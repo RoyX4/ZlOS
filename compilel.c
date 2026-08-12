@@ -153,17 +153,23 @@
  * neither (see the STRINGS and LISTS notes in the header). */
 typedef int Ty;
 #define T_NONE  0
-#define T_INT   1
-#define T_NUM   2
-#define T_STR   3
-#define T_LIST0 4      /* T_LIST0 + i is the list type g_listelem[i] */
+#define T_BOOL  1      /* true/false - an i64 0/1 that PRINTS as true/false */
+#define T_INT   2
+#define T_NUM   3
+#define T_STR   4
+#define T_LIST0 5      /* T_LIST0 + i is the list type g_listelem[i] */
 
 static Ty  g_listelem[256];    /* the element type of each list type   */
 static int g_nlisttypes = 0;
 
 static int is_str(Ty t)  { return t == T_STR; }
 static int is_list(Ty t) { return t >= T_LIST0; }
-static int is_numlike(Ty t) { return t == T_NONE || t == T_INT || t == T_NUM; }
+/* T_BOOL counts as number-like: it is an i64 0/1 in the machine, and
+ * interp.c happily does `true + 1` (make_bool's .num is 0/1). Ordering it
+ * BELOW T_INT means the existing "join by max" widens a bool to whatever
+ * number it meets, so `true + 1` types as INT and prints 2 - matching the
+ * reference. Only PRINTING and str() treat it specially. */
+static int is_numlike(Ty t) { return t == T_NONE || t == T_BOOL || t == T_INT || t == T_NUM; }
 static Ty  elem_of(Ty t) { return g_listelem[t - T_LIST0]; }
 
 /* The list type whose elements are `elem`, interned so that two lists of
@@ -283,6 +289,7 @@ static int newtmp(void) { return ++tmp; }
  * HELPER_ strings near the bottom */
 static int g_used_mod = 0;        /* called @zl_mod                       */
 static int g_used_printnum = 0;   /* called @zl_printnum                  */
+static int g_used_printbool = 0;  /* printed a bool - needs true/false    */
 static int g_used_sat = 0;        /* used the fptosi.sat intrinsic        */
 static int g_used_concat = 0;     /* called @zl_concat                    */
 static int g_used_intstr = 0;     /* called @zl_intstr                    */
@@ -512,10 +519,29 @@ static int builtin_bridge_ty(const char *name, Ty *out) {
         "abs","sqrt","pow","floor","ceil","round","sin","cos","tan","log",
         "exp","atan","asin","acos","log2","log10","trunc","hypot","fmod",
         "min","max","sign","gcd","clamp","num","int","code","find","count",
-        "index_at","band","bor","bxor","bnot","shl","shr","pi","e", 0 };
+        "index_at","band","bor","bxor","bnot","shl","shr","pi","e",
+        /* stage 3: scalar-returning builtins whose ARGUMENTS are also
+         * scalars. Verified one at a time against interp.c. */
+        "now","random","randint", 0 };
     static const char *STRS[] = {
         "upper","lower","trim","ltrim","rtrim","title","swapcase","slice",
-        "chr","hex","pad","replace","repeat","type","env","at", 0 };
+        "chr","hex","pad","replace","repeat","type","env","at",
+        "read","input", 0 };              /* stage 3: V_STR returns          */
+
+/* DELIBERATELY NOT BRIDGED YET - two separate blockers, neither of them
+ * about the return type:
+ *
+ * 1. TAKES A LIST: sum, index_of, contains, join. The bridge boxes scalar
+ *    arguments only ("passing a list to a builtin is not supported yet"),
+ *    so these refuse at compile time regardless of what they return.
+ *
+ * 2. RETURNS A BOOL: has, starts, ends, contains, bool. These would
+ *    compile and run, but print WRONG: this type system has no bool, so
+ *    make_bool comes back as T_NUM and prints 1/0 where the interpreter
+ *    - the reference - prints true/false. Bridging them would trade an
+ *    honest compile-time refusal for a silently wrong answer, which is
+ *    backwards (nativegen refuses to print a fractional double for the
+ *    same reason). Fix the missing bool type first, then bridge these. */
     for (int i=0; NUMS[i]; i++) if (!strcmp(name, NUMS[i])) { *out = T_NUM; return 1; }
     for (int i=0; STRS[i]; i++) if (!strcmp(name, STRS[i])) { *out = T_STR; return 1; }
     return 0;
@@ -525,10 +551,11 @@ static Ty expr_ty(Node *n, FnInfo *f) {
     if (!n) return T_INT;
     switch (n->type) {
         case N_NUMBER: return strchr(n->text,'.') ? T_NUM : T_INT;
-        case N_BOOL:   return T_INT;
+        case N_BOOL:   return T_BOOL;   /* true/false literal */
         case N_STRING: return T_STR;
         case N_IDENT:  return var_ty(f, n->text);
-        case N_UNARY:  return !strcmp(n->text,"-") ? expr_ty(n->a,f) : T_INT;
+        /* -x keeps x's type; `not x` is a bool */
+        case N_UNARY:  return !strcmp(n->text,"-") ? expr_ty(n->a,f) : T_BOOL;
         case N_DANGER: return expr_ty(n->a, f);   /* '!' is a pass-through */
         case N_TERNARY: {
             /* interp.c returns whichever branch is taken, so the static
@@ -541,8 +568,10 @@ static Ty expr_ty(Node *n, FnInfo *f) {
         }
         case N_BINARY: {
             const char *op = n->text;
+            /* comparisons and the logical operators yield true/false,
+             * exactly as interp.c's make_bool does */
             if (is_cmp_op(op) || !strcmp(op,"and") || !strcmp(op,"or") || !strcmp(op,"in"))
-                return T_INT;
+                return T_BOOL;
             Ty ta = expr_ty(n->a,f), tb = expr_ty(n->b,f);
             /* eval_plus: a string on either side makes the whole thing a
              * string join. Everything else is numbers-only, and emitting
@@ -951,7 +980,7 @@ static Ty emit_expr(Node *n, char *ref) {
             return T_INT;
         case N_BOOL:
             sprintf(ref, "%d", strcmp(n->text,"true")==0);
-            return T_INT;
+            return T_BOOL;
         case N_STRING: {
             /* the literal already lives in a private constant; its
              * address IS the value. The lexer resolved the escapes, so
@@ -1068,7 +1097,7 @@ static Ty emit_expr(Node *n, char *ref) {
             int x = newtmp(); fprintf(out, "  %%t%d = xor i1 %%t%d, true\n", x, c);
             int t = newtmp(); fprintf(out, "  %%t%d = zext i1 %%t%d to i64\n", t, x);
             sprintf(ref, "%%t%d", t);
-            return T_INT;
+            return T_BOOL;
         }
         case N_BINARY: {
             const char *op = n->text;
@@ -1113,7 +1142,7 @@ static Ty emit_expr(Node *n, char *ref) {
                 fprintf(out, "  %%t%d = phi i64 [ %d, %%sc_short_%d ], [ %%t%d, %%sc_join_%d ]\n",
                         t, is_and ? 0 : 1, id, rb, id);
                 sprintf(ref, "%%t%d", t);
-                return T_INT;
+                return T_BOOL;
             }
 
             char a[REFLEN], b[REFLEN];
@@ -1170,7 +1199,7 @@ static Ty emit_expr(Node *n, char *ref) {
                      * number folds to false (or true for !=) with no
                      * comparison at all - which is the answer, not a
                      * shortcut: "5" == 5 is false in zl. */
-                    if (ta != tb) { sprintf(ref, "%d", ne); return T_INT; }
+                    if (ta != tb) { sprintf(ref, "%d", ne); return T_BOOL; }
                     g_used_strcmp = 1;
                     int c = newtmp();
                     fprintf(out, "  %%t%d = call i32 @strcmp(ptr %s, ptr %s)\n", c, a, b);
@@ -1179,7 +1208,7 @@ static Ty emit_expr(Node *n, char *ref) {
                     int t = newtmp();
                     fprintf(out, "  %%t%d = zext i1 %%t%d to i64\n", t, p);
                     sprintf(ref, "%%t%d", t);
-                    return T_INT;
+                    return T_BOOL;
                 }
                 if (!strcmp(op,"+")) {
                     /* eval_plus's last arm: value_to_string both sides,
@@ -1263,7 +1292,7 @@ static Ty emit_expr(Node *n, char *ref) {
                     llty(wide), a, b);
             int t = newtmp(); fprintf(out,"  %%t%d = zext i1 %%t%d to i64\n", t, c);
             sprintf(ref,"%%t%d",t);
-            return T_INT;
+            return T_BOOL;
         }
         case N_CALL: {
             /* str(x) -> x as text, exactly value_to_string. Reuses to_text,
@@ -1378,6 +1407,15 @@ static void emit_print(Node *call) {
         /* value_to_string's V_STR arm is the string itself */
         int r = newtmp();   /* capture printf's ignored result (named) */
         fprintf(out, "  %%t%d = call i32 (ptr, ...) @printf(ptr @.fmts, ptr %s)\n", r, v);
+    } else if (t == T_BOOL) {
+        /* value_to_string's V_BOOL arm: the words true/false, not 0/1.
+         * Without this the SPEED backend disagrees with the reference on
+         * something as ordinary as print(1 > 0). */
+        g_used_printbool = 1;
+        int c = newtmp(), sel = newtmp(), r = newtmp();
+        fprintf(out, "  %%t%d = icmp ne i64 %s, 0\n", c, v);
+        fprintf(out, "  %%t%d = select i1 %%t%d, ptr @.strtrue, ptr @.strfalse\n", sel, c);
+        fprintf(out, "  %%t%d = call i32 (ptr, ...) @printf(ptr @.fmts, ptr %%t%d)\n", r, sel);
     } else if (t == T_NUM) {
         /* an INT is a whole number by construction, so only a double
          * needs the runtime "%lld or %g?" choice interp.c makes */
@@ -2124,6 +2162,10 @@ static void emit_helpers(void) {
         fputs(HELPER_MOD, out);
     }
     if (g_used_printnum) fputs(HELPER_PRINTNUM, out);
+    if (g_used_printbool) {
+        fputs("@.strtrue  = private constant [5 x i8] c\"true\\00\"\n", out);
+        fputs("@.strfalse = private constant [6 x i8] c\"false\\00\"\n", out);
+    }
 
     if (g_used_strcmp) fputs("declare i32 @strcmp(ptr, ptr)\n", out);
     if (g_used_strlen || g_used_concat) fputs("declare i64 @strlen(ptr)\n", out);

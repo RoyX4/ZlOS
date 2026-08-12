@@ -108,6 +108,17 @@ fn sum_to(n) {
 print(fib(20))
 print(sum_to(100))
 print("llvm backend works")
+# bools must print as true/false, not 1/0 - this backend had no bool type
+# and disagreed with the interpreter on something as ordinary as 1 > 0.
+print(1 > 0)
+print(2 == 3)
+print(true)
+print(false)
+print(not true)
+print(1 < 2 and 3 > 2)
+print("a" == "a")
+b = 5 > 3
+print(b)
 EOF
 if command -v clang >/dev/null; then
     ( cd "$tmp" && "$OLDPWD/compilel" llvm_smoke.zl >/dev/null 2>&1 && \
