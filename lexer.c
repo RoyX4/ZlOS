@@ -50,6 +50,7 @@ static int is_keyword(const char *word)
         "not", "and", "or",          /* word operators, not && || */
         "true", "false",
         "break", "continue",         /* loop control */
+        "import",                    /* keyword #16 - see design_imports.md */
         NULL
     };
 

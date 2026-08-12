@@ -38,6 +38,54 @@ for t in tests/*.zl; do
     fi
 done
 
+echo "== imports (Phase 2 hinge) =="
+mkdir -p "$tmp/imp"
+cat > "$tmp/imp/numkit.zl" <<'EOF'
+fn nk_double(n) { return n * 2 }
+fn nk_square(n) { return n * n }
+EOF
+printf 'import numkit\nprint(nk_double(21))\nprint(nk_square(7))\n' > "$tmp/imp/p.zl"
+# a local ./<name>.zl must resolve, and every backend must see the splice
+( cd "$tmp/imp" && "$OLDPWD/interp" p.zl ) > "$tmp/imp/interp.out" 2>&1
+if [ "$(tr '\n' ' ' < "$tmp/imp/interp.out")" = "42 49 " ]; then
+    echo "  ok    local module resolves, interpreter"
+else
+    echo "  FAIL  local module"; cat "$tmp/imp/interp.out"; fail=1
+fi
+# stdlib resolution + demo code must NOT run on import
+printf 'import mathkit\nprint(mk_factorial(5))\n' > "$tmp/imp/s.zl"
+if [ "$(./interp "$tmp/imp/s.zl" 2>&1 | tr '\n' ' ')" = "120 " ]; then
+    echo "  ok    stdlib module resolves, demo code not run"
+else
+    echo "  FAIL  stdlib import ran demo code or wrong result"; fail=1
+fi
+# cycle a->b->a must terminate; double import must be a no-op
+printf 'import b\nfn a_hi() { return "a" }\n' > "$tmp/imp/a.zl"
+printf 'import a\nfn b_hi() { return "b" }\n' > "$tmp/imp/b.zl"
+printf 'import a\nimport a\nprint(a_hi())\nprint(b_hi())\n' > "$tmp/imp/c.zl"
+if [ "$( ( cd "$tmp/imp" && timeout 10 "$OLDPWD/interp" c.zl ) 2>&1 | tr '\n' ' ')" = "a b " ]; then
+    echo "  ok    cycle terminates, double import is a no-op"
+else
+    echo "  FAIL  cycle or double-import"; fail=1
+fi
+# a missing module must say so clearly, not crash
+printf 'import nosuchthing\n' > "$tmp/imp/m.zl"
+# capture first: interp correctly exits 1 here, and `set -o pipefail` would
+# make the pipeline fail on that even though grep matched.
+./interp "$tmp/imp/m.zl" > "$tmp/imp/m.out" 2>&1 || true
+if grep -q "module 'nosuchthing' not found" "$tmp/imp/m.out"; then
+    echo "  ok    missing module gives a clear error"
+else
+    echo "  FAIL  missing module error"; fail=1
+fi
+# the payoff: the imports rewrite of texttools matches the inlined original
+if diff -q <(./interp examples/texttools.zl 2>&1) \
+           <(./interp examples/texttools_imports.zl 2>&1) >/dev/null; then
+    echo "  ok    texttools_imports matches the inlined original byte for byte"
+else
+    echo "  DIFF  texttools_imports differs from the original"; fail=1
+fi
+
 echo "== examples: interpreter runs clean =="
 mkdir -p examples_out
 for ex in examples/*.zl; do

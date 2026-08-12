@@ -1,0 +1,40 @@
+# texttools, but with IMPORTS instead of inlined helpers.
+#
+# Same program as texttools.zl - byte-for-byte the same output - with the
+# copy-pasted tk_* and ix_* helpers replaced by two import lines. This is
+# the proof that imports turn the stdlib from copy-paste into a real
+# library: 66 lines becomes 34, and a fix to textkit now lands ONCE.
+
+import textkit, iterx
+
+fn wc(text) {
+    wc_lines = split(text, "\n")
+    wc_words = 0
+    wc_chars = len(text)
+    for wc_l in wc_lines { wc_words = wc_words + len(tk_words(wc_l)) }
+    return [len(wc_lines), wc_words, wc_chars]
+}
+
+# grep needs a predicate that knows the pattern. zl closures can't capture a
+# local, so the pattern rides in a global the predicate reads - the documented
+# way to do "closure-like" behaviour today.
+grep_pat = ""
+fn has_pat(line) { return find(line, grep_pat) >= 0 }
+fn grep(text, pattern) {
+    grep_pat = pattern
+    return ix_filter(split(text, "\n"), has_pat)
+}
+
+# ---- run ----
+doc = "the quick brown fox\nthe lazy dog sleeps\na quick red fox runs\nthe end"
+
+counts = wc(doc)
+print("wc:  " + str(counts[0]) + " lines, " + str(counts[1]) + " words, " + str(counts[2]) + " chars")
+
+print("")
+print("grep 'fox':")
+for line in grep(doc, "fox") { print("  " + line) }
+
+print("")
+print("grep 'the':")
+for line in grep(doc, "the") { print("  " + line) }

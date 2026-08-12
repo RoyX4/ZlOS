@@ -961,12 +961,152 @@ static Node *parse_statement(void)
 }
 
 /* program := (statement)* EOF */
+/* =============================================================
+ * IMPORTS - see docs/design/design_imports.md
+ *
+ * `import mathkit` means: load stdlib/mathkit.zl, parse it, and SPLICE
+ * its top-level definitions into this program, right here. The splice
+ * happens at PARSE time, so interp, compile, compilef, compilel and
+ * nativegen all get imports without a single backend change - the same
+ * trick that made the for-range desugaring free.
+ *
+ * v1 is the "include" model: no namespaces. The stdlib modules already
+ * prefix every function (mk_, ix_, tk_, ...) precisely because a zl
+ * definition is global, and that convention is what makes this trivial.
+ *
+ * Two things this MUST get right:
+ *   - the splice targets the PROGRAM node, not a statement. An import
+ *     yields N top-level definitions, and a statement slot holds one; a
+ *     wrapping block would hide those `fn`s from the backends, whose
+ *     top-level loops look for N_FN at depth 0.
+ *   - parsing a file while parsing a file clobbers the cursor, because
+ *     toks/ntoks/pos/g_hidden are file-scope statics. They are saved and
+ *     restored around the nested parse.
+ * ============================================================= */
+
+#define MAX_IMPORTS 256
+static char g_imported[MAX_IMPORTS][MAX_TEXT];
+static int  g_nimported = 0;
+
+static int already_imported(const char *name)
+{
+    for (int i = 0; i < g_nimported; i++)
+        if (strcmp(g_imported[i], name) == 0) return 1;
+    return 0;
+}
+
+/* Record BEFORE loading, so a cycle (a imports b imports a) terminates
+ * rather than recursing until the stack runs out. */
+static void mark_imported(const char *name)
+{
+    if (g_nimported >= MAX_IMPORTS) {
+        fprintf(stderr, "parse error: too many imports (max %d)\n", MAX_IMPORTS);
+        exit(1);
+    }
+    strncpy(g_imported[g_nimported], name, MAX_TEXT - 1);
+    g_imported[g_nimported][MAX_TEXT - 1] = '\0';
+    g_nimported++;
+}
+
+static int file_exists(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
+
+/* ./<name>.zl, then ./stdlib/<name>.zl, then $ZL_STDLIB/<name>.zl.
+ * First match wins. Writes the winner into `out` and returns 1. */
+static int resolve_module(const char *name, char *out, size_t outsz)
+{
+    snprintf(out, outsz, "%s.zl", name);
+    if (file_exists(out)) return 1;
+    snprintf(out, outsz, "stdlib/%s.zl", name);
+    if (file_exists(out)) return 1;
+    const char *env = getenv("ZL_STDLIB");
+    if (env && *env) {
+        snprintf(out, outsz, "%s/%s.zl", env, name);
+        if (file_exists(out)) return 1;
+    }
+    return 0;
+}
+
+static Node *parse_program(void);
+
+/* parse `import a, b, c` and splice each module's top level into prog */
+static void parse_import_into(Node *prog)
+{
+    advance();                                  /* past `import` */
+    for (;;) {
+        if (curtype() != T_IDENT) {
+            fprintf(stderr, "parse error line %d: import needs a module name\n",
+                    cur()->line);
+            exit(1);
+        }
+        char name[MAX_TEXT];
+        strncpy(name, cur()->text, MAX_TEXT - 1);
+        name[MAX_TEXT - 1] = '\0';
+        advance();
+
+        if (!already_imported(name)) {
+            char path[512];
+            if (!resolve_module(name, path, sizeof(path))) {
+                const char *env = getenv("ZL_STDLIB");
+                fprintf(stderr,
+                        "parse error: module '%s' not found (searched ./%s.zl, "
+                        "./stdlib/%s.zl", name, name, name);
+                if (env && *env) fprintf(stderr, ", %s/%s.zl", env, name);
+                fprintf(stderr, ")\n");
+                exit(1);
+            }
+            mark_imported(name);                /* BEFORE loading: breaks cycles */
+
+            /* the nested parse clobbers the cursor - save it */
+            Token *save_toks = toks; int save_ntoks = ntoks;
+            int save_pos = pos, save_hidden = g_hidden;
+
+            int mcount = 0;
+            Token *mtoks = lex_file(path, &mcount);
+            Node  *mod   = parse(mtoks, mcount);
+
+            toks = save_toks; ntoks = save_ntoks;
+            pos  = save_pos;  g_hidden = save_hidden;
+
+            /* Splice the module's DEFINITIONS - its functions and its
+             * top-level constants - and skip everything else.
+             *
+             * The stdlib modules are written to be runnable on their own,
+             * so most of them end in demo output (mathkit alone has 24
+             * top-level print calls). Importing a module must not run its
+             * demo, and zl has no `if __name__ == "__main__"` to guard it
+             * with. Constants cannot be skipped along with it, though -
+             * ansi.zl is 19 of them (CSI, RESET, ...) and its functions
+             * are useless without them. So: N_FN and N_ASSIGN come in,
+             * bare top-level statements do not.
+             *
+             * The cost: a module whose top level does real side-effecting
+             * setup (a `seed(42)`, say) will not get it on import. None of
+             * the 108 modules here does, and a module needing that can be
+             * given an explicit init function to call. */
+            for (int i = 0; i < mod->nkids; i++) {
+                NodeType t = mod->kids[i]->type;
+                if (t == N_FN || t == N_ASSIGN) add_kid(prog, mod->kids[i]);
+            }
+        }
+
+        if (match_text(",")) continue;   /* `import a, b, c` */
+        break;
+    }
+}
+
 static Node *parse_program(void)
 {
     Node *prog = new_node(N_PROGRAM);
     skip_newlines();
     while (curtype() != T_EOF) {
-        add_kid(prog, parse_statement());
+        if (curtype() == T_KEYWORD && is_text("import")) parse_import_into(prog);
+        else add_kid(prog, parse_statement());
         skip_newlines();
     }
     return prog;
