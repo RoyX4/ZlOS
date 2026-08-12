@@ -10,13 +10,16 @@ CFLAGS="-O2 -Wall -D_strdup=strdup"
 echo "==> interp    (tree-walking interpreter)"
 $CC $CFLAGS -DBUILD_PARSER -DBUILD_INTERP -o interp lexer.c parser.c interp.c runtime.c os_linux.c -lm
 
-echo "==> compile   (zl -> C -> gcc -> native ELF)"
+echo "==> compile   (zl -> boxed C -> gcc -> native ELF)   [ARCHIVED]"
 $CC $CFLAGS -DBUILD_PARSER -DBUILD_INTERP -o compile compile.c lexer.c parser.c -lm
+
+echo "==> compilef  (zl -> unboxed C -> gcc -> native ELF) [ARCHIVED]"
+$CC $CFLAGS -DBUILD_PARSER -DBUILD_INTERP -o compilef compilef.c lexer.c parser.c -lm
 
 echo "==> nativegen (zl -> hand-assembled x86-64 -> ELF, no C compiler)"
 $CC $CFLAGS -DBUILD_PARSER -DBUILD_INTERP -o nativegen nativegen.c lexer.c parser.c -lm
 
-echo "==> compilel  (zl -> LLVM IR -> clang -> native ELF)"
+echo "==> compilel  (zl -> LLVM IR -> clang -> native ELF)  [SPEED BACKEND]"
 $CC $CFLAGS -DBUILD_PARSER -DBUILD_INTERP -o compilel compilel.c lexer.c parser.c -lm
 
 echo "==> lexer, parser (standalone demo binaries)"
@@ -30,7 +33,7 @@ echo "==> compile_commands.json (for clangd / IntelliSense)"
 {
     printf '[\n'
     first=1
-    for f in lexer.c parser.c interp.c runtime.c os_linux.c compile.c compilel.c nativegen.c; do
+    for f in lexer.c parser.c interp.c runtime.c os_linux.c compile.c compilef.c compilel.c nativegen.c; do
         [ -f "$f" ] || continue
         [ $first -eq 1 ] || printf ',\n'
         first=0
@@ -41,7 +44,7 @@ echo "==> compile_commands.json (for clangd / IntelliSense)"
 } > compile_commands.json
 
 echo
-echo "built: interp compile compilel nativegen lexer_demo parser_demo"
+echo "built: interp compile compilef compilel nativegen lexer_demo parser_demo"
 echo
 echo "usage:"
 echo "  ./interp program.zl                  # run directly"

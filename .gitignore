@@ -13,3 +13,5 @@ out.ll
 examples_out/
 *.bmp
 compile_commands.json
+compilef
+outf.c

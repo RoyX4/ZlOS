@@ -69,6 +69,27 @@ for name in csvstats wordfreq texttools; do
     fi
 done
 
+echo "== unboxed C backend (compilef, ARCHIVED): numeric-subset smoke test =="
+cat > "$tmp/f_smoke.zl" <<'EOF'
+fn fib(n) {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+print(fib(25))
+EOF
+( cd "$tmp" && "$OLDPWD/compilef" f_smoke.zl >/dev/null 2>&1 && gcc -O2 -o f_smoke.bin outf.c 2>/dev/null )
+if [ -x "$tmp/f_smoke.bin" ]; then
+    "$tmp/f_smoke.bin" > "$tmp/f_smoke.out" 2>&1
+    ./interp "$tmp/f_smoke.zl" > "$tmp/f_smoke.interp" 2>&1
+    if diff -q "$tmp/f_smoke.interp" "$tmp/f_smoke.out" >/dev/null; then
+        echo "  ok    compilef matches interpreter"
+    else
+        echo "  DIFF  compilef output mismatch"; fail=1
+    fi
+else
+    echo "  BUILD FAIL compilef"; fail=1
+fi
+
 echo "== LLVM backend: unboxed-subset smoke test =="
 cat > "$tmp/llvm_smoke.zl" <<'EOF'
 fn fib(n) {

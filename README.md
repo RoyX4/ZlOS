@@ -6,12 +6,30 @@ that worked on Windows now works natively on Linux, with no C compiler
 required for the hand-assembled path and no Windows/Wine/emulation
 anywhere in the chain.
 
-```
-zl source ─► lexer ─► parser ─► ┬─ interpreter           (interp)
-                                ├─ C backend    ─► out.c  ─► gcc   ─► native ELF
-                                ├─ LLVM backend ─► out.ll ─► clang ─► native ELF
-                                └─ x86-64 backend ──────────────────► native ELF   (NO C compiler)
-```
+## The five ways to run
+
+Per the upstream `HANDOFF.md`, zl has **five** ways to run a program, and
+they are not equals — two are archived and one is the active speed path:
+
+| # | Tool | Path | Status |
+|---|------|------|--------|
+| 1 | `interp`    | tree-walking interpreter | **THE REFERENCE** — whatever it does is correct; runs the whole language |
+| 2 | `compile`   | zl → boxed C → gcc | **ARCHIVED — don't develop** |
+| 3 | `compilef`  | zl → unboxed C → gcc | **ARCHIVED** — the proof-of-concept that unboxing is the win |
+| 4 | `compilel`  | zl → LLVM IR → clang | **THE SPEED BACKEND** — the active one |
+| 5 | `nativegen` | zl → x86-64 machine code → ELF | hand-written, no C compiler in the output |
+
+Measured on this machine, `fib(28)`:
+
+| # | Way to run | time | vs interp |
+|---|---|---|---|
+| 1 | `interp` (reference) | 632 ms | 1× |
+| 2 | `compile` boxed C *(archived)* | 65 ms | 10× |
+| 3 | `compilef` unboxed C *(archived)* | **2 ms** | **316×** |
+| 4 | `compilel` LLVM *(speed backend)* | 3 ms | 210× |
+| 5 | `nativegen` hand-written x86-64 | 6 ms | 105× |
+
+All five build and run on Linux, and all five agree with the interpreter.
 
 ## What changed from the Windows original
 
@@ -78,6 +96,13 @@ language, this one trades completeness for "no C compiler in the loop at
 all."
 
 ## First-class functions in the C backend (new)
+
+> **Note on scope:** this went into `compile.c`, which upstream
+> `HANDOFF.md` marks **ARCHIVED — don't develop**. It was written before
+> that doc was read. It is correct and tested, but it is not on the active
+> path; the equivalent gap in `compilel.c` (the speed backend) is
+> untouched. Kept because it is working code and it makes two example
+> programs compile, not because the archived backend needs the feature.
 
 Passing a function as a value — `ix_sort_by(counts, neg_count)`, then
 calling `key(x)` inside the callee — worked in the interpreter from the
