@@ -130,6 +130,18 @@ print(contains(xs, 2))
 print(index_of(xs, 3))
 print(join(["a", "b", "c"], "-"))
 print(sum([5, 6, 7]))
+# list-RETURNING builtins: the Value list is unboxed back into a zlist
+print(split("x-y-z", "-"))
+print(lines("p\nq"))
+print(range(5))
+print(range(2, 6))
+print(sort([3, 1, 2]))
+print(sort(["c", "a", "b"]))
+print(reverse([1, 2, 3]))
+print(take([1, 2, 3, 4, 5], 2))
+print(drop([1, 2, 3, 4, 5], 3))
+print(reverse(sort([3, 1, 2])))
+print(len(split("a,b,c", ",")))
 EOF
 if command -v clang >/dev/null; then
     # runtime.c/os_linux.c must be linked: any bridged builtin (has, sum,

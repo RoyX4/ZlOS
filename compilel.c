@@ -553,6 +553,13 @@ static int builtin_bridge_ty(const char *name, Ty *out) {
     return 0;
 }
 
+/* The list type a list-RETURNING bridged builtin gives back, or 0 if this
+ * is not one. Split out because both the type pass and the emitter need
+ * the same answer. Two shapes: split/lines/range have a fixed element
+ * type, while sort/reverse/take/drop/copy hand back what they were given,
+ * so their result type is argument 0's. */
+static Ty builtin_bridge_list_ty(Node *n, FnInfo *f);
+
 static Ty expr_ty(Node *n, FnInfo *f) {
     if (!n) return T_INT;
     switch (n->type) {
@@ -617,11 +624,36 @@ static Ty expr_ty(Node *n, FnInfo *f) {
                  * variable that stores its result types correctly */
                 Ty brt;
                 if (builtin_bridge_ty(n->a->text, &brt)) return brt;
+                Ty blt = builtin_bridge_list_ty(n, f);
+                if (blt) return blt;
             }
             return T_INT;
         }
         default: return T_INT;   /* unsupported node - emit_expr will complain */
     }
+}
+
+/* see the forward declaration above expr_ty */
+static Ty builtin_bridge_list_ty(Node *n, FnInfo *f) {
+    if (!n->a || n->a->type != N_IDENT) return 0;
+    const char *nm = n->a->text;
+    /* fixed element type */
+    if (!strcmp(nm,"split") && n->nkids == 2) return ty_list(T_STR);
+    if (!strcmp(nm,"lines") && n->nkids == 1) return ty_list(T_STR);
+    if (!strcmp(nm,"range")) return ty_list(T_NUM);
+    /* shape-preserving: the result holds exactly what argument 0 held, so
+     * the machine element type is already known and no new one is made */
+    /* NOT copy(): that is the file-copy builtin copy(src, dst), not a
+     * list copy - the interpreter refuses it with "copy needs a source and
+     * destination path". */
+    if (!strcmp(nm,"sort") || !strcmp(nm,"reverse") ||
+        !strcmp(nm,"take") || !strcmp(nm,"drop")) {
+        if (n->nkids >= 1) {
+            Ty a = expr_ty(n->kids[0], f);
+            if (is_list(a) && !is_list(elem_of(a))) return a;
+        }
+    }
+    return 0;
 }
 
 /* the type a compound `op=` STORES, given what the target already holds.
@@ -1020,7 +1052,44 @@ static void emit_builtin_call(Node *n, char *ref, Ty rt) {
             R, bi, A, nargs);
 
     int v = newtmp();
-    if (rt == T_STR) {
+    if (is_list(rt)) {
+        /* the mirror of the argument boxing: read the length, allocate our
+         * own zlist, and copy element by element out of the Value list.
+         * Emitted before the stackrestore because the source Value lives in
+         * the alloca'd result slot; the elements copied out are a double or
+         * a heap pointer, so they outlive it. */
+        g_used_listbox = 1;
+        g_used_listrt  = 1;
+        int id = ++lbl;
+        Ty el = elem_of(rt);
+        int nn = newtmp();
+        fprintf(out, "  %%t%d = call i64 @zlx_list_len(ptr %%t%d)\n", nn, R);
+        fprintf(out, "  %%t%d = call ptr @zl_list_new(i64 %%t%d)\n", v, nn);
+        int ctr = newtmp();
+        fprintf(out, "  %%t%d = alloca i64, align 8\n", ctr);
+        fprintf(out, "  store i64 0, ptr %%t%d\n", ctr);
+        fprintf(out, "  br label %%lu_head_%d\n", id);
+        fprintf(out, "lu_head_%d:\n", id);
+        int k = newtmp(), cmp = newtmp();
+        fprintf(out, "  %%t%d = load i64, ptr %%t%d\n", k, ctr);
+        fprintf(out, "  %%t%d = icmp slt i64 %%t%d, %%t%d\n", cmp, k, nn);
+        fprintf(out, "  br i1 %%t%d, label %%lu_body_%d, label %%lu_end_%d\n", cmp, id, id);
+        fprintf(out, "lu_body_%d:\n", id);
+        char ev[REFLEN];
+        int e = newtmp();
+        if (is_str(el)) fprintf(out, "  %%t%d = call ptr @zlx_list_get_str(ptr %%t%d, i64 %%t%d)\n", e, R, k);
+        else            fprintf(out, "  %%t%d = call double @zlx_list_get_num(ptr %%t%d, i64 %%t%d)\n", e, R, k);
+        snprintf(ev, REFLEN, "%%t%d", e);
+        emit_box(ev, el);
+        int sl = newtmp();
+        fprintf(out, "  %%t%d = call ptr @zl_slot(ptr %%t%d, i64 %%t%d)\n", sl, v, k);
+        fprintf(out, "  store ptr %s, ptr %%t%d\n", ev, sl);
+        int nk = newtmp();
+        fprintf(out, "  %%t%d = add i64 %%t%d, 1\n", nk, k);
+        fprintf(out, "  store i64 %%t%d, ptr %%t%d\n", nk, ctr);
+        fprintf(out, "  br label %%lu_head_%d\n", id);
+        fprintf(out, "lu_end_%d:\n", id);
+    } else if (rt == T_STR) {
         fprintf(out, "  %%t%d = call ptr @zlx_as_str(ptr %%t%d)\n", v, R);
     } else if (rt == T_BOOL) {
         /* a bool is machined as an i64 0/1, but it crosses the bridge in a
@@ -1438,6 +1507,12 @@ static Ty emit_expr(Node *n, char *ref) {
                     builtin_bridge_ty(n->a->text, &brt)) {
                     emit_builtin_call(n, ref, brt);
                     return brt;
+                }
+                /* the same, for a builtin that hands back a LIST - the
+                 * result is unboxed into a zlist inside emit_builtin_call */
+                if (n->a->type == N_IDENT && !set_has(&g_fns, n->a->text)) {
+                    Ty blt = builtin_bridge_list_ty(n, g_curfn);
+                    if (blt) { emit_builtin_call(n, ref, blt); return blt; }
                 }
             }
             if (n->a->type != N_IDENT || !set_has(&g_fns, n->a->text)) {
@@ -1995,15 +2070,20 @@ static const char *HELPER_LISTRT =
 "@.rtfmt    = private constant [19 x i8] c\"runtime error: %s\\0A\\00\"\n"
 "@.msgread  = private constant [24 x i8] c\"list index out of range\\00\"\n"
 "@.msgwrite = private constant [26 x i8] c\"index-assign out of range\\00\"\n"
-"declare ptr @__acrt_iob_func(i32)\n"
+/* stdout/stderr: glibc exports them as globals to load, where the MSVC
+ * build called __acrt_iob_func(1)/(2). That symbol does not exist outside
+ * the MSVC runtime, so any program whose zl_rterror survived optimisation
+ * failed to LINK on Linux - which is every list program built at -O0. */
+"@stdout = external global ptr\n"
+"@stderr = external global ptr\n"
 "declare i32 @fflush(ptr)\n"
 "declare i32 @fprintf(ptr, ptr, ...)\n"
 "declare void @exit(i32)\n"
 "define private void @zl_rterror(ptr %msg) {\n"
 "entry:\n"
-"  %so = call ptr @__acrt_iob_func(i32 1)\n"
+"  %so = load ptr, ptr @stdout\n"
 "  %fl = call i32 @fflush(ptr %so)\n"
-"  %se = call ptr @__acrt_iob_func(i32 2)\n"
+"  %se = load ptr, ptr @stderr\n"
 "  %pr = call i32 (ptr, ptr, ...) @fprintf(ptr %se, ptr @.rtfmt, ptr %msg)\n"
 "  call void @exit(i32 1)\n"
 "  unreachable\n"
@@ -2272,6 +2352,9 @@ static void emit_helpers(void) {
             fputs("declare void @zlx_list_new(ptr, i64)\n", out);
             fputs("declare void @zlx_list_set_num(ptr, i64, double)\n", out);
             fputs("declare void @zlx_list_set_str(ptr, i64, ptr)\n", out);
+            fputs("declare i64 @zlx_list_len(ptr)\n", out);
+            fputs("declare double @zlx_list_get_num(ptr, i64)\n", out);
+            fputs("declare ptr @zlx_list_get_str(ptr, i64)\n", out);
         }
         fputs("declare double @zlx_as_num(ptr)\n", out);
         fputs("declare ptr @zlx_as_str(ptr)\n", out);

@@ -1274,3 +1274,12 @@ void zlx_list_new(Value *out, long long n)
 }
 void zlx_list_set_num(Value *lst, long long i, double x)      { *lst->items[i] = zl_num(x); }
 void zlx_list_set_str(Value *lst, long long i, const char *s) { *lst->items[i] = zl_str(s); }
+
+/* ...and the other direction, for a builtin that RETURNS a list. The
+ * caller reads the length, allocates its own zlist, and copies element by
+ * element - the mirror of the boxing above. A returned element is only
+ * ever read through the getter matching the element type the call site
+ * inferred, which is why there is no polymorphic accessor here either. */
+long long   zlx_list_len    (Value *v)              { return v->type == V_LIST ? v->nitems : 0; }
+double      zlx_list_get_num(Value *v, long long i) { return v->items[i]->num; }
+const char *zlx_list_get_str(Value *v, long long i) { return v->items[i]->str; }
