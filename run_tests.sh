@@ -38,6 +38,43 @@ for t in tests/*.zl; do
     fi
 done
 
+echo "== LLVM backend: unboxed-subset smoke test =="
+cat > "$tmp/llvm_smoke.zl" <<'EOF'
+fn fib(n) {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+fn sum_to(n) {
+    total = 0
+    i = 1
+    while i <= n {
+        total = total + i
+        i = i + 1
+    }
+    return total
+}
+print(fib(20))
+print(sum_to(100))
+print("llvm backend works")
+EOF
+if command -v clang >/dev/null; then
+    ( cd "$tmp" && "$OLDPWD/compilel" llvm_smoke.zl >/dev/null 2>&1 && \
+      clang -O2 out.ll -o llvm_smoke.bin 2>/dev/null )
+    if [ -x "$tmp/llvm_smoke.bin" ]; then
+        "$tmp/llvm_smoke.bin" > "$tmp/llvm_smoke.llvm.out" 2>&1
+        ./interp "$tmp/llvm_smoke.zl" > "$tmp/llvm_smoke.interp.out" 2>&1
+        if diff -q "$tmp/llvm_smoke.interp.out" "$tmp/llvm_smoke.llvm.out" >/dev/null; then
+            echo "  ok    LLVM backend matches interpreter"
+        else
+            echo "  DIFF  LLVM backend output mismatch"; fail=1
+        fi
+    else
+        echo "  BUILD FAIL compilel"; fail=1
+    fi
+else
+    echo "  skip  (clang not installed)"
+fi
+
 echo "== native x86-64 ELF backend: integer-subset smoke test =="
 cat > "$tmp/nat_smoke.zl" <<'EOF'
 fn fact(n) {

@@ -8,3 +8,5 @@ out.c
 *.o
 *.bin
 _probe_out.txt
+compilel
+out.ll

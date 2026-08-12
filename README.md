@@ -7,9 +7,10 @@ required for the hand-assembled path and no Windows/Wine/emulation
 anywhere in the chain.
 
 ```
-zl source ─► lexer ─► parser ─► ┬─ interpreter          (interp)
-                                ├─ C backend  ─► out.c ─► gcc ─► native ELF
-                                └─ x86-64 backend ─────────────► native ELF   (NO C compiler)
+zl source ─► lexer ─► parser ─► ┬─ interpreter           (interp)
+                                ├─ C backend    ─► out.c  ─► gcc   ─► native ELF
+                                ├─ LLVM backend ─► out.ll ─► clang ─► native ELF
+                                └─ x86-64 backend ──────────────────► native ELF   (NO C compiler)
 ```
 
 ## What changed from the Windows original
@@ -31,6 +32,10 @@ this is a platform port, not a rewrite. Three things had to change:
    directly - no import table needed at all, which is actually *simpler*
    than the PE version. Verified with `strace`: the only syscalls a
    compiled program makes are the ones it actually asked for.
+
+`compilel.c` (the LLVM backend) also needed zero platform changes - it
+emits LLVM IR, which is platform-neutral; it just needed `clang`/`llvm`
+present and a Linux target triple, which clang supplies by default.
 
 `compile.c` (the C-backend code generator) needed zero platform changes -
 it was already portable C, it just used to be paired with `cl.exe` and
@@ -59,6 +64,9 @@ demo binaries. Needs `gcc` and `libm` - nothing else.
 ./compile program.zl                   # -> out.c
 gcc -O2 -D_strdup=strdup -o program out.c runtime.c os_linux.c -lm
 
+./compilel program.zl                  # -> out.ll (unboxed subset)
+clang -O2 out.ll -o program
+
 ./nativegen program.zl                 # integer subset only -> ./native_out
 ```
 
@@ -77,9 +85,10 @@ all."
 
 Runs the full `tests/*.zl` suite (2,133 assertions) through the
 interpreter, cross-checks the C backend produces byte-identical output for
-every one of them, and cross-checks the native x86-64 backend against the
-interpreter on an integer-subset smoke test. All green on a clean Kali
-Linux build.
+every one of them, and cross-checks the LLVM and native x86-64 backends
+against the interpreter on subset smoke tests. All green on a clean Kali
+Linux build. Needs `gcc`; `clang`/`llvm` for the LLVM stage (skipped with a
+notice if absent).
 
 ## What's not ported
 
