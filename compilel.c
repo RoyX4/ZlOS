@@ -290,6 +290,7 @@ static int newtmp(void) { return ++tmp; }
 static int g_used_mod = 0;        /* called @zl_mod                       */
 static int g_used_printnum = 0;   /* called @zl_printnum                  */
 static int g_used_printbool = 0;  /* printed a bool - needs true/false    */
+static int g_used_listbox = 0;    /* boxed a list arg for a builtin       */
 static int g_used_sat = 0;        /* used the fptosi.sat intrinsic        */
 static int g_used_concat = 0;     /* called @zl_concat                    */
 static int g_used_intstr = 0;     /* called @zl_intstr                    */
@@ -520,13 +521,18 @@ static int builtin_bridge_ty(const char *name, Ty *out) {
         "exp","atan","asin","acos","log2","log10","trunc","hypot","fmod",
         "min","max","sign","gcd","clamp","num","int","code","find","count",
         "index_at","band","bor","bxor","bnot","shl","shr","pi","e",
-        /* stage 3: scalar-returning builtins whose ARGUMENTS are also
-         * scalars. Verified one at a time against interp.c. */
-        "now","random","randint", 0 };
+        "sum","index_of", 0 };   /* stage 3: take a LIST - now boxable */
     static const char *STRS[] = {
         "upper","lower","trim","ltrim","rtrim","title","swapcase","slice",
         "chr","hex","pad","replace","repeat","type","env","at",
-        "read","input", 0 };              /* stage 3: V_STR returns          */
+        "join", 0 };             /* stage 3: takes a LIST              */
+    /* stage 3: now that this backend HAS a bool type, the make_bool
+     * builtins can be bridged - they print true/false like the reference
+     * instead of 1/0. Only the ones whose arguments are scalars: contains
+     * takes a list and is still blocked on that, not on the bool. */
+    static const char *BOOLS[] = { "has","starts","ends","bool",
+                                   "contains", 0 };  /* takes a LIST   */
+    for (int i=0; BOOLS[i]; i++) if (!strcmp(name, BOOLS[i])) { *out = T_BOOL; return 1; }
 
 /* DELIBERATELY NOT BRIDGED YET - two separate blockers, neither of them
  * about the return type:
@@ -679,6 +685,12 @@ static void infer_walk(Node *n, FnInfo *f, int *changed) {
             if (s) raise_ty(s, elem_of(st), changed);
         }
     }
+    /* Type every list literal, even one whose value is only ever handed
+     * straight to a builtin. Asking is what INTERNS the list type, and
+     * %zlist is emitted only when g_nlisttypes says one exists - so without
+     * this, `print(sum([1,2,3]))` emits a getelementptr on an undeclared
+     * %zlist. Nothing here consumes the answer; interning is the point. */
+    if (n->type==N_LIST) (void)expr_ty(n, f);
     if (n->type==N_RETURN && f && n->a) raise_ty(&f->ret, expr_ty(n->a, f), changed);
     if (n->type==N_CALL && n->a && n->a->type==N_IDENT) {
         int i = set_index(&g_fns, n->a->text);
@@ -918,8 +930,16 @@ static void emit_builtin_call(Node *n, char *ref, Ty rt) {
     for (int i=0;i<nargs;i++) aty[i] = emit_expr(n->kids[i], aref[i]);
     for (int i=0;i<nargs;i++) {
         if (is_list(aty[i])) {
-            fprintf(stderr, "compilel: passing a list to a builtin is not supported yet\n");
-            exit(1);
+            /* A list argument is boxed element-by-element below; only a
+             * list of scalars can be, because each element is copied
+             * through zlx_list_set_num/_str. A list of lists would need
+             * the box itself converted recursively - not done yet. */
+            if (is_list(elem_of(aty[i]))) {
+                fprintf(stderr, "compilel: passing a list OF LISTS to a builtin "
+                                "is not supported yet\n");
+                exit(1);
+            }
+            continue;
         }
         /* a number goes in as a double (zlx_num's parameter); a string goes
          * in as its pointer (zlx_str). coerce widens INT/NONE -> double. */
@@ -943,7 +963,52 @@ static void emit_builtin_call(Node *n, char *ref, Ty rt) {
     for (int i=0;i<nargs;i++) {
         int s = newtmp();
         fprintf(out, "  %%t%d = getelementptr inbounds i8, ptr %%t%d, i64 %d\n", s, A, i*VALSZ);
-        if (is_str(aty[i]))
+        if (is_list(aty[i])) {
+            /* copy the zlist into a real V_LIST, one element at a time:
+             *   n = lst->nitems;  zlx_list_new(slot, n)
+             *   for (k = 0; k < n; k++)
+             *       box = lst->items[k];  set_num/_str(slot, k, *box)
+             * emitted inline because the element type is static here. */
+            g_used_listbox = 1;
+            int id = ++lbl;
+            Ty el = elem_of(aty[i]);
+            int fn_ = newtmp(), nn = newtmp();
+            fprintf(out, "  %%t%d = getelementptr inbounds %%zlist, ptr %s, i32 0, i32 0\n", fn_, aref[i]);
+            fprintf(out, "  %%t%d = load i64, ptr %%t%d\n", nn, fn_);
+            fprintf(out, "  call void @zlx_list_new(ptr %%t%d, i64 %%t%d)\n", s, nn);
+            int fi = newtmp(), it = newtmp();
+            fprintf(out, "  %%t%d = getelementptr inbounds %%zlist, ptr %s, i32 0, i32 3\n", fi, aref[i]);
+            fprintf(out, "  %%t%d = load ptr, ptr %%t%d\n", it, fi);
+            /* the counter lives in an alloca rather than a phi: a phi needs
+             * the name of the block we arrived from, and this is emitted in
+             * the middle of an expression where that is not tracked. mem2reg
+             * turns it back into a register anyway. */
+            int ctr = newtmp();
+            fprintf(out, "  %%t%d = alloca i64, align 8\n", ctr);
+            fprintf(out, "  store i64 0, ptr %%t%d\n", ctr);
+            fprintf(out, "  br label %%lb_head_%d\n", id);
+            fprintf(out, "lb_head_%d:\n", id);
+            int k = newtmp(), cmp = newtmp();
+            fprintf(out, "  %%t%d = load i64, ptr %%t%d\n", k, ctr);
+            fprintf(out, "  %%t%d = icmp slt i64 %%t%d, %%t%d\n", cmp, k, nn);
+            fprintf(out, "  br i1 %%t%d, label %%lb_body_%d, label %%lb_end_%d\n", cmp, id, id);
+            fprintf(out, "lb_body_%d:\n", id);
+            int bp = newtmp(), bx = newtmp(), vv = newtmp();
+            fprintf(out, "  %%t%d = getelementptr inbounds ptr, ptr %%t%d, i64 %%t%d\n", bp, it, k);
+            fprintf(out, "  %%t%d = load ptr, ptr %%t%d\n", bx, bp);
+            if (is_str(el)) {
+                fprintf(out, "  %%t%d = load ptr, ptr %%t%d\n", vv, bx);
+                fprintf(out, "  call void @zlx_list_set_str(ptr %%t%d, i64 %%t%d, ptr %%t%d)\n", s, k, vv);
+            } else {
+                fprintf(out, "  %%t%d = load double, ptr %%t%d\n", vv, bx);
+                fprintf(out, "  call void @zlx_list_set_num(ptr %%t%d, i64 %%t%d, double %%t%d)\n", s, k, vv);
+            }
+            int nk = newtmp();
+            fprintf(out, "  %%t%d = add i64 %%t%d, 1\n", nk, k);
+            fprintf(out, "  store i64 %%t%d, ptr %%t%d\n", nk, ctr);
+            fprintf(out, "  br label %%lb_head_%d\n", id);
+            fprintf(out, "lb_end_%d:\n", id);
+        } else if (is_str(aty[i]))
             fprintf(out, "  call void @zlx_str(ptr %%t%d, ptr %s)\n", s, aref[i]);
         else
             fprintf(out, "  call void @zlx_num(ptr %%t%d, double %s)\n", s, aref[i]);
@@ -955,8 +1020,18 @@ static void emit_builtin_call(Node *n, char *ref, Ty rt) {
             R, bi, A, nargs);
 
     int v = newtmp();
-    if (rt == T_STR) fprintf(out, "  %%t%d = call ptr @zlx_as_str(ptr %%t%d)\n", v, R);
-    else             fprintf(out, "  %%t%d = call double @zlx_as_num(ptr %%t%d)\n", v, R);
+    if (rt == T_STR) {
+        fprintf(out, "  %%t%d = call ptr @zlx_as_str(ptr %%t%d)\n", v, R);
+    } else if (rt == T_BOOL) {
+        /* a bool is machined as an i64 0/1, but it crosses the bridge in a
+         * Value whose .num is 0 or 1 - so unbox as a double and narrow.
+         * The value is exactly 0.0 or 1.0, so the conversion is exact. */
+        int d = newtmp();
+        fprintf(out, "  %%t%d = call double @zlx_as_num(ptr %%t%d)\n", d, R);
+        fprintf(out, "  %%t%d = fptosi double %%t%d to i64\n", v, d);
+    } else {
+        fprintf(out, "  %%t%d = call double @zlx_as_num(ptr %%t%d)\n", v, R);
+    }
     fprintf(out, "  call void @llvm.stackrestore.p0(ptr %%t%d)\n", sp);
     sprintf(ref, "%%t%d", v);
 }
@@ -2193,6 +2268,11 @@ static void emit_helpers(void) {
         fputs("declare void @zlx_num(ptr, double)\n", out);
         fputs("declare void @zlx_str(ptr, ptr)\n", out);
         fputs("declare void @zlx_call(ptr, ptr, ptr, i32)\n", out);
+        if (g_used_listbox) {
+            fputs("declare void @zlx_list_new(ptr, i64)\n", out);
+            fputs("declare void @zlx_list_set_num(ptr, i64, double)\n", out);
+            fputs("declare void @zlx_list_set_str(ptr, i64, ptr)\n", out);
+        }
         fputs("declare double @zlx_as_num(ptr)\n", out);
         fputs("declare ptr @zlx_as_str(ptr)\n", out);
         fputs("declare ptr @llvm.stacksave.p0()\n", out);

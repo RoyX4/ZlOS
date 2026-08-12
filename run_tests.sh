@@ -119,10 +119,24 @@ print(1 < 2 and 3 > 2)
 print("a" == "a")
 b = 5 > 3
 print(b)
+# bool-returning builtins through the bridge
+print(has("hello world", "world"))
+print(starts("hello", "he"))
+print(ends("hello", "lo"))
+# LIST arguments through the bridge, both from a variable and inline
+xs = [1, 2, 3, 4]
+print(sum(xs))
+print(contains(xs, 2))
+print(index_of(xs, 3))
+print(join(["a", "b", "c"], "-"))
+print(sum([5, 6, 7]))
 EOF
 if command -v clang >/dev/null; then
+    # runtime.c/os_linux.c must be linked: any bridged builtin (has, sum,
+    # join, ...) calls back into the boxed runtime through the zlx_ bridge.
     ( cd "$tmp" && "$OLDPWD/compilel" llvm_smoke.zl >/dev/null 2>&1 && \
-      clang -O2 out.ll -o llvm_smoke.bin 2>/dev/null )
+      clang -O2 out.ll "$OLDPWD/runtime.c" "$OLDPWD/os_linux.c" -I"$OLDPWD" \
+            -D_strdup=strdup -o llvm_smoke.bin -lm 2>/dev/null )
     if [ -x "$tmp/llvm_smoke.bin" ]; then
         "$tmp/llvm_smoke.bin" > "$tmp/llvm_smoke.llvm.out" 2>&1
         ./interp "$tmp/llvm_smoke.zl" > "$tmp/llvm_smoke.interp.out" 2>&1

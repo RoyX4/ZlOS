@@ -1249,3 +1249,28 @@ double      zlx_as_num (Value *v) { return v->num; }
 const char *zlx_as_str (Value *v) { return v->str; }
 long long   zlx_as_int (Value *v) { return (long long)v->num; }
 int         zlx_as_bool(Value *v) { return v->num != 0; }
+
+/* Boxing a compilel LIST argument.
+ *
+ * compilel machines a list as { i64 nitems, i64 cap, ptr tip, ptr items }
+ * with `items` pointing at 8-byte boxes, while builtin() wants a V_LIST
+ * whose items are full Values. The two layouts cannot be aliased, so the
+ * caller builds one: zlx_list_new reserves the slots, then one
+ * zlx_list_set_* per element fills them from the boxes it just loaded.
+ * The element type is known statically at the call site, which is why
+ * there is a _num and a _str rather than one polymorphic setter. */
+void zlx_list_new(Value *out, long long n)
+{
+    Value v = zl_nil();
+    v.type = V_LIST;
+    v.nitems = (int)n;
+    v.cap    = (int)n;
+    v.items  = malloc(sizeof(Value*) * (size_t)(n > 0 ? n : 1));
+    for (long long i = 0; i < n; i++) {
+        v.items[i] = malloc(sizeof(Value));
+        *v.items[i] = zl_nil();
+    }
+    *out = v;
+}
+void zlx_list_set_num(Value *lst, long long i, double x)      { *lst->items[i] = zl_num(x); }
+void zlx_list_set_str(Value *lst, long long i, const char *s) { *lst->items[i] = zl_str(s); }
