@@ -1,0 +1,148 @@
+# graph_search.zl -- graph traversal + shortest path over an adjacency list.
+#
+# Graph representation: a list of [node, [neighbors]] pairs.
+#   graph = [ ["A", ["B","C"]], ["B", ["D"]], ... ]
+# Nodes are compared by value (works for strings or numbers).
+
+# --- helpers -------------------------------------------------------------
+
+# Return the neighbor list for gnNode, or [] if not present.
+fn neighbors(gnGraph, gnNode) {
+  gnI = 0
+  while gnI < len(gnGraph) {
+    gnPair = gnGraph[gnI]
+    if gnPair[0] == gnNode {
+      return gnPair[1]
+    }
+    gnI = gnI + 1
+  }
+  return []
+}
+
+# --- breadth-first traversal --------------------------------------------
+
+# Return the list of nodes in BFS visit order starting from bfStart.
+fn bfs(bfGraph, bfStart) {
+  bfOrder = []
+  bfSeen = [bfStart]
+  bfQueue = [bfStart]
+  bfHead = 0
+  while bfHead < len(bfQueue) {
+    bfCur = bfQueue[bfHead]
+    bfHead = bfHead + 1
+    bfOrder = push(bfOrder, bfCur)
+    bfAdj = neighbors(bfGraph, bfCur)
+    bfJ = 0
+    while bfJ < len(bfAdj) {
+      bfNext = bfAdj[bfJ]
+      if not contains(bfSeen, bfNext) {
+        bfSeen = push(bfSeen, bfNext)
+        bfQueue = push(bfQueue, bfNext)
+      }
+      bfJ = bfJ + 1
+    }
+  }
+  return bfOrder
+}
+
+# --- depth-first traversal ----------------------------------------------
+
+# Return the list of nodes in DFS (pre-order) starting from dfStart.
+# Uses an explicit stack; neighbors are pushed so the first neighbor is
+# visited first (matching recursive DFS order).
+fn dfs(dfGraph, dfStart) {
+  dfOrder = []
+  dfSeen = []
+  dfStack = [dfStart]
+  while len(dfStack) > 0 {
+    dfTop = dfStack[len(dfStack) - 1]
+    dfStack = slice_list(dfStack, 0, len(dfStack) - 1)
+    if not contains(dfSeen, dfTop) {
+      dfSeen = push(dfSeen, dfTop)
+      dfOrder = push(dfOrder, dfTop)
+      dfAdj = neighbors(dfGraph, dfTop)
+      # push in reverse so first neighbor ends up on top of the stack
+      dfJ = len(dfAdj) - 1
+      while dfJ >= 0 {
+        dfNb = dfAdj[dfJ]
+        if not contains(dfSeen, dfNb) {
+          dfStack = push(dfStack, dfNb)
+        }
+        dfJ = dfJ - 1
+      }
+    }
+  }
+  return dfOrder
+}
+
+# Return a new list = elements [slStart, slEnd) of slList.
+fn slice_list(slList, slStart, slEnd) {
+  slOut = []
+  slI = slStart
+  while slI < slEnd {
+    slOut = push(slOut, slList[slI])
+    slI = slI + 1
+  }
+  return slOut
+}
+
+# --- shortest path length (BFS) -----------------------------------------
+
+# Return the number of EDGES on the shortest path from spA to spB.
+#   0  if spA == spB
+#  -1  if spB is unreachable from spA
+fn shortest_path(spGraph, spA, spB) {
+  if spA == spB {
+    return 0
+  }
+  spSeen = [spA]
+  spQueue = [spA]
+  spDist = [0]
+  spHead = 0
+  while spHead < len(spQueue) {
+    spCur = spQueue[spHead]
+    spCurD = spDist[spHead]
+    spHead = spHead + 1
+    spAdj = neighbors(spGraph, spCur)
+    spJ = 0
+    while spJ < len(spAdj) {
+      spNext = spAdj[spJ]
+      if spNext == spB {
+        return spCurD + 1
+      }
+      if not contains(spSeen, spNext) {
+        spSeen = push(spSeen, spNext)
+        spQueue = push(spQueue, spNext)
+        spDist = push(spDist, spCurD + 1)
+      }
+      spJ = spJ + 1
+    }
+  }
+  return -1
+}
+
+# --- self-test -----------------------------------------------------------
+#
+# Graph (directed):
+#   A -> B, C
+#   B -> D, E
+#   C -> F
+#   D -> (none)
+#   E -> F
+#   F -> (none)
+#   G -> H   (separate component, unreachable from A)
+#   H -> (none)
+
+g = [ ["A", ["B", "C"]], ["B", ["D", "E"]], ["C", ["F"]], ["D", []], ["E", ["F"]], ["F", []], ["G", ["H"]], ["H", []] ]
+
+print("=== graph_search self-test ===")
+print("BFS from A:            " + join(bfs(g, "A"), " -> "))
+print("  expected:            A -> B -> C -> D -> E -> F")
+print("DFS from A:            " + join(dfs(g, "A"), " -> "))
+print("  expected:            A -> B -> D -> E -> F -> C")
+print("shortest A->F (edges): " + num(shortest_path(g, "A", "F")) + "  (expected 2)")
+print("shortest A->D (edges): " + num(shortest_path(g, "A", "D")) + "  (expected 2)")
+print("shortest A->A (edges): " + num(shortest_path(g, "A", "A")) + "  (expected 0)")
+print("shortest A->H (edges): " + num(shortest_path(g, "A", "H")) + "  (expected -1, unreachable)")
+print("BFS from G:            " + join(bfs(g, "G"), " -> ") + "  (expected G -> H)")
+print("=== done ===")

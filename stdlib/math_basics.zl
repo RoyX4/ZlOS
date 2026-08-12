@@ -1,0 +1,105 @@
+# math_basics.zl -- basic math helpers for the zl standard library
+# Standalone: no imports, every helper defined here.
+
+fn abs(x) {
+  if x < 0 {
+    return -x
+  } else {
+    return x
+  }
+}
+
+fn sign(x) {
+  if x > 0 {
+    return 1
+  } else {
+    if x < 0 {
+      return -1
+    } else {
+      return 0
+    }
+  }
+}
+
+fn min2(a, b) {
+  if a < b {
+    return a
+  } else {
+    return b
+  }
+}
+
+fn max2(a, b) {
+  if a > b {
+    return a
+  } else {
+    return b
+  }
+}
+
+# exp assumed >= 0 (integer exponent)
+fn pow(base, exp) {
+  result = 1
+  i = 0
+  while i < exp {
+    result = result * base
+    i = i + 1
+  }
+  return result
+}
+
+# greatest common divisor via Euclid's algorithm (works on negatives too)
+fn gcd(a, b) {
+  x = abs(a)
+  y = abs(b)
+  while y != 0 {
+    t = y
+    y = x % y
+    x = t
+  }
+  return x
+}
+
+# least common multiple; lcm(0,0) defined as 0
+fn lcm(a, b) {
+  if a == 0 {
+    return 0
+  } else {
+    if b == 0 {
+      return 0
+    } else {
+      g = gcd(a, b)
+      return abs(a / g * b)
+    }
+  }
+}
+
+fn is_even(x) {
+  return x % 2 == 0
+}
+
+fn is_odd(x) {
+  return not is_even(x)
+}
+
+# ---------------- self-test ----------------
+print("abs(-7)      = " + abs(-7))
+print("abs(7)       = " + abs(7))
+print("sign(-3)     = " + sign(-3))
+print("sign(0)      = " + sign(0))
+print("sign(9)      = " + sign(9))
+print("min2(4, 9)   = " + min2(4, 9))
+print("max2(4, 9)   = " + max2(4, 9))
+print("pow(2, 10)   = " + pow(2, 10))
+print("pow(5, 0)    = " + pow(5, 0))
+print("pow(3, 3)    = " + pow(3, 3))
+print("gcd(48, 36)  = " + gcd(48, 36))
+print("gcd(-48, 36) = " + gcd(-48, 36))
+print("gcd(17, 5)   = " + gcd(17, 5))
+print("lcm(4, 6)    = " + lcm(4, 6))
+print("lcm(21, 6)   = " + lcm(21, 6))
+print("lcm(0, 5)    = " + lcm(0, 5))
+print("is_even(10)  = " + is_even(10))
+print("is_even(7)   = " + is_even(7))
+print("is_odd(7)    = " + is_odd(7))
+print("is_odd(10)   = " + is_odd(10))

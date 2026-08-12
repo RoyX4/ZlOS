@@ -1,0 +1,414 @@
+# numtheory.zl - modular and number-theoretic arithmetic.
+#
+# Representation: every value is a plain zl number, i.e. a double. That gives
+# exact integers up to 2^53, and it is the one constraint the whole module is
+# built around: a * b for two 32-bit residues is ~2^64 and would silently lose
+# precision. So NOTHING here ever forms a raw product of two residues. Every
+# modular multiply goes through mulmod(), a double-and-add ("Russian peasant")
+# loop whose largest intermediate is 2m. That keeps results exact for any
+# modulus below 2^52, which comfortably covers the 3215031751 bound below.
+# Division is only ever done when it is known to be exact (n / p after
+# n % p == 0), where IEEE division returns the exact quotient.
+#
+# Sign convention: moduli are positive; residues are returned normalised to
+# 0..m-1, so mod_norm(-7, 3) == 2. egcd() takes non-negative arguments and its
+# Bezout coefficients may be negative. Functions that can fail return -1
+# (mod_inverse) or [-1, 0] (crt) rather than raising.
+#
+# factorize(n) returns the exponent form [[p, k], ...] with p ascending, which
+# is what euler_phi() and sigma() consume; [] for n < 2. That is the reason
+# the module has no separate prime_factors() - the flat list is one loop away
+# and the exponent form is the one the multiplicative functions actually need.
+#
+# Naming: a function's locals are its own, but an assignment inside a function
+# writes an existing GLOBAL of the same name if there is one. So every
+# parameter and local carries a two-letter tag for its function (mp_ = mod_pow,
+# eg_ = egcd, ...) and the demo's own variables are all d_-prefixed. Nothing
+# can then be eaten by a call it makes.
+
+NT_MR_BASES = [2, 3, 5, 7]
+
+fn mod_norm(nn_a, nn_m) {
+    nn_r = nn_a % nn_m
+    if nn_r < 0 {
+        nn_r = nn_r + nn_m
+    }
+    return nn_r
+}
+fn mulmod(mu_a, mu_b, mu_m) {
+    mu_x = mod_norm(mu_a, mu_m)
+    mu_y = mod_norm(mu_b, mu_m)
+    mu_r = 0
+    while mu_y > 0 {
+        if mu_y % 2 == 1 {
+            mu_r = (mu_r + mu_x) % mu_m
+        }
+        mu_x = (mu_x * 2) % mu_m
+        mu_y = int(mu_y / 2)
+    }
+    return mu_r
+}
+fn mod_pow(mp_b, mp_e, mp_m) {
+    if mp_m <= 1 {
+        return 0
+    }
+    mp_base = mod_norm(mp_b, mp_m)
+    mp_ex = int(mp_e)
+    mp_r = 1
+    while mp_ex > 0 {
+        if mp_ex % 2 == 1 {
+            mp_r = mulmod(mp_r, mp_base, mp_m)
+        }
+        mp_base = mulmod(mp_base, mp_base, mp_m)
+        mp_ex = int(mp_ex / 2)
+    }
+    return mp_r
+}
+
+# Extended Euclid, iterative: returns [g, x, y] with a*x + b*y == g == gcd(a,b).
+# The quotient is taken as (a - a%b) / b rather than int(a/b) so that an exact
+# quotient can never be rounded down to q-1 by the floating divide.
+fn egcd(eg_a, eg_b) {
+    eg_or = abs(eg_a)
+    eg_r = abs(eg_b)
+    eg_os = 1
+    eg_s = 0
+    eg_ot = 0
+    eg_t = 1
+    while eg_r != 0 {
+        eg_rem = eg_or % eg_r
+        eg_q = (eg_or - eg_rem) / eg_r
+        eg_or = eg_r
+        eg_r = eg_rem
+        eg_tmp = eg_os - eg_q * eg_s
+        eg_os = eg_s
+        eg_s = eg_tmp
+        eg_tmp = eg_ot - eg_q * eg_t
+        eg_ot = eg_t
+        eg_t = eg_tmp
+    }
+    return [eg_or, eg_os, eg_ot]
+}
+fn mod_inverse(mi_a, mi_m) {
+    if mi_m < 1 {
+        return -1
+    }
+    mi_x = mod_norm(mi_a, mi_m)
+    mi_e = egcd(mi_x, mi_m)
+    if mi_e[0] != 1 {
+        return -1
+    }
+    return mod_norm(mi_e[1], mi_m)
+}
+fn is_coprime(ic_a, ic_b) {
+    ic_e = egcd(ic_a, ic_b)
+    return ic_e[0] == 1
+}
+
+# Chinese remainder theorem, merged one congruence at a time. Handles moduli
+# that are NOT pairwise coprime: it succeeds whenever the system is consistent
+# and returns [x, M] with M = lcm of the moduli and 0 <= x < M. Returns
+# [-1, 0] when two congruences contradict each other.
+fn crt(cr_rs, cr_ms) {
+    cr_x = 0
+    cr_mod = 1
+    cr_i = 0
+    while cr_i < len(cr_rs) {
+        cr_m = cr_ms[cr_i]
+        cr_r = mod_norm(cr_rs[cr_i], cr_m)
+        cr_e = egcd(cr_mod, cr_m)
+        cr_g = cr_e[0]
+        cr_diff = cr_r - cr_x
+        if cr_diff % cr_g != 0 {
+            return [-1, 0]
+        }
+        cr_lcm = (cr_mod / cr_g) * cr_m
+        cr_step = (cr_diff - cr_diff % cr_g) / cr_g
+        cr_mg = cr_m / cr_g
+        cr_k = mulmod(cr_step, cr_e[1], cr_mg)
+        cr_x = mod_norm(cr_x + mulmod(cr_mod, cr_k, cr_lcm), cr_lcm)
+        cr_mod = cr_lcm
+        cr_i = cr_i + 1
+    }
+    return [cr_x, cr_mod]
+}
+
+# Trial division by 2 then the odd numbers. Returns [[p, k], ...], p ascending.
+fn factorize(fz_n) {
+    fz_out = []
+    fz_x = int(abs(fz_n))
+    if fz_x < 2 {
+        return fz_out
+    }
+    fz_k = 0
+    while fz_x % 2 == 0 {
+        fz_x = fz_x / 2
+        fz_k = fz_k + 1
+    }
+    if fz_k > 0 {
+        fz_out = push(fz_out, [2, fz_k])
+    }
+    fz_d = 3
+    while fz_d * fz_d <= fz_x {
+        fz_k = 0
+        while fz_x % fz_d == 0 {
+            fz_x = fz_x / fz_d
+            fz_k = fz_k + 1
+        }
+        if fz_k > 0 {
+            fz_out = push(fz_out, [fz_d, fz_k])
+        }
+        fz_d = fz_d + 2
+    }
+    if fz_x > 1 {
+        fz_out = push(fz_out, [fz_x, 1])
+    }
+    return fz_out
+}
+
+# phi(n) = product of (p-1) * p^(k-1) over the prime powers of n.
+fn euler_phi(ph_n) {
+    ph_x = int(ph_n)
+    if ph_x < 1 {
+        return 0
+    }
+    ph_r = 1
+    for ph_pk in factorize(ph_x) {
+        ph_term = ph_pk[0] - 1
+        ph_i = 1
+        while ph_i < ph_pk[1] {
+            ph_term = ph_term * ph_pk[0]
+            ph_i = ph_i + 1
+        }
+        ph_r = ph_r * ph_term
+    }
+    return ph_r
+}
+
+# sigma(n) = sum of all divisors = product of (1 + p + ... + p^k).
+fn sigma(sg_n) {
+    sg_x = int(sg_n)
+    if sg_x < 1 {
+        return 0
+    }
+    sg_r = 1
+    for sg_pk in factorize(sg_x) {
+        sg_term = 1
+        sg_pow = 1
+        sg_i = 0
+        while sg_i < sg_pk[1] {
+            sg_pow = sg_pow * sg_pk[0]
+            sg_term = sg_term + sg_pow
+            sg_i = sg_i + 1
+        }
+        sg_r = sg_r * sg_term
+    }
+    return sg_r
+}
+fn divisors(dv_n) {
+    dv_out = []
+    dv_x = int(dv_n)
+    if dv_x < 1 {
+        return dv_out
+    }
+    dv_i = 1
+    while dv_i * dv_i <= dv_x {
+        if dv_x % dv_i == 0 {
+            dv_out = push(dv_out, dv_i)
+            dv_j = dv_x / dv_i
+            if dv_j != dv_i {
+                dv_out = push(dv_out, dv_j)
+            }
+        }
+        dv_i = dv_i + 1
+    }
+    return sort(dv_out)
+}
+
+# Strong probable-prime test to one base: write n-1 = d * 2^s with d odd, then
+# a^d must be 1 or the sequence a^(d*2^i) must hit n-1 before i reaches s.
+fn is_sprp(sp_n, sp_a) {
+    if sp_n < 3 {
+        return sp_n == 2
+    }
+    if sp_n % 2 == 0 {
+        return false
+    }
+    sp_b = mod_norm(sp_a, sp_n)
+    if sp_b == 0 {
+        return true
+    }
+    sp_d = sp_n - 1
+    sp_s = 0
+    while sp_d % 2 == 0 {
+        sp_d = sp_d / 2
+        sp_s = sp_s + 1
+    }
+    sp_x = mod_pow(sp_b, sp_d, sp_n)
+    if sp_x == 1 or sp_x == sp_n - 1 {
+        return true
+    }
+    sp_i = 1
+    while sp_i < sp_s {
+        sp_x = mulmod(sp_x, sp_x, sp_n)
+        if sp_x == sp_n - 1 {
+            return true
+        }
+        sp_i = sp_i + 1
+    }
+    return false
+}
+
+# Miller-Rabin with the fixed base set 2, 3, 5, 7. That set is DETERMINISTIC
+# for every n < 3215031751; 3215031751 itself is the smallest composite that is
+# a strong probable prime to all four, which is exactly where the bound comes
+# from. Above it the answer is "probably prime" - the demo shows the boundary.
+fn miller_rabin(mr_n) {
+    mr_x = int(mr_n)
+    if mr_x < 2 {
+        return false
+    }
+    for mr_p in NT_MR_BASES {
+        if mr_x % mr_p == 0 {
+            return mr_x == mr_p
+        }
+    }
+    for mr_a in NT_MR_BASES {
+        if not is_sprp(mr_x, mr_a) {
+            return false
+        }
+    }
+    return true
+}
+
+# --- brute-force references, used by the self-check below -------------------
+
+fn brute_pow(bp_b, bp_e, bp_m) {
+    bp_r = 1 % bp_m
+    bp_i = 0
+    while bp_i < bp_e {
+        bp_r = (bp_r * bp_b) % bp_m
+        bp_i = bp_i + 1
+    }
+    return bp_r
+}
+fn brute_inverse(bi_a, bi_m) {
+    if bi_m < 1 {
+        return -1
+    }
+    bi_x = 0
+    while bi_x < bi_m {
+        if (bi_a * bi_x) % bi_m == 1 % bi_m {
+            return bi_x
+        }
+        bi_x = bi_x + 1
+    }
+    return -1
+}
+
+# --- demo -------------------------------------------------------------------
+
+print("mod_pow(2, 10, 1000):                " + str(mod_pow(2, 10, 1000)))
+print("mod_pow(3, 200, 50):                 " + str(mod_pow(3, 200, 50)))
+print("mod_pow(7, 0, 13):                   " + str(mod_pow(7, 0, 13)))
+print("mod_pow(5, 117, 19)   [Fermat]:      " + str(mod_pow(5, 117, 19)))
+print("mod_pow(123456, 789, 1000003):       " + str(mod_pow(123456, 789, 1000003)))
+print("mod_pow(2, 3215031750, 3215031751):  " + str(mod_pow(2, 3215031750, 3215031751)))
+print("")
+print("egcd(240, 46)  -> [g,x,y]:  " + str(egcd(240, 46)) + "   240*-9 + 46*47 = " + str(240 * -9 + 46 * 47))
+print("egcd(30, 12):               " + str(egcd(30, 12)))
+print("egcd(35, 64):               " + str(egcd(35, 64)))
+print("egcd(17, 0) / egcd(0, 17):  " + str(egcd(17, 0)) + " " + str(egcd(0, 17)))
+print("")
+print("mod_inverse(3, 11):         " + str(mod_inverse(3, 11)) + "   (3*4 = 12 = 1 mod 11)")
+print("mod_inverse(10, 17):        " + str(mod_inverse(10, 17)))
+print("mod_inverse(7, 2311):       " + str(mod_inverse(7, 2311)))
+print("mod_inverse(123456, 1000003): " + str(mod_inverse(123456, 1000003)))
+print("mod_inverse(4, 8)  [none]:  " + str(mod_inverse(4, 8)))
+print("")
+print("crt([2,3,2], [3,5,7])  -> [x,M]:  " + str(crt([2, 3, 2], [3, 5, 7])))
+print("crt([0,3,4], [5,7,11]):           " + str(crt([0, 3, 4], [5, 7, 11])))
+print("crt([1,3], [4,6])  [not coprime]: " + str(crt([1, 3], [4, 6])))
+print("crt([1,2], [4,6])  [impossible]:  " + str(crt([1, 2], [4, 6])))
+print("")
+print("factorize(1):              " + str(factorize(1)))
+print("factorize(360):            " + str(factorize(360)))
+print("factorize(97):             " + str(factorize(97)))
+print("factorize(1024):           " + str(factorize(1024)))
+print("factorize(1000003):        " + str(factorize(1000003)))
+print("factorize(3215031751):     " + str(factorize(3215031751)))
+print("factorize(600851475143):   " + str(factorize(600851475143)))
+print("")
+print("euler_phi 1/10/36/97/360/1000:  " + str(euler_phi(1)) + " " + str(euler_phi(10)) + " " + str(euler_phi(36)) + " " + str(euler_phi(97)) + " " + str(euler_phi(360)) + " " + str(euler_phi(1000)))
+print("sigma     1/12/28/360/1000:     " + str(sigma(1)) + " " + str(sigma(12)) + " " + str(sigma(28)) + " " + str(sigma(360)) + " " + str(sigma(1000)))
+print("28 is perfect:                  " + str(sigma(28) == 2 * 28))
+print("")
+print("divisors(1):     " + str(divisors(1)))
+print("divisors(28):    " + str(divisors(28)))
+print("divisors(60):    " + str(divisors(60)))
+print("divisors(360):   " + str(divisors(360)))
+print("sum(divisors(360)) == sigma(360): " + str(sum(divisors(360)) == sigma(360)))
+print("")
+print("is_coprime(14,15) / (12,18) / (1,1) / (0,5) / (0,1):  " + str(is_coprime(14, 15)) + " " + str(is_coprime(12, 18)) + " " + str(is_coprime(1, 1)) + " " + str(is_coprime(0, 5)) + " " + str(is_coprime(0, 1)))
+print("")
+d_mr = [1, 2, 3, 4, 9, 97, 561, 1105, 2047, 7919, 25326001, 1000003, 2147483647]
+d_line = ""
+for d_n in d_mr {
+    d_line = d_line + str(d_n) + ":" + str(miller_rabin(d_n)) + "  "
+}
+print("miller_rabin: " + d_line)
+print("  561/1105 are Carmichael, 2047 fools base 2, 25326001 fools 2,3,5:")
+print("  is_sprp(2047,2)=" + str(is_sprp(2047, 2)) + " is_sprp(2047,3)=" + str(is_sprp(2047, 3)) + "   is_sprp(25326001,5)=" + str(is_sprp(25326001, 5)) + " is_sprp(25326001,7)=" + str(is_sprp(25326001, 7)))
+print("  boundary 3215031751 = 151*751*28351 is composite, yet")
+print("  miller_rabin(3215031751) = " + str(miller_rabin(3215031751)) + "   <- the bases 2,3,5,7 all miss it")
+print("  is_sprp(3215031751,11) = " + str(is_sprp(3215031751, 11)) + "  <- base 11 is the witness")
+print("")
+
+# self-check: mod_pow and mod_inverse against brute force
+d_bad = 0
+d_n1 = 0
+d_b = 0
+while d_b <= 15 {
+    d_e = 0
+    while d_e <= 10 {
+        d_m = 1
+        while d_m <= 15 {
+            d_n1 = d_n1 + 1
+            if mod_pow(d_b, d_e, d_m) != brute_pow(d_b, d_e, d_m) {
+                d_bad = d_bad + 1
+                print("  MISMATCH mod_pow(" + str(d_b) + "," + str(d_e) + "," + str(d_m) + ") = " + str(mod_pow(d_b, d_e, d_m)) + " want " + str(brute_pow(d_b, d_e, d_m)))
+            }
+            d_m = d_m + 1
+        }
+        d_e = d_e + 1
+    }
+    d_b = d_b + 1
+}
+print("mod_pow vs brute force:     " + str(d_n1) + " cases, " + str(d_bad) + " mismatches")
+
+d_bad2 = 0
+d_n2 = 0
+d_inv = 0
+d_m = 1
+while d_m <= 30 {
+    d_a = 0
+    while d_a <= 30 {
+        d_n2 = d_n2 + 1
+        d_got = mod_inverse(d_a, d_m)
+        d_want = brute_inverse(d_a, d_m)
+        if d_got != d_want {
+            d_bad2 = d_bad2 + 1
+            print("  MISMATCH mod_inverse(" + str(d_a) + "," + str(d_m) + ") = " + str(d_got) + " want " + str(d_want))
+        }
+        if d_got != -1 {
+            d_inv = d_inv + 1
+            if mulmod(d_a, d_got, d_m) != 1 % d_m {
+                d_bad2 = d_bad2 + 1
+                print("  BAD INVERSE " + str(d_a) + " mod " + str(d_m))
+            }
+        }
+        d_a = d_a + 1
+    }
+    d_m = d_m + 1
+}
+print("mod_inverse vs brute force: " + str(d_n2) + " cases (" + str(d_inv) + " invertible), " + str(d_bad2) + " mismatches")

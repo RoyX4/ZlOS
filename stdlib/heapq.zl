@@ -1,0 +1,172 @@
+# heapq.zl - a binary min-heap / priority queue on a plain list.
+#
+# The heap is just a list in array form: the children of index i live at
+# 2*i+1 and 2*i+2, so the smallest element is always at index 0.
+#
+# zl has no first-class functions, so the comparison is picked by a "keyed"
+# flag instead of a comparator: keyed = false compares the elements
+# themselves, keyed = true compares [priority, item] pairs on the priority.
+# hless(), sift_up() and sift_down() all take that flag.
+#
+# Popping returns the pair [heap, min], since a zl function returns one value.
+#
+# NAMING: assigning a name inside a function writes the GLOBAL of that name
+# when one exists (see README's scope gotcha), so every function-local here
+# carries a per-function prefix - su_, sd_, hp_, hf_, hs_ - the way
+# fenwick.zl, trie.zl, segtree.zl and the rest of the structure modules
+# already do. Bare locals meant a caller keeping a counter in `i` or `n`, or
+# a list in `out`, had it silently rewritten by a heap operation.
+#
+# The bounds test and the element comparison are written as separate nested
+# ifs rather than `l < n and hless(...)`. `and` short-circuits now, so the
+# combined form would be correct too; the nesting is just left as it reads.
+
+fn hless(a, b, keyed) {
+    if keyed {
+        return a[0] < b[0]
+    }
+    return a < b
+}
+fn sift_up(h, i, keyed) {
+    while i > 0 {
+        su_p = int((i - 1) / 2)
+        if not hless(h[i], h[su_p], keyed) {
+            return h
+        }
+        su_tmp = h[su_p]
+        h[su_p] = h[i]
+        h[i] = su_tmp
+        i = su_p
+    }
+    return h
+}
+fn sift_down(h, i, keyed) {
+    sd_n = len(h)
+    while true {
+        sd_l = 2 * i + 1
+        sd_r = sd_l + 1
+        sd_small = i
+        if sd_l < sd_n {
+            if hless(h[sd_l], h[sd_small], keyed) {
+                sd_small = sd_l
+            }
+        }
+        if sd_r < sd_n {
+            if hless(h[sd_r], h[sd_small], keyed) {
+                sd_small = sd_r
+            }
+        }
+        if sd_small == i {
+            return h
+        }
+        sd_tmp = h[i]
+        h[i] = h[sd_small]
+        h[sd_small] = sd_tmp
+        i = sd_small
+    }
+    return h
+}
+
+fn heap_new() {
+    return []
+}
+fn heap_len(h) {
+    return len(h)
+}
+fn heap_peek(h) {
+    if len(h) == 0 {
+        return nil()
+    }
+    return h[0]
+}
+fn heap_push(h, v) {
+    h = push(h, v)
+    return sift_up(h, len(h) - 1, false)
+}
+fn heap_pop(h, keyed) {
+    hp_n = len(h)
+    if hp_n == 0 {
+        return [h, nil()]
+    }
+    hp_top = h[0]
+    hp_last = h[hp_n - 1]
+    h = remove(h, hp_n - 1)
+    if len(h) > 0 {
+        h[0] = hp_last
+        h = sift_down(h, 0, keyed)
+    }
+    return [h, hp_top]
+}
+fn heap_pop_min(h) {
+    return heap_pop(h, false)
+}
+fn heapify(xs) {
+    hf_h = []
+    for hf_x in xs {
+        hf_h = push(hf_h, hf_x)
+    }
+    hf_i = int(len(hf_h) / 2) - 1
+    while hf_i >= 0 {
+        hf_h = sift_down(hf_h, hf_i, false)
+        hf_i = hf_i - 1
+    }
+    return hf_h
+}
+fn heap_sort(xs) {
+    hs_h = heapify(xs)
+    hs_out = []
+    while len(hs_h) > 0 {
+        hs_r = heap_pop_min(hs_h)
+        hs_h = hs_r[0]
+        hs_out = push(hs_out, hs_r[1])
+    }
+    return hs_out
+}
+
+# keyed variant: the heap holds [priority, item] pairs, lowest priority first.
+fn kpush(h, priority, item) {
+    h = push(h, [priority, item])
+    return sift_up(h, len(h) - 1, true)
+}
+fn kpop(h) {
+    return heap_pop(h, true)
+}
+
+# --- demo ---
+# (top-level names are kept distinct from the names used inside the functions
+#  above: a parameter that shares a global's name overwrites that global.)
+
+hp = heap_new()
+for hv in [5, 3, 8, 1, 9, 2, 7] {
+    hp = heap_push(hp, hv)
+}
+print("heap array:  " + str(hp))
+print("peek:        " + str(heap_peek(hp)))
+print("len:         " + str(heap_len(hp)))
+
+order = []
+while heap_len(hp) > 0 {
+    res = heap_pop_min(hp)
+    hp = res[0]
+    order = push(order, res[1])
+}
+print("pop order:   " + str(order))
+print("peek empty:  " + str(heap_peek(hp)))
+print("pop empty:   " + str(heap_pop_min(hp)))
+
+raw = [9, 4, 7, 1, 8, 3, 6, 2, 5]
+print("heapify:     " + str(heapify(raw)))
+print("heap_sort:   " + str(heap_sort(raw)))
+
+pq = heap_new()
+pq = kpush(pq, 3, "write docs")
+pq = kpush(pq, 1, "fix crash")
+pq = kpush(pq, 4, "ship it")
+pq = kpush(pq, 2, "run tests")
+print("queue array: " + str(pq))
+while heap_len(pq) > 0 {
+    res = kpop(pq)
+    pq = res[0]
+    job = res[1]
+    print("  next job:  p" + str(job[0]) + " " + job[1])
+}

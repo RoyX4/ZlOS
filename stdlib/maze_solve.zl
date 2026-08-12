@@ -1,0 +1,173 @@
+# maze_solve.zl -- breadth-first search over a small grid maze.
+# Maze = list of rows, each row a string of chars:
+#   '#' = wall, ' ' = open, 'S' = start, 'E' = end.
+# Reports whether a path from S to E exists and its length
+# (number of steps = edges walked, S and E inclusive count as cells).
+
+# ---- find a character in the grid -> [row, col] or [-1, -1] ----
+fn find_cell(fc_grid, fc_ch) {
+  fc_r = 0
+  while fc_r < len(fc_grid) {
+    fc_row = fc_grid[fc_r]
+    fc_c = 0
+    while fc_c < len(fc_row) {
+      if at(fc_row, fc_c) == fc_ch {
+        return [fc_r, fc_c]
+      }
+      fc_c = fc_c + 1
+    }
+    fc_r = fc_r + 1
+  }
+  return [-1, -1]
+}
+
+# ---- true if cell (r,c) is inside the grid and not a wall ----
+fn is_open(io_grid, io_r, io_c) {
+  if io_r < 0 or io_c < 0 {
+    return false
+  }
+  if io_r >= len(io_grid) {
+    return false
+  }
+  io_row = io_grid[io_r]
+  if io_c >= len(io_row) {
+    return false
+  }
+  if at(io_row, io_c) == "#" {
+    return false
+  }
+  return true
+}
+
+# ---- build a visited grid (list of rows, each a list of false) ----
+fn make_visited(mv_grid) {
+  mv_out = []
+  mv_r = 0
+  while mv_r < len(mv_grid) {
+    mv_row = mv_grid[mv_r]
+    mv_line = []
+    mv_c = 0
+    while mv_c < len(mv_row) {
+      mv_line = push(mv_line, false)
+      mv_c = mv_c + 1
+    }
+    mv_out = push(mv_out, mv_line)
+    mv_r = mv_r + 1
+  }
+  return mv_out
+}
+
+# ---- set element [r][c] of a 2D list to a value, returning a NEW grid ----
+fn set2d(s2_grid, s2_r, s2_c, s2_val) {
+  s2_out = []
+  s2_i = 0
+  while s2_i < len(s2_grid) {
+    if s2_i == s2_r {
+      s2_row = s2_grid[s2_i]
+      s2_new = []
+      s2_j = 0
+      while s2_j < len(s2_row) {
+        if s2_j == s2_c {
+          s2_new = push(s2_new, s2_val)
+        } else {
+          s2_new = push(s2_new, s2_row[s2_j])
+        }
+        s2_j = s2_j + 1
+      }
+      s2_out = push(s2_out, s2_new)
+    } else {
+      s2_out = push(s2_out, s2_grid[s2_i])
+    }
+    s2_i = s2_i + 1
+  }
+  return s2_out
+}
+
+# ---- BFS. Returns path length in cells, or -1 if no path. ----
+# Queue holds [r, c, dist]; dequeue via a moving head index.
+fn bfs(bf_grid) {
+  bf_start = find_cell(bf_grid, "S")
+  bf_end = find_cell(bf_grid, "E")
+  if bf_start[0] == -1 or bf_end[0] == -1 {
+    return -1
+  }
+
+  bf_visited = make_visited(bf_grid)
+  bf_visited = set2d(bf_visited, bf_start[0], bf_start[1], true)
+
+  # 4-directional moves: up, down, left, right.
+  bf_dr = [-1, 1, 0, 0]
+  bf_dc = [0, 0, -1, 1]
+
+  bf_queue = [[bf_start[0], bf_start[1], 1]]
+  bf_head = 0
+
+  while bf_head < len(bf_queue) {
+    bf_cur = bf_queue[bf_head]
+    bf_head = bf_head + 1
+    bf_r = bf_cur[0]
+    bf_c = bf_cur[1]
+    bf_d = bf_cur[2]
+
+    if bf_r == bf_end[0] and bf_c == bf_end[1] {
+      return bf_d
+    }
+
+    bf_k = 0
+    while bf_k < 4 {
+      bf_nr = bf_r + bf_dr[bf_k]
+      bf_nc = bf_c + bf_dc[bf_k]
+      if is_open(bf_grid, bf_nr, bf_nc) {
+        bf_seen = bf_visited[bf_nr]
+        if bf_seen[bf_nc] == false {
+          bf_visited = set2d(bf_visited, bf_nr, bf_nc, true)
+          bf_queue = push(bf_queue, [bf_nr, bf_nc, bf_d + 1])
+        }
+      }
+      bf_k = bf_k + 1
+    }
+  }
+  return -1
+}
+
+# ---- pretty report for one maze ----
+fn report_maze(rm_grid, rm_label) {
+  print("--- " + rm_label + " ---")
+  rm_i = 0
+  while rm_i < len(rm_grid) {
+    print(rm_grid[rm_i])
+    rm_i = rm_i + 1
+  }
+  rm_len = bfs(rm_grid)
+  if rm_len == -1 {
+    print("path exists: false")
+    print("path length: none")
+  } else {
+    print("path exists: true")
+    print("path length (cells): " + rm_len)
+    print("path length (steps): " + (rm_len - 1))
+  }
+  print("")
+}
+
+# =====================  SELF-TEST  =====================
+
+# Hand-made 6x6 maze with a solution.
+maze_a = ["S#   #", " # # #", " #   #", " ### #", "     #", "#### E"]
+
+# 6x6 maze where E is walled off (no path).
+maze_b = ["S    #", "##### ", "#####E", "######", "######", "######"]
+
+# Trivial open maze: straight shot.
+maze_c = ["S    E"]
+
+report_maze(maze_a, "maze_a (6x6, solvable)")
+report_maze(maze_b, "maze_b (6x6, E blocked by walls)")
+report_maze(maze_c, "maze_c (1x6, straight line)")
+
+# Individual function checks.
+print("find S in maze_a: " + join(find_cell(maze_a, "S"), ","))
+print("find E in maze_a: " + join(find_cell(maze_a, "E"), ","))
+print("is_open wall (0,1) maze_a: " + is_open(maze_a, 0, 1))
+print("is_open open (1,0) maze_a: " + is_open(maze_a, 1, 0))
+print("bfs maze_c length: " + bfs(maze_c))

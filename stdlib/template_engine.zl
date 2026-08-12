@@ -1,0 +1,123 @@
+# template_engine.zl -- {{name}} placeholder template engine for the zl stdlib
+# Standalone: only built-ins are used.
+#
+# render(tmpl, pairs) walks the template string once. When it meets "{{",
+# it looks for the next "}}", extracts the key between them (whitespace
+# trimmed), and substitutes the matching value from pairs (a list of
+# [key, value] pairs). Unknown keys are left as the literal "{{key}}" so
+# mistakes stay visible. An unterminated "{{" is emitted verbatim.
+
+# Strip leading/trailing spaces and tabs from s (local names prefixed te_).
+fn te_trim(s) {
+    te_start = 0
+    while te_start < len(s) and (at(s, te_start) == " " or at(s, te_start) == "\t") {
+        te_start = te_start + 1
+    }
+    te_end = len(s)
+    while te_end > te_start and (at(s, te_end - 1) == " " or at(s, te_end - 1) == "\t") {
+        te_end = te_end - 1
+    }
+    return slice(s, te_start, te_end)
+}
+
+# Look key up in pairs. Returns [found, value]; found is a boolean.
+fn te_lookup(pairs, key) {
+    lu_i = 0
+    while lu_i < len(pairs) {
+        lu_pair = pairs[lu_i]
+        if lu_pair[0] == key {
+            return [true, lu_pair[1]]
+        }
+        lu_i = lu_i + 1
+    }
+    return [false, ""]
+}
+
+# Fill every {{key}} placeholder in tmpl using pairs.
+fn render(tmpl, pairs) {
+    r_out = ""
+    r_i = 0
+    r_n = len(tmpl)
+    while r_i < r_n {
+        r_c = at(tmpl, r_i)
+        # A placeholder must start with "{{".
+        if r_c == "{" and r_i + 1 < r_n and at(tmpl, r_i + 1) == "{" {
+            # Scan forward for the closing "}}".
+            r_j = r_i + 2
+            r_close = -1
+            while r_j < r_n - 1 and r_close == -1 {
+                if at(tmpl, r_j) == "}" and at(tmpl, r_j + 1) == "}" {
+                    r_close = r_j
+                } else {
+                    r_j = r_j + 1
+                }
+            }
+            if r_close == -1 {
+                # No closing brace: emit "{{" literally, keep scanning after it.
+                r_out = r_out + "{{"
+                r_i = r_i + 2
+            } else {
+                r_key = te_trim(slice(tmpl, r_i + 2, r_close))
+                r_hit = te_lookup(pairs, r_key)
+                if r_hit[0] {
+                    r_out = r_out + r_hit[1]
+                } else {
+                    # Unknown key: leave the placeholder intact.
+                    r_out = r_out + slice(tmpl, r_i, r_close + 2)
+                }
+                r_i = r_close + 2
+            }
+        } else {
+            r_out = r_out + r_c
+            r_i = r_i + 1
+        }
+    }
+    return r_out
+}
+
+# ---------------- self-test ----------------
+print("== template_engine self-test ==")
+
+# 1. Single placeholder.
+t1 = "Hello, {{name}}!"
+p1 = [["name", "World"]]
+print("single    -> '" + render(t1, p1) + "'")
+
+# 2. Multiple placeholders, including one key used twice.
+t2 = "{{greeting}}, {{name}}! {{greeting}} again, {{name}}."
+p2 = [["greeting", "Hi"], ["name", "Zac"]]
+print("multiple  -> '" + render(t2, p2) + "'")
+
+# 3. Whitespace inside the braces is trimmed before lookup.
+t3 = "x = {{  x  }}, y = {{y}}"
+p3 = [["x", "10"], ["y", "20"]]
+print("spaced    -> '" + render(t3, p3) + "'")
+
+# 4. Unknown key is left as the literal placeholder.
+t4 = "known={{a}} unknown={{missing}}"
+p4 = [["a", "A"]]
+print("unknown   -> '" + render(t4, p4) + "'")
+
+# 5. No placeholders at all -> template returned unchanged.
+t5 = "plain text, no braces"
+print("plain     -> '" + render(t5, []) + "'")
+
+# 6. Unterminated "{{" is emitted verbatim.
+t6 = "oops {{ not closed"
+print("unterm    -> '" + render(t6, [["not", "X"]]) + "'")
+
+# 7. Adjacent placeholders with no text between them.
+t7 = "{{a}}{{b}}{{c}}"
+p7 = [["a", "1"], ["b", "2"], ["c", "3"]]
+print("adjacent  -> '" + render(t7, p7) + "'")
+
+# 8. Empty value substitutes to nothing.
+t8 = "start[{{gap}}]end"
+p8 = [["gap", ""]]
+print("emptyval  -> '" + render(t8, p8) + "'")
+
+# 9. A multi-line template.
+t9 = "Dear {{name}},\n  Your balance is {{amount}}.\nThanks."
+p9 = [["name", "Roy"], ["amount", "$42"]]
+print("multiline ->")
+print(render(t9, p9))

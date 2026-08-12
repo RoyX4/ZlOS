@@ -1,0 +1,1212 @@
+# =============================================================================
+#  vm.zl  -  a stack machine, and an assembler for it, written in zl
+# =============================================================================
+#
+#  This file is two programs stacked on top of each other.
+#
+#    asm_parse(source)  turns assembly *text* into a loaded program: it finds
+#                       the labels, gives every instruction an address,
+#                       resolves jump targets, allocates a slot for each
+#                       named variable, and reports every mistake it found.
+#
+#    vm_run(program, ...)  executes that program on a stack machine with a
+#                       data stack, a separate call stack, a bank of
+#                       variables, a step limit, and a trap for every way
+#                       the machine can be asked to do something impossible.
+#
+#  A stack machine has no registers. Every instruction takes its operands
+#  from the top of a stack and leaves its result there. `2 + 3` becomes
+#
+#        PUSH 2      ; [2]
+#        PUSH 3      ; [2 3]
+#        ADD         ; [5]
+#
+#  which is why real stack machines - the JVM, CPython, WebAssembly, Forth -
+#  have such small instruction sets. There are seventeen instructions here
+#  and they are enough to run a recursive factorial.
+#
+#  The assembler is the classic TWO PASS design, and the reason for two
+#  passes is one line of assembly:
+#
+#        JMP loop
+#
+#  When the assembler reaches that line it may not yet know where `loop` is:
+#  the label can be defined later in the file. So pass 1 walks the text and
+#  records only *where things are* - which address each instruction lands on,
+#  and which address each label names. Pass 2 walks the same instructions
+#  again, and this time every label is already known, so `JMP loop` can be
+#  encoded as `JMP 4`. Forward references stop being a problem the moment you
+#  agree to read the file twice.
+#
+#  Everything below runs on the zl interpreter. zl has no structs and no
+#  first-class functions, so a "program" and a "run result" are plain lists,
+#  read through the named index constants defined beside them. zl also parses
+#  one expression per line, which is why nothing here wraps.
+#
+#  One more zl house rule is visible everywhere below: assigning to a name
+#  inside a function writes to the *global* of that name if one exists, and
+#  only creates a local if it does not. So every top-level variable in this
+#  file is UPPER_CASE and every variable inside a function is lower case.
+#  Break that and a helper's `i` quietly eats the driver's `i`.
+#
+#  Run:      interp.exe examples\vm.zl
+#  Writes:   examples_out\vm_listing.txt   (everything printed, as a file)
+#
+#  Sizing:   the three demo programs run ~1350 instructions in total, which
+#            is instant. The throughput benchmark near the bottom repeats
+#            them BENCH_REPS times; raise BENCH_REPS for a longer run - the
+#            cost is linear, about 1350 VM instructions per repetition.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+#  1.  THE INSTRUCTION SET
+# -----------------------------------------------------------------------------
+#
+#  An opcode is just a number. MNEMONICS is the table that maps the number to
+#  the name and back again, so the assembler's whole "decode a mnemonic" step
+#  is index_of(MNEMONICS, word) and the disassembler's is MNEMONICS[op].
+#  The OP_* constants below are exactly the indices into that table - keep the
+#  two in step if you ever add an instruction.
+
+MNEMONICS = ["HALT", "PUSH", "POP", "ADD", "SUB", "MUL", "DIV", "DUP", "SWAP", "JMP", "JZ", "JNZ", "LOAD", "STORE", "PRINT", "CALL", "RET"]
+
+OP_HALT  = 0        # HALT     - stop the machine, cleanly
+OP_PUSH  = 1        # PUSH n   - push the immediate n
+OP_POP   = 2        # POP      - discard the top
+OP_ADD   = 3        # ADD      - [a b] -> [a+b]
+OP_SUB   = 4        # SUB      - [a b] -> [a-b]
+OP_MUL   = 5        # MUL      - [a b] -> [a*b]
+OP_DIV   = 6        # DIV      - [a b] -> [a/b] truncated; traps when b is 0
+OP_DUP   = 7        # DUP      - [a]   -> [a a]
+OP_SWAP  = 8        # SWAP     - [a b] -> [b a]
+OP_JMP   = 9        # JMP L    - jump to L
+OP_JZ    = 10       # JZ L     - pop; jump to L if the value was zero
+OP_JNZ   = 11       # JNZ L    - pop; jump to L if the value was not zero
+OP_LOAD  = 12       # LOAD v   - push the value of variable v
+OP_STORE = 13       # STORE v  - pop into variable v
+OP_PRINT = 14       # PRINT    - pop and emit
+OP_CALL  = 15       # CALL L   - push the return address, then jump to L
+OP_RET   = 16       # RET      - pop the return address and go back
+
+#  What kind of operand, if any, each instruction carries. This table is the
+#  entire grammar of the assembly language: a mnemonic, and at most one
+#  operand whose meaning is fixed by that mnemonic.
+
+A_NONE = 0          # no operand at all
+A_IMM  = 1          # an integer literal, e.g.  PUSH -7
+A_LBL  = 2          # a label, resolved to an address in pass 2
+A_VAR  = 3          # a variable name, resolved to a slot number
+
+OPERAND_KIND = [A_NONE, A_IMM, A_NONE, A_NONE, A_NONE, A_NONE, A_NONE, A_NONE, A_NONE, A_LBL, A_LBL, A_LBL, A_VAR, A_VAR, A_NONE, A_LBL, A_NONE]
+
+KIND_NAMES = ["-", "immediate", "label", "variable"]
+KIND_PHRASES = ["nothing", "an integer literal", "a label", "a variable name"]
+
+#  Machine limits. Both stacks are a fixed size: overflowing one is a trap,
+#  not a crash, which is rather the point of writing the loop by hand.
+
+STACK_MAX = 64      # data stack slots
+CALL_MAX  = 64      # call stack slots - so, the maximum recursion depth
+
+BENCH_REPS = 120    # see "Sizing" in the header
+
+
+# -----------------------------------------------------------------------------
+#  2.  SHAPES  -  what a "program" and a "run result" are
+# -----------------------------------------------------------------------------
+#
+#  No structs in zl, so both are lists and these constants are the field
+#  names. program[P_OPS] is the same idea as program.ops in another language.
+
+P_OK     = 0        # bool  - did it assemble without errors?
+P_ERRS   = 1        # list  - human-readable diagnostics, in source order
+P_OPS    = 2        # list  - one opcode number per address
+P_ARGS   = 3        # list  - one resolved operand per address
+P_VARS   = 4        # list  - variable names; the slot number is the position
+P_LNAMES = 5        # list  - label names
+P_LADDRS = 6        # list  - label addresses (parallel to P_LNAMES)
+P_TEXT   = 7        # list  - the cleaned source text of each instruction
+P_LINES  = 8        # list  - the source line number of each instruction
+
+R_STATUS = 0        # str   - "HALT", "STEP-LIMIT ...", or "TRAP: ..."
+R_OUT    = 1        # list  - everything PRINT emitted, in order
+R_STEPS  = 2        # num   - instructions actually executed
+R_MAXSP  = 3        # num   - high-water mark of the data stack
+R_MAXCSP = 4        # num   - high-water mark of the call stack
+R_TRACE  = 5        # list  - the first few steps, as printable rows
+R_VARS   = 6        # list  - final variable values, by slot
+R_USED   = 7        # list  - execution count per opcode: an instruction mix
+
+
+# -----------------------------------------------------------------------------
+#  3.  SMALL HELPERS
+# -----------------------------------------------------------------------------
+
+# Right-align. Addresses and counts read wrong when they are left-aligned.
+fn lpad(x, w) {
+    t = str(x)
+    while len(t) < w {
+        t = " " + t
+    }
+    return t
+}
+
+# A zero-padded address, the way every disassembler prints one.
+fn addr4(n) {
+    t = str(n)
+    while len(t) < 4 {
+        t = "0" + t
+    }
+    return t
+}
+
+# zl's num() answers 0 for junk, which would quietly turn `PUSH oops` into
+# `PUSH 0`. An assembler must never do that, so read the digits by hand and
+# return [ok, value] so the caller has to look at the ok.
+fn parse_int(tok) {
+    s = tok
+    sgn = 1
+    if starts(s, "-") {
+        sgn = -1
+        s = slice(s, 1, len(s))
+    } elif starts(s, "+") {
+        s = slice(s, 1, len(s))
+    }
+    if len(s) == 0 {
+        return [false, 0]
+    }
+    v = 0
+    i = 0
+    while i < len(s) {
+        c = index_at(s, i)
+        if c < 48 or c > 57 {
+            return [false, 0]
+        }
+        v = v * 10 + (c - 48)
+        i = i + 1
+    }
+    return [true, sgn * v]
+}
+
+# A legal label or variable name: a letter or _ first, then letters, digits
+# and _. Rejecting anything else early buys a much better error message than
+# letting it through and failing somewhere downstream.
+fn is_name(s) {
+    if len(s) == 0 {
+        return false
+    }
+    i = 0
+    while i < len(s) {
+        c = index_at(s, i)
+        is_alpha = (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95
+        is_digit = c >= 48 and c <= 57
+        if not is_alpha and not (is_digit and i > 0) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+
+# -----------------------------------------------------------------------------
+#  4.  THE ASSEMBLER
+# -----------------------------------------------------------------------------
+#
+#  asm_parse(source) -> program
+#
+#  The source syntax, in full:
+#
+#      ; everything after a semicolon is a comment
+#      label:                  a label on a line of its own
+#      label:  MNEMONIC arg    or with an instruction on the same line
+#              MNEMONIC        an instruction that takes no operand
+#
+#  Blank lines and comment-only lines occupy no space in the assembled
+#  program, which is exactly why addresses have to be counted separately from
+#  line numbers - and why a listing has to show you both.
+#
+#  Errors are collected, not thrown. An assembler that stops at the first
+#  mistake makes you reassemble once per typo; this one reports all of them
+#  and marks the program un-runnable through P_OK. Because pass 1 finds the
+#  label problems and pass 2 finds the instruction problems, the two sets
+#  arrive out of order and have to be merged back into source order - hence
+#  carrying a line number alongside every message.
+
+# A stable insertion sort of [line, message] pairs by line.
+fn asm_sort_errs(errs) {
+    out = []
+    for e in errs {
+        i = 0
+        placed = false
+        while i < len(out) {
+            if out[i][0] > e[0] {
+                out = insert(out, i, e)
+                placed = true
+                break
+            }
+            i = i + 1
+        }
+        if not placed {
+            out = push(out, e)
+        }
+    }
+    return out
+}
+
+fn asm_parse(source) {
+    errs = []
+    lnames = []
+    laddrs = []
+    pending = []            # pass-1 output: [line_no, MNEMONIC, operand_text]
+
+    # --- pass 1: strip comments, record labels, hand out addresses ----------
+    raw = lines(source)
+    ln = 0
+    addr = 0
+    while ln < len(raw) {
+        ln = ln + 1
+        text = trim(replace(raw[ln - 1], "\t", " "))
+        cut = find(text, ";")
+        if cut >= 0 {
+            text = trim(slice(text, 0, cut))
+        }
+        if len(text) == 0 {
+            continue
+        }
+
+        # A leading "name:" labels the next instruction to be emitted, which
+        # is the address we are about to hand out - so record it before the
+        # instruction on the same line consumes that address.
+        colon = find(text, ":")
+        if colon >= 0 {
+            name = trim(slice(text, 0, colon))
+            if not is_name(name) {
+                errs = push(errs, [ln, "bad label name '" + name + "'"])
+            } elif index_of(lnames, name) >= 0 {
+                errs = push(errs, [ln, "duplicate label '" + name + "'"])
+            } else {
+                lnames = push(lnames, name)
+                laddrs = push(laddrs, addr)
+            }
+            text = trim(slice(text, colon + 1, len(text)))
+            if len(text) == 0 {
+                continue
+            }
+        }
+
+        # Split what is left into "MNEMONIC" and "the rest of the line".
+        gap = find(text, " ")
+        word = text
+        operand = ""
+        if gap >= 0 {
+            word = slice(text, 0, gap)
+            operand = trim(slice(text, gap + 1, len(text)))
+        }
+        pending = push(pending, [ln, upper(word), operand])
+        addr = addr + 1
+    }
+
+    # --- pass 2: encode. Every label is known by now, so nothing is forward -
+    ops = []
+    args = []
+    vnames = []
+    txts = []
+    linenos = []
+    for item in pending {
+        ln = item[0]
+        word = item[1]
+        operand = item[2]
+
+        op = index_of(MNEMONICS, word)
+        if op < 0 {
+            errs = push(errs, [ln, "unknown instruction '" + word + "'"])
+            op = OP_HALT
+            operand = ""
+        }
+
+        kind = OPERAND_KIND[op]
+        v = 0
+        if kind == A_NONE {
+            if len(operand) > 0 {
+                errs = push(errs, [ln, word + " takes no operand (got '" + operand + "')"])
+            }
+        } elif len(operand) == 0 {
+            errs = push(errs, [ln, word + " needs " + KIND_PHRASES[kind] + " after it"])
+        } elif kind == A_IMM {
+            parsed = parse_int(operand)
+            if not parsed[0] {
+                errs = push(errs, [ln, "'" + operand + "' is not an integer"])
+            } else {
+                v = parsed[1]
+            }
+        } elif kind == A_LBL {
+            k = index_of(lnames, operand)
+            if k < 0 {
+                errs = push(errs, [ln, "undefined label '" + operand + "'"])
+            } else {
+                v = laddrs[k]
+            }
+        } else {
+            # A_VAR: the first mention of a name allocates the next free slot.
+            if not is_name(operand) {
+                errs = push(errs, [ln, "bad variable name '" + operand + "'"])
+            } else {
+                k = index_of(vnames, operand)
+                if k < 0 {
+                    vnames = push(vnames, operand)
+                    k = len(vnames) - 1
+                }
+                v = k
+            }
+        }
+
+        ops = push(ops, op)
+        args = push(args, v)
+        txts = push(txts, len(operand) > 0 ? word + " " + operand : word)
+        linenos = push(linenos, ln)
+    }
+
+    msgs = []
+    for e in asm_sort_errs(errs) {
+        msgs = push(msgs, "line " + lpad(e[0], 3) + ": " + e[1])
+    }
+    return [len(errs) == 0, msgs, ops, args, vnames, lnames, laddrs, txts, linenos]
+}
+
+
+# -----------------------------------------------------------------------------
+#  5.  THE DISASSEMBLER
+# -----------------------------------------------------------------------------
+#
+#  Going back the other way is the proof that the encoding lost nothing: the
+#  numbers alone are enough to reprint readable assembly, because the symbol
+#  tables travel inside the program.
+
+fn label_for(program, addr) {
+    laddrs = program[P_LADDRS]
+    i = 0
+    while i < len(laddrs) {
+        if laddrs[i] == addr {
+            return program[P_LNAMES][i]
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+fn disasm(program, pc) {
+    op = program[P_OPS][pc]
+    a = program[P_ARGS][pc]
+    kind = OPERAND_KIND[op]
+    name = MNEMONICS[op]
+    if kind == A_NONE {
+        return name
+    }
+    if kind == A_IMM {
+        return name + " " + str(a)
+    }
+    if kind == A_VAR {
+        return name + " " + program[P_VARS][a]
+    }
+    lab = label_for(program, a)
+    return len(lab) > 0 ? name + " " + lab : name + " " + str(a)
+}
+
+# The listing: the source line it came from, the address it landed on, the
+# encoded cell, the reconstructed instruction, and what the operand resolved
+# to. The first two columns are different numbers for the same instruction,
+# which is the whole reason a listing exists.
+fn asm_listing(program) {
+    out = []
+    out = push(out, "    line | addr | op arg | instruction        | operand resolves to")
+    out = push(out, "    -----+------+--------+--------------------+---------------------")
+    pc = 0
+    while pc < len(program[P_OPS]) {
+        lab = label_for(program, pc)
+        if len(lab) > 0 {
+            out = push(out, "         |      |        | " + lab + ":")
+        }
+        op = program[P_OPS][pc]
+        a = program[P_ARGS][pc]
+        kind = OPERAND_KIND[op]
+        note = ""
+        if kind == A_LBL {
+            note = "address " + addr4(a)
+        } elif kind == A_VAR {
+            note = "slot " + str(a) + "  (" + program[P_VARS][a] + ")"
+        } elif kind == A_IMM {
+            note = "constant " + str(a)
+        }
+        row = "    " + lpad(program[P_LINES][pc], 4) + " | " + addr4(pc) + " | "
+        row = row + lpad(op, 2) + " " + lpad(a, 3) + " | "
+        row = row + pad(disasm(program, pc), 18) + " | " + note
+        out = push(out, row)
+        pc = pc + 1
+    }
+    return out
+}
+
+# A property worth asserting: disassembling every instruction should give back
+# the text it was assembled from. If it does, nothing was lost in encoding.
+# Returns the list of addresses where it does not.
+fn roundtrip_faults(program) {
+    bad = []
+    pc = 0
+    while pc < len(program[P_OPS]) {
+        if disasm(program, pc) != program[P_TEXT][pc] {
+            bad = push(bad, addr4(pc) + ": '" + program[P_TEXT][pc] + "' -> '" + disasm(program, pc) + "'")
+        }
+        pc = pc + 1
+    }
+    return bad
+}
+
+
+# -----------------------------------------------------------------------------
+#  6.  THE MACHINE
+# -----------------------------------------------------------------------------
+#
+#  vm_run(program, step_limit, trace_max)
+#
+#  The step limit is not optional politeness - it is the only thing standing
+#  between a buggy `JMP loop` and a hung interpreter. The machine stops with
+#  status "STEP-LIMIT" rather than spinning forever. trace_max rows of
+#  execution trace are recorded on the way past; pass 0 for none.
+#
+#  Two implementation notes worth stealing:
+#
+#   * Both stacks are preallocated with fill() and driven by an index (sp,
+#     csp). In zl, push() returns a NEW list - perfectly fine for building a
+#     report, ruinous inside an interpreter loop - whereas st[sp] = v writes
+#     in place. A real VM allocates its stack exactly once, for exactly the
+#     same reason.
+#
+#   * `next` holds the address of the following instruction and starts at
+#     pc + 1. A jump is then just "assign to next", which leaves `pc` still
+#     pointing at the *current* instruction for the whole body, so a trap can
+#     name the address that actually faulted.
+
+fn vm_stack_repr(st, sp) {
+    out = "["
+    i = 0
+    while i < sp {
+        if i > 0 {
+            out = out + " "
+        }
+        out = out + str(st[i])
+        i = i + 1
+    }
+    return out + "]"
+}
+
+fn vm_run(program, step_limit, trace_max) {
+    if not program[P_OK] {
+        return ["TRAP: program did not assemble", [], 0, 0, 0, [], [], fill(len(MNEMONICS), 0)]
+    }
+
+    ops = program[P_OPS]                    # hoisted out of the loop: this
+    args = program[P_ARGS]                  # saves an index step on every
+    n = len(ops)                            # single instruction executed
+
+    st = fill(STACK_MAX, 0)                 # the data stack
+    sp = 0
+    rs = fill(CALL_MAX, 0)                  # the call stack: return addresses
+    csp = 0
+    vars = fill(max(1, len(program[P_VARS])), 0)
+    used = fill(len(MNEMONICS), 0)
+
+    out = []
+    tr = []
+    maxsp = 0
+    maxcsp = 0
+    pc = 0
+    steps = 0
+    status = "HALT"
+
+    while true {
+        if steps >= step_limit {
+            status = "STEP-LIMIT after " + str(steps) + " instructions"
+            break
+        }
+        if pc < 0 or pc >= n {
+            status = "TRAP: pc " + addr4(pc) + " is outside 0000.." + addr4(n - 1)
+            break
+        }
+
+        op = ops[pc]
+        a = args[pc]
+        next = pc + 1
+        steps = steps + 1
+        used[op] = used[op] + 1
+
+        # Dispatch, ordered by how often each instruction actually turns up
+        # in the demo programs: a linear elif chain costs one comparison per
+        # rung, so the hot instructions come first and HALT comes last.
+        if op == OP_LOAD {
+            if sp >= STACK_MAX {
+                status = "TRAP: data stack overflow at " + addr4(pc)
+                break
+            }
+            st[sp] = vars[a]
+            sp = sp + 1
+        } elif op == OP_PUSH {
+            if sp >= STACK_MAX {
+                status = "TRAP: data stack overflow at " + addr4(pc)
+                break
+            }
+            st[sp] = a
+            sp = sp + 1
+        } elif op == OP_STORE {
+            if sp < 1 {
+                status = "TRAP: STORE on an empty stack at " + addr4(pc)
+                break
+            }
+            sp = sp - 1
+            vars[a] = st[sp]
+        } elif op >= OP_ADD and op <= OP_DIV {
+            # The four binary operators share one underflow check and one
+            # "pop two, push one" shape. Only the arithmetic differs.
+            if sp < 2 {
+                status = "TRAP: " + MNEMONICS[op] + " needs two values at " + addr4(pc)
+                break
+            }
+            x = st[sp - 2]
+            y = st[sp - 1]
+            sp = sp - 1
+            if op == OP_ADD {
+                st[sp - 1] = x + y
+            } elif op == OP_SUB {
+                st[sp - 1] = x - y
+            } elif op == OP_MUL {
+                st[sp - 1] = x * y
+            } else {
+                if y == 0 {
+                    status = "TRAP: divide by zero at " + addr4(pc)
+                    break
+                }
+                st[sp - 1] = trunc(x / y)       # an integer machine: truncate
+            }
+        } elif op == OP_JMP {
+            next = a
+        } elif op == OP_JZ {
+            if sp < 1 {
+                status = "TRAP: JZ on an empty stack at " + addr4(pc)
+                break
+            }
+            sp = sp - 1
+            if st[sp] == 0 {
+                next = a
+            }
+        } elif op == OP_JNZ {
+            if sp < 1 {
+                status = "TRAP: JNZ on an empty stack at " + addr4(pc)
+                break
+            }
+            sp = sp - 1
+            if st[sp] != 0 {
+                next = a
+            }
+        } elif op == OP_DUP {
+            if sp < 1 {
+                status = "TRAP: DUP on an empty stack at " + addr4(pc)
+                break
+            }
+            if sp >= STACK_MAX {
+                status = "TRAP: data stack overflow at " + addr4(pc)
+                break
+            }
+            st[sp] = st[sp - 1]
+            sp = sp + 1
+        } elif op == OP_PRINT {
+            if sp < 1 {
+                status = "TRAP: PRINT on an empty stack at " + addr4(pc)
+                break
+            }
+            sp = sp - 1
+            out = push(out, st[sp])
+        } elif op == OP_CALL {
+            if csp >= CALL_MAX {
+                status = "TRAP: call stack overflow (depth " + str(csp) + ") at " + addr4(pc)
+                break
+            }
+            rs[csp] = next                      # come back to the next cell
+            csp = csp + 1
+            next = a
+        } elif op == OP_RET {
+            if csp < 1 {
+                status = "TRAP: RET with no matching CALL at " + addr4(pc)
+                break
+            }
+            csp = csp - 1
+            next = rs[csp]
+        } elif op == OP_POP {
+            if sp < 1 {
+                status = "TRAP: POP on an empty stack at " + addr4(pc)
+                break
+            }
+            sp = sp - 1
+        } elif op == OP_SWAP {
+            if sp < 2 {
+                status = "TRAP: SWAP needs two values at " + addr4(pc)
+                break
+            }
+            t = st[sp - 1]
+            st[sp - 1] = st[sp - 2]
+            st[sp - 2] = t
+        } else {
+            status = "HALT"
+            break
+        }
+
+        if sp > maxsp {
+            maxsp = sp
+        }
+        if csp > maxcsp {
+            maxcsp = csp
+        }
+        if steps <= trace_max {
+            row = "    " + lpad(steps, 4) + "  " + addr4(pc) + "  " + pad(disasm(program, pc), 16)
+            tr = push(tr, row + vm_stack_repr(st, sp))
+        }
+        pc = next
+    }
+
+    return [status, out, steps, maxsp, maxcsp, tr, vars, used]
+}
+
+
+# -----------------------------------------------------------------------------
+#  7.  REPORTING
+# -----------------------------------------------------------------------------
+#  say() prints and remembers, so the whole session can be written out to a
+#  file at the end without having to run anything a second time.
+
+REPORT = []
+G_PASS = 0
+G_FAIL = 0
+
+fn say(s) {
+    clean = rtrim(s)
+    print(clean)
+    REPORT = push(REPORT, clean)
+    return 0
+}
+
+fn rule(title) {
+    say("")
+    say("=============================================================================")
+    say("  " + title)
+    say("=============================================================================")
+    return 0
+}
+
+# A sub-heading, ruled out to a constant width whatever its length.
+fn sect(title) {
+    head = "  --- " + title + " "
+    return say(head + repeat("-", max(3, 77 - len(head))))
+}
+
+fn check(label, got, want) {
+    if str(got) == str(want) {
+        G_PASS = G_PASS + 1
+        say("    PASS  " + label)
+    } else {
+        G_FAIL = G_FAIL + 1
+        say("    FAIL  " + label)
+        say("          got  " + str(got))
+        say("          want " + str(want))
+    }
+    return 0
+}
+
+# Numbers wrapped into rows, so 24 Fibonacci terms do not become 24 lines.
+fn wrap_nums(xs, per_row, width) {
+    out = []
+    row = ""
+    i = 0
+    while i < len(xs) {
+        row = row + lpad(xs[i], width)
+        i = i + 1
+        if i % per_row == 0 {
+            out = push(out, "   " + row)
+            row = ""
+        }
+    }
+    if len(row) > 0 {
+        out = push(out, "   " + row)
+    }
+    return out
+}
+
+
+# -----------------------------------------------------------------------------
+#  8.  THREE PROGRAMS FOR THE MACHINE
+# -----------------------------------------------------------------------------
+#  zl parses one expression per line, so the assembly is fed in a line at a
+#  time and src_done() hands back the finished blob of text. Reading it is
+#  not far off watching a card reader.
+
+SRC_BUF = []
+
+fn src(s) {
+    SRC_BUF = push(SRC_BUF, s)
+    return 0
+}
+
+fn src_done() {
+    text = join(SRC_BUF, "\n")
+    SRC_BUF = []
+    return text
+}
+
+src("; countdown.asm - count 10 down to 1, printing each term,")
+src(";                 then report the total and the mean.")
+src("")
+src("        PUSH 10")
+src("        STORE n              ; n = 10")
+src("        PUSH 0")
+src("        STORE total          ; total = 0")
+src("")
+src("loop:   LOAD n")
+src("        JZ done              ; JZ pops the value it tested")
+src("")
+src("        LOAD n")
+src("        PRINT                ; show the current count")
+src("")
+src("        LOAD total")
+src("        LOAD n")
+src("        ADD")
+src("        STORE total          ; total = total + n")
+src("")
+src("        PUSH 1")
+src("        LOAD n")
+src("        SWAP                 ; [1 n] -> [n 1], the order SUB wants")
+src("        SUB")
+src("        STORE n              ; n = n - 1")
+src("        JMP loop")
+src("")
+src("done:   LOAD total")
+src("        PRINT                ; 55")
+src("        LOAD total")
+src("        PUSH 10")
+src("        DIV                  ; integer division")
+src("        PRINT                ; 5")
+src("        HALT")
+SRC_COUNTDOWN = src_done()
+
+src("; factorial.asm - print 0! .. 12! using a RECURSIVE subroutine.")
+src(";")
+src("; The interesting part is that `fact` has no local variables at all.")
+src("; Its argument lives on the data stack and stays there, underneath the")
+src("; recursive call, until that call returns with (n-1)! - and then a single")
+src("; MUL turns the pair into n!. That is the whole trick of a stack machine:")
+src("; the stack IS the activation record.")
+src("")
+src("        PUSH 0")
+src("        STORE i")
+src("")
+src("next:   LOAD i")
+src("        PUSH 13")
+src("        SUB")
+src("        JZ done              ; stop once i has reached 13")
+src("")
+src("        LOAD i")
+src("        CALL fact            ; leaves i! on the stack")
+src("        PRINT")
+src("")
+src("        LOAD i")
+src("        PUSH 1")
+src("        ADD")
+src("        STORE i")
+src("        JMP next")
+src("")
+src("done:   HALT")
+src("")
+src("; --- fact: takes n on the stack, leaves n! on the stack ---------------")
+src("fact:   DUP                  ; [n n]")
+src("        JZ base              ; pops the copy; n == 0 takes the base case")
+src("        DUP                  ; [n n]")
+src("        PUSH 1")
+src("        SUB                  ; [n n-1]")
+src("        CALL fact            ; [n (n-1)!]")
+src("        MUL                  ; [n!]")
+src("        RET")
+src("")
+src("base:   POP                  ; drop the zero")
+src("        PUSH 1               ; 0! is 1")
+src("        RET")
+SRC_FACTORIAL = src_done()
+
+src("; fib.asm - the first 24 Fibonacci numbers, iteratively.")
+src(";")
+src("; The rotation  a, b = b, a + b  needs no temporary, only DUP:")
+src(";   [a b]  DUP -> [a b b]  STORE a -> [a b]  ADD -> [a+b]  STORE b")
+src("")
+src("        PUSH 0")
+src("        STORE a              ; a = fib(0)")
+src("        PUSH 1")
+src("        STORE b              ; b = fib(1)")
+src("        PUSH 24")
+src("        STORE k              ; k = terms remaining")
+src("        JMP test             ; a bottom-tested loop")
+src("")
+src("body:   LOAD b")
+src("        PRINT                ; emit the current term")
+src("")
+src("        LOAD a")
+src("        LOAD b               ; [a b]")
+src("        DUP                  ; [a b b]")
+src("        STORE a              ; a = b       -> [a b]")
+src("        ADD                  ; [a+b]")
+src("        STORE b              ; b = a + b")
+src("")
+src("        LOAD k")
+src("        PUSH 1")
+src("        SUB")
+src("        STORE k")
+src("")
+src("test:   LOAD k")
+src("        JNZ body             ; JNZ pops, and jumps while k is not zero")
+src("        HALT")
+SRC_FIB = src_done()
+
+# A deliberately broken program, so the diagnostics get shown off too.
+src("; every line below is wrong in a different way")
+src("        PUSH                 ; missing operand")
+src("        FROB 3               ; no such instruction")
+src("        JMP nowhere          ; undefined label")
+src("        ADD 5                ; ADD takes no operand")
+src("        PUSH 12x             ; not an integer")
+src("spin:   HALT")
+src("spin:   HALT                 ; duplicate label")
+SRC_BROKEN = src_done()
+
+
+# -----------------------------------------------------------------------------
+#  9.  THE SAME THREE ANSWERS, COMPUTED DIRECTLY IN zl
+# -----------------------------------------------------------------------------
+#  Nothing below shares a line of code with the VM. If the machine and these
+#  agree, the machine is right for reasons that are not circular.
+
+fn ref_countdown() {
+    out = []
+    n = 10
+    total = 0
+    while n != 0 {
+        out = push(out, n)
+        total = total + n
+        n = n - 1
+    }
+    out = push(out, total)
+    out = push(out, trunc(total / 10))
+    return out
+}
+
+fn ref_factorials(hi) {
+    out = []
+    n = 0
+    while n <= hi {
+        f = 1
+        i = 2
+        while i <= n {
+            f = f * i
+            i = i + 1
+        }
+        out = push(out, f)
+        n = n + 1
+    }
+    return out
+}
+
+fn ref_fibs(count) {
+    out = []
+    a = 0
+    b = 1
+    i = 0
+    while i < count {
+        out = push(out, b)
+        t = a + b
+        a = b
+        b = t
+        i = i + 1
+    }
+    return out
+}
+
+
+# -----------------------------------------------------------------------------
+#  10.  DRIVER
+# -----------------------------------------------------------------------------
+
+fn show_instruction_set() {
+    eff = []
+    eff = push(eff, "stop the machine")
+    eff = push(eff, "[] -> [n]")
+    eff = push(eff, "[a] -> []")
+    eff = push(eff, "[a b] -> [a+b]")
+    eff = push(eff, "[a b] -> [a-b]")
+    eff = push(eff, "[a b] -> [a*b]")
+    eff = push(eff, "[a b] -> [a/b]   truncated; traps when b is 0")
+    eff = push(eff, "[a] -> [a a]")
+    eff = push(eff, "[a b] -> [b a]")
+    eff = push(eff, "unconditional jump")
+    eff = push(eff, "[a] -> [] ; jump when a was zero")
+    eff = push(eff, "[a] -> [] ; jump when a was not zero")
+    eff = push(eff, "[] -> [v]")
+    eff = push(eff, "[a] -> [] ; v = a")
+    eff = push(eff, "[a] -> [] ; emit a")
+    eff = push(eff, "push the return address, then jump")
+    eff = push(eff, "pop the return address and go back")
+
+    rule("INSTRUCTION SET  -  17 opcodes")
+    say("")
+    say("    op  mnemonic  operand     effect")
+    say("    --  --------  ----------  ------------------------------------------")
+    i = 0
+    while i < len(MNEMONICS) {
+        row = "    " + lpad(i, 2) + "  " + pad(MNEMONICS[i], 9) + " "
+        say(row + pad(KIND_NAMES[OPERAND_KIND[i]], 11) + " " + eff[i])
+        i = i + 1
+    }
+    return 0
+}
+
+# Assemble, list, run and report one program. Returns the run result.
+fn demo(title, source, trace_max) {
+    rule(title)
+
+    t0 = now()
+    program = asm_parse(source)
+    t_asm = now() - t0
+
+    say("")
+    sect("source")
+    for l in lines(source) {
+        say("    " + l)
+    }
+
+    if not program[P_OK] {
+        say("")
+        sect("assembler diagnostics")
+        for e in program[P_ERRS] {
+            say("    " + e)
+        }
+        say("")
+        say("    " + str(len(program[P_ERRS])) + " error(s) - nothing to run.")
+        return ["NOT ASSEMBLED", [], 0, 0, 0, [], [], fill(len(MNEMONICS), 0)]
+    }
+
+    say("")
+    sect("assembled")
+    for l in asm_listing(program) {
+        say(l)
+    }
+    say("")
+    say("    labels:    " + (len(program[P_LNAMES]) > 0 ? str(program[P_LNAMES]) : "(none)"))
+    say("    variables: " + (len(program[P_VARS]) > 0 ? str(program[P_VARS]) : "(none)"))
+    counts = str(len(program[P_OPS])) + " instructions from " + str(len(lines(source))) + " lines of text"
+    say("    assembled: " + counts + " in " + str(t_asm) + " ms")
+
+    t0 = now()
+    res = vm_run(program, 5000000, trace_max)
+    t_run = now() - t0
+
+    if trace_max > 0 and len(res[R_TRACE]) > 0 {
+        say("")
+        sect("trace: the first " + str(len(res[R_TRACE])) + " steps")
+        say("    step  addr  instruction     stack afterwards")
+        for l in res[R_TRACE] {
+            say(l)
+        }
+        if res[R_STEPS] > len(res[R_TRACE]) {
+            say("     ...  (" + str(res[R_STEPS] - len(res[R_TRACE])) + " further steps)")
+        }
+    }
+
+    say("")
+    sect("output")
+    for l in wrap_nums(res[R_OUT], 8, 11) {
+        say(l)
+    }
+
+    say("")
+    sect("machine state at exit")
+    say("    status:             " + res[R_STATUS])
+    say("    instructions run:   " + str(res[R_STEPS]))
+    say("    values printed:     " + str(len(res[R_OUT])))
+    say("    peak data stack:    " + str(res[R_MAXSP]) + " of " + str(STACK_MAX))
+    say("    peak call depth:    " + str(res[R_MAXCSP]) + " of " + str(CALL_MAX))
+    say("    wall time:          " + str(t_run) + " ms")
+
+    mix = ""
+    i = 0
+    while i < len(MNEMONICS) {
+        if res[R_USED][i] > 0 {
+            if len(mix) > 0 {
+                mix = mix + "  "
+            }
+            mix = mix + MNEMONICS[i] + " " + str(res[R_USED][i])
+        }
+        i = i + 1
+    }
+    say("    instruction mix:    " + mix)
+
+    if len(program[P_VARS]) > 0 {
+        fin = ""
+        i = 0
+        while i < len(program[P_VARS]) {
+            if i > 0 {
+                fin = fin + "   "
+            }
+            fin = fin + program[P_VARS][i] + " = " + str(res[R_VARS][i])
+            i = i + 1
+        }
+        say("    final variables:    " + fin)
+    }
+    return res
+}
+
+# --- go ----------------------------------------------------------------------
+
+T_START = now()
+
+say("=============================================================================")
+say("  vm.zl  -  a 17-instruction stack machine and its two-pass assembler,")
+say("            written in zl, running on the zl interpreter")
+say("=============================================================================")
+
+show_instruction_set()
+
+R1 = demo("PROGRAM 1 of 3  -  countdown.asm", SRC_COUNTDOWN, 14)
+R2 = demo("PROGRAM 2 of 3  -  factorial.asm  (recursive, via CALL / RET)", SRC_FACTORIAL, 22)
+R3 = demo("PROGRAM 3 of 3  -  fib.asm", SRC_FIB, 12)
+
+# --- verification -------------------------------------------------------------
+
+rule("VERIFICATION  -  machine output vs. the same maths done directly in zl")
+say("")
+WANT1 = ref_countdown()
+WANT2 = ref_factorials(12)
+WANT3 = ref_fibs(24)
+say("  countdown: zl says " + str(WANT1))
+say("  factorial: zl says " + str(WANT2))
+say("  fibonacci: zl says " + str(WANT3))
+say("")
+check("countdown.asm halted", R1[R_STATUS], "HALT")
+check("countdown.asm output matches zl", R1[R_OUT], WANT1)
+check("factorial.asm halted", R2[R_STATUS], "HALT")
+check("factorial.asm output matches zl", R2[R_OUT], WANT2)
+check("factorial.asm recursed 13 frames deep", R2[R_MAXCSP], 13)
+check("fib.asm halted", R3[R_STATUS], "HALT")
+check("fib.asm output matches zl", R3[R_OUT], WANT3)
+check("12! came out exact", last(R2[R_OUT]), 479001600)
+check("fib(24) is 46368", last(R3[R_OUT]), 46368)
+check("countdown.asm disassembles back to its source", roundtrip_faults(asm_parse(SRC_COUNTDOWN)), [])
+check("factorial.asm disassembles back to its source", roundtrip_faults(asm_parse(SRC_FACTORIAL)), [])
+check("fib.asm disassembles back to its source", roundtrip_faults(asm_parse(SRC_FIB)), [])
+
+# Every one of the 17 opcodes should have run at least once across the three
+# programs, or part of the machine is going untested.
+say("")
+say("  opcode coverage across all three programs:")
+MISSING = []
+COVROW = ""
+COVI = 0
+while COVI < len(MNEMONICS) {
+    COVN = R1[R_USED][COVI] + R2[R_USED][COVI] + R3[R_USED][COVI]
+    if COVN == 0 {
+        MISSING = push(MISSING, MNEMONICS[COVI])
+    }
+    COVROW = COVROW + pad(MNEMONICS[COVI] + " " + str(COVN), 13)
+    if (COVI + 1) % 5 == 0 {
+        say("    " + COVROW)
+        COVROW = ""
+    }
+    COVI = COVI + 1
+}
+if len(COVROW) > 0 {
+    say("    " + COVROW)
+}
+say("")
+check("all 17 opcodes executed at least once", MISSING, [])
+
+# --- the traps are real -------------------------------------------------------
+
+rule("TRAPS  -  what the machine does when a program misbehaves")
+say("")
+say("  A VM that takes its host down on bad input is not a VM. Each program")
+say("  below assembles cleanly and is then stopped by the machine at run time.")
+say("")
+TRAPCASES = []
+TRAPCASES = push(TRAPCASES, ["pop from an empty stack", "ADD"])
+TRAPCASES = push(TRAPCASES, ["divide by zero", join(["PUSH 1", "PUSH 0", "DIV"], "\n")])
+TRAPCASES = push(TRAPCASES, ["run off the end", "PUSH 1"])
+TRAPCASES = push(TRAPCASES, ["infinite loop", "spin: JMP spin"])
+TRAPCASES = push(TRAPCASES, ["overflow the data stack", join(["f: PUSH 1", "JMP f"], "\n")])
+TRAPCASES = push(TRAPCASES, ["RET with no CALL", "RET"])
+TRAPCASES = push(TRAPCASES, ["unbounded recursion", join(["CALL f", "f: CALL f"], "\n")])
+for TCASE in TRAPCASES {
+    TRES = vm_run(asm_parse(TCASE[1]), 2000, 0)
+    say("    " + pad(TCASE[0], 26) + " -> " + TRES[R_STATUS])
+}
+say("")
+check("an empty ADD traps", starts(vm_run(asm_parse("ADD"), 2000, 0)[R_STATUS], "TRAP"), true)
+check("an endless loop hits the step limit", starts(vm_run(asm_parse("s: JMP s"), 2000, 0)[R_STATUS], "STEP-LIMIT"), true)
+
+# --- assembler diagnostics ----------------------------------------------------
+
+demo("ASSEMBLER DIAGNOSTICS  -  a program that does not assemble", SRC_BROKEN, 0)
+BAD = asm_parse(SRC_BROKEN)
+say("")
+check("the broken program is rejected", BAD[P_OK], false)
+check("all six mistakes are reported", len(BAD[P_ERRS]), 6)
+
+# --- throughput ---------------------------------------------------------------
+
+rule("THROUGHPUT  -  how fast is a VM written in zl, running on zl?")
+say("")
+say("  Two interpreters deep: this stack machine is interpreted by zl, which")
+say("  is itself interpreted by a tree-walker written in C. Every one of the")
+say("  VM instructions below costs a fetch, a bounds check, a linear opcode")
+say("  dispatch and a stack guard - all of it executed as zl.")
+say("")
+PROGS = [asm_parse(SRC_COUNTDOWN), asm_parse(SRC_FACTORIAL), asm_parse(SRC_FIB)]
+BENCH_T0 = now()
+BENCH_STEPS = 0
+BENCH_REP = 0
+while BENCH_REP < BENCH_REPS {
+    for BENCH_PROG in PROGS {
+        BENCH_STEPS = BENCH_STEPS + vm_run(BENCH_PROG, 5000000, 0)[R_STEPS]
+    }
+    BENCH_REP = BENCH_REP + 1
+}
+BENCH_MS = now() - BENCH_T0
+say("    repetitions:        " + str(BENCH_REPS) + " x 3 programs")
+say("    VM instructions:    " + str(BENCH_STEPS))
+say("    wall time:          " + str(BENCH_MS) + " ms")
+if BENCH_MS > 0 {
+    say("    throughput:         " + str(trunc(BENCH_STEPS * 1000 / BENCH_MS)) + " VM instructions / second")
+}
+say("")
+say("    (BENCH_REPS at the top of this file scales that linearly.)")
+
+# --- wrap up ------------------------------------------------------------------
+
+rule("SUMMARY")
+say("")
+say("    " + str(G_PASS) + " checks passed, " + str(G_FAIL) + " failed")
+say("    total wall time: " + str(now() - T_START) + " ms")
+
+OUT_PATH = "examples_out/vm_listing.txt"
+print("")
+if contains(dir("."), "examples_out") {
+    write(OUT_PATH, join(REPORT, "\n") + "\n")
+    print("wrote " + OUT_PATH + "  (" + str(len(read(OUT_PATH))) + " bytes, " + str(len(REPORT)) + " lines)")
+} else {
+    print("no examples_out folder here - run me from the repo root to save the listing")
+}
+
+assert(G_FAIL == 0, "every check must pass")

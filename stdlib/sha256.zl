@@ -1,0 +1,233 @@
+# sha256.zl - SHA-256 (FIPS 180-4) in pure zl.
+#
+# sha256(message) -> the 64-character lowercase hex digest.
+#
+# Representation. Two choices drive this file:
+#
+#   1. Messages are carried as LISTS OF BYTE VALUES (0..255), not as strings.
+#      A zl string is NUL-terminated underneath, so chr(0) cannot be stored in
+#      one - "a" + chr(0) + "b" has length 2, not 3. Padding a message means
+#      appending a 0x80 byte and then a run of zero bytes, so the padded
+#      message simply cannot be a string. sha_bytes() converts a string to a
+#      byte list (one byte per character code) and everything after that
+#      works on the list.
+#
+#   2. State words are plain numbers holding an UNSIGNED 32-BIT value, i.e.
+#      always in 0..4294967295. The band/bor/bxor/shl/shr builtins work on
+#      64-bit signed integers and bnot() complements all 64 bits, so every
+#      operation that can leave that range is followed by m32(). Numbers are
+#      doubles, exact to 2^53: the largest intermediate here is a sum of five
+#      32-bit words (< 2^35) and the largest shift result is kept under 2^32
+#      by rotating in two masked halves, so nothing is ever rounded.
+#
+# Naming: every parameter and local carries a two-letter tag for its function
+# (rr_ = rotr32, sx_ = sha256_bytes, ...), the same convention bitops.zl uses,
+# so a helper can never overwrite a caller's variable.
+
+MASK32 = 4294967295
+HEXDIGITS = "0123456789abcdef"
+
+# Round constants: the first 32 bits of the fractional parts of the cube
+# roots of the first 64 primes. A list literal cannot span lines in zl, so
+# the table is built eight rows at a time.
+SHA_K = [1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221]
+SHA_K = concat(SHA_K, [3624381080, 310598401, 607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580])
+SHA_K = concat(SHA_K, [3835390401, 4022224774, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986])
+SHA_K = concat(SHA_K, [2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711, 113926993, 338241895])
+SHA_K = concat(SHA_K, [666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037])
+SHA_K = concat(SHA_K, [2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344])
+SHA_K = concat(SHA_K, [430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779])
+SHA_K = concat(SHA_K, [1955562222, 2024104815, 2227730452, 2361852424, 2428436474, 2756734187, 3204031479, 3329325298])
+
+# Initial hash state: the first 32 bits of the fractional parts of the square
+# roots of the first 8 primes.
+SHA_H0 = [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225]
+
+# --- 32-bit primitives -----------------------------------------------------
+
+fn m32(m3_x) {
+    return band(m3_x, MASK32)
+}
+
+# Right rotate inside 32 bits. The low rr_n bits are masked off before being
+# shifted up, so the left half never exceeds 32 bits and stays exact.
+fn rotr32(rr_x, rr_n) {
+    rr_low = band(rr_x, shl(1, rr_n) - 1)
+    return bor(shr(band(rr_x, MASK32), rr_n), shl(rr_low, 32 - rr_n))
+}
+
+# Logical (zero-filling) right shift. shr() is arithmetic, so mask first.
+fn shr32(sr_x, sr_n) {
+    return shr(band(sr_x, MASK32), sr_n)
+}
+
+fn hex8(hx_v) {
+    hx_s = ""
+    hx_i = 7
+    while hx_i >= 0 {
+        hx_s = hx_s + at(HEXDIGITS, band(shr(hx_v, hx_i * 4), 15))
+        hx_i -= 1
+    }
+    return hx_s
+}
+
+# --- message preparation ---------------------------------------------------
+
+fn sha_bytes(sb_s) {
+    sb_out = []
+    sb_i = 0
+    while sb_i < len(sb_s) {
+        sb_out = push(sb_out, band(code(at(sb_s, sb_i)), 255))
+        sb_i += 1
+    }
+    return sb_out
+}
+
+# Append 0x80, then zeros up to 56 mod 64, then the 64-bit big-endian bit
+# length. Always adds at least one byte, so a message that is already a
+# multiple of 64 gains a whole extra block.
+fn sha_pad(sp_msg) {
+    sp_out = []
+    for sp_b in sp_msg {
+        sp_out = push(sp_out, sp_b)
+    }
+    sp_bits = len(sp_msg) * 8
+    sp_out = push(sp_out, 128)
+    while len(sp_out) % 64 != 56 {
+        sp_out = push(sp_out, 0)
+    }
+    sp_hi = int(sp_bits / 4294967296)
+    sp_lo = sp_bits - sp_hi * 4294967296
+    sp_i = 3
+    while sp_i >= 0 {
+        sp_out = push(sp_out, band(shr(sp_hi, sp_i * 8), 255))
+        sp_i -= 1
+    }
+    sp_i = 3
+    while sp_i >= 0 {
+        sp_out = push(sp_out, band(shr(sp_lo, sp_i * 8), 255))
+        sp_i -= 1
+    }
+    return sp_out
+}
+
+# --- the digest ------------------------------------------------------------
+
+fn sha256_bytes(sx_msg) {
+    sx_data = sha_pad(sx_msg)
+    sx_h = []
+    for sx_init in SHA_H0 {
+        sx_h = push(sx_h, sx_init)
+    }
+    sx_w = fill(64, 0)
+    sx_pos = 0
+    while sx_pos < len(sx_data) {
+        # message schedule: 16 big-endian words, then 48 derived ones
+        sx_t = 0
+        while sx_t < 16 {
+            sx_p = sx_pos + sx_t * 4
+            sx_w[sx_t] = m32(shl(sx_data[sx_p], 24) + shl(sx_data[sx_p + 1], 16) + shl(sx_data[sx_p + 2], 8) + sx_data[sx_p + 3])
+            sx_t += 1
+        }
+        while sx_t < 64 {
+            sx_x = sx_w[sx_t - 15]
+            sx_y = sx_w[sx_t - 2]
+            sx_s0 = bxor(bxor(rotr32(sx_x, 7), rotr32(sx_x, 18)), shr32(sx_x, 3))
+            sx_s1 = bxor(bxor(rotr32(sx_y, 17), rotr32(sx_y, 19)), shr32(sx_y, 10))
+            sx_w[sx_t] = m32(sx_w[sx_t - 16] + sx_s0 + sx_w[sx_t - 7] + sx_s1)
+            sx_t += 1
+        }
+        # compression
+        sx_a = sx_h[0]
+        sx_b = sx_h[1]
+        sx_c = sx_h[2]
+        sx_d = sx_h[3]
+        sx_e = sx_h[4]
+        sx_f = sx_h[5]
+        sx_g = sx_h[6]
+        sx_hh = sx_h[7]
+        sx_t = 0
+        while sx_t < 64 {
+            sx_bigs1 = bxor(bxor(rotr32(sx_e, 6), rotr32(sx_e, 11)), rotr32(sx_e, 25))
+            sx_ch = bxor(band(sx_e, sx_f), band(m32(bnot(sx_e)), sx_g))
+            sx_t1 = m32(sx_hh + sx_bigs1 + sx_ch + SHA_K[sx_t] + sx_w[sx_t])
+            sx_bigs0 = bxor(bxor(rotr32(sx_a, 2), rotr32(sx_a, 13)), rotr32(sx_a, 22))
+            sx_maj = bxor(bxor(band(sx_a, sx_b), band(sx_a, sx_c)), band(sx_b, sx_c))
+            sx_t2 = m32(sx_bigs0 + sx_maj)
+            sx_hh = sx_g
+            sx_g = sx_f
+            sx_f = sx_e
+            sx_e = m32(sx_d + sx_t1)
+            sx_d = sx_c
+            sx_c = sx_b
+            sx_b = sx_a
+            sx_a = m32(sx_t1 + sx_t2)
+            sx_t += 1
+        }
+        sx_h[0] = m32(sx_h[0] + sx_a)
+        sx_h[1] = m32(sx_h[1] + sx_b)
+        sx_h[2] = m32(sx_h[2] + sx_c)
+        sx_h[3] = m32(sx_h[3] + sx_d)
+        sx_h[4] = m32(sx_h[4] + sx_e)
+        sx_h[5] = m32(sx_h[5] + sx_f)
+        sx_h[6] = m32(sx_h[6] + sx_g)
+        sx_h[7] = m32(sx_h[7] + sx_hh)
+        sx_pos += 64
+    }
+    sx_out = ""
+    for sx_word in sx_h {
+        sx_out = sx_out + hex8(sx_word)
+    }
+    return sx_out
+}
+
+fn sha256(sh_msg) {
+    return sha256_bytes(sha_bytes(sh_msg))
+}
+
+# --- demo ------------------------------------------------------------------
+
+PASSES = 0
+FAILS = 0
+
+fn check(ck_label, ck_msg, ck_want) {
+    ck_got = sha256(ck_msg)
+    if ck_got == ck_want {
+        PASSES += 1
+        print("PASS  " + pad(ck_label, 18) + ck_got)
+    } else {
+        FAILS += 1
+        print("FAIL  " + pad(ck_label, 18) + ck_got)
+        print("      " + pad("expected", 18) + ck_want)
+    }
+}
+
+print("SHA-256 test vectors")
+check("\"\"", "", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+check("\"abc\"", "abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+check("\"hello world\"", "hello world", "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+
+print("")
+print("padding edge cases (block is 64 bytes, length field needs 8)")
+check("448-bit FIPS", "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq", "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1")
+check("55 x 'a'", repeat("a", 55), "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318")
+check("56 x 'a'", repeat("a", 56), "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a")
+check("64 x 'a'", repeat("a", 64), "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb")
+check("119 x 'a'", repeat("a", 119), "31eba51c313a5c08226adf18d4a359cfdfd8d2e816b13f4af952f7ea6584dcfb")
+check("120 x 'a'", repeat("a", 120), "2f3d335432c70b580af0e8e1b3674a7c020d683aa5f73aaaedfdc55af904c21c")
+check("pangram", "The quick brown fox jumps over the lazy dog", "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592")
+
+print("")
+print("results: " + str(PASSES) + " passed, " + str(FAILS) + " failed")
+
+print("")
+print("primitives")
+print("rotr32(0xb5c0fbcf, 7):  " + hex8(rotr32(3049323471, 7)))
+print("shr32(0xb5c0fbcf, 7):   " + hex8(shr32(3049323471, 7)))
+print("m32(bnot(0)):           " + hex8(m32(bnot(0))))
+print("padded len of \"\":       " + str(len(sha_pad(sha_bytes("")))) + " bytes (1 block)")
+print("padded len of 56 x 'a': " + str(len(sha_pad(sha_bytes(repeat("a", 56))))) + " bytes (2 blocks)")
+print("digest length:          " + str(len(sha256("abc"))) + " hex chars")
+print("avalanche, one bit apart:")
+print("  sha256(\"a\") = " + sha256("a"))
+print("  sha256(\"b\") = " + sha256("b"))

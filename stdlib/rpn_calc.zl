@@ -1,0 +1,86 @@
+# rpn_calc.zl -- Reverse Polish Notation calculator
+# Evaluates a space-separated RPN string like "3 4 + 5 *" -> 35 using a list as a stack.
+# Supports + - * / operators.
+
+# --- helpers ---------------------------------------------------------------
+
+# Is a token one of the four supported operators?
+fn rc_isOp(rc_tok) {
+    if rc_tok == "+" or rc_tok == "-" or rc_tok == "*" or rc_tok == "/" {
+        return true
+    }
+    return false
+}
+
+# Apply an operator to two operands (a op b).
+fn rc_apply(rc_op, rc_a, rc_b) {
+    if rc_op == "+" { return rc_a + rc_b }
+    if rc_op == "-" { return rc_a - rc_b }
+    if rc_op == "*" { return rc_a * rc_b }
+    if rc_op == "/" { return rc_a / rc_b }
+    return 0
+}
+
+# Evaluate an RPN expression string. Returns the final numeric result.
+fn rc_eval(rc_expr) {
+    rc_toks = split(rc_expr, " ")
+    rc_stack = []
+    for rc_t in rc_toks {
+        if rc_t == "" {
+            # skip empty tokens from double spaces
+        } else if rc_isOp(rc_t) {
+            # pop two operands: b is top, a is below it
+            rc_n = len(rc_stack)
+            rc_b = rc_stack[rc_n - 1]
+            rc_a = rc_stack[rc_n - 2]
+            rc_res = rc_apply(rc_t, rc_a, rc_b)
+            # rebuild stack without the two popped values, then push result
+            rc_stack = slice2(rc_stack, 0, rc_n - 2)
+            rc_stack = push(rc_stack, rc_res)
+        } else {
+            rc_stack = push(rc_stack, num(rc_t))
+        }
+    }
+    return rc_stack[len(rc_stack) - 1]
+}
+
+# slice a LIST from index a (inclusive) to b (exclusive).
+# (built-in slice targets strings; this is a list version.)
+fn slice2(sl_list, sl_a, sl_b) {
+    sl_out = []
+    sl_i = sl_a
+    while sl_i < sl_b {
+        sl_out = push(sl_out, sl_list[sl_i])
+        sl_i = sl_i + 1
+    }
+    return sl_out
+}
+
+# --- self-test -------------------------------------------------------------
+
+print("RPN calculator self-test")
+print("------------------------")
+
+print("3 4 +            = " + rc_eval("3 4 +"))            # 7
+print("3 4 + 5 *        = " + rc_eval("3 4 + 5 *"))        # 35
+print("10 2 -           = " + rc_eval("10 2 -"))           # 8
+print("20 4 /           = " + rc_eval("20 4 /"))           # 5
+print("2 3 4 * +        = " + rc_eval("2 3 4 * +"))        # 14
+print("5 1 2 + 4 * + 3 -= " + rc_eval("5 1 2 + 4 * + 3 -"))# 14
+print("100 25 / 3 *     = " + rc_eval("100 25 / 3 *"))     # 12
+print("7 2 /            = " + rc_eval("7 2 /"))            # 3.5 (real division)
+print("42               = " + rc_eval("42"))              # 42 (single value)
+
+# quick correctness checks
+fn rc_check(rc_label, rc_got, rc_want) {
+    if rc_got == rc_want {
+        return rc_label + ": PASS"
+    }
+    return rc_label + ": FAIL (got " + rc_got + " want " + rc_want + ")"
+}
+
+print("")
+print(rc_check("t1", rc_eval("3 4 + 5 *"), 35))
+print(rc_check("t2", rc_eval("2 3 4 * +"), 14))
+print(rc_check("t3", rc_eval("20 4 /"), 5))
+print(rc_check("t4", rc_eval("10 2 -"), 8))

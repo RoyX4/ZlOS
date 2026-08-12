@@ -1,0 +1,141 @@
+# mathkit.zl - math functions missing from the builtin set (BUILTIN_FUNCTIONS.md gaps).
+# Pure zl, no imports. Uses the gcd / sort / sum / abs / int builtins.
+# All internal locals are prefixed mk_ so library code never clobbers a caller's globals.
+
+# Factorial of a non-negative integer. mk_factorial(0) == 1, mk_factorial(5) == 120.
+fn mk_factorial(n) {
+  mk_r = 1
+  mk_i = 2
+  while mk_i <= n {
+    mk_r = mk_r * mk_i
+    mk_i = mk_i + 1
+  }
+  return mk_r
+}
+
+# Least common multiple via the gcd builtin. lcm(0, x) == 0 by convention.
+# Divides before multiplying to avoid overflow; result is a non-negative integer.
+fn mk_lcm(a, b) {
+  if a == 0 {
+    return 0
+  } elif b == 0 {
+    return 0
+  } else {
+    mk_g = gcd(a, b)
+    mk_q = int(a / mk_g)
+    return abs(mk_q * b)
+  }
+}
+
+# Integer square root: largest integer r with r*r <= n (integer Newton's method).
+# Domain is n >= 0. mk_isqrt(17) == 4, mk_isqrt(16) == 4.
+fn mk_isqrt(n) {
+  if n < 2 {
+    return n
+  } else {
+    mk_x = n
+    mk_y = int((mk_x + 1) / 2)
+    while mk_y < mk_x {
+      mk_x = mk_y
+      mk_y = int((mk_x + int(n / mk_x)) / 2)
+    }
+    return mk_x
+  }
+}
+
+# Product of a list (companion to the sum builtin). Empty list -> 1 (multiplicative identity).
+fn mk_prod(xs) {
+  mk_p = 1
+  for mk_v in xs {
+    mk_p = mk_p * mk_v
+  }
+  return mk_p
+}
+
+# Arithmetic mean of a list. mk_mean([1,2,3,4]) == 2.5.
+fn mk_mean(xs) {
+  return sum(xs) / len(xs)
+}
+
+# Median of a list. Sorts a copy (the sort builtin returns a new list, never mutates xs).
+# Odd length -> middle element; even length -> average of the two middle elements.
+fn mk_median(xs) {
+  mk_s = sort(xs)
+  mk_n = len(mk_s)
+  mk_mid = int(mk_n / 2)
+  if mk_n % 2 == 1 {
+    return mk_s[mk_mid]
+  } else {
+    return (mk_s[mk_mid - 1] + mk_s[mk_mid]) / 2
+  }
+}
+
+# Minimum of a LIST (the min builtin only takes two scalar args).
+fn mk_min_of(xs) {
+  mk_m = xs[0]
+  for mk_v in xs {
+    if mk_v < mk_m {
+      mk_m = mk_v
+    }
+  }
+  return mk_m
+}
+
+# Maximum of a LIST (the max builtin only takes two scalar args).
+fn mk_max_of(xs) {
+  mk_m = xs[0]
+  for mk_v in xs {
+    if mk_v > mk_m {
+      mk_m = mk_v
+    }
+  }
+  return mk_m
+}
+
+# Integer clamp: constrain x to [lo, hi], returning an integer (the _i suffix = integer variant).
+fn mk_clamp_i(x, lo, hi) {
+  if x < lo {
+    return int(lo)
+  } elif x > hi {
+    return int(hi)
+  } else {
+    return int(x)
+  }
+}
+
+# Sign of x: -1, 0, or +1.
+fn mk_sign(x) {
+  if x > 0 {
+    return 1
+  } elif x < 0 {
+    return -1
+  } else {
+    return 0
+  }
+}
+
+# ---------------- self-test ----------------
+print("mk_factorial(0)          = " + str(mk_factorial(0)))
+print("mk_factorial(5)          = " + str(mk_factorial(5)))
+print("mk_factorial(6)          = " + str(mk_factorial(6)))
+print("mk_lcm(4, 6)             = " + str(mk_lcm(4, 6)))
+print("mk_lcm(21, 6)            = " + str(mk_lcm(21, 6)))
+print("mk_lcm(0, 5)             = " + str(mk_lcm(0, 5)))
+print("mk_isqrt(0)              = " + str(mk_isqrt(0)))
+print("mk_isqrt(1)              = " + str(mk_isqrt(1)))
+print("mk_isqrt(16)             = " + str(mk_isqrt(16)))
+print("mk_isqrt(17)             = " + str(mk_isqrt(17)))
+print("mk_isqrt(99)             = " + str(mk_isqrt(99)))
+print("mk_prod([1,2,3,4])       = " + str(mk_prod([1, 2, 3, 4])))
+print("mk_prod([])              = " + str(mk_prod([])))
+print("mk_mean([1,2,3,4])       = " + str(mk_mean([1, 2, 3, 4])))
+print("mk_median([3,1,2])       = " + str(mk_median([3, 1, 2])))
+print("mk_median([1,2,3,4])     = " + str(mk_median([1, 2, 3, 4])))
+print("mk_min_of([5,2,9,-1,7])  = " + str(mk_min_of([5, 2, 9, -1, 7])))
+print("mk_max_of([5,2,9,-1,7])  = " + str(mk_max_of([5, 2, 9, -1, 7])))
+print("mk_clamp_i(15, 0, 10)    = " + str(mk_clamp_i(15, 0, 10)))
+print("mk_clamp_i(-3, 0, 10)    = " + str(mk_clamp_i(-3, 0, 10)))
+print("mk_clamp_i(5, 0, 10)     = " + str(mk_clamp_i(5, 0, 10)))
+print("mk_sign(-9)              = " + str(mk_sign(-9)))
+print("mk_sign(0)               = " + str(mk_sign(0)))
+print("mk_sign(42)              = " + str(mk_sign(42)))

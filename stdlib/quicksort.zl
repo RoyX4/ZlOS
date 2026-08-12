@@ -1,0 +1,91 @@
+# quicksort.zl  --  recursive quicksort of a list of numbers.
+# Partition around the FIRST element into two sub-lists (less-or-equal, greater),
+# recurse on each, then concatenate: qsort(le) + [pivot] + qsort(gt).
+# zl lists don't mutate in place, so we build new lists by looping + push.
+
+# Concatenate two lists into a new list.
+fn concat(a, b) {
+    out = a
+    for x in b {
+        out = push(out, x)
+    }
+    return out
+}
+
+# Recursive quicksort. Returns a NEW sorted list; input is untouched.
+fn qsort(xs) {
+    if len(xs) <= 1 {
+        return xs
+    }
+
+    pivot = xs[0]
+    less = []          # elements <= pivot (excluding the pivot itself)
+    greater = []       # elements > pivot
+
+    i = 1
+    while i < len(xs) {
+        v = xs[i]
+        if v <= pivot {
+            less = push(less, v)
+        } else {
+            greater = push(greater, v)
+        }
+        i = i + 1
+    }
+
+    sortedLess = qsort(less)
+    sortedGreater = qsort(greater)
+
+    # sortedLess + [pivot] + sortedGreater
+    result = concat(sortedLess, [pivot])
+    result = concat(result, sortedGreater)
+    return result
+}
+
+# --- self-test ---------------------------------------------------------------
+
+print("=== quicksort self-test ===")
+
+t1 = [5, 3, 8, 1, 9, 2, 7]
+print("input 1:  " + join(t1, ", "))
+print("sorted 1: " + join(qsort(t1), ", "))
+
+t2 = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]   # has duplicates
+print("input 2:  " + join(t2, ", "))
+print("sorted 2: " + join(qsort(t2), ", "))
+
+t3 = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]     # reverse sorted
+print("input 3:  " + join(t3, ", "))
+print("sorted 3: " + join(qsort(t3), ", "))
+
+t4 = []                                    # empty
+print("input 4:  (empty)")
+print("sorted 4: " + join(qsort(t4), ", "))
+
+t5 = [42]                                  # single element
+print("input 5:  " + join(t5, ", "))
+print("sorted 5: " + join(qsort(t5), ", "))
+
+t6 = [-3, 5, -1, 0, 2, -8]                 # negatives
+print("input 6:  " + join(t6, ", "))
+print("sorted 6: " + join(qsort(t6), ", "))
+
+# Verify sortedness programmatically.
+fn isSorted(xs) {
+    i = 1
+    while i < len(xs) {
+        if xs[i] < xs[i - 1] {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+allOk = true
+for lst in [t1, t2, t3, t4, t5, t6] {
+    if not isSorted(qsort(lst)) {
+        allOk = false
+    }
+}
+print("all outputs sorted correctly: " + allOk)

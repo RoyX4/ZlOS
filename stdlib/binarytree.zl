@@ -1,0 +1,101 @@
+# binarytree.zl -- binary search tree as nested nodes [value, left, right]
+# empty tree = []. Each node is a 3-element list: [value, leftSubtree, rightSubtree].
+# All function-local variables are prefixed to avoid clobbering globals (zl scope rule).
+
+# Insert value v into tree, returning a NEW tree (immutable).
+fn bst_insert(tree, v) {
+    if len(tree) == 0 {
+        return [v, [], []]
+    }
+    bi_val = tree[0]
+    bi_left = tree[1]
+    bi_right = tree[2]
+    if v < bi_val {
+        return [bi_val, bst_insert(bi_left, v), bi_right]
+    } else if v > bi_val {
+        return [bi_val, bi_left, bst_insert(bi_right, v)]
+    } else {
+        # duplicate: leave tree unchanged
+        return tree
+    }
+}
+
+# Return true if v exists in tree.
+fn bst_contains(tree, v) {
+    if len(tree) == 0 {
+        return false
+    }
+    bc_val = tree[0]
+    if v == bc_val {
+        return true
+    } else if v < bc_val {
+        return bst_contains(tree[1], v)
+    } else {
+        return bst_contains(tree[2], v)
+    }
+}
+
+# Return sorted list of all values via in-order traversal.
+fn inorder(tree) {
+    if len(tree) == 0 {
+        return []
+    }
+    io_left = inorder(tree[1])
+    io_mid = [tree[0]]
+    io_right = inorder(tree[2])
+    return io_left + io_mid + io_right
+}
+
+# Return the height of the tree (empty = 0, single node = 1).
+fn tree_height(tree) {
+    if len(tree) == 0 {
+        return 0
+    }
+    th_lh = tree_height(tree[1])
+    th_rh = tree_height(tree[2])
+    if th_lh > th_rh {
+        return th_lh + 1
+    } else {
+        return th_rh + 1
+    }
+}
+
+# Build a tree by inserting every value from a list, returning the final tree.
+fn build_tree(vals) {
+    bt_t = []
+    for bt_v in vals {
+        bt_t = bst_insert(bt_t, bt_v)
+    }
+    return bt_t
+}
+
+# ---------------------------------------------------------------------------
+# Self-test
+# ---------------------------------------------------------------------------
+print("=== binarytree.zl self-test ===")
+
+values = [50, 30, 70, 20, 40, 60, 80, 30, 10]
+print("insert order: " + join(values, ", "))
+
+t = build_tree(values)
+
+print("inorder (sorted): " + join(inorder(t), ", "))
+print("tree height: " + tree_height(t))
+
+print("contains 60? " + bst_contains(t, 60))
+print("contains 25? " + bst_contains(t, 25))
+print("contains 10? " + bst_contains(t, 10))
+print("contains 80? " + bst_contains(t, 80))
+print("contains 99? " + bst_contains(t, 99))
+
+# Edge cases
+empty = []
+print("empty inorder: " + join(inorder(empty), ", "))
+print("empty height: " + tree_height(empty))
+print("empty contains 5? " + bst_contains(empty, 5))
+
+single = bst_insert([], 42)
+print("single inorder: " + join(inorder(single), ", "))
+print("single height: " + tree_height(single))
+
+print("=== done ===")

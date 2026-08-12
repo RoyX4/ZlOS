@@ -1,0 +1,465 @@
+# poly.zl - polynomials over the reals, as plain coefficient lists.
+#
+# Representation: a polynomial is a list of coefficients, LOWEST degree first,
+# so p[i] is the coefficient of x^i and [-1, 2, 3] means 3x^2 + 2x - 1.
+# Low-first is the only ordering that lets an index be a degree, which keeps
+# every loop here honest: p_derive multiplies by the index, p_integrate
+# divides by index+1, and p_mul just adds indices. The printed form
+# (p_to_string) reverses that for humans, highest degree first.
+#
+# Canonical form: no trailing zero coefficients. Every function runs its
+# result through p_trim, so [3, 0, 0] never escapes as an answer. The zero
+# polynomial is [0], and its degree is reported as -1 - the usual convention,
+# and the flag p_divmod uses to reject a zero divisor.
+#
+# Numbers are doubles, so p_integrate and p_divmod generally leave you with
+# fractions, and equality has to be a tolerance test (p_equal, 1e-9).
+#
+# Two zl details shape the code below:
+#   * There is no local scope - assigning a name inside a function writes the
+#     global of that name, parameters included. Every parameter and local
+#     therefore carries a two-letter tag naming its function (tr_ = p_trim,
+#     ml_ = p_mul, ...), and the demo's own globals all start with g_.
+#   * Lists are references: `b = a` then `b[0] = 9` changes a too. p_trim
+#     always builds a fresh list, which is why p_divmod starts from
+#     p_trim(dividend) before it writes into the working remainder.
+
+# --- drop trailing (high degree) zeros; always leaves at least one term ---
+fn p_trim(tr_p) {
+    if len(tr_p) == 0 {
+        return [0]
+    }
+    tr_top = len(tr_p) - 1
+    while tr_top > 0 {
+        if tr_p[tr_top] != 0 {
+            break
+        }
+        tr_top = tr_top - 1
+    }
+    tr_out = []
+    tr_i = 0
+    while tr_i <= tr_top {
+        tr_out = push(tr_out, tr_p[tr_i])
+        tr_i = tr_i + 1
+    }
+    return tr_out
+}
+
+# --- degree; the zero polynomial reports -1 ---
+fn p_degree(dg_p) {
+    dg_t = p_trim(dg_p)
+    if len(dg_t) == 1 and dg_t[0] == 0 {
+        return -1
+    }
+    return len(dg_t) - 1
+}
+
+# --- coefficient-wise comparison within 1e-9 (doubles never land exactly) ---
+fn p_equal(eq_a, eq_b) {
+    eq_n = max(len(eq_a), len(eq_b))
+    eq_i = 0
+    while eq_i < eq_n {
+        eq_u = 0
+        eq_v = 0
+        if eq_i < len(eq_a) {
+            eq_u = eq_a[eq_i]
+        }
+        if eq_i < len(eq_b) {
+            eq_v = eq_b[eq_i]
+        }
+        if abs(eq_u - eq_v) > 0.000000001 {
+            return false
+        }
+        eq_i = eq_i + 1
+    }
+    return true
+}
+
+fn p_add(ad_a, ad_b) {
+    ad_n = max(len(ad_a), len(ad_b))
+    ad_out = []
+    ad_i = 0
+    while ad_i < ad_n {
+        ad_v = 0
+        if ad_i < len(ad_a) {
+            ad_v = ad_v + ad_a[ad_i]
+        }
+        if ad_i < len(ad_b) {
+            ad_v = ad_v + ad_b[ad_i]
+        }
+        ad_out = push(ad_out, ad_v)
+        ad_i = ad_i + 1
+    }
+    return p_trim(ad_out)
+}
+
+fn p_sub(sb_a, sb_b) {
+    sb_n = max(len(sb_a), len(sb_b))
+    sb_out = []
+    sb_i = 0
+    while sb_i < sb_n {
+        sb_v = 0
+        if sb_i < len(sb_a) {
+            sb_v = sb_v + sb_a[sb_i]
+        }
+        if sb_i < len(sb_b) {
+            sb_v = sb_v - sb_b[sb_i]
+        }
+        sb_out = push(sb_out, sb_v)
+        sb_i = sb_i + 1
+    }
+    return p_trim(sb_out)
+}
+
+# --- schoolbook convolution: the x^i term times the x^j term lands at i+j ---
+fn p_mul(ml_a, ml_b) {
+    ml_x = p_trim(ml_a)
+    ml_y = p_trim(ml_b)
+    ml_out = fill(len(ml_x) + len(ml_y) - 1, 0)
+    ml_i = 0
+    while ml_i < len(ml_x) {
+        ml_j = 0
+        while ml_j < len(ml_y) {
+            ml_out[ml_i + ml_j] = ml_out[ml_i + ml_j] + ml_x[ml_i] * ml_y[ml_j]
+            ml_j = ml_j + 1
+        }
+        ml_i = ml_i + 1
+    }
+    return p_trim(ml_out)
+}
+
+# --- Horner's rule: (((a_n)x + a_n-1)x + ...)x + a_0, one multiply per term ---
+fn p_eval(ev_p, ev_x) {
+    ev_acc = 0
+    ev_i = len(ev_p) - 1
+    while ev_i >= 0 {
+        ev_acc = ev_acc * ev_x + ev_p[ev_i]
+        ev_i = ev_i - 1
+    }
+    return ev_acc
+}
+
+# --- d/dx: the x^i term becomes i*x^(i-1), so shift down and scale by index ---
+fn p_derive(dv_p) {
+    dv_out = []
+    dv_i = 1
+    while dv_i < len(dv_p) {
+        dv_out = push(dv_out, dv_p[dv_i] * dv_i)
+        dv_i = dv_i + 1
+    }
+    return p_trim(dv_out)
+}
+
+# --- antiderivative with constant of integration 0: x^i -> x^(i+1)/(i+1) ---
+fn p_integrate(ig_p) {
+    ig_out = [0]
+    ig_i = 0
+    while ig_i < len(ig_p) {
+        ig_out = push(ig_out, ig_p[ig_i] / (ig_i + 1))
+        ig_i = ig_i + 1
+    }
+    return p_trim(ig_out)
+}
+
+# --- long division: returns [quotient, remainder], deg(remainder) < deg(b) ---
+fn p_divmod(dm_a, dm_b) {
+    dm_num = p_trim(dm_a)
+    dm_den = p_trim(dm_b)
+    dm_da = p_degree(dm_num)
+    dm_db = p_degree(dm_den)
+    assert(dm_db >= 0, "p_divmod: cannot divide by the zero polynomial")
+    if dm_da < dm_db {
+        return [[0], dm_num]
+    }
+    # dm_num is a fresh list out of p_trim, so it is safe to use as scratch
+    dm_r = dm_num
+    dm_lead = dm_den[dm_db]
+    dm_q = fill(dm_da - dm_db + 1, 0)
+    dm_k = dm_da
+    while dm_k >= dm_db {
+        dm_c = dm_r[dm_k] / dm_lead
+        dm_q[dm_k - dm_db] = dm_c
+        # subtract dm_c * x^(k-db) * den from the working remainder
+        dm_j = 0
+        while dm_j < dm_db {
+            dm_r[dm_k - dm_db + dm_j] = dm_r[dm_k - dm_db + dm_j] - dm_c * dm_den[dm_j]
+            dm_j = dm_j + 1
+        }
+        # the top term cancels exactly by construction; say so, don't compute
+        # it, or rounding leaves a speck of dust at the head of the remainder
+        dm_r[dm_k] = 0
+        dm_k = dm_k - 1
+    }
+    dm_rem = []
+    dm_j = 0
+    while dm_j < dm_db {
+        dm_rem = push(dm_rem, dm_r[dm_j])
+        dm_j = dm_j + 1
+    }
+    return [p_trim(dm_q), p_trim(dm_rem)]
+}
+
+# --- one printed term, magnitude only; the caller supplies the sign ---
+fn p_term(tm_c, tm_k) {
+    tm_a = abs(tm_c)
+    if tm_k == 0 {
+        return str(tm_a)
+    }
+    tm_s = ""
+    if tm_a != 1 {
+        tm_s = str(tm_a)
+    }
+    tm_s = tm_s + "x"
+    if tm_k > 1 {
+        tm_s = tm_s + "^" + str(tm_k)
+    }
+    return tm_s
+}
+
+# --- human form, highest degree first: [-1, 2, 3] -> "3x^2 + 2x - 1" ---
+fn p_to_string(ts_p) {
+    ts_t = p_trim(ts_p)
+    ts_out = ""
+    ts_k = len(ts_t) - 1
+    while ts_k >= 0 {
+        ts_c = ts_t[ts_k]
+        if ts_c != 0 {
+            if len(ts_out) == 0 {
+                if ts_c < 0 {
+                    ts_out = "-"
+                }
+            } else {
+                if ts_c < 0 {
+                    ts_out = ts_out + " - "
+                } else {
+                    ts_out = ts_out + " + "
+                }
+            }
+            ts_out = ts_out + p_term(ts_c, ts_k)
+        }
+        ts_k = ts_k - 1
+    }
+    if len(ts_out) == 0 {
+        return "0"
+    }
+    return ts_out
+}
+
+# --- Newton inside a sign-change bracket, bisecting whenever Newton would
+#     jump outside it. Newton alone can be thrown off a flat spot; the
+#     bracket can only shrink, so this always lands on the root.
+#     Stopping is on the STEP, never on the residual: at a repeated root like
+#     (x-2)^3 the residual is already 1e-15 while x is still 1e-5 out, and a
+#     residual test there stops early enough to report one root as two. ---
+fn p_bracket_root(br_p, br_d, br_lo, br_hi) {
+    br_neg = br_lo
+    br_pos = br_hi
+    if p_eval(br_p, br_lo) > 0 {
+        br_neg = br_hi
+        br_pos = br_lo
+    }
+    br_x = (br_lo + br_hi) / 2
+    br_i = 0
+    while br_i < 200 {
+        br_f = p_eval(br_p, br_x)
+        if br_f < 0 {
+            br_neg = br_x
+        } else {
+            br_pos = br_x
+        }
+        if br_f == 0 {
+            break
+        }
+        br_next = (br_neg + br_pos) / 2
+        br_g = p_eval(br_d, br_x)
+        if br_g != 0 {
+            br_cand = br_x - br_f / br_g
+            if br_cand > min(br_neg, br_pos) and br_cand < max(br_neg, br_pos) {
+                br_next = br_cand
+            }
+        }
+        if abs(br_next - br_x) < 0.000000000000001 {
+            br_x = br_next
+            break
+        }
+        br_x = br_next
+        br_i = br_i + 1
+    }
+    return br_x
+}
+
+# --- plain Newton from a starting guess, no bracket to fall back on. Used
+#     only for touching roots, where there is no sign change to bracket. The
+#     caller must check the result really is a root. ---
+fn p_newton_from(nw_p, nw_d, nw_start) {
+    nw_x = nw_start
+    nw_i = 0
+    while nw_i < 200 {
+        nw_f = p_eval(nw_p, nw_x)
+        if nw_f == 0 {
+            break
+        }
+        nw_g = p_eval(nw_d, nw_x)
+        if nw_g == 0 {
+            break
+        }
+        nw_step = nw_f / nw_g
+        nw_x = nw_x - nw_step
+        if abs(nw_step) < 0.000000000000001 {
+            break
+        }
+        nw_i = nw_i + 1
+    }
+    return nw_x
+}
+
+fn p_near_root(nr_list, nr_x, nr_tol) {
+    for nr_v in nr_list {
+        if abs(nr_v - nr_x) < nr_tol {
+            return true
+        }
+    }
+    return false
+}
+
+# --- append a root unless one within 1e-6 is already listed ---
+fn p_add_root(ar_list, ar_x) {
+    if p_near_root(ar_list, ar_x, 0.000001) {
+        return ar_list
+    }
+    return push(ar_list, ar_x)
+}
+
+# --- all real roots, ascending. Every real root satisfies |x| < 1 + max|a_i /
+#     a_n| (Cauchy's bound), so sampling that window catches every one of
+#     them. A sign change between samples brackets a root of odd multiplicity;
+#     a touching root (x-1)^2 never changes sign, so a second pass runs plain
+#     Newton from each local minimum of |f| and keeps what it proves.
+#     Limits: roots closer together than the sample step can be missed, a
+#     root is reported once however many times it repeats, and the "is this
+#     really a root" test in pass 2 is the absolute |f(x)| < 1e-9, so a
+#     polynomial with coefficients far outside 1e-9..1e9 will not satisfy
+#     it. ---
+fn p_roots_newton(rt_p) {
+    rt_t = p_trim(rt_p)
+    rt_n = p_degree(rt_t)
+    rt_out = []
+    if rt_n < 1 {
+        return rt_out
+    }
+    rt_d = p_derive(rt_t)
+    rt_lead = rt_t[rt_n]
+    rt_bound = 0
+    rt_i = 0
+    while rt_i < rt_n {
+        rt_v = abs(rt_t[rt_i] / rt_lead)
+        if rt_v > rt_bound {
+            rt_bound = rt_v
+        }
+        rt_i = rt_i + 1
+    }
+    rt_bound = 1 + rt_bound
+    rt_steps = 1000
+    rt_h = 2 * rt_bound / rt_steps
+    rt_xs = []
+    rt_fs = []
+    rt_i = 0
+    while rt_i <= rt_steps {
+        rt_at = 0 - rt_bound + rt_i * rt_h
+        rt_xs = push(rt_xs, rt_at)
+        rt_fs = push(rt_fs, p_eval(rt_t, rt_at))
+        rt_i = rt_i + 1
+    }
+    # pass 1 - sign changes
+    rt_i = 0
+    while rt_i < rt_steps {
+        if rt_fs[rt_i] == 0 {
+            rt_out = p_add_root(rt_out, rt_xs[rt_i])
+        }
+        if rt_fs[rt_i] * rt_fs[rt_i + 1] < 0 {
+            rt_out = p_add_root(rt_out, p_bracket_root(rt_t, rt_d, rt_xs[rt_i], rt_xs[rt_i + 1]))
+        }
+        rt_i = rt_i + 1
+    }
+    if rt_fs[rt_steps] == 0 {
+        rt_out = p_add_root(rt_out, rt_xs[rt_steps])
+    }
+    # pass 2 - touching roots sit at a local minimum of |f|. Skip anywhere
+    # pass 1 already succeeded: unbracketed Newton is the weaker tool, and
+    # near a repeated root it stalls on rounding noise a few 1e-6 off the
+    # answer, which would list one root twice.
+    rt_i = 1
+    while rt_i < rt_steps {
+        rt_mid = abs(rt_fs[rt_i])
+        if rt_mid <= abs(rt_fs[rt_i - 1]) and rt_mid <= abs(rt_fs[rt_i + 1]) {
+            if not p_near_root(rt_out, rt_xs[rt_i], rt_h) {
+                rt_cand = p_newton_from(rt_t, rt_d, rt_xs[rt_i])
+                if abs(p_eval(rt_t, rt_cand)) < 0.000000001 {
+                    rt_out = p_add_root(rt_out, rt_cand)
+                }
+            }
+        }
+        rt_i = rt_i + 1
+    }
+    return sort(rt_out)
+}
+
+# ---------------------------------------------------------------- demo ----
+
+g_a = [-1, 2, 3]        # 3x^2 + 2x - 1  = (3x - 1)(x + 1)
+g_b = [-1, 1]           # x - 1
+g_c = [-4, 0, -2, 1]    # x^3 - 2x^2 - 4
+g_d = [-3, 1]           # x - 3
+g_e = [-6, 11, -6, 1]   # (x - 1)(x - 2)(x - 3)
+g_f = [2, -3, 0, 1]     # (x - 1)^2 (x + 2)
+g_g = [1, 0, 1]         # x^2 + 1, no real roots
+
+print("A                = " + p_to_string(g_a))
+print("B                = " + p_to_string(g_b))
+print("A + B            = " + p_to_string(p_add(g_a, g_b)))
+print("A - B            = " + p_to_string(p_sub(g_a, g_b)))
+print("A * B            = " + p_to_string(p_mul(g_a, g_b)))
+print("A(2)             = " + str(p_eval(g_a, 2)) + ", A(0) = " + str(p_eval(g_a, 0)) + ", A(-1) = " + str(p_eval(g_a, -1)))
+print("dA/dx            = " + p_to_string(p_derive(g_a)))
+print("integral A dx    = " + p_to_string(p_integrate(g_a)))
+print("round trip       = " + p_to_string(p_derive(p_integrate(g_a))))
+print("degrees          = A:" + str(p_degree(g_a)) + " B:" + str(p_degree(g_b)) + " zero:" + str(p_degree([0])) + " padded:" + str(p_degree([5, 0, 0])))
+print("printing edges   = " + p_to_string([0]) + " | " + p_to_string([7]) + " | " + p_to_string([0, -1]) + " | " + p_to_string([0, 0, 1]))
+
+print("")
+print("C                = " + p_to_string(g_c))
+print("D                = " + p_to_string(g_d))
+g_qr = p_divmod(g_c, g_d)
+print("C / D            = " + p_to_string(g_qr[0]) + "  remainder " + p_to_string(g_qr[1]))
+g_back = p_add(p_mul(g_qr[0], g_d), g_qr[1])
+print("q*D + r          = " + p_to_string(g_back) + "  rebuilds C: " + str(p_equal(g_back, g_c)))
+
+g_qr = p_divmod(g_a, g_b)
+print("A / B            = " + p_to_string(g_qr[0]) + "  remainder " + p_to_string(g_qr[1]))
+g_back = p_add(p_mul(g_qr[0], g_b), g_qr[1])
+print("q*B + r          = " + p_to_string(g_back) + "  rebuilds A: " + str(p_equal(g_back, g_a)))
+
+g_prod = p_mul(g_a, g_b)
+g_qr = p_divmod(g_prod, g_b)
+print("(A*B) / B        = " + p_to_string(g_qr[0]) + "  remainder " + p_to_string(g_qr[1]) + "  is A: " + str(p_equal(g_qr[0], g_a)))
+
+g_qr = p_divmod(g_b, g_e)
+print("B / E (deg too small) = " + p_to_string(g_qr[0]) + "  remainder " + p_to_string(g_qr[1]))
+g_qr = p_divmod(g_a, [2])
+print("A / 2            = " + p_to_string(g_qr[0]) + "  remainder " + p_to_string(g_qr[1]))
+
+print("")
+print("roots of A       = " + str(p_roots_newton(g_a)) + "   (exact: -1 and 1/3)")
+print("roots of E       = " + str(p_roots_newton(g_e)) + "   (exact: 1, 2, 3)")
+print("roots of F       = " + str(p_roots_newton(g_f)) + "   (exact: -2 and a double root at 1)")
+print("roots of G       = " + str(p_roots_newton(g_g)) + "   (none - x^2 + 1 never crosses)")
+print("roots of B       = " + str(p_roots_newton(g_b)) + ", of a constant: " + str(p_roots_newton([7])))
+
+g_roots = p_roots_newton(g_e)
+g_worst = 0
+for g_r in g_roots {
+    if abs(p_eval(g_e, g_r)) > g_worst {
+        g_worst = abs(p_eval(g_e, g_r))
+    }
+}
+print("largest |E(root)| = " + str(g_worst))

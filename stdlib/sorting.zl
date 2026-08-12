@@ -1,0 +1,100 @@
+# sorting.zl -- sorting utilities for the zl standard library
+# Functions: bubble_sort, is_sorted, reverse_list
+# Note: zl lists do NOT mutate in place, so every "change" rebuilds a new list.
+
+# Return a NEW list with positions i and j swapped.
+fn swap(xs, i, j) {
+    out = []
+    k = 0
+    while k < len(xs) {
+        if k == i {
+            out = push(out, xs[j])
+        } else {
+            if k == j {
+                out = push(out, xs[i])
+            } else {
+                out = push(out, xs[k])
+            }
+        }
+        k = k + 1
+    }
+    return out
+}
+
+# Bubble sort ascending. Returns a NEW sorted list; the input is untouched.
+fn bubble_sort(xs) {
+    arr = xs
+    n = len(arr)
+    i = 0
+    while i < n {
+        j = 0
+        while j < n - 1 - i {
+            if arr[j] > arr[j + 1] {
+                arr = swap(arr, j, j + 1)
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return arr
+}
+
+# True if the list is in ascending (non-decreasing) order.
+fn is_sorted(xs) {
+    i = 0
+    while i < len(xs) - 1 {
+        if xs[i] > xs[i + 1] {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+# Return a NEW list with the elements in reverse order.
+fn reverse_list(xs) {
+    out = []
+    i = len(xs) - 1
+    while i >= 0 {
+        out = push(out, xs[i])
+        i = i - 1
+    }
+    return out
+}
+
+# Pretty-print a list as "[a, b, c]" (string + number auto-converts to text).
+fn show(xs) {
+    s = "["
+    i = 0
+    while i < len(xs) {
+        if i > 0 {
+            s = s + ", "
+        }
+        s = s + xs[i]
+        i = i + 1
+    }
+    return s + "]"
+}
+
+# ---------------- self-test ----------------
+print("=== sorting.zl self-test ===")
+
+data = [5, 2, 9, 1, 5, 6, 3]
+print("input:          " + show(data))
+
+sorted = bubble_sort(data)
+print("bubble_sort:    " + show(sorted))
+print("input intact:   " + show(data))
+
+print("is_sorted(in):  " + is_sorted(data))
+print("is_sorted(out): " + is_sorted(sorted))
+
+print("reverse_list:   " + show(reverse_list(data)))
+
+# edge cases
+empty = []
+one = [42]
+print("sort empty:     " + show(bubble_sort(empty)))
+print("sort single:    " + show(bubble_sort(one)))
+print("is_sorted []:   " + is_sorted(empty))
+print("already sorted: " + is_sorted([1, 2, 3, 4]))

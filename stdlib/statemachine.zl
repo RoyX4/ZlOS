@@ -1,0 +1,185 @@
+# statemachine.zl - finite state machines built out of plain lists.
+#
+# Representation: a machine is the two-element list
+#
+#     [ start_state, transitions ]
+#
+# and each transition is the three-element list [ from, symbol, to ].
+# States and symbols are just values (strings here), compared with ==, so
+# nothing outside this file has to know the layout. A flat list of triples
+# is used rather than a nested table because zl has no structs and lookup
+# over a handful of edges is cheap; fsm_step() is a linear scan.
+#
+# "No transition" is reported as nil(), which is a distinct value from any
+# state name (nil() != 0 and nil() != ""), so a machine may legally use 0 or
+# "" as a state and still be told apart from a dead end. Callers test it with
+#     type(next) == "nil"
+#
+# Every builder returns a NEW machine instead of editing the one passed in,
+# so   m = fsm_add(m, ...)   is the idiom, and an older m stays valid.
+#
+# Naming: assigning a name inside a function writes the global of that name
+# if one already exists, so the demo section below deliberately avoids every
+# name used as a local up here (i, out, cur, t, st, s, x, n, res, ok).
+
+fn fsm_new(start) {
+    return [start, []]
+}
+fn fsm_add(m, from_st, sym, to_st) {
+    return [m[0], push(m[1], [from_st, sym, to_st])]
+}
+fn fsm_start(m) {
+    return m[0]
+}
+fn fsm_step(m, st, sym) {
+    for t in m[1] {
+        if t[0] == st and t[1] == sym {
+            return t[2]
+        }
+    }
+    return nil()
+}
+# Feed every symbol in order from the start state.
+# Returns the final state, or nil() if any step had no transition.
+fn fsm_run(m, syms) {
+    cur = m[0]
+    for s in syms {
+        cur = fsm_step(m, cur, s)
+        if type(cur) == "nil" {
+            return nil()
+        }
+    }
+    return cur
+}
+# The states the machine passes through, starting with the start state.
+# A complete run gives len(syms) + 1 entries; a run that dies stops at the
+# last state actually reached, so a short trace means "rejected here".
+fn fsm_trace(m, syms) {
+    cur = m[0]
+    out = [cur]
+    for s in syms {
+        cur = fsm_step(m, cur, s)
+        if type(cur) == "nil" {
+            return out
+        }
+        out = push(out, cur)
+    }
+    return out
+}
+# Every state named by the machine: the start state, then each from/to in the
+# order the transitions were added, with duplicates dropped.
+fn fsm_states(m) {
+    out = [m[0]]
+    for t in m[1] {
+        if not contains(out, t[0]) {
+            out = push(out, t[0])
+        }
+        if not contains(out, t[2]) {
+            out = push(out, t[2])
+        }
+    }
+    return out
+}
+# The symbols the machine understands, deduplicated.
+fn fsm_symbols(m) {
+    out = []
+    for t in m[1] {
+        if not contains(out, t[1]) {
+            out = push(out, t[1])
+        }
+    }
+    return out
+}
+fn fsm_accepts(m, syms, accepting) {
+    res = fsm_run(m, syms)
+    if type(res) == "nil" {
+        return false
+    }
+    return contains(accepting, res)
+}
+
+# --- helper for the demo: a whole number as a list of "0"/"1" symbols -------
+fn bits_of(n) {
+    if n == 0 {
+        return ["0"]
+    }
+    x = n
+    out = []
+    while x > 0 {
+        out = insert(out, 0, str(x % 2))
+        x = int(x / 2)
+    }
+    return out
+}
+
+# --- demo 1: a traffic light ----------------------------------------------
+# "timer" advances the normal cycle; "emergency" drives it back to red the
+# safe way round (green must pass through yellow first).
+
+light = fsm_new("red")
+light = fsm_add(light, "red", "timer", "green")
+light = fsm_add(light, "green", "timer", "yellow")
+light = fsm_add(light, "yellow", "timer", "red")
+light = fsm_add(light, "red", "emergency", "red")
+light = fsm_add(light, "green", "emergency", "yellow")
+light = fsm_add(light, "yellow", "emergency", "red")
+
+print("== traffic light ==")
+print("start:            " + fsm_start(light))
+print("states:           " + str(fsm_states(light)))
+print("symbols:          " + str(fsm_symbols(light)))
+print("step red/timer:   " + str(fsm_step(light, "red", "timer")))
+print("step green/timer: " + str(fsm_step(light, "green", "timer")))
+print("step red/walk:    " + str(fsm_step(light, "red", "walk")))
+print("run 4 timers:     " + str(fsm_run(light, ["timer", "timer", "timer", "timer"])))
+print("trace 4 timers:   " + str(fsm_trace(light, ["timer", "timer", "timer", "timer"])))
+print("trace w/ emerg:   " + str(fsm_trace(light, ["timer", "emergency", "emergency"])))
+print("run unknown sym:  " + str(fsm_run(light, ["timer", "walk", "timer"])))
+print("trace unknown:    " + str(fsm_trace(light, ["timer", "walk", "timer"])))
+print("stops at yellow?  " + str(fsm_accepts(light, ["timer", "timer"], ["yellow"])))
+print("stops at red?     " + str(fsm_accepts(light, ["timer", "timer"], ["red"])))
+
+# --- demo 2: binary strings divisible by 3 --------------------------------
+# State rK means "the number read so far leaves remainder K when divided by 3".
+# Reading bit b turns the value v into 2v + b, so remainder r becomes
+# (2r + b) % 3.  The machine below is exactly that table, and the accepting
+# state is r0.
+
+mod3 = fsm_new("r0")
+mod3 = fsm_add(mod3, "r0", "0", "r0")
+mod3 = fsm_add(mod3, "r0", "1", "r1")
+mod3 = fsm_add(mod3, "r1", "0", "r2")
+mod3 = fsm_add(mod3, "r1", "1", "r0")
+mod3 = fsm_add(mod3, "r2", "0", "r1")
+mod3 = fsm_add(mod3, "r2", "1", "r2")
+accepting = ["r0"]
+
+print("")
+print("== binary divisible by 3 ==")
+print("states:  " + str(fsm_states(mod3)))
+print("symbols: " + str(fsm_symbols(mod3)))
+print("checking 0..20 against real arithmetic:")
+
+bad = 0
+hits = []
+for num in range(21) {
+    bits = bits_of(num)
+    final = fsm_run(mod3, bits)
+    got = fsm_accepts(mod3, bits, accepting)
+    want = num % 3 == 0
+    mark = "ok"
+    if got != want or final != "r" + str(num % 3) {
+        mark = "MISMATCH"
+        bad = bad + 1
+    }
+    if got {
+        hits = push(hits, num)
+    }
+    print("  n=" + pad(str(num), 3) + " bits=" + pad(join(bits, ""), 6) + "-> " + pad(str(final), 4) + "accept=" + pad(str(got), 6) + "n%3=" + str(num % 3) + "  " + mark)
+}
+print("accepted by machine: " + str(hits))
+print("mismatches vs arithmetic: " + str(bad))
+print("trace of 18 (10010):      " + str(fsm_trace(mod3, bits_of(18))))
+print("trace of 19 (10011):      " + str(fsm_trace(mod3, bits_of(19))))
+print("empty input accepted:     " + str(fsm_accepts(mod3, [], accepting)))
+print("bad symbol \"2\" accepted:  " + str(fsm_accepts(mod3, ["1", "2"], accepting)))

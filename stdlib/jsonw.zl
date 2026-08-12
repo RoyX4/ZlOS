@@ -1,0 +1,57 @@
+# jsonw.zl - turn a zl value into JSON text (a stringifier).
+# Handles numbers, strings, bools, nil, and lists (arrays). Recurses.
+
+fn json_escape(s) {
+    out = ""
+    i = 0
+    while i < len(s) {
+        c = at(s, i)
+        if c == "\"" {
+            out = out + "\\\""
+        } else {
+            if c == "\n" {
+                out = out + "\\n"
+            } else {
+                out = out + c
+            }
+        }
+        i = i + 1
+    }
+    return out
+}
+fn to_json(v) {
+    t = type(v)
+    if t == "num" {
+        return str(v)
+    }
+    if t == "bool" {
+        return str(v)
+    }
+    if t == "nil" {
+        return "null"
+    }
+    if t == "str" {
+        return "\"" + json_escape(v) + "\""
+    }
+    if t == "list" {
+        out = "["
+        first = true
+        for x in v {
+            if first {
+                first = false
+            } else {
+                out = out + ", "
+            }
+            out = out + to_json(x)
+        }
+        return out + "]"
+    }
+    return "null"
+}
+
+print(to_json(42))
+print(to_json("hi \"there\""))
+print(to_json(true))
+print(to_json([1, 2, 3]))
+print(to_json([1, "two", [3, 4], nil()]))
+print(to_json([[1, 2], ["a", "b"]]))

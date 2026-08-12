@@ -1,0 +1,831 @@
+# =============================================================================
+# mandelbrot.zl - the Mandelbrot set, rendered twice by the zl interpreter:
+#
+#   1. as 100x40 ASCII art on stdout, escape time mapped onto a character ramp
+#   2. as a 400x300 24-bit colour BMP written to examples_out/mandelbrot.bmp
+#
+# It is meant to be read top to bottom as a tutorial, not just run. Five ideas
+# do all the work; each has its own section below and its own explanation.
+#
+# -----------------------------------------------------------------------------
+# 1. THE MATHS, IN FOUR LINES
+# -----------------------------------------------------------------------------
+# Pick a complex number c. Start at z = 0 and repeat  z <- z*z + c.
+# For some c the sequence stays bounded forever; those c ARE the Mandelbrot set.
+# For the rest it runs away to infinity. Once |z| > 2 it can never come back, so
+# "how many steps until |z| passed the bailout" is a finite, computable number:
+# the ESCAPE TIME. Everything below is escape time, painted.
+#
+# zl has no complex type, so z = zr + zi*i is carried as two doubles and the
+# squaring is done by hand:
+#     (zr + zi*i)^2 + (cr + ci*i)  =  (zr^2 - zi^2 + cr)  +  (2*zr*zi + ci)*i
+# That is the whole inner loop. zr^2 and zi^2 are computed once and reused both
+# for the new zr and for the |z|^2 bailout test - three multiplies per step,
+# the standard trick, and it matters a lot on a tree-walking interpreter.
+#
+# -----------------------------------------------------------------------------
+# 2. SMOOTH ESCAPE TIME - so the bands are gradients, not stair steps
+# -----------------------------------------------------------------------------
+# Plain escape time is an integer, so you get concentric rings of flat colour.
+# Instead we run to a much larger bailout, |z| > 256, and subtract the
+# fractional overshoot:
+#         mu = n + 1 - log2(log2(|z|))
+# mu is continuous across the ring edges, so the rings melt into gradients. The
+# larger bailout costs about three extra iterations per pixel, which is cheap
+# next to what it buys.
+#
+# -----------------------------------------------------------------------------
+# 3. LOOK AT THE HISTOGRAM FIRST - and then treat the two renders differently
+# -----------------------------------------------------------------------------
+# This is the section that makes or breaks the picture. Escape time is violently
+# non-uniform: on the default view HALF the escaping pixels are out within four
+# steps and 99% within sixty, yet the ceiling is 300. Feed mu straight into a
+# gradient and that half all lands on the same sliver of colour - a big pale
+# wash and a thin bright rim, which is exactly what the naive version of this
+# program produced.
+#
+# So before colouring anything, both renders build a histogram of their own
+# escape times and turn it into a cumulative distribution. The bar chart printed
+# before the BMP render is that histogram; it is worth a look. What the two
+# renders then DO with it is different, and the difference is the interesting
+# part:
+#
+#   * The ASCII render EQUALISES. Each cell is drawn by its RANK,
+#         position = (cells that escaped sooner) / (cells that escaped)
+#     so every one of the 20 ramp characters covers the same amount of screen.
+#     With only 20 discrete levels and no way to repeat them, equal area per
+#     symbol is exactly what you want, and it is why the ASCII picture uses its
+#     whole ramp instead of parking 80% of the frame on two characters.
+#
+#   * The BMP render does NOT equalise - it would be a mistake. Equal area per
+#     colour hands the enormous, boring outer field most of the gradient and
+#     crushes the filaments (a few percent of the area, and the only part worth
+#     looking at) into a rim. Tried it; the picture went smooth and empty.
+#     Instead the histogram is used to AUTO-EXPOSE a log tone curve:
+#         position = fmod( log(1 + mu) / log(1 + mu99) * PAL_CYCLES, 1 )
+#     where mu99 is the 99th percentile read off the cumulative histogram. The
+#     log compresses the high end, so the region near the boundary - where mu
+#     leaps by hundreds between neighbouring pixels - resolves into structure
+#     rather than a smear. The fmod cycles the gradient, turning escape-time
+#     contours into rings that stay legible at every scale. And normalising by
+#     mu99 means the exposure follows the actual content: change BMP_MAX or zoom
+#     somewhere else and the picture stays lit the same way, with no constants
+#     to re-tune by hand.
+#
+# -----------------------------------------------------------------------------
+# 4. TWO SPEEDUPS, BOTH EXACT (no approximation, no quality lost)
+# -----------------------------------------------------------------------------
+# The interpreter manages roughly 130k inner iterations per second, so this has
+# to be earned rather than brute-forced.
+#
+#   * MIRROR SYMMETRY. The set is symmetric about the real axis: c and its
+#     conjugate escape identically. When the view is centred on that axis
+#     (VIEW_CY == 0) only the top half of the rows are computed and the bottom
+#     half is copied. Half the work, and the result is not merely close but
+#     bit-for-bit symmetric - better than computing it, since the two halves
+#     cannot drift apart in the last decimal place.
+#
+#   * EXACT INTERIOR TESTS. Every pixel inside the set costs the full iteration
+#     ceiling, because the only way to find out it never escapes is to try the
+#     whole way. But the two largest components of the set have closed forms:
+#     the main cardioid and the period-2 bulb. Testing those two shapes takes
+#     about six multiplies and settles ~91% of the set's area instantly.
+#
+# Between them these pay for the third technique, which costs rather than saves:
+#
+# -----------------------------------------------------------------------------
+# 5. ADAPTIVE ANTIALIASING - 4 samples per pixel, but only where it shows
+# -----------------------------------------------------------------------------
+# At 400x300 the filaments around the set are thinner than a pixel, so a single
+# sample per pixel makes them crawl and sparkle. Supersampling the whole image
+# 2x2 would fix it and cost exactly 4x. Instead each pixel is compared with its
+# four neighbours; only where they disagree - a set/not-set boundary, or an mu
+# jump bigger than AA_EDGE - is that pixel re-shot with 4 sub-samples and the
+# four colours averaged. The flat regions, which is most of the frame, stay at
+# one sample. Typically ~10% of pixels get the expensive treatment.
+#
+# -----------------------------------------------------------------------------
+# TO RENDER BIGGER / DEEPER - it is all in the constants block below
+# -----------------------------------------------------------------------------
+#   BMP_W / BMP_H   image size. Cost is linear in the pixel count: 800x600 is 4x
+#                   the pixels and so ~4x the time.
+#   BMP_MAX         iteration ceiling. Raise it when you zoom in - a deep zoom
+#                   wants thousands. Cost grows with it, but only for the pixels
+#                   near the boundary. Because the tone curve is normalised to a
+#                   percentile rather than to BMP_MAX, changing it adds detail
+#                   without washing the rest of the picture out.
+#   VIEW_CX/CY/W    where to look and how wide. Halving VIEW_W doubles the zoom.
+#                   Worth a look: (-0.743644, 0.131826, 0.003) seahorse valley,
+#                   (-0.1011, 0.9563, 0.02) the spirals on the spike,
+#                   (0.2825, 0.01, 0.02) the elephant valley.
+#                   Any VIEW_CY other than 0 turns the mirror trick off and so
+#                   costs twice as much - the program says so when it does.
+#   AA_ON           false to skip the adaptive supersampling (about 40% faster,
+#                   visibly rougher filaments).
+#   PAL_CYCLES      how many times the gradient repeats between mu = 0 and the
+#                   99th percentile. More cycles = tighter contour rings.
+#   TONE_PCT        which percentile the exposure normalises to. Lower it to
+#                   brighten the outer field, raise it to favour the fringe.
+#   ASCII_*         the terminal render, independent of the BMP one.
+#
+# The BMP writer (le8/le16/le32, the header layout, the bottom-up BGR rows) is
+# lifted from stdlib/bmp.zl; the smoothstep blend and the 0..255 RGB triple
+# convention come from stdlib/color.zl. zl has no import system, so the handful
+# of functions actually needed are inlined below and marked where they came from.
+#
+# Naming: zl has no local scope - a parameter, or any assignment inside a
+# function, writes the GLOBAL of that name. So every function's parameters and
+# locals carry a two-letter tag (es_ = escape, pb_ = pal_build, ...), the
+# convention the stdlib uses. Top-level driver code uses plain lowercase names
+# and shared configuration uses UPPERCASE, so neither can ever be clobbered by
+# a call.
+# =============================================================================
+
+
+# =============================================================================
+# CONSTANTS - the whole control panel
+# =============================================================================
+
+# --- where in the complex plane we are looking ---
+VIEW_CX = 0 - 0.6          # centre, real axis
+VIEW_CY = 0.0              # centre, imaginary axis  (0 enables the mirror)
+VIEW_W  = 3.2              # width of the view in the complex plane
+
+# --- the colour BMP ---
+BMP_W    = 400
+BMP_H    = 300
+BMP_MAX  = 300             # iteration ceiling for the BMP
+OUT_PATH = "examples_out/mandelbrot.bmp"
+
+# --- the terminal render ---
+ASCII_W     = 100
+ASCII_H     = 40
+ASCII_MAX   = 80           # a coarse render only needs a coarse ceiling
+CHAR_ASPECT = 2.0          # terminal cells are about twice as tall as wide
+RAMP        = " .,-~:;=!*+ox%#OQ8&$"   # sparse -> dense, 20 levels
+INSET_CHAR  = "@"          # cells that never escaped
+
+# --- escape, antialiasing and colour tuning ---
+BAILOUT2   = 65536.0       # |z|^2 limit = 256^2; big, for smooth colouring
+AA_ON      = true          # adaptive 2x2 supersampling on boundary pixels
+AA_EDGE    = 0.35          # mu gap between neighbours that calls a pixel "edge"
+PAL_N      = 1024          # gradient table size
+PAL_CYCLES = 3.0           # gradient repeats this often between mu=0 and mu99
+TONE_PCT   = 99            # percentile the BMP exposure normalises to
+
+# The gradient's anchor colours, flat: position 0..1 then r, g, b, repeating.
+# This is the classic "Ultra Fractal" ramp - midnight blue, sky, white, amber,
+# down to near-black - and the last stop repeats the first so that the table
+# wraps seamlessly when PAL_CYCLES > 1. (zl list literals live on one line,
+# hence the concat chain; one anchor per line is worth the extra characters.)
+STOPS = [0.0,    0,   7, 100]
+STOPS = concat(STOPS, [0.16,  32, 107, 203])
+STOPS = concat(STOPS, [0.42, 237, 255, 255])
+STOPS = concat(STOPS, [0.6425, 255, 170,  0])
+STOPS = concat(STOPS, [0.8575,   0,   2,  0])
+STOPS = concat(STOPS, [1.0,      0,   7, 100])
+
+
+# =============================================================================
+# SMALL HELPERS
+# =============================================================================
+
+# Fixed-point decimal for the report lines. stdlib/color.zl has a fixed() too,
+# but it mangles negatives, and every coordinate printed here can be negative -
+# so the sign is peeled off first and the magnitude formatted on its own.
+fn fixed(fx_x, fx_dp) {
+    fx_sign = ""
+    fx_v = fx_x
+    if fx_v < 0 {
+        fx_sign = "-"
+        fx_v = 0 - fx_v
+    }
+    fx_m = 1
+    fx_i = 0
+    while fx_i < fx_dp {
+        fx_m = fx_m * 10
+        fx_i += 1
+    }
+    fx_n = round(fx_v * fx_m)
+    fx_w = int(fx_n / fx_m)
+    fx_r = int(fx_n - fx_w * fx_m)
+    if fx_dp == 0 {
+        return fx_sign + str(fx_w)
+    }
+    fx_s = str(fx_r)
+    while len(fx_s) < fx_dp {
+        fx_s = "0" + fx_s
+    }
+    return fx_sign + str(fx_w) + "." + fx_s
+}
+
+# Hermite smoothstep: 0 at 0, 1 at 1, flat gradient at both ends. Blending the
+# palette anchors with this instead of a straight lerp removes the visible
+# crease where two segments meet. (stdlib/easing.zl carries the same family of
+# curves; this is the one member it does not have.)
+fn sstep(ss_t) {
+    ss_u = clamp(ss_t, 0, 1)
+    return ss_u * ss_u * (3 - 2 * ss_u)
+}
+
+
+# =============================================================================
+# THE PALETTE
+# =============================================================================
+# PAL is a FLAT list of PAL_N*3 bytes - r,g,b,r,g,b,... - not a list of triples.
+# Flat costs one multiply per lookup instead of a nested index hop, the same
+# reasoning stdlib/bmp.zl gives for its pixel buffer. Building the table up
+# front turns a dozen operations per pixel into one multiply and three reads.
+
+PAL = fill(PAL_N * 3, 0)
+
+fn pal_build() {
+    pb_stops = int(len(STOPS) / 4)
+    pb_i = 0
+    while pb_i < PAL_N {
+        pb_t = pb_i / PAL_N
+
+        # find the segment [pb_s, pb_s+1] of STOPS that contains pb_t
+        pb_s = 0
+        while pb_s + 2 < pb_stops {
+            if STOPS[(pb_s + 1) * 4] > pb_t {
+                break
+            }
+            pb_s += 1
+        }
+
+        pb_a = pb_s * 4               # index of this segment's start stop
+        pb_b = pb_a + 4               # index of its end stop
+        pb_span = STOPS[pb_b] - STOPS[pb_a]
+        pb_u = 0
+        if pb_span > 0 {
+            pb_u = (pb_t - STOPS[pb_a]) / pb_span
+        }
+        pb_e = sstep(pb_u)
+
+        pb_o = pb_i * 3
+        PAL[pb_o]     = int(round(STOPS[pb_a + 1] + (STOPS[pb_b + 1] - STOPS[pb_a + 1]) * pb_e))
+        PAL[pb_o + 1] = int(round(STOPS[pb_a + 2] + (STOPS[pb_b + 2] - STOPS[pb_a + 2]) * pb_e))
+        PAL[pb_o + 2] = int(round(STOPS[pb_a + 3] + (STOPS[pb_b + 3] - STOPS[pb_a + 3]) * pb_e))
+        pb_i += 1
+    }
+}
+
+
+# =============================================================================
+# THE KERNEL
+# =============================================================================
+# escape() returns the SMOOTH escape time as one number, or -1 if the point
+# survived es_max iterations (i.e. we call it a member of the set). Returning a
+# bare number rather than an [n, z] pair matters: at a hundred thousand-odd
+# calls, one list allocation per pixel is real money.
+
+fn escape(es_cr, es_ci, es_max) {
+    # ---- exact interior test 1: the main cardioid ----
+    # The big heart-shaped body. A point is inside it iff
+    #     q*(q + (cr - 1/4))  <=  ci^2 / 4     where q = (cr - 1/4)^2 + ci^2
+    # This is not an approximation - it is the closed form of the cardioid, so
+    # anything it accepts really is in the set. Six multiplies, versus es_max
+    # iterations to reach the same answer the slow way.
+    es_dx = es_cr - 0.25
+    es_q = es_dx * es_dx + es_ci * es_ci
+    if es_q * (es_q + es_dx) <= 0.25 * es_ci * es_ci {
+        return 0 - 1
+    }
+    # ---- exact interior test 2: the period-2 bulb ----
+    # The disc of radius 1/4 centred on -1, hanging off the cardioid's left.
+    es_bx = es_cr + 1
+    if es_bx * es_bx + es_ci * es_ci <= 0.0625 {
+        return 0 - 1
+    }
+
+    # ---- the escape loop: z <- z^2 + c ----
+    es_zr = 0.0
+    es_zi = 0.0
+    es_n = 0
+    while es_n < es_max {
+        es_zr2 = es_zr * es_zr
+        es_zi2 = es_zi * es_zi
+        es_m2 = es_zr2 + es_zi2
+        if es_m2 > BAILOUT2 {
+            # Renormalised escape time. |z| overshot the bailout by some
+            # fraction of a step; log2(log2(|z|)) measures that overshoot, and
+            # subtracting it makes mu continuous instead of integer. Written in
+            # terms of |z|^2 to avoid a sqrt:  log2(|z|) = log2(|z|^2) / 2.
+            # max() guards the one degenerate case: a c so far out that it
+            # clears the bailout on the very first step would give mu < 0, and
+            # -1 is spoken for. It cannot happen on a view this size, but a
+            # caller is free to point VIEW_CX a thousand units away.
+            return max(es_n + 1 - log2(0.5 * log2(es_m2)), 0)
+        }
+        # the complex square, unrolled. es_zi must be updated FIRST, because
+        # the new es_zr overwrites the value that it needs.
+        es_zi = 2 * es_zr * es_zi + es_ci
+        es_zr = es_zr2 - es_zi2 + es_cr
+        es_n += 1
+    }
+    return 0 - 1
+}
+
+
+# =============================================================================
+# HISTOGRAM EQUALISATION
+# =============================================================================
+# hist_cum() takes a buffer of mu values and returns [cum, total] where
+#   cum[i] = how many pixels escaped with int(mu) strictly less than i
+#   total  = how many pixels escaped at all (members of the set are excluded -
+#            they are drawn flat black and take no part in the ranking)
+# cum is an EXCLUSIVE prefix sum, one entry longer than the bin count, so
+# cum[n+1] - cum[n] recovers the raw count in bin n and cum[max+1] == total.
+
+fn hist_cum(hc_mus, hc_len, hc_max) {
+    hc_bins = fill(hc_max + 2, 0)
+    hc_tot = 0
+    hc_i = 0
+    while hc_i < hc_len {
+        hc_mu = hc_mus[hc_i]
+        if hc_mu >= 0 {
+            hc_b = int(clamp(hc_mu, 0, hc_max - 1))
+            hc_bins[hc_b] = hc_bins[hc_b] + 1
+            hc_tot += 1
+        }
+        hc_i += 1
+    }
+    # turn the counts into an exclusive running total, in place
+    hc_run = 0
+    hc_i = 0
+    while hc_i < hc_max + 2 {
+        hc_c = hc_bins[hc_i]
+        hc_bins[hc_i] = hc_run
+        hc_run = hc_run + hc_c
+        hc_i += 1
+    }
+    return [hc_bins, hc_tot]
+}
+
+# The active distribution. Set once per render pass; eqpos() and shade() read
+# them as globals rather than taking them as arguments, because they are called
+# once per pixel and argument passing is not free.
+CUM       = []
+CUM_TOTAL = 1
+CUM_MAX   = 1
+
+# pct_of() reads a percentile straight off the cumulative histogram: the
+# smallest escape time that at least pc_pct% of the escaping pixels are under.
+fn pct_of(pc_pct) {
+    pc_n = 0
+    while pc_n < CUM_MAX {
+        if CUM[pc_n] * 100 >= CUM_TOTAL * pc_pct {
+            return pc_n
+        }
+        pc_n += 1
+    }
+    return CUM_MAX
+}
+
+# --- the ASCII mapping: full equalisation ---
+# mu -> position in 0..1, by rank. The fractional part of mu interpolates WITHIN
+# its bin, which keeps the mapping continuous - without that the equalisation
+# would put the stair steps straight back.
+fn eqpos(ep_mu) {
+    ep_n = int(clamp(ep_mu, 0, CUM_MAX - 1))
+    ep_f = clamp(ep_mu - ep_n, 0, 1)
+    ep_c = CUM[ep_n]
+    ep_h = CUM[ep_n + 1] - ep_c
+    return (ep_c + ep_f * ep_h) / CUM_TOTAL
+}
+
+# --- the BMP mapping: auto-exposed log tone curve, cycled ---
+# TONE_SCALE is set once from the histogram (see the driver) so that PAL_CYCLES
+# full sweeps of the gradient fit between mu = 0 and the TONE_PCT percentile.
+TONE_SCALE = 1.0
+
+# mu -> flat index into PAL, or -1 meaning "in the set, paint it black".
+# Returning an index instead of an [r,g,b] triple avoids allocating per pixel.
+fn shade(sh_mu) {
+    if sh_mu < 0 {
+        return 0 - 1
+    }
+    sh_t = fmod(log(1 + sh_mu) * TONE_SCALE, 1.0)
+    return int(sh_t * PAL_N) * 3
+}
+
+# Do these two neighbouring pixels need antialiasing between them? Either one
+# is in the set and the other is not, or their escape times are far enough
+# apart that a hard edge would show.
+fn jumps(ju_a, ju_b) {
+    if ju_a < 0 or ju_b < 0 {
+        return not (ju_a < 0 and ju_b < 0)
+    }
+    return abs(ju_a - ju_b) > AA_EDGE
+}
+
+
+# =============================================================================
+# BMP OUTPUT  (inlined from stdlib/bmp.zl - see the header note)
+# =============================================================================
+# 14-byte BITMAPFILEHEADER + 40-byte BITMAPINFOHEADER, then the pixel rows from
+# the BOTTOM up, three bytes per pixel in B,G,R order, each row zero-padded to a
+# multiple of four bytes. Our own buffer is top-down R,G,B because that is how a
+# person thinks about a picture; bmp_save is the one place that flips both.
+
+fn le8(b8_buf, b8_v) {
+    return push(b8_buf, b8_v % 256)
+}
+fn le16(b16_buf, b16_v) {
+    b16_buf = le8(b16_buf, b16_v % 256)
+    return le8(b16_buf, int(b16_v / 256) % 256)
+}
+fn le32(b32_buf, b32_v) {
+    b32_buf = le16(b32_buf, b32_v % 65536)
+    return le16(b32_buf, int(b32_v / 65536) % 65536)
+}
+fn bmp_row_bytes(rb_w) {
+    return int((rb_w * 3 + 3) / 4) * 4
+}
+
+fn bmp_save(sv_w, sv_h, sv_px, sv_path) {
+    sv_row = bmp_row_bytes(sv_w)
+    sv_pad = sv_row - sv_w * 3
+
+    sv_buf = []
+    sv_buf = le8(sv_buf, 66)                    # 'B'
+    sv_buf = le8(sv_buf, 77)                    # 'M'
+    sv_buf = le32(sv_buf, 54 + sv_row * sv_h)   # total file size
+    sv_buf = le16(sv_buf, 0)                    # reserved
+    sv_buf = le16(sv_buf, 0)                    # reserved
+    sv_buf = le32(sv_buf, 54)                   # offset of the pixel data
+    sv_buf = le32(sv_buf, 40)                   # DIB header size
+    sv_buf = le32(sv_buf, sv_w)
+    sv_buf = le32(sv_buf, sv_h)                 # positive height = bottom-up
+    sv_buf = le16(sv_buf, 1)                    # colour planes
+    sv_buf = le16(sv_buf, 24)                   # bits per pixel
+    sv_buf = le32(sv_buf, 0)                    # BI_RGB, no compression
+    sv_buf = le32(sv_buf, sv_row * sv_h)        # size of the pixel data
+    sv_buf = le32(sv_buf, 2835)                 # 72 dpi across
+    sv_buf = le32(sv_buf, 2835)                 # 72 dpi down
+    sv_buf = le32(sv_buf, 0)                    # palette entries used
+    sv_buf = le32(sv_buf, 0)                    # palette entries that matter
+
+    sv_y = sv_h - 1
+    while sv_y >= 0 {
+        sv_i = sv_y * sv_w * 3
+        sv_x = 0
+        while sv_x < sv_w {
+            sv_buf = push(sv_buf, sv_px[sv_i + 2])   # B
+            sv_buf = push(sv_buf, sv_px[sv_i + 1])   # G
+            sv_buf = push(sv_buf, sv_px[sv_i])       # R
+            sv_i += 3
+            sv_x += 1
+        }
+        sv_p = 0
+        while sv_p < sv_pad {
+            sv_buf = push(sv_buf, 0)
+            sv_p += 1
+        }
+        sv_y -= 1
+    }
+    write_bytes(sv_path, sv_buf)
+    return len(sv_buf)
+}
+
+
+# =============================================================================
+# DRIVER
+# =============================================================================
+
+t_start = now()
+
+# write_bytes cannot create a folder and zl has no mkdir, so say so plainly.
+if not contains(dir("."), "examples_out") {
+    print("mandelbrot.zl: run me from the repo root, and create examples_out/ first")
+    exit(1)
+}
+
+view_left = VIEW_CX - VIEW_W / 2
+sym = VIEW_CY == 0            # is the view centred on the axis of symmetry?
+
+print("=====================================================================")
+print(" THE MANDELBROT SET, rendered by zl")
+print("=====================================================================")
+print(f"  centre        {fixed(VIEW_CX, 6)} + {fixed(VIEW_CY, 6)}i")
+print(f"  view width    {fixed(VIEW_W, 6)}   (real axis {fixed(view_left, 4)} .. {fixed(view_left + VIEW_W, 4)})")
+print(f"  bailout       |z| > {fixed(sqrt(BAILOUT2), 0)}   (large, for smooth colouring)")
+if sym {
+    print("  symmetry      on - centred on the real axis, so only the top half is computed")
+} else {
+    print("  symmetry      OFF - VIEW_CY is not 0, so every row is computed (2x the work)")
+}
+print("")
+
+
+# -----------------------------------------------------------------------------
+# PART 1 - ASCII, 100x40
+# -----------------------------------------------------------------------------
+# Terminal cells are not square, so the view height is scaled by CHAR_ASPECT to
+# keep the set from looking squashed. Each cell is sampled at its centre (the
+# +0.5), which is what stops the picture drifting half a cell up and left.
+
+t_ascii0 = now()
+
+a_h    = VIEW_W * (ASCII_H * CHAR_ASPECT) / ASCII_W
+a_dx   = VIEW_W / ASCII_W
+a_dy   = a_h / ASCII_H
+a_top  = VIEW_CY + a_h / 2
+a_n    = ASCII_W * ASCII_H
+a_last = len(RAMP) - 1
+a_half = sym ? int((ASCII_H + 1) / 2) : ASCII_H
+
+# escape times first, characters afterwards: the equalisation needs to see the
+# whole distribution before it can rank anything in it.
+a_mus = fill(a_n, 0)
+row = 0
+while row < a_half {
+    ci = a_top - (row + 0.5) * a_dy      # row 0 is the TOP, so count downwards
+    base = row * ASCII_W
+    col = 0
+    while col < ASCII_W {
+        a_mus[base + col] = escape(view_left + (col + 0.5) * a_dx, ci, ASCII_MAX)
+        col += 1
+    }
+    row += 1
+}
+# mirror the computed top half down onto the bottom half
+if sym {
+    row = 0
+    while row < a_half {
+        mrow = ASCII_H - 1 - row
+        if mrow > row {
+            src = row * ASCII_W
+            dst = mrow * ASCII_W
+            col = 0
+            while col < ASCII_W {
+                a_mus[dst + col] = a_mus[src + col]
+                col += 1
+            }
+        }
+        row += 1
+    }
+}
+
+a_cum = hist_cum(a_mus, a_n, ASCII_MAX)
+CUM       = a_cum[0]
+CUM_TOTAL = a_cum[1]
+CUM_MAX   = ASCII_MAX
+assert(CUM_TOTAL > 0, "every ASCII cell is inside the set - nothing to rank")
+
+print(f"ASCII  {ASCII_W}x{ASCII_H}, max {ASCII_MAX} iterations, rank-equalised onto a {len(RAMP)}-step ramp")
+print("")
+
+row = 0
+while row < ASCII_H {
+    base = row * ASCII_W
+    line = ""
+    col = 0
+    while col < ASCII_W {
+        mu = a_mus[base + col]
+        if mu < 0 {
+            line = line + INSET_CHAR
+        } else {
+            line = line + at(RAMP, int(clamp(eqpos(mu) * len(RAMP), 0, a_last)))
+        }
+        col += 1
+    }
+    print(line)
+    row += 1
+}
+
+t_ascii = now() - t_ascii0
+print("")
+print(f"  ramp  [{RAMP}]  sparse to dense,  {INSET_CHAR} = never escaped")
+print(f"  {a_n} cells in {fixed(t_ascii / 1000, 2)}s  ({CUM_TOTAL} escaped, {a_n - CUM_TOTAL} in the set)")
+print("")
+
+
+# -----------------------------------------------------------------------------
+# PART 2 - the colour BMP, 400x300
+# -----------------------------------------------------------------------------
+
+aa_word = AA_ON ? "on" : "off"
+print(f"BMP    {BMP_W}x{BMP_H}, max {BMP_MAX} iterations, {PAL_N}-entry palette, AA {aa_word}")
+
+t_pal0 = now()
+pal_build()
+t_pal = now() - t_pal0
+
+b_h    = VIEW_W * BMP_H / BMP_W     # square pixels: match the image aspect
+b_dx   = VIEW_W / BMP_W
+b_dy   = b_h / BMP_H
+b_top  = VIEW_CY + b_h / 2
+b_n    = BMP_W * BMP_H
+b_half = sym ? int((BMP_H + 1) / 2) : BMP_H
+
+# ---- pass 1: escape times ----
+t_scan0 = now()
+mus = fill(b_n, 0)
+iy = 0
+while iy < b_half {
+    ci = b_top - (iy + 0.5) * b_dy
+    base = iy * BMP_W
+    ix = 0
+    while ix < BMP_W {
+        mus[base + ix] = escape(view_left + (ix + 0.5) * b_dx, ci, BMP_MAX)
+        ix += 1
+    }
+    iy += 1
+}
+# Mirror the escape times, not just the finished colours: the antialiasing pass
+# below looks at each pixel's four neighbours, and the rows either side of the
+# axis need to be able to see across it.
+if sym {
+    iy = 0
+    while iy < b_half {
+        my = BMP_H - 1 - iy
+        if my > iy {
+            src = iy * BMP_W
+            dst = my * BMP_W
+            ix = 0
+            while ix < BMP_W {
+                mus[dst + ix] = mus[src + ix]
+                ix += 1
+            }
+        }
+        iy += 1
+    }
+}
+t_scan = now() - t_scan0
+
+# ---- the histogram, and a look at it ----
+t_hist0 = now()
+b_cum = hist_cum(mus, b_n, BMP_MAX)
+CUM       = b_cum[0]
+CUM_TOTAL = b_cum[1]
+CUM_MAX   = BMP_MAX
+t_hist = now() - t_hist0
+assert(CUM_TOTAL > 0, "every pixel is inside the set - nothing to rank")
+
+inside = b_n - CUM_TOTAL
+
+print("")
+print("  escape-time histogram - why rank beats raw value:")
+# Buckets of DOUBLING width. Equal-width buckets would put 97% of the pixels in
+# the first one and leave eleven empty rows, which says the right thing but
+# shows nothing; doubling widths make the decay visible while keeping the
+# lopsidedness obvious from the percentages.
+peak = 1
+lo = 0
+w = 1
+while lo < BMP_MAX {
+    hi = min(lo + w, BMP_MAX)
+    peak = max(peak, CUM[hi] - CUM[lo])
+    lo = hi
+    w = w * 2
+}
+lo = 0
+w = 1
+while lo < BMP_MAX {
+    hi = min(lo + w, BMP_MAX)
+    cnt = CUM[hi] - CUM[lo]
+    label = pad(str(lo) + "-" + str(hi - 1), 10)
+    bar = pad(repeat("#", int(cnt * 44 / peak)), 46)
+    share = pad(fixed(cnt * 100 / CUM_TOTAL, 1) + "%", 7)
+    print("    " + label + bar + share + str(cnt))
+    lo = hi
+    w = w * 2
+}
+
+# Where the mass actually sits, as round numbers rather than a shape.
+med = pct_of(50)
+tone_hi = max(pct_of(TONE_PCT), 1)
+print(f"    half the escaping pixels are out within {med} steps and {TONE_PCT}% within {tone_hi},")
+print(f"    yet the ceiling is {BMP_MAX}. Mapping mu straight onto the gradient would")
+print(f"    spend half the frame inside the first {fixed(med * 100 / BMP_MAX, 1)}% of it.")
+
+# Auto-exposure: PAL_CYCLES sweeps of the gradient between mu = 0 and mu99, and
+# the log keeps sweeping (ever more slowly) past it, all the way to the boundary.
+TONE_SCALE = PAL_CYCLES / log(1 + tone_hi)
+print(f"    exposing for mu99 = {tone_hi}: {fixed(PAL_CYCLES, 1)} gradient cycles to there, then log-compressed")
+print("")
+
+# ---- pass 2: colour, with adaptive supersampling ----
+# One flat R,G,B buffer, row 0 = top. Preallocated with fill() and written by
+# index: push() would work but growing a 360000-element list one element at a
+# time costs noticeably more than writing into one that already exists. Pixels
+# in the set are simply left at the 0 they start as, which is the black we want.
+t_col0 = now()
+pix = fill(b_n * 3, 0)
+edges = 0
+iy = 0
+while iy < b_half {
+    base = iy * BMP_W
+    o = base * 3
+    ix = 0
+    while ix < BMP_W {
+        i = base + ix
+        mu = mus[i]
+
+        # Does this pixel sit on a visible discontinuity? Compare it with its
+        # four neighbours - and note the shape of the bounds handling, because
+        # zl's `and` does NOT short-circuit: writing
+        #     if ix > 0 and jumps(mu, mus[i - 1])
+        # would evaluate mus[-1] on the left edge and die. So the index is
+        # clamped instead of the test guarded, and a border pixel compares
+        # against itself, which by construction never counts as a jump.
+        hit = false
+        if AA_ON {
+            nl = ix > 0 ? i - 1 : i
+            nr = ix + 1 < BMP_W ? i + 1 : i
+            nu = iy > 0 ? i - BMP_W : i
+            nd = iy + 1 < BMP_H ? i + BMP_W : i
+            hit = jumps(mu, mus[nl]) or jumps(mu, mus[nr]) or jumps(mu, mus[nu]) or jumps(mu, mus[nd])
+        }
+
+        if hit {
+            # four fresh samples on a 2x2 grid inside the pixel, at the quarter
+            # points. Averaging COLOURS rather than mu values is what makes this
+            # correct across the set boundary, where mu does not exist at all
+            # and the sample simply contributes black.
+            edges += 1
+            sr = 0
+            sg = 0
+            sb = 0
+            k = 0
+            while k < 4 {
+                sx = ix + ((k % 2) == 0 ? 0.25 : 0.75)
+                sy = iy + (k < 2 ? 0.25 : 0.75)
+                si = shade(escape(view_left + sx * b_dx, b_top - sy * b_dy, BMP_MAX))
+                if si >= 0 {
+                    sr += PAL[si]
+                    sg += PAL[si + 1]
+                    sb += PAL[si + 2]
+                }
+                k += 1
+            }
+            pix[o]     = int(sr / 4)
+            pix[o + 1] = int(sg / 4)
+            pix[o + 2] = int(sb / 4)
+        } else {
+            si = shade(mu)
+            if si >= 0 {
+                pix[o]     = PAL[si]
+                pix[o + 1] = PAL[si + 1]
+                pix[o + 2] = PAL[si + 2]
+            }
+        }
+        o += 3
+        ix += 1
+    }
+    iy += 1
+}
+# mirror the finished rows - a straight byte copy, no maths repeated
+if sym {
+    iy = 0
+    while iy < b_half {
+        my = BMP_H - 1 - iy
+        if my > iy {
+            src = iy * BMP_W * 3
+            dst = my * BMP_W * 3
+            j = 0
+            n3 = BMP_W * 3
+            while j < n3 {
+                pix[dst + j] = pix[src + j]
+                j += 1
+            }
+        }
+        iy += 1
+    }
+}
+t_col = now() - t_col0
+
+t_save0 = now()
+bytes_out = bmp_save(BMP_W, BMP_H, pix, OUT_PATH)
+t_save = now() - t_save0
+
+done_rows = sym ? b_half : BMP_H
+aa_pct = sym ? edges * 100 / (b_half * BMP_W) : edges * 100 / b_n
+
+print("  timings")
+print(f"    palette                {fixed(t_pal / 1000, 2)}s   {PAL_N} entries from {int(len(STOPS) / 4)} anchor colours")
+print(f"    escape times           {fixed(t_scan / 1000, 2)}s   {done_rows} of {BMP_H} rows actually computed")
+print(f"    histogram              {fixed(t_hist / 1000, 2)}s   {b_n} values binned")
+print(f"    colour + antialias     {fixed(t_col / 1000, 2)}s   {edges} edge pixels resampled 4x ({fixed(aa_pct, 1)}%)")
+print(f"    encode + write         {fixed(t_save / 1000, 2)}s   {bytes_out} bytes")
+print("")
+print(f"  {b_n} pixels, {inside} of them ({fixed(inside * 100 / b_n, 1)}%) in the set and drawn black")
+print(f"  wrote {OUT_PATH}")
+
+# Sanity checks. 400*3 = 1200 is already a multiple of 4, so at this width
+# there is no row padding - but bmp_row_bytes is asked rather than assumed.
+assert(bytes_out == 54 + bmp_row_bytes(BMP_W) * BMP_H, "BMP size does not match the header arithmetic")
+assert(inside > 0, "no interior pixels - the view is not looking at the set")
+assert(CUM[BMP_MAX + 1] == CUM_TOTAL, "the cumulative histogram does not close")
+# The mirror is only sound if the two halves really are conjugate; spot-check a
+# row rather than trusting the loop that filled it.
+if sym {
+    assert(mus[BMP_W + 7] == mus[(BMP_H - 2) * BMP_W + 7], "mirrored rows disagree")
+}
+
+print("")
+print("=====================================================================")
+print(f" total {fixed((now() - t_start) / 1000, 2)}s   -   all of it in zl, on the tree-walking interpreter")
+print("=====================================================================")

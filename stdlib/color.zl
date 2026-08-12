@@ -1,0 +1,313 @@
+# color.zl - colour maths: hex/RGB/HSL conversion, tinting, and the WCAG
+# contrast rules.
+#
+# Representation. A colour is a plain 3-element list, never a string, so the
+# maths functions all speak the same type:
+#
+#   rgb  [r, g, b]   sRGB channels, 0..255, whole numbers
+#   hsl  [h, s, l]   hue in DEGREES 0..360, saturation and lightness 0..1
+#   hex  "#rrggbb"   only at the edges - hex_to_rgb() in, rgb_to_hex() out
+#
+# Degrees for hue and 0..1 for s/l is the CSS split (`hsl(210, 50%, 60%)`);
+# the percentages are just s and l times 100. hex_to_rgb() also accepts the
+# 3-digit shorthand and a missing "#"; rgb_to_hex() always emits lowercase
+# 6-digit with the "#". Inputs are assumed to be valid hex digits.
+#
+# luminance() is the WCAG *relative* luminance: channels are un-gamma'd back
+# to linear light before weighting, which is why it is not just a weighted
+# sum of the 0..255 numbers. grayscale() inverts that curve, so the grey it
+# returns has the same relative luminance as the colour it replaced.
+#
+# Naming: zl has no local scope - a parameter or a local assignment writes
+# the global of that name. So every parameter and local carries a two-letter
+# tag for its function (rs_ = rgb_to_hsl, hc_ = hue_channel, ...). That is
+# what lets lighten() call rgb_to_hsl() and hsl_to_rgb() without either of
+# them eating lighten()'s own amount.
+
+# ---- small helpers -------------------------------------------------------
+
+fn fixed(fx_x, fx_places) {
+    fx_m = 1
+    fx_i = 0
+    while fx_i < fx_places {
+        fx_m = fx_m * 10
+        fx_i = fx_i + 1
+    }
+    fx_n = round(fx_x * fx_m)
+    fx_w = int(fx_n / fx_m)
+    fx_r = int(fx_n - fx_w * fx_m)
+    if fx_places == 0 {
+        return str(fx_w)
+    }
+    fx_s = str(fx_r)
+    while len(fx_s) < fx_places {
+        fx_s = "0" + fx_s
+    }
+    return str(fx_w) + "." + fx_s
+}
+fn hex_digit(hv_c) {
+    hv_i = find("0123456789abcdef", lower(hv_c))
+    if hv_i < 0 {
+        return 0
+    }
+    return hv_i
+}
+fn hex_byte(hb_n) {
+    hb_s = hex(int(clamp(round(hb_n), 0, 255)))
+    if len(hb_s) < 2 {
+        hb_s = "0" + hb_s
+    }
+    return hb_s
+}
+
+# ---- hex <-> rgb ---------------------------------------------------------
+
+fn hex_to_rgb(hr_text) {
+    hr_s = lower(trim(hr_text))
+    if starts(hr_s, "#") {
+        hr_s = slice(hr_s, 1, len(hr_s))
+    }
+    if len(hr_s) == 3 {
+        hr_s = at(hr_s, 0) + at(hr_s, 0) + at(hr_s, 1) + at(hr_s, 1) + at(hr_s, 2) + at(hr_s, 2)
+    }
+    hr_r = hex_digit(at(hr_s, 0)) * 16 + hex_digit(at(hr_s, 1))
+    hr_g = hex_digit(at(hr_s, 2)) * 16 + hex_digit(at(hr_s, 3))
+    hr_b = hex_digit(at(hr_s, 4)) * 16 + hex_digit(at(hr_s, 5))
+    return [hr_r, hr_g, hr_b]
+}
+fn rgb_to_hex(rh_rgb) {
+    return "#" + hex_byte(rh_rgb[0]) + hex_byte(rh_rgb[1]) + hex_byte(rh_rgb[2])
+}
+
+# ---- rgb <-> hsl ---------------------------------------------------------
+
+fn rgb_to_hsl(rs_rgb) {
+    rs_r = rs_rgb[0] / 255
+    rs_g = rs_rgb[1] / 255
+    rs_b = rs_rgb[2] / 255
+    rs_hi = max(rs_r, max(rs_g, rs_b))
+    rs_lo = min(rs_r, min(rs_g, rs_b))
+    rs_l = (rs_hi + rs_lo) / 2
+    if rs_hi == rs_lo {
+        return [0, 0, rs_l]
+    }
+    rs_d = rs_hi - rs_lo
+    if rs_l > 0.5 {
+        rs_s = rs_d / (2 - rs_hi - rs_lo)
+    } else {
+        rs_s = rs_d / (rs_hi + rs_lo)
+    }
+    if rs_hi == rs_r {
+        rs_h = (rs_g - rs_b) / rs_d
+        if rs_g < rs_b {
+            rs_h = rs_h + 6
+        }
+    } elif rs_hi == rs_g {
+        rs_h = (rs_b - rs_r) / rs_d + 2
+    } else {
+        rs_h = (rs_r - rs_g) / rs_d + 4
+    }
+    return [rs_h * 60, rs_s, rs_l]
+}
+# One channel of the HSL -> RGB reconstruction. hc_t is the hue in turns,
+# offset by +1/3 for red and -1/3 for blue.
+fn hue_channel(hc_p, hc_q, hc_t) {
+    hc_x = hc_t
+    if hc_x < 0 {
+        hc_x = hc_x + 1
+    }
+    if hc_x > 1 {
+        hc_x = hc_x - 1
+    }
+    if hc_x < 1.0 / 6.0 {
+        return hc_p + (hc_q - hc_p) * 6 * hc_x
+    }
+    if hc_x < 0.5 {
+        return hc_q
+    }
+    if hc_x < 2.0 / 3.0 {
+        return hc_p + (hc_q - hc_p) * (2.0 / 3.0 - hc_x) * 6
+    }
+    return hc_p
+}
+fn hsl_to_rgb(sr_hsl) {
+    sr_h = fmod(sr_hsl[0], 360)
+    if sr_h < 0 {
+        sr_h = sr_h + 360
+    }
+    sr_h = sr_h / 360
+    sr_s = clamp(sr_hsl[1], 0, 1)
+    sr_l = clamp(sr_hsl[2], 0, 1)
+    if sr_s == 0 {
+        sr_v = round(sr_l * 255)
+        return [sr_v, sr_v, sr_v]
+    }
+    if sr_l < 0.5 {
+        sr_q = sr_l * (1 + sr_s)
+    } else {
+        sr_q = sr_l + sr_s - sr_l * sr_s
+    }
+    sr_p = 2 * sr_l - sr_q
+    sr_r = hue_channel(sr_p, sr_q, sr_h + 1.0 / 3.0)
+    sr_g = hue_channel(sr_p, sr_q, sr_h)
+    sr_b = hue_channel(sr_p, sr_q, sr_h - 1.0 / 3.0)
+    return [round(sr_r * 255), round(sr_g * 255), round(sr_b * 255)]
+}
+
+# ---- adjustments (all take and return rgb) -------------------------------
+
+fn lighten(li_rgb, li_amt) {
+    li_hsl = rgb_to_hsl(li_rgb)
+    return hsl_to_rgb([li_hsl[0], li_hsl[1], li_hsl[2] + li_amt])
+}
+fn darken(dk_rgb, dk_amt) {
+    dk_hsl = rgb_to_hsl(dk_rgb)
+    return hsl_to_rgb([dk_hsl[0], dk_hsl[1], dk_hsl[2] - dk_amt])
+}
+# A negative amount desaturates.
+fn saturate(sa_rgb, sa_amt) {
+    sa_hsl = rgb_to_hsl(sa_rgb)
+    return hsl_to_rgb([sa_hsl[0], sa_hsl[1] + sa_amt, sa_hsl[2]])
+}
+fn mix(mx_a, mx_b, mx_t) {
+    mx_u = clamp(mx_t, 0, 1)
+    mx_r = round(mx_a[0] + (mx_b[0] - mx_a[0]) * mx_u)
+    mx_g = round(mx_a[1] + (mx_b[1] - mx_a[1]) * mx_u)
+    mx_b2 = round(mx_a[2] + (mx_b[2] - mx_a[2]) * mx_u)
+    return [mx_r, mx_g, mx_b2]
+}
+fn complement(cp_rgb) {
+    cp_hsl = rgb_to_hsl(cp_rgb)
+    return hsl_to_rgb([cp_hsl[0] + 180, cp_hsl[1], cp_hsl[2]])
+}
+
+# ---- luminance and contrast ----------------------------------------------
+
+# sRGB channel (0..1) -> linear light.
+fn to_linear(tl_c) {
+    if tl_c <= 0.03928 {
+        return tl_c / 12.92
+    }
+    return pow((tl_c + 0.055) / 1.055, 2.4)
+}
+# linear light -> sRGB channel (0..1).
+fn to_srgb(ts_y) {
+    if ts_y <= 0.0031308 {
+        return ts_y * 12.92
+    }
+    return 1.055 * pow(ts_y, 1.0 / 2.4) - 0.055
+}
+# WCAG relative luminance, 0 for black, 1 for white.
+fn luminance(lu_rgb) {
+    lu_r = to_linear(lu_rgb[0] / 255)
+    lu_g = to_linear(lu_rgb[1] / 255)
+    lu_b = to_linear(lu_rgb[2] / 255)
+    return 0.2126 * lu_r + 0.7152 * lu_g + 0.0722 * lu_b
+}
+# The grey of equal relative luminance - not a naive channel average.
+fn grayscale(gs_rgb) {
+    gs_v = round(to_srgb(luminance(gs_rgb)) * 255)
+    return [gs_v, gs_v, gs_v]
+}
+# (Llighter + 0.05) / (Ldarker + 0.05). Symmetric; 1.0 .. 21.0.
+fn contrast_ratio(cr_a, cr_b) {
+    cr_x = luminance(cr_a)
+    cr_y = luminance(cr_b)
+    cr_hi = max(cr_x, cr_y)
+    cr_lo = min(cr_x, cr_y)
+    return (cr_hi + 0.05) / (cr_lo + 0.05)
+}
+# WCAG 2.x thresholds for normal-size text (large text is 4.5 / 3.0).
+fn wcag_level(wl_a, wl_b) {
+    wl_c = contrast_ratio(wl_a, wl_b)
+    if wl_c >= 7 {
+        return "AAA"
+    }
+    if wl_c >= 4.5 {
+        return "AA"
+    }
+    return "fail"
+}
+
+# ---- demo ----------------------------------------------------------------
+
+print("== hex <-> rgb ==")
+print("  hex_to_rgb(\"#1e90ff\") = " + str(hex_to_rgb("#1e90ff")))
+print("  hex_to_rgb(\"#abc\")    = " + str(hex_to_rgb("#abc")))
+print("  hex_to_rgb(\"7B3FA0\")  = " + str(hex_to_rgb("7B3FA0")))
+print("  rgb_to_hex([30,144,255]) = " + rgb_to_hex([30, 144, 255]))
+print("  rgb_to_hex([0,0,0])      = " + rgb_to_hex([0, 0, 0]))
+
+print("")
+print("== round trip: hex -> rgb -> hsl -> rgb -> hex ==")
+d_cols = ["#000000", "#ffffff", "#808080", "#ff0000", "#00ff00", "#0000ff", "#1e90ff", "#7b3fa0", "#ffa500", "#00ced1", "#123456"]
+d_allok = true
+for d_hex in d_cols {
+    d_rgb = hex_to_rgb(d_hex)
+    d_hsl = rgb_to_hsl(d_rgb)
+    d_back = rgb_to_hex(hsl_to_rgb(d_hsl))
+    d_ok = d_back == d_hex
+    if not d_ok {
+        d_allok = false
+    }
+    d_txt = "hsl(" + fixed(d_hsl[0], 1) + ", " + fixed(d_hsl[1] * 100, 0) + "%, " + fixed(d_hsl[2] * 100, 0) + "%)"
+    print("  " + d_hex + "  " + pad(str(d_rgb), 16) + " " + pad(d_txt, 22) + " -> " + d_back + "  " + (d_ok ? "ok" : "MISMATCH"))
+}
+print("  all 11 round trips exact: " + str(d_allok))
+
+print("")
+print("== adjustments ==")
+d_blue = hex_to_rgb("#1e90ff")
+print("  base #1e90ff        " + str(d_blue))
+print("  lighten 0.20        " + rgb_to_hex(lighten(d_blue, 0.20)))
+print("  darken  0.20        " + rgb_to_hex(darken(d_blue, 0.20)))
+d_steel = hex_to_rgb("#6699cc")
+d_shsl = rgb_to_hsl(d_steel)
+print("  base #6699cc        hsl(" + fixed(d_shsl[0], 0) + ", " + fixed(d_shsl[1] * 100, 0) + "%, " + fixed(d_shsl[2] * 100, 0) + "%)")
+print("  saturate  0.20      " + rgb_to_hex(saturate(d_steel, 0.20)))
+print("  saturate -0.20      " + rgb_to_hex(saturate(d_steel, -0.20)))
+print("  complement #ff0000  " + rgb_to_hex(complement([255, 0, 0])))
+print("  complement #1e90ff  " + rgb_to_hex(complement(d_blue)))
+
+print("")
+print("== mix(red, blue, t) ==")
+d_line = "  "
+for d_step in range(5) {
+    d_t = d_step / 4
+    d_line = d_line + fixed(d_t, 2) + " " + rgb_to_hex(mix([255, 0, 0], [0, 0, 255], d_t)) + "   "
+}
+print(rtrim(d_line))
+print("  mix(white, black, 0.5) = " + rgb_to_hex(mix([255, 255, 255], [0, 0, 0], 0.5)))
+
+print("")
+print("== grayscale keeps relative luminance ==")
+for d_hex in ["#ff0000", "#00ff00", "#0000ff", "#1e90ff"] {
+    d_rgb = hex_to_rgb(d_hex)
+    d_gry = grayscale(d_rgb)
+    print("  " + d_hex + " Y=" + fixed(luminance(d_rgb), 4) + "  ->  " + rgb_to_hex(d_gry) + " Y=" + fixed(luminance(d_gry), 4))
+}
+
+print("")
+print("== contrast and WCAG (normal text) ==")
+d_pairs = [["#000000", "#ffffff"], ["#ffffff", "#000000"], ["#595959", "#ffffff"], ["#767676", "#ffffff"], ["#949494", "#ffffff"], ["#1e90ff", "#ffffff"], ["#1e90ff", "#000000"], ["#808080", "#808080"]]
+for d_pair in d_pairs {
+    d_a = hex_to_rgb(d_pair[0])
+    d_b = hex_to_rgb(d_pair[1])
+    d_num = pad(fixed(contrast_ratio(d_a, d_b), 2) + ":1", 9)
+    print("  " + d_pair[0] + " on " + d_pair[1] + "   " + d_num + " " + wcag_level(d_a, d_b))
+}
+
+print("")
+print("== checks ==")
+d_ratio = contrast_ratio([0, 0, 0], [255, 255, 255])
+print("  black on white  = " + fixed(d_ratio, 2) + ":1  (expect 21.00)")
+print("  white luminance = " + fixed(luminance([255, 255, 255]), 4) + "  (expect 1.0000)")
+print("  black luminance = " + fixed(luminance([0, 0, 0]), 4) + "  (expect 0.0000)")
+print("  red luminance   = " + fixed(luminance([255, 0, 0]), 4) + "  (expect 0.2126)")
+print("  same colour     = " + fixed(contrast_ratio(d_blue, d_blue), 2) + ":1  (expect 1.00)")
+assert(d_allok, "hex -> rgb -> hsl -> rgb -> hex round trip failed")
+assert(fixed(d_ratio, 2) == "21.00", "black on white is not 21:1")
+assert(wcag_level([0, 0, 0], [255, 255, 255]) == "AAA", "black on white is not AAA")
+assert(rgb_to_hex(complement([255, 0, 0])) == "#00ffff", "complement of red is not cyan")
+assert(rgb_to_hex(mix([255, 0, 0], [0, 0, 255], 0.5)) == "#800080", "mix midpoint wrong")
+print("  all asserts passed")

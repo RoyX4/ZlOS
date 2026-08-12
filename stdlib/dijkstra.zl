@@ -1,0 +1,158 @@
+# dijkstra.zl -- Dijkstra shortest paths on a weighted graph.
+#
+# Graph shape: a list of [node, [[neighbor, weight], ...]] pairs.
+#   node       : any comparable value (we use strings here)
+#   neighbor   : a node id that appears as some pair's node
+#   weight     : a non-negative number
+#
+# dijkstra(graph, start) returns a list of [node, distance] pairs giving the
+# shortest distance from `start` to every node in the graph. An unreachable
+# node's distance is nil().
+#
+# No maps in zl, so "distances" is a list of [node, dist] pairs and we use
+# linear helpers to read/write it. Every function-local is prefixed so it
+# can never clobber a top-level global.
+#
+# UNREACHABLE IS nil, NOT A BIG NUMBER. It used to be 1000000000, which sits
+# INSIDE the range of legal distances - the contract only asks for "a
+# non-negative number" weight and puts no ceiling on the total. Two ordinary
+# weights of 600000000 give a true distance of 1200000000, which is not
+# "< 1000000000", so the edge was never relaxed and a reachable node was
+# reported unreachable. nil cannot collide with a distance, however large.
+
+# Is this distance the "not reached" marker?
+fn dj_inf(di_d) {
+  return di_d == nil()
+}
+
+# Return the neighbor list ([[nb, w], ...]) of `node`, or [] if not found.
+fn dj_neighbors(graph, node) {
+  for dn_pair in graph {
+    if dn_pair[0] == node {
+      return dn_pair[1]
+    }
+  }
+  return []
+}
+
+# Read the current best distance for `node` (nil if not reached yet).
+fn dj_get(dists, node) {
+  for dg_pair in dists {
+    if dg_pair[0] == node {
+      return dg_pair[1]
+    }
+  }
+  return nil()
+}
+
+# Return a NEW dists list with `node` set to `val` (lists are immutable).
+fn dj_set(dists, node, val) {
+  ds_out = []
+  ds_found = false
+  for ds_pair in dists {
+    if ds_pair[0] == node {
+      ds_out = push(ds_out, [node, val])
+      ds_found = true
+    } else {
+      ds_out = push(ds_out, ds_pair)
+    }
+  }
+  if not ds_found {
+    ds_out = push(ds_out, [node, val])
+  }
+  return ds_out
+}
+
+# Core algorithm. Returns list of [node, distance] pairs.
+fn dijkstra(graph, start) {
+  # Initialise every node to "not reached", then the start to 0.
+  dk_dists = []
+  for dk_ipair in graph {
+    dk_dists = dj_set(dk_dists, dk_ipair[0], nil())
+  }
+  dk_dists = dj_set(dk_dists, start, 0)
+
+  dk_visited = []
+  dk_count = len(graph)
+  dk_i = 0
+
+  while dk_i < dk_count {
+    # Pick the unvisited REACHED node with the smallest tentative
+    # distance. A node still at nil has no finite distance yet, so it
+    # cannot be the minimum and must not be settled or relaxed from.
+    dk_u = ""
+    dk_best = 0
+    dk_have = false
+    for dk_dp in dk_dists {
+      if not contains(dk_visited, dk_dp[0]) and not dj_inf(dk_dp[1]) {
+        if not dk_have or dk_dp[1] < dk_best {
+          dk_best = dk_dp[1]
+          dk_u = dk_dp[0]
+          dk_have = true
+        }
+      }
+    }
+
+    if not dk_have {
+      # Everything reachable is settled; stop early.
+      dk_i = dk_count
+    } else {
+      dk_visited = push(dk_visited, dk_u)
+
+      # Relax each outgoing edge of the chosen node.
+      dk_nbrs = dj_neighbors(graph, dk_u)
+      for dk_nb in dk_nbrs {
+        dk_v = dk_nb[0]
+        dk_w = dk_nb[1]
+        dk_alt = dk_best + dk_w
+        dk_old = dj_get(dk_dists, dk_v)
+        if dj_inf(dk_old) or dk_alt < dk_old {
+          dk_dists = dj_set(dk_dists, dk_v, dk_alt)
+        }
+      }
+      dk_i = dk_i + 1
+    }
+  }
+
+  return dk_dists
+}
+
+# Pretty-print distances, showing "unreachable" for a nil distance.
+fn print_dists(label, dists) {
+  print(label)
+  for pd_pair in dists {
+    if dj_inf(pd_pair[1]) {
+      print("  " + pd_pair[0] + " -> unreachable")
+    } else {
+      print("  " + pd_pair[0] + " -> " + num(pd_pair[1]))
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Self-test
+# ---------------------------------------------------------------------------
+
+# Graph 1: connected weighted graph.
+#   A --1--> B --2--> C --1--> D --3--> E
+#   A --4--> C        B --5--> D
+# Shortest from A:  A=0  B=1  C=3  D=4  E=7
+g1 = [["A", [["B", 1], ["C", 4]]], ["B", [["C", 2], ["D", 5]]], ["C", [["D", 1]]], ["D", [["E", 3]]], ["E", []]]
+
+r1 = dijkstra(g1, "A")
+print_dists("Graph 1  shortest distances from A:", r1)
+
+print("Spot checks (expect 0, 1, 3, 4, 7):")
+print("  dist(A) = " + num(dj_get(r1, "A")))
+print("  dist(B) = " + num(dj_get(r1, "B")))
+print("  dist(C) = " + num(dj_get(r1, "C")))
+print("  dist(D) = " + num(dj_get(r1, "D")))
+print("  dist(E) = " + num(dj_get(r1, "E")))
+
+# Graph 2: has an unreachable node Z (no edge leads into it).
+g2 = [["S", [["A", 7], ["B", 2]]], ["A", [["B", 3], ["T", 1]]], ["B", [["T", 7]]], ["T", []], ["Z", [["S", 1]]]]
+# From S:  S=0  B=2  A=5(via B->? no; A only from S=7, so A=7)  T=8(A->T=7+1) vs B->T=2+7=9 -> 8  Z=unreachable
+r2 = dijkstra(g2, "S")
+print_dists("Graph 2  shortest distances from S (Z unreachable):", r2)
+
+print("Done.")

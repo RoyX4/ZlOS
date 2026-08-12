@@ -1,0 +1,93 @@
+# date_calc.zl -- date utilities for the zl standard library
+# Provides: is_leap, days_in_month, day_of_week (Zeller), days_between.
+# All function-locals are prefixed with the function's initials to avoid the
+# global-namespace scope leak described in the language spec.
+
+# ---- leap year (Gregorian) ----
+fn is_leap(year) {
+    if year % 400 == 0 { return true }
+    if year % 100 == 0 { return false }
+    if year % 4 == 0 { return true }
+    return false
+}
+
+# ---- number of days in month m of year y (m is 1..12) ----
+fn days_in_month(y, m) {
+    dim_table = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    if m == 2 and is_leap(y) { return 29 }
+    return dim_table[m - 1]
+}
+
+# ---- weekday name via Zeller's congruence (Gregorian) ----
+# Returns "Monday".."Sunday".
+fn day_of_week(y, m, d) {
+    dow_m = m
+    dow_y = y
+    # Zeller treats Jan/Feb as months 13/14 of the previous year.
+    if dow_m < 3 {
+        dow_m = dow_m + 12
+        dow_y = dow_y - 1
+    }
+    dow_q = d
+    dow_k = dow_y % 100        # year of the century
+    dow_j = int(dow_y / 100)   # zero-based century
+    dow_h = (dow_q + int(13 * (dow_m + 1) / 5) + dow_k + int(dow_k / 4) + int(dow_j / 4) - 2 * dow_j) % 7
+    # Normalise in case % yields a negative result for negative operands.
+    dow_h = ((dow_h % 7) + 7) % 7
+    # Zeller: 0=Saturday, 1=Sunday, 2=Monday, ...
+    dow_names = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    return dow_names[dow_h]
+}
+
+# ---- serial day number (days since 1970-01-01), Hinnant's algorithm ----
+fn days_from_civil(y, m, d) {
+    dfc_y = y
+    if m <= 2 { dfc_y = dfc_y - 1 }
+    dfc_era = int(dfc_y / 400)
+    dfc_yoe = dfc_y - dfc_era * 400
+    dfc_mp = 0
+    if m > 2 { dfc_mp = m - 3 } else { dfc_mp = m + 9 }
+    dfc_doy = int((153 * dfc_mp + 2) / 5) + d - 1
+    dfc_doe = dfc_yoe * 365 + int(dfc_yoe / 4) - int(dfc_yoe / 100) + dfc_doy
+    return dfc_era * 146097 + dfc_doe - 719468
+}
+
+# ---- absolute number of days between two dates ----
+fn days_between(y1, m1, d1, y2, m2, d2) {
+    db_a = days_from_civil(y1, m1, d1)
+    db_b = days_from_civil(y2, m2, d2)
+    return abs(db_b - db_a)
+}
+
+# stringify a boolean ("num" rejects booleans)
+fn bstr(b) {
+    if b { return "true" }
+    return "false"
+}
+
+# ================= self-test =================
+print("== date_calc self-test ==")
+
+print("is_leap(2000) -> " + bstr(is_leap(2000)) + "  (expect true)")
+print("is_leap(1900) -> " + bstr(is_leap(1900)) + "  (expect false)")
+print("is_leap(2024) -> " + bstr(is_leap(2024)) + "  (expect true)")
+print("is_leap(2023) -> " + bstr(is_leap(2023)) + "  (expect false)")
+
+print("days_in_month(2024,2) -> " + num(days_in_month(2024, 2)) + "  (expect 29)")
+print("days_in_month(2023,2) -> " + num(days_in_month(2023, 2)) + "  (expect 28)")
+print("days_in_month(2024,4) -> " + num(days_in_month(2024, 4)) + "  (expect 30)")
+print("days_in_month(2024,12) -> " + num(days_in_month(2024, 12)) + "  (expect 31)")
+
+print("day_of_week(2000,1,1) -> " + day_of_week(2000, 1, 1) + "  (expect Saturday)")
+print("day_of_week(2024,2,29) -> " + day_of_week(2024, 2, 29) + "  (expect Thursday)")
+print("day_of_week(1969,7,20) -> " + day_of_week(1969, 7, 20) + "  (expect Sunday)")
+print("day_of_week(2026,7,29) -> " + day_of_week(2026, 7, 29) + "  (expect Wednesday)")
+print("day_of_week(1776,7,4)  -> " + day_of_week(1776, 7, 4) + "  (expect Thursday)")
+
+print("days_between(2024,1,1, 2024,12,31) -> " + num(days_between(2024, 1, 1, 2024, 12, 31)) + "  (expect 365)")
+print("days_between(2023,1,1, 2024,1,1)   -> " + num(days_between(2023, 1, 1, 2024, 1, 1)) + "  (expect 365)")
+print("days_between(2024,1,1, 2025,1,1)   -> " + num(days_between(2024, 1, 1, 2025, 1, 1)) + "  (expect 366)")
+print("days_between(2000,1,1, 2000,1,1)   -> " + num(days_between(2000, 1, 1, 2000, 1, 1)) + "  (expect 0)")
+print("days_between(1969,7,20, 2026,7,29) -> " + num(days_between(1969, 7, 20, 2026, 7, 29)) + "  (expect 20828)")
+
+print("== done ==")

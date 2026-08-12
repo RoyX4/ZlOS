@@ -1,0 +1,230 @@
+# strsearch.zl - substring search: KMP, all-occurrence scans, LCS.
+#
+# More capable than the builtin find(), which only gives the first hit,
+# and count(), which only counts NON-overlapping hits.
+#
+# Conventions used everywhere in this module:
+#   - indices are 0-based offsets into the text
+#   - "not found" is -1
+#   - matches MAY overlap: kmp_all("aaaa", "aa") -> [0, 1, 2]
+#   - an empty pattern never matches (0 hits), so callers can't loop forever
+
+# --- the KMP failure table -------------------------------------------------
+#
+# fail[i] = the length of the longest proper prefix of pat[0..i] that is also
+# a suffix of pat[0..i]. It is the "how far back can I fall" number: after a
+# mismatch we already know the last fail[i] characters of the text matched the
+# first fail[i] characters of the pattern, so we resume from there instead of
+# rewinding the text pointer. That is why KMP never re-reads a character.
+#
+# For "ababc" the table is [0, 0, 1, 2, 0]:
+#   i=0 "a"     -> 0   (a proper prefix must be shorter than the whole thing)
+#   i=1 "ab"    -> 0   ("a" != "b")
+#   i=2 "aba"   -> 1   ("a" is both prefix and suffix)
+#   i=3 "abab"  -> 2   ("ab" is both prefix and suffix)
+#   i=4 "ababc" -> 0   (nothing ending in "c" starts the pattern)
+#
+# It is built by matching the pattern against itself with the same fall-back
+# loop the search uses: k tracks the border length found so far.
+fn kmp_table(pat) {
+    m = len(pat)
+    fail = []
+    i = 0
+    while i < m {
+        fail = push(fail, 0)
+        i = i + 1
+    }
+    k = 0
+    i = 1
+    while i < m {
+        while k > 0 and at(pat, i) != at(pat, k) {
+            k = fail[k - 1]
+        }
+        if at(pat, i) == at(pat, k) {
+            k = k + 1
+        }
+        fail[i] = k
+        i = i + 1
+    }
+    return fail
+}
+# One scanner drives both kmp_search and kmp_all.
+# limit = 0 means "collect every match"; limit = 1 stops at the first.
+fn kmp_scan(text, pat, limit) {
+    hits = []
+    n = len(text)
+    m = len(pat)
+    if m == 0 or m > n {
+        return hits
+    }
+    fail = kmp_table(pat)
+    k = 0
+    i = 0
+    while i < n {
+        while k > 0 and at(text, i) != at(pat, k) {
+            k = fail[k - 1]
+        }
+        if at(text, i) == at(pat, k) {
+            k = k + 1
+        }
+        if k == m {
+            hits = push(hits, i - m + 1)
+            if limit > 0 and len(hits) == limit {
+                return hits
+            }
+            k = fail[k - 1]
+        }
+        i = i + 1
+    }
+    return hits
+}
+fn kmp_search(text, pat) {
+    hits = kmp_scan(text, pat, 1)
+    if len(hits) == 0 {
+        return -1
+    }
+    return hits[0]
+}
+fn kmp_all(text, pat) {
+    return kmp_scan(text, pat, 0)
+}
+# The obvious O(n*m) version - kept as a cross-check on kmp_all.
+fn naive_all(text, pat) {
+    out = []
+    n = len(text)
+    m = len(pat)
+    if m == 0 {
+        return out
+    }
+    i = 0
+    while i + m <= n {
+        j = 0
+        ok = true
+        while j < m {
+            if at(text, i + j) != at(pat, j) {
+                ok = false
+                break
+            }
+            j = j + 1
+        }
+        if ok {
+            out = push(out, i)
+        }
+        i = i + 1
+    }
+    return out
+}
+fn count_overlapping(text, pat) {
+    n = len(text)
+    m = len(pat)
+    if m == 0 {
+        return 0
+    }
+    c = 0
+    i = 0
+    while i + m <= n {
+        if slice(text, i, i + m) == pat {
+            c = c + 1
+        }
+        i = i + 1
+    }
+    return c
+}
+# Longest common substring (contiguous, not subsequence), by dynamic
+# programming over two rolling rows. cur[j] = length of the common run that
+# ends exactly at a[i-1] and b[j-1]; it extends prev[j-1] whenever the two
+# characters agree. Remembering the best run's end offset in `a` lets us
+# slice the answer straight out of `a`.
+fn longest_common_substring(a, b) {
+    na = len(a)
+    nb = len(b)
+    best = 0
+    end_a = 0
+    prev = []
+    j = 0
+    while j <= nb {
+        prev = push(prev, 0)
+        j = j + 1
+    }
+    i = 1
+    while i <= na {
+        cur = []
+        j = 0
+        while j <= nb {
+            cur = push(cur, 0)
+            j = j + 1
+        }
+        j = 1
+        while j <= nb {
+            if at(a, i - 1) == at(b, j - 1) {
+                cur[j] = prev[j - 1] + 1
+                if cur[j] > best {
+                    best = cur[j]
+                    end_a = i
+                }
+            }
+            j = j + 1
+        }
+        prev = cur
+        i = i + 1
+    }
+    return slice(a, end_a - best, end_a)
+}
+fn starts_any(s, prefixes) {
+    for p in prefixes {
+        if starts(s, p) {
+            return true
+        }
+    }
+    return false
+}
+# Replace pat with rep, but only at the offsets listed in `indices`.
+# Expects ascending indices; any index that lands inside an already-replaced
+# span is skipped, so overlapping hits degrade to left-to-right greedy.
+fn replace_all_at(s, indices, pat, rep) {
+    out = ""
+    prev = 0
+    m = len(pat)
+    for i in indices {
+        if i < prev {
+            continue
+        }
+        out = out + slice(s, prev, i) + rep
+        prev = i + m
+    }
+    return out + slice(s, prev, len(s))
+}
+
+text = "abababcabababcabab"
+pat = "ababc"
+print("text:            " + text)
+print("pattern:         " + pat)
+print("kmp_table:       " + str(kmp_table(pat)))
+print("kmp_search:      " + str(kmp_search(text, pat)))
+print("kmp_all:         " + str(kmp_all(text, pat)))
+print("naive_all:       " + str(naive_all(text, pat)))
+print("kmp_search miss: " + str(kmp_search(text, "zzz")))
+
+print("")
+print("overlaps in 'aaaa' for 'aa':")
+print("  kmp_all:            " + str(kmp_all("aaaa", "aa")))
+print("  count_overlapping:  " + str(count_overlapping("aaaa", "aa")))
+print("  builtin count():    " + str(count("aaaa", "aa")))
+
+print("")
+print("lcs photosynthesis/hypothesis: " + longest_common_substring("photosynthesis", "hypothesis"))
+print("lcs abcdxyz/xyzabcd:           " + longest_common_substring("abcdxyz", "xyzabcd"))
+print("lcs abc/xyz:                   [" + longest_common_substring("abc", "xyz") + "]")
+
+print("")
+schemes = ["http://", "https://", "ftp://"]
+print("starts_any https://zl.dev: " + str(starts_any("https://zl.dev", schemes)))
+print("starts_any zl.dev:         " + str(starts_any("zl.dev", schemes)))
+
+print("")
+s = "the cat sat on the mat"
+hits = kmp_all(s, "at")
+print("sentence:     " + s)
+print("'at' at:      " + str(hits))
+print("replace all:  " + replace_all_at(s, hits, "at", "og"))
+print("replace 1&3:  " + replace_all_at(s, [hits[0], hits[2]], "at", "AT"))

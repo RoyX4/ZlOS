@@ -1,0 +1,142 @@
+# b64kit.zl - Correct Base64 encode/decode in pure zl.
+#
+# Standard alphabet A-Za-z0-9+/ with "=" padding. Base64 packs 3 input bytes
+# (24 bits) into one integer and reads it back as 4 six-bit indexes into the
+# alphabet. Encoding a final group of 2 bytes emits 3 chars + "="; a final
+# group of 1 byte emits 2 chars + "==". Output length is always a multiple of 4.
+#
+# Decoding here is padding-tolerant: it first strips every "=" and then works
+# from the count of real alphabet characters. 4 chars -> 3 bytes, a trailing
+# group of 3 chars -> 2 bytes, a trailing group of 2 chars -> 1 byte. Because
+# the byte count is derived from the surviving characters rather than from the
+# "=" markers, both padded ("TWE=") and unpadded ("TWE") input decode the same.
+# (The bug in stdlib/base64.zl was that its decode loop skipped the final group
+# whenever the "=" padding was absent, so unpadded input lost data.)
+#
+# Representation: a "byte string" is a zl string, one char per byte. zl strings
+# are NUL-terminated, so chr(0) errors and a zero byte cannot be represented -
+# these functions are for text, not arbitrary binary.
+#
+# Naming: assignment inside a zl function writes the global of that name, so
+# every local carries a two-letter tag (ek_ = bk_encode, dk_ = bk_decode) to
+# avoid clobbering a caller's globals.
+
+BK_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+# bk_encode(s) -> base64 string. Handles any length, padding as needed.
+fn bk_encode(ek_s) {
+    ek_out = ""
+    ek_n = len(ek_s)
+    ek_i = 0
+    while ek_i < ek_n {
+        ek_rem = ek_n - ek_i
+        ek_b0 = code(at(ek_s, ek_i))
+        ek_b1 = 0
+        ek_b2 = 0
+        if ek_rem > 1 {
+            ek_b1 = code(at(ek_s, ek_i + 1))
+        }
+        if ek_rem > 2 {
+            ek_b2 = code(at(ek_s, ek_i + 2))
+        }
+        ek_trip = bor(bor(shl(ek_b0, 16), shl(ek_b1, 8)), ek_b2)
+        ek_out = ek_out + at(BK_ALPHA, band(shr(ek_trip, 18), 63))
+        ek_out = ek_out + at(BK_ALPHA, band(shr(ek_trip, 12), 63))
+        if ek_rem > 2 {
+            ek_out = ek_out + at(BK_ALPHA, band(shr(ek_trip, 6), 63))
+            ek_out = ek_out + at(BK_ALPHA, band(ek_trip, 63))
+        } elif ek_rem == 2 {
+            ek_out = ek_out + at(BK_ALPHA, band(shr(ek_trip, 6), 63)) + "="
+        } else {
+            ek_out = ek_out + "=="
+        }
+        ek_i = ek_i + 3
+    }
+    return ek_out
+}
+
+# bk_decode(s) -> original string. Padding-tolerant: ignores every "=" and
+# derives the byte count from the surviving alphabet characters, so padded and
+# unpadded input decode identically. Decoding text that encoded a zero byte is
+# out of scope (chr(0) errors in zl).
+fn bk_decode(dk_s) {
+    # 1. strip padding and any stray "=" - only real alphabet chars survive
+    dk_clean = ""
+    dk_i = 0
+    dk_n = len(dk_s)
+    while dk_i < dk_n {
+        dk_ch = at(dk_s, dk_i)
+        if dk_ch != "=" {
+            dk_clean = dk_clean + dk_ch
+        }
+        dk_i = dk_i + 1
+    }
+    # 2. walk the cleaned string 4 chars at a time
+    dk_out = ""
+    dk_m = len(dk_clean)
+    dk_i = 0
+    while dk_i < dk_m {
+        dk_rem = dk_m - dk_i
+        dk_v0 = find(BK_ALPHA, at(dk_clean, dk_i))
+        dk_v1 = 0
+        dk_v2 = 0
+        dk_v3 = 0
+        if dk_rem > 1 {
+            dk_v1 = find(BK_ALPHA, at(dk_clean, dk_i + 1))
+        }
+        if dk_rem > 2 {
+            dk_v2 = find(BK_ALPHA, at(dk_clean, dk_i + 2))
+        }
+        if dk_rem > 3 {
+            dk_v3 = find(BK_ALPHA, at(dk_clean, dk_i + 3))
+        }
+        dk_trip = bor(bor(bor(shl(dk_v0, 18), shl(dk_v1, 12)), shl(dk_v2, 6)), dk_v3)
+        # a 2-char remainder yields 1 byte, 3 chars -> 2 bytes, 4 chars -> 3 bytes
+        dk_out = dk_out + chr(band(shr(dk_trip, 16), 255))
+        if dk_rem > 2 {
+            dk_out = dk_out + chr(band(shr(dk_trip, 8), 255))
+        }
+        if dk_rem > 3 {
+            dk_out = dk_out + chr(band(dk_trip, 255))
+        }
+        dk_i = dk_i + 4
+    }
+    return dk_out
+}
+
+# ---- self test ----
+
+fn bk_check(ck_label, ck_got, ck_want) {
+    ck_tag = "FAIL"
+    if ck_got == ck_want {
+        ck_tag = "PASS"
+    }
+    print(ck_tag + "  " + ck_label + "  got=\"" + ck_got + "\"  want=\"" + ck_want + "\"")
+}
+
+print("-- known encode vectors --")
+bk_check("encode(Man)", bk_encode("Man"), "TWFu")
+bk_check("encode(Ma) ", bk_encode("Ma"), "TWE=")
+bk_check("encode(M)  ", bk_encode("M"), "TQ==")
+bk_check("encode(hi) ", bk_encode("hello world"), "aGVsbG8gd29ybGQ=")
+bk_check("encode()   ", bk_encode(""), "")
+
+print("")
+print("-- decode of padded vectors --")
+bk_check("decode(TWFu)", bk_decode("TWFu"), "Man")
+bk_check("decode(TWE=)", bk_decode("TWE="), "Ma")
+bk_check("decode(TQ==)", bk_decode("TQ=="), "M")
+
+print("")
+print("-- decode of UNPADDED input (the base64.zl bug) --")
+bk_check("decode(TWE) ", bk_decode("TWE"), "Ma")
+bk_check("decode(TQ)  ", bk_decode("TQ"), "M")
+
+print("")
+print("-- round trips --")
+bk_check("rt(hello world)", bk_decode(bk_encode("hello world")), "hello world")
+bk_check("rt(M)          ", bk_decode(bk_encode("M")), "M")
+bk_check("rt(Ma)         ", bk_decode(bk_encode("Ma")), "Ma")
+bk_check("rt(Man)        ", bk_decode(bk_encode("Man")), "Man")
+bk_check("rt(fox)        ", bk_decode(bk_encode("The quick brown fox")), "The quick brown fox")
+bk_check("rt(symbols)    ", bk_decode(bk_encode("a+b/c=d?e")), "a+b/c=d?e")

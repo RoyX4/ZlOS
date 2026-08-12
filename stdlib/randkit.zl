@@ -1,0 +1,87 @@
+# randkit.zl - random helpers missing from the builtins, built on the
+# seed() / random() / randint() builtins. Self-contained (zl has no imports).
+#
+# NOTE on randint: randint(lo, hi) is capped at lo+32767 - i.e. it can only
+# return values in [lo, min(hi, lo+32767)] inclusive. That ceiling is far above
+# any list index we use here (Fisher-Yates only ever calls randint(0, i) where
+# i is a list position), so it never affects these functions - but callers who
+# want a large random range must build it up from randint themselves.
+#
+# All local variables are prefixed rk_ so that assigning them never clobbers a
+# global of the same name in the caller's program.
+
+# rk_choice(xs): return one uniformly-random element of list xs.
+fn rk_choice(xs) {
+    rk_pick = randint(0, len(xs) - 1)
+    return xs[rk_pick]
+}
+
+# rk_shuffle(xs): return a NEW list holding xs's elements in random order,
+# using the Fisher-Yates algorithm (randint for the swap index). The input
+# list xs is not modified - we build and shuffle a copy.
+fn rk_shuffle(xs) {
+    rk_a = []
+    for rk_x in xs {
+        rk_a = push(rk_a, rk_x)
+    }
+    rk_i = len(rk_a) - 1
+    while rk_i > 0 {
+        rk_j = randint(0, rk_i)
+        rk_tmp = rk_a[rk_i]
+        rk_a[rk_i] = rk_a[rk_j]
+        rk_a[rk_j] = rk_tmp
+        rk_i = rk_i - 1
+    }
+    return rk_a
+}
+
+# rk_sample(xs, n): return n distinct elements chosen at random from xs
+# (distinct by position - each source slot is used at most once). If n is
+# larger than len(xs), the whole list is returned in shuffled order.
+fn rk_sample(xs, n) {
+    rk_s = rk_shuffle(xs)
+    rk_out = []
+    rk_i = 0
+    while rk_i < n and rk_i < len(rk_s) {
+        rk_out = push(rk_out, rk_s[rk_i])
+        rk_i = rk_i + 1
+    }
+    return rk_out
+}
+
+# rk_uniform(lo, hi): return a random float in the half-open range [lo, hi)
+# using random() (which yields a float in [0, 1)).
+fn rk_uniform(lo, hi) {
+    return lo + random() * (hi - lo)
+}
+
+# ---------------------------------------------------------------------------
+# Self-test: seed a fixed value so results are reproducible, then exercise
+# each function and print a checkable result next to each call.
+# ---------------------------------------------------------------------------
+seed(42)
+
+# rk_choice - the returned value must be a member of the input list.
+choice_list = ["red", "green", "blue", "yellow"]
+picked = rk_choice(choice_list)
+print("rk_choice picked:  " + picked)
+print("  is a member:     " + str(contains(choice_list, picked)))
+
+# rk_shuffle - same length and same multiset of elements; original untouched.
+orig = [1, 2, 3, 4, 5, 6]
+shuf = rk_shuffle(orig)
+print("rk_shuffle result: " + str(shuf))
+print("  original intact: " + str(orig))
+print("  same length:     " + str(len(shuf) == len(orig)))
+print("  same elements:   " + str(str(sort(shuf)) == str(sort(orig))))
+
+# rk_sample - two distinct elements.
+samp = rk_sample([10, 20, 30, 40, 50], 2)
+print("rk_sample(xs, 2):  " + str(samp))
+print("  count is 2:      " + str(len(samp) == 2))
+print("  two distinct:    " + str(samp[0] != samp[1]))
+
+# rk_uniform - a float inside [2, 5).
+u = rk_uniform(2, 5)
+print("rk_uniform[2,5):   " + str(u))
+print("  in range:        " + str(u >= 2 and u < 5))

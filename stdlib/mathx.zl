@@ -1,0 +1,63 @@
+# mathx.zl - number theory & math helpers.
+
+fn factorial(n) {
+    r = 1
+    i = 2
+    while i <= n {
+        r = r * i
+        i = i + 1
+    }
+    return r
+}
+fn lcm(a, b) {
+    return a / gcd(a, b) * b
+}
+fn is_prime(n) {
+    if n < 2 {
+        return false
+    }
+    i = 2
+    while i * i <= n {
+        if n % i == 0 {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+fn primes_up_to(n) {
+    out = []
+    i = 2
+    while i <= n {
+        if is_prime(i) {
+            out = push(out, i)
+        }
+        i = i + 1
+    }
+    return out
+}
+fn clamp(x, lo, hi) {
+    if x < lo {
+        return lo
+    }
+    if x > hi {
+        return hi
+    }
+    return x
+}
+fn power(base, exp) {
+    r = 1
+    i = 0
+    while i < exp {
+        r = r * base
+        i = i + 1
+    }
+    return r
+}
+
+print("factorial(6):  " + str(factorial(6)))
+print("lcm(12,18):    " + str(lcm(12, 18)))
+print("is_prime(97):  " + str(is_prime(97)))
+print("primes <= 30:  " + str(primes_up_to(30)))
+print("clamp(15,0,10):" + str(clamp(15, 0, 10)))
+print("power(2,10):   " + str(power(2, 10)))

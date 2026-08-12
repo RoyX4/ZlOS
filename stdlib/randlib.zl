@@ -1,0 +1,47 @@
+# randlib.zl - randomness helpers (dice, shuffle, choice) built on the
+# random()/randint()/seed() builtins. Self-contained (zl has no imports).
+
+fn shuffle(xs) {
+    a = []
+    for x in xs {
+        a = push(a, x)
+    }
+    i = len(a) - 1
+    while i > 0 {
+        j = randint(0, i)
+        tmp = a[i]
+        a[i] = a[j]
+        a[j] = tmp
+        i = i - 1
+    }
+    return a
+}
+fn choice(xs) {
+    return xs[randint(0, len(xs) - 1)]
+}
+fn dice(sides) {
+    return randint(1, sides)
+}
+fn coin() {
+    if random() < 0.5 {
+        return "heads"
+    }
+    return "tails"
+}
+fn sample(xs, k) {
+    s = shuffle(xs)
+    out = []
+    i = 0
+    while i < k and i < len(s) {
+        out = push(out, s[i])
+        i = i + 1
+    }
+    return out
+}
+
+seed(7)
+print("shuffle:  " + str(shuffle([1, 2, 3, 4, 5, 6])))
+print("choice:   " + str(choice(["red", "green", "blue"])))
+print("2 dice:   " + str(dice(6)) + " " + str(dice(6)))
+print("coin:     " + coin())
+print("sample 3: " + str(sample([10, 20, 30, 40, 50], 3)))

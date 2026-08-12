@@ -1,0 +1,105 @@
+# json_pretty.zl -- pretty-print a nested data structure (numbers, strings,
+# and nested lists) as indented, bracketed text. Recurses over the structure.
+# Standalone: every helper it needs is a built-in or defined below.
+#
+# The language has no type() built-in, so type detection is done by exploiting
+# two error-free behaviours of the interpreter's `==`:
+#   * two lists are never "equal" to each other (not even a list to itself),
+#     so  (v == v)  is TRUE for scalars and FALSE for lists.
+#   * comparing values of different types is FALSE (never an error), so a real
+#     number equals its own num(), while a string never does.
+
+# TRUE when v is a list. A list compared to itself is never equal, so the
+# self-comparison is false exactly for lists.
+fn il(ilV) {
+    return not (ilV == ilV)
+}
+
+# TRUE when v is a number (not a string). num() of a number is that same
+# number (equal); num() of a string is a number of a different type (never
+# equal). Only call on non-list scalars.
+fn isNum(inV) {
+    return inV == num(inV)
+}
+
+# n levels of indent, two spaces per level.
+fn pi(piN) {
+    piS = ""
+    piK = 0
+    while piK < piN {
+        piS = piS + "  "
+        piK = piK + 1
+    }
+    return piS
+}
+
+# Render a scalar: numbers bare, strings wrapped in double quotes.
+fn ps(psV) {
+    if isNum(psV) {
+        return "" + psV
+    }
+    return "\"" + psV + "\""
+}
+
+# Render any node at the given depth. Scalars are one line with no leading
+# indent (the caller supplies it). Lists open with "[", put each child on its
+# own indented line, and close "]" back at the node's own depth.
+fn pn(pnV, pnDepth) {
+    if not il(pnV) {
+        return ps(pnV)
+    }
+    if len(pnV) == 0 {
+        return "[]"
+    }
+    pnOut = "[\n"
+    pnI = 0
+    while pnI < len(pnV) {
+        pnChild = pnV[pnI]
+        pnOut = pnOut + pi(pnDepth + 1) + pn(pnChild, pnDepth + 1)
+        if pnI != len(pnV) - 1 {
+            pnOut = pnOut + ","
+        }
+        pnOut = pnOut + "\n"
+        pnI = pnI + 1
+    }
+    pnOut = pnOut + pi(pnDepth) + "]"
+    return pnOut
+}
+
+# Public entry point: pretty-print a value starting at depth 0.
+fn pretty(prV) {
+    return pn(prV, 0)
+}
+
+# ---------------- self-test ----------------
+print("== json_pretty self-test ==")
+
+print("")
+print("scalar number:")
+print(pretty(42))
+
+print("")
+print("scalar string:")
+print(pretty("hello"))
+
+print("")
+print("flat list:")
+print(pretty([1, 2, 3]))
+
+print("")
+print("empty list:")
+print(pretty([]))
+
+print("")
+print("mixed + nested structure:")
+data = [1, "hello", [2, 3, ["deep", 4]], "world", []]
+print(pretty(data))
+
+print("")
+print("numeric-looking string stays quoted (it is a string, not a number):")
+print(pretty(["42", 42]))
+
+print("")
+print("deeply nested:")
+deep = [1, [2, [3, [4, [5]]]]]
+print(pretty(deep))

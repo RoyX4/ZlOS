@@ -1,0 +1,109 @@
+# list_reduce.zl -- reduction helpers over lists of numbers
+# Standalone: no imports available, so every helper is defined here.
+
+# Sum of all elements. Empty list -> 0.
+fn sum(list) {
+  total = 0
+  for x in list {
+    total = total + x
+  }
+  return total
+}
+
+# Product of all elements. Empty list -> 1 (multiplicative identity).
+fn product(list) {
+  p = 1
+  for x in list {
+    p = p * x
+  }
+  return p
+}
+
+# Largest element. Empty list -> 0 (no null in the language).
+fn maximum(list) {
+  if len(list) == 0 {
+    return 0
+  }
+  best = list[0]
+  for x in list {
+    if x > best {
+      best = x
+    }
+  }
+  return best
+}
+
+# Smallest element. Empty list -> 0.
+fn minimum(list) {
+  if len(list) == 0 {
+    return 0
+  }
+  best = list[0]
+  for x in list {
+    if x < best {
+      best = x
+    }
+  }
+  return best
+}
+
+# How many elements equal `value`.
+fn count(list, value) {
+  n = 0
+  for x in list {
+    if x == value {
+      n = n + 1
+    }
+  }
+  return n
+}
+
+# Truncate a (possibly fractional) number toward zero -> integer.
+# '%' truncates its operands to ints here, so it can't strip a fraction;
+# instead render the number as text and drop everything from the '.' onward.
+# "-4.5" -> "-4",  "18" -> "18".
+fn trunc_int(x) {
+  s = "" + x
+  dot = find(s, ".")
+  if dot == -1 {
+    return x
+  }
+  return num(slice(s, 0, dot))
+}
+
+# Integer average (division truncated toward zero). Empty list -> 0.
+fn average_int(list) {
+  n = len(list)
+  if n == 0 {
+    return 0
+  }
+  total = sum(list)
+  return trunc_int(total / n)
+}
+
+# ---------------- self-test ----------------
+nums = [4, 8, 15, 16, 23, 42]
+print("list          = " + join(nums, ", "))
+print("sum           = " + sum(nums))
+print("product       = " + product(nums))
+print("maximum       = " + maximum(nums))
+print("minimum       = " + minimum(nums))
+print("average_int   = " + average_int(nums))
+
+dups = [3, 7, 3, 3, 9, 7]
+print("dups          = " + join(dups, ", "))
+print("count 3       = " + count(dups, 3))
+print("count 7       = " + count(dups, 7))
+print("count 5       = " + count(dups, 5))
+
+neg = [-5, -1, -9, -3]
+print("neg           = " + join(neg, ", "))
+print("maximum(neg)  = " + maximum(neg))
+print("minimum(neg)  = " + minimum(neg))
+print("average(neg)  = " + average_int(neg))
+
+empty = []
+print("empty sum     = " + sum(empty))
+print("empty product = " + product(empty))
+print("empty max     = " + maximum(empty))
+print("empty avg     = " + average_int(empty))

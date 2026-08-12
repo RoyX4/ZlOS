@@ -1,0 +1,1150 @@
+# test_algorithms.zl - sorting and searching.
+#
+# Covers:
+#   * every sort in stdlib/sortx.zl against the builtin sort(), on random,
+#     already-sorted, reverse-sorted, all-equal, single-element and empty input
+#   * binary_search against a linear scan (index_of)
+#   * astar (stdlib/astar.zl) against dijkstra (stdlib/dijkstra.zl) and BFS,
+#     on the same graph - the grid is converted to a weighted adjacency list
+#     so both algorithms answer the identical question
+#
+# Style follows stdlib/testlib.zl - check(label, got, want) / report().
+# zl has no import system, so the harness AND the three modules under test are
+# inlined below, copied verbatim from stdlib/sortx.zl, stdlib/astar.zl and
+# stdlib/dijkstra.zl (demo/print sections dropped).
+#
+# Every `want` is worked out by hand. Every check is expected to pass; the
+# BUGS block at the bottom is the record of the defects these checks were
+# written for, all since fixed, with the minimal repro for each.
+#
+# 217 checks, 0 failures.
+#
+# NAMING RULE (this file depends on it): in zl a plain ASSIGNMENT inside a
+# function writes a GLOBAL of that name if one exists. A PARAMETER does not -
+# it binds to its own slot in the call scope, and so does a for-loop variable.
+# So every top-level name here is prefixed `t_`, and every helper's locals
+# carry a two-letter tag, to stay clear of the library's assigned locals. This
+# is documented and deliberate - README.md "Scope gotcha (important)". The
+# library's own locals are all prefixed `sx_` for the same reason, and the
+# last two checks in this file pin the parameter half of the rule.
+
+g_pass = 0
+g_fail = 0
+
+fn check(label, got, want) {
+    if str(got) == str(want) {
+        g_pass = g_pass + 1
+        print("  PASS  " + label)
+    } else {
+        g_fail = g_fail + 1
+        print("  FAIL  " + label + "  got " + str(got) + " want " + str(want))
+    }
+}
+fn report() {
+    print("----")
+    print(str(g_pass) + " passed, " + str(g_fail) + " failed")
+}
+
+# ===========================================================================
+# stdlib/sortx.zl  (verbatim, demo removed)
+# ===========================================================================
+# sx_cmp is the total order sort() uses, WORKED OUT IN ZL - it never calls
+# sort(). That independence is the whole point of this block: these sorts are
+# the second opinion on the builtin, so a version that asked sort() for the
+# ordering could not catch a bug in sort() at all - the two would agree by
+# construction, on wrong answers too. Every local is prefixed sx_ so it cannot
+# overwrite a caller's global. See the header of stdlib/sortx.zl.
+fn sx_rank(v) {
+    sx_t = type(v)
+    if sx_t == "nil" { return 0 }
+    if sx_t == "bool" { return 1 }
+    if sx_t == "num" { return 2 }
+    if sx_t == "str" { return 3 }
+    if sx_t == "list" { return 4 }
+    return 5
+}
+fn sx_cmp_str(a, b) {
+    sx_na = len(a)
+    sx_nb = len(b)
+    sx_i = 0
+    while sx_i < sx_na and sx_i < sx_nb {
+        sx_ca = index_at(a, sx_i)
+        sx_cb = index_at(b, sx_i)
+        if sx_ca != sx_cb {
+            if sx_ca < sx_cb { return 0 - 1 }
+            return 1
+        }
+        sx_i = sx_i + 1
+    }
+    if sx_na < sx_nb { return 0 - 1 }
+    if sx_na > sx_nb { return 1 }
+    return 0
+}
+fn sx_cmp(a, b) {
+    sx_ra = sx_rank(a)
+    sx_rb = sx_rank(b)
+    if sx_ra != sx_rb {
+        if sx_ra < sx_rb { return 0 - 1 }
+        return 1
+    }
+    if sx_ra == 0 { return 0 }                  # nil: one value, all equal
+    if sx_ra == 5 { return 0 }                  # fn: all equal, as sort() has it
+    if sx_ra == 1 {                             # bool: false < true
+        if a == b { return 0 }
+        if a == false { return 0 - 1 }
+        return 1
+    }
+    if sx_ra == 2 {                             # num: NaN after every real one
+        sx_an = a != a                          # only a NaN differs from itself
+        sx_bn = b != b
+        if sx_an or sx_bn {
+            if sx_an == sx_bn { return 0 }
+            if sx_an { return 1 }
+            return 0 - 1
+        }
+        if a < b { return 0 - 1 }
+        if a > b { return 1 }
+        return 0
+    }
+    if sx_ra == 3 { return sx_cmp_str(a, b) }
+    sx_na = len(a)                              # list: element-wise, then short
+    sx_nb = len(b)
+    sx_i = 0
+    while sx_i < sx_na and sx_i < sx_nb {
+        sx_c = sx_cmp(a[sx_i], b[sx_i])
+        if sx_c != 0 { return sx_c }
+        sx_i = sx_i + 1
+    }
+    if sx_na < sx_nb { return 0 - 1 }
+    if sx_na > sx_nb { return 1 }
+    return 0
+}
+fn lt(a, b) {
+    return sx_cmp(a, b) < 0
+}
+fn le(a, b) {
+    return sx_cmp(a, b) <= 0
+}
+fn copy_of(xs) {
+    sx_out = []
+    for sx_x in xs {
+        sx_out = push(sx_out, sx_x)
+    }
+    return sx_out
+}
+fn is_sorted(xs) {
+    sx_i = 1
+    while sx_i < len(xs) {
+        if lt(xs[sx_i], xs[sx_i - 1]) {
+            return false
+        }
+        sx_i = sx_i + 1
+    }
+    return true
+}
+fn insertion_sort(xs) {
+    sx_out = copy_of(xs)
+    sx_i = 1
+    while sx_i < len(sx_out) {
+        sx_v = sx_out[sx_i]
+        sx_j = sx_i - 1
+        while sx_j >= 0 {
+            if le(sx_out[sx_j], sx_v) {
+                break
+            }
+            sx_out[sx_j + 1] = sx_out[sx_j]
+            sx_j = sx_j - 1
+        }
+        sx_out[sx_j + 1] = sx_v
+        sx_i = sx_i + 1
+    }
+    return sx_out
+}
+fn selection_sort(xs) {
+    sx_out = copy_of(xs)
+    sx_n = len(sx_out)
+    sx_i = 0
+    while sx_i < sx_n {
+        sx_lo = sx_i
+        sx_j = sx_i + 1
+        while sx_j < sx_n {
+            if lt(sx_out[sx_j], sx_out[sx_lo]) {
+                sx_lo = sx_j
+            }
+            sx_j = sx_j + 1
+        }
+        sx_tmp = sx_out[sx_i]
+        sx_out[sx_i] = sx_out[sx_lo]
+        sx_out[sx_lo] = sx_tmp
+        sx_i = sx_i + 1
+    }
+    return sx_out
+}
+fn bubble_sort(xs) {
+    sx_out = copy_of(xs)
+    sx_n = len(sx_out)
+    sx_end = sx_n - 1
+    while sx_end > 0 {
+        sx_swapped = false
+        sx_j = 0
+        while sx_j < sx_end {
+            if lt(sx_out[sx_j + 1], sx_out[sx_j]) {
+                sx_tmp = sx_out[sx_j]
+                sx_out[sx_j] = sx_out[sx_j + 1]
+                sx_out[sx_j + 1] = sx_tmp
+                sx_swapped = true
+            }
+            sx_j = sx_j + 1
+        }
+        if not sx_swapped {
+            return sx_out
+        }
+        sx_end = sx_end - 1
+    }
+    return sx_out
+}
+fn merge(a, b) {
+    sx_out = []
+    sx_i = 0
+    sx_j = 0
+    while sx_i < len(a) and sx_j < len(b) {
+        if lt(b[sx_j], a[sx_i]) {
+            sx_out = push(sx_out, b[sx_j])
+            sx_j = sx_j + 1
+        } else {
+            sx_out = push(sx_out, a[sx_i])
+            sx_i = sx_i + 1
+        }
+    }
+    while sx_i < len(a) {
+        sx_out = push(sx_out, a[sx_i])
+        sx_i = sx_i + 1
+    }
+    while sx_j < len(b) {
+        sx_out = push(sx_out, b[sx_j])
+        sx_j = sx_j + 1
+    }
+    return sx_out
+}
+fn merge_sort(xs) {
+    sx_n = len(xs)
+    if sx_n < 2 {
+        return copy_of(xs)
+    }
+    sx_mid = int(sx_n / 2)
+    sx_left = []
+    sx_right = []
+    sx_i = 0
+    while sx_i < sx_n {
+        if sx_i < sx_mid {
+            sx_left = push(sx_left, xs[sx_i])
+        } else {
+            sx_right = push(sx_right, xs[sx_i])
+        }
+        sx_i = sx_i + 1
+    }
+    return merge(merge_sort(sx_left), merge_sort(sx_right))
+}
+fn counting_sort(xs) {
+    if len(xs) == 0 {
+        return []
+    }
+    sx_top = xs[0]
+    for sx_x in xs {
+        if sx_x > sx_top {
+            sx_top = sx_x
+        }
+    }
+    sx_counts = []
+    sx_i = 0
+    while sx_i <= sx_top {
+        sx_counts = push(sx_counts, 0)
+        sx_i = sx_i + 1
+    }
+    for sx_x in xs {
+        sx_counts[sx_x] = sx_counts[sx_x] + 1
+    }
+    sx_out = []
+    sx_v = 0
+    while sx_v <= sx_top {
+        sx_c = 0
+        while sx_c < sx_counts[sx_v] {
+            sx_out = push(sx_out, sx_v)
+            sx_c = sx_c + 1
+        }
+        sx_v = sx_v + 1
+    }
+    return sx_out
+}
+fn sort_desc(xs) {
+    sx_out = merge_sort(xs)
+    sx_rev = []
+    sx_i = len(sx_out) - 1
+    while sx_i >= 0 {
+        sx_rev = push(sx_rev, sx_out[sx_i])
+        sx_i = sx_i - 1
+    }
+    return sx_rev
+}
+fn sort_pairs(keys, vals) {
+    sx_ks = copy_of(keys)
+    sx_vs = copy_of(vals)
+    sx_i = 1
+    while sx_i < len(sx_ks) {
+        sx_k = sx_ks[sx_i]
+        sx_v = sx_vs[sx_i]
+        sx_j = sx_i - 1
+        while sx_j >= 0 {
+            if le(sx_ks[sx_j], sx_k) {
+                break
+            }
+            sx_ks[sx_j + 1] = sx_ks[sx_j]
+            sx_vs[sx_j + 1] = sx_vs[sx_j]
+            sx_j = sx_j - 1
+        }
+        sx_ks[sx_j + 1] = sx_k
+        sx_vs[sx_j + 1] = sx_v
+        sx_i = sx_i + 1
+    }
+    return [sx_ks, sx_vs]
+}
+fn binary_search(xs, target) {
+    sx_lo = 0
+    sx_hi = len(xs) - 1
+    while sx_lo <= sx_hi {
+        sx_mid = int((sx_lo + sx_hi) / 2)
+        if xs[sx_mid] == target {
+            return sx_mid
+        }
+        if lt(xs[sx_mid], target) {
+            sx_lo = sx_mid + 1
+        } else {
+            sx_hi = sx_mid - 1
+        }
+    }
+    return 0 - 1
+}
+
+# ===========================================================================
+# stdlib/astar.zl  (verbatim, demo and render helpers removed)
+# ===========================================================================
+LAST_EXPANDED = 0
+
+fn nodes_expanded() {
+    return LAST_EXPANDED
+}
+fn manhattan(mh_a, mh_b) {
+    return abs(mh_a[0] - mh_b[0]) + abs(mh_a[1] - mh_b[1])
+}
+fn cell_open(co_grid, co_r, co_c) {
+    if co_r < 0 or co_c < 0 {
+        return false
+    }
+    if co_r >= len(co_grid) {
+        return false
+    }
+    co_row = co_grid[co_r]
+    if co_c >= len(co_row) {
+        return false
+    }
+    return at(co_row, co_c) != "#"
+}
+fn path_cost(pc_path) {
+    if type(pc_path) == "nil" {
+        return -1
+    }
+    if len(pc_path) == 0 {
+        return -1
+    }
+    return len(pc_path) - 1
+}
+fn astar(as_grid, as_start, as_goal) {
+    LAST_EXPANDED = 0
+    if not cell_open(as_grid, as_start[0], as_start[1]) {
+        return nil()
+    }
+    if not cell_open(as_grid, as_goal[0], as_goal[1]) {
+        return nil()
+    }
+    as_cols = len(as_grid[0])
+    as_n = len(as_grid) * as_cols
+    as_g = fill(as_n, -1)
+    as_came = fill(as_n, -1)
+    as_closed = fill(as_n, 0)
+    as_inopen = fill(as_n, 0)
+    as_si = as_start[0] * as_cols + as_start[1]
+    as_gi = as_goal[0] * as_cols + as_goal[1]
+    as_g[as_si] = 0
+    as_inopen[as_si] = 1
+    as_open = [as_si]
+    while len(as_open) > 0 {
+        as_bestk = 0
+        as_bestf = -1
+        as_besth = -1
+        as_k = 0
+        while as_k < len(as_open) {
+            as_idx = as_open[as_k]
+            as_h = abs(int(as_idx / as_cols) - as_goal[0]) + abs(as_idx % as_cols - as_goal[1])
+            as_f = as_g[as_idx] + as_h
+            if as_bestf < 0 or as_f < as_bestf or (as_f == as_bestf and as_h < as_besth) {
+                as_bestf = as_f
+                as_besth = as_h
+                as_bestk = as_k
+            }
+            as_k = as_k + 1
+        }
+        as_cur = as_open[as_bestk]
+        as_open = remove(as_open, as_bestk)
+        as_inopen[as_cur] = 0
+        as_closed[as_cur] = 1
+        LAST_EXPANDED = LAST_EXPANDED + 1
+        if as_cur == as_gi {
+            as_path = []
+            as_at = as_gi
+            while as_at >= 0 {
+                as_path = push(as_path, [int(as_at / as_cols), as_at % as_cols])
+                as_at = as_came[as_at]
+            }
+            return reverse(as_path)
+        }
+        as_cr = int(as_cur / as_cols)
+        as_cc = as_cur % as_cols
+        for as_d in [[-1, 0], [0, 1], [1, 0], [0, -1]] {
+            as_nr = as_cr + as_d[0]
+            as_nc = as_cc + as_d[1]
+            if cell_open(as_grid, as_nr, as_nc) {
+                as_ni = as_nr * as_cols + as_nc
+                if as_closed[as_ni] == 0 {
+                    as_tent = as_g[as_cur] + 1
+                    if as_g[as_ni] < 0 or as_tent < as_g[as_ni] {
+                        as_g[as_ni] = as_tent
+                        as_came[as_ni] = as_cur
+                        if as_inopen[as_ni] == 0 {
+                            as_inopen[as_ni] = 1
+                            as_open = push(as_open, as_ni)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return nil()
+}
+fn bfs_path(bp_grid, bp_start, bp_goal) {
+    LAST_EXPANDED = 0
+    if not cell_open(bp_grid, bp_start[0], bp_start[1]) {
+        return nil()
+    }
+    if not cell_open(bp_grid, bp_goal[0], bp_goal[1]) {
+        return nil()
+    }
+    bp_cols = len(bp_grid[0])
+    bp_n = len(bp_grid) * bp_cols
+    bp_came = fill(bp_n, -1)
+    bp_seen = fill(bp_n, 0)
+    bp_si = bp_start[0] * bp_cols + bp_start[1]
+    bp_gi = bp_goal[0] * bp_cols + bp_goal[1]
+    bp_seen[bp_si] = 1
+    bp_queue = [bp_si]
+    bp_head = 0
+    while bp_head < len(bp_queue) {
+        bp_cur = bp_queue[bp_head]
+        bp_head = bp_head + 1
+        LAST_EXPANDED = LAST_EXPANDED + 1
+        if bp_cur == bp_gi {
+            bp_path = []
+            bp_at = bp_gi
+            while bp_at >= 0 {
+                bp_path = push(bp_path, [int(bp_at / bp_cols), bp_at % bp_cols])
+                bp_at = bp_came[bp_at]
+            }
+            return reverse(bp_path)
+        }
+        bp_cr = int(bp_cur / bp_cols)
+        bp_cc = bp_cur % bp_cols
+        for bp_d in [[-1, 0], [0, 1], [1, 0], [0, -1]] {
+            bp_nr = bp_cr + bp_d[0]
+            bp_nc = bp_cc + bp_d[1]
+            if cell_open(bp_grid, bp_nr, bp_nc) {
+                bp_ni = bp_nr * bp_cols + bp_nc
+                if bp_seen[bp_ni] == 0 {
+                    bp_seen[bp_ni] = 1
+                    bp_came[bp_ni] = bp_cur
+                    bp_queue = push(bp_queue, bp_ni)
+                }
+            }
+        }
+    }
+    return nil()
+}
+fn path_valid(pv_grid, pv_path, pv_start, pv_goal) {
+    if type(pv_path) == "nil" {
+        return false
+    }
+    if len(pv_path) == 0 {
+        return false
+    }
+    if first(pv_path)[0] != pv_start[0] or first(pv_path)[1] != pv_start[1] {
+        return false
+    }
+    if last(pv_path)[0] != pv_goal[0] or last(pv_path)[1] != pv_goal[1] {
+        return false
+    }
+    pv_i = 0
+    while pv_i < len(pv_path) {
+        if not cell_open(pv_grid, pv_path[pv_i][0], pv_path[pv_i][1]) {
+            return false
+        }
+        if pv_i > 0 {
+            if manhattan(pv_path[pv_i - 1], pv_path[pv_i]) != 1 {
+                return false
+            }
+        }
+        pv_i = pv_i + 1
+    }
+    return true
+}
+
+# ===========================================================================
+# stdlib/dijkstra.zl  (verbatim, self-test removed)
+# ===========================================================================
+# UNREACHABLE IS nil, NOT A BIG NUMBER. The sentinel used to be 1000000000,
+# which sits INSIDE the range of legal distances: two ordinary weights of
+# 600000000 give a true distance of 1200000000, which is not "< 1000000000",
+# so the edge was never relaxed and a REACHABLE node was reported unreachable.
+fn dj_inf(di_d) {
+  return di_d == nil()
+}
+
+fn dj_neighbors(graph, node) {
+  for dn_pair in graph {
+    if dn_pair[0] == node {
+      return dn_pair[1]
+    }
+  }
+  return []
+}
+fn dj_get(dists, node) {
+  for dg_pair in dists {
+    if dg_pair[0] == node {
+      return dg_pair[1]
+    }
+  }
+  return nil()
+}
+fn dj_set(dists, node, val) {
+  ds_out = []
+  ds_found = false
+  for ds_pair in dists {
+    if ds_pair[0] == node {
+      ds_out = push(ds_out, [node, val])
+      ds_found = true
+    } else {
+      ds_out = push(ds_out, ds_pair)
+    }
+  }
+  if not ds_found {
+    ds_out = push(ds_out, [node, val])
+  }
+  return ds_out
+}
+fn dijkstra(graph, start) {
+  dk_dists = []
+  for dk_ipair in graph {
+    dk_dists = dj_set(dk_dists, dk_ipair[0], nil())
+  }
+  dk_dists = dj_set(dk_dists, start, 0)
+  dk_visited = []
+  dk_count = len(graph)
+  dk_i = 0
+  while dk_i < dk_count {
+    dk_u = ""
+    dk_best = 0
+    dk_have = false
+    for dk_dp in dk_dists {
+      if not contains(dk_visited, dk_dp[0]) and not dj_inf(dk_dp[1]) {
+        if not dk_have or dk_dp[1] < dk_best {
+          dk_best = dk_dp[1]
+          dk_u = dk_dp[0]
+          dk_have = true
+        }
+      }
+    }
+    if not dk_have {
+      dk_i = dk_count
+    } else {
+      dk_visited = push(dk_visited, dk_u)
+      dk_nbrs = dj_neighbors(graph, dk_u)
+      for dk_nb in dk_nbrs {
+        dk_v = dk_nb[0]
+        dk_w = dk_nb[1]
+        dk_alt = dk_best + dk_w
+        dk_old = dj_get(dk_dists, dk_v)
+        if dj_inf(dk_old) or dk_alt < dk_old {
+          dk_dists = dj_set(dk_dists, dk_v, dk_alt)
+        }
+      }
+      dk_i = dk_i + 1
+    }
+  }
+  return dk_dists
+}
+
+# ===========================================================================
+# Test-only helpers (not from stdlib)
+# ===========================================================================
+
+# Run every sort in sortx plus the builtin against one hand-worked answer.
+fn all_sorts(qs_label, qs_in, qs_want) {
+    check(qs_label + " builtin sort()", sort(qs_in),           qs_want)
+    check(qs_label + " merge_sort",     merge_sort(qs_in),     qs_want)
+    check(qs_label + " insertion_sort", insertion_sort(qs_in), qs_want)
+    check(qs_label + " selection_sort", selection_sort(qs_in), qs_want)
+    check(qs_label + " bubble_sort",    bubble_sort(qs_in),    qs_want)
+    return 0
+}
+
+# True when the finite (non-nan) members of a list are in non-decreasing order.
+# Used to state what a sort must do even when a nan is present.
+fn finite_ordered(fo_xs) {
+    fo_ok = true
+    fo_seen = false
+    fo_prev = 0
+    fo_i = 0
+    while fo_i < len(fo_xs) {
+        fo_v = fo_xs[fo_i]
+        if fo_v == fo_v {                     # nan is the only value != itself
+            if fo_seen {
+                if fo_v < fo_prev {
+                    fo_ok = false
+                }
+            }
+            fo_prev = fo_v
+            fo_seen = true
+        }
+        fo_i = fo_i + 1
+    }
+    return fo_ok
+}
+
+# "r,c" -- a node id for the grid-to-graph conversion.
+fn cell_name(cn_r, cn_c) {
+    return str(cn_r) + "," + str(cn_c)
+}
+
+# Turn a character grid into the [node, [[neighbor, weight], ...]] shape that
+# dijkstra() eats: one node per open cell, a weight-1 edge to each open
+# orthogonal neighbour. astar and dijkstra then answer the SAME question.
+fn grid_graph(gg_grid) {
+    gg_out = []
+    gg_r = 0
+    while gg_r < len(gg_grid) {
+        gg_c = 0
+        while gg_c < len(gg_grid[gg_r]) {
+            if cell_open(gg_grid, gg_r, gg_c) {
+                gg_nbrs = []
+                for gg_d in [[-1, 0], [0, 1], [1, 0], [0, -1]] {
+                    if cell_open(gg_grid, gg_r + gg_d[0], gg_c + gg_d[1]) {
+                        gg_nbrs = push(gg_nbrs, [cell_name(gg_r + gg_d[0], gg_c + gg_d[1]), 1])
+                    }
+                }
+                gg_out = push(gg_out, [cell_name(gg_r, gg_c), gg_nbrs])
+            }
+            gg_c = gg_c + 1
+        }
+        gg_r = gg_r + 1
+    }
+    return gg_out
+}
+
+# dijkstra's distance to a cell, folded onto path_cost's convention
+# (-1 means "no path") so the two algorithms can be compared directly.
+fn dij_cost(dc_dists, dc_r, dc_c) {
+    dc_d = dj_get(dc_dists, cell_name(dc_r, dc_c))
+    if dj_inf(dc_d) {
+        return -1
+    }
+    return dc_d
+}
+
+t_nan = fmod(5, 0)                 # the only way to make a nan in zl
+
+# ===========================================================================
+# 1. Every sort agrees with the builtin sort()
+# ===========================================================================
+# Wants below are the input re-listed in non-decreasing order, by hand.
+print("-- sorts vs builtin sort() --")
+
+all_sorts("random  ", [5, 3, 8, 1, 9, 2, 7], [1, 2, 3, 5, 7, 8, 9])
+all_sorts("sorted  ", [1, 2, 3, 4, 5],       [1, 2, 3, 4, 5])
+all_sorts("reverse ", [5, 4, 3, 2, 1],       [1, 2, 3, 4, 5])
+all_sorts("allequal", [7, 7, 7, 7],          [7, 7, 7, 7])
+all_sorts("single  ", [42],                  [42])
+all_sorts("empty   ", [],                    [])
+all_sorts("pair-hi ", [2, 1],                [1, 2])
+all_sorts("pair-lo ", [1, 2],                [1, 2])
+all_sorts("dups+0  ", [3, 0, 3, 1, 0, 2],    [0, 0, 1, 2, 3, 3])
+all_sorts("negative", [-3, 0, -7, 2, -1],    [-7, -3, -1, 0, 2])
+all_sorts("fraction", [1.5, -2.25, 0, 1.5],  [-2.25, 0, 1.5, 1.5])
+all_sorts("bigrange", [1000000, -1000000, 0], [-1000000, 0, 1000000])
+
+# ---------------------------------------------------------------- counting_sort
+# Documented contract: non-negative whole numbers only. (A negative member
+# indexes counts[-1] and the interpreter aborts with "list index out of range",
+# which is why no such call is made live in this file - it would kill the run
+# before report(). Repro:  counting_sort([3, -1, 2])
+# A fractional member is silently truncated: counting_sort([1.5, 0.5, 2])
+# returns [0, 1, 2], i.e. it invents values that were never in the input.)
+print("-- counting_sort (non-negative whole numbers) --")
+check("counting_sort random",   counting_sort([4, 2, 7, 2, 0, 5, 2]), [0, 2, 2, 2, 4, 5, 7])
+check("counting_sort sorted",   counting_sort([0, 1, 2, 3]),          [0, 1, 2, 3])
+check("counting_sort reverse",  counting_sort([3, 2, 1, 0]),          [0, 1, 2, 3])
+check("counting_sort allequal", counting_sort([5, 5, 5]),             [5, 5, 5])
+check("counting_sort single",   counting_sort([9]),                   [9])
+check("counting_sort empty",    counting_sort([]),                    [])
+check("counting_sort zero-only", counting_sort([0, 0]),               [0, 0])
+check("counting_sort gap",      counting_sort([6, 0]),                [0, 6])
+check("counting_sort == sort()", str(counting_sort([4, 2, 7, 2, 0, 5, 2])) == str(sort([4, 2, 7, 2, 0, 5, 2])), true)
+
+# ---------------------------------------------------------------- sort_desc
+print("-- sort_desc --")
+check("sort_desc random",   sort_desc([5, 3, 8, 1]), [8, 5, 3, 1])
+check("sort_desc sorted",   sort_desc([1, 2, 3]),    [3, 2, 1])
+check("sort_desc reverse",  sort_desc([3, 2, 1]),    [3, 2, 1])
+check("sort_desc allequal", sort_desc([4, 4]),       [4, 4])
+check("sort_desc single",   sort_desc([1]),          [1])
+check("sort_desc empty",    sort_desc([]),           [])
+check("sort_desc negative", sort_desc([-1, -9, 3]),  [3, -1, -9])
+check("sort_desc == reverse(sort())", str(sort_desc([5, 3, 8, 1])) == str(reverse(sort([5, 3, 8, 1]))), true)
+
+# ---------------------------------------------------------------- is_sorted
+print("-- is_sorted --")
+check("is_sorted empty",    is_sorted([]),           true)      # vacuously
+check("is_sorted single",   is_sorted([1]),          true)
+check("is_sorted ascending", is_sorted([1, 2, 3]),   true)
+check("is_sorted allequal", is_sorted([2, 2, 2]),    true)      # ties are fine
+check("is_sorted one swap", is_sorted([1, 3, 2]),    false)
+check("is_sorted reverse",  is_sorted([3, 2, 1]),    false)
+check("is_sorted last bad", is_sorted([1, 2, 0]),    false)
+check("is_sorted of sort()", is_sorted(sort([9, 1, 5, 5, 0])), true)
+
+# ---------------------------------------------------------------- no mutation
+# sortx promises "the caller's list is never touched". Sorting the same list
+# eight times must not change it.
+print("-- input is not mutated --")
+t_src = [3, 1, 2]
+merge_sort(t_src)
+insertion_sort(t_src)
+selection_sort(t_src)
+bubble_sort(t_src)
+sort_desc(t_src)
+counting_sort(t_src)
+sort(t_src)
+check("input list unchanged", t_src, [3, 1, 2])
+
+# ---------------------------------------------------------------- sort_pairs
+# Keys [3,1,2] with vals ["c","a","b"]: ordering the keys 1,2,3 drags the vals
+# to "a","b","c". Insertion sort on the keys, so ties keep input order.
+print("-- sort_pairs --")
+t_pairs = sort_pairs([3, 1, 2], ["c", "a", "b"])
+check("sort_pairs keys",   t_pairs[0], [1, 2, 3])
+check("sort_pairs vals",   t_pairs[1], ["a", "b", "c"])
+t_pairs = sort_pairs([2, 2, 1], ["x", "y", "z"])
+check("sort_pairs ties keys", t_pairs[0], [1, 2, 2])
+check("sort_pairs stable",    t_pairs[1], ["z", "x", "y"])   # x before y kept
+t_pairs = sort_pairs([], [])
+check("sort_pairs empty keys", t_pairs[0], [])
+check("sort_pairs empty vals", t_pairs[1], [])
+t_pairs = sort_pairs([5], ["only"])
+check("sort_pairs single",     t_pairs[1], ["only"])
+
+# ===========================================================================
+# 2. binary_search vs a linear scan
+# ===========================================================================
+# L = [1, 3, 5, 7, 9, 11]. Traced by hand, mid = int((lo+hi)/2):
+#   1  -> lo0 hi5 mid2(5)>1 hi1 | lo0 hi1 mid0(1)== -> 0
+#   3  -> lo0 hi5 mid2(5)>3 hi1 | mid0(1)<3 lo1 | mid1(3)== -> 1
+#   5  -> mid2(5)== -> 2
+#   7  -> mid2(5)<7 lo3 | lo3 hi5 mid4(9)>7 hi3 | mid3(7)== -> 3
+#   9  -> mid2(5)<9 lo3 | mid4(9)== -> 4
+#   11 -> mid2<11 lo3 | mid4(9)<11 lo5 | mid5(11)== -> 5
+#   4  -> mid2(5)>4 hi1 | mid0(1)<4 lo1 | mid1(3)<4 lo2 > hi1 -> -1
+print("-- binary_search --")
+t_l = [1, 3, 5, 7, 9, 11]
+check("bsearch first",   binary_search(t_l, 1),  0)
+check("bsearch second",  binary_search(t_l, 3),  1)
+check("bsearch middle",  binary_search(t_l, 5),  2)
+check("bsearch fourth",  binary_search(t_l, 7),  3)
+check("bsearch fifth",   binary_search(t_l, 9),  4)
+check("bsearch last",    binary_search(t_l, 11), 5)
+check("bsearch gap",     binary_search(t_l, 4),  -1)
+check("bsearch below",   binary_search(t_l, 0),  -1)
+check("bsearch above",   binary_search(t_l, 12), -1)
+check("bsearch empty",   binary_search([], 1),   -1)
+check("bsearch one hit", binary_search([7], 7),  0)
+check("bsearch one low", binary_search([7], 6),  -1)
+check("bsearch one high", binary_search([7], 8), -1)
+check("bsearch two lo",  binary_search([0, 1], 0), 0)
+check("bsearch two hi",  binary_search([0, 1], 1), 1)
+check("bsearch negatives", binary_search([-5, -3, -1], -5), 0)
+check("bsearch neg mid", binary_search([-5, -3, -1], -3), 1)
+check("bsearch fractions", binary_search([-2.5, 0, 0.5, 9], 0.5), 2)
+
+# Agreement with a linear scan over EVERY member and non-member of a
+# duplicate-free sorted list. index_of() is the linear scan.
+t_hits = 0
+t_misses = 0
+t_probe = -2
+while t_probe <= 13 {
+    if binary_search(t_l, t_probe) == index_of(t_l, t_probe) {
+        t_hits = t_hits + 1
+    } else {
+        t_misses = t_misses + 1
+        print("    (bsearch/index_of split on " + str(t_probe) + ")")
+    }
+    t_probe = t_probe + 1
+}
+check("bsearch == index_of over -2..13", [t_hits, t_misses], [16, 0])
+
+# Duplicates: the doc promises "the index", not the LEFTMOST index, so the two
+# searches legitimately land on different slots. Pinned here so a change shows.
+#   [2,2,2,2]: lo0 hi3 mid=int(3/2)=1 -> hit at 1;  index_of scans -> 0
+check("bsearch dup lands on 1",    binary_search([2, 2, 2, 2], 2), 1)
+check("index_of dup lands on 0",   index_of([2, 2, 2, 2], 2),      0)
+check("bsearch dup index is valid", [2, 2, 2, 2][binary_search([2, 2, 2, 2], 2)], 2)
+check("bsearch agrees on presence", binary_search([1, 2, 2, 3], 2) >= 0, index_of([1, 2, 2, 3], 2) >= 0)
+check("bsearch agrees on absence",  binary_search([1, 2, 2, 3], 9) >= 0, index_of([1, 2, 2, 3], 9) >= 0)
+
+# ===========================================================================
+# 3. astar vs dijkstra vs BFS on the SAME graph
+# ===========================================================================
+print("-- astar / dijkstra / bfs --")
+
+# A 5x5 with one gap in the middle wall.
+#   0 #####
+#   1 #...#
+#   2 ##.##
+#   3 #...#
+#   4 #####
+# From [1,1] the only route to [3,3] is 1,1 -> 1,2 -> 2,2 -> 3,2 -> 3,3: 4 steps.
+t_walled = []
+t_walled = push(t_walled, "#####")
+t_walled = push(t_walled, "#...#")
+t_walled = push(t_walled, "##.##")
+t_walled = push(t_walled, "#...#")
+t_walled = push(t_walled, "#####")
+t_wg = grid_graph(t_walled)
+t_wd = dijkstra(t_wg, cell_name(1, 1))
+
+check("walled graph node count", len(t_wg), 7)          # 3 + 1 + 3 open cells
+check("walled A* cost [1,1]->[3,3]",  path_cost(astar(t_walled, [1, 1], [3, 3])), 4)
+check("walled dij  cost [1,1]->[3,3]", dij_cost(t_wd, 3, 3), 4)
+check("walled BFS  cost [1,1]->[3,3]", path_cost(bfs_path(t_walled, [1, 1], [3, 3])), 4)
+check("walled A* exact path", astar(t_walled, [1, 1], [3, 3]), [[1, 1], [1, 2], [2, 2], [3, 2], [3, 3]])
+check("walled A* path is walkable", path_valid(t_walled, astar(t_walled, [1, 1], [3, 3]), [1, 1], [3, 3]), true)
+check("walled A* == dij [1,1]->[1,3]", path_cost(astar(t_walled, [1, 1], [1, 3])), dij_cost(t_wd, 1, 3))
+check("walled cost [1,1]->[1,3] is 2", dij_cost(t_wd, 1, 3), 2)
+check("walled A* == dij [1,1]->[3,1]", path_cost(astar(t_walled, [1, 1], [3, 1])), dij_cost(t_wd, 3, 1))
+check("walled cost [1,1]->[3,1] is 4", dij_cost(t_wd, 3, 1), 4)
+check("walled self cost is 0",         path_cost(astar(t_walled, [1, 1], [1, 1])), 0)
+check("walled dij self cost is 0",     dij_cost(t_wd, 1, 1), 0)
+check("walled A* into a wall is nil",  type(astar(t_walled, [1, 1], [0, 0])), "nil")
+check("walled dij never reaches a wall", dij_cost(t_wd, 0, 0), -1)
+
+# Sealed: two parallel shafts with no connection.
+t_sealed = []
+t_sealed = push(t_sealed, "#####")
+t_sealed = push(t_sealed, "#.#.#")
+t_sealed = push(t_sealed, "#.#.#")
+t_sealed = push(t_sealed, "#.#.#")
+t_sealed = push(t_sealed, "#####")
+t_sd = dijkstra(grid_graph(t_sealed), cell_name(1, 1))
+check("sealed A* is nil",        type(astar(t_sealed, [1, 1], [1, 3])), "nil")
+check("sealed A* cost is -1",    path_cost(astar(t_sealed, [1, 1], [1, 3])), -1)
+check("sealed dij is unreachable", dij_cost(t_sd, 1, 3), -1)
+check("sealed dij same shaft",   dij_cost(t_sd, 3, 1), 2)
+check("sealed A* same shaft",    path_cost(astar(t_sealed, [1, 1], [3, 1])), 2)
+
+# A 3x3 with no walls at all: [0,0]->[2,2] is 2 down + 2 right = 4 steps,
+# 5 cells. Which of the six shortest routes A* picks is a tie-break detail, so
+# only the cost, the length and walkability are asserted.
+t_open3 = []
+t_open3 = push(t_open3, "...")
+t_open3 = push(t_open3, "...")
+t_open3 = push(t_open3, "...")
+t_o3 = dijkstra(grid_graph(t_open3), cell_name(0, 0))
+check("3x3 A* cost",   path_cost(astar(t_open3, [0, 0], [2, 2])), 4)
+check("3x3 A* cells",  len(astar(t_open3, [0, 0], [2, 2])),       5)
+check("3x3 dij cost",  dij_cost(t_o3, 2, 2),                      4)
+check("3x3 A* valid",  path_valid(t_open3, astar(t_open3, [0, 0], [2, 2]), [0, 0], [2, 2]), true)
+check("3x3 corner-to-edge", dij_cost(t_o3, 0, 2), 2)
+check("3x3 A* == manhattan (no walls)", path_cost(astar(t_open3, [0, 0], [2, 2])), manhattan([0, 0], [2, 2]))
+check("3x3 dij centre", dij_cost(t_o3, 1, 1), 2)
+
+# The 12x20 maze from stdlib/astar.zl. Its 50-step answer is hand-counted in
+# that file's comments; here dijkstra confirms it independently by settling
+# every one of the 101 open cells.
+t_maze = []
+t_maze = push(t_maze, "####################")
+t_maze = push(t_maze, "#........#.........#")
+t_maze = push(t_maze, "#.######.#.#######.#")
+t_maze = push(t_maze, "#.#....#.#.#.....#.#")
+t_maze = push(t_maze, "#.#.##.#.#.#.###.#.#")
+t_maze = push(t_maze, "#...#..#...#...#...#")
+t_maze = push(t_maze, "#####.####.###.#####")
+t_maze = push(t_maze, "#.....#......#.....#")
+t_maze = push(t_maze, "#.#####.####.#.###.#")
+t_maze = push(t_maze, "#.....#....#.#...#.#")
+t_maze = push(t_maze, "#.###.####.#.###...#")
+t_maze = push(t_maze, "####################")
+t_mazed = dijkstra(grid_graph(t_maze), cell_name(1, 1))
+t_ap = astar(t_maze, [1, 1], [10, 18])
+t_aseen = nodes_expanded()
+t_bp = bfs_path(t_maze, [1, 1], [10, 18])
+t_bseen = nodes_expanded()
+check("maze open cells",       len(grid_graph(t_maze)), 101)
+check("maze A* cost",          path_cost(t_ap),  50)
+check("maze BFS cost",         path_cost(t_bp),  50)
+check("maze dij cost",         dij_cost(t_mazed, 10, 18), 50)
+check("maze A* == dij",        path_cost(t_ap) == dij_cost(t_mazed, 10, 18), true)
+check("maze A* path walkable", path_valid(t_maze, t_ap, [1, 1], [10, 18]), true)
+check("maze A* settles fewer than BFS", t_aseen < t_bseen, true)
+check("maze BFS settles every open cell", t_bseen, 101)
+check("maze A* dead-end corner [3,3]", path_cost(astar(t_maze, [1, 1], [3, 3])) == dij_cost(t_mazed, 3, 3), true)
+
+# Weighted graph (stdlib/dijkstra.zl's g1), where the edge weights matter and
+# the greedy first hop is wrong. By hand from A:
+#   A=0; B=1 (A-1->B); C=3 (A-1->B-2->C beats A-4->C); D=4 (C-1->D beats
+#   B-5->D=6); E=7 (D-3->E).
+print("-- dijkstra on a weighted graph --")
+t_g1 = [["A", [["B", 1], ["C", 4]]], ["B", [["C", 2], ["D", 5]]], ["C", [["D", 1]]], ["D", [["E", 3]]], ["E", []]]
+t_r1 = dijkstra(t_g1, "A")
+check("dij A", dj_get(t_r1, "A"), 0)
+check("dij B", dj_get(t_r1, "B"), 1)
+check("dij C beats the direct 4-edge", dj_get(t_r1, "C"), 3)
+check("dij D", dj_get(t_r1, "D"), 4)
+check("dij E", dj_get(t_r1, "E"), 7)
+check("dij result size", len(t_r1), 5)
+
+# Unreachable node, zero-weight edges, and a self-loop.
+#   S-2->B, S-7->A, A-3->B, A-1->T, B-7->T; Z has an edge INTO S but none out
+#   of S, so Z is unreachable. A=7, B=2, T=min(7+1, 2+7)=8.
+t_g2 = [["S", [["A", 7], ["B", 2]]], ["A", [["B", 3], ["T", 1]]], ["B", [["T", 7]]], ["T", []], ["Z", [["S", 1]]]]
+t_r2 = dijkstra(t_g2, "S")
+check("dij S", dj_get(t_r2, "S"), 0)
+check("dij A via direct edge", dj_get(t_r2, "A"), 7)
+check("dij B", dj_get(t_r2, "B"), 2)
+check("dij T takes the A route", dj_get(t_r2, "T"), 8)
+check("dij Z unreachable", dj_get(t_r2, "Z"), nil())
+t_g3 = [["A", [["B", 0], ["A", 5]]], ["B", [["C", 0]]], ["C", []]]
+t_r3 = dijkstra(t_g3, "A")
+check("dij zero-weight chain B", dj_get(t_r3, "B"), 0)
+check("dij zero-weight chain C", dj_get(t_r3, "C"), 0)
+check("dij ignores its self-loop", dj_get(t_r3, "A"), 0)
+check("dij single node", dijkstra([["A", []]], "A"), [["A", 0]])
+check("dij missing node is unreachable", dj_get(t_r1, "nope"), nil())
+
+# ===========================================================================
+# 4. FORMER DEFECTS - each of these was red; the fix is recorded beside it
+# ===========================================================================
+print("-- former defects (regression checks) --")
+
+# BUG 2 (fixed): one nan in the list and sort() stopped sorting the numbers
+# around it. nan is reachable from pure zl (fmod(x,0), 0/0, sqrt(-1)), so this
+# was squarely inside sort()'s contract.
+#   sort([2, nan, 1])       -> [2, nan, 1]              (1 must precede 2)
+#   sort([9,8,7,nan,6,5,4]) -> [7, 8, 9, nan, 4, 5, 6]  (each half sorted only)
+# Every comparison against a nan is false, so the insertion sort stopped dead
+# at it and the two partitions never merged.
+# FIX: sort() has a real total-order comparator (interp.c value_compare) that
+# places nan after every real number.
+check("sort() orders the finite members (1 nan)",  finite_ordered(sort([2, t_nan, 1])), true)
+check("sort() orders the finite members (7 elts)", finite_ordered(sort([9, 8, 7, t_nan, 6, 5, 4])), true)
+check("sort() leaves no finite inversion",         sort([9, 8, 7, t_nan, 6, 5, 4]), [4, 5, 6, 7, 8, 9, t_nan])
+
+# BUG 3 (fixed): the five sorts stopped agreeing as soon as a nan appeared.
+# On [3, nan, 1, 2] the builtin gave [3, nan, 1, 2], merge [1, 2, 3, nan],
+# insertion [1, 2, nan, 3], selection [1, nan, 2, 3], bubble [3, nan, 1, 2].
+# A consequence of BUG 2; the builtin now agrees with merge_sort, which is the
+# one that was already right.
+t_nsb = str(sort([3, t_nan, 1, 2]))
+t_nsm = str(merge_sort([3, t_nan, 1, 2]))
+check("builtin sort() and merge_sort agree on nan input", t_nsb == t_nsm, true)
+
+# BUG 4 (fixed): sort() silently returned a list of strings untouched. It read
+# the .num field of every element whatever its type, and Value is a struct not
+# a union, so for a string that field is uninitialised heap bytes - no swap
+# ever fired, and the same multiset in a different input order came back
+# differently.
+# FIX: value_compare gives sort a total order over EVERY value - nil < bool <
+# num < str < list, strings by byte value, lists element-wise.
+check("sort() orders strings", sort(["zzz", "aaa", "mmm"]), ["aaa", "mmm", "zzz"])
+check("sort() orders lists",   sort([[3], [1], [2]]),       [[1], [2], [3]])
+check("sort() orders by type", sort(["a", 1, nil()]),       [nil(), 1, "a"])
+
+# BUG 4b (fixed): the builtin and the library then disagreed on the SAME input.
+# `<` is numbers-only, so sortx's pure-zl sorts raised "this operator needs
+# numbers" on exactly the string list the builtin now ordered fine. One of the
+# two had to move: making the builtin refuse would have thrown away a correct,
+# useful answer, so the LIBRARY moved instead.
+# FIX: sortx's lt/le go through sx_cmp, which implements the same total order
+# IN ZL. Deliberately not by calling sort(): the library is the independent
+# check on the builtin, and a library that asked sort() for the ordering would
+# agree with it by construction - including on a wrong answer. The two are
+# separate statements of one order, and these checks are what holds them
+# together. `<` itself is unchanged - still numbers-only, deliberately.
+print("-- library agrees with builtin on non-numbers --")
+t_words = ["pear", "fig", "apple", "fig"]
+check("merge_sort strings",     merge_sort(t_words),     sort(t_words))
+check("insertion_sort strings", insertion_sort(t_words), sort(t_words))
+check("selection_sort strings", selection_sort(t_words), sort(t_words))
+check("bubble_sort strings",    bubble_sort(t_words),    sort(t_words))
+check("is_sorted on strings",   is_sorted(sort(t_words)), true)
+t_mixed = [[2], "a", 1, true, nil()]
+check("merge_sort mixed types", merge_sort(t_mixed),     sort(t_mixed))
+check("bubble_sort mixed types", bubble_sort(t_mixed),   sort(t_mixed))
+check("merge_sort lists",       merge_sort([[3], [1], [2]]), sort([[3], [1], [2]]))
+check("binary_search a string", binary_search(sort(t_words), "pear"), 3)
+t_pw = sort_pairs(["c", "a", "b"], [3, 1, 2])
+check("sort_pairs string keys", t_pw[0], ["a", "b", "c"])
+check("sort_pairs string vals", t_pw[1], [1, 2, 3])
+
+# The order itself, worked out BY HAND - no sort() on either side. This is
+# what makes the block above a real cross-check rather than a tautology: two
+# implementations that drifted together would still agree with each other,
+# but they would not agree with this.
+print("-- the total order, worked out by hand --")
+check("hand nil before false",    sx_cmp(nil(), false),  -1)
+check("hand false before true",   sx_cmp(false, true),   -1)
+check("hand bool before num",     sx_cmp(true, 0),       -1)
+check("hand num before str",      sx_cmp(0, ""),         -1)
+check("hand str before list",     sx_cmp("", []),        -1)
+check("hand nil ties with nil",   sx_cmp(nil(), nil()),  0)
+check("hand 1 before 2",          sx_cmp(1, 2),          -1)
+check("hand -1 before 0",         sx_cmp(-1, 0),         -1)
+check("hand nan after a number",  sx_cmp(t_nan, 9),      1)
+check("hand number before nan",   sx_cmp(9, t_nan),      -1)
+check("hand nan ties with nan",   sx_cmp(t_nan, t_nan),  0)
+check("hand upper B before a",    sx_cmp("B", "a"),      -1)   # byte value, not folded
+check("hand prefix sorts first",  sx_cmp("ab", "a"),     1)    # shorter first
+check("hand byte 200 after z",    sx_cmp(chr(200), "z"), 1)    # bytes are unsigned
+check("hand shorter list first",  sx_cmp([1], [1, 2]),   -1)
+check("hand element beats length", sx_cmp([1, 2], [2]),  -1)
+check("hand empty list first",    sx_cmp([], [nil()]),   -1)
+check("hand order is antisymmetric", sx_cmp("a", "b") == 0 - sx_cmp("b", "a"), true)
+check("hand one of each type",    merge_sort([[2], "a", 1, true, nil()]), [nil(), true, 1, "a", [2]])
+check("hand merge_sort words",    merge_sort(["pear", "fig", "apple", "fig"]), ["apple", "fig", "fig", "pear"])
+check("hand insertion_sort words", insertion_sort(["pear", "fig", "apple", "fig"]), ["apple", "fig", "fig", "pear"])
+check("hand bubble_sort by byte", bubble_sort(["b", "B", "a", "A"]), ["A", "B", "a", "b"])
+check("hand selection_sort lists", selection_sort([[3], [1], [2]]), [[1], [2], [3]])
+check("hand is_sorted by byte",   is_sorted(["A", "B", "a", "b"]), true)
+check("hand is_sorted rejects fold", is_sorted(["a", "B"]),        false)
+
+# BUG 5 (fixed): dijkstra.zl used 1000000000 as its "unreachable" sentinel,
+# which sits INSIDE the range of legal distances, so a genuinely reachable node
+# whose distance reached it was reported unreachable. The weights below are
+# ordinary non-negative numbers, which is all the module's contract asks for.
+#   A -600000000-> B -600000000-> C   =>  dist(C) = 1200000000, reported as
+#   1000000000, i.e. print_dists() called C "unreachable".
+# FIX: the marker is nil(), which cannot collide with a distance however large.
+t_gbig = [["A", [["B", 600000000]]], ["B", [["C", 600000000]]], ["C", []]]
+t_rbig = dijkstra(t_gbig, "A")
+check("dij B under the old sentinel", dj_get(t_rbig, "B"), 600000000)
+check("dij C over the old sentinel",  dj_get(t_rbig, "C"), 1200000000)
+check("dij single huge weight", dj_get(dijkstra([["A", [["B", 2000000000]]], ["B", []]], "A"), "B"), 2000000000)
+
+# The scope rule, pinned. A PARAMETER BINDS: it gets its own slot in the call
+# scope, so calling a function can no longer rewrite a global that happens to
+# share a parameter name. It used to - `copy_of([9])` left the global `xs`
+# holding [9] - which meant the contract was on the CALLER (do not name a
+# global after a callee's parameter) and is why every other top-level name in
+# this file is prefixed `t_`.
+#
+# What has NOT changed, and is deliberate: a plain ASSIGNMENT inside a function
+# to a name that also exists at top level still writes that global. README.md
+# "Scope gotcha (important)" calls it "a deliberate property the self-hosting
+# compiler relies on, not a bug", and docs/design/design_stdlib_layout.md builds
+# the stdlib layout around it. So the stdlib's per-function name prefixes are
+# still load-bearing - just for locals now, not for parameters.
+#
+# These checks stay last anyway: they create globals named `xs` and `target`,
+# and a future regression here would contaminate everything after.
+#
+# merge_sort(xs) is the load-bearing one - it is recursive, so it binds the
+# parameter `xs` once per level and drives every local in the library through
+# the caller's own list. copy_of([9]) is the single-frame minimum next to it.
+xs = [5, 3, 8, 1]
+merge_sort(xs)
+check("caller's xs survives merge_sort(xs)", xs, [5, 3, 8, 1])
+copy_of([9])
+check("a parameter must not rebind the global of that name", xs, [5, 3, 8, 1])
+target = 42
+binary_search([1, 2, 3], 7)
+check("...same for a second call", target, 42)
+
+report()
+
+# ===========================================================================
+# BUGS FOUND  (all fixed; kept as the record of what the checks above guard)
+# ===========================================================================
+# BUG 1  FILED, THEN SPLIT. Filed as "a function parameter overwrites a
+#        same-named global", withdrawn as documented behaviour, and in the end
+#        half right. The two halves are now separated:
+#          - BINDING a name is scoped. A parameter, and a for-loop variable,
+#            get their own slot in the call scope. `fn ident(xs)` called as
+#            ident([9]) no longer leaves a global `xs` holding [9].
+#          - ASSIGNING a name is not. A plain assignment inside a function to
+#            a name that also exists at top level still writes that global.
+#            README.md "Scope gotcha (important)" calls that "a deliberate
+#            property the self-hosting compiler relies on, not a bug", and it
+#            stays. stdlib's per-function name prefixes are still needed for
+#            locals.
+#        docs/REFERENCE.md still does not mention scoping; the rule lives in
+#        README.md.
+#
+# BUG 2  FIXED. BUILTIN sort() - a nan de-sorted the finite members around it.
+#          print(str(sort([2, fmod(5, 0), 1])))
+#          # want the finite members ordered (1 before 2)   actual [2, nan, 1]
+#          print(str(sort([9, 8, 7, fmod(5, 0), 6, 5, 4])))
+#          # actual [7, 8, 9, nan, 4, 5, 6] - each half sorted, the whole not
+#        Every comparison against a nan is false, so the insertion sort's
+#        inner loop stopped at it and the partitions never merged.
+#        Fix: interp.c value_compare, a total order that sorts nan last.
+#
+# BUG 3  FIXED with BUG 2. The five sorts disagreed on nan input - on
+#        [3, nan, 1, 2] the builtin gave [3, nan, 1, 2], merge [1, 2, 3, nan],
+#        insertion [1, 2, nan, 3], selection [1, nan, 2, 3], bubble
+#        [3, nan, 1, 2]. Note is_sorted() reported true for [3, nan, 1, 2],
+#        because adjacent-pair testing is only valid for a total order - the
+#        library's own validator could not catch it.
+#
+# BUG 4  FIXED. BUILTIN sort() returned a list of strings untouched, silently.
+#          print(str(sort(["zzz", "aaa", "mmm"])))
+#          # want [aaa, mmm, zzz]   actual [zzz, aaa, mmm]
+#        It compared items[j]->num for every element whatever its type, and
+#        .num is never written for a string/list/nil (Value is a struct, not a
+#        union), so it was ordering by uninitialised heap bytes - the same
+#        multiset in a different input order gave a different answer.
+#        Fix: value_compare orders every value type. Deliberately NOT extended
+#        to the `<` operator, which still refuses non-numbers - so the sortx
+#        sorts still raise on a string list, and that is the intended split.
+#
+# BUG 5  FIXED. stdlib/dijkstra.zl's INF sentinel (1000000000) was inside the
+#        range of legal distances, so a reachable node could be reported
+#        unreachable.
+#          dijkstra([["A", [["B", 2000000000]]], ["B", []]], "A")
+#          # want B = 2000000000   actual B = 1000000000 ("unreachable")
+#        Also reached by summing ordinary weights: 600000000 + 600000000.
+#        Fix: the marker is nil(), which no distance can collide with.
+#
+# NOT BUGS (contract checked, recorded so a future change is visible)
+#   * counting_sort aborts the interpreter on a negative member
+#     ("list index out of range" from counts[-1]) and silently truncates
+#     fractional members - both are outside its documented "non-negative
+#     whole numbers only" contract. No live check, since the abort would
+#     take report() with it.  Repro: counting_sort([3, -1, 2])
+#   * binary_search on duplicates returns a matching index, not the leftmost
+#     one, so it differs from index_of there. The doc promises "the index",
+#     not the first.  binary_search([2,2,2,2], 2) = 1, index_of = 0.
+#   * sort_pairs crashes when keys and vals differ in length. Undocumented,
+#     but no caller in the repo does it.

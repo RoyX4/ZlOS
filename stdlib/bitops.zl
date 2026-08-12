@@ -1,0 +1,171 @@
+# bitops.zl - bitwise operations, which zl has no operators for.
+# Everything is built from arithmetic only: / 2 shifts down, * 2 shifts up,
+# % 2 reads the low bit.
+#
+# Representation: values are non-negative whole numbers, bit 0 being the
+# least significant. There is no fixed word size - a value is as wide as it
+# needs to be - so bnot() takes an explicit bit width to complement within.
+# Numbers are doubles underneath, so results are exact up to 2^53.
+# to_bits() treats its width as a MINIMUM, never truncating, so
+# from_bits(to_bits(x, w)) == x at any width.
+#
+# Naming: zl has no local scope - binding a parameter or assigning inside a
+# function writes the global of that name. So every parameter and local here
+# carries a two-letter tag for its function (an_ = band, sr_ = shr, ...).
+# That is what stops shl() from eating the caller's n, and what stops
+# bit_set()'s own index from being eaten by the pow2() it calls.
+
+fn pow2(pw_n) {
+    pw_p = 1
+    pw_i = 0
+    while pw_i < pw_n {
+        pw_p = pw_p * 2
+        pw_i = pw_i + 1
+    }
+    return pw_p
+}
+fn mask(mk_bits) {
+    return pow2(mk_bits) - 1
+}
+fn band(an_a, an_b) {
+    an_x = an_a
+    an_y = an_b
+    an_out = 0
+    an_place = 1
+    while an_x > 0 and an_y > 0 {
+        if an_x % 2 == 1 and an_y % 2 == 1 {
+            an_out = an_out + an_place
+        }
+        an_x = int(an_x / 2)
+        an_y = int(an_y / 2)
+        an_place = an_place * 2
+    }
+    return an_out
+}
+fn bor(or_a, or_b) {
+    or_x = or_a
+    or_y = or_b
+    or_out = 0
+    or_place = 1
+    while or_x > 0 or or_y > 0 {
+        if or_x % 2 == 1 or or_y % 2 == 1 {
+            or_out = or_out + or_place
+        }
+        or_x = int(or_x / 2)
+        or_y = int(or_y / 2)
+        or_place = or_place * 2
+    }
+    return or_out
+}
+fn bxor(xr_a, xr_b) {
+    xr_x = xr_a
+    xr_y = xr_b
+    xr_out = 0
+    xr_place = 1
+    while xr_x > 0 or xr_y > 0 {
+        if xr_x % 2 != xr_y % 2 {
+            xr_out = xr_out + xr_place
+        }
+        xr_x = int(xr_x / 2)
+        xr_y = int(xr_y / 2)
+        xr_place = xr_place * 2
+    }
+    return xr_out
+}
+fn bnot(nt_a, nt_bits) {
+    nt_m = mask(nt_bits)
+    return nt_m - band(nt_a, nt_m)
+}
+fn shl(sl_a, sl_n) {
+    return sl_a * pow2(sl_n)
+}
+fn shr(sr_a, sr_n) {
+    sr_x = sr_a
+    sr_i = 0
+    while sr_i < sr_n {
+        sr_x = int(sr_x / 2)
+        sr_i = sr_i + 1
+    }
+    return sr_x
+}
+fn bit_get(bg_a, bg_i) {
+    return shr(bg_a, bg_i) % 2
+}
+fn bit_set(bs_a, bs_i) {
+    if bit_get(bs_a, bs_i) == 1 {
+        return bs_a
+    }
+    return bs_a + pow2(bs_i)
+}
+fn bit_clear(bc_a, bc_i) {
+    if bit_get(bc_a, bc_i) == 0 {
+        return bc_a
+    }
+    return bc_a - pow2(bc_i)
+}
+fn popcount(pc_a) {
+    pc_x = pc_a
+    pc_n = 0
+    while pc_x > 0 {
+        pc_n = pc_n + pc_x % 2
+        pc_x = int(pc_x / 2)
+    }
+    return pc_n
+}
+fn to_bits(tb_a, tb_width) {
+    tb_x = tb_a
+    tb_s = ""
+    while tb_x > 0 {
+        tb_s = str(tb_x % 2) + tb_s
+        tb_x = int(tb_x / 2)
+    }
+    if len(tb_s) == 0 {
+        tb_s = "0"
+    }
+    while len(tb_s) < tb_width {
+        tb_s = "0" + tb_s
+    }
+    return tb_s
+}
+fn from_bits(fb_s) {
+    fb_v = 0
+    fb_i = 0
+    while fb_i < len(fb_s) {
+        fb_v = fb_v * 2
+        if at(fb_s, fb_i) == "1" {
+            fb_v = fb_v + 1
+        }
+        fb_i = fb_i + 1
+    }
+    return fb_v
+}
+fn xor_checksum(cs_s) {
+    cs_h = 0
+    cs_i = 0
+    while cs_i < len(cs_s) {
+        cs_h = bxor(cs_h, code(at(cs_s, cs_i)))
+        cs_i = cs_i + 1
+    }
+    return cs_h
+}
+
+print("12 = " + to_bits(12, 8) + ", 10 = " + to_bits(10, 8))
+print("band(12,10):       " + str(band(12, 10)) + "  " + to_bits(band(12, 10), 8))
+print("bor(12,10):        " + str(bor(12, 10)) + " " + to_bits(bor(12, 10), 8))
+print("bxor(12,10):       " + str(bxor(12, 10)) + "  " + to_bits(bxor(12, 10), 8))
+print("bnot(12,8):        " + str(bnot(12, 8)) + " " + to_bits(bnot(12, 8), 8))
+print("all zero:          " + str(band(0, 0)) + " " + str(bor(0, 5)) + " " + str(bxor(7, 7)))
+print("shl(1,10):         " + str(shl(1, 10)))
+print("shl(1,40):         " + str(shl(1, 40)))
+print("shr(1024,3):       " + str(shr(1024, 3)))
+print("bits 3..0 of 12:   " + str(bit_get(12, 3)) + str(bit_get(12, 2)) + str(bit_get(12, 1)) + str(bit_get(12, 0)))
+print("bit_set(8,1):      " + str(bit_set(8, 1)))
+print("bit_clear(15,0):   " + str(bit_clear(15, 0)))
+print("popcount 0/12/255: " + str(popcount(0)) + " " + str(popcount(12)) + " " + str(popcount(255)))
+print("mask(16):          " + str(mask(16)))
+print("to_bits(243,8):    " + to_bits(243, 8))
+print("from_bits(00001100): " + str(from_bits("00001100")))
+print("round trip 1000000:  " + str(from_bits(to_bits(1000000, 8))))
+print("band(0xffffffff,0xf000): " + str(band(4294967295, 61440)))
+print("flags READ|EXEC = " + str(bor(4, 1)) + ", writable: " + str(bit_get(bor(4, 1), 1) == 1))
+print("xor_checksum(\"zl\"):  " + str(xor_checksum("zl")))

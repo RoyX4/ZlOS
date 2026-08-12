@@ -1,0 +1,87 @@
+# primes.zl -- prime number utilities for the zl standard library
+# functions: is_prime(n), primes_up_to(n), nth_prime(k)
+
+# is_prime(n) -- true when n is a prime, by trial division.
+# handles n < 2 (not prime), 2 and 3, then tests odd divisors up to sqrt(n)
+# using i*i <= n so we avoid needing a sqrt built-in.
+fn is_prime(n) {
+    if n < 2 {
+        return false
+    }
+    if n < 4 {
+        # 2 and 3 are prime
+        return true
+    }
+    if n % 2 == 0 {
+        return false
+    }
+    # NOTE: this interpreter shares one variable namespace between function
+    # bodies and callers, so we use a distinctive divisor name (ip_d) that no
+    # caller reuses, to avoid clobbering a caller's loop counter.
+    ip_d = 3
+    while ip_d * ip_d <= n {
+        if n % ip_d == 0 {
+            return false
+        }
+        ip_d = ip_d + 2
+    }
+    return true
+}
+
+# primes_up_to(n) -- list of all primes p with p <= n, in ascending order.
+fn primes_up_to(n) {
+    put_out = []
+    put_k = 2
+    while put_k <= n {
+        if is_prime(put_k) {
+            put_out = push(put_out, put_k)
+        }
+        put_k = put_k + 1
+    }
+    return put_out
+}
+
+# nth_prime(k) -- the k-th prime (1-based): nth_prime(1) == 2, nth_prime(2) == 3, ...
+# returns -1 for k < 1.
+fn nth_prime(k) {
+    if k < 1 {
+        return -1
+    }
+    np_count = 0
+    np_candidate = 1
+    while np_count < k {
+        np_candidate = np_candidate + 1
+        if is_prime(np_candidate) {
+            np_count = np_count + 1
+        }
+    }
+    return np_candidate
+}
+
+# ---------------- self-test ----------------
+print("== is_prime on 0..15 ==")
+i = 0
+while i <= 15 {
+    print("is_prime(" + i + ") = " + is_prime(i))
+    i = i + 1
+}
+
+print("")
+print("== spot checks ==")
+print("is_prime(97) = " + is_prime(97))     # true
+print("is_prime(100) = " + is_prime(100))   # false
+print("is_prime(101) = " + is_prime(101))   # true
+print("is_prime(1) = " + is_prime(1))       # false
+print("is_prime(2) = " + is_prime(2))       # true
+
+print("")
+print("== primes_up_to(30) ==")
+print(primes_up_to(30))                      # 2 3 5 7 11 13 17 19 23 29
+
+print("")
+print("== nth_prime ==")
+print("nth_prime(1) = " + nth_prime(1))      # 2
+print("nth_prime(5) = " + nth_prime(5))      # 11
+print("nth_prime(10) = " + nth_prime(10))    # 29
+print("nth_prime(25) = " + nth_prime(25))    # 97
+print("nth_prime(0) = " + nth_prime(0))      # -1

@@ -1,0 +1,52 @@
+# levenshtein.zl -- edit distance via a rebuilt DP row
+# Each function-local variable is uniquely prefixed to avoid mutating globals.
+
+fn lv_min3(a, b, c) {
+    lv3_m = a
+    if b < lv3_m { lv3_m = b }
+    if c < lv3_m { lv3_m = c }
+    return lv3_m
+}
+
+fn distance(s, t) {
+    d_sn = len(s)
+    d_tn = len(t)
+
+    # Build the initial row: distances from empty prefix of s to prefixes of t.
+    d_prev = []
+    d_j = 0
+    while d_j <= d_tn {
+        d_prev = push(d_prev, d_j)
+        d_j = d_j + 1
+    }
+
+    d_i = 1
+    while d_i <= d_sn {
+        d_sc = at(s, d_i - 1)
+        # First cell of the new row: distance from prefix of s to empty t.
+        d_cur = [d_i]
+        d_k = 1
+        while d_k <= d_tn {
+            d_tc = at(t, d_k - 1)
+            d_cost = 1
+            if d_sc == d_tc { d_cost = 0 }
+            d_del = d_prev[d_k] + 1          # deletion
+            d_ins = d_cur[d_k - 1] + 1       # insertion
+            d_sub = d_prev[d_k - 1] + d_cost # substitution
+            d_cur = push(d_cur, lv_min3(d_del, d_ins, d_sub))
+            d_k = d_k + 1
+        }
+        d_prev = d_cur
+        d_i = d_i + 1
+    }
+
+    return d_prev[d_tn]
+}
+
+# ---- self-test ----
+print("distance(kitten, sitting) = " + distance("kitten", "sitting"))   # expect 3
+print("distance(flaw, lawn) = " + distance("flaw", "lawn"))             # expect 2
+print("distance(gumbo, gambol) = " + distance("gumbo", "gambol"))       # expect 2
+print("distance(same, same) = " + distance("same", "same"))             # expect 0
+print("distance(empty, abc) = " + distance("", "abc"))                  # expect 3
+print("distance(abc, empty) = " + distance("abc", ""))                  # expect 3

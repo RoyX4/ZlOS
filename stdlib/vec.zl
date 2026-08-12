@@ -1,0 +1,49 @@
+# vec.zl - vector math on lists like [x, y] or [x, y, z].
+
+fn vadd(a, b) {
+    out = []
+    i = 0
+    while i < len(a) {
+        out = push(out, a[i] + b[i])
+        i = i + 1
+    }
+    return out
+}
+fn vsub(a, b) {
+    out = []
+    i = 0
+    while i < len(a) {
+        out = push(out, a[i] - b[i])
+        i = i + 1
+    }
+    return out
+}
+fn vscale(a, s) {
+    out = []
+    for x in a {
+        out = push(out, x * s)
+    }
+    return out
+}
+fn vdot(a, b) {
+    s = 0
+    i = 0
+    while i < len(a) {
+        s = s + a[i] * b[i]
+        i = i + 1
+    }
+    return s
+}
+fn vlen(a) {
+    return sqrt(vdot(a, a))
+}
+fn vcross(a, b) {
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+}
+
+print("add:   " + str(vadd([1, 2, 3], [4, 5, 6])))
+print("sub:   " + str(vsub([4, 5, 6], [1, 2, 3])))
+print("dot:   " + str(vdot([1, 2, 3], [4, 5, 6])))
+print("len:   " + str(vlen([3, 4])))
+print("cross: " + str(vcross([1, 0, 0], [0, 1, 0])))
+print("scale: " + str(vscale([1, 2, 3], 10)))

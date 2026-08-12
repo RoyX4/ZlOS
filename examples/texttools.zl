@@ -1,0 +1,66 @@
+# texttools - wc and grep in zl, composing textkit + iterx.
+# wc needed whitespace-run splitting (impossible before textkit); grep needs
+# filter with a predicate (works because functions are first-class). Helpers
+# inlined - no imports yet.
+
+# ---- textkit: split on whitespace runs ----
+fn tk_is_space(c) { return c == " " or c == "\t" or c == "\n" or c == "\r" }
+fn tk_words(s) {
+    tk_out = []
+    tk_cur = ""
+    tk_i = 0
+    while tk_i < len(s) {
+        tk_c = at(s, tk_i)
+        if tk_is_space(tk_c) {
+            if len(tk_cur) > 0 { tk_out = push(tk_out, tk_cur)  tk_cur = "" }
+        } else {
+            tk_cur = tk_cur + tk_c
+        }
+        tk_i = tk_i + 1
+    }
+    if len(tk_cur) > 0 { tk_out = push(tk_out, tk_cur) }
+    return tk_out
+}
+
+# ---- iterx: filter a list by a predicate function ----
+fn ix_filter(xs, keep) {
+    ix_out = []
+    for ix_x in xs {
+        if keep(ix_x) { ix_out = push(ix_out, ix_x) }
+    }
+    return ix_out
+}
+
+# ---- wc: count lines, words, characters ----
+fn wc(text) {
+    wc_lines = split(text, "\n")
+    wc_words = 0
+    wc_chars = len(text)
+    for wc_l in wc_lines { wc_words = wc_words + len(tk_words(wc_l)) }
+    return [len(wc_lines), wc_words, wc_chars]
+}
+
+# ---- grep: keep lines that contain a pattern ----
+# grep needs a predicate that knows the pattern. zl closures can't capture a
+# local, so the pattern rides in a global the predicate reads - the documented
+# way to do "closure-like" behaviour today.
+grep_pat = ""
+fn has_pat(line) { return find(line, grep_pat) >= 0 }   # contains is list-only; find works on strings
+fn grep(text, pattern) {
+    grep_pat = pattern
+    return ix_filter(split(text, "\n"), has_pat)
+}
+
+# ---- run ----
+doc = "the quick brown fox\nthe lazy dog sleeps\na quick red fox runs\nthe end"
+
+counts = wc(doc)
+print("wc:  " + str(counts[0]) + " lines, " + str(counts[1]) + " words, " + str(counts[2]) + " chars")
+
+print("")
+print("grep 'fox':")
+for line in grep(doc, "fox") { print("  " + line) }
+
+print("")
+print("grep 'the':")
+for line in grep(doc, "the") { print("  " + line) }

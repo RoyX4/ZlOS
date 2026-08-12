@@ -1,0 +1,359 @@
+# test_math.zl - math and number builtins.
+#
+# Style follows stdlib/testlib.zl: check(label, got, want) records a pass/fail,
+# report() prints the tally. (zl has no import, so check/report are inlined.)
+#
+# Every want below is worked out by hand. Where a want does NOT match what the
+# interpreter produces, the check is left FAILING on purpose and tagged
+# "### FAILING" with the expected-vs-actual reasoning. A green tick that hides a
+# wrong answer is worth less than a red one that names it.
+#
+# Note on formatting: str() of a number uses %g (6 significant digits), so the
+# irrational wants below are written to 6 significant digits.
+
+g_pass = 0
+g_fail = 0
+
+fn check(label, got, want) {
+    if str(got) == str(want) {
+        g_pass = g_pass + 1
+        print("  PASS  " + label)
+    } else {
+        g_fail = g_fail + 1
+        print("  FAIL  " + label + "  got " + str(got) + " want " + str(want))
+    }
+}
+fn report() {
+    print("----")
+    print(str(g_pass) + " passed, " + str(g_fail) + " failed")
+}
+
+fn is_nan(x) { return x != x }      # IEEE: nan is the only value != itself
+
+nan   = fmod(5, 0)
+inf   = 1 / 0
+big   = pow(10, 200)                 # the lexer rejects the literal 1e200
+tiny  = pow(10, -200)
+negz  = 0 - 0.0                      # negative zero
+
+# ---------------------------------------------------------------- abs
+print("-- abs --")
+check("abs(0)",          abs(0),        0)
+check("abs(-0.0)",       abs(negz),     0)
+check("abs(7.5)",        abs(7.5),      7.5)
+check("abs(-7.5)",       abs(-7.5),     7.5)
+check("abs(-1) is 1",    abs(0 - 1),    1)
+check("abs(inf)",        abs(inf),      inf)
+check("abs(nan) is nan", is_nan(abs(nan)), true)
+
+# ---------------------------------------------------------------- min / max
+print("-- min / max --")
+check("min(3,9)",        min(3, 9),     3)
+check("min(9,3)",        min(9, 3),     3)
+check("min(3,3)",        min(3, 3),     3)          # equal args
+check("min(-5,-9)",      min(-5, -9),   -9)         # both negative
+check("min(-1,0)",       min(-1, 0),    -1)
+check("max(3,9)",        max(3, 9),     9)
+check("max(9,3)",        max(9, 3),     9)
+check("max(-5,-9)",      max(-5, -9),   -5)
+check("max(0,-0.0)",     max(0, negz),  0)
+check("min(0.1,0.2)",    min(0.1, 0.2), 0.1)
+
+# ### FAILING - min/max are order-dependent around nan.
+# By hand: a min/max that meets IEEE-754 minNum/maxNum (and C fmin/fmax) returns
+# the non-nan operand whichever side it is on, so min(1,nan) and min(nan,1) must
+# agree. interp.c does `a <= b ? a : b`; every comparison with nan is false, so
+# it always yields the SECOND argument: min(nan,1)=1 but min(1,nan)=nan.
+# want true, actual false.
+check("min nan order-independent", str(min(1, nan)) == str(min(nan, 1)), true)
+check("max nan order-independent", str(max(1, nan)) == str(max(nan, 1)), true)
+
+# ---------------------------------------------------------------- sign
+print("-- sign --")
+check("sign(0)",         sign(0),       0)
+check("sign(-0.0)",      sign(negz),    0)
+check("sign(12)",        sign(12),      1)
+check("sign(0.001)",     sign(0.001),   1)
+check("sign(-12)",       sign(-12),     -1)
+check("sign(-0.001)",    sign(-0.001),  -1)
+check("sign(inf)",       sign(inf),     1)
+
+# ---------------------------------------------------------------- sqrt
+print("-- sqrt --")
+check("sqrt(0)",         sqrt(0),       0)
+check("sqrt(1)",         sqrt(1),       1)
+check("sqrt(81)",        sqrt(81),      9)
+check("sqrt(0.25)",      sqrt(0.25),    0.5)
+check("sqrt(2)",         sqrt(2),       1.41421)     # 1.4142135... -> 6 s.f.
+check("sqrt(3)",         sqrt(3),       1.73205)
+check("sqrt(2)^2",       sqrt(2) * sqrt(2), 2)
+check("sqrt(-1) is nan", is_nan(sqrt(-1)), true)
+check("sqrt(inf)",       sqrt(inf),     inf)
+
+# ---------------------------------------------------------------- pow
+print("-- pow --")
+check("pow(2,10)",       pow(2, 10),    1024)
+check("pow(2,0)",        pow(2, 0),     1)
+check("pow(0,0)",        pow(0, 0),     1)           # C: 1 by definition
+check("pow(0,5)",        pow(0, 5),     0)
+check("pow(2,-1)",       pow(2, -1),    0.5)
+check("pow(2,-3)",       pow(2, -3),    0.125)
+check("pow(-2,3)",       pow(-2, 3),    -8)          # odd power keeps sign
+check("pow(-2,2)",       pow(-2, 2),    4)           # even power drops it
+check("pow(9,0.5)",      pow(9, 0.5),   3)
+check("pow(0,-1)",       pow(0, -1),    inf)
+check("pow(-1,0.5) nan", is_nan(pow(-1, 0.5)), true) # sqrt of a negative
+check("pow(2,53)",       pow(2, 53),    9007199254740992)
+
+# ------------------------------------------------- floor / ceil / round / trunc
+print("-- floor / ceil / round / trunc --")
+check("floor(2.7)",      floor(2.7),    2)
+check("floor(-2.5)",     floor(-2.5),   -3)          # toward -inf
+check("floor(3)",        floor(3),      3)           # already whole
+check("floor(-0.0)",     floor(negz),   0)
+check("ceil(2.1)",       ceil(2.1),     3)
+check("ceil(-2.5)",      ceil(-2.5),    -2)          # toward +inf
+check("ceil(3)",         ceil(3),       3)
+check("ceil(-0.5)",      ceil(-0.5),    0)
+check("round(0.5)",      round(0.5),    1)           # halves go away from zero
+check("round(-0.5)",     round(-0.5),   -1)
+check("round(2.5)",      round(2.5),    3)
+check("round(-2.5)",     round(-2.5),   -3)
+check("round(1.4999)",   round(1.4999), 1)
+check("round(-1.5)",     round(-1.5),   -2)
+check("trunc(2.7)",      trunc(2.7),    2)           # toward zero
+check("trunc(-2.7)",     trunc(-2.7),   -2)
+check("trunc(-0.5)",     trunc(-0.5),   0)
+check("floor!=trunc neg", floor(-2.7) == trunc(-2.7), false)
+
+# ---------------------------------------------------------------- gcd
+print("-- gcd --")
+check("gcd(48,36)",      gcd(48, 36),   12)
+check("gcd(1071,462)",   gcd(1071, 462), 21)         # 1071=3*7*51? -> 21
+check("gcd(17,5)",       gcd(17, 5),    1)           # coprime
+check("gcd(0,0)",        gcd(0, 0),     0)           # both zero
+check("gcd(0,5)",        gcd(0, 5),     5)
+check("gcd(12,0)",       gcd(12, 0),    12)
+check("gcd(-12,18)",     gcd(-12, 18),  6)           # sign ignored
+check("gcd(-12,-18)",    gcd(-12, -18), 6)
+check("gcd(0,-7)",       gcd(0, -7),    7)
+check("gcd(7.9,3.2)",    gcd(7.9, 3.2), 1)           # args truncated: gcd(7,3)
+check("gcd(2^62,2^60)",  gcd(pow(2,62), pow(2,60)), pow(2,60))
+
+# ---------------------------------------------------------------- sin/cos/tan
+print("-- sin / cos / tan --")
+check("sin(0)",          sin(0),        0)
+check("cos(0)",          cos(0),        1)
+check("tan(0)",          tan(0),        0)
+check("sin(-0.0)",       sin(negz),     0)
+check("sin(1)",          sin(1),        0.841471)
+check("cos(1)",          cos(1),        0.540302)
+check("tan(1)",          tan(1),        1.55741)
+check("cos is even",     cos(-1) == cos(1), true)
+check("sin is odd",      sin(-1) == 0 - sin(1), true)
+check("cos(pi)",         cos(pi()),     -1)
+check("tan(pi/4)",       tan(pi() / 4), 1)
+check("sin^2+cos^2=1",   sin(1)*sin(1) + cos(1)*cos(1), 1)
+check("sin(pi) tiny",    abs(sin(pi())) < 0.000000001, true)   # not exactly 0
+
+# ---------------------------------------------------------------- asin/acos/atan
+print("-- asin / acos / atan --")
+check("asin(0)",         asin(0),       0)
+check("asin(1)",         asin(1),       1.5708)      # pi/2 = 1.5707963...
+check("asin(-1)",        asin(-1),      -1.5708)
+check("asin(0.5)",       asin(0.5),     0.523599)    # pi/6
+check("acos(1)",         acos(1),       0)
+check("acos(0)",         acos(0),       1.5708)
+check("acos(-1)",        acos(-1),      3.14159)     # pi
+check("acos(0.5)",       acos(0.5),     1.0472)      # pi/3
+check("atan(0)",         atan(0),       0)
+check("atan(1)",         atan(1),       0.785398)    # pi/4
+check("atan(-1)",        atan(-1),      -0.785398)
+check("atan(2)",         atan(2),       1.10715)
+check("asin(2) is nan",  is_nan(asin(2)),  true)     # outside [-1,1]
+check("acos(2) is nan",  is_nan(acos(2)),  true)
+check("asin(sin(0.3))",  asin(sin(0.3)), 0.3)
+
+# ---------------------------------------------------------------- log / exp
+print("-- log / exp / log2 / log10 --")
+check("log(1)",          log(1),        0)
+check("log(e)",          log(e()),      1)
+check("log(2)",          log(2),        0.693147)
+check("log(10)",         log(10),       2.30259)
+check("log(0)",          log(0),        0 - inf)     # -inf
+check("log(-1) is nan",  is_nan(log(-1)), true)
+check("exp(0)",          exp(0),        1)
+check("exp(1)",          exp(1),        2.71828)
+check("exp(-1)",         exp(-1),       0.367879)
+check("exp(2)",          exp(2),        7.38906)
+check("exp(log(5))",     exp(log(5)),   5)           # round trip
+check("log(exp(3))",     log(exp(3)),   3)
+check("exp(710) o'flows", exp(710),     inf)         # > max double
+check("log2(1)",         log2(1),       0)
+check("log2(8)",         log2(8),       3)
+check("log2(1024)",      log2(1024),    10)
+check("log2 exact",      log2(1024) == 10, true)
+check("log2(0)",         log2(0),       0 - inf)
+check("log2(10)",        log2(10),      3.32193)
+check("log10(1)",        log10(1),      0)
+check("log10(1000)",     log10(1000),   3)
+check("log10(0.001)",    log10(0.001),  -3)
+check("log10(2)",        log10(2),      0.30103)
+check("log10(1e15)",     log10(pow(10, 15)), 15)
+
+# ---------------------------------------------------------------- hypot
+print("-- hypot --")
+check("hypot(3,4)",      hypot(3, 4),   5)
+check("hypot(0,0)",      hypot(0, 0),   0)
+check("hypot(0,7)",      hypot(0, 7),   7)           # degenerate: one leg 0
+check("hypot(7,0)",      hypot(7, 0),   7)
+check("hypot(-3,-4)",    hypot(-3, -4), 5)           # signs ignored
+check("hypot(5,12)",     hypot(5, 12),  13)
+check("hypot(8,15)",     hypot(8, 15),  17)
+check("hypot(1,1)",      hypot(1, 1),   1.41421)
+check("hypot(3e8,4e8)",  hypot(3 * pow(10,8), 4 * pow(10,8)), 5 * pow(10,8))
+
+# ### FAILING x3 - hypot overflows and underflows.
+# interp.c computes sqrt(a*a + b*b) instead of calling C's hypot(). Squaring a
+# large leg overflows to +inf and squaring a small one flushes to 0, even when
+# the true answer is comfortably inside double range.
+#   hypot(1e200, 0)      by hand = |1e200| = 1e200         actual inf
+#   hypot(1e200, 1e200)  by hand = sqrt(2)*1e200 = 1.41421e200   actual inf
+#   hypot(3e-200,4e-200) by hand = 5e-200                  actual 0
+# The first is the cleanest repro: with one leg exactly zero the result is just
+# the other leg, so no correct implementation can return inf.
+check("hypot(1e200,0)",       hypot(big, 0),          big)
+check("hypot(1e200,1e200)",   hypot(big, big),        sqrt(2) * big)
+check("hypot(3e-200,4e-200)", hypot(3*tiny, 4*tiny),  5 * tiny)
+
+# ---------------------------------------------------------------- clamp
+print("-- clamp --")
+check("clamp inside",    clamp(5, 1, 10),    5)
+check("clamp below",     clamp(-1, 1, 10),   1)      # out at the low end
+check("clamp above",     clamp(99, 1, 10),   10)     # out at the high end
+check("clamp at lo",     clamp(1, 1, 10),    1)      # boundary
+check("clamp at hi",     clamp(10, 1, 10),   10)     # boundary
+check("clamp lo==hi",    clamp(7, 3, 3),     3)      # empty range
+check("clamp all equal", clamp(1, 1, 1),     1)
+check("clamp neg range", clamp(-5, -10, -1), -5)
+check("clamp neg below", clamp(-50, -10, -1), -10)
+check("clamp neg above", clamp(50, -10, -1), -1)
+check("clamp(0,-1,1)",   clamp(0, -1, 1),    0)
+check("clamp nan is nan", is_nan(clamp(nan, 0, 10)), true)
+# Inverted range (lo > hi) is not defined by the docs; recorded here so a future
+# change to it is visible. Actual rule: the x<lo test wins, so lo is returned.
+check("clamp inverted",  clamp(5, 10, 1),    10)
+
+# ---------------------------------------------------------------- fmod
+print("-- fmod --")
+check("fmod(7,3)",       fmod(7, 3),    1)
+check("fmod(-7,3)",      fmod(-7, 3),   -1)          # result takes the dividend's sign
+check("fmod(7,-3)",      fmod(7, -3),   1)
+check("fmod(-7,-3)",     fmod(-7, -3),  -1)
+check("fmod(5.5,2)",     fmod(5.5, 2),  1.5)         # keeps the fraction
+check("fmod(3,3)",       fmod(3, 3),    0)           # exact multiple
+check("fmod(2,3)",       fmod(2, 3),    2)           # divisor bigger
+check("fmod(0,5)",       fmod(0, 5),    0)
+check("fmod(5,0) is nan",  is_nan(fmod(5, 0)),  true)   # divide by zero -> nan
+check("fmod(-5,0) is nan", is_nan(fmod(-5, 0)), true)
+check("fmod(0,0) is nan",  is_nan(fmod(0, 0)),  true)
+check("fmod vs % differ", fmod(5.5, 2) == 5.5 % 2, false)  # % truncates first
+
+# ### CRASH - the % operator with a zero right-hand side kills the process.
+# interp.c does (double)((long long)a % (long long)b), an INTEGER modulo, so
+# b == 0 raises a hardware divide-by-zero: the interpreter dies with
+# 0xC0000094 (STATUS_INTEGER_DIVIDE_BY_ZERO) and prints nothing at all.
+# By hand it should match its siblings: / by zero gives inf, fmod by zero gives
+# nan, so % by zero should give nan (or a clean runtime error).
+# The check is left commented out ON PURPOSE - live it would abort this file
+# before report() ever runs. Repro:  echo print(7 % 0) > c.zl && interp c.zl
+# check("7 % 0 is nan", is_nan(7 % 0), true)
+check("% by zero is a crash, see comment above", "documented", "documented")
+
+# ---------------------------------------------------------------- pi / e
+print("-- pi / e --")
+check("pi()",            pi(),          3.14159)
+check("e()",             e(),           2.71828)
+check("pi to 5dp",       round(pi() * 100000),  314159)
+check("e to 5dp",        round(e() * 100000),   271828)
+check("cos(2pi)",        cos(2 * pi()), 1)
+check("log(e())",        log(e()),      1)
+check("e^1 == e()",      exp(1) == e(), true)
+check("pi/4 == atan(1)", pi() / 4 == atan(1), true)
+
+# ---------------------------------------------------------------- num
+print("-- num --")
+check("num(42)",         num(42),       42)          # already a number
+check("num('42')",       num("42"),     42)
+check("num('3.5')",      num("3.5"),    3.5)
+check("num('-3.5')",     num("-3.5"),   -3.5)
+check("num('+5')",       num("+5"),     5)
+check("num('.5')",       num(".5"),     0.5)
+check("num('1e3')",      num("1e3"),    1000)
+check("num('  12 ')",    num("  12 "),  12)          # leading space skipped
+check("num('  -0012.50 ')", num("  -0012.50 "), -12.5)
+check("num('12abc')",    num("12abc"),  12)          # stops at the junk
+check("num('abc')",      num("abc"),    0)           # no digits -> 0
+check("num('')",         num(""),       0)           # empty string
+check("num('   ')",      num("   "),    0)
+check("num('- 5')",      num("- 5"),    0)           # space breaks the sign
+check("num(str(3.5))",   num(str(3.5)), 3.5)         # round trip
+check("num('0x10')",     num("0x10"),   16)          # strtod parses hex
+
+# ---------------------------------------------------------------- int
+print("-- int --")
+check("int(0)",          int(0),        0)
+check("int(3.9)",        int(3.9),      3)           # toward zero
+check("int(-3.9)",       int(-3.9),     -3)          # NOT floor
+check("int(-0.5)",       int(-0.5),     0)
+check("int(2.999999999)", int(2.999999999), 2)
+check("int(-2)",         int(-2),       -2)
+check("int('7.9')",      int("7.9"),    7)
+check("int('abc')",      int("abc"),    0)
+check("int == trunc",    int(-3.9) == trunc(-3.9), true)
+check("int(2^62)",       int(pow(2, 62)), 4611686018427387904)
+
+# ### FAILING - int() of a value outside long long range returns garbage.
+# By hand: int(x) is "x truncated toward zero", so whatever int(+inf) is meant
+# to be it cannot be NEGATIVE. Casting an out-of-range double to long long is
+# undefined behaviour in C; here it saturates to LLONG_MIN, so
+#   int(1/0) = -9223372036854775808  and  int(nan) = -9223372036854775808.
+# want true, actual false.
+check("int(inf) keeps its sign", int(inf) > 0, true)
+
+# ---------------------------------------------------------------- hex
+print("-- hex --")
+check("hex(0)",          hex(0),        "0")
+check("hex(1)",          hex(1),        "1")
+check("hex(16)",         hex(16),       "10")
+check("hex(255)",        hex(255),      "ff")
+check("hex(4095)",       hex(4095),     "fff")
+check("hex(4886718345)", hex(4886718345), "123456789")
+check("hex(3.9)",        hex(3.9),      "3")         # truncates first
+check("hex(255.9)",      hex(255.9),    "ff")
+check("hex(-1)",         hex(-1),  "ffffffffffffffff")  # two's complement
+check("hex(-255)",       hex(-255), "ffffffffffffff01")
+check("hex(2^62)",       hex(pow(2, 62)), "4000000000000000")
+
+# ### FAILING - hex() of a value at or past 2^64 wraps to the same saturated
+# bit pattern as 2^63, so distinct inputs print the same digits.
+# By hand: 2^64 = 0x1_0000_0000_0000_0000 -> "10000000000000000".
+# Actual: "8000000000000000" (LLONG_MIN saturation), i.e. hex(2^64) == hex(2^63).
+check("hex(2^64)",       hex(pow(2, 64)), "10000000000000000")
+
+# ---------------------------------------------------------------- nan / inf flow
+print("-- nan / inf propagation --")
+check("nan != nan",      nan != nan,    true)
+check("nan == nan",      nan == nan,    false)
+check("nan < 1",         nan < 1,       false)
+check("nan > 1",         nan > 1,       false)
+check("1/0",             1 / 0,         inf)
+check("-1/0",            -1 / 0,        0 - inf)
+check("0/0 is nan",      is_nan(0 / 0), true)
+check("inf + 1",         inf + 1,       inf)
+check("inf - inf is nan", is_nan(inf - inf), true)
+check("nan + 1 is nan",  is_nan(nan + 1), true)
+check("floor(inf)",      floor(inf),    inf)
+check("1/inf",           1 / inf,       0)
+
+report()

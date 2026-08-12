@@ -1,0 +1,175 @@
+# combinat.zl - combinatorics: permutations, combinations, power set, counts.
+#
+# Every generator returns a list of lists, in lexicographic order of the
+# INDEX positions of the input (so if xs is sorted, the output is sorted too).
+# next_permutation() copies its argument before working, so the caller's list
+# is never disturbed; it returns nil() when xs is the last permutation.
+# Ordering comparisons use <, so next_permutation() is for numbers.
+
+fn cat(a, b) {
+    out = []
+    for x in a {
+        out = push(out, x)
+    }
+    for x in b {
+        out = push(out, x)
+    }
+    return out
+}
+fn without(xs, i) {
+    out = []
+    j = 0
+    while j < len(xs) {
+        if j != i {
+            out = push(out, xs[j])
+        }
+        j = j + 1
+    }
+    return out
+}
+fn from(xs, i) {
+    out = []
+    j = i
+    while j < len(xs) {
+        out = push(out, xs[j])
+        j = j + 1
+    }
+    return out
+}
+
+fn permutations(xs) {
+    if len(xs) == 0 {
+        return [[]]
+    }
+    out = []
+    i = 0
+    while i < len(xs) {
+        for rest in permutations(without(xs, i)) {
+            out = push(out, cat([xs[i]], rest))
+        }
+        i = i + 1
+    }
+    return out
+}
+fn combinations(xs, k) {
+    if k == 0 {
+        return [[]]
+    }
+    if k < 0 or k > len(xs) {
+        return []
+    }
+    out = []
+    i = 0
+    while i <= len(xs) - k {
+        for rest in combinations(from(xs, i + 1), k - 1) {
+            out = push(out, cat([xs[i]], rest))
+        }
+        i = i + 1
+    }
+    return out
+}
+fn power_set(xs) {
+    out = [[]]
+    for x in xs {
+        grown = out
+        for s in out {
+            grown = push(grown, cat(s, [x]))
+        }
+        out = grown
+    }
+    return out
+}
+
+fn n_choose_k(n, k) {
+    if k < 0 or k > n {
+        return 0
+    }
+    if k > n - k {
+        k = n - k
+    }
+    r = 1
+    i = 0
+    while i < k {
+        r = r * (n - i) / (i + 1)
+        i = i + 1
+    }
+    return round(r)
+}
+fn n_perm_k(n, k) {
+    if k < 0 or k > n {
+        return 0
+    }
+    r = 1
+    i = 0
+    while i < k {
+        r = r * (n - i)
+        i = i + 1
+    }
+    return r
+}
+
+fn cartesian(a, b) {
+    out = []
+    for x in a {
+        for y in b {
+            out = push(out, [x, y])
+        }
+    }
+    return out
+}
+
+fn next_permutation(xs) {
+    a = cat(xs, [])
+    n = len(a)
+    # 1. rightmost i with a[i] < a[i+1]; none means xs is the last permutation
+    # (and evaluates both sides, so the bounds check has to be its own if)
+    i = n - 2
+    while i >= 0 {
+        if a[i] < a[i + 1] {
+            break
+        }
+        i = i - 1
+    }
+    if i < 0 {
+        return nil()
+    }
+    # 2. rightmost j > i with a[j] > a[i], then swap
+    j = n - 1
+    while a[j] <= a[i] {
+        j = j - 1
+    }
+    t = a[i]
+    a[i] = a[j]
+    a[j] = t
+    # 3. reverse the tail after i, turning it into its smallest arrangement
+    lo = i + 1
+    hi = n - 1
+    while lo < hi {
+        t = a[lo]
+        a[lo] = a[hi]
+        a[hi] = t
+        lo = lo + 1
+        hi = hi - 1
+    }
+    return a
+}
+
+print("permutations [1,2,3]:  " + str(permutations([1, 2, 3])))
+print("combinations [1,2,3,4] k=2:")
+print("  " + str(combinations([1, 2, 3, 4], 2)))
+print("power_set [1,2,3]:     " + str(power_set([1, 2, 3])))
+print("n_choose_k(5,2):       " + str(n_choose_k(5, 2)))
+print("n_choose_k(10,3):      " + str(n_choose_k(10, 3)))
+print("n_perm_k(5,2):         " + str(n_perm_k(5, 2)))
+print("cartesian:             " + str(cartesian([1, 2], ["a", "b"])))
+
+p = [1, 2, 3]
+print("next_permutation walk from " + str(p) + ":")
+while p != nil() {
+    print("  " + str(p))
+    p = next_permutation(p)
+}
+print("next_permutation [3,2,1]: " + str(next_permutation([3, 2, 1])))
+start = [1, 2, 3]
+next_permutation(start)
+print("caller's list unchanged:  " + str(start))

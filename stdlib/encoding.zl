@@ -1,0 +1,226 @@
+# encoding.zl - text encoding helpers: URL percent-encoding, HTML entities,
+# slugs, and C string escapes.
+#
+# Representation: everything works one BYTE at a time, because that is what
+# at()/index_at() hand back. Text is never assumed to be ASCII - a UTF-8
+# character is simply several bytes, so url_encode("cafe" + e-acute) gives
+# "caf%C3%A9", which is what a browser wants. index_at() reports bytes as
+# 0..255 (unsigned), so no sign fixing is needed.
+#
+# url_encode keeps the RFC 3986 unreserved set (A-Z a-z 0-9 - _ . ~) and
+# percent-escapes everything else with UPPERCASE hex, so a space becomes %20
+# and not "+". url_decode reverses that; a "%" that is not followed by two
+# hex digits is passed through untouched rather than being an error, so
+# decoding arbitrary text never fails.
+#
+# html_unescape only knows the five entities html_escape produces
+# (&amp; &lt; &gt; &quot; &#39;). It scans left to right instead of doing
+# replace() passes, which is what stops "&amp;lt;" from collapsing all the
+# way to "<" - it correctly yields "&lt;".
+#
+# slugify lowercases, turns every run of non-alphanumeric bytes into ONE
+# dash, and leaves no dash at either end.
+#
+# Naming: an assignment inside a function writes an outer binding of the same
+# name if one exists, so every parameter and local here carries a two-letter
+# tag for its function (ue_ = url_encode, hu_ = html_unescape, ...). That is
+# what stops hex2()'s counter from eating url_encode()'s.
+
+fn hex_digit(hd_n) {
+    return at("0123456789ABCDEF", hd_n)
+}
+fn hex2(h2_n) {
+    h2_v = int(h2_n)
+    return hex_digit(int(h2_v / 16)) + hex_digit(h2_v % 16)
+}
+fn hex_value(hv_c) {
+    return find("0123456789abcdef", lower(hv_c))
+}
+fn is_alnum(ia_c) {
+    ia_k = index_at(ia_c, 0)
+    if ia_k >= 48 and ia_k <= 57 {
+        return true
+    }
+    if ia_k >= 65 and ia_k <= 90 {
+        return true
+    }
+    return ia_k >= 97 and ia_k <= 122
+}
+fn starts_at(sa_s, sa_i, sa_sub) {
+    if sa_i + len(sa_sub) > len(sa_s) {
+        return false
+    }
+    return slice(sa_s, sa_i, sa_i + len(sa_sub)) == sa_sub
+}
+
+fn url_encode(ue_s) {
+    ue_out = ""
+    ue_i = 0
+    while ue_i < len(ue_s) {
+        ue_c = at(ue_s, ue_i)
+        ue_keep = is_alnum(ue_c)
+        if ue_c == "-" or ue_c == "_" or ue_c == "." or ue_c == "~" {
+            ue_keep = true
+        }
+        if ue_keep {
+            ue_out = ue_out + ue_c
+        } else {
+            ue_out = ue_out + "%" + hex2(index_at(ue_s, ue_i))
+        }
+        ue_i = ue_i + 1
+    }
+    return ue_out
+}
+fn url_decode(ud_s) {
+    ud_out = ""
+    ud_i = 0
+    while ud_i < len(ud_s) {
+        ud_c = at(ud_s, ud_i)
+        ud_hi = -1
+        ud_lo = -1
+        if ud_c == "%" and ud_i + 2 < len(ud_s) {
+            ud_hi = hex_value(at(ud_s, ud_i + 1))
+            ud_lo = hex_value(at(ud_s, ud_i + 2))
+        }
+        if ud_hi >= 0 and ud_lo >= 0 {
+            ud_out = ud_out + chr(ud_hi * 16 + ud_lo)
+            ud_i = ud_i + 3
+        } else {
+            ud_out = ud_out + ud_c
+            ud_i = ud_i + 1
+        }
+    }
+    return ud_out
+}
+
+fn html_escape(he_s) {
+    he_out = ""
+    he_i = 0
+    while he_i < len(he_s) {
+        he_c = at(he_s, he_i)
+        if he_c == "&" {
+            he_out = he_out + "&amp;"
+        } else if he_c == "<" {
+            he_out = he_out + "&lt;"
+        } else if he_c == ">" {
+            he_out = he_out + "&gt;"
+        } else if he_c == "\"" {
+            he_out = he_out + "&quot;"
+        } else if he_c == "'" {
+            he_out = he_out + "&#39;"
+        } else {
+            he_out = he_out + he_c
+        }
+        he_i = he_i + 1
+    }
+    return he_out
+}
+fn html_unescape(hu_s) {
+    hu_out = ""
+    hu_i = 0
+    while hu_i < len(hu_s) {
+        hu_step = 0
+        if at(hu_s, hu_i) == "&" {
+            if starts_at(hu_s, hu_i, "&amp;") {
+                hu_out = hu_out + "&"
+                hu_step = 5
+            } else if starts_at(hu_s, hu_i, "&lt;") {
+                hu_out = hu_out + "<"
+                hu_step = 4
+            } else if starts_at(hu_s, hu_i, "&gt;") {
+                hu_out = hu_out + ">"
+                hu_step = 4
+            } else if starts_at(hu_s, hu_i, "&quot;") {
+                hu_out = hu_out + "\""
+                hu_step = 6
+            } else if starts_at(hu_s, hu_i, "&#39;") {
+                hu_out = hu_out + "'"
+                hu_step = 5
+            }
+        }
+        if hu_step == 0 {
+            hu_out = hu_out + at(hu_s, hu_i)
+            hu_step = 1
+        }
+        hu_i = hu_i + hu_step
+    }
+    return hu_out
+}
+
+fn slugify(sg_s) {
+    sg_low = lower(sg_s)
+    sg_out = ""
+    sg_i = 0
+    while sg_i < len(sg_low) {
+        sg_c = at(sg_low, sg_i)
+        if is_alnum(sg_c) {
+            sg_out = sg_out + sg_c
+        } else if len(sg_out) > 0 and not ends(sg_out, "-") {
+            sg_out = sg_out + "-"
+        }
+        sg_i = sg_i + 1
+    }
+    while ends(sg_out, "-") {
+        sg_out = slice(sg_out, 0, len(sg_out) - 1)
+    }
+    return sg_out
+}
+
+fn escape_c(ec_s) {
+    ec_out = ""
+    ec_i = 0
+    while ec_i < len(ec_s) {
+        ec_c = at(ec_s, ec_i)
+        if ec_c == "\\" {
+            ec_out = ec_out + "\\\\"
+        } else if ec_c == "\"" {
+            ec_out = ec_out + "\\\""
+        } else if ec_c == "\n" {
+            ec_out = ec_out + "\\n"
+        } else if ec_c == "\t" {
+            ec_out = ec_out + "\\t"
+        } else if ec_c == "\r" {
+            ec_out = ec_out + "\\r"
+        } else {
+            ec_out = ec_out + ec_c
+        }
+        ec_i = ec_i + 1
+    }
+    return ec_out
+}
+
+# --- demo ---
+
+q = "hello world & more!"
+qe = url_encode(q)
+print("url_encode:   " + qe)
+print("url_decode:   " + url_decode(qe))
+print("round trip:   " + str(url_decode(qe) == q))
+
+p = "a-b_c.d~e/f?g=h"
+pe = url_encode(p)
+print("unreserved:   " + pe)
+print("round trip:   " + str(url_decode(pe) == p))
+
+u = "cafe" + chr(195) + chr(169)
+ue = url_encode(u)
+print("utf-8 bytes:  " + ue)
+print("round trip:   " + str(url_decode(ue) == u))
+print("stray pct:    " + url_decode("100%_%2Fdone%"))
+
+h = "<a href=\"x\">Tom & Jerry's</a>"
+he = html_escape(h)
+print("html_escape:  " + he)
+print("html_unesc:   " + html_unescape(he))
+print("round trip:   " + str(html_unescape(he) == h))
+print("no collapse:  " + html_unescape("&amp;lt;"))
+
+print("slugify:      [" + slugify("  Hello, World! -- zl Rocks 2026  ") + "]")
+print("slugify:      [" + slugify("///") + "]")
+
+c = "say \"hi\"\tthen\nquit C:\\zl"
+print("escape_c:     " + escape_c(c))
+
+assert(url_decode(url_encode(q)) == q, "url round trip")
+assert(html_unescape(html_escape(h)) == h, "html round trip")
+print("asserts:      ok")

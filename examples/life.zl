@@ -1,0 +1,939 @@
+# =====================================================================
+# life.zl -- Conway's Game of Life, animated in place in your terminal.
+#
+#   run:  .\_interp_w4.exe examples\life.zl        (from the repo root)
+#
+# This is a showcase, and it is meant to be read top to bottom as a
+# tutorial. It covers, in order:
+#
+#   1. loading a pattern from a plain TEXT BLOCK (no literal 0/1 grids)
+#   2. the Life rule computed with a column-sum trick instead of the
+#      naive eight-neighbour scan
+#   3. a real animation: ANSI 256-colour cells, redrawn in place with
+#      cursor-home, with cells coloured by AGE and a ghost trail behind
+#   4. automatic CYCLE DETECTION -- the run stops itself the moment the
+#      board repeats a state it has seen before, and reports the period
+#      (period 1 = a still life, period 2 = an oscillator, ...)
+#   5. a proof, not a claim: the glider is shown to return to its exact
+#      original shape displaced by (1,1) after exactly 4 generations
+#   6. artifacts on disk: a plain-text transcript of every generation,
+#      and one 24-bit BMP per scene -- a "long exposure photograph" of
+#      the run, where each cell is tinted by the last generation it was
+#      alive, so a spaceship leaves a comet trail across the image.
+#
+# It is deliberately different from stdlib/game_of_life.zl, which is a
+# 40-line reference implementation with hard-coded grids and no I/O.
+#
+# zl has no import system, so the handful of helpers borrowed from the
+# standard library are inlined below, each marked with its source.
+#
+# ONE LANGUAGE RULE TO KNOW BEFORE READING THE FUNCTIONS: in zl, an
+# assignment inside a function updates an existing GLOBAL of the same
+# name rather than making a local. So every parameter and local below
+# carries a short per-function tag (ng_ = next_gen, gl_ = grid_lines,
+# ...). The only place that behaviour is used on purpose is TRANSCRIPT,
+# which really is meant to be appended to from inside a function.
+# =====================================================================
+
+
+# ---------------------------------------------------------------------
+# TUNABLES -- everything you would want to turn up for a bigger render.
+# ---------------------------------------------------------------------
+# MAX_GEN      generations per scene before giving up on finding a cycle.
+# FRAME_MS     milliseconds to hold each frame. 0 = as fast as possible.
+#              zl has no sleep(), so pause() busy-waits on now().
+# HOLD_FRAMES  extra frames to keep animating after a cycle is found, so
+#              you actually get to watch the oscillator oscillate.
+# PIXEL        BMP pixels per cell. 8 -> a 36-wide board is 288px across.
+#
+# For a big render try MAX_GEN = 200, PIXEL = 16, and widen the boards in
+# the SCENES section at the bottom (LWSS_COLS is the one that matters --
+# a lightweight spaceship crosses two columns every four generations, so
+# it needs about MAX_GEN/2 columns of runway). Cost is close to linear in
+# rows*cols*MAX_GEN; the sizes here run in a couple of seconds of real
+# work plus the deliberate frame delay.
+MAX_GEN = 40
+FRAME_MS = 55
+HOLD_FRAMES = 6
+PIXEL = 8
+
+
+# ---------------------------------------------------------------------
+# ANSI -- inlined from stdlib/ansi.zl (sgr/cursor/clear), trimmed to the
+# few sequences this program needs. Every one of these is just a string:
+# CSI, then some numeric parameters, then a final letter that says what
+# the sequence means. "m" = set graphic rendition (colour), "H" = move
+# the cursor, "J" = erase display, "K" = erase to end of line.
+# ---------------------------------------------------------------------
+CSI = "\x1b["
+RESET = "\x1b[0m"
+EOL = "\x1b[K"
+
+fn bg256(bg_n) {
+    return CSI + "48;5;" + str(bg_n) + "m"
+}
+fn fg256(fg_s, fg_n) {
+    return CSI + "38;5;" + str(fg_n) + "m" + fg_s + RESET
+}
+fn cursor_home() {
+    return CSI + "1;1H"
+}
+fn cursor_to_row(ct_r) {
+    return CSI + str(ct_r) + ";1H"
+}
+fn clear_screen() {
+    return CSI + "2J" + CSI + "1;1H"
+}
+fn cursor_hide() {
+    return CSI + "?25l"
+}
+fn cursor_show() {
+    return CSI + "?25h"
+}
+
+# Cell palette. A cell is drawn as two spaces with a background colour,
+# so the grid comes out as square pixels rather than lopsided text.
+# The index into AGE_COLS is how many generations the cell has been
+# alive: freshly born is white-hot, and it cools through cyan to deep
+# blue as it survives. Long-lived structure therefore sinks into the
+# background and anything moving stays bright.
+AGE_COLS = [231, 195, 159, 123, 87, 51, 45, 39, 33, 27, 21]
+C_NEVER = 234                 # a cell that has never once been alive
+C_GHOST = 17                  # dead now, but alive at some point: a trail
+
+# Colours for the text around the grid.
+C_TITLE = 220
+C_LABEL = 245
+C_VALUE = 195
+C_GOOD = 82
+
+
+# ---------------------------------------------------------------------
+# PATTERNS -- as text blocks, exactly how they are drawn in the
+# literature. "." is dead; anything else (here "O") is alive. Ragged
+# lines are fine: a short line is simply all-dead off its right edge.
+# ---------------------------------------------------------------------
+GLIDER_TXT = ".O.\n..O\nOOO"
+BLINKER_TXT = "OOO"
+TOAD_TXT = ".OOO\nOOO."
+BEACON_TXT = "OO..\nOO..\n..OO\n..OO"
+BLOCK_TXT = "OO\nOO"
+LWSS_TXT = ".O..O\nO....\nO...O\nOOOO."
+
+# Turn a text block into a grid: a list of rows, each row a list of 0/1.
+fn parse_pattern(pp_txt) {
+    pp_rows = lines(pp_txt)
+    pp_out = []
+    for pp_line in pp_rows {
+        pp_row = []
+        pp_i = 0
+        while pp_i < len(pp_line) {
+            pp_ch = at(pp_line, pp_i)
+            pp_row = push(pp_row, (pp_ch == "." or pp_ch == " ") ? 0 : 1)
+            pp_i += 1
+        }
+        pp_out = push(pp_out, pp_row)
+    }
+    return pp_out
+}
+
+
+# ---------------------------------------------------------------------
+# BOARDS
+# ---------------------------------------------------------------------
+
+# A rectangular board of zeros. Note each row gets its own fill() call:
+# reusing one row list would alias every row to the same list.
+fn blank_board(bb_rows, bb_cols) {
+    bb_out = []
+    bb_r = 0
+    while bb_r < bb_rows {
+        bb_out = push(bb_out, fill(bb_cols, 0))
+        bb_r += 1
+    }
+    return bb_out
+}
+
+# Blit a pattern onto a board at (r0, c0). Live cells only, so patterns
+# can be layered. Anything hanging off the edge is dropped.
+fn stamp(sp_board, sp_pat, sp_r0, sp_c0) {
+    sp_rows = len(sp_board)
+    sp_cols = len(sp_board[0])
+    sp_r = 0
+    while sp_r < len(sp_pat) {
+        sp_row = sp_pat[sp_r]
+        sp_c = 0
+        while sp_c < len(sp_row) {
+            sp_rr = sp_r0 + sp_r
+            sp_cc = sp_c0 + sp_c
+            if sp_row[sp_c] == 1 and sp_rr >= 0 and sp_rr < sp_rows and sp_cc >= 0 and sp_cc < sp_cols {
+                sp_board[sp_rr][sp_cc] = 1
+            }
+            sp_c += 1
+        }
+        sp_r += 1
+    }
+    return sp_board
+}
+
+fn population(po_g) {
+    po_total = 0
+    po_r = 0
+    while po_r < len(po_g) {
+        po_total += sum(po_g[po_r])
+        po_r += 1
+    }
+    return po_total
+}
+
+# Tightest rectangle containing every live cell: [minr, minc, maxr, maxc].
+# An empty board gives [-1, -1, -1, -1].
+fn bbox(bx_g) {
+    bx_mnr = -1
+    bx_mnc = -1
+    bx_mxr = -1
+    bx_mxc = -1
+    bx_r = 0
+    while bx_r < len(bx_g) {
+        bx_row = bx_g[bx_r]
+        bx_c = 0
+        while bx_c < len(bx_row) {
+            if bx_row[bx_c] == 1 {
+                if bx_mnr < 0 or bx_r < bx_mnr { bx_mnr = bx_r }
+                if bx_r > bx_mxr { bx_mxr = bx_r }
+                if bx_mnc < 0 or bx_c < bx_mnc { bx_mnc = bx_c }
+                if bx_c > bx_mxc { bx_mxc = bx_c }
+            }
+            bx_c += 1
+        }
+        bx_r += 1
+    }
+    return [bx_mnr, bx_mnc, bx_mxr, bx_mxc]
+}
+
+# Copy out a rows x cols sub-rectangle, zero-filled where it runs off.
+fn window(wn_g, wn_r0, wn_c0, wn_h, wn_w) {
+    wn_out = []
+    wn_r = 0
+    while wn_r < wn_h {
+        wn_row = fill(wn_w, 0)
+        wn_c = 0
+        while wn_c < wn_w {
+            wn_rr = wn_r0 + wn_r
+            wn_cc = wn_c0 + wn_c
+            if wn_rr >= 0 and wn_rr < len(wn_g) and wn_cc >= 0 and wn_cc < len(wn_g[0]) {
+                wn_row[wn_c] = wn_g[wn_rr][wn_cc]
+            }
+            wn_c += 1
+        }
+        wn_out = push(wn_out, wn_row)
+        wn_r += 1
+    }
+    return wn_out
+}
+
+fn plain_row(pr_row) {
+    pr_s = ""
+    pr_c = 0
+    while pr_c < len(pr_row) {
+        pr_s = pr_s + (pr_row[pr_c] == 1 ? "#" : ".")
+        pr_c += 1
+    }
+    return pr_s
+}
+
+# The board as plain "#"/"." text. This doubles as the board's identity:
+# two generations are the same state exactly when these strings match,
+# which is all the cycle detector needs.
+fn plain(pl_g) {
+    pl_out = []
+    pl_r = 0
+    while pl_r < len(pl_g) {
+        pl_out = push(pl_out, plain_row(pl_g[pl_r]))
+        pl_r += 1
+    }
+    return join(pl_out, "\n")
+}
+
+
+# ---------------------------------------------------------------------
+# THE RULE
+#
+# B3/S23: a dead cell with exactly 3 live neighbours is born; a live
+# cell with 2 or 3 stays alive; everything else is dead next tick.
+#
+# The obvious way to count neighbours is to look at all eight of them,
+# with a bounds check on each -- that is 8 lookups and 8 range tests per
+# cell (what stdlib/game_of_life.zl does, and it is perfectly clear).
+#
+# This version does it in two passes instead. First col_sums() reduces
+# each row to horizontal 3-wide sums:
+#
+#     cs[r][c] = g[r][c-1] + g[r][c] + g[r][c+1]
+#
+# Then the 3x3 neighbourhood of (r,c) is just three of those stacked
+# vertically, minus the cell itself:
+#
+#     neighbours(r,c) = cs[r-1][c] + cs[r][c] + cs[r+1][c] - g[r][c]
+#
+# Three lookups and one subtraction instead of eight lookups and eight
+# bounds tests. Edges are handled by substituting an all-zero row above
+# the top and below the bottom, which is what "dead outside the board"
+# means -- no wraparound.
+# ---------------------------------------------------------------------
+fn col_sums(cs_g) {
+    cs_cols = len(cs_g[0])
+    cs_last = cs_cols - 1
+    cs_out = []
+    cs_r = 0
+    while cs_r < len(cs_g) {
+        cs_row = cs_g[cs_r]
+        cs_acc = fill(cs_cols, 0)
+        cs_c = 0
+        while cs_c < cs_cols {
+            cs_v = cs_row[cs_c]
+            if cs_c > 0 { cs_v += cs_row[cs_c - 1] }
+            if cs_c < cs_last { cs_v += cs_row[cs_c + 1] }
+            cs_acc[cs_c] = cs_v
+            cs_c += 1
+        }
+        cs_out = push(cs_out, cs_acc)
+        cs_r += 1
+    }
+    return cs_out
+}
+
+fn next_gen(ng_g) {
+    ng_rows = len(ng_g)
+    ng_cols = len(ng_g[0])
+    ng_cs = col_sums(ng_g)
+    ng_zero = fill(ng_cols, 0)
+    ng_out = []
+    ng_r = 0
+    while ng_r < ng_rows {
+        ng_up = ng_r > 0 ? ng_cs[ng_r - 1] : ng_zero
+        ng_mid = ng_cs[ng_r]
+        ng_dn = ng_r < ng_rows - 1 ? ng_cs[ng_r + 1] : ng_zero
+        ng_row = ng_g[ng_r]
+        ng_new = fill(ng_cols, 0)
+        ng_c = 0
+        while ng_c < ng_cols {
+            ng_self = ng_row[ng_c]
+            ng_n = ng_up[ng_c] + ng_mid[ng_c] + ng_dn[ng_c] - ng_self
+            # born on 3, survives on 2 -- the whole of B3/S23 in one line
+            if ng_n == 3 or (ng_n == 2 and ng_self == 1) { ng_new[ng_c] = 1 }
+            ng_c += 1
+        }
+        ng_out = push(ng_out, ng_new)
+        ng_r += 1
+    }
+    return ng_out
+}
+
+# How many cells switched on and off between two boards: [births, deaths].
+fn churn(ch_a, ch_b) {
+    ch_born = 0
+    ch_died = 0
+    ch_r = 0
+    while ch_r < len(ch_a) {
+        ch_ra = ch_a[ch_r]
+        ch_rb = ch_b[ch_r]
+        ch_c = 0
+        while ch_c < len(ch_ra) {
+            if ch_ra[ch_c] == 0 and ch_rb[ch_c] == 1 { ch_born += 1 }
+            if ch_ra[ch_c] == 1 and ch_rb[ch_c] == 0 { ch_died += 1 }
+            ch_c += 1
+        }
+        ch_r += 1
+    }
+    return [ch_born, ch_died]
+}
+
+
+# ---------------------------------------------------------------------
+# HISTORY: ages and the trail
+#
+# ages[r][c]  = how many consecutive generations this cell has been
+#               alive (0 if dead). Drives the colour of the animation.
+# trail[r][c] = the last generation number at which this cell was alive,
+#               or -1 for never. Drives the ghosting in the terminal and
+#               the long-exposure BMP at the end.
+# ---------------------------------------------------------------------
+fn record(rc_ages, rc_trail, rc_g, rc_gen) {
+    rc_out = []
+    rc_r = 0
+    while rc_r < len(rc_g) {
+        rc_row = rc_g[rc_r]
+        rc_old = rc_ages[rc_r]
+        rc_tr = rc_trail[rc_r]
+        rc_new = fill(len(rc_row), 0)
+        rc_c = 0
+        while rc_c < len(rc_row) {
+            if rc_row[rc_c] == 1 {
+                rc_new[rc_c] = rc_old[rc_c] + 1
+                rc_tr[rc_c] = rc_gen
+            }
+            rc_c += 1
+        }
+        rc_out = push(rc_out, rc_new)
+        rc_r += 1
+    }
+    return rc_out
+}
+
+
+# ---------------------------------------------------------------------
+# RENDERING THE ANIMATION
+#
+# One row of the board becomes one line of coloured double-spaces. The
+# escape code for a background colour is only emitted when the colour
+# actually changes from the previous cell, which collapses a run of
+# identical background cells into a single escape -- a mostly-empty
+# 36-wide board costs about three escape sequences a line instead of
+# thirty-six. EOL wipes anything the previous, possibly wider, frame
+# left on that line.
+# ---------------------------------------------------------------------
+fn grid_lines(gl_g, gl_ages, gl_trail) {
+    gl_top = len(AGE_COLS)
+    gl_out = []
+    gl_r = 0
+    while gl_r < len(gl_g) {
+        gl_row = gl_g[gl_r]
+        gl_arow = gl_ages[gl_r]
+        gl_trow = gl_trail[gl_r]
+        gl_line = "  "
+        gl_cur = -1
+        gl_c = 0
+        while gl_c < len(gl_row) {
+            if gl_row[gl_c] == 1 {
+                gl_a = gl_arow[gl_c]
+                if gl_a > gl_top { gl_a = gl_top }
+                gl_want = AGE_COLS[gl_a - 1]
+            } else {
+                gl_want = gl_trow[gl_c] >= 0 ? C_GHOST : C_NEVER
+            }
+            if gl_want != gl_cur {
+                gl_line = gl_line + bg256(gl_want)
+                gl_cur = gl_want
+            }
+            gl_line = gl_line + "  "
+            gl_c += 1
+        }
+        gl_out = push(gl_out, gl_line + RESET + EOL)
+        gl_r += 1
+    }
+    return gl_out
+}
+
+# zl has no sleep(), so hold the frame by spinning on the millisecond
+# clock. Returns the spin count purely so the loop cannot be optimised
+# away by a future compiler backend.
+fn pause(pz_ms) {
+    if pz_ms <= 0 { return 0 }
+    pz_t0 = now()
+    pz_spins = 0
+    while now() - pz_t0 < pz_ms { pz_spins += 1 }
+    return pz_spins
+}
+
+# A one-line population history, e.g.  "===+*#####".
+fn sparkline(sk_vals) {
+    sk_ramp = "_.-=+*#%@"
+    sk_hi = 0
+    for sk_v in sk_vals {
+        if sk_v > sk_hi { sk_hi = sk_v }
+    }
+    sk_s = ""
+    for sk_v in sk_vals {
+        sk_i = sk_hi <= 0 ? 0 : int(sk_v * 8 / sk_hi)
+        sk_s = sk_s + at(sk_ramp, sk_i)
+    }
+    return sk_s
+}
+
+
+# ---------------------------------------------------------------------
+# BMP OUTPUT -- the flat-pixel image model and the file layout are taken
+# from stdlib/bmp.zl (bmp_new / bmp_set / bmp_save). Pixels are one flat
+# list of w*h*3 bytes, R,G,B, top row first; only img_save knows the file
+# is stored bottom-up as B,G,R with each row padded to 4 bytes.
+# ---------------------------------------------------------------------
+fn le8(b8_buf, b8_v) {
+    return push(b8_buf, b8_v % 256)
+}
+fn le16(b16_buf, b16_v) {
+    b16_buf = le8(b16_buf, b16_v % 256)
+    return le8(b16_buf, int(b16_v / 256) % 256)
+}
+fn le32(b32_buf, b32_v) {
+    b32_buf = le16(b32_buf, b32_v % 65536)
+    return le16(b32_buf, int(b32_v / 65536) % 65536)
+}
+fn img_new(im_w, im_h) {
+    return [im_w, im_h, fill(im_w * im_h * 3, 0)]
+}
+# Paint one board cell as a PIXEL x PIXEL square, leaving a one-pixel
+# gutter on the right and bottom so the result reads as a pixel display.
+fn img_cell(ic_img, ic_cx, ic_cy, ic_r, ic_g, ic_b) {
+    ic_w = ic_img[0]
+    ic_px = ic_img[2]
+    ic_x0 = ic_cx * PIXEL
+    ic_y0 = ic_cy * PIXEL
+    ic_j = 0
+    while ic_j < PIXEL - 1 {
+        ic_i = ((ic_y0 + ic_j) * ic_w + ic_x0) * 3
+        ic_k = 0
+        while ic_k < PIXEL - 1 {
+            ic_px[ic_i] = ic_r
+            ic_px[ic_i + 1] = ic_g
+            ic_px[ic_i + 2] = ic_b
+            ic_i += 3
+            ic_k += 1
+        }
+        ic_j += 1
+    }
+}
+fn img_save(sv_img, sv_path) {
+    sv_w = sv_img[0]
+    sv_h = sv_img[1]
+    sv_px = sv_img[2]
+    sv_row = int((sv_w * 3 + 3) / 4) * 4
+    sv_pad = sv_row - sv_w * 3
+    sv_buf = []
+    sv_buf = le8(sv_buf, 66)                    # 'B'
+    sv_buf = le8(sv_buf, 77)                    # 'M'
+    sv_buf = le32(sv_buf, 54 + sv_row * sv_h)   # total file size
+    sv_buf = le16(sv_buf, 0)
+    sv_buf = le16(sv_buf, 0)
+    sv_buf = le32(sv_buf, 54)                   # pixel data starts here
+    sv_buf = le32(sv_buf, 40)                   # BITMAPINFOHEADER size
+    sv_buf = le32(sv_buf, sv_w)
+    sv_buf = le32(sv_buf, sv_h)                 # positive = bottom-up
+    sv_buf = le16(sv_buf, 1)                    # colour planes
+    sv_buf = le16(sv_buf, 24)                   # bits per pixel
+    sv_buf = le32(sv_buf, 0)                    # BI_RGB, uncompressed
+    sv_buf = le32(sv_buf, sv_row * sv_h)
+    sv_buf = le32(sv_buf, 2835)                 # 72 dpi
+    sv_buf = le32(sv_buf, 2835)
+    sv_buf = le32(sv_buf, 0)
+    sv_buf = le32(sv_buf, 0)
+    sv_y = sv_h - 1
+    while sv_y >= 0 {
+        sv_i = sv_y * sv_w * 3
+        sv_x = 0
+        while sv_x < sv_w {
+            sv_buf = push(sv_buf, sv_px[sv_i + 2])
+            sv_buf = push(sv_buf, sv_px[sv_i + 1])
+            sv_buf = push(sv_buf, sv_px[sv_i])
+            sv_i += 3
+            sv_x += 1
+        }
+        sv_p = 0
+        while sv_p < sv_pad {
+            sv_buf = push(sv_buf, 0)
+            sv_p += 1
+        }
+        sv_y -= 1
+    }
+    write_bytes(sv_path, sv_buf)
+    return len(sv_buf)
+}
+
+# The long exposure. Every cell is tinted by the LAST generation it was
+# alive: early = deep blue, late = near white, so a spaceship's path
+# reads as a comet trail with the head at the end of the run. Cells that
+# are still alive in the final generation are picked out in gold.
+fn save_trail(tr_trail, tr_final, tr_span, tr_path) {
+    tr_rows = len(tr_trail)
+    tr_cols = len(tr_trail[0])
+    tr_img = img_new(tr_cols * PIXEL, tr_rows * PIXEL)
+    tr_r = 0
+    while tr_r < tr_rows {
+        tr_c = 0
+        while tr_c < tr_cols {
+            tr_when = tr_trail[tr_r][tr_c]
+            if tr_when < 0 {
+                img_cell(tr_img, tr_c, tr_r, 14, 16, 26)
+            } else {
+                if tr_final[tr_r][tr_c] == 1 {
+                    img_cell(tr_img, tr_c, tr_r, 255, 208, 70)
+                } else {
+                    tr_t = tr_span <= 0 ? 1 : tr_when / tr_span
+                    img_cell(tr_img, tr_c, tr_r, int(28 + 200 * tr_t * tr_t), int(70 + 175 * tr_t), int(125 + 130 * tr_t))
+                }
+            }
+            tr_c += 1
+        }
+        tr_r += 1
+    }
+    return img_save(tr_img, tr_path)
+}
+
+
+# =====================================================================
+# THE SCENE RUNNER
+#
+# Runs one board to a cycle, to extinction, or to MAX_GEN, animating it
+# in place and recording everything. TRANSCRIPT and OUT_FILES are
+# globals on purpose -- assignment inside a function updates the global,
+# which is exactly the accumulate-across-scenes behaviour wanted here.
+#
+# Returns [name, gens, status, period, pop0, popN, sparkline, dr, dc,
+#          final_plain, bmp_path, bmp_bytes]
+# =====================================================================
+TRANSCRIPT = []
+OUT_FILES = []
+CAN_WRITE = contains(dir("."), "examples_out")
+
+fn run_scene(rs_name, rs_blurb, rs_board, rs_slug) {
+    rs_rows = len(rs_board)
+    rs_cols = len(rs_board[0])
+    rs_ages = blank_board(rs_rows, rs_cols)
+    rs_trail = blank_board(rs_rows, rs_cols)
+    rs_r = 0
+    while rs_r < rs_rows {                       # trail starts at "never"
+        rs_c = 0
+        while rs_c < rs_cols { rs_trail[rs_r][rs_c] = -1  rs_c += 1 }
+        rs_r += 1
+    }
+
+    rs_hist = []                                 # every state seen so far
+    rs_pops = []
+    rs_pop0 = population(rs_board)
+    rs_bb0 = bbox(rs_board)
+    rs_period = 0
+    rs_found_at = -1
+    rs_born = 0
+    rs_died = 0
+    rs_gen = 0
+
+    TRANSCRIPT = push(TRANSCRIPT, "")
+    TRANSCRIPT = push(TRANSCRIPT, "=== " + rs_name + " ===")
+    TRANSCRIPT = push(TRANSCRIPT, rs_blurb)
+    TRANSCRIPT = push(TRANSCRIPT, "board " + rs_rows + "x" + rs_cols + ", cap " + MAX_GEN + " generations")
+
+    print(clear_screen() + cursor_hide())
+
+    while true {
+        rs_ages = record(rs_ages, rs_trail, rs_board, rs_gen)
+        rs_pop = population(rs_board)
+        rs_pops = push(rs_pops, rs_pop)
+        rs_sig = plain(rs_board)
+
+        # --- cycle detection -----------------------------------------
+        # The board is deterministic, so if a state ever repeats, the
+        # whole future repeats with it. Look the current state up in the
+        # list of states already seen: a hit at index i means the board
+        # has a period of (now - i). Period 1 is a still life (or an
+        # empty board); period 2 is the classic oscillator.
+        if rs_period == 0 {
+            rs_hit = index_of(rs_hist, rs_sig)
+            if rs_hit >= 0 {
+                rs_period = len(rs_hist) - rs_hit
+                rs_found_at = rs_gen
+            }
+        }
+        rs_hist = push(rs_hist, rs_sig)
+
+        rs_state = rs_period == 0 ? "running" : (rs_period == 1 ? (rs_pop == 0 ? "EXTINCT" : "STATIC") : "PERIOD-" + rs_period)
+
+        # --- draw ----------------------------------------------------
+        rs_lines = [fg256(rs_name, C_TITLE) + EOL, EOL]
+        for rs_gline in grid_lines(rs_board, rs_ages, rs_trail) {
+            rs_lines = push(rs_lines, rs_gline)
+        }
+        rs_lines = push(rs_lines, EOL)
+        rs_lines = push(rs_lines, fg256("gen ", C_LABEL) + fg256(pad(str(rs_gen), 4), C_VALUE) + fg256("live ", C_LABEL) + fg256(pad(str(rs_pop), 5), C_VALUE) + fg256("born ", C_LABEL) + fg256(pad(str(rs_born), 5), C_VALUE) + fg256("died ", C_LABEL) + fg256(pad(str(rs_died), 5), C_VALUE) + fg256(rs_state, rs_period == 0 ? C_LABEL : C_GOOD) + EOL)
+        print(cursor_home() + join(rs_lines, "\n"))
+
+        TRANSCRIPT = push(TRANSCRIPT, "")
+        TRANSCRIPT = push(TRANSCRIPT, "-- gen " + rs_gen + "  live " + rs_pop + "  " + rs_state)
+        TRANSCRIPT = push(TRANSCRIPT, rs_sig)
+
+        # --- stop? ---------------------------------------------------
+        if rs_period > 0 and rs_gen >= rs_found_at + HOLD_FRAMES { break }
+        if rs_gen >= MAX_GEN { break }
+
+        pause(FRAME_MS)
+        rs_next = next_gen(rs_board)
+        rs_ch = churn(rs_board, rs_next)
+        rs_born = rs_ch[0]
+        rs_died = rs_ch[1]
+        rs_board = rs_next
+        rs_gen += 1
+    }
+
+    print(cursor_to_row(len(rs_board) + 6) + cursor_show())
+
+    # --- summarise ---------------------------------------------------
+    rs_bbn = bbox(rs_board)
+    rs_dr = (rs_bb0[0] < 0 or rs_bbn[0] < 0) ? 0 : rs_bbn[0] - rs_bb0[0]
+    rs_dc = (rs_bb0[1] < 0 or rs_bbn[1] < 0) ? 0 : rs_bbn[1] - rs_bb0[1]
+    if rs_period == 0 {
+        rs_status = "no repeat in " + MAX_GEN + " gens"
+    } else {
+        if rs_period == 1 {
+            rs_status = population(rs_board) == 0 ? "EXTINCT at gen " + rs_found_at : "STATIC from gen " + rs_found_at
+        } else {
+            rs_status = "PERIOD-" + rs_period + " from gen " + rs_found_at
+        }
+    }
+
+    rs_bytes = 0
+    rs_path = "examples_out/life_" + rs_slug + ".bmp"
+    if CAN_WRITE {
+        rs_bytes = save_trail(rs_trail, rs_board, rs_gen, rs_path)
+        OUT_FILES = push(OUT_FILES, rs_path + "  " + rs_bytes + " bytes")
+    }
+
+    return [rs_name, rs_gen, rs_status, rs_period, rs_pop0, population(rs_board), sparkline(rs_pops), rs_dr, rs_dc, plain(rs_board), rs_path, rs_bytes]
+}
+
+
+# =====================================================================
+# SCENES
+# =====================================================================
+T_START = now()
+
+GLIDER = parse_pattern(GLIDER_TXT)
+LWSS = parse_pattern(LWSS_TXT)
+
+# --- 1. the glider ---------------------------------------------------
+# The smallest spaceship: 5 cells, period 4, and it moves one cell
+# diagonally per period. Launched from the top-left of a low box it
+# reaches the floor around generation 32, where the collision burns off
+# one cell and leaves a 2x2 block -- so this scene ends with the cycle
+# detector reporting a still life, and stops on its own before the cap.
+GLIDER_ROWS = 11
+GLIDER_COLS = 18
+g_board = blank_board(GLIDER_ROWS, GLIDER_COLS)
+g_board = stamp(g_board, GLIDER, 1, 1)
+R_GLIDER = run_scene("1/3  GLIDER  --  5 cells, period 4, travels (1,1)", "a glider launched at (1,1); it flies until it hits the floor and crashes", g_board, "glider")
+
+# --- 2. the blinker (and friends) ------------------------------------
+# The blinker is the smallest oscillator: three in a row flipping
+# between horizontal and vertical. Alongside it go two toads and a
+# beacon (also period 2) and a block (a still life). Spacing matters
+# more than it looks: two structures two cells apart still interact,
+# because a birth can happen in the gap between them. Everything here
+# is separated by at least three empty cells, so nothing interferes and
+# the whole board has period 2 -- which the detector reports on
+# generation 2, the earliest moment it possibly can.
+BLINK_ROWS = 13
+BLINK_COLS = 26
+b_board = blank_board(BLINK_ROWS, BLINK_COLS)
+b_board = stamp(b_board, parse_pattern(BLINKER_TXT), 2, 2)
+b_board = stamp(b_board, parse_pattern(BEACON_TXT), 2, 10)
+b_board = stamp(b_board, parse_pattern(BLINKER_TXT), 2, 19)
+b_board = stamp(b_board, parse_pattern(TOAD_TXT), 9, 2)
+b_board = stamp(b_board, parse_pattern(BLOCK_TXT), 9, 10)
+b_board = stamp(b_board, parse_pattern(TOAD_TXT), 9, 19)
+R_BLINK = run_scene("2/3  BLINKER  --  plus two toads, a beacon and a block", "a blinker with company: the toads and beacon are period 2, the block never moves", b_board, "blinker")
+
+# --- 3. the lightweight spaceship ------------------------------------
+# The LWSS is 9 cells, period 4, and moves TWO cells per period, so it
+# crosses the board at half the speed of light -- twice as fast as a
+# glider. Launched from the right-hand side with a full runway it never
+# repeats a state, so this scene is the one that runs into the MAX_GEN
+# cap. Raise LWSS_COLS along with MAX_GEN to give it more room.
+LWSS_ROWS = 13
+LWSS_COLS = 36
+l_board = blank_board(LWSS_ROWS, LWSS_COLS)
+l_board = stamp(l_board, LWSS, 4, 29)
+R_LWSS = run_scene("3/3  LIGHTWEIGHT SPACESHIP  --  9 cells, period 4, travels 2 per period", "an LWSS crossing right to left at half the speed of light", l_board, "lwss")
+
+
+# =====================================================================
+# THE PROOF: a glider returns to its own shape, displaced by (1,1),
+# after exactly 4 generations.
+#
+# Two independent checks, because "it looks the same" is not a proof:
+#
+#   A. shape  -- crop both boards to their bounding boxes and compare
+#                the text. Identical text means identical shape.
+#   B. place  -- translate every live cell of generation 0 by (+1,+1)
+#                onto a fresh board and compare it cell-for-cell with
+#                generation 4. This is the strong version: it pins the
+#                position as well as the shape.
+#
+# Generations 1..3 are checked too: population must stay at 5 the whole
+# way, and none of them may already equal the shifted target (otherwise
+# "after 4 generations" would be an overstatement).
+# =====================================================================
+fn crop(cr_g) {
+    cr_bb = bbox(cr_g)
+    if cr_bb[0] < 0 { return "" }
+    return plain(window(cr_g, cr_bb[0], cr_bb[1], cr_bb[2] - cr_bb[0] + 1, cr_bb[3] - cr_bb[1] + 1))
+}
+fn shift(sh_g, sh_dr, sh_dc) {
+    sh_out = blank_board(len(sh_g), len(sh_g[0]))
+    sh_r = 0
+    while sh_r < len(sh_g) {
+        sh_c = 0
+        while sh_c < len(sh_g[0]) {
+            if sh_g[sh_r][sh_c] == 1 {
+                sh_rr = sh_r + sh_dr
+                sh_cc = sh_c + sh_dc
+                if sh_rr >= 0 and sh_rr < len(sh_g) and sh_cc >= 0 and sh_cc < len(sh_g[0]) {
+                    sh_out[sh_rr][sh_cc] = 1
+                }
+            }
+            sh_c += 1
+        }
+        sh_r += 1
+    }
+    return sh_out
+}
+# Several small boards printed side by side, with a caption row.
+fn filmstrip(fs_grids, fs_labels, fs_gap) {
+    fs_wide = len(fs_grids[0][0]) + fs_gap
+    fs_out = []
+    fs_head = ""
+    fs_i = 0
+    while fs_i < len(fs_labels) {
+        fs_head = fs_head + pad(fs_labels[fs_i], fs_wide)
+        fs_i += 1
+    }
+    fs_out = push(fs_out, rtrim(fs_head))
+    fs_r = 0
+    while fs_r < len(fs_grids[0]) {
+        fs_line = ""
+        fs_i = 0
+        while fs_i < len(fs_grids) {
+            fs_line = fs_line + pad(plain_row(fs_grids[fs_i][fs_r]), fs_wide)
+            fs_i += 1
+        }
+        fs_out = push(fs_out, rtrim(fs_line))
+        fs_r += 1
+    }
+    return fs_out
+}
+
+PROOF_N = 9
+p_board = blank_board(PROOF_N, PROOF_N)
+p_board = stamp(p_board, GLIDER, 2, 2)
+p_gen0 = p_board
+p_target = shift(p_gen0, 1, 1)
+p_phases = [window(p_gen0, 1, 1, 6, 6)]
+p_labels = ["gen 0", "gen 1", "gen 2", "gen 3", "gen 4"]
+p_pop_ok = true
+p_early = false
+p_cur = p_gen0
+p_i = 1
+while p_i <= 4 {
+    p_cur = next_gen(p_cur)
+    p_phases = push(p_phases, window(p_cur, 1, 1, 6, 6))
+    if population(p_cur) != 5 { p_pop_ok = false }
+    if p_i < 4 and plain(p_cur) == plain(p_target) { p_early = true }
+    p_i += 1
+}
+p_gen4 = p_cur
+p_bb0 = bbox(p_gen0)
+p_bb4 = bbox(p_gen4)
+p_shape_ok = crop(p_gen0) == crop(p_gen4)
+p_place_ok = plain(p_gen4) == plain(p_target)
+p_offset_ok = (p_bb4[0] - p_bb0[0]) == 1 and (p_bb4[1] - p_bb0[1]) == 1
+p_all_ok = p_shape_ok and p_place_ok and p_offset_ok and p_pop_ok and not p_early
+
+
+# =====================================================================
+# THE REPORT -- plain text, no colour, so it survives being piped to a
+# file or read out of a log.
+# =====================================================================
+fn tick(tk_ok) {
+    return tk_ok ? "PASS" : "FAIL"
+}
+fn line_of(lo_ch) {
+    return repeat(lo_ch, 74)
+}
+fn scene_row(sr_tag, sr_r) {
+    return pad(sr_tag, 10) + pad(str(sr_r[1]), 6) + pad(str(sr_r[4]) + " -> " + str(sr_r[5]), 12) + pad("(" + sr_r[7] + "," + sr_r[8] + ")", 9) + sr_r[2]
+}
+
+print("")
+print(line_of("="))
+print("  CONWAY'S GAME OF LIFE  --  run report")
+print(line_of("="))
+print("")
+print("  scene     gens  population  drift    outcome")
+print("  " + line_of("-"))
+print("  " + scene_row("glider", R_GLIDER))
+print("  " + scene_row("blinker", R_BLINK))
+print("  " + scene_row("lwss", R_LWSS))
+print("")
+print("  population over time (one character per generation)")
+print("    glider   " + R_GLIDER[6])
+print("    blinker  " + R_BLINK[6])
+print("    lwss     " + R_LWSS[6])
+print("")
+print("  drift is the movement of the pattern's bounding box from the first")
+print("  generation to the last. The LWSS covers 2 columns every 4 generations,")
+print("  which over " + R_LWSS[1] + " generations is " + int(R_LWSS[1] / 2) + " columns of travel.")
+print("")
+
+print(line_of("-"))
+print("  final state of each scene")
+print(line_of("-"))
+print("")
+print("  " + R_GLIDER[0])
+print(R_GLIDER[9])
+print("")
+print("  " + R_BLINK[0])
+print(R_BLINK[9])
+print("")
+print("  " + R_LWSS[0])
+print(R_LWSS[9])
+print("")
+
+print(line_of("-"))
+print("  PROOF: the glider is its own shape, displaced by (1,1), after 4 gens")
+print(line_of("-"))
+print("")
+for p_l in filmstrip(p_phases, p_labels, 3) {
+    print("  " + p_l)
+}
+print("")
+print("  bounding box gen 0 : rows " + p_bb0[0] + ".." + p_bb0[2] + "  cols " + p_bb0[1] + ".." + p_bb0[3])
+print("  bounding box gen 4 : rows " + p_bb4[0] + ".." + p_bb4[2] + "  cols " + p_bb4[1] + ".." + p_bb4[3])
+print("  offset             : (" + (p_bb4[0] - p_bb0[0]) + "," + (p_bb4[1] - p_bb0[1]) + ")")
+print("")
+print("  " + tick(p_shape_ok) + "  cropped shape at gen 4 is identical to gen 0")
+print("  " + tick(p_offset_ok) + "  bounding box moved by exactly (1,1)")
+print("  " + tick(p_place_ok) + "  gen 4 equals gen 0 translated by (1,1), cell for cell")
+print("  " + tick(p_pop_ok) + "  population stayed at 5 through all four generations")
+print("  " + tick(not p_early) + "  no earlier generation already matched the target")
+print("")
+
+assert(p_shape_ok, "glider shape must repeat after 4 generations")
+assert(p_offset_ok, "glider must move by exactly (1,1) in 4 generations")
+assert(p_place_ok, "gen 4 must equal gen 0 shifted by (1,1)")
+assert(p_pop_ok, "a glider always has 5 live cells")
+assert(not p_early, "the glider must not reach the target early")
+assert(R_BLINK[3] == 2, "the oscillator scene must be detected as period 2")
+assert(R_GLIDER[3] == 1, "the glider scene must settle into a still life")
+assert(R_LWSS[3] == 0, "the LWSS must still be travelling at the cap")
+
+# --- artifacts -------------------------------------------------------
+print(line_of("-"))
+print("  files written")
+print(line_of("-"))
+if CAN_WRITE {
+    TRANSCRIPT = push(TRANSCRIPT, "")
+    TRANSCRIPT = push(TRANSCRIPT, "glider proof: shape " + tick(p_shape_ok) + ", offset (1,1) " + tick(p_offset_ok) + ", placement " + tick(p_place_ok))
+    TR_TEXT = join(TRANSCRIPT, "\n") + "\n"
+    write("examples_out/life_transcript.txt", TR_TEXT)
+    OUT_FILES = push(OUT_FILES, "examples_out/life_transcript.txt  " + len(TR_TEXT) + " bytes")
+    for f_name in OUT_FILES {
+        print("  " + f_name)
+    }
+    print("")
+    print("  the .bmp files are long exposures: each cell is tinted by the last")
+    print("  generation it was alive, deep blue early to white late, and cells")
+    print("  still alive at the end are gold. Open them in any image viewer.")
+} else {
+    print("  (skipped -- run me from the repo root so examples_out/ exists)")
+}
+print("")
+print(line_of("="))
+print("  all checks passed in " + int(now() - T_START) + " ms  (" + FRAME_MS + " ms of that per animation frame)")
+print(line_of("="))

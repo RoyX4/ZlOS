@@ -1,0 +1,330 @@
+# geometry.zl - 2D geometry on plain lists.
+#
+# Representation: a point is [x, y]. A polygon is a list of points in order,
+# implicitly closed - the last point joins back to the first, so do NOT repeat
+# the opening vertex. Winding may be either way: area_polygon() and
+# centroid() use the signed shoelace sum internally but report an unsigned
+# area, so a clockwise square and a counter-clockwise square agree.
+# bbox() returns two corner points, [[min_x, min_y], [max_x, max_y]].
+# convex_hull() returns the hull counter-clockwise, collinear points dropped,
+# and does not repeat the closing vertex either.
+#
+# Two zl details shape the code below:
+#   * `and` / `or` evaluate BOTH sides, so a bounds guard cannot be folded
+#     into the loop test - `while i < len(xs) and xs[i] < v` would index off
+#     the end. Those are written as a plain `while` with an inner `if break`.
+#   * Assigning a name inside a function writes an existing global of that
+#     name (parameters included). Every global in the demo therefore carries
+#     a `g_` prefix, which no parameter or local here uses.
+#
+# Numbers are doubles, so the usual floating point caveats apply: exact
+# comparisons like cross(...) == 0 only mean "exactly collinear".
+
+fn dist(p, q) {
+    return hypot(q[0] - p[0], q[1] - p[1])
+}
+fn manhattan(p, q) {
+    return abs(q[0] - p[0]) + abs(q[1] - p[1])
+}
+fn midpoint(p, q) {
+    return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]
+}
+
+# Z of (a-o) x (b-o). Positive = o->a->b turns left (counter-clockwise),
+# negative = right, zero = the three points are collinear. Its magnitude is
+# twice the area of triangle o-a-b.
+fn cross(o, a, b) {
+    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+}
+
+# Shoelace formula: half the absolute sum of the edge cross terms.
+fn area_polygon(poly) {
+    n = len(poly)
+    if n < 3 {
+        return 0
+    }
+    total = 0
+    i = 0
+    while i < n {
+        j = i + 1
+        if j == n {
+            j = 0
+        }
+        total = total + poly[i][0] * poly[j][1] - poly[j][0] * poly[i][1]
+        i = i + 1
+    }
+    return abs(total) / 2
+}
+
+fn perimeter(poly) {
+    n = len(poly)
+    if n < 2 {
+        return 0
+    }
+    total = 0
+    i = 0
+    while i < n {
+        j = i + 1
+        if j == n {
+            j = 0
+        }
+        total = total + dist(poly[i], poly[j])
+        i = i + 1
+    }
+    return total
+}
+
+# Area centroid (the balance point of the filled shape), not the average of
+# the vertices - for anything but a triangle those differ. A zero-area
+# polygon has no area centroid, so that case falls back to the vertex mean.
+fn centroid(poly) {
+    n = len(poly)
+    if n == 0 {
+        return [0, 0]
+    }
+    a2 = 0
+    cx = 0
+    cy = 0
+    i = 0
+    while i < n {
+        j = i + 1
+        if j == n {
+            j = 0
+        }
+        w = poly[i][0] * poly[j][1] - poly[j][0] * poly[i][1]
+        a2 = a2 + w
+        cx = cx + (poly[i][0] + poly[j][0]) * w
+        cy = cy + (poly[i][1] + poly[j][1]) * w
+        i = i + 1
+    }
+    if a2 == 0 {
+        sx = 0
+        sy = 0
+        for p in poly {
+            sx = sx + p[0]
+            sy = sy + p[1]
+        }
+        return [sx / n, sy / n]
+    }
+    return [cx / (3 * a2), cy / (3 * a2)]
+}
+
+# Ray casting: shoot a ray in -x from pt and count edge crossings; odd means
+# inside. Works on concave polygons. A point exactly on an edge is a
+# boundary case and may answer either way.
+fn point_in_polygon(pt, poly) {
+    n = len(poly)
+    inside = false
+    i = 0
+    j = n - 1
+    while i < n {
+        yi = poly[i][1]
+        yj = poly[j][1]
+        if (yi > pt[1]) != (yj > pt[1]) {
+            xi = poly[i][0]
+            xj = poly[j][0]
+            cut = (xj - xi) * (pt[1] - yi) / (yj - yi) + xi
+            if pt[0] < cut {
+                inside = not inside
+            }
+        }
+        j = i
+        i = i + 1
+    }
+    return inside
+}
+
+fn point_less(u, v) {
+    if u[0] != v[0] {
+        return u[0] < v[0]
+    }
+    return u[1] < v[1]
+}
+
+# Insertion sort by x then y. sort() only orders numbers and strings, and
+# index assignment on a pushed list can alias, so this builds a fresh list
+# with insert() and leaves the caller's list untouched.
+fn sort_points(pts) {
+    out = []
+    for p in pts {
+        k = 0
+        while k < len(out) {
+            if not point_less(out[k], p) {
+                break
+            }
+            k = k + 1
+        }
+        out = insert(out, k, p)
+    }
+    return out
+}
+
+# Andrew's monotone chain. Sweep left to right keeping only left turns to get
+# the lower chain, then right to left for the upper chain; each chain ends
+# where the other begins, so drop both last points and join.
+fn convex_hull(pts) {
+    n = len(pts)
+    if n < 3 {
+        return sort_points(pts)
+    }
+    ord = sort_points(pts)
+    lo = []
+    i = 0
+    while i < n {
+        while len(lo) >= 2 {
+            if cross(lo[len(lo) - 2], lo[len(lo) - 1], ord[i]) > 0 {
+                break
+            }
+            lo = remove(lo, len(lo) - 1)
+        }
+        lo = push(lo, ord[i])
+        i = i + 1
+    }
+    up = []
+    i = n - 1
+    while i >= 0 {
+        while len(up) >= 2 {
+            if cross(up[len(up) - 2], up[len(up) - 1], ord[i]) > 0 {
+                break
+            }
+            up = remove(up, len(up) - 1)
+        }
+        up = push(up, ord[i])
+        i = i - 1
+    }
+    hull = []
+    i = 0
+    while i < len(lo) - 1 {
+        hull = push(hull, lo[i])
+        i = i + 1
+    }
+    i = 0
+    while i < len(up) - 1 {
+        hull = push(hull, up[i])
+        i = i + 1
+    }
+    return hull
+}
+
+fn bbox(pts) {
+    if len(pts) == 0 {
+        return [[0, 0], [0, 0]]
+    }
+    lo_x = pts[0][0]
+    lo_y = pts[0][1]
+    hi_x = lo_x
+    hi_y = lo_y
+    for p in pts {
+        lo_x = min(lo_x, p[0])
+        lo_y = min(lo_y, p[1])
+        hi_x = max(hi_x, p[0])
+        hi_y = max(hi_y, p[1])
+    }
+    return [[lo_x, lo_y], [hi_x, hi_y]]
+}
+
+# Only meaningful when p is already known to be collinear with a-b: then p
+# lies on the segment exactly when it is inside the segment's bounding box.
+fn on_segment(a, b, p) {
+    if p[0] < min(a[0], b[0]) {
+        return false
+    }
+    if p[0] > max(a[0], b[0]) {
+        return false
+    }
+    if p[1] < min(a[1], b[1]) {
+        return false
+    }
+    if p[1] > max(a[1], b[1]) {
+        return false
+    }
+    return true
+}
+
+# True if segment p1-p2 touches segment p3-p4 anywhere, including endpoint
+# touches and collinear overlap.
+fn segments_intersect(p1, p2, p3, p4) {
+    d1 = cross(p3, p4, p1)
+    d2 = cross(p3, p4, p2)
+    d3 = cross(p1, p2, p3)
+    d4 = cross(p1, p2, p4)
+    if sign(d1) * sign(d2) < 0 {
+        if sign(d3) * sign(d4) < 0 {
+            return true
+        }
+    }
+    if d1 == 0 {
+        if on_segment(p3, p4, p1) {
+            return true
+        }
+    }
+    if d2 == 0 {
+        if on_segment(p3, p4, p2) {
+            return true
+        }
+    }
+    if d3 == 0 {
+        if on_segment(p1, p2, p3) {
+            return true
+        }
+    }
+    if d4 == 0 {
+        if on_segment(p1, p2, p4) {
+            return true
+        }
+    }
+    return false
+}
+
+# --- demo -------------------------------------------------------------
+# Every expected value below is worked out by hand in the comment beside it.
+
+g_a = [0, 0]
+g_b = [3, 4]
+print("dist([0,0],[3,4]):      " + str(dist(g_a, g_b)))          # 3-4-5 -> 5
+print("manhattan([0,0],[3,4]): " + str(manhattan(g_a, g_b)))     # 3 + 4  -> 7
+print("midpoint([0,0],[3,4]):  " + str(midpoint(g_a, g_b)))      # [1.5, 2]
+print("cross left turn:        " + str(cross([0, 0], [1, 0], [0, 1])))   # +1
+print("cross right turn:       " + str(cross([0, 0], [1, 0], [0, -1])))  # -1
+print("cross collinear:        " + str(cross([0, 0], [1, 1], [2, 2])))   #  0
+
+# Square (0,0) (4,0) (4,4) (0,4). Shoelace terms: 0, 16, 16, 0 -> 32/2 = 16,
+# which is the 4x4 it obviously is. Perimeter 4*4 = 16, centre (2,2).
+g_sq = [[0, 0], [4, 0], [4, 4], [0, 4]]
+print("square area:            " + str(area_polygon(g_sq)) + "   (hand: 4*4 = 16)")
+print("square area reversed:   " + str(area_polygon([[0, 4], [4, 4], [4, 0], [0, 0]])) + "   (winding must not matter)")
+print("square perimeter:       " + str(perimeter(g_sq)) + "   (hand: 4*4 = 16)")
+print("square centroid:        " + str(centroid(g_sq)) + " (hand: [2, 2])")
+print("square bbox:            " + str(bbox(g_sq)))
+
+# Right triangle (0,0) (6,0) (0,3). Shoelace terms: 0, 18, 0 -> 18/2 = 9,
+# and by base*height/2 that is 6*3/2 = 9. Perimeter 6 + 3 + sqrt(45).
+# A triangle's area centroid is the vertex mean: (6/3, 3/3) = (2, 1).
+g_tri = [[0, 0], [6, 0], [0, 3]]
+print("triangle area:          " + str(area_polygon(g_tri)) + "    (hand: 6*3/2 = 9)")
+print("triangle perimeter:     " + str(perimeter(g_tri)) + " (hand: 6+3+sqrt(45) = " + str(9 + sqrt(45)) + ")")
+print("triangle centroid:      " + str(centroid(g_tri)) + " (hand: [2, 1])")
+
+# Concave chevron: a 4x4 square with a triangular notch (0,4) (2,1) (4,4)
+# cut out of the top. Area 16 - (4*3/2) = 16 - 6 = 10.
+g_chev = [[0, 0], [4, 0], [4, 4], [2, 1], [0, 4]]
+print("chevron area:           " + str(area_polygon(g_chev)) + "   (hand: 16 - 6 = 10)")
+print("in square  [2,2]:       " + str(point_in_polygon([2, 2], g_sq)) + "  (inside)")
+print("in square  [5,2]:       " + str(point_in_polygon([5, 2], g_sq)) + " (right of it)")
+print("in square  [2,5]:       " + str(point_in_polygon([2, 5], g_sq)) + " (above it)")
+print("in chevron [2,0.5]:     " + str(point_in_polygon([2, 0.5], g_chev)) + "  (below the notch)")
+print("in chevron [2,3]:       " + str(point_in_polygon([2, 3], g_chev)) + " (inside the notch, so out)")
+
+# Four square corners plus four interior/edge points; the hull is the square.
+g_cloud = [[0, 0], [4, 0], [4, 4], [0, 4], [2, 2], [1, 3], [2, 0], [3, 3]]
+print("hull of 8 points:       " + str(convex_hull(g_cloud)))
+print("  (hand: the 4 corners, ccw from [0,0]; [2,0] is collinear so dropped)")
+print("cloud bbox:             " + str(bbox(g_cloud)))
+print("hull area = square:     " + str(area_polygon(convex_hull(g_cloud))))
+
+print("X crossing:             " + str(segments_intersect([0, 0], [4, 4], [0, 4], [4, 0])) + "  (meet at [2,2])")
+print("parallel:               " + str(segments_intersect([0, 0], [1, 0], [0, 1], [1, 1])) + " (never meet)")
+print("T touch:                " + str(segments_intersect([0, 0], [4, 0], [2, 0], [2, 5])) + "  (endpoint on segment)")
+print("collinear overlap:      " + str(segments_intersect([0, 0], [2, 2], [1, 1], [3, 3])) + "  (share [1,1]..[2,2])")
+print("collinear apart:        " + str(segments_intersect([0, 0], [1, 1], [2, 2], [3, 3])) + " (same line, no overlap)")
+print("apart, would cross:     " + str(segments_intersect([0, 0], [1, 1], [3, 0], [4, 4])) + " (lines cross past the ends)")

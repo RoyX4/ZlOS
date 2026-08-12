@@ -1,0 +1,220 @@
+# pathx.zl - filesystem path string handling. Pure string work, no I/O.
+#
+# Both '/' and '\' are accepted as separators on input (this is Windows).
+# Representation choice: every function that RETURNS a path returns the
+# posix form ('/' separators) so results are predictable and comparable.
+# Call to_win() on the result if you want backslashes back.
+#
+# A path is understood as  root + components:
+#   ""      -> relative        "a/b"
+#   "/"     -> rooted          "/a/b"
+#   "//"    -> UNC             "//server/share"
+#   "C:/"   -> absolute drive  "C:/a/b"
+#   "C:"    -> drive-relative  "C:a/b"
+
+fn to_posix(p) {
+    return replace(p, "\\", "/")
+}
+fn to_win(p) {
+    return replace(p, "/", "\\")
+}
+
+fn is_letter(c) {
+    if len(c) != 1 {
+        return false
+    }
+    return find("abcdefghijklmnopqrstuvwxyz", lower(c)) >= 0
+}
+
+# The leading root of a path (see the table above). "" when relative.
+fn root_of(p) {
+    s = to_posix(p)
+    if len(s) >= 2 and at(s, 1) == ":" and is_letter(at(s, 0)) {
+        if len(s) >= 3 and at(s, 2) == "/" {
+            return slice(s, 0, 3)
+        }
+        return slice(s, 0, 2)
+    }
+    if len(s) >= 2 and at(s, 0) == "/" and at(s, 1) == "/" {
+        return "//"
+    }
+    if len(s) >= 1 and at(s, 0) == "/" {
+        return "/"
+    }
+    return ""
+}
+
+# Absolute means the root pins it to a filesystem origin, so it ends in '/'.
+fn is_abs(p) {
+    r = root_of(p)
+    return len(r) > 0 and ends(r, "/")
+}
+
+# The named components after the root, with empty pieces dropped.
+fn split_path(p) {
+    s = to_posix(p)
+    r = root_of(s)
+    rest = slice(s, len(r), len(s))
+    out = []
+    for part in split(rest, "/") {
+        if len(part) > 0 {
+            out = push(out, part)
+        }
+    }
+    return out
+}
+
+# The last component. "" for a bare root or an empty path.
+fn basename(p) {
+    parts = split_path(p)
+    if len(parts) == 0 {
+        return ""
+    }
+    return last(parts)
+}
+
+fn dirname(p) {
+    s = to_posix(p)
+    r = root_of(s)
+    parts = split_path(s)
+    if len(parts) <= 1 {
+        if len(r) > 0 {
+            return r
+        }
+        return "."
+    }
+    head = []
+    i = 0
+    while i < len(parts) - 1 {
+        head = push(head, parts[i])
+        i = i + 1
+    }
+    return r + join(head, "/")
+}
+
+# ".txt" for "a/b.txt". A leading dot is a hidden file, not an extension.
+fn extname(p) {
+    b = basename(p)
+    i = len(b) - 1
+    while i > 0 {
+        if at(b, i) == "." {
+            return slice(b, i, len(b))
+        }
+        i = i - 1
+    }
+    return ""
+}
+
+fn stem(p) {
+    b = basename(p)
+    e = extname(p)
+    return slice(b, 0, len(b) - len(e))
+}
+
+# Swap the extension. ext may be given with or without the dot; "" strips it.
+fn with_ext(p, ext) {
+    e = ext
+    if len(e) > 0 and not starts(e, ".") {
+        e = "." + e
+    }
+    s = to_posix(p)
+    if len(basename(s)) == 0 {
+        return s
+    }
+    d = dirname(s)
+    fresh = stem(s) + e
+    if d == "." {
+        return fresh
+    }
+    if ends(d, "/") {
+        return d + fresh
+    }
+    return d + "/" + fresh
+}
+
+# Join components. An absolute part throws away everything before it.
+fn path_join(parts) {
+    out = ""
+    for p in parts {
+        s = to_posix(p)
+        if len(s) == 0 {
+            continue
+        }
+        if len(out) == 0 or is_abs(s) {
+            out = s
+        } else if ends(out, "/") {
+            out = out + s
+        } else {
+            out = out + "/" + s
+        }
+    }
+    return out
+}
+
+# Collapse duplicate separators, drop ".", and resolve "..".
+# A ".." that would climb past an absolute root is discarded.
+fn normalize(p) {
+    s = to_posix(p)
+    r = root_of(s)
+    rooted = is_abs(s)
+    stack = []
+    for c in split_path(s) {
+        if c == "." {
+            continue
+        }
+        if c == ".." {
+            # nested, not "and": zl evaluates both sides of and/or.
+            climbed = false
+            if len(stack) > 0 {
+                if last(stack) != ".." {
+                    stack = remove(stack, len(stack) - 1)
+                    climbed = true
+                }
+            }
+            if not climbed {
+                if not rooted {
+                    stack = push(stack, "..")
+                }
+            }
+            continue
+        }
+        stack = push(stack, c)
+    }
+    body = join(stack, "/")
+    if len(r) > 0 {
+        return r + body
+    }
+    if len(body) == 0 {
+        return "."
+    }
+    return body
+}
+
+# ---- demo ----------------------------------------------------------------
+
+win = "C:\\Users\\royx4\\my-stack\\stdlib\\pathx.zl"
+nix = "/usr/local/share/notes.tar.gz"
+
+print("to_posix:      " + to_posix(win))
+print("to_win:        " + to_win(nix))
+print("basename win:  " + basename(win))
+print("basename nix:  " + basename(nix))
+print("basename dir:  " + basename("a/b/c/"))
+print("dirname win:   " + dirname(win))
+print("dirname nix:   " + dirname(nix))
+print("dirname top:   " + dirname("/only") + "  " + dirname("solo"))
+print("extname:       " + extname(win) + "  " + extname(nix) + "  [" + extname("README") + "]  [" + extname(".gitignore") + "]")
+print("stem:          " + stem(win) + "  " + stem(nix))
+print("with_ext:      " + with_ext(win, "c"))
+print("with_ext strip:" + with_ext("notes.txt", ""))
+print("is_abs:        " + str(is_abs(win)) + " " + str(is_abs(nix)) + " " + str(is_abs("stdlib\\x.zl")) + " " + str(is_abs("C:tmp")))
+print("split_path:    " + str(split_path(win)))
+print("split_path nix:" + str(split_path(nix)))
+print("path_join:     " + path_join(["stdlib", "sub\\dir", "file.zl"]))
+print("path_join abs: " + path_join(["stdlib", "/etc", "hosts"]))
+print("normalize 1:   " + normalize("a//b/../c/./d"))
+print("normalize 2:   " + normalize("C:\\Users\\royx4\\..\\other\\\\file.txt"))
+print("normalize 3:   " + normalize("/x/../../y"))
+print("normalize 4:   " + normalize("../../a/b/.."))
+print("normalize 5:   [" + normalize("./") + "]  [" + normalize("/") + "]")
+print("round trip:    " + to_win(normalize(win)))

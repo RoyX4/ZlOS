@@ -1,0 +1,232 @@
+# complex.zl -- complex-number arithmetic.
+#
+# Representation: a complex number is a two-element list [re, im], both
+# ordinary zl numbers (doubles). A pair was chosen over two parallel values
+# because zl has no structs and no multiple return: a list is the only way a
+# function can hand back both halves at once, and it keeps every operation a
+# plain value -> value function with no shared state. Real numbers are just
+# [x, 0], so c_mul([3,0], [2,0]) == [6, 0] and the module needs no separate
+# real/complex path.
+#
+# Angles are radians throughout, matching sin/cos/atan. c_arg returns the
+# principal argument in (-pi, pi].
+#
+# zl has no atan2 builtin, so c_arg works out the quadrant itself from the
+# signs of re and im (see the function). zl also has no first-class
+# functions, so nothing here takes a callback.
+#
+# c_div does not guard its divisor: dividing by [0, 0] gives inf/nan
+# components rather than an error, the same as 1/0 in plain zl.
+#
+# c_to_string rounds to 6 decimal places for DISPLAY ONLY, so that values
+# like cos(pi/2) = 6.12e-17 read as "0" instead of scientific noise. Stored
+# values are never rounded -- every epsilon check in the demo below measures
+# the raw numbers.
+#
+# Naming: a call gets its own frame while it runs, but the names it binds
+# (parameters included) leak into the global namespace once it returns. So
+# every parameter and local here carries a two-letter tag for its function
+# (cm_ = c_mul, cp_ = c_pow_int, ...), and the demo's globals are named so
+# they cannot collide. Without that, c_pow_int's internal c_mul(a, b) calls
+# would overwrite a caller's own `a`.
+
+# --- (a+bi) + (c+di) = (a+c) + (b+d)i ---
+fn c_add(ad_x, ad_y) {
+    return [ad_x[0] + ad_y[0], ad_x[1] + ad_y[1]]
+}
+
+# --- (a+bi) - (c+di) = (a-c) + (b-d)i ---
+fn c_sub(sb_x, sb_y) {
+    return [sb_x[0] - sb_y[0], sb_x[1] - sb_y[1]]
+}
+
+# --- (a+bi)(c+di) = (ac - bd) + (ad + bc)i ---
+fn c_mul(cm_x, cm_y) {
+    cm_re = cm_x[0] * cm_y[0] - cm_x[1] * cm_y[1]
+    cm_im = cm_x[0] * cm_y[1] + cm_x[1] * cm_y[0]
+    return [cm_re, cm_im]
+}
+
+# --- divide by multiplying top and bottom by the conjugate of the bottom:
+#     (a+bi)/(c+di) = ((ac + bd) + (bc - ad)i) / (c^2 + d^2) ---
+fn c_div(cd_x, cd_y) {
+    cd_den = cd_y[0] * cd_y[0] + cd_y[1] * cd_y[1]
+    cd_re = (cd_x[0] * cd_y[0] + cd_x[1] * cd_y[1]) / cd_den
+    cd_im = (cd_x[1] * cd_y[0] - cd_x[0] * cd_y[1]) / cd_den
+    return [cd_re, cd_im]
+}
+
+# --- modulus |a+bi| = sqrt(a^2 + b^2); hypot avoids overflow on big parts ---
+fn c_abs(ab_z) {
+    return hypot(ab_z[0], ab_z[1])
+}
+
+# --- principal argument, in (-pi, pi]. This is atan2 spelled out: atan()
+#     alone only covers the right half-plane, so the left half needs +-pi and
+#     the imaginary axis is handled directly (im/re would be inf there). ---
+fn c_arg(ag_z) {
+    ag_re = ag_z[0]
+    ag_im = ag_z[1]
+    if ag_re > 0 {
+        return atan(ag_im / ag_re)
+    }
+    if ag_re < 0 {
+        if ag_im >= 0 {
+            return atan(ag_im / ag_re) + pi()
+        }
+        return atan(ag_im / ag_re) - pi()
+    }
+    if ag_im > 0 {
+        return pi() / 2
+    }
+    if ag_im < 0 {
+        return -pi() / 2
+    }
+    return 0
+}
+
+# --- conjugate: flip the sign of the imaginary part ---
+fn c_conj(cj_z) {
+    return [cj_z[0], -cj_z[1]]
+}
+
+# --- negation: flip both parts ---
+fn c_neg(ng_z) {
+    return [-ng_z[0], -ng_z[1]]
+}
+
+# --- e^(a+bi) = e^a * (cos b + i sin b) ---
+fn c_exp(ce_z) {
+    ce_r = exp(ce_z[0])
+    return [ce_r * cos(ce_z[1]), ce_r * sin(ce_z[1])]
+}
+
+# --- integer power by repeated squaring. n may be negative: take the
+#     positive power, then the reciprocal 1/z^|n|. n == 0 gives 1. ---
+fn c_pow_int(cp_z, cp_n) {
+    cp_k = cp_n
+    cp_flip = false
+    if cp_k < 0 {
+        cp_flip = true
+        cp_k = -cp_k
+    }
+    cp_base = cp_z
+    cp_acc = [1, 0]
+    while cp_k > 0 {
+        if cp_k % 2 == 1 {
+            cp_acc = c_mul(cp_acc, cp_base)
+        }
+        cp_base = c_mul(cp_base, cp_base)
+        cp_k = int(cp_k / 2)
+    }
+    if cp_flip {
+        return c_div([1, 0], cp_acc)
+    }
+    return cp_acc
+}
+
+# --- build from modulus and angle: r * (cos t + i sin t) ---
+fn c_from_polar(fp_r, fp_t) {
+    return [fp_r * cos(fp_t), fp_r * sin(fp_t)]
+}
+
+# --- render as "re + imi" / "re - imi", rounded to 6 dp for display ---
+fn c_to_string(cs_z) {
+    cs_re = round(cs_z[0] * 1000000) / 1000000
+    cs_im = round(cs_z[1] * 1000000) / 1000000
+    if cs_im < 0 {
+        return str(cs_re) + " - " + str(-cs_im) + "i"
+    }
+    return str(cs_re) + " + " + str(cs_im) + "i"
+}
+
+# =====================  DEMO  =====================
+
+EPS = 0.000000001
+UNITY = [1, 0]
+
+# distance between two complex numbers -- the yardstick for every check below
+fn err_to(et_got, et_want) {
+    return c_abs(c_sub(et_got, et_want))
+}
+fn ok_str(os_e) {
+    return os_e < EPS ? "ok" : "FAIL"
+}
+
+print("complex.zl -- complex numbers as [re, im]")
+print("")
+
+zp = [3, 4]
+zq = [1, -2]
+print("p = " + c_to_string(zp) + ",  q = " + c_to_string(zq))
+print("  p + q  = " + pad(c_to_string(c_add(zp, zq)), 12) + "(expect 4 + 2i)")
+print("  p - q  = " + pad(c_to_string(c_sub(zp, zq)), 12) + "(expect 2 + 6i)")
+print("  p * q  = " + pad(c_to_string(c_mul(zp, zq)), 12) + "(expect 11 - 2i)")
+print("  p / q  = " + pad(c_to_string(c_div(zp, zq)), 12) + "(expect -1 + 2i)")
+print("  |p|    = " + pad(str(c_abs(zp)), 12) + "(expect 5)")
+print("  conj p = " + pad(c_to_string(c_conj(zp)), 12) + "(expect 3 - 4i)")
+print("  -p     = " + pad(c_to_string(c_neg(zp)), 12) + "(expect -3 - 4i)")
+# (p/q)*q must return p -- a division check that does not compare floats
+back = c_mul(c_div(zp, zq), zq)
+print("  (p/q)*q back to p: " + pad(c_to_string(back), 12) + "err = " + pad(str(err_to(back, zp)), 12) + ok_str(err_to(back, zp)))
+print("")
+
+print("c_arg by quadrant, radians (pi = " + str(round(pi() * 1000000) / 1000000) + ")")
+print("  arg( 1 + 0i) = " + pad(str(c_arg([1, 0])), 11) + "(expect 0)")
+print("  arg( 0 + 1i) = " + pad(str(c_arg([0, 1])), 11) + "(expect pi/2   = 1.5708)")
+print("  arg(-1 + 0i) = " + pad(str(c_arg([-1, 0])), 11) + "(expect pi     = 3.14159)")
+print("  arg(-1 - 1i) = " + pad(str(c_arg([-1, -1])), 11) + "(expect -3pi/4 = -2.35619)")
+print("  arg( 1 - 1i) = " + pad(str(c_arg([1, -1])), 11) + "(expect -pi/4  = -0.785398)")
+print("  arg( 0 - 2i) = " + pad(str(c_arg([0, -2])), 11) + "(expect -pi/2  = -1.5708)")
+print("  arg( 0 + 0i) = " + pad(str(c_arg([0, 0])), 11) + "(expect 0)")
+print("")
+
+print("c_exp and c_pow_int")
+print("  e^(1 + 0i)      = " + pad(c_to_string(c_exp([1, 0])), 14) + "(expect 2.71828 + 0i)")
+print("  e^(0 + (pi/2)i) = " + pad(c_to_string(c_exp([0, pi() / 2])), 14) + "(expect 0 + 1i)")
+print("  e^(i*pi)        = " + pad(c_to_string(c_exp([0, pi()])), 14) + "(expect -1 + 0i)")
+euler = c_add(c_exp([0, pi()]), UNITY)
+print("  Euler: |e^(i*pi) + 1| = " + pad(str(c_abs(euler)), 12) + "< eps -> " + ok_str(c_abs(euler)))
+print("  (1 + 1i)^2      = " + pad(c_to_string(c_pow_int([1, 1], 2)), 14) + "(expect 0 + 2i)")
+print("  i^4             = " + pad(c_to_string(c_pow_int([0, 1], 4)), 14) + "(expect 1 + 0i)")
+print("  i^-1            = " + pad(c_to_string(c_pow_int([0, 1], -1)), 14) + "(expect 0 - 1i)")
+print("  (2 + 0i)^10     = " + pad(c_to_string(c_pow_int([2, 0], 10)), 14) + "(expect 1024 + 0i)")
+print("  p^0             = " + pad(c_to_string(c_pow_int(zp, 0)), 14) + "(expect 1 + 0i)")
+print("  p^3             = " + pad(c_to_string(c_pow_int(zp, 3)), 14) + "(expect -117 + 44i)")
+print("")
+
+print("c_from_polar")
+print("  from_polar(2, pi/3)   = " + pad(c_to_string(c_from_polar(2, pi() / 3)), 16) + "(expect 1 + 1.73205i)")
+print("  from_polar(1, pi)     = " + pad(c_to_string(c_from_polar(1, pi())), 16) + "(expect -1 + 0i)")
+trip = c_from_polar(c_abs(zp), c_arg(zp))
+print("  polar round trip of p = " + pad(c_to_string(trip), 16) + "(expect 3 + 4i)")
+print("  round-trip error      = " + pad(str(err_to(trip, zp)), 16) + "< eps -> " + ok_str(err_to(trip, zp)))
+print("")
+
+# --- Roots of unity: the n solutions of z^n = 1, evenly spaced round the
+#     unit circle at angles 2*pi*k/n. Each one is verified by raising it back
+#     to the n-th power and measuring the distance from 1 -- never by == on
+#     floats. Their sum must also cancel to 0, checked the same way. ---
+fn demo_roots(dr_n) {
+    print("roots of unity, n = " + str(dr_n) + "     z_k = from_polar(1, 2*pi*k/" + str(dr_n) + ")")
+    dr_worst = 0
+    dr_sum = [0, 0]
+    dr_k = 0
+    while dr_k < dr_n {
+        dr_z = c_from_polar(1, 2 * pi() * dr_k / dr_n)
+        dr_p = c_pow_int(dr_z, dr_n)
+        dr_e = err_to(dr_p, UNITY)
+        if dr_e > dr_worst {
+            dr_worst = dr_e
+        }
+        dr_sum = c_add(dr_sum, dr_z)
+        print("  k=" + str(dr_k) + "  z = " + pad(c_to_string(dr_z), 22) + "|z| = " + pad(str(round(c_abs(dr_z) * 1000000) / 1000000), 4) + "  z^" + str(dr_n) + " = " + pad(c_to_string(dr_p), 10) + "|z^" + str(dr_n) + " - 1| = " + pad(str(dr_e), 13) + ok_str(dr_e))
+        dr_k = dr_k + 1
+    }
+    print("  worst |z^" + str(dr_n) + " - 1| = " + pad(str(dr_worst), 13) + "eps = " + str(EPS) + "  -> " + ok_str(dr_worst))
+    print("  sum of all " + str(dr_n) + " roots = " + pad(c_to_string(dr_sum), 10) + "|sum| = " + pad(str(c_abs(dr_sum)), 13) + "-> " + ok_str(c_abs(dr_sum)))
+    print("")
+}
+
+demo_roots(4)
+demo_roots(6)

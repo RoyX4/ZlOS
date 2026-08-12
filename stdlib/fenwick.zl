@@ -1,0 +1,234 @@
+# fenwick.zl - a Fenwick tree (binary indexed tree) over a list of numbers.
+#
+# What it buys you: a plain list answers "sum of elements 0..i" in O(n) and
+# "add d to element i" in O(1). A Fenwick tree makes both O(log n), which is
+# the right trade whenever updates and prefix queries are interleaved.
+#
+# The idea is one line of arithmetic: lowbit(k) = band(k, 0-k) is the lowest
+# set bit of k. Node k stores the sum of the lowbit(k) elements ending at k,
+# so a prefix walks k -= lowbit(k) down to 0 (at most one node per set bit)
+# and an update walks k += lowbit(k) up to n (at most one node per level).
+#
+# Representation: ONE flat list, nothing to unpack.
+#     f[0]        unused - it is the 1-indexed origin the arithmetic needs
+#                 (lowbit(0) is 0, so a 0 index would never advance)
+#     f[1..n]     the tree nodes
+#     len(f) - 1  the logical size, so the tree describes itself
+# A [size, nodes] pair would have been the other option; a bare list was
+# chosen so str(f) and len(f) still read as one would expect, and so
+# fen_build() can hand back something you can index straight away.
+#
+# Indices in the public API are 0-based like the rest of zl - element i of
+# the logical array. The +1 into tree space happens inside. fen_sum(f, i) is
+# INCLUSIVE of i, and fen_sum(f, -1) is 0 (the empty prefix).
+#
+# Two zl details shape the code:
+#   * zl has no local scope - a parameter or a local writes the global of
+#     that name. So every name carries a two-letter tag for its function
+#     (fa_ = fen_add, fs_ = fen_sum, ...). That is what stops fen_set's own
+#     index from being eaten by the fen_range() it calls.
+#   * lists mutate in place, so fen_add() and fen_set() edit the tree they
+#     are handed. They also return it, so `f = fen_add(f, i, d)` is correct
+#     either way and is the form to write.
+
+fn lowbit(lb_k) {
+    return band(lb_k, 0 - lb_k)
+}
+fn fen_new(nw_n) {
+    return fill(nw_n + 1, 0)
+}
+fn fen_size(fz_f) {
+    return len(fz_f) - 1
+}
+fn fen_add(fa_f, fa_i, fa_d) {
+    fa_n = len(fa_f) - 1
+    if fa_i < 0 or fa_i >= fa_n {
+        return fa_f
+    }
+    fa_k = fa_i + 1
+    while fa_k <= fa_n {
+        fa_f[fa_k] = fa_f[fa_k] + fa_d
+        fa_k = fa_k + lowbit(fa_k)
+    }
+    return fa_f
+}
+fn fen_sum(fs_f, fs_i) {
+    fs_n = len(fs_f) - 1
+    fs_k = fs_i + 1
+    if fs_k > fs_n {
+        fs_k = fs_n
+    }
+    fs_s = 0
+    while fs_k > 0 {
+        fs_s = fs_s + fs_f[fs_k]
+        fs_k = fs_k - lowbit(fs_k)
+    }
+    return fs_s
+}
+fn fen_range(fr_f, fr_a, fr_b) {
+    if fr_a > fr_b {
+        return 0
+    }
+    return fen_sum(fr_f, fr_b) - fen_sum(fr_f, fr_a - 1)
+}
+fn fen_set(ft_f, ft_i, ft_v) {
+    ft_cur = fen_range(ft_f, ft_i, ft_i)
+    return fen_add(ft_f, ft_i, ft_v - ft_cur)
+}
+fn fen_to_list(fl_f) {
+    fl_n = len(fl_f) - 1
+    fl_out = []
+    fl_prev = 0
+    fl_i = 0
+    while fl_i < fl_n {
+        fl_s = fen_sum(fl_f, fl_i)
+        fl_out = push(fl_out, fl_s - fl_prev)
+        fl_prev = fl_s
+        fl_i = fl_i + 1
+    }
+    return fl_out
+}
+# O(n) build: node i is finished the moment we pass it, so it can be folded
+# straight into its parent i + lowbit(i) instead of doing n separate adds.
+fn fen_build(fb_xs) {
+    fb_n = len(fb_xs)
+    fb_t = fill(fb_n + 1, 0)
+    fb_i = 1
+    while fb_i <= fb_n {
+        fb_t[fb_i] = fb_t[fb_i] + fb_xs[fb_i - 1]
+        fb_j = fb_i + lowbit(fb_i)
+        if fb_j <= fb_n {
+            fb_t[fb_j] = fb_t[fb_j] + fb_t[fb_i]
+        }
+        fb_i = fb_i + 1
+    }
+    return fb_t
+}
+
+# --- brute force, for the check below ---
+
+fn brute_prefix(bp_xs, bp_i) {
+    bp_s = 0
+    bp_k = 0
+    while bp_k <= bp_i and bp_k < len(bp_xs) {
+        bp_s = bp_s + bp_xs[bp_k]
+        bp_k = bp_k + 1
+    }
+    return bp_s
+}
+fn brute_range(br_xs, br_a, br_b) {
+    br_s = 0
+    br_k = br_a
+    if br_k < 0 {
+        br_k = 0
+    }
+    while br_k <= br_b and br_k < len(br_xs) {
+        br_s = br_s + br_xs[br_k]
+        br_k = br_k + 1
+    }
+    return br_s
+}
+# every prefix, every range a<=b, and the whole array read back.
+# returns [checks made, mismatches].
+fn verify(vf_f, vf_ref) {
+    vf_n = len(vf_ref)
+    vf_checks = 0
+    vf_bad = 0
+    vf_i = 0
+    while vf_i < vf_n {
+        vf_checks = vf_checks + 1
+        if fen_sum(vf_f, vf_i) != brute_prefix(vf_ref, vf_i) {
+            vf_bad = vf_bad + 1
+        }
+        vf_i = vf_i + 1
+    }
+    vf_a = 0
+    while vf_a < vf_n {
+        vf_b = vf_a
+        while vf_b < vf_n {
+            vf_checks = vf_checks + 1
+            if fen_range(vf_f, vf_a, vf_b) != brute_range(vf_ref, vf_a, vf_b) {
+                vf_bad = vf_bad + 1
+            }
+            vf_b = vf_b + 1
+        }
+        vf_a = vf_a + 1
+    }
+    vf_checks = vf_checks + 1
+    if str(fen_to_list(vf_f)) != str(vf_ref) {
+        vf_bad = vf_bad + 1
+    }
+    return [vf_checks, vf_bad]
+}
+
+# --- demo ---
+# (top-level names are tagged d_ so they cannot collide with the parameters
+#  above, which are globals too.)
+
+d_ref = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6, 2, 6, 4, 3, 3, 8, 3, 2, 7]
+d_tree = fen_build(d_ref)
+print("fenwick over the first 30 digits of pi")
+print("values:      " + str(d_ref))
+print("tree array:  " + str(d_tree))
+print("fen_size:    " + str(fen_size(d_tree)))
+print("")
+
+print("prefix sums - fen_sum(f, i) includes element i")
+print("  fen_sum(f, 0)      = " + str(fen_sum(d_tree, 0)) + "\tbrute " + str(brute_prefix(d_ref, 0)))
+print("  fen_sum(f, 9)      = " + str(fen_sum(d_tree, 9)) + "\tbrute " + str(brute_prefix(d_ref, 9)))
+print("  fen_sum(f, 15)     = " + str(fen_sum(d_tree, 15)) + "\tbrute " + str(brute_prefix(d_ref, 15)))
+print("  fen_sum(f, 29)     = " + str(fen_sum(d_tree, 29)) + "\tbrute " + str(brute_prefix(d_ref, 29)))
+print("  fen_sum(f, -1)     = " + str(fen_sum(d_tree, -1)) + "\t(empty prefix)")
+print("")
+
+print("range sums - fen_range(f, a, b) includes both ends")
+print("  fen_range(f, 5, 14)  = " + str(fen_range(d_tree, 5, 14)) + "\tbrute " + str(brute_range(d_ref, 5, 14)))
+print("  fen_range(f, 0, 29)  = " + str(fen_range(d_tree, 0, 29)) + "\tbrute " + str(brute_range(d_ref, 0, 29)))
+print("  fen_range(f, 7, 7)   = " + str(fen_range(d_tree, 7, 7)) + "\tbrute " + str(brute_range(d_ref, 7, 7)))
+print("  fen_range(f, 29, 29) = " + str(fen_range(d_tree, 29, 29)) + "\tbrute " + str(brute_range(d_ref, 29, 29)))
+print("  fen_range(f, 9, 5)   = " + str(fen_range(d_tree, 9, 5)) + "\t(a > b, empty)")
+print("")
+
+d_inc = fen_new(30)
+d_i = 0
+while d_i < 30 {
+    d_inc = fen_add(d_inc, d_i, d_ref[d_i])
+    d_i = d_i + 1
+}
+print("fen_new + 30 fen_add matches fen_build: " + str(str(d_inc) == str(d_tree)))
+print("fen_to_list round trip:                 " + str(str(fen_to_list(d_tree)) == str(d_ref)))
+print("out-of-range fen_add(f, 30, 1) is a no-op: " + str(str(fen_add(d_tree, 30, 1)) == str(d_tree)))
+print("")
+
+d_res = verify(d_tree, d_ref)
+d_checks = d_res[0]
+d_bad = d_res[1]
+print("brute-force check, untouched tree: " + str(d_checks) + " queries, " + str(d_bad) + " wrong")
+print("")
+
+print("updates - the tree and a plain list are kept in step and re-checked")
+d_step = 0
+while d_step < 12 {
+    d_idx = (d_step * 7 + 3) % 30
+    if d_step % 3 == 2 {
+        d_val = d_step * 2
+        d_tree = fen_set(d_tree, d_idx, d_val)
+        d_ref[d_idx] = d_val
+        print("  fen_set(f, " + pad(str(d_idx), 2) + ", " + pad(str(d_val), 3) + ")  total now " + str(fen_sum(d_tree, 29)))
+    } else {
+        d_delta = d_step % 2 == 0 ? d_step + 1 : 0 - d_step - 4
+        d_tree = fen_add(d_tree, d_idx, d_delta)
+        d_ref[d_idx] = d_ref[d_idx] + d_delta
+        print("  fen_add(f, " + pad(str(d_idx), 2) + ", " + pad(str(d_delta), 3) + ")  total now " + str(fen_sum(d_tree, 29)))
+    }
+    d_res = verify(d_tree, d_ref)
+    d_checks = d_checks + d_res[0]
+    d_bad = d_bad + d_res[1]
+    d_step = d_step + 1
+}
+print("")
+
+print("final values: " + str(fen_to_list(d_tree)))
+print("brute force:  " + str(d_ref))
+print("total:        " + str(fen_sum(d_tree, 29)) + "\tbrute " + str(brute_prefix(d_ref, 29)))
+print(str(d_checks) + " queries checked against brute force, " + str(d_bad) + " wrong")

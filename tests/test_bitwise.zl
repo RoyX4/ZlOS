@@ -1,0 +1,356 @@
+# test_bitwise.zl - test suite for the bitwise builtins
+#   band(a,b)  bor(a,b)  bxor(a,b)  bnot(a)  shl(a,n)  shr(a,n)
+#
+# Contract under test (docs/REFERENCE.md):
+#   "Arguments are taken as 64-bit signed integers. shr is arithmetic
+#    (sign-filling); a shift count outside 0..63 gives 0. An operand or a
+#    result that a zl number cannot hold exactly is a runtime error."
+#
+# Style follows stdlib/testlib.zl - check(label, got, want) / report().
+# zl has no import, so the harness is inlined.
+#
+# Every `want` below was worked out by hand in two's complement.
+# The three defects this file was written to pin down are now fixed; the
+# block at the bottom keeps each one, what it used to print, and the
+# command that shows the error it raises today. They cannot be asserted
+# up here because zl has no way to catch an error.
+
+g_pass = 0
+g_fail = 0
+
+fn check(label, got, want) {
+    if str(got) == str(want) {
+        g_pass = g_pass + 1
+        print("  PASS  " + label)
+    } else {
+        g_fail = g_fail + 1
+        print("  FAIL  " + label + "  got " + str(got) + " want " + str(want))
+    }
+}
+fn report() {
+    print("----")
+    print(str(g_pass) + " passed, " + str(g_fail) + " failed")
+}
+
+# ---------------------------------------------------------------- truth table
+# 12 = 1100, 10 = 1010
+print("-- truth table --")
+check("band(12,10) = 1000",        band(12, 10),   8)
+check("bor(12,10)  = 1110",        bor(12, 10),    14)
+check("bxor(12,10) = 0110",        bxor(12, 10),   6)
+check("bnot(12)    = -13",         bnot(12),       -13)
+check("band(1,1)",                 band(1, 1),     1)
+check("band(1,0)",                 band(1, 0),     0)
+check("band(0,1)",                 band(0, 1),     0)
+check("bor(1,0)",                  bor(1, 0),      1)
+check("bor(0,1)",                  bor(0, 1),      1)
+check("bxor(1,1)",                 bxor(1, 1),     0)
+check("bxor(1,0)",                 bxor(1, 0),     1)
+check("band(255,15)",              band(255, 15),  15)
+check("bor(240,15)",               bor(240, 15),   255)
+check("bxor(255,15)",              bxor(255, 15),  240)
+# 0xF0F0 = 61680, 0x0FF0 = 4080
+check("band(0xF0F0,0x0FF0)=0x00F0", band(61680, 4080), 240)
+check("bor(0xF0F0,0x0FF0)=0xFFF0",  bor(61680, 4080),  65520)
+check("bxor(0xF0F0,0x0FF0)=0xFF00", bxor(61680, 4080), 65280)
+
+# ------------------------------------------------------------- zero / empty
+print("-- zero and identity elements --")
+check("band(0,0)",                 band(0, 0),     0)
+check("bor(0,0)",                  bor(0, 0),      0)
+check("bxor(0,0)",                 bxor(0, 0),     0)
+check("bnot(0) = -1 (all ones)",   bnot(0),        -1)
+check("bnot(-1) = 0",              bnot(-1),       0)
+check("shl(0,0)",                  shl(0, 0),      0)
+check("shr(0,0)",                  shr(0, 0),      0)
+check("shl(0,63) stays 0",         shl(0, 63),     0)
+check("shr(0,63) stays 0",         shr(0, 63),     0)
+check("band(x,0) annihilates",     band(123456, 0), 0)
+check("bor(x,0) is identity",      bor(123456, 0), 123456)
+check("bxor(x,0) is identity",     bxor(123456, 0), 123456)
+
+# ---------------------------------------------------------------- identities
+# swept over hand-picked values, positive and negative
+print("-- identity sweep --")
+idvals = [0, 1, 7, 255, -1, -6, 40000, -98765]
+for v in idvals {
+    check("band(x,x)==x  x=" + str(v),   band(v, v),   v)
+}
+for v in idvals {
+    check("bxor(x,x)==0  x=" + str(v),   bxor(v, v),   0)
+}
+for v in idvals {
+    check("bor(x,x)==x   x=" + str(v),   bor(v, v),    v)
+}
+for v in idvals {
+    check("band(x,-1)==x x=" + str(v),   band(v, -1),  v)
+}
+for v in idvals {
+    check("bor(x,-1)==-1 x=" + str(v),   bor(v, -1),   -1)
+}
+for v in idvals {
+    check("bxor(x,-1)==bnot(x) x=" + str(v), bxor(v, -1), bnot(v))
+}
+for v in idvals {
+    check("bnot(bnot(x))==x x=" + str(v), bnot(bnot(v)), v)
+}
+for v in idvals {
+    check("bnot(x) == -x-1 x=" + str(v),  bnot(v),      0 - v - 1)
+}
+
+# ------------------------------------------------------------ algebraic laws
+print("-- algebraic laws --")
+# a = 13 (1101), b = 7 (0111), c = 10 (1010)
+check("band commutes",     band(13, 7),               band(7, 13))
+check("bor commutes",      bor(13, 7),                bor(7, 13))
+check("bxor commutes",     bxor(13, 7),               bxor(7, 13))
+check("band associates",   band(band(13,7),10),       band(13, band(7,10)))
+check("bor associates",    bor(bor(13,7),10),         bor(13, bor(7,10)))
+check("bxor associates",   bxor(bxor(13,7),10),       bxor(13, bxor(7,10)))
+# 13&7 = 0101 = 5, 13|7 = 1111 = 15, 13^7 = 1010 = 10
+check("band(13,7) = 5",    band(13, 7),               5)
+check("bor(13,7)  = 15",   bor(13, 7),                15)
+check("bxor(13,7) = 10",   bxor(13, 7),               10)
+check("and over or",       band(13, bor(7,10)),       bor(band(13,7), band(13,10)))
+check("or over and",       bor(13, band(7,10)),       band(bor(13,7), bor(13,10)))
+check("absorption a|(a&b)", bor(13, band(13,7)),      13)
+check("absorption a&(a|b)", band(13, bor(13,7)),      13)
+check("De Morgan  ~(a&b)", bnot(band(13,7)),          bor(bnot(13), bnot(7)))
+check("De Morgan  ~(a|b)", bnot(bor(13,7)),           band(bnot(13), bnot(7)))
+check("a+b == (a^b)+2(a&b)", 13 + 7,                  bxor(13,7) + 2 * band(13,7))
+check("a|b == (a^b)+(a&b)",  bor(13,7),               bxor(13,7) + band(13,7))
+check("a^b == (a|b)&~(a&b)", bxor(13,7),              band(bor(13,7), bnot(band(13,7))))
+# same sum identity across a sign boundary: -5 + 3 = -2
+check("a+b identity, a<0",   0 - 5 + 3,               bxor(-5,3) + 2 * band(-5,3))
+
+# ------------------------------------------------------------ negative bits
+# two's complement: -1=...1111  -2=...1110  -3=...1101  -6=...1010  -8=...1000
+print("-- negative operands --")
+check("band(-1,-1)",       band(-1, -1),   -1)
+check("band(-1,0)",        band(-1, 0),    0)
+check("band(-1,5)",        band(-1, 5),    5)
+check("band(-2,-3) = -4",  band(-2, -3),   -4)
+check("bor(-2,-3)  = -1",  bor(-2, -3),    -1)
+check("bxor(-2,-3) = 3",   bxor(-2, -3),   3)
+check("band(-8,-3) = -8",  band(-8, -3),   -8)
+check("bor(-8,-3)  = -3",  bor(-8, -3),    -3)
+check("bxor(-8,-3) = 5",   bxor(-8, -3),   5)
+check("band(-6,3)  = 2",   band(-6, 3),    2)
+check("bor(-6,3)   = -5",  bor(-6, 3),     -5)
+check("bxor(-6,3)  = -7",  bxor(-6, 3),    -7)
+check("band(-1,-2) = -2",  band(-1, -2),   -2)
+check("bxor(-1,-2) = 1",   bxor(-1, -2),   1)
+check("bnot(1)     = -2",  bnot(1),        -2)
+check("bnot(-2)    = 1",   bnot(-2),       1)
+check("bnot(255)   = -256", bnot(255),     -256)
+check("bnot(-256)  = 255", bnot(-256),     255)
+# arguments truncate toward zero before the bit op: -6.7 -> -6, -3.2 -> -3
+check("band(-6.7,-3.2) truncs to band(-6,-3)", band(-6.7, -3.2), -8)
+check("band(6.7,3.2) truncs to band(6,3)",     band(6.7, 3.2),   2)
+
+# ------------------------------------------------------------------ shl
+print("-- shl --")
+check("shl(1,0)",          shl(1, 0),      1)
+check("shl(1,1)",          shl(1, 1),      2)
+check("shl(1,8)",          shl(1, 8),      256)
+check("shl(1,10)",         shl(1, 10),     1024)
+check("shl(5,0) no-op",    shl(5, 0),      5)
+check("shl(7,5) == 7*32",  shl(7, 5),      224)
+check("shl(1,31)",         shl(1, 31),     2147483648)
+check("shl(1,32)",         shl(1, 32),     4294967296)
+check("shl(1,52)",         shl(1, 52),     4503599627370496)
+check("shl(1,62)",         shl(1, 62),     4611686018427387904)
+# bit 63 is the sign bit, so shl(1,63) is the most negative int64
+check("shl(1,63) = INT64_MIN", shl(1, 63), -9223372036854775808)
+check("shl(3,62) = 0xC000..", shl(3, 62),  -4611686018427387904)
+check("shl(-1,1)",         shl(-1, 1),     -2)
+check("shl(-1,4)",         shl(-1, 4),     -16)
+check("shl(-3,2)",         shl(-3, 2),     -12)
+check("shl drops bits off the top", shl(shl(1,63), 1), 0)
+
+# ------------------------------------------------------------------ shr
+print("-- shr (arithmetic / sign-filling) --")
+check("shr(1024,3)",       shr(1024, 3),   128)
+check("shr(1,1)",          shr(1, 1),      0)
+check("shr(7,1)",          shr(7, 1),      3)
+check("shr(255,4)",        shr(255, 4),    15)
+check("shr(5,0) no-op",    shr(5, 0),      5)
+check("shr(2147483648,31)", shr(2147483648, 31), 1)
+# sign-filling: a negative value never becomes positive, and never reaches 0
+check("shr(-1,1)  stays -1",  shr(-1, 1),  -1)
+check("shr(-1,32) stays -1",  shr(-1, 32), -1)
+check("shr(-1,63) stays -1",  shr(-1, 63), -1)
+check("shr(-2,1)  = -1",      shr(-2, 1),  -1)
+check("shr(-8,1)  = -4",      shr(-8, 1),  -4)
+check("shr(-8,3)  = -1",      shr(-8, 3),  -1)
+check("shr(-16,63) = -1",     shr(-16, 63), -1)
+# arithmetic shift rounds toward negative infinity, unlike int(a/2^n)
+check("shr(-7,1) = -4 (floor)",     shr(-7, 1),    -4)
+check("shr(-3,1) = -2 (floor)",     shr(-3, 1),    -2)
+check("shr(-9,2) = -3 (floor)",     shr(-9, 2),    -3)
+check("shr(-100,3) = -13 (floor)",  shr(-100, 3),  -13)
+check("shr(-7,1) != int(-7/2)",     shr(-7, 1) == int(-7 / 2), false)
+check("shr matches floor(a/2^n) a=-100", shr(-100, 3), floor(-100 / 8))
+check("shr(INT64_MIN,1)",  shr(shl(1,63), 1),  -4611686018427387904)
+check("shr(INT64_MIN,63)", shr(shl(1,63), 63), -1)
+check("sign bit of -42",   shr(-42, 63),   -1)
+check("sign bit of 42",    shr(42, 63),    0)
+
+# --------------------------------------------------- shift count out of range
+# documented: a count outside 0..63 gives 0
+print("-- shift counts outside 0..63 --")
+check("shl(1,64)",         shl(1, 64),     0)
+check("shl(1,65)",         shl(1, 65),     0)
+check("shl(1,100)",        shl(1, 100),    0)
+check("shl(1,-1)",         shl(1, -1),     0)
+check("shl(1,-64)",        shl(1, -64),    0)
+check("shr(1024,64)",      shr(1024, 64),  0)
+check("shr(1024,100)",     shr(1024, 100), 0)
+check("shr(1024,-1)",      shr(1024, -1),  0)
+check("shr(-1,64) gives 0, not -1", shr(-1, 64), 0)
+check("shr(-1,-1) gives 0, not -1", shr(-1, -1), 0)
+check("shl(-5,64)",        shl(-5, 64),    0)
+check("shl(1,1e20) huge count", shl(1, 100000000000000000000), 0)
+# the count is truncated toward zero FIRST, then range-checked.
+# NOTE: 1.9 -> 1 and 63.9 -> 63 are in range; -0.5 -> 0 is in range too,
+# so shl(1,-0.5) is a no-op rather than 0. Consistent, but worth knowing.
+check("shl(1,1.9) truncs to shl(1,1)",   shl(1, 1.9),   2)
+check("shr(8,1.9) truncs to shr(8,1)",   shr(8, 1.9),   4)
+check("shl(1,63.9) truncs to shl(1,63)", shl(1, 63.9),  -9223372036854775808)
+check("NOTE shl(1,-0.5) truncs to 0, so no-op", shl(1, -0.5), 1)
+
+# ------------------------------------------------------------- shift round trips
+print("-- shift round trips --")
+check("shr(shl(7,5),5) == 7",        shr(shl(7, 5), 5),      7)
+check("shr(shl(-7,5),5) == -7",      shr(shl(-7, 5), 5),     -7)
+check("shl(shr(23,3),3) clears low", shl(shr(23, 3), 3),     16)
+check("shl(shr(-23,3),3) clears low", shl(shr(-23, 3), 3),   -24)
+check("shl(1,n) then shr(.,n) n=62", shr(shl(1, 62), 62),    1)
+
+# --------------------------------------------------------------- bit recipes
+print("-- practical bit recipes --")
+check("clear lowest set bit of 12", band(12, 12 - 1),        8)
+check("isolate lowest set bit of 12", band(12, 0 - 12),      4)
+check("16 is a power of two",       band(16, 15),            0)
+check("12 is not a power of two",   band(12, 11) == 0,       false)
+check("byte 1 of 0x12345678",       shr(band(305419896, 65280), 8), 86)
+check("mask to 32 bits",            band(-1, 4294967295),    4294967295)
+check("swap nibbles of 0xAB",       bor(shl(band(171,15),4), shr(171,4)), 186)
+check("rotate 0b10110001 left 1 in 8 bits", band(bor(shl(177,1), shr(177,7)), 255), 99)
+check("abs(-42) via sign mask",     bxor(-42, shr(-42,63)) - shr(-42,63), 42)
+check("xor swap step 1",            bxor(17, 5),             20)
+check("xor swap step 2",            bxor(bxor(17,5), 5),     17)
+check("xor swap step 3",            bxor(bxor(17,5), 17),    5)
+check("set bit 4 of 3",             bor(3, shl(1,4)),        19)
+check("clear bit 1 of 15",          band(15, bnot(shl(1,1))), 13)
+check("toggle bit 0 of 6",          bxor(6, 1),              7)
+check("test bit 3 of 12 is set",    band(shr(12,3), 1),      1)
+check("test bit 1 of 12 is clear",  band(shr(12,1), 1),      0)
+check("bnot(shl(1,31))",            bnot(shl(1,31)),         -2147483649)
+
+# ------------------------------------------------------ the 53-bit boundary
+# A zl number IS a double: 53 significant bits, and nothing at all outside
+# +/-2^63. The policy (interp.c, "THE INTEGER-WIDTH POLICY") is that a
+# bitwise builtin either gives you the right bits or raises. It no longer
+# rounds an int64 and hands the rounded value back as though it were the
+# answer, and it no longer casts an out-of-range double to long long.
+#
+# So the test below is EXACTNESS, not magnitude: every value a double holds
+# exactly still works no matter how large, and nothing else is answered at
+# all. zl cannot catch an error, so the refusals are checked from the shell
+# instead - each one is spelled out with its command in the block at the
+# bottom of this file.
+print("-- the 53-bit boundary --")
+p53   = shl(1, 53)        # 9007199254740992
+p52   = shl(1, 52)        # 4503599627370496
+odd53 = shl(1, 53) - 1    # 9007199254740991, largest odd int a double holds
+
+check("bor(2^52,1) keeps the low bit", bor(p52, 1),        4503599627370497)
+check("band(bor(2^52,1),1)",           band(bor(p52,1), 1), 1)
+check("bnot(2^52) is exact",           bnot(p52),          -4503599627370497)
+
+# The very edge. 2^53-1 is the largest odd integer a double holds, and its
+# complement -2^53 is held exactly too, so bnot is a true involution here -
+# which is precisely what it stopped being when the result was rounded.
+check("band(2^53-1,1) low bit is set", band(odd53, 1),      1)
+check("bor(2^52, 2^52-1) == 2^53-1",   bor(p52, p52 - 1),   odd53)
+check("bnot(2^53-1) == -2^53",         bnot(odd53),         0 - p53)
+check("bnot(-2^53) == 2^53-1",         bnot(0 - p53),       odd53)
+check("bnot(bnot(2^53-1)) == 2^53-1",  bnot(bnot(odd53)),   odd53)
+check("bxor(2^53-1,2^52)",             bxor(odd53, p52),    4503599627370495)
+
+# Far past 2^53 and still exact, so still answered normally. Size is not
+# what the rule tests.
+check("shl(1,53)",                     p53,                 9007199254740992)
+check("shl(1,62)",                     shl(1, 62),          4611686018427387904)
+check("shl(1,63) still INT64_MIN",     shl(1, 63),          -9223372036854775808)
+check("shl(-1,53) == -2^53",           shl(-1, 53),         0 - p53)
+check("shr(INT64_MIN,9) == -2^54",     shr(shl(1,63), 9),   -18014398509481984)
+check("shr(INT64_MIN,10) == -2^53",    shr(shl(1,63), 10),  0 - p53)
+
+# A literal wider than 53 bits is already rounded before any builtin sees it:
+# 4611686018427387903 (2^62-1, odd) parses as 4611686018427387904. That is
+# the same ceiling seen from the other side, and it is why lifting this
+# means giving zl an exact integer type rather than patching six builtins.
+check("NOTE odd 62-bit literal parses even", band(4611686018427387903, 1), 0)
+
+# ----------------------------------------------- operands at the int64 edge
+# An operand that is not a 64-bit integer has no bitwise meaning, so it is
+# refused rather than cast. Values right AT the edge are still ordinary.
+print("-- operands at the edge of int64 --")
+check("band(INT64_MIN,-1) == INT64_MIN", band(shl(1,63), -1), -9223372036854775808)
+check("bor(INT64_MIN,0) == INT64_MIN",   bor(shl(1,63), 0),   -9223372036854775808)
+check("bxor(INT64_MIN,0) == INT64_MIN",  bxor(shl(1,63), 0),  -9223372036854775808)
+check("band(2^62,-1) == 2^62",           band(shl(1,62), -1), 4611686018427387904)
+check("shr(INT64_MIN,63) == -1",         shr(shl(1,63), 63),  -1)
+check("operands still truncate first",   band(-6.7, -3.2),    -8)
+
+report()
+
+# ========================================================= BUGS FOUND, FIXED
+# All three defects this file was written to pin down are fixed in interp.c
+# and runtime.c (both - see the parity note there). The fix is one policy,
+# not three patches: a bitwise builtin either gives you the right bits or
+# raises. It never rounds, and it never casts out of range.
+#
+# zl has no way to catch an error, so the refusals cannot be asserted above.
+# Each one is reproduced here instead. Put the line in a .zl file and run
+# .\interp.exe on it; the C backend prints the identical message, which is
+# the parity these two files have to keep.
+#
+# 1. WAS: 53-BIT PRECISION CLIFF (all six builtins). The op was done in
+#    int64 and returned through a double, so a result needing 54+ bits was
+#    silently rounded and returned as the answer. Setting, clearing or
+#    toggling a bit in the top 11 bits of a word could do nothing:
+#      print(str(band(bor(shl(1,53),1),1)))   was 0, should have been 1
+#      print(str(bxor(shl(1,53),1)))          was 2^53 - xor with 1 a no-op!
+#    NOW: "bor result needs more than 53 bits of precision - a zl number is
+#    a double and cannot hold it exactly".
+#
+# 2. WAS: bnot NOT AN INVOLUTION AT INT64_MIN.
+#      print(str(bnot(bnot(shl(1,63)))))      was 9.22337e+18
+#    bnot(INT64_MIN) is INT64_MAX, whose nearest double is 2^63 - one past
+#    the top of the range - so the second bnot hit defect 3.
+#    NOW: the FIRST bnot raises, so there is no bad value to feed back in,
+#    and bnot(bnot(x)) == x holds for every x it accepts (see the 2^53-1
+#    involution checks above).
+#
+# 3. WAS: UNDEFINED double->int64 CAST FOR OUT-OF-RANGE OPERANDS. The cast
+#    is undefined in C for |x| >= 2^63 and for NaN, and on x86-64 produced
+#    the "integer indefinite" 0x8000000000000000, so these all quietly
+#    returned the same wrong number:
+#      print(str(band(pow(2,70), -1)))        was -9223372036854775808
+#      print(str(band(pow(10,400), -1)))      was -9223372036854775808
+#      print(str(band(sqrt(0-1), 255)))       was 0
+#      print(str(bnot(sqrt(0-1))))            was 9.22337e+18
+#    NOW: "band needs 64-bit integers (got NaN or a value out of range)",
+#    which is consistent with these builtins already rejecting a non-number.
+#
+# STILL TRUE, and by design: a bitwise builtin can now fail where it used to
+# return a (wrong) number. That is the trade - a program doing 64-bit-wide
+# bit work has to stay inside the integers a double holds exactly, or say so
+# loudly. Lifting the ceiling means giving zl an exact integer type; the
+# same 53 bits already bound a LITERAL, as the parse check above shows.
+#
+# NOTE (not a bug, but undocumented): the shift count is truncated toward zero
+# BEFORE the 0..63 range check, so shl(1,-0.5) == 1 and shl(1,63.9) == INT64_MIN.

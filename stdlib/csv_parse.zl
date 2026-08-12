@@ -1,0 +1,134 @@
+# csv_parse.zl -- parse CSV text into a list of rows (each row a list of field strings).
+# Handles double-quoted fields containing commas OR newlines, and doubled "" escapes.
+#
+# RECORD-BASED, not line-based. It used to split the text on newlines FIRST and
+# then parse each line, so a correctly quoted embedded newline ended the record
+# early and the rest of that row became a phantom extra record. That broke the
+# round trip stdlib/csvw.zl promises: csv_escape() quotes any field containing
+# a newline (RFC 4180), and csv_write's output is documented to feed straight
+# back into csvParse(). csvParseLine() always handled a quoted newline
+# correctly - only the pre-split destroyed it - so the fix is to join lines
+# back together while a quoted field is still open.
+#
+# NOTE: lines() breaks on LF and CRLF, so a CRLF inside a quoted field comes
+# back as a bare LF. A lone CR is untouched.
+
+QUOTE = at("\"", 0)   # a single double-quote character
+
+# Parse one CSV line into a list of field strings.
+fn csvParseLine(clLine) {
+  clFields = []
+  clCur = ""
+  clInQ = false
+  clI = 0
+  clN = len(clLine)
+  while clI < clN {
+    clCh = at(clLine, clI)
+    if clInQ {
+      if clCh == QUOTE {
+        clNext = at(clLine, clI + 1)
+        if clNext == QUOTE {
+          clCur = clCur + QUOTE   # doubled quote -> literal quote
+          clI = clI + 2
+        } else {
+          clInQ = false
+          clI = clI + 1
+        }
+      } else {
+        clCur = clCur + clCh
+        clI = clI + 1
+      }
+    } else {
+      if clCh == QUOTE {
+        clInQ = true
+        clI = clI + 1
+      } else if clCh == "," {
+        clFields = push(clFields, clCur)
+        clCur = ""
+        clI = clI + 1
+      } else {
+        clCur = clCur + clCh
+        clI = clI + 1
+      }
+    }
+  }
+  clFields = push(clFields, clCur)
+  return clFields
+}
+
+# Is this text still inside an open quoted field? A quote either opens or
+# closes a field and a literal quote is written doubled, so an ODD number of
+# quote characters means one is still open and the record continues.
+fn csvOpenQuote(oqS) {
+  return count(oqS, QUOTE) % 2 == 1
+}
+
+# Parse a whole CSV string into a list of rows.
+fn csvParse(cpText) {
+  cpRows = []
+  cpLns = lines(cpText)
+  cpI = 0
+  cpBuf = ""
+  cpHave = false
+  while cpI < len(cpLns) {
+    if cpHave {
+      cpBuf = cpBuf + "\n" + cpLns[cpI]
+    } else {
+      cpBuf = cpLns[cpI]
+      cpHave = true
+    }
+    if not csvOpenQuote(cpBuf) {
+      cpRows = push(cpRows, csvParseLine(cpBuf))
+      cpBuf = ""
+      cpHave = false
+    }
+    cpI = cpI + 1
+  }
+  # An unterminated quote at end of input: parse what we have rather than
+  # dropping the last record on the floor.
+  if cpHave {
+    cpRows = push(cpRows, csvParseLine(cpBuf))
+  }
+  return cpRows
+}
+
+# Pretty-print parsed rows for the self-test.
+fn csvDump(cdRows) {
+  cdI = 0
+  while cdI < len(cdRows) {
+    cdRow = cdRows[cdI]
+    cdParts = []
+    cdJ = 0
+    while cdJ < len(cdRow) {
+      cdParts = push(cdParts, "[" + cdRow[cdJ] + "]")
+      cdJ = cdJ + 1
+    }
+    print("row " + cdI + ": " + join(cdParts, " "))
+    cdI = cdI + 1
+  }
+}
+
+# ---------------- self-test ----------------
+print("== csv_parse self-test ==")
+
+sample = "name,age,city\nAlice,30,Sydney\n\"Bob, Jr.\",25,\"Melbourne, VIC\"\n\"She said \"\"hi\"\"\",1,x"
+
+print("input:")
+print(sample)
+print("")
+print("parsed:")
+rows = csvParse(sample)
+csvDump(rows)
+
+print("")
+print("checks:")
+print("row count == 4 : " + (len(rows) == 4))
+print("header field 0 == name : " + (rows[0][0] == "name"))
+print("quoted comma field kept whole (row2 col0 == 'Bob, Jr.') : " + (rows[2][0] == "Bob, Jr."))
+print("quoted comma field (row2 col2 == 'Melbourne, VIC') : " + (rows[2][2] == "Melbourne, VIC"))
+print("doubled-quote escape (row3 col0 == 'She said \"hi\"') : " + (rows[3][0] == "She said \"hi\""))
+print("row3 col count == 3 : " + (len(rows[3]) == 3))
+
+# a single-line, no-quotes case
+simple = csvParse("a,b,c")
+print("single line 3 fields : " + (len(simple[0]) == 3))

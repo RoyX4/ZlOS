@@ -1,0 +1,46 @@
+# set.zl - a set as a list with no duplicate elements.
+
+fn sadd(s, x) {
+    if contains(s, x) {
+        return s
+    }
+    return push(s, x)
+}
+fn shas(s, x) {
+    return contains(s, x)
+}
+fn sunion(a, b) {
+    out = []
+    for x in a {
+        out = sadd(out, x)
+    }
+    for x in b {
+        out = sadd(out, x)
+    }
+    return out
+}
+fn sinter(a, b) {
+    out = []
+    for x in a {
+        if contains(b, x) {
+            out = push(out, x)
+        }
+    }
+    return out
+}
+fn sdiff(a, b) {
+    out = []
+    for x in a {
+        if not contains(b, x) {
+            out = push(out, x)
+        }
+    }
+    return out
+}
+
+a = [1, 2, 3, 4]
+b = [3, 4, 5, 6]
+print("union:  " + str(sunion(a, b)))
+print("inter:  " + str(sinter(a, b)))
+print("diff:   " + str(sdiff(a, b)))
+print("has 3:  " + str(shas(a, 3)))

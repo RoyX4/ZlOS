@@ -1,0 +1,1234 @@
+# ============================================================
+# compiler.zl - MY COMPILER, WRITTEN IN MY OWN LANGUAGE.
+#
+# This is the whole thing: lexer + parser + C code generator,
+# all in zl. It reads "input.zl", and writes "out.c" (which the
+# real C compiler then turns into a native .exe).
+#
+# When this file can compile ITSELF, the language is self-hosting.
+#
+# An AST node is a list tagged by its first item, e.g.
+#   ["num","5"]  ["bin","+",L,R]  ["call","print",[args]]
+# Blocks/lists keep their children in a nested list at [1].
+# ============================================================
+
+# ---- global state ----
+src = ""      # source text the lexer walks
+spos = 0      # lexer position
+toks = []     # the token list
+pos = 0       # parser position
+g_funcs = []  # names of user functions
+g_globals = []# names of global variables
+
+# ============================================================
+# LEXER
+# ============================================================
+
+fn is_digit(c) {
+    return c != "" and has("0123456789", c)
+}
+fn is_alpha(c) {
+    return c != "" and has("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", c)
+}
+fn is_alnum(c) {
+    return is_alpha(c) or is_digit(c)
+}
+fn is_keyword(w) {
+    return w == "if" or w == "else" or w == "while" or w == "for" or w == "in" or w == "fn" or w == "return" or w == "not" or w == "and" or w == "or" or w == "true" or w == "false"
+}
+fn unescape(e) {
+    if e == "n" {
+        return "\n"
+    }
+    if e == "t" {
+        return "\t"
+    }
+    if e == "r" {
+        return "\r"
+    }
+    return e
+}
+
+fn scur() {
+    return at(src, spos)
+}
+fn scur2() {
+    return at(src, spos + 1)
+}
+
+fn next_token() {
+    c = scur()
+
+    if c == " " or c == "\t" or c == "\r" or c == "\n" {
+        spos = spos + 1
+        return ["SKIP", ""]
+    }
+    if c == "#" {
+        while spos < len(src) and scur() != "\n" {
+            spos = spos + 1
+        }
+        return ["SKIP", ""]
+    }
+    if is_digit(c) {
+        w = ""
+        while is_digit(scur()) {
+            w = w + scur()
+            spos = spos + 1
+        }
+        return ["NUM", w]
+    }
+    if is_alpha(c) {
+        w = ""
+        while is_alnum(scur()) {
+            w = w + scur()
+            spos = spos + 1
+        }
+        if is_keyword(w) {
+            return ["KW", w]
+        }
+        return ["NAME", w]
+    }
+    if c == "\"" {
+        spos = spos + 1
+        w = ""
+        while scur() != "\"" and scur() != "" {
+            ch = scur()
+            if ch == "\\" {
+                spos = spos + 1
+                w = w + unescape(scur())
+            } else {
+                w = w + ch
+            }
+            spos = spos + 1
+        }
+        spos = spos + 1
+        return ["STR", w]
+    }
+
+    c2 = scur2()
+    if (c == "=" or c == "!" or c == ">" or c == "<") and c2 == "=" {
+        spos = spos + 2
+        return ["SYM", c + c2]
+    }
+    spos = spos + 1
+    return ["SYM", c]
+}
+
+fn lex(source) {
+    src = source
+    spos = 0
+    out = []
+    while spos < len(src) {
+        t = next_token()
+        if t[0] != "SKIP" {
+            out = push(out, t)
+        }
+    }
+    out = push(out, ["EOF", ""])
+    return out
+}
+
+# ============================================================
+# PARSER
+# ============================================================
+
+fn kind() {
+    if pos < len(toks) {
+        return toks[pos][0]
+    }
+    return "EOF"
+}
+fn text() {
+    if pos < len(toks) {
+        return toks[pos][1]
+    }
+    return ""
+}
+fn advance() {
+    t = toks[pos]
+    pos = pos + 1
+    return t
+}
+fn is_sym(s) {
+    return kind() == "SYM" and text() == s
+}
+fn is_kw(s) {
+    return kind() == "KW" and text() == s
+}
+fn expect(s) {
+    if is_sym(s) {
+        advance()
+    } else {
+        print("PARSE ERROR: expected", s, "got", text())
+    }
+}
+
+fn parse_primary() {
+    if kind() == "NUM" {
+        t = advance()
+        return ["num", t[1]]
+    }
+    if kind() == "STR" {
+        t = advance()
+        return ["str", t[1]]
+    }
+    if is_kw("true") or is_kw("false") {
+        t = advance()
+        return ["bool", t[1]]
+    }
+    if kind() == "NAME" {
+        t = advance()
+        return ["name", t[1]]
+    }
+    if is_sym("(") {
+        advance()
+        e = parse_expr()
+        expect(")")
+        return e
+    }
+    if is_sym("[") {
+        advance()
+        elems = []
+        if not is_sym("]") {
+            elems = push(elems, parse_expr())
+            while is_sym(",") {
+                advance()
+                elems = push(elems, parse_expr())
+            }
+        }
+        expect("]")
+        return ["list", elems]
+    }
+    print("PARSE ERROR at:", text())
+    return ["num", "0"]
+}
+
+fn parse_postfix() {
+    node = parse_primary()
+    while is_sym("(") or is_sym("[") {
+        if is_sym("(") {
+            advance()
+            args = []
+            if not is_sym(")") {
+                args = push(args, parse_expr())
+                while is_sym(",") {
+                    advance()
+                    args = push(args, parse_expr())
+                }
+            }
+            expect(")")
+            node = ["call", node[1], args]
+        } else {
+            advance()
+            idx = parse_expr()
+            expect("]")
+            node = ["index", node, idx]
+        }
+    }
+    return node
+}
+
+fn parse_unary() {
+    if is_sym("-") {
+        advance()
+        return ["un", "-", parse_unary()]
+    }
+    return parse_postfix()
+}
+
+fn parse_mul() {
+    node = parse_unary()
+    while is_sym("*") or is_sym("/") or is_sym("%") {
+        op = text()
+        advance()
+        node = ["bin", op, node, parse_unary()]
+    }
+    return node
+}
+
+fn parse_add() {
+    node = parse_mul()
+    while is_sym("+") or is_sym("-") {
+        op = text()
+        advance()
+        node = ["bin", op, node, parse_mul()]
+    }
+    return node
+}
+
+fn parse_cmp() {
+    node = parse_add()
+    while is_sym("==") or is_sym("!=") or is_sym(">=") or is_sym("<=") or is_sym(">") or is_sym("<") {
+        op = text()
+        advance()
+        node = ["bin", op, node, parse_add()]
+    }
+    return node
+}
+
+fn parse_not() {
+    if is_kw("not") {
+        advance()
+        return ["un", "not", parse_not()]
+    }
+    return parse_cmp()
+}
+
+fn parse_and() {
+    node = parse_not()
+    while is_kw("and") {
+        advance()
+        node = ["bin", "and", node, parse_not()]
+    }
+    return node
+}
+
+fn parse_or() {
+    node = parse_and()
+    while is_kw("or") {
+        advance()
+        node = ["bin", "or", node, parse_and()]
+    }
+    return node
+}
+
+fn parse_expr() {
+    return parse_or()
+}
+
+fn parse_block() {
+    expect("{")
+    stmts = []
+    while not is_sym("}") and kind() != "EOF" {
+        stmts = push(stmts, parse_statement())
+    }
+    expect("}")
+    return ["block", stmts]
+}
+
+fn parse_if() {
+    advance()
+    cond = parse_expr()
+    thenb = parse_block()
+    elseb = ["block", []]
+    if is_kw("else") {
+        advance()
+        elseb = parse_block()
+    }
+    return ["if", cond, thenb, elseb]
+}
+
+fn parse_while() {
+    advance()
+    cond = parse_expr()
+    body = parse_block()
+    return ["while", cond, body]
+}
+
+fn parse_for() {
+    advance()
+    v = text()
+    advance()
+    advance()
+    seq = parse_expr()
+    body = parse_block()
+    return ["for", v, seq, body]
+}
+
+fn parse_fn() {
+    advance()
+    name = text()
+    advance()
+    expect("(")
+    params = []
+    if not is_sym(")") {
+        params = push(params, text())
+        advance()
+        while is_sym(",") {
+            advance()
+            params = push(params, text())
+            advance()
+        }
+    }
+    expect(")")
+    body = parse_block()
+    return ["fn", name, params, body]
+}
+
+fn parse_return() {
+    advance()
+    if is_sym("}") or kind() == "EOF" {
+        return ["return", ["none"]]
+    }
+    return ["return", parse_expr()]
+}
+
+fn parse_statement() {
+    if is_kw("if") {
+        return parse_if()
+    }
+    if is_kw("while") {
+        return parse_while()
+    }
+    if is_kw("for") {
+        return parse_for()
+    }
+    if is_kw("fn") {
+        return parse_fn()
+    }
+    if is_kw("return") {
+        return parse_return()
+    }
+    e = parse_expr()
+    if is_sym("=") {
+        advance()
+        v = parse_expr()
+        return ["assign", e[1], v]
+    }
+    return ["expr", e]
+}
+
+fn parse_program(source) {
+    toks = lex(source)
+    pos = 0
+    items = []
+    while kind() != "EOF" {
+        items = push(items, parse_statement())
+    }
+    return ["prog", items]
+}
+
+# ============================================================
+# CODE GENERATOR  (AST -> C text)
+# ============================================================
+
+fn cstr(s) {
+    out = "\""
+    i = 0
+    n = len(s)
+    while i < n {
+        c = at(s, i)
+        if c == "\"" {
+            out = out + "\\\""
+        } else {
+            if c == "\\" {
+                out = out + "\\\\"
+            } else {
+                if c == "\n" {
+                    out = out + "\\n"
+                } else {
+                    if c == "\t" {
+                        out = out + "\\t"
+                    } else {
+                        if c == "\r" {
+                            out = out + "\\r"
+                        } else {
+                            out = out + c
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    return out + "\""
+}
+
+fn is_func(name) {
+    for f in g_funcs {
+        if f == name {
+            return true
+        }
+    }
+    return false
+}
+fn is_global(name) {
+    for g in g_globals {
+        if g == name {
+            return true
+        }
+    }
+    return false
+}
+fn is_param(name, params) {
+    for p in params {
+        if p == name {
+            return true
+        }
+    }
+    return false
+}
+
+
+# ============================================================
+# NATIVE x86-64 BACKEND  (written in zl)  -- milestone 1a: exit(intexpr)
+# Values are RAW integers in rax (integer subset, like nativegen.c).
+# ============================================================
+
+code = []          # machine-code byte buffer; helpers append via global leak
+
+fn byte(v) {
+    bb = v % 256
+    if bb < 0 {
+        bb = bb + 256
+    }
+    return bb
+}
+fn emit(v) {
+    code = push(code, byte(v))
+}
+fn emit4(v) {
+    u = v
+    if u < 0 {
+        u = u + 4294967296
+    }
+    emit(u)
+    emit(int(u / 256))
+    emit(int(u / 65536))
+    emit(int(u / 16777216))
+}
+fn emits(lst) {
+    for eb in lst {
+        emit(eb)
+    }
+}
+# cmp rax,rcx ; setcc al ; movzx eax,al ; retag  -> tagged bool.
+# Tagged ints preserve order (2a+1 < 2b+1 iff a < b), so the compare works
+# directly on the tagged values. false=1, true=3.
+fn emit_cmp(cc) {
+    emits([72, 57, 200])         # cmp rax,rcx
+    emits([15, cc, 192])         # setcc al
+    emits([15, 182, 192])        # movzx eax,al
+    emits([72, 141, 68, 0, 1])   # lea rax,[rax+rax+1]  retag to tagged bool
+}
+
+# forward-jump backpatching: zl has no x[i]=v, so we emit a 4-byte
+# placeholder disp at `pos`, record [pos, target] once target is known,
+# and substitute the real disps in ONE rebuild pass at the end.
+fixups = []
+fn add_fixup(pos, target) {
+    fixups = push(fixups, [pos, target])
+}
+fn apply_fixups() {
+    fresult = []
+    ci = 0
+    while ci < len(code) {
+        tgt = 0 - 1
+        for fx in fixups {
+            if fx[0] == ci {
+                tgt = fx[1]
+            }
+        }
+        if tgt >= 0 {
+            u = tgt - (ci + 4)
+            if u < 0 {
+                u = u + 4294967296
+            }
+            fresult = push(fresult, byte(u))
+            fresult = push(fresult, byte(int(u / 256)))
+            fresult = push(fresult, byte(int(u / 65536)))
+            fresult = push(fresult, byte(int(u / 16777216)))
+            ci = ci + 4
+        } else {
+            fresult = push(fresult, code[ci])
+            ci = ci + 1
+        }
+    }
+    code = fresult
+}
+
+# ---- expression -> RAW int in rax ----
+nvars = []            # main's variables (frame slots)
+nfuncs = []           # user function names
+nfunc_offs = []       # [name, code offset] for each emitted function
+in_fn = 0             # 1 while emitting a function body
+cur_params = []       # current function's parameters
+cur_locals = []       # current function's locals (assigned, minus params)
+callfix = []          # [pos, fname] call sites to backpatch
+fn var_disp(nm) {
+    if in_fn == 1 {
+        pidx = index_of(cur_params, nm)
+        if pidx >= 0 {
+            return 16 + 8 * pidx      # params above the return address
+        }
+        return 0 - 8 * (index_of(cur_locals, nm) + 1)   # locals below rbp
+    }
+    return 0 - 8 * (index_of(nvars, nm) + 1)
+}
+fn func_offset(fname) {
+    for fo in nfunc_offs {
+        if fo[0] == fname {
+            return fo[1]
+        }
+    }
+    return 0 - 1
+}
+
+fn gen_expr(node) {
+    etag = node[0]
+    if etag == "num" {
+        emit(72)                 # 48 B8  mov rax, imm64  (TAGGED: (n<<1)|1)
+        emit(184)
+        emit4(num(node[1]) * 2 + 1)
+        emit4(0)
+        return 0
+    }
+    if etag == "name" {
+        emit(72)                 # 48 8B 85 disp32  mov rax,[rbp+disp]
+        emit(139)
+        emit(133)
+        emit4(var_disp(node[1]))
+        return 0
+    }
+    if etag == "bin" {
+        gen_expr(node[2])            # a -> rax
+        emits([72, 131, 236, 16])    # sub rsp,16   (16-byte spill keeps rsp aligned
+        emits([72, 137, 4, 36])      # mov [rsp],rax  across a call inside operand b)
+        gen_expr(node[3])            # b -> rax
+        emits([72, 137, 193])        # mov rcx,rax  (b)
+        emits([72, 139, 4, 36])      # mov rax,[rsp]  (a)
+        emits([72, 131, 196, 16])    # add rsp,16
+        bop = node[1]
+        # a,b are TAGGED ints (2n+1). Keep results tagged.
+        if bop == "+" {
+            emits([72, 1, 200])              # add rax,rcx  -> 2(n+m)+2
+            emits([72, 255, 200])            # dec rax      -> 2(n+m)+1
+        }
+        if bop == "-" {
+            emits([72, 41, 200])             # sub rax,rcx  -> 2(n-m)
+            emits([72, 255, 192])            # inc rax      -> 2(n-m)+1
+        }
+        if bop == "*" {
+            emits([72, 209, 248])            # sar rax,1  untag a
+            emits([72, 209, 249])            # sar rcx,1  untag b
+            emits([72, 15, 175, 193])        # imul rax,rcx
+            emits([72, 141, 68, 0, 1])       # lea rax,[rax+rax+1]  retag
+        }
+        if bop == "/" {
+            emits([72, 209, 248])            # sar rax,1
+            emits([72, 209, 249])            # sar rcx,1
+            emits([72, 153])                 # cqo
+            emits([72, 247, 249])            # idiv rcx
+            emits([72, 141, 68, 0, 1])       # retag quotient
+        }
+        if bop == "%" {
+            emits([72, 209, 248])            # sar rax,1
+            emits([72, 209, 249])            # sar rcx,1
+            emits([72, 153])                 # cqo
+            emits([72, 247, 249])            # idiv rcx
+            emits([72, 137, 208])            # mov rax,rdx  remainder
+            emits([72, 141, 68, 0, 1])       # retag
+        }
+        if bop == "==" {
+            emit_cmp(148)        # sete
+        }
+        if bop == "!=" {
+            emit_cmp(149)        # setne
+        }
+        if bop == "<" {
+            emit_cmp(156)        # setl
+        }
+        if bop == ">" {
+            emit_cmp(159)        # setg
+        }
+        if bop == "<=" {
+            emit_cmp(158)        # setle
+        }
+        if bop == ">=" {
+            emit_cmp(157)        # setge
+        }
+        if bop == "and" {
+            emits([72, 131, 248, 1])    # cmp rax,1   (tagged false)
+            emits([15, 149, 192])       # setne al    -> 1 if a truthy
+            emits([15, 182, 192])       # movzx eax,al
+            emits([72, 131, 249, 1])    # cmp rcx,1
+            emits([15, 149, 193])       # setne cl
+            emits([15, 182, 201])       # movzx ecx,cl
+            emits([72, 33, 200])        # and rax,rcx
+            emits([72, 141, 68, 0, 1])  # retag -> tagged bool
+        }
+        if bop == "or" {
+            emits([72, 131, 248, 1])    # cmp rax,1
+            emits([15, 149, 192])       # setne al
+            emits([15, 182, 192])       # movzx eax,al
+            emits([72, 131, 249, 1])    # cmp rcx,1
+            emits([15, 149, 193])       # setne cl
+            emits([15, 182, 201])       # movzx ecx,cl
+            emits([72, 9, 200])         # or rax,rcx
+            emits([72, 141, 68, 0, 1])  # retag
+        }
+        return 0
+    }
+    if etag == "un" {
+        gen_expr(node[2])        # operand -> rax
+        if node[1] == "-" {
+            emits([72, 247, 216])       # neg rax   -> -(2n+1) = 2(-n)-1
+            emits([72, 131, 192, 2])    # add rax,2 -> 2(-n)+1  (tagged -n)
+        }
+        if node[1] == "not" {
+            emits([72, 131, 248, 1])    # cmp rax,1  (false?)
+            emits([15, 148, 192])       # sete al
+            emits([15, 182, 192])       # movzx eax,al
+            emits([72, 141, 68, 0, 1])  # retag -> tagged bool
+        }
+        return 0
+    }
+    if etag == "call" {
+        # user function call. args go in a 16-aligned block below rsp
+        # (mov, not push, so rsp stays aligned during arg evaluation);
+        # callee reads param i at [rbp+16+8i]; result in rax.
+        cargs = node[2]
+        cn = len(cargs)
+        cblk = cn * 8
+        while cblk % 16 != 0 {
+            cblk = cblk + 8
+        }
+        if cblk > 0 {
+            emits([72, 129, 236])       # sub rsp,cblk
+            emit4(cblk)
+        }
+        cai = 0
+        while cai < cn {
+            gen_expr(cargs[cai])        # arg -> rax
+            emits([72, 137, 132, 36])   # mov [rsp+disp32],rax
+            emit4(8 * cai)
+            cai = cai + 1
+        }
+        emit(232)                       # E8 rel32  call (backpatched)
+        callfix = push(callfix, [len(code), node[1]])
+        emit4(0)
+        if cblk > 0 {
+            emits([72, 129, 196])       # add rsp,cblk
+            emit4(cblk)
+        }
+        return 0
+    }
+    print("gen_expr: unsupported node")
+    return 0
+}
+
+# ---- little-endian header appenders (into a separate list) ----
+buf = []
+fn b8(v)  { buf = push(buf, byte(v)) }
+fn b16(v) {
+    b8(v)
+    b8(int(v / 256))
+}
+fn b32(v) {
+    b16(v % 65536)
+    b16(int(v / 65536))
+}
+fn b64(v) {
+    b32(v % 4294967296)
+    b32(int(v / 4294967296))
+}
+fn bpad(target) {
+    while len(buf) < target {
+        buf = push(buf, 0)
+    }
+}
+fn bstr(s) {
+    si = 0
+    while si < len(s) {
+        buf = push(buf, code(at(s, si)))
+        si = si + 1
+    }
+}
+
+# ---- wrap the code buffer in a PE. entry = code RVA offset of main.
+#      3 imports: GetStdHandle (IAT 0x2048), WriteFile (0x2050),
+#      ExitProcess (0x2058). ----
+fn write_native(path, entry) {
+    # .text file size grows with the code (round up to 512). .idata stays
+    # at RVA 0x2000 (one 0x1000 virtual page for .text), so code must be
+    # under 4096 bytes for this single-page layout.
+    if len(code) >= 4096 {
+        print("write_native: code exceeds one page (need multi-page layout)")
+    }
+    textraw = len(code)
+    while textraw % 512 != 0 {
+        textraw = textraw + 1
+    }
+    if textraw < 512 {
+        textraw = 512
+    }
+    idf = 512 + textraw          # .idata file offset
+
+    buf = []
+    # MZ
+    b8(77)
+    b8(90)
+    bpad(60)
+    b32(64)
+    bpad(64)
+    # PE + COFF
+    bstr("PE")
+    b8(0)
+    b8(0)
+    b16(34404)          # x64
+    b16(2)              # 2 sections
+    b32(0)
+    b32(0)
+    b32(0)
+    b16(240)            # opt header size
+    b16(34)             # characteristics
+    # optional header (PE32+)
+    b16(523)
+    b8(0)
+    b8(0)
+    b32(textraw)        # SizeOfCode
+    b32(512)
+    b32(0)
+    b32(4096 + entry)   # AddressOfEntryPoint = 0x1000 + main offset
+    b32(4096)
+    b64(5368709120)     # imagebase 0x140000000
+    b32(4096)
+    b32(512)
+    b16(6)
+    b16(0)
+    b16(0)
+    b16(0)
+    b16(6)
+    b16(0)
+    b32(0)
+    b32(12288)          # SizeOfImage 0x3000
+    b32(512)            # SizeOfHeaders
+    b32(0)
+    b16(3)              # CONSOLE
+    b16(0)
+    b64(1048576)
+    b64(4096)
+    b64(1048576)
+    b64(4096)
+    b32(0)
+    b32(16)             # 16 data dirs
+    b64(0)              # [0] export
+    b32(8192)           # [1] import RVA 0x2000
+    b32(40)
+    dd = 2
+    while dd < 12 {
+        b64(0)
+        dd = dd + 1
+    }
+    b32(8264)           # [12] IAT RVA 0x2048
+    b32(32)
+    b64(0)
+    b64(0)
+    b64(0)
+    # section headers
+    bstr(".text")
+    bpad(len(buf) + 3)
+    b32(4096)           # VirtualSize (one page)
+    b32(4096)           # VirtualAddress 0x1000
+    b32(textraw)        # SizeOfRawData
+    b32(512)            # PointerToRawData
+    b32(0)
+    b32(0)
+    b16(0)
+    b16(0)
+    b32(1610612768)     # 0x60000020
+    bstr(".idata")
+    bpad(len(buf) + 2)
+    b32(4096)           # VirtualSize
+    b32(8192)           # VirtualAddress 0x2000
+    b32(512)            # SizeOfRawData
+    b32(idf)            # PointerToRawData
+    b32(0)
+    b32(0)
+    b16(0)
+    b16(0)
+    b32(3221225536)     # 0xC0000040
+    # .text at file 0x200: the program code, padded to idata_file
+    bpad(512)
+    ci = 0
+    while ci < len(code) {
+        buf = push(buf, code[ci])
+        ci = ci + 1
+    }
+    bpad(idf)
+    # .idata: descriptor (idf) + null
+    b32(8232)           # OriginalFirstThunk (ILT) RVA 0x2028
+    b32(0)
+    b32(0)
+    b32(8296)           # Name RVA 0x2068
+    b32(8264)           # FirstThunk (IAT) RVA 0x2048
+    b32(0)
+    b32(0)
+    b32(0)
+    b32(0)
+    b32(0)
+    # ILT (RVA 0x2028): 3 hint/name RVAs + null
+    bpad(idf + 40)
+    b64(8312)           # GetStdHandle hint/name RVA 0x2078
+    b64(8328)           # WriteFile   0x2088
+    b64(8344)           # ExitProcess 0x2098
+    b64(0)
+    # IAT (RVA 0x2048): same
+    bpad(idf + 72)
+    b64(8312)
+    b64(8328)
+    b64(8344)
+    b64(0)
+    # name + hint/name entries
+    bpad(idf + 104)     # 0x2068
+    bstr("kernel32.dll")
+    b8(0)
+    bpad(idf + 120)     # 0x2078
+    b16(0)
+    bstr("GetStdHandle")
+    b8(0)
+    bpad(idf + 136)     # 0x2088
+    b16(0)
+    bstr("WriteFile")
+    b8(0)
+    bpad(idf + 152)     # 0x2098
+    b16(0)
+    bstr("ExitProcess")
+    b8(0)
+    bpad(idf + 512)
+    write_bytes(path, buf)
+}
+
+# ============================================================
+# MAIN (native): read input.zl, compile the integer subset, emit .exe
+# ============================================================
+# print_int routine: RAW int in rax -> decimal ASCII + newline via WriteFile.
+# Emitted FIRST (at code offset 0) so calls to it are backward references.
+# The two IAT displacements (GetStdHandle 0x2048, WriteFile 0x2050) are
+# computed from the current position, exactly like a call site.
+fn emit_print_int() {
+    emit(85)                    # push rbp
+    emit(72)                    # mov rbp,rsp
+    emit(137)
+    emit(229)
+    emit(72)                    # sub rsp,0x60
+    emit(131)
+    emit(236)
+    emit(96)
+    emit(72)                    # lea rsi,[rbp-0x11]
+    emit(141)
+    emit(117)
+    emit(239)
+    emit(198)                   # mov byte[rsi],0x0A
+    emit(6)
+    emit(10)
+    emit(72)                    # test rax,rax
+    emit(133)
+    emit(192)
+    emit(117)                   # jnz +8
+    emit(8)
+    emit(72)                    # dec rsi
+    emit(255)
+    emit(206)
+    emit(198)                   # mov byte[rsi],'0'
+    emit(6)
+    emit(48)
+    emit(235)                   # jmp +0x1A
+    emit(26)
+    emit(185)                   # mov ecx,10
+    emit(10)
+    emit(0)
+    emit(0)
+    emit(0)
+    emit(72)                    # test rax,rax
+    emit(133)
+    emit(192)
+    emit(116)                   # jz +0x10
+    emit(16)
+    emit(72)                    # xor rdx,rdx
+    emit(49)
+    emit(210)
+    emit(72)                    # div rcx
+    emit(247)
+    emit(241)
+    emit(128)                   # add dl,'0'
+    emit(194)
+    emit(48)
+    emit(72)                    # dec rsi
+    emit(255)
+    emit(206)
+    emit(136)                   # mov [rsi],dl
+    emit(22)
+    emit(235)                   # jmp -0x15
+    emit(235)
+    emit(72)                    # lea rdx,[rbp-0x10]
+    emit(141)
+    emit(85)
+    emit(240)
+    emit(72)                    # sub rdx,rsi
+    emit(41)
+    emit(242)
+    emit(72)                    # mov [rbp-0x48],rdx
+    emit(137)
+    emit(85)
+    emit(184)
+    emit(185)                   # mov ecx,-11
+    emit(245)
+    emit(255)
+    emit(255)
+    emit(255)
+    emit(255)                   # FF 15  call [rip+GetStdHandle]
+    emit(21)
+    emit4(8264 - (4096 + len(code) + 4))
+    emit(72)                    # mov rcx,rax
+    emit(137)
+    emit(193)
+    emit(72)                    # mov rdx,rsi
+    emit(137)
+    emit(242)
+    emit(76)                    # mov r8,[rbp-0x48]
+    emit(139)
+    emit(69)
+    emit(184)
+    emit(76)                    # lea r9,[rbp-0x38]
+    emit(141)
+    emit(77)
+    emit(200)
+    emit(72)                    # mov qword[rsp+0x20],0
+    emit(199)
+    emit(68)
+    emit(36)
+    emit(32)
+    emit(0)
+    emit(0)
+    emit(0)
+    emit(0)
+    emit(255)                   # FF 15  call [rip+WriteFile]
+    emit(21)
+    emit4(8272 - (4096 + len(code) + 4))
+    emit(72)                    # mov rsp,rbp
+    emit(137)
+    emit(236)
+    emit(93)                    # pop rbp
+    emit(195)                   # ret
+}
+
+fn gen_stmt(node) {
+    stag = node[0]
+    if stag == "assign" {
+        gen_expr(node[2])            # value -> rax
+        emit(72)                     # 48 89 85 disp32  mov [rbp+disp],rax
+        emit(137)
+        emit(133)
+        emit4(var_disp(node[1]))
+        return 0
+    }
+    if stag == "if" {
+        gen_expr(node[1])            # cond -> rax
+        emits([72, 131, 248, 1])     # cmp rax,1  (tagged false)
+        emits([15, 132])             # je (0F 84) placeholder
+        ifp = len(code)
+        emit4(0)
+        for ts in node[2][1] {
+            gen_stmt(ts)
+        }
+        if len(node[3][1]) > 0 {
+            emit(233)                # jmp (E9) placeholder
+            elp = len(code)
+            emit4(0)
+            add_fixup(ifp, len(code))   # je -> else start
+            for es in node[3][1] {
+                gen_stmt(es)
+            }
+            add_fixup(elp, len(code))   # jmp -> end
+        } else {
+            add_fixup(ifp, len(code))   # je -> end
+        }
+        return 0
+    }
+    if stag == "while" {
+        wstart = len(code)
+        gen_expr(node[1])            # cond -> rax
+        emits([72, 131, 248, 1])     # cmp rax,1  (tagged false)
+        emits([15, 132])             # je placeholder
+        wp = len(code)
+        emit4(0)
+        for ws in node[2][1] {
+            gen_stmt(ws)
+        }
+        emit(233)                    # jmp back to wstart (known, backward)
+        emit4(wstart - (len(code) + 4))
+        add_fixup(wp, len(code))     # je -> end
+        return 0
+    }
+    if stag == "return" {
+        if node[1][0] == "none" {
+            emits([72, 199, 192, 0, 0, 0, 0])   # mov rax,0
+        } else {
+            gen_expr(node[1])        # value -> rax
+        }
+        emits([72, 137, 236])        # mov rsp,rbp
+        emit(93)                     # pop rbp
+        emit(195)                    # ret
+        return 0
+    }
+    if stag == "expr" {
+        ec = node[1]
+        if ec[0] == "call" {
+            if ec[1] == "exit" {
+                gen_expr(ec[2][0])   # exit argument -> tagged rax
+                emits([72, 209, 248])# sar rax,1  untag
+                emit(137)            # 89 C1  mov ecx,eax
+                emit(193)
+                emit(72)             # 48 83 EC 28  sub rsp,0x28
+                emit(131)
+                emit(236)
+                emit(40)
+                emit(255)            # FF 15  call [rip+ExitProcess]  (IAT 0x2058)
+                emit(21)
+                emit4(8280 - (4096 + len(code) + 4))
+                return 0
+            }
+            if ec[1] == "print" {
+                gen_expr(ec[2][0])   # value -> tagged rax
+                emits([72, 209, 248])# sar rax,1  untag before print_int
+                emit(232)            # E8 rel32  call print_int (at offset 0)
+                emit4(0 - (len(code) + 4))
+                return 0
+            }
+        }
+        gen_expr(ec)                 # any other call/expr: evaluate for effect
+        return 0
+    }
+    return 0
+}
+
+# emit one user function: prologue, body, safety epilogue. Params are at
+# [rbp+16+8i]; locals below rbp. Called with rsp%16==8, so the frame is a
+# multiple of 16 to keep rsp aligned at nested calls.
+fn gen_function(fnode) {
+    fname = fnode[1]
+    fparams = fnode[2]
+    fbody = fnode[3]
+    nfunc_offs = push(nfunc_offs, [fname, len(code)])
+    in_fn = 1
+    cur_params = fparams
+    rawlocals = collect_block(fbody, [])
+    cur_locals = []
+    for lv in rawlocals {
+        if index_of(fparams, lv) < 0 {
+            cur_locals = push(cur_locals, lv)
+        }
+    }
+    ffr = len(cur_locals) * 8
+    while ffr % 16 != 0 {
+        ffr = ffr + 8
+    }
+    emit(85)                         # push rbp
+    emits([72, 137, 229])            # mov rbp,rsp
+    emits([72, 129, 236])            # sub rsp,ffr
+    emit4(ffr)
+    for fs in fbody[1] {
+        gen_stmt(fs)
+    }
+    emits([72, 199, 192, 0, 0, 0, 0])  # mov rax,0  (safety)
+    emits([72, 137, 236])            # mov rsp,rbp
+    emit(93)
+    emit(195)
+    in_fn = 0
+}
+
+# variable collection (copied from compiler.zl's codegen section)
+fn add_name(acc, nm) {
+    for xx in acc {
+        if xx == nm {
+            return acc
+        }
+    }
+    return push(acc, nm)
+}
+fn collect_vars(node, acc) {
+    ctag = node[0]
+    if ctag == "assign" {
+        return add_name(acc, node[1])
+    }
+    if ctag == "for" {
+        acc = add_name(acc, node[1])
+        return collect_block(node[3], acc)
+    }
+    if ctag == "if" {
+        acc = collect_block(node[2], acc)
+        return collect_block(node[3], acc)
+    }
+    if ctag == "while" {
+        return collect_block(node[2], acc)
+    }
+    return acc
+}
+fn collect_block(block, acc) {
+    for cs in block[1] {
+        acc = collect_vars(cs, acc)
+    }
+    return acc
+}
+
+nsrc = read("input.zl")
+nprog = parse_program(nsrc)
+nitems = nprog[1]
+
+# register user function names (so calls resolve, incl. recursion)
+nfuncs = []
+for nit in nitems {
+    if nit[0] == "fn" {
+        nfuncs = push(nfuncs, nit[1])
+    }
+}
+
+# main's variables = names assigned at top level (non-fn statements)
+nvars = []
+for nit in nitems {
+    if nit[0] != "fn" {
+        nvars = collect_vars(nit, nvars)
+    }
+}
+# main frame == 8 (mod 16): push rbp (-8) makes the total a multiple of 16.
+nframe = len(nvars) * 8
+while nframe % 16 != 8 {
+    nframe = nframe + 8
+}
+
+# layout: print_int (offset 0), then user functions, then main (= entry).
+emit_print_int()
+for nit in nitems {
+    if nit[0] == "fn" {
+        gen_function(nit)
+    }
+}
+nmain = len(code)              # entry point = RVA 0x1000 + nmain
+
+# main prologue: push rbp ; mov rbp,rsp ; sub rsp,frame
+emit(85)
+emit(72)
+emit(137)
+emit(229)
+emit(72)
+emit(129)
+emit(236)
+emit4(nframe)
+
+for nit in nitems {
+    if nit[0] != "fn" {
+        gen_stmt(nit)
+    }
+}
+
+# fall-through safety: ExitProcess(0)   (IAT 0x2058)
+emit(72)                    # 48 31 C9  xor rcx,rcx
+emit(49)
+emit(201)
+emit(72)                    # sub rsp,0x28
+emit(131)
+emit(236)
+emit(40)
+emit(255)                   # call [rip+ExitProcess]
+emit(21)
+emit4(8280 - (4096 + len(code) + 4))
+
+# resolve user-function call sites, then the forward if/while jumps
+for cf in callfix {
+    add_fixup(cf[0], func_offset(cf[1]))
+}
+apply_fixups()
+write_native("zlout.exe", nmain)
+print("zlnat: wrote zlout.exe")
+print(len(code))

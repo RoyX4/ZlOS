@@ -1,0 +1,333 @@
+# wordwrap.zl - text layout: wrapping, justifying, indenting, columns.
+#
+# Representation: text in, text out. Every public function takes a plain
+# string (lines separated by "\n") and returns a plain string, so they
+# compose directly:
+#
+#     indent(justify(wrap(t, 40), 40), 4)
+#
+# The list-of-lines form is exposed as wrap_lines() for callers that want to
+# count or paginate, but nothing in the module needs it - keeping one type
+# everywhere is what makes the composition above readable.
+#
+# wrap() treats its whole input as ONE paragraph: every run of whitespace,
+# newlines included, collapses to a single space. reflow() is the
+# paragraph-aware version - it splits on blank lines, un-wraps each paragraph
+# and re-wraps it, which is what you want for text already wrapped at some
+# other width. justify()/center_block()/indent() work line by line and never
+# re-break anything, so the wrap is decided in exactly one place.
+#
+# The wrap is greedy: keep adding words until the next one will not fit. A
+# word longer than the whole line is the only thing that ever gets cut, and it
+# is cut onto lines of its own - it never shares a line with its neighbours.
+#
+# Naming: a zl function has its own locals, but assigning to a name that
+# already exists at the top level writes THAT global instead. So every
+# top-level name in the demo below carries a d_ prefix; that is what keeps the
+# plain names inside the functions (out, line, width, i) safely local.
+
+fn is_blank(s) {
+    return len(trim(s)) == 0
+}
+fn spaces(n) {
+    if n <= 0 {
+        return ""
+    }
+    return repeat(" ", n)
+}
+fn split_words(text) {
+    words = []
+    cur = ""
+    i = 0
+    while i < len(text) {
+        c = at(text, i)
+        if c == " " or c == "\t" or c == "\n" or c == "\r" {
+            if len(cur) > 0 {
+                words = push(words, cur)
+                cur = ""
+            }
+        } else {
+            cur = cur + c
+        }
+        i = i + 1
+    }
+    if len(cur) > 0 {
+        words = push(words, cur)
+    }
+    return words
+}
+fn wrap_lines(text, width) {
+    if width < 1 {
+        width = 1
+    }
+    out = []
+    line = ""
+    for w in split_words(text) {
+        word = w
+        while len(word) > width {
+            if len(line) > 0 {
+                out = push(out, line)
+                line = ""
+            }
+            out = push(out, slice(word, 0, width))
+            word = slice(word, width, len(word))
+        }
+        if len(line) == 0 {
+            line = word
+        } elif len(line) + 1 + len(word) <= width {
+            line = line + " " + word
+        } else {
+            out = push(out, line)
+            line = word
+        }
+    }
+    if len(line) > 0 {
+        out = push(out, line)
+    }
+    return out
+}
+fn wrap(text, width) {
+    return join(wrap_lines(text, width), "\n")
+}
+fn justify_line(line, width) {
+    words = split_words(line)
+    if len(words) < 2 {
+        return line
+    }
+    ink = 0
+    for w in words {
+        ink = ink + len(w)
+    }
+    gaps = len(words) - 1
+    room = width - ink
+    if room < gaps {
+        return join(words, " ")
+    }
+    base = int(room / gaps)
+    extra = room - base * gaps
+    out = ""
+    i = 0
+    while i < gaps {
+        wide = base
+        if i < extra {
+            wide = base + 1
+        }
+        out = out + words[i] + spaces(wide)
+        i = i + 1
+    }
+    return out + words[gaps]
+}
+fn justify(text, width) {
+    src = lines(text)
+    out = []
+    i = 0
+    while i < len(src) {
+        line = src[i]
+        last = true
+        if i + 1 < len(src) {
+            last = is_blank(src[i + 1])
+        }
+        if is_blank(line) or last {
+            out = push(out, line)
+        } else {
+            out = push(out, justify_line(line, width))
+        }
+        i = i + 1
+    }
+    return join(out, "\n")
+}
+fn center_block(text, width) {
+    out = []
+    for line in lines(text) {
+        t = trim(line)
+        if len(t) == 0 {
+            out = push(out, "")
+        } else {
+            out = push(out, spaces(int((width - len(t)) / 2)) + t)
+        }
+    }
+    return join(out, "\n")
+}
+fn indent(text, n) {
+    out = []
+    for line in lines(text) {
+        if is_blank(line) {
+            out = push(out, line)
+        } else {
+            out = push(out, spaces(n) + line)
+        }
+    }
+    return join(out, "\n")
+}
+fn lead_ws(s) {
+    i = 0
+    while i < len(s) {
+        c = at(s, i)
+        if c != " " and c != "\t" {
+            break
+        }
+        i = i + 1
+    }
+    return slice(s, 0, i)
+}
+fn common_prefix(a, b) {
+    i = 0
+    while i < len(a) and i < len(b) {
+        if at(a, i) != at(b, i) {
+            break
+        }
+        i = i + 1
+    }
+    return slice(a, 0, i)
+}
+fn dedent(text) {
+    src = lines(text)
+    pre = ""
+    seen = false
+    for line in src {
+        if not is_blank(line) {
+            if seen {
+                pre = common_prefix(pre, lead_ws(line))
+            } else {
+                pre = lead_ws(line)
+                seen = true
+            }
+        }
+    }
+    cut = len(pre)
+    out = []
+    for line in src {
+        if is_blank(line) {
+            out = push(out, "")
+        } else {
+            out = push(out, slice(line, cut, len(line)))
+        }
+    }
+    return join(out, "\n")
+}
+fn truncate(s, width, ellipsis) {
+    if width < 0 {
+        return ""
+    }
+    if len(s) <= width {
+        return s
+    }
+    if width <= len(ellipsis) {
+        return slice(ellipsis, 0, width)
+    }
+    return slice(s, 0, width - len(ellipsis)) + ellipsis
+}
+fn columns(items, ncols, width) {
+    if ncols < 1 {
+        ncols = 1
+    }
+    cell = int(width / ncols)
+    if cell < 2 {
+        cell = 2
+    }
+    out = []
+    row = ""
+    i = 0
+    while i < len(items) {
+        row = row + pad(truncate(items[i], cell - 1, ".."), cell)
+        if (i + 1) % ncols == 0 {
+            out = push(out, rtrim(row))
+            row = ""
+        }
+        i = i + 1
+    }
+    if len(row) > 0 {
+        out = push(out, rtrim(row))
+    }
+    return join(out, "\n")
+}
+fn paragraphs(text) {
+    out = []
+    cur = ""
+    for line in lines(text) {
+        if is_blank(line) {
+            if len(cur) > 0 {
+                out = push(out, cur)
+                cur = ""
+            }
+        } else {
+            if len(cur) > 0 {
+                cur = cur + " "
+            }
+            cur = cur + trim(line)
+        }
+    }
+    if len(cur) > 0 {
+        out = push(out, cur)
+    }
+    return out
+}
+fn reflow(text, width) {
+    out = []
+    for p in paragraphs(text) {
+        out = push(out, wrap(p, width))
+    }
+    return join(out, "\n\n")
+}
+
+# One paragraph, spelled in pieces: this lexer caps a string literal at 127
+# characters, so anything longer has to be assembled.
+d_para = "Typesetting is the quiet half of writing. A wrapped paragraph should read as though the line breaks"
+d_para += " were chosen on purpose, even when a greedy algorithm picked them one word at a time. The rule it"
+d_para += " follows is short enough to say out loud: keep adding words to the line until the next word will not"
+d_para += " fit, then start a new line and carry on."
+
+print("-- wrap at 40 --------------------------")
+print(wrap(d_para, 40))
+print("")
+print("-- wrap at 60 ----------------------------------------------")
+print(wrap(d_para, 60))
+print("")
+print("-- justify at 40 (last line left alone) --")
+print(justify(wrap(d_para, 40), 40))
+print("")
+print("-- center_block at 40 ------------------")
+print(center_block(wrap("Text laid out by hand is text laid out with intent.", 30), 40))
+print("")
+print("-- indent 4 ----------------------------")
+print(indent(wrap(d_para, 36), 4))
+print("")
+print("-- dedent ------------------------------")
+d_block = "    fn main() {\n        print(1)\n\n        print(2)\n    }"
+print("before:")
+print(d_block)
+print("after:")
+print(dedent(d_block))
+print("")
+print("-- truncate ----------------------------")
+d_long = "the smallest honest typesetter you can write"
+print("[" + truncate(d_long, 20, "...") + "]  len " + str(len(truncate(d_long, 20, "..."))))
+print("[" + truncate(d_long, 44, "...") + "]  fits, untouched")
+print("[" + truncate(d_long, 3, "...") + "]  width == len(ellipsis)")
+print("[" + truncate(d_long, 2, "...") + "]  width < len(ellipsis)")
+print("")
+print("-- columns (3 cols, width 42) --------------")
+d_words = ["ascender", "baseline", "counter", "descender", "em", "en", "kerning", "leading", "ligature", "orphan", "serif", "tracking", "widow", "x-height", "hyphenation-point"]
+print(columns(d_words, 3, 42))
+print("")
+print("-- reflow: wrapped at 24, rewrapped to 60 --")
+d_narrow = wrap(d_para, 24) + "\n\n" + wrap("A second paragraph, kept separate by the blank line between them.", 24)
+print("before:")
+print(d_narrow)
+print("after:")
+print(reflow(d_narrow, 60))
+print("")
+print("-- long word: wrap at 12 ---")
+print(wrap("a floccinaucinihilipilification of words", 12))
+print("")
+print("-- line lengths (wrap 40 / justify 40) --")
+d_wl = ""
+for d_l in wrap_lines(d_para, 40) {
+    d_wl = d_wl + str(len(d_l)) + " "
+}
+print("wrap:    " + rtrim(d_wl))
+d_jl = ""
+for d_l in lines(justify(wrap(d_para, 40), 40)) {
+    d_jl = d_jl + str(len(d_l)) + " "
+}
+print("justify: " + rtrim(d_jl))

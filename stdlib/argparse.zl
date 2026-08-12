@@ -1,0 +1,209 @@
+# argparse.zl - command-line argument parsing. zl has no argv builtin, so
+# every function here takes the argument list explicitly.
+#
+# parse_args(argv) returns a 3-element list:  [flags, options, positionals]
+#   flags       - list of bare names, dashes stripped   ["v", "r", "f"]
+#   options     - assoc list of [key, value] pairs, last one wins
+#   positionals - everything left over, in order
+# The list is the whole parse result; has_flag/get_opt read it back.
+#
+# Grammar, in the order the rules are tried:
+#   "--"            terminator - every later token is a positional, verbatim
+#   "--key=value"   option. value may be empty and may itself contain '='
+#   "--key value"   option, IF the next token doesn't look like an option
+#   "--key"         otherwise a flag
+#   "-abc"          a cluster of three short flags: a, b, c
+#   "-"             a positional (the usual "read stdin" convention)
+#   anything else   a positional
+#
+# "Looks like an option" means: starts with '-', more than one character, and
+# is not a number. The number exception is what lets "--offset -5" bind -5 as
+# a value instead of reading it as flags. To pass a value that really does
+# look like an option, use the '=' form: "--out=-x".
+
+fn is_num_like(t) {
+    s = t
+    if starts(s, "-") or starts(s, "+") {
+        s = slice(s, 1, len(s))
+    }
+    digits = 0
+    i = 0
+    while i < len(s) {
+        c = at(s, i)
+        if find("0123456789", c) >= 0 {
+            digits = digits + 1
+        } else if c != "." {
+            return false
+        }
+        i = i + 1
+    }
+    return digits > 0
+}
+
+fn is_optionish(t) {
+    if not starts(t, "-") {
+        return false
+    }
+    if len(t) < 2 {
+        return false
+    }
+    return not is_num_like(t)
+}
+
+# Store k=v in an assoc list, replacing any earlier entry for k.
+fn opt_set(opts, k, v) {
+    i = 0
+    while i < len(opts) {
+        if opts[i][0] == k {
+            opts[i][1] = v
+            return opts
+        }
+        i = i + 1
+    }
+    return push(opts, [k, v])
+}
+
+fn parse_args(argv) {
+    flags = []
+    opts = []
+    pos = []
+    ended = false
+    i = 0
+    while i < len(argv) {
+        tok = argv[i]
+        if ended {
+            pos = push(pos, tok)
+            i = i + 1
+            continue
+        }
+        if tok == "--" {
+            ended = true
+            i = i + 1
+            continue
+        }
+        if starts(tok, "--") {
+            body = slice(tok, 2, len(tok))
+            eq = find(body, "=")
+            if eq >= 0 {
+                opts = opt_set(opts, slice(body, 0, eq), slice(body, eq + 1, len(body)))
+                i = i + 1
+                continue
+            }
+            # nested, not "and": zl evaluates both sides, so the bounds
+            # check has to happen before argv[i + 1] is touched.
+            took = false
+            if i + 1 < len(argv) {
+                if not is_optionish(argv[i + 1]) {
+                    opts = opt_set(opts, body, argv[i + 1])
+                    i = i + 2
+                    took = true
+                }
+            }
+            if not took {
+                flags = push(flags, body)
+                i = i + 1
+            }
+            continue
+        }
+        if is_optionish(tok) {
+            j = 1
+            while j < len(tok) {
+                flags = push(flags, at(tok, j))
+                j = j + 1
+            }
+            i = i + 1
+            continue
+        }
+        pos = push(pos, tok)
+        i = i + 1
+    }
+    return [flags, opts, pos]
+}
+
+fn has_flag(parsed, name) {
+    return contains(parsed[0], name)
+}
+
+fn get_opt(parsed, name, fallback) {
+    for pair in parsed[1] {
+        if pair[0] == name {
+            return pair[1]
+        }
+    }
+    return fallback
+}
+
+fn positionals(parsed) {
+    return parsed[2]
+}
+
+# speclist is a list of [spec, description] pairs. The spec column is padded
+# to the widest entry so the descriptions line up.
+fn usage(progname, speclist) {
+    w = 0
+    for row in speclist {
+        if len(row[0]) > w {
+            w = len(row[0])
+        }
+    }
+    text = "Usage: " + progname + " [options] [args]"
+    for row in speclist {
+        text = text + "\n  " + pad(row[0], w) + "  " + row[1]
+    }
+    return text
+}
+
+# Render an options assoc list as "k=v, k=v" for display.
+fn show_opts(parsed) {
+    parts = []
+    for pair in parsed[1] {
+        parts = push(parts, pair[0] + "=" + pair[1])
+    }
+    return "[" + join(parts, ", ") + "]"
+}
+
+# ---- demo ----------------------------------------------------------------
+
+d1 = ["--out", "dist/app.exe", "-v", "--level=3", "src/main.zl", "-rf"]
+d2 = ["--out=-x", "--tag", "--", "-v", "--not-a-flag", "plain"]
+d3 = ["--offset", "-5", "-", "--out", "a.txt", "--out", "b.txt", "--verbose"]
+d4 = ["--out=", "3.5", "-2"]
+
+p1 = parse_args(d1)
+p2 = parse_args(d2)
+p3 = parse_args(d3)
+p4 = parse_args(d4)
+p5 = parse_args([])
+
+print("1 argv:   " + str(d1))
+print("1 flags:  " + str(p1[0]))
+print("1 opts:   " + show_opts(p1))
+print("1 pos:    " + str(positionals(p1)))
+print("")
+print("2 argv:   " + str(d2))
+print("2 flags:  " + str(p2[0]))
+print("2 opts:   " + show_opts(p2))
+print("2 pos:    " + str(positionals(p2)))
+print("")
+print("3 argv:   " + str(d3))
+print("3 flags:  " + str(p3[0]))
+print("3 opts:   " + show_opts(p3))
+print("3 pos:    " + str(positionals(p3)))
+print("")
+print("4 argv:   " + str(d4))
+print("4 flags:  " + str(p4[0]))
+print("4 opts:   " + show_opts(p4))
+print("4 pos:    " + str(positionals(p4)))
+print("")
+print("5 empty:  " + str(p5))
+print("")
+print("has_flag v / z:      " + str(has_flag(p1, "v")) + " " + str(has_flag(p1, "z")))
+print("has_flag tag:        " + str(has_flag(p2, "tag")))
+print("get_opt level:       " + get_opt(p1, "level", "0"))
+print("get_opt jobs (dflt): " + get_opt(p1, "jobs", "4"))
+print("get_opt out (2):     " + get_opt(p2, "out", "?"))
+print("get_opt offset (3):  " + get_opt(p3, "offset", "0"))
+print("get_opt out (3, dup):" + get_opt(p3, "out", "?"))
+print("get_opt out (4, \"\"):  [" + get_opt(p4, "out", "?") + "]")
+print("")
+print(usage("zlc", [["-v", "print more detail"], ["-r, -f", "recurse, force"], ["--out FILE", "write output here"], ["--level=N", "optimisation level 0-3"], ["--", "stop reading options"]]))

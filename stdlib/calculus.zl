@@ -1,0 +1,267 @@
+# calculus.zl - numerical integration and differentiation over a SAMPLE.
+#
+# zl has no first-class functions, so the usual derivative(f, x, h) and
+# integrate(f, a, b, n) cannot be written: a function name is not a value and
+# cannot be handed to another function. This module therefore works one step
+# downstream, on a sample the caller has already taken.
+#
+# Representation: a sample is a list of [x, y] pairs ordered by strictly
+# increasing x - the same "list of points" shape geometry.zl uses. Uneven
+# spacing is fine for trapezoid(), diff_forward(), diff_central() and
+# cumulative(); simpson() assumes even spacing (see its comment). Every result
+# that is itself a sample keeps the shape AND the length of its input, so the
+# pieces chain: cumulative() of a sample is a sample you can differentiate
+# back, and its last y equals trapezoid() of the original.
+#
+# Taking the sample still needs one small purpose-built function per formula -
+# sample_square() below is the demo's, and it is the only place x^2 is written.
+# newton_step() is the same idea for root finding: the caller evaluates f and
+# f' in closed form and the module does the step.
+#
+# Assigning a name inside a function writes an existing global of that name,
+# so every global in the demo carries a g_ prefix that no function here uses.
+#
+# Numbers are doubles. The demo's grids land on exact binary values (halves
+# and quarters), so every error it prints is the method's own truncation
+# error, not floating point noise.
+
+# Composite trapezoid rule: each panel is a straight line between samples, so
+# the area is width * mean height. Exact for straight lines; on a smooth curve
+# the error shrinks as h^2. Fewer than two points enclose no area, so 0.
+fn trapezoid(pts) {
+    n = len(pts)
+    total = 0
+    i = 0
+    while i < n - 1 {
+        total = total + (pts[i + 1][0] - pts[i][0]) * (pts[i][1] + pts[i + 1][1]) / 2
+        i = i + 1
+    }
+    return total
+}
+
+# Composite Simpson's rule: fits a parabola through each PAIR of panels, so it
+# is exact for anything up to a cubic and its error shrinks as h^4. It needs
+# an even number of panels (an odd number of points) and even spacing.
+# An even point count leaves one panel over; that last panel is closed with a
+# trapezoid rather than refused, which costs it the h^4 order at that end.
+fn simpson(pts) {
+    n = len(pts)
+    if n < 3 {
+        return trapezoid(pts)
+    }
+    last = n - 1
+    if n % 2 == 0 {
+        last = n - 2
+    }
+    h = (pts[last][0] - pts[0][0]) / last
+    total = pts[0][1] + pts[last][1]
+    i = 1
+    while i < last {
+        if i % 2 == 1 {
+            total = total + 4 * pts[i][1]
+        } else {
+            total = total + 2 * pts[i][1]
+        }
+        i = i + 1
+    }
+    out = total * h / 3
+    if n % 2 == 0 {
+        out = out + (pts[n - 1][0] - pts[n - 2][0]) * (pts[n - 2][1] + pts[n - 1][1]) / 2
+    }
+    return out
+}
+
+# Forward difference: the slope to the NEXT sample, reported at this x. Error
+# is first order (it leans forward by about h/2 of curvature). The last point
+# has no next sample, so it reuses the slope behind it - that keeps the result
+# the same length as the input.
+fn diff_forward(pts) {
+    n = len(pts)
+    out = []
+    if n < 2 {
+        return out
+    }
+    i = 0
+    while i < n - 1 {
+        out = push(out, [pts[i][0], (pts[i + 1][1] - pts[i][1]) / (pts[i + 1][0] - pts[i][0])])
+        i = i + 1
+    }
+    out = push(out, [pts[n - 1][0], (pts[n - 1][1] - pts[n - 2][1]) / (pts[n - 1][0] - pts[n - 2][0])])
+    return out
+}
+
+# Central difference: the slope across the two neighbours. The forward and
+# backward leans cancel, so the error is second order - and on evenly spaced
+# samples of a parabola it is exact. The two ends have only one neighbour and
+# fall back to the one-sided slope, which is where its error lives.
+fn diff_central(pts) {
+    n = len(pts)
+    out = []
+    if n < 2 {
+        return out
+    }
+    if n == 2 {
+        return diff_forward(pts)
+    }
+    out = push(out, [pts[0][0], (pts[1][1] - pts[0][1]) / (pts[1][0] - pts[0][0])])
+    i = 1
+    while i < n - 1 {
+        out = push(out, [pts[i][0], (pts[i + 1][1] - pts[i - 1][1]) / (pts[i + 1][0] - pts[i - 1][0])])
+        i = i + 1
+    }
+    out = push(out, [pts[n - 1][0], (pts[n - 1][1] - pts[n - 2][1]) / (pts[n - 1][0] - pts[n - 2][0])])
+    return out
+}
+
+# First place the sample crosses zero, as [a, b, root]: a and b are the two x
+# values that bracket it, root is where the straight line between them hits 0.
+# Bisecting that bracket would converge to exactly this point - the sample is
+# piecewise linear, so there is nothing left to halve - hence one direct solve.
+# A sample that is exactly zero returns itself as its own bracket.
+# nil() when the sample never changes sign; the bracket found is only the
+# FIRST one, and a root the sampling stepped over is invisible here.
+fn bisect_sign_change(pts) {
+    n = len(pts)
+    i = 0
+    while i < n - 1 {
+        ya = pts[i][1]
+        yb = pts[i + 1][1]
+        if ya == 0 {
+            return [pts[i][0], pts[i][0], pts[i][0]]
+        }
+        if sign(ya) != sign(yb) {
+            xa = pts[i][0]
+            xb = pts[i + 1][0]
+            return [xa, xb, xa + (xb - xa) * (0 - ya) / (yb - ya)]
+        }
+        i = i + 1
+    }
+    if n > 0 {
+        if pts[n - 1][1] == 0 {
+            return [pts[n - 1][0], pts[n - 1][0], pts[n - 1][0]]
+        }
+    }
+    return nil()
+}
+
+# One Newton-Raphson step: slide down the tangent to where it crosses zero.
+# The caller supplies f(x) and f'(x) because it is the only one that knows the
+# formula. A flat tangent points nowhere, so a zero slope returns x unmoved.
+fn newton_step(x, fx, dfx) {
+    if dfx == 0 {
+        return x
+    }
+    return x - fx / dfx
+}
+
+# Running trapezoid area: [x, area from the first sample up to x]. Same length
+# as the input, starting at zero, and the last y equals trapezoid(pts).
+fn cumulative(pts) {
+    n = len(pts)
+    out = []
+    if n == 0 {
+        return out
+    }
+    out = push(out, [pts[0][0], 0])
+    acc = 0
+    i = 0
+    while i < n - 1 {
+        acc = acc + (pts[i + 1][0] - pts[i][0]) * (pts[i][1] + pts[i + 1][1]) / 2
+        out = push(out, [pts[i + 1][0], acc])
+        i = i + 1
+    }
+    return out
+}
+
+# The demo's sampler: n panels of y = x^2 across [a, b], so n + 1 points.
+# Every sampled formula needs its own little function like this one.
+fn sample_square(a, b, n) {
+    out = []
+    i = 0
+    while i <= n {
+        xv = a + (b - a) * i / n
+        out = push(out, [xv, xv * xv])
+        i = i + 1
+    }
+    return out
+}
+
+# --- demo ---------------------------------------------------------------
+# y = x^2 on [0, 3]. The exact area is 3^3/3 = 9, and the exact slope is 2x.
+# Every expected value below is worked out by hand in the comment beside it.
+
+g_pts = sample_square(0, 3, 6)
+print("sample of x^2, 6 panels, h = 0.5:")
+print("  " + str(g_pts))
+
+# T = h*(y0/2 + y1..y5 + y6/2) = 0.5*(0 + 13.75 + 4.5) = 9.125.
+# The trapezoid error for x^2 is exactly +h^2/2 = 0.125, always over, because
+# every chord sits above a curve that bends upward.
+g_t6 = trapezoid(g_pts)
+print("trapezoid:        " + str(g_t6) + "   error " + str(g_t6 - 9) + "   (hand: 9.125, +h^2/2)")
+
+# Simpson fits parabolas, and x^2 IS a parabola, so it is dead on:
+# (h/3)*(0 + 4*0.25 + 2*1 + 4*2.25 + 2*4 + 4*6.25 + 9) = (0.5/3)*54 = 9.
+g_s6 = simpson(g_pts)
+print("simpson:          " + str(g_s6) + "       error " + str(g_s6 - 9) + "       (hand: exact for a parabola)")
+
+# Halve h and the trapezoid error should quarter: 0.125 -> 0.03125.
+# T = 0.25*(0 + 31.625 + 4.5) = 9.03125.
+g_fine = sample_square(0, 3, 12)
+g_t12 = trapezoid(g_fine)
+print("trapezoid h=0.25: " + str(g_t12) + "  error " + str(g_t12 - 9) + " (hand: 9.03125, a quarter of 0.125)")
+print("error ratio:      " + str((g_t6 - 9) / (g_t12 - 9)) + "           (hand: 4, so the error is O(h^2))")
+print("simpson h=0.25:   " + str(simpson(g_fine)) + "       error " + str(simpson(g_fine) - 9))
+
+# Four points is an EVEN count = 3 panels, one too many for Simpson. It does
+# Simpson over [0,2] - exactly 8/3 - and closes [2,3] with a trapezoid, 6.5.
+# 8/3 + 13/2 = 55/6 = 9.16667, off by 1/6. Plain trapezoid here is
+# 1*(0 + 1 + 4 + 4.5) = 9.5, off by h^2/2 = 0.5.
+g_coarse = sample_square(0, 3, 3)
+print("coarse sample:    " + str(g_coarse))
+print("  trapezoid:      " + str(trapezoid(g_coarse)) + "     error " + str(trapezoid(g_coarse) - 9) + "     (hand: 9.5, h^2/2 = 0.5)")
+print("  simpson (even count -> last panel is a trapezoid):")
+print("                  " + str(simpson(g_coarse)) + " error " + str(simpson(g_coarse) - 9) + " (hand: 8/3 + 13/2 = 55/6, off by 1/6)")
+
+# Derivatives. True slope is 2x: 0, 1, 2, 3, 4, 5, 6.
+# Forward leans a whole h forward, giving 2x + h = 2x + 0.5 exactly.
+# Central is exact at every interior point; only the two ends are one-sided.
+print("d/dx forward:     " + str(diff_forward(g_pts)))
+print("  (hand: 2x + h = 0.5, 1.5, 2.5, 3.5, 4.5, 5.5; last point reuses 5.5)")
+print("d/dx central:     " + str(diff_central(g_pts)))
+print("  (hand: exact 2x = 1, 2, 3, 4, 5 inside; ends one-sided at 0.5 and 5.5)")
+
+# Running area. Last entry must equal trapezoid(g_pts) = 9.125.
+g_cum = cumulative(g_pts)
+print("cumulative:       " + str(g_cum))
+print("  last = trapezoid: " + str(last(g_cum)[1] == g_t6) + "   (exact area to x=3 is 9)")
+
+# Root finding on y = x^2 - 2, the same grid shifted down by 2.
+g_root = []
+for g_p in g_pts {
+    g_root = push(g_root, [g_p[0], g_p[1] - 2])
+}
+print("sample of x^2-2:  " + str(g_root))
+
+# y goes -1 at x=1 then +0.25 at x=1.5, so the crossing is bracketed there:
+# 1 + 0.5*1/1.25 = 1.4, against a true root of sqrt(2) = 1.41421.
+g_hit = bisect_sign_change(g_root)
+print("sign change:      " + str(g_hit) + "  (hand: bracket [1, 1.5], root 1.4)")
+print("  vs sqrt(2):     " + str(sqrt(2)) + "  off by " + str(sqrt(2) - g_hit[2]))
+print("x^2 sample (y=0 at the first point): " + str(bisect_sign_change(g_pts)))
+print("no crossing:      " + str(bisect_sign_change([[0, 1], [1, 2], [2, 3]])) + "  (all positive)")
+
+# Newton on the same root, in closed form: f = x^2 - 2, f' = 2x, from x = 1.
+# By hand: 1 -> 3/2 -> 17/12 = 1.41667 -> 577/408 = 1.41422 -> 665857/470832.
+# Each step roughly doubles the number of correct digits.
+print("newton for sqrt(2) from x = 1:")
+g_x = 1
+g_k = 0
+while g_k < 5 {
+    g_fx = g_x * g_x - 2
+    g_dfx = 2 * g_x
+    g_x = newton_step(g_x, g_fx, g_dfx)
+    g_k = g_k + 1
+    print("  step " + str(g_k) + ": x = " + str(g_x) + "   |x - sqrt(2)| = " + str(abs(g_x - sqrt(2))))
+}
+print("flat tangent:     " + str(newton_step(7, 3, 0)) + "       (dfx = 0, so x is returned unmoved)")

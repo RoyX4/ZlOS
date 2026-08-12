@@ -1,0 +1,26 @@
+# the first program in my language
+name = "Zac"
+print("hi " + name)
+
+age = 19
+if age >= 18 {
+    print("adult")
+} else {
+    print("kid")
+}
+
+fn double(n) {
+    return n * 2
+}
+
+names = ["Zac", "Sam", "Alex"]
+for n in names {
+    print(n)
+}
+
+kill("chrome.exe")
+
+found = false
+if not found and age >= 18 {
+    poke("game.exe", 4000, 999)!
+}

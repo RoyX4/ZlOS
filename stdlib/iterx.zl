@@ -1,0 +1,131 @@
+# iterx - the functional family: map, filter, reduce and friends.
+#
+# For a long time the plan assumed these needed "closures" and were blocked.
+# They are not. zl functions are first-class TODAY - you can store one in a
+# variable, pass it, return it, and call it - so every one of these is just a
+# loop that calls a function you hand it. Verified 2026-08-03.
+#
+# The one real limit: the function you pass must be a NAMED fn (or one stored
+# in a variable). A closure that captures a local - fn(){ ... n ... } reading
+# an outer n - does not work yet. So you write the little helpers by name.
+#
+#   ix_map(xs, f)        -> [f(x) for x in xs]
+#   ix_filter(xs, keep)  -> the x where keep(x) is true
+#   ix_reduce(xs, acc, f)-> f(...f(f(acc,x0),x1)..., xn)
+#   ix_each(xs, f)       -> call f(x) for its side effect, return nil
+#   ix_any(xs, test)     -> true if test(x) for some x
+#   ix_all(xs, test)     -> true if test(x) for every x
+#   ix_count(xs, test)   -> how many x satisfy test
+#   ix_find(xs, test)    -> the first x with test(x), or nil
+#   ix_enumerate(xs)     -> [[0,x0],[1,x1],...]
+#   ix_zip(xs, ys)       -> [[x0,y0],[x1,y1],...] up to the shorter length
+#   ix_sort_by(xs, key)  -> xs sorted by the number key(x) (stable insertion)
+#   ix_take_while(xs, t) -> the leading run where t(x) holds
+
+fn ix_map(xs, f) {
+    ix_out = []
+    for x in xs { ix_out = push(ix_out, f(x)) }
+    return ix_out
+}
+
+fn ix_filter(xs, keep) {
+    ix_out = []
+    for x in xs {
+        if keep(x) { ix_out = push(ix_out, x) }
+    }
+    return ix_out
+}
+
+fn ix_reduce(xs, acc, f) {
+    ix_a = acc
+    for x in xs { ix_a = f(ix_a, x) }
+    return ix_a
+}
+
+fn ix_each(xs, f) {
+    for x in xs { f(x) }
+    return nil()
+}
+
+fn ix_any(xs, test) {
+    for x in xs {
+        if test(x) { return true }
+    }
+    return false
+}
+
+fn ix_all(xs, test) {
+    for x in xs {
+        if not test(x) { return false }
+    }
+    return true
+}
+
+fn ix_count(xs, test) {
+    ix_n = 0
+    for x in xs {
+        if test(x) { ix_n = ix_n + 1 }
+    }
+    return ix_n
+}
+
+fn ix_find(xs, test) {
+    for x in xs {
+        if test(x) { return x }
+    }
+    return nil()
+}
+
+fn ix_enumerate(xs) {
+    ix_out = []
+    ix_i = 0
+    for x in xs {
+        ix_out = push(ix_out, [ix_i, x])
+        ix_i = ix_i + 1
+    }
+    return ix_out
+}
+
+fn ix_zip(xs, ys) {
+    ix_out = []
+    ix_n = len(xs)
+    if len(ys) < ix_n { ix_n = len(ys) }
+    ix_i = 0
+    while ix_i < ix_n {
+        ix_out = push(ix_out, [xs[ix_i], ys[ix_i]])
+        ix_i = ix_i + 1
+    }
+    return ix_out
+}
+
+# stable insertion sort by a numeric key function - what the builtin sort()
+# cannot do (it silently ignores a comparator argument).
+fn ix_sort_by(xs, key) {
+    ix_out = []
+    for x in xs {
+        ix_kx = key(x)
+        ix_pos = len(ix_out)
+        ix_j = 0
+        ix_placed = false
+        ix_res = []
+        for y in ix_out {
+            if not ix_placed and ix_kx < key(y) {
+                ix_res = push(ix_res, x)
+                ix_placed = true
+            }
+            ix_res = push(ix_res, y)
+        }
+        if not ix_placed { ix_res = push(ix_res, x) }
+        ix_out = ix_res
+    }
+    return ix_out
+}
+
+fn ix_take_while(xs, test) {
+    ix_out = []
+    for x in xs {
+        if not test(x) { return ix_out }
+        ix_out = push(ix_out, x)
+    }
+    return ix_out
+}

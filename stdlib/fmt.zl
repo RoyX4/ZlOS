@@ -1,0 +1,61 @@
+# fmt.zl - text formatting helpers (thousands separators, padding, bars).
+
+fn commas(n) {
+    s = str(n)
+    neg = false
+    if at(s, 0) == "-" {
+        neg = true
+        s = slice(s, 1, len(s))
+    }
+    out = ""
+    c = 0
+    i = len(s) - 1
+    while i >= 0 {
+        out = at(s, i) + out
+        c = c + 1
+        if c % 3 == 0 and i > 0 {
+            out = "," + out
+        }
+        i = i - 1
+    }
+    if neg {
+        out = "-" + out
+    }
+    return out
+}
+fn lpad(s, w) {
+    while len(s) < w {
+        s = " " + s
+    }
+    return s
+}
+fn center(s, w) {
+    while len(s) < w {
+        s = s + " "
+        if len(s) < w {
+            s = " " + s
+        }
+    }
+    return s
+}
+fn bar(frac, width) {
+    filled = int(frac * width)
+    out = ""
+    i = 0
+    while i < width {
+        if i < filled {
+            out = out + "#"
+        } else {
+            out = out + "-"
+        }
+        i = i + 1
+    }
+    return "[" + out + "]"
+}
+
+print("commas:  " + commas(1234567))
+print("commas:  " + commas(0 - 9876543))
+print("lpad:   |" + lpad("42", 6) + "|")
+print("center: |" + center("hi", 8) + "|")
+print("bar 65%: " + bar(0.65, 20))
+print("bar 20%: " + bar(0.2, 20))

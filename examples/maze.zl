@@ -1,0 +1,700 @@
+# =====================================================================
+#  examples/maze.zl - carve a perfect maze, then solve it. Pure zl.
+#
+#    1. carve a 31x21 maze with randomised depth-first search
+#       ("recursive backtracking"), seeded so the result is reproducible
+#    2. render it as ASCII
+#    3. solve it with breadth-first search
+#    4. draw the solution back into the maze
+#    5. prove the answer - 15 checks that the path really is a
+#       contiguous chain of open squares from the entrance to the goal
+#    6. save the maze, the solved maze and a 310x210 BMP picture
+#
+#  Run it:   .\_interp_w4.exe examples\maze.zl        (~2 seconds)
+#
+#  ------------------------------------------------------------------
+#  THREE ZL FACTS THIS FILE LEANS ON. Read these before the code.
+#
+#  * 'and' / 'or' do NOT short-circuit - both sides are evaluated before
+#    the operator runs. So  `if y > 0 and cell[y - 1] == 0`  crashes on
+#    y == 0. Every guarded lookup below is a nested `if` instead.
+#    (The ternary `a ? b : c` DOES short-circuit - only the taken branch
+#    is evaluated - so it is the safe one-liner form.)
+#
+#  * assigning to a name inside a function updates a GLOBAL of the same
+#    name if one exists. So, exactly like stdlib/bmp.zl, every parameter
+#    and local here carries a short tag naming its function (cv_ = carve,
+#    fd_ = flood, bx_ = box, ...). The check() counters are the
+#    deliberate exception: they ARE globals, and are meant to be hit.
+#
+#  * a list is a handle. `fill(n, 0)` hands back n slots you can write
+#    with `xs[i] = v`, and a function can write through a list it was
+#    passed. But `push` returns a NEW list, so a grown list must be
+#    re-assigned: `xs = push(xs, v)`. Anything that needs random access
+#    is therefore pre-sized with fill(), and only genuinely growing
+#    sequences use push().
+#  ------------------------------------------------------------------
+#
+#  SIZING. The grid is MAZE_W x MAZE_H, both ODD: walls live on the even
+#  coordinates and cells on the odd ones, so 31x21 holds 15x10 = 150
+#  cells. Want a bigger maze? Raise MAZE_W / MAZE_H (keep them odd) -
+#  the maze work is linear in MAZE_W*MAZE_H and is not the expensive
+#  part. Want a bigger picture? Raise BMP_SCALE - the BMP is
+#  MAZE_W*MAZE_H*BMP_SCALE^2 pixels and IS the expensive part (it is
+#  about 90% of the runtime here). 61x41 at BMP_SCALE 8 still lands
+#  inside a few seconds; 31x21 at BMP_SCALE 24 does not.
+# =====================================================================
+
+
+# ---- 0. configuration -----------------------------------------------
+
+MAZE_W = 31                       # must be odd
+MAZE_H = 21                       # must be odd
+CELLS_X = int((MAZE_W - 1) / 2)   # 15 cells across
+CELLS_Y = int((MAZE_H - 1) / 2)   # 10 cells down
+MAZE_SEED = 20260731
+
+WALL = 0
+OPEN = 1
+NONE = 0 - 1                      # "no distance yet" / "no predecessor"
+
+BMP_SCALE = 10                    # pixels per grid square -> 310 x 210
+
+# A grid square is addressed by ONE number, p = y * MAZE_W + x. Flat
+# indexing costs one multiply instead of two index hops, and it means a
+# queue entry, a predecessor and a path step are all just numbers.
+START = 1 * MAZE_W + 1                          # top-left cell,  (1, 1)
+GOAL  = (MAZE_H - 2) * MAZE_W + (MAZE_W - 2)    # bottom-right,   (29, 19)
+
+HEAT = ".,:;-=+*%@"               # 10-step shading ramp, near -> far
+
+
+# ---- 1. tiny helpers -------------------------------------------------
+
+fn gpos(gp_x, gp_y) { return gp_y * MAZE_W + gp_x }
+fn gx(gx_p)         { return gx_p % MAZE_W }
+fn gy(gy_p)         { return int(gy_p / MAZE_W) }
+
+
+# ---- 2. carve: randomised depth-first search -------------------------
+#
+# The classic "recursive backtracking" maze, written with an explicit
+# stack rather than real recursion. Same algorithm, same output - the
+# stack just lives on the heap where its depth is something we sized on
+# purpose (a cell is pushed at most once, so CELLS_X*CELLS_Y slots is an
+# exact bound) instead of somewhere the interpreter has to guess.
+#
+# Standing at a cell: look at the four neighbours, keep the ones not yet
+# visited, pick one at random, knock out the wall between, and walk into
+# it. No unvisited neighbours means dead end - pop, and carry on from
+# wherever we came from. Because every cell is entered exactly once, the
+# 150 cells end up joined by exactly 149 corridors: a spanning tree. A
+# tree has no loops, so between any two squares there is exactly ONE
+# route. That is what "perfect maze" means, and it is the property the
+# checks at the bottom of this file actually test.
+
+fn carve(cv_seed) {
+    seed(cv_seed)
+    cv_grid = fill(MAZE_W * MAZE_H, WALL)
+
+    cv_ncells = CELLS_X * CELLS_Y
+    cv_seen  = fill(cv_ncells, 0)
+    cv_stack = fill(cv_ncells, 0)
+    cv_sp = 0
+
+    # start in the top-left cell
+    cv_seen[0] = 1
+    cv_grid[gpos(1, 1)] = OPEN
+    cv_stack[0] = 0
+    cv_sp = 1
+
+    while cv_sp > 0 {
+        cv_cur = cv_stack[cv_sp - 1]
+        cv_cx = cv_cur % CELLS_X
+        cv_cy = int(cv_cur / CELLS_X)
+
+        # Which neighbours have we not been to? Nested ifs, NOT `and`:
+        # `and` would evaluate cv_seen[cv_cur - CELLS_X] even when
+        # cv_cy is 0, and index -15 is a runtime error.
+        cv_opts = []
+        if cv_cy > 0 {
+            if cv_seen[cv_cur - CELLS_X] == 0 { cv_opts = push(cv_opts, 0) }
+        }
+        if cv_cy < CELLS_Y - 1 {
+            if cv_seen[cv_cur + CELLS_X] == 0 { cv_opts = push(cv_opts, 1) }
+        }
+        if cv_cx > 0 {
+            if cv_seen[cv_cur - 1] == 0 { cv_opts = push(cv_opts, 2) }
+        }
+        if cv_cx < CELLS_X - 1 {
+            if cv_seen[cv_cur + 1] == 0 { cv_opts = push(cv_opts, 3) }
+        }
+
+        if len(cv_opts) == 0 {
+            cv_sp -= 1                     # dead end - back up
+            continue
+        }
+
+        cv_dir = cv_opts[randint(0, len(cv_opts) - 1)]
+        cv_nx = cv_cx
+        cv_ny = cv_cy
+        if cv_dir == 0 { cv_ny -= 1 }      # up
+        if cv_dir == 1 { cv_ny += 1 }      # down
+        if cv_dir == 2 { cv_nx -= 1 }      # left
+        if cv_dir == 3 { cv_nx += 1 }      # right
+
+        # Cell (cx, cy) sits at grid (2cx+1, 2cy+1). The wall between two
+        # neighbouring cells is their midpoint, which is why the ugly
+        # doubling collapses to cx+nx+1 / cy+ny+1.
+        cv_grid[gpos(cv_cx + cv_nx + 1, cv_cy + cv_ny + 1)] = OPEN
+        cv_grid[gpos(cv_nx * 2 + 1, cv_ny * 2 + 1)] = OPEN
+
+        cv_next = cv_ny * CELLS_X + cv_nx
+        cv_seen[cv_next] = 1
+        cv_stack[cv_sp] = cv_next
+        cv_sp += 1
+    }
+    return cv_grid
+}
+
+
+# ---- 3. flood: breadth-first search ----------------------------------
+#
+# BFS from one square, over the grid one square at a time (so corridors
+# count as steps too, which is what makes the reported length a real
+# distance and not a cell count). Returns [dist, prev, reached].
+#
+# The queue is a pre-sized list with a read index and a write index. It
+# never wraps, because BFS enqueues each square at most once, so
+# MAZE_W*MAZE_H slots can never overflow.
+
+fn flood(fd_grid, fd_from) {
+    fd_n = MAZE_W * MAZE_H
+    fd_dist  = fill(fd_n, NONE)
+    fd_prev  = fill(fd_n, NONE)
+    fd_queue = fill(fd_n, 0)
+    fd_head = 0
+    fd_tail = 0
+
+    fd_dist[fd_from] = 0
+    fd_queue[fd_tail] = fd_from
+    fd_tail += 1
+
+    while fd_head < fd_tail {
+        fd_p = fd_queue[fd_head]
+        fd_head += 1
+        fd_d = fd_dist[fd_p] + 1
+
+        # The outer ring of the grid is solid wall and never opens, so a
+        # square that made it into the queue is never on the border:
+        # p-1, p+1, p-MAZE_W and p+MAZE_W are all in range unchecked.
+        # (Check (b) at the bottom is what earns us that shortcut.)
+        fd_k = 0
+        while fd_k < 4 {
+            fd_q = fd_p - 1
+            if fd_k == 1 { fd_q = fd_p + 1 }
+            if fd_k == 2 { fd_q = fd_p - MAZE_W }
+            if fd_k == 3 { fd_q = fd_p + MAZE_W }
+
+            if fd_grid[fd_q] == OPEN {
+                if fd_dist[fd_q] == NONE {
+                    fd_dist[fd_q] = fd_d
+                    fd_prev[fd_q] = fd_p
+                    fd_queue[fd_tail] = fd_q
+                    fd_tail += 1
+                }
+            }
+            fd_k += 1
+        }
+    }
+    return [fd_dist, fd_prev, fd_tail]
+}
+
+# Follow the predecessor chain back from the goal, then flip it.
+fn trace(tr_prev, tr_from, tr_to) {
+    tr_back = []
+    tr_at = tr_to
+    tr_guard = 0
+    while tr_at != NONE {
+        tr_back = push(tr_back, tr_at)
+        if tr_at == tr_from { break }
+        tr_at = tr_prev[tr_at]
+        tr_guard += 1
+        if tr_guard > MAZE_W * MAZE_H { break }   # impossible on a tree
+    }
+    return reverse(tr_back)
+}
+
+
+# ---- 4. rendering ----------------------------------------------------
+#
+# render() returns a LIST OF ROW STRINGS rather than one blob, so the
+# same rows can be print()ed with join() and written to a file with a
+# trailing newline, without either caller trimming the other's format.
+# rn_over is an overlay: "" means "just draw the maze here".
+
+fn render(rn_grid, rn_over) {
+    rn_rows = []
+    rn_y = 0
+    while rn_y < MAZE_H {
+        rn_line = ""
+        rn_x = 0
+        while rn_x < MAZE_W {
+            rn_p = rn_y * MAZE_W + rn_x
+            rn_c = rn_over[rn_p]
+            if rn_c == "" {
+                rn_c = rn_grid[rn_p] == WALL ? "#" : " "
+            }
+            rn_line = rn_line + rn_c
+            rn_x += 1
+        }
+        rn_rows = push(rn_rows, rn_line)
+        rn_y += 1
+    }
+    return rn_rows
+}
+
+# The BFS distance field, shaded. Walls are left blank, so the maze's
+# shape is drawn entirely by how far each square is from the entrance -
+# you can watch the flood fill spread across the page.
+fn heatmap(hm_grid, hm_dist, hm_max) {
+    hm_top = hm_max < 1 ? 1 : hm_max
+    hm_rows = []
+    hm_y = 0
+    while hm_y < MAZE_H {
+        hm_line = ""
+        hm_x = 0
+        while hm_x < MAZE_W {
+            hm_p = hm_y * MAZE_W + hm_x
+            hm_c = " "
+            if hm_grid[hm_p] == OPEN {
+                hm_c = "?"                       # open but unreachable
+                if hm_dist[hm_p] != NONE {
+                    hm_c = at(HEAT, int(hm_dist[hm_p] * (len(HEAT) - 1) / hm_top))
+                }
+            }
+            hm_line = hm_line + hm_c
+            hm_x += 1
+        }
+        hm_rows = push(hm_rows, hm_line)
+        hm_y += 1
+    }
+    return hm_rows
+}
+
+
+# ---- 5. the check harness --------------------------------------------
+# checks_run / checks_bad are globals ON PURPOSE - see the header note.
+
+checks_run = 0
+checks_bad = 0
+
+fn check(ck_label, ck_got, ck_want) {
+    checks_run += 1
+    if str(ck_got) == str(ck_want) {
+        print("  ok    " + ck_label)
+    } else {
+        checks_bad += 1
+        print("  FAIL  " + ck_label + f"  -  got {str(ck_got)}, want {str(ck_want)}")
+    }
+}
+
+
+# ---- 6. BMP output ---------------------------------------------------
+#
+# The little-endian appenders and the 54-byte header layout are lifted
+# from stdlib/bmp.zl, which documents the format properly (zl has no
+# import system, so reusing a module means reading it and inlining the
+# few functions you need). What is different here: pixels go straight
+# into the flat byte list through box() with inline index arithmetic,
+# instead of a bmp_set() call per pixel - a 310x210 picture is 65,100
+# pixels, and a function call each would be the entire runtime.
+
+fn le8(l8_buf, l8_v)  { return push(l8_buf, l8_v % 256) }
+fn le16(l6_buf, l6_v) {
+    l6_buf = le8(l6_buf, l6_v % 256)
+    return le8(l6_buf, int(l6_v / 256) % 256)
+}
+fn le32(l3_buf, l3_v) {
+    l3_buf = le16(l3_buf, l3_v % 65536)
+    return le16(l3_buf, int(l3_v / 65536) % 65536)
+}
+
+fn mix(mx_a, mx_b, mx_t) { return int(mx_a + (mx_b - mx_a) * mx_t) }
+
+# filled rectangle, both corners inclusive, clipped to the canvas
+fn box(bx_px, bx_w, bx_h, bx_x0, bx_y0, bx_x1, bx_y1, bx_r, bx_g, bx_b) {
+    bx_ax = int(max(bx_x0, 0))
+    bx_ay = int(max(bx_y0, 0))
+    bx_zx = int(min(bx_x1, bx_w - 1))
+    bx_zy = int(min(bx_y1, bx_h - 1))
+    bx_y = bx_ay
+    while bx_y <= bx_zy {
+        bx_i = (bx_y * bx_w + bx_ax) * 3
+        bx_x = bx_ax
+        while bx_x <= bx_zx {
+            bx_px[bx_i] = bx_r
+            bx_px[bx_i + 1] = bx_g
+            bx_px[bx_i + 2] = bx_b
+            bx_i += 3
+            bx_x += 1
+        }
+        bx_y += 1
+    }
+}
+
+fn bmp_save(sv_px, sv_w, sv_h, sv_path) {
+    sv_row = int((sv_w * 3 + 3) / 4) * 4        # rows pad up to 4 bytes
+    sv_pad = sv_row - sv_w * 3
+    sv_buf = []
+    sv_buf = le8(sv_buf, 66)                    # 'B'
+    sv_buf = le8(sv_buf, 77)                    # 'M'
+    sv_buf = le32(sv_buf, 54 + sv_row * sv_h)   # total file size
+    sv_buf = le16(sv_buf, 0)
+    sv_buf = le16(sv_buf, 0)
+    sv_buf = le32(sv_buf, 54)                   # pixel data starts here
+    sv_buf = le32(sv_buf, 40)                   # BITMAPINFOHEADER size
+    sv_buf = le32(sv_buf, sv_w)
+    sv_buf = le32(sv_buf, sv_h)                 # positive = bottom-up
+    sv_buf = le16(sv_buf, 1)                    # colour planes
+    sv_buf = le16(sv_buf, 24)                   # bits per pixel
+    sv_buf = le32(sv_buf, 0)                    # BI_RGB, no compression
+    sv_buf = le32(sv_buf, sv_row * sv_h)
+    sv_buf = le32(sv_buf, 2835)                 # 72 dpi across
+    sv_buf = le32(sv_buf, 2835)                 # 72 dpi down
+    sv_buf = le32(sv_buf, 0)
+    sv_buf = le32(sv_buf, 0)
+
+    sv_y = sv_h - 1                             # rows bottom-up, B,G,R
+    while sv_y >= 0 {
+        sv_i = sv_y * sv_w * 3
+        sv_x = 0
+        while sv_x < sv_w {
+            sv_buf = push(sv_buf, sv_px[sv_i + 2])
+            sv_buf = push(sv_buf, sv_px[sv_i + 1])
+            sv_buf = push(sv_buf, sv_px[sv_i])
+            sv_i += 3
+            sv_x += 1
+        }
+        sv_p = 0
+        while sv_p < sv_pad { sv_buf = push(sv_buf, 0)  sv_p += 1 }
+        sv_y -= 1
+    }
+    write_bytes(sv_path, sv_buf)
+    return len(sv_buf)
+}
+
+# Paint the maze: walls near-black, floors tinted by their distance from
+# the entrance (so the BFS field is visible as colour), and the solution
+# on top as one rectangle per step.
+fn paint(pt_grid, pt_dist, pt_max, pt_path) {
+    pt_w = MAZE_W * BMP_SCALE
+    pt_h = MAZE_H * BMP_SCALE
+    pt_px = fill(pt_w * pt_h * 3, 0)
+    pt_top = pt_max < 1 ? 1 : pt_max
+
+    pt_y = 0
+    while pt_y < MAZE_H {
+        pt_x = 0
+        while pt_x < MAZE_W {
+            pt_p = pt_y * MAZE_W + pt_x
+            pt_r = 12
+            pt_g = 13
+            pt_b = 20
+            if pt_grid[pt_p] == OPEN {
+                # floors stay dim so the solution can out-shout them;
+                # their tint still shows the distance field underneath
+                pt_t = pt_dist[pt_p] / pt_top
+                pt_r = mix(22, 78, pt_t)
+                pt_g = mix(40, 32, pt_t)
+                pt_b = mix(74, 86, pt_t)
+            }
+            # a call argument list cannot span lines - a newline ends
+            # the expression - so corners go into locals first
+            pt_ax = pt_x * BMP_SCALE
+            pt_ay = pt_y * BMP_SCALE
+            box(pt_px, pt_w, pt_h, pt_ax, pt_ay, pt_ax + BMP_SCALE - 1, pt_ay + BMP_SCALE - 1, pt_r, pt_g, pt_b)
+            pt_x += 1
+        }
+        pt_y += 1
+    }
+
+    # One rectangle per STEP, not per square: each rectangle spans the
+    # middle of both squares it joins, so consecutive steps butt
+    # together into a seamless ribbon and corners need no special case.
+    pt_in = int(BMP_SCALE / 4)
+    pt_n = len(pt_path)
+    pt_k = 0
+    while pt_k < pt_n - 1 {
+        pt_p0 = pt_path[pt_k]
+        pt_p1 = pt_path[pt_k + 1]
+        pt_x0 = pt_p0 % MAZE_W
+        pt_y0 = int(pt_p0 / MAZE_W)
+        pt_x1 = pt_p1 % MAZE_W
+        pt_y1 = int(pt_p1 / MAZE_W)
+        pt_t = pt_k / (pt_n - 1)
+        pt_ax = min(pt_x0, pt_x1) * BMP_SCALE + pt_in
+        pt_ay = min(pt_y0, pt_y1) * BMP_SCALE + pt_in
+        pt_bx = max(pt_x0, pt_x1) * BMP_SCALE + BMP_SCALE - 1 - pt_in
+        pt_by = max(pt_y0, pt_y1) * BMP_SCALE + BMP_SCALE - 1 - pt_in
+        pt_cr = mix(104, 255, pt_t)          # cyan at the entrance...
+        pt_cg = mix(232, 176, pt_t)          # ...warming to amber at the goal
+        pt_cb = mix(255, 56, pt_t)
+        box(pt_px, pt_w, pt_h, pt_ax, pt_ay, pt_bx, pt_by, pt_cr, pt_cg, pt_cb)
+        pt_k += 1
+    }
+
+    # entrance (green) and goal (red)
+    pt_sx = (pt_path[0] % MAZE_W) * BMP_SCALE + 1
+    pt_sy = int(pt_path[0] / MAZE_W) * BMP_SCALE + 1
+    pt_se = BMP_SCALE - 3
+    box(pt_px, pt_w, pt_h, pt_sx, pt_sy, pt_sx + pt_se, pt_sy + pt_se, 90, 240, 140)
+    pt_ex = (pt_path[pt_n - 1] % MAZE_W) * BMP_SCALE + 1
+    pt_ey = int(pt_path[pt_n - 1] / MAZE_W) * BMP_SCALE + 1
+    box(pt_px, pt_w, pt_h, pt_ex, pt_ey, pt_ex + pt_se, pt_ey + pt_se, 255, 84, 84)
+
+    return [pt_w, pt_h, pt_px]
+}
+
+
+# =====================================================================
+#  DRIVER
+#  Everything below runs at top level. These names are globals, so none
+#  of them carries a function tag - and no function local uses a plain
+#  name, which is what keeps the two sets from colliding.
+# =====================================================================
+
+t0 = now()
+print("")
+print("=====================================================================")
+print(f" maze.zl  -  a {MAZE_W}x{MAZE_H} perfect maze, carved and solved in zl")
+print(f" seed {MAZE_SEED}   {CELLS_X}x{CELLS_Y} = {CELLS_X * CELLS_Y} cells")
+print("=====================================================================")
+
+# --- carve ---
+grid = carve(MAZE_SEED)
+t_carve = now() - t0
+
+blank = fill(MAZE_W * MAZE_H, "")
+print("")
+print("THE MAZE")
+print("")
+print(join(render(grid, blank), "\n"))
+
+# --- solve ---
+t1 = now()
+result  = flood(grid, START)
+dist    = result[0]
+prev    = result[1]
+reached = result[2]
+path    = trace(prev, START, GOAL)
+t_solve = now() - t1
+
+# --- draw the solution back in ---
+over = fill(MAZE_W * MAZE_H, "")
+i = 0
+while i < len(path) { over[path[i]] = "o"  i += 1 }
+over[START] = "S"
+over[GOAL]  = "G"
+
+print("")
+print("SOLVED    S = entrance,  G = goal,  o = the route,  # = wall")
+print("")
+print(join(render(grid, over), "\n"))
+
+# --- the distance field ---
+max_dist = 0
+far_cell = START
+i = 0
+while i < MAZE_W * MAZE_H {
+    if dist[i] > max_dist { max_dist = dist[i]  far_cell = i }
+    i += 1
+}
+
+print("")
+print("DISTANCE FROM THE ENTRANCE    " + HEAT + "   near -> far")
+print("")
+print(join(heatmap(grid, dist, max_dist), "\n"))
+
+# --- statistics ---
+open_count = 0
+dead_ends = 0
+junctions = 0
+vy = 1
+while vy < MAZE_H - 1 {
+    vx = 1
+    while vx < MAZE_W - 1 {
+        vp = vy * MAZE_W + vx
+        if grid[vp] == OPEN {
+            open_count += 1
+            vn = 0
+            if grid[vp - 1] == OPEN      { vn += 1 }
+            if grid[vp + 1] == OPEN      { vn += 1 }
+            if grid[vp - MAZE_W] == OPEN { vn += 1 }
+            if grid[vp + MAZE_W] == OPEN { vn += 1 }
+            if vn == 1 { dead_ends += 1 }
+            if vn >= 3 { junctions += 1 }
+        }
+        vx += 1
+    }
+    vy += 1
+}
+
+print("")
+print("STATISTICS")
+print(f"  cells                 {CELLS_X * CELLS_Y}")
+print(f"  open grid squares     {open_count}   (cells + the corridors joining them)")
+print(f"  walls                 {MAZE_W * MAZE_H - open_count}")
+print(f"  dead ends             {dead_ends}")
+print(f"  junctions             {junctions}")
+print(f"  entrance -> goal      {len(path)} squares, {len(path) - 1} steps")
+print(f"  furthest square       {max_dist} steps away, at ({gx(far_cell)}, {gy(far_cell)})")
+print(f"  BFS explored          {reached} squares")
+
+# --- verification -----------------------------------------------------
+#
+# "It printed a maze" is not evidence. These checks are the evidence.
+
+print("")
+print("VERIFYING")
+
+# (a) geometry - the odd-size rule and the solid outer ring. The BFS
+#     above skips its bounds checks on the strength of that ring.
+check("grid width is odd", MAZE_W % 2, 1)
+check("grid height is odd", MAZE_H % 2, 1)
+border_open = 0
+i = 0
+while i < MAZE_W {
+    if grid[i] != WALL                            { border_open += 1 }
+    if grid[(MAZE_H - 1) * MAZE_W + i] != WALL    { border_open += 1 }
+    i += 1
+}
+i = 0
+while i < MAZE_H {
+    if grid[i * MAZE_W] != WALL                   { border_open += 1 }
+    if grid[i * MAZE_W + MAZE_W - 1] != WALL      { border_open += 1 }
+    i += 1
+}
+check("the outer ring is solid wall", border_open, 0)
+
+# (b) the maze is a spanning tree. 150 cells joined by 149 corridors is
+#     299 open squares - one edge short of any possible loop - and BFS
+#     reaching all 299 says it is connected. Connected + (V-1) edges
+#     = tree, and a tree is exactly why the route below is unique.
+check("open squares = 2*cells - 1 (no loops)", open_count, CELLS_X * CELLS_Y * 2 - 1)
+check("BFS reached every open square (connected)", reached, open_count)
+
+# (c) the path is a real, contiguous walk
+check("path starts at the entrance", path[0], START)
+check("path ends at the goal", path[len(path) - 1], GOAL)
+check("path length agrees with the BFS distance", len(path), dist[GOAL] + 1)
+
+step_bad = 0
+closed_on_path = 0
+repeat_on_path = 0
+seen_path = fill(MAZE_W * MAZE_H, 0)
+i = 0
+while i < len(path) {
+    vp = path[i]
+    if grid[vp] != OPEN     { closed_on_path += 1 }
+    if seen_path[vp] == 1   { repeat_on_path += 1 }
+    seen_path[vp] = 1
+    if i > 0 {
+        vq = path[i - 1]
+        # a legal step changes exactly one coordinate, by exactly one
+        if abs((vp % MAZE_W) - (vq % MAZE_W)) + abs(int(vp / MAZE_W) - int(vq / MAZE_W)) != 1 {
+            step_bad += 1
+        }
+    }
+    i += 1
+}
+check("every step moves to an orthogonal neighbour", step_bad, 0)
+check("every square on the path is open", closed_on_path, 0)
+check("no square is visited twice", repeat_on_path, 0)
+
+# (d) an INDEPENDENT re-solve that never looks at prev[]. Walk back from
+#     the goal, each time stepping to a neighbour whose distance is one
+#     less. On a tree there is never a choice - so if the count of
+#     candidates is ever anything but 1, the maze has a loop and the
+#     "one and only route" claim is false.
+alt = []
+vp = GOAL
+choices_bad = 0
+while vp != START {
+    alt = push(alt, vp)
+    vbest = NONE
+    vcount = 0
+    vn = 0
+    while vn < 4 {
+        vq = vp - 1
+        if vn == 1 { vq = vp + 1 }
+        if vn == 2 { vq = vp - MAZE_W }
+        if vn == 3 { vq = vp + MAZE_W }
+        if grid[vq] == OPEN {
+            if dist[vq] == dist[vp] - 1 { vcount += 1  vbest = vq }
+        }
+        vn += 1
+    }
+    if vcount != 1 { choices_bad += 1 }
+    if vbest == NONE { break }
+    vp = vbest
+}
+alt = push(alt, START)
+alt = reverse(alt)
+check("back-walking the distance field is never ambiguous", choices_bad, 0)
+check("the independent walk finds the same route", str(alt) == str(path), true)
+
+# (e) reproducibility - the whole point of calling seed()
+same = 0
+grid2 = carve(MAZE_SEED)
+i = 0
+while i < MAZE_W * MAZE_H {
+    if grid[i] == grid2[i] { same += 1 }
+    i += 1
+}
+check("the same seed rebuilds the same maze", same, MAZE_W * MAZE_H)
+
+diff = 0
+grid3 = carve(MAZE_SEED + 1)
+i = 0
+while i < MAZE_W * MAZE_H {
+    if grid[i] != grid3[i] { diff += 1 }
+    i += 1
+}
+check("a different seed gives a different maze", diff > 0, true)
+
+print(f"  ----  {checks_run - checks_bad}/{checks_run} checks passed")
+
+# --- artefacts --------------------------------------------------------
+# write_bytes/write cannot create a folder and zl has no mkdir, so say
+# so plainly rather than dying half way through.
+
+print("")
+print("FILES")
+if contains(dir("."), "examples_out") {
+    plain = join(render(grid, blank), "\n") + "\n"
+    write("examples_out/maze.txt", plain)
+    print(f"  examples_out/maze.txt          {len(plain)} bytes")
+
+    solved = join(render(grid, over), "\n") + "\n"
+    write("examples_out/maze_solved.txt", solved)
+    print(f"  examples_out/maze_solved.txt   {len(solved)} bytes")
+
+    field = join(heatmap(grid, dist, max_dist), "\n") + "\n"
+    write("examples_out/maze_distance.txt", field)
+    print(f"  examples_out/maze_distance.txt {len(field)} bytes")
+
+    t2 = now()
+    img = paint(grid, dist, max_dist, path)
+    wrote = bmp_save(img[2], img[0], img[1], "examples_out/maze.bmp")
+    t_paint = now() - t2
+    print(f"  examples_out/maze.bmp          {wrote} bytes  ({img[0]}x{img[1]})")
+} else {
+    t_paint = 0
+    print("  skipped - run me from the repo root, with an examples_out folder")
+}
+
+print("")
+print(f"timing: carve {t_carve}ms, solve {t_solve}ms, picture {t_paint}ms, total {now() - t0}ms")
+print("")
+if checks_bad > 0 { exit(1) }

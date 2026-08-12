@@ -1,0 +1,1105 @@
+# =====================================================================
+#  calc_repl.zl  --  a real expression calculator, written in zl
+# =====================================================================
+#
+#  This is a complete little language implementation inside zl:
+#
+#      text  ->  tokenizer  ->  recursive-descent parser  ->  AST
+#                                                              |
+#                                       tree printer  <--------+
+#                                       evaluator     <--------+
+#
+#  It handles  + - * / %  , parentheses, unary + and -, a RIGHT
+#  associative  ^  , named variables, and 27 math builtins called by
+#  name (sqrt, sin, pow, clamp, ...).
+#
+#  Running it:
+#      .\_interp_w4.exe examples\calc_repl.zl
+#
+#  With no arguments it runs a built-in suite of 44 expressions with
+#  hand-computed expected values and prints PASS/FAIL for each, so the
+#  file is useful non-interactively.  To get the interactive REPL as
+#  well, set an environment variable first:
+#
+#      $env:ZL_CALC_REPL = "1"          # PowerShell
+#      .\_interp_w4.exe examples\calc_repl.zl
+#
+#  (The REPL is opt-in on purpose: input() blocks on a live console,
+#  and this file is run unattended by the test harness.)
+#
+#  A transcript of everything printed is also written to
+#  examples_out\calc_repl_report.txt.
+#
+#  ---------------------------------------------------------------
+#  THE GRAMMAR  (this is the whole language, in six lines)
+#  ---------------------------------------------------------------
+#      program := stmt ( ';' stmt )*
+#      stmt    := IDENT '=' expr | expr
+#      expr    := term ( ('+' | '-') term )*            left-assoc
+#      term    := factor ( ('*' | '/' | '%') factor )*  left-assoc
+#      factor  := ('-' | '+') factor | power            unary
+#      power   := atom ( '^' factor )?                  RIGHT-assoc
+#      atom    := NUMBER | IDENT | IDENT '(' args ')' | '(' expr ')'
+#
+#  Two subtleties are worth staring at, because they are what most
+#  hand-written calculators get wrong:
+#
+#    * power's right-hand side is `factor`, not `power`.  Recursing
+#      into the *looser* rule is what makes ^ right-associative
+#      (2^3^2 = 2^(3^2) = 512, not (2^3)^2 = 64) and simultaneously
+#      lets you write 2^-1 = 0.5.
+#
+#    * unary minus lives *above* power, so -2^2 parses as -(2^2) = -4,
+#      matching maths and every real calculator.  (-2)^2 = 4 needs the
+#      parentheses.
+#
+#  Both cases are in the test suite, and section 1 prints their parse
+#  trees so you can see the shape rather than take my word for it.
+#
+#  ---------------------------------------------------------------
+#  HOW IT IS BUILT, GIVEN WHAT zl HAS
+#  ---------------------------------------------------------------
+#  zl has no structs, no dictionaries and no first-class functions.
+#  So:
+#    * the token stream is three parallel lists (kind / text / value);
+#    * the AST is five parallel lists indexed by an integer "node id",
+#      which is exactly how a C compiler with an arena allocator does
+#      it -- children are ints, not pointers;
+#    * the variable table is two parallel lists (the same trick
+#      stdlib/dict.zl uses -- see dset/dget there);
+#    * builtins are dispatched by an if/elif chain on the name, since
+#      there are no function pointers to put in a table.
+#
+#  Errors travel in a global ERR string (zl has no exceptions): every
+#  parser and evaluator function bails out early while ERR is set, so
+#  the first error wins and nothing downstream has to be defensive.
+#
+#  ---------------------------------------------------------------
+#  KNOWN LIMITS (measured on this interpreter, not guesses)
+#  ---------------------------------------------------------------
+#    * zl call depth tops out near 150 frames.  This parser burns ~6
+#      frames per level of parentheses, so ~20 nested parens is the
+#      ceiling.  Nothing here goes past 3.
+#    * zl's own % truncates to integers (2.5 % 1 == 0), so the
+#      calculator's % uses the fmod() builtin instead: 2.5 % 1 = 0.5.
+#    * str() prints 6 significant digits, which is no good for a
+#      calculator, so fmtnum() below does its own decimal formatting
+#      to ~15 significant digits.
+#
+#  To make this do more work: add rows to the test table in
+#  build_tests() -- each row is one test() call.  Runtime is ~0.1s
+#  for 44 expressions and it is linear in the number of rows, so even
+#  a thousand of them would stay well under a second.
+# =====================================================================
+
+
+# ---------------------------------------------------------------
+#  0.  Transcript helper
+# ---------------------------------------------------------------
+#  say() prints AND records, so the same text can be dumped to a file
+#  at the end without running everything twice.
+
+OUT = []
+
+fn say(line) {
+    print(line)
+    OUT = push(OUT, line)
+}
+
+
+# ---------------------------------------------------------------
+#  1.  Number formatting
+# ---------------------------------------------------------------
+#  zl's str() is a %g with 6 significant digits: str(1/3) is
+#  "0.333333" and str(3.0001220703125) is "3.00012".  A calculator
+#  that lies about its own answers is not much of a calculator, so
+#  this rebuilds the decimal expansion by hand.
+#
+#  The trick is choosing how many decimals to ask for.  A double holds
+#  about 15-16 honest significant digits, so:
+#      decimals = 15 - (number of digits before the point)
+#  Scaling by 10^decimals then keeps the product inside the range
+#  where doubles still represent every integer exactly (< 2^53), so
+#  round() gives the true rounded digits instead of float noise.
+
+fn zeropad(s, width) {
+    while len(s) < width { s = "0" + s }
+    return s
+}
+
+fn lpad(s, width) {
+    while len(s) < width { s = " " + s }
+    return s
+}
+
+fn fmtnum(x) {
+    # IEEE special cases first: NaN is the only value not equal to
+    # itself, and infinity is the only other value where x - x != 0.
+    if x != x { return "nan" }
+    if x - x != 0 {
+        if x > 0 { return "inf" }
+        return "-inf"
+    }
+    if x == 0 { return "0" }
+
+    sign = ""
+    a = x
+    if a < 0 {
+        sign = "-"
+        a = 0 - a
+    }
+
+    # Whole numbers print exactly; zl's str() does the right thing.
+    if a == floor(a) and a < 1000000000000000 {
+        return sign + str(a)
+    }
+    # Outside the comfortable range, fall back to str()'s %g form.
+    if a >= 1000000000000000 or a < 0.000001 {
+        return str(x)
+    }
+
+    # digits before the point (a loop, not log10 -- log10(1000) can
+    # come back as 2.9999999999999996 and cost you a digit)
+    intdigits = 1
+    t = a
+    while t >= 10 {
+        t = t / 10
+        intdigits += 1
+    }
+    decimals = 15 - intdigits
+    if decimals > 14 { decimals = 14 }
+    if decimals < 0 { decimals = 0 }
+
+    scale = pow(10, decimals)
+    scaled = round(a * scale)
+    ip = floor(scaled / scale)
+    fp = scaled - ip * scale
+
+    ds = zeropad(str(fp), decimals)
+    while len(ds) > 0 and at(ds, len(ds) - 1) == "0" {
+        ds = slice(ds, 0, len(ds) - 1)
+    }
+    if ds == "" { return sign + str(ip) }
+    return sign + str(ip) + "." + ds
+}
+
+
+# ---------------------------------------------------------------
+#  2.  Errors
+# ---------------------------------------------------------------
+#  No exceptions in zl, so: one global string.  Empty means "fine".
+#  fail() always returns 0 so callers can write `return fail(...)`
+#  and satisfy whatever the caller expected to get back.
+
+ERR = ""
+
+fn fail(msg) {
+    if ERR == "" { ERR = msg }
+    return 0
+}
+
+fn clear_err() {
+    ERR = ""
+}
+
+
+# ---------------------------------------------------------------
+#  3.  Tokenizer
+# ---------------------------------------------------------------
+#  Three parallel lists are the token stream:
+#      TK_KIND  "num" | "id" | "op" | "eof"
+#      TK_TEXT  the raw text  ("+",  "sqrt",  "3.5")
+#      TK_NUM   the numeric value for "num" tokens, 0 otherwise
+#
+#  An explicit "eof" token is appended so the parser can always look
+#  at TK_KIND[POS] and TK_KIND[POS+1] without a bounds check.
+
+TK_KIND = []
+TK_TEXT = []
+TK_NUM = []
+
+fn is_digit(c) { return c >= 48 and c <= 57 }
+
+fn is_alpha(c) {
+    if c >= 65 and c <= 90 { return true }
+    if c >= 97 and c <= 122 { return true }
+    return c == 95
+}
+
+fn is_space(c) { return c == 32 or c == 9 or c == 13 or c == 10 }
+
+fn add_tok(kind, text, value) {
+    TK_KIND = push(TK_KIND, kind)
+    TK_TEXT = push(TK_TEXT, text)
+    TK_NUM = push(TK_NUM, value)
+}
+
+fn tokenize(src) {
+    TK_KIND = []
+    TK_TEXT = []
+    TK_NUM = []
+
+    i = 0
+    n = len(src)
+    while i < n {
+        c = index_at(src, i)
+
+        if is_space(c) {
+            i += 1
+            continue
+        }
+
+        # ---- number: digits, with at most one decimal point -------
+        if is_digit(c) or (c == 46 and is_digit(index_at(src, i + 1))) {
+            start = i
+            seen_dot = false
+            while i < n {
+                c = index_at(src, i)
+                if is_digit(c) {
+                    i += 1
+                    continue
+                }
+                if c == 46 and not seen_dot {
+                    seen_dot = true
+                    i += 1
+                    continue
+                }
+                break
+            }
+            text = slice(src, start, i)
+            add_tok("num", text, num(text))
+            continue
+        }
+
+        # ---- identifier: variable name or function name -----------
+        if is_alpha(c) {
+            start = i
+            while i < n and (is_alpha(index_at(src, i)) or is_digit(index_at(src, i))) {
+                i += 1
+            }
+            add_tok("id", slice(src, start, i), 0)
+            continue
+        }
+
+        # ---- single-character operators ---------------------------
+        ch = at(src, i)
+        if ch in "+-*/%^(),;=" {
+            add_tok("op", ch, 0)
+            i += 1
+            continue
+        }
+
+        return fail("unexpected character '" + ch + "' at position " + str(i))
+    }
+
+    add_tok("eof", "<end>", 0)
+    return 1
+}
+
+
+# ---------------------------------------------------------------
+#  4.  The AST
+# ---------------------------------------------------------------
+#  Five parallel lists.  A "node" is just an index into all five.
+#  Children are stored as indices, which is how real compilers do it
+#  when they want the tree in a flat arena.
+#
+#     kind      ND_STR          ND_NUM   ND_A          ND_B
+#     ------------------------------------------------------------
+#     "num"     -               value    -1            -1
+#     "var"     name            -        -1            -1
+#     "bin"     operator        -        left node     right node
+#     "neg"     -               -        operand       -1
+#     "assign"  variable name   -        -1            value node
+#     "call"    function name   -        args start    arg count
+#
+#  Call arguments live in one flat list CALL_ARGS; a call node stores
+#  where its slice starts and how long it is.  (Same idea as a
+#  relocation table -- it keeps every node the same shape.)
+
+ND_KIND = []
+ND_STR = []
+ND_NUM = []
+ND_A = []
+ND_B = []
+CALL_ARGS = []
+
+fn ast_reset() {
+    ND_KIND = []
+    ND_STR = []
+    ND_NUM = []
+    ND_A = []
+    ND_B = []
+    CALL_ARGS = []
+}
+
+fn node(kind, s, v, a, b) {
+    ND_KIND = push(ND_KIND, kind)
+    ND_STR = push(ND_STR, s)
+    ND_NUM = push(ND_NUM, v)
+    ND_A = push(ND_A, a)
+    ND_B = push(ND_B, b)
+    return len(ND_KIND) - 1
+}
+
+
+# ---------------------------------------------------------------
+#  5.  Recursive-descent parser
+# ---------------------------------------------------------------
+#  POS is the read cursor into the token lists.  Every function
+#  returns a node index, or 0 with ERR set.
+
+POS = 0
+
+fn cur_kind() { return TK_KIND[POS] }
+fn cur_text() { return TK_TEXT[POS] }
+
+fn at_op(sym) {
+    return TK_KIND[POS] == "op" and TK_TEXT[POS] == sym
+}
+
+fn accept(sym) {
+    if at_op(sym) {
+        POS += 1
+        return true
+    }
+    return false
+}
+
+fn describe_here() {
+    if TK_KIND[POS] == "eof" { return "end of expression" }
+    return "'" + TK_TEXT[POS] + "'"
+}
+
+# atom := NUMBER | IDENT | IDENT '(' args ')' | '(' expr ')'
+fn parse_atom() {
+    if ERR != "" { return 0 }
+
+    if cur_kind() == "num" {
+        v = TK_NUM[POS]
+        POS += 1
+        return node("num", "", v, 0 - 1, 0 - 1)
+    }
+
+    if cur_kind() == "id" {
+        name = cur_text()
+        POS += 1
+        if not accept("(") {
+            return node("var", name, 0, 0 - 1, 0 - 1)
+        }
+        # A function call.  Collect argument nodes locally first --
+        # a nested call would otherwise interleave its arguments with
+        # ours inside the shared CALL_ARGS list.
+        argv = []
+        if not at_op(")") {
+            argv = push(argv, parse_expr())
+            while accept(",") {
+                argv = push(argv, parse_expr())
+            }
+        }
+        if not accept(")") {
+            return fail("expected ')' to close " + name + "(), found " + describe_here())
+        }
+        start = len(CALL_ARGS)
+        for a in argv { CALL_ARGS = push(CALL_ARGS, a) }
+        return node("call", name, 0, start, len(argv))
+    }
+
+    if accept("(") {
+        inner = parse_expr()
+        if ERR != "" { return 0 }
+        if not accept(")") {
+            return fail("expected ')', found " + describe_here())
+        }
+        return inner
+    }
+
+    return fail("expected a value, found " + describe_here())
+}
+
+# power := atom ( '^' factor )?
+#   The right operand is `factor`, one level LOOSER.  That single
+#   choice buys right-associativity and unary exponents at once.
+fn parse_power() {
+    if ERR != "" { return 0 }
+    left = parse_atom()
+    if ERR != "" { return 0 }
+    if accept("^") {
+        right = parse_factor()
+        if ERR != "" { return 0 }
+        return node("bin", "^", 0, left, right)
+    }
+    return left
+}
+
+# factor := ('-' | '+') factor | power
+fn parse_factor() {
+    if ERR != "" { return 0 }
+    if accept("-") {
+        operand = parse_factor()
+        if ERR != "" { return 0 }
+        return node("neg", "", 0, operand, 0 - 1)
+    }
+    if accept("+") {
+        return parse_factor()
+    }
+    return parse_power()
+}
+
+# term := factor ( ('*' | '/' | '%') factor )*
+fn parse_term() {
+    if ERR != "" { return 0 }
+    left = parse_factor()
+    while ERR == "" and (at_op("*") or at_op("/") or at_op("%")) {
+        op = cur_text()
+        POS += 1
+        right = parse_factor()
+        if ERR != "" { return 0 }
+        left = node("bin", op, 0, left, right)
+    }
+    return left
+}
+
+# expr := term ( ('+' | '-') term )*
+fn parse_expr() {
+    if ERR != "" { return 0 }
+    left = parse_term()
+    while ERR == "" and (at_op("+") or at_op("-")) {
+        op = cur_text()
+        POS += 1
+        right = parse_term()
+        if ERR != "" { return 0 }
+        left = node("bin", op, 0, left, right)
+    }
+    return left
+}
+
+# stmt := IDENT '=' expr | expr
+#   One token of lookahead tells the two apart.  The "eof" sentinel
+#   guarantees TK_KIND[POS + 1] is always a real entry.
+fn parse_stmt() {
+    if ERR != "" { return 0 }
+    if TK_KIND[POS] == "id" and TK_KIND[POS + 1] == "op" and TK_TEXT[POS + 1] == "=" {
+        name = TK_TEXT[POS]
+        POS += 2
+        value = parse_expr()
+        if ERR != "" { return 0 }
+        return node("assign", name, 0, 0 - 1, value)
+    }
+    return parse_expr()
+}
+
+
+# ---------------------------------------------------------------
+#  6.  Variables
+# ---------------------------------------------------------------
+#  Two parallel lists again: names and values.  Linear lookup is
+#  perfectly fine for the handful of names a calculator sees.
+
+VAR_NAMES = []
+VAR_VALS = []
+
+fn env_reset() {
+    VAR_NAMES = []
+    VAR_VALS = []
+}
+
+fn env_set(name, v) {
+    i = index_of(VAR_NAMES, name)
+    if i >= 0 {
+        VAR_VALS[i] = v
+        return v
+    }
+    VAR_NAMES = push(VAR_NAMES, name)
+    VAR_VALS = push(VAR_VALS, v)
+    return v
+}
+
+fn env_get(name) {
+    i = index_of(VAR_NAMES, name)
+    if i < 0 {
+        return fail("undefined variable '" + name + "'")
+    }
+    return VAR_VALS[i]
+}
+
+
+# ---------------------------------------------------------------
+#  7.  Builtin math functions
+# ---------------------------------------------------------------
+#  No function pointers in zl, so the dispatch is an if/elif chain.
+#  builtin_arity() doubles as the "does this name exist" test, which
+#  keeps the two lists from drifting apart.
+
+fn builtin_arity(name) {
+    if name == "pi" or name == "e" { return 0 }
+    if name == "sqrt" or name == "abs" or name == "sin" or name == "cos" { return 1 }
+    if name == "tan" or name == "asin" or name == "acos" or name == "atan" { return 1 }
+    if name == "log" or name == "log2" or name == "log10" or name == "exp" { return 1 }
+    if name == "floor" or name == "ceil" or name == "round" or name == "trunc" { return 1 }
+    if name == "sign" or name == "int" { return 1 }
+    if name == "pow" or name == "min" or name == "max" { return 2 }
+    if name == "hypot" or name == "gcd" or name == "fmod" { return 2 }
+    if name == "clamp" { return 3 }
+    return 0 - 1
+}
+
+fn call_builtin(name, a0, a1, a2) {
+    if name == "pi" { return pi() }
+    if name == "e" { return e() }
+
+    if name == "sqrt" {
+        if a0 < 0 { return fail("sqrt of a negative number (" + fmtnum(a0) + ")") }
+        return sqrt(a0)
+    }
+    if name == "abs" { return abs(a0) }
+    if name == "sin" { return sin(a0) }
+    if name == "cos" { return cos(a0) }
+    if name == "tan" { return tan(a0) }
+    if name == "asin" {
+        if a0 < 0 - 1 or a0 > 1 { return fail("asin needs an argument in [-1, 1]") }
+        return asin(a0)
+    }
+    if name == "acos" {
+        if a0 < 0 - 1 or a0 > 1 { return fail("acos needs an argument in [-1, 1]") }
+        return acos(a0)
+    }
+    if name == "atan" { return atan(a0) }
+    if name == "log" {
+        if a0 <= 0 { return fail("log needs a positive argument") }
+        return log(a0)
+    }
+    if name == "log2" {
+        if a0 <= 0 { return fail("log2 needs a positive argument") }
+        return log2(a0)
+    }
+    if name == "log10" {
+        if a0 <= 0 { return fail("log10 needs a positive argument") }
+        return log10(a0)
+    }
+    if name == "exp" { return exp(a0) }
+    if name == "floor" { return floor(a0) }
+    if name == "ceil" { return ceil(a0) }
+    if name == "round" { return round(a0) }
+    if name == "trunc" { return trunc(a0) }
+    if name == "sign" { return sign(a0) }
+    if name == "int" { return int(a0) }
+
+    if name == "pow" { return pow(a0, a1) }
+    if name == "min" { return min(a0, a1) }
+    if name == "max" { return max(a0, a1) }
+    if name == "hypot" { return hypot(a0, a1) }
+    if name == "gcd" { return gcd(a0, a1) }
+    if name == "fmod" {
+        if a1 == 0 { return fail("fmod by zero") }
+        return fmod(a0, a1)
+    }
+    if name == "clamp" { return clamp(a0, a1, a2) }
+
+    return fail("unknown function '" + name + "'")
+}
+
+
+# ---------------------------------------------------------------
+#  8.  Evaluator
+# ---------------------------------------------------------------
+#  A plain recursive walk over the node indices.  Every arm checks
+#  ERR on the way in, so once something has failed the rest of the
+#  tree unwinds quietly instead of piling on more errors.
+
+fn eval_bin(op, l, r) {
+    if op == "+" { return l + r }
+    if op == "-" { return l - r }
+    if op == "*" { return l * r }
+    if op == "/" {
+        if r == 0 { return fail("division by zero") }
+        return l / r
+    }
+    if op == "%" {
+        # zl's own % truncates to integers; fmod keeps the fraction,
+        # which is what a calculator should do:  7.5 % 2 = 1.5
+        if r == 0 { return fail("division by zero (in %)") }
+        return fmod(l, r)
+    }
+    if op == "^" {
+        if l < 0 and r != floor(r) {
+            return fail("negative base with fractional exponent: " + fmtnum(l) + " ^ " + fmtnum(r))
+        }
+        if l == 0 and r < 0 { return fail("division by zero (0 ^ negative)") }
+        return pow(l, r)
+    }
+    return fail("internal: unknown operator '" + op + "'")
+}
+
+fn eval_node(i) {
+    if ERR != "" { return 0 }
+    k = ND_KIND[i]
+
+    if k == "num" { return ND_NUM[i] }
+
+    if k == "var" { return env_get(ND_STR[i]) }
+
+    if k == "neg" {
+        v = eval_node(ND_A[i])
+        if ERR != "" { return 0 }
+        return 0 - v
+    }
+
+    if k == "assign" {
+        v = eval_node(ND_B[i])
+        if ERR != "" { return 0 }
+        return env_set(ND_STR[i], v)
+    }
+
+    if k == "bin" {
+        l = eval_node(ND_A[i])
+        if ERR != "" { return 0 }
+        r = eval_node(ND_B[i])
+        if ERR != "" { return 0 }
+        out = eval_bin(ND_STR[i], l, r)
+        if ERR != "" { return 0 }
+        if out != out { return fail("result is not a number") }
+        if out - out != 0 { return fail("result overflowed to infinity") }
+        return out
+    }
+
+    if k == "call" {
+        name = ND_STR[i]
+        want = builtin_arity(name)
+        if want < 0 { return fail("unknown function '" + name + "'") }
+        got = ND_B[i]
+        if got != want {
+            plural = " arguments"
+            if want == 1 { plural = " argument" }
+            return fail(name + "() expects " + str(want) + plural + ", got " + str(got))
+        }
+        start = ND_A[i]
+        a0 = 0
+        a1 = 0
+        a2 = 0
+        if got > 0 { a0 = eval_node(CALL_ARGS[start]) }
+        if ERR != "" { return 0 }
+        if got > 1 { a1 = eval_node(CALL_ARGS[start + 1]) }
+        if ERR != "" { return 0 }
+        if got > 2 { a2 = eval_node(CALL_ARGS[start + 2]) }
+        if ERR != "" { return 0 }
+        out = call_builtin(name, a0, a1, a2)
+        if ERR != "" { return 0 }
+        if out != out { return fail(name + "() is undefined for that input") }
+        if out - out != 0 { return fail(name + "() overflowed to infinity") }
+        return out
+    }
+
+    return fail("internal: unknown node kind '" + k + "'")
+}
+
+
+# ---------------------------------------------------------------
+#  9.  Tree printer
+# ---------------------------------------------------------------
+#  Pure ASCII so it survives any code page.  Each node prints its
+#  label, then its children with a prefix that draws the spine.
+
+fn node_label(i) {
+    k = ND_KIND[i]
+    if k == "num" { return fmtnum(ND_NUM[i]) }
+    if k == "var" { return ND_STR[i] + "   (variable)" }
+    if k == "bin" { return ND_STR[i] }
+    if k == "neg" { return "-   (unary)" }
+    if k == "call" { return ND_STR[i] + "()" }
+    if k == "assign" { return "=   (bind " + ND_STR[i] + ")" }
+    return "?"
+}
+
+fn children_of(i) {
+    k = ND_KIND[i]
+    kids = []
+    if k == "neg" { kids = push(kids, ND_A[i]) }
+    if k == "assign" { kids = push(kids, ND_B[i]) }
+    if k == "bin" {
+        kids = push(kids, ND_A[i])
+        kids = push(kids, ND_B[i])
+    }
+    if k == "call" {
+        j = 0
+        while j < ND_B[i] {
+            kids = push(kids, CALL_ARGS[ND_A[i] + j])
+            j += 1
+        }
+    }
+    return kids
+}
+
+fn print_tree(i, prefix, is_last, is_root) {
+    childpre = prefix
+    if is_root {
+        say(prefix + node_label(i))
+    } else {
+        conn = "+- "
+        childpre = prefix + "|  "
+        if is_last {
+            conn = "`- "
+            childpre = prefix + "   "
+        }
+        say(prefix + conn + node_label(i))
+    }
+    kids = children_of(i)
+    n = len(kids)
+    j = 0
+    while j < n {
+        print_tree(kids[j], childpre, j == n - 1, false)
+        j += 1
+    }
+}
+
+
+# ---------------------------------------------------------------
+#  10.  Driver: text in, number out
+# ---------------------------------------------------------------
+#  run_source() executes a whole program (statements separated by ';')
+#  and returns the value of the last one.  LAST_ROOT remembers the
+#  final statement's node so the tree printer can show it.
+
+LAST_ROOT = 0 - 1
+
+fn run_source(src) {
+    clear_err()
+    ast_reset()
+    LAST_ROOT = 0 - 1
+
+    if tokenize(src) == 0 { return 0 }
+    POS = 0
+
+    if cur_kind() == "eof" { return fail("empty expression") }
+
+    value = 0
+    while ERR == "" {
+        root = parse_stmt()
+        if ERR != "" { return 0 }
+        LAST_ROOT = root
+        value = eval_node(root)
+        if ERR != "" { return 0 }
+        if not accept(";") { break }
+        if cur_kind() == "eof" { break }
+    }
+    if ERR != "" { return 0 }
+    if cur_kind() != "eof" {
+        return fail("unexpected " + describe_here() + " after the expression")
+    }
+    return value
+}
+
+
+# ---------------------------------------------------------------
+#  11.  The test suite
+# ---------------------------------------------------------------
+#  T_SRC holds the source text; T_EXP holds EITHER a number (the
+#  hand-computed answer) OR a string (a substring the error message
+#  must contain).  zl lists are heterogeneous, so type() sorts them
+#  out at check time -- one table, two kinds of test.
+
+T_SRC = []
+T_EXP = []
+
+fn test(src, expected) {
+    T_SRC = push(T_SRC, src)
+    T_EXP = push(T_EXP, expected)
+}
+
+fn build_tests() {
+    T_SRC = []
+    T_EXP = []
+
+    # ---- precedence and associativity -------------------------
+    test("1 + 2 * 3", 7)                       # * before +
+    test("(1 + 2) * 3", 9)                     # parens win
+    test("2 ^ 3 ^ 2", 512)                     # 2^(3^2), NOT (2^3)^2 = 64
+    test("-2 ^ 2", 0 - 4)                      # -(2^2), NOT (-2)^2 = 4
+    test("(-2) ^ 2", 4)                        # ...and this is how you get 4
+    test("2 ^ -1", 0.5)                        # unary minus inside an exponent
+    test("2 ^ 3 ^ 0", 2)                       # 3^0 = 1, so 2^1
+    test("10 - 4 - 3", 3)                      # left-assoc: (10-4)-3
+    test("100 / 10 / 2", 5)                    # left-assoc: (100/10)/2
+    test("2 * 3 % 4", 2)                       # same tier, left-assoc: 6%4
+    test("--3 + +4", 7)                        # stacked unary operators
+    test("2 + -3 * -4", 14)                    # 2 + 12
+
+    # the classic shunting-yard torture case:
+    #   (1-5) = -4 ; 2^3 = 8 ; (-4)^8 = 65536 ; 8/65536 = 0.0001220703125
+    test("3 + 4 * 2 / (1 - 5) ^ 2 ^ 3", 3.0001220703125)
+
+    # ---- real-number modulo (zl's own % would say 0) -----------
+    test("7 % 3", 1)
+    test("-7 % 3", 0 - 1)                      # sign follows the dividend
+    test("7.5 % 2", 1.5)                       # fmod, not integer %
+
+    # ---- decimals ---------------------------------------------
+    test("0.1 + 0.2", 0.30000000000000004)     # yes, really: binary floats
+    test(".5 * 4", 2)                          # leading-dot literal
+    test("1 / 8", 0.125)
+
+    # ---- builtins ---------------------------------------------
+    test("sqrt(16) + 1", 5)
+    test("max(3, 4 * 2)", 8)
+    test("min(3, 4) * clamp(15, 0, 10)", 30)   # 3 * 10
+    test("sin(0) + cos(0)", 1)
+    test("hypot(3, 4)", 5)
+    test("round(pi() * 100) / 100", 3.14)
+    test("log(e() ^ 3)", 3)                    # log and exp cancel
+    test("abs(-5) * sign(-2)", 0 - 5)
+    test("pow(2, 10) - 24", 1000)
+    test("gcd(84, 132)", 12)
+    test("floor(-2.5) + ceil(2.5)", 0)         # -3 + 3
+
+    # ---- variables --------------------------------------------
+    test("x = 5; y = x * 2; x + y", 15)        # three statements, last wins
+    test("r=3; round(pi()*r^2*1000)/1000", 28.274)   # spaces are optional
+    test("n = 2; n = n ^ 10; n / 4", 256)      # reassignment
+
+    # ---- errors (the expected value is a substring of the message)
+    test("1 +", "end of expression")
+    test("(1 + 2", "expected ')'")
+    test("2 / 0", "division by zero")
+    test("5 % 0", "division by zero")
+    test("nope(3)", "unknown function")
+    test("q + 1", "undefined variable")
+    test("1 $ 2", "unexpected character")
+    test("sqrt(1, 2)", "expects 1 argument")
+    test("(-8) ^ 0.5", "negative base")
+    test("3 4", "unexpected '4'")
+    test("sqrt(-9)", "sqrt of a negative")
+}
+
+#  Floating point never compares equal on the nose, so compare with a
+#  relative tolerance instead: one part in a billion.
+fn close_enough(got, want) {
+    scale = 1
+    if abs(want) > 1 { scale = abs(want) }
+    return abs(got - want) <= 0.000000001 * scale
+}
+
+fn ellipsis(s, width) {
+    if len(s) <= width { return s }
+    return slice(s, 0, width - 3) + "..."
+}
+
+fn run_tests() {
+    say("--- 2.  Test suite ------------------------------------------------")
+    say("")
+    say("    '=' rows expect a value, '!' rows expect an error -- both are")
+    say("    deliberate; the error rows check the diagnostics, not just the")
+    say("    arithmetic.  Every row starts from an empty variable table.")
+    say("")
+    say("     #  " + pad("expression", 32) + "    " + pad("result", 34) + "  status")
+    say("    --  " + repeat("-", 32) + "  " + repeat("-", 36) + "  ------")
+
+    passed = 0
+    failed = 0
+    i = 0
+    while i < len(T_SRC) {
+        src = T_SRC[i]
+        want = T_EXP[i]
+
+        env_reset()                     # each row starts from a clean slate
+        got = run_source(src)
+
+        # Two kinds of row: a numeric answer, or an expected error.
+        # zl lists are heterogeneous, so type() is the discriminator.
+        ok = false
+        shown = ""
+        sigil = "="
+        if type(want) == "str" {
+            if ERR == "" {
+                shown = fmtnum(got)
+            } else {
+                sigil = "!"
+                shown = ERR
+                ok = has(ERR, want)
+            }
+        } else {
+            if ERR == "" {
+                shown = fmtnum(got)
+                ok = close_enough(got, want)
+            } else {
+                sigil = "!"
+                shown = ERR
+            }
+        }
+
+        mark = "FAIL"
+        if ok {
+            mark = "PASS"
+            passed += 1
+        } else {
+            failed += 1
+        }
+
+        say("    " + lpad(str(i + 1), 2) + "  " + pad(src, 32) + "  " + sigil + " " + pad(ellipsis(shown, 34), 34) + "  " + mark)
+
+        # Only a failure needs to spell out what was wanted.
+        if not ok {
+            if type(want) == "str" {
+                say("        expected an error containing: " + want)
+            } else {
+                say("        expected: " + fmtnum(want))
+            }
+        }
+        i += 1
+    }
+
+    say("")
+    if failed == 0 {
+        say("    " + str(passed) + " / " + str(len(T_SRC)) + " passed.  No failures.")
+    } else {
+        say("    " + str(passed) + " passed, " + str(failed) + " FAILED out of " + str(len(T_SRC)) + ".")
+    }
+    say("")
+    return failed
+}
+
+
+# ---------------------------------------------------------------
+#  12.  Parse-tree showcase
+# ---------------------------------------------------------------
+
+fn show_tree(src, note) {
+    env_reset()
+    v = run_source(src)
+    say("    source:  " + src)
+    if ERR != "" {
+        say("    error:   " + ERR)
+        say("")
+        return 0
+    }
+    say("")
+    print_tree(LAST_ROOT, "      ", true, true)
+    say("")
+    say("    value:   " + pad(fmtnum(v), 22) + note)
+    say("")
+    return v
+}
+
+fn showcase() {
+    say("--- 1.  Parse trees (the precedence rules, made visible) ----------")
+    say("")
+    show_tree("2 ^ 3 ^ 2", "^ is right-associative: 2^(3^2).  Left would give 64.")
+    show_tree("-2 ^ 2", "unary minus is looser than ^, so this is -(2^2).")
+    show_tree("3 + 4 * 2 / (1 - 5) ^ 2 ^ 3", "the full precedence ladder in one tree.")
+    show_tree("area = pi() * max(3, 1 + 1) ^ 2", "calls, arguments and assignment.")
+}
+
+
+# ---------------------------------------------------------------
+#  13.  REPL
+# ---------------------------------------------------------------
+#  Opt-in, because input() blocks on a live console and this file is
+#  also run unattended.  An empty line (which is also what input()
+#  returns at end-of-file) leaves the loop, so a piped-in script
+#  terminates cleanly too.
+
+fn show_vars() {
+    if len(VAR_NAMES) == 0 {
+        say("    (no variables set yet)")
+        return 0
+    }
+    i = 0
+    while i < len(VAR_NAMES) {
+        say("    " + pad(VAR_NAMES[i], 12) + " = " + fmtnum(VAR_VALS[i]))
+        i += 1
+    }
+    return len(VAR_NAMES)
+}
+
+fn repl() {
+    say("")
+    say("Type an expression and press Enter.  Commands:")
+    say("    vars     list the variables you have defined")
+    say("    tree     show the parse tree of the next expression too")
+    say("    quit     leave (an empty line does the same)")
+    say("")
+
+    show_trees = false
+    guard = 0
+    while guard < 100000 {          # belt and braces: never spin forever
+        guard += 1
+        say("calc>")
+        line = trim(input())
+
+        if line == "" { break }     # also what input() returns at EOF
+        low = lower(line)
+        if low == "quit" or low == "exit" { break }
+        if low == "vars" {
+            show_vars()
+            continue
+        }
+        if low == "tree" {
+            show_trees = not show_trees
+            if show_trees {
+                say("  parse trees ON")
+            } else {
+                say("  parse trees OFF")
+            }
+            continue
+        }
+
+        v = run_source(line)
+        if ERR != "" {
+            say("  error: " + ERR)   # an error never ends the session
+            continue
+        }
+        if show_trees {
+            print_tree(LAST_ROOT, "  ", true, true)
+        }
+        say("  = " + fmtnum(v))
+    }
+    say("")
+    say("bye.")
+    return 0
+}
+
+
+# ---------------------------------------------------------------
+#  14.  Main
+# ---------------------------------------------------------------
+
+t0 = now()
+
+say("===================================================================")
+say("  zl expression calculator")
+say("  tokenizer + recursive-descent parser + AST + evaluator, in zl")
+say("===================================================================")
+say("")
+
+showcase()
+build_tests()
+failed = run_tests()
+
+say("--- 3.  Interactive mode ------------------------------------------")
+say("")
+if env("ZL_CALC_REPL") == "1" {
+    say("    REPL enabled (ZL_CALC_REPL=1).")
+} else {
+    say("    The REPL is off by default so this file always runs to")
+    say("    completion unattended.  To try it:")
+    say("")
+    say("        $env:ZL_CALC_REPL = \"1\"")
+    say("        .\\_interp_w4.exe examples\\calc_repl.zl")
+}
+say("")
+say("    elapsed: " + fmtnum(round(now() - t0)) + " ms")
+say("===================================================================")
+
+REPORT = "examples_out/calc_repl_report.txt"
+write(REPORT, join(OUT, "\n") + "\n")
+print("")
+print("transcript written to " + REPORT)
+
+if env("ZL_CALC_REPL") == "1" {
+    env_reset()
+    repl()
+    # everything went through say(), so the file can now include the
+    # interactive session as well
+    write(REPORT, join(OUT, "\n") + "\n")
+}
+
+if failed > 0 { exit(1) }

@@ -1,0 +1,70 @@
+# string_utils.zl -- string helper functions for the zl stdlib
+# Standalone: all helpers needed are built-ins or defined here.
+
+# Strip leading and trailing spaces from s.
+fn trim(s) {
+    start = 0
+    while start < len(s) and at(s, start) == " " {
+        start = start + 1
+    }
+    end = len(s)
+    while end > start and at(s, end - 1) == " " {
+        end = end - 1
+    }
+    return slice(s, start, end)
+}
+
+# Return s concatenated n times ("" when n <= 0).
+fn repeat(s, n) {
+    out = ""
+    i = 0
+    while i < n {
+        out = out + s
+        i = i + 1
+    }
+    return out
+}
+
+# Left-pad s with ch until it is at least n characters long.
+fn pad_left(s, n, ch) {
+    out = s
+    while len(out) < n {
+        out = ch + out
+    }
+    return out
+}
+
+# Return the characters of s in reverse order.
+fn reverse_string(s) {
+    out = ""
+    i = len(s) - 1
+    while i >= 0 {
+        out = out + at(s, i)
+        i = i - 1
+    }
+    return out
+}
+
+# True when s reads the same forwards and backwards.
+fn is_palindrome(s) {
+    return s == reverse_string(s)
+}
+
+# ---------------- self-test ----------------
+print("== string_utils self-test ==")
+
+print("trim('   hello  ') -> '" + trim("   hello  ") + "'")
+print("trim('no pad')     -> '" + trim("no pad") + "'")
+print("trim('     ')      -> '" + trim("     ") + "'")
+
+print("repeat('ab', 3)    -> '" + repeat("ab", 3) + "'")
+print("repeat('x', 0)     -> '" + repeat("x", 0) + "'")
+
+print("pad_left('42', 5, '0')  -> '" + pad_left("42", 5, "0") + "'")
+print("pad_left('hello', 3, '.') -> '" + pad_left("hello", 3, ".") + "'")
+
+print("reverse_string('zl rocks') -> '" + reverse_string("zl rocks") + "'")
+
+print("is_palindrome('racecar') -> " + is_palindrome("racecar"))
+print("is_palindrome('hello')   -> " + is_palindrome("hello"))
+print("is_palindrome('')        -> " + is_palindrome(""))

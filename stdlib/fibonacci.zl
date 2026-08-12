@@ -1,0 +1,53 @@
+# fibonacci.zl -- Fibonacci helpers for the zl standard library
+# Convention used here: fib(0) = 0, fib(1) = 1, fib(2) = 1, ...
+
+# Recursive nth Fibonacci number.
+fn fib(n) {
+  if n < 2 {
+    return n
+  }
+  return fib(n - 1) + fib(n - 2)
+}
+
+# First n Fibonacci numbers as a list: [fib(0), fib(1), ..., fib(n-1)].
+# Built iteratively so it stays fast even for larger n.
+fn fib_list(n) {
+  out = []
+  a = 0
+  b = 1
+  i = 0
+  while i < n {
+    out = push(out, a)
+    next = a + b
+    a = b
+    b = next
+    i = i + 1
+  }
+  return out
+}
+
+# Sum of all even Fibonacci numbers whose value does not exceed `limit`.
+fn sum_even_fibs(limit) {
+  total = 0
+  a = 0
+  b = 1
+  while a <= limit {
+    if a % 2 == 0 {
+      total = total + a
+    }
+    next = a + b
+    a = b
+    b = next
+  }
+  return total
+}
+
+# ---------- self-test ----------
+print("fib(0)  = " + fib(0))
+print("fib(1)  = " + fib(1))
+print("fib(7)  = " + fib(7))
+print("fib(10) = " + fib(10))
+print("fib_list(10) = " + join(fib_list(10), ", "))
+print("sum_even_fibs(10)   = " + sum_even_fibs(10))
+print("sum_even_fibs(100)  = " + sum_even_fibs(100))
+print("sum_even_fibs(4000000) = " + sum_even_fibs(4000000))

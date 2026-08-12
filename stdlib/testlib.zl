@@ -1,0 +1,32 @@
+# testlib.zl - a minimal test framework in zl.
+# check(label, got, want) records a pass/fail; report() prints the tally.
+
+g_pass = 0
+g_fail = 0
+
+fn check(label, got, want) {
+    if str(got) == str(want) {
+        g_pass = g_pass + 1
+        print("  PASS  " + label)
+    } else {
+        g_fail = g_fail + 1
+        print("  FAIL  " + label + "  got " + str(got) + " want " + str(want))
+    }
+}
+fn report() {
+    print("----")
+    print(str(g_pass) + " passed, " + str(g_fail) + " failed")
+}
+
+# demo: exercise a spread of builtins as a self-test
+check("sqrt(81)",      sqrt(81),            9)
+check("gcd(48,36)",    gcd(48, 36),         12)
+check("reverse list",  reverse([1, 2, 3]),  [3, 2, 1])
+check("reverse str",   reverse("abc"),      "cba")
+check("range(4)",      range(4),            [0, 1, 2, 3])
+check("upper",         upper("hi"),         "HI")
+check("sum",           sum([1, 2, 3, 4]),   10)
+check("replace",       replace("a.b.c", ".", "-"), "a-b-c")
+check("first/last",    [first([7,8,9]), last([7,8,9])], [7, 9])
+check("insert",        insert([1, 2, 4], 2, 3), [1, 2, 3, 4])
+report()

@@ -1,0 +1,115 @@
+# deque.zl - a double-ended queue and a fixed-capacity ring buffer.
+#
+# Representation: zl has no structs, so a deque is a plain list that holds
+# one thing - the list of items - at index 0.  The extra wrapper exists
+# because push/insert/remove return NEW lists, while index-assignment
+# (q[0] = ...) writes through to the caller's list.  So the wrapper lets
+# dq_pop_front(q) return the popped VALUE and still shrink the caller's
+# queue, exactly like a real deque.  Items run front (index 0) to back.
+#
+# A ring buffer is the same idea with the capacity alongside it:
+# r = [items, cap].  Pushing past cap drops the oldest item.
+#
+# Popping or peeking an empty deque gives nil().
+#
+# NAMING: assigning a name inside a function writes the GLOBAL of that name
+# when one exists (see README's scope gotcha), so every function-local here
+# carries a per-function prefix - pf_, pb_, rp_ - the way fenwick.zl, trie.zl,
+# segtree.zl and the rest of the structure modules already do. Bare locals
+# meant a caller keeping a counter in `n`, a value in `v` or a list in
+# `items` had it silently rewritten by a queue operation. The demo at the
+# bottom uses d_ names for the same reason.
+
+fn dq_new() {
+    return [[]]
+}
+fn dq_len(q) {
+    return len(q[0])
+}
+fn dq_empty(q) {
+    return len(q[0]) == 0
+}
+fn dq_items(q) {
+    return q[0]
+}
+fn dq_push_back(q, v) {
+    q[0] = push(q[0], v)
+    return q
+}
+fn dq_push_front(q, v) {
+    q[0] = insert(q[0], 0, v)
+    return q
+}
+fn dq_pop_front(q) {
+    if dq_empty(q) {
+        return nil()
+    }
+    pf_v = q[0][0]
+    q[0] = remove(q[0], 0)
+    return pf_v
+}
+fn dq_pop_back(q) {
+    if dq_empty(q) {
+        return nil()
+    }
+    pb_n = len(q[0])
+    pb_v = q[0][pb_n - 1]
+    q[0] = remove(q[0], pb_n - 1)
+    return pb_v
+}
+fn dq_peek_front(q) {
+    if dq_empty(q) {
+        return nil()
+    }
+    return q[0][0]
+}
+fn dq_peek_back(q) {
+    if dq_empty(q) {
+        return nil()
+    }
+    return q[0][len(q[0]) - 1]
+}
+
+fn ring_new(cap) {
+    return [[], cap]
+}
+fn ring_push(r, v) {
+    rp_items = push(r[0], v)
+    while len(rp_items) > r[1] {
+        rp_items = remove(rp_items, 0)
+    }
+    r[0] = rp_items
+    return r
+}
+fn ring_items(r) {
+    return r[0]
+}
+fn ring_len(r) {
+    return len(r[0])
+}
+fn ring_full(r) {
+    return len(r[0]) == r[1]
+}
+
+d_q = dq_new()
+dq_push_back(d_q, "b1")
+dq_push_back(d_q, "b2")
+dq_push_front(d_q, "f1")
+print("items:      " + str(dq_items(d_q)))
+print("len:        " + str(dq_len(d_q)))
+print("empty:      " + str(dq_empty(d_q)))
+print("peek front: " + str(dq_peek_front(d_q)))
+print("peek back:  " + str(dq_peek_back(d_q)))
+print("pop front:  " + str(dq_pop_front(d_q)) + "  -> " + str(dq_items(d_q)))
+print("pop back:   " + str(dq_pop_back(d_q)) + "  -> " + str(dq_items(d_q)))
+print("pop front:  " + str(dq_pop_front(d_q)) + "  -> " + str(dq_items(d_q)))
+print("empty now:  " + str(dq_empty(d_q)))
+print("pop empty:  " + str(dq_pop_front(d_q)))
+
+d_r = ring_new(3)
+for d_n in range(1, 7) {
+    ring_push(d_r, d_n)
+    print("ring push " + str(d_n) + ": " + str(ring_items(d_r)))
+}
+print("ring len:   " + str(ring_len(d_r)))
+print("ring full:  " + str(ring_full(d_r)))

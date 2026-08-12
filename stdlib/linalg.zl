@@ -1,0 +1,693 @@
+# linalg.zl - linear algebra past the basics: determinant, inverse, rank,
+# trace, LU decomposition, and Ax = b by Gaussian elimination.
+#
+# Representation: the same one matrix.zl and matrix_ops.zl use - a matrix is
+# a list of rows, each row a list of numbers, read and written as m[row][col].
+# A vector is a plain list. zl numbers are doubles, so results are floating
+# point: exact for small integer matrices, approximate the moment division
+# enters. That is why every "is this entry zero?" test in here goes through a
+# tolerance instead of == 0.
+#
+# Pivoting: every routine that eliminates uses PARTIAL PIVOTING - before
+# clearing column k it swaps in the row with the largest |value| in that
+# column. Without it a perfectly invertible matrix like [[0,1],[1,0]] divides
+# by zero on the first step, and a merely small pivot magnifies rounding
+# error into the answer.
+#
+# Failure convention: inverse() and solve() return nil() on a singular
+# matrix, so callers test type(r) == "nil". determinant() of a singular
+# matrix is just (near) zero, and lu_decompose() still succeeds - a zero
+# pivot is left sitting in U rather than treated as an error. Because LU
+# leaves ~1e-16 grit where an exact 0 belongs, is_singular() asks rank(),
+# not determinant() == 0.
+#
+# zl has no import statement, so the few matrix primitives this needs - copy,
+# multiply, identity - are re-done privately under the la_ prefix rather than
+# borrowed from matrix.zl. Only the seven unprefixed functions below are the
+# module's interface: determinant, inverse, solve, rank, trace,
+# lu_decompose, is_singular.
+#
+# Naming: in zl an assignment inside a function writes the GLOBAL of that
+# name when one exists, so every local carries a short per-function tag
+# (lu_ = lu_decompose, iv_ = inverse, sv_ = solve, ...) and every global in
+# the demo is UPPERCASE. That is the same guard matrix_ops.zl uses, and it is
+# what stops inverse()'s row counter from eating the caller's variables.
+
+LA_EPS = pow(10, -12)
+
+# ---------------------------------------------------------------- plumbing
+
+fn la_zeros(zr_rows, zr_cols) {
+    zr_m = []
+    zr_i = 0
+    while zr_i < zr_rows {
+        zr_row = []
+        zr_j = 0
+        while zr_j < zr_cols {
+            zr_row = push(zr_row, 0)
+            zr_j = zr_j + 1
+        }
+        zr_m = push(zr_m, zr_row)
+        zr_i = zr_i + 1
+    }
+    return zr_m
+}
+
+fn la_eye(ey_n) {
+    ey_m = la_zeros(ey_n, ey_n)
+    ey_i = 0
+    while ey_i < ey_n {
+        ey_m[ey_i][ey_i] = 1
+        ey_i = ey_i + 1
+    }
+    return ey_m
+}
+
+# Lists are references in zl, so anything that eliminates in place must work
+# on its own copy or it silently rewrites the caller's matrix.
+fn la_copy(cp_m) {
+    cp_out = []
+    for cp_row in cp_m {
+        cp_new = []
+        for cp_v in cp_row {
+            cp_new = push(cp_new, cp_v)
+        }
+        cp_out = push(cp_out, cp_new)
+    }
+    return cp_out
+}
+
+fn la_mul(ml_a, ml_b) {
+    ml_n = len(ml_a)
+    ml_k = len(ml_b)
+    ml_w = len(ml_b[0])
+    ml_out = []
+    ml_i = 0
+    while ml_i < ml_n {
+        ml_row = []
+        ml_j = 0
+        while ml_j < ml_w {
+            ml_s = 0
+            ml_x = 0
+            while ml_x < ml_k {
+                ml_s = ml_s + ml_a[ml_i][ml_x] * ml_b[ml_x][ml_j]
+                ml_x = ml_x + 1
+            }
+            ml_row = push(ml_row, ml_s)
+            ml_j = ml_j + 1
+        }
+        ml_out = push(ml_out, ml_row)
+        ml_i = ml_i + 1
+    }
+    return ml_out
+}
+
+fn la_matvec(mv_a, mv_x) {
+    mv_out = []
+    mv_i = 0
+    while mv_i < len(mv_a) {
+        mv_s = 0
+        mv_j = 0
+        while mv_j < len(mv_x) {
+            mv_s = mv_s + mv_a[mv_i][mv_j] * mv_x[mv_j]
+            mv_j = mv_j + 1
+        }
+        mv_out = push(mv_out, mv_s)
+        mv_i = mv_i + 1
+    }
+    return mv_out
+}
+
+fn la_maxabs(mx_m) {
+    mx_best = 0
+    for mx_row in mx_m {
+        for mx_v in mx_row {
+            if abs(mx_v) > mx_best {
+                mx_best = abs(mx_v)
+            }
+        }
+    }
+    return mx_best
+}
+
+# Pivot tolerance, scaled by the size of the matrix's entries so that a big
+# matrix is not called singular just because its "zeros" are big too.
+fn la_tol(tl_m) {
+    tl_s = la_maxabs(tl_m)
+    if tl_s < 1 {
+        tl_s = 1
+    }
+    return LA_EPS * tl_s
+}
+
+# Row order after pivoting: pm_perm[i] is the original row now sitting at i.
+fn la_permute(pm_m, pm_perm) {
+    pm_out = []
+    for pm_i in pm_perm {
+        pm_row = []
+        for pm_v in pm_m[pm_i] {
+            pm_row = push(pm_row, pm_v)
+        }
+        pm_out = push(pm_out, pm_row)
+    }
+    return pm_out
+}
+
+# ---------------------------------------------------------------- interface
+
+# trace(m) - the sum down the main diagonal.
+fn trace(mat) {
+    tr_n = len(mat)
+    if tr_n == 0 {
+        return 0
+    }
+    if len(mat[0]) < tr_n {
+        tr_n = len(mat[0])
+    }
+    tr_s = 0
+    tr_i = 0
+    while tr_i < tr_n {
+        tr_s = tr_s + mat[tr_i][tr_i]
+        tr_i = tr_i + 1
+    }
+    return tr_s
+}
+
+# rank(m) - number of independent rows, by row-reducing a copy to echelon
+# form and counting the pivots. Works on any shape, not just square.
+fn rank(mat) {
+    rk_rows = len(mat)
+    if rk_rows == 0 {
+        return 0
+    }
+    rk_cols = len(mat[0])
+    rk_m = la_copy(mat)
+    rk_tol = la_tol(mat)
+    rk_r = 0
+    rk_c = 0
+    while rk_r < rk_rows and rk_c < rk_cols {
+        rk_p = rk_r
+        rk_best = abs(rk_m[rk_r][rk_c])
+        rk_i = rk_r + 1
+        while rk_i < rk_rows {
+            if abs(rk_m[rk_i][rk_c]) > rk_best {
+                rk_best = abs(rk_m[rk_i][rk_c])
+                rk_p = rk_i
+            }
+            rk_i = rk_i + 1
+        }
+        if rk_best > rk_tol {
+            if rk_p != rk_r {
+                rk_swap = rk_m[rk_r]
+                rk_m[rk_r] = rk_m[rk_p]
+                rk_m[rk_p] = rk_swap
+            }
+            rk_i = rk_r + 1
+            while rk_i < rk_rows {
+                rk_f = rk_m[rk_i][rk_c] / rk_m[rk_r][rk_c]
+                rk_j = rk_c
+                while rk_j < rk_cols {
+                    rk_m[rk_i][rk_j] = rk_m[rk_i][rk_j] - rk_f * rk_m[rk_r][rk_j]
+                    rk_j = rk_j + 1
+                }
+                rk_i = rk_i + 1
+            }
+            rk_r = rk_r + 1
+        }
+        rk_c = rk_c + 1
+    }
+    return rk_r
+}
+
+# lu_decompose(m) - Doolittle LU with partial pivoting.
+# Returns [L, U, perm, sign] where L is unit lower triangular, U is upper
+# triangular, perm is the row order (perm[i] = original row now at i) and
+# sign is +1 or -1, the parity of the row swaps. The identity it satisfies is
+#   L * U == permute(m, perm)
+# i.e. P*A = L*U. Returns nil() unless m is square and non-empty. A singular
+# matrix is not an error here: its zero pivot is simply left in U.
+fn lu_decompose(mat) {
+    lu_n = len(mat)
+    if lu_n == 0 {
+        return nil()
+    }
+    if len(mat[0]) != lu_n {
+        return nil()
+    }
+    lu_u = la_copy(mat)
+    lu_l = la_eye(lu_n)
+    lu_perm = []
+    lu_i = 0
+    while lu_i < lu_n {
+        lu_perm = push(lu_perm, lu_i)
+        lu_i = lu_i + 1
+    }
+    lu_sign = 1
+    lu_tol = la_tol(mat)
+    lu_k = 0
+    while lu_k < lu_n {
+        lu_p = lu_k
+        lu_best = abs(lu_u[lu_k][lu_k])
+        lu_i = lu_k + 1
+        while lu_i < lu_n {
+            if abs(lu_u[lu_i][lu_k]) > lu_best {
+                lu_best = abs(lu_u[lu_i][lu_k])
+                lu_p = lu_i
+            }
+            lu_i = lu_i + 1
+        }
+        if lu_p != lu_k {
+            lu_swap = lu_u[lu_k]
+            lu_u[lu_k] = lu_u[lu_p]
+            lu_u[lu_p] = lu_swap
+            # Only the already-filled part of L moves with the row; the unit
+            # diagonal and the not-yet-written columns must stay put.
+            lu_j = 0
+            while lu_j < lu_k {
+                lu_t = lu_l[lu_k][lu_j]
+                lu_l[lu_k][lu_j] = lu_l[lu_p][lu_j]
+                lu_l[lu_p][lu_j] = lu_t
+                lu_j = lu_j + 1
+            }
+            lu_t = lu_perm[lu_k]
+            lu_perm[lu_k] = lu_perm[lu_p]
+            lu_perm[lu_p] = lu_t
+            lu_sign = -lu_sign
+        }
+        if abs(lu_u[lu_k][lu_k]) > lu_tol {
+            lu_i = lu_k + 1
+            while lu_i < lu_n {
+                lu_f = lu_u[lu_i][lu_k] / lu_u[lu_k][lu_k]
+                lu_l[lu_i][lu_k] = lu_f
+                lu_j = lu_k
+                while lu_j < lu_n {
+                    lu_u[lu_i][lu_j] = lu_u[lu_i][lu_j] - lu_f * lu_u[lu_k][lu_j]
+                    lu_j = lu_j + 1
+                }
+                lu_u[lu_i][lu_k] = 0
+                lu_i = lu_i + 1
+            }
+        }
+        lu_k = lu_k + 1
+    }
+    return [lu_l, lu_u, lu_perm, lu_sign]
+}
+
+# determinant(m) - sign of the pivoting times the product of U's diagonal.
+# O(n^3), unlike cofactor expansion's O(n!). nil() if m is not square; 1 for
+# the empty matrix, the empty-product convention that keeps det(A*B) =
+# det(A)*det(B) true at size 0.
+fn determinant(mat) {
+    dt_n = len(mat)
+    if dt_n == 0 {
+        return 1
+    }
+    if len(mat[0]) != dt_n {
+        return nil()
+    }
+    dt_lu = lu_decompose(mat)
+    dt_u = dt_lu[1]
+    dt_d = dt_lu[3]
+    dt_i = 0
+    while dt_i < dt_n {
+        dt_d = dt_d * dt_u[dt_i][dt_i]
+        dt_i = dt_i + 1
+    }
+    return dt_d
+}
+
+# is_singular(m) - true when m has no inverse, which is exactly when
+# inverse(m) returns nil(): non-square, empty, or rank-deficient. Asked of
+# rank rather than of determinant, because a computed determinant of a
+# singular matrix comes back as float grit near zero rather than as zero.
+fn is_singular(mat) {
+    sg_n = len(mat)
+    if sg_n == 0 {
+        return true
+    }
+    if len(mat[0]) != sg_n {
+        return true
+    }
+    return rank(mat) < sg_n
+}
+
+# inverse(m) - Gauss-Jordan on the augmented [ m | I ], with partial
+# pivoting; the left half becomes I and the right half becomes m^-1.
+# Returns nil() if m is not square or is singular.
+fn inverse(mat) {
+    iv_n = len(mat)
+    if iv_n == 0 {
+        return nil()
+    }
+    if len(mat[0]) != iv_n {
+        return nil()
+    }
+    iv_tol = la_tol(mat)
+    iv_w = iv_n * 2
+    iv_a = []
+    iv_i = 0
+    while iv_i < iv_n {
+        iv_row = []
+        iv_j = 0
+        while iv_j < iv_n {
+            iv_row = push(iv_row, mat[iv_i][iv_j])
+            iv_j = iv_j + 1
+        }
+        iv_j = 0
+        while iv_j < iv_n {
+            if iv_i == iv_j {
+                iv_row = push(iv_row, 1)
+            } else {
+                iv_row = push(iv_row, 0)
+            }
+            iv_j = iv_j + 1
+        }
+        iv_a = push(iv_a, iv_row)
+        iv_i = iv_i + 1
+    }
+    iv_k = 0
+    while iv_k < iv_n {
+        iv_p = iv_k
+        iv_best = abs(iv_a[iv_k][iv_k])
+        iv_i = iv_k + 1
+        while iv_i < iv_n {
+            if abs(iv_a[iv_i][iv_k]) > iv_best {
+                iv_best = abs(iv_a[iv_i][iv_k])
+                iv_p = iv_i
+            }
+            iv_i = iv_i + 1
+        }
+        if iv_best <= iv_tol {
+            return nil()
+        }
+        if iv_p != iv_k {
+            iv_swap = iv_a[iv_k]
+            iv_a[iv_k] = iv_a[iv_p]
+            iv_a[iv_p] = iv_swap
+        }
+        iv_piv = iv_a[iv_k][iv_k]
+        iv_j = 0
+        while iv_j < iv_w {
+            iv_a[iv_k][iv_j] = iv_a[iv_k][iv_j] / iv_piv
+            iv_j = iv_j + 1
+        }
+        iv_i = 0
+        while iv_i < iv_n {
+            if iv_i != iv_k {
+                iv_f = iv_a[iv_i][iv_k]
+                if iv_f != 0 {
+                    iv_j = 0
+                    while iv_j < iv_w {
+                        iv_a[iv_i][iv_j] = iv_a[iv_i][iv_j] - iv_f * iv_a[iv_k][iv_j]
+                        iv_j = iv_j + 1
+                    }
+                }
+            }
+            iv_i = iv_i + 1
+        }
+        iv_k = iv_k + 1
+    }
+    iv_out = []
+    iv_i = 0
+    while iv_i < iv_n {
+        iv_row = []
+        iv_j = 0
+        while iv_j < iv_n {
+            iv_row = push(iv_row, iv_a[iv_i][iv_n + iv_j])
+            iv_j = iv_j + 1
+        }
+        iv_out = push(iv_out, iv_row)
+        iv_i = iv_i + 1
+    }
+    return iv_out
+}
+
+# solve(A, b) - x such that A*x = b, by forward elimination with partial
+# pivoting on [ A | b ] followed by back substitution. Cheaper and better
+# conditioned than inverse(A) then multiplying. nil() if A is not square, if
+# b is the wrong length, or if A is singular.
+fn solve(amat, bvec) {
+    sv_n = len(amat)
+    if sv_n == 0 {
+        return nil()
+    }
+    if len(amat[0]) != sv_n {
+        return nil()
+    }
+    if len(bvec) != sv_n {
+        return nil()
+    }
+    sv_tol = la_tol(amat)
+    sv_a = []
+    sv_i = 0
+    while sv_i < sv_n {
+        sv_row = []
+        sv_j = 0
+        while sv_j < sv_n {
+            sv_row = push(sv_row, amat[sv_i][sv_j])
+            sv_j = sv_j + 1
+        }
+        sv_row = push(sv_row, bvec[sv_i])
+        sv_a = push(sv_a, sv_row)
+        sv_i = sv_i + 1
+    }
+    sv_k = 0
+    while sv_k < sv_n {
+        sv_p = sv_k
+        sv_best = abs(sv_a[sv_k][sv_k])
+        sv_i = sv_k + 1
+        while sv_i < sv_n {
+            if abs(sv_a[sv_i][sv_k]) > sv_best {
+                sv_best = abs(sv_a[sv_i][sv_k])
+                sv_p = sv_i
+            }
+            sv_i = sv_i + 1
+        }
+        if sv_best <= sv_tol {
+            return nil()
+        }
+        if sv_p != sv_k {
+            sv_swap = sv_a[sv_k]
+            sv_a[sv_k] = sv_a[sv_p]
+            sv_a[sv_p] = sv_swap
+        }
+        sv_i = sv_k + 1
+        while sv_i < sv_n {
+            sv_f = sv_a[sv_i][sv_k] / sv_a[sv_k][sv_k]
+            sv_j = sv_k
+            while sv_j <= sv_n {
+                sv_a[sv_i][sv_j] = sv_a[sv_i][sv_j] - sv_f * sv_a[sv_k][sv_j]
+                sv_j = sv_j + 1
+            }
+            sv_i = sv_i + 1
+        }
+        sv_k = sv_k + 1
+    }
+    sv_x = []
+    sv_i = 0
+    while sv_i < sv_n {
+        sv_x = push(sv_x, 0)
+        sv_i = sv_i + 1
+    }
+    sv_i = sv_n - 1
+    while sv_i >= 0 {
+        sv_s = sv_a[sv_i][sv_n]
+        sv_j = sv_i + 1
+        while sv_j < sv_n {
+            sv_s = sv_s - sv_a[sv_i][sv_j] * sv_x[sv_j]
+            sv_j = sv_j + 1
+        }
+        sv_x[sv_i] = sv_s / sv_a[sv_i][sv_i]
+        sv_i = sv_i - 1
+    }
+    return sv_x
+}
+
+# ---------------------------------------------------------------- reporting
+
+fn la_round(rd_v, rd_dp) {
+    rd_s = pow(10, rd_dp)
+    # the trailing + 0 turns IEEE -0 back into 0 so columns do not read "-0"
+    return round(rd_v * rd_s) / rd_s + 0
+}
+
+fn la_padl(pl_s, pl_w) {
+    pl_out = pl_s
+    while len(pl_out) < pl_w {
+        pl_out = " " + pl_out
+    }
+    return pl_out
+}
+
+fn la_show(sh_label, sh_m, sh_dp) {
+    print(sh_label)
+    for sh_row in sh_m {
+        sh_parts = []
+        for sh_v in sh_row {
+            sh_parts = push(sh_parts, la_padl(str(la_round(sh_v, sh_dp)), 8))
+        }
+        print("   [ " + join(sh_parts, " ") + " ]")
+    }
+    return 0
+}
+
+fn la_showv(vw_label, vw_v, vw_dp) {
+    vw_parts = []
+    for vw_x in vw_v {
+        vw_parts = push(vw_parts, str(la_round(vw_x, vw_dp)))
+    }
+    print(vw_label + "[" + join(vw_parts, ", ") + "]")
+    return 0
+}
+
+fn la_maxdiff(md_a, md_b) {
+    md_worst = 0
+    md_i = 0
+    while md_i < len(md_a) {
+        md_j = 0
+        while md_j < len(md_a[md_i]) {
+            md_d = abs(md_a[md_i][md_j] - md_b[md_i][md_j])
+            if md_d > md_worst {
+                md_worst = md_d
+            }
+            md_j = md_j + 1
+        }
+        md_i = md_i + 1
+    }
+    return md_worst
+}
+
+fn la_maxdiffv(dv_a, dv_b) {
+    dv_worst = 0
+    dv_i = 0
+    while dv_i < len(dv_a) {
+        dv_d = abs(dv_a[dv_i] - dv_b[dv_i])
+        if dv_d > dv_worst {
+            dv_worst = dv_d
+        }
+        dv_i = dv_i + 1
+    }
+    return dv_worst
+}
+
+fn la_verdict(vd_label, vd_err) {
+    if vd_err <= pow(10, -9) {
+        print("   " + vd_label + " -> OK, max error " + str(vd_err))
+    } else {
+        print("   " + vd_label + " -> FAIL, max error " + str(vd_err))
+    }
+    return 0
+}
+
+# ---------------------------------------------------------------- demo
+
+print("=== linalg.zl ===")
+print("")
+
+A = [[2, 1, -1], [-3, -1, 2], [-2, 1, 2]]
+la_show("A =", A, 6)
+print("   trace(A)       = " + str(trace(A)) + "        (expect 3)")
+print("   rank(A)        = " + str(rank(A)) + "        (expect 3)")
+print("   determinant(A) = " + str(la_round(determinant(A), 9)) + "       (expect -1)")
+print("   is_singular(A) = " + str(is_singular(A)) + "    (expect false)")
+print("")
+
+print("-- inverse --")
+AINV = inverse(A)
+la_show("inverse(A) =", AINV, 6)
+print("   expect          [4 3 -1 / -2 -2 1 / 5 4 -1]")
+PROD = la_mul(A, AINV)
+la_show("A * inverse(A) =", PROD, 6)
+la_verdict("A * inverse(A) vs I", la_maxdiff(PROD, la_eye(3)))
+la_verdict("inverse(A) * A vs I", la_maxdiff(la_mul(AINV, A), la_eye(3)))
+print("")
+
+print("-- solve --")
+B = [8, -11, -3]
+la_showv("   b            = ", B, 6)
+X = solve(A, B)
+la_showv("   solve(A, b)  = ", X, 6)
+print("   expect         [2, 3, -1]")
+la_showv("   A * x        = ", la_matvec(A, X), 6)
+la_verdict("A*x vs b", la_maxdiffv(la_matvec(A, X), B))
+print("")
+
+print("-- lu_decompose --")
+LU = lu_decompose(A)
+L = LU[0]
+U = LU[1]
+PERM = LU[2]
+SGN = LU[3]
+la_show("L =", L, 6)
+la_show("U =", U, 6)
+print("   perm = " + str(PERM) + "   (row order after pivoting)")
+print("   sign = " + str(SGN) + "         (parity of the row swaps)")
+PA = la_permute(A, PERM)
+la_verdict("L*U vs P*A", la_maxdiff(la_mul(L, U), PA))
+print("   sign * diag(U) = " + str(la_round(SGN * U[0][0] * U[1][1] * U[2][2], 9)) + "       (= determinant, -1)")
+print("")
+
+print("-- a singular matrix --")
+S = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+la_show("S =", S, 6)
+print("   trace(S)       = " + str(trace(S)) + "       (expect 15)")
+print("   rank(S)        = " + str(rank(S)) + "        (expect 2, row3 = 2*row2 - row1)")
+print("   determinant(S) = " + str(la_round(determinant(S), 9)) + "        (rounded; LU actually gives " + str(determinant(S)) + ")")
+print("   is_singular(S) = " + str(is_singular(S)) + "     (expect true)")
+print("   inverse(S)     = " + str(inverse(S)) + "      (expect nil)")
+print("   solve(S,[1,2,3]) = " + str(solve(S, [1, 2, 3])) + "    (expect nil)")
+print("")
+
+print("-- a 4x4, and a pivot that must be swapped in --")
+M = [[1, 0, 2, -1], [3, 0, 0, 5], [2, 1, 4, -3], [1, 0, 5, 0]]
+la_show("M =", M, 6)
+print("   determinant(M) = " + str(la_round(determinant(M), 9)) + "       (expect 30)")
+print("   trace(M)       = " + str(trace(M)) + "        (expect 5)")
+print("   rank(M)        = " + str(rank(M)) + "        (expect 4)")
+MINV = inverse(M)
+la_show("inverse(M) =", MINV, 6)
+la_verdict("M * inverse(M) vs I", la_maxdiff(la_mul(M, MINV), la_eye(4)))
+MB = [1, 2, 3, 4]
+MX = solve(M, MB)
+la_showv("   solve(M, [1,2,3,4]) = ", MX, 6)
+la_verdict("M*x vs b", la_maxdiffv(la_matvec(M, MX), MB))
+print("")
+
+print("-- zero leading pivot, which naive elimination divides by --")
+Z = [[0, 1], [1, 0]]
+print("   determinant([[0,1],[1,0]]) = " + str(la_round(determinant(Z), 9)) + "     (expect -1)")
+la_show("   inverse =", inverse(Z), 6)
+la_showv("   solve(Z, [5, 7])       = ", solve(Z, [5, 7]), 6)
+print("   expect                   [7, 5]")
+print("")
+
+print("-- rank of non-square matrices --")
+W = [[1, 2, 3, 4], [2, 4, 6, 8]]
+print("   rank([[1,2,3,4],[2,4,6,8]]) = " + str(rank(W)) + "   (expect 1, row2 = 2*row1)")
+T = [[1, 2, 3], [2, 4, 6], [1, 1, 1]]
+print("   rank([[1,2,3],[2,4,6],[1,1,1]]) = " + str(rank(T)) + "   (expect 2)")
+print("   trace([[1,2,3,4],[2,4,6,8]]) = " + str(trace(W)) + "   (expect 5, diagonal 1+4)")
+print("   is_singular(non-square)      = " + str(is_singular(W)) + " (no inverse exists)")
+print("")
+
+print("-- an ill-conditioned case: the 4x4 Hilbert matrix --")
+H = la_zeros(4, 4)
+HI = 0
+while HI < 4 {
+    HJ = 0
+    while HJ < 4 {
+        H[HI][HJ] = 1 / (HI + HJ + 1)
+        HJ = HJ + 1
+    }
+    HI = HI + 1
+}
+la_show("H =", H, 6)
+print("   determinant(H) = " + str(determinant(H)))
+print("   expect 1/6048000 = " + str(1 / 6048000))
+print("   rank(H)        = " + str(rank(H)) + "        (expect 4)")
+la_verdict("H * inverse(H) vs I", la_maxdiff(la_mul(H, inverse(H)), la_eye(4)))
+la_show("inverse(H) =", inverse(H), 3)
+print("   expect the exact integer inverse [16 -120 240 -140 / -120 1200 -2700 1680 /")
+print("                                     240 -2700 6480 -4200 / -140 1680 -4200 2800]")
+print("")
+print("=== done ===")

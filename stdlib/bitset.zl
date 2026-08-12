@@ -1,0 +1,295 @@
+# bitset.zl - a large fixed-size bit vector, stored as a list of 32-bit words.
+#
+# Representation: a bitset is a plain list whose element 0 is the bit count and
+# whose remaining elements are the words:
+#
+#     [ nbits, w0, w1, w2, ... ]      word k covers bits 32k .. 32k+31
+#
+# Bit i therefore lives in element int(i/32)+1, at position i%32 inside that
+# word (value 2^(i%32)). Carrying nbits inside the list is what lets bs_all()
+# and bs_to_string() know where the vector really stops, since the last word
+# is usually only partly used; every bit past nbits is kept at 0.
+#
+# Why 32-bit words and not 64: zl numbers are doubles (exact to 2^53) and the
+# bitwise builtins work on 64-bit *signed* integers. A 32-bit word is always a
+# small non-negative integer, so band/bor/bxor/shl results are exact and can
+# never come back negative - which is exactly what a 64-bit word with its top
+# bit set would do. The whole module is written on the builtins
+# (band bor bxor shl shr), not on arithmetic.
+#
+# Mutation: index assignment is used internally, but every mutating function
+# also RETURNS the bitset, so the safe calling style is
+#     b = bs_set(b, 7)
+# and that is what the demo below does.
+#
+# Naming: zl has no local scope - a parameter or an assignment inside a
+# function writes the global of that name. So every parameter and local here
+# carries a two-letter tag for its function (st_ = bs_set, ct_ = bs_count,
+# ...). That is what stops bs_count() from eating the caller's loop counter
+# when it calls bs_popword().
+
+# ---- internals -------------------------------------------------------------
+
+fn bs_popword(pw_w) {
+    pw_x = pw_w
+    pw_n = 0
+    while pw_x > 0 {
+        pw_n = pw_n + band(pw_x, 1)
+        pw_x = shr(pw_x, 1)
+    }
+    return pw_n
+}
+
+# Which bits of word tm_wi are actually part of the vector, as a mask.
+fn bs_tailmask(tm_b, tm_wi) {
+    tm_left = tm_b[0] - (tm_wi - 1) * 32
+    if tm_left >= 32 {
+        return 4294967295
+    }
+    if tm_left <= 0 {
+        return 0
+    }
+    return shl(1, tm_left) - 1
+}
+
+# ---- construction ----------------------------------------------------------
+
+fn bs_new(nw_nbits) {
+    assert(nw_nbits >= 0, "bs_new: nbits must be >= 0")
+    nw_words = int((nw_nbits + 31) / 32)
+    nw_out = [nw_nbits]
+    nw_k = 0
+    while nw_k < nw_words {
+        nw_out = push(nw_out, 0)
+        nw_k = nw_k + 1
+    }
+    return nw_out
+}
+fn bs_size(sz_b) {
+    return sz_b[0]
+}
+
+# ---- single bits -----------------------------------------------------------
+
+fn bs_set(st_b, st_i) {
+    assert(st_i >= 0 and st_i < st_b[0], "bs_set: index out of range")
+    st_w = int(st_i / 32) + 1
+    st_b[st_w] = bor(st_b[st_w], shl(1, st_i % 32))
+    return st_b
+}
+fn bs_clear(cl_b, cl_i) {
+    assert(cl_i >= 0 and cl_i < cl_b[0], "bs_clear: index out of range")
+    cl_w = int(cl_i / 32) + 1
+    cl_bit = shl(1, cl_i % 32)
+    # w & ~bit, written without bnot so nothing ever goes negative
+    cl_b[cl_w] = bxor(cl_b[cl_w], band(cl_b[cl_w], cl_bit))
+    return cl_b
+}
+fn bs_flip(fl_b, fl_i) {
+    assert(fl_i >= 0 and fl_i < fl_b[0], "bs_flip: index out of range")
+    fl_w = int(fl_i / 32) + 1
+    fl_b[fl_w] = bxor(fl_b[fl_w], shl(1, fl_i % 32))
+    return fl_b
+}
+fn bs_get(gt_b, gt_i) {
+    assert(gt_i >= 0 and gt_i < gt_b[0], "bs_get: index out of range")
+    gt_w = int(gt_i / 32) + 1
+    return band(shr(gt_b[gt_w], gt_i % 32), 1)
+}
+
+# ---- whole-vector queries --------------------------------------------------
+
+fn bs_count(ct_b) {
+    ct_n = 0
+    ct_i = 1
+    while ct_i < len(ct_b) {
+        ct_n = ct_n + bs_popword(ct_b[ct_i])
+        ct_i = ct_i + 1
+    }
+    return ct_n
+}
+fn bs_any(ay_b) {
+    ay_i = 1
+    while ay_i < len(ay_b) {
+        if ay_b[ay_i] != 0 {
+            return true
+        }
+        ay_i = ay_i + 1
+    }
+    return false
+}
+fn bs_all(al_b) {
+    al_i = 1
+    while al_i < len(al_b) {
+        al_m = bs_tailmask(al_b, al_i)
+        if band(al_b[al_i], al_m) != al_m {
+            return false
+        }
+        al_i = al_i + 1
+    }
+    return true
+}
+
+# ---- set algebra (operands must be the same size) --------------------------
+
+fn bs_union(un_a, un_b) {
+    assert(un_a[0] == un_b[0], "bs_union: size mismatch")
+    un_out = bs_new(un_a[0])
+    un_i = 1
+    while un_i < len(un_a) {
+        un_out[un_i] = bor(un_a[un_i], un_b[un_i])
+        un_i = un_i + 1
+    }
+    return un_out
+}
+fn bs_inter(it_a, it_b) {
+    assert(it_a[0] == it_b[0], "bs_inter: size mismatch")
+    it_out = bs_new(it_a[0])
+    it_i = 1
+    while it_i < len(it_a) {
+        it_out[it_i] = band(it_a[it_i], it_b[it_i])
+        it_i = it_i + 1
+    }
+    return it_out
+}
+fn bs_diff(df_a, df_b) {
+    assert(df_a[0] == df_b[0], "bs_diff: size mismatch")
+    df_out = bs_new(df_a[0])
+    df_i = 1
+    while df_i < len(df_a) {
+        # a & ~b  ==  a ^ (a & b)
+        df_out[df_i] = bxor(df_a[df_i], band(df_a[df_i], df_b[df_i]))
+        df_i = df_i + 1
+    }
+    return df_out
+}
+
+# ---- printing --------------------------------------------------------------
+
+# Bit 0 is the LEFTMOST character, so the string reads in index order.
+fn bs_to_string(ts_b) {
+    ts_s = ""
+    ts_i = 0
+    while ts_i < ts_b[0] {
+        ts_s = ts_s + str(bs_get(ts_b, ts_i))
+        ts_i = ts_i + 1
+    }
+    return ts_s
+}
+
+# ---- demo ------------------------------------------------------------------
+
+print("-- single bits --")
+b = bs_new(80)
+print("bs_new(80) words:        " + str(len(b) - 1))
+print("empty any / count:       " + str(bs_any(b)) + " " + str(bs_count(b)))
+b = bs_set(b, 0)
+b = bs_set(b, 31)
+b = bs_set(b, 32)
+b = bs_set(b, 79)
+print("4 sets, count:           " + str(bs_count(b)))
+print("get 0,31,32,33,79:       " + str(bs_get(b, 0)) + str(bs_get(b, 31)) + str(bs_get(b, 32)) + str(bs_get(b, 33)) + str(bs_get(b, 79)))
+b = bs_clear(b, 31)
+print("clear 31, count:         " + str(bs_count(b)))
+b = bs_clear(b, 31)
+print("clear 31 again, count:   " + str(bs_count(b)))
+b = bs_flip(b, 31)
+b = bs_flip(b, 30)
+print("flip 31,30, count:       " + str(bs_count(b)))
+print("any:                     " + str(bs_any(b)))
+
+print("")
+print("-- all / partial last word --")
+full = bs_new(10)
+i = 0
+while i < 10 {
+    full = bs_set(full, i)
+    i = i + 1
+}
+print("10 of 10 set, bs_all:    " + str(bs_all(full)))
+print("as string:               " + bs_to_string(full))
+full = bs_clear(full, 7)
+print("after clear 7, bs_all:   " + str(bs_all(full)))
+print("as string:               " + bs_to_string(full))
+tail = bs_new(33)
+i = 0
+while i < 33 {
+    tail = bs_set(tail, i)
+    i = i + 1
+}
+print("33 bits (2 words) all:   " + str(bs_all(tail)) + ", count " + str(bs_count(tail)))
+
+print("")
+print("-- a big one --")
+big = bs_new(1000)
+print("bs_new(1000) words:      " + str(len(big) - 1))
+big = bs_set(big, 999)
+print("set 999: count/999/998:  " + str(bs_count(big)) + " " + str(bs_get(big, 999)) + " " + str(bs_get(big, 998)))
+print("bs_all on 1 of 1000:     " + str(bs_all(big)))
+
+print("")
+print("-- set algebra over 0..23 --")
+evens = bs_new(24)
+mult3 = bs_new(24)
+i = 0
+while i < 24 {
+    if i % 2 == 0 {
+        evens = bs_set(evens, i)
+    }
+    if i % 3 == 0 {
+        mult3 = bs_set(mult3, i)
+    }
+    i = i + 1
+}
+print("evens:   " + bs_to_string(evens) + "  count " + str(bs_count(evens)))
+print("mult3:   " + bs_to_string(mult3) + "  count " + str(bs_count(mult3)))
+u = bs_union(evens, mult3)
+n = bs_inter(evens, mult3)
+d = bs_diff(evens, mult3)
+print("union:   " + bs_to_string(u) + "  count " + str(bs_count(u)))
+print("inter:   " + bs_to_string(n) + "  count " + str(bs_count(n)))
+print("diff:    " + bs_to_string(d) + "  count " + str(bs_count(d)))
+print("|A|+|B|-|A&B| == |A|B|:  " + str(bs_count(evens) + bs_count(mult3) - bs_count(n) == bs_count(u)))
+
+print("")
+print("-- sieve of Eratosthenes over a bitset, limit 200 --")
+limit = 200
+sieve = bs_new(limit + 1)
+n = 2
+while n <= limit {
+    sieve = bs_set(sieve, n)
+    n = n + 1
+}
+p = 2
+while p * p <= limit {
+    if bs_get(sieve, p) == 1 {
+        m = p * p
+        while m <= limit {
+            sieve = bs_clear(sieve, m)
+            m = m + p
+        }
+    }
+    p = p + 1
+}
+primes = []
+n = 0
+while n <= limit {
+    if bs_get(sieve, n) == 1 {
+        primes = push(primes, n)
+    }
+    n = n + 1
+}
+print("words used:              " + str(len(sieve) - 1))
+print("bits 0..39:              " + slice(bs_to_string(sieve), 0, 40))
+print("prime count (want 46):   " + str(bs_count(sieve)) + " / " + str(len(primes)))
+print("prime sum (want 4227):   " + str(sum(primes)))
+print("first 10:                " + str(take(primes, 10)))
+print("last 5:                  " + str(drop(primes, len(primes) - 5)))
+print("largest:                 " + str(last(primes)))
+print("2,97,199 prime?          " + str(bs_get(sieve, 2)) + str(bs_get(sieve, 97)) + str(bs_get(sieve, 199)))
+print("0,1,91,200 prime?        " + str(bs_get(sieve, 0)) + str(bs_get(sieve, 1)) + str(bs_get(sieve, 91)) + str(bs_get(sieve, 200)))
+print("composites (201-46):     " + str(201 - bs_count(sieve)))
+assert(bs_count(sieve) == 46, "sieve: wrong prime count")
+assert(sum(primes) == 4227, "sieve: wrong prime sum")
+assert(bs_count(sieve) == len(primes), "sieve: count disagrees with scan")
+print("all sieve assertions passed.")

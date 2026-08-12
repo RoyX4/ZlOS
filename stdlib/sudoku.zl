@@ -1,0 +1,216 @@
+# sudoku.zl -- Sudoku solver via backtracking.
+# Grid = flat list of 81 numbers, row-major, 0 = blank cell.
+# solve(grid) -> solved grid, or false if unsolvable.
+#
+# SCOPE NOTE: functions share the global namespace, so every function-local
+# is prefixed with the function's initials to avoid clobbering globals.
+
+# --- return a NEW grid with index idx set to v (lists are immutable) ---
+fn set_at(st_lst, st_idx, st_v) {
+  st_out = []
+  st_i = 0
+  while st_i < len(st_lst) {
+    if st_i == st_idx {
+      st_out = push(st_out, st_v)
+    } else {
+      st_out = push(st_out, st_lst[st_i])
+    }
+    st_i = st_i + 1
+  }
+  return st_out
+}
+
+# --- can value sv_val legally go at flat position sv_pos in grid sv_g? ---
+fn sudoku_valid(sv_g, sv_pos, sv_val) {
+  sv_row = int(sv_pos / 9)
+  sv_col = sv_pos % 9
+
+  # row conflict
+  sv_c = 0
+  while sv_c < 9 {
+    if sv_g[sv_row * 9 + sv_c] == sv_val {
+      return false
+    }
+    sv_c = sv_c + 1
+  }
+
+  # column conflict
+  sv_r = 0
+  while sv_r < 9 {
+    if sv_g[sv_r * 9 + sv_col] == sv_val {
+      return false
+    }
+    sv_r = sv_r + 1
+  }
+
+  # 3x3 box conflict
+  sv_br = int(sv_row / 3) * 3
+  sv_bc = int(sv_col / 3) * 3
+  sv_i = 0
+  while sv_i < 3 {
+    sv_j = 0
+    while sv_j < 3 {
+      if sv_g[(sv_br + sv_i) * 9 + (sv_bc + sv_j)] == sv_val {
+        return false
+      }
+      sv_j = sv_j + 1
+    }
+    sv_i = sv_i + 1
+  }
+
+  return true
+}
+
+# --- find first blank cell, or -1 if the grid is full ---
+fn first_blank(fb_g) {
+  fb_k = 0
+  while fb_k < 81 {
+    if fb_g[fb_k] == 0 {
+      return fb_k
+    }
+    fb_k = fb_k + 1
+  }
+  return -1
+}
+
+# --- recursive backtracking solver ---
+fn sudoku_solve(ss_g) {
+  ss_pos = first_blank(ss_g)
+  if ss_pos == -1 {
+    return ss_g          # no blanks left -> solved
+  }
+  ss_v = 1
+  while ss_v <= 9 {
+    if sudoku_valid(ss_g, ss_pos, ss_v) {
+      ss_ng = set_at(ss_g, ss_pos, ss_v)
+      ss_res = sudoku_solve(ss_ng)
+      if not (ss_res == false) {
+        return ss_res
+      }
+    }
+    ss_v = ss_v + 1
+  }
+  return false            # no digit fits -> dead end
+}
+
+# public entry point
+fn solve(sl_grid) {
+  return sudoku_solve(sl_grid)
+}
+
+# --- pretty-print a 9x9 grid ---
+fn print_grid(pg_g) {
+  pg_r = 0
+  while pg_r < 9 {
+    pg_row = []
+    pg_c = 0
+    while pg_c < 9 {
+      pg_row = push(pg_row, pg_g[pg_r * 9 + pg_c])
+      pg_c = pg_c + 1
+    }
+    print(join(pg_row, " "))
+    pg_r = pg_r + 1
+  }
+}
+
+# --- verify a solved grid: every row/col/box holds 1..9 exactly once ---
+fn group_ok(go_vals) {
+  go_s = sort(go_vals)
+  go_i = 0
+  while go_i < 9 {
+    if go_s[go_i] != go_i + 1 {
+      return false
+    }
+    go_i = go_i + 1
+  }
+  return true
+}
+
+fn check_solution(cs_g) {
+  # rows
+  cs_r = 0
+  while cs_r < 9 {
+    cs_row = []
+    cs_c = 0
+    while cs_c < 9 {
+      cs_row = push(cs_row, cs_g[cs_r * 9 + cs_c])
+      cs_c = cs_c + 1
+    }
+    if not group_ok(cs_row) {
+      return false
+    }
+    cs_r = cs_r + 1
+  }
+  # columns
+  cs_c2 = 0
+  while cs_c2 < 9 {
+    cs_col = []
+    cs_r2 = 0
+    while cs_r2 < 9 {
+      cs_col = push(cs_col, cs_g[cs_r2 * 9 + cs_c2])
+      cs_r2 = cs_r2 + 1
+    }
+    if not group_ok(cs_col) {
+      return false
+    }
+    cs_c2 = cs_c2 + 1
+  }
+  # boxes
+  cs_b = 0
+  while cs_b < 9 {
+    cs_box = []
+    cs_br = int(cs_b / 3) * 3
+    cs_bc = (cs_b % 3) * 3
+    cs_i = 0
+    while cs_i < 3 {
+      cs_j = 0
+      while cs_j < 3 {
+        cs_box = push(cs_box, cs_g[(cs_br + cs_i) * 9 + (cs_bc + cs_j)])
+        cs_j = cs_j + 1
+      }
+      cs_i = cs_i + 1
+    }
+    if not group_ok(cs_box) {
+      return false
+    }
+    cs_b = cs_b + 1
+  }
+  return true
+}
+
+# ============================ SELF-TEST ============================
+
+print("=== Sudoku solver self-test ===")
+
+# A well-known easy puzzle (0 = blank).
+puzzle = [5,3,0,0,7,0,0,0,0, 6,0,0,1,9,5,0,0,0, 0,9,8,0,0,0,0,6,0, 8,0,0,0,6,0,0,0,3, 4,0,0,8,0,3,0,0,1, 7,0,0,0,2,0,0,0,6, 0,6,0,0,0,0,2,8,0, 0,0,0,4,1,9,0,0,5, 0,0,0,0,8,0,0,7,9]
+
+print("")
+print("Puzzle (0 = blank):")
+print_grid(puzzle)
+
+solved = solve(puzzle)
+
+print("")
+if solved == false {
+  print("Result: UNSOLVABLE")
+} else {
+  print("Solution:")
+  print_grid(solved)
+  print("")
+  print("Verified valid solution: " + check_solution(solved))
+}
+
+# Sanity check: an obviously unsolvable grid (two 5s in the first row).
+print("")
+print("--- unsolvable-grid test ---")
+bad = [5,5,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0]
+bad_res = solve(bad)
+if bad_res == false {
+  print("bad grid correctly reported UNSOLVABLE")
+} else {
+  print("ERROR: bad grid unexpectedly solved")
+}
+
+print("")
+print("=== done ===")

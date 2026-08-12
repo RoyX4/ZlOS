@@ -1,0 +1,146 @@
+# regex_match.zl
+# A small recursive regex matcher for the zl language.
+#
+# Supported syntax:
+#   literal chars   match themselves
+#   .               matches any single char
+#   c*              zero-or-more of the preceding char c (c may be '.')
+#   ^               anchor to start of text (only meaningful as first char)
+#   $               anchor to end of text  (only meaningful as last char)
+#
+# Public entry point:  matches(pattern, text) -> bool
+#
+# Implementation follows the classic Kernighan/Pike recursive matcher,
+# adapted to zl. All function-locals are prefixed to avoid clobbering
+# top-level globals (zl functions share the global namespace).
+
+# Does pattern (from index rmh_pi) match text (from index rmh_ti)?
+fn match_here(rmh_p, rmh_pi, rmh_t, rmh_ti) {
+    # Ran out of pattern -> success.
+    if rmh_pi >= len(rmh_p) {
+        return true
+    }
+
+    rmh_c = at(rmh_p, rmh_pi)
+
+    # "c*" : the star form takes priority over everything below.
+    if rmh_pi + 1 < len(rmh_p) and at(rmh_p, rmh_pi + 1) == "*" {
+        return match_star(rmh_c, rmh_p, rmh_pi + 2, rmh_t, rmh_ti)
+    }
+
+    # "$" at the very end of the pattern -> must be at end of text.
+    if rmh_c == "$" and rmh_pi + 1 == len(rmh_p) {
+        return rmh_ti == len(rmh_t)
+    }
+
+    # Consume one matching char (literal or ".").
+    if rmh_ti < len(rmh_t) and (rmh_c == "." or rmh_c == at(rmh_t, rmh_ti)) {
+        return match_here(rmh_p, rmh_pi + 1, rmh_t, rmh_ti + 1)
+    }
+
+    return false
+}
+
+# Match "rms_c*" starting at text index rms_ti, then the rest of the
+# pattern from rms_pi. Tries the shortest match first, then grows.
+fn match_star(rms_c, rms_p, rms_pi, rms_t, rms_ti) {
+    rms_i = rms_ti
+    while true {
+        # Try to match the remainder of the pattern here.
+        if match_here(rms_p, rms_pi, rms_t, rms_i) {
+            return true
+        }
+        # Otherwise consume one more char with the starred atom, if possible.
+        if rms_i < len(rms_t) and (rms_c == "." or rms_c == at(rms_t, rms_i)) {
+            rms_i = rms_i + 1
+        } else {
+            return false
+        }
+    }
+    return false
+}
+
+# Public: does the regex `pattern` match anywhere in `text`
+# (subject to ^ / $ anchors)?
+fn matches(pattern, text) {
+    # Leading "^" anchors to the start; match only from index 0.
+    if len(pattern) > 0 and at(pattern, 0) == "^" {
+        return match_here(pattern, 1, text, 0)
+    }
+
+    # Unanchored: try every starting position, including the empty tail.
+    m_ti = 0
+    while true {
+        if match_here(pattern, 0, text, m_ti) {
+            return true
+        }
+        if m_ti >= len(text) {
+            return false
+        }
+        m_ti = m_ti + 1
+    }
+    return false
+}
+
+# ---------------------------------------------------------------------------
+# Self-test
+# ---------------------------------------------------------------------------
+
+fn yn(b) {
+    if b { return "true" } else { return "false" }
+}
+
+fn check(pattern, text, expected) {
+    st_got = matches(pattern, text)
+    st_mark = "PASS"
+    if st_got != expected {
+        st_mark = "FAIL"
+    }
+    print(st_mark + "  matches(\"" + pattern + "\", \"" + text + "\") = " + yn(st_got) + "  (expected " + yn(expected) + ")")
+    return st_got == expected
+}
+
+print("=== regex_match self-test ===")
+
+pass_count = 0
+total = 0
+
+# Each entry: [pattern, text, expected]
+cases = []
+cases = push(cases, ["abc",     "abc",       true])
+cases = push(cases, ["abc",     "xabcx",     true])
+cases = push(cases, ["abc",     "ab",        false])
+cases = push(cases, ["a.c",     "axc",       true])
+cases = push(cases, ["a.c",     "abc",       true])
+cases = push(cases, ["a.c",     "ac",        false])
+cases = push(cases, ["a*b",     "b",         true])
+cases = push(cases, ["a*b",     "ab",        true])
+cases = push(cases, ["a*b",     "aaaab",     true])
+cases = push(cases, ["a*b",     "aaac",      false])
+cases = push(cases, ["a*",      "",          true])
+cases = push(cases, [".*",      "anything",  true])
+cases = push(cases, ["^hello",  "hello world", true])
+cases = push(cases, ["^hello",  "say hello", false])
+cases = push(cases, ["world$",  "hello world", true])
+cases = push(cases, ["world$",  "world wide", false])
+cases = push(cases, ["^h.llo$", "hello",     true])
+cases = push(cases, ["^h.llo$", "hallo",     true])
+cases = push(cases, ["^h.llo$", "hello!",    false])
+cases = push(cases, ["^h.llo$", "yhello",    false])
+cases = push(cases, ["^a*$",    "aaaa",      true])
+cases = push(cases, ["^a*$",    "aaab",      false])
+cases = push(cases, ["^$",      "",          true])
+cases = push(cases, ["^$",      "x",         false])
+cases = push(cases, ["c.*t",    "cat",       true])
+cases = push(cases, ["c.*t",    "cricket",   true])
+cases = push(cases, ["c.*t",    "car",       false])
+
+for c in cases {
+    total = total + 1
+    if check(c[0], c[1], c[2]) {
+        pass_count = pass_count + 1
+    }
+}
+
+print("-----------------------------")
+print("Result: " + num(pass_count) + " / " + num(total) + " passed")

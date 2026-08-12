@@ -1,0 +1,161 @@
+# A PARSER written in MY OWN LANGUAGE.
+# It turns tokens into a tree, with correct precedence - the same
+# job parser.c does, but written in zl. A node is a list tagged by
+# its first item, e.g. ["bin", "+", left, right] or ["num", "5"].
+#
+# It shares a global cursor (toks, pos) that the helper functions
+# advance as they walk - which is why the compiler had to be taught
+# that functions mutate globals rather than shadowing them.
+
+# ---------- the lexer (same as lexer.zl, inlined) ----------
+
+fn is_digit(c) {
+    return c != "" and has("0123456789", c)
+}
+fn is_alpha(c) {
+    return c != "" and has("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", c)
+}
+fn is_space(c) {
+    return c == " " or c == "\t" or c == "\r" or c == "\n"
+}
+
+fn lex(src) {
+    out = []
+    i = 0
+    n = len(src)
+    while i < n {
+        c = at(src, i)
+        if is_space(c) {
+            i = i + 1
+        } else {
+            if is_digit(c) {
+                word = ""
+                while is_digit(at(src, i)) {
+                    word = word + at(src, i)
+                    i = i + 1
+                }
+                out = push(out, ["NUMBER", word])
+            } else {
+                if is_alpha(c) {
+                    word = ""
+                    while is_alpha(at(src, i)) or is_digit(at(src, i)) {
+                        word = word + at(src, i)
+                        i = i + 1
+                    }
+                    out = push(out, ["WORD", word])
+                } else {
+                    out = push(out, ["SYMBOL", c])
+                    i = i + 1
+                }
+            }
+        }
+    }
+    return out
+}
+
+# ---------- the parser (shared cursor) ----------
+
+toks = []
+pos = 0
+
+fn kind() {
+    if pos < len(toks) {
+        return toks[pos][0]
+    }
+    return "EOF"
+}
+fn text() {
+    if pos < len(toks) {
+        return toks[pos][1]
+    }
+    return ""
+}
+fn advance() {
+    t = toks[pos]
+    pos = pos + 1
+    return t
+}
+
+# primary := NUMBER | WORD | ( expr )
+fn parse_primary() {
+    if kind() == "NUMBER" {
+        t = advance()
+        return ["num", t[1]]
+    }
+    if kind() == "WORD" {
+        t = advance()
+        return ["var", t[1]]
+    }
+    if text() == "(" {
+        advance()
+        e = parse_expr()
+        advance()
+        return e
+    }
+    print("parse error at:", text())
+    return ["error", ""]
+}
+
+# mul := primary ( (* | /) primary )*    <- binds tighter
+fn parse_mul() {
+    node = parse_primary()
+    while text() == "*" or text() == "/" {
+        op = text()
+        advance()
+        right = parse_primary()
+        node = ["bin", op, node, right]
+    }
+    return node
+}
+
+# add := mul ( (+ | -) mul )*            <- binds looser
+fn parse_add() {
+    node = parse_mul()
+    while text() == "+" or text() == "-" {
+        op = text()
+        advance()
+        right = parse_mul()
+        node = ["bin", op, node, right]
+    }
+    return node
+}
+
+fn parse_expr() {
+    return parse_add()
+}
+
+# ---------- print the tree ----------
+
+fn pad(d) {
+    s = ""
+    i = 0
+    while i < d {
+        s = s + "  "
+        i = i + 1
+    }
+    return s
+}
+
+fn show(node, d) {
+    if node[0] == "bin" {
+        print(pad(d) + "BINARY " + node[1])
+        show(node[2], d + 1)
+        show(node[3], d + 1)
+    } else {
+        print(pad(d) + node[0] + " " + node[1])
+    }
+}
+
+# ---------- prove it ----------
+
+fn parse_and_show(src) {
+    toks = lex(src)
+    pos = 0
+    tree = parse_expr()
+    print("parsing:", src)
+    show(tree, 0)
+    print("")
+}
+
+parse_and_show("2 + 3 * 4")
+parse_and_show("(2 + 3) * 4")

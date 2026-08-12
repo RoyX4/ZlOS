@@ -1,0 +1,131 @@
+# game_of_life.zl - Conway's Game of Life on a fixed grid.
+# Grid = list of rows, each row a list of 0/1. Rendered with '#' (alive) and '.' (dead).
+# NOTE: all function-local variables are uniquely prefixed to avoid clobbering globals.
+
+# Count the 8 neighbours of cell (r, c) in grid g (edges are dead, no wraparound).
+fn count_neighbors(g, r, c) {
+  cn_rows = len(g)
+  cn_cols = len(g[0])
+  cn_total = 0
+  cn_dr = -1
+  while cn_dr <= 1 {
+    cn_dc = -1
+    while cn_dc <= 1 {
+      if not (cn_dr == 0 and cn_dc == 0) {
+        cn_nr = r + cn_dr
+        cn_nc = c + cn_dc
+        if cn_nr >= 0 and cn_nr < cn_rows and cn_nc >= 0 and cn_nc < cn_cols {
+          cn_row = g[cn_nr]
+          cn_total = cn_total + cn_row[cn_nc]
+        }
+      }
+      cn_dc = cn_dc + 1
+    }
+    cn_dr = cn_dr + 1
+  }
+  return cn_total
+}
+
+# Advance the grid one generation, returning a NEW grid.
+fn step(g) {
+  st_rows = len(g)
+  st_cols = len(g[0])
+  st_next = []
+  st_r = 0
+  while st_r < st_rows {
+    st_row = g[st_r]
+    st_newrow = []
+    st_c = 0
+    while st_c < st_cols {
+      st_alive = st_row[st_c]
+      st_n = count_neighbors(g, st_r, st_c)
+      st_cell = 0
+      if st_alive == 1 {
+        if st_n == 2 or st_n == 3 { st_cell = 1 } else { st_cell = 0 }
+      } else {
+        if st_n == 3 { st_cell = 1 } else { st_cell = 0 }
+      }
+      st_newrow = push(st_newrow, st_cell)
+      st_c = st_c + 1
+    }
+    st_next = push(st_next, st_newrow)
+    st_r = st_r + 1
+  }
+  return st_next
+}
+
+# Render a grid to text using '#' and '.', rows separated by newlines.
+fn render(g) {
+  rn_out = ""
+  rn_r = 0
+  while rn_r < len(g) {
+    rn_row = g[rn_r]
+    rn_line = ""
+    rn_c = 0
+    while rn_c < len(rn_row) {
+      if rn_row[rn_c] == 1 { rn_line = rn_line + "#" } else { rn_line = rn_line + "." }
+      rn_c = rn_c + 1
+    }
+    rn_out = rn_out + rn_line
+    if rn_r < len(g) - 1 { rn_out = rn_out + "\n" }
+    rn_r = rn_r + 1
+  }
+  return rn_out
+}
+
+# Count total live cells (population) in a grid.
+fn population(g) {
+  pp_total = 0
+  pp_r = 0
+  while pp_r < len(g) {
+    pp_row = g[pp_r]
+    pp_c = 0
+    while pp_c < len(pp_row) {
+      pp_total = pp_total + pp_row[pp_c]
+      pp_c = pp_c + 1
+    }
+    pp_r = pp_r + 1
+  }
+  return pp_total
+}
+
+# ---------------------------------------------------------------------------
+# Self-test: evolve a glider across a 6x6 grid and print a few generations.
+# ---------------------------------------------------------------------------
+
+# Classic glider in the top-left corner of a 6x6 field.
+glider = [[0, 1, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0], [1, 1, 1, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
+
+print("=== Conway's Game of Life: glider ===")
+
+grid = glider
+gen = 0
+while gen <= 4 {
+  print("Generation " + gen + " (population " + population(grid) + "):")
+  print(render(grid))
+  print("")
+  grid = step(grid)
+  gen = gen + 1
+}
+
+# Labeled functional checks.
+print("=== self-test checks ===")
+
+# A glider has a constant population of 5 as it travels.
+print("population(gen0) == 5 : " + (population(glider) == 5))
+
+# Neighbour count of the centre-ish cell (2,1) in the glider = its 8 neighbours.
+print("count_neighbors(glider, 2, 1) == 3 : " + (count_neighbors(glider, 2, 1) == 3))
+
+# A block is a still life: step(block) must equal the block (population unchanged, stable).
+block = [[1, 1, 0], [1, 1, 0], [0, 0, 0]]
+block_next = step(block)
+print("block still-life population stays 4 : " + (population(block_next) == 4))
+print("block top-left stays alive : " + (block_next[0][0] == 1))
+print("block corner stays dead : " + (block_next[2][2] == 0))
+
+# A blinker oscillates between horizontal and vertical (period 2).
+blinker = [[0, 0, 0], [1, 1, 1], [0, 0, 0]]
+blinker_next = step(blinker)
+print("blinker becomes vertical, middle column alive : " + (blinker_next[0][1] == 1 and blinker_next[1][1] == 1 and blinker_next[2][1] == 1))
+print("blinker ends horizontal after 2 steps : " + (render(step(blinker_next)) == render(blinker)))

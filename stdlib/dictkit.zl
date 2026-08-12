@@ -1,0 +1,106 @@
+# dictkit.zl - an immutable dictionary (map) built on a list of [key, value] pairs.
+# zl has no map type, so a dict is just a list like [[k1,v1], [k2,v2], ...].
+# Every mutating operation RETURNS A NEW dict and leaves the input untouched,
+# matching zl's value-style list semantics. All locals are dk_-prefixed so a
+# caller's globals are never clobbered by assignment inside these functions.
+
+# dk_new() -> a fresh empty dict.
+fn dk_new() {
+    return []
+}
+
+# dk_set(d, k, v) -> new dict with k mapped to v; replaces the value in place
+# (same position) if k already exists, otherwise appends a new pair.
+fn dk_set(dk_d, dk_k, dk_v) {
+    dk_out = []
+    dk_found = false
+    for dk_pair in dk_d {
+        if dk_pair[0] == dk_k {
+            dk_out = push(dk_out, [dk_k, dk_v])
+            dk_found = true
+        } else {
+            dk_out = push(dk_out, dk_pair)
+        }
+    }
+    if not dk_found {
+        dk_out = push(dk_out, [dk_k, dk_v])
+    }
+    return dk_out
+}
+
+# dk_get(d, k, default) -> the value mapped to k, or default if k is absent.
+fn dk_get(dk_d, dk_k, dk_default) {
+    for dk_pair in dk_d {
+        if dk_pair[0] == dk_k {
+            return dk_pair[1]
+        }
+    }
+    return dk_default
+}
+
+# dk_has(d, k) -> true if k is present, else false.
+fn dk_has(dk_d, dk_k) {
+    for dk_pair in dk_d {
+        if dk_pair[0] == dk_k {
+            return true
+        }
+    }
+    return false
+}
+
+# dk_keys(d) -> list of keys, in insertion order.
+fn dk_keys(dk_d) {
+    dk_out = []
+    for dk_pair in dk_d {
+        dk_out = push(dk_out, dk_pair[0])
+    }
+    return dk_out
+}
+
+# dk_values(d) -> list of values, in insertion order.
+fn dk_values(dk_d) {
+    dk_out = []
+    for dk_pair in dk_d {
+        dk_out = push(dk_out, dk_pair[1])
+    }
+    return dk_out
+}
+
+# dk_del(d, k) -> new dict with k removed; unchanged (a copy) if k was absent.
+fn dk_del(dk_d, dk_k) {
+    dk_out = []
+    for dk_pair in dk_d {
+        if dk_pair[0] != dk_k {
+            dk_out = push(dk_out, dk_pair)
+        }
+    }
+    return dk_out
+}
+
+# dk_len(d) -> number of key/value pairs.
+fn dk_len(dk_d) {
+    return len(dk_d)
+}
+
+# ---------------------------------------------------------------------------
+# self-test: run  .\_interp_stdlib.exe stdlib\dictkit.zl  and check by hand.
+# ---------------------------------------------------------------------------
+d = dk_new()
+d = dk_set(d, "name", "Zac")
+d = dk_set(d, "lang", "zl")
+d = dk_set(d, "count", 1)
+d = dk_set(d, "count", 42)                        # replace existing key
+
+print("len:          " + str(dk_len(d)))          # 3
+print("get name:     " + dk_get(d, "name", "?"))  # Zac
+print("get count:    " + str(dk_get(d, "count", 0)))   # 42
+print("get missing:  " + dk_get(d, "email", "n/a"))    # n/a
+print("has lang:     " + str(dk_has(d, "lang")))  # true
+print("has email:    " + str(dk_has(d, "email"))) # false
+print("keys:         " + str(dk_keys(d)))         # [name, lang, count]
+print("values:       " + str(dk_values(d)))       # [Zac, zl, 42]
+
+d2 = dk_del(d, "lang")
+print("del keys:     " + str(dk_keys(d2)))        # [name, count]
+print("del len:      " + str(dk_len(d2)))         # 2
+print("orig len:     " + str(dk_len(d)))          # 3  (original unchanged -> immutable)

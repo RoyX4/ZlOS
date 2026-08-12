@@ -1,0 +1,194 @@
+# base64.zl - Base64 and hex encoding/decoding, in pure zl.
+#
+# Base64 packs 3 input bytes (24 bits) into one 24-bit integer and reads it
+# back out as 4 six-bit indexes into the alphabet. That packing is done with
+# the bit builtins: shl to move a byte into place, bor to merge, shr + band
+# to cut a 6-bit slice back out. Decoding is the same trick in reverse.
+#
+# Padding: a final group of 2 bytes emits 3 chars + "=", a final group of
+# 1 byte emits 2 chars + "==", so the output length is always a multiple
+# of 4 and b64_decode() can tell from the "=" how many bytes to hand back.
+#
+# Representation: a "byte string" is just a zl string, one char per byte.
+# zl strings are NUL-terminated, so a byte of value 0 cannot be represented;
+# these functions are for text, not arbitrary binary.
+#
+# Naming: zl has no local scope - assigning inside a function writes the
+# global of that name. Every parameter and local here carries a two-letter
+# tag for its function (en_ = b64_encode, de_ = b64_decode, ...) so that
+# nested calls never eat each other's variables.
+
+B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+HEX_CHARS = "0123456789abcdef"
+
+fn b64_encode(en_s) {
+    en_out = ""
+    en_n = len(en_s)
+    en_i = 0
+    while en_i < en_n {
+        en_rem = en_n - en_i
+        en_b0 = index_at(en_s, en_i)
+        en_b1 = 0
+        en_b2 = 0
+        if en_rem > 1 {
+            en_b1 = index_at(en_s, en_i + 1)
+        }
+        if en_rem > 2 {
+            en_b2 = index_at(en_s, en_i + 2)
+        }
+        en_trip = bor(bor(shl(en_b0, 16), shl(en_b1, 8)), en_b2)
+        en_out = en_out + at(B64_CHARS, band(shr(en_trip, 18), 63))
+        en_out = en_out + at(B64_CHARS, band(shr(en_trip, 12), 63))
+        if en_rem > 2 {
+            en_out = en_out + at(B64_CHARS, band(shr(en_trip, 6), 63))
+            en_out = en_out + at(B64_CHARS, band(en_trip, 63))
+        } else if en_rem == 2 {
+            en_out = en_out + at(B64_CHARS, band(shr(en_trip, 6), 63)) + "="
+        } else {
+            en_out = en_out + "=="
+        }
+        en_i = en_i + 3
+    }
+    return en_out
+}
+
+fn b64_decode(de_s) {
+    de_out = ""
+    de_n = len(de_s)
+    de_i = 0
+    while de_i + 3 < de_n {
+        de_c2 = at(de_s, de_i + 2)
+        de_c3 = at(de_s, de_i + 3)
+        de_pad = 0
+        de_q2 = 0
+        de_q3 = 0
+        if de_c2 == "=" {
+            de_pad = 2
+        } else {
+            de_q2 = find(B64_CHARS, de_c2)
+            if de_c3 == "=" {
+                de_pad = 1
+            } else {
+                de_q3 = find(B64_CHARS, de_c3)
+            }
+        }
+        de_q0 = find(B64_CHARS, at(de_s, de_i))
+        de_q1 = find(B64_CHARS, at(de_s, de_i + 1))
+        de_trip = bor(bor(bor(shl(de_q0, 18), shl(de_q1, 12)), shl(de_q2, 6)), de_q3)
+        de_out = de_out + chr(band(shr(de_trip, 16), 255))
+        if de_pad < 2 {
+            de_out = de_out + chr(band(shr(de_trip, 8), 255))
+        }
+        if de_pad == 0 {
+            de_out = de_out + chr(band(de_trip, 255))
+        }
+        de_i = de_i + 4
+    }
+    return de_out
+}
+
+# Well-formed base64: length a multiple of 4, at most two trailing "=",
+# and every other character drawn from the alphabet.
+fn b64_is_valid(iv_s) {
+    iv_n = len(iv_s)
+    if iv_n % 4 != 0 {
+        return false
+    }
+    if iv_n == 0 {
+        return true
+    }
+    iv_pad = 0
+    if at(iv_s, iv_n - 1) == "=" {
+        iv_pad = 1
+        if at(iv_s, iv_n - 2) == "=" {
+            iv_pad = 2
+        }
+    }
+    iv_i = 0
+    while iv_i < iv_n - iv_pad {
+        if find(B64_CHARS, at(iv_s, iv_i)) < 0 {
+            return false
+        }
+        iv_i = iv_i + 1
+    }
+    return true
+}
+
+fn hex_encode(he_s) {
+    he_out = ""
+    he_i = 0
+    while he_i < len(he_s) {
+        he_b = index_at(he_s, he_i)
+        he_out = he_out + at(HEX_CHARS, band(shr(he_b, 4), 15))
+        he_out = he_out + at(HEX_CHARS, band(he_b, 15))
+        he_i = he_i + 1
+    }
+    return he_out
+}
+
+fn hex_decode(hd_s) {
+    hd_t = lower(hd_s)
+    hd_out = ""
+    hd_i = 0
+    while hd_i + 1 < len(hd_t) {
+        hd_hi = find(HEX_CHARS, at(hd_t, hd_i))
+        hd_lo = find(HEX_CHARS, at(hd_t, hd_i + 1))
+        if hd_hi < 0 or hd_lo < 0 {
+            return hd_out
+        }
+        hd_out = hd_out + chr(bor(shl(hd_hi, 4), hd_lo))
+        hd_i = hd_i + 2
+    }
+    return hd_out
+}
+
+# ---- demo ----
+
+print("-- base64 round trips (every padding case) --")
+dm_cases = ["M", "Ma", "Man", "Many", "hello", "zl rul", "The quick brown fox jumps over the lazy dog"]
+for dm_s in dm_cases {
+    dm_e = b64_encode(dm_s)
+    dm_d = b64_decode(dm_e)
+    dm_tag = "FAIL"
+    if dm_d == dm_s {
+        dm_tag = "PASS"
+    }
+    print(dm_tag + "  len " + pad(str(len(dm_s)), 2) + "  len%3=" + str(len(dm_s) % 3) + "  \"" + dm_s + "\"")
+    print("      encoded: " + dm_e)
+    print("      decoded: \"" + dm_d + "\"")
+}
+
+print("")
+print("-- empty string --")
+print("encode(\"\") = \"" + b64_encode("") + "\", decode(\"\") = \"" + b64_decode("") + "\"")
+
+print("")
+print("-- known vectors --")
+print("b64_encode(\"Man\")   = " + b64_encode("Man") + "   (expect TWFu)")
+print("b64_encode(\"Ma\")    = " + b64_encode("Ma") + "   (expect TWE=)")
+print("b64_encode(\"M\")     = " + b64_encode("M") + "   (expect TQ==)")
+print("b64_encode(\"hello\") = " + b64_encode("hello") + " (expect aGVsbG8=)")
+print("b64_decode(\"aGVsbG8=\") = \"" + b64_decode("aGVsbG8=") + "\" (expect hello)")
+print("alphabet ends: " + b64_encode(chr(251) + chr(239) + chr(190)) + " (expect ++++, uses + and /: " + b64_encode(chr(255) + chr(239) + chr(190)) + ")")
+
+print("")
+print("-- b64_is_valid --")
+print("\"TWFu\"     -> " + str(b64_is_valid("TWFu")) + "   (expect true)")
+print("\"TQ==\"     -> " + str(b64_is_valid("TQ==")) + "   (expect true)")
+print("\"\"         -> " + str(b64_is_valid("")) + "   (expect true)")
+print("\"TWF\"      -> " + str(b64_is_valid("TWF")) + "  (expect false, length not a multiple of 4)")
+print("\"TW-u\"     -> " + str(b64_is_valid("TW-u")) + "  (expect false, bad character)")
+print("\"=WFu\"     -> " + str(b64_is_valid("=WFu")) + "  (expect false, = not at the end)")
+
+print("")
+print("-- hex --")
+for dm_h in ["zl", "Hi!", "Man", "\\o/"] {
+    dm_x = hex_encode(dm_h)
+    dm_b = hex_decode(dm_x)
+    dm_tag = "FAIL"
+    if dm_b == dm_h {
+        dm_tag = "PASS"
+    }
+    print(dm_tag + "  \"" + dm_h + "\" -> " + dm_x + " -> \"" + dm_b + "\"")
+}
+print("hex_decode(\"7A6C\") uppercase = \"" + hex_decode("7A6C") + "\" (expect zl)")

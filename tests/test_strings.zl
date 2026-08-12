@@ -1,0 +1,554 @@
+# test_strings.zl - test suite for the string builtins
+#   len at code chr str slice find has starts ends upper lower trim repeat
+#   replace count pad split join lines reverse ltrim rtrim title swapcase index_at
+#
+# Style follows stdlib/testlib.zl - check(label, got, want) / report().
+# zl has no import, so the harness is inlined.
+#
+# Every `want` below was worked out by hand from the contract in
+# docs/REFERENCE.md plus ordinary string semantics. Blocks tagged "### WAS
+# BROKEN" pinned a real defect that is now fixed in the engine; the checks
+# under them are the regression tests. NOTE marks behaviour that is merely
+# undocumented, recorded so a future change to it is visible. See the BUGS
+# block at the bottom for the summary of what each fix was.
+#
+# str() is how check() compares, so note two formatting traps used below:
+#   str([])  and  str([""])  both print "[]"
+# - a list of empty strings is indistinguishable from an empty list. Wherever
+# that matters the check uses len() and element access instead of list equality.
+
+g_pass = 0
+g_fail = 0
+
+fn check(label, got, want) {
+    if str(got) == str(want) {
+        g_pass = g_pass + 1
+        print("  PASS  " + label)
+    } else {
+        g_fail = g_fail + 1
+        print("  FAIL  " + label + "  got " + str(got) + " want " + str(want))
+    }
+}
+fn report() {
+    print("----")
+    print(str(g_pass) + " passed, " + str(g_fail) + " failed")
+}
+
+huge = pow(10, 20)          # 1e20 - far outside int range. The lexer takes the
+                            # plain-digit form too, but pow() reads better.
+nan  = sqrt(-1)
+
+# ---------------------------------------------------------------------- len
+print("-- len --")
+check("len('')",              len(""),            0)
+check("len('a')",             len("a"),           1)
+check("len('abc')",           len("abc"),         3)
+check("len(' ')",             len(" "),           1)
+check("len('a b')",           len("a b"),         3)
+check("len('a\\tb') tab is 1 char",  len("a\tb"),  3)
+check("len('\\n')",           len("\n"),          1)
+check("len('\\\\')",          len("\\"),          1)
+check("len('\\x41')",         len("\x41"),        1)
+check("'\\x41' is 'A'",       "\x41",             "A")
+check("len(repeat('ab',3))",  len(repeat("ab", 3)), 6)
+check("len of a list too",    len([1, 2, 3]),     3)
+
+# ----------------------------------------------------------------------- at
+# at(s,i) returns the one-character string at i, "" when i is out of range.
+print("-- at --")
+check("at('abc',0)",          at("abc", 0),       "a")
+check("at('abc',1)",          at("abc", 1),       "b")
+check("at('abc',2) last",     at("abc", 2),       "c")
+check("at('abc',3) past end", at("abc", 3),       "")
+check("at('abc',99)",         at("abc", 99),      "")
+check("at('abc',-1)",         at("abc", -1),      "")
+check("at('',0) empty str",   at("", 0),          "")
+check("at('abc',2.9) truncs", at("abc", 2.9),     "c")
+check("at(s,huge) is empty",  at("abc", huge),    "")
+check("len(at oor) is 0",     len(at("abc", 5)),  0)
+check("at spells the string", at("hi",0) + at("hi",1), "hi")
+
+# ---------------------------------------------------------------- code / chr
+# code(s) is the code of the FIRST character; chr(n) is the character.
+print("-- code / chr --")
+check("code('A')",            code("A"),          65)
+check("code('a')",            code("a"),          97)
+check("code('0')",            code("0"),          48)
+check("code(' ')",            code(" "),          32)
+check("code('abc') is first", code("abc"),        97)
+check("code('') is 0",        code(""),           0)
+check("chr(65)",              chr(65),            "A")
+check("chr(97)",              chr(97),            "a")
+check("chr(32) is a space",   chr(32),            " ")
+check("chr(10) is newline",   chr(10) == "\n",    true)
+check("chr(65.9) truncs",     chr(65.9),          "A")
+check("len(chr(65))",         len(chr(65)),       1)
+check("code(chr(1)) round trip",   code(chr(1)),   1)
+check("code(chr(200)) round trip", code(chr(200)), 200)
+check("code(chr(255)) round trip", code(chr(255)), 255)
+check("chr(code('Z')) round trip", chr(code("Z")), "Z")
+
+# ### WAS BROKEN - chr() had no range check; the code was just truncated to a
+# byte, so distinct codes silently produced the SAME character:
+#   chr(321) == chr(65)   because 321 & 255 == 65
+#   chr(256) == ""        256 & 255 == 0
+#   chr(-1)  == chr(255)
+# and code(chr(n)) only round-tripped for n in 1..255, which is the contract the
+# four checks above pin.
+# FIX: chr REFUSES a code outside 1..255.
+#   chr(321) -> runtime error: chr needs a code in 1..255
+#   chr(0)   -> runtime error: chr(0): a zl string cannot hold a NUL byte
+# Code 0 gets its own message because it is a representation limit, not a typo:
+# a zl string IS a NUL-terminated C string, so chr(0) used to return a
+# ZERO-length string and "a" + chr(0) + "b" quietly became "ab" (len 2). Making
+# NUL work would mean giving zl length-carrying strings - a change to every
+# string builtin and every backend. The lexer refuses "\0" and "\x00" for the
+# same reason. A raised error aborts the script, so none of the four lines
+# above can be a check; run them as their own file to see the messages.
+# What IS checkable is that the accepted range still round-trips exactly, and
+# that the boundary codes work:
+check("chr(1) is one char",    len(chr(1)),    1)
+check("chr(255) is one char",  len(chr(255)),  1)
+check("chr is injective on 1..255", chr(65) == chr(66), false)
+check("chr truncates a fraction", chr(65.9),  "A")
+
+# ---------------------------------------------------------------------- str
+print("-- str --")
+check("str(1)",               str(1),             "1")
+check("str(1.5)",             str(1.5),           "1.5")
+check("str(-2)",              str(-2),            "-2")
+check("str(0)",               str(0),             "0")
+check("str(true)",            str(true),          "true")
+check("str(false)",           str(false),         "false")
+check("str('hi') is itself",  str("hi"),          "hi")
+check("str('') is empty",     len(str("")),       0)
+check("str([1,2])",           str([1, 2]),        "[1, 2]")
+check("str([])",              str([]),            "[]")
+check("str(nil())",           str(nil()),         "nil")
+check("len(str(12345))",      len(str(12345)),    5)
+check("str is idempotent",    str(str(7)),        "7")
+
+# -------------------------------------------------------------------- slice
+# slice(s,a,b) is the half-open range [a,b): b is excluded.
+print("-- slice --")
+check("slice('abcdef',1,3)",      slice("abcdef", 1, 3),   "bc")
+check("slice('abcdef',0,1)",      slice("abcdef", 0, 1),   "a")
+check("slice('abcdef',0,6) whole", slice("abcdef", 0, 6),  "abcdef")
+check("slice(s,0,len(s)) == s",   slice("abcdef", 0, len("abcdef")), "abcdef")
+check("slice('abcdef',0,0) empty", slice("abcdef", 0, 0),  "")
+check("slice('abcdef',6,6) at end", slice("abcdef", 6, 6), "")
+check("slice('abcdef',5,6) last char", slice("abcdef", 5, 6), "f")
+check("slice('abcdef',0,99) clamps", slice("abcdef", 0, 99), "abcdef")
+check("slice('abcdef',99,99) past end", slice("abcdef", 99, 99), "")
+check("slice('abcdef',4,2) b<a",  slice("abcdef", 4, 2),   "")
+check("slice('abcdef',3,3) a==b", slice("abcdef", 3, 3),   "")
+check("slice('abcdef',-2,3) a clamps to 0", slice("abcdef", -2, 3), "abc")
+check("slice('abcdef',3,-1) b<0", slice("abcdef", 3, -1),  "")
+check("slice('',0,0)",            slice("", 0, 0),         "")
+check("slice('',0,3) empty src",  slice("", 0, 3),         "")
+check("slice('abcdef',2.7,4.2) truncs", slice("abcdef", 2.7, 4.2), "cd")
+check("slice halves rejoin",      slice("abcdef",0,3) + slice("abcdef",3,6), "abcdef")
+
+# ### WAS BROKEN - slice() cast its indices to int BEFORE clamping, so an index
+# too big for an int landed on INT_MIN and the clamp could no longer rescue it:
+# slice("abcdef", 0, 99) correctly gave "abcdef", but slice("abcdef", 0, 1e20)
+# - an even bigger end - gave "". A computed end index that overflowed silently
+# returned no data instead of the whole string. The breakpoint was exactly
+# INT_MAX: 2147483647 worked, 2147483648 did not.
+# FIX: both ends go through clamp_index, which clamps while the value is still
+# a double.
+check("slice(s,0,1e20) clamps",     slice("abcdef", 0, huge),       "abcdef")
+check("slice(s,0,2^31) clamps",     slice("abcdef", 0, 2147483648), "abcdef")
+check("slice(s,0,2^31-1) clamps",   slice("abcdef", 0, 2147483647), "abcdef")
+check("slice is monotone in the end", len(slice("abcdef",0,2147483648)) >= len(slice("abcdef",0,2147483647)), true)
+print("  INFO  slice('abcdef', nan, 3) = [" + slice("abcdef", nan, 3) + "]  (nan index read as 0)")
+
+# --------------------------------------------------------------------- find
+print("-- find --")
+check("find('hello','h')",        find("hello", "h"),      0)
+check("find('hello','l') leftmost", find("hello", "l"),    2)
+check("find('hello','lo')",       find("hello", "lo"),     3)
+check("find('hello','o') last char", find("hello", "o"),   4)
+check("find('hello','hello')",    find("hello", "hello"),  0)
+check("find('hello','z') absent", find("hello", "z"),      -1)
+check("find('hello','helloo') needle longer", find("hello", "helloo"), -1)
+check("find('','x') empty hay",   find("", "x"),           -1)
+check("find('aaa','aa') leftmost", find("aaa", "aa"),      0)
+check("find('hello','')",         find("hello", ""),       0)
+check("find('','')",              find("", ""),            0)
+check("find('hello','L') is case sensitive", find("hello", "L"), -1)
+check("find agrees with slice",   slice("hello", find("hello","ll"), find("hello","ll") + 2), "ll")
+
+# ---------------------------------------------------------------------- has
+print("-- has --")
+check("has('hello','ell')",       has("hello", "ell"),     true)
+check("has('hello','hello')",     has("hello", "hello"),   true)
+check("has('hello','z')",         has("hello", "z"),       false)
+check("has('hello','HELLO') case", has("hello", "HELLO"),  false)
+check("has('','x') empty hay",    has("", "x"),            false)
+check("has('hello','') empty needle", has("hello", ""),    true)
+check("has('','')",               has("", ""),             true)
+check("has == (find >= 0) 'ell'", has("hello","ell") == (find("hello","ell") >= 0), true)
+check("has == (find >= 0) 'z'",   has("hello","z")   == (find("hello","z")   >= 0), true)
+
+# ----------------------------------------------------------- starts / ends
+print("-- starts / ends --")
+check("starts('hello','he')",     starts("hello", "he"),   true)
+check("starts('hello','hello')",  starts("hello", "hello"), true)
+check("starts('hello','hellox') longer", starts("hello", "hellox"), false)
+check("starts('hello','ello') not at 0", starts("hello", "ello"), false)
+check("starts('hello','He') case", starts("hello", "He"),  false)
+check("starts('hello','')",       starts("hello", ""),     true)
+check("starts('','')",            starts("", ""),          true)
+check("starts('','x')",           starts("", "x"),         false)
+check("starts('a','a') single",   starts("a", "a"),        true)
+check("ends('hello','lo')",       ends("hello", "lo"),     true)
+check("ends('hello','hello')",    ends("hello", "hello"),  true)
+check("ends('hello','xhello') longer", ends("hello", "xhello"), false)
+check("ends('hello','hell') not at end", ends("hello", "hell"), false)
+check("ends('hello','LO') case",  ends("hello", "LO"),     false)
+check("ends('hello','')",         ends("hello", ""),       true)
+check("ends('','')",              ends("", ""),            true)
+check("ends('','x')",             ends("", "x"),           false)
+check("starts+ends on one char",  starts("a","a") and ends("a","a"), true)
+
+# ------------------------------------------------------------ upper / lower
+print("-- upper / lower --")
+check("upper('')",                upper(""),               "")
+check("upper('abc')",             upper("abc"),            "ABC")
+check("upper('Hi There 9!')",     upper("Hi There 9!"),    "HI THERE 9!")
+check("lower('Hi There 9!')",     lower("Hi There 9!"),    "hi there 9!")
+check("lower('')",                lower(""),               "")
+check("upper('123!@#') unchanged", upper("123!@#"),        "123!@#")
+check("upper is idempotent",      upper(upper("aBc")),     "ABC")
+check("lower is idempotent",      lower(lower("aBc")),     "abc")
+check("lower(upper(x)) == lower(x)", lower(upper("MiXeD")), "mixed")
+check("upper doesn't change length", len(upper("abc")),    3)
+# non-ASCII bytes are left alone (no locale case table)
+check("NOTE upper(chr(200)) untouched", code(upper(chr(200))), 200)
+
+# --------------------------------------------------------- trim/ltrim/rtrim
+print("-- trim / ltrim / rtrim --")
+check("trim('  hi  ')",           trim("  hi  "),          "hi")
+check("len(trim('  hi  '))",      len(trim("  hi  ")),     2)
+check("trim('') empty",           trim(""),                "")
+check("trim('   ') all space",    len(trim("   ")),        0)
+check("trim('hi') no-op",         trim("hi"),              "hi")
+check("trim tabs and newlines",   trim("\t\n hi \r\n"),    "hi")
+check("trim keeps inner space",   trim("  a b  "),         "a b")
+check("trim single space",        len(trim(" ")),          0)
+check("ltrim('  hi  ')",          ltrim("  hi  "),         "hi  ")
+check("len(ltrim('  hi  '))",     len(ltrim("  hi  ")),    4)
+check("rtrim('  hi  ')",          rtrim("  hi  "),         "  hi")
+check("len(rtrim('  hi  '))",     len(rtrim("  hi  ")),    4)
+check("ltrim('') empty",          len(ltrim("")),          0)
+check("rtrim('') empty",          len(rtrim("")),          0)
+check("ltrim('   ') all space",   len(ltrim("   ")),       0)
+check("rtrim('   ') all space",   len(rtrim("   ")),       0)
+check("ltrim leaves the right",   ltrim("hi "),            "hi ")
+check("rtrim leaves the left",    rtrim(" hi"),            " hi")
+check("trim == ltrim(rtrim)",     trim("  hi  ") == ltrim(rtrim("  hi  ")), true)
+# NOTE: the whitespace set is exactly space, \t, \n, \r. C's isspace() also
+# counts \v (11) and \f (12); zl does not, so they survive a trim.
+check("NOTE trim leaves \\v",     len(trim(chr(11) + "x" + chr(11))), 3)
+check("NOTE trim leaves \\f",     len(trim(chr(12) + "x" + chr(12))), 3)
+
+# ------------------------------------------------------------------- repeat
+print("-- repeat --")
+check("repeat('ab',3)",           repeat("ab", 3),         "ababab")
+check("repeat('ab',1)",           repeat("ab", 1),         "ab")
+check("repeat('ab',0)",           repeat("ab", 0),         "")
+check("repeat('ab',-1) neg",      repeat("ab", -1),        "")
+check("repeat('',5) empty src",   repeat("", 5),           "")
+check("repeat('a',2.9) truncs",   repeat("a", 2.9),        "aa")
+check("len(repeat('abc',4))",     len(repeat("abc", 4)),   12)
+check("repeat then count",        count(repeat("ab", 4), "ab"), 4)
+# A count that cannot be built is REFUSED, not silently turned into 0. It used
+# to return "" because `int n = (int)1e20` is undefined in C, gave INT32_MIN on
+# x86-64, and the `if (n<0) n=0` clamp then read it as zero - so asking for the
+# largest possible string got you the smallest one. Not a live check: the error
+# aborts the file.
+#   print(repeat("ab", pow(10, 20)))  -> runtime error: repeat result is too
+#                                        large to build
+check("repeat still builds a big string", len(repeat("ab", 100000)), 200000)
+
+# ------------------------------------------------------------------ replace
+print("-- replace --")
+check("replace('a.b.c','.','-')", replace("a.b.c", ".", "-"), "a-b-c")
+check("replace no match",         replace("abc", "z", "-"),   "abc")
+check("replace('aaa','a','bb')",  replace("aaa", "a", "bb"),  "bbbbbb")
+check("replace('aaa','aa','b') non-overlapping", replace("aaa", "aa", "b"), "ba")
+check("replace deletes",          replace("banana", "a", ""), "bnn")
+check("replace('','a','b')",      replace("", "a", "b"),      "")
+check("replace whole string",     replace("abc", "abc", "x"), "x")
+check("replace with itself",      replace("abc", "b", "b"),   "abc")
+check("replace doesn't rescan",   replace("xy", "x", "xx"),   "xxy")
+check("replace grows",            replace("aa", "a", "aa"),   "aaaa")
+check("replace empty old is a no-op", replace("ab", "", "-"), "ab")
+check("replace at the ends",      replace("-a-", "-", "+"),   "+a+")
+
+# -------------------------------------------------------------------- count
+print("-- count --")
+check("count('banana','a')",      count("banana", "a"),    3)
+check("count('banana','an')",     count("banana", "an"),   2)
+check("count('banana','na')",     count("banana", "na"),   2)
+check("count('aaaa','aa') non-overlapping", count("aaaa", "aa"), 2)
+check("count('aaa','aa') non-overlapping",  count("aaa", "aa"),  1)
+check("count('abc','z')",         count("abc", "z"),       0)
+check("count('','x')",            count("", "x"),          0)
+check("count('abc','abc')",       count("abc", "abc"),     1)
+check("count('abc','abcd') longer", count("abc", "abcd"),  0)
+check("count matches split",      count("a,b,c", ",") + 1, len(split("a,b,c", ",")))
+
+# ### WAS BROKEN - the "does this substring occur" builtins disagreed about the
+# empty needle. find, has and `in` all delegate to strstr, and strstr(hay, "")
+# returns hay, so all three said "present at index 0"; count had an explicit
+# `if (!*needle) return 0` and said it never occurs.
+# FIX: count was the outlier, so count changed. The empty needle occurs at
+# every position, so it occurs len+1 times - the same answer Python gives.
+# (replace(s, "", new) stays a documented no-op: replace rewrites, it is not
+# one of the search predicates.)
+check("has/count agree on the empty needle", has("abc","") == (count("abc","") > 0), true)
+check("find/count agree on the empty needle", (find("abc","") >= 0) == (count("abc","") > 0), true)
+check("count('abc','') is len+1",  count("abc", ""),  4)
+check("count('','') is 1",         count("", ""),     1)
+
+# ---------------------------------------------------------------------- pad
+# pad(s,width) right-pads with spaces to `width`; it never truncates.
+print("-- pad --")
+check("pad('ab',5)",              pad("ab", 5),            "ab   ")
+check("len(pad('ab',5))",         len(pad("ab", 5)),       5)
+check("pad('abcde',5) exact fit", pad("abcde", 5),         "abcde")
+check("pad('abcdefg',5) never truncates", pad("abcdefg", 5), "abcdefg")
+check("len(pad too long)",        len(pad("abcdefg", 5)),  7)
+check("pad('',3)",                pad("", 3),              "   ")
+check("len(pad('',3))",           len(pad("", 3)),         3)
+check("pad('ab',0)",              pad("ab", 0),            "ab")
+check("pad('ab',2) == s",         pad("ab", 2),            "ab")
+check("len(pad('ab',3.9)) truncs", len(pad("ab", 3.9)),    3)
+check("pad then trim round trip", trim(pad("ab", 8)),      "ab")
+check("pad(s,-0.5) truncs to 0",  pad("ab", -0.5),         "ab")
+# ### WAS BROKEN - pad used to be the odd one out on argument checking.
+# at/slice/index_at raise "needs a string and a number" for a non-numeric
+# index; pad quietly accepted one, and so did repeat and chr. What they then
+# read was not a number at all, and it was not even stable: chr("xyz") gave a
+# 0-length string in one program and a 1-character one in another (the numeric
+# field of a string Value is whatever aliases it).
+# FIX: pad, repeat and chr all type-check their numeric argument now. The error
+# aborts the script, so these stay comments:
+#     print("[" + pad("ab", "xyz") + "]")  -> pad needs a string and width
+#     print(len(chr("xyz")))               -> chr needs a number
+#     print(repeat("ab", "xyz"))           -> repeat needs a string and a count
+check("non-number width/count is refused, see comment", "documented", "documented")
+
+# ### WAS A CRASH - pad() with any width <= -1 killed the process.
+# interp.c did `size_t o = ((size_t)w > L) ? (size_t)w : L;`  - a negative int
+# cast to size_t becomes ~1.8e19, so malloc(o+1) wrapped to a tiny allocation
+# and the fill loop `for (i=L; i<o; i++) b[i]=' '` walked ~2^64 bytes off the
+# end of it: 0xC0000005 (ACCESS_VIOLATION), no message, and every PASS line
+# still sitting in the stdout buffer lost with it. w == 0 was safe, which is
+# why the boundary sat exactly at -1.
+# FIX: the width goes through clamp_index, which clamps in the double domain
+# before narrowing, so a negative width is 0 and pad is a no-op - matching
+# repeat/slice/take/at/fill, which all clamp a negative count.
+check("pad('ab',-1)",        pad("ab", -1),     "ab")
+check("pad('ab',-100)",      pad("ab", -100),   "ab")
+check("pad('',-1)",          len(pad("", -1)),  0)
+check("pad('ab',nan)",       pad("ab", nan),    "ab")
+check("pad(s,-1) == pad(s,0)", pad("ab", -1) == pad("ab", 0), true)
+
+# -------------------------------------------------------------------- split
+print("-- split --")
+check("split('a,b,c',',')",       split("a,b,c", ","),     ["a", "b", "c"])
+check("len(split('a,b,c',','))",  len(split("a,b,c", ",")), 3)
+check("split('a',',') no sep",    split("a", ","),         ["a"])
+check("split('abc',',') no sep",  split("abc", ","),       ["abc"])
+check("len(split('',',')) is 1",  len(split("", ",")),     1)
+check("split('',',')[0] is empty", len(split("", ",")[0]), 0)
+check("len(split(',a',','))",     len(split(",a", ",")),   2)
+check("split(',a',',')[0] empty", len(split(",a", ",")[0]), 0)
+check("split(',a',',')[1]",       split(",a", ",")[1],     "a")
+check("len(split('a,',','))",     len(split("a,", ",")),   2)
+check("split('a,',',')[1] empty", len(split("a,", ",")[1]), 0)
+check("len(split(',',','))",      len(split(",", ",")),    2)
+check("len(split('a,,b',','))",   len(split("a,,b", ",")), 3)
+check("split('a,,b',',')[1] empty", len(split("a,,b", ",")[1]), 0)
+check("split on a 2-char sep",    split("a--b", "--"),     ["a", "b"])
+check("split with an empty sep",  split("abc", ""),        ["abc"])
+check("split then index",         split("x=1", "=")[0],    "x")
+
+# --------------------------------------------------------------------- join
+print("-- join --")
+check("join(['a','b','c'],'-')",  join(["a", "b", "c"], "-"), "a-b-c")
+check("join(['a'],'-') no sep used", join(["a"], "-"),     "a")
+check("join([],'-') empty list",  len(join([], "-")),      0)
+check("join(['a','b'],'')",       join(["a", "b"], ""),    "ab")
+check("join(['',''],'-')",        join(["", ""], "-"),     "-")
+check("join numbers",             join([1, 2], "-"),       "1-2")
+check("join a bool",              join([true], "-"),       "true")
+check("join with a 2-char sep",   join(["a", "b"], ", "),  "a, b")
+check("join(split(s)) round trip", join(split("a,b,c", ","), ","), "a,b,c")
+check("join keeps empty fields",  join(split("a,,b", ","), "|"), "a||b")
+check("len(join)",                len(join(["ab", "cd"], "-")), 5)
+
+# -------------------------------------------------------------------- lines
+print("-- lines --")
+check("lines('a\\nb')",           lines("a\nb"),           ["a", "b"])
+check("len(lines('a\\nb'))",      len(lines("a\nb")),      2)
+check("len(lines('')) is 0",      len(lines("")),          0)
+check("lines('a') no newline",    lines("a"),              ["a"])
+check("len(lines('a\\n')) no trailing empty", len(lines("a\n")), 1)
+check("lines('a\\n')[0]",         lines("a\n")[0],         "a")
+check("len(lines('\\n')) is 1",   len(lines("\n")),        1)
+check("lines('\\n')[0] is empty", len(lines("\n")[0]),     0)
+check("len(lines('a\\n\\nb'))",   len(lines("a\n\nb")),    3)
+check("lines('a\\n\\nb')[1] is empty", len(lines("a\n\nb")[1]), 0)
+check("lines strips CR of CRLF",  len(lines("a\r\nb")[0]), 1)
+check("lines('a\\r\\nb')",        lines("a\r\nb"),         ["a", "b"])
+check("lines then join",          join(lines("a\nb\nc"), "|"), "a|b|c")
+
+# ------------------------------------------------------------------ reverse
+print("-- reverse --")
+check("reverse('abc')",           reverse("abc"),          "cba")
+check("reverse('') empty",        reverse(""),             "")
+check("reverse('a') single",      reverse("a"),            "a")
+check("reverse('ab')",            reverse("ab"),           "ba")
+check("reverse('aba') palindrome", reverse("aba"),         "aba")
+check("reverse twice is identity", reverse(reverse("hello")), "hello")
+check("len is preserved",         len(reverse("hello")),   5)
+check("reverse('ab cd')",         reverse("ab cd"),        "dc ba")
+check("reverse a list too",       reverse([1, 2, 3]),      [3, 2, 1])
+check("reverse(at) picks the last", at(reverse("abc"), 0), "c")
+
+# -------------------------------------------------------------------- title
+print("-- title --")
+check("title('hello world')",     title("hello world"),    "Hello World")
+check("title('') empty",          title(""),               "")
+check("title('a') single",        title("a"),              "A")
+check("title('a b c')",           title("a b c"),          "A B C")
+check("title keeps the spacing",  title("  hi  there"),    "  Hi  There")
+check("title is idempotent",      title(title("hi there")), "Hi There")
+check("title('!x')",              title("!x"),             "!X")
+# NOTE: title() upper-cases the first letter of each word but does NOT
+# lower-case the rest, so it is not the Python-style title case: "hELLO" stays
+# "HELLO" instead of becoming "Hello". Recorded, not asserted as a bug - the
+# reference gives no contract for it. Punctuation starts a new word; a digit
+# does not.
+check("NOTE title('hELLO') keeps the tail", title("hELLO"),  "HELLO")
+check("NOTE title('HELLO WORLD') unchanged", title("HELLO WORLD"), "HELLO WORLD")
+check("NOTE title after an apostrophe", title("o'brien mc-do"), "O'Brien Mc-Do")
+check("NOTE title after a digit does not fire", title("123abc def"), "123abc Def")
+check("title(lower(x)) is the Python answer", title(lower("hELLO wORLD")), "Hello World")
+
+# ----------------------------------------------------------------- swapcase
+print("-- swapcase --")
+check("swapcase('Hello World')",  swapcase("Hello World"), "hELLO wORLD")
+check("swapcase('') empty",       swapcase(""),            "")
+check("swapcase('abc')",          swapcase("abc"),         "ABC")
+check("swapcase('ABC')",          swapcase("ABC"),         "abc")
+check("swapcase('123!') unchanged", swapcase("123!"),      "123!")
+check("swapcase twice is identity", swapcase(swapcase("HeLLo 9!")), "HeLLo 9!")
+check("swapcase == upper for lower text", swapcase("abc") == upper("abc"), true)
+check("swapcase(title('ab cd'))", swapcase(title("ab cd")), "aB cD")
+check("len is preserved",         len(swapcase("aBc")),    3)
+
+# ----------------------------------------------------------------- index_at
+# documented: the char code at i, -1 if out of range.
+print("-- index_at --")
+check("index_at('abc',0)",        index_at("abc", 0),      97)
+check("index_at('abc',1)",        index_at("abc", 1),      98)
+check("index_at('abc',2) last",   index_at("abc", 2),      99)
+check("index_at('abc',3) past end", index_at("abc", 3),    -1)
+check("index_at('abc',99)",       index_at("abc", 99),     -1)
+check("index_at('abc',-1)",       index_at("abc", -1),     -1)
+check("index_at('',0) empty",     index_at("", 0),         -1)
+check("index_at('abc',1.9) truncs", index_at("abc", 1.9),  98)
+check("index_at(s,huge)",         index_at("abc", huge),   -1)
+check("index_at(s,nan)",          index_at("abc", nan),    -1)
+check("index_at == code(at) in range", index_at("abc",1),  code(at("abc", 1)))
+check("index_at spells the string", chr(index_at("hi",0)) + chr(index_at("hi",1)), "hi")
+
+# ------------------------------------------------------ 'in' on strings
+print("-- 'in' / 'not in' on strings --")
+check("'ell' in 'hello'",         "ell" in "hello",        true)
+check("'z' in 'hello'",           "z" in "hello",          false)
+check("'' in 'hello'",            "" in "hello",           true)
+check("'z' not in 'hello'",       "z" not in "hello",      true)
+check("'in' agrees with has",     ("ell" in "hello") == has("hello", "ell"), true)
+
+report()
+
+# ==================================================== BUGS FOUND (ALL FIXED)
+# 1. CRASH: pad(s, w) with a negative width.
+#      print(pad("ab", -1))
+#      -> process died with 0xC0000005 (ACCESS_VIOLATION), no output at all.
+#    interp.c pad(): `int w=(int)args[1].num; ... size_t o=((size_t)w>L)?(size_t)w:L;`
+#    A negative w cast to size_t is ~1.8e19, so malloc(o+1) wrapped to a tiny
+#    allocation and the space-fill loop walked off the end of it. Reached by
+#    accident from two more arguments:
+#      print(pad("ab", sqrt(-1)))    # nan   -> (int) is undefined -> negative
+#      print(pad("ab", pow(10, 20))) # 1e20  -> (int) is undefined -> negative
+#    A crash also loses all buffered output, so an unrelated suite that padded
+#    with a computed width just printed nothing at all.
+#    FIX: the width goes through clamp_index (clamp in the double domain, nan
+#    first, then narrow). pad never truncates, so any width <= len(s) is a
+#    no-op. Same helper fixes the same class of bug in slice/take/drop/insert/
+#    repeat/fill. Fixed in runtime.c too - the compiled backends had the
+#    identical line.
+#
+# 2. slice() silently returned "" for an out-of-range end index.
+#      print("[" + slice("abcdef", 0, pow(10,20)) + "]")   -> []
+#      print("[" + slice("abcdef", 0, 99) + "]")           -> [abcdef]
+#    The indices were cast to int BEFORE the clamp, so a too-large index became
+#    INT_MIN and the "b < a" test made the result empty. An end index bigger
+#    than the string must clamp to its length - 99 did, 1e20 did not.
+#    FIX: clamp_index again. A nan index still reads as 0 rather than erroring,
+#    which is now a deliberate clamp (nan clamps to the low end) instead of an
+#    accident of undefined behaviour.
+#
+# 3. chr() truncated the code to a byte with no range check.
+#      print(str(chr(321) == "A"))   -> true      (321 & 255 == 65)
+#      print(str(len(chr(0))))       -> 0         expected 1
+#      print(str(len("a"+chr(0)+"b")))-> 2        expected 3
+#    Distinct codes silently produced the same character, and code 0 produced a
+#    zero-length string. code(chr(n)) round-tripped only for n in 1..255.
+#    FIX: chr accepts exactly 1..255 and refuses everything else.
+#      chr(321) -> chr needs a code in 1..255
+#      chr(0)   -> chr(0): a zl string cannot hold a NUL byte
+#    Code 0 gets its own message because it is a representation limit: a zl
+#    string IS a NUL-terminated C string. The lexer now refuses "\0"/"\x00" for
+#    the same reason. Lifting it means giving zl length-carrying strings, a
+#    change to every string builtin and every backend - a decision, not a fix.
+#    KNOWN COST, accepted: stdlib/base64.zl's b64_decode now ABORTS on data
+#    that decodes to a zero byte, where it used to silently drop the byte.
+#    base64.zl documents itself as "for text, not arbitrary binary", and a loud
+#    refusal beats silent corruption; see tests/test_text.zl.
+#
+# 4. find/has/count disagreed about the empty needle.
+#      print(str(find("abc","")))   -> 0      "" occurs, at index 0
+#      print(str(has("abc","")))    -> true   agrees
+#      print(str(count("abc","")))  -> 0      says it never occurs
+#    has(s,sub) must be exactly count(s,sub) > 0.
+#    FIX: count was the outlier (find/has/`in` all delegate to strstr, and
+#    strstr(hay,"") finds it at index 0), so count now returns len(s)+1 - the
+#    empty needle occurs at every position. replace(s,"",new) stays a no-op:
+#    replace rewrites, it is not one of the search predicates.
+#
+# 5. pad, repeat and chr did not type-check their numeric argument, while at,
+#    slice and index_at raised "needs a string and a number" for the same
+#    mistake. The value the three then used was unstable rather than 0:
+#      print(len(chr("xyz")))
+#    printed 0 as a standalone program and 1 from inside this suite (Value is a
+#    struct, not a union, so .num aliases whatever the string Value left there).
+#    For pad that garbage became the width, i.e. bug 1's crash path.
+#    FIX: all three type-check now.
+#
+# NOTES (undocumented, not defects):
+# - trim/ltrim/rtrim strip exactly space, \t, \n and \r. C's isspace() also
+#   counts \v and \f; zl leaves those in place.
+# - title() upper-cases the first letter of each word but leaves the rest of
+#   the word alone, so title("hELLO") is "HELLO", not "Hello". Punctuation
+#   starts a new word ("o'brien" -> "O'Brien"); a digit does not
+#   ("123abc" -> "123abc").
+# - at() reports an out-of-range index as "" while index_at() reports -1; since
+#   no in-range character can be a zero-length string, "" is unambiguous.

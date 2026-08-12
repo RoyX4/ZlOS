@@ -1,0 +1,305 @@
+# ansi.zl - ANSI/VT terminal escape codes: colour, style, cursor, screen.
+#
+# Representation: every function returns a plain zl string. There is no
+# terminal state object and nothing is printed for you - a "colour" is just
+# text with an escape sequence glued on either side, so results compose with
+# + like any other string and can be stored, padded or written to a file.
+#
+# All sequences here are CSI sequences: ESC "[" params final-letter, where
+# ESC is chr(27), written below with the \x1b escape. SGR (the "m" final)
+# carries colour and style; the other finals move the cursor or clear.
+#
+# Colours are named, not numeric. colour()/bg() take one of the eight ANSI
+# names - black red green yellow blue magenta cyan white - optionally with a
+# "bright_" prefix, giving 16 in each of foreground (30-37 / 90-97) and
+# background (40-47 / 100-107). Beyond that, fg256()/bg256() take an index
+# into the 256-colour palette and rgb()/bg_rgb() take 24-bit truecolour.
+#
+# An unknown colour or style name is not an error: the text comes back
+# unwrapped. A styling helper should never be the thing that kills a program.
+#
+# Because escape codes are invisible characters, len() overcounts a coloured
+# string. strip_ansi() removes the sequences and visible_len() measures what
+# the reader actually sees - use it wherever you would otherwise pad or align.
+
+ESC = "\x1b"
+CSI = "\x1b["
+RESET = "\x1b[0m"
+
+COLOUR_NAMES = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"]
+STYLE_NAMES = ["reset", "bold", "dim", "italic", "underline", "blink", "reverse", "hidden", "strike"]
+STYLE_CODES = [0, 1, 2, 3, 4, 5, 7, 8, 9]
+
+# --- codes ------------------------------------------------------------
+
+fn sgr(n) {
+    return CSI + str(int(n)) + "m"
+}
+fn colour_code(name) {
+    base = 30
+    bare = name
+    if starts(name, "bright_") {
+        base = 90
+        bare = slice(name, 7, len(name))
+    }
+    i = index_of(COLOUR_NAMES, bare)
+    if i < 0 {
+        return -1
+    }
+    return base + i
+}
+fn bg_code(name) {
+    c = colour_code(name)
+    if c < 0 {
+        return -1
+    }
+    return c + 10
+}
+fn style_code(name) {
+    i = index_of(STYLE_NAMES, name)
+    if i < 0 {
+        return -1
+    }
+    return STYLE_CODES[i]
+}
+
+# --- wrapping ---------------------------------------------------------
+
+fn colour(s, name) {
+    c = colour_code(name)
+    return c < 0 ? s : sgr(c) + s + RESET
+}
+fn bg(s, name) {
+    c = bg_code(name)
+    return c < 0 ? s : sgr(c) + s + RESET
+}
+fn style(s, name) {
+    c = style_code(name)
+    return c < 0 ? s : sgr(c) + s + RESET
+}
+fn fg256(s, n) {
+    return CSI + "38;5;" + str(int(clamp(n, 0, 255))) + "m" + s + RESET
+}
+fn bg256(s, n) {
+    return CSI + "48;5;" + str(int(clamp(n, 0, 255))) + "m" + s + RESET
+}
+fn rgb(s, r, g, b) {
+    p = str(int(clamp(r, 0, 255))) + ";" + str(int(clamp(g, 0, 255))) + ";" + str(int(clamp(b, 0, 255)))
+    return CSI + "38;2;" + p + "m" + s + RESET
+}
+fn bg_rgb(s, r, g, b) {
+    p = str(int(clamp(r, 0, 255))) + ";" + str(int(clamp(g, 0, 255))) + ";" + str(int(clamp(b, 0, 255)))
+    return CSI + "48;2;" + p + "m" + s + RESET
+}
+
+# --- cursor and screen ------------------------------------------------
+
+fn cursor_up(n) {
+    return CSI + str(int(n)) + "A"
+}
+fn cursor_down(n) {
+    return CSI + str(int(n)) + "B"
+}
+fn cursor_right(n) {
+    return CSI + str(int(n)) + "C"
+}
+fn cursor_left(n) {
+    return CSI + str(int(n)) + "D"
+}
+fn cursor_goto(row, col) {
+    return CSI + str(int(row)) + ";" + str(int(col)) + "H"
+}
+fn cursor_save() {
+    return CSI + "s"
+}
+fn cursor_restore() {
+    return CSI + "u"
+}
+fn cursor_hide() {
+    return CSI + "?25l"
+}
+fn cursor_show() {
+    return CSI + "?25h"
+}
+fn clear_screen() {
+    return CSI + "2J" + CSI + "H"
+}
+fn clear_line() {
+    return CSI + "2K" + "\r"
+}
+
+# --- measuring --------------------------------------------------------
+
+# Drop every escape sequence. A CSI run ends at its final byte (0x40-0x7E);
+# any other escape is assumed to be the two-character kind (e.g. ESC 7).
+fn strip_ansi(s) {
+    out = ""
+    n = len(s)
+    i = 0
+    while i < n {
+        if code(at(s, i)) != 27 {
+            out = out + at(s, i)
+            i = i + 1
+            continue
+        }
+        i = i + 1
+        if i >= n {
+            break
+        }
+        if at(s, i) != "[" {
+            i = i + 1
+            continue
+        }
+        i = i + 1
+        while i < n {
+            c = code(at(s, i))
+            i = i + 1
+            if c >= 64 and c <= 126 {
+                break
+            }
+        }
+    }
+    return out
+}
+fn visible_len(s) {
+    return len(strip_ansi(s))
+}
+
+# --- demo -------------------------------------------------------------
+
+# Print a sequence with the invisible ESC spelled out, so it can be read.
+fn readable(s) {
+    return replace(s, ESC, "ESC")
+}
+fn progress_bar(frac, width) {
+    f = clamp(frac, 0, 1)
+    filled = int(f * width)
+    done = bg(repeat(" ", filled), "green")
+    todo = bg(repeat(" ", width - filled), "bright_black")
+    pct = str(int(f * 100 + 0.5)) + "%"
+    return "[" + done + todo + "] " + colour(pad(pct, 4), "bright_white")
+}
+
+print("-- codes ------------------------------------------------")
+print("colour_code red / bright_red:  " + str(colour_code("red")) + " " + str(colour_code("bright_red")))
+print("bg_code     red / bright_red:  " + str(bg_code("red")) + " " + str(bg_code("bright_red")))
+print("style_code  bold / reverse:    " + str(style_code("bold")) + " " + str(style_code("reverse")))
+print("unknown name -> -1:            " + str(colour_code("puce")) + " " + str(style_code("swirly")))
+print("colour(\"hi\",\"red\")   = " + readable(colour("hi", "red")))
+print("bg(\"hi\",\"blue\")      = " + readable(bg("hi", "blue")))
+print("style(\"hi\",\"bold\")   = " + readable(style("hi", "bold")))
+print("fg256(\"hi\", 208)     = " + readable(fg256("hi", 208)))
+print("rgb(\"hi\",255,140,0)  = " + readable(rgb("hi", 255, 140, 0)))
+print("rgb clamps 300/-20    = " + readable(rgb("hi", 300, 0 - 20, 12)))
+print("unknown name passes through: [" + readable(colour("hi", "puce")) + "]")
+
+print("")
+print("-- cursor / screen --------------------------------------")
+print("cursor_up(3)     = " + readable(cursor_up(3)))
+print("cursor_down(1)   = " + readable(cursor_down(1)))
+print("cursor_right(12) = " + readable(cursor_right(12)))
+print("cursor_left(12)  = " + readable(cursor_left(12)))
+print("cursor_goto(5,9) = " + readable(cursor_goto(5, 9)))
+print("cursor_save()    = " + readable(cursor_save()))
+print("cursor_restore() = " + readable(cursor_restore()))
+print("cursor_hide()    = " + readable(cursor_hide()))
+print("cursor_show()    = " + readable(cursor_show()))
+print("clear_screen()   = " + readable(clear_screen()))
+print("clear_line()     = " + readable(clear_line()) + "(+CR)")
+
+print("")
+print("-- measuring --------------------------------------------")
+plain = "hello"
+fancy = style(colour("hello", "red"), "bold")
+print("fancy               = " + readable(fancy))
+print("len(plain) / len(fancy):     " + str(len(plain)) + " " + str(len(fancy)))
+print("strip_ansi(fancy):           [" + strip_ansi(fancy) + "]")
+print("visible_len(fancy):          " + str(visible_len(fancy)))
+mixed = cursor_goto(2, 3) + fg256("ab", 208) + cursor_hide() + "!"
+print("mixed               = " + readable(mixed))
+print("strip_ansi(mixed):           [" + strip_ansi(mixed) + "]  visible_len " + str(visible_len(mixed)))
+
+print("")
+print("-- colour chart: 16 foreground ---------------------------")
+row = ""
+for name in COLOUR_NAMES {
+    row = row + colour(pad(name, 9), name)
+}
+print(row)
+row = ""
+for name in COLOUR_NAMES {
+    row = row + colour(pad("bright", 9), "bright_" + name)
+}
+print(row)
+
+print("-- colour chart: 16 background ---------------------------")
+row = ""
+for name in COLOUR_NAMES {
+    row = row + bg(pad(" " + name, 9), name)
+}
+print(row)
+row = ""
+for name in COLOUR_NAMES {
+    row = row + bg(pad(" bright", 9), "bright_" + name)
+}
+print(row)
+
+print("-- colour chart: styles ----------------------------------")
+row = ""
+for name in STYLE_NAMES {
+    if name != "reset" {
+        row = row + style(pad(name, 10), name)
+    }
+}
+print(row)
+
+print("-- colour chart: 256-colour cube (16-231) ----------------")
+r = 0
+while r < 6 {
+    row = ""
+    c = 0
+    while c < 36 {
+        row = row + bg256("  ", 16 + r * 36 + c)
+        c = c + 1
+    }
+    print(row)
+    r = r + 1
+}
+print("-- colour chart: greyscale ramp (232-255) ----------------")
+row = ""
+n = 232
+while n < 256 {
+    row = row + bg256("  ", n)
+    n = n + 1
+}
+print(row)
+print("-- colour chart: truecolour red->blue --------------------")
+row = ""
+i = 0
+while i < 24 {
+    row = row + bg_rgb("  ", 255 - i * 11, 0, i * 11)
+    i = i + 1
+}
+print(row)
+
+print("")
+print("-- progress bar ------------------------------------------")
+for f in [0, 0.25, 0.5, 0.65, 0.9, 1] {
+    print(progress_bar(f, 30))
+}
+
+print("")
+print("-- self-check --------------------------------------------")
+assert(colour_code("red") == 31, "red fg is 31")
+assert(colour_code("bright_white") == 97, "bright white fg is 97")
+assert(bg_code("green") == 42, "green bg is 42")
+assert(bg_code("bright_black") == 100, "bright black bg is 100")
+assert(style_code("underline") == 4, "underline is 4")
+assert(colour("hi", "puce") == "hi", "unknown colour passes through")
+assert(len(colour("hi", "red")) == 11, "ESC[31m + hi + ESC[0m is 11 chars")
+assert(strip_ansi(colour("hi", "red")) == "hi", "strip leaves the text")
+assert(visible_len(fancy) == 5, "bold red hello is 5 wide")
+assert(visible_len(mixed) == 3, "ab! is 3 wide")
+assert(strip_ansi("no codes here") == "no codes here", "plain text untouched")
+assert(visible_len(progress_bar(0.5, 30)) == 37, "bar is 30 + brackets + space + 4")
+print("all assertions passed")

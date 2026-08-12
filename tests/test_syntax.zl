@@ -1,0 +1,804 @@
+# test_syntax.zl - test suite for the LANGUAGE itself, not the builtins.
+#
+#   if / elif / else · while + break + continue · for-in · recursion ·
+#   += -= *= /= %= · x[i] = v and x[i][j] = v · a ? b : c · in / not in ·
+#   string escapes \n \t \r \\ \" \xNN · f-strings incl. {{ }} and expressions
+#
+# Style follows stdlib/testlib.zl - check(label, got, want) / report().
+# zl has no import, so the harness is inlined (same as test_math.zl).
+#
+# Every `want` below was worked out by hand. Where the interpreter disagrees the
+# check is left FAILING on purpose and tagged "### FAILING" with the
+# expected-vs-actual reasoning; the BUGS block at the bottom collects them with
+# minimal repros. A green tick that hides a wrong answer is worth less than a
+# red one that names it.
+#
+# Naming discipline (forced by bug 1 at the bottom): every function parameter is
+# prefixed p_ and every variable created inside a function is prefixed q_, and
+# no global uses either prefix. Without that, calling a helper would silently
+# overwrite the globals this file is testing.
+
+g_pass = 0
+g_fail = 0
+
+fn check(label, got, want) {
+    if str(got) == str(want) {
+        g_pass = g_pass + 1
+        print("  PASS  " + label)
+    } else {
+        g_fail = g_fail + 1
+        print("  FAIL  " + label + "  got " + str(got) + " want " + str(want))
+    }
+}
+fn report() {
+    print("----")
+    print(str(g_pass) + " passed, " + str(g_fail) + " failed")
+    print(str(g_pass + g_fail) + " checks total")
+}
+
+# a side-effect counter, used to prove what does and does not get evaluated
+hits = 0
+fn bump(p_v) { hits += 1 return p_v }
+
+# =====================================================================
+# if / elif / else
+# =====================================================================
+print("-- if / elif / else --")
+
+fn grade(p_n) {
+    if p_n >= 90 { return "A" } elif p_n >= 80 { return "B" } elif p_n >= 70 { return "C" } else { return "F" }
+}
+check("if takes the first branch",   grade(95),     "A")
+check("elif takes the second",       grade(85),     "B")
+check("elif takes the third",        grade(75),     "C")
+check("else is the fallthrough",     grade(10),     "F")
+check("boundary 90 is A",            grade(90),     "A")   # >= is inclusive
+check("boundary 89.999 is B",        grade(89.999), "B")
+check("boundary 80 is B",            grade(80),     "B")
+check("boundary 70 is C",            grade(70),     "C")
+check("boundary 69.9 is F",          grade(69.9),   "F")
+check("negative input is F",         grade(-5),     "F")
+check("zero input is F",             grade(0),      "F")
+check("only one branch runs",        grade(95) + grade(85), "AB")
+
+# an if with no else, taken and not taken
+sink = "untouched"
+if 1 == 2 { sink = "changed" }
+check("if with no else, not taken",  sink, "untouched")
+if 1 == 1 { sink = "changed" }
+check("if with no else, taken",      sink, "changed")
+
+# an empty block is legal and does nothing
+sink2 = 0
+if true { } else { sink2 = 1 }
+check("empty then-block",            sink2, 0)
+
+# truthiness of the condition (no explicit bool required)
+fn truthy(p_v) { if p_v { return "t" } return "f" }
+fn nilval() { }                       # a fn with no return yields nil
+check("0 is falsy",                  truthy(0),        "f")
+check("1 is truthy",                 truthy(1),        "t")
+check("-1 is truthy",                truthy(-1),       "t")
+check("0.0000001 is truthy",         truthy(0.0000001), "t")
+check("empty string is falsy",       truthy(""),       "f")
+check("string 0 is truthy",          truthy("0"),      "t")
+check("a space is truthy",           truthy(" "),      "t")
+check("empty list is falsy",         truthy([]),       "f")
+check("list holding 0 is truthy",    truthy([0]),      "t")   # non-empty wins
+check("false is falsy",              truthy(false),    "f")
+check("true is truthy",              truthy(true),     "t")
+check("nil is falsy",                truthy(nilval()), "f")
+
+# nested if/else - the else binds to its own if
+fn quad(p_a, p_b) {
+    if p_a > 0 {
+        if p_b > 0 { return "Q1" } else { return "Q4" }
+    } else {
+        if p_b > 0 { return "Q2" } else { return "Q3" }
+    }
+}
+check("nested if Q1",  quad(1, 1),   "Q1")
+check("nested if Q2",  quad(-1, 1),  "Q2")
+check("nested if Q3",  quad(-1, -1), "Q3")
+check("nested if Q4",  quad(1, -1),  "Q4")
+check("nested if zero", quad(0, 0),  "Q3")   # 0 > 0 is false on both
+
+# =====================================================================
+# while + break + continue
+# =====================================================================
+print("-- while / break / continue --")
+
+i = 0
+tot = 0
+while i < 10 { i += 1 tot += i }
+check("while sums 1..10",            tot, 55)
+check("while exits at the bound",    i,   10)
+
+c = 0
+while false { c += 1 }
+check("while false never runs",      c, 0)
+
+k = 10
+while k < 3 { k += 1 }
+check("condition false at entry",    k, 10)
+
+# a single-iteration loop
+one = 0
+while one < 1 { one += 1 }
+check("single iteration",            one, 1)
+
+# break on the very first pass
+n = 0
+while true {
+    break
+    n += 1
+}
+check("break before any work",       n, 0)
+
+# break out of the middle: 1+2+3+4 = 10, counter stops at 5
+s = 0
+i = 0
+while i < 100 {
+    i += 1
+    if i == 5 { break }
+    s += i
+}
+check("break mid-loop sum",          s, 10)
+check("break mid-loop counter",      i, 5)
+
+# continue skips the rest of the body: 1+3+5+7+9 = 25
+odds = 0
+i = 0
+while i < 10 {
+    i += 1
+    if i % 2 == 0 { continue }
+    odds += i
+}
+check("continue skips the evens",    odds, 25)
+
+# while true with a guard: 1..50 run, 16 of them (3,6,..48) are skipped
+kept = 0
+guard = 0
+while true {
+    guard += 1
+    if guard > 50 { break }
+    if guard % 3 == 0 { continue }
+    kept += 1
+}
+check("guarded while true, kept",    kept,  34)
+check("guarded while true, guard",   guard, 51)
+
+# an inner break leaves the outer loop running
+outer = 0
+inner_tot = 0
+i = 0
+while i < 3 {
+    i += 1
+    j = 0
+    while j < 10 { j += 1 if j == 2 { break } }
+    inner_tot += j
+    outer += 1
+}
+check("outer loop still ran 3x",     outer,     3)
+check("inner break stopped inner",   inner_tot, 6)     # 2 + 2 + 2
+
+# break inside an if inside a while, with a trailing statement after the if
+found = -1
+i = 0
+while i < 20 {
+    if i * i > 30 { found = i break }
+    i += 1
+}
+check("break from inside an if",     found, 6)          # 6*6=36 is the first > 30
+
+# =====================================================================
+# for-in
+# =====================================================================
+print("-- for-in --")
+
+tot = 0
+for v in [1, 2, 3, 4] { tot += v }
+check("for over a list literal",     tot, 10)
+
+tot = 0
+for v in [] { tot += 1 }
+check("for over an empty list",      tot, 0)
+
+tot = 0
+for v in [7] { tot += v }
+check("for over one element",        tot, 7)
+
+tot = 0
+for v in [-1, -2, -3] { tot += v }
+check("for over negatives",          tot, -6)
+
+acc = ""
+for w in ["a", "b", "c"] { acc += w }
+check("for over strings",            acc, "abc")
+
+tot = 0
+for v in range(4) { tot += v }
+check("for over range(4)",           tot, 6)            # 0+1+2+3
+
+tot = 0
+for v in range(0) { tot += 1 }
+check("for over range(0)",           tot, 0)
+
+tot = 0
+for v in range(5, 1) { tot += 1 }
+check("for over a backwards range",  tot, 0)            # range(5,1) is []
+
+# the loop variable survives the loop, holding the last element
+q = 99
+for q in [1, 2, 3] { }
+check("loop var after the loop",     q, 3)
+for q in [] { }
+check("empty loop leaves it alone",  q, 3)
+
+# break and continue in a for
+seen = ""
+for v in range(5) { if v == 2 { break } seen += str(v) }
+check("break in a for",              seen, "01")
+tot = 0
+for v in range(6) { if v % 2 == 1 { continue } tot += v }
+check("continue in a for",           tot, 6)            # 0+2+4
+
+# nested for: inner break does not leave the outer
+pairs = ""
+for a in range(3) {
+    for b in range(3) {
+        if b == 1 { break }
+        pairs += str(a) + str(b) + " "
+    }
+}
+check("nested for, inner break",     pairs, "00 10 20 ")
+
+# rows of a nested list are references, not copies
+m = [[1, 2, 3], [4, 5, 6]]
+tot = 0
+for row in m { for v in row { tot += v } }
+check("sum of a nested list",        tot, 21)
+for row in m { row[0] = 0 }
+check("for-in yields live rows",     m, [[0, 2, 3], [0, 5, 6]])
+
+# the iterated sequence is bound once: rebinding the name mid-loop is ignored
+src = [1, 2, 3]
+count = 0
+for v in src {
+    count += 1
+    if count < 5 { src = concat(src, [v]) }
+}
+check("for iterates the bound list", count, 3)
+check("but the name was rebound",    len(src), 6)
+
+# =====================================================================
+# recursion
+# =====================================================================
+print("-- recursion --")
+
+fn fact(p_n) { if p_n <= 1 { return 1 } return p_n * fact(p_n - 1) }
+check("fact(0)",   fact(0),  1)          # base case
+check("fact(1)",   fact(1),  1)
+check("fact(2)",   fact(2),  2)
+check("fact(5)",   fact(5),  120)
+check("fact(10)",  fact(10), 3628800)
+check("fact(-3)",  fact(-3), 1)          # guard is <=, so negatives return 1
+
+fn fib(p_n) { if p_n < 2 { return p_n } return fib(p_n - 1) + fib(p_n - 2) }
+check("fib(0)",    fib(0),   0)
+check("fib(1)",    fib(1),   1)
+check("fib(10)",   fib(10),  55)
+check("fib(15)",   fib(15),  610)        # tree recursion, 1973 calls
+
+# mutual recursion
+fn is_even(p_n) { if p_n == 0 { return true } return is_odd(p_n - 1) }
+fn is_odd(p_n)  { if p_n == 0 { return false } return is_even(p_n - 1) }
+check("is_even(0)",  is_even(0),  true)
+check("is_even(10)", is_even(10), true)
+check("is_odd(7)",   is_odd(7),   true)
+check("is_even(7)",  is_even(7),  false)
+
+# recursion that walks a list
+fn rsum(p_xs, p_i) {
+    if p_i >= len(p_xs) { return 0 }
+    return p_xs[p_i] + rsum(p_xs, p_i + 1)
+}
+check("recursive sum, empty",  rsum([], 0),         0)
+check("recursive sum, one",    rsum([5], 0),        5)
+check("recursive sum, 1..10",  rsum(range(1, 11), 0), 55)
+check("recursive sum, 0..49",  rsum(range(50), 0),  1225)
+
+# recursion carrying an accumulator, and one that returns a string
+fn rrev(p_s) {
+    if len(p_s) <= 1 { return p_s }
+    return rrev(slice(p_s, 1, len(p_s))) + slice(p_s, 0, 1)
+}
+check("recursive reverse",       rrev("abcdef"), "fedcba")
+check("recursive reverse, empty", rrev(""),      "")
+
+fn rgcd(p_a, p_b) { if p_b == 0 { return p_a } return rgcd(p_b, p_a % p_b) }
+check("recursive gcd(48,36)",    rgcd(48, 36),   12)
+check("recursive gcd(17,5)",     rgcd(17, 5),    1)
+check("recursive gcd(9,0)",      rgcd(9, 0),     9)   # base case on the first call
+
+# plain linear recursion 100 deep still works (see BUG 2 for where it stops)
+fn depth(p_n) { if p_n == 0 { return 0 } return 1 + depth(p_n - 1) }
+check("recursion 100 frames deep", depth(100), 100)
+
+# =====================================================================
+# compound assignment  +=  -=  *=  /=  %=
+# =====================================================================
+print("-- compound assignment --")
+
+n = 10
+n += 5
+check("+= adds",          n, 15)
+n -= 3
+check("-= subtracts",     n, 12)
+n *= 2
+check("*= multiplies",    n, 24)
+n /= 6
+check("/= divides",       n, 4)
+n %= 3
+check("%= remainders",    n, 1)
+
+n = 3
+n -= 10
+check("-= into negative", n, -7)
+n *= -1
+check("*= by -1",         n, 7)
+n *= 0
+check("*= by zero",       n, 0)
+n += 0
+check("+= zero is a no-op", n, 0)
+
+n = 7
+n /= 2
+check("/= makes a fraction", n, 3.5)
+n = 7
+n /= 0
+check("/= by zero is inf", n, 1 / 0)
+
+n = -7
+n %= 3
+check("%= keeps the sign", n, -1)      # C-style: sign follows the dividend
+n = 7.5
+n %= 2
+check("%= truncates first", n, 1)      # 7.5 -> 7, then 7 % 2
+
+# strings
+s = "ab"
+s += "cd"
+check("+= joins strings",  s, "abcd")
+s = "n="
+s += 5
+check("string += number",  s, "n=5")
+n = 5
+n += "x"
+check("number += string",  n, "5x")    # + is a join as soon as one side is text
+
+# accumulating in a loop
+acc = 0
+for v in range(1, 5) { acc += v * v }
+check("+= in a loop",      acc, 30)    # 1+4+9+16
+
+# compound assignment through an index, flat and nested
+xs = [1, 2, 3]
+xs[0] += 10
+xs[2] -= 3
+check("+= through an index", xs, [11, 2, 0])
+g = [[1, 2], [3, 4]]
+g[0][1] *= 10
+g[1][0] -= 3
+g[1][1] /= 2
+check("compound on x[i][j]",  g, [[1, 20], [0, 2]])
+sl = ["a", "b"]
+sl[0] += "!"
+check("string += through index", sl, ["a!", "b"])
+
+# =====================================================================
+# index assignment, including nested
+# =====================================================================
+print("-- index assignment --")
+
+xs = [1, 2, 3]
+xs[0] = 9
+check("write the first slot",  xs, [9, 2, 3])
+xs[2] = 7
+check("write the last slot",   xs, [9, 2, 7])
+xs[len(xs) - 2] = 5
+check("computed index",        xs, [9, 5, 7])
+check("write does not resize", len(xs), 3)
+xs[1] = "text"
+check("a slot can change type", xs, [9, "text", 7])
+xs[1] = [1, 2]
+check("a slot can hold a list", xs, [9, [1, 2], 7])
+
+one = [0]
+one[0] = 42
+check("single-element list",   one, [42])
+
+xs = [1, 2, 3]
+xs[1.9] = 7
+check("index truncates to 1",  xs, [1, 7, 3])   # 1.9 -> 1, not 2
+
+grid = [[1, 2], [3, 4]]
+grid[0][1] = 77
+check("nested x[i][j] = v",    grid, [[1, 77], [3, 4]])
+grid[1] = [8, 9]
+check("replacing a whole row", grid, [[1, 77], [8, 9]])
+
+cube = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+cube[1][0][1] = 99
+check("three levels deep",     cube, [[[1, 2], [3, 4]], [[5, 99], [7, 8]]])
+cube[0][1][0] += 100
+check("compound three deep",   cube, [[[1, 2], [103, 4]], [[5, 99], [7, 8]]])
+
+# lists are references: assignment shares, it does not copy
+a = [1, 2, 3]
+b = a
+b[0] = 99
+check("b = a shares the list", a, [99, 2, 3])
+check("...and both see it",    b, [99, 2, 3])
+
+# NOTE, not a bug claim: fill(n, v) stores the SAME list n times, so writing
+# through one row writes through all of them. Recorded so a change is visible.
+shared = fill(2, fill(2, 0))
+shared[0][0] = 9
+check("NOTE fill shares its rows", shared, [[9, 0], [9, 0]])
+fresh = [[0, 0], [0, 0]]
+fresh[0][0] = 9
+check("a literal does not share",  fresh, [[9, 0], [0, 0]])
+
+# =====================================================================
+# ternary  a ? b : c
+# =====================================================================
+print("-- ternary --")
+
+check("ternary true branch",   true ? "y" : "n",  "y")
+check("ternary false branch",  false ? "y" : "n", "n")
+n = 5
+check("ternary on a compare",  n > 3 ? "big" : "small", "big")
+check("ternary the other way", n < 3 ? "big" : "small", "small")
+check("branches may differ in type", n > 3 ? 1 : "one", 1)
+
+# condition truthiness matches if
+check("0 picks the else",      0 ? "t" : "f",  "f")
+check("1 picks the then",      1 ? "t" : "f",  "t")
+check("empty string else",     "" ? "t" : "f", "f")
+check("nonempty string then",  "x" ? "t" : "f", "t")
+check("empty list else",       [] ? "t" : "f", "f")
+
+# nesting: chained in the else, and nested in the then
+fn describe(p_n) { return p_n < 0 ? "neg" : p_n == 0 ? "zero" : "pos" }
+check("chained ternary neg",   describe(-1), "neg")
+check("chained ternary zero",  describe(0),  "zero")
+check("chained ternary pos",   describe(5),  "pos")
+check("ternary inside a then", true ? false ? "a" : "b" : "c", "b")
+
+# precedence: the else arm swallows the whole arithmetic expression
+check("ternary inside a sum",  1 + (true ? 10 : 20), 11)
+check("then arm stops at :",   true ? 1 : 2 + 100,   1)
+check("else arm takes it all", false ? 1 : 2 + 100,  102)
+check("compare binds tighter", 2 + 3 > 4 ? "y" : "n", "y")
+
+# short-circuit: exactly one arm is evaluated
+hits = 0
+tern1 = true ? bump(1) : bump(2)
+check("then arm value",        tern1, 1)
+check("only the then arm ran", hits,  1)
+hits = 0
+tern2 = false ? bump(1) : bump(2)
+check("else arm value",        tern2, 2)
+check("only the else arm ran", hits,  1)
+
+# the practical payoff: the untaken arm may be illegal to evaluate.
+# xs[0] on an empty list is a hard runtime error, so this only works because
+# the then arm is never touched.
+xs = []
+check("ternary guards an empty list", len(xs) > 0 ? xs[0] : "default", "default")
+
+# =====================================================================
+# in / not in
+# =====================================================================
+print("-- in / not in --")
+
+check("in a list, present",      1 in [1, 2, 3],      true)
+check("in a list, absent",       4 in [1, 2, 3],      false)
+check("not in, absent",          4 not in [1, 2, 3],  true)
+check("not in, present",         1 not in [1, 2, 3],  false)
+check("in an empty list",        1 in [],             false)
+check("not in an empty list",    1 not in [],         true)
+check("in a one-element list",   7 in [7],            true)
+check("last element",            3 in [1, 2, 3],      true)
+check("strings in a list",       "a" in ["a", "b"],   true)
+check("bools in a list",         true in [true, false], true)
+check("in is type-strict",       1 in ["1"],          false)
+check("...both ways",            "1" in [1],          false)
+check("zero vs empty list",      0 in [],             false)
+
+check("substring present",       "ell" in "hello",    true)
+check("substring absent",        "z" in "hello",      false)
+check("in is case-sensitive",    "ELL" in "hello",    false)
+check("whole string in itself",  "hello" in "hello",  true)
+check("needle longer than hay",  "abc" in "ab",       false)
+check("empty needle",            "" in "hello",       true)
+check("empty in empty",          "" in "",            true)
+check("not in a string",         "z" not in "hello",  true)
+check("prefix",                  "he" in "hello",     true)
+check("suffix",                  "lo" in "hello",     true)
+
+# precedence: `not` applies to the whole membership test
+check("not binds outside in",    not 1 in [1],        false)
+check("...same as parenthesised", not (1 in [1]),     false)
+# in a condition and in an f-string slot
+check("in as an if condition",   2 in [1, 2] ? "y" : "n", "y")
+check("in inside an f-string",   f"{3 in [1, 2, 3]}", "true")
+
+# =====================================================================
+# string escapes
+# =====================================================================
+print("-- string escapes --")
+
+check("\\n is one char",       len("a\nb"),        3)
+check("\\n code point",        code("\n"),         10)
+check("\\t code point",        code("\t"),         9)
+check("\\r code point",        code("\r"),         13)
+check("\\\\ is one backslash", code("\\"),         92)
+check("\\\\ has length 1",     len("\\"),          1)
+check("\\\" is a quote",       code("\""),         34)
+check("quoted phrase length",  len("he said \"hi\""), 12)
+check("\\x41 is A",            "\x41",             "A")
+check("\\x7a is z",            "\x7a",             "z")
+check("\\x4A uppercase hex",   "\x4A",             "J")
+check("\\xff is 255",          code("\xff"),       255)
+check("\\x0A equals \\n",      code("\x0A") == code("\n"), true)
+check("three hex escapes",     "\x41\x42\x43",     "ABC")
+check("...and their length",   len("\x41\x42\x43"), 3)
+check("hex escape then text",  len("\x41z"),       2)
+check("hash is not a comment", len("a#b"),         3)
+check("tab inside a longer string", find("a\tb", "\t"), 1)
+# an escape zl does not know is kept verbatim, backslash and all
+check("unknown escape kept",   len("\q"),          2)
+check("...starting with a backslash", code("\q"),  92)
+check("truncated hex kept",    len("\x4"),         3)
+
+# =====================================================================
+# f-strings
+# =====================================================================
+print("-- f-strings --")
+
+a = 3
+b = 4
+check("f-string interpolates",   f"total {a + b}",   "total 7")
+check("no slots at all",         f"no slots",        "no slots")
+check("an empty f-string",       f"",                "")
+check("two slots side by side",  f"{a}{b}",          "34")
+check("whitespace in the slot",  f"{ a }",           "3")
+check("literal braces",          f"{{literal}}",     "{literal}")
+check("braces around a slot",    f"{{{a}}}",         "{3}")
+check("a lone left brace",       f"a{{b",            "a{b")
+check("a lone right brace",      f"}}",              "}")
+check("brace next to a slot",    f"{a}{{{a}",        "3{3")
+check("matches concatenation",   f"x{a}y", "x" + str(a) + "y")
+
+check("arithmetic in a slot",    f"{a * b + 1}",     "13")
+check("a comparison in a slot",  f"{a > b}",         "false")
+check("a call in a slot",        f"{len([1,2,3])}",  "3")
+check("an index in a slot",      f"{[10,20,30][2]}", "30")
+check("a ternary in a slot",     f"{a > 2 ? 1 : 0}", "1")
+check("a list in a slot",        f"{[1, 2, 3]}",     "[1, 2, 3]")
+check("nil in a slot",           f"{nilval()}",      "nil")
+check("a negative in a slot",    f"{-5}",            "-5")
+check("a float in a slot",       f"{1 / 3}",         "0.333333")   # %g, 6 s.f.
+check("escapes still work",      len(f"a\tb{a}"),    4)
+check("newline inside",          len(f"{a}\n{b}"),   3)
+
+# =====================================================================
+# WAS BUGS - every check below pinned a defect that has since been fixed
+# in the engine. They stay here, unlabelled, as the regression tests for
+# those fixes. The block at the bottom of this file records what each one
+# used to do.
+# =====================================================================
+print("-- former bugs --")
+
+# 1 - a parameter is a LOCAL. Calling a function whose parameter shares a
+# name with a global used to overwrite that global; nothing was assigned
+# inside the function, binding the argument was enough.
+sc_g = 100
+fn readback(sc_g) { return sc_g }
+sc_seen = readback(1)
+check("param read gives the argument", sc_seen, 1)
+check("call must not clobber a global", sc_g, 100)
+
+# 2 - a for-loop variable binds the same way: the loop introduces the
+# name, so it is local to the function it loops in.
+sc_i = 500
+fn loop_local() { for sc_i in [7, 8] { } return "done" }
+sc_r = loop_local()
+check("fn loop var must not clobber a global", sc_i, 500)
+
+# 3 - `and` and `or` SHORT-CIRCUIT. The right operand is not evaluated
+# once the left has decided the answer, so the counter must stay 0.
+hits = 0
+sc_and = false and bump(true)
+check("and returns the right value",  sc_and, false)
+check("and must not evaluate the right side", hits, 0)
+hits = 0
+sc_or = true or bump(false)
+check("or returns the right value",   sc_or, true)
+check("or must not evaluate the right side",  hits, 0)
+# ...which makes the standard bounds guard usable. This used to abort
+# with "list index out of range".
+sc_empty = []
+if len(sc_empty) > 0 and sc_empty[0] == 1 { sc_guard = "y" } else { sc_guard = "n" }
+check("bounds guard folds into one `and`", sc_guard, "n")
+
+# 4 - a compound assignment through an index evaluates the subscript ONCE
+# (once for the read and the write together, not once each).
+hits = 0
+xs = [1, 2, 3]
+xs[bump(0)] += 10
+check("compound index stores correctly", xs, [11, 2, 3])
+check("index evaluated once", hits, 1)
+
+# 5 - NUL. A zl string is a NUL-terminated C string, so it cannot hold a
+# NUL byte. `\0` and `\x00` used to be ACCEPTED and then silently
+# truncate the literal - "a\x00b" became "a" with no diagnostic. They are
+# refused at lex time now, which cannot be checked from inside a test
+# file (a lex error kills the whole file before report() runs), so the
+# repro lives in the BUGS block at the bottom. What IS checkable is that
+# every other byte still round-trips through the same decoder:
+check("\\xNN decodes a byte",    "a\x41b",       "aAb")
+check("\\xNN keeps the tail",    len("a\x41b"),  3)
+check("high byte survives",      code("\xFF"),   255)
+
+# 6 - `==` on lists is STRUCTURAL, so `in` / contains / index_of can see
+# a list element. A list used to be the only zl value not equal to itself.
+check("list value found by in", [1, 2] in [[1, 2], [3, 4]], true)
+sc_list = [1, 2]
+check("a list equals itself",  sc_list == sc_list, true)
+check("...and is not != itself", sc_list != sc_list, false)
+check("equal contents, different lists", [1, [2, 3]] == [1, [2, 3]], true)
+check("different contents",              [1, [2, 3]] == [1, [2, 4]], false)
+check("different lengths",               [1, 2] == [1, 2, 3],        false)
+
+report()
+
+# ========================================================== BUGS, NOW FIXED
+# Every entry below was a real defect found by this file. All seven are fixed
+# in the engine; the checks in the "former bugs" section above are what stops
+# them coming back. The old behaviour is kept on record so the fix is
+# recognisable if any of it ever reappears.
+#
+# 1. CALLING A FUNCTION OVERWROTE ANY GLOBAL THAT SHARED A PARAMETER NAME.
+#      g = 100
+#      fn f(g) { return g }
+#      print(f(1))   -> 1     (correct)
+#      print(g)      -> 1     WANT 100
+#    No assignment was needed - binding the argument did it, and the same hole
+#    ate for-loop variables:
+#      i = 500
+#      fn lp() { for i in [7, 8] { } return "done" }
+#      print(lp())   print(i)  -> 8    WANT 500
+#    FIX: interp.c binds parameters with env_define (a new slot in the call
+#    scope) instead of env_assign (which walks the parent chain), and
+#    define_loop_vars binds the body's loop variables the same way. compile.c
+#    and compilef.c declare a loop variable as a C local even when a global
+#    shares the name, so the backends agree.
+#    STILL TRUE, DELIBERATELY: a plain assignment to a name that exists
+#    globally writes that global from inside a function. That is what lets the
+#    self-hosted compiler share a cursor across functions; only BINDING - a
+#    parameter or a loop variable - is scoped. stdlib modules still prefix
+#    their locals for this reason.
+#
+# 2. DEEP RECURSION WAS A HARD CRASH, NOT AN ERROR.
+#      fn d(n) { if n == 0 { return 0 } return 1 + d(n - 1) }
+#      print(d(165))  -> 165        print(d(166)) -> process dies, no output
+#    Exit status 0xC00000FD (STATUS_STACK_OVERFLOW), and because stdout is
+#    block-buffered when redirected, every line printed before it was lost.
+#    FIX: interp.c counts call depth (MAX_CALL_DEPTH) and raises the ordinary
+#    "recursion too deep" runtime error; build.bat gives interp.exe a 64 MB
+#    stack so the counter, not the OS, is what you reach; and runtime_error
+#    flushes stdout before it reports.
+#
+# 3. `and` / `or` DID NOT SHORT-CIRCUIT.
+#      xs = []
+#      if len(xs) > 0 and xs[0] == 1 { print("y") } else { print("n") }
+#      -> runtime error: list index out of range
+#    FIX: eval() special-cases them before evaluating the right operand, so
+#    the guard idiom works. All four backends short-circuit too: compile.c and
+#    compilef.c emit C's own && / ||, nativegen.c emits a conditional jump, and
+#    compilel.c branches to a phi (it was the last one still emitting both
+#    sides and then `and`-ing the two i1s).
+#
+# 4. `x[expr] += v` EVALUATED expr TWICE.
+#      hits = 0
+#      fn idx(i) { hits += 1 return i }
+#      xs = [1,2,3]
+#      xs[idx(0)] += 10
+#      print(hits)   -> 2   WANT 1
+#    The parser desugared `x op= v` into `x = x op v` by putting the SAME Node
+#    in two places in the tree.
+#    FIX: the operator rides on the N_ASSIGN node and every engine reads the
+#    target once.
+#
+# 5. `\x00` TRUNCATED THE STRING.
+#      print(len("a\x00b"))  -> 1   WANT 3
+#      print(len("\x00"))    -> 0   WANT 1
+#    FIX (a representation decision, not a decoder fix): a zl string IS a
+#    NUL-terminated C string, so it cannot hold a NUL byte. Rather than
+#    accepting the escape and silently dropping the rest of the literal, the
+#    lexer now REFUSES `\0` and `\x00`:
+#      line 1: a string cannot contain a NUL byte (\0 or \x00) - zl strings
+#      are NUL-terminated
+#    chr(0) refuses for the same reason. Making NUL work would mean giving zl
+#    length-carrying strings - a change to every string built-in and every
+#    backend. This is a lex error, so it cannot be asserted from inside a test
+#    file; run the two lines above as their own file to see it.
+#
+# 6. LIST EQUALITY WAS NEITHER STRUCTURAL NOR REFLEXIVE.
+#      a = [1,2]
+#      print(a == a)        -> false   WANT true
+#      print([1,2] in [[1,2],[3,4]]) -> false   WANT true
+#    A list was the only zl value not equal to itself, so `in`, `contains` and
+#    `index_of` were blind to list elements.
+#    FIX: values_equal has a V_LIST arm (same length, then element-wise).
+#
+# 7. `push(xs, v)` CALLED TWICE ON THE SAME LIST CORRUPTED THE HEAP.
+#      a = [1,2,3]
+#      b = push(a, 9)
+#      c = push(a, 8)      <- process died, exit 0xC0000374 (heap corruption)
+#    push grew the SOURCE list's array in place ("amortized O(1)"), so the
+#    second push wrote over the first result and the realloc freed an array
+#    the caller still pointed at.
+#    FIX: push allocates its own array. (List builtins are another suite's
+#    ground - recorded here because it dictates how this one accumulates.)
+#
+# ============================================== PARSE-TIME, so not assertable
+# A parse error rejects the whole file, so these cannot be checks - a single one
+# would take the suite down with it. Verified by hand as separate files.
+#
+# A. `else` / `elif` MUST SIT ON THE SAME LINE AS THE CLOSING BRACE.
+#      if x > 10 {
+#          print("a")
+#      }
+#      else {                 <- line 5: expected a value (got 'else')
+#          print("c")
+#      }
+#    `} else {` and `} elif x > 3 {` are fine; a newline between `}` and `else`
+#    ends the if-statement, and the message names the wrong problem.
+#
+# B. AN f-STRING SLOT CANNOT CONTAIN A STRING LITERAL.
+#      print(f"{"lit"}")      -> line 1: f-string has '{' with no matching '}'
+#    The lexer ends the f-string at the first inner quote, so
+#    f"{cond ? "a" : "b"}" and f"{find(s, ",")}" are unwritable.
+#
+# ================================================== RUNTIME, aborts the script
+# Clean one-line errors (not crashes), but they exit(1), so they cannot be
+# asserted inline either. Recorded so the behaviour is on file.
+#      xs = [1,2,3]  print(xs[5])     -> runtime error: list index out of range
+#      xs[5] = 9                      -> runtime error: index-assign out of range
+#      xs[-1] = 9                     -> runtime error: index-assign out of range
+#      s = "abc"  s[0] = "z"          -> runtime error: can only index-assign a list
+#      for c in "abc" { }             -> runtime error: 'for' can only loop over a list
+#      print(3 in "abc")              -> runtime error: has needs two strings
+#      print(1 < 2 < 3)               -> runtime error: this operator needs numbers
+#      undefined += 1                 -> runtime error: 'undefined' doesn't exist yet
+#      fn f(a, b) { return a - b }  print(f(3))  -> 'b' doesn't exist yet
+#                                        (arity is never checked at the call)
+# And one that is not clean, already on file in test_math.zl: `n %= 0` dies with
+# 0xC0000094 (integer divide by zero), the same crash as the `%` operator.
+#
+# ============================================================== NOT BUGS
+# Behaviour that surprised me but is defensible; asserted above so a change to
+# any of it shows up as a failure.
+#   - a fractional index truncates toward zero: xs[1.9] writes slot 1.
+#   - `%` truncates both operands to integers first, so 7.5 % 2 == 1.
+#   - `+` joins as text as soon as either side is text: 5 + "x" == "5x".
+#   - lists are references: `b = a` shares, and fill(n, someList) stores the
+#     same list n times.
+#   - a for-in loop variable stays visible after the loop, holding the last
+#     element (and is untouched if the list was empty).
+#   - `and`/`or` return true/false rather than one of their operands.
+#   - an unknown escape such as \q, and a truncated \x4, are kept verbatim.

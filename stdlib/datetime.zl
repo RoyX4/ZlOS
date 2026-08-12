@@ -1,0 +1,290 @@
+# datetime.zl -- date/time formatting for the zl standard library.
+# The formatting half of date_calc.zl: patterns, names, ISO text, durations.
+#
+# Representation: a date is three plain numbers (y, m, d) with m in 1..12 and
+# d in 1..31, proleptic Gregorian. Functions that must return a whole date
+# return the 3-element list [y, m, d] instead, because zl has no structs.
+# A duration is a plain number of seconds.
+#
+# Reuse: zl has no imports, so this file cannot pull in date_calc.zl. What it
+# does instead is keep ONE piece of calendar arithmetic -- the serial day
+# number (Howard Hinnant's days_from_civil, the same routine date_calc.zl
+# uses) -- and derive everything else from it, rather than re-deriving date
+# maths per function. civil_from_days() below is its exact inverse, which is
+# the one thing date_calc.zl does not provide and add_days needs. There is no
+# second copy of Zeller's congruence here: the weekday falls out of the day
+# number, since day 0 (1970-01-01) was a Thursday.
+#
+# Naming: assigning inside a function creates a local, but assigning to a name
+# that already exists as a global writes that global. Every parameter and
+# local here therefore carries a two-letter tag for its function (fd_ =
+# fmt_date, ad_ = add_days, ...), and module-level tables are UPPER_CASE and
+# only ever read. That is what stops a nested call from eating a caller's
+# loop counter.
+
+MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+# Indexed by the day number mod 7: day 0 (1970-01-01) was a Thursday.
+DAY_NAMES = ["Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday", "Wednesday"]
+# Same index -> ISO weekday, Monday = 1 .. Sunday = 7.
+ISO_WEEKDAY = [4, 5, 6, 7, 1, 2, 3]
+DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+# ---- helpers ----
+
+# floor division: int() truncates toward zero, which is wrong for negatives.
+fn fdiv(fv_a, fv_b) {
+    return floor(fv_a / fv_b)
+}
+
+# left-pad with zeros to width w (never truncates)
+fn zpad(zp_s, zp_w) {
+    zp_t = zp_s
+    while len(zp_t) < zp_w {
+        zp_t = "0" + zp_t
+    }
+    return zp_t
+}
+
+# ---- calendar basics ----
+
+fn is_leap(il_y) {
+    if il_y % 400 == 0 { return true }
+    if il_y % 100 == 0 { return false }
+    if il_y % 4 == 0 { return true }
+    return false
+}
+
+fn days_in_month(dm_y, dm_m) {
+    if dm_m == 2 and is_leap(dm_y) { return 29 }
+    return DAYS_IN_MONTH[dm_m - 1]
+}
+
+fn month_name(mn_m) {
+    return MONTH_NAMES[mn_m - 1]
+}
+
+# ---- the one primitive: serial day number, days since 1970-01-01 ----
+
+fn days_from_civil(dc_y, dc_m, dc_d) {
+    dc_yy = dc_y
+    if dc_m <= 2 { dc_yy = dc_yy - 1 }
+    dc_era = fdiv(dc_yy, 400)
+    dc_yoe = dc_yy - dc_era * 400
+    dc_mp = 0
+    if dc_m > 2 { dc_mp = dc_m - 3 } else { dc_mp = dc_m + 9 }
+    dc_doy = fdiv(153 * dc_mp + 2, 5) + dc_d - 1
+    dc_doe = dc_yoe * 365 + fdiv(dc_yoe, 4) - fdiv(dc_yoe, 100) + dc_doy
+    return dc_era * 146097 + dc_doe - 719468
+}
+
+# ---- and its exact inverse: day number -> [y, m, d] ----
+
+fn civil_from_days(cd_z) {
+    cd_zz = cd_z + 719468
+    cd_era = fdiv(cd_zz, 146097)
+    cd_doe = cd_zz - cd_era * 146097
+    cd_yoe = fdiv(cd_doe - fdiv(cd_doe, 1460) + fdiv(cd_doe, 36524) - fdiv(cd_doe, 146096), 365)
+    cd_y = cd_yoe + cd_era * 400
+    cd_doy = cd_doe - (365 * cd_yoe + fdiv(cd_yoe, 4) - fdiv(cd_yoe, 100))
+    cd_mp = fdiv(5 * cd_doy + 2, 153)
+    cd_d = cd_doy - fdiv(153 * cd_mp + 2, 5) + 1
+    cd_m = 0
+    if cd_mp < 10 { cd_m = cd_mp + 3 } else { cd_m = cd_mp - 9 }
+    if cd_m <= 2 { cd_y = cd_y + 1 }
+    return [cd_y, cd_m, cd_d]
+}
+
+# ---- weekday, straight off the day number ----
+
+fn day_of_week_name(dw_y, dw_m, dw_d) {
+    dw_i = ((days_from_civil(dw_y, dw_m, dw_d) % 7) + 7) % 7
+    return DAY_NAMES[dw_i]
+}
+
+# Monday = 1 .. Sunday = 7 (ISO-8601).
+fn iso_weekday(iw_y, iw_m, iw_d) {
+    iw_i = ((days_from_civil(iw_y, iw_m, iw_d) % 7) + 7) % 7
+    return ISO_WEEKDAY[iw_i]
+}
+
+# ---- arithmetic ----
+
+# n may be negative. Returns [y, m, d].
+fn add_days(ad_y, ad_m, ad_d, ad_n) {
+    return civil_from_days(days_from_civil(ad_y, ad_m, ad_d) + ad_n)
+}
+
+# Signed: how many days you must add to d1 to reach d2. Both are [y, m, d].
+# (date_calc.zl's days_between is the unsigned form.)
+fn diff_days(df_a, df_b) {
+    return days_from_civil(df_b[0], df_b[1], df_b[2]) - days_from_civil(df_a[0], df_a[1], df_a[2])
+}
+
+# ISO-8601 week number, 1..53. The week belongs to whichever year holds its
+# Thursday, so early-January and late-December dates can land in the
+# neighbouring year's numbering (2021-01-01 is week 53, of 2020).
+fn week_number(wn_y, wn_m, wn_d) {
+    wn_thu = days_from_civil(wn_y, wn_m, wn_d) + (4 - iso_weekday(wn_y, wn_m, wn_d))
+    wn_owner = civil_from_days(wn_thu)
+    return fdiv(wn_thu - days_from_civil(wn_owner[0], 1, 1), 7) + 1
+}
+
+# ---- text ----
+
+fn to_iso(ti_y, ti_m, ti_d) {
+    return zpad(str(ti_y), 4) + "-" + zpad(str(ti_m), 2) + "-" + zpad(str(ti_d), 2)
+}
+
+# "YYYY-MM-DD" -> [y, m, d]. Surrounding whitespace is ignored. Returns the
+# empty list if the text is not three dash-separated fields.
+fn parse_iso(pi_s) {
+    pi_parts = split(trim(pi_s), "-")
+    if len(pi_parts) != 3 { return [] }
+    return [num(pi_parts[0]), num(pi_parts[1]), num(pi_parts[2])]
+}
+
+# Pattern tokens, matched longest-first; anything else is copied literally.
+#   YYYY 2026   YY 26
+#   MMMM July   MMM Jul   MM 07   M 7
+#   DDDD Friday DDD Fri   DD 31   D 31
+fn fmt_date(fd_y, fd_m, fd_d, fd_pat) {
+    fd_out = ""
+    fd_i = 0
+    while fd_i < len(fd_pat) {
+        fd_rest = slice(fd_pat, fd_i, len(fd_pat))
+        if starts(fd_rest, "YYYY") {
+            fd_out = fd_out + zpad(str(fd_y), 4)
+            fd_i = fd_i + 4
+        } else if starts(fd_rest, "YY") {
+            fd_out = fd_out + zpad(str(fd_y % 100), 2)
+            fd_i = fd_i + 2
+        } else if starts(fd_rest, "MMMM") {
+            fd_out = fd_out + month_name(fd_m)
+            fd_i = fd_i + 4
+        } else if starts(fd_rest, "MMM") {
+            fd_out = fd_out + slice(month_name(fd_m), 0, 3)
+            fd_i = fd_i + 3
+        } else if starts(fd_rest, "MM") {
+            fd_out = fd_out + zpad(str(fd_m), 2)
+            fd_i = fd_i + 2
+        } else if starts(fd_rest, "M") {
+            fd_out = fd_out + str(fd_m)
+            fd_i = fd_i + 1
+        } else if starts(fd_rest, "DDDD") {
+            fd_out = fd_out + day_of_week_name(fd_y, fd_m, fd_d)
+            fd_i = fd_i + 4
+        } else if starts(fd_rest, "DDD") {
+            fd_out = fd_out + slice(day_of_week_name(fd_y, fd_m, fd_d), 0, 3)
+            fd_i = fd_i + 3
+        } else if starts(fd_rest, "DD") {
+            fd_out = fd_out + zpad(str(fd_d), 2)
+            fd_i = fd_i + 2
+        } else if starts(fd_rest, "D") {
+            fd_out = fd_out + str(fd_d)
+            fd_i = fd_i + 1
+        } else {
+            fd_out = fd_out + at(fd_pat, fd_i)
+            fd_i = fd_i + 1
+        }
+    }
+    return fd_out
+}
+
+# Seconds -> "2h 15m 03s". The largest unit present is unpadded, the ones
+# below it are padded to two digits. Fractional seconds are truncated.
+fn fmt_duration(du_secs) {
+    du_sign = ""
+    du_t = trunc(du_secs)
+    if du_t < 0 {
+        du_sign = "-"
+        du_t = 0 - du_t
+    }
+    du_h = fdiv(du_t, 3600)
+    du_m = fdiv(du_t - du_h * 3600, 60)
+    du_s = du_t - du_h * 3600 - du_m * 60
+    if du_h > 0 {
+        return du_sign + str(du_h) + "h " + zpad(str(du_m), 2) + "m " + zpad(str(du_s), 2) + "s"
+    }
+    if du_m > 0 {
+        return du_sign + str(du_m) + "m " + zpad(str(du_s), 2) + "s"
+    }
+    return du_sign + str(du_s) + "s"
+}
+
+# stringify a boolean ("num" rejects booleans)
+fn bstr(bs_b) {
+    if bs_b { return "true" }
+    return "false"
+}
+
+# ================= demo =================
+print("== datetime demo ==")
+
+print("-- names --")
+print("month_name(1)/(7)/(12):  " + month_name(1) + " / " + month_name(7) + " / " + month_name(12))
+print("day_of_week_name(2026,7,31): " + day_of_week_name(2026, 7, 31) + "   (expect Friday)")
+print("day_of_week_name(2000,1,1):  " + day_of_week_name(2000, 1, 1) + " (expect Saturday)")
+print("day_of_week_name(1969,7,20): " + day_of_week_name(1969, 7, 20) + "   (expect Sunday)")
+print("day_of_week_name(2024,2,29): " + day_of_week_name(2024, 2, 29) + " (expect Thursday)")
+
+print("-- leap years and month lengths --")
+print("is_leap 2000/1900/2024/2023: " + bstr(is_leap(2000)) + " " + bstr(is_leap(1900)) + " " + bstr(is_leap(2024)) + " " + bstr(is_leap(2023)))
+print("days_in_month(2024,2): " + str(days_in_month(2024, 2)) + "  (expect 29)")
+print("days_in_month(2023,2): " + str(days_in_month(2023, 2)) + "  (expect 28)")
+print("days_in_month(2026,4): " + str(days_in_month(2026, 4)) + "  (expect 30)")
+
+print("-- ISO text --")
+print("to_iso(2026,7,31):     " + to_iso(2026, 7, 31) + "   (expect 2026-07-31)")
+print("to_iso(999,1,2):       " + to_iso(999, 1, 2) + "   (expect 0999-01-02)")
+print("parse_iso(\"2024-02-29\"): " + str(parse_iso("2024-02-29")) + "  (expect [2024, 2, 29])")
+print("parse_iso(\" 1969-07-20 \"): " + str(parse_iso(" 1969-07-20 ")) + "  (expect [1969, 7, 20])")
+print("parse_iso(\"nope\"):       " + str(parse_iso("nope")) + "  (expect [])")
+print("round trip:            " + to_iso(parse_iso("2026-07-31")[0], parse_iso("2026-07-31")[1], parse_iso("2026-07-31")[2]))
+
+print("-- fmt_date --")
+print("DDDD, D MMMM YYYY -> " + fmt_date(2026, 7, 31, "DDDD, D MMMM YYYY"))
+print("YYYY-MM-DD        -> " + fmt_date(2024, 2, 29, "YYYY-MM-DD"))
+print("DDD MMM DD, YYYY  -> " + fmt_date(1969, 7, 20, "DDD MMM DD, YYYY"))
+print("DD/MM/YY          -> " + fmt_date(2026, 7, 31, "DD/MM/YY"))
+print("D MMM YY          -> " + fmt_date(2001, 9, 11, "D MMM YY"))
+
+print("-- add_days: month boundary --")
+print("2026-01-31 + 1  -> " + str(add_days(2026, 1, 31, 1)) + "   (expect [2026, 2, 1])")
+print("2026-04-30 + 1  -> " + str(add_days(2026, 4, 30, 1)) + "   (expect [2026, 5, 1])")
+print("2026-03-01 - 1  -> " + str(add_days(2026, 3, 1, -1)) + "  (expect [2026, 2, 28])")
+print("2024-12-31 + 1  -> " + str(add_days(2024, 12, 31, 1)) + "   (expect [2025, 1, 1])")
+
+print("-- add_days: leap-year February --")
+print("2024-02-28 + 1  -> " + str(add_days(2024, 2, 28, 1)) + "  (expect [2024, 2, 29])")
+print("2024-02-29 + 1  -> " + str(add_days(2024, 2, 29, 1)) + "   (expect [2024, 3, 1])")
+print("2024-03-01 - 1  -> " + str(add_days(2024, 3, 1, -1)) + "  (expect [2024, 2, 29])")
+print("2023-02-28 + 1  -> " + str(add_days(2023, 2, 28, 1)) + "   (expect [2023, 3, 1])")
+print("2024-02-29 +365 -> " + str(add_days(2024, 2, 29, 365)) + "   (expect [2025, 2, 28])")
+print("2000-01-01 +366 -> " + str(add_days(2000, 1, 1, 366)) + "   (expect [2001, 1, 1])")
+
+print("-- diff_days (signed) --")
+print("2024-01-01 -> 2024-12-31: " + str(diff_days([2024, 1, 1], [2024, 12, 31])) + "  (expect 365)")
+print("2024-01-01 -> 2025-01-01: " + str(diff_days([2024, 1, 1], [2025, 1, 1])) + "  (expect 366)")
+print("2026-07-31 -> 2026-07-01: " + str(diff_days([2026, 7, 31], [2026, 7, 1])) + "  (expect -30)")
+print("1969-07-20 -> 2026-07-31: " + str(diff_days([1969, 7, 20], [2026, 7, 31])) + " (expect 20830)")
+print("same day:                 " + str(diff_days([2026, 7, 31], [2026, 7, 31])) + "    (expect 0)")
+
+print("-- week_number (ISO-8601) --")
+print("2026-01-01: " + str(week_number(2026, 1, 1)) + "   (expect 1, a Thursday)")
+print("2026-07-31: " + str(week_number(2026, 7, 31)) + "  (expect 31)")
+print("2026-12-31: " + str(week_number(2026, 12, 31)) + "  (expect 53)")
+print("2021-01-01: " + str(week_number(2021, 1, 1)) + "  (expect 53, belongs to 2020)")
+print("2024-01-01: " + str(week_number(2024, 1, 1)) + "   (expect 1, a Monday)")
+print("2024-12-30: " + str(week_number(2024, 12, 30)) + "   (expect 1, belongs to 2025)")
+
+print("-- fmt_duration --")
+print("8103   -> " + fmt_duration(8103) + "   (expect 2h 15m 03s)")
+print("3600   -> " + fmt_duration(3600) + "   (expect 1h 00m 00s)")
+print("86399  -> " + fmt_duration(86399) + "  (expect 23h 59m 59s)")
+print("75     -> " + fmt_duration(75) + "     (expect 1m 15s)")
+print("45     -> " + fmt_duration(45) + "        (expect 45s)")
+print("0      -> " + fmt_duration(0) + "         (expect 0s)")
+print("-90    -> " + fmt_duration(-90) + "    (expect -1m 30s)")
+print("90061.7 -> " + fmt_duration(90061.7) + "  (expect 25h 01m 01s)")
+
+print("== done ==")

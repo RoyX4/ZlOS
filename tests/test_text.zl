@@ -1,0 +1,974 @@
+# test_text.zl - text processing: base64, hex, URL/HTML escaping, CSV, KMP
+# search, and SHA-256.
+#
+# Style follows stdlib/testlib.zl: check(label, got, want) records a pass/fail,
+# report() prints the tally. (zl has no import, so check/report are inlined,
+# and so is every function under test.)
+#
+# What is under test, and where it came from:
+#   b64_encode / b64_decode / b64_is_valid / hex_encode / hex_decode
+#                                                     <- stdlib/base64.zl
+#   url_encode / url_decode / html_escape / html_unescape
+#                                                     <- stdlib/encoding.zl
+#   csv_escape / csv_row / csv_write                  <- stdlib/csvw.zl
+#   csvParseLine / csvParse                           <- stdlib/csv_parse.zl
+#   kmp_table / kmp_scan / kmp_search / kmp_all / naive_all / count_overlapping
+#                                                     <- stdlib/strsearch.zl
+#   sha256 / sha256_bytes / sha_pad / rotr32 / shr32 / hex8 / m32
+#                                                     <- stdlib/sha256.zl
+# The bodies are copied verbatim, INCLUDING their local-name prefixes, because
+# in zl an assignment inside a function writes the global of that name; renaming
+# the locals could hide a scope-leak defect. Every test-level global here is
+# prefixed t_ so it can never collide with a leaked local.
+#
+# Every `want` below was worked out by hand (base64/hex/URL by expanding the
+# bits, KMP by walking the text, CSV against RFC 4180) except the SHA-256
+# digests, which are the published FIPS 180-4 / NESSIE vectors.
+#
+# Blocks tagged "### WAS BROKEN" pinned a real defect that is now fixed in the
+# engine or the stdlib; the checks under them are the regression tests. See the BUGS
+# block at the bottom of this file. A green tick that hides a wrong answer is
+# worth less than a red one that names it.
+
+g_pass = 0
+g_fail = 0
+
+fn check(label, got, want) {
+    if str(got) == str(want) {
+        g_pass = g_pass + 1
+        print("  PASS  " + label)
+    } else {
+        g_fail = g_fail + 1
+        print("  FAIL  " + label + "  got " + str(got) + " want " + str(want))
+    }
+}
+fn report() {
+    print("----")
+    print(str(g_pass) + " passed, " + str(g_fail) + " failed")
+}
+
+# ============================================================ code under test
+# ---- stdlib/base64.zl -------------------------------------------------------
+B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+HEX_CHARS = "0123456789abcdef"
+
+fn b64_encode(en_s) {
+    en_out = ""
+    en_n = len(en_s)
+    en_i = 0
+    while en_i < en_n {
+        en_rem = en_n - en_i
+        en_b0 = index_at(en_s, en_i)
+        en_b1 = 0
+        en_b2 = 0
+        if en_rem > 1 { en_b1 = index_at(en_s, en_i + 1) }
+        if en_rem > 2 { en_b2 = index_at(en_s, en_i + 2) }
+        en_trip = bor(bor(shl(en_b0, 16), shl(en_b1, 8)), en_b2)
+        en_out = en_out + at(B64_CHARS, band(shr(en_trip, 18), 63))
+        en_out = en_out + at(B64_CHARS, band(shr(en_trip, 12), 63))
+        if en_rem > 2 {
+            en_out = en_out + at(B64_CHARS, band(shr(en_trip, 6), 63))
+            en_out = en_out + at(B64_CHARS, band(en_trip, 63))
+        } else if en_rem == 2 {
+            en_out = en_out + at(B64_CHARS, band(shr(en_trip, 6), 63)) + "="
+        } else {
+            en_out = en_out + "=="
+        }
+        en_i = en_i + 3
+    }
+    return en_out
+}
+fn b64_decode(de_s) {
+    de_out = ""
+    de_n = len(de_s)
+    de_i = 0
+    while de_i + 3 < de_n {
+        de_c2 = at(de_s, de_i + 2)
+        de_c3 = at(de_s, de_i + 3)
+        de_pad = 0
+        de_q2 = 0
+        de_q3 = 0
+        if de_c2 == "=" {
+            de_pad = 2
+        } else {
+            de_q2 = find(B64_CHARS, de_c2)
+            if de_c3 == "=" { de_pad = 1 } else { de_q3 = find(B64_CHARS, de_c3) }
+        }
+        de_q0 = find(B64_CHARS, at(de_s, de_i))
+        de_q1 = find(B64_CHARS, at(de_s, de_i + 1))
+        de_trip = bor(bor(bor(shl(de_q0, 18), shl(de_q1, 12)), shl(de_q2, 6)), de_q3)
+        de_out = de_out + chr(band(shr(de_trip, 16), 255))
+        if de_pad < 2 { de_out = de_out + chr(band(shr(de_trip, 8), 255)) }
+        if de_pad == 0 { de_out = de_out + chr(band(de_trip, 255)) }
+        de_i = de_i + 4
+    }
+    return de_out
+}
+fn b64_is_valid(iv_s) {
+    iv_n = len(iv_s)
+    if iv_n % 4 != 0 { return false }
+    if iv_n == 0 { return true }
+    iv_pad = 0
+    if at(iv_s, iv_n - 1) == "=" {
+        iv_pad = 1
+        if at(iv_s, iv_n - 2) == "=" { iv_pad = 2 }
+    }
+    iv_i = 0
+    while iv_i < iv_n - iv_pad {
+        if find(B64_CHARS, at(iv_s, iv_i)) < 0 { return false }
+        iv_i = iv_i + 1
+    }
+    return true
+}
+fn hex_encode(he_s) {
+    he_out = ""
+    he_i = 0
+    while he_i < len(he_s) {
+        he_b = index_at(he_s, he_i)
+        he_out = he_out + at(HEX_CHARS, band(shr(he_b, 4), 15))
+        he_out = he_out + at(HEX_CHARS, band(he_b, 15))
+        he_i = he_i + 1
+    }
+    return he_out
+}
+fn hex_decode(hd_s) {
+    hd_t = lower(hd_s)
+    hd_out = ""
+    hd_i = 0
+    while hd_i + 1 < len(hd_t) {
+        hd_hi = find(HEX_CHARS, at(hd_t, hd_i))
+        hd_lo = find(HEX_CHARS, at(hd_t, hd_i + 1))
+        if hd_hi < 0 or hd_lo < 0 { return hd_out }
+        hd_out = hd_out + chr(bor(shl(hd_hi, 4), hd_lo))
+        hd_i = hd_i + 2
+    }
+    return hd_out
+}
+
+# ---- stdlib/encoding.zl -----------------------------------------------------
+fn hex_digit(hd_n) { return at("0123456789ABCDEF", hd_n) }
+fn hex2(h2_n) {
+    h2_v = int(h2_n)
+    return hex_digit(int(h2_v / 16)) + hex_digit(h2_v % 16)
+}
+fn hex_value(hv_c) { return find("0123456789abcdef", lower(hv_c)) }
+fn is_alnum(ia_c) {
+    ia_k = index_at(ia_c, 0)
+    if ia_k >= 48 and ia_k <= 57 { return true }
+    if ia_k >= 65 and ia_k <= 90 { return true }
+    return ia_k >= 97 and ia_k <= 122
+}
+fn starts_at(sa_s, sa_i, sa_sub) {
+    if sa_i + len(sa_sub) > len(sa_s) { return false }
+    return slice(sa_s, sa_i, sa_i + len(sa_sub)) == sa_sub
+}
+fn url_encode(ue_s) {
+    ue_out = ""
+    ue_i = 0
+    while ue_i < len(ue_s) {
+        ue_c = at(ue_s, ue_i)
+        ue_keep = is_alnum(ue_c)
+        if ue_c == "-" or ue_c == "_" or ue_c == "." or ue_c == "~" { ue_keep = true }
+        if ue_keep {
+            ue_out = ue_out + ue_c
+        } else {
+            ue_out = ue_out + "%" + hex2(index_at(ue_s, ue_i))
+        }
+        ue_i = ue_i + 1
+    }
+    return ue_out
+}
+fn url_decode(ud_s) {
+    ud_out = ""
+    ud_i = 0
+    while ud_i < len(ud_s) {
+        ud_c = at(ud_s, ud_i)
+        ud_hi = -1
+        ud_lo = -1
+        if ud_c == "%" and ud_i + 2 < len(ud_s) {
+            ud_hi = hex_value(at(ud_s, ud_i + 1))
+            ud_lo = hex_value(at(ud_s, ud_i + 2))
+        }
+        if ud_hi >= 0 and ud_lo >= 0 {
+            ud_out = ud_out + chr(ud_hi * 16 + ud_lo)
+            ud_i = ud_i + 3
+        } else {
+            ud_out = ud_out + ud_c
+            ud_i = ud_i + 1
+        }
+    }
+    return ud_out
+}
+fn html_escape(he_s) {
+    he_out = ""
+    he_i = 0
+    while he_i < len(he_s) {
+        he_c = at(he_s, he_i)
+        if he_c == "&" { he_out = he_out + "&amp;"
+        } else if he_c == "<" { he_out = he_out + "&lt;"
+        } else if he_c == ">" { he_out = he_out + "&gt;"
+        } else if he_c == "\"" { he_out = he_out + "&quot;"
+        } else if he_c == "'" { he_out = he_out + "&#39;"
+        } else { he_out = he_out + he_c }
+        he_i = he_i + 1
+    }
+    return he_out
+}
+fn html_unescape(hu_s) {
+    hu_out = ""
+    hu_i = 0
+    while hu_i < len(hu_s) {
+        hu_step = 0
+        if at(hu_s, hu_i) == "&" {
+            if starts_at(hu_s, hu_i, "&amp;") { hu_out = hu_out + "&" hu_step = 5
+            } else if starts_at(hu_s, hu_i, "&lt;") { hu_out = hu_out + "<" hu_step = 4
+            } else if starts_at(hu_s, hu_i, "&gt;") { hu_out = hu_out + ">" hu_step = 4
+            } else if starts_at(hu_s, hu_i, "&quot;") { hu_out = hu_out + "\"" hu_step = 6
+            } else if starts_at(hu_s, hu_i, "&#39;") { hu_out = hu_out + "'" hu_step = 5 }
+        }
+        if hu_step == 0 { hu_out = hu_out + at(hu_s, hu_i) hu_step = 1 }
+        hu_i = hu_i + hu_step
+    }
+    return hu_out
+}
+
+# ---- stdlib/csvw.zl and stdlib/csv_parse.zl ---------------------------------
+QUOTE = at("\"", 0)
+fn csv_escape(ceField) {
+    ceS = str(ceField)
+    if not (has(ceS, ",") or has(ceS, QUOTE) or has(ceS, "\n") or has(ceS, "\r")) {
+        return ceS
+    }
+    ceOut = QUOTE
+    ceI = 0
+    while ceI < len(ceS) {
+        ceCh = at(ceS, ceI)
+        if ceCh == QUOTE { ceOut = ceOut + QUOTE + QUOTE } else { ceOut = ceOut + ceCh }
+        ceI = ceI + 1
+    }
+    return ceOut + QUOTE
+}
+fn csv_row(crFields) {
+    crParts = []
+    for crF in crFields { crParts = push(crParts, csv_escape(crF)) }
+    return join(crParts, ",")
+}
+fn csv_write(cwRows) {
+    cwOut = []
+    for cwR in cwRows { cwOut = push(cwOut, csv_row(cwR)) }
+    return join(cwOut, "\n")
+}
+fn csvParseLine(clLine) {
+    clFields = []
+    clCur = ""
+    clInQ = false
+    clI = 0
+    clN = len(clLine)
+    while clI < clN {
+        clCh = at(clLine, clI)
+        if clInQ {
+            if clCh == QUOTE {
+                clNext = at(clLine, clI + 1)
+                if clNext == QUOTE { clCur = clCur + QUOTE clI = clI + 2
+                } else { clInQ = false clI = clI + 1 }
+            } else { clCur = clCur + clCh clI = clI + 1 }
+        } else {
+            if clCh == QUOTE { clInQ = true clI = clI + 1
+            } else if clCh == "," { clFields = push(clFields, clCur) clCur = "" clI = clI + 1
+            } else { clCur = clCur + clCh clI = clI + 1 }
+        }
+    }
+    clFields = push(clFields, clCur)
+    return clFields
+}
+# A quote either opens or closes a field and a literal quote is written
+# doubled, so an ODD number of quote characters means one is still open and
+# the record continues onto the next line.
+fn csvOpenQuote(oqS) {
+    return count(oqS, QUOTE) % 2 == 1
+}
+fn csvParse(cpText) {
+    cpRows = []
+    cpLns = lines(cpText)
+    cpI = 0
+    cpBuf = ""
+    cpHave = false
+    while cpI < len(cpLns) {
+        if cpHave {
+            cpBuf = cpBuf + "\n" + cpLns[cpI]
+        } else {
+            cpBuf = cpLns[cpI]
+            cpHave = true
+        }
+        if not csvOpenQuote(cpBuf) {
+            cpRows = push(cpRows, csvParseLine(cpBuf))
+            cpBuf = ""
+            cpHave = false
+        }
+        cpI = cpI + 1
+    }
+    if cpHave { cpRows = push(cpRows, csvParseLine(cpBuf)) }
+    return cpRows
+}
+
+# ---- stdlib/strsearch.zl ----------------------------------------------------
+fn kmp_table(pat) {
+    m = len(pat)
+    fail = []
+    i = 0
+    while i < m { fail = push(fail, 0) i = i + 1 }
+    k = 0
+    i = 1
+    while i < m {
+        while k > 0 and at(pat, i) != at(pat, k) { k = fail[k - 1] }
+        if at(pat, i) == at(pat, k) { k = k + 1 }
+        fail[i] = k
+        i = i + 1
+    }
+    return fail
+}
+fn kmp_scan(text, pat, limit) {
+    hits = []
+    n = len(text)
+    m = len(pat)
+    if m == 0 or m > n { return hits }
+    fail = kmp_table(pat)
+    k = 0
+    i = 0
+    while i < n {
+        while k > 0 and at(text, i) != at(pat, k) { k = fail[k - 1] }
+        if at(text, i) == at(pat, k) { k = k + 1 }
+        if k == m {
+            hits = push(hits, i - m + 1)
+            if limit > 0 and len(hits) == limit { return hits }
+            k = fail[k - 1]
+        }
+        i = i + 1
+    }
+    return hits
+}
+fn kmp_search(text, pat) {
+    hits = kmp_scan(text, pat, 1)
+    if len(hits) == 0 { return -1 }
+    return hits[0]
+}
+fn kmp_all(text, pat) { return kmp_scan(text, pat, 0) }
+fn naive_all(text, pat) {
+    out = []
+    n = len(text)
+    m = len(pat)
+    if m == 0 { return out }
+    i = 0
+    while i + m <= n {
+        j = 0
+        ok = true
+        while j < m {
+            if at(text, i + j) != at(pat, j) { ok = false break }
+            j = j + 1
+        }
+        if ok { out = push(out, i) }
+        i = i + 1
+    }
+    return out
+}
+fn count_overlapping(text, pat) {
+    n = len(text)
+    m = len(pat)
+    if m == 0 { return 0 }
+    c = 0
+    i = 0
+    while i + m <= n {
+        if slice(text, i, i + m) == pat { c = c + 1 }
+        i = i + 1
+    }
+    return c
+}
+
+# ---- stdlib/sha256.zl -------------------------------------------------------
+MASK32 = 4294967295
+HEXDIGITS = "0123456789abcdef"
+SHA_K = [1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221]
+SHA_K = concat(SHA_K, [3624381080, 310598401, 607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580])
+SHA_K = concat(SHA_K, [3835390401, 4022224774, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986])
+SHA_K = concat(SHA_K, [2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711, 113926993, 338241895])
+SHA_K = concat(SHA_K, [666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037])
+SHA_K = concat(SHA_K, [2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344])
+SHA_K = concat(SHA_K, [430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779])
+SHA_K = concat(SHA_K, [1955562222, 2024104815, 2227730452, 2361852424, 2428436474, 2756734187, 3204031479, 3329325298])
+SHA_H0 = [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225]
+
+fn m32(m3_x) { return band(m3_x, MASK32) }
+fn rotr32(rr_x, rr_n) {
+    rr_low = band(rr_x, shl(1, rr_n) - 1)
+    return bor(shr(band(rr_x, MASK32), rr_n), shl(rr_low, 32 - rr_n))
+}
+fn shr32(sr_x, sr_n) { return shr(band(sr_x, MASK32), sr_n) }
+fn hex8(hx_v) {
+    hx_s = ""
+    hx_i = 7
+    while hx_i >= 0 { hx_s = hx_s + at(HEXDIGITS, band(shr(hx_v, hx_i * 4), 15)) hx_i -= 1 }
+    return hx_s
+}
+fn sha_bytes(sb_s) {
+    sb_out = []
+    sb_i = 0
+    while sb_i < len(sb_s) { sb_out = push(sb_out, band(code(at(sb_s, sb_i)), 255)) sb_i += 1 }
+    return sb_out
+}
+fn sha_pad(sp_msg) {
+    sp_out = []
+    for sp_b in sp_msg { sp_out = push(sp_out, sp_b) }
+    sp_bits = len(sp_msg) * 8
+    sp_out = push(sp_out, 128)
+    while len(sp_out) % 64 != 56 { sp_out = push(sp_out, 0) }
+    sp_hi = int(sp_bits / 4294967296)
+    sp_lo = sp_bits - sp_hi * 4294967296
+    sp_i = 3
+    while sp_i >= 0 { sp_out = push(sp_out, band(shr(sp_hi, sp_i * 8), 255)) sp_i -= 1 }
+    sp_i = 3
+    while sp_i >= 0 { sp_out = push(sp_out, band(shr(sp_lo, sp_i * 8), 255)) sp_i -= 1 }
+    return sp_out
+}
+fn sha256_bytes(sx_msg) {
+    sx_data = sha_pad(sx_msg)
+    sx_h = []
+    for sx_init in SHA_H0 { sx_h = push(sx_h, sx_init) }
+    sx_w = fill(64, 0)
+    sx_pos = 0
+    while sx_pos < len(sx_data) {
+        sx_t = 0
+        while sx_t < 16 {
+            sx_p = sx_pos + sx_t * 4
+            sx_w[sx_t] = m32(shl(sx_data[sx_p], 24) + shl(sx_data[sx_p + 1], 16) + shl(sx_data[sx_p + 2], 8) + sx_data[sx_p + 3])
+            sx_t += 1
+        }
+        while sx_t < 64 {
+            sx_x = sx_w[sx_t - 15]
+            sx_y = sx_w[sx_t - 2]
+            sx_s0 = bxor(bxor(rotr32(sx_x, 7), rotr32(sx_x, 18)), shr32(sx_x, 3))
+            sx_s1 = bxor(bxor(rotr32(sx_y, 17), rotr32(sx_y, 19)), shr32(sx_y, 10))
+            sx_w[sx_t] = m32(sx_w[sx_t - 16] + sx_s0 + sx_w[sx_t - 7] + sx_s1)
+            sx_t += 1
+        }
+        sx_a = sx_h[0]
+        sx_b = sx_h[1]
+        sx_c = sx_h[2]
+        sx_d = sx_h[3]
+        sx_e = sx_h[4]
+        sx_f = sx_h[5]
+        sx_g = sx_h[6]
+        sx_hh = sx_h[7]
+        sx_t = 0
+        while sx_t < 64 {
+            sx_bigs1 = bxor(bxor(rotr32(sx_e, 6), rotr32(sx_e, 11)), rotr32(sx_e, 25))
+            sx_ch = bxor(band(sx_e, sx_f), band(m32(bnot(sx_e)), sx_g))
+            sx_t1 = m32(sx_hh + sx_bigs1 + sx_ch + SHA_K[sx_t] + sx_w[sx_t])
+            sx_bigs0 = bxor(bxor(rotr32(sx_a, 2), rotr32(sx_a, 13)), rotr32(sx_a, 22))
+            sx_maj = bxor(bxor(band(sx_a, sx_b), band(sx_a, sx_c)), band(sx_b, sx_c))
+            sx_t2 = m32(sx_bigs0 + sx_maj)
+            sx_hh = sx_g
+            sx_g = sx_f
+            sx_f = sx_e
+            sx_e = m32(sx_d + sx_t1)
+            sx_d = sx_c
+            sx_c = sx_b
+            sx_b = sx_a
+            sx_a = m32(sx_t1 + sx_t2)
+            sx_t += 1
+        }
+        sx_h[0] = m32(sx_h[0] + sx_a)
+        sx_h[1] = m32(sx_h[1] + sx_b)
+        sx_h[2] = m32(sx_h[2] + sx_c)
+        sx_h[3] = m32(sx_h[3] + sx_d)
+        sx_h[4] = m32(sx_h[4] + sx_e)
+        sx_h[5] = m32(sx_h[5] + sx_f)
+        sx_h[6] = m32(sx_h[6] + sx_g)
+        sx_h[7] = m32(sx_h[7] + sx_hh)
+        sx_pos += 64
+    }
+    sx_out = ""
+    for sx_word in sx_h { sx_out = sx_out + hex8(sx_word) }
+    return sx_out
+}
+fn sha256(sh_msg) { return sha256_bytes(sha_bytes(sh_msg)) }
+
+# ================================================================= the checks
+
+# ------------------------------------------------- base64 encode, RFC 4648 §10
+# Worked by hand: 3 bytes = 24 bits, read out as 4 six-bit indexes.
+#   "f"   = 0x66 = 011001|10 0000        -> 25,32       -> Z g  + "=="
+#   "fo"  = 0x66 0x6F = 011001|100110|1111 00 -> 25,38,60 -> Z m 8 + "="
+#   "foo" = 011001|100110|111101|101111  -> 25,38,61,47  -> Z m 9 v
+# alphabet: 0-25 A-Z, 26-51 a-z, 52-61 0-9, 62 '+', 63 '/'.
+print("-- base64 encode (RFC 4648 vectors, every padding length) --")
+check("encode('')",         b64_encode(""),        "")
+check("encode('f')",        b64_encode("f"),       "Zg==")
+check("encode('fo')",       b64_encode("fo"),      "Zm8=")
+check("encode('foo')",      b64_encode("foo"),     "Zm9v")
+check("encode('foob')",     b64_encode("foob"),    "Zm9vYg==")
+check("encode('fooba')",    b64_encode("fooba"),   "Zm9vYmE=")
+check("encode('foobar')",   b64_encode("foobar"),  "Zm9vYmFy")
+check("encode('M')",        b64_encode("M"),       "TQ==")
+check("encode('Ma')",       b64_encode("Ma"),      "TWE=")
+check("encode('Man')",      b64_encode("Man"),     "TWFu")
+check("encode('hello')",    b64_encode("hello"),   "aGVsbG8=")
+check("encode('sure.')",    b64_encode("sure."),   "c3VyZS4=")
+check("encode(' ')",        b64_encode(" "),       "IA==")       # 0x20 -> 8,0
+check("encode(chr(1))",     b64_encode(chr(1)),    "AQ==")       # 0x01 -> 0,16
+check("encode(chr(255))",   b64_encode(chr(255)),  "/w==")       # 0xFF -> 63,48
+check("encode 3x0xFF -> ////", b64_encode(chr(255) + chr(255) + chr(255)), "////")
+check("encode fb ef be -> ++++", b64_encode(chr(251) + chr(239) + chr(190)), "++++")
+
+# ------------------------------------------------------------- base64 decode
+print("-- base64 decode --")
+check("decode('')",           b64_decode(""),           "")
+check("decode('Zg==')",       b64_decode("Zg=="),       "f")
+check("decode('Zm8=')",       b64_decode("Zm8="),       "fo")
+check("decode('Zm9v')",       b64_decode("Zm9v"),       "foo")
+check("decode('Zm9vYg==')",   b64_decode("Zm9vYg=="),   "foob")
+check("decode('Zm9vYmE=')",   b64_decode("Zm9vYmE="),   "fooba")
+check("decode('Zm9vYmFy')",   b64_decode("Zm9vYmFy"),   "foobar")
+check("decode('TWFu')",       b64_decode("TWFu"),       "Man")
+check("decode('aGVsbG8=')",   b64_decode("aGVsbG8="),   "hello")
+check("decode('c3VyZS4=')",   b64_decode("c3VyZS4="),   "sure.")
+check("decode('/w==') is 0xFF", index_at(b64_decode("/w=="), 0), 255)
+# Degenerate inputs. Documented rule: the scanner only consumes whole 4-char
+# groups (`while de_i + 3 < de_n`), so anything shorter than a group is dropped.
+check("decode('T') too short",     b64_decode("T"),      "")
+check("decode('TWE') too short",   b64_decode("TWE"),    "")
+check("decode('TWFuTQ') drops tail", b64_decode("TWFuTQ"), "Man")
+check("decode two padded groups",  b64_decode("TQ==TQ=="), "MM")
+
+# ------------------------------------------------- base64 round trips + laws
+# Padding length is decided by len % 3: 0 -> none, 1 -> "==", 2 -> "=".
+print("-- base64 round trips at every padding length --")
+t_cases = ["", "M", "Ma", "Man", "Many", "Many h", "Many ha", "zl", "\t\n", "~!@#$%^&*()"]
+for t_s in t_cases {
+    check("round trip len " + str(len(t_s)) + " (len%3=" + str(len(t_s) % 3) + ")", b64_decode(b64_encode(t_s)) == t_s, true)
+}
+check("pad chars for len%3==0", b64_encode("abc"), "YWJj")            # no "="
+check("pad chars for len%3==1", ends(b64_encode("a"), "=="), true)
+check("pad chars for len%3==2", ends(b64_encode("ab"), "="), true)
+check("len%3==2 has ONE '='",   count(b64_encode("ab"), "="), 1)
+check("len%3==1 has TWO '='",   count(b64_encode("a"), "="), 2)
+# length law: 4 * ceil(n/3)
+check("enc len for n=0",  len(b64_encode("")),                0)
+check("enc len for n=1",  len(b64_encode("a")),               4)
+check("enc len for n=3",  len(b64_encode("abc")),             4)
+check("enc len for n=4",  len(b64_encode("abcd")),            8)
+check("enc len for n=6",  len(b64_encode("abcdef")),          8)
+check("enc len for n=7",  len(b64_encode("abcdefg")),        12)
+check("enc len for n=40", len(b64_encode(repeat("x", 40))),  56)      # 4*ceil(40/3)
+check("high-byte round trip", b64_decode(b64_encode(chr(255) + chr(254) + chr(1))) == chr(255) + chr(254) + chr(1), true)
+check("long round trip", b64_decode(b64_encode(repeat("The quick brown fox. ", 40))) == repeat("The quick brown fox. ", 40), true)
+
+# A byte of value 0 cannot live in a zl string (they are NUL-terminated), and
+# b64_decode builds its output with chr(). chr(0) used to return a ZERO-length
+# string, so valid base64 that decodes to a zero byte came back SHORT and
+# silently wrong - b64_decode("QQBC") gave "AB", length 2 instead of 3.
+# chr(0) is a runtime error now, so the same input ABORTS instead:
+#   print(b64_decode("QQBC"))
+#   -> runtime error: chr(0): a zl string cannot hold a NUL byte
+# That is the accepted trade: base64.zl says up front it is "for text, not
+# arbitrary binary", and a loud refusal beats silent data loss. It cannot be a
+# live check (the error would take this file down), so what is pinned instead
+# is that every byte the representation CAN hold still round-trips:
+check("decode of an all-nonzero triple", len(b64_decode("QUJD")), 3)
+check("...and its value",                b64_decode("QUJD"),      "ABC")
+
+# ------------------------------------------------------------- b64_is_valid
+# Contract: length a multiple of 4, at most two trailing "=", every other
+# character in the alphabet.
+print("-- b64_is_valid --")
+check("valid('')",      b64_is_valid(""),      true)
+check("valid('TWFu')",  b64_is_valid("TWFu"),  true)
+check("valid('TQ==')",  b64_is_valid("TQ=="),  true)
+check("valid('TWE=')",  b64_is_valid("TWE="),  true)
+check("valid('TWE/')",  b64_is_valid("TWE/"),  true)     # 63 is '/'
+check("valid('TW+u')",  b64_is_valid("TW+u"),  true)     # 62 is '+'
+check("valid('TWF')",   b64_is_valid("TWF"),   false)    # length 3
+check("valid('T')",     b64_is_valid("T"),     false)
+check("valid('TW-u')",  b64_is_valid("TW-u"),  false)    # '-' not in alphabet
+check("valid('=WFu')",  b64_is_valid("=WFu"),  false)    # '=' not at the end
+check("valid('AB=C')",  b64_is_valid("AB=C"),  false)
+check("valid('A===')",  b64_is_valid("A==="),  false)    # three '='
+check("valid('====')",  b64_is_valid("===="),  false)
+check("encoder output is always valid", b64_is_valid(b64_encode("Many hands")), true)
+# b64_is_valid checks SHAPE, not canonical form: "TX==" passes but the four
+# spare low bits of 'X' are ignored, so it decodes to "M" and re-encodes to
+# "TQ==". So validity does NOT imply b64_encode(b64_decode(x)) == x. That is
+# the module's stated contract (nothing about canonical form), pinned here.
+check("valid but non-canonical 'TX=='", b64_is_valid("TX=="), true)
+check("non-canonical re-encodes differently", b64_encode(b64_decode("TX==")), "TQ==")
+
+# --------------------------------------------------------------- hex codec
+print("-- hex_encode / hex_decode --")
+check("hex_encode('')",        hex_encode(""),          "")
+check("hex_encode('A')",       hex_encode("A"),         "41")
+check("hex_encode('zl')",      hex_encode("zl"),        "7a6c")
+check("hex_encode(chr(1))",    hex_encode(chr(1)),      "01")
+check("hex_encode(chr(255))",  hex_encode(chr(255)),    "ff")
+check("hex_encode('Man')",     hex_encode("Man"),       "4d616e")
+check("hex len is 2n",         len(hex_encode("hello")), 10)
+check("hex_decode('')",        hex_decode(""),          "")
+check("hex_decode('7a6c')",    hex_decode("7a6c"),      "zl")
+check("hex_decode('7A6C') uc", hex_decode("7A6C"),      "zl")
+check("hex_decode('4') odd",   hex_decode("4"),         "")
+check("hex_decode('414') odd", hex_decode("414"),       "A")      # trailing nibble dropped
+check("hex_decode('4g') bad",  hex_decode("4g"),        "")       # stops at the junk
+check("hex_decode('41g1') bad", hex_decode("41g1"),     "A")      # keeps what it had
+check("hex round trip",        hex_decode(hex_encode("Man")), "Man")
+
+# ------------------------------------------------------------ URL encoding
+# RFC 3986 unreserved set is A-Z a-z 0-9 - _ . ~ ; everything else is %XX with
+# UPPERCASE hex. By hand: ' '=0x20, '!'=0x21, '&'=0x26, '+'=0x2B, '/'=0x2F,
+# '='=0x3D, '?'=0x3F, '%'=0x25.
+print("-- url_encode --")
+check("url enc ''",          url_encode(""),           "")
+check("url enc alnum",       url_encode("abcXYZ019"),  "abcXYZ019")
+check("url enc unreserved",  url_encode("-_.~"),       "-_.~")
+check("url enc space",       url_encode(" "),          "%20")
+check("url enc plus",        url_encode("+"),          "%2B")
+check("url enc slash",       url_encode("/"),          "%2F")
+check("url enc question",    url_encode("?"),          "%3F")
+check("url enc amp",         url_encode("&"),          "%26")
+check("url enc equals",      url_encode("="),          "%3D")
+check("url enc percent",     url_encode("%"),          "%25")
+check("url enc bang",        url_encode("!"),          "%21")
+check("url enc sentence",    url_encode("hello world & more!"), "hello%20world%20%26%20more%21")
+check("url enc 0x80",        url_encode(chr(128)),     "%80")
+check("url enc 0xFF",        url_encode(chr(255)),     "%FF")
+check("url enc utf-8 e-acute", url_encode("caf" + chr(195) + chr(169)), "caf%C3%A9")
+check("url enc newline",     url_encode("\n"),         "%0A")
+check("url enc tab",         url_encode("\t"),         "%09")
+
+print("-- url_decode --")
+check("url dec ''",          url_decode(""),           "")
+check("url dec '%20'",       url_decode("%20"),        " ")
+check("url dec '%2F'",       url_decode("%2F"),        "/")
+check("url dec '%2f' lower", url_decode("%2f"),        "/")      # hex case-insensitive
+check("url dec '%41'",       url_decode("%41"),        "A")
+check("url dec plus stays",  url_decode("a+b"),        "a+b")    # RFC 3986, not form-encoding
+check("url dec lone % at end", url_decode("abc%"),     "abc%")
+check("url dec short % at end", url_decode("abc%4"),   "abc%4")
+check("url dec bad hex",     url_decode("%zz"),        "%zz")
+check("url dec '%%41'",      url_decode("%%41"),       "%A")
+check("url dec '100%_%2Fdone%'", url_decode("100%_%2Fdone%"), "100%_/done%")
+check("url dec 0xFF",        index_at(url_decode("%FF"), 0), 255)
+check("url dec utf-8",       url_decode("caf%C3%A9") == "caf" + chr(195) + chr(169), true)
+t_uroundtrip = ["", "a", " ", "hello world & more!", "a-b_c.d~e/f?g=h", "%%%", "\t\r\n", chr(200) + chr(1)]
+for t_s in t_uroundtrip {
+    check("url round trip len " + str(len(t_s)), url_decode(url_encode(t_s)) == t_s, true)
+}
+# "%00" decodes to a zero byte, which a zl string cannot hold. It used to
+# VANISH (url_decode("a%00b") gave "ab", length 2); now chr(0) refuses, so the
+# same input aborts. Same NUL limitation as base64, same trade - a loud refusal
+# instead of silent data loss. Not a live check; the error kills the file.
+#   print(url_decode("a%00b"))
+#   -> runtime error: chr(0): a zl string cannot hold a NUL byte
+check("url dec '%01' is one byte", len(url_decode("a%01b")), 3)
+
+# ----------------------------------------------------------- HTML escaping
+print("-- html_escape / html_unescape --")
+check("html esc ''",       html_escape(""),        "")
+check("html esc plain",    html_escape("plain"),   "plain")
+check("html esc amp",      html_escape("&"),       "&amp;")
+check("html esc lt",       html_escape("<"),       "&lt;")
+check("html esc gt",       html_escape(">"),       "&gt;")
+check("html esc quot",     html_escape("\""),      "&quot;")
+check("html esc apos",     html_escape("'"),       "&#39;")
+check("html esc all five", html_escape("&<>\"'"),  "&amp;&lt;&gt;&quot;&#39;")
+check("html esc tag",      html_escape("<a href=\"x\">"), "&lt;a href=&quot;x&quot;&gt;")
+check("html unesc ''",     html_unescape(""),      "")
+check("html unesc amp",    html_unescape("&amp;"), "&")
+check("html unesc lt",     html_unescape("&lt;"),  "<")
+check("html unesc gt",     html_unescape("&gt;"),  ">")
+check("html unesc quot",   html_unescape("&quot;"), "\"")
+check("html unesc apos",   html_unescape("&#39;"), "'")
+# Left-to-right scanning is what stops "&amp;lt;" collapsing all the way to "<".
+check("html no double-collapse", html_unescape("&amp;lt;"), "&lt;")
+check("html bare '&'",     html_unescape("&"),      "&")
+check("html '&amp' no semi", html_unescape("&amp"), "&amp")
+check("html '&lt' no semi",  html_unescape("&lt"),  "&lt")
+check("html unknown entity", html_unescape("&nbsp;"), "&nbsp;")
+check("html '&#39' no semi", html_unescape("&#39"),  "&#39")
+t_hcases = ["", "plain", "&", "<>", "&amp;", "&lt;", "a & b < c > d \" e ' f"]
+t_hcases = concat(t_hcases, ["<a href=\"x\">Tom & Jerry's</a>", "&&&", "&amp;amp;"])
+for t_s in t_hcases {
+    check("html round trip [" + t_s + "]", html_unescape(html_escape(t_s)) == t_s, true)
+}
+check("html double esc/unesc", html_unescape(html_unescape(html_escape(html_escape("<&>")))), "<&>")
+
+# ------------------------------------------------------------ CSV escaping
+# RFC 4180: quote only when the field holds a comma, a quote, CR or LF; double
+# any interior quote. A lone quote field becomes four quotes: " "" ".
+print("-- csv_escape --")
+check("csv esc plain",       csv_escape("plain"),        "plain")
+check("csv esc empty",       csv_escape(""),             "")
+check("csv esc spaces kept unquoted", csv_escape(" a "), " a ")
+check("csv esc comma",       csv_escape("Bob, Jr."),     "\"Bob, Jr.\"")
+check("csv esc quote",       csv_escape("she said \"hi\""), "\"she said \"\"hi\"\"\"")
+check("csv esc lone quote",  csv_escape("\""),           "\"\"\"\"")
+check("csv esc lone quote len", len(csv_escape("\"")),   4)
+check("csv esc number",      csv_escape(30),             "30")
+check("csv esc big number",  csv_escape(1000000),        "1000000")
+check("csv esc bool",        csv_escape(true),           "true")
+check("csv esc newline quotes", len(csv_escape("a\nb")), 5)   # " a LF b "
+check("csv esc CR quotes",      len(csv_escape("a\rb")), 5)
+check("csv row plain",       csv_row(["a", "b", "c"]),   "a,b,c")
+check("csv row empty list",  csv_row([]),                "")
+check("csv row empty fields", csv_row(["", "", ""]),     ",,")
+check("csv row mixed",       csv_row(["a,b", 7]),        "\"a,b\",7")
+
+print("-- csv parse / round trip --")
+check("parse ''",            len(csvParseLine("")),      1)     # one empty field
+check("parse ',' -> 2",      len(csvParseLine(",")),     2)
+check("parse 'a,' -> 2",     len(csvParseLine("a,")),    2)
+check("parse ',a' first empty", csvParseLine(",a")[0],   "")
+check("parse 'a,b,c'",       str(csvParseLine("a,b,c")), str(["a", "b", "c"]))
+check("parse quoted comma",  csvParseLine("\"Bob, Jr.\",25")[0], "Bob, Jr.")
+check("parse doubled quote", csvParseLine("\"she said \"\"hi\"\"\"")[0], "she said \"hi\"")
+check("parse lone-quote field", csvParseLine("\"\"\"\"")[0], "\"")
+check("parse unterminated quote", csvParseLine("\"ab")[0], "ab")   # lenient
+check("parse quote-then-junk", csvParseLine("\"ab\"cd")[0], "abcd") # lenient
+t_csvfields = ["plain", "", " ", "a,b", "she said \"hi\"", "\"", ",", "\"\"", "a,\"b\",c"]
+for t_f in t_csvfields {
+    check("csv field round trip [" + t_f + "]", csvParseLine(csv_row([t_f]))[0] == t_f, true)
+}
+check("csv multi-field round trip", str(csvParseLine(csv_row(["a,b", "\"", "plain"]))), str(["a,b", "\"", "plain"]))
+t_grid = [["name", "note"], ["Bob, Jr.", "said \"hi\""], ["", "x"]]
+check("csv grid rows",   len(csvParse(csv_write(t_grid))), 3)
+check("csv grid r1c0",   csvParse(csv_write(t_grid))[1][0], "Bob, Jr.")
+check("csv grid r1c1",   csvParse(csv_write(t_grid))[1][1], "said \"hi\"")
+check("csv grid r2c0 empty", csvParse(csv_write(t_grid))[2][0], "")
+check("csv no trailing newline", ends(csv_write(t_grid), "\n"), false)
+# A lone CR inside a field survives, because lines() only breaks on LF/CRLF.
+t_crgrid = csvParse(csv_write([["a\rb", "z"]]))
+check("csv CR inside a field survives", t_crgrid[0][0] == "a\rb", true)
+
+# ### WAS BROKEN - a newline inside a field silently corrupted the CSV.
+# csvw.zl's header promises "csv_write ... adds NO trailing newline, so its
+# output feeds straight back into csv_parse.zl's csvParse()", and csv_escape
+# deliberately quotes any field containing "\n" - so an embedded newline is a
+# case the writer claims to support. csvParse split with lines() BEFORE it
+# parsed quotes, so the quoted newline ended the row early:
+#   csv_write([["a\nb","z"]]) is  "a<LF>b",z
+#   csvParse of that gave 2 rows - ["a"] and ["b", "z"] - so field 0 was "a"
+#   and the "z" column had moved into a phantom second record.
+# csvParseLine() always handled a quoted newline correctly; only the pre-split
+# destroyed it.
+# FIX: csvParse is record-aware. It joins lines back together while a quoted
+# field is still open (csvOpenQuote: an odd number of quote characters means
+# one is unclosed, since a literal quote is written doubled).
+t_nl = csvParse(csv_write([["a\nb", "z"]]))
+check("csv embedded newline: row count",   len(t_nl),     1)
+check("csv embedded newline: field count", len(t_nl[0]),  2)
+check("csv embedded newline: field value", t_nl[0][0] == "a\nb", true)
+
+# ---------------------------------------------------------------- KMP search
+# fail[i] = length of the longest proper prefix of pat[0..i] that is also a
+# suffix of it. Walked by hand:
+#   "ababc"     -> 0,0,1,2,0
+#   "aaaa"      -> 0,1,2,3
+#   "aabaaa"    -> 0,1,0,1,2,2
+#   "abcabcabd" -> 0,0,0,1,2,3,4,5,0
+print("-- kmp_table --")
+check("table('')",          str(kmp_table("")),          str([]))
+check("table('a')",         str(kmp_table("a")),         str([0]))
+check("table('ab')",        str(kmp_table("ab")),        str([0, 0]))
+check("table('aa')",        str(kmp_table("aa")),        str([0, 1]))
+check("table('ababc')",     str(kmp_table("ababc")),     str([0, 0, 1, 2, 0]))
+check("table('aaaa')",      str(kmp_table("aaaa")),      str([0, 1, 2, 3]))
+check("table('aabaaa')",    str(kmp_table("aabaaa")),    str([0, 1, 0, 1, 2, 2]))
+check("table('abcabcabd')", str(kmp_table("abcabcabd")), str([0, 0, 0, 1, 2, 3, 4, 5, 0]))
+check("table length == pattern length", len(kmp_table("mississippi")), 11)
+
+print("-- kmp_all: repeated prefixes and overlaps --")
+# "aaaaaa" has 6 a's, so "aa" starts at 0..4 and "aaaa" at 0..2.
+check("all('aaaaaa','aa')",   str(kmp_all("aaaaaa", "aa")),   str([0, 1, 2, 3, 4]))
+check("all('aaaaaa','aaaa')", str(kmp_all("aaaaaa", "aaaa")), str([0, 1, 2]))
+check("all('aaaa','a')",      str(kmp_all("aaaa", "a")),      str([0, 1, 2, 3]))
+check("all('aaaa','aaaa')",   str(kmp_all("aaaa", "aaaa")),   str([0]))
+check("all('abababa','aba')", str(kmp_all("abababa", "aba")), str([0, 2, 4]))
+check("all('mississippi','issi')", str(kmp_all("mississippi", "issi")), str([1, 4]))
+check("all('mississippi','iss')",  str(kmp_all("mississippi", "iss")),  str([1, 4]))
+check("all('abababcabababcabab','ababc')", str(kmp_all("abababcabababcabab", "ababc")), str([2, 9]))
+check("all no match",         str(kmp_all("abcdef", "zz")),   str([]))
+
+print("-- kmp edge cases --")
+check("empty pattern never matches", str(kmp_all("abc", "")), str([]))
+check("empty text",           str(kmp_all("", "abc")),        str([]))
+check("both empty",           str(kmp_all("", "")),           str([]))
+check("pattern longer than text", str(kmp_all("abc", "abcd")), str([]))
+check("pattern longer, same start", str(kmp_all("aaa", "aaaa")), str([]))
+check("pattern == text",      str(kmp_all("abc", "abc")),     str([0]))
+check("pattern at the very end", str(kmp_all("xxxab", "ab")), str([3]))
+check("pattern at the very start", str(kmp_all("abxxx", "ab")), str([0]))
+check("single char text/pat", str(kmp_all("a", "a")),         str([0]))
+check("single char miss",     str(kmp_all("a", "b")),         str([]))
+check("kmp_search first hit", kmp_search("abababcabababcabab", "ababc"), 2)
+check("kmp_search miss",      kmp_search("abc", "zzz"),       -1)
+check("kmp_search pattern too long", kmp_search("abc", "abcd"), -1)
+# strsearch.zl states "an empty pattern never matches", which is deliberately
+# NOT what the builtin find() does (it returns 0). Pinned so the divergence
+# stays visible.
+check("kmp_search('abc','') is -1", kmp_search("abc", ""),    -1)
+check("builtin find('abc','') is 0", find("abc", ""),          0)
+
+print("-- kmp_all agrees with a naive scan --")
+t_pairs = [["aaaaaa", "aa"], ["aaaaaa", "aaaa"], ["aaaa", "a"], ["aaa", "aaaa"]]
+t_pairs = concat(t_pairs, [["abababa", "aba"], ["mississippi", "issi"], ["abababcabababcabab", "ababc"]])
+t_pairs = concat(t_pairs, [["", "a"], ["a", ""], ["abc", "abcd"], ["abc", "abc"], ["xxxab", "ab"]])
+t_pairs = concat(t_pairs, [["aabaabaab", "aabaab"], ["banana", "ana"], ["aaaaab", "aab"]])
+t_pairs = concat(t_pairs, [["the cat sat on the mat", "at"], ["abcabcabd", "abcabd"]])
+for t_p in t_pairs {
+    check("kmp==naive [" + t_p[0] + "]/[" + t_p[1] + "]", str(kmp_all(t_p[0], t_p[1])), str(naive_all(t_p[0], t_p[1])))
+}
+for t_p in t_pairs {
+    check("hits==count_overlapping [" + t_p[0] + "]/[" + t_p[1] + "]", len(kmp_all(t_p[0], t_p[1])), count_overlapping(t_p[0], t_p[1]))
+}
+# The builtin count() counts NON-overlapping hits, so it is deliberately lower.
+check("count() is non-overlapping", count("aaaaaa", "aa"), 3)
+check("kmp_all is overlapping",     len(kmp_all("aaaaaa", "aa")), 5)
+# "caf<C3><A9> caf<C3><A9>" is 11 bytes: c0 a1 f2 C3=3 A9=4 sp5 c6 a7 f8 C3=9
+# A9=10, so the two-byte e-acute starts at byte 3 and byte 9.
+check("kmp over multi-byte utf-8",  str(kmp_all("caf" + chr(195) + chr(169) + " caf" + chr(195) + chr(169), chr(195) + chr(169))), str([3, 9]))
+check("utf-8 search agrees with naive", str(kmp_all("caf" + chr(195) + chr(169) + " caf" + chr(195) + chr(169), chr(195) + chr(169))), str(naive_all("caf" + chr(195) + chr(169) + " caf" + chr(195) + chr(169), chr(195) + chr(169))))
+check("kmp on a long run", len(kmp_all(repeat("a", 500), "aaa")), 498)
+
+# --------------------------------------------------------------- SHA-256
+# Published FIPS 180-4 / standard vectors. Padding boundaries matter: a message
+# of 55 bytes still fits one block (55 + 1 + 8 = 64), 56 needs a second, and 64
+# always gains a whole extra block because the 0x80 byte is unconditional.
+print("-- sha256 known vectors --")
+check("sha256('')",   sha256(""),   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+check("sha256('a')",  sha256("a"),  "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb")
+check("sha256('abc')", sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+check("sha256('message digest')", sha256("message digest"), "f7846f55cf23e14eebeab5b4e1550cad5b509e3348fbc4efa3a1413d393cb650")
+check("sha256('hello world')", sha256("hello world"), "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+check("sha256(a-z)", sha256("abcdefghijklmnopqrstuvwxyz"), "71c480df93d6ae2f1efad1447c66c9525e316218cf51fc8d9ed832f2daf18b73")
+check("sha256(0-9)", sha256("0123456789"), "84d89877f0d4041efb6bf91a16f0248f2fd573e6af05c19f96bedb9f882f7882")
+check("sha256 FIPS 448-bit", sha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"), "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1")
+check("sha256 FIPS 896-bit", sha256("abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"), "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1")
+check("sha256 pangram", sha256("The quick brown fox jumps over the lazy dog"), "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592")
+check("sha256 pangram+dot", sha256("The quick brown fox jumps over the lazy dog."), "ef537f25c895bfa782526529a9b63d97aa631564d5d789c2b765448c8635fb6c")
+
+print("-- sha256 padding boundaries --")
+check("sha256 55 x 'a'",  sha256(repeat("a", 55)),  "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318")
+check("sha256 56 x 'a'",  sha256(repeat("a", 56)),  "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a")
+check("sha256 57 x 'a'",  sha256(repeat("a", 57)),  "f13b2d724659eb3bf47f2dd6af1accc87b81f09f59f2b75e5c0bed6589dfe8c6")
+check("sha256 63 x 'a'",  sha256(repeat("a", 63)),  "7d3e74a05d7db15bce4ad9ec0658ea98e3f06eeecf16b4c6fff2da457ddc2f34")
+check("sha256 64 x 'a'",  sha256(repeat("a", 64)),  "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb")
+check("sha256 65 x 'a'",  sha256(repeat("a", 65)),  "635361c48bb9eab14198e76ea8ab7f1a41685d6ad62aa9146d301d4f17eb0ae0")
+check("sha256 119 x 'a'", sha256(repeat("a", 119)), "31eba51c313a5c08226adf18d4a359cfdfd8d2e816b13f4af952f7ea6584dcfb")
+check("sha256 120 x 'a'", sha256(repeat("a", 120)), "2f3d335432c70b580af0e8e1b3674a7c020d683aa5f73aaaedfdc55af904c21c")
+check("pad len of ''",       len(sha_pad(sha_bytes(""))),               64)
+check("pad len of 55",       len(sha_pad(sha_bytes(repeat("a", 55)))),  64)
+check("pad len of 56",       len(sha_pad(sha_bytes(repeat("a", 56)))), 128)
+check("pad len of 64",       len(sha_pad(sha_bytes(repeat("a", 64)))), 128)
+check("pad is a multiple of 64", len(sha_pad(sha_bytes(repeat("a", 200)))) % 64, 0)
+check("pad always grows",    len(sha_pad(sha_bytes(repeat("a", 64)))) > 64, true)
+
+print("-- sha256 over raw byte lists (the NUL bytes strings cannot hold) --")
+check("sha256_bytes([])",        sha256_bytes([]), sha256(""))
+check("sha256_bytes([97,98,99])", sha256_bytes([97, 98, 99]), sha256("abc"))
+check("sha256_bytes([0])",       sha256_bytes([0]), "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d")
+check("sha256_bytes([0,1,2])",   sha256_bytes([0, 1, 2]), "ae4b3280e56e2faf83f414a6e3dabe9d5fbe18976544c05fed121accb85b53fc")
+check("sha256_bytes([255])",     sha256_bytes([255]), "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89")
+check("sha256_bytes high bytes", sha256_bytes([255, 254, 253, 128, 127]), "a3508b14875690868d6a0dfe938d0c825f749ba9e3affde545952daee4930d5f")
+check("high bytes via string agree", sha256(chr(255) + chr(254) + chr(253) + chr(128) + chr(127)), sha256_bytes([255, 254, 253, 128, 127]))
+
+print("-- sha256 shape and primitives --")
+check("digest is 64 hex chars",  len(sha256("abc")),   64)
+check("digest of '' is 64 too",  len(sha256("")),      64)
+check("digest is lowercase hex", sha256("abc") == lower(sha256("abc")), true)
+check("digest is deterministic", sha256("zl") == sha256("zl"), true)
+check("one-bit avalanche",       sha256("a") != sha256("b"), true)
+check("length extension differs", sha256("a") != sha256("aa"), true)
+check("rotr32(1,1)",             hex8(rotr32(1, 1)),          "80000000")
+check("rotr32(0xffffffff,16)",   hex8(rotr32(4294967295, 16)), "ffffffff")
+check("rotr32(0x12345678,4)",    hex8(rotr32(305419896, 4)),  "81234567")
+check("shr32(0xffffffff,31)",    hex8(shr32(4294967295, 31)), "00000001")
+check("shr32 is zero-filling",   hex8(shr32(2147483648, 31)), "00000001")
+check("m32(bnot(0))",            hex8(m32(bnot(0))),          "ffffffff")
+check("hex8(0)",                 hex8(0),                     "00000000")
+check("hex8(0xffffffff)",        hex8(4294967295),            "ffffffff")
+
+# ------------------------------------------------- was a crash, now a check
+# ### WAS A CRASH - pad(s, w) with a NEGATIVE width killed the interpreter.
+# pad() is the width helper the text stdlib formats with (sha256.zl, fmt.zl and
+# base64.zl all call it). Any width <= -1 died with 0xC0000005
+# (STATUS_ACCESS_VIOLATION); no message was printed and every line buffered on
+# stdout was lost with it. It was the width alone, not the string:
+#   pad("ab",  0)    -> "ab"    fine
+#   pad("ab", -0.5)  -> "ab"    fine (truncates to 0)
+#   pad("ab", -1)    -> CRASH
+#   pad("",   -1)    -> CRASH
+#   pad("ab", -100)  -> CRASH
+# `int w=(int)args[1].num; size_t o=((size_t)w>L)?(size_t)w:L;` - a negative w
+# cast to size_t is SIZE_MAX, so malloc(o+1) wrapped to a tiny allocation and
+# the space-fill loop walked off the end of it. w == 0 was safe because
+# (size_t)0 > L is false, which is exactly why the boundary sat at -1.
+# FIX: the width is clamped in the double domain before narrowing, so pad now
+# matches every sibling builtin - repeat("ab",-5)="", slice("abc",0,-1)="",
+# take([1,2],-1)=[], at("abc",-5)="" - and pad(s, negative) is just s.
+# Fixed in runtime.c as well, which had the identical line.
+check("pad negative width returns s", pad("ab", -1),      "ab")
+check("pad(-100) returns s",          pad("ab", -100),    "ab")
+check("pad('',-1) is empty",          len(pad("", -1)),   0)
+check("pad(-1) == pad(0)",            pad("ab", -1) == pad("ab", 0), true)
+
+report()
+
+# ==================================================== BUGS FOUND (ALL FIXED)
+#
+# 1. CRASH - pad(s, w) segfaulted for any w <= -1  (HIGH)
+#    Interpreter died with 0xC0000005, printed nothing, lost buffered stdout.
+#    Repro:            print(pad("ab", -1))
+#    Boundary:         w = 0 and w = -0.5 were fine; w <= -1 always died.
+#    Independent of the string: pad("", -1) died too.
+#    FIX: the width is clamped while it is still a double, before the narrowing
+#    to int - the same clamp_index helper the other count/index builtins now
+#    use. Applied to interp.c AND runtime.c, which carried the identical line.
+#    Now covered by live checks above.
+#
+# 2. A newline inside a CSV field silently corrupted the file  (HIGH)
+#    csv_escape() quotes fields containing "\n", and csvw.zl's header promises
+#    its output "feeds straight back into csv_parse.zl's csvParse()". It did
+#    not: csvParse split on lines() BEFORE parsing quotes, so the quoted
+#    newline terminated the record.
+#    Repro:  csvParse(csv_write([["a\nb", "z"]]))
+#            want 1 row  [["a\nb", "z"]]
+#            got  2 rows [["a"], ["b", "z"]]
+#    The csvw.zl demo writes exactly this shape of row ("line one\nline two")
+#    but never round-tripped it, which is why it went unnoticed.
+#    FIX: csvParse is record-aware - it keeps joining lines while a quoted
+#    field is open, so csvParseLine (which always handled this correctly) sees
+#    the whole record. csvw.zl's round-trip claim is now true.
+#    A lone CR is fine - lines() only breaks on LF and CRLF - and that is
+#    pinned by the "csv CR inside a field survives" check above.
+#
+# 2b. KNOWN COST of the chr(0) fix, accepted. A zl string is a NUL-terminated
+#    C string, so it cannot hold a zero byte. chr(0) used to return a
+#    ZERO-LENGTH string, so b64_decode and url_decode silently DROPPED a
+#    decoded zero byte - b64_decode("QQBC") gave "AB" and url_decode("a%00b")
+#    gave "ab". chr(0) is a runtime error now, so those inputs abort instead of
+#    corrupting. Loud beats silent, and base64.zl already documents itself as
+#    "for text, not arbitrary binary". Making it work needs length-carrying
+#    strings, which is a language change, not a builtin fix.
+#
+# 3. NOTE (low) - b64_is_valid() accepts non-canonical base64.
+#    "TX==" passes, but the four spare low bits of 'X' are dropped, so it
+#    decodes to "M" and re-encodes to "TQ==". 60 of the 64 strings "T?==" are
+#    accepted-but-not-canonical. That matches the module's own stated contract
+#    (shape only), so it is pinned as passing rather than failing - but callers
+#    must not read b64_is_valid(x) as "x is something b64_encode could emit".
+#
+# Checked and found CORRECT (no defect): every base64 padding length including
+# all 255 single-byte messages and the full 64-character alphabet; the
+# 4*ceil(n/3) length law; URL encoding of all 256 byte values against the
+# RFC 3986 unreserved set; HTML entity round trips including the "&amp;lt;"
+# no-double-collapse case; KMP against a naive scan exhaustively over every
+# binary text up to length 8 with every pattern up to length 3 (7154 cases,
+# 0 mismatches) and against the builtin find() over 900 random cases; and all
+# 23 SHA-256 reference digests including the byte-list path.

@@ -1,0 +1,97 @@
+# stack_queue.zl
+# Stack (LIFO) and Queue (FIFO) helpers built on plain lists.
+# Lists don't mutate in place: push(list,item) RETURNS a new list, so every
+# helper here returns a fresh list (and pop/dequeue also return the removed value).
+
+# ---------- Stack helpers (LIFO) ----------
+
+# push_top: add value onto the top of the stack -> returns the new list.
+fn push_top(stk, value) {
+    return push(stk, value)
+}
+
+# pop_top: remove the top (last) element.
+# returns [newlist, value].  If empty, returns [stk, ""] (nothing to pop).
+fn pop_top(stk) {
+    n = len(stk)
+    if n == 0 {
+        return [stk, ""]
+    }
+    top = stk[n - 1]
+    out = []
+    i = 0
+    while i < n - 1 {
+        out = push(out, stk[i])
+        i = i + 1
+    }
+    return [out, top]
+}
+
+# ---------- Queue helpers (FIFO) ----------
+
+# enqueue: add value to the back of the queue -> returns the new list.
+fn enqueue(q, value) {
+    return push(q, value)
+}
+
+# dequeue: remove the front (first) element.
+# returns [newlist, value].  If empty, returns [q, ""].
+fn dequeue(q) {
+    n = len(q)
+    if n == 0 {
+        return [q, ""]
+    }
+    front = q[0]
+    out = []
+    i = 1
+    while i < n {
+        out = push(out, q[i])
+        i = i + 1
+    }
+    return [out, front]
+}
+
+# =====================================================================
+# SELF-TEST: demonstrate LIFO (stack) and FIFO (queue) order with prints
+# =====================================================================
+
+print("=== STACK (LIFO) ===")
+stack = []
+stack = push_top(stack, "A")
+stack = push_top(stack, "B")
+stack = push_top(stack, "C")
+print("stack after pushing A, B, C: " + join(stack, ", "))
+
+# Pop everything: should come out C, B, A (last in, first out)
+popped = []
+while len(stack) > 0 {
+    res = pop_top(stack)
+    stack = res[0]
+    popped = push(popped, res[1])
+}
+print("pop order (expect C, B, A): " + join(popped, ", "))
+print("stack now empty, len = " + len(stack))
+
+emptyPop = pop_top([])
+print("pop_top on empty list -> value is empty string? " + (emptyPop[1] == ""))
+
+print("")
+print("=== QUEUE (FIFO) ===")
+queue = []
+queue = enqueue(queue, "A")
+queue = enqueue(queue, "B")
+queue = enqueue(queue, "C")
+print("queue after enqueuing A, B, C: " + join(queue, ", "))
+
+# Dequeue everything: should come out A, B, C (first in, first out)
+served = []
+while len(queue) > 0 {
+    res = dequeue(queue)
+    queue = res[0]
+    served = push(served, res[1])
+}
+print("dequeue order (expect A, B, C): " + join(served, ", "))
+print("queue now empty, len = " + len(queue))
+
+emptyDeq = dequeue([])
+print("dequeue on empty list -> value is empty string? " + (emptyDeq[1] == ""))

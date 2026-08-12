@@ -1,0 +1,137 @@
+# run_length.zl -- run-length encoding / decoding in zl
+#
+# rle_encode("aaabbc") -> "a3b2c1"
+# rle_decode("a3b2c1") -> "aaabbc"
+#
+# Format: each run is one character followed by its base-10 count.
+# Runs are concatenated. rle_decode parses char-then-digits repeatedly.
+# NOTE: this scheme assumes the source text contains no digit characters
+# (digits are ambiguous with counts). The self-test uses letter data.
+
+# --- helpers ------------------------------------------------------------
+
+# Is 1-char string rlic a decimal digit?
+# (relational operators are numeric-only in zl, so use a membership test)
+fn rl_is_digit(rlic) {
+    rlid_digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+    return contains(rlid_digits, rlic)
+}
+
+# Convert an all-digits string to a number (no built-in for this).
+fn rl_str_to_num(rlsn_s) {
+    rlsn_acc = 0
+    rlsn_i = 0
+    while rlsn_i < len(rlsn_s) {
+        rlsn_ch = at(rlsn_s, rlsn_i)
+        rlsn_d = num(rlsn_ch)          # num() parses a numeric string
+        rlsn_acc = rlsn_acc * 10 + rlsn_d
+        rlsn_i = rlsn_i + 1
+    }
+    return rlsn_acc
+}
+
+# Repeat a 1-char string rlrc_c, rlrc_n times.
+fn rl_repeat(rlrc_c, rlrc_n) {
+    rlrc_out = ""
+    rlrc_k = 0
+    while rlrc_k < rlrc_n {
+        rlrc_out = rlrc_out + rlrc_c
+        rlrc_k = rlrc_k + 1
+    }
+    return rlrc_out
+}
+
+# --- core ---------------------------------------------------------------
+
+fn rle_encode(rle_s) {
+    rle_out = ""
+    rle_n = len(rle_s)
+    if rle_n == 0 {
+        return ""
+    }
+    rle_i = 0
+    while rle_i < rle_n {
+        rle_ch = at(rle_s, rle_i)
+        rle_count = 1
+        # extend the run while the next char matches
+        while rle_i + 1 < rle_n and at(rle_s, rle_i + 1) == rle_ch {
+            rle_count = rle_count + 1
+            rle_i = rle_i + 1
+        }
+        rle_out = rle_out + rle_ch + num(rle_count)
+        rle_i = rle_i + 1
+    }
+    return rle_out
+}
+
+fn rle_decode(rld_s) {
+    rld_out = ""
+    rld_n = len(rld_s)
+    rld_i = 0
+    while rld_i < rld_n {
+        rld_ch = at(rld_s, rld_i)     # the literal character of this run
+        rld_i = rld_i + 1
+        # gather the following digits into a count string
+        rld_digits = ""
+        while rld_i < rld_n and rl_is_digit(at(rld_s, rld_i)) {
+            rld_digits = rld_digits + at(rld_s, rld_i)
+            rld_i = rld_i + 1
+        }
+        rld_count = rl_str_to_num(rld_digits)
+        rld_out = rld_out + rl_repeat(rld_ch, rld_count)
+    }
+    return rld_out
+}
+
+# --- self-test ----------------------------------------------------------
+
+fn rl_check(rlck_label, rlck_got, rlck_want) {
+    rlck_ok = "FAIL"
+    if rlck_got == rlck_want {
+        rlck_ok = "ok"
+    }
+    print(rlck_ok + "  " + rlck_label + " => " + rlck_got + "  (want " + rlck_want + ")")
+}
+
+print("=== run_length.zl self-test ===")
+
+# encode cases
+rl_check("encode aaabbc", rle_encode("aaabbc"), "a3b2c1")
+rl_check("encode single a", rle_encode("a"), "a1")
+rl_check("encode empty", rle_encode(""), "")
+rl_check("encode all-same", rle_encode("zzzzz"), "z5")
+rl_check("encode no-repeats", rle_encode("abcde"), "a1b1c1d1e1")
+
+# long run crossing 9 -> multi-digit count
+rl_long = rl_repeat("q", 12)          # "qqqqqqqqqqqq"
+rl_check("encode 12 q's", rle_encode(rl_long), "q12")
+
+# decode cases
+rl_check("decode a3b2c1", rle_decode("a3b2c1"), "aaabbc")
+rl_check("decode q12", rle_decode("q12"), rl_long)
+rl_check("decode empty", rle_decode(""), "")
+
+# round-trip battery
+print("--- round trips ---")
+rl_cases = ["aaabbc", "a", "abcde", "zzzzz", rl_long, "wwwwwwwwwwwwwwwooo", "mississippi"]
+rl_ci = 0
+rl_all_ok = true
+while rl_ci < len(rl_cases) {
+    rl_orig = rl_cases[rl_ci]
+    rl_enc = rle_encode(rl_orig)
+    rl_back = rle_decode(rl_enc)
+    rl_rt_ok = "FAIL"
+    if rl_back == rl_orig {
+        rl_rt_ok = "ok"
+    } else {
+        rl_all_ok = false
+    }
+    print(rl_rt_ok + "  \"" + rl_orig + "\" -> \"" + rl_enc + "\" -> \"" + rl_back + "\"")
+    rl_ci = rl_ci + 1
+}
+
+if rl_all_ok {
+    print("ALL ROUND TRIPS PASSED")
+} else {
+    print("SOME ROUND TRIPS FAILED")
+}

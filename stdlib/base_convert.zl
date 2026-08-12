@@ -1,0 +1,151 @@
+# base_convert.zl
+# Base conversion for the zl standard library.
+#   to_binary(n)   : non-negative integer -> binary string  (e.g. 13 -> "1101")
+#   to_hex(n)      : non-negative integer -> hex string      (e.g. 255 -> "ff")
+#   from_binary(s) : binary string -> integer                (e.g. "1101" -> 13)
+#   from_hex(s)    : hex string -> integer                   (e.g. "ff" -> 255)
+#
+# zl limitations worked around here:
+#   - no maps/dictionaries: the hex alphabet is a string, indexed with at(...).
+#   - lists don't mutate in place: not needed here, strings are rebuilt with +.
+#   - no import: every helper lives in this file.
+#   - integer division: zl '/' is used, and %/subtraction keep values whole.
+
+HEX_ALPHABET = "0123456789abcdef"
+
+# ---- helpers ----
+
+# integer quotient of a / b (drops any fractional part).
+fn idiv(a, b) {
+    q = a / b
+    # subtract the remainder to floor toward zero for non-negative inputs.
+    r = a % b
+    return (a - r) / b
+}
+
+# value of a single binary digit, or -1 if not '0'/'1'.
+fn bin_digit_value(c) {
+    if c == "0" { return 0 }
+    if c == "1" { return 1 }
+    return -1
+}
+
+# value of a single hex digit (0-9 a-f A-F), or -1 if not a hex digit.
+fn hex_digit_value(c) {
+    lc = lower(c)
+    i = find(HEX_ALPHABET, lc)
+    if len(lc) != 1 { return -1 }
+    return i
+}
+
+# ---- integer -> string ----
+
+# n (>= 0) -> binary string. Repeatedly take n % 2, prepend, then n = n / 2.
+fn to_binary(n) {
+    if n < 0 { return "ERROR: negative not supported" }
+    if n == 0 { return "0" }
+    # Work on a copy: assigning to the parameter leaks back to the caller in
+    # this interpreter, which would corrupt a loop variable passed in.
+    num = n
+    out = ""
+    while num > 0 {
+        bit = num % 2
+        out = "" + bit + out
+        num = idiv(num, 2)
+    }
+    return out
+}
+
+# n (>= 0) -> hex string. Same idea, base 16, digit char from HEX_ALPHABET.
+fn to_hex(n) {
+    if n < 0 { return "ERROR: negative not supported" }
+    if n == 0 { return "0" }
+    num = n
+    out = ""
+    while num > 0 {
+        d = num % 16
+        out = at(HEX_ALPHABET, d) + out
+        num = idiv(num, 16)
+    }
+    return out
+}
+
+# ---- string -> integer ----
+
+# binary string -> integer. Horner's method: total = total*2 + digit.
+fn from_binary(s) {
+    if len(s) == 0 { return -1 }
+    total = 0
+    i = 0
+    while i < len(s) {
+        v = bin_digit_value(at(s, i))
+        if v == -1 { return -1 }
+        total = total * 2 + v
+        i = i + 1
+    }
+    return total
+}
+
+# hex string -> integer. Accepts an optional "0x"/"0X" prefix.
+fn from_hex(s) {
+    s = lower(s)
+    if has(s, "0x") {
+        if find(s, "0x") == 0 { s = slice(s, 2, len(s)) }
+    }
+    if len(s) == 0 { return -1 }
+    total = 0
+    i = 0
+    while i < len(s) {
+        v = hex_digit_value(at(s, i))
+        if v == -1 { return -1 }
+        total = total * 16 + v
+        i = i + 1
+    }
+    return total
+}
+
+# ---------------- self-test ----------------
+print("=== to_binary ===")
+bsamples = [0, 1, 2, 5, 8, 13, 42, 255, 1024]
+for n in bsamples {
+    print("" + n + " -> " + to_binary(n))
+}
+
+print("=== to_hex ===")
+hsamples = [0, 10, 15, 16, 255, 256, 3735928559, 4096]
+for n in hsamples {
+    print("" + n + " -> " + to_hex(n))
+}
+
+print("=== from_binary ===")
+frombin = ["0", "1", "101", "1101", "11111111", "10000000000"]
+for s in frombin {
+    print(s + " -> " + from_binary(s))
+}
+
+print("=== from_hex ===")
+fromhex = ["0", "a", "ff", "100", "0xff", "DEADBEEF", "1000"]
+for s in fromhex {
+    print(s + " -> " + from_hex(s))
+}
+
+print("=== round-trips (binary) ===")
+allok = true
+rt = [0, 1, 13, 42, 255, 1024, 65535]
+for n in rt {
+    b = to_binary(n)
+    back = from_binary(b)
+    ok = back == n
+    if not ok { allok = false }
+    print("" + n + " -> " + b + " -> " + back + "  ok=" + ok)
+}
+
+print("=== round-trips (hex) ===")
+for n in rt {
+    h = to_hex(n)
+    back = from_hex(h)
+    ok = back == n
+    if not ok { allok = false }
+    print("" + n + " -> " + h + " -> " + back + "  ok=" + ok)
+}
+print("all round-trips ok = " + allok)

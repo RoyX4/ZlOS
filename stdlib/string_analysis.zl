@@ -1,0 +1,123 @@
+# string_analysis.zl
+# String analysis helpers for the zl standard library.
+# Standalone: no imports; every helper it needs is defined here.
+
+# Count how many times a single character c appears in string s.
+fn count_char(s, c) {
+  n = 0
+  i = 0
+  while i < len(s) {
+    if at(s, i) == c {
+      n = n + 1
+    }
+    i = i + 1
+  }
+  return n
+}
+
+# Count the vowels (a e i o u, case-insensitive) in s.
+fn count_vowels(s) {
+  n = 0
+  i = 0
+  while i < len(s) {
+    ch = lower(at(s, i))
+    if ch == "a" or ch == "e" or ch == "i" or ch == "o" or ch == "u" {
+      n = n + 1
+    }
+    i = i + 1
+  }
+  return n
+}
+
+# Count words separated by spaces. Runs of spaces count as one separator,
+# leading/trailing spaces do not produce empty words.
+fn count_words(s) {
+  n = 0
+  inWord = false
+  i = 0
+  while i < len(s) {
+    if at(s, i) == " " {
+      inWord = false
+    } else {
+      if not inWord {
+        n = n + 1
+        inWord = true
+      }
+    }
+    i = i + 1
+  }
+  return n
+}
+
+# Return whether list of [char,count] pairs already contains char ch.
+fn hist_index(pairs, ch) {
+  i = 0
+  while i < len(pairs) {
+    pair = pairs[i]
+    if pair[0] == ch {
+      return i
+    }
+    i = i + 1
+  }
+  return -1
+}
+
+# Build a histogram: a list of [char, count] pairs, in first-seen order.
+# (No maps in zl, so we scan the accumulator list to update counts.)
+fn char_histogram(s) {
+  pairs = []
+  i = 0
+  while i < len(s) {
+    ch = at(s, i)
+    idx = hist_index(pairs, ch)
+    if idx == -1 {
+      pairs = push(pairs, [ch, 1])
+    } else {
+      # Rebuild the list with the matched pair's count incremented,
+      # since lists do not mutate in place.
+      out = []
+      j = 0
+      while j < len(pairs) {
+        pair = pairs[j]
+        if j == idx {
+          out = push(out, [pair[0], pair[1] + 1])
+        } else {
+          out = push(out, pair)
+        }
+        j = j + 1
+      }
+      pairs = out
+    }
+    i = i + 1
+  }
+  return pairs
+}
+
+# ---------------------------------------------------------------------------
+# Self-test
+# ---------------------------------------------------------------------------
+
+print("=== string_analysis self-test ===")
+
+sample = "hello world"
+print("sample: \"" + sample + "\"")
+
+print("count_char(sample, \"l\") = " + count_char(sample, "l"))   # expect 3
+print("count_char(sample, \"o\") = " + count_char(sample, "o"))   # expect 2
+print("count_char(sample, \"z\") = " + count_char(sample, "z"))   # expect 0
+
+print("count_vowels(sample) = " + count_vowels(sample))           # expect 3
+print("count_vowels(\"AEIOU xyz\") = " + count_vowels("AEIOU xyz")) # expect 5
+
+print("count_words(sample) = " + count_words(sample))             # expect 2
+print("count_words(\"  the  quick brown fox  \") = " + count_words("  the  quick brown fox  ")) # expect 4
+print("count_words(\"\") = " + count_words(""))                   # expect 0
+
+print("char_histogram(\"banana\"):")
+hist = char_histogram("banana")
+for pair in hist {
+  print("  '" + pair[0] + "' -> " + pair[1])
+}
+# expect: b -> 1, a -> 3, n -> 2
+
+print("=== done ===")

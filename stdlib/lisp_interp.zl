@@ -1,0 +1,315 @@
+# lisp_interp.zl -- a tiny Lisp interpreter written in zl (ultimate dogfooding)
+#
+# Parses s-expressions from a string like "(+ 1 (* 2 3))" into nested zl lists,
+# then evaluates them. Supports:
+#   - numbers (including negatives)
+#   - arithmetic:  + - * /   (variadic, e.g. (+ 1 2 3))
+#   - comparisons: < > =      (return 1 for true, 0 for false)
+#   - special form: (if cond then else)
+#   - special form: (define name valueExpr)  -> stores a variable in the env
+#   - variable references (symbols resolve against the env)
+#
+# AST REPRESENTATION (nested zl lists), every node is a 2-element tagged pair:
+#   ["num", 5]                 a numeric literal
+#   ["sym", "+"]               a symbol (operator name or variable name)
+#   ["list", [child, child]]   a parenthesised list of child nodes
+# Tagging avoids needing runtime type introspection (zl has none).
+
+# --- parser state (intentional globals used as a shared cursor) -------------
+LP_toks = []      # token list for the expression currently being parsed
+LP_pos = 0        # index of the next unconsumed token
+LP_env = []       # environment: list of [name, value] pairs
+
+# --- tokenizer --------------------------------------------------------------
+
+# Is a single character a decimal digit?
+fn lp_isDigit(lp_ch) {
+    return has("0123456789", lp_ch)
+}
+
+# Does a token look like a number? ("-" alone is the subtraction symbol.)
+fn lp_isNumber(lp_tok) {
+    lp_n = len(lp_tok)
+    if lp_n == 0 { return false }
+    lp_start = 0
+    if at(lp_tok, 0) == "-" {
+        if lp_n == 1 { return false }   # bare "-" is a symbol, not a number
+        lp_start = 1
+    }
+    lp_j = lp_start
+    lp_digits = 0
+    while lp_j < lp_n {
+        lp_ch = at(lp_tok, lp_j)
+        if lp_ch == "." {
+            # decimal point allowed
+        } else if lp_isDigit(lp_ch) {
+            lp_digits = lp_digits + 1
+        } else {
+            return false
+        }
+        lp_j = lp_j + 1
+    }
+    return lp_digits > 0
+}
+
+# Split a source string into tokens by padding parens with spaces then splitting.
+fn lp_tokenize(lp_src) {
+    lp_spaced = ""
+    lp_i = 0
+    while lp_i < len(lp_src) {
+        lp_c = at(lp_src, lp_i)
+        if lp_c == "(" or lp_c == ")" {
+            lp_spaced = lp_spaced + " " + lp_c + " "
+        } else {
+            lp_spaced = lp_spaced + lp_c
+        }
+        lp_i = lp_i + 1
+    }
+    lp_raw = split(lp_spaced, " ")
+    lp_out = []
+    for lp_t in lp_raw {
+        if lp_t != "" {
+            lp_out = push(lp_out, lp_t)
+        }
+    }
+    return lp_out
+}
+
+# --- recursive-descent parser (drives the LP_toks / LP_pos cursor) ----------
+
+# Look at the next token without consuming it ("" when exhausted).
+fn lp_peek() {
+    if LP_pos < len(LP_toks) {
+        return LP_toks[LP_pos]
+    }
+    return ""
+}
+
+# Consume and return the next token.
+fn lp_next() {
+    lp_t = LP_toks[LP_pos]
+    LP_pos = LP_pos + 1
+    return lp_t
+}
+
+# Parse a single expression (atom or parenthesised list) at the cursor.
+fn lp_parseExpr() {
+    lp_tok = lp_next()
+    if lp_tok == "(" {
+        return lp_parseList()
+    }
+    if lp_isNumber(lp_tok) {
+        return ["num", num(lp_tok)]
+    }
+    return ["sym", lp_tok]
+}
+
+# Parse child expressions until the matching ")" (which is then consumed).
+fn lp_parseList() {
+    lp_children = []
+    while lp_peek() != ")" {
+        lp_child = lp_parseExpr()
+        lp_children = push(lp_children, lp_child)
+    }
+    LP_pos = LP_pos + 1   # consume the ")"
+    return ["list", lp_children]
+}
+
+# Parse a whole source string into one AST node.
+fn lp_parse(lp_src) {
+    LP_toks = lp_tokenize(lp_src)
+    LP_pos = 0
+    return lp_parseExpr()
+}
+
+# --- environment (list of [name, value] pairs) ------------------------------
+
+# Look up a variable; returns 0 if it is not defined.
+fn lp_envGet(lp_name) {
+    lp_i = 0
+    while lp_i < len(LP_env) {
+        lp_pair = LP_env[lp_i]
+        if lp_pair[0] == lp_name {
+            return lp_pair[1]
+        }
+        lp_i = lp_i + 1
+    }
+    return 0
+}
+
+# Set a variable (replace existing binding or append a new one). Immutable
+# rebuild of LP_env -- no in-place mutation.
+fn lp_envSet(lp_name, lp_val) {
+    lp_new = []
+    lp_found = false
+    lp_k = 0
+    while lp_k < len(LP_env) {
+        lp_p = LP_env[lp_k]
+        if lp_p[0] == lp_name {
+            lp_new = push(lp_new, [lp_name, lp_val])
+            lp_found = true
+        } else {
+            lp_new = push(lp_new, lp_p)
+        }
+        lp_k = lp_k + 1
+    }
+    if not lp_found {
+        lp_new = push(lp_new, [lp_name, lp_val])
+    }
+    LP_env = lp_new
+    return lp_val
+}
+
+# --- evaluator --------------------------------------------------------------
+
+# Evaluate every argument node (items[1..]) into a plain zl list of values.
+fn lp_evalArgs(lp_items) {
+    lp_args = []
+    lp_ai = 1
+    while lp_ai < len(lp_items) {
+        lp_args = push(lp_args, lp_eval(lp_items[lp_ai]))
+        lp_ai = lp_ai + 1
+    }
+    return lp_args
+}
+
+# Evaluate an AST node to a number.
+fn lp_eval(lp_node) {
+    lp_tag = lp_node[0]
+    if lp_tag == "num" {
+        return lp_node[1]
+    }
+    if lp_tag == "sym" {
+        return lp_envGet(lp_node[1])
+    }
+
+    # tag == "list": a call / special form
+    lp_items = lp_node[1]
+    if len(lp_items) == 0 {
+        return 0
+    }
+    lp_head = lp_items[0]
+    lp_op = lp_head[1]   # operator/special-form name (head is a "sym" node)
+
+    # --- special forms (evaluated lazily, NOT via lp_evalArgs) ---
+    if lp_op == "if" {
+        # (if cond then else) -- cond is true when it evaluates to non-zero
+        lp_cond = lp_eval(lp_items[1])
+        if lp_cond != 0 {
+            return lp_eval(lp_items[2])
+        }
+        return lp_eval(lp_items[3])
+    }
+    if lp_op == "define" {
+        # (define name valueExpr)
+        lp_nameNode = lp_items[1]
+        lp_v = lp_eval(lp_items[2])
+        return lp_envSet(lp_nameNode[1], lp_v)
+    }
+
+    # --- ordinary operators: evaluate all arguments first ---
+    lp_args = lp_evalArgs(lp_items)
+
+    if lp_op == "+" {
+        lp_sum = 0
+        for lp_a in lp_args { lp_sum = lp_sum + lp_a }
+        return lp_sum
+    }
+    if lp_op == "-" {
+        if len(lp_args) == 1 { return 0 - lp_args[0] }   # unary negate
+        lp_dacc = lp_args[0]
+        lp_di = 1
+        while lp_di < len(lp_args) {
+            lp_dacc = lp_dacc - lp_args[lp_di]
+            lp_di = lp_di + 1
+        }
+        return lp_dacc
+    }
+    if lp_op == "*" {
+        lp_prod = 1
+        for lp_m in lp_args { lp_prod = lp_prod * lp_m }
+        return lp_prod
+    }
+    if lp_op == "/" {
+        lp_qacc = lp_args[0]
+        lp_qi = 1
+        while lp_qi < len(lp_args) {
+            lp_qacc = lp_qacc / lp_args[lp_qi]
+            lp_qi = lp_qi + 1
+        }
+        return lp_qacc
+    }
+    if lp_op == "<" {
+        if lp_args[0] < lp_args[1] { return 1 }
+        return 0
+    }
+    if lp_op == ">" {
+        if lp_args[0] > lp_args[1] { return 1 }
+        return 0
+    }
+    if lp_op == "=" {
+        if lp_args[0] == lp_args[1] { return 1 }
+        return 0
+    }
+
+    # unknown operator -> 0
+    return 0
+}
+
+# Parse + evaluate one source string against the shared LP_env.
+fn lp_run(lp_src) {
+    return lp_eval(lp_parse(lp_src))
+}
+
+# --- self-test --------------------------------------------------------------
+
+print("tiny Lisp interpreter self-test")
+print("-------------------------------")
+
+# The headline case from the task.
+print("(+ 1 (* 2 3))          = " + lp_run("(+ 1 (* 2 3))"))        # 7
+
+# More arithmetic, exercising nesting and variadic operators.
+print("(* 2 3 4)              = " + lp_run("(* 2 3 4)"))            # 24
+print("(- 10 2 3)             = " + lp_run("(- 10 2 3)"))          # 5
+print("(/ 100 5 2)            = " + lp_run("(/ 100 5 2)"))         # 10
+print("(+ (* 2 3) (- 8 3))    = " + lp_run("(+ (* 2 3) (- 8 3))")) # 11
+print("(- 7)                  = " + lp_run("(- 7)"))               # -7 (unary)
+
+# Conditionals.
+print("(if (< 3 5) 100 200)   = " + lp_run("(if (< 3 5) 100 200)"))  # 100
+print("(if (> 3 5) 100 200)   = " + lp_run("(if (> 3 5) 100 200)"))  # 200
+print("(if (= 4 4) 1 0)       = " + lp_run("(if (= 4 4) 1 0)"))      # 1
+
+# define: variables persist across calls because LP_env is shared.
+print("")
+print("(define x 10)          -> " + lp_run("(define x 10)"))      # 10
+print("(+ x 5)                = " + lp_run("(+ x 5)"))             # 15
+print("(define y (* x 2))     -> " + lp_run("(define y (* x 2))")) # 20
+print("(+ x y)                = " + lp_run("(+ x y)"))             # 30
+print("(define x (+ x 1))     -> " + lp_run("(define x (+ x 1))")) # 11 (redefine)
+print("(+ x y)                = " + lp_run("(+ x y)"))             # 31
+
+# --- pass/fail checks -------------------------------------------------------
+
+fn lp_check(lp_label, lp_got, lp_want) {
+    if lp_got == lp_want {
+        return lp_label + ": PASS"
+    }
+    return lp_label + ": FAIL (got " + lp_got + " want " + lp_want + ")"
+}
+
+# Reset env for a clean, order-independent check block.
+LP_env = []
+print("")
+print(lp_check("nested arith", lp_run("(+ 1 (* 2 3))"), 7))
+print(lp_check("variadic mul", lp_run("(* 2 3 4)"), 24))
+print(lp_check("left-fold sub", lp_run("(- 10 2 3)"), 5))
+print(lp_check("if true branch", lp_run("(if (< 1 2) 42 99)"), 42))
+print(lp_check("if false branch", lp_run("(if (< 2 1) 42 99)"), 99))
+
+r1 = lp_run("(define n 6)")
+print(lp_check("define returns val", r1, 6))
+print(lp_check("use defined var", lp_run("(* n n)"), 36))
+lp_run("(define m (+ n 4))")
+print(lp_check("define from expr", lp_run("(+ n m)"), 16))

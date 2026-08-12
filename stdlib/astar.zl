@@ -1,0 +1,410 @@
+# astar.zl -- A* shortest path over a character grid, with a BFS baseline
+#             so you can watch the heuristic do its work.
+#
+# Grid shape: a list of equal-length strings, row 0 at the top.
+#   '#' = wall, '.' = open.
+# A cell is a [row, col] pair. Every step costs 1 and moves are 4-directional
+# (up, right, down, left), so the manhattan distance never overestimates --
+# it is an admissible heuristic and A* still returns a genuine shortest path.
+#
+#   astar(grid, start, goal)  -> list of [row, col] from start to goal,
+#                                or nil() when the goal cannot be reached
+#   bfs_path(grid, start, goal) -> same, by plain breadth-first search
+#   nodes_expanded()          -> how many cells the LAST search popped
+#   path_cost(path)           -> steps walked (cells - 1); -1 for no path
+#   render_path(grid, path)   -> a copy of the grid with the path drawn '*'
+#   manhattan(a, b)           -> |dr| + |dc|, the heuristic itself
+#
+# Why this is not dijkstra.zl: that module walks an explicit weighted
+# adjacency list and settles EVERY node before it answers. Here the edges are
+# implied by the grid, every edge weighs 1, and the heuristic lets the search
+# stop the moment the goal is popped -- so it settles fewer cells. How many
+# fewer depends entirely on how well the heuristic predicts the real route;
+# the demo runs both extremes and prints the counts.
+#
+# Representation choice: zl has no maps, and dijkstra's list-of-pairs lookup
+# is a linear scan per probe. A grid has dense integer keys instead, so each
+# per-cell table below (g score, came-from, closed, in-open) is a FLAT list of
+# length rows*cols indexed by  r * cols + c , allocated with fill() and
+# written in place with x[i] = v. Each probe is then a single index read.
+#
+# Naming: zl has no local scope -- assigning inside a function writes the
+# global of that name -- so every parameter and local carries a two-letter tag
+# for its function (as_ = astar, bp_ = bfs_path, rp_ = render_path, ...).
+# That is what stops astar()'s own as_cols being clobbered by the cell_open()
+# it calls once per neighbour, on every pop.
+
+# Cells popped (settled) by the most recent astar() / bfs_path() call.
+LAST_EXPANDED = 0
+
+fn nodes_expanded() {
+    return LAST_EXPANDED
+}
+
+# The heuristic: 4-directional grid distance ignoring walls.
+fn manhattan(mh_a, mh_b) {
+    return abs(mh_a[0] - mh_b[0]) + abs(mh_a[1] - mh_b[1])
+}
+
+# True when [r, c] is inside the grid and is not a wall.
+fn cell_open(co_grid, co_r, co_c) {
+    if co_r < 0 or co_c < 0 {
+        return false
+    }
+    if co_r >= len(co_grid) {
+        return false
+    }
+    co_row = co_grid[co_r]
+    if co_c >= len(co_row) {
+        return false
+    }
+    return at(co_row, co_c) != "#"
+}
+
+# Steps walked along a path. A 1-cell path costs 0; no path costs -1.
+fn path_cost(pc_path) {
+    if type(pc_path) == "nil" {
+        return -1
+    }
+    if len(pc_path) == 0 {
+        return -1
+    }
+    return len(pc_path) - 1
+}
+
+# A copy of the grid with every path cell overwritten by '*'.
+# The grid itself is left untouched (zl lists are shared by reference, so the
+# rows are copied into a fresh list before any of them is replaced).
+fn render_path(rp_grid, rp_path) {
+    rp_out = []
+    for rp_row in rp_grid {
+        rp_out = push(rp_out, rp_row)
+    }
+    if type(rp_path) == "nil" {
+        return rp_out
+    }
+    for rp_cell in rp_path {
+        rp_r = rp_cell[0]
+        rp_c = rp_cell[1]
+        rp_line = rp_out[rp_r]
+        rp_out[rp_r] = slice(rp_line, 0, rp_c) + "*" + slice(rp_line, rp_c + 1, len(rp_line))
+    }
+    return rp_out
+}
+
+# ---------------------------------------------------------------------------
+# A*
+# ---------------------------------------------------------------------------
+# The open set is a plain list of cell indices scanned linearly for the lowest
+# f = g + h. No heap: a 12x20 grid has 240 cells, and a linear scan keeps the
+# tie-breaking rule (lowest f, then lowest h) obvious.
+fn astar(as_grid, as_start, as_goal) {
+    LAST_EXPANDED = 0
+    if not cell_open(as_grid, as_start[0], as_start[1]) {
+        return nil()
+    }
+    if not cell_open(as_grid, as_goal[0], as_goal[1]) {
+        return nil()
+    }
+
+    as_cols = len(as_grid[0])
+    as_n = len(as_grid) * as_cols
+    as_g = fill(as_n, -1)        # cost from start, -1 = never reached
+    as_came = fill(as_n, -1)     # predecessor index, -1 = none
+    as_closed = fill(as_n, 0)
+    as_inopen = fill(as_n, 0)
+
+    as_si = as_start[0] * as_cols + as_start[1]
+    as_gi = as_goal[0] * as_cols + as_goal[1]
+    as_g[as_si] = 0
+    as_inopen[as_si] = 1
+    as_open = [as_si]
+
+    while len(as_open) > 0 {
+        # Pick the open cell with the smallest f; break ties on smaller h,
+        # which pushes the search towards the goal instead of sideways.
+        as_bestk = 0
+        as_bestf = -1
+        as_besth = -1
+        as_k = 0
+        while as_k < len(as_open) {
+            as_idx = as_open[as_k]
+            as_h = abs(int(as_idx / as_cols) - as_goal[0]) + abs(as_idx % as_cols - as_goal[1])
+            as_f = as_g[as_idx] + as_h
+            if as_bestf < 0 or as_f < as_bestf or (as_f == as_bestf and as_h < as_besth) {
+                as_bestf = as_f
+                as_besth = as_h
+                as_bestk = as_k
+            }
+            as_k = as_k + 1
+        }
+
+        # A closed cell is never reopened. That is only safe because manhattan
+        # is consistent on a 4-connected unit grid -- h never drops by more
+        # than the 1 that a step costs -- so a settled cell already holds its
+        # best g. The demo cross-checks every cost against BFS to prove it.
+        as_cur = as_open[as_bestk]
+        as_open = remove(as_open, as_bestk)
+        as_inopen[as_cur] = 0
+        as_closed[as_cur] = 1
+        LAST_EXPANDED = LAST_EXPANDED + 1
+
+        if as_cur == as_gi {
+            # Walk the came-from chain back to the start, then flip it.
+            as_path = []
+            as_at = as_gi
+            while as_at >= 0 {
+                as_path = push(as_path, [int(as_at / as_cols), as_at % as_cols])
+                as_at = as_came[as_at]
+            }
+            return reverse(as_path)
+        }
+
+        as_cr = int(as_cur / as_cols)
+        as_cc = as_cur % as_cols
+        for as_d in [[-1, 0], [0, 1], [1, 0], [0, -1]] {
+            as_nr = as_cr + as_d[0]
+            as_nc = as_cc + as_d[1]
+            if cell_open(as_grid, as_nr, as_nc) {
+                as_ni = as_nr * as_cols + as_nc
+                if as_closed[as_ni] == 0 {
+                    as_tent = as_g[as_cur] + 1
+                    if as_g[as_ni] < 0 or as_tent < as_g[as_ni] {
+                        as_g[as_ni] = as_tent
+                        as_came[as_ni] = as_cur
+                        if as_inopen[as_ni] == 0 {
+                            as_inopen[as_ni] = 1
+                            as_open = push(as_open, as_ni)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return nil()
+}
+
+# ---------------------------------------------------------------------------
+# BFS baseline -- same answer, no heuristic. Kept here purely so the demo can
+# compare expansion counts on identical terms: both searches test for the goal
+# when a cell is POPPED, and both count exactly the cells they pop.
+# ---------------------------------------------------------------------------
+fn bfs_path(bp_grid, bp_start, bp_goal) {
+    LAST_EXPANDED = 0
+    if not cell_open(bp_grid, bp_start[0], bp_start[1]) {
+        return nil()
+    }
+    if not cell_open(bp_grid, bp_goal[0], bp_goal[1]) {
+        return nil()
+    }
+
+    bp_cols = len(bp_grid[0])
+    bp_n = len(bp_grid) * bp_cols
+    bp_came = fill(bp_n, -1)
+    bp_seen = fill(bp_n, 0)
+
+    bp_si = bp_start[0] * bp_cols + bp_start[1]
+    bp_gi = bp_goal[0] * bp_cols + bp_goal[1]
+    bp_seen[bp_si] = 1
+    bp_queue = [bp_si]
+    bp_head = 0
+
+    while bp_head < len(bp_queue) {
+        bp_cur = bp_queue[bp_head]
+        bp_head = bp_head + 1
+        LAST_EXPANDED = LAST_EXPANDED + 1
+
+        if bp_cur == bp_gi {
+            bp_path = []
+            bp_at = bp_gi
+            while bp_at >= 0 {
+                bp_path = push(bp_path, [int(bp_at / bp_cols), bp_at % bp_cols])
+                bp_at = bp_came[bp_at]
+            }
+            return reverse(bp_path)
+        }
+
+        bp_cr = int(bp_cur / bp_cols)
+        bp_cc = bp_cur % bp_cols
+        for bp_d in [[-1, 0], [0, 1], [1, 0], [0, -1]] {
+            bp_nr = bp_cr + bp_d[0]
+            bp_nc = bp_cc + bp_d[1]
+            if cell_open(bp_grid, bp_nr, bp_nc) {
+                bp_ni = bp_nr * bp_cols + bp_nc
+                if bp_seen[bp_ni] == 0 {
+                    bp_seen[bp_ni] = 1
+                    bp_came[bp_ni] = bp_cur
+                    bp_queue = push(bp_queue, bp_ni)
+                }
+            }
+        }
+    }
+    return nil()
+}
+
+# True when the path really starts at start, ends at goal, only touches open
+# cells, and every consecutive pair is one orthogonal step apart.
+fn path_valid(pv_grid, pv_path, pv_start, pv_goal) {
+    if type(pv_path) == "nil" {
+        return false
+    }
+    if len(pv_path) == 0 {
+        return false
+    }
+    if first(pv_path)[0] != pv_start[0] or first(pv_path)[1] != pv_start[1] {
+        return false
+    }
+    if last(pv_path)[0] != pv_goal[0] or last(pv_path)[1] != pv_goal[1] {
+        return false
+    }
+    pv_i = 0
+    while pv_i < len(pv_path) {
+        if not cell_open(pv_grid, pv_path[pv_i][0], pv_path[pv_i][1]) {
+            return false
+        }
+        if pv_i > 0 {
+            if manhattan(pv_path[pv_i - 1], pv_path[pv_i]) != 1 {
+                return false
+            }
+        }
+        pv_i = pv_i + 1
+    }
+    return true
+}
+
+fn print_grid(pg_label, pg_grid) {
+    print(pg_label)
+    for pg_row in pg_grid {
+        print("  " + pg_row)
+    }
+}
+
+# ===========================================================================
+# Demo
+# ===========================================================================
+
+# A 12x20 maze. Written a row at a time because zl list literals may not span
+# lines, which is just as well -- the shape stays readable.
+maze = []
+maze = push(maze, "####################")
+maze = push(maze, "#........#.........#")
+maze = push(maze, "#.######.#.#######.#")
+maze = push(maze, "#.#....#.#.#.....#.#")
+maze = push(maze, "#.#.##.#.#.#.###.#.#")
+maze = push(maze, "#...#..#...#...#...#")
+maze = push(maze, "#####.####.###.#####")
+maze = push(maze, "#.....#......#.....#")
+maze = push(maze, "#.#####.####.#.###.#")
+maze = push(maze, "#.....#....#.#...#.#")
+maze = push(maze, "#.###.####.#.###...#")
+maze = push(maze, "####################")
+
+start = [1, 1]
+goal = [10, 18]
+
+print("A* on a " + str(len(maze)) + "x" + str(len(maze[0])) + " maze")
+print("  start " + str(start) + "   goal " + str(goal))
+print("  straight-line (manhattan) lower bound: " + str(manhattan(start, goal)))
+print_grid("maze:", maze)
+
+ap = astar(maze, start, goal)
+a_seen = nodes_expanded()
+bp = bfs_path(maze, start, goal)
+b_seen = nodes_expanded()
+
+print_grid("A* path drawn with '*':", render_path(maze, ap))
+print("path cells:  " + str(len(ap)))
+print("path_cost:   " + str(path_cost(ap)) + " steps   (expected 50)")
+print("path valid:  " + str(path_valid(maze, ap, start, goal)))
+print("BFS agrees on cost: " + str(path_cost(bp) == path_cost(ap)) + "  (BFS = " + str(path_cost(bp)) + ")")
+print("nodes expanded  A*: " + str(a_seen) + "   BFS: " + str(b_seen) + "   saved: " + str(b_seen - a_seen))
+print("  a thin saving, and honestly so: the real route is " + str(path_cost(ap)) + " steps against")
+print("  a bound of " + str(manhattan(start, goal)) + ", so the heuristic is nearly blind in here and can")
+print("  rule almost nothing out. BFS's " + str(b_seen) + " is every open cell in the maze.")
+
+# 50 counted by hand off the maze above. Every leg is forced -- the corridors
+# it threads are the only openings between one region and the next:
+#   [1,1] -> [1,8]            7   (row 1 stops at the wall in column 9)
+#   [1,8] -> [5,8]            4   down the column-8 shaft
+#   [5,8] -> [5,10]           2
+#   [5,10] -> [1,10]          4   back up to row 1, the far side of that wall
+#   [1,10] -> [1,18]          8
+#   [1,18] -> [5,14]         16   down column 18, back along row 3, down to row 5
+#   [5,14] -> [7,14]          2   column 14 is the ONLY gap in row 6's right half
+#   [7,14] -> [10,18]         7   = manhattan(3+4), so this leg is already optimal
+#                            --
+#                            50
+assert(path_cost(ap) == 50, "maze shortest path should be 50 steps")
+assert(path_valid(maze, ap, start, goal), "A* path must be walkable")
+assert(path_cost(bp) == path_cost(ap), "A* must match BFS optimum")
+assert(a_seen < b_seen, "A* should settle fewer cells than BFS")
+
+# --- a wide-open room: the case the heuristic was made for -----------------
+room = []
+room = push(room, "####################")
+room = push(room, "#..................#")
+room = push(room, "#..................#")
+room = push(room, "#..................#")
+room = push(room, "#..................#")
+room = push(room, "#..................#")
+room = push(room, "#..................#")
+room = push(room, "#..................#")
+room = push(room, "#..................#")
+room = push(room, "#..................#")
+room = push(room, "#..................#")
+room = push(room, "####################")
+
+rp1 = astar(room, [1, 1], [10, 18])
+r_a = nodes_expanded()
+rp2 = bfs_path(room, [1, 1], [10, 18])
+r_b = nodes_expanded()
+print("")
+print("open 12x20 room, [1,1] -> [10,18]")
+print("  cost A*/BFS: " + str(path_cost(rp1)) + " / " + str(path_cost(rp2)) + "   (expected 26 = 9 down + 17 right)")
+print("  nodes expanded  A*: " + str(r_a) + "   BFS: " + str(r_b))
+assert(path_cost(rp1) == 26, "open room cost is manhattan")
+assert(path_cost(rp2) == 26, "BFS agrees on the open room")
+
+# --- small hand-checkable cases --------------------------------------------
+tiny = []
+tiny = push(tiny, "...")
+tiny = push(tiny, "...")
+tiny = push(tiny, "...")
+t1 = astar(tiny, [0, 0], [2, 2])
+print("")
+print("3x3 open, [0,0]->[2,2]: cells " + str(len(t1)) + ", cost " + str(path_cost(t1)) + "  (expected 5, 4)")
+assert(len(t1) == 5, "3x3 diagonal is 5 cells")
+assert(path_cost(t1) == 4, "3x3 diagonal is 4 steps")
+
+t2 = astar(tiny, [1, 1], [1, 1])
+print("start == goal:          cells " + str(len(t2)) + ", cost " + str(path_cost(t2)) + "  (expected 1, 0)")
+assert(path_cost(t2) == 0, "a path to yourself costs nothing")
+
+walled = []
+walled = push(walled, "#####")
+walled = push(walled, "#...#")
+walled = push(walled, "##.##")
+walled = push(walled, "#...#")
+walled = push(walled, "#####")
+print("detour round a wall [1,1]->[3,3]: cost " + str(path_cost(astar(walled, [1, 1], [3, 3]))) + "  (expected 4)")
+assert(path_cost(astar(walled, [1, 1], [3, 3])) == 4, "detour is 4 steps")
+
+sealed = []
+sealed = push(sealed, "#####")
+sealed = push(sealed, "#.#.#")
+sealed = push(sealed, "#.#.#")
+sealed = push(sealed, "#.#.#")
+sealed = push(sealed, "#####")
+noway = astar(sealed, [1, 1], [1, 3])
+print("sealed off:             " + type(noway) + ", path_cost " + str(path_cost(noway)) + "  (expected nil, -1)")
+assert(type(noway) == "nil", "unreachable goal returns nil()")
+assert(path_cost(noway) == -1, "no path costs -1")
+
+print("into a wall:            " + type(astar(sealed, [1, 1], [0, 0])))
+assert(type(astar(sealed, [1, 1], [0, 0])) == "nil", "a wall is never a goal")
+
+print("manhattan([0,0],[3,4]): " + str(manhattan([0, 0], [3, 4])) + "  (expected 7)")
+assert(manhattan([0, 0], [3, 4]) == 7, "manhattan is |dr|+|dc|")
+
+print("")
+print("All checks passed.")

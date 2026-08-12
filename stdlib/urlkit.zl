@@ -1,0 +1,155 @@
+# urlkit.zl - URL percent-encoding (RFC 3986), in pure zl.
+#
+# uk_encode keeps only the "unreserved" set A-Za-z0-9-_.~ and turns every
+# other byte into "%XX" (uppercase hex). A space is outside the set, so it
+# becomes "%20" - NOT "+" (the "+"-means-space rule is a query-string quirk,
+# handled separately by uk_decode_query on the way back).
+#
+# uk_decode reverses that: "%XX" -> the byte, anything else passes through.
+# uk_decode_query does the same but also reads a bare "+" as a space, which
+# is how application/x-www-form-urlencoded query strings encode spaces.
+# Because a real "+" is written "%2B" (no literal "+" left in it), treating
+# the remaining bare "+" as space is safe and never eats an escaped plus.
+#
+# Everything works one BYTE at a time. code()/chr() are byte-accurate and
+# unsigned (0..255), so non-ASCII text just works: a UTF-8 "e-acute" is the
+# two bytes 0xC3 0xA9, and uk_encode gives "%C3%A9", which is what a browser
+# expects. A byte value is turned into its two hex digits with the hex()
+# builtin; hex() drops the leading zero (hex(10)=="a") so uk_hex2 re-pads to
+# a width of two and uppercases the result.
+#
+# hex() also has no fixed case and no "0x" prefix, so decoding accepts either
+# case; a "%" not followed by two hex digits is passed through untouched
+# rather than being an error, so uk_decode never fails on arbitrary text.
+#
+# Naming: an assignment inside a function writes an outer binding of the same
+# name if one already exists, so every parameter and local here carries a
+# per-function tag (uke_ = uk_encode, ukd_ = uk_decode, ...) to guarantee a
+# library call can never clobber a caller's global.
+
+UK_HEX_DIGITS = "0123456789abcdef"
+
+# True when byte c is in the RFC 3986 unreserved set: A-Z a-z 0-9 - _ . ~
+fn uk_is_unreserved(uki_c) {
+    uki_k = code(uki_c)
+    if uki_k >= 48 and uki_k <= 57 {
+        return true
+    }
+    if uki_k >= 65 and uki_k <= 90 {
+        return true
+    }
+    if uki_k >= 97 and uki_k <= 122 {
+        return true
+    }
+    return uki_c == "-" or uki_c == "_" or uki_c == "." or uki_c == "~"
+}
+
+# Byte value (0..255) -> two uppercase hex digits, e.g. 10 -> "0A", 32 -> "20".
+fn uk_hex2(ukh_b) {
+    ukh_h = upper(hex(ukh_b))
+    if len(ukh_h) < 2 {
+        ukh_h = "0" + ukh_h
+    }
+    return ukh_h
+}
+
+# One hex digit (either case) -> its value 0..15, or -1 if not a hex digit.
+fn uk_hexval(ukv_c) {
+    return find(UK_HEX_DIGITS, lower(ukv_c))
+}
+
+# Percent-encode a byte string. Unreserved bytes pass through; every other
+# byte becomes %XX. Space -> %20.
+fn uk_encode(uke_s) {
+    uke_out = ""
+    uke_i = 0
+    while uke_i < len(uke_s) {
+        uke_c = at(uke_s, uke_i)
+        if uk_is_unreserved(uke_c) {
+            uke_out = uke_out + uke_c
+        } else {
+            uke_out = uke_out + "%" + uk_hex2(code(uke_c))
+        }
+        uke_i = uke_i + 1
+    }
+    return uke_out
+}
+
+# Shared decoder. ukc_plus selects whether a bare "+" reads as a space.
+fn uk_decode_core(ukc_s, ukc_plus) {
+    ukc_out = ""
+    ukc_i = 0
+    while ukc_i < len(ukc_s) {
+        ukc_c = at(ukc_s, ukc_i)
+        ukc_hi = -1
+        ukc_lo = -1
+        if ukc_c == "%" and ukc_i + 2 < len(ukc_s) {
+            ukc_hi = uk_hexval(at(ukc_s, ukc_i + 1))
+            ukc_lo = uk_hexval(at(ukc_s, ukc_i + 2))
+        }
+        if ukc_hi >= 0 and ukc_lo >= 0 {
+            ukc_out = ukc_out + chr(ukc_hi * 16 + ukc_lo)
+            ukc_i = ukc_i + 3
+        } else if ukc_plus and ukc_c == "+" {
+            ukc_out = ukc_out + " "
+            ukc_i = ukc_i + 1
+        } else {
+            ukc_out = ukc_out + ukc_c
+            ukc_i = ukc_i + 1
+        }
+    }
+    return ukc_out
+}
+
+# Reverse uk_encode: %XX -> byte, everything else untouched. "+" stays "+".
+fn uk_decode(ukd_s) {
+    return uk_decode_core(ukd_s, false)
+}
+
+# Query-string decode: like uk_decode but a bare "+" becomes a space.
+fn uk_decode_query(ukq_s) {
+    return uk_decode_core(ukq_s, true)
+}
+
+# ---- self-test ----
+# Each line prints RESULT and the value expected, so running the file checks
+# itself. "PASS"/"FAIL" is computed against the hand-verified expectation.
+
+fn uk_check(t_label, t_got, t_want) {
+    t_tag = "FAIL"
+    if t_got == t_want {
+        t_tag = "PASS"
+    }
+    print(t_tag + "  " + t_label + " = [" + t_got + "]  expect [" + t_want + "]")
+}
+
+print("-- uk_encode --")
+uk_check("uk_encode(\"a b&c\")", uk_encode("a b&c"), "a%20b%26c")
+uk_check("uk_encode(\"hello world!\")", uk_encode("hello world!"), "hello%20world%21")
+uk_check("uk_encode unreserved kept", uk_encode("Az0-_.~"), "Az0-_.~")
+uk_check("uk_encode(\"100%\")", uk_encode("100%"), "100%25")
+uk_check("uk_encode(\"a/b?c=d\")", uk_encode("a/b?c=d"), "a%2Fb%3Fc%3Dd")
+
+print("")
+print("-- uk_decode --")
+uk_check("uk_decode(\"a%20b%26c\")", uk_decode("a%20b%26c"), "a b&c")
+uk_check("uk_decode passthrough +", uk_decode("a+b"), "a+b")
+uk_check("uk_decode stray %", uk_decode("100%_done%"), "100%_done%")
+uk_check("uk_decode lowercase hex", uk_decode("caf%c3%a9"), "caf" + chr(195) + chr(169))
+
+print("")
+print("-- uk_decode_query --")
+uk_check("uk_decode_query(\"a+b%20c\")", uk_decode_query("a+b%20c"), "a b c")
+uk_check("uk_decode_query escaped plus", uk_decode_query("1%2B1"), "1+1")
+
+print("")
+print("-- round trips --")
+uk_check("round-trip \"hello world!\"", uk_decode(uk_encode("hello world!")), "hello world!")
+uk_check("round-trip utf-8", uk_decode(uk_encode("cafe" + chr(195) + chr(169))), "cafe" + chr(195) + chr(169))
+uk_check("round-trip symbols", uk_decode(uk_encode("a b&c=d/e?f#g")), "a b&c=d/e?f#g")
+
+print("")
+print("-- helpers --")
+uk_check("uk_hex2(10)", uk_hex2(10), "0A")
+uk_check("uk_hex2(255)", uk_hex2(255), "FF")
+uk_check("uk_hex2(32)", uk_hex2(32), "20")

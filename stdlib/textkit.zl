@@ -1,0 +1,97 @@
+# textkit - the string helpers zl was missing, that real programs hit first.
+#
+# Fills three concrete gaps found by trying to build real tools (GAPS_REALWORLD):
+#   - tk_words: split on RUNS of whitespace, so `wc -w` is finally possible.
+#     The builtin split() takes one fixed delimiter and cannot collapse runs.
+#   - tk_is_* : character-class predicates (is_digit/is_alpha/...). zl has
+#     upper()/lower() on whole strings but no per-character tests at all.
+#   - the string-builder pattern: pushing onto a list then join()-ing once is
+#     O(n); `s = s + piece` in a loop is O(n^2) because strings are immutable.
+#
+# A "char" here is a one-character string (what at(s,i) returns); code(c) is
+# its byte value.
+#
+#   tk_words(s)         -> ["the","quick","fox"]   (whitespace-run split)
+#   tk_is_digit(c)      -> true for "0".."9"
+#   tk_is_alpha(c)      -> true for a letter
+#   tk_is_alnum(c)      -> letter or digit
+#   tk_is_space(c)      -> space / tab / newline / carriage-return
+#   tk_is_upper(c) / tk_is_lower(c)
+#   tk_capitalize(s)    -> first letter up, rest unchanged
+#   tk_count_char(s, c) -> how many times character c appears
+#   tk_lpad(s, w, c) / tk_rpad(s, w, c) / tk_center(s, w)
+#   tk_join_chars(cs)   -> the string-builder join (list of chars -> string)
+
+fn tk_is_digit(c) { return code(c) >= 48 and code(c) <= 57 }
+fn tk_is_upper(c) { return code(c) >= 65 and code(c) <= 90 }
+fn tk_is_lower(c) { return code(c) >= 97 and code(c) <= 122 }
+
+fn tk_is_alpha(c) { return tk_is_upper(c) or tk_is_lower(c) }
+fn tk_is_alnum(c) { return tk_is_alpha(c) or tk_is_digit(c) }
+
+fn tk_is_space(c) {
+    return c == " " or c == "\t" or c == "\n" or c == "\r"
+}
+
+# split on runs of whitespace, dropping empty fields - the wc -w primitive.
+fn tk_words(s) {
+    tk_out = []
+    tk_cur = ""
+    tk_i = 0
+    tk_n = len(s)
+    while tk_i < tk_n {
+        tk_c = at(s, tk_i)
+        if tk_is_space(tk_c) {
+            if len(tk_cur) > 0 { tk_out = push(tk_out, tk_cur)  tk_cur = "" }
+        } else {
+            tk_cur = tk_cur + tk_c
+        }
+        tk_i = tk_i + 1
+    }
+    if len(tk_cur) > 0 { tk_out = push(tk_out, tk_cur) }
+    return tk_out
+}
+
+fn tk_capitalize(s) {
+    if len(s) == 0 { return s }
+    return upper(at(s, 0)) + slice(s, 1, len(s))
+}
+
+fn tk_count_char(s, c) {
+    tk_n = 0
+    tk_i = 0
+    while tk_i < len(s) {
+        if at(s, tk_i) == c { tk_n = tk_n + 1 }
+        tk_i = tk_i + 1
+    }
+    return tk_n
+}
+
+fn tk_lpad(s, w, c) {
+    tk_r = s
+    while len(tk_r) < w { tk_r = c + tk_r }
+    return tk_r
+}
+
+fn tk_rpad(s, w, c) {
+    tk_r = s
+    while len(tk_r) < w { tk_r = tk_r + c }
+    return tk_r
+}
+
+fn tk_center(s, w) {
+    tk_total = w - len(s)
+    if tk_total <= 0 { return s }
+    tk_left = tk_total / 2
+    tk_r = s
+    tk_i = 0
+    while tk_i < tk_left { tk_r = " " + tk_r  tk_i = tk_i + 1 }
+    while len(tk_r) < w { tk_r = tk_r + " " }
+    return tk_r
+}
+
+# the string-builder join: collect chars/pieces in a list, join once.
+# O(n) total, versus O(n^2) for `s = s + piece` in a loop.
+fn tk_join_chars(cs) {
+    return join(cs, "")
+}

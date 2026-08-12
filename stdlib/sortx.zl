@@ -1,0 +1,345 @@
+# sortx.zl - sorting algorithms beyond the builtin sort().
+# Every function builds and returns a NEW list; the caller's list is never
+# touched. sort_pairs returns a 2-element list [sorted_keys, sorted_vals].
+#
+# ORDERING. These algorithms order values EXACTLY like the builtin sort(),
+# on every input. They used to be numbers-only, because they compared with
+# < and > and those operators only accept numbers - so sort(["b","a"])
+# answered [a, b] while merge_sort(["b","a"]) died with "this operator
+# needs numbers" on the very same list. The two now agree.
+#
+# sx_cmp below is that order WORKED OUT IN ZL. It does not call sort(), and
+# that is load-bearing: these sorts exist as an INDEPENDENT second opinion
+# on the builtin, so a version that asked sort() for the ordering could not
+# catch a bug in sort() at all - the two would agree by construction, on
+# wrong answers too. The order is
+#
+#     nil < bool < num < str < list < fn      (by type first)
+#     false < true
+#     numbers ascending, NaN after every real number
+#     strings by byte value, then shorter first
+#     lists element-wise, then shorter first
+#
+# and it is stated a second time, in C, as interp.c's value_compare. Two
+# independent statements of one order; tests/test_algorithms.zl holds them
+# against each other. (A list that contains itself makes sx_cmp recurse
+# until the stack goes, where sort() raises at depth 256. Nothing here
+# builds one.)
+#
+# LOCAL NAMES. Every local below is prefixed sx_. A plain assignment inside
+# a function writes an EXISTING global of that name - README.md "Scope
+# gotcha (important)" - so an unprefixed local silently overwrites a
+# caller's global that happens to share the name. Parameters and for-loop
+# variables bind to their own slot and are safe unprefixed.
+fn sx_rank(v) {
+    sx_t = type(v)
+    if sx_t == "nil" { return 0 }
+    if sx_t == "bool" { return 1 }
+    if sx_t == "num" { return 2 }
+    if sx_t == "str" { return 3 }
+    if sx_t == "list" { return 4 }
+    return 5
+}
+# Byte by byte, then shorter first - what strcmp does, without strcmp.
+# index_at gives the UNSIGNED byte value, so bytes above 127 sort last.
+fn sx_cmp_str(a, b) {
+    sx_na = len(a)
+    sx_nb = len(b)
+    sx_i = 0
+    while sx_i < sx_na and sx_i < sx_nb {
+        sx_ca = index_at(a, sx_i)
+        sx_cb = index_at(b, sx_i)
+        if sx_ca != sx_cb {
+            if sx_ca < sx_cb { return 0 - 1 }
+            return 1
+        }
+        sx_i = sx_i + 1
+    }
+    if sx_na < sx_nb { return 0 - 1 }
+    if sx_na > sx_nb { return 1 }
+    return 0
+}
+# -1 / 0 / 1 over every zl value. Recurses on lists, and only on lists.
+fn sx_cmp(a, b) {
+    sx_ra = sx_rank(a)
+    sx_rb = sx_rank(b)
+    if sx_ra != sx_rb {
+        if sx_ra < sx_rb { return 0 - 1 }
+        return 1
+    }
+    if sx_ra == 0 { return 0 }                  # nil: one value, all equal
+    if sx_ra == 5 { return 0 }                  # fn: all equal, as sort() has it
+    if sx_ra == 1 {                             # bool: false < true
+        if a == b { return 0 }
+        if a == false { return 0 - 1 }
+        return 1
+    }
+    if sx_ra == 2 {                             # num: NaN after every real one
+        sx_an = a != a                          # only a NaN differs from itself
+        sx_bn = b != b
+        if sx_an or sx_bn {
+            if sx_an == sx_bn { return 0 }
+            if sx_an { return 1 }
+            return 0 - 1
+        }
+        if a < b { return 0 - 1 }
+        if a > b { return 1 }
+        return 0
+    }
+    if sx_ra == 3 { return sx_cmp_str(a, b) }
+    sx_na = len(a)                              # list: element-wise, then short
+    sx_nb = len(b)
+    sx_i = 0
+    while sx_i < sx_na and sx_i < sx_nb {
+        sx_c = sx_cmp(a[sx_i], b[sx_i])
+        if sx_c != 0 { return sx_c }
+        sx_i = sx_i + 1
+    }
+    if sx_na < sx_nb { return 0 - 1 }
+    if sx_na > sx_nb { return 1 }
+    return 0
+}
+fn lt(a, b) {
+    return sx_cmp(a, b) < 0
+}
+fn le(a, b) {
+    return sx_cmp(a, b) <= 0
+}
+
+fn copy_of(xs) {
+    sx_out = []
+    for sx_x in xs {
+        sx_out = push(sx_out, sx_x)
+    }
+    return sx_out
+}
+fn is_sorted(xs) {
+    sx_i = 1
+    while sx_i < len(xs) {
+        if lt(xs[sx_i], xs[sx_i - 1]) {
+            return false
+        }
+        sx_i = sx_i + 1
+    }
+    return true
+}
+fn insertion_sort(xs) {
+    sx_out = copy_of(xs)
+    sx_i = 1
+    while sx_i < len(sx_out) {
+        sx_v = sx_out[sx_i]
+        sx_j = sx_i - 1
+        # The bound check is its own loop condition and the order test its
+        # own if, so le() is only ever reached with an in-range sx_j.
+        while sx_j >= 0 {
+            if le(sx_out[sx_j], sx_v) {
+                break
+            }
+            sx_out[sx_j + 1] = sx_out[sx_j]
+            sx_j = sx_j - 1
+        }
+        sx_out[sx_j + 1] = sx_v
+        sx_i = sx_i + 1
+    }
+    return sx_out
+}
+fn selection_sort(xs) {
+    sx_out = copy_of(xs)
+    sx_n = len(sx_out)
+    sx_i = 0
+    while sx_i < sx_n {
+        sx_lo = sx_i
+        sx_j = sx_i + 1
+        while sx_j < sx_n {
+            if lt(sx_out[sx_j], sx_out[sx_lo]) {
+                sx_lo = sx_j
+            }
+            sx_j = sx_j + 1
+        }
+        sx_tmp = sx_out[sx_i]
+        sx_out[sx_i] = sx_out[sx_lo]
+        sx_out[sx_lo] = sx_tmp
+        sx_i = sx_i + 1
+    }
+    return sx_out
+}
+fn bubble_sort(xs) {
+    sx_out = copy_of(xs)
+    sx_n = len(sx_out)
+    sx_end = sx_n - 1
+    while sx_end > 0 {
+        sx_swapped = false
+        sx_j = 0
+        while sx_j < sx_end {
+            if lt(sx_out[sx_j + 1], sx_out[sx_j]) {
+                sx_tmp = sx_out[sx_j]
+                sx_out[sx_j] = sx_out[sx_j + 1]
+                sx_out[sx_j + 1] = sx_tmp
+                sx_swapped = true
+            }
+            sx_j = sx_j + 1
+        }
+        if not sx_swapped {
+            return sx_out
+        }
+        sx_end = sx_end - 1
+    }
+    return sx_out
+}
+fn merge(a, b) {
+    sx_out = []
+    sx_i = 0
+    sx_j = 0
+    while sx_i < len(a) and sx_j < len(b) {
+        if lt(b[sx_j], a[sx_i]) {
+            sx_out = push(sx_out, b[sx_j])
+            sx_j = sx_j + 1
+        } else {
+            sx_out = push(sx_out, a[sx_i])
+            sx_i = sx_i + 1
+        }
+    }
+    while sx_i < len(a) {
+        sx_out = push(sx_out, a[sx_i])
+        sx_i = sx_i + 1
+    }
+    while sx_j < len(b) {
+        sx_out = push(sx_out, b[sx_j])
+        sx_j = sx_j + 1
+    }
+    return sx_out
+}
+fn merge_sort(xs) {
+    sx_n = len(xs)
+    if sx_n < 2 {
+        return copy_of(xs)
+    }
+    sx_mid = int(sx_n / 2)
+    sx_left = []
+    sx_right = []
+    sx_i = 0
+    while sx_i < sx_n {
+        if sx_i < sx_mid {
+            sx_left = push(sx_left, xs[sx_i])
+        } else {
+            sx_right = push(sx_right, xs[sx_i])
+        }
+        sx_i = sx_i + 1
+    }
+    return merge(merge_sort(sx_left), merge_sort(sx_right))
+}
+# counting_sort: non-negative whole numbers only, and the one sort here
+# that cannot follow the builtin's order - it indexes a bucket list BY the
+# value itself, so the value has to be a small non-negative integer. It
+# stays numeric on purpose; use merge_sort for anything else.
+fn counting_sort(xs) {
+    if len(xs) == 0 {
+        return []
+    }
+    sx_top = xs[0]
+    for sx_x in xs {
+        if sx_x > sx_top {
+            sx_top = sx_x
+        }
+    }
+    sx_counts = []
+    sx_i = 0
+    while sx_i <= sx_top {
+        sx_counts = push(sx_counts, 0)
+        sx_i = sx_i + 1
+    }
+    for sx_x in xs {
+        sx_counts[sx_x] = sx_counts[sx_x] + 1
+    }
+    sx_out = []
+    sx_v = 0
+    while sx_v <= sx_top {
+        sx_c = 0
+        while sx_c < sx_counts[sx_v] {
+            sx_out = push(sx_out, sx_v)
+            sx_c = sx_c + 1
+        }
+        sx_v = sx_v + 1
+    }
+    return sx_out
+}
+fn sort_desc(xs) {
+    sx_out = merge_sort(xs)
+    sx_rev = []
+    sx_i = len(sx_out) - 1
+    while sx_i >= 0 {
+        sx_rev = push(sx_rev, sx_out[sx_i])
+        sx_i = sx_i - 1
+    }
+    return sx_rev
+}
+# sort_pairs: order vals by their matching keys. Returns [keys, vals].
+fn sort_pairs(keys, vals) {
+    sx_ks = copy_of(keys)
+    sx_vs = copy_of(vals)
+    sx_i = 1
+    while sx_i < len(sx_ks) {
+        sx_k = sx_ks[sx_i]
+        sx_v = sx_vs[sx_i]
+        sx_j = sx_i - 1
+        while sx_j >= 0 {
+            if le(sx_ks[sx_j], sx_k) {
+                break
+            }
+            sx_ks[sx_j + 1] = sx_ks[sx_j]
+            sx_vs[sx_j + 1] = sx_vs[sx_j]
+            sx_j = sx_j - 1
+        }
+        sx_ks[sx_j + 1] = sx_k
+        sx_vs[sx_j + 1] = sx_v
+        sx_i = sx_i + 1
+    }
+    return [sx_ks, sx_vs]
+}
+# binary_search: xs must already be sorted. Returns the index, or -1.
+fn binary_search(xs, target) {
+    sx_lo = 0
+    sx_hi = len(xs) - 1
+    while sx_lo <= sx_hi {
+        sx_mid = int((sx_lo + sx_hi) / 2)
+        if xs[sx_mid] == target {
+            return sx_mid
+        }
+        if lt(xs[sx_mid], target) {
+            sx_lo = sx_mid + 1
+        } else {
+            sx_hi = sx_mid - 1
+        }
+    }
+    return 0 - 1
+}
+
+data = [5, 3, 8, 1, 9, 2, 7]
+print("data:           " + str(data))
+print("merge_sort:     " + str(merge_sort(data)))
+print("insertion_sort: " + str(insertion_sort(data)))
+print("selection_sort: " + str(selection_sort(data)))
+print("bubble_sort:    " + str(bubble_sort(data)))
+print("sort_desc:      " + str(sort_desc(data)))
+print("data untouched: " + str(data))
+print("is_sorted data: " + str(is_sorted(data)))
+print("is_sorted mrgd: " + str(is_sorted(merge_sort(data))))
+print("counting_sort:  " + str(counting_sort([4, 2, 7, 2, 0, 5, 2])))
+pairs = sort_pairs([3, 1, 2], ["c", "a", "b"])
+print("sort_pairs key: " + str(pairs[0]))
+print("sort_pairs val: " + str(pairs[1]))
+sorted = merge_sort(data)
+print("find 7 in " + str(sorted) + ": " + str(binary_search(sorted, 7)))
+print("find 1: " + str(binary_search(sorted, 1)))
+print("find 4: " + str(binary_search(sorted, 4)))
+
+# These used to raise "this operator needs numbers" while the builtin
+# sort() answered them fine. Both sides now give the same list - worked out
+# separately, which is the only way the agreement means anything.
+words = ["pear", "fig", "apple", "fig"]
+print("words builtin:  " + str(sort(words)))
+print("words merge:    " + str(merge_sort(words)))
+print("words insert:   " + str(insertion_sort(words)))
+mixed = [[2], "a", 1, true]
+print("mixed builtin:  " + str(sort(mixed)))
+print("mixed merge:    " + str(merge_sort(mixed)))

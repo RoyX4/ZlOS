@@ -1,0 +1,97 @@
+# roman_numerals.zl
+# Roman numeral conversion for the zl standard library.
+# int_to_roman(n) : n in 1..3999 -> roman numeral string
+# roman_to_int(s) : roman numeral string -> integer
+#
+# zl limitations worked around here:
+#   - no maps/dictionaries: value/symbol tables are kept as parallel lists.
+#   - lists don't mutate in place: results are rebuilt with push(...) into a new list.
+#   - no import: helpers live in this file.
+
+# ---- lookup tables (parallel lists, biggest first) ----
+ROMAN_VALUES = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
+ROMAN_SYMS   = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
+
+# int -> roman. Greedy: subtract the largest fitting value, append its symbol.
+fn int_to_roman(n) {
+    if n < 1 or n > 3999 {
+        return "ERROR: out of range 1..3999"
+    }
+    # Use a working copy: assigning to the parameter `n` leaks back to the
+    # caller's variable in this interpreter, so never mutate `n` directly.
+    num = n
+    out = ""
+    i = 0
+    while i < len(ROMAN_VALUES) {
+        v = ROMAN_VALUES[i]
+        sym = ROMAN_SYMS[i]
+        while num >= v {
+            out = out + sym
+            num = num - v
+        }
+        i = i + 1
+    }
+    return out
+}
+
+# value of a single roman letter, or -1 if not a roman letter.
+fn roman_char_value(c) {
+    if c == "I" { return 1 }
+    if c == "V" { return 5 }
+    if c == "X" { return 10 }
+    if c == "L" { return 50 }
+    if c == "C" { return 100 }
+    if c == "D" { return 500 }
+    if c == "M" { return 1000 }
+    return -1
+}
+
+# roman -> int. Standard subtractive scan:
+# if a letter's value is less than the next letter's value, subtract it, else add it.
+fn roman_to_int(s) {
+    s = upper(s)
+    total = 0
+    i = 0
+    while i < len(s) {
+        cur = roman_char_value(at(s, i))
+        if cur == -1 {
+            return -1
+        }
+        nxt = -1
+        if i + 1 < len(s) {
+            nxt = roman_char_value(at(s, i + 1))
+        }
+        if nxt > cur {
+            total = total - cur
+        } else {
+            total = total + cur
+        }
+        i = i + 1
+    }
+    return total
+}
+
+# ---------------- self-test ----------------
+print("=== int_to_roman ===")
+samples = [1, 4, 9, 14, 40, 90, 400, 1994, 2024, 3888, 3999]
+for n in samples {
+    print("" + n + " -> " + int_to_roman(n))
+}
+
+print("=== roman_to_int ===")
+rsamples = ["I", "IV", "IX", "XIV", "XL", "XC", "CD", "MCMXCIV", "MMXXIV", "MMMDCCCLXXXVIII", "MMMCMXCIX"]
+for r in rsamples {
+    print(r + " -> " + roman_to_int(r))
+}
+
+print("=== round-trips ===")
+rt = [1, 4, 1994, 2024, 3999]
+allok = true
+for n in rt {
+    r = int_to_roman(n)
+    back = roman_to_int(r)
+    ok = back == n
+    if not ok { allok = false }
+    print("" + n + " -> " + r + " -> " + back + "  ok=" + ok)
+}
+print("all round-trips ok = " + allok)

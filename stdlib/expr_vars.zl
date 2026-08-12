@@ -1,0 +1,308 @@
+# expr_vars.zl
+# Arithmetic evaluator with variables and assignment.
+# Evaluates a list of statements like ["x = 5", "y = x * 2 + 1", "y"]
+# maintaining a variable environment (a list of [name, value] pairs).
+# Supports + - * / and parentheses. Real division per zl semantics.
+#
+# Grammar (recursive descent):
+#   statement := IDENT "=" expr    |    expr
+#   expr      := term (("+" | "-") term)*
+#   term      := factor (("*" | "/") factor)*
+#   factor    := "(" expr ")" | number | ident | "-" factor
+#
+# Tokenizing and parsing operate on a shared list of tokens. The parser
+# uses a global cursor index P_POS. All function-locals are uniquely
+# prefixed to avoid clobbering top-level globals (per zl scope rule).
+
+# ---------- environment (list of [name, value] pairs) ----------
+
+fn env_get(eg_env, eg_name) {
+    eg_i = 0
+    while eg_i < len(eg_env) {
+        eg_pair = eg_env[eg_i]
+        if eg_pair[0] == eg_name {
+            return eg_pair[1]
+        }
+        eg_i = eg_i + 1
+    }
+    print("  [error] undefined variable: " + eg_name)
+    return 0
+}
+
+fn env_set(es_env, es_name, es_value) {
+    # Return a NEW env with es_name updated (or appended).
+    es_out = []
+    es_found = false
+    es_i = 0
+    while es_i < len(es_env) {
+        es_pair = es_env[es_i]
+        if es_pair[0] == es_name {
+            es_out = push(es_out, [es_name, es_value])
+            es_found = true
+        } else {
+            es_out = push(es_out, es_pair)
+        }
+        es_i = es_i + 1
+    }
+    if not es_found {
+        es_out = push(es_out, [es_name, es_value])
+    }
+    return es_out
+}
+
+# ---------- character classifiers ----------
+
+# zl string comparison only supports ==, not < > <= >=, so classify
+# characters via has(pool, c) (substring membership) instead of ranges.
+
+fn is_digit(id_c) {
+    if id_c == "" {
+        return false
+    }
+    return has("0123456789", id_c)
+}
+
+fn is_alpha(ia_c) {
+    if ia_c == "" {
+        return false
+    }
+    return has("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", ia_c)
+}
+
+fn is_alnum(ian_c) {
+    if is_alpha(ian_c) {
+        return true
+    }
+    return is_digit(ian_c)
+}
+
+# ---------- tokenizer ----------
+# Produces a list of tokens. Each token is a [kind, text] pair.
+# kinds: "num", "ident", "op"  (op covers + - * / ( ) = )
+
+fn tokenize(tk_src) {
+    tk_toks = []
+    tk_i = 0
+    tk_n = len(tk_src)
+    while tk_i < tk_n {
+        tk_c = at(tk_src, tk_i)
+        if tk_c == " " or tk_c == "\t" {
+            tk_i = tk_i + 1
+        } else if is_digit(tk_c) or tk_c == "." {
+            # read a number (digits with optional single decimal point)
+            tk_start = tk_i
+            while tk_i < tk_n and (is_digit(at(tk_src, tk_i)) or at(tk_src, tk_i) == ".") {
+                tk_i = tk_i + 1
+            }
+            tk_text = slice(tk_src, tk_start, tk_i)
+            tk_toks = push(tk_toks, ["num", tk_text])
+        } else if is_alpha(tk_c) {
+            # read an identifier
+            tk_start2 = tk_i
+            while tk_i < tk_n and is_alnum(at(tk_src, tk_i)) {
+                tk_i = tk_i + 1
+            }
+            tk_text2 = slice(tk_src, tk_start2, tk_i)
+            tk_toks = push(tk_toks, ["ident", tk_text2])
+        } else if tk_c == "+" or tk_c == "-" or tk_c == "*" or tk_c == "/" or tk_c == "(" or tk_c == ")" or tk_c == "=" {
+            tk_toks = push(tk_toks, ["op", tk_c])
+            tk_i = tk_i + 1
+        } else {
+            print("  [error] bad character in input: " + tk_c)
+            tk_i = tk_i + 1
+        }
+    }
+    return tk_toks
+}
+
+# ---------- parser / evaluator ----------
+# Global cursor + token stream shared by the parse functions.
+P_TOKS = []
+P_POS = 0
+P_ENV = []
+
+fn p_peek_kind() {
+    if P_POS >= len(P_TOKS) {
+        return "eof"
+    }
+    pk_tok = P_TOKS[P_POS]
+    return pk_tok[0]
+}
+
+fn p_peek_text() {
+    if P_POS >= len(P_TOKS) {
+        return ""
+    }
+    pt_tok = P_TOKS[P_POS]
+    return pt_tok[1]
+}
+
+fn p_advance() {
+    P_POS = P_POS + 1
+    return 0
+}
+
+# factor := "(" expr ")" | number | ident | "-" factor
+fn parse_factor() {
+    pf_kind = p_peek_kind()
+    pf_text = p_peek_text()
+
+    if pf_kind == "op" and pf_text == "-" {
+        p_advance()
+        return -parse_factor()
+    }
+    if pf_kind == "op" and pf_text == "(" {
+        p_advance()
+        pf_val = parse_expr()
+        if p_peek_kind() == "op" and p_peek_text() == ")" {
+            p_advance()
+        } else {
+            print("  [error] expected ')'")
+        }
+        return pf_val
+    }
+    if pf_kind == "num" {
+        p_advance()
+        return num(pf_text)
+    }
+    if pf_kind == "ident" {
+        p_advance()
+        return env_get(P_ENV, pf_text)
+    }
+    print("  [error] unexpected token in factor: " + pf_text)
+    return 0
+}
+
+# term := factor (("*" | "/") factor)*
+fn parse_term() {
+    pt_val = parse_factor()
+    while p_peek_kind() == "op" and (p_peek_text() == "*" or p_peek_text() == "/") {
+        pt_op = p_peek_text()
+        p_advance()
+        pt_rhs = parse_factor()
+        if pt_op == "*" {
+            pt_val = pt_val * pt_rhs
+        } else {
+            if pt_rhs == 0 {
+                print("  [error] division by zero")
+                pt_val = 0
+            } else {
+                pt_val = pt_val / pt_rhs
+            }
+        }
+    }
+    return pt_val
+}
+
+# expr := term (("+" | "-") term)*
+fn parse_expr() {
+    pe_val = parse_term()
+    while p_peek_kind() == "op" and (p_peek_text() == "+" or p_peek_text() == "-") {
+        pe_op = p_peek_text()
+        p_advance()
+        pe_rhs = parse_term()
+        if pe_op == "+" {
+            pe_val = pe_val + pe_rhs
+        } else {
+            pe_val = pe_val - pe_rhs
+        }
+    }
+    return pe_val
+}
+
+# Evaluate ONE statement string against P_ENV.
+# If it is an assignment, updates P_ENV and returns the assigned value.
+# Otherwise evaluates the expression and returns its value.
+fn eval_stmt(ev_line) {
+    P_TOKS = tokenize(ev_line)
+    P_POS = 0
+
+    # Detect assignment: ident followed by "=" at the start.
+    ev_is_assign = false
+    ev_name = ""
+    if len(P_TOKS) >= 2 {
+        ev_t0 = P_TOKS[0]
+        ev_t1 = P_TOKS[1]
+        if ev_t0[0] == "ident" and ev_t1[0] == "op" and ev_t1[1] == "=" {
+            ev_is_assign = true
+            ev_name = ev_t0[1]
+        }
+    }
+
+    if ev_is_assign {
+        P_POS = 2                # skip ident and "="
+        ev_val = parse_expr()
+        P_ENV = env_set(P_ENV, ev_name, ev_val)
+        return ev_val
+    }
+
+    ev_val2 = parse_expr()
+    return ev_val2
+}
+
+# Run a whole program (list of statement strings). Resets P_ENV first.
+# Returns the value of the last statement.
+fn run_program(rp_stmts) {
+    P_ENV = []
+    rp_last = 0
+    rp_i = 0
+    while rp_i < len(rp_stmts) {
+        rp_last = eval_stmt(rp_stmts[rp_i])
+        rp_i = rp_i + 1
+    }
+    return rp_last
+}
+
+# ---------- self-test ----------
+
+print("=== expr_vars self-test ===")
+
+# 1. Basic assignment chain: x=5, y = x*2+1 -> 11, then y
+r1 = run_program(["x = 5", "y = x * 2 + 1", "y"])
+print("prog1  x=5; y=x*2+1; y   => " + num(r1) + "   (expect 11)")
+
+# 2. Parentheses and precedence
+r2 = eval_stmt("2 + 3 * 4")
+print("expr   2 + 3 * 4         => " + num(r2) + "   (expect 14)")
+r3 = eval_stmt("(2 + 3) * 4")
+print("expr   (2 + 3) * 4       => " + num(r3) + "   (expect 20)")
+
+# 3. Real division
+r4 = eval_stmt("7 / 2")
+print("expr   7 / 2             => " + num(r4) + "   (expect 3.5)")
+
+# 4. Unary minus and nested parens
+r5 = eval_stmt("-(3 + 4) * 2")
+print("expr   -(3 + 4) * 2      => " + num(r5) + "   (expect -14)")
+
+# 5. Multi-variable program with reassignment
+r6 = run_program(["a = 10", "b = 20", "a = a + b", "a * 2 - b"])
+print("prog2  a=10;b=20;a=a+b;a*2-b => " + num(r6) + "   (expect 40)")
+
+# 6. Deep expression: (1+2)*(3+4) - 10/5
+r7 = eval_stmt("(1 + 2) * (3 + 4) - 10 / 5")
+print("expr   (1+2)*(3+4)-10/5  => " + num(r7) + "   (expect 19)")
+
+# 7. Variable referencing earlier variables in same run
+r8 = run_program(["w = 3", "h = 4", "area = w * h", "perimeter = 2 * (w + h)", "area + perimeter"])
+print("prog3  area+perimeter    => " + num(r8) + "   (expect 26)")
+
+# Verify a few with explicit pass/fail markers
+fn check(ck_label, ck_got, ck_want) {
+    if ck_got == ck_want {
+        print("  PASS " + ck_label + " = " + num(ck_got))
+    } else {
+        print("  FAIL " + ck_label + " got " + num(ck_got) + " want " + num(ck_want))
+    }
+}
+
+print("--- checks ---")
+check("prog1", r1, 11)
+check("2+3*4", r2, 14)
+check("(2+3)*4", r3, 20)
+check("7/2", r4, 3.5)
+check("-(3+4)*2", r5, -14)
+check("prog2", r6, 40)
+check("deep", r7, 19)
+check("prog3", r8, 26)
+print("=== done ===")

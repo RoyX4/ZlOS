@@ -1,0 +1,94 @@
+# wordfreq - count how often each word appears, print the most common.
+#
+# A real program built entirely from the two stdlib modules written today:
+#   textkit.tk_words  - split text into words on whitespace runs
+#   iterx.ix_sort_by  - order the results by a key function
+#
+# It also shows the maps gap CONCRETELY: counting needs a dictionary
+# (word -> count), which zl does not have, so counts are kept as a list of
+# [word, n] pairs and looked up with a linear scan. That O(n*m) scan is the
+# exact cost a real map type (roadmap item 4) would remove.
+
+# ---- textkit (inlined; no imports yet) --------------------------------
+fn tk_is_space(c) { return c == " " or c == "\t" or c == "\n" or c == "\r" }
+fn tk_words(s) {
+    tk_out = []
+    tk_cur = ""
+    tk_i = 0
+    while tk_i < len(s) {
+        tk_c = at(s, tk_i)
+        if tk_is_space(tk_c) {
+            if len(tk_cur) > 0 { tk_out = push(tk_out, tk_cur)  tk_cur = "" }
+        } else {
+            tk_cur = tk_cur + lower(tk_c)
+        }
+        tk_i = tk_i + 1
+    }
+    if len(tk_cur) > 0 { tk_out = push(tk_out, tk_cur) }
+    return tk_out
+}
+
+# ---- iterx (inlined) --------------------------------------------------
+fn ix_sort_by(xs, key) {
+    ix_out = []
+    for x in xs {
+        ix_kx = key(x)
+        ix_res = []
+        ix_placed = false
+        for y in ix_out {
+            if not ix_placed and ix_kx < key(y) {
+                ix_res = push(ix_res, x)  ix_placed = true
+            }
+            ix_res = push(ix_res, y)
+        }
+        if not ix_placed { ix_res = push(ix_res, x) }
+        ix_out = ix_res
+    }
+    return ix_out
+}
+
+# ---- the count: a list of [word, n] pairs standing in for a map -------
+fn find_pair(pairs, word) {
+    fp_i = 0
+    while fp_i < len(pairs) {
+        if pairs[fp_i][0] == word { return fp_i }
+        fp_i = fp_i + 1
+    }
+    return 0 - 1
+}
+
+fn count_words(words) {
+    cw_pairs = []
+    for w in words {
+        cw_at = find_pair(cw_pairs, w)
+        if cw_at < 0 {
+            cw_pairs = push(cw_pairs, [w, 1])
+        } else {
+            cw_pairs[cw_at] = [w, cw_pairs[cw_at][1] + 1]
+        }
+    }
+    return cw_pairs
+}
+
+# sort_by ranks ascending; negate the count to get most-frequent first
+fn neg_count(pair) { return 0 - pair[1] }
+
+# ---- run it -----------------------------------------------------------
+text = "the quick brown fox the lazy dog the fox jumps over the lazy dog the end"
+
+words = tk_words(text)
+print("total words: " + str(len(words)))
+
+counts = count_words(words)
+print("distinct words: " + str(len(counts)))
+
+ranked = ix_sort_by(counts, neg_count)
+
+print("")
+print("most common:")
+rank_i = 0
+while rank_i < len(ranked) and rank_i < 5 {
+    pair = ranked[rank_i]
+    print("  " + pad(pair[0], 8) + str(pair[1]))
+    rank_i = rank_i + 1
+}

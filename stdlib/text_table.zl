@@ -1,0 +1,129 @@
+# text_table.zl -- render a list of rows as a space-aligned text table.
+# A table is a list of rows; each row is a list of string cells.
+# Standalone: every helper it needs is a built-in or defined here.
+
+# Return s with trailing spaces appended until it is at least n chars wide.
+fn pad_right(s, n) {
+    out = s
+    while len(out) < n {
+        out = out + " "
+    }
+    return out
+}
+
+# Given a table (list of rows), return a list holding the max width of
+# each column. Assumes every row has the same number of columns.
+fn column_widths(rows) {
+    widths = []
+    # Seed the widths list with a zero per column, using the first row.
+    if len(rows) == 0 {
+        return widths
+    }
+    first = rows[0]
+    c = 0
+    while c < len(first) {
+        widths = push(widths, 0)
+        c = c + 1
+    }
+    # Walk every cell, growing the running max for its column.
+    for row in rows {
+        i = 0
+        while i < len(row) {
+            cell = row[i]
+            if len(cell) > widths[i] {
+                # Rebuild widths with the larger value at index i (no in-place edit).
+                newWidths = []
+                j = 0
+                while j < len(widths) {
+                    if j == i {
+                        newWidths = push(newWidths, len(cell))
+                    } else {
+                        newWidths = push(newWidths, widths[j])
+                    }
+                    j = j + 1
+                }
+                widths = newWidths
+            }
+            i = i + 1
+        }
+    }
+    return widths
+}
+
+# Render one row to a string: each cell padded to its column width,
+# columns separated by "  " (two spaces). Trailing pad on the last
+# column is trimmed off so lines have no dangling spaces.
+fn format_row(row, widths) {
+    line = ""
+    i = 0
+    while i < len(row) {
+        cell = row[i]
+        if i == len(row) - 1 {
+            line = line + cell
+        } else {
+            line = line + pad_right(cell, widths[i]) + "  "
+        }
+        i = i + 1
+    }
+    return line
+}
+
+# Render a whole table to a single string with newline-separated rows.
+fn format_table(rows) {
+    widths = column_widths(rows)
+    out = ""
+    r = 0
+    while r < len(rows) {
+        out = out + format_row(rows[r], widths)
+        if r != len(rows) - 1 {
+            out = out + "\n"
+        }
+        r = r + 1
+    }
+    return out
+}
+
+# Join a list of numbers into a "[a, b, c]" string (for readable test output).
+fn join_ints(nums) {
+    out = "["
+    i = 0
+    while i < len(nums) {
+        out = out + nums[i]
+        if i != len(nums) - 1 {
+            out = out + ", "
+        }
+        i = i + 1
+    }
+    return out + "]"
+}
+
+# Print a table straight to stdout, row by row.
+fn print_table(rows) {
+    widths = column_widths(rows)
+    for row in rows {
+        print(format_row(row, widths))
+    }
+}
+
+# ---------------- self-test ----------------
+print("== text_table self-test ==")
+
+# A 3x3 example: header plus two data rows of differing widths.
+sample = [["Name", "Age", "City"], ["Alice", "30", "Melbourne"], ["Bob", "5", "NYC"]]
+
+print("")
+print("column_widths -> " + join_ints(column_widths(sample)))
+
+print("")
+print("print_table output:")
+print_table(sample)
+
+print("")
+print("format_table returns one string:")
+print(format_table(sample))
+
+# A second table proving alignment adapts to the data.
+print("")
+grid = [["x", "yy", "zzz"], ["1234", "5", "6"]]
+print("second table:")
+print_table(grid)

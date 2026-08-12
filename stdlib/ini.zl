@@ -1,0 +1,191 @@
+# ini.zl - read and write INI / .conf configuration text.
+#
+# Representation: a parsed config is a flat list of [section, key, value]
+# triples, in the order they appeared. zl has no structs and no nested maps,
+# so a flat triple list is the honest shape: it keeps duplicate keys visible,
+# keeps ordering, and needs nothing but list indexing to walk. Every value is
+# a string - ini.zl never guesses that "8080" or "false" wanted to be a
+# number, that is the caller's job.
+#
+# Keys that appear before the first [header] belong to section "" (the empty
+# string), so a config with no headers at all still parses.
+#
+# Parsing rules:
+#   - lines are trimmed; blank lines are skipped
+#   - a line whose FIRST character is ';' or '#' is a comment and is skipped
+#   - ';' / '#' inside a value is kept literally - INI has no agreed rule for
+#     trailing comments, so ini.zl does not invent one
+#   - "[name]" opens a section; the name is trimmed
+#   - otherwise the line splits at its FIRST '=', so a value may contain '='
+#   - whitespace around the key and the value is trimmed; "k =" gives ""
+#   - a line with no '=' at all is malformed and is dropped
+#
+# ini_write() groups the triples by section (first-appearance order) and emits
+# "key=value" with no padding. Comments are NOT preserved - they are dropped at
+# parse time - so write(parse(text)) is not text. What IS guaranteed is that
+# the parsed form is a fixpoint: parse(write(p)) == p whenever p is already
+# grouped by section, and write(parse(write(p))) == write(p) always.
+#
+# Naming: assigning a name inside a function writes the global of that name if
+# one already exists, so every local here carries a two-letter tag for its
+# function (ip_ = ini_parse, ig_ = ini_get, ...) to stay clear of the demo's
+# globals at the bottom.
+
+fn ini_parse(ipText) {
+    ipOut = []
+    ipSec = ""
+    for ipRaw in lines(ipText) {
+        ipL = trim(ipRaw)
+        if len(ipL) == 0 {
+            continue
+        }
+        ipC = at(ipL, 0)
+        if ipC == ";" or ipC == "#" {
+            continue
+        }
+        if ipC == "[" and at(ipL, len(ipL) - 1) == "]" {
+            ipSec = trim(slice(ipL, 1, len(ipL) - 1))
+            continue
+        }
+        ipEq = find(ipL, "=")
+        if ipEq < 0 {
+            continue
+        }
+        ipK = trim(slice(ipL, 0, ipEq))
+        ipV = trim(slice(ipL, ipEq + 1, len(ipL)))
+        ipOut = push(ipOut, [ipSec, ipK, ipV])
+    }
+    return ipOut
+}
+
+fn ini_get(igP, igSec, igKey, igDef) {
+    for igT in igP {
+        if igT[0] == igSec and igT[1] == igKey {
+            return igT[2]
+        }
+    }
+    return igDef
+}
+
+fn ini_sections(isP) {
+    isOut = []
+    for isT in isP {
+        if not contains(isOut, isT[0]) {
+            isOut = push(isOut, isT[0])
+        }
+    }
+    return isOut
+}
+
+fn ini_keys(ikP, ikSec) {
+    ikOut = []
+    for ikT in ikP {
+        if ikT[0] == ikSec {
+            ikOut = push(ikOut, ikT[1])
+        }
+    }
+    return ikOut
+}
+
+# Updates in place when the key exists, appends otherwise. Returns the list -
+# always use the return value, since appending produces a new list.
+fn ini_set(ieP, ieSec, ieKey, ieVal) {
+    ieI = 0
+    while ieI < len(ieP) {
+        if ieP[ieI][0] == ieSec and ieP[ieI][1] == ieKey {
+            ieP[ieI][2] = ieVal
+            return ieP
+        }
+        ieI = ieI + 1
+    }
+    return push(ieP, [ieSec, ieKey, ieVal])
+}
+
+fn ini_write(iwP) {
+    iwOut = ""
+    for iwSec in ini_sections(iwP) {
+        if iwSec != "" {
+            if len(iwOut) > 0 {
+                iwOut = iwOut + "\n"
+            }
+            iwOut = iwOut + "[" + iwSec + "]\n"
+        }
+        for iwT in iwP {
+            if iwT[0] == iwSec {
+                iwOut = iwOut + iwT[1] + "=" + iwT[2] + "\n"
+            }
+        }
+    }
+    return iwOut
+}
+
+# ---------------- demo ----------------
+print("== ini.zl ==")
+
+sample = "# settings that come before any section header\n"
+sample = sample + "app = zl\n"
+sample = sample + "debug=false\n"
+sample = sample + "\n"
+sample = sample + "[server]\n"
+sample = sample + "   host =  127.0.0.1   \n"
+sample = sample + "port=8080\n"
+sample = sample + "; the next value keeps its ; and # - they are not comments\n"
+sample = sample + "motd = hi; there # kept\n"
+sample = sample + "\n"
+sample = sample + "[query]\n"
+sample = sample + "sql = SELECT a=1 FROM t\n"
+sample = sample + "empty =\n"
+sample = sample + "\n"
+sample = sample + "[paths]\n"
+sample = sample + "root = /usr/local/zl\n"
+
+print("input:")
+print(sample)
+
+cfg = ini_parse(sample)
+print("triples (" + str(len(cfg)) + "):")
+for t in cfg {
+    print("  [" + t[0] + "] " + t[1] + " = [" + t[2] + "]")
+}
+
+print("")
+print("sections:        " + str(ini_sections(cfg)))
+print("keys of server:  " + str(ini_keys(cfg, "server")))
+print("keys of \"\":      " + str(ini_keys(cfg, "")))
+print("get server.port: " + ini_get(cfg, "server", "port", "?"))
+print("get \"\".app:      " + ini_get(cfg, "", "app", "?"))
+print("value with '=':  " + ini_get(cfg, "query", "sql", "?"))
+print("value with ';#': " + ini_get(cfg, "server", "motd", "?"))
+print("empty value:     [" + ini_get(cfg, "query", "empty", "?") + "]")
+print("missing key:     " + ini_get(cfg, "server", "nope", "<default>"))
+print("missing section: " + ini_get(cfg, "nosuch", "port", "<default>"))
+
+print("")
+print("written back:")
+text1 = ini_write(cfg)
+print(text1)
+
+again = ini_parse(text1)
+text2 = ini_write(again)
+print("round trip - same triples: " + str(str(cfg) == str(again)))
+print("round trip - same text:    " + str(text1 == text2))
+print("comment lines dropped:     " + str(not has(text1, "before any section header")))
+print("but '#' inside a value:    " + str(has(text1, "there # kept")))
+
+print("")
+cfg = ini_set(cfg, "server", "port", "9090")
+cfg = ini_set(cfg, "server", "tls", "on")
+cfg = ini_set(cfg, "", "app", "zl-2")
+print("after set port/tls/app:")
+print(ini_write(cfg))
+print("port now:  " + ini_get(cfg, "server", "port", "?"))
+print("tls added: " + ini_get(cfg, "server", "tls", "?"))
+print("triples now: " + str(len(cfg)))
+
+print("")
+print("no headers at all -> section \"\":")
+flat = ini_parse("a=1\nb = 2\n; note\nc=3")
+print("  " + str(flat))
+for s in ini_sections(flat) {
+    print("  section \"" + s + "\" holds " + str(len(ini_keys(flat, s))) + " keys")
+}

@@ -1,0 +1,210 @@
+# markdown.zl
+# A tiny Markdown -> HTML converter for the zl standard library.
+# Supported subset (processed line by line):
+#   # / ## / ... / ######   -> <h1>..<h6>
+#   - bullet                 -> <ul><li>..</li></ul>  (consecutive lines grouped)
+#   **bold**                 -> <strong>..</strong>
+#   *italic*                 -> <em>..</em>
+#   blank line               -> paragraph break
+#   anything else            -> <p>..</p>
+#
+# zl limitations worked around here:
+#   - no maps/dictionaries: state is tracked with plain booleans/strings.
+#   - lists don't mutate in place: output lines accumulate via push(out, x).
+#   - no import: every helper lives in this file, standalone.
+#   - CRITICAL scope rule: every function-local is prefixed (md_/mi_/mh_/mc_)
+#     so it never clobbers a top-level global.
+
+# ---- inline formatting ----
+
+# Replace matched pairs of `delim` in `s` with open/close tags. Only a delim
+# that has a later closing delim is wrapped; an unmatched delim is left as a
+# literal character so malformed input is never mangled.
+fn md_wrap_pairs(s, delim, otag, ctag) {
+  mi_out = ""
+  mi_rest = s
+  mi_dlen = len(delim)
+  mi_go = true
+  while mi_go {
+    mi_idx1 = find(mi_rest, delim)
+    if mi_idx1 < 0 {
+      mi_go = false
+    } else {
+      mi_after = slice(mi_rest, mi_idx1 + mi_dlen, len(mi_rest))
+      mi_idx2 = find(mi_after, delim)
+      if mi_idx2 < 0 {
+        # opener with no closer: stop, remaining text stays literal.
+        mi_go = false
+      } else {
+        mi_out = mi_out + slice(mi_rest, 0, mi_idx1) + otag
+        mi_out = mi_out + slice(mi_after, 0, mi_idx2) + ctag
+        mi_rest = slice(mi_after, mi_idx2 + mi_dlen, len(mi_after))
+      }
+    }
+  }
+  mi_out = mi_out + mi_rest
+  return mi_out
+}
+
+# Apply bold first (** consumes the double star), then italic (* on what's left).
+fn md_inline(s) {
+  mi2_bold = md_wrap_pairs(s, "**", "<strong>", "</strong>")
+  mi2_ital = md_wrap_pairs(mi2_bold, "*", "<em>", "</em>")
+  return mi2_ital
+}
+
+# ---- block detection ----
+
+# Number of leading '#' if the line is a heading (1..6) followed by a space,
+# else 0.
+fn md_heading_level(line) {
+  mh_i = 0
+  while mh_i < len(line) and at(line, mh_i) == "#" {
+    mh_i = mh_i + 1
+  }
+  if mh_i >= 1 and mh_i <= 6 and at(line, mh_i) == " " {
+    return mh_i
+  }
+  return 0
+}
+
+# True when the line is a bullet list item ("- ...").
+fn md_is_bullet(line) {
+  if len(line) >= 2 and at(line, 0) == "-" and at(line, 1) == " " {
+    return true
+  }
+  return false
+}
+
+# True when the line is blank (empty or only spaces/tabs).
+fn md_is_blank(line) {
+  mb_i = 0
+  while mb_i < len(line) {
+    mb_c = at(line, mb_i)
+    if mb_c != " " and mb_c != "\t" {
+      return false
+    }
+    mb_i = mb_i + 1
+  }
+  return true
+}
+
+# ---- main converter ----
+
+# Convert a Markdown document (one string) into an HTML string.
+fn md_to_html(src) {
+  mc_lines = lines(src)
+  mc_out = []          # accumulated HTML lines
+  mc_in_list = false   # are we currently inside a <ul>?
+  mc_i = 0
+  while mc_i < len(mc_lines) {
+    mc_line = mc_lines[mc_i]
+
+    if md_is_bullet(mc_line) {
+      if not mc_in_list {
+        mc_out = push(mc_out, "<ul>")
+        mc_in_list = true
+      }
+      mc_item = md_inline(slice(mc_line, 2, len(mc_line)))
+      mc_out = push(mc_out, "  <li>" + mc_item + "</li>")
+    } else {
+      # Any non-bullet line closes an open list first.
+      if mc_in_list {
+        mc_out = push(mc_out, "</ul>")
+        mc_in_list = false
+      }
+      if md_is_blank(mc_line) {
+        # blank line -> nothing emitted (paragraph separator)
+        mc_i = mc_i
+      } else {
+        mc_level = md_heading_level(mc_line)
+        if mc_level > 0 {
+          mc_htxt = md_inline(slice(mc_line, mc_level + 1, len(mc_line)))
+          mc_tag = "h" + num(mc_level)
+          mc_out = push(mc_out, "<" + mc_tag + ">" + mc_htxt + "</" + mc_tag + ">")
+        } else {
+          mc_ptxt = md_inline(mc_line)
+          mc_out = push(mc_out, "<p>" + mc_ptxt + "</p>")
+        }
+      }
+    }
+    mc_i = mc_i + 1
+  }
+  # Close a list left open at end of document.
+  if mc_in_list {
+    mc_out = push(mc_out, "</ul>")
+  }
+  return join(mc_out, "\n")
+}
+
+# ---------------------------------------------------------------------------
+# Self-test
+# ---------------------------------------------------------------------------
+
+print("=== markdown.zl self-test ===")
+print("")
+
+# --- inline unit checks ---
+print("-- inline --")
+print("bold:   " + md_inline("say **hi** now"))
+print("italic: " + md_inline("say *hi* now"))
+print("both:   " + md_inline("**bold** and *italic*"))
+print("odd *:  " + md_inline("a * lone star"))
+print("")
+
+# --- heading level checks ---
+print("-- heading level --")
+print("'# x'    -> " + num(md_heading_level("# x")))
+print("'### x'  -> " + num(md_heading_level("### x")))
+print("'####### x' -> " + num(md_heading_level("####### x")))   # 7 -> 0 (too deep)
+print("'#nospace'  -> " + num(md_heading_level("#nospace")))    # no space -> 0
+print("'plain'  -> " + num(md_heading_level("plain")))
+print("")
+
+# --- full document conversion ---
+doc = "# Shopping List\n"
+doc = doc + "\n"
+doc = doc + "Buy the **important** things and *maybe* the rest.\n"
+doc = doc + "\n"
+doc = doc + "## Groceries\n"
+doc = doc + "- Milk\n"
+doc = doc + "- **Fresh** bread\n"
+doc = doc + "- Eggs\n"
+doc = doc + "\n"
+doc = doc + "## Notes\n"
+doc = doc + "Remember to bring a *reusable* bag.\n"
+
+print("-- source document --")
+print(doc)
+print("-- converted HTML --")
+html = md_to_html(doc)
+print(html)
+print("")
+
+# --- structural assertions ---
+print("-- assertions --")
+mc_checks = []
+mc_checks = push(mc_checks, ["has h1", has(html, "<h1>Shopping List</h1>")])
+mc_checks = push(mc_checks, ["has h2", has(html, "<h2>Groceries</h2>")])
+mc_checks = push(mc_checks, ["opens ul", has(html, "<ul>")])
+mc_checks = push(mc_checks, ["closes ul", has(html, "</ul>")])
+mc_checks = push(mc_checks, ["bold li", has(html, "<li><strong>Fresh</strong> bread</li>")])
+mc_checks = push(mc_checks, ["para bold", has(html, "<strong>important</strong>")])
+mc_checks = push(mc_checks, ["para italic", has(html, "<em>maybe</em>")])
+mc_checks = push(mc_checks, ["no stray star", not has(html, "*")])
+mc_pass = 0
+mc_k = 0
+while mc_k < len(mc_checks) {
+  mc_row = mc_checks[mc_k]
+  mc_name = mc_row[0]
+  mc_ok = mc_row[1]
+  if mc_ok {
+    mc_pass = mc_pass + 1
+    print("  PASS  " + mc_name)
+  } else {
+    print("  FAIL  " + mc_name)
+  }
+  mc_k = mc_k + 1
+}
+print("")
+print("result: " + num(mc_pass) + "/" + num(len(mc_checks)) + " checks passed")

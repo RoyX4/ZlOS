@@ -1,0 +1,293 @@
+# unionfind.zl -- disjoint-set union (DSU) with path compression and union by
+# rank, plus Kruskal's minimum spanning tree built on top of it.
+#
+# Representation:
+#   u = [parent, rank, count]
+#     parent : list of n indices; parent[x] == x means x is a root
+#     rank   : list of n upper bounds on tree height (only roots matter)
+#     count  : how many disjoint sets are left right now
+# Elements are the integers 0 .. n-1. A caller with named nodes keeps its own
+# name list and passes indices (the Kruskal demo below does exactly that).
+#
+# Why a 3-slot list and not three separate globals: zl lists are references,
+# so writing u[0][x] or u[2] inside a function is visible to the caller. That
+# lets uf_find and uf_union mutate the structure in place and hands the caller
+# one value to carry around -- unlike heapq.zl, where push() forces the caller
+# to rebind the whole heap after every operation.
+#
+# The flip side: push() invalidates the list it grew from, so parent and rank
+# are sized once in uf_new() and only ever written by index afterwards. The
+# set is fixed at n elements; there is no uf_add().
+#
+# Two zl details shape the code:
+#   * No local scope -- a parameter or an assignment inside a function writes
+#     the global of that name. Every local is prefixed per function
+#     (un_ = uf_new, uf_ = uf_find, uu_ = uf_union, ...) so that uf_union
+#     calling uf_find cannot eat its own roots. Demo globals use d.
+#   * `and` does not short-circuit, so a bounds test can never guard an index
+#     in the same condition. The insertion sort below uses `while j >= 0` with
+#     an inner `if ... { break }` instead of `while j >= 0 and xs[j] > key`.
+#
+# Costs: find and union are near-constant (inverse-Ackermann) amortised.
+# uf_groups is O(n * alpha) plus an index_of scan per element.
+
+# --- core ----------------------------------------------------------------
+
+# A fresh structure of n singletons. range(n) is already [0,1,..,n-1], which
+# is exactly "every element is its own parent".
+fn uf_new(un_n) {
+    return [range(un_n), fill(un_n, 0), un_n]
+}
+
+# The representative of uf_x's set, compressing the path on the way out:
+# a first walk finds the root, a second re-points every node on the path
+# straight at it, so the next find on any of them is a single step.
+fn uf_find(uf_u, uf_x) {
+    uf_par = uf_u[0]
+    uf_root = uf_x
+    while uf_par[uf_root] != uf_root {
+        uf_root = uf_par[uf_root]
+    }
+    uf_cur = uf_x
+    while uf_par[uf_cur] != uf_root {
+        uf_next = uf_par[uf_cur]
+        uf_par[uf_cur] = uf_root
+        uf_cur = uf_next
+    }
+    return uf_root
+}
+
+# Merge the sets holding uu_a and uu_b. true if they really were separate
+# (and the set count dropped), false if they were already together.
+# The shorter tree is hung under the taller one, so heights stay logarithmic
+# even before path compression flattens them.
+fn uf_union(uu_u, uu_a, uu_b) {
+    uu_ra = uf_find(uu_u, uu_a)
+    uu_rb = uf_find(uu_u, uu_b)
+    if uu_ra == uu_rb {
+        return false
+    }
+    uu_par = uu_u[0]
+    uu_rank = uu_u[1]
+    if uu_rank[uu_ra] < uu_rank[uu_rb] {
+        uu_swap = uu_ra
+        uu_ra = uu_rb
+        uu_rb = uu_swap
+    }
+    uu_par[uu_rb] = uu_ra
+    # Only a merge of two equal-rank trees can make the winner taller.
+    if uu_rank[uu_ra] == uu_rank[uu_rb] {
+        uu_rank[uu_ra] = uu_rank[uu_ra] + 1
+    }
+    uu_u[2] = uu_u[2] - 1
+    return true
+}
+
+fn uf_connected(uc_u, uc_a, uc_b) {
+    uc_ra = uf_find(uc_u, uc_a)
+    uc_rb = uf_find(uc_u, uc_b)
+    return uc_ra == uc_rb
+}
+
+fn uf_count(uk_u) {
+    return uk_u[2]
+}
+
+# Every set as a list of its members: [[0,1,2],[3,4],...]. Members come out
+# ascending, and the groups come out ordered by their smallest member, since
+# both fall out of one sweep of 0..n-1. Side effect: it finds every element,
+# so it leaves the whole forest fully compressed.
+fn uf_groups(ug_u) {
+    ug_roots = []
+    ug_out = []
+    ug_n = len(ug_u[0])
+    ug_i = 0
+    while ug_i < ug_n {
+        ug_r = uf_find(ug_u, ug_i)
+        ug_slot = index_of(ug_roots, ug_r)
+        if ug_slot < 0 {
+            ug_roots = push(ug_roots, ug_r)
+            ug_out = push(ug_out, [ug_i])
+        } else {
+            ug_out[ug_slot] = push(ug_out[ug_slot], ug_i)
+        }
+        ug_i = ug_i + 1
+    }
+    return ug_out
+}
+
+# --- Kruskal's minimum spanning tree -------------------------------------
+
+# Stable insertion sort of an edge list on the weight, ms_e[2]. Stable so the
+# demo's tie-breaks are the input order and stay reproducible. Only strictly
+# heavier edges shift, and the `break` stands in for the short-circuit that
+# `and` will not give us.
+fn mst_sort(ms_edges) {
+    ms_out = []
+    for ms_e in ms_edges {
+        ms_out = push(ms_out, ms_e)
+    }
+    ms_i = 1
+    while ms_i < len(ms_out) {
+        ms_key = ms_out[ms_i]
+        ms_j = ms_i - 1
+        while ms_j >= 0 {
+            if ms_out[ms_j][2] <= ms_key[2] {
+                break
+            }
+            ms_out[ms_j + 1] = ms_out[ms_j]
+            ms_j = ms_j - 1
+        }
+        ms_out[ms_j + 1] = ms_key
+        ms_i = ms_i + 1
+    }
+    return ms_out
+}
+
+# Kruskal over kr_n nodes and edges given as [a, b, weight] with a and b in
+# 0..kr_n-1. Walk the edges cheapest first and keep an edge only when it joins
+# two different sets -- that check IS the disjoint-set structure, and it is
+# what keeps the result acyclic.
+# Returns [chosen_edges, total_weight, components_left]. On a disconnected
+# graph it stops short of n-1 edges and returns a spanning forest, which the
+# third slot reports.
+fn kruskal(kr_n, kr_edges) {
+    kr_u = uf_new(kr_n)
+    kr_sorted = mst_sort(kr_edges)
+    kr_picked = []
+    kr_total = 0
+    for kr_e in kr_sorted {
+        if len(kr_picked) == kr_n - 1 {
+            break
+        }
+        if uf_union(kr_u, kr_e[0], kr_e[1]) {
+            kr_picked = push(kr_picked, kr_e)
+            kr_total = kr_total + kr_e[2]
+        }
+    }
+    return [kr_picked, kr_total, uf_count(kr_u)]
+}
+
+# --- printing helpers ----------------------------------------------------
+
+fn show_groups(sg_label, sg_groups) {
+    sg_parts = []
+    for sg_g in sg_groups {
+        sg_bits = []
+        for sg_m in sg_g {
+            sg_bits = push(sg_bits, str(sg_m))
+        }
+        sg_parts = push(sg_parts, "{" + join(sg_bits, ",") + "}")
+    }
+    print(sg_label + join(sg_parts, " "))
+}
+
+fn show_edges(se_label, se_names, se_edges) {
+    se_parts = []
+    for se_e in se_edges {
+        se_parts = push(se_parts, se_names[se_e[0]] + se_names[se_e[1]] + ":" + str(se_e[2]))
+    }
+    print(se_label + join(se_parts, "  "))
+}
+
+# ---------------------------------------------------------------------------
+# Demo / self-test
+# ---------------------------------------------------------------------------
+
+print("=== unionfind self-test ===")
+
+# -- Part 1: the structure on its own, 10 elements --------------------------
+#   0-1, 2-3, then 1-3 welds those two into {0,1,2,3}
+#   4-5, 6-7, then 5-6 welds those two into {4,5,6,7}
+#   8-9 stands alone
+
+print("")
+print("-- Part 1: 10 singletons, then 7 unions")
+dUf = uf_new(10)
+print("uf_new(10) count:  " + str(uf_count(dUf)) + "        (expected 10)")
+print("parent:            " + str(dUf[0]))
+print("  expected:        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]")
+
+dPairs = [[0, 1], [2, 3], [1, 3], [4, 5], [6, 7], [5, 6], [8, 9]]
+for dP in dPairs {
+    dMerged = uf_union(dUf, dP[0], dP[1])
+    print("  union(" + str(dP[0]) + "," + str(dP[1]) + ") -> " + str(dMerged) + "   sets left: " + str(uf_count(dUf)))
+}
+print("  expected:        seven true, count falling 9,8,7,6,5,4,3")
+
+print("union(0,2) again:  " + str(uf_union(dUf, 0, 2)) + "     (expected false, already one set)")
+print("union(5,5) self:   " + str(uf_union(dUf, 5, 5)) + "     (expected false)")
+print("count:             " + str(uf_count(dUf)) + "         (expected 3, unchanged)")
+
+print("connected(0,3):    " + str(uf_connected(dUf, 0, 3)) + "      (expected true)")
+print("connected(0,4):    " + str(uf_connected(dUf, 0, 4)) + "     (expected false)")
+print("connected(4,7):    " + str(uf_connected(dUf, 4, 7)) + "      (expected true)")
+print("connected(7,8):    " + str(uf_connected(dUf, 7, 8)) + "     (expected false)")
+
+show_groups("groups:            ", uf_groups(dUf))
+print("  expected:        {0,1,2,3} {4,5,6,7} {8,9}")
+
+# uf_groups just found every element, so every node now points at its root.
+print("parent, compressed:" + str(dUf[0]))
+print("  expected:        [0, 0, 0, 0, 4, 4, 4, 4, 8, 8]")
+print("rank:              " + str(dUf[1]))
+print("  expected:        [2, 0, 1, 0, 2, 0, 1, 0, 1, 0]  (only roots 0,4,8 count)")
+
+# -- Part 2: Kruskal ---------------------------------------------------------
+# The 9-node textbook graph. Nodes a..i are indices 0..8; edges are
+# [from, to, weight]. Written out as an adjacency list rather than as art,
+# because every weight has to be read exactly:
+#
+#     a: b4  h8            f: c4  d14  e10  g2
+#     b: a4  c8  h11       g: f2  h1   i6
+#     c: b8  d7  f4  i2    h: a8  b11  g1  i7
+#     d: c7  e9  f14       i: c2  g6   h7
+#     e: d9  f10
+
+print("")
+print("-- Part 2: Kruskal MST over 9 nodes / 14 edges")
+dNames = ["a", "b", "c", "d", "e", "f", "g", "h", "i"]
+dEdges = [[0, 1, 4], [0, 7, 8], [1, 2, 8], [1, 7, 11], [2, 3, 7], [2, 5, 4], [2, 8, 2], [3, 4, 9], [3, 5, 14], [4, 5, 10], [5, 6, 2], [6, 7, 1], [6, 8, 6], [7, 8, 7]]
+
+show_edges("all edges:   ", dNames, dEdges)
+show_edges("by weight:   ", dNames, mst_sort(dEdges))
+print("  expected:  gh:1  ci:2  fg:2  ab:4  cf:4  gi:6  cd:7  hi:7  ah:8  bc:8  de:9  ef:10  bh:11  df:14")
+
+dMst = kruskal(9, dEdges)
+show_edges("MST edges:   ", dNames, dMst[0])
+print("  expected:  gh:1  ci:2  fg:2  ab:4  cf:4  cd:7  ah:8  de:9")
+print("MST edge count:    " + str(len(dMst[0])) + "          (expected 8, = 9 nodes - 1)")
+print("MST total weight:  " + str(dMst[1]) + "         (expected 37)")
+print("components left:   " + str(dMst[2]) + "          (expected 1, the graph is connected)")
+
+# The three edges Kruskal threw away were exactly the ones that closed a
+# cycle: gi (g and i already joined via f), hi, and bc.
+print("rejected as cyclic: gi:6  hi:7  bc:8   (ef:10 bh:11 df:14 never reached, 8 edges was enough)")
+
+# -- Part 3: a disconnected graph gives a spanning forest --------------------
+# Same 9 nodes but only the two cheap triangles: a-b-h and c-d.
+
+print("")
+print("-- Part 3: disconnected graph -> spanning forest")
+dSparse = [[0, 1, 4], [0, 7, 8], [1, 7, 11], [2, 3, 7]]
+dForest = kruskal(9, dSparse)
+show_edges("forest:      ", dNames, dForest[0])
+print("  expected:  ab:4  cd:7  ah:8   (bh:11 would close the a-b-h cycle)")
+print("forest weight:     " + str(dForest[1]) + "         (expected 19)")
+print("components left:   " + str(dForest[2]) + "          (expected 6: {a,b,h} {c,d} and e,f,g,i alone)")
+
+# -- Part 4: degenerate sizes ------------------------------------------------
+
+print("")
+print("-- Part 4: edge cases")
+dOne = uf_new(1)
+print("uf_new(1) count:   " + str(uf_count(dOne)) + "          (expected 1)")
+show_groups("uf_new(1) groups:  ", uf_groups(dOne))
+print("  expected:        {0}")
+dZero = uf_new(0)
+print("uf_new(0) count:   " + str(uf_count(dZero)) + "          (expected 0)")
+print("uf_new(0) groups:  " + str(uf_groups(dZero)) + "         (expected [])")
+print("kruskal(1, []):    " + str(kruskal(1, [])) + "   (expected [[], 0, 1])")
+
+print("")
+print("=== done ===")

@@ -1,0 +1,298 @@
+# easing.zl - easing / tweening curves for animation.
+#
+# Representation: an easing is a pure function of one number t, the normalised
+# progress of an animation, running 0 at the start to 1 at the end. It returns
+# the eased progress. Every curve here satisfies f(0) == 0 and f(1) == 1, so
+# an animation always starts where it started and lands where it was aimed;
+# what differs is the shape in between. The "back" and "elastic" curves leave
+# the 0..1 band mid-flight on purpose - that overshoot is the effect - so a
+# caller that must stay inside a range has to clamp for itself.
+#
+# zl has no first-class functions, so a curve cannot be passed as a value.
+# Instead a curve is named by a string, and ease(name, t) is the one dispatch
+# point everything else goes through: tween(), sample() and plot() all call
+# ease(). An unknown name falls back to "linear"; easing_names() lists the
+# ones that are real.
+#
+# in_  = slow at the start,  out_ = slow at the end,
+# in_out_ = slow at both ends. Each out_ curve is the in_ curve reflected:
+# out(t) == 1 - in(1 - t).
+#
+# Function frames are isolated in zl (a callee cannot see or write a caller's
+# locals), so plain short names are safe here; only top-level globals are
+# shared, and the demo at the bottom prefixes those with d_ to keep clear of
+# the function bodies.
+
+fn linear(t) {
+    return t
+}
+
+fn ease_in_quad(t) {
+    return t * t
+}
+fn ease_out_quad(t) {
+    return 1 - (1 - t) * (1 - t)
+}
+fn ease_in_out_quad(t) {
+    if t < 0.5 {
+        return 2 * t * t
+    }
+    return 1 - (2 - 2 * t) * (2 - 2 * t) / 2
+}
+
+fn ease_in_cubic(t) {
+    return t * t * t
+}
+fn ease_out_cubic(t) {
+    return 1 - (1 - t) * (1 - t) * (1 - t)
+}
+fn ease_in_out_cubic(t) {
+    if t < 0.5 {
+        return 4 * t * t * t
+    }
+    return 1 - (2 - 2 * t) * (2 - 2 * t) * (2 - 2 * t) / 2
+}
+
+fn ease_in_sine(t) {
+    return 1 - cos(t * pi() / 2)
+}
+fn ease_out_sine(t) {
+    return sin(t * pi() / 2)
+}
+fn ease_in_out_sine(t) {
+    return (1 - cos(pi() * t)) / 2
+}
+
+# Four parabolic hops of shrinking height. n1/d1 are the classic constants:
+# the pieces meet at 1/d1, 2/d1, 2.5/d1 and each lands exactly on its floor.
+fn ease_out_bounce(t) {
+    n1 = 7.5625
+    d1 = 2.75
+    x = t
+    if x < 1 / d1 {
+        return n1 * x * x
+    }
+    if x < 2 / d1 {
+        x = x - 1.5 / d1
+        return n1 * x * x + 0.75
+    }
+    if x < 2.5 / d1 {
+        x = x - 2.25 / d1
+        return n1 * x * x + 0.9375
+    }
+    x = x - 2.625 / d1
+    return n1 * x * x + 0.984375
+}
+
+# A decaying sine: overshoots 1 and rings down onto it. The endpoints are
+# special-cased because the ringing term is not exactly 0 or 1 there.
+fn ease_out_elastic(t) {
+    if t == 0 {
+        return 0
+    }
+    if t == 1 {
+        return 1
+    }
+    c4 = 2 * pi() / 3
+    return pow(2, -10 * t) * sin((t * 10 - 0.75) * c4) + 1
+}
+
+# Anticipation: pulls back below 0 before moving off. c1 is the standard
+# overshoot constant (~10% back), c3 = c1 + 1 keeps f(1) == 1.
+fn ease_in_back(t) {
+    c1 = 1.70158
+    c3 = c1 + 1
+    return c3 * t * t * t - c1 * t * t
+}
+fn ease_out_back(t) {
+    c1 = 1.70158
+    c3 = c1 + 1
+    p = t - 1
+    return 1 + c3 * p * p * p + c1 * p * p
+}
+
+# A list literal cannot span lines in zl, so the groups are concat'd.
+fn easing_names() {
+    out = ["linear"]
+    out = concat(out, ["ease_in_quad", "ease_out_quad", "ease_in_out_quad"])
+    out = concat(out, ["ease_in_cubic", "ease_out_cubic", "ease_in_out_cubic"])
+    out = concat(out, ["ease_in_sine", "ease_out_sine", "ease_in_out_sine"])
+    out = concat(out, ["ease_out_bounce", "ease_out_elastic"])
+    return concat(out, ["ease_in_back", "ease_out_back"])
+}
+
+fn ease(name, t) {
+    if name == "ease_in_quad" {
+        return ease_in_quad(t)
+    } elif name == "ease_out_quad" {
+        return ease_out_quad(t)
+    } elif name == "ease_in_out_quad" {
+        return ease_in_out_quad(t)
+    } elif name == "ease_in_cubic" {
+        return ease_in_cubic(t)
+    } elif name == "ease_out_cubic" {
+        return ease_out_cubic(t)
+    } elif name == "ease_in_out_cubic" {
+        return ease_in_out_cubic(t)
+    } elif name == "ease_in_sine" {
+        return ease_in_sine(t)
+    } elif name == "ease_out_sine" {
+        return ease_out_sine(t)
+    } elif name == "ease_in_out_sine" {
+        return ease_in_out_sine(t)
+    } elif name == "ease_out_bounce" {
+        return ease_out_bounce(t)
+    } elif name == "ease_out_elastic" {
+        return ease_out_elastic(t)
+    } elif name == "ease_in_back" {
+        return ease_in_back(t)
+    } elif name == "ease_out_back" {
+        return ease_out_back(t)
+    }
+    return linear(t)
+}
+
+# Interpolate a -> b along the named curve. tween(a, b, 0) == a always,
+# tween(a, b, 1) == b always, and b may be below a (it just runs backwards).
+fn tween(a, b, t, name) {
+    return a + (b - a) * ease(name, t)
+}
+
+# steps evenly spaced values with both ends included, so t goes
+# 0, 1/(steps-1), ... 1. sample("linear", 5) -> [0, 0.25, 0.5, 0.75, 1].
+fn sample(name, steps) {
+    out = []
+    if steps <= 1 {
+        return push(out, ease(name, 0))
+    }
+    i = 0
+    while i < steps {
+        out = push(out, ease(name, i / (steps - 1)))
+        i = i + 1
+    }
+    return out
+}
+
+# ---- demo helpers -------------------------------------------------------
+
+# x written with exactly dp decimals, e.g. fixed(0.5, 4) -> "0.5000".
+fn fixed(x, dp) {
+    neg = x < 0
+    v = x
+    if neg {
+        v = -x
+    }
+    scale = 1
+    k = 0
+    while k < dp {
+        scale = scale * 10
+        k = k + 1
+    }
+    n = round(v * scale)
+    ip = int(n / scale)
+    fs = str(n - ip * scale)
+    while len(fs) < dp {
+        fs = "0" + fs
+    }
+    out = str(ip)
+    if dp > 0 {
+        out = out + "." + fs
+    }
+    if neg and n > 0 {
+        out = "-" + out
+    }
+    return out
+}
+fn padl(s, w) {
+    out = s
+    while len(out) < w {
+        out = " " + out
+    }
+    return out
+}
+fn fmt_list(vals, dp) {
+    parts = []
+    for v in vals {
+        parts = push(parts, fixed(v, dp))
+    }
+    return "[" + join(parts, ", ") + "]"
+}
+
+# An overlaid plot: t left to right, eased value bottom to top, values
+# clamped into 0..1 so the overshooting curves stay on the page. Curves are
+# drawn in list order, so where two cross the later one wins the cell.
+fn plot(names, glyphs, cols, rows) {
+    grid = []
+    r = 0
+    while r < rows {
+        line = []
+        c = 0
+        while c < cols {
+            line = push(line, " ")
+            c = c + 1
+        }
+        grid = push(grid, line)
+        r = r + 1
+    }
+    k = 0
+    while k < len(names) {
+        c = 0
+        while c < cols {
+            v = clamp(ease(names[k], c / (cols - 1)), 0, 1)
+            grid[int(round((1 - v) * (rows - 1)))][c] = glyphs[k]
+            c = c + 1
+        }
+        k = k + 1
+    }
+    out = []
+    r = 0
+    while r < rows {
+        out = push(out, fixed((rows - 1 - r) / (rows - 1), 1) + " |" + join(grid[r], "") + "|")
+        r = r + 1
+    }
+    return push(out, "    +" + repeat("-", cols) + "+")
+}
+
+# ---- demo ---------------------------------------------------------------
+
+d_ts = [0, 0.25, 0.5, 0.75, 1]
+
+d_head = padl("easing", 18)
+for d_t in d_ts {
+    d_head = d_head + padl("t=" + fixed(d_t, 2), 10)
+}
+print(d_head)
+print(repeat("-", len(d_head)))
+for d_name in easing_names() {
+    d_row = padl(d_name, 18)
+    for d_t in d_ts {
+        d_row = d_row + padl(fixed(ease(d_name, d_t), 4), 10)
+    }
+    print(d_row)
+}
+
+print("")
+print("endpoints are exact for every curve: f(0)=0, f(1)=1")
+print("back and elastic overshoot on purpose - see t=0.5 above")
+
+print("")
+print("sample(\"linear\", 5)           " + fmt_list(sample("linear", 5), 4))
+print("sample(\"ease_in_quad\", 5)     " + fmt_list(sample("ease_in_quad", 5), 4))
+print("sample(\"ease_out_bounce\", 6)  " + fmt_list(sample("ease_out_bounce", 6), 4))
+print("sample(\"ease_out_back\", 5)    " + fmt_list(sample("ease_out_back", 5), 4))
+print("sample(\"linear\", 1)           " + fmt_list(sample("linear", 1), 4))
+print("unknown name -> linear:       " + fmt_list(sample("wobble", 5), 4))
+
+print("")
+print("tween(0, 100, 0.50, ease_in_out_cubic) = " + fixed(tween(0, 100, 0.5, "ease_in_out_cubic"), 4))
+print("tween(10, 20, 0.25, ease_out_quad)     = " + fixed(tween(10, 20, 0.25, "ease_out_quad"), 4))
+print("tween(100, 0, 0.75, ease_in_cubic)     = " + fixed(tween(100, 0, 0.75, "ease_in_cubic"), 4))
+print("tween(0, 100, 0.00, ease_out_bounce)   = " + fixed(tween(0, 100, 0, "ease_out_bounce"), 4))
+print("tween(0, 100, 1.00, ease_out_bounce)   = " + fixed(tween(0, 100, 1, "ease_out_bounce"), 4))
+
+print("")
+print("value up, t across:   . linear   o ease_in_out_cubic   * ease_out_bounce")
+for d_line in plot(["linear", "ease_in_out_cubic", "ease_out_bounce"], [".", "o", "*"], 31, 11) {
+    print(d_line)
+}
+print("     t=0" + repeat(" ", 25) + "t=1")

@@ -1,0 +1,256 @@
+# segtree.zl - a segment tree for range sum / min / max queries.
+#
+# A segment tree answers "combine every element in [a,b]" and "set element i"
+# both in O(log n), where a plain list needs O(n) for one and O(1) for the
+# other. Kinds supported: "sum", "min", "max".
+#
+# Representation: zl has no structs, so a tree is a 4-slot list
+#
+#     t = [nodes, n, kind, size]
+#
+# where n is the logical length, size is n rounded UP to a power of two, and
+# nodes is a flat array of 2*size cells laid out as an implicit binary tree:
+#
+#     nodes[0]                     unused
+#     nodes[1]                     root, covering all of [0, size-1]
+#     nodes[p]                     = op(nodes[2p], nodes[2p+1])
+#     nodes[size + i]              leaf i
+#
+# Rounding up to a power of two is what makes the arithmetic work without a
+# separate range table: a leaf's parent is always at int(p/2), so an update
+# is a walk from leaf to root, and a query is the standard bottom-up
+# half-open sweep - climb from both ends, taking a node whenever it sits
+# fully inside the range. Nothing recursive, so nothing deep.
+#
+# The identity element is nil(), not 0 or a big sentinel. The 25th..31st
+# leaves of a 25-element tree hold nil(), and seg_op() treats nil() as
+# "nothing here yet" and returns the other side. That gives one identity for
+# all three kinds, keeps padded internal nodes holding honest values, and
+# lets a query over an empty range return nil() instead of a magic number.
+#
+# Two zl details shape the code:
+#   * `and`/`or` do NOT short-circuit, so no test may depend on its left
+#     side guarding its right. Every test below is on plain numbers, safe.
+#   * Assigning a name inside a function writes the GLOBAL of that name when
+#     one exists. So every parameter and local carries a two-letter tag for
+#     its function (bd_ = seg_build, qy_ = seg_query, ...) and the demo at
+#     the bottom keeps its own names under a d_ prefix. Nothing collides.
+#
+# seg_update() writes through the handle, so `seg_update(t, i, v)` updates
+# the caller's tree; it returns the tree too, for chaining.
+
+fn seg_pow2_ceil(p2_n) {
+    p2_s = 1
+    while p2_s < p2_n {
+        p2_s = p2_s * 2
+    }
+    return p2_s
+}
+
+# The combining operation, with nil() as the identity on both sides.
+fn seg_op(op_kind, op_a, op_b) {
+    if type(op_a) == "nil" {
+        return op_b
+    }
+    if type(op_b) == "nil" {
+        return op_a
+    }
+    if op_kind == "sum" {
+        return op_a + op_b
+    }
+    if op_kind == "min" {
+        return min(op_a, op_b)
+    }
+    return max(op_a, op_b)
+}
+
+fn seg_build(bd_xs, bd_kind) {
+    assert(bd_kind == "sum" or bd_kind == "min" or bd_kind == "max", "seg_build: kind must be sum, min or max")
+    bd_n = len(bd_xs)
+    bd_size = seg_pow2_ceil(bd_n)
+    bd_nodes = fill(2 * bd_size, nil())
+    bd_i = 0
+    while bd_i < bd_n {
+        bd_nodes[bd_size + bd_i] = bd_xs[bd_i]
+        bd_i = bd_i + 1
+    }
+    bd_p = bd_size - 1
+    while bd_p >= 1 {
+        bd_nodes[bd_p] = seg_op(bd_kind, bd_nodes[2 * bd_p], bd_nodes[2 * bd_p + 1])
+        bd_p = bd_p - 1
+    }
+    return [bd_nodes, bd_n, bd_kind, bd_size]
+}
+
+fn seg_size(sz_t) {
+    return sz_t[1]
+}
+fn seg_kind(sk_t) {
+    return sk_t[2]
+}
+fn seg_get(sg_t, sg_i) {
+    if sg_i < 0 {
+        return nil()
+    }
+    if sg_i >= sg_t[1] {
+        return nil()
+    }
+    return sg_t[0][sg_t[3] + sg_i]
+}
+
+fn seg_update(up_t, up_i, up_v) {
+    assert(up_i >= 0, "seg_update: index below 0")
+    assert(up_i < up_t[1], "seg_update: index past the end")
+    up_p = up_t[3] + up_i
+    up_t[0][up_p] = up_v
+    up_p = int(up_p / 2)
+    while up_p >= 1 {
+        up_t[0][up_p] = seg_op(up_t[2], up_t[0][2 * up_p], up_t[0][2 * up_p + 1])
+        up_p = int(up_p / 2)
+    }
+    return up_t
+}
+
+# Inclusive range [a,b], clipped to [0, n-1]. An empty range gives nil().
+# Left and right accumulators are kept apart so operands stay in index
+# order - sum/min/max do not care, but a non-commutative op would.
+fn seg_query(qy_t, qy_a, qy_b) {
+    qy_lo = max(qy_a, 0)
+    qy_hi = min(qy_b, qy_t[1] - 1)
+    if qy_lo > qy_hi {
+        return nil()
+    }
+    qy_l = qy_t[3] + qy_lo
+    qy_r = qy_t[3] + qy_hi + 1
+    qy_left = nil()
+    qy_right = nil()
+    while qy_l < qy_r {
+        if qy_l % 2 == 1 {
+            qy_left = seg_op(qy_t[2], qy_left, qy_t[0][qy_l])
+            qy_l = qy_l + 1
+        }
+        if qy_r % 2 == 1 {
+            qy_r = qy_r - 1
+            qy_right = seg_op(qy_t[2], qy_t[0][qy_r], qy_right)
+        }
+        qy_l = int(qy_l / 2)
+        qy_r = int(qy_r / 2)
+    }
+    return seg_op(qy_t[2], qy_left, qy_right)
+}
+
+# --- demo ---
+# Brute force is written out longhand, sharing nothing with seg_op(), so a
+# bug in the tree cannot hide by also being a bug in the checker.
+
+fn brute(bt_xs, bt_a, bt_b, bt_kind) {
+    bt_seen = false
+    bt_acc = 0
+    bt_i = bt_a
+    while bt_i <= bt_b {
+        bt_v = bt_xs[bt_i]
+        if bt_seen {
+            if bt_kind == "sum" {
+                bt_acc = bt_acc + bt_v
+            }
+            if bt_kind == "min" {
+                if bt_v < bt_acc {
+                    bt_acc = bt_v
+                }
+            }
+            if bt_kind == "max" {
+                if bt_v > bt_acc {
+                    bt_acc = bt_v
+                }
+            }
+        } else {
+            bt_acc = bt_v
+            bt_seen = true
+        }
+        bt_i = bt_i + 1
+    }
+    if bt_seen {
+        return bt_acc
+    }
+    return nil()
+}
+
+# Every range 0 <= a <= b <= n-1: 25*26/2 = 325 of them.
+fn check_all(ck_t, ck_xs) {
+    ck_bad = 0
+    ck_a = 0
+    while ck_a < len(ck_xs) {
+        ck_b = ck_a
+        while ck_b < len(ck_xs) {
+            if seg_query(ck_t, ck_a, ck_b) != brute(ck_xs, ck_a, ck_b, ck_t[2]) {
+                ck_bad = ck_bad + 1
+            }
+            ck_b = ck_b + 1
+        }
+        ck_a = ck_a + 1
+    }
+    return ck_bad
+}
+
+d_arr = [7, -3, 12, 0, 5, 9, -8, 4, 4, 15, -1, 6, 2, 11, -6, 3, 8, 0, 13, -2, 10, 1, 14, -5, 7]
+d_kinds = ["sum", "min", "max"]
+
+print("array (25):     " + str(d_arr))
+d_shape = seg_build(d_arr, "sum")
+print("seg_size:       " + str(seg_size(d_shape)))
+print("padded leaves:  " + str(d_shape[3]) + "  (nodes array = " + str(len(d_shape[0])) + " cells)")
+print("seg_get 0/9/24: " + str(seg_get(d_shape, 0)) + " " + str(seg_get(d_shape, 9)) + " " + str(seg_get(d_shape, 24)))
+
+for d_k in d_kinds {
+    d_t = seg_build(d_arr, d_k)
+    print("")
+    print("kind = " + seg_kind(d_t))
+    print("  whole  [0,24]:  " + str(seg_query(d_t, 0, 24)))
+    print("  head   [0,4]:   " + str(seg_query(d_t, 0, 4)))
+    print("  middle [6,12]:  " + str(seg_query(d_t, 6, 12)))
+    print("  tail   [20,24]: " + str(seg_query(d_t, 20, 24)))
+    print("  single [12,12]: " + str(seg_query(d_t, 12, 12)))
+    print("  pair   [1,3]:   " + str(seg_query(d_t, 1, 3)))
+    d_bad = check_all(d_t, d_arr)
+    print("  vs brute force: " + str(325 - d_bad) + "/325 ranges match")
+}
+
+# --- updates: apply the same three writes to the tree and to a plain copy ---
+
+d_upd = [[6, 100], [24, -50], [0, 0]]
+d_arr2 = []
+for d_v in d_arr {
+    d_arr2 = push(d_arr2, d_v)
+}
+for d_u in d_upd {
+    d_arr2[d_u[0]] = d_u[1]
+}
+print("")
+print("updates:        " + str(d_upd))
+print("array after:    " + str(d_arr2))
+
+for d_k2 in d_kinds {
+    d_t2 = seg_build(d_arr, d_k2)
+    for d_u2 in d_upd {
+        seg_update(d_t2, d_u2[0], d_u2[1])
+    }
+    d_bad2 = check_all(d_t2, d_arr2)
+    print("  " + d_k2 + " after updates: whole = " + str(seg_query(d_t2, 0, 24)) + ", " + str(325 - d_bad2) + "/325 ranges match")
+}
+
+# --- edges ---
+
+print("")
+print("edges")
+d_one = seg_build([42], "min")
+print("  size-1 tree:    " + str(seg_query(d_one, 0, 0)) + "  (size " + str(seg_size(d_one)) + ")")
+d_empty = seg_build([], "sum")
+print("  empty tree:     size " + str(seg_size(d_empty)) + ", query [0,5] -> " + str(seg_query(d_empty, 0, 5)))
+d_e = seg_build(d_arr, "max")
+print("  empty range:    [5,4] -> " + str(seg_query(d_e, 5, 4)))
+print("  clipped low:    [-9,3] -> " + str(seg_query(d_e, 0 - 9, 3)) + "  (== [0,3] -> " + str(seg_query(d_e, 0, 3)) + ")")
+print("  clipped high:   [22,99] -> " + str(seg_query(d_e, 22, 99)) + "  (== [22,24] -> " + str(seg_query(d_e, 22, 24)) + ")")
+print("  clipped both:   [-4,77] -> " + str(seg_query(d_e, 0 - 4, 77)) + "  (== whole -> " + str(seg_query(d_e, 0, 24)) + ")")
+d_odd = seg_build([5, 1, 9], "min")
+seg_update(d_odd, 1, 0 - 7)
+print("  3-elem min:     " + str(seg_query(d_odd, 0, 2)) + " whole, " + str(seg_query(d_odd, 0, 0)) + " head, " + str(seg_query(d_odd, 2, 2)) + " tail")

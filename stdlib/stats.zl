@@ -1,0 +1,57 @@
+# stats.zl - basic statistics over a list of numbers.
+# Uses the sum / sort / sqrt builtins.
+
+fn mean(xs) {
+    return sum(xs) / len(xs)
+}
+fn minl(xs) {
+    m = xs[0]
+    for x in xs {
+        if x < m {
+            m = x
+        }
+    }
+    return m
+}
+fn maxl(xs) {
+    m = xs[0]
+    for x in xs {
+        if x > m {
+            m = x
+        }
+    }
+    return m
+}
+fn median(xs) {
+    s = sort(xs)
+    n = len(s)
+    mid = int(n / 2)
+    if n % 2 == 1 {
+        return s[mid]
+    }
+    return (s[mid - 1] + s[mid]) / 2
+}
+fn variance(xs) {
+    m = mean(xs)
+    total = 0
+    for x in xs {
+        d = x - m
+        total = total + d * d
+    }
+    return total / len(xs)
+}
+fn stdev(xs) {
+    return sqrt(variance(xs))
+}
+fn range_of(xs) {
+    return maxl(xs) - minl(xs)
+}
+
+data = [4, 8, 15, 16, 23, 42]
+print("data:     " + str(data))
+print("mean:     " + str(mean(data)))
+print("min/max:  " + str(minl(data)) + " / " + str(maxl(data)))
+print("median:   " + str(median(data)))
+print("variance: " + str(variance(data)))
+print("stdev:    " + str(stdev(data)))
+print("range:    " + str(range_of(data)))

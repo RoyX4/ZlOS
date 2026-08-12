@@ -1,0 +1,278 @@
+# bloom.zl - a Bloom filter: a small bit array that answers "definitely not
+# present" or "probably present", never storing the items themselves.
+#
+# Representation: a filter is the 3-element list [nbits, k, bits], where
+# bits is a plain list of nbits numbers each 0 or 1 - one list slot per bit.
+# Packing 32 bits into a number would be the C choice, but it buys nothing
+# here: a zl list element is already a boxed double, so packed storage would
+# cost the same memory and add band/shl arithmetic to every read and write.
+# One slot per bit keeps bloom_bits_set() a straight sum and the bitmap in
+# the demo a straight walk.
+#
+# Hashing: k independent hashes are not needed. Kirsch-Mitzenmacher says two
+# are enough - slot i is (h1 + i*h2 + i*i) mod m, which has the same false
+# positive behaviour as k real hashes. h1 is FNV-1a and h2 is djb2, both
+# copied in from hash.zl (zl has no module system, so a stdlib module that
+# wants another one's code carries it). The + i*i term is the "enhanced"
+# part: without it a string whose h2 lands on a multiple of m would hash to
+# the same slot k times over and quietly weaken the filter. That is not a
+# theoretical worry - the demo's very first example, "a" in a 16-bit filter,
+# has h2 = 0 exactly.
+#
+# Both hashes go through fmix32(), murmur3's finalizer, before being folded
+# to the filter width. This is not decoration. Taking h % m with m a power
+# of two keeps only the low bits, and the low bits of FNV-1a and djb2 are
+# their weakest - djb2's bottom bits barely depend on any character but the
+# last few. Measured on this demo, folding the raw hashes made the real
+# false positive rate run 34% to 100% above what the fill ratio predicted,
+# because slots that are supposed to be independent were not. With the
+# finalizer the measured rate tracks the prediction.
+#
+# Naming: assigning a name inside a function creates a local, BUT if that
+# name already exists as a global the global is written instead. So every
+# local here carries a two-letter tag for its function (fv_ = fnv1a,
+# sl_ = bloom_slots, ...), which is what keeps the demo's own i, m and w safe
+# from the functions it calls inside its loops.
+
+MASK32 = 4294967295
+MASK16 = 65535
+
+fn mask32(mv) {
+    return band(mv, MASK32)
+}
+
+# (h * k) mod 2^32 without exceeding 2^53 - see hash.zl for why the split
+# into 16-bit halves is needed (a bare h * 16777619 reaches 2^56 and the
+# double silently drops the low bits, which are the ones the hash keeps).
+fn mul32(mh, mk) {
+    mu_hi = band(shr(mh, 16), MASK16)
+    mu_lo = band(mh, MASK16)
+    return mask32(shl(band(mu_hi * mk, MASK16), 16) + mu_lo * mk)
+}
+
+# FNV-1a, 32-bit: xor the byte in, then multiply by the FNV prime.
+fn fnv1a(fv_s) {
+    fv_h = 2166136261
+    fv_i = 0
+    while fv_i < len(fv_s) {
+        fv_h = bxor(fv_h, index_at(fv_s, fv_i))
+        fv_h = mul32(fv_h, 16777619)
+        fv_i = fv_i + 1
+    }
+    return fv_h
+}
+
+# Bernstein djb2, 32-bit: h = h*33 + c, seeded with 5381.
+fn djb2(db_s) {
+    db_h = 5381
+    db_i = 0
+    while db_i < len(db_s) {
+        db_h = mask32(mul32(db_h, 33) + index_at(db_s, db_i))
+        db_i = db_i + 1
+    }
+    return db_h
+}
+
+# murmur3's fmix32 finalizer: an invertible scramble that spreads every
+# input bit across all 32 output bits, so the low bits become usable.
+fn fmix32(fx_h) {
+    fx_v = bxor(fx_h, shr(fx_h, 16))
+    fx_v = mul32(fx_v, 2246822507)
+    fx_v = bxor(fx_v, shr(fx_v, 13))
+    fx_v = mul32(fx_v, 3266489909)
+    return bxor(fx_v, shr(fx_v, 16))
+}
+
+# ------------------------------------------------------------- filter ----
+
+# An empty filter of nbits bits using k slots per item.
+fn bloom_new(bn_nbits, bn_k) {
+    return [bn_nbits, bn_k, fill(bn_nbits, 0)]
+}
+
+# The k bit positions a string occupies. Both hashes are folded to the
+# filter width first, so the running total stays far below 2^53.
+fn bloom_slots(sl_b, sl_s) {
+    sl_m = sl_b[0]
+    sl_h1 = fmix32(fnv1a(sl_s)) % sl_m
+    sl_h2 = fmix32(djb2(sl_s)) % sl_m
+    sl_out = []
+    sl_i = 0
+    while sl_i < sl_b[1] {
+        sl_out = push(sl_out, (sl_h1 + sl_i * sl_h2 + sl_i * sl_i) % sl_m)
+        sl_i = sl_i + 1
+    }
+    return sl_out
+}
+
+# Set the k bits for a string. Lists are references, so this edits the
+# caller's filter; the filter is returned as well so calls can be chained.
+fn bloom_add(ba_b, ba_s) {
+    for ba_p in bloom_slots(ba_b, ba_s) {
+        ba_b[2][ba_p] = 1
+    }
+    return ba_b
+}
+
+# false means definitely absent. true means probably present.
+fn bloom_maybe(bm_b, bm_s) {
+    for bm_p in bloom_slots(bm_b, bm_s) {
+        if bm_b[2][bm_p] == 0 {
+            return false
+        }
+    }
+    return true
+}
+
+fn bloom_bits_set(bs_b) {
+    return sum(bs_b[2])
+}
+
+# How full the bit array is, 0 .. 1.
+fn bloom_fill_ratio(fr_b) {
+    return bloom_bits_set(fr_b) / fr_b[0]
+}
+
+# Chance a never-added string hits k set bits by luck. Taken from the bits
+# actually set, so it needs no item count and stays honest when the hashes
+# collide more (or less) than theory expects.
+fn bloom_est_fp_rate(fp_b) {
+    return pow(bloom_fill_ratio(fp_b), fp_b[1])
+}
+
+# ---------------------------------------------------------------- demo ----
+
+fn pct(pc_x) {
+    return str(round(pc_x * 1000) / 10) + "%"
+}
+
+print("-- fmix32 against murmur3's published values --")
+print("fmix32(0) = " + str(fmix32(0)) + "             (expect 0)")
+print("fmix32(1) = " + str(fmix32(1)) + "    0x" + hex(fmix32(1)) + "  (expect 1364076727 = 0x514e28b7)")
+
+print("")
+print("-- known answers: 16 bits, k = 2, the string \"a\" --")
+ka = bloom_new(16, 2)
+print("empty bits set:   " + str(bloom_bits_set(ka)) + "          (expect 0)")
+print("empty fill ratio: " + str(bloom_fill_ratio(ka)) + "          (expect 0)")
+print("empty maybe(a):   " + str(bloom_maybe(ka, "a")) + "      (expect false)")
+print("   fnv1a(a)         = " + str(fnv1a("a")) + "   (expect 3826002220)")
+print("   fmix32 of that   = " + str(fmix32(fnv1a("a"))) + "    (expect 444641715)  % 16 -> h1 = " + str(fmix32(fnv1a("a")) % 16))
+print("   djb2(a)          = " + str(djb2("a")) + "        (expect 177670)")
+print("   fmix32 of that   = " + str(fmix32(djb2("a"))) + "   (expect 3279500720) % 16 -> h2 = " + str(fmix32(djb2("a")) % 16))
+print("   h2 is 0, so without the + i*i term both slots would be 3.")
+print("   slot 0 = (3 + 0*0 + 0*0) % 16 = 3,  slot 1 = (3 + 1*0 + 1*1) % 16 = 4")
+print("slots(a):         " + str(bloom_slots(ka, "a")) + "     (expect [3, 4])")
+bloom_add(ka, "a")
+print("bits set:         " + str(bloom_bits_set(ka)) + "          (expect 2)")
+print("fill ratio:       " + str(bloom_fill_ratio(ka)) + "      (expect 2/16 = 0.125)")
+print("est fp rate:      " + str(bloom_est_fp_rate(ka)) + "   (expect 0.125^2 = 0.015625)")
+print("maybe(a):         " + str(bloom_maybe(ka, "a")) + "       (expect true)")
+print("re-add a, bits:   " + str(bloom_bits_set(bloom_add(ka, "a"))) + "          (expect 2 - adding twice is idempotent)")
+
+print("")
+print("-- 30 fruit into 128 bits, k = 3 --")
+NBITS = 128
+KSLOTS = 3
+
+present = ["apple", "banana", "cherry", "date", "elderberry", "fig"]
+present = concat(present, ["grape", "honeydew", "kiwi", "lemon", "mango"])
+present = concat(present, ["nectarine", "orange", "papaya", "quince"])
+present = concat(present, ["raspberry", "strawberry", "tangerine", "ugli"])
+present = concat(present, ["vanilla", "watermelon", "xigua", "yam"])
+present = concat(present, ["zucchini", "apricot", "blueberry", "cranberry"])
+present = concat(present, ["damson", "guava", "jackfruit"])
+
+absent = ["anvil", "bracket", "candle", "domino", "ember", "funnel"]
+absent = concat(absent, ["girder", "hammer", "ingot", "jigsaw", "kettle"])
+absent = concat(absent, ["lantern", "mallet", "nozzle", "oarlock", "piston"])
+absent = concat(absent, ["quiver", "ratchet", "spindle", "turbine"])
+absent = concat(absent, ["ukulele", "valve", "wrench", "xylophone", "yoke"])
+absent = concat(absent, ["zeppelin", "bellows", "chisel", "drawbar", "engine"])
+
+overlap = 0
+for w in absent {
+    if contains(present, w) {
+        overlap = overlap + 1
+    }
+}
+print("added:            " + str(len(present)) + " strings")
+print("probes:           " + str(len(absent)) + " strings, overlap with added " + str(overlap) + " (must be 0)")
+
+filt = bloom_new(NBITS, KSLOTS)
+for w in present {
+    bloom_add(filt, w)
+}
+
+row = 0
+while row < NBITS / 32 {
+    line = ""
+    col = 0
+    while col < 32 {
+        if filt[2][row * 32 + col] == 1 {
+            line = line + "#"
+        } else {
+            line = line + "."
+        }
+        col = col + 1
+    }
+    print("  bits " + pad(str(row * 32), 3) + "-" + pad(str(row * 32 + 31), 3) + "  " + line)
+    row = row + 1
+}
+
+missing = 0
+for w in present {
+    if not bloom_maybe(filt, w) {
+        missing = missing + 1
+    }
+}
+hits = 0
+hitlist = []
+for w in absent {
+    if bloom_maybe(filt, w) {
+        hits = hits + 1
+        hitlist = push(hitlist, w)
+    }
+}
+
+print("")
+print("bits set:         " + str(bloom_bits_set(filt)) + " of " + str(NBITS) + "   (30 items x 3 slots = 90 draws, so collisions expected)")
+print("fill ratio:       " + str(bloom_fill_ratio(filt)) + "  = " + pct(bloom_fill_ratio(filt)))
+print("false negatives:  " + str(missing) + "         (must be 0 - a Bloom filter cannot miss what it holds)")
+print("")
+print("false positives:  " + str(hits) + " of " + str(len(absent)) + " -> measured " + pct(hits / len(absent)))
+print("  which were:     " + join(hitlist, " "))
+print("predicted from fill ratio  (fill^k):        " + pct(bloom_est_fp_rate(filt)))
+print("predicted from the formula (1-e^-kn/m)^k:  " + pct(pow(1 - exp(0 - KSLOTS * len(present) / NBITS), KSLOTS)))
+print("  k*n/m = 3*30/128 = " + str(KSLOTS * len(present) / NBITS) + ", e^-that = " + str(exp(0 - KSLOTS * len(present) / NBITS)))
+
+print("")
+print("-- same filter, 600 more absent probes (30 is a coarse ruler) --")
+wide = 0
+i = 0
+while i < 600 {
+    if bloom_maybe(filt, "probe-" + str(i)) {
+        wide = wide + 1
+    }
+    i = i + 1
+}
+print("false positives:  " + str(wide) + " of 600 -> measured " + pct(wide / 600))
+print("predicted:                                  " + pct(bloom_est_fp_rate(filt)))
+
+print("")
+print("-- size matters: 30 fruit, k = 3, widening the bit array --")
+for m in [64, 128, 256, 512, 1024] {
+    f2 = bloom_new(m, 3)
+    for w in present {
+        bloom_add(f2, w)
+    }
+    fp = 0
+    j = 0
+    while j < 600 {
+        if bloom_maybe(f2, "probe-" + str(j)) {
+            fp = fp + 1
+        }
+        j = j + 1
+    }
+    print("  " + pad(str(m), 4) + " bits  fill " + pad(pct(bloom_fill_ratio(f2)), 6) + "  predicted " + pad(pct(bloom_est_fp_rate(f2)), 6) + "  measured " + pct(fp / 600))
+}

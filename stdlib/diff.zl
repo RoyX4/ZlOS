@@ -1,0 +1,241 @@
+# diff.zl - a line-based diff, the line-level cousin of lcs.zl.
+#
+# lcs.zl finds the longest common subsequence of the CHARACTERS of two
+# strings. This module runs the same DP over the LINES of two texts, then
+# turns the backtrack into an edit script.
+#
+# Representation: a diff is a list of ops, each op a 2-element list
+#     ["keep", line]   line is in both texts
+#     ["del",  line]   line is in a only  - drop it
+#     ["add",  line]   line is in b only  - insert it
+# in b's order (which is also a's order for the keep/del ops). An op is a
+# plain list because zl has no structs; op[0] is the tag, op[1] the text.
+#
+# A text is split with the lines() builtin and rejoined with "\n", so a
+# text is always taken WITHOUT a trailing newline: lines("a\nb\n") is
+# ["a", "b"], and joining that back gives "a\nb". Feed the functions text
+# in that form and apply_diff(a, diff_lines(a, b)) == b exactly - that
+# round-trip is the correctness proof, and it is asserted in the demo.
+#
+# Naming: zl has no local scope - assigning inside a function writes the
+# global of that name - so every parameter and local carries a two-letter
+# tag for its function (dl_ = diff_lines, ap_ = apply_diff, ...), the same
+# discipline bitops.zl uses. zl's `and` also does not short-circuit, so
+# guards that index a list are written as nested ifs, never as one `and`.
+
+fn dmax(mx_a, mx_b) {
+    if mx_a > mx_b {
+        return mx_a
+    }
+    return mx_b
+}
+
+# Build the (m+1) x (n+1) LCS table over two LISTS OF LINES.
+# table[i][j] = number of common lines in the first i of a and first j of b.
+fn line_table(lt_a, lt_b) {
+    lt_m = len(lt_a)
+    lt_n = len(lt_b)
+    lt_table = []
+    lt_i = 0
+    while lt_i <= lt_m {
+        lt_row = [0]
+        lt_j = 1
+        while lt_j <= lt_n {
+            if lt_i == 0 {
+                lt_row = push(lt_row, 0)
+            } else {
+                lt_prev = lt_table[lt_i - 1]
+                if lt_a[lt_i - 1] == lt_b[lt_j - 1] {
+                    lt_row = push(lt_row, lt_prev[lt_j - 1] + 1)
+                } else {
+                    lt_row = push(lt_row, dmax(lt_prev[lt_j], lt_row[lt_j - 1]))
+                }
+            }
+            lt_j = lt_j + 1
+        }
+        lt_table = push(lt_table, lt_row)
+        lt_i = lt_i + 1
+    }
+    return lt_table
+}
+
+# The edit script. Walks the table from the bottom-right corner back to the
+# origin, collecting ops in reverse, then flips them into reading order.
+fn diff_lines(dl_atext, dl_btext) {
+    dl_a = lines(dl_atext)
+    dl_b = lines(dl_btext)
+    dl_t = line_table(dl_a, dl_b)
+    dl_i = len(dl_a)
+    dl_j = len(dl_b)
+    dl_rev = []
+    while dl_i > 0 or dl_j > 0 {
+        dl_same = false
+        if dl_i > 0 {
+            if dl_j > 0 {
+                if dl_a[dl_i - 1] == dl_b[dl_j - 1] {
+                    dl_same = true
+                }
+            }
+        }
+        if dl_same {
+            dl_rev = push(dl_rev, ["keep", dl_a[dl_i - 1]])
+            dl_i = dl_i - 1
+            dl_j = dl_j - 1
+        } else {
+            # Not a match: step whichever way the table says loses nothing.
+            # On a tie take the add, so a replacement reads "- old" then
+            # "+ new" once the list is reversed.
+            dl_isadd = false
+            if dl_j > 0 {
+                if dl_i == 0 {
+                    dl_isadd = true
+                } else {
+                    dl_row = dl_t[dl_i]
+                    dl_up = dl_t[dl_i - 1]
+                    if dl_row[dl_j - 1] >= dl_up[dl_j] {
+                        dl_isadd = true
+                    }
+                }
+            }
+            if dl_isadd {
+                dl_rev = push(dl_rev, ["add", dl_b[dl_j - 1]])
+                dl_j = dl_j - 1
+            } else {
+                dl_rev = push(dl_rev, ["del", dl_a[dl_i - 1]])
+                dl_i = dl_i - 1
+            }
+        }
+    }
+    return reverse(dl_rev)
+}
+
+fn count_op(co_diff, co_kind) {
+    co_n = 0
+    co_i = 0
+    while co_i < len(co_diff) {
+        co_op = co_diff[co_i]
+        if co_op[0] == co_kind {
+            co_n = co_n + 1
+        }
+        co_i = co_i + 1
+    }
+    return co_n
+}
+
+# Printable diff: "  " for context, "- " for a deletion, "+ " for an addition.
+fn unified(un_atext, un_btext) {
+    un_diff = diff_lines(un_atext, un_btext)
+    un_out = ["--- a", "+++ b"]
+    un_i = 0
+    while un_i < len(un_diff) {
+        un_op = un_diff[un_i]
+        if un_op[0] == "keep" {
+            un_out = push(un_out, "  " + un_op[1])
+        } else if un_op[0] == "del" {
+            un_out = push(un_out, "- " + un_op[1])
+        } else {
+            un_out = push(un_out, "+ " + un_op[1])
+        }
+        un_i = un_i + 1
+    }
+    return join(un_out, "\n")
+}
+
+# How alike two texts are, 0..100, rounded to a whole percent.
+# A kept line counts once in each text, so the score is
+# 200 * kept / (lines in a + lines in b). Two empty texts score 100.
+fn similarity(sm_atext, sm_btext) {
+    sm_total = len(lines(sm_atext)) + len(lines(sm_btext))
+    if sm_total == 0 {
+        return 100
+    }
+    sm_kept = count_op(diff_lines(sm_atext, sm_btext), "keep")
+    return round(200 * sm_kept / sm_total)
+}
+
+# Replay a diff onto a, producing b. Every keep/del op must line up with the
+# next unconsumed line of a, and a must be fully consumed at the end - so a
+# diff that does not belong to a is caught here rather than silently applied.
+fn apply_diff(ap_atext, ap_diff) {
+    ap_a = lines(ap_atext)
+    ap_ai = 0
+    ap_out = []
+    ap_i = 0
+    while ap_i < len(ap_diff) {
+        ap_op = ap_diff[ap_i]
+        if ap_op[0] == "add" {
+            ap_out = push(ap_out, ap_op[1])
+        } else {
+            assert(ap_ai < len(ap_a), "apply_diff: diff runs past the end of a")
+            assert(ap_a[ap_ai] == ap_op[1], "apply_diff: op does not match a")
+            if ap_op[0] == "keep" {
+                ap_out = push(ap_out, ap_op[1])
+            }
+            ap_ai = ap_ai + 1
+        }
+        ap_i = ap_i + 1
+    }
+    assert(ap_ai == len(ap_a), "apply_diff: diff left lines of a unconsumed")
+    return join(ap_out, "\n")
+}
+
+# The round-trip: diff a against b, replay it on a, and check we landed on b.
+fn roundtrip_ok(rt_atext, rt_btext) {
+    rt_got = apply_diff(rt_atext, diff_lines(rt_atext, rt_btext))
+    return rt_got == rt_btext
+}
+
+# ---------------- demo ----------------
+
+demo_a = "the quick brown fox\njumps over\nthe lazy dog\nend of file"
+demo_b = "the quick brown fox\nleaps over\nthe lazy dog\nand goes home\nend of file"
+
+print("a (" + str(len(lines(demo_a))) + " lines):")
+print(demo_a)
+print("")
+print("b (" + str(len(lines(demo_b))) + " lines):")
+print(demo_b)
+
+print("")
+print("--- diff_lines ---")
+demo_d = diff_lines(demo_a, demo_b)
+for demo_op in demo_d {
+    print(pad(demo_op[0], 6) + demo_op[1])
+}
+
+print("")
+print("--- unified ---")
+print(unified(demo_a, demo_b))
+
+print("")
+print("keep/add/del: " + str(count_op(demo_d, "keep")) + "/" + str(count_op(demo_d, "add")) + "/" + str(count_op(demo_d, "del")))
+print("similarity:   " + str(similarity(demo_a, demo_b)) + "%")
+
+print("")
+print("--- round trip ---")
+demo_back = apply_diff(demo_a, demo_d)
+print("apply_diff(a, diff) == b : " + str(demo_back == demo_b))
+assert(demo_back == demo_b, "round trip a -> b failed")
+print("apply_diff(b, diff b->a) == a : " + str(roundtrip_ok(demo_b, demo_a)))
+assert(roundtrip_ok(demo_b, demo_a), "round trip b -> a failed")
+
+print("")
+print("--- edge cases ---")
+demo_same = "one\ntwo"
+print("identical:  ops " + str(diff_lines(demo_same, demo_same)) + "  similarity " + str(similarity(demo_same, demo_same)) + "%")
+print("nothing in common: ops " + str(diff_lines("a\nb", "x\ny")) + "  similarity " + str(similarity("a\nb", "x\ny")) + "%")
+print("empty -> b: ops " + str(diff_lines("", "p\nq")))
+print("a -> empty: ops " + str(diff_lines("p\nq", "")))
+print("empty vs empty similarity: " + str(similarity("", "")) + "%")
+print("insert in middle: ops " + str(diff_lines("a\nc", "a\nb\nc")))
+print("delete in middle: ops " + str(diff_lines("a\nb\nc", "a\nc")))
+print("reordered lines:  ops " + str(diff_lines("a\nb", "b\na")))
+
+demo_pairs = [["", ""], ["", "p\nq"], ["p\nq", ""], ["a\nc", "a\nb\nc"], ["a\nb\nc", "a\nc"], ["a\nb", "b\na"], [demo_same, demo_same], ["a\nb", "x\ny"], [demo_a, demo_b], [demo_b, demo_a]]
+demo_i = 0
+while demo_i < len(demo_pairs) {
+    demo_pair = demo_pairs[demo_i]
+    assert(roundtrip_ok(demo_pair[0], demo_pair[1]), "round trip failed on pair " + str(demo_i))
+    demo_i = demo_i + 1
+}
+print("all " + str(len(demo_pairs)) + " round trips verified")

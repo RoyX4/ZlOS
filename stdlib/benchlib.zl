@@ -1,0 +1,209 @@
+# benchlib.zl - timing and micro-benchmarks, built on the now() builtin.
+#
+# now() returns milliseconds since the process started, so only DIFFERENCES
+# between two now() readings mean anything. Everything here is a difference.
+#
+# Representation:
+#   timer  = [label, start_ms]      - made by timer_new(), read by timer_stop()
+#   row    = [label, elapsed_ms]    - what bench_table() eats
+#   sample = a plain list of ms numbers - what best/mean/median eat
+# A timer is a list rather than two loose variables so a label travels with
+# its clock and can be handed straight to bench_row().
+#
+# zl has no first-class functions, so there is no time_it(fn, n). The pattern
+# is: t = timer_new("name"); <your loop>; ms = timer_stop(t). Collect the
+# [label, ms] rows yourself and hand the list to bench_table().
+#
+# Naming: zl has no local scope - a parameter or an assignment inside a
+# function writes the global of that name. So every parameter and local here
+# carries a two-letter tag for its function (fx_ = fixed, bt_ = bench_table,
+# dm_ = the demo below). That is what stops bench_row() from eating the
+# label bench_table() is looping over.
+#
+# str() prints 6 significant digits, so fixed() does the decimal formatting.
+
+fn fixed(fx_x, fx_dp) {
+    fx_scale = 1
+    fx_i = 0
+    while fx_i < fx_dp {
+        fx_scale = fx_scale * 10
+        fx_i = fx_i + 1
+    }
+    fx_n = round(abs(fx_x) * fx_scale)
+    fx_whole = int(fx_n / fx_scale)
+    fx_frac = fx_n - fx_whole * fx_scale
+    fx_s = str(fx_whole)
+    if fx_dp > 0 {
+        fx_t = str(fx_frac)
+        while len(fx_t) < fx_dp {
+            fx_t = "0" + fx_t
+        }
+        fx_s = fx_s + "." + fx_t
+    }
+    if fx_x < 0 {
+        fx_s = "-" + fx_s
+    }
+    return fx_s
+}
+fn lpad(lp_s, lp_w) {
+    lp_t = lp_s
+    while len(lp_t) < lp_w {
+        lp_t = " " + lp_t
+    }
+    return lp_t
+}
+
+# --- clocks ---------------------------------------------------------------
+
+fn bench_start() {
+    return now()
+}
+fn bench_ms(bm_t0) {
+    return now() - bm_t0
+}
+fn timer_new(tn_label) {
+    return [tn_label, now()]
+}
+fn timer_stop(ts_t) {
+    return now() - ts_t[1]
+}
+
+# --- formatting -----------------------------------------------------------
+
+fn human_ms(hm_ms) {
+    hm_v = hm_ms
+    if hm_v < 0 {
+        hm_v = 0
+    }
+    if hm_v >= 60000 {
+        return fixed(hm_v / 60000, 1) + " min"
+    }
+    if hm_v >= 1000 {
+        return fixed(hm_v / 1000, 1) + " s"
+    }
+    if hm_v >= 1 {
+        return fixed(hm_v, 0) + " ms"
+    }
+    if hm_v > 0 {
+        return fixed(hm_v * 1000, 0) + " us"
+    }
+    return "0 ms"
+}
+fn bench_row(br_label, br_ms, br_base) {
+    br_mult = "n/a"
+    if br_base > 0 {
+        br_mult = fixed(br_ms / br_base, 2) + "x"
+    }
+    return "  " + pad(br_label, 16) + lpad(human_ms(br_ms), 10) + lpad(br_mult, 10)
+}
+fn bench_table(bt_rows) {
+    if len(bt_rows) == 0 {
+        return "  (no rows)"
+    }
+    bt_base = bt_rows[0][1]
+    bt_bar = "  " + repeat("-", 36)
+    bt_out = "  " + pad("benchmark", 16) + lpad("time", 10) + lpad("x base", 10)
+    bt_out = bt_out + "\n" + bt_bar
+    for bt_row in bt_rows {
+        bt_out = bt_out + "\n" + bench_row(bt_row[0], bt_row[1], bt_base)
+    }
+    bt_out = bt_out + "\n" + bt_bar
+    bt_out = bt_out + "\n  base = " + bt_rows[0][0] + " at " + human_ms(bt_base)
+    bt_out = bt_out + "  (>1x is slower than base)"
+    return bt_out
+}
+
+# --- stats over timing samples --------------------------------------------
+
+fn best(bs_xs) {
+    if len(bs_xs) == 0 {
+        return 0
+    }
+    bs_lo = bs_xs[0]
+    for bs_x in bs_xs {
+        if bs_x < bs_lo {
+            bs_lo = bs_x
+        }
+    }
+    return bs_lo
+}
+fn mean(mn_xs) {
+    if len(mn_xs) == 0 {
+        return 0
+    }
+    return sum(mn_xs) / len(mn_xs)
+}
+fn median(md_xs) {
+    if len(md_xs) == 0 {
+        return 0
+    }
+    md_s = sort(md_xs)
+    md_n = len(md_s)
+    md_mid = int(md_n / 2)
+    if md_n % 2 == 1 {
+        return md_s[md_mid]
+    }
+    return (md_s[md_mid - 1] + md_s[md_mid]) / 2
+}
+
+# --- demo -----------------------------------------------------------------
+
+# Known numbers first, so the formatting can be checked by eye.
+print("human_ms(0.42):    " + human_ms(0.42))
+print("human_ms(340):     " + human_ms(340))
+print("human_ms(1234):    " + human_ms(1234))
+print("human_ms(95000):   " + human_ms(95000))
+print("human_ms(0):       " + human_ms(0))
+print("fixed(1234.567,1): " + fixed(1234.567, 1))
+print("fixed(0.999,2):    " + fixed(0.999, 2))
+print("")
+
+dm_samples = [12, 9, 15, 9.5]
+print("samples:  " + str(dm_samples))
+print("best:     " + str(best(dm_samples)))
+print("mean:     " + str(mean(dm_samples)))
+print("median:   " + str(median(dm_samples)))
+print("")
+
+print("one row, base 120ms:")
+print(bench_row("baseline", 120, 120))
+print(bench_row("2x slower", 240, 120))
+print("")
+
+# Real timings: the same adding loop at three sizes.
+dm_rows = []
+for dm_n in [50000, 200000, 800000] {
+    dm_t = timer_new("sum to " + str(dm_n))
+    dm_i = 0
+    dm_acc = 0
+    while dm_i < dm_n {
+        dm_acc = dm_acc + dm_i
+        dm_i = dm_i + 1
+    }
+    dm_rows = push(dm_rows, [dm_t[0], timer_stop(dm_t)])
+}
+print("measured loops:")
+print(bench_table(dm_rows))
+print("")
+
+# bench_start / bench_ms, and five repeats of one loop for the stats.
+dm_t0 = bench_start()
+dm_runs = []
+dm_r = 0
+while dm_r < 5 {
+    dm_t = timer_new("run")
+    dm_i = 0
+    dm_acc = 0
+    while dm_i < 100000 {
+        dm_acc = dm_acc + dm_i
+        dm_i = dm_i + 1
+    }
+    dm_runs = push(dm_runs, timer_stop(dm_t))
+    dm_r = dm_r + 1
+}
+print("5 runs of 100k:   " + str(dm_runs) + " ms")
+print("  best:           " + human_ms(best(dm_runs)))
+print("  mean:           " + human_ms(mean(dm_runs)))
+print("  median:         " + human_ms(median(dm_runs)))
+print("  wall (bench_ms):" + lpad(human_ms(bench_ms(dm_t0)), 9))
+print("uptime at exit:   " + human_ms(now()))

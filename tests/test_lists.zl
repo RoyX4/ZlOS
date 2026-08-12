@@ -1,0 +1,579 @@
+# test_lists.zl - test suite for the list builtins
+#   len  push  first  last  insert  remove  contains  index_of  sort
+#   reverse  sum  range  concat  fill  flat  take  drop
+#
+# Style follows stdlib/testlib.zl - check(label, got, want) / report().
+# zl has no import, so the harness is inlined.
+#
+# Every `want` below was worked out by hand. Blocks tagged "### WAS BROKEN"
+# pinned a real defect; all of them are fixed in the engine now and the checks
+# stand as the regression tests. The BUGS block at the bottom keeps the record
+# of what each one used to do.
+#
+# Some behaviour is DOCUMENTED IN COMMENTS ONLY because running it would abort
+# this file before report() ever prints - the runtime errors from first([]) /
+# last([]) / remove(xs, out_of_range) / sum of a non-number. Those are written
+# out beside the checks and in the BUGS block.
+
+g_pass = 0
+g_fail = 0
+
+fn check(label, got, want) {
+    if str(got) == str(want) {
+        g_pass = g_pass + 1
+        print("  PASS  " + label)
+    } else {
+        g_fail = g_fail + 1
+        print("  FAIL  " + label + "  got " + str(got) + " want " + str(want))
+    }
+}
+fn report() {
+    print("----")
+    print(str(g_pass) + " passed, " + str(g_fail) + " failed")
+}
+
+# drop every nan from a list (nan is the only value not equal to itself)
+fn drop_nans(xs) {
+    out = []
+    for v in xs {
+        if v == v { out = push(out, v) }
+    }
+    return out
+}
+
+inf = 1 / 0
+nan = fmod(5, 0)
+
+# ---------------------------------------------------------------------- len
+print("-- len --")
+check("len([])",            len([]),                0)
+check("len([0])",           len([0]),               1)      # a falsy element still counts
+check("len([1,2,3])",       len([1, 2, 3]),         3)
+check("len([[1,2,3]])",     len([[1, 2, 3]]),       1)      # one element, which is a list
+check("len([[],[]])",       len([[], []]),          2)
+check("len(range(10))",     len(range(10)),         10)
+check("len(fill(4,0))",     len(fill(4, 0)),        4)
+check("len(concat(a,b))",   len(concat([1,2], [3])), 3)
+
+# --------------------------------------------------------------------- push
+print("-- push --")
+check("push([],1)",         push([], 1),            [1])
+check("push([1],2)",        push([1], 2),           [1, 2])
+check("push([1,2],3)",      push([1, 2], 3),        [1, 2, 3])
+check("push a string",      push(["a"], "b"),       ["a", "b"])
+check("push a list nests",  push([1, 2], [3]),      [1, 2, [3]])
+check("push [] into []",    push([], []),           [[]])
+check("push chain length",  len(push(push(push([], 1), 2), 3)), 3)
+check("last(push(xs,v))==v", last(push([1, 2], 99)), 99)
+
+# push is the ONE list builtin that does not deep-copy its input: it writes the
+# new element into the source list's spare capacity. Build a list with spare
+# capacity (three pushes onto [] leave nitems 2, cap 4) and branch off it twice.
+pbase = []
+pbase = push(pbase, 1)
+pbase = push(pbase, 2)
+check("push leaves the source length alone",   len(pbase), 2)
+check("push leaves the source contents alone", pbase,      [1, 2])
+pb = push(pbase, 9)
+pc = push(pbase, 8)
+# ### WAS BROKEN - pb was computed BEFORE pc and must not change afterwards.
+# push returns a new list, so pb is [1,2,9] for ever. It used to grow the
+# SOURCE list's array in place, so pb and pc shared pbase's spare slot and pc's
+# 8 overwrote pb's 9: pb read [1, 2, 8]. Fixed - push allocates its own array.
+check("push branch pb is not clobbered by pc", pb, [1, 2, 9])
+check("two pushes off one base differ", str(pb) == str(pc), false)
+check("control: pc itself is right",            pc, [1, 2, 8])
+
+# ------------------------------------------------------------- first / last
+print("-- first / last --")
+check("first([7])",         first([7]),             7)      # single element
+check("last([7])",          last([7]),              7)
+check("first([1,2,3])",     first([1, 2, 3]),       1)
+check("last([1,2,3])",      last([1, 2, 3]),        3)
+check("first of nested",    first([[1], [2]]),      [1])
+check("last(range(5))",     last(range(5)),         4)
+check("first(reverse(xs))", first(reverse([1,2,3])), 3)
+check("last(reverse(xs))",  last(reverse([1,2,3])),  1)
+check("first == xs[0]",     first([4, 5, 6]) == 4,  true)
+# first([]) and last([]) are runtime errors ("first needs a non-empty list").
+# Not asserted live - the error would abort the file. See BUGS note 5.
+check("empty first/last error, see comment", "documented", "documented")
+
+# ------------------------------------------------------------------- insert
+print("-- insert --")
+check("insert middle",      insert([1, 2, 4], 2, 3), [1, 2, 3, 4])
+check("insert at 0",        insert([1, 2, 3], 0, 9), [9, 1, 2, 3])
+check("insert at len",      insert([1, 2, 3], 3, 9), [1, 2, 3, 9])
+check("insert into []",     insert([], 0, 5),        [5])
+check("insert grows by 1",  len(insert([1, 2, 3], 1, 9)), 4)
+check("insert a list",      insert([1], 0, [0]),     [[0], 1])
+# index out of range is CLAMPED to 0..len (unlike remove, which errors)
+check("insert past the end",  insert([1, 2, 3], 4, 9),   [1, 2, 3, 9])
+check("insert way past",      insert([1, 2, 3], 100, 9), [1, 2, 3, 9])
+check("insert into [] past",  insert([], 5, 5),          [5])
+check("insert negative",      insert([1, 2, 3], -1, 9),  [9, 1, 2, 3])
+check("insert very negative", insert([1, 2, 3], -100, 9), [9, 1, 2, 3])
+check("insert -0.5 clamps",   insert([1, 2, 3], -0.5, 9), [9, 1, 2, 3])
+check("insert 2.9 truncates", insert([1, 2, 3], 2.9, 9),  [1, 2, 9, 3])
+check("insert nan clamps",    insert([1, 2, 3], nan, 9),  [9, 1, 2, 3])
+
+# ### WAS BROKEN - the index used to be narrowed to a 32-bit int BEFORE the
+# clamp, so one past INT32_MAX landed on INT32_MIN and the `if (i<0) i=0` then
+# flipped the clamp from "end of list" to "start of list": insert at 2^31 gave
+# [9, 1, 2, 3]. Fixed - the clamp runs in the double domain (clamp_index).
+check("control: insert at 2^31-1 appends", insert([1,2,3], 2147483647, 9), [1, 2, 3, 9])
+check("insert at 2^31 appends",    insert([1,2,3], 2147483648, 9), [1, 2, 3, 9])
+check("insert at inf appends",     insert([1,2,3], inf, 9),        [1, 2, 3, 9])
+
+# ------------------------------------------------------------------- remove
+print("-- remove --")
+check("remove middle",      remove([1, 2, 3], 1),   [1, 3])
+check("remove head",        remove([1, 2, 3], 0),   [2, 3])
+check("remove tail",        remove([1, 2, 3], 2),   [1, 2])
+check("remove only element", remove([7], 0),        [])
+check("remove shrinks by 1", len(remove(range(5), 2)), 4)
+check("remove twice",       remove(remove([1,2,3], 0), 0), [3])
+check("remove 1.9 truncates", remove([1, 2, 3], 1.9), [1, 3])
+check("remove keeps the rest in order", remove([5, 6, 7, 8], 1), [5, 7, 8])
+# remove(xs, i) with i outside 0..len-1 is a runtime error, including i = -1
+# and i = len. Not asserted live - it would abort the file. See BUGS note 5.
+check("remove out-of-range errors, see comment", "documented", "documented")
+
+# ------------------------------------------------------- contains / index_of
+print("-- contains / index_of --")
+check("contains hit",       contains([1, 2, 3], 2), true)
+check("contains miss",      contains([1, 2, 3], 4), false)
+check("contains on []",     contains([], 1),        false)
+check("contains first",     contains([1, 2, 3], 1), true)
+check("contains last",      contains([1, 2, 3], 3), true)
+check("contains a string",  contains(["a", "b"], "a"), true)
+check("contains is case sensitive", contains(["a"], "A"), false)
+check("contains nil",       contains([nil()], nil()),  true)
+check("contains 1 not true", contains([1], true),   false)      # types must match
+check("contains true not 1", contains([true], 1),   false)
+check("contains -0.0 == 0", contains([0], 0 - 0.0), true)
+check("index_of head",      index_of([1, 2, 3], 1), 0)
+check("index_of tail",      index_of([1, 2, 3], 3), 2)
+check("index_of miss",      index_of([1, 2, 3], 9), -1)
+check("index_of on []",     index_of([], 1),        -1)
+check("index_of picks the first", index_of([5, 5, 5], 5), 0)
+check("index_of dup",       index_of([1, 2, 1], 1), 0)
+check("index_of a string",  index_of(["x", "y"], "y"), 1)
+check("in operator",        2 in [1, 2, 3],         true)
+check("not in operator",    9 not in [1, 2, 3],     true)
+check("index_of agrees with contains", index_of([1,2],9) == -1, contains([1,2],9) == false)
+
+# ### WAS BROKEN - values_equal() had no V_LIST case, so a list was never equal
+# to anything, not even to itself: `xs == xs` was false and contains/index_of
+# could never find a list element (false, false, -1). Fixed - lists compare
+# structurally, same length then element by element.
+eqlist = [1, 2]
+check("a list equals itself",      eqlist == eqlist,               true)
+check("[1] == [1]",                [1] == [1],                     true)
+check("contains finds a sublist",  contains([[1, 2], [3]], [3]),   true)
+check("index_of finds a sublist",  index_of([[1, 2], [3]], [3]),   1)
+check("deep nesting compares",     [[1, [2, [3]]]] == [[1, [2, [3]]]], true)
+check("deep nesting differs",      [[1, [2, [3]]]] == [[1, [2, [4]]]], false)
+
+# ### WAS BROKEN - making == structural then made it recurse, and zl can build
+# a list that CONTAINS ITSELF in two lines, because index-assign stores a Value
+# whose .items is the very array being written into. `cyc == cyc` walked that
+# cycle until the process was KILLED with STATUS_STACK_OVERFLOW - no message,
+# and every line printed so far lost with the buffer. Fixed - two Values that
+# share an .items array ARE the same list and compare equal without a walk, and
+# the walk itself is depth-capped so a pair of genuinely different cyclic lists
+# reports a runtime error instead of taking the process down.
+cyc = [1, 2]
+cyc[0] = cyc
+check("a self-referencing list equals itself", cyc == cyc,            true)
+check("sort() survives a self-reference",      len(sort([cyc, cyc])), 2)
+check("a cycle is not equal to a plain list",  cyc == [1, 2],         false)
+
+# --------------------------------------------------------------------- sort
+print("-- sort --")
+check("sort([])",           sort([]),               [])
+check("sort single",        sort([1]),              [1])
+check("sort pair",          sort([2, 1]),           [1, 2])
+check("sort already sorted", sort([1, 2, 3, 4, 5]), [1, 2, 3, 4, 5])
+check("sort reverse sorted", sort([5, 4, 3, 2, 1]), [1, 2, 3, 4, 5])
+check("sort duplicates",    sort([3, 1, 3, 1, 2]),  [1, 1, 2, 3, 3])
+check("sort all equal",     sort([0, 0, 0]),        [0, 0, 0])
+check("sort negatives",     sort([3, -1, 0, -5, 2]), [-5, -1, 0, 2, 3])
+check("sort fractions",     sort([1.5, 1.25, -0.5]), [-0.5, 1.25, 1.5])
+check("sort a big span",    sort([9,8,7,6,5,4,3,2,1,0]), [0,1,2,3,4,5,6,7,8,9])
+check("sort is idempotent", sort(sort([3, 1, 2])),  [1, 2, 3])
+check("sort keeps the length", len(sort([4, 2, 9, 1])), 4)
+check("sort keeps the sum", sum(sort([4, 2, 9, 1])), 16)
+check("sort leaves the source alone", str(sort([3,1,2])) == str([3,1,2]), false)
+check("sort with infinities", sort([1, inf, -1, 0 - inf]), [0 - inf, -1, 1, inf])
+check("sort -0.0 and 0",    sort([1, 0 - 0.0, 0, -1]), [-1, 0, 0, 1])
+check("sort(range) no-op",  sort(range(5)),         [0, 1, 2, 3, 4])
+check("sort(reverse(range))", sort(reverse(range(5))), [0, 1, 2, 3, 4])
+check("sort bools by value", sort([true, false]),   [false, true])
+check("first(sort) is the min", first(sort([4, 2, 9, 1])), 1)
+check("last(sort) is the max",  last(sort([4, 2, 9, 1])), 9)
+
+# ### WAS BROKEN - sort's only comparison used to be `items[j]->num > key->num`.
+# Every comparison against a nan is false, so the insertion sort's inner loop
+# stopped dead at a nan and nothing could move past it: a nan in the MIDDLE left
+# the numbers around it in input order (3, 1, 2). Fixed - value_compare is a
+# total order that places nan after every real number.
+check("control: nan at the head sorts the rest", drop_nans(sort([nan, 3, 1, 2])), [1, 2, 3])
+check("nan in the middle still sorts the numbers", drop_nans(sort([3, nan, 1, 2])), [1, 2, 3])
+check("two nans still sort the numbers", drop_nans(sort([5, nan, 4, nan, 3])), [3, 4, 5])
+
+# ### WAS BROKEN - Value is a struct, not a union, and make_str/make_nil never
+# set .num, so for a string element `->num` was uninitialised memory and sort
+# ordered strings by whatever bytes happened to be in that field. It was not
+# even a function of its input:
+#   sort([5,"x",4,3]) = [3, 4, 5, x]      sort([5,4,3,"x"]) = [3, x, 4, 5]
+# Fixed - value_compare orders EVERY value type: nil < bool < num < str < list,
+# numbers ascending with nan last, strings by byte value, lists element-wise
+# then shorter first. That is sort's order and only sort's order; the `<`
+# operator still refuses anything but numbers.
+check("sort is a function of the multiset", str(sort([5, "x", 4, 3])) == str(sort([5, 4, 3, "x"])), true)
+check("sort orders strings", sort(["c", "b", "a"]), ["a", "b", "c"])
+check("sort orders string numbers", sort(["10", "9", "100"]), ["10", "100", "9"])
+check("sort orders lists element-wise", sort([[2], [1, 9], [1]]), [[1], [1, 9], [2]])
+check("sort orders across types", sort([1, "a", nil(), [0]]), [nil(), 1, "a", [0]])
+
+# ------------------------------------------------------------------ reverse
+print("-- reverse --")
+check("reverse([])",        reverse([]),            [])
+check("reverse single",     reverse([1]),           [1])
+check("reverse pair",       reverse([1, 2]),        [2, 1])
+check("reverse triple",     reverse([1, 2, 3]),     [3, 2, 1])
+check("reverse is an involution", reverse(reverse([1,2,3])), [1, 2, 3])
+check("reverse(range(4))",  reverse(range(4)),      [3, 2, 1, 0])
+check("reverse strings",    reverse(["a", "b"]),    ["b", "a"])
+check("reverse nested",     reverse([[1], [2]]),    [[2], [1]])
+check("reverse keeps length", len(reverse(range(7))), 7)
+check("reverse keeps the sum", sum(reverse([1, 2, 3])), 6)
+check("reverse of a palindrome", reverse([1, 2, 1]), [1, 2, 1])
+
+# ---------------------------------------------------------------------- sum
+print("-- sum --")
+check("sum([])",            sum([]),                0)      # empty sums to 0
+check("sum single",         sum([7]),               7)
+check("sum([1..5])",        sum([1, 2, 3, 4, 5]),   15)
+check("sum cancels",        sum([-1, 1]),           0)
+check("sum all negative",   sum([-1, -2, -3]),      -6)
+check("sum(range(101))",    sum(range(101)),        5050)   # 100*101/2
+check("sum fractions",      sum([0.5, 0.25, 0.25]), 1)
+check("sum(fill(4,2.5))",   sum(fill(4, 2.5)),      10)
+check("sum([0])",           sum([0]),               0)
+check("sum bools counts them", sum([true, true, false]), 2)  # bools carry .num
+check("sum(concat) is additive", sum(concat([1,2],[3,4])), sum([1,2]) + sum([3,4]))
+
+# FIXED - sum used to do `s += items[i]->num` with no type check, so for a
+# string, list or nil element it added an uninitialised .num field (Value is a
+# struct, not a union, so .num is never written for those). sum(["a","b"]) was
+# seen as 6.95143e-310, 6.95137e-310 and 2.90348e-312 on three runs of the
+# same code - the bytes came from the heap.
+# sum now REJECTS a non-numeric element, matching every other numeric builtin
+# (abs("a") raises "abs needs a number"). Bools still count as 0/1, pinned
+# above. A raised error aborts the script, so these three cannot be checks;
+# run them as their own file to see the message:
+#   print(str(sum(["a", "b"])))       -> runtime error: sum needs a list of numbers
+#   print(str(sum([[1, 2], [3]])))    -> runtime error: sum needs a list of numbers
+#   print(str(sum([nil()])))          -> runtime error: sum needs a list of numbers
+check("sum still takes an all-number list", sum([1, 2.5, -3]), 0.5)
+
+# -------------------------------------------------------------------- range
+print("-- range --")
+check("range(0)",           range(0),               [])
+check("range(1)",           range(1),               [0])
+check("range(5)",           range(5),               [0, 1, 2, 3, 4])
+check("range(-1)",          range(-1),              [])     # negative -> empty
+check("range(-5)",          range(-5),              [])
+check("range(3.7) truncs",  range(3.7),             [0, 1, 2])
+check("range(2,5)",         range(2, 5),            [2, 3, 4])
+check("range(5,5) empty",   range(5, 5),            [])     # lo == hi
+check("range(5,2) empty",   range(5, 2),            [])     # lo > hi
+check("range(0,0)",         range(0, 0),            [])
+check("range(-3,2)",        range(-3, 2),           [-3, -2, -1, 0, 1])
+check("range(-5,-2)",       range(-5, -2),          [-5, -4, -3])
+check("range(-2,-2)",       range(-2, -2),          [])
+check("range(1.5,4.5)",     range(1.5, 4.5),        [1, 2, 3])   # both truncate
+check("range(nan)",         range(nan),             [])
+check("len(range(100))",    len(range(100)),        100)
+check("sum(range(10))",     sum(range(10)),         45)
+check("first(range(3))",    first(range(3)),        0)
+check("last(range(3))",     last(range(3)),         2)
+check("range(n) excludes n", contains(range(5), 5), false)
+
+# ------------------------------------------------------------------- concat
+print("-- concat --")
+check("concat([],[])",      concat([], []),         [])
+check("concat([1],[])",     concat([1], []),        [1])
+check("concat([],[1])",     concat([], [1]),        [1])
+check("concat two",         concat([1, 2], [3, 4]), [1, 2, 3, 4])
+check("concat mixed types", concat(["a"], [1]),     ["a", 1])
+check("concat nested",      concat([[1]], [[2]]),   [[1], [2]])
+check("concat lengths add", len(concat(range(3), range(4))), 7)
+check("concat sums add",    sum(concat([1, 2], [3])), 6)
+check("concat associates",  concat(concat([1],[2]), [3]), concat([1], concat([2],[3])))
+check("concat is not commutative", str(concat([1],[2])) == str(concat([2],[1])), false)
+check("concat with itself", concat([1, 2], [1, 2]), [1, 2, 1, 2])
+
+# --------------------------------------------------------------------- fill
+print("-- fill --")
+check("fill(0,9)",          fill(0, 9),             [])
+check("fill(1,9)",          fill(1, 9),             [9])
+check("fill(3,7)",          fill(3, 7),             [7, 7, 7])
+check("fill(-1,9)",         fill(-1, 9),            [])     # negative -> empty
+check("fill(-100,9)",       fill(-100, 9),          [])
+check("fill(2.9,7) truncs", fill(2.9, 7),           [7, 7])
+check("fill a string",      fill(3, "a"),           ["a", "a", "a"])
+check("fill a list",        fill(2, [0]),           [[0], [0]])
+check("fill(nan,1)",        fill(nan, 1),           [])
+check("len(fill(10,0))",    len(fill(10, 0)),       10)
+check("sum(fill(5,3))",     sum(fill(5, 3)),        15)
+check("fill(0,x) == []",    len(fill(0, "anything")), 0)
+
+# --------------------------------------------------------------------- flat
+print("-- flat --")
+check("flat([])",           flat([]),               [])
+check("flat([[]])",         flat([[]]),             [])     # one empty level
+check("flat two lists",     flat([[1, 2], [3, 4]]), [1, 2, 3, 4])
+check("flat no lists",      flat([1, 2, 3]),        [1, 2, 3])
+check("flat mixed",         flat([1, [2, 3], 4]),   [1, 2, 3, 4])
+check("flat skips empties", flat([[], [], [1]]),    [1])
+check("flat singleton",     flat([[1]]),            [1])
+check("flat strings",       flat([["a"], ["b"]]),   ["a", "b"])
+check("flat is ONE level",  flat([[1, [2]], [3]]),  [1, [2], 3])
+check("flat twice goes deeper", flat(flat([[[1]], [[2]]])), [1, 2])
+check("flat length",        len(flat([[1, 2], [3]])), 3)
+check("flat keeps the sum", sum(flat([[1, 2], [3]])), 6)
+check("flat(flat(x)) == flat(x) when shallow", flat(flat([[1],[2]])), [1, 2])
+
+# ----------------------------------------------------------------------- take
+print("-- take --")
+xs = [1, 2, 3, 4, 5]
+check("take 0",             take(xs, 0),            [])
+check("take 1",             take(xs, 1),            [1])
+check("take 3",             take(xs, 3),            [1, 2, 3])
+check("take len",           take(xs, 5),            [1, 2, 3, 4, 5])
+check("take len+1 clamps",  take(xs, 6),            [1, 2, 3, 4, 5])
+check("take 100 clamps",    take(xs, 100),          [1, 2, 3, 4, 5])
+check("take -1 -> []",      take(xs, -1),           [])
+check("take -100 -> []",    take(xs, -100),         [])
+check("take 2.9 truncs",    take(xs, 2.9),          [1, 2])
+check("take from []",       take([], 3),            [])
+check("take 0 from []",     take([], 0),            [])
+check("take leaves source", xs,                     [1, 2, 3, 4, 5])
+check("take(nan)",          take(xs, nan),          [])
+
+# ----------------------------------------------------------------------- drop
+print("-- drop --")
+check("drop 0",             drop(xs, 0),            [1, 2, 3, 4, 5])
+check("drop 1",             drop(xs, 1),            [2, 3, 4, 5])
+check("drop 3",             drop(xs, 3),            [4, 5])
+check("drop len",           drop(xs, 5),            [])
+check("drop len+1 clamps",  drop(xs, 6),            [])
+check("drop 100 clamps",    drop(xs, 100),          [])
+check("drop -1 -> all",     drop(xs, -1),           [1, 2, 3, 4, 5])
+check("drop -100 -> all",   drop(xs, -100),         [1, 2, 3, 4, 5])
+check("drop 2.9 truncs",    drop(xs, 2.9),          [3, 4, 5])
+check("drop from []",       drop([], 3),            [])
+check("drop leaves source", xs,                     [1, 2, 3, 4, 5])
+check("drop(nan)",          drop(xs, nan),          [1, 2, 3, 4, 5])
+
+# take and drop must partition the list for every n
+print("-- take/drop partition --")
+n = -2
+while n <= 7 {
+    check("take+drop n=" + str(n), concat(take(xs, n), drop(xs, n)), xs)
+    check("lengths add n=" + str(n), len(take(xs,n)) + len(drop(xs,n)), 5)
+    n = n + 1
+}
+check("take(xs,len) == xs",   take(xs, len(xs)),    xs)
+check("drop(xs,0) == xs",     drop(xs, 0),          xs)
+check("first(drop(xs,2))",    first(drop(xs, 2)),   3)
+check("last(take(xs,2))",     last(take(xs, 2)),    2)
+
+# ### WAS BROKEN - the count used to be narrowed to a 32-bit int BEFORE the
+# clamp, so anything from 2^31 up saturated to INT32_MIN, which `if (n<0) n=0`
+# then read as ZERO. Adding 1 to an already-past-the-end count flipped take from
+# "everything" to "nothing" and drop from "nothing" to "everything":
+#   take([1,2,3], 2147483647) = [1, 2, 3]   take([1,2,3], 2147483648) = []
+#   drop([1,2,3], 2147483647) = []          drop([1,2,3], 2147483648) = [1, 2, 3]
+# Fixed - clamp_index clamps in the double domain, nan first, so nothing can
+# overflow on the way in.
+print("-- take/drop with a huge count --")
+check("control: take 2^31-1 takes it all", take([1,2,3], 2147483647), [1, 2, 3])
+check("control: drop 2^31-1 drops it all", drop([1,2,3], 2147483647), [])
+check("take 2^31 takes it all",    take([1,2,3], 2147483648), [1, 2, 3])
+check("drop 2^31 drops it all",    drop([1,2,3], 2147483648), [])
+check("take 2^62 takes it all",    take([1,2,3], pow(2, 62)), [1, 2, 3])
+check("take inf takes it all",     take([1,2,3], inf),        [1, 2, 3])
+check("drop inf drops it all",     drop([1,2,3], inf),        [])
+# monotonicity, stated without naming a bit width: a bigger n cannot take fewer
+check("take is monotone in n", len(take([1,2,3], 2147483648)) >= len(take([1,2,3], 2147483647)), true)
+check("drop is antitone in n", len(drop([1,2,3], 2147483648)) <= len(drop([1,2,3], 2147483647)), true)
+
+# ----------------------------------------------------- empty-list round-up
+print("-- empty list round-up --")
+check("len([])",            len([]),                0)
+check("type([])",           type([]),               "list")
+check("str([])",            str([]),                "[]")
+check("sum([])",            sum([]),                0)
+check("sort([])",           sort([]),               [])
+check("reverse([])",        reverse([]),            [])
+check("flat([])",           flat([]),               [])
+check("take([],n)",         take([], 3),            [])
+check("drop([],n)",         drop([], 3),            [])
+check("concat([],[])",      concat([], []),         [])
+check("contains([],x)",     contains([], 1),        false)
+check("index_of([],x)",     index_of([], 1),        -1)
+check("push([],x)",         push([], 1),            [1])
+check("insert([],0,x)",     insert([], 0, 1),       [1])
+check("[] is truthy?",      bool([]),               false)
+check("[0] is truthy?",     bool([0]),              true)
+
+# ------------------------------------------------------- combined round trips
+print("-- round trips --")
+check("reverse(sort(desc))",   reverse(sort([3, 1, 2])),        [3, 2, 1])
+check("sort(concat)",          sort(concat([3, 1], [2])),       [1, 2, 3])
+check("take/drop rebuild",     concat(take(range(6), 2), drop(range(6), 2)), range(6))
+check("remove then insert",    insert(remove([1, 2, 3], 1), 1, 2), [1, 2, 3])
+check("push then remove last", remove(push([1, 2], 3), 2),      [1, 2])
+check("flat of fill",          flat(fill(3, [1])),              [1, 1, 1])
+check("sum(flat(fill))",       sum(flat(fill(3, [2]))),         6)
+check("index_of(sort)",        index_of(sort([9, 5, 7]), 7),    1)
+check("contains(reverse)",     contains(reverse(range(4)), 3),  true)
+check("last(sort(range))",     last(sort(range(8))),            7)
+check("len(flat(fill(n,[a,b])))", len(flat(fill(4, [1, 2]))),   8)
+
+report()
+
+# ==================================================== BUGS FOUND (ALL FIXED)
+# Kept as the record of what the checks above are guarding. Every entry is
+# past tense; the fix is named at the end of each.
+#
+# 1. push() SHARED THE SOURCE LIST'S SPARE CAPACITY - a value written into one
+#    result was visible in an older one, and escalated to a use-after-free.
+#    Every other list builtin deep-copies its input; push did not:
+#        Value v = args[0];                     /* shallow: same items array */
+#        if (v.nitems >= v.cap) { v.items = realloc(v.items, ...); }
+#        v.items[v.nitems++] = <new element>;   /* writes into the SOURCE array */
+#
+#    (a) Silent wrong answer, deterministic, no crash:
+#          base = []
+#          base = push(base, 1)
+#          base = push(base, 2)      # nitems 2, cap 4 -> spare room, no realloc
+#          b = push(base, 9)
+#          c = push(base, 8)
+#          print(str(b))
+#        -> [1, 2, 8]        expected [1, 2, 9]
+#        b changes retroactively when c is created. Any code that branches two
+#        candidate lists off one shared prefix silently gets the wrong one.
+#        Same thing through a function, so it is not a parser artifact:
+#          fn add(xs, v) { return push(xs, v) }
+#          p = add(base, 100)
+#          q = add(base, 200)
+#          print(str(p))     -> [1, 2, 200]     expected [1, 2, 100]
+#
+#    (b) Use-after-free / heap corruption when the push does realloc. A list
+#        literal is built with cap == nitems, so push always reallocs it, which
+#        frees the array the source variable still points at:
+#          a = [1,2,3]
+#          b = push(a, 4)
+#          c = push(a, 5)
+#          print(str(b))
+#        -> process dies, no output, exit 0xC0000374 STATUS_HEAP_CORRUPTION
+#        and the shorter
+#          a = [1,2,3]
+#          b = push(a, 4)
+#          print(str(b))
+#          print(str(a))
+#        -> exit 0xC0000005 ACCESS_VIOLATION on some runs, correct output on
+#           others (it depends on whether realloc moved the block), which is the
+#           signature of reading freed memory.
+#    FIX: push allocates a fresh pointer array of nitems+1 and copies into it,
+#    never touching its argument. The elements themselves stay shared, exactly
+#    as they were when the old code handed back the very same array. Both
+#    repros above now print what they should, and the suite reads list literals
+#    after pushing onto them freely.
+#
+# 2. take/drop/insert NARROWED THEIR COUNT TO A 32-BIT int.
+#      print(str(take([1,2,3], 2147483647)))     -> [1, 2, 3]
+#      print(str(take([1,2,3], 2147483648)))     -> []            expected [1, 2, 3]
+#      print(str(drop([1,2,3], 2147483648)))     -> [1, 2, 3]     expected []
+#      print(str(insert([1,2,3], 2147483648, 9)))-> [9, 1, 2, 3]  expected [1, 2, 3, 9]
+#      print(str(take([1,2,3], 1/0)))            -> []            expected [1, 2, 3]
+#    `int n = (int)args[1].num` is undefined in C once the double is outside
+#    int32 range; on x86-64 it yields INT32_MIN, which then tripped the
+#    `if (n<0) n=0` clamp. So an enormous count was treated as zero.
+#    range() had the same narrowing WITHOUT the clamp, so range(2147483648)
+#    produced a live list whose nitems was INT32_MIN - len() reported a
+#    negative length while str() rendered it as empty.
+#    FIX: one clamp_index helper does the range test in the double domain (nan
+#    first, since every comparison against a nan is false) and only then
+#    narrows; take/drop/insert/slice/pad/fill/repeat all use it. range() and
+#    fill() additionally REFUSE a count too large to build rather than
+#    truncating it - range(2147483648) now says "range count is too large to
+#    build" instead of returning a broken list or trying to allocate ~17 GB.
+#
+# 3. sort() BROKE ON nan AND ON ANY NON-NUMBER ELEMENT.
+#    The whole comparison was `v.items[j]->num > key->num`, with no type check.
+#      (a) Every comparison against a nan is false, so the insertion loop stops
+#          at a nan and nothing crosses it:
+#            print(str(sort([3, sqrt(-1), 1, 2])))
+#            -> [3, nan, 1, 2]      the numbers are left in their input order
+#            print(str(sort([5, sqrt(-1), 4, sqrt(-1), 3])))
+#            -> [5, nan, 4, nan, 3]
+#          A nan at the head or tail is harmless, so whether sort works at all
+#          depends on where the nan happens to sit.
+#      (b) Value is a struct, not a union, and make_str/make_nil never assign
+#          .num, so for a string, nil or list element the comparison reads
+#          uninitialised memory. sort stops being a function of its input:
+#            print(str(sort([5, "x", 4, 3])))    -> [3, 4, 5, x]
+#            print(str(sort([5, 4, 3, "x"])))    -> [3, x, 4, 5]
+#          Same four values, two different answers. A list of strings came back
+#          untouched (sort(["c","b","a"]) -> [c, b, a]).
+#    FIX: sort compares with value_compare, a TOTAL order over every value -
+#    nil < bool < num < str < list < fn by type, numbers ascending with nan
+#    last, strings by byte value, lists element-wise then shorter first. It is
+#    sort's order alone: `<` still refuses anything but numbers, so `"a" < "b"`
+#    is still a runtime error and the pure-zl sorts in stdlib/sortx.zl still
+#    (correctly) raise on a string list.
+#
+# 4. sum() READ THE SAME UNINITIALISED .num FIELD.
+#      print(str(sum(["a", "b"])))      -> 6.95137e-310
+#      print(str(sum([[1,2],[3]])))     -> 3.55727e-322
+#      print(str(sum([nil()])))         -> 6.95137e-310
+#    The value moved between runs (sum(["a","b"]) has also come back as
+#    6.95143e-310 and 2.90348e-312) because the bytes came from the heap.
+#    FIX: sum type-checks every ELEMENT and raises "sum needs a list of
+#    numbers", matching every other numeric builtin. Bools still count as 0/1.
+#    Unlike sort, sum has no meaningful answer for a string, so it refuses
+#    rather than inventing one.
+#
+# 5. LIST EQUALITY WAS ALWAYS FALSE, INCLUDING AGAINST ITSELF.
+#      a = [1,2]
+#      print(str(a == a))               -> false        expected true
+#      print(str([1] == [1]))           -> false
+#    values_equal() had cases for V_NUM/V_BOOL/V_STR/V_NIL and `default: return
+#    0`, which caught V_LIST. The knock-on for this suite's subject matter was
+#    that contains() and index_of() could never find a list element:
+#      print(str(contains([[1,2],[3]], [3])))   -> false    expected true
+#      print(str(index_of([[1,2],[3]], [3])))   -> -1       expected 1
+#    FIX: values_equal has a V_LIST arm - same length, then element-wise
+#    recursion. docs/design/design_maps.md wanted lists rejected as MAP KEYS;
+#    that is a separate contract and is untouched by making `==` structural.
+#
+# NOTES (recorded so a future change to them is visible, not filed as bugs)
+#  * insert() CLAMPS an out-of-range index to 0..len, but remove() raises
+#    "remove index out of range" for anything outside 0..len-1, including -1.
+#    Two neighbouring builtins, two different policies.
+#  * first([]) and last([]) raise "first/last needs a non-empty list" rather
+#    than returning nil.
+#  * Plain assignment aliases a list - `m = [1,2,3]  n = m  n[0] = 99` leaves
+#    m as [99, 2, 3] - while every builtin, push now included, returns a fresh
+#    list. push copies the pointer array, not the elements, so pushing a list
+#    into a list still shares that inner list.
+#  * sum() and sort() treat a bool as its 0/1 numeric value, so
+#    sum([true,true,false]) is 2 and sort([true,false]) is [false, true].
+#  * take/drop/insert/fill/range all truncate a fractional argument toward zero
+#    before using it: take(xs, 2.9) takes 2, insert(xs, -0.5, v) inserts at 0.

@@ -1,0 +1,131 @@
+# argkit.zl - command-line argument parsing over a LIST of arg strings.
+#
+# zl has no args()/argv builtin yet (stdlib item 8), so ak_parse takes the
+# token list explicitly - hand it your simulated argv and it hands back a
+# parsed structure you read with ak_get / ak_positionals / ak_has.
+#
+# ak_parse(args) -> [pairs, positionals]
+#   pairs       : list of [key, value] pairs, in the order seen.
+#                 value is the boolean `true` for a bare  --flag,
+#                 otherwise the string that supplied the value.
+#   positionals : the leftover bare tokens, in order.
+#
+# Grammar (each token is tested top to bottom):
+#   "--key=value"   option; value may be empty and may contain further '='
+#   "--key value"   option, taken ONLY when the next token is not itself a
+#                   "--" option - the next token is consumed as the value
+#   "--key"         otherwise a boolean flag, value = true
+#   anything else   a positional
+#
+# The "--key value" rule is the classic simple-parser heuristic: a flag that
+# sits directly before a positional would swallow it as its value. That never
+# happens in the test below (every real flag is followed by another --option
+# or is the =form), but callers who need a value that looks bare should use
+# the unambiguous  --key=value  form.
+#
+# Readers:
+#   ak_get(parsed, key, default) -> value for key, or default if absent
+#   ak_positionals(parsed)       -> the positional list
+#   ak_has(parsed, key)          -> true if key was given at all
+
+# true when string s begins with prefix p (length-safe: slice never overruns).
+fn ak_starts(s, ak_p) {
+    if len(s) < len(ak_p) { return false }
+    return slice(s, 0, len(ak_p)) == ak_p
+}
+
+fn ak_parse(ak_args) {
+    ak_pairs = []
+    ak_pos = []
+    ak_i = 0
+    ak_n = len(ak_args)
+    while ak_i < ak_n {
+        ak_tok = ak_args[ak_i]
+        if ak_starts(ak_tok, "--") {
+            ak_body = slice(ak_tok, 2, len(ak_tok))
+            ak_eq = find(ak_body, "=")
+            if ak_eq >= 0 {
+                ak_pairs = push(ak_pairs, [slice(ak_body, 0, ak_eq), slice(ak_body, ak_eq + 1, len(ak_body))])
+                ak_i = ak_i + 1
+            } else {
+                # Look ahead. `and` is not short-circuiting in zl, so the
+                # bounds check must nest ABOVE the token read, never share an
+                # `and` with it, or argv[i+1] is touched out of range.
+                ak_took = false
+                if ak_i + 1 < ak_n {
+                    if not ak_starts(ak_args[ak_i + 1], "--") {
+                        ak_pairs = push(ak_pairs, [ak_body, ak_args[ak_i + 1]])
+                        ak_i = ak_i + 2
+                        ak_took = true
+                    }
+                }
+                if not ak_took {
+                    ak_pairs = push(ak_pairs, [ak_body, true])
+                    ak_i = ak_i + 1
+                }
+            }
+        } else {
+            ak_pos = push(ak_pos, ak_tok)
+            ak_i = ak_i + 1
+        }
+    }
+    return [ak_pairs, ak_pos]
+}
+
+# First value stored for key, or default when key was never given.
+fn ak_get(ak_parsed, ak_key, ak_default) {
+    for ak_pair in ak_parsed[0] {
+        if ak_pair[0] == ak_key {
+            return ak_pair[1]
+        }
+    }
+    return ak_default
+}
+
+fn ak_positionals(ak_parsed) {
+    return ak_parsed[1]
+}
+
+fn ak_has(ak_parsed, ak_key) {
+    for ak_pair in ak_parsed[0] {
+        if ak_pair[0] == ak_key { return true }
+    }
+    return false
+}
+
+# Render the pairs as "k=v, k=v" for display (booleans show as true/false).
+fn ak_show(ak_parsed) {
+    ak_parts = []
+    for ak_pair in ak_parsed[0] {
+        ak_parts = push(ak_parts, ak_pair[0] + "=" + str(ak_pair[1]))
+    }
+    return "[" + join(ak_parts, ", ") + "]"
+}
+
+# ---- self-test -----------------------------------------------------------
+
+t1 = ak_parse(["--verbose", "--name", "zac", "--n=5", "file.txt"])
+print("argv:        " + str(["--verbose", "--name", "zac", "--n=5", "file.txt"]))
+print("pairs:       " + ak_show(t1))
+print("positionals: " + str(ak_positionals(t1)))
+print("get verbose: " + str(ak_get(t1, "verbose", false)))
+print("get name:    " + ak_get(t1, "name", "?"))
+print("get n:       " + ak_get(t1, "n", "0"))
+print("get missing: " + ak_get(t1, "jobs", "4"))
+print("has verbose: " + str(ak_has(t1, "verbose")))
+print("has jobs:    " + str(ak_has(t1, "jobs")))
+print("")
+
+# edge cases: trailing bare flag, =form with empty value, no options at all,
+# and an empty argv.
+t2 = ak_parse(["input.txt", "output.txt", "--force"])
+print("t2 pairs:    " + ak_show(t2))
+print("t2 pos:      " + str(ak_positionals(t2)))
+print("t2 force:    " + str(ak_get(t2, "force", false)))
+
+t3 = ak_parse(["--out="])
+print("t3 out empty:[" + ak_get(t3, "out", "?") + "]")
+
+t4 = ak_parse([])
+print("t4 pairs:    " + ak_show(t4))
+print("t4 pos:      " + str(ak_positionals(t4)))

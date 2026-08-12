@@ -1,0 +1,101 @@
+# csvstats - read CSV, compute stats on a numeric column, group counts by a
+# category column. This is the "data-CLI" a real-world probe found IMPOSSIBLE
+# in zl (no whitespace split, no maps, csv_parse crashes on blank lines).
+# It is possible now, composing three modules built this session:
+#   csvkit  - parse CSV safely (blank lines, quoted fields)
+#   mathkit - mean / median / min / max on a column
+#   dictkit - group-by counts (the map stand-in)
+# Helpers inlined here since zl has no imports yet.
+
+# ---- csvkit (parse each line independently, skip blanks) ----
+fn ck_parse_line(line) {
+    ck_out = []
+    ck_cur = ""
+    ck_q = false
+    ck_i = 0
+    while ck_i < len(line) {
+        ck_c = at(line, ck_i)
+        if ck_q {
+            if ck_c == "\"" { ck_q = false } else { ck_cur = ck_cur + ck_c }
+        } else {
+            if ck_c == "\"" { ck_q = true } elif ck_c == "," { ck_out = push(ck_out, ck_cur)  ck_cur = "" } else { ck_cur = ck_cur + ck_c }
+        }
+        ck_i = ck_i + 1
+    }
+    return push(ck_out, ck_cur)
+}
+fn ck_parse(text) {
+    ck_rows = []
+    for ck_line in split(text, "\n") {
+        if len(trim(ck_line)) > 0 { ck_rows = push(ck_rows, ck_parse_line(ck_line)) }
+    }
+    return ck_rows
+}
+
+# ---- mathkit (column stats) ----
+fn mk_mean(xs) {
+    mk_s = 0
+    for mk_v in xs { mk_s = mk_s + mk_v }
+    return mk_s / len(xs)
+}
+fn mk_median(xs) {
+    mk_s = sort(xs)
+    mk_n = len(mk_s)
+    mk_h = mk_n / 2
+    if mk_n % 2 == 1 { return mk_s[int(mk_h)] }
+    return (mk_s[int(mk_h) - 1] + mk_s[int(mk_h)]) / 2
+}
+fn mk_min_of(xs) {
+    mk_m = xs[0]
+    for mk_v in xs { if mk_v < mk_m { mk_m = mk_v } }
+    return mk_m
+}
+fn mk_max_of(xs) {
+    mk_m = xs[0]
+    for mk_v in xs { if mk_v > mk_m { mk_m = mk_v } }
+    return mk_m
+}
+
+# ---- dictkit (group-by counts) ----
+fn dk_bump(d, k) {
+    dk_i = 0
+    while dk_i < len(d) {
+        if d[dk_i][0] == k { d[dk_i] = [k, d[dk_i][1] + 1]  return d }
+        dk_i = dk_i + 1
+    }
+    return push(d, [k, 1])
+}
+
+# ---- the report ----
+# (multi-line string literals are not supported yet - a real zl gap - so the
+#  CSV is one line with \n escapes)
+csv = "name,dept,salary\nAnn,eng,95\nBob,eng,88\nCara,sales,72\nDan,sales,65\nEve,eng,110\nFay,ops,80"
+
+rows = ck_parse(csv)
+header = rows[0]
+print("columns: " + str(header))
+print("data rows: " + str(len(rows) - 1))
+
+# stats on the salary column (index 2), headcount by dept (index 1)
+salaries = []
+depts = []
+r = 1
+while r < len(rows) {
+    salaries = push(salaries, num(rows[r][2]))
+    depts = dk_bump(depts, rows[r][1])
+    r = r + 1
+}
+
+print("")
+print("salary stats:")
+print("  count  " + str(len(salaries)))
+print("  mean   " + str(mk_mean(salaries)))
+print("  median " + str(mk_median(salaries)))
+print("  min    " + str(mk_min_of(salaries)))
+print("  max    " + str(mk_max_of(salaries)))
+
+print("")
+print("headcount by dept:")
+for pair in depts {
+    print("  " + pad(pair[0], 8) + str(pair[1]))
+}

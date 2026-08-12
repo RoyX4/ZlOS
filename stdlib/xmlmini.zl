@@ -1,0 +1,355 @@
+# xmlmini.zl - a minimal XML/HTML tag SCANNER. Not a validating parser:
+# it does not build a tree, resolve entities, check that a document has a
+# single root, or know any DTD/schema. It walks the text left to right and
+# reports the markup it sees.
+#
+# Representation: a tag is a 3-element list [kind, name, attrs]
+#   kind  - "open" (<p>), "close" (</p>) or "selfclose" (<br/>)
+#   name  - the tag name, LOWER-CASED, so all matching here is
+#           case-insensitive (HTML-style, not XML-style)
+#   attrs - everything after the name, as one raw string; hand it to
+#           attrs() to split it into [key, value] pairs
+# An attribute with no "=" (e.g. `disabled`) gets the value "".
+#
+# Quoting: the scan for the closing ">" tracks ' and " quotes, so
+# <img src="a>b.png"> is one tag, not two. Comments <!-- ... --> are skipped
+# whole (a ">" inside a comment is harmless); <!doctype ...> and <?xml ...?>
+# are skipped as non-tags.
+#
+# Known limits, all deliberate: entities are left as-is (&amp; stays
+# "&amp;"), the contents of <script>/<style> are treated as ordinary markup,
+# and a ">" inside <![CDATA[ ]]> ends the "tag" early. An unterminated
+# comment stops the scan.
+#
+# Naming: zl has no local scope - a parameter or an assignment inside a
+# function writes the global of that name. So every parameter and local
+# carries a two-letter tag for its function (nx_ = next_tag, as_ = attrs,
+# ...). That is what stops next_tag() from eating its caller's cursor.
+
+fn is_space(sp_c) {
+    if sp_c == " " {
+        return true
+    }
+    if sp_c == "\t" {
+        return true
+    }
+    if sp_c == "\n" {
+        return true
+    }
+    if sp_c == "\r" {
+        return true
+    }
+    return false
+}
+
+fn is_void(vd_name) {
+    return contains(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"], vd_name)
+}
+
+# tag_end(s, i): i is the index of a "<". Returns the index of the ">" that
+# closes that tag, skipping over any ">" inside a quoted attribute value.
+# Returns len(s) if the tag is never closed.
+fn tag_end(te_s, te_i) {
+    te_j = te_i + 1
+    te_q = ""
+    while te_j < len(te_s) {
+        te_c = at(te_s, te_j)
+        if te_q != "" {
+            if te_c == te_q {
+                te_q = ""
+            }
+        } else if te_c == "\"" or te_c == "'" {
+            te_q = te_c
+        } else if te_c == ">" {
+            return te_j
+        }
+        te_j = te_j + 1
+    }
+    return len(te_s)
+}
+
+# next_tag(s, from): the scanner everything else is built on.
+# Returns [start, after, kind, name, attrs] where start is the index of the
+# "<" and after is the index just past the ">". When there is no further tag
+# it returns [-1, len(s), "", "", ""].
+fn next_tag(nx_s, nx_from) {
+    nx_i = nx_from
+    nx_n = len(nx_s)
+    while nx_i < nx_n {
+        if at(nx_s, nx_i) != "<" {
+            nx_i = nx_i + 1
+            continue
+        }
+        if slice(nx_s, nx_i, nx_i + 4) == "<!--" {
+            nx_c = find(slice(nx_s, nx_i, nx_n), "-->")
+            if nx_c < 0 {
+                return [-1, nx_n, "", "", ""]
+            }
+            nx_i = nx_i + nx_c + 3
+            continue
+        }
+        nx_e = tag_end(nx_s, nx_i)
+        nx_body = slice(nx_s, nx_i + 1, nx_e)
+        nx_after = nx_e + 1
+        if len(nx_body) > 0 and at(nx_body, 0) != "!" and at(nx_body, 0) != "?" {
+            nx_kind = "open"
+            nx_rest = nx_body
+            if at(nx_rest, 0) == "/" {
+                nx_kind = "close"
+                nx_rest = slice(nx_rest, 1, len(nx_rest))
+            } else {
+                nx_rest = rtrim(nx_rest)
+                if ends(nx_rest, "/") {
+                    nx_kind = "selfclose"
+                    nx_rest = slice(nx_rest, 0, len(nx_rest) - 1)
+                }
+            }
+            nx_k = 0
+            while nx_k < len(nx_rest) and not is_space(at(nx_rest, nx_k)) {
+                nx_k = nx_k + 1
+            }
+            nx_name = lower(slice(nx_rest, 0, nx_k))
+            nx_attrs = trim(slice(nx_rest, nx_k, len(nx_rest)))
+            if len(nx_name) > 0 {
+                return [nx_i, nx_after, nx_kind, nx_name, nx_attrs]
+            }
+        }
+        nx_i = nx_after
+    }
+    return [-1, nx_n, "", "", ""]
+}
+
+# tags(text) -> list of [kind, name, attrs_string], in document order.
+fn tags(tg_text) {
+    tg_out = []
+    tg_i = 0
+    tg_go = true
+    while tg_go {
+        tg_t = next_tag(tg_text, tg_i)
+        if tg_t[0] < 0 {
+            tg_go = false
+        } else {
+            tg_out = push(tg_out, [tg_t[2], tg_t[3], tg_t[4]])
+            tg_i = tg_t[1]
+        }
+    }
+    return tg_out
+}
+
+# attrs(attr_string) -> list of [key, value]. Keys are lower-cased, values
+# are kept verbatim. Quoted values may hold spaces and ">"; a bare key with
+# no "=" gets the value "".
+fn attrs(as_s) {
+    as_out = []
+    as_i = 0
+    as_n = len(as_s)
+    while as_i < as_n {
+        if is_space(at(as_s, as_i)) {
+            as_i = as_i + 1
+            continue
+        }
+        as_k0 = as_i
+        while as_i < as_n and not is_space(at(as_s, as_i)) and at(as_s, as_i) != "=" {
+            as_i = as_i + 1
+        }
+        as_key = slice(as_s, as_k0, as_i)
+        while as_i < as_n and is_space(at(as_s, as_i)) {
+            as_i = as_i + 1
+        }
+        as_val = ""
+        if as_i < as_n and at(as_s, as_i) == "=" {
+            as_i = as_i + 1
+            while as_i < as_n and is_space(at(as_s, as_i)) {
+                as_i = as_i + 1
+            }
+            as_c = at(as_s, as_i)
+            if as_c == "\"" or as_c == "'" {
+                as_i = as_i + 1
+                as_v0 = as_i
+                while as_i < as_n and at(as_s, as_i) != as_c {
+                    as_i = as_i + 1
+                }
+                as_val = slice(as_s, as_v0, as_i)
+                as_i = as_i + 1
+            } else {
+                as_v0 = as_i
+                while as_i < as_n and not is_space(at(as_s, as_i)) {
+                    as_i = as_i + 1
+                }
+                as_val = slice(as_s, as_v0, as_i)
+            }
+        }
+        if len(as_key) > 0 {
+            as_out = push(as_out, [lower(as_key), as_val])
+        }
+    }
+    return as_out
+}
+
+# strip_tags(text) -> the text with every tag and comment removed.
+# Whitespace is left exactly as it was and entities are not decoded.
+fn strip_tags(sx_text) {
+    sx_out = ""
+    sx_i = 0
+    sx_n = len(sx_text)
+    while sx_i < sx_n {
+        sx_c = at(sx_text, sx_i)
+        if sx_c != "<" {
+            sx_out = sx_out + sx_c
+            sx_i = sx_i + 1
+            continue
+        }
+        if slice(sx_text, sx_i, sx_i + 4) == "<!--" {
+            sx_e = find(slice(sx_text, sx_i, sx_n), "-->")
+            if sx_e < 0 {
+                return sx_out
+            }
+            sx_i = sx_i + sx_e + 3
+            continue
+        }
+        sx_i = tag_end(sx_text, sx_i) + 1
+    }
+    return sx_out
+}
+
+# find_tag(text, name) -> index of the "<" of the first open (or self-closing)
+# tag with that name, or -1. Matching ignores case.
+fn find_tag(ft_text, ft_name) {
+    ft_want = lower(ft_name)
+    ft_i = 0
+    ft_go = true
+    while ft_go {
+        ft_t = next_tag(ft_text, ft_i)
+        if ft_t[0] < 0 {
+            ft_go = false
+        } else {
+            if ft_t[3] == ft_want and ft_t[2] != "close" {
+                return ft_t[0]
+            }
+            ft_i = ft_t[1]
+        }
+    }
+    return -1
+}
+
+# inner_text(text, name) -> the raw text between the first open tag with that
+# name and its matching close tag. Nesting is counted, so the close that
+# matches is the right one. Markup inside is kept - wrap the result in
+# strip_tags() if you want it plain. "" when there is no matching pair.
+fn inner_text(it_text, it_name) {
+    it_want = lower(it_name)
+    it_i = 0
+    it_depth = 0
+    it_start = -1
+    it_go = true
+    while it_go {
+        it_t = next_tag(it_text, it_i)
+        if it_t[0] < 0 {
+            it_go = false
+        } else {
+            it_i = it_t[1]
+            if it_t[3] == it_want and it_t[2] == "open" {
+                if it_depth == 0 {
+                    it_start = it_i
+                }
+                it_depth = it_depth + 1
+            } else if it_t[3] == it_want and it_t[2] == "close" and it_depth > 0 {
+                it_depth = it_depth - 1
+                if it_depth == 0 {
+                    return slice(it_text, it_start, it_t[0])
+                }
+            }
+        }
+    }
+    return ""
+}
+
+# is_balanced(text) -> true when every open tag is closed, in order.
+# Self-closing tags and the HTML void elements (br, img, hr, ...) never need
+# a close, and a stray </br> is forgiven for the same reason.
+fn is_balanced(ib_text) {
+    ib_stack = []
+    ib_i = 0
+    ib_go = true
+    while ib_go {
+        ib_t = next_tag(ib_text, ib_i)
+        if ib_t[0] < 0 {
+            ib_go = false
+        } else {
+            ib_i = ib_t[1]
+            if ib_t[2] == "open" and not is_void(ib_t[3]) {
+                ib_stack = push(ib_stack, ib_t[3])
+            } else if ib_t[2] == "close" and not is_void(ib_t[3]) {
+                if len(ib_stack) == 0 {
+                    return false
+                }
+                if last(ib_stack) != ib_t[3] {
+                    return false
+                }
+                ib_stack = remove(ib_stack, len(ib_stack) - 1)
+            }
+        }
+    }
+    return len(ib_stack) == 0
+}
+
+# ---- demo ----
+
+d_doc = "<html>\n"
+d_doc = d_doc + "  <head><title>zl mini scanner</title></head>\n"
+d_doc = d_doc + "  <body class=\"main\" data-id='7'>\n"
+d_doc = d_doc + "    <!-- a > b : this comment is skipped -->\n"
+d_doc = d_doc + "    <h1 id=\"top\">Hello</h1>\n"
+d_doc = d_doc + "    <p>Some <b>bold</b> text.</p>\n"
+d_doc = d_doc + "    <img src=\"a>b.png\" alt='x' />\n"
+d_doc = d_doc + "    <br>\n"
+d_doc = d_doc + "  </body>\n"
+d_doc = d_doc + "</html>"
+
+d_list = tags(d_doc)
+print("tags found: " + str(len(d_list)))
+for d_t in d_list {
+    print("  " + pad(d_t[0], 10) + pad(d_t[1], 7) + "|" + d_t[2] + "|")
+}
+
+print("")
+print("attrs of <body>:")
+for d_p in attrs("class=\"main\" data-id='7'") {
+    print("  " + pad(d_p[0], 10) + "= [" + d_p[1] + "]")
+}
+print("attrs of <img> (quoted '>' survives):")
+for d_p in attrs("src=\"a>b.png\" alt='x'") {
+    print("  " + pad(d_p[0], 10) + "= [" + d_p[1] + "]")
+}
+print("attrs, bare key + unquoted + spaced '=':")
+for d_p in attrs("disabled type=text value = \"hi there\"") {
+    print("  " + pad(d_p[0], 10) + "= [" + d_p[1] + "]")
+}
+
+print("")
+print("strip_tags: [" + strip_tags("<p>Hello <b>bold</b> &amp; <i>italic</i> world</p>") + "]")
+print("strip_tags drops comments: [" + strip_tags("a<!-- b > c -->d") + "]")
+
+print("")
+d_at = find_tag(d_doc, "p")
+print("find_tag p:      " + str(d_at) + "  -> [" + slice(d_doc, d_at, d_at + 3) + "]")
+d_at = find_tag(d_doc, "IMG")
+print("find_tag IMG:    " + str(d_at) + " -> [" + slice(d_doc, d_at, d_at + 4) + "]")
+print("find_tag footer: " + str(find_tag(d_doc, "footer")))
+
+print("")
+print("inner_text title: [" + inner_text(d_doc, "title") + "]")
+print("inner_text p:     [" + inner_text(d_doc, "p") + "]")
+print("  stripped:       [" + strip_tags(inner_text(d_doc, "p")) + "]")
+d_nested = "<div id=\"a\"><div id=\"b\">inner</div>outer</div>"
+print("inner_text nested div: [" + inner_text(d_nested, "div") + "]")
+print("inner_text missing:    [" + inner_text(d_doc, "table") + "]")
+
+print("")
+print("is_balanced(doc):                    " + str(is_balanced(d_doc)))
+print("is_balanced(<ul><li>a</li></ul>):    " + str(is_balanced("<ul><li>a</li></ul>")))
+print("is_balanced(<a><b></a></b>):         " + str(is_balanced("<a><b></a></b>")))
+print("is_balanced(<p>unclosed):            " + str(is_balanced("<p>unclosed")))
+print("is_balanced(</p>):                   " + str(is_balanced("</p>")))
+print("is_balanced(<p>a<br>b</p>) (void):   " + str(is_balanced("<p>a<br>b</p>")))
+print("is_balanced(<img src=\"a>b\">):        " + str(is_balanced("<img src=\"a>b\">")))

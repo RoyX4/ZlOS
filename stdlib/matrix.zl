@@ -1,0 +1,75 @@
+# matrix.zl - 2D matrices as nested lists, using index-assignment.
+
+fn zeros(rows, cols) {
+    m = []
+    r = 0
+    while r < rows {
+        row = []
+        c = 0
+        while c < cols {
+            row = push(row, 0)
+            c = c + 1
+        }
+        m = push(m, row)
+        r = r + 1
+    }
+    return m
+}
+fn identity(n) {
+    m = zeros(n, n)
+    i = 0
+    while i < n {
+        m[i][i] = 1
+        i = i + 1
+    }
+    return m
+}
+fn transpose(m) {
+    rows = len(m)
+    cols = len(m[0])
+    t = zeros(cols, rows)
+    r = 0
+    while r < rows {
+        c = 0
+        while c < cols {
+            t[c][r] = m[r][c]
+            c = c + 1
+        }
+        r = r + 1
+    }
+    return t
+}
+fn matmul(a, b) {
+    n = len(a)
+    m = len(b[0])
+    k = len(b)
+    out = zeros(n, m)
+    i = 0
+    while i < n {
+        j = 0
+        while j < m {
+            s = 0
+            x = 0
+            while x < k {
+                s = s + a[i][x] * b[x][j]
+                x = x + 1
+            }
+            out[i][j] = s
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return out
+}
+fn show(m) {
+    for row in m {
+        print(str(row))
+    }
+}
+
+print("identity(3):")
+show(identity(3))
+print("transpose [[1,2,3],[4,5,6]]:")
+show(transpose([[1, 2, 3], [4, 5, 6]]))
+print("matmul [[1,2],[3,4]] x [[5,6],[7,8]]:")
+show(matmul([[1, 2], [3, 4]], [[5, 6], [7, 8]]))

@@ -1,0 +1,284 @@
+# bmp.zl - a 24-bit uncompressed BMP writer. zl producing a real, viewable
+# binary artifact: open examples_out/bmp_demo.bmp in any image viewer.
+#
+# Representation: an image is a 3-element list  [w, h, px].
+#   px is ONE flat list of w*h*3 numbers (0..255), not a list of rows. Flat
+#   costs one multiply per pixel instead of two index hops, and it is the
+#   shape write_bytes wants in the end anyway.
+#   In px the channels are R,G,B and row 0 is the TOP row, because that is
+#   how a person thinks about a picture. The BMP FILE wants B,G,R with the
+#   rows bottom-up, so bmp_save() is the single place that flips both.
+#   Nothing above bmp_save has to know the file is upside down.
+#   bmp_set() is the only writer, and it clamps to 0..255 and truncates to
+#   a whole number, so px can never hold a value that is not a real byte.
+#
+# On disk: 14-byte BITMAPFILEHEADER + 40-byte BITMAPINFOHEADER, then the
+# pixel rows from the bottom up, each row zero-padded to a multiple of 4.
+#   row_bytes = int((w*3 + 3) / 4) * 4
+#   file size = 54 + row_bytes * h
+#
+# Naming: assignment inside a zl function updates an existing GLOBAL of the
+# same name, so every parameter and local carries a two-letter tag for its
+# function (st_ = bmp_set, ln_ = bmp_line, ...), the convention bitops.zl
+# uses. The demo's check() counters below rely on the opposite behaviour on
+# purpose - they ARE globals, so the function updates them.
+
+# ---- little-endian byte appenders (push returns the grown list) ----
+fn le8(b8_buf, b8_v) {
+    return push(b8_buf, b8_v % 256)
+}
+fn le16(b16_buf, b16_v) {
+    b16_buf = le8(b16_buf, b16_v % 256)
+    return le8(b16_buf, int(b16_v / 256) % 256)
+}
+fn le32(b32_buf, b32_v) {
+    b32_buf = le16(b32_buf, b32_v % 65536)
+    return le16(b32_buf, int(b32_v / 65536) % 65536)
+}
+
+# ---- image ----
+fn bmp_new(nw_w, nw_h) {
+    return [nw_w, nw_h, fill(nw_w * nw_h * 3, 0)]
+}
+fn bmp_row_bytes(rb_w) {
+    return int((rb_w * 3 + 3) / 4) * 4
+}
+fn bmp_size(sz_w, sz_h) {
+    return 54 + bmp_row_bytes(sz_w) * sz_h
+}
+# out-of-range writes are dropped, which is what clips lines and circles
+fn bmp_set(st_img, st_x, st_y, st_r, st_g, st_b) {
+    if st_x < 0 or st_y < 0 or st_x >= st_img[0] or st_y >= st_img[1] {
+        return false
+    }
+    st_px = st_img[2]
+    st_i = (st_y * st_img[0] + st_x) * 3
+    st_px[st_i] = int(clamp(st_r, 0, 255))
+    st_px[st_i + 1] = int(clamp(st_g, 0, 255))
+    st_px[st_i + 2] = int(clamp(st_b, 0, 255))
+    return true
+}
+fn bmp_get(gt_img, gt_x, gt_y) {
+    if gt_x < 0 or gt_y < 0 or gt_x >= gt_img[0] or gt_y >= gt_img[1] {
+        return [0 - 1, 0 - 1, 0 - 1]
+    }
+    gt_px = gt_img[2]
+    gt_i = (gt_y * gt_img[0] + gt_x) * 3
+    return [gt_px[gt_i], gt_px[gt_i + 1], gt_px[gt_i + 2]]
+}
+# whole-image fill, straight over the flat list - no per-pixel call
+fn bmp_fill(fl_img, fl_r, fl_g, fl_b) {
+    fl_px = fl_img[2]
+    fl_n = fl_img[0] * fl_img[1] * 3
+    fl_r8 = int(clamp(fl_r, 0, 255))
+    fl_g8 = int(clamp(fl_g, 0, 255))
+    fl_b8 = int(clamp(fl_b, 0, 255))
+    fl_i = 0
+    while fl_i < fl_n {
+        fl_px[fl_i] = fl_r8
+        fl_px[fl_i + 1] = fl_g8
+        fl_px[fl_i + 2] = fl_b8
+        fl_i += 3
+    }
+}
+
+# ---- shapes (filled rect and disc; outlines come from bmp_line) ----
+fn bmp_line(ln_img, ln_x0, ln_y0, ln_x1, ln_y1, ln_r, ln_g, ln_b) {
+    ln_x = int(ln_x0)
+    ln_y = int(ln_y0)
+    ln_ex = int(ln_x1)
+    ln_ey = int(ln_y1)
+    ln_dx = abs(ln_ex - ln_x)
+    ln_dy = 0 - abs(ln_ey - ln_y)
+    ln_sx = ln_x < ln_ex ? 1 : 0 - 1
+    ln_sy = ln_y < ln_ey ? 1 : 0 - 1
+    ln_err = ln_dx + ln_dy
+    while true {
+        bmp_set(ln_img, ln_x, ln_y, ln_r, ln_g, ln_b)
+        if ln_x == ln_ex and ln_y == ln_ey {
+            break
+        }
+        ln_e2 = 2 * ln_err
+        if ln_e2 >= ln_dy {
+            ln_err = ln_err + ln_dy
+            ln_x = ln_x + ln_sx
+        }
+        if ln_e2 <= ln_dx {
+            ln_err = ln_err + ln_dx
+            ln_y = ln_y + ln_sy
+        }
+    }
+}
+fn bmp_rect(rc_img, rc_x, rc_y, rc_w, rc_h, rc_r, rc_g, rc_b) {
+    rc_j = 0
+    while rc_j < rc_h {
+        rc_i = 0
+        while rc_i < rc_w {
+            bmp_set(rc_img, rc_x + rc_i, rc_y + rc_j, rc_r, rc_g, rc_b)
+            rc_i += 1
+        }
+        rc_j += 1
+    }
+}
+fn bmp_circle(ci_img, ci_cx, ci_cy, ci_rad, ci_r, ci_g, ci_b) {
+    ci_rr = ci_rad * ci_rad
+    ci_dy = 0 - ci_rad
+    while ci_dy <= ci_rad {
+        ci_dx = 0 - ci_rad
+        while ci_dx <= ci_rad {
+            if ci_dx * ci_dx + ci_dy * ci_dy <= ci_rr {
+                bmp_set(ci_img, ci_cx + ci_dx, ci_cy + ci_dy, ci_r, ci_g, ci_b)
+            }
+            ci_dx += 1
+        }
+        ci_dy += 1
+    }
+}
+
+# ---- save: the only place that knows the file layout ----
+fn bmp_save(sv_img, sv_path) {
+    sv_w = sv_img[0]
+    sv_h = sv_img[1]
+    sv_px = sv_img[2]
+    sv_row = bmp_row_bytes(sv_w)
+    sv_pad = sv_row - sv_w * 3
+
+    sv_buf = []
+    # 14-byte file header
+    sv_buf = le8(sv_buf, 66)                    # 'B'
+    sv_buf = le8(sv_buf, 77)                    # 'M'
+    sv_buf = le32(sv_buf, 54 + sv_row * sv_h)   # total file size
+    sv_buf = le16(sv_buf, 0)                    # reserved
+    sv_buf = le16(sv_buf, 0)                    # reserved
+    sv_buf = le32(sv_buf, 54)                   # offset of the pixel data
+    # 40-byte DIB header (BITMAPINFOHEADER)
+    sv_buf = le32(sv_buf, 40)                   # this header's size
+    sv_buf = le32(sv_buf, sv_w)
+    sv_buf = le32(sv_buf, sv_h)                 # positive height = bottom-up
+    sv_buf = le16(sv_buf, 1)                    # colour planes
+    sv_buf = le16(sv_buf, 24)                   # bits per pixel
+    sv_buf = le32(sv_buf, 0)                    # BI_RGB, no compression
+    sv_buf = le32(sv_buf, sv_row * sv_h)        # size of the pixel data
+    sv_buf = le32(sv_buf, 2835)                 # 72 dpi across
+    sv_buf = le32(sv_buf, 2835)                 # 72 dpi down
+    sv_buf = le32(sv_buf, 0)                    # palette entries used
+    sv_buf = le32(sv_buf, 0)                    # palette entries that matter
+
+    # pixels: bottom row first, B,G,R per pixel, each row padded to 4 bytes
+    sv_y = sv_h - 1
+    while sv_y >= 0 {
+        sv_i = sv_y * sv_w * 3
+        sv_x = 0
+        while sv_x < sv_w {
+            sv_buf = push(sv_buf, sv_px[sv_i + 2])
+            sv_buf = push(sv_buf, sv_px[sv_i + 1])
+            sv_buf = push(sv_buf, sv_px[sv_i])
+            sv_i += 3
+            sv_x += 1
+        }
+        sv_p = 0
+        while sv_p < sv_pad {
+            sv_buf = push(sv_buf, 0)
+            sv_p += 1
+        }
+        sv_y -= 1
+    }
+    write_bytes(sv_path, sv_buf)
+    return len(sv_buf)
+}
+
+# =====================================================================
+# demo
+# =====================================================================
+
+checks_run = 0
+checks_bad = 0
+fn check(ck_label, ck_got, ck_want) {
+    checks_run += 1
+    if str(ck_got) == str(ck_want) {
+        print("  ok   " + ck_label + " = " + str(ck_got))
+    } else {
+        checks_bad += 1
+        print("  FAIL " + ck_label + " = " + str(ck_got) + "  want " + str(ck_want))
+    }
+}
+
+# write_bytes cannot make a folder and zl has no mkdir, so say so plainly
+if not contains(dir("."), "examples_out") {
+    print("bmp.zl: run me from the repo root, and create the examples_out folder first")
+    exit(1)
+}
+
+print("header arithmetic (row padded up to a multiple of 4)")
+check("row_bytes(128)", bmp_row_bytes(128), 384)
+check("row_bytes(2)  ", bmp_row_bytes(2), 8)
+check("row_bytes(3)  ", bmp_row_bytes(3), 12)
+check("row_bytes(5)  ", bmp_row_bytes(5), 16)
+check("size(128,128) ", bmp_size(128, 128), 49206)
+check("size(2,2)     ", bmp_size(2, 2), 70)
+
+print("")
+print("drawing 128x128")
+img = bmp_new(128, 128)
+y = 0
+while y < 128 {
+    x = 0
+    while x < 128 {
+        bmp_set(img, x, y, x * 2, y * 2, 64)
+        x += 1
+    }
+    y += 1
+}
+bmp_rect(img, 16, 16, 40, 24, 255, 0, 0)
+bmp_circle(img, 96, 40, 20, 0, 255, 0)
+bmp_line(img, 0, 127, 127, 0, 255, 255, 255)
+bmp_line(img, 8, 100, 120, 100, 0, 0, 0)
+
+check("gradient (10,20)  ", bmp_get(img, 10, 20), [20, 40, 64])
+check("gradient (127,127)", bmp_get(img, 127, 127), [254, 254, 64])
+check("rect inside(20,20)", bmp_get(img, 20, 20), [255, 0, 0])
+check("rect past  (56,20)", bmp_get(img, 56, 20), [112, 40, 64])
+check("disc centre(96,40)", bmp_get(img, 96, 40), [0, 255, 0])
+check("disc rim   (96,60)", bmp_get(img, 96, 60), [0, 255, 0])
+check("disc out   (96,61)", bmp_get(img, 96, 61), [192, 122, 64])
+check("diag end   (0,127)", bmp_get(img, 0, 127), [255, 255, 255])
+check("diag mid   (63,64)", bmp_get(img, 63, 64), [255, 255, 255])
+check("diag end   (127,0)", bmp_get(img, 127, 0), [255, 255, 255])
+check("hline      (50,100)", bmp_get(img, 50, 100), [0, 0, 0])
+check("off canvas (-1,0) ", bmp_get(img, 0 - 1, 0), [0 - 1, 0 - 1, 0 - 1])
+check("off canvas write  ", bmp_set(img, 128, 0, 0, 0, 0), false)
+
+print("")
+print("saving")
+written = bmp_save(img, "examples_out/bmp_demo.bmp")
+print("  examples_out/bmp_demo.bmp: " + str(written) + " bytes written")
+check("bytes written     ", written, 49206)
+
+# a 2-wide image is 6 bytes per row, so this one exercises the 2 pad bytes
+pad2 = bmp_new(2, 2)
+bmp_fill(pad2, 300, 0 - 5, 12.7)
+check("bmp_fill clamps   ", bmp_get(pad2, 1, 1), [255, 0, 12])
+written2 = bmp_save(pad2, "examples_out/bmp_pad2x2.bmp")
+print("  examples_out/bmp_pad2x2.bmp: " + str(written2) + " bytes written")
+check("padded bytes      ", written2, 70)
+
+print("")
+print("reading the files back off disk")
+# read() hands back a C string, so it stops at the first zero byte - here
+# that is byte 4, the top half of the size field. Bytes 0..3 are enough to
+# check the magic and the low 16 bits of the size, and the truncation point
+# itself proves byte 4 is zero.
+back = read("examples_out/bmp_demo.bmp")
+check("byte 0 'B'        ", index_at(back, 0), 66)
+check("byte 1 'M'        ", index_at(back, 1), 77)
+check("size field low16  ", index_at(back, 2) + index_at(back, 3) * 256, 49206)
+check("read stops at 4   ", len(back), 4)
+check("nothing past it   ", index_at(back, 4), 0 - 1)
+
+back2 = read("examples_out/bmp_pad2x2.bmp")
+check("2x2 byte 0 'B'    ", index_at(back2, 0), 66)
+check("2x2 byte 1 'M'    ", index_at(back2, 1), 77)
+check("2x2 size field    ", index_at(back2, 2), 70)
+
+print("")
+print("checks: " + str(checks_run - checks_bad) + "/" + str(checks_run) + " passed")

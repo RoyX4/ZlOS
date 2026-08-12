@@ -1,0 +1,47 @@
+# strx.zl - string utilities built on the string builtins.
+
+fn word_count(s) {
+    return len(split(trim(s), " "))
+}
+fn reverse_words(s) {
+    words = split(s, " ")
+    return join(reverse(words), " ")
+}
+fn is_palindrome(s) {
+    return s == reverse(s)
+}
+fn title_case(s) {
+    words = split(s, " ")
+    out = []
+    for w in words {
+        if len(w) > 0 {
+            head = upper(slice(w, 0, 1))
+            tail = lower(slice(w, 1, len(w)))
+            out = push(out, head + tail)
+        }
+    }
+    return join(out, " ")
+}
+fn caesar(s, shift) {
+    low = "abcdefghijklmnopqrstuvwxyz"
+    out = ""
+    i = 0
+    while i < len(s) {
+        c = at(s, i)
+        idx = find(low, c)
+        if idx >= 0 {
+            out = out + at(low, (idx + shift) % 26)
+        } else {
+            out = out + c
+        }
+        i = i + 1
+    }
+    return out
+}
+
+print("word_count:    " + str(word_count("the quick brown fox")))
+print("reverse_words: " + reverse_words("hello there world"))
+print("palindrome:    " + str(is_palindrome("racecar")) + " " + str(is_palindrome("hello")))
+print("title_case:    " + title_case("the lord of the rings"))
+print("caesar +3:     " + caesar("attack at dawn", 3))
+print("caesar back:   " + caesar(caesar("attack at dawn", 3), 23))

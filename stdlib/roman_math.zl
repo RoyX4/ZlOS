@@ -1,0 +1,118 @@
+# roman_math.zl
+# Do arithmetic directly on Roman numerals: parse two numerals, add or
+# multiply, and return the answer as a Roman numeral string.
+# Every function-local is prefixed to avoid clobbering top-level globals.
+
+# --- value of a single roman letter -------------------------------------
+fn rm_val(rm_ch) {
+    if rm_ch == "I" { return 1 }
+    if rm_ch == "V" { return 5 }
+    if rm_ch == "X" { return 10 }
+    if rm_ch == "L" { return 50 }
+    if rm_ch == "C" { return 100 }
+    if rm_ch == "D" { return 500 }
+    if rm_ch == "M" { return 1000 }
+    return 0
+}
+
+# --- parse a roman numeral string into an integer -----------------------
+# Standard rule: if a letter's value is less than the letter to its right,
+# subtract it; otherwise add it.
+fn roman_to_int(rti_s) {
+    rti_total = 0
+    rti_i = 0
+    rti_n = len(rti_s)
+    while rti_i < rti_n {
+        rti_cur = rm_val(at(rti_s, rti_i))
+        rti_nextval = 0
+        if rti_i + 1 < rti_n {
+            rti_nextval = rm_val(at(rti_s, rti_i + 1))
+        }
+        if rti_cur < rti_nextval {
+            rti_total = rti_total - rti_cur
+        } else {
+            rti_total = rti_total + rti_cur
+        }
+        rti_i = rti_i + 1
+    }
+    return rti_total
+}
+
+# --- convert an integer into a roman numeral string ---------------------
+# Greedy subtraction over the value/symbol table (includes subtractive forms).
+fn int_to_roman(itr_n) {
+    if itr_n <= 0 {
+        return ""
+    }
+    itr_vals = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
+    itr_syms = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
+    itr_out = ""
+    itr_rem = itr_n
+    itr_i = 0
+    while itr_i < len(itr_vals) {
+        while itr_rem >= itr_vals[itr_i] {
+            itr_out = itr_out + itr_syms[itr_i]
+            itr_rem = itr_rem - itr_vals[itr_i]
+        }
+        itr_i = itr_i + 1
+    }
+    return itr_out
+}
+
+# --- roman-in, roman-out arithmetic -------------------------------------
+fn roman_add(ra_a, ra_b) {
+    return int_to_roman(roman_to_int(ra_a) + roman_to_int(ra_b))
+}
+
+fn roman_mul(ra2_a, ra2_b) {
+    return int_to_roman(roman_to_int(ra2_a) * roman_to_int(ra2_b))
+}
+
+# ========================================================================
+# SELF-TEST
+# ========================================================================
+print("=== roman_math self-test ===")
+
+print("--- parse checks ---")
+print("IV   -> " + num(roman_to_int("IV")))     # 4
+print("IX   -> " + num(roman_to_int("IX")))     # 9
+print("XIV  -> " + num(roman_to_int("XIV")))    # 14
+print("XL   -> " + num(roman_to_int("XL")))     # 40
+print("MCMXCIV -> " + num(roman_to_int("MCMXCIV")))  # 1994
+
+print("--- int_to_roman checks ---")
+print("4    -> " + int_to_roman(4))     # IV
+print("40   -> " + int_to_roman(40))    # XL
+print("1994 -> " + int_to_roman(1994))  # MCMXCIV
+print("2024 -> " + int_to_roman(2024))  # MMXXIV
+
+print("--- roman_add ---")
+print("XIV + VI    = " + roman_add("XIV", "VI"))      # XX (14+6=20)
+print("IX  + IX    = " + roman_add("IX", "IX"))       # XVIII (18)
+print("XL  + IX    = " + roman_add("XL", "IX"))       # XLIX (49)
+print("MMXX + IV   = " + roman_add("MMXX", "IV"))     # MMXXIV (2024)
+print("CD  + XC    = " + roman_add("CD", "XC"))       # CDXC (490)
+
+print("--- roman_mul ---")
+print("VI  * VII   = " + roman_mul("VI", "VII"))      # XLII (42)
+print("XII * XII   = " + roman_mul("XII", "XII"))     # CXLIV (144)
+print("IX  * XI    = " + roman_mul("IX", "XI"))       # XCIX (99)
+print("L   * L     = " + roman_mul("L", "L"))         # MMD (2500)
+
+print("--- round-trip verification (1..50) ---")
+rt_ok = true
+rt_k = 1
+while rt_k <= 50 {
+    rt_r = int_to_roman(rt_k)
+    rt_back = roman_to_int(rt_r)
+    if rt_back != rt_k {
+        rt_ok = false
+        print("MISMATCH at " + num(rt_k) + " -> " + rt_r + " -> " + num(rt_back))
+    }
+    rt_k = rt_k + 1
+}
+if rt_ok {
+    print("round-trip 1..50: ALL PASS")
+} else {
+    print("round-trip 1..50: FAILURES ABOVE")
+}

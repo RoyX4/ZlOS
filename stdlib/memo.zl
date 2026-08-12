@@ -1,0 +1,166 @@
+# memo.zl - memoization and LRU caching, built on the assoc-list idea in dict.zl.
+#
+# Representation: dict.zl returns a fresh map from dset, so callers must
+# reassign it. A cache has to be shared - a recursive function updating it
+# deep in the call tree must be seen by the caller - so a memo here is a
+# one-slot BOX holding the pair list: m = [pairs], pairs = [[key, value], ...].
+# Index-assignment (m[0] = ...) writes through to every holder of the box.
+# An LRU cache is the same trick with three slots: c = [pairs, order, cap],
+# where order lists keys least-recently-used first.
+# Keys are strings - call str() on anything else.
+
+fn pair_index(pairs, k) {
+    i = 0
+    while i < len(pairs) {
+        if pairs[i][0] == k {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+fn drop_key(pairs, k) {
+    out = []
+    for pair in pairs {
+        if pair[0] != k {
+            out = push(out, pair)
+        }
+    }
+    return out
+}
+
+fn drop_key_flat(keys, k) {
+    out = []
+    for x in keys {
+        if x != k {
+            out = push(out, x)
+        }
+    }
+    return out
+}
+
+fn memo_new() {
+    return [[]]
+}
+fn memo_has(m, key) {
+    return pair_index(m[0], key) >= 0
+}
+fn memo_get(m, key) {
+    i = pair_index(m[0], key)
+    if i < 0 {
+        return nil()
+    }
+    return m[0][i][1]
+}
+fn memo_put(m, key, value) {
+    i = pair_index(m[0], key)
+    if i >= 0 {
+        m[0][i][1] = value
+        return m
+    }
+    m[0] = push(m[0], [key, value])
+    return m
+}
+fn memo_size(m) {
+    return len(m[0])
+}
+
+fn lru_new(cap) {
+    return [[], [], cap]
+}
+fn lru_touch(c, key) {
+    order = []
+    for k in c[1] {
+        if k != key {
+            order = push(order, k)
+        }
+    }
+    c[1] = push(order, key)
+    return c
+}
+fn lru_has(c, key) {
+    return pair_index(c[0], key) >= 0
+}
+fn lru_get(c, key) {
+    i = pair_index(c[0], key)
+    if i < 0 {
+        return nil()
+    }
+    v = c[0][i][1]
+    lru_touch(c, key)
+    return v
+}
+fn lru_put(c, key, value) {
+    i = pair_index(c[0], key)
+    if i >= 0 {
+        c[0][i][1] = value
+        lru_touch(c, key)
+        return c
+    }
+    if len(c[0]) >= c[2] {
+        victim = c[1][0]
+        c[0] = drop_key(c[0], victim)
+        c[1] = drop_key_flat(c[1], victim)
+    }
+    c[0] = push(c[0], [key, value])
+    c[1] = push(c[1], key)
+    return c
+}
+fn lru_keys(c) {
+    return c[1]
+}
+
+# --- worked example: memoized vs naive fibonacci -------------------------
+
+FIB_CACHE = memo_new()
+FIB_MEMO_CALLS = [0]
+FIB_NAIVE_CALLS = [0]
+
+fn fib_memo(n) {
+    FIB_MEMO_CALLS[0] = FIB_MEMO_CALLS[0] + 1
+    key = str(n)
+    if memo_has(FIB_CACHE, key) {
+        return memo_get(FIB_CACHE, key)
+    }
+    if n < 2 {
+        memo_put(FIB_CACHE, key, n)
+        return n
+    }
+    v = fib_memo(n - 1) + fib_memo(n - 2)
+    memo_put(FIB_CACHE, key, v)
+    return v
+}
+fn fib_naive(n) {
+    FIB_NAIVE_CALLS[0] = FIB_NAIVE_CALLS[0] + 1
+    if n < 2 {
+        return n
+    }
+    return fib_naive(n - 1) + fib_naive(n - 2)
+}
+
+m = memo_new()
+memo_put(m, "sq:7", 49)
+memo_put(m, "sq:8", 64)
+memo_put(m, "sq:7", 49)
+print("memo get sq:8:   " + str(memo_get(m, "sq:8")))
+print("memo has sq:9:   " + str(memo_has(m, "sq:9")))
+print("memo get sq:9:   " + str(memo_get(m, "sq:9")))
+print("memo size:       " + str(memo_size(m)))
+
+c = lru_new(3)
+lru_put(c, "a", 1)
+lru_put(c, "b", 2)
+lru_put(c, "c", 3)
+print("lru keys:        " + str(lru_keys(c)))
+print("lru get a:       " + str(lru_get(c, "a")))
+print("lru keys after a:" + str(lru_keys(c)))
+lru_put(c, "d", 4)
+print("lru put d, keys: " + str(lru_keys(c)))
+print("lru get b:       " + str(lru_get(c, "b")) + "  (evicted)")
+print("lru get c:       " + str(lru_get(c, "c")))
+
+N = 25
+print("fib(" + str(N) + ") memo:    " + str(fib_memo(N)) + " in " + str(FIB_MEMO_CALLS[0]) + " calls")
+print("fib(" + str(N) + ") naive:   " + str(fib_naive(N)) + " in " + str(FIB_NAIVE_CALLS[0]) + " calls")
+print("saved:           " + str(FIB_NAIVE_CALLS[0] - FIB_MEMO_CALLS[0]) + " calls")
+print("cache entries:   " + str(memo_size(FIB_CACHE)))

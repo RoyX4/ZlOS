@@ -1,0 +1,112 @@
+# hashkit.zl - the cheap end of the hash family: fast, non-cryptographic
+# string hashes (djb2, FNV-1a, CRC-32). md5/sha are deliberately out of scope.
+#
+# Representation: every hash is a plain zl number holding an unsigned 32-bit
+# value in 0 .. 4294967295. zl has no unsigned type, so the wrap-around that C
+# gets for free is done by hand with band(x, HK_MASK32) after each step.
+#
+# The one real trap is precision. zl numbers are doubles - exact only to 2^53 -
+# but the bitwise builtins operate on 64-bit ints. So a product that overflows
+# 2^53 is already wrong BEFORE band() can mask it. FNV's h * 16777619 reaches
+# ~2^56 and silently drops its low bits, which are exactly the bits the hash
+# keeps. hk_mul32() avoids this by splitting the accumulator into two 16-bit
+# halves so no intermediate ever exceeds 2^53.
+#
+# Bytes come from code(at(s, i)) - the raw char code of each character.
+#
+# Naming: zl assignment inside a function writes the GLOBAL of that name if one
+# exists, so every local carries a two-letter tag for its function (dj_ = djb2,
+# fv_ = fnv1a, cr_ = crc32, mu_ = mul32, mk_ = mask32). This stops a library
+# call from clobbering a caller's variable.
+
+HK_MASK32 = 4294967295
+HK_MASK16 = 65535
+HK_CRC_POLY = 3988292384
+
+# Reduce any value to an unsigned 32-bit result.
+fn hk_mask32(mk_v) {
+    return band(mk_v, HK_MASK32)
+}
+
+# (h * k) mod 2^32 with no intermediate exceeding 2^53.
+# h*k = (hi*2^16 + lo)*k, so only (hi*k mod 2^16) survives into the high half:
+#   (h*k) mod 2^32 = ((hi*k mod 2^16) << 16 + lo*k) mod 2^32.
+# Exact for any h < 2^32 and any multiplier k < 2^37 - here k is 33 and
+# 16777619, both far below that bound.
+fn hk_mul32(mu_h, mu_k) {
+    mu_hi = band(shr(mu_h, 16), HK_MASK16)
+    mu_lo = band(mu_h, HK_MASK16)
+    return hk_mask32(shl(band(mu_hi * mu_k, HK_MASK16), 16) + mu_lo * mu_k)
+}
+
+# Bernstein djb2: h = h*33 + c, seeded with 5381.
+fn hk_djb2(dj_s) {
+    dj_h = 5381
+    dj_i = 0
+    while dj_i < len(dj_s) {
+        dj_h = hk_mask32(hk_mul32(dj_h, 33) + code(at(dj_s, dj_i)))
+        dj_i = dj_i + 1
+    }
+    return dj_h
+}
+
+# FNV-1a: xor the byte in first, then multiply by the FNV prime 16777619,
+# seeded with the offset basis 2166136261.
+fn hk_fnv1a(fv_s) {
+    fv_h = 2166136261
+    fv_i = 0
+    while fv_i < len(fv_s) {
+        fv_h = bxor(fv_h, code(at(fv_s, fv_i)))
+        fv_h = hk_mul32(fv_h, 16777619)
+        fv_i = fv_i + 1
+    }
+    return fv_h
+}
+
+# CRC-32 (IEEE 802.3): reflected, table-free, polynomial 0xEDB88320. Computed a
+# bit at a time - no 256-entry table needed, just the polynomial constant.
+fn hk_crc32(cr_s) {
+    cr_crc = HK_MASK32
+    cr_i = 0
+    while cr_i < len(cr_s) {
+        cr_crc = bxor(cr_crc, code(at(cr_s, cr_i)))
+        cr_b = 0
+        while cr_b < 8 {
+            if band(cr_crc, 1) == 1 {
+                cr_crc = bxor(shr(cr_crc, 1), HK_CRC_POLY)
+            } else {
+                cr_crc = shr(cr_crc, 1)
+            }
+            cr_b = cr_b + 1
+        }
+        cr_i = cr_i + 1
+    }
+    return bxor(cr_crc, HK_MASK32)
+}
+
+# ------------------------------------------------------------- self-test ----
+# Each printed line shows the computed value next to its known-good answer.
+
+print("-- hk_djb2 --")
+print("hk_djb2(\"\")      = " + str(hk_djb2("")) + "        (expect 5381)")
+print("hk_djb2(\"hello\") = " + str(hk_djb2("hello")) + "  (expect 261238937)")
+print("hk_djb2(\"a\")     = " + str(hk_djb2("a")) + "       (expect 177670)")
+print("empty != hello:   " + str(hk_djb2("") != hk_djb2("hello")))
+
+print("")
+print("-- hk_fnv1a --")
+print("hk_fnv1a(\"\")       = " + str(hk_fnv1a("")) + "  (expect 2166136261)")
+print("hk_fnv1a(\"a\")      = " + str(hk_fnv1a("a")) + "  (expect 3826002220)")
+print("hk_fnv1a(\"foobar\") = " + str(hk_fnv1a("foobar")) + "  (expect 3214735720)")
+
+print("")
+print("-- hk_crc32 --")
+print("hk_crc32(\"\")          = " + str(hk_crc32("")) + "           (expect 0)")
+print("hk_crc32(\"123456789\") = " + str(hk_crc32("123456789")) + "  (expect 3421780262)")
+print("hk_crc32(\"The quick brown fox jumps over the lazy dog\") = " + str(hk_crc32("The quick brown fox jumps over the lazy dog")) + " (expect 1095738169)")
+
+print("")
+print("-- hex view --")
+print("hk_djb2(\"hello\")  0x" + hex(hk_djb2("hello")))
+print("hk_fnv1a(\"hello\") 0x" + hex(hk_fnv1a("hello")))
+print("hk_crc32(\"123456789\") 0x" + hex(hk_crc32("123456789")) + "  (expect cbf43926)")

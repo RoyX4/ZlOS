@@ -1,0 +1,796 @@
+# =====================================================================
+# raytracer.zl - a Whitted-style recursive ray tracer, in zl.
+#
+# Renders spheres + an infinite checkered ground plane, lit by one point
+# light, with hard shadows, Phong highlights, mirror reflections, a sky
+# gradient with a sun, and distance fog. Writes a real 24-bit BMP you can
+# open in any image viewer, and prints an ASCII-art preview so you can see
+# the result without leaving the terminal.
+#
+#   run:  interp.exe examples\raytracer.zl
+#   out:  examples_out\raytrace.bmp
+#
+# ---------------------------------------------------------------------
+# HOW A RAY TRACER WORKS, IN FOUR SENTENCES
+#
+#   1. For every pixel, shoot a ray from the eye out through that pixel.
+#   2. Find the nearest thing the ray hits (that is `scene_hit` below).
+#   3. Ask "can the light see this spot?" by shooting a second ray at the
+#      lamp - if something blocks it, the spot is in shadow.
+#   4. If the surface is mirror-like, bounce the ray and go back to 2.
+#
+# Everything else in this file is bookkeeping and taste.
+#
+# ---------------------------------------------------------------------
+# TWO ZL IDIOMS THIS FILE LEANS ON
+#
+# (a) MULTIPLE RETURN VALUES VIA GLOBALS.
+#     zl has no structs and no tuples, and building a 3-element list for
+#     every vector would allocate millions of lists. But an assignment
+#     inside a function updates an existing GLOBAL of the same name, so a
+#     function can hand back several numbers by writing to pre-declared
+#     globals. `scene_hit` sets `hit_t` / `hit_id`; `sky` sets
+#     `sky_r/g/b`; `trace` sets `out_r/g/b`. Zero allocation per ray.
+#
+# (b) PREFIXED LOCALS.
+#     The flip side of (a): a local that happens to share a name with a
+#     global would silently write to the global instead. So, exactly as
+#     stdlib/bmp.zl does, every parameter and local carries a two-letter
+#     tag naming its function (hi_ = scene_hit, tr_ = trace, ...). The
+#     globals above are the only names deliberately left bare.
+#
+# Because `trace` calls `scene_hit` for shadow rays, and both would fight
+# over `hit_t`, `trace` copies `hit_t`/`hit_id` into its own locals the
+# instant the call returns. For the same reason reflections are done with
+# an iterative bounce LOOP rather than recursion - a recursive `trace`
+# would clobber its own globals.
+#
+# ---------------------------------------------------------------------
+# The BMP writing code (le8/le16/le32, bmp_new, bmp_row_bytes, bmp_save)
+# is lifted from stdlib/bmp.zl - zl has no import system, so the few
+# functions needed are inlined here verbatim. See that file for the
+# format notes; the short version is 54 bytes of header, then the pixel
+# rows bottom-up as B,G,R, each row padded to a multiple of 4 bytes.
+# =====================================================================
+
+
+# =====================================================================
+# 1. KNOBS - the only numbers you need to touch
+# =====================================================================
+# Cost is very close to linear in IMG_W * IMG_H. The defaults render in
+# roughly half a minute on the tree-walking interpreter.
+#
+# FOR A BIGGER RENDER: 512x384 is 4x the pixels and 4x the time. For a
+# cleaner one, set SAMPLES to 2 - that supersamples EVERY pixel 2x2
+# instead of only the edges, which costs about 3x and is the honest way
+# to do it. Raising BOUNCES past 2 changes almost nothing here: the
+# attenuation cut-off in `trace` already kills third-order reflections
+# before they can affect a byte.
+
+IMG_W = 224             # image width in pixels
+IMG_H = 168             # image height in pixels
+SAMPLES = 1             # rays per pixel in pass 1 (1 = one through the centre)
+AA_SAMPLES = 2          # rays per axis when pass 2 refines a silhouette pixel
+BOUNCES = 2             # extra mirror bounces after the first hit
+OUT_PATH = "examples_out/raytrace.bmp"
+
+EPS = 0.0008            # nudge off a surface so a ray cannot re-hit it
+FAR = 1000000.0         # "infinitely far away"
+EXPOSURE = 1.05         # global brightness multiplier applied before gamma
+
+
+# =====================================================================
+# 2. BMP WRITER  (inlined from stdlib/bmp.zl)
+# =====================================================================
+# An image is [w, h, px] where px is ONE flat list of w*h*3 numbers,
+# channel order R,G,B, row 0 = the TOP row. bmp_save is the only place
+# that knows the file wants B,G,R bottom-up.
+
+fn le8(b8_buf, b8_v) {
+    return push(b8_buf, b8_v % 256)
+}
+fn le16(b16_buf, b16_v) {
+    b16_buf = le8(b16_buf, b16_v % 256)
+    return le8(b16_buf, int(b16_v / 256) % 256)
+}
+fn le32(b32_buf, b32_v) {
+    b32_buf = le16(b32_buf, b32_v % 65536)
+    return le16(b32_buf, int(b32_v / 65536) % 65536)
+}
+fn bmp_new(nw_w, nw_h) {
+    return [nw_w, nw_h, fill(nw_w * nw_h * 3, 0)]
+}
+fn bmp_row_bytes(rb_w) {
+    return int((rb_w * 3 + 3) / 4) * 4
+}
+fn bmp_save(sv_img, sv_path) {
+    sv_w = sv_img[0]
+    sv_h = sv_img[1]
+    sv_px = sv_img[2]
+    sv_row = bmp_row_bytes(sv_w)
+    sv_pad = sv_row - sv_w * 3
+
+    sv_buf = []
+    # 14-byte BITMAPFILEHEADER
+    sv_buf = le8(sv_buf, 66)                    # 'B'
+    sv_buf = le8(sv_buf, 77)                    # 'M'
+    sv_buf = le32(sv_buf, 54 + sv_row * sv_h)   # total file size
+    sv_buf = le16(sv_buf, 0)                    # reserved
+    sv_buf = le16(sv_buf, 0)                    # reserved
+    sv_buf = le32(sv_buf, 54)                   # offset of the pixel data
+    # 40-byte BITMAPINFOHEADER
+    sv_buf = le32(sv_buf, 40)                   # this header's size
+    sv_buf = le32(sv_buf, sv_w)
+    sv_buf = le32(sv_buf, sv_h)                 # positive height = bottom-up
+    sv_buf = le16(sv_buf, 1)                    # colour planes
+    sv_buf = le16(sv_buf, 24)                   # bits per pixel
+    sv_buf = le32(sv_buf, 0)                    # BI_RGB, no compression
+    sv_buf = le32(sv_buf, sv_row * sv_h)        # size of the pixel data
+    sv_buf = le32(sv_buf, 2835)                 # 72 dpi across
+    sv_buf = le32(sv_buf, 2835)                 # 72 dpi down
+    sv_buf = le32(sv_buf, 0)                    # palette entries used
+    sv_buf = le32(sv_buf, 0)                    # palette entries that matter
+
+    sv_y = sv_h - 1
+    while sv_y >= 0 {
+        sv_i = sv_y * sv_w * 3
+        sv_x = 0
+        while sv_x < sv_w {
+            sv_buf = push(sv_buf, sv_px[sv_i + 2])
+            sv_buf = push(sv_buf, sv_px[sv_i + 1])
+            sv_buf = push(sv_buf, sv_px[sv_i])
+            sv_i += 3
+            sv_x += 1
+        }
+        sv_p = 0
+        while sv_p < sv_pad {
+            sv_buf = push(sv_buf, 0)
+            sv_p += 1
+        }
+        sv_y -= 1
+    }
+    write_bytes(sv_path, sv_buf)
+    return len(sv_buf)
+}
+
+
+# =====================================================================
+# 3. THE SCENE
+# =====================================================================
+# No structs in zl, so the spheres live in parallel flat lists indexed by
+# the same id. Reading sph_cx[i] is one index op; a list-of-lists would
+# be two, and the inner loop of a ray tracer is the hottest code there is.
+#
+#   sph_cx/cy/cz  centre        sph_rad   radius
+#   sph_r/g/b     albedo        sph_ref   how mirror-like, 0..1
+#   sph_spc       highlight strength      sph_shn   highlight tightness
+
+sph_cx  = [ 0.00, -1.90,  2.00, -0.85,  1.05]
+sph_cy  = [ 1.00,  0.75,  0.85,  0.35,  0.30]
+sph_cz  = [ 0.00,  1.05,  0.50,  2.15,  2.35]
+sph_rad = [ 1.00,  0.75,  0.85,  0.35,  0.30]
+sph_r   = [ 0.93,  0.86,  0.11,  0.96,  0.55]
+sph_g   = [ 0.95,  0.18,  0.62,  0.72,  0.30]
+sph_b   = [ 0.99,  0.16,  0.60,  0.22,  0.86]
+sph_ref = [ 0.74,  0.04,  0.28,  0.36,  0.10]
+sph_spc = [ 0.90,  0.35,  0.70,  0.80,  0.50]
+sph_shn = [  220,    60,   140,   180,    90]
+N_SPH = 5
+
+# The intersection test wants r^2, never r, so pay for the multiply once
+# at start-up instead of five times per ray.
+sph_r2 = []
+si = 0
+while si < N_SPH {
+    sph_r2 = push(sph_r2, sph_rad[si] * sph_rad[si])
+    si += 1
+}
+
+# The ground plane is y = 0. It is not in the arrays above because its
+# colour is computed (a checkerboard), so it gets its own id, N_SPH.
+# hit_id meanings:  -1 = nothing,  0..N_SPH-1 = a sphere,  N_SPH = ground.
+PLANE_REF = 0.16        # the floor is faintly polished
+PLANE_SPC = 0.14
+PLANE_SHN = 40
+CHK_SIZE = 0.9          # side of one checker square, in world units
+
+# One point light, plus a constant ambient so shadows are not pure black.
+lit_x = 3.20
+lit_y = 5.00
+lit_z = 3.40
+lit_r = 1.00
+lit_g = 0.96
+lit_b = 0.90
+LIT_POW = 2.10
+AMBIENT = 0.16
+
+# Sky: a vertical gradient plus a sun disc in the direction of the light.
+SKY_HZ_R = 0.86         # colour at the horizon
+SKY_HZ_G = 0.89
+SKY_HZ_B = 0.96
+SKY_UP_R = 0.20         # colour straight up
+SKY_UP_G = 0.38
+SKY_UP_B = 0.74
+FOG_DIST = 26.0         # ground fades into the horizon over this distance
+
+
+# =====================================================================
+# 4. CAMERA
+# =====================================================================
+# A pinhole camera: an eye point, and an orthonormal basis (right, up,
+# fwd) built from the direction it is looking. For each pixel we mix
+# `right` and `up` in proportion to how far off-centre the pixel is, add
+# `fwd`, and normalise - that is the ray direction.
+
+eye_x = 0.00
+eye_y = 1.35
+eye_z = 5.20
+tgt_x = 0.00
+tgt_y = 0.82
+tgt_z = 0.00
+FOV_DEG = 54.0
+
+# fwd = normalise(target - eye)
+fwd_x = tgt_x - eye_x
+fwd_y = tgt_y - eye_y
+fwd_z = tgt_z - eye_z
+flen = sqrt(fwd_x * fwd_x + fwd_y * fwd_y + fwd_z * fwd_z)
+fwd_x /= flen
+fwd_y /= flen
+fwd_z /= flen
+
+# right = normalise(cross(fwd, world_up)) with world_up = (0, 1, 0),
+# which collapses to (-f_z, 0, f_x) because two of the three terms are
+# multiplied by zero. Swap that sign and the whole picture comes out
+# mirrored - which it did, the first time this file was run.
+rgt_x = -fwd_z
+rgt_y = 0.0
+rgt_z = fwd_x
+rlen = sqrt(rgt_x * rgt_x + rgt_z * rgt_z)
+rgt_x /= rlen
+rgt_z /= rlen
+
+# up = cross(right, fwd)   (already unit length, both inputs are)
+up_x = rgt_y * fwd_z - rgt_z * fwd_y
+up_y = rgt_z * fwd_x - rgt_x * fwd_z
+up_z = rgt_x * fwd_y - rgt_y * fwd_x
+
+# Half-width of the image plane at unit distance, and the aspect ratio.
+tan_half = tan(FOV_DEG * pi() / 360.0)
+aspect = IMG_W * 1.0 / IMG_H
+
+
+# =====================================================================
+# 5. scene_hit - the nearest intersection along a ray
+# =====================================================================
+# Writes the globals `hit_t` (distance along the ray) and `hit_id`.
+# The direction (hi_dx,hi_dy,hi_dz) must already be unit length.
+#
+# Sphere maths: a point on the ray is  P = O + t*D. It is on the sphere
+# when |P - C| = r. Substituting and expanding gives a quadratic in t,
+# and because D is unit length the t^2 coefficient is exactly 1, which
+# kills the usual 2a divisions:
+#
+#     L = O - C
+#     t^2 + 2(D.L)t + (L.L - r^2) = 0
+#     t = -b +/- sqrt(b*b - c)      with b = D.L,  c = L.L - r^2
+#
+# A negative discriminant means the ray misses. Otherwise the smaller
+# root is the front of the sphere; if that is behind us (we are inside,
+# or it is just behind the origin) we try the far root.
+
+hit_t = 0.0
+hit_id = -1
+
+fn scene_hit(hi_ox, hi_oy, hi_oz, hi_dx, hi_dy, hi_dz, hi_tmax, hi_any) {
+    hit_t = hi_tmax
+    hit_id = -1
+
+    hi_k = 0
+    while hi_k < N_SPH {
+        hi_lx = hi_ox - sph_cx[hi_k]
+        hi_ly = hi_oy - sph_cy[hi_k]
+        hi_lz = hi_oz - sph_cz[hi_k]
+        hi_b = hi_dx * hi_lx + hi_dy * hi_ly + hi_dz * hi_lz
+        # b >= 0 means the centre lies behind the ray's origin. Every ray
+        # in this scene starts OUTSIDE every sphere (the eye is clear of
+        # them, and bounce rays are nudged EPS along the outward normal),
+        # so that is a guaranteed miss and the sqrt can be skipped. Put
+        # the camera inside a sphere and this shortcut would lie.
+        if hi_b < 0.0 {
+            hi_c = hi_lx * hi_lx + hi_ly * hi_ly + hi_lz * hi_lz - sph_r2[hi_k]
+            hi_disc = hi_b * hi_b - hi_c
+            if hi_disc > 0.0 {
+                hi_t = -hi_b - sqrt(hi_disc)
+                if hi_t > EPS and hi_t < hit_t {
+                    hit_t = hi_t
+                    hit_id = hi_k
+                    # A shadow ray only needs to know THAT something is
+                    # in the way, not what or how far, so it can stop at
+                    # the first blocker.
+                    if hi_any {
+                        return
+                    }
+                }
+            }
+        }
+        hi_k += 1
+    }
+
+    # Ground plane y = 0: solve  oy + t*dy = 0. Only rays travelling
+    # downward can land on it from above, hence the dy < 0 test.
+    if hi_dy < -0.000001 {
+        hi_pt = -hi_oy / hi_dy
+        if hi_pt > EPS and hi_pt < hit_t {
+            hit_t = hi_pt
+            hit_id = N_SPH
+        }
+    }
+}
+
+
+# =====================================================================
+# 6. sky - what a ray sees when it hits nothing
+# =====================================================================
+# A gradient from a pale horizon to a deep zenith, plus a broad warm
+# glow in the direction of the light - real air scatters sunlight
+# forwards, so the sky is always brightest near the sun. A loose power
+# of the cosine between the ray and the direction to the light is the
+# one-line version of that.
+
+sky_r = 0.0
+sky_g = 0.0
+sky_b = 0.0
+
+# Direction to the light, normalised once at start-up and reused.
+sun_len = sqrt(lit_x * lit_x + lit_y * lit_y + lit_z * lit_z)
+sun_x = lit_x / sun_len
+sun_y = lit_y / sun_len
+sun_z = lit_z / sun_len
+
+fn sky(sk_dx, sk_dy, sk_dz) {
+    # Only the upper hemisphere is graded; rays heading down have
+    # already hit the ground plane, so they never reach here.
+    sk_t = pow(clamp(sk_dy * 2.4, 0.0, 1.0), 0.70)
+    sky_r = SKY_HZ_R + (SKY_UP_R - SKY_HZ_R) * sk_t
+    sky_g = SKY_HZ_G + (SKY_UP_G - SKY_HZ_G) * sk_t
+    sky_b = SKY_HZ_B + (SKY_UP_B - SKY_HZ_B) * sk_t
+
+    sk_c = sk_dx * sun_x + sk_dy * sun_y + sk_dz * sun_z
+    if sk_c > 0.0 {
+        sk_glow = pow(sk_c, 2.5) * 0.34
+        sky_r += sk_glow * lit_r
+        sky_g += sk_glow * lit_g
+        sky_b += sk_glow * lit_b
+    }
+}
+
+
+# =====================================================================
+# 7. trace - follow one ray and return the colour it carries back
+# =====================================================================
+# Writes the globals out_r/out_g/out_b.
+#
+# Reflection is a loop, not recursion. `att` ("attenuation") is how much
+# of what we find at the current bounce still reaches the eye: it starts
+# at 1 and is multiplied by the surface's reflectivity at every bounce,
+# so a ray that has bounced off two 0.7-mirrors contributes 0.49 of what
+# it finds. That is also why the loop can stop early - once att is tiny
+# the rest of the path cannot change the pixel.
+#
+# The shading model per hit is textbook Phong:
+#     colour = albedo * (ambient + N.L * shadow * light)   <- diffuse
+#            + (N.H)^shininess * strength * shadow * light <- highlight
+# where H is the half-vector between the light and the viewer, the cheap
+# stand-in for a true mirror reflection of the light.
+
+out_r = 0.0
+out_g = 0.0
+out_b = 0.0
+prim_id = -1            # what the ray hit first, before any bounces
+
+fn trace(tr_ox, tr_oy, tr_oz, tr_dx, tr_dy, tr_dz) {
+    tr_cr = 0.0                 # colour accumulated so far
+    tr_cg = 0.0
+    tr_cb = 0.0
+    tr_ar = 1.0                 # attenuation still in play
+    tr_ag = 1.0
+    tr_ab = 1.0
+    tr_bounce = 0
+
+    while true {
+        scene_hit(tr_ox, tr_oy, tr_oz, tr_dx, tr_dy, tr_dz, FAR, false)
+        tr_t = hit_t            # copy out at once: the shadow ray below
+        tr_id = hit_id          # reuses these same two globals
+
+        # Remember what the FIRST hit was; the antialiasing pass uses it
+        # to find silhouettes. Reflections must not overwrite it.
+        if tr_bounce == 0 {
+            prim_id = tr_id
+        }
+
+        # --- miss: the ray escapes into the sky, and the path ends -----
+        if tr_id < 0 {
+            sky(tr_dx, tr_dy, tr_dz)
+            tr_cr += tr_ar * sky_r
+            tr_cg += tr_ag * sky_g
+            tr_cb += tr_ab * sky_b
+            break
+        }
+
+        # --- the hit point --------------------------------------------
+        tr_px = tr_ox + tr_dx * tr_t
+        tr_py = tr_oy + tr_dy * tr_t
+        tr_pz = tr_oz + tr_dz * tr_t
+
+        # --- surface normal and material ------------------------------
+        if tr_id == N_SPH {
+            # Ground plane. Normal points straight up; the colour is a
+            # checkerboard. floor() of the scaled coordinates gives the
+            # square index, and band(n, 1) is its parity - band works on
+            # two's-complement 64-bit ints, so it gets negative squares
+            # right where  n % 2  would hand back -1.
+            tr_nx = 0.0
+            tr_ny = 1.0
+            tr_nz = 0.0
+            tr_sq = int(floor(tr_px / CHK_SIZE) + floor(tr_pz / CHK_SIZE))
+            if band(tr_sq, 1) == 0 {
+                tr_kr = 0.88
+                tr_kg = 0.88
+                tr_kb = 0.85
+            } else {
+                tr_kr = 0.13
+                tr_kg = 0.15
+                tr_kb = 0.19
+            }
+            # Fade the floor into the horizon colour with distance. This
+            # is aerial perspective, and it also hides the checker
+            # aliasing that would otherwise shimmer near the horizon.
+            tr_fog = clamp(tr_t / FOG_DIST, 0.0, 1.0)
+            tr_fog = tr_fog * tr_fog
+            tr_kr += (SKY_HZ_R - tr_kr) * tr_fog
+            tr_kg += (SKY_HZ_G - tr_kg) * tr_fog
+            tr_kb += (SKY_HZ_B - tr_kb) * tr_fog
+            # Schlick's Fresnel approximation: every surface becomes a
+            # mirror at a grazing angle. This is why a wet road glares
+            # into the distance but looks matte at your feet, and it is
+            # what stretches the spheres' reflections towards the
+            # horizon. -(D.N) is the cosine of the viewing angle.
+            tr_cos = clamp(1.0 + tr_dx * tr_nx + tr_dy * tr_ny + tr_dz * tr_nz, 0.0, 1.0)
+            tr_fres = pow(tr_cos, 5.0)
+            tr_ref = (PLANE_REF + (0.9 - PLANE_REF) * tr_fres) * (1.0 - tr_fog)
+            tr_spc = PLANE_SPC
+            tr_shn = PLANE_SHN
+        } else {
+            # Sphere. The normal is just the outward radius, normalised
+            # for free by dividing by the (known) radius.
+            tr_ir = 1.0 / sph_rad[tr_id]
+            tr_nx = (tr_px - sph_cx[tr_id]) * tr_ir
+            tr_ny = (tr_py - sph_cy[tr_id]) * tr_ir
+            tr_nz = (tr_pz - sph_cz[tr_id]) * tr_ir
+            tr_kr = sph_r[tr_id]
+            tr_kg = sph_g[tr_id]
+            tr_kb = sph_b[tr_id]
+            tr_ref = sph_ref[tr_id]
+            tr_spc = sph_spc[tr_id]
+            tr_shn = sph_shn[tr_id]
+        }
+
+        # --- direction and distance to the light ----------------------
+        tr_lx = lit_x - tr_px
+        tr_ly = lit_y - tr_py
+        tr_lz = lit_z - tr_pz
+        tr_ld = sqrt(tr_lx * tr_lx + tr_ly * tr_ly + tr_lz * tr_lz)
+        tr_lx /= tr_ld
+        tr_ly /= tr_ld
+        tr_lz /= tr_ld
+        tr_ndl = tr_nx * tr_lx + tr_ny * tr_ly + tr_nz * tr_lz
+
+        # --- the shadow ray -------------------------------------------
+        # Fire from just above the surface (EPS along the normal, or the
+        # surface would shadow itself) towards the lamp, and stop short
+        # of the lamp itself. Anything hit means this spot is occluded.
+        tr_vis = 0.0
+        if tr_ndl > 0.0 {
+            tr_sx = tr_px + tr_nx * EPS
+            tr_sy = tr_py + tr_ny * EPS
+            tr_sz = tr_pz + tr_nz * EPS
+            scene_hit(tr_sx, tr_sy, tr_sz, tr_lx, tr_ly, tr_lz, tr_ld - EPS * 2.0, true)
+            if hit_id < 0 {
+                tr_vis = 1.0
+            }
+        }
+
+        # Inverse-square-ish falloff, softened so nothing blows out.
+        tr_att = LIT_POW / (1.0 + 0.018 * tr_ld * tr_ld)
+        tr_dif = AMBIENT + tr_ndl * tr_vis * tr_att
+
+        # --- Phong highlight ------------------------------------------
+        # H = normalise(L - D): halfway between "towards the light" and
+        # "towards the eye" (D points away from the eye, hence minus).
+        tr_sp = 0.0
+        if tr_vis > 0.0 and tr_spc > 0.0 {
+            tr_hx = tr_lx - tr_dx
+            tr_hy = tr_ly - tr_dy
+            tr_hz = tr_lz - tr_dz
+            tr_hl = sqrt(tr_hx * tr_hx + tr_hy * tr_hy + tr_hz * tr_hz)
+            tr_ndh = (tr_nx * tr_hx + tr_ny * tr_hy + tr_nz * tr_hz) / tr_hl
+            if tr_ndh > 0.0 {
+                tr_sp = pow(tr_ndh, tr_shn) * tr_spc * tr_att
+            }
+        }
+
+        # Energy conservation: light that goes into the mirror reflection
+        # cannot also come out of the diffuse lobe. Scaling the matte
+        # term by (1 - reflectivity) is what stops the chrome sphere
+        # looking like white plastic with a picture painted on it.
+        tr_kd = 1.0 - tr_ref
+        tr_cr += tr_ar * (tr_kr * tr_dif * tr_kd + tr_sp * lit_r)
+        tr_cg += tr_ag * (tr_kg * tr_dif * tr_kd + tr_sp * lit_g)
+        tr_cb += tr_ab * (tr_kb * tr_dif * tr_kd + tr_sp * lit_b)
+
+        # --- bounce, or stop ------------------------------------------
+        if tr_bounce >= BOUNCES or tr_ref < 0.02 {
+            break
+        }
+        # A metal tints what it reflects towards its own colour; mixing
+        # the attenuation halfway to the albedo is a cheap version of
+        # that, and it is what makes the gold sphere reflect gold.
+        tr_ar *= tr_ref * (0.5 + 0.5 * tr_kr)
+        tr_ag *= tr_ref * (0.5 + 0.5 * tr_kg)
+        tr_ab *= tr_ref * (0.5 + 0.5 * tr_kb)
+        # Russian-roulette-lite: once a path can no longer change any
+        # channel by more than ~1/255, tracing it further is free of
+        # visual consequence and expensive in time.
+        if max(tr_ar, max(tr_ag, tr_ab)) < 0.02 {
+            break
+        }
+
+        # Mirror the direction about the normal:  R = D - 2(D.N)N
+        tr_dn = tr_dx * tr_nx + tr_dy * tr_ny + tr_dz * tr_nz
+        tr_dx = tr_dx - 2.0 * tr_dn * tr_nx
+        tr_dy = tr_dy - 2.0 * tr_dn * tr_ny
+        tr_dz = tr_dz - 2.0 * tr_dn * tr_nz
+        tr_ox = tr_px + tr_nx * EPS
+        tr_oy = tr_py + tr_ny * EPS
+        tr_oz = tr_pz + tr_nz * EPS
+        tr_bounce += 1
+    }
+
+    out_r = tr_cr
+    out_g = tr_cg
+    out_b = tr_cb
+}
+
+
+# =====================================================================
+# 8. RENDER
+# =====================================================================
+
+# write_bytes cannot create a folder and zl has no mkdir, so check.
+if not contains(dir("."), "examples_out") {
+    print("raytracer.zl: run me from the repo root, and create the")
+    print("examples_out folder first:   mkdir examples_out")
+    exit(1)
+}
+
+img = bmp_new(IMG_W, IMG_H)
+px_buf = img[2]
+ids = fill(IMG_W * IMG_H, -1)   # which object each pixel saw first
+rays = 0
+
+# --- shade one pixel with an sp_n x sp_n grid of rays -----------------
+# Writes the three bytes for pixel (sp_x, sp_y) straight into px_buf.
+# Splitting this out of the loop is what lets pass 2 below re-shade an
+# individual pixel at a higher sample count.
+fn shade_pixel(sp_x, sp_y, sp_n) {
+    sp_ar = 0.0
+    sp_ag = 0.0
+    sp_ab = 0.0
+    sp_inv = 1.0 / sp_n
+    sp_j = 0
+    while sp_j < sp_n {
+        sp_i = 0
+        while sp_i < sp_n {
+            # Pixel -> normalised screen coords in [-1, 1], y flipped
+            # because row 0 is the top of the image but +y is up. The
+            # (sp_i + 0.5) * sp_inv term walks the sub-pixel grid; with
+            # sp_n = 1 it is just 0.5, the centre of the pixel.
+            sp_u = (2.0 * (sp_x + (sp_i + 0.5) * sp_inv) / IMG_W - 1.0) * aspect * tan_half
+            sp_v = (1.0 - 2.0 * (sp_y + (sp_j + 0.5) * sp_inv) / IMG_H) * tan_half
+
+            # Ray direction = normalise(u*right + v*up + fwd)
+            sp_dx = sp_u * rgt_x + sp_v * up_x + fwd_x
+            sp_dy = sp_u * rgt_y + sp_v * up_y + fwd_y
+            sp_dz = sp_u * rgt_z + sp_v * up_z + fwd_z
+            sp_dl = sqrt(sp_dx * sp_dx + sp_dy * sp_dy + sp_dz * sp_dz)
+
+            trace(eye_x, eye_y, eye_z, sp_dx / sp_dl, sp_dy / sp_dl, sp_dz / sp_dl)
+            sp_ar += out_r
+            sp_ag += out_g
+            sp_ab += out_b
+            sp_i += 1
+        }
+        sp_j += 1
+    }
+
+    # Average the samples, apply exposure, then gamma-correct. Light adds
+    # up linearly but screens are roughly gamma 2.2; sqrt is the standard
+    # cheap approximation, and skipping it is exactly why naive renders
+    # come out looking muddy.
+    sp_k = EXPOSURE / (sp_n * sp_n)
+    sp_q = sp_y * IMG_W + sp_x
+    sp_p = sp_q * 3
+    px_buf[sp_p] = int(sqrt(clamp(sp_ar * sp_k, 0.0, 1.0)) * 255.0 + 0.5)
+    px_buf[sp_p + 1] = int(sqrt(clamp(sp_ag * sp_k, 0.0, 1.0)) * 255.0 + 0.5)
+    px_buf[sp_p + 2] = int(sqrt(clamp(sp_ab * sp_k, 0.0, 1.0)) * 255.0 + 0.5)
+    ids[sp_q] = prim_id
+    rays += sp_n * sp_n
+}
+
+print("zl ray tracer")
+print(f"  {IMG_W}x{IMG_H}, {BOUNCES} reflection bounces, {N_SPH} spheres + checkered ground")
+print(f"  1 point light, hard shadows, {AA_SAMPLES}x{AA_SAMPLES} adaptive antialiasing")
+print("")
+
+t_start = now()
+
+# --- pass 1: one ray through the centre of every pixel ---------------
+py = 0
+while py < IMG_H {
+    px = 0
+    while px < IMG_W {
+        shade_pixel(px, py, SAMPLES)
+        px += 1
+    }
+    # progress bar, redrawn every 8 scanlines
+    if py % 8 == 0 or py == IMG_H - 1 {
+        done = (py + 1) * 1.0 / IMG_H
+        filled = int(done * 40)
+        bar = repeat("#", filled) + repeat(".", 40 - filled)
+        print(f"  [{bar}] {int(done * 100)}%  {(now() - t_start) / 1000.0}s")
+    }
+    py += 1
+}
+t_pass1 = (now() - t_start) / 1000.0
+
+# --- pass 2: adaptive antialiasing on silhouettes ---------------------
+# One ray per pixel means every object outline is a hard staircase.
+# Firing 4 rays at EVERY pixel would fix that and cost four times as
+# much - so instead, re-shade only the pixels that need it.
+#
+# The trick is HOW you decide which those are. Comparing neighbouring
+# COLOURS looks obvious and is a trap: the checkerboard is nothing but
+# colour edges, so a quarter of the image qualifies and you have paid
+# for brute force anyway. Comparing which OBJECT each pixel hit finds
+# the geometric silhouettes exactly - sphere against sky, sphere against
+# floor, sphere against sphere - and nothing else. That is a few per
+# cent of the image, and it is where the eye actually sees the stairs.
+# The checker's own edges are left to the distance fog, which greys them
+# out before they get small enough to shimmer.
+mark = fill(IMG_W * IMG_H, 0)
+py = 0
+while py < IMG_H {
+    px = 0
+    while px < IMG_W {
+        i = py * IMG_W + px
+        # Note the nested ifs: `and` in zl evaluates BOTH sides, so
+        # `px + 1 < IMG_W and ids[i + 1] != ...` would still index off
+        # the end of the row. Guard first, then read.
+        if px + 1 < IMG_W {
+            if ids[i] != ids[i + 1] {
+                mark[i] = 1
+                mark[i + 1] = 1
+            }
+        }
+        if py + 1 < IMG_H {
+            if ids[i] != ids[i + IMG_W] {
+                mark[i] = 1
+                mark[i + IMG_W] = 1
+            }
+        }
+        px += 1
+    }
+    py += 1
+}
+
+refined = 0
+i = 0
+npix = IMG_W * IMG_H
+while i < npix {
+    if mark[i] == 1 {
+        shade_pixel(i % IMG_W, int(i / IMG_W), AA_SAMPLES)
+        refined += 1
+    }
+    i += 1
+}
+
+elapsed = (now() - t_start) / 1000.0
+print("")
+print(f"  pass 1: {IMG_W * IMG_H} pixels in {t_pass1}s")
+print(f"  pass 2: {refined} edge pixels re-shaded ({int(refined * 100 / npix)}% of the image)")
+print(f"  {rays} rays in {elapsed}s total")
+
+
+# =====================================================================
+# 9. SAVE + ASCII PREVIEW
+# =====================================================================
+
+t_save = now()
+bytes_written = bmp_save(img, OUT_PATH)
+print(f"  wrote {OUT_PATH}  ({bytes_written} bytes, {(now() - t_save) / 1000.0}s)")
+print("")
+
+# Box-average the image down to a character grid and pick a glyph per
+# cell by brightness. Terminal cells are about twice as tall as they are
+# wide, hence the extra 0.5 on the row count.
+RAMP = " .':;+=xX$@"
+COLS = 78
+ROWS = int(COLS * IMG_H / IMG_W * 0.5)
+bw = IMG_W * 1.0 / COLS
+bh = IMG_H * 1.0 / ROWS
+nramp = len(RAMP) - 1
+
+# Two passes, because eleven glyphs is a very small dynamic range. The
+# first collects the block luminances and notes the darkest and
+# brightest; the second stretches that measured range across the whole
+# ramp. Without the stretch the sky and the floor - which occupy most of
+# the frame and sit in the upper half of the brightness range - collapse
+# onto two or three glyphs and the picture turns to porridge.
+cells = []
+lo = 2.0
+hi = -1.0
+cy = 0
+while cy < ROWS {
+    cx = 0
+    while cx < COLS {
+        x0 = int(cx * bw)
+        x1 = int((cx + 1) * bw)
+        y0 = int(cy * bh)
+        y1 = int((cy + 1) * bh)
+        if x1 <= x0 { x1 = x0 + 1 }
+        if y1 <= y0 { y1 = y0 + 1 }
+        tot = 0.0
+        cnt = 0
+        yy = y0
+        while yy < y1 {
+            base = yy * IMG_W * 3
+            xx = x0
+            while xx < x1 {
+                i3 = base + xx * 3
+                # Rec.601 luma - green carries most of the perceived
+                # brightness, blue almost none.
+                tot += 0.299 * px_buf[i3] + 0.587 * px_buf[i3 + 1] + 0.114 * px_buf[i3 + 2]
+                cnt += 1
+                xx += 1
+            }
+            yy += 1
+        }
+        lum = tot / (cnt * 255.0)
+        if lum < lo { lo = lum }
+        if lum > hi { hi = lum }
+        cells = push(cells, lum)
+        cx += 1
+    }
+    cy += 1
+}
+span = hi - lo
+if span < 0.001 { span = 1.0 }
+
+print("  " + repeat("_", COLS))
+cy = 0
+while cy < ROWS {
+    line = ""
+    cx = 0
+    while cx < COLS {
+        v = (cells[cy * COLS + cx] - lo) / span
+        line = line + at(RAMP, int(clamp(v * nramp + 0.5, 0, nramp)))
+        cx += 1
+    }
+    print(" |" + line)
+    cy += 1
+}
+print("  " + repeat("-", COLS))
+print("")
+print(f"  contrast stretched from {lo} - {hi} for the terminal;")
+print(f"  open {OUT_PATH} for the real thing.")

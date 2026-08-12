@@ -1,0 +1,89 @@
+# searching.zl -- list search routines for the zl standard library
+# Functions:
+#   linear_search(list, x)        -> index of first match, or -1
+#   binary_search(sorted_list, x) -> index of a match in a sorted list, or -1
+#   contains(list, x)             -> true/false
+
+# Scan left-to-right, return the first index whose value equals x.
+fn linear_search(lst, x) {
+  i = 0
+  while i < len(lst) {
+    if lst[i] == x {
+      return i
+    }
+    i = i + 1
+  }
+  return -1
+}
+
+# Classic binary search over an ascending-sorted list.
+# Returns an index where x is found, or -1 if absent.
+fn binary_search(sorted_list, x) {
+  lo = 0
+  hi = len(sorted_list) - 1
+  while lo <= hi {
+    mid = (lo + hi) / 2
+    # (lo + hi) / 2 can be fractional in zl since '/' is real division,
+    # so floor it to a whole index by walking down to an integer.
+    mid = floor_int(mid)
+    v = sorted_list[mid]
+    if v == x {
+      return mid
+    } else {
+      if v < x {
+        lo = mid + 1
+      } else {
+        hi = mid - 1
+      }
+    }
+  }
+  return -1
+}
+
+# Floor a non-negative number to the nearest integer index.
+# zl has no int() builtin, so subtract 1 until we drop below an
+# integer boundary reconstructed by repeated addition.
+fn floor_int(n) {
+  i = 0
+  while i + 1 <= n {
+    i = i + 1
+  }
+  return i
+}
+
+# True when x appears anywhere in lst.
+fn contains(lst, x) {
+  return linear_search(lst, x) != -1
+}
+
+# ---------------------------------------------------------------
+# Self-test
+# ---------------------------------------------------------------
+print("== linear_search ==")
+nums = [10, 20, 30, 40, 50]
+print("list: " + join(["10","20","30","40","50"], ", "))
+print("linear_search(30) [hit,  expect 2]  -> " + linear_search(nums, 30))
+print("linear_search(10) [hit,  expect 0]  -> " + linear_search(nums, 10))
+print("linear_search(50) [hit,  expect 4]  -> " + linear_search(nums, 50))
+print("linear_search(99) [miss, expect -1] -> " + linear_search(nums, 99))
+
+words = ["apple", "banana", "cherry"]
+print("linear_search(\"banana\") [hit,  expect 1]  -> " + linear_search(words, "banana"))
+print("linear_search(\"grape\")  [miss, expect -1] -> " + linear_search(words, "grape"))
+
+print("")
+print("== binary_search ==")
+sorted_nums = [2, 5, 8, 11, 17, 23, 42]
+print("sorted list: " + join(["2","5","8","11","17","23","42"], ", "))
+print("binary_search(2)  [hit,  expect 0]  -> " + binary_search(sorted_nums, 2))
+print("binary_search(11) [hit,  expect 3]  -> " + binary_search(sorted_nums, 11))
+print("binary_search(42) [hit,  expect 6]  -> " + binary_search(sorted_nums, 42))
+print("binary_search(4)  [miss, expect -1] -> " + binary_search(sorted_nums, 4))
+print("binary_search(99) [miss, expect -1] -> " + binary_search(sorted_nums, 99))
+
+print("")
+print("== contains ==")
+print("contains(nums, 40)  [expect true]  -> " + contains(nums, 40))
+print("contains(nums, 41)  [expect false] -> " + contains(nums, 41))
+print("contains(words, \"cherry\") [expect true]  -> " + contains(words, "cherry"))
+print("contains(words, \"kiwi\")   [expect false] -> " + contains(words, "kiwi"))

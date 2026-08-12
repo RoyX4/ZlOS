@@ -1,0 +1,55 @@
+# dict.zl - an associative map as a list of [key, value] pairs.
+# Uses index-assignment (d[i][1] = v) for in-place updates.
+
+fn dset(d, k, v) {
+    i = 0
+    while i < len(d) {
+        if d[i][0] == k {
+            d[i][1] = v
+            return d
+        }
+        i = i + 1
+    }
+    return push(d, [k, v])
+}
+fn dget(d, k) {
+    for pair in d {
+        if pair[0] == k {
+            return pair[1]
+        }
+    }
+    return 0
+}
+fn dhas(d, k) {
+    for pair in d {
+        if pair[0] == k {
+            return true
+        }
+    }
+    return false
+}
+fn dkeys(d) {
+    out = []
+    for pair in d {
+        out = push(out, pair[0])
+    }
+    return out
+}
+fn dvalues(d) {
+    out = []
+    for pair in d {
+        out = push(out, pair[1])
+    }
+    return out
+}
+
+d = []
+d = dset(d, "name", "Zac")
+d = dset(d, "lang", "zl")
+d = dset(d, "count", 1)
+d = dset(d, "count", 42)
+print("name:   " + dget(d, "name"))
+print("count:  " + str(dget(d, "count")))
+print("has email: " + str(dhas(d, "email")))
+print("keys:   " + str(dkeys(d)))
+print("values: " + str(dvalues(d)))

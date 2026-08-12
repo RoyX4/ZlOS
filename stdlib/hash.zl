@@ -1,0 +1,197 @@
+# hash.zl - classic non-cryptographic string hashes, in 32-bit arithmetic.
+#
+# Representation: every hash is a plain zl number holding an unsigned 32-bit
+# value, 0 .. 4294967295. There is no unsigned type, so the wrap-around that
+# C gets for free has to be done by hand: band(x, MASK32) after every step.
+#
+# The one real trap is precision. zl numbers are doubles, exact only up to
+# 2^53, but the bitwise builtins work on 64-bit ints - so a product that
+# overflows 2^53 is already wrong *before* band() ever sees it. FNV's
+# h * 16777619 reaches 2^56 and silently loses its low bits, which are
+# exactly the bits the hash keeps. mul32() below avoids that by splitting the
+# multiplicand into two 16-bit halves, so no intermediate exceeds 2^41.
+#
+# Bytes come from index_at(s, i), which is the char code, so these hash the
+# raw code units of the string.
+
+MASK32 = 4294967295
+MASK16 = 65535
+
+fn mask32(mv) {
+    return band(mv, MASK32)
+}
+
+# (h * k) mod 2^32, without ever exceeding 2^53.
+# h*k = (hi*2^16 + lo)*k, so only (hi*k mod 2^16) survives into the high half.
+# Exact for any h < 2^32 and any multiplier k < 2^37; the hashes here use
+# k = 16777619, 33 and 65599.
+fn mul32(mh, mk) {
+    hi = band(shr(mh, 16), MASK16)
+    lo = band(mh, MASK16)
+    return mask32(shl(band(hi * mk, MASK16), 16) + lo * mk)
+}
+
+# FNV-1a: xor the byte in first, then multiply by the FNV prime.
+fn fnv1a(fs) {
+    h = 2166136261
+    i = 0
+    while i < len(fs) {
+        h = bxor(h, index_at(fs, i))
+        h = mul32(h, 16777619)
+        i = i + 1
+    }
+    return h
+}
+
+# Bernstein djb2: h = h*33 + c, seeded with 5381.
+fn djb2(ds) {
+    h = 5381
+    i = 0
+    while i < len(ds) {
+        h = mask32(mul32(h, 33) + index_at(ds, i))
+        i = i + 1
+    }
+    return h
+}
+
+# sdbm: h = h*65599 + c (the classic "(h<<6) + (h<<16) - h + c").
+fn sdbm(ss) {
+    h = 0
+    i = 0
+    while i < len(ss) {
+        h = mask32(mul32(h, 65599) + index_at(ss, i))
+        i = i + 1
+    }
+    return h
+}
+
+# CRC-32 (IEEE 802.3), table-free, reflected, polynomial 0xEDB88320.
+fn crc32(cs) {
+    crc = MASK32
+    i = 0
+    while i < len(cs) {
+        crc = bxor(crc, index_at(cs, i))
+        b = 0
+        while b < 8 {
+            if band(crc, 1) == 1 {
+                crc = bxor(shr(crc, 1), 3988292384)
+            } else {
+                crc = shr(crc, 1)
+            }
+            b = b + 1
+        }
+        i = i + 1
+    }
+    return bxor(crc, MASK32)
+}
+
+# Adler-32: two running sums mod 65521, packed as (b << 16) | a.
+fn adler32(ad) {
+    a = 1
+    b = 0
+    i = 0
+    while i < len(ad) {
+        a = (a + index_at(ad, i)) % 65521
+        b = (b + a) % 65521
+        i = i + 1
+    }
+    return mask32(shl(b, 16) + a)
+}
+
+# Boost-style mixer: fold h2 into h1 so that order matters.
+fn hash_combine(c1, c2) {
+    mix = mask32(c2 + 2654435769 + shl(c1, 6) + shr(c1, 2))
+    return mask32(bxor(c1, mix))
+}
+
+# Which of nbuckets a string belongs in.
+fn bucket_of(bs, nbuckets) {
+    return fnv1a(bs) % nbuckets
+}
+
+# ---------------------------------------------------------------- demo ----
+
+print("-- hashes of \"zl\" --")
+print("fnv1a:    " + str(fnv1a("zl")) + "  0x" + hex(fnv1a("zl")))
+print("djb2:     " + str(djb2("zl")) + "  0x" + hex(djb2("zl")))
+print("sdbm:     " + str(sdbm("zl")) + "  0x" + hex(sdbm("zl")))
+print("crc32:    " + str(crc32("zl")) + "  0x" + hex(crc32("zl")))
+print("adler32:  " + str(adler32("zl")) + "  0x" + hex(adler32("zl")))
+
+print("")
+print("-- known-answer checks --")
+print("fnv1a(\"\")            = " + str(fnv1a("")) + "   (offset basis 2166136261)")
+print("fnv1a(\"a\")           = " + str(fnv1a("a")) + "   (expect 3826002220)")
+print("fnv1a(\"foobar\")      = " + str(fnv1a("foobar")) + "   (expect 3214735720 = 0xBF9CF968)")
+print("djb2(\"\")             = " + str(djb2("")) + "         (expect 5381)")
+print("djb2(\"hello\")        = " + str(djb2("hello")) + "  (expect 210714636441 mod 2^32 = 261238937)")
+print("sdbm(\"\")             = " + str(sdbm("")) + "            (expect 0)")
+print("crc32(\"\")            = " + str(crc32("")) + "            (expect 0)")
+print("crc32(\"123456789\")   = " + str(crc32("123456789")) + "   (expect 3421780262 = 0xCBF43926)")
+print("crc32(\"The quick brown fox jumps over the lazy dog\") = " + str(crc32("The quick brown fox jumps over the lazy dog")) + " (expect 1095738169)")
+print("adler32(\"\")          = " + str(adler32("")) + "            (expect 1)")
+print("adler32(\"Wikipedia\") = " + str(adler32("Wikipedia")) + "    (expect 300286872 = 0x11E60398)")
+
+print("")
+print("-- hash_combine is order sensitive --")
+ha = fnv1a("alpha")
+hb = fnv1a("beta")
+print("h(alpha)          = " + str(ha))
+print("h(beta)           = " + str(hb))
+print("combine(a,b)      = " + str(hash_combine(ha, hb)))
+print("combine(b,a)      = " + str(hash_combine(hb, ha)))
+print("differ:             " + str(hash_combine(ha, hb) != hash_combine(hb, ha)))
+
+print("")
+print("-- collision demo: 20 words into 8 buckets --")
+words = ["apple", "banana", "cherry", "date", "elderberry"]
+words = concat(words, ["fig", "grape", "honeydew", "kiwi", "lemon"])
+words = concat(words, ["mango", "nectarine", "orange", "papaya", "quince"])
+words = concat(words, ["raspberry", "strawberry", "tangerine", "ugli", "vanilla"])
+
+NB = 8
+buckets = []
+i = 0
+while i < NB {
+    buckets = push(buckets, [])
+    i = i + 1
+}
+for w in words {
+    slot = bucket_of(w, NB)
+    buckets[slot] = push(buckets[slot], w)
+}
+
+i = 0
+while i < NB {
+    row = buckets[i]
+    print(str(i) + " [" + str(len(row)) + "] " + repeat("#", len(row)) + " " + join(row, " "))
+    i = i + 1
+}
+
+placed = 0
+empty = 0
+worst = 0
+i = 0
+while i < NB {
+    n = len(buckets[i])
+    placed = placed + n
+    if n == 0 {
+        empty = empty + 1
+    }
+    if n > worst {
+        worst = n
+    }
+    i = i + 1
+}
+print("placed " + str(placed) + " of " + str(len(words)) + ", empty buckets " + str(empty) + ", worst bucket " + str(worst) + ", ideal " + str(len(words) / NB))
+
+print("")
+print("-- distinctness: 20 words, how many distinct fnv1a values? --")
+seen = []
+for w in words {
+    hv = fnv1a(w)
+    if not contains(seen, hv) {
+        seen = push(seen, hv)
+    }
+}
+print("distinct full hashes: " + str(len(seen)) + " of " + str(len(words)))

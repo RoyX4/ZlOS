@@ -1,0 +1,716 @@
+# ============================================================
+# compiler.zl - MY COMPILER, WRITTEN IN MY OWN LANGUAGE.
+#
+# This is the whole thing: lexer + parser + C code generator,
+# all in zl. It reads "input.zl", and writes "out.c" (which the
+# real C compiler then turns into a native .exe).
+#
+# When this file can compile ITSELF, the language is self-hosting.
+#
+# An AST node is a list tagged by its first item, e.g.
+#   ["num","5"]  ["bin","+",L,R]  ["call","print",[args]]
+# Blocks/lists keep their children in a nested list at [1].
+# ============================================================
+
+# ---- global state ----
+src = ""      # source text the lexer walks
+spos = 0      # lexer position
+toks = []     # the token list
+pos = 0       # parser position
+g_funcs = []  # names of user functions
+g_globals = []# names of global variables
+
+# ============================================================
+# LEXER
+# ============================================================
+
+fn is_digit(c) {
+    return c != "" and has("0123456789", c)
+}
+fn is_alpha(c) {
+    return c != "" and has("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", c)
+}
+fn is_alnum(c) {
+    return is_alpha(c) or is_digit(c)
+}
+fn is_keyword(w) {
+    return w == "if" or w == "else" or w == "while" or w == "for" or w == "in" or w == "fn" or w == "return" or w == "not" or w == "and" or w == "or" or w == "true" or w == "false"
+}
+fn unescape(e) {
+    if e == "n" {
+        return "\n"
+    }
+    if e == "t" {
+        return "\t"
+    }
+    if e == "r" {
+        return "\r"
+    }
+    return e
+}
+
+fn scur() {
+    return at(src, spos)
+}
+fn scur2() {
+    return at(src, spos + 1)
+}
+
+fn next_token() {
+    c = scur()
+
+    if c == " " or c == "\t" or c == "\r" or c == "\n" {
+        spos = spos + 1
+        return ["SKIP", ""]
+    }
+    if c == "#" {
+        while spos < len(src) and scur() != "\n" {
+            spos = spos + 1
+        }
+        return ["SKIP", ""]
+    }
+    if is_digit(c) {
+        w = ""
+        while is_digit(scur()) {
+            w = w + scur()
+            spos = spos + 1
+        }
+        return ["NUM", w]
+    }
+    if is_alpha(c) {
+        w = ""
+        while is_alnum(scur()) {
+            w = w + scur()
+            spos = spos + 1
+        }
+        if is_keyword(w) {
+            return ["KW", w]
+        }
+        return ["NAME", w]
+    }
+    if c == "\"" {
+        spos = spos + 1
+        w = ""
+        while scur() != "\"" and scur() != "" {
+            ch = scur()
+            if ch == "\\" {
+                spos = spos + 1
+                w = w + unescape(scur())
+            } else {
+                w = w + ch
+            }
+            spos = spos + 1
+        }
+        spos = spos + 1
+        return ["STR", w]
+    }
+
+    c2 = scur2()
+    if (c == "=" or c == "!" or c == ">" or c == "<") and c2 == "=" {
+        spos = spos + 2
+        return ["SYM", c + c2]
+    }
+    spos = spos + 1
+    return ["SYM", c]
+}
+
+fn lex(source) {
+    src = source
+    spos = 0
+    out = []
+    while spos < len(src) {
+        t = next_token()
+        if t[0] != "SKIP" {
+            out = push(out, t)
+        }
+    }
+    out = push(out, ["EOF", ""])
+    return out
+}
+
+# ============================================================
+# PARSER
+# ============================================================
+
+fn kind() {
+    if pos < len(toks) {
+        return toks[pos][0]
+    }
+    return "EOF"
+}
+fn text() {
+    if pos < len(toks) {
+        return toks[pos][1]
+    }
+    return ""
+}
+fn advance() {
+    t = toks[pos]
+    pos = pos + 1
+    return t
+}
+fn is_sym(s) {
+    return kind() == "SYM" and text() == s
+}
+fn is_kw(s) {
+    return kind() == "KW" and text() == s
+}
+fn expect(s) {
+    if is_sym(s) {
+        advance()
+    } else {
+        print("PARSE ERROR: expected", s, "got", text())
+    }
+}
+
+fn parse_primary() {
+    if kind() == "NUM" {
+        t = advance()
+        return ["num", t[1]]
+    }
+    if kind() == "STR" {
+        t = advance()
+        return ["str", t[1]]
+    }
+    if is_kw("true") or is_kw("false") {
+        t = advance()
+        return ["bool", t[1]]
+    }
+    if kind() == "NAME" {
+        t = advance()
+        return ["name", t[1]]
+    }
+    if is_sym("(") {
+        advance()
+        e = parse_expr()
+        expect(")")
+        return e
+    }
+    if is_sym("[") {
+        advance()
+        elems = []
+        if not is_sym("]") {
+            elems = push(elems, parse_expr())
+            while is_sym(",") {
+                advance()
+                elems = push(elems, parse_expr())
+            }
+        }
+        expect("]")
+        return ["list", elems]
+    }
+    print("PARSE ERROR at:", text())
+    return ["num", "0"]
+}
+
+fn parse_postfix() {
+    node = parse_primary()
+    while is_sym("(") or is_sym("[") {
+        if is_sym("(") {
+            advance()
+            args = []
+            if not is_sym(")") {
+                args = push(args, parse_expr())
+                while is_sym(",") {
+                    advance()
+                    args = push(args, parse_expr())
+                }
+            }
+            expect(")")
+            node = ["call", node[1], args]
+        } else {
+            advance()
+            idx = parse_expr()
+            expect("]")
+            node = ["index", node, idx]
+        }
+    }
+    return node
+}
+
+fn parse_unary() {
+    if is_sym("-") {
+        advance()
+        return ["un", "-", parse_unary()]
+    }
+    return parse_postfix()
+}
+
+fn parse_mul() {
+    node = parse_unary()
+    while is_sym("*") or is_sym("/") or is_sym("%") {
+        op = text()
+        advance()
+        node = ["bin", op, node, parse_unary()]
+    }
+    return node
+}
+
+fn parse_add() {
+    node = parse_mul()
+    while is_sym("+") or is_sym("-") {
+        op = text()
+        advance()
+        node = ["bin", op, node, parse_mul()]
+    }
+    return node
+}
+
+fn parse_cmp() {
+    node = parse_add()
+    while is_sym("==") or is_sym("!=") or is_sym(">=") or is_sym("<=") or is_sym(">") or is_sym("<") {
+        op = text()
+        advance()
+        node = ["bin", op, node, parse_add()]
+    }
+    return node
+}
+
+fn parse_not() {
+    if is_kw("not") {
+        advance()
+        return ["un", "not", parse_not()]
+    }
+    return parse_cmp()
+}
+
+fn parse_and() {
+    node = parse_not()
+    while is_kw("and") {
+        advance()
+        node = ["bin", "and", node, parse_not()]
+    }
+    return node
+}
+
+fn parse_or() {
+    node = parse_and()
+    while is_kw("or") {
+        advance()
+        node = ["bin", "or", node, parse_and()]
+    }
+    return node
+}
+
+fn parse_expr() {
+    return parse_or()
+}
+
+fn parse_block() {
+    expect("{")
+    stmts = []
+    while not is_sym("}") and kind() != "EOF" {
+        stmts = push(stmts, parse_statement())
+    }
+    expect("}")
+    return ["block", stmts]
+}
+
+fn parse_if() {
+    advance()
+    cond = parse_expr()
+    thenb = parse_block()
+    elseb = ["block", []]
+    if is_kw("else") {
+        advance()
+        elseb = parse_block()
+    }
+    return ["if", cond, thenb, elseb]
+}
+
+fn parse_while() {
+    advance()
+    cond = parse_expr()
+    body = parse_block()
+    return ["while", cond, body]
+}
+
+fn parse_for() {
+    advance()
+    v = text()
+    advance()
+    advance()
+    seq = parse_expr()
+    body = parse_block()
+    return ["for", v, seq, body]
+}
+
+fn parse_fn() {
+    advance()
+    name = text()
+    advance()
+    expect("(")
+    params = []
+    if not is_sym(")") {
+        params = push(params, text())
+        advance()
+        while is_sym(",") {
+            advance()
+            params = push(params, text())
+            advance()
+        }
+    }
+    expect(")")
+    body = parse_block()
+    return ["fn", name, params, body]
+}
+
+fn parse_return() {
+    advance()
+    if is_sym("}") or kind() == "EOF" {
+        return ["return", ["none"]]
+    }
+    return ["return", parse_expr()]
+}
+
+fn parse_statement() {
+    if is_kw("if") {
+        return parse_if()
+    }
+    if is_kw("while") {
+        return parse_while()
+    }
+    if is_kw("for") {
+        return parse_for()
+    }
+    if is_kw("fn") {
+        return parse_fn()
+    }
+    if is_kw("return") {
+        return parse_return()
+    }
+    e = parse_expr()
+    if is_sym("=") {
+        advance()
+        v = parse_expr()
+        return ["assign", e[1], v]
+    }
+    return ["expr", e]
+}
+
+fn parse_program(source) {
+    toks = lex(source)
+    pos = 0
+    items = []
+    while kind() != "EOF" {
+        items = push(items, parse_statement())
+    }
+    return ["prog", items]
+}
+
+# ============================================================
+# CODE GENERATOR  (AST -> C text)
+# ============================================================
+
+fn cstr(s) {
+    out = "\""
+    i = 0
+    n = len(s)
+    while i < n {
+        c = at(s, i)
+        if c == "\"" {
+            out = out + "\\\""
+        } else {
+            if c == "\\" {
+                out = out + "\\\\"
+            } else {
+                if c == "\n" {
+                    out = out + "\\n"
+                } else {
+                    if c == "\t" {
+                        out = out + "\\t"
+                    } else {
+                        if c == "\r" {
+                            out = out + "\\r"
+                        } else {
+                            out = out + c
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    return out + "\""
+}
+
+fn is_func(name) {
+    for f in g_funcs {
+        if f == name {
+            return true
+        }
+    }
+    return false
+}
+fn is_global(name) {
+    for g in g_globals {
+        if g == name {
+            return true
+        }
+    }
+    return false
+}
+fn is_param(name, params) {
+    for p in params {
+        if p == name {
+            return true
+        }
+    }
+    return false
+}
+
+fn emit_expr(node) {
+    tag = node[0]
+    if tag == "num" {
+        return "zl_num(" + node[1] + ")"
+    }
+    if tag == "str" {
+        return "zl_str(" + cstr(node[1]) + ")"
+    }
+    if tag == "bool" {
+        if node[1] == "true" {
+            return "zl_bool(1)"
+        }
+        return "zl_bool(0)"
+    }
+    if tag == "name" {
+        return "v_" + node[1]
+    }
+    if tag == "list" {
+        s = "zl_list_n(" + len(node[1])
+        for e in node[1] {
+            s = s + ", " + emit_expr(e)
+        }
+        return s + ")"
+    }
+    if tag == "bin" {
+        return "zl_binop(" + cstr(node[1]) + ", " + emit_expr(node[2]) + ", " + emit_expr(node[3]) + ")"
+    }
+    if tag == "un" {
+        return "zl_unop(" + cstr(node[1]) + ", " + emit_expr(node[2]) + ")"
+    }
+    if tag == "index" {
+        return "zl_index(" + emit_expr(node[1]) + ", " + emit_expr(node[2]) + ")"
+    }
+    if tag == "call" {
+        if is_func(node[1]) {
+            s = "zl_fn_" + node[1] + "("
+            first = true
+            for a in node[2] {
+                if first {
+                    first = false
+                } else {
+                    s = s + ", "
+                }
+                s = s + emit_expr(a)
+            }
+            return s + ")"
+        }
+        s = "zl_calln(" + cstr(node[1]) + ", " + len(node[2])
+        for a in node[2] {
+            s = s + ", " + emit_expr(a)
+        }
+        return s + ")"
+    }
+    return "zl_nil()"
+}
+
+fn pad(ind) {
+    s = ""
+    i = 0
+    while i < ind {
+        s = s + "    "
+        i = i + 1
+    }
+    return s
+}
+
+fn emit_block(block, ind) {
+    out = ""
+    for s in block[1] {
+        out = out + emit_stmt(s, ind)
+    }
+    return out
+}
+
+fn emit_stmt(node, ind) {
+    tag = node[0]
+    if tag == "expr" {
+        return pad(ind) + emit_expr(node[1]) + ";\n"
+    }
+    if tag == "assign" {
+        return pad(ind) + "v_" + node[1] + " = " + emit_expr(node[2]) + ";\n"
+    }
+    if tag == "return" {
+        if node[1][0] == "none" {
+            return pad(ind) + "return zl_nil();\n"
+        }
+        return pad(ind) + "return " + emit_expr(node[1]) + ";\n"
+    }
+    if tag == "if" {
+        out = pad(ind) + "if (zl_truthy(" + emit_expr(node[1]) + ")) {\n"
+        out = out + emit_block(node[2], ind + 1)
+        out = out + pad(ind) + "}"
+        if len(node[3][1]) > 0 {
+            out = out + " else {\n" + emit_block(node[3], ind + 1) + pad(ind) + "}"
+        }
+        return out + "\n"
+    }
+    if tag == "while" {
+        out = pad(ind) + "while (zl_truthy(" + emit_expr(node[1]) + ")) {\n"
+        out = out + emit_block(node[2], ind + 1)
+        return out + pad(ind) + "}\n"
+    }
+    if tag == "for" {
+        out = pad(ind) + "{\n"
+        out = out + pad(ind + 1) + "Value _seq = " + emit_expr(node[2]) + ";\n"
+        out = out + pad(ind + 1) + "for (int _i = 0; _i < zl_len_list(_seq); _i++) {\n"
+        out = out + pad(ind + 2) + "v_" + node[1] + " = zl_item(_seq, _i);\n"
+        out = out + emit_block(node[3], ind + 2)
+        out = out + pad(ind + 1) + "}\n"
+        return out + pad(ind) + "}\n"
+    }
+    return pad(ind) + emit_expr(node) + ";\n"
+}
+
+fn add_name(acc, name) {
+    for x in acc {
+        if x == name {
+            return acc
+        }
+    }
+    return push(acc, name)
+}
+
+fn collect_vars(node, acc) {
+    tag = node[0]
+    if tag == "assign" {
+        acc = add_name(acc, node[1])
+        return acc
+    }
+    if tag == "for" {
+        acc = add_name(acc, node[1])
+        acc = collect_block(node[3], acc)
+        return acc
+    }
+    if tag == "if" {
+        acc = collect_block(node[2], acc)
+        acc = collect_block(node[3], acc)
+        return acc
+    }
+    if tag == "while" {
+        acc = collect_block(node[2], acc)
+        return acc
+    }
+    return acc
+}
+
+fn collect_block(block, acc) {
+    for s in block[1] {
+        acc = collect_vars(s, acc)
+    }
+    return acc
+}
+
+fn emit_function(fnode) {
+    name = fnode[1]
+    params = fnode[2]
+    body = fnode[3]
+
+    out = "Value zl_fn_" + name + "("
+    if len(params) == 0 {
+        out = out + "void"
+    }
+    first = true
+    for p in params {
+        if first {
+            first = false
+        } else {
+            out = out + ", "
+        }
+        out = out + "Value v_" + p
+    }
+    out = out + ") {\n"
+
+    locals = collect_block(body, [])
+    for lv in locals {
+        if not is_param(lv, params) and not is_global(lv) {
+            out = out + "    Value v_" + lv + " = zl_nil();\n"
+        }
+    }
+
+    out = out + emit_block(body, 1)
+    out = out + "    return zl_nil();\n}\n\n"
+    return out
+}
+
+fn compile_program(prog) {
+    items = prog[1]
+
+    g_funcs = []
+    for it in items {
+        if it[0] == "fn" {
+            g_funcs = push(g_funcs, it[1])
+        }
+    }
+
+    g_globals = []
+    for it in items {
+        if it[0] != "fn" {
+            g_globals = collect_vars(it, g_globals)
+        }
+    }
+
+    out = "/* generated by compiler.zl - SELF-HOSTED */\n"
+    out = out + "#include \"runtime.h\"\n\n"
+
+    for it in items {
+        if it[0] == "fn" {
+            out = out + "Value zl_fn_" + it[1] + "("
+            if len(it[2]) == 0 {
+                out = out + "void"
+            }
+            first = true
+            for p in it[2] {
+                if first {
+                    first = false
+                } else {
+                    out = out + ", "
+                }
+                out = out + "Value"
+            }
+            out = out + ");\n"
+        }
+    }
+    out = out + "\n"
+
+    for g in g_globals {
+        out = out + "Value v_" + g + ";\n"
+    }
+    out = out + "\n"
+
+    for it in items {
+        if it[0] == "fn" {
+            out = out + emit_function(it)
+        }
+    }
+
+    out = out + "int main(void) {\n"
+    for it in items {
+        if it[0] != "fn" {
+            out = out + emit_stmt(it, 1)
+        }
+    }
+    out = out + "    return 0;\n}\n"
+    return out
+}
+
+# ============================================================
+# MAIN
+# ============================================================
+
+input = read("input.zl")
+prog = parse_program(input)
+result = compile_program(prog)
+write("out.c", result)
+print("compiler.zl: wrote out.c")

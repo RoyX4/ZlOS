@@ -1,0 +1,166 @@
+# csvw.zl - write CSV text: the complement of csv_parse.zl.
+# A row is a list of fields; a field can be any value (str() is applied first).
+# A field is quoted only when it must be: when it contains a comma, a double
+# quote, or a newline. Interior quotes are doubled ("") as RFC 4180 wants.
+# csv_write joins rows with "\n" and adds NO trailing newline, so its output
+# feeds straight back into csv_parse.zl's csvParse().
+# TSV has no quoting rule, so tsv_write scrubs tabs/newlines to spaces instead.
+#
+# Locals are prefixed per-function on purpose: assignment walks up the scope
+# chain, so an unprefixed local would overwrite a caller's global of the
+# same name (same convention as csv_parse.zl).
+
+QUOTE = at("\"", 0)   # a single double-quote character
+
+# Escape one field for CSV: quote it only if it needs quoting.
+fn csv_escape(ceField) {
+    ceS = str(ceField)
+    if not (has(ceS, ",") or has(ceS, QUOTE) or has(ceS, "\n") or has(ceS, "\r")) {
+        return ceS
+    }
+    ceOut = QUOTE
+    ceI = 0
+    while ceI < len(ceS) {
+        ceCh = at(ceS, ceI)
+        if ceCh == QUOTE {
+            ceOut = ceOut + QUOTE + QUOTE
+        } else {
+            ceOut = ceOut + ceCh
+        }
+        ceI = ceI + 1
+    }
+    return ceOut + QUOTE
+}
+
+# One row (a list of fields) -> one CSV line.
+fn csv_row(crFields) {
+    crParts = []
+    for crF in crFields {
+        crParts = push(crParts, csv_escape(crF))
+    }
+    return join(crParts, ",")
+}
+
+# A list of rows -> the whole CSV text (no trailing newline).
+fn csv_write(cwRows) {
+    cwOut = []
+    for cwR in cwRows {
+        cwOut = push(cwOut, csv_row(cwR))
+    }
+    return join(cwOut, "\n")
+}
+
+# Same, with a header row put in front.
+fn csv_with_header(chHeader, chRows) {
+    chAll = [chHeader]
+    for chR in chRows {
+        chAll = push(chAll, chR)
+    }
+    return csv_write(chAll)
+}
+
+# TSV cannot quote, so flatten anything that would break the grid.
+fn tsv_clean(tcField) {
+    tcS = str(tcField)
+    tcS = replace(tcS, "\t", " ")
+    tcS = replace(tcS, "\r\n", " ")
+    tcS = replace(tcS, "\n", " ")
+    tcS = replace(tcS, "\r", " ")
+    return tcS
+}
+fn tsv_row(trFields) {
+    trParts = []
+    for trF in trFields {
+        trParts = push(trParts, tsv_clean(trF))
+    }
+    return join(trParts, "\t")
+}
+fn tsv_write(twRows) {
+    twOut = []
+    for twR in twRows {
+        twOut = push(twOut, tsv_row(twR))
+    }
+    return join(twOut, "\n")
+}
+
+# Demo-only minimal reader, so the demo can prove a round-trip without
+# depending on csv_parse.zl (zl has no import).
+fn rt_read_line(rtLine) {
+    rtFields = []
+    rtCur = ""
+    rtInQ = false
+    rtI = 0
+    while rtI < len(rtLine) {
+        rtCh = at(rtLine, rtI)
+        if rtInQ {
+            if rtCh == QUOTE {
+                if at(rtLine, rtI + 1) == QUOTE {
+                    rtCur = rtCur + QUOTE
+                    rtI = rtI + 2
+                } else {
+                    rtInQ = false
+                    rtI = rtI + 1
+                }
+            } else {
+                rtCur = rtCur + rtCh
+                rtI = rtI + 1
+            }
+        } else if rtCh == QUOTE {
+            rtInQ = true
+            rtI = rtI + 1
+        } else if rtCh == "," {
+            rtFields = push(rtFields, rtCur)
+            rtCur = ""
+            rtI = rtI + 1
+        } else {
+            rtCur = rtCur + rtCh
+            rtI = rtI + 1
+        }
+    }
+    return push(rtFields, rtCur)
+}
+
+# ---------------- demo ----------------
+print("== csvw demo ==")
+
+head = ["name", "note", "score"]
+data = []
+data = push(data, ["Alice", "plain", 30])
+data = push(data, ["Bob, Jr.", "has a comma", 25])
+data = push(data, ["Carol", "she said \"hi\"", 41])
+data = push(data, ["Dave", "line one\nline two", 7])
+
+print("escape plain     : [" + csv_escape("plain") + "]")
+print("escape comma     : [" + csv_escape("Bob, Jr.") + "]")
+print("escape quote     : [" + csv_escape("she said \"hi\"") + "]")
+print("escape newline   : [" + replace(csv_escape("a\nb"), "\n", "\\n") + "]")
+print("escape number    : [" + csv_escape(30) + "]")
+print("")
+
+print("csv_row          : " + csv_row(data[1]))
+print("")
+
+print("csv_with_header:")
+print(csv_with_header(head, data))
+print("")
+
+print("tsv_write (tabs shown as ->, row 3 has an embedded newline):")
+print(replace(tsv_write([head, data[1], data[3]]), "\t", "->"))
+print("")
+
+print("round-trip:")
+lineQ = csv_row(data[2])
+backQ = rt_read_line(lineQ)
+print("  written  : " + lineQ)
+print("  read [0] : [" + backQ[0] + "]")
+print("  read [1] : [" + backQ[1] + "]")
+print("  read [2] : [" + backQ[2] + "]")
+print("  3 fields back              : " + (len(backQ) == 3))
+print("  doubled quotes undone      : " + (backQ[1] == "she said \"hi\""))
+
+lineC = csv_row(data[1])
+backC = rt_read_line(lineC)
+print("  quoted comma stayed whole  : " + (backC[0] == "Bob, Jr."))
+print("  unquoted field untouched   : " + (backC[1] == "has a comma"))
+print("  numbers come back as text  : " + (rt_read_line(csv_row([1, 2]))[0] == "1"))
+print("  empty fields survive       : " + (len(rt_read_line(csv_row(["", "", ""]))) == 3))

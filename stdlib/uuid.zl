@@ -1,0 +1,219 @@
+# uuid.zl - identifier generation: UUIDv4, short base36 ids, ULID-like
+# sortable ids, and nano ids. Everything is text; zl has no bytes type, so an
+# id is built one alphabet character at a time out of randint().
+#
+# Determinism: zl's randomness is seedable, so seed(n) followed by the same
+# calls always produces the same ids. The demo at the bottom seeds 12345, so
+# its output is fixed and re-runnable.
+#
+# Alphabets are globals so every generator reads the same table:
+#   HEX_ALPHA   16 lowercase hex digits          (uuid4)
+#   B36_ALPHA   36 digits + lowercase            (short_id)
+#   B32_ALPHA   32 Crockford base32, no I L O U  (ulid_like)
+#   NANO_ALPHA  64 URL-safe chars                (nano_id)
+# B32_ALPHA is listed in ascending ASCII order, which is what makes a
+# ulid_like() string sort by its timestamp as plain text.
+#
+# Naming: zl assigns through to a global of the same name, so every parameter
+# and local here carries a two-letter tag for its function (u4_ = uuid4,
+# be_ = b32_encode, ...). That is what stops rand_hex() from eating the
+# caller's counter.
+
+HEX_ALPHA    = "0123456789abcdef"
+B36_ALPHA    = "0123456789abcdefghijklmnopqrstuvwxyz"
+B32_ALPHA    = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+NANO_ALPHA   = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+UUID_VARIANT = "89ab"
+
+fn rand_hex(rx_n) {
+    rx_s = ""
+    rx_i = 0
+    while rx_i < rx_n {
+        rx_s = rx_s + at(HEX_ALPHA, randint(0, 15))
+        rx_i = rx_i + 1
+    }
+    return rx_s
+}
+
+# RFC 4122 version 4: 32 hex digits as 8-4-4-4-12. The third group starts
+# with the version nibble "4"; the fourth starts with the variant nibble,
+# which must be 10xx in binary - that is one of 8, 9, a, b.
+fn uuid4() {
+    u4_a = rand_hex(8)
+    u4_b = rand_hex(4)
+    u4_c = "4" + rand_hex(3)
+    u4_d = at(UUID_VARIANT, randint(0, 3)) + rand_hex(3)
+    u4_e = rand_hex(12)
+    return u4_a + "-" + u4_b + "-" + u4_c + "-" + u4_d + "-" + u4_e
+}
+
+# Shape check only: 36 chars, dashes at 8/13/18/23, lowercase hex elsewhere.
+# It does not demand version 4, so a v1 or v7 uuid still reads as valid.
+fn uuid_is_valid(uv_s) {
+    if type(uv_s) != "str" {
+        return false
+    }
+    if len(uv_s) != 36 {
+        return false
+    }
+    uv_i = 0
+    while uv_i < 36 {
+        uv_c = at(uv_s, uv_i)
+        if uv_i == 8 or uv_i == 13 or uv_i == 18 or uv_i == 23 {
+            if uv_c != "-" {
+                return false
+            }
+        } else if find(HEX_ALPHA, uv_c) < 0 {
+            return false
+        }
+        uv_i = uv_i + 1
+    }
+    return true
+}
+
+fn short_id(si_n) {
+    si_s = ""
+    si_i = 0
+    while si_i < si_n {
+        si_s = si_s + at(B36_ALPHA, randint(0, 35))
+        si_i = si_i + 1
+    }
+    return si_s
+}
+
+fn nano_id(ni_n) {
+    ni_s = ""
+    ni_i = 0
+    while ni_i < ni_n {
+        ni_s = ni_s + at(NANO_ALPHA, randint(0, 63))
+        ni_i = ni_i + 1
+    }
+    return ni_s
+}
+
+# Whole number -> Crockford base32, left-padded with "0" to be_width chars.
+fn b32_encode(be_v, be_width) {
+    be_x = int(be_v)
+    be_s = ""
+    while be_x > 0 {
+        be_s = at(B32_ALPHA, be_x % 32) + be_s
+        be_x = int(be_x / 32)
+    }
+    while len(be_s) < be_width {
+        be_s = "0" + be_s
+    }
+    return be_s
+}
+
+# ULID shape: 10 base32 chars of timestamp then be_rand_n random ones.
+# The caller passes the milliseconds - now() here is milliseconds since the
+# process started, not since the epoch, and passing it in keeps this
+# reproducible. 10 chars hold any ms below 32^10, i.e. about 2^50.
+fn ulid_like(ul_ms, ul_rand_n) {
+    ul_s = b32_encode(ul_ms, 10)
+    ul_i = 0
+    while ul_i < ul_rand_n {
+        ul_s = ul_s + at(B32_ALPHA, randint(0, 31))
+        ul_i = ul_i + 1
+    }
+    return ul_s
+}
+
+# "<" only compares numbers in zl, so text order needs its own comparator.
+fn id_before(ib_a, ib_b) {
+    ib_n = len(ib_a)
+    if len(ib_b) < ib_n {
+        ib_n = len(ib_b)
+    }
+    ib_i = 0
+    while ib_i < ib_n {
+        ib_x = index_at(ib_a, ib_i)
+        ib_y = index_at(ib_b, ib_i)
+        if ib_x != ib_y {
+            return ib_x < ib_y
+        }
+        ib_i = ib_i + 1
+    }
+    return len(ib_a) < len(ib_b)
+}
+
+seed(12345)
+
+print("-- uuid4 (seed 12345) --")
+i = 0
+while i < 3 {
+    u = uuid4()
+    print(u + "  len=" + str(len(u)) + " ver=" + at(u, 14) + " var=" + at(u, 19) + " valid=" + str(uuid_is_valid(u)))
+    i = i + 1
+}
+
+print("")
+print("-- uuid_is_valid --")
+print("good uuid:      " + str(uuid_is_valid("f81d4fae-7dec-41d0-a765-00a0c91e6bf6")))
+print("too short:      " + str(uuid_is_valid("f81d4fae-7dec-41d0-a765-00a0c91e6bf")))
+print("dash misplaced: " + str(uuid_is_valid("f81d4fae7-dec-41d0-a765-00a0c91e6bf6")))
+print("uppercase hex:  " + str(uuid_is_valid("F81D4FAE-7DEC-41D0-A765-00A0C91E6BF6")))
+print("non-hex letter: " + str(uuid_is_valid("z81d4fae-7dec-41d0-a765-00a0c91e6bf6")))
+print("not a string:   " + str(uuid_is_valid(42)))
+
+print("")
+print("-- short_id (base36) --")
+s8 = short_id(8)
+s12 = short_id(12)
+print("short_id(8):  " + s8 + "  len=" + str(len(s8)) + " valid_uuid=" + str(uuid_is_valid(s8)))
+print("short_id(12): " + s12 + "  len=" + str(len(s12)) + " valid_uuid=" + str(uuid_is_valid(s12)))
+
+print("")
+print("-- ulid_like (timestamp + randomness) --")
+print("b32_encode(0,10):             " + b32_encode(0, 10))
+print("b32_encode(1,10):             " + b32_encode(1, 10))
+print("b32_encode(32,10):            " + b32_encode(32, 10))
+print("b32_encode(1469918176385,10): " + b32_encode(1469918176385, 10))
+ua = ulid_like(1469918176385, 16)
+ub = ulid_like(1469918176386, 16)
+uc = ulid_like(1469918180000, 16)
+print(ua + "  len=" + str(len(ua)) + " valid_uuid=" + str(uuid_is_valid(ua)))
+print(ub + "  len=" + str(len(ub)) + " valid_uuid=" + str(uuid_is_valid(ub)))
+print(uc + "  len=" + str(len(uc)) + " valid_uuid=" + str(uuid_is_valid(uc)))
+print("sorted by time: " + str(id_before(ua, ub) and id_before(ub, uc)))
+print("reverse order:  " + str(id_before(uc, ua)))
+
+print("")
+print("-- nano_id (URL-safe) --")
+n21 = nano_id(21)
+n10 = nano_id(10)
+print("nano_id(21): " + n21 + "  len=" + str(len(n21)) + " valid_uuid=" + str(uuid_is_valid(n21)))
+print("nano_id(10): " + n10 + "  len=" + str(len(n10)) + " valid_uuid=" + str(uuid_is_valid(n10)))
+
+print("")
+print("-- 200 uuid4s: every nibble must be right --")
+bad_shape = 0
+bad_ver = 0
+bad_var = 0
+seen = ""
+i = 0
+while i < 200 {
+    u = uuid4()
+    if not uuid_is_valid(u) {
+        bad_shape = bad_shape + 1
+    }
+    if at(u, 14) != "4" {
+        bad_ver = bad_ver + 1
+    }
+    if find(UUID_VARIANT, at(u, 19)) < 0 {
+        bad_var = bad_var + 1
+    }
+    if find(seen, at(u, 19)) < 0 {
+        seen = seen + at(u, 19)
+    }
+    i = i + 1
+}
+print("bad shape:    " + str(bad_shape))
+print("bad version:  " + str(bad_ver))
+print("bad variant:  " + str(bad_var))
+print("variants seen: " + seen)
+
+print("")
+print("-- reproducibility --")
+seed(12345)
+print("same seed, first uuid again: " + uuid4())

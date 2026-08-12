@@ -1,0 +1,264 @@
+# trie.zl - a prefix tree (trie) over strings, built out of plain lists.
+#
+# Representation: zl has no structs, so a node is not an object - it is just
+# an INDEX, and the trie is three parallel lists ("columns") holding the
+# fields of every node side by side:
+#
+#     t = [chars, kids, ends]
+#
+#     t[0][i]  chars[i] - the single character on the edge leading INTO node
+#                         i. The root is node 0 and its char is "".
+#     t[1][i]  kids[i]  - list of the node indices of i's children, kept
+#                         sorted by character at insert time.
+#     t[2][i]  ends[i]  - 1 if a word finishes at node i, else 0.
+#
+# Keeping the kid lists sorted is what makes trie_words() come out in
+# lexicographic order for free: a pre-order walk visits a node before its
+# children (so "car" precedes "card") and visits children smallest-first.
+# We cannot lean on sort() for that - zl's sort() only orders numbers, and
+# "<" on two strings is a runtime error, so characters are compared with
+# code().
+#
+# Nothing here recurses. A function's PARAMETERS are scoped to the call, but
+# assigning to any other name inside a function writes the global of that
+# name, so a recursive walk would eat its own cursor. Instead the traversals
+# carry an explicit stack of
+# [node, prefix_so_far] pairs, and every parameter and local carries a
+# two-letter tag for its function (ti_ = trie_insert, wp_ = trie_with_prefix,
+# ...) so that a callee cannot clobber its caller.
+#
+# Lists are handed around by reference, so trie_insert() edits the trie in
+# place AND returns it. Assign the result back - t = trie_insert(t, w) - and
+# the module reads the same either way.
+
+fn trie_new() {
+    return [[""], [[]], [0]]
+}
+
+# Walk na_s from the root. Returns the node index it lands on, or -1 if the
+# path runs out. Note "reachable" is not "is a word" - see trie_has.
+fn trie_node_at(na_t, na_s) {
+    na_i = 0
+    na_p = 0
+    while na_p < len(na_s) {
+        na_ch = at(na_s, na_p)
+        na_next = -1
+        for na_c in na_t[1][na_i] {
+            if na_t[0][na_c] == na_ch {
+                na_next = na_c
+                break
+            }
+        }
+        if na_next < 0 {
+            return -1
+        }
+        na_i = na_next
+        na_p = na_p + 1
+    }
+    return na_i
+}
+
+# Add ti_w to the trie. Re-inserting a word is a no-op.
+fn trie_insert(ti_t, ti_w) {
+    ti_i = 0
+    ti_p = 0
+    while ti_p < len(ti_w) {
+        ti_ch = at(ti_w, ti_p)
+        ti_code = code(ti_ch)
+        ti_kids = ti_t[1][ti_i]
+        ti_next = -1
+        ti_k = 0
+        while ti_k < len(ti_kids) {
+            if ti_t[0][ti_kids[ti_k]] == ti_ch {
+                ti_next = ti_kids[ti_k]
+                break
+            }
+            ti_k = ti_k + 1
+        }
+        if ti_next < 0 {
+            # new node: append one slot to each of the three columns
+            ti_next = len(ti_t[0])
+            ti_t[0] = push(ti_t[0], ti_ch)
+            ti_t[1] = push(ti_t[1], [])
+            ti_t[2] = push(ti_t[2], 0)
+            # then splice it into the parent's kid list, in character order.
+            # (the bounds test is its own statement; "and" short-circuits
+            # now, so folding it into the while would work too.)
+            ti_pos = 0
+            while ti_pos < len(ti_kids) {
+                if code(ti_t[0][ti_kids[ti_pos]]) >= ti_code {
+                    break
+                }
+                ti_pos = ti_pos + 1
+            }
+            ti_t[1][ti_i] = insert(ti_kids, ti_pos, ti_next)
+        }
+        ti_i = ti_next
+        ti_p = ti_p + 1
+    }
+    ti_t[2][ti_i] = 1
+    return ti_t
+}
+
+# Is th_w a stored word (not merely a reachable path)?
+fn trie_has(th_t, th_w) {
+    th_n = trie_node_at(th_t, th_w)
+    if th_n < 0 {
+        return false
+    }
+    return th_t[2][th_n] == 1
+}
+
+# Is sw_pre a prefix of at least one stored WORD?
+#
+# Reachability alone is not the answer. The root is reachable by "" the
+# moment the trie exists, so trie_starts_with(trie_new(), "") used to say
+# true on a trie that stores nothing - there is no word for "" to be a
+# prefix of. Every OTHER reachable node was put there by inserting a word
+# and nothing is ever deleted, so for those reachability is exact; only
+# the root needs the extra "does this trie hold any word at all" test.
+fn trie_starts_with(sw_t, sw_pre) {
+    sw_n = trie_node_at(sw_t, sw_pre)
+    if sw_n < 0 {
+        return false
+    }
+    if sw_n == 0 {
+        return contains(sw_t[2], 1)
+    }
+    return true
+}
+
+# Every stored word beginning with wp_pre, in lexicographic order.
+# Pre-order walk with an explicit stack; children are pushed largest-first
+# so the smallest one is popped first.
+fn trie_with_prefix(wp_t, wp_pre) {
+    wp_out = []
+    wp_start = trie_node_at(wp_t, wp_pre)
+    if wp_start < 0 {
+        return wp_out
+    }
+    wp_stack = [[wp_start, wp_pre]]
+    while len(wp_stack) > 0 {
+        wp_top = last(wp_stack)
+        wp_stack = remove(wp_stack, len(wp_stack) - 1)
+        wp_n = wp_top[0]
+        wp_s = wp_top[1]
+        if wp_t[2][wp_n] == 1 {
+            wp_out = push(wp_out, wp_s)
+        }
+        wp_kids = wp_t[1][wp_n]
+        wp_k = len(wp_kids) - 1
+        while wp_k >= 0 {
+            wp_c = wp_kids[wp_k]
+            wp_stack = push(wp_stack, [wp_c, wp_s + wp_t[0][wp_c]])
+            wp_k = wp_k - 1
+        }
+    }
+    return wp_out
+}
+
+# Every stored word, in lexicographic order.
+fn trie_words(wd_t) {
+    return trie_with_prefix(wd_t, "")
+}
+
+# How many words are stored - one per node flagged as an ending.
+fn trie_count(ct_t) {
+    return sum(ct_t[2])
+}
+
+# The longest STORED WORD that is a prefix of lp_s, or "" if there is none.
+# ("word-break" style lookup: trie_longest_prefix(t, "carefully") is
+# "careful", not "carefull".)
+fn trie_longest_prefix(lp_t, lp_s) {
+    lp_best = ""
+    lp_i = 0
+    lp_p = 0
+    while lp_p < len(lp_s) {
+        lp_ch = at(lp_s, lp_p)
+        lp_next = -1
+        for lp_c in lp_t[1][lp_i] {
+            if lp_t[0][lp_c] == lp_ch {
+                lp_next = lp_c
+                break
+            }
+        }
+        if lp_next < 0 {
+            break
+        }
+        lp_i = lp_next
+        lp_p = lp_p + 1
+        if lp_t[2][lp_i] == 1 {
+            lp_best = slice(lp_s, 0, lp_p)
+        }
+    }
+    return lp_best
+}
+
+# ---------------------------------------------------------------- demo ----
+
+fn show(sh_xs) {
+    if len(sh_xs) == 0 {
+        return "(none)"
+    }
+    return join(sh_xs, " ")
+}
+fn quoted(qu_s) {
+    if len(qu_s) == 0 {
+        return "(none)"
+    }
+    return qu_s
+}
+
+vocab = ["car", "card", "care", "careful", "cars", "cat", "cats", "cattle"]
+for extra in ["do", "dog", "done", "door", "dot", "be", "bee", "been"] {
+    vocab = push(vocab, extra)
+}
+
+t = trie_new()
+letters = 0
+for word in vocab {
+    t = trie_insert(t, word)
+    letters = letters + len(word)
+}
+
+print("words inserted:      " + str(len(vocab)))
+print("letters in them:     " + str(letters))
+print("edges in the trie:   " + str(len(t[0]) - 1) + "  (root + " + str(len(t[0]) - 1) + " = " + str(len(t[0])) + " nodes)")
+print("trie_count:          " + str(trie_count(t)))
+print("")
+print("trie_words:          " + show(trie_words(t)))
+print("")
+print("has car:             " + str(trie_has(t, "car")))
+print("has ca:              " + str(trie_has(t, "ca")))
+print("has careful:         " + str(trie_has(t, "careful")))
+print("has carefully:       " + str(trie_has(t, "carefully")))
+print("has been:            " + str(trie_has(t, "been")))
+print("")
+print("starts_with ca:      " + str(trie_starts_with(t, "ca")))
+print("starts_with care:    " + str(trie_starts_with(t, "care")))
+print("starts_with carez:   " + str(trie_starts_with(t, "carez")))
+print("starts_with z:       " + str(trie_starts_with(t, "z")))
+print("starts_with '':      " + str(trie_starts_with(t, "")))
+print("")
+print("with_prefix car:     " + show(trie_with_prefix(t, "car")))
+print("with_prefix cat:     " + show(trie_with_prefix(t, "cat")))
+print("with_prefix do:      " + show(trie_with_prefix(t, "do")))
+print("with_prefix be:      " + show(trie_with_prefix(t, "be")))
+print("with_prefix zz:      " + show(trie_with_prefix(t, "zz")))
+print("")
+print("longest_prefix cartoon:   " + quoted(trie_longest_prefix(t, "cartoon")))
+print("longest_prefix carefully: " + quoted(trie_longest_prefix(t, "carefully")))
+print("longest_prefix catalog:   " + quoted(trie_longest_prefix(t, "catalog")))
+print("longest_prefix doorway:   " + quoted(trie_longest_prefix(t, "doorway")))
+print("longest_prefix cats:      " + quoted(trie_longest_prefix(t, "cats")))
+print("longest_prefix ca:        " + quoted(trie_longest_prefix(t, "ca")))
+print("longest_prefix zebra:     " + quoted(trie_longest_prefix(t, "zebra")))
+print("")
+t = trie_insert(t, "car")
+print("re-insert car, count:     " + str(trie_count(t)))
+t = trie_insert(t, "carp")
+print("insert carp, prefix car:  " + show(trie_with_prefix(t, "car")))
+print("insert carp, count:       " + str(trie_count(t)))
+empty = trie_new()
+print("empty trie words/count:   " + show(trie_words(empty)) + " / " + str(trie_count(empty)))

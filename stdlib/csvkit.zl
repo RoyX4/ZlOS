@@ -1,0 +1,163 @@
+# csvkit.zl -- a small, robust CSV parser for the zl stdlib.
+#
+# This is the hardened replacement for stdlib/csv_parse.zl, which had two
+# concrete bugs:
+#   1. BLANK LINES. csv_parse counted quote characters across a whole record to
+#      decide whether a quoted field was still open; a stray/unescaped quote made
+#      that count odd, so the parser JOINED the following line into the current
+#      record and "swallowed" the next row. A blank line combined with that logic
+#      could also fold rows together instead of yielding an empty result.
+#   2. QUOTED FIELDS. Relying on the whole-record quote count meant a legitimate
+#      quoted field containing a comma, or a doubled "" escape, could be
+#      mis-attributed when a malformed quote appeared elsewhere in the input.
+#
+# csvkit fixes both by parsing each line INDEPENDENTLY (never joining lines) and
+# by tracking quote state character-by-character with a guarded look-ahead, so an
+# unescaped quote can never reach past the end of its own line. Truly blank lines
+# (empty or whitespace-only) are skipped rather than crashing or merging rows.
+#
+# NOTE: this is line-based, so a newline embedded INSIDE a quoted field is not
+# supported (each physical line is its own row). That is the deliberate trade for
+# the safety guarantees above; csv_parse.zl kept the record-based behaviour.
+#
+#   ck_parse_line(line) -> list of field strings (handles "quoted, commas" and
+#                          "" doubled-quote escapes)
+#   ck_parse(text)      -> list of rows (each a list of fields), blank lines skipped
+#   ck_is_blank(line)   -> true when a line is empty or only whitespace
+
+# True when the line has no non-whitespace characters (empty counts as blank).
+fn ck_is_blank(ck_line) {
+    ck_i = 0
+    while ck_i < len(ck_line) {
+        ck_c = at(ck_line, ck_i)
+        if ck_c != " " and ck_c != "\t" and ck_c != "\r" and ck_c != "\n" {
+            return false
+        }
+        ck_i = ck_i + 1
+    }
+    return true
+}
+
+# Remove a single trailing carriage-return (left behind when CRLF text is split
+# on "\n"), so fields do not pick up a stray "\r".
+fn ck_strip_cr(ck_line) {
+    ck_n = len(ck_line)
+    if ck_n > 0 and at(ck_line, ck_n - 1) == "\r" {
+        return slice(ck_line, 0, ck_n - 1)
+    }
+    return ck_line
+}
+
+# Parse ONE CSV line into a list of field strings.
+# A double-quote opens/closes a quoted field; inside a quoted field a doubled ""
+# is a single literal quote. The look-ahead for the doubled quote is guarded so
+# it never reads past the end of this line (the bug that let a lone quote swallow
+# the next row cannot happen here -- there is no next row to reach).
+fn ck_parse_line(ck_line) {
+    ck_fields = []
+    ck_cur = ""
+    ck_inq = false
+    ck_i = 0
+    ck_n = len(ck_line)
+    while ck_i < ck_n {
+        ck_ch = at(ck_line, ck_i)
+        if ck_inq {
+            if ck_ch == "\"" {
+                # Guarded peek: only a "" INSIDE the line is a literal quote.
+                ck_peek = ""
+                if ck_i + 1 < ck_n {
+                    ck_peek = at(ck_line, ck_i + 1)
+                }
+                if ck_peek == "\"" {
+                    ck_cur = ck_cur + "\""   # doubled quote -> one literal quote
+                    ck_i = ck_i + 2
+                } else {
+                    ck_inq = false           # closing quote
+                    ck_i = ck_i + 1
+                }
+            } else {
+                ck_cur = ck_cur + ck_ch
+                ck_i = ck_i + 1
+            }
+        } else {
+            if ck_ch == "\"" {
+                ck_inq = true
+            } else if ck_ch == "," {
+                ck_fields = push(ck_fields, ck_cur)
+                ck_cur = ""
+            } else {
+                ck_cur = ck_cur + ck_ch
+            }
+            ck_i = ck_i + 1
+        }
+    }
+    ck_fields = push(ck_fields, ck_cur)
+    return ck_fields
+}
+
+# Parse a whole CSV string into a list of rows (each row a list of fields).
+# Splits on "\n", drops a trailing "\r" from each line, and SKIPS truly blank
+# lines so a blank line never produces a phantom row or a crash.
+fn ck_parse(ck_text) {
+    ck_rows = []
+    ck_lines = split(ck_text, "\n")
+    ck_i = 0
+    while ck_i < len(ck_lines) {
+        ck_raw = ck_strip_cr(ck_lines[ck_i])
+        if not ck_is_blank(ck_raw) {
+            ck_rows = push(ck_rows, ck_parse_line(ck_raw))
+        }
+        ck_i = ck_i + 1
+    }
+    return ck_rows
+}
+
+# ---------------- self-test ----------------
+print("== csvkit self-test ==")
+
+# 1) quoted field containing a comma: a,"b,c",d -> [a] [b,c] [d]
+r1 = ck_parse_line("a,\"b,c\",d")
+print("1 len(r1)==3        : " + (len(r1) == 3))
+print("1 r1[0]=='a'        : " + (r1[0] == "a"))
+print("1 r1[1]=='b,c'      : " + (r1[1] == "b,c"))
+print("1 r1[2]=='d'        : " + (r1[2] == "d"))
+
+# 2) doubled-quote escape inside a quoted field: "she said ""hi""",x
+r2 = ck_parse_line("\"she said \"\"hi\"\"\",x")
+print("2 len(r2)==2        : " + (len(r2) == 2))
+print("2 r2[0]=='she said \"hi\"' : " + (r2[0] == "she said \"hi\""))
+print("2 r2[1]=='x'        : " + (r2[1] == "x"))
+
+# 3) plain unquoted line
+r3 = ck_parse_line("a,b,c")
+print("3 len(r3)==3        : " + (len(r3) == 3))
+
+# 4) a blank line must not crash -- yields a single empty field, no error
+r4 = ck_parse_line("")
+print("4 blank line no crash, len==1 : " + (len(r4) == 1))
+print("4 r4[0]==''         : " + (r4[0] == ""))
+
+# 5) ck_is_blank checks
+print("5 blank('')         : " + (ck_is_blank("") == true))
+print("5 blank('   ')      : " + (ck_is_blank("   ") == true))
+print("5 blank('a')        : " + (ck_is_blank("a") == false))
+
+# 6) ck_parse of a 3-line CSV -> 3 rows
+rows3 = ck_parse("name,age\nAlice,30\nBob,25")
+print("6 rows==3           : " + (len(rows3) == 3))
+print("6 rows3[0][0]=='name' : " + (rows3[0][0] == "name"))
+print("6 rows3[2][1]=='25' : " + (rows3[2][1] == "25"))
+
+# 7) blank lines in the middle AND trailing are skipped (still 3 rows)
+rows7 = ck_parse("x,y\n\na,b\n\nc,d\n")
+print("7 blanks skipped, rows==3 : " + (len(rows7) == 3))
+print("7 rows7[1][0]=='a'  : " + (rows7[1][0] == "a"))
+print("7 rows7[2][1]=='d'  : " + (rows7[2][1] == "d"))
+
+# 8) full mixed sample: quoted comma AND doubled quote in one parse
+rows8 = ck_parse("h1,h2,h3\n\"Bob, Jr.\",25,\"Melbourne, VIC\"\n\"say \"\"hi\"\"\",1,x")
+print("8 rows==3           : " + (len(rows8) == 3))
+print("8 quoted comma kept : " + (rows8[1][0] == "Bob, Jr."))
+print("8 quoted comma col2 : " + (rows8[1][2] == "Melbourne, VIC"))
+print("8 doubled quote     : " + (rows8[2][0] == "say \"hi\""))
+print("8 row2 col count==3 : " + (len(rows8[1]) == 3))

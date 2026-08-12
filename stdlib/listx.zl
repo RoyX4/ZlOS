@@ -1,0 +1,84 @@
+# listx.zl - list utilities (no first-class functions needed).
+
+fn unique(xs) {
+    out = []
+    for x in xs {
+        if not contains(out, x) {
+            out = push(out, x)
+        }
+    }
+    return out
+}
+fn take(xs, n) {
+    out = []
+    i = 0
+    while i < n and i < len(xs) {
+        out = push(out, xs[i])
+        i = i + 1
+    }
+    return out
+}
+fn drop(xs, n) {
+    out = []
+    i = n
+    while i < len(xs) {
+        out = push(out, xs[i])
+        i = i + 1
+    }
+    return out
+}
+fn zip(a, b) {
+    out = []
+    n = len(a)
+    if len(b) < n {
+        n = len(b)
+    }
+    i = 0
+    while i < n {
+        out = push(out, [a[i], b[i]])
+        i = i + 1
+    }
+    return out
+}
+fn flatten(xss) {
+    out = []
+    for xs in xss {
+        for x in xs {
+            out = push(out, x)
+        }
+    }
+    return out
+}
+fn chunk(xs, size) {
+    out = []
+    cur = []
+    for x in xs {
+        cur = push(cur, x)
+        if len(cur) == size {
+            out = push(out, cur)
+            cur = []
+        }
+    }
+    if len(cur) > 0 {
+        out = push(out, cur)
+    }
+    return out
+}
+fn count_in(xs, v) {
+    c = 0
+    for x in xs {
+        if x == v {
+            c = c + 1
+        }
+    }
+    return c
+}
+
+nums = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
+print("unique:  " + str(unique(nums)))
+print("take 4:  " + str(take(nums, 4)))
+print("drop 4:  " + str(drop(nums, 4)))
+print("zip:     " + str(zip([1, 2, 3], ["a", "b", "c"])))
+print("flatten: " + str(flatten([[1, 2], [3], [4, 5]])))
+print("chunk 3: " + str(chunk(nums, 3)))
+print("count 5: " + str(count_in(nums, 5)))

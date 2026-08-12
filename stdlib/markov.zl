@@ -1,0 +1,313 @@
+# markov.zl - Markov-chain text generation over character or word n-grams.
+#
+# A Markov model answers one question: "given the last `order` symbols, what
+# comes next, and how often?" Training is just counting; generating is a
+# weighted coin toss per step.
+#
+# REPRESENTATION. zl has no maps and no structs, so a model is a 4-slot list:
+#
+#     [mode, order, contexts, vocab]
+#
+#   mode      "char" or "word" - what counts as one symbol. It also decides
+#             the glue used to turn symbols back into text: "" for chars,
+#             " " for words.
+#   order     how many symbols of history a context remembers.
+#   contexts  one [key, total, followers] per distinct context.
+#               key       the context's symbols already glued into a string,
+#                         so it can be compared with a single ==.
+#               total     how many times that context was seen.
+#               followers [symbol, count] pairs, in first-seen order.
+#   vocab     the distinct symbols, so smoothing knows the alphabet size.
+#
+# Gluing the context into a string key is the whole trick: it turns a
+# list-vs-list comparison into a string compare, which zl does natively.
+# Lookup is still a linear scan (no hashing), which is fine for a paragraph
+# and quadratic for a novel.
+#
+# TRAINING WRAPS AROUND. The symbol sequence is treated as a circle, so the
+# text's last symbols are followed by its first. Two consequences worth
+# knowing: there are exactly len(syms) observations, and every context in the
+# model has at least one follower - so generation can never dead-end.
+#
+# SMOOTHING. score() uses add-one (Laplace): an unseen follower of a known
+# context gets 1/(total+V) rather than 0, and a wholly unseen context gets
+# 1/V. Without it a single surprise would make the score infinite.
+
+fn symbols(text, mode) {
+    out = []
+    if mode == "word" {
+        oneline = replace(replace(text, "\n", " "), "\t", " ")
+        for w in split(oneline, " ") {
+            if len(w) > 0 {
+                out = push(out, w)
+            }
+        }
+        return out
+    }
+    i = 0
+    while i < len(text) {
+        out = push(out, at(text, i))
+        i = i + 1
+    }
+    return out
+}
+fn glue(mode) {
+    if mode == "word" {
+        return " "
+    }
+    return ""
+}
+fn window_key(syms, start, order, mode) {
+    parts = []
+    k = 0
+    while k < order {
+        parts = push(parts, syms[(start + k) % len(syms)])
+        k = k + 1
+    }
+    return join(parts, glue(mode))
+}
+fn observe(contexts, key, sym) {
+    i = 0
+    while i < len(contexts) {
+        if contexts[i][0] == key {
+            contexts[i][1] = contexts[i][1] + 1
+            fs = contexts[i][2]
+            j = 0
+            while j < len(fs) {
+                if fs[j][0] == sym {
+                    fs[j][1] = fs[j][1] + 1
+                    contexts[i][2] = fs
+                    return contexts
+                }
+                j = j + 1
+            }
+            contexts[i][2] = push(fs, [sym, 1])
+            return contexts
+        }
+        i = i + 1
+    }
+    return push(contexts, [key, 1, [[sym, 1]]])
+}
+fn build_from(syms, order, mode) {
+    vocab = []
+    for sy in syms {
+        if not contains(vocab, sy) {
+            vocab = push(vocab, sy)
+        }
+    }
+    contexts = []
+    n = len(syms)
+    if order > 0 and n > order {
+        i = 0
+        while i < n {
+            contexts = observe(contexts, window_key(syms, i, order, mode), syms[(i + order) % n])
+            i = i + 1
+        }
+    }
+    return [mode, order, contexts, vocab]
+}
+fn build(text, order) {
+    return build_from(symbols(text, "char"), order, "char")
+}
+fn build_words(text, order) {
+    return build_from(symbols(text, "word"), order, "word")
+}
+fn model_size(model) {
+    return len(model[2])
+}
+fn vocab_size(model) {
+    return len(model[3])
+}
+fn find_ctx(model, key) {
+    i = 0
+    while i < len(model[2]) {
+        if model[2][i][0] == key {
+            return i
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+# The last `order` symbols of `text`, glued into a context key.
+fn key_from_text(model, text) {
+    syms = symbols(text, model[0])
+    if len(syms) < model[1] {
+        return ""
+    }
+    parts = []
+    k = len(syms) - model[1]
+    while k < len(syms) {
+        parts = push(parts, syms[k])
+        k = k + 1
+    }
+    return join(parts, glue(model[0]))
+}
+# Highest-count follower of `context`; ties go to the first one seen.
+# "" when the context was never observed.
+fn most_likely_next(model, context) {
+    idx = find_ctx(model, key_from_text(model, context))
+    if idx < 0 {
+        return ""
+    }
+    fs = model[2][idx][2]
+    best = fs[0][0]
+    bestc = fs[0][1]
+    j = 1
+    while j < len(fs) {
+        if fs[j][1] > bestc {
+            bestc = fs[j][1]
+            best = fs[j][0]
+        }
+        j = j + 1
+    }
+    return best
+}
+# Add-one smoothed P(sym | key).
+fn prob_of(model, key, sym) {
+    v = vocab_size(model)
+    idx = find_ctx(model, key)
+    if idx < 0 {
+        return 1.0 / v
+    }
+    c = 0
+    for f in model[2][idx][2] {
+        if f[0] == sym {
+            c = f[1]
+        }
+    }
+    return (c + 1.0) / (model[2][idx][1] + v)
+}
+# One weighted draw from the followers of `key`. "" for an unknown key.
+fn pick_next(model, key) {
+    idx = find_ctx(model, key)
+    if idx < 0 {
+        return ""
+    }
+    fs = model[2][idx][2]
+    pick = int(random() * model[2][idx][1])
+    acc = 0
+    j = 0
+    while j < len(fs) {
+        acc = acc + fs[j][1]
+        if pick < acc {
+            return fs[j][0]
+        }
+        j = j + 1
+    }
+    return fs[len(fs) - 1][0]
+}
+# Exactly `n` fresh symbols, glued. `seed` is priming text: its last `order`
+# symbols become the starting context (falling back to the model's first
+# context if that never occurred). The seed itself is NOT part of the result.
+fn generate(model, n, seed) {
+    if model_size(model) == 0 {
+        return ""
+    }
+    key = key_from_text(model, seed)
+    if find_ctx(model, key) < 0 {
+        key = model[2][0][0]
+    }
+    hist = symbols(key, model[0])
+    out = []
+    i = 0
+    while i < n {
+        nxt = pick_next(model, join(hist, glue(model[0])))
+        if nxt == "" {
+            break
+        }
+        out = push(out, nxt)
+        hist = push(hist, nxt)
+        trimmed = []
+        k = len(hist) - model[1]
+        while k < len(hist) {
+            trimmed = push(trimmed, hist[k])
+            k = k + 1
+        }
+        hist = trimmed
+        i = i + 1
+    }
+    return join(out, glue(model[0]))
+}
+# Perplexity of `text` under the model: the geometric mean of 1/P over every
+# predicted symbol. 1.0 means "never surprised"; vocab_size() is the score of
+# a model that learned nothing. Lower is better. 0 when there is nothing to
+# predict.
+fn score(model, text) {
+    if vocab_size(model) == 0 {
+        return 0
+    }
+    syms = symbols(text, model[0])
+    if len(syms) <= model[1] {
+        return 0
+    }
+    surprise = 0
+    n = 0
+    i = model[1]
+    while i < len(syms) {
+        parts = []
+        k = i - model[1]
+        while k < i {
+            parts = push(parts, syms[k])
+            k = k + 1
+        }
+        surprise = surprise - log(prob_of(model, join(parts, glue(model[0])), syms[i]))
+        n = n + 1
+        i = i + 1
+    }
+    return exp(surprise / n)
+}
+
+seed(7)
+
+# --- hand-checkable model: "abab" as characters, order 1 -------------------
+# Circular, so the four observations are a->b, b->a, a->b, b->a.
+# contexts: "a" total 2 [[b,2]], "b" total 2 [[a,2]], vocab [a,b] so V = 2.
+# P(b|"a") = (2+1)/(2+2) = 0.75, and P(a|"a") = (0+1)/(2+2) = 0.25.
+demo_tiny = build("abab", 1)
+print("-- hand-checked tiny model: build(\"abab\", 1) --")
+print("model_size            " + str(model_size(demo_tiny)) + "        expect 2")
+print("vocab_size            " + str(vocab_size(demo_tiny)) + "        expect 2")
+print("most_likely_next \"a\"  " + most_likely_next(demo_tiny, "a") + "        expect b")
+print("most_likely_next \"b\"  " + most_likely_next(demo_tiny, "b") + "        expect a")
+print("generate 5 from \"a\"   " + generate(demo_tiny, 5, "a") + "    expect babab")
+print("prob_of a->b          " + str(prob_of(demo_tiny, "a", "b")) + "     expect 0.75")
+print("prob_of a->a          " + str(prob_of(demo_tiny, "a", "a")) + "     expect 0.25")
+print("score(\"abab\")         " + str(score(demo_tiny, "abab")) + "  expect 1.33333 = 1/0.75")
+print("score(\"abaa\")         " + str(score(demo_tiny, "abaa")) + "    expect 1.923 = (.75*.75*.25)^-1/3")
+
+# --- the real demo: a short paragraph --------------------------------------
+# Built from three literals because this zl truncates a single string literal
+# at 127 characters. The trailing space matters: training is circular, so the
+# last symbol runs straight into the first, and a space there keeps the seam
+# ("sets. the quick") from gluing two words together.
+demo_s1 = "the quick brown fox jumps over the lazy dog. "
+demo_s2 = "the quick brown fox naps beside the warm stone. "
+demo_s3 = "the lazy dog watches the quick fox and the warm stone cools as the sun sets. "
+demo_text = demo_s1 + demo_s2 + demo_s3
+
+demo_chars = build(demo_text, 4)
+print("")
+print("-- character model, order 4 --")
+print("training symbols  " + str(len(demo_text)))
+print("distinct contexts " + str(model_size(demo_chars)))
+print("vocabulary        " + str(vocab_size(demo_chars)))
+print("after \"the \"      " + most_likely_next(demo_chars, "the "))
+print("sample 1          " + generate(demo_chars, 64, "the quick"))
+print("sample 2          " + generate(demo_chars, 64, "the lazy "))
+print("sample 3          " + generate(demo_chars, 64, "warm stone"))
+print("score on itself   " + str(score(demo_chars, demo_text)))
+print("score on stranger " + str(score(demo_chars, "zebras quarrel vigorously")))
+
+demo_words = build_words(demo_text, 2)
+print("")
+print("-- word model, order 2 --")
+print("training symbols  " + str(len(symbols(demo_text, "word"))))
+print("distinct contexts " + str(model_size(demo_words)))
+print("vocabulary        " + str(vocab_size(demo_words)))
+print("after \"the quick\"   " + most_likely_next(demo_words, "the quick"))
+print("after \"quick brown\" " + most_likely_next(demo_words, "quick brown"))
+print("after unseen ctx    \"" + most_likely_next(demo_words, "no such words") + "\"")
+print("sample 1          " + generate(demo_words, 10, "the quick"))
+print("sample 2          " + generate(demo_words, 10, "the lazy"))
+print("sample 3          " + generate(demo_words, 10, "warm stone"))
+print("score on itself   " + str(score(demo_words, demo_text)))

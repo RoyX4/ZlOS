@@ -1,0 +1,65 @@
+# A LEXER written in MY OWN LANGUAGE.
+# This is the first real piece of self-hosting: the compiler,
+# written in the language it compiles. It mirrors lexer.c.
+#
+# A token is a 2-item list: [kind, text].
+
+fn is_digit(c) {
+    return c != "" and has("0123456789", c)
+}
+
+fn is_alpha(c) {
+    return c != "" and has("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", c)
+}
+
+fn is_space(c) {
+    return c == " " or c == "\t" or c == "\r" or c == "\n"
+}
+
+fn lex(src) {
+    tokens = []
+    i = 0
+    n = len(src)
+
+    while i < n {
+        c = at(src, i)
+
+        if is_space(c) {
+            i = i + 1
+        } else {
+            if is_digit(c) {
+                word = ""
+                while is_digit(at(src, i)) {
+                    word = word + at(src, i)
+                    i = i + 1
+                }
+                tokens = push(tokens, ["NUMBER", word])
+            } else {
+                if is_alpha(c) {
+                    word = ""
+                    while is_alpha(at(src, i)) or is_digit(at(src, i)) {
+                        word = word + at(src, i)
+                        i = i + 1
+                    }
+                    tokens = push(tokens, ["WORD", word])
+                } else {
+                    tokens = push(tokens, ["SYMBOL", c])
+                    i = i + 1
+                }
+            }
+        }
+    }
+
+    return tokens
+}
+
+# --- prove it works ---
+src = "count = 5 + double(x2)"
+print("source:", src)
+print("")
+print("tokens my zl-lexer found:")
+
+toks = lex(src)
+for t in toks {
+    print("  ", t[0], "->", t[1])
+}

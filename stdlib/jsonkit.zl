@@ -1,0 +1,148 @@
+# jsonkit - correct JSON encode / decode in pure zl.
+#
+# Replaces the broken stdlib JSON found on 2026-08-03: json_parse/json_pretty
+# ABORT with a runtime error, and jsonw emits INVALID json (it never escapes
+# backslashes or control characters). This one escapes correctly and round-trips.
+#
+# zl has no map type, so a JSON object decodes to a LIST OF [key, value] PAIRS,
+# and jk_obj() encodes one back. Arrays are plain zl lists.
+#
+#   jk_enc(v)        -> compact JSON for a num / str / bool / nil / list(array)
+#   jk_obj(pairs)    -> JSON object from [[key,val],...]
+#   jk_decode(text)  -> the zl value (objects come back as [[k,v],...])
+
+# ---------- ENCODE ----------
+
+fn jk_hex2(n) {
+    jh = hex(n)
+    if len(jh) < 2 { jh = "0" + jh }
+    return jh
+}
+
+fn jk_esc(s) {
+    je = ""
+    ji = 0
+    while ji < len(s) {
+        jc = at(s, ji)
+        jk = code(jc)
+        if jc == "\"" { je = je + "\\\"" } elif jc == "\\" { je = je + "\\\\" } elif jk == 10 { je = je + "\\n" } elif jk == 9 { je = je + "\\t" } elif jk == 13 { je = je + "\\r" } elif jk < 32 { je = je + "\\u00" + jk_hex2(jk) } else { je = je + jc }
+        ji = ji + 1
+    }
+    return je
+}
+
+fn jk_enc(v) {
+    jt = type(v)
+    if jt == "nil" { return "null" } elif jt == "bool" { if v { return "true" } return "false" } elif jt == "num" { return str(v) } elif jt == "str" { return "\"" + jk_esc(v) + "\"" } elif jt == "list" {
+        jr = "["
+        jf = true
+        for e in v {
+            if not jf { jr = jr + "," }
+            jr = jr + jk_enc(e)
+            jf = false
+        }
+        return jr + "]"
+    }
+    return "null"
+}
+
+fn jk_obj(pairs) {
+    jo = "{"
+    jof = true
+    for p in pairs {
+        if not jof { jo = jo + "," }
+        jo = jo + "\"" + jk_esc(p[0]) + "\":" + jk_enc(p[1])
+        jof = false
+    }
+    return jo + "}"
+}
+
+# ---------- DECODE ----------
+# a shared cursor over the source (the write-through scoping rule lets these
+# functions share jd_src / jd_pos, exactly as compiler.zl shares its cursor).
+
+jd_src = ""
+jd_pos = 0
+
+fn jd_isspace(c) { return c == " " or c == "\t" or c == "\n" or c == "\r" }
+
+fn jd_ws() {
+    while jd_pos < len(jd_src) and jd_isspace(at(jd_src, jd_pos)) { jd_pos = jd_pos + 1 }
+}
+
+fn jd_string() {
+    jd_pos = jd_pos + 1                 # opening quote
+    js = ""
+    while jd_pos < len(jd_src) {
+        jsc = at(jd_src, jd_pos)
+        if jsc == "\"" { jd_pos = jd_pos + 1  return js }
+        if jsc == "\\" {
+            jd_pos = jd_pos + 1
+            je = at(jd_src, jd_pos)
+            if je == "n" { js = js + "\n" } elif je == "t" { js = js + "\t" } elif je == "r" { js = js + "\r" } elif je == "\"" { js = js + "\"" } elif je == "\\" { js = js + "\\" } else { js = js + je }
+        } else {
+            js = js + jsc
+        }
+        jd_pos = jd_pos + 1
+    }
+    return js
+}
+
+fn jd_number() {
+    jn_start = jd_pos
+    jn_go = true
+    while jn_go and jd_pos < len(jd_src) {
+        jnc = at(jd_src, jd_pos)
+        if jnc == "-" or jnc == "+" or jnc == "." or jnc == "e" or jnc == "E" or (code(jnc) >= 48 and code(jnc) <= 57) {
+            jd_pos = jd_pos + 1
+        } else {
+            jn_go = false
+        }
+    }
+    return num(slice(jd_src, jn_start, jd_pos))
+}
+
+fn jd_array() {
+    jd_pos = jd_pos + 1                 # [
+    ja = []
+    jd_ws()
+    if jd_pos < len(jd_src) and at(jd_src, jd_pos) == "]" { jd_pos = jd_pos + 1  return ja }
+    while jd_pos < len(jd_src) {
+        ja = push(ja, jd_value())
+        jd_ws()
+        jac = at(jd_src, jd_pos)
+        if jac == "," { jd_pos = jd_pos + 1  jd_ws() } elif jac == "]" { jd_pos = jd_pos + 1  return ja } else { return ja }
+    }
+    return ja
+}
+
+fn jd_object() {
+    jd_pos = jd_pos + 1                 # {
+    job = []
+    jd_ws()
+    if jd_pos < len(jd_src) and at(jd_src, jd_pos) == "}" { jd_pos = jd_pos + 1  return job }
+    while jd_pos < len(jd_src) {
+        jd_ws()
+        jkey = jd_string()
+        jd_ws()
+        jd_pos = jd_pos + 1             # :
+        jval = jd_value()
+        job = push(job, [jkey, jval])
+        jd_ws()
+        joc = at(jd_src, jd_pos)
+        if joc == "," { jd_pos = jd_pos + 1 } elif joc == "}" { jd_pos = jd_pos + 1  return job } else { return job }
+    }
+    return job
+}
+
+fn jd_value() {
+    jd_ws()
+    jvc = at(jd_src, jd_pos)
+    if jvc == "{" { return jd_object() } elif jvc == "[" { return jd_array() } elif jvc == "\"" { return jd_string() } elif jvc == "t" { jd_pos = jd_pos + 4  return true } elif jvc == "f" { jd_pos = jd_pos + 5  return false } elif jvc == "n" { jd_pos = jd_pos + 4  return nil() } else { return jd_number() }
+}
+
+fn jk_decode(text) {
+    jd_src = text
+    jd_pos = 0
+    return jd_value()
+}

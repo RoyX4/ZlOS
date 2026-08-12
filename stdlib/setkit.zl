@@ -1,0 +1,75 @@
+# setkit - set operations on plain lists.
+#
+# zl has no set type, so a "set" here is just a list with no duplicates, and
+# the operations keep it that way. Pairs with dictkit (the map stand-in).
+# All locals are prefixed sk_ so a library function never clobbers a caller's
+# global of the same name (zl's assignment-writes-global rule).
+#
+#   sk_has(s, x)        -> is x in the set
+#   sk_unique(xs)       -> xs with duplicates removed (order preserved)
+#   sk_add(s, x)        -> a new set with x added (no-op if already present)
+#   sk_union(a, b)      -> everything in either
+#   sk_intersect(a, b)  -> only what is in both
+#   sk_diff(a, b)       -> in a but not b
+#   sk_subset(a, b)     -> is every element of a also in b
+#   sk_equal(a, b)      -> same elements, ignoring order and duplicates
+#   sk_size(s)          -> number of distinct elements
+
+fn sk_has(s, x) {
+    return contains(s, x)
+}
+
+fn sk_unique(xs) {
+    sk_out = []
+    for sk_e in xs {
+        if not contains(sk_out, sk_e) { sk_out = push(sk_out, sk_e) }
+    }
+    return sk_out
+}
+
+fn sk_add(s, x) {
+    if contains(s, x) { return s }
+    return push(s, x)
+}
+
+fn sk_union(a, b) {
+    sk_out = sk_unique(a)
+    for sk_e in b {
+        if not contains(sk_out, sk_e) { sk_out = push(sk_out, sk_e) }
+    }
+    return sk_out
+}
+
+fn sk_intersect(a, b) {
+    sk_out = []
+    for sk_e in a {
+        if contains(b, sk_e) and not contains(sk_out, sk_e) { sk_out = push(sk_out, sk_e) }
+    }
+    return sk_out
+}
+
+fn sk_diff(a, b) {
+    sk_out = []
+    for sk_e in a {
+        if not contains(b, sk_e) and not contains(sk_out, sk_e) { sk_out = push(sk_out, sk_e) }
+    }
+    return sk_out
+}
+
+fn sk_subset(a, b) {
+    for sk_e in a {
+        if not contains(b, sk_e) { return false }
+    }
+    return true
+}
+
+fn sk_equal(a, b) {
+    sk_ua = sk_unique(a)
+    sk_ub = sk_unique(b)
+    if len(sk_ua) != len(sk_ub) { return false }
+    return sk_subset(sk_ua, sk_ub)
+}
+
+fn sk_size(s) {
+    return len(sk_unique(s))
+}
