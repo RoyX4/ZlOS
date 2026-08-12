@@ -46,9 +46,26 @@ static int set_has(NameSet *s, const char *name)
     return 0;
 }
 
+static int set_index(NameSet *s, const char *name)
+{
+    for (int i = 0; i < s->count; i++)
+        if (strcmp(s->names[i], name) == 0) return i;
+    return -1;
+}
+
 /* the names of every user-defined function - so a CALL can tell a
  * real function apart from a built-in like print/dir. */
 static NameSet g_funcs;
+
+/* each function's parameter count, index-parallel to g_funcs. Needed to
+ * emit a function VALUE: zl_callv has to cast the pointer back to the
+ * exact signature, so the arity travels with the pointer. */
+static int g_func_arity[256];
+
+/* the names bound in the scope being emitted (params + locals, or the
+ * top-level's globals). A call to a name in here is an INDIRECT call
+ * through a variable holding a function value, not a builtin. */
+static NameSet *g_scope = 0;
 
 /* the names of every top-level (global) variable. A function that
  * assigns one of these should MUTATE the global, not make a local
@@ -205,7 +222,15 @@ static void emit_call(FILE *out, Node *n)
     }
     const char *name = n->a->text;
 
-    if (set_has(&g_funcs, name)) {
+    /* A name bound as a VARIABLE in this scope shadows everything else: it
+     * holds a function value at run time, so the call goes indirect through
+     * zl_callv. This is what makes `fn ix_sort_by(xs, key) { ... key(x) ... }`
+     * work - `key` is a parameter, not a known function name. */
+    if (g_scope && set_has(g_scope, name)) {
+        char extra[MAX_TEXT + 16];
+        snprintf(extra, sizeof(extra), "v_%s, %d", name, n->nkids);
+        emit_seq_call(out, "zl_callv", extra, n->kids, n->nkids);
+    } else if (set_has(&g_funcs, name)) {
         /* a real user function -> direct C call: zl_fn_name(a, b) */
         char head[MAX_TEXT + 8];
         snprintf(head, sizeof(head), "zl_fn_%s", name);
@@ -234,7 +259,17 @@ static void emit_expr(FILE *out, Node *n)
             emit_c_string(out, n->text);
             fputc(')', out);
             break;
-        case N_IDENT:  fprintf(out, "v_%s", n->text); break;   /* variable read */
+        /* variable read - unless the name is a user FUNCTION not shadowed by
+         * a variable in scope, in which case reading it yields a function
+         * VALUE (the compiled equivalent of the interpreter's V_FN). That is
+         * what lets a function be passed as an argument. */
+        case N_IDENT:
+            if ((!g_scope || !set_has(g_scope, n->text)) && set_has(&g_funcs, n->text))
+                fprintf(out, "zl_fn((void*)zl_fn_%s, %d)",
+                        n->text, g_func_arity[set_index(&g_funcs, n->text)]);
+            else
+                fprintf(out, "v_%s", n->text);
+            break;
 
         case N_LIST: {
             char extra[16];
@@ -443,9 +478,19 @@ static void emit_function(FILE *out, Node *fn)
             fprintf(out, "    Value v_%s = zl_nil();\n", locals.names[i]);
     }
 
+    /* the names this body can see as VARIABLES: params, its own locals, and
+     * the shared globals. A call to one of these is an indirect call through
+     * a function value; a call to anything else is a direct call or builtin. */
+    NameSet scope; scope.count = 0;
+    for (int p = 0; p < fn->nkids; p++) set_add(&scope, fn->kids[p]->text);
+    for (int i = 0; i < locals.count; i++)  set_add(&scope, locals.names[i]);
+    for (int i = 0; i < g_globals.count; i++) set_add(&scope, g_globals.names[i]);
+    g_scope = &scope;
+
     emit_block(out, fn->a, 1);
     fputs("    return zl_nil();\n", out);   /* fall-through result */
     fputs("}\n\n", out);
+    g_scope = 0;
 }
 
 /* emit the function prototype (so functions can call each other / recurse) */
@@ -472,11 +517,15 @@ int main(int argc, char **argv)
     Token *tokens  = lex_file(argv[1], &count);
     Node  *program = parse(tokens, count);
 
-    /* pass 1: find every user function name */
+    /* pass 1: find every user function name, and record its arity so a
+     * function used as a value can be cast back to the right signature */
     g_funcs.count = 0;
     for (int i = 0; i < program->nkids; i++)
-        if (program->kids[i]->type == N_FN)
+        if (program->kids[i]->type == N_FN) {
             set_add(&g_funcs, program->kids[i]->text);
+            int fi = set_index(&g_funcs, program->kids[i]->text);
+            if (fi >= 0 && fi < 256) g_func_arity[fi] = program->kids[i]->nkids;
+        }
 
     FILE *out = fopen("out.c", "wb");
     if (!out) { fprintf(stderr, "can't write out.c\n"); return 1; }
@@ -508,12 +557,15 @@ int main(int argc, char **argv)
         if (program->kids[i]->type == N_FN)
             emit_function(out, program->kids[i]);
 
-    /* main() = the top-level statements (skipping function defs) */
+    /* main() = the top-level statements (skipping function defs). At the top
+     * level the globals are the variables in scope. */
+    g_scope = &g_globals;
     fputs("int main(void) {\n", out);
     for (int i = 0; i < program->nkids; i++)
         if (program->kids[i]->type != N_FN)
             emit_stmt(out, program->kids[i], 1);
     fputs("    return 0;\n}\n", out);
+    g_scope = 0;
 
     fclose(out);
     printf("wrote out.c\n");

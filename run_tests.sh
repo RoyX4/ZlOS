@@ -38,6 +38,37 @@ for t in tests/*.zl; do
     fi
 done
 
+echo "== examples: interpreter runs clean =="
+mkdir -p examples_out
+for ex in examples/*.zl; do
+    name=$(basename "$ex" .zl)
+    [ "$name" = "calc_repl" ] && { echo "  skip  $name (interactive REPL)"; continue; }
+    if timeout 300 ./interp "$ex" >"$tmp/ex_$name.out" 2>&1; then
+        echo "  ok    $name"
+    else
+        echo "  FAIL  $name"; tail -2 "$tmp/ex_$name.out"; fail=1
+    fi
+done
+
+# Only the deterministic examples can be diffed against a compiled build:
+# maze uses rand(), and life/vm print elapsed-time measurements that
+# legitimately differ between an interpreted and a compiled run.
+echo "== examples: C backend cross-check (deterministic ones) =="
+for name in csvstats wordfreq texttools; do
+    ( cd "$tmp" && "$OLDPWD/compile" "$OLDPWD/examples/$name.zl" >/dev/null 2>&1 && \
+      gcc -O2 -D_strdup=strdup -I"$OLDPWD" -o "ex_$name.bin" out.c "$OLDPWD/runtime.c" "$OLDPWD/os_linux.c" -lm 2>"ex_$name.cc.err" )
+    if [ -x "$tmp/ex_$name.bin" ]; then
+        "$tmp/ex_$name.bin" > "$tmp/ex_$name.c.out" 2>&1
+        if diff -q "$tmp/ex_$name.out" "$tmp/ex_$name.c.out" >/dev/null; then
+            echo "  match $name"
+        else
+            echo "  DIFF  $name"; fail=1
+        fi
+    else
+        echo "  BUILD FAIL $name"; cat "$tmp/ex_$name.cc.err"; fail=1
+    fi
+done
+
 echo "== LLVM backend: unboxed-subset smoke test =="
 cat > "$tmp/llvm_smoke.zl" <<'EOF'
 fn fib(n) {

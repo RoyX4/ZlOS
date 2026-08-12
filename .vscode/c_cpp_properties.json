@@ -1,0 +1,18 @@
+{
+    "version": 4,
+    "configurations": [
+        {
+            "name": "zl-linux",
+            "includePath": ["${workspaceFolder}/**"],
+            "defines": [
+                "BUILD_PARSER",
+                "BUILD_INTERP",
+                "_strdup=strdup"
+            ],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c17",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compileCommands": "${workspaceFolder}/compile_commands.json"
+        }
+    ]
+}

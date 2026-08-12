@@ -9,7 +9,7 @@
 #ifndef RUNTIME_H
 #define RUNTIME_H
 
-typedef enum { V_NIL, V_NUM, V_STR, V_BOOL, V_LIST } ValueType;
+typedef enum { V_NIL, V_NUM, V_STR, V_BOOL, V_LIST, V_FN } ValueType;
 
 typedef struct Value {
     ValueType      type;
@@ -19,6 +19,8 @@ typedef struct Value {
     int            nitems;
     int            cap;      /* V_LIST spare capacity (amortized push)  */
     int           *tip;      /* V_LIST slots handed out - see zl push() */
+    void          *fnptr;    /* V_FN - the compiled zl_fn_NAME function  */
+    int            fnargs;   /* V_FN - how many Value params it takes    */
 } Value;
 
 /* making values */
@@ -39,5 +41,14 @@ Value zl_item(Value v, int i);            /* the i-th item of a list  */
 
 /* built-in functions: zl_calln("print", 2, a, b) */
 Value zl_calln(const char *name, int n, ...);
+
+/* first-class functions. A user function used as a VALUE (passed to another
+ * function, stored in a variable) becomes a V_FN carrying its compiled
+ * address; calling a variable that holds one goes through zl_callv, which
+ * casts the pointer to the arity the call site actually uses. The
+ * interpreter has had this since the start (its V_FN points at the AST
+ * node); this is the compiled equivalent. */
+Value zl_fn(void *fnptr, int nargs);
+Value zl_callv(Value f, int n, ...);
 
 #endif /* RUNTIME_H */

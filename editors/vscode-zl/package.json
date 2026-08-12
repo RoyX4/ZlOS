@@ -1,0 +1,26 @@
+{
+  "name": "zl-lang",
+  "displayName": "zl language",
+  "description": "Syntax highlighting and editor support for the zl programming language",
+  "version": "0.1.0",
+  "publisher": "zl",
+  "engines": { "vscode": "^1.60.0" },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "zl",
+        "aliases": ["zl", "ZL"],
+        "extensions": [".zl"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "zl",
+        "scopeName": "source.zl",
+        "path": "./syntaxes/zl.tmLanguage.json"
+      }
+    ]
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "zl",
+  "scopeName": "source.zl",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#fstrings" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#function-def" },
+    { "include": "#keywords" },
+    { "include": "#constants" },
+    { "include": "#builtins" },
+    { "include": "#function-call" },
+    { "include": "#operators" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.zl",
+          "begin": "#",
+          "end": "$"
+        }
+      ]
+    },
+
+    "escapes": {
+      "name": "constant.character.escape.zl",
+      "match": "\\\\(n|t|r|0|\\\\|\"|x[0-9A-Fa-f]{2})"
+    },
+
+    "strings": {
+      "name": "string.quoted.double.zl",
+      "begin": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.zl" } },
+      "end": "\"",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.zl" } },
+      "patterns": [ { "include": "#escapes" } ]
+    },
+
+    "fstrings": {
+      "name": "string.interpolated.zl",
+      "begin": "\\bf\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.zl" } },
+      "end": "\"",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.zl" } },
+      "patterns": [
+        { "include": "#escapes" },
+        {
+          "name": "meta.interpolation.zl",
+          "begin": "\\{",
+          "beginCaptures": { "0": { "name": "punctuation.definition.template-expression.begin.zl" } },
+          "end": "\\}",
+          "endCaptures": { "0": { "name": "punctuation.definition.template-expression.end.zl" } },
+          "patterns": [
+            { "include": "#builtins" },
+            { "include": "#numbers" },
+            { "include": "#operators" },
+            { "include": "#function-call" },
+            { "include": "#identifiers" }
+          ]
+        }
+      ]
+    },
+
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.hex.zl", "match": "\\b0[xX][0-9A-Fa-f]+\\b" },
+        { "name": "constant.numeric.float.zl", "match": "\\b[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?\\b" },
+        { "name": "constant.numeric.integer.zl", "match": "\\b[0-9]+\\b" }
+      ]
+    },
+
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.zl",
+          "match": "\\b(if|elif|else|while|for|do|loop|return|break|continue)\\b"
+        },
+        {
+          "name": "keyword.operator.word.zl",
+          "match": "\\b(and|or|not|in|to|step)\\b"
+        },
+        {
+          "name": "storage.type.function.zl",
+          "match": "\\b(fn)\\b"
+        }
+      ]
+    },
+
+    "constants": {
+      "name": "constant.language.zl",
+      "match": "\\b(true|false|nil)\\b"
+    },
+
+    "builtins": {
+      "name": "support.function.builtin.zl",
+      "match": "\\b(abs|acos|asin|at|atan|band|bnot|bool|bor|bxor|ceil|chr|clamp|code|concat|contains|cos|count|dir|drop|ends|env|exit|exp|fill|find|first|flat|floor|fmod|gcd|has|hex|hypot|index_at|index_of|input|insert|int|join|last|len|lines|log|log10|log2|lower|ltrim|max|min|now|num|pad|pow|print|procs|push|randint|random|range|read|remove|repeat|replace|reverse|round|rtrim|seed|shl|shr|sign|sin|slice|sort|split|sqrt|starts|str|sum|swapcase|take|tan|title|trim|trunc|type|upper|write|write_bytes)\\b(?=\\s*\\()"
+    },
+
+    "function-def": {
+      "match": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "storage.type.function.zl" },
+        "2": { "name": "entity.name.function.zl" }
+      }
+    },
+
+    "function-call": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+      "name": "entity.name.function.call.zl"
+    },
+
+    "operators": {
+      "patterns": [
+        { "name": "keyword.operator.assignment.zl", "match": "(\\+=|-=|\\*=|/=|%=|=)" },
+        { "name": "keyword.operator.comparison.zl", "match": "(==|!=|<=|>=|<|>)" },
+        { "name": "keyword.operator.arithmetic.zl", "match": "(\\+|-|\\*|/|%)" },
+        { "name": "keyword.operator.ternary.zl", "match": "(\\?|:)" }
+      ]
+    },
+
+    "identifiers": {
+      "name": "variable.other.zl",
+      "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+    }
+  }
+}

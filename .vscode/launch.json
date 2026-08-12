@@ -1,0 +1,59 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "debug interp on current .zl file",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/interp",
+            "args": ["${file}"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "preLaunchTask": "build toolchain",
+            "setupCommands": [
+                { "description": "pretty printing", "text": "-enable-pretty-printing", "ignoreFailures": true }
+            ]
+        },
+        {
+            "name": "debug compile (C backend) on current .zl file",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/compile",
+            "args": ["${file}"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "preLaunchTask": "build toolchain",
+            "setupCommands": [
+                { "description": "pretty printing", "text": "-enable-pretty-printing", "ignoreFailures": true }
+            ]
+        },
+        {
+            "name": "debug nativegen on current .zl file",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/nativegen",
+            "args": ["${file}"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "preLaunchTask": "build toolchain",
+            "setupCommands": [
+                { "description": "pretty printing", "text": "-enable-pretty-printing", "ignoreFailures": true }
+            ]
+        },
+        {
+            "name": "debug a nativegen-produced binary (raw ELF, no symbols)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/native_out",
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "setupCommands": [
+                { "description": "intel syntax", "text": "-gdb-set disassembly-flavor intel", "ignoreFailures": true }
+            ]
+        }
+    ]
+}

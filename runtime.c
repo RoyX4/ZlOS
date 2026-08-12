@@ -23,12 +23,15 @@
 
 /* The zlx_ bridge (bottom of this file) lets compiled LLVM code call the
  * boxed builtins by passing POINTERS to Value slots it stack-allocates as
- * raw bytes. compilel.c sizes those slots at 48 bytes (its VALSZ), so a
- * Value must actually be 48 bytes or args[i] indexing in zlx_call desyncs.
- * This is the portable (C89) static assert - MSVC's default C mode does not
- * enable the _Static_assert keyword, so a size mismatch makes this typedef
- * an array of negative length and the compile fails loudly. */
-typedef char zl_value_is_48_bytes[(sizeof(Value) == 48) ? 1 : -1];
+ * raw bytes. compilel.c sizes those slots at VALSZ, so a Value must be
+ * exactly that size or args[i] indexing in zlx_call desyncs. This is the
+ * portable (C89) static assert - MSVC's default C mode does not enable the
+ * _Static_assert keyword, so a size mismatch makes this typedef an array of
+ * negative length and the compile fails loudly.
+ *
+ * It was 48 until first-class functions added fnptr+fnargs; if you change
+ * the Value layout again, update compilel.c's VALSZ to match. */
+typedef char zl_value_is_64_bytes[(sizeof(Value) == 64) ? 1 : -1];
 
 static void rt_error(const char *msg)
 {
@@ -175,6 +178,7 @@ int zl_truthy(Value v)
         case V_NUM:  return v.num != 0;
         case V_STR:  return v.str && v.str[0] != '\0';
         case V_LIST: return v.nitems > 0;
+        case V_FN:   return 1;            /* matches interp.c */
     }
     return 0;
 }
@@ -186,6 +190,7 @@ static char *to_string(Value v)
         case V_NIL:  return _strdup("nil");
         case V_BOOL: return _strdup(v.num ? "true" : "false");
         case V_STR:  return _strdup(v.str ? v.str : "");
+        case V_FN:   return _strdup("<function>");   /* matches interp.c */
         case V_NUM:
             if (v.num == (long long)v.num)
                 snprintf(buf, sizeof(buf), "%lld", (long long)v.num);
@@ -260,6 +265,7 @@ static int type_rank(ValueType t)
         case V_NUM:  return 2;
         case V_STR:  return 3;
         case V_LIST: return 4;
+        case V_FN:   return 5;            /* matches interp.c */
     }
     return 6;
 }
@@ -1178,6 +1184,46 @@ Value zl_calln(const char *name, int n, ...)
     Value r = builtin(name, args, n);
     free(args);
     return r;
+}
+
+/* ---- first-class functions ----
+ * A compiled zl function is a plain C function taking N Values and
+ * returning one. Wrapping its address in a Value lets it be passed around
+ * like any other value; zl_callv casts back to the concrete signature for
+ * the arity the call site uses. The cast has to be exact - calling through
+ * the wrong signature is undefined behaviour, not merely wrong - so the
+ * arity recorded at capture time is checked against the call. */
+Value zl_fn(void *fnptr, int nargs)
+{
+    Value v = zl_nil();
+    v.type = V_FN; v.fnptr = fnptr; v.fnargs = nargs;
+    return v;
+}
+
+Value zl_callv(Value f, int n, ...)
+{
+    if (f.type != V_FN || !f.fnptr) rt_error("tried to call something that is not a function");
+    if (f.fnargs != n) rt_error("wrong number of arguments for a function value");
+
+    Value a[8];
+    va_list ap;
+    va_start(ap, n);
+    for (int i = 0; i < n && i < 8; i++) a[i] = va_arg(ap, Value);
+    va_end(ap);
+
+    switch (n) {
+        case 0: return ((Value(*)(void))f.fnptr)();
+        case 1: return ((Value(*)(Value))f.fnptr)(a[0]);
+        case 2: return ((Value(*)(Value,Value))f.fnptr)(a[0],a[1]);
+        case 3: return ((Value(*)(Value,Value,Value))f.fnptr)(a[0],a[1],a[2]);
+        case 4: return ((Value(*)(Value,Value,Value,Value))f.fnptr)(a[0],a[1],a[2],a[3]);
+        case 5: return ((Value(*)(Value,Value,Value,Value,Value))f.fnptr)(a[0],a[1],a[2],a[3],a[4]);
+        case 6: return ((Value(*)(Value,Value,Value,Value,Value,Value))f.fnptr)(a[0],a[1],a[2],a[3],a[4],a[5]);
+        case 7: return ((Value(*)(Value,Value,Value,Value,Value,Value,Value))f.fnptr)(a[0],a[1],a[2],a[3],a[4],a[5],a[6]);
+        case 8: return ((Value(*)(Value,Value,Value,Value,Value,Value,Value,Value))f.fnptr)(a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7]);
+        default: rt_error("a function value takes at most 8 arguments");
+    }
+    return zl_nil();
 }
 
 /* =============================================================

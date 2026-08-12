@@ -1,0 +1,20 @@
+{
+    "files.associations": {
+        "*.zl": "zl"
+    },
+    "C_Cpp.default.compilerPath": "/usr/bin/gcc",
+    "C_Cpp.default.cStandard": "c17",
+    "clangd.arguments": [
+        "--compile-commands-dir=${workspaceFolder}",
+        "--header-insertion=never"
+    ],
+    "[c]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+    },
+    "search.exclude": {
+        "**/out.c": true,
+        "**/out.ll": true,
+        "**/compile_commands.json": true
+    }
+}

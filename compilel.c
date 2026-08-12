@@ -293,8 +293,9 @@ static int g_used_listrt = 0;     /* used the list runtime (HELPER_LISTRT) */
 static int g_used_bridge = 0;     /* called a builtin through the zlx_ bridge */
 
 /* sizeof(Value) in runtime.h - the size of one boxed-value slot the bridge
- * stack-allocates. runtime.c guards this equality with a _Static_assert. */
-#define VALSZ 48
+ * stack-allocates. runtime.c guards this equality with a static assert.
+ * Was 48 before first-class functions added fnptr+fnargs to Value. */
+#define VALSZ 64
 
 /* the builtin names referenced through the bridge, each emitted once as a
  * private @.bname.N constant so @zlx_call can be handed a name pointer */

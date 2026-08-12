@@ -23,6 +23,23 @@ echo "==> lexer, parser (standalone demo binaries)"
 $CC $CFLAGS -o lexer_demo  lexer.c  -lm
 $CC $CFLAGS -DBUILD_PARSER -o parser_demo parser.c lexer.c -lm
 
+# compile_commands.json - so clangd / VS Code IntelliSense resolve the
+# BUILD_PARSER / BUILD_INTERP / _strdup defines the same way the real build
+# does. Without it every file shows phantom errors in the editor.
+echo "==> compile_commands.json (for clangd / IntelliSense)"
+{
+    printf '[\n'
+    first=1
+    for f in lexer.c parser.c interp.c runtime.c os_linux.c compile.c compilel.c nativegen.c; do
+        [ -f "$f" ] || continue
+        [ $first -eq 1 ] || printf ',\n'
+        first=0
+        printf '  {"directory": "%s", "file": "%s/%s", "command": "%s %s -DBUILD_PARSER -DBUILD_INTERP -c %s"}' \
+            "$PWD" "$PWD" "$f" "$CC" "$CFLAGS" "$f"
+    done
+    printf '\n]\n'
+} > compile_commands.json
+
 echo
 echo "built: interp compile compilel nativegen lexer_demo parser_demo"
 echo

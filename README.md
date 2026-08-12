@@ -77,6 +77,49 @@ real-PC-control builtins - the interpreter and C backend have the full
 language, this one trades completeness for "no C compiler in the loop at
 all."
 
+## First-class functions in the C backend (new)
+
+Passing a function as a value — `ix_sort_by(counts, neg_count)`, then
+calling `key(x)` inside the callee — worked in the interpreter from the
+start (its `V_FN` points at the AST node) but was never implemented in the
+C backend: it emitted a function name as if it were a variable, so
+`examples/wordfreq.zl` and `examples/texttools.zl` failed to compile with
+`'v_neg_count' undeclared`. Verified pre-existing against the original
+unmodified `compile.c`, not a port regression.
+
+Now supported: `Value` gained `fnptr`/`fnargs`, `zl_fn()` captures a
+compiled function as a value, and `zl_callv()` casts back to the arity the
+call site uses. `compile.c` tracks the names bound in each scope, so a call
+to a *variable* holding a function goes indirect while a call to a known
+function stays a direct C call. Both examples now compile and match the
+interpreter byte-for-byte.
+
+This grew `Value` from 48 to 64 bytes; `compilel.c`'s `VALSZ` was updated
+to match, which `runtime.c`'s static assert enforces.
+
+## Editor support (VS Code)
+
+`editors/vscode-zl/` is the syntax-highlighting extension (carried over
+from the original repo, install instructions now cover Linux). Install it
+with:
+
+```bash
+cp -r editors/vscode-zl ~/.vscode/extensions/vscode-zl
+```
+
+`.vscode/` in this repo adds, for anyone who opens the folder:
+
+- **tasks** — build the toolchain, run the test suite, and compile/run the
+  open `.zl` file through any of the three backends (Ctrl+Shift+B)
+- **launch configs** — gdb on `interp`/`compile`/`nativegen`, plus one for
+  stepping through a `nativegen`-produced raw ELF in Intel-syntax
+  disassembly (no symbols, since it hand-emits its own machine code)
+- **IntelliSense/clangd config** — `build.sh` generates
+  `compile_commands.json` with the same `BUILD_PARSER`/`BUILD_INTERP`/
+  `_strdup` defines the real build uses, so the editor doesn't show
+  phantom errors. Verified: `clangd --check` reports 0 diagnostics on every
+  source file.
+
 ## Test
 
 ```
@@ -85,10 +128,15 @@ all."
 
 Runs the full `tests/*.zl` suite (2,133 assertions) through the
 interpreter, cross-checks the C backend produces byte-identical output for
-every one of them, and cross-checks the LLVM and native x86-64 backends
-against the interpreter on subset smoke tests. All green on a clean Kali
-Linux build. Needs `gcc`; `clang`/`llvm` for the LLVM stage (skipped with a
-notice if absent).
+every one of them, runs every `examples/*.zl` program and cross-checks the
+deterministic ones against a compiled build, and cross-checks the LLVM and
+native x86-64 backends against the interpreter on subset smoke tests. All
+green on a clean Kali Linux build. Needs `gcc`; `clang`/`llvm` for the LLVM
+stage (skipped with a notice if absent).
+
+`examples/raytracer.zl` and `examples/mandelbrot.zl` write real BMPs into
+`examples_out/` — a genuine raytracer with reflections and shadows, written
+in zl, rendering on Linux.
 
 ## What's not ported
 

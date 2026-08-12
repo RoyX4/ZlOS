@@ -10,3 +10,6 @@ out.c
 _probe_out.txt
 compilel
 out.ll
+examples_out/
+*.bmp
+compile_commands.json
