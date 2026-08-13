@@ -58,6 +58,10 @@ extern void idt_init(void);
 extern unsigned int idt_ticks(void);
 extern int  idt_scan(void);
 extern void console_at_num(int row, int col, long n, unsigned char attr);
+extern int  cpu_brand_byte(int i);
+extern void speaker_on(unsigned freq);
+extern void speaker_off(void);
+extern void kreboot(void);
 extern int  console_kind(void);
 extern int  console_cols(void);
 extern int  console_rows(void);
@@ -294,6 +298,11 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ticks"))     return zl_num((double)idt_ticks());
     if (streq(name, "scan_get"))  return zl_num((double)idt_scan());
     if (streq(name, "at_num"))    { console_at_num((int)a[0].num,(int)a[1].num,(long)a[2].num,(unsigned char)(unsigned long long)a[3].num); return zl_nil(); }
+    if (streq(name, "cpu_char"))  return zl_num((double)cpu_brand_byte((int)a[0].num));
+    if (streq(name, "emit"))      { zl_putc((char)(int)a[0].num); return zl_nil(); }
+    if (streq(name, "beep_on"))   { speaker_on((unsigned)(long long)a[0].num); return zl_nil(); }
+    if (streq(name, "beep_off"))  { speaker_off(); return zl_nil(); }
+    if (streq(name, "reboot"))    { kreboot(); return zl_nil(); }
     if (streq(name, "goto_row")) { console_set_row((int)a[0].num); return zl_nil(); }
 #endif
 

@@ -20,9 +20,12 @@
     <n> f    fib(n)          e.g.  20f
     <n> s    sum of squares  e.g.  10s
     t        uptime, from the timer interrupt
-    b        colour-bar graphics demo
+    p        the CPU's own brand string, via CPUID
+    b        colour-bar graphics demo (with sound)
+    e        beep the PC speaker
     m        poke a byte into video memory and read it back
     c        clear the screen
+    r        reboot the machine
     q        halt the machine
   zl> 20
   6765

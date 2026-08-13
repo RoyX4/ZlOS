@@ -61,6 +61,17 @@ fn key_get() {
     return kbd_scan()                            # keyboard via the IRQ buffer
 }
 
+# ---- timing + sound, both riding on the timer interrupt --------------------
+fn wait_ticks(n) {
+    target = ticks() + n
+    while ticks() < target { }
+}
+fn beep(freq, dur) {
+    beep_on(freq)
+    wait_ticks(dur)
+    beep_off()
+}
+
 # ---- graphical chrome ------------------------------------------------------
 # On a framebuffer these draw real pixels; on VGA text the primitives no-op
 # and the plain text title/status bars are used instead.
@@ -142,9 +153,12 @@ fn help() {
     print("    <n> f    fib(n)          e.g.  20f")
     print("    <n> s    sum of squares  e.g.  10s")
     print("    t        uptime, from the timer interrupt")
-    print("    b        colour-bar graphics demo")
+    print("    p        the CPU's own brand string, via CPUID")
+    print("    b        colour-bar graphics demo (with sound)")
+    print("    e        beep the PC speaker")
     print("    m        poke a byte into video memory and read it back")
     print("    c        clear the screen")
+    print("    r        reboot the machine")
     print("    q        halt the machine")
 }
 
@@ -178,7 +192,34 @@ fn run_command(cmd, arg) {
         color(C_WHITE) put(ticks())        color(C_GREY)  print(" ticks at 100 Hz)")
         return 0
     }
-    if cmd == 98  { return colorbars() }  # b - colour bars
+    if cmd == 98  {                       # b - colour bars, with a little chime
+        beep(880, 8)  beep(1174, 8)  beep(1568, 12)
+        return colorbars()
+    }
+    if cmd == 112 {                       # p - CPU brand string via CPUID
+        color(C_GREY)  put("  CPU: ")
+        color(C_WHITE)
+        i = 0
+        while i < 48 {
+            b = cpu_char(i)
+            if b > 0 { emit(b) }
+            i = i + 1
+        }
+        print("")
+        color(C_GREY)
+        return 0
+    }
+    if cmd == 101 {                       # e - beep
+        color(C_GREY)  print("  beep!")
+        beep(1000, 15)
+        return 0
+    }
+    if cmd == 114 {                       # r - reboot
+        color(C_YELLOW)  print("  rebooting...")
+        beep(1568, 6)  beep(784, 10)
+        reboot()
+        return 0
+    }
     if cmd == 109 {
         poke8(VGA + 158, 42)
         poke8(VGA + 159, 0x4E)
@@ -236,6 +277,9 @@ print("")
 color(C_GREEN)  print("  ready.")
 color(C_GREY)   print("  press h for help, q to halt")
 print("")
+
+# a two-note boot chime - the timer is up, so we can time it
+beep(784, 8)  beep(1046, 12)
 
 # ---- the shell -------------------------------------------------------------
 running = 1
