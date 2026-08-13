@@ -53,6 +53,11 @@ extern void console_gradient(int x, int y, int w, int h, unsigned char at, unsig
 extern void console_logo(int px, int py, const char *s, int scale, unsigned char attr);
 extern void console_cursor(int row, int col, int on, unsigned char attr);
 extern void console_set_region(int top, int bot);
+extern void gdt_init(void);
+extern void idt_init(void);
+extern unsigned int idt_ticks(void);
+extern int  idt_scan(void);
+extern void console_at_num(int row, int col, long n, unsigned char attr);
 extern int  console_kind(void);
 extern int  console_cols(void);
 extern int  console_rows(void);
@@ -284,6 +289,11 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "logo"))      { if (a[2].type==V_STR) console_logo((int)a[0].num,(int)a[1].num,a[2].str,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "cursor"))    { console_cursor((int)a[0].num,(int)a[1].num,(int)a[2].num,(unsigned char)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "region"))    { console_set_region((int)a[0].num,(int)a[1].num); return zl_nil(); }
+    if (streq(name, "setup_gdt")) { gdt_init(); return zl_nil(); }
+    if (streq(name, "setup_idt")) { idt_init(); return zl_nil(); }
+    if (streq(name, "ticks"))     return zl_num((double)idt_ticks());
+    if (streq(name, "scan_get"))  return zl_num((double)idt_scan());
+    if (streq(name, "at_num"))    { console_at_num((int)a[0].num,(int)a[1].num,(long)a[2].num,(unsigned char)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "goto_row")) { console_set_row((int)a[0].num); return zl_nil(); }
 #endif
 

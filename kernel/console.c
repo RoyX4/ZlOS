@@ -151,3 +151,18 @@ void console_logo(int px, int py, const char *s, int scale, unsigned char attr)
  * cursor already positioned by vga_putc, so nothing to do there. */
 void console_cursor(int row, int col, int on, unsigned char attr)
 { if (fb_active()) fb_cursor(row, col, on, attr); }
+
+/* draw a decimal number at an exact cell - the kernel subset has no str(),
+ * so a live clock in the status bar needs this in C. */
+void console_at_num(int row, int col, long n, unsigned char attr)
+{
+    char tmp[16], out[18];
+    int t = 0, i = 0, neg = (n < 0);
+    unsigned long u = neg ? (unsigned long)(-(n + 1)) + 1UL : (unsigned long)n;
+    if (u == 0) tmp[t++] = '0';
+    while (u) { tmp[t++] = (char)('0' + (u % 10)); u /= 10; }
+    if (neg) out[i++] = '-';
+    while (t) out[i++] = tmp[--t];
+    out[i] = 0;
+    console_at(row, col, out, attr);
+}

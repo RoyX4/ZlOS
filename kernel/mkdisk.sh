@@ -41,10 +41,13 @@ gcc $CFLAGS -c font8x16.c -o _font.o
 gcc $CFLAGS -c console.c  -o _console.o
 # shellcheck disable=SC2086
 gcc $CFLAGS -c divmod.c   -o _divmod.o
+gcc $CFLAGS -c gdt.c      -o _gdt.o
+# interrupt handlers must not touch SSE - -mgeneral-regs-only enforces it
+gcc $CFLAGS -mgeneral-regs-only -c idt.c -o _idt.o
 gcc -m32 -c raw_entry.S -o _rawentry.o
 
 ld -m elf_i386 -T link-raw.ld -o kernel_raw.elf \
-   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _font.o _console.o _divmod.o
+   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _font.o _console.o _divmod.o _gdt.o _idt.o
 objcopy -O binary kernel_raw.elf kernel_raw.bin
 
 nasm -f bin raw_boot.asm -o raw_boot.bin

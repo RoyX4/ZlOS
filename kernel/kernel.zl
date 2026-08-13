@@ -47,17 +47,18 @@ fn kbd_init() {
     kmap(0x39, 32)                      # space
     kmap(0x1C, 13)                      # enter
 }
-fn ps2_ready() { return band(inb(0x64), 1) }
-fn ps2_read() {
-    p2 = inb(0x60)
-    if band(p2, 0x80) != 0 { return 0 }
-    if p2 > 127 { return 0 }
-    return peek8(KBD_TABLE + p2)
+# The keyboard now arrives by INTERRUPT: the IRQ1 handler drops each scancode
+# into a ring buffer, and scan_get() pulls the next one (0 when empty). This
+# replaced polling port 0x60 directly, which dropped keys on real hardware.
+fn kbd_scan() {
+    sc = scan_get()
+    if sc == 0 { return 0 }
+    if band(sc, 0x80) != 0 { return 0 }     # key release - ignore
+    return peek8(KBD_TABLE + sc)
 }
 fn key_get() {
-    if ser_ready() == 1 { return ser_read() }
-    if ps2_ready() == 1 { return ps2_read() }
-    return 0
+    if ser_ready() == 1 { return ser_read() }   # serial still polled (for tests)
+    return kbd_scan()                            # keyboard via the IRQ buffer
 }
 
 # ---- graphical chrome ------------------------------------------------------
@@ -97,6 +98,14 @@ fn draw_status(msg) {
     at(sr, 12, "q halt", C_STATUS)
     at(sr, 40, "state:", C_STATUS)
     at(sr, 47, msg, C_STATUS)
+    at(sr, 62, "uptime:", C_STATUS)
+    at(sr, 72, "s", C_STATUS)
+}
+
+# just the uptime number, drawn cheaply so it can tick every second without
+# redrawing the whole bar
+fn draw_clock(sec) {
+    at_num(status_row(), 70, sec, C_STATUS)
 }
 
 # [ OK ]/[ INFO ] boot lines, assembled from coloured pieces
@@ -132,15 +141,44 @@ fn help() {
     print("    h        this help")
     print("    <n> f    fib(n)          e.g.  20f")
     print("    <n> s    sum of squares  e.g.  10s")
+    print("    t        uptime, from the timer interrupt")
+    print("    b        colour-bar graphics demo")
     print("    m        poke a byte into video memory and read it back")
     print("    c        clear the screen")
     print("    q        halt the machine")
+}
+
+# a graphics demo: 14 colour bars, proving the framebuffer is ours to paint
+fn colorbars() {
+    if px_w() == 0 {
+        color(C_GREY)  print("  (colour bars need the framebuffer console)")
+        return 0
+    }
+    y = row() * 16 + 8
+    w = px_w() / 14
+    i = 1
+    while i <= 14 {
+        fill_rect((i - 1) * w, y, w, 40, i)
+        i = i + 1
+    }
+    print("")
+    print("")
+    print("")
+    color(C_GREY)  print("  14 colours, painted straight into the framebuffer")
+    return 0
 }
 
 fn run_command(cmd, arg) {
     if cmd == 104 { help()  return 0 }
     if cmd == 102 { color(C_WHITE)  put("  ")  print(fib(arg))  color(C_GREY)  return 0 }
     if cmd == 115 { color(C_WHITE)  put("  ")  print(sum_squares(arg))  color(C_GREY)  return 0 }
+    if cmd == 116 {                      # t - uptime from the timer IRQ
+        color(C_GREY)  put("  uptime: ")
+        color(C_WHITE) put(ticks() / 100)  color(C_GREY)  put(" s  (")
+        color(C_WHITE) put(ticks())        color(C_GREY)  print(" ticks at 100 Hz)")
+        return 0
+    }
+    if cmd == 98  { return colorbars() }  # b - colour bars
     if cmd == 109 {
         poke8(VGA + 158, 42)
         poke8(VGA + 159, 0x4E)
@@ -185,9 +223,13 @@ if con_kind() == 1 {
 } else {
     ok_line("VGA text console, 80x25")
 }
-ok_line("PS/2 keyboard, scancode set 1")
+setup_gdt()
+ok_line("GDT loaded - flat 4 GiB code and data segments")
+setup_idt()
+ok_line("IDT installed, PIC remapped, interrupts ON")
+ok_line("PIT timer running at 100 Hz on IRQ0")
+ok_line("keyboard on IRQ1 - no more polling the port")
 ok_line("zl runtime, kernel subset")
-info_line("no interrupts - the shell polls")
 info_line("no heap, no filesystem, no scheduler")
 
 print("")
@@ -199,22 +241,43 @@ print("")
 running = 1
 pending = 0
 
+last_sec  = 0 - 1
+last_blink = 0 - 1
+
 while running == 1 {
     color(C_GREEN)  put("  zl> ")
     color(C_WHITE)
     crow = row()
     ccol = 6                              # after the 6-char "  zl> " prompt
-    cursor(crow, ccol, 1, C_CURSOR)
 
     got = 0
     while got == 0 {
+        tk = ticks()
+
+        # live uptime clock in the status bar, redrawn only when it changes
+        sec = tk / 100
+        if sec != last_sec {
+            draw_clock(sec)
+            last_sec = sec
+        }
+
+        # a real blinking cursor: on for the first half of each second. The
+        # timer interrupt is what makes this tick at a steady rate.
+        phase = tk % 100
+        bon = 0
+        if phase < 50 { bon = 1 }
+        if bon != last_blink {
+            cursor(crow, ccol, bon, C_CURSOR)
+            last_blink = bon
+        }
+
         ch = key_get()
         if ch > 0 {
             if is_digit(ch) == true {
                 cursor(crow, ccol, 0, C_CURSOR)
                 color(C_WHITE)  put(ch - 48)
                 ccol = ccol + 1
-                cursor(crow, ccol, 1, C_CURSOR)
+                last_blink = 0 - 1                  # force a redraw at the new spot
                 pending = pending * 10 + (ch - 48)
             } else {
                 if ch > 32 {
@@ -224,6 +287,7 @@ while running == 1 {
                     r = run_command(ch, pending)
                     pending = 0
                     got = 1
+                    last_sec = 0 - 1                # clock lost to the redraw
                     draw_status("ready")
                     if r == 1 { running = 0 }
                 }
