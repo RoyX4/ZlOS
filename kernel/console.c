@@ -31,6 +31,13 @@ void fb_set_row(int r, int log_top, int log_bot);
 int  fb_get_row(void);
 int  fb_get_cols(void);
 int  fb_get_rows(void);
+unsigned int fb_pxw(void);
+unsigned int fb_pxh(void);
+void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
+void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot);
+void fb_text_scaled(int px, int py, const char *s, int scale, unsigned int fg);
+unsigned int fb_attr_rgb(unsigned char attr);
+void fb_cursor(int row, int col, int on, unsigned char attr);
 
 /* The log scrolls between the title bar and the status bar. On VGA that is
  * rows 1..23 of 25; on a framebuffer the screen is taller, so the bottom is
@@ -40,6 +47,11 @@ static int log_bot = 23;
 static int status_row = 24;
 
 int console_status_row(void) { return status_row; }
+
+/* Let zl reserve rows for a graphical header/footer: the log scrolls only
+ * between top and bot, so a tall logo band or a status strip is not scrolled
+ * away. */
+void console_set_region(int top, int bot) { log_top = top; log_bot = bot; }
 
 /* Which screen did we actually get, and how big is it? The boot log should
  * say what is true, not what was hoped for - claiming "VGA text 80x25"
@@ -120,3 +132,22 @@ void console_at(int r, int c, const char *s, unsigned char a)
                                          { if (fb_active()) fb_at(r, c, s, a); else vga_at(r, c, s, a); }
 void console_set_row(int r)              { if (fb_active()) fb_set_row(r, log_top, log_bot); else vga_set_row(r); }
 int  console_get_row(void)               { return fb_active() ? fb_get_row() : vga_get_row(); }
+
+/* ---- rich graphics, exposed to zl. All no-op on the VGA text path, where
+ * there are no pixels; the boot still reads fine without them. ---- */
+int  console_pxw(void) { return fb_active() ? (int)fb_pxw() : 0; }
+int  console_pxh(void) { return fb_active() ? (int)fb_pxh() : 0; }
+
+void console_fill(int x, int y, int w, int h, unsigned char attr)
+{ if (fb_active()) fb_fill_px(x, y, w, h, fb_attr_rgb(attr)); }
+
+void console_gradient(int x, int y, int w, int h, unsigned char a_top, unsigned char a_bot)
+{ if (fb_active()) fb_gradient(x, y, w, h, fb_attr_rgb(a_top), fb_attr_rgb(a_bot)); }
+
+void console_logo(int px, int py, const char *s, int scale, unsigned char attr)
+{ if (fb_active()) fb_text_scaled(px, py, s, scale, fb_attr_rgb(attr)); }
+
+/* the software cursor - framebuffer draws a block; VGA has its own hardware
+ * cursor already positioned by vga_putc, so nothing to do there. */
+void console_cursor(int row, int col, int on, unsigned char attr)
+{ if (fb_active()) fb_cursor(row, col, on, attr); }

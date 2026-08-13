@@ -116,6 +116,68 @@ void fb_at(int row, int col, const char *s, unsigned char attr)
     while (*s && col < fb_cols) { draw_glyph(col, row, *s++, fg, bg); col++; }
 }
 
+/* ---- graphics primitives, framebuffer only ------------------------------
+ * The UEFI framebuffer is raw RGB pixels, so the console can draw more than
+ * text: filled bands, panel borders, and text scaled up for a real logo.
+ * None of this exists on the VGA text path - a text grid has no pixels - so
+ * console.c makes each a no-op there and the boot still reads fine. */
+
+unsigned int fb_pxw(void) { return fb_w; }
+unsigned int fb_pxh(void) { return fb_h; }
+
+/* fill a pixel rectangle with an RGB colour (clipped to the screen) */
+void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
+{
+    for (int yy = y; yy < y + h; yy++)
+        for (int xx = x; xx < x + w; xx++)
+            put_pixel((unsigned)xx, (unsigned)yy, rgb);
+}
+
+/* a vertical gradient band - top colour fading to bottom colour. A flat bar
+ * reads as "text mode"; a gradient reads as "a real UI". */
+void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
+{
+    if (h <= 0) return;
+    int tr = (top >> 16) & 0xFF, tg = (top >> 8) & 0xFF, tb = top & 0xFF;
+    int br = (bot >> 16) & 0xFF, bg = (bot >> 8) & 0xFF, bb = bot & 0xFF;
+    for (int i = 0; i < h; i++) {
+        int r = tr + (br - tr) * i / h;
+        int g = tg + (bg - tg) * i / h;
+        int b = tb + (bb - tb) * i / h;
+        unsigned int c = ((unsigned)r << 16) | ((unsigned)g << 8) | (unsigned)b;
+        fb_fill_px(x, y + i, w, 1, c);
+    }
+}
+
+/* one glyph, scaled up by an integer factor, drawn at a pixel position */
+void fb_glyph_scaled(int px, int py, char c, int scale, unsigned int fg)
+{
+    if (c < FONT_FIRST || c > FONT_LAST) c = '?';
+    const unsigned char *g = font8x16[(int)c - FONT_FIRST];
+    for (int y = 0; y < GLYPH_H; y++) {
+        unsigned char bits = g[y];
+        for (int x = 0; x < GLYPH_W; x++)
+            if (bits & (0x80 >> x))
+                fb_fill_px(px + x * scale, py + y * scale, scale, scale, fg);
+    }
+}
+
+/* a whole string, scaled - this is how the zlOS logo is drawn big */
+void fb_text_scaled(int px, int py, const char *s, int scale, unsigned int fg)
+{
+    while (*s) { fb_glyph_scaled(px, py, *s++, scale, fg); px += GLYPH_W * scale; }
+}
+
+/* map a VGA attribute's foreground to RGB, so zl keeps using colour indices */
+unsigned int fb_attr_rgb(unsigned char attr) { return vga_rgb[attr & 0x0F]; }
+
+/* a software cursor block at a text cell (framebuffer has no hardware one) */
+void fb_cursor(int row, int col, int on, unsigned char attr)
+{
+    if (row < 0 || row >= fb_rows || col < 0 || col >= fb_cols) return;
+    fill_cell(col, row, on ? vga_rgb[attr & 0x0F] : fb_bg);
+}
+
 /* Scrolling a framebuffer means moving every byte of every scanline. It is
  * the slowest thing this console does, which is why the log region is kept
  * small rather than scrolling the whole screen. */

@@ -1,197 +1,174 @@
 # kernel.zl - zlOS
 #
-# A kernel with a text console and a shell, written in zl. Runs on bare
-# metal: no OS, no libc, no syscalls. The serial and console drivers are
-# driven from zl - inb/outb/cls/color/bar/at are builtins, everything else
-# here is ordinary zl.
+# A kernel with a graphical console and a shell, written in zl. Runs on bare
+# metal: no OS, no libc, no syscalls, no GRUB on the BIOS path. The serial and
+# keyboard drivers are zl; on a UEFI framebuffer the whole UI - gradients, a
+# scaled logo, panels, a block cursor - is drawn pixel by pixel from zl too.
 
 COM1 = 0x3F8
 VGA  = 0xB8000
 
-# ---- colours (low nibble foreground, high nibble background) ------------
-C_NORM   = 0x07      # grey on black
-C_BRIGHT = 0x0F      # white on black
-C_OK     = 0x0A      # green
-C_WARN   = 0x0E      # yellow
-C_ERR    = 0x0C      # red
-C_INFO   = 0x0B      # cyan
-C_TITLE  = 0x1F      # white on blue
-C_STATUS = 0x70      # black on grey
+# ---- palette (VGA colour indices; the framebuffer maps them to RGB) --------
+C_BLACK  = 0x00
+C_BLUE   = 0x01
+C_GREEN  = 0x0A
+C_CYAN   = 0x0B
+C_RED    = 0x0C
+C_GREY   = 0x07
+C_DGREY  = 0x08
+C_LBLUE  = 0x09
+C_YELLOW = 0x0E
+C_WHITE  = 0x0F
 
-# ---- serial input, written in zl ---------------------------------------
+C_TITLE  = 0x1F      # white on blue (VGA title fallback)
+C_STATUS = 0x8F      # white on dark grey
+C_CURSOR = 0x0A      # green block cursor
+
+# ---- serial input, in zl ---------------------------------------------------
 fn ser_ready() { return band(inb(COM1 + 5), 1) }
 fn ser_read()  { return inb(COM1) }
 
-# ---- PS/2 keyboard, written in zl --------------------------------------
-#
-# Port 0x64 is the status register: bit 0 set means a byte is waiting.
-# Port 0x60 hands over the scancode. Set 1: a key going DOWN sends its
-# code, a key coming UP sends the same code with bit 7 set - so anything
-# with bit 7 set is a release and we ignore it.
-#
-# The scancode -> ASCII table lives in RAM, built with poke8 at boot and
-# read with peek8. The kernel subset has no lists, and a 90-branch if/else
-# chain would be unreadable - so the raw memory primitives ARE the data
-# structure here. 0x7000 is free low memory below the kernel at 1 MiB.
+# ---- PS/2 keyboard, in zl --------------------------------------------------
 KBD_TABLE = 0x7000
-
 fn kmap(code, ch) { poke8(KBD_TABLE + code, ch) }
-
 fn kbd_init() {
-    # zero the table so an unmapped key reads back as 0
     fill_mem(KBD_TABLE, 0, 128)
-
     kmap(0x02, 49)  kmap(0x03, 50)  kmap(0x04, 51)  kmap(0x05, 52)
     kmap(0x06, 53)  kmap(0x07, 54)  kmap(0x08, 55)  kmap(0x09, 56)
     kmap(0x0A, 57)  kmap(0x0B, 48)
-
     kmap(0x10, 113) kmap(0x11, 119) kmap(0x12, 101) kmap(0x13, 114)
     kmap(0x14, 116) kmap(0x15, 121) kmap(0x16, 117) kmap(0x17, 105)
     kmap(0x18, 111) kmap(0x19, 112)
-
     kmap(0x1E, 97)  kmap(0x1F, 115) kmap(0x20, 100) kmap(0x21, 102)
     kmap(0x22, 103) kmap(0x23, 104) kmap(0x24, 106) kmap(0x25, 107)
     kmap(0x26, 108)
-
     kmap(0x2C, 122) kmap(0x2D, 120) kmap(0x2E, 99)  kmap(0x2F, 118)
     kmap(0x30, 98)  kmap(0x31, 110) kmap(0x32, 109)
-
     kmap(0x39, 32)                      # space
     kmap(0x1C, 13)                      # enter
 }
-
 fn ps2_ready() { return band(inb(0x64), 1) }
-
 fn ps2_read() {
-    p2_code = inb(0x60)
-    if band(p2_code, 0x80) != 0 { return 0 }      # key release - ignore
-    if p2_code > 127 { return 0 }
-    return peek8(KBD_TABLE + p2_code)
+    p2 = inb(0x60)
+    if band(p2, 0x80) != 0 { return 0 }
+    if p2 > 127 { return 0 }
+    return peek8(KBD_TABLE + p2)
 }
-
-# Take input from EITHER source: the serial line (so a piped test and a
-# terminal still work) or the PS/2 keyboard (so it is usable on real
-# hardware, which has no serial port). Returns 0 when nothing is waiting.
 fn key_get() {
     if ser_ready() == 1 { return ser_read() }
     if ps2_ready() == 1 { return ps2_read() }
     return 0
 }
 
-# ---- the chrome --------------------------------------------------------
-fn draw_title() {
-    bar(0, C_TITLE)
-    at(0, 2, "zlOS", C_TITLE)
-    at(0, 9, "a kernel written in zl", C_TITLE)
-    at(0, 62, "no OS  no libc", C_TITLE)
+# ---- graphical chrome ------------------------------------------------------
+# On a framebuffer these draw real pixels; on VGA text the primitives no-op
+# and the plain text title/status bars are used instead.
+
+fn draw_header() {
+    if px_w() > 0 {
+        w = px_w()
+        # a blue gradient band with a bright accent line beneath it
+        gradient(0, 0, w, 62, C_LBLUE, C_BLUE)
+        fill_rect(0, 62, w, 3, C_CYAN)          # bright accent
+        fill_rect(0, 65, w, 1, C_DGREY)         # a bevel line under it, for depth
+        # the logo, drawn big (3x) - the whole point of the polish
+        logo(20, 10, "zlOS", 3, C_WHITE)
+        # subtitle + provenance, small, beside the logo
+        logo(150, 18, "a kernel written in zl", 1, C_WHITE)
+        logo(150, 38, "no OS   no libc   no GNU", 1, C_CYAN)
+        # a version tag on the right
+        logo(w - 88, 24, "v0.1", 2, C_WHITE)
+    } else {
+        bar(0, C_TITLE)
+        at(0, 2, "zlOS", C_TITLE)
+        at(0, 9, "a kernel written in zl", C_TITLE)
+        at(0, 62, "no OS  no libc", C_TITLE)
+    }
 }
 
 fn draw_status(msg) {
-    sb = status_row()
-    bar(sb, C_STATUS)
-    at(sb, 2, "h help", C_STATUS)
-    at(sb, 12, "q halt", C_STATUS)
-    at(sb, 40, msg, C_STATUS)
+    sr = status_row()
+    if px_w() > 0 {
+        gradient(0, sr * 16, px_w(), 16, C_DGREY, C_BLACK)
+    } else {
+        bar(sr, C_STATUS)
+    }
+    at(sr, 2,  "h help", C_STATUS)
+    at(sr, 12, "q halt", C_STATUS)
+    at(sr, 40, "state:", C_STATUS)
+    at(sr, 47, msg, C_STATUS)
 }
 
-# A boot line that looks like a real init: "[ OK ] doing the thing".
-# put() writes without a trailing newline, so one line can be assembled
-# out of differently coloured pieces - that is what makes it read as a
-# real boot log rather than a column of fragments.
+# [ OK ]/[ INFO ] boot lines, assembled from coloured pieces
 fn ok_line(msg) {
-    color(C_NORM)  put("[")
-    color(C_OK)    put("  OK  ")
-    color(C_NORM)  put("] ")
-    print(msg)
+    color(C_GREY)  put("  [")
+    color(C_GREEN) put("  OK  ")
+    color(C_GREY)  put("] ")
+    color(C_GREY)  print(msg)
 }
-
 fn info_line(msg) {
-    color(C_NORM)  put("[")
-    color(C_INFO)  put(" INFO ")
-    color(C_NORM)  put("] ")
-    print(msg)
+    color(C_GREY)  put("  [")
+    color(C_CYAN)  put(" INFO ")
+    color(C_GREY)  put("] ")
+    color(C_GREY)  print(msg)
 }
 
-# ---- the work the shell can do -----------------------------------------
+# ---- the work the shell can do ---------------------------------------------
 fn fib(n) {
     if n < 2 { return n }
     return fib(n - 1) + fib(n - 2)
 }
-
 fn sum_squares(n) {
-    ss_t = 0
-    ss_i = 1
-    while ss_i <= n {
-        ss_t = ss_t + ss_i * ss_i
-        ss_i = ss_i + 1
-    }
-    return ss_t
+    t = 0
+    i = 1
+    while i <= n { t = t + i * i  i = i + 1 }
+    return t
 }
-
 fn is_digit(c) { return c >= 48 and c <= 57 }
 
 fn help() {
-    color(C_INFO)
-    print("commands")
-    color(C_NORM)
-    print("  h        this help")
-    print("  <n> f    fib(n)          e.g.  20f")
-    print("  <n> s    sum of squares  e.g.  10s")
-    print("  m        poke a byte into video memory and read it back")
-    print("  c        clear the screen")
-    print("  q        halt the machine")
+    color(C_CYAN)  print("  commands")
+    color(C_GREY)
+    print("    h        this help")
+    print("    <n> f    fib(n)          e.g.  20f")
+    print("    <n> s    sum of squares  e.g.  10s")
+    print("    m        poke a byte into video memory and read it back")
+    print("    c        clear the screen")
+    print("    q        halt the machine")
 }
 
 fn run_command(cmd, arg) {
     if cmd == 104 { help()  return 0 }
-    if cmd == 102 {
-        color(C_BRIGHT)
-        print(fib(arg))
-        color(C_NORM)
-        return 0
-    }
-    if cmd == 115 {
-        color(C_BRIGHT)
-        print(sum_squares(arg))
-        color(C_NORM)
-        return 0
-    }
+    if cmd == 102 { color(C_WHITE)  put("  ")  print(fib(arg))  color(C_GREY)  return 0 }
+    if cmd == 115 { color(C_WHITE)  put("  ")  print(sum_squares(arg))  color(C_GREY)  return 0 }
     if cmd == 109 {
-        poke8(VGA + 156, 42)
-        poke8(VGA + 157, 0x4E)
-        color(C_NORM)
-        print("wrote '*' into video memory, read back:")
-        color(C_BRIGHT)
-        print(peek8(VGA + 156))
-        color(C_NORM)
-        return 0
+        poke8(VGA + 158, 42)
+        poke8(VGA + 159, 0x4E)
+        color(C_GREY)  put("  wrote a byte to video memory, read back: ")
+        color(C_WHITE) print(peek8(VGA + 158))
+        color(C_GREY)  return 0
     }
-    if cmd == 99 {
-        cls()
-        draw_title()
-        draw_status("ready")
-        goto_row(2)
-        return 0
-    }
+    if cmd == 99  { draw_screen()  return 0 }
     if cmd == 113 { return 1 }
-    color(C_ERR)
-    print("unknown command - press h for help")
-    color(C_NORM)
-    return 0
+    color(C_RED)  print("  unknown command - press h for help")
+    color(C_GREY) return 0
 }
 
-# ---- boot ---------------------------------------------------------------
+# ---- the full screen: header + reserved log region + status ----------------
+fn draw_screen() {
+    cls()
+    draw_header()
+    region(5, status_row() - 1)
+    draw_status("ready")
+    goto_row(5)
+}
+
+# ---- boot ------------------------------------------------------------------
 kbd_init()
+draw_screen()
 
-cls()
-draw_title()
-draw_status("booting")
-goto_row(2)
-
-color(C_BRIGHT)
-print("zlOS starting")
-color(C_NORM)
-print("")
+color(C_WHITE)  print("  zlOS starting")
+color(C_GREY)   print("")
 
 if loader() == 1 {
     ok_line("multiboot handoff, 32-bit protected mode")
@@ -201,9 +178,9 @@ if loader() == 1 {
 ok_line("stack established, 16 KiB")
 ok_line("COM1 initialised, 115200 8N1")
 if con_kind() == 1 {
-    color(C_NORM)  put("[")
-    color(C_OK)    put("  OK  ")
-    color(C_NORM)  put("] framebuffer console, ")
+    color(C_GREY)  put("  [")
+    color(C_GREEN) put("  OK  ")
+    color(C_GREY)  put("] framebuffer console, ")
     put(con_cols())  put("x")  print(con_rows())
 } else {
     ok_line("VGA text console, 80x25")
@@ -214,34 +191,34 @@ info_line("no interrupts - the shell polls")
 info_line("no heap, no filesystem, no scheduler")
 
 print("")
-color(C_OK)
-print("ready.")
-color(C_NORM)
-print("press h for help, q to halt")
+color(C_GREEN)  print("  ready.")
+color(C_GREY)   print("  press h for help, q to halt")
 print("")
 
-draw_status("ready")
-
-# ---- the shell -----------------------------------------------------------
+# ---- the shell -------------------------------------------------------------
 running = 1
 pending = 0
 
 while running == 1 {
-    color(C_OK)
-    put("zl> ")
-    color(C_NORM)
+    color(C_GREEN)  put("  zl> ")
+    color(C_WHITE)
+    crow = row()
+    ccol = 6                              # after the 6-char "  zl> " prompt
+    cursor(crow, ccol, 1, C_CURSOR)
 
     got = 0
     while got == 0 {
         ch = key_get()
         if ch > 0 {
             if is_digit(ch) == true {
+                cursor(crow, ccol, 0, C_CURSOR)
+                color(C_WHITE)  put(ch - 48)
+                ccol = ccol + 1
+                cursor(crow, ccol, 1, C_CURSOR)
                 pending = pending * 10 + (ch - 48)
-                color(C_BRIGHT)
-                put(ch - 48)
-                color(C_NORM)
             } else {
                 if ch > 32 {
+                    cursor(crow, ccol, 0, C_CURSOR)
                     print("")
                     draw_status("working")
                     r = run_command(ch, pending)
@@ -256,7 +233,6 @@ while running == 1 {
 }
 
 print("")
-color(C_WARN)
-print("halting.")
-color(C_NORM)
+color(C_YELLOW)  print("  halting.")
+color(C_GREY)
 draw_status("halted")

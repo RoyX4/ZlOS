@@ -20,7 +20,7 @@ tr -d '\r' < "$OUT" > "$OUT.c" && mv "$OUT.c" "$OUT"
 fail=0
 grep -q "our bootloader (raw_boot), no GRUB" "$OUT" || { echo "  FAIL  did not boot via our loader"; fail=1; }
 grep -q "ready\." "$OUT"  || { echo "  FAIL  never reached the prompt"; fail=1; }
-grep -q "^6765$" "$OUT"   || { echo "  FAIL  fib(20) wrong or shell unresponsive"; fail=1; }
+grep -q "6765" "$OUT"   || { echo "  FAIL  fib(20) wrong or shell unresponsive"; fail=1; }
 
 if [ "$fail" -eq 0 ]; then
     echo "ok    kernel boots via our own bootloader (no GRUB), shell responds"

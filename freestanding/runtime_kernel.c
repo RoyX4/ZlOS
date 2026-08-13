@@ -46,6 +46,13 @@ extern void console_set_row(int r);
 extern int  console_get_row(void);
 extern int  console_status_row(void);
 extern int  console_loader(void);
+extern int  console_pxw(void);
+extern int  console_pxh(void);
+extern void console_fill(int x, int y, int w, int h, unsigned char attr);
+extern void console_gradient(int x, int y, int w, int h, unsigned char at, unsigned char ab);
+extern void console_logo(int px, int py, const char *s, int scale, unsigned char attr);
+extern void console_cursor(int row, int col, int on, unsigned char attr);
+extern void console_set_region(int top, int bot);
 extern int  console_kind(void);
 extern int  console_cols(void);
 extern int  console_rows(void);
@@ -194,10 +201,10 @@ static int streq(const char *a, const char *b)
 Value zl_calln(const char *name, int n, ...)
 {
     __builtin_va_list ap;
-    Value a[4];
+    Value a[8];
     int i;
     __builtin_va_start(ap, n);
-    for (i = 0; i < n && i < 4; i++) a[i] = __builtin_va_arg(ap, Value);
+    for (i = 0; i < n && i < 8; i++) a[i] = __builtin_va_arg(ap, Value);
     __builtin_va_end(ap);
 
     if (streq(name, "print")) {
@@ -270,6 +277,13 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "con_cols"))   return zl_num((double)console_cols());
     if (streq(name, "con_rows"))   return zl_num((double)console_rows());
     if (streq(name, "loader"))     return zl_num((double)console_loader());
+    if (streq(name, "px_w"))       return zl_num((double)console_pxw());
+    if (streq(name, "px_h"))       return zl_num((double)console_pxh());
+    if (streq(name, "fill_rect")) { console_fill((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
+    if (streq(name, "gradient"))  { console_gradient((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num,(unsigned char)(unsigned long long)a[5].num); return zl_nil(); }
+    if (streq(name, "logo"))      { if (a[2].type==V_STR) console_logo((int)a[0].num,(int)a[1].num,a[2].str,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
+    if (streq(name, "cursor"))    { console_cursor((int)a[0].num,(int)a[1].num,(int)a[2].num,(unsigned char)(unsigned long long)a[3].num); return zl_nil(); }
+    if (streq(name, "region"))    { console_set_region((int)a[0].num,(int)a[1].num); return zl_nil(); }
     if (streq(name, "goto_row")) { console_set_row((int)a[0].num); return zl_nil(); }
 #endif
 
