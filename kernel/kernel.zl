@@ -1,87 +1,61 @@
-# kernel.zl - a kernel with a shell, written in zl.
+# kernel.zl - zlOS
 #
-# Runs on bare metal: no OS, no libc, no syscalls. The serial driver below
-# is ordinary zl calling inb/outb, so this is not "C does the work and zl
-# prints" - the device handling is in the language.
-#
-# MASTER_PLAN Floor 6 level 2 is "boot a VM, get a prompt, type a command,
-# my language runs it". This is that.
+# A kernel with a text console and a shell, written in zl. Runs on bare
+# metal: no OS, no libc, no syscalls. The serial and console drivers are
+# driven from zl - inb/outb/cls/color/bar/at are builtins, everything else
+# here is ordinary zl.
 
 COM1 = 0x3F8
+VGA  = 0xB8000
 
-# ---------------------------------------------------------------- serial
-# Line Status Register, bit 0: a byte is waiting to be read.
+# ---- colours (low nibble foreground, high nibble background) ------------
+C_NORM   = 0x07      # grey on black
+C_BRIGHT = 0x0F      # white on black
+C_OK     = 0x0A      # green
+C_WARN   = 0x0E      # yellow
+C_ERR    = 0x0C      # red
+C_INFO   = 0x0B      # cyan
+C_TITLE  = 0x1F      # white on blue
+C_STATUS = 0x70      # black on grey
+
+# ---- serial, written in zl ---------------------------------------------
 fn kbd_ready() { return band(inb(COM1 + 5), 1) }
 fn kbd_read()  { return inb(COM1) }
 
-# --------------------------------------------------------------- VGA text
-# 0xB8000 is the text buffer: two bytes per cell, character then colour.
-VGA = 0xB8000
-
-fn vga_put(pos, ch, attr) {
-    vp = VGA + pos * 2
-    poke8(vp, ch)
-    poke8(vp + 1, attr)
+# ---- the chrome --------------------------------------------------------
+fn draw_title() {
+    bar(0, C_TITLE)
+    at(0, 2, "zlOS", C_TITLE)
+    at(0, 9, "a kernel written in zl", C_TITLE)
+    at(0, 62, "no OS  no libc", C_TITLE)
 }
 
-fn vga_banner(text_len, row) {
-    vb_i = 0
-    while vb_i < 80 {
-        vga_put(row * 80 + vb_i, 32, 0x1F)
-        vb_i = vb_i + 1
-    }
+fn draw_status(msg) {
+    bar(24, C_STATUS)
+    at(24, 2, "h help", C_STATUS)
+    at(24, 12, "q halt", C_STATUS)
+    at(24, 40, msg, C_STATUS)
 }
 
-# ------------------------------------------------------------- the shell
-fn is_digit(c) { return c >= 48 and c <= 57 }
-
-fn run_command(cmd, arg) {
-    # cmd is a single letter; keeping the parser tiny keeps the kernel
-    # inside the subset (no string values, so commands are characters).
-    if cmd == 104 {                       # h - help
-        print("")
-        print("  h        this help")
-        print("  f <n>    fib(n)")
-        print("  s <n>    sum of squares to n")
-        print("  m        read a byte back from VGA memory")
-        print("  c        clear the screen")
-        print("  q        halt the machine")
-        return 0
-    }
-    if cmd == 102 {                       # f - fib
-        print("")
-        print(fib(arg))
-        return 0
-    }
-    if cmd == 115 {                       # s - sum of squares
-        print("")
-        print(sum_squares(arg))
-        return 0
-    }
-    if cmd == 109 {                       # m - poke/peek proof
-        poke8(VGA + 158, 42)              # a '*' near the top-right
-        poke8(VGA + 159, 0x4F)
-        print("")
-        print("wrote '*' to VGA, read back:")
-        print(peek8(VGA + 158))
-        return 0
-    }
-    if cmd == 99 {                        # c - clear
-        vc_i = 0
-        while vc_i < 2000 {
-            vga_put(vc_i, 32, 0x07)
-            vc_i = vc_i + 1
-        }
-        print("")
-        print("screen cleared")
-        return 0
-    }
-    if cmd == 113 { return 1 }            # q - quit
-    print("")
-    print("unknown command - press h for help")
-    return 0
+# A boot line that looks like a real init: "[ OK ] doing the thing".
+# put() writes without a trailing newline, so one line can be assembled
+# out of differently coloured pieces - that is what makes it read as a
+# real boot log rather than a column of fragments.
+fn ok_line(msg) {
+    color(C_NORM)  put("[")
+    color(C_OK)    put("  OK  ")
+    color(C_NORM)  put("] ")
+    print(msg)
 }
 
+fn info_line(msg) {
+    color(C_NORM)  put("[")
+    color(C_INFO)  put(" INFO ")
+    color(C_NORM)  put("] ")
+    print(msg)
+}
+
+# ---- the work the shell can do -----------------------------------------
 fn fib(n) {
     if n < 2 { return n }
     return fib(n - 1) + fib(n - 2)
@@ -97,33 +71,94 @@ fn sum_squares(n) {
     return ss_t
 }
 
-# ----------------------------------------------------------------- boot
-print("========================================")
-print("  zl kernel")
-print("  no OS. no libc. no syscalls.")
-print("========================================")
-print("")
-print("the serial driver below is written in zl:")
-print("inb/outb are builtins, the polling is zl.")
-print("")
-print("press h for help, q to halt.")
+fn is_digit(c) { return c >= 48 and c <= 57 }
 
-# paint the top row so the screen shows something too
-vga_banner(80, 0)
-vga_put(0, 90, 0x1F)      # Z
-vga_put(1, 76, 0x1F)      # L
-vga_put(3, 83, 0x1F)      # S
-vga_put(4, 72, 0x1F)      # H
+fn help() {
+    color(C_INFO)
+    print("commands")
+    color(C_NORM)
+    print("  h        this help")
+    print("  <n> f    fib(n)          e.g.  20f")
+    print("  <n> s    sum of squares  e.g.  10s")
+    print("  m        poke a byte into video memory and read it back")
+    print("  c        clear the screen")
+    print("  q        halt the machine")
+}
 
-# --------------------------------------------------------- the main loop
-# A real read-eval-print loop, polling the UART. This is the whole point:
-# the machine is now waiting for YOU.
+fn run_command(cmd, arg) {
+    if cmd == 104 { help()  return 0 }
+    if cmd == 102 {
+        color(C_BRIGHT)
+        print(fib(arg))
+        color(C_NORM)
+        return 0
+    }
+    if cmd == 115 {
+        color(C_BRIGHT)
+        print(sum_squares(arg))
+        color(C_NORM)
+        return 0
+    }
+    if cmd == 109 {
+        poke8(VGA + 156, 42)
+        poke8(VGA + 157, 0x4E)
+        color(C_NORM)
+        print("wrote '*' into video memory, read back:")
+        color(C_BRIGHT)
+        print(peek8(VGA + 156))
+        color(C_NORM)
+        return 0
+    }
+    if cmd == 99 {
+        cls()
+        draw_title()
+        draw_status("ready")
+        goto_row(2)
+        return 0
+    }
+    if cmd == 113 { return 1 }
+    color(C_ERR)
+    print("unknown command - press h for help")
+    color(C_NORM)
+    return 0
+}
+
+# ---- boot ---------------------------------------------------------------
+cls()
+draw_title()
+draw_status("booting")
+goto_row(2)
+
+color(C_BRIGHT)
+print("zlOS starting")
+color(C_NORM)
+print("")
+
+ok_line("multiboot handoff, 32-bit protected mode")
+ok_line("stack established, 16 KiB")
+ok_line("COM1 initialised, 115200 8N1")
+ok_line("VGA text console, 80x25")
+ok_line("zl runtime, kernel subset")
+info_line("no interrupts - the shell polls")
+info_line("no heap, no filesystem, no scheduler")
+
+print("")
+color(C_OK)
+print("ready.")
+color(C_NORM)
+print("press h for help, q to halt")
+print("")
+
+draw_status("ready")
+
+# ---- the shell -----------------------------------------------------------
 running = 1
-pending = 0                # a digit typed before a command letter
+pending = 0
 
 while running == 1 {
-    print("")
-    print("zl> ")
+    color(C_OK)
+    put("zl> ")
+    color(C_NORM)
 
     got = 0
     while got == 0 {
@@ -132,13 +167,17 @@ while running == 1 {
 
             if is_digit(ch) == true {
                 pending = pending * 10 + (ch - 48)
-                # echo the digit so typing feels real
-                print(ch - 48)
+                color(C_BRIGHT)
+                put(ch - 48)
+                color(C_NORM)
             } else {
                 if ch > 32 {
+                    print("")
+                    draw_status("working")
                     r = run_command(ch, pending)
                     pending = 0
                     got = 1
+                    draw_status("ready")
                     if r == 1 { running = 0 }
                 }
             }
@@ -147,4 +186,7 @@ while running == 1 {
 }
 
 print("")
+color(C_WARN)
 print("halting.")
+color(C_NORM)
+draw_status("halted")

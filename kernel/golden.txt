@@ -1,39 +1,31 @@
-========================================
-  zl kernel
-  no OS. no libc. no syscalls.
-========================================
+zlOS starting
 
-the serial driver below is written in zl:
-inb/outb are builtins, the polling is zl.
+[  OK  ] multiboot handoff, 32-bit protected mode
+[  OK  ] stack established, 16 KiB
+[  OK  ] COM1 initialised, 115200 8N1
+[  OK  ] VGA text console, 80x25
+[  OK  ] zl runtime, kernel subset
+[ INFO ] no interrupts - the shell polls
+[ INFO ] no heap, no filesystem, no scheduler
 
-press h for help, q to halt.
+ready.
+press h for help, q to halt
 
 zl> 
-
+commands
   h        this help
-  f <n>    fib(n)
-  s <n>    sum of squares to n
-  m        read a byte back from VGA memory
+  <n> f    fib(n)          e.g.  20f
+  <n> s    sum of squares  e.g.  10s
+  m        poke a byte into video memory and read it back
   c        clear the screen
   q        halt the machine
-
-zl> 
-2
-0
-
+zl> 20
 6765
-
-zl> 
-1
-0
-
+zl> 10
 385
-
 zl> 
-
-wrote '*' to VGA, read back:
+wrote '*' into video memory, read back:
 42
-
 zl> 
 
 halting.

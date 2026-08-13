@@ -1,4 +1,20 @@
-# A kernel, written in zl
+# zlOS - a kernel written in zl
+
+```
+ zlOS   a kernel written in zl                        no OS  no libc
+ [  OK  ] multiboot handoff, 32-bit protected mode
+ [  OK  ] stack established, 16 KiB
+ [  OK  ] COM1 initialised, 115200 8N1
+ [  OK  ] VGA text console, 80x25
+ [  OK  ] zl runtime, kernel subset
+ [ INFO ] no interrupts - the shell polls
+ [ INFO ] no heap, no filesystem, no scheduler
+
+ ready.
+ zl> 20f
+ 6765
+ h help    q halt                    ready
+```
 
 `kernel.zl` runs on bare metal. No operating system underneath it, no libc,
 no syscalls. `print()` talks to COM1 by polling the UART; `poke8` writes to
@@ -9,6 +25,19 @@ VGA text memory at `0xB8000` and the characters appear on screen.
 ./run.sh                   # boot it in QEMU, serial on your terminal
 ./verify.sh                # headless boot, diff serial against golden.txt
 ```
+
+## The console
+
+`vga.c` drives the 80x25 text grid at `0xB8000` directly - cursor via the
+CRT controller at ports 0x3D4/0x3D5, and scrolling constrained to rows
+1..23 so the title and status bars do not scroll away with the log.
+
+zl drives it through builtins: `cls`, `color`, `bar`, `at`, `row`,
+`goto_row`, and `put` (print with no trailing newline, which is what lets
+`[ OK ] message` be assembled out of separately coloured pieces).
+
+Everything printed also goes to COM1, so `verify.sh` can capture a
+transcript headlessly while a human sees the screen.
 
 ## How it is built
 

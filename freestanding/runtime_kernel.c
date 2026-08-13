@@ -33,8 +33,21 @@
 extern void zl_outb(unsigned short port, unsigned char val);
 extern unsigned char zl_inb(unsigned short port);
 #define COM1 0x3F8
+/* the VGA text console lives in the kernel dir - it is board support, not
+ * language runtime, so it is only linked in on the kernel target */
+extern void vga_putc(char c);
+extern void vga_clear(void);
+extern void vga_setcolor(unsigned char attr);
+extern void vga_bar(int row, unsigned char attr);
+extern void vga_at(int row, int col, const char *s, unsigned char attr);
+extern void vga_set_row(int r);
+extern int  vga_get_row(void);
+
 static void zl_putc(char c)
 {
+    /* screen for a human, serial for verify.sh - both, always, so a
+     * headless test still sees everything the user would */
+    vga_putc(c);
     while ((zl_inb(COM1 + 5) & 0x20) == 0) { }   /* wait for THR empty */
     zl_outb(COM1, (unsigned char)c);
 }
@@ -192,6 +205,19 @@ Value zl_calln(const char *name, int n, ...)
         return zl_nil();
     }
 
+    /* put(x) - print with NO trailing newline. print() always ends the
+     * line, which makes "[ OK ] message" impossible to build out of
+     * separately coloured pieces. */
+    if (streq(name, "put")) {
+        for (i = 0; i < n; i++) {
+            if (a[i].type == V_STR)       zl_puts(a[i].str);
+            else if (a[i].type == V_BOOL) zl_puts(a[i].num ? "true" : "false");
+            else if (a[i].type == V_NIL)  zl_puts("nil");
+            else                          zl_put_i64((long long)a[i].num);
+        }
+        return zl_nil();
+    }
+
     if (streq(name, "exit")) {
 #ifdef ZL_KERNEL_SERIAL
         for (;;) __asm__ volatile("hlt");
@@ -217,6 +243,20 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "inb"))  return zl_num((double)zl_inb((unsigned short)(unsigned long long)a[0].num));
     if (streq(name, "outb")) { zl_outb((unsigned short)(unsigned long long)a[0].num,
                                        (unsigned char )(unsigned long long)a[1].num); return zl_nil(); }
+#endif
+
+#ifdef ZL_KERNEL_SERIAL
+    /* the text console, driven from zl - colour, bars and cursor rows are
+     * what turn a scrolling log into something that reads as an OS */
+    if (streq(name, "cls"))      { vga_clear(); return zl_nil(); }
+    if (streq(name, "color"))    { vga_setcolor((unsigned char)(unsigned long long)a[0].num); return zl_nil(); }
+    if (streq(name, "bar"))      { vga_bar((int)a[0].num, (unsigned char)(unsigned long long)a[1].num); return zl_nil(); }
+    if (streq(name, "at"))       { if (a[2].type == V_STR)
+                                       vga_at((int)a[0].num, (int)a[1].num, a[2].str,
+                                              (unsigned char)(unsigned long long)a[3].num);
+                                   return zl_nil(); }
+    if (streq(name, "row"))      return zl_num((double)vga_get_row());
+    if (streq(name, "goto_row")) { vga_set_row((int)a[0].num); return zl_nil(); }
 #endif
 
     /* Bitwise ops. A driver cannot be written without them - every status

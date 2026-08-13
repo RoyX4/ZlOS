@@ -25,6 +25,7 @@ gcc $CFLAGS -DZL_KERNEL_SERIAL -c ../freestanding/runtime_kernel.c -o _rt.o
 gcc $CFLAGS -c _gen.c    -o _gen.o
 # shellcheck disable=SC2086
 gcc $CFLAGS -c support.c -o _support.o
+gcc $CFLAGS -c vga.c     -o _vga.o
 gcc -m32 -c boot.S -o _boot.o
 
 # libgcc supplies __divdi3/__moddi3 - 64-bit division on a 32-bit target.
@@ -32,7 +33,7 @@ gcc -m32 -c boot.S -o _boot.o
 # keeps the "no libc, no OS" property intact.
 LIBGCC=$(gcc -m32 -print-libgcc-file-name)
 
-ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o "$LIBGCC"
+ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o "$LIBGCC"
 
 echo "built kernel.elf"
 echo "  undefined symbols: $(nm -u kernel.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"
