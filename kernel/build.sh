@@ -29,14 +29,14 @@ gcc $CFLAGS -c vga.c      -o _vga.o
 gcc $CFLAGS -c fb.c       -o _fb.o
 gcc $CFLAGS -c font8x16.c -o _font.o
 gcc $CFLAGS -c console.c  -o _console.o
+gcc $CFLAGS -c divmod.c   -o _divmod.o
 gcc -m32 -c boot.S -o _boot.o
 
-# libgcc supplies __divdi3/__moddi3 - 64-bit division on a 32-bit target.
-# It is the compiler support library, not libc: linking it is standard and
-# keeps the "no libc, no OS" property intact.
-LIBGCC=$(gcc -m32 -print-libgcc-file-name)
-
-ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _font.o _console.o "$LIBGCC"
+# No -lgcc. __divdi3/__moddi3 (64-bit division on a 32-bit target) are the
+# only things the kernel took from libgcc, and divmod.c now supplies them.
+# Nothing GNU is linked into the kernel any more - only gcc-the-tool that
+# compiled the C, which nativegen is on track to replace.
+ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _font.o _console.o _divmod.o
 
 echo "built kernel.elf"
 echo "  undefined symbols: $(nm -u kernel.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"
