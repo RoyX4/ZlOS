@@ -1,0 +1,4 @@
+_gen.c
+_*.o
+kernel.elf
+out.c

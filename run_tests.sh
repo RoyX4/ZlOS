@@ -187,6 +187,17 @@ else
     echo "  FAIL  kernel/serial target does not compile"; fail=1
 fi
 
+# The kernel is a separate gate (design_kernel.md §10) but a broken build
+# should surface here too. Skipped cleanly if QEMU is not installed.
+if command -v qemu-system-i386 >/dev/null; then
+    echo "== kernel: boots in QEMU and matches its golden transcript =="
+    if kout=$(./kernel/verify.sh 2>&1); then
+        echo "  $kout"
+    else
+        echo "  FAIL  kernel gate"; echo "$kout" | head -8; fail=1
+    fi
+fi
+
 echo "== examples: interpreter runs clean =="
 mkdir -p examples_out
 for ex in examples/*.zl; do

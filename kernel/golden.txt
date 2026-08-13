@@ -1,0 +1,31 @@
+========================================
+  zl kernel - running on bare metal
+========================================
+
+no OS underneath. no libc. no syscalls.
+print() is talking to COM1 directly.
+
+arithmetic:
+14
+14
+2
+
+recursion - fib(20):
+6765
+
+a loop - sum of squares to 10:
+385
+
+hex literals:
+57005
+753664
+
+writing to VGA text memory at 0xB8000...
+read back from 0xB8000:
+90
+
+========================================
+  it boots.
+========================================
+
+[kernel] main() returned - halting

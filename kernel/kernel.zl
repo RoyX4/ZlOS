@@ -1,0 +1,84 @@
+# kernel.zl - a kernel, written in zl.
+#
+# This is the whole kernel. It runs on bare metal with no operating system
+# underneath it: no libc, no syscalls, no loader. print() reaches COM1
+# through runtime_kernel.c's zl_putc, which polls the UART directly.
+#
+# The subset rule (design_kernel.md): numbers, arithmetic, comparisons,
+# if/while, functions, recursion, print, and raw memory. No lists, no string
+# values, no concatenation - runtime_kernel.c makes each of those a named
+# fault rather than a silent surprise.
+
+fn fib(n) {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fn sum_squares(n) {
+    ss_total = 0
+    ss_i = 1
+    while ss_i <= n {
+        ss_total = ss_total + ss_i * ss_i
+        ss_i = ss_i + 1
+    }
+    return ss_total
+}
+
+print("========================================")
+print("  zl kernel - running on bare metal")
+print("========================================")
+
+print("")
+print("no OS underneath. no libc. no syscalls.")
+print("print() is talking to COM1 directly.")
+
+print("")
+print("arithmetic:")
+print(2 + 3 * 4)
+print(100 / 7)
+print(100 % 7)
+
+print("")
+print("recursion - fib(20):")
+print(fib(20))
+
+print("")
+print("a loop - sum of squares to 10:")
+print(sum_squares(10))
+
+print("")
+print("hex literals:")
+print(0xDEAD)
+print(0xB8000)
+
+# Raw memory, on real hardware this time. 0xB8000 is the VGA text buffer:
+# each cell is two bytes, a character and an attribute. Writing here puts
+# characters on the QEMU screen without going through the serial port at all.
+print("")
+print("writing to VGA text memory at 0xB8000...")
+
+fn vga_put(pos, ch, attr) {
+    vp_addr = 0xB8000 + pos * 2
+    poke8(vp_addr, ch)
+    poke8(vp_addr + 1, attr)
+}
+
+# spell ZL KERNEL on the top-left of the screen, bright white on blue
+vga_put(0, 90, 0x1F)     # Z
+vga_put(1, 76, 0x1F)     # L
+vga_put(2, 32, 0x1F)     # space
+vga_put(3, 75, 0x1F)     # K
+vga_put(4, 69, 0x1F)     # E
+vga_put(5, 82, 0x1F)     # R
+vga_put(6, 78, 0x1F)     # N
+vga_put(7, 69, 0x1F)     # E
+vga_put(8, 76, 0x1F)     # L
+
+# and read one back, to prove the write really landed in memory
+print("read back from 0xB8000:")
+print(peek8(0xB8000))
+
+print("")
+print("========================================")
+print("  it boots.")
+print("========================================")
