@@ -302,6 +302,75 @@ static void emit_fbinop(const char *op)
     }
 }
 
+/* KERNEL INTRINSICS - raw memory and port I/O, emitted inline.
+ *
+ * These are the ops a kernel needs that a user program does not: read/write
+ * a physical address, talk to a device port. They are the reason nativegen
+ * exists on the kernel path - once it can emit these, a kernel compiled by
+ * nativegen touches hardware with no C compiler anywhere in the pipeline.
+ *
+ * Everything is i64 in the int subset, so an address or a value is just what
+ * gen_expr left in rax. Returns 1 if `name` was an intrinsic and code was
+ * emitted (leaving the result, if any, in rax); 0 if it is not one.
+ *
+ * NOTE: in/out are privileged (ring 0). A nativegen program using inb/outb
+ * will #GP if run as an ordinary Linux process - that is correct, they are
+ * for a kernel. peek/poke are plain memory and run fine anywhere.
+ */
+static int emit_intrinsic(Node *call)
+{
+    const char *name = call->a->text;
+    int nargs = call->nkids;
+
+    /* --- peek: load 1/2/4/8 bytes from [addr] into rax --- */
+    if (nargs == 1 && !strcmp(name, "peek8"))  { gen_expr(call->kids[0]);
+        { unsigned char x[]={0x0F,0xB6,0x00}; bytes(x,3); } return 1; }   /* movzx eax,byte[rax] */
+    if (nargs == 1 && !strcmp(name, "peek16")) { gen_expr(call->kids[0]);
+        { unsigned char x[]={0x0F,0xB7,0x00}; bytes(x,3); } return 1; }   /* movzx eax,word[rax] */
+    if (nargs == 1 && !strcmp(name, "peek32")) { gen_expr(call->kids[0]);
+        { unsigned char x[]={0x8B,0x00};      bytes(x,2); } return 1; }   /* mov eax,[rax] (zext) */
+    if (nargs == 1 && !strcmp(name, "peek64")) { gen_expr(call->kids[0]);
+        { unsigned char x[]={0x48,0x8B,0x00}; bytes(x,3); } return 1; }   /* mov rax,[rax] */
+
+    /* --- poke: store the low 1/2/4/8 bytes of val at [addr] --- */
+    if (nargs == 2 && (!strcmp(name,"poke8")||!strcmp(name,"poke16")||
+                       !strcmp(name,"poke32")||!strcmp(name,"poke64"))) {
+        gen_expr(call->kids[0]); b(0x50);        /* addr -> push */
+        gen_expr(call->kids[1]);                 /* val  -> rax  */
+        b(0x59);                                 /* pop rcx (addr) */
+        if      (!strcmp(name,"poke8"))  { unsigned char x[]={0x88,0x01};      bytes(x,2); } /* mov [rcx],al  */
+        else if (!strcmp(name,"poke16")) { unsigned char x[]={0x66,0x89,0x01}; bytes(x,3); } /* mov [rcx],ax  */
+        else if (!strcmp(name,"poke32")) { unsigned char x[]={0x89,0x01};      bytes(x,2); } /* mov [rcx],eax */
+        else                             { unsigned char x[]={0x48,0x89,0x01}; bytes(x,3); } /* mov [rcx],rax */
+        { unsigned char z[]={0x48,0x31,0xC0}; bytes(z,3); }   /* xor rax,rax - poke is void */
+        return 1;
+    }
+
+    /* --- inb(port): read a byte from a device port into rax --- */
+    if (nargs == 1 && !strcmp(name, "inb")) {
+        gen_expr(call->kids[0]);                 /* port -> rax */
+        unsigned char x[]={0x89,0xC2,            /* mov edx,eax  (port -> dx) */
+                           0xEC,                 /* in  al,dx                 */
+                           0x0F,0xB6,0xC0};      /* movzx eax,al              */
+        bytes(x,6);
+        return 1;
+    }
+
+    /* --- outb(port, val): write a byte to a device port --- */
+    if (nargs == 2 && !strcmp(name, "outb")) {
+        gen_expr(call->kids[0]); b(0x50);        /* port -> push */
+        gen_expr(call->kids[1]);                 /* val  -> rax  */
+        b(0x59);                                 /* pop rcx (port) */
+        unsigned char x[]={0x89,0xCA,            /* mov edx,ecx  (port -> dx) */
+                           0xEE};                /* out dx,al                 */
+        bytes(x,3);
+        { unsigned char z[]={0x48,0x31,0xC0}; bytes(z,3); }   /* xor rax,rax - outb is void */
+        return 1;
+    }
+
+    return 0;
+}
+
 /* emit a call to a user function, args already the concern of caller */
 static void emit_user_call(Node *call)
 {
@@ -412,6 +481,8 @@ static void gen_expr(Node *n)
         case N_CALL:
             if (n->a->type == N_IDENT && fn_index(n->a->text) >= 0) {
                 emit_user_call(n);
+            } else if (n->a->type == N_IDENT && emit_intrinsic(n)) {
+                /* peek/poke/inb/outb - handled inline, result (if any) in rax */
             } else {
                 fprintf(stderr,"native: can't call '%s' in int subset\n",
                         n->a->type==N_IDENT ? n->a->text : "?");
@@ -683,6 +754,13 @@ static void eu32(int o, unsigned v){ for(int i=0;i<4;i++) elfbuf[o+i]=(unsigned 
 static void eu64(int o, unsigned long long v){ for(int i=0;i<8;i++) elfbuf[o+i]=(unsigned char)((v>>(8*i))&0xFF); }
 
 #define ELF_BASE_VADDR 0x400000ULL
+/* a fixed, generously-aligned address inside the zero-filled scratch BSS the
+ * writer reserves past the code (see write_elf). A program that wants to
+ * peek/poke real memory can use this without knowing its own load layout.
+ * 0x420000 is well past any code nativegen emits (a few KiB) and inside the
+ * 64 KiB scratch, so it is always mapped writable. */
+#define NATIVE_SCRATCH_SIZE 0x20000ULL
+#define NATIVE_SCRATCH_ADDR 0x420000ULL
 #define EHDR_SIZE 64
 #define PHDR_SIZE 56
 
@@ -714,14 +792,21 @@ static void write_elf(const char *path)
     eu16(60, 0);              /* e_shnum                 */
     eu16(62, 0);              /* e_shstrndx              */
 
+    /* A 64 KiB zero-filled scratch region past the code: memsz > filesz, so
+     * the loader maps [base+filesz, base+memsz) as zeroed writable memory - a
+     * BSS. peek/poke now have somewhere to write. NATIVE_SCRATCH below is the
+     * fixed address a program can use for it. */
+    unsigned long long memsz = filesz + NATIVE_SCRATCH_SIZE;
+
     int ph = EHDR_SIZE;
     eu32(ph+0,  1);           /* p_type = PT_LOAD        */
-    eu32(ph+4,  5);           /* p_flags = PF_R|PF_X     */
+    eu32(ph+4,  7);           /* p_flags = PF_R|PF_W|PF_X - writable, so a
+                                 program can peek/poke its own scratch region */
     eu64(ph+8,  0);           /* p_offset                */
     eu64(ph+16, ELF_BASE_VADDR); /* p_vaddr              */
     eu64(ph+24, ELF_BASE_VADDR); /* p_paddr              */
     eu64(ph+32, filesz);      /* p_filesz                */
-    eu64(ph+40, filesz);      /* p_memsz                 */
+    eu64(ph+40, memsz);       /* p_memsz - includes the scratch BSS */
     eu64(ph+48, 0x1000);      /* p_align                 */
 
     memcpy(elfbuf + hdrsize, code, (size_t)codelen);

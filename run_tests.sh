@@ -352,6 +352,38 @@ else
     echo "  BUILD FAIL nativegen"; fail=1
 fi
 
+echo "== nativegen kernel intrinsics (the gcc-replacement path) =="
+# peek/poke must round-trip through real memory. Write 65, 66 and 1000 into
+# the scratch region, read them back, and exit with the low byte of the sum.
+cat > "$tmp/intr.zl" <<'EOF'
+buf = 0x420000
+poke8(buf, 65)
+poke8(buf + 1, 66)
+poke32(buf + 4, 1000)
+exit(peek8(buf) + peek8(buf + 1) + peek32(buf + 4))
+EOF
+( cd "$tmp" && "$OLDPWD/nativegen" intr.zl >/dev/null 2>&1 )
+"$tmp/native_out" 2>/dev/null; icode=$?
+if [ "$icode" -eq 107 ]; then          # (65+66+1000) & 255
+    echo "  ok    nativegen peek/poke round-trip through real memory"
+else
+    echo "  FAIL  nativegen peek/poke (exit $icode, expected 107)"; fail=1
+fi
+# inb/outb are privileged and cannot run in user mode, so assert the emitted
+# machine code is correct rather than executing it.
+cat > "$tmp/pio.zl" <<'EOF'
+x = inb(0x64)
+outb(0x60, 255)
+exit(0)
+EOF
+( cd "$tmp" && "$OLDPWD/nativegen" pio.zl >/dev/null 2>&1 )
+dis=$(objdump -D -b binary -m i386:x86-64 -M intel "$tmp/native_out" 2>/dev/null)
+if grep -q "in .*al,dx" <<<"$dis" && grep -q "out .*dx,al" <<<"$dis"; then
+    echo "  ok    nativegen emits correct in/out port instructions"
+else
+    echo "  FAIL  nativegen port I/O encoding"; fail=1
+fi
+
 echo
 if [ "$fail" -eq 0 ]; then
     echo "ALL GREEN"
