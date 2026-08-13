@@ -18,9 +18,65 @@ C_INFO   = 0x0B      # cyan
 C_TITLE  = 0x1F      # white on blue
 C_STATUS = 0x70      # black on grey
 
-# ---- serial, written in zl ---------------------------------------------
-fn kbd_ready() { return band(inb(COM1 + 5), 1) }
-fn kbd_read()  { return inb(COM1) }
+# ---- serial input, written in zl ---------------------------------------
+fn ser_ready() { return band(inb(COM1 + 5), 1) }
+fn ser_read()  { return inb(COM1) }
+
+# ---- PS/2 keyboard, written in zl --------------------------------------
+#
+# Port 0x64 is the status register: bit 0 set means a byte is waiting.
+# Port 0x60 hands over the scancode. Set 1: a key going DOWN sends its
+# code, a key coming UP sends the same code with bit 7 set - so anything
+# with bit 7 set is a release and we ignore it.
+#
+# The scancode -> ASCII table lives in RAM, built with poke8 at boot and
+# read with peek8. The kernel subset has no lists, and a 90-branch if/else
+# chain would be unreadable - so the raw memory primitives ARE the data
+# structure here. 0x7000 is free low memory below the kernel at 1 MiB.
+KBD_TABLE = 0x7000
+
+fn kmap(code, ch) { poke8(KBD_TABLE + code, ch) }
+
+fn kbd_init() {
+    # zero the table so an unmapped key reads back as 0
+    fill_mem(KBD_TABLE, 0, 128)
+
+    kmap(0x02, 49)  kmap(0x03, 50)  kmap(0x04, 51)  kmap(0x05, 52)
+    kmap(0x06, 53)  kmap(0x07, 54)  kmap(0x08, 55)  kmap(0x09, 56)
+    kmap(0x0A, 57)  kmap(0x0B, 48)
+
+    kmap(0x10, 113) kmap(0x11, 119) kmap(0x12, 101) kmap(0x13, 114)
+    kmap(0x14, 116) kmap(0x15, 121) kmap(0x16, 117) kmap(0x17, 105)
+    kmap(0x18, 111) kmap(0x19, 112)
+
+    kmap(0x1E, 97)  kmap(0x1F, 115) kmap(0x20, 100) kmap(0x21, 102)
+    kmap(0x22, 103) kmap(0x23, 104) kmap(0x24, 106) kmap(0x25, 107)
+    kmap(0x26, 108)
+
+    kmap(0x2C, 122) kmap(0x2D, 120) kmap(0x2E, 99)  kmap(0x2F, 118)
+    kmap(0x30, 98)  kmap(0x31, 110) kmap(0x32, 109)
+
+    kmap(0x39, 32)                      # space
+    kmap(0x1C, 13)                      # enter
+}
+
+fn ps2_ready() { return band(inb(0x64), 1) }
+
+fn ps2_read() {
+    p2_code = inb(0x60)
+    if band(p2_code, 0x80) != 0 { return 0 }      # key release - ignore
+    if p2_code > 127 { return 0 }
+    return peek8(KBD_TABLE + p2_code)
+}
+
+# Take input from EITHER source: the serial line (so a piped test and a
+# terminal still work) or the PS/2 keyboard (so it is usable on real
+# hardware, which has no serial port). Returns 0 when nothing is waiting.
+fn key_get() {
+    if ser_ready() == 1 { return ser_read() }
+    if ps2_ready() == 1 { return ps2_read() }
+    return 0
+}
 
 # ---- the chrome --------------------------------------------------------
 fn draw_title() {
@@ -124,6 +180,8 @@ fn run_command(cmd, arg) {
 }
 
 # ---- boot ---------------------------------------------------------------
+kbd_init()
+
 cls()
 draw_title()
 draw_status("booting")
@@ -138,6 +196,7 @@ ok_line("multiboot handoff, 32-bit protected mode")
 ok_line("stack established, 16 KiB")
 ok_line("COM1 initialised, 115200 8N1")
 ok_line("VGA text console, 80x25")
+ok_line("PS/2 keyboard, scancode set 1")
 ok_line("zl runtime, kernel subset")
 info_line("no interrupts - the shell polls")
 info_line("no heap, no filesystem, no scheduler")
@@ -162,9 +221,8 @@ while running == 1 {
 
     got = 0
     while got == 0 {
-        if kbd_ready() == 1 {
-            ch = kbd_read()
-
+        ch = key_get()
+        if ch > 0 {
             if is_digit(ch) == true {
                 pending = pending * 10 + (ch - 48)
                 color(C_BRIGHT)

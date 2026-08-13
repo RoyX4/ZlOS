@@ -21,10 +21,35 @@ no syscalls. `print()` talks to COM1 by polling the UART; `poke8` writes to
 VGA text memory at `0xB8000` and the characters appear on screen.
 
 ```bash
-./build.sh                 # kernel.zl -> kernel.elf
-./run.sh                   # boot it in QEMU, serial on your terminal
-./verify.sh                # headless boot, diff serial against golden.txt
+./build.sh          # kernel.zl -> kernel.elf
+./run.sh            # boot in QEMU: window = screen, this terminal = keyboard
+./run.sh --term     # no window, everything in the terminal
+./mkiso.sh          # -> zlOS.iso, bootable by GRUB on real hardware
+./verify.sh         # headless boot, drive the shell, diff against golden.txt
 ```
+
+## Running it on real hardware
+
+```bash
+./mkiso.sh
+qemu-system-i386 -cdrom zlOS.iso              # test the real boot path first
+sudo dd if=zlOS.iso of=/dev/sdX bs=4M status=progress && sync
+```
+
+Two things decide whether your machine will boot it:
+
+- **It is a BIOS/legacy image.** Most machines made after ~2020 are UEFI-only
+  with no CSM and will refuse it. A UEFI image needs the PE32+ route
+  `design_kernel.md` §3 specifies, which belongs to `kernelgen.c`.
+- **You need the PS/2 keyboard**, which is why it exists. There is no serial
+  port on a modern laptop, so without it you could see the screen and never
+  type. USB keyboards usually work through the firmware's PS/2 emulation,
+  but that is the firmware's favour, not ours - a real USB stack is a much
+  later floor.
+
+Building the ISO needs `grub-pc-bin` (the i386-pc modules). With only
+`grub-efi-*` installed, `grub-mkrescue` silently produces an image that
+fails with "could not read the boot disk".
 
 ## The console
 
@@ -96,8 +121,17 @@ zl> c        clear the screen
 zl> q        halt
 ```
 
-The serial driver is **written in zl** - `inb`/`outb` are builtins, the
-polling loop and the command dispatch are ordinary zl functions. That is
+The serial AND keyboard drivers are **written in zl** - `inb`/`outb` are
+builtins, everything else is ordinary zl functions.
+
+The PS/2 driver reads port 0x64 for "a byte is waiting" and 0x60 for the
+scancode, ignores anything with bit 7 set (a key coming up), and maps
+scancodes through a **table built in RAM with `poke8` and read with
+`peek8`**. The kernel subset has no lists, and a 90-branch if/else chain
+would be unreadable - so the raw memory primitives are the data structure.
+
+Input is taken from whichever source has a byte, so the same build works
+over serial (piped tests, a terminal) and on a real keyboard. That is
 MASTER_PLAN Floor 6 level 2's definition: *"boot a VM, get a prompt, type a
 command, my language runs it."*
 

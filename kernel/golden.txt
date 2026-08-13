@@ -4,6 +4,7 @@ zlOS starting
 [  OK  ] stack established, 16 KiB
 [  OK  ] COM1 initialised, 115200 8N1
 [  OK  ] VGA text console, 80x25
+[  OK  ] PS/2 keyboard, scancode set 1
 [  OK  ] zl runtime, kernel subset
 [ INFO ] no interrupts - the shell polls
 [ INFO ] no heap, no filesystem, no scheduler
