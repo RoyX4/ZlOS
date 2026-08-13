@@ -157,6 +157,8 @@ fn help() {
     print("    b        colour-bar graphics demo (with sound)")
     print("    a        animation - a bouncing logo over a starfield")
     print("    x        mouse demo - a cursor driven by the PS/2 mouse")
+    print("    g        play SNAKE (w a s d to steer)")
+    print("    d        paint with the mouse")
     print("    e        beep the PC speaker")
     print("    m        poke a byte into video memory and read it back")
     print("    c        clear the screen")
@@ -254,6 +256,146 @@ fn anim() {
     return 0
 }
 
+# ---- Snake: a real, playable game -----------------------------------------
+# The snake body is an array of grid cells - and the kernel subset has no
+# arrays, so it lives in raw memory: one byte per cell coordinate, walked
+# with poke8/peek8. This is what the raw-memory primitives were FOR.
+SNAKE_X = 0x30000
+SNAKE_Y = 0x30200
+
+fn snake_game() {
+    if px_w() == 0 {
+        color(C_GREY)  print("  the game needs the framebuffer console")
+        return 0
+    }
+    gw = px_w() / 16
+    gh = (px_h() / 16) - 2
+
+    slen = 5
+    hx = gw / 2
+    hy = gh / 2
+    i = 0
+    while i < slen {
+        poke8(SNAKE_X + i, hx - i)
+        poke8(SNAKE_Y + i, hy)
+        i = i + 1
+    }
+    dx = 1  dy = 0
+    seed = ticks() + 7
+    seed = seed * 1103515245 + 12345
+    fx = band(seed / 256, 1023) % gw
+    seed = seed * 1103515245 + 12345
+    fy = band(seed / 256, 1023) % gh
+    score = 0
+    alive = 1
+
+    cls()
+    fill_rect(0, 0, px_w(), px_h(), C_BLACK)
+    at(0, 2, "SNAKE", C_GREEN)
+    at(0, 10, "w a s d to steer, any other key to quit", C_GREY)
+    at(0, 60, "score:", C_WHITE)
+
+    nexttick = ticks() + 7
+    while alive == 1 {
+        k = kbd_scan()
+        if k == 119 { if dy == 0 { dx = 0  dy = 0 - 1 } }
+        if k == 115 { if dy == 0 { dx = 0  dy = 1 } }
+        if k == 97  { if dx == 0 { dx = 0 - 1  dy = 0 } }
+        if k == 100 { if dx == 0 { dx = 1  dy = 0 } }
+        if k > 0 {
+            if k != 119 { if k != 115 { if k != 97 { if k != 100 { alive = 0 } } } }
+        }
+
+        if ticks() >= nexttick {
+            nexttick = ticks() + 7
+            nhx = peek8(SNAKE_X) + dx
+            nhy = peek8(SNAKE_Y) + dy
+            if nhx < 0   { alive = 0 }
+            if nhx >= gw { alive = 0 }
+            if nhy < 0   { alive = 0 }
+            if nhy >= gh { alive = 0 }
+            i = 0
+            while i < slen {
+                if peek8(SNAKE_X + i) == nhx {
+                    if peek8(SNAKE_Y + i) == nhy { alive = 0 }
+                }
+                i = i + 1
+            }
+            if alive == 1 {
+                grew = 0
+                if nhx == fx {
+                    if nhy == fy {
+                        grew = 1
+                        score = score + 1
+                        slen = slen + 1
+                        seed = seed * 1103515245 + 12345
+                        fx = band(seed / 256, 1023) % gw
+                        seed = seed * 1103515245 + 12345
+                        fy = band(seed / 256, 1023) % gh
+                    }
+                }
+                if grew == 0 {
+                    tx = peek8(SNAKE_X + slen - 1)
+                    ty = peek8(SNAKE_Y + slen - 1)
+                    fill_rect(tx * 16, ty * 16 + 20, 16, 16, C_BLACK)
+                }
+                i = slen - 1
+                while i > 0 {
+                    poke8(SNAKE_X + i, peek8(SNAKE_X + i - 1))
+                    poke8(SNAKE_Y + i, peek8(SNAKE_Y + i - 1))
+                    i = i - 1
+                }
+                poke8(SNAKE_X, nhx)
+                poke8(SNAKE_Y, nhy)
+                fill_rect(nhx * 16, nhy * 16 + 20, 15, 15, C_GREEN)
+                fill_rect(fx * 16, fy * 16 + 20, 15, 15, C_RED)
+                at_num(0, 67, score, C_YELLOW)
+            }
+        }
+    }
+    beep(200, 20)
+    color(C_RED)   put("  game over - score ")  color(C_WHITE)  print(score)
+    color(C_GREY)  print("  press any key")
+    while kbd_scan() == 0 { }
+    draw_screen()
+    return 0
+}
+
+# ---- Paint: draw with the mouse -------------------------------------------
+fn paint() {
+    if px_w() == 0 {
+        color(C_GREY)  print("  paint needs the framebuffer console")
+        return 0
+    }
+    w = px_w()
+    h = px_h()
+    cls()
+    fill_rect(0, 0, w, h, C_BLACK)
+    at(0, 2, "PAINT", C_WHITE)
+    at(0, 9, "hold left button to draw   1-7 pick colour   space clears   other key exits", C_GREY)
+    col = C_GREEN
+    running = 1
+    while running == 1 {
+        k = key_get()
+        if k > 0 {
+            if k == 32 { fill_rect(0, 24, w, h - 24, C_BLACK) }
+            if k >= 49 { if k <= 55 { col = k - 48 } }
+            if k > 55 { running = 0 }
+            if k < 49 { if k != 32 { running = 0 } }
+        }
+        mx = mouse_x()
+        my = mouse_y()
+        if mx > w - 5 { mx = w - 5 }
+        if my > h - 5 { my = h - 5 }
+        if my < 24 { my = 24 }
+        if band(mouse_btn(), 1) != 0 { fill_rect(mx, my, 5, 5, col) }
+        at_num(0, 62, mx, C_GREY)
+        at_num(0, 70, my, C_GREY)
+    }
+    draw_screen()
+    return 0
+}
+
 fn run_command(cmd, arg) {
     if cmd == 104 { help()  return 0 }
     if cmd == 102 { color(C_WHITE)  put("  ")  print(fib(arg))  color(C_GREY)  return 0 }
@@ -288,6 +430,8 @@ fn run_command(cmd, arg) {
     }
     if cmd == 120 { return mousedemo() }  # x - mouse demo
     if cmd == 97  { return anim() }       # a - animation
+    if cmd == 103 { return snake_game() } # g - snake game
+    if cmd == 100 { return paint() }      # d - paint (draw)
     if cmd == 114 {                       # r - reboot
         color(C_YELLOW)  print("  rebooting...")
         beep(1568, 6)  beep(784, 10)

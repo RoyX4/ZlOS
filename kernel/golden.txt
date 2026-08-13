@@ -24,6 +24,8 @@
     b        colour-bar graphics demo (with sound)
     a        animation - a bouncing logo over a starfield
     x        mouse demo - a cursor driven by the PS/2 mouse
+    g        play SNAKE (w a s d to steer)
+    d        paint with the mouse
     e        beep the PC speaker
     m        poke a byte into video memory and read it back
     c        clear the screen
