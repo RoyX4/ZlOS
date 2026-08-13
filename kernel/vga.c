@@ -105,6 +105,7 @@ void vga_at(int row, int col, const char *s, unsigned char attr)
 }
 
 int vga_get_row(void) { return vga_row; }
+int vga_get_col(void) { return vga_col; }
 
 void vga_set_row(int r)
 {

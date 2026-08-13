@@ -257,3 +257,4 @@ void fb_set_row(int r, int log_top, int log_bot)
 }
 
 int fb_get_row(void) { return fb_row; }
+int fb_get_col(void) { return fb_col; }

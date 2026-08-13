@@ -46,6 +46,31 @@ fn kbd_init() {
     kmap(0x30, 98)  kmap(0x31, 110) kmap(0x32, 109)
     kmap(0x39, 32)                      # space
     kmap(0x1C, 13)                      # enter
+    kmap(0x0E, 8)                       # backspace
+    kmap(0x01, 27)                      # esc
+    kmap(0x33, 44)  kmap(0x34, 46)  kmap(0x35, 47)   # , . /
+    kmap(0x0C, 45)  kmap(0x0D, 61)                   # - =
+    kmap(0x27, 59)  kmap(0x28, 39)                   # ; '
+    kmap(0x1A, 91)  kmap(0x1B, 93)                   # [ ]
+}
+
+# shift state, tracked for the editor so it can type capitals
+shift_state = 0
+
+# a shift-aware read: returns a translated character, or 0 if nothing / a
+# modifier / a release. Uppercases letters; leaves the rest as-is (v1).
+fn edit_key() {
+    sc = scan_get()
+    if sc == 0 { return 0 }
+    if sc == 0x2A { shift_state = 1  return 0 }      # left shift down
+    if sc == 0x36 { shift_state = 1  return 0 }      # right shift down
+    if sc == 0xAA { shift_state = 0  return 0 }      # left shift up
+    if sc == 0xB6 { shift_state = 0  return 0 }      # right shift up
+    if band(sc, 0x80) != 0 { return 0 }              # any other release
+    ch = peek8(KBD_TABLE + sc)
+    if ch == 0 { return 0 }
+    if shift_state == 1 { if ch >= 97 { if ch <= 122 { ch = ch - 32 } } }
+    return ch
 }
 # The keyboard now arrives by INTERRUPT: the IRQ1 handler drops each scancode
 # into a ring buffer, and scan_get() pulls the next one (0 when empty). This
@@ -159,6 +184,7 @@ fn help() {
     print("    x        mouse demo - a cursor driven by the PS/2 mouse")
     print("    g        play SNAKE (w a s d to steer)")
     print("    d        paint with the mouse")
+    print("    i        text editor (type, backspace, ESC to exit)")
     print("    e        beep the PC speaker")
     print("    m        poke a byte into video memory and read it back")
     print("    c        clear the screen")
@@ -396,6 +422,63 @@ fn paint() {
     return 0
 }
 
+# ---- a text editor --------------------------------------------------------
+# The text lives in a raw memory buffer, one byte per character. Typing
+# appends, backspace removes, enter inserts a newline; the whole buffer is
+# re-rendered each keystroke (buffers are small). This is a TempleOS-style
+# "the OS edits text" feature, written entirely in zl.
+EDIT_BUF = 0x40000
+EDIT_MAX = 8000
+
+fn redraw_editor(len) {
+    fill_rect(0, 34, px_w(), px_h() - 50, C_BLACK)   # clear the text area
+    goto_row(3)
+    color(C_WHITE)
+    i = 0
+    while i < len {
+        sc(peek8(EDIT_BUF + i))                        # screen-only, no serial spam
+        i = i + 1
+    }
+    # a block cursor at the current position
+    cursor(row(), col(), 1, C_GREEN)
+}
+
+fn editor() {
+    if px_w() == 0 {
+        color(C_GREY)  print("  the editor needs the framebuffer console")
+        return 0
+    }
+    cls()
+    fill_rect(0, 0, px_w(), 30, C_BLUE)
+    at(0, 2, "zlEDIT", C_WHITE)
+    at(0, 12, "type to edit   backspace deletes   ESC saves & exits", C_CYAN)
+    fill_mem(EDIT_BUF, 0, EDIT_MAX)
+    len = 0
+    redraw_editor(len)
+    running = 1
+    while running == 1 {
+        k = edit_key()
+        if k > 0 {
+            if k == 27 { running = 0 }
+            if k == 8 {
+                if len > 0 { len = len - 1  poke8(EDIT_BUF + len, 0) }
+                redraw_editor(len)
+            }
+            if k == 13 {
+                if len < EDIT_MAX - 1 { poke8(EDIT_BUF + len, 10)  len = len + 1 }
+                redraw_editor(len)
+            }
+            if k >= 32 {
+                if len < EDIT_MAX - 1 { poke8(EDIT_BUF + len, k)  len = len + 1 }
+                redraw_editor(len)
+            }
+        }
+    }
+    draw_screen()
+    color(C_GREY)  put("  editor: kept ")  color(C_WHITE)  put(len)  color(C_GREY)  print(" characters in memory at 0x40000")
+    return 0
+}
+
 fn run_command(cmd, arg) {
     if cmd == 104 { help()  return 0 }
     if cmd == 102 { color(C_WHITE)  put("  ")  print(fib(arg))  color(C_GREY)  return 0 }
@@ -432,6 +515,7 @@ fn run_command(cmd, arg) {
     if cmd == 97  { return anim() }       # a - animation
     if cmd == 103 { return snake_game() } # g - snake game
     if cmd == 100 { return paint() }      # d - paint (draw)
+    if cmd == 105 { return editor() }     # i - text editor
     if cmd == 114 {                       # r - reboot
         color(C_YELLOW)  print("  rebooting...")
         beep(1568, 6)  beep(784, 10)

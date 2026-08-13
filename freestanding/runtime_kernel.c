@@ -44,6 +44,7 @@ extern void console_bar(int row, unsigned char attr);
 extern void console_at(int row, int col, const char *s, unsigned char attr);
 extern void console_set_row(int r);
 extern int  console_get_row(void);
+extern int  console_get_col(void);
 extern int  console_status_row(void);
 extern int  console_loader(void);
 extern int  console_pxw(void);
@@ -306,6 +307,8 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "at_num"))    { console_at_num((int)a[0].num,(int)a[1].num,(long)a[2].num,(unsigned char)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "cpu_char"))  return zl_num((double)cpu_brand_byte((int)a[0].num));
     if (streq(name, "emit"))      { zl_putc((char)(int)a[0].num); return zl_nil(); }
+    if (streq(name, "sc"))        { console_putc((char)(int)a[0].num); return zl_nil(); }
+    if (streq(name, "col"))       return zl_num((double)console_get_col());
     if (streq(name, "beep_on"))   { speaker_on((unsigned)(long long)a[0].num); return zl_nil(); }
     if (streq(name, "beep_off"))  { speaker_off(); return zl_nil(); }
     if (streq(name, "reboot"))    { kreboot(); return zl_nil(); }

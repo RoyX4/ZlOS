@@ -17,6 +17,7 @@ void vga_bar(int row, unsigned char attr);
 void vga_at(int row, int col, const char *s, unsigned char attr);
 void vga_set_row(int r);
 int  vga_get_row(void);
+int  vga_get_col(void);
 
 /* fb.c - the UEFI framebuffer */
 int  fb_active(void);
@@ -31,6 +32,7 @@ void fb_set_row(int r, int log_top, int log_bot);
 int  fb_get_row(void);
 int  fb_get_cols(void);
 int  fb_get_rows(void);
+int  fb_get_col(void);
 unsigned int fb_pxw(void);
 unsigned int fb_pxh(void);
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
@@ -135,6 +137,7 @@ void console_at(int r, int c, const char *s, unsigned char a)
                                          { if (fb_active()) fb_at(r, c, s, a); else vga_at(r, c, s, a); }
 void console_set_row(int r)              { if (fb_active()) fb_set_row(r, log_top, log_bot); else vga_set_row(r); }
 int  console_get_row(void)               { return fb_active() ? fb_get_row() : vga_get_row(); }
+int  console_get_col(void)               { return fb_active() ? fb_get_col() : vga_get_col(); }
 
 /* ---- rich graphics, exposed to zl. All no-op on the VGA text path, where
  * there are no pixels; the boot still reads fine without them. ---- */
