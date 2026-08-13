@@ -1,31 +1,41 @@
 ========================================
-  zl kernel - running on bare metal
+  zl kernel
+  no OS. no libc. no syscalls.
 ========================================
 
-no OS underneath. no libc. no syscalls.
-print() is talking to COM1 directly.
+the serial driver below is written in zl:
+inb/outb are builtins, the polling is zl.
 
-arithmetic:
-14
-14
+press h for help, q to halt.
+
+zl> 
+
+  h        this help
+  f <n>    fib(n)
+  s <n>    sum of squares to n
+  m        read a byte back from VGA memory
+  c        clear the screen
+  q        halt the machine
+
+zl> 
 2
+0
 
-recursion - fib(20):
 6765
 
-a loop - sum of squares to 10:
+zl> 
+1
+0
+
 385
 
-hex literals:
-57005
-753664
+zl> 
 
-writing to VGA text memory at 0xB8000...
-read back from 0xB8000:
-90
+wrote '*' to VGA, read back:
+42
 
-========================================
-  it boots.
-========================================
+zl> 
+
+halting.
 
 [kernel] main() returned - halting

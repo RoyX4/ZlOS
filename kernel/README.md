@@ -54,9 +54,35 @@ descriptor is how you get a wrong GDT entry).
 a `write` syscall on Linux, COM1 under `-DZL_KERNEL_SERIAL`. Retargeting is
 one function. That is what "swappable later" has to mean in practice.
 
+## The shell
+
+`kernel.zl` polls COM1 and runs commands you type:
+
+```
+zl> h        help
+zl> 20f      fib(20)      -> 6765
+zl> 10s      sum of squares to 10 -> 385
+zl> m        write a byte to VGA and read it back
+zl> c        clear the screen
+zl> q        halt
+```
+
+The serial driver is **written in zl** - `inb`/`outb` are builtins, the
+polling loop and the command dispatch are ordinary zl functions. That is
+MASTER_PLAN Floor 6 level 2's definition: *"boot a VM, get a prompt, type a
+command, my language runs it."*
+
+### One quirk, and it is not the kernel's fault
+
+QEMU can hand the guest the very first serial byte before it starts
+executing, so a *piped* first character is lost - unrecoverable from inside
+the kernel. A human at a terminal cannot type before the machine boots, so
+this never shows up interactively. `verify.sh` sends a throwaway `.` first
+for exactly this reason.
+
 ## What this is not
 
-It owns the machine and it can print. It has no interrupts, no keyboard, no
-timer, no memory manager, no scheduler, no filesystem. That line is
-`design_kernel.md`'s: **W6 owns the machine and can print; W7 does something
-with it.**
+It owns the machine, prints, and takes input. It has no interrupts (the
+shell polls), no timer, no memory manager, no scheduler, no filesystem, and
+cannot load a program from disk. `design_kernel.md` draws the line:
+**W6 owns the machine and can print; W7 does something with it.**

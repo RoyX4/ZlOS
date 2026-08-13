@@ -1,54 +1,37 @@
 #!/usr/bin/env bash
-# kernel/verify.sh - the second gate, deliberately separate.
+# kernel/verify.sh - the second gate (design_kernel.md §10).
 #
-# design_kernel.md §10 asks for exactly this: build the image, boot it
-# headless, capture serial, diff against a golden transcript, always time
-# out. run_tests.sh is the language gate; this is the kernel gate, and a
-# kernel that stops booting must fail loudly rather than quietly.
+# Build the image, boot it headless, drive the shell over serial, capture
+# the transcript, diff against golden.txt, always time out.
 set -uo pipefail
 cd "$(dirname "$0")"
 
 GOLDEN=golden.txt
-OUT=$(mktemp)
-trap 'rm -f "$OUT"' EXIT
+OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT
 
 ./build.sh >/dev/null 2>&1 || { echo "FAIL: kernel did not build"; exit 1; }
 
-# A kernel that hangs must not hang the test suite - always time out.
-timeout 30 qemu-system-i386 \
-    -kernel kernel.elf \
-    -serial "file:$OUT" \
-    -display none \
-    -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-    -no-reboot >/dev/null 2>&1
+# The leading '.' is a deliberate throwaway: QEMU can hand the guest the
+# very first serial byte before it starts executing, so that byte is lost
+# no matter what the kernel does. A human typing never hits this.
+# Then: h=help, 20f=fib(20), 10s=sum_squares(10), m=poke/peek proof, q=halt.
+KEYS='.h20f10smq'
 
-# QEMU's isa-debug-exit reports (value<<1)|1, so kernel_done's 0 becomes 1.
-# Any other code means it never reached the end.
+printf '%s' "$KEYS" | timeout 30 qemu-system-i386 \
+    -kernel kernel.elf -serial stdio -display none -no-reboot \
+    -device isa-debug-exit,iobase=0xf4,iosize=0x04 >"$OUT" 2>/dev/null
 rc=$?
-if [ "$rc" -eq 124 ]; then
-    echo "FAIL: kernel timed out - it hung before halting"
-    exit 1
-fi
+[ "$rc" -eq 124 ] && { echo "FAIL: kernel timed out - it hung"; exit 1; }
+[ -s "$OUT" ]     || { echo "FAIL: no serial output - it did not boot"; exit 1; }
 
-if [ ! -s "$OUT" ]; then
-    echo "FAIL: no serial output at all - it did not boot"
-    exit 1
-fi
-
-# strip CR: the UART emits \r\n, the golden file is plain \n
-tr -d '\r' < "$OUT" > "$OUT.clean" && mv "$OUT.clean" "$OUT"
+tr -d '\r' < "$OUT" > "$OUT.c" && mv "$OUT.c" "$OUT"
 
 if [ ! -f "$GOLDEN" ]; then
-    cp "$OUT" "$GOLDEN"
-    echo "wrote $GOLDEN (first run - review it, then commit it)"
-    exit 0
+    cp "$OUT" "$GOLDEN"; echo "wrote $GOLDEN (first run - review, then commit)"; exit 0
 fi
 
 if diff -q "$GOLDEN" "$OUT" >/dev/null; then
-    echo "ok    kernel boots and its serial transcript matches $GOLDEN"
+    echo "ok    kernel boots, shell responds, transcript matches golden.txt"
     exit 0
 fi
-
-echo "FAIL: serial transcript changed"
-diff "$GOLDEN" "$OUT" | head -20
-exit 1
+echo "FAIL: serial transcript changed"; diff "$GOLDEN" "$OUT" | head -20; exit 1

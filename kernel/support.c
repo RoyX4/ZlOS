@@ -22,7 +22,14 @@ void serial_init(void)
     zl_outb(COM1 + 0, 0x01);   /* divisor lo = 1  -> 115200 baud        */
     zl_outb(COM1 + 1, 0x00);   /* divisor hi = 0                        */
     zl_outb(COM1 + 3, 0x03);   /* DLAB off, 8 bits, no parity, 1 stop   */
-    zl_outb(COM1 + 2, 0xC7);   /* enable + clear FIFOs, 14-byte trigger */
+    /* Enable FIFOs at a 14-byte trigger WITHOUT clearing them (0xC1, not
+       0xC7): clearing would discard a byte that arrived before init.
+       Note this does not fully solve piped-at-boot input - QEMU can deliver
+       the very first byte before the guest executes at all, and that one is
+       unrecoverable from inside the kernel. It costs nothing for a human at
+       a terminal, who cannot type before the machine boots. The automated
+       test sends a padding byte first for this reason. */
+    zl_outb(COM1 + 2, 0xC1);
     zl_outb(COM1 + 4, 0x0B);   /* DTR + RTS + OUT2                      */
 }
 

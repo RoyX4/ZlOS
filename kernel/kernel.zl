@@ -1,13 +1,86 @@
-# kernel.zl - a kernel, written in zl.
+# kernel.zl - a kernel with a shell, written in zl.
 #
-# This is the whole kernel. It runs on bare metal with no operating system
-# underneath it: no libc, no syscalls, no loader. print() reaches COM1
-# through runtime_kernel.c's zl_putc, which polls the UART directly.
+# Runs on bare metal: no OS, no libc, no syscalls. The serial driver below
+# is ordinary zl calling inb/outb, so this is not "C does the work and zl
+# prints" - the device handling is in the language.
 #
-# The subset rule (design_kernel.md): numbers, arithmetic, comparisons,
-# if/while, functions, recursion, print, and raw memory. No lists, no string
-# values, no concatenation - runtime_kernel.c makes each of those a named
-# fault rather than a silent surprise.
+# MASTER_PLAN Floor 6 level 2 is "boot a VM, get a prompt, type a command,
+# my language runs it". This is that.
+
+COM1 = 0x3F8
+
+# ---------------------------------------------------------------- serial
+# Line Status Register, bit 0: a byte is waiting to be read.
+fn kbd_ready() { return band(inb(COM1 + 5), 1) }
+fn kbd_read()  { return inb(COM1) }
+
+# --------------------------------------------------------------- VGA text
+# 0xB8000 is the text buffer: two bytes per cell, character then colour.
+VGA = 0xB8000
+
+fn vga_put(pos, ch, attr) {
+    vp = VGA + pos * 2
+    poke8(vp, ch)
+    poke8(vp + 1, attr)
+}
+
+fn vga_banner(text_len, row) {
+    vb_i = 0
+    while vb_i < 80 {
+        vga_put(row * 80 + vb_i, 32, 0x1F)
+        vb_i = vb_i + 1
+    }
+}
+
+# ------------------------------------------------------------- the shell
+fn is_digit(c) { return c >= 48 and c <= 57 }
+
+fn run_command(cmd, arg) {
+    # cmd is a single letter; keeping the parser tiny keeps the kernel
+    # inside the subset (no string values, so commands are characters).
+    if cmd == 104 {                       # h - help
+        print("")
+        print("  h        this help")
+        print("  f <n>    fib(n)")
+        print("  s <n>    sum of squares to n")
+        print("  m        read a byte back from VGA memory")
+        print("  c        clear the screen")
+        print("  q        halt the machine")
+        return 0
+    }
+    if cmd == 102 {                       # f - fib
+        print("")
+        print(fib(arg))
+        return 0
+    }
+    if cmd == 115 {                       # s - sum of squares
+        print("")
+        print(sum_squares(arg))
+        return 0
+    }
+    if cmd == 109 {                       # m - poke/peek proof
+        poke8(VGA + 158, 42)              # a '*' near the top-right
+        poke8(VGA + 159, 0x4F)
+        print("")
+        print("wrote '*' to VGA, read back:")
+        print(peek8(VGA + 158))
+        return 0
+    }
+    if cmd == 99 {                        # c - clear
+        vc_i = 0
+        while vc_i < 2000 {
+            vga_put(vc_i, 32, 0x07)
+            vc_i = vc_i + 1
+        }
+        print("")
+        print("screen cleared")
+        return 0
+    }
+    if cmd == 113 { return 1 }            # q - quit
+    print("")
+    print("unknown command - press h for help")
+    return 0
+}
 
 fn fib(n) {
     if n < 2 { return n }
@@ -15,70 +88,63 @@ fn fib(n) {
 }
 
 fn sum_squares(n) {
-    ss_total = 0
+    ss_t = 0
     ss_i = 1
     while ss_i <= n {
-        ss_total = ss_total + ss_i * ss_i
+        ss_t = ss_t + ss_i * ss_i
         ss_i = ss_i + 1
     }
-    return ss_total
+    return ss_t
 }
 
+# ----------------------------------------------------------------- boot
 print("========================================")
-print("  zl kernel - running on bare metal")
+print("  zl kernel")
+print("  no OS. no libc. no syscalls.")
 print("========================================")
-
 print("")
-print("no OS underneath. no libc. no syscalls.")
-print("print() is talking to COM1 directly.")
-
+print("the serial driver below is written in zl:")
+print("inb/outb are builtins, the polling is zl.")
 print("")
-print("arithmetic:")
-print(2 + 3 * 4)
-print(100 / 7)
-print(100 % 7)
+print("press h for help, q to halt.")
 
-print("")
-print("recursion - fib(20):")
-print(fib(20))
+# paint the top row so the screen shows something too
+vga_banner(80, 0)
+vga_put(0, 90, 0x1F)      # Z
+vga_put(1, 76, 0x1F)      # L
+vga_put(3, 83, 0x1F)      # S
+vga_put(4, 72, 0x1F)      # H
 
-print("")
-print("a loop - sum of squares to 10:")
-print(sum_squares(10))
+# --------------------------------------------------------- the main loop
+# A real read-eval-print loop, polling the UART. This is the whole point:
+# the machine is now waiting for YOU.
+running = 1
+pending = 0                # a digit typed before a command letter
 
-print("")
-print("hex literals:")
-print(0xDEAD)
-print(0xB8000)
+while running == 1 {
+    print("")
+    print("zl> ")
 
-# Raw memory, on real hardware this time. 0xB8000 is the VGA text buffer:
-# each cell is two bytes, a character and an attribute. Writing here puts
-# characters on the QEMU screen without going through the serial port at all.
-print("")
-print("writing to VGA text memory at 0xB8000...")
+    got = 0
+    while got == 0 {
+        if kbd_ready() == 1 {
+            ch = kbd_read()
 
-fn vga_put(pos, ch, attr) {
-    vp_addr = 0xB8000 + pos * 2
-    poke8(vp_addr, ch)
-    poke8(vp_addr + 1, attr)
+            if is_digit(ch) == true {
+                pending = pending * 10 + (ch - 48)
+                # echo the digit so typing feels real
+                print(ch - 48)
+            } else {
+                if ch > 32 {
+                    r = run_command(ch, pending)
+                    pending = 0
+                    got = 1
+                    if r == 1 { running = 0 }
+                }
+            }
+        }
+    }
 }
 
-# spell ZL KERNEL on the top-left of the screen, bright white on blue
-vga_put(0, 90, 0x1F)     # Z
-vga_put(1, 76, 0x1F)     # L
-vga_put(2, 32, 0x1F)     # space
-vga_put(3, 75, 0x1F)     # K
-vga_put(4, 69, 0x1F)     # E
-vga_put(5, 82, 0x1F)     # R
-vga_put(6, 78, 0x1F)     # N
-vga_put(7, 69, 0x1F)     # E
-vga_put(8, 76, 0x1F)     # L
-
-# and read one back, to prove the write really landed in memory
-print("read back from 0xB8000:")
-print(peek8(0xB8000))
-
 print("")
-print("========================================")
-print("  it boots.")
-print("========================================")
+print("halting.")

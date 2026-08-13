@@ -208,6 +208,25 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "poke8"))  { *(volatile unsigned char  *)(unsigned long)a[0].num = (unsigned char )(unsigned long long)a[1].num; return zl_nil(); }
     if (streq(name, "poke16")) { *(volatile unsigned short *)(unsigned long)a[0].num = (unsigned short)(unsigned long long)a[1].num; return zl_nil(); }
     if (streq(name, "poke32")) { *(volatile unsigned int   *)(unsigned long)a[0].num = (unsigned int  )(unsigned long long)a[1].num; return zl_nil(); }
+
+    /* Port I/O - design_kernel.md §6.3 lists these among the intrinsics a
+     * kernel backend must provide. Exposing them as builtins is what lets a
+     * DRIVER be written in zl rather than in C: the serial and keyboard
+     * drivers in kernel.zl are ordinary zl functions that call inb/outb. */
+#ifdef ZL_KERNEL_SERIAL
+    if (streq(name, "inb"))  return zl_num((double)zl_inb((unsigned short)(unsigned long long)a[0].num));
+    if (streq(name, "outb")) { zl_outb((unsigned short)(unsigned long long)a[0].num,
+                                       (unsigned char )(unsigned long long)a[1].num); return zl_nil(); }
+#endif
+
+    /* Bitwise ops. A driver cannot be written without them - every status
+     * register is read by masking a bit. Same names as runtime.c's. */
+    if (streq(name, "band")) return zl_num((double)((long long)a[0].num & (long long)a[1].num));
+    if (streq(name, "bor"))  return zl_num((double)((long long)a[0].num | (long long)a[1].num));
+    if (streq(name, "bxor")) return zl_num((double)((long long)a[0].num ^ (long long)a[1].num));
+    if (streq(name, "bnot")) return zl_num((double)(~(long long)a[0].num));
+    if (streq(name, "shl"))  return zl_num((double)((long long)a[0].num << (long long)a[1].num));
+    if (streq(name, "shr"))  return zl_num((double)((unsigned long long)a[0].num >> (long long)a[1].num));
     /* peek64/poke64 carry the 2^53 hazard (design_kernel.md §2); the two
      * -halves rule means a kernel should not need them for descriptors. */
     if (streq(name, "peek64")) {
