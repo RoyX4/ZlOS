@@ -24,8 +24,9 @@ VGA text memory at `0xB8000` and the characters appear on screen.
 ./build.sh          # kernel.zl -> kernel.elf
 ./run.sh            # boot in QEMU: window = screen, this terminal = keyboard
 ./run.sh --term     # no window, everything in the terminal
-./mkiso.sh          # -> zlOS.iso, bootable by GRUB on real hardware
-./verify.sh         # headless boot, drive the shell, diff against golden.txt
+./mkiso.sh          # -> zlOS.iso, boots BIOS *and* UEFI
+./verify.sh         # fast gate: headless boot, drive the shell, diff golden.txt
+./verify-iso.sh     # slow gate: boot the real ISO on BIOS and on UEFI
 ```
 
 ## Running it on real hardware
@@ -36,20 +37,43 @@ qemu-system-i386 -cdrom zlOS.iso              # test the real boot path first
 sudo dd if=zlOS.iso of=/dev/sdX bs=4M status=progress && sync
 ```
 
-Two things decide whether your machine will boot it:
+The ISO is **hybrid**: one image, both boot paths, verified by
+`verify-iso.sh`.
 
-- **It is a BIOS/legacy image.** Most machines made after ~2020 are UEFI-only
-  with no CSM and will refuse it. A UEFI image needs the PE32+ route
-  `design_kernel.md` §3 specifies, which belongs to `kernelgen.c`.
-- **You need the PS/2 keyboard**, which is why it exists. There is no serial
-  port on a modern laptop, so without it you could see the screen and never
-  type. USB keyboards usually work through the firmware's PS/2 emulation,
-  but that is the firmware's favour, not ours - a real USB stack is a much
-  later floor.
+- **UEFI** - what a machine made after ~2015 will use. Verified against OVMF.
+- **Legacy BIOS/CSM** - older machines, and QEMU's default.
 
-Building the ISO needs `grub-pc-bin` (the i386-pc modules). With only
-`grub-efi-*` installed, `grub-mkrescue` silently produces an image that
-fails with "could not read the boot disk".
+### Why UEFI needed a framebuffer console
+
+UEFI has **no VGA text mode**. The buffer at `0xB8000` simply is not there,
+so the first UEFI attempt booted fine over serial and left the screen black,
+with GRUB reporting `no suitable video mode found`.
+
+The fix is in three parts:
+1. `boot.S` sets multiboot flag bit 2 to **request a video mode**, with
+   width/height/depth all **0** meaning "any linear framebuffer". Asking for
+   an exact 1024x768x32 fails on firmware that offers something else - OVMF
+   hands out 1280x800 - and GRUB then gives up rather than picking a nearby
+   mode.
+2. `mkiso.sh` does `insmod all_video`, without which GRUB may have no video
+   driver loaded and cannot satisfy the request at all.
+3. `fb.c` renders glyphs into that framebuffer with an 8x16 bitmap font
+   (generated from the system console font), and `console.c` chooses
+   framebuffer or VGA text **at run time** - so one image serves both, and
+   `kernel.zl` never learns which screen it is on.
+
+### Two more things that decide whether YOUR machine boots it
+
+- **Secure Boot** must be off. The GRUB in this ISO is unsigned.
+- **The PS/2 keyboard** is why it exists: no modern laptop has a serial port,
+  so without it you would see the screen and never be able to type. USB
+  keyboards usually work through the firmware's PS/2 emulation - that is the
+  firmware doing you a favour, not us. A real USB stack is a much later floor.
+
+Building the ISO needs `grub-pc-bin` (the i386-pc modules) for the BIOS half.
+With only `grub-efi-*` installed, `grub-mkrescue` silently produces an image
+that fails at "could not read the boot disk" - it does not warn that it had
+no BIOS platform to target.
 
 ## The console
 

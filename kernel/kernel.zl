@@ -87,10 +87,11 @@ fn draw_title() {
 }
 
 fn draw_status(msg) {
-    bar(24, C_STATUS)
-    at(24, 2, "h help", C_STATUS)
-    at(24, 12, "q halt", C_STATUS)
-    at(24, 40, msg, C_STATUS)
+    sb = status_row()
+    bar(sb, C_STATUS)
+    at(sb, 2, "h help", C_STATUS)
+    at(sb, 12, "q halt", C_STATUS)
+    at(sb, 40, msg, C_STATUS)
 }
 
 # A boot line that looks like a real init: "[ OK ] doing the thing".
@@ -195,7 +196,14 @@ print("")
 ok_line("multiboot handoff, 32-bit protected mode")
 ok_line("stack established, 16 KiB")
 ok_line("COM1 initialised, 115200 8N1")
-ok_line("VGA text console, 80x25")
+if con_kind() == 1 {
+    color(C_NORM)  put("[")
+    color(C_OK)    put("  OK  ")
+    color(C_NORM)  put("] framebuffer console, ")
+    put(con_cols())  put("x")  print(con_rows())
+} else {
+    ok_line("VGA text console, 80x25")
+}
 ok_line("PS/2 keyboard, scancode set 1")
 ok_line("zl runtime, kernel subset")
 info_line("no interrupts - the shell polls")

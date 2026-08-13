@@ -35,19 +35,25 @@ extern unsigned char zl_inb(unsigned short port);
 #define COM1 0x3F8
 /* the VGA text console lives in the kernel dir - it is board support, not
  * language runtime, so it is only linked in on the kernel target */
-extern void vga_putc(char c);
-extern void vga_clear(void);
-extern void vga_setcolor(unsigned char attr);
-extern void vga_bar(int row, unsigned char attr);
-extern void vga_at(int row, int col, const char *s, unsigned char attr);
-extern void vga_set_row(int r);
-extern int  vga_get_row(void);
+/* console.c chooses VGA text or a UEFI framebuffer at run time, so the
+ * runtime - and therefore kernel.zl - never learns which screen it is on */
+extern void console_putc(char c);
+extern void console_clear(void);
+extern void console_setcolor(unsigned char attr);
+extern void console_bar(int row, unsigned char attr);
+extern void console_at(int row, int col, const char *s, unsigned char attr);
+extern void console_set_row(int r);
+extern int  console_get_row(void);
+extern int  console_status_row(void);
+extern int  console_kind(void);
+extern int  console_cols(void);
+extern int  console_rows(void);
 
 static void zl_putc(char c)
 {
     /* screen for a human, serial for verify.sh - both, always, so a
      * headless test still sees everything the user would */
-    vga_putc(c);
+    console_putc(c);
     while ((zl_inb(COM1 + 5) & 0x20) == 0) { }   /* wait for THR empty */
     zl_outb(COM1, (unsigned char)c);
 }
@@ -248,15 +254,21 @@ Value zl_calln(const char *name, int n, ...)
 #ifdef ZL_KERNEL_SERIAL
     /* the text console, driven from zl - colour, bars and cursor rows are
      * what turn a scrolling log into something that reads as an OS */
-    if (streq(name, "cls"))      { vga_clear(); return zl_nil(); }
-    if (streq(name, "color"))    { vga_setcolor((unsigned char)(unsigned long long)a[0].num); return zl_nil(); }
-    if (streq(name, "bar"))      { vga_bar((int)a[0].num, (unsigned char)(unsigned long long)a[1].num); return zl_nil(); }
+    if (streq(name, "cls"))      { console_clear(); return zl_nil(); }
+    if (streq(name, "color"))    { console_setcolor((unsigned char)(unsigned long long)a[0].num); return zl_nil(); }
+    if (streq(name, "bar"))      { console_bar((int)a[0].num, (unsigned char)(unsigned long long)a[1].num); return zl_nil(); }
     if (streq(name, "at"))       { if (a[2].type == V_STR)
-                                       vga_at((int)a[0].num, (int)a[1].num, a[2].str,
-                                              (unsigned char)(unsigned long long)a[3].num);
+                                       console_at((int)a[0].num, (int)a[1].num, a[2].str,
+                                                  (unsigned char)(unsigned long long)a[3].num);
                                    return zl_nil(); }
-    if (streq(name, "row"))      return zl_num((double)vga_get_row());
-    if (streq(name, "goto_row")) { vga_set_row((int)a[0].num); return zl_nil(); }
+    if (streq(name, "row"))      return zl_num((double)console_get_row());
+    /* the status bar row differs between VGA (24) and a taller
+     * framebuffer, so zl asks rather than hardcoding it */
+    if (streq(name, "status_row")) return zl_num((double)console_status_row());
+    if (streq(name, "con_kind"))   return zl_num((double)console_kind());
+    if (streq(name, "con_cols"))   return zl_num((double)console_cols());
+    if (streq(name, "con_rows"))   return zl_num((double)console_rows());
+    if (streq(name, "goto_row")) { console_set_row((int)a[0].num); return zl_nil(); }
 #endif
 
     /* Bitwise ops. A driver cannot be written without them - every status

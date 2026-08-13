@@ -21,6 +21,11 @@ mkdir -p _iso/boot/grub
 cp kernel.elf _iso/boot/kernel.elf
 
 cat > _iso/boot/grub/grub.cfg <<'EOF'
+# all_video pulls in the GOP/VBE drivers. Without it GRUB may have no video
+# driver loaded at all and cannot satisfy the kernel's framebuffer request.
+insmod all_video
+insmod gfxterm
+
 set timeout=3
 set default=0
 
