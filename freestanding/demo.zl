@@ -1,0 +1,15 @@
+fn fib(n) {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+print("zl, freestanding, no libc")
+print(fib(20))
+p = 0
+i = 0
+while i < 5 {
+    i = i + 1
+    p = p + i * i
+}
+print(p)
+print(0xDEAD)
+exit(0)

@@ -154,6 +154,39 @@ else
     echo "  FAIL  two-halves workaround"; fail=1
 fi
 
+echo "== freestanding: zl with NO libc (the kernel-track proof) =="
+if ./freestanding/build.sh freestanding/demo.zl "$tmp/fs.bin" >"$tmp/fs.build" 2>&1; then
+    undef=$(nm -u "$tmp/fs.bin" 2>/dev/null | wc -l)
+    if [ "$undef" -eq 0 ]; then
+        echo "  ok    binary has 0 undefined symbols (genuinely libc-free)"
+    else
+        echo "  FAIL  $undef undefined symbols - not freestanding"; fail=1
+    fi
+    # capture first: ldd exits non-zero for a STATIC binary, and
+    # `set -o pipefail` would fail the pipeline even though grep matched.
+    ldd "$tmp/fs.bin" > "$tmp/fs.ldd" 2>&1 || true
+    if grep -q "not a dynamic executable" "$tmp/fs.ldd"; then
+        echo "  ok    statically linked, no dynamic loader"
+    else
+        echo "  FAIL  binary is dynamically linked"; fail=1
+    fi
+    "$tmp/fs.bin" > "$tmp/fs.out" 2>&1
+    if diff -q <(./interp freestanding/demo.zl 2>&1) "$tmp/fs.out" >/dev/null; then
+        echo "  ok    freestanding output matches the interpreter"
+    else
+        echo "  DIFF  freestanding output differs from the reference"; fail=1
+    fi
+else
+    echo "  BUILD FAIL freestanding"; tail -3 "$tmp/fs.build"; fail=1
+fi
+# the kernel target (serial instead of syscalls) must also compile clean
+if gcc -O2 -ffreestanding -nostdlib -fno-stack-protector -fno-pic -no-pie \
+       -DZL_KERNEL_SERIAL -c -I. freestanding/runtime_kernel.c -o "$tmp/rk.o" 2>/dev/null; then
+    echo "  ok    kernel/serial target compiles (the seam swaps cleanly)"
+else
+    echo "  FAIL  kernel/serial target does not compile"; fail=1
+fi
+
 echo "== examples: interpreter runs clean =="
 mkdir -p examples_out
 for ex in examples/*.zl; do
