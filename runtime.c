@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <dirent.h>
+#include <stdint.h>
 #include <sys/wait.h>
 
 #include "runtime.h"
@@ -813,6 +814,75 @@ static Value builtin(const char *name, Value *args, int nargs)
             rt_error("kill needs a process name (string) or pid (number)");
         }
         return zl_bool(kill((pid_t)pid, SIGTERM) == 0);
+    }
+
+    /* ---- W5 raw memory - the same set as interp.c, same spellings.
+     * See design_memory_structs.md §3.1. Bare peek/poke stay simulated. ---- */
+    if (strncmp(name, "peek", 4) == 0 && name[4] != '\0') {
+        int w = atoi(name + 4);
+        if (w == 8 || w == 16 || w == 32 || w == 64) {
+            if (nargs < 1 || args[0].type != V_NUM) rt_error("peek needs an address");
+            unsigned long long p = (unsigned long long)args[0].num, v = 0;
+            if      (w == 8)  v = *(unsigned char *)(uintptr_t)p;
+            else if (w == 16) v = *(unsigned short *)(uintptr_t)p;
+            else if (w == 32) v = *(unsigned int *)(uintptr_t)p;
+            else              v = *(unsigned long long *)(uintptr_t)p;
+            /* see interp.c - a double cannot hold a bit pattern above 2^53,
+             * so refuse rather than hand back a different number */
+            if (v > 9007199254740992ULL)
+                rt_error("peek64: value above 2^53 cannot be represented exactly "
+                         "(a zl number is a double) - read it as two peek32 halves");
+            return zl_num((double)v);
+        }
+    }
+    if (strncmp(name, "poke", 4) == 0 && name[4] != '\0') {
+        int w = atoi(name + 4);
+        if (w == 8 || w == 16 || w == 32 || w == 64) {
+            if (nargs < 2 || args[0].type != V_NUM || args[1].type != V_NUM)
+                rt_error("poke needs an address and a value");
+            unsigned long long p = (unsigned long long)args[0].num;
+            unsigned long long v = (unsigned long long)args[1].num;
+            if (w == 64 && v > 9007199254740992ULL)
+                rt_error("poke64: value above 2^53 has already lost precision "
+                         "(a zl number is a double) - write it as two poke32 halves");
+            if      (w == 8)  *(unsigned char *)(uintptr_t)p  = (unsigned char)v;
+            else if (w == 16) *(unsigned short *)(uintptr_t)p = (unsigned short)v;
+            else if (w == 32) *(unsigned int *)(uintptr_t)p   = (unsigned int)v;
+            else              *(unsigned long long *)(uintptr_t)p = v;
+            return zl_nil();
+        }
+    }
+    if (strcmp(name, "alloc") == 0) {
+        if (nargs < 1 || args[0].type != V_NUM) rt_error("alloc needs a byte count");
+        size_t n = (size_t)args[0].num;
+        void *p = NULL;
+        if (posix_memalign(&p, 16, n ? n : 16) != 0 || !p) rt_error("alloc failed");
+        memset(p, 0, n ? n : 16);
+        return zl_num((double)(unsigned long long)(uintptr_t)p);
+    }
+    if (strcmp(name, "free") == 0) return zl_nil();     /* ignored in v1 */
+    if (strcmp(name, "copy_mem") == 0) {
+        if (nargs < 3) rt_error("copy_mem needs dst, src and a length");
+        memmove((void *)(uintptr_t)(unsigned long long)args[0].num,
+                (void *)(uintptr_t)(unsigned long long)args[1].num,
+                (size_t)args[2].num);
+        return zl_nil();
+    }
+    if (strcmp(name, "fill_mem") == 0) {
+        if (nargs < 3) rt_error("fill_mem needs an address, a byte and a length");
+        memset((void *)(uintptr_t)(unsigned long long)args[0].num,
+               (int)args[1].num, (size_t)args[2].num);
+        return zl_nil();
+    }
+    if (strcmp(name, "sext") == 0) {
+        if (nargs < 2) rt_error("sext needs a value and a bit width");
+        int bits = (int)args[1].num;
+        if (bits <= 0 || bits > 64) rt_error("sext needs 1..64 bits");
+        if (bits == 64) return args[0];
+        unsigned long long v = (unsigned long long)args[0].num;
+        unsigned long long m = 1ULL << (bits - 1);
+        v &= (1ULL << bits) - 1;
+        return zl_num((double)(long long)((v ^ m) - m));
     }
 
     if (strcmp(name, "procs") == 0) {

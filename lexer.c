@@ -100,11 +100,45 @@ static void die(int line, const char *msg, char c)
 
 /* --- the four things we know how to chop ----------------------- */
 
-/* 5   42   3.14 */
+/* value of one hex digit, or -1 if it isn't one */
+static int hex_val(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+/* 5   42   3.14   0xFF
+ *
+ * A hex literal is converted to its DECIMAL text right here, so the token
+ * every later stage sees is an ordinary number. That is deliberate: the
+ * interpreter reads token text with strtod, nativegen and compilel with
+ * atoll, and the C backend pastes the text straight into the generated C.
+ * Rewriting at lex time means all five engines gain hex with no change to
+ * any of them - the same trick the for-range desugaring and the import
+ * splice use. (design_kernel.md stage 0b: the serial driver needs 0x8E.)
+ */
 static Token lex_number(Lexer *lx)
 {
     int start = lx->pos;
     int line  = lx->line;
+
+    if (peek(lx) == '0' && (peek_next(lx) == 'x' || peek_next(lx) == 'X') &&
+        hex_val(lx->src[lx->pos + 2]) >= 0) {
+        advance(lx); advance(lx);                     /* eat the 0x */
+        unsigned long long v = 0;
+        int digits = 0;
+        while (hex_val(peek(lx)) >= 0) {
+            if (digits >= 16) die(line, "hex literal too long (max 16 digits)", peek(lx));
+            v = (v << 4) | (unsigned long long)hex_val(peek(lx));
+            digits++;
+            advance(lx);
+        }
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%llu", v);
+        return make_token(T_NUMBER, buf, (int)strlen(buf), line);
+    }
 
     while (isdigit((unsigned char)peek(lx))) advance(lx);
 
@@ -114,15 +148,6 @@ static Token lex_number(Lexer *lx)
     }
 
     return make_token(T_NUMBER, lx->src + start, lx->pos - start, line);
-}
-
-/* value of one hex digit, or -1 if it isn't one */
-static int hex_val(char c)
-{
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
 }
 
 /* "hello"  -> the token text is  hello  (quotes stripped)

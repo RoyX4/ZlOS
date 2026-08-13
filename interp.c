@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <dirent.h>
+#include <stdint.h>
 #include <sys/wait.h>
 
 #include "lexer.h"
@@ -913,6 +914,102 @@ static Value call_builtin(const char *name, Value *args, int nargs)
             return make_nil();
         }
         return make_bool(kill((pid_t)pid, SIGTERM) == 0);
+    }
+
+    /* ---- W5 raw memory (docs/design/design_memory_structs.md §3.1) ----
+     *
+     * Sized, unsigned loads and stores. The NAMES are fixed by that doc: it
+     * notes design_kernel.md §8.2's page allocator and design_game_system.md
+     * §2.2 are already written against these exact spellings, so they are
+     * acceptance tests, not suggestions.
+     *
+     * The bare `peek`/`poke` deliberately stay in SIMULATED[] - the doc is
+     * explicit that repurposing them would make any existing program calling
+     * poke(a, v) silently start writing memory. They are deprecated in favour
+     * of these, and left exactly as they were.
+     *
+     * An address rides in a double, so it is exact only below 2^53. That is
+     * the one documented hole (§3.2) and it is fine for every address a
+     * kernel actually pokes. */
+    if (strncmp(name, "peek", 4) == 0 && name[4] != '\0') {
+        int w = atoi(name + 4);
+        if (w == 8 || w == 16 || w == 32 || w == 64) {
+            if (nargs < 1 || args[0].type != V_NUM) runtime_error("peek needs an address");
+            unsigned long long p = (unsigned long long)args[0].num;
+            unsigned long long v = 0;
+            if      (w == 8)  v = *(unsigned char *)(uintptr_t)p;
+            else if (w == 16) v = *(unsigned short *)(uintptr_t)p;
+            else if (w == 32) v = *(unsigned int *)(uintptr_t)p;
+            else              v = *(unsigned long long *)(uintptr_t)p;
+            /* A zl number is a double, so a bit pattern above 2^53 cannot be
+             * returned intact. design_kernel.md §2 names this exactly: a GDT
+             * entry like 0x00AF9A000000FFFF would come back as a DIFFERENT
+             * number and silently write the wrong descriptor. Refuse instead
+             * - "backends may REJECT a program, never answer differently"
+             * (MASTER_PLAN §8 risk 9). The documented fix is two halves. */
+            if (v > 9007199254740992ULL)
+                runtime_error("peek64: value above 2^53 cannot be represented exactly "
+                              "(a zl number is a double) - read it as two peek32 halves");
+            return make_num((double)v);
+        }
+    }
+    if (strncmp(name, "poke", 4) == 0 && name[4] != '\0') {
+        int w = atoi(name + 4);
+        if (w == 8 || w == 16 || w == 32 || w == 64) {
+            if (nargs < 2 || args[0].type != V_NUM || args[1].type != V_NUM)
+                runtime_error("poke needs an address and a value");
+            unsigned long long p = (unsigned long long)args[0].num;
+            unsigned long long v = (unsigned long long)args[1].num;
+            /* same 2^53 rule on the way in - by the time the value reaches
+             * here a too-big literal has ALREADY been rounded, so the only
+             * honest move is to refuse rather than write the rounded bytes */
+            if (w == 64 && v > 9007199254740992ULL)
+                runtime_error("poke64: value above 2^53 has already lost precision "
+                              "(a zl number is a double) - write it as two poke32 halves");
+            if      (w == 8)  *(unsigned char *)(uintptr_t)p  = (unsigned char)v;
+            else if (w == 16) *(unsigned short *)(uintptr_t)p = (unsigned short)v;
+            else if (w == 32) *(unsigned int *)(uintptr_t)p   = (unsigned int)v;
+            else              *(unsigned long long *)(uintptr_t)p = v;
+            return make_nil();
+        }
+    }
+
+    /* alloc(n) - n ZEROED bytes, 16-byte aligned, address returned.
+     * free(p) is accepted and ignored in v1, exactly as the doc specifies. */
+    if (strcmp(name, "alloc") == 0) {
+        if (nargs < 1 || args[0].type != V_NUM) runtime_error("alloc needs a byte count");
+        size_t n = (size_t)args[0].num;
+        void *p = NULL;
+        if (posix_memalign(&p, 16, n ? n : 16) != 0 || !p) runtime_error("alloc failed");
+        memset(p, 0, n ? n : 16);
+        return make_num((double)(unsigned long long)(uintptr_t)p);
+    }
+    if (strcmp(name, "free") == 0) return make_nil();   /* ignored in v1 */
+
+    if (strcmp(name, "copy_mem") == 0) {               /* memmove, overlap-safe */
+        if (nargs < 3) runtime_error("copy_mem needs dst, src and a length");
+        memmove((void *)(uintptr_t)(unsigned long long)args[0].num,
+                (void *)(uintptr_t)(unsigned long long)args[1].num,
+                (size_t)args[2].num);
+        return make_nil();
+    }
+    if (strcmp(name, "fill_mem") == 0) {               /* memset */
+        if (nargs < 3) runtime_error("fill_mem needs an address, a byte and a length");
+        memset((void *)(uintptr_t)(unsigned long long)args[0].num,
+               (int)args[1].num, (size_t)args[2].num);
+        return make_nil();
+    }
+    /* sext(v, bits) - sign-extend the low `bits` of v. Loads are unsigned, so
+     * this is how hand-written code reads a signed field (§3.2). */
+    if (strcmp(name, "sext") == 0) {
+        if (nargs < 2) runtime_error("sext needs a value and a bit width");
+        int bits = (int)args[1].num;
+        if (bits <= 0 || bits > 64) runtime_error("sext needs 1..64 bits");
+        if (bits == 64) return args[0];
+        unsigned long long v = (unsigned long long)args[0].num;
+        unsigned long long m = 1ULL << (bits - 1);
+        v &= (1ULL << bits) - 1;
+        return make_num((double)(long long)((v ^ m) - m));
     }
 
     /* procs() -> a real LIST of the names of every running process */

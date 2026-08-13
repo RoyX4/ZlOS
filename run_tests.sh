@@ -86,6 +86,74 @@ else
     echo "  DIFF  texttools_imports differs from the original"; fail=1
 fi
 
+echo "== W5: hex literals + raw memory =="
+cat > "$tmp/w5.zl" <<'EOF'
+print(0xFF)
+print(0x8E)
+print(0xDEAD)
+print(255 == 0xFF)
+p = alloc(64)
+poke8(p, 0x41)
+poke16(p + 8, 0xBEEF)
+poke32(p + 16, 0xDEADBEEF)
+poke64(p + 24, 0x1122334455)
+print(peek8(p))
+print(peek16(p + 8))
+print(peek32(p + 16))
+print(peek64(p + 24))
+fill_mem(p + 32, 0xFF, 4)
+print(peek32(p + 32))
+copy_mem(p + 40, p, 1)
+print(peek8(p + 40))
+print(sext(0xFF, 8))
+print(sext(0x7F, 8))
+free(p)
+EOF
+./interp "$tmp/w5.zl" > "$tmp/w5.interp" 2>&1
+if grep -q "^255$" "$tmp/w5.interp" && grep -q "^3735928559$" "$tmp/w5.interp" && grep -q "^-1$" "$tmp/w5.interp"; then
+    echo "  ok    hex literals and raw memory, interpreter"
+else
+    echo "  FAIL  w5 primitives"; cat "$tmp/w5.interp"; fail=1
+fi
+# the C backend is the kernel-track backend: it must agree exactly
+( cd "$tmp" && "$OLDPWD/compile" w5.zl >/dev/null 2>&1 &&   gcc -O2 -D_strdup=strdup -I"$OLDPWD" -o w5.bin out.c "$OLDPWD/runtime.c" "$OLDPWD/os_linux.c" -lm 2>/dev/null )
+if [ -x "$tmp/w5.bin" ]; then
+    "$tmp/w5.bin" > "$tmp/w5.c.out" 2>&1
+    if diff -q "$tmp/w5.interp" "$tmp/w5.c.out" >/dev/null; then
+        echo "  ok    C backend matches on raw memory"
+    else
+        echo "  DIFF  C backend disagrees on raw memory"; fail=1
+    fi
+else
+    echo "  BUILD FAIL w5 C backend"; fail=1
+fi
+# design_memory_structs.md is explicit: bare peek/poke must STAY simulated,
+# so no existing program silently starts writing memory.
+printf 'poke(1000, 65)!
+' > "$tmp/bare.zl"
+if ./interp "$tmp/bare.zl" 2>&1 | grep -q "\[sim\]"; then
+    echo "  ok    bare peek/poke still simulated (per design doc)"
+else
+    echo "  FAIL  bare poke became real - the design doc forbids this"; fail=1
+fi
+
+# design_kernel.md §2: a zl number is a double, so a bit pattern above 2^53
+# cannot round-trip. That is how a GDT entry gets silently corrupted. The
+# guard must REFUSE, and the documented two-halves workaround must work.
+printf 'p = alloc(16)\npoke64(p, 0x00AF9A000000FFFF)\n' > "$tmp/big.zl"
+./interp "$tmp/big.zl" > "$tmp/big.out" 2>&1 || true
+if grep -q "above 2\^53" "$tmp/big.out"; then
+    echo "  ok    poke64 refuses >2^53 instead of corrupting"
+else
+    echo "  FAIL  poke64 silently accepted a >2^53 value"; cat "$tmp/big.out"; fail=1
+fi
+printf 'p = alloc(16)\npoke32(p, 0x0000FFFF)\npoke32(p + 4, 0x00AF9A00)\nprint(peek32(p))\nprint(peek32(p + 4))\n' > "$tmp/halves.zl"
+if [ "$(./interp "$tmp/halves.zl" 2>&1 | tr '\n' ' ')" = "65535 11508224 " ]; then
+    echo "  ok    two-halves descriptor write works (the documented fix)"
+else
+    echo "  FAIL  two-halves workaround"; fail=1
+fi
+
 echo "== examples: interpreter runs clean =="
 mkdir -p examples_out
 for ex in examples/*.zl; do
