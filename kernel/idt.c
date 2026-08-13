@@ -59,6 +59,15 @@ int idt_scan(void)
     return c;
 }
 
+/* ---- PS/2 mouse state, published by the IRQ12 handler --------------- */
+static volatile int mouse_x = 400, mouse_y = 300, mouse_btn = 0;
+static volatile u8  mpkt[3];
+static volatile int mphase = 0;
+
+int idt_mouse_x(void)   { return mouse_x; }
+int idt_mouse_y(void)   { return mouse_y; }
+int idt_mouse_btn(void) { return mouse_btn; }
+
 /* ---- the handlers ---------------------------------------------------- */
 struct interrupt_frame { u32 ip, cs, flags, sp, ss; };
 
@@ -84,6 +93,44 @@ static void keyboard_isr(struct interrupt_frame *f)
         kbuf_head = next;
     }
     zl_outb(0x20, 0x20);
+}
+
+/* IRQ12: the PS/2 mouse. Each move or click sends a 3-byte packet -
+ * [flags, dx, dy] - and this reassembles them, updates the tracked position
+ * (mouse Y is inverted, hence the minus), and clamps to a generous range;
+ * zl clamps the rest to the real screen. This, drawn as a cursor, is the
+ * TempleOS-style mouse-driven UI. */
+__attribute__((interrupt))
+static void mouse_isr(struct interrupt_frame *f)
+{
+    (void)f;
+    u8 status = zl_inb(0x64);
+    if (status & 0x20) {                       /* bit 5: byte is from the mouse */
+        u8 b = zl_inb(0x60);
+        if (mphase == 0 && !(b & 0x08)) {
+            /* byte 0 always has bit 3 set; if not, we are out of sync - drop */
+        } else {
+            mpkt[mphase++] = b;
+            if (mphase == 3) {
+                mphase = 0;
+                u8 flags = mpkt[0];
+                if (!(flags & 0xC0)) {         /* ignore overflowed packets */
+                    int dx = mpkt[1], dy = mpkt[2];
+                    if (flags & 0x10) dx |= 0xFFFFFF00;   /* sign-extend */
+                    if (flags & 0x20) dy |= 0xFFFFFF00;
+                    mouse_x += dx;
+                    mouse_y -= dy;
+                    if (mouse_x < 0) mouse_x = 0;
+                    if (mouse_y < 0) mouse_y = 0;
+                    if (mouse_x > 2000) mouse_x = 2000;
+                    if (mouse_y > 1500) mouse_y = 1500;
+                    mouse_btn = flags & 0x07;
+                }
+            }
+        }
+    }
+    zl_outb(0xA0, 0x20);        /* EOI to the slave PIC (IRQ12 lives there) */
+    zl_outb(0x20, 0x20);        /* and the master, for the cascade */
 }
 
 /* a catch-all for hardware IRQs we do not handle - acknowledge and move on */
@@ -130,12 +177,39 @@ static void pit_init(void)
     zl_outb(0x40, (u8)((divisor >> 8) & 0xFF));
 }
 
+/* ---- enable the PS/2 mouse in the 8042 controller ------------------- */
+static void ps2_wait_in(void)  { int t = 100000; while (t-- && (zl_inb(0x64) & 2)); }
+static void ps2_wait_out(void) { int t = 100000; while (t-- && !(zl_inb(0x64) & 1)); }
+
+static void mouse_cmd(u8 cmd)
+{
+    ps2_wait_in();  zl_outb(0x64, 0xD4);    /* next byte goes to the mouse */
+    ps2_wait_in();  zl_outb(0x60, cmd);
+    ps2_wait_out(); zl_inb(0x60);           /* read+discard the ACK */
+}
+
+static void mouse_init(void)
+{
+    ps2_wait_in(); zl_outb(0x64, 0xA8);     /* enable the auxiliary (mouse) port */
+
+    ps2_wait_in(); zl_outb(0x64, 0x20);     /* read the controller config byte */
+    ps2_wait_out(); u8 cfg = zl_inb(0x60);
+    cfg |= 0x02;                            /* enable IRQ12 */
+    cfg &= ~0x20;                           /* enable the mouse clock */
+    ps2_wait_in(); zl_outb(0x64, 0x60);     /* write the config byte back */
+    ps2_wait_in(); zl_outb(0x60, cfg);
+
+    mouse_cmd(0xF6);                        /* set defaults */
+    mouse_cmd(0xF4);                        /* enable data reporting */
+}
+
 void idt_init(void)
 {
     for (int i = 0;  i < 32;  i++) set_gate(i, fault_isr);    /* CPU exceptions: halt */
     for (int i = 32; i < 256; i++) set_gate(i, ignore_isr);   /* stray IRQs: ack     */
-    set_gate(0x20, timer_isr);      /* IRQ0 after remap */
-    set_gate(0x21, keyboard_isr);   /* IRQ1 after remap */
+    set_gate(0x20, timer_isr);      /* IRQ0  timer            */
+    set_gate(0x21, keyboard_isr);   /* IRQ1  keyboard         */
+    set_gate(0x2C, mouse_isr);      /* IRQ12 mouse (on slave) */
 
     idtp.limit = sizeof(idt) - 1;
     idtp.base  = (u32)&idt;
@@ -143,11 +217,13 @@ void idt_init(void)
 
     pic_remap();
     pit_init();
+    mouse_init();
 
-    /* unmask only IRQ0 (timer) and IRQ1 (keyboard) on the master; mask the
-     * rest and the whole slave - nothing else is handled yet. */
-    zl_outb(0x21, 0xFC);            /* 1111 1100 - bits 0,1 clear = enabled */
-    zl_outb(0xA1, 0xFF);
+    /* Master: unmask IRQ0 (timer), IRQ1 (keyboard) and IRQ2 (the cascade to
+     * the slave PIC, without which IRQ12 never arrives).  0xF8 = 1111 1000.
+     * Slave: unmask IRQ12 only.  0xEF = 1110 1111. */
+    zl_outb(0x21, 0xF8);
+    zl_outb(0xA1, 0xEF);
 
-    __asm__ volatile("sti");        /* interrupts on - the CPU will now be told */
+    __asm__ volatile("sti");        /* interrupts on */
 }

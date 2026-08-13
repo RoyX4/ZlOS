@@ -22,6 +22,8 @@
     t        uptime, from the timer interrupt
     p        the CPU's own brand string, via CPUID
     b        colour-bar graphics demo (with sound)
+    a        animation - a bouncing logo over a starfield
+    x        mouse demo - a cursor driven by the PS/2 mouse
     e        beep the PC speaker
     m        poke a byte into video memory and read it back
     c        clear the screen

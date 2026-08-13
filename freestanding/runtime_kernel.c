@@ -62,6 +62,12 @@ extern int  cpu_brand_byte(int i);
 extern void speaker_on(unsigned freq);
 extern void speaker_off(void);
 extern void kreboot(void);
+extern int  idt_mouse_x(void);
+extern int  idt_mouse_y(void);
+extern int  idt_mouse_btn(void);
+extern void console_box(int x, int y, int w, int h, unsigned char attr);
+extern void console_line(int x0, int y0, int x1, int y1, unsigned char attr);
+extern void console_mouse_cursor(int x, int y, unsigned char fill, unsigned char edge);
 extern int  console_kind(void);
 extern int  console_cols(void);
 extern int  console_rows(void);
@@ -303,6 +309,12 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "beep_on"))   { speaker_on((unsigned)(long long)a[0].num); return zl_nil(); }
     if (streq(name, "beep_off"))  { speaker_off(); return zl_nil(); }
     if (streq(name, "reboot"))    { kreboot(); return zl_nil(); }
+    if (streq(name, "mouse_x"))   return zl_num((double)idt_mouse_x());
+    if (streq(name, "mouse_y"))   return zl_num((double)idt_mouse_y());
+    if (streq(name, "mouse_btn")) return zl_num((double)idt_mouse_btn());
+    if (streq(name, "box"))       { console_box((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
+    if (streq(name, "line"))      { console_line((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
+    if (streq(name, "mcursor"))   { console_mouse_cursor((int)a[0].num,(int)a[1].num,(unsigned char)(unsigned long long)a[2].num,(unsigned char)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "goto_row")) { console_set_row((int)a[0].num); return zl_nil(); }
 #endif
 

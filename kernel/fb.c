@@ -171,6 +171,48 @@ void fb_text_scaled(int px, int py, const char *s, int scale, unsigned int fg)
 /* map a VGA attribute's foreground to RGB, so zl keeps using colour indices */
 unsigned int fb_attr_rgb(unsigned char attr) { return vga_rgb[attr & 0x0F]; }
 
+/* a rectangle OUTLINE - for panels, buttons and window frames */
+void fb_box(int x, int y, int w, int h, unsigned int rgb)
+{
+    fb_fill_px(x, y, w, 1, rgb);
+    fb_fill_px(x, y + h - 1, w, 1, rgb);
+    fb_fill_px(x, y, 1, h, rgb);
+    fb_fill_px(x + w - 1, y, 1, h, rgb);
+}
+
+/* a straight line, any angle - Bresenham, integer only, no floating point */
+void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb)
+{
+    int dx = x1 - x0, dy = y1 - y0;
+    int sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1;
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+    int err = (dx > dy ? dx : -dy) / 2, e2;
+    for (;;) {
+        put_pixel((unsigned)x0, (unsigned)y0, rgb);
+        if (x0 == x1 && y0 == y1) break;
+        e2 = err;
+        if (e2 > -dx) { err -= dy; x0 += sx; }
+        if (e2 <  dy) { err += dx; y0 += sy; }
+    }
+}
+
+/* a mouse pointer: a small filled arrow, plus a contrasting outline so it
+ * shows on any background. Drawn/erased by the caller each frame. */
+void fb_cursor_arrow(int x, int y, unsigned int fill, unsigned int edge)
+{
+    /* a simple 12x18 triangle-ish pointer, row by row */
+    for (int r = 0; r < 16; r++) {
+        int w = r < 12 ? r + 1 : (16 - r) * 2;
+        if (w < 1) w = 1;
+        if (w > 8) w = 8;
+        fb_fill_px(x, y + r, w, 1, fill);
+        put_pixel((unsigned)(x + w), (unsigned)(y + r), edge);   /* right edge */
+    }
+    fb_fill_px(x, y, 1, 16, edge);       /* left edge */
+    fb_fill_px(x, y, 9, 1, edge);        /* top edge  */
+}
+
 /* a software cursor block at a text cell (framebuffer has no hardware one) */
 void fb_cursor(int row, int col, int on, unsigned char attr)
 {

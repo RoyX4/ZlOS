@@ -38,6 +38,9 @@ void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
 void fb_text_scaled(int px, int py, const char *s, int scale, unsigned int fg);
 unsigned int fb_attr_rgb(unsigned char attr);
 void fb_cursor(int row, int col, int on, unsigned char attr);
+void fb_box(int x, int y, int w, int h, unsigned int rgb);
+void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
+void fb_cursor_arrow(int x, int y, unsigned int fill, unsigned int edge);
 
 /* The log scrolls between the title bar and the status bar. On VGA that is
  * rows 1..23 of 25; on a framebuffer the screen is taller, so the bottom is
@@ -151,6 +154,15 @@ void console_logo(int px, int py, const char *s, int scale, unsigned char attr)
  * cursor already positioned by vga_putc, so nothing to do there. */
 void console_cursor(int row, int col, int on, unsigned char attr)
 { if (fb_active()) fb_cursor(row, col, on, attr); }
+
+void console_box(int x, int y, int w, int h, unsigned char attr)
+{ if (fb_active()) fb_box(x, y, w, h, fb_attr_rgb(attr)); }
+
+void console_line(int x0, int y0, int x1, int y1, unsigned char attr)
+{ if (fb_active()) fb_line(x0, y0, x1, y1, fb_attr_rgb(attr)); }
+
+void console_mouse_cursor(int x, int y, unsigned char fill, unsigned char edge)
+{ if (fb_active()) fb_cursor_arrow(x, y, fb_attr_rgb(fill), fb_attr_rgb(edge)); }
 
 /* draw a decimal number at an exact cell - the kernel subset has no str(),
  * so a live clock in the status bar needs this in C. */

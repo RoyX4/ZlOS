@@ -155,6 +155,8 @@ fn help() {
     print("    t        uptime, from the timer interrupt")
     print("    p        the CPU's own brand string, via CPUID")
     print("    b        colour-bar graphics demo (with sound)")
+    print("    a        animation - a bouncing logo over a starfield")
+    print("    x        mouse demo - a cursor driven by the PS/2 mouse")
     print("    e        beep the PC speaker")
     print("    m        poke a byte into video memory and read it back")
     print("    c        clear the screen")
@@ -179,6 +181,76 @@ fn colorbars() {
     print("")
     print("")
     color(C_GREY)  print("  14 colours, painted straight into the framebuffer")
+    return 0
+}
+
+# ---- a live mouse demo: a cursor that follows the PS/2 mouse ---------------
+fn mousedemo() {
+    if px_w() == 0 {
+        color(C_GREY)  print("  the mouse demo needs the framebuffer console")
+        return 0
+    }
+    w = px_w()
+    h = px_h()
+    cls()
+    color(C_WHITE)  print("  MOUSE - move it. left/right button changes colour. press any key to exit.")
+    print("")
+    color(C_GREY)   put("  x: ")  at(row(), 8, "     y:", C_GREY)
+    ox = 0
+    oy = 0
+    while key_get() == 0 {
+        mx = mouse_x()
+        my = mouse_y()
+        if mx > w - 12 { mx = w - 12 }
+        if my > h - 18 { my = h - 18 }
+        if my < 48 { my = 48 }
+        fill_rect(ox, oy, 12, 18, C_BLACK)     # erase the old cursor
+        col = C_GREEN
+        if band(mouse_btn(), 1) != 0 { col = C_RED }
+        if band(mouse_btn(), 2) != 0 { col = C_CYAN }
+        mcursor(mx, my, col, C_WHITE)
+        ox = mx
+        oy = my
+        at_num(2, 5, mx, C_WHITE)
+        at_num(2, 16, my, C_WHITE)
+    }
+    draw_screen()
+    return 0
+}
+
+# ---- an animation: a bouncing logo over a starfield ------------------------
+fn anim() {
+    if px_w() == 0 {
+        color(C_GREY)  print("  the animation needs the framebuffer console")
+        return 0
+    }
+    w = px_w()
+    h = px_h()
+    lx = 40  ly = 90  vx = 6  vy = 4
+    while key_get() == 0 {
+        fill_rect(0, 0, w, h, C_BLACK)          # clear the frame
+        # a stable starfield from a fixed seed, so stars don't flicker
+        seed = 2463534242
+        i = 0
+        while i < 90 {
+            seed = seed * 1103515245 + 12345
+            sx = band(seed / 4096, 2047) % w
+            seed = seed * 1103515245 + 12345
+            sy = band(seed / 4096, 2047) % h
+            c = C_GREY
+            if band(seed, 7) == 0 { c = C_WHITE }
+            fill_rect(sx, sy, 2, 2, c)
+            i = i + 1
+        }
+        lx = lx + vx  ly = ly + vy               # bounce the logo
+        if lx < 0      { lx = 0       vx = 0 - vx }
+        if lx > w - 120 { lx = w - 120 vx = 0 - vx }
+        if ly < 72     { ly = 72      vy = 0 - vy }
+        if ly > h - 48 { ly = h - 48  vy = 0 - vy }
+        logo(lx, ly, "zlOS", 3, C_CYAN)
+        wait_ticks(2)
+    }
+    draw_screen()
     return 0
 }
 
@@ -214,6 +286,8 @@ fn run_command(cmd, arg) {
         beep(1000, 15)
         return 0
     }
+    if cmd == 120 { return mousedemo() }  # x - mouse demo
+    if cmd == 97  { return anim() }       # a - animation
     if cmd == 114 {                       # r - reboot
         color(C_YELLOW)  print("  rebooting...")
         beep(1568, 6)  beep(784, 10)
