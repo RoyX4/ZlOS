@@ -4,3 +4,7 @@ kernel.elf
 out.c
 zlOS.iso
 _iso/
+zlOS.img
+kernel_raw.bin
+kernel_raw.elf
+raw_boot.bin

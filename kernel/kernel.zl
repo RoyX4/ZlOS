@@ -193,7 +193,11 @@ print("zlOS starting")
 color(C_NORM)
 print("")
 
-ok_line("multiboot handoff, 32-bit protected mode")
+if loader() == 1 {
+    ok_line("multiboot handoff, 32-bit protected mode")
+} else {
+    ok_line("our bootloader (raw_boot), no GRUB - 32-bit protected mode")
+}
 ok_line("stack established, 16 KiB")
 ok_line("COM1 initialised, 115200 8N1")
 if con_kind() == 1 {

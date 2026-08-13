@@ -196,6 +196,13 @@ if command -v qemu-system-i386 >/dev/null; then
     else
         echo "  FAIL  kernel gate"; echo "$kout" | head -8; fail=1
     fi
+    if command -v nasm >/dev/null; then
+        if rout=$(./kernel/verify-raw.sh 2>&1); then
+            echo "  $rout"
+        else
+            echo "  FAIL  raw-bootloader gate"; echo "$rout" | head -8; fail=1
+        fi
+    fi
 fi
 
 echo "== examples: interpreter runs clean =="

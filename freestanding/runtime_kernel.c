@@ -45,6 +45,7 @@ extern void console_at(int row, int col, const char *s, unsigned char attr);
 extern void console_set_row(int r);
 extern int  console_get_row(void);
 extern int  console_status_row(void);
+extern int  console_loader(void);
 extern int  console_kind(void);
 extern int  console_cols(void);
 extern int  console_rows(void);
@@ -268,6 +269,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "con_kind"))   return zl_num((double)console_kind());
     if (streq(name, "con_cols"))   return zl_num((double)console_cols());
     if (streq(name, "con_rows"))   return zl_num((double)console_rows());
+    if (streq(name, "loader"))     return zl_num((double)console_loader());
     if (streq(name, "goto_row")) { console_set_row((int)a[0].num); return zl_nil(); }
 #endif
 

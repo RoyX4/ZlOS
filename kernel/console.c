@@ -49,6 +49,13 @@ int console_kind(void) { return fb_active() ? 1 : 0; }      /* 0 VGA, 1 framebuf
 int console_cols(void) { return fb_active() ? fb_get_cols() : 80; }
 int console_rows(void) { return fb_active() ? fb_get_rows() : 25; }
 
+/* Which loader booted us. GRUB always passes a non-null multiboot info
+ * pointer; our own raw_boot.asm hands over with ebx = 0. So a null mb_addr
+ * means we came up on our own bootloader, and the boot log should say so
+ * instead of claiming a multiboot handoff that did not happen. */
+static int loaded_by_multiboot = 0;
+int console_loader(void) { return loaded_by_multiboot; }    /* 1 = GRUB/multiboot, 0 = ours */
+
 /* The multiboot info structure GRUB fills in. Only the fields this kernel
  * reads are named; the offsets are fixed by the multiboot 1 spec. */
 struct mb_info {
@@ -78,6 +85,7 @@ struct mb_info {
 
 void console_init(unsigned long mb_addr)
 {
+    loaded_by_multiboot = (mb_addr != 0);
     struct mb_info *mb = (struct mb_info *)mb_addr;
 
     /* Take the framebuffer only if GRUB says it gave us a packed-RGB one.
