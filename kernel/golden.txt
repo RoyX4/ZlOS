@@ -26,7 +26,8 @@
     x        mouse demo - a cursor driven by the PS/2 mouse
     g        play SNAKE (w a s d to steer)
     d        paint with the mouse
-    i        text editor (type, backspace, ESC to exit)
+    <n> i    edit RAM file n (0-9) - ESC saves it
+    l        list the RAM files
     e        beep the PC speaker
     m        poke a byte into video memory and read it back
     c        clear the screen

@@ -184,7 +184,8 @@ fn help() {
     print("    x        mouse demo - a cursor driven by the PS/2 mouse")
     print("    g        play SNAKE (w a s d to steer)")
     print("    d        paint with the mouse")
-    print("    i        text editor (type, backspace, ESC to exit)")
+    print("    <n> i    edit RAM file n (0-9) - ESC saves it")
+    print("    l        list the RAM files")
     print("    e        beep the PC speaker")
     print("    m        poke a byte into video memory and read it back")
     print("    c        clear the screen")
@@ -400,14 +401,14 @@ fn paint() {
     at(0, 2, "PAINT", C_WHITE)
     at(0, 9, "hold left button to draw   1-7 pick colour   space clears   other key exits", C_GREY)
     col = C_GREEN
-    running = 1
-    while running == 1 {
+    pt_run = 1
+    while pt_run == 1 {
         k = key_get()
         if k > 0 {
             if k == 32 { fill_rect(0, 24, w, h - 24, C_BLACK) }
             if k >= 49 { if k <= 55 { col = k - 48 } }
-            if k > 55 { running = 0 }
-            if k < 49 { if k != 32 { running = 0 } }
+            if k > 55 { pt_run = 0 }
+            if k < 49 { if k != 32 { pt_run = 0 } }
         }
         mx = mouse_x()
         my = mouse_y()
@@ -419,6 +420,44 @@ fn paint() {
         at_num(0, 70, my, C_GREY)
     }
     draw_screen()
+    return 0
+}
+
+# ---- a RAM filesystem ------------------------------------------------------
+# Ten numbered files, held in memory. Each file's length lives in a small
+# metadata table and its bytes in a fixed 8 KiB slot. The whole thing is
+# written in zl using copy_mem/poke32/peek32 - no new C. It is a RAM disk,
+# so it is wiped on reboot, but within a session the editor can save and
+# reload files by number.
+FS_META = 0x50000       # 10 lengths, 4 bytes each
+FS_DATA = 0x51000       # 10 slots of FS_SLOT bytes
+FS_SLOT = 8192
+
+fn fs_init()      { fill_mem(FS_META, 0, 64) }
+fn fs_len(slot)   { return peek32(FS_META + slot * 4) }
+fn fs_save(slot, len) {
+    if len > FS_SLOT { len = FS_SLOT }
+    poke32(FS_META + slot * 4, len)
+    if len > 0 { copy_mem(FS_DATA + slot * FS_SLOT, EDIT_BUF, len) }
+}
+fn fs_load(slot) {
+    len = fs_len(slot)
+    fill_mem(EDIT_BUF, 0, EDIT_MAX)
+    if len > 0 { copy_mem(EDIT_BUF, FS_DATA + slot * FS_SLOT, len) }
+    return len
+}
+
+fn fs_list() {
+    color(C_CYAN)  print("  RAM files:")
+    i = 0
+    while i < 10 {
+        color(C_GREY)   put("    file ")  color(C_WHITE)  put(i)  color(C_GREY)  put(":  ")
+        n = fs_len(i)
+        if n > 0 { color(C_WHITE)  put(n)  color(C_GREY)  print(" bytes") }
+        if n == 0 { color(C_DGREY)  print("empty") }
+        i = i + 1
+    }
+    color(C_GREY)
     return 0
 }
 
@@ -443,7 +482,7 @@ fn redraw_editor(len) {
     cursor(row(), col(), 1, C_GREEN)
 }
 
-fn editor() {
+fn editor(slot) {
     if px_w() == 0 {
         color(C_GREY)  print("  the editor needs the framebuffer console")
         return 0
@@ -451,15 +490,16 @@ fn editor() {
     cls()
     fill_rect(0, 0, px_w(), 30, C_BLUE)
     at(0, 2, "zlEDIT", C_WHITE)
-    at(0, 12, "type to edit   backspace deletes   ESC saves & exits", C_CYAN)
-    fill_mem(EDIT_BUF, 0, EDIT_MAX)
-    len = 0
+    at(0, 10, "file", C_CYAN)
+    at_num(0, 15, slot, C_YELLOW)
+    at(0, 20, "type to edit   backspace deletes   ESC saves file & exits", C_CYAN)
+    len = fs_load(slot)                # load the file's existing content
     redraw_editor(len)
-    running = 1
-    while running == 1 {
+    ed_run = 1
+    while ed_run == 1 {
         k = edit_key()
         if k > 0 {
-            if k == 27 { running = 0 }
+            if k == 27 { ed_run = 0 }
             if k == 8 {
                 if len > 0 { len = len - 1  poke8(EDIT_BUF + len, 0) }
                 redraw_editor(len)
@@ -474,8 +514,10 @@ fn editor() {
             }
         }
     }
+    fs_save(slot, len)                 # write it back to the file on exit
     draw_screen()
-    color(C_GREY)  put("  editor: kept ")  color(C_WHITE)  put(len)  color(C_GREY)  print(" characters in memory at 0x40000")
+    color(C_GREY)  put("  saved ")  color(C_WHITE)  put(len)
+    color(C_GREY)  put(" bytes to file ")  color(C_WHITE)  print(slot)
     return 0
 }
 
@@ -515,7 +557,8 @@ fn run_command(cmd, arg) {
     if cmd == 97  { return anim() }       # a - animation
     if cmd == 103 { return snake_game() } # g - snake game
     if cmd == 100 { return paint() }      # d - paint (draw)
-    if cmd == 105 { return editor() }     # i - text editor
+    if cmd == 105 { return editor(arg) }  # i - text editor (arg = file slot 0-9)
+    if cmd == 108 { return fs_list() }    # l - list RAM files
     if cmd == 114 {                       # r - reboot
         color(C_YELLOW)  print("  rebooting...")
         beep(1568, 6)  beep(784, 10)
@@ -546,6 +589,7 @@ fn draw_screen() {
 
 # ---- boot ------------------------------------------------------------------
 kbd_init()
+fs_init()
 draw_screen()
 
 color(C_WHITE)  print("  zlOS starting")
