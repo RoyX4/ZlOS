@@ -1596,3 +1596,147 @@ int intel_lt_status(int i)      { return (i >= 0 && i < 6) ? lt_last_status[i] :
 int intel_lt_swing(int l)       { return (l >= 0 && l < 4) ? lt_final_swing[l] : 0; }
 u32 intel_dp_tp_ctl(int port)   { return intel_present() ? mmio_r(DP_TP_CTL(port)) : 0; }
 u32 intel_dp_tp_status(int port){ return intel_present() ? mmio_r(DP_TP_STATUS(port)) : 0; }
+
+/* ==== eDP panel power sequencing =========================================
+ * The part of a modeset that can physically damage a panel, and therefore the
+ * part to be most careful with.
+ *
+ * An LCD panel is not a device you switch on. It has a required order and
+ * required delays between its supply rail, its link, and its backlight, and
+ * violating them can damage the panel over time - image sticking at best,
+ * failure at worst. The delays are named T1..T12 in the eDP specification and
+ * the hardware enforces them for us IF the delay registers are programmed
+ * correctly, which is why this code reads them rather than inventing them.
+ *
+ * The order that matters:
+ *
+ *   power on    VDD up -> wait T1+T2 -> link training -> wait T3 ->
+ *               backlight on (T7 after valid video)
+ *   power off   backlight OFF FIRST -> wait T9 -> video off -> VDD down ->
+ *               then T12 must elapse before it may be powered on again
+ *
+ * Backlight before video off is not a detail: a lit backlight over a panel
+ * whose link has stopped shows garbage, and on some panels holding a static
+ * pattern is what causes sticking.
+ *
+ * PP_CONTROL has a write-protect key in its top 16 bits. Writes without it
+ * are silently ignored, which produces the very confusing symptom of a
+ * register that reads back exactly what it did before.
+ */
+#define PP_ON_DELAYS      0xC7208
+#define PP_OFF_DELAYS     0xC720C
+#define PP_DIVISOR        0xC7210
+
+#define PP_UNLOCK_KEY     0xABCD0000u
+#define PP_ON             (1u << 0)
+#define PP_RESET          (1u << 1)     /* panel reset, active low on some parts */
+#define PP_BACKLIGHT_EN   (1u << 2)
+#define PP_VDD_FORCE      (1u << 3)
+
+#define PP_STATUS_ON      (1u << 31)
+#define PP_STATUS_SEQ     (3u << 28)    /* sequencing progress */
+#define PP_SEQ_NONE       (0u << 28)
+#define PP_SEQ_POWER_UP   (1u << 28)
+#define PP_SEQ_POWER_DOWN (2u << 28)
+
+int intel_pp_status(void)  { return intel_present() ? (int)mmio_r(PP_STATUS) : 0; }
+int intel_pp_control(void) { return intel_present() ? (int)mmio_r(PP_CONTROL) : 0; }
+
+/* The delays are stored in units of 100 microseconds. Reading them back tells
+ * us what the firmware negotiated with THIS panel, which is far better
+ * information than any default we could pick. */
+int intel_pp_t1_t3(void)  { return intel_present() ? (int)((mmio_r(PP_ON_DELAYS) >> 16) & 0x1FFF) : 0; }
+int intel_pp_t8(void)     { return intel_present() ? (int)(mmio_r(PP_ON_DELAYS) & 0x1FFF) : 0; }
+int intel_pp_t9(void)     { return intel_present() ? (int)((mmio_r(PP_OFF_DELAYS) >> 16) & 0x1FFF) : 0; }
+int intel_pp_t10(void)    { return intel_present() ? (int)(mmio_r(PP_OFF_DELAYS) & 0x1FFF) : 0; }
+int intel_pp_t11_t12(void){ return intel_present() ? (int)(mmio_r(PP_DIVISOR) & 0x1F) : 0; }
+
+int intel_pp_sequencing(void)
+{
+    if (!intel_present()) return 0;
+    return (int)((mmio_r(PP_STATUS) >> 28) & 3);
+}
+
+/* Wait for the hardware's own sequencer to finish. It is enforcing the panel's
+ * timing; racing it is exactly the mistake this whole comment exists to
+ * prevent. */
+static int pp_wait_idle(int ms)
+{
+    u32 t0 = idt_ticks();
+    u32 ticks = (u32)(ms / 10) + 1;
+    long spins = (long)ms * 50000;
+    while (spins-- > 0) {
+        if (intel_pp_sequencing() == 0) return 1;
+        if (idt_ticks() - t0 >= ticks) return 0;
+    }
+    return 0;
+}
+
+/* Force VDD on without lighting the panel.
+ *
+ * A driver needs this: AUX transactions require the panel's logic to be
+ * powered, but during a modeset we do not want the display lit yet. This is
+ * the standard "VDD force" every eDP driver holds across its AUX work. */
+int intel_panel_vdd_on(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    u32 v = mmio_r(PP_CONTROL) & 0xFFFF;
+    mmio_w(PP_CONTROL, PP_UNLOCK_KEY | v | PP_VDD_FORCE);
+    /* the panel's logic needs a moment before it will answer AUX */
+    for (volatile int d = 0; d < 400000; d++) { }
+    return 1;
+}
+
+int intel_panel_vdd_off(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    u32 v = mmio_r(PP_CONTROL) & 0xFFFF;
+    mmio_w(PP_CONTROL, PP_UNLOCK_KEY | (v & ~PP_VDD_FORCE));
+    return 1;
+}
+
+/* Bring the panel up. The hardware sequencer honours T1..T3 itself once
+ * PP_ON is set; our job is to ask and then WAIT, not to guess timings. */
+int intel_panel_power_on(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (mmio_r(PP_STATUS) & PP_STATUS_ON) return 1;
+
+    u32 v = mmio_r(PP_CONTROL) & 0xFFFF;
+    mmio_w(PP_CONTROL, PP_UNLOCK_KEY | v | PP_ON);
+
+    /* up to 600 ms: T1+T2+T3 on a slow panel genuinely takes that long */
+    if (!pp_wait_idle(600)) return 0;
+    return (mmio_r(PP_STATUS) & PP_STATUS_ON) ? 1 : 0;
+}
+
+/* Take it down in the required order: backlight first, then power. */
+int intel_panel_power_off(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+
+    u32 v = mmio_r(PP_CONTROL) & 0xFFFF;
+    if (v & PP_BACKLIGHT_EN) {
+        mmio_w(PP_CONTROL, PP_UNLOCK_KEY | (v & ~PP_BACKLIGHT_EN));
+        /* T9: the backlight must be dark before video stops */
+        for (volatile int d = 0; d < 2000000; d++) { }
+        v = mmio_r(PP_CONTROL) & 0xFFFF;
+    }
+
+    mmio_w(PP_CONTROL, PP_UNLOCK_KEY | (v & ~PP_ON));
+    if (!pp_wait_idle(600)) return 0;
+
+    /* T12: the panel may not be powered up again for a further ~500 ms. The
+     * hardware tracks this, and asking too early simply does nothing - which
+     * looks like a dead panel to anyone who does not know about T12. */
+    return 1;
+}
+
+int intel_panel_backlight_enable(int on)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    u32 v = mmio_r(PP_CONTROL) & 0xFFFF;
+    if (on) v |= PP_BACKLIGHT_EN; else v &= ~PP_BACKLIGHT_EN;
+    mmio_w(PP_CONTROL, PP_UNLOCK_KEY | v);
+    return 1;
+}

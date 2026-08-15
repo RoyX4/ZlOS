@@ -132,6 +132,14 @@ u32  intel_dp_tp_ctl(int port);
 u32  intel_dp_tp_status(int port);
 void intel_link_train_arm(int on);
 int  intel_link_train_armed(void);
+int  intel_pp_status(void);
+int  intel_pp_control(void);
+int  intel_pp_t1_t3(void);
+int  intel_pp_t8(void);
+int  intel_pp_t9(void);
+int  intel_pp_t10(void);
+int  intel_pp_t11_t12(void);
+int  intel_pp_sequencing(void);
 
 static unsigned char edid_storage[256];
 
@@ -452,6 +460,22 @@ int main(int argc, char **argv)
         }
         printf("\n");
     }
+
+    printf("  -- panel power sequencing (delays in 100us units) --\n");
+    printf("  PP_STATUS       0x%08X   on=%d  sequencing=%d\n",
+           intel_pp_status(), (intel_pp_status() >> 31) & 1, intel_pp_sequencing());
+    printf("  PP_CONTROL      0x%08X\n", intel_pp_control());
+    printf("  T1+T3 (power up to video)   %5d = %d.%d ms\n",
+           intel_pp_t1_t3(), intel_pp_t1_t3()/10, intel_pp_t1_t3()%10);
+    printf("  T8    (video to backlight)  %5d = %d.%d ms\n",
+           intel_pp_t8(), intel_pp_t8()/10, intel_pp_t8()%10);
+    printf("  T9    (backlight off first) %5d = %d.%d ms\n",
+           intel_pp_t9(), intel_pp_t9()/10, intel_pp_t9()%10);
+    printf("  T10   (video off to vdd)    %5d = %d.%d ms\n",
+           intel_pp_t10(), intel_pp_t10()/10, intel_pp_t10()%10);
+    printf("  T11+T12 (cycle delay)       %5d = %d ms minimum before re-power\n",
+           intel_pp_t11_t12(), intel_pp_t11_t12() * 100);
+    printf("\n");
 
     printf("  -- backlight --\n");
     u32 blmax = intel_backlight_max();
