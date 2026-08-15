@@ -326,6 +326,8 @@ fn help() {
     print("    w        draggable windows")
     print("    y        virtio-gpu - a real GPU driver, virtqueues and all")
     print("    z        the processor: CPUID, topology, caches, TSC clock")
+    print("    o        NVMe disk - identify, then write and read a block back")
+    print("    +        multitasking - three tasks running beside the shell")
     print("    c        clear the screen")
     print("    r        reboot the machine")
     print("    q        halt the machine")
@@ -1024,6 +1026,88 @@ fn run_command(cmd, arg) {
         return 0
     }
     if cmd == 106 { return usbkey_demo() }   # j - USB keyboard, live
+    if cmd == 43 {                        # + - three tasks at once
+        color(C_CYAN)  print("  multitasking")
+        color(C_GREY)
+        print("    three tasks, each counting at its own rate, plus this shell.")
+        print("    every number below is a different stack.")
+        print("")
+        put("    tasks now runnable: ")  print(sched_go())
+        mti = 0
+        while mti < 12 {
+            yield()
+            put("    t=")   put(ticks())
+            put("  A=")     put(counter(0))
+            put("  B=")     put(counter(1))
+            put("  C=")     put(counter(2))
+            put("  switches=")  print(sched_sw())
+            mts = ticks() + 25
+            while ticks() < mts { yield() }
+            mti = mti + 1
+        }
+        print("")
+        color(C_GREEN)
+        print("    all three advanced while the shell kept running.")
+        color(C_GREY)
+        return 0
+    }
+    if cmd == 111 {                       # o - NVMe storage, our driver
+        color(C_CYAN)  print("  NVMe storage")
+        color(C_GREY)
+        if nv_find() < 0 {
+            print("    no NVMe controller on the PCI bus")
+            print("    add -device nvme,serial=zl,drive=... to QEMU")
+            return 0
+        }
+        put("    MMIO at   0x")  hex(nv_mmio(), 8)  print("")
+        put("    version   ")    hex(nv_ver(), 8)   print("")
+        if nv_setup() == 0 {
+            color(C_RED)  print("    controller did not come ready")
+            color(C_GREY)  return 0
+        }
+        color(C_GREEN)
+        print("    enabled, admin + I/O queues created - it is ours")
+        color(C_GREY)
+        put("    model:    ")
+        nmi = 0
+        while nmi < 40 { emit(nv_mb(nmi))  nmi = nmi + 1 }
+        print("")
+        put("    capacity: ")  put(nv_cap())  put(" MiB in ")
+        put(nv_blocks())  put(" blocks of ")  put(nv_bsize())  print(" bytes")
+
+        # The real proof: write a pattern to a block, read it back, compare.
+        # This is a round trip through a DMA queue to actual storage.
+        nvi = 0
+        while nvi < 512 { nv_set(nvi, (nvi * 7 + 11) % 256)  nvi = nvi + 1 }
+        if nv_write(1000, 0) == 0 {
+            color(C_RED)  print("    write to LBA 1000 failed")
+            color(C_GREY)  return 0
+        }
+        # scrub the buffer so a read that does nothing cannot look like success
+        nvi = 0
+        while nvi < 512 { nv_set(nvi, 0)  nvi = nvi + 1 }
+        if nv_read(1000, 0) == 0 {
+            color(C_RED)  print("    read back from LBA 1000 failed")
+            color(C_GREY)  return 0
+        }
+        nvbad = 0
+        nvi = 0
+        while nvi < 512 {
+            if nv_get(nvi) != (nvi * 7 + 11) % 256 { nvbad = nvbad + 1 }
+            nvi = nvi + 1
+        }
+        if nvbad == 0 {
+            color(C_GREEN)
+            print("    wrote 512 bytes to LBA 1000, read them back, all match")
+            print("    zlOS can store things that outlive it")
+            color(C_GREY)
+        } else {
+            color(C_RED)
+            put("    read back WRONG in ")  put(nvbad)  print(" of 512 bytes")
+            color(C_GREY)
+        }
+        return 0
+    }
     if cmd == 122 {                       # z - the processor, read from itself
         color(C_CYAN)  print("  the processor, via CPUID and the MSRs")
         color(C_GREY)

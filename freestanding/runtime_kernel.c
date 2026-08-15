@@ -212,6 +212,34 @@ extern int  cpu_has_avx2(void);
 extern int  cpu_has_aes(void);
 extern int  cpu_has_rdrand(void);
 extern int  cpu_has_hypervisor(void);
+/* NVMe: real storage */
+extern int  nvme_find(void);
+extern int  nvme_present(void);
+extern int  nvme_setup(void);
+extern int  nvme_ready(void);
+extern unsigned int nvme_version(void);
+extern unsigned int nvme_mmio(void);
+extern int  nvme_model_byte(int i);
+extern int  nvme_serial_byte(int i);
+extern unsigned int nvme_blocks_lo(void);
+extern unsigned int nvme_blocksize(void);
+extern unsigned int nvme_capacity_mb(void);
+extern int  nvme_read_block(unsigned lo, unsigned hi);
+extern int  nvme_write_block(unsigned lo, unsigned hi);
+extern int  nvme_data_byte(int i);
+extern void nvme_data_set(int i, int v);
+/* the scheduler */
+extern int  sched_init(void);
+extern int  sched_start_demo(void);
+extern int  sched_active(void);
+extern int  sched_count(void);
+extern int  sched_current(void);
+extern unsigned int sched_switches(void);
+extern int  sched_state(int i);
+extern unsigned int sched_ticks(int i);
+extern unsigned int sched_counter(int i);
+extern void yield(void);
+extern void task_sleep(unsigned ticks);
 /* the Intel Gen9 display driver */
 extern int  intel_find(void);
 extern int  intel_present(void);
@@ -537,6 +565,30 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "vg_c2d"))     return zl_num((double)virtio_gpu_create_2d((unsigned)a[0].num,(unsigned)a[1].num,(unsigned)a[2].num));
     if (streq(name, "vg_attach"))  return zl_num((double)virtio_gpu_attach_backing((unsigned)a[0].num,(unsigned)a[1].num));
     if (streq(name, "vg_scanout")) return zl_num((double)virtio_gpu_set_scanout((unsigned)a[0].num,(unsigned)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "sched_go"))   return zl_num((double)sched_start_demo());
+    if (streq(name, "sched_on"))   return zl_num((double)sched_active());
+    if (streq(name, "sched_n"))    return zl_num((double)sched_count());
+    if (streq(name, "sched_cur"))  return zl_num((double)sched_current());
+    if (streq(name, "sched_sw"))   return zl_num((double)sched_switches());
+    if (streq(name, "sched_st"))   return zl_num((double)sched_state((int)a[0].num));
+    if (streq(name, "sched_tk"))   return zl_num((double)sched_ticks((int)a[0].num));
+    if (streq(name, "counter"))    return zl_num((double)sched_counter((int)a[0].num));
+    if (streq(name, "yield"))      { yield(); return zl_nil(); }
+    if (streq(name, "nv_find"))    return zl_num((double)nvme_find());
+    if (streq(name, "nv_ok"))      return zl_num((double)nvme_present());
+    if (streq(name, "nv_setup"))   return zl_num((double)nvme_setup());
+    if (streq(name, "nv_ready"))   return zl_num((double)nvme_ready());
+    if (streq(name, "nv_ver"))     return zl_num((double)nvme_version());
+    if (streq(name, "nv_mmio"))    return zl_num((double)nvme_mmio());
+    if (streq(name, "nv_mb"))      return zl_num((double)nvme_model_byte((int)a[0].num));
+    if (streq(name, "nv_sb"))      return zl_num((double)nvme_serial_byte((int)a[0].num));
+    if (streq(name, "nv_blocks"))  return zl_num((double)nvme_blocks_lo());
+    if (streq(name, "nv_bsize"))   return zl_num((double)nvme_blocksize());
+    if (streq(name, "nv_cap"))     return zl_num((double)nvme_capacity_mb());
+    if (streq(name, "nv_read"))    return zl_num((double)nvme_read_block((unsigned)a[0].num,(unsigned)a[1].num));
+    if (streq(name, "nv_write"))   return zl_num((double)nvme_write_block((unsigned)a[0].num,(unsigned)a[1].num));
+    if (streq(name, "nv_get"))     return zl_num((double)nvme_data_byte((int)a[0].num));
+    if (streq(name, "nv_set"))     { nvme_data_set((int)a[0].num,(int)a[1].num); return zl_nil(); }
     if (streq(name, "cpu_vb"))     return zl_num((double)cpu_vendor_byte((int)a[0].num));
     if (streq(name, "cpu_fam"))    return zl_num((double)cpu_family());
     if (streq(name, "cpu_mod"))    return zl_num((double)cpu_model());

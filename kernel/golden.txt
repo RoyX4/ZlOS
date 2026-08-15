@@ -41,6 +41,8 @@
     w        draggable windows
     y        virtio-gpu - a real GPU driver, virtqueues and all
     z        the processor: CPUID, topology, caches, TSC clock
+    o        NVMe disk - identify, then write and read a block back
+    +        multitasking - three tasks running beside the shell
     c        clear the screen
     r        reboot the machine
     q        halt the machine

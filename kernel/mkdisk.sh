@@ -57,10 +57,14 @@ gcc $CFLAGS -mgeneral-regs-only -c apic.c -o _apic.o
 gcc $CFLAGS -c virtio_gpu.c -o _vgpu.o
 # reading the processor itself: CPUID, topology, caches, the TSC
 gcc $CFLAGS -c cpu.c -o _cpu.o
+# NVMe: real storage, so something survives a power cycle
+gcc $CFLAGS -c nvme.c -o _nvme.o
+# the scheduler: more than one thing at a time
+gcc $CFLAGS -c sched.c -o _sched.o
 gcc -m32 -c raw_entry.S -o _rawentry.o
 
 ld -m elf_i386 -T link-raw.ld -o kernel_raw.elf \
-   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o
+   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o
 objcopy -O binary kernel_raw.elf kernel_raw.bin
 
 nasm -f bin raw_boot.asm -o raw_boot.bin
