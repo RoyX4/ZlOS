@@ -1397,6 +1397,9 @@ u32 intel_dpcd_max_rate_kbps(void)
  * registers. Running it while another driver owns the display will fight that
  * driver. On the host harness, detach i915 first.
  */
+#define DDI_BUF_CTL(port)   (0x64000 + (port) * 0x100)
+#define DDI_BUF_CTL_ENABLE  (1u << 31)
+#define DDI_BUF_IS_IDLE     (1u << 7)
 #define DP_TP_CTL(port)     (0x64040 + (port) * 0x100)
 #define DP_TP_STATUS(port)  (0x64044 + (port) * 0x100)
 
@@ -1475,6 +1478,66 @@ static int adjust_pre(const u8 *adj, int lane)
 /* Write the drive settings the sink asked for into both ends: the panel's
  * TRAINING_LANE registers and, on real silicon, the DDI buffer translation
  * that actually changes the transmitter. */
+/* ---- DDI buffer translation ---------------------------------------------
+ * The last piece of link training that cannot be derived: what voltage the
+ * transmitter actually drives for a given swing/pre-emphasis pair. The values
+ * are per-SKU silicon characterisation, published only in the PRM.
+ *
+ * These were READ OFF THIS MACHINE - the ten entries i915 programmed into
+ * DDI_BUF_TRANS for DDI A, which is the eDP panel. They match i915's
+ * skl_u_ddi_translations_edp exactly, confirming both the table and that a
+ * Comet Lake-U part uses the SKL-U eDP set.
+ *
+ * The index is a triangular map over the legal (swing, pre-emphasis) pairs:
+ * higher swing leaves room for less pre-emphasis, so the combinations are not
+ * a 4x4 grid. Asking for an illegal pair is a driver bug, not a hardware one. */
+static const u32 edp_buf_trans[10][2] = {
+    { 0x00000018, 0x000000A8 },   /* swing 0, pre 0 */
+    { 0x00004013, 0x000000A9 },   /* swing 0, pre 1 */
+    { 0x00007011, 0x000000A2 },   /* swing 0, pre 2 */
+    { 0x00009010, 0x0000009C },   /* swing 0, pre 3 */
+    { 0x00000018, 0x000000A9 },   /* swing 1, pre 0 */
+    { 0x00006013, 0x000000A2 },   /* swing 1, pre 1 */
+    { 0x00007011, 0x000000A6 },   /* swing 1, pre 2 */
+    { 0x00002016, 0x000000AB },   /* swing 2, pre 0 */
+    { 0x00005013, 0x0000009F },   /* swing 2, pre 1 */
+    { 0x00000018, 0x000000DF },   /* swing 3, pre 0 */
+};
+
+#define DDI_BUF_TRANS(port, i) (0x64E00 + (port) * 0x60 + (i) * 8)
+
+static int buf_trans_index(int swing, int pre)
+{
+    static const int base[4] = { 0, 4, 7, 9 };
+    static const int room[4] = { 4, 3, 2, 1 };
+    if (swing < 0) swing = 0;
+    if (swing > 3) swing = 3;
+    if (pre < 0) pre = 0;
+    if (pre >= room[swing]) pre = room[swing] - 1;
+    return base[swing] + pre;
+}
+
+u32 intel_buf_trans1(int i) { return (i >= 0 && i < 10) ? edp_buf_trans[i][0] : 0; }
+u32 intel_buf_trans2(int i) { return (i >= 0 && i < 10) ? edp_buf_trans[i][1] : 0; }
+int intel_buf_trans_index(int swing, int pre) { return buf_trans_index(swing, pre); }
+
+/* Program the whole table and select an entry. The table has to be written
+ * before DDI_BUF_CTL is enabled - the hardware latches it at enable. */
+int intel_ddi_program_buf_trans(int port, int swing, int pre)
+{
+    if (!intel_present() || !lt_armed || port < 0 || port > 4) return 0;
+    for (int i = 0; i < 10; i++) {
+        mmio_w(DDI_BUF_TRANS(port, i) + 0, edp_buf_trans[i][0]);
+        mmio_w(DDI_BUF_TRANS(port, i) + 4, edp_buf_trans[i][1]);
+    }
+    int idx = buf_trans_index(swing, pre);
+    u32 v = mmio_r(DDI_BUF_CTL(port));
+    v &= ~(0xFu << 24);
+    v |= ((u32)idx << 24);
+    mmio_w(DDI_BUF_CTL(port), v);
+    return 1;
+}
+
 static void set_drive(int port, int lanes, const int *swing, const int *pre)
 {
     u8 v[4];
@@ -1486,10 +1549,11 @@ static void set_drive(int port, int lanes, const int *swing, const int *pre)
         if (pe >= 3) v[i] |= (1 << 5);
     }
     intel_dpcd_write(port, DPCD_TRAINING_LANE0, v, lanes);
-    /* The DDI buffer translation entry for this swing/pre pair would be
-     * programmed here. The table is part-specific and is the one piece of
-     * this sequence that cannot be derived - it has to come from the PRM for
-     * the exact SKU, so it is left to a caller that knows the part. */
+    /* and the transmitter side: select the buffer translation entry that
+     * corresponds to the swing/pre-emphasis the sink asked for. Lane 0's
+     * request drives the selection, which is what the hardware supports -
+     * DDI_BUF_CTL has one entry select for the whole port, not per lane. */
+    intel_ddi_program_buf_trans(port, swing[0], pre[0]);
 }
 
 static void tp_ctl_pattern(int port, u32 pattern, int enhanced)
