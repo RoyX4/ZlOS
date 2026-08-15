@@ -496,8 +496,8 @@ int main(int argc, char **argv)
            intel_pp_t9(), intel_pp_t9()/10, intel_pp_t9()%10);
     printf("  T10   (video off to vdd)    %5d = %d.%d ms\n",
            intel_pp_t10(), intel_pp_t10()/10, intel_pp_t10()%10);
-    printf("  T11+T12 (cycle delay)       %5d = %d ms minimum before re-power\n",
-           intel_pp_t11_t12(), intel_pp_t11_t12() * 100);
+    printf("  T11+T12 (cycle delay)        %d ms minimum before re-power\n",
+           intel_pp_t11_t12());
     printf("\n");
 
     printf("  -- backlight --\n");
@@ -522,7 +522,7 @@ int main(int argc, char **argv)
         u32 nominal = (u32)((double)intel_htotal() * intel_vtotal() * 60.0 / 1000.0);
         u32 ours = intel_wm_compute_level0((u32)intel_pipe_width(), 32, nominal, 0);
         printf("  our conservative level 0: blocks=%u lines=%u (firmware: %d / %d)\n",
-               ours & 0x7FF, (ours >> 20) & 0x7FF,
+               ours & 0x3FF, (ours >> 14) & 0x1F,
                intel_wm_blocks(0), intel_wm_lines(0));
     }
     printf("\n");

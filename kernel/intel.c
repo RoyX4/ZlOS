@@ -1595,7 +1595,16 @@ int intel_lt_eq_attempts(void)  { return lt_eq_attempts; }
 int intel_lt_status(int i)      { return (i >= 0 && i < 6) ? lt_last_status[i] : 0; }
 int intel_lt_swing(int l)       { return (l >= 0 && l < 4) ? lt_final_swing[l] : 0; }
 u32 intel_dp_tp_ctl(int port)   { return intel_present() ? mmio_r(DP_TP_CTL(port)) : 0; }
-u32 intel_dp_tp_status(int port){ return intel_present() ? mmio_r(DP_TP_STATUS(port)) : 0; }
+/* DDI A HAS NO DP_TP_STATUS. The PRM says so explicitly and i915 returns
+ * early for PORT_A. A generic "wait for IDLE_DONE" helper pointed here spins
+ * its entire timeout on every single modeset and still succeeds, which makes
+ * it invisible except as unexplained slowness. Return 0 and mean it. */
+u32 intel_dp_tp_status(int port)
+{
+    if (!intel_present() || port == 0) return 0;
+    return mmio_r(DP_TP_STATUS(port));
+}
+int intel_dp_tp_status_exists(int port) { return port != 0; }
 
 /* ==== eDP panel power sequencing =========================================
  * The part of a modeset that can physically damage a panel, and therefore the
@@ -1627,7 +1636,19 @@ u32 intel_dp_tp_status(int port){ return intel_present() ? mmio_r(DP_TP_STATUS(p
 #define PP_OFF_DELAYS     0xC720C
 #define PP_DIVISOR        0xC7210
 
-#define PP_UNLOCK_KEY     0xABCD0000u
+/* NO UNLOCK KEY ON GEN9. The 0xABCD write-protect key in PP_CONTROL's top
+ * half is a pre-DDI thing; i915 only applies it when !HAS_DDI(), and the
+ * measured PP_CONTROL on this machine is 0x00000067 with the top half clear.
+ * Writing the key here would put 0xABCD into bits the PRM marks Reserved.
+ * Read-modify-write is the correct discipline instead. */
+#define PP_UNLOCK_KEY     0x00000000u
+
+/* On CNP/CMP (this part) the power cycle delay moved INTO PP_CONTROL and
+ * PP_DIVISOR is dead - reading it gives a ref divider of 0, which the PRM
+ * forbids, i.e. the register is not live. The field is "+1" encoded in units
+ * of 100 ms: a value of v means (v-1)*100 ms, and 0 means none. */
+#define PP_CYCLE_DELAY_SHIFT 4
+#define PP_CYCLE_DELAY_MASK  0x1F
 #define PP_ON             (1u << 0)
 #define PP_RESET          (1u << 1)     /* panel reset, active low on some parts */
 #define PP_BACKLIGHT_EN   (1u << 2)
@@ -1649,7 +1670,13 @@ int intel_pp_t1_t3(void)  { return intel_present() ? (int)((mmio_r(PP_ON_DELAYS)
 int intel_pp_t8(void)     { return intel_present() ? (int)(mmio_r(PP_ON_DELAYS) & 0x1FFF) : 0; }
 int intel_pp_t9(void)     { return intel_present() ? (int)((mmio_r(PP_OFF_DELAYS) >> 16) & 0x1FFF) : 0; }
 int intel_pp_t10(void)    { return intel_present() ? (int)(mmio_r(PP_OFF_DELAYS) & 0x1FFF) : 0; }
-int intel_pp_t11_t12(void){ return intel_present() ? (int)(mmio_r(PP_DIVISOR) & 0x1F) : 0; }
+/* T11+T12, in milliseconds. NOT from PP_DIVISOR - see the note above. */
+int intel_pp_t11_t12(void)
+{
+    if (!intel_present()) return 0;
+    int v = (int)((mmio_r(PP_CONTROL) >> PP_CYCLE_DELAY_SHIFT) & PP_CYCLE_DELAY_MASK);
+    return v ? (v - 1) * 100 : 0;
+}
 
 int intel_pp_sequencing(void)
 {
@@ -1938,16 +1965,21 @@ int intel_plane_configure(u32 width, u32 height, u32 stride_bytes)
 #define PLANE_BUF_CFG_1_A   0x7027C
 #define PIPE_UNDERRUN_A     0x70008     /* the underrun bit lives in PIPECONF */
 
-#define WM_ENABLE     (1u << 31)
-#define WM_LINES_MASK 0x7FF00000u
-#define WM_BLOCKS_MASK 0x000007FFu
+/* Gen9 watermark field widths are NARROW: lines at 18:14 and blocks at 9:0.
+ * The wider 26:14 / 11:0 encoding is a later generation. Legal gen9 values
+ * fit inside both, so a too-wide mask reads correctly right up until it
+ * doesn't - which is the sort of thing that only shows on one machine. */
+#define WM_ENABLE       (1u << 31)
+#define WM_LINES_SHIFT  14
+#define WM_LINES_MASK   0x1Fu
+#define WM_BLOCKS_MASK  0x3FFu
 
 u32 intel_wm_trans(void)  { return intel_present() ? mmio_r(PLANE_WM_TRANS_1_A) : 0; }
 u32 intel_ddb_cfg(void)   { return intel_present() ? mmio_r(PLANE_BUF_CFG_1_A) : 0; }
 
 int intel_wm_enabled(int level)  { return (intel_watermark(level) & WM_ENABLE) ? 1 : 0; }
 int intel_wm_blocks(int level)   { return (int)(intel_watermark(level) & WM_BLOCKS_MASK); }
-int intel_wm_lines(int level)    { return (int)((intel_watermark(level) & WM_LINES_MASK) >> 20); }
+int intel_wm_lines(int level)    { return (int)((intel_watermark(level) >> WM_LINES_SHIFT) & WM_LINES_MASK); }
 
 /* The display data buffer allocation: which 512-byte blocks this plane owns,
  * as a start and end index. */
@@ -1993,7 +2025,8 @@ u32 intel_wm_compute_level0(u32 width, u32 bpp, u32 pixel_khz, u32 latency_us)
     u32 blocks_per_line = (bytes_per_line + 511u) / 512u;
     u32 lines = blocks_per_line ? ((blocks + blocks_per_line - 1) / blocks_per_line) : 1;
 
-    return WM_ENABLE | ((lines & 0x7FF) << 20) | (blocks & 0x7FF);
+    return WM_ENABLE | ((lines & WM_LINES_MASK) << WM_LINES_SHIFT) |
+           (blocks & WM_BLOCKS_MASK);
 }
 
 int intel_wm_set_level(int level, u32 value)
