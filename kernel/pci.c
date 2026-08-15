@@ -189,6 +189,13 @@ u32 pci_bar_hi(int i, int which)
  * separates xHCI (0x30) from EHCI (0x20), OHCI (0x10) and UHCI (0x00) */
 int pci_prog_if(int i) { return (i < found_n) ? found[i].prog_if : 0; }
 
+/* Where a device sits on the bus. Anything that has to reach config space
+ * directly - walking a capability list, say - needs these rather than the
+ * cached summary above. */
+int pci_bus_of(int i) { return (i >= 0 && i < found_n) ? found[i].bus : -1; }
+int pci_dev_of(int i) { return (i >= 0 && i < found_n) ? found[i].dev : -1; }
+int pci_fn_of (int i) { return (i >= 0 && i < found_n) ? found[i].fn  : -1; }
+
 /* Size a BAR the way the spec says: write all ones, read back, and the
  * hardware returns zeros in the bits it does not decode. The size is the
  * complement of the masked value, plus one. The original must be restored. */

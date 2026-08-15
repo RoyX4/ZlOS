@@ -6,6 +6,7 @@
   [  OK  ] VGA text console, 80x25
   [  OK  ] GDT loaded - flat 4 GiB code and data segments
   [  OK  ] IDT installed, PIC remapped, interrupts ON
+  [  OK  ] APIC: IRQs via I/O APIC at 0xFEC00000, 1 CPU(s)
   [  OK  ] PIT timer running at 100 Hz on IRQ0
   [  OK  ] keyboard on IRQ1 - no more polling the port
   USB: no xHCI controller (6 PCI devices seen)
@@ -38,6 +39,7 @@
     n        change the screen resolution, no BIOS involved
     v        spinning 3D cube, rendered in software
     w        draggable windows
+    y        virtio-gpu - a real GPU driver, virtqueues and all
     c        clear the screen
     r        reboot the machine
     q        halt the machine

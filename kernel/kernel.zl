@@ -324,6 +324,7 @@ fn help() {
     print("    n        change the screen resolution, no BIOS involved")
     print("    v        spinning 3D cube, rendered in software")
     print("    w        draggable windows")
+    print("    y        virtio-gpu - a real GPU driver, virtqueues and all")
     print("    c        clear the screen")
     print("    r        reboot the machine")
     print("    q        halt the machine")
@@ -1022,6 +1023,48 @@ fn run_command(cmd, arg) {
         return 0
     }
     if cmd == 106 { return usbkey_demo() }   # j - USB keyboard, live
+    if cmd == 121 {                       # y - virtio-gpu, a real GPU driver
+        color(C_CYAN)  print("  virtio-gpu")
+        color(C_GREY)
+        if vg_find() < 0 {
+            print("    no virtio-gpu on the PCI bus")
+            print("    add -device virtio-gpu-pci to QEMU to see this work")
+            return 0
+        }
+        if vg_init() == 0 {
+            color(C_RED)  print("    the device refused our feature negotiation")
+            color(C_GREY)  return 0
+        }
+        color(C_GREEN)
+        print("    virtqueue up, DRIVER_OK - the device is ours")
+        color(C_GREY)
+        put("    scanouts: ")  print(vg_scan())
+        if vg_info() == 0 {
+            color(C_RED)  print("    GET_DISPLAY_INFO failed")
+            color(C_GREY)  return 0
+        }
+        put("    display:  ")  put(vg_w())  put(" x ")  print(vg_h())
+        put("    create_2d:      ")  put(vg_c2d(1, vg_w(), vg_h()))
+        put("  resp 0x")  hex(vg_resp(), 4)  print("")
+        put("    attach_backing: ")  put(vg_attach(1, vg_w() * vg_h() * 4))
+        put("  resp 0x")  hex(vg_resp(), 4)  print("")
+        put("    set_scanout:    ")  put(vg_scanout(1, vg_w(), vg_h()))
+        put("  resp 0x")  hex(vg_resp(), 4)  print("")
+        vgfb = vg_fb()
+        put("    framebuffer bound at 0x")  hex(vgfb, 8)  print("")
+        # Draw straight into GPU memory and flush it. Every pixel here crossed
+        # a virtqueue as a real GPU command.
+        if vg_test() == 1 {
+            color(C_GREEN)
+            print("    TRANSFER_TO_HOST_2D + RESOURCE_FLUSH acknowledged")
+            print("    pixels drawn through a real GPU command queue")
+            color(C_GREY)
+        } else {
+            color(C_RED)  print("    flush failed")
+            color(C_GREY)
+        }
+        return 0
+    }
     if cmd == 118 { return cube_demo() }     # v - spinning 3D cube (software)
     if cmd == 119 { return windows_demo() }  # w - draggable-style window demo
     if cmd == 120 { return mousedemo() }  # x - mouse demo
@@ -1306,6 +1349,16 @@ if bits() == 64 {
 }
 setup_idt()
 ok_line("IDT installed, PIC remapped, interrupts ON")
+# Move off the 8259 if this machine has an APIC. On a UEFI laptop the legacy
+# PIC may not be wired to anything at all - the keyboard raises IRQ1 and the
+# interrupt is simply never delivered. The I/O APIC is how a modern machine
+# routes it, and ACPI is the only thing that knows where that chip lives.
+if apic_up() == 1 {
+    put("  [  OK  ] APIC: IRQs via I/O APIC at 0x")  hex(apic_ib(), 8)
+    put(", ")  put(apic_cpus())  print(" CPU(s)")
+} else {
+    info_line("no APIC - staying on the legacy 8259 PIC")
+}
 ok_line("PIT timer running at 100 Hz on IRQ0")
 ok_line("keyboard on IRQ1 - no more polling the port")
 # USB comes up HERE, not earlier: the driver's timeouts are measured with the

@@ -34,12 +34,16 @@ gcc $CFLAGS -c console.c  -o _console64.o
 gcc $CFLAGS -c divmod.c   -o _divmod64.o
 gcc $CFLAGS -c gdt64.c    -o _gdt64.o
 gcc $CFLAGS -mgeneral-regs-only -c idt.c -o _idt64.o
+# The APIC driver replaces the 1981 PIC on machines that no longer wire it.
+gcc $CFLAGS -mgeneral-regs-only -c apic.c -o _apic64.o
+# virtio-gpu: the one GPU driver we can prove on every build.
+gcc $CFLAGS -c virtio_gpu.c -o _vgpu64.o
 gcc -m64 -c boot64.S -o _boot64.o
 
 ld -m elf_x86_64 -T link64.ld -o kernel64.elf \
    _boot64.o _gen64.o _rt64.o _support64.o _vga64.o _fb64.o _fb3d64.o \
    _font64.o _fontaa64.o _fontsub64.o _icons64.o _pci64.o _bga64.o _intel64.o _xhci64.o \
-   _console64.o _divmod64.o _gdt64.o _idt64.o
+   _console64.o _divmod64.o _gdt64.o _idt64.o _apic64.o _vgpu64.o
 
 echo "built kernel64.elf"
 echo "  undefined symbols: $(nm -u kernel64.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"

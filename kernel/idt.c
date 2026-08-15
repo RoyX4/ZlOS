@@ -78,6 +78,24 @@ int idt_scan(void)
     return c;
 }
 
+/* End of interrupt.
+ *
+ * Which chip gets acknowledged depends on which one actually delivered the
+ * interrupt. Once the I/O APIC is routing, the PIC is masked and completely
+ * out of the path - sending it an EOI is harmless but pointless, and MISSING
+ * the local APIC's EOI is fatal: that core never accepts another interrupt of
+ * equal or lower priority again, so the machine goes quiet after exactly one
+ * keypress. */
+extern int  apic_active(void);
+extern void apic_eoi(void);
+
+static void irq_done(int irq)
+{
+    if (apic_active()) { apic_eoi(); return; }
+    if (irq >= 8) zl_outb(0xA0, 0x20);      /* slave first, then the cascade */
+    zl_outb(0x20, 0x20);
+}
+
 /* ---- PS/2 mouse state, published by the IRQ12 handler --------------- */
 static volatile int mouse_x = 400, mouse_y = 300, mouse_btn = 0;
 static volatile u8  mpkt[3];
@@ -100,7 +118,7 @@ static void timer_isr(struct interrupt_frame *f)
 {
     (void)f;
     tick_count++;
-    zl_outb(0x20, 0x20);        /* EOI to the master PIC */
+    irq_done(0);
 }
 
 /* IRQ1: a key changed. Grab the scancode before the controller moves on
@@ -115,7 +133,7 @@ static void keyboard_isr(struct interrupt_frame *f)
         kbuf[kbuf_head] = sc;
         kbuf_head = next;
     }
-    zl_outb(0x20, 0x20);
+    irq_done(1);
 }
 
 /* IRQ12: the PS/2 mouse. Each move or click sends a 3-byte packet -
@@ -152,8 +170,7 @@ static void mouse_isr(struct interrupt_frame *f)
             }
         }
     }
-    zl_outb(0xA0, 0x20);        /* EOI to the slave PIC (IRQ12 lives there) */
-    zl_outb(0x20, 0x20);        /* and the master, for the cascade */
+    irq_done(12);
 }
 
 /* a catch-all for hardware IRQs we do not handle - acknowledge and move on */
@@ -161,8 +178,7 @@ __attribute__((interrupt))
 static void ignore_isr(struct interrupt_frame *f)
 {
     (void)f;
-    zl_outb(0x20, 0x20);
-    zl_outb(0xA0, 0x20);         /* EOI to both PICs, in case it was IRQ8-15 */
+    irq_done(8);                 /* acknowledge whichever controller is live */
 }
 
 /* a CPU exception (divide error, page fault, GP...) must NOT iret - that just
