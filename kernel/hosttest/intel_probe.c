@@ -103,6 +103,19 @@ int  intel_dpll_is_hdmi(int pll);
 int  intel_ddi_clock_select(int ddi);
 int  intel_ddi_clock_off(int ddi);
 u32  intel_dpll_rate_khz(int idx);
+u32  intel_dp_link_bandwidth_kbps(int rate_idx, int lanes);
+u32  intel_mode_bandwidth_kbps(u32 pixel_khz, int bpp);
+int  intel_dp_choose_rate(u32 pixel_khz, int lanes, int bpp);
+int  intel_dpll_compute_hdmi(u32 pixel_khz);
+u32  intel_wrpll_dco_khz(void);
+u32  intel_wrpll_central(void);
+int  intel_wrpll_p(void);
+int  intel_wrpll_q(void);
+int  intel_wrpll_k(void);
+int  intel_wrpll_divider(void);
+u32  intel_wrpll_cfgcr1(void);
+u32  intel_wrpll_cfgcr2(void);
+u32  intel_wrpll_actual_khz(void);
 
 static unsigned char edid_storage[256];
 
@@ -288,6 +301,64 @@ int main(int argc, char **argv)
     for (int d = 0; d < 5; d++)
         printf("    DDI %s  clock_off=%d  dpll=%d\n",
                ddi_name[d], intel_ddi_clock_off(d), intel_ddi_clock_select(d));
+    printf("\n");
+
+    /* ---- the real test: does our maths agree with the running hardware? --
+     * The panel is on, so the correct answer is readable. If the driver
+     * computes the same link rate i915 chose, the DP path is right. */
+    printf("  -- DPLL computation vs. what i915 actually programmed --\n");
+    {
+        double hz2 = (f1 - f0) * 2.0;
+        u32 pixel_khz = (u32)((double)intel_htotal() * intel_vtotal() * hz2 / 1000.0);
+        /* the frame counter under-reads when the panel self-refreshes, so also
+         * compute from the nominal 60 Hz the mode implies */
+        u32 nominal_khz = (u32)((double)intel_htotal() * intel_vtotal() * 60.0 / 1000.0);
+        printf("  measured pixel clock  %u kHz   (frame counter may under-read: PSR)\n", pixel_khz);
+        printf("  at a nominal 60 Hz    %u kHz\n", nominal_khz);
+
+        for (int bpp = 18; bpp <= 30; bpp += 6) {
+            int want = intel_dp_choose_rate(nominal_khz, 4, bpp);
+            printf("    %d bpp, 4 lanes -> rate index %d", bpp, want);
+            if (want >= 0)
+                printf("  (%u kHz symbol, %u kbps link vs %u kbps needed)",
+                       intel_dpll_rate_khz(want),
+                       intel_dp_link_bandwidth_kbps(want, 4),
+                       intel_mode_bandwidth_kbps(nominal_khz, bpp));
+            printf("\n");
+        }
+        int live = intel_dpll_link_rate(0);
+        printf("  i915 programmed DPLL0 at rate index %d\n", live);
+        int ours = intel_dp_choose_rate(nominal_khz, 4, 24);
+        printf("  our choice at 24 bpp      rate index %d   -> %s\n",
+               ours, ours == live ? "MATCH" : "differs");
+    }
+    printf("\n");
+
+    /* the HDMI divider search, checked against clocks whose answers are known */
+    printf("  -- HDMI divider search (a few standard modes) --\n");
+    {
+        struct { u32 khz; const char *name; } modes[] = {
+            { 25175,  "640x480@60"    },
+            { 74250,  "1280x720@60"   },
+            { 148500, "1920x1080@60"  },
+            { 241500, "2560x1440@60"  },
+            { 297000, "3840x2160@30"  },
+            { 594000, "3840x2160@60"  },
+            { 0, 0 }
+        };
+        for (int i = 0; modes[i].name; i++) {
+            if (!intel_dpll_compute_hdmi(modes[i].khz)) {
+                printf("    %-16s %6u kHz  NO SOLUTION\n", modes[i].name, modes[i].khz);
+                continue;
+            }
+            u32 got = intel_wrpll_actual_khz();
+            long err = (long)got - (long)modes[i].khz;
+            printf("    %-16s %6u kHz  dco=%u div=%d (p=%d q=%d k=%d)  cfgcr1=%08X cfgcr2=%08X  err=%+ld kHz\n",
+                   modes[i].name, modes[i].khz, intel_wrpll_dco_khz(),
+                   intel_wrpll_divider(), intel_wrpll_p(), intel_wrpll_q(),
+                   intel_wrpll_k(), intel_wrpll_cfgcr1(), intel_wrpll_cfgcr2(), err);
+        }
+    }
     printf("\n");
 
     printf("  -- backlight --\n");

@@ -803,3 +803,290 @@ u32 intel_dpll_rate_khz(int idx)
     }
     return 0;
 }
+
+/* ==== programming a DPLL =================================================
+ * Everything above READS. This is where the driver starts deciding.
+ *
+ * Skylake-class hardware has two completely different ways of setting a DPLL,
+ * and which one applies depends on what is plugged in:
+ *
+ *   DisplayPort (and eDP)  the link runs at one of six standard rates. You do
+ *                          not choose a frequency, you choose a RATE INDEX,
+ *                          and the pixel clock has to fit inside the bandwidth
+ *                          that rate provides. Simple, and it is what the
+ *                          internal panel uses.
+ *
+ *   HDMI                   the pixel clock is arbitrary, so the hardware has
+ *                          to synthesise it: a DCO running near one of three
+ *                          central frequencies, divided down by a chain of
+ *                          P, Q and K dividers. Finding a combination that
+ *                          lands close enough to the target is a search, and
+ *                          it is the part people mean when they say DPLL
+ *                          programming is hard.
+ *
+ * Both are implemented. The DP path is verifiable against this laptop right
+ * now - the panel is running, so the correct answer is readable out of the
+ * hardware and our computation can be checked against it.
+ */
+
+/* ---- DP: does this mode fit in this link rate? -------------------------
+ * A DP link carries 8b/10b encoded symbols, so only 80% of the raw rate is
+ * payload. Bandwidth is (rate * lanes * 0.8); demand is (pixel clock * bpp).
+ * The right link rate is the slowest one that still fits, because a faster
+ * link costs power for nothing. */
+u32 intel_dp_link_bandwidth_kbps(int rate_idx, int lanes)
+{
+    u32 sym_khz = intel_dpll_rate_khz(rate_idx);      /* symbol clock */
+    if (!sym_khz || lanes <= 0) return 0;
+    /* symbol clock * 2 = raw bits/s per lane (DDR), * 8/10 for the encoding */
+    return (sym_khz * 2u / 10u) * 8u * (u32)lanes;
+}
+
+u32 intel_mode_bandwidth_kbps(u32 pixel_khz, int bpp)
+{
+    if (bpp <= 0) bpp = 24;
+    return pixel_khz * (u32)bpp;
+}
+
+/* Choose the slowest link rate the mode fits inside.
+ *
+ * NOT every rate in the table is usable. DisplayPort standardises exactly
+ * four: RBR 1.62, HBR 2.7, HBR2 5.4 and HBR3 8.1 Gbps - indices 2, 1 and 0
+ * here. The other three (2.16, 3.24, 4.32 Gbps) are eDP intermediate rates,
+ * legal only if the panel advertises them in its DPCD, and a panel that does
+ * not will simply fail link training on one.
+ *
+ * This was caught by comparing against the running hardware: our first
+ * version picked index 4 (2.16 Gbps) for this laptop's mode because it fit,
+ * while i915 had chosen index 1 (2.7 Gbps). i915 was right - it was
+ * restricting itself to the standard rates. Cheap to get wrong, and it would
+ * have presented as "the panel stays black on our driver only".
+ *
+ * allow_edp_rates opens the intermediate rates up for a caller that has read
+ * the DPCD and knows they are supported. */
+int intel_dp_choose_rate_ex(u32 pixel_khz, int lanes, int bpp, int allow_edp_rates)
+{
+    /* ascending by real speed: 810, (1080), (1620), 1350, (2160), 2700 */
+    static const int standard[3]  = { 2, 1, 0 };
+    static const int extended[6]  = { 2, 4, 3, 1, 5, 0 };
+    const int *order = allow_edp_rates ? extended : standard;
+    int n = allow_edp_rates ? 6 : 3;
+
+    u32 need = intel_mode_bandwidth_kbps(pixel_khz, bpp);
+    for (int i = 0; i < n; i++)
+        if (intel_dp_link_bandwidth_kbps(order[i], lanes) >= need) return order[i];
+    return -1;
+}
+
+/* The safe default: standard DP rates only. */
+int intel_dp_choose_rate(u32 pixel_khz, int lanes, int bpp)
+{
+    return intel_dp_choose_rate_ex(pixel_khz, lanes, bpp, 0);
+}
+
+/* ---- HDMI: the divider search -----------------------------------------
+ * The DCO runs at pixel_clock * 5 * (p * q * k). Intel's algorithm walks a
+ * fixed set of divider combinations, keeps the ones that put the DCO within
+ * its legal window around a central frequency, and picks whichever lands
+ * closest to that centre - a DCO near the middle of its range is the one that
+ * locks reliably.
+ *
+ * The candidate dividers and the three central frequencies are from the
+ * Skylake PRM; this is the same set i915 walks in skl_ddi_calculate_wrpll. */
+#define DCO_CENTRAL_0  9600000u    /* kHz */
+#define DCO_CENTRAL_1  9000000u
+#define DCO_CENTRAL_2  8400000u
+
+static const int wrpll_dividers[] = {
+    /* even dividers first - Intel's table order, and the order matters
+     * because ties are broken by taking the first match */
+    4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 30, 32, 36, 40, 42, 44,
+    48, 52, 54, 56, 60, 64, 66, 68, 70, 72, 76, 78, 80, 84, 88, 90, 92, 96, 98,
+    /* then odd */
+    3, 5, 7, 9, 15, 21, 35
+};
+#define WRPLL_NDIV ((int)(sizeof(wrpll_dividers) / sizeof(wrpll_dividers[0])))
+
+/* results of the last computation, so a caller can inspect or program them */
+static u32 wr_dco_khz = 0, wr_central = 0;
+static int wr_p = 0, wr_q = 0, wr_k = 0, wr_divider = 0;
+static u32 wr_cfgcr1 = 0, wr_cfgcr2 = 0;
+
+/* Split a total divider into the P, Q and K the hardware actually has.
+ * K is 1, 2 or 3; P is 1, 2, 3 or 7; Q is whatever is left. Not every total
+ * is expressible, which is why the search tries many. */
+static int split_divider(int total, int *p, int *q, int *k)
+{
+    static const int ks[3] = { 1, 2, 3 };
+    static const int ps[4] = { 1, 2, 3, 7 };
+    for (int ki = 0; ki < 3; ki++) {
+        if (total % ks[ki]) continue;
+        int rem = total / ks[ki];
+        for (int pi = 0; pi < 4; pi++) {
+            if (rem % ps[pi]) continue;
+            int qq = rem / ps[pi];
+            if (qq < 1 || qq > 255) continue;
+            /* the hardware only accepts a non-unity Q when K is 2 */
+            if (qq != 1 && ks[ki] != 2) continue;
+            *k = ks[ki]; *p = ps[pi]; *q = qq;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static u32 absdiff(u32 a, u32 b) { return a > b ? a - b : b - a; }
+
+/* Find a divider chain for a pixel clock. Returns 1 on success and leaves the
+ * answer in the wr_* statics, ready for intel_dpll_program_hdmi(). */
+int intel_dpll_compute_hdmi(u32 pixel_khz)
+{
+    if (pixel_khz < 25000 || pixel_khz > 600000) return 0;
+
+    u32 afe = pixel_khz * 5u;              /* the AFE clock the link needs */
+    static const u32 centrals[3] = { DCO_CENTRAL_0, DCO_CENTRAL_1, DCO_CENTRAL_2 };
+
+    u32 best_dev = 0xFFFFFFFFu;
+    int found = 0;
+
+    for (int c = 0; c < 3; c++) {
+        u32 central = centrals[c];
+        /* the DCO may sit up to +1% / -6% away from its central frequency */
+        u32 hi = central + central / 100u;
+        u32 lo = central - (central * 6u) / 100u;
+
+        for (int d = 0; d < WRPLL_NDIV; d++) {
+            u32 dco = afe * (u32)wrpll_dividers[d];
+            if (dco < lo || dco > hi) continue;
+
+            int p, q, k;
+            if (!split_divider(wrpll_dividers[d], &p, &q, &k)) continue;
+
+            u32 dev = absdiff(dco, central);
+            if (dev >= best_dev) continue;
+
+            best_dev   = dev;
+            wr_dco_khz = dco;
+            wr_central = central;
+            wr_divider = wrpll_dividers[d];
+            wr_p = p; wr_q = q; wr_k = k;
+            found = 1;
+        }
+    }
+    if (!found) return 0;
+
+    /* CFGCR1: the DCO frequency as a multiple of 24 MHz, integer part in
+     * [8:0] and a 15-bit fraction above it, plus the enable bit. */
+    u32 dco_int  = wr_dco_khz / 24000u;
+    u32 dco_rem  = wr_dco_khz - dco_int * 24000u;
+    u32 dco_frac = (u32)(((u64)dco_rem << 15) / 24000u);
+    wr_cfgcr1 = (1u << 31) | (dco_frac << 9) | (dco_int & 0x1FF);
+
+    /* CFGCR2: the divider chain, plus which central frequency we picked.
+     * qdiv_mode is set only when Q is actually dividing. */
+    u32 pdiv_enc = (wr_p == 1) ? 0u : (wr_p == 2) ? 1u : (wr_p == 3) ? 2u : 4u;
+    u32 kdiv_enc = (wr_k == 1) ? 0u : (wr_k == 2) ? 1u : 2u;
+    u32 cf_enc   = (wr_central == DCO_CENTRAL_0) ? 0u :
+                   (wr_central == DCO_CENTRAL_1) ? 1u : 3u;
+    wr_cfgcr2 = ((u32)wr_q << 8) | ((wr_q > 1 ? 1u : 0u) << 7) |
+                (kdiv_enc << 5) | (pdiv_enc << 2) | cf_enc;
+    return 1;
+}
+
+u32 intel_wrpll_dco_khz(void) { return wr_dco_khz; }
+u32 intel_wrpll_central(void) { return wr_central; }
+int intel_wrpll_p(void)       { return wr_p; }
+int intel_wrpll_q(void)       { return wr_q; }
+int intel_wrpll_k(void)       { return wr_k; }
+int intel_wrpll_divider(void) { return wr_divider; }
+u32 intel_wrpll_cfgcr1(void)  { return wr_cfgcr1; }
+u32 intel_wrpll_cfgcr2(void)  { return wr_cfgcr2; }
+
+/* What pixel clock does a computed chain actually produce? Rounding in the
+ * divider search means the answer is close to but not exactly the target, and
+ * a driver that does not check can be several MHz out without noticing. */
+u32 intel_wrpll_actual_khz(void)
+{
+    if (!wr_divider) return 0;
+    return wr_dco_khz / (5u * (u32)wr_divider);
+}
+
+/* ---- actually writing them --------------------------------------------
+ * These are the only functions in this file that change the display's clock
+ * source. Everything is guarded on the pll index and on the driver having
+ * been attached, and enabling always ends by WAITING FOR LOCK - a modeset
+ * that proceeds without lock produces an intermittently black screen, which
+ * is the worst failure mode because it looks like it works. */
+int intel_dpll_program_dp(int pll, int rate_idx, int ssc)
+{
+    if (!intel_present() || pll < 0 || pll > 3) return 0;
+    if (rate_idx < 0 || rate_idx > 5) return 0;
+
+    u32 v = mmio_r(DPLL_CTRL1);
+    u32 field = 1u                                   /* override enable */
+              | ((u32)rate_idx << 1)
+              | ((ssc ? 1u : 0u) << 4);              /* bit 5 (HDMI) stays 0 */
+    v &= ~(0x3Fu << (pll * 6));
+    v |=  (field  << (pll * 6));
+    mmio_w(DPLL_CTRL1, v);
+    return 1;
+}
+
+int intel_dpll_program_hdmi(int pll, u32 pixel_khz)
+{
+    if (!intel_present() || pll < 0 || pll > 3) return 0;
+    if (!intel_dpll_compute_hdmi(pixel_khz)) return 0;
+
+    mmio_w(DPLL_CFGCR1(pll), wr_cfgcr1);
+    mmio_w(DPLL_CFGCR2(pll), wr_cfgcr2);
+
+    u32 v = mmio_r(DPLL_CTRL1);
+    u32 field = 1u | (1u << 5);        /* override enable + HDMI mode */
+    v &= ~(0x3Fu << (pll * 6));
+    v |=  (field  << (pll * 6));
+    mmio_w(DPLL_CTRL1, v);
+    return 1;
+}
+
+#define LCPLL_PLL_ENABLE (1u << 31)
+#define DPLL_ENABLE(p)   (0x46010 + (p) * 4)   /* LCPLL1_CTL, LCPLL2_CTL, ... */
+
+/* Turn a DPLL on and wait for it to lock. The wait is the point. */
+int intel_dpll_enable(int pll)
+{
+    if (!intel_present() || pll < 0 || pll > 3) return 0;
+    if (intel_dpll_locked(pll)) return 1;
+
+    u32 en = DPLL_ENABLE(pll);
+    mmio_w(en, mmio_r(en) | LCPLL_PLL_ENABLE);
+
+    /* the PRM allows 5 ms; give it 50 and report honestly if it never comes */
+    u32 t0 = idt_ticks();
+    while (idt_ticks() - t0 < 5) {
+        if (intel_dpll_locked(pll)) return 1;
+    }
+    return intel_dpll_locked(pll);
+}
+
+int intel_dpll_disable(int pll)
+{
+    if (!intel_present() || pll < 0 || pll > 3) return 0;
+    u32 en = DPLL_ENABLE(pll);
+    mmio_w(en, mmio_r(en) & ~LCPLL_PLL_ENABLE);
+    return !intel_dpll_locked(pll);
+}
+
+/* Point a DDI port at a DPLL. Three bits of clock select per port in
+ * DPLL_CTRL2, plus a per-port override bit that must be set for the selection
+ * to take effect, plus a clock-off bit that has to be cleared. */
+int intel_ddi_set_clock(int ddi, int pll)
+{
+    if (!intel_present() || ddi < 0 || ddi > 4 || pll < 0 || pll > 3) return 0;
+    u32 v = mmio_r(DPLL_CTRL2);
+    v &= ~(0x3u << (ddi * 3 + 1));            /* clear the select      */
+    v |=  ((u32)pll << (ddi * 3 + 1));        /* ...and set it         */
+    v |=  (1u << (ddi * 3 + 3));              /* select override on    */
+    v &= ~(1u << (ddi + 15));                 /* clock off -> off      */
+    mmio_w(DPLL_CTRL2, v);
+    return 1;
+}
