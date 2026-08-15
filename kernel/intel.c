@@ -1299,3 +1299,300 @@ u32 intel_dpcd_max_rate_kbps(void)
     /* the encoded value times 270 MHz, then times 10 for kbps per lane */
     return (u32)aux_buf[1] * 270000u;
 }
+
+/* ==== DisplayPort link training ==========================================
+ * This is the negotiation that actually brings a link up, and it is the last
+ * large piece of a cold-start modeset.
+ *
+ * The problem it solves: a DP link is a high-speed serial connection over a
+ * cable or a flex of unknown quality, and the right transmitter drive strength
+ * is not knowable in advance. So the two ends negotiate. The source sends a
+ * known pattern, the sink reports whether it locked onto it, and if not it
+ * says how much more drive it wants. Repeat until it works or the attempts run
+ * out.
+ *
+ * Two phases, and they are not interchangeable:
+ *
+ *   CLOCK RECOVERY (pattern 1)      the sink locks its PLL to the bit clock.
+ *                                   Success is CR_DONE on every lane.
+ *   CHANNEL EQUALISATION (2 or 3)   the sink equalises the channel and finds
+ *                                   symbol boundaries. Success needs
+ *                                   CHANNEL_EQ_DONE, SYMBOL_LOCKED on every
+ *                                   lane AND INTERLANE_ALIGN_DONE.
+ *
+ * The retry rules come from the DP specification and exist to stop a driver
+ * looping forever on a link that will never work: at most five attempts at
+ * clock recovery, and at most four at the same voltage level. Reaching
+ * maximum swing without CR_DONE means this rate is not achievable - the
+ * correct response is to fall back to a lower link rate, then to fewer lanes,
+ * not to keep trying.
+ *
+ * WARNING: everything here WRITES, both to the GPU and to the panel's own
+ * registers. Running it while another driver owns the display will fight that
+ * driver. On the host harness, detach i915 first.
+ */
+#define DP_TP_CTL(port)     (0x64040 + (port) * 0x100)
+#define DP_TP_STATUS(port)  (0x64044 + (port) * 0x100)
+
+#define DP_TP_CTL_ENABLE          (1u << 31)
+#define DP_TP_CTL_MODE_SST        (0u << 27)
+#define DP_TP_CTL_ENHANCED_FRAME  (1u << 18)
+#define DP_TP_CTL_LINK_TRAIN_MASK (7u << 8)
+#define DP_TP_CTL_LINK_TRAIN_PAT1 (0u << 8)
+#define DP_TP_CTL_LINK_TRAIN_PAT2 (1u << 8)
+#define DP_TP_CTL_LINK_TRAIN_IDLE (2u << 8)
+#define DP_TP_CTL_LINK_TRAIN_NORM (3u << 8)
+#define DP_TP_CTL_LINK_TRAIN_PAT3 (4u << 8)
+
+/* DPCD addresses used during training */
+#define DPCD_LINK_BW_SET        0x100
+#define DPCD_LANE_COUNT_SET     0x101
+#define DPCD_TRAINING_PATTERN   0x102
+#define DPCD_TRAINING_LANE0     0x103
+#define DPCD_LANE0_1_STATUS     0x202
+#define DPCD_LANE_ALIGN_STATUS  0x204
+#define DPCD_ADJUST_REQ_LANE0_1 0x206
+
+#define DP_TRAIN_PAT_1          0x01
+#define DP_TRAIN_PAT_2          0x02
+#define DP_TRAIN_PAT_3          0x03
+#define DP_TRAIN_PAT_NONE       0x00
+#define DP_SCRAMBLING_DISABLE   0x20
+
+#define DP_CR_DONE              (1 << 0)
+#define DP_CHANNEL_EQ_DONE      (1 << 1)
+#define DP_SYMBOL_LOCKED        (1 << 2)
+#define DP_INTERLANE_ALIGN_DONE (1 << 0)
+#define DP_MAX_SWING_REACHED    (1 << 2)
+#define DP_MAX_PRE_REACHED      (1 << 5)
+
+/* the state of the last training run, for diagnostics */
+static int lt_lanes = 0, lt_rate_idx = 0;
+static int lt_cr_attempts = 0, lt_eq_attempts = 0;
+static int lt_final_swing[4], lt_final_pre[4];
+static int lt_last_status[6];
+static int lt_armed = 0;          /* refuse to touch anything until armed */
+
+void intel_link_train_arm(int on) { lt_armed = on ? 1 : 0; }
+int  intel_link_train_armed(void) { return lt_armed; }
+
+/* The link rate index our DPLL table uses is not what the panel wants in
+ * DPCD 0x100 - that field counts in units of 270 MHz of LINK rate. */
+static u8 dpcd_bw_for_rate_idx(int idx)
+{
+    u32 link_khz = intel_dpll_rate_khz(idx) * 2u;
+    return (u8)(link_khz / 270000u);
+}
+
+static int dpcd_get(int port, u32 addr, int len, u8 *out)
+{
+    if (!intel_dpcd_read(port, addr, len)) return 0;
+    for (int i = 0; i < len; i++) out[i] = (u8)intel_dpcd_byte(i);
+    return 1;
+}
+
+/* Per-lane status is packed two lanes to a byte. */
+static int lane_status(const u8 *st, int lane)
+{
+    return (st[lane / 2] >> ((lane % 2) * 4)) & 0xF;
+}
+
+static int adjust_swing(const u8 *adj, int lane)
+{
+    return (adj[lane / 2] >> ((lane % 2) * 4)) & 0x3;
+}
+
+static int adjust_pre(const u8 *adj, int lane)
+{
+    return (adj[lane / 2] >> ((lane % 2) * 4 + 2)) & 0x3;
+}
+
+/* Write the drive settings the sink asked for into both ends: the panel's
+ * TRAINING_LANE registers and, on real silicon, the DDI buffer translation
+ * that actually changes the transmitter. */
+static void set_drive(int port, int lanes, const int *swing, const int *pre)
+{
+    u8 v[4];
+    for (int i = 0; i < 4; i++) {
+        int sw = i < lanes ? swing[i] : 0;
+        int pe = i < lanes ? pre[i] : 0;
+        v[i] = (u8)((sw & 3) | ((pe & 3) << 3));
+        if (sw >= 3) v[i] |= DP_MAX_SWING_REACHED;
+        if (pe >= 3) v[i] |= (1 << 5);
+    }
+    intel_dpcd_write(port, DPCD_TRAINING_LANE0, v, lanes);
+    /* The DDI buffer translation entry for this swing/pre pair would be
+     * programmed here. The table is part-specific and is the one piece of
+     * this sequence that cannot be derived - it has to come from the PRM for
+     * the exact SKU, so it is left to a caller that knows the part. */
+}
+
+static void tp_ctl_pattern(int port, u32 pattern, int enhanced)
+{
+    u32 v = DP_TP_CTL_ENABLE | DP_TP_CTL_MODE_SST | pattern;
+    if (enhanced) v |= DP_TP_CTL_ENHANCED_FRAME;
+    mmio_w(DP_TP_CTL(port), v);
+}
+
+/* ---- clock recovery ---------------------------------------------------- */
+static int train_clock_recovery(int port, int lanes)
+{
+    int swing[4] = {0,0,0,0}, pre[4] = {0,0,0,0};
+    int prev_swing = -1, same_voltage = 0;
+    lt_cr_attempts = 0;
+
+    tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_PAT1, 1);
+    u8 pat = DP_TRAIN_PAT_1 | DP_SCRAMBLING_DISABLE;
+    if (!intel_dpcd_write(port, DPCD_TRAINING_PATTERN, &pat, 1)) return 0;
+    set_drive(port, lanes, swing, pre);
+
+    for (int attempt = 0; attempt < 5; attempt++) {
+        lt_cr_attempts++;
+        /* the panel says how long to wait in DPCD 0x0E; 100 us is the
+         * default and is what almost every panel asks for */
+        for (volatile int d = 0; d < 400000; d++) { }
+
+        u8 st[6];
+        if (!dpcd_get(port, DPCD_LANE0_1_STATUS, 6, st)) return 0;
+        for (int i = 0; i < 6; i++) lt_last_status[i] = st[i];
+
+        int all = 1;
+        for (int l = 0; l < lanes; l++)
+            if (!(lane_status(st, l) & DP_CR_DONE)) all = 0;
+        if (all) {
+            for (int l = 0; l < 4; l++) { lt_final_swing[l] = swing[l]; lt_final_pre[l] = pre[l]; }
+            return 1;
+        }
+
+        /* not locked - take the sink's adjustment request */
+        u8 adj[2] = { st[4], st[5] };
+        int maxed = 0;
+        for (int l = 0; l < lanes; l++) {
+            swing[l] = adjust_swing(adj, l);
+            pre[l]   = adjust_pre(adj, l);
+            if (swing[l] >= 3) maxed = 1;
+        }
+
+        if (swing[0] == prev_swing) {
+            if (++same_voltage >= 4) return 0;   /* the spec's limit */
+        } else {
+            same_voltage = 0;
+            prev_swing = swing[0];
+        }
+        if (maxed && same_voltage >= 1) return 0; /* no more drive available */
+
+        set_drive(port, lanes, swing, pre);
+    }
+    return 0;
+}
+
+/* ---- channel equalisation ---------------------------------------------- */
+static int train_channel_eq(int port, int lanes, int tps3)
+{
+    u32 hw_pat = tps3 ? DP_TP_CTL_LINK_TRAIN_PAT3 : DP_TP_CTL_LINK_TRAIN_PAT2;
+    u8  dp_pat = (u8)((tps3 ? DP_TRAIN_PAT_3 : DP_TRAIN_PAT_2) | DP_SCRAMBLING_DISABLE);
+
+    tp_ctl_pattern(port, hw_pat, 1);
+    if (!intel_dpcd_write(port, DPCD_TRAINING_PATTERN, &dp_pat, 1)) return 0;
+    lt_eq_attempts = 0;
+
+    for (int attempt = 0; attempt < 5; attempt++) {
+        lt_eq_attempts++;
+        for (volatile int d = 0; d < 400000; d++) { }
+
+        u8 st[6];
+        if (!dpcd_get(port, DPCD_LANE0_1_STATUS, 6, st)) return 0;
+        for (int i = 0; i < 6; i++) lt_last_status[i] = st[i];
+
+        /* clock recovery must still be holding, or the link has come apart
+         * and continuing to equalise is pointless */
+        for (int l = 0; l < lanes; l++)
+            if (!(lane_status(st, l) & DP_CR_DONE)) return 0;
+
+        int all = 1;
+        for (int l = 0; l < lanes; l++) {
+            int s = lane_status(st, l);
+            if (!(s & DP_CHANNEL_EQ_DONE) || !(s & DP_SYMBOL_LOCKED)) all = 0;
+        }
+        if (all && (st[2] & DP_INTERLANE_ALIGN_DONE)) return 1;
+
+        u8 adj[2] = { st[4], st[5] };
+        int swing[4], pre[4];
+        for (int l = 0; l < lanes; l++) {
+            swing[l] = adjust_swing(adj, l);
+            pre[l]   = adjust_pre(adj, l);
+        }
+        set_drive(port, lanes, swing, pre);
+    }
+    return 0;
+}
+
+/* Run the whole sequence at one rate and lane count. */
+int intel_link_train(int port, int rate_idx, int lanes, int tps3, int enhanced)
+{
+    if (!lt_armed) return 0;             /* refuse unless explicitly armed */
+    if (!intel_present()) return 0;
+    if (lanes < 1 || lanes > 4) return 0;
+
+    lt_lanes = lanes; lt_rate_idx = rate_idx;
+
+    /* tell the panel what link we intend to run */
+    u8 bw = dpcd_bw_for_rate_idx(rate_idx);
+    u8 lc = (u8)(lanes | (enhanced ? 0x80 : 0));
+    if (!intel_dpcd_write(port, DPCD_LINK_BW_SET, &bw, 1)) return 0;
+    if (!intel_dpcd_write(port, DPCD_LANE_COUNT_SET, &lc, 1)) return 0;
+
+    if (!train_clock_recovery(port, lanes)) return 0;
+    if (!train_channel_eq(port, lanes, tps3)) return 0;
+
+    /* done: stop the pattern at both ends and let real pixels flow */
+    u8 none = DP_TRAIN_PAT_NONE;
+    intel_dpcd_write(port, DPCD_TRAINING_PATTERN, &none, 1);
+    tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_IDLE, enhanced);
+    for (volatile int d = 0; d < 200000; d++) { }
+    tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_NORM, enhanced);
+    return 1;
+}
+
+/* Train with fallback. When a rate fails, the specification's answer is to
+ * step DOWN - first the link rate, then the lane count - not to retry the
+ * same configuration harder. Returns the rate index that worked, or -1. */
+int intel_link_train_auto(int port, u32 pixel_khz, int bpp,
+                          int dpcd_max_rate, int dpcd_max_lanes,
+                          int has_rate_table, int tps3, int enhanced)
+{
+    if (!lt_armed) return -1;
+
+    static const int by_speed_desc[3] = { 0, 1, 2 };   /* 2700, 1350, 810 */
+    int lanes = dpcd_max_lanes;
+    if (lanes > 4) lanes = 4;
+
+    for (; lanes >= 1; lanes >>= 1) {
+        for (int i = 0; i < 3; i++) {
+            int idx = by_speed_desc[i];
+            /* never exceed what the panel says it can take */
+            u32 link_khz = intel_dpll_rate_khz(idx) * 2u;
+            if (link_khz > (u32)dpcd_max_rate * 270000u) continue;
+            /* and do not bother with a rate the mode cannot fit into */
+            if (intel_dp_link_bandwidth_kbps(idx, lanes) <
+                intel_mode_bandwidth_kbps(pixel_khz, bpp)) continue;
+
+            if (intel_link_train(port, idx, lanes, tps3, enhanced)) {
+                lt_rate_idx = idx; lt_lanes = lanes;
+                return idx;
+            }
+        }
+        if (lanes == 1) break;
+    }
+    (void)has_rate_table;
+    return -1;
+}
+
+int intel_lt_lanes(void)        { return lt_lanes; }
+int intel_lt_rate_idx(void)     { return lt_rate_idx; }
+int intel_lt_cr_attempts(void)  { return lt_cr_attempts; }
+int intel_lt_eq_attempts(void)  { return lt_eq_attempts; }
+int intel_lt_status(int i)      { return (i >= 0 && i < 6) ? lt_last_status[i] : 0; }
+int intel_lt_swing(int l)       { return (l >= 0 && l < 4) ? lt_final_swing[l] : 0; }
+u32 intel_dp_tp_ctl(int port)   { return intel_present() ? mmio_r(DP_TP_CTL(port)) : 0; }
+u32 intel_dp_tp_status(int port){ return intel_present() ? mmio_r(DP_TP_STATUS(port)) : 0; }

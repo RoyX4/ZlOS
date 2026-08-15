@@ -128,6 +128,10 @@ u32  intel_dpcd_max_rate_kbps(void);
 int  intel_aux_last_reply(void);
 int  intel_dp_choose_rate_ex(u32 pixel_khz, int lanes, int bpp, int allow_edp);
 int  intel_dp_choose_rate_for_panel(u32 pixel_khz, int bpp, int maxrate, int maxlanes, int table);
+u32  intel_dp_tp_ctl(int port);
+u32  intel_dp_tp_status(int port);
+void intel_link_train_arm(int on);
+int  intel_link_train_armed(void);
 
 static unsigned char edid_storage[256];
 
@@ -416,6 +420,35 @@ int main(int argc, char **argv)
             printf("  DPCD read FAILED (reply=%d)\n", intel_aux_last_reply());
             printf("  i915 is probably holding the AUX channel - try\n");
             printf("    sudo ./gpu-dev.sh detach\n");
+        }
+        /* Read back the link's own training state. If these offsets are
+         * wrong the values are garbage; a trained link has a very specific
+         * signature, which is what makes this a real check. */
+        u32 tp = intel_dp_tp_ctl(0);
+        printf("\n  DP_TP_CTL(A)    0x%08X\n", tp);
+        printf("    enable=%u  mode=%s  enhanced_frame=%u  pattern=%u (%s)\n",
+               (tp >> 31) & 1, ((tp >> 27) & 1) ? "MST" : "SST",
+               (tp >> 18) & 1, (tp >> 8) & 7,
+               ((tp >> 8) & 7) == 0 ? "TPS1" : ((tp >> 8) & 7) == 1 ? "TPS2" :
+               ((tp >> 8) & 7) == 2 ? "idle" : ((tp >> 8) & 7) == 3 ? "NORMAL - link is up" :
+               ((tp >> 8) & 7) == 4 ? "TPS3" : "?");
+        printf("  DP_TP_STATUS(A) 0x%08X\n", intel_dp_tp_status(0));
+
+        /* and the link configuration the panel currently has */
+        if (intel_dpcd_read(0, 0x100, 8)) {
+            printf("  panel link cfg  BW=0x%02X (%u kHz link)  lanes=%d%s  pattern=0x%02X\n",
+                   intel_dpcd_byte(0), intel_dpcd_byte(0) * 270000,
+                   intel_dpcd_byte(1) & 0x1F,
+                   (intel_dpcd_byte(1) & 0x80) ? " enhanced" : "",
+                   intel_dpcd_byte(2));
+        }
+        if (intel_dpcd_read(0, 0x202, 6)) {
+            printf("  lane status     %02X %02X  align=%02X  adjust=%02X %02X\n",
+                   intel_dpcd_byte(0), intel_dpcd_byte(1), intel_dpcd_byte(2),
+                   intel_dpcd_byte(4), intel_dpcd_byte(5));
+            int l0 = intel_dpcd_byte(0) & 0xF;
+            printf("    lane0: CR=%d EQ=%d SYM=%d   interlane align=%d\n",
+                   l0 & 1, (l0 >> 1) & 1, (l0 >> 2) & 1, intel_dpcd_byte(2) & 1);
         }
         printf("\n");
     }
