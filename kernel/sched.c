@@ -40,6 +40,15 @@
 typedef unsigned int   u32;
 typedef unsigned char  u8;
 
+/* A saved stack pointer is pointer-width, not always 32 bits. The UEFI build -
+ * the one that boots the real laptop - is 64-bit, and this file has to work
+ * there too. */
+#if defined(ZL_64)
+typedef unsigned long long uptr;
+#else
+typedef unsigned int       uptr;
+#endif
+
 extern u32 idt_ticks(void);
 
 #define MAX_TASKS   8
@@ -52,7 +61,7 @@ extern u32 idt_ticks(void);
 #define TASK_DONE    3
 
 struct task {
-    u32 sp;            /* saved stack pointer - the whole of its context   */
+    uptr sp;           /* saved stack pointer - the whole of its context   */
     u32 state;
     u32 ticks;         /* how much CPU it has had, for the diagnostics     */
     u32 wake_at;       /* if sleeping, the tick to resume at               */
@@ -73,33 +82,77 @@ static u32 switches  = 0;
  * differ. Nor is the FPU/SSE state - zl numbers are doubles and this WOULD
  * matter for a task doing floating point across a switch, which is a real
  * limitation and the first thing to fix if a task ever computes wrong. */
+#if defined(ZL_64)
+/* x86-64. There is no pushal, so the callee-saved set is pushed by hand -
+ * which is all the ABI requires a function to preserve anyway. The argument
+ * registers differ between the System V and Microsoft conventions, and the
+ * UEFI build uses the Microsoft one, so both are handled. */
 __asm__(
     ".globl switch_to\n"
     "switch_to:\n"
-    "    movl 4(%esp), %eax\n"      /* &old->sp                        */
-    "    movl 8(%esp), %edx\n"      /* new->sp                         */
-    "    pushal\n"
-    "    movl %esp, (%eax)\n"       /* remember where we left off      */
-    "    movl %edx, %esp\n"         /* ...and stand on the other stack */
-    "    popal\n"
-    "    ret\n");                   /* returns into the OTHER task     */
+#if defined(ZL_EFI)
+    "    movq %rcx, %rax\n"        /* MS x64: rcx = &old->sp, rdx = new sp */
+    "    movq %rdx, %r10\n"
+#else
+    "    movq %rdi, %rax\n"        /* System V: rdi, rsi                   */
+    "    movq %rsi, %r10\n"
+#endif
+    "    pushq %rbx\n"
+    "    pushq %rbp\n"
+    "    pushq %r12\n"
+    "    pushq %r13\n"
+    "    pushq %r14\n"
+    "    pushq %r15\n"
+    "    movq %rsp, (%rax)\n"
+    "    movq %r10, %rsp\n"
+    "    popq %r15\n"
+    "    popq %r14\n"
+    "    popq %r13\n"
+    "    popq %r12\n"
+    "    popq %rbp\n"
+    "    popq %rbx\n"
+    "    ret\n");
 
-extern void switch_to(u32 *old_sp, u32 new_sp);
-
-/* Where a task begins life. Reached by the fabricated `ret` above, with the
- * entry point sitting on the stack right behind it. */
 __asm__(
     ".globl task_trampoline\n"
     "task_trampoline:\n"
-    "    sti\n"                     /* a new task starts interruptible */
-    "    ret\n");                   /* ret pops the entry point        */
+    "    sti\n"
+    "    ret\n");
 
+#define SAVED_REGS 6
+
+#else
+/* 32-bit: pushal/popal move all eight general registers as a block. */
+__asm__(
+    ".globl switch_to\n"
+    "switch_to:\n"
+    "    movl 4(%esp), %eax\n"     /* &old->sp                        */
+    "    movl 8(%esp), %edx\n"     /* new->sp                         */
+    "    pushal\n"
+    "    movl %esp, (%eax)\n"      /* remember where we left off      */
+    "    movl %edx, %esp\n"        /* ...and stand on the other stack */
+    "    popal\n"
+    "    ret\n");                  /* returns into the OTHER task     */
+
+__asm__(
+    ".globl task_trampoline\n"
+    "task_trampoline:\n"
+    "    sti\n"                    /* a new task starts interruptible */
+    "    ret\n");                  /* ret pops the entry point        */
+
+#define SAVED_REGS 8
+#endif
+
+extern void switch_to(uptr *old_sp, uptr new_sp);
+
+/* Where a task begins life: reached by the fabricated `ret` above, with the
+ * entry point sitting on the stack right behind it. */
 extern void task_trampoline(void);
 void task_exit(void);
 
-static u32 stack_top_of(int i)
+static uptr stack_top_of(int i)
 {
-    return STACK_BASE + (u32)(i + 1) * STACK_BYTES - 16;
+    return (uptr)STACK_BASE + (uptr)(i + 1) * STACK_BYTES - 64;
 }
 
 /* Build a stack that looks like a task suspended inside switch_to.
@@ -107,20 +160,20 @@ static u32 stack_top_of(int i)
  * Layout, from the stack pointer upward: eight saved registers, then the
  * address switch_to's `ret` will jump to, then what THAT returns into.
  * pushal's order puts EDI lowest, so eight zeroes is all we need. */
-int task_create(u32 entry)
+int task_create(uptr entry)
 {
     if (ntasks >= MAX_TASKS) return -1;
     int i = ntasks++;
 
-    u32 top = stack_top_of(i);
-    volatile u32 *sp = (volatile u32 *)top;
+    uptr top = stack_top_of(i);
+    volatile uptr *sp = (volatile uptr *)top;
 
-    *(--sp) = (u32)(unsigned long)task_exit;        /* if the task returns */
-    *(--sp) = entry;                                /* trampoline rets here */
-    *(--sp) = (u32)(unsigned long)task_trampoline;  /* switch_to rets here  */
-    for (int r = 0; r < 8; r++) *(--sp) = 0;        /* the pushal block     */
+    *(--sp) = (uptr)task_exit;                  /* if the task ever returns */
+    *(--sp) = entry;                            /* trampoline rets here     */
+    *(--sp) = (uptr)task_trampoline;            /* switch_to rets here      */
+    for (int r = 0; r < SAVED_REGS; r++) *(--sp) = 0;   /* the saved block  */
 
-    tasks[i].sp      = (u32)(unsigned long)sp;
+    tasks[i].sp      = (uptr)sp;
     tasks[i].state   = TASK_READY;
     tasks[i].ticks   = 0;
     tasks[i].wake_at = 0;
@@ -209,7 +262,7 @@ u32 sched_ticks(int i)   { return (i >= 0 && i < ntasks) ? tasks[i].ticks : 0; }
 
 static void counter_task(int slot, u32 delay)
 {
-    volatile u32 *c = (volatile u32 *)(COUNTER_BASE + (u32)slot * 4);
+    volatile u32 *c = (volatile u32 *)(uptr)(COUNTER_BASE + (u32)slot * 4);
     for (;;) {
         (*c)++;
         task_sleep(delay);
@@ -223,7 +276,7 @@ static void task_c(void) { counter_task(2, 25); }   /* every 250 ms */
 u32 sched_counter(int i)
 {
     if (i < 0 || i > 2) return 0;
-    return *(volatile u32 *)(COUNTER_BASE + (u32)i * 4);
+    return *(volatile u32 *)(uptr)(COUNTER_BASE + (u32)i * 4);
 }
 
 /* Start the demo tasks. Returns how many are now runnable. */
@@ -231,9 +284,9 @@ int sched_start_demo(void)
 {
     sched_init();
     for (int i = 0; i < 3; i++)
-        *(volatile u32 *)(COUNTER_BASE + (u32)i * 4) = 0;
-    task_create((u32)(unsigned long)task_a);
-    task_create((u32)(unsigned long)task_b);
-    task_create((u32)(unsigned long)task_c);
+        *(volatile u32 *)(uptr)(COUNTER_BASE + (u32)i * 4) = 0;
+    task_create((uptr)task_a);
+    task_create((uptr)task_b);
+    task_create((uptr)task_c);
     return ntasks;
 }

@@ -37,9 +37,15 @@ extern int  apic_cpus(void);
 extern int  apic_cpu_id(int i);
 extern void apic_send_ipi(int dest_id, u32 icr_low);
 
-/* the trampoline, as linked into the kernel image */
+/* The trampoline is 16-bit -> 32-bit protected mode code. On the 64-bit build
+ * that is not enough: an application processor would come up in protected mode
+ * and then have to call a long-mode function, which means the trampoline would
+ * need to build its own page tables and enter long mode itself. That is real
+ * work and it is not done, so the 64-bit build says so instead of pretending. */
+#if !defined(ZL_64)
 extern const u8 smp_tramp_start[];
 extern const u8 smp_tramp_end[];
+#endif
 
 #define TRAMP_ADDR   0x9000u        /* must match smp_trampoline.S */
 #define ENTRY_PTR    0x8FF0u
@@ -92,7 +98,13 @@ int smp_online(void)    { return ap_online + 1; }   /* +1 for the boot core */
 int smp_last_id(void)   { return ap_last_id; }
 u32 smp_mask(void)      { return ap_mask | 1u; }
 int smp_ready(void)     { return smp_started; }
+#if defined(ZL_64)
+int smp_tramp_size(void){ return 0; }
+int smp_supported(void) { return 0; }
+#else
 int smp_tramp_size(void){ return (int)(smp_tramp_end - smp_tramp_start); }
+int smp_supported(void) { return 1; }
+#endif
 
 /* Wake every application processor the MADT listed. Returns how many cores are
  * online afterwards, including this one. */
@@ -100,6 +112,13 @@ int smp_start(void)
 {
     if (smp_attempted) return smp_online();
     smp_attempted = 1;
+
+#if defined(ZL_64)
+    /* see the note by the trampoline declaration: this needs a long-mode
+     * trampoline that does not exist yet */
+    smp_started = 1;
+    return 1;
+#else
 
     if (!apic_active() && !apic_init()) return 1;   /* no APIC, no SMP */
 
@@ -139,4 +158,5 @@ int smp_start(void)
 
     smp_started = 1;
     return smp_online();
+#endif
 }

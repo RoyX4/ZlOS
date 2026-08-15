@@ -84,6 +84,13 @@ typedef struct {
     void *std_err;
     void *runtime_services;
     efi_boot_services *boot_services;
+    /* The configuration table is how UEFI hands over ACPI. There is no BIOS
+     * region to scan on a UEFI machine, so without these two fields the ACPI
+     * tables are simply unreachable - and with them, so is the MADT, which is
+     * the only thing that knows where the I/O APIC is and how the IRQs are
+     * really wired. */
+    unsigned long long n_config_entries;
+    void *config_table;
 } efi_system_table;
 
 /* the Graphics Output Protocol - how a UEFI machine tells you where to draw */
@@ -154,6 +161,41 @@ void *memcpy(void *d, const void *s, unsigned long n)
     return d;
 }
 
+/* An entry is a 16-byte GUID followed by a pointer. */
+typedef struct { efi_guid guid; void *table; } efi_config_entry;
+
+extern void acpi_set_rsdp(unsigned long long addr);
+
+static int guid_eq(efi_guid *g, u32 d1, u16 d2, u16 d3,
+                   u8 a, u8 b, u8 c, u8 d, u8 e, u8 f, u8 gg, u8 h)
+{
+    return g->d1 == d1 && g->d2 == d2 && g->d3 == d3 &&
+           g->d4[0] == a && g->d4[1] == b && g->d4[2] == c && g->d4[3] == d &&
+           g->d4[4] == e && g->d4[5] == f && g->d4[6] == gg && g->d4[7] == h;
+}
+
+/* Find the ACPI root pointer and hand it to the APIC driver. ACPI 2.0 is
+ * preferred because only its RSDP carries the XSDT; the 1.0 GUID is accepted
+ * as a fallback for firmware that offers nothing else. */
+static void capture_acpi(efi_system_table *st)
+{
+    if (!st->config_table) return;
+    efi_config_entry *e = (efi_config_entry *)st->config_table;
+    unsigned long long found_1 = 0;
+
+    for (unsigned long long i = 0; i < st->n_config_entries; i++) {
+        if (guid_eq(&e[i].guid, 0x8868e871, 0xe4f1, 0x11d3,
+                    0xbc,0x22,0x00,0x80,0xc7,0x3c,0x88,0x81)) {
+            acpi_set_rsdp((unsigned long long)(unsigned long)e[i].table);
+            return;                                   /* ACPI 2.0+ - best */
+        }
+        if (guid_eq(&e[i].guid, 0xeb9d2d30, 0x2d88, 0x11d3,
+                    0x9a,0x16,0x00,0x90,0x27,0x3f,0xc1,0x4d))
+            found_1 = (unsigned long long)(unsigned long)e[i].table;
+    }
+    if (found_1) acpi_set_rsdp(found_1);
+}
+
 /* ---- what the kernel proper needs --------------------------------------- */
 void serial_init(void);
 void console_init_fb(unsigned long addr, unsigned int pitch, unsigned int width,
@@ -173,6 +215,10 @@ static unsigned int  fb_w, fb_h, fb_pitch_bytes;
 MS efi_status efi_main(efi_handle image, efi_system_table *st)
 {
     efi_boot_services *bs = st->boot_services;
+
+    /* Do this BEFORE ExitBootServices: the configuration table is the
+     * firmware's memory and everything about it stops being valid after. */
+    capture_acpi(st);
 
     /* ---- 1. find the framebuffer ---------------------------------------
      * UEFI has no VGA text mode and no BIOS to ask, so this protocol IS the
