@@ -43,6 +43,27 @@ void fb_cursor(int row, int col, int on, unsigned char attr);
 void fb_box(int x, int y, int w, int h, unsigned int rgb);
 void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
 void fb_cursor_arrow(int x, int y, unsigned int fill, unsigned int edge);
+unsigned int fb_get_px(int x, int y);
+void fb_shade(int x, int y, int w, int h, int num, int den);
+void fb_shadow(int x, int y, int w, int h, int off, int soft);
+void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
+void fb_text_aa(int px, int py, const char *s, unsigned int fg);
+void fb_text_aa2x(int px, int py, const char *s, unsigned int fg);
+void fb_glyph_aa(int px, int py, char c, unsigned int fg);
+void fb_set_text_box(int c0, int c1);
+void fb_cube(int cx, int cy, int size, int angle, unsigned int color);
+void fb_pointer_show(int x, int y);
+void fb_pointer_hide(void);
+void fb_present(void);
+void fb_icon24(int px, int py, int n, unsigned int fg);
+int  fb_cell_w(void);
+int  fb_cell_h(void);
+void fb_bg_snapshot(void);
+void fb_bg_restore(int x, int y, int w, int h);
+void fb_grab(int x, int y, int w, int h);
+void fb_stamp(int x, int y);
+void fb_cube_filled(int cx, int cy, int size, int angle, unsigned int base);
+void fb3d_set_clip(int x0, int y0, int x1, int y1);
 
 /* The log scrolls between the title bar and the status bar. On VGA that is
  * rows 1..23 of 25; on a framebuffer the screen is taller, so the bottom is
@@ -64,6 +85,10 @@ void console_set_region(int top, int bot) { log_top = top; log_bot = bot; }
  * comfortable lie that hides a broken assumption later. */
 int console_kind(void) { return fb_active() ? 1 : 0; }      /* 0 VGA, 1 framebuffer */
 int console_cols(void) { return fb_active() ? fb_get_cols() : 80; }
+/* the console cell size in pixels - zl needs it to turn a window rect into a
+ * text box, and it is no longer always 8x16 */
+int console_cell_w(void) { return fb_active() ? fb_cell_w() : 8; }
+int console_cell_h(void) { return fb_active() ? fb_cell_h() : 16; }
 int console_rows(void) { return fb_active() ? fb_get_rows() : 25; }
 
 /* Which loader booted us. GRUB always passes a non-null multiboot info
@@ -129,8 +154,78 @@ void console_init(unsigned long mb_addr)
     }
 }
 
+/* The path where OUR bootloader did the whole job: raw_boot.asm asked the card
+ * for a linear framebuffer through VBE itself and handed the details straight
+ * over, so there is no multiboot info and no GRUB anywhere in the story. */
+void console_init_fb(unsigned long addr, unsigned int pitch, unsigned int width,
+                     unsigned int height, unsigned int bpp);
+
+/* Called only from the UEFI entry: the firmware loaded us directly, so there
+ * was no bootloader of any kind in between - not GRUB, not ours. */
+void console_init_efi(unsigned long addr, unsigned int pitch, unsigned int width,
+                      unsigned int height, unsigned int bpp)
+{
+    console_init_fb(addr, pitch, width, height, bpp);
+    loaded_by_multiboot = 2;            /* 2 = booted as a UEFI application */
+}
+
+void console_init_fb(unsigned long addr, unsigned int pitch, unsigned int width,
+                     unsigned int height, unsigned int bpp)
+{
+    loaded_by_multiboot = 0;
+    fb_setup(addr, pitch, width, height, (unsigned char)bpp);
+
+    if (fb_active()) {
+        int rows = fb_get_rows();
+        log_top    = 1;
+        log_bot    = rows - 2;
+        status_row = rows - 1;
+        fb_clear();
+    } else {
+        log_top = 1; log_bot = 23; status_row = 24;
+        vga_clear();
+    }
+}
+
+/* A RUNTIME MODE SWITCH - the thing a real OS can do and a fixed-at-boot
+ * hobby OS cannot. Our own BGA driver reprograms the display controller,
+ * then the console is re-pointed at the new geometry and the framebuffer
+ * address the card reports through PCI. Nothing here goes near the BIOS. */
+int bga_set_mode(int w, int h, int bpp);
+unsigned int bga_framebuffer(void);
+int bga_get_pitch(void);
+
+int console_set_res(int w, int h)
+{
+    /* A mode switch must not rewrite history: who loaded us is still true
+     * afterwards, and console_init_fb would otherwise clear the flag and make
+     * the boot log claim we came up on our own bootloader when we did not. */
+    int was_multiboot = loaded_by_multiboot;
+    if (!bga_set_mode(w, h, 32)) return 0;
+    unsigned int lfb = bga_framebuffer();
+    if (!lfb) return 0;
+    /* ask the card what stride it settled on rather than assuming w*4 */
+    int pitch = bga_get_pitch();
+    if (pitch < w * 4) pitch = w * 4;
+    console_init_fb((unsigned long)lfb, (unsigned int)pitch,
+                    (unsigned int)w, (unsigned int)h, 32);
+    loaded_by_multiboot = was_multiboot;
+    return 1;
+}
+
 void console_clear(void)                 { if (fb_active()) fb_clear(); else vga_clear(); }
-void console_putc(char c)                { if (fb_active()) fb_putc(c, log_top, log_bot); else vga_putc(c); }
+/* Push whatever has been drawn since the last call out to the card. Cheap when
+ * nothing changed, and only ever copies the rectangle that actually moved. */
+void console_present(void) { if (fb_active()) fb_present(); }
+
+void console_putc(char c)
+{
+    if (!fb_active()) { vga_putc(c); return; }
+    fb_putc(c, log_top, log_bot);
+    /* flush a line at a time so the boot log still streams live, without
+     * paying for a blit on every single character */
+    if (c == '\n') fb_present();
+}
 void console_setcolor(unsigned char a)   { if (fb_active()) fb_setcolor(a); else vga_setcolor(a); }
 void console_bar(int r, unsigned char a) { if (fb_active()) fb_bar(r, a); else vga_bar(r, a); }
 void console_at(int r, int c, const char *s, unsigned char a)
@@ -149,6 +244,82 @@ void console_fill(int x, int y, int w, int h, unsigned char attr)
 
 void console_gradient(int x, int y, int w, int h, unsigned char a_top, unsigned char a_bot)
 { if (fb_active()) fb_gradient(x, y, w, h, fb_attr_rgb(a_top), fb_attr_rgb(a_bot)); }
+
+/* true-colour versions: zl passes a packed 0xRRGGBB it computes as
+ * r*65536 + g*256 + b, escaping the 16-colour VGA palette for the modern
+ * gradients, shadows and wallpaper a desktop needs. */
+void console_fill_rgb(int x, int y, int w, int h, unsigned int rgb)
+{ if (fb_active()) fb_fill_px(x, y, w, h, rgb); }
+
+void console_gradient_rgb(int x, int y, int w, int h, unsigned int top, unsigned int bot)
+{ if (fb_active()) fb_gradient(x, y, w, h, top, bot); }
+
+/* text drawn in a true-colour foreground at a pixel position, transparent
+ * background - so labels sit on a gradient without a black box behind them */
+void console_text_rgb(int px, int py, const char *s, unsigned int rgb)
+{ if (fb_active()) fb_text_scaled(px, py, s, 1, rgb); }
+
+/* read a pixel back (0 on the text console, which has no pixels) */
+int console_get_px(int x, int y) { return fb_active() ? (int)fb_get_px(x, y) : 0; }
+
+/* darken a region: one shadow pass, num/den of current brightness */
+void console_shade(int x, int y, int w, int h, int num, int den)
+{ if (fb_active()) fb_shade(x, y, w, h, num, den); }
+
+/* a soft drop shadow offset down-right of a window footprint */
+void console_shadow(int x, int y, int w, int h, int off, int soft)
+{ if (fb_active()) fb_shadow(x, y, w, h, off, soft); }
+
+/* a filled rounded rectangle - window chrome */
+void console_rrect(int x, int y, int w, int h, int r, unsigned int rgb)
+{ if (fb_active()) fb_rrect(x, y, w, h, r, rgb); }
+
+/* anti-aliased text over whatever is already drawn (gradient/wallpaper).
+ * On VGA text there are no pixels, so fall back to nothing - callers that
+ * need a text-console label use console_at instead. */
+void console_text_aa(int px, int py, const char *s, unsigned int rgb)
+{ if (fb_active()) fb_text_aa(px, py, s, rgb); }
+
+/* double-size anti-aliased text for titles/headers */
+void console_text_aa2x(int px, int py, const char *s, unsigned int rgb)
+{ if (fb_active()) fb_text_aa2x(px, py, s, rgb); }
+
+/* one AA glyph by character code, at a pixel position - lets zl draw dynamic
+ * strings it reads a byte at a time (the CPUID brand) inside a window */
+void console_char_aa(int px, int py, int code, unsigned int rgb)
+{ if (fb_active()) fb_glyph_aa(px, py, (char)code, rgb); }
+
+/* confine the flowing console to a column band, so the shell can live inside a
+ * floating terminal window. c0..c1 in cells; no-op on the VGA text path. */
+void console_set_text_box(int c0, int c1)
+{ if (fb_active()) fb_set_text_box(c0, c1); }
+
+/* the software-rendered 3D cube, at true-colour */
+void console_cube(int cx, int cy, int size, int angle, unsigned int rgb)
+{ if (fb_active()) fb_cube(cx, cy, size, angle, rgb); }
+
+/* a 24x24 icon, blended - the dock and menus draw with these */
+void console_icon(int px, int py, int n, unsigned int rgb)
+{ if (fb_active()) fb_icon24(px, py, n, rgb); }
+
+/* the live mouse pointer sprite */
+void console_pointer_show(int x, int y) { if (fb_active()) fb_pointer_show(x, y); }
+void console_pointer_hide(void)         { if (fb_active()) fb_pointer_hide(); }
+
+/* window-drag backing store: snapshot background, grab/stamp a window bitmap */
+void console_bg_snapshot(void)                    { if (fb_active()) fb_bg_snapshot(); }
+void console_bg_restore(int x,int y,int w,int h)  { if (fb_active()) fb_bg_restore(x, y, w, h); }
+void console_grab(int x, int y, int w, int h)     { if (fb_active()) fb_grab(x, y, w, h); }
+void console_stamp(int x, int y)                  { if (fb_active()) fb_stamp(x, y); }
+
+/* the solid, flat-shaded, back-face-culled cube */
+void console_cube_filled(int cx, int cy, int size, int angle, unsigned int rgb)
+{ if (fb_active()) fb_cube_filled(cx, cy, size, angle, rgb); }
+
+/* clip box for the 3D cube - set to a window's interior so it can't overdraw */
+void console_cube_clip(int x0, int y0, int x1, int y1)
+{ if (fb_active()) fb3d_set_clip(x0, y0, x1, y1); }
+
 
 void console_logo(int px, int py, const char *s, int scale, unsigned char attr)
 { if (fb_active()) fb_text_scaled(px, py, s, scale, fb_attr_rgb(attr)); }
@@ -180,4 +351,34 @@ void console_at_num(int row, int col, long n, unsigned char attr)
     while (t) out[i++] = tmp[--t];
     out[i] = 0;
     console_at(row, col, out, attr);
+}
+
+/* Print a number in HEX to the console and the serial line. Every register,
+ * address and device ID in a driver is quoted in hex in the documentation, so
+ * reading them back in decimal makes them impossible to check against the
+ * manual. */
+void zl_putc_pub(char c);
+void console_puthex(unsigned long v, int digits)
+{
+    const char *d = "0123456789ABCDEF";
+    if (digits < 1) digits = 1;
+    if (digits > 16) digits = 16;
+    for (int i = digits - 1; i >= 0; i--)
+        zl_putc_pub(d[(v >> (i * 4)) & 0xF]);
+}
+
+/* the same decimal number, but anti-aliased at a pixel position and blended
+ * over whatever is there - so the dock clock sits on the gradient with no
+ * solid box behind it, matching the AA labels around it. */
+void console_num_aa(int px, int py, long n, unsigned int rgb)
+{
+    char tmp[16], out[18];
+    int t = 0, i = 0, neg = (n < 0);
+    unsigned long u = neg ? (unsigned long)(-(n + 1)) + 1UL : (unsigned long)n;
+    if (u == 0) tmp[t++] = '0';
+    while (u) { tmp[t++] = (char)('0' + (u % 10)); u /= 10; }
+    if (neg) out[i++] = '-';
+    while (t) out[i++] = tmp[--t];
+    out[i] = 0;
+    if (fb_active()) fb_text_aa(px, py, out, rgb);
 }

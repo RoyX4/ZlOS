@@ -14,6 +14,21 @@ void zl_outb(unsigned short port, unsigned char val)
 unsigned char zl_inb(unsigned short port)
 { unsigned char r; __asm__ volatile("inb %1, %0" : "=a"(r) : "Nd"(port)); return r; }
 
+/* 16- and 32-bit port IO. PCI configuration space is addressed a whole
+ * 32-bit word at a time through 0xCF8/0xCFC, so a byte-wide outb cannot
+ * reach it - these are what make a bus driver possible at all. */
+void zl_outw(unsigned short port, unsigned short val)
+{ __asm__ volatile("outw %0, %1" :: "a"(val), "Nd"(port)); }
+
+unsigned short zl_inw(unsigned short port)
+{ unsigned short r; __asm__ volatile("inw %1, %0" : "=a"(r) : "Nd"(port)); return r; }
+
+void zl_outl(unsigned short port, unsigned int val)
+{ __asm__ volatile("outl %0, %1" :: "a"(val), "Nd"(port)); }
+
+unsigned int zl_inl(unsigned short port)
+{ unsigned int r; __asm__ volatile("inl %1, %0" : "=a"(r) : "Nd"(port)); return r; }
+
 /* ---- CPUID: ask the processor its own name ------------------------------
  * Leaves 0x80000002..4 return the 48-character brand string ("Intel(R)
  * Core(TM) i7-...") directly in EAX/EBX/ECX/EDX. This is a real query to

@@ -27,7 +27,15 @@ gcc $CFLAGS -c _gen.c    -o _gen.o
 gcc $CFLAGS -c support.c -o _support.o
 gcc $CFLAGS -c vga.c      -o _vga.o
 gcc $CFLAGS -c fb.c       -o _fb.o
+gcc $CFLAGS -c fb3d.c     -o _fb3d.o
 gcc $CFLAGS -c font8x16.c -o _font.o
+gcc $CFLAGS -c font_aa.c  -o _fontaa.o
+gcc $CFLAGS -c font_sub.c -o _fontsub.o
+gcc $CFLAGS -c icons.c    -o _icons.o
+gcc $CFLAGS -c pci.c      -o _pci.o
+gcc $CFLAGS -c bga.c      -o _bga.o
+gcc $CFLAGS -c intel.c    -o _intel.o
+gcc $CFLAGS -c xhci.c     -o _xhci.o
 gcc $CFLAGS -c console.c  -o _console.o
 gcc $CFLAGS -c divmod.c   -o _divmod.o
 gcc $CFLAGS -c gdt.c      -o _gdt.o
@@ -39,7 +47,7 @@ gcc -m32 -c boot.S -o _boot.o
 # only things the kernel took from libgcc, and divmod.c now supplies them.
 # Nothing GNU is linked into the kernel any more - only gcc-the-tool that
 # compiled the C, which nativegen is on track to replace.
-ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _font.o _console.o _divmod.o _gdt.o _idt.o
+ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o
 
 echo "built kernel.elf"
 echo "  undefined symbols: $(nm -u kernel.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"

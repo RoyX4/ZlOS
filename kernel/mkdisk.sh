@@ -36,7 +36,15 @@ gcc $CFLAGS -c vga.c      -o _vga.o
 # shellcheck disable=SC2086
 gcc $CFLAGS -c fb.c       -o _fb.o
 # shellcheck disable=SC2086
+gcc $CFLAGS -c fb3d.c     -o _fb3d.o
 gcc $CFLAGS -c font8x16.c -o _font.o
+gcc $CFLAGS -c font_aa.c  -o _fontaa.o
+gcc $CFLAGS -c font_sub.c -o _fontsub.o
+gcc $CFLAGS -c icons.c    -o _icons.o
+gcc $CFLAGS -c pci.c      -o _pci.o
+gcc $CFLAGS -c bga.c      -o _bga.o
+gcc $CFLAGS -c intel.c    -o _intel.o
+gcc $CFLAGS -c xhci.c     -o _xhci.o
 # shellcheck disable=SC2086
 gcc $CFLAGS -c console.c  -o _console.o
 # shellcheck disable=SC2086
@@ -47,7 +55,7 @@ gcc $CFLAGS -mgeneral-regs-only -c idt.c -o _idt.o
 gcc -m32 -c raw_entry.S -o _rawentry.o
 
 ld -m elf_i386 -T link-raw.ld -o kernel_raw.elf \
-   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _font.o _console.o _divmod.o _gdt.o _idt.o
+   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o
 objcopy -O binary kernel_raw.elf kernel_raw.bin
 
 nasm -f bin raw_boot.asm -o raw_boot.bin
@@ -55,7 +63,7 @@ nasm -f bin raw_boot.asm -o raw_boot.bin
 # assemble the disk: boot sector first, then the kernel, padded to a round size
 cat raw_boot.bin kernel_raw.bin > zlOS.img
 # pad to at least what the loader reads (12 * 32 KiB) so no read runs off the end
-truncate -s 512K zlOS.img
+truncate -s 2M zlOS.img
 
 echo "built zlOS.img - OUR bootloader, no GRUB"
 echo "  boot sector: $(stat -c%s raw_boot.bin) bytes  (must be 512)"

@@ -24,6 +24,22 @@ C_TITLE  = 0x1F      # white on blue (VGA title fallback)
 C_STATUS = 0x8F      # white on dark grey
 C_CURSOR = 0x0A      # green block cursor
 
+# ---- true-colour theme (framebuffer only) ----------------------------------
+# The 16 VGA colours are harsh; the framebuffer is real RGB, so the desktop
+# uses packed 0xRRGGBB colours (r*65536 + g*256 + b) for smooth gradients.
+fn rgb(rr, gg, bb) { return rr * 65536 + gg * 256 + bb }
+WALL_TOP = rgb(26, 30, 50)      # wallpaper: deep slate-blue, top
+WALL_BOT = rgb(10, 12, 22)      # ... to near-black at the bottom
+HDR_TOP  = rgb(48, 92, 168)     # title bar: bright blue
+HDR_BOT  = rgb(22, 40, 92)      # ... to deep blue
+ACCENT   = rgb(96, 210, 235)    # bright cyan accent line
+BAR_TOP  = rgb(40, 46, 66)      # taskbar top
+BAR_BOT  = rgb(18, 20, 32)      # taskbar bottom
+BAR_HI   = rgb(78, 92, 128)     # taskbar top highlight
+PANEL    = rgb(0, 0, 0)        # content panel = black, matches text cell bg
+TXT_HI   = rgb(210, 228, 255)   # light text
+TXT_DIM  = rgb(150, 165, 195)   # dim text
+
 # ---- serial input, in zl ---------------------------------------------------
 fn ser_ready() { return band(inb(COM1 + 5), 1) }
 fn ser_read()  { return inb(COM1) }
@@ -101,47 +117,151 @@ fn beep(freq, dur) {
 # On a framebuffer these draw real pixels; on VGA text the primitives no-op
 # and the plain text title/status bars are used instead.
 
+# ---- the top bar -----------------------------------------------------------
+# A thin, flat GNOME-style bar: system name on the left, clock in the middle,
+# status on the right. Deliberately NOT a branded banner - an operating system
+# does not explain what it is in its own top bar, it just tells you the state
+# of the machine. That is the whole difference between a demo and a desktop.
+# The UI scale: 1 on a small screen, 2 once the console switches to 16x32
+# cells. EVERY offset and size below is multiplied by it, so the desktop is
+# laid out in design units rather than raw pixels and stays correct at any
+# resolution instead of colliding when the text grows.
+fn ui() { return cell_w() / 8 }
+TITLE_H = 28                       # window title bar height, in design units
+MON_W = 284                        # System Monitor / About width
+MON_H = 214                        # System Monitor height
+AB_H  = 122                        # About height
+TOPBAR_H = 32
+DESK_TOP = 40                    # first row of desktop below the bar + hairline
+TOP_BG   = rgb(20, 23, 33)
+TOP_LINE = rgb(8, 9, 14)
+TOP_TXT  = rgb(226, 234, 248)
+TOP_DIM  = rgb(128, 140, 166)
+OK_GRN   = rgb(120, 220, 140)
+
 fn draw_header() {
     if px_w() > 0 {
         w = px_w()
-        # a blue gradient band with a bright accent line beneath it
-        gradient(0, 0, w, 62, C_LBLUE, C_BLUE)
-        fill_rect(0, 62, w, 3, C_CYAN)          # bright accent
-        fill_rect(0, 65, w, 1, C_DGREY)         # a bevel line under it, for depth
-        # the logo, drawn big (3x) - the whole point of the polish
-        logo(20, 10, "zlOS", 3, C_WHITE)
-        # subtitle + provenance, small, beside the logo
-        logo(150, 18, "a kernel written in zl", 1, C_WHITE)
-        logo(150, 38, "no OS   no libc   no GNU", 1, C_CYAN)
-        # a version tag on the right
-        logo(w - 88, 24, "v0.1", 2, C_WHITE)
+        u = ui()
+        hb = TOPBAR_H * u
+        fill_rgb(0, 0, w, hb, TOP_BG)                     # flat, no gradient
+        fill_rgb(0, hb, w, 1, TOP_LINE)                   # hairline separator
+        grad_rgb(0, hb + 1, w, 7, rgb(12, 14, 21), WALL_TOP)
+        ht = (hb - 16 * u) / 2                            # text baseline, centred
+        fill_rgb(14 * u, (hb - 10 * u) / 2, 10 * u, 10 * u, ACCENT)
+        text_aa(34 * u, ht, "zlOS", TOP_TXT)
+        text_aa(90 * u, ht, "Activities", TOP_DIM)
+        # right side: live machine state, laid out from the right edge
+        text_aa(w - 300 * u, ht, "fb", TOP_DIM)
+        num_aa(w - 276 * u, ht, w, TOP_TXT)
+        text_aa(w - 200 * u, ht, "x", TOP_DIM)
+        num_aa(w - 184 * u, ht, px_h(), TOP_TXT)
+        text_aa(w - 108 * u, ht, "net", TOP_DIM)
+        fill_rgb(w - 66 * u, (hb - 8 * u) / 2, 8 * u, 8 * u, OK_GRN)
+        text_aa(w - 48 * u, ht, "up", TOP_DIM)
     } else {
         bar(0, C_TITLE)
         at(0, 2, "zlOS", C_TITLE)
-        at(0, 9, "a kernel written in zl", C_TITLE)
-        at(0, 62, "no OS  no libc", C_TITLE)
     }
 }
 
+# the dock top edge, cell-aligned to row (rows-3) so at_num can place the clock
+fn dock_y() { return px_h() - 64 * ui() }
+
+# one app-launcher tile: a rounded chip with a real 24x24 icon in it. Icons,
+# not key letters - you are meant to click these, not memorise a hotkey.
+DOCK_X0 = 118            # first tile
+DOCK_PITCH = 56          # tile-to-tile spacing
+DOCK_TW = 48             # tile width/height
+
+fn dock_tile(slot, dy, ic) {
+    u = ui()
+    dtx = DOCK_X0 * u + slot * DOCK_PITCH * u
+    dtw = DOCK_TW * u
+    rrect(dtx, dy + 8 * u, dtw, dtw, 8 * u, rgb(34, 40, 58))
+    fill_rgb(dtx, dy + 8 * u, dtw, 1, rgb(66, 78, 108))
+    icon(dtx + (dtw - 24 * u) / 2, dy + 8 * u + (dtw - 24 * u) / 2, ic, TXT_HI)
+    return 0
+}
+
+# which app each dock slot launches. Kept in one place so the drawing and the
+# click test can never drift apart.
+fn dock_icon(slot) {
+    if slot == 0 { return 0 }    # terminal
+    if slot == 1 { return 7 }    # files
+    if slot == 2 { return 3 }    # editor
+    if slot == 3 { return 2 }    # paint
+    if slot == 4 { return 1 }    # snake
+    if slot == 5 { return 6 }    # 3D cube
+    if slot == 6 { return 4 }    # system monitor
+    if slot == 7 { return 5 }    # about
+    if slot == 8 { return 9 }    # power
+    return 0 - 1
+}
+fn dock_cmd(slot) {
+    if slot == 0 { return 104 }  # help
+    if slot == 1 { return 108 }  # list RAM files
+    if slot == 2 { return 105 }  # editor
+    if slot == 3 { return 100 }  # paint
+    if slot == 4 { return 103 }  # snake
+    if slot == 5 { return 118 }  # 3D cube
+    if slot == 8 { return 113 }  # halt
+    return 0                     # 6 and 7 reopen windows, handled by the caller
+}
+
+# the dock: a taller gradient strip with a start button, app tiles and a tray
 fn draw_status(msg) {
     sr = status_row()
     if px_w() > 0 {
-        gradient(0, sr * 16, px_w(), 16, C_DGREY, C_BLACK)
+        w = px_w()
+        dy = dock_y()
+        grad_rgb(0, dy - 6, w, 6, WALL_BOT, rgb(6, 7, 12))    # soft shadow above
+        grad_rgb(0, dy, w, px_h() - dy, BAR_TOP, BAR_BOT)     # the dock
+        fill_rgb(0, dy, w, 1, BAR_HI)                          # top highlight
+        u = ui()
+        rrect(10 * u, dy + 8 * u, 96 * u, DOCK_TW * u, 8 * u, rgb(48, 92, 168))
+        fill_rgb(10 * u, dy + 8 * u, 96 * u, 1, rgb(120, 170, 235))
+        fill_rgb(24 * u, dy + 26 * u, 11 * u, 11 * u, ACCENT)
+        text_aa(44 * u, dy + 22 * u, "zlOS", C_WHITE)
+        # app tiles - all icons
+        ds = 0
+        while ds < 9 {
+            dock_tile(ds, dy, dock_icon(ds))
+            ds = ds + 1
+        }
+        # tray: state + uptime
+        # the tray must start AFTER the last dock tile, or on a narrow screen
+        # the two overlap - at 800x600 nine tiles reach x=622 while w-300 is 500
+        tray = w - 300 * u
+        dend = DOCK_X0 * u + 9 * DOCK_PITCH * u + 16 * u
+        if tray < dend { tray = dend }
+        text_aa(tray, dy + 22 * u, "state:", TXT_DIM)
+        text_aa(tray + 60 * u, dy + 22 * u, msg, ACCENT)
+        text_aa(tray + 170 * u, dy + 22 * u, "up:", TXT_DIM)
     } else {
         bar(sr, C_STATUS)
+        at(sr, 2,  "h help", C_STATUS)
+        at(sr, 12, "q halt", C_STATUS)
+        at(sr, 40, "state:", C_STATUS)
+        at(sr, 47, msg, C_STATUS)
+        at(sr, 62, "uptime:", C_STATUS)
     }
-    at(sr, 2,  "h help", C_STATUS)
-    at(sr, 12, "q halt", C_STATUS)
-    at(sr, 40, "state:", C_STATUS)
-    at(sr, 47, msg, C_STATUS)
-    at(sr, 62, "uptime:", C_STATUS)
-    at(sr, 72, "s", C_STATUS)
 }
 
-# just the uptime number, drawn cheaply so it can tick every second without
-# redrawing the whole bar
+# just the uptime number, redrawn each second. On the framebuffer it is drawn
+# in true colour over the taskbar; on VGA it uses the text cell.
 fn draw_clock(sec) {
-    at_num(status_row(), 70, sec, C_STATUS)
+    if px_w() > 0 {
+        w = px_w()
+        dy = dock_y()
+        ctray = w - 300 * ui()
+        cdend = DOCK_X0 * ui() + 9 * DOCK_PITCH * ui() + 16 * ui()
+        if ctray < cdend { ctray = cdend }
+        grad_rgb(ctray + 200 * ui(), dy + 12 * ui(), 80 * ui(), 30 * ui(), BAR_TOP, BAR_BOT)
+        num_aa(ctray + 204 * ui(), dy + 22 * ui(), sec, TXT_HI)                  # AA, blends over dock
+    } else {
+        at_num(status_row(), 70, sec, C_STATUS)
+    }
 }
 
 # [ OK ]/[ INFO ] boot lines, assembled from coloured pieces
@@ -159,6 +279,10 @@ fn info_line(msg) {
 }
 
 # ---- the work the shell can do ---------------------------------------------
+# Recursive, and it WORKS: zl gives every function call its own frame for the
+# PARAMETERS, so `n` is restored after each sub-call - fib(20) returns 6765,
+# verified against the golden transcript. (The no-locals gotcha only bites
+# same-named *free locals*, e.g. a helper's `running` stomping the shell's.)
 fn fib(n) {
     if n < 2 { return n }
     return fib(n - 1) + fib(n - 2)
@@ -247,6 +371,95 @@ fn mousedemo() {
     return 0
 }
 
+# ---- a real window: soft drop shadow, rounded panel, gradient title bar ----
+# This is increment #3+#4 of the desktop plan proven end to end: get_px-backed
+# shadows, rrect chrome, a true-colour title bar, all drawn by the CPU.
+fn draw_window(wx, wy, ww, wh, title, focus) {
+    u = ui()
+    shadow(wx, wy, ww, wh, 8 * u, 6 * u)
+    rrect(wx, wy, ww, wh, 5 * u, rgb(20, 26, 42))
+    rrect(wx + 1, wy + 1, ww - 2, wh - 2, 4 * u, PANEL)
+    tbt = rgb(48, 92, 168)
+    tbb = rgb(22, 40, 92)
+    if focus == 0 { tbt = rgb(42, 53, 80)  tbb = rgb(24, 34, 56) }
+    grad_rgb(wx + 4, wy + 3, ww - 8, TITLE_H * u - 5, tbt, tbb)
+    if focus == 1 { fill_rgb(wx + 4, wy + TITLE_H * u - 2, ww - 8, 2, ACCENT) }
+    fill_rgb(wx + ww - 20 * u, wy + 9 * u, 11 * u, 11 * u, rgb(224, 90, 90))
+    text_aa(wx + 12 * u, wy + 7 * u, title, rgb(234, 243, 255))
+    return 0
+}
+
+# w - three overlapping windows over the wallpaper: the real thing next to the
+# mockup, so the software-vs-browser gap is judged by eye, not by promise
+fn windows_demo() {
+    if px_w() == 0 {
+        color(C_GREY)  print("  the window demo needs the framebuffer console")
+        return 0
+    }
+    w = px_w()
+    h = px_h()
+    grad_rgb(0, 0, w, h, WALL_TOP, WALL_BOT)            # fresh wallpaper
+    draw_window(70, 74, 300, 150, "System Monitor", 0)
+    text_aa(104, 118, "CPU  load  steady", TXT_DIM)
+    text_aa(104, 138, "mem  64 / 256 MiB", TXT_DIM)
+    draw_window(150, 150, 340, 200, "zl shell", 1)
+    text_aa(186, 194, "the quick brown fox jumps", TXT_HI)
+    text_aa(186, 214, "over 0123456789 !@#$%&*", TXT_DIM)
+    text_aa(186, 244, "zl> gfx compose --shadows", ACCENT)
+    draw_window(440, 258, 250, 120, "Clock", 0)
+    text_aa(500, 300, "12:04:37", TXT_HI)
+    text_aa(70, h - 58, "real windows - real shadows - press any key", ACCENT)
+    while key_get() == 0 { }
+    draw_screen()
+    return 0
+}
+
+# a spinning 3D cube - proof the CPU can do real 3D with no GPU and no floats.
+# Two wireframe cubes counter-rotating in a viewport window; the maths lives in
+# fb.c (integer sine + a perspective divide), zl just spins the angle.
+# USB link speeds, as the controller reports them in PORTSC bits 13:10.
+# The numbering is the xHCI "Protocol Speed ID"; 1-4 are the defaults every
+# controller uses, higher values are only meaningful with the extended
+# capability tables, so anything else is reported honestly as unknown.
+fn spname(s) {
+    if s == 1 { return "full (12 Mb/s)" }
+    if s == 2 { return "low (1.5 Mb/s)" }
+    if s == 3 { return "high (480 Mb/s)" }
+    if s == 4 { return "super (5 Gb/s)" }
+    if s == 5 { return "super+ (10 Gb/s)" }
+    return "unknown"
+}
+
+fn cube_demo() {
+    if px_w() == 0 {
+        color(C_GREY)  print("  the 3D demo needs the framebuffer console")
+        return 0
+    }
+    w = px_w()
+    h = px_h()
+    grad_rgb(0, 0, w, h, WALL_TOP, WALL_BOT)
+    draw_header()
+    vx = 150
+    vy = 108
+    vw = 500
+    vh = 384
+    draw_window(vx, vy, vw, vh, "3D   -   software rendered, no GPU", 1)
+    ccx = vx + vw / 2
+    ccy = vy + vh / 2
+    cube_clip(vx + 3, vy + 30, vx + vw - 4, vy + vh - 30)       # keep the cube in the viewport
+    ang = 0
+    while key_get() == 0 {
+        fill_rgb(vx + 3, vy + 30, vw - 6, vh - 33, PANEL)      # clear the viewport
+        cube3d(ccx, ccy, 96, ang, ACCENT)                      # solid, flat-shaded, lit
+        text_aa(vx + 18, vy + vh - 26, "press any key to exit", TXT_DIM)
+        ang = ang + 5
+        if ang >= 360 { ang = 0 }
+        wait_ticks(3)
+    }
+    draw_screen()
+    return 0
+}
+
 # ---- an animation: a bouncing logo over a starfield ------------------------
 fn anim() {
     if px_w() == 0 {
@@ -287,8 +500,8 @@ fn anim() {
 # The snake body is an array of grid cells - and the kernel subset has no
 # arrays, so it lives in raw memory: one byte per cell coordinate, walked
 # with poke8/peek8. This is what the raw-memory primitives were FOR.
-SNAKE_X = 0x30000
-SNAKE_Y = 0x30200
+SNAKE_X = 0x02000000    # high memory - 0x30000 was inside the raw-loaded kernel
+SNAKE_Y = 0x02000200
 
 fn snake_game() {
     if px_w() == 0 {
@@ -429,8 +642,13 @@ fn paint() {
 # written in zl using copy_mem/poke32/peek32 - no new C. It is a RAM disk,
 # so it is wiped on reboot, but within a session the editor can save and
 # reload files by number.
-FS_META = 0x50000       # 10 lengths, 4 bytes each
-FS_DATA = 0x51000       # 10 slots of FS_SLOT bytes
+# These MUST live above the kernel image. Our own bootloader loads the kernel
+# at 0x10000 and it now reaches past 0x89000, so the old 0x50000 landed inside
+# the kernel's own code - fs_init() overwrote it and the machine died on an
+# invalid opcode the moment that code was reached. GRUB loads at 1 MiB, which
+# is why only the raw path ever showed it. 32 MiB is clear of everything.
+FS_META = 0x02010000    # 10 lengths, 4 bytes each
+FS_DATA = 0x02011000    # 10 slots of FS_SLOT bytes
 FS_SLOT = 8192
 
 fn fs_init()      { fill_mem(FS_META, 0, 64) }
@@ -553,6 +771,144 @@ fn run_command(cmd, arg) {
         beep(1000, 15)
         return 0
     }
+    if cmd == 107 {                       # k - the hardware, as the bus reports it
+        color(C_CYAN)  print("  PCI bus scan")
+        color(C_GREY)
+        pci_scan()
+        pn = 0
+        while pn < pci_count() {
+            put("    ")
+            put(pci_vendor(pn))  put(":")  put(pci_device(pn))
+            put("   class ")     print(pci_class(pn))
+            pn = pn + 1
+        }
+        put("    devices found: ")  print(pci_count())
+        print("")
+        color(C_CYAN)  print("  Intel graphics (our own driver)")
+        color(C_GREY)
+        ii = intel_find()
+        if ii < 0 {
+            print("    no Intel GPU on this machine (expected in a VM)")
+        } else {
+            put("    device 0x")  print(intel_id())
+            if intel_ok() == 1 {
+                print("    generation:    Gen9/9.5 - supported")
+                put("    MMIO  (BAR0):  0x")  hex(intel_mmio(), 8)  print("")
+                put("    aperture:      0x")  hex(intel_aper(), 8)  print("")
+                put("    stolen memory: ")    put(intel_ssize() / 1048576)  print(" MiB")
+                put("    GGTT size:     ")    put(intel_ggtt() / 1048576)   print(" MiB")
+                put("    pipe A active: ")    print(intel_pipe())
+                put("    plane enabled: ")    print(intel_plane())
+                put("    live mode:     ")    put(intel_w())  put(" x ")  print(intel_h())
+                put("    stride:        ")    put(intel_stride())  print(" bytes")
+                put("    scanning out:  0x")  print(intel_surf())
+            } else {
+                print("    not a Gen9 part - detected but not driven")
+            }
+        }
+        print("")
+        color(C_CYAN)  print("  display adapter")
+        color(C_GREY)
+        gi = gpu_find()
+        if gi < 0 {
+            print("    no PCI display adapter found")
+        } else {
+            put("    framebuffer at 0x")  hex(gpu_fb(), 8)  print("")
+            put("    video memory:  ")    put(gpu_vram() / 1048576)  print(" MiB")
+            if gpu_present() == 1 {
+                put("    modesetting:   YES, BGA rev ")  print(gpu_version())
+                put("    current mode:  ")  put(gpu_w())  put(" x ")  print(gpu_h())
+            } else {
+                print("    modesetting:   not supported by this adapter")
+            }
+        }
+        return 0
+    }
+    if cmd == 110 {                       # n - switch resolution, live
+        color(C_CYAN)  print("  modesetting with our own driver")
+        color(C_GREY)
+        nw = 1280
+        nh = 800
+        if px_w() == 1280 { nw = 1920  nh = 1200 }
+        put("    switching to ")  put(nw)  put(" x ")  print(nh)
+        if set_res(nw, nh) == 1 {
+            put("    now ")  put(gpu_w())  put(" x ")  put(gpu_h())
+            put(", pitch ")  print(gpu_pitch())
+            layout()
+            draw_screen()
+            color(C_GREEN)  print("  mode set by zlOS, no BIOS involved")
+            color(C_GREY)
+        } else {
+            color(C_RED)  print("    the card refused that mode")
+            color(C_GREY)
+        }
+        return 0
+    }
+    if cmd == 117 {                       # u - the USB controller, our driver
+        color(C_CYAN)  print("  USB host controller (xHCI)")
+        color(C_GREY)
+        ui2 = usb_find()
+        if ui2 < 0 {
+            print("    no xHCI controller found on the PCI bus")
+        } else {
+            put("    xHCI version  0x")  hex(usb_ver(), 4)   print("")
+            put("    MMIO at       0x")  hex(usb_mmio(), 8)  print("")
+            put("    device slots: ")    print(usb_slots())
+            put("    root ports:   ")    print(usb_ports())
+            put("    context size: ")    put(usb_ctxsz())  print(" bytes")
+            if usb_reset() == 1 {
+                color(C_GREEN)  print("    controller reset OK - it is ours now")
+                color(C_GREY)
+            } else {
+                color(C_RED)    print("    controller did not reset")
+                color(C_GREY)
+            }
+            if usb_rings() == 1 {
+                color(C_GREEN)  print("    rings up, controller RUNNING")
+                color(C_GREY)
+                if usb_noop() == 1 {
+                    color(C_GREEN)
+                    print("    no-op command completed - DMA path proven")
+                    color(C_GREY)
+                } else {
+                    color(C_RED)  print("    no-op did not complete")
+                    color(C_GREY)
+                }
+            } else {
+                color(C_RED)  print("    rings/start failed")
+                color(C_GREY)
+            }
+            put("    devices attached: ")  print(usb_count())
+            up = 1
+            while up <= usb_ports() {
+                if usb_conn(up) == 1 {
+                    put("      port ")  put(up)
+                    put(" connected, speed ")  put(spname(usb_speed(up)))
+                    # stage 4: reset the port, take a slot, address the device
+                    # and read the descriptor that says what it actually is
+                    uslot = usb_enum(up)
+                    if uslot > 0 {
+                        color(C_GREEN)
+                        put("  -> slot ")  put(uslot)
+                        put(" addr ")      print(usb_addr())
+                        color(C_GREY)
+                        put("        USB ")  hex(usb_uver(), 4)
+                        put("  vendor ")     hex(usb_vid(), 4)
+                        put(":")             hex(usb_pid(), 4)
+                        put("  class ")      hex(usb_cls(), 2)
+                        put("  ep0 mps ")    print(usb_mps())
+                    } else {
+                        color(C_RED)  print("  -> enumeration failed")
+                        color(C_GREY)
+                    }
+                }
+                up = up + 1
+            }
+        }
+        return 0
+    }
+    if cmd == 118 { return cube_demo() }     # v - spinning 3D cube (software)
+    if cmd == 119 { return windows_demo() }  # w - draggable-style window demo
     if cmd == 120 { return mousedemo() }  # x - mouse demo
     if cmd == 97  { return anim() }       # a - animation
     if cmd == 103 { return snake_game() } # g - snake game
@@ -578,29 +934,246 @@ fn run_command(cmd, arg) {
     color(C_GREY) return 0
 }
 
-# ---- the full screen: header + reserved log region + status ----------------
+# a live System Monitor window: the real CPUID brand, a memory bar, tick count
+# and a sparkline - drawn with the same window chrome as everything else
+fn draw_sysmon(sx, sy, sfoc) {
+    u = ui()
+    draw_window(sx, sy, MON_W * u, MON_H * u, "System Monitor", sfoc)
+    text_aa(sx + 14 * u, sy + 40 * u, "CPU", TXT_DIM)
+    smi = 0
+    smx = sx + 14 * u
+    smy = sy + 58 * u
+    while smi < 48 {
+        smb = cpu_char(smi)
+        if smb > 32 { char_aa(smx, smy, smb, TXT_HI) }
+        if smb > 0 {
+            smx = smx + cell_w()
+            if smx > sx + 268 * u { smx = sx + 14 * u  smy = smy + 18 * u }
+        }
+        smi = smi + 1
+    }
+    text_aa(sx + 14 * u, sy + 98 * u, "MEM", TXT_DIM)
+    fill_rgb(sx + 56 * u, sy + 100 * u, 214 * u, 12 * u, rgb(12, 18, 32))
+    fill_rgb(sx + 56 * u, sy + 100 * u, 58 * u, 12 * u, ACCENT)
+    text_aa(sx + 14 * u, sy + 122 * u, "TICKS", TXT_DIM)
+    num_aa(sx + 68 * u, sy + 122 * u, ticks(), TXT_HI)
+    # a little sparkline across the bottom, drawn as connected segments
+    line(sx + 14,  sy + 182, sx + 46,  sy + 170, C_CYAN)
+    line(sx + 46,  sy + 170, sx + 78,  sy + 176, C_CYAN)
+    line(sx + 78 * u, sy + 176 * u, sx + 110 * u, sy + 161 * u, C_CYAN)
+    line(sx + 110 * u, sy + 161 * u, sx + 142 * u, sy + 173 * u, C_CYAN)
+    line(sx + 142 * u, sy + 173 * u, sx + 174 * u, sy + 158 * u, C_CYAN)
+    line(sx + 174 * u, sy + 158 * u, sx + 206 * u, sy + 169 * u, C_CYAN)
+    line(sx + 206 * u, sy + 169 * u, sx + 238 * u, sy + 155 * u, C_CYAN)
+    line(sx + 238 * u, sy + 155 * u, sx + 270 * u, sy + 164 * u, C_CYAN)
+    return 0
+}
+
+# a small About window - the identity card, static content
+fn draw_about(ax, ay, afoc) {
+    u = ui()
+    draw_window(ax, ay, MON_W * u, AB_H * u, "About", afoc)
+    text_aa(ax + 14 * u, ay + 32 * u, "zlOS 0.3", TXT_HI)
+    text_aa(ax + 14 * u, ay + 54 * u, "a desktop written in zl", TXT_DIM)
+    text_aa(ax + 14 * u, ay + 76 * u, "no OS   no libc   no GNU", ACCENT)
+    text_aa(ax + 14 * u, ay + 98 * u, "press h for the app list", TXT_DIM)
+    return 0
+}
+
+# ---- the full desktop: wallpaper + header + a terminal window + the dock ----
+# The shell no longer prints raw onto the screen - it lives inside a real
+# window frame (shadow, rounded border, title bar) sitting on the wallpaper,
+# with the dock along the bottom. This is what turns "a console" into "a
+# desktop". The console text region is set to the window's interior so every
+# line the shell prints lands inside the frame.
+# the STATIC desktop: wallpaper, header, the fixed terminal window, the dock.
+# Everything here stays put, so it becomes the "background" a dragged window is
+# lifted off of and dropped back onto.
+# Work out where everything sits for the screen we actually got. Our bootloader
+# takes the widest mode the card offers, so that is 1280x1024 on one machine and
+# 800x600 on another - nothing may be hard-coded to one size. The right-hand
+# column is anchored to the right edge and the terminal fills what is left, which
+# reproduces the old 800x600 layout exactly and grows from there.
+fn layout() {
+    mon_x = px_w() - (MON_W + 16) * ui()
+    mon_y = DESK_TOP * ui() + 8 * ui()
+    ab_x  = mon_x
+    ab_y  = mon_y + (MON_H + 16) * ui()
+    term_x = 16 * ui()
+    term_y = DESK_TOP * ui() + 8 * ui()
+    term_w = mon_x - 32 * ui()
+    term_h = dock_y() - term_y - 16 * ui()
+    lcw = cell_w()                             # the console text box, in cells -
+    lch = cell_h()                             # which are 8x16 or 16x32 now
+    # round the top-left UP to the next whole cell, the bottom-right DOWN, so
+    # the text can never sit on the title bar or spill past the frame
+    term_c0 = (term_x + 10 + lcw - 1) / lcw
+    term_c1 = (term_x + term_w - 12) / lcw
+    term_r0 = (term_y + 34 + lch - 1) / lch
+    term_r1 = (term_y + term_h - 16) / lch
+    return 0
+}
+
+fn draw_desk() {
+    if px_w() > 0 {
+        w = px_w()
+        grad_rgb(0, 0, w, px_h(), WALL_TOP, WALL_BOT)          # the wallpaper
+        draw_header()
+        draw_window(term_x, term_y, term_w, term_h, "zl shell   ~", 1)
+        text_box(term_c0, term_c1)
+        region(term_r0, term_r1)
+        draw_status("ready")
+        goto_row(term_r0)
+        present()
+    } else {
+        cls()
+        draw_header()
+        region(5, status_row() - 1)
+        draw_status("ready")
+        goto_row(5)
+    }
+}
+
+# snapshot the static desktop as the drag background, then draw the DRAGGABLE
+# windows on top of it. Called once the terminal has its content, and again
+# after any redraw, so the background always matches what's really behind them.
+fn compose_windows() {
+    if px_w() > 0 {
+        bg_snap()                        # capture wallpaper+header+terminal+dock
+        raise_windows()                  # ... then the open windows, focused last
+        present()
+    }
+}
+
+# Draw the open windows in z-order: everything else first, the focused one LAST
+# so it lands on top. That single ordering is the whole "bring to front".
+fn raise_windows() {
+    rw_mf = 0                                  # is the monitor the focused one?
+    if focus_win == 1 { rw_mf = 1 }
+    if focus_win == 2 {
+        if mon_open == 1 { draw_sysmon(mon_x, mon_y, 0) }
+        if ab_open  == 1 { draw_about(ab_x, ab_y, 1) }
+    }
+    if focus_win != 2 {
+        if ab_open  == 1 { draw_about(ab_x, ab_y, 0) }
+        if mon_open == 1 { draw_sysmon(mon_x, mon_y, rw_mf) }
+    }
+    present()
+    return 0
+}
+
+# a full redraw: static desktop + the draggable windows composited over it
 fn draw_screen() {
-    cls()
-    draw_header()
-    region(5, status_row() - 1)
-    draw_status("ready")
-    goto_row(5)
+    draw_desk()
+    compose_windows()
+}
+
+# ---- the start menu --------------------------------------------------------
+# Click the zlOS button and a menu pops up above the dock. It saves the patch
+# of screen underneath (grab) so closing it just stamps that back - no full
+# redraw, so whatever was there (a window, the terminal) returns untouched.
+fn open_menu() {
+    mnx = 10
+    mnh = 10 * 26 + 36
+    mny = dock_y() - mnh - 6
+    grab(mnx - 2, mny - 2, 182, mnh + 16)               # save what's under the menu
+    shadow(mnx, mny, 172, mnh, 8, 6)
+    rrect(mnx, mny, 172, mnh, 6, rgb(20, 26, 42))
+    rrect(mnx + 1, mny + 1, 170, mnh - 2, 5, PANEL)
+    grad_rgb(mnx + 2, mny + 2, 168, 26, HDR_TOP, HDR_BOT)
+    fill_rgb(mnx + 2, mny + 28, 168, 2, ACCENT)
+    text_aa(mnx + 14, mny + 8, "zlOS menu", C_WHITE)
+    mrow = mny + 36
+    text_aa(mnx + 18, mrow, "Help", TXT_HI)       mrow = mrow + 26
+    text_aa(mnx + 18, mrow, "Snake", TXT_HI)      mrow = mrow + 26
+    text_aa(mnx + 18, mrow, "Paint", TXT_HI)      mrow = mrow + 26
+    text_aa(mnx + 18, mrow, "Editor", TXT_HI)     mrow = mrow + 26
+    text_aa(mnx + 18, mrow, "Demo", TXT_HI)       mrow = mrow + 26
+    text_aa(mnx + 18, mrow, "Windows", TXT_HI)    mrow = mrow + 26
+    text_aa(mnx + 18, mrow, "3D Cube", ACCENT)    mrow = mrow + 26
+    text_aa(mnx + 18, mrow, "System Monitor", TXT_HI)   mrow = mrow + 26
+    text_aa(mnx + 18, mrow, "About", TXT_HI)      mrow = mrow + 26
+    text_aa(mnx + 18, mrow, "Reboot", TXT_DIM)
+    menu_open = 1
+    return 0
+}
+fn close_menu() {
+    stamp(mnx - 2, mny - 2)                              # restore the saved patch
+    menu_open = 0
+    return 0
+}
+# map a menu row (0..7) to the command it launches
+fn menu_cmd(idx) {
+    if idx == 0 { return 104 }   # Help
+    if idx == 1 { return 103 }   # Snake
+    if idx == 2 { return 100 }   # Paint
+    if idx == 3 { return 105 }   # Editor
+    if idx == 4 { return 97 }    # Demo
+    if idx == 5 { return 119 }   # Windows
+    if idx == 6 { return 118 }   # 3D Cube
+    if idx == 9 { return 114 }   # Reboot
+    return 0                     # 7 and 8 reopen windows - the caller handles those
 }
 
 # ---- boot ------------------------------------------------------------------
 kbd_init()
 fs_init()
-draw_screen()
+mon_x = 0                                # window positions - layout() fills these in
+mon_y = 0                                # from the real screen size, and dragging
+ab_x = 0                                 # updates them from there
+ab_y = 0
+term_x = 0                               # the terminal window's frame and text box
+term_y = 0
+term_w = 0
+term_h = 0
+term_c0 = 0
+term_c1 = 0
+term_r0 = 5
+term_r1 = 20
+mon_open = 1                             # is each window open (1) or closed (0)?
+ab_open = 1
+focus_win = 1                            # 0 = terminal, 1 = monitor, 2 = about
+# Do not accept whatever mode the bootloader happened to hand us. We have our
+# own modesetting driver, so ASK THE HARDWARE for a proper resolution - the
+# same thing a real OS does at startup. Try progressively smaller modes until
+# the card takes one; if none work we simply keep what we were given.
+if px_w() > 0 {
+    if px_w() < 1900 {
+        if set_res(1920, 1200) == 0 {
+            if set_res(1920, 1080) == 0 {
+                if set_res(1600, 900) == 0 {
+                    set_res(1280, 800)
+                }
+            }
+        }
+    }
+}
+if px_w() > 0 { layout() }
+draw_desk()                              # static desktop; the boot log fills the terminal
 
 color(C_WHITE)  print("  zlOS starting")
 color(C_GREY)   print("")
 
-if loader() == 1 {
-    ok_line("multiboot handoff, 32-bit protected mode")
-} else {
-    ok_line("our bootloader (raw_boot), no GRUB - 32-bit protected mode")
+if loader() == 2 {
+    ok_line("UEFI application - no GRUB, no bootloader, 64-bit from the start")
 }
-ok_line("stack established, 16 KiB")
+if loader() == 1 {
+    if bits() == 64 {
+        ok_line("multiboot handoff, then OUR jump into 64-bit long mode")
+    }
+    if bits() == 32 {
+        ok_line("multiboot handoff, 32-bit protected mode")
+    }
+}
+if loader() == 0 {
+    if bits() == 64 {
+        ok_line("our bootloader (raw_boot), no GRUB - then 64-bit long mode")
+    }
+    if bits() == 32 {
+        ok_line("our bootloader (raw_boot), no GRUB - 32-bit protected mode")
+    }
+}
+ok_line("stack established, 256 KiB")
 ok_line("COM1 initialised, 115200 8N1")
 if con_kind() == 1 {
     color(C_GREY)  put("  [")
@@ -611,7 +1184,11 @@ if con_kind() == 1 {
     ok_line("VGA text console, 80x25")
 }
 setup_gdt()
-ok_line("GDT loaded - flat 4 GiB code and data segments")
+if bits() == 64 {
+    ok_line("GDT loaded - 64-bit flat segments, 4-level paging, SSE on")
+} else {
+    ok_line("GDT loaded - flat 4 GiB code and data segments")
+}
 setup_idt()
 ok_line("IDT installed, PIC remapped, interrupts ON")
 ok_line("PIT timer running at 100 Hz on IRQ0")
@@ -627,42 +1204,236 @@ print("")
 # a two-note boot chime - the timer is up, so we can time it
 beep(784, 8)  beep(1046, 12)
 
+# now that the terminal holds the boot log, snapshot it as the drag background
+# and drop the draggable windows on top
+compose_windows()
+
 # ---- the shell -------------------------------------------------------------
 running = 1
 pending = 0
 
 last_sec  = 0 - 1
 last_blink = 0 - 1
+last_mx = 0 - 1                           # mouse pointer position, tracked so the
+last_my = 0 - 1                           # cursor sprite only redraws when it moves
+last_lb = 0                               # last left-button state (drag edge detect)
+dragging = 0                             # 1 while a window is being dragged
+drag_win = 0                             # which window: 1 = monitor, 2 = about
+dox = 0                                  # the dragged window's current drawn origin
+doy = 0
+dgw = 0                                  # the dragged window's width/height
+dgh = 0
+gox = 0                                  # grab offset: mouse minus window origin
+goy = 0
+menu_open = 0                            # is the start menu showing?
+mnx = 0                                  # start menu geometry (set in open_menu)
+mny = 0
+mnh = 0
 
 while running == 1 {
     color(C_GREEN)  put("  zl> ")
     color(C_WHITE)
     crow = row()
-    ccol = 6                              # after the 6-char "  zl> " prompt
+    ccol = col()                         # actual column after the prompt (text box aware)
 
     got = 0
     while got == 0 {
         tk = ticks()
+        cur_dirty = 0                     # does the mouse pointer need repainting?
 
-        # live uptime clock in the status bar, redrawn only when it changes
-        sec = tk / 100
-        if sec != last_sec {
-            draw_clock(sec)
-            last_sec = sec
+        # clock + text-cursor blink, paused while dragging or the menu is open
+        if dragging == 0 { if menu_open == 0 {
+            sec = tk / 100
+            if sec != last_sec {
+                mhide()
+                draw_clock(sec)
+                last_sec = sec
+                cur_dirty = 1
+            }
+            phase = tk % 100
+            bon = 0
+            if phase < 50 { bon = 1 }
+            if bon != last_blink {
+                mhide()
+                cursor(crow, ccol, bon, C_CURSOR)
+                last_blink = bon
+                cur_dirty = 1
+            }
+        }}
+
+        # ---- mouse: the live pointer, and window dragging ------------------
+        if px_w() > 0 {
+            mx = mouse_x()
+            my = mouse_y()
+            if mx > px_w() - 12 { mx = px_w() - 12 }
+            if my > px_h() - 18 { my = px_h() - 18 }
+            if my < 28 { my = 28 }
+            lb = band(mouse_btn(), 1)
+
+            if dragging == 1 {
+                # move the grabbed window as a bitmap: restore old spot, stamp new
+                nx = mx - gox
+                ny = my - goy
+                if nx < 0 { nx = 0 }
+                if ny < 28 { ny = 28 }
+                if nx > px_w() - dgw { nx = px_w() - dgw }
+                if ny > px_h() - 52 - dgh { ny = px_h() - 52 - dgh }
+                moved = 0
+                if nx != dox { moved = 1 }
+                if ny != doy { moved = 1 }
+                if moved == 1 {
+                    mhide()
+                    bg_rest(dox, doy, dgw + 16, dgh + 16)   # erase old (incl. shadow)
+                    stamp(nx, ny)                            # window bitmap at new spot
+                    dox = nx
+                    doy = ny
+                    mpoint(mx, my)
+                }
+                if lb == 0 {                                 # released - drop it
+                    if drag_win == 1 { mon_x = dox  mon_y = doy }
+                    if drag_win == 2 { ab_x = dox  ab_y = doy }
+                    mhide()
+                    focus_win = drag_win                     # dragging focuses it
+                    raise_windows()                          # redraw in z-order
+                    dragging = 0
+                    drag_win = 0
+                    mpoint(mx, my)
+                }
+            } else {
+                # not dragging: pointer follows the mouse; a click may grab a window
+                if mx != last_mx { cur_dirty = 1 }
+                if my != last_my { cur_dirty = 1 }
+                if cur_dirty == 1 { mpoint(mx, my) }
+                if lb == 1 {
+                    if last_lb == 0 {
+                        if menu_open == 1 {
+                            # a click while the menu is open: pick a row or dismiss it
+                            picked = 0 - 1
+                            if mx >= mnx { if mx < mnx + 172 { if my >= mny + 30 {
+                                idx = (my - mny - 30) / 26
+                                if idx >= 0 { if idx < 10 { picked = idx } }
+                            }}}
+                            mhide()  close_menu()  mpoint(mx, my)
+                            # rows 7 and 8 bring a closed window back
+                            if picked == 7 {
+                                mon_open = 1  focus_win = 1
+                                mhide()  raise_windows()  mpoint(mx, my)
+                            }
+                            if picked == 8 {
+                                ab_open = 1  focus_win = 2
+                                mhide()  raise_windows()  mpoint(mx, my)
+                            }
+                            if picked >= 0 {
+                                mcmd = menu_cmd(picked)
+                                if mcmd > 0 {
+                                    mhide()  print("")  draw_status("working")
+                                    r = run_command(mcmd, 0)
+                                    got = 1  last_sec = 0 - 1  last_mx = 0 - 1
+                                    draw_status("ready")
+                                    if r == 1 { running = 0 }
+                                }
+                            }
+                        } else {
+                            # menu closed. Work out which window was hit, if any:
+                            # 0 = none, 1 = monitor, 2 = about. Topmost (focused)
+                            # window wins, so a click on an overlap picks the one
+                            # you can actually see.
+                            hit = 0
+                            hbar = 0                        # was it on the title bar?
+                            hcls = 0                        # was it on the close box?
+                            if mon_open == 1 { if mx >= mon_x { if mx < mon_x + MON_W * ui() {
+                                if my >= mon_y { if my < mon_y + MON_H * ui() { hit = 1 }}}}}
+                            if ab_open == 1 { if mx >= ab_x { if mx < ab_x + MON_W * ui() {
+                                if my >= ab_y { if my < ab_y + AB_H * ui() {
+                                    if hit == 0 { hit = 2 }
+                                    if focus_win == 2 { hit = 2 }   # About is on top
+                                }}}}}
+                            hx = mon_x
+                            hy = mon_y
+                            if hit == 2 { hx = ab_x  hy = ab_y }
+                            if hit > 0 {
+                                if my < hy + TITLE_H * ui() { hbar = 1 }
+                                if my >= hy + 4 * ui() { if my < hy + 26 * ui() {
+                                    if mx >= hx + (MON_W - 26) * ui() { if mx < hx + (MON_W - 4) * ui() { hcls = 1 }}}}
+                            }
+
+                            if hcls == 1 {
+                                # the red box really closes the window now
+                                mhide()
+                                if hit == 1 { mon_open = 0  bg_rest(mon_x, mon_y, (MON_W + 16) * ui(), (MON_H + 16) * ui()) }
+                                if hit == 2 { ab_open = 0   bg_rest(ab_x, ab_y, (MON_W + 16) * ui(), (AB_H + 16) * ui()) }
+                                focus_win = 0
+                                raise_windows()             # whatever is left, redrawn
+                                mpoint(mx, my)
+                            }
+                            if hcls == 0 { if hit > 0 {
+                                # a click anywhere in a window raises and focuses it
+                                if focus_win != hit {
+                                    mhide()
+                                    focus_win = hit
+                                    raise_windows()
+                                    mpoint(mx, my)
+                                }
+                                if hbar == 1 {              # title bar: start a drag
+                                    if hit == 1 {
+                                        dragging = 1  drag_win = 1  dgw = MON_W * ui()  dgh = MON_H * ui()
+                                        dox = mon_x  doy = mon_y
+                                        gox = mx - mon_x  goy = my - mon_y
+                                        mhide()  grab(mon_x, mon_y, (MON_W + 16) * ui(), (MON_H + 16) * ui())
+                                    }
+                                    if hit == 2 {
+                                        dragging = 1  drag_win = 2  dgw = MON_W * ui()  dgh = AB_H * ui()
+                                        dox = ab_x  doy = ab_y
+                                        gox = mx - ab_x  goy = my - ab_y
+                                        mhide()  grab(ab_x, ab_y, (MON_W + 16) * ui(), (AB_H + 16) * ui())
+                                    }
+                                }
+                            }}
+                            # ...or click the dock: zlOS opens the menu, a tile launches an app
+                            if dragging == 0 { if hit == 0 {
+                                if my >= dock_y() {
+                                    if mx >= 10 * ui() { if mx < 106 * ui() {
+                                        mhide()  open_menu()  mpoint(mx, my)
+                                    }}
+                                    dcmd = 0
+                                    if mx >= DOCK_X0 * ui() {
+                                        dslot = (mx - DOCK_X0 * ui()) / (DOCK_PITCH * ui())
+                                        dinto = mx - DOCK_X0 * ui() - dslot * DOCK_PITCH * ui()
+                                        if dslot < 9 { if dinto < DOCK_TW * ui() {
+                                            if dslot == 6 {
+                                                mon_open = 1  focus_win = 1
+                                                mhide()  raise_windows()  mpoint(mx, my)
+                                            }
+                                            if dslot == 7 {
+                                                ab_open = 1   focus_win = 2
+                                                mhide()  raise_windows()  mpoint(mx, my)
+                                            }
+                                            dcmd = dock_cmd(dslot)
+                                        }}
+                                    }
+                                    if dcmd > 0 {
+                                        mhide()  print("")  draw_status("working")
+                                        r = run_command(dcmd, 0)
+                                        got = 1  last_sec = 0 - 1  last_mx = 0 - 1
+                                        draw_status("ready")
+                                        if r == 1 { running = 0 }
+                                    }
+                                }
+                            }}
+                        }
+                    }
+                }
+            }
+            last_mx = mx
+            last_my = my
+            last_lb = lb
         }
 
-        # a real blinking cursor: on for the first half of each second. The
-        # timer interrupt is what makes this tick at a steady rate.
-        phase = tk % 100
-        bon = 0
-        if phase < 50 { bon = 1 }
-        if bon != last_blink {
-            cursor(crow, ccol, bon, C_CURSOR)
-            last_blink = bon
-        }
+        present()          # push this frame's changes out in one blit
 
         ch = key_get()
         if ch > 0 {
+            mhide()                                 # pointer off before text is drawn
             if is_digit(ch) == true {
                 cursor(crow, ccol, 0, C_CURSOR)
                 color(C_WHITE)  put(ch - 48)
@@ -678,6 +1449,7 @@ while running == 1 {
                     pending = 0
                     got = 1
                     last_sec = 0 - 1                # clock lost to the redraw
+                    last_mx = 0 - 1                 # force the pointer to redraw too
                     draw_status("ready")
                     if r == 1 { running = 0 }
                 }

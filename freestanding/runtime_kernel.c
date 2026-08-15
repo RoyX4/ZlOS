@@ -59,6 +59,30 @@ extern void idt_init(void);
 extern unsigned int idt_ticks(void);
 extern int  idt_scan(void);
 extern void console_at_num(int row, int col, long n, unsigned char attr);
+extern void console_fill_rgb(int x, int y, int w, int h, unsigned int rgb);
+extern void console_gradient_rgb(int x, int y, int w, int h, unsigned int top, unsigned int bot);
+extern void console_text_rgb(int px, int py, const char *s, unsigned int rgb);
+extern int  console_get_px(int x, int y);
+extern void console_shade(int x, int y, int w, int h, int num, int den);
+extern void console_shadow(int x, int y, int w, int h, int off, int soft);
+extern void console_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
+extern void console_text_aa(int px, int py, const char *s, unsigned int rgb);
+extern void console_text_aa2x(int px, int py, const char *s, unsigned int rgb);
+extern void console_num_aa(int px, int py, long n, unsigned int rgb);
+extern void console_puthex(unsigned long v, int digits);
+extern void console_char_aa(int px, int py, int code, unsigned int rgb);
+extern void console_set_text_box(int c0, int c1);
+extern void console_cube(int cx, int cy, int size, int angle, unsigned int rgb);
+extern void console_pointer_show(int x, int y);
+extern void console_pointer_hide(void);
+extern void console_present(void);
+extern void console_icon(int px, int py, int n, unsigned int rgb);
+extern void console_bg_snapshot(void);
+extern void console_bg_restore(int x, int y, int w, int h);
+extern void console_grab(int x, int y, int w, int h);
+extern void console_stamp(int x, int y);
+extern void console_cube_filled(int cx, int cy, int size, int angle, unsigned int rgb);
+extern void console_cube_clip(int x0, int y0, int x1, int y1);
 extern int  cpu_brand_byte(int i);
 extern void speaker_on(unsigned freq);
 extern void speaker_off(void);
@@ -71,6 +95,72 @@ extern void console_line(int x0, int y0, int x1, int y1, unsigned char attr);
 extern void console_mouse_cursor(int x, int y, unsigned char fill, unsigned char edge);
 extern int  console_kind(void);
 extern int  console_cols(void);
+extern int  console_cell_w(void);
+extern int  console_cell_h(void);
+extern void fb_set_subpixel(int on);
+extern int  fb_get_subpixel(void);
+/* the PCI bus driver and our own modesetting driver */
+extern void pci_scan(void);
+extern int  pci_count(void);
+extern int  pci_vendor(int i);
+extern int  pci_device(int i);
+extern int  pci_class(int i);
+extern int  pci_find_class(int cls, int sub);
+extern unsigned int pci_bar(int i, int which);
+extern int  bga_present(void);
+extern int  bga_version(void);
+extern int  bga_find(void);
+extern unsigned int bga_framebuffer(void);
+extern unsigned int bga_vram_bytes(void);
+extern int  bga_set_mode(int w, int h, int bpp);
+extern int  bga_get_width(void);
+extern int  bga_get_height(void);
+extern int  console_set_res(int w, int h);
+extern int  bga_get_pitch(void);
+extern int  bga_reg(int idx);
+/* the xHCI USB host controller driver */
+extern int  xhci_find(void);
+extern int  xhci_present(void);
+extern int  xhci_version(void);
+extern int  xhci_slots(void);
+extern int  xhci_ports(void);
+extern int  xhci_ctx_size(void);
+extern unsigned int xhci_mmio(void);
+extern int  xhci_reset(void);
+extern int  xhci_halted(void);
+extern int  xhci_port_connected(int p);
+extern int  xhci_port_speed(int p);
+extern int  xhci_devices_attached(void);
+extern int  xhci_init_rings(void);
+extern int  xhci_running(void);
+extern int  xhci_test_noop(void);
+extern int  xhci_port_reset(int p);
+extern int  xhci_port_enabled(int p);
+extern int  xhci_enumerate(int p);
+extern int  xhci_device_address(void);
+extern int  xhci_desc_vendor(void);
+extern int  xhci_desc_product(void);
+extern int  xhci_desc_usbver(void);
+extern int  xhci_desc_class(void);
+extern int  xhci_desc_mps0(void);
+extern int  xhci_desc_byte(int i);
+/* the Intel Gen9 display driver */
+extern int  intel_find(void);
+extern int  intel_present(void);
+extern int  intel_supported(void);
+extern int  intel_devid(void);
+extern unsigned int intel_mmio(void);
+extern unsigned int intel_aperture(void);
+extern unsigned int intel_stolen_base(void);
+extern unsigned int intel_stolen_size(void);
+extern unsigned int intel_ggtt_size(void);
+extern int  intel_pipe_width(void);
+extern int  intel_pipe_height(void);
+extern int  intel_stride(void);
+extern int  intel_plane_enabled(void);
+extern int  intel_pipe_enabled(void);
+extern unsigned int intel_surface(void);
+extern int  intel_frame_count(void);
 extern int  console_rows(void);
 
 static void zl_putc(char c)
@@ -96,6 +186,9 @@ static void zl_putc(char c)
 #endif
 
 static void zl_puts(const char *s) { while (*s) zl_putc(*s++); }
+
+/* the one character sink, exposed so console.c can print hex through it */
+void zl_putc_pub(char c) { zl_putc(c); }
 
 /* signed 64-bit to decimal, no snprintf */
 static void zl_put_i64(long long v)
@@ -292,6 +385,66 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "con_kind"))   return zl_num((double)console_kind());
     if (streq(name, "con_cols"))   return zl_num((double)console_cols());
     if (streq(name, "con_rows"))   return zl_num((double)console_rows());
+    if (streq(name, "cell_w"))     return zl_num((double)console_cell_w());
+    if (streq(name, "cell_h"))     return zl_num((double)console_cell_h());
+    if (streq(name, "bits"))       return zl_num((double)(sizeof(void *) * 8));
+    if (streq(name, "hex"))        { console_puthex((unsigned long)(long long)a[0].num, (int)a[1].num); return zl_nil(); }
+    if (streq(name, "subpix"))     { fb_set_subpixel((int)a[0].num); return zl_nil(); }
+    if (streq(name, "subpix_on"))  return zl_num((double)fb_get_subpixel());
+    if (streq(name, "pci_scan"))   { pci_scan(); return zl_nil(); }
+    if (streq(name, "pci_count"))  return zl_num((double)pci_count());
+    if (streq(name, "pci_vendor")) return zl_num((double)pci_vendor((int)a[0].num));
+    if (streq(name, "pci_device")) return zl_num((double)pci_device((int)a[0].num));
+    if (streq(name, "pci_class"))  return zl_num((double)pci_class((int)a[0].num));
+    if (streq(name, "gpu_find"))   return zl_num((double)bga_find());
+    if (streq(name, "gpu_present"))return zl_num((double)bga_present());
+    if (streq(name, "gpu_version"))return zl_num((double)bga_version());
+    if (streq(name, "gpu_fb"))     return zl_num((double)bga_framebuffer());
+    if (streq(name, "gpu_vram"))   return zl_num((double)bga_vram_bytes());
+    if (streq(name, "gpu_mode"))   return zl_num((double)bga_set_mode((int)a[0].num,(int)a[1].num,(int)a[2].num));
+    if (streq(name, "gpu_w"))      return zl_num((double)bga_get_width());
+    if (streq(name, "gpu_h"))      return zl_num((double)bga_get_height());
+    if (streq(name, "set_res"))    return zl_num((double)console_set_res((int)a[0].num,(int)a[1].num));
+    if (streq(name, "gpu_pitch"))  return zl_num((double)bga_get_pitch());
+    if (streq(name, "gpu_reg"))    return zl_num((double)bga_reg((int)a[0].num));
+    if (streq(name, "usb_find"))   return zl_num((double)xhci_find());
+    if (streq(name, "usb_ok"))     return zl_num((double)xhci_present());
+    if (streq(name, "usb_ver"))    return zl_num((double)xhci_version());
+    if (streq(name, "usb_slots"))  return zl_num((double)xhci_slots());
+    if (streq(name, "usb_ports"))  return zl_num((double)xhci_ports());
+    if (streq(name, "usb_ctxsz"))  return zl_num((double)xhci_ctx_size());
+    if (streq(name, "usb_mmio"))   return zl_num((double)xhci_mmio());
+    if (streq(name, "usb_reset"))  return zl_num((double)xhci_reset());
+    if (streq(name, "usb_conn"))   return zl_num((double)xhci_port_connected((int)a[0].num));
+    if (streq(name, "usb_speed"))  return zl_num((double)xhci_port_speed((int)a[0].num));
+    if (streq(name, "usb_count"))  return zl_num((double)xhci_devices_attached());
+    if (streq(name, "usb_rings"))  return zl_num((double)xhci_init_rings());
+    if (streq(name, "usb_run"))    return zl_num((double)xhci_running());
+    if (streq(name, "usb_noop"))   return zl_num((double)xhci_test_noop());
+    if (streq(name, "usb_prst"))   return zl_num((double)xhci_port_reset((int)a[0].num));
+    if (streq(name, "usb_pen"))    return zl_num((double)xhci_port_enabled((int)a[0].num));
+    if (streq(name, "usb_enum"))   return zl_num((double)xhci_enumerate((int)a[0].num));
+    if (streq(name, "usb_addr"))   return zl_num((double)xhci_device_address());
+    if (streq(name, "usb_vid"))    return zl_num((double)xhci_desc_vendor());
+    if (streq(name, "usb_pid"))    return zl_num((double)xhci_desc_product());
+    if (streq(name, "usb_uver"))   return zl_num((double)xhci_desc_usbver());
+    if (streq(name, "usb_cls"))    return zl_num((double)xhci_desc_class());
+    if (streq(name, "usb_mps"))    return zl_num((double)xhci_desc_mps0());
+    if (streq(name, "usb_dbyte"))  return zl_num((double)xhci_desc_byte((int)a[0].num));
+    if (streq(name, "intel_find"))  return zl_num((double)intel_find());
+    if (streq(name, "intel_ok"))    return zl_num((double)intel_supported());
+    if (streq(name, "intel_id"))    return zl_num((double)intel_devid());
+    if (streq(name, "intel_mmio"))  return zl_num((double)intel_mmio());
+    if (streq(name, "intel_aper"))  return zl_num((double)intel_aperture());
+    if (streq(name, "intel_sbase")) return zl_num((double)intel_stolen_base());
+    if (streq(name, "intel_ssize")) return zl_num((double)intel_stolen_size());
+    if (streq(name, "intel_ggtt"))  return zl_num((double)intel_ggtt_size());
+    if (streq(name, "intel_w"))     return zl_num((double)intel_pipe_width());
+    if (streq(name, "intel_h"))     return zl_num((double)intel_pipe_height());
+    if (streq(name, "intel_stride"))return zl_num((double)intel_stride());
+    if (streq(name, "intel_plane")) return zl_num((double)intel_plane_enabled());
+    if (streq(name, "intel_pipe"))  return zl_num((double)intel_pipe_enabled());
+    if (streq(name, "intel_surf"))  return zl_num((double)intel_surface());
     if (streq(name, "loader"))     return zl_num((double)console_loader());
     if (streq(name, "px_w"))       return zl_num((double)console_pxw());
     if (streq(name, "px_h"))       return zl_num((double)console_pxh());
@@ -305,6 +458,29 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ticks"))     return zl_num((double)idt_ticks());
     if (streq(name, "scan_get"))  return zl_num((double)idt_scan());
     if (streq(name, "at_num"))    { console_at_num((int)a[0].num,(int)a[1].num,(long)a[2].num,(unsigned char)(unsigned long long)a[3].num); return zl_nil(); }
+    if (streq(name, "fill_rgb"))  { console_fill_rgb((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num); return zl_nil(); }
+    if (streq(name, "grad_rgb"))  { console_gradient_rgb((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num,(unsigned int)(unsigned long long)a[5].num); return zl_nil(); }
+    if (streq(name, "text_rgb"))  { if (a[2].type==V_STR) console_text_rgb((int)a[0].num,(int)a[1].num,a[2].str,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
+    if (streq(name, "get_px"))    return zl_num((double)console_get_px((int)a[0].num,(int)a[1].num));
+    if (streq(name, "shade"))     { console_shade((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
+    if (streq(name, "shadow"))    { console_shadow((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
+    if (streq(name, "rrect"))     { console_rrect((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(unsigned int)(unsigned long long)a[5].num); return zl_nil(); }
+    if (streq(name, "text_aa"))   { if (a[2].type==V_STR) console_text_aa((int)a[0].num,(int)a[1].num,a[2].str,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
+    if (streq(name, "text_big"))  { if (a[2].type==V_STR) console_text_aa2x((int)a[0].num,(int)a[1].num,a[2].str,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
+    if (streq(name, "num_aa"))    { console_num_aa((int)a[0].num,(int)a[1].num,(long)a[2].num,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
+    if (streq(name, "char_aa"))   { console_char_aa((int)a[0].num,(int)a[1].num,(int)a[2].num,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
+    if (streq(name, "text_box"))  { console_set_text_box((int)a[0].num,(int)a[1].num); return zl_nil(); }
+    if (streq(name, "cube"))      { console_cube((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num); return zl_nil(); }
+    if (streq(name, "mpoint"))    { console_pointer_show((int)a[0].num,(int)a[1].num); return zl_nil(); }
+    if (streq(name, "mhide"))     { console_pointer_hide(); return zl_nil(); }
+    if (streq(name, "present"))   { console_present(); return zl_nil(); }
+    if (streq(name, "icon"))      { console_icon((int)a[0].num,(int)a[1].num,(int)a[2].num,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
+    if (streq(name, "bg_snap"))   { console_bg_snapshot(); return zl_nil(); }
+    if (streq(name, "bg_rest"))   { console_bg_restore((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "grab"))      { console_grab((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "stamp"))     { console_stamp((int)a[0].num,(int)a[1].num); return zl_nil(); }
+    if (streq(name, "cube3d"))    { console_cube_filled((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num); return zl_nil(); }
+    if (streq(name, "cube_clip")) { console_cube_clip((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "cpu_char"))  return zl_num((double)cpu_brand_byte((int)a[0].num));
     if (streq(name, "emit"))      { zl_putc((char)(int)a[0].num); return zl_nil(); }
     if (streq(name, "sc"))        { console_putc((char)(int)a[0].num); return zl_nil(); }

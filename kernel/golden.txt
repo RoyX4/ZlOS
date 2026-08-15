@@ -1,7 +1,7 @@
   zlOS starting
 
   [  OK  ] multiboot handoff, 32-bit protected mode
-  [  OK  ] stack established, 16 KiB
+  [  OK  ] stack established, 256 KiB
   [  OK  ] COM1 initialised, 115200 8N1
   [  OK  ] VGA text console, 80x25
   [  OK  ] GDT loaded - flat 4 GiB code and data segments

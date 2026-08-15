@@ -24,20 +24,39 @@ void          zl_outb(u16 port, u8 val);
 unsigned char zl_inb(u16 port);
 
 /* ---- IDT ------------------------------------------------------------- */
+#ifdef ZL_64
+/* A long-mode gate is 16 bytes: the handler address is split across three
+ * fields, and there is an IST index for a dedicated interrupt stack. The
+ * 32-bit layout below simply does not fit a 64-bit address. */
+struct idt_entry { u16 lo; u16 sel; u8 ist; u8 flags; u16 mid; u32 hi; u32 zero; } __attribute__((packed));
+struct idt_ptr   { u16 limit; unsigned long base; } __attribute__((packed));
+#else
 struct idt_entry { u16 lo; u16 sel; u8 zero; u8 flags; u16 hi; } __attribute__((packed));
 struct idt_ptr   { u16 limit; u32 base; } __attribute__((packed));
+#endif
 
 static struct idt_entry idt[256];
 static struct idt_ptr   idtp;
 
 static void set_gate(int n, void *handler)
 {
+#ifdef ZL_64
+    unsigned long a = (unsigned long)handler;
+    idt[n].lo    = a & 0xFFFF;
+    idt[n].mid   = (a >> 16) & 0xFFFF;
+    idt[n].hi    = (u32)(a >> 32);
+    idt[n].sel   = 0x08;        /* the 64-bit code selector from boot64.S */
+    idt[n].ist   = 0;           /* no separate interrupt stack for now     */
+    idt[n].flags = 0x8E;        /* present, ring 0, 64-bit interrupt gate  */
+    idt[n].zero  = 0;
+#else
     u32 a = (u32)handler;
     idt[n].lo    = a & 0xFFFF;
     idt[n].hi    = (a >> 16) & 0xFFFF;
     idt[n].sel   = 0x08;        /* our GDT code selector */
     idt[n].zero  = 0;
     idt[n].flags = 0x8E;        /* present, ring 0, 32-bit interrupt gate */
+#endif
 }
 
 /* ---- the state the ISRs publish, read by zl ------------------------- */
@@ -69,7 +88,11 @@ int idt_mouse_y(void)   { return mouse_y; }
 int idt_mouse_btn(void) { return mouse_btn; }
 
 /* ---- the handlers ---------------------------------------------------- */
+#ifdef ZL_64
+struct interrupt_frame { unsigned long ip, cs, flags, sp, ss; };
+#else
 struct interrupt_frame { u32 ip, cs, flags, sp, ss; };
+#endif
 
 /* IRQ0: the PIT ticks ~100 times a second. Just count. */
 __attribute__((interrupt))
@@ -188,19 +211,64 @@ static void mouse_cmd(u8 cmd)
     ps2_wait_out(); zl_inb(0x60);           /* read+discard the ACK */
 }
 
+/* ---- bring the 8042 controller up properly ------------------------------
+ * This is the bug that made zlOS look dead on real hardware while working
+ * perfectly in QEMU: we never initialised the keyboard controller at all. We
+ * unmasked IRQ1 on the PIC and started reading port 0x60, which is fine in an
+ * emulator because QEMU hands the 8042 over already enabled and scanning.
+ *
+ * Real firmware does not. UEFI drives the keyboard through its own drivers and
+ * hands control over with the keyboard's INTERRUPT DISABLED in the controller
+ * config byte, and often with scanning switched off entirely. The PIC then
+ * dutifully delivers an interrupt that the controller never raises, so every
+ * key press vanishes and the machine looks frozen.
+ *
+ * So: flush whatever is stale, take explicit control of the config byte, and
+ * tell the keyboard to actually start scanning. */
+static void ps2_flush(void)
+{
+    int t = 1000;
+    while (t-- && (zl_inb(0x64) & 1)) zl_inb(0x60);
+}
+
+static void kbd_ctrl_init(void)
+{
+    /* quiet both ports while we reconfigure */
+    ps2_wait_in(); zl_outb(0x64, 0xAD);     /* disable the keyboard port  */
+    ps2_wait_in(); zl_outb(0x64, 0xA7);     /* disable the mouse port     */
+    ps2_flush();                            /* drop anything left over    */
+
+    /* Take the config byte and set it to what WE need, rather than trusting
+     * whatever state the firmware left behind. */
+    ps2_wait_in();  zl_outb(0x64, 0x20);    /* read config byte */
+    ps2_wait_out(); u8 cfg = zl_inb(0x60);
+    cfg |=  0x01;      /* bit 0: keyboard interrupt (IRQ1) ON - the fix      */
+    cfg |=  0x02;      /* bit 1: mouse interrupt (IRQ12) ON                  */
+    cfg &= ~0x10;      /* bit 4: clear = keyboard clock ENABLED              */
+    cfg &= ~0x20;      /* bit 5: clear = mouse clock ENABLED                 */
+    cfg |=  0x40;      /* bit 6: translate to scancode set 1, which our map
+                          expects - UEFI often leaves the keyboard in set 2  */
+    ps2_wait_in(); zl_outb(0x64, 0x60);     /* write config byte back */
+    ps2_wait_in(); zl_outb(0x60, cfg);
+
+    /* ports back on */
+    ps2_wait_in(); zl_outb(0x64, 0xAE);     /* enable the keyboard port */
+    ps2_wait_in(); zl_outb(0x64, 0xA8);     /* enable the mouse port    */
+
+    /* and finally tell the KEYBOARD ITSELF to scan. Without this the
+     * controller is listening to a device that is not talking. */
+    ps2_wait_in();  zl_outb(0x60, 0xF4);    /* enable scanning */
+    ps2_wait_out(); zl_inb(0x60);           /* eat the ACK */
+    ps2_flush();
+}
+
 static void mouse_init(void)
 {
-    ps2_wait_in(); zl_outb(0x64, 0xA8);     /* enable the auxiliary (mouse) port */
-
-    ps2_wait_in(); zl_outb(0x64, 0x20);     /* read the controller config byte */
-    ps2_wait_out(); u8 cfg = zl_inb(0x60);
-    cfg |= 0x02;                            /* enable IRQ12 */
-    cfg &= ~0x20;                           /* enable the mouse clock */
-    ps2_wait_in(); zl_outb(0x64, 0x60);     /* write the config byte back */
-    ps2_wait_in(); zl_outb(0x60, cfg);
+    kbd_ctrl_init();                        /* the controller, then the mouse */
 
     mouse_cmd(0xF6);                        /* set defaults */
     mouse_cmd(0xF4);                        /* enable data reporting */
+    ps2_flush();
 }
 
 void idt_init(void)
@@ -212,7 +280,7 @@ void idt_init(void)
     set_gate(0x2C, mouse_isr);      /* IRQ12 mouse (on slave) */
 
     idtp.limit = sizeof(idt) - 1;
-    idtp.base  = (u32)&idt;
+    idtp.base  = (unsigned long)&idt;
     __asm__ volatile("lidt %0" :: "m"(idtp));
 
     pic_remap();

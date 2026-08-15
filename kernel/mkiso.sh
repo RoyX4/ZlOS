@@ -26,6 +26,14 @@ cat > _iso/boot/grub/grub.cfg <<'EOF'
 insmod all_video
 insmod gfxterm
 
+# Ask GRUB for a bigger screen and hand that exact mode to the kernel.
+# gfxmode lists preferred resolutions (first that the firmware offers wins);
+# gfxpayload=keep makes the loaded kernel inherit GRUB's framebuffer instead
+# of the firmware default. The kernel READS width/height from multiboot, so it
+# adapts to whatever mode is actually set - no code change needed for the size.
+set gfxmode=1280x720,1280x800,1024x768,auto
+set gfxpayload=keep
+
 set timeout=3
 set default=0
 
@@ -48,4 +56,4 @@ echo
 echo "test it:      qemu-system-i386 -cdrom zlOS.iso"
 echo "write a USB:  sudo dd if=zlOS.iso of=/dev/sdX bs=4M status=progress && sync"
 echo
-echo "This is a BIOS/legacy image - a UEFI-only machine will not boot it."
+echo "Hybrid image: boots on BOTH legacy BIOS and 64-bit UEFI (efi/boot/bootx64.efi)."

@@ -33,7 +33,9 @@
 .section .bss
 .align 16
 stack_bottom:
-.skip 16384                            /* 16 KiB - design_kernel K2: keep frames small */
+.skip 262144                           /* 256 KiB - the zl compositor nests deep (compose ->
+                                          draw_sysmon -> draw_window -> shadow), and each zl
+                                          frame is large; 16 KiB overflowed into console state */
 stack_top:
 
 .section .text

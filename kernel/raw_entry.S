@@ -13,7 +13,10 @@
 .section .text.rawentry, "ax"
 .global _rawstart
 _rawstart:
-    mov $0x90000, %esp          /* a stack below 640 KiB, above the kernel */
+    mov $0x600000, %esp         /* a stack in high memory (6 MiB). The kernel fills
+                                   0x10000..~0x92000, leaving only ~55 KiB under the
+                                   640 KiB line - not enough for the framebuffer
+                                   compositor, which nests deep and needs ~256 KiB. */
 
     /* Zero the .bss ourselves. GRUB-loaded kernels get a zeroed .bss from
      * the ELF loader; a flat binary loaded off disk does not, so the font
@@ -27,10 +30,30 @@ _rawstart:
 
     call serial_init            /* serial before anything else */
 
-    xor %ebx, %ebx              /* no multiboot info -> console_init picks VGA text */
+    /* Our bootloader sets a VBE mode itself and parks the details at 0x8300:
+     * addr(4) pitch(2) width(2) height(2) bpp(1). A zero address means it could
+     * not get one, and we fall back to the VGA text console. There is no
+     * multiboot info on this path either way - this handoff is entirely ours. */
+    movl 0x8300, %eax
+    testl %eax, %eax
+    jz 1f
+    movzbl 0x830A, %ecx         /* bpp    */
+    push %ecx
+    movzwl 0x8308, %ecx         /* height */
+    push %ecx
+    movzwl 0x8306, %ecx         /* width  */
+    push %ecx
+    movzwl 0x8304, %ecx         /* pitch  */
+    push %ecx
+    push %eax                   /* addr   */
+    call console_init_fb
+    add $20, %esp
+    jmp 2f
+1:  xor %ebx, %ebx              /* no framebuffer -> VGA text console */
     push %ebx
     call console_init
     add $4, %esp
+2:
 
     call main                   /* main() is the zl program */
     call kernel_done
