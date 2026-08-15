@@ -116,6 +116,18 @@ int  intel_wrpll_divider(void);
 u32  intel_wrpll_cfgcr1(void);
 u32  intel_wrpll_cfgcr2(void);
 u32  intel_wrpll_actual_khz(void);
+int  intel_dpcd_read(int port, u32 addr, int len);
+int  intel_dpcd_byte(int i);
+int  intel_dpcd_rev(void);
+int  intel_dpcd_max_rate(void);
+int  intel_dpcd_max_lanes(void);
+int  intel_dpcd_enhanced(void);
+int  intel_dpcd_tps3(void);
+int  intel_dpcd_has_rate_table(void);
+u32  intel_dpcd_max_rate_kbps(void);
+int  intel_aux_last_reply(void);
+int  intel_dp_choose_rate_ex(u32 pixel_khz, int lanes, int bpp, int allow_edp);
+int  intel_dp_choose_rate_for_panel(u32 pixel_khz, int bpp, int maxrate, int maxlanes, int table);
 
 static unsigned char edid_storage[256];
 
@@ -360,6 +372,53 @@ int main(int argc, char **argv)
         }
     }
     printf("\n");
+
+    if (unsafe) {
+        printf("  -- talking to the PANEL over the AUX channel --\n");
+        int n = intel_dpcd_read(0, 0x00000, 16);   /* DDI A = port 0 */
+        if (n > 0) {
+            printf("  DPCD read OK    %d bytes, reply=%d\n", n, intel_aux_last_reply());
+            printf("  DPCD revision   %d.%d\n",
+                   intel_dpcd_rev() >> 4, intel_dpcd_rev() & 0xF);
+            int mr = intel_dpcd_max_rate();
+            const char *rn = mr == 0x06 ? "1.62 Gbps (RBR)" :
+                             mr == 0x0A ? "2.70 Gbps (HBR)" :
+                             mr == 0x14 ? "5.40 Gbps (HBR2)" :
+                             mr == 0x1E ? "8.10 Gbps (HBR3)" : "?";
+            printf("  MAX_LINK_RATE   0x%02X = %s\n", mr, rn);
+            printf("  MAX_LANE_COUNT  %d%s\n", intel_dpcd_max_lanes(),
+                   intel_dpcd_enhanced() ? "  (enhanced framing)" : "");
+            printf("  TPS3 supported  %d\n", intel_dpcd_tps3());
+            printf("  rate table      %s\n",
+                   intel_dpcd_has_rate_table()
+                     ? "YES - eDP 1.4, intermediate rates are legal here"
+                     : "no - STANDARD RATES ONLY");
+            printf("  raw: ");
+            for (int i = 0; i < 16; i++) printf("%02X ", intel_dpcd_byte(i));
+            printf("\n");
+
+            /* now the question that actually matters for the modeset */
+            u32 nominal = (u32)((double)intel_htotal() * intel_vtotal() * 60.0 / 1000.0);
+            int allow = intel_dpcd_has_rate_table();
+            (void)allow;
+            int pick  = intel_dp_choose_rate_for_panel(nominal, 24,
+                            intel_dpcd_max_rate(), intel_dpcd_max_lanes(),
+                            intel_dpcd_has_rate_table());
+            printf("\n  with the panel's REAL capabilities:\n");
+            printf("    %u kHz, %d lanes, 24 bpp -> rate index %d\n",
+                   nominal, intel_dpcd_max_lanes(), pick);
+            printf("    (clamped to the panel's 0x%02X max and its rate-table policy)\n",
+                   intel_dpcd_max_rate());
+            printf("    i915 chose index %d  ->  %s\n",
+                   intel_dpll_link_rate(0),
+                   pick == intel_dpll_link_rate(0) ? "MATCH" : "differs");
+        } else {
+            printf("  DPCD read FAILED (reply=%d)\n", intel_aux_last_reply());
+            printf("  i915 is probably holding the AUX channel - try\n");
+            printf("    sudo ./gpu-dev.sh detach\n");
+        }
+        printf("\n");
+    }
 
     printf("  -- backlight --\n");
     u32 blmax = intel_backlight_max();

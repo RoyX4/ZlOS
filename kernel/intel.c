@@ -884,6 +884,38 @@ int intel_dp_choose_rate(u32 pixel_khz, int lanes, int bpp)
     return intel_dp_choose_rate_ex(pixel_khz, lanes, bpp, 0);
 }
 
+/* Choose a rate the PANEL will actually accept.
+ *
+ * Two separate limits apply and both are easy to miss. The panel publishes a
+ * maximum link rate in DPCD 0x01, and driving faster than that fails training
+ * no matter what the GPU can do - this laptop's panel caps at 0x0A, 2.7 Gbps,
+ * so the 5.4 Gbps rate the GPU supports is simply not available. And the
+ * intermediate eDP rates are only legal if the panel advertises a rate table.
+ *
+ * Both facts come from the DPCD, so this takes the DPCD values rather than
+ * assuming anything. Returns -1 if the mode cannot be driven at all, which is
+ * a real answer a caller must handle - it means "reduce bpp or resolution",
+ * not "try anyway". */
+int intel_dp_choose_rate_for_panel(u32 pixel_khz, int bpp,
+                                   int dpcd_max_rate, int dpcd_max_lanes,
+                                   int dpcd_has_rate_table)
+{
+    int lanes = dpcd_max_lanes;
+    if (lanes < 1) lanes = 1;
+    if (lanes > 4) lanes = 4;
+
+    int idx = intel_dp_choose_rate_ex(pixel_khz, lanes, bpp,
+                                      dpcd_has_rate_table ? 1 : 0);
+    if (idx < 0) return -1;
+
+    /* DPCD 0x01 counts in units of 270 MHz of LINK rate; our table is in
+     * symbol clocks, which are half that. Compare in the same units. */
+    u32 chosen_link_khz = intel_dpll_rate_khz(idx) * 2u;
+    u32 panel_max_khz   = (u32)dpcd_max_rate * 270000u;
+    if (panel_max_khz && chosen_link_khz > panel_max_khz) return -1;
+    return idx;
+}
+
 /* ---- HDMI: the divider search -----------------------------------------
  * The DCO runs at pixel_clock * 5 * (p * q * k). Intel's algorithm walks a
  * fixed set of divider combinations, keeps the ones that put the DCO within
@@ -1089,4 +1121,181 @@ int intel_ddi_set_clock(int ddi, int pll)
     v &= ~(1u << (ddi + 15));                 /* clock off -> off      */
     mmio_w(DPLL_CTRL2, v);
     return 1;
+}
+
+/* ==== the DisplayPort AUX channel ========================================
+ * Everything so far has talked to the GPU. This talks to the PANEL.
+ *
+ * AUX is a tiny bidirectional link alongside the main DisplayPort lanes,
+ * carrying short transactions to a register map inside the display called the
+ * DPCD. It is how a driver learns what the panel can actually do - its
+ * maximum link rate, how many lanes it has, which training patterns it
+ * supports - and it is the channel link training itself is negotiated over.
+ * Without AUX there is no modeset, only guessing.
+ *
+ * A transaction is a header plus up to 16 bytes, written into the data
+ * registers, kicked off by setting SEND_BUSY, and answered in the same
+ * registers. The header is four bytes:
+ *
+ *     [7:4] command   9 = native read, 8 = native write
+ *     [3:0] address bits 19:16
+ *     address bits 15:8
+ *     address bits 7:0
+ *     length - 1
+ *
+ * The reply's top nibble is ACK (0), NACK (1) or DEFER (2). DEFER means "ask
+ * again" and is completely normal - a panel that is busy defers rather than
+ * failing, and a driver that treats a defer as an error will look flaky on
+ * hardware that is working correctly.
+ */
+#define DP_AUX_CH_CTL(port)   (0x64010 + (port) * 0x100)
+#define DP_AUX_CH_DATA(port, i) (0x64014 + (port) * 0x100 + (i) * 4)
+
+#define AUX_SEND_BUSY     (1u << 31)
+#define AUX_DONE          (1u << 30)
+#define AUX_INTERRUPT     (1u << 29)
+#define AUX_TIMEOUT_ERR   (1u << 28)
+#define AUX_TIMEOUT_MAX   (3u << 26)
+#define AUX_RECEIVE_ERR   (1u << 25)
+#define AUX_MSG_SIZE_SHIFT 20
+
+/* Skylake derives the AUX bit clock from CDCLK itself, so there is no divider
+ * to compute - but it does want the sync pulse counts programmed, and i915
+ * uses 32 for both. */
+#define AUX_SYNC_PULSE_SKL(c)    (((c) - 1) << 0)
+#define AUX_FW_SYNC_PULSE_SKL(c) (((c) - 1) << 5)
+
+#define AUX_REPLY_ACK    0x0
+#define AUX_REPLY_NACK   0x1
+#define AUX_REPLY_DEFER  0x2
+
+static u8 aux_buf[20];
+static int aux_last_reply = -1;
+static int aux_last_len   = 0;
+
+/* One raw transaction. Returns the number of bytes received, or -1. */
+static int aux_xfer(int port, u32 cmd, u32 addr, const u8 *out, int out_len,
+                    u8 *in, int in_len)
+{
+    if (!intel_present() || port < 0 || port > 3) return -1;
+    if (out_len > 16 || in_len > 16) return -1;
+
+    u32 ctl_reg = DP_AUX_CH_CTL(port);
+
+    /* the header, then any payload, packed big-endian into the data regs */
+    u8 msg[20];
+    int msg_len = 0;
+    msg[msg_len++] = (u8)((cmd << 4) | ((addr >> 16) & 0x0F));
+    msg[msg_len++] = (u8)((addr >> 8) & 0xFF);
+    msg[msg_len++] = (u8)(addr & 0xFF);
+    /* a zero-length transaction encodes as length-1 = 0xFF... but we never
+     * issue one, so the simple form is correct here */
+    msg[msg_len++] = (u8)((out_len ? out_len : in_len) - 1);
+    for (int i = 0; i < out_len; i++) msg[msg_len++] = out[i];
+
+    /* clear any stale status before starting - these bits are write-1-clear
+     * and a leftover DONE makes the very next poll return immediately */
+    mmio_w(ctl_reg, mmio_r(ctl_reg) |
+           AUX_DONE | AUX_TIMEOUT_ERR | AUX_RECEIVE_ERR | AUX_INTERRUPT);
+
+    for (int i = 0; i < 5; i++) {
+        u32 w = 0;
+        for (int b = 0; b < 4; b++) {
+            int idx = i * 4 + b;
+            w = (w << 8) | (idx < msg_len ? msg[idx] : 0);
+        }
+        mmio_w(DP_AUX_CH_DATA(port, i), w);
+    }
+
+    u32 send = AUX_SEND_BUSY | AUX_DONE | AUX_INTERRUPT | AUX_TIMEOUT_ERR |
+               AUX_TIMEOUT_MAX | AUX_RECEIVE_ERR |
+               ((u32)msg_len << AUX_MSG_SIZE_SHIFT) |
+               AUX_FW_SYNC_PULSE_SKL(32) | AUX_SYNC_PULSE_SKL(32);
+    mmio_w(ctl_reg, send);
+
+    /* SEND_BUSY clears when the transaction completes, one way or another */
+    u32 status = 0;
+    int done = 0;
+    for (int spin = 0; spin < 2000000; spin++) {
+        status = mmio_r(ctl_reg);
+        if (!(status & AUX_SEND_BUSY)) { done = 1; break; }
+    }
+    if (!done) return -1;
+
+    /* acknowledge whatever happened */
+    mmio_w(ctl_reg, status | AUX_DONE | AUX_TIMEOUT_ERR | AUX_RECEIVE_ERR);
+
+    if (status & AUX_TIMEOUT_ERR) { aux_last_reply = -2; return -1; }
+    if (status & AUX_RECEIVE_ERR) { aux_last_reply = -3; return -1; }
+
+    int recv = (int)((status >> AUX_MSG_SIZE_SHIFT) & 0x1F);
+    if (recv < 1) return -1;
+
+    /* first byte is the reply header; the rest is data */
+    u32 d0 = mmio_r(DP_AUX_CH_DATA(port, 0));
+    aux_last_reply = (int)((d0 >> 28) & 0xF);
+    aux_last_len   = recv - 1;
+
+    int n = recv - 1;
+    if (n > in_len) n = in_len;
+    for (int i = 0; i < n; i++) {
+        int byte_index = i + 1;                    /* skip the reply header */
+        u32 w = mmio_r(DP_AUX_CH_DATA(port, byte_index / 4));
+        in[i] = (u8)((w >> (24 - (byte_index % 4) * 8)) & 0xFF);
+    }
+    return n;
+}
+
+int intel_aux_last_reply(void) { return aux_last_reply; }
+
+/* A native DPCD read, with the retry a DEFER requires. */
+int intel_dpcd_read(int port, u32 addr, int len)
+{
+    if (len < 1 || len > 16) return 0;
+    for (int attempt = 0; attempt < 8; attempt++) {
+        int n = aux_xfer(port, 0x9, addr, 0, 0, aux_buf, len);
+        if (n > 0 && aux_last_reply == AUX_REPLY_ACK) return n;
+        if (aux_last_reply != AUX_REPLY_DEFER && n < 0 && attempt > 2) break;
+        /* a short settle before asking again - the panel said "not yet" */
+        for (volatile int d = 0; d < 200000; d++) { }
+    }
+    return 0;
+}
+
+int intel_dpcd_write(int port, u32 addr, const u8 *data, int len)
+{
+    if (len < 1 || len > 16) return 0;
+    for (int attempt = 0; attempt < 8; attempt++) {
+        int n = aux_xfer(port, 0x8, addr, data, len, aux_buf, 1);
+        if (n >= 0 && aux_last_reply == AUX_REPLY_ACK) return 1;
+        for (volatile int d = 0; d < 200000; d++) { }
+    }
+    return 0;
+}
+
+int intel_dpcd_byte(int i)
+{
+    if (i < 0 || i >= 20) return 0;
+    return (int)aux_buf[i];
+}
+
+/* ---- what the DPCD says, decoded --------------------------------------
+ * These are the fields that decide a modeset. MAX_LINK_RATE is in units of
+ * 270 MHz: 0x06 = 1.62, 0x0A = 2.7, 0x14 = 5.4, 0x1E = 8.1 Gbps. */
+int intel_dpcd_rev(void)        { return (int)aux_buf[0]; }
+int intel_dpcd_max_rate(void)   { return (int)aux_buf[1]; }
+int intel_dpcd_max_lanes(void)  { return (int)(aux_buf[2] & 0x1F); }
+int intel_dpcd_enhanced(void)   { return (int)((aux_buf[2] >> 7) & 1); }
+int intel_dpcd_tps3(void)       { return (int)((aux_buf[2] >> 6) & 1); }
+
+/* Bit 1 of DPCD 0x0E (TRAINING_AUX_RD_INTERVAL) says the panel publishes a
+ * SUPPORTED_LINK_RATES table at 0x10 - which is exactly how an eDP 1.4 panel
+ * advertises the intermediate rates. A panel WITHOUT this bit must only be
+ * driven at the standard rates, which is the rule our rate chooser follows. */
+int intel_dpcd_has_rate_table(void) { return (int)((aux_buf[14] >> 7) & 1); }
+
+u32 intel_dpcd_max_rate_kbps(void)
+{
+    /* the encoded value times 270 MHz, then times 10 for kbps per lane */
+    return (u32)aux_buf[1] * 270000u;
 }
