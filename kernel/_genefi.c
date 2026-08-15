@@ -29,6 +29,9 @@ Value zl_fn_colorbars(void);
 Value zl_fn_mousedemo(void);
 Value zl_fn_draw_window(Value, Value, Value, Value, Value, Value);
 Value zl_fn_windows_demo(void);
+Value zl_fn_usb_boot(void);
+Value zl_fn_usbkey_demo(void);
+Value zl_fn_spname(Value);
 Value zl_fn_cube_demo(void);
 Value zl_fn_anim(void);
 Value zl_fn_snake_game(void);
@@ -238,7 +241,12 @@ Value zl_fn_kbd_init(void) {
 }
 
 Value zl_fn_edit_key(void) {
+    Value v_uk = zl_nil();
     Value v_sc = zl_nil();
+    v_uk = ({ zl_calln("usb_key", 0); });
+    if (zl_truthy(zl_binop("!=", v_uk, zl_num(0)))) {
+        return v_uk;
+    }
     v_sc = ({ zl_calln("scan_get", 0); });
     if (zl_truthy(zl_binop("==", v_sc, zl_num(0)))) {
         return zl_num(0);
@@ -291,8 +299,13 @@ Value zl_fn_kbd_scan(void) {
 }
 
 Value zl_fn_key_get(void) {
+    Value v_uk = zl_nil();
     if (zl_truthy(zl_binop("==", ({ zl_fn_ser_ready(); }), zl_num(1)))) {
         return ({ zl_fn_ser_read(); });
+    }
+    v_uk = ({ zl_calln("usb_key", 0); });
+    if (zl_truthy(zl_binop("!=", v_uk, zl_num(0)))) {
+        return v_uk;
     }
     return ({ zl_fn_kbd_scan(); });
     return zl_nil();
@@ -558,9 +571,18 @@ Value zl_fn_help(void) {
     ({ Value _t333 = zl_str("    l        list the RAM files"); zl_calln("print", 1, _t333); });
     ({ Value _t334 = zl_str("    e        beep the PC speaker"); zl_calln("print", 1, _t334); });
     ({ Value _t335 = zl_str("    m        poke a byte into video memory and read it back"); zl_calln("print", 1, _t335); });
-    ({ Value _t336 = zl_str("    c        clear the screen"); zl_calln("print", 1, _t336); });
-    ({ Value _t337 = zl_str("    r        reboot the machine"); zl_calln("print", 1, _t337); });
-    ({ Value _t338 = zl_str("    q        halt the machine"); zl_calln("print", 1, _t338); });
+    ({ Value _t336 = v_C_CYAN; zl_calln("color", 1, _t336); });
+    ({ Value _t337 = zl_str("  our hardware drivers"); zl_calln("print", 1, _t337); });
+    ({ Value _t338 = v_C_GREY; zl_calln("color", 1, _t338); });
+    ({ Value _t339 = zl_str("    k        PCI bus + the Intel GPU, read off real silicon"); zl_calln("print", 1, _t339); });
+    ({ Value _t340 = zl_str("    u        USB: take the xHCI controller and enumerate the bus"); zl_calln("print", 1, _t340); });
+    ({ Value _t341 = zl_str("    j        USB keyboard - live, straight off the HID reports"); zl_calln("print", 1, _t341); });
+    ({ Value _t342 = zl_str("    n        change the screen resolution, no BIOS involved"); zl_calln("print", 1, _t342); });
+    ({ Value _t343 = zl_str("    v        spinning 3D cube, rendered in software"); zl_calln("print", 1, _t343); });
+    ({ Value _t344 = zl_str("    w        draggable windows"); zl_calln("print", 1, _t344); });
+    ({ Value _t345 = zl_str("    c        clear the screen"); zl_calln("print", 1, _t345); });
+    ({ Value _t346 = zl_str("    r        reboot the machine"); zl_calln("print", 1, _t346); });
+    ({ Value _t347 = zl_str("    q        halt the machine"); zl_calln("print", 1, _t347); });
     return zl_nil();
 }
 
@@ -569,22 +591,22 @@ Value zl_fn_colorbars(void) {
     Value v_w = zl_nil();
     Value v_i = zl_nil();
     if (zl_truthy(zl_binop("==", ({ zl_calln("px_w", 0); }), zl_num(0)))) {
-        ({ Value _t339 = v_C_GREY; zl_calln("color", 1, _t339); });
-        ({ Value _t340 = zl_str("  (colour bars need the framebuffer console)"); zl_calln("print", 1, _t340); });
+        ({ Value _t348 = v_C_GREY; zl_calln("color", 1, _t348); });
+        ({ Value _t349 = zl_str("  (colour bars need the framebuffer console)"); zl_calln("print", 1, _t349); });
         return zl_num(0);
     }
     v_y = zl_binop("+", zl_binop("*", ({ zl_calln("row", 0); }), zl_num(16)), zl_num(8));
     v_w = zl_binop("/", ({ zl_calln("px_w", 0); }), zl_num(14));
     v_i = zl_num(1);
     while (zl_truthy(zl_binop("<=", v_i, zl_num(14)))) {
-        ({ Value _t341 = zl_binop("*", zl_binop("-", v_i, zl_num(1)), v_w); Value _t342 = v_y; Value _t343 = v_w; Value _t344 = zl_num(40); Value _t345 = v_i; zl_calln("fill_rect", 5, _t341, _t342, _t343, _t344, _t345); });
+        ({ Value _t350 = zl_binop("*", zl_binop("-", v_i, zl_num(1)), v_w); Value _t351 = v_y; Value _t352 = v_w; Value _t353 = zl_num(40); Value _t354 = v_i; zl_calln("fill_rect", 5, _t350, _t351, _t352, _t353, _t354); });
         v_i = zl_binop("+", v_i, zl_num(1));
     }
-    ({ Value _t346 = zl_str(""); zl_calln("print", 1, _t346); });
-    ({ Value _t347 = zl_str(""); zl_calln("print", 1, _t347); });
-    ({ Value _t348 = zl_str(""); zl_calln("print", 1, _t348); });
-    ({ Value _t349 = v_C_GREY; zl_calln("color", 1, _t349); });
-    ({ Value _t350 = zl_str("  14 colours, painted straight into the framebuffer"); zl_calln("print", 1, _t350); });
+    ({ Value _t355 = zl_str(""); zl_calln("print", 1, _t355); });
+    ({ Value _t356 = zl_str(""); zl_calln("print", 1, _t356); });
+    ({ Value _t357 = zl_str(""); zl_calln("print", 1, _t357); });
+    ({ Value _t358 = v_C_GREY; zl_calln("color", 1, _t358); });
+    ({ Value _t359 = zl_str("  14 colours, painted straight into the framebuffer"); zl_calln("print", 1, _t359); });
     return zl_num(0);
     return zl_nil();
 }
@@ -596,19 +618,19 @@ Value zl_fn_mousedemo(void) {
     Value v_oy = zl_nil();
     Value v_col = zl_nil();
     if (zl_truthy(zl_binop("==", ({ zl_calln("px_w", 0); }), zl_num(0)))) {
-        ({ Value _t351 = v_C_GREY; zl_calln("color", 1, _t351); });
-        ({ Value _t352 = zl_str("  the mouse demo needs the framebuffer console"); zl_calln("print", 1, _t352); });
+        ({ Value _t360 = v_C_GREY; zl_calln("color", 1, _t360); });
+        ({ Value _t361 = zl_str("  the mouse demo needs the framebuffer console"); zl_calln("print", 1, _t361); });
         return zl_num(0);
     }
     v_w = ({ zl_calln("px_w", 0); });
     v_h = ({ zl_calln("px_h", 0); });
     ({ zl_calln("cls", 0); });
-    ({ Value _t353 = v_C_WHITE; zl_calln("color", 1, _t353); });
-    ({ Value _t354 = zl_str("  MOUSE - move it. left/right button changes colour. press any key to exit."); zl_calln("print", 1, _t354); });
-    ({ Value _t355 = zl_str(""); zl_calln("print", 1, _t355); });
-    ({ Value _t356 = v_C_GREY; zl_calln("color", 1, _t356); });
-    ({ Value _t357 = zl_str("  x: "); zl_calln("put", 1, _t357); });
-    ({ Value _t358 = ({ zl_calln("row", 0); }); Value _t359 = zl_num(8); Value _t360 = zl_str("     y:"); Value _t361 = v_C_GREY; zl_calln("at", 4, _t358, _t359, _t360, _t361); });
+    ({ Value _t362 = v_C_WHITE; zl_calln("color", 1, _t362); });
+    ({ Value _t363 = zl_str("  MOUSE - move it. left/right button changes colour. press any key to exit."); zl_calln("print", 1, _t363); });
+    ({ Value _t364 = zl_str(""); zl_calln("print", 1, _t364); });
+    ({ Value _t365 = v_C_GREY; zl_calln("color", 1, _t365); });
+    ({ Value _t366 = zl_str("  x: "); zl_calln("put", 1, _t366); });
+    ({ Value _t367 = ({ zl_calln("row", 0); }); Value _t368 = zl_num(8); Value _t369 = zl_str("     y:"); Value _t370 = v_C_GREY; zl_calln("at", 4, _t367, _t368, _t369, _t370); });
     v_ox = zl_num(0);
     v_oy = zl_num(0);
     while (zl_truthy(zl_binop("==", ({ zl_fn_key_get(); }), zl_num(0)))) {
@@ -623,19 +645,19 @@ Value zl_fn_mousedemo(void) {
         if (zl_truthy(zl_binop("<", v_my, zl_num(48)))) {
             v_my = zl_num(48);
         }
-        ({ Value _t362 = v_ox; Value _t363 = v_oy; Value _t364 = zl_num(12); Value _t365 = zl_num(18); Value _t366 = v_C_BLACK; zl_calln("fill_rect", 5, _t362, _t363, _t364, _t365, _t366); });
+        ({ Value _t371 = v_ox; Value _t372 = v_oy; Value _t373 = zl_num(12); Value _t374 = zl_num(18); Value _t375 = v_C_BLACK; zl_calln("fill_rect", 5, _t371, _t372, _t373, _t374, _t375); });
         v_col = v_C_GREEN;
-        if (zl_truthy(zl_binop("!=", ({ Value _t367 = ({ zl_calln("mouse_btn", 0); }); Value _t368 = zl_num(1); zl_calln("band", 2, _t367, _t368); }), zl_num(0)))) {
+        if (zl_truthy(zl_binop("!=", ({ Value _t376 = ({ zl_calln("mouse_btn", 0); }); Value _t377 = zl_num(1); zl_calln("band", 2, _t376, _t377); }), zl_num(0)))) {
             v_col = v_C_RED;
         }
-        if (zl_truthy(zl_binop("!=", ({ Value _t369 = ({ zl_calln("mouse_btn", 0); }); Value _t370 = zl_num(2); zl_calln("band", 2, _t369, _t370); }), zl_num(0)))) {
+        if (zl_truthy(zl_binop("!=", ({ Value _t378 = ({ zl_calln("mouse_btn", 0); }); Value _t379 = zl_num(2); zl_calln("band", 2, _t378, _t379); }), zl_num(0)))) {
             v_col = v_C_CYAN;
         }
-        ({ Value _t371 = v_mx; Value _t372 = v_my; Value _t373 = v_col; Value _t374 = v_C_WHITE; zl_calln("mcursor", 4, _t371, _t372, _t373, _t374); });
+        ({ Value _t380 = v_mx; Value _t381 = v_my; Value _t382 = v_col; Value _t383 = v_C_WHITE; zl_calln("mcursor", 4, _t380, _t381, _t382, _t383); });
         v_ox = v_mx;
         v_oy = v_my;
-        ({ Value _t375 = zl_num(2); Value _t376 = zl_num(5); Value _t377 = v_mx; Value _t378 = v_C_WHITE; zl_calln("at_num", 4, _t375, _t376, _t377, _t378); });
-        ({ Value _t379 = zl_num(2); Value _t380 = zl_num(16); Value _t381 = v_my; Value _t382 = v_C_WHITE; zl_calln("at_num", 4, _t379, _t380, _t381, _t382); });
+        ({ Value _t384 = zl_num(2); Value _t385 = zl_num(5); Value _t386 = v_mx; Value _t387 = v_C_WHITE; zl_calln("at_num", 4, _t384, _t385, _t386, _t387); });
+        ({ Value _t388 = zl_num(2); Value _t389 = zl_num(16); Value _t390 = v_my; Value _t391 = v_C_WHITE; zl_calln("at_num", 4, _t388, _t389, _t390, _t391); });
     }
     ({ zl_fn_draw_screen(); });
     return zl_num(0);
@@ -647,21 +669,21 @@ Value zl_fn_draw_window(Value v_wx, Value v_wy, Value v_ww, Value v_wh, Value v_
     Value v_tbt = zl_nil();
     Value v_tbb = zl_nil();
     v_u = ({ zl_fn_ui(); });
-    ({ Value _t383 = v_wx; Value _t384 = v_wy; Value _t385 = v_ww; Value _t386 = v_wh; Value _t387 = zl_binop("*", zl_num(8), v_u); Value _t388 = zl_binop("*", zl_num(6), v_u); zl_calln("shadow", 6, _t383, _t384, _t385, _t386, _t387, _t388); });
-    ({ Value _t389 = v_wx; Value _t390 = v_wy; Value _t391 = v_ww; Value _t392 = v_wh; Value _t393 = zl_binop("*", zl_num(5), v_u); Value _t394 = ({ Value _t389 = zl_num(20); Value _t390 = zl_num(26); Value _t391 = zl_num(42); zl_fn_rgb(_t389, _t390, _t391); }); zl_calln("rrect", 6, _t389, _t390, _t391, _t392, _t393, _t394); });
-    ({ Value _t398 = zl_binop("+", v_wx, zl_num(1)); Value _t399 = zl_binop("+", v_wy, zl_num(1)); Value _t400 = zl_binop("-", v_ww, zl_num(2)); Value _t401 = zl_binop("-", v_wh, zl_num(2)); Value _t402 = zl_binop("*", zl_num(4), v_u); Value _t403 = v_PANEL; zl_calln("rrect", 6, _t398, _t399, _t400, _t401, _t402, _t403); });
-    v_tbt = ({ Value _t404 = zl_num(48); Value _t405 = zl_num(92); Value _t406 = zl_num(168); zl_fn_rgb(_t404, _t405, _t406); });
-    v_tbb = ({ Value _t407 = zl_num(22); Value _t408 = zl_num(40); Value _t409 = zl_num(92); zl_fn_rgb(_t407, _t408, _t409); });
+    ({ Value _t392 = v_wx; Value _t393 = v_wy; Value _t394 = v_ww; Value _t395 = v_wh; Value _t396 = zl_binop("*", zl_num(8), v_u); Value _t397 = zl_binop("*", zl_num(6), v_u); zl_calln("shadow", 6, _t392, _t393, _t394, _t395, _t396, _t397); });
+    ({ Value _t398 = v_wx; Value _t399 = v_wy; Value _t400 = v_ww; Value _t401 = v_wh; Value _t402 = zl_binop("*", zl_num(5), v_u); Value _t403 = ({ Value _t398 = zl_num(20); Value _t399 = zl_num(26); Value _t400 = zl_num(42); zl_fn_rgb(_t398, _t399, _t400); }); zl_calln("rrect", 6, _t398, _t399, _t400, _t401, _t402, _t403); });
+    ({ Value _t407 = zl_binop("+", v_wx, zl_num(1)); Value _t408 = zl_binop("+", v_wy, zl_num(1)); Value _t409 = zl_binop("-", v_ww, zl_num(2)); Value _t410 = zl_binop("-", v_wh, zl_num(2)); Value _t411 = zl_binop("*", zl_num(4), v_u); Value _t412 = v_PANEL; zl_calln("rrect", 6, _t407, _t408, _t409, _t410, _t411, _t412); });
+    v_tbt = ({ Value _t413 = zl_num(48); Value _t414 = zl_num(92); Value _t415 = zl_num(168); zl_fn_rgb(_t413, _t414, _t415); });
+    v_tbb = ({ Value _t416 = zl_num(22); Value _t417 = zl_num(40); Value _t418 = zl_num(92); zl_fn_rgb(_t416, _t417, _t418); });
     if (zl_truthy(zl_binop("==", v_focus, zl_num(0)))) {
-        v_tbt = ({ Value _t410 = zl_num(42); Value _t411 = zl_num(53); Value _t412 = zl_num(80); zl_fn_rgb(_t410, _t411, _t412); });
-        v_tbb = ({ Value _t413 = zl_num(24); Value _t414 = zl_num(34); Value _t415 = zl_num(56); zl_fn_rgb(_t413, _t414, _t415); });
+        v_tbt = ({ Value _t419 = zl_num(42); Value _t420 = zl_num(53); Value _t421 = zl_num(80); zl_fn_rgb(_t419, _t420, _t421); });
+        v_tbb = ({ Value _t422 = zl_num(24); Value _t423 = zl_num(34); Value _t424 = zl_num(56); zl_fn_rgb(_t422, _t423, _t424); });
     }
-    ({ Value _t416 = zl_binop("+", v_wx, zl_num(4)); Value _t417 = zl_binop("+", v_wy, zl_num(3)); Value _t418 = zl_binop("-", v_ww, zl_num(8)); Value _t419 = zl_binop("-", zl_binop("*", v_TITLE_H, v_u), zl_num(5)); Value _t420 = v_tbt; Value _t421 = v_tbb; zl_calln("grad_rgb", 6, _t416, _t417, _t418, _t419, _t420, _t421); });
+    ({ Value _t425 = zl_binop("+", v_wx, zl_num(4)); Value _t426 = zl_binop("+", v_wy, zl_num(3)); Value _t427 = zl_binop("-", v_ww, zl_num(8)); Value _t428 = zl_binop("-", zl_binop("*", v_TITLE_H, v_u), zl_num(5)); Value _t429 = v_tbt; Value _t430 = v_tbb; zl_calln("grad_rgb", 6, _t425, _t426, _t427, _t428, _t429, _t430); });
     if (zl_truthy(zl_binop("==", v_focus, zl_num(1)))) {
-        ({ Value _t422 = zl_binop("+", v_wx, zl_num(4)); Value _t423 = zl_binop("-", zl_binop("+", v_wy, zl_binop("*", v_TITLE_H, v_u)), zl_num(2)); Value _t424 = zl_binop("-", v_ww, zl_num(8)); Value _t425 = zl_num(2); Value _t426 = v_ACCENT; zl_calln("fill_rgb", 5, _t422, _t423, _t424, _t425, _t426); });
+        ({ Value _t431 = zl_binop("+", v_wx, zl_num(4)); Value _t432 = zl_binop("-", zl_binop("+", v_wy, zl_binop("*", v_TITLE_H, v_u)), zl_num(2)); Value _t433 = zl_binop("-", v_ww, zl_num(8)); Value _t434 = zl_num(2); Value _t435 = v_ACCENT; zl_calln("fill_rgb", 5, _t431, _t432, _t433, _t434, _t435); });
     }
-    ({ Value _t427 = zl_binop("-", zl_binop("+", v_wx, v_ww), zl_binop("*", zl_num(20), v_u)); Value _t428 = zl_binop("+", v_wy, zl_binop("*", zl_num(9), v_u)); Value _t429 = zl_binop("*", zl_num(11), v_u); Value _t430 = zl_binop("*", zl_num(11), v_u); Value _t431 = ({ Value _t427 = zl_num(224); Value _t428 = zl_num(90); Value _t429 = zl_num(90); zl_fn_rgb(_t427, _t428, _t429); }); zl_calln("fill_rgb", 5, _t427, _t428, _t429, _t430, _t431); });
-    ({ Value _t435 = zl_binop("+", v_wx, zl_binop("*", zl_num(12), v_u)); Value _t436 = zl_binop("+", v_wy, zl_binop("*", zl_num(7), v_u)); Value _t437 = v_title; Value _t438 = ({ Value _t435 = zl_num(234); Value _t436 = zl_num(243); Value _t437 = zl_num(255); zl_fn_rgb(_t435, _t436, _t437); }); zl_calln("text_aa", 4, _t435, _t436, _t437, _t438); });
+    ({ Value _t436 = zl_binop("-", zl_binop("+", v_wx, v_ww), zl_binop("*", zl_num(20), v_u)); Value _t437 = zl_binop("+", v_wy, zl_binop("*", zl_num(9), v_u)); Value _t438 = zl_binop("*", zl_num(11), v_u); Value _t439 = zl_binop("*", zl_num(11), v_u); Value _t440 = ({ Value _t436 = zl_num(224); Value _t437 = zl_num(90); Value _t438 = zl_num(90); zl_fn_rgb(_t436, _t437, _t438); }); zl_calln("fill_rgb", 5, _t436, _t437, _t438, _t439, _t440); });
+    ({ Value _t444 = zl_binop("+", v_wx, zl_binop("*", zl_num(12), v_u)); Value _t445 = zl_binop("+", v_wy, zl_binop("*", zl_num(7), v_u)); Value _t446 = v_title; Value _t447 = ({ Value _t444 = zl_num(234); Value _t445 = zl_num(243); Value _t446 = zl_num(255); zl_fn_rgb(_t444, _t445, _t446); }); zl_calln("text_aa", 4, _t444, _t445, _t446, _t447); });
     return zl_num(0);
     return zl_nil();
 }
@@ -670,27 +692,147 @@ Value zl_fn_windows_demo(void) {
     Value v_w = zl_nil();
     Value v_h = zl_nil();
     if (zl_truthy(zl_binop("==", ({ zl_calln("px_w", 0); }), zl_num(0)))) {
-        ({ Value _t442 = v_C_GREY; zl_calln("color", 1, _t442); });
-        ({ Value _t443 = zl_str("  the window demo needs the framebuffer console"); zl_calln("print", 1, _t443); });
+        ({ Value _t451 = v_C_GREY; zl_calln("color", 1, _t451); });
+        ({ Value _t452 = zl_str("  the window demo needs the framebuffer console"); zl_calln("print", 1, _t452); });
         return zl_num(0);
     }
     v_w = ({ zl_calln("px_w", 0); });
     v_h = ({ zl_calln("px_h", 0); });
-    ({ Value _t444 = zl_num(0); Value _t445 = zl_num(0); Value _t446 = v_w; Value _t447 = v_h; Value _t448 = v_WALL_TOP; Value _t449 = v_WALL_BOT; zl_calln("grad_rgb", 6, _t444, _t445, _t446, _t447, _t448, _t449); });
-    ({ Value _t450 = zl_num(70); Value _t451 = zl_num(74); Value _t452 = zl_num(300); Value _t453 = zl_num(150); Value _t454 = zl_str("System Monitor"); Value _t455 = zl_num(0); zl_fn_draw_window(_t450, _t451, _t452, _t453, _t454, _t455); });
-    ({ Value _t456 = zl_num(104); Value _t457 = zl_num(118); Value _t458 = zl_str("CPU  load  steady"); Value _t459 = v_TXT_DIM; zl_calln("text_aa", 4, _t456, _t457, _t458, _t459); });
-    ({ Value _t460 = zl_num(104); Value _t461 = zl_num(138); Value _t462 = zl_str("mem  64 / 256 MiB"); Value _t463 = v_TXT_DIM; zl_calln("text_aa", 4, _t460, _t461, _t462, _t463); });
-    ({ Value _t464 = zl_num(150); Value _t465 = zl_num(150); Value _t466 = zl_num(340); Value _t467 = zl_num(200); Value _t468 = zl_str("zl shell"); Value _t469 = zl_num(1); zl_fn_draw_window(_t464, _t465, _t466, _t467, _t468, _t469); });
-    ({ Value _t470 = zl_num(186); Value _t471 = zl_num(194); Value _t472 = zl_str("the quick brown fox jumps"); Value _t473 = v_TXT_HI; zl_calln("text_aa", 4, _t470, _t471, _t472, _t473); });
-    ({ Value _t474 = zl_num(186); Value _t475 = zl_num(214); Value _t476 = zl_str("over 0123456789 !@#$%&*"); Value _t477 = v_TXT_DIM; zl_calln("text_aa", 4, _t474, _t475, _t476, _t477); });
-    ({ Value _t478 = zl_num(186); Value _t479 = zl_num(244); Value _t480 = zl_str("zl> gfx compose --shadows"); Value _t481 = v_ACCENT; zl_calln("text_aa", 4, _t478, _t479, _t480, _t481); });
-    ({ Value _t482 = zl_num(440); Value _t483 = zl_num(258); Value _t484 = zl_num(250); Value _t485 = zl_num(120); Value _t486 = zl_str("Clock"); Value _t487 = zl_num(0); zl_fn_draw_window(_t482, _t483, _t484, _t485, _t486, _t487); });
-    ({ Value _t488 = zl_num(500); Value _t489 = zl_num(300); Value _t490 = zl_str("12:04:37"); Value _t491 = v_TXT_HI; zl_calln("text_aa", 4, _t488, _t489, _t490, _t491); });
-    ({ Value _t492 = zl_num(70); Value _t493 = zl_binop("-", v_h, zl_num(58)); Value _t494 = zl_str("real windows - real shadows - press any key"); Value _t495 = v_ACCENT; zl_calln("text_aa", 4, _t492, _t493, _t494, _t495); });
+    ({ Value _t453 = zl_num(0); Value _t454 = zl_num(0); Value _t455 = v_w; Value _t456 = v_h; Value _t457 = v_WALL_TOP; Value _t458 = v_WALL_BOT; zl_calln("grad_rgb", 6, _t453, _t454, _t455, _t456, _t457, _t458); });
+    ({ Value _t459 = zl_num(70); Value _t460 = zl_num(74); Value _t461 = zl_num(300); Value _t462 = zl_num(150); Value _t463 = zl_str("System Monitor"); Value _t464 = zl_num(0); zl_fn_draw_window(_t459, _t460, _t461, _t462, _t463, _t464); });
+    ({ Value _t465 = zl_num(104); Value _t466 = zl_num(118); Value _t467 = zl_str("CPU  load  steady"); Value _t468 = v_TXT_DIM; zl_calln("text_aa", 4, _t465, _t466, _t467, _t468); });
+    ({ Value _t469 = zl_num(104); Value _t470 = zl_num(138); Value _t471 = zl_str("mem  64 / 256 MiB"); Value _t472 = v_TXT_DIM; zl_calln("text_aa", 4, _t469, _t470, _t471, _t472); });
+    ({ Value _t473 = zl_num(150); Value _t474 = zl_num(150); Value _t475 = zl_num(340); Value _t476 = zl_num(200); Value _t477 = zl_str("zl shell"); Value _t478 = zl_num(1); zl_fn_draw_window(_t473, _t474, _t475, _t476, _t477, _t478); });
+    ({ Value _t479 = zl_num(186); Value _t480 = zl_num(194); Value _t481 = zl_str("the quick brown fox jumps"); Value _t482 = v_TXT_HI; zl_calln("text_aa", 4, _t479, _t480, _t481, _t482); });
+    ({ Value _t483 = zl_num(186); Value _t484 = zl_num(214); Value _t485 = zl_str("over 0123456789 !@#$%&*"); Value _t486 = v_TXT_DIM; zl_calln("text_aa", 4, _t483, _t484, _t485, _t486); });
+    ({ Value _t487 = zl_num(186); Value _t488 = zl_num(244); Value _t489 = zl_str("zl> gfx compose --shadows"); Value _t490 = v_ACCENT; zl_calln("text_aa", 4, _t487, _t488, _t489, _t490); });
+    ({ Value _t491 = zl_num(440); Value _t492 = zl_num(258); Value _t493 = zl_num(250); Value _t494 = zl_num(120); Value _t495 = zl_str("Clock"); Value _t496 = zl_num(0); zl_fn_draw_window(_t491, _t492, _t493, _t494, _t495, _t496); });
+    ({ Value _t497 = zl_num(500); Value _t498 = zl_num(300); Value _t499 = zl_str("12:04:37"); Value _t500 = v_TXT_HI; zl_calln("text_aa", 4, _t497, _t498, _t499, _t500); });
+    ({ Value _t501 = zl_num(70); Value _t502 = zl_binop("-", v_h, zl_num(58)); Value _t503 = zl_str("real windows - real shadows - press any key"); Value _t504 = v_ACCENT; zl_calln("text_aa", 4, _t501, _t502, _t503, _t504); });
     while (zl_truthy(zl_binop("==", ({ zl_fn_key_get(); }), zl_num(0)))) {
     }
     ({ zl_fn_draw_screen(); });
     return zl_num(0);
+    return zl_nil();
+}
+
+Value zl_fn_usb_boot(void) {
+    Value v_ub = zl_nil();
+    Value v_ubp = zl_nil();
+    Value v_ubs = zl_nil();
+    v_ub = ({ zl_calln("usb_up", 0); });
+    if (zl_truthy(zl_binop("==", ({ zl_calln("usb_ok", 0); }), zl_num(0)))) {
+        ({ Value _t505 = v_C_RED; zl_calln("color", 1, _t505); });
+        ({ Value _t506 = zl_str("  USB: no xHCI controller ("); zl_calln("put", 1, _t506); });
+        ({ Value _t507 = ({ zl_calln("pci_count", 0); }); zl_calln("put", 1, _t507); });
+        ({ Value _t508 = zl_str(" PCI devices seen)"); zl_calln("print", 1, _t508); });
+        ({ Value _t509 = v_C_GREY; zl_calln("color", 1, _t509); });
+        return zl_num(0);
+    }
+    if (zl_truthy(zl_binop(">", v_ub, zl_num(0)))) {
+        ({ Value _t510 = v_C_GREEN; zl_calln("color", 1, _t510); });
+        ({ Value _t511 = zl_str("  USB: HID keyboard live on slot "); zl_calln("put", 1, _t511); });
+        ({ Value _t512 = v_ub; zl_calln("print", 1, _t512); });
+    } else {
+        ({ Value _t513 = v_C_RED; zl_calln("color", 1, _t513); });
+        if (zl_truthy(zl_binop("==", ({ zl_calln("usb_ours", 0); }), zl_num(1)))) {
+            ({ Value _t514 = zl_str("  USB: controller is ours, but no HID boot keyboard found"); zl_calln("print", 1, _t514); });
+            ({ Value _t515 = v_C_GREY; zl_calln("color", 1, _t515); });
+            v_ubp = zl_num(1);
+            while (zl_truthy(zl_binop("<=", v_ubp, ({ zl_calln("usb_ports", 0); })))) {
+                if (zl_truthy(zl_binop("==", ({ Value _t516 = v_ubp; zl_calln("usb_conn", 1, _t516); }), zl_num(1)))) {
+                    ({ Value _t517 = zl_str("    port "); zl_calln("put", 1, _t517); });
+                    ({ Value _t518 = v_ubp; zl_calln("put", 1, _t518); });
+                    ({ Value _t519 = zl_str(" portsc 0x"); zl_calln("put", 1, _t519); });
+                    ({ Value _t520 = ({ Value _t520 = v_ubp; zl_calln("usb_portsc", 1, _t520); }); Value _t521 = zl_num(8); zl_calln("hex", 2, _t520, _t521); });
+                    ({ Value _t523 = zl_str(" reset->"); zl_calln("put", 1, _t523); });
+                    ({ Value _t524 = ({ Value _t524 = v_ubp; zl_calln("usb_prst", 1, _t524); }); zl_calln("put", 1, _t524); });
+                    ({ Value _t526 = zl_str(" now 0x"); zl_calln("put", 1, _t526); });
+                    ({ Value _t527 = ({ Value _t527 = v_ubp; zl_calln("usb_portsc", 1, _t527); }); Value _t528 = zl_num(8); zl_calln("hex", 2, _t527, _t528); });
+                    v_ubs = ({ Value _t530 = v_ubp; zl_calln("usb_enum", 1, _t530); });
+                    ({ Value _t531 = zl_str(" slot "); zl_calln("put", 1, _t531); });
+                    ({ Value _t532 = v_ubs; zl_calln("put", 1, _t532); });
+                    if (zl_truthy(zl_binop(">", v_ubs, zl_num(0)))) {
+                        ({ Value _t533 = zl_str(" vid "); zl_calln("put", 1, _t533); });
+                        ({ Value _t534 = ({ zl_calln("usb_vid", 0); }); Value _t535 = zl_num(4); zl_calln("hex", 2, _t534, _t535); });
+                        ({ Value _t536 = zl_str(":"); zl_calln("put", 1, _t536); });
+                        ({ Value _t537 = ({ zl_calln("usb_pid", 0); }); Value _t538 = zl_num(4); zl_calln("hex", 2, _t537, _t538); });
+                        ({ Value _t539 = zl_str(" cls "); zl_calln("put", 1, _t539); });
+                        ({ Value _t540 = ({ zl_calln("usb_cls", 0); }); Value _t541 = zl_num(2); zl_calln("hex", 2, _t540, _t541); });
+                    }
+                    ({ Value _t542 = zl_str(""); zl_calln("print", 1, _t542); });
+                }
+                v_ubp = zl_binop("+", v_ubp, zl_num(1));
+            }
+        } else {
+            ({ Value _t543 = zl_str("  USB: could not take the xHCI controller"); zl_calln("print", 1, _t543); });
+        }
+    }
+    ({ Value _t544 = v_C_GREY; zl_calln("color", 1, _t544); });
+    return v_ub;
+    return zl_nil();
+}
+
+Value zl_fn_usbkey_demo(void) {
+    Value v_ustop = zl_nil();
+    Value v_uc = zl_nil();
+    ({ Value _t545 = v_C_CYAN; zl_calln("color", 1, _t545); });
+    ({ Value _t546 = zl_str("  USB keyboard test"); zl_calln("print", 1, _t546); });
+    ({ Value _t547 = v_C_GREY; zl_calln("color", 1, _t547); });
+    if (zl_truthy(zl_binop("==", ({ zl_calln("usb_kbd_ok", 0); }), zl_num(0)))) {
+        if (zl_truthy(zl_binop("==", ({ zl_fn_usb_boot(); }), zl_num(0)))) {
+            ({ Value _t548 = v_C_RED; zl_calln("color", 1, _t548); });
+            ({ Value _t549 = zl_str("    no USB boot keyboard found"); zl_calln("print", 1, _t549); });
+            ({ Value _t550 = v_C_GREY; zl_calln("color", 1, _t550); });
+            return zl_num(0);
+        }
+    }
+    ({ Value _t551 = zl_str("    keyboard on slot "); zl_calln("put", 1, _t551); });
+    ({ Value _t552 = ({ zl_calln("usb_kbd_slot", 0); }); zl_calln("put", 1, _t552); });
+    ({ Value _t553 = zl_str(", endpoint dci "); zl_calln("put", 1, _t553); });
+    ({ Value _t554 = ({ zl_calln("usb_kbd_ep", 0); }); zl_calln("print", 1, _t554); });
+    ({ Value _t555 = zl_str("    type - ESC or 60s ends the test"); zl_calln("print", 1, _t555); });
+    ({ Value _t556 = zl_str("    "); zl_calln("put", 1, _t556); });
+    v_ustop = zl_binop("+", ({ zl_calln("ticks", 0); }), zl_num(6000));
+    while (zl_truthy(zl_binop("<", ({ zl_calln("ticks", 0); }), v_ustop))) {
+        v_uc = ({ zl_calln("usb_key", 0); });
+        if (zl_truthy(zl_binop("!=", v_uc, zl_num(0)))) {
+            if (zl_truthy(zl_binop("==", v_uc, zl_num(27)))) {
+                ({ Value _t557 = zl_str(""); zl_calln("print", 1, _t557); });
+                ({ Value _t558 = zl_str("    ESC - done"); zl_calln("print", 1, _t558); });
+                return zl_num(0);
+            }
+            if (zl_truthy(zl_binop("==", v_uc, zl_num(13)))) {
+                ({ Value _t559 = zl_str(""); zl_calln("print", 1, _t559); });
+                ({ Value _t560 = zl_str("    "); zl_calln("put", 1, _t560); });
+            } else {
+                ({ Value _t561 = v_uc; zl_calln("emit", 1, _t561); });
+            }
+        }
+    }
+    ({ Value _t562 = zl_str(""); zl_calln("print", 1, _t562); });
+    ({ Value _t563 = zl_str("    timed out"); zl_calln("print", 1, _t563); });
+    return zl_num(0);
+    return zl_nil();
+}
+
+Value zl_fn_spname(Value v_s) {
+    if (zl_truthy(zl_binop("==", v_s, zl_num(1)))) {
+        return zl_str("full (12 Mb/s)");
+    }
+    if (zl_truthy(zl_binop("==", v_s, zl_num(2)))) {
+        return zl_str("low (1.5 Mb/s)");
+    }
+    if (zl_truthy(zl_binop("==", v_s, zl_num(3)))) {
+        return zl_str("high (480 Mb/s)");
+    }
+    if (zl_truthy(zl_binop("==", v_s, zl_num(4)))) {
+        return zl_str("super (5 Gb/s)");
+    }
+    if (zl_truthy(zl_binop("==", v_s, zl_num(5)))) {
+        return zl_str("super+ (10 Gb/s)");
+    }
+    return zl_str("unknown");
     return zl_nil();
 }
 
@@ -705,32 +847,32 @@ Value zl_fn_cube_demo(void) {
     Value v_ccy = zl_nil();
     Value v_ang = zl_nil();
     if (zl_truthy(zl_binop("==", ({ zl_calln("px_w", 0); }), zl_num(0)))) {
-        ({ Value _t496 = v_C_GREY; zl_calln("color", 1, _t496); });
-        ({ Value _t497 = zl_str("  the 3D demo needs the framebuffer console"); zl_calln("print", 1, _t497); });
+        ({ Value _t564 = v_C_GREY; zl_calln("color", 1, _t564); });
+        ({ Value _t565 = zl_str("  the 3D demo needs the framebuffer console"); zl_calln("print", 1, _t565); });
         return zl_num(0);
     }
     v_w = ({ zl_calln("px_w", 0); });
     v_h = ({ zl_calln("px_h", 0); });
-    ({ Value _t498 = zl_num(0); Value _t499 = zl_num(0); Value _t500 = v_w; Value _t501 = v_h; Value _t502 = v_WALL_TOP; Value _t503 = v_WALL_BOT; zl_calln("grad_rgb", 6, _t498, _t499, _t500, _t501, _t502, _t503); });
+    ({ Value _t566 = zl_num(0); Value _t567 = zl_num(0); Value _t568 = v_w; Value _t569 = v_h; Value _t570 = v_WALL_TOP; Value _t571 = v_WALL_BOT; zl_calln("grad_rgb", 6, _t566, _t567, _t568, _t569, _t570, _t571); });
     ({ zl_fn_draw_header(); });
     v_vx = zl_num(150);
     v_vy = zl_num(108);
     v_vw = zl_num(500);
     v_vh = zl_num(384);
-    ({ Value _t504 = v_vx; Value _t505 = v_vy; Value _t506 = v_vw; Value _t507 = v_vh; Value _t508 = zl_str("3D   -   software rendered, no GPU"); Value _t509 = zl_num(1); zl_fn_draw_window(_t504, _t505, _t506, _t507, _t508, _t509); });
+    ({ Value _t572 = v_vx; Value _t573 = v_vy; Value _t574 = v_vw; Value _t575 = v_vh; Value _t576 = zl_str("3D   -   software rendered, no GPU"); Value _t577 = zl_num(1); zl_fn_draw_window(_t572, _t573, _t574, _t575, _t576, _t577); });
     v_ccx = zl_binop("+", v_vx, zl_binop("/", v_vw, zl_num(2)));
     v_ccy = zl_binop("+", v_vy, zl_binop("/", v_vh, zl_num(2)));
-    ({ Value _t510 = zl_binop("+", v_vx, zl_num(3)); Value _t511 = zl_binop("+", v_vy, zl_num(30)); Value _t512 = zl_binop("-", zl_binop("+", v_vx, v_vw), zl_num(4)); Value _t513 = zl_binop("-", zl_binop("+", v_vy, v_vh), zl_num(30)); zl_calln("cube_clip", 4, _t510, _t511, _t512, _t513); });
+    ({ Value _t578 = zl_binop("+", v_vx, zl_num(3)); Value _t579 = zl_binop("+", v_vy, zl_num(30)); Value _t580 = zl_binop("-", zl_binop("+", v_vx, v_vw), zl_num(4)); Value _t581 = zl_binop("-", zl_binop("+", v_vy, v_vh), zl_num(30)); zl_calln("cube_clip", 4, _t578, _t579, _t580, _t581); });
     v_ang = zl_num(0);
     while (zl_truthy(zl_binop("==", ({ zl_fn_key_get(); }), zl_num(0)))) {
-        ({ Value _t514 = zl_binop("+", v_vx, zl_num(3)); Value _t515 = zl_binop("+", v_vy, zl_num(30)); Value _t516 = zl_binop("-", v_vw, zl_num(6)); Value _t517 = zl_binop("-", v_vh, zl_num(33)); Value _t518 = v_PANEL; zl_calln("fill_rgb", 5, _t514, _t515, _t516, _t517, _t518); });
-        ({ Value _t519 = v_ccx; Value _t520 = v_ccy; Value _t521 = zl_num(96); Value _t522 = v_ang; Value _t523 = v_ACCENT; zl_calln("cube3d", 5, _t519, _t520, _t521, _t522, _t523); });
-        ({ Value _t524 = zl_binop("+", v_vx, zl_num(18)); Value _t525 = zl_binop("-", zl_binop("+", v_vy, v_vh), zl_num(26)); Value _t526 = zl_str("press any key to exit"); Value _t527 = v_TXT_DIM; zl_calln("text_aa", 4, _t524, _t525, _t526, _t527); });
+        ({ Value _t582 = zl_binop("+", v_vx, zl_num(3)); Value _t583 = zl_binop("+", v_vy, zl_num(30)); Value _t584 = zl_binop("-", v_vw, zl_num(6)); Value _t585 = zl_binop("-", v_vh, zl_num(33)); Value _t586 = v_PANEL; zl_calln("fill_rgb", 5, _t582, _t583, _t584, _t585, _t586); });
+        ({ Value _t587 = v_ccx; Value _t588 = v_ccy; Value _t589 = zl_num(96); Value _t590 = v_ang; Value _t591 = v_ACCENT; zl_calln("cube3d", 5, _t587, _t588, _t589, _t590, _t591); });
+        ({ Value _t592 = zl_binop("+", v_vx, zl_num(18)); Value _t593 = zl_binop("-", zl_binop("+", v_vy, v_vh), zl_num(26)); Value _t594 = zl_str("press any key to exit"); Value _t595 = v_TXT_DIM; zl_calln("text_aa", 4, _t592, _t593, _t594, _t595); });
         v_ang = zl_binop("+", v_ang, zl_num(5));
         if (zl_truthy(zl_binop(">=", v_ang, zl_num(360)))) {
             v_ang = zl_num(0);
         }
-        ({ Value _t528 = zl_num(3); zl_fn_wait_ticks(_t528); });
+        ({ Value _t596 = zl_num(3); zl_fn_wait_ticks(_t596); });
     }
     ({ zl_fn_draw_screen(); });
     return zl_num(0);
@@ -750,8 +892,8 @@ Value zl_fn_anim(void) {
     Value v_sy = zl_nil();
     Value v_c = zl_nil();
     if (zl_truthy(zl_binop("==", ({ zl_calln("px_w", 0); }), zl_num(0)))) {
-        ({ Value _t529 = v_C_GREY; zl_calln("color", 1, _t529); });
-        ({ Value _t530 = zl_str("  the animation needs the framebuffer console"); zl_calln("print", 1, _t530); });
+        ({ Value _t597 = v_C_GREY; zl_calln("color", 1, _t597); });
+        ({ Value _t598 = zl_str("  the animation needs the framebuffer console"); zl_calln("print", 1, _t598); });
         return zl_num(0);
     }
     v_w = ({ zl_calln("px_w", 0); });
@@ -761,19 +903,19 @@ Value zl_fn_anim(void) {
     v_vx = zl_num(6);
     v_vy = zl_num(4);
     while (zl_truthy(zl_binop("==", ({ zl_fn_key_get(); }), zl_num(0)))) {
-        ({ Value _t531 = zl_num(0); Value _t532 = zl_num(0); Value _t533 = v_w; Value _t534 = v_h; Value _t535 = v_C_BLACK; zl_calln("fill_rect", 5, _t531, _t532, _t533, _t534, _t535); });
+        ({ Value _t599 = zl_num(0); Value _t600 = zl_num(0); Value _t601 = v_w; Value _t602 = v_h; Value _t603 = v_C_BLACK; zl_calln("fill_rect", 5, _t599, _t600, _t601, _t602, _t603); });
         v_seed = zl_num(2463534242);
         v_i = zl_num(0);
         while (zl_truthy(zl_binop("<", v_i, zl_num(90)))) {
             v_seed = zl_binop("+", zl_binop("*", v_seed, zl_num(1103515245)), zl_num(12345));
-            v_sx = zl_binop("%", ({ Value _t536 = zl_binop("/", v_seed, zl_num(4096)); Value _t537 = zl_num(2047); zl_calln("band", 2, _t536, _t537); }), v_w);
+            v_sx = zl_binop("%", ({ Value _t604 = zl_binop("/", v_seed, zl_num(4096)); Value _t605 = zl_num(2047); zl_calln("band", 2, _t604, _t605); }), v_w);
             v_seed = zl_binop("+", zl_binop("*", v_seed, zl_num(1103515245)), zl_num(12345));
-            v_sy = zl_binop("%", ({ Value _t538 = zl_binop("/", v_seed, zl_num(4096)); Value _t539 = zl_num(2047); zl_calln("band", 2, _t538, _t539); }), v_h);
+            v_sy = zl_binop("%", ({ Value _t606 = zl_binop("/", v_seed, zl_num(4096)); Value _t607 = zl_num(2047); zl_calln("band", 2, _t606, _t607); }), v_h);
             v_c = v_C_GREY;
-            if (zl_truthy(zl_binop("==", ({ Value _t540 = v_seed; Value _t541 = zl_num(7); zl_calln("band", 2, _t540, _t541); }), zl_num(0)))) {
+            if (zl_truthy(zl_binop("==", ({ Value _t608 = v_seed; Value _t609 = zl_num(7); zl_calln("band", 2, _t608, _t609); }), zl_num(0)))) {
                 v_c = v_C_WHITE;
             }
-            ({ Value _t542 = v_sx; Value _t543 = v_sy; Value _t544 = zl_num(2); Value _t545 = zl_num(2); Value _t546 = v_c; zl_calln("fill_rect", 5, _t542, _t543, _t544, _t545, _t546); });
+            ({ Value _t610 = v_sx; Value _t611 = v_sy; Value _t612 = zl_num(2); Value _t613 = zl_num(2); Value _t614 = v_c; zl_calln("fill_rect", 5, _t610, _t611, _t612, _t613, _t614); });
             v_i = zl_binop("+", v_i, zl_num(1));
         }
         v_lx = zl_binop("+", v_lx, v_vx);
@@ -794,8 +936,8 @@ Value zl_fn_anim(void) {
             v_ly = zl_binop("-", v_h, zl_num(48));
             v_vy = zl_binop("-", zl_num(0), v_vy);
         }
-        ({ Value _t547 = v_lx; Value _t548 = v_ly; Value _t549 = zl_str("zlOS"); Value _t550 = zl_num(3); Value _t551 = v_C_CYAN; zl_calln("logo", 5, _t547, _t548, _t549, _t550, _t551); });
-        ({ Value _t552 = zl_num(2); zl_fn_wait_ticks(_t552); });
+        ({ Value _t615 = v_lx; Value _t616 = v_ly; Value _t617 = zl_str("zlOS"); Value _t618 = zl_num(3); Value _t619 = v_C_CYAN; zl_calln("logo", 5, _t615, _t616, _t617, _t618, _t619); });
+        ({ Value _t620 = zl_num(2); zl_fn_wait_ticks(_t620); });
     }
     ({ zl_fn_draw_screen(); });
     return zl_num(0);
@@ -822,8 +964,8 @@ Value zl_fn_snake_game(void) {
     Value v_tx = zl_nil();
     Value v_ty = zl_nil();
     if (zl_truthy(zl_binop("==", ({ zl_calln("px_w", 0); }), zl_num(0)))) {
-        ({ Value _t553 = v_C_GREY; zl_calln("color", 1, _t553); });
-        ({ Value _t554 = zl_str("  the game needs the framebuffer console"); zl_calln("print", 1, _t554); });
+        ({ Value _t621 = v_C_GREY; zl_calln("color", 1, _t621); });
+        ({ Value _t622 = zl_str("  the game needs the framebuffer console"); zl_calln("print", 1, _t622); });
         return zl_num(0);
     }
     v_gw = zl_binop("/", ({ zl_calln("px_w", 0); }), zl_num(16));
@@ -833,24 +975,24 @@ Value zl_fn_snake_game(void) {
     v_hy = zl_binop("/", v_gh, zl_num(2));
     v_i = zl_num(0);
     while (zl_truthy(zl_binop("<", v_i, v_slen))) {
-        ({ Value _t555 = zl_binop("+", v_SNAKE_X, v_i); Value _t556 = zl_binop("-", v_hx, v_i); zl_calln("poke8", 2, _t555, _t556); });
-        ({ Value _t557 = zl_binop("+", v_SNAKE_Y, v_i); Value _t558 = v_hy; zl_calln("poke8", 2, _t557, _t558); });
+        ({ Value _t623 = zl_binop("+", v_SNAKE_X, v_i); Value _t624 = zl_binop("-", v_hx, v_i); zl_calln("poke8", 2, _t623, _t624); });
+        ({ Value _t625 = zl_binop("+", v_SNAKE_Y, v_i); Value _t626 = v_hy; zl_calln("poke8", 2, _t625, _t626); });
         v_i = zl_binop("+", v_i, zl_num(1));
     }
     v_dx = zl_num(1);
     v_dy = zl_num(0);
     v_seed = zl_binop("+", ({ zl_calln("ticks", 0); }), zl_num(7));
     v_seed = zl_binop("+", zl_binop("*", v_seed, zl_num(1103515245)), zl_num(12345));
-    v_fx = zl_binop("%", ({ Value _t559 = zl_binop("/", v_seed, zl_num(256)); Value _t560 = zl_num(1023); zl_calln("band", 2, _t559, _t560); }), v_gw);
+    v_fx = zl_binop("%", ({ Value _t627 = zl_binop("/", v_seed, zl_num(256)); Value _t628 = zl_num(1023); zl_calln("band", 2, _t627, _t628); }), v_gw);
     v_seed = zl_binop("+", zl_binop("*", v_seed, zl_num(1103515245)), zl_num(12345));
-    v_fy = zl_binop("%", ({ Value _t561 = zl_binop("/", v_seed, zl_num(256)); Value _t562 = zl_num(1023); zl_calln("band", 2, _t561, _t562); }), v_gh);
+    v_fy = zl_binop("%", ({ Value _t629 = zl_binop("/", v_seed, zl_num(256)); Value _t630 = zl_num(1023); zl_calln("band", 2, _t629, _t630); }), v_gh);
     v_score = zl_num(0);
     v_alive = zl_num(1);
     ({ zl_calln("cls", 0); });
-    ({ Value _t563 = zl_num(0); Value _t564 = zl_num(0); Value _t565 = ({ zl_calln("px_w", 0); }); Value _t566 = ({ zl_calln("px_h", 0); }); Value _t567 = v_C_BLACK; zl_calln("fill_rect", 5, _t563, _t564, _t565, _t566, _t567); });
-    ({ Value _t568 = zl_num(0); Value _t569 = zl_num(2); Value _t570 = zl_str("SNAKE"); Value _t571 = v_C_GREEN; zl_calln("at", 4, _t568, _t569, _t570, _t571); });
-    ({ Value _t572 = zl_num(0); Value _t573 = zl_num(10); Value _t574 = zl_str("w a s d to steer, any other key to quit"); Value _t575 = v_C_GREY; zl_calln("at", 4, _t572, _t573, _t574, _t575); });
-    ({ Value _t576 = zl_num(0); Value _t577 = zl_num(60); Value _t578 = zl_str("score:"); Value _t579 = v_C_WHITE; zl_calln("at", 4, _t576, _t577, _t578, _t579); });
+    ({ Value _t631 = zl_num(0); Value _t632 = zl_num(0); Value _t633 = ({ zl_calln("px_w", 0); }); Value _t634 = ({ zl_calln("px_h", 0); }); Value _t635 = v_C_BLACK; zl_calln("fill_rect", 5, _t631, _t632, _t633, _t634, _t635); });
+    ({ Value _t636 = zl_num(0); Value _t637 = zl_num(2); Value _t638 = zl_str("SNAKE"); Value _t639 = v_C_GREEN; zl_calln("at", 4, _t636, _t637, _t638, _t639); });
+    ({ Value _t640 = zl_num(0); Value _t641 = zl_num(10); Value _t642 = zl_str("w a s d to steer, any other key to quit"); Value _t643 = v_C_GREY; zl_calln("at", 4, _t640, _t641, _t642, _t643); });
+    ({ Value _t644 = zl_num(0); Value _t645 = zl_num(60); Value _t646 = zl_str("score:"); Value _t647 = v_C_WHITE; zl_calln("at", 4, _t644, _t645, _t646, _t647); });
     v_nexttick = zl_binop("+", ({ zl_calln("ticks", 0); }), zl_num(7));
     while (zl_truthy(zl_binop("==", v_alive, zl_num(1)))) {
         v_k = ({ zl_fn_kbd_scan(); });
@@ -891,8 +1033,8 @@ Value zl_fn_snake_game(void) {
         }
         if (zl_truthy(zl_binop(">=", ({ zl_calln("ticks", 0); }), v_nexttick))) {
             v_nexttick = zl_binop("+", ({ zl_calln("ticks", 0); }), zl_num(7));
-            v_nhx = zl_binop("+", ({ Value _t580 = v_SNAKE_X; zl_calln("peek8", 1, _t580); }), v_dx);
-            v_nhy = zl_binop("+", ({ Value _t581 = v_SNAKE_Y; zl_calln("peek8", 1, _t581); }), v_dy);
+            v_nhx = zl_binop("+", ({ Value _t648 = v_SNAKE_X; zl_calln("peek8", 1, _t648); }), v_dx);
+            v_nhy = zl_binop("+", ({ Value _t649 = v_SNAKE_Y; zl_calln("peek8", 1, _t649); }), v_dy);
             if (zl_truthy(zl_binop("<", v_nhx, zl_num(0)))) {
                 v_alive = zl_num(0);
             }
@@ -907,8 +1049,8 @@ Value zl_fn_snake_game(void) {
             }
             v_i = zl_num(0);
             while (zl_truthy(zl_binop("<", v_i, v_slen))) {
-                if (zl_truthy(zl_binop("==", ({ Value _t582 = zl_binop("+", v_SNAKE_X, v_i); zl_calln("peek8", 1, _t582); }), v_nhx))) {
-                    if (zl_truthy(zl_binop("==", ({ Value _t583 = zl_binop("+", v_SNAKE_Y, v_i); zl_calln("peek8", 1, _t583); }), v_nhy))) {
+                if (zl_truthy(zl_binop("==", ({ Value _t650 = zl_binop("+", v_SNAKE_X, v_i); zl_calln("peek8", 1, _t650); }), v_nhx))) {
+                    if (zl_truthy(zl_binop("==", ({ Value _t651 = zl_binop("+", v_SNAKE_Y, v_i); zl_calln("peek8", 1, _t651); }), v_nhy))) {
                         v_alive = zl_num(0);
                     }
                 }
@@ -922,37 +1064,37 @@ Value zl_fn_snake_game(void) {
                         v_score = zl_binop("+", v_score, zl_num(1));
                         v_slen = zl_binop("+", v_slen, zl_num(1));
                         v_seed = zl_binop("+", zl_binop("*", v_seed, zl_num(1103515245)), zl_num(12345));
-                        v_fx = zl_binop("%", ({ Value _t584 = zl_binop("/", v_seed, zl_num(256)); Value _t585 = zl_num(1023); zl_calln("band", 2, _t584, _t585); }), v_gw);
+                        v_fx = zl_binop("%", ({ Value _t652 = zl_binop("/", v_seed, zl_num(256)); Value _t653 = zl_num(1023); zl_calln("band", 2, _t652, _t653); }), v_gw);
                         v_seed = zl_binop("+", zl_binop("*", v_seed, zl_num(1103515245)), zl_num(12345));
-                        v_fy = zl_binop("%", ({ Value _t586 = zl_binop("/", v_seed, zl_num(256)); Value _t587 = zl_num(1023); zl_calln("band", 2, _t586, _t587); }), v_gh);
+                        v_fy = zl_binop("%", ({ Value _t654 = zl_binop("/", v_seed, zl_num(256)); Value _t655 = zl_num(1023); zl_calln("band", 2, _t654, _t655); }), v_gh);
                     }
                 }
                 if (zl_truthy(zl_binop("==", v_grew, zl_num(0)))) {
-                    v_tx = ({ Value _t588 = zl_binop("-", zl_binop("+", v_SNAKE_X, v_slen), zl_num(1)); zl_calln("peek8", 1, _t588); });
-                    v_ty = ({ Value _t589 = zl_binop("-", zl_binop("+", v_SNAKE_Y, v_slen), zl_num(1)); zl_calln("peek8", 1, _t589); });
-                    ({ Value _t590 = zl_binop("*", v_tx, zl_num(16)); Value _t591 = zl_binop("+", zl_binop("*", v_ty, zl_num(16)), zl_num(20)); Value _t592 = zl_num(16); Value _t593 = zl_num(16); Value _t594 = v_C_BLACK; zl_calln("fill_rect", 5, _t590, _t591, _t592, _t593, _t594); });
+                    v_tx = ({ Value _t656 = zl_binop("-", zl_binop("+", v_SNAKE_X, v_slen), zl_num(1)); zl_calln("peek8", 1, _t656); });
+                    v_ty = ({ Value _t657 = zl_binop("-", zl_binop("+", v_SNAKE_Y, v_slen), zl_num(1)); zl_calln("peek8", 1, _t657); });
+                    ({ Value _t658 = zl_binop("*", v_tx, zl_num(16)); Value _t659 = zl_binop("+", zl_binop("*", v_ty, zl_num(16)), zl_num(20)); Value _t660 = zl_num(16); Value _t661 = zl_num(16); Value _t662 = v_C_BLACK; zl_calln("fill_rect", 5, _t658, _t659, _t660, _t661, _t662); });
                 }
                 v_i = zl_binop("-", v_slen, zl_num(1));
                 while (zl_truthy(zl_binop(">", v_i, zl_num(0)))) {
-                    ({ Value _t595 = zl_binop("+", v_SNAKE_X, v_i); Value _t596 = ({ Value _t595 = zl_binop("-", zl_binop("+", v_SNAKE_X, v_i), zl_num(1)); zl_calln("peek8", 1, _t595); }); zl_calln("poke8", 2, _t595, _t596); });
-                    ({ Value _t598 = zl_binop("+", v_SNAKE_Y, v_i); Value _t599 = ({ Value _t598 = zl_binop("-", zl_binop("+", v_SNAKE_Y, v_i), zl_num(1)); zl_calln("peek8", 1, _t598); }); zl_calln("poke8", 2, _t598, _t599); });
+                    ({ Value _t663 = zl_binop("+", v_SNAKE_X, v_i); Value _t664 = ({ Value _t663 = zl_binop("-", zl_binop("+", v_SNAKE_X, v_i), zl_num(1)); zl_calln("peek8", 1, _t663); }); zl_calln("poke8", 2, _t663, _t664); });
+                    ({ Value _t666 = zl_binop("+", v_SNAKE_Y, v_i); Value _t667 = ({ Value _t666 = zl_binop("-", zl_binop("+", v_SNAKE_Y, v_i), zl_num(1)); zl_calln("peek8", 1, _t666); }); zl_calln("poke8", 2, _t666, _t667); });
                     v_i = zl_binop("-", v_i, zl_num(1));
                 }
-                ({ Value _t601 = v_SNAKE_X; Value _t602 = v_nhx; zl_calln("poke8", 2, _t601, _t602); });
-                ({ Value _t603 = v_SNAKE_Y; Value _t604 = v_nhy; zl_calln("poke8", 2, _t603, _t604); });
-                ({ Value _t605 = zl_binop("*", v_nhx, zl_num(16)); Value _t606 = zl_binop("+", zl_binop("*", v_nhy, zl_num(16)), zl_num(20)); Value _t607 = zl_num(15); Value _t608 = zl_num(15); Value _t609 = v_C_GREEN; zl_calln("fill_rect", 5, _t605, _t606, _t607, _t608, _t609); });
-                ({ Value _t610 = zl_binop("*", v_fx, zl_num(16)); Value _t611 = zl_binop("+", zl_binop("*", v_fy, zl_num(16)), zl_num(20)); Value _t612 = zl_num(15); Value _t613 = zl_num(15); Value _t614 = v_C_RED; zl_calln("fill_rect", 5, _t610, _t611, _t612, _t613, _t614); });
-                ({ Value _t615 = zl_num(0); Value _t616 = zl_num(67); Value _t617 = v_score; Value _t618 = v_C_YELLOW; zl_calln("at_num", 4, _t615, _t616, _t617, _t618); });
+                ({ Value _t669 = v_SNAKE_X; Value _t670 = v_nhx; zl_calln("poke8", 2, _t669, _t670); });
+                ({ Value _t671 = v_SNAKE_Y; Value _t672 = v_nhy; zl_calln("poke8", 2, _t671, _t672); });
+                ({ Value _t673 = zl_binop("*", v_nhx, zl_num(16)); Value _t674 = zl_binop("+", zl_binop("*", v_nhy, zl_num(16)), zl_num(20)); Value _t675 = zl_num(15); Value _t676 = zl_num(15); Value _t677 = v_C_GREEN; zl_calln("fill_rect", 5, _t673, _t674, _t675, _t676, _t677); });
+                ({ Value _t678 = zl_binop("*", v_fx, zl_num(16)); Value _t679 = zl_binop("+", zl_binop("*", v_fy, zl_num(16)), zl_num(20)); Value _t680 = zl_num(15); Value _t681 = zl_num(15); Value _t682 = v_C_RED; zl_calln("fill_rect", 5, _t678, _t679, _t680, _t681, _t682); });
+                ({ Value _t683 = zl_num(0); Value _t684 = zl_num(67); Value _t685 = v_score; Value _t686 = v_C_YELLOW; zl_calln("at_num", 4, _t683, _t684, _t685, _t686); });
             }
         }
     }
-    ({ Value _t619 = zl_num(200); Value _t620 = zl_num(20); zl_fn_beep(_t619, _t620); });
-    ({ Value _t621 = v_C_RED; zl_calln("color", 1, _t621); });
-    ({ Value _t622 = zl_str("  game over - score "); zl_calln("put", 1, _t622); });
-    ({ Value _t623 = v_C_WHITE; zl_calln("color", 1, _t623); });
-    ({ Value _t624 = v_score; zl_calln("print", 1, _t624); });
-    ({ Value _t625 = v_C_GREY; zl_calln("color", 1, _t625); });
-    ({ Value _t626 = zl_str("  press any key"); zl_calln("print", 1, _t626); });
+    ({ Value _t687 = zl_num(200); Value _t688 = zl_num(20); zl_fn_beep(_t687, _t688); });
+    ({ Value _t689 = v_C_RED; zl_calln("color", 1, _t689); });
+    ({ Value _t690 = zl_str("  game over - score "); zl_calln("put", 1, _t690); });
+    ({ Value _t691 = v_C_WHITE; zl_calln("color", 1, _t691); });
+    ({ Value _t692 = v_score; zl_calln("print", 1, _t692); });
+    ({ Value _t693 = v_C_GREY; zl_calln("color", 1, _t693); });
+    ({ Value _t694 = zl_str("  press any key"); zl_calln("print", 1, _t694); });
     while (zl_truthy(zl_binop("==", ({ zl_fn_kbd_scan(); }), zl_num(0)))) {
     }
     ({ zl_fn_draw_screen(); });
@@ -967,23 +1109,23 @@ Value zl_fn_paint(void) {
     Value v_pt_run = zl_nil();
     Value v_k = zl_nil();
     if (zl_truthy(zl_binop("==", ({ zl_calln("px_w", 0); }), zl_num(0)))) {
-        ({ Value _t627 = v_C_GREY; zl_calln("color", 1, _t627); });
-        ({ Value _t628 = zl_str("  paint needs the framebuffer console"); zl_calln("print", 1, _t628); });
+        ({ Value _t695 = v_C_GREY; zl_calln("color", 1, _t695); });
+        ({ Value _t696 = zl_str("  paint needs the framebuffer console"); zl_calln("print", 1, _t696); });
         return zl_num(0);
     }
     v_w = ({ zl_calln("px_w", 0); });
     v_h = ({ zl_calln("px_h", 0); });
     ({ zl_calln("cls", 0); });
-    ({ Value _t629 = zl_num(0); Value _t630 = zl_num(0); Value _t631 = v_w; Value _t632 = v_h; Value _t633 = v_C_BLACK; zl_calln("fill_rect", 5, _t629, _t630, _t631, _t632, _t633); });
-    ({ Value _t634 = zl_num(0); Value _t635 = zl_num(2); Value _t636 = zl_str("PAINT"); Value _t637 = v_C_WHITE; zl_calln("at", 4, _t634, _t635, _t636, _t637); });
-    ({ Value _t638 = zl_num(0); Value _t639 = zl_num(9); Value _t640 = zl_str("hold left button to draw   1-7 pick colour   space clears   other key exits"); Value _t641 = v_C_GREY; zl_calln("at", 4, _t638, _t639, _t640, _t641); });
+    ({ Value _t697 = zl_num(0); Value _t698 = zl_num(0); Value _t699 = v_w; Value _t700 = v_h; Value _t701 = v_C_BLACK; zl_calln("fill_rect", 5, _t697, _t698, _t699, _t700, _t701); });
+    ({ Value _t702 = zl_num(0); Value _t703 = zl_num(2); Value _t704 = zl_str("PAINT"); Value _t705 = v_C_WHITE; zl_calln("at", 4, _t702, _t703, _t704, _t705); });
+    ({ Value _t706 = zl_num(0); Value _t707 = zl_num(9); Value _t708 = zl_str("hold left button to draw   1-7 pick colour   space clears   other key exits"); Value _t709 = v_C_GREY; zl_calln("at", 4, _t706, _t707, _t708, _t709); });
     v_col = v_C_GREEN;
     v_pt_run = zl_num(1);
     while (zl_truthy(zl_binop("==", v_pt_run, zl_num(1)))) {
         v_k = ({ zl_fn_key_get(); });
         if (zl_truthy(zl_binop(">", v_k, zl_num(0)))) {
             if (zl_truthy(zl_binop("==", v_k, zl_num(32)))) {
-                ({ Value _t642 = zl_num(0); Value _t643 = zl_num(24); Value _t644 = v_w; Value _t645 = zl_binop("-", v_h, zl_num(24)); Value _t646 = v_C_BLACK; zl_calln("fill_rect", 5, _t642, _t643, _t644, _t645, _t646); });
+                ({ Value _t710 = zl_num(0); Value _t711 = zl_num(24); Value _t712 = v_w; Value _t713 = zl_binop("-", v_h, zl_num(24)); Value _t714 = v_C_BLACK; zl_calln("fill_rect", 5, _t710, _t711, _t712, _t713, _t714); });
             }
             if (zl_truthy(zl_binop(">=", v_k, zl_num(49)))) {
                 if (zl_truthy(zl_binop("<=", v_k, zl_num(55)))) {
@@ -1010,11 +1152,11 @@ Value zl_fn_paint(void) {
         if (zl_truthy(zl_binop("<", v_my, zl_num(24)))) {
             v_my = zl_num(24);
         }
-        if (zl_truthy(zl_binop("!=", ({ Value _t647 = ({ zl_calln("mouse_btn", 0); }); Value _t648 = zl_num(1); zl_calln("band", 2, _t647, _t648); }), zl_num(0)))) {
-            ({ Value _t649 = v_mx; Value _t650 = v_my; Value _t651 = zl_num(5); Value _t652 = zl_num(5); Value _t653 = v_col; zl_calln("fill_rect", 5, _t649, _t650, _t651, _t652, _t653); });
+        if (zl_truthy(zl_binop("!=", ({ Value _t715 = ({ zl_calln("mouse_btn", 0); }); Value _t716 = zl_num(1); zl_calln("band", 2, _t715, _t716); }), zl_num(0)))) {
+            ({ Value _t717 = v_mx; Value _t718 = v_my; Value _t719 = zl_num(5); Value _t720 = zl_num(5); Value _t721 = v_col; zl_calln("fill_rect", 5, _t717, _t718, _t719, _t720, _t721); });
         }
-        ({ Value _t654 = zl_num(0); Value _t655 = zl_num(62); Value _t656 = v_mx; Value _t657 = v_C_GREY; zl_calln("at_num", 4, _t654, _t655, _t656, _t657); });
-        ({ Value _t658 = zl_num(0); Value _t659 = zl_num(70); Value _t660 = v_my; Value _t661 = v_C_GREY; zl_calln("at_num", 4, _t658, _t659, _t660, _t661); });
+        ({ Value _t722 = zl_num(0); Value _t723 = zl_num(62); Value _t724 = v_mx; Value _t725 = v_C_GREY; zl_calln("at_num", 4, _t722, _t723, _t724, _t725); });
+        ({ Value _t726 = zl_num(0); Value _t727 = zl_num(70); Value _t728 = v_my; Value _t729 = v_C_GREY; zl_calln("at_num", 4, _t726, _t727, _t728, _t729); });
     }
     ({ zl_fn_draw_screen(); });
     return zl_num(0);
@@ -1022,12 +1164,12 @@ Value zl_fn_paint(void) {
 }
 
 Value zl_fn_fs_init(void) {
-    ({ Value _t662 = v_FS_META; Value _t663 = zl_num(0); Value _t664 = zl_num(64); zl_calln("fill_mem", 3, _t662, _t663, _t664); });
+    ({ Value _t730 = v_FS_META; Value _t731 = zl_num(0); Value _t732 = zl_num(64); zl_calln("fill_mem", 3, _t730, _t731, _t732); });
     return zl_nil();
 }
 
 Value zl_fn_fs_len(Value v_slot) {
-    return ({ Value _t665 = zl_binop("+", v_FS_META, zl_binop("*", v_slot, zl_num(4))); zl_calln("peek32", 1, _t665); });
+    return ({ Value _t733 = zl_binop("+", v_FS_META, zl_binop("*", v_slot, zl_num(4))); zl_calln("peek32", 1, _t733); });
     return zl_nil();
 }
 
@@ -1035,19 +1177,19 @@ Value zl_fn_fs_save(Value v_slot, Value v_len) {
     if (zl_truthy(zl_binop(">", v_len, v_FS_SLOT))) {
         v_len = v_FS_SLOT;
     }
-    ({ Value _t666 = zl_binop("+", v_FS_META, zl_binop("*", v_slot, zl_num(4))); Value _t667 = v_len; zl_calln("poke32", 2, _t666, _t667); });
+    ({ Value _t734 = zl_binop("+", v_FS_META, zl_binop("*", v_slot, zl_num(4))); Value _t735 = v_len; zl_calln("poke32", 2, _t734, _t735); });
     if (zl_truthy(zl_binop(">", v_len, zl_num(0)))) {
-        ({ Value _t668 = zl_binop("+", v_FS_DATA, zl_binop("*", v_slot, v_FS_SLOT)); Value _t669 = v_EDIT_BUF; Value _t670 = v_len; zl_calln("copy_mem", 3, _t668, _t669, _t670); });
+        ({ Value _t736 = zl_binop("+", v_FS_DATA, zl_binop("*", v_slot, v_FS_SLOT)); Value _t737 = v_EDIT_BUF; Value _t738 = v_len; zl_calln("copy_mem", 3, _t736, _t737, _t738); });
     }
     return zl_nil();
 }
 
 Value zl_fn_fs_load(Value v_slot) {
     Value v_len = zl_nil();
-    v_len = ({ Value _t671 = v_slot; zl_fn_fs_len(_t671); });
-    ({ Value _t672 = v_EDIT_BUF; Value _t673 = zl_num(0); Value _t674 = v_EDIT_MAX; zl_calln("fill_mem", 3, _t672, _t673, _t674); });
+    v_len = ({ Value _t739 = v_slot; zl_fn_fs_len(_t739); });
+    ({ Value _t740 = v_EDIT_BUF; Value _t741 = zl_num(0); Value _t742 = v_EDIT_MAX; zl_calln("fill_mem", 3, _t740, _t741, _t742); });
     if (zl_truthy(zl_binop(">", v_len, zl_num(0)))) {
-        ({ Value _t675 = v_EDIT_BUF; Value _t676 = zl_binop("+", v_FS_DATA, zl_binop("*", v_slot, v_FS_SLOT)); Value _t677 = v_len; zl_calln("copy_mem", 3, _t675, _t676, _t677); });
+        ({ Value _t743 = v_EDIT_BUF; Value _t744 = zl_binop("+", v_FS_DATA, zl_binop("*", v_slot, v_FS_SLOT)); Value _t745 = v_len; zl_calln("copy_mem", 3, _t743, _t744, _t745); });
     }
     return v_len;
     return zl_nil();
@@ -1056,45 +1198,45 @@ Value zl_fn_fs_load(Value v_slot) {
 Value zl_fn_fs_list(void) {
     Value v_i = zl_nil();
     Value v_n = zl_nil();
-    ({ Value _t678 = v_C_CYAN; zl_calln("color", 1, _t678); });
-    ({ Value _t679 = zl_str("  RAM files:"); zl_calln("print", 1, _t679); });
+    ({ Value _t746 = v_C_CYAN; zl_calln("color", 1, _t746); });
+    ({ Value _t747 = zl_str("  RAM files:"); zl_calln("print", 1, _t747); });
     v_i = zl_num(0);
     while (zl_truthy(zl_binop("<", v_i, zl_num(10)))) {
-        ({ Value _t680 = v_C_GREY; zl_calln("color", 1, _t680); });
-        ({ Value _t681 = zl_str("    file "); zl_calln("put", 1, _t681); });
-        ({ Value _t682 = v_C_WHITE; zl_calln("color", 1, _t682); });
-        ({ Value _t683 = v_i; zl_calln("put", 1, _t683); });
-        ({ Value _t684 = v_C_GREY; zl_calln("color", 1, _t684); });
-        ({ Value _t685 = zl_str(":  "); zl_calln("put", 1, _t685); });
-        v_n = ({ Value _t686 = v_i; zl_fn_fs_len(_t686); });
+        ({ Value _t748 = v_C_GREY; zl_calln("color", 1, _t748); });
+        ({ Value _t749 = zl_str("    file "); zl_calln("put", 1, _t749); });
+        ({ Value _t750 = v_C_WHITE; zl_calln("color", 1, _t750); });
+        ({ Value _t751 = v_i; zl_calln("put", 1, _t751); });
+        ({ Value _t752 = v_C_GREY; zl_calln("color", 1, _t752); });
+        ({ Value _t753 = zl_str(":  "); zl_calln("put", 1, _t753); });
+        v_n = ({ Value _t754 = v_i; zl_fn_fs_len(_t754); });
         if (zl_truthy(zl_binop(">", v_n, zl_num(0)))) {
-            ({ Value _t687 = v_C_WHITE; zl_calln("color", 1, _t687); });
-            ({ Value _t688 = v_n; zl_calln("put", 1, _t688); });
-            ({ Value _t689 = v_C_GREY; zl_calln("color", 1, _t689); });
-            ({ Value _t690 = zl_str(" bytes"); zl_calln("print", 1, _t690); });
+            ({ Value _t755 = v_C_WHITE; zl_calln("color", 1, _t755); });
+            ({ Value _t756 = v_n; zl_calln("put", 1, _t756); });
+            ({ Value _t757 = v_C_GREY; zl_calln("color", 1, _t757); });
+            ({ Value _t758 = zl_str(" bytes"); zl_calln("print", 1, _t758); });
         }
         if (zl_truthy(zl_binop("==", v_n, zl_num(0)))) {
-            ({ Value _t691 = v_C_DGREY; zl_calln("color", 1, _t691); });
-            ({ Value _t692 = zl_str("empty"); zl_calln("print", 1, _t692); });
+            ({ Value _t759 = v_C_DGREY; zl_calln("color", 1, _t759); });
+            ({ Value _t760 = zl_str("empty"); zl_calln("print", 1, _t760); });
         }
         v_i = zl_binop("+", v_i, zl_num(1));
     }
-    ({ Value _t693 = v_C_GREY; zl_calln("color", 1, _t693); });
+    ({ Value _t761 = v_C_GREY; zl_calln("color", 1, _t761); });
     return zl_num(0);
     return zl_nil();
 }
 
 Value zl_fn_redraw_editor(Value v_len) {
     Value v_i = zl_nil();
-    ({ Value _t694 = zl_num(0); Value _t695 = zl_num(34); Value _t696 = ({ zl_calln("px_w", 0); }); Value _t697 = zl_binop("-", ({ zl_calln("px_h", 0); }), zl_num(50)); Value _t698 = v_C_BLACK; zl_calln("fill_rect", 5, _t694, _t695, _t696, _t697, _t698); });
-    ({ Value _t699 = zl_num(3); zl_calln("goto_row", 1, _t699); });
-    ({ Value _t700 = v_C_WHITE; zl_calln("color", 1, _t700); });
+    ({ Value _t762 = zl_num(0); Value _t763 = zl_num(34); Value _t764 = ({ zl_calln("px_w", 0); }); Value _t765 = zl_binop("-", ({ zl_calln("px_h", 0); }), zl_num(50)); Value _t766 = v_C_BLACK; zl_calln("fill_rect", 5, _t762, _t763, _t764, _t765, _t766); });
+    ({ Value _t767 = zl_num(3); zl_calln("goto_row", 1, _t767); });
+    ({ Value _t768 = v_C_WHITE; zl_calln("color", 1, _t768); });
     v_i = zl_num(0);
     while (zl_truthy(zl_binop("<", v_i, v_len))) {
-        ({ Value _t701 = ({ Value _t701 = zl_binop("+", v_EDIT_BUF, v_i); zl_calln("peek8", 1, _t701); }); zl_calln("sc", 1, _t701); });
+        ({ Value _t769 = ({ Value _t769 = zl_binop("+", v_EDIT_BUF, v_i); zl_calln("peek8", 1, _t769); }); zl_calln("sc", 1, _t769); });
         v_i = zl_binop("+", v_i, zl_num(1));
     }
-    ({ Value _t703 = ({ zl_calln("row", 0); }); Value _t704 = ({ zl_calln("col", 0); }); Value _t705 = zl_num(1); Value _t706 = v_C_GREEN; zl_calln("cursor", 4, _t703, _t704, _t705, _t706); });
+    ({ Value _t771 = ({ zl_calln("row", 0); }); Value _t772 = ({ zl_calln("col", 0); }); Value _t773 = zl_num(1); Value _t774 = v_C_GREEN; zl_calln("cursor", 4, _t771, _t772, _t773, _t774); });
     return zl_nil();
 }
 
@@ -1103,18 +1245,18 @@ Value zl_fn_editor(Value v_slot) {
     Value v_ed_run = zl_nil();
     Value v_k = zl_nil();
     if (zl_truthy(zl_binop("==", ({ zl_calln("px_w", 0); }), zl_num(0)))) {
-        ({ Value _t707 = v_C_GREY; zl_calln("color", 1, _t707); });
-        ({ Value _t708 = zl_str("  the editor needs the framebuffer console"); zl_calln("print", 1, _t708); });
+        ({ Value _t775 = v_C_GREY; zl_calln("color", 1, _t775); });
+        ({ Value _t776 = zl_str("  the editor needs the framebuffer console"); zl_calln("print", 1, _t776); });
         return zl_num(0);
     }
     ({ zl_calln("cls", 0); });
-    ({ Value _t709 = zl_num(0); Value _t710 = zl_num(0); Value _t711 = ({ zl_calln("px_w", 0); }); Value _t712 = zl_num(30); Value _t713 = v_C_BLUE; zl_calln("fill_rect", 5, _t709, _t710, _t711, _t712, _t713); });
-    ({ Value _t714 = zl_num(0); Value _t715 = zl_num(2); Value _t716 = zl_str("zlEDIT"); Value _t717 = v_C_WHITE; zl_calln("at", 4, _t714, _t715, _t716, _t717); });
-    ({ Value _t718 = zl_num(0); Value _t719 = zl_num(10); Value _t720 = zl_str("file"); Value _t721 = v_C_CYAN; zl_calln("at", 4, _t718, _t719, _t720, _t721); });
-    ({ Value _t722 = zl_num(0); Value _t723 = zl_num(15); Value _t724 = v_slot; Value _t725 = v_C_YELLOW; zl_calln("at_num", 4, _t722, _t723, _t724, _t725); });
-    ({ Value _t726 = zl_num(0); Value _t727 = zl_num(20); Value _t728 = zl_str("type to edit   backspace deletes   ESC saves file & exits"); Value _t729 = v_C_CYAN; zl_calln("at", 4, _t726, _t727, _t728, _t729); });
-    v_len = ({ Value _t730 = v_slot; zl_fn_fs_load(_t730); });
-    ({ Value _t731 = v_len; zl_fn_redraw_editor(_t731); });
+    ({ Value _t777 = zl_num(0); Value _t778 = zl_num(0); Value _t779 = ({ zl_calln("px_w", 0); }); Value _t780 = zl_num(30); Value _t781 = v_C_BLUE; zl_calln("fill_rect", 5, _t777, _t778, _t779, _t780, _t781); });
+    ({ Value _t782 = zl_num(0); Value _t783 = zl_num(2); Value _t784 = zl_str("zlEDIT"); Value _t785 = v_C_WHITE; zl_calln("at", 4, _t782, _t783, _t784, _t785); });
+    ({ Value _t786 = zl_num(0); Value _t787 = zl_num(10); Value _t788 = zl_str("file"); Value _t789 = v_C_CYAN; zl_calln("at", 4, _t786, _t787, _t788, _t789); });
+    ({ Value _t790 = zl_num(0); Value _t791 = zl_num(15); Value _t792 = v_slot; Value _t793 = v_C_YELLOW; zl_calln("at_num", 4, _t790, _t791, _t792, _t793); });
+    ({ Value _t794 = zl_num(0); Value _t795 = zl_num(20); Value _t796 = zl_str("type to edit   backspace deletes   ESC saves file & exits"); Value _t797 = v_C_CYAN; zl_calln("at", 4, _t794, _t795, _t796, _t797); });
+    v_len = ({ Value _t798 = v_slot; zl_fn_fs_load(_t798); });
+    ({ Value _t799 = v_len; zl_fn_redraw_editor(_t799); });
     v_ed_run = zl_num(1);
     while (zl_truthy(zl_binop("==", v_ed_run, zl_num(1)))) {
         v_k = ({ zl_fn_edit_key(); });
@@ -1125,36 +1267,36 @@ Value zl_fn_editor(Value v_slot) {
             if (zl_truthy(zl_binop("==", v_k, zl_num(8)))) {
                 if (zl_truthy(zl_binop(">", v_len, zl_num(0)))) {
                     v_len = zl_binop("-", v_len, zl_num(1));
-                    ({ Value _t732 = zl_binop("+", v_EDIT_BUF, v_len); Value _t733 = zl_num(0); zl_calln("poke8", 2, _t732, _t733); });
+                    ({ Value _t800 = zl_binop("+", v_EDIT_BUF, v_len); Value _t801 = zl_num(0); zl_calln("poke8", 2, _t800, _t801); });
                 }
-                ({ Value _t734 = v_len; zl_fn_redraw_editor(_t734); });
+                ({ Value _t802 = v_len; zl_fn_redraw_editor(_t802); });
             }
             if (zl_truthy(zl_binop("==", v_k, zl_num(13)))) {
                 if (zl_truthy(zl_binop("<", v_len, zl_binop("-", v_EDIT_MAX, zl_num(1))))) {
-                    ({ Value _t735 = zl_binop("+", v_EDIT_BUF, v_len); Value _t736 = zl_num(10); zl_calln("poke8", 2, _t735, _t736); });
+                    ({ Value _t803 = zl_binop("+", v_EDIT_BUF, v_len); Value _t804 = zl_num(10); zl_calln("poke8", 2, _t803, _t804); });
                     v_len = zl_binop("+", v_len, zl_num(1));
                 }
-                ({ Value _t737 = v_len; zl_fn_redraw_editor(_t737); });
+                ({ Value _t805 = v_len; zl_fn_redraw_editor(_t805); });
             }
             if (zl_truthy(zl_binop(">=", v_k, zl_num(32)))) {
                 if (zl_truthy(zl_binop("<", v_len, zl_binop("-", v_EDIT_MAX, zl_num(1))))) {
-                    ({ Value _t738 = zl_binop("+", v_EDIT_BUF, v_len); Value _t739 = v_k; zl_calln("poke8", 2, _t738, _t739); });
+                    ({ Value _t806 = zl_binop("+", v_EDIT_BUF, v_len); Value _t807 = v_k; zl_calln("poke8", 2, _t806, _t807); });
                     v_len = zl_binop("+", v_len, zl_num(1));
                 }
-                ({ Value _t740 = v_len; zl_fn_redraw_editor(_t740); });
+                ({ Value _t808 = v_len; zl_fn_redraw_editor(_t808); });
             }
         }
     }
-    ({ Value _t741 = v_slot; Value _t742 = v_len; zl_fn_fs_save(_t741, _t742); });
+    ({ Value _t809 = v_slot; Value _t810 = v_len; zl_fn_fs_save(_t809, _t810); });
     ({ zl_fn_draw_screen(); });
-    ({ Value _t743 = v_C_GREY; zl_calln("color", 1, _t743); });
-    ({ Value _t744 = zl_str("  saved "); zl_calln("put", 1, _t744); });
-    ({ Value _t745 = v_C_WHITE; zl_calln("color", 1, _t745); });
-    ({ Value _t746 = v_len; zl_calln("put", 1, _t746); });
-    ({ Value _t747 = v_C_GREY; zl_calln("color", 1, _t747); });
-    ({ Value _t748 = zl_str(" bytes to file "); zl_calln("put", 1, _t748); });
-    ({ Value _t749 = v_C_WHITE; zl_calln("color", 1, _t749); });
-    ({ Value _t750 = v_slot; zl_calln("print", 1, _t750); });
+    ({ Value _t811 = v_C_GREY; zl_calln("color", 1, _t811); });
+    ({ Value _t812 = zl_str("  saved "); zl_calln("put", 1, _t812); });
+    ({ Value _t813 = v_C_WHITE; zl_calln("color", 1, _t813); });
+    ({ Value _t814 = v_len; zl_calln("put", 1, _t814); });
+    ({ Value _t815 = v_C_GREY; zl_calln("color", 1, _t815); });
+    ({ Value _t816 = zl_str(" bytes to file "); zl_calln("put", 1, _t816); });
+    ({ Value _t817 = v_C_WHITE; zl_calln("color", 1, _t817); });
+    ({ Value _t818 = v_slot; zl_calln("print", 1, _t818); });
     return zl_num(0);
     return zl_nil();
 }
@@ -1167,179 +1309,285 @@ Value zl_fn_run_command(Value v_cmd, Value v_arg) {
     Value v_gi = zl_nil();
     Value v_nw = zl_nil();
     Value v_nh = zl_nil();
+    Value v_ui2 = zl_nil();
+    Value v_ukb = zl_nil();
+    Value v_up = zl_nil();
+    Value v_uslot = zl_nil();
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(104)))) {
         ({ zl_fn_help(); });
         return zl_num(0);
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(102)))) {
-        ({ Value _t751 = v_C_WHITE; zl_calln("color", 1, _t751); });
-        ({ Value _t752 = zl_str("  "); zl_calln("put", 1, _t752); });
-        ({ Value _t753 = ({ Value _t753 = v_arg; zl_fn_fib(_t753); }); zl_calln("print", 1, _t753); });
-        ({ Value _t755 = v_C_GREY; zl_calln("color", 1, _t755); });
+        ({ Value _t819 = v_C_WHITE; zl_calln("color", 1, _t819); });
+        ({ Value _t820 = zl_str("  "); zl_calln("put", 1, _t820); });
+        ({ Value _t821 = ({ Value _t821 = v_arg; zl_fn_fib(_t821); }); zl_calln("print", 1, _t821); });
+        ({ Value _t823 = v_C_GREY; zl_calln("color", 1, _t823); });
         return zl_num(0);
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(115)))) {
-        ({ Value _t756 = v_C_WHITE; zl_calln("color", 1, _t756); });
-        ({ Value _t757 = zl_str("  "); zl_calln("put", 1, _t757); });
-        ({ Value _t758 = ({ Value _t758 = v_arg; zl_fn_sum_squares(_t758); }); zl_calln("print", 1, _t758); });
-        ({ Value _t760 = v_C_GREY; zl_calln("color", 1, _t760); });
+        ({ Value _t824 = v_C_WHITE; zl_calln("color", 1, _t824); });
+        ({ Value _t825 = zl_str("  "); zl_calln("put", 1, _t825); });
+        ({ Value _t826 = ({ Value _t826 = v_arg; zl_fn_sum_squares(_t826); }); zl_calln("print", 1, _t826); });
+        ({ Value _t828 = v_C_GREY; zl_calln("color", 1, _t828); });
         return zl_num(0);
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(116)))) {
-        ({ Value _t761 = v_C_GREY; zl_calln("color", 1, _t761); });
-        ({ Value _t762 = zl_str("  uptime: "); zl_calln("put", 1, _t762); });
-        ({ Value _t763 = v_C_WHITE; zl_calln("color", 1, _t763); });
-        ({ Value _t764 = zl_binop("/", ({ zl_calln("ticks", 0); }), zl_num(100)); zl_calln("put", 1, _t764); });
-        ({ Value _t765 = v_C_GREY; zl_calln("color", 1, _t765); });
-        ({ Value _t766 = zl_str(" s  ("); zl_calln("put", 1, _t766); });
-        ({ Value _t767 = v_C_WHITE; zl_calln("color", 1, _t767); });
-        ({ Value _t768 = ({ zl_calln("ticks", 0); }); zl_calln("put", 1, _t768); });
-        ({ Value _t769 = v_C_GREY; zl_calln("color", 1, _t769); });
-        ({ Value _t770 = zl_str(" ticks at 100 Hz)"); zl_calln("print", 1, _t770); });
+        ({ Value _t829 = v_C_GREY; zl_calln("color", 1, _t829); });
+        ({ Value _t830 = zl_str("  uptime: "); zl_calln("put", 1, _t830); });
+        ({ Value _t831 = v_C_WHITE; zl_calln("color", 1, _t831); });
+        ({ Value _t832 = zl_binop("/", ({ zl_calln("ticks", 0); }), zl_num(100)); zl_calln("put", 1, _t832); });
+        ({ Value _t833 = v_C_GREY; zl_calln("color", 1, _t833); });
+        ({ Value _t834 = zl_str(" s  ("); zl_calln("put", 1, _t834); });
+        ({ Value _t835 = v_C_WHITE; zl_calln("color", 1, _t835); });
+        ({ Value _t836 = ({ zl_calln("ticks", 0); }); zl_calln("put", 1, _t836); });
+        ({ Value _t837 = v_C_GREY; zl_calln("color", 1, _t837); });
+        ({ Value _t838 = zl_str(" ticks at 100 Hz)"); zl_calln("print", 1, _t838); });
         return zl_num(0);
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(98)))) {
-        ({ Value _t771 = zl_num(880); Value _t772 = zl_num(8); zl_fn_beep(_t771, _t772); });
-        ({ Value _t773 = zl_num(1174); Value _t774 = zl_num(8); zl_fn_beep(_t773, _t774); });
-        ({ Value _t775 = zl_num(1568); Value _t776 = zl_num(12); zl_fn_beep(_t775, _t776); });
+        ({ Value _t839 = zl_num(880); Value _t840 = zl_num(8); zl_fn_beep(_t839, _t840); });
+        ({ Value _t841 = zl_num(1174); Value _t842 = zl_num(8); zl_fn_beep(_t841, _t842); });
+        ({ Value _t843 = zl_num(1568); Value _t844 = zl_num(12); zl_fn_beep(_t843, _t844); });
         return ({ zl_fn_colorbars(); });
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(112)))) {
-        ({ Value _t777 = v_C_GREY; zl_calln("color", 1, _t777); });
-        ({ Value _t778 = zl_str("  CPU: "); zl_calln("put", 1, _t778); });
-        ({ Value _t779 = v_C_WHITE; zl_calln("color", 1, _t779); });
+        ({ Value _t845 = v_C_GREY; zl_calln("color", 1, _t845); });
+        ({ Value _t846 = zl_str("  CPU: "); zl_calln("put", 1, _t846); });
+        ({ Value _t847 = v_C_WHITE; zl_calln("color", 1, _t847); });
         v_i = zl_num(0);
         while (zl_truthy(zl_binop("<", v_i, zl_num(48)))) {
-            v_b = ({ Value _t780 = v_i; zl_calln("cpu_char", 1, _t780); });
+            v_b = ({ Value _t848 = v_i; zl_calln("cpu_char", 1, _t848); });
             if (zl_truthy(zl_binop(">", v_b, zl_num(0)))) {
-                ({ Value _t781 = v_b; zl_calln("emit", 1, _t781); });
+                ({ Value _t849 = v_b; zl_calln("emit", 1, _t849); });
             }
             v_i = zl_binop("+", v_i, zl_num(1));
         }
-        ({ Value _t782 = zl_str(""); zl_calln("print", 1, _t782); });
-        ({ Value _t783 = v_C_GREY; zl_calln("color", 1, _t783); });
+        ({ Value _t850 = zl_str(""); zl_calln("print", 1, _t850); });
+        ({ Value _t851 = v_C_GREY; zl_calln("color", 1, _t851); });
         return zl_num(0);
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(101)))) {
-        ({ Value _t784 = v_C_GREY; zl_calln("color", 1, _t784); });
-        ({ Value _t785 = zl_str("  beep!"); zl_calln("print", 1, _t785); });
-        ({ Value _t786 = zl_num(1000); Value _t787 = zl_num(15); zl_fn_beep(_t786, _t787); });
+        ({ Value _t852 = v_C_GREY; zl_calln("color", 1, _t852); });
+        ({ Value _t853 = zl_str("  beep!"); zl_calln("print", 1, _t853); });
+        ({ Value _t854 = zl_num(1000); Value _t855 = zl_num(15); zl_fn_beep(_t854, _t855); });
         return zl_num(0);
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(107)))) {
-        ({ Value _t788 = v_C_CYAN; zl_calln("color", 1, _t788); });
-        ({ Value _t789 = zl_str("  PCI bus scan"); zl_calln("print", 1, _t789); });
-        ({ Value _t790 = v_C_GREY; zl_calln("color", 1, _t790); });
+        ({ Value _t856 = v_C_CYAN; zl_calln("color", 1, _t856); });
+        ({ Value _t857 = zl_str("  PCI bus scan"); zl_calln("print", 1, _t857); });
+        ({ Value _t858 = v_C_GREY; zl_calln("color", 1, _t858); });
         ({ zl_calln("pci_scan", 0); });
         v_pn = zl_num(0);
         while (zl_truthy(zl_binop("<", v_pn, ({ zl_calln("pci_count", 0); })))) {
-            ({ Value _t791 = zl_str("    "); zl_calln("put", 1, _t791); });
-            ({ Value _t792 = ({ Value _t792 = v_pn; zl_calln("pci_vendor", 1, _t792); }); zl_calln("put", 1, _t792); });
-            ({ Value _t794 = zl_str(":"); zl_calln("put", 1, _t794); });
-            ({ Value _t795 = ({ Value _t795 = v_pn; zl_calln("pci_device", 1, _t795); }); zl_calln("put", 1, _t795); });
-            ({ Value _t797 = zl_str("   class "); zl_calln("put", 1, _t797); });
-            ({ Value _t798 = ({ Value _t798 = v_pn; zl_calln("pci_class", 1, _t798); }); zl_calln("print", 1, _t798); });
+            ({ Value _t859 = zl_str("    "); zl_calln("put", 1, _t859); });
+            ({ Value _t860 = ({ Value _t860 = v_pn; zl_calln("pci_vendor", 1, _t860); }); zl_calln("put", 1, _t860); });
+            ({ Value _t862 = zl_str(":"); zl_calln("put", 1, _t862); });
+            ({ Value _t863 = ({ Value _t863 = v_pn; zl_calln("pci_device", 1, _t863); }); zl_calln("put", 1, _t863); });
+            ({ Value _t865 = zl_str("   class "); zl_calln("put", 1, _t865); });
+            ({ Value _t866 = ({ Value _t866 = v_pn; zl_calln("pci_class", 1, _t866); }); zl_calln("print", 1, _t866); });
             v_pn = zl_binop("+", v_pn, zl_num(1));
         }
-        ({ Value _t800 = zl_str("    devices found: "); zl_calln("put", 1, _t800); });
-        ({ Value _t801 = ({ zl_calln("pci_count", 0); }); zl_calln("print", 1, _t801); });
-        ({ Value _t802 = zl_str(""); zl_calln("print", 1, _t802); });
-        ({ Value _t803 = v_C_CYAN; zl_calln("color", 1, _t803); });
-        ({ Value _t804 = zl_str("  Intel graphics (our own driver)"); zl_calln("print", 1, _t804); });
-        ({ Value _t805 = v_C_GREY; zl_calln("color", 1, _t805); });
+        ({ Value _t868 = zl_str("    devices found: "); zl_calln("put", 1, _t868); });
+        ({ Value _t869 = ({ zl_calln("pci_count", 0); }); zl_calln("print", 1, _t869); });
+        ({ Value _t870 = zl_str(""); zl_calln("print", 1, _t870); });
+        ({ Value _t871 = v_C_CYAN; zl_calln("color", 1, _t871); });
+        ({ Value _t872 = zl_str("  Intel graphics (our own driver)"); zl_calln("print", 1, _t872); });
+        ({ Value _t873 = v_C_GREY; zl_calln("color", 1, _t873); });
         v_ii = ({ zl_calln("intel_find", 0); });
         if (zl_truthy(zl_binop("<", v_ii, zl_num(0)))) {
-            ({ Value _t806 = zl_str("    no Intel GPU on this machine (expected in a VM)"); zl_calln("print", 1, _t806); });
+            ({ Value _t874 = zl_str("    no Intel GPU on this machine (expected in a VM)"); zl_calln("print", 1, _t874); });
         } else {
-            ({ Value _t807 = zl_str("    device 0x"); zl_calln("put", 1, _t807); });
-            ({ Value _t808 = ({ zl_calln("intel_id", 0); }); zl_calln("print", 1, _t808); });
+            ({ Value _t875 = zl_str("    device 0x"); zl_calln("put", 1, _t875); });
+            ({ Value _t876 = ({ zl_calln("intel_id", 0); }); zl_calln("print", 1, _t876); });
             if (zl_truthy(zl_binop("==", ({ zl_calln("intel_ok", 0); }), zl_num(1)))) {
-                ({ Value _t809 = zl_str("    generation:    Gen9/9.5 - supported"); zl_calln("print", 1, _t809); });
-                ({ Value _t810 = zl_str("    MMIO  (BAR0):  0x"); zl_calln("put", 1, _t810); });
-                ({ Value _t811 = ({ zl_calln("intel_mmio", 0); }); zl_calln("print", 1, _t811); });
-                ({ Value _t812 = zl_str("    aperture:      0x"); zl_calln("put", 1, _t812); });
-                ({ Value _t813 = ({ zl_calln("intel_aper", 0); }); zl_calln("print", 1, _t813); });
-                ({ Value _t814 = zl_str("    stolen memory: "); zl_calln("put", 1, _t814); });
-                ({ Value _t815 = zl_binop("/", ({ zl_calln("intel_ssize", 0); }), zl_num(1048576)); zl_calln("put", 1, _t815); });
-                ({ Value _t816 = zl_str(" MiB"); zl_calln("print", 1, _t816); });
-                ({ Value _t817 = zl_str("    GGTT size:     "); zl_calln("put", 1, _t817); });
-                ({ Value _t818 = zl_binop("/", ({ zl_calln("intel_ggtt", 0); }), zl_num(1048576)); zl_calln("put", 1, _t818); });
-                ({ Value _t819 = zl_str(" MiB"); zl_calln("print", 1, _t819); });
-                ({ Value _t820 = zl_str("    pipe A active: "); zl_calln("put", 1, _t820); });
-                ({ Value _t821 = ({ zl_calln("intel_pipe", 0); }); zl_calln("print", 1, _t821); });
-                ({ Value _t822 = zl_str("    plane enabled: "); zl_calln("put", 1, _t822); });
-                ({ Value _t823 = ({ zl_calln("intel_plane", 0); }); zl_calln("print", 1, _t823); });
-                ({ Value _t824 = zl_str("    live mode:     "); zl_calln("put", 1, _t824); });
-                ({ Value _t825 = ({ zl_calln("intel_w", 0); }); zl_calln("put", 1, _t825); });
-                ({ Value _t826 = zl_str(" x "); zl_calln("put", 1, _t826); });
-                ({ Value _t827 = ({ zl_calln("intel_h", 0); }); zl_calln("print", 1, _t827); });
-                ({ Value _t828 = zl_str("    stride:        "); zl_calln("put", 1, _t828); });
-                ({ Value _t829 = ({ zl_calln("intel_stride", 0); }); zl_calln("put", 1, _t829); });
-                ({ Value _t830 = zl_str(" bytes"); zl_calln("print", 1, _t830); });
-                ({ Value _t831 = zl_str("    scanning out:  0x"); zl_calln("put", 1, _t831); });
-                ({ Value _t832 = ({ zl_calln("intel_surf", 0); }); zl_calln("print", 1, _t832); });
+                ({ Value _t877 = zl_str("    generation:    Gen9/9.5 - supported"); zl_calln("print", 1, _t877); });
+                ({ Value _t878 = zl_str("    MMIO  (BAR0):  0x"); zl_calln("put", 1, _t878); });
+                ({ Value _t879 = ({ zl_calln("intel_mmio", 0); }); Value _t880 = zl_num(8); zl_calln("hex", 2, _t879, _t880); });
+                ({ Value _t881 = zl_str(""); zl_calln("print", 1, _t881); });
+                ({ Value _t882 = zl_str("    aperture:      0x"); zl_calln("put", 1, _t882); });
+                ({ Value _t883 = ({ zl_calln("intel_aper", 0); }); Value _t884 = zl_num(8); zl_calln("hex", 2, _t883, _t884); });
+                ({ Value _t885 = zl_str(""); zl_calln("print", 1, _t885); });
+                ({ Value _t886 = zl_str("    stolen memory: "); zl_calln("put", 1, _t886); });
+                ({ Value _t887 = zl_binop("/", ({ zl_calln("intel_ssize", 0); }), zl_num(1048576)); zl_calln("put", 1, _t887); });
+                ({ Value _t888 = zl_str(" MiB"); zl_calln("print", 1, _t888); });
+                ({ Value _t889 = zl_str("    GGTT size:     "); zl_calln("put", 1, _t889); });
+                ({ Value _t890 = zl_binop("/", ({ zl_calln("intel_ggtt", 0); }), zl_num(1048576)); zl_calln("put", 1, _t890); });
+                ({ Value _t891 = zl_str(" MiB"); zl_calln("print", 1, _t891); });
+                ({ Value _t892 = zl_str("    pipe A active: "); zl_calln("put", 1, _t892); });
+                ({ Value _t893 = ({ zl_calln("intel_pipe", 0); }); zl_calln("print", 1, _t893); });
+                ({ Value _t894 = zl_str("    plane enabled: "); zl_calln("put", 1, _t894); });
+                ({ Value _t895 = ({ zl_calln("intel_plane", 0); }); zl_calln("print", 1, _t895); });
+                ({ Value _t896 = zl_str("    live mode:     "); zl_calln("put", 1, _t896); });
+                ({ Value _t897 = ({ zl_calln("intel_w", 0); }); zl_calln("put", 1, _t897); });
+                ({ Value _t898 = zl_str(" x "); zl_calln("put", 1, _t898); });
+                ({ Value _t899 = ({ zl_calln("intel_h", 0); }); zl_calln("print", 1, _t899); });
+                ({ Value _t900 = zl_str("    stride:        "); zl_calln("put", 1, _t900); });
+                ({ Value _t901 = ({ zl_calln("intel_stride", 0); }); zl_calln("put", 1, _t901); });
+                ({ Value _t902 = zl_str(" bytes"); zl_calln("print", 1, _t902); });
+                ({ Value _t903 = zl_str("    scanning out:  0x"); zl_calln("put", 1, _t903); });
+                ({ Value _t904 = ({ zl_calln("intel_surf", 0); }); zl_calln("print", 1, _t904); });
             } else {
-                ({ Value _t833 = zl_str("    not a Gen9 part - detected but not driven"); zl_calln("print", 1, _t833); });
+                ({ Value _t905 = zl_str("    not a Gen9 part - detected but not driven"); zl_calln("print", 1, _t905); });
             }
         }
-        ({ Value _t834 = zl_str(""); zl_calln("print", 1, _t834); });
-        ({ Value _t835 = v_C_CYAN; zl_calln("color", 1, _t835); });
-        ({ Value _t836 = zl_str("  display adapter"); zl_calln("print", 1, _t836); });
-        ({ Value _t837 = v_C_GREY; zl_calln("color", 1, _t837); });
+        ({ Value _t906 = zl_str(""); zl_calln("print", 1, _t906); });
+        ({ Value _t907 = v_C_CYAN; zl_calln("color", 1, _t907); });
+        ({ Value _t908 = zl_str("  display adapter"); zl_calln("print", 1, _t908); });
+        ({ Value _t909 = v_C_GREY; zl_calln("color", 1, _t909); });
         v_gi = ({ zl_calln("gpu_find", 0); });
         if (zl_truthy(zl_binop("<", v_gi, zl_num(0)))) {
-            ({ Value _t838 = zl_str("    no PCI display adapter found"); zl_calln("print", 1, _t838); });
+            ({ Value _t910 = zl_str("    no PCI display adapter found"); zl_calln("print", 1, _t910); });
         } else {
-            ({ Value _t839 = zl_str("    framebuffer at 0x"); zl_calln("put", 1, _t839); });
-            ({ Value _t840 = ({ zl_calln("gpu_fb", 0); }); zl_calln("print", 1, _t840); });
-            ({ Value _t841 = zl_str("    video memory:  "); zl_calln("put", 1, _t841); });
-            ({ Value _t842 = zl_binop("/", ({ zl_calln("gpu_vram", 0); }), zl_num(1048576)); zl_calln("put", 1, _t842); });
-            ({ Value _t843 = zl_str(" MiB"); zl_calln("print", 1, _t843); });
+            ({ Value _t911 = zl_str("    framebuffer at 0x"); zl_calln("put", 1, _t911); });
+            ({ Value _t912 = ({ zl_calln("gpu_fb", 0); }); Value _t913 = zl_num(8); zl_calln("hex", 2, _t912, _t913); });
+            ({ Value _t914 = zl_str(""); zl_calln("print", 1, _t914); });
+            ({ Value _t915 = zl_str("    video memory:  "); zl_calln("put", 1, _t915); });
+            ({ Value _t916 = zl_binop("/", ({ zl_calln("gpu_vram", 0); }), zl_num(1048576)); zl_calln("put", 1, _t916); });
+            ({ Value _t917 = zl_str(" MiB"); zl_calln("print", 1, _t917); });
             if (zl_truthy(zl_binop("==", ({ zl_calln("gpu_present", 0); }), zl_num(1)))) {
-                ({ Value _t844 = zl_str("    modesetting:   YES, BGA rev "); zl_calln("put", 1, _t844); });
-                ({ Value _t845 = ({ zl_calln("gpu_version", 0); }); zl_calln("print", 1, _t845); });
-                ({ Value _t846 = zl_str("    current mode:  "); zl_calln("put", 1, _t846); });
-                ({ Value _t847 = ({ zl_calln("gpu_w", 0); }); zl_calln("put", 1, _t847); });
-                ({ Value _t848 = zl_str(" x "); zl_calln("put", 1, _t848); });
-                ({ Value _t849 = ({ zl_calln("gpu_h", 0); }); zl_calln("print", 1, _t849); });
+                ({ Value _t918 = zl_str("    modesetting:   YES, BGA rev "); zl_calln("put", 1, _t918); });
+                ({ Value _t919 = ({ zl_calln("gpu_version", 0); }); zl_calln("print", 1, _t919); });
+                ({ Value _t920 = zl_str("    current mode:  "); zl_calln("put", 1, _t920); });
+                ({ Value _t921 = ({ zl_calln("gpu_w", 0); }); zl_calln("put", 1, _t921); });
+                ({ Value _t922 = zl_str(" x "); zl_calln("put", 1, _t922); });
+                ({ Value _t923 = ({ zl_calln("gpu_h", 0); }); zl_calln("print", 1, _t923); });
             } else {
-                ({ Value _t850 = zl_str("    modesetting:   not supported by this adapter"); zl_calln("print", 1, _t850); });
+                ({ Value _t924 = zl_str("    modesetting:   not supported by this adapter"); zl_calln("print", 1, _t924); });
             }
         }
         return zl_num(0);
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(110)))) {
-        ({ Value _t851 = v_C_CYAN; zl_calln("color", 1, _t851); });
-        ({ Value _t852 = zl_str("  modesetting with our own driver"); zl_calln("print", 1, _t852); });
-        ({ Value _t853 = v_C_GREY; zl_calln("color", 1, _t853); });
+        ({ Value _t925 = v_C_CYAN; zl_calln("color", 1, _t925); });
+        ({ Value _t926 = zl_str("  modesetting with our own driver"); zl_calln("print", 1, _t926); });
+        ({ Value _t927 = v_C_GREY; zl_calln("color", 1, _t927); });
         v_nw = zl_num(1280);
         v_nh = zl_num(800);
         if (zl_truthy(zl_binop("==", ({ zl_calln("px_w", 0); }), zl_num(1280)))) {
             v_nw = zl_num(1920);
             v_nh = zl_num(1200);
         }
-        ({ Value _t854 = zl_str("    switching to "); zl_calln("put", 1, _t854); });
-        ({ Value _t855 = v_nw; zl_calln("put", 1, _t855); });
-        ({ Value _t856 = zl_str(" x "); zl_calln("put", 1, _t856); });
-        ({ Value _t857 = v_nh; zl_calln("print", 1, _t857); });
-        if (zl_truthy(zl_binop("==", ({ Value _t858 = v_nw; Value _t859 = v_nh; zl_calln("set_res", 2, _t858, _t859); }), zl_num(1)))) {
-            ({ Value _t860 = zl_str("    now "); zl_calln("put", 1, _t860); });
-            ({ Value _t861 = ({ zl_calln("gpu_w", 0); }); zl_calln("put", 1, _t861); });
-            ({ Value _t862 = zl_str(" x "); zl_calln("put", 1, _t862); });
-            ({ Value _t863 = ({ zl_calln("gpu_h", 0); }); zl_calln("put", 1, _t863); });
-            ({ Value _t864 = zl_str(", pitch "); zl_calln("put", 1, _t864); });
-            ({ Value _t865 = ({ zl_calln("gpu_pitch", 0); }); zl_calln("print", 1, _t865); });
+        ({ Value _t928 = zl_str("    switching to "); zl_calln("put", 1, _t928); });
+        ({ Value _t929 = v_nw; zl_calln("put", 1, _t929); });
+        ({ Value _t930 = zl_str(" x "); zl_calln("put", 1, _t930); });
+        ({ Value _t931 = v_nh; zl_calln("print", 1, _t931); });
+        if (zl_truthy(zl_binop("==", ({ Value _t932 = v_nw; Value _t933 = v_nh; zl_calln("set_res", 2, _t932, _t933); }), zl_num(1)))) {
+            ({ Value _t934 = zl_str("    now "); zl_calln("put", 1, _t934); });
+            ({ Value _t935 = ({ zl_calln("gpu_w", 0); }); zl_calln("put", 1, _t935); });
+            ({ Value _t936 = zl_str(" x "); zl_calln("put", 1, _t936); });
+            ({ Value _t937 = ({ zl_calln("gpu_h", 0); }); zl_calln("put", 1, _t937); });
+            ({ Value _t938 = zl_str(", pitch "); zl_calln("put", 1, _t938); });
+            ({ Value _t939 = ({ zl_calln("gpu_pitch", 0); }); zl_calln("print", 1, _t939); });
             ({ zl_fn_layout(); });
             ({ zl_fn_draw_screen(); });
-            ({ Value _t866 = v_C_GREEN; zl_calln("color", 1, _t866); });
-            ({ Value _t867 = zl_str("  mode set by zlOS, no BIOS involved"); zl_calln("print", 1, _t867); });
-            ({ Value _t868 = v_C_GREY; zl_calln("color", 1, _t868); });
+            ({ Value _t940 = v_C_GREEN; zl_calln("color", 1, _t940); });
+            ({ Value _t941 = zl_str("  mode set by zlOS, no BIOS involved"); zl_calln("print", 1, _t941); });
+            ({ Value _t942 = v_C_GREY; zl_calln("color", 1, _t942); });
         } else {
-            ({ Value _t869 = v_C_RED; zl_calln("color", 1, _t869); });
-            ({ Value _t870 = zl_str("    the card refused that mode"); zl_calln("print", 1, _t870); });
-            ({ Value _t871 = v_C_GREY; zl_calln("color", 1, _t871); });
+            ({ Value _t943 = v_C_RED; zl_calln("color", 1, _t943); });
+            ({ Value _t944 = zl_str("    the card refused that mode"); zl_calln("print", 1, _t944); });
+            ({ Value _t945 = v_C_GREY; zl_calln("color", 1, _t945); });
         }
         return zl_num(0);
+    }
+    if (zl_truthy(zl_binop("==", v_cmd, zl_num(117)))) {
+        ({ Value _t946 = v_C_CYAN; zl_calln("color", 1, _t946); });
+        ({ Value _t947 = zl_str("  USB host controller (xHCI)"); zl_calln("print", 1, _t947); });
+        ({ Value _t948 = v_C_GREY; zl_calln("color", 1, _t948); });
+        v_ui2 = ({ zl_calln("usb_find", 0); });
+        if (zl_truthy(zl_binop("<", v_ui2, zl_num(0)))) {
+            ({ Value _t949 = zl_str("    no xHCI controller found on the PCI bus"); zl_calln("print", 1, _t949); });
+        } else {
+            ({ Value _t950 = zl_str("    xHCI version  0x"); zl_calln("put", 1, _t950); });
+            ({ Value _t951 = ({ zl_calln("usb_ver", 0); }); Value _t952 = zl_num(4); zl_calln("hex", 2, _t951, _t952); });
+            ({ Value _t953 = zl_str(""); zl_calln("print", 1, _t953); });
+            ({ Value _t954 = zl_str("    MMIO at       0x"); zl_calln("put", 1, _t954); });
+            ({ Value _t955 = ({ zl_calln("usb_mmio", 0); }); Value _t956 = zl_num(8); zl_calln("hex", 2, _t955, _t956); });
+            ({ Value _t957 = zl_str(""); zl_calln("print", 1, _t957); });
+            ({ Value _t958 = zl_str("    device slots: "); zl_calln("put", 1, _t958); });
+            ({ Value _t959 = ({ zl_calln("usb_slots", 0); }); zl_calln("print", 1, _t959); });
+            ({ Value _t960 = zl_str("    root ports:   "); zl_calln("put", 1, _t960); });
+            ({ Value _t961 = ({ zl_calln("usb_ports", 0); }); zl_calln("print", 1, _t961); });
+            ({ Value _t962 = zl_str("    context size: "); zl_calln("put", 1, _t962); });
+            ({ Value _t963 = ({ zl_calln("usb_ctxsz", 0); }); zl_calln("put", 1, _t963); });
+            ({ Value _t964 = zl_str(" bytes"); zl_calln("print", 1, _t964); });
+            if (zl_truthy(zl_binop("==", ({ zl_calln("usb_ram", 0); }), zl_num(0)))) {
+                ({ Value _t965 = v_C_RED; zl_calln("color", 1, _t965); });
+                ({ Value _t966 = zl_str("    the DMA arena at 224 MiB is not backed by RAM"); zl_calln("print", 1, _t966); });
+                ({ Value _t967 = v_C_GREY; zl_calln("color", 1, _t967); });
+                return zl_num(0);
+            }
+            v_ukb = ({ zl_calln("usb_up", 0); });
+            if (zl_truthy(zl_binop("==", ({ zl_calln("usb_ours", 0); }), zl_num(1)))) {
+                ({ Value _t968 = v_C_GREEN; zl_calln("color", 1, _t968); });
+                ({ Value _t969 = zl_str("    controller reset, rings up, RUNNING - it is ours"); zl_calln("print", 1, _t969); });
+                ({ Value _t970 = v_C_GREY; zl_calln("color", 1, _t970); });
+                if (zl_truthy(zl_binop("==", ({ zl_calln("usb_noop", 0); }), zl_num(1)))) {
+                    ({ Value _t971 = v_C_GREEN; zl_calln("color", 1, _t971); });
+                    ({ Value _t972 = zl_str("    no-op command completed - DMA path proven"); zl_calln("print", 1, _t972); });
+                    ({ Value _t973 = v_C_GREY; zl_calln("color", 1, _t973); });
+                } else {
+                    ({ Value _t974 = v_C_RED; zl_calln("color", 1, _t974); });
+                    ({ Value _t975 = zl_str("    no-op did not complete"); zl_calln("print", 1, _t975); });
+                    ({ Value _t976 = v_C_GREY; zl_calln("color", 1, _t976); });
+                }
+            } else {
+                ({ Value _t977 = v_C_RED; zl_calln("color", 1, _t977); });
+                ({ Value _t978 = zl_str("    could not take the controller"); zl_calln("print", 1, _t978); });
+                ({ Value _t979 = v_C_GREY; zl_calln("color", 1, _t979); });
+                return zl_num(0);
+            }
+            ({ Value _t980 = zl_str("    devices attached: "); zl_calln("put", 1, _t980); });
+            ({ Value _t981 = ({ zl_calln("usb_count", 0); }); zl_calln("print", 1, _t981); });
+            v_up = zl_num(1);
+            while (zl_truthy(zl_binop("<=", v_up, ({ zl_calln("usb_ports", 0); })))) {
+                if (zl_truthy(zl_binop("==", ({ Value _t982 = v_up; zl_calln("usb_conn", 1, _t982); }), zl_num(1)))) {
+                    ({ Value _t983 = zl_str("      port "); zl_calln("put", 1, _t983); });
+                    ({ Value _t984 = v_up; zl_calln("put", 1, _t984); });
+                    ({ Value _t985 = zl_str(" connected, speed "); zl_calln("put", 1, _t985); });
+                    ({ Value _t986 = ({ Value _t986 = ({ Value _t986 = v_up; zl_calln("usb_speed", 1, _t986); }); zl_fn_spname(_t986); }); zl_calln("put", 1, _t986); });
+                    v_uslot = ({ Value _t989 = v_up; zl_calln("usb_enum", 1, _t989); });
+                    if (zl_truthy(zl_binop(">", v_uslot, zl_num(0)))) {
+                        ({ Value _t990 = v_C_GREEN; zl_calln("color", 1, _t990); });
+                        ({ Value _t991 = zl_str("  -> slot "); zl_calln("put", 1, _t991); });
+                        ({ Value _t992 = v_uslot; zl_calln("put", 1, _t992); });
+                        ({ Value _t993 = zl_str(" addr "); zl_calln("put", 1, _t993); });
+                        ({ Value _t994 = ({ zl_calln("usb_addr", 0); }); zl_calln("print", 1, _t994); });
+                        ({ Value _t995 = v_C_GREY; zl_calln("color", 1, _t995); });
+                        ({ Value _t996 = zl_str("        USB "); zl_calln("put", 1, _t996); });
+                        ({ Value _t997 = ({ zl_calln("usb_uver", 0); }); Value _t998 = zl_num(4); zl_calln("hex", 2, _t997, _t998); });
+                        ({ Value _t999 = zl_str("  vendor "); zl_calln("put", 1, _t999); });
+                        ({ Value _t1000 = ({ zl_calln("usb_vid", 0); }); Value _t1001 = zl_num(4); zl_calln("hex", 2, _t1000, _t1001); });
+                        ({ Value _t1002 = zl_str(":"); zl_calln("put", 1, _t1002); });
+                        ({ Value _t1003 = ({ zl_calln("usb_pid", 0); }); Value _t1004 = zl_num(4); zl_calln("hex", 2, _t1003, _t1004); });
+                        ({ Value _t1005 = zl_str("  class "); zl_calln("put", 1, _t1005); });
+                        ({ Value _t1006 = ({ zl_calln("usb_cls", 0); }); Value _t1007 = zl_num(2); zl_calln("hex", 2, _t1006, _t1007); });
+                        ({ Value _t1008 = zl_str("  ep0 mps "); zl_calln("put", 1, _t1008); });
+                        ({ Value _t1009 = ({ zl_calln("usb_mps", 0); }); zl_calln("print", 1, _t1009); });
+                    } else {
+                        ({ Value _t1010 = v_C_RED; zl_calln("color", 1, _t1010); });
+                        ({ Value _t1011 = zl_str("  -> enumeration failed"); zl_calln("print", 1, _t1011); });
+                        ({ Value _t1012 = v_C_GREY; zl_calln("color", 1, _t1012); });
+                    }
+                }
+                v_up = zl_binop("+", v_up, zl_num(1));
+            }
+            if (zl_truthy(zl_binop(">", v_ukb, zl_num(0)))) {
+                ({ Value _t1013 = v_C_GREEN; zl_calln("color", 1, _t1013); });
+                ({ Value _t1014 = zl_str("    HID boot keyboard on slot "); zl_calln("put", 1, _t1014); });
+                ({ Value _t1015 = v_ukb; zl_calln("put", 1, _t1015); });
+                ({ Value _t1016 = zl_str(", endpoint dci "); zl_calln("put", 1, _t1016); });
+                ({ Value _t1017 = ({ zl_calln("usb_kbd_ep", 0); }); zl_calln("print", 1, _t1017); });
+                ({ Value _t1018 = zl_str("    keystrokes now come from OUR driver - try 'j'"); zl_calln("print", 1, _t1018); });
+                ({ Value _t1019 = v_C_GREY; zl_calln("color", 1, _t1019); });
+            } else {
+                ({ Value _t1020 = zl_str("    no HID boot keyboard on this bus"); zl_calln("print", 1, _t1020); });
+            }
+        }
+        return zl_num(0);
+    }
+    if (zl_truthy(zl_binop("==", v_cmd, zl_num(106)))) {
+        return ({ zl_fn_usbkey_demo(); });
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(118)))) {
         return ({ zl_fn_cube_demo(); });
@@ -1360,27 +1608,27 @@ Value zl_fn_run_command(Value v_cmd, Value v_arg) {
         return ({ zl_fn_paint(); });
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(105)))) {
-        return ({ Value _t872 = v_arg; zl_fn_editor(_t872); });
+        return ({ Value _t1021 = v_arg; zl_fn_editor(_t1021); });
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(108)))) {
         return ({ zl_fn_fs_list(); });
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(114)))) {
-        ({ Value _t873 = v_C_YELLOW; zl_calln("color", 1, _t873); });
-        ({ Value _t874 = zl_str("  rebooting..."); zl_calln("print", 1, _t874); });
-        ({ Value _t875 = zl_num(1568); Value _t876 = zl_num(6); zl_fn_beep(_t875, _t876); });
-        ({ Value _t877 = zl_num(784); Value _t878 = zl_num(10); zl_fn_beep(_t877, _t878); });
+        ({ Value _t1022 = v_C_YELLOW; zl_calln("color", 1, _t1022); });
+        ({ Value _t1023 = zl_str("  rebooting..."); zl_calln("print", 1, _t1023); });
+        ({ Value _t1024 = zl_num(1568); Value _t1025 = zl_num(6); zl_fn_beep(_t1024, _t1025); });
+        ({ Value _t1026 = zl_num(784); Value _t1027 = zl_num(10); zl_fn_beep(_t1026, _t1027); });
         ({ zl_calln("reboot", 0); });
         return zl_num(0);
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(109)))) {
-        ({ Value _t879 = zl_binop("+", v_VGA, zl_num(158)); Value _t880 = zl_num(42); zl_calln("poke8", 2, _t879, _t880); });
-        ({ Value _t881 = zl_binop("+", v_VGA, zl_num(159)); Value _t882 = zl_num(78); zl_calln("poke8", 2, _t881, _t882); });
-        ({ Value _t883 = v_C_GREY; zl_calln("color", 1, _t883); });
-        ({ Value _t884 = zl_str("  wrote a byte to video memory, read back: "); zl_calln("put", 1, _t884); });
-        ({ Value _t885 = v_C_WHITE; zl_calln("color", 1, _t885); });
-        ({ Value _t886 = ({ Value _t886 = zl_binop("+", v_VGA, zl_num(158)); zl_calln("peek8", 1, _t886); }); zl_calln("print", 1, _t886); });
-        ({ Value _t888 = v_C_GREY; zl_calln("color", 1, _t888); });
+        ({ Value _t1028 = zl_binop("+", v_VGA, zl_num(158)); Value _t1029 = zl_num(42); zl_calln("poke8", 2, _t1028, _t1029); });
+        ({ Value _t1030 = zl_binop("+", v_VGA, zl_num(159)); Value _t1031 = zl_num(78); zl_calln("poke8", 2, _t1030, _t1031); });
+        ({ Value _t1032 = v_C_GREY; zl_calln("color", 1, _t1032); });
+        ({ Value _t1033 = zl_str("  wrote a byte to video memory, read back: "); zl_calln("put", 1, _t1033); });
+        ({ Value _t1034 = v_C_WHITE; zl_calln("color", 1, _t1034); });
+        ({ Value _t1035 = ({ Value _t1035 = zl_binop("+", v_VGA, zl_num(158)); zl_calln("peek8", 1, _t1035); }); zl_calln("print", 1, _t1035); });
+        ({ Value _t1037 = v_C_GREY; zl_calln("color", 1, _t1037); });
         return zl_num(0);
     }
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(99)))) {
@@ -1390,9 +1638,9 @@ Value zl_fn_run_command(Value v_cmd, Value v_arg) {
     if (zl_truthy(zl_binop("==", v_cmd, zl_num(113)))) {
         return zl_num(1);
     }
-    ({ Value _t889 = v_C_RED; zl_calln("color", 1, _t889); });
-    ({ Value _t890 = zl_str("  unknown command - press h for help"); zl_calln("print", 1, _t890); });
-    ({ Value _t891 = v_C_GREY; zl_calln("color", 1, _t891); });
+    ({ Value _t1038 = v_C_RED; zl_calln("color", 1, _t1038); });
+    ({ Value _t1039 = zl_str("  unknown command - press h for help"); zl_calln("print", 1, _t1039); });
+    ({ Value _t1040 = v_C_GREY; zl_calln("color", 1, _t1040); });
     return zl_num(0);
     return zl_nil();
 }
@@ -1404,15 +1652,15 @@ Value zl_fn_draw_sysmon(Value v_sx, Value v_sy, Value v_sfoc) {
     Value v_smy = zl_nil();
     Value v_smb = zl_nil();
     v_u = ({ zl_fn_ui(); });
-    ({ Value _t892 = v_sx; Value _t893 = v_sy; Value _t894 = zl_binop("*", v_MON_W, v_u); Value _t895 = zl_binop("*", v_MON_H, v_u); Value _t896 = zl_str("System Monitor"); Value _t897 = v_sfoc; zl_fn_draw_window(_t892, _t893, _t894, _t895, _t896, _t897); });
-    ({ Value _t898 = zl_binop("+", v_sx, zl_binop("*", zl_num(14), v_u)); Value _t899 = zl_binop("+", v_sy, zl_binop("*", zl_num(40), v_u)); Value _t900 = zl_str("CPU"); Value _t901 = v_TXT_DIM; zl_calln("text_aa", 4, _t898, _t899, _t900, _t901); });
+    ({ Value _t1041 = v_sx; Value _t1042 = v_sy; Value _t1043 = zl_binop("*", v_MON_W, v_u); Value _t1044 = zl_binop("*", v_MON_H, v_u); Value _t1045 = zl_str("System Monitor"); Value _t1046 = v_sfoc; zl_fn_draw_window(_t1041, _t1042, _t1043, _t1044, _t1045, _t1046); });
+    ({ Value _t1047 = zl_binop("+", v_sx, zl_binop("*", zl_num(14), v_u)); Value _t1048 = zl_binop("+", v_sy, zl_binop("*", zl_num(40), v_u)); Value _t1049 = zl_str("CPU"); Value _t1050 = v_TXT_DIM; zl_calln("text_aa", 4, _t1047, _t1048, _t1049, _t1050); });
     v_smi = zl_num(0);
     v_smx = zl_binop("+", v_sx, zl_binop("*", zl_num(14), v_u));
     v_smy = zl_binop("+", v_sy, zl_binop("*", zl_num(58), v_u));
     while (zl_truthy(zl_binop("<", v_smi, zl_num(48)))) {
-        v_smb = ({ Value _t902 = v_smi; zl_calln("cpu_char", 1, _t902); });
+        v_smb = ({ Value _t1051 = v_smi; zl_calln("cpu_char", 1, _t1051); });
         if (zl_truthy(zl_binop(">", v_smb, zl_num(32)))) {
-            ({ Value _t903 = v_smx; Value _t904 = v_smy; Value _t905 = v_smb; Value _t906 = v_TXT_HI; zl_calln("char_aa", 4, _t903, _t904, _t905, _t906); });
+            ({ Value _t1052 = v_smx; Value _t1053 = v_smy; Value _t1054 = v_smb; Value _t1055 = v_TXT_HI; zl_calln("char_aa", 4, _t1052, _t1053, _t1054, _t1055); });
         }
         if (zl_truthy(zl_binop(">", v_smb, zl_num(0)))) {
             v_smx = zl_binop("+", v_smx, ({ zl_calln("cell_w", 0); }));
@@ -1423,19 +1671,19 @@ Value zl_fn_draw_sysmon(Value v_sx, Value v_sy, Value v_sfoc) {
         }
         v_smi = zl_binop("+", v_smi, zl_num(1));
     }
-    ({ Value _t907 = zl_binop("+", v_sx, zl_binop("*", zl_num(14), v_u)); Value _t908 = zl_binop("+", v_sy, zl_binop("*", zl_num(98), v_u)); Value _t909 = zl_str("MEM"); Value _t910 = v_TXT_DIM; zl_calln("text_aa", 4, _t907, _t908, _t909, _t910); });
-    ({ Value _t911 = zl_binop("+", v_sx, zl_binop("*", zl_num(56), v_u)); Value _t912 = zl_binop("+", v_sy, zl_binop("*", zl_num(100), v_u)); Value _t913 = zl_binop("*", zl_num(214), v_u); Value _t914 = zl_binop("*", zl_num(12), v_u); Value _t915 = ({ Value _t911 = zl_num(12); Value _t912 = zl_num(18); Value _t913 = zl_num(32); zl_fn_rgb(_t911, _t912, _t913); }); zl_calln("fill_rgb", 5, _t911, _t912, _t913, _t914, _t915); });
-    ({ Value _t919 = zl_binop("+", v_sx, zl_binop("*", zl_num(56), v_u)); Value _t920 = zl_binop("+", v_sy, zl_binop("*", zl_num(100), v_u)); Value _t921 = zl_binop("*", zl_num(58), v_u); Value _t922 = zl_binop("*", zl_num(12), v_u); Value _t923 = v_ACCENT; zl_calln("fill_rgb", 5, _t919, _t920, _t921, _t922, _t923); });
-    ({ Value _t924 = zl_binop("+", v_sx, zl_binop("*", zl_num(14), v_u)); Value _t925 = zl_binop("+", v_sy, zl_binop("*", zl_num(122), v_u)); Value _t926 = zl_str("TICKS"); Value _t927 = v_TXT_DIM; zl_calln("text_aa", 4, _t924, _t925, _t926, _t927); });
-    ({ Value _t928 = zl_binop("+", v_sx, zl_binop("*", zl_num(68), v_u)); Value _t929 = zl_binop("+", v_sy, zl_binop("*", zl_num(122), v_u)); Value _t930 = ({ zl_calln("ticks", 0); }); Value _t931 = v_TXT_HI; zl_calln("num_aa", 4, _t928, _t929, _t930, _t931); });
-    ({ Value _t932 = zl_binop("+", v_sx, zl_num(14)); Value _t933 = zl_binop("+", v_sy, zl_num(182)); Value _t934 = zl_binop("+", v_sx, zl_num(46)); Value _t935 = zl_binop("+", v_sy, zl_num(170)); Value _t936 = v_C_CYAN; zl_calln("line", 5, _t932, _t933, _t934, _t935, _t936); });
-    ({ Value _t937 = zl_binop("+", v_sx, zl_num(46)); Value _t938 = zl_binop("+", v_sy, zl_num(170)); Value _t939 = zl_binop("+", v_sx, zl_num(78)); Value _t940 = zl_binop("+", v_sy, zl_num(176)); Value _t941 = v_C_CYAN; zl_calln("line", 5, _t937, _t938, _t939, _t940, _t941); });
-    ({ Value _t942 = zl_binop("+", v_sx, zl_binop("*", zl_num(78), v_u)); Value _t943 = zl_binop("+", v_sy, zl_binop("*", zl_num(176), v_u)); Value _t944 = zl_binop("+", v_sx, zl_binop("*", zl_num(110), v_u)); Value _t945 = zl_binop("+", v_sy, zl_binop("*", zl_num(161), v_u)); Value _t946 = v_C_CYAN; zl_calln("line", 5, _t942, _t943, _t944, _t945, _t946); });
-    ({ Value _t947 = zl_binop("+", v_sx, zl_binop("*", zl_num(110), v_u)); Value _t948 = zl_binop("+", v_sy, zl_binop("*", zl_num(161), v_u)); Value _t949 = zl_binop("+", v_sx, zl_binop("*", zl_num(142), v_u)); Value _t950 = zl_binop("+", v_sy, zl_binop("*", zl_num(173), v_u)); Value _t951 = v_C_CYAN; zl_calln("line", 5, _t947, _t948, _t949, _t950, _t951); });
-    ({ Value _t952 = zl_binop("+", v_sx, zl_binop("*", zl_num(142), v_u)); Value _t953 = zl_binop("+", v_sy, zl_binop("*", zl_num(173), v_u)); Value _t954 = zl_binop("+", v_sx, zl_binop("*", zl_num(174), v_u)); Value _t955 = zl_binop("+", v_sy, zl_binop("*", zl_num(158), v_u)); Value _t956 = v_C_CYAN; zl_calln("line", 5, _t952, _t953, _t954, _t955, _t956); });
-    ({ Value _t957 = zl_binop("+", v_sx, zl_binop("*", zl_num(174), v_u)); Value _t958 = zl_binop("+", v_sy, zl_binop("*", zl_num(158), v_u)); Value _t959 = zl_binop("+", v_sx, zl_binop("*", zl_num(206), v_u)); Value _t960 = zl_binop("+", v_sy, zl_binop("*", zl_num(169), v_u)); Value _t961 = v_C_CYAN; zl_calln("line", 5, _t957, _t958, _t959, _t960, _t961); });
-    ({ Value _t962 = zl_binop("+", v_sx, zl_binop("*", zl_num(206), v_u)); Value _t963 = zl_binop("+", v_sy, zl_binop("*", zl_num(169), v_u)); Value _t964 = zl_binop("+", v_sx, zl_binop("*", zl_num(238), v_u)); Value _t965 = zl_binop("+", v_sy, zl_binop("*", zl_num(155), v_u)); Value _t966 = v_C_CYAN; zl_calln("line", 5, _t962, _t963, _t964, _t965, _t966); });
-    ({ Value _t967 = zl_binop("+", v_sx, zl_binop("*", zl_num(238), v_u)); Value _t968 = zl_binop("+", v_sy, zl_binop("*", zl_num(155), v_u)); Value _t969 = zl_binop("+", v_sx, zl_binop("*", zl_num(270), v_u)); Value _t970 = zl_binop("+", v_sy, zl_binop("*", zl_num(164), v_u)); Value _t971 = v_C_CYAN; zl_calln("line", 5, _t967, _t968, _t969, _t970, _t971); });
+    ({ Value _t1056 = zl_binop("+", v_sx, zl_binop("*", zl_num(14), v_u)); Value _t1057 = zl_binop("+", v_sy, zl_binop("*", zl_num(98), v_u)); Value _t1058 = zl_str("MEM"); Value _t1059 = v_TXT_DIM; zl_calln("text_aa", 4, _t1056, _t1057, _t1058, _t1059); });
+    ({ Value _t1060 = zl_binop("+", v_sx, zl_binop("*", zl_num(56), v_u)); Value _t1061 = zl_binop("+", v_sy, zl_binop("*", zl_num(100), v_u)); Value _t1062 = zl_binop("*", zl_num(214), v_u); Value _t1063 = zl_binop("*", zl_num(12), v_u); Value _t1064 = ({ Value _t1060 = zl_num(12); Value _t1061 = zl_num(18); Value _t1062 = zl_num(32); zl_fn_rgb(_t1060, _t1061, _t1062); }); zl_calln("fill_rgb", 5, _t1060, _t1061, _t1062, _t1063, _t1064); });
+    ({ Value _t1068 = zl_binop("+", v_sx, zl_binop("*", zl_num(56), v_u)); Value _t1069 = zl_binop("+", v_sy, zl_binop("*", zl_num(100), v_u)); Value _t1070 = zl_binop("*", zl_num(58), v_u); Value _t1071 = zl_binop("*", zl_num(12), v_u); Value _t1072 = v_ACCENT; zl_calln("fill_rgb", 5, _t1068, _t1069, _t1070, _t1071, _t1072); });
+    ({ Value _t1073 = zl_binop("+", v_sx, zl_binop("*", zl_num(14), v_u)); Value _t1074 = zl_binop("+", v_sy, zl_binop("*", zl_num(122), v_u)); Value _t1075 = zl_str("TICKS"); Value _t1076 = v_TXT_DIM; zl_calln("text_aa", 4, _t1073, _t1074, _t1075, _t1076); });
+    ({ Value _t1077 = zl_binop("+", v_sx, zl_binop("*", zl_num(68), v_u)); Value _t1078 = zl_binop("+", v_sy, zl_binop("*", zl_num(122), v_u)); Value _t1079 = ({ zl_calln("ticks", 0); }); Value _t1080 = v_TXT_HI; zl_calln("num_aa", 4, _t1077, _t1078, _t1079, _t1080); });
+    ({ Value _t1081 = zl_binop("+", v_sx, zl_num(14)); Value _t1082 = zl_binop("+", v_sy, zl_num(182)); Value _t1083 = zl_binop("+", v_sx, zl_num(46)); Value _t1084 = zl_binop("+", v_sy, zl_num(170)); Value _t1085 = v_C_CYAN; zl_calln("line", 5, _t1081, _t1082, _t1083, _t1084, _t1085); });
+    ({ Value _t1086 = zl_binop("+", v_sx, zl_num(46)); Value _t1087 = zl_binop("+", v_sy, zl_num(170)); Value _t1088 = zl_binop("+", v_sx, zl_num(78)); Value _t1089 = zl_binop("+", v_sy, zl_num(176)); Value _t1090 = v_C_CYAN; zl_calln("line", 5, _t1086, _t1087, _t1088, _t1089, _t1090); });
+    ({ Value _t1091 = zl_binop("+", v_sx, zl_binop("*", zl_num(78), v_u)); Value _t1092 = zl_binop("+", v_sy, zl_binop("*", zl_num(176), v_u)); Value _t1093 = zl_binop("+", v_sx, zl_binop("*", zl_num(110), v_u)); Value _t1094 = zl_binop("+", v_sy, zl_binop("*", zl_num(161), v_u)); Value _t1095 = v_C_CYAN; zl_calln("line", 5, _t1091, _t1092, _t1093, _t1094, _t1095); });
+    ({ Value _t1096 = zl_binop("+", v_sx, zl_binop("*", zl_num(110), v_u)); Value _t1097 = zl_binop("+", v_sy, zl_binop("*", zl_num(161), v_u)); Value _t1098 = zl_binop("+", v_sx, zl_binop("*", zl_num(142), v_u)); Value _t1099 = zl_binop("+", v_sy, zl_binop("*", zl_num(173), v_u)); Value _t1100 = v_C_CYAN; zl_calln("line", 5, _t1096, _t1097, _t1098, _t1099, _t1100); });
+    ({ Value _t1101 = zl_binop("+", v_sx, zl_binop("*", zl_num(142), v_u)); Value _t1102 = zl_binop("+", v_sy, zl_binop("*", zl_num(173), v_u)); Value _t1103 = zl_binop("+", v_sx, zl_binop("*", zl_num(174), v_u)); Value _t1104 = zl_binop("+", v_sy, zl_binop("*", zl_num(158), v_u)); Value _t1105 = v_C_CYAN; zl_calln("line", 5, _t1101, _t1102, _t1103, _t1104, _t1105); });
+    ({ Value _t1106 = zl_binop("+", v_sx, zl_binop("*", zl_num(174), v_u)); Value _t1107 = zl_binop("+", v_sy, zl_binop("*", zl_num(158), v_u)); Value _t1108 = zl_binop("+", v_sx, zl_binop("*", zl_num(206), v_u)); Value _t1109 = zl_binop("+", v_sy, zl_binop("*", zl_num(169), v_u)); Value _t1110 = v_C_CYAN; zl_calln("line", 5, _t1106, _t1107, _t1108, _t1109, _t1110); });
+    ({ Value _t1111 = zl_binop("+", v_sx, zl_binop("*", zl_num(206), v_u)); Value _t1112 = zl_binop("+", v_sy, zl_binop("*", zl_num(169), v_u)); Value _t1113 = zl_binop("+", v_sx, zl_binop("*", zl_num(238), v_u)); Value _t1114 = zl_binop("+", v_sy, zl_binop("*", zl_num(155), v_u)); Value _t1115 = v_C_CYAN; zl_calln("line", 5, _t1111, _t1112, _t1113, _t1114, _t1115); });
+    ({ Value _t1116 = zl_binop("+", v_sx, zl_binop("*", zl_num(238), v_u)); Value _t1117 = zl_binop("+", v_sy, zl_binop("*", zl_num(155), v_u)); Value _t1118 = zl_binop("+", v_sx, zl_binop("*", zl_num(270), v_u)); Value _t1119 = zl_binop("+", v_sy, zl_binop("*", zl_num(164), v_u)); Value _t1120 = v_C_CYAN; zl_calln("line", 5, _t1116, _t1117, _t1118, _t1119, _t1120); });
     return zl_num(0);
     return zl_nil();
 }
@@ -1443,11 +1691,11 @@ Value zl_fn_draw_sysmon(Value v_sx, Value v_sy, Value v_sfoc) {
 Value zl_fn_draw_about(Value v_ax, Value v_ay, Value v_afoc) {
     Value v_u = zl_nil();
     v_u = ({ zl_fn_ui(); });
-    ({ Value _t972 = v_ax; Value _t973 = v_ay; Value _t974 = zl_binop("*", v_MON_W, v_u); Value _t975 = zl_binop("*", v_AB_H, v_u); Value _t976 = zl_str("About"); Value _t977 = v_afoc; zl_fn_draw_window(_t972, _t973, _t974, _t975, _t976, _t977); });
-    ({ Value _t978 = zl_binop("+", v_ax, zl_binop("*", zl_num(14), v_u)); Value _t979 = zl_binop("+", v_ay, zl_binop("*", zl_num(32), v_u)); Value _t980 = zl_str("zlOS 0.3"); Value _t981 = v_TXT_HI; zl_calln("text_aa", 4, _t978, _t979, _t980, _t981); });
-    ({ Value _t982 = zl_binop("+", v_ax, zl_binop("*", zl_num(14), v_u)); Value _t983 = zl_binop("+", v_ay, zl_binop("*", zl_num(54), v_u)); Value _t984 = zl_str("a desktop written in zl"); Value _t985 = v_TXT_DIM; zl_calln("text_aa", 4, _t982, _t983, _t984, _t985); });
-    ({ Value _t986 = zl_binop("+", v_ax, zl_binop("*", zl_num(14), v_u)); Value _t987 = zl_binop("+", v_ay, zl_binop("*", zl_num(76), v_u)); Value _t988 = zl_str("no OS   no libc   no GNU"); Value _t989 = v_ACCENT; zl_calln("text_aa", 4, _t986, _t987, _t988, _t989); });
-    ({ Value _t990 = zl_binop("+", v_ax, zl_binop("*", zl_num(14), v_u)); Value _t991 = zl_binop("+", v_ay, zl_binop("*", zl_num(98), v_u)); Value _t992 = zl_str("press h for the app list"); Value _t993 = v_TXT_DIM; zl_calln("text_aa", 4, _t990, _t991, _t992, _t993); });
+    ({ Value _t1121 = v_ax; Value _t1122 = v_ay; Value _t1123 = zl_binop("*", v_MON_W, v_u); Value _t1124 = zl_binop("*", v_AB_H, v_u); Value _t1125 = zl_str("About"); Value _t1126 = v_afoc; zl_fn_draw_window(_t1121, _t1122, _t1123, _t1124, _t1125, _t1126); });
+    ({ Value _t1127 = zl_binop("+", v_ax, zl_binop("*", zl_num(14), v_u)); Value _t1128 = zl_binop("+", v_ay, zl_binop("*", zl_num(32), v_u)); Value _t1129 = zl_str("zlOS 0.3"); Value _t1130 = v_TXT_HI; zl_calln("text_aa", 4, _t1127, _t1128, _t1129, _t1130); });
+    ({ Value _t1131 = zl_binop("+", v_ax, zl_binop("*", zl_num(14), v_u)); Value _t1132 = zl_binop("+", v_ay, zl_binop("*", zl_num(54), v_u)); Value _t1133 = zl_str("a desktop written in zl"); Value _t1134 = v_TXT_DIM; zl_calln("text_aa", 4, _t1131, _t1132, _t1133, _t1134); });
+    ({ Value _t1135 = zl_binop("+", v_ax, zl_binop("*", zl_num(14), v_u)); Value _t1136 = zl_binop("+", v_ay, zl_binop("*", zl_num(76), v_u)); Value _t1137 = zl_str("no OS   no libc   no GNU"); Value _t1138 = v_ACCENT; zl_calln("text_aa", 4, _t1135, _t1136, _t1137, _t1138); });
+    ({ Value _t1139 = zl_binop("+", v_ax, zl_binop("*", zl_num(14), v_u)); Value _t1140 = zl_binop("+", v_ay, zl_binop("*", zl_num(98), v_u)); Value _t1141 = zl_str("press h for the app list"); Value _t1142 = v_TXT_DIM; zl_calln("text_aa", 4, _t1139, _t1140, _t1141, _t1142); });
     return zl_num(0);
     return zl_nil();
 }
@@ -1477,20 +1725,20 @@ Value zl_fn_draw_desk(void) {
     Value v_w = zl_nil();
     if (zl_truthy(zl_binop(">", ({ zl_calln("px_w", 0); }), zl_num(0)))) {
         v_w = ({ zl_calln("px_w", 0); });
-        ({ Value _t994 = zl_num(0); Value _t995 = zl_num(0); Value _t996 = v_w; Value _t997 = ({ zl_calln("px_h", 0); }); Value _t998 = v_WALL_TOP; Value _t999 = v_WALL_BOT; zl_calln("grad_rgb", 6, _t994, _t995, _t996, _t997, _t998, _t999); });
+        ({ Value _t1143 = zl_num(0); Value _t1144 = zl_num(0); Value _t1145 = v_w; Value _t1146 = ({ zl_calln("px_h", 0); }); Value _t1147 = v_WALL_TOP; Value _t1148 = v_WALL_BOT; zl_calln("grad_rgb", 6, _t1143, _t1144, _t1145, _t1146, _t1147, _t1148); });
         ({ zl_fn_draw_header(); });
-        ({ Value _t1000 = v_term_x; Value _t1001 = v_term_y; Value _t1002 = v_term_w; Value _t1003 = v_term_h; Value _t1004 = zl_str("zl shell   ~"); Value _t1005 = zl_num(1); zl_fn_draw_window(_t1000, _t1001, _t1002, _t1003, _t1004, _t1005); });
-        ({ Value _t1006 = v_term_c0; Value _t1007 = v_term_c1; zl_calln("text_box", 2, _t1006, _t1007); });
-        ({ Value _t1008 = v_term_r0; Value _t1009 = v_term_r1; zl_calln("region", 2, _t1008, _t1009); });
-        ({ Value _t1010 = zl_str("ready"); zl_fn_draw_status(_t1010); });
-        ({ Value _t1011 = v_term_r0; zl_calln("goto_row", 1, _t1011); });
+        ({ Value _t1149 = v_term_x; Value _t1150 = v_term_y; Value _t1151 = v_term_w; Value _t1152 = v_term_h; Value _t1153 = zl_str("zl shell   ~"); Value _t1154 = zl_num(1); zl_fn_draw_window(_t1149, _t1150, _t1151, _t1152, _t1153, _t1154); });
+        ({ Value _t1155 = v_term_c0; Value _t1156 = v_term_c1; zl_calln("text_box", 2, _t1155, _t1156); });
+        ({ Value _t1157 = v_term_r0; Value _t1158 = v_term_r1; zl_calln("region", 2, _t1157, _t1158); });
+        ({ Value _t1159 = zl_str("ready"); zl_fn_draw_status(_t1159); });
+        ({ Value _t1160 = v_term_r0; zl_calln("goto_row", 1, _t1160); });
         ({ zl_calln("present", 0); });
     } else {
         ({ zl_calln("cls", 0); });
         ({ zl_fn_draw_header(); });
-        ({ Value _t1012 = zl_num(5); Value _t1013 = zl_binop("-", ({ zl_calln("status_row", 0); }), zl_num(1)); zl_calln("region", 2, _t1012, _t1013); });
-        ({ Value _t1014 = zl_str("ready"); zl_fn_draw_status(_t1014); });
-        ({ Value _t1015 = zl_num(5); zl_calln("goto_row", 1, _t1015); });
+        ({ Value _t1161 = zl_num(5); Value _t1162 = zl_binop("-", ({ zl_calln("status_row", 0); }), zl_num(1)); zl_calln("region", 2, _t1161, _t1162); });
+        ({ Value _t1163 = zl_str("ready"); zl_fn_draw_status(_t1163); });
+        ({ Value _t1164 = zl_num(5); zl_calln("goto_row", 1, _t1164); });
     }
     return zl_nil();
 }
@@ -1512,18 +1760,18 @@ Value zl_fn_raise_windows(void) {
     }
     if (zl_truthy(zl_binop("==", v_focus_win, zl_num(2)))) {
         if (zl_truthy(zl_binop("==", v_mon_open, zl_num(1)))) {
-            ({ Value _t1016 = v_mon_x; Value _t1017 = v_mon_y; Value _t1018 = zl_num(0); zl_fn_draw_sysmon(_t1016, _t1017, _t1018); });
+            ({ Value _t1165 = v_mon_x; Value _t1166 = v_mon_y; Value _t1167 = zl_num(0); zl_fn_draw_sysmon(_t1165, _t1166, _t1167); });
         }
         if (zl_truthy(zl_binop("==", v_ab_open, zl_num(1)))) {
-            ({ Value _t1019 = v_ab_x; Value _t1020 = v_ab_y; Value _t1021 = zl_num(1); zl_fn_draw_about(_t1019, _t1020, _t1021); });
+            ({ Value _t1168 = v_ab_x; Value _t1169 = v_ab_y; Value _t1170 = zl_num(1); zl_fn_draw_about(_t1168, _t1169, _t1170); });
         }
     }
     if (zl_truthy(zl_binop("!=", v_focus_win, zl_num(2)))) {
         if (zl_truthy(zl_binop("==", v_ab_open, zl_num(1)))) {
-            ({ Value _t1022 = v_ab_x; Value _t1023 = v_ab_y; Value _t1024 = zl_num(0); zl_fn_draw_about(_t1022, _t1023, _t1024); });
+            ({ Value _t1171 = v_ab_x; Value _t1172 = v_ab_y; Value _t1173 = zl_num(0); zl_fn_draw_about(_t1171, _t1172, _t1173); });
         }
         if (zl_truthy(zl_binop("==", v_mon_open, zl_num(1)))) {
-            ({ Value _t1025 = v_mon_x; Value _t1026 = v_mon_y; Value _t1027 = v_rw_mf; zl_fn_draw_sysmon(_t1025, _t1026, _t1027); });
+            ({ Value _t1174 = v_mon_x; Value _t1175 = v_mon_y; Value _t1176 = v_rw_mf; zl_fn_draw_sysmon(_t1174, _t1175, _t1176); });
         }
     }
     ({ zl_calln("present", 0); });
@@ -1542,40 +1790,40 @@ Value zl_fn_open_menu(void) {
     v_mnx = zl_num(10);
     v_mnh = zl_binop("+", zl_binop("*", zl_num(10), zl_num(26)), zl_num(36));
     v_mny = zl_binop("-", zl_binop("-", ({ zl_fn_dock_y(); }), v_mnh), zl_num(6));
-    ({ Value _t1028 = zl_binop("-", v_mnx, zl_num(2)); Value _t1029 = zl_binop("-", v_mny, zl_num(2)); Value _t1030 = zl_num(182); Value _t1031 = zl_binop("+", v_mnh, zl_num(16)); zl_calln("grab", 4, _t1028, _t1029, _t1030, _t1031); });
-    ({ Value _t1032 = v_mnx; Value _t1033 = v_mny; Value _t1034 = zl_num(172); Value _t1035 = v_mnh; Value _t1036 = zl_num(8); Value _t1037 = zl_num(6); zl_calln("shadow", 6, _t1032, _t1033, _t1034, _t1035, _t1036, _t1037); });
-    ({ Value _t1038 = v_mnx; Value _t1039 = v_mny; Value _t1040 = zl_num(172); Value _t1041 = v_mnh; Value _t1042 = zl_num(6); Value _t1043 = ({ Value _t1038 = zl_num(20); Value _t1039 = zl_num(26); Value _t1040 = zl_num(42); zl_fn_rgb(_t1038, _t1039, _t1040); }); zl_calln("rrect", 6, _t1038, _t1039, _t1040, _t1041, _t1042, _t1043); });
-    ({ Value _t1047 = zl_binop("+", v_mnx, zl_num(1)); Value _t1048 = zl_binop("+", v_mny, zl_num(1)); Value _t1049 = zl_num(170); Value _t1050 = zl_binop("-", v_mnh, zl_num(2)); Value _t1051 = zl_num(5); Value _t1052 = v_PANEL; zl_calln("rrect", 6, _t1047, _t1048, _t1049, _t1050, _t1051, _t1052); });
-    ({ Value _t1053 = zl_binop("+", v_mnx, zl_num(2)); Value _t1054 = zl_binop("+", v_mny, zl_num(2)); Value _t1055 = zl_num(168); Value _t1056 = zl_num(26); Value _t1057 = v_HDR_TOP; Value _t1058 = v_HDR_BOT; zl_calln("grad_rgb", 6, _t1053, _t1054, _t1055, _t1056, _t1057, _t1058); });
-    ({ Value _t1059 = zl_binop("+", v_mnx, zl_num(2)); Value _t1060 = zl_binop("+", v_mny, zl_num(28)); Value _t1061 = zl_num(168); Value _t1062 = zl_num(2); Value _t1063 = v_ACCENT; zl_calln("fill_rgb", 5, _t1059, _t1060, _t1061, _t1062, _t1063); });
-    ({ Value _t1064 = zl_binop("+", v_mnx, zl_num(14)); Value _t1065 = zl_binop("+", v_mny, zl_num(8)); Value _t1066 = zl_str("zlOS menu"); Value _t1067 = v_C_WHITE; zl_calln("text_aa", 4, _t1064, _t1065, _t1066, _t1067); });
+    ({ Value _t1177 = zl_binop("-", v_mnx, zl_num(2)); Value _t1178 = zl_binop("-", v_mny, zl_num(2)); Value _t1179 = zl_num(182); Value _t1180 = zl_binop("+", v_mnh, zl_num(16)); zl_calln("grab", 4, _t1177, _t1178, _t1179, _t1180); });
+    ({ Value _t1181 = v_mnx; Value _t1182 = v_mny; Value _t1183 = zl_num(172); Value _t1184 = v_mnh; Value _t1185 = zl_num(8); Value _t1186 = zl_num(6); zl_calln("shadow", 6, _t1181, _t1182, _t1183, _t1184, _t1185, _t1186); });
+    ({ Value _t1187 = v_mnx; Value _t1188 = v_mny; Value _t1189 = zl_num(172); Value _t1190 = v_mnh; Value _t1191 = zl_num(6); Value _t1192 = ({ Value _t1187 = zl_num(20); Value _t1188 = zl_num(26); Value _t1189 = zl_num(42); zl_fn_rgb(_t1187, _t1188, _t1189); }); zl_calln("rrect", 6, _t1187, _t1188, _t1189, _t1190, _t1191, _t1192); });
+    ({ Value _t1196 = zl_binop("+", v_mnx, zl_num(1)); Value _t1197 = zl_binop("+", v_mny, zl_num(1)); Value _t1198 = zl_num(170); Value _t1199 = zl_binop("-", v_mnh, zl_num(2)); Value _t1200 = zl_num(5); Value _t1201 = v_PANEL; zl_calln("rrect", 6, _t1196, _t1197, _t1198, _t1199, _t1200, _t1201); });
+    ({ Value _t1202 = zl_binop("+", v_mnx, zl_num(2)); Value _t1203 = zl_binop("+", v_mny, zl_num(2)); Value _t1204 = zl_num(168); Value _t1205 = zl_num(26); Value _t1206 = v_HDR_TOP; Value _t1207 = v_HDR_BOT; zl_calln("grad_rgb", 6, _t1202, _t1203, _t1204, _t1205, _t1206, _t1207); });
+    ({ Value _t1208 = zl_binop("+", v_mnx, zl_num(2)); Value _t1209 = zl_binop("+", v_mny, zl_num(28)); Value _t1210 = zl_num(168); Value _t1211 = zl_num(2); Value _t1212 = v_ACCENT; zl_calln("fill_rgb", 5, _t1208, _t1209, _t1210, _t1211, _t1212); });
+    ({ Value _t1213 = zl_binop("+", v_mnx, zl_num(14)); Value _t1214 = zl_binop("+", v_mny, zl_num(8)); Value _t1215 = zl_str("zlOS menu"); Value _t1216 = v_C_WHITE; zl_calln("text_aa", 4, _t1213, _t1214, _t1215, _t1216); });
     v_mrow = zl_binop("+", v_mny, zl_num(36));
-    ({ Value _t1068 = zl_binop("+", v_mnx, zl_num(18)); Value _t1069 = v_mrow; Value _t1070 = zl_str("Help"); Value _t1071 = v_TXT_HI; zl_calln("text_aa", 4, _t1068, _t1069, _t1070, _t1071); });
+    ({ Value _t1217 = zl_binop("+", v_mnx, zl_num(18)); Value _t1218 = v_mrow; Value _t1219 = zl_str("Help"); Value _t1220 = v_TXT_HI; zl_calln("text_aa", 4, _t1217, _t1218, _t1219, _t1220); });
     v_mrow = zl_binop("+", v_mrow, zl_num(26));
-    ({ Value _t1072 = zl_binop("+", v_mnx, zl_num(18)); Value _t1073 = v_mrow; Value _t1074 = zl_str("Snake"); Value _t1075 = v_TXT_HI; zl_calln("text_aa", 4, _t1072, _t1073, _t1074, _t1075); });
+    ({ Value _t1221 = zl_binop("+", v_mnx, zl_num(18)); Value _t1222 = v_mrow; Value _t1223 = zl_str("Snake"); Value _t1224 = v_TXT_HI; zl_calln("text_aa", 4, _t1221, _t1222, _t1223, _t1224); });
     v_mrow = zl_binop("+", v_mrow, zl_num(26));
-    ({ Value _t1076 = zl_binop("+", v_mnx, zl_num(18)); Value _t1077 = v_mrow; Value _t1078 = zl_str("Paint"); Value _t1079 = v_TXT_HI; zl_calln("text_aa", 4, _t1076, _t1077, _t1078, _t1079); });
+    ({ Value _t1225 = zl_binop("+", v_mnx, zl_num(18)); Value _t1226 = v_mrow; Value _t1227 = zl_str("Paint"); Value _t1228 = v_TXT_HI; zl_calln("text_aa", 4, _t1225, _t1226, _t1227, _t1228); });
     v_mrow = zl_binop("+", v_mrow, zl_num(26));
-    ({ Value _t1080 = zl_binop("+", v_mnx, zl_num(18)); Value _t1081 = v_mrow; Value _t1082 = zl_str("Editor"); Value _t1083 = v_TXT_HI; zl_calln("text_aa", 4, _t1080, _t1081, _t1082, _t1083); });
+    ({ Value _t1229 = zl_binop("+", v_mnx, zl_num(18)); Value _t1230 = v_mrow; Value _t1231 = zl_str("Editor"); Value _t1232 = v_TXT_HI; zl_calln("text_aa", 4, _t1229, _t1230, _t1231, _t1232); });
     v_mrow = zl_binop("+", v_mrow, zl_num(26));
-    ({ Value _t1084 = zl_binop("+", v_mnx, zl_num(18)); Value _t1085 = v_mrow; Value _t1086 = zl_str("Demo"); Value _t1087 = v_TXT_HI; zl_calln("text_aa", 4, _t1084, _t1085, _t1086, _t1087); });
+    ({ Value _t1233 = zl_binop("+", v_mnx, zl_num(18)); Value _t1234 = v_mrow; Value _t1235 = zl_str("Demo"); Value _t1236 = v_TXT_HI; zl_calln("text_aa", 4, _t1233, _t1234, _t1235, _t1236); });
     v_mrow = zl_binop("+", v_mrow, zl_num(26));
-    ({ Value _t1088 = zl_binop("+", v_mnx, zl_num(18)); Value _t1089 = v_mrow; Value _t1090 = zl_str("Windows"); Value _t1091 = v_TXT_HI; zl_calln("text_aa", 4, _t1088, _t1089, _t1090, _t1091); });
+    ({ Value _t1237 = zl_binop("+", v_mnx, zl_num(18)); Value _t1238 = v_mrow; Value _t1239 = zl_str("Windows"); Value _t1240 = v_TXT_HI; zl_calln("text_aa", 4, _t1237, _t1238, _t1239, _t1240); });
     v_mrow = zl_binop("+", v_mrow, zl_num(26));
-    ({ Value _t1092 = zl_binop("+", v_mnx, zl_num(18)); Value _t1093 = v_mrow; Value _t1094 = zl_str("3D Cube"); Value _t1095 = v_ACCENT; zl_calln("text_aa", 4, _t1092, _t1093, _t1094, _t1095); });
+    ({ Value _t1241 = zl_binop("+", v_mnx, zl_num(18)); Value _t1242 = v_mrow; Value _t1243 = zl_str("3D Cube"); Value _t1244 = v_ACCENT; zl_calln("text_aa", 4, _t1241, _t1242, _t1243, _t1244); });
     v_mrow = zl_binop("+", v_mrow, zl_num(26));
-    ({ Value _t1096 = zl_binop("+", v_mnx, zl_num(18)); Value _t1097 = v_mrow; Value _t1098 = zl_str("System Monitor"); Value _t1099 = v_TXT_HI; zl_calln("text_aa", 4, _t1096, _t1097, _t1098, _t1099); });
+    ({ Value _t1245 = zl_binop("+", v_mnx, zl_num(18)); Value _t1246 = v_mrow; Value _t1247 = zl_str("System Monitor"); Value _t1248 = v_TXT_HI; zl_calln("text_aa", 4, _t1245, _t1246, _t1247, _t1248); });
     v_mrow = zl_binop("+", v_mrow, zl_num(26));
-    ({ Value _t1100 = zl_binop("+", v_mnx, zl_num(18)); Value _t1101 = v_mrow; Value _t1102 = zl_str("About"); Value _t1103 = v_TXT_HI; zl_calln("text_aa", 4, _t1100, _t1101, _t1102, _t1103); });
+    ({ Value _t1249 = zl_binop("+", v_mnx, zl_num(18)); Value _t1250 = v_mrow; Value _t1251 = zl_str("About"); Value _t1252 = v_TXT_HI; zl_calln("text_aa", 4, _t1249, _t1250, _t1251, _t1252); });
     v_mrow = zl_binop("+", v_mrow, zl_num(26));
-    ({ Value _t1104 = zl_binop("+", v_mnx, zl_num(18)); Value _t1105 = v_mrow; Value _t1106 = zl_str("Reboot"); Value _t1107 = v_TXT_DIM; zl_calln("text_aa", 4, _t1104, _t1105, _t1106, _t1107); });
+    ({ Value _t1253 = zl_binop("+", v_mnx, zl_num(18)); Value _t1254 = v_mrow; Value _t1255 = zl_str("Reboot"); Value _t1256 = v_TXT_DIM; zl_calln("text_aa", 4, _t1253, _t1254, _t1255, _t1256); });
     v_menu_open = zl_num(1);
     return zl_num(0);
     return zl_nil();
 }
 
 Value zl_fn_close_menu(void) {
-    ({ Value _t1108 = zl_binop("-", v_mnx, zl_num(2)); Value _t1109 = zl_binop("-", v_mny, zl_num(2)); zl_calln("stamp", 2, _t1108, _t1109); });
+    ({ Value _t1257 = zl_binop("-", v_mnx, zl_num(2)); Value _t1258 = zl_binop("-", v_mny, zl_num(2)); zl_calln("stamp", 2, _t1257, _t1258); });
     v_menu_open = zl_num(0);
     return zl_num(0);
     return zl_nil();
@@ -1626,17 +1874,17 @@ int main(void) {
     v_C_TITLE = zl_num(31);
     v_C_STATUS = zl_num(143);
     v_C_CURSOR = zl_num(10);
-    v_WALL_TOP = ({ Value _t1110 = zl_num(26); Value _t1111 = zl_num(30); Value _t1112 = zl_num(50); zl_fn_rgb(_t1110, _t1111, _t1112); });
-    v_WALL_BOT = ({ Value _t1113 = zl_num(10); Value _t1114 = zl_num(12); Value _t1115 = zl_num(22); zl_fn_rgb(_t1113, _t1114, _t1115); });
-    v_HDR_TOP = ({ Value _t1116 = zl_num(48); Value _t1117 = zl_num(92); Value _t1118 = zl_num(168); zl_fn_rgb(_t1116, _t1117, _t1118); });
-    v_HDR_BOT = ({ Value _t1119 = zl_num(22); Value _t1120 = zl_num(40); Value _t1121 = zl_num(92); zl_fn_rgb(_t1119, _t1120, _t1121); });
-    v_ACCENT = ({ Value _t1122 = zl_num(96); Value _t1123 = zl_num(210); Value _t1124 = zl_num(235); zl_fn_rgb(_t1122, _t1123, _t1124); });
-    v_BAR_TOP = ({ Value _t1125 = zl_num(40); Value _t1126 = zl_num(46); Value _t1127 = zl_num(66); zl_fn_rgb(_t1125, _t1126, _t1127); });
-    v_BAR_BOT = ({ Value _t1128 = zl_num(18); Value _t1129 = zl_num(20); Value _t1130 = zl_num(32); zl_fn_rgb(_t1128, _t1129, _t1130); });
-    v_BAR_HI = ({ Value _t1131 = zl_num(78); Value _t1132 = zl_num(92); Value _t1133 = zl_num(128); zl_fn_rgb(_t1131, _t1132, _t1133); });
-    v_PANEL = ({ Value _t1134 = zl_num(0); Value _t1135 = zl_num(0); Value _t1136 = zl_num(0); zl_fn_rgb(_t1134, _t1135, _t1136); });
-    v_TXT_HI = ({ Value _t1137 = zl_num(210); Value _t1138 = zl_num(228); Value _t1139 = zl_num(255); zl_fn_rgb(_t1137, _t1138, _t1139); });
-    v_TXT_DIM = ({ Value _t1140 = zl_num(150); Value _t1141 = zl_num(165); Value _t1142 = zl_num(195); zl_fn_rgb(_t1140, _t1141, _t1142); });
+    v_WALL_TOP = ({ Value _t1259 = zl_num(26); Value _t1260 = zl_num(30); Value _t1261 = zl_num(50); zl_fn_rgb(_t1259, _t1260, _t1261); });
+    v_WALL_BOT = ({ Value _t1262 = zl_num(10); Value _t1263 = zl_num(12); Value _t1264 = zl_num(22); zl_fn_rgb(_t1262, _t1263, _t1264); });
+    v_HDR_TOP = ({ Value _t1265 = zl_num(48); Value _t1266 = zl_num(92); Value _t1267 = zl_num(168); zl_fn_rgb(_t1265, _t1266, _t1267); });
+    v_HDR_BOT = ({ Value _t1268 = zl_num(22); Value _t1269 = zl_num(40); Value _t1270 = zl_num(92); zl_fn_rgb(_t1268, _t1269, _t1270); });
+    v_ACCENT = ({ Value _t1271 = zl_num(96); Value _t1272 = zl_num(210); Value _t1273 = zl_num(235); zl_fn_rgb(_t1271, _t1272, _t1273); });
+    v_BAR_TOP = ({ Value _t1274 = zl_num(40); Value _t1275 = zl_num(46); Value _t1276 = zl_num(66); zl_fn_rgb(_t1274, _t1275, _t1276); });
+    v_BAR_BOT = ({ Value _t1277 = zl_num(18); Value _t1278 = zl_num(20); Value _t1279 = zl_num(32); zl_fn_rgb(_t1277, _t1278, _t1279); });
+    v_BAR_HI = ({ Value _t1280 = zl_num(78); Value _t1281 = zl_num(92); Value _t1282 = zl_num(128); zl_fn_rgb(_t1280, _t1281, _t1282); });
+    v_PANEL = ({ Value _t1283 = zl_num(0); Value _t1284 = zl_num(0); Value _t1285 = zl_num(0); zl_fn_rgb(_t1283, _t1284, _t1285); });
+    v_TXT_HI = ({ Value _t1286 = zl_num(210); Value _t1287 = zl_num(228); Value _t1288 = zl_num(255); zl_fn_rgb(_t1286, _t1287, _t1288); });
+    v_TXT_DIM = ({ Value _t1289 = zl_num(150); Value _t1290 = zl_num(165); Value _t1291 = zl_num(195); zl_fn_rgb(_t1289, _t1290, _t1291); });
     v_KBD_TABLE = zl_num(28672);
     v_shift_state = zl_num(0);
     v_TITLE_H = zl_num(28);
@@ -1645,11 +1893,11 @@ int main(void) {
     v_AB_H = zl_num(122);
     v_TOPBAR_H = zl_num(32);
     v_DESK_TOP = zl_num(40);
-    v_TOP_BG = ({ Value _t1143 = zl_num(20); Value _t1144 = zl_num(23); Value _t1145 = zl_num(33); zl_fn_rgb(_t1143, _t1144, _t1145); });
-    v_TOP_LINE = ({ Value _t1146 = zl_num(8); Value _t1147 = zl_num(9); Value _t1148 = zl_num(14); zl_fn_rgb(_t1146, _t1147, _t1148); });
-    v_TOP_TXT = ({ Value _t1149 = zl_num(226); Value _t1150 = zl_num(234); Value _t1151 = zl_num(248); zl_fn_rgb(_t1149, _t1150, _t1151); });
-    v_TOP_DIM = ({ Value _t1152 = zl_num(128); Value _t1153 = zl_num(140); Value _t1154 = zl_num(166); zl_fn_rgb(_t1152, _t1153, _t1154); });
-    v_OK_GRN = ({ Value _t1155 = zl_num(120); Value _t1156 = zl_num(220); Value _t1157 = zl_num(140); zl_fn_rgb(_t1155, _t1156, _t1157); });
+    v_TOP_BG = ({ Value _t1292 = zl_num(20); Value _t1293 = zl_num(23); Value _t1294 = zl_num(33); zl_fn_rgb(_t1292, _t1293, _t1294); });
+    v_TOP_LINE = ({ Value _t1295 = zl_num(8); Value _t1296 = zl_num(9); Value _t1297 = zl_num(14); zl_fn_rgb(_t1295, _t1296, _t1297); });
+    v_TOP_TXT = ({ Value _t1298 = zl_num(226); Value _t1299 = zl_num(234); Value _t1300 = zl_num(248); zl_fn_rgb(_t1298, _t1299, _t1300); });
+    v_TOP_DIM = ({ Value _t1301 = zl_num(128); Value _t1302 = zl_num(140); Value _t1303 = zl_num(166); zl_fn_rgb(_t1301, _t1302, _t1303); });
+    v_OK_GRN = ({ Value _t1304 = zl_num(120); Value _t1305 = zl_num(220); Value _t1306 = zl_num(140); zl_fn_rgb(_t1304, _t1305, _t1306); });
     v_DOCK_X0 = zl_num(118);
     v_DOCK_PITCH = zl_num(56);
     v_DOCK_TW = zl_num(48);
@@ -1679,10 +1927,10 @@ int main(void) {
     v_focus_win = zl_num(1);
     if (zl_truthy(zl_binop(">", ({ zl_calln("px_w", 0); }), zl_num(0)))) {
         if (zl_truthy(zl_binop("<", ({ zl_calln("px_w", 0); }), zl_num(1900)))) {
-            if (zl_truthy(zl_binop("==", ({ Value _t1158 = zl_num(1920); Value _t1159 = zl_num(1200); zl_calln("set_res", 2, _t1158, _t1159); }), zl_num(0)))) {
-                if (zl_truthy(zl_binop("==", ({ Value _t1160 = zl_num(1920); Value _t1161 = zl_num(1080); zl_calln("set_res", 2, _t1160, _t1161); }), zl_num(0)))) {
-                    if (zl_truthy(zl_binop("==", ({ Value _t1162 = zl_num(1600); Value _t1163 = zl_num(900); zl_calln("set_res", 2, _t1162, _t1163); }), zl_num(0)))) {
-                        ({ Value _t1164 = zl_num(1280); Value _t1165 = zl_num(800); zl_calln("set_res", 2, _t1164, _t1165); });
+            if (zl_truthy(zl_binop("==", ({ Value _t1307 = zl_num(1920); Value _t1308 = zl_num(1200); zl_calln("set_res", 2, _t1307, _t1308); }), zl_num(0)))) {
+                if (zl_truthy(zl_binop("==", ({ Value _t1309 = zl_num(1920); Value _t1310 = zl_num(1080); zl_calln("set_res", 2, _t1309, _t1310); }), zl_num(0)))) {
+                    if (zl_truthy(zl_binop("==", ({ Value _t1311 = zl_num(1600); Value _t1312 = zl_num(900); zl_calln("set_res", 2, _t1311, _t1312); }), zl_num(0)))) {
+                        ({ Value _t1313 = zl_num(1280); Value _t1314 = zl_num(800); zl_calln("set_res", 2, _t1313, _t1314); });
                     }
                 }
             }
@@ -1692,64 +1940,65 @@ int main(void) {
         ({ zl_fn_layout(); });
     }
     ({ zl_fn_draw_desk(); });
-    ({ Value _t1166 = v_C_WHITE; zl_calln("color", 1, _t1166); });
-    ({ Value _t1167 = zl_str("  zlOS starting"); zl_calln("print", 1, _t1167); });
-    ({ Value _t1168 = v_C_GREY; zl_calln("color", 1, _t1168); });
-    ({ Value _t1169 = zl_str(""); zl_calln("print", 1, _t1169); });
+    ({ Value _t1315 = v_C_WHITE; zl_calln("color", 1, _t1315); });
+    ({ Value _t1316 = zl_str("  zlOS starting"); zl_calln("print", 1, _t1316); });
+    ({ Value _t1317 = v_C_GREY; zl_calln("color", 1, _t1317); });
+    ({ Value _t1318 = zl_str(""); zl_calln("print", 1, _t1318); });
     if (zl_truthy(zl_binop("==", ({ zl_calln("loader", 0); }), zl_num(2)))) {
-        ({ Value _t1170 = zl_str("UEFI application - no GRUB, no bootloader, 64-bit from the start"); zl_fn_ok_line(_t1170); });
+        ({ Value _t1319 = zl_str("UEFI application - no GRUB, no bootloader, 64-bit from the start"); zl_fn_ok_line(_t1319); });
     }
     if (zl_truthy(zl_binop("==", ({ zl_calln("loader", 0); }), zl_num(1)))) {
         if (zl_truthy(zl_binop("==", ({ zl_calln("bits", 0); }), zl_num(64)))) {
-            ({ Value _t1171 = zl_str("multiboot handoff, then OUR jump into 64-bit long mode"); zl_fn_ok_line(_t1171); });
+            ({ Value _t1320 = zl_str("multiboot handoff, then OUR jump into 64-bit long mode"); zl_fn_ok_line(_t1320); });
         }
         if (zl_truthy(zl_binop("==", ({ zl_calln("bits", 0); }), zl_num(32)))) {
-            ({ Value _t1172 = zl_str("multiboot handoff, 32-bit protected mode"); zl_fn_ok_line(_t1172); });
+            ({ Value _t1321 = zl_str("multiboot handoff, 32-bit protected mode"); zl_fn_ok_line(_t1321); });
         }
     }
     if (zl_truthy(zl_binop("==", ({ zl_calln("loader", 0); }), zl_num(0)))) {
         if (zl_truthy(zl_binop("==", ({ zl_calln("bits", 0); }), zl_num(64)))) {
-            ({ Value _t1173 = zl_str("our bootloader (raw_boot), no GRUB - then 64-bit long mode"); zl_fn_ok_line(_t1173); });
+            ({ Value _t1322 = zl_str("our bootloader (raw_boot), no GRUB - then 64-bit long mode"); zl_fn_ok_line(_t1322); });
         }
         if (zl_truthy(zl_binop("==", ({ zl_calln("bits", 0); }), zl_num(32)))) {
-            ({ Value _t1174 = zl_str("our bootloader (raw_boot), no GRUB - 32-bit protected mode"); zl_fn_ok_line(_t1174); });
+            ({ Value _t1323 = zl_str("our bootloader (raw_boot), no GRUB - 32-bit protected mode"); zl_fn_ok_line(_t1323); });
         }
     }
-    ({ Value _t1175 = zl_str("stack established, 256 KiB"); zl_fn_ok_line(_t1175); });
-    ({ Value _t1176 = zl_str("COM1 initialised, 115200 8N1"); zl_fn_ok_line(_t1176); });
+    ({ Value _t1324 = zl_str("stack established, 256 KiB"); zl_fn_ok_line(_t1324); });
+    ({ Value _t1325 = zl_str("COM1 initialised, 115200 8N1"); zl_fn_ok_line(_t1325); });
     if (zl_truthy(zl_binop("==", ({ zl_calln("con_kind", 0); }), zl_num(1)))) {
-        ({ Value _t1177 = v_C_GREY; zl_calln("color", 1, _t1177); });
-        ({ Value _t1178 = zl_str("  ["); zl_calln("put", 1, _t1178); });
-        ({ Value _t1179 = v_C_GREEN; zl_calln("color", 1, _t1179); });
-        ({ Value _t1180 = zl_str("  OK  "); zl_calln("put", 1, _t1180); });
-        ({ Value _t1181 = v_C_GREY; zl_calln("color", 1, _t1181); });
-        ({ Value _t1182 = zl_str("] framebuffer console, "); zl_calln("put", 1, _t1182); });
-        ({ Value _t1183 = ({ zl_calln("con_cols", 0); }); zl_calln("put", 1, _t1183); });
-        ({ Value _t1184 = zl_str("x"); zl_calln("put", 1, _t1184); });
-        ({ Value _t1185 = ({ zl_calln("con_rows", 0); }); zl_calln("print", 1, _t1185); });
+        ({ Value _t1326 = v_C_GREY; zl_calln("color", 1, _t1326); });
+        ({ Value _t1327 = zl_str("  ["); zl_calln("put", 1, _t1327); });
+        ({ Value _t1328 = v_C_GREEN; zl_calln("color", 1, _t1328); });
+        ({ Value _t1329 = zl_str("  OK  "); zl_calln("put", 1, _t1329); });
+        ({ Value _t1330 = v_C_GREY; zl_calln("color", 1, _t1330); });
+        ({ Value _t1331 = zl_str("] framebuffer console, "); zl_calln("put", 1, _t1331); });
+        ({ Value _t1332 = ({ zl_calln("con_cols", 0); }); zl_calln("put", 1, _t1332); });
+        ({ Value _t1333 = zl_str("x"); zl_calln("put", 1, _t1333); });
+        ({ Value _t1334 = ({ zl_calln("con_rows", 0); }); zl_calln("print", 1, _t1334); });
     } else {
-        ({ Value _t1186 = zl_str("VGA text console, 80x25"); zl_fn_ok_line(_t1186); });
+        ({ Value _t1335 = zl_str("VGA text console, 80x25"); zl_fn_ok_line(_t1335); });
     }
     ({ zl_calln("setup_gdt", 0); });
     if (zl_truthy(zl_binop("==", ({ zl_calln("bits", 0); }), zl_num(64)))) {
-        ({ Value _t1187 = zl_str("GDT loaded - 64-bit flat segments, 4-level paging, SSE on"); zl_fn_ok_line(_t1187); });
+        ({ Value _t1336 = zl_str("GDT loaded - 64-bit flat segments, 4-level paging, SSE on"); zl_fn_ok_line(_t1336); });
     } else {
-        ({ Value _t1188 = zl_str("GDT loaded - flat 4 GiB code and data segments"); zl_fn_ok_line(_t1188); });
+        ({ Value _t1337 = zl_str("GDT loaded - flat 4 GiB code and data segments"); zl_fn_ok_line(_t1337); });
     }
     ({ zl_calln("setup_idt", 0); });
-    ({ Value _t1189 = zl_str("IDT installed, PIC remapped, interrupts ON"); zl_fn_ok_line(_t1189); });
-    ({ Value _t1190 = zl_str("PIT timer running at 100 Hz on IRQ0"); zl_fn_ok_line(_t1190); });
-    ({ Value _t1191 = zl_str("keyboard on IRQ1 - no more polling the port"); zl_fn_ok_line(_t1191); });
-    ({ Value _t1192 = zl_str("zl runtime, kernel subset"); zl_fn_ok_line(_t1192); });
-    ({ Value _t1193 = zl_str("no heap, no filesystem, no scheduler"); zl_fn_info_line(_t1193); });
-    ({ Value _t1194 = zl_str(""); zl_calln("print", 1, _t1194); });
-    ({ Value _t1195 = v_C_GREEN; zl_calln("color", 1, _t1195); });
-    ({ Value _t1196 = zl_str("  ready."); zl_calln("print", 1, _t1196); });
-    ({ Value _t1197 = v_C_GREY; zl_calln("color", 1, _t1197); });
-    ({ Value _t1198 = zl_str("  press h for help, q to halt"); zl_calln("print", 1, _t1198); });
-    ({ Value _t1199 = zl_str(""); zl_calln("print", 1, _t1199); });
-    ({ Value _t1200 = zl_num(784); Value _t1201 = zl_num(8); zl_fn_beep(_t1200, _t1201); });
-    ({ Value _t1202 = zl_num(1046); Value _t1203 = zl_num(12); zl_fn_beep(_t1202, _t1203); });
+    ({ Value _t1338 = zl_str("IDT installed, PIC remapped, interrupts ON"); zl_fn_ok_line(_t1338); });
+    ({ Value _t1339 = zl_str("PIT timer running at 100 Hz on IRQ0"); zl_fn_ok_line(_t1339); });
+    ({ Value _t1340 = zl_str("keyboard on IRQ1 - no more polling the port"); zl_fn_ok_line(_t1340); });
+    ({ zl_fn_usb_boot(); });
+    ({ Value _t1341 = zl_str("zl runtime, kernel subset"); zl_fn_ok_line(_t1341); });
+    ({ Value _t1342 = zl_str("no heap, no filesystem, no scheduler"); zl_fn_info_line(_t1342); });
+    ({ Value _t1343 = zl_str(""); zl_calln("print", 1, _t1343); });
+    ({ Value _t1344 = v_C_GREEN; zl_calln("color", 1, _t1344); });
+    ({ Value _t1345 = zl_str("  ready."); zl_calln("print", 1, _t1345); });
+    ({ Value _t1346 = v_C_GREY; zl_calln("color", 1, _t1346); });
+    ({ Value _t1347 = zl_str("  press h for help, q to halt"); zl_calln("print", 1, _t1347); });
+    ({ Value _t1348 = zl_str(""); zl_calln("print", 1, _t1348); });
+    ({ Value _t1349 = zl_num(784); Value _t1350 = zl_num(8); zl_fn_beep(_t1349, _t1350); });
+    ({ Value _t1351 = zl_num(1046); Value _t1352 = zl_num(12); zl_fn_beep(_t1351, _t1352); });
     ({ zl_fn_compose_windows(); });
     v_running = zl_num(1);
     v_pending = zl_num(0);
@@ -1771,9 +2020,9 @@ int main(void) {
     v_mny = zl_num(0);
     v_mnh = zl_num(0);
     while (zl_truthy(zl_binop("==", v_running, zl_num(1)))) {
-        ({ Value _t1204 = v_C_GREEN; zl_calln("color", 1, _t1204); });
-        ({ Value _t1205 = zl_str("  zl> "); zl_calln("put", 1, _t1205); });
-        ({ Value _t1206 = v_C_WHITE; zl_calln("color", 1, _t1206); });
+        ({ Value _t1353 = v_C_GREEN; zl_calln("color", 1, _t1353); });
+        ({ Value _t1354 = zl_str("  zl> "); zl_calln("put", 1, _t1354); });
+        ({ Value _t1355 = v_C_WHITE; zl_calln("color", 1, _t1355); });
         v_crow = ({ zl_calln("row", 0); });
         v_ccol = ({ zl_calln("col", 0); });
         v_got = zl_num(0);
@@ -1785,7 +2034,7 @@ int main(void) {
                     v_sec = zl_binop("/", v_tk, zl_num(100));
                     if (zl_truthy(zl_binop("!=", v_sec, v_last_sec))) {
                         ({ zl_calln("mhide", 0); });
-                        ({ Value _t1207 = v_sec; zl_fn_draw_clock(_t1207); });
+                        ({ Value _t1356 = v_sec; zl_fn_draw_clock(_t1356); });
                         v_last_sec = v_sec;
                         v_cur_dirty = zl_num(1);
                     }
@@ -1796,7 +2045,7 @@ int main(void) {
                     }
                     if (zl_truthy(zl_binop("!=", v_bon, v_last_blink))) {
                         ({ zl_calln("mhide", 0); });
-                        ({ Value _t1208 = v_crow; Value _t1209 = v_ccol; Value _t1210 = v_bon; Value _t1211 = v_C_CURSOR; zl_calln("cursor", 4, _t1208, _t1209, _t1210, _t1211); });
+                        ({ Value _t1357 = v_crow; Value _t1358 = v_ccol; Value _t1359 = v_bon; Value _t1360 = v_C_CURSOR; zl_calln("cursor", 4, _t1357, _t1358, _t1359, _t1360); });
                         v_last_blink = v_bon;
                         v_cur_dirty = zl_num(1);
                     }
@@ -1814,7 +2063,7 @@ int main(void) {
                 if (zl_truthy(zl_binop("<", v_my, zl_num(28)))) {
                     v_my = zl_num(28);
                 }
-                v_lb = ({ Value _t1212 = ({ zl_calln("mouse_btn", 0); }); Value _t1213 = zl_num(1); zl_calln("band", 2, _t1212, _t1213); });
+                v_lb = ({ Value _t1361 = ({ zl_calln("mouse_btn", 0); }); Value _t1362 = zl_num(1); zl_calln("band", 2, _t1361, _t1362); });
                 if (zl_truthy(zl_binop("==", v_dragging, zl_num(1)))) {
                     v_nx = zl_binop("-", v_mx, v_gox);
                     v_ny = zl_binop("-", v_my, v_goy);
@@ -1839,11 +2088,11 @@ int main(void) {
                     }
                     if (zl_truthy(zl_binop("==", v_moved, zl_num(1)))) {
                         ({ zl_calln("mhide", 0); });
-                        ({ Value _t1214 = v_dox; Value _t1215 = v_doy; Value _t1216 = zl_binop("+", v_dgw, zl_num(16)); Value _t1217 = zl_binop("+", v_dgh, zl_num(16)); zl_calln("bg_rest", 4, _t1214, _t1215, _t1216, _t1217); });
-                        ({ Value _t1218 = v_nx; Value _t1219 = v_ny; zl_calln("stamp", 2, _t1218, _t1219); });
+                        ({ Value _t1363 = v_dox; Value _t1364 = v_doy; Value _t1365 = zl_binop("+", v_dgw, zl_num(16)); Value _t1366 = zl_binop("+", v_dgh, zl_num(16)); zl_calln("bg_rest", 4, _t1363, _t1364, _t1365, _t1366); });
+                        ({ Value _t1367 = v_nx; Value _t1368 = v_ny; zl_calln("stamp", 2, _t1367, _t1368); });
                         v_dox = v_nx;
                         v_doy = v_ny;
-                        ({ Value _t1220 = v_mx; Value _t1221 = v_my; zl_calln("mpoint", 2, _t1220, _t1221); });
+                        ({ Value _t1369 = v_mx; Value _t1370 = v_my; zl_calln("mpoint", 2, _t1369, _t1370); });
                     }
                     if (zl_truthy(zl_binop("==", v_lb, zl_num(0)))) {
                         if (zl_truthy(zl_binop("==", v_drag_win, zl_num(1)))) {
@@ -1859,7 +2108,7 @@ int main(void) {
                         ({ zl_fn_raise_windows(); });
                         v_dragging = zl_num(0);
                         v_drag_win = zl_num(0);
-                        ({ Value _t1222 = v_mx; Value _t1223 = v_my; zl_calln("mpoint", 2, _t1222, _t1223); });
+                        ({ Value _t1371 = v_mx; Value _t1372 = v_my; zl_calln("mpoint", 2, _t1371, _t1372); });
                     }
                 } else {
                     if (zl_truthy(zl_binop("!=", v_mx, v_last_mx))) {
@@ -1869,7 +2118,7 @@ int main(void) {
                         v_cur_dirty = zl_num(1);
                     }
                     if (zl_truthy(zl_binop("==", v_cur_dirty, zl_num(1)))) {
-                        ({ Value _t1224 = v_mx; Value _t1225 = v_my; zl_calln("mpoint", 2, _t1224, _t1225); });
+                        ({ Value _t1373 = v_mx; Value _t1374 = v_my; zl_calln("mpoint", 2, _t1373, _t1374); });
                     }
                     if (zl_truthy(zl_binop("==", v_lb, zl_num(1)))) {
                         if (zl_truthy(zl_binop("==", v_last_lb, zl_num(0)))) {
@@ -1889,32 +2138,32 @@ int main(void) {
                                 }
                                 ({ zl_calln("mhide", 0); });
                                 ({ zl_fn_close_menu(); });
-                                ({ Value _t1226 = v_mx; Value _t1227 = v_my; zl_calln("mpoint", 2, _t1226, _t1227); });
+                                ({ Value _t1375 = v_mx; Value _t1376 = v_my; zl_calln("mpoint", 2, _t1375, _t1376); });
                                 if (zl_truthy(zl_binop("==", v_picked, zl_num(7)))) {
                                     v_mon_open = zl_num(1);
                                     v_focus_win = zl_num(1);
                                     ({ zl_calln("mhide", 0); });
                                     ({ zl_fn_raise_windows(); });
-                                    ({ Value _t1228 = v_mx; Value _t1229 = v_my; zl_calln("mpoint", 2, _t1228, _t1229); });
+                                    ({ Value _t1377 = v_mx; Value _t1378 = v_my; zl_calln("mpoint", 2, _t1377, _t1378); });
                                 }
                                 if (zl_truthy(zl_binop("==", v_picked, zl_num(8)))) {
                                     v_ab_open = zl_num(1);
                                     v_focus_win = zl_num(2);
                                     ({ zl_calln("mhide", 0); });
                                     ({ zl_fn_raise_windows(); });
-                                    ({ Value _t1230 = v_mx; Value _t1231 = v_my; zl_calln("mpoint", 2, _t1230, _t1231); });
+                                    ({ Value _t1379 = v_mx; Value _t1380 = v_my; zl_calln("mpoint", 2, _t1379, _t1380); });
                                 }
                                 if (zl_truthy(zl_binop(">=", v_picked, zl_num(0)))) {
-                                    v_mcmd = ({ Value _t1232 = v_picked; zl_fn_menu_cmd(_t1232); });
+                                    v_mcmd = ({ Value _t1381 = v_picked; zl_fn_menu_cmd(_t1381); });
                                     if (zl_truthy(zl_binop(">", v_mcmd, zl_num(0)))) {
                                         ({ zl_calln("mhide", 0); });
-                                        ({ Value _t1233 = zl_str(""); zl_calln("print", 1, _t1233); });
-                                        ({ Value _t1234 = zl_str("working"); zl_fn_draw_status(_t1234); });
-                                        v_r = ({ Value _t1235 = v_mcmd; Value _t1236 = zl_num(0); zl_fn_run_command(_t1235, _t1236); });
+                                        ({ Value _t1382 = zl_str(""); zl_calln("print", 1, _t1382); });
+                                        ({ Value _t1383 = zl_str("working"); zl_fn_draw_status(_t1383); });
+                                        v_r = ({ Value _t1384 = v_mcmd; Value _t1385 = zl_num(0); zl_fn_run_command(_t1384, _t1385); });
                                         v_got = zl_num(1);
                                         v_last_sec = zl_binop("-", zl_num(0), zl_num(1));
                                         v_last_mx = zl_binop("-", zl_num(0), zl_num(1));
-                                        ({ Value _t1237 = zl_str("ready"); zl_fn_draw_status(_t1237); });
+                                        ({ Value _t1386 = zl_str("ready"); zl_fn_draw_status(_t1386); });
                                         if (zl_truthy(zl_binop("==", v_r, zl_num(1)))) {
                                             v_running = zl_num(0);
                                         }
@@ -1975,15 +2224,15 @@ int main(void) {
                                     ({ zl_calln("mhide", 0); });
                                     if (zl_truthy(zl_binop("==", v_hit, zl_num(1)))) {
                                         v_mon_open = zl_num(0);
-                                        ({ Value _t1238 = v_mon_x; Value _t1239 = v_mon_y; Value _t1240 = zl_binop("*", zl_binop("+", v_MON_W, zl_num(16)), ({ zl_fn_ui(); })); Value _t1241 = zl_binop("*", zl_binop("+", v_MON_H, zl_num(16)), ({ zl_fn_ui(); })); zl_calln("bg_rest", 4, _t1238, _t1239, _t1240, _t1241); });
+                                        ({ Value _t1387 = v_mon_x; Value _t1388 = v_mon_y; Value _t1389 = zl_binop("*", zl_binop("+", v_MON_W, zl_num(16)), ({ zl_fn_ui(); })); Value _t1390 = zl_binop("*", zl_binop("+", v_MON_H, zl_num(16)), ({ zl_fn_ui(); })); zl_calln("bg_rest", 4, _t1387, _t1388, _t1389, _t1390); });
                                     }
                                     if (zl_truthy(zl_binop("==", v_hit, zl_num(2)))) {
                                         v_ab_open = zl_num(0);
-                                        ({ Value _t1242 = v_ab_x; Value _t1243 = v_ab_y; Value _t1244 = zl_binop("*", zl_binop("+", v_MON_W, zl_num(16)), ({ zl_fn_ui(); })); Value _t1245 = zl_binop("*", zl_binop("+", v_AB_H, zl_num(16)), ({ zl_fn_ui(); })); zl_calln("bg_rest", 4, _t1242, _t1243, _t1244, _t1245); });
+                                        ({ Value _t1391 = v_ab_x; Value _t1392 = v_ab_y; Value _t1393 = zl_binop("*", zl_binop("+", v_MON_W, zl_num(16)), ({ zl_fn_ui(); })); Value _t1394 = zl_binop("*", zl_binop("+", v_AB_H, zl_num(16)), ({ zl_fn_ui(); })); zl_calln("bg_rest", 4, _t1391, _t1392, _t1393, _t1394); });
                                     }
                                     v_focus_win = zl_num(0);
                                     ({ zl_fn_raise_windows(); });
-                                    ({ Value _t1246 = v_mx; Value _t1247 = v_my; zl_calln("mpoint", 2, _t1246, _t1247); });
+                                    ({ Value _t1395 = v_mx; Value _t1396 = v_my; zl_calln("mpoint", 2, _t1395, _t1396); });
                                 }
                                 if (zl_truthy(zl_binop("==", v_hcls, zl_num(0)))) {
                                     if (zl_truthy(zl_binop(">", v_hit, zl_num(0)))) {
@@ -1991,7 +2240,7 @@ int main(void) {
                                             ({ zl_calln("mhide", 0); });
                                             v_focus_win = v_hit;
                                             ({ zl_fn_raise_windows(); });
-                                            ({ Value _t1248 = v_mx; Value _t1249 = v_my; zl_calln("mpoint", 2, _t1248, _t1249); });
+                                            ({ Value _t1397 = v_mx; Value _t1398 = v_my; zl_calln("mpoint", 2, _t1397, _t1398); });
                                         }
                                         if (zl_truthy(zl_binop("==", v_hbar, zl_num(1)))) {
                                             if (zl_truthy(zl_binop("==", v_hit, zl_num(1)))) {
@@ -2004,7 +2253,7 @@ int main(void) {
                                                 v_gox = zl_binop("-", v_mx, v_mon_x);
                                                 v_goy = zl_binop("-", v_my, v_mon_y);
                                                 ({ zl_calln("mhide", 0); });
-                                                ({ Value _t1250 = v_mon_x; Value _t1251 = v_mon_y; Value _t1252 = zl_binop("*", zl_binop("+", v_MON_W, zl_num(16)), ({ zl_fn_ui(); })); Value _t1253 = zl_binop("*", zl_binop("+", v_MON_H, zl_num(16)), ({ zl_fn_ui(); })); zl_calln("grab", 4, _t1250, _t1251, _t1252, _t1253); });
+                                                ({ Value _t1399 = v_mon_x; Value _t1400 = v_mon_y; Value _t1401 = zl_binop("*", zl_binop("+", v_MON_W, zl_num(16)), ({ zl_fn_ui(); })); Value _t1402 = zl_binop("*", zl_binop("+", v_MON_H, zl_num(16)), ({ zl_fn_ui(); })); zl_calln("grab", 4, _t1399, _t1400, _t1401, _t1402); });
                                             }
                                             if (zl_truthy(zl_binop("==", v_hit, zl_num(2)))) {
                                                 v_dragging = zl_num(1);
@@ -2016,7 +2265,7 @@ int main(void) {
                                                 v_gox = zl_binop("-", v_mx, v_ab_x);
                                                 v_goy = zl_binop("-", v_my, v_ab_y);
                                                 ({ zl_calln("mhide", 0); });
-                                                ({ Value _t1254 = v_ab_x; Value _t1255 = v_ab_y; Value _t1256 = zl_binop("*", zl_binop("+", v_MON_W, zl_num(16)), ({ zl_fn_ui(); })); Value _t1257 = zl_binop("*", zl_binop("+", v_AB_H, zl_num(16)), ({ zl_fn_ui(); })); zl_calln("grab", 4, _t1254, _t1255, _t1256, _t1257); });
+                                                ({ Value _t1403 = v_ab_x; Value _t1404 = v_ab_y; Value _t1405 = zl_binop("*", zl_binop("+", v_MON_W, zl_num(16)), ({ zl_fn_ui(); })); Value _t1406 = zl_binop("*", zl_binop("+", v_AB_H, zl_num(16)), ({ zl_fn_ui(); })); zl_calln("grab", 4, _t1403, _t1404, _t1405, _t1406); });
                                             }
                                         }
                                     }
@@ -2028,7 +2277,7 @@ int main(void) {
                                                 if (zl_truthy(zl_binop("<", v_mx, zl_binop("*", zl_num(106), ({ zl_fn_ui(); }))))) {
                                                     ({ zl_calln("mhide", 0); });
                                                     ({ zl_fn_open_menu(); });
-                                                    ({ Value _t1258 = v_mx; Value _t1259 = v_my; zl_calln("mpoint", 2, _t1258, _t1259); });
+                                                    ({ Value _t1407 = v_mx; Value _t1408 = v_my; zl_calln("mpoint", 2, _t1407, _t1408); });
                                                 }
                                             }
                                             v_dcmd = zl_num(0);
@@ -2042,28 +2291,28 @@ int main(void) {
                                                             v_focus_win = zl_num(1);
                                                             ({ zl_calln("mhide", 0); });
                                                             ({ zl_fn_raise_windows(); });
-                                                            ({ Value _t1260 = v_mx; Value _t1261 = v_my; zl_calln("mpoint", 2, _t1260, _t1261); });
+                                                            ({ Value _t1409 = v_mx; Value _t1410 = v_my; zl_calln("mpoint", 2, _t1409, _t1410); });
                                                         }
                                                         if (zl_truthy(zl_binop("==", v_dslot, zl_num(7)))) {
                                                             v_ab_open = zl_num(1);
                                                             v_focus_win = zl_num(2);
                                                             ({ zl_calln("mhide", 0); });
                                                             ({ zl_fn_raise_windows(); });
-                                                            ({ Value _t1262 = v_mx; Value _t1263 = v_my; zl_calln("mpoint", 2, _t1262, _t1263); });
+                                                            ({ Value _t1411 = v_mx; Value _t1412 = v_my; zl_calln("mpoint", 2, _t1411, _t1412); });
                                                         }
-                                                        v_dcmd = ({ Value _t1264 = v_dslot; zl_fn_dock_cmd(_t1264); });
+                                                        v_dcmd = ({ Value _t1413 = v_dslot; zl_fn_dock_cmd(_t1413); });
                                                     }
                                                 }
                                             }
                                             if (zl_truthy(zl_binop(">", v_dcmd, zl_num(0)))) {
                                                 ({ zl_calln("mhide", 0); });
-                                                ({ Value _t1265 = zl_str(""); zl_calln("print", 1, _t1265); });
-                                                ({ Value _t1266 = zl_str("working"); zl_fn_draw_status(_t1266); });
-                                                v_r = ({ Value _t1267 = v_dcmd; Value _t1268 = zl_num(0); zl_fn_run_command(_t1267, _t1268); });
+                                                ({ Value _t1414 = zl_str(""); zl_calln("print", 1, _t1414); });
+                                                ({ Value _t1415 = zl_str("working"); zl_fn_draw_status(_t1415); });
+                                                v_r = ({ Value _t1416 = v_dcmd; Value _t1417 = zl_num(0); zl_fn_run_command(_t1416, _t1417); });
                                                 v_got = zl_num(1);
                                                 v_last_sec = zl_binop("-", zl_num(0), zl_num(1));
                                                 v_last_mx = zl_binop("-", zl_num(0), zl_num(1));
-                                                ({ Value _t1269 = zl_str("ready"); zl_fn_draw_status(_t1269); });
+                                                ({ Value _t1418 = zl_str("ready"); zl_fn_draw_status(_t1418); });
                                                 if (zl_truthy(zl_binop("==", v_r, zl_num(1)))) {
                                                     v_running = zl_num(0);
                                                 }
@@ -2083,24 +2332,24 @@ int main(void) {
             v_ch = ({ zl_fn_key_get(); });
             if (zl_truthy(zl_binop(">", v_ch, zl_num(0)))) {
                 ({ zl_calln("mhide", 0); });
-                if (zl_truthy(zl_binop("==", ({ Value _t1270 = v_ch; zl_fn_is_digit(_t1270); }), zl_bool(1)))) {
-                    ({ Value _t1271 = v_crow; Value _t1272 = v_ccol; Value _t1273 = zl_num(0); Value _t1274 = v_C_CURSOR; zl_calln("cursor", 4, _t1271, _t1272, _t1273, _t1274); });
-                    ({ Value _t1275 = v_C_WHITE; zl_calln("color", 1, _t1275); });
-                    ({ Value _t1276 = zl_binop("-", v_ch, zl_num(48)); zl_calln("put", 1, _t1276); });
+                if (zl_truthy(zl_binop("==", ({ Value _t1419 = v_ch; zl_fn_is_digit(_t1419); }), zl_bool(1)))) {
+                    ({ Value _t1420 = v_crow; Value _t1421 = v_ccol; Value _t1422 = zl_num(0); Value _t1423 = v_C_CURSOR; zl_calln("cursor", 4, _t1420, _t1421, _t1422, _t1423); });
+                    ({ Value _t1424 = v_C_WHITE; zl_calln("color", 1, _t1424); });
+                    ({ Value _t1425 = zl_binop("-", v_ch, zl_num(48)); zl_calln("put", 1, _t1425); });
                     v_ccol = zl_binop("+", v_ccol, zl_num(1));
                     v_last_blink = zl_binop("-", zl_num(0), zl_num(1));
                     v_pending = zl_binop("+", zl_binop("*", v_pending, zl_num(10)), zl_binop("-", v_ch, zl_num(48)));
                 } else {
                     if (zl_truthy(zl_binop(">", v_ch, zl_num(32)))) {
-                        ({ Value _t1277 = v_crow; Value _t1278 = v_ccol; Value _t1279 = zl_num(0); Value _t1280 = v_C_CURSOR; zl_calln("cursor", 4, _t1277, _t1278, _t1279, _t1280); });
-                        ({ Value _t1281 = zl_str(""); zl_calln("print", 1, _t1281); });
-                        ({ Value _t1282 = zl_str("working"); zl_fn_draw_status(_t1282); });
-                        v_r = ({ Value _t1283 = v_ch; Value _t1284 = v_pending; zl_fn_run_command(_t1283, _t1284); });
+                        ({ Value _t1426 = v_crow; Value _t1427 = v_ccol; Value _t1428 = zl_num(0); Value _t1429 = v_C_CURSOR; zl_calln("cursor", 4, _t1426, _t1427, _t1428, _t1429); });
+                        ({ Value _t1430 = zl_str(""); zl_calln("print", 1, _t1430); });
+                        ({ Value _t1431 = zl_str("working"); zl_fn_draw_status(_t1431); });
+                        v_r = ({ Value _t1432 = v_ch; Value _t1433 = v_pending; zl_fn_run_command(_t1432, _t1433); });
                         v_pending = zl_num(0);
                         v_got = zl_num(1);
                         v_last_sec = zl_binop("-", zl_num(0), zl_num(1));
                         v_last_mx = zl_binop("-", zl_num(0), zl_num(1));
-                        ({ Value _t1285 = zl_str("ready"); zl_fn_draw_status(_t1285); });
+                        ({ Value _t1434 = zl_str("ready"); zl_fn_draw_status(_t1434); });
                         if (zl_truthy(zl_binop("==", v_r, zl_num(1)))) {
                             v_running = zl_num(0);
                         }
@@ -2109,10 +2358,10 @@ int main(void) {
             }
         }
     }
-    ({ Value _t1286 = zl_str(""); zl_calln("print", 1, _t1286); });
-    ({ Value _t1287 = v_C_YELLOW; zl_calln("color", 1, _t1287); });
-    ({ Value _t1288 = zl_str("  halting."); zl_calln("print", 1, _t1288); });
-    ({ Value _t1289 = v_C_GREY; zl_calln("color", 1, _t1289); });
-    ({ Value _t1290 = zl_str("halted"); zl_fn_draw_status(_t1290); });
+    ({ Value _t1435 = zl_str(""); zl_calln("print", 1, _t1435); });
+    ({ Value _t1436 = v_C_YELLOW; zl_calln("color", 1, _t1436); });
+    ({ Value _t1437 = zl_str("  halting."); zl_calln("print", 1, _t1437); });
+    ({ Value _t1438 = v_C_GREY; zl_calln("color", 1, _t1438); });
+    ({ Value _t1439 = zl_str("halted"); zl_fn_draw_status(_t1439); });
     return 0;
 }

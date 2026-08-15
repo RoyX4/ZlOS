@@ -76,6 +76,8 @@ shift_state = 0
 # a shift-aware read: returns a translated character, or 0 if nothing / a
 # modifier / a release. Uppercases letters; leaves the rest as-is (v1).
 fn edit_key() {
+    uk = usb_key()
+    if uk != 0 { return uk }
     sc = scan_get()
     if sc == 0 { return 0 }
     if sc == 0x2A { shift_state = 1  return 0 }      # left shift down
@@ -99,7 +101,9 @@ fn kbd_scan() {
 }
 fn key_get() {
     if ser_ready() == 1 { return ser_read() }   # serial still polled (for tests)
-    return kbd_scan()                            # keyboard via the IRQ buffer
+    uk = usb_key()                               # our own USB HID driver
+    if uk != 0 { return uk }
+    return kbd_scan()                            # PS/2 via the IRQ buffer
 }
 
 # ---- timing + sound, both riding on the timer interrupt --------------------
@@ -312,6 +316,14 @@ fn help() {
     print("    l        list the RAM files")
     print("    e        beep the PC speaker")
     print("    m        poke a byte into video memory and read it back")
+    color(C_CYAN)  print("  our hardware drivers")
+    color(C_GREY)
+    print("    k        PCI bus + the Intel GPU, read off real silicon")
+    print("    u        USB: take the xHCI controller and enumerate the bus")
+    print("    j        USB keyboard - live, straight off the HID reports")
+    print("    n        change the screen resolution, no BIOS involved")
+    print("    v        spinning 3D cube, rendered in software")
+    print("    w        draggable windows")
     print("    c        clear the screen")
     print("    r        reboot the machine")
     print("    q        halt the machine")
@@ -421,6 +433,94 @@ fn windows_demo() {
 # The numbering is the xHCI "Protocol Speed ID"; 1-4 are the defaults every
 # controller uses, higher values are only meaningful with the extended
 # capability tables, so anything else is reported honestly as unknown.
+# Bring the USB stack all the way up: find the controller, take it from the
+# firmware, build the DMA rings, then look for a boot-protocol keyboard on
+# every port. Returns the keyboard's slot, or 0 if there is no keyboard.
+# Safe to call twice - enumeration remembers what it already did.
+# Bring the whole USB stack up and SAY what happened.
+#
+# This runs at boot, before anything is typed, on purpose: on a real UEFI
+# machine the firmware's PS/2 emulation dies with ExitBootServices, so if this
+# driver fails there is no keyboard to ask it with. The status has to be on the
+# screen already. Stays silent when there is no xHCI controller at all, so the
+# BIOS/serial test path is unchanged.
+fn usb_boot() {
+    ub = usb_up()
+    if usb_ok() == 0 {
+        # Say WHY, and say it on screen. On a UEFI machine there is no serial
+        # console and no working PS/2, so a silent failure here is a machine
+        # you cannot interact with and cannot diagnose.
+        color(C_RED)
+        put("  USB: no xHCI controller (")  put(pci_count())
+        print(" PCI devices seen)")
+        color(C_GREY)
+        return 0
+    }
+    if ub > 0 {
+        color(C_GREEN)
+        put("  USB: HID keyboard live on slot ")  print(ub)
+    } else {
+        color(C_RED)
+        if usb_ours() == 1 {
+            print("  USB: controller is ours, but no HID boot keyboard found")
+            color(C_GREY)
+            # Dump what IS on the bus. On a machine with no keyboard and no
+            # serial this is the only diagnostic we will ever get.
+            ubp = 1
+            while ubp <= usb_ports() {
+                if usb_conn(ubp) == 1 {
+                    put("    port ")   put(ubp)
+                    put(" portsc 0x")  hex(usb_portsc(ubp), 8)
+                    put(" reset->")    put(usb_prst(ubp))
+                    put(" now 0x")     hex(usb_portsc(ubp), 8)
+                    ubs = usb_enum(ubp)
+                    put(" slot ")      put(ubs)
+                    if ubs > 0 {
+                        put(" vid ")  hex(usb_vid(), 4)
+                        put(":")      hex(usb_pid(), 4)
+                        put(" cls ")  hex(usb_cls(), 2)
+                    }
+                    print("")
+                }
+                ubp = ubp + 1
+            }
+        } else {
+            print("  USB: could not take the xHCI controller")
+        }
+    }
+    color(C_GREY)
+    return ub
+}
+
+# Live echo test for the USB keyboard. This is the proof that stage 5 works:
+# characters here came off the wire as HID reports, not from the PS/2 port.
+fn usbkey_demo() {
+    color(C_CYAN)  print("  USB keyboard test")
+    color(C_GREY)
+    if usb_kbd_ok() == 0 {
+        if usb_boot() == 0 {
+            color(C_RED)  print("    no USB boot keyboard found")
+            color(C_GREY)
+            return 0
+        }
+    }
+    put("    keyboard on slot ")  put(usb_kbd_slot())
+    put(", endpoint dci ")        print(usb_kbd_ep())
+    print("    type - ESC or 60s ends the test")
+    put("    ")
+    ustop = ticks() + 6000
+    while ticks() < ustop {
+        uc = usb_key()
+        if uc != 0 {
+            if uc == 27 { print("")  print("    ESC - done")  return 0 }
+            if uc == 13 { print("")  put("    ") } else { emit(uc) }
+        }
+    }
+    print("")
+    print("    timed out")
+    return 0
+}
+
 fn spname(s) {
     if s == 1 { return "full (12 Mb/s)" }
     if s == 2 { return "low (1.5 Mb/s)" }
@@ -856,15 +956,19 @@ fn run_command(cmd, arg) {
             put("    device slots: ")    print(usb_slots())
             put("    root ports:   ")    print(usb_ports())
             put("    context size: ")    put(usb_ctxsz())  print(" bytes")
-            if usb_reset() == 1 {
-                color(C_GREEN)  print("    controller reset OK - it is ours now")
+            if usb_ram() == 0 {
+                color(C_RED)
+                print("    the DMA arena at 224 MiB is not backed by RAM")
                 color(C_GREY)
-            } else {
-                color(C_RED)    print("    controller did not reset")
-                color(C_GREY)
+                return 0
             }
-            if usb_rings() == 1 {
-                color(C_GREEN)  print("    rings up, controller RUNNING")
+            # usb_up() is idempotent: it resets and builds our rings only if we
+            # do not already own the controller. Re-resetting here would throw
+            # away a working keyboard, which is exactly what we came for.
+            ukb = usb_up()
+            if usb_ours() == 1 {
+                color(C_GREEN)
+                print("    controller reset, rings up, RUNNING - it is ours")
                 color(C_GREY)
                 if usb_noop() == 1 {
                     color(C_GREEN)
@@ -875,8 +979,9 @@ fn run_command(cmd, arg) {
                     color(C_GREY)
                 }
             } else {
-                color(C_RED)  print("    rings/start failed")
+                color(C_RED)  print("    could not take the controller")
                 color(C_GREY)
+                return 0
             }
             put("    devices attached: ")  print(usb_count())
             up = 1
@@ -904,9 +1009,19 @@ fn run_command(cmd, arg) {
                 }
                 up = up + 1
             }
+            if ukb > 0 {
+                color(C_GREEN)
+                put("    HID boot keyboard on slot ")  put(ukb)
+                put(", endpoint dci ")                 print(usb_kbd_ep())
+                print("    keystrokes now come from OUR driver - try 'j'")
+                color(C_GREY)
+            } else {
+                print("    no HID boot keyboard on this bus")
+            }
         }
         return 0
     }
+    if cmd == 106 { return usbkey_demo() }   # j - USB keyboard, live
     if cmd == 118 { return cube_demo() }     # v - spinning 3D cube (software)
     if cmd == 119 { return windows_demo() }  # w - draggable-style window demo
     if cmd == 120 { return mousedemo() }  # x - mouse demo
@@ -1193,6 +1308,12 @@ setup_idt()
 ok_line("IDT installed, PIC remapped, interrupts ON")
 ok_line("PIT timer running at 100 Hz on IRQ0")
 ok_line("keyboard on IRQ1 - no more polling the port")
+# USB comes up HERE, not earlier: the driver's timeouts are measured with the
+# PIT, and before setup_idt() that timer is not ticking - every wait would
+# silently fall back to a spin count instead of a real millisecond. On a UEFI
+# machine the firmware's PS/2 emulation dies with ExitBootServices, so this is
+# the only keyboard there will be.
+usb_boot()
 ok_line("zl runtime, kernel subset")
 info_line("no heap, no filesystem, no scheduler")
 

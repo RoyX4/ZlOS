@@ -160,6 +160,35 @@ u32 pci_bar(int i, int which)
     return v & 0xFFFFFFF0;                    /* memory space */
 }
 
+/* ---- 64-bit BARs -------------------------------------------------------
+ * Bits [2:1] of a memory BAR are the type: 0 = 32-bit, 2 = 64-bit. A 64-bit
+ * BAR consumes the NEXT slot as well, and that slot holds the upper 32 bits of
+ * the address.
+ *
+ * This is not a theoretical case. UEFI firmware routinely puts 64-bit BARs
+ * high: OVMF maps QEMU's xHCI at 0xC000000000, and the Intel PCH xHCI on real
+ * hardware is a 64-bit BAR too. Reading only the low dword there yields zero,
+ * and the device looks like it does not exist - which is exactly the bug this
+ * was written to fix. */
+int pci_bar_is64(int i, int which)
+{
+    if (i < 0 || i >= found_n || which < 0 || which > 4) return 0;
+    u32 v = pci_read32(found[i].bus, found[i].dev, found[i].fn, PCI_BAR0 + which * 4);
+    if (v & 1) return 0;                      /* IO BARs are never 64-bit */
+    return ((v >> 1) & 3) == 2;
+}
+
+u32 pci_bar_hi(int i, int which)
+{
+    if (!pci_bar_is64(i, which)) return 0;
+    return pci_read32(found[i].bus, found[i].dev, found[i].fn,
+                      PCI_BAR0 + (which + 1) * 4);
+}
+
+/* the programming interface byte - for class 0x0C subclass 0x03 this is what
+ * separates xHCI (0x30) from EHCI (0x20), OHCI (0x10) and UHCI (0x00) */
+int pci_prog_if(int i) { return (i < found_n) ? found[i].prog_if : 0; }
+
 /* Size a BAR the way the spec says: write all ones, read back, and the
  * hardware returns zeros in the bits it does not decode. The size is the
  * complement of the masked value, plus one. The original must be restored. */

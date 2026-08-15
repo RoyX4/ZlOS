@@ -8,6 +8,7 @@
   [  OK  ] IDT installed, PIC remapped, interrupts ON
   [  OK  ] PIT timer running at 100 Hz on IRQ0
   [  OK  ] keyboard on IRQ1 - no more polling the port
+  USB: no xHCI controller (6 PCI devices seen)
   [  OK  ] zl runtime, kernel subset
   [ INFO ] no heap, no filesystem, no scheduler
 
@@ -30,6 +31,13 @@
     l        list the RAM files
     e        beep the PC speaker
     m        poke a byte into video memory and read it back
+  our hardware drivers
+    k        PCI bus + the Intel GPU, read off real silicon
+    u        USB: take the xHCI controller and enumerate the bus
+    j        USB keyboard - live, straight off the HID reports
+    n        change the screen resolution, no BIOS involved
+    v        spinning 3D cube, rendered in software
+    w        draggable windows
     c        clear the screen
     r        reboot the machine
     q        halt the machine
