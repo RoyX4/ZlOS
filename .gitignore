@@ -15,3 +15,5 @@ examples_out/
 compile_commands.json
 compilef
 outf.c
+kernel/hosttest/intel_probe
+kernel/hosttest/regs-*.txt

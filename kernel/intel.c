@@ -81,6 +81,31 @@ u32  pci_read32(int bus, int dev, int fn, int off);
  * All are stored as (start | end << 16) and all are minus one. Reading them
  * back tells us the panel's real mode, including the refresh rate, without
  * touching a single PLL. */
+/* WHICH TRANSCODER - this cost a real bug before the host harness existed.
+ *
+ * A laptop's internal panel is almost always driven by the dedicated eDP
+ * transcoder, NOT transcoder A, even though it feeds pipe A. The timing
+ * registers therefore live at 0x6F000, and reading 0x60000 returns zeroes -
+ * which decodes to a 1x1 mode and looks like the driver is broken rather than
+ * looking in the wrong place. Verified on the real machine: transcoder A reads
+ * 0x00000000 while the eDP transcoder reads 0x0A9F09FF = 2560 of 2720. */
+#define TRANS_A_BASE      0x60000
+#define TRANS_EDP_BASE    0x6F000
+#define TRANS_OFF_HTOTAL  0x00
+#define TRANS_OFF_HBLANK  0x04
+#define TRANS_OFF_HSYNC   0x08
+#define TRANS_OFF_VTOTAL  0x0C
+#define TRANS_OFF_VBLANK  0x10
+#define TRANS_OFF_VSYNC   0x14
+#define TRANS_OFF_CONF    0x08       /* relative to 0x70008 / 0x6F008 */
+/* The pipe configuration register is NOT inside the transcoder timing block.
+ * PIPECONF lives in the pipe register range: A at 0x70008, and the eDP
+ * transcoder's at 0x7F008. Reading 0x6F008 gets HSYNC instead, which is a
+ * plausible-looking non-zero number - so the bug reads as "pipe disabled"
+ * while the panel is visibly on. Found with the host harness in one run. */
+#define TRANS_A_CONF      0x70008
+#define TRANS_EDP_CONF    0x7F008
+
 #define HTOTAL_A          0x60000
 #define HBLANK_A          0x60004
 #define HSYNC_A           0x60008
@@ -138,11 +163,15 @@ u32  pci_read32(int bus, int dev, int fn, int off);
 #define PLANE_CTL_FORMAT_MASK 0x0F000000u
 
 static int  gpu_idx = -1;
-static u32  mmio    = 0;      /* BAR0 - registers and the GGTT window */
-static u32  aperture = 0;     /* BAR2 - the CPU-visible window        */
+static uptr mmio    = 0;      /* BAR0 - registers and the GGTT window */
+static uptr aperture = 0;     /* BAR2 - the CPU-visible window        */
 static u32  mmio_size = 0;
 static u32  aper_size = 0;
 static u16  gpu_devid = 0;
+
+/* config-space reads go through this, so a host-side test harness can
+ * substitute its own source without the driver knowing */
+static u32 (*cfg_read)(int bus, int dev, int fn, int off) = 0;
 
 /* MMIO is plain memory to us: flat 32-bit segments, no paging, so the BAR
  * address is directly addressable. `volatile` matters - these are registers,
@@ -150,13 +179,36 @@ static u16  gpu_devid = 0;
 static u32 mmio_r(u32 off)
 {
     if (!mmio) return 0;
-    return *(volatile u32 *)(mmio + off);
+    return *(volatile u32 *)(mmio + (uptr)off);
 }
 
 static void mmio_w(u32 off, u32 val)
 {
     if (!mmio) return;
-    *(volatile u32 *)(mmio + off) = val;
+    *(volatile u32 *)(mmio + (uptr)off) = val;
+}
+
+static u32 gpu_cfg(int off)
+{
+    return cfg_read ? cfg_read(0, 2, 0, off) : pci_read32(0, 2, 0, off);
+}
+
+/* ---- attaching without a PCI scan --------------------------------------
+ * The kernel finds the GPU by walking the bus. A test harness running under
+ * Linux already knows where it is - it has the BAR mapped - and needs to hand
+ * that mapping in directly. Everything downstream is identical either way,
+ * which is the point: the code being tested is the code that ships. */
+void intel_attach(uptr mmio_base, u32 mmio_bytes,
+                  uptr aper_base, u32 aper_bytes, int devid,
+                  u32 (*cfg)(int, int, int, int))
+{
+    mmio      = mmio_base;
+    mmio_size = mmio_bytes;
+    aperture  = aper_base;
+    aper_size = aper_bytes;
+    gpu_devid = (u16)devid;
+    cfg_read  = cfg;
+    gpu_idx   = 0;                 /* "found", by assertion rather than scan */
 }
 
 /* Is this device ID a Gen9/Gen9.5 part we understand? Skylake through Comet
@@ -185,9 +237,9 @@ int intel_find(void)
         gpu_idx   = i;
         gpu_devid = (u16)pci_device(i);
         pci_enable(i);                            /* memory + bus master */
-        mmio      = pci_bar(i, 0);                /* GTTMMADR */
+        mmio      = (uptr)pci_bar(i, 0);          /* GTTMMADR */
         mmio_size = pci_bar_size(i, 0);
-        aperture  = pci_bar(i, 2);                /* GMADR    */
+        aperture  = (uptr)pci_bar(i, 2);          /* GMADR    */
         aper_size = pci_bar_size(i, 2);
         return i;
     }
@@ -198,9 +250,9 @@ int intel_find(void)
 int intel_present(void)   { return gpu_idx >= 0 && mmio != 0; }
 int intel_devid(void)     { return gpu_devid; }
 int intel_supported(void) { return intel_present() && is_gen9(gpu_devid); }
-u32 intel_mmio(void)      { return mmio; }
+u32 intel_mmio(void)      { return (u32)mmio; }
 u32 intel_mmio_size(void) { return mmio_size; }
-u32 intel_aperture(void)  { return aperture; }
+u32 intel_aperture(void)  { return (u32)aperture; }
 u32 intel_aper_size(void) { return aper_size; }
 
 /* ---- stolen memory: the RAM the firmware reserved for graphics ----------
@@ -210,13 +262,13 @@ u32 intel_aper_size(void) { return aper_size; }
 u32 intel_stolen_base(void)
 {
     if (gpu_idx < 0) return 0;
-    return pci_read32(0, 2, 0, BDSM) & 0xFFF00000u;
+    return gpu_cfg(BDSM) & 0xFFF00000u;
 }
 
 u32 intel_stolen_size(void)
 {
     if (gpu_idx < 0) return 0;
-    u32 ggc = pci_read32(0, 2, 0, MGGC0);
+    u32 ggc = gpu_cfg(MGGC0);
     u32 gms = (ggc >> 8) & 0xFF;
     if (gms < 0xF0) return gms * (32u << 20);
     return (gms - 0xF0) * (4u << 20) + (4u << 20);
@@ -227,11 +279,14 @@ u32 intel_stolen_size(void)
 u32 intel_ggtt_size(void)
 {
     if (gpu_idx < 0) return 0;
-    u32 ggc  = pci_read32(0, 2, 0, MGGC0);
+    u32 ggc  = gpu_cfg(MGGC0);
     u32 ggms = (ggc >> 6) & 0x3;
     if (!ggms) return 0;
     return (1u << 20) << ggms;         /* 2, 4 or 8 MiB */
 }
+
+static u32 trans_base(void);   /* defined with the timing helpers below */
+int intel_plane_tiling(void);  /* defined with the plane helpers below      */
 
 /* ---- reading the live display configuration -----------------------------
  * The firmware has already brought the panel up, so these registers describe
@@ -249,8 +304,22 @@ int intel_pipe_height(void)
     return (int)(v & 0x1FFF) + 1;
 }
 
-/* stride is held in units of 64 bytes for a linear surface */
-int intel_stride(void)       { return (int)(mmio_r(PLANE_STRIDE_1_A) & 0x3FF) * 64; }
+/* Stride units depend on TILING, which is the sort of detail that silently
+ * halves your framebuffer. A linear surface counts in 64-byte units; an
+ * X-tiled one counts in 512-byte tiles, and Y-tiled in 128. This panel is
+ * X-tiled, where reading it as linear reports 1280 bytes for a 2560-pixel
+ * wide display - off by exactly the factor of 8 between the two units. */
+int intel_stride(void)
+{
+    u32 raw = mmio_r(PLANE_STRIDE_1_A) & 0x3FF;
+    switch (intel_plane_tiling()) {
+        case 0: return (int)(raw * 64);     /* linear  */
+        case 1: return (int)(raw * 512);    /* X tiled */
+        case 4:
+        case 5: return (int)(raw * 128);    /* Y / Yf tiled */
+    }
+    return (int)(raw * 64);
+}
 int intel_plane_enabled(void){ return (mmio_r(PLANE_CTL_1_A) & PLANE_CTL_ENABLE) ? 1 : 0; }
 u32 intel_plane_ctl(void)    { return mmio_r(PLANE_CTL_1_A); }
 
@@ -259,7 +328,11 @@ u32 intel_surface(void)      { return mmio_r(PLANE_SURFLIVE_A); }
 int intel_frame_count(void)  { return (int)mmio_r(PIPE_FRMCNT_A); }
 
 /* is the transcoder actually running? bit 31 of TRANS_CONF is the enable */
-int intel_pipe_enabled(void) { return (mmio_r(TRANS_CONF_A) & 0x80000000u) ? 1 : 0; }
+int intel_pipe_enabled(void)
+{
+    u32 conf = (trans_base() == TRANS_EDP_BASE) ? TRANS_EDP_CONF : TRANS_A_CONF;
+    return (mmio_r(conf) & 0x80000000u) ? 1 : 0;
+}
 
 /* ---- the real thing: re-point the display at OUR framebuffer ------------
  * PLANE_SURF is special. Every other plane register is double-buffered and
@@ -308,7 +381,7 @@ int intel_ggtt_map(u32 gfx_page, u32 phys_addr)
     if (!ggtt) return 0;
     if (gfx_page * 8u >= ggtt) return 0;      /* past the end of the table */
 
-    volatile u32 *pte = (volatile u32 *)(mmio + GGTT_OFFSET + gfx_page * 8u);
+    volatile u32 *pte = (volatile u32 *)(mmio + (uptr)GGTT_OFFSET + (uptr)gfx_page * 8u);
     pte[0] = (phys_addr & 0xFFFFF000u) | 1u;  /* address | present */
     pte[1] = 0;                                /* HAW=39 on a client part */
     return 1;
@@ -321,14 +394,31 @@ int intel_ggtt_map(u32 gfx_page, u32 phys_addr)
 static int reg_lo(u32 off) { return (int)(mmio_r(off) & 0x1FFF) + 1; }
 static int reg_hi(u32 off) { return (int)((mmio_r(off) >> 16) & 0x1FFF) + 1; }
 
-int intel_htotal(void)   { return reg_hi(HTOTAL_A); }
-int intel_hactive(void)  { return reg_lo(HTOTAL_A); }
-int intel_vtotal(void)   { return reg_hi(VTOTAL_A); }
-int intel_vactive(void)  { return reg_lo(VTOTAL_A); }
-int intel_hsync_start(void) { return reg_lo(HSYNC_A); }
-int intel_hsync_end(void)   { return reg_hi(HSYNC_A); }
-int intel_vsync_start(void) { return reg_lo(VSYNC_A); }
-int intel_vsync_end(void)   { return reg_hi(VSYNC_A); }
+/* Which transcoder is actually driving the display?
+ *
+ * TRANS_DDI_FUNC_CTL_EDP bit 31 says the eDP transcoder is enabled, and bits
+ * [12:14] say which pipe feeds it. If it is on, its timing block is the one
+ * that matters. Otherwise fall back to transcoder A. Asking the hardware
+ * beats assuming, and on this laptop the two answers differ completely. */
+static u32 trans_base(void)
+{
+    u32 edp = mmio_r(TRANS_DDI_EDP);
+    if (edp & 0x80000000u) return TRANS_EDP_BASE;
+    return TRANS_A_BASE;
+}
+
+int intel_transcoder_is_edp(void) { return trans_base() == TRANS_EDP_BASE; }
+
+int intel_htotal(void)   { return reg_hi(trans_base() + TRANS_OFF_HTOTAL); }
+int intel_hactive(void)  { return reg_lo(trans_base() + TRANS_OFF_HTOTAL); }
+int intel_vtotal(void)   { return reg_hi(trans_base() + TRANS_OFF_VTOTAL); }
+int intel_vactive(void)  { return reg_lo(trans_base() + TRANS_OFF_VTOTAL); }
+int intel_hsync_start(void) { return reg_lo(trans_base() + TRANS_OFF_HSYNC); }
+int intel_hsync_end(void)   { return reg_hi(trans_base() + TRANS_OFF_HSYNC); }
+int intel_vsync_start(void) { return reg_lo(trans_base() + TRANS_OFF_VSYNC); }
+int intel_vsync_end(void)   { return reg_hi(trans_base() + TRANS_OFF_VSYNC); }
+int intel_hblank_start(void){ return reg_lo(trans_base() + TRANS_OFF_HBLANK); }
+int intel_vblank_start(void){ return reg_lo(trans_base() + TRANS_OFF_VBLANK); }
 
 /* Refresh rate, derived rather than guessed.
  *
@@ -389,7 +479,7 @@ static int gmbus_wait(u32 bit, int want)
 /* Read `len` bytes of EDID into our buffer using one pin pair. Gen9 numbers
  * the DDI pin pairs 1..4; which one the panel is on is not knowable without
  * ACPI, so the caller tries each. */
-static int gmbus_read_edid(int pin, u32 dest, int len)
+static int gmbus_read_edid(int pin, uptr dest, int len)
 {
     if (!intel_present()) return 0;
 
@@ -407,7 +497,7 @@ static int gmbus_read_edid(int pin, u32 dest, int len)
         if (!gmbus_wait(GMBUS_HW_RDY, 1)) { mmio_w(GMBUS0, 0); return 0; }
         u32 v = mmio_r(GMBUS3);
         for (int b = 0; b < 4 && got < len; b++, got++)
-            *(volatile u8 *)(uptr)(dest + (u32)got) = (u8)((v >> (b * 8)) & 0xFF);
+            *(volatile u8 *)(dest + (uptr)got) = (u8)((v >> (b * 8)) & 0xFF);
     }
 
     mmio_w(GMBUS1, GMBUS_SW_RDY | GMBUS_CYCLE_STOP);
@@ -416,13 +506,16 @@ static int gmbus_read_edid(int pin, u32 dest, int len)
     return got == len;
 }
 
-#define EDID_BUF 0x0C980000u
+/* Where a 128-byte EDID lands. In the kernel this is fixed physical scratch;
+ * a host harness has no such address and supplies its own buffer instead. */
+static uptr edid_buf = 0x0C980000u;
+void intel_set_edid_buffer(uptr p) { if (p) edid_buf = p; }
 
 /* An EDID always begins 00 FF FF FF FF FF FF 00. That fixed header is how we
  * know we read a display and not an empty bus. */
-static int edid_valid(u32 buf)
+static int edid_valid(uptr buf)
 {
-    volatile u8 *e = (volatile u8 *)(uptr)buf;
+    volatile u8 *e = (volatile u8 *)buf;
     if (e[0] != 0x00 || e[7] != 0x00) return 0;
     for (int i = 1; i <= 6; i++) if (e[i] != 0xFF) return 0;
     u8 sum = 0;
@@ -436,8 +529,8 @@ int intel_read_edid(void)
 {
     if (!intel_present()) return 0;
     for (int pin = 1; pin <= 4; pin++) {
-        if (!gmbus_read_edid(pin, EDID_BUF, 128)) continue;
-        if (!edid_valid(EDID_BUF)) continue;
+        if (!gmbus_read_edid(pin, edid_buf, 128)) continue;
+        if (!edid_valid(edid_buf)) continue;
         edid_pin = pin;
         return pin;
     }
@@ -448,7 +541,7 @@ int intel_edid_pin(void)  { return edid_pin; }
 int intel_edid_byte(int i)
 {
     if (i < 0 || i >= 128) return 0;
-    return (int)*(volatile u8 *)(uptr)(EDID_BUF + (u32)i);
+    return (int)*(volatile u8 *)(edid_buf + (uptr)i);
 }
 
 /* The three manufacturer letters are packed five bits each, big endian, in
@@ -603,3 +696,110 @@ u32 intel_watermark(int level)
     return mmio_r(PLANE_WM_1_A(level));
 }
 u32 intel_ddi_func_ctl(void) { return mmio_r(TRANS_DDI_EDP); }
+
+/* ==== the DPLLs =========================================================
+ * This is the part a real modesetting driver lives or dies on, and the part
+ * that could not be developed at all until the host harness made the registers
+ * readable in milliseconds instead of minutes.
+ *
+ * Skylake-class hardware has four shared DPLLs. DPLL0 doubles as the source
+ * for the core display clock, so it is usually already running; the others are
+ * assigned to whichever port needs them. Two registers configure them all:
+ *
+ *   DPLL_CTRL1  six bits per DPLL: an override enable, a link-rate index, a
+ *               spread-spectrum bit, and a bit selecting HDMI mode (where the
+ *               frequency comes from CFGCR1/2 instead of the rate table)
+ *   DPLL_CTRL2  which DPLL each DDI port takes its clock from
+ *   DPLL_STATUS one lock bit per DPLL, and lock is the thing you WAIT for
+ *
+ * Reading these back from a working panel is how you learn what a correct
+ * configuration looks like before trying to produce one. On this laptop DPLL0
+ * is locked and DPLL_CTRL1 = 0x4C3, which decodes to link rate index 1. */
+#define DPLL_CTRL1      0x6C058
+#define DPLL_CTRL2      0x6C05C
+#define DPLL_STATUS     0x6C060
+#define DPLL_CFGCR1(p)  (0x6C040 + (p) * 8)   /* HDMI mode: the divider     */
+#define DPLL_CFGCR2(p)  (0x6C044 + (p) * 8)
+#define LCPLL1_CTL      0x46010
+#define LCPLL2_CTL      0x46014
+#define CDCLK_CTL       0x46000
+
+u32 intel_dpll_ctrl1(void)  { return mmio_r(DPLL_CTRL1); }
+u32 intel_dpll_ctrl2(void)  { return mmio_r(DPLL_CTRL2); }
+u32 intel_dpll_status(void) { return mmio_r(DPLL_STATUS); }
+u32 intel_cdclk_ctl(void)   { return mmio_r(CDCLK_CTL); }
+u32 intel_lcpll1(void)      { return mmio_r(LCPLL1_CTL); }
+
+u32 intel_dpll_cfgcr1(int pll)
+{
+    if (pll < 0 || pll > 3) return 0;
+    return mmio_r(DPLL_CFGCR1(pll));
+}
+
+u32 intel_dpll_cfgcr2(int pll)
+{
+    if (pll < 0 || pll > 3) return 0;
+    return mmio_r(DPLL_CFGCR2(pll));
+}
+
+/* Is this DPLL locked? Every modeset sequence ends by waiting on this bit,
+ * and a driver that does not wait produces a black screen intermittently -
+ * the worst possible failure mode, because it looks like it works. */
+int intel_dpll_locked(int pll)
+{
+    if (pll < 0 || pll > 3) return 0;
+    return (mmio_r(DPLL_STATUS) >> (pll * 8)) & 1;
+}
+
+/* The six-bit configuration field for one DPLL out of DPLL_CTRL1. */
+int intel_dpll_link_rate(int pll)
+{
+    if (pll < 0 || pll > 3) return -1;
+    u32 f = (mmio_r(DPLL_CTRL1) >> (pll * 6)) & 0x3F;
+    if (!(f & 1)) return -1;                 /* override not enabled */
+    return (int)((f >> 1) & 0x7);
+}
+
+int intel_dpll_ssc(int pll)
+{
+    if (pll < 0 || pll > 3) return 0;
+    return (int)((mmio_r(DPLL_CTRL1) >> (pll * 6 + 4)) & 1);
+}
+
+int intel_dpll_is_hdmi(int pll)
+{
+    if (pll < 0 || pll > 3) return 0;
+    return (int)((mmio_r(DPLL_CTRL1) >> (pll * 6 + 5)) & 1);
+}
+
+/* Which DPLL feeds a given DDI port, from DPLL_CTRL2. Three bits of clock
+ * select per port plus a "select override" bit, and a per-port clock-off bit
+ * at the bottom of each field. */
+int intel_ddi_clock_select(int ddi)
+{
+    if (ddi < 0 || ddi > 4) return -1;
+    u32 v = mmio_r(DPLL_CTRL2);
+    if ((v >> (ddi * 3 + 15)) & 1) { }        /* select override, informational */
+    return (int)((v >> (ddi * 3 + 1)) & 0x3);
+}
+
+int intel_ddi_clock_off(int ddi)
+{
+    if (ddi < 0 || ddi > 4) return 1;
+    return (int)((mmio_r(DPLL_CTRL2) >> (ddi + 15)) & 1);
+}
+
+/* The link rate index in DPLL_CTRL1 is not a frequency, it is a table entry.
+ * These are the symbol clocks in units of 10 kHz, from the Skylake PRM. */
+u32 intel_dpll_rate_khz(int idx)
+{
+    switch (idx) {
+        case 0: return 2700000;   /* DP 5.4 GHz  */
+        case 1: return 1350000;   /* DP 2.7 GHz  */
+        case 2: return  810000;   /* DP 1.62 GHz */
+        case 3: return 1620000;   /* DP 3.24 GHz */
+        case 4: return 1080000;   /* DP 2.16 GHz */
+        case 5: return 2160000;   /* DP 4.32 GHz */
+    }
+    return 0;
+}
