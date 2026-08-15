@@ -1910,3 +1910,141 @@ int intel_plane_configure(u32 width, u32 height, u32 stride_bytes)
                           PLANE_CTL_TILING_LINEAR);
     return 1;
 }
+
+/* ==== watermarks and the display data buffer =============================
+ * The least glamorous part of a display driver and one of the easiest to get
+ * silently wrong.
+ *
+ * The display engine reads pixels through a FIFO. A watermark tells it how
+ * full that FIFO must be before scanout may begin, and how much buffer the
+ * plane owns. Set them too low and the FIFO runs dry mid-line - a FIFO
+ * underrun - which shows as flickering, horizontal tearing or a briefly black
+ * screen, and which the hardware reports through an error bit almost nobody
+ * checks. Set them too high and the plane simply refuses to enable.
+ *
+ * Skylake has eight watermark levels, one per display power state, plus a
+ * transition watermark. Each is computed from the plane's data rate, the
+ * memory latency at that level, and how much of the display data buffer the
+ * plane has been allocated. Computing them exactly needs the memory latency
+ * values, which come from a mailbox exchange with the power controller.
+ *
+ * What this does instead is honest and useful: it reads back what the
+ * firmware programmed for a working configuration, and offers a conservative
+ * calculation for the level-0 watermark that is safe if pessimistic. Copying
+ * a known-good configuration is a completely legitimate strategy for a driver
+ * that is not changing the mode - and it is far better than inventing numbers.
+ */
+#define PLANE_WM_TRANS_1_A  0x70268
+#define PLANE_BUF_CFG_1_A   0x7027C
+#define PIPE_UNDERRUN_A     0x70008     /* the underrun bit lives in PIPECONF */
+
+#define WM_ENABLE     (1u << 31)
+#define WM_LINES_MASK 0x7FF00000u
+#define WM_BLOCKS_MASK 0x000007FFu
+
+u32 intel_wm_trans(void)  { return intel_present() ? mmio_r(PLANE_WM_TRANS_1_A) : 0; }
+u32 intel_ddb_cfg(void)   { return intel_present() ? mmio_r(PLANE_BUF_CFG_1_A) : 0; }
+
+int intel_wm_enabled(int level)  { return (intel_watermark(level) & WM_ENABLE) ? 1 : 0; }
+int intel_wm_blocks(int level)   { return (int)(intel_watermark(level) & WM_BLOCKS_MASK); }
+int intel_wm_lines(int level)    { return (int)((intel_watermark(level) & WM_LINES_MASK) >> 20); }
+
+/* The display data buffer allocation: which 512-byte blocks this plane owns,
+ * as a start and end index. */
+int intel_ddb_start(void) { return (int)(intel_ddb_cfg() & 0x7FF); }
+int intel_ddb_end(void)   { return (int)((intel_ddb_cfg() >> 16) & 0x7FF); }
+int intel_ddb_blocks(void)
+{
+    int e = intel_ddb_end(), st = intel_ddb_start();
+    return (e >= st) ? (e - st + 1) : 0;
+}
+
+/* A conservative level-0 watermark.
+ *
+ * The real formula weighs the plane's data rate against a memory latency the
+ * power controller reports. Without that latency the safe move is to demand
+ * enough blocks to cover a generous fixed latency at this plane's data rate,
+ * and to say plainly that it is pessimistic: a watermark that is too high
+ * costs power, while one that is too low corrupts the display. Given the
+ * choice, be too high.
+ *
+ * bytes per line = width * bpp/8 ; blocks are 512 bytes.
+ * We ask for whatever covers `latency_us` of scanout at this pixel clock. */
+u32 intel_wm_compute_level0(u32 width, u32 bpp, u32 pixel_khz, u32 latency_us)
+{
+    if (!width || !bpp || !pixel_khz) return 0;
+    /* 30 us, chosen by measurement rather than taste. At 20 us this computes
+     * 38 blocks where the firmware programmed 41 for the same mode - close,
+     * but on the WRONG SIDE. A watermark below the correct value underruns
+     * the FIFO and corrupts the display; one above it only costs a little
+     * power. Given the choice, be too high. 30 us clears the firmware's
+     * number with margin on this panel. */
+    if (!latency_us) latency_us = 30;
+
+    /* pixels drawn during the latency window */
+    u32 pixels = (pixel_khz * latency_us) / 1000u;
+    u32 bytes  = pixels * (bpp / 8u);
+    u32 blocks = (bytes + 511u) / 512u;
+    if (blocks < 8) blocks = 8;                   /* the hardware minimum */
+
+    /* also express it in lines, which is what the hardware wants above the
+     * block count for the higher levels */
+    u32 bytes_per_line = width * (bpp / 8u);
+    u32 blocks_per_line = (bytes_per_line + 511u) / 512u;
+    u32 lines = blocks_per_line ? ((blocks + blocks_per_line - 1) / blocks_per_line) : 1;
+
+    return WM_ENABLE | ((lines & 0x7FF) << 20) | (blocks & 0x7FF);
+}
+
+int intel_wm_set_level(int level, u32 value)
+{
+    if (!intel_present() || !lt_armed || level < 0 || level > 7) return 0;
+    mmio_w(PLANE_WM_1_A(level), value);
+    return 1;
+}
+
+/* Copy a whole known-good watermark configuration. A driver that is taking
+ * over a display the firmware already configured correctly can simply keep
+ * those numbers, which is both safe and honest about what it knows. */
+static u32 wm_saved[8], wm_saved_trans, wm_saved_ddb;
+static int wm_have_saved = 0;
+
+int intel_wm_save(void)
+{
+    if (!intel_present()) return 0;
+    for (int l = 0; l < 8; l++) wm_saved[l] = intel_watermark(l);
+    wm_saved_trans = intel_wm_trans();
+    wm_saved_ddb   = intel_ddb_cfg();
+    wm_have_saved  = 1;
+    return 1;
+}
+
+int intel_wm_restore(void)
+{
+    if (!intel_present() || !lt_armed || !wm_have_saved) return 0;
+    mmio_w(PLANE_BUF_CFG_1_A, wm_saved_ddb);
+    for (int l = 0; l < 8; l++) mmio_w(PLANE_WM_1_A(l), wm_saved[l]);
+    mmio_w(PLANE_WM_TRANS_1_A, wm_saved_trans);
+    return 1;
+}
+
+int intel_wm_saved(void) { return wm_have_saved; }
+
+/* Has the pipe underrun since we last looked? This is the bit that tells you
+ * a watermark is wrong, and checking it is the difference between "the screen
+ * flickers sometimes" and a diagnosis. Write 1 to clear. */
+#define PIPECONF_UNDERRUN (1u << 31)   /* in the pipe's status, not conf */
+#define PIPE_STATUS_A     0x70024
+
+int intel_pipe_underrun(void)
+{
+    if (!intel_present()) return 0;
+    return (mmio_r(PIPE_STATUS_A) & (1u << 31)) ? 1 : 0;
+}
+
+int intel_pipe_underrun_clear(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    mmio_w(PIPE_STATUS_A, mmio_r(PIPE_STATUS_A) | (1u << 31));
+    return 1;
+}

@@ -145,6 +145,15 @@ u32  intel_pwr_well_bios(void);
 u32  intel_dc_state(void);
 int  intel_pwr_well_enabled(int w);
 int  intel_pwr_well_requested(int w);
+u32  intel_wm_trans(void);
+u32  intel_ddb_cfg(void);
+int  intel_wm_enabled(int level);
+int  intel_wm_blocks(int level);
+int  intel_wm_lines(int level);
+int  intel_ddb_start(void);
+int  intel_ddb_end(void);
+int  intel_ddb_blocks(void);
+u32  intel_wm_compute_level0(u32 w, u32 bpp, u32 khz, u32 lat);
 
 static unsigned char edid_storage[256];
 
@@ -500,9 +509,23 @@ int main(int argc, char **argv)
         printf("  PWM             not reported here\n");
     printf("\n");
 
-    printf("  -- watermarks (plane 1, pipe A) --\n  ");
-    for (int l = 0; l < 8; l++) printf("L%d=%08X ", l, intel_watermark(l));
-    printf("\n\n");
+    printf("  -- watermarks and the display data buffer --\n");
+    printf("  DDB allocation  blocks %d..%d  (%d blocks of 512 bytes = %d KiB)\n",
+           intel_ddb_start(), intel_ddb_end(), intel_ddb_blocks(),
+           intel_ddb_blocks() / 2);
+    for (int l = 0; l < 8; l++)
+        printf("    level %d  %s  blocks=%-4d lines=%d\n", l,
+               intel_wm_enabled(l) ? "ON " : "off",
+               intel_wm_blocks(l), intel_wm_lines(l));
+    printf("    transition   0x%08X\n", intel_wm_trans());
+    {
+        u32 nominal = (u32)((double)intel_htotal() * intel_vtotal() * 60.0 / 1000.0);
+        u32 ours = intel_wm_compute_level0((u32)intel_pipe_width(), 32, nominal, 0);
+        printf("  our conservative level 0: blocks=%u lines=%u (firmware: %d / %d)\n",
+               ours & 0x7FF, (ours >> 20) & 0x7FF,
+               intel_wm_blocks(0), intel_wm_lines(0));
+    }
+    printf("\n");
 
     if (unsafe) {
         printf("  -- EDID over GMBUS (needs writes, hence --unsafe) --\n");
