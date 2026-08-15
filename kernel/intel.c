@@ -1740,3 +1740,173 @@ int intel_panel_backlight_enable(int on)
     mmio_w(PP_CONTROL, PP_UNLOCK_KEY | v);
     return 1;
 }
+
+/* ==== power wells and DC states ==========================================
+ * The first thing a modeset touches, and the reason a driver that skips it
+ * reads zeroes from perfectly good registers.
+ *
+ * Modern Intel display hardware is split into power wells that the hardware
+ * turns off when nothing needs them. A register inside a well that is down
+ * reads back as zero and swallows writes - no fault, no error bit, just
+ * silence. So "the register is zero" is ambiguous until you know the well is
+ * up, and that ambiguity has cost people days.
+ *
+ * On top of that sit the DC states: deeper sleep modes the display engine
+ * enters when the pipes are idle. DC5 and DC6 must be blocked before touching
+ * anything, or the hardware may drop into one mid-sequence and lose what was
+ * just written.
+ *
+ * PWR_WELL_CTL is four copies of the same register - one per requester (BIOS,
+ * driver, KVMR, debug). A well stays up while ANY requester wants it, which
+ * is why the driver has its own copy and must not write the BIOS's.
+ */
+#define PWR_WELL_CTL_BIOS   0x45400
+#define PWR_WELL_CTL_DRIVER 0x45404
+#define PWR_WELL_CTL_KVMR   0x45408
+#define PWR_WELL_CTL_DEBUG  0x4540C
+#define DC_STATE_EN         0x45504
+
+#define DC_STATE_DISABLE        0u
+#define DC_STATE_EN_UPTO_DC5    (1u << 0)
+#define DC_STATE_EN_UPTO_DC6    (2u << 0)
+#define DC_STATE_EN_DC9         (1u << 3)
+
+/* request is the odd bit of the pair, state is the even one */
+#define PW_REQUEST(w)  (1u << ((w) * 2 + 1))
+#define PW_STATE(w)    (1u << ((w) * 2))
+
+u32 intel_pwr_well_driver(void) { return intel_present() ? mmio_r(PWR_WELL_CTL_DRIVER) : 0; }
+u32 intel_pwr_well_bios(void)   { return intel_present() ? mmio_r(PWR_WELL_CTL_BIOS) : 0; }
+u32 intel_dc_state(void)        { return intel_present() ? mmio_r(DC_STATE_EN) : 0; }
+
+int intel_pwr_well_enabled(int well)
+{
+    if (!intel_present() || well < 0 || well > 3) return 0;
+    return (mmio_r(PWR_WELL_CTL_DRIVER) & PW_STATE(well)) ? 1 : 0;
+}
+
+int intel_pwr_well_requested(int well)
+{
+    if (!intel_present() || well < 0 || well > 3) return 0;
+    return (mmio_r(PWR_WELL_CTL_DRIVER) & PW_REQUEST(well)) ? 1 : 0;
+}
+
+/* Ask for a well and wait for the hardware to say it is actually up. The wait
+ * is not optional: the request bit is a request, and the state bit is the
+ * answer, and they are not the same thing. */
+int intel_pwr_well_enable(int well)
+{
+    if (!intel_present() || !lt_armed || well < 0 || well > 3) return 0;
+    u32 v = mmio_r(PWR_WELL_CTL_DRIVER);
+    mmio_w(PWR_WELL_CTL_DRIVER, v | PW_REQUEST(well));
+
+    u32 t0 = idt_ticks();
+    while (idt_ticks() - t0 < 3) {          /* the PRM allows 20 ms */
+        if (mmio_r(PWR_WELL_CTL_DRIVER) & PW_STATE(well)) return 1;
+    }
+    return (mmio_r(PWR_WELL_CTL_DRIVER) & PW_STATE(well)) ? 1 : 0;
+}
+
+int intel_pwr_well_disable(int well)
+{
+    if (!intel_present() || !lt_armed || well < 0 || well > 3) return 0;
+    u32 v = mmio_r(PWR_WELL_CTL_DRIVER);
+    mmio_w(PWR_WELL_CTL_DRIVER, v & ~PW_REQUEST(well));
+    return 1;
+}
+
+/* Block the deep sleep states for the duration of a modeset. */
+int intel_dc_states_block(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    mmio_w(DC_STATE_EN, DC_STATE_DISABLE);
+    return mmio_r(DC_STATE_EN) == DC_STATE_DISABLE;
+}
+
+/* ==== the ordered modeset ================================================
+ * Everything in this file exists to make this function possible, and its
+ * value is almost entirely in the ORDER. Each step depends on the one before
+ * having actually completed, which is why every one of them waits rather than
+ * assuming.
+ *
+ * This is the sequence, and where each piece lives:
+ *
+ *    1. block DC states, bring up the power wells        (above)
+ *    2. panel VDD on, so AUX works                       (panel power)
+ *    3. read the panel's DPCD - what can it actually do? (AUX)
+ *    4. choose a link rate that fits the mode AND the panel   (DPLL)
+ *    5. program and lock the DPLL                        (DPLL)
+ *    6. point the DDI at that DPLL                       (DPLL)
+ *    7. program the transcoder timings                   (below)
+ *    8. link training                                    (link training)
+ *    9. enable the transcoder, then the pipe             (below)
+ *   10. configure and enable the plane                   (plane)
+ *   11. panel power on, wait T1+T3, backlight on         (panel power)
+ *
+ * Steps 1-8 and 11 are implemented and their registers verified against the
+ * live hardware. Step 7 and 9 are below. What is NOT here is the DDI buffer
+ * translation table for step 8's drive settings, which is SKU-specific.
+ */
+int intel_set_timings(u32 hactive, u32 hblank_start, u32 hsync_start, u32 hsync_end,
+                      u32 htotal,
+                      u32 vactive, u32 vblank_start, u32 vsync_start, u32 vsync_end,
+                      u32 vtotal)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    u32 base = trans_base();
+
+    /* every field is stored minus one, and start goes in the low half */
+    mmio_w(base + TRANS_OFF_HTOTAL, ((htotal - 1) << 16) | (hactive - 1));
+    mmio_w(base + TRANS_OFF_HBLANK, ((htotal - 1) << 16) | (hblank_start - 1));
+    mmio_w(base + TRANS_OFF_HSYNC,  ((hsync_end - 1) << 16) | (hsync_start - 1));
+    mmio_w(base + TRANS_OFF_VTOTAL, ((vtotal - 1) << 16) | (vactive - 1));
+    mmio_w(base + TRANS_OFF_VBLANK, ((vtotal - 1) << 16) | (vblank_start - 1));
+    mmio_w(base + TRANS_OFF_VSYNC,  ((vsync_end - 1) << 16) | (vsync_start - 1));
+
+    /* the composed image size is a PIPE register, not a transcoder one */
+    mmio_w(PIPE_SRCSZ_A, ((hactive - 1) << 16) | (vactive - 1));
+    return 1;
+}
+
+#define TRANS_CONF_ENABLE  (1u << 31)
+#define TRANS_CONF_STATE   (1u << 30)
+
+/* Enable the transcoder and wait for it to actually start. The state bit
+ * lagging the enable bit is normal; treating them as the same thing is how a
+ * driver ends up configuring a plane against a pipe that is not running. */
+int intel_transcoder_enable(int on)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    u32 conf = (trans_base() == TRANS_EDP_BASE) ? TRANS_EDP_CONF : TRANS_A_CONF;
+
+    u32 v = mmio_r(conf);
+    if (on) mmio_w(conf, v | TRANS_CONF_ENABLE);
+    else    mmio_w(conf, v & ~TRANS_CONF_ENABLE);
+
+    u32 t0 = idt_ticks();
+    while (idt_ticks() - t0 < 10) {          /* 100 ms is generous */
+        int state = (mmio_r(conf) & TRANS_CONF_STATE) ? 1 : 0;
+        if (state == (on ? 1 : 0)) return 1;
+    }
+    return 0;
+}
+
+/* Configure the primary plane for a linear 32-bit surface. Kept separate from
+ * the arming write so a caller can set everything up and then flip. */
+#define PLANE_CTL_FORMAT_XRGB8888  (4u << 24)
+#define PLANE_CTL_ORDER_RGBX       (1u << 20)
+#define PLANE_CTL_TILING_LINEAR    (0u << 10)
+
+int intel_plane_configure(u32 width, u32 height, u32 stride_bytes)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (stride_bytes & 63) return 0;
+
+    mmio_w(PLANE_OFFSET_1_A, 0);
+    mmio_w(PLANE_POS_1_A, 0);
+    mmio_w(PLANE_SIZE_1_A, ((height - 1) << 16) | (width - 1));
+    mmio_w(PLANE_STRIDE_1_A, stride_bytes / 64);     /* linear: 64-byte units */
+    mmio_w(PLANE_CTL_1_A, PLANE_CTL_ENABLE | PLANE_CTL_FORMAT_XRGB8888 |
+                          PLANE_CTL_TILING_LINEAR);
+    return 1;
+}

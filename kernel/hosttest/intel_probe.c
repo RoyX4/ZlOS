@@ -140,6 +140,11 @@ int  intel_pp_t9(void);
 int  intel_pp_t10(void);
 int  intel_pp_t11_t12(void);
 int  intel_pp_sequencing(void);
+u32  intel_pwr_well_driver(void);
+u32  intel_pwr_well_bios(void);
+u32  intel_dc_state(void);
+int  intel_pwr_well_enabled(int w);
+int  intel_pwr_well_requested(int w);
 
 static unsigned char edid_storage[256];
 
@@ -460,6 +465,15 @@ int main(int argc, char **argv)
         }
         printf("\n");
     }
+
+    printf("  -- power wells (a register in a down well reads ZERO) --\n");
+    printf("  PWR_WELL_CTL_DRIVER 0x%08X\n", intel_pwr_well_driver());
+    printf("  PWR_WELL_CTL_BIOS   0x%08X\n", intel_pwr_well_bios());
+    printf("  DC_STATE_EN         0x%08X\n", intel_dc_state());
+    for (int w = 0; w < 3; w++)
+        printf("    well %d  requested=%d  actually up=%d\n",
+               w, intel_pwr_well_requested(w), intel_pwr_well_enabled(w));
+    printf("\n");
 
     printf("  -- panel power sequencing (delays in 100us units) --\n");
     printf("  PP_STATUS       0x%08X   on=%d  sequencing=%d\n",
