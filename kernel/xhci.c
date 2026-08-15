@@ -1026,6 +1026,7 @@ int xhci_enumerate(int port)
     return slot;
 }
 
+
 int xhci_cur_slot(void)  { return cur_slot;  }
 int xhci_cur_speed(void) { return cur_speed; }
 
@@ -1452,3 +1453,268 @@ int xhci_kbd_report(int i)
     if (i < 0 || i > 7) return 0;
     return (int)*(volatile u8 *)(KBD_REPORT + (u32)i);
 }
+
+/* ==== USB mass storage: Bulk-Only Transport ==============================
+ * A USB stick is not a block device the way NVMe is. It is a SCSI target at
+ * the end of a USB pipe, and the transport that carries SCSI over USB is
+ * deliberately minimal - three steps, no interrupts, no queueing:
+ *
+ *   CBW   a 31-byte Command Block Wrapper on the bulk OUT endpoint, carrying
+ *         a SCSI command inside it
+ *   data  however many bytes the command moves, on bulk IN or bulk OUT
+ *   CSW   a 13-byte Command Status Wrapper on bulk IN, saying whether it
+ *         worked
+ *
+ * The SCSI commands themselves are the same ones a 1986 hard disk spoke:
+ * INQUIRY to ask what it is, READ CAPACITY to ask how big, READ(10) to fetch
+ * blocks. That is not an accident - it is why a USB stick works on anything.
+ *
+ * Everything below reuses the ring and context machinery the keyboard already
+ * proved. The only genuinely new piece is bulk endpoints, which differ from
+ * the interrupt endpoint only in their type field and in having no polling
+ * interval.
+ */
+#define MSC_IN_RING(s)   (0x0E500000u + (u32)(s) * RING_STRIDE)
+#define MSC_OUT_RING(s)  (0x0E508000u + (u32)(s) * RING_STRIDE)
+#define MSC_CBW          0x0E510000u
+#define MSC_CSW          0x0E510200u
+#define MSC_DATA         0x0E511000u
+#define MSC_DATA_MAX     4096u
+
+#define EPTYPE_BULK_OUT  2
+#define EPTYPE_BULK_IN   6
+
+static int msc_slot = 0, msc_iface = 0;
+static int msc_in_dci = 0, msc_out_dci = 0;
+static int msc_in_mps = 512, msc_out_mps = 512;
+static u32 msc_in_enq = 0, msc_in_cyc = 1;
+static u32 msc_out_enq = 0, msc_out_cyc = 1;
+static u32 msc_tag = 1;
+static int msc_ready = 0;
+static u32 msc_blocks = 0, msc_blocksize = 512;
+
+/* Add both bulk endpoints to a configured device in one Configure Endpoint.
+ * Doing it as one command matters: each one changes Context Entries, and two
+ * separate commands would have the second overwrite the first's idea of how
+ * many contexts are valid. */
+static int configure_bulk(int slot)
+{
+    ring_init(MSC_IN_RING(slot));
+    ring_init(MSC_OUT_RING(slot));
+    msc_in_enq = 0; msc_in_cyc = 1;
+    msc_out_enq = 0; msc_out_cyc = 1;
+
+    int top = (msc_in_dci > msc_out_dci) ? msc_in_dci : msc_out_dci;
+
+    zero_mem(CTX_INPUT, 33u * (u32)xctxsize);
+    ctx_set(CTX_INPUT, 0, 1, (1u << 0) | (1u << msc_in_dci) | (1u << msc_out_dci));
+
+    u32 slot_dw0 = ctx_get(CTX_DEVICE(slot), 0, 0);
+    slot_dw0 = (slot_dw0 & 0x07FFFFFFu) | ((u32)top << 27);
+    ctx_set(CTX_INPUT, 1, 0, slot_dw0);
+    ctx_set(CTX_INPUT, 1, 1, ctx_get(CTX_DEVICE(slot), 0, 1));
+
+    int ic_in = msc_in_dci + 1;
+    ctx_set(CTX_INPUT, ic_in, 0, 0);                  /* bulk has no interval */
+    ctx_set(CTX_INPUT, ic_in, 1, (3u << 1) | ((u32)EPTYPE_BULK_IN << 3) | ((u32)msc_in_mps << 16));
+    ctx_set(CTX_INPUT, ic_in, 2, MSC_IN_RING(slot) | 1u);
+    ctx_set(CTX_INPUT, ic_in, 3, 0);
+    ctx_set(CTX_INPUT, ic_in, 4, (u32)msc_in_mps);
+
+    int ic_out = msc_out_dci + 1;
+    ctx_set(CTX_INPUT, ic_out, 0, 0);
+    ctx_set(CTX_INPUT, ic_out, 1, (3u << 1) | ((u32)EPTYPE_BULK_OUT << 3) | ((u32)msc_out_mps << 16));
+    ctx_set(CTX_INPUT, ic_out, 2, MSC_OUT_RING(slot) | 1u);
+    ctx_set(CTX_INPUT, ic_out, 3, 0);
+    ctx_set(CTX_INPUT, ic_out, 4, (u32)msc_out_mps);
+
+    u32 trb = cmd_submit((u64)CTX_INPUT, 0, TRB_CONFIGURE_EP, (u32)slot << 24);
+    u32 status = 0;
+    if (!cmd_wait(trb, &status, 0, 5000000)) return 0;
+    return ((status >> 24) & 0xFF) == 1;
+}
+
+/* One bulk transfer: a single Normal TRB with interrupt-on-completion. Bulk
+ * endpoints have no schedule, so this is as simple as USB gets. */
+static int bulk_xfer(int slot, int dci, u32 buf, u32 len, int is_in)
+{
+    u32 ring = is_in ? MSC_IN_RING(slot) : MSC_OUT_RING(slot);
+    u32 *enq = is_in ? &msc_in_enq : &msc_out_enq;
+    u32 *cyc = is_in ? &msc_in_cyc : &msc_out_cyc;
+
+    trb_write(ring, *enq, (u64)buf, len, (TRB_NORMAL << 10) | (1u << 5) | *cyc);
+    (*enq)++;
+    if (*enq >= RING_TRBS - 1) {
+        trb_write(ring, RING_TRBS - 1, (u64)ring, 0,
+                  (TRB_LINK << 10) | (1u << 1) | *cyc);
+        *enq = 0;
+        *cyc ^= 1;
+    }
+    doorbell((u32)slot, (u32)dci);
+
+    u32 status = 0, ctrl = 0;
+    if (!event_wait(TRB_TRANSFER_EVENT, 0, &status, &ctrl, 20000000)) return 0;
+    int cc = (int)((status >> 24) & 0xFF);
+    if (cc == 1 || cc == 13) return 1;
+    if (cc == 6 || cc == 4) reset_endpoint(slot, dci);   /* stall - recover */
+    return 0;
+}
+
+/* Build a Command Block Wrapper. The signature and the tag are how the device
+ * tells our commands apart from noise, and the tag comes back in the status
+ * wrapper so a reply can be matched to its request. */
+static void build_cbw(u32 data_len, int is_in, const u8 *cdb, int cdb_len)
+{
+    volatile u8 *w = (volatile u8 *)MSC_CBW;
+    for (int i = 0; i < 31; i++) w[i] = 0;
+    volatile u32 *d = (volatile u32 *)MSC_CBW;
+    d[0] = 0x43425355u;               /* 'USBC'                       */
+    d[1] = msc_tag++;                 /* our tag                      */
+    d[2] = data_len;
+    w[12] = is_in ? 0x80 : 0x00;      /* direction                    */
+    w[13] = 0;                        /* LUN 0                        */
+    w[14] = (u8)cdb_len;
+    for (int i = 0; i < cdb_len && i < 16; i++) w[15 + i] = cdb[i];
+}
+
+/* Run one SCSI command through the transport. */
+static int scsi_cmd(const u8 *cdb, int cdb_len, u32 data_len, int is_in)
+{
+    if (!msc_slot) return 0;
+    build_cbw(data_len, is_in, cdb, cdb_len);
+
+    if (!bulk_xfer(msc_slot, msc_out_dci, MSC_CBW, 31, 0)) return 0;
+
+    if (data_len) {
+        if (data_len > MSC_DATA_MAX) return 0;
+        if (is_in) zero_mem(MSC_DATA, data_len);
+        if (!bulk_xfer(msc_slot, is_in ? msc_in_dci : msc_out_dci,
+                       MSC_DATA, data_len, is_in)) return 0;
+    }
+
+    zero_mem(MSC_CSW, 16);
+    if (!bulk_xfer(msc_slot, msc_in_dci, MSC_CSW, 13, 1)) return 0;
+
+    volatile u32 *c = (volatile u32 *)MSC_CSW;
+    if (c[0] != 0x53425355u) return 0;         /* 'USBS' */
+    return (*(volatile u8 *)(MSC_CSW + 12)) == 0;   /* status 0 = good */
+}
+
+int xhci_msc_inquiry(void)
+{
+    u8 cdb[6] = { 0x12, 0, 0, 0, 36, 0 };      /* INQUIRY, 36 bytes */
+    return scsi_cmd(cdb, 6, 36, 1);
+}
+
+int xhci_msc_read_capacity(void)
+{
+    u8 cdb[10] = { 0x25, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    if (!scsi_cmd(cdb, 10, 8, 1)) return 0;
+    /* both fields are BIG endian - SCSI predates the x86 monoculture */
+    volatile u8 *d = (volatile u8 *)MSC_DATA;
+    u32 last = ((u32)d[0] << 24) | ((u32)d[1] << 16) | ((u32)d[2] << 8) | d[3];
+    u32 blen = ((u32)d[4] << 24) | ((u32)d[5] << 16) | ((u32)d[6] << 8) | d[7];
+    msc_blocks    = last + 1;
+    msc_blocksize = blen ? blen : 512;
+    return 1;
+}
+
+int xhci_msc_read_block(u32 lba)
+{
+    u8 cdb[10];
+    for (int i = 0; i < 10; i++) cdb[i] = 0;
+    cdb[0] = 0x28;                              /* READ(10) */
+    cdb[2] = (u8)(lba >> 24); cdb[3] = (u8)(lba >> 16);
+    cdb[4] = (u8)(lba >> 8);  cdb[5] = (u8)lba;
+    cdb[7] = 0; cdb[8] = 1;                     /* one block */
+    return scsi_cmd(cdb, 10, msc_blocksize, 1);
+}
+
+int xhci_msc_byte(int i)
+{
+    if (i < 0 || i >= (int)MSC_DATA_MAX) return 0;
+    return (int)*(volatile u8 *)(MSC_DATA + (u32)i);
+}
+
+u32 xhci_msc_blocks(void)    { return msc_blocks; }
+u32 xhci_msc_blocksize(void) { return msc_blocksize; }
+u32 xhci_msc_capacity_mb(void)
+{
+    u64 bytes = (u64)msc_blocks * (u64)msc_blocksize;
+    return (u32)(bytes >> 20);
+}
+int xhci_msc_ready(void) { return msc_ready; }
+int xhci_msc_slot(void)  { return msc_slot; }
+
+/* Find a bulk-only mass storage device and bring it up. The interface triple
+ * is class 8 (mass storage), subclass 6 (SCSI transparent), protocol 0x50
+ * (bulk-only) - anything else is a different transport we do not speak. */
+int xhci_msc_init(void)
+{
+    if (msc_ready) return msc_slot;
+    if (!xhci_running()) return 0;
+
+    for (int port = 1; port <= xports; port++) {
+        if (!xhci_port_connected(port)) continue;
+        int slot = xhci_enumerate(port);
+        if (!slot || slot >= MAX_SLOTS) continue;
+
+        if (!get_config(slot, 9)) continue;
+        int total = (int)cfg_byte(2) | ((int)cfg_byte(3) << 8);
+        if (total < 9) continue;
+        if (total > CFG_MAX) total = CFG_MAX;
+        if (!get_config(slot, total)) continue;
+
+        int cfgval = (int)cfg_byte(5);
+        int iface = -1, in_ep = 0, out_ep = 0, in_mps = 0, out_mps = 0;
+
+        int off = (int)cfg_byte(0);
+        while (off + 1 < total) {
+            int dlen  = (int)cfg_byte(off);
+            int dtype = (int)cfg_byte(off + 1);
+            if (dlen < 2) break;
+            if (off + dlen > total) break;
+
+            if (dtype == DESC_INTERFACE && dlen >= 9) {
+                int cls  = (int)cfg_byte(off + 5);
+                int sub  = (int)cfg_byte(off + 6);
+                int prot = (int)cfg_byte(off + 7);
+                if (cls == 0x08 && sub == 0x06 && prot == 0x50) {
+                    iface = (int)cfg_byte(off + 2);
+                    in_ep = out_ep = 0;
+                } else if (iface >= 0 && (!in_ep || !out_ep)) {
+                    iface = -1;                 /* a different interface began */
+                }
+            } else if (dtype == DESC_ENDPOINT && dlen >= 7 && iface >= 0) {
+                int addr = (int)cfg_byte(off + 2);
+                int attr = (int)cfg_byte(off + 3);
+                int mps  = (int)cfg_byte(off + 4) |
+                           (((int)cfg_byte(off + 5) & 0x07) << 8);
+                if ((attr & 0x03) == 2) {       /* bulk */
+                    if ((addr & 0x80) && !in_ep)  { in_ep  = addr; in_mps  = mps; }
+                    if (!(addr & 0x80) && !out_ep){ out_ep = addr; out_mps = mps; }
+                }
+            }
+            off += dlen;
+        }
+
+        if (iface < 0 || !in_ep || !out_ep) continue;
+
+        msc_in_dci  = ((in_ep  & 0x0F) * 2) + 1;
+        msc_out_dci = ((out_ep & 0x0F) * 2);
+        if (msc_in_dci < 2 || msc_in_dci > 31)  continue;
+        if (msc_out_dci < 2 || msc_out_dci > 31) continue;
+        if (in_mps  <= 0 || in_mps  > 1024) in_mps  = 512;
+        if (out_mps <= 0 || out_mps > 1024) out_mps = 512;
+        msc_in_mps = in_mps; msc_out_mps = out_mps;
+        msc_slot = slot; msc_iface = iface;
+
+        if (!set_configuration(slot, cfgval)) { msc_slot = 0; continue; }
+        if (!configure_bulk(slot))            { msc_slot = 0; continue; }
+
+        msc_ready = 1;
+        return slot;
+    }
+    return 0;
+}
+

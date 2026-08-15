@@ -328,6 +328,9 @@ fn help() {
     print("    z        the processor: CPUID, topology, caches, TSC clock")
     print("    o        NVMe disk - identify, then write and read a block back")
     print("    +        multitasking - three tasks running beside the shell")
+    print("    *        SMP - wake the other CPU cores with INIT/STARTUP IPIs")
+    print("    /        USB mass storage - SCSI over USB, read a sector")
+    print("    ?        I2C-HID touchpad (real hardware only - QEMU has no LPSS I2C)")
     print("    c        clear the screen")
     print("    r        reboot the machine")
     print("    q        halt the machine")
@@ -1026,6 +1029,140 @@ fn run_command(cmd, arg) {
         return 0
     }
     if cmd == 106 { return usbkey_demo() }   # j - USB keyboard, live
+    if cmd == 63 {                        # ? - the I2C touchpad
+        color(C_CYAN)  print("  I2C-HID touchpad")
+        color(C_GREY)
+        tpi = 0
+        tpfound = 0
+        while tpi < 2 {
+            if i2c_find(tpi) >= 0 {
+                put("    I2C controller ")  put(tpi)
+                put(" at 0x")  hex(i2c_mmio(), 8)
+                put("  COMP_TYPE 0x")  hex(i2c_ct(), 8)
+                if i2c_dw() == 1 {
+                    print("  (DesignWare)")
+                    tpfound = 1
+                } else {
+                    print("  (not a DesignWare core)")
+                }
+            }
+            tpi = tpi + 1
+        }
+        if tpfound == 0 {
+            print("    no Intel LPSS I2C controller here.")
+            print("    QEMU does not emulate one - this needs the real laptop.")
+            return 0
+        }
+        print("    probing the bus for a HID device...")
+        tpa = tp_probe()
+        if tpa < 0 {
+            color(C_RED)  print("    nothing on the bus answered as HID")
+            color(C_GREY)  return 0
+        }
+        color(C_GREEN)
+        put("    HID device at I2C address 0x")  hex(tpa, 2)  print("")
+        color(C_GREY)
+        put("    vendor ")  hex(tp_vid(), 4)
+        put(":")            hex(tp_pid(), 4)
+        put("  version ")   hex(tp_ver(), 4)  print("")
+        put("    max input report ")  put(tp_maxin())
+        put(" bytes, report descriptor ")  put(tp_rdlen())  print(" bytes")
+        print("    touch the pad - reading reports for a few seconds")
+        tpstop = ticks() + 500
+        tpn = 0
+        while ticks() < tpstop {
+            tplen = tp_read()
+            if tplen > 2 {
+                tpn = tpn + 1
+                if tpn < 6 {
+                    put("      report ")  put(tplen)  put(" bytes: ")
+                    tpj = 2
+                    while tpj < 10 { hex(tp_b(tpj), 2)  put(" ")  tpj = tpj + 1 }
+                    print("")
+                }
+            }
+        }
+        put("    reports received: ")  print(tpn)
+        return 0
+    }
+    if cmd == 47 {                        # / - USB mass storage
+        color(C_CYAN)  print("  USB mass storage (SCSI over Bulk-Only Transport)")
+        color(C_GREY)
+        if usb_up() == 0 { }              # make sure the controller is ours
+        mss = msc_up()
+        if mss == 0 {
+            print("    no bulk-only mass storage device on the bus")
+            print("    add -device usb-storage,drive=... to QEMU")
+            return 0
+        }
+        color(C_GREEN)
+        put("    device on slot ")  put(mss)
+        print(" - bulk IN and OUT endpoints configured")
+        color(C_GREY)
+        if msc_inq() == 1 {
+            put("    INQUIRY:  ")
+            mi = 8
+            while mi < 36 { emit(msc_b(mi))  mi = mi + 1 }
+            print("")
+        } else {
+            color(C_RED)  print("    INQUIRY failed")  color(C_GREY)
+        }
+        if msc_cap() == 1 {
+            put("    capacity: ")  put(msc_mb())  put(" MiB in ")
+            put(msc_blocks())  put(" blocks of ")  put(msc_bsize())  print(" bytes")
+        } else {
+            color(C_RED)  print("    READ CAPACITY failed")  color(C_GREY)
+            return 0
+        }
+        if msc_read(0) == 1 {
+            put("    block 0 first bytes: ")
+            mi = 0
+            while mi < 8 { hex(msc_b(mi), 2)  put(" ")  mi = mi + 1 }
+            print("")
+            # a real partitioned stick ends its first sector with 55 AA
+            if msc_b(510) == 85 {
+                if msc_b(511) == 170 {
+                    color(C_GREEN)
+                    print("    boot signature 55 AA - this is a real MBR")
+                    color(C_GREY)
+                }
+            }
+            color(C_GREEN)
+            print("    read a sector off a USB stick with our own driver")
+            color(C_GREY)
+        } else {
+            color(C_RED)  print("    READ(10) of block 0 failed")  color(C_GREY)
+        }
+        return 0
+    }
+    if cmd == 42 {                        # * - wake the other CPU cores
+        color(C_CYAN)  print("  SMP - the other cores")
+        color(C_GREY)
+        put("    ACPI lists ")  put(smp_total())  print(" usable core(s):")
+        smi = 0
+        while smi < smp_total() {
+            put("      core ")  put(smi)
+            put(" has APIC id ")  print(smp_id(smi))
+            smi = smi + 1
+        }
+        put("    trampoline is ")  put(smp_tsz())  print(" bytes, copied to 0x9000")
+        print("    sending INIT then STARTUP to each...")
+        smn = smp_go()
+        put("    cores online now: ")  put(smn)
+        put(" of ")  print(smp_total())
+        if smn > 1 {
+            color(C_GREEN)
+            put("    they answered - APIC id bitmap 0x")  hex(smp_mask(), 8)
+            print("")
+            print("    the machine is running on more than one core")
+            color(C_GREY)
+            print("    (they park immediately: nothing is lock-protected yet)")
+        } else {
+            color(C_RED)  print("    no application processor answered")
+            color(C_GREY)
+        }
+        return 0
+    }
     if cmd == 43 {                        # + - three tasks at once
         color(C_CYAN)  print("  multitasking")
         color(C_GREY)

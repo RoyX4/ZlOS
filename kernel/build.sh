@@ -51,13 +51,18 @@ gcc $CFLAGS -c cpu.c -o _cpu.o
 gcc $CFLAGS -c nvme.c -o _nvme.o
 # the scheduler: more than one thing at a time
 gcc $CFLAGS -c sched.c -o _sched.o
+# SMP: waking the other cores
+gcc $CFLAGS -c smp.c -o _smp.o
+# I2C-HID: the touchpad
+gcc $CFLAGS -c i2c_hid.c -o _i2c.o
+gcc $CFLAGS -c smp_trampoline.S -o _smptr.o
 gcc -m32 -c boot.S -o _boot.o
 
 # No -lgcc. __divdi3/__moddi3 (64-bit division on a 32-bit target) are the
 # only things the kernel took from libgcc, and divmod.c now supplies them.
 # Nothing GNU is linked into the kernel any more - only gcc-the-tool that
 # compiled the C, which nativegen is on track to replace.
-ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o
+ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o
 
 echo "built kernel.elf"
 echo "  undefined symbols: $(nm -u kernel.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"

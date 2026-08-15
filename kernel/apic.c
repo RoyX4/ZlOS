@@ -98,6 +98,7 @@ static int  apic_on     = 0;
 static u64  rsdp_addr   = 0;      /* handed to us by the UEFI loader */
 static int  madt_found  = 0;
 static int  cpu_count   = 0;
+static u8   cpu_apic_ids[16];      /* the APIC id of every usable core */
 
 /* IRQ -> GSI mapping, plus the polarity/trigger the firmware declared.
  * Identity by default, per ACPI: "if no override exists, ISA IRQ n is GSI n". */
@@ -228,7 +229,11 @@ static void parse_madt(void)
 
         if (type == 0) {                        /* processor local APIC */
             u32 fl = *(volatile u32 *)(p + 4);
-            if (fl & 1) cpu_count++;            /* bit 0: this CPU is usable */
+            u8  id = *(volatile u8 *)(p + 3);   /* the APIC id, not the ACPI id */
+            if (fl & 1) {                       /* bit 0: this CPU is usable */
+                if (cpu_count < 16) cpu_apic_ids[cpu_count] = id;
+                cpu_count++;
+            }
         } else if (type == 1) {                 /* I/O APIC */
             if (!ioapic_base) {
                 ioapic_base     = (uptr)*(volatile u32 *)(p + 4);
@@ -364,6 +369,23 @@ int apic_ioapic_pins(void) { return ioapic_pins; }
 int apic_madt_ok(void)     { return madt_found; }
 int apic_cpus(void)        { return cpu_count; }
 u32 apic_rsdp(void)        { return (u32)acpi_find_rsdp(); }
+int apic_cpu_id(int i)     { return (i >= 0 && i < cpu_count && i < 16) ? (int)cpu_apic_ids[i] : -1; }
+
+/* Send an interprocessor interrupt. The ICR is two registers: the high half
+ * carries the destination APIC id, and WRITING THE LOW HALF is what sends it,
+ * so the order matters. Delivery status (bit 12) stays set until the message
+ * has actually gone out. */
+#define LAPIC_ICR_LO 0x300
+#define LAPIC_ICR_HI 0x310
+
+void apic_send_ipi(int dest_id, u32 icr_low)
+{
+    if (!apic_on) return;
+    mmio_w(lapic_base + LAPIC_ICR_HI, (u32)dest_id << 24);
+    mmio_w(lapic_base + LAPIC_ICR_LO, icr_low);
+    for (int spin = 0; spin < 1000000; spin++)
+        if (!(mmio_r(lapic_base + LAPIC_ICR_LO) & (1u << 12))) break;
+}
 int apic_gsi(int irq)      { return (irq >= 0 && irq < 16) ? (int)gsi_of_irq[irq] : -1; }
 int apic_id(void)          { return apic_on ? (int)((mmio_r(lapic_base + LAPIC_ID) >> 24) & 0xFF) : -1; }
 u32 apic_redtbl(int irq)

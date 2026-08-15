@@ -43,6 +43,9 @@
     z        the processor: CPUID, topology, caches, TSC clock
     o        NVMe disk - identify, then write and read a block back
     +        multitasking - three tasks running beside the shell
+    *        SMP - wake the other CPU cores with INIT/STARTUP IPIs
+    /        USB mass storage - SCSI over USB, read a sector
+    ?        I2C-HID touchpad (real hardware only - QEMU has no LPSS I2C)
     c        clear the screen
     r        reboot the machine
     q        halt the machine
