@@ -48,7 +48,7 @@ gcc $CFLAGS -c sched.c -o _sched64.o
 gcc $CFLAGS -c smp.c -o _smp64.o
 # I2C-HID: the touchpad
 gcc $CFLAGS -c i2c_hid.c -o _i2c64.o
-gcc $CFLAGS -c smp_trampoline.S -o _smptr64.o
+gcc $CFLAGS -c smp_trampoline64.S -o _smptr64.o
 gcc -m64 -c boot64.S -o _boot64.o
 
 ld -m elf_x86_64 -T link64.ld -o kernel64.elf \

@@ -908,6 +908,39 @@ fn run_command(cmd, arg) {
                 put("    plane enabled: ")    print(intel_plane())
                 put("    live mode:     ")    put(intel_w())  put(" x ")  print(intel_h())
                 put("    stride:        ")    put(intel_stride())  print(" bytes")
+                put("    plane format:  ")    put(gpu_fmt())
+                put("   tiling mode ")        print(gpu_tile())
+                # the real video signal, blanking included
+                put("    timing:        ")    put(gpu_ha())  put(" of ")  put(gpu_ht())
+                put(" px  x  ")               put(gpu_va())  put(" of ")  put(gpu_vt())
+                print(" lines")
+                print("    measuring refresh against the PIT...")
+                gmhz = gpu_hz()
+                put("    refresh:       ")    put(gmhz / 1000)
+                put(".")                      put((gmhz % 1000) / 100)
+                print(" Hz")
+                put("    pixel clock:   ")    put(gpu_clk() / 1000)  print(" MHz")
+                put("    panel power:   ")    print(panel_on())
+                gblm = bl_max()
+                if gblm > 0 {
+                    put("    backlight:     ")  put(bl_get() * 100 / gblm)
+                    put("% of ")                put(gblm)  print(" PWM counts")
+                }
+                # ask the panel what it is, over the GPU's own I2C bus
+                gep = edid_read()
+                if gep > 0 {
+                    color(C_GREEN)
+                    put("    EDID read on GMBUS pin pair ")  print(gep)
+                    color(C_GREY)
+                    put("    panel:         ")
+                    emit(edid_vc(0))  emit(edid_vc(1))  emit(edid_vc(2))
+                    put(" product 0x")  hex(edid_prod(), 4)  print("")
+                    put("    native mode:   ")  put(edid_w())  put(" x ")  print(edid_h())
+                    put("    physical size: ")  put(edid_mmw())  put(" x ")
+                    put(edid_mmh())  print(" mm")
+                } else {
+                    print("    no EDID on any GMBUS pin pair")
+                }
                 put("    scanning out:  0x")  print(intel_surf())
             } else {
                 print("    not a Gen9 part - detected but not driven")

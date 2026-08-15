@@ -25,6 +25,10 @@ for f in efi.c _genefi.c ../freestanding/runtime_kernel.c support.c vga.c fb.c f
     OBJS="$OBJS $o"
 done
 
+# The AP trampoline is assembly, not C, so it is not in the loop above.
+clang $CF -c smp_trampoline64.S -o _efi_smptr.o
+OBJS="$OBJS _efi_smptr.o"
+
 lld-link -subsystem:efi_application -nodefaultlib -dll \
          -entry:efi_main -out:BOOTX64.EFI $OBJS
 

@@ -35,6 +35,15 @@
 typedef unsigned int   u32;
 typedef unsigned short u16;
 typedef unsigned char  u8;
+typedef unsigned long long u64;
+
+#if defined(ZL_64)
+typedef unsigned long long uptr;
+#else
+typedef unsigned int       uptr;
+#endif
+
+u32 idt_ticks(void);
 
 int  pci_count(void);
 int  pci_vendor(int i);
@@ -65,6 +74,65 @@ u32  pci_read32(int bus, int dev, int fn, int off);
 #define PLANE_SURFLIVE_A  0x701AC   /* read-only: what is scanning out NOW  */
 #define TRANS_DDI_EDP     0x6F400   /* which pipe drives the laptop panel   */
 #define VGACNTRL          0x71400   /* legacy VGA plane                     */
+
+/* ---- the full timing generator, pipe A -------------------------------
+ * These describe the actual video signal: how many pixels and lines there are
+ * including the blanking intervals, and where the sync pulses sit inside them.
+ * All are stored as (start | end << 16) and all are minus one. Reading them
+ * back tells us the panel's real mode, including the refresh rate, without
+ * touching a single PLL. */
+#define HTOTAL_A          0x60000
+#define HBLANK_A          0x60004
+#define HSYNC_A           0x60008
+#define VTOTAL_A          0x6000C
+#define VBLANK_A          0x60010
+#define VSYNC_A           0x60014
+#define PIPE_FLIPCNT_A    0x70044
+
+/* ---- the hardware cursor plane ---------------------------------------
+ * A separate plane the display engine composites on top of the primary one,
+ * for free, every frame. Moving it costs one register write and no redraw -
+ * which is why every real OS has a hardware cursor and software mice look
+ * laggy by comparison. */
+#define CUR_CTL_A         0x70080
+#define CUR_BASE_A        0x70084
+#define CUR_POS_A         0x70088
+#define CUR_MODE_128_ARGB 0x22      /* 128x128, 32-bit ARGB */
+#define CUR_MODE_64_ARGB  0x27      /* 64x64, 32-bit ARGB   */
+#define CUR_MODE_DISABLE  0x00
+
+/* ---- plane geometry --------------------------------------------------- */
+#define PLANE_POS_1_A     0x7018C
+#define PLANE_KEYMAX_1_A  0x701A0
+#define PLANE_WM_1_A(l)   (0x70240 + (l) * 4)   /* eight watermark levels */
+
+/* ---- GMBUS: the I2C bus the monitor's EDID lives on -------------------
+ * Every display carries a 128-byte EDID blob at I2C address 0x50 describing
+ * what it is and which modes it supports. Intel exposes that bus through five
+ * registers rather than a general I2C controller. */
+#define GMBUS0            0xC5100   /* clock rate and pin pair              */
+#define GMBUS1            0xC5104   /* command and slave address            */
+#define GMBUS2            0xC5108   /* status                               */
+#define GMBUS3            0xC510C   /* data, four bytes at a time           */
+#define GMBUS4            0xC5110
+#define GMBUS5            0xC5120
+
+#define GMBUS_SW_RDY      (1u << 30)
+#define GMBUS_CYCLE_WAIT  (1u << 25)
+#define GMBUS_CYCLE_INDEX (1u << 26)
+#define GMBUS_CYCLE_STOP  (1u << 27)
+#define GMBUS_SLAVE_READ  1u
+#define GMBUS_HW_RDY      (1u << 11)
+#define GMBUS_NAK         (1u << 10)
+#define GMBUS_ACTIVE      (1u << 9)
+
+/* ---- panel power and backlight ---------------------------------------
+ * On a laptop these are the difference between a driver that can dim the
+ * screen and one that cannot. The PCH owns them. */
+#define PP_STATUS         0xC7200
+#define PP_CONTROL        0xC7204
+#define BLC_PWM_PCH_CTL1  0xC8250   /* enable, polarity                     */
+#define BLC_PWM_PCH_CTL2  0xC8254   /* frequency [31:16], duty cycle [15:0] */
 
 #define PLANE_CTL_ENABLE  0x80000000u
 #define PLANE_CTL_FORMAT_MASK 0x0F000000u
@@ -245,3 +313,293 @@ int intel_ggtt_map(u32 gfx_page, u32 phys_addr)
     pte[1] = 0;                                /* HAW=39 on a client part */
     return 1;
 }
+
+/* ==== the full timing generator ==========================================
+ * Everything below reads what the firmware programmed. Sizes and positions in
+ * these registers are stored MINUS ONE, and each packs a start in the low half
+ * and an end in the high half. */
+static int reg_lo(u32 off) { return (int)(mmio_r(off) & 0x1FFF) + 1; }
+static int reg_hi(u32 off) { return (int)((mmio_r(off) >> 16) & 0x1FFF) + 1; }
+
+int intel_htotal(void)   { return reg_hi(HTOTAL_A); }
+int intel_hactive(void)  { return reg_lo(HTOTAL_A); }
+int intel_vtotal(void)   { return reg_hi(VTOTAL_A); }
+int intel_vactive(void)  { return reg_lo(VTOTAL_A); }
+int intel_hsync_start(void) { return reg_lo(HSYNC_A); }
+int intel_hsync_end(void)   { return reg_hi(HSYNC_A); }
+int intel_vsync_start(void) { return reg_lo(VSYNC_A); }
+int intel_vsync_end(void)   { return reg_hi(VSYNC_A); }
+
+/* Refresh rate, derived rather than guessed.
+ *
+ * There is no register that says "60 Hz". What there is: the total pixel
+ * count per frame, and a frame counter that increments once per vblank. Count
+ * frames against the PIT for a known interval and the refresh rate falls out -
+ * which also works on a panel running at 48 or 120 Hz, where an assumed 60
+ * would silently be wrong. Returns milli-hertz to keep the fraction. */
+u32 intel_refresh_mhz(void)
+{
+    if (!intel_pipe_enabled()) return 0;
+    u32 t0 = idt_ticks();
+    /* wait for a tick edge so the interval is a whole number of ticks */
+    while (idt_ticks() == t0) { }
+    u32 start_tick = idt_ticks();
+    int f0 = intel_frame_count();
+    while (idt_ticks() - start_tick < 50) { }     /* 500 ms at 100 Hz */
+    int f1 = intel_frame_count();
+    u32 elapsed = idt_ticks() - start_tick;
+    if (!elapsed) return 0;
+    u32 frames = (u32)(f1 - f0);
+    /* frames per (elapsed*10) ms  ->  milli-hertz */
+    return (frames * 100000u) / elapsed;
+}
+
+/* pixel clock in kHz, from the mode and the measured refresh */
+u32 intel_pixel_clock_khz(void)
+{
+    u32 mhz = intel_refresh_mhz();
+    if (!mhz) return 0;
+    u64 dots = (u64)intel_htotal() * (u64)intel_vtotal();
+    return (u32)((dots * (u64)mhz) / 1000000u);
+}
+
+int intel_flip_count(void) { return (int)mmio_r(PIPE_FLIPCNT_A); }
+
+/* ==== GMBUS: reading the panel's EDID ====================================
+ * The EDID is the display telling us what it is - manufacturer, physical size,
+ * native resolution, supported timings. It is the input a real modesetting
+ * driver works from, and reading it is the honest prerequisite for ever
+ * attempting one.
+ *
+ * The transaction: select a pin pair, write a command with the slave address
+ * and byte count, then read the data register four bytes at a time as the
+ * hardware fills it. */
+#define EDID_ADDR 0x50
+
+static int gmbus_wait(u32 bit, int want)
+{
+    for (int i = 0; i < 2000000; i++) {
+        u32 v = mmio_r(GMBUS2);
+        if (v & GMBUS_NAK) return 0;
+        if (want ? (v & bit) : !(v & bit)) return 1;
+    }
+    return 0;
+}
+
+/* Read `len` bytes of EDID into our buffer using one pin pair. Gen9 numbers
+ * the DDI pin pairs 1..4; which one the panel is on is not knowable without
+ * ACPI, so the caller tries each. */
+static int gmbus_read_edid(int pin, u32 dest, int len)
+{
+    if (!intel_present()) return 0;
+
+    mmio_w(GMBUS0, (u32)pin & 0x7);          /* pin pair, 100 kHz */
+    mmio_w(GMBUS1, 0);
+    if (!gmbus_wait(GMBUS_ACTIVE, 0)) { mmio_w(GMBUS0, 0); return 0; }
+
+    /* offset 0 within the EDID: an index cycle with a zero index */
+    mmio_w(GMBUS5, 0);
+    mmio_w(GMBUS1, GMBUS_SW_RDY | GMBUS_CYCLE_WAIT | GMBUS_CYCLE_INDEX |
+                   ((u32)len << 16) | (EDID_ADDR << 1) | GMBUS_SLAVE_READ);
+
+    int got = 0;
+    while (got < len) {
+        if (!gmbus_wait(GMBUS_HW_RDY, 1)) { mmio_w(GMBUS0, 0); return 0; }
+        u32 v = mmio_r(GMBUS3);
+        for (int b = 0; b < 4 && got < len; b++, got++)
+            *(volatile u8 *)(uptr)(dest + (u32)got) = (u8)((v >> (b * 8)) & 0xFF);
+    }
+
+    mmio_w(GMBUS1, GMBUS_SW_RDY | GMBUS_CYCLE_STOP);
+    gmbus_wait(GMBUS_ACTIVE, 0);
+    mmio_w(GMBUS0, 0);
+    return got == len;
+}
+
+#define EDID_BUF 0x0C980000u
+
+/* An EDID always begins 00 FF FF FF FF FF FF 00. That fixed header is how we
+ * know we read a display and not an empty bus. */
+static int edid_valid(u32 buf)
+{
+    volatile u8 *e = (volatile u8 *)(uptr)buf;
+    if (e[0] != 0x00 || e[7] != 0x00) return 0;
+    for (int i = 1; i <= 6; i++) if (e[i] != 0xFF) return 0;
+    u8 sum = 0;
+    for (int i = 0; i < 128; i++) sum = (u8)(sum + e[i]);
+    return sum == 0;
+}
+
+static int edid_pin = 0;
+
+int intel_read_edid(void)
+{
+    if (!intel_present()) return 0;
+    for (int pin = 1; pin <= 4; pin++) {
+        if (!gmbus_read_edid(pin, EDID_BUF, 128)) continue;
+        if (!edid_valid(EDID_BUF)) continue;
+        edid_pin = pin;
+        return pin;
+    }
+    return 0;
+}
+
+int intel_edid_pin(void)  { return edid_pin; }
+int intel_edid_byte(int i)
+{
+    if (i < 0 || i >= 128) return 0;
+    return (int)*(volatile u8 *)(uptr)(EDID_BUF + (u32)i);
+}
+
+/* The three manufacturer letters are packed five bits each, big endian, in
+ * bytes 8-9, with 1 = 'A'. */
+int intel_edid_vendor_char(int i)
+{
+    if (i < 0 || i > 2) return 0;
+    u32 v = ((u32)intel_edid_byte(8) << 8) | (u32)intel_edid_byte(9);
+    int shift = 10 - i * 5;
+    int c = (int)((v >> shift) & 0x1F);
+    return c ? (c + 'A' - 1) : '?';
+}
+
+int intel_edid_product(void)
+{
+    return intel_edid_byte(10) | (intel_edid_byte(11) << 8);
+}
+
+/* The first detailed timing descriptor, at byte 54, is the panel's native
+ * mode. Width and height each split their high bits into a shared nibble. */
+int intel_edid_native_w(void)
+{
+    return intel_edid_byte(56) | ((intel_edid_byte(58) & 0xF0) << 4);
+}
+
+int intel_edid_native_h(void)
+{
+    return intel_edid_byte(59) | ((intel_edid_byte(61) & 0xF0) << 4);
+}
+
+/* physical size in millimetres, bytes 66-68 */
+int intel_edid_width_mm(void)
+{
+    return intel_edid_byte(66) | ((intel_edid_byte(68) & 0xF0) << 4);
+}
+
+int intel_edid_height_mm(void)
+{
+    return intel_edid_byte(67) | ((intel_edid_byte(68) & 0x0F) << 8);
+}
+
+/* ==== the hardware cursor ================================================
+ * A plane the display engine composites for free. The position register takes
+ * a signed x and y, and negative values are expressed with a sign bit rather
+ * than two's complement across the whole field. */
+int intel_cursor_enable(u32 gfx_addr, int size64)
+{
+    if (!intel_supported() || !intel_pipe_enabled()) return 0;
+    mmio_w(CUR_CTL_A, size64 ? CUR_MODE_64_ARGB : CUR_MODE_128_ARGB);
+    mmio_w(CUR_BASE_A, gfx_addr & 0xFFFFF000u);   /* arms it */
+    return 1;
+}
+
+int intel_cursor_move(int x, int y)
+{
+    if (!intel_supported()) return 0;
+    u32 v = 0;
+    if (x < 0) { v |= (1u << 15) | ((u32)(-x) & 0xFFF); } else v |= ((u32)x & 0xFFF);
+    if (y < 0) { v |= (1u << 31) | (((u32)(-y) & 0xFFF) << 16); }
+    else       { v |= (((u32)y & 0xFFF) << 16); }
+    mmio_w(CUR_POS_A, v);
+    return 1;
+}
+
+int intel_cursor_disable(void)
+{
+    if (!intel_supported()) return 0;
+    mmio_w(CUR_CTL_A, CUR_MODE_DISABLE);
+    mmio_w(CUR_BASE_A, 0);
+    return 1;
+}
+
+/* ==== backlight ==========================================================
+ * The PCH drives the panel backlight with a PWM signal: one register holds the
+ * period, another the duty cycle. Setting duty to zero is a black screen with
+ * the panel still powered, which is a real thing to be careful about. */
+u32 intel_backlight_max(void)
+{
+    if (!intel_present()) return 0;
+    return (mmio_r(BLC_PWM_PCH_CTL2) >> 16) & 0xFFFF;
+}
+
+u32 intel_backlight_get(void)
+{
+    if (!intel_present()) return 0;
+    return mmio_r(BLC_PWM_PCH_CTL2) & 0xFFFF;
+}
+
+/* Percentage rather than raw counts, because the period differs per machine.
+ * Clamped to 5% at the bottom: zero is indistinguishable from a broken driver
+ * from where the user is sitting. */
+int intel_backlight_set(int percent)
+{
+    if (!intel_present()) return 0;
+    u32 max = intel_backlight_max();
+    if (!max) return 0;
+    if (percent < 5)   percent = 5;
+    if (percent > 100) percent = 100;
+    u32 duty = (max * (u32)percent) / 100u;
+    u32 v = mmio_r(BLC_PWM_PCH_CTL2);
+    mmio_w(BLC_PWM_PCH_CTL2, (v & 0xFFFF0000u) | (duty & 0xFFFF));
+    return 1;
+}
+
+int intel_panel_on(void)
+{
+    if (!intel_present()) return 0;
+    return (mmio_r(PP_STATUS) & 0x80000000u) ? 1 : 0;
+}
+
+/* ==== page flipping ======================================================
+ * Writing PLANE_SURF arms every double-buffered plane register at once, and
+ * the hardware latches them at the next vblank. Waiting for the frame counter
+ * to move afterwards is what makes a flip tear-free: return before that and
+ * the caller may start drawing into a buffer still being scanned out. */
+int intel_flip(u32 gfx_addr)
+{
+    if (!intel_supported() || !intel_pipe_enabled()) return 0;
+    int before = intel_frame_count();
+    mmio_w(PLANE_SURF_1_A, gfx_addr & 0xFFFFF000u);
+    for (int spin = 0; spin < 20000000; spin++)
+        if (intel_frame_count() != before) return 1;
+    return 0;
+}
+
+/* Wait for the start of the next vertical blank. */
+int intel_wait_vblank(void)
+{
+    if (!intel_pipe_enabled()) return 0;
+    int before = intel_frame_count();
+    for (int spin = 0; spin < 20000000; spin++)
+        if (intel_frame_count() != before) return 1;
+    return 0;
+}
+
+/* ==== GGTT: mapping a whole range =======================================
+ * One page at a time is fine for a proof; a framebuffer needs thousands. */
+int intel_ggtt_map_range(u32 gfx_page, u32 phys_addr, int pages)
+{
+    if (!intel_present() || pages <= 0) return 0;
+    for (int i = 0; i < pages; i++)
+        if (!intel_ggtt_map(gfx_page + (u32)i, phys_addr + (u32)i * 4096u)) return 0;
+    return 1;
+}
+
+/* ==== what the plane is actually doing ================================== */
+u32 intel_plane_format(void) { return (mmio_r(PLANE_CTL_1_A) >> 24) & 0xF; }
+int intel_plane_tiling(void) { return (int)((mmio_r(PLANE_CTL_1_A) >> 10) & 0x7); }
+u32 intel_watermark(int level)
+{
+    if (level < 0 || level > 7) return 0;
+    return mmio_r(PLANE_WM_1_A(level));
+}
+u32 intel_ddi_func_ctl(void) { return mmio_r(TRANS_DDI_EDP); }

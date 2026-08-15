@@ -37,18 +37,24 @@ extern int  apic_cpus(void);
 extern int  apic_cpu_id(int i);
 extern void apic_send_ipi(int dest_id, u32 icr_low);
 
-/* The trampoline is 16-bit -> 32-bit protected mode code. On the 64-bit build
- * that is not enough: an application processor would come up in protected mode
- * and then have to call a long-mode function, which means the trampoline would
- * need to build its own page tables and enter long mode itself. That is real
- * work and it is not done, so the 64-bit build says so instead of pretending. */
-#if !defined(ZL_64)
+/* Two trampolines, because an AP has to arrive in whichever mode the kernel is
+ * already running in. The 32-bit one stops at protected mode; the 64-bit one
+ * goes all the way into long mode, reusing the boot processor's page tables. */
+#if defined(ZL_64)
+extern const u8 smp_tramp64_start[];
+extern const u8 smp_tramp64_end[];
+#define TRAMP_BEGIN smp_tramp64_start
+#define TRAMP_END   smp_tramp64_end
+#else
 extern const u8 smp_tramp_start[];
 extern const u8 smp_tramp_end[];
+#define TRAMP_BEGIN smp_tramp_start
+#define TRAMP_END   smp_tramp_end
 #endif
 
 #define TRAMP_ADDR   0x9000u        /* must match smp_trampoline.S */
 #define ENTRY_PTR    0x8FF0u
+#define CR3_PTR      0x8FE0u        /* the BSP leaves its page tables here */
 #define TRAMP_PAGE   0x09           /* 0x9000 >> 12 - what the SIPI carries */
 
 /* ICR delivery modes. Bit 14 is "assert", bits 10:8 the mode. */
@@ -98,13 +104,8 @@ int smp_online(void)    { return ap_online + 1; }   /* +1 for the boot core */
 int smp_last_id(void)   { return ap_last_id; }
 u32 smp_mask(void)      { return ap_mask | 1u; }
 int smp_ready(void)     { return smp_started; }
-#if defined(ZL_64)
-int smp_tramp_size(void){ return 0; }
-int smp_supported(void) { return 0; }
-#else
-int smp_tramp_size(void){ return (int)(smp_tramp_end - smp_tramp_start); }
+int smp_tramp_size(void){ return (int)(TRAMP_END - TRAMP_BEGIN); }
 int smp_supported(void) { return 1; }
-#endif
 
 /* Wake every application processor the MADT listed. Returns how many cores are
  * online afterwards, including this one. */
@@ -113,26 +114,29 @@ int smp_start(void)
     if (smp_attempted) return smp_online();
     smp_attempted = 1;
 
-#if defined(ZL_64)
-    /* see the note by the trampoline declaration: this needs a long-mode
-     * trampoline that does not exist yet */
-    smp_started = 1;
-    return 1;
-#else
-
     if (!apic_active() && !apic_init()) return 1;   /* no APIC, no SMP */
 
     int total = apic_cpus();
     if (total <= 1) { smp_started = 1; return 1; }
 
     /* 1. put the trampoline where a startup IPI can point at it */
-    u32 size = (u32)(smp_tramp_end - smp_tramp_start);
+    u32 size = (u32)(TRAMP_END - TRAMP_BEGIN);
     if (size == 0 || size > 0x0FF0) return 1;       /* would not fit below ENTRY_PTR */
     for (u32 i = 0; i < size; i++)
-        *(volatile u8 *)(TRAMP_ADDR + i) = smp_tramp_start[i];
+        *(volatile u8 *)(unsigned long)(TRAMP_ADDR + i) = TRAMP_BEGIN[i];
 
-    /* the entry point the trampoline will call, by convention not by patching */
+    /* Values the trampoline reads out of memory rather than having patched into
+     * it. The 64-bit path also needs our page tables: sharing CR3 means there
+     * is only ever one address space to keep correct. */
+#if defined(ZL_64)
+    unsigned long long cr3;
+    __asm__ volatile("movq %%cr3, %0" : "=r"(cr3));
+    *(volatile unsigned long long *)(unsigned long)CR3_PTR = cr3;
+    *(volatile unsigned long long *)(unsigned long)ENTRY_PTR =
+        (unsigned long long)(unsigned long)smp_ap_main;
+#else
     *(volatile u32 *)ENTRY_PTR = (u32)(unsigned long)smp_ap_main;
+#endif
 
     /* our own APIC id - never send ourselves a startup IPI */
     u32 a, b, c, d;
@@ -158,5 +162,4 @@ int smp_start(void)
 
     smp_started = 1;
     return smp_online();
-#endif
 }
