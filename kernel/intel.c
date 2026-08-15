@@ -718,8 +718,19 @@ u32 intel_ddi_func_ctl(void) { return mmio_r(TRANS_DDI_EDP); }
 #define DPLL_CTRL1      0x6C058
 #define DPLL_CTRL2      0x6C05C
 #define DPLL_STATUS     0x6C060
-#define DPLL_CFGCR1(p)  (0x6C040 + (p) * 8)   /* HDMI mode: the divider     */
-#define DPLL_CFGCR2(p)  (0x6C044 + (p) * 8)
+/* CFGCR is indexed from DPLL1, NOT from DPLL0.
+ *
+ * DPLL0 has no CFGCR at all - it is an LCPLL driven from the link-rate table
+ * and has no divider registers. So the array starts at DPLL1 = 0x6C040, which
+ * means DPLL2 is 0x6C048 and DPLL3 is 0x6C050.
+ *
+ * Computing it as 0x6C040 + pll*8 is off by one PLL: programming DPLL2 writes
+ * DPLL3's registers. The symptom is exactly what the first write test produced
+ * - every write appears to succeed and read back correctly, the enable bit
+ * sets, and the PLL never locks, because the one being enabled was never given
+ * a frequency. */
+#define DPLL_CFGCR1(p)  (0x6C040 + ((p) - 1) * 8)
+#define DPLL_CFGCR2(p)  (0x6C044 + ((p) - 1) * 8)
 #define LCPLL1_CTL      0x46010
 #define LCPLL2_CTL      0x46014
 #define CDCLK_CTL       0x46000
@@ -732,13 +743,13 @@ u32 intel_lcpll1(void)      { return mmio_r(LCPLL1_CTL); }
 
 u32 intel_dpll_cfgcr1(int pll)
 {
-    if (pll < 0 || pll > 3) return 0;
+    if (pll < 1 || pll > 3) return 0;      /* DPLL0 has no CFGCR */
     return mmio_r(DPLL_CFGCR1(pll));
 }
 
 u32 intel_dpll_cfgcr2(int pll)
 {
-    if (pll < 0 || pll > 3) return 0;
+    if (pll < 1 || pll > 3) return 0;
     return mmio_r(DPLL_CFGCR2(pll));
 }
 
@@ -803,6 +814,11 @@ u32 intel_dpll_rate_khz(int idx)
     }
     return 0;
 }
+
+/* Nothing in this file WRITES to the display engine unless it has been armed.
+ * The read paths are safe alongside another driver; the write paths are not,
+ * and an accidental write while i915 owns the device fights it. */
+static int lt_armed = 0;
 
 /* ==== programming a DPLL =================================================
  * Everything above READS. This is where the driver starts deciding.
@@ -1066,7 +1082,8 @@ int intel_dpll_program_dp(int pll, int rate_idx, int ssc)
 
 int intel_dpll_program_hdmi(int pll, u32 pixel_khz)
 {
-    if (!intel_present() || pll < 0 || pll > 3) return 0;
+    /* DPLL0 cannot do HDMI mode: it has no divider registers. */
+    if (!intel_present() || pll < 1 || pll > 3) return 0;
     if (!intel_dpll_compute_hdmi(pixel_khz)) return 0;
 
     mmio_w(DPLL_CFGCR1(pll), wr_cfgcr1);
@@ -1081,20 +1098,50 @@ int intel_dpll_program_hdmi(int pll, u32 pixel_khz)
 }
 
 #define LCPLL_PLL_ENABLE (1u << 31)
-#define DPLL_ENABLE(p)   (0x46010 + (p) * 4)   /* LCPLL1_CTL, LCPLL2_CTL, ... */
+#define LCPLL_PLL_LOCK   (1u << 30)
+
+/* The four DPLLs do NOT have their enable bits in a regular array. DPLL0 and
+ * DPLL1 are LCPLLs; DPLL2 and DPLL3 are WRPLLs 64 bytes apart in a different
+ * block. Computing the address as 0x46010 + pll*4 lands on 0x46018 for DPLL2,
+ * which is a different register entirely.
+ *
+ * Worse: DPLL0's enable is LCPLL1_CTL, and DPLL0 FEEDS CDCLK - the core
+ * display clock for the whole engine. Clearing its enable bit does not just
+ * turn off a PLL, it stops the display engine. Verified on hardware: that
+ * register reads 0xC0000000, enabled and locked, right now. So disabling
+ * DPLL0 is refused outright rather than left as a footgun. */
+static u32 dpll_enable_reg(int pll)
+{
+    switch (pll) {
+        case 0: return 0x46010;      /* LCPLL1_CTL  - feeds CDCLK */
+        case 1: return 0x46014;      /* LCPLL2_CTL  */
+        case 2: return 0x46040;      /* WRPLL_CTL(0) */
+        case 3: return 0x46060;      /* WRPLL_CTL(1) */
+    }
+    return 0;
+}
 
 /* Turn a DPLL on and wait for it to lock. The wait is the point. */
 int intel_dpll_enable(int pll)
 {
-    if (!intel_present() || pll < 0 || pll > 3) return 0;
+    if (!intel_present() || !lt_armed || pll < 0 || pll > 3) return 0;
     if (intel_dpll_locked(pll)) return 1;
 
-    u32 en = DPLL_ENABLE(pll);
+    u32 en = dpll_enable_reg(pll);
+    if (!en) return 0;
     mmio_w(en, mmio_r(en) | LCPLL_PLL_ENABLE);
 
-    /* the PRM allows 5 ms; give it 50 and report honestly if it never comes */
+    /* The PRM quotes 5 ms for DPLL lock. MEASURED on this part, a cold WRPLL
+     * that has not been used since power-on takes about 80 ms - well past both
+     * the documented figure and the 50 ms this code originally allowed, which
+     * is why the first write test reported "did not lock" on a PLL that had in
+     * fact locked moments later.
+     *
+     * A modeset happens rarely and a generous bound costs nothing, so wait
+     * half a second before giving up. Reporting failure on a PLL that was
+     * merely slow is far worse than waiting. */
     u32 t0 = idt_ticks();
-    while (idt_ticks() - t0 < 5) {
+    while (idt_ticks() - t0 < 50) {          /* 500 ms */
         if (intel_dpll_locked(pll)) return 1;
     }
     return intel_dpll_locked(pll);
@@ -1102,10 +1149,29 @@ int intel_dpll_enable(int pll)
 
 int intel_dpll_disable(int pll)
 {
-    if (!intel_present() || pll < 0 || pll > 3) return 0;
-    u32 en = DPLL_ENABLE(pll);
+    if (!intel_present() || !lt_armed || pll < 1 || pll > 3) return 0;
+    /* pll 0 is deliberately excluded above: it feeds CDCLK. */
+    u32 en = dpll_enable_reg(pll);
+    if (!en) return 0;
     mmio_w(en, mmio_r(en) & ~LCPLL_PLL_ENABLE);
+
+    /* also drop the override so DPLL_CTRL1 stops claiming it is configured */
+    u32 v = mmio_r(DPLL_CTRL1);
+    v &= ~(0x3Fu << (pll * 6));
+    mmio_w(DPLL_CTRL1, v);
     return !intel_dpll_locked(pll);
+}
+
+u32 intel_dpll_enable_reg(int pll)  { return dpll_enable_reg(pll); }
+u32 intel_dpll_enable_val(int pll)
+{
+    u32 r = dpll_enable_reg(pll);
+    return (intel_present() && r) ? mmio_r(r) : 0;
+}
+int intel_dpll_in_use(int pll)
+{
+    if (!intel_present() || pll < 0 || pll > 3) return 1;
+    return (mmio_r(DPLL_CTRL1) >> (pll * 6)) & 1;   /* override enable */
 }
 
 /* Point a DDI port at a DPLL. Three bits of clock select per port in
@@ -1371,7 +1437,6 @@ static int lt_lanes = 0, lt_rate_idx = 0;
 static int lt_cr_attempts = 0, lt_eq_attempts = 0;
 static int lt_final_swing[4], lt_final_pre[4];
 static int lt_last_status[6];
-static int lt_armed = 0;          /* refuse to touch anything until armed */
 
 void intel_link_train_arm(int on) { lt_armed = on ? 1 : 0; }
 int  intel_link_train_armed(void) { return lt_armed; }
