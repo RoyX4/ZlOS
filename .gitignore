@@ -17,3 +17,19 @@ compilef
 outf.c
 kernel/hosttest/intel_probe
 kernel/hosttest/regs-*.txt
+
+# build outputs - regenerable, and large. Build them with:
+#   kernel/build.sh      kernel.elf        (BIOS multiboot)
+#   kernel/mkdisk.sh     zlOS.img          (our own bootloader)
+#   kernel/mkiso.sh      zlOS.iso          (hybrid BIOS/UEFI)
+#   kernel/buildefi.sh   BOOTX64.EFI       (native UEFI application)
+#   kernel/mkusb.sh      zlOS-usb.img      (bootable USB image)
+kernel/*.elf
+kernel/*.img
+kernel/*.iso
+kernel/BOOTX64.EFI
+kernel/BOOTX64.lib
+kernel/_gen*.c
+kernel/hosttest/intel_probe
+kernel/hosttest/dpll_test
+kernel/hosttest/regs-*.txt
