@@ -99,12 +99,34 @@ fn kbd_scan() {
     if band(sc, 0x80) != 0 { return 0 }     # key release - ignore
     return peek8(KBD_TABLE + sc)
 }
+# The shell's character source. Serial stays first so the automated gates,
+# which drive zlOS over a pipe, behave exactly as before. Everything a human
+# types goes through the input stack: PS/2 and USB both land in one event
+# queue with modifiers, caps lock and auto-repeat already applied.
 fn key_get() {
-    if ser_ready() == 1 { return ser_read() }   # serial still polled (for tests)
-    uk = usb_key()                               # our own USB HID driver
-    if uk != 0 { return uk }
-    return kbd_scan()                            # PS/2 via the IRQ buffer
+    if ser_ready() == 1 { return ser_read() }
+    return in_char()
 }
+
+# The editor's reader: a character, OR a navigation key above 0x100 so it can
+# tell an arrow from a letter.
+fn key_full() {
+    if ser_ready() == 1 { return ser_read() }
+    return in_key()
+}
+
+# key codes the input stack reports for the non-printing keys
+K_ESC = 0x101
+K_BKSP = 0x102
+K_TAB = 0x103
+K_ENTER = 0x104
+K_LEFT = 0x110
+K_RIGHT = 0x111
+K_UP = 0x112
+K_DOWN = 0x113
+K_HOME = 0x114
+K_END = 0x115
+K_DEL = 0x119
 
 # ---- timing + sound, both riding on the timer interrupt --------------------
 fn wait_ticks(n) {
@@ -331,6 +353,7 @@ fn help() {
     print("    *        SMP - wake the other CPU cores with INIT/STARTUP IPIs")
     print("    /        USB mass storage - SCSI over USB, read a sector")
     print("    ?        I2C-HID touchpad (real hardware only - QEMU has no LPSS I2C)")
+    print("    =        input events - keys, modifiers, repeat, live")
     print("    c        clear the screen")
     print("    r        reboot the machine")
     print("    q        halt the machine")
@@ -526,6 +549,171 @@ fn usbkey_demo() {
     print("")
     print("    timed out")
     return 0
+}
+
+# ---- a real line editor ---------------------------------------------------
+# Reading a line is not "collect characters until Enter". A usable prompt has
+# a cursor you can move, editing that happens in the middle of the line, and
+# a history you can walk back through. That is the difference between typing
+# at a computer and operating one.
+#
+# The line lives in memory at LINE_BUF, the history is a ring of HIST_N slots
+# above it, and both are plain bytes - there is no allocator to ask.
+LINE_BUF  = 0x02020000
+LINE_MAX  = 200
+HIST_BUF  = 0x02021000
+HIST_N    = 16
+hist_count = 0
+hist_pos   = 0
+
+fn line_get(i)    { return peek8(LINE_BUF + i) }
+fn line_set(i, c) { poke8(LINE_BUF + i, c) }
+
+fn hist_save(len) {
+    hslot = hist_count % HIST_N
+    hi = 0
+    while hi < len {
+        poke8(HIST_BUF + hslot * 256 + hi, peek8(LINE_BUF + hi))
+        hi = hi + 1
+    }
+    poke8(HIST_BUF + hslot * 256 + len, 0)
+    hist_count = hist_count + 1
+}
+
+# Load history entry `back` steps into the past. Returns its length.
+fn hist_load(back) {
+    if back <= 0 { return 0 }
+    if back > hist_count { return -1 }
+    if back > HIST_N { return -1 }
+    hslot = (hist_count - back) % HIST_N
+    hi = 0
+    while hi < LINE_MAX {
+        hc = peek8(HIST_BUF + hslot * 256 + hi)
+        if hc == 0 { return hi }
+        poke8(LINE_BUF + hi, hc)
+        hi = hi + 1
+    }
+    return hi
+}
+
+# Redraw the line in place. The console has no way to move the cursor
+# backwards, so the whole line is rewritten each time - at 80 columns that is
+# far too fast to see, and it keeps the logic honest.
+fn line_draw(len, cur, startcol) {
+    put("\r")
+    put("  zl> ")
+    li = 0
+    while li < len { emit(line_get(li))  li = li + 1 }
+    put(" ")
+    # park the cursor by rewriting up to it
+    put("\r")
+    put("  zl> ")
+    li = 0
+    while li < cur { emit(line_get(li))  li = li + 1 }
+    return 0
+}
+
+# Read one line. Returns its length; the text is at LINE_BUF.
+fn read_line() {
+    llen = 0
+    lcur = 0
+    hist_pos = 0
+    line_draw(0, 0, 0)
+    while 1 == 1 {
+        lk = key_full()
+        if lk == 0 { continue }
+
+        if lk == 13 {
+            print("")
+            if llen > 0 { hist_save(llen) }
+            return llen
+        }
+        if lk == K_ENTER {
+            print("")
+            if llen > 0 { hist_save(llen) }
+            return llen
+        }
+
+        if lk == 8 or lk == K_BKSP {
+            if lcur > 0 {
+                li = lcur - 1
+                while li < llen - 1 {
+                    line_set(li, line_get(li + 1))
+                    li = li + 1
+                }
+                llen = llen - 1
+                lcur = lcur - 1
+                line_draw(llen, lcur, 0)
+            }
+            continue
+        }
+        if lk == K_DEL {
+            if lcur < llen {
+                li = lcur
+                while li < llen - 1 {
+                    line_set(li, line_get(li + 1))
+                    li = li + 1
+                }
+                llen = llen - 1
+                line_draw(llen, lcur, 0)
+            }
+            continue
+        }
+        if lk == K_LEFT  { if lcur > 0    { lcur = lcur - 1  line_draw(llen, lcur, 0) }  continue }
+        if lk == K_RIGHT { if lcur < llen { lcur = lcur + 1  line_draw(llen, lcur, 0) }  continue }
+        if lk == K_HOME  { lcur = 0     line_draw(llen, lcur, 0)  continue }
+        if lk == K_END   { lcur = llen  line_draw(llen, lcur, 0)  continue }
+
+        if lk == K_UP {
+            hnew = hist_load(hist_pos + 1)
+            if hnew >= 0 {
+                hist_pos = hist_pos + 1
+                llen = hnew
+                lcur = hnew
+                line_draw(llen, lcur, 0)
+            }
+            continue
+        }
+        if lk == K_DOWN {
+            if hist_pos > 1 {
+                hist_pos = hist_pos - 1
+                hnew = hist_load(hist_pos)
+                llen = hnew
+                lcur = hnew
+            } else {
+                hist_pos = 0
+                llen = 0
+                lcur = 0
+            }
+            line_draw(llen, lcur, 0)
+            continue
+        }
+
+        # Ctrl+U clears the line, Ctrl+A and Ctrl+E jump to the ends -
+        # the readline bindings everyone's fingers already know.
+        if lk == 21 { llen = 0  lcur = 0  line_draw(0, 0, 0)  continue }
+        if lk == 1  { lcur = 0     line_draw(llen, lcur, 0)  continue }
+        if lk == 5  { lcur = llen  line_draw(llen, lcur, 0)  continue }
+        if lk == 27 { llen = 0  lcur = 0  line_draw(0, 0, 0)  continue }
+
+        # an ordinary character: insert it at the cursor
+        if lk >= 32 {
+            if lk < 127 {
+                if llen < LINE_MAX - 1 {
+                    li = llen
+                    while li > lcur {
+                        line_set(li, line_get(li - 1))
+                        li = li - 1
+                    }
+                    line_set(lcur, lk)
+                    llen = llen + 1
+                    lcur = lcur + 1
+                    line_draw(llen, lcur, 0)
+                }
+            }
+        }
+    }
+    return llen
 }
 
 fn spname(s) {
@@ -1062,6 +1250,45 @@ fn run_command(cmd, arg) {
         return 0
     }
     if cmd == 106 { return usbkey_demo() }   # j - USB keyboard, live
+    if cmd == 61 {                        # = - the input stack, live
+        color(C_CYAN)  print("  input events")
+        color(C_GREY)
+        print("    every key press, release and character, with modifiers.")
+        print("    try caps lock, ctrl, shift, arrows, and holding a key.")
+        print("    ESC ends.")
+        print("")
+        iestop = ticks() + 3000
+        while ticks() < iestop {
+            iet = in_next()
+            if iet != 0 {
+                iec = in_code()
+                iem = in_mods()
+                put("    ")
+                if iet == 1 { put("down ") }
+                if iet == 2 { put("up   ") }
+                if iet == 3 { put("char ") }
+                put("code 0x")  hex(iec, 4)
+                if iec >= 32 {
+                    if iec < 127 { put(" '")  emit(iec)  put("'") }
+                }
+                put("   mods")
+                if band(iem, 1) != 0 { put(" shift") }
+                if band(iem, 2) != 0 { put(" ctrl") }
+                if band(iem, 4) != 0 { put(" alt") }
+                if band(iem, 8) != 0 { put(" CAPS") }
+                if iem == 0 { put(" -") }
+                print("")
+                if iet == 1 {
+                    if iec == 0x101 {
+                        print("    ESC - done")
+                        return 0
+                    }
+                }
+            }
+        }
+        print("    timed out")
+        return 0
+    }
     if cmd == 63 {                        # ? - the I2C touchpad
         color(C_CYAN)  print("  I2C-HID touchpad")
         color(C_GREY)

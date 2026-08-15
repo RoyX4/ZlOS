@@ -275,6 +275,20 @@ extern int  i2c_hid_max_input(void);
 extern int  i2c_hid_rdesc_len(void);
 extern int  i2c_hid_read_report(void);
 extern int  i2c_hid_byte(int i);
+/* the input stack: events, modifiers, repeat */
+extern void input_poll(void);
+extern int  input_next(void);
+extern int  input_type(void);
+extern int  input_code(void);
+extern int  input_mods(void);
+extern int  input_shift(void);
+extern int  input_ctrl(void);
+extern int  input_alt(void);
+extern int  input_caps(void);
+extern int  input_char(void);
+extern int  input_key(void);
+extern int  input_queued(void);
+extern int  input_key_held(int code);
 /* the full Intel display driver */
 extern int  intel_htotal(void);
 extern int  intel_hactive(void);
@@ -655,6 +669,19 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "gpu_fmt"))    return zl_num((double)intel_plane_format());
     if (streq(name, "gpu_tile"))   return zl_num((double)intel_plane_tiling());
     if (streq(name, "ggtt_map"))   return zl_num((double)intel_ggtt_map_range((unsigned)a[0].num,(unsigned)a[1].num,(int)a[2].num));
+    if (streq(name, "in_poll"))    { input_poll(); return zl_nil(); }
+    if (streq(name, "in_next"))    return zl_num((double)input_next());
+    if (streq(name, "in_type"))    return zl_num((double)input_type());
+    if (streq(name, "in_code"))    return zl_num((double)input_code());
+    if (streq(name, "in_mods"))    return zl_num((double)input_mods());
+    if (streq(name, "in_shift"))   return zl_num((double)input_shift());
+    if (streq(name, "in_ctrl"))    return zl_num((double)input_ctrl());
+    if (streq(name, "in_alt"))     return zl_num((double)input_alt());
+    if (streq(name, "in_caps"))    return zl_num((double)input_caps());
+    if (streq(name, "in_char"))    return zl_num((double)input_char());
+    if (streq(name, "in_key"))     return zl_num((double)input_key());
+    if (streq(name, "in_queued"))  return zl_num((double)input_queued());
+    if (streq(name, "in_held"))    return zl_num((double)input_key_held((int)a[0].num));
     if (streq(name, "i2c_find"))   return zl_num((double)i2c_find((int)a[0].num));
     if (streq(name, "i2c_ok"))     return zl_num((double)i2c_present());
     if (streq(name, "i2c_dw"))     return zl_num((double)i2c_is_designware());

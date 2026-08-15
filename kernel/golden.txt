@@ -46,6 +46,7 @@
     *        SMP - wake the other CPU cores with INIT/STARTUP IPIs
     /        USB mass storage - SCSI over USB, read a sector
     ?        I2C-HID touchpad (real hardware only - QEMU has no LPSS I2C)
+    =        input events - keys, modifiers, repeat, live
     c        clear the screen
     r        reboot the machine
     q        halt the machine

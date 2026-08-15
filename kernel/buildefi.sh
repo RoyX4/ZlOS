@@ -18,7 +18,7 @@ CF="-target x86_64-unknown-windows -ffreestanding -fno-stack-protector \
 
 OBJS=""
 for f in efi.c _genefi.c ../freestanding/runtime_kernel.c support.c vga.c fb.c fb3d.c font8x16.c font_aa.c \
-         font_sub.c icons.c pci.c bga.c intel.c xhci.c console.c divmod.c gdt64.c idt.c apic.c virtio_gpu.c cpu.c nvme.c sched.c smp.c i2c_hid.c; do
+         font_sub.c icons.c pci.c bga.c intel.c xhci.c console.c divmod.c gdt64.c idt.c apic.c virtio_gpu.c cpu.c nvme.c sched.c smp.c i2c_hid.c input.c; do
     o="_efi_$(basename "$f" .c).o"
     # shellcheck disable=SC2086
     clang $CF -DZL_KERNEL_SERIAL -c "$f" -o "$o"
