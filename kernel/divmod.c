@@ -63,3 +63,11 @@ s64 __moddi3(s64 a, s64 b)
     udivmod(ua, ub, &r);
     return neg ? -(s64)r : (s64)r;
 }
+
+/* The unsigned forms. gcc emits these for any 64-bit / or % on unsigned
+ * operands - the TSC calibration in cpu.c divides a cycle count, and a cycle
+ * count is emphatically unsigned. Same shift-and-subtract loop, without the
+ * sign dance. */
+u64 __udivdi3(u64 a, u64 b) { return udivmod(a, b, 0); }
+
+u64 __umoddi3(u64 a, u64 b) { u64 r = 0; udivmod(a, b, &r); return r; }

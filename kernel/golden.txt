@@ -40,6 +40,7 @@
     v        spinning 3D cube, rendered in software
     w        draggable windows
     y        virtio-gpu - a real GPU driver, virtqueues and all
+    z        the processor: CPUID, topology, caches, TSC clock
     c        clear the screen
     r        reboot the machine
     q        halt the machine

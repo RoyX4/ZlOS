@@ -325,6 +325,7 @@ fn help() {
     print("    v        spinning 3D cube, rendered in software")
     print("    w        draggable windows")
     print("    y        virtio-gpu - a real GPU driver, virtqueues and all")
+    print("    z        the processor: CPUID, topology, caches, TSC clock")
     print("    c        clear the screen")
     print("    r        reboot the machine")
     print("    q        halt the machine")
@@ -1023,6 +1024,55 @@ fn run_command(cmd, arg) {
         return 0
     }
     if cmd == 106 { return usbkey_demo() }   # j - USB keyboard, live
+    if cmd == 122 {                       # z - the processor, read from itself
+        color(C_CYAN)  print("  the processor, via CPUID and the MSRs")
+        color(C_GREY)
+        put("    vendor:   ")
+        cvi = 0
+        while cvi < 12 { emit(cpu_vb(cvi))  cvi = cvi + 1 }
+        print("")
+        put("    family ")  put(cpu_fam())
+        put("  model ")     put(cpu_mod())
+        put("  stepping ")  print(cpu_step())
+        put("    topology: ")  put(cpu_cores())  put(" core(s), ")
+        put(cpu_thr())  put(" thread(s), ")
+        put(cpu_tpc())  print(" per core")
+        put("    this core is APIC id ")  print(cpu_apicid())
+        put("    clock:    ")  put(cpu_mhz())  put(" MHz (TSC ")
+        put(cpu_khz())  put(" kHz")
+        if cpu_inv() == 1 { put(", invariant") }
+        print(")")
+        cci = 0
+        while cci < 6 {
+            if cpu_ctype(cci) != 0 {
+                put("    cache L")  put(cpu_clevel(cci))
+                if cpu_ctype(cci) == 1 { put(" data       ") }
+                if cpu_ctype(cci) == 2 { put(" instruction") }
+                if cpu_ctype(cci) == 3 { put(" unified    ") }
+                put("  ")  put(cpu_ckb(cci))  print(" KiB")
+            }
+            cci = cci + 1
+        }
+        put("    features: ")
+        if cpu_sse2() == 1   { put("sse2 ") }
+        if cpu_sse42() == 1  { put("sse4.2 ") }
+        if cpu_avx() == 1    { put("avx ") }
+        if cpu_avx2() == 1   { put("avx2 ") }
+        if cpu_aes() == 1    { put("aes ") }
+        if cpu_rdrand() == 1 { put("rdrand ") }
+        print("")
+        ctc = cpu_temp()
+        if ctc > 0 { put("    temperature: ")  put(ctc)  print(" C") }
+        if cpu_hv() == 1 {
+            put("    running under a hypervisor: ")
+            chi = 0
+            while chi < 12 { emit(cpu_hvb(chi))  chi = chi + 1 }
+            print("")
+        } else {
+            print("    running on bare metal - no hypervisor bit")
+        }
+        return 0
+    }
     if cmd == 121 {                       # y - virtio-gpu, a real GPU driver
         color(C_CYAN)  print("  virtio-gpu")
         color(C_GREY)
