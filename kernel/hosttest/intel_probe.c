@@ -188,6 +188,7 @@ u32  intel_wm_compute_level0(u32 w, u32 bpp, u32 khz, u32 lat);
 
 int  intel_modeset_run(int port);
 int  intel_modeset_teardown(int port);
+int  intel_backlight_save(void);
 int  intel_ggtt_map_range(u32 gfx_page, u32 phys_addr, int pages);
 u32  intel_aperture(void);
 int  intel_wm_save(void);
@@ -274,11 +275,12 @@ static const char *tiling_name(int t)
 
 int main(int argc, char **argv)
 {
-    int unsafe = 0, dump = 0, do_modeset = 0;
+    int unsafe = 0, dump = 0, do_modeset = 0, hold_s = 10;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--unsafe")) unsafe = 1;
         /* --modeset writes by definition, so it implies --unsafe. */
         if (!strcmp(argv[i], "--modeset")) { do_modeset = 1; unsafe = 1; }
+        if (!strcmp(argv[i], "--hold") && i + 1 < argc) hold_s = atoi(argv[++i]);
         if (!strcmp(argv[i], "--dump"))   dump = 1;
     }
 
@@ -878,6 +880,7 @@ int main(int argc, char **argv)
                : "the pipe is DOWN - this is a genuine COLD START");
 
         intel_wm_save();                    /* so a failure can be walked back */
+        intel_backlight_save();             /* so brightness survives the run */
 
         if (!intel_modeset_set_from_hw()) {
             printf("  [ FAIL ] could not read the mode off the hardware.\n");
@@ -967,6 +970,23 @@ int main(int argc, char **argv)
          * and i915 could not relight the panel from that state. The machine
          * was alive and the screen was dead, which costs a power button.
          * Handing back a clean device is not optional. */
+        /* Hold the image up long enough to actually be seen. Without this the
+         * teardown follows the last step by microseconds, so even a completely
+         * successful modeset shows as a flash - which is exactly what the
+         * previous run looked like from the other side of the screen. */
+        /* Deliberately NOT gated on ok_run. The previous run "failed" at the
+         * last step because of a bad readback check while the plane was in
+         * fact armed - so the one case where seeing the screen matters most is
+         * the one a success-only hold would skip. Ask the hardware whether it
+         * is scanning out, not the return code. */
+        if (intel_pipe_enabled() && intel_plane_enabled()) {
+            printf("\n  *** PICTURE SHOULD BE ON SCREEN NOW - holding %d s ***\n", hold_s);
+            fflush(stdout);
+            for (int s = 0; s < hold_s; s++) sleep(1);
+            printf("  underrun after %d s: %s\n", hold_s,
+                   intel_pipe_underrun() ? "YES - watermarks too low" : "clear");
+        }
+
         printf("\n  tearing down so i915 gets a clean device...\n");
         intel_link_train_arm(1);            /* teardown writes, so it needs arming */
         int td_bad = intel_modeset_teardown(0);

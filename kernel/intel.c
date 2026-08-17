@@ -453,7 +453,12 @@ int intel_set_surface(u32 gfx_addr, int stride_bytes)
     for (int spin = 0; spin < 2000000; spin++) {
         if (intel_frame_count() != before) break;
     }
-    return (intel_surface() == (gfx_addr & 0xFFFFF000u)) ? 1 : 0;
+    /* PLANE_SURFLIVE carries status bits in the low byte alongside the
+     * address - measured, SURF 0x01F40000 reads back as SURFLIVE 0x01F40020 -
+     * so an equality test against a page-aligned address can never match, and
+     * this reported failure on a plane it had just armed correctly. Compare
+     * the address bits only. */
+    return ((intel_surface() & 0xFFFFF000u) == (gfx_addr & 0xFFFFF000u)) ? 1 : 0;
 }
 
 /* ---- GGTT: mapping our own memory so the display can reach it ------------
@@ -3768,6 +3773,37 @@ int intel_modeset_run(int port) { return intel_modeset_run_ex(port, 0); }
 int intel_modeset_dry(int port) { return intel_modeset_run_ex(port, 1); }
 int intel_modeset_was_dry(void) { return ms_dry; }
 
+/* The backlight as it was before we touched it. A run that ends with the
+ * user's brightness at zero is a bug even when the modeset itself succeeded -
+ * i915 restores its own idea of brightness on rebind, but it does not
+ * re-derive the PWM duty we overwrote, so the panel comes back lit at nothing
+ * and the only fix the user has is the brightness keys. */
+static u32 bl_saved_ctl = 0, bl_saved_freq = 0, bl_saved_duty = 0;
+static int bl_have_saved = 0;
+
+int intel_backlight_save(void)
+{
+    if (!intel_present()) return 0;
+    bl_saved_ctl  = mmio_r(BLC_PWM_CTL);
+    bl_saved_freq = mmio_r(BLC_PWM_FREQ);
+    bl_saved_duty = mmio_r(BLC_PWM_DUTY);
+    bl_have_saved = 1;
+    return 1;
+}
+
+int intel_backlight_restore(void)
+{
+    if (!intel_present() || !lt_armed || !bl_have_saved) return 0;
+    /* frequency and duty before the enable bit, same ordering rule as any
+     * other PWM bring-up */
+    mmio_w(BLC_PWM_FREQ, bl_saved_freq);
+    mmio_w(BLC_PWM_DUTY, bl_saved_duty);
+    (void)mmio_r(BLC_PWM_FREQ);
+    mmio_w(BLC_PWM_CTL, bl_saved_ctl);
+    (void)mmio_r(BLC_PWM_CTL);
+    return 1;
+}
+
 /* ==== teardown: never hand the device back half-configured ===============
  *
  * The first real run ended with 31 of 32 steps green and a dark screen that
@@ -3824,6 +3860,10 @@ int intel_modeset_teardown(int port)
 
     /* 14: panel down, which stamps the T12 epoch. */
     if (!intel_panel_power_off()) bad++;
+
+    /* Put the backlight registers back exactly as they were found, so the
+     * user's brightness survives a run whatever else happened. */
+    intel_backlight_restore();
 
     /* 16: release the DDI A/E IO well. A well the DMC or BIOS is holding on
      * will not drop, and that is informational rather than an error. */
