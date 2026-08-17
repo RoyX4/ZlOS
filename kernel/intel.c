@@ -1789,6 +1789,89 @@ int intel_dpcd_read(int port, u32 addr, int len)
     return 0;
 }
 
+/* ==== EDID over I2C-over-AUX ============================================
+ *
+ * intel_read_edid() reads the EDID over GMBUS, and GMBUS does not serve eDP on
+ * DDI A - the panel has no GMBUS pins. So the only way this driver has ever
+ * known its own mode is by reading back the timing registers firmware
+ * programmed, which works right up until nobody has programmed them.
+ *
+ * On this machine that is not hypothetical: with i915 unbound the transcoder is
+ * disabled and the eDP timing block only still reads correctly because the
+ * registers happen to retain their values. A genuine cold start, or any board
+ * where firmware chose a different mode, needs the panel asked directly.
+ *
+ * The transport is the same AUX channel DPCD uses, with the I2C command values
+ * instead of the native ones, addressing I2C slave 0x50. The important
+ * differences from a native transaction:
+ *
+ *   - MOT (middle-of-transaction, bit 2 of the command) must stay SET for every
+ *     transfer that is not the last, or the sink ends the I2C transaction and
+ *     the address pointer resets. Getting this wrong reads byte 0 repeatedly.
+ *   - An I2C DEFER is far more likely than a native one and needs more
+ *     patience: the plan allows max(7, bus-derived) plus seven more, where a
+ *     native DEFER gets 32 quick retries.
+ *   - A read is a zero-length write to set the address, then reads.
+ */
+#define AUX_I2C_WRITE      0x0
+#define AUX_I2C_READ       0x1
+#define AUX_I2C_MOT        0x4
+#define EDID_I2C_ADDR      0x50
+
+/* One I2C-over-AUX chunk. AUX carries at most 16 bytes per transaction. */
+static int aux_i2c(int port, u32 cmd, const u8 *out, int out_len, u8 *in, int in_len)
+{
+    for (int attempt = 0; attempt < 14; attempt++) {
+        int n = aux_xfer(port, cmd, EDID_I2C_ADDR, out, out_len, in, in_len);
+        if (n >= 0 && aux_last_reply == AUX_REPLY_ACK) return n;
+        /* Reply bits 3:2 are the I2C status; a DEFER there is bit 3 in the
+         * decoded nibble. Anything that is not a defer is a real no. */
+        if (aux_last_reply != AUX_REPLY_DEFER && aux_last_reply != 2) return -1;
+        cpu_delay_us(500);
+    }
+    return -1;
+}
+
+/* Read `len` bytes from EDID offset `off` into edid_buf. Returns bytes read.
+ *
+ * MOT is set on the address write and on every read but the last, so the whole
+ * thing is one I2C transaction and the sink's address pointer advances. The
+ * final read clears MOT to release the bus - leaving it set holds the
+ * transaction open and the next caller starts mid-stream. */
+int intel_edid_over_aux(int port, u32 off, int len)
+{
+    if (len < 1 || len > 128 || !edid_buf) return 0;
+
+    u8 addr = (u8)off;
+    if (aux_i2c(port, AUX_I2C_WRITE | AUX_I2C_MOT, &addr, 1, aux_buf, 1) < 0)
+        return 0;
+
+    int done = 0;
+    while (done < len) {
+        int chunk = len - done;
+        if (chunk > 16) chunk = 16;
+        int last = (done + chunk >= len);
+        u32 cmd = AUX_I2C_READ | (last ? 0u : AUX_I2C_MOT);
+
+        int n = aux_i2c(port, cmd, 0, 0, aux_buf, chunk);
+        if (n <= 0) return done;
+        for (int i = 0; i < n; i++)
+            *(volatile u8 *)(edid_buf + (uptr)(done + i)) = aux_buf[i];
+        done += n;
+        if (n < chunk) break;              /* short read - the sink stopped */
+    }
+    return done;
+}
+
+/* The whole 128-byte block, validated. Same checksum rule as the GMBUS path:
+ * all 128 bytes must sum to zero mod 256, and the header must be the fixed
+ * 00 FF FF FF FF FF FF 00 - a partial read passes neither. */
+int intel_read_edid_aux(int port)
+{
+    if (intel_edid_over_aux(port, 0, 128) != 128) return 0;
+    return edid_valid(edid_buf);
+}
+
 int intel_dpcd_write(int port, u32 addr, const u8 *data, int len)
 {
     if (len < 1 || len > 16) return 0;
@@ -3522,6 +3605,45 @@ int intel_pipe_underrun_clear(void)
     return 1;
 }
 
+/* Link training with a bounded retry.
+ *
+ * Not a loop around intel_link_train(). A second attempt on a still-enabled
+ * port is not a second attempt at all: the PRM requires disable-then-re-enable
+ * with pattern 1 to retrain, and DDI_BUF_CTL[3:1] and DP_TP_CTL[18] are
+ * latched while the port is up (4.3 #20). So each retry takes the port fully
+ * down and brings it back, which also resets the sink's own training state.
+ *
+ * Three attempts. i915 requires two consecutive failures before it reacts at
+ * all, so one is too few to match the plan and many is just a slow way to fail
+ * - a link that has not trained in three tries at a rate the mode needs is not
+ * going to. Failing loudly is still the point; this only stops a single
+ * transient from being fatal.
+ *
+ * Deliberately does NOT walk the rate/lane ladder. With the real pixel clock
+ * nothing below 4 lanes at HBR carries this mode at 24 bpp, so descending can
+ * only find a link that trains and then cannot carry a frame (plan step 11). */
+#define LT_MAX_ATTEMPTS 3
+
+static int lt_attempts_used = 0;
+
+static int lt_train_retry(int port, int rate_idx, int lanes, int tps3, int enhanced)
+{
+    for (int try = 0; try < LT_MAX_ATTEMPTS; try++) {
+        lt_attempts_used = try + 1;
+        if (intel_link_train(port, rate_idx, lanes, tps3, enhanced)) return 1;
+        if (try + 1 >= LT_MAX_ATTEMPTS) break;
+
+        /* Cycle the port. A failure to bring it back is fatal - retrying into
+         * a port that would not come up is worse than reporting the original
+         * training failure. */
+        if (!intel_port_disable(port)) return 0;
+        if (!intel_port_enable(port, lanes, enhanced)) return 0;
+    }
+    return 0;
+}
+
+int intel_lt_attempts_used(void) { return lt_attempts_used; }
+
 /* defined with the backlight save/restore in the teardown section below */
 u32 intel_backlight_duty_wanted(void);
 
@@ -3710,17 +3832,14 @@ int intel_modeset_run_ex(int port, int dry)
      * 4 lanes @ HBR carries this mode at 24 bpp, so a ladder can only descend
      * into a link that trains successfully and then cannot carry a frame.
      *
-     * KNOWN DEVIATION: the plan also says to retry the same parameters a
-     * bounded number of times before failing (i915 wants two consecutive
-     * failures before it reacts). This makes ONE attempt and then fails with
-     * the step number. Failing loudly is the plan's actual point, and a correct
-     * retry is not just a loop - it has to cycle the port through
-     * intel_port_disable/enable first, because DDI_BUF_CTL[3:1] and
-     * DP_TP_CTL[18] cannot change while the port is enabled (4.3 #20). Worth
-     * adding once this sequence has run even once; adding a second never-
-     * executed path now buys nothing. */
+     * Retries are bounded and cycle the port between attempts - see
+     * lt_train_retry(). The plan wants a bounded retry before giving up
+     * (i915 waits for two consecutive failures before reacting), and a correct
+     * one is not a loop: DDI_BUF_CTL[3:1] and DP_TP_CTL[18] cannot change while
+     * the port is enabled (4.3 #20), so the port has to go down and come back
+     * up with pattern 1 selected before a second attempt means anything. */
     MS_STEP(40, "link training",
-               intel_link_train(port, rate_idx, lanes, tps3, enhanced));
+               lt_train_retry(port, rate_idx, lanes, tps3, enhanced));
 
     /* -- Phase H: transcoder, pipe, plane -------------------------------- */
     MS_STEP(45, "M/N computed",

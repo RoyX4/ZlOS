@@ -206,6 +206,9 @@ int  intel_vbt_child_count(void);
 int  intel_vbt_child_port(int i);
 int  intel_vbt_child_type(int i);
 int  intel_vbt_port_present(int dvo_port);
+int  intel_edid_over_aux(int port, u32 off, int len);
+int  intel_read_edid_aux(int port);
+int  intel_edid_byte(int i);
 int  intel_ggtt_map_range(u32 gfx_page, u32 phys_addr, int pages);
 u32  intel_aperture(void);
 int  intel_wm_save(void);
@@ -784,6 +787,41 @@ int main(int argc, char **argv)
         }
     }
     printf("\n");
+
+    /* ---- EDID over I2C-over-AUX (phase 0.4) ------------------------------
+     * GMBUS cannot reach an eDP panel, so this is the only way a cold boot
+     * learns its own mode. Ground truth is the EDID Linux already read - if
+     * our 128 bytes match that byte for byte, the transport is right. */
+    if (unsafe) {
+        printf("  -- EDID over I2C-over-AUX (GMBUS cannot serve eDP) --\n");
+        int n = intel_edid_over_aux(0, 0, 128);
+        printf("    read %d of 128 bytes over AUX\n", n);
+        if (n == 128) {
+            unsigned char ref[128]; int have = 0;
+            FILE *f = fopen("/sys/class/drm/card0-eDP-1/edid", "rb");
+            if (f) { have = (int)fread(ref, 1, 128, f); fclose(f); }
+            int sum = 0, diff = -1;
+            for (int i = 0; i < 128; i++) {
+                sum += intel_edid_byte(i);
+                if (have == 128 && diff < 0 && (unsigned char)intel_edid_byte(i) != ref[i])
+                    diff = i;
+            }
+            printf("    checksum %s   header %s\n",
+                   (sum & 0xFF) == 0 ? "OK" : "BAD",
+                   (intel_edid_byte(0) == 0 && (intel_edid_byte(1) & 0xFF) == 0xFF)
+                       ? "OK" : "BAD");
+            if (have == 128)
+                printf("    vs the EDID Linux read: %s%s\n",
+                       diff < 0 ? "IDENTICAL, all 128 bytes" : "DIFFERS at byte ",
+                       diff < 0 ? "" : "");
+            if (diff >= 0) printf("      first difference at byte %d\n", diff);
+            printf("    pixel clock in our copy: %d kHz\n",
+                   ((intel_edid_byte(0x37) << 8) | intel_edid_byte(0x36)) * 10);
+        } else {
+            printf("    [ FAIL ] short read - MOT handling or an I2C defer\n");
+        }
+        printf("\n");
+    }
 
     /* the HDMI divider search, checked against clocks whose answers are known */
     printf("  -- HDMI divider search (a few standard modes) --\n");
