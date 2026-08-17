@@ -4458,3 +4458,201 @@ int intel_vbt_port_present(int dvo_port)
         if (intel_vbt_child_port(i) == dvo_port) return 1;
     return 0;
 }
+
+/* ==== colour: gamma and the pipe CSC (phase 6) ===========================
+ *
+ * Offsets confirmed on this machine rather than taken from a header. The
+ * legacy palette at 0x4A000 reads 00000000, 00010101, 00020202, 00030303 -
+ * an identity ramp, entry n = (n<<16)|(n<<8)|n - which is unmistakable and
+ * settles both the base and the entry format in one read. PIPE_CSC_MODE at
+ * 0x49028 reads 2 with all coefficients zero, a defined idle state.
+ *
+ * Two LUTs exist. The legacy one is 256 8-bit entries and is what firmware
+ * loads; the precision one at 0x4A400 is an index/data pair for 10-bit and
+ * reads zero here because nothing has asked for it. Legacy is enough for
+ * brightness, contrast and a colour ramp, and it is the one with a verified
+ * layout, so it is the one implemented.
+ */
+/* The palette and CSC blocks step differently from the pipe blocks: 0x800 for
+ * the palettes (A 0x4A000, B 0x4A800) and 0x100 for the CSC. Assuming the
+ * 0x1000 pipe stride here would land in the middle of pipe A's own LUT. */
+#define PIPE_PAL_REG(base) ((base) + (u32)cur_pipe * 0x800u)
+#define PIPE_CSC_REG(base) ((base) + (u32)cur_pipe * 0x100u)
+
+#define LGC_PALETTE_A     PIPE_PAL_REG(0x4A000)   /* 256 entries, 4 bytes each */
+#define PREC_PAL_INDEX_A  PIPE_PAL_REG(0x4A400)
+#define PREC_PAL_DATA_A   PIPE_PAL_REG(0x4A404)
+#define PIPE_CSC_RY_GY_A  PIPE_CSC_REG(0x49010)
+#define PIPE_CSC_MODE_A   PIPE_CSC_REG(0x49028)
+
+/* One palette entry. 8 bits each, packed (R<<16)|(G<<8)|B - the format the
+ * identity ramp proves. */
+int intel_gamma_set(int i, u32 r, u32 g, u32 b)
+{
+    if (!intel_present() || !lt_armed || i < 0 || i > 255) return 0;
+    mmio_w(LGC_PALETTE_A + (u32)i * 4u,
+           ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF));
+    return 1;
+}
+
+u32 intel_gamma_get(int i)
+{
+    if (!intel_present() || i < 0 || i > 255) return 0;
+    return mmio_r(LGC_PALETTE_A + (u32)i * 4u);
+}
+
+/* Straight through - what firmware leaves. Restoring this undoes anything
+ * below it, which matters because a bad ramp is not visibly a bad ramp, it is
+ * a screen with wrong colours and no other symptom. */
+int intel_gamma_identity(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    for (int i = 0; i < 256; i++)
+        mmio_w(LGC_PALETTE_A + (u32)i * 4u,
+               ((u32)i << 16) | ((u32)i << 8) | (u32)i);
+    return 1;
+}
+
+/* Brightness and contrast as a ramp, which is all a LUT can express: output =
+ * (input - 128) * contrast / 256 + 128 + brightness, clamped. Contrast is in
+ * 1/256ths so 256 is unity; brightness is a signed offset in output levels. */
+int intel_gamma_ramp(int brightness, int contrast)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (contrast < 0) contrast = 0;
+    if (contrast > 1024) contrast = 1024;
+    for (int i = 0; i < 256; i++) {
+        int v = ((i - 128) * contrast) / 256 + 128 + brightness;
+        if (v < 0) v = 0;
+        if (v > 255) v = 255;
+        mmio_w(LGC_PALETTE_A + (u32)i * 4u,
+               ((u32)v << 16) | ((u32)v << 8) | (u32)v);
+    }
+    return 1;
+}
+
+/* NO general power-law gamma here, deliberately.
+ *
+ * A first version of this bisected on an integer power and was simply wrong -
+ * it scaled by an arbitrary constant each iteration and produced a smooth,
+ * monotonic, plausible-looking curve that was not a gamma curve. It would have
+ * shipped, because a wrong gamma ramp does not look like a bug: it looks like a
+ * screen whose colours are slightly off, with no other symptom and nothing to
+ * check it against.
+ *
+ * Everything else in this driver is verified against what firmware programmed
+ * for the same hardware. There is no firmware answer for an arbitrary gamma
+ * exponent, so that safety net does not exist here, and this kernel has no
+ * floating point to do it honestly. A correct implementation needs either a
+ * precomputed table per exponent or fixed-point roots done carefully.
+ *
+ * intel_gamma_ramp() covers brightness and contrast exactly, which is what a
+ * LUT is actually asked for, and intel_gamma_identity() restores firmware's
+ * state. Those are correct. A power law is left out rather than approximated
+ * wrongly. */
+
+u32 intel_csc_mode(void) { return intel_present() ? mmio_r(PIPE_CSC_MODE_A) : 0; }
+
+/* ==== phase 5: sprite planes, rotation, scaling ==========================
+ *
+ * Gen9 gives each pipe three universal planes. Plane 1 is the one this driver
+ * has always driven; 2 and 3 are identical in shape at +0x100 each, which is
+ * why they cost so little to add. They are what a compositor uses to put a
+ * video window or a cursor-sized overlay on screen without the CPU compositing
+ * it into the primary surface.
+ */
+#define PLANE_STRIDE_BASE  0x70180u        /* plane 1; +0x100 per plane */
+#define PLANE_REG(plane, off) PIPE_REG(PLANE_STRIDE_BASE + \
+                                       (u32)((plane) - 1) * 0x100u + (off))
+#define PL_CTL      0x00
+#define PL_STRIDE   0x08
+#define PL_POS      0x0C
+#define PL_SIZE     0x10
+#define PL_SURF     0x1C
+#define PL_OFFSET   0x24
+
+/* PLANE_CTL[1:0]. 90 and 270 need a Y or Yf tiled surface - the hardware
+ * cannot rotate a linear one - so a caller asking for those on linear is
+ * refused rather than silently given a scrambled screen. */
+#define PLANE_ROT_0     0
+#define PLANE_ROT_90    1
+#define PLANE_ROT_180   2
+#define PLANE_ROT_270   3
+
+int intel_plane_setup(int plane, u32 gfx_addr, u32 x, u32 y, u32 w, u32 h,
+                      u32 stride_bytes, int tiling, int rotation)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (plane < 1 || plane > 3) return 0;
+    if (rotation < 0 || rotation > 3) return 0;
+    if (!w || !h) return 0;
+
+    /* 90 and 270 are only legal on a tiled surface. */
+    if ((rotation == PLANE_ROT_90 || rotation == PLANE_ROT_270) &&
+        tiling != PLANE_TILING_Y) return 0;
+
+    u32 unit = plane_stride_unit(tiling);
+    if (stride_bytes % unit) return 0;
+    u32 st = stride_bytes / unit;
+    if (!st || st > 0x3FF) return 0;
+
+    mmio_w(PLANE_REG(plane, PL_OFFSET), 0);
+    mmio_w(PLANE_REG(plane, PL_POS),    (y << 16) | x);
+    mmio_w(PLANE_REG(plane, PL_SIZE),   ((h - 1) << 16) | (w - 1));
+    mmio_w(PLANE_REG(plane, PL_STRIDE), st);
+    mmio_w(PLANE_REG(plane, PL_CTL),
+           PLANE_CTL_ENABLE | PLANE_CTL_FORMAT_XRGB8888 |
+           ((u32)tiling << 10) | (u32)rotation);
+    /* SURF last - it arms everything above it (4.3 #3). */
+    mmio_w(PLANE_REG(plane, PL_SURF), gfx_addr & 0xFFFFF000u);
+    return 1;
+}
+
+int intel_plane_disable(int plane)
+{
+    if (!intel_present() || !lt_armed || plane < 1 || plane > 3) return 0;
+    mmio_w(PLANE_REG(plane, PL_CTL), 0);
+    mmio_w(PLANE_REG(plane, PL_SURF), 0);   /* the CTL=0 is armed by this */
+    return 1;
+}
+
+u32 intel_plane_ctl_n(int plane)
+{
+    if (!intel_present() || plane < 1 || plane > 3) return 0;
+    return mmio_r(PLANE_REG(plane, PL_CTL));
+}
+
+/* ---- the pipe scalers --------------------------------------------------
+ *
+ * Two per pipe. They take the plane's output and resample it into a window on
+ * the pipe, which is how a non-native resolution reaches a fixed-pixel panel
+ * without the blur of doing it in software.
+ *
+ * The modeset switches both OFF (step 51) because we scan out at native size
+ * and a scaler firmware left enabled would resample a correct image into a soft
+ * one. This is the other direction: asking for one deliberately.
+ *
+ * PS_WIN_POS and PS_WIN_SZ come BEFORE PS_CTRL, and the window is in pipe
+ * coordinates - the destination, not the source. The source is whatever the
+ * plane produces. */
+#define PS_WIN_POS(n)  PIPE_REG(0x68170u + (u32)((n) - 1) * 0x100u)
+#define PS_WIN_SZ(n)   PIPE_REG(0x68174u + (u32)((n) - 1) * 0x100u)
+#define PS_CTRL(n)     PIPE_REG(0x68180u + (u32)((n) - 1) * 0x100u)
+#define PS_ENABLE      (1u << 31)
+
+int intel_scaler_enable(int which, u32 x, u32 y, u32 w, u32 h)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (which < 1 || which > 2 || !w || !h) return 0;
+    mmio_w(PS_WIN_POS(which), (x << 16) | y);
+    mmio_w(PS_WIN_SZ(which),  (w << 16) | h);
+    mmio_w(PS_CTRL(which),    PS_ENABLE);
+    return 1;
+}
+
+int intel_scaler_disable(int which)
+{
+    if (!intel_present() || !lt_armed || which < 1 || which > 2) return 0;
+    mmio_w(PS_CTRL(which), 0);
+    return 1;
+}
