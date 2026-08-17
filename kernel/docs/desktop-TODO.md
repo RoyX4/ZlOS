@@ -157,18 +157,46 @@ rectangle would cost more than the blit they exist to shrink.
 
 ---
 
-### [ ] 0d. Put mouse events into the input queue
+### [x] 0d. Put mouse events into the input queue — **DONE 2026-08-18** (C side)
 
-**Problem.** The keyboard produces proper events. The mouse does not — it is a
-polled global at `idt.c:100`. `input.c:40` already declares `EV_MOUSE` and
-**nothing ever pushes one**.
+**Problem.** The keyboard produced proper events. The mouse did not — a polled
+global at `idt.c:100`. `input.c` declared `EV_MOUSE` and **nothing ever pushed
+one**, so this file's own opening claim — "the keyboard and the mouse are two
+sources of one stream of events" — was half true, and a compositor cannot route
+what is not in the queue.
 
-**Do.** Push `EV_MOUSE` from the same pump in `input_poll()`, carrying x, y and
-buttons. Keep the old `mouse_x()`/`mouse_y()` builtins working during the
-transition so nothing breaks mid-way.
+**Shipped.** `pump_mouse()` in `input_poll()`, plus `input_x()`/`input_y()`.
+`mouse_x()`/`mouse_y()` are untouched and still read `idt.c` directly.
 
-**Verify.** The existing mouse demo (`x`) and paint (`d`) still work, reading
-events instead of globals.
+Two things worth knowing before building on it:
+
+- **A position is state, so moves coalesce** to one event carrying the latest
+  position. That is correct, not lossy: replaying intermediate positions would
+  tell a window it had been dragged through places the hand had already left.
+- **A button is not state, and that is the seam.** `idt.c` keeps only the
+  current mask, so a press *and* release that both fall between two polls is
+  gone before `input.c` runs. No work in this file recovers it. It does not
+  bite in practice — the pump runs per frame, a human click is 50–100 ms — and
+  the fix when it is needed is a "pressed since last read" latch in the ISR,
+  not here.
+
+**Not done: the zl side.** `in_x`/`in_y` builtins would need
+`freestanding/runtime_kernel.c`, which another session is mid-flight in. `wm.c`
+is C and consumes `input.c` directly, so nothing in Group C is blocked. Left
+for whoever owns that file.
+
+**Verified.** New `hosttest/inputtest.c` — the shipping `input.c` against
+stubbed hardware, 12 assertions, all green. Every failure mode of this change
+is invisible in a screenshot, which is why it gets assertions instead:
+
+| | |
+|---|---|
+| no phantom event at boot | the first poll *adopts* 400,300 rather than announcing it — otherwise every boot opens with a fake move, including the text-mode gate where there is no pointer |
+| an unchanged pointer is silent | including one parked against the clamp for 50 polls |
+| one move → exactly one event | carrying the new position, not the current one |
+| 20 moves → coalesced, last wins | |
+| a button change with no movement still reports | a click without a wobble is the normal case |
+| `input_char`/`input_key` unaffected | asserted *with* mouse traffic in the same drain — this is the task's stated gate |
 
 ---
 

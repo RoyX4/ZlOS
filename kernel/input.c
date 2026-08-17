@@ -31,6 +31,9 @@ typedef unsigned char  u8;
 extern u32 idt_ticks(void);
 extern int idt_scan(void);        /* raw PS/2 scancode from the IRQ buffer */
 extern int xhci_key(void);        /* a decoded character from USB HID      */
+extern int idt_mouse_x(void);     /* the PS/2 pointer, published by IRQ12  */
+extern int idt_mouse_y(void);
+extern int idt_mouse_btn(void);
 
 /* ---- event model ------------------------------------------------------- */
 #define EV_NONE      0
@@ -254,6 +257,39 @@ static void handle_scancode(int sc)
     repeat_at   = idt_ticks() + REPEAT_DELAY;
 }
 
+/* ---- the mouse ---------------------------------------------------------
+ * EV_MOUSE has been declared since this file was written and NOTHING EVER
+ * PUSHED ONE. The keyboard produced proper events while the pointer stayed a
+ * pair of globals that callers polled - so "the keyboard and the mouse are two
+ * sources of one stream of events", which is this file's opening claim, was
+ * only half true. A compositor cannot route what is not in the queue.
+ *
+ * A position is STATE, not an increment, so many moves between two polls
+ * coalesce into one event carrying the latest position. That is correct rather
+ * than lossy: replaying intermediate positions would tell a window it had been
+ * dragged through places the hand had already left.
+ *
+ * A BUTTON is not state, and this is the seam. idt.c keeps only the current
+ * mask, so a press and release that both land between two polls is already
+ * gone before this code runs - no amount of work here recovers it. In practice
+ * the pump runs every frame and a human click is 50-100 ms, so it does not
+ * bite; the fix, when it is needed, is a latch in the ISR (idt.c) recording
+ * "pressed since last read", not anything in this file.
+ *
+ * The first poll ADOPTS the pointer instead of announcing it. Otherwise the
+ * initial 400,300 would arrive as a phantom move on every boot, including the
+ * text-mode gate path where there is no pointer at all. */
+static int ms_x, ms_y, ms_btn, ms_seen;
+
+static void pump_mouse(void)
+{
+    int x = idt_mouse_x(), y = idt_mouse_y(), b = idt_mouse_btn();
+    if (!ms_seen) { ms_x = x; ms_y = y; ms_btn = b; ms_seen = 1; return; }
+    if (x == ms_x && y == ms_y && b == ms_btn) return;
+    ms_x = x; ms_y = y; ms_btn = b;
+    evq_push(EV_MOUSE, (u32)b, mods, x, y);
+}
+
 /* ---- the pump ----------------------------------------------------------
  * Called from the shell's idle loop. Drains both hardware sources into the
  * one queue and generates repeats. Everything above is bookkeeping; this is
@@ -266,6 +302,8 @@ void input_poll(void)
         if (!sc) break;
         handle_scancode(sc);
     }
+
+    pump_mouse();
 
     /* USB HID, which already hands us decoded characters */
     for (int i = 0; i < 8; i++) {
@@ -300,6 +338,12 @@ int input_next(void)
 
 int input_type(void)  { return last.type; }
 int input_code(void)  { return (int)last.code; }
+/* For EV_MOUSE: where the pointer was when the event was made, and which
+ * buttons were down (input_code carries the mask). Reading idt_mouse_x()
+ * instead would give wherever the pointer is NOW, which is a different and
+ * usually wrong question once there is a queue between the two. */
+int input_x(void)     { return last.x; }
+int input_y(void)     { return last.y; }
 int input_mods(void)  { return last.mods; }
 int input_shift(void) { return (mods & MOD_SHIFT) ? 1 : 0; }
 int input_ctrl(void)  { return (mods & MOD_CTRL) ? 1 : 0; }
