@@ -129,6 +129,75 @@ int fb_get_rows(void) { return fb_rows; }
 static unsigned int *back = (unsigned int *)HI_BACK;
 static int back_on = 0;
 
+/* ---- SIMD, and exactly where it is allowed --------------------------------
+ * cpu.c has detected SSE/SSE2/SSE3/SSSE3 since it was written and NOTHING has
+ * ever used it. The reason to be careful rather than eager:
+ *
+ *   SSE IS ONLY ENABLED ON THE 64-BIT PATH. boot64.S sets CR4.OSFXSR (bit 9);
+ *   boot.S, the 32-bit multiboot entry that verify.sh boots, does not touch
+ *   CR4 at all. An SSE instruction there faults. So this cannot simply be
+ *   switched on for "the kernel" - fb.c is compiled into both.
+ *
+ * __SSE2__ is exactly the right predicate and needs no build-system change:
+ * gcc defines it for x86-64 (always, SSE2 is baseline) and leaves it undefined
+ * for -m32 without -msse2, which is what build.sh uses. So the 64-bit kernel,
+ * the UEFI application - the path the ThinkPad actually takes - and
+ * hosttest/fbbench all get the vector path, and the 32-bit kernel keeps the
+ * scalar one. The two must produce IDENTICAL pixels, which the FNV scene hash
+ * checks on every run.
+ *
+ * WHAT IS NOT VECTORISED, AND WHY: blend_rgb and blend_sub. They are three
+ * table lookups into srgb_to_lin per pixel, and a gather is the one thing SSE2
+ * cannot do. Vectorising around it would mean giving up the gamma-correct
+ * linear-light blend, which is the single best thing about this renderer. Not
+ * worth it, and saying so here is cheaper than someone rediscovering it.
+ */
+/* -DFB_NO_SIMD forces the scalar path even where SSE2 exists. That is not a
+ * debug switch, it is the A/B: DECISIONS.md #25 records an optimisation that
+ * was argued from an instruction count, shipped, and turned out 25% SLOWER
+ * when finally measured. Keeping both paths buildable is what makes the
+ * comparison a command rather than an opinion. */
+#if defined(__SSE2__) && !defined(FB_NO_SIMD)
+#include <emmintrin.h>
+#define FB_SIMD 1
+#else
+#define FB_SIMD 0
+#endif
+
+/* Fill n 32-bit pixels with one colour. Sixteen bytes a go once aligned.
+ * GCC will not do this itself at -O2: the "very-cheap" cost model refuses any
+ * loop whose trip count is a runtime value, because it would need a scalar
+ * epilogue - verified by objdump, which shows no xmm in fb_fill_px at all. */
+static inline void fill32(unsigned int *d, unsigned int rgb, int n)
+{
+#if FB_SIMD
+    while (n > 0 && ((unsigned long)d & 15)) { *d++ = rgb; n--; }
+    __m128i v = _mm_set1_epi32((int)rgb);
+    while (n >= 16) {
+        _mm_store_si128((__m128i *)d,      v);
+        _mm_store_si128((__m128i *)d + 1,  v);
+        _mm_store_si128((__m128i *)d + 2,  v);
+        _mm_store_si128((__m128i *)d + 3,  v);
+        d += 16; n -= 16;
+    }
+    while (n >= 4) { _mm_store_si128((__m128i *)d, v); d += 4; n -= 4; }
+#endif
+    while (n-- > 0) *d++ = rgb;
+}
+
+/* Copy n 32-bit pixels. This is the present blit, which crosses into
+ * write-combining VRAM on real hardware - wide stores are what WC is for. */
+static inline void copy32(unsigned int *d, const unsigned int *s, int n)
+{
+#if FB_SIMD
+    while (n >= 4) {
+        _mm_storeu_si128((__m128i *)d, _mm_loadu_si128((const __m128i *)s));
+        d += 4; s += 4; n -= 4;
+    }
+#endif
+    while (n-- > 0) *d++ = *s++;
+}
+
 /* ---- the damage list -----------------------------------------------------
  * This was ONE rectangle that every touched pixel grew. A clock ticking in one
  * corner and a monitor updating in the other unioned to the whole screen, every
@@ -254,8 +323,7 @@ void fb_present(void)
             unsigned int  *src = back + (unsigned long)y * fb_w + x0;
             unsigned char *dst = fb_base + (unsigned long)y * fb_pitch + (unsigned long)x0 * bpx;
             if (bpx == 4) {
-                unsigned int *d = (unsigned int *)dst;
-                for (int x = x0; x < x1; x++) *d++ = *src++;
+                copy32((unsigned int *)dst, src, x1 - x0);
             } else {
                 for (int x = x0; x < x1; x++) {
                     unsigned int c = *src++;
@@ -761,10 +829,8 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
     if (x0 >= x1 || y0 >= y1) return;
 
     if (back_on) {
-        for (int yy = y0; yy < y1; yy++) {
-            unsigned int *row = back + (unsigned long)yy * fb_w + x0;
-            for (int xx = x0; xx < x1; xx++) *row++ = rgb;
-        }
+        for (int yy = y0; yy < y1; yy++)
+            fill32(back + (unsigned long)yy * fb_w + x0, rgb, x1 - x0);
         fb_damage(x0, y0, x1 - x0, y1 - y0);
         return;
     }
