@@ -89,8 +89,43 @@ int fb_get_rows(void) { return fb_rows; }
  * The dirty box is tracked automatically by put_pixel, so nothing above this
  * file has to know the back buffer exists - callers just draw, then present.
  */
-#define BACK_MAX (1920 * 1200)   /* covers 1080p and 16:10 1920x1200 */
-static unsigned int *back = (unsigned int *)0x0C000000;   /* 192 MiB scratch */
+/* ---- the fixed high-RAM map ----------------------------------------------
+ * There is no allocator, so every multi-megabyte buffer in this kernel lives
+ * at a fixed physical address. They are NEIGHBOURS, and the only thing
+ * stopping one from eating the next is arithmetic. Every base below was read
+ * out of the file that owns it - do not take this list on trust, re-grep it:
+ *
+ *   0x08000000  128 MiB   fb.c          bg_buf   drag background snapshot
+ *   0x0A000000  160 MiB   fb.c          sp_buf   drag sprite
+ *   0x0B000000  176 MiB   sched.c       STACK_BASE, kernel task stacks
+ *   0x0C000000  192 MiB   fb.c          back     the back buffer
+ *   0x0D000000  208 MiB   nvme.c        NMEM_ASQ, admin queues
+ *   0x0E000000  224 MiB   xhci.c        XMEM_DCBAA - the DMA arena
+ *   0x0F000000  240 MiB   virtio_gpu.c  VMEM_DESC
+ *
+ * So each buffer's ceiling is set by whoever comes after it, and "does this
+ * mode fit" is that subtraction. It is NOT a compile-time pixel count that
+ * silently stops being true when the panel gets bigger - which is exactly the
+ * bug this replaces. BACK_MAX was 1920*1200, so the ThinkPad's 2560x1440 made
+ * back_on 0 and took the back buffer, subpixel text, fast read-back AND
+ * window dragging with it, without printing a word. desktop-TODO 0a, T-1.
+ *
+ * (Group C deletes bg_buf and sp_buf entirely - the snapshot-and-sticker drag
+ * machinery - which frees 128..176 MiB and lets `back` move down to cover 4K.
+ * Until then 192..208 MiB is what it has: 16 MiB, i.e. up to 4,194,304 pixels,
+ * which covers 2560x1440 and 2560x1600 but not 3840x2160.)
+ */
+#define HI_BG     0x08000000UL
+#define HI_SP     0x0A000000UL
+#define HI_SCHED  0x0B000000UL
+#define HI_BACK   0x0C000000UL
+#define HI_NVME   0x0D000000UL
+
+#define BG_LIMIT   ((unsigned int)(HI_SP    - HI_BG))    /* 32 MiB */
+#define SP_LIMIT   ((unsigned int)(HI_SCHED - HI_SP))    /* 16 MiB */
+#define BACK_LIMIT ((unsigned int)(HI_NVME  - HI_BACK))  /* 16 MiB */
+
+static unsigned int *back = (unsigned int *)HI_BACK;
 static int back_on = 0;
 static int dx0, dy0, dx1, dy1, dirty;
 
@@ -133,6 +168,66 @@ void fb_present(void)
     }
 }
 
+/* ---- saying so out loud --------------------------------------------------
+ * The degradation above is legitimate. The SILENCE was the bug: four features
+ * turned themselves off at 2560x1440 and nothing anywhere said a word, so the
+ * first symptom would have been "the desktop is inexplicably a slideshow on
+ * the laptop and dragging does nothing".
+ *
+ * This goes out through zl_putc_pub, the same character sink the rest of the
+ * kernel prints through, so it lands on the serial log. On the FIRST call the
+ * screen is wiped immediately afterwards by console_init's fb_clear(), so the
+ * line is serial-only there - which is fine, because the serial log is what an
+ * unattended gate reads. On a later runtime mode switch (the `n` command, via
+ * console_init_fb) it lands on both.
+ *
+ * Note this cannot reach the text-mode path: fb_setup is only ever called when
+ * there IS a framebuffer, and on verify.sh's `-kernel -display none` there is
+ * not one, so golden.txt is untouched.
+ */
+void zl_putc_pub(char c);
+
+static void fb_puts(const char *s) { while (*s) zl_putc_pub(*s++); }
+
+static void fb_putu(unsigned int v)
+{
+    char b[12];
+    int i = 0;
+    if (!v) { zl_putc_pub('0'); return; }
+    while (v) { b[i++] = (char)('0' + v % 10u); v /= 10u; }
+    while (i) zl_putc_pub(b[--i]);
+}
+
+/* Report EACH buffer separately, because they no longer fail together.
+ * They used to: BACK_MAX and BG_MAX were both 1920*1200, so one resolution
+ * killed the back buffer and dragging in the same step and it was fair to list
+ * them as one loss. Sized from real neighbours they have different ceilings -
+ * at 3840x2160 the back buffer does not fit but the drag snapshot does, by
+ * 368 KiB. Saying "dragging is lost" there would be a lie the boot log tells
+ * every time, which is worse than the silence this replaced. */
+static void fb_report_mode(unsigned int need)
+{
+    int drag_ok = (need <= BG_LIMIT);
+
+    fb_puts("  fb: ");
+    fb_putu(fb_w); fb_puts("x"); fb_putu(fb_h); fb_puts("x"); fb_putu(fb_bpp);
+    fb_puts(" cell "); fb_putu((unsigned)cell_w); fb_puts("x"); fb_putu((unsigned)cell_h);
+    fb_puts(", back "); fb_puts(back_on ? "ON" : "OFF");
+    fb_puts(", drag "); fb_puts(drag_ok ? "ON" : "OFF");
+    fb_puts("  ("); fb_putu(need >> 10); fb_puts(" KiB/mode)\n");
+
+    if (!back_on) {
+        fb_puts("      back OFF: wants "); fb_putu(need >> 10);
+        fb_puts(" KiB, "); fb_putu(BACK_LIMIT >> 10);
+        fb_puts(" KiB free below nvme - no subpixel text, read-back hits VRAM\n");
+    }
+    if (!drag_ok) {
+        fb_puts("      drag OFF: snapshot wants "); fb_putu(need >> 10);
+        fb_puts(" KiB, "); fb_putu(BG_LIMIT >> 10);
+        fb_puts(" KiB free below sp_buf - windows will not move\n");
+    }
+}
+
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp)
 {
@@ -156,10 +251,13 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
     tx1      = fb_cols - 1;      /* full width until zl opens a text box */
 
     /* Draw into RAM and blit, rather than drawing straight into the card.
-     * Only refused if the mode is bigger than the buffer we reserved, in
-     * which case everything still works - just slower, straight to VRAM. */
-    back_on = ((int)(width * height) <= BACK_MAX);
+     * Refused only when the mode does not fit between `back` and its
+     * neighbour, in which case everything still works - just slower, straight
+     * to VRAM - and the boot log SAYS SO. See the high-RAM map above. */
+    unsigned int need = width * height * 4u;
+    back_on = (need <= BACK_LIMIT);
     dirty   = 0;
+    fb_report_mode(need);
 
     /* Tell the mouse ISR how big the screen is. It cannot ask: idt.c is built
      * -mgeneral-regs-only so that an interrupt never touches SSE, and calling
@@ -914,14 +1012,18 @@ void fb_pointer_show(int x, int y)
  * it now IS. Two copies per frame, no re-rendering - so a window glides.
  * Buffers are sized for up to 1024x768 background and a 640x480 window; bigger
  * modes fall back gracefully (dragging just no-ops). */
-#define BG_MAX (1920 * 1200)    /* the widest mode the bootloader will pick */
-#define SP_MAX (640 * 480)
 /* These are multi-megabyte, so they must NOT live in BSS (the linker would put
  * them right after the kernel, where they collided with the stack/framebuffer
- * and corrupted memory). Park them in free high RAM instead - QEMU/-m 256 has
- * 256 MiB, and 16-25 MiB is clear of the kernel image and the framebuffer. */
-static unsigned int *bg_buf = (unsigned int *)0x08000000;   /* 128 MiB scratch */
-static unsigned int *sp_buf = (unsigned int *)0x0A000000;   /* 160 MiB scratch */
+ * and corrupted memory). Park them in free high RAM instead - see the map at
+ * the top of this file.
+ *
+ * Their ceilings used to be compile-time PIXEL COUNTS - BG_MAX 1920*1200 and
+ * SP_MAX 640*480 - which is the same bug the back buffer had: at 2560x1440
+ * bg_ok went to 0 and dragging stopped working, silently. Both now measure the
+ * mode against the actual gap to the next buffer. (SP_MAX 640x480 was also why
+ * the 1256x944 terminal could not be dragged: nearly 4x over the ceiling.) */
+static unsigned int *bg_buf = (unsigned int *)HI_BG;
+static unsigned int *sp_buf = (unsigned int *)HI_SP;
 static int bg_w = 0, bg_h = 0, bg_ok = 0;
 static int sp_w = 0, sp_h = 0, sp_ok = 0;
 
@@ -929,7 +1031,7 @@ static int sp_w = 0, sp_h = 0, sp_ok = 0;
  * wallpaper/header/dock but before the draggable windows go on top */
 void fb_bg_snapshot(void)
 {
-    if ((int)(fb_w * fb_h) > BG_MAX) { bg_ok = 0; return; }
+    if (fb_w * fb_h * 4u > BG_LIMIT) { bg_ok = 0; return; }
     bg_w = (int)fb_w; bg_h = (int)fb_h;
     for (int y = 0; y < bg_h; y++)
         for (int x = 0; x < bg_w; x++)
@@ -951,7 +1053,7 @@ void fb_bg_restore(int x, int y, int w, int h)
 /* grab a screen rectangle into the sprite buffer (the window being lifted) */
 void fb_grab(int x, int y, int w, int h)
 {
-    if (w <= 0 || h <= 0 || w * h > SP_MAX) { sp_ok = 0; return; }
+    if (w <= 0 || h <= 0 || (unsigned int)(w * h) * 4u > SP_LIMIT) { sp_ok = 0; return; }
     sp_w = w; sp_h = h;
     for (int j = 0; j < h; j++)
         for (int i = 0; i < w; i++)

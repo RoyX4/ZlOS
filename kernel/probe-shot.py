@@ -56,11 +56,22 @@ def main():
     ap.add_argument("--settle", type=float, default=1.0,
                     help="seconds to let the screen settle after the keys")
     ap.add_argument("--boot-timeout", type=float, default=240)
+    ap.add_argument("--gfxmode",
+                    help="force GRUB's gfxmode, e.g. 2560x1440,auto. The kernel "
+                         "only re-modesets itself below 1900 wide, so this is "
+                         "the way to hand it a bigger panel than it would pick.")
+    ap.add_argument("--src",
+                    help="build from this .zl instead of kernel.zl - for booting "
+                         "a variant without editing the tracked source")
     args = ap.parse_args()
 
     crop = tuple(int(v) for v in args.crop.split(",")) if args.crop else None
     os.makedirs(SHOTS, exist_ok=True)
 
+    if args.gfxmode:
+        os.environ["ZLOS_GFXMODE"] = args.gfxmode
+    if args.src:
+        os.environ["ZLOS_SRC"] = os.path.abspath(args.src)
     build(False)
     tmp = tempfile.mkdtemp(prefix="zlos-shot-")
     ser_path, qmp_path = os.path.join(tmp, "ser"), os.path.join(tmp, "qmp")
@@ -71,7 +82,7 @@ def main():
         ok, log = ser.wait("ready.", args.boot_timeout)
         if not ok:
             print("never booted. serial so far:\n" + log[-2000:]); sys.exit(1)
-        print(log.strip()[-800:])
+        print(log.strip())
         ok, _ = ser.wait(PROMPT, 60)
         if not ok:
             print("booted but no prompt"); sys.exit(1)

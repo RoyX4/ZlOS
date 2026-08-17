@@ -27,13 +27,20 @@
 #include <stdint.h>
 #include <time.h>
 
-/* ---- the fixed addresses fb.c hardcodes -------------------------------- */
-#define BG_ADDR   0x08000000UL   /* bg_buf   - 128 MiB */
-#define SP_ADDR   0x0A000000UL   /* sp_buf   - 160 MiB */
-#define BACK_ADDR 0x0C000000UL   /* back     - 192 MiB */
-#define BG_SIZE   (16UL << 20)
-#define SP_SIZE   (8UL  << 20)
-#define BACK_SIZE (48UL << 20)   /* enough for 4K at 4 bytes per pixel */
+/* ---- the fixed addresses fb.c hardcodes --------------------------------
+ * These MUST match the high-RAM map at the top of fb.c, including the sizes:
+ * fb.c now decides whether a mode fits by subtracting one base from the next,
+ * so mapping a different amount here would make the harness disagree with the
+ * kernel about what degrades. Re-read that comment block if this ever fails. */
+#define BG_ADDR   0x08000000UL   /* bg_buf - 128 MiB, ceiling = sp_buf   */
+#define SP_ADDR   0x0A000000UL   /* sp_buf - 160 MiB, ceiling = sched.c  */
+#define BACK_ADDR 0x0C000000UL   /* back   - 192 MiB, ceiling = nvme.c   */
+#define BG_SIZE   (SP_ADDR    - BG_ADDR)      /* 32 MiB */
+#define SP_SIZE   (0x0B000000UL - SP_ADDR)    /* 16 MiB */
+#define BACK_SIZE (0x0D000000UL - BACK_ADDR)  /* 16 MiB */
+
+/* what fb.c will decide, by the same arithmetic */
+static int fits_back(int w, int h) { return (unsigned long)w * h * 4 <= BACK_SIZE; }
 
 /* ---- fb.c's public surface --------------------------------------------- */
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
@@ -50,6 +57,10 @@ void fb_box(int x, int y, int w, int h, unsigned int rgb);
 void fb_present(void);
 void fb_at(int row, int col, const char *s, unsigned char attr);
 void fb_bg_snapshot(void);
+void fb_bg_restore(int x, int y, int w, int h);
+void fb_grab(int x, int y, int w, int h);
+void fb_stamp(int x, int y);
+unsigned int fb_get_px(int x, int y);
 unsigned int fb_pxw(void);
 unsigned int fb_pxh(void);
 int  fb_cell_w(void);
@@ -62,6 +73,11 @@ int  fb_get_subpixel(void);
  * link, and "fbbench does not build" is indistinguishable from "fb.c is
  * broken" at exactly the moment you want to tell those apart. */
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
+
+/* fb_setup() reports the mode it took and whether the back buffer survived it.
+ * That goes through the kernel's one character sink; here it is stdout, so the
+ * harness prints exactly what the boot log would. */
+void zl_putc_pub(char c) { fputc(c, stdout); }
 
 /* ---- timing ------------------------------------------------------------ */
 static inline uint64_t rdtsc(void)
@@ -218,6 +234,49 @@ static void scene(void)
         fb_at(r, 0, "the quick brown fox 0123456789", 0x07);
 }
 
+/* Does the DRAG machinery survive this mode?
+ *
+ * Dragging goes through a second pair of fixed buffers, bg_buf and sp_buf,
+ * each of which had its own compile-time PIXEL ceiling - and bg_buf's was
+ * 1920x1200, so at 2560x1440 bg_ok went to 0 and every drag became a silent
+ * no-op. That is a different failure from the back buffer's and it needs its
+ * own check, because "the desktop draws" does not test it at all.
+ *
+ * bg_ok and sp_ok are static, so this asks functionally instead: snapshot,
+ * scribble, restore, and see whether the scribble went away. A refused
+ * snapshot makes fb_bg_restore a no-op and the scribble stays. Same for the
+ * sprite: grab a patch, stamp it somewhere else, and look for it there. */
+static int drag_check(void)
+{
+    const unsigned MARK = 0x00FF00FF, WALL = 0x00203040;
+    int ok = 1;
+
+    fb_fill_px(0, 0, W, H, WALL);
+    fb_bg_snapshot();
+    fb_fill_px(100, 100, 200, 200, MARK);
+    fb_bg_restore(100, 100, 200, 200);
+    if (fb_get_px(150, 150) != WALL) {
+        printf("  %-34s FAIL - bg_restore did not undo the scribble\n",
+               "drag: background snapshot");
+        ok = 0;
+    } else {
+        printf("  %-34s ok\n", "drag: background snapshot");
+    }
+
+    /* a window-sized sprite: the System Monitor at ui()==2 is 568x428 */
+    fb_fill_px(400, 400, 568, 428, MARK);
+    fb_grab(400, 400, 568, 428);
+    fb_bg_restore(400, 400, 568, 428);
+    fb_stamp(900, 500);
+    if (fb_get_px(900 + 284, 500 + 214) != MARK) {
+        printf("  %-34s FAIL - the sprite did not land\n", "drag: window sprite");
+        ok = 0;
+    } else {
+        printf("  %-34s ok\n", "drag: window sprite");
+    }
+    return ok;
+}
+
 static void hash_report(void)
 {
     memset(vram_p, 0, (size_t)W * H * 4);
@@ -233,17 +292,10 @@ static void run_at(int w, int h, unsigned long vram)
 {
     W = w; H = h;
     vram_p = (unsigned char *)vram;
-    fb_setup(vram, (unsigned)w * 4, (unsigned)w, (unsigned)h, 32);
-
-    /* fb.c decides back_on internally from BACK_MAX; report what it chose by
-     * timing a readback-heavy op is unreliable, so infer it the same way fb.c
-     * does and state it. BACK_MAX is 1920*1200. */
-    int back_on = (w * h) <= (1920 * 1200);
-
     printf("\n=== %dx%d  (%ld px)   back buffer: %s ===\n",
-           w, h, (long)w * h, back_on ? "ON" : "OFF  <-- degraded");
-    if (!back_on)
-        printf("  subpixel text OFF, get_px reads VRAM, dragging disabled\n");
+           w, h, (long)w * h, fits_back(w, h) ? "ON" : "OFF  <-- degraded");
+    /* fb_setup prints its own verdict - the same line the boot log gets */
+    fb_setup(vram, (unsigned)w * 4, (unsigned)w, (unsigned)h, 32);
     printf("  subpixel flag: %d   cell: %dpx\n", fb_get_subpixel(), fb_cell_w());
 
     long px = (long)w * h;
@@ -262,6 +314,7 @@ static void run_at(int w, int h, unsigned long vram)
     bench("ONE WINDOW (full chrome)", b_window,   0);
     bench("WHOLE DESKTOP redraw",     b_desktop,  px);
     printf("\n");
+    drag_check();
     hash_report();
 }
 
@@ -297,8 +350,10 @@ int main(void)
     printf("TSC %.3f GHz   (min of %d runs; cycles are the real number)\n",
            tsc_hz / 1e9, REPS);
 
-    run_at(1920, 1200, (unsigned long)vram);   /* back buffer ON  */
-    run_at(2560, 1440, (unsigned long)vram);   /* back buffer OFF */
+    run_at(1920, 1200, (unsigned long)vram);   /* back buffer ON               */
+    run_at(2560, 1440, (unsigned long)vram);   /* the ThinkPad panel - ON now, */
+                                               /* OFF before desktop-TODO 0a   */
+    run_at(3840, 2160, (unsigned long)vram);   /* 4K: still OFF, and it says so */
 
     printf("\nnote: 'present' writes to ordinary RAM here. On the real machine\n");
     printf("it crosses PCIe into write-combining VRAM, so it is a FLOOR.\n");
