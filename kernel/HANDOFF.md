@@ -196,10 +196,57 @@ run for real.
 `intel.c` is unreachable from zlOS itself — the driver reads the display
 correctly and cannot yet touch it.
 
-And there is still **no ordered modeset function**: the sequence in `intel.c` is
-a comment. All the pieces it needs now exist except EDID over I2C-over-AUX
-(GMBUS does not serve eDP on DDI A) and `LINK_RATE_SET` Method B (not needed —
-this panel has no rate table).
+## The ordered modeset exists now — 35 steps, and it can be read before it runs
+
+`intel_modeset_run(port)` walks Phases B→H in the plan's order. Set the mode
+first (`intel_modeset_set_from_hw()` takes it off the running panel), then run.
+
+**`intel_modeset_dry(port)` walks the whole sequence writing nothing** — it needs
+neither `lt_armed` nor a detached i915, so the order is reviewable on a live
+desktop. `./gpu-dev.sh probe` prints it. That matters because the sequence is now
+the *only* genuinely untested thing left: every primitive under it was checked
+against what firmware programmed, but the order has never executed.
+
+Dry mode is a macro, not a flag, for a real reason: C evaluates arguments
+eagerly, so `ms_do(3, "...", intel_dc_states_block())` would touch hardware even
+in a dry run. `MS_STEP` defers the call.
+
+**Verified dry.** A full dry run followed by a register diff: all 25 registers
+the sequence writes are byte-identical, and `PWR_WELL_CTL_DRIVER`,
+`PWR_WELL_CTL_BIOS` and `DC_STATE_EN` are unchanged across two runs. The 22
+registers that *did* move are i915's own — `PIPEDSL`, the frame and flip
+counters, timestamps, a page-flipped `PLANE_SURF`, and `DDI_BUF_CTL` bit 7 which
+is read-only idle status.
+
+Failures report the plan step number, not "modeset failed".
+
+Three things it needed that also did not exist:
+
+- **A port enable/disable primitive.** `DDI_BUF_CTL_ENABLE` was defined and
+  never written by anything, so `intel_link_train()` was writing training
+  patterns into a port nothing had switched on. Plan implementation order #5
+  calls this mandatory before any training attempt.
+- **`intel_dbuf_enable()`** (step 10) and **`intel_cdclk_khz()`** (step 9).
+- **`intel_iboost_set()`** (step 32), including the x4 rule — DDI A's upper
+  lanes are driven by the DDI E field, so both halves need programming or two
+  lanes sit on a different drive setting from the other two.
+
+Two guards that were silently too narrow:
+
+- `intel_pwr_well_enable()` rejected anything above index 3, which made **PW1
+  (index 14) unrequestable** — plan step 6, a prerequisite for the whole display
+  core. The REQ/STATE macros were always right; only the range check was wrong.
+- `lt_armed` was declared halfway down the file, so a write path added above it
+  failed to compile in a way that reads as "lt_armed is missing". Moved up with
+  the other module state.
+
+**Known deviation from the plan:** step 40 makes ONE training attempt and fails,
+where the plan wants a bounded retry. Failing loudly is the plan's actual point,
+and a correct retry must cycle the port first (4.3 #20) — worth adding once the
+sequence has run once, not before.
+
+Still missing: EDID over I2C-over-AUX (GMBUS does not serve eDP on DDI A).
+`LINK_RATE_SET` Method B is **not** needed — this panel has no rate table.
 
 ## The one thing blocking a cold-start modeset
 

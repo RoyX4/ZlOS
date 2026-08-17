@@ -185,6 +185,16 @@ int  intel_ddb_end(void);
 int  intel_ddb_blocks(void);
 u32  intel_wm_compute_level0(u32 w, u32 bpp, u32 khz, u32 lat);
 
+int  intel_modeset_set_from_hw(void);
+int  intel_modeset_set_fb(u32 gfx_addr, u32 stride_bytes);
+int  intel_modeset_dry(int port);
+int  intel_modeset_steps(void);
+int  intel_modeset_step_plan(int i);
+const char *intel_modeset_step_name(int i);
+int  intel_modeset_step_result(int i);
+int  intel_modeset_failed_at(void);
+u32  intel_wm_compute_level0(u32 w, u32 bpp, u32 khz, u32 lat);
+
 static unsigned char edid_storage[256];
 
 /* ---- what intel.c expects the kernel to provide ------------------------ */
@@ -566,6 +576,51 @@ int main(int argc, char **argv)
             printf("    [ FAIL ] duty exceeds period\n");
         else
             printf("    [ PASS ] a sane period and a duty inside it\n");
+    }
+    printf("\n");
+
+
+    /* ---- the ordered modeset sequence, walked without executing it -------
+     * intel.c's modeset is 30-odd steps whose ORDER is the entire point, and
+     * it had never existed as code - only as a comment. It cannot RUN here:
+     * that needs i915 detached and lt_armed set. But dry mode walks the whole
+     * sequence recording each step and touching no register, which makes the
+     * order reviewable against the plan today rather than after a black
+     * screen. The step numbers are the plan's own, so they must never go
+     * backwards. */
+    printf("  -- the cold-start modeset sequence (DRY - nothing written) --\n");
+    if (!intel_modeset_set_from_hw()) {
+        printf("    could not take the mode from hardware\n");
+    } else {
+        intel_modeset_set_fb(0, 10240);
+        intel_modeset_dry(0);
+        int n = intel_modeset_steps(), last = 0, backwards = 0;
+        const char *phase = "";
+        for (int i = 0; i < n; i++) {
+            int s = intel_modeset_step_plan(i);
+            const char *p = s <= 10 ? "B core" : s <= 14 ? "C panel" :
+                            s <= 26 ? "D sink" : s == 27 ? "E power" :
+                            s <= 35 ? "F port" : s <= 44 ? "G train" : "H pipe";
+            if (strcmp(p, phase)) { printf("    -- phase %s --\n", p); phase = p; }
+            printf("      step %-2d  %s\n", s, intel_modeset_step_name(i));
+            if (s < last) backwards++;
+            last = s;
+        }
+        printf("    %d steps, plan order %s\n", n,
+               backwards ? "BROKEN - a step runs before an earlier one"
+                         : "monotonic (never goes backwards)");
+        /* The mode came from the accessors, which return 1-based counts, and
+         * intel_set_timings() subtracts 1 again on the way out. An off-by-one
+         * across that round trip is wrong timings and no picture, so check it
+         * reproduces firmware's raw registers exactly. */
+        u32 ht_raw = *(volatile u32 *)((volatile unsigned char *)map + 0x6F000);
+        u32 vt_raw = *(volatile u32 *)((volatile unsigned char *)map + 0x6F00C);
+        u32 ht_ours = ((u32)(intel_htotal() - 1) << 16) | (u32)(intel_hactive() - 1);
+        u32 vt_ours = ((u32)(intel_vtotal() - 1) << 16) | (u32)(intel_vactive() - 1);
+        printf("    timing round-trip: HTOTAL %08X vs %08X %s   VTOTAL %08X vs %08X %s\n",
+               ht_raw, ht_ours, ht_raw == ht_ours ? "MATCH" : "OFF-BY-ONE",
+               vt_raw, vt_ours, vt_raw == vt_ours ? "MATCH" : "OFF-BY-ONE");
+        printf("    NOT executed. needs gpu-dev.sh detach + intel_link_train_arm(1).\n");
     }
     printf("\n");
 

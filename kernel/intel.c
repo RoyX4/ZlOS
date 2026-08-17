@@ -204,6 +204,17 @@ u32  pci_read32(int bus, int dev, int fn, int off);
 #define PLANE_CTL_ENABLE  0x80000000u
 #define PLANE_CTL_FORMAT_MASK 0x0F000000u
 
+/* Nothing in this file WRITES to the display engine unless it has been armed.
+ * The read paths are safe alongside another driver; the write paths are not,
+ * and an accidental write while i915 owns the device fights it.
+ *
+ * Declared up here with the other module state rather than halfway down the
+ * file, where it used to live: it is the gate on every write path, and a write
+ * path added above its old declaration failed to compile in a way that reads
+ * as "lt_armed is missing" rather than "this function is in the wrong place".
+ * That cost time twice. */
+static int lt_armed = 0;
+
 static int  gpu_idx = -1;
 static uptr mmio    = 0;      /* BAR0 - registers and the GGTT window */
 static uptr aperture = 0;     /* BAR2 - the CPU-visible window        */
@@ -979,6 +990,41 @@ u32 intel_dpll_ctrl1(void)  { return mmio_r(DPLL_CTRL1); }
 u32 intel_dpll_ctrl2(void)  { return mmio_r(DPLL_CTRL2); }
 u32 intel_dpll_status(void) { return mmio_r(DPLL_STATUS); }
 u32 intel_cdclk_ctl(void)   { return mmio_r(CDCLK_CTL); }
+
+/* CDCLK in kHz. Bits 10:0 hold (kHz - 1000) / 500, so this inverts that.
+ * Plan step 9: the only requirement is cdclk >= pixel rate, and if it already
+ * is we leave it alone. Measured 337500 kHz here against a 241690 kHz pixel
+ * rate, so there is nothing to do - changing CDCLK needs a pcode handshake and
+ * is deliberately deferred. */
+u32 intel_cdclk_khz(void)
+{
+    if (!intel_present()) return 0;
+    return ((mmio_r(CDCLK_CTL) & 0x7FF) * 500u) + 1000u;
+}
+
+/* DBUF: the display data buffer has to be powered before any plane can fetch
+ * through it. Plan step 10 - request, posting read, a FIXED 10 us delay, then a
+ * single check. Not a poll: the PRM gives a settling time, not a handshake, and
+ * a poll loop here would read the state bit before it is meaningful. */
+#define DBUF_CTL_S0        0x45008
+#define DBUF_POWER_REQUEST (1u << 31)
+#define DBUF_POWER_STATE   (1u << 30)
+
+int intel_dbuf_enable(int on)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    u32 v = mmio_r(DBUF_CTL_S0);
+    mmio_w(DBUF_CTL_S0, on ? (v | DBUF_POWER_REQUEST) : (v & ~DBUF_POWER_REQUEST));
+    (void)mmio_r(DBUF_CTL_S0);
+    cpu_delay_us(10);
+    int state = (mmio_r(DBUF_CTL_S0) & DBUF_POWER_STATE) ? 1 : 0;
+    return state == (on ? 1 : 0);
+}
+
+int intel_dbuf_powered(void)
+{
+    return intel_present() ? ((mmio_r(DBUF_CTL_S0) & DBUF_POWER_STATE) ? 1 : 0) : 0;
+}
 u32 intel_lcpll1(void)      { return mmio_r(LCPLL1_CTL); }
 
 u32 intel_dpll_cfgcr1(int pll)
@@ -1082,11 +1128,6 @@ u32 intel_dp_link_symbol_khz(int rate_idx)
     u32 dpll_khz = intel_dpll_rate_khz(rate_idx);
     return dpll_khz ? dpll_khz / 5u : 0;
 }
-
-/* Nothing in this file WRITES to the display engine unless it has been armed.
- * The read paths are safe alongside another driver; the write paths are not,
- * and an accidental write while i915 owns the device fights it. */
-static int lt_armed = 0;
 
 /* ==== programming a DPLL =================================================
  * Everything above READS. This is where the driver starts deciding.
@@ -1902,6 +1943,135 @@ static int lt_last_status[6];
 void intel_link_train_arm(int on) { lt_armed = on ? 1 : 0; }
 int  intel_link_train_armed(void) { return lt_armed; }
 
+/* ==== bringing the port up and down (plan steps 30-35, teardown 9-11) =====
+ *
+ * This did not exist. DDI_BUF_CTL_ENABLE was defined and never written by
+ * anything, so intel_link_train() below was writing training patterns into a
+ * port that nothing had switched on. The plan lists this as implementation
+ * order #5 and calls it "mandatory before any training attempt"; it is also the
+ * only way to take the port back from firmware, which is the state we are
+ * always in on this machine.
+ *
+ * Two boot-time straps live in DDI_BUF_CTL and must survive every write:
+ * DDI_A_4_LANES (b4) and Port Reversal (b16). Read once, OR into everything -
+ * hazard 4.3 #19. saved_port_bits on this board is 0x00000010.
+ */
+#define DDI_BUF_PORT_REVERSAL  (1u << 16)
+#define DDI_BUF_A_4_LANES      (1u << 4)
+#define DDI_BUF_WIDTH_MASK     (7u << 1)
+#define DDI_BUF_TRANS_SEL_MASK (0xFu << 24)
+#define DISPIO_CR_TX_BMU_CR0   0x6C00C
+
+static u32 port_saved_bits = 0;
+static int port_saved_read = 0;
+
+/* Read the straps once. Safe to call any time; it only reads. */
+u32 intel_port_save_bits(int port)
+{
+    if (!intel_present()) return 0;
+    port_saved_bits = mmio_r(DDI_BUF_CTL(port)) &
+                      (DDI_BUF_PORT_REVERSAL | DDI_BUF_A_4_LANES);
+    port_saved_read = 1;
+    return port_saved_bits;
+}
+
+/* I_boost / balance leg (step 32). The low-vswing eDP table this board uses has
+ * I_boost 0 for every entry, so the correct action is to SET the balance-leg
+ * disable bit rather than program a boost - and firmware has already done
+ * exactly that (DISPIO_CR_TX_BMU_CR0 = 08800000, b23 and b27 set).
+ *
+ * When the port runs x4, DDI A's upper lanes are driven by the DDI E field, so
+ * both have to be programmed. Missing that half leaves two lanes on a different
+ * drive setting from the other two. Bits 31:28 and 7:0 are never ours. */
+int intel_iboost_set(int port, int iboost, int four_lanes)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (iboost != 0 && iboost != 1 && iboost != 3 && iboost != 7) return 0;
+
+    u32 v = mmio_r(DISPIO_CR_TX_BMU_CR0);
+    v &= ~(7u << (8 + port * 3));                    /* this port's sctl */
+    v &= ~(1u << (23 + port));                       /* this port's disable */
+    if (iboost) v |= ((u32)iboost << (8 + port * 3));
+    else        v |= (1u << (23 + port));
+
+    if (four_lanes && port == 0) {                   /* DDI A x4 -> also sctl_4 */
+        v &= ~(7u << 20);
+        v &= ~(1u << 27);
+        if (iboost) v |= ((u32)iboost << 20);
+        else        v |= (1u << 27);
+    }
+    mmio_w(DISPIO_CR_TX_BMU_CR0, v);
+    return 1;
+}
+
+/* Take the port down. Order is the plan's and is not the obvious one: the idle
+ * wait comes AFTER both disables, not between them (teardown 9, 10, then 11).
+ * Returns 0 if the port never went idle, which is worth knowing but is not
+ * fatal - the 8 us in the PRM is spec-accurate and field-inaccurate, so we
+ * budget 1 ms (C4). */
+int intel_port_disable(int port)
+{
+    if (!intel_present() || !lt_armed) return 0;
+
+    mmio_w(DDI_BUF_CTL(port), mmio_r(DDI_BUF_CTL(port)) & ~DDI_BUF_CTL_ENABLE);
+    /* Do NOT route through Idle on the way down - that is the enable path's
+     * sequence, and the plan is explicit that the disable path skips it. */
+    mmio_w(DP_TP_CTL(port), mmio_r(DP_TP_CTL(port)) & ~DP_TP_CTL_ENABLE);
+
+    return wait_bits_us(DDI_BUF_CTL(port), DDI_BUF_IS_IDLE, DDI_BUF_IS_IDLE, 1000u);
+}
+
+/* Bring the port up ready for training (steps 30, 33, 34, 35).
+ *
+ * If firmware left the port enabled we must cycle it: the PRM requires
+ * disable-then-re-enable with pattern 1 to retrain, and DDI_BUF_CTL[3:1] and
+ * DP_TP_CTL[18] cannot legally change while the port is enabled (4.3 #20).
+ *
+ * DP_TP_CTL goes on FIRST, with TPS1 already selected, and only then
+ * DDI_BUF_CTL - doing it the other way round enables a port with no transport
+ * behind it. Enhanced framing must match DPCD 0x101 b7 or the link is stable
+ * and shows garbage (4.3 #8), and it cannot be changed later, so it is decided
+ * here.
+ *
+ * Then a blind 600 us. There is NO status bit for this on Gen9 - the !IDLE poll
+ * everyone reaches for is gated to DISPLAY_VER >= 10 - so a poll here would
+ * either spin its whole timeout or, worse, read the stale idle bit and sail
+ * past. 518 us is the spec figure; 600 gives it margin. */
+int intel_port_enable(int port, int lanes, int enhanced)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (lanes < 1 || lanes > 4) return 0;
+    if (!port_saved_read) intel_port_save_bits(port);
+
+    /* mandatory if firmware left it up */
+    if (mmio_r(DDI_BUF_CTL(port)) & DDI_BUF_CTL_ENABLE) {
+        if (!intel_port_disable(port)) return 0;
+    }
+
+    mmio_w(DP_TP_CTL(port), DP_TP_CTL_ENABLE | DP_TP_CTL_MODE_SST |
+                            DP_TP_CTL_LINK_TRAIN_PAT1 |
+                            (enhanced ? DP_TP_CTL_ENHANCED_FRAME : 0u));
+    (void)mmio_r(DP_TP_CTL(port));
+
+    /* vswing entry 0 to start; training walks it up from there */
+    u32 buf = port_saved_bits | ((u32)(lanes - 1) << 1) | (0u << 24);
+    mmio_w(DDI_BUF_CTL(port), buf);
+    (void)mmio_r(DDI_BUF_CTL(port));
+    mmio_w(DDI_BUF_CTL(port), buf | DDI_BUF_CTL_ENABLE);
+    (void)mmio_r(DDI_BUF_CTL(port));
+
+    cpu_delay_us(600);                  /* blind. no status bit exists (4.2) */
+    return 1;
+}
+
+int intel_port_enabled(int port)
+{
+    if (!intel_present()) return 0;
+    return (mmio_r(DDI_BUF_CTL(port)) & DDI_BUF_CTL_ENABLE) ? 1 : 0;
+}
+u32 intel_port_bits(void)  { return port_saved_bits; }
+u32 intel_iboost_reg(void) { return intel_present() ? mmio_r(DISPIO_CR_TX_BMU_CR0) : 0; }
+
 /* The link rate index our DPLL table uses is not what the panel wants in
  * DPCD 0x100 - that field counts in units of 270 MHz of LINK rate. */
 static u8 dpcd_bw_for_rate_idx(int idx)
@@ -2566,15 +2736,30 @@ u32 intel_pwr_well_driver(void) { return intel_present() ? mmio_r(PWR_WELL_CTL_D
 u32 intel_pwr_well_bios(void)   { return intel_present() ? mmio_r(PWR_WELL_CTL_BIOS) : 0; }
 u32 intel_dc_state(void)        { return intel_present() ? mmio_r(DC_STATE_EN) : 0; }
 
+/* Well indices are not 0..3. The REQ/STATE bit pair is uniform across the
+ * register - REQ = bit(2i+1), STATE = bit(2i) - but the indices that matter go
+ * up to 15:
+ *
+ *   0  MISC_IO      1  DDI_A_E     2  DDI_B    3  DDI_C    4  DDI_D
+ *   14 PW1 (b29/b28)             15 PW2 (b31/b30)
+ *
+ * The guards below used to stop at 3, which made PW1 - plan step 6, and a
+ * prerequisite for everything in the display core - simply unrequestable. The
+ * macros were always right; only the range check was wrong. */
+#define PW_MISC_IO  0
+#define PW_DDI_A_E  1
+#define PW_PW1     14
+#define PW_PW2     15
+
 int intel_pwr_well_enabled(int well)
 {
-    if (!intel_present() || well < 0 || well > 3) return 0;
+    if (!intel_present() || well < 0 || well > 15) return 0;
     return (mmio_r(PWR_WELL_CTL_DRIVER) & PW_STATE(well)) ? 1 : 0;
 }
 
 int intel_pwr_well_requested(int well)
 {
-    if (!intel_present() || well < 0 || well > 3) return 0;
+    if (!intel_present() || well < 0 || well > 15) return 0;
     return (mmio_r(PWR_WELL_CTL_DRIVER) & PW_REQUEST(well)) ? 1 : 0;
 }
 
@@ -2583,7 +2768,7 @@ int intel_pwr_well_requested(int well)
  * answer, and they are not the same thing. */
 int intel_pwr_well_enable(int well)
 {
-    if (!intel_present() || !lt_armed || well < 0 || well > 3) return 0;
+    if (!intel_present() || !lt_armed || well < 0 || well > 15) return 0;
     u32 v = mmio_r(PWR_WELL_CTL_DRIVER);
     mmio_w(PWR_WELL_CTL_DRIVER, v | PW_REQUEST(well));
 
@@ -2595,7 +2780,7 @@ int intel_pwr_well_enable(int well)
 
 int intel_pwr_well_disable(int well)
 {
-    if (!intel_present() || !lt_armed || well < 0 || well > 3) return 0;
+    if (!intel_present() || !lt_armed || well < 0 || well > 15) return 0;
     u32 v = mmio_r(PWR_WELL_CTL_DRIVER);
     mmio_w(PWR_WELL_CTL_DRIVER, v & ~PW_REQUEST(well));
     return 1;
@@ -3250,3 +3435,240 @@ int intel_pipe_underrun_clear(void)
     mmio_w(GEN8_DE_PIPE_IIR_A, DE_PIPE_UNDERRUN);
     return 1;
 }
+
+/* ==== the ordered cold-start modeset =====================================
+ *
+ * Everything above is a primitive. This is the sequence, and the sequence is
+ * the part the plan exists for: 30-odd steps whose ORDER is load-bearing, where
+ * getting one out of place gives a black screen with no error bit anywhere.
+ * Until now it lived in this file as a comment.
+ *
+ * Two things make it reviewable before it has ever run:
+ *
+ *   - every step records its plan number, its name and its result, so a failure
+ *     reports "step 34 (port enable) failed" rather than "modeset failed", and
+ *     the whole intended sequence can be printed without executing it;
+ *   - it composes primitives that were each checked against what firmware
+ *     programmed for this exact panel. The sequence is the only genuinely
+ *     untested thing left.
+ *
+ * It is still gated behind lt_armed, and NOTHING IN THE KERNEL ARMS IT. This
+ * runs today only from the host harness with i915 detached. That is deliberate:
+ * the first execution of a 30-step hardware sequence should be somewhere with
+ * a recovery path, not on a machine whose only console is the panel being
+ * reprogrammed.
+ */
+#define MS_MAX_STEPS 40
+
+static struct { int plan_step; const char *name; int result; } ms_log[MS_MAX_STEPS];
+static int ms_count = 0;
+static int ms_failed_at = 0;
+
+static int ms_dry = 0;
+
+static int ms_do(int plan_step, const char *name, int result)
+{
+    if (ms_count < MS_MAX_STEPS) {
+        ms_log[ms_count].plan_step = plan_step;
+        ms_log[ms_count].name      = name;
+        ms_log[ms_count].result    = result;
+        ms_count++;
+    }
+    if (!result && !ms_failed_at) ms_failed_at = plan_step;
+    return result;
+}
+
+/* Macros, not plain calls, for one reason: C evaluates arguments eagerly, so
+ * `ms_do(3, "...", intel_dc_states_block())` would touch the hardware even in a
+ * dry run. A macro defers the call, which is what makes the sequence printable
+ * on a live machine without writing a single register.
+ *
+ * MS_STEP aborts the sequence on failure. MS_STEP_SOFT records and carries on,
+ * for steps whose failure is worth knowing but is not fatal to the modeset. */
+#define MS_STEP(n, name, call) \
+    do { if (ms_dry) ms_do((n), name, 1); \
+         else if (!ms_do((n), name, (call))) return 0; } while (0)
+
+#define MS_STEP_SOFT(n, name, call) \
+    do { if (ms_dry) ms_do((n), name, 1); else ms_do((n), name, (call)); } while (0)
+
+int         intel_modeset_steps(void)          { return ms_count; }
+int         intel_modeset_step_plan(int i)     { return (i >= 0 && i < ms_count) ? ms_log[i].plan_step : 0; }
+const char *intel_modeset_step_name(int i)     { return (i >= 0 && i < ms_count) ? ms_log[i].name : ""; }
+int         intel_modeset_step_result(int i)   { return (i >= 0 && i < ms_count) ? ms_log[i].result : 0; }
+int         intel_modeset_failed_at(void)      { return ms_failed_at; }
+
+/* ---- the mode, staged in pieces so no single call takes 16 arguments ----
+ * Same shape as the WRPLL and M/N code above: compute into module state, then
+ * a run function that consumes it. */
+static u32 ms_hactive, ms_hblank, ms_hsync_s, ms_hsync_e, ms_htotal;
+static u32 ms_vactive, ms_vblank, ms_vsync_s, ms_vsync_e, ms_vtotal;
+static u32 ms_pixel_khz = 0, ms_stride = 0, ms_fb = 0;
+static int ms_bpp = 24, ms_phsync = 1, ms_pvsync = 0, ms_have_mode = 0;
+
+int intel_modeset_set_timing(u32 hactive, u32 hblank_start, u32 hsync_start,
+                             u32 hsync_end, u32 htotal,
+                             u32 vactive, u32 vblank_start, u32 vsync_start,
+                             u32 vsync_end, u32 vtotal)
+{
+    if (!hactive || !htotal || !vactive || !vtotal) return 0;
+    if (htotal < hactive || vtotal < vactive) return 0;
+    ms_hactive = hactive; ms_hblank = hblank_start;
+    ms_hsync_s = hsync_start; ms_hsync_e = hsync_end; ms_htotal = htotal;
+    ms_vactive = vactive; ms_vblank = vblank_start;
+    ms_vsync_s = vsync_start; ms_vsync_e = vsync_end; ms_vtotal = vtotal;
+    ms_have_mode = 1;
+    return 1;
+}
+
+int intel_modeset_set_link(u32 pixel_khz, int bpp, int phsync, int pvsync)
+{
+    if (!pixel_khz || bpp < 6) return 0;
+    ms_pixel_khz = pixel_khz; ms_bpp = bpp;
+    ms_phsync = phsync ? 1 : 0; ms_pvsync = pvsync ? 1 : 0;
+    return 1;
+}
+
+int intel_modeset_set_fb(u32 gfx_addr, u32 stride_bytes)
+{
+    if (!stride_bytes || (stride_bytes & 63)) return 0;   /* linear: 64 B units */
+    ms_fb = gfx_addr; ms_stride = stride_bytes;
+    return 1;
+}
+
+/* Take the mode from whatever the hardware is already running. Useful for the
+ * takeover case, which is the only case on this machine. */
+int intel_modeset_set_from_hw(void)
+{
+    if (!intel_present()) return 0;
+    u32 ddi = mmio_r(TRANS_DDI_EDP);
+    if (!intel_modeset_set_timing((u32)intel_hactive(), (u32)intel_hblank_start(),
+                                  (u32)intel_hsync_start(), (u32)intel_hsync_end(),
+                                  (u32)intel_htotal(),
+                                  (u32)intel_vactive(), (u32)intel_vblank_start(),
+                                  (u32)intel_vsync_start(), (u32)intel_vsync_end(),
+                                  (u32)intel_vtotal())) return 0;
+    return intel_modeset_set_link(intel_pixel_clock_khz(), intel_ddi_bpp(),
+                                  !!(ddi & (1u << 16)), !!(ddi & (1u << 17)));
+}
+
+/* ---- the sequence ------------------------------------------------------ */
+/* dry != 0 walks the whole sequence recording every step and touching nothing.
+ * It needs neither lt_armed nor a detached i915, so the intended order can be
+ * reviewed against the plan on a running desktop. */
+int intel_modeset_run_ex(int port, int dry)
+{
+    ms_count = 0; ms_failed_at = 0; ms_dry = dry ? 1 : 0;
+
+    if (!intel_present())                       return 0;
+    if (!ms_dry && !lt_armed)                   return 0;
+    if (!ms_have_mode || !ms_pixel_khz)         return 0;
+
+    /* The link has to be decided before anything is programmed: enhanced
+     * framing and the lane count are latched at port enable and cannot be
+     * changed afterwards (4.3 #8, #20). */
+    int lanes = 4, rate_idx = 1;
+
+    /* -- Phase B: display core ------------------------------------------ */
+    MS_STEP(3,  "DC states off",        intel_dc_states_block());
+    MS_STEP(4,  "PSR off",              intel_psr_disable());
+    /* Step 6: PW1 feeds everything below. If firmware already has it up -
+     * always, on this machine - requesting it again is harmless. */
+    MS_STEP(6,  "power well PW1",       intel_pwr_well_enable(PW_PW1));
+    MS_STEP(7,  "power well MISC_IO",   intel_pwr_well_enable(PW_MISC_IO));
+    /* Step 8: DPLL0 is already locked and feeds CDCLK. Hazard H6 says do not
+     * touch it when it is already at the rate we want. Verify, do not program. */
+    MS_STEP_SOFT(8, "DPLL0 locked at wanted rate",
+          intel_dpll_locked(0) && intel_dpll_link_rate(0) == rate_idx);
+    MS_STEP(9,  "CDCLK >= pixel rate",  intel_cdclk_khz() >= ms_pixel_khz);
+    MS_STEP(10, "DBUF powered",         intel_dbuf_enable(1));
+
+    /* -- Phase C: panel power and VDD ----------------------------------- */
+    /* Step 12 MUST precede any power-on assertion: the delay registers reset to
+     * zero, and a sequencer with T3=T12=0 reports ready instantly and yanks VDD
+     * under live video (hazard H3). */
+    MS_STEP(12, "PPS delays programmed", intel_pp_sequencing());
+    MS_STEP(14, "panel VDD on (T12,T3)", intel_panel_vdd_on());
+
+    /* -- Phase D: what does the panel say it can do? --------------------- */
+    MS_STEP(20, "DPCD caps read",       intel_dpcd_read_caps(port));
+    int tps3     = intel_dpcd_tps3();
+    int enhanced = intel_dpcd_enhanced();
+    MS_STEP(26, "mode fits 4 lanes @ HBR",
+               intel_dp_link_bandwidth_kbps(rate_idx, lanes) >=
+               intel_mode_bandwidth_kbps(ms_pixel_khz, ms_bpp));
+
+    /* -- Phase E: full panel power --------------------------------------- */
+    MS_STEP(27, "panel power on",       intel_panel_power_on());
+
+    /* -- Phase F: the port ----------------------------------------------- */
+    MS_STEP(28, "power well DDI_A_E",   intel_pwr_well_enable(PW_DDI_A_E));
+    MS_STEP(29, "DDI A clock <- DPLL0", intel_ddi_set_clock(port, 0));
+    /* Step 31 before 34, always: the hardware latches the buffer translation
+     * at DDI_BUF_CTL enable, so programming it afterwards does nothing. */
+    MS_STEP(31, "buf-trans entry 0",    intel_ddi_program_buf_trans(port, 0, 0));
+    MS_STEP(32, "I_boost / balance leg", intel_iboost_set(port, 0, lanes == 4));
+    MS_STEP(34, "port enable + 600us",  intel_port_enable(port, lanes, enhanced));
+
+    /* -- Phase G: link training ------------------------------------------
+     * intel_link_train, not intel_link_train_auto. Plan step 11: do NOT walk
+     * the rate/lane ladder here. With the real pixel clock, nothing below
+     * 4 lanes @ HBR carries this mode at 24 bpp, so a ladder can only descend
+     * into a link that trains successfully and then cannot carry a frame.
+     *
+     * KNOWN DEVIATION: the plan also says to retry the same parameters a
+     * bounded number of times before failing (i915 wants two consecutive
+     * failures before it reacts). This makes ONE attempt and then fails with
+     * the step number. Failing loudly is the plan's actual point, and a correct
+     * retry is not just a loop - it has to cycle the port through
+     * intel_port_disable/enable first, because DDI_BUF_CTL[3:1] and
+     * DP_TP_CTL[18] cannot change while the port is enabled (4.3 #20). Worth
+     * adding once this sequence has run even once; adding a second never-
+     * executed path now buys nothing. */
+    MS_STEP(40, "link training",
+               intel_link_train(port, rate_idx, lanes, tps3, enhanced));
+
+    /* -- Phase H: transcoder, pipe, plane -------------------------------- */
+    MS_STEP(45, "M/N computed",
+               intel_mn_compute(ms_pixel_khz, intel_dp_link_symbol_khz(rate_idx),
+                                lanes, ms_bpp));
+    MS_STEP(45, "M/N programmed",       intel_mn_program());
+    MS_STEP(46, "MSA_MISC",             intel_msa_misc_write(ms_bpp));
+    MS_STEP(47, "transcoder timings",
+               intel_set_timings(ms_hactive, ms_hblank, ms_hsync_s, ms_hsync_e, ms_htotal,
+                                 ms_vactive, ms_vblank, ms_vsync_s, ms_vsync_e, ms_vtotal));
+    MS_STEP(49, "PIPE_MISC",            intel_pipe_misc_write(ms_bpp, 0));
+    MS_STEP(50, "CHICKEN_TRANS reset",  intel_chicken_trans_reset());
+    MS_STEP(51, "scalers off",          intel_scalers_disable());
+    MS_STEP(52, "WM_LINETIME",          intel_wm_linetime_write(ms_htotal, ms_pixel_khz));
+    /* Step 53: watermarks and the buffer split BEFORE the plane is enabled.
+     * 33 cursor blocks and a 13-block cursor watermark are what firmware
+     * programs for this panel. */
+    MS_STEP(53, "watermarks + DDB split", intel_ddb_split(33, WM_ENABLE | 13u));
+    MS_STEP(53, "plane watermark L0",
+               intel_wm_set_level(0, intel_wm_compute_level0(ms_hactive, (u32)ms_bpp,
+                                                             ms_pixel_khz, 0)));
+    MS_STEP(54, "TRANS_DDI_FUNC_CTL",
+               intel_trans_ddi_ctl_write(lanes, ms_bpp, ms_phsync, ms_pvsync));
+    MS_STEP(55, "transcoder enable",    intel_transcoder_enable(1));
+
+    /* Step 56: PLANE_SURF arms everything, so it goes last - nothing written to
+     * CTL/SIZE/STRIDE takes effect until it does (4.3 #3). */
+    if (ms_fb || ms_stride) {
+        MS_STEP(56, "plane configured",
+                   intel_plane_configure(ms_hactive, ms_vactive, ms_stride));
+        MS_STEP(56, "PLANE_SURF armed", intel_set_surface(ms_fb, (int)ms_stride));
+    }
+    MS_STEP_SOFT(57, "underrun telltale cleared", intel_pipe_underrun_clear());
+
+    /* Step 58: frequency and duty before enable, then PP_CONTROL b2. */
+    MS_STEP_SOFT(58, "backlight PWM",
+          intel_backlight_pwm_enable(intel_backlight_max(), intel_backlight_get()));
+    MS_STEP_SOFT(58, "backlight enabled",         intel_panel_backlight_enable(1));
+
+    return ms_failed_at ? 0 : 1;
+}
+
+int intel_modeset_run(int port) { return intel_modeset_run_ex(port, 0); }
+int intel_modeset_dry(int port) { return intel_modeset_run_ex(port, 1); }
+int intel_modeset_was_dry(void) { return ms_dry; }
