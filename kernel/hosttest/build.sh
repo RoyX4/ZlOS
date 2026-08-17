@@ -29,6 +29,14 @@ echo "built ./fbbench       (run: ./fbbench)"
 gcc -O2 -w -o inputtest inputtest.c ../input.c
 echo "built ./inputtest     (run: ./inputtest)"
 
+# The compositor, asserted. A compositor's bugs are not crashes - they are a
+# sliver of an old window left on the wallpaper, a click landing on the window
+# underneath, a drag that stops when the pointer outruns the frame. None of
+# those show in a screenshot taken a frame later.
+gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../fb.c ../input.c \
+    ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
+echo "built ./wmtest        (run: ./wmtest)"
+
 # The comparison number: what the REAL GPU on this same laptop does with a
 # blended full-screen layer. Offscreen pixmap, so it never touches the desktop.
 # Needs libGL - skipped silently if the dev headers are not installed.

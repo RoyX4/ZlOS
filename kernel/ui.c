@@ -1,0 +1,275 @@
+/* ui.c - an immediate-mode toolkit. No allocation, no widget tree.
+ *
+ * IMMEDIATE MODE WAS FORCED, NOT CHOSEN. A retained tree (Qt, GTK,
+ * SerenityOS's LibGUI) allocates an object per widget and holds parent/child
+ * pointers - a tree needs a heap, and a tree of children IS a list. zlOS has
+ * neither: the kernel subset's zl_list_n is a hard fault. So ui_button("OK")
+ * RETURNS whether it was clicked, nothing is allocated, and widget state stays
+ * in the app where it already lives.
+ *
+ * THE CONSEQUENCE, AND IT IS THE THING MOST LIKELY TO BE GOT WRONG:
+ * hit testing re-runs app_draw with drawing switched OFF - the same trick
+ * intel_modeset_dry() uses for its 35-step sequence. So a widget must RETURN
+ * whether it fired and must NEVER take an action as an argument, because C
+ * evaluates arguments eagerly: ui_button("Delete", delete_everything()) would
+ * delete everything on every hit-test pass, twice per click. That is the same
+ * language behaviour that forced MS_STEP to be a macro rather than a flag.
+ *
+ * LAYOUT IS A FLOWING CURSOR and that is the entire algorithm. A widget asks
+ * for a size, is placed at the cursor, the cursor advances by size + gap, and
+ * rows wrap at the content width. No tree walk, no constraint solver, no
+ * second pass.
+ */
+
+#include "ui.h"
+
+void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
+void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
+void fb_text_aa(int px, int py, const char *s, unsigned int fg);
+int  fb_cell_w(void);
+int  fb_cell_h(void);
+
+/* ---- the theme ------------------------------------------------------------
+ * One struct, every colour and every metric. Before this they were spread
+ * across kernel.zl and fb.c as literals picked by eye per window. */
+static struct ui_theme theme;
+
+const struct ui_theme *ui_theme(void) { return &theme; }
+void ui_theme_set(const struct ui_theme *t) { theme = *t; }
+
+void ui_theme_init(int scale)
+{
+    if (scale < 1) scale = 1;
+    /* Deep navy, nested rounded panels, focused-blue title gradients with an
+     * accent underline. This is the look that already exists - extended, not
+     * replaced. Do not introduce a second visual system. */
+    theme.bg        = 0x141A2E;
+    theme.panel     = 0x1E2A44;
+    theme.panel_hi  = 0x27354F;
+    theme.text      = 0xE4EDFF;
+    theme.text_dim  = 0x8FA0C0;
+    theme.accent    = 0x55D6FF;
+    theme.border    = 0x141A2A;
+    theme.danger    = 0xE05561;
+    theme.title     = 0x305CA8;
+    theme.title_bot = 0x16285C;
+    theme.title_off = 0x243350;
+
+    theme.scale   = scale;
+    theme.pad     = 12 * scale;      /* every one of these is on the scale */
+    theme.gap     =  8 * scale;
+    theme.row_h   = 24 * scale;
+    theme.radius  =  5 * scale;
+    theme.title_h = 28 * scale;
+}
+
+/* ---- the layout cursor ---------------------------------------------------- */
+static struct {
+    int x, y, w, h;          /* the content box, inside the padding */
+    int cx, cy;              /* where the next widget goes          */
+    int row_h;               /* tallest thing in the current row    */
+    int mode;                /* UI_DRAW or UI_HITTEST               */
+    int px, py, click;       /* the pointer, and whether it is down */
+    int fired;               /* which widget index fired, or -1     */
+    int index;               /* widget counter, for identity        */
+    int in_row;              /* 1 while ui_row() is open            */
+} L;
+
+void ui_begin(int x, int y, int w, int h, int mode, int px, int py, int click)
+{
+    L.x = x + theme.pad;
+    L.y = y + theme.pad;
+    L.w = w - 2 * theme.pad;
+    L.h = h - 2 * theme.pad;
+    L.cx = L.x;
+    L.cy = L.y;
+    L.row_h = 0;
+    L.mode = mode;
+    L.px = px; L.py = py; L.click = click;
+    L.fired = -1;
+    L.index = 0;
+    L.in_row = 0;
+}
+
+int ui_fired(void) { return L.fired; }
+
+void ui_row(void)    { L.in_row = 1; }
+void ui_endrow(void) { L.in_row = 0; L.cx = L.x; L.cy += L.row_h + theme.gap; L.row_h = 0; }
+
+/* Place a widget of this size and return where it landed. The ONE function
+ * that knows about the cursor; every widget below is a call to this plus
+ * some drawing. */
+static void place(int w, int h, int *ox, int *oy)
+{
+    if (w > L.w) w = L.w;
+    if (L.in_row && L.cx + w > L.x + L.w) {     /* wrap */
+        L.cx = L.x;
+        L.cy += L.row_h + theme.gap;
+        L.row_h = 0;
+    }
+    *ox = L.cx;
+    *oy = L.cy;
+    if (h > L.row_h) L.row_h = h;
+    if (L.in_row) {
+        L.cx += w + theme.gap;
+    } else {
+        L.cx = L.x;
+        L.cy += h + theme.gap;
+        L.row_h = 0;
+    }
+}
+
+static int hit(int x, int y, int w, int h)
+{
+    return L.px >= x && L.px < x + w && L.py >= y && L.py < y + h;
+}
+
+/* Every widget that can fire funnels through this, so "did it fire" is decided
+ * in exactly one place and cannot drift between widgets. In UI_HITTEST mode
+ * nothing is drawn and this is the only thing that happens. */
+static int fire(int x, int y, int w, int h)
+{
+    int me = L.index++;
+    if (!L.click || !hit(x, y, w, h)) return 0;
+    L.fired = me;
+    return 1;
+}
+
+static int text_w(const char *s)
+{
+    int n = 0;
+    while (s[n]) n++;
+    return n * fb_cell_w();
+}
+
+/* ---- the widgets ---------------------------------------------------------- */
+void ui_label(const char *s)
+{
+    int x, y;
+    place(text_w(s), fb_cell_h(), &x, &y);
+    if (L.mode == UI_DRAW) fb_text_aa(x, y, s, theme.text);
+}
+
+void ui_label_dim(const char *s)
+{
+    int x, y;
+    place(text_w(s), fb_cell_h(), &x, &y);
+    if (L.mode == UI_DRAW) fb_text_aa(x, y, s, theme.text_dim);
+}
+
+void ui_bar(int pct)
+{
+    int x, y, w = L.w, h = UI_S2(&theme);
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    place(w, h, &x, &y);
+    if (L.mode != UI_DRAW) return;
+    fb_rrect(x, y, w, h, h / 2, theme.panel_hi);
+    if (pct) fb_rrect(x, y, w * pct / 100, h, h / 2, theme.accent);
+}
+
+int ui_button(const char *s)
+{
+    int w = text_w(s) + 2 * UI_S3(&theme), h = theme.row_h;
+    int x, y;
+    place(w, h, &x, &y);
+    int over = hit(x, y, w, h);
+    int fired = fire(x, y, w, h);
+    if (L.mode == UI_DRAW) {
+        /* accent on hover, danger only on press. One button, three states -
+         * and it is the difference between "drawn" and "designed". */
+        unsigned face = over ? (L.click ? theme.accent : theme.panel_hi) : theme.panel_hi;
+        fb_rrect(x, y, w, h, UI_S1(&theme), face);
+        fb_text_aa(x + UI_S3(&theme), y + (h - fb_cell_h()) / 2, s,
+                   over && L.click ? theme.border : theme.text);
+    }
+    return fired;
+}
+
+void ui_sep(void)
+{
+    int x, y;
+    place(L.w, 1, &x, &y);
+    if (L.mode == UI_DRAW) fb_fill_px(x, y, L.w, 1, theme.border);
+}
+
+void ui_space(int n)
+{
+    int x, y;
+    place(1, n > 0 ? n : theme.gap, &x, &y);
+    (void)x; (void)y;
+}
+
+/* Note the int* - the widget owns no state. The app already has the variable;
+ * a retained toolkit would have made a second copy of it and then needed a way
+ * to keep the two in step. */
+int ui_toggle(const char *s, int *on)
+{
+    int kw = UI_S6(&theme), kh = theme.row_h;
+    int w = kw + theme.gap + text_w(s), h = kh;
+    int x, y;
+    place(w, h, &x, &y);
+    int fired = fire(x, y, w, h);
+    if (fired) *on = !*on;
+    if (L.mode == UI_DRAW) {
+        fb_rrect(x, y, kw, kh, kh / 2, *on ? theme.accent : theme.panel_hi);
+        int d = kh - UI_S1(&theme);
+        fb_rrect(*on ? x + kw - d - UI_S1(&theme) / 2 : x + UI_S1(&theme) / 2,
+                 y + UI_S1(&theme) / 2, d, d, d / 2, theme.text);
+        fb_text_aa(x + kw + theme.gap, y + (h - fb_cell_h()) / 2, s, theme.text);
+    }
+    return fired;
+}
+
+/* The slider is what PROVES wm.c's pointer grab: once pressed it must keep
+ * tracking after the pointer leaves its rectangle, which only works because
+ * the window that owns the grab keeps receiving the events. */
+int ui_slider(int *v, int lo, int hi)
+{
+    int w = L.w, h = theme.row_h;
+    int x, y;
+    place(w, h, &x, &y);
+    int fired = fire(x, y, w, h);
+    if (hi <= lo) hi = lo + 1;
+    if (fired) {
+        int t = (L.px - x) * (hi - lo) / (w ? w : 1) + lo;
+        if (t < lo) t = lo;
+        if (t > hi) t = hi;
+        *v = t;
+    }
+    if (L.mode == UI_DRAW) {
+        int track = UI_S2(&theme);
+        int ty = y + (h - track) / 2;
+        fb_rrect(x, ty, w, track, track / 2, theme.panel_hi);
+        int pos = (*v - lo) * w / (hi - lo);
+        fb_rrect(x, ty, pos, track, track / 2, theme.accent);
+        int knob = theme.row_h - UI_S1(&theme);
+        int kx = x + pos - knob / 2;
+        if (kx < x) kx = x;
+        if (kx > x + w - knob) kx = x + w - knob;
+        fb_rrect(kx, y + UI_S1(&theme) / 2, knob, knob, knob / 2, theme.text);
+    }
+    return fired;
+}
+
+/* A number with a label, right-aligned - the System Monitor's readouts. No
+ * itoa in this kernel, so it is built here, digits backwards into a buffer. */
+void ui_num(const char *s, int v)
+{
+    char buf[16];
+    int n = 0, neg = v < 0;
+    unsigned u = neg ? (unsigned)(-v) : (unsigned)v;
+    if (!u) buf[n++] = '0';
+    while (u && n < 12) { buf[n++] = (char)('0' + u % 10u); u /= 10u; }
+    if (neg && n < 15) buf[n++] = '-';
+    for (int i = 0; i < n / 2; i++) {
+        char t = buf[i]; buf[i] = buf[n - 1 - i]; buf[n - 1 - i] = t;
+    }
+    buf[n] = 0;
+
+    int x, y;
+    place(L.w, fb_cell_h(), &x, &y);
+    if (L.mode != UI_DRAW) return;
+    fb_text_aa(x, y, s, theme.text_dim);
+    fb_text_aa(x + L.w - text_w(buf), y, buf, theme.text);
+}

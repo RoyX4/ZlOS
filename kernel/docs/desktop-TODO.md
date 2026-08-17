@@ -352,7 +352,20 @@ tap-to-click, two-finger scroll.
 Do not start before Phase 1. Building a pointer UI you cannot test with a
 pointer is guesswork.
 
-### [ ] 2a. `wm.c` — the window table
+> **Phase 2 status, 2026-08-18: 2a, 2b, 2c and 2f are BUILT and TESTED but not
+> WIRED IN.** `wm.c`, `ui.c` and `ui.h` compile freestanding, link into the
+> kernel, and pass 31 assertions in `hosttest/wmtest.c`. Nothing calls them —
+> the inversion is a `kernel.zl` change and `kernel.zl` was mid-flight in
+> another session all night. See T-8 and T-9. The wiring is small and
+> mechanical: zl compiles *to C* (`zl_fn_<name>` taking and returning `Value`),
+> so `wm_hooks()` needs three shim functions of a dozen lines each.
+>
+> The note below saying "Do not start before Phase 1" is superseded, and was
+> already relaxed by the overnight brief: it was written believing a pointer UI
+> could not be tested, and QEMU has a working pointer. The touchpad blocks the
+> *laptop*, not the design.
+
+### [x] 2a. `wm.c` — the window table — **BUILT 2026-08-18**
 
 ```c
 #define WM_MAX 12
@@ -368,7 +381,7 @@ In C, not zl — the zl kernel subset has no lists (`kernel/README.md:154`), and
 z-order **is** the `zorder` array. Iteration order is paint order. Raise =
 remove + append. Hit-test walks it backwards.
 
-### [ ] 2b. The repaint loop
+### [x] 2b. The repaint loop — **BUILT 2026-08-18**
 
 ```
 for each damaged rectangle R:
@@ -379,7 +392,7 @@ for each damaged rectangle R:
     fb_clip_none()
 ```
 
-### [ ] 2c. Event routing
+### [x] 2c. Event routing — **BUILT 2026-08-18**
 
 Three modes, checked in this order: **pointer grab** (a drag owns all pointer
 events until button-up) → **modal** (menu open) → **normal** (pointer to topmost
@@ -418,7 +431,7 @@ app_tick (id, win)
 Already the right shape, copy the pattern: `draw_sysmon(sx, sy, sfoc)` and
 `draw_about(ax, ay, afoc)` take position as arguments and hardcode nothing.
 
-### [ ] 2f. `ui.c` — the toolkit. **Immediate mode, no allocation.**
+### [x] 2f. `ui.c` — the toolkit — **BUILT 2026-08-18** (through `ui_num`)
 
 Full design: `desktop-toolkit.md`. This is the layer that was missing from every
 earlier plan.
@@ -485,3 +498,54 @@ Background and decisions: `desktop-plan.md` · Plain-English intro:
 `desktop-build-guide.md` · Why it looks blocky: `desktop-look.md` · Polish and
 performance: `desktop-polish-and-speed.md` · Status and blockers:
 `../../.ultra/STATE.md`
+
+---
+
+## What Phase 2 actually got, 2026-08-18
+
+`wm.c` (mechanism), `ui.c` (widgets), `ui.h` (the contract between them).
+Asserted by `hosttest/wmtest.c` — the whole stack, `fb.c` + `input.c` + `ui.c`
++ `wm.c`, against fake hardware and a fake app, 31 checks.
+
+A compositor's bugs are not crashes. They are a sliver of an old window left on
+the wallpaper, a click landing on the window underneath, a drag that stops the
+moment the pointer outruns the frame, an app quietly painting over its own
+title bar. Every one of those is invisible in a screenshot taken a frame later,
+and several are invisible in a screenshot *ever* — they only show against some
+backgrounds. So it gets assertions.
+
+What the harness pins down, beyond "it runs":
+
+- **paint order IS z-order.** Two overlap points, sampled inside both *client*
+  areas rather than both frames — a point in a title bar is drawn by chrome and
+  says nothing about paint order.
+- **the double scissor holds.** The fake app deliberately draws at −500,−500,
+  up into its own title bar, and 200 px past its right edge. None of it lands.
+  That guarantee is the whole reason `fb_clip` was built first.
+- **a move leaves no smear.** The old rectangle comes back as *pure wallpaper*,
+  checked 40 px beyond the frame on every side — because a window's damage is
+  its frame **plus its shadow**, and repainting only the frame is exactly the
+  12-px halo measured in 0a.
+- **the pointer grab survives the pointer leaving the window**, and stops at
+  button-up. Without it a drag dies the instant the hand outruns the frame.
+- **focus does not imply raise** — a menu can take keys without reordering the
+  stack under it.
+- **closing focuses the new top**, so keys never go nowhere.
+- **`WM_MAX` is a refusal**, not a silent drop: the 13th `wm_open` returns −1.
+- **`app_tick` returning 0 does not repaint, returning 1 does.** That is how a
+  clock ticks without owning the frame — and it is the resolution of the
+  immediate-mode/damage tension `desktop-toolkit.md` flagged as most likely to
+  be got wrong.
+- **the hit-test pass draws nothing and fires the same widget the draw pass
+  would.** If those two ever disagree, clicks land on the wrong control.
+
+Also folded in, since they were free once the chrome was in one place:
+
+- **F1 elevation** — three shadow levels. A modal sits above a focused window
+  sits above an unfocused one. `off` and `soft` were already parameters of
+  `fb_shadow`, so this cost nothing but deciding.
+- **F2 the close box** — quiet by default, accent on hover, danger red *only*
+  while pressed. It was a hardcoded red square in every state.
+- **D0 theme as data** — every colour and every metric in one `struct
+  ui_theme`, on the 4/8/12/16/24 × `ui()` scale. No literal survives in the
+  window, dock or menu drawing paths.
