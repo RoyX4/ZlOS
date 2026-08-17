@@ -159,11 +159,35 @@ void wm_damage(int x, int y, int w, int h)
 #define SHADOW_OFF(t)   (UI_S2(t))
 #define SHADOW_SOFT(t)  (UI_S3(t) / 2)
 
+/* ELEVATION MAKES THE SHADOW A VARIABLE, AND THAT IS A TRAP.
+ *
+ * chrome() draws three sizes - a modal at 1.5x, a focused window at 1x, an
+ * unfocused one at about half - so "how far does this window's shadow reach"
+ * is no longer one number. Damaging the wrong one under-damages, and
+ * under-damage is precisely the smear the comment above is about.
+ *
+ * Two ways it bites, both real:
+ *   a MODAL reaches 42 px at scale 2 while a fixed reach damages 28, so
+ *   closing or moving one leaves 14 px of shadow behind;
+ *   FOCUS CHANGE shrinks the shadow, and wm_focus damages AFTER updating
+ *   focus_win - so the window that just lost focus would be damaged at its
+ *   new, smaller size while its old, larger shadow is still on screen.
+ *
+ * So this returns the MAXIMUM reach for the window's flags, over both focus
+ * states. Over-damaging costs a few pixels of repaint; under-damaging leaves
+ * dirt on the screen that nothing will ever clean up. */
+static int shadow_reach(int win)
+{
+    const struct ui_theme *t = ui_theme();
+    int off = SHADOW_OFF(t), soft = SHADOW_SOFT(t);
+    if (wins[win].flags & WF_MODAL) { off = off * 3 / 2; soft = soft * 3 / 2; }
+    return off + soft;          /* the focused size; unfocused is smaller */
+}
+
 void wm_damage_win(int win)
 {
     if (win < 0 || win >= WM_MAX || !(wins[win].flags & WF_OPEN)) return;
-    const struct ui_theme *t = ui_theme();
-    int reach = SHADOW_OFF(t) + SHADOW_SOFT(t);
+    int reach = shadow_reach(win);
     wm_damage(wins[win].x - reach, wins[win].y - reach,
               wins[win].w + 2 * reach, wins[win].h + 2 * reach);
 }
@@ -414,9 +438,13 @@ void wm_focus(int win)
 void wm_set_modal(int win, int on)
 {
     if (!wm_is_open(win)) return;
+    /* Damage BOTH ways round. Turning modal off shrinks the shadow, so
+     * damaging only afterwards would leave the larger one's edge behind - the
+     * same asymmetry as the focus change above. */
+    wm_damage_win(win);
     if (on) wins[win].flags |= WF_MODAL;
     else    wins[win].flags &= ~WF_MODAL;
-    wm_damage_win(win);        /* the elevation changes, so the shadow does */
+    wm_damage_win(win);
 }
 
 void wm_move(int win, int x, int y)
@@ -557,8 +585,6 @@ static void chrome(int win, int focused)
 void wm_repaint(void)
 {
     if (!fb_active() || !nwd) return;
-    int reach = SHADOW_OFF(ui_theme()) + SHADOW_SOFT(ui_theme());
-
     for (int r = 0; r < nwd; r++) {
         int rx0 = wd[r].x0, ry0 = wd[r].y0, rx1 = wd[r].x1, ry1 = wd[r].y1;
         fb_clip(rx0, ry0, rx1 - rx0, ry1 - ry0);
@@ -575,6 +601,7 @@ void wm_repaint(void)
                        rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
                 /* the shadow reaches outside the frame, so a window can still
                  * owe this rectangle something even when the frame misses it */
+                int reach = shadow_reach(win);
                 if (!isect(W->x - reach, W->y - reach,
                            W->x + W->w + reach, W->y + W->h + reach,
                            rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) continue;

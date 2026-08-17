@@ -487,6 +487,43 @@ int main(void)
     ok("WM_TABS is a ceiling, and full refuses",
        wm_add_tab(tw, 4, "four") == 3 && wm_add_tab(tw, 5, "five") == -1);
 
+    /* --------------------------------------------- elevation vs damage
+     * A modal's shadow is 1.5x the size of an ordinary one, so closing one
+     * must damage the LARGER rectangle. A fixed reach under-damages by 14 px
+     * at scale 2 and leaves a ring of shadow on the wallpaper that nothing
+     * ever cleans up - the same failure as the drag smear, but only for
+     * modals, and only visible against some backgrounds. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    int md = wm_open(1, "modal", 400, 400, 400, 300);
+    wm_set_modal(md, 1);
+    frame();
+    wm_close(md);
+    frame();
+    ok("closing a MODAL leaves no shadow ring behind",
+       all_wallpaper(400 - 60, 400 - 60, 400 + 400 + 60, 400 + 300 + 60));
+
+    /* and the same for losing focus, which SHRINKS the shadow: wm_focus
+     * updates focus_win before damaging, so a reach derived from the new
+     * state would miss the old, larger shadow.
+     *
+     * Park the pointer somewhere else first. wm_frame draws the cursor sprite
+     * at the end of every frame, and it is not wallpaper - an earlier test
+     * left the pointer inside this region and the check failed on the cursor
+     * rather than on any shadow. Which is a fair thing for the assertion to
+     * notice; it just is not what this one is asking about. */
+    pointer(1500, 1000, 0);
+    int f1 = wm_open(1, "one", 200, 200, 300, 200);
+    int f2 = wm_open(2, "two", 900, 600, 300, 200);
+    frame();
+    wm_focus(f1);
+    frame();
+    wm_close(f1);
+    wm_close(f2);
+    frame();
+    ok("a focus change leaves no shadow edge behind",
+       all_wallpaper(200 - 60, 200 - 60, 200 + 300 + 60, 200 + 200 + 60));
+
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;
 }
