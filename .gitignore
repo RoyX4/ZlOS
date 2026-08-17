@@ -35,3 +35,11 @@ kernel/hosttest/dpll_test
 kernel/hosttest/modeset_test
 kernel/hosttest/regs-*.txt
 kernel/hosttest/modeset-*.log
+
+# screenshots taken by kernel/probe-shot.py - evidence for a visual gate, but
+# regenerable and large. The gate is "run it and look", not "diff a PNG".
+kernel/shots/
+kernel/hosttest/fbbench
+kernel/hosttest/gpu_fillrate
+
+kernel/__pycache__/

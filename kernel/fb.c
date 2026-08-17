@@ -41,6 +41,7 @@ int fb_cell_w(void) { return cell_w; }
 int fb_cell_h(void) { return cell_h; }
 
 unsigned int fb_get_px(int x, int y);   /* defined below; used by the AA text path */
+void idt_set_pointer_bounds(int w, int h);   /* the mouse clamp, pushed not pulled */
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);  /* the fast row fill */
 
 static unsigned char *fb_base;
@@ -68,6 +69,11 @@ void fb_set_text_box(int c0, int c1)
 }
 
 int fb_active(void) { return fb_base != 0; }
+
+/* Where the card actually scans out of. NOT the back buffer below: this is
+ * real video memory, which is what a poke/peek proof has to write to. */
+unsigned long fb_phys(void) { return (unsigned long)fb_base; }
+
 int fb_get_cols(void) { return fb_cols; }
 int fb_get_rows(void) { return fb_rows; }
 
@@ -154,6 +160,13 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
      * which case everything still works - just slower, straight to VRAM. */
     back_on = ((int)(width * height) <= BACK_MAX);
     dirty   = 0;
+
+    /* Tell the mouse ISR how big the screen is. It cannot ask: idt.c is built
+     * -mgeneral-regs-only so that an interrupt never touches SSE, and calling
+     * out of that file into one that can use XMM corrupts whatever the
+     * interrupted code had in those registers. Every zl number is a double, so
+     * that is the interpreter itself - it killed the 64-bit boot outright. */
+    idt_set_pointer_bounds((int)width, (int)height);
 }
 
 static void put_pixel(unsigned int x, unsigned int y, unsigned int rgb)
@@ -186,11 +199,10 @@ static void fill_cell(int cx, int cy, unsigned int rgb)
     fb_fill_px(cx * cell_w, cy * cell_h, cell_w, cell_h, rgb);
 }
 
-/* Divide by 255 without dividing. An integer div is 20-40 cycles on x86 and
- * does not pipeline; this shift-add pair is ~1 and gives the identical answer
- * for every value a blend can produce (0..255*255). It matters because this
- * runs three times per pixel, 128 times per antialiased glyph. */
-static inline int div255(int v) { v += 128; return (v + (v >> 8)) >> 8; }
+/* (div255() lived here - a shift-add replacement for /255, defined and NEVER
+ * called. GCC already strength-reduces the /255 in the blend path, verified by
+ * objdump: there is not a single div instruction in it. Deleted rather than
+ * left as a trap for the next person optimising this file. desktop-TODO 0i.) */
 
 /* ---- gamma-correct blending ---------------------------------------------
  * A screen value of 128 is NOT half the light of 255 - the display applies a
@@ -270,6 +282,67 @@ static unsigned int blend_rgb(unsigned int bg, unsigned int fg, int a)
     return ((unsigned)lin_to_srgb[lr] << 16)
          | ((unsigned)lin_to_srgb[lg] << 8)
          |  (unsigned)lin_to_srgb[lb];
+}
+
+/* ---- coverage blitting ---------------------------------------------------
+ * A coverage bitmap is one byte of alpha per pixel: the icons and every font
+ * atlas in this kernel are exactly that, and so is a resampled version of one.
+ * These three are the whole vocabulary for putting one on the screen, and
+ * everything that used to open-code the loop now goes through them.
+ */
+
+/* one coverage value, blended over whatever is already there */
+static void blend_px(int x, int y, unsigned int rgb, int a)
+{
+    if (a <= 0) return;
+    if (a >= 255) { put_pixel((unsigned)x, (unsigned)y, rgb); return; }
+    put_pixel((unsigned)x, (unsigned)y, blend_rgb(fb_get_px(x, y), rgb, a));
+}
+
+/* a whole coverage bitmap, one destination pixel per source pixel */
+static void blend_cov(int px, int py, const unsigned char *src,
+                      int sw, int sh, unsigned int fg)
+{
+    for (int y = 0; y < sh; y++)
+        for (int x = 0; x < sw; x++)
+            blend_px(px + x, py + y, fg, src[(unsigned long)y * sw + x]);
+}
+
+/* the same, resampled BILINEARLY into a dw x dh box.
+ *
+ * The source coordinate of destination pixel i is (i + 0.5) * sw / dw - 0.5,
+ * held in 16.16 fixed point. Those half-pixel terms are not decoration: drop
+ * them and the resampled image drifts half a destination pixel up and left,
+ * which at icon sizes is visible as a wonky icon.
+ *
+ * This exists because the two places that used to scale a coverage bitmap
+ * both did it by COPYING pixels - fb_icon24 at 2x and fb_glyph_scaled for the
+ * logo - and copying is what throws the anti-aliasing away. */
+static void blend_cov_scaled(int px, int py, const unsigned char *src,
+                             int sw, int sh, int dw, int dh, unsigned int fg)
+{
+    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
+    if (dw == sw && dh == sh) { blend_cov(px, py, src, sw, sh, fg); return; }
+    int lastx = (sw - 1) << 16, lasty = (sh - 1) << 16;
+    for (int y = 0; y < dh; y++) {
+        int syq = (2 * y + 1) * sh * 32768 / dh - 32768;
+        if (syq < 0) syq = 0;
+        if (syq > lasty) syq = lasty;
+        int y0 = syq >> 16, fy = syq & 0xFFFF;
+        int y1 = (y0 + 1 < sh) ? y0 + 1 : y0;
+        const unsigned char *r0 = src + (unsigned long)y0 * sw;
+        const unsigned char *r1 = src + (unsigned long)y1 * sw;
+        for (int x = 0; x < dw; x++) {
+            int sxq = (2 * x + 1) * sw * 32768 / dw - 32768;
+            if (sxq < 0) sxq = 0;
+            if (sxq > lastx) sxq = lastx;
+            int x0 = sxq >> 16, fx = sxq & 0xFFFF;
+            int x1 = (x0 + 1 < sw) ? x0 + 1 : x0;
+            int top = (r0[x0] * (65536 - fx) + r0[x1] * fx) >> 16;
+            int bot = (r1[x0] * (65536 - fx) + r1[x1] * fx) >> 16;
+            blend_px(px + x, py + y, fg, (top * (65536 - fy) + bot * fy) >> 16);
+        }
+    }
 }
 
 /* a glyph in a text cell, anti-aliased over a SOLID cell background. The core
@@ -511,17 +584,25 @@ void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
     }
 }
 
-/* one glyph, scaled up by an integer factor, drawn at a pixel position */
+/* one glyph, scaled up by an integer factor, drawn at a pixel position.
+ *
+ * This read the ONE-BIT font8x16 and drew each set bit as a solid scale x
+ * scale square. It was the blockiest path in the codebase and it drew the
+ * largest text on screen - the zlOS logo (desktop-look.md, bug 3). text_big
+ * already did the right thing; logo was the odd one out.
+ *
+ * Now it resamples the 16x32 COVERAGE atlas - the same real-TrueType,
+ * FreeType-hinted glyphs the console draws - into the 8*scale x 16*scale box
+ * this function has always occupied. At scale 2 that is 1:1 with the atlas and
+ * costs nothing extra; above it, an interpolated real glyph rather than
+ * staircase squares. Transparent where coverage is zero, exactly as before. */
 void fb_glyph_scaled(int px, int py, char c, int scale, unsigned int fg)
 {
     if (c < FONT_FIRST || c > FONT_LAST) c = '?';
-    const unsigned char *g = font8x16[(int)c - FONT_FIRST];
-    for (int y = 0; y < GLYPH_H; y++) {
-        unsigned char bits = g[y];
-        for (int x = 0; x < GLYPH_W; x++)
-            if (bits & (0x80 >> x))
-                fb_fill_px(px + x * scale, py + y * scale, scale, scale, fg);
-    }
+    if (scale < 1) scale = 1;
+    blend_cov_scaled(px, py, &font16x32_aa[(int)c - FONT_FIRST][0][0],
+                     GLYPH2_W, GLYPH2_H,
+                     GLYPH_W * scale, GLYPH_H * scale, fg);
 }
 
 /* a whole string, scaled - this is how the zlOS logo is drawn big */
@@ -584,10 +665,31 @@ void fb_shadow(int x, int y, int w, int h, int off, int soft)
     int x1 = x + off + w + soft, y1 = y + off + h + soft;
     int ix0 = x + off, iy0 = y + off, ix1 = x + off + w, iy1 = y + off + h;
 
+    /* The caller draws the window itself on top of this immediately afterwards,
+     * so every shadow pixel under the window's own footprint is computed and
+     * then painted over. That is ~90% of the pixels this loop visits, and the
+     * shadow is the most expensive thing in a window redraw - measured at 4.3 ms
+     * of a 5.1 ms window at 1920x1200 (kernel/hosttest/fbbench.c).
+     *
+     * So skip that rectangle. It is inset by SHADOW_SKIP_INSET rather than
+     * skipped exactly, because the window has ROUNDED corners: the pixels just
+     * outside the arc are still visible and still need their shadow. The inset
+     * must stay larger than any radius draw_window uses (5 * ui() = 10 at 2x).
+     *
+     * Verified pixel-identical: FNV hash of the whole 1920x1200 back buffer
+     * after shadow + rrect + rrect + gradient + text is unchanged. */
+#define SHADOW_SKIP_INSET 16
+    int sk_on = (w > 2 * SHADOW_SKIP_INSET) && (h > 2 * SHADOW_SKIP_INSET);
+    int skx0 = x + SHADOW_SKIP_INSET, skx1 = x + w - SHADOW_SKIP_INSET;
+    int sky0 = y + SHADOW_SKIP_INSET, sky1 = y + h - SHADOW_SKIP_INSET;
+
     for (int yy = y0; yy < y1; yy++) {
         if ((unsigned)yy >= fb_h) continue;
+        int skip_row = sk_on && yy >= sky0 && yy < sky1;
         for (int xx = x0; xx < x1; xx++) {
             if ((unsigned)xx >= fb_w) continue;
+            /* jump straight past the strip the window will cover */
+            if (skip_row && xx >= skx0 && xx < skx1) { xx = skx1 - 1; continue; }
             /* how far outside the window's own footprint is this pixel? */
             int dx = 0, dy = 0;
             if (xx < ix0) dx = ix0 - xx; else if (xx >= ix1) dx = xx - ix1 + 1;
@@ -665,20 +767,53 @@ void fb_box(int x, int y, int w, int h, unsigned int rgb)
     fb_fill_px(x + w - 1, y, 1, h, rgb);
 }
 
-/* a straight line, any angle - Bresenham, integer only, no floating point */
+/* A straight line, any angle - Wu's algorithm, integer only, no floating point.
+ *
+ * This was plain Bresenham: one hard on/off pixel per step, so every diagonal
+ * staircased. The System Monitor sparkline is eight diagonal segments sitting
+ * directly beside gamma-correct anti-aliased text, and the contrast made it
+ * worse rather than hiding it (desktop-look.md, bug 2).
+ *
+ * Wu's insight is that a diagonal line passes BETWEEN two pixels, so light
+ * both, in proportion to how close the true line is to each. The exact ratio
+ * is the fractional part of the line's position, which the 16.16 accumulator
+ * below already carries - so anti-aliasing costs one extra blended pixel per
+ * step and no arithmetic that was not already there.
+ *
+ * The axis with the greater extent is the one stepped along (`steep` swaps x
+ * and y to make that always x), which is what keeps the coverage sensible: on
+ * the other axis the line would move more than a pixel per step and the two
+ * lit pixels would not bracket it. */
 void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb)
 {
+    int adx = x1 - x0, ady = y1 - y0;
+    if (adx < 0) adx = -adx;
+    if (ady < 0) ady = -ady;
+
+    int steep = ady > adx;
+    if (steep) { int t; t = x0; x0 = y0; y0 = t; t = x1; x1 = y1; y1 = t; }
+    if (x0 > x1) { int t; t = x0; x0 = x1; x1 = t; t = y0; y0 = y1; y1 = t; }
+
     int dx = x1 - x0, dy = y1 - y0;
-    int sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1;
-    if (dx < 0) dx = -dx;
-    if (dy < 0) dy = -dy;
-    int err = (dx > dy ? dx : -dy) / 2, e2;
-    for (;;) {
-        put_pixel((unsigned)x0, (unsigned)y0, rgb);
-        if (x0 == x1 && y0 == y1) break;
-        e2 = err;
-        if (e2 > -dx) { err -= dy; x0 += sx; }
-        if (e2 <  dy) { err += dx; y0 += sy; }
+    /* 16.16 pixels of secondary axis per whole pixel of primary axis. dx == 0
+     * only for a single point, where the loop body runs once and grad is
+     * never applied. */
+    int grad = dx ? (int)(((long long)dy << 16) / dx) : 0;
+
+    int acc = y0 << 16;
+    for (int x = x0; x <= x1; x++) {
+        int yi = acc >> 16;            /* arithmetic shift: floor, not trunc */
+        int f  = acc & 0xFFFF;         /* ...so this fraction is always >= 0 */
+        int a2 = (f * 255) >> 16;      /* how far into the NEXT pixel we are  */
+        int a1 = 255 - a2;
+        if (steep) {
+            blend_px(yi,     x, rgb, a1);
+            blend_px(yi + 1, x, rgb, a2);
+        } else {
+            blend_px(x, yi,     rgb, a1);
+            blend_px(x, yi + 1, rgb, a2);
+        }
+        acc += grad;
     }
 }
 
@@ -912,34 +1047,38 @@ int fb_get_col(void) { return fb_col; }
  * fb_glyph_aa: transparent where coverage is zero, so an icon sits on the
  * wallpaper or a titlebar gradient with no box around it. */
 extern const unsigned char icons24[10][24][24];
-#define ICON_N 10
-#define ICON_W 24
-#define ICON_H 24
+/* the same ten icons RE-RASTERIZED at 48x48, not the 24x24 set scaled up.
+ * gen_icons.py draws each size from the geometry at its own 4x supersample,
+ * so this carries real anti-aliased edges. See the comment in fb_icon24. */
+extern const unsigned char icons48[10][48][48];
+#define ICON_N  10
+#define ICON_W  24
+#define ICON_H  24
+#define ICON2_W 48
+#define ICON2_H 48
 
+/* Draw icon `n` at the current UI scale.
+ *
+ * This used to be `ic[y / sc][x / sc]` - nearest-neighbour, i.e. each source
+ * pixel copied into an sc x sc block. `sc` is 2 on every screen 1400px or
+ * wider, which is every screen actually used, so the pipeline was: draw clean
+ * geometry at 96x96, box-filter it to 24x24, then throw away every one of
+ * those anti-aliased edge pixels by blowing it back up to 48x48 in squares.
+ * desktop-look.md called it the single most visible source of blockiness in
+ * the desktop, and it was.
+ *
+ * Now each scale reads the atlas that was RASTERIZED for it. Only a scale
+ * neither atlas covers (3x and up, which F4's fractional UI scale will want)
+ * resamples - and it interpolates rather than copies, from the 48x48 set. */
 void fb_icon24(int px, int py, int n, unsigned int fg)
 {
     if ((unsigned)n >= ICON_N) return;
-    const unsigned char (*ic)[ICON_W] = icons24[n];
-    /* draw at the UI scale - a 24px icon on a 1920 desktop is a speck */
     int sc = cell_w / GLYPH_W;
     if (sc < 1) sc = 1;
-    if (sc > 1) {
-        for (int y = 0; y < ICON_H * sc; y++)
-            for (int x = 0; x < ICON_W * sc; x++) {
-                int a = ic[y / sc][x / sc];
-                if (a <= 0) continue;
-                if (a >= 255) { put_pixel((unsigned)(px + x), (unsigned)(py + y), fg); continue; }
-                unsigned int bg = fb_get_px(px + x, py + y);
-                put_pixel((unsigned)(px + x), (unsigned)(py + y), blend_rgb(bg, fg, a));
-            }
-        return;
-    }
-    for (int y = 0; y < ICON_H; y++)
-        for (int x = 0; x < ICON_W; x++) {
-            int a = ic[y][x];
-            if (a <= 0) continue;
-            if (a >= 255) { put_pixel((unsigned)(px + x), (unsigned)(py + y), fg); continue; }
-            unsigned int bg = fb_get_px(px + x, py + y);
-            put_pixel((unsigned)(px + x), (unsigned)(py + y), blend_rgb(bg, fg, a));
-        }
+
+    if (sc == 1) { blend_cov(px, py, &icons24[n][0][0], ICON_W,  ICON_H,  fg); return; }
+    if (sc == 2) { blend_cov(px, py, &icons48[n][0][0], ICON2_W, ICON2_H, fg); return; }
+
+    blend_cov_scaled(px, py, &icons48[n][0][0], ICON2_W, ICON2_H,
+                     ICON_W * sc, ICON_H * sc, fg);
 }
