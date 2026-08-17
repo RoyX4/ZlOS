@@ -51,6 +51,8 @@ void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
 void fb_shadow(int x, int y, int w, int h, int off, int soft);
 void fb_shade(int x, int y, int w, int h, int num, int den);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
+void fb_text_prop(int px, int py, const char *s, unsigned int fg);
+int  fb_text_prop_w(const char *s);
 void fb_icon24(int px, int py, int n, unsigned int fg);
 void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
 void fb_box(int x, int y, int w, int h, unsigned int rgb);
@@ -178,6 +180,18 @@ static void b_text_aa(void)
         fb_text_aa(100, 100 + i * 20,
                    "the quick brown fox jumps over the lazy dog 0123456789", 0xE4EDFF);
 }
+/* The proportional path draws the full CELL per glyph - 30px wide at title
+ * size - even when the advance is 8. Coverage is zero outside the ink so it is
+ * correct, but it is up to 3.7x the pixels touched for a narrow glyph, and a
+ * label-heavy UI draws a lot of narrow glyphs. Worth a number rather than a
+ * shrug. */
+static void b_text_prop(void)
+{
+    for (int i = 0; i < 40; i++)
+        fb_text_prop(100, 100 + i * 20,
+                     "the quick brown fox jumps over the lazy dog 0123456789", 0xE4EDFF);
+}
+
 static void b_console(void)
 {
     for (int r = 0; r < 40; r++)
@@ -461,7 +475,8 @@ static void run_at(int w, int h, unsigned long vram)
     bench("shadow 600x460 soft=12",   b_shadow,   (600 + 24L) * (460 + 24));
     bench("rrect 600x460 r=10",       b_rrect,    600L * 460);
     bench("10 dock icons",            b_icons,    10L * 48 * 48);
-    bench("40 lines of AA text",      b_text_aa,  0);
+    bench("40 lines of AA text (mono)",b_text_aa,  0);
+    bench("40 lines of PROPORTIONAL",  b_text_prop, 0);
     bench("40 rows console text",     b_console,  0);
     bench("200 diagonal lines",       b_lines,    0);
     printf("\n");

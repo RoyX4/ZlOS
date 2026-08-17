@@ -623,13 +623,22 @@ static void blend_px(int x, int y, unsigned int rgb, int a)
     put_pixel((unsigned)x, (unsigned)y, blend_rgb(fb_get_px(x, y), rgb, a));
 }
 
-/* a whole coverage bitmap, one destination pixel per source pixel */
-static void blend_cov(int px, int py, const unsigned char *src,
-                      int sw, int sh, unsigned int fg)
+/* a coverage bitmap, one destination pixel per source pixel. `stride` is the
+ * source's row length, which is not always the width being drawn: a
+ * proportional glyph sits in a cell far wider than its own ink, and blitting
+ * the whole cell is up to 7x the pixels for no visible difference. */
+static void blend_cov_s(int px, int py, const unsigned char *src,
+                        int sw, int sh, int stride, unsigned int fg)
 {
     for (int y = 0; y < sh; y++)
         for (int x = 0; x < sw; x++)
-            blend_px(px + x, py + y, fg, src[(unsigned long)y * sw + x]);
+            blend_px(px + x, py + y, fg, src[(unsigned long)y * stride + x]);
+}
+
+static void blend_cov(int px, int py, const unsigned char *src,
+                      int sw, int sh, unsigned int fg)
+{
+    blend_cov_s(px, py, src, sw, sh, sw, fg);
 }
 
 /* the same, resampled BILINEARLY into a dw x dh box.
@@ -1446,10 +1455,13 @@ void fb_text_prop(int px, int py, const char *s, unsigned int fg)
         char c = *s++;
         if (c < FONT_FIRST || c > FONT_LAST) c = '?';
         int i = (int)c - FONT_FIRST;
+        /* only the columns that can hold ink, not the whole cell */
         if (prop_big())
-            blend_cov(px, py, &font16x32_prop[i][0][0], PROP16_W, 32, fg);
+            blend_cov_s(px, py, &font16x32_prop[i][0][0],
+                        prop16_ink[i], 32, PROP16_W, fg);
         else
-            blend_cov(px, py, &font8x16_prop[i][0][0], PROP8_W, 16, fg);
+            blend_cov_s(px, py, &font8x16_prop[i][0][0],
+                        prop8_ink[i], 16, PROP8_W, fg);
         px += prop_big() ? prop16_adv[i] : prop8_adv[i];
     }
 }
