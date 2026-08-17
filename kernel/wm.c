@@ -34,6 +34,11 @@ void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
 void fb_shadow(int x, int y, int w, int h, int off, int soft);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
+/* Titles are LABELS, not console text, so they take the proportional path.
+ * That is the single change desktop-look.md item 4 asks for at this layer. */
+void fb_text_prop(int px, int py, const char *s, unsigned int fg);
+int  fb_text_prop_w(const char *s);
+int  fb_text_prop_h(void);
 void fb_present(void);
 void fb_pointer_show(int x, int y);
 void fb_pointer_hide(void);
@@ -560,13 +565,13 @@ static void chrome(int win, int focused)
             ty += W->y - wins[win].y;
             int on = (i == wins[win].tab);
             if (on) fb_rrect(tx, ty, tw, th + UI_S1(t), UI_S1(t) / 2, t->panel);
-            fb_text_aa(tx + UI_S2(t), ty + (th - fb_cell_h()) / 2,
+            fb_text_prop(tx + UI_S2(t), ty + (th - fb_text_prop_h()) / 2,
                        wins[win].tab_title[i],
                        on ? (focused ? t->text : t->text_dim) : t->text_dim);
         }
     } else {
-        fb_text_aa(W->x + UI_S3(t), W->y + (t->title_h - fb_cell_h()) / 2,
-                   W->title, focused ? t->text : t->text_dim);
+        fb_text_prop(W->x + UI_S3(t), W->y + (t->title_h - fb_text_prop_h()) / 2,
+                     W->title, focused ? t->text : t->text_dim);
     }
 
     /* THE CLOSE BOX. It used to be a hardcoded red square, always, in every

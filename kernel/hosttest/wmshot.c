@@ -27,6 +27,9 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot);
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
+void fb_text_prop(int px, int py, const char *s, unsigned int fg);
+int  fb_text_prop_w(const char *s);
+int  fb_text_prop_h(void);
 void fb_icon24(int px, int py, int n, unsigned int fg);
 void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
 void fb_present(void);
@@ -128,9 +131,9 @@ static void desk_draw(int x, int y, int w, int h)
     fb_gradient(0, 0, W, hb, 0x1B2340, 0x141A2E);
     fb_fill_px(0, hb, W, 1, t->border);
     fb_rrect(UI_S3(t), (hb - UI_S3(t)) / 2, UI_S3(t), UI_S3(t), UI_S1(t) / 2, t->accent);
-    fb_text_aa(UI_S3(t) * 3, (hb - fb_cell_h()) / 2, "zlOS", t->text);
-    fb_text_aa(UI_S3(t) * 3 + UI_S6(t) * 3, (hb - fb_cell_h()) / 2, "Activities", t->text_dim);
-    fb_text_aa(W - UI_S6(t) * 8, (hb - fb_cell_h()) / 2, "1920 x 1200", t->text_dim);
+    fb_text_prop(UI_S3(t) * 3, (hb - fb_text_prop_h()) / 2, "zlOS", t->text);
+    fb_text_prop(UI_S3(t) * 3 + UI_S6(t) * 3, (hb - fb_text_prop_h()) / 2, "Activities", t->text_dim);
+    fb_text_prop(W - UI_S6(t) * 8, (hb - fb_text_prop_h()) / 2, "1920 x 1200", t->text_dim);
 
     int dh = UI_S6(t) * 3;
     int dy = H - dh;
@@ -139,7 +142,7 @@ static void desk_draw(int x, int y, int w, int h)
     int tile = UI_S6(t) * 3, ix = UI_S6(t);
     fb_rrect(ix, dy + UI_S2(t), tile * 2, dh - 2 * UI_S2(t), UI_S1(t), t->title);
     fb_rrect(ix + UI_S3(t), dy + dh / 2 - UI_S2(t), UI_S4(t), UI_S4(t), UI_S1(t) / 2, t->accent);
-    fb_text_aa(ix + UI_S6(t) * 2, dy + (dh - fb_cell_h()) / 2, "zlOS", t->text);
+    fb_text_prop(ix + UI_S6(t) * 2, dy + (dh - fb_text_prop_h()) / 2, "zlOS", t->text);
     ix += tile * 2 + UI_S6(t);
     for (int i = 0; i < 7; i++) {
         fb_rrect(ix, dy + UI_S2(t), tile, dh - 2 * UI_S2(t), UI_S1(t), 0x1B2236);
@@ -150,7 +153,7 @@ static void desk_draw(int x, int y, int w, int h)
      * dock in kernel.zl has the same rule and the same reason */
     int tray = ix + UI_S6(t);
     int want = W - UI_S6(t) * 9;
-    fb_text_aa(want > tray ? want : tray, dy + (dh - fb_cell_h()) / 2,
+    fb_text_prop(want > tray ? want : tray, dy + (dh - fb_text_prop_h()) / 2,
                "state: ready", t->text_dim);
 }
 

@@ -17,6 +17,7 @@ extern const unsigned char font8x16[95][16];
 /* the anti-aliased twin of the same font: a coverage (alpha 0..255) per pixel,
  * generated from font8x16 by gen_aa_font.py. Blended over the background so
  * glyph edges go grey instead of staircasing. */
+#include "font_prop.h"
 extern const unsigned char font8x16_aa[95][16][8];
 #define FONT_FIRST 32
 #define FONT_LAST  126
@@ -1396,6 +1397,62 @@ void fb_set_row(int r, int log_top, int log_bot)
 
 int fb_get_row(void) { return fb_row; }
 int fb_get_col(void) { return fb_col; }
+
+/* ---- proportional text ----------------------------------------------------
+ * fb_text_aa advances by exactly cell_w per character, so every string it
+ * draws is monospace-positioned - window titles, dock labels, button captions,
+ * all of it. desktop-look.md item 4: uniform advance is the single strongest
+ * "this is a terminal" signal there is, and it was being applied to things
+ * that are not terminals.
+ *
+ * This is the same blend and the same coverage-atlas machinery, with two
+ * differences: the glyphs come from DejaVu SANS rather than Sans Mono, and the
+ * pen moves by each glyph's real advance instead of by the cell.
+ *
+ * THE CONSOLE DOES NOT USE THIS AND MUST NOT. A terminal is a grid; text that
+ * reflows under it would break fb_scroll, the text box, and the cursor. Only
+ * labels change - which is exactly the split desktop-look.md asks for.
+ */
+/* The atlas itself, not a declaration of it. See the comment at the top of the
+ * generated file for why it rides along with fb.c rather than being its own
+ * translation unit. */
+#include "font_prop.inc"
+
+/* Follow the console's cell, the way fb_glyph_aa does, so UI text scales with
+ * everything else rather than staying 8px tall on a 1920-wide desktop. */
+static int prop_big(void) { return cell_w != GLYPH_W; }
+
+static int prop_adv(char c)
+{
+    if (c < FONT_FIRST || c > FONT_LAST) c = '?';
+    int i = (int)c - FONT_FIRST;
+    return prop_big() ? prop16_adv[i] : prop8_adv[i];
+}
+
+/* How wide will this string be? A proportional layout cannot ask "length times
+ * cell" any more, so anything that centres or right-aligns has to measure. */
+int fb_text_prop_w(const char *s)
+{
+    int w = 0;
+    while (*s) w += prop_adv(*s++);
+    return w;
+}
+
+int fb_text_prop_h(void) { return prop_big() ? 32 : 16; }
+
+void fb_text_prop(int px, int py, const char *s, unsigned int fg)
+{
+    while (*s) {
+        char c = *s++;
+        if (c < FONT_FIRST || c > FONT_LAST) c = '?';
+        int i = (int)c - FONT_FIRST;
+        if (prop_big())
+            blend_cov(px, py, &font16x32_prop[i][0][0], PROP16_W, 32, fg);
+        else
+            blend_cov(px, py, &font8x16_prop[i][0][0], PROP8_W, 16, fg);
+        px += prop_big() ? prop16_adv[i] : prop8_adv[i];
+    }
+}
 
 /* ---- 24x24 icons: the dock, the start menu, window titlebars -------------
  * icons24 is a coverage atlas exactly like the font atlases - one byte of

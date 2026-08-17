@@ -25,7 +25,10 @@
 
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
-void fb_text_aa(int px, int py, const char *s, unsigned int fg);
+void fb_text_prop(int px, int py, const char *s, unsigned int fg);
+void fb_text_prop(int px, int py, const char *s, unsigned int fg);
+int  fb_text_prop_w(const char *s);
+int  fb_text_prop_h(void);
 int  fb_cell_w(void);
 int  fb_cell_h(void);
 
@@ -135,26 +138,26 @@ static int fire(int x, int y, int w, int h)
     return 1;
 }
 
-static int text_w(const char *s)
-{
-    int n = 0;
-    while (s[n]) n++;
-    return n * fb_cell_w();
-}
+/* A proportional layout cannot ask "length times cell" any more - it has to
+ * MEASURE. That is the part of item 4 that touches every widget, and the
+ * reason a toolkit needs one function for it rather than a multiply spread
+ * across ten call sites. */
+static int text_w(const char *s) { return fb_text_prop_w(s); }
+static int text_h(void)          { return fb_text_prop_h(); }
 
 /* ---- the widgets ---------------------------------------------------------- */
 void ui_label(const char *s)
 {
     int x, y;
-    place(text_w(s), fb_cell_h(), &x, &y);
-    if (L.mode == UI_DRAW) fb_text_aa(x, y, s, theme.text);
+    place(text_w(s), text_h(), &x, &y);
+    if (L.mode == UI_DRAW) fb_text_prop(x, y, s, theme.text);
 }
 
 void ui_label_dim(const char *s)
 {
     int x, y;
-    place(text_w(s), fb_cell_h(), &x, &y);
-    if (L.mode == UI_DRAW) fb_text_aa(x, y, s, theme.text_dim);
+    place(text_w(s), text_h(), &x, &y);
+    if (L.mode == UI_DRAW) fb_text_prop(x, y, s, theme.text_dim);
 }
 
 void ui_bar(int pct)
@@ -180,8 +183,8 @@ int ui_button(const char *s)
          * and it is the difference between "drawn" and "designed". */
         unsigned face = over ? (L.click ? theme.accent : theme.panel_hi) : theme.panel_hi;
         fb_rrect(x, y, w, h, UI_S1(&theme), face);
-        fb_text_aa(x + UI_S3(&theme), y + (h - fb_cell_h()) / 2, s,
-                   over && L.click ? theme.border : theme.text);
+        fb_text_prop(x + UI_S3(&theme), y + (h - text_h()) / 2, s,
+                     over && L.click ? theme.border : theme.text);
     }
     return fired;
 }
@@ -225,7 +228,7 @@ int ui_toggle(const char *s, int *on)
         fb_rrect(x, ty, kw, kh, kh / 2, *on ? theme.accent : theme.panel_hi);
         fb_rrect(*on ? x + kw - d - pad : x + pad, ty + pad, d, d, d / 2,
                  *on ? theme.border : theme.text_dim);
-        fb_text_aa(x + kw + theme.gap, y + (h - fb_cell_h()) / 2, s, theme.text);
+        fb_text_prop(x + kw + theme.gap, y + (h - text_h()) / 2, s, theme.text);
     }
     return fired;
 }
@@ -277,10 +280,10 @@ void ui_num(const char *s, int v)
     buf[n] = 0;
 
     int x, y;
-    place(L.w, fb_cell_h(), &x, &y);
+    place(L.w, text_h(), &x, &y);
     if (L.mode != UI_DRAW) return;
-    fb_text_aa(x, y, s, theme.text_dim);
-    fb_text_aa(x + L.w - text_w(buf), y, buf, theme.text);
+    fb_text_prop(x, y, s, theme.text_dim);
+    fb_text_prop(x + L.w - text_w(buf), y, buf, theme.text);
 }
 
 /* ---- ui_list_row and ui_scroll --------------------------------------------
@@ -330,8 +333,8 @@ int ui_list_row(const char *s, int selected)
     if (L.mode == UI_DRAW) {
         if (selected)  fb_rrect(x, y, w, h, UI_S1(&theme), theme.accent);
         else if (over) fb_rrect(x, y, w, h, UI_S1(&theme), theme.panel_hi);
-        fb_text_aa(x + UI_S2(&theme), y + (h - fb_cell_h()) / 2, s,
-                   selected ? theme.border : theme.text);
+        fb_text_prop(x + UI_S2(&theme), y + (h - text_h()) / 2, s,
+                     selected ? theme.border : theme.text);
     }
     return fired;
 }
