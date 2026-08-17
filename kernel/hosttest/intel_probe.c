@@ -185,6 +185,9 @@ int  intel_ddb_end(void);
 int  intel_ddb_blocks(void);
 u32  intel_wm_compute_level0(u32 w, u32 bpp, u32 khz, u32 lat);
 
+int  intel_modeset_run(int port);
+int  intel_wm_save(void);
+int  intel_pipe_underrun(void);
 int  intel_modeset_set_from_hw(void);
 int  intel_modeset_set_fb(u32 gfx_addr, u32 stride_bytes);
 int  intel_modeset_dry(int port);
@@ -267,9 +270,11 @@ static const char *tiling_name(int t)
 
 int main(int argc, char **argv)
 {
-    int unsafe = 0, dump = 0;
+    int unsafe = 0, dump = 0, do_modeset = 0;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--unsafe")) unsafe = 1;
+        /* --modeset writes by definition, so it implies --unsafe. */
+        if (!strcmp(argv[i], "--modeset")) { do_modeset = 1; unsafe = 1; }
         if (!strcmp(argv[i], "--dump"))   dump = 1;
     }
 
@@ -796,6 +801,61 @@ int main(int argc, char **argv)
         }
     } else {
         printf("  (EDID needs GMBUS writes - re-run with --unsafe)\n");
+    }
+
+    /* ---- the real thing --------------------------------------------------
+     * Everything above is a read-only survey. This ARMS the driver and runs the
+     * 35-step sequence for real. It needs i915 gone - run it through
+     * modeset-run.sh, which stops the display manager, unbinds i915, and
+     * restores all of it from an EXIT trap whatever happens in here. */
+    if (do_modeset) {
+        printf("\n=====================================================\n");
+        printf("  STAGE 2 - EXECUTING THE MODESET FOR REAL\n");
+        printf("=====================================================\n");
+
+        printf("  %s\n", (intel_pipe_enabled() && intel_plane_enabled())
+               ? "the pipe is still live - this is a TAKEOVER, not a cold start"
+               : "the pipe is DOWN - this is a genuine COLD START");
+
+        intel_wm_save();                    /* so a failure can be walked back */
+
+        if (!intel_modeset_set_from_hw()) {
+            printf("  [ FAIL ] could not read the mode off the hardware.\n");
+            printf("           with i915 gone the timing registers may be clear,\n");
+            printf("           in which case the mode has to be supplied, not read.\n");
+            munmap(map, bar0_len); close(fd); close(cfg_fd);
+            return 2;
+        }
+        intel_modeset_set_fb(intel_surface(), (u32)intel_stride());
+
+        printf("  mode: %dx%d, %u kHz, %d lanes, %d bpp, stride %d\n",
+               intel_hactive(), intel_vactive(), intel_pixel_clock_khz(),
+               intel_ddi_lanes(), intel_ddi_bpp(), intel_stride());
+        printf("  arming lt_armed and running...\n\n");
+
+        intel_link_train_arm(1);
+        int ok_run = intel_modeset_run(0);
+        intel_link_train_arm(0);
+
+        int n = intel_modeset_steps();
+        for (int i = 0; i < n; i++)
+            printf("    step %-2d  %-28s %s\n", intel_modeset_step_plan(i),
+                   intel_modeset_step_name(i),
+                   intel_modeset_step_result(i) ? "ok" : "FAILED");
+
+        printf("\n  %d steps ran.\n", n);
+        if (ok_run) {
+            printf("  MODESET REPORTED SUCCESS.\n");
+            printf("  pipe %s, plane %s, underrun %s\n",
+                   intel_pipe_enabled() ? "on" : "OFF",
+                   intel_plane_enabled() ? "on" : "OFF",
+                   intel_pipe_underrun() ? "YES - watermarks too low" : "clear");
+        } else {
+            printf("  FAILED AT PLAN STEP %d - the FAILED line above is where.\n",
+                   intel_modeset_failed_at());
+        }
+        munmap(map, bar0_len); close(fd); close(cfg_fd);
+        return ok_run ? 0 : 3;
     }
 
     munmap(map, bar0_len);
