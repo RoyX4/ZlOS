@@ -349,8 +349,16 @@ int main(int argc, char **argv)
     void *aper = NULL; size_t aper_len = 0; int aper_fd = -1;
     if (do_modeset) {
         char ap[256];
-        snprintf(ap, sizeof ap, "%s/resource2", PCI_DEV);
+        /* resource2_wc is the same aperture mapped write-combining. Painting
+         * 14 MiB of framebuffer one uncached pixel at a time is slow enough to
+         * matter against the harness's 120 s timeout; write-combining batches
+         * the stores. Fall back to the plain aperture if it is absent. */
+        snprintf(ap, sizeof ap, "%s/resource2_wc", PCI_DEV);
         aper_fd = open(ap, O_RDWR);
+        if (aper_fd < 0) {
+            snprintf(ap, sizeof ap, "%s/resource2", PCI_DEV);
+            aper_fd = open(ap, O_RDWR);
+        }
         if (aper_fd >= 0) {
             aper_len = 256u << 20;
             aper = mmap(NULL, aper_len, PROT_READ | PROT_WRITE, MAP_SHARED, aper_fd, 0);
