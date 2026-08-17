@@ -2744,6 +2744,9 @@ int intel_backlight_pwm_enable(u32 period, u32 duty)
     if ((mmio_r(PP_STATUS) & PP_ON_MASK) != PP_ON_WANT) return 0;
 
     if (duty > period) duty = period;
+    /* Enabling the output at zero duty is a lit backlight emitting nothing.
+     * Nobody ever wants that, and it is indistinguishable from a dead panel. */
+    if (!duty) duty = period / 2u;
     mmio_w(BLC_PWM_FREQ, period);
     mmio_w(BLC_PWM_DUTY, duty);
     (void)mmio_r(BLC_PWM_FREQ);                       /* posting read */
@@ -3519,6 +3522,9 @@ int intel_pipe_underrun_clear(void)
     return 1;
 }
 
+/* defined with the backlight save/restore in the teardown section below */
+u32 intel_backlight_duty_wanted(void);
+
 /* ==== the ordered cold-start modeset =====================================
  *
  * Everything above is a primitive. This is the sequence, and the sequence is
@@ -3763,7 +3769,8 @@ int intel_modeset_run_ex(int port, int dry)
 
     /* Step 58: frequency and duty before enable, then PP_CONTROL b2. */
     MS_STEP_SOFT(58, "backlight PWM",
-          intel_backlight_pwm_enable(intel_backlight_max(), intel_backlight_get()));
+          intel_backlight_pwm_enable(intel_backlight_max(),
+                                     intel_backlight_duty_wanted()));
     MS_STEP_SOFT(58, "backlight enabled",         intel_panel_backlight_enable(1));
 
     return ms_failed_at ? 0 : 1;
@@ -3791,17 +3798,45 @@ int intel_backlight_save(void)
     return 1;
 }
 
+/* Restore FREQ and DUTY, and deliberately NOT the enable bit.
+ *
+ * Teardown ends with the panel powered down, and re-arming the PWM output into
+ * an unpowered panel is hazard H2 - the same rule that keeps AUX and the main
+ * link off a dark panel. The first version of this restored PP_CONTROL's
+ * companion CTL register wholesale, enable bit included, immediately AFTER
+ * intel_panel_power_off(). Wrong order, and the hazard list says so.
+ *
+ * Duty and frequency are just counters; writing them with the output disabled
+ * drives nothing. Leaving the right duty behind is the whole point - i915
+ * re-enables the PWM itself on rebind and the panel then comes up at the
+ * brightness the user had, instead of at whatever we left. */
 int intel_backlight_restore(void)
 {
     if (!intel_present() || !lt_armed || !bl_have_saved) return 0;
-    /* frequency and duty before the enable bit, same ordering rule as any
-     * other PWM bring-up */
     mmio_w(BLC_PWM_FREQ, bl_saved_freq);
     mmio_w(BLC_PWM_DUTY, bl_saved_duty);
-    (void)mmio_r(BLC_PWM_FREQ);
-    mmio_w(BLC_PWM_CTL, bl_saved_ctl);
-    (void)mmio_r(BLC_PWM_CTL);
+    (void)mmio_r(BLC_PWM_DUTY);
     return 1;
+}
+
+/* The duty to light the panel with, in preference order: what the user had
+ * before we started, then whatever is in the register, then half brightness.
+ *
+ * A zero here is not "off", it is "nobody told us" - and enabling the PWM at
+ * zero duty is a backlight that is on and emitting nothing, which looks
+ * exactly like a failed modeset from in front of the screen. Measured: i915
+ * leaves DUTY at 0 when it powers the panel down on unbind, so reading the
+ * register at step 58 and passing it straight back produced a correctly
+ * scanned-out image on an unlit panel, and left the user at zero brightness
+ * afterwards. */
+u32 intel_backlight_duty_wanted(void)
+{
+    u32 period = mmio_r(BLC_PWM_FREQ);
+    if (bl_have_saved && bl_saved_duty && bl_saved_duty <= bl_saved_freq)
+        return bl_saved_duty;
+    u32 live = mmio_r(BLC_PWM_DUTY);
+    if (live && live <= period) return live;
+    return period / 2u;                    /* visible, and obviously not ours */
 }
 
 /* ==== teardown: never hand the device back half-configured ===============
