@@ -300,6 +300,32 @@ zlOS itself still cannot light the panel — the driver can, and is proven to, b
 the kernel has no caller. That is now the single thing between this and zlOS
 booting on the ThinkPad with its own display.
 
+## Finishing the display: `docs/display-roadmap.md`
+
+The decision (2026-08-17): **complete the display subsystem entirely before any
+GPU work.** No ring buffers, no blitter, no execution engine until every item in
+that roadmap is done.
+
+Ordered by dependency, and the order is not the appealing one — the two most
+interesting phases are blocked behind a parser and a grind:
+
+```
+0  close what is open      wire into zlOS, second modeset, LT retry,
+                           EDID over AUX, X-tiled scanout
+1  VBT parsing             unblocks 2 and 3; a parser, no hardware sequence
+2  de-hardcode pipe/port   42 *_A registers; mechanical; blocks 3/4/5
+3  HDMI, then external DP  HDMI first - no training, no panel power, no T12
+4  hotplug                 zero lines today; needs a real interrupt path
+5  planes, rotation, scaling, tiling
+6  colour (gamma, CSC)
+7  PSR / DRRS
+8  audio over HDMI/DP      needs an HDA driver alongside
+```
+
+State measured rather than remembered: **one port, one pipe, one panel, one mode,
+polled.** 42 `*_A` registers, no VBT parser, no HDMI port bring-up (the DPLL
+clock math exists and is verified), and zero hotplug or interrupt code.
+
 ## The one thing blocking a cold-start modeset
 
 It needs the display to itself. gnome-shell + Xwayland hold `/dev/dri/card0`,
