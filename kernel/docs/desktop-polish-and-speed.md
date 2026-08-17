@@ -516,16 +516,21 @@ enormous, not marginal.
 
 ### Slower, by a factor of 2.8, and here is exactly why
 
-| 400 large triangles | |
-|---|---|
-| scanline `fill_poly` | **45.2 µs** |
-| tiled barycentric | 126.5 µs |
+| 400 large triangles | best of 6 | range |
+|---|---|---|
+| scanline `fill_poly` | **30.1 µs** | 30.1–37.5 |
+| tiled barycentric | 84.7 µs | 84.7–90.1 |
+| | **2.81× slower** | |
+
+*(A single run of this reads anywhere from 2.4× to 2.8× depending on host load,
+which is why the figure above is best-of-6 and the range is printed next to it.
+The ratio is stable; the absolute microseconds are not.)*
 
 Two rounds of optimisation are already in it — adjacent interior tiles merge
-into one `fb_fill_px` per tile row (160 → 135 µs), and the four corner values
-come from one edge evaluation plus the step constants rather than twelve
-(135 → 126 µs). Neither closed the gap, because neither addresses the real
-cost.
+into one `fb_fill_px` per tile row, and the four corner values come from one
+edge evaluation plus the step constants rather than twelve. Together they took
+about 20% off and did not change the verdict, because neither addresses the
+real cost.
 
 **A scanline fill is already optimal for a flat triangle.** It emits one
 full-width `fb_fill_px` per row — 500 calls, each hitting the SIMD fill — and
