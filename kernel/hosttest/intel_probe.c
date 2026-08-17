@@ -38,6 +38,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <errno.h>
 #include <time.h>
 
 typedef unsigned int       u32;
@@ -307,14 +308,35 @@ int main(int argc, char **argv)
     size_t bar0_len = 8u << 20;
 
     void *map = MAP_FAILED;
-    /* The 8 MiB map stops one byte short of the GGTT, which lives AT offset
-     * 8 MiB - so with only 8 MiB there is no way to build a page table, and no
-     * way to point the plane at memory we control. The kernel refuses the full
-     * BAR while i915 holds it, but a real modeset run has already unbound
-     * i915, so try 16 first and fall back. */
+    /* The GGTT lives AT offset 8 MiB in BAR0, so an 8 MiB map stops one byte
+     * short of it - no page table, and no way to point the plane at memory we
+     * control. The obvious fix, mapping all 16 MiB at once, does not work:
+     * measured, the kernel returns EINVAL for a single 16 MiB mapping of this
+     * resource whether or not i915 holds it, while an 8 MiB map at offset 0
+     * and an 8 MiB map at offset 8 MiB BOTH succeed individually.
+     *
+     * So reserve 16 MiB of address space and place the two halves into it with
+     * MAP_FIXED. The driver then sees one contiguous BAR exactly as it does in
+     * the kernel, and intel.c needs no host-specific GGTT pointer - which
+     * matters, because the whole value of this harness is that the code under
+     * test is the code that ships. */
     if (do_modeset) {
-        map = mmap(NULL, 16u << 20, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        if (map != MAP_FAILED) bar0_len = 16u << 20;
+        void *slot = mmap(NULL, 16u << 20, PROT_NONE,
+                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (slot != MAP_FAILED) {
+            void *lo = mmap(slot, 8u << 20, PROT_READ | PROT_WRITE,
+                            MAP_SHARED | MAP_FIXED, fd, 0);
+            void *hi = mmap((char *)slot + (8u << 20), 8u << 20,
+                            PROT_READ | PROT_WRITE,
+                            MAP_SHARED | MAP_FIXED, fd, 8u << 20);
+            if (lo != MAP_FAILED && hi != MAP_FAILED) {
+                map = slot; bar0_len = 16u << 20;
+            } else {
+                munmap(slot, 16u << 20);
+            }
+        }
+        if (map == MAP_FAILED)
+            fprintf(stderr, "  split BAR0 map failed (%s) - no GGTT\n", strerror(errno));
     }
     if (map == MAP_FAILED)
         map = mmap(NULL, bar0_len, unsafe ? (PROT_READ | PROT_WRITE) : PROT_READ,
