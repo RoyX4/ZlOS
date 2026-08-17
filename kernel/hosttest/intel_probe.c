@@ -421,6 +421,8 @@ int main(int argc, char **argv)
             { 0x68180, 0x68300, "SCALER"    },
             { 0x45260, 0x45280, "WM_LINET"  },
             { 0x420C0, 0x420D0, "CHICKEN"   },
+            { 0x44440, 0x44450, "DE_PORT"   },
+            { 0xC4030, 0xC4038, "SHOTPLUG"  },
             { 0x49010, 0x49040, "CSC_A"     },
             { 0x4A000, 0x4A020, "LGC_PAL_A" },
             { 0x4A400, 0x4A410, "PREC_PAL_A"},
