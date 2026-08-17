@@ -41,5 +41,9 @@ kernel/hosttest/modeset-*.log
 kernel/shots/
 kernel/hosttest/fbbench
 kernel/hosttest/gpu_fillrate
+kernel/hosttest/inputtest
+kernel/hosttest/wmtest
+kernel/hosttest/wmshot
+kernel/hosttest/tritest
 
 kernel/__pycache__/
