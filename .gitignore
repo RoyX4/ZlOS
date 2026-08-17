@@ -32,4 +32,6 @@ kernel/BOOTX64.lib
 kernel/_gen*.c
 kernel/hosttest/intel_probe
 kernel/hosttest/dpll_test
+kernel/hosttest/modeset_test
 kernel/hosttest/regs-*.txt
+kernel/hosttest/modeset-*.log
