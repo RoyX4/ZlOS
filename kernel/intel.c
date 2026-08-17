@@ -71,15 +71,65 @@ u32  pci_read32(int bus, int dev, int fn, int off);
 #define BDSM   0x5C      /* base of data stolen memory                */
 
 /* ---- MMIO display registers, relative to BAR0 --------------------------- */
-#define PIPE_SRCSZ_A      0x6001C   /* the composed image size, minus one   */
-#define TRANS_CONF_A      0x70008   /* transcoder A config + enable         */
-#define PIPE_FRMCNT_A     0x70040   /* free-running frame counter           */
-#define PLANE_CTL_1_A     0x70180   /* primary plane control                */
-#define PLANE_STRIDE_1_A  0x70188   /* stride, in units of 64 bytes         */
-#define PLANE_SIZE_1_A    0x70190   /* fetched image size, minus one        */
-#define PLANE_SURF_1_A    0x7019C   /* surface address AND the arm trigger  */
-#define PLANE_OFFSET_1_A  0x701A4   /* pan position inside the surface      */
-#define PLANE_SURFLIVE_A  0x701AC   /* read-only: what is scanning out NOW  */
+/* ---- which pipe, and the stride that makes it one line of code ---------
+ *
+ * Every pipe register in this file was hardcoded to A. The hardware lays them
+ * out regularly, which is the only reason that was survivable: both blocks step
+ * by 0x1000 per pipe.
+ *
+ *     0x60000 + pipe*0x1000    transcoder timings, PIPE_SRCSZ
+ *     0x70000 + pipe*0x1000    TRANSCONF, planes, cursor, watermarks
+ *
+ * The eDP transcoder is index 0xF in both - 0x6F000 and 0x7F008 - which is why
+ * TRANSCONF landed at 0x7F008 rather than 0x6F008 and why that was contested
+ * (C1). It is not a separate block; it is the same stride with a high index.
+ *
+ * Pipe selection is module state rather than a parameter on forty functions.
+ * The driver drives one pipe at a time and always has; what changes is that it
+ * is now a variable rather than an assumption. Defaults to A, so every existing
+ * caller behaves exactly as before - which is the property the harness checks.
+ */
+#define PIPE_A            0
+#define PIPE_B            1
+#define PIPE_C            2
+#define PIPE_STRIDE       0x1000u
+
+/* A PIPE IS NOT A TRANSCODER, and this is the distinction that makes C2 a
+ * conflict rather than a typo.
+ *
+ * The eDP transcoder is index 0xF, which is why TRANSCONF is at 0x7F008 and the
+ * timings at 0x6F000. But it is FED BY PIPE A. Every pipe register - PIPE_SRCSZ,
+ * the planes, the cursor, the watermarks, the frame counter - stays at pipe A's
+ * index while the transcoder is eDP.
+ *
+ * So 0xF is deliberately NOT a legal value here. PIPE_REG(0x6001C) with 0xF
+ * gives 0x6F01C, which the survey measures as reading 0 while the real
+ * PIPE_SRCSZ at 0x6001C reads 09FF059F - exactly the trap C2 describes, and it
+ * would have been reintroduced by treating the two indices as one.
+ *
+ * Transcoder selection stays where it already was: trans_base() for the timing
+ * block, and TRANS_EDP_CONF against TRANS_CONF_A for the config register. */
+static int cur_pipe = PIPE_A;      /* the pipe every register below refers to */
+
+int  intel_pipe_select(int pipe)
+{
+    if (pipe != PIPE_A && pipe != PIPE_B && pipe != PIPE_C) return 0;
+    cur_pipe = pipe;
+    return 1;
+}
+int  intel_pipe_current(void) { return cur_pipe; }
+
+#define PIPE_REG(base)    ((base) + (u32)cur_pipe * PIPE_STRIDE)
+
+#define PIPE_SRCSZ_A      PIPE_REG(0x6001C)  /* composed image size, minus one */
+#define TRANS_CONF_A      PIPE_REG(0x70008)  /* transcoder config + enable   */
+#define PIPE_FRMCNT_A     PIPE_REG(0x70040)  /* free-running frame counter   */
+#define PLANE_CTL_1_A     PIPE_REG(0x70180)  /* primary plane control        */
+#define PLANE_STRIDE_1_A  PIPE_REG(0x70188)  /* stride, in tiling units      */
+#define PLANE_SIZE_1_A    PIPE_REG(0x70190)  /* fetched image size, minus one*/
+#define PLANE_SURF_1_A    PIPE_REG(0x7019C)  /* surface addr AND arm trigger */
+#define PLANE_OFFSET_1_A  PIPE_REG(0x701A4)  /* pan inside the surface       */
+#define PLANE_SURFLIVE_A  PIPE_REG(0x701AC)  /* RO: what is scanning out NOW */
 #define TRANS_DDI_EDP     0x6F400   /* which pipe drives the laptop panel   */
 #define VGACNTRL          0x71400   /* legacy VGA plane                     */
 
@@ -130,24 +180,24 @@ u32  pci_read32(int bus, int dev, int fn, int off);
 #define VTOTAL_A          0x6000C
 #define VBLANK_A          0x60010
 #define VSYNC_A           0x60014
-#define PIPE_FLIPCNT_A    0x70044
+#define PIPE_FLIPCNT_A    PIPE_REG(0x70044)
 
 /* ---- the hardware cursor plane ---------------------------------------
  * A separate plane the display engine composites on top of the primary one,
  * for free, every frame. Moving it costs one register write and no redraw -
  * which is why every real OS has a hardware cursor and software mice look
  * laggy by comparison. */
-#define CUR_CTL_A         0x70080
-#define CUR_BASE_A        0x70084
-#define CUR_POS_A         0x70088
+#define CUR_CTL_A         PIPE_REG(0x70080)
+#define CUR_BASE_A        PIPE_REG(0x70084)
+#define CUR_POS_A         PIPE_REG(0x70088)
 #define CUR_MODE_128_ARGB 0x22      /* 128x128, 32-bit ARGB */
 #define CUR_MODE_64_ARGB  0x27      /* 64x64, 32-bit ARGB   */
 #define CUR_MODE_DISABLE  0x00
 
 /* ---- plane geometry --------------------------------------------------- */
-#define PLANE_POS_1_A     0x7018C
-#define PLANE_KEYMAX_1_A  0x701A0
-#define PLANE_WM_1_A(l)   (0x70240 + (l) * 4)   /* eight watermark levels */
+#define PLANE_POS_1_A     PIPE_REG(0x7018C)
+#define PLANE_KEYMAX_1_A  PIPE_REG(0x701A0)
+#define PLANE_WM_1_A(l)   PIPE_REG(0x70240 + (u32)(l) * 4u)  /* 8 wm levels */
 
 /* ---- GMBUS: the I2C bus the monitor's EDID lives on -------------------
  * Every display carries a 128-byte EDID blob at I2C address 0x50 describing
@@ -3160,7 +3210,7 @@ int intel_mn_program(void)
  * with no error bit anywhere. Each is checked against what firmware left.
  */
 #define TRANS_MSA_MISC_EDP  0x6F410
-#define PIPE_MISC_A         0x70030
+#define PIPE_MISC_A         PIPE_REG(0x70030)
 #define CHICKEN_TRANS_EDP   0x420CC
 #define PS_CTRL_1_A         0x68180
 #define PS_CTRL_2_A         0x68280
@@ -3354,18 +3404,71 @@ int intel_transcoder_enable(int on)
 #define PLANE_CTL_ORDER_RGBX       (1u << 20)
 #define PLANE_CTL_TILING_LINEAR    (0u << 10)
 
-int intel_plane_configure(u32 width, u32 height, u32 stride_bytes)
+/* PLANE_STRIDE is in units that depend on the tiling, and the register holds
+ * bytes/unit with the division unchecked (4.3 #16). Getting the unit wrong is a
+ * stride off by 8x, which shears the image rather than failing.
+ *
+ *   linear  64 B      X  512 B      Y  128 B
+ *
+ * Tiling value 5 is Yf on gen9 and Tile4 on gen12+ - the same encoding means
+ * different memory layouts on different parts (4.3 #15), so only the three
+ * above are offered here. */
+#define PLANE_TILING_LINEAR 0
+#define PLANE_TILING_X      1
+#define PLANE_TILING_Y      4
+
+static u32 plane_stride_unit(int tiling)
+{
+    switch (tiling) {
+        case PLANE_TILING_X: return 512;
+        case PLANE_TILING_Y: return 128;
+        default:             return 64;
+    }
+}
+
+/* Configure the plane with an explicit tiling.
+ *
+ * The tiling here describes how the SURFACE IS LAID OUT IN MEMORY, not a
+ * preference - the display engine reads the buffer according to this field, so
+ * telling it X-tiled while writing linear pixels produces a scrambled image,
+ * not a slower correct one. Firmware scans this panel out X-tiled; we write
+ * linear and say so, which costs memory bandwidth and is otherwise correct.
+ *
+ * Switching the kernel's framebuffer to X would mean the console's own drawing
+ * had to swizzle every pixel into 512-byte-wide, 8-row tiles. That belongs with
+ * whatever owns the drawing, not here - this side is ready for it. */
+int intel_plane_configure_tiled(u32 width, u32 height, u32 stride_bytes, int tiling)
 {
     if (!intel_present() || !lt_armed) return 0;
-    if (stride_bytes & 63) return 0;
+    if (tiling != PLANE_TILING_LINEAR && tiling != PLANE_TILING_X &&
+        tiling != PLANE_TILING_Y) return 0;
+
+    u32 unit = plane_stride_unit(tiling);
+    if (stride_bytes % unit) return 0;          /* the division is unchecked */
+    u32 st = stride_bytes / unit;
+    if (!st || st > 0x3FF) return 0;
 
     mmio_w(PLANE_OFFSET_1_A, 0);
     mmio_w(PLANE_POS_1_A, 0);
     mmio_w(PLANE_SIZE_1_A, ((height - 1) << 16) | (width - 1));
-    mmio_w(PLANE_STRIDE_1_A, stride_bytes / 64);     /* linear: 64-byte units */
+    mmio_w(PLANE_STRIDE_1_A, st);
     mmio_w(PLANE_CTL_1_A, PLANE_CTL_ENABLE | PLANE_CTL_FORMAT_XRGB8888 |
-                          PLANE_CTL_TILING_LINEAR);
+                          ((u32)tiling << 10));
     return 1;
+}
+
+int intel_plane_configure(u32 width, u32 height, u32 stride_bytes)
+{
+    return intel_plane_configure_tiled(width, height, stride_bytes,
+                                       PLANE_TILING_LINEAR);
+}
+
+/* What the stride register should hold for a given layout, so a caller can
+ * check its own arithmetic without programming anything. */
+u32 intel_plane_stride_reg(u32 stride_bytes, int tiling)
+{
+    u32 unit = plane_stride_unit(tiling);
+    return (stride_bytes % unit) ? 0 : stride_bytes / unit;
 }
 
 /* ==== watermarks and the display data buffer =============================
@@ -3391,8 +3494,8 @@ int intel_plane_configure(u32 width, u32 height, u32 stride_bytes)
  * a known-good configuration is a completely legitimate strategy for a driver
  * that is not changing the mode - and it is far better than inventing numbers.
  */
-#define PLANE_WM_TRANS_1_A  0x70268
-#define PLANE_BUF_CFG_1_A   0x7027C
+#define PLANE_WM_TRANS_1_A  PIPE_REG(0x70268)
+#define PLANE_BUF_CFG_1_A   PIPE_REG(0x7027C)
 /* The underrun telltale is GEN8_DE_PIPE_IIR bit 31, write-1-clear. It is NOT
  * in PIPECONF: 0x70008 is TRANS_CONF_A, whose b31 is the pipe ENABLE bit, so
  * reading it as an underrun flag reports a permanent true on any live pipe. */
@@ -3491,9 +3594,9 @@ int intel_wm_set_level(int level, u32 value)
  * been one short of what firmware asks for. Follow the hardware.
  *
  * The write order matters and is the plan's: watermarks first, BUF_CFG last. */
-#define CUR_WM_A(level)   (0x70140u + 4u * (u32)(level))
-#define CUR_WM_TRANS_A    0x70168
-#define CUR_BUF_CFG_A     0x7017C
+#define CUR_WM_A(level)   PIPE_REG(0x70140u + 4u * (u32)(level))
+#define CUR_WM_TRANS_A    PIPE_REG(0x70168)
+#define CUR_BUF_CFG_A     PIPE_REG(0x7017C)
 #define DDB_LAST_BLOCK    891              /* 896 blocks, 4 reserved, 1 slice */
 
 u32 intel_cur_wm(int level)
@@ -3587,7 +3690,7 @@ int intel_wm_saved(void) { return wm_have_saved; }
  * a watermark is wrong, and checking it is the difference between "the screen
  * flickers sometimes" and a diagnosis. Write 1 to clear. */
 #define PIPECONF_UNDERRUN (1u << 31)   /* in the pipe's status, not conf */
-#define PIPE_STATUS_A     0x70024
+#define PIPE_STATUS_A     PIPE_REG(0x70024)
 
 int intel_pipe_underrun(void)
 {
