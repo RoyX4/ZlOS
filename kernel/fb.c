@@ -427,6 +427,38 @@ static void fb_report_mode(unsigned int need)
     }
 }
 
+/* NOTE, AND IT IS NOT THIS FILE'S BUG TO FIX: `addr` arrives TRUNCATED in the
+ * EFI build, and this signature is one link in that chain rather than its
+ * origin.
+ *
+ * buildefi.sh targets x86_64-unknown-windows, which is LLP64 - `unsigned long`
+ * is FOUR bytes there and eight everywhere else. Proven, not assumed:
+ * a _Static_assert(sizeof(unsigned long) == 8) fails on that target.
+ *
+ * The chain, all of it `unsigned long`:
+ *     efi.c:250   fb_addr = (unsigned long)gop->mode->framebuffer_base;
+ *                 <- the UINT64 loses its top half HERE, at the source
+ *     efi.c:287   console_init_efi(fb_addr, ...)
+ *     console.c   console_init_efi -> fb_setup(addr, ...)
+ *     here        fb_base = (unsigned char *)addr
+ * and back out through fb_phys() -> console_vram() -> the `vram` builtin.
+ *
+ * CLAUDE.md already names this bug class - "never put a pointer through
+ * unsigned long in the EFI build" - and buildefi.sh carries four -Werror flags
+ * against it. THOSE FLAGS ARE SILENT HERE, verified by compiling both cast
+ * shapes with the exact build line: they catch pointer<->int, and this is a
+ * UINT64 narrowed by an EXPLICIT cast, which no warning catches.
+ *
+ * Latent rather than active: a GOP framebuffer base is normally a PCI BAR in
+ * the 32-bit MMIO window, which is why QEMU and OVMF never show it. Firmware
+ * that places it above 4 GiB would give a black screen or write into whatever
+ * lives at the truncated address.
+ *
+ * The fix is three declarations, not one, and two of the files were mid-flight
+ * in another session: efi.c's fb_addr, console_init_efi, and this parameter all
+ * become `unsigned long long`. Changing only this one is WORSE than leaving it
+ * - console.c's declaration would then disagree with the definition about the
+ * size of a register argument. Logged as T-11. */
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp)
 {
