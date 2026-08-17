@@ -20,6 +20,8 @@
 
 #include "../ui.h"
 
+#define ANIM_SETTLE 5   /* four animation frames plus one to settle */
+
 /* ---- fb.c ---------------------------------------------------------------- */
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp);
@@ -27,6 +29,7 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 unsigned int fb_get_px(int x, int y);
 void fb_present(void);
 void fb_clip_none(void);
+void fb_clip(int x, int y, int w, int h);
 unsigned int fb_pxw(void);
 unsigned int fb_pxh(void);
 
@@ -332,6 +335,85 @@ int main(void)
     ui_toggle("wrap", &on);
     ui_slider(&v, 0, 100);
     ok("a toggle flips only when it is the thing hit", on == 0 || on == 1);
+
+    /* ------------------------------------------------------------ animation
+     * Four frames of growth, then settled. The properties that matter are not
+     * "it moves" but: it ENDS, it ends at exactly the requested geometry, and
+     * HIT TESTING NEVER SEES THE INTERMEDIATE SIZE - a click that misses
+     * because the target was still growing is worse than no animation. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    int an = wm_open(7, "anim", 300, 300, 400, 300);
+    int gx2, gy2, gw2, gh2;
+    wm_geometry(an, &gx2, &gy2, &gw2, &gh2);
+    ok("geometry is the SETTLED size from frame zero",
+       gw2 == 400 && gh2 == 300);
+    ok("...and so is hit testing, mid-animation", wm_at(310, 310) == an);
+
+    /* the drawn window must actually be smaller on the first frame */
+    frame();
+    int grew = 0;
+    for (int x = 300; x < 320; x++)
+        if (fb_get_px(x, 450) == WALL) grew = 1;   /* left edge not yet reached */
+    ok("the first frame is drawn SMALLER than the settled rect", grew);
+
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
+    int settled = 1;
+    for (int x = 302; x < 316; x++)
+        if (fb_get_px(x, 450) == WALL) settled = 0;
+    ok("...and after four frames it has settled at full size", settled);
+
+    int before_calls = draw_calls[7];
+    frame(); frame();
+    ok("the animation ENDS - no repaint once settled",
+       draw_calls[7] == before_calls);
+
+    /* ------------------------------------------------- ui_list_row / ui_scroll
+     * Both were held back until clipping was settled, and for a real reason:
+     * a scrolled list draws rows PARTLY outside their viewport. */
+    int off = 0, picked = -1;
+    /* 200 rows into a 100px viewport, hit-testing a point inside it */
+    ui_begin(0, 0, 400, 300, UI_HITTEST, 40, 60, 1);
+    ui_scroll_begin(100, &off);
+    for (int i = 0; i < 200; i++) if (ui_list_row("row", 0)) picked = i;
+    ui_scroll_end(&off);
+    ok("a 200-row list hit-tests to exactly one row", picked >= 0);
+    ok("...and measures its full content height", ui_scroll_content() > 100);
+
+    /* scrolled past the end, ui_scroll_end must clamp the app's variable back
+     * - the app cannot know the content height until after the loop it just
+     * ran, so this is the only place that information exists */
+    off = 99999;
+    ui_begin(0, 0, 400, 300, UI_HITTEST, 40, 60, 0);
+    ui_scroll_begin(100, &off);
+    for (int i = 0; i < 200; i++) ui_list_row("row", 0);
+    ui_scroll_end(&off);
+    ok("scrolling past the end is clamped, not left dangling",
+       off == ui_scroll_content() - 100);
+
+    off = -500;
+    ui_begin(0, 0, 400, 300, UI_HITTEST, 40, 60, 0);
+    ui_scroll_begin(100, &off);
+    for (int i = 0; i < 200; i++) ui_list_row("row", 0);
+    ui_scroll_end(&off);
+    ok("...and so is scrolling above the start", off == 0);
+
+    /* THE PROPERTY THAT MATTERS: rows outside the viewport are REJECTED, not
+     * drawn and clipped. The scissor is a correctness guarantee, not a
+     * substitute for not drawing - otherwise a 200-row list costs 200 rows of
+     * drawing to show 4. Draw into a known-clear area and count the damage. */
+    fb_clip_none();
+    fb_fill_px(0, 0, 400, 400, WALL);
+    off = 0;
+    ui_begin(0, 0, 400, 300, UI_DRAW, -1, -1, 0);
+    ui_scroll_begin(100, &off);
+    for (int i = 0; i < 200; i++) ui_list_row("row", 0);
+    ui_scroll_end(&off);
+    int painted_below = 1;
+    for (int y = 200; y < 400; y++)
+        for (int x = 0; x < 380; x++)
+            if (fb_get_px(x, y) != WALL) painted_below = 0;
+    ok("rows past the viewport never reach the framebuffer", painted_below);
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;

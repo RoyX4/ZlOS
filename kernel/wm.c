@@ -71,6 +71,7 @@ struct win {
     int app;
     int flags;
     int min_w, min_h;
+    int anim;                  /* frames left in the open animation, 0 = none */
     char title[32];
 };
 
@@ -160,6 +161,56 @@ void wm_damage_win(int win)
               wins[win].w + 2 * reach, wins[win].h + 2 * reach);
 }
 
+/* ---- motion ---------------------------------------------------------------
+ * Nothing in zlOS animated at all: windows appeared instantly, menus popped,
+ * focus snapped. desktop-polish-and-speed.md calls that the single biggest
+ * "feels modern" gap, and it was gated on damage tracking - a window that
+ * appears over several frames is composited several times, which is only
+ * affordable once that costs a rectangle instead of the screen.
+ *
+ * FOUR FRAMES. Not an easing curve, not a timeline system, not 60fps. A window
+ * that grows into place over four frames already feels different from one that
+ * teleports, and four frames at 100 Hz is 40 ms - under the ~100 ms where a
+ * person starts calling it slow.
+ *
+ * It is a SCALE, not a fade, and that is not a compromise. A fade needs the
+ * window composited against the background at a fraction of opacity, which
+ * means an offscreen buffer this kernel has nowhere to put. A scale needs
+ * nothing new: apps are already required to be size-agnostic by the app
+ * contract, so drawing one at 82% is just drawing it, and the chrome is
+ * parametric already.
+ *
+ * HIT TESTING IGNORES ALL OF IT. wm_at and the routing use the settled
+ * geometry from the first frame, so a click during those 40 ms lands where the
+ * window is ABOUT to be rather than where it momentarily looks. A pointer that
+ * misses a target because the target was still growing is worse than no
+ * animation.
+ */
+#define ANIM_FRAMES 4
+
+/* how big window `win` should be DRAWN this frame, as a percentage */
+static int anim_pct(int win)
+{
+    int a = wins[win].anim;
+    if (a <= 0) return 100;
+    /* 82, 90, 95, 98 -> 100. Decelerating, by subtracting a shrinking
+     * fraction rather than by evaluating a curve. */
+    static const unsigned char steps[ANIM_FRAMES] = { 82, 90, 95, 98 };
+    return steps[ANIM_FRAMES - a];
+}
+
+static void anim_rect(int win, int *x, int *y, int *w, int *h)
+{
+    int p = anim_pct(win);
+    struct win *W = &wins[win];
+    *w = W->w * p / 100;
+    *h = W->h * p / 100;
+    /* grow from the CENTRE - a window that grows from its top-left corner
+     * reads as sliding, which says something different */
+    *x = W->x + (W->w - *w) / 2;
+    *y = W->y + (W->h - *h) / 2;
+}
+
 /* ---- z-order ------------------------------------------------------------- */
 static int z_index_of(int win)
 {
@@ -200,18 +251,28 @@ void wm_geometry(int win, int *x, int *y, int *w, int *h)
 /* The CLIENT area: inside the frame, below the title bar. This is the second,
  * narrower scissor in the repaint - the one that means an app physically
  * cannot draw over its own title bar no matter what it does. */
+static void client_of(int fx, int fy, int fw, int fh, int flags,
+                      int *x, int *y, int *w, int *h)
+{
+    const struct ui_theme *t = ui_theme();
+    int b  = (flags & WF_NOCHROME) ? 0 : 2;
+    int th = (flags & WF_NOCHROME) ? 0 : t->title_h;
+    *x = fx + b;
+    *y = fy + th;
+    *w = fw - 2 * b;
+    *h = fh - th - b;
+    if (*w < 0) *w = 0;
+    if (*h < 0) *h = 0;
+}
+
+/* The SETTLED client area - where the window will be, not where it may
+ * momentarily be drawn mid-animation. Hit testing and app coordinates outside
+ * the repaint both want this one. */
 void wm_client(int win, int *x, int *y, int *w, int *h)
 {
     if (!wm_is_open(win)) { *x = *y = *w = *h = 0; return; }
-    const struct ui_theme *t = ui_theme();
-    int b = (wins[win].flags & WF_NOCHROME) ? 0 : 2;
-    int th = (wins[win].flags & WF_NOCHROME) ? 0 : t->title_h;
-    *x = wins[win].x + b;
-    *y = wins[win].y + th;
-    *w = wins[win].w - 2 * b;
-    *h = wins[win].h - th - b;
-    if (*w < 0) *w = 0;
-    if (*h < 0) *h = 0;
+    client_of(wins[win].x, wins[win].y, wins[win].w, wins[win].h,
+              wins[win].flags, x, y, w, h);
 }
 
 /* ---- lifecycle ------------------------------------------------------------
@@ -248,6 +309,7 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         wins[i].flags = WF_OPEN;
         wins[i].min_w = 8 * fb_cell_w();
         wins[i].min_h = 4 * fb_cell_h();
+        wins[i].anim = ANIM_FRAMES;
         title_copy(wins[i].title, title);
         z_append(i);
         focus_win = i;
@@ -381,7 +443,9 @@ static int ptr_x, ptr_y;
 static void chrome(int win, int focused)
 {
     const struct ui_theme *t = ui_theme();
-    struct win *W = &wins[win];
+    struct win Wa = wins[win];
+    struct win *W = &Wa;
+    anim_rect(win, &W->x, &W->y, &W->w, &W->h);
     int off  = SHADOW_OFF(t), soft = SHADOW_SOFT(t);
     if (W->flags & WF_MODAL) { off = off * 3 / 2; soft = soft * 3 / 2; }
     else if (!focused)       { off = off / 2;     soft = soft * 2 / 3; }
@@ -445,8 +509,9 @@ void wm_repaint(void)
             fb_clip(cx, cy, cw, ch);            /* clip 1: the frame + shadow */
             chrome(win, win == focus_win);
 
-            int ax, ay, aw, ah;
-            wm_client(win, &ax, &ay, &aw, &ah);
+            int fx, fy, fw, fh, ax, ay, aw, ah;
+            anim_rect(win, &fx, &fy, &fw, &fh);
+            client_of(fx, fy, fw, fh, W->flags, &ax, &ay, &aw, &ah);
             if (hook_draw && isect(ax, ay, ax + aw, ay + ah,
                                    rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
                 fb_clip(cx, cy, cw, ch);        /* clip 2: NARROWER - client   */
@@ -594,6 +659,13 @@ void wm_frame(void)
     /* app_tick runs every frame, is cheap, and MUST NOT DRAW. Returning 1 is
      * how a clock or a snake says "my state changed" without owning the frame
      * - which is the whole reason those demos no longer need a while-loop. */
+    /* advance any open animation. Damaging the SETTLED rect (which is the
+     * largest) is what erases the smaller frame drawn a moment ago. */
+    for (int i = 0; i < nz; i++) {
+        int win = zorder[i];
+        if (wins[win].anim > 0) { wins[win].anim--; wm_damage_win(win); }
+    }
+
     if (hook_tick)
         for (int i = 0; i < nz; i++)
             if (hook_tick(wins[zorder[i]].app, zorder[i])) wm_damage_win(zorder[i]);

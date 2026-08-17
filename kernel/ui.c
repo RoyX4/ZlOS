@@ -273,3 +273,111 @@ void ui_num(const char *s, int v)
     fb_text_aa(x, y, s, theme.text_dim);
     fb_text_aa(x + L.w - text_w(buf), y, buf, theme.text);
 }
+
+/* ---- ui_list_row and ui_scroll --------------------------------------------
+ * Both were held back until clipping was settled, and for a real reason: a
+ * scrolled list draws rows that are PARTLY outside their own viewport, so
+ * without a scissor the overflow lands on whatever is next to it. fb_clip is
+ * now proven - zero pixels escape a set scissor across every primitive - so
+ * these are safe to build.
+ *
+ * They are still immediate mode. A list does not own its items and there is no
+ * item array anywhere: the app calls ui_list_row once per thing it has, in a
+ * loop it already writes, and the row returns whether it was clicked. That is
+ * the only shape available without a heap, and it is also the nicer one.
+ */
+void fb_clip(int x, int y, int w, int h);
+void fb_clip_none(void);
+
+static struct {
+    int on;                  /* inside a scroll region?                    */
+    int x, y, w, h;          /* the viewport, in screen coordinates        */
+    int off;                 /* how far down the content is scrolled       */
+    int content;             /* total content height, measured as we go    */
+    int save_cy, save_h;     /* the cursor state ui_scroll_end restores     */
+    int cx0, cy0, cx1, cy1;  /* the scissor to put back                     */
+} S;
+
+/* A selectable row: full width, one row high, highlighted when the pointer is
+ * over it. `selected` marks the current one - passed in rather than stored,
+ * because the app already knows which of its things is selected and a second
+ * copy here would be a second thing to keep in step. */
+int ui_list_row(const char *s, int selected)
+{
+    int x, y, w = L.w, h = theme.row_h;
+    place(w, h, &x, &y);
+
+    /* Cheap rejection FIRST. A list can be thousands of rows and only ~20 are
+     * ever visible; drawing the rest and letting the scissor throw them away
+     * would make scrolling cost O(items) instead of O(visible). The scissor is
+     * a correctness guarantee, not a substitute for not drawing. */
+    if (S.on && (y + h < S.y || y > S.y + S.h)) {
+        L.index++;                      /* keep widget identity stable */
+        return 0;
+    }
+
+    int over = hit(x, y, w, h);
+    int fired = fire(x, y, w, h);
+    if (L.mode == UI_DRAW) {
+        if (selected)  fb_rrect(x, y, w, h, UI_S1(&theme), theme.accent);
+        else if (over) fb_rrect(x, y, w, h, UI_S1(&theme), theme.panel_hi);
+        fb_text_aa(x + UI_S2(&theme), y + (h - fb_cell_h()) / 2, s,
+                   selected ? theme.border : theme.text);
+    }
+    return fired;
+}
+
+/* Open a scrolling viewport `h` pixels tall. `off` is the app's scroll
+ * position - again, the app's variable, not ours. Everything between this and
+ * ui_scroll_end is clipped to the viewport and shifted up by off. */
+void ui_scroll_begin(int h, int *off)
+{
+    int x, y;
+    place(L.w, h, &x, &y);
+
+    S.on = 1;
+    S.x = x; S.y = y; S.w = L.w; S.h = h;
+    S.off = off ? *off : 0;
+    S.content = 0;
+    S.save_cy = L.cy;
+    S.save_h = L.h;
+
+    if (L.mode == UI_DRAW) fb_clip(x, y, L.w, h);
+    /* the cursor moves INTO the viewport, offset by the scroll position */
+    L.cy = y - S.off;
+    L.cx = L.x;
+}
+
+void ui_scroll_end(int *off)
+{
+    S.content = L.cy + S.off - S.y;     /* how tall the content turned out */
+    if (L.mode == UI_DRAW) {
+        fb_clip_none();
+        /* the scrollbar, only when there is something to scroll. A bar that
+         * is always there but sometimes full-height is a bar that means
+         * nothing. */
+        if (S.content > S.h) {
+            int bw = UI_S1(&theme);
+            int bx = S.x + S.w - bw;
+            int th2 = S.h * S.h / S.content;
+            if (th2 < UI_S6(&theme)) th2 = UI_S6(&theme);
+            int ty = S.y + (S.h - th2) * S.off / (S.content - S.h);
+            fb_rrect(bx, S.y, bw, S.h, bw / 2, theme.panel_hi);
+            fb_rrect(bx, ty, bw, th2, bw / 2, theme.text_dim);
+        }
+    }
+    /* clamp the app's scroll position to what the content turned out to be -
+     * it cannot know that before the loop it just ran */
+    if (off) {
+        int max = S.content - S.h;
+        if (max < 0) max = 0;
+        if (*off > max) *off = max;
+        if (*off < 0) *off = 0;
+    }
+    L.cy = S.save_cy + S.h + theme.gap;
+    L.cx = L.x;
+    L.h = S.save_h;
+    S.on = 0;
+}
+
+int ui_scroll_content(void) { return S.content; }

@@ -135,6 +135,10 @@ void ui_space(int n);
 int  ui_toggle(const char *s, int *on);
 int  ui_slider(int *v, int lo, int hi);
 void ui_num(const char *s, int v);
+int  ui_list_row(const char *s, int selected);
+void ui_scroll_begin(int h, int *off);
+void ui_scroll_end(int *off);
+int  ui_scroll_content(void);
 void ui_row(void);              /* put the next widget beside this one       */
 void ui_endrow(void);
 
