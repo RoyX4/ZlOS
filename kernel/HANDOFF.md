@@ -248,6 +248,58 @@ sequence has run once, not before.
 Still missing: EDID over I2C-over-AUX (GMBUS does not serve eDP on DDI A).
 `LINK_RATE_SET` Method B is **not** needed — this panel has no rate table.
 
+## IT WORKS. The panel was lit by our own driver on 2026-08-17
+
+`sudo ./modeset-run.sh --modeset` brought the ThinkPad's panel up from cold and
+displayed a test pattern — a colour gradient with a white border, held for ten
+seconds, confirmed by eye. All 34 steps green, then a clean teardown and the
+desktop back with no power button.
+
+```
+*** PICTURE SHOULD BE ON SCREEN NOW - holding 10 s ***
+underrun after 10 s: clear
+teardown: clean
+pipe off, panel off, port off
+exit code: 0
+```
+
+**`underrun after 10 s: clear` is the second result.** Ten seconds of real
+scanout with zero FIFO underruns, which validates the watermarks and the DDB
+split derived from firmware — including the cursor's 13 blocks and the 0..858 /
+859..891 division the plan had inverted.
+
+### What the four failed attempts before it actually cost
+
+Every one of them was a bug in the *harness or the checks*, not the modeset:
+
+| Run | Reported | Truth |
+|---|---|---|
+| 1 | FAILED at step 56 | no framebuffer existed; armed a scanout of address 0 |
+| 2 | 34/34 SUCCESS, dark | GGTT unreachable — 8 MiB map stops one byte short of it |
+| 3 | FAILED at step 56 | plane WAS armed; `PLANE_SURFLIVE` returns address + status bits, so the equality check could never match |
+| 4 | — | backlight enabled at **zero duty**: correct image on an unlit panel |
+
+Run 1 also left the display half-configured and cost a hard power-off. That is
+why `intel_modeset_teardown()` exists and why the harness calls it on the
+success and failure paths both.
+
+### The two mapping facts worth keeping
+
+- The kernel will **not** serve one 16 MiB mapping of BAR0 — EINVAL, i915 or no
+  i915. It will serve 8 MiB at offset 0 and 8 MiB at offset 8 MiB separately.
+  Reserve 16 MiB with an anonymous `PROT_NONE` map and `MAP_FIXED` both halves
+  into it; the driver then sees one contiguous BAR exactly as in the kernel.
+- The framebuffer lives in **stolen memory** — `/proc/iomem` confirms
+  `79800000-7d7fffff : Graphics Stolen Memory` inside `Reserved`, so it is never
+  Linux RAM. Paint it through `resource2_wc`.
+
+### Still true
+
+**Nothing in the kernel arms `lt_armed`.** This runs from the host harness only.
+zlOS itself still cannot light the panel — the driver can, and is proven to, but
+the kernel has no caller. That is now the single thing between this and zlOS
+booting on the ThinkPad with its own display.
+
 ## The one thing blocking a cold-start modeset
 
 It needs the display to itself. gnome-shell + Xwayland hold `/dev/dri/card0`,
