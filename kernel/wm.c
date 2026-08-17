@@ -59,6 +59,12 @@ int  input_y(void);
 
 unsigned int idt_ticks(void);
 
+/* The one character sink the whole kernel prints through. wm.c uses it for
+ * refusals only - anything it declines to do says so, on the serial log, where
+ * an unattended gate can read it. */
+void zl_putc_pub(char c);
+static void wm_puts(const char *s) { while (*s) zl_putc_pub(*s++); }
+
 /* ---- the table ----------------------------------------------------------- */
 struct win {
     int x, y, w, h;
@@ -248,7 +254,12 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         wm_damage_win(i);
         return i;
     }
-    return -1;      /* WM_MAX is a hard ceiling. The caller must SAY so. */
+    /* WM_MAX is a hard ceiling, and a refusal has to SAY SO. A silent -1 is
+     * how "the dock stopped launching things" becomes a twenty-minute hunt -
+     * and it is the same bug class as the back buffer switching itself off
+     * without a word (desktop-TODO 0a). */
+    wm_puts("  wm: no free window slot (WM_MAX reached), refusing to open\n");
+    return -1;
 }
 
 void wm_close(int win)
@@ -281,6 +292,18 @@ void wm_focus(int win)
      * gains them. Two damages, not one. */
     if (wm_is_open(old)) wm_damage_win(old);
     if (wm_is_open(win)) wm_damage_win(win);
+}
+
+/* WF_MODAL had no setter, so the modal branch in route_mouse was code that
+ * could never execute - which is exactly the hazard HANDOFF.md names for
+ * intel.c: "the code exists" is not "the code works", check for an actual
+ * caller. C5 makes the start menu a modal window; this is what it will call. */
+void wm_set_modal(int win, int on)
+{
+    if (!wm_is_open(win)) return;
+    if (on) wins[win].flags |= WF_MODAL;
+    else    wins[win].flags &= ~WF_MODAL;
+    wm_damage_win(win);        /* the elevation changes, so the shadow does */
 }
 
 void wm_move(int win, int x, int y)
@@ -397,8 +420,7 @@ static void chrome(int win, int focused)
 void wm_repaint(void)
 {
     if (!fb_active() || !nwd) return;
-    const struct ui_theme *t = ui_theme();
-    (void)t;
+    int reach = SHADOW_OFF(ui_theme()) + SHADOW_SOFT(ui_theme());
 
     for (int r = 0; r < nwd; r++) {
         int rx0 = wd[r].x0, ry0 = wd[r].y0, rx1 = wd[r].x1, ry1 = wd[r].y1;
@@ -416,7 +438,6 @@ void wm_repaint(void)
                        rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
                 /* the shadow reaches outside the frame, so a window can still
                  * owe this rectangle something even when the frame misses it */
-                int reach = SHADOW_OFF(ui_theme()) + SHADOW_SOFT(ui_theme());
                 if (!isect(W->x - reach, W->y - reach,
                            W->x + W->w + reach, W->y + W->h + reach,
                            rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) continue;

@@ -101,6 +101,7 @@ int  wm_open(int app, const char *title, int x, int y, int w, int h);
 void wm_close(int win);
 void wm_raise(int win);
 void wm_focus(int win);
+void wm_set_modal(int win, int on);
 void wm_move(int win, int x, int y);
 void wm_resize(int win, int w, int h);
 

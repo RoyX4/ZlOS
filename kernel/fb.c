@@ -404,7 +404,18 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
     /* Only 32- and 24-bit packed pixel modes are handled. Anything else is
      * refused rather than drawn as garbage - a wrong depth paints noise and
      * looks like a crash. */
-    if (!addr || (bpp != 32 && bpp != 24)) { fb_base = 0; return; }
+    if (!addr || (bpp != 32 && bpp != 24)) {
+        /* Refusing is right - a wrong depth paints noise and reads as a crash.
+         * Refusing SILENTLY is the bug, and it is the same one 0a was about:
+         * the machine ends up with no framebuffer and nothing anywhere says
+         * why. On a real UEFI boot this is the difference between "the panel
+         * is black" and "the panel is black because firmware handed us 16bpp". */
+        fb_base = 0;
+        fb_puts("  fb: REFUSED the mode - ");
+        if (!addr) fb_puts("no framebuffer address\n");
+        else { fb_puts("bpp "); fb_putu(bpp); fb_puts(", only 24 and 32 are handled\n"); }
+        return;
+    }
 
     fb_base  = (unsigned char *)addr;
     fb_pitch = pitch;

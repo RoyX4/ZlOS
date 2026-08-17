@@ -251,14 +251,46 @@ int main(void)
     ok("...and focus falls to the new top, not to nothing", wm_focused() == d);
     pointer(0, 0, 0);
 
-    /* ---------------------------------------------------------------- modal */
+    /* ---------------------------------------------------------------- modal
+     * This branch of route_mouse had NO WAY TO BE REACHED until wm_set_modal
+     * existed - nothing set WF_MODAL, so it was code that could never run.
+     * That is this project's own named hazard: "the code exists" is not "the
+     * code works", check for an actual caller. */
     int m = wm_open(5, "menu", 200, 200, 200, 300);
-    /* WF_MODAL is set through the table because nothing else needs to set it */
+    wm_set_modal(m, 1);
     wm_raise(m);
     frame();
     ok("the menu opened", wm_is_open(m));
 
-    /* ----------------------------------------------------------- app_tick */
+    /* a click INSIDE the modal reaches it and does not dismiss it */
+    last_event_app = -1;
+    pointer(250, 200 + th->title_h + 20, 1);
+    ok("a modal takes a click inside itself", wm_is_open(m) && last_event_app == 5);
+    pointer(250, 200 + th->title_h + 20, 0);
+
+    /* a click OUTSIDE it dismisses it, and does NOT reach the window under it */
+    last_event_app = -1;
+    pointer(900, 700, 1);
+    ok("a click outside a modal dismisses it", !wm_is_open(m));
+    ok("...and does not fall through to the window underneath",
+       last_event_app == -1);
+    pointer(900, 700, 0);
+
+    /* with the modal gone, a click in the same place reaches normally again */
+    int under = wm_open(6, "under", 850, 650, 300, 200);
+    frame();
+    last_event_app = -1;
+    pointer(900, 700 + th->title_h, 1);
+    ok("with the modal gone, clicks route normally again", last_event_app == 6);
+    pointer(900, 700 + th->title_h, 0);
+    wm_close(under);
+
+    /* ----------------------------------------------------------- app_tick
+     * Settle FIRST. Everything above left damage pending - closing `under`
+     * damages a region window `d` overlaps - and this asserts that nothing
+     * repaints, so it has to start from a clean frame or it measures the
+     * previous test instead of this one. */
+    frame();
     draw_calls[4] = 0;
     tick_returns = 0;
     frame(); frame();
