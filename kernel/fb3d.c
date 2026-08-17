@@ -94,6 +94,168 @@ static void fill_poly(const int *xs, const int *ys, int n, unsigned int rgb)
     }
 }
 
+/* ---- a TILED barycentric triangle rasterizer -------------------------------
+ * The path SerenityOS took to run Quake III with no GPU, and the shape every
+ * software rasterizer converges on. desktop-TODO's order is fb_clip -> tiled
+ * rasterization -> SIMD -> depth buffer -> textures; this is step two, and the
+ * first is now done.
+ *
+ * WHY TILES RATHER THAN SCANLINES. fill_poly above walks every row of the
+ * bounding box and solves for edge crossings per row. That is fine for one
+ * cube and wrong for a scene: it is inherently serial down the triangle, it
+ * re-derives the same edge maths every row, and it has nowhere to hang a depth
+ * test, a texture lookup or a vector unit.
+ *
+ * The barycentric form instead asks, per pixel, "which side of each edge am I
+ * on" - three integer edge functions, each of which is LINEAR, so stepping one
+ * pixel right adds a constant and stepping one row down adds another. No
+ * division in the inner loop and no per-row setup.
+ *
+ * The tiling is what makes that affordable. Testing every pixel of the
+ * bounding box would be far worse than scanlines for a thin triangle. So the
+ * box is walked in 16x16 blocks, each classified by evaluating the three edge
+ * functions at its FOUR CORNERS:
+ *
+ *   all four corners inside all three edges  -> the tile is wholly inside.
+ *                                               Fill it as one rectangle, with
+ *                                               no per-pixel test at all.
+ *   any edge has all four corners outside it -> the tile cannot intersect the
+ *                                               triangle. Skip it entirely.
+ *   otherwise                                -> partial: test per pixel.
+ *
+ * Interior tiles are the common case for anything bigger than a few pixels and
+ * cost one rectangle fill each. That is the whole win, and it is also exactly
+ * where a depth buffer and a texture unit slot in later.
+ *
+ * INTEGER ONLY. The edge function is a cross product of screen coordinates, so
+ * it is exact - no epsilon, and the fill rule is a comparison rather than a
+ * tolerance.
+ */
+#define TILE 16
+
+/* Twice the signed area of (a, b, c): positive for one winding, negative for
+ * the other, zero when the three are collinear. */
+static int edge(int ax, int ay, int bx, int by, int px, int py)
+{
+    return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+}
+
+/* One triangle, flat colour. Any winding - the sign is normalised here so
+ * callers need not care, which matters because the cube's faces arrive in a
+ * fixed winding that back-face culling has already used for something else. */
+void fb3d_tri(int x0, int y0, int x1, int y1, int x2, int y2, unsigned int rgb)
+{
+    if (edge(x0, y0, x1, y1, x2, y2) < 0) {
+        int t;
+        t = x1; x1 = x2; x2 = t;
+        t = y1; y1 = y2; y2 = t;
+    }
+
+    int bx0 = x0 < x1 ? (x0 < x2 ? x0 : x2) : (x1 < x2 ? x1 : x2);
+    int bx1 = x0 > x1 ? (x0 > x2 ? x0 : x2) : (x1 > x2 ? x1 : x2);
+    int by0 = y0 < y1 ? (y0 < y2 ? y0 : y2) : (y1 < y2 ? y1 : y2);
+    int by1 = y0 > y1 ? (y0 > y2 ? y0 : y2) : (y1 > y2 ? y1 : y2);
+
+    if (bx0 < cl_x0) bx0 = cl_x0;
+    if (by0 < cl_y0) by0 = cl_y0;
+    if (bx1 > cl_x1) bx1 = cl_x1;
+    if (by1 > cl_y1) by1 = cl_y1;
+    if (bx0 > bx1 || by0 > by1) return;
+
+    /* E(x, y) = (bx-ax)(y-ay) - (by-ay)(x-ax), so
+     *     dE/dx = -(by - ay) = ay - by      and      dE/dy = bx - ax
+     * A step right adds the first, a step down the second - which is why the
+     * inner loop has no division and no per-row setup.
+     *
+     * These were all SIX sign-inverted in the first version. Interior tiles
+     * still came out right, because they never step - so the cube looked fine
+     * and only the partial tiles at the edges were wrong. The comparison
+     * against the scanline reference is what found it: 13,031 pixels differing
+     * on one large triangle, and a thin sliver drawing almost nothing at all,
+     * because a sliver is nearly ALL partial tiles. */
+    int ea = y0 - y1, eb = x1 - x0;
+    int fa = y1 - y2, fb_ = x2 - x1;
+    int ga = y2 - y0, gb = x0 - x2;
+
+    for (int ty = by0; ty <= by1; ty += TILE) {
+        int tyh = ty + TILE - 1;
+        if (tyh > by1) tyh = by1;
+        int run = -1;              /* start of the current interior tile run */
+        for (int tx = bx0; tx <= bx1; tx += TILE) {
+            int txw = tx + TILE - 1;
+            if (txw > bx1) txw = bx1;
+
+            /* The four corner values, from ONE evaluation plus the step
+             * constants: E is linear, so the other three corners are the
+             * origin plus a whole-tile step in x, in y, or both. Twelve
+             * edge() calls per tile - each a pair of multiplies - was most of
+             * why the first version lost to the scanline fill. */
+            int dx = txw - tx, dy = tyh - ty;
+            int er = edge(x0, y0, x1, y1, tx, ty);
+            int fr = edge(x1, y1, x2, y2, tx, ty);
+            int gr = edge(x2, y2, x0, y0, tx, ty);
+            int ex = ea * dx, ey = eb * dy;
+            int fx = fa * dx, fy = fb_ * dy;
+            int gx = ga * dx, gy = gb * dy;
+            int ec[4] = { er, er + ex, er + ey, er + ex + ey };
+            int fc[4] = { fr, fr + fx, fr + fy, fr + fx + fy };
+            int gc[4] = { gr, gr + gx, gr + gy, gr + gx + gy };
+            int oe = 0, of = 0, og = 0, allin = 1;
+            for (int k = 0; k < 4; k++) {
+                if (ec[k] < 0) oe++;
+                if (fc[k] < 0) of++;
+                if (gc[k] < 0) og++;
+                if (ec[k] < 0 || fc[k] < 0 || gc[k] < 0) allin = 0;
+            }
+            if (oe == 4 || of == 4 || og == 4) {           /* wholly outside */
+                if (run >= 0) {                            /* close a run */
+                    fb_fill_px(run, ty, tx - run, tyh - ty + 1, rgb);
+                    run = -1;
+                }
+                continue;
+            }
+            if (allin) {
+                /* Wholly inside. Do NOT fill it yet: accumulate a RUN of
+                 * adjacent interior tiles and emit one rectangle for the lot.
+                 * Filling per tile made this 3.5x SLOWER than the scanline
+                 * fill it replaces, because fb_fill_px is not free - it clamps
+                 * against the scissor and reports damage on every call - and a
+                 * 700x500 triangle is ~1,400 tiles against 500 scanline rows.
+                 * More, smaller calls is the wrong direction. */
+                if (run < 0) run = tx;
+                continue;
+            }
+            if (run >= 0) {
+                fb_fill_px(run, ty, tx - run, tyh - ty + 1, rgb);
+                run = -1;
+            }
+
+            for (int py = ty; py <= tyh; py++) {
+                int e = er, f = fr, g = gr, span = -1;
+                for (int px = tx; px <= txw; px++) {
+                    if (e >= 0 && f >= 0 && g >= 0) {
+                        if (span < 0) span = px;
+                    } else if (span >= 0) {
+                        fb_fill_px(span, py, px - span, 1, rgb);
+                        span = -1;
+                    }
+                    e += ea; f += fa; g += ga;
+                }
+                if (span >= 0) fb_fill_px(span, py, txw - span + 1, 1, rgb);
+                er += eb; fr += fb_; gr += gb;
+            }
+        }
+        if (run >= 0) fb_fill_px(run, ty, bx1 - run + 1, tyh - ty + 1, rgb);
+    }
+}
+
+/* A convex polygon as a triangle fan - the cube's faces are quads. */
+void fb3d_poly(const int *xs, const int *ys, int n, unsigned int rgb)
+{
+    for (int i = 1; i + 1 < n; i++)
+        fb3d_tri(xs[0], ys[0], xs[i], ys[i], xs[i + 1], ys[i + 1], rgb);
+}
+
 /* fb_cube_filled - a solid, shaded, back-face-culled cube.
  *   cx,cy  screen centre
  *   size   half-edge in pixels (the cube spans about 2*size)

@@ -483,3 +483,67 @@ Unchanged and still **excluded** from unattended work. `smp.c:79` parks three
 of four cores in `cli; hlt`, and splitting the back buffer into disjoint
 horizontal bands needs no lock. A real 4×. Concurrency bugs in a run with
 nobody watching are the wrong risk; this wants a supervised session.
+
+---
+
+## H3 — the tiled rasterizer, and why it is NOT wired in
+
+`fb3d.c` now has `fb3d_tri` / `fb3d_poly`: a 16×16 tiled barycentric
+rasterizer, the shape SerenityOS used to run Quake III with no GPU. It is
+**correct and it is slower**, and both halves of that need saying.
+
+### Correct, against an oracle rather than against my eye
+
+`hosttest/tritest.c` rasterizes the same polygons with the existing scanline
+`fill_poly` and with the new tiled path, into two buffers, and compares them
+pixel for pixel — over the shapes that actually break rasterizers: thin
+vertical and horizontal slivers, exact axis-aligned edges, a degenerate
+zero-area triangle, both windings, and triangles hanging off every corner of
+the clip rectangle.
+
+That oracle earned itself immediately. The first version had **all six**
+incremental step constants sign-inverted. The cube still looked perfect,
+because interior tiles never step — only the partial tiles at the edges were
+wrong. The comparison found 13,031 differing pixels on one large triangle, and
+a thin sliver drawing almost nothing, because a sliver is nearly *all* partial
+tiles. Looking at a spinning cube would never have caught it.
+
+Residual differences are boundary-only — about 300 pixels on a triangle with a
+~1,600 pixel perimeter, all on one edge. The two use different fill rules on
+the exact boundary (half-open rows versus `>= 0` edge functions), which is a
+legitimate design difference rather than a bug. Interior disagreement would be
+enormous, not marginal.
+
+### Slower, by a factor of 2.8, and here is exactly why
+
+| 400 large triangles | |
+|---|---|
+| scanline `fill_poly` | **45.2 µs** |
+| tiled barycentric | 126.5 µs |
+
+Two rounds of optimisation are already in it — adjacent interior tiles merge
+into one `fb_fill_px` per tile row (160 → 135 µs), and the four corner values
+come from one edge evaluation plus the step constants rather than twelve
+(135 → 126 µs). Neither closed the gap, because neither addresses the real
+cost.
+
+**A scanline fill is already optimal for a flat triangle.** It emits one
+full-width `fb_fill_px` per row — 500 calls, each hitting the SIMD fill — and
+that is close to memory bandwidth. The tiled path's expense is the ~25,600
+per-pixel edge tests on boundary tiles, which is inherent to barycentric
+rasterization and is precisely what SIMD removes by testing 4 or 8 pixels at
+once.
+
+So **`fb_cube_filled` still uses `fill_poly`.** Shipping the slower path
+because it is more sophisticated would be DECISIONS #25 again with the sign
+flipped — that entry records an optimisation argued from an instruction count,
+shipped, and measured 25% slower afterwards. The measurement is what decides.
+
+### What the structure buys, which is why it exists anyway
+
+Nothing about a flat fill. Everything about what comes next: a depth test, a
+texture lookup and a vector unit all need somewhere to hang per-pixel work, and
+a tile is that place. The order in `desktop-TODO` is `fb_clip` → tiled
+rasterization → SIMD → depth buffer → textures. Two are done. **The next step
+is SIMD across the partial tiles**, and it is also the step that would make
+this table read the other way round.

@@ -45,6 +45,14 @@ gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmshot        (run: ./wmshot out.ppm)"
 
+# The tiled rasterizer against the scanline one it does NOT replace. Two ways
+# to fill a polygon are only worth having if they draw the same pixels, and a
+# rasterizer one pixel fat along an edge looks fine until two triangles share
+# that edge and the mesh cracks.
+gcc -O2 -w -o tritest tritest.c ../fb3d.c ../fb.c \
+    ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
+echo "built ./tritest       (run: ./tritest)"
+
 # The comparison number: what the REAL GPU on this same laptop does with a
 # blended full-screen layer. Offscreen pixmap, so it never touches the desktop.
 # Needs libGL - skipped silently if the dev headers are not installed.
