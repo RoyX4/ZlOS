@@ -189,6 +189,23 @@ u32  intel_wm_compute_level0(u32 w, u32 bpp, u32 khz, u32 lat);
 int  intel_modeset_run(int port);
 int  intel_modeset_teardown(int port);
 int  intel_backlight_save(void);
+int  intel_vbt_attach(uptr base, u32 len);
+int  intel_vbt_present(void);
+u32  intel_vbt_bdb_version(void);
+int  intel_vbt_panel_type(void);
+int  intel_vbt_t1_t3(void);
+int  intel_vbt_t8(void);
+int  intel_vbt_t9(void);
+int  intel_vbt_t10(void);
+int  intel_vbt_t11_t12(void);
+int  intel_vbt_low_vswing(void);
+int  intel_vbt_pwm_hz(void);
+int  intel_vbt_pwm_active_low(void);
+int  intel_vbt_bl_min(void);
+int  intel_vbt_child_count(void);
+int  intel_vbt_child_port(int i);
+int  intel_vbt_child_type(int i);
+int  intel_vbt_port_present(int dvo_port);
 int  intel_ggtt_map_range(u32 gfx_page, u32 phys_addr, int pages);
 u32  intel_aperture(void);
 int  intel_wm_save(void);
@@ -698,6 +715,73 @@ int main(int argc, char **argv)
                ht_raw, ht_ours, ht_raw == ht_ours ? "MATCH" : "OFF-BY-ONE",
                vt_raw, vt_ours, vt_raw == vt_ours ? "MATCH" : "OFF-BY-ONE");
         printf("    NOT executed. needs gpu-dev.sh detach + intel_link_train_arm(1).\n");
+    }
+    printf("\n");
+
+
+    /* ---- VBT: the OEM's own answers, checked against ours ----------------
+     * /dev/mem is closed on a locked-down kernel, so the harness cannot walk
+     * the opregion the way the kernel will. i915 exposes the same blob through
+     * debugfs, which is enough to test the parser against the real thing. */
+    printf("  -- VBT (the OEM's description of this board) --\n");
+    {
+        static unsigned char vbt[8192];
+        FILE *vf = fopen("/sys/kernel/debug/dri/0000:00:02.0/i915_vbt", "rb");
+        size_t got = vf ? fread(vbt, 1, sizeof vbt, vf) : 0;
+        if (vf) fclose(vf);
+
+        if (!got) {
+            printf("    could not read the VBT (need sudo, or i915 unbound)\n");
+        } else if (!intel_vbt_attach((uptr)vbt, (u32)got)) {
+            printf("    [ FAIL ] %zu bytes read but the parser rejected it\n", got);
+        } else {
+            printf("    %zu bytes, BDB version %u, panel type %d\n",
+                   got, intel_vbt_bdb_version(), intel_vbt_panel_type());
+            /* Each of these has an independent answer already established from
+             * the registers, so a mismatch means the parser is wrong. */
+            struct { const char *n; int vbt_100us; int known_ms; } t[] = {
+                { "T1+T3 power-up",   intel_vbt_t1_t3(),   200 },
+                { "T8  backlight-on", intel_vbt_t8(),        1 },
+                { "T9  backlight-off",intel_vbt_t9(),      260 },
+                { "T10 power-down",   intel_vbt_t10(),      50 },
+                { "T11+T12 cycle",    intel_vbt_t11_t12(), 500 },
+                { 0, 0, 0 }
+            };
+            for (int i = 0; t[i].n; i++)
+                printf("    %-18s %6d = %4d ms   vs known %4d ms  %s\n",
+                       t[i].n, t[i].vbt_100us, t[i].vbt_100us / 10, t[i].known_ms,
+                       t[i].vbt_100us / 10 == t[i].known_ms ? "MATCH" : "DIFFERS");
+
+            int lv = intel_vbt_low_vswing();
+            printf("    low vswing         %-6s               vs buf-trans readback  %s\n",
+                   lv == 1 ? "yes" : lv == 0 ? "no" : "?",
+                   lv == 1 ? "MATCH (skl_u_trans_edp)" : "DIFFERS");
+
+            int hz = intel_vbt_pwm_hz();
+            u32 measured = intel_backlight_max() ? 24000000u / intel_backlight_max() : 0;
+            printf("    PWM frequency      %6d Hz              vs measured %u Hz  %s\n",
+                   hz, measured,
+                   (measured && hz && (u32)hz == measured) ? "MATCH" : "check");
+            printf("    min brightness     %6d, active low %d\n",
+                   intel_vbt_bl_min(), intel_vbt_pwm_active_low());
+
+            int n = intel_vbt_child_count();
+            printf("    %d child devices - which ports the OEM actually wired:\n", n);
+            static const char *DVO[15] = { "HDMI-A","HDMI-B","HDMI-C","HDMI-D",
+                "LVDS","TV","CRT","DP-B","DP-C","DP-D","DP-A (eDP)","DP-E",
+                "HDMI-E","DP-F","HDMI-F" };
+            for (int i = 0; i < n && i < 16; i++) {
+                int p = intel_vbt_child_port(i);
+                if (p < 0) continue;                 /* slot declared, nothing wired */
+                printf("        dvo_port %-2d  %-12s  device_type 0x%04X\n",
+                       p, (p >= 0 && p < 15) ? DVO[p] : "?", intel_vbt_child_type(i));
+            }
+            printf("    eDP wired: %s   DP-B: %s   DP-C: %s   HDMI-B: %s\n",
+                   intel_vbt_port_present(10) ? "yes" : "no",
+                   intel_vbt_port_present(7)  ? "yes" : "no",
+                   intel_vbt_port_present(8)  ? "yes" : "no",
+                   intel_vbt_port_present(1)  ? "yes" : "no");
+        }
     }
     printf("\n");
 

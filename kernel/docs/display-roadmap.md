@@ -98,7 +98,29 @@ numbers corrupts scanout on *both* pipes (4.3 #14).
 
 ## Phase 3 — external ports
 
-### 3.1 HDMI
+> **Corrected by Phase 1, before a line of Phase 3 was written.**
+>
+> The VBT says this board has **no HDMI port at all**. It declares eight child
+> device slots and populates three: `dvo_port 10` = DP-A (the eDP panel),
+> `dvo_port 7` = DP-B, `dvo_port 8` = DP-C. `intel_vbt_port_present(1)` — HDMI-B
+> — returns no.
+>
+> So "HDMI first because it is easier" is not available on this machine. The two
+> external ports are DisplayPort behind Type-C/Thunderbolt, which §3.3 called
+> "deliberately last, and possibly not worth it".
+>
+> This is precisely what putting VBT before external ports was for: the
+> alternative was writing an HDMI port bring-up and then discovering there is
+> nothing to plug into. Linux does create an `HDMI-A-1` connector, which is
+> speculative and not backed by a VBT child device — believing *it* would have
+> cost the same mistake.
+>
+> **Revised order for Phase 3:** external DP (§3.2) is the only reachable target,
+> and it arrives coupled to the Type-C work rather than after it. HDMI stays
+> written up because the code is generic and a future machine may have one, but
+> it cannot be tested here.
+
+### 3.1 HDMI *(no port on this board — untestable here)*
 The DPLL side already exists and is verified — `intel_dpll_compute_hdmi()` finds
 P/Q/K dividers and was checked against known clocks. What does not exist is the
 port: TMDS instead of DP, **no link training at all**, different buf-trans table,

@@ -4015,3 +4015,224 @@ int intel_panel_takeover(void)
     console_init_fb((uptr)fb, stride, w, h, 32);
     return 1;
 }
+
+/* ==== VBT: the OEM's description of THIS board ===========================
+ *
+ * Everything the driver knows about this laptop it currently knows by reading
+ * back what firmware programmed. That works only because firmware ran first,
+ * and it answers "what is set" rather than "what is correct". The Video BIOS
+ * Table answers the second question, and it is the authoritative source for
+ * facts no register carries: which ports are populated, the panel's power
+ * sequence including T9, whether the panel is low-vswing, and how the backlight
+ * is wired.
+ *
+ * Verified against this machine before a line of it was trusted. The VBT says
+ * T1+T3 200 ms, T8 1 ms, T9 260 ms, T10 50 ms, T11+T12 500 ms, PWM 990 Hz, and
+ * every one of those matches what was measured out of the registers or, in T9's
+ * case, what had been hardcoded on the strength of a comment. It also settles
+ * the low-vswing question that HANDOFF called "only in VBT and not discoverable
+ * from any register" - and agrees with what reading back DDI_BUF_TRANS deduced.
+ *
+ * Reaching it: PCI config 0xFC (ASLS) holds the physical address of the Intel
+ * opregion; mailbox 4, at opregion + 0x400, is the VBT. In the kernel that is a
+ * plain pointer. The host harness cannot read /dev/mem on a locked-down kernel,
+ * so it hands the blob in instead - same arrangement as intel_attach().
+ */
+#define ASLS_REG        0xFC        /* PCI config: opregion physical address  */
+#define OPREGION_VBT    0x400       /* mailbox 4                              */
+
+static uptr vbt_base = 0;
+static u32  vbt_len  = 0;
+static u32  bdb_base = 0;           /* offset of the BDB within the VBT       */
+static u32  bdb_size = 0;
+static int  vbt_ok   = 0;
+
+static u8  vbt_u8 (u32 off) { return *(volatile u8 *)(vbt_base + (uptr)off); }
+static u16 vbt_u16(u32 off) { return (u16)(vbt_u8(off) | (vbt_u8(off+1) << 8)); }
+static u32 vbt_u32(u32 off)
+{
+    return (u32)vbt_u8(off) | ((u32)vbt_u8(off+1) << 8) |
+           ((u32)vbt_u8(off+2) << 16) | ((u32)vbt_u8(off+3) << 24);
+}
+
+/* Point the parser at a VBT already in memory. */
+int intel_vbt_attach(uptr base, u32 len)
+{
+    vbt_ok = 0; vbt_base = base; vbt_len = len; bdb_base = 0; bdb_size = 0;
+    if (!base || len < 64) return 0;
+
+    /* "$VBT" - the rest of the 20-byte signature names the platform and is not
+     * worth matching, since this same driver should accept a KBL or CFL blob. */
+    if (vbt_u8(0) != '$' || vbt_u8(1) != 'V' || vbt_u8(2) != 'B' || vbt_u8(3) != 'T')
+        return 0;
+
+    /* bdb_offset is a u32 at 0x1C. It is NOT the u16 at 0x1A - that is the
+     * checksum and a reserved byte, and reading it there lands in the middle of
+     * the copyright string with a plausible-looking small number. */
+    u32 bdb = vbt_u32(0x1C);
+    if (bdb + 22u >= len) return 0;
+
+    /* "BIOS_DATA_BLOCK " - indices 0, 5 and 11. Index 10 is the second 'B',
+     * not the 'L'; checking there rejects a perfectly good VBT. */
+    if (vbt_u8(bdb) != 'B' || vbt_u8(bdb+5) != 'D' || vbt_u8(bdb+11) != 'L')
+        return 0;
+
+    bdb_base = bdb;
+    bdb_size = vbt_u16(bdb + 0x14);
+    if (!bdb_size || bdb + bdb_size > len) bdb_size = len - bdb;
+    vbt_ok = 1;
+    return 1;
+}
+
+/* Find the VBT ourselves, from PCI config. Kernel path. */
+int intel_vbt_find(void)
+{
+    if (!intel_present()) return 0;
+    u32 asls = gpu_cfg(ASLS_REG);
+    if (!asls) return 0;
+    /* The opregion is 8 KiB; the VBT is mailbox 4 and up to 6 KiB of it. */
+    return intel_vbt_attach((uptr)(asls + OPREGION_VBT), 6u << 10);
+}
+
+int intel_vbt_present(void) { return vbt_ok; }
+u32 intel_vbt_bdb_version(void) { return vbt_ok ? vbt_u16(bdb_base + 0x10) : 0; }
+
+/* Offset of a BDB block's payload, or 0. Blocks are id, u16 size, payload. */
+static u32 bdb_block(u8 want, u32 *out_size)
+{
+    if (!vbt_ok) return 0;
+    u32 off = vbt_u16(bdb_base + 0x12);           /* skip the BDB header */
+    while (off + 3 <= bdb_size) {
+        u8  id = vbt_u8(bdb_base + off);
+        u32 sz = vbt_u16(bdb_base + off + 1);
+        if (!sz || off + 3 + sz > bdb_size) break;
+        if (id == want) { if (out_size) *out_size = sz; return bdb_base + off + 3; }
+        off += 3 + sz;
+    }
+    return 0;
+}
+
+u32 intel_vbt_block(int id)  { u32 s = 0; u32 o = bdb_block((u8)id, &s); return o ? s : 0; }
+
+/* Which entry of every per-panel table in the VBT applies to this machine.
+ * Block 40 byte 0, low nibble. Everything else here indexes on it. */
+int intel_vbt_panel_type(void)
+{
+    u32 o = bdb_block(40, 0);
+    return o ? (int)(vbt_u8(o) & 0xF) : -1;
+}
+
+/* Panel power sequence, in 100 us units, straight from the OEM.
+ *
+ * T9 is the reason this matters. It is the backlight-off to video-off delay,
+ * hazard H5, and it does NOT live in PP_OFF_DELAYS - that register's low field
+ * holds it only if firmware chose to program it there, and on this machine
+ * firmware forces it to 1 and does the real wait in software. So a driver
+ * reading the register gets 0.1 ms for a delay the panel actually needs 260 ms
+ * for, and stops video under a lit backlight. */
+static u32 vbt_pps_field(int which)
+{
+    int panel = intel_vbt_panel_type();
+    u32 o = bdb_block(27, 0);
+    if (!o || panel < 0) return 0;
+    return vbt_u16(o + (u32)panel * 10u + (u32)which * 2u);
+}
+int intel_vbt_t1_t3(void)   { return (int)vbt_pps_field(0); }
+int intel_vbt_t8(void)      { return (int)vbt_pps_field(1); }
+int intel_vbt_t9(void)      { return (int)vbt_pps_field(2); }
+int intel_vbt_t10(void)     { return (int)vbt_pps_field(3); }
+int intel_vbt_t11_t12(void) { return (int)vbt_pps_field(4); }
+
+/* Low vswing decides which DDI buffer translation table to program, and it is
+ * the fact HANDOFF called undiscoverable from any register.
+ *
+ * i915's rule: the per-panel nibble of edp_vswing_preemph is 0 for low vswing.
+ * The field sits after power_seqs[16] (160 B), color_depth (4), link_params[16]
+ * (32), sdrrs delay (4), s3d feature (2) and t3 optimization (2). */
+int intel_vbt_low_vswing(void)
+{
+    int panel = intel_vbt_panel_type();
+    u32 o = bdb_block(27, 0);
+    if (!o || panel < 0) return -1;
+    u32 f = o + 160u + 4u + 32u + 4u + 2u + 2u;
+    u32 lo = vbt_u32(f), hi = vbt_u32(f + 4);
+    u32 nib = (panel < 8) ? ((lo >> (panel * 4)) & 0xF)
+                          : ((hi >> ((panel - 8) * 4)) & 0xF);
+    return nib == 0 ? 1 : 0;
+}
+
+/* Backlight: PWM frequency in Hz, polarity, and the OEM's minimum level. */
+static u32 vbt_bl_entry(void)
+{
+    int panel = intel_vbt_panel_type();
+    u32 o = bdb_block(43, 0);
+    if (!o || panel < 0) return 0;
+    u32 esz = vbt_u8(o);
+    if (!esz || esz > 16) return 0;
+    return o + 1u + (u32)panel * esz;
+}
+int intel_vbt_pwm_hz(void)      { u32 e = vbt_bl_entry(); return e ? (int)vbt_u16(e + 1) : 0; }
+int intel_vbt_pwm_active_low(void){ u32 e = vbt_bl_entry(); return e ? (int)((vbt_u8(e) >> 2) & 1) : 0; }
+int intel_vbt_bl_min(void)      { u32 e = vbt_bl_entry(); return e ? (int)vbt_u8(e + 3) : 0; }
+
+/* Which ports the OEM actually wired up.
+ *
+ * Block 2 is general definitions: a header, then a list of fixed-size child
+ * device entries. A port with no child device is not populated, and driving it
+ * is training a link into an unconnected pad. This is the fact that has to come
+ * before any external-port work.
+ *
+ * dvo_port lives at offset 0 of each entry: 0 = none, and the DP/HDMI values
+ * identify A/B/C/D. Entry size is in the block header so it survives version
+ * differences. */
+int intel_vbt_child_count(void)
+{
+    u32 sz = 0, o = bdb_block(2, &sz);
+    if (!o || sz < 6) return 0;
+    u32 esz = vbt_u8(o + 4);            /* child_dev_size */
+    if (!esz || esz > 64) return 0;
+    return (int)((sz - 5u) / esz);
+}
+
+/* Offset of child entry i, or 0. Header is crt_ddc_pin, dpms bits,
+ * boot_display[2], child_dev_size - five bytes - then the entries. */
+static u32 vbt_child(int i)
+{
+    u32 sz = 0, o = bdb_block(2, &sz);
+    if (!o || sz < 6 || i < 0) return 0;
+    u32 esz = vbt_u8(o + 4);
+    if (!esz || esz > 64) return 0;
+    if (5u + (u32)(i + 1) * esz > sz) return 0;
+    return o + 5u + (u32)i * esz;
+}
+
+/* device_type of 0 means the slot exists but nothing is wired to it. Those are
+ * the entries that must NOT be treated as ports: this board declares eight
+ * child slots and populates three. */
+int intel_vbt_child_type(int i)
+{
+    u32 c = vbt_child(i);
+    return c ? (int)vbt_u16(c + 2) : 0;
+}
+
+/* dvo_port sits at offset 16 of the entry, after handle, device_type, the
+ * ten-byte device_id and addin_offset - NOT at offset 0. Values are i915's
+ * DVO_PORT_*: 7 = DP-B, 8 = DP-C, 9 = DP-D, 10 = DP-A which is the eDP panel,
+ * 0..3 = HDMI A..D. */
+int intel_vbt_child_port(int i)
+{
+    u32 c = vbt_child(i);
+    if (!c || !vbt_u16(c + 2)) return -1;    /* unpopulated slot */
+    return (int)vbt_u8(c + 16);
+}
+
+/* Is this port wired on this board at all? Driving one that is not is training
+ * a link into an unconnected pad, and it is the question that has to be
+ * answered before any external-port work. */
+int intel_vbt_port_present(int dvo_port)
+{
+    int n = intel_vbt_child_count();
+    for (int i = 0; i < n; i++)
+        if (intel_vbt_child_port(i) == dvo_port) return 1;
+    return 0;
+}
