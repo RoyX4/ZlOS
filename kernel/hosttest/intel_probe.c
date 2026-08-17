@@ -424,6 +424,7 @@ int main(int argc, char **argv)
             { 0x44440, 0x44450, "DE_PORT"   },
             { 0xC4030, 0xC4038, "SHOTPLUG"  },
             { 0x65000, 0x650D0, "AUDIO"     },
+            { 0x162000, 0x162010, "TCSS"      },
             { 0x49010, 0x49040, "CSC_A"     },
             { 0x4A000, 0x4A020, "LGC_PAL_A" },
             { 0x4A400, 0x4A410, "PREC_PAL_A"},
