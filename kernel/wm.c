@@ -73,6 +73,13 @@ struct win {
     int min_w, min_h;
     int anim;                  /* frames left in the open animation, 0 = none */
     char title[32];
+    /* TABS. Several apps sharing one frame, grouped by task - the idea worth
+     * stealing from Essence. It is cheap here because a window already has
+     * exactly one thing a tab needs to change: which app_draw gets called. */
+    int  tab_app[WM_TABS];
+    char tab_title[WM_TABS][16];
+    int  ntab;                 /* 1 for an ordinary window */
+    int  tab;                  /* which one is showing     */
 };
 
 static struct win wins[WM_MAX];
@@ -300,6 +307,46 @@ static void title_copy(char *dst, const char *src)
     dst[i] = 0;
 }
 
+static void title_copy16(char *dst, const char *src)
+{
+    int i = 0;
+    if (src) for (; src[i] && i < 15; i++) dst[i] = src[i];
+    dst[i] = 0;
+}
+
+/* Add another app to this window's frame. Returns the tab index, or -1 when
+ * the frame is full - a refusal that says so, like wm_open's. */
+int wm_add_tab(int win, int app, const char *title)
+{
+    if (!wm_is_open(win)) return -1;
+    if (wins[win].ntab >= WM_TABS) {
+        wm_puts("  wm: window already has WM_TABS tabs, refusing to add\n");
+        return -1;
+    }
+    int i = wins[win].ntab++;
+    wins[win].tab_app[i] = app;
+    title_copy16(wins[win].tab_title[i], title);
+    wm_damage_win(win);
+    return i;
+}
+
+int wm_tab(int win)   { return wm_is_open(win) ? wins[win].tab  : -1; }
+int wm_ntabs(int win) { return wm_is_open(win) ? wins[win].ntab : 0; }
+
+void wm_set_tab(int win, int tab)
+{
+    if (!wm_is_open(win) || tab < 0 || tab >= wins[win].ntab) return;
+    if (wins[win].tab == tab) return;
+    wins[win].tab = tab;
+    wm_damage_win(win);
+}
+
+/* Which app this window is SHOWING. Everything downstream asks this rather
+ * than reading .app, so a tabbed window and a plain one are the same thing to
+ * the repaint and the routing - which is what keeps tabs from being a special
+ * case threaded through the whole file. */
+static int win_app(int win) { return wins[win].tab_app[wins[win].tab]; }
+
 int wm_open(int app, const char *title, int x, int y, int w, int h)
 {
     for (int i = 0; i < WM_MAX; i++) {
@@ -310,6 +357,10 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         wins[i].min_w = 8 * fb_cell_w();
         wins[i].min_h = 4 * fb_cell_h();
         wins[i].anim = ANIM_FRAMES;
+        wins[i].ntab = 1;
+        wins[i].tab = 0;
+        wins[i].tab_app[0] = app;
+        title_copy16(wins[i].tab_title[0], title);
         title_copy(wins[i].title, title);
         z_append(i);
         focus_win = i;
@@ -430,6 +481,8 @@ static int isect(int ax0, int ay0, int ax1, int ay1,
     return 1;
 }
 
+static void tab_rect(int win, int i, int *x, int *y, int *w, int *h);
+
 /* Where the pointer is and what it is doing. chrome() reads these for hover
  * and press states, so they are declared here rather than down in the routing
  * section that writes them. */
@@ -465,8 +518,28 @@ static void chrome(int win, int focused)
     } else {
         fb_fill_px(tx, W->y + 2, tw, th, t->title_off);
     }
-    fb_text_aa(W->x + UI_S3(t), W->y + (t->title_h - fb_cell_h()) / 2,
-               W->title, focused ? t->text : t->text_dim);
+    if (wins[win].ntab > 1) {
+        /* a tab strip instead of a title. The active one is a raised surface
+         * continuous with the client area below it - which is what makes it
+         * read as "this tab is the window" rather than "here are some
+         * buttons". The inactive ones stay flush with the bar. */
+        for (int i = 0; i < wins[win].ntab; i++) {
+            int tx, ty, tw, th;
+            tab_rect(win, i, &tx, &ty, &tw, &th);
+            /* tab_rect works from the settled rect; shift it onto the animated
+             * one so a tabbed window still grows correctly */
+            tx += W->x - wins[win].x;
+            ty += W->y - wins[win].y;
+            int on = (i == wins[win].tab);
+            if (on) fb_rrect(tx, ty, tw, th + UI_S1(t), UI_S1(t) / 2, t->panel);
+            fb_text_aa(tx + UI_S2(t), ty + (th - fb_cell_h()) / 2,
+                       wins[win].tab_title[i],
+                       on ? (focused ? t->text : t->text_dim) : t->text_dim);
+        }
+    } else {
+        fb_text_aa(W->x + UI_S3(t), W->y + (t->title_h - fb_cell_h()) / 2,
+                   W->title, focused ? t->text : t->text_dim);
+    }
 
     /* THE CLOSE BOX. It used to be a hardcoded red square, always, in every
      * state. One button with three states is the difference between "drawn"
@@ -515,7 +588,7 @@ void wm_repaint(void)
             if (hook_draw && isect(ax, ay, ax + aw, ay + ah,
                                    rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
                 fb_clip(cx, cy, cw, ch);        /* clip 2: NARROWER - client   */
-                hook_draw(W->app, ax, ay, aw, ah, win == focus_win);
+                hook_draw(win_app(win), ax, ay, aw, ah, win == focus_win);
             }
         }
     }
@@ -536,6 +609,34 @@ void wm_repaint(void)
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
 static int grab_drag;           /* 1 = we are moving it, 0 = the app has it */
 static int grab_dx, grab_dy;    /* pointer offset inside the frame          */
+
+/* Where tab `i` sits in the title bar. Drawing and hit-testing BOTH call this,
+ * which is the only way to be sure a tab is clickable exactly where it looks -
+ * two copies of this arithmetic is how a UI ends up with controls that respond
+ * a few pixels off from where they are drawn. */
+static void tab_rect(int win, int i, int *x, int *y, int *w, int *h)
+{
+    const struct ui_theme *t = ui_theme();
+    int avail = wins[win].w - 2 * UI_S3(t) - UI_S6(t);   /* leave the close box */
+    int tw = avail / wins[win].ntab;
+    int max = UI_S6(t) * 5;
+    if (tw > max) tw = max;
+    *w = tw - UI_S1(t);
+    *h = t->title_h - UI_S2(t);
+    *x = wins[win].x + UI_S2(t) + i * tw;
+    *y = wins[win].y + UI_S1(t);
+}
+
+static int in_tab(int win, int x, int y)
+{
+    if (wins[win].ntab < 2) return -1;
+    for (int i = 0; i < wins[win].ntab; i++) {
+        int tx, ty, tw, th;
+        tab_rect(win, i, &tx, &ty, &tw, &th);
+        if (x >= tx && x < tx + tw && y >= ty && y < ty + th) return i;
+    }
+    return -1;
+}
 
 static int in_titlebar(int win, int x, int y)
 {
@@ -565,7 +666,7 @@ static void route_mouse(int x, int y, int btn)
     /* 1. POINTER GRAB */
     if (pgrab >= 0) {
         if (grab_drag) wm_move(pgrab, x - grab_dx, y - grab_dy);
-        else if (hook_event) hook_event(wins[pgrab].app, pgrab, EV_MOUSE, btn, x, y);
+        else if (hook_event) hook_event(win_app(pgrab), pgrab, EV_MOUSE, btn, x, y);
         if (up) pgrab = -1;
         return;
     }
@@ -585,6 +686,10 @@ static void route_mouse(int x, int y, int btn)
         wm_focus(hit);
         wm_raise(hit);
         if (in_closebox(hit, x, y)) { wm_close(hit); return; }
+        /* a tab BEFORE the drag: the strip lives inside the title bar, so
+         * checking the drag first would make tabs unclickable */
+        int tb = in_tab(hit, x, y);
+        if (tb >= 0) { wm_set_tab(hit, tb); return; }
         if (in_titlebar(hit, x, y)) {
             pgrab = hit; grab_drag = 1;
             grab_dx = x - wins[hit].x;
@@ -596,7 +701,7 @@ static void route_mouse(int x, int y, int btn)
          * leaves the widget mid-drag */
         pgrab = hit; grab_drag = 0;
     }
-    if (hook_event) hook_event(wins[hit].app, hit, EV_MOUSE, btn, x, y);
+    if (hook_event) hook_event(win_app(hit), hit, EV_MOUSE, btn, x, y);
 }
 
 /* Alt+Tab walks the z-order BACKWARDS - the window below the top one is the
@@ -627,7 +732,7 @@ static void route_key(int type, int code, int mods)
     int m = modal_win();
     int target = (m >= 0) ? m : focus_win;
     if (target < 0) return;
-    if (hook_event) hook_event(wins[target].app, target, type, code, 0, 0);
+    if (hook_event) hook_event(win_app(target), target, type, code, 0, 0);
 }
 
 static void wm_route(int type)
@@ -668,7 +773,7 @@ void wm_frame(void)
 
     if (hook_tick)
         for (int i = 0; i < nz; i++)
-            if (hook_tick(wins[zorder[i]].app, zorder[i])) wm_damage_win(zorder[i]);
+            if (hook_tick(win_app(zorder[i]), zorder[i])) wm_damage_win(zorder[i]);
 
     if (nwd) {
         fb_pointer_hide();      /* the sprite's save-under is stale once the

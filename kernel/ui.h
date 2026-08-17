@@ -89,6 +89,7 @@ typedef void (*desk_draw_fn)(int x, int y, int w, int h);
 
 /* ---- wm.c ---------------------------------------------------------------- */
 #define WM_MAX 12
+#define WM_TABS 4        /* apps sharing one window frame */
 
 #define WF_OPEN     (1 << 0)
 #define WF_MODAL    (1 << 1)   /* takes everything; a click outside dismisses */
@@ -102,6 +103,10 @@ void wm_close(int win);
 void wm_raise(int win);
 void wm_focus(int win);
 void wm_set_modal(int win, int on);
+int  wm_add_tab(int win, int app, const char *title);
+void wm_set_tab(int win, int tab);
+int  wm_tab(int win);
+int  wm_ntabs(int win);
 void wm_move(int win, int x, int y);
 void wm_resize(int win, int w, int h);
 

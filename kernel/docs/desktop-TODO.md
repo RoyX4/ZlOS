@@ -549,3 +549,74 @@ Also folded in, since they were free once the chrome was in one place:
 - **D0 theme as data** — every colour and every metric in one `struct
   ui_theme`, on the 4/8/12/16/24 × `ui()` scale. No literal survives in the
   window, dock or menu drawing paths.
+
+
+---
+
+## Beyond the task list, 2026-08-18
+
+Things the overnight run landed that were not numbered here.
+
+### H1 — motion. Windows animate open.
+
+Four frames. Not an easing curve, not a timeline, not 60fps — the brief says
+start small and it is right: four frames at 100 Hz is 40 ms, under the ~100 ms
+where a person starts calling something slow, and a window that *grows* into
+place already feels different from one that teleports.
+
+It is a **scale, not a fade**, and that is not a compromise. A fade needs the
+window composited at fractional opacity against the background, which means an
+offscreen buffer this kernel has nowhere to put. A scale needs nothing new: the
+app contract already requires apps to be size-agnostic, so drawing one at 82%
+is just drawing it.
+
+**Hit testing ignores all of it.** `wm_at`, the routing and `wm_client` use the
+settled geometry from frame zero, so a click during those 40 ms lands where the
+window is *about to be*. A pointer that misses because the target was still
+growing is worse than no animation, and it is the obvious way to get this
+wrong.
+
+### H2 — tabbed windows. Several apps in one frame.
+
+The Essence idea, and genuinely cheap once `wm.c` exists, because a window
+already has exactly one thing a tab needs to change: which `app_draw` gets
+called. `wm_add_tab(win, app, title)`, up to `WM_TABS` (4).
+
+Two details that are the whole difference between working and not:
+
+- **One `tab_rect()`, called by both the drawing and the hit-testing.** Two
+  copies of that arithmetic is how a UI ends up with controls that respond a
+  few pixels away from where they are drawn.
+- **The tab is checked BEFORE the drag.** The strip lives inside the title
+  bar, so checking the drag first makes tabs unclickable and moves the window
+  instead. Asserted: clicking a tab switches it *and does not move the
+  window*.
+
+Everything downstream asks `win_app(win)` rather than reading `.app`, so a
+tabbed window and a plain one are the same thing to the repaint and the
+routing. That is what keeps tabs from becoming a special case threaded through
+the file.
+
+### `ui_list_row` and `ui_scroll`
+
+Held back until clipping was settled, for a real reason: a scrolled list draws
+rows partly outside their viewport. `fb_clip` is now proven, so they are safe.
+
+Still immediate mode, and the shape falls out of that — a list does not own its
+items and there is no item array anywhere. The app calls `ui_list_row` once per
+thing it has, in a loop it already writes.
+
+**Rows outside the viewport are rejected, not drawn and clipped.** The scissor
+is a correctness guarantee, not a substitute for not drawing: otherwise a
+200-row list costs 200 rows of drawing to show four. Asserted.
+
+### Two harnesses, because they catch different things
+
+`hosttest/wmtest.c` — 57 assertions over the whole stack against fake hardware.
+`hosttest/wmshot.c` — renders one frame to a picture, in milliseconds, no boot.
+
+The second one immediately earned itself: **`ui_toggle` was drawing a circle.**
+The track was as tall as it was wide with a knob nearly filling it, so the
+control read as a round button — "press me", not "I am on or off". Every
+assertion about it passed the whole time, because *does it toggle* and *does it
+look like a toggle* are different questions and only one of them had a test.

@@ -182,7 +182,11 @@ int main(int argc, char **argv)
     wm_open(APP_SHELL,   "zl shell   ~",    UI_S6(t), hb + UI_S6(t), 1180, 720);
     wm_open(APP_FILES,   "Files",           1260, hb + UI_S6(t), 560, 420);
     wm_open(APP_MONITOR, "System Monitor",  1260, hb + UI_S6(t) + 450, 560, 380);
-    wm_open(APP_ABOUT,   "About",            700, 700, 520, 300);
+    int wabout = wm_open(APP_ABOUT, "About", 700, 700, 520, 300);
+    /* H2: several apps in one frame, grouped by task - the Essence idea. The
+     * About window becomes a tabbed one so the strip is visible in the shot. */
+    wm_add_tab(wabout, APP_MONITOR, "Stats");
+    wm_add_tab(wabout, APP_FILES, "Files");
 
     /* let the open animation settle, then take the picture */
     for (int i = 0; i < 7; i++) { fake_ticks++; wm_frame(); }

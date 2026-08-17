@@ -440,6 +440,53 @@ int main(void)
     ok("wm_bind_zl declines cleanly when zl has no app_draw", wm_bind_zl() == 0);
     ok("wm_available is false without apps, framebuffer or not", !wm_available());
 
+    /* ---------------------------------------------------------------- tabs
+     * Several apps in one frame. The properties that matter: only the ACTIVE
+     * tab draws, clicking a tab switches without moving the window, and the
+     * tab strip lives inside the title bar - so if the drag were checked
+     * first, tabs would be unclickable and the window would move instead. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    int tw = wm_open(1, "Editor", 200, 200, 600, 400);
+    ok("a plain window has exactly one tab", wm_ntabs(tw) == 1);
+    ok("adding a tab returns its index", wm_add_tab(tw, 2, "Build") == 1);
+    wm_add_tab(tw, 3, "Docs");
+    ok("...and they accumulate", wm_ntabs(tw) == 3 && wm_tab(tw) == 0);
+
+    draw_calls[1] = draw_calls[2] = draw_calls[3] = 0;
+    frame();
+    ok("ONLY the active tab's app draws",
+       draw_calls[1] > 0 && draw_calls[2] == 0 && draw_calls[3] == 0);
+
+    /* click the second tab. Its rectangle is inside the title bar, and the
+     * window must NOT move as a result. */
+    int bx, by, bw, bh;
+    wm_geometry(tw, &bx, &by, &bw, &bh);
+    int strip_y = by + th->title_h / 2;
+    int avail = bw - 2 * UI_S3(th) - UI_S6(th);
+    int step = avail / 3;
+    if (step > UI_S6(th) * 5) step = UI_S6(th) * 5;
+    pointer(bx + UI_S2(th) + step + step / 4, strip_y, 1);
+    ok("clicking a tab selects it", wm_tab(tw) == 1);
+    int ax2, ay2;
+    wm_geometry(tw, &ax2, &ay2, &bw, &bh);
+    ok("...and does NOT drag the window", ax2 == bx && ay2 == by);
+    pointer(bx + UI_S2(th) + step + step / 4, strip_y + 200, 0);
+
+    draw_calls[1] = draw_calls[2] = draw_calls[3] = 0;
+    frame();
+    ok("...and now the SECOND tab's app is the one that draws",
+       draw_calls[2] > 0 && draw_calls[1] == 0);
+
+    /* keys go to the active tab, not to tab 0 */
+    last_event_app = -1;
+    pointer(bx + 100, by + th->title_h + 100, 1);
+    ok("clicks in the client reach the ACTIVE tab's app", last_event_app == 2);
+    pointer(bx + 100, by + th->title_h + 100, 0);
+
+    ok("WM_TABS is a ceiling, and full refuses",
+       wm_add_tab(tw, 4, "four") == 3 && wm_add_tab(tw, 5, "five") == -1);
+
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;
 }
