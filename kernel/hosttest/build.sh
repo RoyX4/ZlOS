@@ -33,7 +33,7 @@ echo "built ./inputtest     (run: ./inputtest)"
 # sliver of an old window left on the wallpaper, a click landing on the window
 # underneath, a drag that stops when the pointer outruns the frame. None of
 # those show in a screenshot taken a frame later.
-gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest        (run: ./wmtest)"
 

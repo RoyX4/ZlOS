@@ -36,6 +36,23 @@ unsigned int fb_pxh(void);
 /* ---- input.c ------------------------------------------------------------- */
 int input_next(void);
 
+/* ---- wmglue.c ------------------------------------------------------------ */
+int wm_bind_zl(void);
+int wm_available(void);
+
+/* wmglue boxes ints into zl Values to call across the C/zl seam. In the kernel
+ * zl_num comes from runtime_kernel.c; here it is the one thing the harness has
+ * to supply, the same way it supplies memory for fb.c. */
+#include "../../runtime.h"
+Value zl_num(double n)
+{
+    Value v;
+    memset(&v, 0, sizeof v);
+    v.type = V_NUM;
+    v.num = n;
+    return v;
+}
+
 /* ---- fake hardware ------------------------------------------------------- */
 static int fake_x = 10, fake_y = 10, fake_btn = 0;
 static unsigned fake_ticks = 1;
@@ -414,6 +431,14 @@ int main(void)
         for (int x = 0; x < 380; x++)
             if (fb_get_px(x, y) != WALL) painted_below = 0;
     ok("rows past the viewport never reach the framebuffer", painted_below);
+
+    /* ------------------------------------------------------------- the glue
+     * wmglue.c's references to kernel.zl's app_* functions are WEAK, so this
+     * binary has them as NULL. The property under test is that it says so
+     * rather than calling through a null pointer - which is the entire reason
+     * the whole thing can ship before kernel.zl grows those functions. */
+    ok("wm_bind_zl declines cleanly when zl has no app_draw", wm_bind_zl() == 0);
+    ok("wm_available is false without apps, framebuffer or not", !wm_available());
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;
