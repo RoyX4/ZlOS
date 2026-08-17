@@ -193,8 +193,13 @@ u32  pci_read32(int bus, int dev, int fn, int off);
  * screen and one that cannot. The PCH owns them. */
 #define PP_STATUS         0xC7200
 #define PP_CONTROL        0xC7204
-#define BLC_PWM_PCH_CTL1  0xC8250   /* enable, polarity                     */
-#define BLC_PWM_PCH_CTL2  0xC8254   /* frequency [31:16], duty cycle [15:0] */
+/* CNP/CMP layout - three separate registers. The old names here were CTL1/CTL2
+ * with a comment claiming 0xC8254 packed freq and duty together, which is the
+ * SKL/SPT layout and not this part. Named for what they are now. */
+#define BLC_PWM_CTL       0xC8250   /* b31 enable, b29 polarity (1=active low) */
+#define BLC_PWM_FREQ      0xC8254   /* period, in 24 MHz clocks. ALL 32 bits.  */
+#define BLC_PWM_DUTY      0xC8258   /* active clocks.            ALL 32 bits.  */
+#define BLC_PWM_ENABLE    (1u << 31)
 
 #define PLANE_CTL_ENABLE  0x80000000u
 #define PLANE_CTL_FORMAT_MASK 0x0F000000u
@@ -783,17 +788,40 @@ int intel_cursor_disable(void)
 /* ==== backlight ==========================================================
  * The PCH drives the panel backlight with a PWM signal: one register holds the
  * period, another the duty cycle. Setting duty to zero is a black screen with
- * the panel still powered, which is a real thing to be careful about. */
+ * the panel still powered, which is a real thing to be careful about.
+ *
+ * WHICH registers hold them is platform-specific, and this code had the wrong
+ * platform. Two layouts exist:
+ *
+ *   SKL / SPT      0xC8254 packs BOTH: freq in 31:16, duty in 15:0
+ *   CNP / CMP      0xC8254 is freq, all 32 bits. Duty is its own register,
+ *                  0xC8258. (This part. The plan says so explicitly, and adds
+ *                  that SKL also needs a SOUTH_CHICKEN1 granularity bit that
+ *                  does not apply here.)
+ *
+ * We are CMP and the code used the SKL packing, so on this laptop:
+ *
+ *   0xC8254 = 00005EB2   real period, 24242 clocks of 24 MHz  (~990 Hz)
+ *   0xC8258 = 0000556E   real duty, 21870  ->  90% brightness
+ *
+ * intel_backlight_max() read 0x5EB2 >> 16 = 0, so intel_backlight_set() hit
+ * its `if (!max) return 0` and did nothing at all, while
+ * intel_backlight_get() returned 24242 - the period - as the brightness.
+ *
+ * Worth being precise about the severity: it failed SAFE. Because max read 0
+ * it bailed before writing, so it never corrupted the period. But it was dead
+ * code that looked live, and it is one of the few write paths here NOT gated
+ * behind lt_armed, so it would have been the first thing to run for real. */
 u32 intel_backlight_max(void)
 {
     if (!intel_present()) return 0;
-    return (mmio_r(BLC_PWM_PCH_CTL2) >> 16) & 0xFFFF;
+    return mmio_r(BLC_PWM_FREQ);            /* the whole register is the period */
 }
 
 u32 intel_backlight_get(void)
 {
     if (!intel_present()) return 0;
-    return mmio_r(BLC_PWM_PCH_CTL2) & 0xFFFF;
+    return mmio_r(BLC_PWM_DUTY);
 }
 
 /* Percentage rather than raw counts, because the period differs per machine.
@@ -806,11 +834,21 @@ int intel_backlight_set(int percent)
     if (!max) return 0;
     if (percent < 5)   percent = 5;
     if (percent > 100) percent = 100;
-    u32 duty = (max * (u32)percent) / 100u;
-    u32 v = mmio_r(BLC_PWM_PCH_CTL2);
-    mmio_w(BLC_PWM_PCH_CTL2, (v & 0xFFFF0000u) | (duty & 0xFFFF));
+    /* 32-bit period, so scale before dividing would overflow at periods above
+     * ~42 M. This panel's is 24242, but divide first if it ever is not. */
+    u32 duty = (max > 42000000u) ? (max / 100u) * (u32)percent
+                                 : (max * (u32)percent) / 100u;
+    mmio_w(BLC_PWM_DUTY, duty);
     return 1;
 }
+
+int intel_backlight_pwm_enabled(void)
+{
+    return intel_present() ? ((mmio_r(BLC_PWM_CTL) & BLC_PWM_ENABLE) ? 1 : 0) : 0;
+}
+/* The PWM enable/disable pair lives with the panel-power code further down,
+ * where lt_armed is in scope and where plan step 58 pairs it with
+ * PP_CONTROL b2 - the order between the two is the whole point of that step. */
 
 int intel_panel_on(void)
 {
@@ -2437,6 +2475,40 @@ int intel_panel_power_off(void)
     return ok;
 }
 
+/* Bring the PWM up from cold: frequency and duty BEFORE the enable bit, which
+ * is plan step 58 and the opposite order to how it reads naturally. Enabling
+ * first runs the panel at whatever period happened to be left in the register.
+ * Both are separate 32-bit registers on this PCH - see the BLC_PWM_* defines. */
+int intel_backlight_pwm_enable(u32 period, u32 duty)
+{
+    if (!intel_present() || !lt_armed || !period) return 0;
+
+    /* Same guard as intel_panel_backlight_enable, for the same reason: hazard
+     * H2 names PWM alongside AUX and the main link as something not to drive
+     * into an unpowered panel. Writing FREQ and DUTY alone is harmless while
+     * the output is off, but this function ends by turning the output ON, so
+     * the check belongs here and not at the call site. */
+    if ((mmio_r(PP_STATUS) & PP_ON_MASK) != PP_ON_WANT) return 0;
+
+    if (duty > period) duty = period;
+    mmio_w(BLC_PWM_FREQ, period);
+    mmio_w(BLC_PWM_DUTY, duty);
+    (void)mmio_r(BLC_PWM_FREQ);                       /* posting read */
+    mmio_w(BLC_PWM_CTL, mmio_r(BLC_PWM_CTL) | BLC_PWM_ENABLE);
+    (void)mmio_r(BLC_PWM_CTL);
+    return 1;
+}
+
+/* Teardown step 3: the PWM goes off AFTER PP_CONTROL b2 and after the
+ * backlight-off delay, never before - see intel_panel_backlight_enable(). */
+int intel_backlight_pwm_disable(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    mmio_w(BLC_PWM_CTL, mmio_r(BLC_PWM_CTL) & ~BLC_PWM_ENABLE);
+    (void)mmio_r(BLC_PWM_CTL);
+    return 1;
+}
+
 int intel_panel_backlight_enable(int on)
 {
     if (!intel_present() || !lt_armed) return 0;
@@ -2728,6 +2800,178 @@ int intel_mn_program(void)
     return 1;
 }
 
+/* ==== the rest of the transcoder and pipe (plan steps 46, 49-52, 54) =====
+ * Every register below had NO code at all. They are individually trivial, which
+ * is exactly why they go missing - and any one of them wrong is a black screen
+ * with no error bit anywhere. Each is checked against what firmware left.
+ */
+#define TRANS_MSA_MISC_EDP  0x6F410
+#define PIPE_MISC_A         0x70030
+#define CHICKEN_TRANS_EDP   0x420CC
+#define PS_CTRL_1_A         0x68180
+#define PS_CTRL_2_A         0x68280
+#define WM_LINETIME_A       0x45270
+
+/* TRANS_DDI_FUNC_CTL. A SINGLE 32-bit write, not a read-modify-write: the plan
+ * is explicit, and an RMW would preserve whatever DDI-select and mode bits
+ * firmware left behind.
+ *
+ * Input select stays 000b (pipe A). 100b appears on one i915 path but the KBL
+ * PRM lists only 000/101/110 and the SKL PRM marks 14:12 flatly Reserved, so
+ * the plan forbids it (C10).
+ *
+ * Firmware on this machine holds 0x82010006 and we reproduce that exactly for
+ * 4 lanes / 8 bpc / hsync-positive, which is also what the panel's EDID asks
+ * for. bpc uses THIS register's table, not MSA_MISC's - see intel_ddi_bpp(). */
+u32 intel_trans_ddi_ctl_value(int lanes, int bpp, int phsync, int pvsync)
+{
+    u32 bpc_field;
+    switch (bpp) {
+        case 24: bpc_field = 0; break;      /* 8 bpc  */
+        case 30: bpc_field = 1; break;      /* 10 bpc */
+        case 18: bpc_field = 2; break;      /* 6 bpc  */
+        case 36: bpc_field = 3; break;      /* 12 bpc */
+        default: return 0;                  /* not a bpc this register can say */
+    }
+    if (lanes < 1 || lanes > 4) return 0;
+
+    return (1u << 31)                       /* enable                        */
+         | (2u << 24)                       /* mode: DP SST                  */
+         | (bpc_field << 20)
+         | (pvsync ? (1u << 17) : 0u)       /* PVSYNC */
+         | (phsync ? (1u << 16) : 0u)       /* PHSYNC */
+         | (0u << 12)                       /* input select: pipe A          */
+         | ((u32)(lanes - 1) << 1);         /* port width                    */
+}
+
+int intel_trans_ddi_ctl_write(int lanes, int bpp, int phsync, int pvsync)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    u32 v = intel_trans_ddi_ctl_value(lanes, bpp, phsync, pvsync);
+    if (!v) return 0;
+    mmio_w(TRANS_DDI_EDP, v);               /* single write, deliberately */
+    (void)mmio_r(TRANS_DDI_EDP);
+    return 1;
+}
+
+int intel_trans_ddi_ctl_disable(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    mmio_w(TRANS_DDI_EDP, 0);               /* gen9 allows writing 0 outright */
+    (void)mmio_r(TRANS_DDI_EDP);
+    return 1;
+}
+
+/* TRANS_MSA_MISC (step 46). b0 = "sync clock", 7:5 = bpc.
+ *
+ * The bpc table here is NOT the one in TRANS_DDI_FUNC_CTL: 0=6, 1=8, 2=10,
+ * 3=12. Same field name, same transcoder, one value apart. Firmware holds
+ * 0x21 = sync clock + field 1 = 8 bpc, which is what this returns. */
+u32 intel_msa_misc_value(int bpp)
+{
+    u32 f;
+    switch (bpp) {
+        case 18: f = 0; break;
+        case 24: f = 1; break;
+        case 30: f = 2; break;
+        case 36: f = 3; break;
+        default: return 0;
+    }
+    return 1u | (f << 5);
+}
+
+int intel_msa_misc_write(int bpp)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    u32 v = intel_msa_misc_value(bpp);
+    if (!v) return 0;
+    mmio_w(TRANS_MSA_MISC_EDP, v);
+    return 1;
+}
+
+/* WM_LINETIME (step 52): how long one scanline takes, in units of 0.125 us,
+ * rounded UP. Nine bits, so it saturates at 0x1FF.
+ *
+ * The plan works this out as 90. It is 91, and firmware agrees - 0x45270 reads
+ * 0x0000005B. 2720 * 8000 / 241690 = 90.03, and the formula rounds up, so the
+ * plan's number came from truncating where i915 uses DIV_ROUND_UP. Worth
+ * having caught from a register rather than shipping an off-by-one into a
+ * timing parameter. */
+u32 intel_wm_linetime_value(u32 htotal, u32 pixel_khz)
+{
+    if (!htotal || !pixel_khz) return 0;
+    u64 v = ((u64)htotal * 8000u + pixel_khz - 1) / pixel_khz;   /* round up */
+    return (v > 0x1FF) ? 0x1FFu : (u32)v;
+}
+
+int intel_wm_linetime_write(u32 htotal, u32 pixel_khz)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    u32 v = intel_wm_linetime_value(htotal, pixel_khz);
+    if (!v) return 0;
+    mmio_w(WM_LINETIME_A, v);
+    return 1;
+}
+
+/* PIPE_MISC (step 49) and the two things that go with it.
+ *
+ * bpc lives HERE on gen9, not in TRANSCONF - TRANSCONF's 7:5 and 4/3:2 are
+ * ctg-through-ivb only, and programming bpc there on this part sets nothing
+ * while looking correct (hazard 4.3 #12). Firmware holds 0. */
+u32 intel_pipe_misc_value(int bpp, int dither)
+{
+    u32 f;
+    switch (bpp) {
+        case 24: f = 0; break;              /* 8 bpc  */
+        case 30: f = 1; break;              /* 10 bpc */
+        case 18: f = 2; break;              /* 6 bpc  */
+        case 36: f = 3; break;              /* 12 bpc */
+        default: return 0xFFFFFFFFu;        /* sentinel: 0 is a legal value  */
+    }
+    return (f << 5) | (dither ? (1u << 4) : 0u);
+}
+
+int intel_pipe_misc_write(int bpp, int dither)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    u32 v = intel_pipe_misc_value(bpp, dither);
+    if (v == 0xFFFFFFFFu) return 0;
+    mmio_w(PIPE_MISC_A, v);
+    return 1;
+}
+
+/* Scalers off (step 51). We scan out at the panel's native size, so any scaler
+ * left enabled by firmware would resample a correct image into a soft one. */
+int intel_scalers_disable(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    mmio_w(PS_CTRL_1_A, 0);
+    mmio_w(PS_CTRL_2_A, 0);
+    return 1;
+}
+
+int intel_scaler_enabled(int which)
+{
+    if (!intel_present() || which < 1 || which > 2) return 0;
+    u32 r = (which == 1) ? PS_CTRL_1_A : PS_CTRL_2_A;
+    return (mmio_r(r) & (1u << 31)) ? 1 : 0;
+}
+
+/* CHICKEN_TRANS_EDP (step 50): frame start delay in 28:27, encoded minus one.
+ * Reset value 0 means a delay of 1, which is what we want, so this is a no-op
+ * on a cold box - it exists for the case where firmware left something else. */
+int intel_chicken_trans_reset(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    mmio_w(CHICKEN_TRANS_EDP, mmio_r(CHICKEN_TRANS_EDP) & ~(3u << 27));
+    return 1;
+}
+
+u32 intel_chicken_trans(void) { return intel_present() ? mmio_r(CHICKEN_TRANS_EDP) : 0; }
+u32 intel_msa_misc(void)      { return intel_present() ? mmio_r(TRANS_MSA_MISC_EDP) : 0; }
+u32 intel_pipe_misc(void)     { return intel_present() ? mmio_r(PIPE_MISC_A) : 0; }
+u32 intel_wm_linetime(void)   { return intel_present() ? mmio_r(WM_LINETIME_A) : 0; }
+
 #define TRANS_CONF_ENABLE  (1u << 31)
 #define TRANS_CONF_STATE   (1u << 30)
 
@@ -2819,8 +3063,10 @@ int intel_wm_lines(int level)    { return (int)((intel_watermark(level) >> WM_LI
 
 /* The display data buffer allocation: which 512-byte blocks this plane owns,
  * as a start and end index. */
-int intel_ddb_start(void) { return (int)(intel_ddb_cfg() & 0x7FF); }
-int intel_ddb_end(void)   { return (int)((intel_ddb_cfg() >> 16) & 0x7FF); }
+/* 12-bit fields, not 11. Immaterial at 892 blocks, but 0x7FF was a guess that
+ * happened to be wide enough rather than the field width the plan states. */
+int intel_ddb_start(void) { return (int)(intel_ddb_cfg() & 0xFFF); }
+int intel_ddb_end(void)   { return (int)((intel_ddb_cfg() >> 16) & 0xFFF); }
 int intel_ddb_blocks(void)
 {
     int e = intel_ddb_end(), st = intel_ddb_start();
@@ -2870,6 +3116,90 @@ int intel_wm_set_level(int level, u32 value)
     if (!intel_present() || !lt_armed || level < 0 || level > 7) return 0;
     mmio_w(PLANE_WM_1_A(level), value);
     return 1;
+}
+
+/* ---- the cursor half of step 53, which had no code at all ---------------
+ *
+ * The plane watermarks above existed; the cursor's did not, and the DDB has to
+ * be split between them. Overlapping allocations, or any index past 891, is
+ * hazard 4.3 #14 - a FIFO underrun rather than a refused write.
+ *
+ * The plan suggests cursor 0..7 and plane 8..891. Firmware on this machine does
+ * the opposite and does it more tightly:
+ *
+ *   PLANE_BUF_CFG 0x7027C = 035A0000  ->  plane  blocks   0..858
+ *   CUR_BUF_CFG   0x7017C = 037B035B  ->  cursor blocks 859..891
+ *   CUR_WM(0)     0x70140 = 8000000D  ->  enable, 13 blocks, 0 lines
+ *
+ * No gap, no overlap, exactly fills 0..891. Both splits are legal, but 13
+ * blocks is the real cursor requirement measured on this panel where the plan
+ * guessed 8, and the plan's cursor allocation of 8 blocks would therefore have
+ * been one short of what firmware asks for. Follow the hardware.
+ *
+ * The write order matters and is the plan's: watermarks first, BUF_CFG last. */
+#define CUR_WM_A(level)   (0x70140u + 4u * (u32)(level))
+#define CUR_WM_TRANS_A    0x70168
+#define CUR_BUF_CFG_A     0x7017C
+#define DDB_LAST_BLOCK    891              /* 896 blocks, 4 reserved, 1 slice */
+
+u32 intel_cur_wm(int level)
+{
+    if (!intel_present() || level < 0 || level > 7) return 0;
+    return mmio_r(CUR_WM_A(level));
+}
+u32 intel_cur_buf_cfg(void) { return intel_present() ? mmio_r(CUR_BUF_CFG_A) : 0; }
+
+/* The two BUF_CFG words for a given cursor allocation, as values, so the
+ * arithmetic can be checked against firmware without programming anything.
+ * Return 0 for a split that will not fit - 0 is not a legal BUF_CFG here
+ * because END must be at least START. */
+u32 intel_ddb_cur_cfg_value(int cur_blocks)
+{
+    if (cur_blocks < 1 || cur_blocks > DDB_LAST_BLOCK) return 0;
+    u32 cur_start = (u32)(DDB_LAST_BLOCK - cur_blocks + 1);
+    return ((u32)DDB_LAST_BLOCK << 16) | cur_start;
+}
+
+u32 intel_ddb_plane_cfg_value(int cur_blocks)
+{
+    if (cur_blocks < 1 || cur_blocks >= DDB_LAST_BLOCK) return 0;
+    u32 plane_end = (u32)(DDB_LAST_BLOCK - cur_blocks);
+    return (plane_end << 16) | 0u;
+}
+
+/* Split the buffer: the plane gets everything below cur_blocks, the cursor the
+ * top. Returns 0 on a split that would overlap or overrun rather than
+ * programming one - this is the one place where a plausible-looking pair of
+ * numbers corrupts scanout. */
+int intel_ddb_split(int cur_blocks, u32 cur_wm0)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    u32 cur_cfg = intel_ddb_cur_cfg_value(cur_blocks);
+    u32 pln_cfg = intel_ddb_plane_cfg_value(cur_blocks);
+    if (!cur_cfg || !pln_cfg) return 0;
+    /* the cursor cannot ask for more blocks than it was allocated */
+    if ((cur_wm0 & WM_BLOCKS_MASK) > (u32)cur_blocks) return 0;
+
+    /* watermarks before BUF_CFG, and BUF_CFG last of all */
+    mmio_w(CUR_WM_A(0), cur_wm0);
+    for (int l = 1; l < 8; l++) mmio_w(CUR_WM_A(l), 0);
+    mmio_w(CUR_WM_TRANS_A, 0);
+    mmio_w(CUR_BUF_CFG_A, cur_cfg);
+    mmio_w(PLANE_BUF_CFG_1_A, pln_cfg);
+    return 1;
+}
+
+/* Do the two allocations overlap or run past the end? A direct check on what
+ * the hardware currently holds, for a caller that did not program it. */
+int intel_ddb_valid(void)
+{
+    if (!intel_present()) return 0;
+    u32 p = mmio_r(PLANE_BUF_CFG_1_A), c = mmio_r(CUR_BUF_CFG_A);
+    int ps = (int)(p & 0xFFF), pe = (int)((p >> 16) & 0xFFF);
+    int cs = (int)(c & 0xFFF), ce = (int)((c >> 16) & 0xFFF);
+    if (pe > DDB_LAST_BLOCK || ce > DDB_LAST_BLOCK) return 0;
+    if (pe < ps || ce < cs) return 0;
+    return (pe < cs || ce < ps) ? 1 : 0;        /* disjoint */
 }
 
 /* Copy a whole known-good watermark configuration. A driver that is taking

@@ -138,6 +138,69 @@ inputs: pixel 241690 kHz, link 270000 kHz symbol, 4 lanes, 24 bpp
 M is **truncated**, not rounded — rounding misses. N is rounded *up* to a power
 of two then capped (0x800000 data, 0x80000 link). `--survey` is 21/21 now.
 
+## The rest of the pipe path — also absent, also now verified
+
+Steps 46, 49–54 had **no code at all**. Each is a couple of lines and each one
+wrong is a black screen with no error bit. Same method: compute, compare to what
+firmware left. `./gpu-dev.sh probe` checks all of these every run.
+
+```
+TRANS_DDI_FUNC_CTL  firmware 82010006   ours 82010006   MATCH
+TRANS_MSA_MISC      firmware 00000021   ours 00000021   MATCH
+PIPE_MISC           firmware 00000000   ours 00000000   MATCH
+WM_LINETIME         firmware 0000005B   ours 0000005B   MATCH
+```
+
+Three things the hardware corrected in the plan:
+
+| Plan says | Hardware says |
+|---|---|
+| `WM_LINETIME` → **90** | **91** (`0x5B`). 2720×8000/241690 = 90.03 and i915 uses DIV_ROUND_**UP** — the plan truncated |
+| cursor DDB 0..7, plane 8..891 | plane **0..858**, cursor **859..891** — inverted, and exactly fills 0..891 |
+| cursor watermark 8 blocks | **13** blocks (`CUR_WM(0) = 8000000D`) — the plan's 8 is one short of what firmware asks |
+
+Also settles plan uncertainty **#12**: `PLANE_WM` bit 30 (IGNORE_LINES) is **0**
+in all eight of firmware's levels, so writing 0 is right. Firmware's real
+per-level plane watermarks are 41/74/91/99/157/182/195/222 blocks — the plan
+guessed "~21 blocks" for level 0 and suggested 256 as a safe margin; the real
+number is 41 and 256 would have been a 6× over-allocation.
+
+**C9 is still NOT settled.** Firmware's largest values (222 blocks, 11 lines) fit
+inside *both* the narrow 18:14/9:0 and the wide 26:14/11:0 encodings, so this
+data cannot distinguish them. Still using narrow, still on the plan's authority.
+
+## The backlight was writing to the wrong registers
+
+Two layouts exist and this code had the other one:
+
+```
+SKL / SPT   0xC8254 packs both: freq 31:16, duty 15:0
+CNP / CMP   0xC8254 = freq, all 32 bits.  0xC8258 = duty, all 32 bits.   <- us
+```
+
+Measured: `FREQ 0x5EB2` = 24242 clocks of 24 MHz = **990 Hz**, `DUTY 0x556E` =
+21870 = **90% brightness**. Under the packed reading, `intel_backlight_max()`
+computed `0x5EB2 >> 16` = **0**, so `intel_backlight_set()` hit its `if (!max)`
+and silently did nothing, and `intel_backlight_get()` returned the *period* as
+the brightness.
+
+It failed **safe** — max reading 0 meant it bailed before writing, so it never
+corrupted the period. But it was dead code that looked live, and it is one of the
+few write paths *not* behind `lt_armed`, so it would have been the first thing to
+run for real.
+
+## Still true, and the thing to fix next
+
+**Nothing in the kernel ever arms `lt_armed`.** Only `hosttest/dpll_test.c` and
+`hosttest/intel_probe.c` call `intel_link_train_arm()`. Every write path in
+`intel.c` is unreachable from zlOS itself — the driver reads the display
+correctly and cannot yet touch it.
+
+And there is still **no ordered modeset function**: the sequence in `intel.c` is
+a comment. All the pieces it needs now exist except EDID over I2C-over-AUX
+(GMBUS does not serve eDP on DDI A) and `LINK_RATE_SET` Method B (not needed —
+this panel has no rate table).
+
 ## The one thing blocking a cold-start modeset
 
 It needs the display to itself. gnome-shell + Xwayland hold `/dev/dri/card0`,

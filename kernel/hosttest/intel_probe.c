@@ -103,6 +103,21 @@ u32  intel_data_m1_reg(void);
 u32  intel_data_n1_reg(void);
 u32  intel_link_m1_reg(void);
 u32  intel_link_n1_reg(void);
+u32  intel_trans_ddi_ctl_value(int lanes, int bpp, int phsync, int pvsync);
+u32  intel_msa_misc_value(int bpp);
+u32  intel_msa_misc(void);
+u32  intel_pipe_misc_value(int bpp, int dither);
+u32  intel_pipe_misc(void);
+u32  intel_wm_linetime_value(u32 htotal, u32 pixel_khz);
+u32  intel_wm_linetime(void);
+u32  intel_chicken_trans(void);
+int  intel_scaler_enabled(int which);
+u32  intel_cur_wm(int level);
+u32  intel_cur_buf_cfg(void);
+int  intel_ddb_valid(void);
+u32  intel_ddb_cur_cfg_value(int cur_blocks);
+u32  intel_ddb_plane_cfg_value(int cur_blocks);
+int  intel_backlight_pwm_enabled(void);   /* max/get are declared further up */
 void intel_set_edid_buffer(uptr p);
 int  intel_transcoder_is_edp(void);
 u32  intel_dpll_ctrl1(void);
@@ -293,6 +308,13 @@ int main(int argc, char **argv)
             { 0x6C000, 0x6C070, "DPLL"      },
             { 0x46000, 0x46020, "CDCLK"     },
             { 0x70000, 0x70200, "PIPE_A"    },
+            /* to 0x70300: PLANE_WM(0..7) at 0x70240, PLANE_WM_TRANS at 0x70268
+             * and PLANE_BUF_CFG at 0x7027C all sit past the old 0x70200 edge,
+             * so the entire watermark block was invisible. */
+            { 0x70200, 0x70300, "PIPE_A_WM" },
+            { 0x68180, 0x68300, "SCALER"    },
+            { 0x45260, 0x45280, "WM_LINET"  },
+            { 0x420C0, 0x420D0, "CHICKEN"   },
             { 0x7F000, 0x7F020, "PIPE_EDP"  },
             { 0xC5100, 0xC5130, "GMBUS"     },
             { 0xC7200, 0xC7220, "PANEL"     },
@@ -461,6 +483,89 @@ int main(int argc, char **argv)
                    ? "  all four exact - the M/N algorithm is right on this hardware"
                    : "  a mismatch here means the ratio maths is wrong, not the panel");
         }
+    }
+    printf("\n");
+
+    /* ---- the rest of the pipe path, same method: compute, compare ---------
+     * Every register here had no code at all until now. Firmware has all of
+     * them set for a working 2560x1440, so each computation has a real answer
+     * to be wrong against. */
+    printf("  -- transcoder/pipe registers vs. firmware --\n");
+    {
+        u32 pixel_khz = intel_pixel_clock_khz();
+        int lanes = intel_ddi_lanes(), bpp = intel_ddi_bpp();
+        /* sync polarity as firmware has it, so we reproduce the same word */
+        u32 live_ddi = intel_ddi_func_ctl();
+        int phsync = !!(live_ddi & (1u << 16)), pvsync = !!(live_ddi & (1u << 17));
+
+        struct { const char *name; u32 got, want; } chk[] = {
+            { "TRANS_DDI_FUNC_CTL", live_ddi,
+              intel_trans_ddi_ctl_value(lanes, bpp, phsync, pvsync) },
+            { "TRANS_MSA_MISC",     intel_msa_misc(),    intel_msa_misc_value(bpp) },
+            { "PIPE_MISC",          intel_pipe_misc(),   intel_pipe_misc_value(bpp, 0) },
+            { "WM_LINETIME",        intel_wm_linetime(),
+              intel_wm_linetime_value((u32)intel_htotal(), pixel_khz) },
+            { 0, 0, 0 }
+        };
+        int bad = 0;
+        for (int i = 0; chk[i].name; i++) {
+            int match = chk[i].got == chk[i].want;
+            if (!match) bad++;
+            printf("    %-19s firmware %08X   ours %08X   %s\n",
+                   chk[i].name, chk[i].got, chk[i].want, match ? "MATCH" : "DIFFERS");
+        }
+        printf("    %-19s %08X   %s\n", "CHICKEN_TRANS_EDP", intel_chicken_trans(),
+               (intel_chicken_trans() & (3u << 27)) ? "frame start delay NOT reset"
+                                                   : "frame start delay 1 (reset)");
+        printf("    %-19s scaler1 %s  scaler2 %s\n", "PS_CTRL",
+               intel_scaler_enabled(1) ? "ON" : "off",
+               intel_scaler_enabled(2) ? "ON" : "off");
+        printf("  %s\n", bad == 0 ? "  all four exact"
+                                  : "  a DIFFERS above is our maths, not the panel");
+    }
+    printf("\n");
+
+    /* ---- the DDB split, where the plan and the hardware disagree ---------- */
+    printf("  -- display data buffer split (cursor watermarks were absent) --\n");
+    {
+        u32 p = intel_ddb_cfg(), c = intel_cur_buf_cfg();
+        printf("    plane  blocks %4u..%-4u  (PLANE_BUF_CFG %08X)\n",
+               p & 0xFFF, (p >> 16) & 0xFFF, p);
+        printf("    cursor blocks %4u..%-4u  (CUR_BUF_CFG   %08X)\n",
+               c & 0xFFF, (c >> 16) & 0xFFF, c);
+        printf("    CUR_WM(0) %08X -> %u blocks, %u lines%s\n", intel_cur_wm(0),
+               intel_cur_wm(0) & 0x3FF, (intel_cur_wm(0) >> 14) & 0x1F,
+               (intel_cur_wm(0) & 0x3FF) > 8 ? "   <- plan guessed 8" : "");
+        printf("  %s\n", intel_ddb_valid()
+               ? "  disjoint and within 0..891 - valid"
+               : "  OVERLAPPING or past block 891 (hazard 4.3 #14)");
+
+        /* Does our split arithmetic reproduce firmware's, given the same
+         * cursor allocation? Values only - nothing is written. */
+        int cur_blocks = (int)(((c >> 16) & 0xFFF) - (c & 0xFFF) + 1);
+        u32 ours_c = intel_ddb_cur_cfg_value(cur_blocks);
+        u32 ours_p = intel_ddb_plane_cfg_value(cur_blocks);
+        printf("    for %d cursor blocks, ours: CUR %08X %s   PLANE %08X %s\n",
+               cur_blocks, ours_c, ours_c == c ? "MATCH" : "DIFFERS",
+               ours_p, ours_p == p ? "MATCH" : "DIFFERS");
+    }
+    printf("\n");
+
+    /* ---- backlight: the layout this code had wrong ------------------------ */
+    printf("  -- backlight (CNP/CMP: freq and duty are SEPARATE registers) --\n");
+    {
+        u32 period = intel_backlight_max(), duty = intel_backlight_get();
+        printf("    PWM enabled     %s\n", intel_backlight_pwm_enabled() ? "yes" : "no");
+        printf("    period          %u clocks of 24 MHz  = %u Hz\n",
+               period, period ? 24000000u / period : 0);
+        printf("    duty            %u  = %u%% brightness\n",
+               duty, period ? (100u * duty) / period : 0);
+        if (!period)
+            printf("    [ FAIL ] period reads 0 - the SKL packed layout is back\n");
+        else if (duty > period)
+            printf("    [ FAIL ] duty exceeds period\n");
+        else
+            printf("    [ PASS ] a sane period and a duty inside it\n");
     }
     printf("\n");
 
