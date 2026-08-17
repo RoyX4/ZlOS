@@ -88,6 +88,21 @@ u32  intel_plane_format(void);
 int  intel_plane_tiling(void);
 u32  intel_watermark(int level);
 u32  intel_ddi_func_ctl(void);
+int  intel_ddi_lanes(void);
+int  intel_ddi_bpp(void);
+u32  intel_pixel_clock_khz(void);
+u32  intel_pixel_clock_mn_khz(void);
+u32  intel_refresh_mhz_derived(void);
+u32  intel_dp_link_symbol_khz(int rate_idx);
+int  intel_mn_compute(u32 pixel_khz, u32 link_khz, int lanes, int bpp);
+u32  intel_mn_data_m(void);
+u32  intel_mn_data_n(void);
+u32  intel_mn_link_m(void);
+u32  intel_mn_link_n(void);
+u32  intel_data_m1_reg(void);
+u32  intel_data_n1_reg(void);
+u32  intel_link_m1_reg(void);
+u32  intel_link_n1_reg(void);
 void intel_set_edid_buffer(uptr p);
 int  intel_transcoder_is_edp(void);
 u32  intel_dpll_ctrl1(void);
@@ -268,8 +283,11 @@ int main(int argc, char **argv)
     if (dump) {
         volatile unsigned char *b = (volatile unsigned char *)map;
         struct { unsigned lo, hi; const char *name; } ranges[] = {
-            { 0x60000, 0x60040, "TRANS_A"   },
-            { 0x6F000, 0x6F040, "TRANS_EDP" },
+            /* to 0x50, not 0x40: PIPE_LINK_M1/N1 live at +0x40/+0x44 and the
+             * pixel clock is derivable from them. Stopping at 0x40 hid the one
+             * pair of registers that says what the link is actually carrying. */
+            { 0x60000, 0x60050, "TRANS_A"   },
+            { 0x6F000, 0x6F050, "TRANS_EDP" },
             { 0x6F400, 0x6F420, "DDI_EDP"   },
             { 0x64000, 0x64100, "DDI_BUF"   },
             { 0x6C000, 0x6C070, "DPLL"      },
@@ -326,9 +344,20 @@ int main(int argc, char **argv)
     usleep(500000);
     int f1 = intel_frame_count();
     double hz = (f1 - f0) * 2.0;
-    printf("  frame counter   %d -> %d in 0.5 s  =  %.1f Hz\n", f0, f1, hz);
-    if (intel_htotal() && intel_vtotal())
-        printf("  pixel clock     %.1f MHz\n",
+    printf("  frame counter   %d -> %d in 0.5 s  =  %.1f Hz%s\n", f0, f1, hz,
+           hz == 0.0 ? "   <- frozen: PSR is on" : "");
+
+    /* The frame counter is the honest measurement and it reads zero here,
+     * because firmware leaves PSR enabled and a self-refreshing panel does not
+     * advance it. PIPE_LINK_M1/N1 give the answer exactly and without a timer -
+     * they hold pixel_clock : link_clock, which is what a fixed-rate link needs
+     * in order to carry an arbitrary mode. */
+    u32 mn_khz = intel_pixel_clock_mn_khz();
+    printf("  pixel clock     %u kHz   (from PIPE_LINK_M1/N1 - exact, PSR-immune)\n", mn_khz);
+    printf("  refresh         %u.%03u Hz (derived, not counted)\n",
+           intel_refresh_mhz_derived() / 1000u, intel_refresh_mhz_derived() % 1000u);
+    if (intel_htotal() && intel_vtotal() && hz > 0.0)
+        printf("  cross-check     %.1f MHz from the frame counter\n",
                (double)intel_htotal() * intel_vtotal() * hz / 1e6);
     printf("\n");
 
@@ -361,29 +390,77 @@ int main(int argc, char **argv)
      * computes the same link rate i915 chose, the DP path is right. */
     printf("  -- DPLL computation vs. what i915 actually programmed --\n");
     {
-        double hz2 = (f1 - f0) * 2.0;
-        u32 pixel_khz = (u32)((double)intel_htotal() * intel_vtotal() * hz2 / 1000.0);
-        /* the frame counter under-reads when the panel self-refreshes, so also
-         * compute from the nominal 60 Hz the mode implies */
-        u32 nominal_khz = (u32)((double)intel_htotal() * intel_vtotal() * 60.0 / 1000.0);
-        printf("  measured pixel clock  %u kHz   (frame counter may under-read: PSR)\n", pixel_khz);
-        printf("  at a nominal 60 Hz    %u kHz\n", nominal_khz);
+        /* No more "nominal 60 Hz". The pixel clock is read out of the link
+         * ratio now, so every number below rests on a measurement. */
+        u32 pixel_khz = intel_pixel_clock_khz();
+        int live = intel_dpll_link_rate(0);
+        printf("  pixel clock           %u kHz  (measured, was assumed 60 Hz)\n", pixel_khz);
 
         for (int bpp = 18; bpp <= 30; bpp += 6) {
-            int want = intel_dp_choose_rate(nominal_khz, 4, bpp);
+            int want = intel_dp_choose_rate(pixel_khz, 4, bpp);
             printf("    %d bpp, 4 lanes -> rate index %d", bpp, want);
             if (want >= 0)
-                printf("  (%u kHz symbol, %u kbps link vs %u kbps needed)",
+                printf("  (%u kHz DPLL, %u kbps link vs %u kbps needed)",
                        intel_dpll_rate_khz(want),
                        intel_dp_link_bandwidth_kbps(want, 4),
-                       intel_mode_bandwidth_kbps(nominal_khz, bpp));
+                       intel_mode_bandwidth_kbps(pixel_khz, bpp));
             printf("\n");
         }
-        int live = intel_dpll_link_rate(0);
         printf("  i915 programmed DPLL0 at rate index %d\n", live);
-        int ours = intel_dp_choose_rate(nominal_khz, 4, 24);
+        int ours = intel_dp_choose_rate(pixel_khz, 4, 24);
         printf("  our choice at 24 bpp      rate index %d   -> %s\n",
                ours, ours == live ? "MATCH" : "differs");
+
+        /* Is there anything slower that still carries this mode? The plan says
+         * no, and says it matters: a driver that walks the rate ladder on a
+         * training failure will "succeed" onto a link too slow for a frame. */
+        u32 need = intel_mode_bandwidth_kbps(pixel_khz, 24);
+        printf("  need %u kbps at 24 bpp;  2xHBR %u, 4xRBR %u  -> %s\n",
+               need, intel_dp_link_bandwidth_kbps(1, 2), intel_dp_link_bandwidth_kbps(2, 4),
+               (intel_dp_link_bandwidth_kbps(1, 2) < need &&
+                intel_dp_link_bandwidth_kbps(2, 4) < need)
+                   ? "4xHBR is the only working point, as the plan says"
+                   : "a fallback exists - the plan's step 26 needs revisiting");
+    }
+    printf("\n");
+
+    /* ---- M/N against firmware: a write path with a known-correct answer ----
+     * PIPE_DATA_M1/N1 and PIPE_LINK_M1/N1 have never been written by this
+     * driver - the code did not exist until now. But firmware has already
+     * solved the identical problem for the identical mode, and left its answer
+     * in the registers. So the computation can be checked exactly, which is a
+     * far stronger claim than "it compiles and looks plausible". */
+    printf("  -- M/N computation vs. what firmware left in the registers --\n");
+    {
+        u32 pixel_khz = intel_pixel_clock_khz();
+        int lanes = intel_ddi_lanes();
+        int bpp   = intel_ddi_bpp();
+        u32 link_khz = intel_dp_link_symbol_khz(intel_dpll_link_rate(intel_ddi_clock_select(0)));
+
+        printf("  inputs: pixel %u kHz, link %u kHz symbol, %d lanes, %d bpp\n",
+               pixel_khz, link_khz, lanes, bpp);
+
+        if (!intel_mn_compute(pixel_khz, link_khz, lanes, bpp)) {
+            printf("  [ FAIL ] intel_mn_compute() rejected its inputs\n");
+        } else {
+            struct { const char *name; u32 got, want; } chk[] = {
+                { "DATA_M1 (with TU)", intel_data_m1_reg(), (63u << 25) | intel_mn_data_m() },
+                { "DATA_N1",           intel_data_n1_reg(), intel_mn_data_n() },
+                { "LINK_M1",           intel_link_m1_reg(), intel_mn_link_m() },
+                { "LINK_N1",           intel_link_n1_reg(), intel_mn_link_n() },
+                { 0, 0, 0 }
+            };
+            int bad = 0;
+            for (int i = 0; chk[i].name; i++) {
+                int match = chk[i].got == chk[i].want;
+                if (!match) bad++;
+                printf("    %-18s firmware %08X   ours %08X   %s\n",
+                       chk[i].name, chk[i].got, chk[i].want, match ? "MATCH" : "DIFFERS");
+            }
+            printf("  %s\n", bad == 0
+                   ? "  all four exact - the M/N algorithm is right on this hardware"
+                   : "  a mismatch here means the ratio maths is wrong, not the panel");
+        }
     }
     printf("\n");
 

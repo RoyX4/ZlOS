@@ -106,6 +106,16 @@ u32  pci_read32(int bus, int dev, int fn, int off);
 #define TRANS_OFF_VBLANK  0x10
 #define TRANS_OFF_VSYNC   0x14
 #define TRANS_OFF_CONF    0x08       /* relative to 0x70008 / 0x6F008 */
+/* M/N, in the same transcoder-indexed block. DATA is the payload ratio, LINK
+ * the clock ratio; M2/N2 are the second set DRRS switches to and stay zero. */
+#define TRANS_OFF_DATA_M1 0x30
+#define TRANS_OFF_DATA_N1 0x34
+#define TRANS_OFF_DATA_M2 0x38
+#define TRANS_OFF_DATA_N2 0x3C
+#define TRANS_OFF_LINK_M1 0x40
+#define TRANS_OFF_LINK_N1 0x44
+#define TRANS_OFF_LINK_M2 0x48
+#define TRANS_OFF_LINK_N2 0x4C
 /* The pipe configuration register is NOT inside the transcoder timing block.
  * PIPECONF lives in the pipe register range: A at 0x70008, and the eDP
  * transcoder's at 0x7F008. Reading 0x6F008 gets HSYNC instead, which is a
@@ -213,6 +223,41 @@ static void mmio_w(u32 off, u32 val)
 {
     if (!mmio) return;
     *(volatile u32 *)(mmio + (uptr)off) = val;
+}
+
+/* Poll a register until the masked bits match, or the budget runs out.
+ *
+ * Two things this gets right that the loops it replaces did not.
+ *
+ * The time base cannot be idt_ticks(). That counter advances on a timer
+ * interrupt, and a modeset runs with interrupts masked - so
+ * `while (idt_ticks() - t0 < N)` never advances, the condition stays 0 < N, and
+ * the loop spins forever. Three waits in this file were written that way. They
+ * looked fine, because each also returns the moment the bit it wants appears;
+ * the hang only reaches the path where the hardware does NOT come up, which is
+ * the only path a timeout exists for. A wait that cannot expire is not a
+ * timeout, it is a deadlock waiting for a bad panel.
+ *
+ * And the budget is counted in poll iterations rather than by re-reading a
+ * clock. cpu_now_ms() divides a 64-bit cycle count, which on the 32-bit build
+ * is a software routine out of divmod.c; cpu.c is explicit that it belongs once
+ * per power transition and not inside a loop. Each pass also costs an MMIO
+ * read, so the real elapsed time is a little over the budget - over-waiting a
+ * timeout is the safe direction, and the same direction cpu_delay_us() chose.
+ *
+ * Microseconds, because that is the unit the plan states these waits in: 8 us
+ * for DDI_BUF idle, 20 us for an IO power well. */
+#define WAIT_POLL_US 10u
+
+static int wait_bits_us(u32 reg, u32 mask, u32 want, u32 us)
+{
+    u32 tries = us / WAIT_POLL_US;
+    if (!tries) tries = 1;
+    for (u32 i = 0; i < tries; i++) {
+        if ((mmio_r(reg) & mask) == want) return 1;
+        cpu_delay_us(WAIT_POLL_US);
+    }
+    return (mmio_r(reg) & mask) == want;      /* one last look after the budget */
 }
 
 static u32 gpu_cfg(int off)
@@ -453,16 +498,30 @@ int intel_vblank_start(void){ return reg_lo(trans_base() + TRANS_OFF_VBLANK); }
  * count per frame, and a frame counter that increments once per vblank. Count
  * frames against the PIT for a known interval and the refresh rate falls out -
  * which also works on a panel running at 48 or 120 Hz, where an assumed 60
- * would silently be wrong. Returns milli-hertz to keep the fraction. */
+ * would silently be wrong. Returns milli-hertz to keep the fraction.
+ *
+ * This one genuinely needs idt_ticks(), because it is counting vblanks against
+ * wall time and the PIT tick IS the interval being measured. So it can only run
+ * with interrupts enabled, and both waits below are bounded to say so: with
+ * interrupts masked idt_ticks() never advances, and an unbounded
+ * `while (idt_ticks() == t0)` is a hang, not a wait. Bounded, it returns 0,
+ * which every caller already treats as "we do not know". */
+#define REFRESH_SPIN_MAX 200000000u
+
 u32 intel_refresh_mhz(void)
 {
     if (!intel_pipe_enabled()) return 0;
     u32 t0 = idt_ticks();
     /* wait for a tick edge so the interval is a whole number of ticks */
-    while (idt_ticks() == t0) { }
+    u32 spin = 0;
+    while (idt_ticks() == t0)
+        if (++spin > REFRESH_SPIN_MAX) return 0;      /* clock is not moving */
     u32 start_tick = idt_ticks();
     int f0 = intel_frame_count();
-    while (idt_ticks() - start_tick < 50) { }     /* 500 ms at 100 Hz */
+    spin = 0;
+    while (idt_ticks() - start_tick < 50) {        /* 500 ms at 100 Hz */
+        if (++spin > REFRESH_SPIN_MAX) return 0;
+    }
     int f1 = intel_frame_count();
     u32 elapsed = idt_ticks() - start_tick;
     if (!elapsed) return 0;
@@ -471,13 +530,93 @@ u32 intel_refresh_mhz(void)
     return (frames * 100000u) / elapsed;
 }
 
-/* pixel clock in kHz, from the mode and the measured refresh */
+/* ---- the pixel clock, without needing the frame counter to move ---------
+ *
+ * The measurement above is honest but it has a hole: PSR. With self-refresh
+ * enabled the panel redraws itself from its own memory, the pipe is not
+ * fetching, and the frame counter does not advance. Firmware leaves PSR on on
+ * this laptop (EDP_PSR_CTL = 0x81F00406), so intel_refresh_mhz() returns 0 and
+ * intel_pixel_clock_khz() returned 0 with it.
+ *
+ * The failure is worse than a flat zero, and this is the part that argues for
+ * replacing it rather than working around it: whether the counter moves depends
+ * on whether the panel happens to be in self-refresh at that instant. Measured
+ * both ways on this machine - 0.0 Hz with an idle screen, a correct 60.0 Hz
+ * with a terminal scrolling on it. So it passes in testing and returns zero in
+ * the field, and every bandwidth, watermark and link-rate decision downstream
+ * was resting on an assumed 60 Hz that nothing checked.
+ *
+ * There is an exact answer sitting in a register. A DP link runs at a fixed
+ * symbol rate regardless of the mode, so the transcoder carries a ratio that
+ * reconciles the two clocks, and PIPE_LINK_M1/N1 hold precisely
+ * pixel_clock : link_clock. Scale the link clock by it and the pixel clock
+ * falls out - no timer, no moving counter, and correct while PSR is on.
+ *
+ * Verified against this panel: LINK_M1 = 0x00072943 (469315), LINK_N1 =
+ * 0x00080000 (524288), link clock 270000 kHz -> 241690 kHz, which is the
+ * pixel clock in the panel's own EDID detailed timing descriptor (0x5E69 in
+ * units of 10 kHz) to the kHz. So the assumed 60 Hz was very nearly right -
+ * 59.998 Hz - but it is now read rather than assumed, and the same code
+ * reports a 48 Hz or 120 Hz panel correctly.
+ *
+ * m is truncated when the ratio is built, so the true quotient sits just above
+ * it: round rather than truncate on the way back, or lose a kHz. */
+#define M_N_FIELD_MASK  0xFFFFFFu        /* both M and N are 24-bit fields */
+
+/* all three are defined with the DPLL code further down */
+u32 intel_dp_link_symbol_khz(int rate_idx);
+int intel_ddi_clock_select(int ddi);
+int intel_dpll_link_rate(int pll);
+
+u32 intel_pixel_clock_mn_khz(void)
+{
+    if (!intel_present()) return 0;
+
+    /* eDP transcoder only, and that is a correctness limit rather than
+     * laziness. The ratio is against the LINK clock, so this needs to know
+     * which port's DPLL to ask - and the answer is only knowable for free on
+     * this transcoder, whose DDI-select field is ignored because it is
+     * hardwired to DDI A. On transcoder A the field is live and the port could
+     * be B, C or D, so asking DDI A would pair one transcoder's ratio with
+     * another port's clock and return a wrong pixel clock with no symptom.
+     * Say nothing instead and let the caller fall back. */
+    u32 base = trans_base();
+    if (base != TRANS_EDP_BASE) return 0;
+
+    u32 m = mmio_r(base + TRANS_OFF_LINK_M1) & M_N_FIELD_MASK;
+    u32 n = mmio_r(base + TRANS_OFF_LINK_N1) & M_N_FIELD_MASK;
+    if (!m || !n) return 0;                  /* no DP link on this transcoder */
+
+    /* Which DPLL feeds DDI A, and at what rate is it running? */
+    int pll = intel_ddi_clock_select(0);
+    u32 link_khz = intel_dp_link_symbol_khz(intel_dpll_link_rate(pll));
+    if (!link_khz) return 0;
+
+    return (u32)(((u64)link_khz * (u64)m + (u64)(n / 2)) / (u64)n);
+}
+
+/* pixel clock in kHz. The M/N ratio is exact and survives PSR, so it is the
+ * first choice; the frame-counter measurement is the fallback for a path that
+ * has no M/N to read, which on this hardware means HDMI. */
 u32 intel_pixel_clock_khz(void)
 {
+    u32 khz = intel_pixel_clock_mn_khz();
+    if (khz) return khz;
+
     u32 mhz = intel_refresh_mhz();
     if (!mhz) return 0;
     u64 dots = (u64)intel_htotal() * (u64)intel_vtotal();
     return (u32)((dots * (u64)mhz) / 1000000u);
+}
+
+/* Refresh rate derived from the pixel clock rather than counted, in milli-hertz.
+ * Works while PSR has the counter frozen, which is when it is actually needed. */
+u32 intel_refresh_mhz_derived(void)
+{
+    u32 khz = intel_pixel_clock_khz();
+    u64 dots = (u64)intel_htotal() * (u64)intel_vtotal();
+    if (!khz || !dots) return 0;
+    return (u32)(((u64)khz * 1000000u + dots / 2) / dots);
 }
 
 int intel_flip_count(void) { return (int)mmio_r(PIPE_FLIPCNT_A); }
@@ -724,6 +863,42 @@ u32 intel_watermark(int level)
 }
 u32 intel_ddi_func_ctl(void) { return mmio_r(TRANS_DDI_EDP); }
 
+/* How many lanes the port is running: bits 3:1 hold lanes-1. */
+int intel_ddi_lanes(void)
+{
+    return (int)((mmio_r(TRANS_DDI_EDP) >> 1) & 0x7) + 1;
+}
+
+/* Bits per pixel, from TRANS_DDI_FUNC_CTL bits 22:20.
+ *
+ * Two registers on the same transcoder encode bpc, and they DISAGREE:
+ *
+ *    TRANS_DDI_FUNC_CTL 22:20   0=8  1=10  2=6  3=12
+ *    TRANS_MSA_MISC     7:5     0=6  1=8   2=10 3=12
+ *
+ * So the same field value means 8 bpc in one and 6 bpc in the other. Reading
+ * this register with the MSA table gets 6 bpc on a panel running at 8, which
+ * under-computes every bandwidth figure by 25% and picks a link rate that
+ * trains and then cannot carry a frame. Hence one accessor, here, with the
+ * table written down next to it. */
+int intel_ddi_bpp(void)
+{
+    /* The field is three bits wide and only four values are defined; 4..7 are
+     * reserved. Report 0 for those rather than folding them onto a real bpc -
+     * 0 propagates as "we do not know" and gets rejected downstream, which is
+     * the behaviour this file already settled on for an unknown pixel clock. */
+    static const int bpc[8] = { 8, 10, 6, 12, 0, 0, 0, 0 };
+    return bpc[(mmio_r(TRANS_DDI_EDP) >> 20) & 0x7] * 3;
+}
+
+/* M/N as the hardware currently holds it, for comparing against a computation.
+ * DATA_M1 is returned raw, TU_SIZE field and all, because that is what has to
+ * be reproduced by a write. */
+u32 intel_data_m1_reg(void) { return mmio_r(trans_base() + TRANS_OFF_DATA_M1); }
+u32 intel_data_n1_reg(void) { return mmio_r(trans_base() + TRANS_OFF_DATA_N1); }
+u32 intel_link_m1_reg(void) { return mmio_r(trans_base() + TRANS_OFF_LINK_M1); }
+u32 intel_link_n1_reg(void) { return mmio_r(trans_base() + TRANS_OFF_LINK_N1); }
+
 /* ==== the DPLLs =========================================================
  * This is the part a real modesetting driver lives or dies on, and the part
  * that could not be developed at all until the host harness made the registers
@@ -817,7 +992,17 @@ int intel_ddi_clock_select(int ddi)
 {
     if (ddi < 0 || ddi > 4) return -1;
     u32 v = mmio_r(DPLL_CTRL2);
-    if ((v >> (ddi * 3 + 15)) & 1) { }        /* select override, informational */
+    /* The select override is bit (port*3 + 0). This line used to read
+     * (ddi*3 + 15), which for DDI A is bit 15 - the CLK_OFF bit, a different
+     * field entirely - and then discarded the result in an empty body. It is
+     * the same off-by-a-field that f652d56 fixed in intel_ddi_set_clock, still
+     * present in the reader.
+     *
+     * It matters here rather than being cosmetic: with the override clear the
+     * CLK_SEL bits are not what is driving the port, so returning them would
+     * be reporting a guess as a reading. Say "unknown" instead, the same way
+     * intel_dpll_link_rate() does for its own override. */
+    if (!((v >> (ddi * 3)) & 1)) return -1;
     return (int)((v >> (ddi * 3 + 1)) & 0x3);
 }
 
@@ -828,7 +1013,16 @@ int intel_ddi_clock_off(int ddi)
 }
 
 /* The link rate index in DPLL_CTRL1 is not a frequency, it is a table entry.
- * These are the symbol clocks in units of 10 kHz, from the Skylake PRM. */
+ *
+ * Three different clocks get called "the link rate" and confusing them is
+ * hazard 4.3 #10. For HBR the numbers are:
+ *
+ *    2700000 kbps   bit rate         "2.7 Gbps", what the DPCD reports
+ *    1350000 kHz    DPLL frequency   half the bit rate; DP is DDR. THIS TABLE.
+ *     270000 kHz    symbol rate      bit rate / 10, for 8b/10b. What M/N uses.
+ *
+ * So this returns DPLL frequencies, not symbol clocks - the comment here used
+ * to say "symbol clocks in units of 10 kHz", which is neither. */
 u32 intel_dpll_rate_khz(int idx)
 {
     switch (idx) {
@@ -840,6 +1034,15 @@ u32 intel_dpll_rate_khz(int idx)
         case 5: return 2160000;   /* DP 4.32 GHz */
     }
     return 0;
+}
+
+/* The link symbol clock: bit rate / 10, which is DPLL frequency * 2 / 10.
+ * This is the clock the M/N ratios are taken against, and the one number
+ * i915 confusingly also calls "port_clock". HBR -> 270000 kHz. */
+u32 intel_dp_link_symbol_khz(int rate_idx)
+{
+    u32 dpll_khz = intel_dpll_rate_khz(rate_idx);
+    return dpll_khz ? dpll_khz / 5u : 0;
 }
 
 /* Nothing in this file WRITES to the display engine unless it has been armed.
@@ -1175,11 +1378,7 @@ int intel_dpll_enable(int pll)
      * A modeset happens rarely and a generous bound costs nothing, so wait
      * half a second before giving up. Reporting failure on a PLL that was
      * merely slow is far worse than waiting. */
-    u32 t0 = idt_ticks();
-    while (idt_ticks() - t0 < 50) {          /* 500 ms */
-        if (intel_dpll_locked(pll)) return 1;
-    }
-    return intel_dpll_locked(pll);
+    return wait_bits_us(DPLL_STATUS, 1u << (pll * 8), 1u << (pll * 8), 500000u);
 }
 
 int intel_dpll_disable(int pll)
@@ -2316,11 +2515,10 @@ int intel_pwr_well_enable(int well)
     u32 v = mmio_r(PWR_WELL_CTL_DRIVER);
     mmio_w(PWR_WELL_CTL_DRIVER, v | PW_REQUEST(well));
 
-    u32 t0 = idt_ticks();
-    while (idt_ticks() - t0 < 3) {          /* the PRM allows 20 ms */
-        if (mmio_r(PWR_WELL_CTL_DRIVER) & PW_STATE(well)) return 1;
-    }
-    return (mmio_r(PWR_WELL_CTL_DRIVER) & PW_STATE(well)) ? 1 : 0;
+    /* The PRM allows 20 us for an IO well - the comment here used to say 20 ms,
+     * a thousand times too long. Budget 1 ms, as the plan does for every one of
+     * these short hardware handshakes. */
+    return wait_bits_us(PWR_WELL_CTL_DRIVER, PW_STATE(well), PW_STATE(well), 1000u);
 }
 
 int intel_pwr_well_disable(int well)
@@ -2437,6 +2635,99 @@ int intel_set_timings(u32 hactive, u32 hblank_start, u32 hsync_start, u32 hsync_
     return 1;
 }
 
+/* ==== M/N: reconciling a fixed link rate with an arbitrary pixel clock ====
+ *
+ * A DP link runs at one of a few fixed symbol rates. A panel wants whatever
+ * pixel clock its EDID asks for. The transcoder bridges the two with a pair of
+ * ratios it uses to meter data onto the link:
+ *
+ *    DATA M/N  = (bpp * pixel_clock) : (link_clock * lanes * 8)   payload share
+ *    LINK M/N  = pixel_clock : link_clock                         clock ratio
+ *
+ * Both are 24-bit fields. N is rounded UP to a power of two and then capped -
+ * 0x800000 for data, 0x80000 for link - and M follows from the ratio. The
+ * rounding is not decoration: a power-of-two N is what lets the hardware do the
+ * division by shifting.
+ *
+ * M is TRUNCATED, not rounded. That is worth stating because it is checkable:
+ * with this panel's numbers the algorithm has to land on exactly what firmware
+ * put in the registers, and rounding instead of truncating misses.
+ *
+ *   pixel 241690 kHz, link 270000 kHz, 4 lanes, 24 bpp
+ *     DATA  M 5631785 N 8388608   -> 0x7E55EF29 / 0x00800000
+ *     LINK  M  469315 N  524288   -> 0x00072943 / 0x00080000
+ *
+ * All four read back from this laptop bit for bit. That is the whole value of
+ * doing this on a machine whose firmware has already solved the same problem:
+ * a write path that has never executed still has a known-correct answer to be
+ * checked against, which is a much stronger test than "it compiles".
+ */
+#define M_N_TU_SIZE       64             /* transfer unit, always 64 on gen9 */
+#define M_N_DATA_N_MAX    0x800000u
+#define M_N_LINK_N_MAX    0x080000u
+
+/* results of the last computation, for a caller to inspect or program */
+static u32 mn_data_m = 0, mn_data_n = 0, mn_link_m = 0, mn_link_n = 0;
+
+/* N rounded up to a power of two, then capped. Stays in 32-bit arithmetic. */
+static u32 mn_round_n(u32 n, u32 cap)
+{
+    u32 p = 1;
+    while (p < n && p < cap) p <<= 1;
+    return p > cap ? cap : p;
+}
+
+static void mn_ratio(u32 m, u32 n, u32 cap, u32 *out_m, u32 *out_n)
+{
+    u32 rn = mn_round_n(n, cap);
+    u32 rm = (u32)(((u64)m * (u64)rn) / (u64)n);
+    /* If either field overflows 24 bits, halve both - the ratio survives. */
+    while (rm > M_N_FIELD_MASK || rn > M_N_FIELD_MASK) { rm >>= 1; rn >>= 1; }
+    *out_m = rm;
+    *out_n = rn;
+}
+
+/* Work out both ratios for a mode. link_khz is the SYMBOL clock (270000 for
+ * HBR), not the bit rate and not the DPLL frequency - see
+ * intel_dp_link_symbol_khz(). Returns 0 on an argument that cannot describe a
+ * real link, rather than quietly producing a ratio from it. */
+int intel_mn_compute(u32 pixel_khz, u32 link_khz, int lanes, int bpp)
+{
+    mn_data_m = mn_data_n = mn_link_m = mn_link_n = 0;
+    if (!pixel_khz || !link_khz || lanes < 1 || lanes > 4 || bpp < 6) return 0;
+
+    mn_ratio(pixel_khz * (u32)bpp, link_khz * (u32)lanes * 8u,
+             M_N_DATA_N_MAX, &mn_data_m, &mn_data_n);
+    mn_ratio(pixel_khz, link_khz, M_N_LINK_N_MAX, &mn_link_m, &mn_link_n);
+    return 1;
+}
+
+u32 intel_mn_data_m(void) { return mn_data_m; }
+u32 intel_mn_data_n(void) { return mn_data_n; }
+u32 intel_mn_link_m(void) { return mn_link_m; }
+u32 intel_mn_link_n(void) { return mn_link_n; }
+
+/* Write what intel_mn_compute() worked out. M2/N2 are the alternate set DRRS
+ * switches between; we do not do DRRS, and the plan says to leave them zero
+ * rather than mirroring M1/N1 - a non-zero M2/N2 with no DRRS logic is a
+ * second timing the hardware may switch to and nothing maintains. */
+int intel_mn_program(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (!mn_data_n || !mn_link_n) return 0;      /* nothing computed */
+    u32 base = trans_base();
+
+    mmio_w(base + TRANS_OFF_DATA_M1, ((M_N_TU_SIZE - 1) << 25) | mn_data_m);
+    mmio_w(base + TRANS_OFF_DATA_N1, mn_data_n);
+    mmio_w(base + TRANS_OFF_DATA_M2, 0);
+    mmio_w(base + TRANS_OFF_DATA_N2, 0);
+    mmio_w(base + TRANS_OFF_LINK_M1, mn_link_m);
+    mmio_w(base + TRANS_OFF_LINK_N1, mn_link_n);
+    mmio_w(base + TRANS_OFF_LINK_M2, 0);
+    mmio_w(base + TRANS_OFF_LINK_N2, 0);
+    return 1;
+}
+
 #define TRANS_CONF_ENABLE  (1u << 31)
 #define TRANS_CONF_STATE   (1u << 30)
 
@@ -2452,12 +2743,11 @@ int intel_transcoder_enable(int on)
     if (on) mmio_w(conf, v | TRANS_CONF_ENABLE);
     else    mmio_w(conf, v & ~TRANS_CONF_ENABLE);
 
-    u32 t0 = idt_ticks();
-    while (idt_ticks() - t0 < 10) {          /* 100 ms is generous */
-        int state = (mmio_r(conf) & TRANS_CONF_STATE) ? 1 : 0;
-        if (state == (on ? 1 : 0)) return 1;
-    }
-    return 0;
+    /* Poll STATE, not ENABLE. On the disable path especially: ENABLE reads back
+     * cleared the instant it is written and tells you nothing, while the pipe is
+     * still running on clocks the next teardown step is about to switch off.
+     * The plan gives this wait 100 ms (teardown step 7). */
+    return wait_bits_us(conf, TRANS_CONF_STATE, on ? TRANS_CONF_STATE : 0u, 100000u);
 }
 
 /* Configure the primary plane for a linear 32-bit surface. Kept separate from

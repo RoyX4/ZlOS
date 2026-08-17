@@ -62,8 +62,9 @@ Full researched plan with 13 source conflicts: `kernel/docs/gen9-modeset-plan.tx
 
 ## Stage 1 of that plan is DONE — every conflict settled on the real panel
 
-`hosttest/modeset_test.c --survey` is read-only and runs with i915 up. **18 passed,
-0 failed** (2026-08-17). It settles by measurement what the sources disagreed on:
+`hosttest/modeset_test.c --survey` is read-only and runs with i915 up. **21 passed,
+0 failed** (2026-08-17 — 18 for the four conflicts below, 3 more for the pixel
+clock). It settles by measurement what the sources disagreed on:
 
 | Was contested | Settled |
 |---|---|
@@ -82,11 +83,60 @@ Also captured: **`saved_port_bits = 0x00000010`** (DDI_A_4_LANES set, port
 reversal clear), CDCLK 337500 kHz, DPLL0 locked at rate_idx 1 (HBR).
 `TRANS_DDI_FUNC_CTL = 82010006` — the plan predicted `0x82000006` + PHSYNC. Match.
 
-**PSR is ON** (`EDP_PSR_CTL = 81F00406`). Two consequences: it must be cleared in
-Phase B step 4 before anything else, and it explains the probe's
-`frame counter 0 -> 0 = 0.0 Hz` — the panel is in self-refresh, so the pixel
-clock was never actually measured. Every bandwidth number still rests on an
-*assumed* 60 Hz.
+**PSR is ON** (`EDP_PSR_CTL = 81F00406`). It must be cleared in Phase B step 4
+before anything else, and it is why the frame counter reads `0 -> 0 = 0.0 Hz`
+when the screen is idle.
+
+## The pixel clock is MEASURED now: 241,690 kHz, 59.998 Hz
+
+It never had been, and every bandwidth, watermark and link-rate number rested on
+an assumed 60 Hz. It did **not** need PSR disabled. A DP link runs at a fixed
+symbol rate, so the transcoder holds a ratio reconciling it with the pixel clock,
+and `PIPE_LINK_M1/N1` *is* `pixel_clock : link_clock`. Read-only, exact, no
+timer, correct while PSR is on.
+
+Four independent sources agree, three of them registers this driver has to get
+right anyway:
+
+| Source | Says |
+|---|---|
+| `PIPE_LINK_M1/N1` = 0x72943 / 0x80000 × 270000 kHz | 241,690 kHz |
+| `PIPE_DATA_M1/N1` = 0x7E55EF29 / 0x800000, via bpp and lanes | 241,690 kHz (delta 0) |
+| Panel EDID detailed timing descriptor (`0x5E69` × 10 kHz) | 241,690 kHz |
+| Frame counter, *with the screen busy* | 60.0 Hz |
+
+So the assumed 60 Hz was right to 0.004% and **plan step 26 holds: 4 lanes @ HBR
+is the only working point** (5,800,560 kbps needed; 4×RBR gives 5,184,000).
+Confirmed with a real number rather than inherited from an assumption.
+
+Panel is an **LG LP140QH2-SPD**, 309×174 mm, hsync **positive**, vsync negative —
+which is exactly what `TRANS_DDI_FUNC_CTL = 0x82010006` encodes (b16 set, b17
+clear). Another cross-check that landed.
+
+**Do not trust the frame counter for this.** It is not reliably zero, it is
+*intermittently* zero — 0.0 Hz idle, a correct 60.0 Hz with a terminal scrolling.
+It passes in testing and returns 0 in the field.
+`intel_pixel_clock_khz()` uses M/N first and keeps the counter only as the
+fallback for a path with no M/N, which on this hardware means HDMI.
+
+## M/N is implemented and verified bit-for-bit against firmware
+
+Plan step 45 had **no implementation at all** — not a defective write path, an
+absent one, and a hard blocker for Phase H. `intel_mn_compute()` /
+`intel_mn_program()` now exist, and because firmware has already solved the same
+problem for the same mode, the computation has a known-correct answer to be
+checked against:
+
+```
+inputs: pixel 241690 kHz, link 270000 kHz symbol, 4 lanes, 24 bpp
+  DATA_M1 (with TU)  firmware 7E55EF29   ours 7E55EF29   MATCH
+  DATA_N1            firmware 00800000   ours 00800000   MATCH
+  LINK_M1            firmware 00072943   ours 00072943   MATCH
+  LINK_N1            firmware 00080000   ours 00080000   MATCH
+```
+
+M is **truncated**, not rounded — rounding misses. N is rounded *up* to a power
+of two then capped (0x800000 data, 0x80000 link). `--survey` is 21/21 now.
 
 ## The one thing blocking a cold-start modeset
 

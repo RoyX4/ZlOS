@@ -61,6 +61,10 @@ static u32 rd(unsigned off) { return *(volatile u32 *)(bar + off); }
 #define DC_STATE_EN         0x45504
 #define TRANS_HTOTAL_EDP    0x6F000
 #define TRANS_VTOTAL_EDP    0x6F00C
+#define PIPE_DATA_M1_EDP    0x6F030
+#define PIPE_DATA_N1_EDP    0x6F034
+#define PIPE_LINK_M1_EDP    0x6F040
+#define PIPE_LINK_N1_EDP    0x6F044
 
 /* skl_u_trans_edp - CML-U eDP low vswing, 10 entries. */
 static const u32 edp_tbl[10][2] = {
@@ -193,6 +197,67 @@ static void survey(void)
     u32 ht = rd(TRANS_HTOTAL_EDP), vt = rd(TRANS_VTOTAL_EDP);
     printf("         timings  %u active of %u total  x  %u active of %u total\n",
            (ht & 0xFFFF)+1, (ht>>16)+1, (vt & 0xFFFF)+1, (vt>>16)+1);
+
+    printf("\n-- the pixel clock, which had never been measured -----------------\n");
+    /* §6 item 4 called this blocking: 2720x1481 total implies 241.7 MHz only if
+     * the panel really runs at 60 Hz, and every bandwidth conclusion rested on
+     * that. The frame counter cannot settle it - PSR freezes it - but PIPE_LINK
+     * M/N can, because it holds pixel_clock : link_clock exactly.
+     *
+     * Worked here rather than through the driver, on purpose: the same rule
+     * that keeps this file on raw offsets. A measurement that goes through the
+     * code it is meant to check is not a measurement. */
+    u32 dm = rd(PIPE_DATA_M1_EDP), dn = rd(PIPE_DATA_N1_EDP);
+    u32 lm = rd(PIPE_LINK_M1_EDP), ln = rd(PIPE_LINK_N1_EDP);
+    unsigned lanes = ((ddi >> 1) & 7) + 1;
+    static const unsigned bpc_tbl[8] = { 8, 10, 6, 12, 0, 0, 0, 0 };
+    unsigned bpp = bpc_tbl[(ddi >> 20) & 7] * 3;
+    /* symbol clock = bit rate / 10 = DPLL frequency / 5 */
+    unsigned link_khz = (r0 < 6 ? rate_mhz[r0] * 1000u : 0) / 5u;
+
+    printf("         DATA_M1 %08X  DATA_N1 %08X   (TU %u)\n", dm, dn, ((dm>>25)&0x3F)+1);
+    printf("         LINK_M1 %08X  LINK_N1 %08X\n", lm, ln);
+    if (!(ln & 0xFFFFFF) || !link_khz) {
+        bad("pixel clock derivable from LINK M/N", "LINK_N1 or link clock reads zero");
+    } else {
+        /* round, not truncate: M was truncated when the ratio was built */
+        unsigned long long pix = ((unsigned long long)link_khz * (lm & 0xFFFFFF)
+                                  + (ln & 0xFFFFFF) / 2) / (ln & 0xFFFFFF);
+        unsigned long long dots = (unsigned long long)((ht>>16)+1) * ((vt>>16)+1);
+        unsigned long long mhz  = dots ? (pix * 1000000ull + dots/2) / dots : 0;
+        snprintf(b, sizeof b, "%llu kHz at %u lanes / %u bpp -> %llu.%03llu Hz",
+                 pix, lanes, bpp, mhz/1000, mhz%1000);
+        ok("pixel clock MEASURED, not assumed", b);
+
+        /* Cross-check against the other ratio. DATA is (bpp * pixel) :
+         * (link * lanes * 8), so it carries the same pixel clock by a different
+         * route - through bpp and the lane count. Agreement means the lane
+         * count, the bpc decode and the link rate are all right too; that is
+         * four readings confirming each other, not one being trusted. */
+        if (bpp && lanes && (dn & 0xFFFFFF)) {
+            unsigned long long pix2 =
+                ((unsigned long long)(dm & 0xFFFFFF) * link_khz * lanes * 8ull
+                 + (unsigned long long)(dn & 0xFFFFFF) * bpp / 2)
+                / ((unsigned long long)(dn & 0xFFFFFF) * bpp);
+            long long delta = (long long)pix2 - (long long)pix;
+            snprintf(b, sizeof b, "DATA M/N gives %llu kHz, LINK M/N %llu kHz (delta %lld)",
+                     pix2, pix, delta);
+            /* both ratios are truncated into 24-bit fields, so a kHz of
+             * disagreement out of 241690 is the encoding, not an error */
+            if (delta > -3 && delta < 3) ok("the two ratios agree", b);
+            else bad("the two ratios disagree - a decode is wrong", b);
+        }
+
+        /* The bandwidth conclusion the plan's step 26 rests on, now with a
+         * measured clock instead of an assumed one. */
+        unsigned long long need = pix * bpp;
+        snprintf(b, sizeof b, "need %llu kbps; 4xHBR 8640000, 4xRBR 5184000, 2xHBR 4320000",
+                 need);
+        if (need > 5184000ull && need <= 8640000ull)
+            ok("4 lanes @ HBR is the only working point", b);
+        else
+            hmm("bandwidth conclusion changed - re-read plan step 26", b);
+    }
 
     u32 psr = rd(EDP_PSR_CTL);
     snprintf(b, sizeof b, "EDP_PSR_CTL = %08X  enable=%d", psr, !!(psr>>31));
