@@ -47,6 +47,12 @@ def main():
     # relative events too - in which case the PS/2 mouse zlOS does drive never
     # sees them, exactly the way probe-mouse.py says a usb-MOUSE steals them.
     no_tablet = "--no-tablet" in sys.argv
+    # --abs sends ABSOLUTE events instead of relative ones. That is the other
+    # half of the question: the tablet is an absolute device, and another
+    # session is adding a USB pointer driver (xhci_ptr_*) for exactly it, so
+    # "the tablet steals the pointer" and "the tablet IS the pointer" have to
+    # be told apart by measurement rather than by argument.
+    use_abs = "--abs" in sys.argv
     build(False)
     tmp = tempfile.mkdtemp(prefix="zlos-msync-")
     ser_path, qmp_path = os.path.join(tmp, "ser"), os.path.join(tmp, "qmp")
@@ -68,11 +74,18 @@ def main():
                                      ("ten  (0, +10)",      10, 0, 10)):
             ser.send("x")
             ser.drain(1.5)
-            for _ in range(count):
-                ev = []
-                if dx: ev.append({"type": "rel", "data": {"axis": "x", "value": dx}})
-                if dy: ev.append({"type": "rel", "data": {"axis": "y", "value": dy}})
-                if ev: qmp.cmd("input-send-event", events=ev)
+            for step in range(count):
+                if use_abs:
+                    # walk across the screen in absolute space, 0..32767
+                    f = (step + 1) / float(count)
+                    qmp.cmd("input-send-event", events=[
+                        {"type": "abs", "data": {"axis": "x", "value": int(f * 0.75 * 32767)}},
+                        {"type": "abs", "data": {"axis": "y", "value": int(f * 0.50 * 32767)}}])
+                else:
+                    ev = []
+                    if dx: ev.append({"type": "rel", "data": {"axis": "x", "value": dx}})
+                    if dy: ev.append({"type": "rel", "data": {"axis": "y", "value": dy}})
+                    if ev: qmp.cmd("input-send-event", events=ev)
                 ser.drain(0.12)
             ser.drain(1.0)
             n, pos = report(ser)

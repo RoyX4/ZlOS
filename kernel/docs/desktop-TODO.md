@@ -37,13 +37,20 @@ trusting the arithmetic. A real 2560×1440 boot logs `back ON, drag ON`, the
 desktop draws (`shots/b1-2560.png`), and `probe-drag.py` moves the System
 Monitor 12.22% of the screen (`shots/b1-drag-2560-after.png`).
 
-**Two things that shot leaves behind, neither of them this task's:**
-- a **smear trail** of shadow slivers along the drag path. Arithmetic:
-  `fb_shadow(w, h, off = 8·u, soft = 6·u)` reaches `x + w + 28` at `u = 2`, and
-  the drag erases `bg_rest(dox, doy, dgw + 16, dgh + 16)` — **12 px short on
-  every step**. This is the "shadow halo artifact" 2d already promises to
-  delete along with the sticker drag. Now with a number attached.
-- dragging needs `-device usb-tablet` gone from `try.sh` — see T-5.
+**One thing that shot leaves behind, and it is not this task's:** a **smear
+trail** of shadow slivers along the drag path. Arithmetic:
+`fb_shadow(w, h, off = 8·u, soft = 6·u)` reaches `x + w + 28` at `u = 2`, and
+the drag erases `bg_rest(dox, doy, dgw + 16, dgh + 16)` — **12 px short on
+every step**. This is the "shadow halo artifact" 2d already promises to delete
+along with the sticker drag. Now with a number attached.
+
+**A trap this task walked into, worth reading before writing a pointer test.**
+zlOS reads *two* pointers — `xhci.c` drives the usb-tablet (absolute) and
+`idt.c` the PS/2 mouse (relative) — and `mouse_x()` prefers the tablet when it
+is present. So **the event type has to match the machine**. Sending relative
+events to a tablet-equipped guest made this gate report "dragging is a no-op"
+when dragging was fine, and removing the tablet made it pass *for the wrong
+reason*. See T-5, which is filed as a correction rather than a finding.
 
 **The original problem, for the record.** `#define BACK_MAX (1920 * 1200)` and
 `back_on = ((int)(width * height) <= BACK_MAX)`. The ThinkPad panel is

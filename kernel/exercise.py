@@ -294,14 +294,16 @@ def qemu_argv(tmp, uefi, ser_path, qmp_path, tablet=True):
         # absolute - the guest is told the position instead of a delta to
         # accumulate, so the cursor cannot drift away from the host's. This is
         # what try.sh attaches, so it is what the sweep must exercise.
-        # MEASURED 2026-08-18, probe-mouse-sync.py: the tablet is a THIEF, and
-        # not only of absolute events. With it attached QEMU routes the
-        # RELATIVE ones to it as well, so the PS/2 mouse zlOS actually drives
-        # receives nothing and the pointer sits pinned at the screen centre -
-        # 21 known deltas moved it zero pixels. Without it the decode is exact:
-        # one +10 goes to 410, ten of them to 510. That is the same failure the
-        # comment above blames on usb-MOUSE; the tablet does it too. try.sh has
-        # the same device list and therefore the same dead pointer.
+        # MEASURED 2026-08-18, probe-mouse-sync.py. zlOS reads TWO pointers and
+        # prefers the USB one: xhci.c drives this tablet (absolute) and idt.c
+        # the PS/2 mouse (relative). Both work - but only with the event type
+        # that matches. With the tablet attached, 21 RELATIVE deltas move the
+        # pointer zero pixels; ABSOLUTE events land it exactly (0.75/0.50 of
+        # the screen -> 1439,599 on 1920x1200). Without the tablet, relative
+        # events are exact instead. A pointer test that sends the wrong kind
+        # will report a dead pointer and be believed.
+        # tablet=False exercises the PS/2 fallback, which is what the laptop's
+        # TrackPoint actually is - not a synthetic case.
         *(("-device", "usb-tablet,bus=xhci.0") if tablet else ()),
         "-no-reboot", "-display", "none",
         "-chardev", f"socket,id=ser0,path={ser_path},server=on,wait=off",

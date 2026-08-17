@@ -7,16 +7,24 @@ goes through a SECOND pair of fixed buffers - bg_buf and sp_buf - each of which
 had its own compile-time pixel ceiling, and bg_buf's was 1920x1200. Above it
 bg_ok went to 0 and every drag silently became a no-op.
 
-zlOS reads the pointer from the PS/2 mouse on IRQ12 only (see probe-mouse.py),
-so this sends RELATIVE events. Absolute ones go to the usb-tablet, which zlOS
-has no driver for.
+zlOS reads TWO pointers and prefers the USB one: xhci.c drives the usb-tablet
+(absolute) and idt.c drives the PS/2 mouse (relative), and the mouse_x builtin
+takes the tablet when it is there. So the event type has to match the machine,
+and this defaults to the machine try.sh actually gives - tablet attached,
+ABSOLUTE events. Getting that backwards is not a theoretical hazard: it made an
+earlier run of this script report "dragging is a no-op" when the drag was fine
+and the harness was sending relative events into an absolute device.
 
   ./probe-drag.py                                  drag at whatever mode boots
   ./probe-drag.py --src /tmp/kernel-2560.zl        ...at 2560x1440
+  ./probe-drag.py --no-tablet                      the PS/2 path (the laptop's
+                                                   TrackPoint is PS/2, so this
+                                                   is not a synthetic case)
 
-It homes the pointer into the top-left corner first, because there is no way to
-ask the guest where the pointer currently is - the kernel clamps to the screen,
-so shoving it hard enough at the corner puts it somewhere known.
+Absolute mode needs no homing: the position IS the message. Relative mode homes
+into the top-left corner first, because there is no way to ask the guest where
+the pointer is and the kernel clamps to the screen, so overshooting the corner
+puts it somewhere known.
 """
 import argparse, os, subprocess, sys, tempfile
 
@@ -25,6 +33,14 @@ from exercise import Serial, Qmp, ppm_sample, frame_delta, qemu_argv, build, PRO
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHOTS = os.path.join(HERE, "shots")
+
+
+def absolute(qmp, x, y, w, h):
+    """put the pointer AT x,y. The HID logical range is 0..32767 across the
+    whole screen, so this is a proportion, not a pixel count."""
+    qmp.cmd("input-send-event", events=[
+        {"type": "abs", "data": {"axis": "x", "value": int(x * 32767 / (w - 1))}},
+        {"type": "abs", "data": {"axis": "y", "value": int(y * 32767 / (h - 1))}}])
 
 
 def rel(qmp, dx, dy):
@@ -61,6 +77,9 @@ def main():
     ap.add_argument("--grab", default="2110,120", help="x,y to press at")
     ap.add_argument("--drop", default="1100,760", help="x,y to release at")
     ap.add_argument("--boot-timeout", type=float, default=240)
+    ap.add_argument("--no-tablet", action="store_true",
+                    help="drop the usb-tablet and drive the PS/2 mouse with "
+                         "relative events instead")
     args = ap.parse_args()
 
     gx, gy = (int(v) for v in args.grab.split(","))
@@ -75,11 +94,12 @@ def main():
 
     tmp = tempfile.mkdtemp(prefix="zlos-drag-")
     ser_path, qmp_path = os.path.join(tmp, "ser"), os.path.join(tmp, "qmp")
-    # tablet=False is not optional here. With the usb-tablet attached QEMU
-    # keeps every pointer event for itself and zlOS's PS/2 mouse never sees
-    # one - measured in probe-mouse-sync.py. A drag test against a dead
-    # pointer would report "dragging is broken" for the wrong reason.
-    proc = subprocess.Popen(qemu_argv(tmp, False, ser_path, qmp_path, tablet=False),
+    # Default to the machine try.sh gives - tablet attached - and send the
+    # ABSOLUTE events that machine expects. An earlier version forced the
+    # tablet off because relative events were going nowhere, which passed for
+    # the wrong reason and hid that zlOS drives the tablet perfectly well.
+    proc = subprocess.Popen(qemu_argv(tmp, False, ser_path, qmp_path,
+                                      tablet=not args.no_tablet),
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         ser, qmp = Serial(ser_path), Qmp(qmp_path)
@@ -92,18 +112,26 @@ def main():
         ser.wait(PROMPT, 60)
         ser.drain(1.0)
 
-        # home: the kernel clamps the pointer to the screen, so overshooting
-        # the top-left corner leaves it at a position we know
-        for _ in range(50):
-            rel(qmp, -200, -200)
-        ser.drain(0.6)
+        # one screendump first, purely to learn the screen size - the absolute
+        # range is a proportion of it and guessing would put the press in the
+        # wrong place at any mode but the one the defaults were written for
+        probe = os.path.join(tmp, "probe.ppm")
+        qmp.screendump(probe)
+        sw, sh, _ = ppm_sample(probe)
 
-        step = 80
-        for _ in range(max(1, gx // step)):
-            rel(qmp, step, 0)
-        for _ in range(max(1, gy // step)):
-            rel(qmp, 0, step)
-        rel(qmp, gx % step, gy % step)
+        if args.no_tablet:
+            # relative: home into the corner, then walk out to the grab point
+            for _ in range(50):
+                rel(qmp, -200, -200)
+            ser.drain(0.6)
+            step = 80
+            for _ in range(max(1, gx // step)):
+                rel(qmp, step, 0)
+            for _ in range(max(1, gy // step)):
+                rel(qmp, 0, step)
+            rel(qmp, gx % step, gy % step)
+        else:
+            absolute(qmp, gx, gy, sw, sh)
         ser.drain(1.2)
 
         before = os.path.join(tmp, "before.ppm")
@@ -114,8 +142,12 @@ def main():
         # walk there, so the kernel's drag loop sees intermediate positions the
         # way it would from a hand
         steps = 24
-        for i in range(steps):
-            rel(qmp, (dx - gx) // steps, (dy - gy) // steps)
+        for i in range(1, steps + 1):
+            if args.no_tablet:
+                rel(qmp, (dx - gx) // steps, (dy - gy) // steps)
+            else:
+                absolute(qmp, gx + (dx - gx) * i // steps,
+                              gy + (dy - gy) * i // steps, sw, sh)
             ser.drain(0.08)
         ser.drain(0.6)
         btn(qmp, False)
