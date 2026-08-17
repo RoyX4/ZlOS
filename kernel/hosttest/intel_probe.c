@@ -186,6 +186,9 @@ int  intel_ddb_blocks(void);
 u32  intel_wm_compute_level0(u32 w, u32 bpp, u32 khz, u32 lat);
 
 int  intel_modeset_run(int port);
+int  intel_modeset_teardown(int port);
+int  intel_ggtt_map_range(u32 gfx_page, u32 phys_addr, int pages);
+u32  intel_aperture(void);
 int  intel_wm_save(void);
 int  intel_pipe_underrun(void);
 int  intel_modeset_set_from_hw(void);
@@ -303,9 +306,35 @@ int main(int argc, char **argv)
      * owns the device. */
     size_t bar0_len = 8u << 20;
 
-    void *map = mmap(NULL, bar0_len, unsafe ? (PROT_READ | PROT_WRITE) : PROT_READ,
-                     MAP_SHARED, fd, 0);
+    void *map = MAP_FAILED;
+    /* The 8 MiB map stops one byte short of the GGTT, which lives AT offset
+     * 8 MiB - so with only 8 MiB there is no way to build a page table, and no
+     * way to point the plane at memory we control. The kernel refuses the full
+     * BAR while i915 holds it, but a real modeset run has already unbound
+     * i915, so try 16 first and fall back. */
+    if (do_modeset) {
+        map = mmap(NULL, 16u << 20, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (map != MAP_FAILED) bar0_len = 16u << 20;
+    }
+    if (map == MAP_FAILED)
+        map = mmap(NULL, bar0_len, unsafe ? (PROT_READ | PROT_WRITE) : PROT_READ,
+                   MAP_SHARED, fd, 0);
     if (map == MAP_FAILED) { perror("mmap"); return 1; }
+
+    /* BAR2 is GMADR, the CPU's window onto whatever the GGTT maps. Writing
+     * there is how a framebuffer gets its pixels without the GPU executing
+     * anything. Only needed for a real modeset. */
+    void *aper = NULL; size_t aper_len = 0; int aper_fd = -1;
+    if (do_modeset) {
+        char ap[256];
+        snprintf(ap, sizeof ap, "%s/resource2", PCI_DEV);
+        aper_fd = open(ap, O_RDWR);
+        if (aper_fd >= 0) {
+            aper_len = 256u << 20;
+            aper = mmap(NULL, aper_len, PROT_READ | PROT_WRITE, MAP_SHARED, aper_fd, 0);
+            if (aper == MAP_FAILED) { aper = NULL; aper_len = 0; }
+        }
+    }
 
     /* --dump: every display register, one per line, for diffing. A modeset
      * touches a few dozen out of hundreds, and seeing exactly which ones is
@@ -350,7 +379,8 @@ int main(int argc, char **argv)
     printf("  mode            %s\n\n", unsafe ? "READ/WRITE (--unsafe)" : "read-only");
 
     /* hand the mapping to the driver - from here on it is zlOS's code */
-    intel_attach((uptr)map, (u32)bar0_len, 0, 0, (int)devid, host_cfg_read);
+    intel_attach((uptr)map, (u32)bar0_len, (uptr)aper, (u32)aper_len,
+                 (int)devid, host_cfg_read);
     intel_set_edid_buffer((uptr)edid_storage);
 
     printf("  supported       %s\n", intel_supported() ? "yes - Gen9/9.5" : "NO");
@@ -826,7 +856,54 @@ int main(int argc, char **argv)
             munmap(map, bar0_len); close(fd); close(cfg_fd);
             return 2;
         }
-        intel_modeset_set_fb(intel_surface(), (u32)intel_stride());
+        /* ---- build a framebuffer to actually display -------------------
+         * The first run failed here, and correctly: intel_surface() reads
+         * PLANE_SURF, which is 0 once i915 has switched the display off. It
+         * meant "no framebuffer" and arrived looking like "the framebuffer at
+         * address 0", so the modeset armed a scanout of nothing.
+         *
+         * There is no allocator here, but there is stolen memory - a block
+         * firmware reserves and Linux never manages, so it is ours and it is
+         * always present. Point the GGTT at it, paint through the aperture,
+         * and the plane has something real to scan out.
+         *
+         * Needs both the GGTT (BAR0 at offset 8 MiB) and the aperture (BAR2),
+         * which is why the mapping above tries for the full BAR. */
+        u32 fb_stride = 2560u * 4u;             /* linear XRGB8888 */
+        u32 fb_pages  = (fb_stride * 1440u + 4095u) / 4096u;
+        /* 1 MiB into the GGTT, not 0. Address 0 is a legitimate GGTT address,
+         * but "no framebuffer" is also spelled 0 everywhere else in this
+         * driver - which is exactly the ambiguity that failed the first run.
+         * Sidestep it entirely rather than special-case it. */
+        u32 fb_gfx    = 1u << 20;
+        int have_fb   = 0;
+
+        if (bar0_len >= (16u << 20) && aper && intel_stolen_base()) {
+            /* Skip the first megabyte of stolen memory - firmware keeps its
+             * own structures at the bottom of it. */
+            u32 phys = intel_stolen_base() + (1u << 20);
+            if (intel_ggtt_map_range(fb_gfx >> 12, phys, (int)fb_pages)) {
+                volatile u32 *px = (volatile u32 *)((volatile char *)aper + fb_gfx);
+                /* Something unmistakably ours: a colour gradient with a white
+                 * border, so a partial or mis-strided scanout is obvious
+                 * rather than looking like a plausible desktop. */
+                for (u32 y = 0; y < 1440; y++) {
+                    for (u32 x = 0; x < 2560; x++) {
+                        u32 c = (y < 4 || y >= 1436 || x < 4 || x >= 2556)
+                                ? 0x00FFFFFFu
+                                : ((x * 255u / 2560u) << 16) |
+                                  ((y * 255u / 1440u) << 8)  | 0x80u;
+                        px[y * (fb_stride / 4) + x] = c;
+                    }
+                }
+                have_fb = 1;
+            }
+        }
+        printf("  framebuffer: %s\n", have_fb
+               ? "GGTT mapped to stolen memory, test pattern painted"
+               : (bar0_len < (16u << 20) ? "NO - only 8 MiB of BAR0 (GGTT unreachable)"
+                                         : "NO - aperture or stolen memory missing"));
+        if (have_fb) intel_modeset_set_fb(fb_gfx, fb_stride);
 
         printf("  mode: %dx%d, %u kHz, %d lanes, %d bpp, stride %d\n",
                intel_hactive(), intel_vactive(), intel_pixel_clock_khz(),
@@ -854,6 +931,23 @@ int main(int argc, char **argv)
             printf("  FAILED AT PLAN STEP %d - the FAILED line above is where.\n",
                    intel_modeset_failed_at());
         }
+        /* ALWAYS tear down before giving the device back, success or failure.
+         * The first real run left a half-configured display behind - our
+         * transcoder config, our panel power, a plane pointed at address 0 -
+         * and i915 could not relight the panel from that state. The machine
+         * was alive and the screen was dead, which costs a power button.
+         * Handing back a clean device is not optional. */
+        printf("\n  tearing down so i915 gets a clean device...\n");
+        intel_link_train_arm(1);            /* teardown writes, so it needs arming */
+        int td_bad = intel_modeset_teardown(0);
+        intel_link_train_arm(0);
+        printf("  teardown: %s\n", td_bad == 0 ? "clean"
+               : td_bad < 0 ? "REFUSED (not armed)" : "completed with failures");
+        printf("  pipe %s, panel %s, port %s\n",
+               intel_pipe_enabled() ? "STILL ON" : "off",
+               intel_panel_on() ? "STILL ON" : "off",
+               (intel_ddi_func_ctl() >> 31) ? "STILL ON" : "off");
+
         munmap(map, bar0_len); close(fd); close(cfg_fd);
         return ok_run ? 0 : 3;
     }

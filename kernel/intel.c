@@ -3610,6 +3610,11 @@ int intel_modeset_set_link(u32 pixel_khz, int bpp, int phsync, int pvsync)
 int intel_modeset_set_fb(u32 gfx_addr, u32 stride_bytes)
 {
     if (!stride_bytes || (stride_bytes & 63)) return 0;   /* linear: 64 B units */
+    /* Reject a zero address rather than storing it. The caller that passed one
+     * had read PLANE_SURF back from a display i915 had already switched off,
+     * where it reads 0 - so "no framebuffer" arrived looking like a valid
+     * request to scan out from address zero. */
+    if (!gfx_addr) { ms_fb = 0; ms_stride = 0; return 0; }
     ms_fb = gfx_addr; ms_stride = stride_bytes;
     return 1;
 }
@@ -3732,10 +3737,22 @@ int intel_modeset_run_ex(int port, int dry)
 
     /* Step 56: PLANE_SURF arms everything, so it goes last - nothing written to
      * CTL/SIZE/STRIDE takes effect until it does (4.3 #3). */
-    if (ms_fb || ms_stride) {
+    /* A framebuffer address of zero is not "the framebuffer at address zero",
+     * it is "we have no framebuffer" - and the first real run proved the
+     * difference matters. It had a stride but no address, so it configured the
+     * plane and armed it at 0, which is a scanout of nothing and reported
+     * FAILED at the last step of an otherwise complete modeset.
+     *
+     * Both are required now, and a modeset with no surface is a legitimate
+     * outcome rather than a failure: link up, transcoder running, nothing
+     * being displayed yet. The kernel supplies a real framebuffer; the host
+     * harness only can if it can reach the GGTT. */
+    if (ms_fb && ms_stride) {
         MS_STEP(56, "plane configured",
                    intel_plane_configure(ms_hactive, ms_vactive, ms_stride));
         MS_STEP(56, "PLANE_SURF armed", intel_set_surface(ms_fb, (int)ms_stride));
+    } else {
+        MS_STEP_SOFT(56, "plane SKIPPED (no framebuffer)", 1);
     }
     MS_STEP_SOFT(57, "underrun telltale cleared", intel_pipe_underrun_clear());
 
@@ -3750,3 +3767,67 @@ int intel_modeset_run_ex(int port, int dry)
 int intel_modeset_run(int port) { return intel_modeset_run_ex(port, 0); }
 int intel_modeset_dry(int port) { return intel_modeset_run_ex(port, 1); }
 int intel_modeset_was_dry(void) { return ms_dry; }
+
+/* ==== teardown: never hand the device back half-configured ===============
+ *
+ * The first real run ended with 31 of 32 steps green and a dark screen that
+ * needed a power button. The modeset itself was not the problem: it failed at
+ * the last step and then the harness rebound i915 - onto a display engine
+ * still holding OUR transcoder config, OUR panel power, and a plane pointed at
+ * address zero. i915 took the device back and could not light it from there.
+ *
+ * So a failed modeset must undo itself. This is plan section 3, in its order,
+ * and the order matters as much here as on the way up: backlight before video
+ * (H5 - video stopping under a lit backlight shows garbage and, on some
+ * panels, is a current transient in the LED driver), pipe fully off before the
+ * clocks it uses are switched off, and the T12 epoch stamped at the end so the
+ * next power-on knows what it owes.
+ *
+ * Best effort by design: every step runs even if an earlier one failed,
+ * because a teardown that gives up halfway is exactly the state it exists to
+ * prevent. Returns the number of steps that did not report success. */
+int intel_modeset_teardown(int port)
+{
+    if (!intel_present() || !lt_armed) return -1;
+    int bad = 0;
+
+    /* 1-3: backlight off, wait T9, then the PWM itself. */
+    if (!intel_panel_backlight_enable(0)) bad++;
+    {
+        u32 t9 = (u32)intel_pp_t9() / 10u;          /* 100 us units -> ms */
+        cpu_delay_ms(t9 < 260u ? 260u : t9);        /* H5 - not optional */
+    }
+    if (!intel_backlight_pwm_disable()) bad++;
+
+    /* 4: PSR, in case anything re-armed it. */
+    if (mmio_r(EDP_PSR_CTL) & 0x80000000u) intel_psr_disable();
+
+    /* 5: plane and cursor off. CTL first, then SURF/BASE - the SURF write is
+     * what arms the CTL=0, exactly as it arms a real surface. */
+    mmio_w(PLANE_CTL_1_A, 0);
+    mmio_w(PLANE_SURF_1_A, 0);
+    mmio_w(CUR_CTL_A, 0);
+    mmio_w(CUR_BASE_A, 0);
+
+    /* 7: the pipe, waiting on STATE - polling ENABLE reads back cleared at
+     * once and tells you nothing while the pipe still runs on clocks step 13
+     * is about to remove. */
+    if (!intel_transcoder_enable(0)) bad++;
+
+    /* 8-11: transcoder function, then the port. The idle wait comes AFTER
+     * both disables, not between them. */
+    if (!intel_trans_ddi_ctl_disable()) bad++;
+    if (!intel_port_disable(port)) bad++;
+
+    /* 13: gate DDI A's clock off. DPLL0 is left alone - it feeds CDCLK. */
+    mmio_w(DPLL_CTRL2, mmio_r(DPLL_CTRL2) | (1u << 15));
+
+    /* 14: panel down, which stamps the T12 epoch. */
+    if (!intel_panel_power_off()) bad++;
+
+    /* 16: release the DDI A/E IO well. A well the DMC or BIOS is holding on
+     * will not drop, and that is informational rather than an error. */
+    intel_pwr_well_disable(PW_DDI_A_E);
+
+    return bad;
+}
