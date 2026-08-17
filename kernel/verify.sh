@@ -17,11 +17,21 @@ OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT
 # Then: h=help, 20f=fib(20), 10s=sum_squares(10), m=poke/peek proof, q=halt.
 KEYS='.h20f10smq'
 
-printf '%s' "$KEYS" | timeout 30 qemu-system-i386 \
+# Wait for the answer, not a fixed wall clock. Under TCG the boot time depends
+# on host load, and a fixed timeout turns a busy machine into a failed gate on
+# an unchanged kernel. 'halting' is the last thing the kernel prints for 'q'.
+CEILING=180
+printf '%s' "$KEYS" | timeout "$CEILING" qemu-system-i386 \
     -kernel kernel.elf -serial stdio -display none -no-reboot \
-    -device isa-debug-exit,iobase=0xf4,iosize=0x04 >"$OUT" 2>/dev/null
-rc=$?
-[ "$rc" -eq 124 ] && { echo "FAIL: kernel timed out - it hung"; exit 1; }
+    -device isa-debug-exit,iobase=0xf4,iosize=0x04 >"$OUT" 2>/dev/null &
+QPID=$!
+for _ in $(seq $((CEILING * 2))); do
+    grep -q "halting" "$OUT" 2>/dev/null && break
+    kill -0 "$QPID" 2>/dev/null || break
+    sleep 0.5
+done
+kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null
+grep -q "halting" "$OUT" 2>/dev/null || { echo "FAIL: kernel never halted - it hung"; exit 1; }
 [ -s "$OUT" ]     || { echo "FAIL: no serial output - it did not boot"; exit 1; }
 
 tr -d '\r' < "$OUT" > "$OUT.c" && mv "$OUT.c" "$OUT"

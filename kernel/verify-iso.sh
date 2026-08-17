@@ -30,10 +30,31 @@ check() {
     echo "  ok    $label - $(grep -oE '(framebuffer|VGA text) console, [0-9]+x[0-9]+' "$log" | head -1)"
 }
 
+# Boot and wait for the console line, rather than for a fixed number of seconds.
+# Two full QEMU boots run in this script and both were on fixed timeouts, which
+# makes the gate a function of host load instead of of the kernel.
+boot_until() {           # $1 = log file, rest = qemu argv
+    local log="$1"; shift
+    local ceiling=180
+    timeout "$ceiling" "$@" >/dev/null 2>&1 &
+    local pid=$!
+    # Wait for the LAST thing check() requires, which is the prompt - not the
+    # console line. The console line is printed early in boot, so waiting on it
+    # kills QEMU before "ready." is ever emitted and the gate then reports
+    # "booted but never reached the prompt" on a perfectly healthy kernel.
+    for _ in $(seq $((ceiling * 2))); do
+        grep -q "ready\." "$log" 2>/dev/null && break
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 0.5
+    done
+    sleep 1        # let the line after the prompt land before we kill it
+    kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+}
+
 echo "== ISO: legacy BIOS boot =="
 BLOG=$(mktemp)
-timeout 40 qemu-system-i386 -cdrom zlOS.iso -display none \
-    -serial "file:$BLOG" -no-reboot >/dev/null 2>&1
+boot_until "$BLOG" qemu-system-i386 -cdrom zlOS.iso -display none \
+    -serial "file:$BLOG" -no-reboot
 tr -d '\r' < "$BLOG" > "$BLOG.c" && mv "$BLOG.c" "$BLOG"
 check "BIOS" "$BLOG"
 
@@ -43,11 +64,11 @@ if [ ! -f "$OVMF_CODE" ]; then
 else
     VARS=$(mktemp); cp "$OVMF_VARS" "$VARS"
     ULOG=$(mktemp)
-    timeout 50 qemu-system-x86_64 \
+    boot_until "$ULOG" qemu-system-x86_64 \
         -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,unit=1,file="$VARS" \
         -cdrom zlOS.iso -display none \
-        -serial "file:$ULOG" -no-reboot >/dev/null 2>&1
+        -serial "file:$ULOG" -no-reboot
     tr -d '\r' < "$ULOG" > "$ULOG.c" && mv "$ULOG.c" "$ULOG"
     check "UEFI" "$ULOG"
     # Under UEFI there is no VGA text mode, so a framebuffer is the ONLY way

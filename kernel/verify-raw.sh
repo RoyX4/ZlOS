@@ -11,10 +11,29 @@ command -v nasm >/dev/null || { echo "skip: no nasm"; exit 0; }
 ./mkdisk.sh >/dev/null 2>&1 || { echo "FAIL: disk image did not build"; exit 1; }
 
 OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT
+
+# Wait for the ANSWER, not for a fixed wall-clock time.
+#
+# This used to be `timeout 30`. Under TCG emulation the whole boot plus the help
+# text is a couple of KiB over a simulated 115200 line, and how long that takes
+# depends entirely on what else the host is doing - measured anywhere from 12 s
+# to well past 30 s on the same unchanged kernel. So the gate reported failures
+# that were host load, not kernel behaviour, which is worse than no gate at all:
+# it costs a bisect every time. Poll for the marker instead and give it a
+# generous ceiling; a healthy kernel now finishes as fast as the host allows,
+# and only a genuinely stuck one waits out the ceiling.
+CEILING=180
 # .=throwaway, h=help, 20f=fib(20), q=halt
-printf '.h20fq' | timeout 30 qemu-system-i386 \
+printf '.h20fq' | timeout "$CEILING" qemu-system-i386 \
     -drive file=zlOS.img,format=raw -serial stdio -display none -no-reboot \
-    >"$OUT" 2>/dev/null
+    >"$OUT" 2>/dev/null &
+QPID=$!
+for _ in $(seq $((CEILING * 2))); do
+    grep -q "6765" "$OUT" 2>/dev/null && break
+    kill -0 "$QPID" 2>/dev/null || break      # qemu exited on its own
+    sleep 0.5
+done
+kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null
 tr -d '\r' < "$OUT" > "$OUT.c" && mv "$OUT.c" "$OUT"
 
 fail=0
