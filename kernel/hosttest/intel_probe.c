@@ -170,6 +170,21 @@ u32 host_cfg_read(int bus, int dev, int fn, int off)
 
 /* intel.c's timing helpers call this; on the host a monotonic 100 Hz stand-in
  * is enough, and it keeps the driver source identical. */
+/* intel.c needs real timing now (cpu.c provides it in the kernel; here we are
+ * a Linux process, so nanosleep is both simpler and more accurate than any
+ * spin). Without these three the link fails at cpu_delay_us. */
+void cpu_delay_us(unsigned int us)
+{
+    struct timespec ts = { (long)(us / 1000000u), (long)(us % 1000000u) * 1000L };
+    while (nanosleep(&ts, &ts) == -1) { }
+}
+void cpu_delay_ms(unsigned int ms) { cpu_delay_us(ms * 1000u); }
+unsigned int cpu_now_ms(void)
+{
+    struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
+    return (unsigned int)(t.tv_sec * 1000ull + t.tv_nsec / 1000000ull);
+}
+
 u32 idt_ticks(void)
 {
     struct timespec ts;

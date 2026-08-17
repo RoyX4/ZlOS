@@ -45,6 +45,14 @@ typedef unsigned int       uptr;
 
 u32 idt_ticks(void);
 
+/* Real timing, from cpu.c's PIT-calibrated TSC. idt_ticks() resolves 10 ms and
+ * stops advancing when interrupts are masked, which is the state a modeset runs
+ * in - it cannot express a 100 us link-training wait and must not be used for
+ * one. Every host harness that links intel.c has to provide these three. */
+void cpu_delay_us(u32 us);
+void cpu_delay_ms(u32 ms);
+u32  cpu_now_ms(void);
+
 int  pci_count(void);
 int  pci_vendor(int i);
 int  pci_device(int i);
@@ -150,6 +158,25 @@ u32  pci_read32(int bus, int dev, int fn, int off);
 #define GMBUS_HW_RDY      (1u << 11)
 #define GMBUS_NAK         (1u << 10)
 #define GMBUS_ACTIVE      (1u << 9)
+
+/* Panel-power bits. These live up here rather than beside the sequencer code
+ * because aux_xfer() needs them: it must refuse to drive AUX into a panel
+ * whose VDD is down, and it sits 500 lines above that code. */
+#define PP_ON             (1u << 0)
+/* b1 is PANEL_POWER_RESET, "power down on reset". It must stay SET: with it
+ * clear, any reset drops VDD instantly under live video instead of running the
+ * ordered T9/T10 sequence. It measures 1 on this box only because firmware
+ * left it that way - so we assert it on every write rather than preserve it. */
+#define PP_PWR_DOWN_ON_RESET (1u << 1)
+#define PP_RESET          PP_PWR_DOWN_ON_RESET   /* old name, same bit */
+#define PP_BACKLIGHT_EN   (1u << 2)
+#define PP_VDD_FORCE      (1u << 3)
+
+#define PP_STATUS_ON      (1u << 31)
+#define PP_STATUS_SEQ     (3u << 28)    /* sequencing progress */
+#define PP_SEQ_NONE       (0u << 28)
+#define PP_SEQ_POWER_UP   (1u << 28)
+#define PP_SEQ_POWER_DOWN (2u << 28)
 
 /* ---- panel power and backlight ---------------------------------------
  * On a laptop these are the difference between a driver that can dim the
@@ -861,6 +888,14 @@ u32 intel_dp_link_bandwidth_kbps(int rate_idx, int lanes)
 u32 intel_mode_bandwidth_kbps(u32 pixel_khz, int bpp)
 {
     if (bpp <= 0) bpp = 24;
+    /* A zero pixel clock is not "needs no bandwidth" - it is "we do not know",
+     * and it happens for real: intel_pixel_clock_khz() derives from the frame
+     * counter, which is frozen whenever PSR is enabled. Returning 0 made the
+     * rate chooser accept the very first candidate, which is RBR - a rate that
+     * cannot carry this panel's mode. Training would pass and the screen stay
+     * black. Report 0 only for a genuinely zero-bandwidth mode, never as a
+     * side effect of not knowing. */
+    if (!pixel_khz) return 0;
     return pixel_khz * (u32)bpp;
 }
 
@@ -1183,7 +1218,12 @@ int intel_ddi_set_clock(int ddi, int pll)
     u32 v = mmio_r(DPLL_CTRL2);
     v &= ~(0x3u << (ddi * 3 + 1));            /* clear the select      */
     v |=  ((u32)pll << (ddi * 3 + 1));        /* ...and set it         */
-    v |=  (1u << (ddi * 3 + 3));              /* select override on    */
+    /* Override lives at bit (ddi*3), NOT (ddi*3 + 3). This was setting the
+      * NEXT port's override bit: asking for DDI A set DDI B's. It survives on
+      * this machine only because firmware left DDI A's b0 set - measured
+      * DPLL_CTRL2 = 0x00A30001, b0 set and b3 clear. First cold start without
+      * firmware's help, it would have failed with nothing to print. */
+    v |=  (1u << (ddi * 3));                  /* select override on    */
     v &= ~(1u << (ddi + 15));                 /* clock off -> off      */
     mmio_w(DPLL_CTRL2, v);
     return 1;
@@ -1214,8 +1254,64 @@ int intel_ddi_set_clock(int ddi, int pll)
  * failing, and a driver that treats a defer as an error will look flaky on
  * hardware that is working correctly.
  */
+/* DC5/DC6 gate power well 1, and AUX channel A lives in PG1. With a DC state
+ * armed, AUX register reads return zeros and writes go nowhere - with no error
+ * bit set anywhere. This is the documented number-one cause of "AUX works on
+ * some boots". Measured on this box going 0 -> 2 between two runs minutes
+ * apart, so it is not hypothetical. Defined up here because aux_xfer needs it. */
+#define DC_STATE_EN         0x45504
+
+#define DC_STATE_DISABLE        0u
+#define DC_STATE_EN_UPTO_DC5    (1u << 0)
+#define DC_STATE_EN_UPTO_DC6    (2u << 0)
+#define DC_STATE_EN_DC9         (1u << 3)
+
 #define DP_AUX_CH_CTL(port)   (0x64010 + (port) * 0x100)
 #define DP_AUX_CH_DATA(port, i) (0x64014 + (port) * 0x100 + (i) * 4)
+#define DP_AUX_MUTEX(port)    (0x6402C + (port) * 0x100)
+#define AUX_MUTEX_ENABLE      (1u << 31)
+#define AUX_MUTEX_HELD        (1u << 30)
+
+/* Force every DC state off and make it stick.
+ *
+ * The DMC firmware re-arms DC5/DC6 behind our back, so a single write loses a
+ * race we would never see - the register reads back correct once and is wrong
+ * by the time AUX runs. The plan's rule is to keep writing until the value
+ * holds across six consecutive reads. No wall-clock timeout: this either
+ * settles in a few iterations or the DMC is fighting us, and spinning a bounded
+ * 100 times is cheaper than reasoning about how long that takes. */
+static void dc_states_off(void)
+{
+    for (int attempt = 0; attempt < 100; attempt++) {
+        mmio_w(DC_STATE_EN, DC_STATE_DISABLE);
+        int stable = 0;
+        for (; stable < 6; stable++)
+            if (mmio_r(DC_STATE_EN) != DC_STATE_DISABLE) break;
+        if (stable == 6) return;
+    }
+}
+
+/* The AUX channel is shared with the hardware's own users - PSR fast-wake and
+ * GTC both issue transactions on it without asking. The mutex is how you tell
+ * them to wait, and it has an unusual protocol: READING the register while
+ * enabled IS the acquire attempt. Read back 0 in the HELD bit and it is ours;
+ * read 1 and somebody else has it.
+ *
+ * PSR is measured ON on this panel, so this is not optional. */
+static int aux_mutex_acquire(int port)
+{
+    for (int i = 0; i < 20; i++) {                /* 20 x 500 us = 10 ms */
+        mmio_w(DP_AUX_MUTEX(port), AUX_MUTEX_ENABLE);
+        if (!(mmio_r(DP_AUX_MUTEX(port)) & AUX_MUTEX_HELD)) return 1;
+        cpu_delay_us(500);
+    }
+    return 0;
+}
+
+static void aux_mutex_release(int port)
+{
+    mmio_w(DP_AUX_MUTEX(port), AUX_MUTEX_ENABLE | AUX_MUTEX_HELD);
+}
 
 #define AUX_SEND_BUSY     (1u << 31)
 #define AUX_DONE          (1u << 30)
@@ -1239,12 +1335,13 @@ static u8 aux_buf[20];
 static int aux_last_reply = -1;
 static int aux_last_len   = 0;
 
-/* One raw transaction. Returns the number of bytes received, or -1. */
-static int aux_xfer(int port, u32 cmd, u32 addr, const u8 *out, int out_len,
-                    u8 *in, int in_len)
+/* The transaction itself, run with the AUX mutex already held. Split out from
+ * aux_xfer() below purely so that the mutex cannot leak: this function has
+ * eight exit paths, and a release on each is a release that will eventually be
+ * forgotten. The wrapper owns acquire and release; this owns the protocol. */
+static int aux_xfer_locked(int port, u32 cmd, u32 addr, const u8 *out, int out_len,
+                           u8 *in, int in_len)
 {
-    if (!intel_present() || port < 0 || port > 3) return -1;
-    if (out_len > 16 || in_len > 16) return -1;
 
     u32 ctl_reg = DP_AUX_CH_CTL(port);
 
@@ -1259,10 +1356,15 @@ static int aux_xfer(int port, u32 cmd, u32 addr, const u8 *out, int out_len,
     msg[msg_len++] = (u8)((out_len ? out_len : in_len) - 1);
     for (int i = 0; i < out_len; i++) msg[msg_len++] = out[i];
 
-    /* clear any stale status before starting - these bits are write-1-clear
-     * and a leftover DONE makes the very next poll return immediately */
-    mmio_w(ctl_reg, mmio_r(ctl_reg) |
-           AUX_DONE | AUX_TIMEOUT_ERR | AUX_RECEIVE_ERR | AUX_INTERRUPT);
+    /* There used to be a read-modify-write status pre-clear here. It was a
+     * loaded gun: if SEND_BUSY happened to be set in the value read back -
+     * which PSR's own fast-wake transactions on this same channel will do -
+     * writing it back LAUNCHES a second transaction, with whatever stale bytes
+     * are still in DATA1-5 and whatever stale Message Size is in the register.
+     * It also preserved timeout field [27:26] = 00b, the forbidden 400 us
+     * setting. The send write below already folds all three write-1-clear bits
+     * into the same write that starts the transaction, which is the documented
+     * way to do this, so nothing is lost by deleting it. */
 
     for (int i = 0; i < 5; i++) {
         u32 w = 0;
@@ -1279,23 +1381,42 @@ static int aux_xfer(int port, u32 cmd, u32 addr, const u8 *out, int out_len,
                AUX_FW_SYNC_PULSE_SKL(32) | AUX_SYNC_PULSE_SKL(32);
     mmio_w(ctl_reg, send);
 
-    /* SEND_BUSY clears when the transaction completes, one way or another */
+    /* SEND_BUSY clears when the transaction completes, one way or another.
+     * Poll on a real clock: the hardware's own timeout is 1600 us, so a 10 ms
+     * bound is generous, and the previous 2,000,000-iteration count was both
+     * far past that on a fast core and potentially short of it on a slow one. */
     u32 status = 0;
     int done = 0;
-    for (int spin = 0; spin < 2000000; spin++) {
+    for (int i = 0; i < 1000; i++) {              /* 1000 x 10 us = 10 ms */
         status = mmio_r(ctl_reg);
         if (!(status & AUX_SEND_BUSY)) { done = 1; break; }
+        cpu_delay_us(10);
     }
-    if (!done) return -1;
 
-    /* acknowledge whatever happened */
-    mmio_w(ctl_reg, status | AUX_DONE | AUX_TIMEOUT_ERR | AUX_RECEIVE_ERR);
+    /* Acknowledge FIRST, on every path. Returning before this - as the !done
+     * path used to - leaves SEND_BUSY and every write-1-clear bit set, which
+     * then makes the next transaction's status decode meaningless. Note
+     * `status` is written back with b31 already clear on the done path, so
+     * this cannot itself launch a transaction; on the !done path we must mask
+     * it off explicitly. */
+    mmio_w(ctl_reg, (status & ~AUX_SEND_BUSY) |
+                    AUX_DONE | AUX_TIMEOUT_ERR | AUX_RECEIVE_ERR);
+
+    if (!done) { aux_last_reply = -4; return -1; }
 
     if (status & AUX_TIMEOUT_ERR) { aux_last_reply = -2; return -1; }
-    if (status & AUX_RECEIVE_ERR) { aux_last_reply = -3; return -1; }
+    if (status & AUX_RECEIVE_ERR) {
+        aux_last_reply = -3;
+        /* DP CTS 4.2.1.1: settle 400 us before anyone retries. Not needed after
+         * a hardware TIMEOUT, whose 1600 us already exceeds it. */
+        cpu_delay_us(400);
+        return -1;
+    }
+    /* DONE is the only positive completion signal, and it was never tested. */
+    if (!(status & AUX_DONE)) { aux_last_reply = -5; return -1; }
 
     int recv = (int)((status >> AUX_MSG_SIZE_SHIFT) & 0x1F);
-    if (recv < 1) return -1;
+    if (recv < 1 || recv > 20) return -1;         /* 0 or >20 is illegal */
 
     /* first byte is the reply header; the rest is data */
     u32 d0 = mmio_r(DP_AUX_CH_DATA(port, 0));
@@ -1312,6 +1433,48 @@ static int aux_xfer(int port, u32 cmd, u32 addr, const u8 *out, int out_len,
     return n;
 }
 
+/* One raw transaction. Returns the number of bytes received, or -1.
+ *
+ * Everything that must be true BEFORE the hardware is touched lives here, and
+ * the mutex is released on every path out. */
+static int aux_xfer(int port, u32 cmd, u32 addr, const u8 *out, int out_len,
+                    u8 *in, int in_len)
+{
+    if (!intel_present() || port < 0 || port > 3) return -1;
+    if (out_len > 16 || in_len > 16) return -1;
+
+    /* Stale state must not survive a rejected call: every early return here
+     * used to leave the PREVIOUS transaction's reply visible to the caller. */
+    aux_last_reply = -1;
+    aux_last_len   = 0;
+
+    /* THE PANEL MUST BE POWERED. The sink's AUX receiver runs off panel VDD;
+     * with VDD down we are driving AUX+/- into unpowered input pins and the
+     * current goes through the TCON's ESD/body diodes. That is an absolute-
+     * maximum-rating violation (Vin <= VDD + 0.3 V), not a timing preference.
+     *
+     * This guard belongs here rather than at the call sites precisely because
+     * the risky caller is the retrain-after-failure path, which runs exactly
+     * when the panel may have been taken down. */
+    if (!(mmio_r(PP_STATUS) & PP_STATUS_ON) && !(mmio_r(PP_CONTROL) & PP_VDD_FORCE))
+        return -1;
+
+    /* AUX A is in power well 1, which a DC state gates off. Done per
+     * transaction, not once at init - the DMC re-arms it behind us. */
+    dc_states_off();
+
+    /* Take the channel off PSR and GTC. Failing to get the mutex is a real
+     * error, not something to push through: proceeding would interleave our
+     * transaction with the hardware's own. */
+    if (!aux_mutex_acquire(port)) { aux_last_reply = -6; return -1; }
+
+    int r = aux_xfer_locked(port, cmd, addr, out, out_len, in, in_len);
+
+    aux_mutex_release(port);
+    return r;
+}
+
+
 int intel_aux_last_reply(void) { return aux_last_reply; }
 
 /* A native DPCD read, with the retry a DEFER requires. */
@@ -1322,8 +1485,9 @@ int intel_dpcd_read(int port, u32 addr, int len)
         int n = aux_xfer(port, 0x9, addr, 0, 0, aux_buf, len);
         if (n > 0 && aux_last_reply == AUX_REPLY_ACK) return n;
         if (aux_last_reply != AUX_REPLY_DEFER && n < 0 && attempt > 2) break;
-        /* a short settle before asking again - the panel said "not yet" */
-        for (volatile int d = 0; d < 200000; d++) { }
+        /* a short settle before asking again - the panel said "not yet".
+         * 500 us is what the DP spec allows between native DEFER retries. */
+        cpu_delay_us(500);
     }
     return 0;
 }
@@ -1334,7 +1498,10 @@ int intel_dpcd_write(int port, u32 addr, const u8 *data, int len)
     for (int attempt = 0; attempt < 8; attempt++) {
         int n = aux_xfer(port, 0x8, addr, data, len, aux_buf, 1);
         if (n >= 0 && aux_last_reply == AUX_REPLY_ACK) return 1;
-        for (volatile int d = 0; d < 200000; d++) { }
+        /* A NACK means "no", not "not yet" - re-sending it 8 times is wrong
+         * and burns the whole budget. Only a DEFER earns a retry. */
+        if (aux_last_reply != AUX_REPLY_DEFER) return 0;
+        cpu_delay_us(500);
     }
     return 0;
 }
@@ -1348,22 +1515,76 @@ int intel_dpcd_byte(int i)
 /* ---- what the DPCD says, decoded --------------------------------------
  * These are the fields that decide a modeset. MAX_LINK_RATE is in units of
  * 270 MHz: 0x06 = 1.62, 0x0A = 2.7, 0x14 = 5.4, 0x1E = 8.1 Gbps. */
-int intel_dpcd_rev(void)        { return (int)aux_buf[0]; }
-int intel_dpcd_max_rate(void)   { return (int)aux_buf[1]; }
-int intel_dpcd_max_lanes(void)  { return (int)(aux_buf[2] & 0x1F); }
-int intel_dpcd_enhanced(void)   { return (int)((aux_buf[2] >> 7) & 1); }
-int intel_dpcd_tps3(void)       { return (int)((aux_buf[2] >> 6) & 1); }
+/* The capability block gets its OWN storage.
+ *
+ * These accessors used to read aux_buf directly - the single scratch buffer
+ * that every DPCD read and write shares. So the moment link training read link
+ * status from 0x202, intel_dpcd_rev() started returning a link-status byte and
+ * intel_dpcd_max_lanes() returned whatever happened to land in aux_buf[2].
+ * Nothing latched the caps anywhere. Read them once, keep them. */
+static u8  dpcd_caps[16];
+static int dpcd_caps_valid = 0;
 
-/* Bit 1 of DPCD 0x0E (TRAINING_AUX_RD_INTERVAL) says the panel publishes a
- * SUPPORTED_LINK_RATES table at 0x10 - which is exactly how an eDP 1.4 panel
- * advertises the intermediate rates. A panel WITHOUT this bit must only be
- * driven at the standard rates, which is the rule our rate chooser follows. */
-int intel_dpcd_has_rate_table(void) { return (int)((aux_buf[14] >> 7) & 1); }
+/* Read DPCD 0x00000..0x0000E in one transaction and latch it. Must succeed
+ * before any accessor below means anything. */
+int intel_dpcd_read_caps(int port)
+{
+    dpcd_caps_valid = 0;
+    int n = intel_dpcd_read(port, 0x00000, 15);
+    if (n < 15) return 0;                    /* short read is a protocol error */
+    for (int i = 0; i < 15; i++) dpcd_caps[i] = (u8)intel_dpcd_byte(i);
+    if (!dpcd_caps[0]) return 0;             /* rev 0 means the read failed */
+    dpcd_caps_valid = 1;
+    return 1;
+}
+int intel_dpcd_caps_valid(void) { return dpcd_caps_valid; }
+
+int intel_dpcd_rev(void)        { return (int)dpcd_caps[0]; }
+int intel_dpcd_max_rate(void)   { return (int)dpcd_caps[1]; }
+int intel_dpcd_max_lanes(void)  { return (int)(dpcd_caps[2] & 0x1F); }
+int intel_dpcd_enhanced(void)   { return (int)((dpcd_caps[2] >> 7) & 1); }
+int intel_dpcd_tps3(void)       { return (int)((dpcd_caps[2] >> 6) & 1); }
+
+/* DPCD 0x0E bits 6:0 is TRAINING_AUX_RD_INTERVAL - how long the sink wants us
+ * to wait before reading link status back. Nothing read this before, so both
+ * training loops used the same hardcoded spin and a panel asking for interval 4
+ * (16 ms) got about 1 ms and read back "not locked" on a healthy link. */
+static u32 lt_rd_interval(void)
+{
+    return (u32)(dpcd_caps[14] & 0x7F);
+}
+static u32 lt_cr_interval_us(void)
+{
+    u32 iv = lt_rd_interval();
+    if (intel_dpcd_rev() >= 0x14) return 100u;   /* rev >= 1.4 forces 100 us */
+    return iv ? iv * 4000u : 100u;
+}
+static u32 lt_eq_interval_us(void)
+{
+    /* Note the asymmetry with clock recovery: 400 us at interval 0, and the
+     * rev >= 1.4 "force 100 us" rule applies to CR only. */
+    u32 iv = lt_rd_interval();
+    return iv ? iv * 4000u : 400u;
+}
+
+/* Does the panel publish a SUPPORTED_LINK_RATES table at DPCD 0x10?
+ *
+ * This used to return bit 7 of DPCD 0x0E, which is EXTENDED_RECEIVER_CAP_FIELD
+ * _PRESENT - a different field entirely, set on most modern eDP panels. That
+ * made the rate chooser hand back the eDP intermediate rates, and the caller
+ * then divided them by 270000 to build LINK_BW_SET, producing 0x08 - not one
+ * of the four legal bandwidth codes. Training simply timed out.
+ *
+ * Answering this honestly needs a real read of 0x10..0x1F plus the Method B
+ * LINK_RATE_SET write path, and neither exists yet. Until they do, the correct
+ * answer is "no table", which confines the chooser to the standard rates and
+ * to LINK_BW_SET. The measured panel has no rate table, so nothing is lost. */
+int intel_dpcd_has_rate_table(void) { return 0; }
 
 u32 intel_dpcd_max_rate_kbps(void)
 {
     /* the encoded value times 270 MHz, then times 10 for kbps per lane */
-    return (u32)aux_buf[1] * 270000u;
+    return (u32)dpcd_caps[1] * 270000u;
 }
 
 /* ==== DisplayPort link training ==========================================
@@ -1577,9 +1798,12 @@ static int train_clock_recovery(int port, int lanes)
 
     for (int attempt = 0; attempt < 5; attempt++) {
         lt_cr_attempts++;
-        /* the panel says how long to wait in DPCD 0x0E; 100 us is the
-         * default and is what almost every panel asks for */
-        for (volatile int d = 0; d < 400000; d++) { }
+        /* The sink states its own interval in DPCD 0x0E bits 6:0. Interval 0
+         * means 100 us for clock recovery; anything else is interval*4000 us.
+         * This wait MUST come before the first status read - reading straight
+         * after writing TRAINING_PATTERN_SET returns stale bits and fails a
+         * link that is perfectly healthy. */
+        cpu_delay_us(lt_cr_interval_us());
 
         u8 st[6];
         if (!dpcd_get(port, DPCD_LANE0_1_STATUS, 6, st)) return 0;
@@ -1627,7 +1851,9 @@ static int train_channel_eq(int port, int lanes, int tps3)
 
     for (int attempt = 0; attempt < 5; attempt++) {
         lt_eq_attempts++;
-        for (volatile int d = 0; d < 400000; d++) { }
+        /* 400 us at interval 0, NOT the 100 us clock recovery uses. The
+         * asymmetry is real and is easy to lose. */
+        cpu_delay_us(lt_eq_interval_us());
 
         u8 st[6];
         if (!dpcd_get(port, DPCD_LANE0_1_STATUS, 6, st)) return 0;
@@ -1678,7 +1904,7 @@ int intel_link_train(int port, int rate_idx, int lanes, int tps3, int enhanced)
     u8 none = DP_TRAIN_PAT_NONE;
     intel_dpcd_write(port, DPCD_TRAINING_PATTERN, &none, 1);
     tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_IDLE, enhanced);
-    for (volatile int d = 0; d < 200000; d++) { }
+    cpu_delay_us(500);
     tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_NORM, enhanced);
     return 1;
 }
@@ -1778,16 +2004,6 @@ int intel_dp_tp_status_exists(int port) { return port != 0; }
  * of 100 ms: a value of v means (v-1)*100 ms, and 0 means none. */
 #define PP_CYCLE_DELAY_SHIFT 4
 #define PP_CYCLE_DELAY_MASK  0x1F
-#define PP_ON             (1u << 0)
-#define PP_RESET          (1u << 1)     /* panel reset, active low on some parts */
-#define PP_BACKLIGHT_EN   (1u << 2)
-#define PP_VDD_FORCE      (1u << 3)
-
-#define PP_STATUS_ON      (1u << 31)
-#define PP_STATUS_SEQ     (3u << 28)    /* sequencing progress */
-#define PP_SEQ_NONE       (0u << 28)
-#define PP_SEQ_POWER_UP   (1u << 28)
-#define PP_SEQ_POWER_DOWN (2u << 28)
 
 int intel_pp_status(void)  { return intel_present() ? (int)mmio_r(PP_STATUS) : 0; }
 int intel_pp_control(void) { return intel_present() ? (int)mmio_r(PP_CONTROL) : 0; }
@@ -1797,8 +2013,13 @@ int intel_pp_control(void) { return intel_present() ? (int)mmio_r(PP_CONTROL) : 
  * information than any default we could pick. */
 int intel_pp_t1_t3(void)  { return intel_present() ? (int)((mmio_r(PP_ON_DELAYS) >> 16) & 0x1FFF) : 0; }
 int intel_pp_t8(void)     { return intel_present() ? (int)(mmio_r(PP_ON_DELAYS) & 0x1FFF) : 0; }
-int intel_pp_t9(void)     { return intel_present() ? (int)((mmio_r(PP_OFF_DELAYS) >> 16) & 0x1FFF) : 0; }
-int intel_pp_t10(void)    { return intel_present() ? (int)(mmio_r(PP_OFF_DELAYS) & 0x1FFF) : 0; }
+/* PP_OFF_DELAYS: 28:16 is T10 (power-down), 12:0 is T9 (backlight-off ->
+ * power-down). These two returned each other's field. Measured
+ * PP_OFF_DELAYS = 0x01F40001 settles it: 0x1F4 = 500 = 50.0 ms is T10, and
+ * the 0x0001 low field is i915 forcing the hardware delay to 0.1 ms while
+ * doing the real 260 ms T9 wait in software from VBT. */
+int intel_pp_t9(void)     { return intel_present() ? (int)(mmio_r(PP_OFF_DELAYS) & 0x1FFF) : 0; }
+int intel_pp_t10(void)    { return intel_present() ? (int)((mmio_r(PP_OFF_DELAYS) >> 16) & 0x1FFF) : 0; }
 /* T11+T12, in milliseconds. NOT from PP_DIVISOR - see the note above. */
 int intel_pp_t11_t12(void)
 {
@@ -1813,20 +2034,90 @@ int intel_pp_sequencing(void)
     return (int)((mmio_r(PP_STATUS) >> 28) & 3);
 }
 
-/* Wait for the hardware's own sequencer to finish. It is enforcing the panel's
- * timing; racing it is exactly the mistake this whole comment exists to
- * prevent. */
-static int pp_wait_idle(int ms)
+/* ---- the T12 epoch -----------------------------------------------------
+ *
+ * T12 is the panel's power-cycle delay: after power goes away, it may not come
+ * back for 500 ms on this panel (PP_CONTROL[8:4] reads 6). Violating it is the
+ * one hazard in this driver that damages hardware rather than failing - the
+ * rails have not discharged and the TCON can latch into an undefined state.
+ *
+ * The hardware sequencer enforces its own copy via PP_STATUS b27, but that is
+ * not sufficient on its own: if VDD was dropped while PANEL_POWER_ON was
+ * already clear, the sequencer never ran and b27 never sets, while the panel
+ * still owes the full delay. So both halves are required - a software wait
+ * from this epoch, AND the b27 poll. Neither is redundant.
+ *
+ * Initialised to 0 meaning "unknown history", which is treated as owing a full
+ * T12 - the safe direction. */
+static u32 pp_last_off_ms = 0;
+static int pp_epoch_valid = 0;
+static u32 pp_last_on_ms  = 0;   /* backlight-on delay is measured from here */
+static int pp_panel_up    = 0;   /* our own view; AUX refuses without it */
+
+static void pp_stamp_off(void)
 {
-    u32 t0 = idt_ticks();
-    u32 ticks = (u32)(ms / 10) + 1;
-    long spins = (long)ms * 50000;
-    while (spins-- > 0) {
-        if (intel_pp_sequencing() == 0) return 1;
-        if (idt_ticks() - t0 >= ticks) return 0;
-    }
-    return 0;
+    pp_last_off_ms = cpu_now_ms();
+    pp_epoch_valid = 1;
 }
+
+/* T12 in milliseconds, from PP_CONTROL[8:4]. The field is "+1" encoded: a
+ * value v means (v-1)*100 ms, and 0 means none. Floor at the eDP spec's
+ * 500 ms rather than trusting a zero, because a zero here is far more likely
+ * to mean "soft reset wiped the register" than "this panel needs no delay". */
+static u32 pp_t12_ms(void)
+{
+    u32 v = (mmio_r(PP_CONTROL) >> PP_CYCLE_DELAY_SHIFT) & PP_CYCLE_DELAY_MASK;
+    u32 ms = v ? (v - 1u) * 100u : 0u;
+    return ms < 500u ? 500u : ms;
+}
+
+/* Pay whatever is left of T12, then confirm the hardware agrees. */
+static void pp_wait_power_cycle(void)
+{
+    u32 t12 = pp_t12_ms();
+
+    if (pp_epoch_valid) {
+        u32 elapsed = cpu_now_ms() - pp_last_off_ms;
+        if (elapsed < t12) cpu_delay_ms(t12 - elapsed);
+    } else {
+        cpu_delay_ms(t12);            /* unknown history - owe the lot */
+    }
+
+    /* Then the hardware's own view: b31 clear, b27 (cycle delay active) clear,
+     * sequencer idle, and the undocumented-but-implemented state nibble at
+     * OFF_IDLE. Polled, with a bound - a panel that never reaches this is a
+     * fault to report, not a reason to spin forever. */
+    for (u32 i = 0; i < 500u; i++) {
+        if ((mmio_r(PP_STATUS) & 0xB800000Fu) == 0) return;
+        cpu_delay_ms(10);
+    }
+}
+
+/* Wait for the sequencer to reach a TARGET state, not merely to look idle.
+ *
+ * The old version returned as soon as PP_STATUS[29:28] read 00, and was called
+ * one instruction after the PP_ON write - at which point the sequencer has not
+ * started yet, 29:28 still reads 00, and it returned "done" on a panel that had
+ * not begun powering up. Then the b31 test read 0 and the whole call reported
+ * failure on a panel coming up perfectly.
+ *
+ * mask/want describe the state we are waiting FOR, so no such race exists. */
+static int pp_wait_state(u32 mask, u32 want, u32 ms)
+{
+    for (u32 i = 0; i <= ms / 10u; i++) {
+        if ((mmio_r(PP_STATUS) & mask) == want) return 1;
+        cpu_delay_ms(10);
+    }
+    return (mmio_r(PP_STATUS) & mask) == want;
+}
+
+/* PP_STATUS predicates. b31 alone is NOT "on": it reads 1 for the whole
+ * power-DOWN sequence too, so testing it alone lets a caller start driving AUX
+ * into a rail that is collapsing. */
+#define PP_ON_MASK    0xB000000Fu
+#define PP_ON_WANT    0x80000008u        /* b31 set, no cycle/seq, state ON_IDLE */
+#define PP_OFF_MASK   0xB0000000u
+#define PP_OFF_WANT   0x00000000u
 
 /* Force VDD on without lighting the panel.
  *
@@ -1836,10 +2127,28 @@ static int pp_wait_idle(int ms)
 int intel_panel_vdd_on(void)
 {
     if (!intel_present() || !lt_armed) return 0;
+
+    /* Already up? Nothing to do, and in particular no second T3 wait. */
+    if (mmio_r(PP_STATUS) & PP_STATUS_ON) { pp_panel_up = 1; return 1; }
+    if (mmio_r(PP_CONTROL) & PP_VDD_FORCE) { pp_panel_up = 1; return 1; }
+
+    /* Raising FORCE_VDD from a cold panel is itself subject to T12. The
+     * 1->0->1 transition of this bit is a power cycle as far as the panel is
+     * concerned, which is why this wait is here and not only in power_on(). */
+    pp_wait_power_cycle();
+
     u32 v = mmio_r(PP_CONTROL) & 0xFFFF;
-    mmio_w(PP_CONTROL, PP_UNLOCK_KEY | v | PP_VDD_FORCE);
-    /* the panel's logic needs a moment before it will answer AUX */
-    for (volatile int d = 0; d < 400000; d++) { }
+    mmio_w(PP_CONTROL, PP_UNLOCK_KEY | v | PP_VDD_FORCE | PP_PWR_DOWN_ON_RESET);
+    (void)mmio_r(PP_CONTROL);                 /* posting read */
+
+    /* T3, flat. No status bit reports "VDD is ready" separately, so there is
+     * nothing to poll - the panel's logic simply is not answering AUX until
+     * this has elapsed. Read from PP_ON_DELAYS 28:16 (100 us units), floored
+     * at the eDP spec ceiling in case a soft reset zeroed the register. */
+    u32 t3 = (u32)intel_pp_t1_t3() / 10u;     /* 100 us units -> ms */
+    cpu_delay_ms(t3 < 200u ? 200u : t3);
+
+    pp_panel_up = 1;
     return 1;
 }
 
@@ -1848,6 +2157,13 @@ int intel_panel_vdd_off(void)
     if (!intel_present() || !lt_armed) return 0;
     u32 v = mmio_r(PP_CONTROL) & 0xFFFF;
     mmio_w(PP_CONTROL, PP_UNLOCK_KEY | (v & ~PP_VDD_FORCE));
+    (void)mmio_r(PP_CONTROL);
+
+    /* If PANEL_POWER_ON was already clear, dropping VDD just took the panel
+     * fully down without the sequencer running - so the T12 clock starts now
+     * and nothing else will record it. This is the case PP_STATUS b27 cannot
+     * see, and the reason the software half of the wait exists. */
+    if (!(mmio_r(PP_STATUS) & PP_STATUS_ON)) { pp_stamp_off(); pp_panel_up = 0; }
     return 1;
 }
 
@@ -1856,44 +2172,94 @@ int intel_panel_vdd_off(void)
 int intel_panel_power_on(void)
 {
     if (!intel_present() || !lt_armed) return 0;
-    if (mmio_r(PP_STATUS) & PP_STATUS_ON) return 1;
+
+    /* Only a full ON_IDLE counts as already-on. b31 alone reads 1 during the
+     * entire power-DOWN sequence, so returning early on it hands the caller a
+     * panel whose rail is collapsing. */
+    if ((mmio_r(PP_STATUS) & PP_ON_MASK) == PP_ON_WANT) { pp_panel_up = 1; return 1; }
+
+    pp_wait_power_cycle();
 
     u32 v = mmio_r(PP_CONTROL) & 0xFFFF;
-    mmio_w(PP_CONTROL, PP_UNLOCK_KEY | v | PP_ON);
+    mmio_w(PP_CONTROL, PP_UNLOCK_KEY | v | PP_ON | PP_PWR_DOWN_ON_RESET);
+    (void)mmio_r(PP_CONTROL);
 
-    /* up to 600 ms: T1+T2+T3 on a slow panel genuinely takes that long */
-    if (!pp_wait_idle(600)) return 0;
-    return (mmio_r(PP_STATUS) & PP_STATUS_ON) ? 1 : 0;
+    /* The sequencer runs T1+T2+T3 during this poll, so there is no extra sleep
+     * to add. 5000 ms because the plan specifies that bound and a slow panel
+     * plus a full cycle delay genuinely approaches it. */
+    if (!pp_wait_state(PP_ON_MASK, PP_ON_WANT, 5000)) return 0;
+    pp_panel_up = 1;
+    pp_last_on_ms = cpu_now_ms();
+    return 1;
 }
 
-/* Take it down in the required order: backlight first, then power. */
+/* Take it down in the required order: backlight, T9, then power. */
 int intel_panel_power_off(void)
 {
     if (!intel_present() || !lt_armed) return 0;
 
+    /* T9 - video must not stop while the backlight is lit. This is here rather
+     * than in backlight_enable() on purpose: the documented calling order turns
+     * the backlight off first, and when it does, this function would find b2
+     * already clear and skip the wait entirely. Paying it unconditionally is
+     * the only ordering that cannot be defeated by a correct caller.
+     *
+     * 260 ms is the VBT value. The register's 12:0 field reads 0.1 ms because
+     * i915 forces the hardware delays to 1 and does the real wait in software;
+     * take the larger of the two rather than believing the register. */
     u32 v = mmio_r(PP_CONTROL) & 0xFFFF;
     if (v & PP_BACKLIGHT_EN) {
         mmio_w(PP_CONTROL, PP_UNLOCK_KEY | (v & ~PP_BACKLIGHT_EN));
-        /* T9: the backlight must be dark before video stops */
-        for (volatile int d = 0; d < 2000000; d++) { }
-        v = mmio_r(PP_CONTROL) & 0xFFFF;
+        (void)mmio_r(PP_CONTROL);
     }
+    u32 t9 = (u32)intel_pp_t9() / 10u;
+    cpu_delay_ms(t9 < 260u ? 260u : t9);
 
-    mmio_w(PP_CONTROL, PP_UNLOCK_KEY | (v & ~PP_ON));
-    if (!pp_wait_idle(600)) return 0;
+    /* Force VDD on FIRST, then drop everything in one write. Panels misbehave
+     * if VDD is allowed to fall independently of the sequenced power-down, and
+     * clearing PP_ON while b3 is left wherever vdd_on() put it can leave
+     * FORCE_VDD asserted indefinitely on a panel reported as "off". */
+    v = mmio_r(PP_CONTROL) & 0xFFFF;
+    mmio_w(PP_CONTROL, PP_UNLOCK_KEY | v | PP_VDD_FORCE);
+    (void)mmio_r(PP_CONTROL);
 
-    /* T12: the panel may not be powered up again for a further ~500 ms. The
-     * hardware tracks this, and asking too early simply does nothing - which
-     * looks like a dead panel to anyone who does not know about T12. */
-    return 1;
+    v = mmio_r(PP_CONTROL) & 0xFFFF;
+    mmio_w(PP_CONTROL, PP_UNLOCK_KEY |
+           (v & ~(PP_ON | PP_PWR_DOWN_ON_RESET | PP_BACKLIGHT_EN | PP_VDD_FORCE)));
+    (void)mmio_r(PP_CONTROL);
+
+    int ok = pp_wait_state(PP_OFF_MASK, PP_OFF_WANT, 5000);
+
+    /* Stamp the epoch either way. A panel that failed to report "off" is more
+     * likely to owe T12 than less, and the whole point of the epoch is to be
+     * conservative about what we do not know. */
+    pp_stamp_off();
+    pp_panel_up = 0;
+    return ok;
 }
 
 int intel_panel_backlight_enable(int on)
 {
     if (!intel_present() || !lt_armed) return 0;
+
+    /* Never drive the backlight into an unpowered panel. The hardware does
+     * interlock BLC behind T3, but that interlock is implemented by the
+     * sequencer using the delay registers - and those reset to zero, so it
+     * cannot be relied on as the only guard. */
+    if (on && (mmio_r(PP_STATUS) & PP_ON_MASK) != PP_ON_WANT) return 0;
+
+    if (on) {
+        /* backlight-on delay, measured from the moment power came up */
+        u32 want = (u32)intel_pp_t8() / 10u;
+        if (!want) want = 1u;
+        u32 since = cpu_now_ms() - pp_last_on_ms;
+        if (since < want) cpu_delay_ms(want - since);
+    }
+
     u32 v = mmio_r(PP_CONTROL) & 0xFFFF;
     if (on) v |= PP_BACKLIGHT_EN; else v &= ~PP_BACKLIGHT_EN;
     mmio_w(PP_CONTROL, PP_UNLOCK_KEY | v);
+    (void)mmio_r(PP_CONTROL);
     return 1;
 }
 
@@ -1920,12 +2286,6 @@ int intel_panel_backlight_enable(int on)
 #define PWR_WELL_CTL_DRIVER 0x45404
 #define PWR_WELL_CTL_KVMR   0x45408
 #define PWR_WELL_CTL_DEBUG  0x4540C
-#define DC_STATE_EN         0x45504
-
-#define DC_STATE_DISABLE        0u
-#define DC_STATE_EN_UPTO_DC5    (1u << 0)
-#define DC_STATE_EN_UPTO_DC6    (2u << 0)
-#define DC_STATE_EN_DC9         (1u << 3)
 
 /* request is the odd bit of the pair, state is the even one */
 #define PW_REQUEST(w)  (1u << ((w) * 2 + 1))
@@ -1975,8 +2335,61 @@ int intel_pwr_well_disable(int well)
 int intel_dc_states_block(void)
 {
     if (!intel_present() || !lt_armed) return 0;
-    mmio_w(DC_STATE_EN, DC_STATE_DISABLE);
+    /* One write loses a race with the DMC, which re-arms DC5/DC6 behind us.
+     * dc_states_off() writes until the value holds across six reads. */
+    dc_states_off();
     return mmio_r(DC_STATE_EN) == DC_STATE_DISABLE;
+}
+
+/* ---- panel self refresh ------------------------------------------------
+ *
+ * PSR lets the panel hold its own image and lets the display engine stop
+ * scanning out. It is measured ENABLED on this machine (EDP_PSR_CTL reads
+ * 0x81F00406), and while it is on it does three things that break a driver
+ * trying to take over:
+ *
+ *   - it stops the frame counter, so PIPE_FRMCNT never advances and every
+ *     pixel-clock measurement derived from it reads zero
+ *   - it issues its own fast-wake AUX transactions on the channel we are
+ *     trying to use
+ *   - it fights every plane update
+ *
+ * The frozen frame counter is why the probe reports 0.0 Hz and why every
+ * bandwidth number in this project currently rests on an ASSUMED 60 Hz. This
+ * function is the prerequisite for ever measuring the real one. */
+#define EDP_PSR_CTL         0x6F800
+#define EDP_PSR_STATUS      0x6F840
+#define EDP_PSR_ENABLE      (1u << 31)
+#define EDP_PSR_STATE_MASK  (7u << 29)
+
+int intel_psr_enabled(void)
+{
+    return intel_present() ? ((mmio_r(EDP_PSR_CTL) & EDP_PSR_ENABLE) ? 1 : 0) : 0;
+}
+
+u32 intel_psr_ctl(void)    { return intel_present() ? mmio_r(EDP_PSR_CTL) : 0; }
+u32 intel_psr_status(void) { return intel_present() ? mmio_r(EDP_PSR_STATUS) : 0; }
+
+/* Returns 1 if PSR is off and idle when we leave, 0 if it would not go idle.
+ * Clearing the enable bit is not enough on its own - the hardware may be in
+ * the middle of a self-refresh entry or exit, and the next thing a modeset
+ * does is take the clocks away from underneath it. */
+int intel_psr_disable(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (!(mmio_r(EDP_PSR_CTL) & EDP_PSR_ENABLE)) return 1;   /* already off */
+
+    mmio_w(EDP_PSR_CTL, mmio_r(EDP_PSR_CTL) & ~EDP_PSR_ENABLE);
+    (void)mmio_r(EDP_PSR_CTL);
+
+    /* Wait for the state machine to reach IDLE. 50 ms is not a documented
+     * figure - no public PRM gives one - it is the plan's estimate, and it is
+     * recorded as an estimate rather than dressed up as a specification. */
+    for (int i = 0; i < 50; i++) {
+        if ((mmio_r(EDP_PSR_STATUS) & EDP_PSR_STATE_MASK) == 0) return 1;
+        cpu_delay_ms(1);
+    }
+    return 0;
 }
 
 /* ==== the ordered modeset ================================================
@@ -2092,7 +2505,11 @@ int intel_plane_configure(u32 width, u32 height, u32 stride_bytes)
  */
 #define PLANE_WM_TRANS_1_A  0x70268
 #define PLANE_BUF_CFG_1_A   0x7027C
-#define PIPE_UNDERRUN_A     0x70008     /* the underrun bit lives in PIPECONF */
+/* The underrun telltale is GEN8_DE_PIPE_IIR bit 31, write-1-clear. It is NOT
+ * in PIPECONF: 0x70008 is TRANS_CONF_A, whose b31 is the pipe ENABLE bit, so
+ * reading it as an underrun flag reports a permanent true on any live pipe. */
+#define GEN8_DE_PIPE_IIR_A  0x44408
+#define DE_PIPE_UNDERRUN    (1u << 31)
 
 /* Gen9 watermark field widths are NARROW: lines at 18:14 and blocks at 9:0.
  * The wider 26:14 / 11:0 encoding is a later generation. Legal gen9 values
@@ -2201,12 +2618,15 @@ int intel_wm_saved(void) { return wm_have_saved; }
 int intel_pipe_underrun(void)
 {
     if (!intel_present()) return 0;
-    return (mmio_r(PIPE_STATUS_A) & (1u << 31)) ? 1 : 0;
+    return (mmio_r(GEN8_DE_PIPE_IIR_A) & DE_PIPE_UNDERRUN) ? 1 : 0;
 }
 
 int intel_pipe_underrun_clear(void)
 {
     if (!intel_present() || !lt_armed) return 0;
-    mmio_w(PIPE_STATUS_A, mmio_r(PIPE_STATUS_A) | (1u << 31));
+    /* Write ONLY the underrun bit. The old version wrote the whole register
+     * value back, and since every bit in an IIR is write-1-clear, that
+     * acknowledged every other pending interrupt as a side effect. */
+    mmio_w(GEN8_DE_PIPE_IIR_A, DE_PIPE_UNDERRUN);
     return 1;
 }

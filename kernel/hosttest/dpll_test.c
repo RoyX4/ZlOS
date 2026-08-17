@@ -44,6 +44,21 @@ u32  intel_dpll_status(void); u32 intel_pwr_well_driver(void); u32 intel_dc_stat
 static int cfg_fd = -1;
 u32 host_cfg_read(int b,int d,int f,int o){(void)b;(void)d;(void)f;u32 v=0;
   if(cfg_fd>=0&&pread(cfg_fd,&v,4,o)==4)return v;return 0;}
+/* intel.c needs real timing now (cpu.c provides it in the kernel; here we are
+ * a Linux process, so nanosleep is both simpler and more accurate than any
+ * spin). Without these three the link fails at cpu_delay_us. */
+void cpu_delay_us(unsigned int us)
+{
+    struct timespec ts = { (long)(us / 1000000u), (long)(us % 1000000u) * 1000L };
+    while (nanosleep(&ts, &ts) == -1) { }
+}
+void cpu_delay_ms(unsigned int ms) { cpu_delay_us(ms * 1000u); }
+unsigned int cpu_now_ms(void)
+{
+    struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
+    return (unsigned int)(t.tv_sec * 1000ull + t.tv_nsec / 1000000ull);
+}
+
 u32 idt_ticks(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);
   return (u32)(t.tv_sec*100+t.tv_nsec/10000000);}
 int pci_count(void){return 0;} int pci_vendor(int i){(void)i;return 0;}

@@ -244,6 +244,80 @@ u32 cpu_tsc_khz(void)
 
 u32 cpu_mhz(void) { u32 k = cpu_tsc_khz(); return k / 1000u; }
 
+/* ---- a real microsecond delay ------------------------------------------
+ *
+ * The display driver needs waits from 100 us (link training) to 500 ms (the
+ * panel power cycle), and it needs them to be RIGHT: under-waiting a panel
+ * power cycle is the one hazard in that driver that damages hardware rather
+ * than merely failing. Two things were being used before this existed and
+ * neither works:
+ *
+ *   idt_ticks()  resolves 10 ms, so it cannot express 100 us at all, and it
+ *                stops advancing entirely when interrupts are masked - which
+ *                is exactly the state a modeset runs in.
+ *   for (volatile int d = 0; d < N; d++)
+ *                measured 0.576 ms for N=400000 on this box at -O2, where the
+ *                caller wanted 200 ms. Wrong by 350x, and wrong by a different
+ *                factor on every machine and optimisation level.
+ *
+ * The TSC is the answer: cpu_tsc_khz() calibrates it against the PIT once and
+ * caches, and read_tsc() keeps working with interrupts off.
+ *
+ * No 64-bit division here on purpose. Dividing by 1000 to get MHz first turns
+ * the cycle count into a 32x32->64 multiply; the alternative calls __udivdi3
+ * from divmod.c, in software, inside a timing loop. Truncating 2304548 kHz to
+ * 2304 MHz costs 0.02%, which is nothing against delays specified to 100 us.
+ */
+void cpu_delay_us(u32 us)
+{
+    if (!us) return;
+
+    u32 khz = cpu_tsc_khz();
+    if (khz >= 1000u) {
+        u64 target = read_tsc() + (u64)us * (u64)(khz / 1000u);
+        /* pause is a hint to the core that this is a spin-wait: it drops the
+         * pipeline out of the memory-order speculation that makes a tight loop
+         * expensive, and on a hyperthread it yields to the sibling. */
+        while (read_tsc() < target) __asm__ volatile("pause");
+        return;
+    }
+
+    /* No usable TSC. Never under-wait - over-waiting costs milliseconds,
+     * under-waiting a T12 costs a panel. Anything the PIT can resolve goes to
+     * the PIT, rounded up by two ticks. */
+    if (us >= 20000u) {
+        u32 t0 = idt_ticks();
+        u32 ticks = (us / 10000u) + 2u;
+        while (idt_ticks() - t0 < ticks) { }
+        return;
+    }
+    /* Below 20 ms with no TSC, all that is left is a spin with no time base.
+     * 20000 iterations per us is deliberately far more than any real CPU
+     * needs - it is a pessimistic bound, not a measurement, and it only ever
+     * runs on hardware with no invariant TSC. */
+    for (volatile u32 d = 0; d < us * 20000u; d++) { }
+}
+
+void cpu_delay_ms(u32 ms)
+{
+    /* split so the us->cycles multiply cannot overflow 64 bits on a long wait */
+    while (ms--) cpu_delay_us(1000u);
+}
+
+/* Monotonic milliseconds since boot. The display driver needs this to enforce
+ * the panel's T12 power-cycle delay, which is measured from the last power-off
+ * and is the one timing in that driver that damages hardware when violated.
+ *
+ * Wraps after ~49 days, which is fine: every consumer takes a difference, and
+ * unsigned subtraction is correct across the wrap. The 64-bit divide here does
+ * call into divmod.c, but this runs once per power transition, not in a loop. */
+u32 cpu_now_ms(void)
+{
+    u32 khz = cpu_tsc_khz();
+    if (khz >= 1000u) return (u32)(read_tsc() / (u64)khz);
+    return idt_ticks() * 10u;         /* PIT fallback: 100 Hz, 10 ms a tick */
+}
+
 /* ---- are we in a VM? ---------------------------------------------------
  * Bit 31 of leaf 1 ECX is the hypervisor-present bit, and leaf 0x40000000
  * returns the hypervisor's own signature - "TCGTCGTCGTCG" for QEMU without
