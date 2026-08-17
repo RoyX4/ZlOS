@@ -205,17 +205,26 @@ void ui_space(int n)
  * to keep the two in step. */
 int ui_toggle(const char *s, int *on)
 {
-    int kw = UI_S6(&theme), kh = theme.row_h;
-    int w = kw + theme.gap + text_w(s), h = kh;
+    /* A SWITCH IS A PILL, NOT A CIRCLE. The track has to be visibly wider than
+     * it is tall or the knob fills it and the whole control reads as a round
+     * button - which says "press me", not "I am on or off". Caught by looking
+     * at a rendered frame; every assertion about it passed while it was wrong,
+     * because "does it toggle" and "does it look like a toggle" are different
+     * questions and only one of them has a test. */
+    int kh = theme.row_h * 2 / 3;             /* shorter than a full row      */
+    int kw = kh * 2;                          /* ...and twice as wide as tall */
+    int w = kw + theme.gap + text_w(s), h = theme.row_h;
     int x, y;
     place(w, h, &x, &y);
     int fired = fire(x, y, w, h);
     if (fired) *on = !*on;
     if (L.mode == UI_DRAW) {
-        fb_rrect(x, y, kw, kh, kh / 2, *on ? theme.accent : theme.panel_hi);
-        int d = kh - UI_S1(&theme);
-        fb_rrect(*on ? x + kw - d - UI_S1(&theme) / 2 : x + UI_S1(&theme) / 2,
-                 y + UI_S1(&theme) / 2, d, d, d / 2, theme.text);
+        int ty = y + (h - kh) / 2;            /* centre the track in the row  */
+        int pad = UI_S1(&theme) / 2;
+        int d = kh - 2 * pad;                 /* the knob                     */
+        fb_rrect(x, ty, kw, kh, kh / 2, *on ? theme.accent : theme.panel_hi);
+        fb_rrect(*on ? x + kw - d - pad : x + pad, ty + pad, d, d, d / 2,
+                 *on ? theme.border : theme.text_dim);
         fb_text_aa(x + kw + theme.gap, y + (h - fb_cell_h()) / 2, s, theme.text);
     }
     return fired;

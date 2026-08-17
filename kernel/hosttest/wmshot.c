@@ -1,0 +1,205 @@
+/* wmshot.c - render one frame of the compositor to a PPM, from Linux.
+ *
+ * wmtest asserts 47 properties and nobody has LOOKED at any of them. Both
+ * matter and they catch different things: assertions catch a click landing on
+ * the wrong window, eyes catch a title bar that is four pixels too tall. This
+ * is the second kind, and it costs no boot - the whole stack is C against
+ * memory, so it renders here in milliseconds.
+ *
+ * The apps below are written the way a real app must be: through ui_* calls
+ * only, position-pure, no loop. They are also therefore a worked example of
+ * the app contract in ui.h, which is worth having somewhere executable.
+ *
+ *   ./wmshot [out.ppm] [width height]
+ */
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+
+#include "../ui.h"
+#include "../../runtime.h"
+
+void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
+              unsigned int height, unsigned char bpp);
+void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
+void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot);
+void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
+void fb_text_aa(int px, int py, const char *s, unsigned int fg);
+void fb_icon24(int px, int py, int n, unsigned int fg);
+void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
+void fb_present(void);
+unsigned int fb_get_px(int x, int y);
+int  fb_cell_h(void);
+
+/* fake hardware, same as wmtest */
+static int fake_x = 1290, fake_y = 342, fake_btn = 0;
+static unsigned fake_ticks = 1;
+int idt_mouse_x(void)   { return fake_x; }
+int idt_mouse_y(void)   { return fake_y; }
+int idt_mouse_btn(void) { return fake_btn; }
+unsigned int idt_ticks(void) { return fake_ticks; }
+int idt_scan(void)      { return 0; }
+int xhci_key(void)      { return 0; }
+void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
+void zl_putc_pub(char c) { (void)c; }
+Value zl_num(double n) { Value v; memset(&v, 0, sizeof v); v.type = V_NUM; v.num = n; return v; }
+
+static int W = 1920, H = 1200;
+
+#define APP_SHELL   0
+#define APP_MONITOR 1
+#define APP_ABOUT   2
+#define APP_FILES   3
+
+/* ---- the apps, through ui_* only ------------------------------------------ */
+static int cpu_pct = 34, mem_pct = 62, wrap_on = 1, volume = 70, sel = 2;
+static int list_off;
+
+static void app_draw(int app, int x, int y, int w, int h, int focused)
+{
+    const struct ui_theme *t = ui_theme();
+    /* the pointer, so hover states are live. click is 0 here - a screenshot of
+     * a pressed button would be a screenshot of a lie. */
+    ui_begin(x, y, w, h, UI_DRAW, fake_x, fake_y, 0);
+
+    if (app == APP_SHELL) {
+        ui_label_dim("zlOS 0.3   -   a desktop written in zl");
+        ui_sep();
+        ui_label("[  OK  ] framebuffer console, 120x37");
+        ui_label("[  OK  ] APIC: IRQs via I/O APIC, 4 CPU(s)");
+        ui_label("[  OK  ] zl runtime, kernel subset");
+        ui_label_dim("[ INFO ] no heap, no filesystem, no scheduler");
+        ui_space(t->gap);
+        ui_label("ready.");
+        ui_space(t->gap);
+        ui_row();
+        ui_button("help");
+        ui_button("snake");
+        ui_button("3D cube");
+        ui_endrow();
+        return;
+    }
+    if (app == APP_MONITOR) {
+        ui_num("CPU", cpu_pct);
+        ui_bar(cpu_pct);
+        ui_num("MEM", mem_pct);
+        ui_bar(mem_pct);
+        ui_space(t->gap);
+        ui_toggle("subpixel", &wrap_on);
+        ui_label_dim("volume");
+        ui_slider(&volume, 0, 100);
+        return;
+    }
+    if (app == APP_ABOUT) {
+        ui_label("zlOS 0.3");
+        ui_label_dim("no OS   no libc   no GNU");
+        ui_sep();
+        ui_label_dim("11,374 lines, hand written");
+        (void)focused;
+        return;
+    }
+    if (app == APP_FILES) {
+        static const char *names[] = {
+            "kernel.zl", "fb.c", "wm.c", "ui.c", "input.c", "intel.c",
+            "xhci.c", "nvme.c", "apic.c", "smp.c", "cpu.c", "sched.c",
+        };
+        ui_label_dim("kernel/");
+        ui_scroll_begin(h - 4 * t->row_h, &list_off);
+        for (int i = 0; i < 12; i++) ui_list_row(names[i], i == sel);
+        ui_scroll_end(&list_off);
+        return;
+    }
+}
+
+static int app_event(int a, int win, int ty, int c, int x, int y)
+{ (void)a;(void)win;(void)ty;(void)c;(void)x;(void)y; return 0; }
+static int app_tick(int a, int win) { (void)a; (void)win; return 0; }
+
+/* ---- the furniture: wallpaper, header, dock -------------------------------- */
+static void desk_draw(int x, int y, int w, int h)
+{
+    const struct ui_theme *t = ui_theme();
+    (void)x; (void)y; (void)w; (void)h;
+    fb_gradient(0, 0, W, H, 0x141A2E, 0x2A3350);
+
+    int hb = t->title_h + UI_S1(t);
+    fb_gradient(0, 0, W, hb, 0x1B2340, 0x141A2E);
+    fb_fill_px(0, hb, W, 1, t->border);
+    fb_rrect(UI_S3(t), (hb - UI_S3(t)) / 2, UI_S3(t), UI_S3(t), UI_S1(t) / 2, t->accent);
+    fb_text_aa(UI_S3(t) * 3, (hb - fb_cell_h()) / 2, "zlOS", t->text);
+    fb_text_aa(UI_S3(t) * 3 + UI_S6(t) * 3, (hb - fb_cell_h()) / 2, "Activities", t->text_dim);
+    fb_text_aa(W - UI_S6(t) * 8, (hb - fb_cell_h()) / 2, "1920 x 1200", t->text_dim);
+
+    int dh = UI_S6(t) * 3;
+    int dy = H - dh;
+    fb_gradient(0, dy, W, dh, 0x282E42, 0x121420);
+    fb_fill_px(0, dy, W, 1, t->border);
+    int tile = UI_S6(t) * 3, ix = UI_S6(t);
+    fb_rrect(ix, dy + UI_S2(t), tile * 2, dh - 2 * UI_S2(t), UI_S1(t), t->title);
+    fb_rrect(ix + UI_S3(t), dy + dh / 2 - UI_S2(t), UI_S4(t), UI_S4(t), UI_S1(t) / 2, t->accent);
+    fb_text_aa(ix + UI_S6(t) * 2, dy + (dh - fb_cell_h()) / 2, "zlOS", t->text);
+    ix += tile * 2 + UI_S6(t);
+    for (int i = 0; i < 7; i++) {
+        fb_rrect(ix, dy + UI_S2(t), tile, dh - 2 * UI_S2(t), UI_S1(t), 0x1B2236);
+        fb_icon24(ix + (tile - 48) / 2, dy + (dh - 48) / 2, i, 0xC8D4EC);
+        ix += tile + UI_S2(t);
+    }
+    /* the tray text starts AFTER the last tile, never on top of it - the
+     * dock in kernel.zl has the same rule and the same reason */
+    int tray = ix + UI_S6(t);
+    int want = W - UI_S6(t) * 9;
+    fb_text_aa(want > tray ? want : tray, dy + (dh - fb_cell_h()) / 2,
+               "state: ready", t->text_dim);
+}
+
+int main(int argc, char **argv)
+{
+    const char *out = argc > 1 ? argv[1] : "wmshot.ppm";
+    if (argc > 3) { W = atoi(argv[2]); H = atoi(argv[3]); }
+
+    struct { unsigned long a, n; } bufs[] = {
+        { 0x08000000UL, 32UL << 20 }, { 0x0A000000UL, 16UL << 20 },
+        { 0x0C000000UL, 16UL << 20 },
+    };
+    for (unsigned i = 0; i < 3; i++) {
+        void *p = mmap((void *)bufs[i].a, bufs[i].n, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+        if (p != (void *)bufs[i].a) { fprintf(stderr, "mmap\n"); return 1; }
+        memset(p, 0, bufs[i].n);
+    }
+    void *vram = mmap(NULL, 64UL << 20, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    fb_setup((unsigned long)vram, (unsigned)W * 4, (unsigned)W, (unsigned)H, 32);
+
+    ui_theme_init(2);
+    wm_init();
+    wm_hooks(app_draw, app_event, app_tick, desk_draw);
+
+    const struct ui_theme *t = ui_theme();
+    int hb = t->title_h + UI_S1(t);
+    wm_open(APP_SHELL,   "zl shell   ~",    UI_S6(t), hb + UI_S6(t), 1180, 720);
+    wm_open(APP_FILES,   "Files",           1260, hb + UI_S6(t), 560, 420);
+    wm_open(APP_MONITOR, "System Monitor",  1260, hb + UI_S6(t) + 450, 560, 380);
+    wm_open(APP_ABOUT,   "About",            700, 700, 520, 300);
+
+    /* let the open animation settle, then take the picture */
+    for (int i = 0; i < 7; i++) { fake_ticks++; wm_frame(); }
+
+    FILE *f = fopen(out, "wb");
+    if (!f) { perror("open"); return 1; }
+    fprintf(f, "P6\n%d %d\n255\n", W, H);
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            unsigned c = fb_get_px(x, y);
+            unsigned char px[3] = { (unsigned char)(c >> 16),
+                                    (unsigned char)(c >> 8),
+                                    (unsigned char)c };
+            fwrite(px, 1, 3, f);
+        }
+    fclose(f);
+    printf("wrote %s  %dx%d   (%d windows, focus %d)\n",
+           out, W, H, wm_count(), wm_focused());
+    return 0;
+}

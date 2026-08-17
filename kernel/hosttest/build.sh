@@ -37,6 +37,14 @@ gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest        (run: ./wmtest)"
 
+# ...and one frame of it, as a picture. Assertions catch a click landing on the
+# wrong window; eyes catch a title bar four pixels too tall, or a toggle that
+# renders as a circle instead of a pill. Both were real, and only the second
+# kind is found by looking.
+gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c \
+    ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
+echo "built ./wmshot        (run: ./wmshot out.ppm)"
+
 # The comparison number: what the REAL GPU on this same laptop does with a
 # blended full-screen layer. Offscreen pixmap, so it never touches the desktop.
 # Needs libGL - skipped silently if the dev headers are not installed.
