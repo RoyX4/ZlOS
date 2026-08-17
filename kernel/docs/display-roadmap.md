@@ -221,3 +221,58 @@ those first three failures was a bug in a *check*, not in the driver.
 
 Keep doing that. Firmware has already solved every problem in this document at
 least once, on this exact machine, and it leaves its answers lying around.
+
+---
+
+# STATUS (2026-08-18)
+
+| Phase | | Verified how |
+|---|---|---|
+| 0.1 zlOS calls its own driver | **done** | builds 4 ways, 3 gates; **`P` never pressed on hardware** |
+| 0.2 second modeset | **not done** | needs a hardware run |
+| 0.3 link-training retry | **done** | gates; never triggered — no link has failed |
+| 0.4 EDID over I2C-over-AUX | **done** | **128/128 bytes off the real panel**, checksum OK, 241690 kHz |
+| 0.5 tiling support | **done** | stride units checked; painter still linear |
+| 1 VBT parsing | **done** | **every value matches an independently known one** |
+| 2 pipe-indexed registers | **done** | pipe A reads byte-identical after the refactor |
+| 3 external DisplayPort | **written** | untestable — both ports behind Thunderbolt |
+| 3.3 Type-C / Thunderbolt | **not done** | needs TCSS port-ownership negotiation |
+| 4 hotplug | **done** | registers decoded and cross-checked against VBT |
+| 5 planes, rotation, scalers | **done** | gates; no second plane has been enabled |
+| 6 colour | **done** | palette base + format proved by firmware's identity ramp |
+| 7 DRRS / PSR | **done** | gates; neither has been switched on |
+| 8 audio | **deliberately not written** | see below |
+
+## Why phase 8 is not written
+
+The whole audio block, `0x65000`–`0x650D0`, reads **zero on this machine**. There
+is an HDMI codec at `/proc/asound/card0/codec#2`, but no display audio is active
+and the eDP panel has no audio path at all.
+
+So there is nothing to check against. Every other register in this driver was
+settled by comparing our value to what firmware programmed for the same
+hardware — that is the entire method, and it is why 34 untested steps worked on
+the fourth attempt. For audio that answer key does not exist here.
+
+Phase 8 also needs an **HDA controller driver**, which zlOS does not have. The
+display half alone produces no sound; it is one end of a link whose other end is
+absent.
+
+Writing speculative register pokes for a subsystem with no consumer and no way
+to verify them is precisely the failure this project's method is built to avoid.
+It stays unwritten until there is a machine that can prove it — which means
+external DP working first, since that is the only port here that carries audio.
+
+## What has NEVER executed on hardware
+
+Worth keeping separate from "done", because the two are not the same:
+
+- the `P` command — zlOS has never booted on the ThinkPad
+- the link-training retry — no link has failed
+- any second plane, rotation, or scaler
+- DRRS or PSR enable
+- any external port — nothing can be plugged in without Thunderbolt work
+- a second modeset (off → on → off → on)
+
+Everything above compiles four ways and passes three boot gates. That is a real
+bar and it is not the same bar as "runs".
