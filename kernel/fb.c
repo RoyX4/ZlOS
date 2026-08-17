@@ -43,6 +43,7 @@ int fb_cell_h(void) { return cell_h; }
 unsigned int fb_get_px(int x, int y);   /* defined below; used by the AA text path */
 void idt_set_pointer_bounds(int w, int h);   /* the mouse clamp, pushed not pulled */
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);  /* the fast row fill */
+void fb_clip_none(void);                /* the scissor; defined below with put_pixel */
 
 static unsigned char *fb_base;
 static unsigned int   fb_pitch;      /* bytes per scanline, NOT pixels */
@@ -249,6 +250,7 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
     fb_row   = 0;
     tx0      = 0;
     tx1      = fb_cols - 1;      /* full width until zl opens a text box */
+    fb_clip_none();              /* the scissor follows the new geometry */
 
     /* Draw into RAM and blit, rather than drawing straight into the card.
      * Refused only when the mode does not fit between `back` and its
@@ -267,9 +269,59 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
     idt_set_pointer_bounds((int)width, (int)height);
 }
 
+/* ---- the scissor ---------------------------------------------------------
+ * Every primitive in this file clipped to the SCREEN and nothing else, which
+ * is what made a compositor impossible: there was no way to say "repaint only
+ * this rectangle" and be sure nothing escaped it. That, not the absence of
+ * window code, was the blocker (desktop-TODO 0b, DECISIONS.md #6).
+ *
+ * It is one rectangle, not a stack. A stack would need push/pop and a depth
+ * limit for no gain: the repaint loop sets the scissor twice per window - once
+ * to the frame so chrome cannot bleed onto a neighbour, then NARROWER to the
+ * client area so an app physically cannot draw over its own title bar - and
+ * both are computed, not nested.
+ *
+ * x1/y1 are EXCLUSIVE, and fb_clip() clamps to the screen on the way in, so
+ * the scissor test below subsumes the screen test it replaces rather than
+ * being an extra one.
+ */
+static int clip_x0, clip_y0, clip_x1, clip_y1;
+
+void fb_clip(int x, int y, int w, int h)
+{
+    int x1 = x + w, y1 = y + h;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x1 > (int)fb_w) x1 = (int)fb_w;
+    if (y1 > (int)fb_h) y1 = (int)fb_h;
+    if (x1 < x) x1 = x;              /* an empty rect clips everything away */
+    if (y1 < y) y1 = y;
+    clip_x0 = x; clip_y0 = y; clip_x1 = x1; clip_y1 = y1;
+}
+
+void fb_clip_none(void)
+{
+    clip_x0 = 0; clip_y0 = 0;
+    clip_x1 = (int)fb_w; clip_y1 = (int)fb_h;
+}
+
+/* Is the scissor the whole screen? The fast paths that write the back buffer
+ * directly, bypassing put_pixel, use this to decide whether they may. */
+static int clip_is_full(void)
+{
+    return clip_x0 == 0 && clip_y0 == 0 &&
+           clip_x1 == (int)fb_w && clip_y1 == (int)fb_h;
+}
+
 static void put_pixel(unsigned int x, unsigned int y, unsigned int rgb)
 {
-    if (x >= fb_w || y >= fb_h) return;
+    /* Signed, deliberately. Callers pass (unsigned)(px + x) where px + x can
+     * be negative, and that arrives here as a huge unsigned - which the old
+     * `x >= fb_w` test rejected for the right reason by accident. Casting back
+     * to int makes any value at or above 2^31 negative, and everything below
+     * it is caught by the upper bound, so both halves still reject it. */
+    if ((int)x < clip_x0 || (int)x >= clip_x1 ||
+        (int)y < clip_y0 || (int)y >= clip_y1) return;
     if (back_on) { back[(unsigned long)y * fb_w + x] = rgb; mark((int)x, (int)y); return; }
     unsigned char *p = fb_base + (unsigned long)y * fb_pitch + (unsigned long)x * (fb_bpp / 8);
     p[0] = (unsigned char)(rgb & 0xFF);           /* B */
@@ -463,32 +515,42 @@ static void draw_glyph(int cx, int cy, char c, unsigned int fg, unsigned int bg)
         const unsigned char *sub = (cw == GLYPH_W)
             ? &font8x16_sub[(int)c - FONT_FIRST][0][0][0]
             : &font16x32_sub[(int)c - FONT_FIRST][0][0][0];
-        for (int y = 0; y < ch; y++) {
-            unsigned int *row = back + (unsigned long)(oy + y) * fb_w + ox;
-            const unsigned char *sr = sub + (unsigned long)y * cw * 3;
-            for (int x = 0; x < cw; x++) {
-                int ar = sr[x * 3], ag = sr[x * 3 + 1], ab = sr[x * 3 + 2];
+        /* clipped BOUNDS, not a clipped test per pixel: this path writes the
+         * back buffer directly and never sees put_pixel, so the scissor has to
+         * be folded into the loop range or the glyph escapes it. */
+        int gx0 = ox > clip_x0 ? ox : clip_x0, gx1 = ox + cw < clip_x1 ? ox + cw : clip_x1;
+        int gy0 = oy > clip_y0 ? oy : clip_y0, gy1 = oy + ch < clip_y1 ? oy + ch : clip_y1;
+        if (gx0 >= gx1 || gy0 >= gy1) return;
+        for (int y = gy0; y < gy1; y++) {
+            unsigned int *row = back + (unsigned long)y * fb_w;
+            const unsigned char *sr = sub + (unsigned long)(y - oy) * cw * 3;
+            for (int x = gx0; x < gx1; x++) {
+                int i = (x - ox) * 3;
+                int ar = sr[i], ag = sr[i + 1], ab = sr[i + 2];
                 if (!(ar | ag | ab)) { row[x] = bg; continue; }
                 row[x] = blend_sub(bg, fg, ar, ag, ab);
             }
         }
-        mark(ox, oy);
-        mark(ox + cw - 1, oy + ch - 1);
+        mark(gx0, gy0);
+        mark(gx1 - 1, gy1 - 1);
         return;
     }
 
     if (back_on && ox >= 0 && oy >= 0 &&
         ox + cw <= (int)fb_w && oy + ch <= (int)fb_h) {
-        for (int y = 0; y < ch; y++) {
-            unsigned int *row = back + (unsigned long)(oy + y) * fb_w + ox;
-            const unsigned char *cr = cov + (unsigned long)y * cw;
-            for (int x = 0; x < cw; x++) {
-                int a = cr[x];
+        int gx0 = ox > clip_x0 ? ox : clip_x0, gx1 = ox + cw < clip_x1 ? ox + cw : clip_x1;
+        int gy0 = oy > clip_y0 ? oy : clip_y0, gy1 = oy + ch < clip_y1 ? oy + ch : clip_y1;
+        if (gx0 >= gx1 || gy0 >= gy1) return;
+        for (int y = gy0; y < gy1; y++) {
+            unsigned int *row = back + (unsigned long)y * fb_w;
+            const unsigned char *cr = cov + (unsigned long)(y - oy) * cw;
+            for (int x = gx0; x < gx1; x++) {
+                int a = cr[x - ox];
                 row[x] = (a <= 0) ? bg : (a >= 255) ? fg : blend_rgb(bg, fg, a);
             }
         }
-        mark(ox, oy);
-        mark(ox + cw - 1, oy + ch - 1);
+        mark(gx0, gy0);
+        mark(gx1 - 1, gy1 - 1);
         return;
     }
     for (int y = 0; y < ch; y++)
@@ -598,10 +660,12 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
 {
     if (w <= 0 || h <= 0) return;
     int x0 = x, y0 = y, x1 = x + w, y1 = y + h;
-    if (x0 < 0) x0 = 0;
-    if (y0 < 0) y0 = 0;
-    if (x1 > (int)fb_w) x1 = (int)fb_w;
-    if (y1 > (int)fb_h) y1 = (int)fb_h;
+    /* against the SCISSOR, not the screen. fb_clip() already clamped the
+     * scissor to the screen, so this is the same test plus the window. */
+    if (x0 < clip_x0) x0 = clip_x0;
+    if (y0 < clip_y0) y0 = clip_y0;
+    if (x1 > clip_x1) x1 = clip_x1;
+    if (y1 > clip_y1) y1 = clip_y1;
     if (x0 >= x1 || y0 >= y1) return;
 
     if (back_on) {
@@ -647,10 +711,14 @@ void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
         int b8 = (tb << 8) + ((bb - tb) * i * 256) / h;
         const unsigned char *drow = dither4[i & 3];
         int yy = y + i;
-        if ((unsigned)yy >= fb_h) continue;
+        /* the SCISSOR, not the screen - fb_clip() clamped it to the screen
+         * already. The back_on branch below writes rows straight into the back
+         * buffer without going near put_pixel, so this is the only thing
+         * keeping the wallpaper inside a damage rectangle. */
+        if (yy < clip_y0 || yy >= clip_y1) continue;
         int j0 = 0, j1 = w;
-        if (x + j0 < 0) j0 = -x;
-        if (x + j1 > (int)fb_w) j1 = (int)fb_w - x;
+        if (x + j0 < clip_x0) j0 = clip_x0 - x;
+        if (x + j1 > clip_x1) j1 = clip_x1 - x;
         if (j0 >= j1) continue;
 
         /* The dither pattern repeats every 4 pixels across, and the colour is
@@ -1093,15 +1161,27 @@ static void fb_scroll(int top, int bot)
     /* move each scanline up by one text row, but only within the text box's
      * columns - so a floating terminal scrolls without touching its neighbours */
     if (back_on) {
+        /* the third and last direct writer of the back buffer, and it needs
+         * the scissor for the same reason the other two do. In practice the
+         * clamp is a no-op: once the shell is a window (E3) the text box sits
+         * inside the client area, which is what the scissor will be. It exists
+         * so that a NARROWER scissor scrolls only what it was told to. */
         int x0 = c0 * cell_w;
-        int npx = (c1 - c0 + 1) * cell_w;
-        for (int y = y_top; y < y_bot; y++) {
-            unsigned int *d = back + (unsigned long)y * fb_w + x0;
-            unsigned int *s = back + (unsigned long)(y + cell_h) * fb_w + x0;
-            for (int i = 0; i < npx; i++) d[i] = s[i];
+        int x1 = x0 + (c1 - c0 + 1) * cell_w;
+        if (x0 < clip_x0) x0 = clip_x0;
+        if (x1 > clip_x1) x1 = clip_x1;
+        int ys = y_top < clip_y0 ? clip_y0 : y_top;
+        int ye = y_bot < clip_y1 ? y_bot : clip_y1;
+        int npx = x1 - x0;
+        if (npx > 0 && ys < ye) {
+            for (int y = ys; y < ye; y++) {
+                unsigned int *d = back + (unsigned long)y * fb_w + x0;
+                unsigned int *s = back + (unsigned long)(y + cell_h) * fb_w + x0;
+                for (int i = 0; i < npx; i++) d[i] = s[i];
+            }
+            mark(x0, ys);
+            mark(x0 + npx - 1, ye - 1);
         }
-        mark(x0, y_top);
-        mark(x0 + npx - 1, y_bot - 1);
     } else {
         int bpx = (int)(fb_bpp / 8);
         unsigned long xoff = (unsigned long)c0 * cell_w * bpx;

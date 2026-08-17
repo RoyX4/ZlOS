@@ -50,10 +50,7 @@ def main():
     build(False)
     tmp = tempfile.mkdtemp(prefix="zlos-msync-")
     ser_path, qmp_path = os.path.join(tmp, "ser"), os.path.join(tmp, "qmp")
-    argv = qemu_argv(tmp, False, ser_path, qmp_path)
-    if no_tablet:
-        i = argv.index("usb-tablet,bus=xhci.0")
-        del argv[i - 1:i + 1]
+    argv = qemu_argv(tmp, False, ser_path, qmp_path, tablet=not no_tablet)
     print("pointer devices:", "PS/2 only" if no_tablet else "PS/2 + usb-tablet")
     proc = subprocess.Popen(argv,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

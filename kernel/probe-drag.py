@@ -75,7 +75,11 @@ def main():
 
     tmp = tempfile.mkdtemp(prefix="zlos-drag-")
     ser_path, qmp_path = os.path.join(tmp, "ser"), os.path.join(tmp, "qmp")
-    proc = subprocess.Popen(qemu_argv(tmp, False, ser_path, qmp_path),
+    # tablet=False is not optional here. With the usb-tablet attached QEMU
+    # keeps every pointer event for itself and zlOS's PS/2 mouse never sees
+    # one - measured in probe-mouse-sync.py. A drag test against a dead
+    # pointer would report "dragging is broken" for the wrong reason.
+    proc = subprocess.Popen(qemu_argv(tmp, False, ser_path, qmp_path, tablet=False),
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         ser, qmp = Serial(ser_path), Qmp(qmp_path)

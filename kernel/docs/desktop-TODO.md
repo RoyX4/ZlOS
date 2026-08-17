@@ -14,11 +14,40 @@ Never run a QEMU boot alongside a multi-agent fan-out.
 
 ## Phase 0 — no laptop, no touchpad, all testable in QEMU
 
-### [ ] 0a. Stop the back buffer switching itself off at high resolution
+### [x] 0a. Stop the back buffer switching itself off at high resolution — **DONE 2026-08-18**
 
-**Problem.** `fb.c:86` — `#define BACK_MAX (1920 * 1200)`. `fb.c:155` —
+**Shipped.** Every ceiling is now the distance to the **next buffer in the
+high-RAM map**, which is written out at the top of `fb.c` with each base
+re-read from the file that owns it. `fb_setup` prints the verdict.
+
+| mode | back | drag |
+|---|---|---|
+| 1920×1200 | ON (9,000 KiB of 16,384) | ON |
+| **2560×1440** — the ThinkPad panel | **ON** (14,400 KiB) | **ON** |
+| 3840×2160 | OFF, and it says why | ON, by 368 KiB |
+
+That last row is why the boot line reports each buffer separately: `back` and
+`drag` used to fail together only because `BACK_MAX` and `BG_MAX` happened to
+be the same number. Sized from real neighbours they part company at 4K, and a
+line reading "lost: window dragging" there would be a lie printed every boot.
+
+**Verified.** `hosttest/fbbench` exercises the drag machinery functionally
+(snapshot → scribble → restore, grab → stamp) at all three modes rather than
+trusting the arithmetic. A real 2560×1440 boot logs `back ON, drag ON`, the
+desktop draws (`shots/b1-2560.png`), and `probe-drag.py` moves the System
+Monitor 12.22% of the screen (`shots/b1-drag-2560-after.png`).
+
+**Two things that shot leaves behind, neither of them this task's:**
+- a **smear trail** of shadow slivers along the drag path. Arithmetic:
+  `fb_shadow(w, h, off = 8·u, soft = 6·u)` reaches `x + w + 28` at `u = 2`, and
+  the drag erases `bg_rest(dox, doy, dgw + 16, dgh + 16)` — **12 px short on
+  every step**. This is the "shadow halo artifact" 2d already promises to
+  delete along with the sticker drag. Now with a number attached.
+- dragging needs `-device usb-tablet` gone from `try.sh` — see T-5.
+
+**The original problem, for the record.** `#define BACK_MAX (1920 * 1200)` and
 `back_on = ((int)(width * height) <= BACK_MAX)`. The ThinkPad panel is
-2560×1440 = 3,686,400 pixels, which is larger, so `back_on` becomes 0.
+2560×1440 = 3,686,400 pixels, which is larger, so `back_on` became 0.
 
 Four features are keyed off that one flag and all die together, silently:
 
@@ -44,31 +73,40 @@ names the mode and says whether the back buffer is on.
 
 ---
 
-### [ ] 0b. Add a clip rectangle to `fb.c`
+### [x] 0b. Add a clip rectangle to `fb.c` — **DONE 2026-08-18**
 
-**Why this is the keystone.** Every primitive in `fb.c` clips to the screen and
-nothing else, so there is no way to repaint part of the screen. That, not the
-window code, is what blocks a compositor.
+**Why this is the keystone.** Every primitive in `fb.c` clipped to the screen
+and nothing else, so there was no way to repaint part of the screen. That, not
+the window code, is what blocked a compositor.
 
-**Do.** Add four statics and two functions:
+**Shipped.** Four statics, `fb_clip(x,y,w,h)` and `fb_clip_none()`. One
+rectangle, not a stack — the repaint loop computes the frame and client rects
+rather than nesting them, so push/pop would buy nothing.
 
-```c
-static int clip_x0, clip_y0, clip_x1, clip_y1;
-void fb_clip(int x, int y, int w, int h);
-void fb_clip_none(void);
-```
+**This task said "exactly two functions" and that was wrong.** `fb_fill_px` and
+`put_pixel` are two of *five*. The other three write the back buffer directly
+and call neither: `draw_glyph`'s subpixel fast path, `draw_glyph`'s AA fast
+path, `fb_gradient`'s `back_on` branch, and `fb_scroll`. With only the two
+changed, **2,184,000 pixels escaped the scissor at 1920×1200** — the wallpaper
+and every glyph on screen.
 
-Then change **exactly two functions** to clamp against the scissor instead of
-the screen:
+It passed at 3840×2160 while broken, because `back_on` is 0 there and those
+paths fall back to `put_pixel`. Worth remembering: a gate that only runs in the
+degraded configuration tests the wrong code.
 
-- `fb_fill_px` — `fb.c:429-434`, the four clamps
-- `put_pixel` — `fb.c:161`, the bounds test
+All five fold the scissor into their **loop bounds** rather than testing per
+pixel, so a clipped draw costs no more per pixel than an unclipped one. That is
+the point — the compositor's hot path is many small clipped rectangles.
 
-Everything else in the file is built on those two, so the whole library becomes
-clippable for free. Do not touch the other primitives.
+**Verified, both halves** (`hosttest/fbbench.c`, `clip_check()`):
 
-**Verify.** Set the clip to the full screen. QMP screendump must be
-**pixel-identical** to before the change. If anything moved, a clamp is wrong.
+| | |
+|---|---|
+| broke nothing | scene hash unchanged with the scissor at full screen: `8473499efb49abb1` @1920×1200, `81c4be85c58763e7` @2560×1440, `2275f08098c8291e` @3840×2160 |
+| does something | **zero** pixels escape a set scissor — fill, gradient, rrect, shadow, AA text, icons, lines, checked at all four edges and one pixel outside each |
+
+The first check alone is passed perfectly by an `fb_clip()` that does nothing.
+Both are needed.
 
 ---
 

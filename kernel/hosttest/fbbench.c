@@ -57,6 +57,8 @@ void fb_box(int x, int y, int w, int h, unsigned int rgb);
 void fb_present(void);
 void fb_at(int row, int col, const char *s, unsigned char attr);
 void fb_bg_snapshot(void);
+void fb_clip(int x, int y, int w, int h);
+void fb_clip_none(void);
 void fb_bg_restore(int x, int y, int w, int h);
 void fb_grab(int x, int y, int w, int h);
 void fb_stamp(int x, int y);
@@ -277,6 +279,69 @@ static int drag_check(void)
     return ok;
 }
 
+/* Does the scissor actually scissor?
+ *
+ * The full-screen identity hash proves the clip did not BREAK anything. It
+ * cannot prove the clip WORKS - a fb_clip() that did nothing at all would pass
+ * it perfectly. So drive every primitive at a rectangle that is deliberately
+ * far bigger than the scissor and check both halves of the claim: the pixel
+ * just inside changed, the pixel just outside did not.
+ *
+ * Corners matter more than edges here. An off-by-one in a clamp usually shows
+ * at exactly one boundary, so each of the four is tested on its own rather
+ * than sampling the middle and calling it clipped. */
+static int clip_check(void)
+{
+    const unsigned WALL = 0x00112233, INK = 0x00FF7700;
+    const int cx = 300, cy = 200, cw = 400, ch = 300;
+    int bad = 0;
+
+    fb_clip_none();
+    fb_fill_px(0, 0, W, H, WALL);
+
+    fb_clip(cx, cy, cw, ch);
+    fb_fill_px(0, 0, W, H, INK);            /* the whole screen, scissored */
+    fb_clip_none();
+
+    /* inside, at each corner and the middle */
+    if (fb_get_px(cx, cy) != INK)                     { printf("  clip: top-left inside not drawn\n");     bad++; }
+    if (fb_get_px(cx + cw - 1, cy) != INK)            { printf("  clip: top-right inside not drawn\n");    bad++; }
+    if (fb_get_px(cx, cy + ch - 1) != INK)            { printf("  clip: bottom-left inside not drawn\n");  bad++; }
+    if (fb_get_px(cx + cw - 1, cy + ch - 1) != INK)   { printf("  clip: bottom-right inside not drawn\n"); bad++; }
+    if (fb_get_px(cx + cw / 2, cy + ch / 2) != INK)   { printf("  clip: centre not drawn\n");              bad++; }
+    /* one pixel outside, on all four sides */
+    if (fb_get_px(cx - 1, cy) != WALL)                { printf("  clip: LEAKED left\n");   bad++; }
+    if (fb_get_px(cx + cw, cy) != WALL)               { printf("  clip: LEAKED right\n");  bad++; }
+    if (fb_get_px(cx, cy - 1) != WALL)                { printf("  clip: LEAKED above\n");  bad++; }
+    if (fb_get_px(cx, cy + ch) != WALL)               { printf("  clip: LEAKED below\n");  bad++; }
+
+    /* every primitive, not just the fill: a rounded rect, a shadow, a
+     * gradient, text and an icon, all drawn far outside the scissor. Nothing
+     * of any of them may land beyond it. */
+    fb_clip_none();
+    fb_fill_px(0, 0, W, H, WALL);
+    fb_clip(cx, cy, cw, ch);
+    fb_gradient(0, 0, W, H, 0x808080, 0x404040);
+    fb_rrect(cx - 200, cy - 150, cw + 400, ch + 300, 20, 0x00AA00);
+    fb_shadow(cx - 100, cy - 100, cw + 200, ch + 200, 16, 12);
+    fb_text_aa(cx - 180, cy - 40, "clipped text should not appear", 0xFFFFFF);
+    fb_icon24(cx - 60, cy + ch + 10, 0, 0xFFFFFF);
+    fb_line(0, 0, W - 1, H - 1, 0x00FFFF);
+    fb_clip_none();
+
+    int leaks = 0;
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            int in = (x >= cx && x < cx + cw && y >= cy && y < cy + ch);
+            if (!in && fb_get_px(x, y) != WALL) leaks++;
+        }
+    if (leaks) { printf("  clip: %d pixels ESCAPED the scissor\n", leaks); bad++; }
+
+    printf("  %-34s %s\n", "clip: scissor holds",
+           bad ? "FAIL" : "ok  (every primitive, all four edges)");
+    return !bad;
+}
+
 static void hash_report(void)
 {
     memset(vram_p, 0, (size_t)W * H * 4);
@@ -315,6 +380,7 @@ static void run_at(int w, int h, unsigned long vram)
     bench("WHOLE DESKTOP redraw",     b_desktop,  px);
     printf("\n");
     drag_check();
+    clip_check();
     hash_report();
 }
 
