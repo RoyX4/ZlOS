@@ -3906,3 +3906,112 @@ int intel_modeset_teardown(int port)
 
     return bad;
 }
+
+/* ==== one call to light the panel, for a kernel with no allocator ========
+ *
+ * The harness does this in fifty lines of C because it can: it has mmap, it can
+ * pick addresses, it can print. zlOS has no heap at all - `pci.c` says so
+ * plainly - so the framebuffer cannot be allocated, only decided.
+ *
+ * Stolen memory is what makes that acceptable rather than a hack. Firmware
+ * reserves it, no operating system manages it, and it is present on every boot
+ * at an address the hardware itself reports. Deciding to put the framebuffer
+ * one megabyte into it is not arbitrary the way a hardcoded 224 MiB is - it is
+ * the only memory on the machine that is unambiguously ours.
+ *
+ * Returns a CPU-writable address for the framebuffer, or 0. The address is in
+ * the aperture: BAR2 is the CPU's window onto whatever the GGTT maps, so GGTT
+ * address X is reachable at aperture_base + X, and a plain store from the
+ * kernel lands in the memory the display is scanning out.
+ *
+ * On failure it returns 0 having changed nothing that matters, and the caller
+ * keeps whatever framebuffer the loader gave it. A driver that cannot bring the
+ * panel up must not also take away the screen that was working.
+ */
+u32 intel_bringup_panel(void)
+{
+    if (!intel_present() || !intel_supported()) return 0;
+
+    u32 stolen = intel_stolen_base();
+    u32 ssize  = intel_stolen_size();
+    u32 aper   = (u32)aperture;
+    if (!stolen || !ssize || !aper) return 0;
+
+    /* The mode comes from what firmware is already running. On this machine
+     * that is always available: the system firmware lights the panel during
+     * POST, long before any bootloader, so the timing registers describe a real
+     * mode even when zlOS was loaded by its own 512-byte bootloader. */
+    if (!intel_modeset_set_from_hw()) return 0;
+
+    u32 w = (u32)intel_hactive(), h = (u32)intel_vactive();
+    if (w < 640 || h < 480) return 0;
+
+    u32 stride = (w * 4u + 63u) & ~63u;          /* linear: 64-byte multiples */
+    u32 bytes  = stride * h;
+    u32 gfx    = 1u << 20;                       /* 1 MiB into the GGTT       */
+    u32 skip   = 1u << 20;                       /* firmware's own structures */
+
+    /* Refuse rather than run off the end of stolen memory. */
+    if (bytes + skip > ssize) return 0;
+
+    u32 pages = (bytes + 4095u) / 4096u;
+    if (!intel_ggtt_map_range(gfx >> 12, stolen + skip, (int)pages)) return 0;
+
+    if (!intel_modeset_set_fb(gfx, stride)) return 0;
+
+    intel_link_train_arm(1);
+    int ok = intel_modeset_run(0);
+    intel_link_train_arm(0);
+    if (!ok) return 0;
+
+    return aper + gfx;
+}
+
+/* Undo it. Same arming discipline, and the same reason it exists: a half
+ * configured display handed to anything else is worse than no display. */
+int intel_shutdown_panel(void)
+{
+    if (!intel_present()) return 0;
+    intel_link_train_arm(1);
+    int bad = intel_modeset_teardown(0);
+    intel_link_train_arm(0);
+    return bad == 0;
+}
+
+/* Which step it stopped at, for a caller that got 0 back. */
+int intel_bringup_failed_step(void) { return intel_modeset_failed_at(); }
+
+/* Bring the panel up and move the console onto it.
+ *
+ * This is the point of the whole exercise: after this returns 1, every
+ * character zlOS prints is being scanned out by a mode this driver programmed,
+ * on a link this driver trained, through a page table this driver wrote. The
+ * loader's framebuffer is no longer involved.
+ *
+ * Ordered so a failure is survivable. The modeset runs first and the console is
+ * only moved once it has actually succeeded - if the bring-up fails the console
+ * keeps the loader's framebuffer and the machine is exactly as it was. The one
+ * genuinely irreversible moment is the console_init_fb() call, because after it
+ * there is no way to report anything except through the display we just
+ * programmed. Everything that could fail has already been checked by then.
+ *
+ * Declared here rather than including console.h because intel.c takes its
+ * kernel dependencies as externs - see idt_ticks and cpu_delay_us above. */
+void console_init_fb(uptr addr, u32 pitch, u32 width, u32 height, u32 bpp);
+
+int intel_panel_takeover(void)
+{
+    u32 fb = intel_bringup_panel();
+    if (!fb) return 0;
+
+    u32 w = (u32)intel_hactive(), h = (u32)intel_vactive();
+    u32 stride = (w * 4u + 63u) & ~63u;
+
+    /* Clear it before the console arrives. Stolen memory holds whatever
+     * firmware left, and a console scrolling over that looks like corruption. */
+    volatile u32 *px = (volatile u32 *)(uptr)fb;
+    for (u32 i = 0; i < (stride / 4u) * h; i++) px[i] = 0;
+
+    console_init_fb((uptr)fb, stride, w, h, 32);
+    return 1;
+}

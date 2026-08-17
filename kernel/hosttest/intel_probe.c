@@ -208,6 +208,16 @@ static unsigned char edid_storage[256];
 /* ---- what intel.c expects the kernel to provide ------------------------ */
 static int cfg_fd = -1;
 
+/* intel.c's console dependency. The harness has no console - it prints to a
+ * terminal - so this reports the handover instead of performing it. Same
+ * arrangement as cpu_delay_us and host_cfg_read below: the driver states what
+ * it needs from a kernel, and each host supplies its own. */
+void console_init_fb(uptr addr, u32 pitch, u32 width, u32 height, u32 bpp)
+{
+    printf("  [console would move to 0x%llX, %ux%u, pitch %u, %u bpp]\n",
+           (unsigned long long)addr, width, height, pitch, bpp);
+}
+
 u32 host_cfg_read(int bus, int dev, int fn, int off)
 {
     (void)bus; (void)dev; (void)fn;

@@ -330,6 +330,13 @@ extern unsigned int intel_ggtt_size(void);
 extern int  intel_pipe_width(void);
 extern int  intel_pipe_height(void);
 extern int  intel_stride(void);
+/* The whole panel bring-up in one call: pick memory in stolen, map it through
+ * the GGTT, run the 34-step modeset, and hand back a CPU-writable framebuffer
+ * address - or 0, having left the loader's screen alone. */
+extern unsigned int intel_bringup_panel(void);
+extern int  intel_shutdown_panel(void);
+extern int  intel_bringup_failed_step(void);
+extern int  intel_panel_takeover(void);
 extern int  intel_plane_enabled(void);
 extern int  intel_pipe_enabled(void);
 extern unsigned int intel_surface(void);
@@ -776,6 +783,10 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "intel_w"))     return zl_num((double)intel_pipe_width());
     if (streq(name, "intel_h"))     return zl_num((double)intel_pipe_height());
     if (streq(name, "intel_stride"))return zl_num((double)intel_stride());
+    if (streq(name, "panel_up"))    return zl_num((double)intel_bringup_panel());
+    if (streq(name, "panel_down"))  return zl_num((double)intel_shutdown_panel());
+    if (streq(name, "panel_step"))  return zl_num((double)intel_bringup_failed_step());
+    if (streq(name, "panel_console"))return zl_num((double)intel_panel_takeover());
     if (streq(name, "intel_plane")) return zl_num((double)intel_plane_enabled());
     if (streq(name, "intel_pipe"))  return zl_num((double)intel_pipe_enabled());
     if (streq(name, "intel_surf"))  return zl_num((double)intel_surface());

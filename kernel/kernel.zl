@@ -1066,6 +1066,41 @@ fn run_command(cmd, arg) {
         beep(1000, 15)
         return 0
     }
+    if cmd == 80 {                        # P - light the panel with OUR driver
+        color(C_CYAN)  print("  taking the panel with our own modeset")
+        color(C_GREY)
+        print("    you are reading this on the loader's framebuffer.")
+        print("    after this, every pixel is scanned out by a mode this")
+        print("    driver programmed, over a link it trained itself.")
+        print("")
+        ii = intel_find()
+        if ii < 0 {
+            color(C_RED)   print("    no Intel GPU here - nothing to take")
+            color(C_GREY)  return 0
+        }
+        if intel_ok() == 0 {
+            color(C_RED)   print("    not a Gen9 part - refusing")
+            color(C_GREY)  return 0
+        }
+        fb = panel_up()
+        if fb == 0 {
+            color(C_RED)
+            put("    bring-up FAILED at plan step ")  print(panel_step())
+            color(C_GREY)
+            print("    the loader's framebuffer is untouched. nothing is lost.")
+            return 0
+        }
+        color(C_GREEN)
+        put("    the panel is ours. framebuffer at 0x")  hex(fb, 8)  print("")
+        color(C_GREY)
+        print("    press a key to move the console onto it")
+        key()
+        panel_console()
+        color(C_GREEN)
+        print("  this text is being scanned out by our own driver.")
+        color(C_GREY)
+        return 0
+    }
     if cmd == 107 {                       # k - the hardware, as the bus reports it
         color(C_CYAN)  print("  PCI bus scan")
         color(C_GREY)
