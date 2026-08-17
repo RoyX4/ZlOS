@@ -552,3 +552,61 @@ a tile is that place. The order in `desktop-TODO` is `fb_clip` → tiled
 rasterization → SIMD → depth buffer → textures. Two are done. **The next step
 is SIMD across the partial tiles**, and it is also the step that would make
 this table read the other way round.
+
+---
+
+# The full baseline, after the whole overnight run
+
+`hosttest/fbbench`, best of 5 invocations, host load ~1.6. Replaces every
+earlier table in this document. Milliseconds track host load; the *ratios* are
+what to read.
+
+| | 1920×1200 | 2560×1440 | 3840×2160 |
+|---|---|---|---|
+| fill whole screen | 0.396 | 0.847 | **30.613** |
+| gradient whole screen | 1.480 | 2.433 | **33.424** |
+| fill + present (blit) | 1.358 | 2.503 | **31.647** |
+| bg_snapshot | 3.442 | 5.663 | 15.119 |
+| shadow 600×460 | 0.609 | 0.629 | 0.668 |
+| rrect 600×460 | 0.042 | 0.053 | 1.056 |
+| 10 dock icons | 0.079 | 0.081 | 0.079 |
+| 40 lines AA text (mono) | 3.430 | 3.552 | 3.428 |
+| 40 lines proportional | 3.738 | 3.859 | 3.766 |
+| 40 rows console text | 2.596 | 2.899 | 6.863 |
+| 200 diagonal lines | 3.341 | 3.452 | 3.617 |
+| **one window, full chrome** | **0.735** | **0.778** | 2.824 |
+| **whole desktop redraw** | **3.953** | **5.254** | **44.370** |
+
+**The ThinkPad's 2560×1440 draws a whole desktop in 5.25 ms of a 16.67 ms
+budget** — and before this run it could not use the back buffer at that
+resolution at all.
+
+## Read the 4K column, because it is an argument
+
+Nothing is wrong with 4K. `back_on` is 0 there, so every primitive goes
+straight to VRAM through `put_pixel` instead of through the fast row path, and
+a full-screen fill costs **77× what it costs at 1920×1200** for 3.6× the
+pixels. The operations that do *not* collapse — shadow, icons, text — are the
+ones already dominated by per-pixel blending rather than by stores.
+
+That single column is the case for **C4**. Deleting the sticker-drag machinery
+frees 128–176 MiB, which lets `back` move down and cover 3840×2160, and this
+column would then look like the other two — call it 8 ms rather than 44. It is
+the largest measurable win left in this document that does not require
+concurrency, and it is currently blocked only on `kernel.zl` still calling
+`bg_snap`/`grab`/`stamp` (T-9).
+
+## What each change contributed, all measured
+
+| | |
+|---|---|
+| damage list (B3) | two-corner update **66–107× less** presented area |
+| SIMD fill and blit (G1) | fill **2.2×**, blit **34%**, desktop 8% |
+| icon atlas (A1) | **2×** on the icon path, 20.1 → 10.0 cyc/px |
+| shadow skip (0i, pre-run) | whole desktop 19.98 → 4.88 ms |
+| ink-width glyph blit (F3) | proportional text 35% → **9%** over mono |
+| Wu lines (A2) | **4.3× slower** per line pixel — a quality change, and the cost is stated rather than hidden |
+| tiled rasterizer (H3) | **2.8× slower** than scanline — so *not* wired in |
+
+Two of those seven are slower and both are still here for stated reasons. That
+is the point of measuring in both directions.
