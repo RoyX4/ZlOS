@@ -4903,3 +4903,134 @@ int intel_hpd_irq_enabled(void)
     if (!intel_present()) return 0;
     return (mmio_r(GEN8_DE_PORT_IMR) & DE_PORT_DDI_A_HOTPLUG) ? 0 : 1;
 }
+
+/* ==== phase 3: external DisplayPort ======================================
+ *
+ * The VBT says this board has no HDMI port at all - eight child slots, three
+ * populated: DP-A (the eDP panel), DP-B and DP-C. So the roadmap's "HDMI first
+ * because it has no link training" is not available here, and external DP is
+ * the only reachable target. Confirmed twice over: SHOTPLUG_CTL has hotplug
+ * enables set for exactly A, B and C.
+ *
+ * Four things differ from the eDP path, and all four are the kind that fail
+ * quietly:
+ *
+ * 1. DP_TP_STATUS EXISTS on B/C/D. It does not on DDI A - the PRM says so and
+ *    i915 returns early for PORT_A - which is why the eDP path had to use a
+ *    blind 600 us where a poll belongs. On an external port the poll is real,
+ *    and using the blind wait there instead just makes every modeset slower.
+ *
+ * 2. No panel power sequencer. T12, T3, T9, FORCE_VDD, the whole PPS - none of
+ *    it applies. An external monitor powers itself. Running the panel power
+ *    path against DDI B would poke the internal panel's sequencer while
+ *    bringing up a different port.
+ *
+ * 3. A different buffer translation table. The eDP table is the OEM's
+ *    low-vswing choice for a soldered panel; an external port drives a cable of
+ *    unknown length to a sink of unknown make, and uses the DP table with its
+ *    higher swings and I_boost values.
+ *
+ * 4. The rate and lane ladder becomes load-bearing. The internal panel has one
+ *    working point and the plan says never to walk down from it. An external
+ *    sink can be anything - the ladder is how you find what it can take, and
+ *    intel_dp_choose_rate_for_panel() already implements it against the sink's
+ *    own DPCD.
+ */
+
+/* kbl_u_trans_dp - the table for an external port, from the plan. Nine entries
+ * against the eDP table's ten, so max vswing level is 2 not 3, and several
+ * entries set bit 31 (balance leg enable) and a non-zero I_boost where the
+ * low-vswing eDP table has neither. */
+static const u32 dp_buf_trans[9][2] = {
+    {0x0000201B, 0x000000A1}, {0x00005012, 0x00000088}, {0x80007011, 0x000000CD},
+    {0x80009010, 0x000000C0}, {0x0000201B, 0x0000009D}, {0x80005012, 0x000000C0},
+    {0x80007011, 0x000000C0}, {0x00002016, 0x0000004F}, {0x80005012, 0x000000C0},
+};
+
+/* I_boost for the DP table, per entry - the plan lists 0x3 where bit 31 is set
+ * and none elsewhere. It is programmed into DISPIO_CR_TX_BMU_CR0, not into
+ * DDI_BUF_TRANS, which is why it needs its own lookup. */
+static int dp_trans_iboost(int i)
+{
+    return (i >= 0 && i < 9 && (dp_buf_trans[i][0] & 0x80000000u)) ? 3 : 0;
+}
+
+int intel_is_edp_port(int port) { return port == 0; }   /* DDI A only */
+
+/* Program whichever table this port should use. Must happen BEFORE
+ * DDI_BUF_CTL is enabled - the hardware latches it at enable (4.3 #19). */
+int intel_ddi_program_trans_for_port(int port)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (port < 0 || port > 3) return 0;
+
+    if (intel_is_edp_port(port)) {
+        for (int i = 0; i < 10; i++) {
+            mmio_w(DDI_BUF_TRANS(port, i) + 0, edp_buf_trans[i][0]);
+            mmio_w(DDI_BUF_TRANS(port, i) + 4, edp_buf_trans[i][1]);
+        }
+        return intel_iboost_set(port, 0, 1);      /* low vswing: I_boost 0 */
+    }
+
+    for (int i = 0; i < 9; i++) {
+        mmio_w(DDI_BUF_TRANS(port, i) + 0, dp_buf_trans[i][0]);
+        mmio_w(DDI_BUF_TRANS(port, i) + 4, dp_buf_trans[i][1]);
+    }
+    /* Entry 0 is what the port starts training at, so its I_boost is the one
+     * to program here; a level change during training re-evaluates it. */
+    return intel_iboost_set(port, dp_trans_iboost(0), 0);
+}
+
+/* The idle wait that DDI A cannot do.
+ *
+ * On B/C/D, DP_TP_STATUS bit 25 is IDLE_DONE and polling it is the correct way
+ * to know the transport has settled. On DDI A the register does not exist, a
+ * read returns whatever the address decodes to, and a generic poll pointed at
+ * it spins its whole timeout on every modeset and then succeeds anyway - which
+ * looks like it works and costs the timeout every time (C3). */
+#define DP_TP_STATUS_IDLE   (1u << 25)
+
+int intel_dp_tp_wait_idle(int port, u32 us)
+{
+    if (!intel_present()) return 0;
+    if (intel_is_edp_port(port)) return 1;        /* no such register; blind wait covers it */
+    return wait_bits_us(DP_TP_STATUS(port), DP_TP_STATUS_IDLE, DP_TP_STATUS_IDLE, us);
+}
+
+/* Bring up an external DP port far enough to train.
+ *
+ * No panel power anywhere in here on purpose. The sink powers itself, and
+ * touching the PPS while bringing up DDI B would be operating the internal
+ * panel's power sequencer as a side effect of enabling a different port. */
+int intel_ext_port_prepare(int port, int lanes, int enhanced)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (intel_is_edp_port(port)) return 0;        /* wrong function for eDP */
+    if (port < 1 || port > 3) return 0;
+
+    if (!intel_pwr_well_enable(PW_DDI_A_E + port)) return 0;
+    if (!intel_ddi_set_clock(port, 0)) return 0;
+    if (!intel_ddi_program_trans_for_port(port)) return 0;
+    if (!intel_port_enable(port, lanes, enhanced)) return 0;
+    /* Now that the port is up, the real idle poll is available. */
+    intel_dp_tp_wait_idle(port, 1000);
+    return 1;
+}
+
+/* Probe what is plugged in, and pick a working point for it.
+ *
+ * Unlike the panel, an external sink's capabilities are not known in advance,
+ * so this reads them and lets the existing chooser walk the ladder. Returns the
+ * rate index, or -1 if nothing is connected or nothing fits. */
+int intel_ext_port_probe(int port, u32 pixel_khz, int bpp)
+{
+    if (!intel_present()) return -1;
+    if (intel_is_edp_port(port)) return -1;
+    if (!intel_port_connected(port)) return -1;
+    if (!intel_dpcd_read_caps(port)) return -1;
+
+    return intel_dp_choose_rate_for_panel(pixel_khz, bpp,
+                                          intel_dpcd_max_rate(),
+                                          intel_dpcd_max_lanes(),
+                                          intel_dpcd_has_rate_table());
+}
