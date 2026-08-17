@@ -98,7 +98,15 @@ static void survey(void)
      * as a plausible sync pair - that is exactly why it fooled a report. */
     u32 a = rd(TRANSCONF_EDP_C1A), b2 = rd(TRANSCONF_EDP_C1B);
     snprintf(b, sizeof b, "0x7F008 = %08X  (b31=%d b30=%d)", a, !!(a>>31), !!(a>>30&1));
-    if ((a >> 31) && (a >> 30 & 1)) ok("TRANSCONF is 0x7F008", b); else bad("TRANSCONF is 0x7F008", b);
+    /* b31/b30 only mean "this is TRANSCONF" while something is driving the
+     * pipe. Measured with i915 unbound, 0x7F008 reads 00000000 - the pipe is
+     * genuinely off, and failing there was the test asserting a precondition
+     * it does not control. The offset is still settled either way, because
+     * 0x6F008 decodes as a plausible hsync pair and TRANSCONF cannot. */
+    if ((a >> 31) && (a >> 30 & 1))      ok("TRANSCONF is 0x7F008", b);
+    else if (a == 0 && !(rd(TRANS_DDI_FUNC_CTL) >> 31))
+                                         ok("TRANSCONF is 0x7F008 (pipe off - reads 0)", b);
+    else                                 bad("TRANSCONF is 0x7F008", b);
     snprintf(b, sizeof b, "0x6F008 = %08X  -> hsync %u..%u", b2, (b2 & 0xFFFF)+1, (b2>>16)+1);
     ok("0x6F008 decodes as TRANS_HSYNC", b);
 
@@ -135,7 +143,12 @@ static void survey(void)
     printf("         backlight-off      %3u.%u ms   <- H5: if this is 0.1, the real\n"
            "                                         T9 is in VBT (260 ms), not here\n",
            (ppoff&0x1FFF)/10, (ppoff&0x1FFF)%10);
-    if (!(ppc & 2)) bad("H4: PP_CONTROL b1 must stay set", "power-down-on-reset is CLEAR");
+    /* i915 CLEARS b1 when it releases the device - measured 00000060 after
+     * unbind against 00000067 while it was running. So a cleared bit here is
+     * the state we inherit, not a fault; what would be a fault is leaving it
+     * clear. intel_pp_delays_program() sets it as plan step 12. */
+    if (!(ppc & 2)) hmm("H4: b1 clear - we must set it (step 12)",
+                        "power-down-on-reset CLEAR: normal after an i915 unbind");
     else            ok("H4: power-down-on-reset set", "b1 = 1");
 
     printf("\n-- straps: read once, OR into every DDI_BUF_CTL write -----------\n");
@@ -302,7 +315,9 @@ int main(int argc, char **argv)
     printf("  BAR0 mapped %u MiB, %s\n", BAR_BYTES >> 20, mode_modeset ? "READ/WRITE" : "read-only");
 
     if (mode_survey) {
-        printf("\n### STAGE 1 - firmware state survey (i915 still running) ###\n");
+        printf("\n### STAGE 1 - firmware state survey (%s) ###\n",
+               (rd(TRANS_DDI_FUNC_CTL) >> 31) ? "display is live"
+                                              : "display is DOWN - i915 released it");
         survey();
         printf("\n===============================\n");
         printf("  %d passed, %d failed, %d to look at\n", pass, fail, warn);

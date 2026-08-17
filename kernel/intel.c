@@ -492,6 +492,20 @@ static u32 trans_base(void)
 {
     u32 edp = mmio_r(TRANS_DDI_EDP);
     if (edp & 0x80000000u) return TRANS_EDP_BASE;
+
+    /* The eDP transcoder is not enabled. That does NOT mean transcoder A is
+     * driving something - measured with i915 unbound, TRANS_DDI_FUNC_CTL reads
+     * 0x00010006 (enable clear) while the eDP timing registers at 0x6F000 still
+     * hold 2560 of 2720 and 1440 of 1481, and transcoder A reads zeroes.
+     *
+     * Falling through to A there gives a 1x1 mode built from an empty register
+     * block, which is how a takeover of a STOPPED display reads the mode as
+     * nonsense and then programs it. So: if the eDP block still describes a
+     * real mode, it is the one that matters, enabled or not. */
+    if ((mmio_r(TRANS_EDP_BASE + TRANS_OFF_HTOTAL) & 0x1FFF) &&
+        (mmio_r(TRANS_EDP_BASE + TRANS_OFF_VTOTAL) & 0x1FFF))
+        return TRANS_EDP_BASE;
+
     return TRANS_A_BASE;
 }
 
@@ -2441,6 +2455,70 @@ int intel_pp_sequencing(void)
     return (int)((mmio_r(PP_STATUS) >> 28) & 3);
 }
 
+/* Plan step 12: program the sequencer BEFORE anything asserts panel power.
+ *
+ * This is the step the modeset sequence originally pointed at
+ * intel_pp_sequencing(), which only READS the sequence-progress bits and
+ * returns 0 when the sequencer is idle - so the modeset would have aborted at
+ * step 12 with a name that claimed it had programmed something.
+ *
+ * Measured with i915 unbound, which is the state a real run starts from:
+ *
+ *   PP_STATUS  = 00000000    panel fully powered DOWN
+ *   PP_CONTROL = 00000060    b0 off, b2 off, T12 field still 6, and b1 CLEAR
+ *   PP_ON_DELAYS / PP_OFF_DELAYS survive intact (T3 200 ms, T10 50 ms)
+ *
+ * Two things follow. The delay registers persist, so the correct action is to
+ * keep whatever is larger rather than overwrite good values with our defaults -
+ * hazard H3 is about them resetting to ZERO, and a sequencer with T3 = 0
+ * reports ready instantly and lets AUX drive an unpowered panel.
+ *
+ * And b1, power-down-on-reset, is CLEARED by i915 on the way out. Hazard H4:
+ * with it clear, any reset drops VDD instantly under live video instead of
+ * running the ordered T9/T10 sequence. Nothing in this driver set it. Now it
+ * does, and it is the reason this function exists rather than being folded
+ * into the power-on path - it has to happen before power is asserted, not with
+ * it. */
+int intel_pp_delays_program(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+
+    /* eDP-spec ceilings, used only where the register reads lower */
+    u32 want_t3 = 2000, want_bl_on = 10, want_t10 = 500, want_bl_off = 500;
+
+    u32 on  = mmio_r(PP_ON_DELAYS);
+    u32 off = mmio_r(PP_OFF_DELAYS);
+    u32 t3      = (on  >> 16) & 0x1FFF, bl_on  = on  & 0x1FFF;
+    u32 t10     = (off >> 16) & 0x1FFF, bl_off = off & 0x1FFF;
+
+    if (t3     < want_t3)     t3     = want_t3;
+    if (bl_on  < want_bl_on)  bl_on  = want_bl_on;
+    if (t10    < want_t10)    t10    = want_t10;
+    if (bl_off < want_bl_off) bl_off = want_bl_off;
+
+    mmio_w(PP_ON_DELAYS,  (t3  << 16) | bl_on);
+    mmio_w(PP_OFF_DELAYS, (t10 << 16) | bl_off);
+
+    /* T12 field is "+1" encoded in 100 ms units: 6 means 500 ms. Keep whatever
+     * is there if it already asks for at least 500 ms, and never write 0 -
+     * that means "no delay", which is the H1 hazard itself. */
+    u32 ctl = mmio_r(PP_CONTROL) & 0xFFFF;
+    u32 cyc = (ctl >> 4) & 0x1F;
+    if (cyc < 6) cyc = 6;                       /* >= 500 ms */
+    ctl = (ctl & ~(0x1Fu << 4)) | (cyc << 4);
+    ctl |= PP_PWR_DOWN_ON_RESET;                /* H4 - i915 leaves this clear */
+
+    mmio_w(PP_CONTROL, PP_UNLOCK_KEY | ctl);
+    (void)mmio_r(PP_CONTROL);
+    return 1;
+}
+
+int intel_pp_down_on_reset(void)
+{
+    if (!intel_present()) return 0;
+    return (mmio_r(PP_CONTROL) & PP_PWR_DOWN_ON_RESET) ? 1 : 0;
+}
+
 /* ---- the T12 epoch -----------------------------------------------------
  *
  * T12 is the panel's power-cycle delay: after power goes away, it may not come
@@ -3587,7 +3665,7 @@ int intel_modeset_run_ex(int port, int dry)
     /* Step 12 MUST precede any power-on assertion: the delay registers reset to
      * zero, and a sequencer with T3=T12=0 reports ready instantly and yanks VDD
      * under live video (hazard H3). */
-    MS_STEP(12, "PPS delays programmed", intel_pp_sequencing());
+    MS_STEP(12, "PPS delays + H4 bit", intel_pp_delays_program());
     MS_STEP(14, "panel VDD on (T12,T3)", intel_panel_vdd_on());
 
     /* -- Phase D: what does the panel say it can do? --------------------- */
