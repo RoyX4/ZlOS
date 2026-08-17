@@ -575,7 +575,7 @@ what to read.
 | 40 rows console text | 2.596 | 2.899 | 6.863 |
 | 200 diagonal lines | 3.341 | 3.452 | 3.617 |
 | **one window, full chrome** | **0.735** | **0.778** | 2.824 |
-| **whole desktop redraw** | **3.953** | **5.254** | **44.370** |
+| **whole desktop redraw** | **3.953** | **5.254** | ~~44.370~~ → **9.094** |
 
 **The ThinkPad's 2560×1440 draws a whole desktop in 5.25 ms of a 16.67 ms
 budget** — and before this run it could not use the back buffer at that
@@ -589,12 +589,39 @@ a full-screen fill costs **77× what it costs at 1920×1200** for 3.6× the
 pixels. The operations that do *not* collapse — shadow, icons, text — are the
 ones already dominated by per-pixel blending rather than by stores.
 
-That single column is the case for **C4**. Deleting the sticker-drag machinery
-frees 128–176 MiB, which lets `back` move down and cover 3840×2160, and this
-column would then look like the other two — call it 8 ms rather than 44. It is
-the largest measurable win left in this document that does not require
-concurrency, and it is currently blocked only on `kernel.zl` still calling
-`bg_snap`/`grab`/`stamp` (T-9).
+That single column was the case for **C4** — and it turned out not to need C4
+at all. **Done 2026-08-18, and the prediction was almost exact:**
+
+| 3840×2160 | before | after |
+|---|---|---|
+| whole desktop redraw | 44.370 ms | **9.094 ms** |
+| | | **4.9× faster**, 2.53 cyc/px |
+
+`fb_setup` now computes the back buffer's **base**, not just its limit. If the
+mode does not fit in `back`'s own 16 MiB span it falls back to the drag arena
+at 128 MiB, which is 48 MiB — the only span in the map large enough for 4K's
+31.6 MiB.
+
+**The trade is real and the boot log states it:** dragging turns off, because
+the buffer it would snapshot into is now the back buffer. That is not much of a
+loss, because at that mode the drag buffers were unusable anyway — `bg_buf`
+needs the same 31.6 MiB and has 32, leaving nothing for a back buffer beside
+it. The choice was never "back buffer or dragging"; it was "back buffer or
+neither".
+
+`fb_bg_snapshot` and `fb_grab` **refuse** while the arena is taken, and the
+harness asserts the refusal — a snapshot that "worked" there would be
+overwriting the very thing it was snapshotting, silently.
+
+**The 4K scene hash changed**, `2275f08098c8291e` → `e735d8737eeff842`, and
+that is intended rather than a regression: subpixel text is gated on `back_on`
+(`fb.c`'s `draw_glyph`), so 4K went from grayscale AA to subpixel. The pixels
+are different because they are better. Recording it here because an unexplained
+hash change is exactly what that hash exists to catch.
+
+C4 still supersedes this properly: deleting the sticker-drag machinery frees
+the arena outright, and dragging comes back through damage-based repaint, which
+needs no snapshot at all. Blocked on `kernel.zl` (T-9).
 
 ## What each change contributed, all measured
 

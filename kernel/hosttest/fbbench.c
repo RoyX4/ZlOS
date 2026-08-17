@@ -38,9 +38,23 @@
 #define BG_SIZE   (SP_ADDR    - BG_ADDR)      /* 32 MiB */
 #define SP_SIZE   (0x0B000000UL - SP_ADDR)    /* 16 MiB */
 #define BACK_SIZE (0x0D000000UL - BACK_ADDR)  /* 16 MiB */
+#define BIG_SIZE  (0x0B000000UL - BG_ADDR)    /* 48 MiB: the fallback arena */
 
-/* what fb.c will decide, by the same arithmetic */
-static int fits_back(int w, int h) { return (unsigned long)w * h * 4 <= BACK_SIZE; }
+/* What fb.c will decide, by the same arithmetic. Three-way now: back's own
+ * span, then the drag arena, then nothing. Keeping this in step with fb.c
+ * matters - a harness that disagrees with the kernel about what degraded is
+ * worse than one that does not ask. */
+static int fits_back(int w, int h)
+{
+    unsigned long n = (unsigned long)w * h * 4;
+    return n <= BACK_SIZE || n <= BIG_SIZE;
+}
+/* ...and whether that cost us the drag buffers */
+static int took_arena(int w, int h)
+{
+    unsigned long n = (unsigned long)w * h * 4;
+    return n > BACK_SIZE && n <= BIG_SIZE;
+}
 
 /* ---- fb.c's public surface --------------------------------------------- */
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
@@ -269,6 +283,21 @@ static int drag_check(void)
 {
     const unsigned MARK = 0x00FF00FF, WALL = 0x00203040;
     int ok = 1;
+
+    if (took_arena(W, H)) {
+        /* Dragging is off BY DESIGN here: the back buffer is living in the
+         * drag buffers' space, and fb.c refuses the snapshot rather than
+         * overwriting the thing being snapshotted. Asserting the refusal is
+         * the test - a snapshot that "worked" here would be corruption. */
+        fb_bg_snapshot();
+        fb_fill_px(100, 100, 200, 200, MARK);
+        fb_bg_restore(100, 100, 200, 200);
+        printf("  %-34s %s\n", "drag: refused (arena taken by back)",
+               fb_get_px(150, 150) == MARK ? "ok  (refused, as it must)"
+                                           : "FAIL - it snapshotted anyway");
+        if (fb_get_px(150, 150) != MARK) ok = 0;
+        return ok;
+    }
 
     fb_fill_px(0, 0, W, H, WALL);
     fb_bg_snapshot();

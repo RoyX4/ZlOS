@@ -127,8 +127,31 @@ int fb_get_rows(void) { return fb_rows; }
 #define SP_LIMIT   ((unsigned int)(HI_SCHED - HI_SP))    /* 16 MiB */
 #define BACK_LIMIT ((unsigned int)(HI_NVME  - HI_BACK))  /* 16 MiB */
 
+/* THE FALLBACK ARENA. 128..176 MiB is 48 MiB - the drag buffers plus the gap
+ * to sched.c - and it is the only span in the map big enough for 3840x2160,
+ * which needs 31.6 MiB and does not fit in back's own 16.
+ *
+ * At a mode that large the drag buffers are unusable ANYWAY: bg_buf would need
+ * the same 31.6 MiB and has 32, leaving no room for a back buffer beside it.
+ * So the choice is not "back buffer or dragging", it is "back buffer or
+ * neither", and the arena is worth more as one big buffer than as two that
+ * cannot both be used.
+ *
+ * The difference this makes is not marginal. With back off, every primitive
+ * goes to VRAM through put_pixel instead of the fast row path, and a
+ * full-screen fill at 4K costs 77x what it costs at 1920x1200 - for 3.6x the
+ * pixels. Measured: a whole desktop redraw at 3840x2160 is 44 ms without a
+ * back buffer, against 3.95 ms at 1920x1200 with one.
+ *
+ * C4 supersedes this properly: deleting the sticker-drag machinery frees the
+ * arena outright and dragging comes back through damage-based repaint, which
+ * needs no snapshot at all. Until then this is the honest trade, and the boot
+ * log states it rather than leaving someone to wonder why dragging stopped. */
+#define BIG_LIMIT  ((unsigned int)(HI_SCHED - HI_BG))    /* 48 MiB */
+
 static unsigned int *back = (unsigned int *)HI_BACK;
 static int back_on = 0;
+static int back_took_arena = 0;   /* back is living in the drag buffers' space */
 
 /* ---- SIMD, and exactly where it is allowed --------------------------------
  * cpu.c has detected SSE/SSE2/SSE3/SSSE3 since it was written and NOTHING has
@@ -378,7 +401,7 @@ static void fb_putu(unsigned int v)
  * every time, which is worse than the silence this replaced. */
 static void fb_report_mode(unsigned int need)
 {
-    int drag_ok = (need <= BG_LIMIT);
+    int drag_ok = (need <= BG_LIMIT) && !back_took_arena;
 
     fb_puts("  fb: ");
     fb_putu(fb_w); fb_puts("x"); fb_putu(fb_h); fb_puts("x"); fb_putu(fb_bpp);
@@ -393,9 +416,14 @@ static void fb_report_mode(unsigned int need)
         fb_puts(" KiB free below nvme - no subpixel text, read-back hits VRAM\n");
     }
     if (!drag_ok) {
-        fb_puts("      drag OFF: snapshot wants "); fb_putu(need >> 10);
-        fb_puts(" KiB, "); fb_putu(BG_LIMIT >> 10);
-        fb_puts(" KiB free below sp_buf - windows will not move\n");
+        fb_puts("      drag OFF: ");
+        if (back_took_arena) {
+            fb_puts("the back buffer is using the drag arena at 128 MiB\n");
+        } else {
+            fb_puts("snapshot wants "); fb_putu(need >> 10);
+            fb_puts(" KiB, "); fb_putu(BG_LIMIT >> 10);
+            fb_puts(" KiB free below sp_buf - windows will not move\n");
+        }
     }
 }
 
@@ -438,7 +466,22 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
      * neighbour, in which case everything still works - just slower, straight
      * to VRAM - and the boot log SAYS SO. See the high-RAM map above. */
     unsigned int need = width * height * 4u;
-    back_on = (need <= BACK_LIMIT);
+    /* Prefer back's own span; fall back to the drag arena; then give up. The
+     * BASE is computed from the map rather than hardcoded - which is what
+     * desktop-TODO 0a asked for and what the first version of this only did
+     * for the limit. */
+    back_took_arena = 0;
+    if (need <= BACK_LIMIT) {
+        back = (unsigned int *)HI_BACK;
+        back_on = 1;
+    } else if (need <= BIG_LIMIT) {
+        back = (unsigned int *)HI_BG;
+        back_on = 1;
+        back_took_arena = 1;
+    } else {
+        back = (unsigned int *)HI_BACK;
+        back_on = 0;
+    }
     ndmg    = 0;                 /* the mode changed; old damage means nothing */
     pdirty  = 0;
     fb_report_mode(need);
@@ -1285,7 +1328,9 @@ static int sp_w = 0, sp_h = 0, sp_ok = 0;
  * wallpaper/header/dock but before the draggable windows go on top */
 void fb_bg_snapshot(void)
 {
-    if (fb_w * fb_h * 4u > BG_LIMIT) { bg_ok = 0; return; }
+    /* Refuse if the back buffer took this space - overwriting it would corrupt
+     * the very thing being snapshotted, and silently. */
+    if (back_took_arena || fb_w * fb_h * 4u > BG_LIMIT) { bg_ok = 0; return; }
     bg_w = (int)fb_w; bg_h = (int)fb_h;
     for (int y = 0; y < bg_h; y++)
         for (int x = 0; x < bg_w; x++)
@@ -1307,7 +1352,8 @@ void fb_bg_restore(int x, int y, int w, int h)
 /* grab a screen rectangle into the sprite buffer (the window being lifted) */
 void fb_grab(int x, int y, int w, int h)
 {
-    if (w <= 0 || h <= 0 || (unsigned int)(w * h) * 4u > SP_LIMIT) { sp_ok = 0; return; }
+    if (back_took_arena || w <= 0 || h <= 0 ||
+        (unsigned int)(w * h) * 4u > SP_LIMIT) { sp_ok = 0; return; }
     sp_w = w; sp_h = h;
     for (int j = 0; j < h; j++)
         for (int i = 0; i < w; i++)
