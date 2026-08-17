@@ -128,45 +128,146 @@ int fb_get_rows(void) { return fb_rows; }
 
 static unsigned int *back = (unsigned int *)HI_BACK;
 static int back_on = 0;
-static int dx0, dy0, dx1, dy1, dirty;
+
+/* ---- the damage list -----------------------------------------------------
+ * This was ONE rectangle that every touched pixel grew. A clock ticking in one
+ * corner and a monitor updating in the other unioned to the whole screen, every
+ * second, so the present blit copied 2.3 million pixels to move a few hundred.
+ * GNOME repaints ~2% of the screen per frame; zlOS repainted 100%.
+ *
+ * Eight rectangles, merged on contact. When it fills, everything collapses into
+ * one - which IS the old single box, so the worst case is "as slow as it was",
+ * never "wrong". That property is why 8 is enough and why there is no dynamic
+ * growth to get wrong.
+ *
+ * THE PIXEL ACCUMULATOR IS NOT AN OPTIMISATION, IT IS THE DESIGN. put_pixel is
+ * the hottest path in the renderer - every shadow pixel, every antialiased
+ * glyph edge, every rounded corner - and making it search an eight-entry list
+ * per pixel would tax the whole file to speed up the blit. So put_pixel keeps
+ * growing a single box exactly as before, at the same four compares, and that
+ * box is flushed into the list whenever a rect-shaped primitive reports its own
+ * damage, or at present time. Per-pixel primitives are spatially coherent
+ * anyway, so the box is the right shape for them.
+ */
+#define DMG_MAX 8
+struct dmg_rect { int x0, y0, x1, y1; };
+static struct dmg_rect dmg[DMG_MAX];
+static int ndmg;
+
+static int px0, py0, px1, py1, pdirty;   /* the put_pixel accumulator */
 
 static void mark(int x, int y)
 {
-    if (!dirty) { dx0 = x; dy0 = y; dx1 = x + 1; dy1 = y + 1; dirty = 1; return; }
-    if (x < dx0) dx0 = x;
-    if (y < dy0) dy0 = y;
-    if (x + 1 > dx1) dx1 = x + 1;
-    if (y + 1 > dy1) dy1 = y + 1;
+    if (!pdirty) { px0 = x; py0 = y; px1 = x + 1; py1 = y + 1; pdirty = 1; return; }
+    if (x < px0) px0 = x;
+    if (y < py0) py0 = y;
+    if (x + 1 > px1) px1 = x + 1;
+    if (y + 1 > py1) py1 = y + 1;
 }
 
-/* copy the dirty box out to the card, then forget it */
+/* Touching counts as overlapping. Two rectangles sharing an edge are cheaper
+ * to blit as one than as two, and merging them cannot cover a pixel that was
+ * not already going to be covered by one of them. */
+static int dmg_touches(const struct dmg_rect *a, int x0, int y0, int x1, int y1)
+{
+    return !(x0 > a->x1 || x1 < a->x0 || y0 > a->y1 || y1 < a->y0);
+}
+
+static void dmg_add(int x0, int y0, int x1, int y1)
+{
+    if (x0 >= x1 || y0 >= y1) return;
+
+    /* Absorb everything it touches, and RESTART after each absorption: one
+     * union makes the rectangle bigger, which can bring it into contact with
+     * something it did not touch a moment ago. Bounded by DMG_MAX either way. */
+    for (int i = 0; i < ndmg; ) {
+        if (dmg_touches(&dmg[i], x0, y0, x1, y1)) {
+            if (dmg[i].x0 < x0) x0 = dmg[i].x0;
+            if (dmg[i].y0 < y0) y0 = dmg[i].y0;
+            if (dmg[i].x1 > x1) x1 = dmg[i].x1;
+            if (dmg[i].y1 > y1) y1 = dmg[i].y1;
+            dmg[i] = dmg[--ndmg];
+            i = 0;
+            continue;
+        }
+        i++;
+    }
+
+    if (ndmg >= DMG_MAX) {              /* full: degrade to the old single box */
+        for (int i = 0; i < ndmg; i++) {
+            if (dmg[i].x0 < x0) x0 = dmg[i].x0;
+            if (dmg[i].y0 < y0) y0 = dmg[i].y0;
+            if (dmg[i].x1 > x1) x1 = dmg[i].x1;
+            if (dmg[i].y1 > y1) y1 = dmg[i].y1;
+        }
+        ndmg = 0;
+    }
+    dmg[ndmg].x0 = x0; dmg[ndmg].y0 = y0;
+    dmg[ndmg].x1 = x1; dmg[ndmg].y1 = y1;
+    ndmg++;
+}
+
+static void dmg_flush_pixels(void)
+{
+    if (!pdirty) return;
+    pdirty = 0;
+    dmg_add(px0, py0, px1, py1);
+}
+
+/* A primitive that knows its own rectangle says so here, instead of marking
+ * every pixel it wrote. That is what keeps two far-apart updates apart. */
+void fb_damage(int x, int y, int w, int h)
+{
+    dmg_flush_pixels();
+    dmg_add(x, y, x + w, y + h);
+}
+
+/* what fb_present would blit right now: how many rectangles, and how many
+ * pixels in total. The whole claim of this change is "the presented area is
+ * measurably smaller", and that needs a number - see hosttest/fbbench.c. */
+int fb_damage_count(void) { dmg_flush_pixels(); return ndmg; }
+
+unsigned int fb_damage_area(void)
+{
+    dmg_flush_pixels();
+    unsigned int a = 0;
+    for (int i = 0; i < ndmg; i++)
+        a += (unsigned)(dmg[i].x1 - dmg[i].x0) * (unsigned)(dmg[i].y1 - dmg[i].y0);
+    return a;
+}
+
+/* copy every damaged rectangle out to the card, then forget them */
 void fb_present(void)
 {
-    if (!back_on || !dirty) return;
-    int x0 = dx0, y0 = dy0, x1 = dx1, y1 = dy1;
-    dirty = 0;
-    if (x0 < 0) x0 = 0;
-    if (y0 < 0) y0 = 0;
-    if (x1 > (int)fb_w) x1 = (int)fb_w;
-    if (y1 > (int)fb_h) y1 = (int)fb_h;
-    if (x0 >= x1 || y0 >= y1) return;
+    if (!back_on) return;
+    dmg_flush_pixels();
+    if (!ndmg) return;
     int bpx = (int)(fb_bpp / 8);
-    for (int y = y0; y < y1; y++) {
-        unsigned int  *src = back + (unsigned long)y * fb_w + x0;
-        unsigned char *dst = fb_base + (unsigned long)y * fb_pitch + (unsigned long)x0 * bpx;
-        if (bpx == 4) {
-            unsigned int *d = (unsigned int *)dst;
-            for (int x = x0; x < x1; x++) *d++ = *src++;
-        } else {
-            for (int x = x0; x < x1; x++) {
-                unsigned int c = *src++;
-                dst[0] = (unsigned char)(c & 0xFF);
-                dst[1] = (unsigned char)((c >> 8) & 0xFF);
-                dst[2] = (unsigned char)((c >> 16) & 0xFF);
-                dst += 3;
+    for (int i = 0; i < ndmg; i++) {
+        int x0 = dmg[i].x0, y0 = dmg[i].y0, x1 = dmg[i].x1, y1 = dmg[i].y1;
+        if (x0 < 0) x0 = 0;
+        if (y0 < 0) y0 = 0;
+        if (x1 > (int)fb_w) x1 = (int)fb_w;
+        if (y1 > (int)fb_h) y1 = (int)fb_h;
+        if (x0 >= x1 || y0 >= y1) continue;
+        for (int y = y0; y < y1; y++) {
+            unsigned int  *src = back + (unsigned long)y * fb_w + x0;
+            unsigned char *dst = fb_base + (unsigned long)y * fb_pitch + (unsigned long)x0 * bpx;
+            if (bpx == 4) {
+                unsigned int *d = (unsigned int *)dst;
+                for (int x = x0; x < x1; x++) *d++ = *src++;
+            } else {
+                for (int x = x0; x < x1; x++) {
+                    unsigned int c = *src++;
+                    dst[0] = (unsigned char)(c & 0xFF);
+                    dst[1] = (unsigned char)((c >> 8) & 0xFF);
+                    dst[2] = (unsigned char)((c >> 16) & 0xFF);
+                    dst += 3;
+                }
             }
         }
     }
+    ndmg = 0;
 }
 
 /* ---- saying so out loud --------------------------------------------------
@@ -258,7 +359,8 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
      * to VRAM - and the boot log SAYS SO. See the high-RAM map above. */
     unsigned int need = width * height * 4u;
     back_on = (need <= BACK_LIMIT);
-    dirty   = 0;
+    ndmg    = 0;                 /* the mode changed; old damage means nothing */
+    pdirty  = 0;
     fb_report_mode(need);
 
     /* Tell the mouse ISR how big the screen is. It cannot ask: idt.c is built
@@ -303,14 +405,6 @@ void fb_clip_none(void)
 {
     clip_x0 = 0; clip_y0 = 0;
     clip_x1 = (int)fb_w; clip_y1 = (int)fb_h;
-}
-
-/* Is the scissor the whole screen? The fast paths that write the back buffer
- * directly, bypassing put_pixel, use this to decide whether they may. */
-static int clip_is_full(void)
-{
-    return clip_x0 == 0 && clip_y0 == 0 &&
-           clip_x1 == (int)fb_w && clip_y1 == (int)fb_h;
 }
 
 static void put_pixel(unsigned int x, unsigned int y, unsigned int rgb)
@@ -531,8 +625,7 @@ static void draw_glyph(int cx, int cy, char c, unsigned int fg, unsigned int bg)
                 row[x] = blend_sub(bg, fg, ar, ag, ab);
             }
         }
-        mark(gx0, gy0);
-        mark(gx1 - 1, gy1 - 1);
+        fb_damage(gx0, gy0, gx1 - gx0, gy1 - gy0);
         return;
     }
 
@@ -549,8 +642,7 @@ static void draw_glyph(int cx, int cy, char c, unsigned int fg, unsigned int bg)
                 row[x] = (a <= 0) ? bg : (a >= 255) ? fg : blend_rgb(bg, fg, a);
             }
         }
-        mark(gx0, gy0);
-        mark(gx1 - 1, gy1 - 1);
+        fb_damage(gx0, gy0, gx1 - gx0, gy1 - gy0);
         return;
     }
     for (int y = 0; y < ch; y++)
@@ -673,8 +765,7 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
             unsigned int *row = back + (unsigned long)yy * fb_w + x0;
             for (int xx = x0; xx < x1; xx++) *row++ = rgb;
         }
-        mark(x0, y0);
-        mark(x1 - 1, y1 - 1);
+        fb_damage(x0, y0, x1 - x0, y1 - y0);
         return;
     }
     for (int yy = y0; yy < y1; yy++)
@@ -701,6 +792,8 @@ static const unsigned char dither4[4][4] = {
 void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
 {
     if (h <= 0) return;
+    /* the union of every row actually written, reported once at the end */
+    int gx0 = 1 << 30, gy0 = 1 << 30, gx1 = -(1 << 30), gy1 = -(1 << 30);
     int tr = (top >> 16) & 0xFF, tg = (top >> 8) & 0xFF, tb = top & 0xFF;
     int br = (bot >> 16) & 0xFF, bg = (bot >> 8) & 0xFF, bb = bot & 0xFF;
     for (int i = 0; i < h; i++) {
@@ -741,13 +834,19 @@ void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
         if (back_on) {
             unsigned int *row = back + (unsigned long)yy * fb_w + x + j0;
             for (int j = j0; j < j1; j++) *row++ = quad[j & 3];
-            mark(x + j0, yy);
-            mark(x + j1 - 1, yy);
+            /* accumulate, do not report per row: a full-screen wallpaper is
+             * 1200 rows, and 1200 list insertions to describe one rectangle
+             * would cost more than the blit they are meant to shrink */
+            if (x + j0 < gx0) gx0 = x + j0;
+            if (x + j1 > gx1) gx1 = x + j1;
+            if (yy < gy0) gy0 = yy;
+            if (yy + 1 > gy1) gy1 = yy + 1;
         } else {
             for (int j = j0; j < j1; j++)
                 put_pixel((unsigned)(x + j), (unsigned)yy, quad[j & 3]);
         }
     }
+    if (gx0 < gx1 && gy0 < gy1) fb_damage(gx0, gy0, gx1 - gx0, gy1 - gy0);
 }
 
 /* one glyph, scaled up by an integer factor, drawn at a pixel position.
@@ -1179,8 +1278,7 @@ static void fb_scroll(int top, int bot)
                 unsigned int *s = back + (unsigned long)(y + cell_h) * fb_w + x0;
                 for (int i = 0; i < npx; i++) d[i] = s[i];
             }
-            mark(x0, ys);
-            mark(x0 + npx - 1, ye - 1);
+            fb_damage(x0, ys, npx, ye - ys);
         }
     } else {
         int bpx = (int)(fb_bpp / 8);

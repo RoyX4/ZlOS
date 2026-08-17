@@ -110,17 +110,50 @@ Both are needed.
 
 ---
 
-### [ ] 0c. Replace the single dirty box with a damage list
+### [x] 0c. Replace the single dirty box with a damage list — **DONE 2026-08-18**
 
-**Problem.** `fb.c:89-98` tracks one rectangle and `mark()` grows it. A clock in
-one corner plus a monitor in the other unions to the whole screen every second.
+**Problem.** One rectangle that `mark()` grew per pixel. A clock in one corner
+plus a monitor in the other unioned to the whole screen, every second.
 
-**Do.** A small array — 8 rectangles is plenty. Merge on overlap. **When full,
-merge everything into one**, which degrades to exactly today's behaviour, so the
-worst case is "as slow as now", never "wrong". Have primitives call
-`fb_damage()` once with their known rect rather than `mark()` per pixel.
+**Shipped.** Eight rectangles, merged on *contact* (touching counts — two
+rectangles sharing an edge are cheaper as one blit than two). Each insertion
+absorbs everything it touches and then **restarts**, because one union can
+bring the rectangle into contact with something it did not touch a moment
+before. When the array fills, everything collapses into one — which *is* the
+old single box, so the worst case is "as slow as it was", never "wrong". That
+property is why 8 needs no tuning and why there is no dynamic growth.
 
-**Verify.** Screendump identical; the presented area is measurably smaller.
+**The pixel accumulator is the design, not an optimisation.** `put_pixel` is
+the hottest path in the renderer — every shadow pixel, every AA glyph edge,
+every rounded corner — and making it search an eight-entry list per pixel would
+tax the whole file to speed up the blit. So it still grows a single box at the
+same four compares, and that box is flushed into the list when a rect-shaped
+primitive reports its own damage, or at present time. Per-pixel primitives are
+spatially coherent anyway, so a box is the right shape for them.
+
+`fb_fill_px`, `draw_glyph`, `fb_gradient` and `fb_scroll` now call
+`fb_damage()` once with the rectangle they know. `fb_gradient` accumulates
+across rows and reports at the end — 1200 list insertions to describe one
+rectangle would cost more than the blit they exist to shrink.
+
+**Verified**, `hosttest/fbbench.c`:
+
+| | presented | one box would have been | |
+|---|---|---|---|
+| two corners, 1920×1200 | 2 rects, 33,000 px | 2,180,800 px | **66× less** |
+| two corners, 2560×1440 | 2 rects, 33,000 px | 3,528,000 px | **107× less** |
+| four corners, 1920×1200 | 4 rects, 48,000 px | 2,304,000 px | **48× less** |
+
+- **present blits every rectangle, and only those.** Zero VRAM, present, check
+  each corner arrived and the untouched middle is still zero. The scene hash
+  could not have caught a `present()` that only ever blitted `dmg[0]` — that
+  scene opens with a full-screen gradient, so it always presents as *one* rect.
+  Worth knowing before trusting a hash.
+- **it costs nothing to draw.** Interleaved A/B against the pre-change file,
+  best of 6 each: AA text +3.0%, one window −4.9%, whole desktop −3.3%. The
+  sign is not even consistent — that is noise, which is the answer the pixel
+  accumulator was designed to produce.
+- scene hashes unchanged at all three resolutions.
 
 ---
 

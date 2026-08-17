@@ -58,6 +58,9 @@ void fb_present(void);
 void fb_at(int row, int col, const char *s, unsigned char attr);
 void fb_bg_snapshot(void);
 void fb_clip(int x, int y, int w, int h);
+void fb_damage(int x, int y, int w, int h);
+int  fb_damage_count(void);
+unsigned int fb_damage_area(void);
 void fb_clip_none(void);
 void fb_bg_restore(int x, int y, int w, int h);
 void fb_grab(int x, int y, int w, int h);
@@ -342,14 +345,100 @@ static int clip_check(void)
     return !bad;
 }
 
+/* Is the damage list actually smaller than the box it replaced?
+ *
+ * The single dirty box grew to enclose everything touched, so a clock in one
+ * corner and a monitor in the other unioned to the whole screen. The claim is
+ * that eight rectangles keep them apart. That is a NUMBER, not an opinion, and
+ * DECISIONS.md #25 is about exactly this: an argument is not a measurement.
+ *
+ * The old behaviour is recoverable for comparison without keeping the old code
+ * around - it is the bounding box of the new list, because that is precisely
+ * what unioning everything into one would have produced. */
+static void damage_check(void)
+{
+    if (!fits_back(W, H)) {
+        /* No back buffer means no blit to shrink: drawing already went
+         * straight to VRAM, so the damage list is legitimately empty. Saying
+         * "0 rects" here without saying why reads as a failure. */
+        printf("  %-34s n/a - no back buffer, drawing goes straight to VRAM\n",
+               "damage list");
+        return;
+    }
+    struct { const char *what; int n; int corners[4][4]; } scenes[] = {
+        { "two corners (clock + monitor)", 2,
+          { { 20, 20, 200, 60 }, { W - 320, H - 90, 300, 70 } } },
+        { "four corners", 4,
+          { { 0, 0, 200, 60 }, { W - 200, 0, 200, 60 },
+            { 0, H - 60, 200, 60 }, { W - 200, H - 60, 200, 60 } } },
+    };
+
+    for (unsigned s = 0; s < sizeof scenes / sizeof scenes[0]; s++) {
+        fb_present();                       /* start from an empty list */
+        for (int i = 0; i < scenes[s].n; i++) {
+            const int *r = scenes[s].corners[i];
+            fb_fill_px(r[0], r[1], r[2], r[3], 0x00304050);
+            /* text too, so the per-pixel accumulator is in play, not just the
+             * rect primitives - that is the half most likely to over-merge */
+            fb_text_aa(r[0] + 4, r[1] + 4, "12:04:55", 0x00E4EDFF);
+        }
+
+        int n = fb_damage_count();
+        unsigned area = fb_damage_area();
+
+        /* what the single box would have been: the bounding box of the lot */
+        long bx0 = W, by0 = H, bx1 = 0, by1 = 0;
+        for (int i = 0; i < scenes[s].n; i++) {
+            const int *r = scenes[s].corners[i];
+            if (r[0] < bx0) bx0 = r[0];
+            if (r[1] < by0) by0 = r[1];
+            if (r[0] + r[2] > bx1) bx1 = r[0] + r[2];
+            if (r[1] + r[3] > by1) by1 = r[1] + r[3];
+        }
+        long boxed = (bx1 - bx0) * (by1 - by0);
+
+        printf("  %-34s %d rects, %u px   (one box: %ld px, %.1fx more)\n",
+               scenes[s].what, n, area, boxed,
+               area ? (double)boxed / (double)area : 0.0);
+        if (n < 2)
+            printf("       ^ MERGED into one - the list is not separating them\n");
+
+        /* Does present actually blit EVERY rectangle? The scene hash cannot
+         * answer that: its first call is a full-screen gradient, so it always
+         * presents as one rect and would pass with a present() that only ever
+         * blitted dmg[0]. Zero VRAM, present, and look. */
+        memset(vram_p, 0, (size_t)W * H * 4);
+        fb_present();
+        int missing = 0, bled = 0;
+        for (int i = 0; i < scenes[s].n; i++) {
+            const int *r = scenes[s].corners[i];
+            const unsigned char *p = vram_p + ((size_t)(r[1] + r[3] / 2) * W
+                                             + (r[0] + r[2] - 2)) * 4;
+            if (!(p[0] | p[1] | p[2])) missing++;
+        }
+        /* the middle of the screen was never drawn, so it must still be zero */
+        const unsigned char *mid = vram_p + ((size_t)(H / 2) * W + W / 2) * 4;
+        if (mid[0] | mid[1] | mid[2]) bled = 1;
+        printf("  %-34s %s\n", "  ...and present blits them all",
+               missing ? "FAIL - a damaged rectangle never reached VRAM"
+                       : bled ? "FAIL - present wrote outside the damage"
+                              : "ok");
+    }
+    fb_present();
+}
+
 static void hash_report(void)
 {
     memset(vram_p, 0, (size_t)W * H * 4);
     scene();
-    fb_present();                 /* no-op when back_on == 0; drawing already
-                                     went straight to VRAM in that case */
-    printf("  %-34s FNV %016llx\n", "scene hash (VRAM)",
-           (unsigned long long)fnv1a(vram_p, (size_t)W * H * 4));
+    /* how many rectangles this scene actually presented as. If it is 1 the
+     * hash proves nothing about the multi-rect blit path, so say the number. */
+    int n = fb_damage_count();
+    unsigned area = fb_damage_area();
+    fb_present();
+    printf("  %-34s FNV %016llx   (%d rects, %u px presented)\n",
+           "scene hash (VRAM)",
+           (unsigned long long)fnv1a(vram_p, (size_t)W * H * 4), n, area);
 }
 
 /* ---- driver ------------------------------------------------------------ */
@@ -381,6 +470,7 @@ static void run_at(int w, int h, unsigned long vram)
     printf("\n");
     drag_check();
     clip_check();
+    damage_check();
     hash_report();
 }
 
