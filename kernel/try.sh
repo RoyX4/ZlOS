@@ -52,15 +52,21 @@ serial)
     -display none -serial mon:stdio
   ;;
 *)
-  ./build.sh >/dev/null
+  ./mkiso.sh >/dev/null
   echo "zlOS - press h for help. Things worth trying:"
   echo "    h  help          w  draggable windows    v  spinning 3D cube"
   echo "    k  PCI + GPU     u  USB bus              o  NVMe disk"
   echo "    y  virtio-gpu    *  wake all 4 cores     +  multitasking"
   echo "    =  input events  z  the CPU              g  snake"
   echo
-  exec qemu-system-i386 -kernel kernel.elf "${COMMON[@]}" \
-    -vga none -device virtio-gpu-pci,xres=1280,yres=800 \
+  # Boot the ISO, not -kernel. QEMU's own multiboot loader never fills in the
+  # framebuffer tag - it says so out loud: "multiboot knows VBE. we don't" - so
+  # console_init() never reaches fb_setup(), and every graphical demo listed
+  # above answers "needs the framebuffer console" and refuses. GRUB, inside the
+  # ISO, does supply that tag. Keep the standard VGA it draws through, and keep
+  # virtio-gpu-pci alongside it so 'y' still has a device of its own to drive.
+  exec qemu-system-i386 -cdrom zlOS.iso "${COMMON[@]}" \
+    -device virtio-gpu-pci,xres=1280,yres=800 \
     -display gtk -serial mon:stdio
   ;;
 esac
