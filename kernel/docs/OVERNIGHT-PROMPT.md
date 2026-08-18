@@ -645,6 +645,25 @@ DESIGN RULES — do not violate
 | Audio, networking, a filesystem | Each is a whole subsystem needing a heap. Not tonight, probably not ever — see `feature-catalogue.md` |
 | A browser | Unbounded. Chromium is 6.38M lines, Ladybird 314K, all of zlOS is 11,374 |
 
+> **Both of those last two rows were wrong, and are corrected here rather than
+> edited away, because the reason they were wrong is the useful part.**
+>
+> Networking and a filesystem both shipped (`net.c`, `tcp.c`, `dns.c`,
+> `http.c`, `fs.c`) and **none of them needed a heap** — they use the same
+> static arenas as the rest of the kernel. "Needs a heap" was an assumption
+> that was never tested against an attempt.
+>
+> The browser shipped too, on 2026-08-19: it fetches `http://example.com/` by
+> name off the real internet and renders it, in ~4,657 lines. Every number in
+> that row is correct and **the conclusion does not follow from them** — they
+> measure the maximal version of the capability and report it as the
+> capability. The full correction, and the general form of the mistake, is in
+> `feature-catalogue.md` §"Why a browser is in a category of its own".
+>
+> Kept as a standing caution for this document's own genre: an exclusion table
+> is a list of things nobody will attempt, so a wrong entry in it costs work
+> that never gets done and never shows up missing.
+
 ## What Windows and Linux have that this run is chasing
 
 Mapped so nothing quietly falls off the list. Full detail in

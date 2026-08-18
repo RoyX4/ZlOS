@@ -292,7 +292,7 @@ def build(uefi):
         print(script, "failed:\n", r.stdout[-2000:], r.stderr[-2000:]); sys.exit(1)
 
 
-def qemu_argv(tmp, uefi, ser_path, qmp_path, tablet=True):
+def qemu_argv(tmp, uefi, ser_path, qmp_path, tablet=True, net=False):
     disk, stick = os.path.join(tmp, "nvme.img"), os.path.join(tmp, "stick.img")
     for p, mb in ((disk, 64), (stick, 32)):
         subprocess.run(["qemu-img", "create", "-f", "raw", p, f"{mb}M"],
@@ -320,6 +320,15 @@ def qemu_argv(tmp, uefi, ser_path, qmp_path, tablet=True):
         # tablet=False exercises the PS/2 fallback, which is what the laptop's
         # TrackPoint actually is - not a synthetic case.
         *(("-device", "usb-tablet,bus=xhci.0") if tablet else ()),
+        # THE NIC IS OPT-IN, and deliberately off by default. Every probe here
+        # shares this argv, so attaching a card unconditionally would add a PCI
+        # device to machines whose gates photograph the `k` (PCI + GPU) readout
+        # or count devices on the bus - i.e. it would change the answer of
+        # gates that have nothing to do with networking. probe-net.py passes
+        # net=True; nothing else needs to, and try.sh attaches one always
+        # because that machine is for a person, not for an assertion.
+        *(("-netdev", "user,id=n0",
+           "-device", "virtio-net-pci,netdev=n0") if net else ()),
         "-no-reboot", "-display", "none",
         "-chardev", f"socket,id=ser0,path={ser_path},server=on,wait=off",
         "-serial", "chardev:ser0",

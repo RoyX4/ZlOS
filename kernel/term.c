@@ -208,6 +208,21 @@ static const struct cmd table[] = {
     { "paint",   100 }, { "edit",    105 },
     { "anim",     97 }, { "demo",     97 },
     { "ls",      108 }, { "files",   108 },
+    /* THE SAME REGRESSION THIS TABLE'S HEADER DESCRIBES, HAPPENING AGAIN.
+     * 78/87/69 are 'N', 'W' and 'E' - the network card + ARP probe, TCP +
+     * HTTP/1.0 against a real server, and a real website by name off the
+     * internet. run_command dispatches all three (kernel.zl:2124-2126) and
+     * none of them had a word, so from the moment the compositor became the
+     * boot state there was NO WAY TO RUN ANY OF THEM: the text shell's loop is
+     * never entered when there is a framebuffer (kernel.zl:3901), and
+     * wm_frame() reads PS/2 and USB HID only - nothing in the compositor path
+     * looks at COM1. Measured, not reasoned: with a NIC attached, sending 'N'
+     * down the serial socket at the "zl> " prompt produces no output at all,
+     * and neither does 'h'.
+     * This is why the header says completeness is the point. */
+    { "net",      78 }, { "arp",      78 },
+    { "web",      87 }, { "http",     87 },
+    { "fetch",    69 }, { "site",     69 },
     { "redraw",   99 },
     { "peak",     11 }, { "peakreset", 12 },   /* the frame timer */
     { "reboot",  114 }, { "halt",    113 }, { "quit",  113 }, { "exit", 113 },

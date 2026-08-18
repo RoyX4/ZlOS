@@ -28,6 +28,14 @@ COMMON=(
   -device usb-storage,bus=xhci.0,drive=stick
   -device usb-kbd,bus=xhci.0
   -device usb-mouse,bus=xhci.0
+  # THE NETWORK CARD. Without these two flags the browser opens and cannot
+  # fetch anything, and `N` reports "no virtio-net device on the PCI bus" -
+  # which reads as a broken driver rather than an unplugged machine.
+  # virtio_net.c matches PCI 1af4:1041 and 1af4:1000 only, so QEMU's default
+  # e1000 is not enough; these are the exact flags net_gate() prints when it
+  # cannot find a card.
+  -netdev user,id=n0
+  -device virtio-net-pci,netdev=n0
   -no-reboot
 )
 

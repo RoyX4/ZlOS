@@ -180,15 +180,22 @@ hobby OS — but it should be a *stated* choice, not an accident.
 
 ## 12. Networking
 
+**This whole table was ❌ until the `desktop/browser` track landed on `main` on
+2026-08-19.** It is corrected in full rather than one row at a time, because a
+`TCP/IP stack ❌` sitting directly above a browser that fetches off the real
+internet is not a stale row, it is a contradiction.
+
 | Feature | Who | zlOS |
 |---|---|---|
-| TCP/IP stack | SerenityOS, Haiku, Essence, KolibriOS, Managarm | ❌ |
-| HTTP/TLS client | SerenityOS (`LibHTTP`, `LibTLS`) | ❌ |
-| **A web browser** | SerenityOS (Ladybird), Haiku, KolibriOS, MenuetOS | ❌ |
+| Ethernet driver | everyone | ✅ `virtio_net.c` (763 lines) |
+| TCP/IP stack | SerenityOS, Haiku, Essence, KolibriOS, Managarm | ✅ `net.c` + `tcp.c` (1,352) — ARP, IPv4, ICMP, TCP with retransmit and backoff |
+| DNS resolver | SerenityOS, KolibriOS | ✅ `dns.c` (433) — resolves by name; most of its gate is malicious input, not malformed |
+| HTTP/TLS client | SerenityOS (`LibHTTP`, `LibTLS`) | 🟡 HTTP/1.0 in `http.c` (290). **No TLS**, so `https://` does not load |
+| **A web browser** | SerenityOS (Ladybird), Haiku, KolibriOS, MenuetOS | ⚠️ **Bounded, and built.** Fetches `http://example.com/` **by name, off the real internet**, and renders it. ~4,657 lines across eight files. No JavaScript, no HTTPS — see §"Why a browser is in a category of its own" |
 | Email / IMAP | SerenityOS | ❌ |
 | Servers (ftp/http) | KolibriOS | ❌ |
 | Network-transparent filesystem | Plan 9 (9P), `drawterm` | ❌ |
-| WiFi | 9front, Haiku | ❌ |
+| WiFi | 9front, Haiku | ❌ — `wireless-plan.md` is a plan, not a driver |
 
 ## 13. Boot and platform
 
@@ -306,12 +313,42 @@ Filtered by: cheap, fits no-heap/no-lists, and pays off more than once.
 | **10** | **Audio mixing** | Haiku, SerenityOS | Whole new subsystem. Later. |
 
 **Explicitly not worth taking:** microkernel structure, capability security,
-attribute-indexed filesystems, network stacks, a browser. Each needs a heap, a
-filesystem, or processes — all of which zlOS refuses by design.
+attribute-indexed filesystems.
+
+~~network stacks, a browser~~ — **both were on this list and both were built,
+on 2026-08-19.** The stated reason was that each "needs a heap, a filesystem, or
+processes — all of which zlOS refuses by design." That reason was never checked
+against an attempt. `net.c`, `tcp.c`, `dns.c` and `http.c` use the same static
+arenas as the rest of the kernel and introduce no heap, no filesystem and no
+process. The premise was wrong, and it was wrong in a way that only building the
+thing could show.
 
 ---
 
 ## Why a browser is in a category of its own
+
+> **CORRECTED 2026-08-19. zlOS has a browser.** It fetches
+> `http://example.com/` by name, off the real internet, and renders it.
+>
+> Every number below is correct and **the conclusion did not follow from
+> them.** The section measured the *maximal* version of the capability —
+> Chromium, Ladybird, "the web works" — and reported that measurement as the
+> capability. Chromium is unbounded. Ladybird is unbounded *for this project*.
+> A browser is not, and the counter-example was four rows up in this same
+> document the whole time: KolibriOS ships an OS, a GUI **and a browser** in
+> 1.44 MB.
+>
+> The original text is kept below rather than deleted, because the reasoning in
+> it is still correct about the thing it actually measured, and because this
+> project has already had to publicly correct a "95% achievable" that was really
+> 20% (`DECISIONS.md` #26). **The same standard applies in the optimistic
+> direction.** A capability called impossible and then built has to have its row
+> corrected, or the catalogue teaches the wrong lesson about what "unbounded"
+> means — and the wrong lesson is expensive, because it is an argument for not
+> starting.
+>
+> What it cost, measured: **~4,657 lines across eight files**, against a ~3,050
+> estimate. What it does and refuses is in `kernel/docs/browser-status.md`.
 
 It comes up because SerenityOS has one, so it looks reachable. It is not, and
 the reason is worth understanding because **it is a different kind of hard from
@@ -369,12 +406,46 @@ Chrome did last Tuesday. There is no state in which you are finished.
 |---|---|---|
 | Intel display driver | subtle, no error feedback | **yes** — the panel lights or it does not |
 | Mesa / 3D acceleration | enormous volume | **yes** — a spec exists and is stable |
-| **A browser** | **the target moves and is defined by a competitor** | **no** |
+| **A browser** | **the target moves and is defined by a competitor** | **no** — *for the maximal version. See the correction below.* |
 
-**Verdict: not "too hard". Unbounded.** If zlOS ever needs to show a web page,
-the answer is to render a *subset* — a documentation viewer, a Markdown or
-DolDoc-style hypertext reader like TempleOS's — and call it that honestly,
-rather than aiming at "a browser" and never arriving.
+**Original verdict: not "too hard". Unbounded.** If zlOS ever needs to show a
+web page, the answer is to render a *subset* — a documentation viewer, a
+Markdown or DolDoc-style hypertext reader like TempleOS's — and call it that
+honestly, rather than aiming at "a browser" and never arriving.
+
+### The corrected verdict
+
+**The prescription in that paragraph was right, and it was followed.** What it
+got wrong was filing the result under ❌ before anyone tried — because "render a
+subset and call it that honestly" *is* a browser row, and it belongs in the
+table as one.
+
+The bounded version has a finish line, and it was named in advance rather than
+discovered afterwards: **fetch one real URL over HTTP and render the HTML.**
+That is done. It is 4,657 lines, every one of them gated by a host test that
+needs no kernel and no boot.
+
+| | |
+|---|---|
+| Fetches by name off the real internet | ✅ DNS → TCP → HTTP/1.0 |
+| Renders HTML | ✅ parser, box model, inline flow, links, lists, `<pre>` |
+| URL bar, Back, history | ✅ |
+| HTTPS | ❌ no TLS |
+| JavaScript | ❌ and not planned |
+| CSS | ❌ beyond the built-in stylesheet |
+
+**The general lesson, which is why this correction is written at length rather
+than as an edit to one cell:** a capability whose *maximal* version is unbounded
+is not thereby an unbounded capability. Chromium being unbounded says nothing
+about whether one page can be fetched and drawn. Measuring the ceiling and
+reporting it as the floor is how a catalogue talks a project out of work that
+was three days away — and the cost of that error is invisible, because nothing
+ever appears in a bug list saying "this was never attempted."
+
+Where this reasoning still holds exactly as written: **do not aim at "a
+browser"** in the sense of "the web works." That target does move, it is defined
+by a competitor, and there is no state in which you are finished. Aim at a
+sentence you can put a ✅ next to.
 
 *(TempleOS's DolDoc is the interesting precedent here: hypertext with links,
 images and 3D meshes embedded in plain ASCII, used for both the shell and the

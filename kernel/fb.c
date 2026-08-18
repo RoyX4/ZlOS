@@ -962,16 +962,28 @@ static void blend_cov(int px, int py, const unsigned char *src,
  * This exists because the two places that used to scale a coverage bitmap
  * both did it by COPYING pixels - fb_icon24 at 2x and fb_glyph_scaled for the
  * logo - and copying is what throws the anti-aliasing away. */
-/* The strided form. A font atlas row is `stride` wide while the ink that has
- * to be resampled is `sw` - passing sw as the stride would step into the next
- * glyph's row a fraction at a time, which reads as text smeared to the right.
- * blend_cov_scaled is this with stride == sw. */
-static void blend_cov_scaled_s(int px, int py, const unsigned char *src,
-                               int sw, int sh, int stride,
-                               int dw, int dh, unsigned int fg)
+/* The strided form, plus a per-row horizontal offset.
+ *
+ * A font atlas row is `stride` wide while the ink that has to be resampled is
+ * `sw` - passing sw as the stride would step into the next glyph's row a
+ * fraction at a time, which reads as text smeared to the right.
+ * blend_cov_scaled is this with stride == sw.
+ *
+ * `shear` leans the destination: none at the bottom row, `shear` pixels at the
+ * top. That is what synthesises an oblique from an upright atlas, and it is
+ * here rather than in a second copy of this loop because the two differ by one
+ * addition. Note it shears about the CELL BOTTOM, not the baseline, so a
+ * descender leans with the rest of the glyph instead of hanging back to the
+ * left of it - which is also what keeps dx non-negative and stops the lean
+ * reaching into the previous glyph.
+ *
+ * put_pixel is the scissor, so a lean that runs past the clip is clipped, not
+ * written out of bounds. */
+static void blend_cov_shear_s(int px, int py, const unsigned char *src,
+                              int sw, int sh, int stride,
+                              int dw, int dh, unsigned int fg, int shear)
 {
     if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
-    if (dw == sw && dh == sh) { blend_cov_s(px, py, src, sw, sh, stride, fg); return; }
     int lastx = (sw - 1) << 16, lasty = (sh - 1) << 16;
     for (int y = 0; y < dh; y++) {
         int syq = (2 * y + 1) * sh * 32768 / dh - 32768;
@@ -981,6 +993,7 @@ static void blend_cov_scaled_s(int px, int py, const unsigned char *src,
         int y1 = (y0 + 1 < sh) ? y0 + 1 : y0;
         const unsigned char *r0 = src + (unsigned long)y0 * stride;
         const unsigned char *r1 = src + (unsigned long)y1 * stride;
+        int dx = shear ? (dh - 1 - y) * shear / dh : 0;
         for (int x = 0; x < dw; x++) {
             int sxq = (2 * x + 1) * sw * 32768 / dw - 32768;
             if (sxq < 0) sxq = 0;
@@ -989,9 +1002,18 @@ static void blend_cov_scaled_s(int px, int py, const unsigned char *src,
             int x1 = (x0 + 1 < sw) ? x0 + 1 : x0;
             int top = (r0[x0] * (65536 - fx) + r0[x1] * fx) >> 16;
             int bot = (r1[x0] * (65536 - fx) + r1[x1] * fx) >> 16;
-            blend_px(px + x, py + y, fg, (top * (65536 - fy) + bot * fy) >> 16);
+            blend_px(px + x + dx, py + y, fg, (top * (65536 - fy) + bot * fy) >> 16);
         }
     }
+}
+
+static void blend_cov_scaled_s(int px, int py, const unsigned char *src,
+                               int sw, int sh, int stride,
+                               int dw, int dh, unsigned int fg)
+{
+    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
+    if (dw == sw && dh == sh) { blend_cov_s(px, py, src, sw, sh, stride, fg); return; }
+    blend_cov_shear_s(px, py, src, sw, sh, stride, dw, dh, fg, 0);
 }
 
 static void blend_cov_scaled(int px, int py, const unsigned char *src,
@@ -2803,55 +2825,101 @@ static const unsigned char *prop_atlas(int cell, int weight, int *stride,
     return &prop32[0][0][0];
 }
 
-/* ---- the full form -------------------------------------------------------- */
-int fb_text_role_h(int role) { return prop_cell(role); }
+/* ---- the core: a run at an EXACT pixel height ------------------------------
+ * A ROLE is what UI callers ask for, but the engine underneath has always
+ * worked in pixels - `want` is a height and the nearest generated atlas is
+ * resampled to reach it, which is the path ui() 1, 3 and 4 already take. These
+ * two expose that directly, so a caller with a real pixel size (the browser
+ * has six heading sizes) does not have to round to one of three roles first.
+ *
+ * `len < 0` means "up to the NUL". A length is taken because browser.c hands
+ * out substrings of a document buffer that are not NUL-terminated; the shim
+ * these replace copied through a 512-byte stack scratch, which both cost a
+ * kernel stack frame and silently CLIPPED any run longer than that.
+ *
+ * `ital` synthesises an oblique by shearing the upright atlas. It is a
+ * synthesised slant, not a drawn italic - the letterforms do not change, so a
+ * two-storey `a` stays two-storey where a real italic would redraw it.
+ */
 
-int fb_text_role_w(const char *s, int role, int weight)
+/* One pen advance, in destination pixels. The measure and the draw both come
+ * through here, because a width function that disagrees with the loop that
+ * draws it is a browser that wraps a line somewhere other than where the ink
+ * actually ends. */
+static int prop_adv(const unsigned char *adv, int i, int want, int cell, int ital)
 {
-    int want = prop_cell(role), cell = prop_atlas_cell(want);
+    /* the advance scales with the glyph, or a resampled string measures one
+     * width and draws another */
+    int a = adv[i] * want / cell;
+    /* the lean needs somewhere to land, or the top of an `f` sits on the
+     * glyph after it. Browser's own figure, kept. */
+    if (ital) a += want / 16;
+    return a;
+}
+
+static int prop_run_w(const char *s, int len, int want, int weight, int ital)
+{
+    if (!s || want <= 0) return 0;
+    int cell = prop_atlas_cell(want);
     int stride;
     const unsigned char *adv, *ink;
     prop_atlas(cell, weight, &stride, &adv, &ink);
     int w = 0;
-    while (*s) {
-        char c = *s++;
+    for (int k = 0; len < 0 ? s[k] != 0 : k < len; k++) {
+        char c = s[k];
         if (c < FONT_FIRST || c > FONT_LAST) c = '?';
-        /* the advance scales with the glyph, or a resampled string measures
-         * one width and draws another */
-        w += adv[(int)c - FONT_FIRST] * want / cell;
+        w += prop_adv(adv, (int)c - FONT_FIRST, want, cell, ital);
     }
     return w;
 }
 
-void fb_text_role(int px, int py, const char *s, unsigned int fg,
-                  int role, int weight)
+static void prop_run_draw(int px, int py, const char *s, int len,
+                          unsigned int fg, int want, int weight, int ital)
 {
-    int want = prop_cell(role), cell = prop_atlas_cell(want);
+    if (!s || want <= 0) return;
+    int cell = prop_atlas_cell(want);
     int stride;
     const unsigned char *adv, *ink;
     const unsigned char *atlas = prop_atlas(cell, weight, &stride, &adv, &ink);
+    /* the lean, over the full cell height. want/5 is about 11 degrees, which
+     * is inside the 8-15 a text face uses, and it is browser's own figure. */
+    int shear = ital ? want / 5 : 0;
 
-    while (*s) {
-        char c = *s++;
+    for (int k = 0; len < 0 ? s[k] != 0 : k < len; k++) {
+        char c = s[k];
         if (c < FONT_FIRST || c > FONT_LAST) c = '?';
         int i = (int)c - FONT_FIRST;
         const unsigned char *g = atlas + (unsigned long)i * cell * stride;
-        if (want == cell) {
+        if (!ital && want == cell) {
             /* the common case, and the fast one: only the columns that can
              * hold ink, not the whole cell - a comma's ink is 4px inside a
              * 30px cell at title size */
             blend_cov_s(px, py, g, ink[i], cell, stride, fg);
         } else {
-            /* No atlas at this size, so resample one. blend_cov_scaled wants a
-             * tight bitmap, and the atlas row is `stride` wide - so the ink
-             * width is passed as the source width and the stride is honoured
-             * by stepping rows, which is exactly what the ink-width form does
+            /* No atlas at this size (or a shear to apply), so resample. The
+             * scaler wants a tight bitmap and the atlas row is `stride` wide -
+             * so the ink width is passed as the source width and the stride is
+             * honoured by stepping rows, exactly as the ink-width form does
              * for the unscaled case. */
-            blend_cov_scaled_s(px, py, g, ink[i], cell, stride,
-                               ink[i] * want / cell, want, fg);
+            blend_cov_shear_s(px, py, g, ink[i], cell, stride,
+                              ink[i] * want / cell, want, fg, shear);
         }
-        px += adv[i] * want / cell;
+        px += prop_adv(adv, i, want, cell, ital);
     }
+}
+
+/* ---- the full form -------------------------------------------------------- */
+int fb_text_role_h(int role) { return prop_cell(role); }
+
+int fb_text_role_w(const char *s, int role, int weight)
+{
+    return prop_run_w(s, -1, prop_cell(role), weight, 0);
+}
+
+void fb_text_role(int px, int py, const char *s, unsigned int fg,
+                  int role, int weight)
+{
+    prop_run_draw(px, py, s, -1, fg, prop_cell(role), weight, 0);
 }
 
 /* ---- the old two-argument form, which is TEXT_BODY ------------------------
@@ -2879,16 +2947,36 @@ void fb_text_prop(int px, int py, const char *s, unsigned int fg)
  * version also indexed with PROP16_W == 30 and font16x32_prop, neither of
  * which exists here (PROP16_W is 16), so it could not have compiled anyway.
  *
- * So the API is kept and the body is a shim onto fb_text_role, and the browser
- * gets a drawn bold instead of a struck one.
+ * So the API is kept and the body is a shim onto the run core, and the browser
+ * gets a DRAWN bold instead of a struck one.
  *
- * HONEST LIMITS. There is no italic in any atlas here, so FBT_ITAL renders
- * regular - browser.c will show <em> the same as its surrounding text, which
- * is a regression against the sheared oblique it had. Re-synthesising the
- * shear on top of this atlas is the follow-up; it needs blend_cov's stride
- * and a per-row offset, which is why it is not a two-line change. FBT_MONO
- * routes to the fixed-cell AA path. Sizes snap to the three roles rather than
- * being continuous, so h1..h6 land on three steps, not six. */
+ * Italic and continuous sizes were lost when that shim first landed, and are
+ * back: it now goes through prop_run_*, which takes a pixel height rather than
+ * a role, so the six sizes layout.c emits (em*2, *3/2, *5/4, *11/10, em, *9/10)
+ * stay six instead of collapsing onto the roles - at em 24 they used to snap to
+ * just two, 32 and 24, so h1/h2/h3 were one size and h4/h5/h6 another.
+ *
+ * SCALE ONE ATLAS, DO NOT GENERATE MORE - decided deliberately, since the
+ * follow-up note asked for a decision rather than a default. The resampler
+ * that already serves ui() 1, 3 and 4 does the work, so six sizes cost no new
+ * atlas, no generator run and no bytes in the kernel. THE COST IS REAL AND
+ * VISIBLE: the largest atlas is 32px, so h1 at em 24 is a 1.5x bilinear
+ * upscale and is softer than the 32px it used to be drawn at. That is the
+ * right trade at this size - a heading that is the WRONG SIZE reads as a bug,
+ * a heading that is half a pixel soft reads as a heading - but it stops being
+ * the right trade somewhere above 2x, and the fix there is a generated prop48,
+ * not a smarter filter.
+ *
+ * HONEST LIMITS, still. The oblique is SYNTHESISED - the upright atlas sheared
+ * about the cell bottom - so <em> leans but its letterforms are the roman ones,
+ * where a real italic redraws them (a real italic `a` is single-storey). It is
+ * an oblique, and calling it italic is the usual abuse of the word. FBT_MONO
+ * routes to the fixed-cell AA font, which is ONE size: `size` is honoured for
+ * proportional text and ignored for mono, consistently between the measure and
+ * the draw, so <code> inside an h1 is set at body width.
+ *
+ * All three are asserted in hosttest/fbtext.c, which reports 12 failures
+ * against the shim this replaced. */
 #define FBT_BOLD 1
 #define FBT_ITAL 2
 #define FBT_MONO 4
@@ -2896,48 +2984,32 @@ void fb_text_prop(int px, int py, const char *s, unsigned int fg)
 /* the natural body size for this screen, in pixels */
 int fb_prop_em(void) { return prop_cell(TEXT_BODY); }
 
-/* a pixel size -> the nearest role this tree actually generates an atlas for */
-static int role_for_size(int size)
-{
-    int best = TEXT_BODY, bd = -1;
-    for (int r = TEXT_CAPTION; r <= TEXT_TITLE; r++) {
-        int d = prop_cell(r) - size;
-        if (d < 0) d = -d;
-        if (bd < 0 || d < bd) { bd = d; best = r; }
-    }
-    return best;
-}
-
 /* browser.c hands out substrings of a document buffer, so these take a length
- * rather than a NUL. Copy into a bounded scratch to reach the NUL-terminated
- * role API; a run longer than the scratch is clipped rather than overrun. */
-#define RICH_MAX 512
-
+ * rather than a NUL - which prop_run_* accepts directly. */
 int fb_text_rich_w(const char *s, int len, int size, int style)
 {
-    char buf[RICH_MAX];
     if (!s || len <= 0 || size <= 0) return 0;
-    if (len > RICH_MAX - 1) len = RICH_MAX - 1;
-    for (int i = 0; i < len; i++) buf[i] = s[i];
-    buf[len] = 0;
     /* the mono path is the fixed-cell AA font, so width is just the cell count
      * - there is no fb_text_*_w for it because nothing needed one before */
     if (style & FBT_MONO) return len * cell_w;
-    return fb_text_role_w(buf, role_for_size(size),
-                          (style & FBT_BOLD) ? TEXT_BOLD : TEXT_REGULAR);
+    return prop_run_w(s, len, size,
+                      (style & FBT_BOLD) ? TEXT_BOLD : TEXT_REGULAR,
+                      (style & FBT_ITAL) != 0);
 }
 
 void fb_text_rich(int px, int py, const char *s, int len, unsigned int fg,
                   int size, int style)
 {
-    char buf[RICH_MAX];
     if (!s || len <= 0 || size <= 0) return;
-    if (len > RICH_MAX - 1) len = RICH_MAX - 1;
-    for (int i = 0; i < len; i++) buf[i] = s[i];
-    buf[len] = 0;
-    if (style & FBT_MONO) { fb_text_aa(px, py, buf, fg); return; }
-    fb_text_role(px, py, buf, fg, role_for_size(size),
-                 (style & FBT_BOLD) ? TEXT_BOLD : TEXT_REGULAR);
+    if (style & FBT_MONO) {
+        /* fb_text_aa's loop, unrolled here only because it wants a NUL and
+         * this has a length */
+        for (int k = 0; k < len; k++) { fb_glyph_aa(px, py, s[k], fg); px += cell_w; }
+        return;
+    }
+    prop_run_draw(px, py, s, len, fg, size,
+                  (style & FBT_BOLD) ? TEXT_BOLD : TEXT_REGULAR,
+                  (style & FBT_ITAL) != 0);
 }
 
 /* ---- 24x24 icons: the dock, the start menu, window titlebars -------------
