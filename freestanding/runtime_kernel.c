@@ -349,6 +349,7 @@ extern int  wm_focused(void);
 extern void wm_focus(int win);
 extern void wm_raise(int win);
 extern void wm_client(int win, int *x, int *y, int *w, int *h);
+extern int  wm_is_open(int win);
 extern int  wm_count(void);
 extern int  wm_add_tab(int win, int app, const char *title);
 extern void wm_damage(int x, int y, int w, int h);
@@ -830,6 +831,10 @@ Value zl_calln(const char *name, int n, ...)
         if (name[4] == 'w') return zl_num((double)cw);
         return zl_num((double)ch);
     }
+    /* Is this window still open? A window id kept in zl goes stale the moment
+     * the user hits its close box, and re-focusing a closed window is a silent
+     * no-op that reads as "the dock stopped working". */
+    if (streq(name, "wm_alive"))   return zl_num((double)wm_is_open((int)a[0].num));
     if (streq(name, "wm_focused")) return zl_num((double)wm_focused());
     if (streq(name, "wm_focus"))   { wm_focus((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_raise"))   { wm_raise((int)a[0].num); return zl_nil(); }

@@ -865,112 +865,152 @@ fn anim() {
 SNAKE_X = 0x02000000    # high memory - 0x30000 was inside the raw-loaded kernel
 SNAKE_Y = 0x02000200
 
-fn snake_game() {
-    if px_w() == 0 {
-        color(C_GREY)  print("  the game needs the framebuffer console")
-        return 0
+# ---- THE APP CONTRACT, applied ---------------------------------------------
+# snake_game() used to be 90 lines around `while alive == 1 { ... }`, and that
+# loop was the whole problem: it owned the screen, it owned the keyboard, and
+# it ended with "press any key" - the phrase this rewrite exists to delete. It
+# is three functions now and none of them loops.
+#
+#   snake_draw(x, y, w, h)   repaint the board. POSITION-PURE: every coordinate
+#                            comes from the x,y passed in, so the window can be
+#                            anywhere and the board follows it.
+#   snake_key(code)          steer. Returns 1 if it handled the key.
+#   snake_step()             advance ONE cell if it is time. Returns 1 if the
+#                            state changed, which is what asks for a repaint.
+#
+# The body was already in raw memory (SNAKE_X/SNAKE_Y, one byte per coordinate)
+# which is why the brief names this the right first conversion: there is no
+# array to hoist, only the scalars below.
+
+SNAKE_CELL = 16                 # one grid cell, in pixels
+SNAKE_RATE = 7                  # ticks between steps, at 100 Hz - 70 ms
+# SNAKE_X has exactly 512 bytes before SNAKE_Y begins. The old code grew slen
+# without limit, so a long enough snake wrote its own X coordinates through the
+# start of its Y array - the same class of collision as the AP stacks in fb.c,
+# on a smaller scale. 400 leaves real headroom and is still a very long snake.
+SNAKE_MAX  = 400
+
+s_len   = 0
+s_dx    = 1
+s_dy    = 0
+s_fx    = 0
+s_fy    = 0
+s_score = 0
+s_alive = 0
+s_seed  = 1
+s_gw    = 10
+s_gh    = 10
+s_next  = 0
+
+fn snake_rand(n) {
+    s_seed = s_seed * 1103515245 + 12345
+    return band(s_seed / 256, 1023) % n
+}
+
+# Size the board from the CLIENT AREA it was given, once, when the window
+# opens. Recomputing it every frame would move the walls under a running snake
+# if the window were resized, which is a worse bug than a board that does not
+# refill a grown window.
+fn snake_start(aw, ah) {
+    s_gw = aw / SNAKE_CELL
+    s_gh = ah / SNAKE_CELL
+    if s_gw < 8 { s_gw = 8 }
+    if s_gh < 8 { s_gh = 8 }
+    if s_gw > 200 { s_gw = 200 }      # one byte per coordinate
+    if s_gh > 200 { s_gh = 200 }
+    s_len = 5
+    sn_hx = s_gw / 2
+    sn_hy = s_gh / 2
+    sn_i = 0
+    while sn_i < s_len {
+        poke8(SNAKE_X + sn_i, sn_hx - sn_i)
+        poke8(SNAKE_Y + sn_i, sn_hy)
+        sn_i = sn_i + 1
     }
-    gw = px_w() / 16
-    gh = (px_h() / 16) - 2
-
-    slen = 5
-    hx = gw / 2
-    hy = gh / 2
-    i = 0
-    while i < slen {
-        poke8(SNAKE_X + i, hx - i)
-        poke8(SNAKE_Y + i, hy)
-        i = i + 1
-    }
-    dx = 1  dy = 0
-    seed = ticks() + 7
-    seed = seed * 1103515245 + 12345
-    fx = band(seed / 256, 1023) % gw
-    seed = seed * 1103515245 + 12345
-    fy = band(seed / 256, 1023) % gh
-    score = 0
-    alive = 1
-
-    cls()
-    fill_rect(0, 0, px_w(), px_h(), C_BLACK)
-    at(0, 2, "SNAKE", C_GREEN)
-    at(0, 10, "w a s d to steer, any other key to quit", C_GREY)
-    at(0, 60, "score:", C_WHITE)
-
-    nexttick = ticks() + 7
-    while alive == 1 {
-        # key_get(), not kbd_scan(): kbd_scan() reads the PS/2 scancode queue
-        # and nothing else, so on a machine whose keyboard is USB the snake
-        # could not be steered and the game could not be quit.
-        k = key_get()
-        if k == 119 { if dy == 0 { dx = 0  dy = 0 - 1 } }
-        if k == 115 { if dy == 0 { dx = 0  dy = 1 } }
-        if k == 97  { if dx == 0 { dx = 0 - 1  dy = 0 } }
-        if k == 100 { if dx == 0 { dx = 1  dy = 0 } }
-        if k > 0 {
-            if k != 119 { if k != 115 { if k != 97 { if k != 100 { alive = 0 } } } }
-        }
-
-        if ticks() >= nexttick {
-            nexttick = ticks() + 7
-            nhx = peek8(SNAKE_X) + dx
-            nhy = peek8(SNAKE_Y) + dy
-            if nhx < 0   { alive = 0 }
-            if nhx >= gw { alive = 0 }
-            if nhy < 0   { alive = 0 }
-            if nhy >= gh { alive = 0 }
-            i = 0
-            while i < slen {
-                if peek8(SNAKE_X + i) == nhx {
-                    if peek8(SNAKE_Y + i) == nhy { alive = 0 }
-                }
-                i = i + 1
-            }
-            if alive == 1 {
-                grew = 0
-                if nhx == fx {
-                    if nhy == fy {
-                        grew = 1
-                        score = score + 1
-                        slen = slen + 1
-                        seed = seed * 1103515245 + 12345
-                        fx = band(seed / 256, 1023) % gw
-                        seed = seed * 1103515245 + 12345
-                        fy = band(seed / 256, 1023) % gh
-                    }
-                }
-                if grew == 0 {
-                    tx = peek8(SNAKE_X + slen - 1)
-                    ty = peek8(SNAKE_Y + slen - 1)
-                    fill_rect(tx * 16, ty * 16 + 20, 16, 16, C_BLACK)
-                }
-                i = slen - 1
-                while i > 0 {
-                    poke8(SNAKE_X + i, peek8(SNAKE_X + i - 1))
-                    poke8(SNAKE_Y + i, peek8(SNAKE_Y + i - 1))
-                    i = i - 1
-                }
-                poke8(SNAKE_X, nhx)
-                poke8(SNAKE_Y, nhy)
-                fill_rect(nhx * 16, nhy * 16 + 20, 15, 15, C_GREEN)
-                fill_rect(fx * 16, fy * 16 + 20, 15, 15, C_RED)
-                at_num(0, 67, score, C_YELLOW)
-            }
-            present()      # one blit per tick, not per rectangle
-        }
-    }
-    beep(200, 20)
-    color(C_RED)   put("  game over - score ")  color(C_WHITE)  print(score)
-    color(C_GREY)  print("  press any key")
-    # Same reason as the steering loop above. This one was worse: with no PS/2
-    # keyboard there was no key that could end it, and the shell never came
-    # back - every command typed afterwards was swallowed by this loop.
-    while key_get() == 0 { }
-    draw_screen()
+    s_dx = 1  s_dy = 0
+    s_seed = ticks() + 7
+    s_fx = snake_rand(s_gw)
+    s_fy = snake_rand(s_gh)
+    s_score = 0
+    s_alive = 1
+    s_next = ticks() + SNAKE_RATE
     return 0
 }
 
-# ---- Paint: draw with the mouse -------------------------------------------
+# w/a/s/d and the arrow keys. A reversal into your own neck is refused, which
+# is why each turn checks the axis it is leaving.
+fn snake_key(code) {
+    if s_alive == 0 { snake_start(s_gw * SNAKE_CELL, s_gh * SNAKE_CELL)  return 1 }
+    if code == 119 { if s_dy == 0 { s_dx = 0  s_dy = 0 - 1 }  return 1 }
+    if code == 115 { if s_dy == 0 { s_dx = 0  s_dy = 1 }      return 1 }
+    if code == 97  { if s_dx == 0 { s_dx = 0 - 1  s_dy = 0 }  return 1 }
+    if code == 100 { if s_dx == 0 { s_dx = 1  s_dy = 0 }      return 1 }
+    return 0
+}
+
+# ONE STEP, and only when the clock says so. Returns 1 if anything moved, which
+# is how wm.c knows to repaint without this function drawing a single pixel -
+# app_tick MUST NOT DRAW. That separation is what lets the snake keep playing
+# while another window is dragged over it.
+fn snake_step() {
+    if s_alive == 0 { return 0 }
+    if ticks() < s_next { return 0 }
+    s_next = ticks() + SNAKE_RATE
+
+    sn_nx = peek8(SNAKE_X) + s_dx
+    sn_ny = peek8(SNAKE_Y) + s_dy
+    if sn_nx < 0     { s_alive = 0 }
+    if sn_nx >= s_gw { s_alive = 0 }
+    if sn_ny < 0     { s_alive = 0 }
+    if sn_ny >= s_gh { s_alive = 0 }
+    sn_i = 0
+    while sn_i < s_len {
+        if peek8(SNAKE_X + sn_i) == sn_nx {
+            if peek8(SNAKE_Y + sn_i) == sn_ny { s_alive = 0 }
+        }
+        sn_i = sn_i + 1
+    }
+    if s_alive == 0 { return 1 }
+
+    if sn_nx == s_fx {
+        if sn_ny == s_fy {
+            s_score = s_score + 1
+            if s_len < SNAKE_MAX { s_len = s_len + 1 }
+            s_fx = snake_rand(s_gw)
+            s_fy = snake_rand(s_gh)
+        }
+    }
+    sn_i = s_len - 1
+    while sn_i > 0 {
+        poke8(SNAKE_X + sn_i, peek8(SNAKE_X + sn_i - 1))
+        poke8(SNAKE_Y + sn_i, peek8(SNAKE_Y + sn_i - 1))
+        sn_i = sn_i - 1
+    }
+    poke8(SNAKE_X, sn_nx)
+    poke8(SNAKE_Y, sn_ny)
+    return 1
+}
+
+# Repaint the whole board from the raw arrays. Called only when damaged, and
+# every coordinate derives from ax,ay - drag the window and the board goes with
+# it, with nothing baked in.
+fn snake_draw(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, PANEL)
+    fill_rgb(ax + s_fx * SNAKE_CELL, ay + s_fy * SNAKE_CELL, SNAKE_CELL - 2, SNAKE_CELL - 2, rgb(220, 80, 90))
+    sn_i = 0
+    while sn_i < s_len {
+        sn_c = ACCENT
+        if sn_i > 0 { sn_c = rgb(70, 150, 170) }
+        fill_rgb(ax + peek8(SNAKE_X + sn_i) * SNAKE_CELL, ay + peek8(SNAKE_Y + sn_i) * SNAKE_CELL, SNAKE_CELL - 2, SNAKE_CELL - 2, sn_c)
+        sn_i = sn_i + 1
+    }
+    sn_ty = ay + ah - 20
+    text_aa(ax + 6, sn_ty, "score", TXT_DIM)
+    num_aa(ax + 60, sn_ty, s_score, TXT_HI)
+    if s_alive == 0 { text_aa(ax + 110, sn_ty, "game over - any key restarts", TXT_DIM) }
+    return 0
+}
+
 fn paint() {
     if px_w() == 0 {
         color(C_GREY)  print("  paint needs the framebuffer console")
@@ -1714,7 +1754,12 @@ fn run_command(cmd, arg) {
     if cmd == 119 { return wm_session() }    # w - the real compositor (wm.c)
     if cmd == 120 { return mousedemo() }  # x - mouse demo
     if cmd == 97  { return anim() }       # a - animation
-    if cmd == 103 { return snake_game() } # g - snake game
+    # g - snake. Reached only from the TEXT shell now; under the compositor
+    # open_app() gives it a window instead. snake_game() is deleted.
+    if cmd == 103 {
+        color(C_GREY)  print("  snake runs in a window - start the compositor first")
+        return 0
+    }
     if cmd == 100 { return paint() }      # d - paint (draw)
     if cmd == 105 { return editor(arg) }  # i - text editor (arg = file slot 0-9)
     if cmd == 108 { return fs_list() }    # l - list RAM files
@@ -1817,11 +1862,18 @@ fn about_body(ax, ay) {
 APP_SHELL   = 0
 APP_MONITOR = 1
 APP_ABOUT   = 2
+APP_SNAKE   = 3
+
+# Which window each app is in, or -1. An app that is already open is FOCUSED
+# rather than opened twice - wm.c would happily give you a second Snake, and
+# both would drive the same SNAKE_X/SNAKE_Y because the state is module-level.
+snake_win = 0 - 1
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     wy = ay - TITLE_H * ui()
     if id == APP_MONITOR { return sysmon_body(ax, wy) }
     if id == APP_ABOUT   { return about_body(ax, wy) }
+    if id == APP_SNAKE   { return snake_draw(ax, ay, aw, ah) }
     if id == APP_SHELL {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the
@@ -1857,11 +1909,56 @@ fn app_event(id, win, ety, ecode, ex, ey) {
                 tc = term_cmd()
                 if tc > 0 {
                     if tc == 113 { wm_stop()  return 1 }
-                    run_command(tc, term_arg())
+                    # AN APP OPENS A WINDOW; everything else still prints into
+                    # the shell. That is the difference desktop-TODO calls "the
+                    # dock launches INTO a window, not over the whole screen",
+                    # and it is why these commands no longer end with "press
+                    # any key" - there is nothing to press a key to get out of.
+                    if open_app(tc) == 0 { run_command(tc, term_arg()) }
                 }
             }
             wm_damage_win_all()
         }
+        return 1
+    }
+    if id == APP_SNAKE {
+        if ety == 3 { if snake_key(ecode) == 1 { wm_dmg(win)  return 1 } }
+        return 0
+    }
+    return 0
+}
+
+# WHERE A WINDOW IS, on the serial log. A pointer gate has to aim at a title
+# bar, and every alternative is worse: hardcoding coordinates gave probe-drag.py
+# a default that was off the right edge of a 1920-wide screen and made it report
+# "dragging is a no-op" for a drag that worked, and recomputing this layout in
+# Python would go stale the first time the look track moves a window.
+#
+# Printed when the session starts AND whenever a window opens afterwards, so a
+# window that did not exist at boot still says where it is.
+fn wm_report(w) {
+    put("  wm: win ")  put(w)  put(" title ")
+    put(wm_cx(w))  put(",")  put(wm_cy(w) - TITLE_H * ui())  put(" ")
+    put(wm_cw(w))  put("x")  put(TITLE_H * ui())
+    put(" client ")
+    put(wm_cx(w))  put(",")  put(wm_cy(w))  put(" ")
+    put(wm_cw(w))  put("x")  print(wm_ch(w))
+    return 0
+}
+
+# Open an app in its own window, or focus the one already open. Returns 1 if
+# this command was an app, 0 if the shell should run it as a command.
+fn open_app(cmd) {
+    if cmd == 103 {
+        if snake_win >= 0 { if wm_alive(snake_win) == 1 {
+            wm_focus(snake_win)  wm_raise(snake_win)  return 1
+        }}
+        oa_u = ui()
+        snake_win = wm_open(APP_SNAKE, "Snake", 120 * oa_u, 120 * oa_u, 46 * SNAKE_CELL, 30 * SNAKE_CELL + 24)
+        if snake_win < 0 { return 0 }
+        snake_start(46 * SNAKE_CELL, 30 * SNAKE_CELL)
+        wm_focus(snake_win)
+        wm_report(snake_win)
         return 1
     }
     return 0
@@ -1890,6 +1987,10 @@ fn app_tick(id, win) {
         tsec = ticks() / 100
         if tsec != last_tick_sec { last_tick_sec = tsec  return 1 }
     }
+    # THE WHOLE POINT OF app_tick. Snake advances here, draws nothing, and
+    # returns 1 to ask for a repaint - so it keeps playing while another window
+    # is being dragged over it, which is the assertion probe-snake.py makes.
+    if id == APP_SNAKE { return snake_step() }
     return 0
 }
 
@@ -1976,9 +2077,7 @@ fn wm_session() {
     # every time, which is the rule verify-raw.sh was rewritten for.
     wi = 0
     while wi < wm_n() {
-        put("  wm: win ")  put(wi)  put(" title ")
-        put(wm_cx(wi))  put(",")  put(wm_cy(wi) - TITLE_H * u)  put(" ")
-        put(wm_cw(wi))  put("x")  print(TITLE_H * u)
+        wm_report(wi)
         wi = wi + 1
     }
     while wm_run() == 1 { wm_frame() }
