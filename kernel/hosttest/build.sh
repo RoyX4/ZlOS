@@ -114,3 +114,12 @@ echo "built ./httptest      (run: ./httptest)"
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o browsertest browsertest.c ../browser.c \
     ../html.c ../layout.c ../http.c ../tcp.c ../net.c
 echo "built ./browsertest   (run: ./browsertest)"
+
+# Every layer that takes bytes from somewhere else, fed garbage. The harnesses
+# above check the code does the right thing with inputs someone thought of;
+# this checks it does nothing catastrophic with inputs nobody thought of. Build
+# it WITH the sanitizers - a clean run without them proves almost nothing.
+#   ./fuzz [iterations] [seed]
+gcc -O1 -g -w -D_GNU_SOURCE -fsanitize=address,undefined -o fuzz fuzz.c \
+    ../html.c ../layout.c ../net.c ../tcp.c ../http.c
+echo "built ./fuzz          (run: ./fuzz 3000 1)"

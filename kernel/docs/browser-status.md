@@ -188,6 +188,33 @@ kernel/hosttest/httptest       # 91 checks, 0 failed
 kernel/hosttest/browsertest    # 58 checks, 0 failed
 ```
 
+```bash
+kernel/hosttest/fuzz 3000 1    # ~400,000 checks per seed, 0 failed
+```
+
+The fuzzer feeds garbage to every layer that takes bytes from somewhere else —
+markup from a server, frames from anyone on the segment, segments from anyone
+who can guess a port, a response from the server we asked. It is deterministic
+(a seeded LCG, and a failure prints its seed) and it is built **with** ASan and
+UBSan, because a clean run without them proves almost nothing. It asserts
+invariants after every iteration rather than only checking for a fault: a run
+outside the content box, a tree edge pointing outside its array, or a receive
+buffer whose length goes negative are all silent corruption.
+
+It found four layout defects in the first four thousand iterations, none of
+which any hand-written test had reached, because all four need a width-to-font
+ratio nobody would type:
+
+| | |
+|---|---|
+| **nested list indentation was never clamped** against the content width, so a dozen nested `<ul>` on a narrow window pushed the whole page outside the box — where `fb_clip` hides it, leaving a blank window and nothing to say why | fixed |
+| **`<pre>` ran off the edge.** By design it does not wrap — but this browser has no horizontal scrolling and never will, so text past the edge is not *preserved*, it is invisible. It now breaks at the box edge as a last resort, keeping the spacing and keeping the text reachable | fixed, and it is a deliberate departure from what `<pre>` means |
+| **an ordered-list marker was placed with no width check at all** — the last run still escaping a box narrower than `10.` | fixed |
+| **a font size could round to zero.** `h6` is `em * 9 / 10`, which is 0 for any `em` below 2; a zero line height makes a run taller than the line box containing it, so the document lays out above its own origin at a negative y | fixed |
+
+None is reachable with the kernel's 16 and 32 pixel fonts. All four were real,
+and the first two would bite a real page on a narrow window.
+
 `browsertest` covers the app's logic with the drawing stubbed rather than
 linked — URL parsing (the one place the browser takes whatever a person typed),
 the history stack and its eight-slot cap, and the URL bar's key machine. The

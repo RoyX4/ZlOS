@@ -65,7 +65,13 @@ static int meas(const char *s, int len, int size, int style)
     return measure(s, len, size, style);
 }
 
-static int line_height(int size) { return size * 5 / 4; }
+/* NEVER ZERO. Integer division makes a small em round a size away entirely -
+ * h6 is em*9/10, which is 0 for any em below 2 - and a zero line height makes
+ * a run taller than the line box that contains it, so line_end computes a
+ * NEGATIVE y and the document lays out above its own origin. Not reachable
+ * with the kernel's 16 and 32 pixel fonts; found by the fuzzer, which picks
+ * sizes nobody would type. A floor costs one comparison. */
+static int line_height(int size) { int h = size * 5 / 4; return h > 0 ? h : 1; }
 
 /* A margin is not applied when it is declared - it is applied when something
  * finally needs to be drawn, which is what lets two of them collapse. The
@@ -78,6 +84,26 @@ static void apply_margin(void)
 }
 
 static void margin(int m) { if (m > pend_m) pend_m = m; }
+
+/* INDENTATION IS CLAMPED AGAINST THE CONTENT WIDTH. Nested lists add to the
+ * left edge, and nothing stopped that edge from walking past the right one -
+ * so a page with a dozen nested <ul> on a narrow window pushed its content
+ * entirely outside the box. In the kernel fb_clip then hides it, and the
+ * result is a blank window with no explanation at all.
+ *
+ * Two characters of content is the floor. Below that a list is unreadable
+ * anyway, and the alternative - a negative content width - makes every
+ * wrapping decision below meaningless. Found by the fuzzer, which picks
+ * width/font ratios no hand-written test would. */
+static void indent(int px)
+{
+    int floor_w = em * 2;
+    int max_left = right - floor_w;
+    if (max_left < 0) max_left = 0;
+    left += px;
+    if (left > max_left) left = max_left;
+    if (left < 0) left = 0;
+}
 
 static void line_begin(void)
 {
@@ -206,8 +232,20 @@ static void emit_text(const char *s, int len, int size, int style, int color,
     }
 }
 
-/* <pre>: no wrapping, no collapsing. Every newline is a line break and every
- * space was already preserved by the parser. */
+/* <pre>: no word wrapping and no whitespace collapsing. Every newline is a
+ * line break and every space was already preserved by the parser.
+ *
+ * IT DOES STILL BREAK AT THE BOX EDGE, as a last resort, and that is a
+ * deliberate departure from what <pre> means. Preformatted says "do not
+ * collapse the spacing and do not re-flow at word boundaries"; it does not
+ * oblige a renderer to put text where it cannot be seen. This browser has no
+ * horizontal scrolling and is never going to have any, so a line that runs
+ * past the edge is not preserved - it is INVISIBLE, with nothing on screen to
+ * say so. Breaking it keeps the spacing and keeps the text reachable.
+ *
+ * The fuzzer is what forced the question: unbroken <pre> made the layout's
+ * central invariant - no run outside the content box - simply untrue, and an
+ * invariant with an undocumented exception is not one. */
 static void emit_pre(const char *s, int len, int size, int style, int color,
                      int node, int link)
 {
@@ -216,18 +254,29 @@ static void emit_pre(const char *s, int len, int size, int style, int color,
         int j = i;
         while (j < len && s[j] != '\n') j++;
         if (j > i) {
-            line_begin();
-            struct lay_run *r = push_run();
-            if (r) {
+            int at = i;
+            while (at < j) {
+                line_begin();
+                int avail = right - fx;
+                if (avail <= 0) { line_end(); line_begin(); avail = right - fx; }
+                int take = j - at;
+                if (meas(s + at, take, size, style) > avail) {
+                    take = fit_chars(s + at, take, size, style, avail);
+                    if (take < 1) take = 1;
+                }
+                struct lay_run *r = push_run();
+                if (!r) break;
                 r->kind = LR_TEXT;
                 r->x = fx; r->y = fy;
-                r->w = meas(s + i, j - i, size, style);
+                r->w = meas(s + at, take, size, style);
                 r->h = line_height(size);
-                r->text = s + i; r->len = j - i;
+                r->text = s + at; r->len = take;
                 r->size = size; r->style = style; r->color = color;
                 r->node = node; r->link = link;
                 fx += r->w;
                 if (r->h > line_h) line_h = r->h;
+                at += take;
+                if (at < j) line_end();          /* the box edge is a break */
             }
         } else if (j < len) {
             line_begin();
@@ -244,15 +293,17 @@ static void emit_pre(const char *s, int len, int size, int style, int color,
  * pixels, so the whole document scales with one number. */
 static int head_size(int tag)
 {
+    int sz;
     switch (tag) {
-    case HT_H1: return em * 2;
-    case HT_H2: return em * 3 / 2;
-    case HT_H3: return em * 5 / 4;
-    case HT_H4: return em * 11 / 10;
-    case HT_H5: return em;
-    case HT_H6: return em * 9 / 10;
-    default:    return em;
+    case HT_H1: sz = em * 2;        break;
+    case HT_H2: sz = em * 3 / 2;    break;
+    case HT_H3: sz = em * 5 / 4;    break;
+    case HT_H4: sz = em * 11 / 10;  break;
+    case HT_H5: sz = em;            break;
+    case HT_H6: sz = em * 9 / 10;   break;
+    default:    sz = em;            break;
     }
+    return sz > 0 ? sz : 1;         /* see line_height: a zero size is not one */
 }
 
 static int is_heading(int t) { return t >= HT_H1 && t <= HT_H6; }
@@ -361,11 +412,11 @@ static void walk(int n, int size, int style, int color, int link,
             margin(em * 3 / 4);
             cstyle = style | LS_MONO;
             child_pre = 1;
-            left += em / 2;
+            indent(em / 2);
         } else if (t == HT_UL || t == HT_OL) {
             line_end();
             margin(em / 2);
-            left += em * 3 / 2;
+            indent(em * 3 / 2);
             my_item = 0;
             child_item = &my_item;
             child_ordered = (t == HT_OL);
@@ -388,18 +439,27 @@ static void walk(int n, int size, int style, int color, int link,
                     gen[gused++] = '.'; cnt++;
                 } else start = -1;
                 if (start >= 0) {
+                    /* The marker hangs in the gutter and was the one thing
+                     * placed with no width check at all - in a box narrower
+                     * than "10." it was the last run still escaping. Trimmed
+                     * like everything else rather than exempted. */
+                    int mx = left - em * 5 / 4;
+                    if (mx < 0) mx = 0;
+                    int room_m = right - mx;
+                    if (room_m > 0 && meas(gen + start, cnt, size, style) > room_m)
+                        cnt = fit_chars(gen + start, cnt, size, style, room_m);
+                    if (cnt < 0) cnt = 0;
                     int w = meas(gen + start, cnt, size, style);
                     struct lay_run *r = push_run();
                     if (r) {
                         r->kind = LR_TEXT;
-                        r->x = left - em * 5 / 4;
+                        r->x = mx;
                         r->y = fy;
                         r->w = w; r->h = line_height(size);
                         r->text = gen + start; r->len = cnt;
                         r->size = size; r->style = style; r->color = LC_DIM;
                         r->node = n; r->link = link;
                         if (r->h > line_h) line_h = r->h;
-                        if (r->x < 0) r->x = 0;
                     }
                 }
             } else {
