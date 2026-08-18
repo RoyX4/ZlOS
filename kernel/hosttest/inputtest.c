@@ -178,6 +178,80 @@ int main(void)
     d = drain();
     ok("a parked pointer is silent, not a per-poll event", d.mouse == 0);
 
+    /* ---- auto-repeat must survive a modifier change ----------------------
+     * Found by the Item 5 bug hunt, class "code with no caller" / "a gate
+     * weaker than the property", and it is the worst kind of bug this kernel
+     * can have: an event queue that never stops filling.
+     *
+     * handle_scancode derives `key` through to_char(code, mods) - which
+     * DEPENDS ON THE CURRENT MODIFIERS - and then disarms the repeat with
+     * `if (repeat_code == key)`. Press 'a' with no modifiers and repeat_code
+     * is 'a' (0x61). Hold shift. Release 'a', and the release re-derives the
+     * key as 'A' (0x41), which does not match, so the repeat is never
+     * disarmed and 'a' repeats until the machine is reset.
+     *
+     * Every one of these is a real key sequence a human types by accident:
+     * shift is pressed late while typing a capital, ctrl is released before
+     * the letter in a shortcut, caps lock gets bumped. */
+    fake_ticks = 1000;
+    drain();
+
+    /* press 'a' (0x1E), then shift (0x2A), then release 'a' (0x9E) */
+    send_scan(0x1E); drain();
+    send_scan(0x2A); drain();
+    send_scan(0x9E); drain();
+    fake_ticks += 500;                     /* well past REPEAT_DELAY */
+    d = drain();
+    ok("a key released while shift is held stops repeating", d.chars == 0);
+    send_scan(0xAA); drain();              /* shift up, tidy */
+
+    /* the same with control, which routes through a different branch of
+     * to_char - a letter becomes its control code rather than its capital */
+    fake_ticks += 10;
+    send_scan(0x1E); drain();
+    send_scan(0x1D); drain();              /* ctrl down */
+    send_scan(0x9E); drain();              /* 'a' up */
+    fake_ticks += 500;
+    d = drain();
+    ok("...and while ctrl is held", d.chars == 0);
+    send_scan(0x9D); drain();              /* ctrl up */
+
+    /* and caps lock, which is a TOGGLE - so it does not even have to be held */
+    fake_ticks += 10;
+    send_scan(0x1E); drain();
+    send_scan(0x3A); drain();              /* caps lock pressed */
+    send_scan(0x9E); drain();              /* 'a' up */
+    fake_ticks += 500;
+    d = drain();
+    ok("...and after caps lock is bumped mid-keystroke", d.chars == 0);
+    send_scan(0x3A); drain();              /* caps off again */
+
+    /* A RELEASE MUST REPORT THE KEY THAT WAS PRESSED. Same root cause: the
+     * release re-derives the code from the CURRENT modifiers, so a client
+     * pairing EV_KEY_DOWN with EV_KEY_UP never sees the matching release and
+     * believes the key is still held. */
+    fake_ticks += 10;
+    drain();
+    send_scan(0x1E);                       /* 'a' down, no modifiers */
+    int down_code = 0, up_code = 0;
+    for (int g = 0; g < 32; g++) {
+        int t = input_next();
+        if (!t) break;
+        if (t == EV_KEY_DOWN) down_code = input_code();
+    }
+    send_scan(0x2A);                       /* shift down */
+    drain();
+    send_scan(0x9E);                       /* 'a' up, WITH shift held */
+    for (int g = 0; g < 32; g++) {
+        int t = input_next();
+        if (!t) break;
+        if (t == EV_KEY_UP) up_code = input_code();
+    }
+    ok("a release reports the key that was actually pressed",
+       down_code == 'a' && up_code == down_code);
+    send_scan(0xAA); drain();
+    fake_ticks += 500; drain();
+
     /* ---- pointer speed and acceleration ---------------------------------
      * There was none of this at all: raw 1:1 deltas, so crossing a 2560-wide
      * screen took a physical hand sweep and slow precise movement was exactly

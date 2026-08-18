@@ -82,7 +82,22 @@ static int mods = 0;
 
 /* which keys are currently held, for repeat and for "is shift down" queries */
 static u8 key_down[512];
+
+/* WHAT EACH HELD KEY REPORTED WHEN IT WENT DOWN.
+ *
+ * A key code is derived through to_char(code, mods) and therefore DEPENDS ON
+ * THE MODIFIERS AT THAT MOMENT. Re-deriving it on release asks a different
+ * question - "what would this scancode mean now" - and the answer is different
+ * the instant a modifier changes between press and release, which is something
+ * a human does constantly: shift pressed late while typing a capital, ctrl
+ * released before the letter of a shortcut, caps lock bumped.
+ *
+ * Every consumer of a key's identity now reads this instead of re-deriving:
+ * the release event, the repeat disarm, and input_key_held. */
+static u32 key_sent[512];
+
 static u32 repeat_code = 0;
+static int repeat_slot = -1;   /* the PHYSICAL key that armed it */
 static u32 repeat_at   = 0;
 static int repeat_mods = 0;
 
@@ -242,17 +257,28 @@ static void handle_scancode(int sc)
 
     if (release) {
         key_down[slot] = 0;
-        if (repeat_code == key) repeat_code = 0;     /* stop repeating it */
-        evq_push(EV_KEY_UP, key, mods, 0, 0);
+        /* Report what went DOWN. `key` here was re-derived from whatever
+         * modifiers are held NOW, which is a different key the moment shift,
+         * ctrl or caps changed since the press. */
+        u32 sent = key_sent[slot] ? key_sent[slot] : key;
+        key_sent[slot] = 0;
+        /* ...and disarm by the PHYSICAL key, for the same reason. Comparing
+         * repeat_code against the re-derived `key` silently fails to match
+         * after any modifier change, and the queue then fills with that
+         * character forever - the machine has to be reset. */
+        if (repeat_slot == slot) { repeat_slot = -1; repeat_code = 0; }
+        evq_push(EV_KEY_UP, sent, mods, 0, 0);
         return;
     }
 
     key_down[slot] = 1;
+    key_sent[slot] = key;
     evq_push(EV_KEY_DOWN, key, mods, 0, 0);
     if (ch) evq_push(EV_CHAR, ch, mods, 0, 0);
 
     /* arm auto-repeat on this key */
     repeat_code = key;
+    repeat_slot = slot;
     repeat_mods = mods;
     repeat_at   = idt_ticks() + REPEAT_DELAY;
 }
@@ -489,14 +515,15 @@ int input_ctrl(void)  { return (mods & MOD_CTRL) ? 1 : 0; }
 int input_alt(void)   { return (mods & MOD_ALT) ? 1 : 0; }
 int input_caps(void)  { return (mods & MOD_CAPS) ? 1 : 0; }
 
+/* Is this key held? Read what it REPORTED, not what its scancode would mean
+ * now. The old version re-derived with mods = 0, so a key pressed while shift
+ * was down could never be found: hold Shift+A and ask for 'A' and it derived
+ * 'a' and answered no. Same root cause as the stuck repeat, and it is also
+ * O(1) work per slot instead of two table lookups. */
 int input_key_held(int code)
 {
-    for (int i = 0; i < 512; i++) {
-        if (!key_down[i]) continue;
-        u32 k = (i >= 0x100) ? sc_extended(i - 0x100) : sc_special(i);
-        if (!k) k = to_char(i, 0);
-        if ((int)k == code) return 1;
-    }
+    for (int i = 0; i < 512; i++)
+        if (key_down[i] && (int)key_sent[i] == code) return 1;
     return 0;
 }
 
