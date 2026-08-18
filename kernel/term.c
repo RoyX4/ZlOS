@@ -148,6 +148,11 @@ static const struct cmd table[] = {
     { "usb",     117 }, { "cpu",     122 },
     { "gpu",     121 }, { "virtio",  121 },
     { "cube",    118 }, { "3d",      118 },
+    /* `anim` had no word at all - it was reachable only as the single key 'a'
+     * in the old text shell, so under the compositor there was no way to start
+     * it. A command in the help list with no way to type it is worse than one
+     * that does not exist. */
+    { "anim",     97 }, { "logo",     97 },
     { "windows", 119 }, { "wm",      119 },
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },

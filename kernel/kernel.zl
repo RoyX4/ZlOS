@@ -405,70 +405,52 @@ fn colorbars() {
 }
 
 # ---- a live mouse demo: a cursor that follows the PS/2 mouse ---------------
-fn mousedemo() {
-    if px_w() == 0 {
-        color(C_GREY)  print("  the mouse demo needs the framebuffer console")
-        return 0
+# ---- the pointer diagnostics, as an app ------------------------------------
+# Its value was never the cursor - it was the COUNTERS. A dead pointer has two
+# very different causes and only these separate them: mouse_irqs() at 0 means
+# no interrupt reached us at all, non-zero with a stuck position means the
+# decode is wrong. ptr_driver() is new and answers a third: whether the USB
+# pointer driver is even linked in (see the weak symbols in runtime_kernel.c).
+m_lastx = 0 - 1
+m_lasty = 0 - 1
+
+fn mouse_tick() {
+    if mouse_x() == m_lastx { if mouse_y() == m_lasty { return 0 } }
+    m_lastx = mouse_x()
+    m_lasty = mouse_y()
+    return 1
+}
+
+fn mouse_draw(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, PANEL)
+    # TWO COLUMNS, both measured in CELLS. The value column used to be the
+    # literal x+90, which is inside the label at ui()==2 - "pointer" and its
+    # value rendered on top of each other and read as "point400 300". Nothing
+    # in this file may use a pixel literal for a text position; cell_w() is
+    # 8 or 16 depending on the console, and that is the whole reason it exists.
+    ms_lab = ax + cell_w()
+    ms_val = ax + cell_w() * 11
+    ms_row = cell_h() * 5 / 4
+    ms_y = ay + cell_h() / 2
+    text_aa(ms_lab, ms_y, "pointer", TXT_DIM)
+    num_aa(ms_val, ms_y, mouse_x(), TXT_HI)
+    num_aa(ms_val + cell_w() * 5, ms_y, mouse_y(), TXT_HI)
+    ms_y = ms_y + ms_row
+    text_aa(ms_lab, ms_y, "buttons", TXT_DIM)
+    num_aa(ms_val, ms_y, mouse_btn(), TXT_HI)
+    ms_y = ms_y + ms_row
+    text_aa(ms_lab, ms_y, "IRQ12", TXT_DIM)
+    num_aa(ms_val, ms_y, mouse_irqs(), TXT_HI)
+    ms_y = ms_y + ms_row
+    text_aa(ms_lab, ms_y, "kbd slot", TXT_DIM)
+    num_aa(ms_val, ms_y, usb_kbd_slot(), TXT_HI)
+    ms_y = ms_y + ms_row
+    text_aa(ms_lab, ms_y, "usb ptr", TXT_DIM)
+    if ptr_driver() == 1 {
+        text_aa(ms_val, ms_y, "linked", ACCENT)
+    } else {
+        text_aa(ms_val, ms_y, "absent", rgb(230, 90, 90))
     }
-    w = px_w()
-    h = px_h()
-    cls()
-    color(C_WHITE)  print("  MOUSE - move it. left/right button changes colour. press any key to exit.")
-    print("")
-    color(C_GREY)   put("  x: ")  at(row(), 8, "     y:", C_GREY)
-    ox = 0
-    oy = 0
-    while key_get() == 0 {
-        mx = mouse_x()
-        my = mouse_y()
-        if mx > w - 12 { mx = w - 12 }
-        if my > h - 18 { my = h - 18 }
-        if my < 48 { my = 48 }
-        fill_rect(ox, oy, 12, 18, C_BLACK)     # erase the old cursor
-        col = C_GREEN
-        if band(mouse_btn(), 1) != 0 { col = C_RED }
-        if band(mouse_btn(), 2) != 0 { col = C_CYAN }
-        mcursor(mx, my, col, C_WHITE)
-        ox = mx
-        oy = my
-        at_num(2, 5, mx, C_WHITE)
-        at_num(2, 16, my, C_WHITE)
-        present()          # drawing lands in the back buffer; this is the blit
-    }
-    draw_screen()
-    # Say how many IRQ12 packets actually arrived. A dead pointer has two very
-    # different causes and this separates them: 0 means no interrupt reached us
-    # at all, non-zero with a stuck cursor means the decode is wrong.
-    color(C_GREY)  put("  mouse: ")
-    color(C_WHITE) put(mouse_irqs())
-    color(C_GREY)  put(" IRQ12 packets, last at ")
-    color(C_WHITE) put(mouse_x())  put(",")  print(mouse_y())
-    # Which slot/endpoint each HID device landed on. They MUST differ: the
-    # interrupt ring is per-slot, so two devices sharing one would corrupt it
-    # and whichever spoke second would silence the other.
-    color(C_GREY)  put("  usb kbd slot ")  color(C_WHITE)  put(usb_kbd_slot())
-    color(C_GREY)  put(" ep ")             color(C_WHITE)  put(usb_kbd_ep())
-    color(C_GREY)  put("   ptr slot ")     color(C_WHITE)  put(ptr_slot())
-    color(C_GREY)  put(" ep ")             color(C_WHITE)  put(ptr_ep())
-    # How many pointer reports have been decoded in total. If this is enormous
-    # after a demo that never moved the pointer, the endpoint is storming the
-    # shared event ring and starving the keyboard behind it.
-    color(C_GREY)  put("  ptr reports ")   color(C_WHITE)  put(ptr_reports())
-    # Every dispatch, and the last completion code. ptr_reports counts only
-    # SUCCESSFUL decodes, so a stalled endpoint being requeued in a loop leaves
-    # it at 1 while events climbs without bound - which is why the earlier
-    # "no storm" reading was worthless.
-    color(C_GREY)  put("  events ")        color(C_WHITE)  put(ptr_events())
-    color(C_GREY)  put("  last cc ")       color(C_WHITE)  print(ptr_lastcc())
-    # The keyboard side, same shape. The pointer is healthy; the keyboard
-    # delivers exactly one report and then goes quiet, so what matters is
-    # whether kbd_events stops at 1 and whether the re-arm actually happened.
-    color(C_GREY)  put("  kbd events ")   color(C_WHITE)  put(kbd_events())
-    color(C_GREY)  put("  requeues ")     color(C_WHITE)  put(kbd_requeues())
-    color(C_GREY)  put("  last cc ")      color(C_WHITE)  print(kbd_lastcc())
-    color(C_GREY)
-    color(C_GREY)
-    color(C_GREY)
     return 0
 }
 
@@ -492,29 +474,10 @@ fn draw_window(wx, wy, ww, wh, title, focus) {
 
 # w - three overlapping windows over the wallpaper: the real thing next to the
 # mockup, so the software-vs-browser gap is judged by eye, not by promise
-fn windows_demo() {
-    if px_w() == 0 {
-        color(C_GREY)  print("  the window demo needs the framebuffer console")
-        return 0
-    }
-    w = px_w()
-    h = px_h()
-    grad_rgb(0, 0, w, h, WALL_TOP, WALL_BOT)            # fresh wallpaper
-    draw_window(70, 74, 300, 150, "System Monitor", 0)
-    text_aa(104, 118, "CPU  load  steady", TXT_DIM)
-    text_aa(104, 138, "mem  64 / 256 MiB", TXT_DIM)
-    draw_window(150, 150, 340, 200, "zl shell", 1)
-    text_aa(186, 194, "the quick brown fox jumps", TXT_HI)
-    text_aa(186, 214, "over 0123456789 !@#$%&*", TXT_DIM)
-    text_aa(186, 244, "zl> gfx compose --shadows", ACCENT)
-    draw_window(440, 258, 250, 120, "Clock", 0)
-    text_aa(500, 300, "12:04:37", TXT_HI)
-    text_aa(70, h - 58, "real windows - real shadows - press any key", ACCENT)
-    present()              # everything above is still in the back buffer
-    while key_get() == 0 { }
-    draw_screen()
-    return 0
-}
+# windows_demo was here: a static PICTURE of three window frames with "press
+# any key" underneath, from before there was a window manager. desktop-TODO
+# calls it superseded and it is - `windows` opens the real thing now. Deleted
+# rather than converted; there is nothing in it the compositor does not do.
 
 # a spinning 3D cube - proof the CPU can do real 3D with no GPU and no floats.
 # Two wireframe cubes counter-rotating in a viewport window; the maths lives in
@@ -790,71 +753,71 @@ fn spname(s) {
     return "unknown"
 }
 
-fn cube_demo() {
-    if px_w() == 0 {
-        color(C_GREY)  print("  the 3D demo needs the framebuffer console")
-        return 0
-    }
-    w = px_w()
-    h = px_h()
-    grad_rgb(0, 0, w, h, WALL_TOP, WALL_BOT)
-    draw_header()
-    vx = 150
-    vy = 108
-    vw = 500
-    vh = 384
-    draw_window(vx, vy, vw, vh, "3D   -   software rendered, no GPU", 1)
-    ccx = vx + vw / 2
-    ccy = vy + vh / 2
-    cube_clip(vx + 3, vy + 30, vx + vw - 4, vy + vh - 30)       # keep the cube in the viewport
-    ang = 0
-    while key_get() == 0 {
-        fill_rgb(vx + 3, vy + 30, vw - 6, vh - 33, PANEL)      # clear the viewport
-        cube3d(ccx, ccy, 96, ang, ACCENT)                      # solid, flat-shaded, lit
-        text_aa(vx + 18, vy + vh - 26, "press any key to exit", TXT_DIM)
-        ang = ang + 5
-        if ang >= 360 { ang = 0 }
-        present()          # show this frame before sleeping, not after
-        wait_ticks(3)
-    }
-    draw_screen()
+# ---- the 3D cube, as an app ------------------------------------------------
+# Was `while key_get() == 0 { ...draw... wait_ticks(3) }`: a loop that owned the
+# screen and told you to "press any key to exit". The angle is the only state,
+# so this is the smallest of the four conversions.
+c_ang  = 0
+c_next = 0
+
+fn cube_tick() {
+    if ticks() < c_next { return 0 }
+    c_next = ticks() + 3
+    c_ang = c_ang + 5
+    if c_ang >= 360 { c_ang = 0 }
+    return 1
+}
+
+fn cube_draw(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, PANEL)
+    # The rasterizer has its OWN clip and it must be the client area. fb_clip
+    # already stops the cube reaching the chrome, but cube_clip is what keeps
+    # the geometry inside the viewport rather than merely scissored at the edge.
+    cube_clip(ax, ay, ax + aw, ay + ah)
+    cb_s = aw / 5
+    if ah / 5 < cb_s { cb_s = ah / 5 }
+    cube3d(ax + aw / 2, ay + ah / 2, cb_s, c_ang, ACCENT)
     return 0
 }
 
 # ---- an animation: a bouncing logo over a starfield ------------------------
-fn anim() {
-    if px_w() == 0 {
-        color(C_GREY)  print("  the animation needs the framebuffer console")
-        return 0
+# ---- the bouncing logo, as an app ------------------------------------------
+# The starfield is recomputed from a FIXED seed every frame rather than stored,
+# which is what stops it flickering - and it is what makes this app_draw
+# position-pure for free.
+a_lx = 40
+a_ly = 90
+a_vx = 6
+a_vy = 4
+a_next = 0
+
+fn anim_tick(aw, ah) {
+    if ticks() < a_next { return 0 }
+    a_next = ticks() + 2
+    a_lx = a_lx + a_vx
+    a_ly = a_ly + a_vy
+    if a_lx < 0        { a_lx = 0         a_vx = 0 - a_vx }
+    if a_lx > aw - 120 { a_lx = aw - 120  a_vx = 0 - a_vx }
+    if a_ly < 0        { a_ly = 0         a_vy = 0 - a_vy }
+    if a_ly > ah - 48  { a_ly = ah - 48   a_vy = 0 - a_vy }
+    return 1
+}
+
+fn anim_draw(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, PANEL)
+    an_seed = 2463534242
+    an_i = 0
+    while an_i < 90 {
+        an_seed = an_seed * 1103515245 + 12345
+        an_x = band(an_seed / 4096, 2047) % aw
+        an_seed = an_seed * 1103515245 + 12345
+        an_y = band(an_seed / 4096, 2047) % ah
+        an_c = rgb(120, 132, 160)
+        if band(an_seed, 7) == 0 { an_c = rgb(235, 242, 255) }
+        fill_rgb(ax + an_x, ay + an_y, 2, 2, an_c)
+        an_i = an_i + 1
     }
-    w = px_w()
-    h = px_h()
-    lx = 40  ly = 90  vx = 6  vy = 4
-    while key_get() == 0 {
-        fill_rect(0, 0, w, h, C_BLACK)          # clear the frame
-        # a stable starfield from a fixed seed, so stars don't flicker
-        seed = 2463534242
-        i = 0
-        while i < 90 {
-            seed = seed * 1103515245 + 12345
-            sx = band(seed / 4096, 2047) % w
-            seed = seed * 1103515245 + 12345
-            sy = band(seed / 4096, 2047) % h
-            c = C_GREY
-            if band(seed, 7) == 0 { c = C_WHITE }
-            fill_rect(sx, sy, 2, 2, c)
-            i = i + 1
-        }
-        lx = lx + vx  ly = ly + vy               # bounce the logo
-        if lx < 0      { lx = 0       vx = 0 - vx }
-        if lx > w - 120 { lx = w - 120 vx = 0 - vx }
-        if ly < 72     { ly = 72      vy = 0 - vy }
-        if ly > h - 48 { ly = h - 48  vy = 0 - vy }
-        logo(lx, ly, "zlOS", 3, C_CYAN)
-        present()          # show this frame before sleeping, not after
-        wait_ticks(2)
-    }
-    draw_screen()
+    logo(ax + a_lx, ay + a_ly, "zlOS", 3, C_CYAN)
     return 0
 }
 
@@ -883,7 +846,7 @@ SNAKE_Y = 0x02000200
 # array to hoist, only the scalars below.
 
 SNAKE_CELL = 16                 # one grid cell, in pixels
-SNAKE_RATE = 7                  # ticks between steps, at 100 Hz - 70 ms
+SNAKE_RATE = 10                 # ticks between steps, at 100 Hz - 100 ms
 # SNAKE_X has exactly 512 bytes before SNAKE_Y begins. The old code grew slen
 # without limit, so a long enough snake wrote its own X coordinates through the
 # start of its Y array - the same class of collision as the AP stacks in fb.c,
@@ -901,6 +864,7 @@ s_seed  = 1
 s_gw    = 10
 s_gh    = 10
 s_next  = 0
+s_died  = 0
 
 fn snake_rand(n) {
     s_seed = s_seed * 1103515245 + 12345
@@ -934,7 +898,8 @@ fn snake_start(aw, ah) {
     s_score = 0
     s_alive = 1
     s_next = ticks() + SNAKE_RATE
-    return 0
+    s_died = 0
+    return 1
 }
 
 # w/a/s/d and the arrow keys. A reversal into your own neck is refused, which
@@ -953,7 +918,16 @@ fn snake_key(code) {
 # app_tick MUST NOT DRAW. That separation is what lets the snake keep playing
 # while another window is dragged over it.
 fn snake_step() {
-    if s_alive == 0 { return 0 }
+    # DEAD IS NOT DONE. desktop-TODO's interaction target is "apps run in
+    # windows and KEEP RUNNING", and a game that hits a wall and then sits
+    # there forever is a window with a picture in it. Hold the final board
+    # long enough to read the score, then start again - which is what an
+    # arcade cabinet does, and what makes this app self-sustaining rather
+    # than something you have to poke to revive.
+    if s_alive == 0 {
+        if ticks() < s_died + 200 { return 0 }
+        return snake_start(s_gw * SNAKE_CELL, s_gh * SNAKE_CELL)
+    }
     if ticks() < s_next { return 0 }
     s_next = ticks() + SNAKE_RATE
 
@@ -970,7 +944,7 @@ fn snake_step() {
         }
         sn_i = sn_i + 1
     }
-    if s_alive == 0 { return 1 }
+    if s_alive == 0 { s_died = ticks()  return 1 }
 
     if sn_nx == s_fx {
         if sn_ny == s_fy {
@@ -1004,45 +978,80 @@ fn snake_draw(ax, ay, aw, ah) {
         fill_rgb(ax + peek8(SNAKE_X + sn_i) * SNAKE_CELL, ay + peek8(SNAKE_Y + sn_i) * SNAKE_CELL, SNAKE_CELL - 2, SNAKE_CELL - 2, sn_c)
         sn_i = sn_i + 1
     }
-    sn_ty = ay + ah - 20
+    # The status strip is ONE CELL tall, measured, not the literal 20 px it
+    # used to be - at ui()==2 a cell is 32 px and the text was drawn half
+    # outside the client area, where fb_clip correctly cut it in half.
+    sn_ty = ay + ah - cell_h()
     text_aa(ax + 6, sn_ty, "score", TXT_DIM)
-    num_aa(ax + 60, sn_ty, s_score, TXT_HI)
-    if s_alive == 0 { text_aa(ax + 110, sn_ty, "game over - any key restarts", TXT_DIM) }
+    num_aa(ax + 8 + 6 * cell_w(), sn_ty, s_score, TXT_HI)
+    if s_alive == 0 { text_aa(ax + 8 + 11 * cell_w(), sn_ty, "game over", TXT_DIM) }
     return 0
 }
 
-fn paint() {
-    if px_w() == 0 {
-        color(C_GREY)  print("  paint needs the framebuffer console")
-        return 0
+# ---- paint, as an app - and it had to grow a CANVAS -------------------------
+# The old paint drew each dab straight to the screen and never redrew. That is
+# fine while it owns the whole display and nothing ever repaints, and it is
+# fatal the moment a window can be dragged across it: the compositor repaints
+# from damage, and there was nothing to repaint FROM. Exactly the problem
+# term.c's scrollback solved for the shell.
+#
+# So the strokes are kept. Not a pixel buffer - 800x500 bytes would be 400,000
+# peek8 calls per repaint and zl dispatches builtins through a linear strcmp
+# chain, so a frame would take seconds. A capped list of DABS is bounded work:
+# PAINT_MAX rects per repaint, once, when damaged.
+#
+# One 32-bit word per dab, because raw memory is all there is: x in 12 bits,
+# y in 12, colour index in 8. 4096 is well past any client area this runs in.
+# The coordinates are CLIENT-RELATIVE, which is what makes the drawing follow
+# the window when you drag it instead of staying where the pixels were.
+PAINT_BUF = 0x02100000
+PAINT_MAX = 2000
+
+p_col  = 2
+p_n    = 0
+
+fn paint_pack(px, py, pc) { return px + py * 4096 + pc * 16777216 }
+
+fn paint_col(idx) {
+    if idx == 1 { return rgb(230, 90, 90) }
+    if idx == 2 { return rgb(120, 220, 140) }
+    if idx == 3 { return rgb(240, 210, 110) }
+    if idx == 4 { return rgb(110, 170, 245) }
+    if idx == 5 { return rgb(215, 130, 235) }
+    if idx == 6 { return rgb(110, 225, 230) }
+    return rgb(235, 242, 255)
+}
+
+# A dab, in client coordinates. Refuses silently ONLY when full, and says so on
+# the canvas rather than quietly dropping strokes forever.
+fn paint_dab(cx, cy) {
+    if p_n >= PAINT_MAX { return 0 }
+    poke32(PAINT_BUF + p_n * 4, paint_pack(cx, cy, p_col))
+    p_n = p_n + 1
+    return 1
+}
+
+fn paint_clear() { p_n = 0  return 1 }
+
+fn paint_key(code) {
+    if code == 32 { return paint_clear() }
+    if code >= 49 { if code <= 55 { p_col = code - 48  return 1 } }
+    return 0
+}
+
+fn paint_draw(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, PANEL)
+    pt_i = 0
+    while pt_i < p_n {
+        pt_w = peek32(PAINT_BUF + pt_i * 4)
+        pt_c = pt_w / 16777216
+        pt_y = band(pt_w / 4096, 4095)
+        pt_x = band(pt_w, 4095)
+        fill_rgb(ax + pt_x, ay + pt_y, 5, 5, paint_col(pt_c))
+        pt_i = pt_i + 1
     }
-    w = px_w()
-    h = px_h()
-    cls()
-    fill_rect(0, 0, w, h, C_BLACK)
-    at(0, 2, "PAINT", C_WHITE)
-    at(0, 9, "hold left button to draw   1-7 pick colour   space clears   other key exits", C_GREY)
-    col = C_GREEN
-    pt_run = 1
-    while pt_run == 1 {
-        k = key_get()
-        if k > 0 {
-            if k == 32 { fill_rect(0, 24, w, h - 24, C_BLACK) }
-            if k >= 49 { if k <= 55 { col = k - 48 } }
-            if k > 55 { pt_run = 0 }
-            if k < 49 { if k != 32 { pt_run = 0 } }
-        }
-        mx = mouse_x()
-        my = mouse_y()
-        if mx > w - 5 { mx = w - 5 }
-        if my > h - 5 { my = h - 5 }
-        if my < 24 { my = 24 }
-        if band(mouse_btn(), 1) != 0 { fill_rect(mx, my, 5, 5, col) }
-        at_num(0, 62, mx, C_GREY)
-        at_num(0, 70, my, C_GREY)
-        present()          # drawing lands in the back buffer; this is the blit
-    }
-    draw_screen()
+    text_aa(ax + 6, ay + ah - cell_h(), "1-7 colour   space clears", TXT_DIM)
+    if p_n >= PAINT_MAX { text_aa(ax + 6, ay + 6, "canvas full", rgb(230, 90, 90)) }
     return 0
 }
 
@@ -1150,6 +1159,17 @@ fn editor(slot) {
     draw_screen()
     color(C_GREY)  put("  saved ")  color(C_WHITE)  put(len)
     color(C_GREY)  put(" bytes to file ")  color(C_WHITE)  print(slot)
+    return 0
+}
+
+# An app with no text-mode form. Says which one and why, rather than doing
+# nothing - a command that silently returns is this repo's most expensive
+# recurring bug, and "the app list offers it but nothing happens" is exactly
+# that shape.
+fn needs_wm(what) {
+    color(C_GREY)  put("  ")
+    color(C_WHITE) put(what)
+    color(C_GREY)  print(" runs in a window - it needs the framebuffer console")
     return 0
 }
 
@@ -1750,17 +1770,17 @@ fn run_command(cmd, arg) {
         }
         return 0
     }
-    if cmd == 118 { return cube_demo() }     # v - spinning 3D cube (software)
+    # v/x/a/d are APPS now: under the compositor open_app() gives each one a
+    # window before run_command is ever reached, and there is no text-mode
+    # version of any of them - they were all full-screen graphical loops.
+    if cmd == 118 { return needs_wm("the 3D cube") }
     if cmd == 119 { return wm_session() }    # w - the real compositor (wm.c)
-    if cmd == 120 { return mousedemo() }  # x - mouse demo
-    if cmd == 97  { return anim() }       # a - animation
+    if cmd == 120 { return needs_wm("the pointer readout") }
+    if cmd == 97  { return needs_wm("the animation") }
     # g - snake. Reached only from the TEXT shell now; under the compositor
     # open_app() gives it a window instead. snake_game() is deleted.
-    if cmd == 103 {
-        color(C_GREY)  print("  snake runs in a window - start the compositor first")
-        return 0
-    }
-    if cmd == 100 { return paint() }      # d - paint (draw)
+    if cmd == 103 { return needs_wm("snake") }
+    if cmd == 100 { return needs_wm("paint") }
     if cmd == 105 { return editor(arg) }  # i - text editor (arg = file slot 0-9)
     if cmd == 108 { return fs_list() }    # l - list RAM files
     if cmd == 114 {                       # r - reboot
@@ -1863,17 +1883,29 @@ APP_SHELL   = 0
 APP_MONITOR = 1
 APP_ABOUT   = 2
 APP_SNAKE   = 3
+APP_PAINT   = 4
+APP_CUBE    = 5
+APP_ANIM    = 6
+APP_MOUSE   = 7
 
 # Which window each app is in, or -1. An app that is already open is FOCUSED
 # rather than opened twice - wm.c would happily give you a second Snake, and
 # both would drive the same SNAKE_X/SNAKE_Y because the state is module-level.
 snake_win = 0 - 1
+paint_win = 0 - 1
+cube_win  = 0 - 1
+anim_win  = 0 - 1
+mouse_win = 0 - 1
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     wy = ay - TITLE_H * ui()
     if id == APP_MONITOR { return sysmon_body(ax, wy) }
     if id == APP_ABOUT   { return about_body(ax, wy) }
     if id == APP_SNAKE   { return snake_draw(ax, ay, aw, ah) }
+    if id == APP_PAINT   { return paint_draw(ax, ay, aw, ah) }
+    if id == APP_CUBE    { return cube_draw(ax, ay, aw, ah) }
+    if id == APP_ANIM    { return anim_draw(ax, ay, aw, ah) }
+    if id == APP_MOUSE   { return mouse_draw(ax, ay, aw, ah) }
     if id == APP_SHELL {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the
@@ -1925,6 +1957,20 @@ fn app_event(id, win, ety, ecode, ex, ey) {
         if ety == 3 { if snake_key(ecode) == 1 { wm_dmg(win)  return 1 } }
         return 0
     }
+    if id == APP_PAINT {
+        if ety == 3 { if paint_key(ecode) == 1 { wm_dmg(win)  return 1 } }
+        # EV_MOUSE (4) carries the position and the button mask. Painting on
+        # the EVENT rather than polling in app_tick is what makes a stroke
+        # follow the pointer through wm.c's grab, which keeps delivering to
+        # this window even when the hand outruns the frame.
+        if ety == 4 {
+            if band(ecode, 1) != 0 {
+                if paint_dab(ex - wm_cx(win), ey - wm_cy(win)) == 1 { wm_dmg(win) }
+                return 1
+            }
+        }
+        return 0
+    }
     return 0
 }
 
@@ -1948,17 +1994,85 @@ fn wm_report(w) {
 
 # Open an app in its own window, or focus the one already open. Returns 1 if
 # this command was an app, 0 if the shell should run it as a command.
+#
+# THE APPS TILE rather than cascade. A cascade is the usual desktop default and
+# it is wrong here for a reason worth keeping: every one of these windows shows
+# something MOVING, and stacked on top of each other four of the five are
+# invisible - which is also how probe-apps.py first measured 0.00% change for
+# three apps that were running perfectly. Two rows of 200x160 design units clear
+# each other at every UI scale, and all of them stay left of the System
+# Monitor column at 1342 px so nothing opens underneath it.
+#
+# Snake gets the widest tile because it is the one app whose window size is
+# GAMEPLAY: the board is the client area divided by SNAKE_CELL, so a narrow
+# tile is a short game. At 200 design units it was 24 cells across and the
+# snake reached the wall 0.84 s after opening, every time, before a player
+# could react. 280 units and a 100 ms step make that ~1.7 s.
+#
+# OPENING DOES NOT STEAL FOCUS, and that is a decision rather than an omission.
+# A new window taking focus is normal on a desktop you drive with a mouse; here
+# the shell is the ONLY launcher, so handing focus to the app you just started
+# means you cannot type the next command without clicking your way back. It
+# also made launching two apps in a row impossible - the second command was
+# typed into the first app, which dropped it. Asking for an app that is already
+# open DOES focus and raise it, because that is the only way to get to it from
+# the keyboard, and Alt+Tab cycles the rest.
 fn open_app(cmd) {
+    oa_u = ui()
+    # WHO HAD FOCUS BEFORE. wm_open() focuses the window it just opened
+    # (wm.c: focus_win = i), so simply not calling wm_focus here is not enough
+    # - the focus still moves. Put it back explicitly, or the second command
+    # you type goes to the app you started with the first one and is dropped.
+    oa_f = wm_focused()
     if cmd == 103 {
         if snake_win >= 0 { if wm_alive(snake_win) == 1 {
             wm_focus(snake_win)  wm_raise(snake_win)  return 1
         }}
-        oa_u = ui()
-        snake_win = wm_open(APP_SNAKE, "Snake", 120 * oa_u, 120 * oa_u, 46 * SNAKE_CELL, 30 * SNAKE_CELL + 24)
+        snake_win = wm_open(APP_SNAKE, "Snake", 20 * oa_u, 60 * oa_u, 280 * oa_u, 160 * oa_u)
         if snake_win < 0 { return 0 }
-        snake_start(46 * SNAKE_CELL, 30 * SNAKE_CELL)
-        wm_focus(snake_win)
+        snake_start(wm_cw(snake_win), wm_ch(snake_win))
+        if oa_f >= 0 { wm_focus(oa_f) }
         wm_report(snake_win)
+        return 1
+    }
+    if cmd == 100 {
+        if paint_win >= 0 { if wm_alive(paint_win) == 1 {
+            wm_focus(paint_win)  wm_raise(paint_win)  return 1
+        }}
+        paint_win = wm_open(APP_PAINT, "Paint", 20 * oa_u, 230 * oa_u, 280 * oa_u, 160 * oa_u)
+        if paint_win < 0 { return 0 }
+        if oa_f >= 0 { wm_focus(oa_f) }
+        wm_report(paint_win)
+        return 1
+    }
+    if cmd == 118 {
+        if cube_win >= 0 { if wm_alive(cube_win) == 1 {
+            wm_focus(cube_win)  wm_raise(cube_win)  return 1
+        }}
+        cube_win = wm_open(APP_CUBE, "3D", 310 * oa_u, 60 * oa_u, 160 * oa_u, 160 * oa_u)
+        if cube_win < 0 { return 0 }
+        if oa_f >= 0 { wm_focus(oa_f) }
+        wm_report(cube_win)
+        return 1
+    }
+    if cmd == 97 {
+        if anim_win >= 0 { if wm_alive(anim_win) == 1 {
+            wm_focus(anim_win)  wm_raise(anim_win)  return 1
+        }}
+        anim_win = wm_open(APP_ANIM, "zlOS", 480 * oa_u, 60 * oa_u, 160 * oa_u, 160 * oa_u)
+        if anim_win < 0 { return 0 }
+        if oa_f >= 0 { wm_focus(oa_f) }
+        wm_report(anim_win)
+        return 1
+    }
+    if cmd == 120 {
+        if mouse_win >= 0 { if wm_alive(mouse_win) == 1 {
+            wm_focus(mouse_win)  wm_raise(mouse_win)  return 1
+        }}
+        mouse_win = wm_open(APP_MOUSE, "Pointer", 310 * oa_u, 230 * oa_u, 160 * oa_u, 160 * oa_u)
+        if mouse_win < 0 { return 0 }
+        if oa_f >= 0 { wm_focus(oa_f) }
+        wm_report(mouse_win)
         return 1
     }
     return 0
@@ -1991,6 +2105,9 @@ fn app_tick(id, win) {
     # returns 1 to ask for a repaint - so it keeps playing while another window
     # is being dragged over it, which is the assertion probe-snake.py makes.
     if id == APP_SNAKE { return snake_step() }
+    if id == APP_CUBE  { return cube_tick() }
+    if id == APP_ANIM  { return anim_tick(wm_cw(win), wm_ch(win)) }
+    if id == APP_MOUSE { return mouse_tick() }
     return 0
 }
 
