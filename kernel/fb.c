@@ -149,6 +149,25 @@ int fb_get_rows(void) { return fb_rows; }
  * log states it rather than leaving someone to wonder why dragging stopped. */
 #define BIG_LIMIT  ((unsigned int)(HI_SCHED - HI_BG))    /* 48 MiB */
 
+/* THE MAP MUST BE IN ORDER, AND THE COMPILER SHOULD SAY SO.
+ *
+ * Every limit above is a subtraction of one base from the next, which is only
+ * meaningful if the bases are in ascending order. Reorder two of them by
+ * mistake and the subtraction underflows to a colossal unsigned number, every
+ * "does it fit" test passes, and a buffer lands on top of a neighbour - which
+ * is the DMA-arena collision this project has hit five times, in the shape
+ * that hides best.
+ *
+ * These cost nothing at run time and fail the build the moment the map stops
+ * making sense. A comment claiming the order would not have. */
+_Static_assert(HI_BG    < HI_SP,    "high-RAM map out of order: bg >= sp");
+_Static_assert(HI_SP    < HI_SCHED, "high-RAM map out of order: sp >= sched");
+_Static_assert(HI_SCHED < HI_BACK,  "high-RAM map out of order: sched >= back");
+_Static_assert(HI_BACK  < HI_NVME,  "high-RAM map out of order: back >= nvme");
+/* and the fallback arena must not reach into sched.c's stacks */
+_Static_assert(HI_BG + (unsigned long)BIG_LIMIT <= HI_SCHED,
+               "the back buffer's fallback arena overruns sched.c");
+
 static unsigned int *back = (unsigned int *)HI_BACK;
 static int back_on = 0;
 static int back_took_arena = 0;   /* back is living in the drag buffers' space */
@@ -415,6 +434,18 @@ static void fb_report_mode(unsigned int need)
         fb_puts(" KiB, "); fb_putu(BACK_LIMIT >> 10);
         fb_puts(" KiB free below nvme - no subpixel text, read-back hits VRAM\n");
     }
+    /* Say where it ends, not just that it fits. "back ON" is a claim; an
+     * address is a fact somebody can check against the map in this file. */
+    if (back_on) {
+        unsigned long top = (unsigned long)back + need;
+        unsigned long ceil = back_took_arena ? HI_SCHED : HI_NVME;
+        fb_puts("      back at ");   fb_putu((unsigned)((unsigned long)back >> 20));
+        fb_puts(" MiB, ends at ");   fb_putu((unsigned)(top >> 20));
+        fb_puts(" MiB, ceiling ");   fb_putu((unsigned)(ceil >> 20));
+        fb_puts(" MiB");
+        if (top > ceil) fb_puts("  *** OVERRUN - THIS WILL CORRUPT THE NEXT BUFFER ***");
+        fb_puts("\n");
+    }
     if (!drag_ok) {
         fb_puts("      drag OFF: ");
         if (back_took_arena) {
@@ -503,6 +534,10 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
      * desktop-TODO 0a asked for and what the first version of this only did
      * for the limit. */
     back_took_arena = 0;
+    /* The static asserts above prove the MAP is sane. This proves the choice
+     * made from it is: a mode arrives at run time and `need` is computed from
+     * it, so the one thing a compile-time check cannot cover is whether this
+     * particular mode's buffer stays inside the span picked for it. */
     if (need <= BACK_LIMIT) {
         back = (unsigned int *)HI_BACK;
         back_on = 1;
