@@ -184,6 +184,31 @@ kernel/hosttest/tcptest        # 110 checks, 0 failed
 kernel/hosttest/httptest       # 91 checks, 0 failed
 ```
 
+```bash
+kernel/hosttest/browsertest    # 58 checks, 0 failed
+```
+
+`browsertest` covers the app's logic with the drawing stubbed rather than
+linked — URL parsing (the one place the browser takes whatever a person typed),
+the history stack and its eight-slot cap, and the URL bar's key machine. The
+network under it is real, so "did it parse the port" is answered by inspecting
+the SYN that went out rather than by an accessor that exists only for the test.
+
+Both harnesses were mutation-tested, and that is the part worth keeping. Of
+fourteen deliberate mutations, twelve were caught immediately and **two were
+not** — and both survivors were weak *assertions*, not correct code:
+
+- `about:home` not being pushed into the history was invisible, because the
+  browser is a single global with no teardown and the test's reset could never
+  produce a genuinely empty history. Moved to a test that runs first, where
+  the property is observable exactly once per process.
+- control characters reaching the URL buffer was invisible, because the first
+  printable keystroke clears the select-all and wiped them before the
+  assertion looked. Now a real character is typed first.
+
+A test that quietly cannot observe the property it names is worse than no
+test: it reports PASS.
+
 `httptest` drives `http.c` over the **real** `tcp.c`, with the response
 arriving as scripted TCP segments — so it exercises the same reassembly path
 the kernel uses rather than a mock of it. It passed all 91 checks the first

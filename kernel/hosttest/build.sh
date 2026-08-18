@@ -104,3 +104,13 @@ echo "built ./tcptest       (run: ./tcptest)"
 # for from a real server; all of them are two lines here.
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o httptest httptest.c ../http.c ../tcp.c ../net.c
 echo "built ./httptest      (run: ./httptest)"
+
+# The browser app's LOGIC - URL parsing, history, the URL bar's key machine -
+# with the drawing stubbed rather than linked. browsershot renders browser.c
+# and asserts nothing about it; everything the app does that is not drawing was
+# untested, including the one place it takes whatever a person typed. The
+# network below it is real: net.c, tcp.c and http.c are all linked, so "did it
+# parse the port" is answered by looking at the SYN that went out.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o browsertest browsertest.c ../browser.c \
+    ../html.c ../layout.c ../http.c ../tcp.c ../net.c
+echo "built ./browsertest   (run: ./browsertest)"

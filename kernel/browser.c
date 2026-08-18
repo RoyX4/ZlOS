@@ -201,10 +201,23 @@ typedef unsigned long long uptr;
 typedef unsigned int       uptr;
 #endif
 
+/* The pointer form is the real one; the address form is the zl seam. Splitting
+ * them is not test scaffolding - it is that `unsigned int` is the right type
+ * for a zl number carrying a physical address and the WRONG type for a C
+ * caller that already has a pointer, which on a 64-bit build it silently
+ * truncates. The kernel's own buffers all live below 4 GiB, so the address
+ * form is safe where it is used; a caller with a pointer should never have to
+ * round-trip it through a narrower integer to find that out. */
+void browser_load(const char *src, int len)
+{
+    if (!src || len <= 0) { browser_home(); return; }
+    doc_set(src, len);
+}
+
 void browser_load_mem(unsigned int addr, int len)
 {
     if (!addr || len <= 0) { browser_home(); return; }
-    doc_set((const char *)(uptr)addr, len);
+    browser_load((const char *)(uptr)addr, len);
 }
 
 int browser_truncated(void) { return doc_truncated; }
