@@ -808,6 +808,49 @@ int main(void)
     wm_close(dw);
     frame();
 
+    /* --------------------------------------------------- grab vs. close */
+    /* CLOSING A WINDOW MUST RELEASE ITS POINTER GRAB.
+     *
+     * A press in a client area hands the window the pointer until button-up -
+     * that is what makes a slider keep tracking when the pointer leaves it.
+     * Nothing released that grab when the window CLOSED, and a window can
+     * close mid-press: Ctrl+W is a key event and arrives between the down and
+     * the up.
+     *
+     * The second half is the nasty one. wm_open reuses the first free slot, so
+     * a window opened before button-up lands in the dead window's index and
+     * silently inherits the drag. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    wm_damage(0, 0, W, H);
+    pointer(20, 20, 0);
+    frame();
+    int ga = wm_open(9, "grabbed", 200, 200, 400, 300);
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
+    int gcx, gcy, gcw, gch;
+    wm_client(ga, &gcx, &gcy, &gcw, &gch);
+    pointer(gcx + 40, gcy + 40, 1);            /* press in the client: grab */
+    wm_close(ga);
+    frame();
+    last_event_app = -1;
+    pointer(gcx + 80, gcy + 80, 1);            /* still held */
+    ok("closing a window releases its pointer grab", last_event_app == -1);
+
+    /* ...and a new window in the reused slot does not inherit it */
+    int gb = wm_open(10, "fresh", 500, 500, 300, 200);
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
+    int bx0, by0, bw0, bh0;
+    wm_geometry(gb, &bx0, &by0, &bw0, &bh0);
+    last_event_app = -1;
+    pointer(gcx + 120, gcy + 120, 1);          /* STILL held from before */
+    int bx1, by1, bw1, bh1;
+    wm_geometry(gb, &bx1, &by1, &bw1, &bh1);
+    ok("...and a window reusing the slot does not inherit the drag",
+       bx1 == bx0 && by1 == by0 && bw1 == bw0 && bh1 == bh0 &&
+       last_event_app != 10);
+    pointer(gcx + 120, gcy + 120, 0);
+    wm_close(gb);
+    frame();
+
     /* ---------------------------------------------------------- Super key */
     /* MOD_SUPER has been tracked by input.c since it was written and used for
      * NOTHING. Snapping is the binding worth spending it on: the one window

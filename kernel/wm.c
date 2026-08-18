@@ -417,6 +417,10 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
     return -1;
 }
 
+/* Declared here because wm_close has to drop the grab and the grab state is
+ * declared with the routing, further down. */
+static void wm_drop_grab(int win);
+
 void wm_close(int win)
 {
     if (!wm_is_open(win)) return;
@@ -425,6 +429,16 @@ void wm_close(int win)
     z_remove(win);
     /* focus the new top, so closing never leaves keys going nowhere */
     focus_win = nz ? zorder[nz - 1] : -1;
+    /* ...and the POINTER, for the same reason. A press hands the window the
+     * pointer until button-up, and a window can close mid-press - Ctrl+W is a
+     * key event and arrives between the down and the up. Left alone, the app
+     * kept receiving mouse events for a window that no longer existed.
+     *
+     * The second half is worse: wm_open reuses the FIRST FREE SLOT, so a
+     * window opened before button-up lands in the dead window's index and
+     * silently inherits the drag - a brand new window that starts moving
+     * because of a press the user aimed at something else. */
+    wm_drop_grab(win);
 }
 
 void wm_raise(int win)
@@ -785,6 +799,13 @@ static void wm_toggle_max(int win)
 }
 
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
+
+/* wm_close calls this. Defined here, beside the state it clears, so the grab
+ * and its lifetime stay in one place. */
+static void wm_drop_grab(int win)
+{
+    if (pgrab == win) pgrab = -1;
+}
 /* What the pointer grab is FOR. It used to be a bare 0/1 meaning "the app has
  * it" or "we are moving it"; resize is a third answer, and three states with
  * two values is how a bug gets in. */
