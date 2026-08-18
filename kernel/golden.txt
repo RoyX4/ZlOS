@@ -10,6 +10,7 @@
   [  OK  ] PIT timer running at 100 Hz on IRQ0
   [  OK  ] keyboard on IRQ1 - no more polling the port
   USB: no xHCI controller (6 PCI devices seen)
+  arena: 16 MiB at 8 MiB, ends at 24 MiB, ceiling 128 MiB (bg_buf)
   [  OK  ] zl runtime, kernel subset
   [ INFO ] no heap, no filesystem, no scheduler
 
@@ -30,6 +31,12 @@
     d        paint with the mouse
     <n> i    edit RAM file n (0-9) - ESC saves it
     l        list the RAM files
+    run F    run a program from a file (type it - needs a name)
+    .        zlfs on the NVMe disk - mount, and count the boots
+    ,        list the files ON DISK, by name
+    ;        the real time, read off the CMOS clock
+    '        write the clipboard to clip.txt on disk
+             (Ctrl+C in the editor copies, Ctrl+V pastes)
     e        beep the PC speaker
     m        poke a byte into video memory and read it back
   our hardware drivers

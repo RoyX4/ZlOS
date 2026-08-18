@@ -231,6 +231,11 @@ static void report(const char *what, unsigned long long cyc, int frames)
 int xhci_key_event(void) { return 0; }
 int xhci_kbd_mods(void)  { return 0; }
 
+/* term.c writes COM1 directly - term_say() tees to the scrollback AND the
+ * serial log, because gates grep that log and the console's pixels are
+ * muted under the compositor. This harness has no UART. */
+void zl_serial_putc(char c) { (void)c; }
+
 int main(int argc, char **argv)
 {
     if (argc > 2) { W = atoi(argv[1]); H = atoi(argv[2]); }

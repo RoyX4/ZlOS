@@ -11,6 +11,10 @@ Boots three ways with no GRUB: BIOS multiboot, our own 512-byte bootloader
 **The point of the project is the Intel display driver — the DPLL and a
 cold-start modeset.** The laptop is a test PC. Optimise for that.
 
+Where the firmware boundary actually sits, what a BIOS does that this kernel
+already does for itself, and the two walls (an Intel DRAM-training blob, and
+Boot Guard fused *on* on this laptop — measured): [`docs/what-is-a-bios.md`](docs/what-is-a-bios.md).
+
 ## The development loop that matters
 
 `kernel/hosttest/` compiles **the same `intel.c` that ships in the kernel** as a
@@ -690,6 +694,26 @@ cd kernel/hosttest && ./build.sh && ./inputtest
 ```
 
 Full write-up: `docs/input-stack.md`.
+## zlOS keeps things now — `docs/system-track.md`
+
+Files had no names and nothing survived a reboot. **zlfs** (`fs.c`) is a
+superblock, a flat directory of 32 named entries, and files as contiguous runs
+on the NVMe disk. `rtc.c` reads the CMOS clock, so the header shows a real time
+instead of uptime — and the header has stopped drawing "net up", which claimed
+a network driver this tree does not contain. `clip.c`, `snap.c` and `notify.c`
+are the clipboard, window snapping and toasts.
+
+**`verify-disk.sh` is the only gate here that power-cycles the machine.** Three
+boots against one image, asserting a counter in a file goes 1 → 2 → 3. Two
+boots cannot tell "reformats every mount" (1,1,1) from "the second write never
+landed" (1,2,2).
+
+The write path was reviewed adversarially — a fresh agent told to lose a file,
+proving each claim by running it — and it found **six data-loss defects** in
+code that already had 63 passing assertions, including one where the comment
+asserted an invariant the code did not hold. All six are fixed with regressions
+that fail on the old code. The full account, and what is deliberately left
+undone in `wm.c`, is in [`docs/system-track.md`](docs/system-track.md).
 
 ## The recurring bug class — check this FIRST
 
@@ -725,6 +749,17 @@ the build (including a replay of this exact bug), and the 34 addresses that were
 rebased onto the header are proven identical to the literals they replaced.
 **A `_Static_assert` nobody has watched fail is a decoration, not a guard** —
 that is what the negative half of that script is for.
+**And the corollary nobody had written down: NOT ONE GATE passes `-m`.**
+`verify.sh`, `verify-raw.sh` and `verify-iso.sh` all boot QEMU's default, which
+is **measured** at exactly 128 MiB (`query-memory-size-summary` says
+`base-memory: 134217728`). So on every gate this project runs, the whole
+high-RAM map is unbacked, and **a new fixed buffer placed above 128 MiB is dead
+code that will still pass review**. That is why the program arena is at 8 MiB.
+
+The full map — every base and end re-grepped from the file that owns it, the
+kernel image end measured, the arithmetic for where a new buffer may go, and one
+collision `fb.c`'s map does not list (the SMP AP stacks at 168 MiB, inside
+`sp_buf`'s declared span) — is `kernel/docs/memory-map.md`.
 
 ## Verify before believing anything
 
@@ -759,6 +794,46 @@ arithmetic — no build, no QEMU, so it cannot fail because the host is busy.
 hardcoded nine-name list and does not discover new constants, so `DISK_SCRATCH`
 — added on `desktop/system-track` at exactly the `0x02030000` this branch moved
 `LINE_BUF` to — is invisible to it. Fix the sweep before trusting it.
+**`./build.sh` DOES NOT REBUILD WHAT THE PROBES BOOT, and this will cost you an
+afternoon.** `build.sh` produces `kernel.elf`. Every `probe-*.py` boots
+`zlOS.iso` (`exercise.py:280` `qemu_argv` → `-cdrom zlOS.iso`), which is made by
+`mkiso.sh` and only by `mkiso.sh`. `exercise.py:273` `build()` runs it for you —
+so a probe run WITHOUT `--no-build` is honest, and `./build.sh && ./probe-x.py
+--no-build` silently tests the kernel you had before your edit.
+
+Measured, the hard way: three consecutive diagnostics of a real bug were run
+against a stale ISO. A fix that worked looked like it had failed, was reverted,
+and the hunt moved to the wrong subsystem. The tell was a `term_say` printed
+*before* another one appearing in the log *after* it — impossible in the source,
+and the only explanation was that the source was not what was running.
+
+**If a diagnostic result is impossible, check what you actually booted before
+you check anything else.**
+
+## The exec track — running code the kernel was not built with
+
+Three docs, all written from measurement rather than intent:
+
+- `kernel/docs/memory-map.md` — every fixed physical address, re-grepped from the
+  file that owns it, the kernel image end measured, and **the fact that no gate
+  passes `-m` so every address above 128 MiB is unbacked under all of them**.
+  Also two collisions `fb.c`'s map does not list.
+- `kernel/docs/exec-kill-path.md` — how a program that will not stop is stopped:
+  a step budget and a depth cap at `eval`/`exec`, a `longjmp` boundary instead of
+  `exit(1)`, and why it is deliberately not the timer interrupt.
+- `kernel/docs/DECISIONS.md` §"The exec track" — the level choice (**Level 1,
+  ASSUMED not chosen**), and why the boot log still says "no heap".
+
+Gates the exec track added, cheapest first:
+
+```
+cd kernel/hosttest && ./build.sh
+./arenatest        # the program arena's ceiling      62 checks, no QEMU
+./exectest         # `run`, with a fake filesystem    44 checks, no QEMU
+./exectest-nofs    # `run`, as it actually ships      32 checks, no QEMU
+./killtest.sh      # adversarial: can a script wedge the machine?  14 cases
+cd .. && ./probe-run.py                # `run` in the real compositor
+```
 
 `try.sh` GUI mode is **verified working** (2026-08-17). It was booting
 `-kernel kernel.elf`, and QEMU's own multiboot loader never supplies the

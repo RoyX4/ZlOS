@@ -8,3 +8,22 @@ zlOS.img
 kernel_raw.bin
 kernel_raw.elf
 raw_boot.bin
+
+# host harness BINARIES. The .c files are the work; these are build outputs,
+# and CLAUDE.md's rule about them has already had to be applied by hand once
+# (kernel/hosttest/dpll_test). Listing them means it does not have to be again.
+hosttest/fstest
+hosttest/wmtest
+hosttest/wmshot
+hosttest/inputtest
+hosttest/tritest
+hosttest/fbbench
+hosttest/dpll_test
+hosttest/modeset_test
+hosttest/intel_probe
+hosttest/gpu_fillrate
+hosttest/*.ppm
+
+hosttest/systest
+hosttest/rtctest
+hosttest/toasttest

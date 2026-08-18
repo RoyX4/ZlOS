@@ -13,6 +13,25 @@
  * and only after VM testing. `print` and `input` are real.
  */
 
+#ifdef ZL_FREESTANDING
+/* ---- the kernel build ----------------------------------------------------
+ * There is no libc here, so the names this file uses are redirected to
+ * interp_kernel.c's, which are checked against the real libc's over tens of
+ * thousands of inputs in hosttest/libctest.c.
+ *
+ * MACROS RATHER THAN #ifdefs THROUGHOUT THE BODY, on purpose. The alternative
+ * is a second copy of the interpreter that the hosted test suite never runs,
+ * and the two drift the first time either is fixed. This way there is one
+ * interpreter, the tests exercise it, and the only difference between the two
+ * builds is which strlen it links against.
+ *
+ * What is NOT redirected is the OS surface - files, processes, the clock.
+ * Those have no kernel equivalent at all, so the builtins that use them are
+ * compiled out below and refused by name at run time. Both, deliberately: the
+ * compile-out is what makes the kernel link, and the run-time refusal is what
+ * makes the message honest on the host too. */
+#include "freestanding/zl_freestanding.h"
+#else
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,12 +43,272 @@
 #include <dirent.h>
 #include <stdint.h>
 #include <sys/wait.h>
+#endif
 
 #include "lexer.h"
 #include "parser.h"
+#ifndef ZL_FREESTANDING
 #include "os.h"          /* the OS layer: real machine access, kept
                             in its own file so <windows.h> can't
                             clash with our TokenType/Node names */
+#endif
+
+
+/* =============================================================
+ * THE KILL PATH - how a program that misbehaves is stopped
+ *
+ * zlOS is about to run scripts it was not compiled with, in ring 0, with no
+ * memory protection (kernel/docs/EXEC-PROMPT.md, Item 2). Two of that item's
+ * three non-negotiables live here, and the brief is emphatic that they are
+ * decided BEFORE the loop is written rather than bolted on after:
+ *
+ *   1. a runaway program must be killable
+ *   2. a crashing program must not take the kernel with it
+ *
+ * A STEP BUDGET, NOT A TIMER. The obvious reflex is to preempt from the timer
+ * interrupt, and it is wrong twice over. DECISIONS.md #5 refused preemptive
+ * tasks sharing one framebuffer with no memory protection and no locks, and
+ * that call still stands. More basic than that: a timer does not DECIDE
+ * anything. Being interrupted 100 times a second does not make an infinite
+ * loop finite - you still need a policy that says "this has had enough", and
+ * the budget IS that policy. It is also reproducible, which a wall clock is
+ * not: the same script dies at the same step every time, on a loaded box or an
+ * idle one, so a gate written against it can never be timing-sensitive - the
+ * rule this project adopted after verify-raw.sh failed on an unchanged kernel.
+ *
+ * A DEPTH CAP AS WELL, because the budget alone does not save the stack. A
+ * script that recurses is consuming C stack frames per level, and the kernel
+ * has 256 KiB of stack in total. A budget of ten million steps is reached long
+ * after a recursion of a hundred thousand has walked off the bottom of it -
+ * and this project has already had a stack overflow write into console statics
+ * (16 KiB was not enough for the compositor). So depth is counted too, and it
+ * is the cheaper of the two checks.
+ *
+ * BOTH CHECKS ARE OFF BY DEFAULT. zi_limit(0, 0) means unlimited, which is
+ * exactly what the hosted `zl` interpreter has always done, so this changes
+ * nothing for it. The kernel arms them. That way there is ONE code path
+ * instead of an #ifdef pair, the hosted test suite exercises the same lines
+ * the kernel runs, and neither can drift from the other.
+ *
+ * THE TRAP. runtime_error() has always called exit(1), which is correct for a
+ * program and fatal for an operating system. When a trap is armed it longjmps
+ * back to whoever armed it instead, carrying the message. Nothing else about
+ * the error path changes, and with no trap armed the behaviour is identical to
+ * what it was.
+ * ============================================================= */
+
+#ifndef ZL_FREESTANDING
+#include <setjmp.h>
+#define zi_jmp_buf  jmp_buf
+#define zi_setjmp   setjmp
+#define zi_longjmp  longjmp
+#endif
+
+#define ZI_ERRMAX 192
+
+static long long zi_steps_left;      /* 0 = unlimited                        */
+static long long zi_steps_used;
+static int       zi_depth;
+static int       zi_depth_max;       /* 0 = unlimited                        */
+static int       zi_depth_peak;
+static zi_jmp_buf zi_trap;
+static int       zi_trap_armed;
+static int       zi_killed;          /* 1 = stopped by budget or depth       */
+static char      zi_errmsg[ZI_ERRMAX];
+
+long long zi_used(void)      { return zi_steps_used; }
+int       zi_peak_depth(void){ return zi_depth_peak; }
+int       zi_was_killed(void){ return zi_killed; }
+const char *zi_error(void)   { return zi_errmsg; }
+
+void zi_limit(long long steps, int max_depth)
+{
+    zi_steps_left = steps;
+    zi_steps_used = 0;
+    zi_depth      = 0;
+    zi_depth_max  = max_depth;
+    zi_depth_peak = 0;
+    zi_killed     = 0;
+    zi_errmsg[0]  = 0;
+}
+
+static void zi_seterr(const char *msg)
+{
+    int i = 0;
+    while (msg && msg[i] && i < ZI_ERRMAX - 1) { zi_errmsg[i] = msg[i]; i++; }
+    zi_errmsg[i] = 0;
+}
+
+
+/* ---- the allocation seam, and the second half of the budget --------------
+ * THE HOLE THIS CLOSES. The step budget counts visits to eval() and exec(),
+ * which bounds how many NODES a program executes and says nothing about how
+ * much WORK each one does. Found by an adversarial reader, and confirmed:
+ *
+ *     $ echo 'xs = range(50000000)
+ *             print(len(xs))' > onestep.zl
+ *     $ ./interp --steps 100 --depth 50 onestep.zl
+ *     50000000
+ *     exit=0
+ *
+ * A hundred steps of budget, fifty million allocations, and the program won.
+ * One eval() of one builtin call. Every container-building builtin has this
+ * shape - range, repeat, concat, join, split, sort - and capping them one at a
+ * time is whack-a-mole that the next builtin somebody adds walks straight past.
+ *
+ * So the budget is charged where the work actually is: PER BYTE ALLOCATED.
+ * That is one chokepoint, it cannot be forgotten by a new builtin because a new
+ * builtin cannot allocate without coming through here, and it makes the budget
+ * mean "work" rather than "statements" - which is what a caller wanting to
+ * bound a program actually means.
+ *
+ * It is ALSO the seam the kernel port needs for Item 2's third non-negotiable,
+ * that a program's memory must be its own. In the kernel zi_alloc becomes
+ * arena_alloc; here it stays malloc. One function to change instead of 68.
+ *
+ * THE DIVISOR. Charging one step per byte would make the budget's units
+ * incomparable between a loop that allocates and one that does not. A step is
+ * roughly "one node visited", and 64 bytes is roughly the cost of a Value, so
+ * a step per 64 bytes puts allocation and execution on the same scale: the
+ * fifty-million-element list above costs about 50 million steps rather than 1.
+ */
+#define ZI_BYTES_PER_STEP 64
+
+static void zi_charge(long long units);      /* defined with zi_step below */
+
+static void *zi_alloc(unsigned long bytes)
+{
+    zi_charge((long long)(bytes / ZI_BYTES_PER_STEP) + 1);
+    return malloc(bytes);
+}
+
+static char *zi_strdup(const char *s)
+{
+    zi_charge((long long)(s ? (strlen(s) / ZI_BYTES_PER_STEP) : 0) + 1);
+    return _strdup(s ? s : "");
+}
+
+static void *zi_realloc(void *p, unsigned long bytes)
+{
+    zi_charge((long long)(bytes / ZI_BYTES_PER_STEP) + 1);
+    return realloc(p, bytes);
+}
+
+
+/* ---- the memory window: which addresses a program may touch ---------------
+ * FOUND BY AN ADVERSARIAL READER, AND IT IS THE WHOLE OF NON-NEGOTIABLE 3.
+ *
+ *     poke32(0, 1)                    -> SIGSEGV
+ *     x = peek8(0)                    -> SIGSEGV
+ *     fill_mem(0, 0, 1000000000000)   -> SIGSEGV
+ *
+ * Three characters of zl, and on a hosted Linux that is a dead process. In the
+ * kernel - ring 0, no memory protection, which is exactly the situation
+ * EXEC-PROMPT.md describes - it is a dead machine, and none of the step budget
+ * or the depth cap or the longjmp trap comes anywhere near it. A signal is not
+ * a longjmp and there is no handler; a page fault in ring 0 is not a signal at
+ * all.
+ *
+ * The budget bounds TIME and the arena bounds HOW MUCH memory. Neither bounds
+ * WHICH memory, and the raw-memory builtins - peek*, poke*, alloc, copy_mem,
+ * fill_mem - exist precisely to hand out arbitrary addresses. They are not a
+ * mistake: design_memory_structs.md §3.1 fixes their names because a page
+ * allocator is written against them. They are how zl drives hardware. But a
+ * program the kernel was not built with is not the kernel.
+ *
+ * So there is a WINDOW. zi_confine(lo, hi) says "this program may touch
+ * [lo, hi) and nothing else"; every raw access is checked against it and a
+ * violation is an ordinary runtime_error, which the trap already catches and
+ * reports. Set to (0, 0) - the default - there is no window and nothing is
+ * checked, which is what the hosted interpreter and kernel.zl's own compiled
+ * code have always had. Only a foreign program gets confined, and the kernel
+ * confines it to exactly the arena.
+ *
+ * The check is a subtraction, not an addition: `len > hi - addr` cannot wrap,
+ * where `addr + len > hi` wraps for a length a script chose. That is the same
+ * form arena.c uses for its ceiling and for the same reason.
+ */
+static void runtime_error(const char *msg);   /* the trap - see below */
+static void zi_charge(long long units);
+
+static unsigned long long zi_win_lo, zi_win_hi;
+
+void zi_confine(unsigned long long lo, unsigned long long hi)
+{
+    zi_win_lo = lo;
+    zi_win_hi = hi;
+}
+
+static void zi_check(unsigned long long addr, unsigned long long len,
+                     const char *what)
+{
+    if (zi_win_hi == 0) return;                 /* no window: unconfined */
+    if (addr < zi_win_lo || addr >= zi_win_hi) {
+        zi_killed = 1;
+        runtime_error(what);
+    }
+    if (len > zi_win_hi - addr) {               /* subtraction: cannot wrap */
+        zi_killed = 1;
+        runtime_error(what);
+    }
+}
+
+/* ---- what a confined program may not do at all ---------------------------
+ * The window above says which ADDRESSES a program may touch. This says which
+ * BUILTINS it may call, and it exists because an adversarial reader found two
+ * more ways past everything else:
+ *
+ *     run("sleep 3600")     one eval() node, one step, blocks forever. The
+ *                           budget counts statements, not seconds, so a
+ *                           builtin that waits is unbounded no matter how
+ *                           small the budget is.
+ *     exit(0)               calls exit() directly. Not an error, so the trap
+ *                           never sees it; in a kernel it is the machine.
+ *
+ * Neither is a bug in those builtins - they are exactly what a shell language
+ * should have, and kernel.zl's own compiled code may want them. They are
+ * simply not things a program the kernel was NOT built with gets to do, and
+ * the honest way to say that is to refuse by name rather than to quietly
+ * return nil, which would look like the call had worked.
+ *
+ * The list is of everything that reaches OUTSIDE the interpreter: the host
+ * process, the filesystem, the clock, other programs. A confined program is a
+ * pure computation over its own arena, and that is the whole of what Level 1
+ * promised.
+ */
+static const char *const ZI_FORBIDDEN[] = {
+    "run", "start", "kill", "procs", "exit", "input",
+    "read", "write", "write_bytes", "dir", "rm", "move", "copy",
+    "env", "now",
+    0
+};
+/* NOT on the list, deliberately, and each for a reason:
+ *   seed    is srand() of a number the program supplies. It reaches nothing
+ *           outside the interpreter, and a confined program that wants
+ *           REPRODUCIBLE randomness needs it. Refusing it would be strictness
+ *           that costs something and buys nothing.
+ *   random,
+ *   randint are pure reads of that state.
+ *   print   is the whole point - a program that cannot say anything is not
+ *           worth running. It goes to the terminal, which is where the person
+ *           who typed `run` is looking.
+ * `now` IS on the list only because it is clock(), which has no freestanding
+ * implementation yet - an honest "not available" rather than a wrong number. */
+
+static void zi_forbid(const char *name)
+{
+    if (zi_win_hi == 0) return;                 /* unconfined: everything allowed */
+    for (int i = 0; ZI_FORBIDDEN[i]; i++) {
+        if (strcmp(name, ZI_FORBIDDEN[i]) == 0) {
+            char buf[96];
+            snprintf(buf, sizeof buf,
+                     "'%s' is not available to a program run this way", name);
+            zi_killed = 1;
+            runtime_error(buf);
+        }
+    }
+}
+
 
 /* =============================================================
  * VALUES - what an expression evaluates to
@@ -63,7 +342,7 @@ static Value make_bool(int b)        { Value v = make_nil(); v.type=V_BOOL; v.nu
 static Value make_str(const char *s)
 {
     Value v = make_nil(); v.type = V_STR;
-    v.str = malloc(strlen(s) + 1);
+    v.str = zi_alloc(strlen(s) + 1);
     strcpy(v.str, s);
     return v;
 }
@@ -106,17 +385,17 @@ static char *value_to_string_depth(Value v, int depth)
 {
     char buf[64];
     switch (v.type) {
-        case V_NIL:  return _strdup("nil");
-        case V_BOOL: return _strdup(v.num ? "true" : "false");
-        case V_STR:  return _strdup(v.str ? v.str : "");
-        case V_FN:   return _strdup("<function>");
+        case V_NIL:  return zi_strdup("nil");
+        case V_BOOL: return zi_strdup(v.num ? "true" : "false");
+        case V_STR:  return zi_strdup(v.str ? v.str : "");
+        case V_FN:   return zi_strdup("<function>");
         case V_NUM:
             /* whole numbers print without a trailing ".000000" */
             if (v.num == (long long)v.num)
                 snprintf(buf, sizeof(buf), "%lld", (long long)v.num);
             else
                 snprintf(buf, sizeof(buf), "%g", v.num);
-            return _strdup(buf);
+            return zi_strdup(buf);
         case V_LIST: {
             /* [a, b, c] */
             size_t cap = 3;
@@ -124,12 +403,12 @@ static char *value_to_string_depth(Value v, int depth)
             if (depth >= MAX_VALUE_DEPTH)
                 runtime_error("str nested too deep to print "
                               "(does a list contain itself?)");
-            out = malloc(cap);
+            out = zi_alloc(cap);
             strcpy(out, "[");
             for (int i = 0; i < v.nitems; i++) {
                 char *part = value_to_string_depth(*v.items[i], depth + 1);
                 cap += strlen(part) + 2;
-                out = realloc(out, cap);
+                out = zi_realloc(out, cap);
                 if (i) strcat(out, ", ");
                 strcat(out, part);
                 free(part);
@@ -138,7 +417,7 @@ static char *value_to_string_depth(Value v, int depth)
             return out;
         }
     }
-    return _strdup("?");
+    return zi_strdup("?");
 }
 
 static char *value_to_string(Value v) { return value_to_string_depth(v, 0); }
@@ -160,7 +439,7 @@ typedef struct Env {
 
 static Env *env_new(Env *parent)
 {
-    Env *e = malloc(sizeof(Env));
+    Env *e = zi_alloc(sizeof(Env));
     e->parent = parent;
     e->vars   = NULL;
     return e;
@@ -193,7 +472,7 @@ static Var *env_find_local(Env *e, const char *name)
  * a parameter there is a C function argument and shadows naturally. */
 static void env_define(Env *e, const char *name, Value val)
 {
-    Var *v = malloc(sizeof(Var));
+    Var *v = zi_alloc(sizeof(Var));
     strncpy(v->name, name, MAX_TEXT - 1);
     v->name[MAX_TEXT - 1] = '\0';
     v->val  = val;
@@ -220,6 +499,7 @@ static void env_assign(Env *e, const char *name, Value val)
  * ============================================================= */
 
 static Value eval(Node *n, Env *env);
+static Value eval_inner(Node *n, Env *env);
 
 /* statements can trigger a `return`. We carry that back up with a
  * flag + the returned value, checked after every statement. */
@@ -246,14 +526,42 @@ static int   g_depth = 0;
 static Env *g_global = NULL;
 
 static void exec(Node *n, Env *env);
+static void exec_inner(Node *n, Env *env);
 
 static void runtime_error(const char *msg)
 {
+    /* THE BOUNDARY. With a trap armed this unwinds to whoever armed it and the
+     * caller decides what to do; with none it exits, exactly as it always has.
+     * A kernel cannot afford the second: exit(1) there is the machine.
+     *
+     * The message is COPIED before unwinding. Several callers pass a pointer
+     * into a local buffer (see N_IDENT's "doesn't exist yet"), and that buffer
+     * is gone the moment the stack unwinds past it - so handing the caller the
+     * pointer would be a read of dead stack, which is the shape of bug that
+     * reproduces on one build and not the other. */
+    if (zi_trap_armed) {
+        zi_seterr(msg);
+        zi_trap_armed = 0;
+        zi_longjmp(zi_trap, 1);
+    }
     fflush(stdout);            /* stdout is block-buffered when redirected;
                                   without this the output that explains HOW
                                   we got here dies with the process. */
     fprintf(stderr, "runtime error: %s\n", msg);
+#ifdef ZL_FREESTANDING
+    /* A KERNEL HAS NOWHERE TO EXIT TO. Reaching here means an error was raised
+     * with no trap armed, which is a wiring bug in whoever called the
+     * interpreter rather than a fault in the program - so it says so and stops
+     * deliberately, instead of returning into a caller that believes the call
+     * succeeded. zl_run_program arms the trap before anything runs and disarms
+     * it on every exit path, so this line should be unreachable; it exists
+     * because "should be unreachable" and "is unreachable" differ by one
+     * refactor. */
+    term_say("\n  the interpreter faulted with no handler armed - stopping.\n");
+    for (;;) { __asm__ volatile ("cli; hlt"); }
+#else
     exit(1);
+#endif
 }
 
 /* =============================================================
@@ -428,6 +736,7 @@ static int is_simulated(const char *name)
     return 0;
 }
 
+#ifndef ZL_FREESTANDING   /* needs the OS: walks /proc */
 /* find a running process's pid by exact command name (as seen in `procs()`) */
 static long find_pid_by_name(const char *want)
 {
@@ -455,18 +764,19 @@ static long find_pid_by_name(const char *want)
     closedir(d);
     return pid;
 }
+#endif  /* ZL_FREESTANDING */
 
 /* helper: append a length-limited C string to a V_LIST as a V_STR */
 static void list_push_str(Value *list, int *cap, const char *p, int len)
 {
     if (list->nitems == *cap) {
         *cap *= 2;
-        list->items = realloc(list->items, sizeof(Value*) * (size_t)(*cap));
+        list->items = zi_realloc(list->items, sizeof(Value*) * (size_t)(*cap));
     }
-    char *buf = malloc((size_t)len + 1);
+    char *buf = zi_alloc((size_t)len + 1);
     memcpy(buf, p, (size_t)len);
     buf[len] = '\0';
-    list->items[list->nitems] = malloc(sizeof(Value));
+    list->items[list->nitems] = zi_alloc(sizeof(Value));
     Value v = make_nil(); v.type = V_STR; v.str = buf;
     *list->items[list->nitems] = v;
     list->nitems++;
@@ -475,6 +785,9 @@ static void list_push_str(Value *list, int *cap, const char *p, int len)
 /* run a built-in by name, given already-evaluated argument values */
 static Value call_builtin(const char *name, Value *args, int nargs)
 {
+    /* One gate, at the one door. Putting this at each dangerous builtin
+     * instead would be a list that the next dangerous builtin is not on. */
+    zi_forbid(name);
     /* print(...) - the real one */
     if (strcmp(name, "print") == 0) {
         for (int i = 0; i < nargs; i++) {
@@ -488,6 +801,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     }
 
     /* input("prompt?") - reads a real line from the keyboard */
+#ifndef ZL_FREESTANDING   /* needs the OS: input */
     if (strcmp(name, "input") == 0) {
         if (nargs > 0) { char *p = value_to_string(args[0]); printf("%s", p); free(p); }
         char line[512];
@@ -497,6 +811,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         }
         return make_str("");
     }
+#endif  /* ZL_FREESTANDING */
 
     /* ---- text tools: needed to do real work with strings ---- */
 
@@ -513,7 +828,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (nargs < 1 || args[0].type != V_STR) runtime_error("lines needs a string");
         Value list = make_nil(); list.type = V_LIST; list.nitems = 0; list.cap = 0;
         int cap = 8;
-        list.items = malloc(sizeof(Value*) * (size_t)cap);
+        list.items = zi_alloc(sizeof(Value*) * (size_t)cap);
 
         const char *s = args[0].str, *start = s;
         while (*s) {
@@ -610,7 +925,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         int m = src.nitems;
 
         if (src.items && src.tip && *src.tip == m && m < src.cap) {
-            src.items[m] = malloc(sizeof(Value));
+            src.items[m] = zi_alloc(sizeof(Value));
             *src.items[m] = args[1];
             *src.tip = m + 1;
             src.nitems = m + 1;      /* same array, same tip, same cap */
@@ -621,11 +936,11 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         int newcap = (want > 1073741823) ? want : want * 2;
         if (newcap < 8) newcap = 8;
         Value v = make_nil(); v.type = V_LIST; v.nitems = want; v.cap = newcap;
-        v.items = malloc(sizeof(Value*) * (size_t)newcap);
+        v.items = zi_alloc(sizeof(Value*) * (size_t)newcap);
         if (m > 0) memcpy(v.items, src.items, sizeof(Value*) * (size_t)m);
-        v.items[m] = malloc(sizeof(Value));
+        v.items[m] = zi_alloc(sizeof(Value));
         *v.items[m] = args[1];
-        v.tip = malloc(sizeof(int)); *v.tip = want;
+        v.tip = zi_alloc(sizeof(int)); *v.tip = want;
         return v;
     }
 
@@ -686,8 +1001,8 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (nargs < 1 || args[0].type != V_LIST) runtime_error("sort needs a list");
         int m = args[0].nitems;
         Value v = make_nil(); v.type = V_LIST; v.nitems = m; v.cap = m;
-        v.items = malloc(sizeof(Value*) * (m > 0 ? m : 1));
-        for (int i = 0; i < m; i++) { v.items[i] = malloc(sizeof(Value)); *v.items[i] = *args[0].items[i]; }
+        v.items = zi_alloc(sizeof(Value*) * (m > 0 ? m : 1));
+        for (int i = 0; i < m; i++) { v.items[i] = zi_alloc(sizeof(Value)); *v.items[i] = *args[0].items[i]; }
         for (int i = 1; i < m; i++) {           /* insertion sort */
             Value *key = v.items[i]; int j = i - 1;
             while (j >= 0 && value_compare(v.items[j], key) > 0) { v.items[j+1] = v.items[j]; j--; }
@@ -709,7 +1024,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         int a = clamp_index(args[1].num, 0, L), b = clamp_index(args[2].num, 0, L);
         if (a > b) a = b;
         int m = b - a;
-        char *buf = malloc((size_t)m + 1);
+        char *buf = zi_alloc((size_t)m + 1);
         memcpy(buf, args[0].str + a, (size_t)m);
         buf[m] = '\0';
         Value v = make_nil(); v.type = V_STR; v.str = buf; return v;
@@ -729,7 +1044,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (nargs < 1 || args[0].type != V_STR) runtime_error("upper/lower needs a string");
         int up = (strcmp(name, "upper") == 0);
         size_t L = strlen(args[0].str);
-        char *buf = malloc(L + 1);
+        char *buf = zi_alloc(L + 1);
         for (size_t i = 0; i < L; i++) {
             char ch = args[0].str[i];
             if (up  && ch >= 'a' && ch <= 'z') ch = (char)(ch - 32);
@@ -745,11 +1060,11 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (nargs < 2 || args[0].type != V_LIST || args[1].type != V_STR)
             runtime_error("join needs a list and a separator string");
         size_t cap = 1;
-        char *out = malloc(cap); out[0] = '\0';
+        char *out = zi_alloc(cap); out[0] = '\0';
         for (int i = 0; i < args[0].nitems; i++) {
             char *part = value_to_string(*args[0].items[i]);
             cap += strlen(part) + strlen(args[1].str);
-            out = realloc(out, cap);
+            out = zi_realloc(out, cap);
             if (i) strcat(out, args[1].str);
             strcat(out, part);
             free(part);
@@ -763,7 +1078,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
             runtime_error("split needs two strings");
         Value list = make_nil(); list.type = V_LIST; list.nitems = 0; list.cap = 0;
         int cap = 8;
-        list.items = malloc(sizeof(Value*) * (size_t)cap);
+        list.items = zi_alloc(sizeof(Value*) * (size_t)cap);
         const char *sep = args[1].str;
         size_t seplen = strlen(sep);
         const char *start = args[0].str;
@@ -781,20 +1096,23 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     /* ---- REAL PC-control: reading is safe, so these are real ---- */
 
     /* read("path") -> the whole file as a string */
+#ifndef ZL_FREESTANDING   /* needs the OS: read */
     if (strcmp(name, "read") == 0) {
         if (nargs < 1 || args[0].type != V_STR) runtime_error("read needs a filename");
         FILE *f = fopen(args[0].str, "rb");
         if (!f) { runtime_error("read: can't open that file"); }
         fseek(f, 0, SEEK_END); long sz = ftell(f); rewind(f);
-        char *buf = malloc((size_t)sz + 1);
+        char *buf = zi_alloc((size_t)sz + 1);
         size_t got = fread(buf, 1, (size_t)sz, f);
         buf[got] = '\0';
         fclose(f);
         Value v = make_nil(); v.type = V_STR; v.str = buf;
         return v;
     }
+#endif  /* ZL_FREESTANDING */
 
     /* write("path", "text") -> creates/overwrites a real file */
+#ifndef ZL_FREESTANDING   /* needs the OS: write */
     if (strcmp(name, "write") == 0) {
         if (nargs < 2 || args[0].type != V_STR) runtime_error("write needs a filename and text");
         FILE *f = fopen(args[0].str, "wb");
@@ -805,6 +1123,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         fclose(f);
         return make_nil();
     }
+#endif  /* ZL_FREESTANDING */
 
     /* code("A") -> the byte value of a string's first character (65).
      * The inverse of building bytes; lets zl turn text into raw bytes. */
@@ -816,6 +1135,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     /* write_bytes("path", [n, n, ...]) -> write a list of byte values as
      * a real binary file. zl strings are NUL-terminated and cannot hold
      * binary, so this is how a zl program emits a .exe. */
+#ifndef ZL_FREESTANDING   /* needs the OS: write_bytes */
     if (strcmp(name, "write_bytes") == 0) {
         if (nargs < 2 || args[0].type != V_STR || args[1].type != V_LIST)
             runtime_error("write_bytes needs a filename and a list of byte values");
@@ -828,10 +1148,12 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         fclose(f);
         return make_nil();
     }
+#endif  /* ZL_FREESTANDING */
 
     /* dir("path") -> a real LIST of the filenames in that folder.
      * The actual Windows call lives in os_win.c; we just wrap the
      * result up as a list of string values here. */
+#ifndef ZL_FREESTANDING   /* needs the OS: dir */
     if (strcmp(name, "dir") == 0) {
         const char *path = (nargs > 0 && args[0].type == V_STR) ? args[0].str : ".";
 
@@ -839,29 +1161,35 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         char **names = os_dir(path, &count);
 
         Value list = make_nil(); list.type = V_LIST; list.nitems = count; list.cap = count;
-        list.items = malloc(sizeof(Value*) * (count > 0 ? count : 1));
+        list.items = zi_alloc(sizeof(Value*) * (count > 0 ? count : 1));
         for (int i = 0; i < count; i++) {
-            list.items[i] = malloc(sizeof(Value));
+            list.items[i] = zi_alloc(sizeof(Value));
             *list.items[i] = make_str(names[i]);
             free(names[i]);
         }
         free(names);
         return list;
     }
+#endif  /* ZL_FREESTANDING */
 
+#ifndef ZL_FREESTANDING   /* needs the OS: rm */
     if (strcmp(name, "rm") == 0) {
         if (nargs < 1 || args[0].type != V_STR) runtime_error("rm needs a filename");
         if (remove(args[0].str) != 0) runtime_error("rm: couldn't remove that path");
         return make_nil();
     }
+#endif  /* ZL_FREESTANDING */
 
+#ifndef ZL_FREESTANDING   /* needs the OS: move */
     if (strcmp(name, "move") == 0) {
         if (nargs < 2 || args[0].type != V_STR || args[1].type != V_STR)
             runtime_error("move needs a source and destination path");
         if (rename(args[0].str, args[1].str) != 0) runtime_error("move: rename failed");
         return make_nil();
     }
+#endif  /* ZL_FREESTANDING */
 
+#ifndef ZL_FREESTANDING   /* needs the OS: copy */
     if (strcmp(name, "copy") == 0) {
         if (nargs < 2 || args[0].type != V_STR || args[1].type != V_STR)
             runtime_error("copy needs a source and destination path");
@@ -874,8 +1202,10 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         fclose(in); fclose(outf);
         return make_nil();
     }
+#endif  /* ZL_FREESTANDING */
 
     /* start(path[, args...]) - launch a program, don't wait for it, return its pid */
+#ifndef ZL_FREESTANDING   /* needs the OS: start */
     if (strcmp(name, "start") == 0) {
         if (nargs < 1 || args[0].type != V_STR) runtime_error("start needs a program path");
         pid_t child = fork();
@@ -892,15 +1222,19 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         }
         return make_num((double)child);
     }
+#endif  /* ZL_FREESTANDING */
 
     /* run(command) - run a shell command, wait for it, return its exit code */
+#ifndef ZL_FREESTANDING   /* needs the OS: run */
     if (strcmp(name, "run") == 0) {
         if (nargs < 1 || args[0].type != V_STR) runtime_error("run needs a command string");
         int status = system(args[0].str);
         return make_num((double)(status == -1 ? -1 : WEXITSTATUS(status)));
     }
+#endif  /* ZL_FREESTANDING */
 
     /* kill(name_or_pid) - terminate a process (SIGTERM) by exact `procs()` name or numeric pid */
+#ifndef ZL_FREESTANDING   /* needs the OS: kill */
     if (strcmp(name, "kill") == 0) {
         if (nargs < 1) runtime_error("kill needs a process name or pid");
         long pid;
@@ -915,6 +1249,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         }
         return make_bool(kill((pid_t)pid, SIGTERM) == 0);
     }
+#endif  /* ZL_FREESTANDING */
 
     /* ---- W5 raw memory (docs/design/design_memory_structs.md §3.1) ----
      *
@@ -937,6 +1272,8 @@ static Value call_builtin(const char *name, Value *args, int nargs)
             if (nargs < 1 || args[0].type != V_NUM) runtime_error("peek needs an address");
             unsigned long long p = (unsigned long long)args[0].num;
             unsigned long long v = 0;
+            zi_check(p, (unsigned long long)(w / 8),
+                     "peek outside the memory this program is allowed to touch");
             if      (w == 8)  v = *(unsigned char *)(uintptr_t)p;
             else if (w == 16) v = *(unsigned short *)(uintptr_t)p;
             else if (w == 32) v = *(unsigned int *)(uintptr_t)p;
@@ -966,6 +1303,8 @@ static Value call_builtin(const char *name, Value *args, int nargs)
             if (w == 64 && v > 9007199254740992ULL)
                 runtime_error("poke64: value above 2^53 has already lost precision "
                               "(a zl number is a double) - write it as two poke32 halves");
+            zi_check(p, (unsigned long long)(w / 8),
+                     "poke outside the memory this program is allowed to touch");
             if      (w == 8)  *(unsigned char *)(uintptr_t)p  = (unsigned char)v;
             else if (w == 16) *(unsigned short *)(uintptr_t)p = (unsigned short)v;
             else if (w == 32) *(unsigned int *)(uintptr_t)p   = (unsigned int)v;
@@ -980,7 +1319,13 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (nargs < 1 || args[0].type != V_NUM) runtime_error("alloc needs a byte count");
         size_t n = (size_t)args[0].num;
         void *p = NULL;
-        if (posix_memalign(&p, 16, n ? n : 16) != 0 || !p) runtime_error("alloc failed");
+        /* Through the SAME seam as every other allocation, so it is charged to
+         * the budget and, in the kernel, comes out of the arena - which is what
+         * makes the address it returns land inside the window above. An alloc
+         * that bypassed this would hand a confined program a legal pointer to
+         * memory it is not allowed to touch. */
+        p = zi_alloc((unsigned long)(n ? n : 16));
+        if (!p) runtime_error("alloc failed");
         memset(p, 0, n ? n : 16);
         return make_num((double)(unsigned long long)(uintptr_t)p);
     }
@@ -988,6 +1333,11 @@ static Value call_builtin(const char *name, Value *args, int nargs)
 
     if (strcmp(name, "copy_mem") == 0) {               /* memmove, overlap-safe */
         if (nargs < 3) runtime_error("copy_mem needs dst, src and a length");
+        zi_charge((long long)((unsigned long long)args[2].num / ZI_BYTES_PER_STEP) + 1);
+        zi_check((unsigned long long)args[0].num, (unsigned long long)args[2].num,
+                 "copy_mem destination is outside this program's memory");
+        zi_check((unsigned long long)args[1].num, (unsigned long long)args[2].num,
+                 "copy_mem source is outside this program's memory");
         memmove((void *)(uintptr_t)(unsigned long long)args[0].num,
                 (void *)(uintptr_t)(unsigned long long)args[1].num,
                 (size_t)args[2].num);
@@ -995,6 +1345,9 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     }
     if (strcmp(name, "fill_mem") == 0) {               /* memset */
         if (nargs < 3) runtime_error("fill_mem needs an address, a byte and a length");
+        zi_charge((long long)((unsigned long long)args[2].num / ZI_BYTES_PER_STEP) + 1);
+        zi_check((unsigned long long)args[0].num, (unsigned long long)args[2].num,
+                 "fill_mem is outside the memory this program is allowed to touch");
         memset((void *)(uintptr_t)(unsigned long long)args[0].num,
                (int)args[1].num, (size_t)args[2].num);
         return make_nil();
@@ -1013,20 +1366,22 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     }
 
     /* procs() -> a real LIST of the names of every running process */
+#ifndef ZL_FREESTANDING   /* needs the OS: procs */
     if (strcmp(name, "procs") == 0) {
         int    count = 0;
         char **names = os_procs(&count);
 
         Value list = make_nil(); list.type = V_LIST; list.nitems = count; list.cap = count;
-        list.items = malloc(sizeof(Value*) * (count > 0 ? count : 1));
+        list.items = zi_alloc(sizeof(Value*) * (count > 0 ? count : 1));
         for (int i = 0; i < count; i++) {
-            list.items[i] = malloc(sizeof(Value));
+            list.items[i] = zi_alloc(sizeof(Value));
             *list.items[i] = make_str(names[i]);
             free(names[i]);
         }
         free(names);
         return list;
     }
+#endif  /* ZL_FREESTANDING */
 
     /* the simulated dangerous ones: show what they WOULD do */
     if (is_simulated(name)) {
@@ -1046,10 +1401,23 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     if (strcmp(name, "pi") == 0)     { return make_num(3.14159265358979323846); }
     if (strcmp(name, "e") == 0)      { return make_num(2.71828182845904523536); }
     if (strcmp(name, "assert") == 0) {
+        /* A FAILED ASSERTION MUST UNWIND, NOT EXIT. This used to print the
+         * message and call exit(1) directly, which walks straight past the
+         * trap: in a kernel that is the machine, and on the host it is a
+         * process death that zl_run_program's caller cannot report. Found by
+         * an adversarial reader, who classified it as a partial trap bypass -
+         * "partial" because the no-message branch already went through
+         * runtime_error and the WITH-message branch did not.
+         *
+         * Both branches now go through runtime_error, so a failed assertion is
+         * an ordinary catchable error carrying its own text. */
         if (nargs<1 || !is_truthy(args[0])) {
-            if (nargs>=2 && args[1].type==V_STR) fprintf(stderr,"assertion failed: %s\n", args[1].str);
-            else runtime_error("assertion failed");
-            exit(1);
+            if (nargs>=2 && args[1].type==V_STR) {
+                char buf[ZI_ERRMAX];
+                snprintf(buf, sizeof buf, "assertion failed: %s", args[1].str);
+                runtime_error(buf);
+            }
+            runtime_error("assertion failed");
         }
         return make_nil();
     }
@@ -1130,21 +1498,21 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (dcnt > 100000000.0) runtime_error("range count is too large to build");
         int cnt = (int)dcnt;
         long long lo = cnt > 0 ? exact_i64(dlo, "range") : 0;
-        Value v = make_nil(); v.type=V_LIST; v.nitems=cnt; v.cap=cnt; v.items=malloc(sizeof(Value*)*(size_t)(cnt>0?cnt:1));
+        Value v = make_nil(); v.type=V_LIST; v.nitems=cnt; v.cap=cnt; v.items=zi_alloc(sizeof(Value*)*(size_t)(cnt>0?cnt:1));
         if (!v.items) runtime_error("out of memory building a range");
-        for (int i=0;i<cnt;i++){ v.items[i]=malloc(sizeof(Value)); *v.items[i]=make_num((double)(lo+i)); }
+        for (int i=0;i<cnt;i++){ v.items[i]=zi_alloc(sizeof(Value)); *v.items[i]=make_num((double)(lo+i)); }
         return v;
     }
     if (strcmp(name, "reverse") == 0) {
-        if (args[0].type==V_STR){ size_t L=strlen(args[0].str); char*b=malloc(L+1); for(size_t i=0;i<L;i++) b[i]=args[0].str[L-1-i]; b[L]='\0'; Value v = make_nil(); v.type=V_STR; v.str=b; return v; }
-        if (args[0].type==V_LIST){ int m=args[0].nitems; Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=malloc(sizeof(Value*)*(m>0?m:1)); for(int i=0;i<m;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=*args[0].items[m-1-i];} return v; }
+        if (args[0].type==V_STR){ size_t L=strlen(args[0].str); char*b=zi_alloc(L+1); for(size_t i=0;i<L;i++) b[i]=args[0].str[L-1-i]; b[L]='\0'; Value v = make_nil(); v.type=V_STR; v.str=b; return v; }
+        if (args[0].type==V_LIST){ int m=args[0].nitems; Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=zi_alloc(sizeof(Value*)*(m>0?m:1)); for(int i=0;i<m;i++){v.items[i]=zi_alloc(sizeof(Value)); *v.items[i]=*args[0].items[m-1-i];} return v; }
         runtime_error("reverse needs a string or list");
     }
     if (strcmp(name, "repeat") == 0) {
         if (args[0].type!=V_STR||args[1].type!=V_NUM) runtime_error("repeat needs a string and a count");
         int n=clamp_index(args[1].num, 0, 100000000); size_t L=strlen(args[0].str);
         if (L > 0 && (size_t)n > 100000000u / L) runtime_error("repeat result is too large to build");
-        char*b=malloc(L*(size_t)n+1);
+        char*b=zi_alloc(L*(size_t)n+1);
         if (!b) runtime_error("out of memory in repeat");
         for (int i=0;i<n;i++) memcpy(b+(size_t)i*L, args[0].str, L); b[L*(size_t)n]='\0';
         Value v = make_nil(); v.type=V_STR; v.str=b; return v;
@@ -1153,7 +1521,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (args[0].type!=V_STR) runtime_error("trim needs a string");
         const char*s=args[0].str; while(*s==' '||*s=='\t'||*s=='\n'||*s=='\r')s++;
         const char*e=s+strlen(s); while(e>s&&(e[-1]==' '||e[-1]=='\t'||e[-1]=='\n'||e[-1]=='\r'))e--;
-        size_t L=(size_t)(e-s); char*b=malloc(L+1); memcpy(b,s,L); b[L]='\0'; Value v = make_nil(); v.type=V_STR; v.str=b; return v;
+        size_t L=(size_t)(e-s); char*b=zi_alloc(L+1); memcpy(b,s,L); b[L]='\0'; Value v = make_nil(); v.type=V_STR; v.str=b; return v;
     }
     /* count(text, part) -> how many non-overlapping times part occurs.
      * The empty needle occurs at every position, so it occurs len+1
@@ -1177,7 +1545,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
          * the process. Clamp while it is still signed. */
         if (args[0].type!=V_STR||args[1].type!=V_NUM) runtime_error("pad needs a string and width");
         int w=clamp_index(args[1].num, 0, 100000000); size_t L=strlen(args[0].str); size_t o=((size_t)w>L)?(size_t)w:L;
-        char*b=malloc(o+1);
+        char*b=zi_alloc(o+1);
         if (!b) runtime_error("out of memory in pad");
         memcpy(b,args[0].str,L); for(size_t i=L;i<o;i++)b[i]=' '; b[o]='\0'; Value v = make_nil(); v.type=V_STR; v.str=b; return v;
     }
@@ -1186,17 +1554,17 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         const char*s=args[0].str,*o=args[1].str,*nw=args[2].str; size_t ol=strlen(o),nl=strlen(nw);
         if (ol==0) return make_str(s);
         int c=0; const char*p=s; while((p=strstr(p,o))){c++; p+=ol;}
-        size_t out=strlen(s)-(size_t)c*ol+(size_t)c*nl; char*b=malloc(out+1),*w=b; p=s; const char*q;
+        size_t out=strlen(s)-(size_t)c*ol+(size_t)c*nl; char*b=zi_alloc(out+1),*w=b; p=s; const char*q;
         while((q=strstr(p,o))){ memcpy(w,p,(size_t)(q-p)); w+=q-p; memcpy(w,nw,nl); w+=nl; p=q+ol; }
         strcpy(w,p); Value v = make_nil(); v.type=V_STR; v.str=b; return v;
     }
     if (strcmp(name, "insert") == 0) {
         if (args[0].type!=V_LIST||args[1].type!=V_NUM) runtime_error("insert needs a list, index, value");
         int m=args[0].nitems, idx=clamp_index(args[1].num, 0, m);
-        Value v = make_nil(); v.type=V_LIST; v.nitems=m+1; v.cap=m+1; v.items=malloc(sizeof(Value*)*(size_t)(m+1)); int k=0;
-        for(int i=0;i<idx;i++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
-        v.items[k]=malloc(sizeof(Value)); *v.items[k]=args[2]; k++;
-        for(int i=idx;i<m;i++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
+        Value v = make_nil(); v.type=V_LIST; v.nitems=m+1; v.cap=m+1; v.items=zi_alloc(sizeof(Value*)*(size_t)(m+1)); int k=0;
+        for(int i=0;i<idx;i++){v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
+        v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=args[2]; k++;
+        for(int i=idx;i<m;i++){v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
         return v;
     }
     if (strcmp(name, "remove") == 0) {
@@ -1204,8 +1572,8 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         int m=args[0].nitems;
         if (!(args[1].num >= 0 && args[1].num < (double)m)) runtime_error("remove index out of range");
         int idx=(int)args[1].num;
-        Value v = make_nil(); v.type=V_LIST; v.nitems=m-1; v.cap=(m-1>0)?m-1:1; v.items=malloc(sizeof(Value*)*(size_t)(m>1?m-1:1)); int k=0;
-        for(int i=0;i<m;i++){ if(i==idx)continue; v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++; }
+        Value v = make_nil(); v.type=V_LIST; v.nitems=m-1; v.cap=(m-1>0)?m-1:1; v.items=zi_alloc(sizeof(Value*)*(size_t)(m>1?m-1:1)); int k=0;
+        for(int i=0;i<m;i++){ if(i==idx)continue; v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++; }
         return v;
     }
 
@@ -1293,12 +1661,12 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (nargs<1||args[0].type!=V_STR) runtime_error("rtrim needs a string");
         const char*s=args[0].str; const char*e=s+strlen(s);
         while(e>s&&(e[-1]==' '||e[-1]=='\t'||e[-1]=='\n'||e[-1]=='\r'))e--;
-        size_t L=(size_t)(e-s); char*b=malloc(L+1); memcpy(b,s,L); b[L]='\0';
+        size_t L=(size_t)(e-s); char*b=zi_alloc(L+1); memcpy(b,s,L); b[L]='\0';
         Value v = make_nil(); v.type=V_STR; v.str=b; return v;
     }
     if (strcmp(name, "title") == 0) {  /* upper-case the first letter of each word */
         if (nargs<1||args[0].type!=V_STR) runtime_error("title needs a string");
-        size_t L=strlen(args[0].str); char*b=malloc(L+1); int at_start=1;
+        size_t L=strlen(args[0].str); char*b=zi_alloc(L+1); int at_start=1;
         for (size_t i=0;i<L;i++) {
             char ch=args[0].str[i];
             int alnum=(ch>='a'&&ch<='z')||(ch>='A'&&ch<='Z')||(ch>='0'&&ch<='9');
@@ -1309,7 +1677,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     }
     if (strcmp(name, "swapcase") == 0) {
         if (nargs<1||args[0].type!=V_STR) runtime_error("swapcase needs a string");
-        size_t L=strlen(args[0].str); char*b=malloc(L+1);
+        size_t L=strlen(args[0].str); char*b=zi_alloc(L+1);
         for (size_t i=0;i<L;i++) {
             char ch=args[0].str[i];
             if (ch>='a'&&ch<='z') ch=(char)(ch-32);
@@ -1329,29 +1697,29 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     if (strcmp(name, "concat") == 0) {
         if (nargs<2||args[0].type!=V_LIST||args[1].type!=V_LIST) runtime_error("concat needs two lists");
         int m=args[0].nitems+args[1].nitems;
-        Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=malloc(sizeof(Value*)*(m>0?m:1)); int k=0;
-        for(int i=0;i<args[0].nitems;i++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
-        for(int i=0;i<args[1].nitems;i++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[1].items[i]; k++;}
+        Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=zi_alloc(sizeof(Value*)*(m>0?m:1)); int k=0;
+        for(int i=0;i<args[0].nitems;i++){v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
+        for(int i=0;i<args[1].nitems;i++){v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*args[1].items[i]; k++;}
         return v;
     }
     if (strcmp(name, "fill") == 0) {
         if (nargs<2||args[0].type!=V_NUM) runtime_error("fill needs a count and a value");
         if (args[0].num > 100000000.0) runtime_error("fill count is too large to build");
         int m=clamp_index(args[0].num, 0, 100000000);
-        Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=malloc(sizeof(Value*)*(size_t)(m>0?m:1));
+        Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=zi_alloc(sizeof(Value*)*(size_t)(m>0?m:1));
         if (!v.items) runtime_error("out of memory in fill");
-        for(int i=0;i<m;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=args[1];}
+        for(int i=0;i<m;i++){v.items[i]=zi_alloc(sizeof(Value)); *v.items[i]=args[1];}
         return v;
     }
     if (strcmp(name, "flat") == 0) {   /* flattens ONE level */
         if (nargs<1||args[0].type!=V_LIST) runtime_error("flat needs a list");
         int m=0;
         for(int i=0;i<args[0].nitems;i++) m += (args[0].items[i]->type==V_LIST) ? args[0].items[i]->nitems : 1;
-        Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=malloc(sizeof(Value*)*(m>0?m:1)); int k=0;
+        Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=zi_alloc(sizeof(Value*)*(m>0?m:1)); int k=0;
         for(int i=0;i<args[0].nitems;i++){
             Value *it=args[0].items[i];
-            if (it->type==V_LIST) { for(int j=0;j<it->nitems;j++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*it->items[j]; k++;} }
-            else { v.items[k]=malloc(sizeof(Value)); *v.items[k]=*it; k++; }
+            if (it->type==V_LIST) { for(int j=0;j<it->nitems;j++){v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*it->items[j]; k++;} }
+            else { v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*it; k++; }
         }
         return v;
     }
@@ -1362,30 +1730,36 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     if (strcmp(name, "take") == 0) {
         if (nargs<2||args[0].type!=V_LIST||args[1].type!=V_NUM) runtime_error("take needs a list and a number");
         int m=args[0].nitems, n=clamp_index(args[1].num, 0, m);
-        Value v = make_nil(); v.type=V_LIST; v.nitems=n; v.cap=n; v.items=malloc(sizeof(Value*)*(n>0?n:1));
-        for(int i=0;i<n;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=*args[0].items[i];}
+        Value v = make_nil(); v.type=V_LIST; v.nitems=n; v.cap=n; v.items=zi_alloc(sizeof(Value*)*(n>0?n:1));
+        for(int i=0;i<n;i++){v.items[i]=zi_alloc(sizeof(Value)); *v.items[i]=*args[0].items[i];}
         return v;
     }
     if (strcmp(name, "drop") == 0) {
         if (nargs<2||args[0].type!=V_LIST||args[1].type!=V_NUM) runtime_error("drop needs a list and a number");
         int m=args[0].nitems, n=clamp_index(args[1].num, 0, m); int c=m-n;
-        Value v = make_nil(); v.type=V_LIST; v.nitems=c; v.cap=c; v.items=malloc(sizeof(Value*)*(c>0?c:1));
-        for(int i=0;i<c;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=*args[0].items[n+i];}
+        Value v = make_nil(); v.type=V_LIST; v.nitems=c; v.cap=c; v.items=zi_alloc(sizeof(Value*)*(c>0?c:1));
+        for(int i=0;i<c;i++){v.items[i]=zi_alloc(sizeof(Value)); *v.items[i]=*args[0].items[n+i];}
         return v;
     }
 
     /* ---- system ---- */
+#ifndef ZL_FREESTANDING   /* needs the OS: now */
     if (strcmp(name, "now") == 0) {    /* milliseconds since this process started */
         return make_num((double)clock() * 1000.0 / (double)CLOCKS_PER_SEC);
     }
+#endif  /* ZL_FREESTANDING */
+#ifndef ZL_FREESTANDING   /* needs the OS: exit */
     if (strcmp(name, "exit") == 0) {
         exit((nargs>=1 && args[0].type==V_NUM) ? (int)args[0].num : 0);
     }
+#endif  /* ZL_FREESTANDING */
+#ifndef ZL_FREESTANDING   /* needs the OS: env */
     if (strcmp(name, "env") == 0) {
         if (nargs<1||args[0].type!=V_STR) runtime_error("env needs a string");
         const char *val = getenv(args[0].str);
         return make_str(val ? val : "");
     }
+#endif  /* ZL_FREESTANDING */
 
     runtime_error("unknown function");
     return make_nil();
@@ -1403,16 +1777,16 @@ static Value eval_plus(Value l, Value r)
 
     if (l.type == V_LIST && r.type == V_LIST) {
         Value v = make_nil(); v.type = V_LIST; v.nitems = l.nitems + r.nitems; v.cap = v.nitems;
-        v.items = malloc(sizeof(Value*) * (v.nitems > 0 ? v.nitems : 1));
+        v.items = zi_alloc(sizeof(Value*) * (v.nitems > 0 ? v.nitems : 1));
         int k = 0;
-        for (int i = 0; i < l.nitems; i++) { v.items[k] = malloc(sizeof(Value)); *v.items[k] = *l.items[i]; k++; }
-        for (int i = 0; i < r.nitems; i++) { v.items[k] = malloc(sizeof(Value)); *v.items[k] = *r.items[i]; k++; }
+        for (int i = 0; i < l.nitems; i++) { v.items[k] = zi_alloc(sizeof(Value)); *v.items[k] = *l.items[i]; k++; }
+        for (int i = 0; i < r.nitems; i++) { v.items[k] = zi_alloc(sizeof(Value)); *v.items[k] = *r.items[i]; k++; }
         return v;
     }
 
     char *ls = value_to_string(l);
     char *rs = value_to_string(r);
-    char *out = malloc(strlen(ls) + strlen(rs) + 1);
+    char *out = zi_alloc(strlen(ls) + strlen(rs) + 1);
     strcpy(out, ls); strcat(out, rs);
     Value v = make_nil(); v.type = V_STR; v.str = out;
     free(ls); free(rs);
@@ -1622,7 +1996,7 @@ static Value eval_call(Node *n, Env *env)
 {
     /* evaluate the arguments first */
     int nargs = n->nkids;
-    Value *args = malloc(sizeof(Value) * (nargs > 0 ? nargs : 1));
+    Value *args = zi_alloc(sizeof(Value) * (nargs > 0 ? nargs : 1));
     for (int i = 0; i < nargs; i++) args[i] = eval(n->kids[i], env);
 
     /* case 1: callee is a plain name */
@@ -1667,7 +2041,76 @@ static Value eval_call(Node *n, Env *env)
     return make_nil();
 }
 
+/* ---- the two places every step of a program passes through ---------------
+ * eval() is every expression, exec() is every statement, and a zl program
+ * cannot do ANYTHING without going through one of them - a loop body, a
+ * function call, an operand, all of it. So the budget needs exactly two check
+ * sites, not a sprinkling of them, and there is no path around it.
+ *
+ * The wrapper pair exists so that depth is decremented on the way out along
+ * EVERY return path. eval_inner has a dozen returns in a switch; putting a
+ * decrement before each was the alternative and it is one edit away from a
+ * permanent leak that only shows up as a spurious "too deep" ten thousand
+ * calls later.
+ *
+ * The unwind is the exception, and it is deliberate: runtime_error longjmps
+ * straight past these frames, so zi_depth is left high. It does not matter and
+ * must not be "fixed" with a cleanup - the trap catcher is the only code that
+ * runs afterwards and zi_limit() resets the counters before anything runs
+ * again. A cleanup here would be code that only ever executes while unwinding,
+ * i.e. code no test can reach. */
+/* Debit the budget by more than one step. Same kill as zi_step's, so a program
+ * cannot escape by doing its work in one enormous allocation instead of many
+ * small statements. Saturating rather than wrapping: a request big enough to
+ * overflow the counter must exhaust the budget, never lap it. */
+static void zi_charge(long long units)
+{
+    if (units < 1) units = 1;
+    zi_steps_used += units;
+    if (!zi_steps_left) return;
+    if (units >= zi_steps_left) {
+        zi_steps_left = 0;
+        zi_killed = 1;
+        runtime_error("step budget exhausted - the program was stopped");
+    }
+    zi_steps_left -= units;
+}
+
+static void zi_step(void)
+{
+    if (zi_steps_left) {
+        if (--zi_steps_left <= 0) {
+            zi_killed = 1;
+            runtime_error("step budget exhausted - the program was stopped");
+        }
+    }
+    zi_steps_used++;
+    if (zi_depth > zi_depth_peak) zi_depth_peak = zi_depth;
+    if (zi_depth_max && zi_depth >= zi_depth_max) {
+        zi_killed = 1;
+        runtime_error("too deeply nested - the program was stopped");
+    }
+}
+
 static Value eval(Node *n, Env *env)
+{
+    Value v;
+    zi_step();
+    zi_depth++;
+    v = eval_inner(n, env);
+    zi_depth--;
+    return v;
+}
+
+static void exec(Node *n, Env *env)
+{
+    zi_step();
+    zi_depth++;
+    exec_inner(n, env);
+    zi_depth--;
+}
+
+static Value eval_inner(Node *n, Env *env)
 {
     switch (n->type) {
         case N_NUMBER: return make_num(atof(n->text));
@@ -1686,9 +2129,9 @@ static Value eval(Node *n, Env *env)
 
         case N_LIST: {
             Value v = make_nil(); v.type = V_LIST; v.nitems = n->nkids; v.cap = n->nkids;
-            v.items = malloc(sizeof(Value*) * (n->nkids > 0 ? n->nkids : 1));
+            v.items = zi_alloc(sizeof(Value*) * (n->nkids > 0 ? n->nkids : 1));
             for (int i = 0; i < n->nkids; i++) {
-                v.items[i] = malloc(sizeof(Value));
+                v.items[i] = zi_alloc(sizeof(Value));
                 *v.items[i] = eval(n->kids[i], env);
             }
             return v;
@@ -1775,7 +2218,7 @@ static void exec_block(Node *block, Env *env)
     }
 }
 
-static void exec(Node *n, Env *env)
+static void exec_inner(Node *n, Env *env)
 {
     switch (n->type) {
         case N_EXPRSTMT:
@@ -1878,23 +2321,164 @@ static void exec(Node *n, Env *env)
  * MAIN
  * ============================================================= */
 
-int main(int argc, char **argv)
-{
-    if (argc < 2) {
-        fprintf(stderr, "usage: interp <file>\n");
-        return 1;
-    }
+/* ---- running a program, with a way out -----------------------------------
+ * The entry point the kernel needs and the one main() now uses, so the path a
+ * gate exercises is the path that ships rather than a parallel one written for
+ * testing.
+ *
+ * Everything that makes this safe is here rather than at the call sites:
+ *
+ *   - THE CONTROL-FLOW FLAGS ARE RESET FIRST. g_returning / g_breaking /
+ *     g_continuing are globals, and a program killed mid-loop leaves whichever
+ *     one it was carrying set. The next program then returns from its first
+ *     statement, for no visible reason, and the bug looks like it is in the
+ *     second program. Nothing resets these today because nothing has ever run
+ *     two programs in one process - the kernel will run one per `run`.
+ *
+ *   - THE TRAP IS ARMED AFTER setjmp AND DISARMED ON EVERY EXIT. Armed before,
+ *     and a longjmp taken during setup would jump into a frame that is not yet
+ *     valid. Left armed on the way out, and the NEXT runtime_error - possibly
+ *     from a completely different subsystem - would unwind into a dead frame.
+ *
+ *   - NOTHING LOCAL IS READ AFTER THE UNWIND. Locals modified between setjmp
+ *     and longjmp are indeterminate afterwards unless volatile, so the return
+ *     path reads only the zi_* globals. That is not pedantry: it is UB that
+ *     works at -O0 and breaks at -O2, which is the optimisation level the
+ *     kernel builds at.
+ */
 
-    int    count;
-    Token *tokens  = lex_file(argv[1], &count);
-    Node  *program = parse(tokens, count);
+/* ---- the nesting guard, and why it runs BEFORE the parser ----------------
+ * FOUND BY AN ADVERSARIAL READER. A file containing nothing but open brackets:
+ *
+ *     python3 -c "open('x.zl','w').write('['*8000)"
+ *     ./interp --steps 1 --depth 1 x.zl      ->  SIGSEGV
+ *
+ * `--steps 1 --depth 1` and it still crashes, because NONE of the kill path is
+ * involved. parse() runs before zl_run_program() arms the trap or sets a
+ * limit, and the parser is uncapped recursive descent: every `[` re-enters
+ * parse_expr through a dozen frames, and the overflow happens on the DESCENT,
+ * so no closing bracket is ever needed. Measured on this host's 8 MiB stack:
+ * 6000 brackets survives, 6500 crashes. THE KERNEL HAS 256 KiB, about 32x
+ * less - so roughly 200 brackets, a source file under a quarter of a kilobyte,
+ * and no memory protection to contain where it lands.
+ *
+ * Two ways to fix it and only one of them is small. Capping recursion inside
+ * parser.c means finding every recursive path through eleven precedence levels
+ * and threading a counter through all of them - in a file this track does not
+ * own. But parser recursion is bounded by BRACKET NESTING, and bracket nesting
+ * is visible in the token stream before a single frame is pushed. One linear
+ * scan, no parser change, and it cannot be wrong about a construct it has not
+ * been taught, because it counts the only thing that makes the parser recurse.
+ *
+ * The limit is deliberately generous. Real zl nests a handful deep; 64 is far
+ * past anything anyone writes and far below what either stack can take.
+ */
+
+#define ZI_MAX_NESTING 64
+
+static int zi_nesting_ok(const Token *tokens, int count, int *deepest, int *line)
+{
+    int depth = 0, worst = 0, worst_line = 0;
+    for (int i = 0; i < count; i++) {
+        if (tokens[i].type != T_SYMBOL) continue;
+        char c = tokens[i].text[0];
+        if (tokens[i].text[1] != '\0') continue;      /* ==, >=, ... are not brackets */
+        if (c == '(' || c == '[' || c == '{') {
+            depth++;
+            if (depth > worst) { worst = depth; worst_line = tokens[i].line; }
+        } else if (c == ')' || c == ']' || c == '}') {
+            if (depth > 0) depth--;
+        }
+    }
+    if (deepest) *deepest = worst;
+    if (line) *line = worst_line;
+    return worst <= ZI_MAX_NESTING;
+}
+
+#define ZI_OK      0
+#define ZI_ERROR   1     /* the program did something illegal - trap caught it */
+#define ZI_KILLED  2     /* the budget or the depth cap stopped it             */
+
+/* Parse, but refuse a program whose nesting would overflow the stack getting
+ * there. Returns NULL and reports; the caller must not parse it otherwise. */
+Node *zl_parse_guarded(Token *tokens, int count)
+{
+    int deepest = 0, line = 0;
+    if (!zi_nesting_ok(tokens, count, &deepest, &line)) {
+        zi_killed = 1;
+        zi_seterr("nested too deeply to parse - the program was refused");
+        fflush(stdout);
+        fprintf(stderr, "refused: nesting %d deep at line %d, limit %d "
+                        "(it would overflow the stack before it ran)\n",
+                deepest, line, ZI_MAX_NESTING);
+        return NULL;
+    }
+    return parse(tokens, count);
+}
+
+int zl_run_program(Node *program, long long steps, int max_depth)
+{
+    zi_limit(steps, max_depth);
+
+    g_returning = 0;
+    g_breaking  = 0;
+    g_continuing = 0;
 
     Env *global = env_new(NULL);
     g_global = global;                 /* functions scope off this */
+
+    if (zi_setjmp(zi_trap) != 0)
+        return zi_killed ? ZI_KILLED : ZI_ERROR;
+
+    zi_trap_armed = 1;
     for (int i = 0; i < program->nkids; i++) {
         exec(program->kids[i], global);
         if (g_returning) break;
     }
+    zi_trap_armed = 0;
+    return ZI_OK;
+}
 
+int main(int argc, char **argv)
+{
+    if (argc < 2) {
+        fprintf(stderr, "usage: interp [--steps N] [--depth N] [--confine LO HI] <file>\n");
+        return 1;
+    }
+
+    /* Unlimited unless asked otherwise, which is what this interpreter has
+     * always been. The flags exist so the kill path can be driven from a gate
+     * without a kernel - see kernel/hosttest/killtest.sh. */
+    long long steps = 0;
+    int depth = 0, argi = 1;
+    unsigned long long confine_lo = 0, confine_hi = 0;
+    while (argi < argc - 1) {
+        if (strcmp(argv[argi], "--steps") == 0 && argi + 1 < argc) {
+            steps = atoll(argv[++argi]); argi++;
+        } else if (strcmp(argv[argi], "--depth") == 0 && argi + 1 < argc) {
+            depth = atoi(argv[++argi]); argi++;
+        } else if (strcmp(argv[argi], "--confine") == 0 && argi + 2 < argc) {
+            /* --confine LO HI: the only addresses raw memory may touch. This
+             * is what the kernel sets to the arena's bounds. */
+            confine_lo = strtoull(argv[++argi], NULL, 0);
+            confine_hi = strtoull(argv[++argi], NULL, 0); argi++;
+        } else break;
+    }
+
+    int    count;
+    Token *tokens  = lex_file(argv[argi], &count);
+    Node  *program = zl_parse_guarded(tokens, count);
+    if (!program) return 2;              /* refused - stopped, not a crash */
+
+    if (confine_hi) zi_confine(confine_lo, confine_hi);
+    int r = zl_run_program(program, steps, depth);
+    if (r != ZI_OK) {
+        fflush(stdout);
+        fprintf(stderr, "%s: %s\n",
+                r == ZI_KILLED ? "stopped" : "runtime error", zi_error());
+        fprintf(stderr, "  steps used %lld, peak depth %d\n",
+                zi_used(), zi_peak_depth());
+        return r == ZI_KILLED ? 2 : 1;
+    }
     return 0;
 }

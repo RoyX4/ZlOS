@@ -87,21 +87,77 @@ extern int  idt_mouse_x(void);
 extern int  idt_mouse_y(void);
 extern int  idt_mouse_btn(void);
 extern unsigned idt_mouse_irqs(void);
-/* the USB pointer: absolute when it is a tablet, so it cannot drift */
-extern int xhci_ptr_ready(void);
-extern int xhci_ptr_abs(void);
-extern int xhci_ptr_x(void);
-extern int xhci_ptr_y(void);
-extern int xhci_ptr_btn(void);
-extern int xhci_ptr_poll(void);
-extern unsigned xhci_ptr_reports(void);
-extern unsigned xhci_ptr_events(void);
-extern int      xhci_ptr_lastcc(void);
-extern unsigned xhci_kbd_events(void);
-extern unsigned xhci_kbd_requeues(void);
-extern int      xhci_kbd_lastcc(void);
-extern int xhci_ptr_slot(void);
-extern int xhci_ptr_ep(void);
+/* ---- the USB pointer: absolute when it is a tablet, so it cannot drift -----
+ *
+ * THESE ARE WEAK ON PURPOSE, and it is the same trick wmglue.c uses for the
+ * app callbacks. Commit b19207d ("wip(usb,input)") landed these CALL SITES
+ * without the driver that defines them: `git log --all -S"int xhci_ptr_ready"`
+ * finds no commit on any branch, so the tree as committed does not link, and
+ * every gate in the project has been unrunnable since. The definitions exist,
+ * uncommitted, in the display session's working tree.
+ *
+ * Writing a second USB pointer driver here to fix the link would be the wrong
+ * repair twice over - it is someone else's work in flight, and xhci.c is the
+ * file they have open. A weak reference is NULL when nothing defines it, so
+ * the kernel links today, falls back to the PS/2 mouse that has always worked,
+ * and BINDS TO THE REAL DRIVER the moment that commit lands, with no change
+ * here. Nothing to remember, nothing to undo.
+ *
+ * The fallback ANNOUNCES ITSELF (see usb_ptr_ok below). A silent fallback is
+ * this repo's most expensive recurring bug - `intel_backlight_set` computed a
+ * max of 0 and quietly did nothing for months - and one that hides a missing
+ * driver would be exactly that shape. */
+#define ZL_WEAK __attribute__((weak))
+extern int xhci_ptr_ready(void) ZL_WEAK;
+extern int xhci_ptr_abs(void) ZL_WEAK;
+extern int xhci_ptr_x(void) ZL_WEAK;
+extern int xhci_ptr_y(void) ZL_WEAK;
+extern int xhci_ptr_btn(void) ZL_WEAK;
+extern int xhci_ptr_poll(void) ZL_WEAK;
+extern unsigned xhci_ptr_reports(void) ZL_WEAK;
+extern unsigned xhci_ptr_events(void) ZL_WEAK;
+extern int      xhci_ptr_lastcc(void) ZL_WEAK;
+extern unsigned xhci_kbd_events(void) ZL_WEAK;
+extern unsigned xhci_kbd_requeues(void) ZL_WEAK;
+extern int      xhci_kbd_lastcc(void) ZL_WEAK;
+extern int xhci_ptr_slot(void) ZL_WEAK;
+extern int xhci_ptr_ep(void) ZL_WEAK;
+
+/* ---- arena.c: the memory a program the kernel was NOT built with may use --
+ * Not weak. arena.c is in all four source lists and is pure arithmetic against
+ * memory - if it is missing the build should fail, because unlike a USB
+ * pointer there is no fallback that "has always worked" to degrade to. */
+extern int arena_init(void);
+extern int arena_ok(void);
+extern void arena_reset(void);
+extern unsigned long arena_resets(void);
+extern unsigned long arena_capacity(void);
+extern unsigned long arena_used(void);
+extern unsigned long arena_available(void);
+extern unsigned long arena_high_water(void);
+extern unsigned long arena_refusals(void);
+extern unsigned long arena_base_addr(void);
+
+/* ---- exec.c: `run`, and every way it declines --------------------------- */
+extern int  exec_run(void);
+extern int  exec_state(void);
+extern int  exec_wants_window(void);
+extern const char *exec_title(void);
+extern void exec_draw(int x, int y, int w, int h,
+                      unsigned int fg, unsigned int dim, unsigned int accent);
+
+/* Is there a USB pointer at all? Two questions in one, and both have to be
+ * yes: is the driver linked in (weak symbol non-NULL), and did it find a
+ * device. Every xhci_ptr_* call below is guarded by this, so a NULL weak
+ * symbol can never be called. */
+static int usb_ptr_ok(void)
+{
+    return xhci_ptr_ready != 0 && xhci_ptr_ready() != 0;
+}
+
+/* Zero when the driver is absent, so the diagnostic builtins report 0 rather
+ * than jumping through a null pointer. */
+#define ZL_WEAK_CALL(fn) ((fn) ? (fn)() : 0)
 extern void console_box(int x, int y, int w, int h, unsigned char attr);
 extern void console_line(int x0, int y0, int x1, int y1, unsigned char attr);
 extern void console_mouse_cursor(int x, int y, unsigned char fill, unsigned char edge);
@@ -561,6 +617,85 @@ extern unsigned int intel_surface(void);
 extern int  intel_frame_count(void);
 extern int  console_rows(void);
 
+/* ONE byte to COM1, and nothing else. Extracted from zl_putc because there are
+ * now two callers with different needs, and inlining it in one of them made the
+ * other impossible: term.c generates its own text (the unknown-command line,
+ * the echo of what you typed) which has to reach the serial log so a gate can
+ * assert on it, but must NOT reach console_putc - during a compositor session
+ * console_putc draws glyphs straight into the back buffer at the old text
+ * region, which is nowhere near the shell window. Three sinks, chosen
+ * per-caller, rather than one bundle nobody can take apart.
+ *
+ * Wait for the transmit holding register - but never forever. A laptop has no
+ * UART at 0x3F8; an undecoded port floats high, so this reads 0xFF and falls
+ * straight through, which is why it has always worked. If a machine ever read
+ * back zero instead, the kernel would hang inside its FIRST printed character
+ * with nothing on screen to say why. The bound is ~1000x one character time at
+ * 115200, so a real UART is never cut short. */
+void zl_serial_putc(char c)
+{
+    for (int i = 0; i < 200000; i++)
+        if (zl_inb(COM1 + 5) & 0x20) break;
+    zl_outb(COM1, (unsigned char)c);
+}
+
+/* ---- the system track: nvme.c, fs.c, rtc.c, clip.c, notify.c ------------ */
+extern int  nvme_read_to(unsigned dst, unsigned lba_lo, unsigned lba_hi);
+extern int  nvme_write_from(unsigned src, unsigned lba_lo, unsigned lba_hi);
+extern int  nvme_ram_ok(void);
+extern int  nvme_fault(void);
+
+extern int  fs_mkfs(void);
+extern int  fs_mount(void);
+extern int  fs_mounted(void);
+extern int  fs_count(void);
+extern int  fs_maxfiles(void);
+extern int  fs_used(int idx);
+extern unsigned fs_size(int idx);
+extern unsigned fs_start(int idx);
+extern unsigned fs_runlen(int idx);
+extern unsigned fs_mtime(int idx);
+extern unsigned fs_free_blocks(void);
+extern unsigned fs_capacity(void);
+extern unsigned fs_bsize(void);
+extern int  fs_name_byte(int idx, int i);
+extern void fs_name_clear(void);
+extern int  fs_name_push(int ch);
+extern int  fs_create_named(unsigned bytes);
+extern int  fs_find_named(void);
+extern int  fs_delete(int idx);
+extern int  fs_read(int idx, void *dst, unsigned max);
+extern int  fs_write(int idx, const void *src, unsigned bytes);
+extern void fs_set_time(unsigned secs);
+
+extern int  rtc_read(void);
+extern int  rtc_present(void);
+extern int  rtc_valid(void);
+extern int  rtc_fail(void);
+extern int  rtc_year(void);
+extern int  rtc_month(void);
+extern int  rtc_day(void);
+extern int  rtc_hour(void);
+extern int  rtc_min(void);
+extern int  rtc_sec(void);
+extern unsigned rtc_unix(void);
+extern int  rtc_hhmm_byte(int i);
+
+extern unsigned clip_len(void);
+extern int  clip_byte(int i);
+extern unsigned clip_seq(void);
+extern void clip_begin(void);
+extern int  clip_push(int ch);
+extern int  clip_commit(int type);
+extern void clip_clear(void);
+
+extern int  notify_post(const char *text, unsigned ticks);
+extern int  notify_tick(unsigned now);
+extern int  notify_active(void);
+extern int  notify_byte(int i);
+extern int  notify_dismiss(void);
+extern int  notify_queued(void);
+
 static void zl_putc(char c)
 {
     /* screen for a human, serial for verify.sh - both, always, so a
@@ -572,15 +707,7 @@ static void zl_putc(char c)
      * Without this the compositor has nothing to repaint the shell FROM, and
      * dragging a window across it would erase it permanently. */
     term_putc(c);
-    /* Wait for the transmit holding register - but never forever. A laptop has
-     * no UART at 0x3F8; an undecoded port floats high, so this reads 0xFF and
-     * falls straight through, which is why it has always worked. If a machine
-     * ever read back zero instead, the kernel would hang inside its FIRST
-     * printed character with nothing on screen to say why. The bound is ~1000x
-     * one character time at 115200, so a real UART is never cut short. */
-    for (int i = 0; i < 200000; i++)
-        if (zl_inb(COM1 + 5) & 0x20) break;
-    zl_outb(COM1, (unsigned char)c);
+    zl_serial_putc(c);
 }
 #else
 /* On Linux, for testing the pipeline: write(1, &c, 1) by raw syscall.
@@ -835,6 +962,11 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "vram"))       return zl_num((double)console_vram());
     if (streq(name, "con_cols"))   return zl_num((double)console_cols());
     if (streq(name, "con_rows"))   return zl_num((double)console_rows());
+    /* Mute the console's PIXELS while the compositor owns the screen. The
+     * scrollback and the serial log are untouched - see console_mute(). */
+    /* con_quiet was desktop/exec-track's name for con_mute. One flag,
+     * one builtin - kernel.zl used to call both, so they could disagree
+     * about who owns the screen. Call sites are rewritten to con_mute. */
     if (streq(name, "cell_w"))     return zl_num((double)console_cell_w());
     /* THE LAYOUT SCALE, which used to be cell_w()/8 in zl and therefore could
      * only ever be 1 or 2. See fb.c: the console cell has two atlases, the
@@ -1006,6 +1138,19 @@ Value zl_calln(const char *name, int n, ...)
      * which app is in it. A taskbar cannot exist without these. */
     if (streq(name, "wm_zat"))     return zl_num((double)wm_zorder_at((int)a[0].num));
     if (streq(name, "wm_app"))     return zl_num((double)wm_win_app((int)a[0].num));
+    /* ---- from desktop/exec-track ------------------------------------------
+     * NAMING: exec-track had renamed wm_focus to be the SETTER and wm_focused
+     * the getter. On this side wm_focus is the GETTER and wm_setfocus the
+     * setter, which is what 17 call sites in kernel.zl already say against
+     * exec's 5. Taking both would have left `wm_focus(win)` - a setter call
+     * with an argument - resolving to a getter that ignores it, in a language
+     * with no arity check. exec's call sites are rewritten instead. */
+    if (streq(name, "wm_is_open")) return zl_num((double)wm_is_open((int)a[0].num));
+    /* the other two components of the client rect. probe-term.py crops to the
+     * rectangle the kernel REPORTS rather than recomputing the layout in
+     * Python, which goes stale the first time a window moves. */
+    if (streq(name, "wm_cw"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)w); }
+    if (streq(name, "wm_ch"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)h); }
     if (streq(name, "wm_dmg"))     { wm_damage_win((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "ui_theme"))   { ui_theme_init((int)a[0].num); return zl_nil(); }
@@ -1324,26 +1469,148 @@ Value zl_calln(const char *name, int n, ...)
      * the PS/2 mouse is relative and stays as the fallback (and is what the
      * laptop's TrackPoint actually is). Polled here because the pointer shares
      * the keyboard's event ring and something has to turn the handle. */
-    if (streq(name, "mouse_x"))   { if (xhci_ptr_ready()) { xhci_ptr_poll(); return zl_num((double)xhci_ptr_x()); }
+    if (streq(name, "mouse_x"))   { if (usb_ptr_ok()) { xhci_ptr_poll(); return zl_num((double)xhci_ptr_x()); }
                                     return zl_num((double)idt_mouse_x()); }
-    if (streq(name, "mouse_y"))   { if (xhci_ptr_ready()) return zl_num((double)xhci_ptr_y());
+    if (streq(name, "mouse_y"))   { if (usb_ptr_ok()) return zl_num((double)xhci_ptr_y());
                                     return zl_num((double)idt_mouse_y()); }
-    if (streq(name, "mouse_btn")) { if (xhci_ptr_ready()) return zl_num((double)xhci_ptr_btn());
+    if (streq(name, "mouse_btn")) { if (usb_ptr_ok()) return zl_num((double)xhci_ptr_btn());
                                     return zl_num((double)idt_mouse_btn()); }
-    if (streq(name, "ptr_abs"))    return zl_num((double)(xhci_ptr_ready() ? xhci_ptr_abs() : 0));
-    if (streq(name, "ptr_reports"))return zl_num((double)xhci_ptr_reports());
-    if (streq(name, "ptr_events")) return zl_num((double)xhci_ptr_events());
-    if (streq(name, "ptr_lastcc")) return zl_num((double)xhci_ptr_lastcc());
-    if (streq(name, "kbd_events")) return zl_num((double)xhci_kbd_events());
-    if (streq(name, "kbd_requeues"))return zl_num((double)xhci_kbd_requeues());
-    if (streq(name, "kbd_lastcc")) return zl_num((double)xhci_kbd_lastcc());
-    if (streq(name, "ptr_slot"))   return zl_num((double)xhci_ptr_slot());
-    if (streq(name, "ptr_ep"))     return zl_num((double)xhci_ptr_ep());
+    if (streq(name, "ptr_abs"))    return zl_num((double)(usb_ptr_ok() ? xhci_ptr_abs() : 0));
+    /* 1 if the USB pointer driver is even linked in. Distinguishes "no driver"
+     * from "driver present, no device" - which look identical from ptr_ready
+     * alone, and cost a long hunt once already. */
+    if (streq(name, "ptr_driver")) return zl_num(xhci_ptr_ready != 0 ? 1.0 : 0.0);
+    if (streq(name, "ptr_reports"))return zl_num((double)ZL_WEAK_CALL(xhci_ptr_reports));
+    if (streq(name, "ptr_events")) return zl_num((double)ZL_WEAK_CALL(xhci_ptr_events));
+    if (streq(name, "ptr_lastcc")) return zl_num((double)ZL_WEAK_CALL(xhci_ptr_lastcc));
+    if (streq(name, "kbd_events")) return zl_num((double)ZL_WEAK_CALL(xhci_kbd_events));
+    if (streq(name, "kbd_requeues"))return zl_num((double)ZL_WEAK_CALL(xhci_kbd_requeues));
+    if (streq(name, "kbd_lastcc")) return zl_num((double)ZL_WEAK_CALL(xhci_kbd_lastcc));
+    if (streq(name, "ptr_slot"))   return zl_num((double)ZL_WEAK_CALL(xhci_ptr_slot));
+    if (streq(name, "ptr_ep"))     return zl_num((double)ZL_WEAK_CALL(xhci_ptr_ep));
     if (streq(name, "mouse_irqs")) return zl_num((double)idt_mouse_irqs());
+    /* ---- the program arena (arena.c) --------------------------------------
+     * arena_up prints its own line, the way fb.c does, so the boot log states
+     * an ADDRESS rather than a claim - a number somebody can check against the
+     * map in fb.c and in arena.c's header comment. */
+    if (streq(name, "arena_up"))      return zl_num((double)arena_init());
+    if (streq(name, "arena_ok"))      return zl_num((double)arena_ok());
+    if (streq(name, "arena_cap"))     return zl_num((double)arena_capacity());
+    if (streq(name, "arena_used"))    return zl_num((double)arena_used());
+    if (streq(name, "arena_free"))    return zl_num((double)arena_available());
+    if (streq(name, "arena_hw"))      return zl_num((double)arena_high_water());
+    if (streq(name, "arena_refused")) return zl_num((double)arena_refusals());
+    if (streq(name, "arena_base"))    return zl_num((double)arena_base_addr());
+    if (streq(name, "arena_resets"))  return zl_num((double)arena_resets());
+    /* The one that makes the rest of the design work, and it was missed on the
+     * first pass: without a reset exposed, a bump allocator is a one-shot.
+     * `run` calls this BEFORE each program, never after - reclaiming on the way
+     * in means a program that faulted still has its memory intact to look at,
+     * and means nothing is holding a pointer into the arena at the moment it
+     * is reclaimed except code that is about to be handed a new one. */
+    if (streq(name, "arena_reset"))  { arena_reset(); return zl_nil(); }
+    /* ---- exec.c -----------------------------------------------------------
+     * exec_run takes NO arguments on purpose. The filename lives in term.c's
+     * buffer and exec.c reads it there, in C. Passing it through here would
+     * mean a V_STR in zl's hands, and zl_binop above hard-faults on any string
+     * operand BEFORE it reaches the `==` arm - so `if n == "hello.zl"`
+     * compiles clean, links clean, and halts the machine when it runs. */
+    if (streq(name, "exec_run"))    return zl_num((double)exec_run());
+    if (streq(name, "exec_state"))  return zl_num((double)exec_state());
+    if (streq(name, "exec_window")) return zl_num((double)exec_wants_window());
+    /* A pointer into exec.c's own buffer, handed straight to wm_open as a
+     * title and never compared. Passing a V_STR is safe; operating on one is
+     * not, and that is the entire distinction. */
+    if (streq(name, "exec_title"))  return zl_str(exec_title());
+    if (streq(name, "exec_draw"))   { exec_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,
+                                                (unsigned int)(unsigned long long)a[4].num,
+                                                (unsigned int)(unsigned long long)a[5].num,
+                                                (unsigned int)(unsigned long long)a[6].num);
+                                      return zl_nil(); }
     if (streq(name, "box"))       { console_box((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "line"))      { console_line((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "mcursor"))   { console_mouse_cursor((int)a[0].num,(int)a[1].num,(unsigned char)(unsigned long long)a[2].num,(unsigned char)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "goto_row")) { console_set_row((int)a[0].num); return zl_nil(); }
+
+    /* ---- the system track: storage, time, clipboard ---------------------
+     * Appended, never interleaved, so this block is one contiguous diff and
+     * three other sessions editing this file do not have to merge through it.
+     *
+     * The naming follows the file each one lives in rather than the zl verb,
+     * because when a builtin misbehaves the first question is always which
+     * driver it landed in. */
+
+    /* the disk, at an ARBITRARY address rather than the one fixed page.
+     * nv_read/nv_write above still exist and still use the bounce buffer;
+     * these are what a filesystem can actually be built on. */
+    if (streq(name, "nv_rd_to"))   return zl_num((double)nvme_read_to((unsigned)a[0].num,(unsigned)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "nv_wr_from")) return zl_num((double)nvme_write_from((unsigned)a[0].num,(unsigned)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "nv_ram"))     return zl_num((double)nvme_ram_ok());
+    if (streq(name, "nv_fault"))   return zl_num((double)nvme_fault());
+
+    /* zlfs. Names are pushed one character at a time and compared in C - the
+     * zl kernel subset has string literals and no string values, so two
+     * runtime strings can never meet in zl. Same seam term.c uses. */
+    if (streq(name, "fs_format"))  return zl_num((double)fs_mkfs());
+    if (streq(name, "fs_mount"))   return zl_num((double)fs_mount());
+    if (streq(name, "fs_ok"))      return zl_num((double)fs_mounted());
+    if (streq(name, "fs_n"))       return zl_num((double)fs_count());
+    if (streq(name, "fs_max"))     return zl_num((double)fs_maxfiles());
+    if (streq(name, "fs_inuse"))   return zl_num((double)fs_used((int)a[0].num));
+    if (streq(name, "fs_bytes"))   return zl_num((double)fs_size((int)a[0].num));
+    if (streq(name, "fs_lba"))     return zl_num((double)fs_start((int)a[0].num));
+    if (streq(name, "fs_run"))     return zl_num((double)fs_runlen((int)a[0].num));
+    if (streq(name, "fs_when"))    return zl_num((double)fs_mtime((int)a[0].num));
+    if (streq(name, "fs_ch"))      return zl_num((double)fs_name_byte((int)a[0].num,(int)a[1].num));
+    if (streq(name, "fs_free"))    return zl_num((double)fs_free_blocks());
+    if (streq(name, "fs_cap"))     return zl_num((double)fs_capacity());
+    if (streq(name, "fs_bs"))      return zl_num((double)fs_bsize());
+    if (streq(name, "fs_nclear"))  { fs_name_clear(); return zl_nil(); }
+    if (streq(name, "fs_npush"))   return zl_num((double)fs_name_push((int)a[0].num));
+    if (streq(name, "fs_new"))     return zl_num((double)fs_create_named((unsigned)a[0].num));
+    if (streq(name, "fs_get"))     return zl_num((double)fs_find_named());
+    if (streq(name, "fs_rm"))      return zl_num((double)fs_delete((int)a[0].num));
+    if (streq(name, "fs_rd"))      return zl_num((double)fs_read((int)a[0].num,(void *)(unsigned long)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "fs_wr"))      return zl_num((double)fs_write((int)a[0].num,(const void *)(unsigned long)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "fs_stamp"))   { fs_set_time((unsigned)a[0].num); return zl_nil(); }
+
+    /* the clock */
+    if (streq(name, "rtc_up"))     return zl_num((double)rtc_read());
+    if (streq(name, "rtc_here"))   return zl_num((double)rtc_present());
+    if (streq(name, "rtc_ok"))     return zl_num((double)rtc_valid());
+    if (streq(name, "rtc_why"))    return zl_num((double)rtc_fail());
+    if (streq(name, "rtc_y"))      return zl_num((double)rtc_year());
+    if (streq(name, "rtc_mo"))     return zl_num((double)rtc_month());
+    if (streq(name, "rtc_d"))      return zl_num((double)rtc_day());
+    if (streq(name, "rtc_h"))      return zl_num((double)rtc_hour());
+    if (streq(name, "rtc_mi"))     return zl_num((double)rtc_min());
+    if (streq(name, "rtc_s"))      return zl_num((double)rtc_sec());
+    if (streq(name, "rtc_epoch"))  return zl_num((double)rtc_unix());
+    if (streq(name, "rtc_ch"))     return zl_num((double)rtc_hhmm_byte((int)a[0].num));
+
+    /* the clipboard */
+    if (streq(name, "clip_n"))     return zl_num((double)clip_len());
+    if (streq(name, "clip_ch"))    return zl_num((double)clip_byte((int)a[0].num));
+    if (streq(name, "clip_seq"))   return zl_num((double)clip_seq());
+    if (streq(name, "clip_new"))   { clip_begin(); return zl_nil(); }
+    if (streq(name, "clip_add"))   return zl_num((double)clip_push((int)a[0].num));
+    if (streq(name, "clip_done"))  return zl_num((double)clip_commit(1));
+    if (streq(name, "clip_wipe"))  { clip_clear(); return zl_nil(); }
+
+    /* notifications */
+    if (streq(name, "note_tick"))  return zl_num((double)notify_tick((unsigned)a[0].num));
+    if (streq(name, "note_on"))    return zl_num((double)notify_active());
+    if (streq(name, "note_ch"))    return zl_num((double)notify_byte((int)a[0].num));
+    if (streq(name, "note_go"))    return zl_num((double)notify_dismiss());
+    if (streq(name, "note_q"))     return zl_num((double)notify_queued());
+    /* A string LITERAL is the one kind of string the zl kernel subset has, and
+     * it is exactly what a notification is: fixed text chosen at compile time.
+     * Same shape as the `at` builtin above - check the type, take the pointer,
+     * never store it. */
+    if (streq(name, "note_say")) {
+        if (a[0].type != V_STR) return zl_num(0);
+        return zl_num((double)notify_post(a[0].str, (unsigned)(n > 1 ? a[1].num : 0)));
+    }
 #endif
 
     /* Bitwise ops. A driver cannot be written without them - every status

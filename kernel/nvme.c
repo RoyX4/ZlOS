@@ -115,6 +115,18 @@ static void wr64(uptr a, u64 v)
 _Static_assert((unsigned long)NMEM_DATA + NMEM_PAGE <= HI_XHCI,
                "nvme: queues escape their region into the xHCI arena");
 
+/* Why the last bring-up refused. `nvme_setup()` returning 0 used to be the
+ * whole story, and the shell reported every one of these as "the controller
+ * did not come ready" - which is true of exactly one of them. */
+#define NVF_NONE       0
+#define NVF_NO_DEV     1
+#define NVF_NOT_READY  2
+#define NVF_IDENT      3
+#define NVF_BLOCKSIZE  4
+#define NVF_QUEUES     5
+#define NVF_RAM        6
+static int nv_fault = NVF_NONE;
+
 static int  nv_idx   = -1;
 static uptr nv_base  = 0;
 static u32  nv_dstrd = 0;         /* doorbell stride, from CAP              */
@@ -154,7 +166,17 @@ int nvme_find(void)
         u32 lo = pci_bar(i, 0);
         u32 hi = pci_bar_hi(i, 0);
         if (hi && sizeof(uptr) < 8) continue;    /* above 4 GiB, unreachable */
+        /* Split by #if, not by sizeof: on the 32-bit target `hi << 32` is a
+         * shift wider than the type - undefined behaviour, and gcc warns. The
+         * guard above has already established hi == 0 on that target, so the
+         * shift was never NEEDED there, only compiled there. This is the same
+         * truncated-address bug class that has cost this project five
+         * debugging sessions; it may as well not be UB while we are here. */
+#if defined(ZL_64)
         uptr b = ((uptr)hi << 32) | (uptr)lo;
+#else
+        uptr b = (uptr)lo;
+#endif
         if (!b) continue;
 
         nv_idx  = i;
@@ -313,8 +335,45 @@ int nvme_identify_namespace(void)
     u32 lbaf0 = id[32];
     u32 lbads = (lbaf0 >> 16) & 0xFF;
     if (lbads >= 9 && lbads <= 16) nv_blocksize = 1u << lbads;
+
+    /* Every command this driver issues carries PRP1 and no PRP2, so one
+     * transfer is one 4 KiB page. A device with a larger logical block would
+     * have the CONTROLLER DMA past the end of that page and into whatever the
+     * next arena holds - silently, with a successful completion status. The
+     * old code accepted LBADS up to 16 (64 KiB) and would have done exactly
+     * that. Nothing common reports more than 4096, which is precisely why
+     * this would have sat here undiscovered.
+     *
+     * Supporting it means a PRP list, which is a real feature and not one to
+     * fake. Refusing is honest; corrupting the xHCI arena is not. */
+    if (nv_blocksize > 4096) {
+        nv_fault = NVF_BLOCKSIZE;
+        return 0;
+    }
     return 1;
 }
+
+/* The recurring bug class, five times so far: a DMA buffer that is not inside
+ * guest RAM. The symptoms read as protocol bugs every time - a command that
+ * completes with good status and no data. This arena sits at 208 MiB, so a
+ * machine given less than that fails here rather than three layers up.
+ *
+ * Probe the LOWEST and HIGHEST addresses the driver actually uses, not just
+ * the base: the failure mode is a boundary, and a base-only probe passes on a
+ * machine whose RAM ends in the middle of the arena. */
+int nvme_ram_ok(void)
+{
+    volatile u32 *lo = (volatile u32 *)(uptr)NMEM_ASQ;
+    volatile u32 *hi = (volatile u32 *)(uptr)(NMEM_DATA + 4096 - 4);
+    u32 save_lo = *lo, save_hi = *hi;
+    *lo = 0xA5A5F00Du;
+    *hi = 0x5A5A0FF0u;
+    int good = (*lo == 0xA5A5F00Du) && (*hi == 0x5A5A0FF0u);
+    *lo = save_lo; *hi = save_hi;
+    return good;
+}
+
+int nvme_fault(void) { return nv_fault; }
 
 /* Identify Controller puts the model string at byte 24, 40 bytes, space
  * padded. Serial is at byte 4 for 20 bytes. */
@@ -369,6 +428,38 @@ static int io_one(u8 opcode, u32 lba_lo, u32 lba_hi)
 int nvme_read_block(u32 lba_lo, u32 lba_hi)  { return io_one(IO_READ,  lba_lo, lba_hi); }
 int nvme_write_block(u32 lba_lo, u32 lba_hi) { return io_one(IO_WRITE, lba_lo, lba_hi); }
 
+/* ---- a block and an ARBITRARY address ----------------------------------
+ * Everything above moves data to and from one fixed page, and the only way
+ * out of it was nvme_data_byte/nvme_data_set - one byte per call. A
+ * filesystem reading a 512-byte block through that seam costs 512 crossings
+ * of the zl/C boundary per block, which is not a performance question so much
+ * as a reason nobody would build a filesystem on top of it.
+ *
+ * The DMA still lands in NMEM_DATA and nowhere else. That is deliberate: it
+ * keeps every transfer inside one 4 KiB page, so PRP2 stays unused and there
+ * is no scatter list to get wrong. The caller's address is reached by a copy
+ * on THIS side of the controller, where a mistake is a wrong byte rather than
+ * a device writing into an arena that belongs to something else.
+ */
+int nvme_read_to(u32 dst, u32 lba_lo, u32 lba_hi)
+{
+    if (!nv_ready) return 0;
+    if (!io_one(IO_READ, lba_lo, lba_hi)) return 0;
+    volatile u8       *d = (volatile u8 *)(uptr)dst;
+    volatile const u8 *s = (volatile const u8 *)(uptr)NMEM_DATA;
+    for (u32 i = 0; i < nv_blocksize; i++) d[i] = s[i];
+    return 1;
+}
+
+int nvme_write_from(u32 src, u32 lba_lo, u32 lba_hi)
+{
+    if (!nv_ready) return 0;
+    volatile u8       *d = (volatile u8 *)(uptr)NMEM_DATA;
+    volatile const u8 *s = (volatile const u8 *)(uptr)src;
+    for (u32 i = 0; i < nv_blocksize; i++) d[i] = s[i];
+    return io_one(IO_WRITE, lba_lo, lba_hi);
+}
+
 u32 nvme_data(void)          { return NMEM_DATA; }
 int nvme_data_byte(int i)
 {
@@ -386,9 +477,16 @@ int nvme_ready(void) { return nv_ready; }
 /* Bring the whole thing up: enable, identify, create I/O queues. */
 int nvme_setup(void)
 {
-    if (!nvme_init())               return 0;
-    if (!nvme_identify_controller())return 0;
-    if (!nvme_identify_namespace()) return 0;
-    if (!nvme_create_io_queues())   return 0;
+    nv_fault = NVF_NONE;
+    if (!nvme_present() && nvme_find() < 0) { nv_fault = NVF_NO_DEV;    return 0; }
+    if (!nvme_ram_ok())                     { nv_fault = NVF_RAM;       return 0; }
+    if (!nvme_init())                       { nv_fault = NVF_NOT_READY; return 0; }
+    if (!nvme_identify_controller())        { nv_fault = NVF_IDENT;     return 0; }
+    /* identify_namespace sets NVF_BLOCKSIZE itself when that is the reason */
+    if (!nvme_identify_namespace()) {
+        if (nv_fault == NVF_NONE) nv_fault = NVF_IDENT;
+        return 0;
+    }
+    if (!nvme_create_io_queues())           { nv_fault = NVF_QUEUES;    return 0; }
     return 1;
 }

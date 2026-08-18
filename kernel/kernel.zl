@@ -81,6 +81,10 @@ fn kbd_init() {
 
 # shift state, tracked for the editor so it can type capitals
 shift_state = 0
+# Ctrl, tracked the same way shift is. Without this the editor can never see
+# Ctrl+C: the PS/2 path builds characters from a scancode table and there is no
+# modifier state but shift, so `c` is all that ever arrives.
+ctrl_state = 0
 
 # a shift-aware read: returns a translated character, or 0 if nothing / a
 # modifier / a release. Uppercases letters; leaves the rest as-is (v1).
@@ -95,6 +99,8 @@ fn edit_key() {
     if uk != 0 { return uk }
     sc = scan_get()
     if sc == 0 { return 0 }
+    if sc == 0x1D { ctrl_state = 1   return 0 }      # ctrl down
+    if sc == 0x9D { ctrl_state = 0   return 0 }      # ctrl up
     if sc == 0x2A { shift_state = 1  return 0 }      # left shift down
     if sc == 0x36 { shift_state = 1  return 0 }      # right shift down
     if sc == 0xAA { shift_state = 0  return 0 }      # left shift up
@@ -103,6 +109,11 @@ fn edit_key() {
     ch = peek8(KBD_TABLE + sc)
     if ch == 0 { return 0 }
     if shift_state == 1 { if ch >= 97 { if ch <= 122 { ch = ch - 32 } } }
+    # Ctrl+letter is the letter with the top three bits cleared - Ctrl+C is 3,
+    # Ctrl+V is 22. That is not a convention this file invents: it is what
+    # input.c already produces on the USB path, so the editor sees the same
+    # codes whichever keyboard it is being typed on.
+    if ctrl_state == 1 { if ch >= 97 { if ch <= 122 { return band(ch, 31) } } }
     return ch
 }
 # The keyboard now arrives by INTERRUPT: the IRQ1 handler drops each scancode
@@ -525,6 +536,12 @@ fn help_keys() {
     print("    d        paint with the mouse")
     print("    <n> i    edit RAM file n (0-9) - ESC saves it")
     print("    l        list the RAM files")
+    print("    run F    run a program from a file (type it - needs a name)")
+    print("    .        zlfs on the NVMe disk - mount, and count the boots")
+    print("    ,        list the files ON DISK, by name")
+    print("    ;        the real time, read off the CMOS clock")
+    print("    '        write the clipboard to clip.txt on disk")
+    print("             (Ctrl+C in the editor copies, Ctrl+V pastes)")
     print("    e        beep the PC speaker")
     print("    m        poke a byte into video memory and read it back")
     color(C_CYAN)  print("  our hardware drivers")
@@ -1213,6 +1230,13 @@ FS_META = 0x02010000    # 10 lengths, 4 bytes each
 FS_DATA = 0x02011000    # 10 slots of FS_SLOT bytes -> ends 0x02025000
 FS_SLOT = 8192
 
+# A page of scratch for the DISK filesystem's small reads and writes. It sits
+# above the RAM disk (FS_DATA + 10 * 8192 ends at 0x02025000) and far below the
+# DMA arena map at the top of fb.c - bg 128 MiB, sp 160, sched 176, back 192,
+# nvme 208, xhci 224, virtio-gpu 240. 32 MiB + 192 KiB collides with none of
+# them, which is the check this project's recurring bug says to do every time.
+DISK_SCRATCH = 0x02030000
+
 fn fs_init()      { fill_mem(FS_META, 0, 64) }
 fn fs_len(slot)   { return peek32(FS_META + slot * 4) }
 fn fs_save(slot, len) {
@@ -1290,6 +1314,30 @@ fn editor(slot) {
             }
             if k == 13 {
                 if len < EDIT_MAX - 1 { poke8(EDIT_BUF + len, 10)  len = len + 1 }
+                redraw_editor(len)
+            }
+            # Ctrl+C: the whole buffer goes to the clipboard. Pushed a byte at
+            # a time because the zl kernel subset has no string values - the
+            # same seam filenames and typed commands use.
+            if k == 3 {
+                clip_new()
+                ci = 0
+                while ci < len { clip_add(peek8(EDIT_BUF + ci))  ci = ci + 1 }
+                clip_done()
+            }
+            # Ctrl+V: whatever is on the clipboard, appended here. The bytes may
+            # have been put there by a completely different app; nothing in this
+            # function knows or needs to.
+            if k == 22 {
+                cn = clip_n()
+                ci = 0
+                while ci < cn {
+                    if len < EDIT_MAX - 1 {
+                        poke8(EDIT_BUF + len, clip_ch(ci))
+                        len = len + 1
+                    }
+                    ci = ci + 1
+                }
                 redraw_editor(len)
             }
             if k >= 32 {
@@ -1811,6 +1859,163 @@ fn run_command(cmd, arg) {
         }
         return 0
     }
+    # . - zlfs: mount the disk, and prove a NAMED FILE survives a power cycle.
+    #
+    # The 'o' command above already writes a block and reads it back, which
+    # proves the DMA round trip and nothing about persistence: it never
+    # reboots. This keeps a counter in a file called "boots" and increments it
+    # once per run, so the number on screen is the number of times this machine
+    # has been powered on since the volume was formatted. That number cannot be
+    # produced by a cache, a buffer or a lucky read - only by bytes that were
+    # on the platter before this kernel existed.
+    #
+    # verify-disk.sh drives exactly this, twice, against the same image file.
+    if cmd == 46 {
+        color(C_CYAN)  print("  zlfs on NVMe")
+        color(C_GREY)
+        if nv_setup() == 0 {
+            color(C_RED)
+            put("    no usable NVMe controller (fault ")  put(nv_fault())  print(")")
+            color(C_GREY)  return 0
+        }
+        if fs_mount() == 0 {
+            print("    no volume here yet - formatting")
+            if fs_format() == 0 {
+                color(C_RED)  print("    format failed")
+                color(C_GREY)  return 0
+            }
+            if fs_mount() == 0 {
+                color(C_RED)  print("    formatted, but will not mount")
+                color(C_GREY)  return 0
+            }
+        }
+        put("    mounted: ")  put(fs_n())  put(" file(s), ")
+        put(fs_free())  put(" of ")  put(fs_cap())  print(" blocks free")
+
+        # find "boots", or make it. The name is pushed one character at a
+        # time because the zl kernel subset has no string values.
+        fs_nclear()
+        fs_npush(98)  fs_npush(111)  fs_npush(111)  fs_npush(116)  fs_npush(115)
+        bi = fs_get()
+        if bi < 0 { bi = fs_new(4) }
+        if bi < 0 {
+            color(C_RED)  print("    could not create 'boots'")
+            color(C_GREY)  return 0
+        }
+
+        poke32(DISK_SCRATCH, 0)
+        fs_rd(bi, DISK_SCRATCH, 4)
+        bootn = peek32(DISK_SCRATCH) + 1
+        poke32(DISK_SCRATCH, bootn)
+        if fs_wr(bi, DISK_SCRATCH, 4) == 0 {
+            color(C_RED)  print("    could not write 'boots'")
+            color(C_GREY)  return 0
+        }
+        color(C_GREEN)
+        put("    BOOTCOUNT=")  print(bootn)
+        color(C_GREY)
+        print("    that number came off the disk, not out of memory")
+        # ...and say so on the desktop too. A toast is the right shape for
+        # this: it is worth knowing and not worth a window.
+        note_say("zlfs mounted", 300)
+        return 0
+    }
+    # ; - the real time, off the CMOS clock. The header draws this too, but the
+    # header only exists when there is a framebuffer, and verify.sh boots with
+    # -display none. This is how the clock gets gated.
+    if cmd == 59 {
+        color(C_CYAN)  print("  the clock")
+        color(C_GREY)
+        if rtc_here() == 0 {
+            color(C_RED)  print("    no RTC on this machine")
+            color(C_GREY)  return 0
+        }
+        if rtc_up() == 0 {
+            color(C_RED)
+            put("    the clock would not settle (reason ")  put(rtc_why())  print(")")
+            color(C_GREY)  return 0
+        }
+        put("    RTC=")
+        put(rtc_y())   put("-")
+        if rtc_mo() < 10 { put("0") }   put(rtc_mo())  put("-")
+        if rtc_d()  < 10 { put("0") }   put(rtc_d())   put(" ")
+        if rtc_h()  < 10 { put("0") }   put(rtc_h())   put(":")
+        if rtc_mi() < 10 { put("0") }   put(rtc_mi())  put(":")
+        if rtc_s()  < 10 { put("0") }   print(rtc_s())
+        put("    epoch=")  print(rtc_epoch())
+        # a file's mtime comes from here once the disk is mounted
+        fs_stamp(rtc_epoch())
+        return 0
+    }
+    # ' - write the clipboard to a file on disk, as "clip.txt".
+    #
+    # This is the half of the clipboard that makes the point. The editor puts
+    # bytes there with Ctrl+C and has no idea what happens to them; this takes
+    # them and writes them to the filesystem and has no idea where they came
+    # from. Two programs that share nothing but one buffer - which is the
+    # difference between a machine and several programs on one screen.
+    if cmd == 39 {
+        color(C_CYAN)  print("  clipboard -> disk")
+        color(C_GREY)
+        if clip_n() == 0 {
+            print("    the clipboard is empty - copy something first (Ctrl+C in the editor)")
+            return 0
+        }
+        if fs_ok() == 0 {
+            print("    no volume mounted - press . first")
+            return 0
+        }
+        # stage the name "clip.txt" a character at a time
+        fs_nclear()
+        fs_npush(99)  fs_npush(108) fs_npush(105) fs_npush(112)
+        fs_npush(46)  fs_npush(116) fs_npush(120) fs_npush(116)
+        cbi = fs_get()
+        if cbi < 0 { cbi = fs_new(clip_n()) }
+        if cbi < 0 {
+            color(C_RED)  print("    could not create clip.txt")
+            color(C_GREY)  return 0
+        }
+        # copy the clipboard into scratch RAM, then hand the disk one address
+        cbn = clip_n()
+        cbj = 0
+        while cbj < cbn { poke8(DISK_SCRATCH + cbj, clip_ch(cbj))  cbj = cbj + 1 }
+        if fs_wr(cbi, DISK_SCRATCH, cbn) == 0 {
+            color(C_RED)  print("    the write failed")
+            color(C_GREY)  return 0
+        }
+        color(C_GREEN)
+        put("    wrote ")  put(cbn)  print(" bytes of clipboard to clip.txt")
+        color(C_GREY)
+        note_say("clipboard saved", 300)
+        return 0
+    }
+    # , - list what is on the disk, by NAME
+    if cmd == 44 {
+        color(C_CYAN)  print("  zlfs")
+        color(C_GREY)
+        if fs_ok() == 0 {
+            print("    no volume mounted - press . first")
+            return 0
+        }
+        lsi = 0
+        while lsi < fs_max() {
+            if fs_inuse(lsi) == 1 {
+                put("    ")
+                lsc = 0
+                while lsc < 24 {
+                    lsb = fs_ch(lsi, lsc)
+                    if lsb > 0 { emit(lsb) }
+                    lsc = lsc + 1
+                }
+                put("  ")  put(fs_bytes(lsi))  put(" bytes at LBA ")
+                print(fs_lba(lsi))
+            }
+            lsi = lsi + 1
+        }
+        put("    ")  put(fs_n())  put(" file(s), ")
+        put(fs_free())  print(" blocks free")
+        return 0
+    }
     if cmd == 122 {                       # z - the processor, read from itself
         color(C_CYAN)  print("  the processor, via CPUID and the MSRs")
         color(C_GREY)
@@ -1953,9 +2158,70 @@ fn run_command(cmd, arg) {
         color(C_GREY)  return 0
     }
     if cmd == 12 { wm_peak0()  print("  peak reset")  return 0 }
+    # R - run a program the kernel was NOT built with. Typed only: `run` needs a
+    # FILENAME, and the single-key path folds everything after the letter into a
+    # decimal accumulator, so there is no character buffer on it to hold a word.
+    # term.c has the whole line already and hands the text to exec.c in C.
+    #
+    # exec_run() takes no argument and returns a state code, never a name. That
+    # is the whole safety property here: a filename that reached zl would meet
+    # zl_binop, which hard-faults on ANY string operand before it ever gets to
+    # `==`, so the natural way to write this in zl compiles clean and halts the
+    # machine. exec.c does the comparing.
+    if cmd == 82 {
+        exec_run()
+        # The window is opened only for a request that named something. `run`
+        # with no filename is a usage error and gets its line and nothing else;
+        # a window that says "you forgot the argument" is noise. Anything that
+        # names a file gets the window, because from Item 2 on that window is
+        # where the program lives - and a window that only ever appears on the
+        # success path is a window nobody has tested.
+        if exec_window() == 1 { open_run_window() }
+        return 0
+    }
     if cmd == 113 { return 1 }
     color(C_RED)  print("  unknown command - press h for help")
     color(C_GREY) return 0
+}
+
+# ONE window, reused. `run` twice should not leave two windows on the desktop,
+# and wm.c's table is WM_MAX=12 deep - a new window per invocation runs it out
+# in twelve commands and then fails silently, which is the failure shape this
+# project keeps paying for.
+run_win = 0 - 1
+fn open_run_window() {
+    if wm_avail() == 0 { return 0 }
+    u = ui()
+    if run_win >= 0 {
+        if wm_is_open(run_win) == 1 {
+            wm_raise(run_win)
+            wm_dmg(run_win)
+            # focus goes back below, for the same reason as on the open path
+            wm_setfocus(shell_win)
+            return 0
+        }
+    }
+    run_win = wm_open(APP_RUN, exec_title(), 90 * u, 90 * u, 320 * u, 110 * u)
+    # AND HAND THE KEYBOARD STRAIGHT BACK. wm_open focuses whatever it just
+    # opened, so without this the run window holds focus, app_event has no
+    # APP_RUN branch, and every subsequent keystroke is dropped - the terminal
+    # goes dead and looks for all the world like the compositor crashed.
+    #
+    # This is not a new discovery, it is the SAME bug the comment above
+    # app_event records: three wm_opens at startup left About focused and the
+    # shell untypeable. It was fixed there with an explicit wm_focus and it has
+    # to be fixed the same way at every later wm_open, because "wm_open steals
+    # focus" is a property of wm.c, not of that one call site.
+    #
+    # Focus does not imply raise (wm.c), so the run window stays on top and the
+    # keys still go to the terminal - which is what someone who just typed a
+    # command into that terminal expects.
+    #
+    # probe-run.py asserts this by typing `fib 20` afterwards and requiring
+    # 6765. Without the line below that assertion fails, which is how it was
+    # found rather than reasoned about.
+    wm_setfocus(shell_win)
+    return 0
 }
 
 # a live System Monitor window: the real CPUID brand, a memory bar, tick count
@@ -2457,6 +2723,7 @@ fn ip_gate() {
 }
 
 APP_BROWSER = 5                     # 3 was APP_SNAKE; the union merge gave both the same id
+APP_RUN     = 7                     # 3 is APP_SNAKE, 5 APP_BROWSER, 6 APP_SETTINGS
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     wy = ay - TITLE_H * ui()
@@ -2469,6 +2736,15 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
     # kernel subset has string literals but no string values. Same split the
     # terminal's command matcher had to make, and for the same reason.
     if id == APP_BROWSER { return br_draw(ax, ay, aw, ah, afocus) }
+    # The exec track's window. Its body is written in C for the same reason
+    # term.c's is: what it has to say includes a FILENAME, and a filename
+    # cannot be a zl value - zl_binop hard-faults on any string operand. So
+    # this branch does nothing but hand exec.c the client rectangle.
+    if id == APP_RUN {
+        u = ui()
+        exec_draw(ax + 8 * u, ay + 6 * u, aw - 16 * u, ah - 12 * u, TXT_HI, TXT_DIM, ACCENT)
+        return 0
+    }
     if id == APP_SHELL {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the
@@ -2482,8 +2758,18 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
     return 0
 }
 
-# Return 1 if handled. 'q' or Esc ends the session - NEVER "press any key",
-# which is the phrase this whole rewrite exists to delete.
+# Return 1 if handled, 0 if NOT. The fall-through used to `return 1`, so the
+# System Monitor and the About window each claimed to have handled every event
+# sent to them and then dropped it. wm.c discards this value at all three
+# hook_event call sites today, so that was not what made the terminal
+# untypeable - THAT was wm_open focusing the window it just opened, which left
+# the shell (opened first) unfocused while About (opened last) received every
+# keystroke and ignored it. Fixed where it belongs, with wm_focus below.
+#
+# The honest return value stays anyway. ui.h states the contract, wm.c will
+# read it the moment there is a fallback path for an unhandled key, and
+# claiming to have handled something you dropped is the same bug class as a
+# silent fallback - which is this repo's most expensive recurring bug.
 fn app_event(id, win, ety, ecode, ex, ey) {
     if id == APP_SNAKE { return sn_event(ety, ecode) }
     if id == APP_MENU  { return menu_event(ety, ecode, ex, ey, win) }
@@ -2531,7 +2817,7 @@ fn app_event(id, win, ety, ecode, ex, ey) {
         }
         return 1
     }
-    return 1
+    return 0
 }
 
 # Runs every frame, must be cheap, MUST NOT DRAW. Returning 1 means "my state
@@ -3049,6 +3335,20 @@ fn wm_session() {
         return 0
     }
     color(C_GREY)  print("  the compositor needs the framebuffer console")
+    # SAY THAT THE COMPOSITOR STARTED, and say WHERE THE SHELL IS. It reaches
+    # the serial log even though the console's pixels are muted, because
+    # con_mute mutes only the pixels - so a headless gate can tell "the
+    # compositor is up and listening" from "the w never arrived", which are
+    # otherwise the same silence. probe-term.py waits on this line rather than
+    # on a wall-clock guess, and crops its screendump to the rectangle printed
+    # here rather than recomputing this layout in Python, where it would go
+    # stale the first time a window moves.
+    color(C_GREEN)  put("  compositor: ")
+    color(C_GREY)   put(wm_n())  put(" windows, shell client ")
+    put(wm_cx(shell_win))  put(",")  put(wm_cy(shell_win))  put(" ")
+    put(wm_cw(shell_win))  put("x")  print(wm_ch(shell_win))
+    while wm_run() == 1 { wm_frame() }
+    con_mute(0)
     return 0
 }
 
@@ -3245,7 +3545,21 @@ ok_line("keyboard on IRQ1 - no more polling the port")
 # machine the firmware's PS/2 emulation dies with ExitBootServices, so this is
 # the only keyboard there will be.
 usb_boot()
+# The program arena. It prints its own line with an ADDRESS in it, the way fb.c
+# does, because "the arena is up" is a claim and "16 MiB at 8 MiB, ends at
+# 24 MiB, ceiling 128 MiB" is a fact somebody can check against the map.
+#
+# It is called HERE, at boot, rather than lazily on the first `run`: an arena
+# that is not backed by RAM is something you want to be told about while you
+# are still reading the boot log, not three keystrokes into a program.
+arena_up()
 ok_line("zl runtime, kernel subset")
+# STILL TRUE, and it is worth saying why rather than leaving the next reader to
+# wonder whether it was just missed. A bump allocator with no free() and no
+# reuse inside a run is not a heap - there is nothing to fragment, nothing to
+# double-free, and nothing to leak that a reset does not reclaim. The line stops
+# being honest the day the interpreter boxes lists and strings (EXEC-PROMPT §8),
+# and that is the change that has to carry it, not this one.
 info_line("no heap, no filesystem, no scheduler")
 
 print("")

@@ -33,10 +33,10 @@ echo "built ./inputtest_hid (run: ./inputtest_hid)"
 # sliver of an old window left on the wallpaper, a click landing on the window
 # underneath, a drag that stops when the pointer outruns the frame. None of
 # those show in a screenshot taken a frame later.
-gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest wmtest.c ../wm.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest        (run: ./wmtest)"
-gcc -O2 -w -o wmtest_feel wmtest_feel.c ../wm.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest_feel wmtest_feel.c ../wm.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest_feel"
 
@@ -44,7 +44,7 @@ echo "built ./wmtest_feel"
 # wrong window; eyes catch a title bar four pixels too tall, or a toggle that
 # renders as a circle instead of a pill. Both were real, and only the second
 # kind is found by looking.
-gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmshot wmshot.c ../wm.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmshot        (run: ./wmshot out.ppm)"
 
@@ -54,7 +54,7 @@ echo "built ./wmshot        (run: ./wmshot out.ppm)"
 # 2.25 and 16,000 us at load 7.43, which is not an A/B. Cycles counted here are
 # perturbed by cache pressure, not by an order of magnitude, and it attributes
 # the cost per app instead of reporting one number.
-gcc -O2 -w -o wmbench wmbench.c ../wm.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmbench wmbench.c ../wm.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../term.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmbench       (run: ./wmbench)"
 # The settings block, against a fake disk. This is the first code in the project
@@ -157,3 +157,82 @@ echo "built ./inputtest     (run: ./inputtest)"
 gcc -O1 -g -Wall -Wextra -Wno-unused-function -o inputtest_feel \
     inputtest_feel.c ../input.c
 echo "built ./inputtest_feel"
+
+# The program arena, asserted. This one is the cheapest gate in the project -
+# no QEMU, no GPU, no sudo - because arena.c is just arithmetic against memory,
+# and the arithmetic is the entire point: a ceiling test written as an addition
+# instead of a subtraction hands a script the whole machine. Built at the same
+# -O2 the kernel uses; the harness mmaps the address arena.c hardcodes so the
+# shipping source compiles unmodified.
+# The error boundary: twenty lines of assembly the whole kill path rests on.
+# Built for BOTH architectures, because a setjmp that forgets a callee-saved
+# register does not crash - it hands back a stale value after an unwind, and
+# the symptom surfaces in whatever loop was using that register, in another
+# file, later. The i386 build is the one the kernel actually ships.
+gcc -O2 -w -o jmptest   jmptest.c ../ksetjmp.S
+gcc -m32 -O2 -w -o jmptest32 jmptest.c ../ksetjmp.S
+echo "built ./jmptest       (run: ./jmptest && ./jmptest32)"
+
+# The kernel's libc replacements, against the real libc. Fourteen functions,
+# each a dozen lines, each with a well-known way to be SUBTLY wrong - signed
+# chars in strcmp, strncpy forgetting to pad, memmove copying forwards through
+# an overlap. None of those crash; they return a plausible wrong answer inside
+# an interpreter running somebody's script. So they are checked against glibc's
+# own on tens of thousands of generated inputs rather than against what I
+# thought to test. Links the REAL arena.c, so the allocator is exercised for
+# real rather than stubbed.
+gcc -O2 -w -o libctest libctest.c ../interp_kernel.c ../arena.c -lm
+echo "built ./libctest      (run: ./libctest)"
+
+gcc -O2 -w -o arenatest arenatest.c ../arena.c
+echo "built ./arenatest     (run: ./arenatest)"
+
+# `run`, and every way it declines. TWO binaries from one source, which is the
+# point of exec.c's weak fs_* references: with a filesystem linked it reaches
+# not-found / empty / too-big / loaded; with nothing defining fs_* the weak
+# symbols are NULL and it says "no fs driver" instead. Since fs.c was merged the
+# FIRST is what the kernel ships - and exec.c did not change by a character to
+# make that happen. The second still earns its place: it is the only proof that
+# the NULL-weak branch is reached rather than merely written, and it is the
+# branch any build without fs.c still lands on.
+gcc -O2 -w -o exectest exectest.c ../exec.c
+echo "built ./exectest      (run: ./exectest)"
+
+# The filesystem, against a RAM disk that can be told to fail a write. fs.c
+# talks to storage through three functions, so replacing them with an array is
+# the whole of the fake hardware - and it buys the sequences that matter: a
+# torn write, a deleted file's blocks being reused under a live neighbour, a
+# superblock with one byte flipped in its tail. Built -Wall -Wextra, unlike the
+# harnesses above, because this one can lose data.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
+    -o fstest fstest.c ../fs.c
+echo "built ./fstest        (run: ./fstest)"
+
+# The clipboard, window snapping and notifications. All three are integer logic
+# with no framebuffer, and all three have bugs that a screenshot cannot show: a
+# clipboard that truncates silently, a snap that overwrites its restore
+# rectangle on the SECOND snap, a toast that eats the next keystroke.
+# Deliberately not folded into wmtest.c - that harness is being edited in
+# another worktree right now, and colliding with it would help nobody.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter \
+    -o systest systest.c ../clip.c ../snap.c ../notify.c
+echo "built ./systest       (run: ./systest)"
+
+# The clock. Two port instructions and a pile of decoding, and the bug it
+# exists to avoid - a read torn across the second boundary, giving a time an
+# hour wrong - lasts a few hundred microseconds a second and cannot be
+# reproduced on demand any other way. So the CMOS chip is faked: it can hold
+# UIP high, hand out a different time on the second sweep, claim any of the
+# three encodings, or not be there at all.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -DRTC_HOSTTEST \
+    -o rtctest rtctest.c ../rtc.c
+echo "built ./rtctest       (run: ./rtctest)"
+
+# The toast INSIDE the compositor. systest asserts notify.c's own queue and
+# expiry; this asserts the part that only exists once wm.c is involved - that
+# it paints ON TOP of a window, that it leaves no ghost when it retires, and
+# that focus never moves, because a toast is not a window and cannot be one.
+gcc -O2 -w -o toasttest toasttest.c ../wm.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c \
+    ../input.c ../notify.c ../snap.c \
+    ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
+echo "built ./toasttest     (run: ./toasttest)"

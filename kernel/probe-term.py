@@ -1,0 +1,324 @@
+#!/usr/bin/env python3
+"""probe-term.py - does the terminal in the compositor actually WORK?
+
+term.c was written, wired, linked and committed, and nobody had ever typed a
+command into it. Everything in the platform queue sits on top of that
+assumption, so it gets a gate rather than a hand test.
+
+It types five things and asserts on each:
+
+    help        the app list reaches the shell
+    uptime      a live figure, so the command really ran
+    fib 20      -> 6765, which proves the ARGUMENT parser, not just dispatch
+    nonsense    -> "unknown command: nonsense"     <- THE IMPORTANT ONE
+    clear       the scrollback empties
+
+The unknown-command case matters most. A shell that silently ignores what you
+typed is worse than one with no commands at all, and it is the only one of the
+five whose failure looks exactly like success from a distance.
+
+TWO THINGS THIS HAD TO WORK AROUND, both measured rather than guessed:
+
+1. SERIAL KEYSTROKES CANNOT REACH THE COMPOSITOR. The text shell reads the
+   UART in key_get() (kernel.zl), so `probe-shot.py -k` works there. wm_frame()
+   does not: its only input is input_poll() -> idt_scan() (PS/2) and xhci_key()
+   (USB HID), and nothing in the compositor path ever looks at COM1. Bytes sent
+   down the serial socket after 'w' sit in the FIFO and are eventually eaten by
+   the text shell as single-key commands, which is worse than nothing. So keys
+   go through QMP input-send-event, and only the initial 'w' goes over serial.
+
+2. THE TERMINAL'S OWN OUTPUT DID NOT REACH THE SERIAL LOG. term_putc writes the
+   scrollback ring and nothing else, so the unknown-command message and the
+   echo of the typed line were invisible to any headless gate. term.c now emits
+   those through term_say(), which writes the scrollback AND the serial port
+   but deliberately not the console. Without that change the assertion this
+   gate exists for could not be made at all.
+
+`clear` prints nothing on any sink by design, so it is the one assertion made
+on PIXELS: an ink count over a QMP screendump, before and after. Both numbers
+are printed, because "fewer" is a measurement and "it looked empty" is not.
+
+Nothing here waits a fixed wall-clock time for anything the guest decides -
+every wait polls for a marker, per the project rule that a gate must never be
+timing-sensitive. The only clocked waits are the settles that let a frame
+finish rendering before it is photographed, which decide nothing.
+
+    ./probe-term.py                 # the gate
+    ./probe-term.py --keep-shots    # ...and leave the PNGs in shots/
+"""
+
+import argparse
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+from exercise import Serial, Qmp, qemu_argv, build, PROMPT  # noqa: E402
+
+SHOTS = os.path.join(HERE, "shots")
+
+# The compositor announces itself on serial even though its console pixels are
+# muted, so "it is up and listening" is distinguishable from "the w never
+# arrived". Those are the same silence otherwise, and telling them apart by
+# waiting longer is exactly the timing-sensitive gate this project banned.
+COMPOSITOR = "compositor:"
+
+# QEMU qcodes. A character with no qcode is a hard error, never a silent skip:
+# a probe that quietly drops a keystroke asserts against a command nobody typed
+# and passes for the wrong reason. probe-mouse.py already cost this project one
+# of those.
+QCODE = {
+    " ": "spc", "\n": "ret", "-": "minus", "=": "equal",
+    ".": "dot", ",": "comma", "/": "slash", ";": "semicolon", "'": "apostrophe",
+}
+for _c in "abcdefghijklmnopqrstuvwxyz":
+    QCODE[_c] = _c
+for _c in "0123456789":
+    QCODE[_c] = _c
+
+
+class Transcript:
+    """Serial.wait() DRAINS the buffer when it fails to match, which silently
+    throws away output a later assertion needs. This keeps a running record and
+    puts back anything a failed match consumed."""
+
+    def __init__(self, ser):
+        self.ser = ser
+        self.log = ""
+
+    def expect(self, marker, ceiling=60):
+        ok, got = self.ser.wait(marker, ceiling)
+        if ok:
+            self.log += got
+        else:
+            self.ser.buf = got + self.ser.buf      # unconsumed - hand it back
+        return ok
+
+    def seen(self, marker, ceiling=60):
+        """Consume up to and including `marker`, returning what came with it."""
+        ok, got = self.ser.wait(marker, ceiling)
+        if ok:
+            self.log += got
+            return got
+        self.ser.buf = got + self.ser.buf
+        return None
+
+
+def qtype(qmp, text, settle=0.12):
+    """Type `text` on the emulated keyboard, one key at a time.
+
+    input-send-event, not send-key: under -display none there is no active
+    console handler and send-key is silently dropped. Both the PS/2 and the USB
+    path turn a key into an EV_CHAR (input.c:252 and input.c:312), so either
+    keyboard QEMU routes this to will do.
+    """
+    import time
+    for ch in text:
+        code = QCODE.get(ch)
+        if code is None:
+            raise RuntimeError(f"no qcode for {ch!r} - add one rather than skipping it")
+        qmp.sendkey(code)
+        time.sleep(settle)
+
+
+def ppm_crop(path, box, step=2):
+    """Every step'th pixel inside `box` = (x, y, w, h), as a list of 3-byte
+    colours. A whole-frame sample is the wrong instrument here: the wallpaper
+    is a full-screen GRADIENT, so almost every pixel on the desktop is a colour
+    that occurs a handful of times, and any "how many unusual colours" measure
+    over the whole frame is dominated by the wallpaper and blind to the text.
+    Measured: emptying an entire screen of scrollback moved a whole-frame ink
+    count by 11%, which is indistinguishable from noise. Cropped to the window,
+    the same change is total."""
+    with open(path, "rb") as fh:
+        blob = fh.read()
+    if not blob.startswith(b"P6"):
+        return None
+    fields, i = [], 2
+    while len(fields) < 3:
+        while i < len(blob) and blob[i:i + 1].isspace():
+            i += 1
+        if blob[i:i + 1] == b"#":
+            while i < len(blob) and blob[i] != 0x0A:
+                i += 1
+            continue
+        j = i
+        while j < len(blob) and not blob[j:j + 1].isspace():
+            j += 1
+        fields.append(int(blob[i:j])); i = j
+    i += 1
+    w, h, _ = fields
+    px = blob[i:]
+    x0, y0, bw, bh = box
+    x1, y1 = min(x0 + bw, w), min(y0 + bh, h)
+    out = []
+    for y in range(max(0, y0), max(0, y1), step):
+        base = y * w * 3
+        for x in range(max(0, x0), max(0, x1), step):
+            p = base + x * 3
+            out.append(bytes(px[p:p + 3]))
+    return out
+
+
+def ink(px):
+    """How much TEXT is in a crop, as a count of pixels.
+
+    A glyph is drawn in a text colour over a FLAT panel, and anti-aliasing puts
+    a spread of intermediate shades along every edge. Inside a window the
+    commonest colour is the panel itself, so "everything that is not the
+    commonest colour" is the text, its anti-aliased edges, and nothing else. No
+    theme colour is named here, which matters: the look track is changing all
+    of them in another worktree.
+    """
+    if not px:
+        return None
+    counts = {}
+    for p in px:
+        counts[p] = counts.get(p, 0) + 1
+    return len(px) - max(counts.values())
+
+
+def shot(qmp, tmp, name, box, keep):
+    ppm = os.path.join(tmp, name + ".ppm")
+    if not qmp.screendump(ppm):
+        return None
+    px = ppm_crop(ppm, box)
+    if keep:
+        os.makedirs(SHOTS, exist_ok=True)
+        png = os.path.join(SHOTS, "term-" + name + ".png")
+        subprocess.run(["convert", ppm, png], capture_output=True)
+        if not os.path.exists(png):          # no ImageMagick - keep the PPM
+            subprocess.run(["cp", ppm, os.path.join(SHOTS, "term-" + name + ".ppm")])
+    return px
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--boot-timeout", type=float, default=240)
+    ap.add_argument("--step-timeout", type=float, default=60)
+    ap.add_argument("--settle", type=float, default=1.5,
+                    help="seconds to let a frame render before photographing it")
+    ap.add_argument("--keep-shots", action="store_true")
+    ap.add_argument("--no-build", action="store_true")
+    args = ap.parse_args()
+
+    import time
+
+    if not args.no_build:
+        build(False)
+
+    tmp = tempfile.mkdtemp(prefix="probeterm-")
+    ser_path = os.path.join(tmp, "ser.sock")
+    qmp_path = os.path.join(tmp, "qmp.sock")
+    proc = subprocess.Popen(qemu_argv(tmp, False, ser_path, qmp_path),
+                            cwd=HERE, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+    failures = []
+
+    def check(label, ok, detail=""):
+        print(f"  {'ok  ' if ok else 'FAIL'}  {label}{('   ' + detail) if detail else ''}")
+        if not ok:
+            failures.append(label)
+
+    try:
+        ser = Serial(ser_path)
+        qmp = Qmp(qmp_path)
+        t = Transcript(ser)
+
+        if not t.expect("ready.", args.boot_timeout):
+            print("never booted. serial so far:\n" + t.log[-2000:])
+            return 1
+
+        # THE COMPOSITOR MAY ALREADY BE THE BOOT STATE. Queue item 2 replaces
+        # the shell loop with wm_session(), at which point there is no text
+        # prompt to send 'w' to and sending one would type a stray character
+        # into the terminal. Ask which world we are in rather than assuming,
+        # so this gate keeps working across that change unaltered.
+        if t.expect(COMPOSITOR, 8):
+            print("  note  the compositor is the boot state - no 'w' needed")
+        else:
+            if not t.expect(PROMPT, args.step_timeout):
+                print("booted but no shell prompt:\n" + t.log[-2000:])
+                return 1
+            ser.send("w")                     # the LAST thing sent over serial
+            if not t.expect(COMPOSITOR, args.step_timeout):
+                print("the compositor never started:\n" + t.log[-2000:])
+                return 1
+            print("  ok    'w' started the compositor")
+
+        # The rest of that line carries the shell's client rectangle. Crop to
+        # what the kernel says rather than recomputing the layout here.
+        rest = t.seen("\n", args.step_timeout) or ""
+        m = re.search(r"shell client (\d+),(\d+) (\d+)x(\d+)", rest)
+        if not m:
+            print("the compositor did not report the shell rect: " + repr(rest))
+            return 1
+        box = tuple(int(g) for g in m.groups())
+        print(f"  ok    shell client rect {box[0]},{box[1]} {box[2]}x{box[3]}")
+
+        time.sleep(args.settle)
+
+        # ---- the five commands ------------------------------------------
+        # Each is asserted twice: the ECHO proves the keystrokes arrived at
+        # all, and the RESULT proves the command ran. Without the echo a
+        # command that produces no output (clear) is indistinguishable from a
+        # key that never landed.
+        for cmd, marker, what in (
+            ("help",     "h        this help",         "help lists the apps"),
+            ("uptime",   "ticks at 100 Hz",            "uptime reports a live figure"),
+            ("fib 20",   "6765",                       "fib 20 = 6765 - the ARGUMENT parser works"),
+            ("nonsense", "unknown command: nonsense",  "an unknown command SAYS SO"),
+        ):
+            qtype(qmp, cmd + "\n")
+            if not t.expect("zl> " + cmd, args.step_timeout):
+                check(what, False, "the keystrokes never arrived")
+                continue
+            check(what, t.expect(marker, args.step_timeout))
+
+        # ---- clear, which prints nothing anywhere by design --------------
+        before = shot(qmp, tmp, "before-clear", box, args.keep_shots)
+        qtype(qmp, "clear\n")
+        echoed = t.expect("zl> clear", args.step_timeout)
+        check("clear was typed and echoed", echoed)
+        time.sleep(args.settle)
+        after = shot(qmp, tmp, "after-clear", box, args.keep_shots)
+
+        i0, i1 = ink(before), ink(after)
+        if i0 is None or i1 is None:
+            check("clear empties the scrollback", False, "no screendump")
+        else:
+            # Inside the client area nothing survives clear except the one-line
+            # prompt, so this is a near-total collapse rather than a nudge.
+            # 0.2 leaves room for the prompt, the caret and the window's inner
+            # border without naming a single theme colour.
+            check("clear empties the scrollback", i1 < i0 * 0.2,
+                  f"ink {i0} -> {i1} inside the shell")
+
+        # ---- the double prompt, reported rather than asserted ------------
+        # PLATFORM-PROMPT item 1 names this and predicts it disappears when the
+        # compositor becomes the boot state, because then no text shell ever
+        # prints a prompt for the scrollback to capture. Print the evidence
+        # either way; asserting it before its fix has landed would gate this
+        # item on the next one.
+        captured = t.log.count(PROMPT)
+        print(f"  note  '{PROMPT.strip()}' appears {captured}x in this session's serial log")
+
+        print()
+        if failures:
+            print(f"terminal gate FAILED: {len(failures)} - " + ", ".join(failures))
+            print("\n--- serial transcript (tail) ---\n" + t.log[-3000:])
+            return 1
+        print("terminal gate green: five commands typed, five results asserted")
+        return 0
+    finally:
+        proc.kill()
+        proc.wait()
+        subprocess.run(["rm", "-rf", tmp])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

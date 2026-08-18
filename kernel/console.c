@@ -98,6 +98,13 @@ int console_ui_scale(void) { return fb_active() ? fb_ui_scale() : 1; }
 int console_cell_h(void) { return fb_active() ? fb_cell_h() : 16; }
 int console_rows(void) { return fb_active() ? fb_get_rows() : 25; }
 
+/* WHERE VIDEO MEMORY ACTUALLY IS. The `m` command pokes a byte into it and
+ * reads it back, which is a real proof that we own the display - but only if
+ * it pokes the right memory. Poking 0xB8000 unconditionally read back 255 on
+ * the desktop, because in a framebuffer mode nothing decodes the VGA text
+ * buffer and the write went nowhere. So whichever console is up answers with
+ * its own memory: the linear framebuffer, or the text buffer at 0xB8000. */
+
 /* Which loader booted us. GRUB always passes a non-null multiboot info
  * pointer; our own raw_boot.asm hands over with ebx = 0. So a null mb_addr
  * means we came up on our own bootloader, and the boot log should say so
@@ -238,6 +245,17 @@ void console_present(void) { if (fb_active()) fb_present(); }
  * a complete transcript and every automated gate reads exactly what it read
  * before. That split is the whole point: the serial log must not depend on who
  * owns the framebuffer. */
+/* desktop/exec-track arrived with the same feature under a second name -
+ * console_quiet() over `static int quiet` - and added the reason from its own
+ * side: the console's text region is set once at boot from the STATIC
+ * desktop's terminal frame, so under the compositor the shell lives in a
+ * wm_open window somewhere else entirely and every character printed by a
+ * command in that window landed as an opaque glyph on the wallpaper, at
+ * coordinates from a layout no longer on screen - plus an fb_present() per
+ * line, fighting wm_frame for the blit.
+ *
+ * One flag, one function. Both builtin names existed and kernel.zl called
+ * BOTH, so the two could disagree about who owns the screen. */
 static int con_muted = 0;
 
 void console_mute(int on) { con_muted = on ? 1 : 0; }

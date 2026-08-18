@@ -139,6 +139,15 @@ static volatile int mouse_x = 400, mouse_y = 300, mouse_btn = 0;
  * else entirely. */
 static volatile u8  mpkt[4];
 static volatile int mphase = 0;
+static volatile int mouse_irqs = 0;
+
+/* The clamp the ISR applies. It used to be the literals 2000 and 1500, chosen
+ * to be "generous" because this file has no idea how big the screen is - and
+ * the cost of that was a pointer that could be driven a long way off a
+ * 1280x800 panel and then take a long drag back to reappear. fb_setup knows
+ * the real mode, so it tells us; until it does, the old literals stand and
+ * behave exactly as before. */
+static volatile int mouse_max_x = 2000, mouse_max_y = 1500;
 
 int idt_mouse_x(void)   { return mouse_x; }
 int idt_mouse_y(void)   { return mouse_y; }
@@ -171,8 +180,9 @@ int idt_mouse_haswheel(void) { return mouse_pktlen == 4; }
  * interrupt is arriving at all (controller not enabled, or the line is not
  * routed), non-zero with a stuck position means the packets are arriving and
  * the decode is wrong. */
-static volatile unsigned mouse_irqs = 0;
-unsigned idt_mouse_irqs(void) { return mouse_irqs; }
+/* mouse_irqs itself is declared with the rest of the PS/2 state above; this
+ * merge produced a second one, `unsigned` against the original `int`. */
+unsigned idt_mouse_irqs(void) { return (unsigned)mouse_irqs; }
 
 /* One byte of a mouse packet, wherever it was noticed.
  *

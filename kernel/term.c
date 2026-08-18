@@ -38,6 +38,7 @@ static int  pending_arg;
 /* Set when a typed word matched nothing. zl reads it to pulse the window - a
  * refusal you can SEE beats one you have to read, and the message scrolls. */
 static int  last_unknown;
+static char argstr[TERM_COLS];      /* ...and the argument as TEXT, for C  */
 
 /* A TERMINAL IS A GRID, and this drew with the PROPORTIONAL font.
  *
@@ -59,6 +60,10 @@ void fb_text_aa2x(int px, int py, const char *s, unsigned int fg);
 int  fb_cell_w(void);
 int  fb_cell_h(void);
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
+
+/* One byte to COM1. See the comment on term_say below for why this file needs
+ * the serial port directly rather than going through zl's print. */
+void zl_serial_putc(char c);
 
 /* ---- capture ---------------------------------------------------------------
  * Called for EVERY character the kernel prints, from zl_putc. The console
@@ -85,6 +90,28 @@ void term_clear(void)
 {
     s_head = 0; s_live = 0; s_col = 0; in_len = 0;
     for (int i = 0; i < TERM_ROWS; i++) scroll[i][0] = 0;
+}
+
+/* ---- what THIS file says, as opposed to what it captures ------------------
+ * term_putc is a capture sink: it is fed by zl_putc, so everything zl prints
+ * is already on the serial log by the time it arrives here. The two messages
+ * term.c generates ITSELF are not - the unknown-command line and the echo of
+ * the line you typed - and calling term_putc for them put them in the
+ * scrollback and NOWHERE else. That made the single most important behaviour
+ * in this shell untestable: "an unknown command must SAY SO" could only be
+ * checked by looking at a photograph of the screen.
+ *
+ * So they go to the scrollback AND to the serial log, and deliberately NOT to
+ * the console. console_putc draws glyphs into the back buffer at the console's
+ * own cursor, which during a compositor session is the OLD static desktop's
+ * text region - a rectangle that has nothing to do with the shell window. A
+ * message printed that way lands on the wallpaper.
+ *
+ * Bare LF, no CR, because that is what zl_putc emits and the serial log should
+ * not have two conventions in it. */
+void term_say(const char *s)
+{
+    for (; *s; s++) { term_putc(*s); zl_serial_putc(*s); }
 }
 
 /* ---- typing ----------------------------------------------------------------
@@ -175,6 +202,9 @@ static const struct cmd table[] = {
     { "redraw",   99 },
     { "peak",     11 }, { "peakreset", 12 },   /* the frame timer */
     { "reboot",  114 }, { "halt",    113 }, { "quit",  113 }, { "exit", 113 },
+    /* 82 is 'R'. Lower-case 'r' (114) is already reboot, and the exec track
+     * needs a code run_command dispatches on that nothing else claims. */
+    { "run",      82 },
     { "clear",     1 },                       /* handled here, not by zl */
     { 0, 0 }
 };
@@ -196,8 +226,22 @@ static int match_cmd(void)
     int wlen = i - start;
     if (wlen <= 0) return 0;                  /* empty line: no command */
 
+    /* THE ARGUMENT, BOTH WAYS, AND FROM THE SAME START POINT.
+     *
+     * `arg` has always been a decimal number, which is all `fib 20` and
+     * `edit 3` ever needed. A filename is not a number, so the raw text is
+     * captured too - and both are read from the SAME offset rather than the
+     * text picking up where the digit scan stopped. That ordering is the whole
+     * correctness of it: `run 2048.zl` would otherwise let the digit loop eat
+     * "2048" and leave the text as ".zl", which is a file-not-found that reads
+     * like a typo. Taken from the same start, arg is 2048 and argstr is
+     * "2048.zl", each right for whoever asked.
+     *
+     * No existing command's behaviour changes - `arg` is parsed from exactly
+     * the offset it always was. */
     int arg = 0;
     while (input[i] == ' ') i++;
+    int astart = i;
     while (input[i] >= '0' && input[i] <= '9') arg = arg * 10 + (input[i++] - '0');
 
     for (int k = 0; table[k].word; k++) {
@@ -205,25 +249,52 @@ static int match_cmd(void)
             if (table[k].code == 1) { term_clear(); return 0; }
             pending_cmd = table[k].code;
             pending_arg = arg;
+            /* ...and the same argument as TEXT, read from the SAME offset the
+             * digit scan started at, not from where it stopped. That ordering
+             * is the whole correctness of it: `run 2048.zl` would otherwise
+             * leave the text as ".zl" - a file-not-found that reads like a
+             * typo - while arg quietly took the 2048. From one start point,
+             * arg is 2048 and argstr is "2048.zl", each right for whoever
+             * asked, and no existing command's `arg` changes by a digit. */
+            {
+                int n = 0;
+                while (input[astart + n] && n < TERM_COLS - 1) {
+                    argstr[n] = input[astart + n];
+                    n++;
+                }
+                argstr[n] = 0;
+            }
             return 1;
         }
     }
 
     /* An unknown command must SAY SO. A shell that silently ignores what you
-     * typed is worse than one that has no commands at all. */
     last_unknown = 1;
-    const char *msg = "  unknown command: ";
-    while (*msg) term_putc(*msg++);
-    for (int k = start; k < start + wlen; k++) term_putc(input[k]);
-    term_putc('\n');
-    msg = "  type 'help'\n";
-    while (*msg) term_putc(*msg++);
+     * typed is worse than one that has no commands at all - which is why this
+     * is the assertion probe-term.py cares about most, and why it goes to the
+     * serial log rather than only into the scrollback. */
+    term_say("  unknown command: ");
+    {
+        char word[TERM_COLS];
+        int n = 0;
+        for (int k = start; k < start + wlen && n < TERM_COLS - 1; k++)
+            word[n++] = input[k];
+        word[n] = 0;
+        term_say(word);
+    }
+    term_say("\n  type 'help'\n");
     return 0;
 }
 
 int term_cmd(void) { int c = pending_cmd; pending_cmd = -1; return c; }
 int term_unknown(void) { int u = last_unknown; last_unknown = 0; return u; }
 int term_arg(void) { return pending_arg; }
+
+/* The argument as TEXT. Deliberately not routed through zl: runtime_kernel.c
+ * hard-faults on any string operand (:562, before the `==` arm at :573), so a
+ * filename that reaches zl compiles clean and halts the machine. C callers
+ * read it here; zl only ever sees the int. */
+const char *term_argstr(void) { return argstr; }
 
 /* ---- drawing ---------------------------------------------------------------
  * POSITION-PURE, as the app contract requires: every coordinate is derived

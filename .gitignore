@@ -65,3 +65,11 @@ kernel/hosttest/tritest
 kernel/hosttest/settingstest
 
 kernel/__pycache__/
+
+# hosttest binary: the arena gate (source is arenatest.c)
+kernel/hosttest/arenatest
+kernel/hosttest/exectest
+kernel/hosttest/exectest-nofs
+kernel/hosttest/jmptest
+kernel/hosttest/jmptest32
+kernel/hosttest/libctest

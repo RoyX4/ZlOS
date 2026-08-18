@@ -23,4 +23,13 @@ SECTIONS
     .bss    : { *(COMMON) *(.bss*) }
     . = ALIGN(16);
     __bss_end = .;
+
+    /* See link.ld. This path matters MOST of the three: raw_entry.S:16 puts
+     * the stack top at 6 MiB and it grows DOWN toward this symbol, so the
+     * image and the stack are walking at each other. */
+    __kernel_end = .;
+    ASSERT(__kernel_end <= 0x00600000,
+           "the kernel image has grown into the raw-boot stack at 6 MiB (raw_entry.S:16)")
+    ASSERT(__kernel_end <= 0x00800000,
+           "the kernel image has grown into the program arena at 8 MiB (arena.c ARENA_BASE)")
 }
