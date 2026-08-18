@@ -349,6 +349,27 @@ a line editor with history.
 
 **Unproven:** `i2c_hid.c` (QEMU has no Intel LPSS I2C) and the cold-start modeset.
 
+## zlOS keeps things now — `docs/system-track.md`
+
+Files had no names and nothing survived a reboot. **zlfs** (`fs.c`) is a
+superblock, a flat directory of 32 named entries, and files as contiguous runs
+on the NVMe disk. `rtc.c` reads the CMOS clock, so the header shows a real time
+instead of uptime — and the header has stopped drawing "net up", which claimed
+a network driver this tree does not contain. `clip.c`, `snap.c` and `notify.c`
+are the clipboard, window snapping and toasts.
+
+**`verify-disk.sh` is the only gate here that power-cycles the machine.** Three
+boots against one image, asserting a counter in a file goes 1 → 2 → 3. Two
+boots cannot tell "reformats every mount" (1,1,1) from "the second write never
+landed" (1,2,2).
+
+The write path was reviewed adversarially — a fresh agent told to lose a file,
+proving each claim by running it — and it found **six data-loss defects** in
+code that already had 63 passing assertions, including one where the comment
+asserted an invariant the code did not hold. All six are fixed with regressions
+that fail on the old code. The full account, and what is deliberately left
+undone in `wm.c`, is in [`docs/system-track.md`](docs/system-track.md).
+
 ## The recurring bug class — check this FIRST
 
 Five times now: **a DMA buffer outside guest RAM, or an address truncated to

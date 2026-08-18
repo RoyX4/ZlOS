@@ -30,6 +30,8 @@
     d        paint with the mouse
     <n> i    edit RAM file n (0-9) - ESC saves it
     l        list the RAM files
+    .        zlfs on the NVMe disk - mount, and count the boots
+    ,        list the files ON DISK, by name
     e        beep the PC speaker
     m        poke a byte into video memory and read it back
   our hardware drivers

@@ -31,7 +31,10 @@ CEILING=${CEILING:-240}
 OUT=$(mktemp); trap 'rm -f "$OUT" "$OUT".*' EXIT
 
 # ONE QEMU across the whole box, ever - four sessions share four cores.
-if pgrep -f qemu-system >/dev/null 2>&1; then
+# pgrep WITHOUT -f, so it matches the executable's name and not every command
+# line containing the string "qemu-system" - including this script's own
+# invocation, which made it refuse to run against itself.
+if pgrep '^qemu-system' >/dev/null 2>&1; then
     echo "SKIP: another qemu-system is already running on this box."
     echo "      §1.2 allows exactly one. Re-run when it is done."
     exit 2
