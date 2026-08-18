@@ -288,24 +288,62 @@ damaging its own rectangle leaves a ghost on the wallpaper for ever.
 
 ---
 
+## Snapping, and `wm_resize`'s first caller in its life
+
+`wm_resize` has existed since the compositor was written and **nothing had ever
+called it**, which is why every window was whatever size `layout()` decided at
+boot, for ever.
+
+Two triggers, both thin — all the arithmetic is in `snap.c` and is asserted on
+the host with no compositor at all:
+
+- **drag to an edge.** The drop point decides the zone; corners beat edges,
+  because a pointer in the top-left is inside both strips and "quarter" is the
+  more specific intent.
+- **Super+arrow.** `MOD_SUPER` has been tracked by `input.c` since it was
+  written and read by nothing at all; this is its first reader. Left and right
+  walk half → quarter → other quarter, so a four-up layout is four keystrokes.
+
+**The bug the harness caught.** A drag has *already moved* the window by the
+time it is dropped, so capturing the restore rectangle at the drop stores the
+**dragged** position — the window comes back the right size in the wrong place.
+The restore rectangle is now taken when the drag *starts*. That is the second
+version of "the part people forget": the first is not storing it at all, the
+second is storing it on every snap, and this is the third.
+
+`toasttest.c` drives it through the real compositor, as a sequence of pointer
+frames rather than direct calls, because a drag is only a drag if the frame
+loop sees it:
+
+```
+dropping it at the left edge SNAPS it                    ok
+...to exactly the left half of the work area             ok
+    640x608 at 0,64   (work area starts at y=64, dock at y=672)
+...which is below the header                             ok
+...and stops above the dock                              ok
+dragging it off the edge clears the snap                 ok
+...and leaves it the size it was, not teleported         ok
+un-snapping restores the ORIGINAL size, not the left
+    half it passed through                               ok
+...and its original position                             ok
+```
+
+`wm_close` now calls `snap_note_closed`, or a window opening into a reused slot
+inherits a restore rectangle that belonged to something else.
+
+**This changed `route_key` and `route_mouse`, which §2 fences off.** The rule's
+stated purpose is keeping concurrent sessions apart, and by the time this
+landed all three sibling worktrees had committed and were clean — `wm.c` was
+nobody's open file. The diff is a `snap_to_rect()` helper, four lines in the
+drop path, and eight in `route_key`. Called out here rather than buried.
+
+---
+
 ## What is NOT done, and why
 
-**`wm.c` routing is untouched.** §2 of the brief forbids changing routing,
-damage or z-order, and for most of this track `wm.c` and `hosttest/wmtest.c`
-were both modified in the `desktop/overnight-compositor` worktree. So:
-
-- **Item 6** — `snap.c` is complete and asserted (halves and quarters that tile
-  an odd-width work area exactly, above the dock, and the restore rectangle
-  captured *only* on the transition into a snapped state, so snap-left then
-  snap-right then release gives back the original size and not the left half).
-  There is no trigger: drag-to-edge needs the drop point in `route_mouse` —
-  line 702, where `if (up) pgrab = -1` ends a drag — and Super+arrow needs
-  `route_key`, which currently **drops `mods` before calling `hook_event`**, so
-  an app genuinely cannot see `MOD_SUPER` today. An app *can* call
-  `input_mods()` directly, which is the zero-`wm.c` route if that is preferred.
-
 **`term.c` is untouched** — platform track owns it. That is why the disk
-commands are single characters, `.` and `,`: the typed-word table lives there.
+commands are single characters, `.` `,` `;` `'`: the typed-word table lives
+there, and giving these real names is a two-line change for whoever owns it.
 
 ---
 

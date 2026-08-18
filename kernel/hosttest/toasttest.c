@@ -37,6 +37,18 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 unsigned int fb_get_px(int x, int y);
 void fb_clip_none(void);
 
+/* ---- snap.c -------------------------------------------------------------- */
+#define SNAP_NONE 0
+#define SNAP_LEFT 1
+#define SNAP_RIGHT 2
+#define SNAP_MAX 3
+#define SNAP_TL 4
+#define SK_DOWN 4
+void wm_snap_key(int win, int dir);
+void snap_reset(void);
+int  snap_state(int win);
+void snap_rect(int z, int sw, int sh, int rt, int rb, int *x, int *y, int *w, int *h);
+
 /* ---- notify.c ------------------------------------------------------------ */
 void        notify_reset(void);
 int         notify_post(const char *text, unsigned ticks);
@@ -102,6 +114,14 @@ static void ok(const char *what, int cond)
     if (!cond) fails++;
 }
 static void frame(void) { fake_ticks++; wm_frame(); }
+
+/* move the pointer and run one frame - the compositor only looks at the mouse
+ * once per tick, so a drag is a sequence of these, not a sequence of writes */
+static void pointer(int x, int y, int btn)
+{
+    fake_x = x; fake_y = y; fake_btn = btn;
+    frame();
+}
 
 /* how many pixels in this rectangle are neither wallpaper nor the app colour?
  * That is the toast: the only other thing that paints. */
@@ -200,6 +220,84 @@ int main(void)
     ok("the second takes over by itself",
        notify_active() && strcmp(notify_text(), "second") == 0);
     ok("...and focus never moved through any of it", wm_focused() == win);
+
+    /* =================================================================
+     * SNAPPING, THROUGH THE COMPOSITOR
+     *
+     * systest.c asserts snap.c's arithmetic. This asserts the part that only
+     * exists once wm.c is involved: that a DROP at an edge actually resizes
+     * the window, that dragging it away again clears the state so un-snapping
+     * cannot teleport it, and that wm_resize - which had no caller at all
+     * until now - is really being reached.
+     * ================================================================= */
+    printf("\n  -- snapping, through the compositor --\n");
+    notify_reset();
+    snap_reset();
+    wm_close(win);
+    for (int i = 0; i < 4; i++) frame();
+
+    const int RT = 32 * 2, RB = 64 * 2;      /* TOPBAR_H and dock, at scale 2 */
+    int s0 = wm_open(1, "snap", 300, 300, 420, 260);
+    for (int i = 0; i < 8; i++) frame();
+    int gx, gy, gw, gh;
+    wm_geometry(s0, &gx, &gy, &gw, &gh);
+    ok("a window opens at the size it asked for", gw == 420 && gh == 260);
+
+    /* pick it up by the title bar, drag to the left edge, drop */
+    const struct ui_theme *thm = ui_theme();
+    pointer(gx + 100, gy + thm->title_h / 2, 1);     /* press on the title bar */
+    pointer(60, 400, 1);                            /* drag left              */
+    pointer(2, 400, 1);                             /* ...to the edge         */
+    pointer(2, 400, 0);                             /* drop                   */
+    frame();
+
+    int ex, ey, ew, eh;
+    snap_rect(SNAP_LEFT, W, H, RT, RB, &ex, &ey, &ew, &eh);
+    wm_geometry(s0, &gx, &gy, &gw, &gh);
+    ok("dropping it at the left edge SNAPS it", snap_state(s0) == SNAP_LEFT);
+    ok("...to exactly the left half of the work area",
+       gx == ex && gy == ey && gw == ew && gh == eh);
+    printf("      %dx%d at %d,%d   (work area starts at y=%d, dock at y=%d)\n",
+           gw, gh, gx, gy, RT, H - RB);
+    ok("...which is below the header", gy >= RT);
+    ok("...and stops above the dock", gy + gh == H - RB);
+
+    /* drag it back into the middle: no longer snapped, and NOT restored */
+    pointer(gx + 100, gy + thm->title_h / 2, 1);
+    pointer(600, 400, 1);
+    pointer(600, 400, 0);
+    frame();
+    ok("dragging it off the edge clears the snap", snap_state(s0) == SNAP_NONE);
+    wm_geometry(s0, &gx, &gy, &gw, &gh);
+    ok("...and leaves it the size it was, not teleported", gw == ew && gh == eh);
+
+    /* a fresh window, snapped left then right, must restore to its ORIGINAL */
+    snap_reset();
+    wm_close(s0);
+    for (int i = 0; i < 4; i++) frame();
+    int s1 = wm_open(1, "restore", 250, 250, 500, 320);
+    for (int i = 0; i < 8; i++) frame();
+
+    pointer(250 + 60, 250 + thm->title_h / 2, 1);
+    pointer(2, 400, 1);
+    pointer(2, 400, 0);                             /* -> left half */
+    frame();
+    wm_geometry(s1, &gx, &gy, &gw, &gh);
+    ok("snapped left", snap_state(s1) == SNAP_LEFT && gw == ew);
+
+    pointer(gx + 60, gy + thm->title_h / 2, 1);
+    pointer(W - 2, 400, 1);
+    pointer(W - 2, 400, 0);                         /* -> right half */
+    frame();
+    ok("...then right", snap_state(s1) == SNAP_RIGHT);
+
+    /* Super+Down, through the same entry point route_key uses */
+    wm_snap_key(s1, SK_DOWN);
+    frame();
+    wm_geometry(s1, &gx, &gy, &gw, &gh);
+    ok("un-snapping restores the ORIGINAL size, not the left half it passed through",
+       gw == 500 && gh == 320);
+    ok("...and its original position", gx == 250 && gy == 250);
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;

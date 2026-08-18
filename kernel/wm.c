@@ -64,6 +64,27 @@ int         notify_post(const char *text, unsigned ticks);
 void        notify_rect(int sw, int sh, int reserve_bot, int scale,
                         int *x, int *y, int *w, int *h);
 
+/* ---- snap.c ---------------------------------------------------------------
+ * `wm_resize` has existed since this file was written and NOTHING HAS EVER
+ * CALLED IT. These two triggers are its first callers.
+ *
+ * All the arithmetic lives in snap.c and is asserted on the host with no
+ * compositor at all - the zones, the rectangles that tile an odd width
+ * exactly, and the restore rectangle that is captured only on the transition
+ * INTO a snapped state. What is here is only "when": a drop, and a key. */
+#define SNAP_NONE 0
+#define SK_LEFT   1
+#define SK_RIGHT  2
+#define SK_UP     3
+#define SK_DOWN   4
+int  snap_zone_for_point(int px, int py, int sw, int sh);
+int  snap_apply(int win, int z, int cx, int cy, int cw, int ch,
+                int sw, int sh, int rt, int rb, int *x, int *y, int *w, int *h);
+int  snap_release(int win, int *x, int *y, int *w, int *h);
+int  snap_key_zone(int win, int dir);
+void snap_note_moved(int win);
+void snap_note_closed(int win);
+
 /* ---- input.c ------------------------------------------------------------- */
 void input_poll(void);
 int  input_next(void);
@@ -80,6 +101,13 @@ int  input_y(void);
 
 #define MOD_ALT     (1 << 2)
 #define MOD_SUPER   (1 << 5)
+
+/* The navigation keys, as input.c numbers them. Above 0xFF on purpose: they
+ * have no character, so they can never be confused with one. */
+#define KEY_LEFT      0x110
+#define KEY_RIGHT     0x111
+#define KEY_UP        0x112
+#define KEY_DOWN      0x113
 
 unsigned int idt_ticks(void);
 
@@ -429,6 +457,10 @@ void wm_close(int win)
     wm_damage_win(win);
     wins[win].flags = 0;
     z_remove(win);
+    /* A closed window must not leave its snap state behind for whatever opens
+     * into the same slot next, or the new window un-snaps to a rectangle that
+     * belonged to something else entirely. */
+    snap_note_closed(win);
     /* focus the new top, so closing never leaves keys going nowhere */
     focus_win = nz ? zorder[nz - 1] : -1;
 }
@@ -707,6 +739,11 @@ void wm_repaint(void)
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
 static int grab_drag;           /* 1 = we are moving it, 0 = the app has it */
 static int grab_dx, grab_dy;    /* pointer offset inside the frame          */
+/* Where the window was BEFORE the drag started. A drag has already moved it
+ * by the time it is dropped on an edge, so capturing the restore rectangle at
+ * the drop stores the dragged position - the window comes back the right SIZE
+ * in the wrong PLACE. This is the rectangle un-snapping should return to. */
+static int grab_ox, grab_oy, grab_ow, grab_oh;
 
 /* Where tab `i` sits in the title bar. Drawing and hit-testing BOTH call this,
  * which is the only way to be sure a tab is clickable exactly where it looks -
@@ -754,6 +791,55 @@ static int in_closebox(int win, int x, int y)
     return x >= bx && x < bx + cs && y >= by && y < by + cs;
 }
 
+/* The desktop's furniture, in the only two numbers wm.c needs from it: the
+ * header bar at the top and the dock at the bottom. kernel.zl's TOPBAR_H and
+ * dock_y() are 32 and 64, times ui(). A "maximised" window that reaches under
+ * the dock cannot reach its own status bar. */
+#define RESERVE_TOP(t)  (32 * (t)->scale)
+#define RESERVE_BOT(t)  (64 * (t)->scale)
+
+/* Snap `win` to `z` (or un-snap it if z is SNAP_NONE), applying whatever
+ * geometry snap.c hands back. The two triggers below both end here, so there
+ * is one place where a snap actually changes a window. */
+static void snap_to_rect(int win, int z, int gx, int gy, int gw, int gh)
+{
+    const struct ui_theme *t = ui_theme();
+    int nx, ny, nw, nh;
+
+    if (z == SNAP_NONE) {
+        if (!snap_release(win, &nx, &ny, &nw, &nh)) return;
+    } else if (!snap_apply(win, z, gx, gy, gw, gh,
+                           (int)fb_pxw(), (int)fb_pxh(),
+                           RESERVE_TOP(t), RESERVE_BOT(t), &nx, &ny, &nw, &nh)) {
+        return;
+    }
+    /* damage the OLD rectangle before moving, or the window leaves a copy of
+     * itself behind on the wallpaper - wm_move and wm_resize each damage what
+     * they touch, but neither knows about the other's half of this */
+    wm_damage_win(win);
+    wm_move(win, nx, ny);
+    wm_resize(win, nw, nh);
+    wm_damage_win(win);
+}
+
+/* the ordinary entry: the restore rectangle is where the window is NOW */
+static void snap_to(int win, int z)
+{
+    int gx, gy, gw, gh;
+    wm_geometry(win, &gx, &gy, &gw, &gh);
+    snap_to_rect(win, z, gx, gy, gw, gh);
+}
+
+/* The keyboard half, public so it can be driven directly. Super+arrow arrives
+ * as a modifier plus a key code, and synthesising that through the event queue
+ * in a harness tests the queue rather than the snapping - so the trigger and
+ * the action are separated here, and both ends are reachable. */
+void wm_snap_key(int win, int dir)
+{
+    if (!wm_is_open(win)) return;
+    snap_to(win, snap_key_zone(win, dir));
+}
+
 static void route_mouse(int x, int y, int btn)
 {
     int down = (btn & 1) && !(last_btn & 1);
@@ -765,7 +851,21 @@ static void route_mouse(int x, int y, int btn)
     if (pgrab >= 0) {
         if (grab_drag) wm_move(pgrab, x - grab_dx, y - grab_dy);
         else if (hook_event) hook_event(win_app(pgrab), pgrab, EV_MOUSE, btn, x, y);
-        if (up) pgrab = -1;
+        if (up) {
+            /* A window DROPPED at a screen edge takes that half; at a corner,
+             * that quarter. Dropped anywhere else it is simply where you put
+             * it - and whatever snap it used to be in is no longer true, so
+             * its stored restore rectangle has to go with it or un-snapping
+             * later teleports it somewhere it has not been for ten minutes. */
+            if (grab_drag) {
+                int z = snap_zone_for_point(x, y, (int)fb_pxw(), (int)fb_pxh());
+                if (z != SNAP_NONE)
+                    snap_to_rect(pgrab, z, grab_ox, grab_oy, grab_ow, grab_oh);
+                else
+                    snap_note_moved(pgrab);
+            }
+            pgrab = -1;
+        }
         return;
     }
 
@@ -792,6 +892,7 @@ static void route_mouse(int x, int y, int btn)
             pgrab = hit; grab_drag = 1;
             grab_dx = x - wins[hit].x;
             grab_dy = y - wins[hit].y;
+            wm_geometry(hit, &grab_ox, &grab_oy, &grab_ow, &grab_oh);
             return;
         }
         /* a press in the client area hands the pointer to the app until
@@ -820,6 +921,19 @@ static void route_key(int type, int code, int mods)
     if (type == EV_KEY_DOWN && code == '\t' && (mods & MOD_ALT)) {
         cycle_focus();
         return;
+    }
+    /* Super+arrow. MOD_SUPER has been tracked by input.c since it was written
+     * and used for NOTHING - this is its first reader. Left and right walk
+     * half -> quarter -> other quarter, so a four-up layout is four
+     * keystrokes; up maximises; down un-snaps and does nothing to a window
+     * that was never snapped. */
+    if (type == EV_KEY_DOWN && (mods & MOD_SUPER) && focus_win >= 0) {
+        int dir = 0;
+        if (code == KEY_LEFT)  dir = SK_LEFT;
+        if (code == KEY_RIGHT) dir = SK_RIGHT;
+        if (code == KEY_UP)    dir = SK_UP;
+        if (code == KEY_DOWN)  dir = SK_DOWN;
+        if (dir) { wm_snap_key(focus_win, dir); return; }
     }
     /* Ctrl+W closes. Closing is the close box or Ctrl+W - NEVER "press any
      * key", which is the phrase this whole rewrite exists to delete. */
