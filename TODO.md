@@ -68,7 +68,6 @@ _none open._
 
 ## Open pull requests
 
-- [ ] #4 ci: gates on GitHub, a zl brief for agents, and a screenshot of the desktop  `ci/gates-and-agent-brief`
 - [ ] #2 fix(kernel): HID buffers sat inside fb.c's blur arena — the high-RAM map is now compiler-enforced  `fix/dma-map-hid-arena`
 
 ---
