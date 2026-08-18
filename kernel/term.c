@@ -41,6 +41,10 @@ int  fb_text_prop_w(const char *s);
 int  fb_text_prop_h(void);
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 
+/* One byte to COM1. See the comment on term_say below for why this file needs
+ * the serial port directly rather than going through zl's print. */
+void zl_serial_putc(char c);
+
 /* ---- capture ---------------------------------------------------------------
  * Called for EVERY character the kernel prints, from zl_putc. The console
  * still gets it too - this is a tee, not a redirect, so the serial log and the
@@ -68,6 +72,28 @@ void term_clear(void)
     for (int i = 0; i < TERM_ROWS; i++) scroll[i][0] = 0;
 }
 
+/* ---- what THIS file says, as opposed to what it captures ------------------
+ * term_putc is a capture sink: it is fed by zl_putc, so everything zl prints
+ * is already on the serial log by the time it arrives here. The two messages
+ * term.c generates ITSELF are not - the unknown-command line and the echo of
+ * the line you typed - and calling term_putc for them put them in the
+ * scrollback and NOWHERE else. That made the single most important behaviour
+ * in this shell untestable: "an unknown command must SAY SO" could only be
+ * checked by looking at a photograph of the screen.
+ *
+ * So they go to the scrollback AND to the serial log, and deliberately NOT to
+ * the console. console_putc draws glyphs into the back buffer at the console's
+ * own cursor, which during a compositor session is the OLD static desktop's
+ * text region - a rectangle that has nothing to do with the shell window. A
+ * message printed that way lands on the wallpaper.
+ *
+ * Bare LF, no CR, because that is what zl_putc emits and the serial log should
+ * not have two conventions in it. */
+static void term_say(const char *s)
+{
+    for (; *s; s++) { term_putc(*s); zl_serial_putc(*s); }
+}
+
 /* ---- typing ----------------------------------------------------------------
  * One character per call, from app_event. NO LOOP - that is the whole point:
  * read_line used to block, which is why the shell had to be the top of the
@@ -78,10 +104,14 @@ int term_key(int code)
 {
     if (code == 13 || code == 10) {          /* Enter */
         input[in_len] = 0;
-        /* echo the typed line into the scrollback, so it reads like a session */
-        term_putc('z'); term_putc('l'); term_putc('>'); term_putc(' ');
-        for (int i = 0; i < in_len; i++) term_putc(input[i]);
-        term_putc('\n');
+        /* echo the typed line into the scrollback, so it reads like a session -
+         * and onto the serial log, so a gate can see that the keystroke was
+         * received at all. Without the echo there is no evidence a key landed
+         * except the command's own output, and a command that produces none
+         * (clear) then looks identical to a key that never arrived. */
+        term_say("zl> ");
+        term_say(input);
+        term_say("\n");
         int got = match_cmd();
         in_len = 0;
         input[0] = 0;
@@ -158,13 +188,19 @@ static int match_cmd(void)
     }
 
     /* An unknown command must SAY SO. A shell that silently ignores what you
-     * typed is worse than one that has no commands at all. */
-    const char *msg = "  unknown command: ";
-    while (*msg) term_putc(*msg++);
-    for (int k = start; k < start + wlen; k++) term_putc(input[k]);
-    term_putc('\n');
-    msg = "  type 'help'\n";
-    while (*msg) term_putc(*msg++);
+     * typed is worse than one that has no commands at all - which is why this
+     * is the assertion probe-term.py cares about most, and why it goes to the
+     * serial log rather than only into the scrollback. */
+    term_say("  unknown command: ");
+    {
+        char word[TERM_COLS];
+        int n = 0;
+        for (int k = start; k < start + wlen && n < TERM_COLS - 1; k++)
+            word[n++] = input[k];
+        word[n] = 0;
+        term_say(word);
+    }
+    term_say("\n  type 'help'\n");
     return 0;
 }
 
