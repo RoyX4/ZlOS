@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · MOSTLY DONE.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. 30 of the 34 tasks here are implemented and reachable, verified symbol by symbol. What is still open is not what this file's own "Still open" section says: `ui.c` has zero zl bindings, the Settings app has no caller, the touchpad decoder does not exist, and the `mkdisk.sh` size guard this file records as added is absent from the tree.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # Desktop — the task list
 
 > **THE PLATFORM QUEUE IS DONE, 2026-08-18.** All ten items of

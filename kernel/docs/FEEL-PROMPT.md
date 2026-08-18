@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · PARTLY OPEN.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. The code almost all landed and is unusually good. What did not land is REACHABILITY: the Settings app, its NVMe persistence, the focus ring and the pointer-speed controls are compiled into every build and cannot be reached from the running desktop. Do not read its rules (§§1.2, 1.4, 2) as current.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # The feel & control track — the pointer, settings, customisation, bugs
 
 The third track. `desktop-v10-plan.md` is the **look**, `PLATFORM-PROMPT.md` is

@@ -2,6 +2,17 @@
 
 Read this first in a new session. Everything below is verified, not remembered.
 
+> **What is still OPEN is not in this file — it is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../docs/STATE-OF-THE-PROJECT.md),** which
+> audited twenty-one planning documents against the merged tree on 2026-08-19.
+> This file remains the authority on what the hardware has *proven*. It is
+> **stale on five checkable points**, each corrected there with a command: it
+> says nothing in the kernel arms `lt_armed` (`intel.c:4232` does, reachable
+> from `kernel.zl:1395`); it says there is no VBT parser (there is, unwired);
+> it says `fb.c` has no clipping (`fb.c:763-798` is the scissor, with four
+> callers); it describes a boot fork `kernel.zl` no longer has; and it carries a
+> northstar percentage its own source retracted.
+
 ## What this is
 
 An OS written in `zl` (Roy's own language) at `~/Documents/repos/zl-linux/kernel/`.

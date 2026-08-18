@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · REFERENCE, STILL VALID.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. Its method — separate "no because it is enormous" from "no because a vendor holds a key" — survives the merge intact and is worth keeping as written. Two lines must be corrected before acting on it: its closing paragraph says "about six" walls where its own body says four, and its most actionable claim (blocked on one missing caller, nothing arms `lt_armed`) is false — `kernel.zl:1395` calls `panel_up()`, which arms it.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # What is actually impossible — the wall map
 
 ## The thesis this project is testing

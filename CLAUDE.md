@@ -2,21 +2,27 @@
 
 ## Read first, before changing anything
 
+**`docs/STATE-OF-THE-PROJECT.md` is the one page that says where the project
+actually is.** Twenty-one planning documents (~392 KB) were audited item by item
+against the merged tree on 2026-08-19 and every open item, with its evidence,
+lives there ranked by leverage. The twenty-one now carry banners pointing at it.
+Read it before picking up any task list.
+
 `docs/CODE-MAP.md` says where the code actually lives. The layout is not what
 the directory names imply: the desktop and all eight apps are one zl file
-(`kernel/kernel.zl`), the browser exists only on the `desktop/browser` branch,
-and `kernel/out.c` is generated output that must never be edited or counted.
-Read it before searching for a subsystem.
+(`kernel/kernel.zl`), and `kernel/out.c` is generated output that must never be
+edited or counted. Read it before searching for a subsystem — but note it is
+**stale from its "The browser" heading onward**: it says the browser is
+branch-only and that `main` has no windowed desktop, and both are false since
+the merge. `STATE-OF-THE-PROJECT.md` §11 has the corrections.
 
 `docs/MERGE-EVIDENCE.md` is the measured account of the eight parallel
 tracks: the real shared base (`d61a481`, not `44346d6`), the landmines that
 merge clean and then fail, and the landing order. Read it before merging
 anything or starting a ninth track.
 
-`docs/DOCS-RECONCILE-PROMPT.md` is the brief for turning the 21 planning
-documents (~392 KB, most written before the eleven-track merge) into one
-honest `docs/STATE-OF-THE-PROJECT.md`. They are stale by construction; every
-claim has to be checked against the merged tree.
+`docs/DOCS-RECONCILE-PROMPT.md` is the brief that produced
+`STATE-OF-THE-PROJECT.md`. Done 2026-08-19; kept for method, not for work.
 
 `kernel/docs/POINTER-PROMPT.md` is the CURRENT WORK: the pointer is
 visibly broken after the eleven-track merge, the lead suspect is measured
@@ -26,10 +32,13 @@ Read it before touching input, xhci or wm.
 `kernel/HANDOFF.md` is the orientation doc and it is kept honest — it records what
 is *verified* rather than what is intended. Read it before touching `kernel/`.
 
-**Eight tracks are in flight in parallel worktrees and none of them are merged.**
-`docs/INTEGRATION-PLAN.md` measures the divergence and sets the landing order,
-the per-landing gate, and which paths `main` owns. Read it before merging
-anything, and before starting a ninth track.
+**All eleven tracks landed on `main` on 2026-08-19.** `docs/MERGE-EVIDENCE.md`
+§Outcome is the record. Two branches are still out: `fix/pointer-drain` (3
+commits, the written fix for the broken pointer) and `ci/gates-and-agent-brief`
+(11 commits, the only CI and the only copy of `zlfmt.c` anywhere).
+`docs/INTEGRATION-PLAN.md` is **superseded** and its figures are wrong — do not
+plan a merge from it.
+
 `kernel/docs/gen9-modeset-plan.txt` is the researched Intel display plan (JSON;
 the text is in `.result.plan`). It resolves 13 conflicts between sources and lists
 hazards that can damage hardware.
@@ -114,9 +123,9 @@ server-side source (`gh api repos/RoyX4/zl-linux --jq .pushed_at`).
 ## Build outputs do not belong in git
 
 `.gitignore` covers them, but several were already tracked and had to be
-`git rm --cached`'d (`kernel/_gen64.c`, `kernel/hosttest/dpll_test`, and
-`kernel/_genefi.c`). Before committing, check that a new binary or generated
-`.c` is not being added.
+`git rm --cached`'d (`kernel/_gen64.c`, `kernel/hosttest/dpll_test`,
+`kernel/_genefi.c`, and `kernel/hosttest/{browsershot,wmshot}.ppm`). Before
+committing, check that a new binary or generated `.c` is not being added.
 
 **A tracked file is never ignored.** `.gitignore` only applies to files git is
 not already following, so adding a pattern does nothing for a path that is
@@ -128,13 +137,35 @@ already in the index — it has to be `git rm --cached`'d as well. That is why
 git ls-files -z | git check-ignore --no-index --stdin -z -v
 ```
 
-As of the `_genefi.c` removal that command returns nothing — no tracked file in
-the repo matches an ignore rule.
+As of the `browsershot.ppm` / `wmshot.ppm` removal that command returns only two
+entries, both `.ultra/STATE.md` and `.ultra/TENSIONS.md` matching `.ultra/` in
+`~/.gitignore_global`. Those come from the machine's global ignore file, not
+from this repo, and are expected — **leave them alone.** No tracked file matches
+a rule in any of the repo's own `.gitignore`s.
+
+That claim was stale for a while before anyone re-ran the command, so re-run it
+rather than trusting this paragraph. Two `.ppm` renders sat tracked against the
+repo's own `kernel/.gitignore` line `hosttest/*.ppm`, rewritten on every
+`./wmshot` and `./browsershot` run.
+
+**The command only finds tracked files that some ignore rule already matches.**
+A build output nobody ever wrote a pattern for is invisible to it. `kernel/.gitignore`'s
+hosttest section is a hand-maintained allowlist, one line per binary, and it is
+still incomplete: `hosttest/inputtest_feel`, `hosttest/inputtest_hid`,
+`hosttest/wmbench` and `hosttest/wmtest_feel` are tracked, unlisted, and
+rewritten by `./build.sh` on every run. `git ls-files kernel/hosttest/ | grep -v '\.c$'`
+is the check that actually catches those.
 
 All four build scripts that emit generated C write under `kernel/_gen*.c`
 (`build.sh`/`mkdisk.sh` → `_gen.c`, `build64.sh` → `_gen64.c`, `buildefi.sh` →
 `_genefi.c`) and each `cp`s over its output unconditionally, so no committed
 copy is ever an input to a build.
+
+Same for the two `.ppm`s: `hosttest/wmshot.c:204` and `hosttest/browsershot.c:76`
+default their output path to `wmshot.ppm` / `browsershot.ppm` and truncate it.
+Nothing reads them back — `probe-shot.py` and `probe-drag.py` are the only
+`.ppm` readers in the tree and both open a QEMU `screendump` they just wrote
+into a temp dir.
 
 `font_aa.c`, `font_sub.c`, `font8x16.c`, `icons.c` and `icons_rgb.c` are also
 generated (by `gen_*.py` / `mkfont.py`) but are **deliberately tracked** — no

@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · PARTLY OPEN.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. The substrate genuinely exists: zlfs survives three power cycles under `verify-disk.sh`, `rtc.c` decodes under `verify-clock.sh`, snapping gave `wm_resize` its first caller, and all seven data-loss defects have named regressions. Read it now for its hazard list and its "what done means" standard — four of its user-facing outcomes were silently reverted by the merge.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # The system track — storage, time, clipboard, and the things an OS just has
 
 The fourth brief. The other three are the **look**, **apps and speed**, and

@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · PARTLY OPEN.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. The phase-by-phase reasoning is still the best display design in the repo and is unchanged. Its STATUS table and its closing "the display driver is complete for this hardware" are contradicted by the tree: 63 of 301 exported `intel_*` functions have no call site, and those 63 are almost exactly phases 3–7.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # Finishing the display driver
 
 The decision: **complete the display subsystem entirely before any GPU work.**

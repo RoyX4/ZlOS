@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · PARTLY OPEN.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. The survey of ~15 hand-built OSes is still good and its citations still hold. The zlOS have/partial/none column is stale in one direction: eleven tracks landed nine of the things it marks absent, including three of the five it tells you not to build.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # Feature catalogue — everything the other OSes have
 
 Compiled 2026-08-17 from research across ~15 hand-built operating systems.

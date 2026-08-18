@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · MOSTLY DONE.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. All ten §6 items landed and §8 is the most accurate account of a run in this repo — keep §8.1's measured numbers and §8.4's arithmetic. But §8.2.5's `mkdisk.sh` kernel-size guard was silently dropped by the final merge, and §§3, 4 and 7 are corrected by the tree.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # Making zlOS look like the v10 prototype — the plan
 
 > **DONE 2026-08-18. All ten items in §6 landed, plus five defects the work

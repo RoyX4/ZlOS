@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · MOSTLY OPEN.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. Every externally checkable hardware fact here reproduces exactly, and not one line of WiFi or Bluetooth code exists in the tree — so this is unstarted rather than stale. Follow it, but fix three premises first: the network stack it budgets at ~10,000 lines is already landed, its xhci.c estimate assumes a bulk path that is hardcoded single-instance mass-storage, and its shared-crypto discount is unbanked — the tree has no crypto at all.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # WiFi and Bluetooth on zlOS — the actual plan
 
 Roy asked for both. This is the build plan, not a feasibility argument.

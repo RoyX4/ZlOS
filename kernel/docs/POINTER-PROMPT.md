@@ -1,3 +1,11 @@
+> **AUDITED 2026-08-19 · LIVE WORK, NOT HISTORY.** This file was deliberately NOT audited
+> against the merged tree — it is the current task, not a record of an old one.
+> Its two open items (the xHCI event-ring double drain, and the dock readout's
+> digit debris) are carried into
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) §§3.1–3.2 and 3.6 as OPEN, with the
+> diagnosis here treated as settled and not re-derived. Work from THIS file;
+> use that one for everything around it.
+
 # POINTER-PROMPT — fix the pointer, then audit the whole tree
 
 Two phases, strictly in order. **Do not start phase 2 until phase 1 is

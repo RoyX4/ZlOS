@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · MOSTLY DONE.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. 55 of 58 asks are built and booting — several better than specified. Its header still says "Nothing here is implemented"; that describes an inversion which is now the boot state. Keep §1.5 and §§3.3/4 as live reference.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # zlOS desktop — inverting the shell and the compositor
 
 > **New to this? Read `desktop-build-guide.md` first.** It explains what we are

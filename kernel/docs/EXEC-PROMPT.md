@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · PARTLY OPEN.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. Roughly half executed. Items 0 and 1 landed and are compiled into all four targets; Item 2's port is ~90% built and never linked — neither `interp.c` nor `interp_kernel.c` is in `kernel/SOURCES`, so the kernel still cannot execute anything. §3's "four source lists" and "4 cores" are both dead.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # The exec track — running code the kernel was not built with
 
 The sixth brief, and the most architecturally consequential. The other five
