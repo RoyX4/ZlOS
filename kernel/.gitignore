@@ -23,3 +23,5 @@ hosttest/modeset_test
 hosttest/intel_probe
 hosttest/gpu_fillrate
 hosttest/*.ppm
+
+hosttest/systest

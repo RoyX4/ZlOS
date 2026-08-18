@@ -63,6 +63,16 @@ gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
     -o fstest fstest.c ../fs.c
 echo "built ./fstest        (run: ./fstest)"
 
+# The clipboard, window snapping and notifications. All three are integer logic
+# with no framebuffer, and all three have bugs that a screenshot cannot show: a
+# clipboard that truncates silently, a snap that overwrites its restore
+# rectangle on the SECOND snap, a toast that eats the next keystroke.
+# Deliberately not folded into wmtest.c - that harness is being edited in
+# another worktree right now, and colliding with it would help nobody.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter \
+    -o systest systest.c ../clip.c ../snap.c ../notify.c
+echo "built ./systest       (run: ./systest)"
+
 # The comparison number: what the REAL GPU on this same laptop does with a
 # blended full-screen layer. Offscreen pixmap, so it never touches the desktop.
 # Needs libGL - skipped silently if the dev headers are not installed.

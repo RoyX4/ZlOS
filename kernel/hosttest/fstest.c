@@ -449,6 +449,141 @@ int main(int argc, char **argv)
     for (int i = 0; i < 9000 && intact; i++) if (buf[i] != (char)(i & 0x7F)) intact = 0;
     ok("...byte for byte", intact);
 
+    /* =================================================================
+     * REGRESSIONS. Every one of these was a real defect found by an
+     * adversarial reviewer reading the write path with the explicit goal of
+     * losing a file. Each reproduced before the fix. They are listed in the
+     * order they were found, not by severity.
+     * ================================================================= */
+    printf("\n  -- regressions: six defects an adversarial reader constructed --\n");
+    dev_new(DEV_BSIZE_DEFAULT);
+    fs_mkfs(); fs_mount();
+
+    /* D1: blocks_for() overflowed and returned ZERO blocks. That gave a run of
+     * length 0 sitting on top of a live file, an unmountable volume, and an
+     * alloc_run whose cursor stopped advancing - an infinite loop in a kernel
+     * with nothing to interrupt it. */
+    said_reset();
+    int keep = fs_create("keep.txt", 100);
+    fs_write(keep, "MUST-SURVIVE", 12);
+    ok("D1 a 4 GiB file is REFUSED, not rounded down to zero blocks",
+       fs_create("bad.bin", 0xFFFFFFFFu) < 0);
+    ok("D1 ...saying there is no run that long", said("no contiguous run"));
+    ok("D1 ...and no zero-block entry was planted", fs_count() == 1);
+    ok("D1 the next create still terminates (it used to spin forever)",
+       fs_create("after.bin", 100) >= 0);
+    ok("D1 ...and the volume still mounts", fs_mount() == 1);
+    memset(buf, 0, sizeof buf);
+    fs_read(fs_find("keep.txt"), buf, sizeof buf);
+    ok("D1 ...with keep.txt intact", memcmp(buf, "MUST-SURVIVE", 12) == 0);
+
+    /* D1b: fs_write with a wrapping length returned SUCCESS having written
+     * nothing, then committed a 4 GiB length over a one-block run, and
+     * fs_read walked out of the run into the next file. */
+    said_reset();
+    int vic = fs_find("keep.txt");
+    ok("D1b a 4 GiB write is refused", fs_write(vic, buf, 0xFFFFFFFFu) == 0);
+    ok("D1b ...and the length is untouched", fs_size(vic) == 12);
+
+    /* D2: a relocation that failed mid-copy had ALREADY published the new
+     * start/blocks, so the file was permanently repointed at a run holding a
+     * deleted file's bytes, while its own bytes sat orphaned. */
+    dev_new(DEV_BSIZE_DEFAULT);
+    fs_mkfs(); fs_mount();
+    int A = fs_create("A.txt", 13);
+    fs_write(A, "ORIGINAL-DATA", 13);
+    int wall2 = fs_create("wall2", 100);
+    fs_write(wall2, "W", 1);
+    int ghost = fs_create("ghost", 5000);
+    for (int i = 0; i < 5000; i++) buf[i] = 'G';
+    fs_write(ghost, buf, 5000);
+    u32 ghost_lba = fs_start(ghost);
+    fs_delete(ghost);
+
+    u32 a_start_before = fs_start(A);
+    said_reset();
+    fail_lba = (long)ghost_lba + 2;
+    for (int i = 0; i < 5000; i++) buf[i] = 'N';
+    ok("D2 a relocation whose copy fails reports failure",
+       fs_write(A, buf, 5000) == 0);
+    ok("D2 ...saying the FILE IS UNCHANGED, not 'partial'",
+       said("the file is unchanged"));
+    ok("D2 ...and the entry still points at the ORIGINAL run",
+       fs_start(A) == a_start_before);
+    ok("D2 ...with the original length", fs_size(A) == 13);
+    fail_lba = -1;
+    memset(buf, 0, sizeof buf);
+    fs_read(A, buf, sizeof buf);
+    ok("D2 ...and A still reads back its OWN bytes, not the ghost's",
+       memcmp(buf, "ORIGINAL-DATA", 13) == 0);
+    fs_create("flusher", 10);                 /* force a dir_flush */
+    ok("D2 ...even after an unrelated operation flushes the directory",
+       fs_mount() == 1);
+    memset(buf, 0, sizeof buf);
+    fs_read(fs_find("A.txt"), buf, sizeof buf);
+    ok("D2 ...and across a remount", memcmp(buf, "ORIGINAL-DATA", 13) == 0);
+
+    /* D3: an on-disk entry whose start+blocks wrapped the 32-bit LBA space
+     * passed the mount check, and alloc_run then handed out blocks BELOW the
+     * data area - an ordinary create+write destroyed the superblock. */
+    dev_new(DEV_BSIZE_DEFAULT);
+    fs_mkfs(); fs_mount();
+    fs_create("one.txt", 100);
+    said_reset();
+    {
+        unsigned char *d = disk + FS_START_OFF + dev_bsize;   /* directory */
+        d[24] = 0xB8; d[25] = 0x0B; d[26] = 0; d[27] = 0;     /* start  = 3000 */
+        d[32] = 0x6C; d[33] = 0xD3; d[34] = 0xFF; d[35] = 0xFF; /* blocks wraps */
+        ok("D3 an entry whose start+blocks WRAPS is refused at mount",
+           fs_mount() == 0);
+        ok("D3 ...naming the entry as out of range", said("is out of range"));
+    }
+
+    /* D6: the same wrap on the superblock's own geometry. */
+    dev_new(DEV_BSIZE_DEFAULT);
+    fs_mkfs();
+    said_reset();
+    {
+        unsigned char *sb = disk + FS_START_OFF;
+        sb[28] = 0x1F; sb[29] = 0x1C; sb[30] = 0xFF; sb[31] = 0xFF;  /* data_blocks */
+        sb_refix();
+        ok("D6 a superblock claiming 4.29 billion data blocks is refused",
+           fs_mount() == 0);
+        ok("D6 ...as a geometry problem", said("geometry does not fit"));
+    }
+
+    /* D4: a name longer than the field was truncated into the entry while
+     * fs_find compared the caller's full string, so the file could never be
+     * found, the duplicate check never fired, and creating it twice gave two
+     * entries with identical names and one unreachable. */
+    dev_new(DEV_BSIZE_DEFAULT);
+    fs_mkfs(); fs_mount();
+    said_reset();
+    const char *toolong = "averyveryverylongfilename.txt";
+    ok("D4 a 29-character name is REFUSED, not truncated",
+       fs_create(toolong, 100) < 0);
+    ok("D4 ...saying it is too long", said("longer than 23 characters"));
+    ok("D4 ...and no entry was made", fs_count() == 0);
+    ok("D4 a name of exactly 23 characters is still accepted",
+       fs_create("12345678901234567890123", 100) >= 0);
+    ok("D4 ...and is findable", fs_find("12345678901234567890123") >= 0);
+
+    /* D5: a failed REFORMAT left the old superblock valid, so the volume
+     * mounted with a half-erased directory - four files surviving out of
+     * twenty. The comment claimed the opposite. */
+    dev_new(DEV_BSIZE_DEFAULT);
+    fs_mkfs(); fs_mount();
+    for (int i = 0; i < 20; i++) { char nm[24]; snprintf(nm, sizeof nm, "g%02d", i); fs_create(nm, 100); }
+    ok("D5 twenty files on the volume", fs_count() == 20);
+    said_reset();
+    fail_lba = (long)(FS_START_OFF / dev_bsize) + 1 + 2;   /* 3rd directory block */
+    ok("D5 a reformat whose directory write fails reports failure",
+       fs_mkfs() == 0);
+    fail_lba = -1;
+    ok("D5 ...and the volume does NOT mount afterwards", fs_mount() == 0);
+    ok("D5 ...refusing on the magic, the superblock having been invalidated first",
+       said("no filesystem here"));
+
     /* ---- leave a disk behind for the separate-process reboot ------------- */
     printf("\n  -- building the disk phase 2 will cold-start from --\n");
     dev_new(DEV_BSIZE_DEFAULT);

@@ -46,6 +46,12 @@ gcc $CFLAGS -c nvme.c -o _nvme64.o
 # Tested without booting anything - hosttest/fstest.c compiles THIS file
 # against a RAM disk that can be told to fail a write.
 gcc $CFLAGS -c fs.c -o _fs64.o
+# the system track's three: the clipboard that makes this one machine rather
+# than several programs sharing a screen, window snapping (wm_resize finally
+# has a caller), and a toast that goes away by itself.
+gcc $CFLAGS -c clip.c -o _clip64.o
+gcc $CFLAGS -c snap.c -o _snap64.o
+gcc $CFLAGS -c notify.c -o _notify64.o
 # the scheduler: more than one thing at a time
 gcc $CFLAGS -c sched.c -o _sched64.o
 # SMP: waking the other cores
@@ -71,7 +77,7 @@ gcc -m64 -c boot64.S -o _boot64.o
 ld -m elf_x86_64 -T link64.ld -o kernel64.elf \
    _boot64.o _gen64.o _rt64.o _support64.o _vga64.o _fb64.o _fb3d64.o \
    _font64.o _fontaa64.o _fontsub64.o _icons64.o _pci64.o _bga64.o _intel64.o _xhci64.o \
-   _console64.o _divmod64.o _gdt64.o _idt64.o _apic64.o _vgpu64.o _cpu64.o _nvme64.o _fs64.o _sched64.o _smp64.o _smptr64.o _i2c64.o _input64.o _term64.o _wm64.o _ui64.o _wmglue64.o
+   _console64.o _divmod64.o _gdt64.o _idt64.o _apic64.o _vgpu64.o _cpu64.o _nvme64.o _fs64.o _clip64.o _snap64.o _notify64.o _sched64.o _smp64.o _smptr64.o _i2c64.o _input64.o _term64.o _wm64.o _ui64.o _wmglue64.o
 
 echo "built kernel64.elf"
 echo "  undefined symbols: $(nm -u kernel64.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"

@@ -253,10 +253,19 @@ static u32  ent_start(int i)    { return rd32(ent(i) + FE_START); }
 static u32  ent_blocks(int i)   { return rd32(ent(i) + FE_BLOCKS); }
 static u32  ent_len(int i)      { return rd32(ent(i) + FE_LEN); }
 
+/* Divide FIRST, then round up. The obvious `(bytes + dev_bsize - 1) / dev_bsize`
+ * wraps for the top 511 values of a u32 at 512-byte blocks and returns ZERO,
+ * and a zero-block run is not a small bug: alloc_run hands out a run of length
+ * 0 on top of a live file, the mount-time range check then rejects the whole
+ * volume forever, and alloc_run's cursor stops advancing so the NEXT create
+ * spins in an infinite loop. One overflow, three symptoms, every other file on
+ * the disk lost. Found by an adversarial reviewer, not by this file's author. */
 static u32 blocks_for(u32 bytes)
 {
     if (bytes == 0) return 1;                   /* every file owns >= 1 block */
-    return (bytes + dev_bsize - 1) / dev_bsize;
+    u32 n = bytes / dev_bsize;                  /* cannot overflow            */
+    if (bytes % dev_bsize) n++;                 /* ...nor can this            */
+    return n;
 }
 
 static int dir_flush(void)
@@ -350,9 +359,20 @@ int fs_mkfs(void)
     wr32b(sbbuf + SB_CSUM,     0);
     wr32b(sbbuf + SB_CSUM,     (u32)(0u - sb_sum(sbbuf, dev_bsize)));
 
-    /* directory first, superblock last. If the power goes out between the
-     * two, the volume does not mount and nothing claims to be a file - which
-     * is the failure this order is chosen to produce. */
+    /* INVALIDATE the old superblock before touching anything else.
+     *
+     * This used to write the directory first and the superblock last, on the
+     * reasoning that a failure between them leaves a volume that will not
+     * mount. That is true of a blank disk and false of the case that matters -
+     * a REFORMAT, where the old superblock is still perfectly valid, so a
+     * failed mkfs left a volume that mounted happily with half its directory
+     * erased and four files out of twenty surviving. Wiping the superblock
+     * first makes the failure look like the failure it is. */
+    bzero_n(blkbuf, dev_bsize);
+    if (!fsdev_write(start_lba(), blkbuf)) {
+        p_str("  zlfs: cannot write the superblock - disk is read-only or absent\n");
+        return 0;
+    }
     if (!dir_flush()) return 0;
     if (!fsdev_write(start_lba(), sbbuf)) {
         p_str("  zlfs: superblock write failed\n");
@@ -417,10 +437,15 @@ int fs_mount(void)
     /* Geometry out of the superblock is attacker-shaped input as far as this
      * code is concerned: it decides which LBAs get written. Check it against
      * the device rather than trusting it. */
+    /* `sb_data_lba + sb_data_blocks > dev_nblocks` reads correctly and WRAPS:
+     * a superblock claiming 4.29 billion data blocks made the sum come out
+     * small and passed. Subtract instead - dev_nblocks - sb_data_lba cannot
+     * underflow once sb_data_lba <= dev_nblocks has been established. */
     if (sb_dir_blocks != dir_blocks_for(dev_bsize) ||
         sb_dir_lba    != start_lba() + 1 ||
         sb_data_lba   != sb_dir_lba + sb_dir_blocks ||
-        sb_data_lba + sb_data_blocks > dev_nblocks) {
+        sb_data_lba   >  dev_nblocks ||
+        sb_data_blocks > dev_nblocks - sb_data_lba) {
         p_str("  zlfs: superblock geometry does not fit this disk - refusing\n");
         return 0;
     }
@@ -433,7 +458,14 @@ int fs_mount(void)
     for (int i = 0; i < FS_MAXFILES; i++) {
         if (!ent_used(i)) continue;
         u32 st = ent_start(i), nb = ent_blocks(i), ln = ent_len(i);
-        if (nb == 0 || st < sb_data_lba || st + nb > sb_data_lba + sb_data_blocks ||
+        /* `st + nb > vol_end` wraps too, and this one is worse than the
+         * superblock's: an entry with start 3000 and 4294964396 blocks summed
+         * to 100 and passed, after which alloc_run inherited the wrapped end
+         * as its cursor and handed out blocks BELOW the data area - so an
+         * ordinary create-and-write, with no crafted arguments at all,
+         * overwrote the superblock and destroyed the volume. Subtract. */
+        u32 vol_end = sb_data_lba + sb_data_blocks;   /* checked above, no wrap */
+        if (nb == 0 || st < sb_data_lba || st > vol_end || nb > vol_end - st ||
             ln > nb * dev_bsize) {
             p_str("  zlfs: directory entry "); p_u32((u32)i);
             p_str(" is out of range - refusing to mount\n");
@@ -453,10 +485,14 @@ int fs_mounted(void) { return mounted; }
  * be shorter and would leak every deletion until reformat; that is the kind of
  * "simpler" that is only simpler for the person writing it.
  *
- * `skip` lets a grow-in-place caller ignore its own old run while looking for
- * the new one.
+ * It takes NO `skip` argument. It used to, so that a growing file could ignore
+ * its own old run and be allowed to overlap it - and that is precisely what
+ * made a failed relocation unrecoverable, because the copy had already eaten
+ * the bytes it was copying FROM. Copying a file needs both runs to exist at
+ * once; the cost is that a file cannot grow past half the free space, which is
+ * a stated limit rather than a window in which a power cut loses the file.
  */
-static int alloc_run(u32 need, int skip, u32 *out)
+static int alloc_run(u32 need, u32 *out)
 {
     u32 cursor = sb_data_lba;
     u32 end    = sb_data_lba + sb_data_blocks;
@@ -466,7 +502,7 @@ static int alloc_run(u32 need, int skip, u32 *out)
         u32 next_end   = end;
         int found = 0;
         for (int i = 0; i < FS_MAXFILES; i++) {
-            if (i == skip || !ent_used(i)) continue;
+            if (!ent_used(i)) continue;
             u32 st = ent_start(i);
             if (st < cursor) continue;
             if (!found || st < next_start) {
@@ -495,6 +531,24 @@ int fs_create(const char *name, u32 bytes)
 {
     if (!mounted) { p_str("  zlfs: not mounted\n"); return -1; }
     if (name[0] == 0) { p_str("  zlfs: a file needs a name\n"); return -1; }
+
+    /* A name that does not fit used to be TRUNCATED into the entry while
+     * fs_find went on comparing the caller's full string - so the file could
+     * never be found again, the duplicate check therefore never fired, and
+     * creating it twice produced two entries with byte-identical names and one
+     * of them unreachable. Refusing is the only answer that does not lose a
+     * file quietly. */
+    {
+        int n = 0;
+        while (n < FS_NAME_MAX && name[n]) n++;
+        if (n >= FS_NAME_MAX) {
+            p_str("  zlfs: that name is longer than ");
+            p_u32(FS_NAME_MAX - 1);
+            p_str(" characters - refusing rather than truncating it\n");
+            return -1;
+        }
+    }
+
     if (fs_find(name) >= 0) {
         p_str("  zlfs: '"); p_name(name); p_str("' already exists\n");
         return -1;
@@ -509,7 +563,7 @@ int fs_create(const char *name, u32 bytes)
     }
 
     u32 need = blocks_for(bytes), start;
-    if (!alloc_run(need, -1, &start)) {
+    if (!alloc_run(need, &start)) {
         p_str("  zlfs: no contiguous run of "); p_u32(need);
         p_str(" block(s) free - refusing\n");
         return -1;
@@ -534,24 +588,41 @@ int fs_write(int idx, const void *src, u32 bytes)
         p_str("  zlfs: no such file\n"); return 0;
     }
 
-    u32 need = blocks_for(bytes);
+    u32 need       = blocks_for(bytes);
+    u32 old_start  = ent_start(idx);
+    u32 old_blocks = ent_blocks(idx);
+    u32 old_len    = ent_len(idx);
+    u32 old_mtime  = rd32(ent(idx) + FE_MTIME);
+    u32 base       = old_start;
+    int moving     = 0;
 
-    /* Outgrown its run: find a new one, copy, then publish. The old run is
-     * only released once the new one holds the data, so a failure anywhere
-     * leaves the file exactly as it was. */
+    /* Outgrown its run: find another one. NOTHING is written into the
+     * directory entry here.
+     *
+     * The previous version published FE_START and FE_BLOCKS at this point and
+     * only then began copying, on the reasoning that the length is written
+     * last so a torn write leaves a stale length. That reasoning was wrong,
+     * and the comment that stated it as an invariant was worse than the bug:
+     * a write that failed mid-relocation left the entry pointing at the NEW
+     * run - which holds whatever a deleted file left there - while the file's
+     * real bytes sat orphaned at the old LBA with nothing referencing them.
+     * The next dir_flush() from any unrelated operation made that permanent.
+     * The file read back as some other file's deleted contents.
+     *
+     * So: allocate, copy, and only publish start/blocks/length TOGETHER once
+     * every block has landed. Until that moment the entry is untouched and the
+     * old run is intact, which is what "a failure leaves the file exactly as
+     * it was" actually requires. */
     if (need > ent_blocks(idx)) {
-        u32 start;
-        if (!alloc_run(need, idx, &start)) {
+        if (!alloc_run(need, &base)) {
             p_str("  zlfs: '"); p_name((const char *)(ent(idx) + FE_NAME));
             p_str("' needs "); p_u32(need);
-            p_str(" blocks and there is no run that long - refusing\n");
+            p_str(" blocks and there is no run that long free - refusing\n");
             return 0;
         }
-        wr32b(ent(idx) + FE_START,  start);
-        wr32b(ent(idx) + FE_BLOCKS, need);
+        moving = 1;
     }
 
-    u32 base = ent_start(idx);
     const u8 *s = (const u8 *)src;
     for (u32 b = 0; b < need; b++) {
         bzero_n(blkbuf, dev_bsize);
@@ -561,17 +632,44 @@ int fs_write(int idx, const void *src, u32 bytes)
         if (n) bcopy_n(blkbuf, s + off, n);
         if (!fsdev_write(base + b, blkbuf)) {
             p_str("  zlfs: write failed at LBA "); p_u32(base + b);
-            p_str(" - the file is now partial\n");
+            if (moving) {
+                /* alloc_run never overlaps a live run, including this file's
+                 * own, so the old copy is untouched and still published. */
+                p_str(" - the file is unchanged, still at LBA ");
+                p_u32(old_start); zl_putc_pub('\n');
+            } else {
+                p_str(" - the file is now partial\n");
+            }
             return 0;
         }
     }
 
-    /* Length last. Until this lands the file still reports its old size, so a
-     * torn write is a stale file rather than a file claiming bytes that were
-     * never written. */
-    wr32b(ent(idx) + FE_LEN,   bytes);
-    wr32b(ent(idx) + FE_MTIME, now_secs);
-    return dir_flush();
+    /* Publish. Start, blocks and length go in together, then one flush.
+     *
+     * The run never SHRINKS in place. Writing 2000 bytes into a file that owns
+     * eight blocks leaves it owning eight: giving them back would mean the
+     * next write past 2000 bytes relocates, and a file that is written short
+     * and then long again is the common case, not the rare one. The space is
+     * reclaimed by deleting the file, which is the only place this design
+     * reclaims anything. */
+    u32 pub_blocks = (need > old_blocks) ? need : old_blocks;
+    u8 *e = ent(idx);
+    wr32b(e + FE_START,  base);
+    wr32b(e + FE_BLOCKS, pub_blocks);
+    wr32b(e + FE_LEN,    bytes);
+    wr32b(e + FE_MTIME,  now_secs);
+    if (!dir_flush()) {
+        /* The directory did not land, so on disk the file still points at the
+         * old run with the old length. Put the in-memory copy back to match -
+         * read from the saved values, NOT from the entry, which now holds
+         * exactly the numbers being rolled back. */
+        wr32b(e + FE_START,  old_start);
+        wr32b(e + FE_BLOCKS, old_blocks);
+        wr32b(e + FE_LEN,    old_len);
+        wr32b(e + FE_MTIME,  old_mtime);
+        return 0;
+    }
+    return 1;
 }
 
 int fs_read(int idx, void *dst, u32 max)
@@ -582,6 +680,18 @@ int fs_read(int idx, void *dst, u32 max)
     }
     u32 len = ent_len(idx);
     if (len > max) len = max;
+
+    /* Never read past the file's OWN run, whatever the length field says. The
+     * length is checked at mount, but "checked once at mount" and "cannot walk
+     * into the next file" are different guarantees, and a stale or crafted
+     * length used to give the caller its neighbour's bytes. Compared in blocks
+     * so nb * dev_bsize cannot overflow on the way. */
+    u32 nb = ent_blocks(idx);
+    if (len / dev_bsize >= nb) {
+        u32 cap = nb * dev_bsize;               /* nb is bounded by the volume */
+        if (len > cap) len = cap;
+    }
+
     u32 base = ent_start(idx);
     u8 *d = (u8 *)dst;
     u32 done = 0;
