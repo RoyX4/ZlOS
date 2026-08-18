@@ -338,6 +338,18 @@ sudo systemctl stop lightdm
 ```
 Recovery: `sudo systemctl start lightdm`.
 
+## The desktop is the boot state now (2026-08-18)
+
+`kernel.zl` ends in `if wm_avail() == 0 { ...text shell... } else { wm_session() }`.
+With a framebuffer you get a compositor with the shell, System Monitor and
+About open; without one - which is what `verify.sh` boots - the old text shell
+runs unchanged and its transcript is still byte-identical to `golden.txt`.
+
+Every demo is an app in a window: no `while` loop, no "press any key". Typing
+`snake`, `paint`, `cube`, `anim`, `mouse` or `edit` opens one. The full account
+of that run, including four things it found that no task list predicted, is
+`docs/desktop-platform-run.md`.
+
 ## Everything else in the kernel
 
 15 drivers, ~6,000 lines, all ours: `pci` `bga` `intel` `xhci` `efi` `apic`
@@ -363,10 +375,29 @@ Five times now: **a DMA buffer outside guest RAM, or an address truncated to
 
 ```
 cd kernel
-./verify.sh        # BIOS golden transcript
-./verify-raw.sh    # our own bootloader
-./verify-iso.sh    # UEFI
-./try.sh serial    # drive it from the terminal
+./verify.sh          # BIOS golden transcript
+./verify-raw.sh      # our own bootloader - text leg AND framebuffer leg
+./verify-efi.sh      # the NATIVE UEFI application (buildefi.sh's output)
+./verify-iso.sh      # BIOS and UEFI through GRUB
+./verify-sources.sh  # one source list really does reach all four builds
+./try.sh serial      # drive it from the terminal
+```
+
+**`verify-efi.sh` and `verify-sources.sh` are new (2026-08-18).** Before them,
+`buildefi.sh` built `BOOTX64.EFI` and nothing ever booted it - which is how the
+address truncation in `efi.c` survived, since `verify-iso.sh`'s UEFI leg boots
+the *multiboot* kernel and `efi.c` is not in that binary.
+
+The desktop has its own probes, all of which boot the real thing:
+
+```
+./probe-term.py    type five commands into the shell, assert each result
+./probe-apps.py    five apps in five windows, running at once
+./probe-snake.py   snake keeps playing while another window is dragged
+./probe-smp.py     band rendering on 4 real cores draws identical pixels
+./probe-frame.py   the frame timer is a measurement, not a number
+./probe-edit.py    the editor: a window, typing, ESC saves and closes
+./probe-drag.py --no-tablet     a window really moves
 ```
 
 `try.sh` GUI mode is **verified working** (2026-08-17). It was booting

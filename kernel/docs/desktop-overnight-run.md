@@ -1,5 +1,12 @@
 # The overnight desktop run — 2026-08-17/18
 
+> **Superseded in part by [`desktop-platform-run.md`](desktop-platform-run.md)
+> (2026-08-18).** Everything §5 lists as "what is left" has landed: the
+> compositor is wired in and is the boot state, C4 is done, the apps are
+> converted, B5 is done, and G2 (SMP bands) is done and measured at 1.64x
+> rather than the 4x it was hoped for. What that run found on the way is
+> worth more than the ticks - start there.
+
 What one unattended session did against `OVERNIGHT-PROMPT.md`, what it got
 wrong, and what is left. Written because chat is gone next session and the repo
 is not.

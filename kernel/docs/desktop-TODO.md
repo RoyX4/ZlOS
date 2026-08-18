@@ -1,5 +1,20 @@
 # Desktop — the task list
 
+> **THE PLATFORM QUEUE IS DONE, 2026-08-18.** All ten items of
+> [`PLATFORM-PROMPT.md`](PLATFORM-PROMPT.md) landed on `desktop/apps-in-windows`,
+> each with a gate. The state below is superseded where the two disagree —
+> the compositor is the boot state, every app runs in a window, the sticker
+> drag is deleted, there is one source list, and the parked cores render.
+> Eight new gates exist that did not: `verify-efi.sh`, `verify-sources.sh`,
+> `probe-term.py`, `probe-apps.py`, `probe-snake.py`, `probe-smp.py`,
+> `probe-frame.py`, `probe-edit.py`.
+>
+> Four things were found on the way that no task list predicted, and they are
+> written up in `../../.ultra/TENSIONS.md`: the branch did not build at all
+> (P-2), zlOS had been hanging at boot under UEFI (P-6), the SMP stacks were
+> inside a framebuffer buffer (P-3), and `verify-efi.sh` — named by three
+> documents as a required gate — did not exist (P-1).
+
 > **A full account of the 2026-08-17/18 overnight run — what landed, the four
 > things it got wrong, the two changes that measured *slower* and are still
 > here, and what is left — is in
@@ -331,7 +346,15 @@ scale 3, 8× magnified: round bowls on the O and S, blended edges throughout.
 
 ---
 
-### [ ] 0h. Add a `tsc()` builtin and put frame time on screen
+### [x] 0h. Add a `tsc()` builtin and put frame time on screen — **DONE 2026-08-18**
+
+`cpu_tsc` was already exposed and returned only the low 32 bits, wrapping
+every 1.8 s. Full 64-bit now, and `wm_frame_us()` times the body of a frame -
+not the gap between frames, which `wm_frame`'s 100 Hz rate limit pins at
+10 ms. Gate: `probe-frame.py`. Detail: the commit message.
+
+The original task text follows.
+
 
 **Nothing measures a frame.** `cpu_tsc()` and `cpu_tsc_khz()` exist and work
 (`cpu.c:212`, `cpu.c:220`) but are **not exposed to zl** — no `tsc` builtin.
@@ -444,7 +467,12 @@ Three modes, checked in this order: **pointer grab** (a drag owns all pointer
 events until button-up) → **modal** (menu open) → **normal** (pointer to topmost
 window containing the point; keys to focus).
 
-### [ ] 2d. Delete the photo-and-sticker code
+### [x] 2d. Delete the photo-and-sticker code — **DONE 2026-08-18**
+
+And the AP stacks were inside `sp_buf`. See `../../.ultra/TENSIONS.md` P-3.
+
+The original task text follows.
+
 
 `fb_bg_snapshot`, `fb_bg_restore`, `fb_grab`, `fb_stamp`, `bg_buf`, `sp_buf`
 (`fb.c:775-834`). Removing them also removes the 640×480 drag ceiling (the
@@ -454,7 +482,13 @@ dragged), the shadow halo artifact, and 10 MiB of fixed high RAM.
 **Keep** `fb_pointer_show`/`fb_pointer_hide`. Save-under for an 11×17 patch is
 correct and has none of these problems.
 
-### [ ] 2e. Convert the apps — 7 of them
+### [x] 2e. Convert the apps — **DONE 2026-08-18**, and `windows_demo` deleted
+
+Gate: `probe-apps.py` — five apps, five windows, three animating and two
+holding still as controls. Zero live `press any key`, zero app event loops.
+
+The original task text follows.
+
 
 Each becomes three functions and **no loop of its own**:
 
@@ -500,7 +534,13 @@ Build order: `ui_label` → `ui_bar` → `ui_button` → `ui_sep`/`ui_space` →
 
 Needs `fb_clip` (step 0b) — a widget must not draw outside its window.
 
-### [ ] 2g. The shell becomes app 0
+### [x] 2g. The shell becomes app 0 — **DONE 2026-08-18**
+
+`read_line` is gone; `term.c` is a state machine fed one char per event.
+Gate: `probe-term.py`.
+
+The original task text follows.
+
 
 - `read_line()` stops looping — becomes a state machine fed one char per event.
   Smaller than it sounds: `LINE_BUF` and the history are already in raw memory,
