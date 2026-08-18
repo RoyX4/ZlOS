@@ -149,6 +149,59 @@ identical apart from the digits that changed.
 
 ---
 
+## Phase 1c — the desktop looks worse than v10, cause NOT found
+
+Zac's report, and he is right that the two screens differ. Compare
+`docs/shots/before-merge-help.png` (desktop/overnight-compositor, "v10-wall")
+with `docs/shots/after-merge-help.png` (merged main, same `help` screen, same
+1920x1200). The merged one reads as coarser, and its longest lines are clipped
+at the window edge where the v10 shot fits them.
+
+**This is an OPEN question. Do not assume it is cosmetic and do not assume the
+merge is innocent - but do not repeat the search below either.**
+
+Ruled out, each by a command whose output was read:
+
+- **No visual function was lost.** Every function `desktop/overnight-compositor`
+  defines in `fb.c` exists in the merged `fb.c`. Diffed both directions on the
+  full symbol list; the difference is empty.
+- **`fb_text_aa` is byte-identical** to overnight's, as is `fb_glyph_aa`. It
+  advances by a fixed `cell_w`, so the terminal is monospace BY DESIGN on both
+  branches - the "v10 was proportional" reading is wrong.
+- **`term.c` lost nothing relevant.** The only removal against overnight is the
+  unknown-command block, deliberately replaced with exec-track's `term_say`
+  version so the message reaches the serial log for `probe-term.py`.
+- **`prop_big()` being unused** is pre-existing: it is unused on overnight too.
+  The compiler warning is not a symptom of the merge.
+
+So the drawing code is intact. That points at **state or parameters**, not
+deleted code - scale, cell size, padding, theme, or the console geometry - which
+narrows it to `kernel.zl`, where fifteen hunks were resolved by hand, and to
+`fb_setup`'s sizing.
+
+Concrete places to start:
+
+1. `fn ui()` - the known landmine. It is `ui_scale()` on overnight and
+   `cell_w() / 8` on apps-in-windows, and taking apps's version compiles, links,
+   boots and silently restores the "everything is tiny at 4K" regression. The
+   merge kept overnight's. **Verify that is still true** and that nothing else
+   redefines `ui`.
+2. `cell_w = (width >= 1400) ? GLYPH_W * 2 : GLYPH_W` in `fb_setup` - the boot
+   log says `cell 16x32 ui 2x`. Check what v10 reported at the same resolution;
+   if it differed, the console geometry moved and everything downstream with it.
+3. The window's client rect: the merged boot prints
+   `compositor: 4 windows, shell client 82,160 1236x834`. Compare against a v10
+   boot. A narrower client with the same cell means fewer columns and clipping.
+4. `docs/shots/` has both PNGs. Measure rather than eyeball - my own pixel
+   comparison was inconclusive because the two shots show different content at
+   the same row, which is exactly the mistake to avoid repeating.
+
+A good outcome here is either a named parameter that changed and a fix, or a
+measured statement that the two are equivalent and the difference is the content
+on screen. Both are useful; "looks fine to me" is not.
+
+---
+
 ## Phase 2 — the full audit
 
 Only after phase 1 is confirmed.
