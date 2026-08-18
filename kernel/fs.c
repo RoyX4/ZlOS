@@ -285,6 +285,41 @@ static int dir_flush(void)
     return 1;
 }
 
+static u8 *ent(int i);
+
+/* Publish one changed entry, or leave the volume exactly as it was.
+ *
+ * dir_flush() writes several blocks from one in-memory image, so a failure
+ * part-way through leaves the ON-DISK directory a mixture: some blocks new,
+ * some old. Only one entry ever changes at a time, so that mixture either
+ * contains the change or does not - and the callers used to just undo their
+ * in-memory edit and return, which meant a create that reported failure could
+ * still have landed a PHANTOM FILE on the platter, pointing at blocks nobody
+ * ever wrote. It would appear at the next mount, out of nowhere.
+ *
+ * So: undo the change and flush AGAIN. If that succeeds the disk holds the old
+ * state and nothing was lost. If it fails too, this volume is no longer under
+ * our control, and the honest response is to stop writing to it rather than to
+ * keep going and hope.
+ *
+ * (An adversarial reviewer named this as the gap its own testing had not
+ * covered. It was right.)
+ */
+static int dir_flush(void);
+static int dir_commit(int idx, const u8 *prev)
+{
+    if (dir_flush()) return 1;
+    bcopy_n(ent(idx), prev, FS_ENT_BYTES);
+    if (dir_flush()) {
+        p_str("  zlfs: the change was rolled back - the volume is unharmed\n");
+        return 0;
+    }
+    p_str("  zlfs: the directory is inconsistent on disk and cannot be repaired\n");
+    p_str("  zlfs: unmounting rather than writing to it again\n");
+    mounted = 0;
+    return 0;
+}
+
 static int dir_load(void)
 {
     for (u32 b = 0; b < sb_dir_blocks; b++) {
@@ -570,6 +605,9 @@ int fs_create(const char *name, u32 bytes)
     }
 
     u8 *e = ent(slot);
+    u8 prev[FS_ENT_BYTES];
+    bcopy_n(prev, e, FS_ENT_BYTES);          /* the free slot, to go back to */
+
     bzero_n(e, FS_ENT_BYTES);
     for (int i = 0; i < FS_NAME_MAX - 1 && name[i]; i++) e[FE_NAME + i] = (u8)name[i];
     wr32b(e + FE_START,  start);
@@ -577,7 +615,7 @@ int fs_create(const char *name, u32 bytes)
     wr32b(e + FE_BLOCKS, need);
     wr32b(e + FE_FLAGS,  FE_USED);
     wr32b(e + FE_MTIME,  now_secs);
-    if (!dir_flush()) { bzero_n(e, FS_ENT_BYTES); return -1; }
+    if (!dir_commit(slot, prev)) return -1;
     return slot;
 }
 
@@ -654,22 +692,15 @@ int fs_write(int idx, const void *src, u32 bytes)
      * reclaims anything. */
     u32 pub_blocks = (need > old_blocks) ? need : old_blocks;
     u8 *e = ent(idx);
+    u8 prev[FS_ENT_BYTES];
+    bcopy_n(prev, e, FS_ENT_BYTES);
+    (void)old_len; (void)old_mtime;          /* prev carries them verbatim */
+
     wr32b(e + FE_START,  base);
     wr32b(e + FE_BLOCKS, pub_blocks);
     wr32b(e + FE_LEN,    bytes);
     wr32b(e + FE_MTIME,  now_secs);
-    if (!dir_flush()) {
-        /* The directory did not land, so on disk the file still points at the
-         * old run with the old length. Put the in-memory copy back to match -
-         * read from the saved values, NOT from the entry, which now holds
-         * exactly the numbers being rolled back. */
-        wr32b(e + FE_START,  old_start);
-        wr32b(e + FE_BLOCKS, old_blocks);
-        wr32b(e + FE_LEN,    old_len);
-        wr32b(e + FE_MTIME,  old_mtime);
-        return 0;
-    }
-    return 1;
+    return dir_commit(idx, prev);
 }
 
 int fs_read(int idx, void *dst, u32 max)
@@ -715,8 +746,10 @@ int fs_delete(int idx)
     if (idx < 0 || idx >= FS_MAXFILES || !ent_used(idx)) {
         p_str("  zlfs: no such file\n"); return 0;
     }
+    u8 prev[FS_ENT_BYTES];
+    bcopy_n(prev, ent(idx), FS_ENT_BYTES);
     bzero_n(ent(idx), FS_ENT_BYTES);
-    return dir_flush();
+    return dir_commit(idx, prev);
 }
 
 /* ---- what the shell needs to draw a listing ------------------------------ */

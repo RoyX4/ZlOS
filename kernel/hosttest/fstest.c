@@ -79,7 +79,9 @@ static unsigned char *disk;
 static u32 dev_bsize  = DEV_BSIZE_DEFAULT;
 static u32 dev_blocks = DEV_BYTES / DEV_BSIZE_DEFAULT;
 
-static long fail_lba = -1;          /* writes to this LBA fail               */
+static long fail_lba   = -1;        /* writes to this LBA fail               */
+static int  fail_times = 1 << 30;   /* ...this many times. 1 = a transient
+                                       glitch the retry can recover from    */
 static u32  writes_done;
 
 int fsdev_read(u32 lba, void *buf)
@@ -91,7 +93,10 @@ int fsdev_read(u32 lba, void *buf)
 int fsdev_write(u32 lba, const void *buf)
 {
     if (lba >= dev_blocks) return 0;
-    if (fail_lba >= 0 && (long)lba == fail_lba) return 0;
+    if (fail_lba >= 0 && (long)lba == fail_lba && fail_times > 0) {
+        fail_times--;
+        return 0;
+    }
     memcpy(disk + (size_t)lba * dev_bsize, buf, dev_bsize);
     writes_done++;
     return 1;
@@ -106,6 +111,7 @@ static void dev_new(u32 bsize)
     free(disk);
     disk = calloc(DEV_BYTES, 1);
     fail_lba = -1;
+    fail_times = 1 << 30;
     writes_done = 0;
 }
 
@@ -583,6 +589,64 @@ int main(int argc, char **argv)
     ok("D5 ...and the volume does NOT mount afterwards", fs_mount() == 0);
     ok("D5 ...refusing on the magic, the superblock having been invalidated first",
        said("no filesystem here"));
+
+    /* D7: the gap the reviewer named but did not test - a create that
+     * reports failure could still leave a PHANTOM FILE on the platter,
+     * because dir_flush writes several blocks and only some of them landed.
+     * Tested twice: a TRANSIENT failure the retry recovers from, and a
+     * PERMANENT one it cannot. Those are different outcomes and both matter. */
+    printf("\n  -- the phantom file a failed create used to leave behind --\n");
+    dev_new(DEV_BSIZE_DEFAULT);
+    fs_mkfs(); fs_mount();
+    int survivor = fs_create("survivor.txt", 20);
+    fs_write(survivor, "STILL-HERE", 10);
+    u32 dirlba = FS_START_OFF / dev_bsize + 1;
+
+    /* --- transient: one block write glitches, the rollback lands ---------- */
+    said_reset();
+    fail_lba = (long)dirlba + 2; fail_times = 1;
+    ok("D7 a create whose directory write glitches returns failure",
+       fs_create("phantom.bin", 100) < 0);
+    fail_lba = -1; fail_times = 1 << 30;
+    ok("D7 ...saying the change was rolled back, volume unharmed",
+       said("rolled back"));
+    ok("D7 ...and the volume is STILL MOUNTED", fs_mounted() == 1);
+    ok("D7 ...the phantom is not in the live directory", fs_find("phantom.bin") < 0);
+    ok("D7 ...NOR on the disk after a remount",
+       fs_mount() == 1 && fs_find("phantom.bin") < 0);
+    ok("D7 ...and survivor.txt is untouched", fs_find("survivor.txt") >= 0);
+    memset(buf, 0, sizeof buf);
+    fs_read(fs_find("survivor.txt"), buf, sizeof buf);
+    ok("D7 ...with its bytes intact", memcmp(buf, "STILL-HERE", 10) == 0);
+
+    /* --- transient delete: the file must survive intact ------------------- */
+    said_reset();
+    int doomed = fs_create("doomed.bin", 100);
+    fs_write(doomed, "PRESENT", 7);
+    fail_lba = (long)dirlba + 2; fail_times = 1;
+    ok("D7 a delete whose directory write glitches returns failure",
+       fs_delete(doomed) == 0);
+    fail_lba = -1; fail_times = 1 << 30;
+    ok("D7 ...and the file is still there, not half-removed",
+       fs_find("doomed.bin") >= 0);
+    ok("D7 ...on disk too", fs_mount() == 1 && fs_find("doomed.bin") >= 0);
+    memset(buf, 0, sizeof buf);
+    fs_read(fs_find("doomed.bin"), buf, sizeof buf);
+    ok("D7 ...with its bytes", memcmp(buf, "PRESENT", 7) == 0);
+
+    /* --- permanent: the disk is gone. Stop writing to it. ----------------- */
+    said_reset();
+    fail_lba = (long)dirlba + 2;                 /* fails for ever */
+    ok("D7 a create against a disk that will not take writes AT ALL fails",
+       fs_create("hopeless.bin", 100) < 0);
+    ok("D7 ...and says the directory cannot be repaired",
+       said("cannot be repaired"));
+    ok("D7 ...and UNMOUNTS rather than writing to it again", fs_mounted() == 0);
+    fail_lba = -1;
+    ok("D7 ...and once the disk is back, no phantom is on it",
+       fs_mount() == 1 && fs_find("hopeless.bin") < 0);
+    ok("D7 ...and everything that was there still is",
+       fs_find("survivor.txt") >= 0 && fs_find("doomed.bin") >= 0);
 
     /* ---- leave a disk behind for the separate-process reboot ------------- */
     printf("\n  -- building the disk phase 2 will cold-start from --\n");
