@@ -78,6 +78,28 @@ static struct {
     int in_row;              /* 1 while ui_row() is open            */
 } L;
 
+/* ---- keyboard focus -------------------------------------------------------
+ * Window focus was a title-bar hue and an accent underline; a focused CONTROL
+ * had no indicator at all, and no way to move between controls without the
+ * mouse.
+ *
+ * THE FOCUS INDEX LIVES HERE, NOT IN L. L is reset by every ui_begin, and
+ * focus has to survive between passes or it would be forgotten between the
+ * hit-test and the draw - and between frames, which is the entire point of it.
+ * Which widget is focused is still the APP's to choose (ui_set_focus), the way
+ * every other piece of widget state is; this only remembers the number.
+ *
+ * -1 is "nothing focused", and it is the default: a desktop that boots with a
+ * ring already on some arbitrary control looks broken. */
+static int focus_idx = -1;
+static int focus_activate;      /* one-shot: the focused widget fires */
+static int focus_count;         /* how many fired-capable widgets last pass */
+
+void ui_set_focus(int idx)   { focus_idx = idx; }
+int  ui_focus_get(void)      { return focus_idx; }
+int  ui_widget_count(void)   { return focus_count; }
+void ui_activate_focus(void) { focus_activate = 1; }
+
 void ui_begin(int x, int y, int w, int h, int mode, int px, int py, int click)
 {
     L.x = x + theme.pad;
@@ -92,7 +114,13 @@ void ui_begin(int x, int y, int w, int h, int mode, int px, int py, int click)
     L.fired = -1;
     L.index = 0;
     L.in_row = 0;
+    focus_count = 0;      /* recounted every pass, so it follows the layout */
 }
+
+/* Consume the one-shot activation. Called by the app AFTER it has re-run its
+ * widget sequence, so the flag covers exactly one pass and an Enter cannot
+ * fire the same control again on the next repaint. */
+void ui_end_activate(void) { focus_activate = 0; }
 
 int ui_fired(void) { return L.fired; }
 
@@ -127,15 +155,41 @@ static int hit(int x, int y, int w, int h)
     return L.px >= x && L.px < x + w && L.py >= y && L.py < y + h;
 }
 
+
 /* Every widget that can fire funnels through this, so "did it fire" is decided
  * in exactly one place and cannot drift between widgets. In UI_HITTEST mode
- * nothing is drawn and this is the only thing that happens. */
+ * nothing is drawn and this is the only thing that happens.
+ *
+ * The keyboard path goes through the SAME funnel, deliberately. A widget must
+ * not be able to tell a click from an Enter - the moment it can, the two paths
+ * drift and one of them grows a bug the other does not have. */
 static int fire(int x, int y, int w, int h)
 {
     int me = L.index++;
+    if (me + 1 > focus_count) focus_count = me + 1;
+    if (focus_activate && me == focus_idx) return 1;
     if (!L.click || !hit(x, y, w, h)) return 0;
     L.fired = me;
     return 1;
+}
+
+/* The ring, drawn by each firing widget at the end of its own draw block.
+ *
+ * L.index has already been advanced by fire(), so `L.index - 1` is the calling
+ * widget's own id - which means this needs no argument and cannot be passed
+ * the wrong one. It draws OUTSIDE the control's rect so it never covers the
+ * label, and in the accent so it reads as "the keyboard is here" rather than
+ * as another border. */
+static void focus_ring(int x, int y, int w, int h)
+{
+    if (L.mode != UI_DRAW || focus_idx < 0 || L.index - 1 != focus_idx) return;
+    int g = UI_S1(&theme) / 2;
+    int x0 = x - g, y0 = y - g, x1 = x + w + g, y1 = y + h + g;
+    unsigned c = theme.accent;
+    fb_fill_px(x0, y0, x1 - x0, 1, c);
+    fb_fill_px(x0, y1 - 1, x1 - x0, 1, c);
+    fb_fill_px(x0, y0, 1, y1 - y0, c);
+    fb_fill_px(x1 - 1, y0, 1, y1 - y0, c);
 }
 
 /* A proportional layout cannot ask "length times cell" any more - it has to
@@ -185,6 +239,7 @@ int ui_button(const char *s)
         fb_rrect(x, y, w, h, UI_S1(&theme), face);
         fb_text_prop(x + UI_S3(&theme), y + (h - text_h()) / 2, s,
                      over && L.click ? theme.border : theme.text);
+        focus_ring(x, y, w, h);
     }
     return fired;
 }
@@ -229,6 +284,7 @@ int ui_toggle(const char *s, int *on)
         fb_rrect(*on ? x + kw - d - pad : x + pad, ty + pad, d, d, d / 2,
                  *on ? theme.border : theme.text_dim);
         fb_text_prop(x + kw + theme.gap, y + (h - text_h()) / 2, s, theme.text);
+        focus_ring(x, y, w, h);
     }
     return fired;
 }
@@ -277,6 +333,7 @@ int ui_slider(int *v, int lo, int hi)
         if (kx < x) kx = x;
         if (kx > x + w - knob) kx = x + w - knob;
         fb_rrect(kx, y + UI_S1(&theme) / 2, knob, knob, knob / 2, theme.text);
+        focus_ring(x, y, w, h);
     }
     return fired;
 }
@@ -353,6 +410,7 @@ int ui_list_row(const char *s, int selected)
         else if (over) fb_rrect(x, y, w, h, UI_S1(&theme), theme.panel_hi);
         fb_text_prop(x + UI_S2(&theme), y + (h - text_h()) / 2, s,
                      selected ? theme.border : theme.text);
+        focus_ring(x, y, w, h);
     }
     return fired;
 }

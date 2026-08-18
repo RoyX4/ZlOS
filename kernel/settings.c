@@ -43,7 +43,10 @@ void input_set_speed(int pct);
 void input_set_accel(int on);
 void wm_set_anim(int on);
 
-#define EV_MOUSE 4          /* wm.c's event type, same numbering as input.c */
+#define EV_MOUSE     4      /* wm.c's event types, same numbering as input.c */
+#define EV_KEY_DOWN  1
+#define KEY_TAB      0x103
+#define KEY_ENTER    0x104
 
 /* ---- the accent palette ---------------------------------------------------
  * Named, not a colour picker: there is no colour-picker widget and building one
@@ -524,9 +527,50 @@ void settings_draw(int app, int x, int y, int w, int h, int focused)
     build_ui();
 }
 
+/* Which control the keyboard is on. The app owns it, like every other piece of
+ * widget state - ui.c only remembers the number so it survives between the
+ * hit-test pass and the draw pass. */
+static int focus = -1;
+
 int settings_event(int app, int win, int type, int code, int x, int y)
 {
     (void)app;
+
+    /* ---- keyboard ---------------------------------------------------------
+     * Tab walks the controls, Enter presses the one with the ring. Without
+     * this the ring would be an indicator of something the user cannot move,
+     * which is worse than no indicator at all. */
+    if (type == EV_KEY_DOWN && (code == KEY_TAB || code == KEY_ENTER)) {
+        int cx, cy, cw, ch;
+        wm_client(win, &cx, &cy, &cw, &ch);
+        if (cw <= 0 || ch <= 0) return 0;
+
+        int n = ui_widget_count();
+        if (code == KEY_TAB) {
+            /* n is whatever the LAST pass counted, so it already follows the
+             * layout at the current scale rather than a number written here. */
+            if (n > 0) focus = (focus + 1) % n;
+            ui_set_focus(focus);
+            wm_damage(0, 0, (int)fb_pxw(), (int)fb_pxh());
+            return 1;
+        }
+        if (focus < 0) return 1;
+        /* Enter: re-run the SAME sequence with the activation flag set, so the
+         * focused widget fires through fire() exactly as a click would. */
+        struct settings before = S;
+        ui_activate_focus();
+        ui_begin(cx, cy, cw, ch, UI_HITTEST, -1, -1, 0);
+        build_ui();
+        ui_end_activate();
+        if (before.accent   != S.accent   || before.scale != S.scale ||
+            before.speed    != S.speed    || before.accel != S.accel ||
+            before.subpixel != S.subpixel || before.anim  != S.anim) {
+            settings_commit();
+            settings_flush();       /* a key press is a whole gesture on its own */
+        }
+        return 1;
+    }
+
     if (type != EV_MOUSE) return 0;
     if (!(code & 1)) {
         /* Button up: the gesture is over, so persist whatever it changed.
@@ -555,5 +599,9 @@ int settings_event(int app, int win, int type, int code, int x, int y)
                || before.subpixel != S.subpixel
                || before.anim     != S.anim;
     if (changed) settings_commit();
+    /* Clicking a control moves the keyboard focus onto it. Leaving the ring
+     * behind on whatever was last Tabbed to makes the next Enter press a
+     * different control than the one the user is looking at. */
+    if (ui_fired() >= 0) { focus = ui_fired(); ui_set_focus(focus); }
     return ui_fired() >= 0;
 }

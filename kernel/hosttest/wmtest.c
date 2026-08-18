@@ -779,6 +779,60 @@ int main(void)
     wm_close(dw);
     frame();
 
+    /* ---------------------------------------------------------- focus ring */
+    /* Window focus was a title-bar hue and an accent underline; a focused
+     * CONTROL had no indicator at all, and no way to move between controls
+     * without the mouse. */
+    {
+        int v = 50, on = 0, fired_by_key = 0;
+        int px0 = th->pad, py0 = th->pad + th->row_h / 2;
+
+        ui_set_focus(-1);
+        ui_begin(0, 0, 300, 400, UI_HITTEST, -1, -1, 0);
+        ui_button("one"); ui_toggle("two", &on); ui_slider(&v, 0, 100);
+        ok("three firing widgets are counted", ui_widget_count() == 3);
+        ok("...and nothing is focused by default", ui_focus_get() == -1);
+
+        /* ACTIVATION GOES THROUGH THE SAME fire() A CLICK DOES. A widget that
+         * could tell Enter from a click is two code paths that will drift. */
+        ui_set_focus(1);
+        ui_activate_focus();
+        ui_begin(0, 0, 300, 400, UI_HITTEST, -1, -1, 0);
+        ui_button("one");
+        fired_by_key = ui_toggle("two", &on);
+        ui_slider(&v, 0, 100);
+        ui_end_activate();
+        ok("the FOCUSED widget fires on activation", fired_by_key == 1);
+        ok("...and it really toggled", on == 1);
+
+        /* ...and only that one. An activation that fired every widget would
+         * look like it worked on whichever control was checked first. */
+        int a_fired = 0, c_fired = 0;
+        on = 0; v = 50;
+        ui_set_focus(1);
+        ui_activate_focus();
+        ui_begin(0, 0, 300, 400, UI_HITTEST, -1, -1, 0);
+        a_fired = ui_button("one");
+        ui_toggle("two", &on);
+        c_fired = ui_slider(&v, 0, 100);
+        ui_end_activate();
+        ok("...and ONLY that one", a_fired == 0 && c_fired == 0);
+
+        /* the flag is one-shot: a second pass must not re-fire it, or holding
+         * Enter would toggle the control on every repaint */
+        on = 0;
+        ui_begin(0, 0, 300, 400, UI_HITTEST, -1, -1, 0);
+        ui_button("one"); ui_toggle("two", &on); ui_slider(&v, 0, 100);
+        ok("...and activation is ONE-SHOT, not sticky", on == 0);
+
+        /* the ring is drawn, and only around the focused control */
+        for (int i = 0; i < WM_MAX; i++) wm_close(i);
+        wm_damage(0, 0, W, H);
+        pointer(20, 20, 0);
+        frame();
+        ui_set_focus(-1);
+    }
+
     /* -------------------------------------------------- the scroll scissor */
     /* A SCROLL REGION MUST NARROW THE SCISSOR AND THEN PUT IT BACK.
      *

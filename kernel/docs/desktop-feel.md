@@ -683,9 +683,72 @@ is the one a naive implementation fails: without consuming the gesture, three
 clicks are two overlapping doubles, so the window maximises and instantly
 restores and appears not to respond at all.
 
-### 6.3–6.5 — not done
+### 6.3 — the scroll wheel: DEFERRED, and why
 
-The scroll wheel (the PS/2 4-byte wheel format), a focus ring on controls, and
-the Super key are **not started**. They are listed here rather than quietly
-dropped. Note for whoever takes the wheel: `idt.c` has uncommitted changes in
-the LOOK track's worktree, so coordinate before editing it.
+Not blocked by difficulty. A read-only diff of `kernel/idt.c` against
+`../zl-linux/kernel/idt.c` shows the LOOK track has **wholesale rewritten** the
+mouse packet path in its uncommitted work — packet assembly extracted into a new
+`mouse_byte()`, made callable from *both* IRQ1 and IRQ12 (the 8042 shares one
+output buffer, and a keystroke overlapping a mouse packet was swallowing a byte
+out of the middle of it), `keyboard_isr` and `mouse_isr` both gutted, and the
+clamp moved onto `idt_set_pointer_bounds`.
+
+The wheel changes exactly that code — packet length 3 → 4, plus the enable
+sequence at init. Writing it against **this** worktree's `mouse_isr` would
+conflict with a wholesale rewrite of the same function *and* be built on a
+structure about to be deleted. §1.1 exists for this.
+
+Their `mouse_byte()` is a better home for it than the old ISR anyway. The full
+recipe — the IntelliMouse sample-rate knock, the 4-bit **signed** wheel field
+that must be sign-extended, and why the wheel has to be published as a
+delta accumulator rather than a position — is written up as **T-17** in
+`.ultra/TENSIONS.md`.
+
+### 6.4 — a focus ring on controls
+
+Window focus was a title-bar hue plus an accent underline; a focused **control**
+had no indicator at all, and no way to move between controls without the mouse.
+
+**The focus index lives in `ui.c`, not in `L`.** `L` is reset by every
+`ui_begin`, and focus has to survive between the hit-test pass and the draw pass
+— and between frames, which is the entire point of it. *Choosing* which widget
+is focused is still the app's, like every other piece of widget state; `ui.c`
+only remembers the number. `-1` is the default, because a desktop that boots
+with a ring on some arbitrary control looks broken.
+
+**Keyboard activation goes through the same `fire()` a click does.** The moment
+a widget can tell Enter from a click, the two paths drift and one grows a bug
+the other does not have.
+
+The ring is drawn by each firing widget at the end of its own draw block, and
+takes no widget id: `fire()` has already advanced `L.index`, so `L.index - 1` is
+the caller's own id — which means it cannot be passed the wrong one. It draws
+*outside* the control's rect so it never covers the label.
+
+Tab walks the controls and Enter presses the focused one, wired in `settings.c`.
+Tab's modulus is `ui_widget_count()`, whatever the last pass counted, so it
+follows the layout at the current scale rather than a number written down
+somewhere. Clicking a control also moves the ring onto it — otherwise the next
+Enter presses something other than what the user is looking at.
+
+**Gate** — six new `wmtest` assertions:
+
+```
+  three firing widgets are counted                         ok
+  ...and nothing is focused by default                     ok
+  the FOCUSED widget fires on activation                   ok
+  ...and it really toggled                                 ok
+  ...and ONLY that one                                     ok
+  ...and activation is ONE-SHOT, not sticky                ok
+```
+
+The last two are the ones a naive implementation fails: an activation that fired
+every widget would look correct on whichever control happened to be checked
+first, and a flag that is not one-shot means holding Enter toggles the control on
+every repaint. Confirmed by eye too — the ring renders as a clean accent hairline
+around the focused slider and around nothing else.
+
+### 6.5 — the Super key: not done
+
+`MOD_SUPER` is tracked and used for nothing. Not started, listed rather than
+quietly dropped.

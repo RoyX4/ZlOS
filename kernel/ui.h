@@ -179,6 +179,18 @@ int  ui_list_row(const char *s, int selected);
 void ui_scroll_begin(int h, int *off);
 void ui_scroll_end(int *off);
 int  ui_scroll_content(void);
+/* ---- keyboard focus --------------------------------------------------------
+ * Which control the keyboard is on. The INDEX lives in ui.c because it has to
+ * survive between the hit-test pass and the draw pass; choosing it is still the
+ * app's job, like every other piece of widget state. -1 is "nothing focused",
+ * and it is the default - a desktop that boots with a ring on some arbitrary
+ * control looks broken. */
+void ui_set_focus(int idx);
+int  ui_focus_get(void);
+int  ui_widget_count(void);     /* fired-capable widgets in the last pass    */
+void ui_activate_focus(void);   /* one-shot: the focused widget fires        */
+void ui_end_activate(void);     /* ...consumed after the app re-runs its UI  */
+
 void ui_row(void);              /* put the next widget beside this one       */
 void ui_endrow(void);
 
