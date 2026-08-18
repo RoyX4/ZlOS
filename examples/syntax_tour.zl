@@ -1,0 +1,103 @@
+# syntax_tour.zl - every piece of zl syntax, in one runnable file.
+#
+# This is the executable half of docs/REFERENCE.md's Syntax section. If the
+# reference and the language ever disagree, THIS file is the tiebreaker,
+# because it either runs or it does not:
+#
+#     ./interp examples/syntax_tour.zl
+#
+# Keep it interpreter-only. It uses strings, lists and f-strings, none of
+# which the unboxed backends (compilel/nativegen) accept - that is their
+# documented subset, not a bug.
+
+import strx                          # keyword #16: splices stdlib/strx.zl in
+
+# --- values and variables ------------------------------------------------
+# No declaration keyword and no types. Assignment creates.
+x = 5                                # num: every number is a double
+name = "Zac"                         # str
+ok = true                            # bool: true / false
+nums = [1, 2, 3]                     # list, mutable, mixed types allowed
+nothing = nil()                      # nil is a BUILTIN CALL, not a literal
+
+print(type(x) + " " + type(name) + " " + type(ok) + " " + type(nums))
+
+# --- strings -------------------------------------------------------------
+print("hi " + name)                  # + concatenates
+print(f"{name} is {x * 2} next year")   # f-string: {expr} is real code
+print("tab\there, newline next\n")   # \n \t \xNN \0 escapes
+
+# --- operators -----------------------------------------------------------
+# Arithmetic  + - * / %      Compare  == != < > <= >=
+# Logic is WORDS: and or not. There is no && || !
+# '!' alone means "i mean it, this is dangerous" - it is not negation.
+print(7 / 2)                         # 3.5 - '/' is always float division
+print(int(7 / 2))                    # 3   - int() truncates toward zero
+print(7 % 2)
+print(not (x > 10 and ok))
+
+# Ternary, right-associative, and the else-branch is NOT evaluated.
+label = x > 3 ? "big" : "small"
+print(label)
+
+# --- control flow --------------------------------------------------------
+# Blocks are { }. No colons, no significant indentation. No parens needed
+# around the condition.
+age = 17
+if age >= 18 {
+    print("adult")
+} elif age >= 13 {                   # 'elif', one word - 'else if' also works
+    print("teen")
+} else {
+    print("kid")
+}
+
+for n in nums {                      # for-in over a list
+    print(n)
+}
+for i in range(3) {                  # range(n) / range(a, b) build a list
+    print(f"i={i}")
+}
+
+i = 0
+while i < 10 {
+    i += 1                           # compound assign: += -= *= /= %=
+    if i == 3 { continue }
+    if i > 6 { break }
+}
+print(f"loop stopped at {i}")
+
+# --- lists ---------------------------------------------------------------
+nums[0] = 99                         # index assignment
+grid = [[1, 2], [3, 4]]
+grid[0][1] = 77                      # nested index assignment
+# push RETURNS the grown list - it is not reliably in-place. Always reassign:
+# a bare `push(nums, 4)` leaves nums unchanged.
+nums = push(nums, 4)
+print(f"{nums} len={len(nums)} first={first(nums)} last={last(nums)}")
+print(grid)
+print(slice("hello", 1, 3))          # slice works on strings
+
+# --- functions -----------------------------------------------------------
+fn double(n) {
+    return n * 2                     # no return -> the call yields nil
+}
+
+# Parameters are frame-scoped, so recursion works: each call gets its own n.
+fn fact(n) {
+    if n <= 1 { return 1 }
+    return n * fact(n - 1)
+}
+
+print(double(21))
+print(fact(5))
+
+# Functions are values: pass one in, call it through the parameter.
+fn apply_twice(f, v) { return f(f(v)) }
+print(apply_twice(double, 3))        # 12
+
+# The catch that bites: a function body sees GLOBALS. A local in the caller
+# with the same name as a local in the callee is the same variable, because
+# only parameters get a fresh frame slot. Prefix your helpers' locals, or
+# make them parameters.
+print(title_case("from the imported module"))   # defined in stdlib/strx.zl
