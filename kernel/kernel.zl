@@ -1917,6 +1917,10 @@ fn run_command(cmd, arg) {
     if cmd == 100 { return paint() }      # d - paint (draw)
     if cmd == 105 { return editor(arg) }  # i - text editor (arg = file slot 0-9)
     if cmd == 108 { return fs_list() }    # l - list RAM files
+    # 'N', not 'n': every lowercase code from a to z is already a command.
+    if cmd == 78 { return net_gate() }    # N - the network card, and an ARP probe
+    if cmd == 87 { return web_gate() }    # W - TCP + HTTP/1.0 against a real server
+    if cmd == 69 { return real_gate() }   # E - a real website, by name, off the internet
     if cmd == 114 {                       # r - reboot
         color(C_YELLOW)  print("  rebooting...")
         beep(1568, 6)  beep(784, 10)
@@ -2199,6 +2203,260 @@ APP_MONITOR = 1
 APP_ABOUT   = 2
 APP_SNAKE   = 3
 APP_MENU    = 4
+# ---- the resolver: names into addresses ------------------------------------
+# Everything under this is addressed by number. This is the rung that turns
+# "a machine I already know the address of" into "a name someone typed".
+fn dns_show(dnm) {
+    if dns_ask(dnm) == 0 {
+        color(C_RED)  put("    could not ask about ")  print(dnm)
+        color(C_GREY) return 0
+    }
+    dgi = 0
+    dgs = 1
+    while dgi < 400000 {
+        ip_poll()
+        dgs = dns_poll()
+        if dgs != 1 { dgi = 400000 } else { dgi = dgi + 1 }
+    }
+    if dgs == 2 {
+        color(C_GREEN)  put("    ")  put(dnm)  put("  ->  ")
+        dip = dns_ip()
+        put(band(dip / 16777216, 255))  put(".")
+        put(band(dip / 65536, 255))     put(".")
+        put(band(dip / 256, 255))       put(".")
+        print(band(dip, 255))
+        color(C_GREY)  return 1
+    }
+    if dgs == 3 { color(C_YELLOW)  put("    no such name: ")  print(dnm) }
+    if dgs == 4 { color(C_RED)     put("    timed out asking about ")  print(dnm) }
+    if dgs == 5 { color(C_RED)     put("    the answer was refused: ")  print(dnm) }
+    color(C_GREY)  return 0
+}
+
+fn dns_gate() {
+    color(C_CYAN)  print("  DNS")
+    color(C_GREY)
+    dns_up(NET_DNS)
+    print("    asking 10.0.2.3 (asserted, not leased - still no DHCP)")
+    dns_show("example.com")
+    dns_show("github.com")
+    dns_show("no-such-host-anywhere.invalid")
+    put("    queries ")  put(dns_q())  put("  replies ")  put(dns_r())
+    put("  refused ")  put(dns_bad())  put("  cached ")  print(dns_n())
+    return 0
+}
+
+# ---- a real website, by name -----------------------------------------------
+# The whole stack in one command: resolve a name we did not choose, open a
+# connection to whatever address came back, fetch over HTTP/1.0, parse the
+# markup and lay it out. Every layer under this was written this session.
+fn real_gate() {
+    color(C_CYAN)  print("  a real website")
+    color(C_GREY)
+    if ip_live() == 0 {
+        print("    the network is not up - press N first")
+        return 0
+    }
+    dns_up(NET_DNS)
+    print("    GET http://example.com/   (a name, not an address)")
+    br_go("http://example.com/")
+    # Keep pumping while the browser is RESOLVING (7) or FETCHING (4).
+    # Anything else means it has finished, one way or the other.
+    rgi = 0
+    rgs = 7
+    while rgi < 900000 {
+        br_tick()
+        rgs = br_state()
+        if rgs == 4 { rgi = rgi + 1 } else {
+            if rgs == 7 { rgi = rgi + 1 } else { rgi = 900000 }
+        }
+    }
+    if rgs == 0 {
+        color(C_GREEN)  put("    fetched and rendered: ")
+        put(br_h())  print(" pixels of laid-out page")
+        color(C_GREY)  put("    HTTP ")  put(http_code())
+        put("   body ")  put(http_len())  print(" bytes")
+        put("    title: ")  print(br_title())
+        color(C_CYAN)  print("    press w for the desktop - it is on screen")
+        color(C_GREY)  return 0
+    }
+    color(C_RED)  put("    failed, browser status ")  print(br_state())
+    color(C_GREY)  return 0
+}
+
+# ---- items 3 and 4: TCP and HTTP, against a real server --------------------
+# 10.0.2.2 is the HOST from inside QEMU's user-mode network, so this fetches
+# from a python3 -m http.server running on the machine the emulator is on.
+# That is a real server, a real three-way handshake and a real response body -
+# not a loopback and not a mock.
+HTTP_PORT = 8000
+
+fn web_gate() {
+    color(C_CYAN)  print("  TCP + HTTP/1.0")
+    color(C_GREY)
+    if ip_live() == 0 {
+        print("    the IP stack is not up - run the network gate first")
+        return 0
+    }
+    tcp_up(NET_ME)
+    http_reset()
+    if http_get(NET_GW, HTTP_PORT, "10.0.2.2", "/") == 0 {
+        color(C_RED)  print("    could not start the fetch")
+        color(C_GREY) return 0
+    }
+    put("    GET http://10.0.2.2:")  put(HTTP_PORT)  print("/  ...")
+    wgi = 0
+    wgs = 0
+    while wgi < 400000 {
+        ip_poll()
+        tcp_tick()
+        wgs = http_poll()
+        if wgs > 2 { wgi = 400000 } else { wgi = wgi + 1 }
+    }
+    put("    tcp state:    ")  print(tcp_st())
+    put("    segments:     out ")  put(tcp_tx())  put("  in ")  put(tcp_rx())
+    put("  retransmits ")  put(tcp_rexmit())  put("  dup ")  put(tcp_dup())
+    put("  out-of-order ")  print(tcp_ooo())
+    if wgs == 3 {
+        color(C_GREEN)  put("    HTTP ")  put(http_code())
+        put("   body ")  put(http_len())  put(" bytes of ")  put(http_total())
+        print(" received")
+        color(C_GREY)
+        if http_trunc() == 1 { color(C_YELLOW)  print("    body truncated - larger than the buffer")  color(C_GREY) }
+        # ...and hand it straight to the browser, which is the whole point
+        br_load(http_addr(), http_len())
+        color(C_CYAN)  print("    loaded into the browser. press w for the desktop.")
+        color(C_GREY)  return 0
+    }
+    if wgs == 5 { color(C_YELLOW)  print("    refused: not text/html or text/plain")  color(C_GREY)  return 0 }
+    color(C_RED)  put("    fetch failed in state ")  print(wgs)
+    print("    is there a server? on the host:  python3 -m http.server 8000")
+    color(C_GREY)  return 0
+}
+
+# ---- the network card, and the two-frame proof that it works ---------------
+# Item 1's gate: send an ARP request into QEMU's user-mode network, receive the
+# reply, print both MACs. Two frames, and it exercises the whole path - PCI
+# capability walk, feature handshake, both virtqueues, DMA out and DMA in.
+#
+# 10.0.2.15 is the address QEMU's user-mode DHCP hands the guest and 10.0.2.2
+# is its gateway. We do not speak DHCP, so the address is asserted rather than
+# leased - which is fine for an ARP probe and is NOT fine for anything above it.
+NET_ME  = 167772687          # 10.0.2.15
+NET_GW  = 167772674          # 10.0.2.2
+
+fn mac_print(which) {
+    mpi = 0
+    while mpi < 6 {
+        if mpi > 0 { put(":") }
+        if which == 0 { hex(net_mac(mpi), 2) } else { hex(net_peer(mpi), 2) }
+        mpi = mpi + 1
+    }
+    return 0
+}
+
+fn net_gate() {
+    color(C_CYAN)  print("  network (virtio-net)")
+    color(C_GREY)
+    if net_find() < 0 {
+        print("    no virtio-net device on the PCI bus")
+        print("    QEMU needs: -device virtio-net-pci,netdev=n0 -netdev user,id=n0")
+        return 0
+    }
+    put("    DMA arena at  0x")  hex(net_arena(), 8)  print("")
+    if net_ram() == 0 {
+        color(C_RED)  print("    the arena is NOT backed by RAM - needs -m 256 or more")
+        color(C_GREY) return 0
+    }
+    if net_up() == 0 {
+        color(C_RED)  print("    the device refused the feature handshake")
+        color(C_GREY) return 0
+    }
+    put("    link:         ")   print(net_link())
+    put("    our MAC:      ")   mac_print(0)  print("")
+    # ONE LAYER MAY OWN THE RECEIVE QUEUE. The raw ARP probe below drains the
+    # card directly and throws away every frame that is not its own reply, so
+    # running it once net.c is also draining that queue eats exactly the frames
+    # net.c is waiting for. It is a bring-up test, and it is only valid before
+    # bring-up.
+    if ip_live() == 1 {
+        color(C_GREY)  print("    (link already proven; the IP stack owns the queue now)")
+        return ip_gate()
+    }
+    color(C_GREY)  print("    sending an ARP request for 10.0.2.2 ...")
+    if net_arp(NET_ME, NET_GW, 2000) == 0 {
+        color(C_RED)  put("    no ARP reply. tx ")  put(net_tx())
+        put(" rx ")  put(net_rx())  put(" drops ")  print(net_drop())
+        color(C_GREY) return 0
+    }
+    put("    gateway MAC:  ")   mac_print(1)  print("")
+    color(C_GREEN)  put("    LINK UP. frames out ")  put(net_tx())
+    put(", in ")  print(net_rx())
+    color(C_GREY)  return ip_gate()
+}
+
+# ---- item 2: ARP, IPv4, ICMP -----------------------------------------------
+# One ping proves a round trip happened. It does NOT prove the stack works: a
+# stack that drops every fourth packet looks identical on a single ping, which
+# is why this runs twenty and reports loss and jitter as well as a time.
+#
+# The address is ASSERTED, not leased - there is no DHCP here. On QEMU's
+# user-mode network 10.0.2.15/24 via 10.0.2.2 is what the built-in server would
+# have handed out anyway, and saying that out loud is the point.
+NET_MASK = 4294967040        # 255.255.255.0
+NET_DNS  = 167772675         # 10.0.2.3 - QEMU's built-in resolver
+
+fn ip_gate() {
+    color(C_CYAN)  print("  IPv4 / ICMP")
+    color(C_GREY)
+    if ip_up(NET_ME, NET_MASK, NET_GW) == 0 {
+        color(C_RED)  print("    the stack could not be brought up")
+        color(C_GREY) return 0
+    }
+    print("    10.0.2.15/24 via 10.0.2.2  (asserted, not leased - no DHCP)")
+    pg = ip_ping(NET_GW, 1000)
+    if pg < 0 {
+        color(C_RED)  print("    no echo reply from the gateway")
+        color(C_GREY) return 0
+    }
+    put("    ping 10.0.2.2:  ")  put(pg)  print(" us")
+    color(C_GREY)  print("    ...and 20 more, because one proves nothing:")
+    ip_run(NET_GW, 20, 1000)
+    put("      sent ")  put(ip_sent())  put("   received ")  put(ip_recv())
+    put("   lost ")     print(ip_lost())
+    put("      min ")   put(ip_min())   put(" us   avg ")  put(ip_avg())
+    put(" us   max ")   put(ip_max())   print(" us")
+    put("      jitter ")  put(ip_jit())  print(" us  (mean step between round trips)")
+    dns_gate()
+    if ip_lost() > 0 { put("      lost pings (bit 0 = the first): 0x")  hex(ip_mask(), 8)  print("") }
+    put("      frames in ")  put(ip_rxf())  put("  arp ")  put(ip_rxarp())
+    put("  ip ")  put(ip_rxip())  put("  icmp ")  put(ip_rxicmp())
+    put("  bad-checksum ")  put(ip_badsum())  put("  not-ours ")  put(ip_notours())
+    put("  unmatched-echo ")  print(ip_stale())
+    put("      dropped: short ")  put(ip_short())  put("  bad-version ")  put(ip_badver())
+    put("  bad-ihl ")  put(ip_badihl())  put("  fragment ")  print(ip_frag())
+    put("      driver: tx ")  put(net_tx())  put("  rx ")  put(net_rx())
+    put("  rx-truncated ")  put(net_drop())  put("  runts ")  put(net_runt())  put("  tx-queue-full ")  print(net_txfull())
+    put("      driver saw: arp ")  put(net_seenarp())  put("  ip ")  put(net_seenip())
+    put("   buffers handed back twice: ")  print(net_idreuse())
+    print("      device trace  (index: desc-id len ethertype)")
+    tri = 0
+    while tri < net_trn() {
+        put("        ")  put(tri)  put(": id ")  put(net_trid(tri))
+        put("  len ")  put(net_trlen(tri))  put("  et 0x")  hex(net_tret(tri), 4)  print("")
+        tri = tri + 1
+    }
+    put("      rings: tx avail ")  put(net_txa())  put(" used ")  put(net_txu())
+    put("   rx avail ")  put(net_rxa())  put(" used ")  print(net_rxu())
+    if ip_lost() == 0 {
+        color(C_GREEN)  print("      no loss")
+    } else {
+        color(C_YELLOW)  print("      PACKETS WERE LOST - the stack is not clean")
+    }
+    color(C_GREY)  return 0
+}
+
+APP_BROWSER = 5                     # 3 was APP_SNAKE; the union merge gave both the same id
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     wy = ay - TITLE_H * ui()
@@ -2206,6 +2464,11 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_ABOUT   { return about_body(ax, wy) }
     if id == APP_SNAKE   { return sn_draw(ax, ay, aw, ah) }
     if id == APP_MENU    { return menu_draw(ax, ay, aw, ah) }
+    # THE BROWSER'S ENTIRE POLICY SURFACE IS THIS LINE. The parse, the box
+    # model and the paint are C - a tokenizer is string handling, and the zl
+    # kernel subset has string literals but no string values. Same split the
+    # terminal's command matcher had to make, and for the same reason.
+    if id == APP_BROWSER { return br_draw(ax, ay, aw, ah, afocus) }
     if id == APP_SHELL {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the
@@ -2224,6 +2487,21 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
 fn app_event(id, win, ety, ecode, ex, ey) {
     if id == APP_SNAKE { return sn_event(ety, ecode) }
     if id == APP_MENU  { return menu_event(ety, ecode, ex, ey, win) }
+    if id == APP_BROWSER {
+        # '[' and ']' RESIZE THE WINDOW, and that is the gate rather than a
+        # convenience: reflow is only observable if the width can change while
+        # the machine is running. wm_resize has existed since the compositor
+        # landed with no caller and no way to reach it - this is the first.
+        if ety == 3 {
+            if ecode == 91 { wm_size(win, wm_w(win) - 80, wm_hh(win))  wm_dmg(win)  return 1 }
+            if ecode == 93 { wm_size(win, wm_w(win) + 80, wm_hh(win))  wm_dmg(win)  return 1 }
+            if br_key(ecode) == 1 { wm_dmg(win) }
+            return 1
+        }
+        if ety == 1 { if br_key(ecode) == 1 { wm_dmg(win) }  return 1 }
+        if ety == 4 { if br_click(ex, ey) == 1 { wm_dmg(win) }  return 1 }
+        return 1
+    }
     if id == APP_SHELL {
         # ONE CHARACTER PER CALL. No loop - that is the whole inversion.
         # read_line used to block, which is exactly why the shell had to be the
@@ -2269,6 +2547,10 @@ fn wm_damage_win_all() {
 
 fn app_tick(id, win) {
     if id == APP_SNAKE { return sn_step() }
+    # The browser drives its own fetch from the frame loop. app_tick MUST NOT
+    # DRAW and must be cheap; br_tick pumps the link, the TCP timers and the
+    # HTTP state machine, and returns 1 only when something actually changed.
+    if id == APP_BROWSER { return br_tick() }
     if id == APP_MONITOR {
         tsec = ticks() / 100
         if tsec != last_tick_sec {
@@ -2718,6 +3000,7 @@ fn wm_boot_start() {
     shell_win = wm_open(APP_SHELL, "zl shell", 40 * u, 52 * u, sw - 340 * u, sh - 90 * u)
     wm_open(APP_MONITOR, "System Monitor", sw - 290 * u, 52 * u, MON_W * u, MON_H * u)
     wm_open(APP_ABOUT, "About", sw - 290 * u, 52 * u + (MON_H + 16) * u, MON_W * u, AB_H * u)
+    wm_open(APP_BROWSER, "zlOS browser", 120 * u, 96 * u, 520 * u, 380 * u)
     # THE SHELL TAKES THE KEYBOARD BACK. wm_open focuses whatever it just
     # opened, and the shell has to be opened FIRST for an unrelated reason -
     # the boot log prints into it, so it must exist before the log runs. Those

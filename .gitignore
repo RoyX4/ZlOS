@@ -16,6 +16,14 @@ compile_commands.json
 compilef
 outf.c
 kernel/hosttest/intel_probe
+kernel/hosttest/htmltest
+kernel/hosttest/browsershot
+kernel/hosttest/nettest
+kernel/hosttest/tcptest
+kernel/hosttest/httptest
+kernel/hosttest/browsertest
+kernel/hosttest/fuzz
+kernel/hosttest/dnstest
 kernel/hosttest/regs-*.txt
 
 # build outputs - regenerable, and large. Build them with:
@@ -31,6 +39,14 @@ kernel/BOOTX64.EFI
 kernel/BOOTX64.lib
 kernel/_gen*.c
 kernel/hosttest/intel_probe
+kernel/hosttest/htmltest
+kernel/hosttest/browsershot
+kernel/hosttest/nettest
+kernel/hosttest/tcptest
+kernel/hosttest/httptest
+kernel/hosttest/browsertest
+kernel/hosttest/fuzz
+kernel/hosttest/dnstest
 kernel/hosttest/dpll_test
 kernel/hosttest/modeset_test
 kernel/hosttest/regs-*.txt

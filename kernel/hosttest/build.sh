@@ -70,3 +70,74 @@ if [ -f /usr/include/GL/glx.h ]; then
   gcc -O2 -w -o gpu_fillrate gpu_fillrate.c -lGL -lX11
   echo "built ./gpu_fillrate  (run: ./gpu_fillrate)"
 fi
+
+# The browser's parser and box model, asserted. html.c and layout.c reach for
+# exactly one thing outside themselves - a function that measures a string - so
+# injecting a synthetic one turns both into ordinary programs. Malformed markup
+# recovering rather than faulting is unprovable by looking at a rendered page,
+# and reflow is a claim about numbers before it is a claim about pixels.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o htmltest htmltest.c ../html.c ../layout.c
+echo "built ./htmltest      (run: ./htmltest)"
+
+# ...and the same document at three widths, as a picture. Same argument as
+# wmtest/wmshot: assertions catch a run escaping the content box, eyes catch
+# inline <code> set at the wrong size or a list marker sitting in its own text.
+gcc -O2 -w -o browsershot browsershot.c ../browser.c ../html.c ../layout.c \
+    ../ui.c ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c \
+    ../http.c ../tcp.c ../net.c
+echo "built ./browsershot   (run: ./browsershot out.ppm)"
+
+# ARP, IPv4 and ICMP against scripted packets. net.c holds no link driver - the
+# link is two function pointers - so this harness IS the machine on the other
+# end of the wire: it answers ARP and ICMP, and it can be told to lose one
+# packet in four or to alternate its delay. That makes loss and jitter numbers
+# with a known right answer rather than whatever the network did that
+# afternoon, and the clock is virtual so the jitter assertion cannot be flaky.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o nettest nettest.c ../net.c
+echo "built ./nettest       (run: ./nettest)"
+
+# The TCP state machine against scripted packet sequences. Every case here is
+# one that either cannot be produced from a real peer on demand (a segment
+# arriving twice, a FIN mid-transfer, a RST with the wrong sequence number) or
+# takes minutes of wall clock (five SYN retransmits with exponential backoff).
+# The harness IS the peer and the clock is a variable, so all of it is instant.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o tcptest tcptest.c ../tcp.c ../net.c
+echo "built ./tcptest       (run: ./tcptest)"
+
+# HTTP/1.0 over the REAL tcp.c, driven by scripted TCP segments. http.c was
+# gated end to end against a python http.server, which proves the happy path
+# and nothing else - and the happy path is the one case a server will reliably
+# give you. Everything that makes a parser wrong is what happens when the
+# response is not what you expected: headers split across segments, bare LF
+# line endings, a body with no Content-Length, a Content-Length that lies, a
+# 3xx with no Location, a type that is not a page. None of those can be asked
+# for from a real server; all of them are two lines here.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o httptest httptest.c ../http.c ../tcp.c ../net.c
+echo "built ./httptest      (run: ./httptest)"
+
+# The browser app's LOGIC - URL parsing, history, the URL bar's key machine -
+# with the drawing stubbed rather than linked. browsershot renders browser.c
+# and asserts nothing about it; everything the app does that is not drawing was
+# untested, including the one place it takes whatever a person typed. The
+# network below it is real: net.c, tcp.c and http.c are all linked, so "did it
+# parse the port" is answered by looking at the SYN that went out.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o browsertest browsertest.c ../browser.c \
+    ../html.c ../layout.c ../http.c ../tcp.c ../net.c
+echo "built ./browsertest   (run: ./browsertest)"
+
+# Every layer that takes bytes from somewhere else, fed garbage. The harnesses
+# above check the code does the right thing with inputs someone thought of;
+# this checks it does nothing catastrophic with inputs nobody thought of. Build
+# it WITH the sanitizers - a clean run without them proves almost nothing.
+#   ./fuzz [iterations] [seed]
+gcc -O1 -g -w -D_GNU_SOURCE -fsanitize=address,undefined -o fuzz fuzz.c \
+    ../html.c ../layout.c ../net.c ../tcp.c ../http.c
+echo "built ./fuzz          (run: ./fuzz 3000 1)"
+
+# The resolver, mostly fed answers it should refuse. A DNS response is
+# unauthenticated data from a machine we did not choose, parsed by a walk over
+# length-prefixed labels with BACKWARD POINTERS in them - nothing in the format
+# stops a pointer aimed at itself. Most of this harness is malicious rather
+# than merely malformed, and none of it can be asked for from a real server.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o dnstest dnstest.c ../dns.c ../net.c
+echo "built ./dnstest       (run: ./dnstest)"
