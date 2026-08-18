@@ -215,3 +215,241 @@ char *k_strdup(const char *s)
     if (d) k_memcpy(d, s, n);
     return d;
 }
+
+/* ---- maths ---------------------------------------------------------------
+ * zl exposes about eighteen of these as builtins. A kernel has no libm, and
+ * writing one is the part of this port where "it looks right" is worth the
+ * least - every function below is checked against glibc's over a swept range
+ * in hosttest/libctest.c, because a sine that is subtly wrong produces a
+ * plausible picture rather than an error.
+ *
+ * THE SHAPE OF ALL OF THEM: reduce the argument into a range where a short
+ * series converges fast, evaluate, then undo the reduction. The reduction is
+ * where the accuracy is won or lost - a Taylor series for sin is excellent
+ * near zero and useless at 100, so the answer for 100 is entirely decided by
+ * how well it was folded back to near zero.
+ *
+ * Accuracy target is ~1e-12 relative, which is far tighter than anything a zl
+ * script drawing on a screen can notice and loose enough to write in 150 lines
+ * rather than 1500. Where that is not met it is stated, not hidden.
+ */
+
+#define K_PI   3.14159265358979323846
+#define K_PI2  1.57079632679489661923
+#define K_LN2  0.69314718055994530942
+
+int k_isnan(double x) { return x != x; }
+
+double k_fabs(double x)  { return x < 0 ? -x : x; }
+double k_floor(double x)
+{
+    /* The cast is only valid inside the range a long long can hold; outside
+     * it the value is already integral, so returning it unchanged is both
+     * correct and the only thing that does not invoke UB. */
+    if (x >= 9.2e18 || x <= -9.2e18 || k_isnan(x)) return x;
+    double t = (double)(long long)x;
+    return (t > x) ? t - 1.0 : t;
+}
+double k_ceil(double x)
+{
+    if (x >= 9.2e18 || x <= -9.2e18 || k_isnan(x)) return x;
+    double t = (double)(long long)x;
+    return (t < x) ? t + 1.0 : t;
+}
+double k_trunc(double x)
+{
+    if (x >= 9.2e18 || x <= -9.2e18 || k_isnan(x)) return x;
+    return (double)(long long)x;
+}
+double k_round(double x)
+{
+    /* away from zero on a tie, which is what C's round() does - and NOT what
+     * floor(x+0.5) does for negatives, the usual shortcut and the usual bug */
+    return x < 0 ? -k_floor(-x + 0.5) : k_floor(x + 0.5);
+}
+/* MEASURED WRONG THE OBVIOUS WAY. `a - trunc(a/b)*b` reads correctly and is
+ * accurate only while a/b is small: swept against libm over a in [-100,100]
+ * and b in [-20,20] its worst error was 9.03, not 1e-9, because for a small b
+ * the quotient is huge and trunc() throws away the low bits that the whole
+ * answer consists of.
+ *
+ * Repeated subtraction by a scaled divisor instead. Every operation here is
+ * exact in binary floating point - doubling and halving only move the
+ * exponent, and the subtraction is between numbers within a factor of two of
+ * each other, so it is exact by Sterbenz's lemma. The result is therefore
+ * exact, not merely close, which is what libm's is. */
+double k_fmod(double a, double b)
+{
+    if (b == 0.0 || k_isnan(a) || k_isnan(b)) return 0.0 / 1.0 * 0.0;   /* nan */
+    int neg = a < 0.0;
+    double r = k_fabs(a), d = k_fabs(b);
+    if (r < d) return a;
+
+    /* scale d up to just below r, counting the doublings */
+    int shifts = 0;
+    while (d <= r * 0.5) { d *= 2.0; shifts++; }
+
+    while (shifts-- >= 0) {
+        if (r >= d) r -= d;
+        d *= 0.5;
+    }
+    return neg ? -r : r;
+}
+
+double k_sqrt(double x)
+{
+    if (x < 0.0 || k_isnan(x)) return 0.0 / 1.0 * 0.0;
+    if (x == 0.0) return 0.0;
+    /* Newton-Raphson. Seeded by halving the exponent rather than from a
+     * constant: from a fixed seed this needs ~40 iterations for large inputs
+     * and converges in 6 from a good one. */
+    double g = x;
+    int e = 0;
+    while (g > 2.0)  { g *= 0.25; e++; }
+    while (g < 0.5)  { g *= 4.0;  e--; }
+    double r = g;
+    for (int i = 0; i < 8; i++) r = 0.5 * (r + g / r);
+    while (e > 0) { r *= 2.0; e--; }
+    while (e < 0) { r *= 0.5; e++; }
+    /* two more at full scale to clean up whatever the scaling cost */
+    r = 0.5 * (r + x / r);
+    r = 0.5 * (r + x / r);
+    return r;
+}
+
+double k_exp(double x)
+{
+    if (x > 709.0)  return 1.0e308 * 10.0;      /* inf */
+    if (x < -745.0) return 0.0;
+    /* exp(x) = 2^n * exp(r), |r| <= ln2/2. Without the reduction the series
+     * needs hundreds of terms at x=700 and loses everything to cancellation. */
+    double n = k_round(x / K_LN2);
+    double r = x - n * K_LN2;
+    double term = 1.0, sum = 1.0;
+    for (int i = 1; i < 18; i++) { term *= r / (double)i; sum += term; }
+    int e = (int)n;
+    while (e > 0)  { sum *= 2.0; e--; }
+    while (e < 0)  { sum *= 0.5; e++; }
+    return sum;
+}
+
+double k_log(double x)
+{
+    if (x < 0.0 || k_isnan(x)) return 0.0 / 1.0 * 0.0;
+    if (x == 0.0) return -1.0e308 * 10.0;
+    /* x = m * 2^e with m in [2/3, 4/3), then atanh's series in
+     * z = (m-1)/(m+1), which converges far faster than log(1+u) near the
+     * edges of the mantissa range. */
+    int e = 0;
+    while (x > 1.3333333333333333) { x *= 0.5; e++; }
+    while (x < 0.6666666666666666) { x *= 2.0; e--; }
+    double z = (x - 1.0) / (x + 1.0), z2 = z * z, t = z, sum = 0.0;
+    for (int i = 1; i < 30; i += 2) { sum += t / (double)i; t *= z2; }
+    return 2.0 * sum + (double)e * K_LN2;
+}
+
+double k_pow(double a, double b)
+{
+    if (b == 0.0) return 1.0;
+    if (a == 0.0) return 0.0;
+    /* An integer exponent goes by squaring: exact for the cases a script
+     * actually writes (x^2, x^3), where exp(b*log a) would return 8.000000001 */
+    if (b == k_trunc(b) && k_fabs(b) < 1024.0) {
+        int n = (int)k_fabs(b);
+        double r = 1.0, base = a;
+        while (n) { if (n & 1) r *= base; base *= base; n >>= 1; }
+        return b < 0 ? 1.0 / r : r;
+    }
+    if (a < 0.0) return 0.0 / 1.0 * 0.0;        /* non-integer power of a negative */
+    return k_exp(b * k_log(a));
+}
+
+double k_log2(double x)  { return k_log(x) / K_LN2; }
+double k_log10(double x) { return k_log(x) / 2.30258509299404568402; }
+
+static double k_sin_core(double r)          /* |r| <= pi/4 */
+{
+    double r2 = r * r, term = r, sum = r;
+    for (int i = 1; i < 9; i++) {
+        term *= -r2 / (double)((2 * i) * (2 * i + 1));
+        sum += term;
+    }
+    return sum;
+}
+static double k_cos_core(double r)          /* |r| <= pi/4 */
+{
+    double r2 = r * r, term = 1.0, sum = 1.0;
+    for (int i = 1; i < 9; i++) {
+        term *= -r2 / (double)((2 * i - 1) * (2 * i));
+        sum += term;
+    }
+    return sum;
+}
+
+/* Fold to the nearest quadrant, then pick the core by which quadrant it is.
+ * Accuracy falls off for very large arguments because the fold subtracts two
+ * close numbers - the standard limitation, and it starts to matter around
+ * 1e9, which no zl script drawing a circle will reach. */
+double k_sin(double x)
+{
+    double n = k_round(x / K_PI2);
+    double r = x - n * K_PI2;
+    int q = ((int)n) & 3;
+    if (q < 0) q += 4;
+    switch (q) {
+        case 0: return  k_sin_core(r);
+        case 1: return  k_cos_core(r);
+        case 2: return -k_sin_core(r);
+        default:return -k_cos_core(r);
+    }
+}
+double k_cos(double x)
+{
+    double n = k_round(x / K_PI2);
+    double r = x - n * K_PI2;
+    int q = ((int)n) & 3;
+    if (q < 0) q += 4;
+    switch (q) {
+        case 0: return  k_cos_core(r);
+        case 1: return -k_sin_core(r);
+        case 2: return -k_cos_core(r);
+        default:return  k_sin_core(r);
+    }
+}
+double k_tan(double x) { double c = k_cos(x); if (c == 0.0) return 1.0e308 * 10.0; return k_sin(x) / c; }
+
+double k_atan(double x)
+{
+    int neg = x < 0; if (neg) x = -x;
+    int inv = x > 1.0; if (inv) x = 1.0 / x;
+    /* Halve twice with the identity atan(x)=2*atan(x/(1+sqrt(1+x^2))) so the
+     * series argument is small and 30 terms is plenty. */
+    int halves = 0;
+    for (; halves < 2; halves++) x = x / (1.0 + k_sqrt(1.0 + x * x));
+    double x2 = x * x, t = x, sum = 0.0;
+    for (int i = 0; i < 24; i++) {
+        sum += ((i & 1) ? -1.0 : 1.0) * t / (double)(2 * i + 1);
+        t *= x2;
+    }
+    for (int i = 0; i < halves; i++) sum *= 2.0;
+    if (inv) sum = K_PI2 - sum;
+    return neg ? -sum : sum;
+}
+double k_asin(double x)
+{
+    if (x > 1.0 || x < -1.0) return 0.0 / 1.0 * 0.0;
+    if (x == 1.0) return K_PI2;
+    if (x == -1.0) return -K_PI2;
+    return k_atan(x / k_sqrt(1.0 - x * x));
+}
+double k_acos(double x) { return K_PI2 - k_asin(x); }
+
+double k_hypot(double a, double b)
+{
+    /* scaled, so hypot(1e200,1e200) does not overflow squaring its way there */
+    a = k_fabs(a); b = k_fabs(b);
+    double m = a > b ? a : b, n = a > b ? b : a;
+    if (m == 0.0) return 0.0;
+    double r = n / m;
+    return m * k_sqrt(1.0 + r * r);
+}

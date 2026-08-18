@@ -55,6 +55,14 @@ void *k_realloc(void *, ul);
 char *k_strdup(const char *);
 void  k_free(void *);
 
+double k_sqrt(double); double k_exp(double); double k_log(double);
+double k_log2(double); double k_log10(double); double k_sin(double);
+double k_cos(double); double k_tan(double); double k_atan(double);
+double k_asin(double); double k_acos(double); double k_floor(double);
+double k_ceil(double); double k_trunc(double); double k_round(double);
+double k_fabs(double); double k_pow(double, double);
+double k_hypot(double, double); double k_fmod(double, double);
+
 int   arena_init(void);
 void  arena_reset(void);
 void zl_putc_pub(char c) { (void)c; }
@@ -207,6 +215,89 @@ int main(void)
         arena_reset();
         void *big = k_malloc(ARENA_BYTES * 2);
         ok(big == NULL, "k_malloc cannot exceed the arena's ceiling");
+    }
+
+    /* ---- maths, swept against libm --------------------------------------
+     * A sine that is subtly wrong produces a plausible picture rather than an
+     * error, so every function is swept rather than spot-checked, and the
+     * WORST error over the sweep is printed - a max is a measurement, an
+     * average hides the one input that is wrong. */
+    {
+        struct { const char *name; double (*mine)(double); double (*real)(double);
+                 double lo, hi; double tol; } fns[] = {
+            { "sqrt",  k_sqrt,  sqrt,   0.0,    1e6,   1e-14 },
+            { "exp",   k_exp,   exp,   -30.0,   30.0,  1e-13 },
+            { "log",   k_log,   log,    1e-6,   1e6,   1e-13 },
+            { "log2",  k_log2,  log2,   1e-6,   1e6,   1e-13 },
+            { "log10", k_log10, log10,  1e-6,   1e6,   1e-13 },
+            { "sin",   k_sin,   sin,   -50.0,   50.0,  1e-12 },
+            { "cos",   k_cos,   cos,   -50.0,   50.0,  1e-12 },
+            { "atan",  k_atan,  atan,  -100.0,  100.0, 1e-12 },
+            { "asin",  k_asin,  asin,  -1.0,    1.0,   1e-11 },
+            { "acos",  k_acos,  acos,  -1.0,    1.0,   1e-11 },
+            { "floor", k_floor, floor, -1e9,    1e9,   0.0   },
+            { "ceil",  k_ceil,  ceil,  -1e9,    1e9,   0.0   },
+            { "trunc", k_trunc, trunc, -1e9,    1e9,   0.0   },
+            { "round", k_round, round, -1e9,    1e9,   0.0   },
+            { "fabs",  k_fabs,  fabs,  -1e9,    1e9,   0.0   },
+        };
+        for (unsigned f = 0; f < sizeof fns / sizeof fns[0]; f++) {
+            double worst = 0, worst_at = 0;
+            const int N = 20000;
+            for (int i = 0; i <= N; i++) {
+                double x = fns[f].lo + (fns[f].hi - fns[f].lo) * (double)i / (double)N;
+                double m = fns[f].mine(x), r = fns[f].real(x);
+                double e = fabs(m - r);
+                double rel = fabs(r) > 1.0 ? e / fabs(r) : e;
+                if (rel > worst) { worst = rel; worst_at = x; }
+            }
+            char msg[128];
+            snprintf(msg, sizeof msg, "%s agrees with libm over its range (worst %.2g at %.4g)",
+                     fns[f].name, worst, worst_at);
+            ok(worst <= fns[f].tol, msg);
+            if (worst <= fns[f].tol)
+                printf("        %-6s worst relative error %.3g\n", fns[f].name, worst);
+        }
+
+        /* two-argument ones */
+        double wp = 0, wh = 0, wm = 0;
+        for (int i = 0; i < 20000; i++) {
+            double a = -100.0 + 200.0 * (double)(nextr() % 10000) / 10000.0;
+            double b = -20.0  + 40.0  * (double)(nextr() % 10000) / 10000.0;
+            if (a > 0) {
+                double m = k_pow(a, b), r = pow(a, b);
+                if (r != 0 && !isinf(r) && !isnan(r)) {
+                    double e = fabs(m - r) / fabs(r);
+                    if (e > wp) wp = e;
+                }
+            }
+            double m2 = k_hypot(a, b), r2 = hypot(a, b);
+            double e2 = fabs(m2 - r2) / (fabs(r2) > 1 ? fabs(r2) : 1);
+            if (e2 > wh) wh = e2;
+            if (b != 0) {
+                double m3 = k_fmod(a, b), r3 = fmod(a, b);
+                double e3 = fabs(m3 - r3);
+                if (e3 > wm) wm = e3;
+            }
+        }
+        ok(wp < 1e-11, "pow agrees with libm");
+        ok(wh < 1e-13, "hypot agrees with libm");
+        ok(wm < 1e-9,  "fmod agrees with libm");
+        printf("        pow %.3g   hypot %.3g   fmod %.3g\n", wp, wh, wm);
+
+        /* the cases the shortcuts get wrong */
+        ok(k_round(-2.5) == round(-2.5), "round(-2.5) goes AWAY from zero, not floor(x+0.5)");
+        ok(k_round(2.5)  == round(2.5),  "round(2.5) likewise");
+        ok(k_pow(2.0, 10.0) == 1024.0, "an integer power is EXACT, not 1023.9999999");
+        ok(k_pow(3.0, 3.0) == 27.0, "...and so is 3^3");
+        {
+            double h = k_hypot(1e200, 1e200), hr = hypot(1e200, 1e200);
+            /* NOT exact equality - that asks a reimplementation to reproduce
+             * glibc bit for bit, which is a different and much harder claim.
+             * What matters is that scaling stopped it reaching inf. */
+            ok(!isinf(h) && fabs(h - hr) / hr < 1e-14,
+               "hypot(1e200,1e200) does not overflow on the way");
+        }
     }
 
     printf("\n%d checks, %d failures\n", checks, fails);
