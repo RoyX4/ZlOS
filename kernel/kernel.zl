@@ -1949,6 +1949,15 @@ fn ip_gate() {
     put("  bad-ihl ")  put(ip_badihl())  put("  fragment ")  print(ip_frag())
     put("      driver: tx ")  put(net_tx())  put("  rx ")  put(net_rx())
     put("  rx-truncated ")  put(net_drop())  put("  runts ")  put(net_runt())  put("  tx-queue-full ")  print(net_txfull())
+    put("      driver saw: arp ")  put(net_seenarp())  put("  ip ")  put(net_seenip())
+    put("   buffers handed back twice: ")  print(net_idreuse())
+    print("      device trace  (index: desc-id len ethertype)")
+    tri = 0
+    while tri < net_trn() {
+        put("        ")  put(tri)  put(": id ")  put(net_trid(tri))
+        put("  len ")  put(net_trlen(tri))  put("  et 0x")  hex(net_tret(tri), 4)  print("")
+        tri = tri + 1
+    }
     put("      rings: tx avail ")  put(net_txa())  put(" used ")  put(net_txu())
     put("   rx avail ")  put(net_rxa())  put(" used ")  print(net_rxu())
     if ip_lost() == 0 {

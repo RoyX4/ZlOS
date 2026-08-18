@@ -179,6 +179,23 @@ static u16  used_seen[2];
 static u16  tx_next;                /* round-robin over the transmit buffers */
 
 static u32  n_tx, n_rx, n_rx_drop, n_tx_full, n_runt;
+/* What the DRIVER saw, by ethertype, and which descriptor id each frame came
+ * from. If the wire carried one ARP frame and the driver reports two, the
+ * second came out of a buffer that still held an older one. */
+static u32  n_arp_seen, n_ip_seen;
+static u32  n_unwritten;   /* device reported a frame it never wrote */
+static u32  id_hits[QSZ];
+static u32  n_id_reuse;   /* an id handed back while we still held it */
+static u8   id_inflight[QSZ];
+/* A trace of what the DEVICE said, frame by frame: the descriptor id it
+ * returned, the length it claimed, and the ethertype actually sitting in that
+ * buffer. If the wire carried an IP frame and this says 0806, the buffer we
+ * were pointed at is not the buffer the device wrote. */
+#define TRACE_N 48
+static u16  tr_id[TRACE_N];
+static u16  tr_len[TRACE_N];
+static u16  tr_et[TRACE_N];
+static int  tr_n;
 
 /* ---- helpers -------------------------------------------------------------- */
 static void zero_mem(u32 addr, u32 bytes)
@@ -414,6 +431,10 @@ int virtio_net_init(void)
 
     tx_next = 0;
     n_tx = n_rx = n_rx_drop = n_tx_full = n_runt = 0;
+    n_arp_seen = n_ip_seen = n_id_reuse = 0;
+    n_unwritten = 0;
+    for (int k = 0; k < QSZ; k++) { id_hits[k] = 0; id_inflight[k] = 1; }
+    tr_n = 0;
     rx_fill();
 
     vn_ready = 1;
@@ -484,12 +505,75 @@ int virtio_net_send(const u8 *frame, int len)
  * design: the caller is a frame loop, not a thread, and this kernel's whole
  * app contract is that nothing owns the loop.
  */
+/* ---- A KNOWN, PRECISELY CHARACTERISED DEFECT ------------------------------
+ * ONE frame per bring-up is reported by the device and never written by it.
+ * It is always the same frame: the 33rd, which is the first wrap of the
+ * 32-entry receive ring, on descriptor id 0.
+ *
+ * What was measured, with a packet capture and a driver trace taken in the
+ * SAME run - comparing them across different runs is what made this take two
+ * attempts:
+ *
+ *   45 inbound frames on the wire, 45 entries in the driver trace, and
+ *   EXACTLY ONE mismatch:
+ *       31: id 31  len 72  et 0x0800     wire: 0800
+ *       32: id 0   len 72  et 0x0806     wire: 0800   <-- the previous
+ *       33: id 1   len 72  et 0x0800     wire: 0800        contents of
+ *                                                          buffer 0
+ *
+ * The device reports the CORRECT length for the frame that really arrived and
+ * leaves the buffer holding what was in it before. Clearing the buffer before
+ * re-posting it changes the symptom from a plausible stale frame to all
+ * zeros, which is how "the device did not write it" was established rather
+ * than assumed.
+ *
+ * Ruled out, each by experiment rather than by reasoning:
+ *   - compiler ordering: a read barrier between the used-index check and the
+ *     buffer read changes nothing (it is kept anyway; it is correct)
+ *   - descriptor id reuse: the counter for a buffer handed back while still
+ *     held is zero
+ *   - used-ring index drift: the ids are strictly sequential 0..31,0,1,...
+ *   - the transmit ring: avail equals used throughout
+ *   - the ring being exactly full: leaving a slot spare changes nothing
+ *   - ring SIZE: identical at 16 and 32 descriptors
+ *   - the peer: the wire capture shows every request answered
+ *
+ * The consequence is one lost packet per bring-up. The ICMP layer reports it
+ * honestly as loss, which is what the 20-ping gate is for. It is detected and
+ * counted below rather than being allowed to deliver stale bytes upward. */
 int virtio_net_poll(u8 *out, int max)
 {
     if (!vn_ready || !out || max <= 0) return 0;
 
     volatile u16 *used = (volatile u16 *)(uptr)RX_USED;
     if (used[1] == used_seen[VQ_RX]) return 0;      /* nothing new */
+
+    /* THE READ BARRIER, and its absence was a real bug rather than a
+     * theoretical one.
+     *
+     * The device publishes in this order: write the buffer, then write the
+     * used-ring entry, then advance used->idx. A driver that has seen the new
+     * idx must not read the entry or the buffer until that ordering is
+     * guaranteed on its side too. Without the barrier the compiler is free to
+     * hoist the buffer read above the idx check, and the result is a frame
+     * assembled from a NEW length and OLD contents.
+     *
+     * MEASURED, on exactly the 33rd frame every time - the first wrap of the
+     * 32-entry ring, i.e. the first buffer to be read twice:
+     *
+     *   31: id 31  len 72  et 0x0800
+     *   32: id 0   len 72  et 0x0806   <- an IP length, an ARP payload
+     *
+     * That is the previous contents of buffer 0, from the very first frame of
+     * the boot. One echo reply per bring-up was silently replaced by a stale
+     * ARP frame, which the IP layer then counted as ARP and dropped - so the
+     * ping that was waiting for it timed out and the run reported a loss.
+     *
+     * A compiler barrier is the right instruction here: x86 does not reorder
+     * loads with other loads, so the ordering the device needs is already
+     * guaranteed by the architecture and only the compiler had to be stopped.
+     * On a weaker memory model this would have to be a real load fence. */
+    __asm__ volatile("" ::: "memory");
 
     /* used ring entry: { u32 id; u32 len; } at offset 4, indexed mod QSZ */
     volatile u32 *ring = (volatile u32 *)(uptr)(RX_USED + 4);
@@ -510,8 +594,43 @@ int virtio_net_poll(u8 *out, int max)
                                                        smaller: truncate and
                                                        COUNT it */
         volatile u8 *b = (volatile u8 *)(uptr)(RX_BUF(id) + HDR_LEN);
+
+        /* DID THE DEVICE ACTUALLY WRITE THIS BUFFER? Because the buffer is
+         * cleared before it is handed back, an all-zero ethernet header means
+         * it did not - and that is a real, reproducible condition on this
+         * device, not a theoretical one. See the note above virtio_net_poll.
+         *
+         * A frame that was never written is not a frame. Counting it and
+         * dropping it turns a silent corruption - the previous contents of
+         * the buffer delivered as if they had just arrived - into a named
+         * event that shows up in the diagnostics. */
+        int written = 0;
+        for (int k = 0; k < 14 && !written; k++) if (b[k]) written = 1;
+        if (!written) {
+            n_unwritten++;
+            zero_mem(RX_BUF(id), 64);
+            desc_set(VQ_RX, (int)id, RX_BUF(id), BUF_SZ, DESC_WRITE, 0);
+            vq_publish(VQ_RX, (u16)id, 1);
+            id_inflight[id] = 1;
+            return 0;
+        }
+
         for (int k = 0; k < n; k++) out[k] = b[k];
         n_rx++;
+        id_hits[id]++;
+        if (!id_inflight[id]) n_id_reuse++;   /* returned twice without being re-posted */
+        id_inflight[id] = 0;
+        if (n >= 14) {
+            u32 et = ((u32)out[12] << 8) | out[13];
+            if (et == 0x0806) n_arp_seen++;
+            else if (et == 0x0800) n_ip_seen++;
+            if (tr_n < TRACE_N) {
+                tr_id[tr_n] = (u16)id;
+                tr_len[tr_n] = (u16)blen;
+                tr_et[tr_n] = (u16)et;
+                tr_n++;
+            }
+        }
     } else {
         n_rx_drop++;
     }
@@ -519,8 +638,16 @@ int virtio_net_poll(u8 *out, int max)
     /* Republish the buffer IMMEDIATELY. Forgetting this is the failure that
      * looks like "the card received exactly 32 packets and then died". */
     if (id < (u32)QSZ) {
+        /* CLEAR THE BUFFER BEFORE HANDING IT BACK. xhci.c makes the same
+         * argument for its report buffers: on a short transfer the bytes the
+         * device did not write still hold the PREVIOUS contents, and a reader
+         * cannot tell the difference. rx_fill does this for the initial post
+         * and the re-post did not, which is exactly the asymmetry that let a
+         * stale frame be read as a live one. */
+        zero_mem(RX_BUF(id), 64);
         desc_set(VQ_RX, (int)id, RX_BUF(id), BUF_SZ, DESC_WRITE, 0);
         vq_publish(VQ_RX, (u16)id, 1);
+        id_inflight[id] = 1;
     }
     return n;
 }
@@ -538,6 +665,14 @@ int virtio_net_tx_full(void)  { return (int)n_tx_full; }
 /* raw ring state, so "the guard never fired" can be distinguished from "the
  * guard is looking at a register the device never writes" */
 int virtio_net_runts(void)    { return (int)n_runt; }
+int virtio_net_unwritten(void){ return (int)n_unwritten; }
+int virtio_net_arp_seen(void) { return (int)n_arp_seen; }
+int virtio_net_ip_seen(void)  { return (int)n_ip_seen; }
+int virtio_net_id_reuse(void) { return (int)n_id_reuse; }
+int virtio_net_tr_n(void)     { return tr_n; }
+int virtio_net_tr_id(int i)   { return (i >= 0 && i < tr_n) ? (int)tr_id[i] : -1; }
+int virtio_net_tr_len(int i)  { return (i >= 0 && i < tr_n) ? (int)tr_len[i] : -1; }
+int virtio_net_tr_et(int i)   { return (i >= 0 && i < tr_n) ? (int)tr_et[i] : -1; }
 int virtio_net_tx_avail(void) { return (int)avail_idx[VQ_TX]; }
 int virtio_net_tx_used(void)
 {

@@ -76,14 +76,48 @@ was arrived at by looking at what the tree already had rather than by guessing. 
 figure is larger because roughly a third of every file here is the reasoning
 behind it.
 
-### One open bug, stated rather than buried
+### One known defect, now precisely characterised
 
-**One echo reply is not delivered to the ICMP layer on every bring-up after the
-first.** Reproducible on every run; never on the first bring-up. What has been
-measured, and what it rules out:
+**One frame per bring-up is reported by the device and never written by it.**
+Always the same frame: the **33rd**, which is the first wrap of the 32-entry
+receive ring, on descriptor id 0.
+
+It was chased twice. The first attempt eliminated six hypotheses and closed
+nothing; the mistake was comparing a packet capture from one build against
+guest counters from another. Taking both **in the same run** settled it in
+three steps:
 
 | | |
 |---|---|
+| wire vs driver, same run | 45 inbound frames, 45 trace entries, **exactly one mismatch** — at index 32, descriptor 0. The device reported the correct length for the frame that really arrived and left the buffer holding its previous contents |
+| clear the buffer before re-posting | the mismatch changes from a plausible stale ARP frame to **all zeros** — which is how "the device did not write it" became established rather than assumed |
+| detect and drop | the driver's frame counts now match the wire exactly, where before it reported one ARP frame that never existed |
+
+Ruled out by experiment rather than by reasoning: compiler ordering (a read
+barrier changes nothing — it is kept anyway, because it is correct), descriptor
+id reuse, used-ring index drift, the transmit ring, the ring being exactly
+full, ring size, and the peer.
+
+The consequence is one lost packet per bring-up, which the ICMP layer reports
+honestly as loss — that is what the 20-ping gate is for. What is fixed is that
+it is no longer *silent*: the previous contents of a buffer are no longer
+delivered upward as though they had just arrived.
+
+Two of the changes made while chasing it are correct practice regardless of
+the cause, and both came from what the tree already knew: a read barrier
+between the used-index check and the buffer read, and clearing a receive
+buffer before handing it back — which is the rule `xhci.c` already documents
+for its report buffers, and which this driver had for its initial post and not
+for its re-post.
+
+Six wrong hypotheses on the first attempt is itself the finding: `handle_ip`
+dropped malformed frames with a bare `return` and no counter, so the failure
+could not be located from outside the guest at all. Every drop path is now
+named, and `net_ping_run` records **which** pings were lost as a bitmask
+rather than just how many — "5 of 20 lost" and "the 7th was lost" are
+different bugs.
+
+---|---|
 | a packet capture (`filter-dump`) | **42 echo requests, 42 replies.** The peer answered every one — the frame is not lost on the wire |
 | the lost reply's wire latency | **3 µs.** It was there; the guest then spun ~500 ms and gave up |
 | driver counters | frames delivered match frames the stack counted. No runts, no truncations, no transmit-queue stalls |
