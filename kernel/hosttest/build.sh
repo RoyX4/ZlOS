@@ -21,6 +21,17 @@ gcc -O2 -w -pthread -o fbbench fbbench.c \
     ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./fbbench       (run: ./fbbench)"
 
+# The proportional text engine, asserted. fbbench times fb.c and browsershot
+# photographs it; neither NOTICES when a style flag stops changing the pixels.
+# Both regressions this gate exists for shipped green: italic silently rendered
+# upright, and six heading sizes collapsed onto two, because a line count does
+# not move when a heading that already fits on one line is set too small.
+# Run against the pre-fix fb.c it reports 12 failures, which is the only reason
+# to believe it would catch the next one.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -D_GNU_SOURCE -o fbtext fbtext.c \
+    ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
+echo "built ./fbtext        (run: ./fbtext)"
+
 # The event stack, asserted. input.c talks to four functions outside itself, so
 # stubbing those turns it into an ordinary program. Every failure mode of
 # "push EV_MOUSE from the same pump" is invisible in a screenshot - a phantom
