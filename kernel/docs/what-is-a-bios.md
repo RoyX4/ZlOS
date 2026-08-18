@@ -139,6 +139,50 @@ So: making your own BIOS is not a new project to start. It is a name for the
 part of this one already being done — minus DRAM training, which is a blob, and
 minus running on this specific laptop, which is a fuse.
 
+## "Could I write the whole BIOS in zl, years from now?"
+
+**Yes.** Here is the short version.
+
+A CPU is a machine that eats numbers. Instructions are numbers. There is no
+field in an instruction saying which language produced it, and no step where the
+chip asks. C is not blessed — it is just the language that happened to be in the
+room first. zl already produces x86-64 machine code, so a zl BIOS is not a new
+kind of thing; it is the same numbers arriving from a different direction.
+
+Nothing stands between zl and firmware *as a language*. What stands in the way
+is three separate things, and only one of them is even about zl:
+
+**1. The first few instructions run in 16-bit mode.** The CPU wakes up in a
+1978 costume and stays in it until you tell it to change. zl has no 16-bit
+backend. That is a *thing nobody has written*, not a limit — and it is small,
+because you only stay in that mode long enough to jump out of it. Until it
+exists, ~20 lines of assembly cover it and everything after the jump is zl. This
+is the only item on the list that a zl feature fixes.
+
+**2. Waking the RAM needs numbers Intel does not publish.** Not a language
+problem — C cannot do it either. coreboot, written in C by hundreds of people,
+calls a closed Intel blob for exactly this step. On older chips the numbers were
+reverse-engineered and are public, so on that hardware zl can do the whole thing.
+On Comet Lake, nobody outside Intel can, in any language.
+
+**3. This laptop checks a signature before it runs anything.** Measured above:
+Boot Guard verified boot is fused on. It rejects unsigned firmware no matter what
+wrote it. Assembly, C, Rust, zl — all rejected identically. A different machine
+without the fuse has no such problem.
+
+So, honestly:
+
+| Target | All-zl BIOS? |
+|---|---|
+| QEMU | **Yes** — everything except ~20 lines of real-mode asm, and zero once zl has a 16-bit backend |
+| Old real hardware, no Boot Guard, public raminit | **Yes**, same caveat |
+| A modern Intel board, DRAM training included | **No — and neither can anyone else.** Not a zl limit |
+| This X1 Carbon | **No.** A fuse, not a language |
+
+The claim "you cannot write a BIOS in your own language" is false. The true
+claim is much narrower: *one step of one kind of BIOS depends on a trade secret,
+and one particular laptop refuses to run anything it did not sign.*
+
 ## If you want to check any of this yourself
 
 ```bash
