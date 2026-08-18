@@ -13,6 +13,25 @@
  * and only after VM testing. `print` and `input` are real.
  */
 
+#ifdef ZL_FREESTANDING
+/* ---- the kernel build ----------------------------------------------------
+ * There is no libc here, so the names this file uses are redirected to
+ * interp_kernel.c's, which are checked against the real libc's over tens of
+ * thousands of inputs in hosttest/libctest.c.
+ *
+ * MACROS RATHER THAN #ifdefs THROUGHOUT THE BODY, on purpose. The alternative
+ * is a second copy of the interpreter that the hosted test suite never runs,
+ * and the two drift the first time either is fixed. This way there is one
+ * interpreter, the tests exercise it, and the only difference between the two
+ * builds is which strlen it links against.
+ *
+ * What is NOT redirected is the OS surface - files, processes, the clock.
+ * Those have no kernel equivalent at all, so the builtins that use them are
+ * compiled out below and refused by name at run time. Both, deliberately: the
+ * compile-out is what makes the kernel link, and the run-time refusal is what
+ * makes the message honest on the host too. */
+#include "freestanding/zl_freestanding.h"
+#else
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,12 +43,15 @@
 #include <dirent.h>
 #include <stdint.h>
 #include <sys/wait.h>
+#endif
 
 #include "lexer.h"
 #include "parser.h"
+#ifndef ZL_FREESTANDING
 #include "os.h"          /* the OS layer: real machine access, kept
                             in its own file so <windows.h> can't
                             clash with our TokenType/Node names */
+#endif
 
 
 /* =============================================================

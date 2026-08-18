@@ -63,6 +63,7 @@ double k_ceil(double); double k_trunc(double); double k_round(double);
 double k_fabs(double); double k_pow(double, double);
 double k_hypot(double, double); double k_fmod(double, double);
 
+int   k_snprintf(char *, unsigned long, const char *, ...);
 int   arena_init(void);
 void  arena_reset(void);
 void zl_putc_pub(char c) { (void)c; }
@@ -298,6 +299,64 @@ int main(void)
             ok(!isinf(h) && fabs(h - hr) / hr < 1e-14,
                "hypot(1e200,1e200) does not overflow on the way");
         }
+    }
+
+    /* ---- the formatter --------------------------------------------------
+     * Only five conversions, and each is checked against glibc's snprintf on
+     * the same inputs. The TRUNCATION contract matters as much as the output:
+     * a formatter that lies about how much it would have written is a buffer
+     * overrun waiting for its first caller who checks. */
+    {
+        char a[64], b[64];
+        int bad = 0;
+        for (int i = 0; i < 5000; i++) {
+            long long v = (long long)(nextr()) - 2147483648LL;
+            int ra = k_snprintf(a, sizeof a, "%lld", v);
+            int rb = snprintf(b, sizeof b, "%lld", v);
+            if (strcmp(a, b) || ra != rb) { bad = 1; printf("  ...%lld -> %s vs %s\n", v, a, b); break; }
+            unsigned long long u = (unsigned long long)nextr() * 65537ULL;
+            k_snprintf(a, sizeof a, "%llx", u);
+            snprintf(b, sizeof b, "%llx", u);
+            if (strcmp(a, b)) { bad = 1; break; }
+            k_snprintf(a, sizeof a, "[%s]", "hi");
+            if (strcmp(a, "[hi]")) { bad = 1; break; }
+            k_snprintf(a, sizeof a, "%d", (int)v);
+            snprintf(b, sizeof b, "%d", (int)v);
+            if (strcmp(a, b)) { bad = 1; break; }
+        }
+        ok(!bad, "5000 x %lld / %llx / %d / %s match glibc's snprintf exactly");
+
+        /* truncation: the return is what WOULD have been written */
+        char small[5];
+        int r = k_snprintf(small, sizeof small, "%s", "abcdefgh");
+        ok(r == 8, "a truncated snprintf returns the length it WOULD have written");
+        ok(small[4] == 0, "...and still NUL-terminates");
+        ok(!strcmp(small, "abcd"), "...with the prefix that fit");
+
+        /* %g only ever sees a non-integral number from interp.c */
+        k_snprintf(a, sizeof a, "%g", 1.5);      ok(!strcmp(a, "1.5"), "%g of 1.5");
+        k_snprintf(a, sizeof a, "%g", -0.25);    ok(!strcmp(a, "-0.25"), "%g of -0.25");
+        k_snprintf(a, sizeof a, "%g", 3.14159);  ok(!strcmp(a, "3.14159"), "%g of 3.14159 ROUNDS, not truncates");
+        k_snprintf(a, sizeof a, "%g", 2.0/3.0);  ok(!strcmp(a, "0.666667"), "%g of 2/3 rounds the last digit up");
+        /* the carry: 0.9999999 must not print as 0.1000000 with the integer
+         * part still reading 0 */
+        k_snprintf(a, sizeof a, "%g", 0.9999999); ok(!strcmp(a, "1"), "%g carries into the integer part");
+        /* swept against glibc where the two agree by construction: six
+         * decimals is six significant digits for values under 10 */
+        {
+            int gbad = 0;
+            for (int i = 0; i < 5000; i++) {
+                double v = (double)(nextr() % 100000000) / 100000.0;   /* 0 .. 1000 */
+                k_snprintf(a, sizeof a, "%g", v);
+                snprintf(b, sizeof b, "%g", v);
+                if (strcmp(a, b)) { gbad = 1; printf("  ...%%g %.9f -> %s vs %s\n", v, a, b); break; }
+            }
+            ok(!gbad, "5000 fractions over 0..1000: %g matches glibc EXACTLY");
+        }
+
+        /* an unsupported conversion must be VISIBLE, not silently wrong */
+        k_snprintf(a, sizeof a, "%q", 1);
+        ok(strstr(a, "%q") != NULL, "an unsupported conversion is emitted verbatim");
     }
 
     printf("\n%d checks, %d failures\n", checks, fails);

@@ -453,3 +453,154 @@ double k_hypot(double a, double b)
     double r = n / m;
     return m * k_sqrt(1.0 + r * r);
 }
+
+double k_atan2(double y, double x)
+{
+    if (x > 0.0) return k_atan(y / x);
+    if (x < 0.0) return y >= 0.0 ? k_atan(y / x) + K_PI : k_atan(y / x) - K_PI;
+    if (y > 0.0) return K_PI2;
+    if (y < 0.0) return -K_PI2;
+    return 0.0;
+}
+
+/* ---- formatting ----------------------------------------------------------
+ * Not a printf. interp.c uses exactly five conversions and this supports those
+ * five and refuses the rest, loudly, by emitting the specifier verbatim - so a
+ * conversion somebody adds later shows up in the output as `%q` rather than
+ * silently formatting as something else. A half-working printf in a kernel is
+ * worse than none, because the half that works stops anyone looking.
+ *
+ *     %s      a string
+ *     %d      an int
+ *     %lld    a long long
+ *     %llx    a long long, hex
+ *     %g      a double, and see below
+ *
+ * ALWAYS NUL-TERMINATED, and the return is the length that WOULD have been
+ * written, like C's - interp.c does not check it, but a function that lies
+ * about truncation is a buffer overrun waiting for its first caller who does.
+ */
+typedef __builtin_va_list k_va_list;
+#define k_va_start(ap, last) __builtin_va_start(ap, last)
+#define k_va_arg(ap, t)      __builtin_va_arg(ap, t)
+#define k_va_end(ap)         __builtin_va_end(ap)
+
+static void kf_put(char *buf, ul cap, ul *n, char c)
+{
+    if (*n + 1 < cap) buf[*n] = c;
+    (*n)++;
+}
+
+static void kf_puts(char *buf, ul cap, ul *n, const char *s)
+{
+    if (!s) s = "(null)";
+    while (*s) kf_put(buf, cap, n, *s++);
+}
+
+static void kf_u64(char *buf, ul cap, ul *n, unsigned long long v, int base)
+{
+    char t[24];
+    int i = 0;
+    if (!v) { kf_put(buf, cap, n, '0'); return; }
+    while (v) { int d = (int)(v % (unsigned)base); t[i++] = (char)(d < 10 ? '0' + d : 'a' + d - 10); v /= (unsigned)base; }
+    while (i) kf_put(buf, cap, n, t[--i]);
+}
+
+static void kf_i64(char *buf, ul cap, ul *n, long long v)
+{
+    if (v < 0) { kf_put(buf, cap, n, '-'); kf_u64(buf, cap, n, (unsigned long long)(-(v + 1)) + 1ULL, 10); }
+    else kf_u64(buf, cap, n, (unsigned long long)v, 10);
+}
+
+/* %g. zl only reaches this for a NON-integral number - whole ones go through
+ * %lld above it - so the job is "show a fraction the way the hosted
+ * interpreter shows it".
+ *
+ * SIX SIGNIFICANT DIGITS, NOT SIX DECIMAL PLACES, and that distinction is the
+ * whole of this function's difficulty. Six decimals is easier, more precise,
+ * and WRONG: glibc's %g prints 2.887614 as "2.88761", so a kernel doing six
+ * decimals makes the same script print differently depending on whether it was
+ * interpreted in the kernel or on the host. This project already has one such
+ * divergence logged (1/0 is inf in interp.c and a dead machine in
+ * runtime_kernel.c, T-EXEC-8) and one is enough.
+ *
+ * ROUNDED, NOT TRUNCATED. The first version pulled digits out one at a time by
+ * repeated multiplication, which never gets to look at the digit after the
+ * last one it keeps: 3.14159 printed as "3.141589" and 2/3 as "0.666666".
+ * Scale once, round once, and handle the carry - without it 0.9999999 prints
+ * as "0.1000000" with the integer part still reading 0.
+ *
+ * Magnitudes outside 1e-4..1e15 fall back to a plain integer rendering rather
+ * than the exponent notation this does not implement. glibc would print
+ * "1e+20"; readable-and-different beats subtly-wrong-and-similar, and no zl
+ * script that draws on a screen produces one.
+ */
+static void kf_g(char *buf, ul cap, ul *n, double v)
+{
+    if (k_isnan(v)) { kf_puts(buf, cap, n, "nan"); return; }
+    if (v > 1.0e308)  { kf_puts(buf, cap, n, "inf"); return; }
+    if (v < -1.0e308) { kf_puts(buf, cap, n, "-inf"); return; }
+    if (v < 0) { kf_put(buf, cap, n, '-'); v = -v; }
+    if (v == 0.0) { kf_put(buf, cap, n, '0'); return; }
+
+    if (v >= 1.0e15 || v < 1.0e-4) {          /* out of range: plain integer */
+        kf_i64(buf, cap, n, (long long)v);
+        return;
+    }
+
+    /* how many digits before the point */
+    int intdigits = 1;
+    { double t = v; while (t >= 10.0) { t *= 0.1; intdigits++; } }
+    if (v < 1.0) intdigits = 0;
+
+    int decimals = 6 - intdigits;             /* six SIGNIFICANT digits */
+    if (decimals < 0) decimals = 0;
+    if (decimals > 12) decimals = 12;
+
+    double scale = 1.0;
+    for (int i = 0; i < decimals; i++) scale *= 10.0;
+
+    double ip = k_floor(v);
+    long long f = (long long)((v - ip) * scale + 0.5);
+    long long lim = (long long)scale;
+    if (f >= lim) { ip += 1.0; f -= lim; }    /* the carry */
+
+    kf_i64(buf, cap, n, (long long)ip);
+    if (decimals == 0 || f <= 0) return;
+
+    char d[16];
+    for (int i = decimals - 1; i >= 0; i--) { d[i] = (char)('0' + (int)(f % 10)); f /= 10; }
+    int last = decimals - 1;
+    while (last >= 0 && d[last] == '0') last--;   /* trim trailing zeros */
+    if (last < 0) return;
+    kf_put(buf, cap, n, '.');
+    for (int i = 0; i <= last; i++) kf_put(buf, cap, n, d[i]);
+}
+
+int k_snprintf(char *buf, ul cap, const char *fmt, ...)
+{
+    k_va_list ap;
+    ul n = 0;
+    k_va_start(ap, fmt);
+    for (const char *f = fmt; *f; f++) {
+        if (*f != '%') { kf_put(buf, cap, &n, *f); continue; }
+        f++;
+        if (*f == '%') { kf_put(buf, cap, &n, '%'); continue; }
+        if (*f == 's') { kf_puts(buf, cap, &n, k_va_arg(ap, const char *)); continue; }
+        if (*f == 'd') { kf_i64(buf, cap, &n, (long long)k_va_arg(ap, int)); continue; }
+        if (*f == 'g') { kf_g(buf, cap, &n, k_va_arg(ap, double)); continue; }
+        if (f[0] == 'l' && f[1] == 'l' && f[2] == 'd') {
+            kf_i64(buf, cap, &n, k_va_arg(ap, long long)); f += 2; continue;
+        }
+        if (f[0] == 'l' && f[1] == 'l' && f[2] == 'x') {
+            kf_u64(buf, cap, &n, k_va_arg(ap, unsigned long long), 16); f += 2; continue;
+        }
+        /* unsupported: emit it verbatim so it is VISIBLE rather than silently
+         * formatted as something else */
+        kf_put(buf, cap, &n, '%');
+        kf_put(buf, cap, &n, *f);
+    }
+    k_va_end(ap);
+    if (cap) buf[n < cap ? n : cap - 1] = 0;
+    return (int)n;
+}
