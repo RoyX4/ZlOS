@@ -7,7 +7,7 @@ Every item below was measured by a command, not remembered. Regenerate with:
 tools/todo.sh
 ```
 
-## EFI pointer truncation — 34 sites
+## EFI pointer truncation — 14 sites
 
 The four `-Werror=` flags in `kernel/buildefi.sh` are inert: `-w` is a
 blanket suppression a later `-Werror=` does not survive. Harmless below
@@ -16,11 +16,9 @@ blanket suppression a later `-Werror=` does not survive. Harmless below
 - [ ] replace `-w` with `-Wno-everything` in `kernel/buildefi.sh` (verified fix)
 - [ ] repair the sites it then reports, per file:
 
+  - [ ] `kernel/efi.c` — 2 site(s)
   - [ ] `freestanding/runtime_kernel.c` — 11 site(s)
-  - [ ] `kernel/fb.c` — 8 site(s)
-  - [ ] `kernel/xhci.c` — 12 site(s)
-  - [ ] `kernel/console.c` — 1 site(s)
-  - [ ] `kernel/smp.c` — 2 site(s)
+  - [ ] `kernel/gdt64.c` — 1 site(s)
 - [ ] then run `kernel/verify-efi.sh` before believing the boot path
 
 ## Engine divergence — 2 pinned
@@ -37,7 +35,8 @@ Both unboxed backends sit on the far side of the scoping decision in
 ## Documented but not in git
 
 - [ ] `kernel/_gen64.c`
-- [ ] `kernel/crypto.c`
+- [ ] `kernel/_genefi.c`
+- [ ] `kernel/out.c`
 
 ## Stale doc references — 19 baselined
 
@@ -65,16 +64,7 @@ Delete a line from `tools/doc-check-ignore.txt` as you fix it. New rot fails CI.
 
 ## Open tensions (.ultra/TENSIONS.md)
 
-- [ ] **T-1** () — what's broken, uncertain, or in conflict
-- [ ] **T-1** (2026-08-17) — what's broken, uncertain, or in conflict
-- [ ] **T-2** (2026-08-17) — `i2c_hid.c` is a transport with no decoder.
-- [ ] **T-3** (2026-08-17) — `intel.c`'s write paths are gated behind `lt_armed` and most have
-- [ ] **T-4** (2026-08-17) — Two objectives, and ULTRA CODE can only track one.
-- [ ] **T-7** (2026-08-18) — `verify-efi.sh` failed once and passed twice on the *same tree*,
-- [ ] **T-8** (2026-08-18) — Group C is built and tested but **not wired in**, and the wiring is
-- [ ] **T-9** (2026-08-18) — C4 — delete `fb_bg_snapshot` / `fb_bg_restore` / `fb_grab` /
-- [ ] **T-10** (2026-08-18) — the display session's three commits landed on **my** branch, not on
-- [ ] **T-11** (2026-08-18) — the GOP framebuffer address is **truncated to 32 bits** in the EFI
+_none open._
 
 ## Open pull requests
 
