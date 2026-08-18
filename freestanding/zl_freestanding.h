@@ -115,7 +115,43 @@ void klongjmp(zi_jmp_buf, int) __attribute__((noreturn));
  */
 void term_say(const char *s);
 int  k_snprintf(char *buf, unsigned long cap, const char *fmt, ...);
-#define snprintf k_snprintf
+int  k_printf(const char *fmt, ...);
+int  k_puts_no_nl(const char *);
+int  k_putchar(int);
+#define snprintf  k_snprintf
+#define printf    k_printf
 #define fflush(x) ((void)0)
+/* stderr/stdout are the same place - the terminal. The stream argument is
+ * discarded rather than emulated, because a kernel that pretended to have two
+ * output streams and had one would be lying in the one place it matters. */
+#define stdout    ((void *)0)
+#define stderr    ((void *)0)
+#define fprintf(stream, ...)  k_printf(__VA_ARGS__)
+#define fputs(s, stream)      k_puts_no_nl(s)
+#define fputc(c, stream)      k_putchar(c)
+#define putchar(c)            k_putchar(c)
+
+/* ---- the small odds and ends (interp_kernel.c) ---------------------------*/
+int k_isdigit(int); int k_isspace(int); int k_isalpha(int);
+unsigned long k_strcspn(const char *, const char *);
+long k_atol(const char *);
+unsigned long long k_strtoull(const char *, char **, int);
+double k_ldexp(double, int);
+double k_frexp(double, int *);
+void k_srand(unsigned);
+int  k_rand(void);
+
+#define isdigit  k_isdigit
+#define isspace  k_isspace
+#define isalpha  k_isalpha
+#define strcspn  k_strcspn
+#define atol     k_atol
+#define strtoull k_strtoull
+#define ldexp    k_ldexp
+#define frexp    k_frexp
+#define srand    k_srand
+#define rand     k_rand
+#define RAND_MAX 0x7FFFFFFF
+#define HUGE_VAL (1.0e308 * 10.0)
 
 #endif /* ZL_FREESTANDING_H */

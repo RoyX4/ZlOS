@@ -548,7 +548,20 @@ static void runtime_error(const char *msg)
                                   without this the output that explains HOW
                                   we got here dies with the process. */
     fprintf(stderr, "runtime error: %s\n", msg);
+#ifdef ZL_FREESTANDING
+    /* A KERNEL HAS NOWHERE TO EXIT TO. Reaching here means an error was raised
+     * with no trap armed, which is a wiring bug in whoever called the
+     * interpreter rather than a fault in the program - so it says so and stops
+     * deliberately, instead of returning into a caller that believes the call
+     * succeeded. zl_run_program arms the trap before anything runs and disarms
+     * it on every exit path, so this line should be unreachable; it exists
+     * because "should be unreachable" and "is unreachable" differ by one
+     * refactor. */
+    term_say("\n  the interpreter faulted with no handler armed - stopping.\n");
+    for (;;) { __asm__ volatile ("cli; hlt"); }
+#else
     exit(1);
+#endif
 }
 
 /* =============================================================
@@ -723,6 +736,7 @@ static int is_simulated(const char *name)
     return 0;
 }
 
+#ifndef ZL_FREESTANDING   /* needs the OS: walks /proc */
 /* find a running process's pid by exact command name (as seen in `procs()`) */
 static long find_pid_by_name(const char *want)
 {
@@ -750,6 +764,7 @@ static long find_pid_by_name(const char *want)
     closedir(d);
     return pid;
 }
+#endif  /* ZL_FREESTANDING */
 
 /* helper: append a length-limited C string to a V_LIST as a V_STR */
 static void list_push_str(Value *list, int *cap, const char *p, int len)
@@ -786,6 +801,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     }
 
     /* input("prompt?") - reads a real line from the keyboard */
+#ifndef ZL_FREESTANDING   /* needs the OS: input */
     if (strcmp(name, "input") == 0) {
         if (nargs > 0) { char *p = value_to_string(args[0]); printf("%s", p); free(p); }
         char line[512];
@@ -795,6 +811,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         }
         return make_str("");
     }
+#endif  /* ZL_FREESTANDING */
 
     /* ---- text tools: needed to do real work with strings ---- */
 
@@ -1079,6 +1096,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     /* ---- REAL PC-control: reading is safe, so these are real ---- */
 
     /* read("path") -> the whole file as a string */
+#ifndef ZL_FREESTANDING   /* needs the OS: read */
     if (strcmp(name, "read") == 0) {
         if (nargs < 1 || args[0].type != V_STR) runtime_error("read needs a filename");
         FILE *f = fopen(args[0].str, "rb");
@@ -1091,8 +1109,10 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         Value v = make_nil(); v.type = V_STR; v.str = buf;
         return v;
     }
+#endif  /* ZL_FREESTANDING */
 
     /* write("path", "text") -> creates/overwrites a real file */
+#ifndef ZL_FREESTANDING   /* needs the OS: write */
     if (strcmp(name, "write") == 0) {
         if (nargs < 2 || args[0].type != V_STR) runtime_error("write needs a filename and text");
         FILE *f = fopen(args[0].str, "wb");
@@ -1103,6 +1123,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         fclose(f);
         return make_nil();
     }
+#endif  /* ZL_FREESTANDING */
 
     /* code("A") -> the byte value of a string's first character (65).
      * The inverse of building bytes; lets zl turn text into raw bytes. */
@@ -1114,6 +1135,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     /* write_bytes("path", [n, n, ...]) -> write a list of byte values as
      * a real binary file. zl strings are NUL-terminated and cannot hold
      * binary, so this is how a zl program emits a .exe. */
+#ifndef ZL_FREESTANDING   /* needs the OS: write_bytes */
     if (strcmp(name, "write_bytes") == 0) {
         if (nargs < 2 || args[0].type != V_STR || args[1].type != V_LIST)
             runtime_error("write_bytes needs a filename and a list of byte values");
@@ -1126,10 +1148,12 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         fclose(f);
         return make_nil();
     }
+#endif  /* ZL_FREESTANDING */
 
     /* dir("path") -> a real LIST of the filenames in that folder.
      * The actual Windows call lives in os_win.c; we just wrap the
      * result up as a list of string values here. */
+#ifndef ZL_FREESTANDING   /* needs the OS: dir */
     if (strcmp(name, "dir") == 0) {
         const char *path = (nargs > 0 && args[0].type == V_STR) ? args[0].str : ".";
 
@@ -1146,20 +1170,26 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         free(names);
         return list;
     }
+#endif  /* ZL_FREESTANDING */
 
+#ifndef ZL_FREESTANDING   /* needs the OS: rm */
     if (strcmp(name, "rm") == 0) {
         if (nargs < 1 || args[0].type != V_STR) runtime_error("rm needs a filename");
         if (remove(args[0].str) != 0) runtime_error("rm: couldn't remove that path");
         return make_nil();
     }
+#endif  /* ZL_FREESTANDING */
 
+#ifndef ZL_FREESTANDING   /* needs the OS: move */
     if (strcmp(name, "move") == 0) {
         if (nargs < 2 || args[0].type != V_STR || args[1].type != V_STR)
             runtime_error("move needs a source and destination path");
         if (rename(args[0].str, args[1].str) != 0) runtime_error("move: rename failed");
         return make_nil();
     }
+#endif  /* ZL_FREESTANDING */
 
+#ifndef ZL_FREESTANDING   /* needs the OS: copy */
     if (strcmp(name, "copy") == 0) {
         if (nargs < 2 || args[0].type != V_STR || args[1].type != V_STR)
             runtime_error("copy needs a source and destination path");
@@ -1172,8 +1202,10 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         fclose(in); fclose(outf);
         return make_nil();
     }
+#endif  /* ZL_FREESTANDING */
 
     /* start(path[, args...]) - launch a program, don't wait for it, return its pid */
+#ifndef ZL_FREESTANDING   /* needs the OS: start */
     if (strcmp(name, "start") == 0) {
         if (nargs < 1 || args[0].type != V_STR) runtime_error("start needs a program path");
         pid_t child = fork();
@@ -1190,15 +1222,19 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         }
         return make_num((double)child);
     }
+#endif  /* ZL_FREESTANDING */
 
     /* run(command) - run a shell command, wait for it, return its exit code */
+#ifndef ZL_FREESTANDING   /* needs the OS: run */
     if (strcmp(name, "run") == 0) {
         if (nargs < 1 || args[0].type != V_STR) runtime_error("run needs a command string");
         int status = system(args[0].str);
         return make_num((double)(status == -1 ? -1 : WEXITSTATUS(status)));
     }
+#endif  /* ZL_FREESTANDING */
 
     /* kill(name_or_pid) - terminate a process (SIGTERM) by exact `procs()` name or numeric pid */
+#ifndef ZL_FREESTANDING   /* needs the OS: kill */
     if (strcmp(name, "kill") == 0) {
         if (nargs < 1) runtime_error("kill needs a process name or pid");
         long pid;
@@ -1213,6 +1249,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         }
         return make_bool(kill((pid_t)pid, SIGTERM) == 0);
     }
+#endif  /* ZL_FREESTANDING */
 
     /* ---- W5 raw memory (docs/design/design_memory_structs.md §3.1) ----
      *
@@ -1329,6 +1366,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     }
 
     /* procs() -> a real LIST of the names of every running process */
+#ifndef ZL_FREESTANDING   /* needs the OS: procs */
     if (strcmp(name, "procs") == 0) {
         int    count = 0;
         char **names = os_procs(&count);
@@ -1343,6 +1381,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         free(names);
         return list;
     }
+#endif  /* ZL_FREESTANDING */
 
     /* the simulated dangerous ones: show what they WOULD do */
     if (is_simulated(name)) {
@@ -1362,10 +1401,23 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     if (strcmp(name, "pi") == 0)     { return make_num(3.14159265358979323846); }
     if (strcmp(name, "e") == 0)      { return make_num(2.71828182845904523536); }
     if (strcmp(name, "assert") == 0) {
+        /* A FAILED ASSERTION MUST UNWIND, NOT EXIT. This used to print the
+         * message and call exit(1) directly, which walks straight past the
+         * trap: in a kernel that is the machine, and on the host it is a
+         * process death that zl_run_program's caller cannot report. Found by
+         * an adversarial reader, who classified it as a partial trap bypass -
+         * "partial" because the no-message branch already went through
+         * runtime_error and the WITH-message branch did not.
+         *
+         * Both branches now go through runtime_error, so a failed assertion is
+         * an ordinary catchable error carrying its own text. */
         if (nargs<1 || !is_truthy(args[0])) {
-            if (nargs>=2 && args[1].type==V_STR) fprintf(stderr,"assertion failed: %s\n", args[1].str);
-            else runtime_error("assertion failed");
-            exit(1);
+            if (nargs>=2 && args[1].type==V_STR) {
+                char buf[ZI_ERRMAX];
+                snprintf(buf, sizeof buf, "assertion failed: %s", args[1].str);
+                runtime_error(buf);
+            }
+            runtime_error("assertion failed");
         }
         return make_nil();
     }
@@ -1691,17 +1743,23 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     }
 
     /* ---- system ---- */
+#ifndef ZL_FREESTANDING   /* needs the OS: now */
     if (strcmp(name, "now") == 0) {    /* milliseconds since this process started */
         return make_num((double)clock() * 1000.0 / (double)CLOCKS_PER_SEC);
     }
+#endif  /* ZL_FREESTANDING */
+#ifndef ZL_FREESTANDING   /* needs the OS: exit */
     if (strcmp(name, "exit") == 0) {
         exit((nargs>=1 && args[0].type==V_NUM) ? (int)args[0].num : 0);
     }
+#endif  /* ZL_FREESTANDING */
+#ifndef ZL_FREESTANDING   /* needs the OS: env */
     if (strcmp(name, "env") == 0) {
         if (nargs<1||args[0].type!=V_STR) runtime_error("env needs a string");
         const char *val = getenv(args[0].str);
         return make_str(val ? val : "");
     }
+#endif  /* ZL_FREESTANDING */
 
     runtime_error("unknown function");
     return make_nil();

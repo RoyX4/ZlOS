@@ -604,3 +604,118 @@ int k_snprintf(char *buf, ul cap, const char *fmt, ...)
     if (cap) buf[n < cap ? n : cap - 1] = 0;
     return (int)n;
 }
+
+/* ---- output --------------------------------------------------------------
+ * The interpreter's print builtin writes through here, and here writes to
+ * term.c - the scrollback AND the serial line, which is where the person who
+ * typed `run` is looking and where a gate can see it. There is no stdout, no
+ * buffering, and nothing to flush.
+ *
+ * The buffer is deliberately modest and on the STACK of this function rather
+ * than a static: the kernel has 256 KiB of stack in total, but a static print
+ * buffer is a piece of shared mutable state that two tasks would race on the
+ * moment sched.c is wired in (Item 3), and this is easier to get right now
+ * than to find later. */
+extern void term_say(const char *s);
+
+int k_printf(const char *fmt, ...)
+{
+    char b[512];
+    k_va_list ap;
+    k_va_start(ap, fmt);
+    /* k_vsnprintf would be the tidy way; k_snprintf's body is the same loop
+     * and duplicating it to gain a va_list variant is not worth a second copy
+     * of the conversion table. Small, fixed set of callers. */
+    ul n = 0;
+    for (const char *f = fmt; *f; f++) {
+        if (*f != '%') { kf_put(b, sizeof b, &n, *f); continue; }
+        f++;
+        if (*f == '%') { kf_put(b, sizeof b, &n, '%'); continue; }
+        if (*f == 's') { kf_puts(b, sizeof b, &n, k_va_arg(ap, const char *)); continue; }
+        if (*f == 'd') { kf_i64(b, sizeof b, &n, (long long)k_va_arg(ap, int)); continue; }
+        if (*f == 'c') { kf_put(b, sizeof b, &n, (char)k_va_arg(ap, int)); continue; }
+        if (*f == 'g') { kf_g(b, sizeof b, &n, k_va_arg(ap, double)); continue; }
+        if (f[0]=='l' && f[1]=='l' && f[2]=='d') { kf_i64(b, sizeof b, &n, k_va_arg(ap, long long)); f += 2; continue; }
+        if (f[0]=='l' && f[1]=='l' && f[2]=='x') { kf_u64(b, sizeof b, &n, k_va_arg(ap, unsigned long long), 16); f += 2; continue; }
+        kf_put(b, sizeof b, &n, '%'); kf_put(b, sizeof b, &n, *f);
+    }
+    k_va_end(ap);
+    b[n < sizeof b ? n : sizeof b - 1] = 0;
+    term_say(b);
+    return (int)n;
+}
+
+int k_puts_no_nl(const char *s) { term_say(s ? s : "(null)"); return 0; }
+int k_putchar(int c) { char b[2]; b[0] = (char)c; b[1] = 0; term_say(b); return c; }
+
+/* ---- the small odds and ends interp.c reaches for ------------------------*/
+int k_isdigit(int c) { return c >= '0' && c <= '9'; }
+int k_isspace(int c) { return c==' '||c=='\t'||c=='\n'||c=='\r'||c=='\v'||c=='\f'; }
+int k_isalpha(int c) { return (c>='a'&&c<='z')||(c>='A'&&c<='Z'); }
+
+unsigned long k_strcspn(const char *s, const char *reject)
+{
+    ul n = 0;
+    for (; s[n]; n++) {
+        for (const char *r = reject; *r; r++) if (s[n] == *r) return n;
+    }
+    return n;
+}
+
+long k_atol(const char *s) { return (long)k_atof(s); }
+
+unsigned long long k_strtoull(const char *s, char **end, int base)
+{
+    while (k_isspace((int)(unsigned char)*s)) s++;
+    if (base == 0) {
+        if (s[0]=='0' && (s[1]=='x'||s[1]=='X')) { base = 16; s += 2; }
+        else if (s[0]=='0') base = 8;
+        else base = 10;
+    } else if (base == 16 && s[0]=='0' && (s[1]=='x'||s[1]=='X')) s += 2;
+
+    unsigned long long v = 0;
+    for (;; s++) {
+        int c = (unsigned char)*s, d;
+        if (c >= '0' && c <= '9') d = c - '0';
+        else if (c >= 'a' && c <= 'z') d = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'Z') d = c - 'A' + 10;
+        else break;
+        if (d >= base) break;
+        v = v * (unsigned)base + (unsigned)d;
+    }
+    if (end) *end = (char *)s;
+    return v;
+}
+
+/* frexp/ldexp - only the hex-float formatter uses these, and only for finite
+ * positive values, so the sub-normal and NaN cases are not pretended at. */
+double k_ldexp(double x, int e)
+{
+    while (e > 0) { x *= 2.0; e--; }
+    while (e < 0) { x *= 0.5; e++; }
+    return x;
+}
+double k_frexp(double x, int *e)
+{
+    int n = 0;
+    if (x == 0.0 || k_isnan(x)) { *e = 0; return x; }
+    double a = k_fabs(x);
+    while (a >= 1.0) { a *= 0.5; n++; }
+    while (a < 0.5)  { a *= 2.0; n--; }
+    *e = n;
+    return x < 0 ? -a : a;
+}
+
+/* A PRNG, because a kernel has no rand(). xorshift32: three shifts, a full
+ * 2^32-1 period, and vastly better distribution than the LCG a kernel usually
+ * gets given. The seed is fixed rather than time-based, deliberately - a
+ * program that behaves differently on every run cannot be gated. */
+static unsigned k_rng = 2463534242u;
+void k_srand(unsigned s) { k_rng = s ? s : 2463534242u; }
+int  k_rand(void)
+{
+    k_rng ^= k_rng << 13;
+    k_rng ^= k_rng >> 17;
+    k_rng ^= k_rng << 5;
+    return (int)(k_rng & 0x7FFFFFFF);
+}
