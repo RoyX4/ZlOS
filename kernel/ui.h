@@ -127,6 +127,18 @@ int  wm_running(void);
 void wm_set_anim(int on);                     /* window open animation on/off */
 int  wm_anim(void);
 
+/* ---- the pointer -----------------------------------------------------------
+ * The cursor SHAPES, published so the compositor can ask for one. fb.c static-
+ * asserts these against cursor.inc's own CUR_* so the two cannot drift; a
+ * mismatch would silently show the wrong picture, which is the kind of thing
+ * nothing tests. */
+#define CURSOR_ARROW   0
+#define CURSOR_IBEAM   1
+#define CURSOR_RESIZE  2
+#define CURSOR_BUSY    3
+void fb_cursor_set(int kind);
+int  fb_cursor_get(void);
+
 /* ---- settings.c -------------------------------------------------------------
  * The Settings app. Signatures match app_draw_fn / app_event_fn above, so it
  * can be handed to wm_hooks or dispatched to from wmglue.c. */

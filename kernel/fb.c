@@ -1370,6 +1370,19 @@ void fb_cube(int cx, int cy, int size, int angle, unsigned int color)
  * caller. */
 static int cur_kind = CUR_ARROW;
 
+/* ui.h publishes these same numbers to the compositor as CURSOR_ARROW and
+ * friends. fb.c is the PIXELS layer and does not include ui.h - doing so would
+ * invert the layering ui.h itself sets out - so the two lists are pinned to
+ * literals here instead.
+ *
+ * They drift the moment a cursor is INSERTED rather than appended, and the
+ * symptom is the wrong picture rather than any failure, which nothing tests.
+ * Keep these in step with ui.h's CURSOR_* block. */
+_Static_assert(CUR_ARROW  == 0, "cursor kinds moved: ui.h CURSOR_ARROW is 0");
+_Static_assert(CUR_IBEAM  == 1, "cursor kinds moved: ui.h CURSOR_IBEAM is 1");
+_Static_assert(CUR_RESIZE == 2, "cursor kinds moved: ui.h CURSOR_RESIZE is 2");
+_Static_assert(CUR_BUSY   == 3, "cursor kinds moved: ui.h CURSOR_BUSY is 3");
+
 void fb_cursor_set(int kind)
 {
     if ((unsigned)kind >= CUR_N) return;

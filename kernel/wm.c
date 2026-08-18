@@ -33,6 +33,7 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot);
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
 void fb_shadow(int x, int y, int w, int h, int off, int soft);
+void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
 /* Titles are LABELS, not console text, so they take the proportional path.
  * That is the single change desktop-look.md item 4 asks for at this layer. */
@@ -594,6 +595,30 @@ static void chrome(int win, int focused)
     unsigned face = !over ? (focused ? t->text_dim : t->title_off)
                           : ((last_btn & 1) ? t->danger : t->accent);
     fb_rrect(bx, by, cs, cs, UI_S1(t) / 2, face);
+
+    /* THE RESIZE GRIP, drawn. A corner you cannot see is a corner nobody finds,
+     * and the pointer shape only helps once you are already on it.
+     *
+     * Three short diagonal rules stepping in from the corner - the universal
+     * mark for it, and cheap: three fills, no new primitive. Dim by default so
+     * it does not compete with the close box, which is the only other thing on
+     * a window frame that does something. */
+    {
+        int gs = UI_S3(t);
+        int gx = W->x + W->w - gs, gy = W->y + W->h - gs;
+        int step = gs / 4;
+        unsigned ink = focused ? t->text_dim : t->title_off;
+        /* Three rules PARALLEL TO THE CORNER'S DIAGONAL, stepping inward. The
+         * first attempt drew them all at the same offset with different
+         * lengths, which merges into a single L-bracket - it renders, and it
+         * reads as a border artefact rather than as a grip. Only looking at it
+         * showed that. */
+        if (step > 0)
+            for (int i = 1; i <= 3; i++) {
+                int d = i * step;
+                fb_line(gx + gs - d, gy + gs - 1, gx + gs - 1, gy + gs - d, ink);
+            }
+    }
 }
 
 void wm_repaint(void)
@@ -667,7 +692,13 @@ void wm_repaint(void)
  *                   walking the z-order backwards; keys to the focus window.
  */
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
-static int grab_drag;           /* 1 = we are moving it, 0 = the app has it */
+/* What the pointer grab is FOR. It used to be a bare 0/1 meaning "the app has
+ * it" or "we are moving it"; resize is a third answer, and three states with
+ * two values is how a bug gets in. */
+#define GRAB_APP    0           /* the app owns the pointer until button-up  */
+#define GRAB_MOVE   1           /* we are dragging the frame                 */
+#define GRAB_RESIZE 2           /* we are dragging the bottom-right corner   */
+static int grab_drag;
 static int grab_dx, grab_dy;    /* pointer offset inside the frame          */
 
 /* Where tab `i` sits in the title bar. Drawing and hit-testing BOTH call this,
@@ -706,6 +737,32 @@ static int in_titlebar(int win, int x, int y)
            x >= wins[win].x && x < wins[win].x + wins[win].w;
 }
 
+/* THE RESIZE GRIP.
+ *
+ * wm_resize has existed since the window table did - with min_w/min_h clamping
+ * and correct damage on both the old and the new rect - and NOTHING HAS EVER
+ * CALLED IT. That is this project's own named hazard, "the code exists is not
+ * the code works", sitting in the compositor.
+ *
+ * A corner, not an edge: an edge grip has to decide which edge from a few
+ * pixels of hit area, and every one of those decisions is another place for an
+ * off-by-one against the frame rect. The bottom-right corner is one rectangle,
+ * the same size as the close box, and it grows the window in the direction the
+ * pointer is already moving.
+ *
+ * It sits INSIDE the frame rather than straddling the border, so it cannot
+ * overlap the shadow - which is drawn outside the frame and is not part of the
+ * window for hit-testing purposes. */
+static int in_grip(int win, int x, int y)
+{
+    const struct ui_theme *t = ui_theme();
+    if (wins[win].flags & WF_NOCHROME) return 0;
+    int gs = UI_S3(t);
+    int gx = wins[win].x + wins[win].w - gs;
+    int gy = wins[win].y + wins[win].h - gs;
+    return x >= gx && x < gx + gs && y >= gy && y < gy + gs;
+}
+
 static int in_closebox(int win, int x, int y)
 {
     const struct ui_theme *t = ui_theme();
@@ -723,10 +780,31 @@ static void route_mouse(int x, int y, int btn)
     last_btn = btn;
     ptr_x = x; ptr_y = y;
 
+    /* THE POINTER SHAPE IS THE ONLY AFFORDANCE A GRIP HAS. A resize corner you
+     * cannot see and that does not announce itself is a feature nobody finds.
+     * Held during a resize drag too, so the shape does not flicker back to an
+     * arrow the moment the pointer outruns the corner. */
+    {
+        int over = (pgrab >= 0 && grab_drag == GRAB_RESIZE);
+        if (!over) {
+            int top = wm_at(x, y);
+            over = (top >= 0 && in_grip(top, x, y));
+        }
+        fb_cursor_set(over ? CURSOR_RESIZE : CURSOR_ARROW);
+    }
+
     /* 1. POINTER GRAB */
     if (pgrab >= 0) {
-        if (grab_drag) wm_move(pgrab, x - grab_dx, y - grab_dy);
-        else if (hook_event) hook_event(win_app(pgrab), pgrab, EV_MOUSE, btn, x, y);
+        if (grab_drag == GRAB_MOVE) {
+            wm_move(pgrab, x - grab_dx, y - grab_dy);
+        } else if (grab_drag == GRAB_RESIZE) {
+            /* grab_dx/dy hold the offset from the pointer to the corner, so
+             * the corner stays under the cursor instead of snapping to it. */
+            wm_resize(pgrab, x + grab_dx - wins[pgrab].x,
+                             y + grab_dy - wins[pgrab].y);
+        } else if (hook_event) {
+            hook_event(win_app(pgrab), pgrab, EV_MOUSE, btn, x, y);
+        }
         if (up) pgrab = -1;
         return;
     }
@@ -746,12 +824,22 @@ static void route_mouse(int x, int y, int btn)
         wm_focus(hit);
         wm_raise(hit);
         if (in_closebox(hit, x, y)) { wm_close(hit); return; }
+        /* the grip BEFORE the title bar: they cannot overlap on any sane
+         * window, but a window shorter than its own title bar is exactly the
+         * degenerate case where checking the bigger region first would swallow
+         * the smaller one */
+        if (in_grip(hit, x, y)) {
+            pgrab = hit; grab_drag = GRAB_RESIZE;
+            grab_dx = (wins[hit].x + wins[hit].w) - x;
+            grab_dy = (wins[hit].y + wins[hit].h) - y;
+            return;
+        }
         /* a tab BEFORE the drag: the strip lives inside the title bar, so
          * checking the drag first would make tabs unclickable */
         int tb = in_tab(hit, x, y);
         if (tb >= 0) { wm_set_tab(hit, tb); return; }
         if (in_titlebar(hit, x, y)) {
-            pgrab = hit; grab_drag = 1;
+            pgrab = hit; grab_drag = GRAB_MOVE;
             grab_dx = x - wins[hit].x;
             grab_dy = y - wins[hit].y;
             return;
@@ -759,7 +847,7 @@ static void route_mouse(int x, int y, int btn)
         /* a press in the client area hands the pointer to the app until
          * button-up - that is what makes a slider work when the pointer
          * leaves the widget mid-drag */
-        pgrab = hit; grab_drag = 0;
+        pgrab = hit; grab_drag = GRAB_APP;
     }
     if (hook_event) hook_event(win_app(hit), hit, EV_MOUSE, btn, x, y);
 }

@@ -576,3 +576,72 @@ paths. Five further findings are real and either belong to `nvme.c` or are
 blocked by T-13; they are written up as T-16 in `.ultra/TENSIONS.md`, including
 that **persistence is currently write-only** because nothing in `kernel.zl`
 opens an `APP_SETTINGS` window or calls `settings_load()` yet.
+
+---
+
+## Item 6 — the interaction gaps
+
+Taken in the order FEEL-PROMPT gives them.
+
+### 6.1 — window resize, by a corner grip
+
+`wm_resize` has existed since the window table did — `min_w`/`min_h` clamping,
+damage on both the old and the new rect, all correct — and **nothing had ever
+called it**. That is this project's own named hazard sitting in the compositor:
+"the code exists" is not "the code works".
+
+A **corner**, not an edge. An edge grip has to decide *which* edge from a few
+pixels of hit area, and every one of those decisions is another place for an
+off-by-one against the frame rect. The bottom-right corner is one rectangle, the
+same size as the close box, and it grows the window in the direction the pointer
+is already moving. It sits inside the frame so it cannot overlap the shadow,
+which is drawn outside the frame and is not part of the window for hit-testing.
+
+Three things fell out of it:
+
+- **The grab mode became a named set.** It was a bare 0/1 meaning "the app has
+  it" or "we are moving it"; resize is a third answer, and three states in two
+  values is how a bug gets in. `GRAB_APP` / `GRAB_MOVE` / `GRAB_RESIZE`.
+- **`grab_dx/dy` hold the offset from the pointer to the corner**, so the corner
+  stays under the cursor instead of snapping to it on the first motion event.
+- **The pointer shape is the affordance.** Over the grip the cursor becomes
+  `CURSOR_RESIZE` — which finally gives the resize cursor generated in Item 1 a
+  caller, instead of it being an atlas entry nothing selects. It is held for the
+  whole drag so it does not flicker back to an arrow when the pointer outruns
+  the corner.
+
+`ui.h` publishes the cursor kinds and `fb.c` static-asserts the generated
+`cursor.inc` order against them. Two lists of the same constants drift the
+moment a cursor is *inserted* rather than appended, and the symptom is the wrong
+picture rather than any failure — which nothing tests. `fb.c` is the pixels
+layer and does not include `ui.h` (that would invert the layering `ui.h` itself
+sets out), so the assertions are pinned to literals with a comment naming the
+other list.
+
+**Gate** — seven new `wmtest` assertions:
+
+```
+  the pointer over the grip asks for the RESIZE cursor     ok
+  dragging the grip RESIZES the window                     ok
+  ...and does not MOVE it                                  ok
+  ...and the cursor stays RESIZE mid-drag                  ok
+  ...and a drag past the minimum clamps instead of inverting ok
+  the title bar still MOVES rather than resizing           ok
+  ...and off the grip the cursor is an ARROW again         ok
+```
+
+The last two matter as much as the first: a grip that swallowed the title bar's
+drag would stop windows moving, and a cursor that never went back to an arrow
+would look broken everywhere else.
+
+**And one thing only looking found.** The first version drew the three rules at
+the same offset with different lengths, which merges into a single L-bracket —
+it renders, and it reads as a border artefact rather than as a grip. They are
+three rules *parallel to the corner's diagonal* now, stepping inward, which is
+the universal mark for it. No assertion would ever have caught that.
+
+### 6.2–6.5 — not done
+
+Double-click, the scroll wheel (the PS/2 4-byte wheel format), a focus ring on
+controls, and the Super key are **not started**. They are listed here rather
+than quietly dropped.

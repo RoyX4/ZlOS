@@ -643,6 +643,55 @@ int main(void)
     ok("a focus change leaves no shadow edge behind",
        all_wallpaper(200 - 60, 200 - 60, 200 + 300 + 60, 200 + 200 + 60));
 
+    /* ------------------------------------------------------- resize grip */
+    /* wm_resize has existed since the window table did - min_w/min_h clamping,
+     * damage on both the old and the new rect - and NOTHING HAS EVER CALLED
+     * IT. FEEL-PROMPT item 6 names it first for that reason. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    wm_damage(0, 0, W, H);
+    frame();
+    int rw = wm_open(5, "resize me", 200, 200, 400, 300);
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
+    int rx0, ry0, rw0, rh0;
+    wm_geometry(rw, &rx0, &ry0, &rw0, &rh0);
+
+    /* grab the bottom-right corner and drag it out by 120,90 */
+    int gs = UI_S3(th);
+    int gpx = rx0 + rw0 - gs / 2, gpy = ry0 + rh0 - gs / 2;
+    pointer(gpx, gpy, 0);
+    ok("the pointer over the grip asks for the RESIZE cursor",
+       fb_cursor_get() == CURSOR_RESIZE);
+    pointer(gpx, gpy, 1);
+    pointer(gpx + 120, gpy + 90, 1);
+    int rx1, ry1, rw1, rh1;
+    wm_geometry(rw, &rx1, &ry1, &rw1, &rh1);
+    ok("dragging the grip RESIZES the window", rw1 == rw0 + 120 && rh1 == rh0 + 90);
+    ok("...and does not MOVE it", rx1 == rx0 && ry1 == ry0);
+    ok("...and the cursor stays RESIZE mid-drag",
+       fb_cursor_get() == CURSOR_RESIZE);
+
+    /* keep dragging inward, far past any sane size: min_w/min_h must hold */
+    pointer(gpx - 4000, gpy - 4000, 1);
+    int rw2, rh2;
+    wm_geometry(rw, &rx1, &ry1, &rw2, &rh2);
+    ok("...and a drag past the minimum clamps instead of inverting",
+       rw2 > 0 && rh2 > 0 && rw2 <= rw0 && rh2 <= rh0);
+    pointer(gpx, gpy, 0);                    /* release */
+
+    /* the grip must not steal the title bar's drag, or windows stop moving */
+    wm_geometry(rw, &rx1, &ry1, &rw1, &rh1);
+    pointer(rx1 + 40, ry1 + th->title_h / 2, 1);
+    pointer(rx1 + 40 + 60, ry1 + th->title_h / 2 + 40, 1);
+    int rx3, ry3, rw3, rh3;
+    wm_geometry(rw, &rx3, &ry3, &rw3, &rh3);
+    ok("the title bar still MOVES rather than resizing",
+       rx3 == rx1 + 60 && ry3 == ry1 + 40 && rw3 == rw1 && rh3 == rh1);
+    pointer(rx3 + 40, ry3 + th->title_h / 2, 0);
+    ok("...and off the grip the cursor is an ARROW again",
+       fb_cursor_get() == CURSOR_ARROW);
+    wm_close(rw);
+    frame();
+
     /* -------------------------------------------------- the scroll scissor */
     /* A SCROLL REGION MUST NARROW THE SCISSOR AND THEN PUT IT BACK.
      *
