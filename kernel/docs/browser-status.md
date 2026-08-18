@@ -18,6 +18,16 @@ work, not an afterthought: this project already had to publicly correct a "95%
 achievable" that was really 20% (`DECISIONS.md` #26), and the same standard
 applies in the optimistic direction.
 
+> **DONE, 2026-08-19.** Both files landed on `main` in the eleven-track merge
+> and both have been corrected on `desktop/browser-next`:
+> `feature-catalogue.md` §12 (the whole networking table, since `TCP/IP stack
+> ❌` above a working browser is a contradiction, not a stale row), its
+> "explicitly not worth taking" list, and §"Why a browser is in a category of
+> its own"; and the exclusion table in `OVERNIGHT-PROMPT.md`. The original
+> text was kept and annotated rather than deleted — the reasoning is still
+> correct about the thing it actually measured, and the *shape* of the mistake
+> is the reusable part.
+
 ---
 
 ## The corrected row
@@ -190,6 +200,23 @@ kernel/hosttest/browsertest    # 58 checks, 0 failed
 ```
 
 ```bash
+kernel/hosttest/fbtext         # 45 checks, 0 failed
+```
+
+`fbtext` is the newest and it exists because of a hole the others did not
+cover: **both text regressions this browser suffered shipped with every gate
+above green.** Italic silently rendering upright is not a crash, not a wrong
+number and not a failed assertion; six heading sizes collapsing onto two does
+not move a line count, because a heading that already fits on one line still
+fits when it is set too small. `browsershot` drew both bugs faithfully and
+nobody diffed the pixels.
+
+So it asserts the two things a picture and a line count both miss — that a
+requested pixel size is the size that gets drawn, and that a style flag changes
+the pixels. **Against the shim it replaced it reports 12 failures**, which is
+the only reason to believe it would catch the next one.
+
+```bash
 kernel/hosttest/fuzz 3000 1    # ~400,000 checks per seed, 0 failed
 ```
 
@@ -307,10 +334,19 @@ Both now have assertions. The first fails by 122 px if the fix is reverted.
 - `<pre>` does not wrap and has no horizontal scroll, so a long preformatted
   line is clipped. That is what `<pre>` means, and the clip is `fb_clip`, so
   nothing escapes — but it is a limit, not a feature.
-- Bold and oblique are **synthesised** — a double strike and a shear. There is
-  one weight and one slope in the atlas. Visibly not a real bold to anyone who
-  looks closely, and unambiguously better than rendering `<strong>` identically
-  to the text around it.
+- ~~Bold and oblique are **synthesised** — a double strike and a shear.~~
+  **Superseded on the merge, twice.** Bold is now a REAL DRAWN WEIGHT: this
+  tree ships `prop16b`/`prop24b`/`prop32b`, so `<strong>` is a bold face, not a
+  double strike. **Oblique is still synthesised** — the upright atlas sheared
+  about the cell bottom — so `<em>` leans but keeps roman letterforms, where a
+  real italic redraws them. It is an oblique; calling it italic is the usual
+  abuse of the word.
+- Headings are **six sizes again**, not three or two. `layout.c` emits `em*2`,
+  `em*3/2`, `em*5/4`, `em*11/10`, `em`, `em*9/10`; the text engine now takes a
+  pixel height rather than a role, so all six survive. The largest atlas is
+  32px, so h1 at `em` 24 is a 1.5× bilinear upscale and is measurably softer
+  than a natively rasterized 48px would be. That was chosen over generating a
+  `prop48` — see the decision note in `fb.c`.
 - Documents are capped at 24 KB, the node array at 1024 and the run array at
   2048. All three are fixed arrays because there is no heap. Overflow
   **truncates and says so on screen**; it does not scribble.
