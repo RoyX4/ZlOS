@@ -61,13 +61,18 @@ gcc $CFLAGS -c ui.c -o _ui64.o
 # app_* functions are WEAK, so this links today - in a kernel where kernel.zl
 # has not grown them - and starts working the day it does, with no change here.
 gcc $CFLAGS -c wmglue.c -o _wmglue64.o
+# the browser: the tokenizer, the box model and the app.
+gcc $CFLAGS -c html.c    -o _html64.o
+gcc $CFLAGS -c layout.c  -o _layout64.o
+gcc $CFLAGS -c browser.c -o _browser64.o
 gcc $CFLAGS -c smp_trampoline64.S -o _smptr64.o
 gcc -m64 -c boot64.S -o _boot64.o
 
 ld -m elf_x86_64 -T link64.ld -o kernel64.elf \
    _boot64.o _gen64.o _rt64.o _support64.o _vga64.o _fb64.o _fb3d64.o \
    _font64.o _fontaa64.o _fontsub64.o _icons64.o _pci64.o _bga64.o _intel64.o _xhci64.o \
-   _console64.o _divmod64.o _gdt64.o _idt64.o _apic64.o _vgpu64.o _cpu64.o _nvme64.o _sched64.o _smp64.o _smptr64.o _i2c64.o _input64.o _term64.o _wm64.o _ui64.o _wmglue64.o
+   _console64.o _divmod64.o _gdt64.o _idt64.o _apic64.o _vgpu64.o _cpu64.o _nvme64.o _sched64.o _smp64.o _smptr64.o _i2c64.o _input64.o _term64.o _wm64.o _ui64.o _wmglue64.o \
+   _html64.o _layout64.o _browser64.o
 
 echo "built kernel64.elf"
 echo "  undefined symbols: $(nm -u kernel64.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"

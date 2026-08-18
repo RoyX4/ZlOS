@@ -60,3 +60,18 @@ if [ -f /usr/include/GL/glx.h ]; then
   gcc -O2 -w -o gpu_fillrate gpu_fillrate.c -lGL -lX11
   echo "built ./gpu_fillrate  (run: ./gpu_fillrate)"
 fi
+
+# The browser's parser and box model, asserted. html.c and layout.c reach for
+# exactly one thing outside themselves - a function that measures a string - so
+# injecting a synthetic one turns both into ordinary programs. Malformed markup
+# recovering rather than faulting is unprovable by looking at a rendered page,
+# and reflow is a claim about numbers before it is a claim about pixels.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o htmltest htmltest.c ../html.c ../layout.c
+echo "built ./htmltest      (run: ./htmltest)"
+
+# ...and the same document at three widths, as a picture. Same argument as
+# wmtest/wmshot: assertions catch a run escaping the content box, eyes catch
+# inline <code> set at the wrong size or a list marker sitting in its own text.
+gcc -O2 -w -o browsershot browsershot.c ../browser.c ../html.c ../layout.c \
+    ../ui.c ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
+echo "built ./browsershot   (run: ./browsershot out.ppm)"

@@ -1579,6 +1579,130 @@ void fb_text_prop(int px, int py, const char *s, unsigned int fg)
     }
 }
 
+/* ---- rich text: any size, bold, oblique, monospace ------------------------
+ * ADDITIVE. Nothing above this point changes; fb_text_prop and every existing
+ * caller behave exactly as they did. This exists because a DOCUMENT needs
+ * something a user interface does not: more than one type size on one line.
+ * fb_text_prop offers exactly two - 16px or 32px, chosen by the console cell -
+ * and a document with h1 through h6 needs seven.
+ *
+ * WHY IT LIVES IN fb.c rather than in the browser. The atlases are included
+ * INTO this translation unit (font_prop.inc), and the coverage blend is static
+ * here. A second file would have had to either duplicate the blend - two
+ * places to get gamma-correct blending wrong - or export the internals. This
+ * is ~90 lines and it exports one more capability instead.
+ *
+ * BOLD AND ITALIC ARE SYNTHESISED, and that is worth being straight about.
+ * There is one weight and one slope in the atlas. Bold is a double strike one
+ * pixel to the right; italic is a per-row horizontal shear. Both are what a
+ * printer did before there were font files, both are visibly not a real bold
+ * or a real italic to anyone who looks closely, and both are unambiguously
+ * better than rendering <strong> identically to its surrounding text. A real
+ * pair of faces is a font-generation job, not a rendering one.
+ *
+ * The style bits are private to this file. A caller translates its own into
+ * these explicitly rather than relying on the two sets happening to agree -
+ * a silently shared numeric encoding across a layer boundary is exactly the
+ * kind of thing that works until someone inserts a bit.
+ */
+#define FBT_BOLD 1
+#define FBT_ITAL 2
+#define FBT_MONO 4
+
+/* The natural body size for this screen: the same 16 or 32 fb_text_prop uses,
+ * so a document at the default size matches the rest of the desktop. */
+int fb_prop_em(void) { return prop_big() ? 32 : 16; }
+
+/* How far the pen moves. The 16x32 atlas is the reference for every size -
+ * scaling one set of advances keeps the type colour even, where switching
+ * atlases at some threshold would make 17px noticeably wider than 16px. */
+static int rich_adv(char c, int size, int style)
+{
+    if (c < FONT_FIRST || c > FONT_LAST) c = '?';
+    int i = (int)c - FONT_FIRST;
+    int a = (style & FBT_MONO) ? (GLYPH_W * 2 * size / 32)
+                               : (prop16_adv[i] * size / 32);
+    if (style & FBT_BOLD) a += size >= 24 ? 2 : 1;
+    if (style & FBT_ITAL) a += size / 16;
+    return a > 0 ? a : 1;
+}
+
+int fb_text_rich_w(const char *s, int len, int size, int style)
+{
+    int w = 0;
+    if (!s || len <= 0 || size <= 0) return 0;
+    for (int i = 0; i < len; i++) w += rich_adv(s[i], size, style);
+    return w;
+}
+
+/* blend_cov_scaled, with two things it does not have: a source stride that is
+ * not the width (a proportional glyph's ink is narrower than its cell) and a
+ * per-row horizontal offset (the shear that makes an oblique). */
+static void blend_cov_shear(int px, int py, const unsigned char *src,
+                            int sw, int sh, int stride, int dw, int dh,
+                            unsigned int fg, int shear)
+{
+    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
+    int lastx = (sw - 1) << 16, lasty = (sh - 1) << 16;
+    for (int y = 0; y < dh; y++) {
+        int syq = (2 * y + 1) * sh * 32768 / dh - 32768;
+        if (syq < 0) syq = 0;
+        if (syq > lasty) syq = lasty;
+        int y0 = syq >> 16, fy = syq & 0xFFFF;
+        int y1 = (y0 + 1 < sh) ? y0 + 1 : y0;
+        const unsigned char *r0 = src + (unsigned long)y0 * stride;
+        const unsigned char *r1 = src + (unsigned long)y1 * stride;
+        /* the lean: none at the baseline, full at the cap height */
+        int dx = shear ? (dh - 1 - y) * shear / dh : 0;
+        for (int x = 0; x < dw; x++) {
+            int sxq = (2 * x + 1) * sw * 32768 / dw - 32768;
+            if (sxq < 0) sxq = 0;
+            if (sxq > lastx) sxq = lastx;
+            int x0 = sxq >> 16, fx = sxq & 0xFFFF;
+            int x1 = (x0 + 1 < sw) ? x0 + 1 : x0;
+            int top = (r0[x0] * (65536 - fx) + r0[x1] * fx) >> 16;
+            int bot = (r1[x0] * (65536 - fx) + r1[x1] * fx) >> 16;
+            blend_px(px + x + dx, py + y, fg, (top * (65536 - fy) + bot * fy) >> 16);
+        }
+    }
+}
+
+/* Draw s[0..len) with its CELL TOP at py and its cell `size` pixels tall. The
+ * caller positions the cell; this does not guess at a baseline, because a
+ * layout that has already worked out where the line sits must not have that
+ * decision second-guessed one layer down. */
+void fb_text_rich(int px, int py, const char *s, int len, unsigned int fg,
+                  int size, int style)
+{
+    if (!s || len <= 0 || size <= 0) return;
+    int shear = (style & FBT_ITAL) ? size / 5 : 0;
+    int bold  = (style & FBT_BOLD) ? (size >= 24 ? 2 : 1) : 0;
+    for (int k = 0; k < len; k++) {
+        char c = s[k];
+        if (c < FONT_FIRST || c > FONT_LAST) c = '?';
+        int i = (int)c - FONT_FIRST;
+        const unsigned char *cov;
+        int sw, sh, stride, dw;
+        if (style & FBT_MONO) {
+            cov = &font16x32_aa[i][0][0];
+            sw = GLYPH_W * 2; sh = 32; stride = GLYPH_W * 2;
+            dw = sw * size / 32;
+        } else {
+            cov = &font16x32_prop[i][0][0];
+            sw = prop16_ink[i]; sh = 32; stride = PROP16_W;
+            dw = sw * size / 32;
+        }
+        if (dw > 0) {
+            blend_cov_shear(px, py, cov, sw, sh, stride, dw, size, fg, shear);
+            /* the double strike. One pixel at text sizes, two once the stem
+             * itself is wide enough that one would not read as heavier. */
+            for (int b = 1; b <= bold; b++)
+                blend_cov_shear(px + b, py, cov, sw, sh, stride, dw, size, fg, shear);
+        }
+        px += rich_adv(s[k], size, style);
+    }
+}
+
 /* ---- 24x24 icons: the dock, the start menu, window titlebars -------------
  * icons24 is a coverage atlas exactly like the font atlases - one byte of
  * alpha per pixel, generated by gen_icons.py - so an icon is a SHAPE, not a

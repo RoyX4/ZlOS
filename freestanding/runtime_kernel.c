@@ -323,6 +323,24 @@ extern void wm_damage(int x, int y, int w, int h);
 extern void wm_damage_win(int win);
 extern void ui_theme_init(int scale);
 
+/* ---- the browser (browser.c / html.c / layout.c) ------------------------
+ * kernel.zl owns the browser app's policy - which window, which keys - and
+ * nothing else. The parse, the box model and the paint are all C, because
+ * the zl kernel subset has no runtime strings and a tokenizer is nothing
+ * but string handling. Same split as term.c's command matcher. */
+extern void browser_home(void);
+extern void browser_load_mem(unsigned int addr, int len);
+extern void browser_draw(int x, int y, int w, int h, int focused);
+extern int  browser_key(int code);
+extern int  browser_click(int cx, int cy);
+extern int  browser_scroll_by(int d);
+extern int  browser_height(void);
+extern int  browser_lines(void);
+extern int  browser_runs(void);
+extern int  browser_status(void);
+extern void wm_resize(int win, int w, int h);
+extern void wm_geometry(int win, int *x, int *y, int *w, int *h);
+
 extern void input_poll(void);
 extern int  input_next(void);
 extern int  input_type(void);
@@ -764,6 +782,23 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_dmg"))     { wm_damage_win((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "ui_theme"))   { ui_theme_init((int)a[0].num); return zl_nil(); }
+    /* ---- the browser. Everything below is one app's policy surface. */
+    if (streq(name, "br_home"))    { browser_home(); return zl_nil(); }
+    if (streq(name, "br_load"))    { browser_load_mem((unsigned)a[0].num, (int)a[1].num); return zl_nil(); }
+    if (streq(name, "br_draw"))    { browser_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num); return zl_nil(); }
+    if (streq(name, "br_key"))     return zl_num((double)browser_key((int)a[0].num));
+    if (streq(name, "br_click"))   return zl_num((double)browser_click((int)a[0].num,(int)a[1].num));
+    if (streq(name, "br_scroll"))  return zl_num((double)browser_scroll_by((int)a[0].num));
+    if (streq(name, "br_h"))       return zl_num((double)browser_height());
+    if (streq(name, "br_lines"))   return zl_num((double)browser_lines());
+    if (streq(name, "br_runs"))    return zl_num((double)browser_runs());
+    if (streq(name, "br_status"))  return zl_num((double)browser_status());
+    /* wm_resize existed and had no caller and no way to reach it. The browser
+     * is the first thing that needs it: reflow is only observable if the
+     * window can change width while the machine is running. */
+    if (streq(name, "wm_size"))    { wm_resize((int)a[0].num,(int)a[1].num,(int)a[2].num); return zl_nil(); }
+    if (streq(name, "wm_w"))       { int gx,gy,gw,gh; wm_geometry((int)a[0].num,&gx,&gy,&gw,&gh); return zl_num((double)gw); }
+    if (streq(name, "wm_hh"))      { int gx,gy,gw,gh; wm_geometry((int)a[0].num,&gx,&gy,&gw,&gh); return zl_num((double)gh); }
     if (streq(name, "in_poll"))    { input_poll(); return zl_nil(); }
     if (streq(name, "in_next"))    return zl_num((double)input_next());
     if (streq(name, "in_type"))    return zl_num((double)input_type());

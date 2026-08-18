@@ -1798,11 +1798,17 @@ fn about_body(ax, ay) {
 APP_SHELL   = 0
 APP_MONITOR = 1
 APP_ABOUT   = 2
+APP_BROWSER = 3
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     wy = ay - TITLE_H * ui()
     if id == APP_MONITOR { return sysmon_body(ax, wy) }
     if id == APP_ABOUT   { return about_body(ax, wy) }
+    # THE BROWSER'S ENTIRE POLICY SURFACE IS THIS LINE. The parse, the box
+    # model and the paint are C - a tokenizer is string handling, and the zl
+    # kernel subset has string literals but no string values. Same split the
+    # terminal's command matcher had to make, and for the same reason.
+    if id == APP_BROWSER { return br_draw(ax, ay, aw, ah, afocus) }
     if id == APP_SHELL {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the
@@ -1819,6 +1825,21 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
 # Return 1 if handled. 'q' or Esc ends the session - NEVER "press any key",
 # which is the phrase this whole rewrite exists to delete.
 fn app_event(id, win, ety, ecode, ex, ey) {
+    if id == APP_BROWSER {
+        # '[' and ']' RESIZE THE WINDOW, and that is the gate rather than a
+        # convenience: reflow is only observable if the width can change while
+        # the machine is running. wm_resize has existed since the compositor
+        # landed with no caller and no way to reach it - this is the first.
+        if ety == 3 {
+            if ecode == 91 { wm_size(win, wm_w(win) - 80, wm_hh(win))  wm_dmg(win)  return 1 }
+            if ecode == 93 { wm_size(win, wm_w(win) + 80, wm_hh(win))  wm_dmg(win)  return 1 }
+            if br_key(ecode) == 1 { wm_dmg(win) }
+            return 1
+        }
+        if ety == 1 { if br_key(ecode) == 1 { wm_dmg(win) }  return 1 }
+        if ety == 4 { if br_click(ex, ey) == 1 { wm_dmg(win) }  return 1 }
+        return 1
+    }
     if id == APP_SHELL {
         # ONE CHARACTER PER CALL. No loop - that is the whole inversion.
         # read_line used to block, which is exactly why the shell had to be the
@@ -1895,6 +1916,8 @@ fn wm_session() {
     shell_win = wm_open(APP_SHELL, "zl shell", 40 * u, 52 * u, sw - 340 * u, sh - 90 * u)
     wm_open(APP_MONITOR, "System Monitor", sw - 290 * u, 52 * u, MON_W * u, MON_H * u)
     wm_open(APP_ABOUT, "About", sw - 290 * u, 52 * u + (MON_H + 16) * u, MON_W * u, AB_H * u)
+    br_home()
+    wm_open(APP_BROWSER, "zlOS browser", 120 * u, 96 * u, 520 * u, 380 * u)
     while wm_run() == 1 { wm_frame() }
     return 0
 }
