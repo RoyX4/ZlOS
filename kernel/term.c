@@ -52,6 +52,9 @@ static int  last_unknown;
  * item 4 draws: uniform advance is the "this is a terminal" signal, so use it
  * on the one thing that IS a terminal. */
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
+/* the scissor, so a row that cannot be seen is not drawn - see below */
+int  fb_clip_top(void);
+int  fb_clip_bot(void);
 void fb_text_aa2x(int px, int py, const char *s, unsigned int fg);
 int  fb_cell_w(void);
 int  fb_cell_h(void);
@@ -243,15 +246,29 @@ void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
     int first = s_head - show;
     while (first < 0) first += TERM_ROWS;
 
+    /* SKIP THE ROWS THAT CANNOT BE SEEN.
+     *
+     * app_draw is called once per damage rectangle, and a window being dragged
+     * across this one damages a band of it - typically two or three rows out
+     * of thirty-seven. Every other row was being walked, laid out and blitted
+     * glyph by glyph, and then rejected a pixel at a time by the scissor.
+     * fbbench measures forty lines of AA text at 4.588 ms, so a drag across
+     * the shell was paying most of that per frame to draw nothing.
+     *
+     * The scissor is still what GUARANTEES nothing escapes; this is about not
+     * doing the work first. Same reason ui_scroll rejects rows outside its
+     * viewport rather than drawing them and clipping. */
+    int c_top = fb_clip_top(), c_bot = fb_clip_bot();
     int ty = y;
     for (int r = 0; r < show; r++) {
         const char *line = scroll[(first + r) % TERM_ROWS];
-        if (line[0]) fb_text_aa(x, ty, line, dim);
+        if (line[0] && ty + lh > c_top && ty < c_bot) fb_text_aa(x, ty, line, dim);
         ty += lh;
     }
 
     /* the prompt line, always at the bottom of the client area */
     int py = y + h - lh;
+    if (py + lh <= c_top || py >= c_bot) return;      /* not in this band */
     fb_text_aa(x, py, "zl>", accent);
     int px = x + 4 * cw;
     input[in_len] = 0;

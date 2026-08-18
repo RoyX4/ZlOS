@@ -310,12 +310,70 @@ for: `desktop-northstar-feasibility.md` · The run that built the primitives:
 `probe-frame.py`, 1920×1200, drives real interaction and reads the numbers back
 out of the shell.
 
-| | before the bake | after |
+| typical frame | before | after |
 |---|---|---|
-| hovering nine dock tiles, typical frame | **7,426 µs** | **1,258 µs** |
+| hovering nine dock tiles | **7,426 µs** | **1,258 µs** (5.9×) |
 
-**5.9× on the case a person actually feels.** 7.4 ms to light up one chip is
-not a subtle regression; it is most of a frame to change one rounded rectangle.
+7.4 ms to light up one chip is not a subtle regression; it is most of a frame
+to change one rounded rectangle.
+
+### ...and then the drag was still 19.4 ms, which was a different bug
+
+On a quiet box (load 2.25, KVM, so the guest TSC is the host's):
+
+```
+hovering nine dock tiles     3,410 us
+twelve drag steps           19,399 us      <- over the 16.67 ms budget
+```
+
+A drag is not slow because of the window being dragged. It is slow because of
+the window UNDERNEATH it. `app_draw` is called once per damage rectangle, and
+dragging across the shell damages a band of it — two or three rows out of
+thirty-seven — but `term_draw` walked its **whole scrollback** every time,
+laid out every line and blitted it glyph by glyph, and the scissor then
+rejected it a pixel at a time. `fbbench` measures forty lines of AA text at
+**4.588 ms**, so a drag across the shell was paying most of that per frame to
+draw nothing.
+
+The scissor had been **write-only** since it was built. That was fine while
+every customer was an `fb_*` primitive, because those fold it into their own
+loop bounds — an app cannot. `fb_clip_top/bot/left/right` let a caller skip the
+work instead of having it thrown away, which is the same rule `ui_scroll`
+already follows for rows outside its viewport.
+
+### What that change is worth: not measurable on this machine, and say so
+
+| run | host load at start | drag step |
+|---|---|---|
+| before the row skip | 2.25 | 19,399 µs |
+| after | **7.43** | 16,000 µs |
+
+**That is not an A/B.** The second run had three times the host load of the
+first, so the 17% is a number with an uncontrolled variable in it and quoting
+it would be dishonest. Every attempt to re-measure since has landed at load
+5–7, because a second session shares this four-core box and is compiling and
+booting QEMU alongside.
+
+So the row skip stands **on argument, not on measurement**: it removes work
+whose output is provably discarded — rows entirely outside the scissor, which
+the scissor was going to reject pixel by pixel anyway. That is a claim that can
+be checked by reading, which is the right kind of claim to make when the
+stopwatch is unreliable.
+
+**The honest state of the speed work:**
+
+| | measured | confidence |
+|---|---|---|
+| dock hover, 7,426 → 1,258 µs | yes, both at comparable load | high |
+| drag step, 19.4 ms at load 2.25 | yes, one clean sample | it is over budget; that much is certain |
+| the row skip's contribution | **no** | argued, not measured |
+| any peak figure | no | contended every run |
+
+The remaining drag cost has not been attributed. `sysmon_body` redraws the
+48-character CPU brand string glyph by glyph and eight antialiased sparkline
+segments on every damage rectangle that touches it, and Wu's algorithm is
+4.3× the cost per line pixel of Bresenham — that is the next thing to look at,
+and it should be looked at with a stopwatch that works.
 
 ### The peaks in that run are not usable, and saying so matters
 

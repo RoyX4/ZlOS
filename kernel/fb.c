@@ -581,6 +581,21 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
  */
 static int clip_x0, clip_y0, clip_x1, clip_y1;
 
+/* THE SCISSOR, READABLE. It has been write-only since it was built, which was
+ * fine while every customer was a fb_* primitive that folds it into its own
+ * loop bounds. An APP cannot do that: term_draw walks its whole scrollback and
+ * calls fb_text_aa per row, and a row outside the scissor costs a full string
+ * walk and a per-pixel reject before producing nothing.
+ *
+ * Being able to ASK is what lets a caller skip work instead of having it
+ * thrown away. The scissor stays a correctness guarantee either way - this is
+ * about not doing the work twice over. */
+int fb_clip_top(void)   { return clip_y0; }
+int fb_clip_bot(void)   { return clip_y1; }
+int fb_clip_left(void)  { return clip_x0; }
+int fb_clip_right(void) { return clip_x1; }
+
+
 void fb_clip(int x, int y, int w, int h)
 {
     int x1 = x + w, y1 = y + h;
