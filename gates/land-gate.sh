@@ -66,7 +66,8 @@ if [ -f "$WT/kernel/SOURCES" ]; then
     if grep -q "$b" "$WT/kernel/hosttest/build.sh" 2>/dev/null; then
       # host-only: a harness compiles it, the kernel does not. Correct.
       echo "host-only (not in the kernel): $b"; hostonly=$((hostonly+1))
-    elif grep -rqs -- "${b%.c}" "$WT"/kernel/*.c "$WT"/kernel/*.h --exclude="$b"; then
+    elif grep -lsr -- "${b%.c}" "$WT"/kernel/*.c "$WT"/kernel/*.h 2>/dev/null \
+         | grep -qv "/$b\$"; then
       # something references it but SOURCES does not list it - this is the
       # silent-drop this whole check exists for
       echo "NOT IN SOURCES: $b"; miss=$((miss+1))
