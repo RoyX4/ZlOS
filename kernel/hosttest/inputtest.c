@@ -83,6 +83,14 @@ static int fake_usb_ptr = 0, fake_ux = 0, fake_uy = 0, fake_ubtn = 0;
  * because it is the PS/2 fallback the laptop's TrackPoint takes. */
 int xhci_ptr_ready(void) { return fake_usb_ptr; }
 int xhci_ptr_poll(void)  { return 0; }
+int xhci_poll(int max)   { (void)max; return 0; }  /* the one ring drainer */
+/* What this harness emulates when fake_usb_ptr is set is a usb-TABLET: it
+ * sets fake_ux/fake_uy to absolute positions. Say so, rather than letting
+ * input.c infer it from "a USB pointer exists", which is the bug that made
+ * every usb-mouse take the absolute branch. */
+int xhci_ptr_abs(void)   { return 1; }
+int xhci_ptr_take_dx(void) { return 0; }
+int xhci_ptr_take_dy(void) { return 0; }
 int xhci_ptr_x(void)     { return fake_ux; }
 int xhci_ptr_y(void)     { return fake_uy; }
 int xhci_ptr_btn(void)   { return fake_ubtn; }

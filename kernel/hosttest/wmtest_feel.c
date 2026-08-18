@@ -228,6 +228,10 @@ int cpu_tsc_khz(void) { return 0; }
  * would be a NUL byte and a keystroke. */
 int xhci_ptr_ready(void) { return 0; }
 int xhci_ptr_poll(void) { return 0; }
+int xhci_poll(int max)   { (void)max; return 0; }  /* the one ring drainer */
+int xhci_ptr_abs(void)   { return 0; }   /* no USB pointer here at all */
+int xhci_ptr_take_dx(void) { return 0; }
+int xhci_ptr_take_dy(void) { return 0; }
 int xhci_ptr_x(void) { return 0; }
 int xhci_ptr_y(void) { return 0; }
 int xhci_ptr_btn(void) { return 0; }

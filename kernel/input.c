@@ -38,7 +38,10 @@ extern int ser_rx(void);          /* one byte from COM1, or -1 (support.c) */
 /* The USB pointer. A tablet reports an ABSOLUTE position, which is why it is
  * preferred over the PS/2 mouse's relative deltas whenever it is present. */
 extern int xhci_ptr_ready(void);
-extern int xhci_ptr_poll(void);
+extern int xhci_ptr_abs(void);    /* 1 = tablet (a position), 0 = mouse (a delta) */
+extern int xhci_ptr_take_dx(void);   /* read-and-clear raw relative motion */
+extern int xhci_ptr_take_dy(void);
+extern int xhci_poll(int max);    /* the ONE drainer of the USB event ring */
 extern int xhci_ptr_x(void);
 extern int xhci_ptr_y(void);
 extern int xhci_ptr_btn(void);
@@ -522,33 +525,68 @@ static int scale_axis(int d, int gain, int *rem)
  * One rule, one place: prefer the tablet, exactly as the builtin does. */
 static void pump_mouse(void)
 {
-    int x, y, b, tablet = xhci_ptr_ready();
-    if (tablet) {
-        xhci_ptr_poll();                 /* the report is pulled, not pushed */
-        x = xhci_ptr_x(); y = xhci_ptr_y(); b = xhci_ptr_btn();
-    } else {
-        x = idt_mouse_x(); y = idt_mouse_y(); b = idt_mouse_btn();
-    }
-    if (!ms_seen) {
-        ms_x = x; ms_y = y; ms_btn = b; ms_seen = 1;
-        px_x = x; px_y = y;                 /* adopt, do not announce */
-        ms_pub_x = px_x; ms_pub_y = px_y;   /* ...and seed what "announced"
-                                               means, or the NEXT poll compares
-                                               a real position against 0 and
-                                               fires the phantom this adoption
-                                               exists to prevent */
-        return;
-    }
+    /* "IS THERE A USB POINTER" AND "IS IT ABSOLUTE" ARE TWO QUESTIONS, and
+     * this asked only the first. `tablet` was xhci_ptr_ready(), so the
+     * absolute branch below was taken for every USB pointer there is. A
+     * usb-tablet really is absolute, so it looked correct - and every probe in
+     * this repo attaches a usb-tablet, so nothing ever disagreed. try.sh
+     * attaches a usb-MOUSE, which is relative, and it went down the same
+     * branch: every USB mouse ran at exactly 1:1 with no acceleration, and
+     * Settings' pointer-speed slider moved a number that reached nothing.
+     *
+     * xhci_ptr_abs() is the question that was meant. */
+    int usb    = xhci_ptr_ready();
+    int tablet = usb && xhci_ptr_abs();
+    int b, dx, dy;
 
-    int dx = x - ms_x, dy = y - ms_y;
-    ms_x = x; ms_y = y;
+    /* NO POLL IN HERE. input_poll() has already drained the ring, once, for
+     * both devices - see the note at the top of it. Polling again from inside
+     * the mouse pump is what made this the first of two competing drainers,
+     * and it capped the pointer at one report per frame. */
+    if (usb && !tablet) {
+        /* A relative USB mouse hands over a DELTA, read-and-cleared, rather
+         * than a position to difference. It has to: xhci.c clamps its own
+         * ptr_x to the screen, so two consecutive positions stop differing the
+         * moment the pointer sits against an edge - and below 1x the
+         * accelerated pointer would then never reach that edge at all. */
+        b = xhci_ptr_btn();
+        if (!ms_seen) {
+            ms_x = xhci_ptr_x(); ms_y = xhci_ptr_y();
+            ms_btn = b; ms_seen = 1;
+            px_x = ms_x; px_y = ms_y;
+            ms_pub_x = px_x; ms_pub_y = px_y;
+            (void)xhci_ptr_take_dx(); (void)xhci_ptr_take_dy();  /* discard */
+            return;
+        }
+        dx = xhci_ptr_take_dx();
+        dy = xhci_ptr_take_dy();
+        ms_x += dx; ms_y += dy;
+    } else {
+        int x, y;
+        if (tablet) { x = xhci_ptr_x();  y = xhci_ptr_y();  b = xhci_ptr_btn();  }
+        else        { x = idt_mouse_x(); y = idt_mouse_y(); b = idt_mouse_btn(); }
+        if (!ms_seen) {
+            ms_x = x; ms_y = y; ms_btn = b; ms_seen = 1;
+            px_x = x; px_y = y;                 /* adopt, do not announce */
+            ms_pub_x = px_x; ms_pub_y = px_y;   /* ...and seed what "announced"
+                                                   means, or the NEXT poll
+                                                   compares a real position
+                                                   against 0 and fires the
+                                                   phantom this adoption exists
+                                                   to prevent */
+            return;
+        }
+        dx = x - ms_x; dy = y - ms_y;
+        ms_x = x; ms_y = y;
+    }
 
     /* A TABLET IS ABSOLUTE, so it does not go through the accel curve: its
        report already IS where the pointer should be, and scaling a delta
        derived from two absolute samples would make the pointer lag the pen and
-       drift away from it. Speed and acceleration are a mouse's problem. */
+       drift away from it. Speed and acceleration are a mouse's problem - and
+       a USB mouse is a mouse, which is the whole point of the split above. */
     if (tablet) {
-        px_x = x; px_y = y;
+        px_x = ms_x; px_y = ms_y;
     } else if (dx | dy) {
         /* ONE gain for both axes, from the magnitude of the move. Deriving it
          * per-axis would give a fast-horizontal, slow-vertical move two
@@ -652,6 +690,22 @@ static void handle_hid_event(int ev)
  * where the timing lives. */
 void input_poll(void)
 {
+    /* THE USB EVENT RING, DRAINED ONCE, FIRST, BY ONE CALLER.
+     *
+     * Both HID devices post completions to a single xHCI event ring. This used
+     * to be drained from two places at two different rates - pump_mouse()
+     * once, the keyboard loop below up to sixteen times - and whichever ran
+     * first took whatever happened to be at the front. That is why the pointer
+     * was jumpy: pump_mouse() got at most one report per frame, and sometimes
+     * a keystroke instead of one.
+     *
+     * Draining here, before pump_mouse() reads the pointer and before the
+     * keyboard loop pops its queue, means both see everything that arrived
+     * since the last frame. The bound is generous on purpose - a hand moving
+     * fast produces a report per USB service interval, several per frame, and
+     * the surplus must not be left on the ring until the next one. */
+    xhci_poll(32);
+
     /* PS/2 */
     for (int i = 0; i < 16; i++) {
         int sc = idt_scan();
@@ -698,8 +752,10 @@ void input_poll(void)
         if (c == 0) continue;                    /* a NUL is not a keystroke */
         evq_push(EV_CHAR, (u32)c, mods, 0, 0);
     }
-    /* After the drain, not before: xhci_key_event() polls the controller, so
-     * reading the bitmap first would report the state one report out of date. */
+    /* The modifier bitmap is whatever the last report decoded, and the drain
+     * that decoded it ran at the top of this function - so by here it is
+     * current. (It used to matter that this came AFTER the keyboard loop,
+     * because xhci_key_event() did the polling. It no longer does.) */
     usb_mods = hid_mods_to_mods(xhci_kbd_mods());
 
     /* auto-repeat: one key at a time, the most recently pressed */

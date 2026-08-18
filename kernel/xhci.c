@@ -578,7 +578,7 @@ static int event_poll(u32 *out_param_lo, u32 *out_status, u32 *out_ctrl, int spi
  * is very often not yours. A driver that assumes otherwise works perfectly on
  * an empty bus and fails the instant a keyboard exists, which is exactly the
  * case we care about. */
-static void kbd_event(u32 status, u32 ctrl);    /* stage 5, defined below */
+static void kbd_event(u32 param, u32 status, u32 ctrl);  /* stage 5, below */
 
 /* Wait for the completion of ONE SPECIFIC command.
  *
@@ -593,7 +593,7 @@ static int cmd_wait(u32 trb_addr, u32 *status, u32 *ctrl, int spins)
         u32 p = 0, s = 0, c = 0;
         int t = event_poll(&p, &s, &c, spins);
         if (t == 0) return 0;
-        if (t == TRB_TRANSFER_EVENT) { kbd_event(s, c); continue; }
+        if (t == TRB_TRANSFER_EVENT) { kbd_event(p, s, c); continue; }
         if (t != TRB_CMD_COMPLETION) continue;      /* port change etc */
         if (p != trb_addr) continue;                /* a stale completion */
         if (status) *status = s;
@@ -603,24 +603,46 @@ static int cmd_wait(u32 trb_addr, u32 *status, u32 *ctrl, int spins)
     return 0;
 }
 
-static int event_wait(int want, u32 *param, u32 *status, u32 *ctrl, int spins)
+/* Wait for the completion of ONE SPECIFIC transfer, named by slot and endpoint.
+ *
+ * THE SAME TRAP cmd_wait ALREADY LEARNED, one layer down. This was
+ * event_wait(want, ...) and every caller passed want == TRB_TRANSFER_EVENT, so
+ * it returned the FIRST transfer event on the ring whoever it belonged to. It
+ * carried the right lesson in a comment - "a keypress that lands while we are
+ * waiting must NOT be thrown away: dropping it also drops our obligation to
+ * post another buffer, and the keyboard goes silent forever" - and then made
+ * that exact mistake, because the `t == want` test ran FIRST and matched the
+ * keypress. The dispatch below it was unreachable for every real caller.
+ *
+ * What that costs: xhci_control_in() runs about forty times during enumeration
+ * and bulk_xfer() runs on every USB-storage read, and try.sh attaches a
+ * usb-storage device. A HID completion landing inside either window was
+ * consumed as if it were the transfer's own - so the HID endpoint was never
+ * requeued and went silent for good, AND the transfer read somebody else's
+ * completion code. Move the mouse while reading the USB stick and the pointer
+ * could die outright.
+ *
+ * A Transfer Event names its slot and endpoint in the control dword, so match
+ * on those and hand everything else to the dispatcher that owns it. */
+static int xfer_wait(int slot, int dci, u32 *status, u32 *ctrl, int spins)
 {
-    for (int i = 0; i < 32; i++) {
+    /* Bounded well above the number of foreign events that can plausibly
+     * interleave - the pointer alone can have PTR_NBUF in flight. */
+    for (int i = 0; i < 64; i++) {
         u32 p = 0, s = 0, c = 0;
         int t = event_poll(&p, &s, &c, spins);
         if (t == 0) return 0;                   /* nothing arrived at all */
-        if (t == want) {
-            if (param)  *param  = p;
+        if (t != TRB_TRANSFER_EVENT) continue;  /* port change etc - noise */
+
+        int es = (int)((c >> 24) & 0xFF);
+        int ee = (int)((c >> 16) & 0x1F);
+        if (es == slot && ee == dci) {
             if (status) *status = s;
             if (ctrl)   *ctrl   = c;
             return t;
         }
-        /* A keypress that lands while we are waiting on a command must NOT be
-         * thrown away: dropping it also drops our obligation to post another
-         * buffer, and the keyboard goes silent forever. Hand it to the
-         * keyboard code and carry on waiting. Port-change events genuinely are
-         * noise here and are discarded. */
-        if (t == TRB_TRANSFER_EVENT) kbd_event(s, c);
+        /* Somebody else's, and it carries an obligation to re-arm them. */
+        kbd_event(p, s, c);
     }
     return 0;
 }
@@ -893,7 +915,9 @@ int xhci_control_in(int slot, u32 setup_lo, u32 setup_hi, u32 buf, int len)
     doorbell((u32)slot, 1);           /* EP0 is doorbell target 1 */
 
     u32 status = 0, ctrl = 0;
-    if (!event_wait(TRB_TRANSFER_EVENT, 0, &status, &ctrl, 5000000)) return 0;
+    /* EP0 of THIS slot, not "the next transfer event on the ring" - a HID
+     * completion landing mid-enumeration used to be taken for this one. */
+    if (!xfer_wait(slot, 1, &status, &ctrl, 5000000)) return 0;
     int cc = (int)((status >> 24) & 0xFF);
     if (cc == 1 || cc == 13) return 1;      /* success, or a short packet */
 
@@ -1091,7 +1115,70 @@ int xhci_cur_speed(void) { return cur_speed; }
  *   tablet     (subclass 0, protocol 0): [buttons, xlo, xhi, ylo, yhi, wheel]
  * The tablet is not a BOOT device, so it is matched on being HID with an
  * interrupt IN endpoint and a 6-byte report rather than on the class triple. */
-#define PTR_REPORT   (XMEM_DATA + 0x480)     /* the pointer's report buffer    */
+/* THE POINTER NEEDS A PIPELINE, AND THE KEYBOARD DOES NOT.
+ *
+ * One outstanding buffer is right for a keyboard: a key is an event, it happens
+ * when a finger moves, and the guest reads it whenever it likes. It is WRONG
+ * for a pointer, and this is what made the pointer jumpy after the merge.
+ *
+ * An interrupt endpoint only transfers when the driver has posted a buffer for
+ * it. With exactly one outstanding, the sequence is: the controller completes
+ * it, we notice at the next frame, we decode and post another. So the device
+ * gets ONE service opportunity per frame no matter how often the bus offers
+ * one - and every interval in between is a report the mouse had and could not
+ * hand over. Measured in hosttest/xhcitest.c: 8 reports offered in a frame, 1
+ * delivered, 7 service intervals starved.
+ *
+ * That is not merely latency. QEMU's usb-mouse (hw/input/hid.c) delivers at
+ * most 127 counts per report and keeps the remainder, so a starved endpoint
+ * turns a hand's motion into a queue that drains at 127 counts per FRAME. The
+ * pointer then coasts after the hand stops, which is exactly what "jumpy,
+ * laggy, unpredictable" describes.
+ *
+ * PTR_NBUF buffers, so the endpoint is always armed and the bus - not the
+ * compositor's frame rate - decides how often the mouse is asked.
+ *
+ * EACH TRB MUST NAME ITS OWN BUFFER. Posting several TRBs that all point at
+ * one buffer is worse than posting one: the controller fills the same bytes N
+ * times and N-1 reports' worth of delta is overwritten before anything reads
+ * it. The buffer is therefore derived from the TRB's own ring index, and the
+ * completion event carries that TRB's address, so decode and post agree by
+ * construction rather than by a counter that could drift. */
+#define PTR_NBUF     8                       /* reports in flight at once      */
+#define PTR_BUFSZ    64u                     /* what ptr_requeue clears        */
+#define PTR_BUF0     (XMEM_DATA + 0x500)     /* first of PTR_NBUF buffers      */
+#define PTR_BUF(i)   (PTR_BUF0 + ((u32)(i) % PTR_NBUF) * PTR_BUFSZ)
+/* XMEM_DATA + 0x800 is xhci_ram_ok()'s upper probe address - stay under it. */
+_Static_assert(PTR_BUF0 + PTR_NBUF * PTR_BUFSZ <= XMEM_DATA + 0x800,
+               "the pointer report buffers overrun the xHCI DMA scratch");
+
+/* THE RING MUST BE LONGER THAN THE PIPELINE, AND THIS COST A ROUND.
+ *
+ * The first version put the Link TRB at PTR_NBUF, making the ring exactly as
+ * long as the buffer count. It worked for exactly PTR_NBUF reports and then
+ * the endpoint went silent for good, which hosttest/xhcitest.c's liveness case
+ * caught and a screenshot never would have.
+ *
+ * The cycle bit is the reason. A Link TRB is handed to the controller with the
+ * producer's CURRENT cycle, and the controller follows it - toggling its own -
+ * when it reaches it. With the pipeline as long as the ring, the producer laps
+ * the consumer: we rewrite the Link with the NEXT cycle while the controller
+ * is still one TRB short of reading it, so it arrives at a Link that no longer
+ * matches, decides the ring is empty, and stops.
+ *
+ * PTR_RING_USE gives PTR_RING_USE - PTR_NBUF slots of slack between the two,
+ * so the Link is always rewritten long before the controller gets there. It
+ * must be a MULTIPLE of PTR_NBUF as well: the buffer is the TRB index modulo
+ * the buffer count, and that is only collision-free across the wrap when the
+ * ring length divides evenly by it. */
+#define PTR_RING_USE 32                      /* usable TRBs; Link sits here    */
+_Static_assert(PTR_RING_USE % PTR_NBUF == 0,
+               "pointer ring length must divide by the buffer count, or two "
+               "outstanding TRBs share a buffer across the wrap");
+_Static_assert(PTR_RING_USE > PTR_NBUF,
+               "the pointer ring must be longer than the pipeline, or the "
+               "producer rewrites the Link TRB's cycle under the controller");
+_Static_assert(PTR_RING_USE < RING_TRBS - 1, "the pointer ring needs a Link TRB");
 #define PTR_ABS_MAX  32767                   /* HID logical maximum per axis   */
 
 extern int console_pxw(void);
@@ -1101,6 +1188,7 @@ static int ptr_slot = 0, ptr_dci = 0, ptr_mps = 8, ptr_ready = 0;
 static int ptr_abs  = 0;       /* 1 = absolute tablet, 0 = relative mouse     */
 static u32 ptr_enq  = 0, ptr_cyc = 1;
 static int ptr_x = 0, ptr_y = 0, ptr_btn = 0;
+static int ptr_dx_acc = 0, ptr_dy_acc = 0;  /* raw relative motion, unclamped */
 static unsigned ptr_reports = 0;
 static unsigned ptr_events  = 0;   /* EVERY dispatch, any cc */
 static unsigned kbd_events  = 0;   /* keyboard dispatches, any cc */
@@ -1302,16 +1390,23 @@ static void kbd_requeue(void)
     doorbell((u32)kbd_slot, (u32)kbd_dci);
 }
 
-/* Hand the pointer's buffer back to the controller for the next report. */
+/* Post ONE buffer for the pointer, at the next free slot of its ring.
+ *
+ * Called PTR_NBUF times at bring-up to fill the pipeline, and once per
+ * completion after that, so the number outstanding stays constant. */
 static void ptr_requeue(void)
 {
-    zero_mem(PTR_REPORT, 64);
     u32 ring = INT_RING(ptr_slot);
-    trb_write(ring, ptr_enq, (u64)PTR_REPORT, (u32)ptr_mps,
+    /* Clear the buffer before handing it back, for the same reason the
+     * keyboard does: on a short packet the bytes the device did not send would
+     * still hold an older report, and a stale delta is movement that never
+     * happened. */
+    zero_mem(PTR_BUF(ptr_enq), PTR_BUFSZ);
+    trb_write(ring, ptr_enq, (u64)PTR_BUF(ptr_enq), (u32)ptr_mps,
               (TRB_NORMAL << 10) | (1u << 5) | ptr_cyc);   /* IOC */
     ptr_enq++;
-    if (ptr_enq >= RING_TRBS - 1) {
-        trb_write(ring, RING_TRBS - 1, (u64)ring, 0,
+    if (ptr_enq >= PTR_RING_USE) {
+        trb_write(ring, PTR_RING_USE, (u64)ring, 0,
                   (TRB_LINK << 10) | (1u << 1) | ptr_cyc);
         ptr_enq = 0;
         ptr_cyc ^= 1;
@@ -1319,11 +1414,24 @@ static void ptr_requeue(void)
     doorbell((u32)ptr_slot, (u32)ptr_dci);
 }
 
-/* One report. Absolute reports are scaled from the HID 0..32767 range onto the
- * live screen; relative ones are accumulated and clamped like the PS/2 path. */
-static void ptr_decode(void)
+/* Fill the pipeline. Called once at bring-up; after that each completion posts
+ * its own replacement, so the outstanding count stays at PTR_NBUF.
+ *
+ * A function rather than a loop at the call site so that the depth the kernel
+ * runs with and the depth hosttest/xhcitest.c arms are the same number by
+ * construction - a harness that armed its own guess would pass while the
+ * shipping driver starved. */
+static void ptr_arm_all(void)
 {
-    volatile u8 *r = (volatile u8 *)PTR_REPORT;
+    for (int i = 0; i < PTR_NBUF; i++) ptr_requeue();
+}
+
+/* One report, from the buffer the completed TRB named. Absolute reports are
+ * scaled from the HID 0..32767 range onto the live screen; relative ones are
+ * accumulated and clamped like the PS/2 path. */
+static void ptr_decode(u32 buf)
+{
+    volatile u8 *r = (volatile u8 *)buf;
     int w = console_pxw(), h = console_pxh();
     if (w <= 0) w = 1920;
     if (h <= 0) h = 1200;
@@ -1342,6 +1450,21 @@ static void ptr_decode(void)
         int dx = (int)r[1], dy = (int)r[2];
         if (dx > 127) dx -= 256;              /* signed bytes */
         if (dy > 127) dy -= 256;
+        /* THE RAW DELTA, PUBLISHED SEPARATELY AND UNCLAMPED.
+         *
+         * ptr_x/ptr_y below stay a 1:1 clamped position, because kernel.zl's
+         * mouse_x() builtin reads them and has always meant "where the pointer
+         * is, in pixels". But input.c's acceleration curve needs the DELTA,
+         * and it cannot recover it by differencing two of those positions: the
+         * clamp means consecutive samples stop differing the moment the
+         * pointer is against an edge, so below 1x the accelerated pointer
+         * could never reach that edge at all.
+         *
+         * Accumulated and read-and-cleared, which is the contract
+         * idt_mouse_wheel() already uses for notches - a delta published as a
+         * position is a delta that gets counted twice or not at all. */
+        ptr_dx_acc += dx;
+        ptr_dy_acc += dy;
         ptr_x += dx;
         ptr_y += dy;                          /* HID mice count Y downward */
     }
@@ -1682,7 +1805,9 @@ int xhci_ptr_init(void)
         ptr_ready = 1;
         ptr_x = console_pxw() / 2;
         ptr_y = console_pxh() / 2;
-        ptr_requeue();
+        /* Fill the pipeline, not just prime it. One buffer means the device is
+         * only asked once per frame; PTR_NBUF means the bus sets the rate. */
+        ptr_arm_all();
         return slot;
     }
     return 0;
@@ -1690,6 +1815,11 @@ int xhci_ptr_init(void)
 
 int xhci_ptr_ready(void)   { return ptr_ready; }
 int xhci_ptr_abs(void)     { return ptr_abs; }
+/* Read-and-clear: how far a RELATIVE mouse has moved since anyone last asked.
+ * Meaningless for a tablet, which reports a position; ptr_decode only ever
+ * accumulates these on the relative path. */
+int xhci_ptr_take_dx(void) { int v = ptr_dx_acc; ptr_dx_acc = 0; return v; }
+int xhci_ptr_take_dy(void) { int v = ptr_dy_acc; ptr_dy_acc = 0; return v; }
 int xhci_ptr_x(void)       { return ptr_x; }
 int xhci_ptr_y(void)       { return ptr_y; }
 int xhci_ptr_btn(void)     { return ptr_btn; }
@@ -1741,7 +1871,7 @@ int xhci_kbd_ep(void)    { return kbd_dci;   }
  * controller another buffer. The requeue is not optional - it is the only
  * thing keeping the keyboard alive, so it happens even when the completion
  * code was an error. */
-static void kbd_event(u32 status, u32 ctrl)
+static void kbd_event(u32 param, u32 status, u32 ctrl)
 {
     int slot = (int)((ctrl >> 24) & 0xFF);
     int epid = (int)((ctrl >> 16) & 0x1F);
@@ -1754,7 +1884,20 @@ static void kbd_event(u32 status, u32 ctrl)
     if (ptr_ready && slot == ptr_slot && epid == ptr_dci) {
         ptr_events++;              /* counted BEFORE any cc filter */
         ptr_lastcc = cc;
-        if (cc == 1 || cc == 13) ptr_decode();
+        if (cc == 1 || cc == 13) {
+            /* WHICH buffer. A Transfer Event's parameter is the address of the
+             * TRB that produced it, and that TRB's index is the buffer index -
+             * so the report is read from the bytes this completion is actually
+             * about, not from whichever buffer was filled most recently. With
+             * PTR_NBUF in flight those are different buffers, and reading the
+             * wrong one replays or skips a delta. */
+            u32 ring = INT_RING(ptr_slot);
+            u32 idx  = (param - ring) / TRB_BYTES;
+            /* A completion pointing outside our ring is not ours to decode.
+             * Requeue anyway - the endpoint's liveness must not depend on the
+             * event making sense. */
+            if (param >= ring && idx < PTR_RING_USE) ptr_decode(PTR_BUF(idx));
+        }
         ptr_requeue();
         return;
     }
@@ -1767,31 +1910,44 @@ static void kbd_event(u32 status, u32 ctrl)
     kbd_requeues++;
 }
 
-int xhci_kbd_poll(void)
-{
-    if (!kbd_ready) return 0;
-
-    u32 status = 0, ctrl = 0;
-    int type = event_poll(0, &status, &ctrl, 1);
-    if (type != TRB_TRANSFER_EVENT) return 0;
-
-    kbd_event(status, ctrl);
-    return 1;
-}
-
-/* Same ring, same dispatch - the pointer just needs someone to turn the
- * handle when no key is being polled for. */
-int xhci_ptr_poll(void)
+/* ONE DRAINER FOR ONE RING.
+ *
+ * The merge left two, and they were byte-for-byte the same function:
+ * xhci_kbd_poll() from the branch that owned the keyboard, xhci_ptr_poll()
+ * from the branch that owned the pointer. Neither was wrong on its own. The
+ * damage was that input.c called them at different rates - the pointer's once
+ * per frame from pump_mouse(), the keyboard's in a loop of up to sixteen - and
+ * they took events off the SAME ring. A pointer report drawn by the keyboard
+ * loop was decoded after pump_mouse() had already sampled the position, so it
+ * did not move the pointer until the next frame; and a keystroke sitting in
+ * front of a pointer report meant pump_mouse() spent its single poll on the
+ * keystroke and the pointer did not move at all that frame.
+ *
+ * So: one function owns the ring, it runs once per frame before anything reads
+ * the decoded state, and it drains generously rather than exactly once. The
+ * two names below survive because the zl builtins `usb_poll` and `mouse_x`
+ * call them from outside input.c; they are now wrappers, not owners.
+ *
+ * `max` bounds the WHOLE loop, not the transfer events found, so a burst of
+ * port-status changes cannot hold the caller either. */
+int xhci_poll(int max)
 {
     if (!ptr_ready && !kbd_ready) return 0;
 
-    u32 status = 0, ctrl = 0;
-    int type = event_poll(0, &status, &ctrl, 1);
-    if (type != TRB_TRANSFER_EVENT) return 0;
-
-    kbd_event(status, ctrl);
-    return 1;
+    int got = 0;
+    for (int i = 0; i < max; i++) {
+        u32 param = 0, status = 0, ctrl = 0;
+        int type = event_poll(&param, &status, &ctrl, 1);
+        if (!type) break;                    /* the ring is empty - done */
+        if (type != TRB_TRANSFER_EVENT) continue;   /* consumed, ignored */
+        kbd_event(param, status, ctrl);
+        got++;
+    }
+    return got;
 }
+
+int xhci_kbd_poll(void) { return xhci_poll(1); }
+int xhci_ptr_poll(void) { return xhci_poll(PTR_NBUF + 2); }
 
 /* One character, or 0 if nothing was typed.
  *
@@ -1822,10 +1978,15 @@ int xhci_key(void)
 
 /* One key event - press or release, with the usage ID and the modifiers of the
  * report it came in. This is what input.c reads, and the only view through
- * which a key with no character can reach an application. */
+ * which a key with no character can reach an application.
+ *
+ * IT DOES NOT POLL. It used to, and that is what made it a second drainer of
+ * the pointer's ring: input.c calls this in a loop, so a pointer report drawn
+ * here was decoded after pump_mouse() had already read the position. The
+ * caller drains once, at the top of input_poll(), and this reads what that
+ * drain decoded. */
 int xhci_key_event(void)
 {
-    xhci_kbd_poll();
     return kevq_pop();
 }
 
@@ -1955,7 +2116,9 @@ static int bulk_xfer(int slot, int dci, u32 buf, u32 len, int is_in)
     doorbell((u32)slot, (u32)dci);
 
     u32 status = 0, ctrl = 0;
-    if (!event_wait(TRB_TRANSFER_EVENT, 0, &status, &ctrl, 20000000)) return 0;
+    /* This bulk endpoint, not whatever completes first: the pointer shares
+     * this ring and a disk read must not be able to kill it. */
+    if (!xfer_wait(slot, dci, &status, &ctrl, 20000000)) return 0;
     int cc = (int)((status >> 24) & 0xFF);
     if (cc == 1 || cc == 13) return 1;
     if (cc == 6 || cc == 4) reset_endpoint(slot, dci);   /* stall - recover */

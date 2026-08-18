@@ -169,6 +169,21 @@ echo "built ./dnstest       (run: ./dnstest)"
 gcc -O1 -g -Wall -Wextra -Wno-unused-function -o inputtest \
     inputtest.c ../input.c
 echo "built ./inputtest     (run: ./inputtest)"
+
+# The xHCI EVENT RING, with this harness playing the controller. The layer
+# inputtest.c cannot reach: it stubs xhci_ptr_poll() as `return 0`, so the ring
+# that the pointer bug actually lived in is not in its picture at all. Here the
+# real xhci.c is compiled unmodified (included, not linked, to reach the static
+# state an enumeration would have set) and driven by a fake controller that
+# walks the transfer ring, honours the cycle bit and the Link TRB, and fills the
+# buffer each TRB names.
+#
+# It exists because every probe-*.py in this repo attaches a usb-TABLET while
+# try.sh attaches a usb-MOUSE, so the relative path a person actually uses had
+# no coverage of any kind. -DZL_64 only widens xhci.c's `uptr`; every DMA
+# address it puts in a ring stays 32-bit, exactly as in the kernel.
+gcc -O1 -g -w -D_GNU_SOURCE -DZL_64 -o xhcitest xhcitest.c ../input.c
+echo "built ./xhcitest      (run: ./xhcitest)"
 gcc -O1 -g -Wall -Wextra -Wno-unused-function -o inputtest_feel \
     inputtest_feel.c ../input.c
 echo "built ./inputtest_feel"
