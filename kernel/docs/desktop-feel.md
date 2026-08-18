@@ -640,8 +640,52 @@ it renders, and it reads as a border artefact rather than as a grip. They are
 three rules *parallel to the corner's diagonal* now, stepping inward, which is
 the universal mark for it. No assertion would ever have caught that.
 
-### 6.2–6.5 — not done
+### 6.2 — double-click, and maximise
 
-Double-click, the scroll wheel (the PS/2 4-byte wheel format), a focus ring on
-controls, and the Super key are **not started**. They are listed here rather
-than quietly dropped.
+There was no notion of one anywhere in the kernel.
+
+It is decided in `wm.c`, not `input.c`, because it is a question about **place**
+as well as time — two presses 300 ms apart at opposite corners of the screen are
+not a double-click, and `input.c` deliberately knows nothing about where windows
+are. `idt_ticks()` is 100 Hz, which is ample for a 400 ms window. The slop
+follows `ui()`, because "a few pixels" on a 2560-wide panel at 2× is not the
+same distance as on an 800-wide one, and a fixed number makes the gesture
+hardest on exactly the screens where the pointer travels furthest.
+
+The elapsed-time test is an **unsigned** subtraction, so a tick counter that
+wraps cannot report a gigantic elapsed time and silently disable the gesture for
+the rest of the uptime.
+
+A double-click on the title bar **maximises**, and again restores the exact rect
+— which gives the compositor something to *do* with the gesture rather than only
+forwarding it, and puts `wm_move` and `wm_resize` both on a second caller. Apps
+get it as `MOUSE_DOUBLE`, a bit in the button mask, rather than as a new event
+type: PS/2 uses bits 0..2, bit 8 is free, and an app that masks for button 1
+keeps working unchanged. A new event type would have made every existing
+`app_event` handler wrong by omission instead.
+
+**Gate** — seven new `wmtest` assertions:
+
+```
+  double-clicking the title bar MAXIMISES                  ok
+  ...and doing it again RESTORES the exact rect            ok
+  two SLOW clicks are not a double                         ok
+  two clicks far apart are not a double                    ok
+  a TRIPLE click maximises once, it does not toggle twice  ok
+  a double-click in the CLIENT area reaches the app with MOUSE_DOUBLE ok
+  ...and a lone click does NOT carry it                    ok
+```
+
+The negative cases carry the weight. "Two slow clicks" differs from the passing
+case *only* in the clock, and "far apart" only in position, so between them they
+pin down that the detector is not simply counting presses. The triple-click case
+is the one a naive implementation fails: without consuming the gesture, three
+clicks are two overlapping doubles, so the window maximises and instantly
+restores and appears not to respond at all.
+
+### 6.3–6.5 — not done
+
+The scroll wheel (the PS/2 4-byte wheel format), a focus ring on controls, and
+the Super key are **not started**. They are listed here rather than quietly
+dropped. Note for whoever takes the wheel: `idt.c` has uncommitted changes in
+the LOOK track's worktree, so coordinate before editing it.

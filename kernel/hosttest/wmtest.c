@@ -102,6 +102,7 @@ void zl_putc_pub(char c) { (void)c; }        /* fb.c's boot line: not wanted her
 static int draw_calls[8];
 static int tick_returns;            /* what app_tick claims each frame */
 static int last_event_app = -1, last_event_type, last_event_x, last_event_y;
+static int last_event_code;
 
 /* When set, the app closes a SCROLL REGION before making its escape attempts.
  * That is the interesting case: ui_scroll_end used to end with fb_clip_none(),
@@ -129,7 +130,8 @@ static void t_draw(int app, int x, int y, int w, int h, int focused)
 
 static int t_event(int app, int win, int type, int code, int x, int y)
 {
-    (void)win; (void)code;
+    (void)win;
+    last_event_code = code;
     last_event_app = app; last_event_type = type;
     last_event_x = x; last_event_y = y;
     return 1;
@@ -690,6 +692,91 @@ int main(void)
     ok("...and off the grip the cursor is an ARROW again",
        fb_cursor_get() == CURSOR_ARROW);
     wm_close(rw);
+    frame();
+
+    /* --------------------------------------------------------- double-click */
+    /* There was no notion of one anywhere in the kernel. It is decided in wm.c
+     * rather than input.c because it is a question about PLACE as well as time:
+     * two presses 300 ms apart at opposite corners are not a double-click, and
+     * input.c knows nothing about where windows are. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    wm_damage(0, 0, W, H);
+    frame();
+    int dw = wm_open(6, "dbl", 250, 250, 380, 260);
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
+    int dx0, dy0, dw0, dh0;
+    wm_geometry(dw, &dx0, &dy0, &dw0, &dh0);
+    int tby = dy0 + th->title_h / 2;
+
+    /* two presses, close together in time and place, on the title bar */
+    pointer(dx0 + 60, tby, 1);
+    pointer(dx0 + 60, tby, 0);
+    pointer(dx0 + 60, tby, 1);
+    pointer(dx0 + 60, tby, 0);
+    int mx, my, mw, mh;
+    wm_geometry(dw, &mx, &my, &mw, &mh);
+    ok("double-clicking the title bar MAXIMISES",
+       mx == 0 && my == 0 && mw == W && mh == H);
+
+    /* ...and again restores the exact rect it had */
+    pointer(60, th->title_h / 2, 1);
+    pointer(60, th->title_h / 2, 0);
+    pointer(60, th->title_h / 2, 1);
+    pointer(60, th->title_h / 2, 0);
+    wm_geometry(dw, &mx, &my, &mw, &mh);
+    ok("...and doing it again RESTORES the exact rect",
+       mx == dx0 && my == dy0 && mw == dw0 && mh == dh0);
+
+    /* a SLOW pair is two singles, not a double. The clock is the only thing
+     * that differs from the case above. */
+    pointer(dx0 + 60, tby, 1);
+    pointer(dx0 + 60, tby, 0);
+    fake_ticks += 500;                       /* far outside the window */
+    pointer(dx0 + 60, tby, 1);
+    pointer(dx0 + 60, tby, 0);
+    wm_geometry(dw, &mx, &my, &mw, &mh);
+    ok("two SLOW clicks are not a double", mw == dw0 && mh == dh0);
+
+    /* a pair far apart in SPACE is not a double either - and this one also
+     * proves the detector is not simply counting presses */
+    pointer(dx0 + 40, tby, 1);
+    pointer(dx0 + 40, tby, 0);
+    pointer(dx0 + 300, tby, 1);
+    pointer(dx0 + 300, tby, 0);
+    wm_geometry(dw, &mx, &my, &mw, &mh);
+    ok("two clicks far apart are not a double", mw == dw0 && mh == dh0);
+
+    /* THREE clicks are a double and then a single, not two overlapping
+     * doubles - otherwise a triple-click maximises and instantly restores,
+     * and the window appears not to respond at all. */
+    wm_geometry(dw, &dx0, &dy0, &dw0, &dh0);
+    tby = dy0 + th->title_h / 2;
+    pointer(dx0 + 60, tby, 1); pointer(dx0 + 60, tby, 0);
+    pointer(dx0 + 60, tby, 1); pointer(dx0 + 60, tby, 0);
+    pointer(dx0 + 60, tby, 1); pointer(dx0 + 60, tby, 0);
+    wm_geometry(dw, &mx, &my, &mw, &mh);
+    ok("a TRIPLE click maximises once, it does not toggle twice",
+       mx == 0 && my == 0 && mw == W && mh == H);
+    pointer(60, th->title_h / 2, 1); pointer(60, th->title_h / 2, 0);
+    pointer(60, th->title_h / 2, 1); pointer(60, th->title_h / 2, 0);
+
+    /* the app is told, as a bit in the button mask */
+    wm_geometry(dw, &dx0, &dy0, &dw0, &dh0);
+    int cy2 = dy0 + th->title_h + 40;
+    pointer(dx0 + 60, cy2, 1);
+    pointer(dx0 + 60, cy2, 0);
+    last_event_code = 0;
+    pointer(dx0 + 60, cy2, 1);
+    ok("a double-click in the CLIENT area reaches the app with MOUSE_DOUBLE",
+       (last_event_code & MOUSE_DOUBLE) != 0);
+    pointer(dx0 + 60, cy2, 0);
+    fake_ticks += 500;
+    last_event_code = 0;
+    pointer(dx0 + 60, cy2, 1);
+    ok("...and a lone click does NOT carry it",
+       (last_event_code & MOUSE_DOUBLE) == 0);
+    pointer(dx0 + 60, cy2, 0);
+    wm_close(dw);
     frame();
 
     /* -------------------------------------------------- the scroll scissor */

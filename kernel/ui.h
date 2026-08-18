@@ -132,6 +132,14 @@ int  wm_anim(void);
  * asserts these against cursor.inc's own CUR_* so the two cannot drift; a
  * mismatch would silently show the wrong picture, which is the kind of thing
  * nothing tests. */
+/* A double-click arrives as an ordinary EV_MOUSE press with this bit set in the
+ * button mask, rather than as a new event type. The PS/2 protocol uses bits
+ * 0..2 for left/right/middle, so bit 8 is free, and an app that does not care
+ * about double-clicks keeps working unchanged - it masks for button 1 and never
+ * sees this. A new event type would have made every existing app_event handler
+ * wrong by omission instead. */
+#define MOUSE_DOUBLE  (1 << 8)
+
 #define CURSOR_ARROW   0
 #define CURSOR_IBEAM   1
 #define CURSOR_RESIZE  2

@@ -86,6 +86,9 @@ struct win {
     char tab_title[WM_TABS][16];
     int  ntab;                 /* 1 for an ordinary window */
     int  tab;                  /* which one is showing     */
+    /* maximise/restore. The saved rect is only meaningful while maxed. */
+    int  maxed;
+    int  sav_x, sav_y, sav_w, sav_h;
 };
 
 static struct win wins[WM_MAX];
@@ -691,6 +694,64 @@ void wm_repaint(void)
  *   3 NORMAL        pointer to the topmost window containing the point,
  *                   walking the z-order backwards; keys to the focus window.
  */
+/* ---- double-click ---------------------------------------------------------
+ * There was no notion of one anywhere in the kernel.
+ *
+ * It is decided HERE rather than in input.c because it is a question about
+ * PLACE as well as time - two presses 300 ms apart at opposite corners of the
+ * screen are not a double-click - and input.c deliberately knows nothing about
+ * where windows are. idt_ticks() is 100 Hz, which is ample: the window is 40
+ * ticks, and no human double-clicks faster than 10 ms.
+ *
+ * The slop follows ui() because a "few pixels" on a 2560-wide panel at 2x is
+ * not the same distance as on an 800-wide one, and a fixed number makes the
+ * gesture harder on exactly the screens where the pointer moves furthest.
+ */
+#define DBL_TICKS  40           /* 400 ms at 100 Hz */
+static int dbl_slop(void) { return UI_S2(ui_theme()); }
+
+static unsigned dbl_when;
+static int dbl_x, dbl_y, dbl_win = -1;
+
+static int is_double(int win, int x, int y)
+{
+    unsigned now = idt_ticks();
+    int dx = x - dbl_x, dy = y - dbl_y, s = dbl_slop();
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+    /* unsigned subtraction, so a tick counter that wraps cannot report a
+     * gigantic elapsed time and silently disable the gesture forever */
+    int soon = (now - dbl_when) < (unsigned)DBL_TICKS;
+    int near = dx <= s && dy <= s;
+    int same = (win == dbl_win);
+
+    dbl_when = now; dbl_x = x; dbl_y = y; dbl_win = win;
+    if (soon && near && same) {
+        /* consume it: three clicks in a row are a double and then a single,
+         * not two overlapping doubles */
+        dbl_win = -1;
+        return 1;
+    }
+    return 0;
+}
+
+/* Fill the screen, or go back. wm_move and wm_resize each damage the old rect
+ * and the new one, so this needs no damage of its own. */
+static void wm_toggle_max(int win)
+{
+    if (wins[win].maxed) {
+        wins[win].maxed = 0;
+        wm_move(win, wins[win].sav_x, wins[win].sav_y);
+        wm_resize(win, wins[win].sav_w, wins[win].sav_h);
+        return;
+    }
+    wins[win].sav_x = wins[win].x; wins[win].sav_y = wins[win].y;
+    wins[win].sav_w = wins[win].w; wins[win].sav_h = wins[win].h;
+    wins[win].maxed = 1;
+    wm_move(win, 0, 0);
+    wm_resize(win, (int)fb_pxw(), (int)fb_pxh());
+}
+
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
 /* What the pointer grab is FOR. It used to be a bare 0/1 meaning "the app has
  * it" or "we are moving it"; resize is a third answer, and three states with
@@ -823,7 +884,13 @@ static void route_mouse(int x, int y, int btn)
     if (down) {
         wm_focus(hit);
         wm_raise(hit);
+        int dbl = is_double(hit, x, y);
         if (in_closebox(hit, x, y)) { wm_close(hit); return; }
+        /* DOUBLE-CLICK THE TITLE BAR TO MAXIMISE, again to restore. Checked
+         * before the drag, or the second press starts a drag instead - and a
+         * maximise that also moves the window by however far the hand drifted
+         * between the two clicks is worse than no maximise. */
+        if (dbl && in_titlebar(hit, x, y)) { wm_toggle_max(hit); return; }
         /* the grip BEFORE the title bar: they cannot overlap on any sane
          * window, but a window shorter than its own title bar is exactly the
          * degenerate case where checking the bigger region first would swallow
@@ -848,6 +915,9 @@ static void route_mouse(int x, int y, int btn)
          * button-up - that is what makes a slider work when the pointer
          * leaves the widget mid-drag */
         pgrab = hit; grab_drag = GRAB_APP;
+        /* Hand the app the double-click too, as a bit in the button mask. An
+         * app that does not care masks for button 1 and never sees it. */
+        if (dbl) btn |= MOUSE_DOUBLE;
     }
     if (hook_event) hook_event(win_app(hit), hit, EV_MOUSE, btn, x, y);
 }
