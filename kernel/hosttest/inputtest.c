@@ -42,6 +42,7 @@ int  input_ptr_y(void);
 #define EV_KEY_UP   2
 #define EV_CHAR     3
 #define EV_MOUSE    4
+#define EV_WHEEL    5
 
 /* ---- the fake hardware -------------------------------------------------- */
 static int fake_x = 400, fake_y = 300, fake_btn = 0;
@@ -53,6 +54,10 @@ int idt_mouse_y(void)   { return fake_y; }
 int idt_mouse_btn(void) { return fake_btn; }
 unsigned int idt_ticks(void) { return fake_ticks; }
 int xhci_key(void)      { return 0; }
+
+/* the wheel, as idt.c publishes it: read-and-clear */
+static int fake_wz = 0;
+int idt_mouse_wheel(void) { int v = fake_wz; fake_wz = 0; return v; }
 
 int idt_scan(void)
 {
@@ -78,7 +83,7 @@ static void ok(const char *what, int cond)
 }
 
 /* drain the queue, counting what came out */
-struct drained { int n, mouse, chars, keydown; int last_x, last_y, last_btn; };
+struct drained { int n, mouse, chars, keydown, wheel; int last_x, last_y, last_btn, last_wz; };
 
 static struct drained drain(void)
 {
@@ -93,6 +98,10 @@ static struct drained drain(void)
             d.last_x = input_x();
             d.last_y = input_y();
             d.last_btn = input_code();
+        } else if (t == EV_WHEEL) {
+            d.wheel++;
+            d.last_wz = input_code();
+            d.last_x = input_x(); d.last_y = input_y();
         } else if (t == EV_CHAR)     d.chars++;
         else if (t == EV_KEY_DOWN)   d.keydown++;
     }
@@ -410,6 +419,46 @@ int main(void)
     /* leave the module the way the kernel boots it */
     input_set_speed(100);
     input_set_accel(1);
+
+    /* ---- the scroll wheel ------------------------------------------------
+     * The PS/2 protocol has one and this driver never asked for it. The whole
+     * trap is in the last byte: the notch count is a 4-BIT SIGNED field, so
+     * reading the byte makes one notch backwards (0x0F) look like fifteen
+     * notches forwards - and it only shows when you scroll UP. */
+    input_set_speed(100);
+    input_set_accel(0);
+    drain();
+
+    fake_wz = 1;
+    d = drain();
+    ok("a wheel notch produces an EV_WHEEL", d.wheel == 1);
+    ok("...carrying the notch count", d.last_wz == 1);
+
+    fake_wz = -1;
+    d = drain();
+    ok("...and a BACKWARD notch is negative, not 15", d.last_wz == -1);
+
+    /* it must not need the pointer to move - a hand on a wheel is a hand
+     * holding the mouse still, which is exactly when a coalesce would eat it */
+    d = drain();
+    ok("a still pointer produces no wheel event", d.wheel == 0);
+    fake_wz = 3;
+    d = drain();
+    ok("...but a notch with NO movement still reports", d.wheel == 1 && d.last_wz == 3);
+
+    /* the event carries where the pointer is, because scroll goes to whatever
+     * is under it */
+    fake_x = 640; fake_y = 400; drain();
+    fake_wz = -2;
+    d = drain();
+    ok("...and it carries the pointer position",
+       d.last_x == input_ptr_x() && d.last_y == input_ptr_y());
+
+    /* NOTCHES MUST ACCUMULATE, NOT BE LOST. idt.c's accessor is read-and-clear
+     * precisely so two notches between polls report as two. */
+    fake_wz = 0;
+    drain();
+    ok("a drained wheel is silent", drain().wheel == 0);
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;

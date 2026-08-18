@@ -90,6 +90,9 @@ unsigned int idt_ticks(void) { return fake_ticks; }
  * event. A Super+arrow chord that only works against invented events proves
  * nothing about the one a keyboard sends. */
 static int scanq[64], scanh, scant;
+static int fake_wz = 0;
+int idt_mouse_wheel(void) { int v = fake_wz; fake_wz = 0; return v; }
+
 int idt_scan(void)
 {
     if (scanh == scant) return 0;
@@ -806,6 +809,45 @@ int main(void)
        (last_event_code & MOUSE_DOUBLE) == 0);
     pointer(dx0 + 60, cy2, 0);
     wm_close(dw);
+    frame();
+
+    /* --------------------------------------------------------- scroll wheel */
+    /* A notch goes to the window UNDER THE POINTER, not the focused one - you
+     * scroll what you are looking at without clicking it first - and it must
+     * not raise or focus it, because scrolling is not a click. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    wm_damage(0, 0, W, H);
+    pointer(20, 20, 0);
+    frame();
+    int wa = wm_open(11, "under",  150, 150, 300, 250);
+    int wb = wm_open(12, "focused", 700, 400, 300, 250);
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
+    wm_focus(wb);
+
+    int wcx, wcy, wcw, wch;
+    wm_client(wa, &wcx, &wcy, &wcw, &wch);
+    pointer(wcx + 40, wcy + 40, 0);          /* hover the UNFOCUSED one */
+    last_event_app = -1; last_event_type = 0; last_event_code = 0;
+    fake_wz = 3;
+    frame();
+    ok("a wheel notch goes to the window UNDER the pointer",
+       last_event_app == 11);
+    ok("...as an EV_WHEEL carrying the notch count",
+       last_event_type == 5 && last_event_code == 3);
+    ok("...and does NOT steal focus from the focused window",
+       wm_focused() == wb);
+
+    fake_wz = -2;
+    frame();
+    ok("...and a backward notch arrives negative", last_event_code == -2);
+
+    /* over bare wallpaper it must go nowhere rather than to the focused window */
+    pointer(W - 30, H - 30, 0);
+    last_event_app = -1;
+    fake_wz = 1;
+    frame();
+    ok("a notch over no window reaches no app", last_event_app == -1);
+    wm_close(wa); wm_close(wb);
     frame();
 
     /* --------------------------------------------------- grab vs. close */

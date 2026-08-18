@@ -683,7 +683,62 @@ is the one a naive implementation fails: without consuming the gesture, three
 clicks are two overlapping doubles, so the window maximises and instantly
 restores and appears not to respond at all.
 
-### 6.3 — the scroll wheel: DEFERRED, and why
+### 6.3 — the scroll wheel (done; the `idt.c` conflict taken deliberately)
+
+Roy's call: take the merge conflict rather than wait. What follows is the
+original deferral reasoning, kept because it is the map for resolving it.
+
+**The change, and how to merge it.** Three edits to `idt.c`, all small:
+
+1. `mouse_enable_wheel()` — additive, in `mouse_init`. No conflict.
+2. `mpkt[3]` → **`mpkt[4]`**, and `if (mphase == 3)` → `if (mphase == mouse_pktlen)`.
+3. the wheel extraction after the `dx`/`dy` sign-extend.
+
+Edits 2 and 3 land inside the packet assembly, which the LOOK track has moved
+into `mouse_byte()`. **The resolution is to apply the same three lines inside
+`mouse_byte` and take their version of everything else** — their structure is
+the better home for it, exactly as predicted.
+
+**The compiler caught a real overflow doing this.** `mpkt` was `u8[3]`, and
+`mphase` indexes it directly, so a 4-byte packet wrote one byte past the end on
+*every packet* — into whatever the linker placed next. `-Warray-bounds` is the
+only reason that is a caught bug rather than corruption surfacing somewhere
+else entirely.
+
+**The 4-bit signed field is the trap.** Bits 3:0 are the notch count in two's
+complement; 4..7 are buttons 4 and 5. Reading the whole byte makes one notch
+*backwards* (`0x0F`) look like fifteen notches *forwards* — and it only shows
+when you scroll up, which is why it is asserted explicitly.
+
+**A wheel is a delta, not a position.** `idt_mouse_wheel()` is read-and-clear.
+A position would mean a poll that misses a notch loses it and two notches
+between polls read as one.
+
+`EV_WHEEL` is its own event type, not a bit on `EV_MOUSE`: it is the one pointer
+event with no button and no movement, and folding it in would make every
+existing `EV_MOUSE` handler learn that a "move" it did not ask for might really
+be a scroll. It is pushed **before** the coalesce test, because a hand on a
+wheel is a hand holding the mouse still — exactly when "the pointer did not
+move" would have eaten it.
+
+`wm.c` routes a notch to the window **under the pointer**, not the focused one,
+and deliberately does not raise or focus it. Scrolling is not a click.
+
+**Gate** — 7 new `inputtest` and 5 new `wmtest` assertions:
+
+```
+  a wheel notch produces an EV_WHEEL                   ok
+  ...carrying the notch count                          ok
+  ...and a BACKWARD notch is negative, not 15          ok
+  ...but a notch with NO movement still reports        ok
+  a wheel notch goes to the window UNDER the pointer       ok
+  ...and does NOT steal focus from the focused window      ok
+  a notch over no window reaches no app                    ok
+```
+
+---
+
+### The original deferral reasoning
 
 Not blocked by difficulty. A read-only diff of `kernel/idt.c` against
 `../zl-linux/kernel/idt.c` shows the LOOK track has **wholesale rewritten** the

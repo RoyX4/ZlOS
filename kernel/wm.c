@@ -59,6 +59,7 @@ int  input_y(void);
 #define EV_KEY_UP    2
 #define EV_CHAR      3
 #define EV_MOUSE     4
+#define EV_WHEEL     5
 
 #define MOD_ALT     (1 << 2)
 #define MOD_SUPER   (1 << 5)
@@ -1026,8 +1027,22 @@ static void route_key(int type, int code, int mods)
     if (hook_event) hook_event(win_app(target), target, type, code, 0, 0);
 }
 
+/* A wheel notch goes to the window UNDER THE POINTER, not to the focused one.
+ * That is the behaviour every desktop has and the one people expect: you scroll
+ * what you are looking at without clicking it first. It deliberately does not
+ * raise or focus that window either - scrolling is not a click. */
+static void route_wheel(int x, int y, int notches)
+{
+    int m = modal_win();
+    int hit = wm_at(x, y);
+    if (m >= 0 && hit != m) return;          /* a modal owns everything */
+    if (hit < 0) return;
+    if (hook_event) hook_event(win_app(hit), hit, EV_WHEEL, notches, x, y);
+}
+
 static void wm_route(int type)
 {
+    if (type == EV_WHEEL) { route_wheel(input_x(), input_y(), input_code()); return; }
     if (type == EV_MOUSE) route_mouse(input_x(), input_y(), input_code());
     else                  route_key(type, input_code(), input_mods());
 }

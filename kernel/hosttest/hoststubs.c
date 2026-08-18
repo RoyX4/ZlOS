@@ -1,4 +1,4 @@
-/* nvme_stub.c - "there is no disk", for the harnesses that draw.
+/* hoststubs.c - the hardware these harnesses do not have.
  *
  * settings.c persists to NVMe, so anything that links it needs the driver's
  * symbols. wmtest and wmshot are about pixels and routing and have no business
@@ -20,3 +20,14 @@ int  nvme_read_block(unsigned lo, unsigned hi)  { (void)lo; (void)hi; return 0; 
 int  nvme_write_block(unsigned lo, unsigned hi) { (void)lo; (void)hi; return 0; }
 int  nvme_data_byte(int i)     { (void)i; return 0; }
 void nvme_data_set(int i, int v) { (void)i; (void)v; }
+
+/* ...and no scroll wheel. input.c reads this every pump; returning 0 means
+ * "no notches", which is the honest answer for a harness with no mouse and
+ * keeps the wheel out of every drawing test that does not ask about it.
+ * wmtest overrides it with a scriptable one of its own. */
+/* WEAK, so a harness that wants a scriptable wheel just defines its own and
+ * wins the link - which is what wmtest does. The same trick wmglue.c uses for
+ * the zl app hooks, and for the same reason: the default has to be inert
+ * rather than absent, or every harness pays for a feature it does not test. */
+__attribute__((weak))
+int  idt_mouse_wheel(void)     { return 0; }

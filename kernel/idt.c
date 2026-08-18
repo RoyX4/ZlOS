@@ -98,12 +98,39 @@ static void irq_done(int irq)
 
 /* ---- PS/2 mouse state, published by the IRQ12 handler --------------- */
 static volatile int mouse_x = 400, mouse_y = 300, mouse_btn = 0;
-static volatile u8  mpkt[3];
+/* FOUR, not three. The wheel packet is 4 bytes, and mphase indexes this
+ * directly - at u8[3] a wheel mouse wrote one byte past the end of it on every
+ * single packet, into whatever the linker put next. Caught by -Warray-bounds,
+ * which is the only reason it is not a corruption bug that shows up somewhere
+ * else entirely. */
+static volatile u8  mpkt[4];
 static volatile int mphase = 0;
 
 int idt_mouse_x(void)   { return mouse_x; }
 int idt_mouse_y(void)   { return mouse_y; }
 int idt_mouse_btn(void) { return mouse_btn; }
+
+/* ---- the scroll wheel ------------------------------------------------------
+ * The PS/2 protocol has one and this driver never asked for it: a plain mouse
+ * sends 3-byte packets, and only after the "IntelliMouse knock" does it send 4
+ * with the wheel in the last one. mouse_init does the knock; mouse_pktlen says
+ * whether it worked. It is NOT assumed - a device that declines stays at 3.
+ *
+ * A WHEEL IS A DELTA, NOT A POSITION. There is no "where the wheel is", so
+ * this accumulates notches and hands them over on read, clearing as it goes.
+ * Publishing a position would mean a poll that misses a notch loses it, and
+ * two notches between polls would read as one. */
+static volatile int mouse_wz = 0;
+static int mouse_pktlen = 3;
+
+int idt_mouse_wheel(void)
+{
+    int v = mouse_wz;
+    mouse_wz = 0;               /* read-and-clear: notches accumulate, never
+                                   pile up as a position nobody resets */
+    return v;
+}
+int idt_mouse_haswheel(void) { return mouse_pktlen == 4; }
 
 /* ---- the handlers ---------------------------------------------------- */
 #ifdef ZL_64
@@ -152,7 +179,7 @@ static void mouse_isr(struct interrupt_frame *f)
             /* byte 0 always has bit 3 set; if not, we are out of sync - drop */
         } else {
             mpkt[mphase++] = b;
-            if (mphase == 3) {
+            if (mphase == mouse_pktlen) {
                 mphase = 0;
                 u8 flags = mpkt[0];
                 if (!(flags & 0xC0)) {         /* ignore overflowed packets */
@@ -166,6 +193,18 @@ static void mouse_isr(struct interrupt_frame *f)
                     if (mouse_x > 2000) mouse_x = 2000;
                     if (mouse_y > 1500) mouse_y = 1500;
                     mouse_btn = flags & 0x07;
+
+                    /* THE WHEEL FIELD IS 4-BIT SIGNED, not a byte. Bits 3:0
+                     * are the notch count in two's complement; 4..7 are
+                     * buttons 4 and 5 on the mice that have them. Reading the
+                     * whole byte makes one notch backwards (0x0F) look like
+                     * fifteen notches forwards - which is the entire bug this
+                     * field invites, and it only shows when you scroll UP. */
+                    if (mouse_pktlen == 4) {
+                        int wz = mpkt[3] & 0x0F;
+                        if (wz & 0x08) wz -= 16;        /* sign-extend from 4 bits */
+                        mouse_wz += wz;
+                    }
                 }
             }
         }
@@ -227,6 +266,40 @@ static void mouse_cmd(u8 cmd)
     ps2_wait_out(); zl_inb(0x60);           /* read+discard the ACK */
 }
 
+/* the same, but with an argument byte - 0xF3 (set sample rate) needs one */
+static void mouse_cmd_arg(u8 cmd, u8 arg)
+{
+    mouse_cmd(cmd);
+    ps2_wait_in();  zl_outb(0x64, 0xD4);
+    ps2_wait_in();  zl_outb(0x60, arg);
+    ps2_wait_out(); zl_inb(0x60);           /* ACK */
+}
+
+/* ...and one that returns the reply, for 0xF2 (get device id) */
+static u8 mouse_cmd_reply(u8 cmd)
+{
+    mouse_cmd(cmd);
+    ps2_wait_out();
+    return zl_inb(0x60);
+}
+
+/* THE INTELLIMOUSE KNOCK. Setting the sample rate to 200, then 100, then 80 is
+ * a magic sequence, not a configuration: a wheel mouse recognises it and
+ * switches to 4-byte packets, reporting device id 3 afterwards. A plain mouse
+ * ignores it, keeps reporting id 0, and stays at 3 bytes.
+ *
+ * So the id is CHECKED rather than assumed. Guessing wrong is not cosmetic -
+ * reading 4 bytes from a device sending 3 desynchronises the stream
+ * permanently and the pointer moves at random. */
+static void mouse_enable_wheel(void)
+{
+    mouse_cmd_arg(0xF3, 200);
+    mouse_cmd_arg(0xF3, 100);
+    mouse_cmd_arg(0xF3, 80);
+    if (mouse_cmd_reply(0xF2) == 3) mouse_pktlen = 4;
+    mouse_cmd_arg(0xF3, 100);      /* a sane reporting rate either way */
+}
+
 /* ---- bring the 8042 controller up properly ------------------------------
  * This is the bug that made zlOS look dead on real hardware while working
  * perfectly in QEMU: we never initialised the keyboard controller at all. We
@@ -283,6 +356,7 @@ static void mouse_init(void)
     kbd_ctrl_init();                        /* the controller, then the mouse */
 
     mouse_cmd(0xF6);                        /* set defaults */
+    mouse_enable_wheel();                   /* ...and 4-byte packets, if it has one */
     mouse_cmd(0xF4);                        /* enable data reporting */
     ps2_flush();
 }

@@ -34,6 +34,7 @@ extern int xhci_key(void);        /* a decoded character from USB HID      */
 extern int idt_mouse_x(void);     /* the PS/2 pointer, published by IRQ12  */
 extern int idt_mouse_y(void);
 extern int idt_mouse_btn(void);
+extern int idt_mouse_wheel(void);  /* read-and-clear notch accumulator */
 
 /* ---- event model ------------------------------------------------------- */
 #define EV_NONE      0
@@ -41,6 +42,12 @@ extern int idt_mouse_btn(void);
 #define EV_KEY_UP    2
 #define EV_CHAR      3
 #define EV_MOUSE     4
+/* A wheel notch. Its own type rather than a bit on EV_MOUSE, because it is the
+ * one pointer event with no button and no movement - folding it in would make
+ * every existing EV_MOUSE handler have to learn that a "move" it did not ask
+ * for might really be a scroll. code carries the SIGNED notch count; x,y are
+ * where the pointer was, because scroll goes to what is under the pointer. */
+#define EV_WHEEL     5
 
 /* Key codes. Printable keys use their unshifted ASCII so the common case is
  * trivial; everything else is above 0x100 where it cannot collide. */
@@ -446,6 +453,12 @@ static void pump_mouse(void)
         if (px_x > bnd_w) px_x = bnd_w;
         if (px_y > bnd_h) px_y = bnd_h;
     }
+
+    /* THE WHEEL, before the coalesce test - it is a separate event and must not
+     * be swallowed by "the pointer did not move", which is the normal case
+     * while scrolling: a hand on a wheel is a hand holding the mouse still. */
+    int wz = idt_mouse_wheel();
+    if (wz) evq_push(EV_WHEEL, (u32)wz, mods, px_x, px_y);
 
     /* Coalesce on the REPORTED position, not the raw one: below 1x a raw move
      * can scale to nothing at all, and an event that says the pointer is where
