@@ -203,6 +203,25 @@ kernel/hosttest/browsertest    # 58 checks, 0 failed
 kernel/hosttest/fbtext         # 45 checks, 0 failed
 ```
 
+```bash
+kernel/probe-net.py            # the only gate that is not a host test
+```
+
+`probe-net.py` is the odd one out and deliberately so: every gate above runs
+the shipping source as an ordinary Linux program, and none of them can prove
+the DMA arena is where the driver thinks it is, that the feature handshake
+matches what a device really offers, or that a descriptor ring survives contact
+with QEMU. It boots the kernel with a virtio-net card attached, types `net`,
+and asserts on the readout — card found, arena backed by RAM, handshake, link,
+MAC, ARP answered, twenty pings with zero loss, DNS resolving a real name and
+refusing one that does not exist, and the driver's own truncated/runt/
+bad-checksum/double-return counters at zero.
+
+The host tests and this one answer different questions and both are needed:
+`nettest`/`tcptest`/`httptest`/`dnstest` are the machine on the other end of
+the wire, proving the state machines against sequences a real peer will not
+produce on demand. This is the wire.
+
 `fbtext` is the newest and it exists because of a hole the others did not
 cover: **both text regressions this browser suffered shipped with every gate
 above green.** Italic silently rendering upright is not a crash, not a wrong
@@ -326,6 +345,114 @@ the real font in `browsershot`, because a metric bug can hide from the first.
   nested the rest of the document inside itself.
 
 Both now have assertions. The first fails by 122 px if the fix is reverted.
+
+---
+
+## The network path had no gate, and could not be reached at all
+
+`STATE-OF-THE-PROJECT.md` §2.9 found that the browser's network path is covered
+by no gate: no QEMU invocation in the repo attached a network card, so
+`net_gate()` — a complete bring-up test bound to `N` at `kernel.zl:2124` — had
+never run. That is correct. **It is also not the whole problem, and the fix it
+proposes is not sufficient.**
+
+§2.9's fix is "two QEMU flags in `try.sh`'s `COMMON[]` plus a `probe-net.py`
+shaped like `probe-term.py`". The flags are necessary. They are not enough,
+for two reasons that only showed up on the first run:
+
+**1. Serial keystrokes cannot reach the shell in the shipped boot state.**
+When there is a framebuffer the compositor is the top of the system and the
+text shell's loop is never entered:
+
+```
+kernel.zl:3873   if wm_boot == 1 { ser_out("zl> ") }
+kernel.zl:3901   if wm_boot == 1 { while wm_run() == 1 { wm_frame() }  running = 0 }
+```
+
+`wm_frame()` drains PS/2 and USB HID; nothing in the compositor path looks at
+COM1. The `"zl> "` on the serial log is a **courtesy string** printed so
+harnesses do not report "booted but no prompt" — its own comment says so. It is
+not a shell waiting for input. Measured, with a NIC attached and the prompt on
+the log:
+
+```
+sending 'h' -> ''      sending 'N' -> ''
+sending 'W' -> ''      sending 'E' -> ''
+```
+
+Keys must go through QMP `input-send-event`, exactly as `probe-term.py`
+documented for the same reason. (`probe-shot.py`'s `-k` flag sends keys over
+serial, so it is subject to this too.)
+
+**2. The three network gates had no typed name, so nothing could run them.**
+`run_command` dispatches `N`/`W`/`E` (78/87/69 — the card and ARP probe, TCP +
+HTTP/1.0, and a real website by name), and `term.c`'s word table had an entry
+for none of them. That table's own header describes this exact failure:
+
+> COMPLETENESS IS THE POINT, not convenience. Ten of run_command's commands had
+> no name here … which was invisible while single keypresses still worked and
+> became **a straight capability regression the moment the compositor became
+> the boot state**: those ten could be reached from the text shell and from
+> nothing else. Anything run_command dispatches should be typeable.
+
+It happened again, to these three. So §2.9's "the ARP gate is written and
+reachable, and nothing runs it" understates it: **in the shipped boot state it
+was not reachable.** `net`/`arp`, `web`/`http` and `fetch`/`site` were added to
+the table, and `probe-net.py` types `net` rather than pressing a key.
+
+---
+
+## HTTPS: the decision, and the file the audit said did not exist
+
+`BROWSER-PROMPT.md` §5 says do nothing about HTTPS for now and say so on
+screen, and explicitly forbids a half-TLS that skips certificate validation.
+**That decision stands.** What follows is only the evidence about what exists,
+because two documents disagree about it and one of them is wrong.
+
+`docs/STATE-OF-THE-PROJECT.md` §7.1 says of `crypto.c`: *"**No such file has
+ever existed in this repo.** Strike the citation."* **That is incorrect, and
+the citation should not be struck.** The audit used `git ls-files | grep -i
+crypto` and `git log --all`, and neither sees `refs/wip/*` — `--all` covers
+`refs/heads`, `refs/remotes` and `refs/tags` only. Checked directly:
+
+```
+$ git for-each-ref --format='%(refname)' refs/wip |
+    while read r; do git cat-file -e "$r:kernel/crypto.c" 2>/dev/null &&
+    echo "$r HAS crypto.c"; done
+refs/wip/zl-linux HAS crypto.c
+refs/wip/tmp-wtclean HAS crypto.c
+refs/wip/tmp-wtw0 HAS crypto.c
+
+$ git cat-file -s refs/wip/zl-linux:kernel/crypto.c
+21270
+$ git show refs/wip/zl-linux:kernel/crypto.c | wc -l
+543
+```
+
+543 lines — SHA-1, SHA-256, HMAC-SHA1, HMAC-SHA256, PBKDF2, AES-128 — plus
+`hosttest/cryptotest.c` (246 lines) against **published** vectors: FIPS 180-1,
+FIPS 180-4, RFC 2202, RFC 4231, RFC 6070, FIPS-197 C.1, RFC 4493 and IEEE
+802.11i. So `BROWSER-PROMPT.md` §0/§5's citation of "543 lines" is exact.
+
+**The audit's load-bearing conclusion survives intact**, and it is the one that
+matters: `crypto.c` is in **no `SOURCES` on any ref**, checked across every
+`refs/wip` and `main`. A file in no build is not in the kernel, so the shipped
+kernel has no ciphers *and no hashes*. The browser's home page claimed "there
+is no cipher in this kernel - only hashes", and the "only hashes" half was
+false. That string is fixed.
+
+Two distinct things, which is why the correction is worth writing down rather
+than just fixing:
+
+| | |
+|---|---|
+| "no crypto is linked into the kernel" | **true**, and it is why the HTTPS refusal is honest |
+| "no crypto has ever been written here" | **false** — 543 gated lines exist in `refs/wip` |
+
+Landing `crypto.c` is therefore a *decision*, not a *writing task*, and it is
+not on the browser's critical path: TLS needs AES-GCM, ECDHE and X.509 chain
+validation on top of what that file has, and §5 is right that this is a
+separate track with its own review. **Nothing here depends on it yet.**
 
 ---
 

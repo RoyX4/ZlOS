@@ -115,10 +115,30 @@ static int measure(const char *s, int len, int size, int style)
 /* ---- the page that ships in the kernel -------------------------------------
  * Not a placeholder: this is the gate document. It uses every element the
  * parser claims to support, so "the browser renders" and "the browser renders
- * what it says it does" are the same observation. It also states the two
- * things the browser cannot do, on the screen, where a user will see them -
- * the same standard §5 sets for the padlock and SYSTEM-PROMPT.md sets for the
- * `net up` label.
+ * what it says it does" are the same observation. It also states what the
+ * browser cannot do, on the screen, where a user will see them - the same
+ * standard §5 sets for the padlock and SYSTEM-PROMPT.md sets for the `net up`
+ * label.
+ *
+ * THIS PAGE WENT STALE IN THE DIRECTION NOBODY CHECKS FOR. It was written
+ * before the network landed and said, to the user's face, "There is no driver
+ * yet, so nothing can be fetched" - while `virtio_net.c` sat in SOURCES at 763
+ * lines and the browser fetched `http://example.com/` by name. A page whose
+ * whole job is to be the honest surface had become dishonest by understating,
+ * which is the failure mode a review looks for least: an overclaim gets
+ * challenged the first time someone tries it, an underclaim is never tested by
+ * anyone, because nobody tries what they have been told is absent.
+ *
+ * The HTTPS entry was wrong on its stated reason too. It claimed "there is no
+ * cipher in this kernel - only hashes". There are no hashes either: nothing
+ * crypto is in SOURCES on any ref. A `crypto.c` does exist - 543 lines of
+ * SHA-1, SHA-256, HMAC, PBKDF2 and AES-128, with `cryptotest.c` against
+ * published FIPS and RFC vectors - but only inside `refs/wip/*` snapshots, and
+ * a file that is in no build is not in the kernel. The refusal POLICY is
+ * unchanged and correct; only the reason given for it was false.
+ *
+ * If you add a capability, the edit to this page is part of the change, not a
+ * follow-up.
  */
 static const char home_page[] =
 "<html><head><title>zlOS</title></head><body>\n"
@@ -135,16 +155,23 @@ static const char home_page[] =
 "<li><em>emphasis</em>, <strong>strong</strong>, <code>monospace</code></li>\n"
 "<li>ordered and unordered lists, nested</li>\n"
 "<li>links, entities (&amp; &lt; &gt;), and malformed markup</li>\n"
+"<li><strong>the network</strong> - a real URL over <code>http://</code> is "
+"resolved by name, fetched and drawn</li>\n"
 "</ul>\n"
 "<h2>What does not</h2>\n"
 "<ol>\n"
-"<li><strong>The network.</strong> There is no driver yet, so nothing can "
-"be fetched. The header's <code>net up</code> is decorative and always was.</li>\n"
-"<li><strong>HTTPS.</strong> Refused, deliberately. There is no cipher in "
-"this kernel - only hashes - and a padlock that has not been earned is worse "
-"than no padlock at all.</li>\n"
+"<li><strong>HTTPS.</strong> Refused, deliberately. There is no TLS in this "
+"kernel - no ciphersuite, no certificate chain validation, and no cipher or "
+"hash primitive linked into it at all - and a padlock that has not been "
+"earned is worse than no padlock at all.</li>\n"
+"<li><strong>Any card but virtio-net.</strong> The driver matches PCI "
+"<code>1af4:1041</code> and <code>1af4:1000</code> and nothing else, so QEMU "
+"needs <code>-device virtio-net-pci</code>, and the ThinkPad's Intel part is "
+"not supported.</li>\n"
 "<li><strong>JavaScript.</strong> An engine is its own multi-year project, "
 "not a hard afternoon.</li>\n"
+"<li><strong>CSS.</strong> The stylesheet is the one compiled into "
+"<code>layout.c</code>; a page cannot bring its own.</li>\n"
 "</ol>\n"
 "<h3>Try it</h3>\n"
 "<p>Press <code>[</code> and <code>]</code> to narrow and widen this window. "
@@ -154,7 +181,7 @@ static const char home_page[] =
 "  layout.c  block and inline boxes\n"
 "  browser.c this window</pre>\n"
 "<p>A <a href=\"http://example.com/\">link</a> is drawn in the accent colour "
-"and underlined. Following one needs the network.</p>\n"
+"and underlined. Following one fetches it.</p>\n"
 "</body></html>\n";
 
 static void hist_push(const char *u);
