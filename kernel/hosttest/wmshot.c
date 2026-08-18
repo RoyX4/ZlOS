@@ -178,6 +178,14 @@ static void desk_draw(int x, int y, int w, int h)
                "state: ready", t->text_dim);
 }
 
+
+/* input.c's USB keyboard path takes RAW HID EVENTS now, not decoded chars
+ * (claude/ecstatic-lewin-f617bb - there is no character for Up, so a decoded
+ * arrow came back 0 and 0 means "nothing typed"). These harnesses drive the
+ * pointer, so no USB keyboard is present. */
+int xhci_key_event(void) { return 0; }
+int xhci_kbd_mods(void)  { return 0; }
+
 int main(int argc, char **argv)
 {
     const char *out = argc > 1 ? argv[1] : "wmshot.ppm";

@@ -49,6 +49,7 @@ kernel/hosttest/fuzz
 kernel/hosttest/dnstest
 kernel/hosttest/dpll_test
 kernel/hosttest/modeset_test
+kernel/hosttest/inputtest
 kernel/hosttest/regs-*.txt
 kernel/hosttest/modeset-*.log
 

@@ -123,6 +123,15 @@ static struct drained drain(void)
     return d;
 }
 
+
+/* input.c's USB keyboard path now takes RAW HID EVENTS rather than decoded
+ * characters (claude/ecstatic-lewin-f617bb: there is no character for Up, so
+ * a decoded arrow came back 0 and 0 means "nothing typed"). This harness
+ * tests the pointer and the serial source, so both are inert here -
+ * inputtest_hid.c is the one that drives them. */
+int xhci_key_event(void) { return 0; }
+int xhci_kbd_mods(void)  { return 0; }
+
 int main(void)
 {
     printf("inputtest - the shipping input.c, against fake hardware\n\n");

@@ -644,6 +644,52 @@ the desktop on real hardware:
 2. **`fb.c` has no clipping.** Every primitive clips to the screen and nothing
    else, so there is no way to repaint part of the screen. That, not the window
    code, is what blocks a real compositor.
+## Arrow keys reached no application until 2026-08-18, and PS/2 was innocent
+
+Reported as "arrows are not delivered to apps", with a correct measurement
+behind it: in the browser, injecting qcode `spc` scrolled and `down` did
+nothing, though `browser_key()` handles both. The suspected cause was the
+`0xE0` prefix in the PS/2 decode — which fits the evidence exactly, and is
+wrong. `hosttest/inputtest.c` drives the real `input.c` and the PS/2 path
+decodes all nine extended keys correctly, before any change.
+
+**The keyboard in the repro was the USB one.** `try.sh` attaches `-device
+usb-kbd` and QEMU routes typing to it once it exists.
+
+The USB path decoded keys to **characters**. There is no character for Up, so
+`hid_to_ascii()` returned 0 — and 0 already means "nothing was typed". The key
+vanished with no error at any layer. Adding arrow cases to that function cannot
+fix it: there is nothing to return. The transport had to change shape.
+
+| Was | Is |
+|---|---|
+| `xhci_key()` → a character; `input_poll()` pushes `EV_CHAR` | `xhci_key_event()` → packed `press`/`mods`/HID usage; `input.c` translates |
+| a keymap in `xhci.c` and another in `input.c` | printable USB keys map to a set-1 scancode and go through the **existing** `to_char()` |
+| USB sent presses only | releases too — without them `key_down[]` never clears and repeat never stops |
+| USB handled shift and nothing else | ctrl, caps and super, because it is the same `to_char()` — **Ctrl+W was dead on an external keyboard** |
+| a held shift alone was invisible | `xhci_kbd_mods()` publishes the live bitmap |
+
+`wm.c` was never involved; `route_key()` forwards every event type already.
+
+`key_down[]` now has **three** regions — PS/2, PS/2-extended, and USB at
+`0x200 + usage`. A USB `'a'` is usage 0x04 and a PS/2 F9 is scancode 0x04, so a
+shared slot means releasing one un-holds the other.
+
+`xhci_key()` still exists, still returns a character, and reads its **own**
+queue: `kernel.zl` calls the `usb_key` builtin in two places and compares the
+result against 13 and 27. Two queues also stop the shell and the compositor
+stealing each other's keystrokes.
+
+Why it hid so long: **a test that asks "did a key work" passes on the broken
+code**, because most keys did. `hosttest/inputtest.c` asserts on event *type and
+code*, and asserts parity — the same key must produce the same event from either
+keyboard. No GPU, no root, no QEMU, milliseconds:
+
+```
+cd kernel/hosttest && ./build.sh && ./inputtest
+```
+
+Full write-up: `docs/input-stack.md`.
 
 ## The recurring bug class — check this FIRST
 

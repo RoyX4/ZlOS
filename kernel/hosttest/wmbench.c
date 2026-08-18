@@ -220,6 +220,14 @@ static void report(const char *what, unsigned long long cyc, int frames)
            what, (double)cyc / frames, us);
 }
 
+
+/* input.c's USB keyboard path takes RAW HID EVENTS now, not decoded chars
+ * (claude/ecstatic-lewin-f617bb - there is no character for Up, so a decoded
+ * arrow came back 0 and 0 means "nothing typed"). These harnesses drive the
+ * pointer, so no USB keyboard is present. */
+int xhci_key_event(void) { return 0; }
+int xhci_kbd_mods(void)  { return 0; }
+
 int main(int argc, char **argv)
 {
     if (argc > 2) { W = atoi(argv[1]); H = atoi(argv[2]); }

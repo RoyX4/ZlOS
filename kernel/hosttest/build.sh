@@ -26,8 +26,8 @@ echo "built ./fbbench       (run: ./fbbench)"
 # "push EV_MOUSE from the same pump" is invisible in a screenshot - a phantom
 # event at boot, a flood of duplicates, a coalesce that swallows a button - so
 # it gets assertions rather than a photograph.
-gcc -O2 -w -o inputtest inputtest.c ../input.c
-echo "built ./inputtest     (run: ./inputtest)"
+gcc -O2 -w -o inputtest_hid inputtest_hid.c ../input.c
+echo "built ./inputtest_hid (run: ./inputtest_hid)"
 
 # The compositor, asserted. A compositor's bugs are not crashes - they are a
 # sliver of an old window left on the wallpaper, a click landing on the window
@@ -141,3 +141,8 @@ echo "built ./fuzz          (run: ./fuzz 3000 1)"
 # than merely malformed, and none of it can be asked for from a real server.
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o dnstest dnstest.c ../dns.c ../net.c
 echo "built ./dnstest       (run: ./dnstest)"
+# The input stack, against fake hardware. No GPU, no root, no QEMU - so unlike
+# everything else here it can run on any box, in milliseconds.
+gcc -O1 -g -Wall -Wextra -Wno-unused-function -o inputtest \
+    inputtest.c ../input.c
+echo "built ./inputtest     (run: ./inputtest)"
