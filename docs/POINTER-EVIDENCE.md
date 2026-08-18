@@ -310,6 +310,49 @@ names" class, sitting inside the pointer path, and it is why the prompt's own
 description of the clamps was wrong. Left in place deliberately — removing dead
 code belongs to the phase 2 sweep, not to a fix whose gate is a human's hand.
 
+## 6a. Found on the way, verified, deliberately NOT fixed here
+
+Each of these was read in the source and confirmed. None is fixed in this
+change, because phase 1's gate is a human's hand on a mouse and widening the
+diff makes that verdict harder to attribute. They are phase 2's, and they are
+written down so phase 2 does not have to find them again.
+
+**`idt.c`'s `mouse_max_x`/`mouse_max_y` are dead.** Declared at `idt.c:150`
+with a comment describing them as the live clamp; read and written by nothing.
+The live pair is `ptr_lim_x`/`ptr_lim_y` at `idt.c:37`. Two names for one
+thing — phase 2's class 2, inside the pointer path.
+
+**The telescoping clamp is live on the PS/2 path.** `idt.c:225-229` clamps the
+raw ISR position, and `input.c` derives its delta by differencing two
+*already-clamped* positions. At any pointer speed below 100% with acceleration
+off, the accelerated pointer moves less than the raw one, so the raw position
+pins against the edge, the difference goes to zero, and **the accelerated
+pointer can never reach that edge**. It does not bite by default only because
+`settings.c:95` ships `speed = 100`. This is the same hazard the USB path now
+avoids by publishing a raw delta; the PS/2 path needs the same treatment.
+
+**A failed mode switch leaves all three clamps stale.** `console.c:230-232`
+returns 0 if `bga_framebuffer()` comes back NULL — *after* `bga_set_mode()` has
+already reprogrammed the geometry. `fb_setup()` is never reached, so the clamps
+still describe the previous mode.
+
+**A USB mouse's scroll wheel is dropped.** The boot-mouse report is
+`[buttons, dx, dy, wheel]` and `ptr_decode()`'s relative branch never reads
+`r[3]`. Not fixed, and not merely for scope: `EV_WHEEL` currently reaches
+`route_wheel()` → `hook_event()` and **no app handles it**, for either device.
+Wiring USB into it would feed an event nothing consumes. Missing feature, not
+regression.
+
+**xHCI runs with interrupts disabled.** `XRT_IMAN` and `XRT_IMOD` are defined
+at `xhci.c:393-394` and never written, and the file contains no ISR. That is a
+deliberate, working design — but it is *why* the frame clock gates the whole
+input stack, and it is the thing to revisit if the pipeline ever proves too
+shallow.
+
+**`probe-mouse.py` tests neither pointer.** It defaults to no tablet and no
+usb-mouse, so it drives a PS/2-only machine, and its header still claims
+"xhci.c contains no mouse code at all".
+
 ## 7. What is checked, and where
 
 `kernel/hosttest/xhcitest.c`, wired into `hosttest/build.sh` and therefore into
