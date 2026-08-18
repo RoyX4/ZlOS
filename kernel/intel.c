@@ -4010,6 +4010,49 @@ int intel_modeset_was_dry(void) { return ms_dry; }
 static u32 bl_saved_ctl = 0, bl_saved_freq = 0, bl_saved_duty = 0;
 static int bl_have_saved = 0;
 
+/* PSR as we found it, and the reason this exists.
+ *
+ * The modeset disables PSR as step 4 (hazard 4.3 #17: it fights every plane
+ * update and issues its own AUX traffic on our channel). The teardown then
+ * disabled it AGAIN "in case anything re-armed it" - and never put it back.
+ *
+ * That cost a real hang. Firmware leaves PSR ON here; we handed the device to
+ * i915 with it OFF while i915's software state still said ON, and i915's next
+ * atomic commit waited forever for a panel transition that could not happen:
+ *
+ *   i915 *ERROR* PSR wait timed out, atomic update may fail
+ *   i915 *ERROR* [CRTC:57:pipe A] flip_done timed out
+ *   i915 *ERROR* [CONNECTOR:109:eDP-1] commit wait timed out
+ *
+ * repeating every ten seconds until Xorg was blocked 1208 seconds inside
+ * intel_wait_for_vblank_workers and the machine had to be power-cycled.
+ *
+ * Same lesson as the backlight, which had the same shape: leaving the hardware
+ * in a state the next owner does not expect is worse than never touching it. */
+static u32 psr_saved_ctl = 0;
+static int psr_have_saved = 0;
+
+int intel_psr_save(void)
+{
+    if (!intel_present()) return 0;
+    psr_saved_ctl  = mmio_r(EDP_PSR_CTL);
+    psr_have_saved = 1;
+    return 1;
+}
+
+int intel_psr_restore(void)
+{
+    if (!intel_present() || !lt_armed || !psr_have_saved) return 0;
+    mmio_w(EDP_PSR_CTL, psr_saved_ctl);
+    (void)mmio_r(EDP_PSR_CTL);
+    return 1;
+}
+
+int intel_psr_saved_enabled(void)
+{
+    return psr_have_saved ? ((psr_saved_ctl & EDP_PSR_ENABLE) ? 1 : 0) : -1;
+}
+
 int intel_backlight_save(void)
 {
     if (!intel_present()) return 0;
@@ -4092,8 +4135,9 @@ int intel_modeset_teardown(int port)
     }
     if (!intel_backlight_pwm_disable()) bad++;
 
-    /* 4: PSR, in case anything re-armed it. */
-    if (mmio_r(EDP_PSR_CTL) & 0x80000000u) intel_psr_disable();
+    /* 4: PSR back to exactly what we found. NOT "disable it again" - that was
+     * the bug that hung i915 for twenty minutes and cost a power cycle. */
+    intel_psr_restore();
 
     /* 5: plane and cursor off. CTL first, then SURF/BASE - the SURF write is
      * what arms the CTL=0, exactly as it arms a real surface. */
@@ -4164,6 +4208,10 @@ u32 intel_bringup_panel(void)
      * POST, long before any bootloader, so the timing registers describe a real
      * mode even when zlOS was loaded by its own 512-byte bootloader. */
     if (!intel_modeset_set_from_hw()) return 0;
+
+    /* Snapshot what must be handed back untouched, BEFORE anything is changed. */
+    intel_psr_save();
+    intel_backlight_save();
 
     u32 w = (u32)intel_hactive(), h = (u32)intel_vactive();
     if (w < 640 || h < 480) return 0;
