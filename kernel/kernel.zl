@@ -135,9 +135,28 @@ K_END = 0x115
 K_DEL = 0x119
 
 # ---- timing + sound, both riding on the timer interrupt --------------------
+# WAIT FOR THE TIMER, BUT NEVER FOREVER - the same rule zl_putc already applies
+# to the UART. This was `while ticks() < target { }`, an unbounded spin on a
+# hardware counter, and when the timer interrupt was not being delivered it
+# hung the machine inside the two-note boot chime with nothing on screen to say
+# why. That is exactly what happened booting under OVMF (see apic.c: no MADT,
+# no interrupt source overrides, PIC disabled anyway).
+#
+# The guard is a WATCHDOG, not a deadline: `spins` resets every time the
+# counter actually moves, so a slow machine is never cut short - only a frozen
+# counter trips it. At 100 Hz a tick lands every 10 ms, and 400000 iterations
+# of two builtin calls is far longer than that, so a healthy timer cannot.
 fn wait_ticks(n) {
     target = ticks() + n
-    while ticks() < target { }
+    seen = ticks()
+    spins = 0
+    while ticks() < target {
+        now = ticks()
+        if now != seen { seen = now  spins = 0 }
+        spins = spins + 1
+        if spins > 400000 { return 0 }
+    }
+    return 0
 }
 fn beep(freq, dur) {
     beep_on(freq)
@@ -1854,6 +1873,13 @@ fn app_event(id, win, ety, ecode, ex, ey) {
 last_tick_sec = 0 - 1
 # The shell window repaints after anything is typed or printed into it.
 shell_win = 0 - 1
+# Is a compositor session already running? It matters now that the compositor
+# is the BOOT STATE rather than something 'w' launches: `windows` is still in
+# term.c's command table and still dispatches to wm_session, so typing it into
+# the shell inside a session would re-enter, call wm_init() - which clears the
+# whole window table, including the shell you typed into - and then run a
+# second frame loop nested inside the first.
+wm_live = 0
 fn wm_damage_win_all() {
     if shell_win >= 0 { wm_dmg(shell_win) }
     return 0
@@ -1889,6 +1915,15 @@ fn wm_session() {
         color(C_GREY)  print("  the compositor needs the framebuffer console")
         return 0
     }
+    # REFUSE TO RE-ENTER, and say so. wm_init() clears the window table, so a
+    # nested session would delete the shell window the command was typed into
+    # and leave a frame loop running underneath one that can never be reached
+    # again. A silent return would be the same bug with no evidence.
+    if wm_live == 1 {
+        color(C_GREY)  print("  the compositor is already running")
+        return 0
+    }
+    wm_live = 1
     u = ui()
     ui_theme(u)
     wm_init()
@@ -1935,6 +1970,7 @@ fn wm_session() {
     put(wm_cw(shell_win))  put("x")  print(wm_ch(shell_win))
     while wm_run() == 1 { wm_frame() }
     con_quiet(0)
+    wm_live = 0
     return 0
 }
 
@@ -2178,10 +2214,6 @@ print("")
 # a two-note boot chime - the timer is up, so we can time it
 beep(784, 8)  beep(1046, 12)
 
-# now that the terminal holds the boot log, snapshot it as the drag background
-# and drop the draggable windows on top
-compose_windows()
-
 # ---- the shell -------------------------------------------------------------
 running = 1
 pending = 0
@@ -2203,6 +2235,28 @@ menu_open = 0                            # is the start menu showing?
 mnx = 0                                  # start menu geometry (set in open_menu)
 mny = 0
 mnh = 0
+
+# ---- WHICH SYSTEM ARE WE? --------------------------------------------------
+# The compositor is the boot state now, and this is the whole of that change.
+#
+# wm_avail() asks TWO questions and both have to be yes: is there a framebuffer
+# at all, and does kernel.zl actually define app_draw. verify.sh boots
+# `-kernel -display none`, where QEMU's multiboot loader supplies no framebuffer
+# tag, so fb_w is 0, this is 0, and the plain text shell below runs exactly as
+# it always has - its serial transcript must stay BYTE-IDENTICAL to golden.txt
+# and that is the single most likely thing in this queue to go red.
+#
+# The two branches are not symmetrical and should not be made so. The text
+# branch is the OLD system, untouched, including compose_windows() and the
+# sticker-drag machinery it owns; the graphical branch is wm_session(), which
+# owns the screen from the moment it starts. Nothing is shared between them but
+# the scrollback in term.c, which is what lets the boot log printed above land
+# inside the shell WINDOW rather than being lost with the pixels it was drawn as.
+if wm_avail() == 0 {
+
+# now that the terminal holds the boot log, snapshot it as the drag background
+# and drop the draggable windows on top
+compose_windows()
 
 while running == 1 {
     color(C_GREEN)  put("  zl> ")
@@ -2430,6 +2484,15 @@ while running == 1 {
             }
         }
     }
+}
+
+} else {
+    # THE COMPOSITOR OWNS THE MACHINE. wm_session opens the shell window first
+    # so the boot log already in term.c's scrollback is redrawn inside it,
+    # mutes the console's pixels, and runs wm_frame() until something calls
+    # wm_stop() - which is 'q' typed into the shell, the close box, or Ctrl+W.
+    # Never "press any key", which is the phrase this whole rewrite deletes.
+    wm_session()
 }
 
 print("")

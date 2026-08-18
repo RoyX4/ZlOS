@@ -238,7 +238,8 @@ def main():
         # prompt to send 'w' to and sending one would type a stray character
         # into the terminal. Ask which world we are in rather than assuming,
         # so this gate keeps working across that change unaltered.
-        if t.expect(COMPOSITOR, 8):
+        booted_into_wm = t.expect(COMPOSITOR, 8)
+        if booted_into_wm:
             print("  note  the compositor is the boot state - no 'w' needed")
         else:
             if not t.expect(PROMPT, args.step_timeout):
@@ -298,14 +299,22 @@ def main():
             check("clear empties the scrollback", i1 < i0 * 0.2,
                   f"ink {i0} -> {i1} inside the shell")
 
-        # ---- the double prompt, reported rather than asserted ------------
-        # PLATFORM-PROMPT item 1 names this and predicts it disappears when the
-        # compositor becomes the boot state, because then no text shell ever
-        # prints a prompt for the scrollback to capture. Print the evidence
-        # either way; asserting it before its fix has landed would gate this
-        # item on the next one.
-        captured = t.log.count(PROMPT)
-        print(f"  note  '{PROMPT.strip()}' appears {captured}x in this session's serial log")
+        # ---- the double prompt -------------------------------------------
+        # PLATFORM-PROMPT item 1 names two "zl>" prompts - one captured into
+        # the scrollback from the text shell before the compositor starts, one
+        # live - and predicts item 2 removes it. It does, and this is the
+        # measurement rather than the assumption: with the compositor as the
+        # BOOT STATE no text shell ever runs, so the only prompts on the wire
+        # are term.c's own echo of each line typed. Five commands, five
+        # prompts. Under 'w' it is six, and the extra one IS the bug.
+        typed = 5
+        prompts = t.log.count(PROMPT)
+        if booted_into_wm:
+            check("no captured prompt - one per line typed", prompts == typed,
+                  f"{prompts} on the wire, {typed} typed")
+        else:
+            print(f"  note  '{PROMPT.strip()}' x{prompts} for {typed} typed - "
+                  f"the extra one is the text shell's, captured (item 2 removes it)")
 
         print()
         if failures:

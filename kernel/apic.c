@@ -341,6 +341,35 @@ int apic_init(void)
     mmio_w(lapic_base + LAPIC_SVR, 0x1FF);       /* vector 0xFF, enable */
     mmio_w(lapic_base + LAPIC_TPR, 0);           /* accept every priority */
 
+    /* NO MADT MEANS NO INTERRUPT SOURCE OVERRIDES, AND THAT IS DISQUALIFYING.
+     *
+     * parse_madt() leaves gsi_of_irq[] as the identity when it cannot find the
+     * table, so IRQ0 gets routed to I/O APIC pin 0. On a great many machines
+     * ISA IRQ0 is overridden to GSI 2, and the MADT is the only thing that
+     * says so. Route it to pin 0 there and the timer interrupt is delivered
+     * nowhere - while pic_disable() below has already silenced the 8259 that
+     * WAS delivering it. The result is a machine with no timer at all.
+     *
+     * MEASURED, and it is not hypothetical: booting the ISO under OVMF, the
+     * RSDP is not in the legacy 0xE0000..0x100000 window that acpi_find_rsdp
+     * scans - UEFI passes it through the EFI configuration table instead, and
+     * the GRUB multiboot path never calls acpi_set_rsdp(). So madt_found is 0,
+     * cpu_count is 0, and the boot log said "APIC: IRQs via I/O APIC at
+     * 0xFEC00000, 0 CPU(s)" - a line that should have been read as a
+     * contradiction, since an I/O APIC with zero CPUs to deliver to is not a
+     * working configuration. zlOS then hung forever in the two-note boot chime,
+     * because beep() waits on a tick counter that had stopped advancing.
+     *
+     * It went unnoticed because verify-iso.sh waited for "ready." and killed
+     * QEMU one second later, and "ready." is printed BEFORE the chime.
+     *
+     * The 8259 is already remapped and working at this point, so declining is
+     * free: apic_init returns 0, kernel.zl prints "no APIC - staying on the
+     * legacy 8259 PIC", and everything downstream keeps its interrupts. A
+     * guess at the routing would be the alternative, and a guess that is wrong
+     * costs the whole machine. */
+    if (!madt_found) return 0;
+
     if (!ioapic_base) ioapic_base = 0xFEC00000u; /* the usual place */
     ioapic_pins = (int)((ioapic_read(IOAPIC_REG_VER) >> 16) & 0xFF) + 1;
     if (ioapic_pins < 1 || ioapic_pins > 240) return 0;   /* nothing sane there */
