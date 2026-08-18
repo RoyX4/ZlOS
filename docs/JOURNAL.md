@@ -7,6 +7,23 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-19 — chore: regenerated journal/TODO (post-commit hook) (3e6497c)
+
+`main` · 1 file changed, 18 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 14 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>1 file(s)</summary>
+
+- `docs/JOURNAL.md`
+
+</details>
+
 ## 2026-08-19 — chore: the journal and TODO the post-commit hook regenerated (0a4bc8f)
 
 `main` · 2 files changed, 24 insertions(+), 16 deletions(-)
