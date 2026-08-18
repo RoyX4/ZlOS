@@ -499,6 +499,7 @@ extern int  clip_push(int ch);
 extern int  clip_commit(int type);
 extern void clip_clear(void);
 
+extern int  notify_post(const char *text, unsigned ticks);
 extern int  notify_tick(unsigned now);
 extern int  notify_active(void);
 extern int  notify_byte(int i);
@@ -1155,6 +1156,14 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "note_ch"))    return zl_num((double)notify_byte((int)a[0].num));
     if (streq(name, "note_go"))    return zl_num((double)notify_dismiss());
     if (streq(name, "note_q"))     return zl_num((double)notify_queued());
+    /* A string LITERAL is the one kind of string the zl kernel subset has, and
+     * it is exactly what a notification is: fixed text chosen at compile time.
+     * Same shape as the `at` builtin above - check the type, take the pointer,
+     * never store it. */
+    if (streq(name, "note_say")) {
+        if (a[0].type != V_STR) return zl_num(0);
+        return zl_num((double)notify_post(a[0].str, (unsigned)(n > 1 ? a[1].num : 0)));
+    }
 #endif
 
     /* Bitwise ops. A driver cannot be written without them - every status

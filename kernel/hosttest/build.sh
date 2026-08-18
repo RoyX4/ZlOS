@@ -33,7 +33,7 @@ echo "built ./inputtest     (run: ./inputtest)"
 # sliver of an old window left on the wallpaper, a click landing on the window
 # underneath, a drag that stops when the pointer outruns the frame. None of
 # those show in a screenshot taken a frame later.
-gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c ../notify.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest        (run: ./wmtest)"
 
@@ -41,7 +41,7 @@ echo "built ./wmtest        (run: ./wmtest)"
 # wrong window; eyes catch a title bar four pixels too tall, or a toggle that
 # renders as a circle instead of a pill. Both were real, and only the second
 # kind is found by looking.
-gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c \
+gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c ../notify.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmshot        (run: ./wmshot out.ppm)"
 
@@ -82,6 +82,14 @@ echo "built ./systest       (run: ./systest)"
 gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -DRTC_HOSTTEST \
     -o rtctest rtctest.c ../rtc.c
 echo "built ./rtctest       (run: ./rtctest)"
+
+# The toast INSIDE the compositor. systest asserts notify.c's own queue and
+# expiry; this asserts the part that only exists once wm.c is involved - that
+# it paints ON TOP of a window, that it leaves no ghost when it retires, and
+# that focus never moves, because a toast is not a window and cannot be one.
+gcc -O2 -w -o toasttest toasttest.c ../wm.c ../ui.c ../wmglue.c ../fb.c \
+    ../input.c ../notify.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
+echo "built ./toasttest     (run: ./toasttest)"
 
 # The comparison number: what the REAL GPU on this same laptop does with a
 # blended full-screen layer. Offscreen pixmap, so it never touches the desktop.

@@ -26,3 +26,4 @@ hosttest/*.ppm
 
 hosttest/systest
 hosttest/rtctest
+hosttest/toasttest

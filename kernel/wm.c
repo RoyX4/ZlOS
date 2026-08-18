@@ -45,6 +45,25 @@ void fb_pointer_hide(void);
 int  fb_cell_w(void);
 int  fb_cell_h(void);
 
+/* ---- notify.c -------------------------------------------------------------
+ * The notification surface, which SYSTEM-PROMPT.md §2 permits adding here and
+ * which is the only thing this track has put in this file. Nothing above or
+ * below it changed: no routing, no damage rule, no z-order.
+ *
+ * A toast is not a window. It is not in `wins`, not in `zorder`, and there is
+ * no window id for it - which is not an implementation shortcut, it is the
+ * feature. A notification that takes focus eats the next keystroke: you are
+ * typing, something completes, and the character you were in the middle of
+ * goes to something that is about to close itself. There is nothing here that
+ * COULD take focus, and that is a stronger guarantee than remembering not to.
+ */
+int         notify_tick(unsigned now);
+int         notify_active(void);
+const char *notify_text(void);
+int         notify_post(const char *text, unsigned ticks);
+void        notify_rect(int sw, int sh, int reserve_bot, int scale,
+                        int *x, int *y, int *w, int *h);
+
 /* ---- input.c ------------------------------------------------------------- */
 void input_poll(void);
 int  input_next(void);
@@ -587,6 +606,49 @@ static void chrome(int win, int focused)
     fb_rrect(bx, by, cs, cs, UI_S1(t) / 2, face);
 }
 
+/* Where the toast sits. The dock is desktop furniture drawn by hook_desk and
+ * wm.c does not know how tall it is, so this asks for the same reserve the
+ * policy layer uses - 64 * scale, matching kernel.zl's dock_y(). A toast that
+ * lands under the dock is a toast you cannot read or click. */
+static void toast_rect(int *x, int *y, int *w, int *h)
+{
+    const struct ui_theme *t = ui_theme();
+    notify_rect((int)fb_pxw(), (int)fb_pxh(), 64 * t->scale, t->scale, x, y, w, h);
+}
+
+/* Drawn LAST in each damage rectangle, so it is on top of every window without
+ * being in the z-order at all. Same primitives and the same theme as chrome(),
+ * because a toast that does not look like the rest of the desktop reads as a
+ * bug in the desktop. */
+static void toast_draw(int rx0, int ry0, int rx1, int ry1)
+{
+    if (!notify_active()) return;
+    const char *msg = notify_text();
+    if (!msg) return;
+
+    int x, y, w, h, cx, cy, cw, ch;
+    toast_rect(&x, &y, &w, &h);
+    if (!isect(x, y, x + w, y + h, rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
+        /* the shadow reaches outside the panel, exactly as a window's does */
+        const struct ui_theme *ts = ui_theme();
+        int reach = SHADOW_OFF(ts) + SHADOW_SOFT(ts);
+        if (!isect(x - reach, y - reach, x + w + reach, y + h + reach,
+                   rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) return;
+    }
+    fb_clip(cx, cy, cw, ch);
+
+    const struct ui_theme *t = ui_theme();
+    fb_shadow(x, y, w, h, SHADOW_OFF(t), SHADOW_SOFT(t));
+    fb_rrect(x, y, w, h, t->radius, t->border);
+    fb_rrect(x + 1, y + 1, w - 2, h - 2, t->radius - 1, t->panel_hi);
+    /* one accent stripe down the left edge: the same "this is the one
+     * saturated colour" rule the focused title bar follows */
+    fb_fill_px(x + 1, y + 1, UI_S1(t) / 2, h - 2, t->accent);
+
+    int th = fb_text_prop_h();
+    fb_text_prop(x + UI_S3(t), y + (h - th) / 2, msg, t->text);
+}
+
 void wm_repaint(void)
 {
     if (!fb_active() || !nwd) return;
@@ -623,6 +685,10 @@ void wm_repaint(void)
                 hook_draw(win_app(win), ax, ay, aw, ah, win == focus_win);
             }
         }
+
+        /* ...and the toast on top of all of them, still inside this damage
+         * rectangle. Added, not woven in: the loop above is unchanged. */
+        toast_draw(rx0, ry0, rx1, ry1);
     }
     fb_clip_none();
     nwd = 0;
@@ -806,6 +872,18 @@ void wm_frame(void)
     if (hook_tick)
         for (int i = 0; i < nz; i++)
             if (hook_tick(win_app(zorder[i]), zorder[i])) wm_damage_win(zorder[i]);
+
+    /* The toast appears and retires on a tick count of its own. This damages
+     * ONLY its own rectangle and only when what is on screen actually changed
+     * - notify_tick returns 1 for that and 0 otherwise, the same contract
+     * hook_tick uses above. No existing damage rule is altered. */
+    if (notify_tick(now)) {
+        int tx, ty, tw, th;
+        toast_rect(&tx, &ty, &tw, &th);
+        const struct ui_theme *t = ui_theme();
+        int reach = SHADOW_OFF(t) + SHADOW_SOFT(t);
+        wm_damage(tx - reach, ty - reach, tw + 2 * reach, th + 2 * reach);
+    }
 
     if (nwd) {
         fb_pointer_hide();      /* the sprite's save-under is stale once the

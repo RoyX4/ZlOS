@@ -229,11 +229,13 @@ file added none. Four new `.c` files went in that way.
 ## The gates
 
 ```
-kernel/hosttest/fstest    117 assertions   zlfs, incl. a cold start in a SEPARATE PROCESS
-kernel/hosttest/rtctest    46 assertions   the clock, against a misbehaving CMOS
-kernel/hosttest/systest    96 assertions   clipboard, snapping, notifications
-kernel/verify.sh                           BIOS boot vs golden.txt
-kernel/verify-disk.sh                      THREE boots against one disk image
+kernel/hosttest/fstest      117 assertions  zlfs, incl. a cold start in a SEPARATE PROCESS
+kernel/hosttest/rtctest      46 assertions  the clock, against a misbehaving CMOS
+kernel/hosttest/systest      96 assertions  clipboard, snapping, notifications
+kernel/hosttest/toasttest    17 assertions  the toast INSIDE the compositor, by pixel
+kernel/verify.sh                            BIOS boot vs golden.txt
+kernel/verify-disk.sh                       THREE boots against one disk image
+kernel/verify-clock.sh                      three chosen -rtc base= values, exact output
 ```
 
 `verify-disk.sh` is the only gate in the tree that power-cycles the machine. It
@@ -249,19 +251,49 @@ this machine and §1.2 allows one VM.
 
 ---
 
+## The toast, which is the one thing this track put in `wm.c`
+
+§2 permits adding a notification surface and forbids changing routing, damage
+or z-order. The surface is 40 lines and touches none of those three: a
+`toast_draw()` called last inside each damage rectangle in `wm_repaint`, and a
+`notify_tick()` in `wm_frame` that damages **only the toast's own rectangle**
+and only when what is on screen actually changed.
+
+**A toast is not a window.** It is not in `wins`, not in `zorder`, and has no
+window id. That is not a shortcut — it is the feature. A notification that
+takes focus eats the next keystroke: you are typing, something completes, and
+the character you were mid-way through goes to something about to close itself.
+There is nothing here that *could* take focus, which is a stronger guarantee
+than remembering not to.
+
+`hosttest/toasttest.c` asserts it against the real compositor, with a window
+deliberately placed **underneath** the toast so "it appears" means "on top of a
+window" and not "on empty wallpaper":
+
+```
+after a frame the toast is ON SCREEN                    ok
+    62685 pixels of toast inside its rectangle
+...and it is ON TOP of the window, not behind it        ok
+focus is STILL the window, not the toast                ok
+...and the window count is unchanged                    ok
+...it has no place in the z-order at all                ok
+...and the pixels are GONE, repainted by what was under ok
+    0 pixels left behind
+...leaving no ghost - the window under it is intact     ok
+```
+
+That last pair is the classic compositor bug and it is only visible in the
+frame *after* the one you would screenshot: a surface that retires without
+damaging its own rectangle leaves a ghost on the wallpaper for ever.
+
+---
+
 ## What is NOT done, and why
 
-**`wm.c` routing is untouched.** §2 of the brief permits adding a notification
-surface and forbids changing routing, damage or z-order, and for most of this
-track `wm.c` and `hosttest/wmtest.c` were both modified in the
-`desktop/overnight-compositor` worktree. So:
+**`wm.c` routing is untouched.** §2 of the brief forbids changing routing,
+damage or z-order, and for most of this track `wm.c` and `hosttest/wmtest.c`
+were both modified in the `desktop/overnight-compositor` worktree. So:
 
-- **Item 5** — `notify.c` is complete and asserted (queue of four, one visible,
-  auto-dismiss, expiry that survives the 2^32 tick wrap, and *no concept of
-  focus at all*, which is a stronger guarantee that it cannot eat a keystroke
-  than remembering not to). There is no toast on screen: it needs a
-  `notify_rect()` call at the end of `wm_repaint` and a `notify_tick()` in
-  `wm_frame`.
 - **Item 6** — `snap.c` is complete and asserted (halves and quarters that tile
   an odd-width work area exactly, above the dock, and the restore rectangle
   captured *only* on the transition into a snapped state, so snap-left then

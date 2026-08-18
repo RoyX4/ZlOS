@@ -1685,6 +1685,9 @@ fn run_command(cmd, arg) {
         put("    BOOTCOUNT=")  print(bootn)
         color(C_GREY)
         print("    that number came off the disk, not out of memory")
+        # ...and say so on the desktop too. A toast is the right shape for
+        # this: it is worth knowing and not worth a window.
+        note_say("zlfs mounted", 300)
         return 0
     }
     # ; - the real time, off the CMOS clock. The header draws this too, but the
