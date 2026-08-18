@@ -110,6 +110,45 @@ Then, and only then: `./try.sh`, move the mouse by hand, and have Zac confirm.
 
 ---
 
+## Phase 1b — the dock readout leaves debris (confirmed, visual)
+
+The tray reads `frame 0  us peak 0  )08  up 1`. The `)08` is not a value, it is
+the tail of a previous, wider number.
+
+`kernel.zl` draws the status numbers at FIXED x-offsets with **no background
+clear**:
+
+```
+label    (tray +   0, ..., "frame")
+label_num(tray +  44, ..., wm_us())        <- nothing clears behind this
+label    (tray +  92, ..., "us   peak")
+label_num(tray + 152, ..., wm_peak())      <- nor this
+label    (tray + 210, ..., "up")
+label_num(tray + 232, ..., ticks() / 100)
+```
+
+Only `draw_clock()` clears, and only the `up` region
+(`grad_rgb(ctray + 226 * ui(), ...)`, 70 px wide). So when `wm_peak()` shrinks -
+say from a six-digit boot peak to `0` - the digits that are no longer drawn are
+never erased.
+
+This is a REGRESSION and its provenance is exact: the tray used to read
+`state: compositor`, a constant string that cannot shrink.
+`desktop/apps-in-windows` replaced it with live numbers, correctly citing
+desktop-TODO 0h ("a number nobody can see is a number nobody checks"), and did
+not add the clear that live numbers need.
+
+Fix: clear each number's cell before drawing it, the way `draw_clock` already
+does for `up`. Better, since the font is proportional and the offsets are fixed
+literals: clear the whole tray strip once per redraw and draw the row into it.
+
+Gate: `probe-frame.py` already reads the frame timer over serial and would not
+have seen this - it greps the log, not the screen. Photograph the tray with
+`probe-shot.py --crop` at two different peak values and assert the strip is
+identical apart from the digits that changed.
+
+---
+
 ## Phase 2 — the full audit
 
 Only after phase 1 is confirmed.
