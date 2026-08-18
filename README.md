@@ -6,6 +6,16 @@ that worked on Windows now works natively on Linux, with no C compiler
 required for the hand-assembled path and no Windows/Wine/emulation
 anywhere in the chain.
 
+New here? The directory names lie — there is no `apps/`, `browser/` or
+`desktop/` directory, and eight of the nine `zl*` repos on disk are the
+same repository on different branches. [`docs/CODE-MAP.md`](docs/CODE-MAP.md)
+says where everything actually is and how big it is.
+
+Wondering how this stacks up against a peer project?
+[`docs/COMPARE-BOREDOS.md`](docs/COMPARE-BOREDOS.md) measures zlOS against
+[BoredOS](https://boredos.dev) — same target, opposite strategy — and is
+blunt about where BoredOS is ahead.
+
 ## The five ways to run
 
 Per the upstream `HANDOFF.md`, zl has **five** ways to run a program, and

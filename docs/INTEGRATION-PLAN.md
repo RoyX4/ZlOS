@@ -4,6 +4,11 @@ Written 2026-08-18 against `main` = `44346d6`. Every number below was measured
 with `git merge-tree` (read-only, no working tree touched); the commands are at
 the bottom so you can re-run them after anything moves.
 
+> **Re-measured 2026-08-18 18:50, `main` = `3facf35`. Read
+> [§ Status at re-measurement](#status-at-re-measurement-2026-08-18-1850) before
+> acting on any number above — the plan's *shape* held up, three of its figures
+> did not, and step 0 was never done.**
+
 ## The situation, in one picture
 
 Eight sessions have been building eight different floors of the same building at
@@ -203,3 +208,128 @@ base=main; for b in lang/value-16 desktop/overnight-compositor fix/dma-map-hid-a
   echo "$b -> $(echo "$out" | tail -n +2 | grep -c .) conflicts"; \
   base=$(git commit-tree $(echo "$out" | head -1) -p $base -m sim); done
 ```
+
+---
+
+## Status at re-measurement (2026-08-18 18:50)
+
+Everything in this section was measured, not recalled. `main` has moved from
+`44346d6` to `3facf35`.
+
+### The plan's shape survived. Three of its numbers did not.
+
+| Claim above | Actual now | Verdict |
+|---|---|---|
+| "every branch is 0 commits behind" | every branch is **2 behind** | stale — `main` moved |
+| "**332 commits** exist on exactly one disk" | **69** | **wrong, and it was wrong when written** |
+| "the only branch on the remote is `claude/quirky-pare`" | 5 refs on origin | stale |
+| "no clever ordering saves this" (181/185/190) | a 4th order measured **163** | **holds** — 10% spread, still no free lunch |
+| landing order, deepest-layer-first | unchanged | **holds** |
+| `main` owns docs + build scripts | unchanged, and now better supported | **holds, see below** |
+
+**On the 332.** The whole repo contains 186 commits. 332 was a sum of
+per-branch `main..$b` counts, which counts every shared commit once per branch.
+The honest figure is `git rev-list --count --all --not --remotes` = **69**.
+Origin already holds the shared base, because `fix/dma-map-hid-arena` and
+`desktop/overnight-compositor` were pushed and they carry most of the ancestry.
+The risk is real but it is 69 commits and 8 branch tips, not 332.
+
+### Step 0 was never done. It is still the only irreversible item.
+
+Ten branches have **no remote ref at all**:
+
+```
+claude/amazing-robinson-19793a   desktop/apps-in-windows   desktop/feel-and-control
+claude/cranky-cray-b340d0        desktop/browser           desktop/system-track
+claude/lucid-varahamihira-4cd47d desktop/exec-track        lang/value-16
+claude/pensive-pike-2b5b01
+```
+
+Plus `main` 26 ahead of `origin/main`, and `desktop/overnight-compositor` 7
+ahead of its remote. Everything else in this document is reversible. This is not.
+
+### What changed for the worse in five hours
+
+1. **Cross-track contamination has already happened.** `repos/zl-exec`
+   (on `desktop/exec-track`) has four files **staged** that are byte-identical
+   to `desktop/system-track`'s versions:
+   `kernel/clip.c`, `kernel/docs/SYSTEM-PROMPT.md`, `kernel/docs/system-track.md`,
+   `kernel/docs/what-is-a-bios.md`. Verified by comparing `git hash-object` in
+   the worktree against `git rev-parse desktop/system-track:<path>` — identical
+   blobs. A session copied another track's work sideways instead of merging it.
+   This is the exact failure §4 exists to prevent, and it post-dates the plan.
+
+2. **Two sessions were still running at re-measurement**, and four worktrees had
+   source files written within 15 minutes: `zl-apps`, `zl-exec`, `zl-browser`,
+   `zl-linux`. Tracks are still growing while the plan to land them sits unread.
+
+3. **Uncommitted work grew to 140 files** across all worktrees
+   (`zl-linux` 57, `zl-exec` 31, `zl-apps` 5, `zl-main` 3, plus 44 in two
+   abandoned scratchpad worktrees under `/tmp`). None of it is in any branch,
+   and none of it is in any conflict measurement.
+
+4. **Six `claude/*` worktree branches now exist** beyond the eight tracks.
+   Three of them — `cranky-cray-b340d0`, `lucid-varahamihira-4cd47d`,
+   `pensive-pike-2b5b01` — are **0 commits ahead of `main`'s merge-base and
+   change 0 files**. They are empty and can be deleted. Three carry real work
+   (`ecstatic-lewin` 7 files, `quirky-pare` 7 files, `amazing-robinson` 2 files)
+   and three have open PRs (#1, #2, #3).
+
+### New finding: the 163 conflicts are two different problems, not one
+
+The plan splits conflicts into source / build / docs by *file type*. Measuring
+churn per file tells you something more useful — the split is by **whether the
+branches deleted each other's lines**.
+
+Additions/deletions vs the `44346d6` fork point, four representative tracks:
+
+| File | compositor | system-track | exec-track | apps-in-windows | Character |
+|---|---|---|---|---|---|
+| `kernel/wm.c` | +1149/**-0** | +1009/**-0** | +817/**-0** | +859/**-0** | purely additive |
+| `kernel/term.c` | +277/**-0** | +247/**-0** | +286/**-0** | +256/**-0** | purely additive |
+| `kernel/build.sh` | +13/-1 | +25/-1 | +19/-1 | +20/-34 | mechanical |
+| `kernel/build64.sh` | +12/-1 | +24/-1 | +18/-1 | +17/-34 | mechanical |
+| `freestanding/runtime_kernel.c` | +209/-12 | +329/-5 | +258/-5 | +217/-14 | light |
+| `kernel/idt.c` | +110/-29 | +28/-2 | +28/-2 | +28/-2 | light |
+| **`kernel/fb.c`** | +1677/**-172** | +807/-129 | +807/-129 | +1082/**-202** | **real divergence** |
+| **`kernel/kernel.zl`** | +1202/**-367** | +467/-10 | +327/-7 | +837/**-261** | **real divergence** |
+
+The build-script conflicts are a **union merge**, confirmed by reading one:
+each track appends its own `gcc -c foo.c -o _foo.o` lines and adds `_foo.o` to
+the single `ld` line. `desktop/system-track` vs `desktop/overnight-compositor`
+on `kernel/build.sh` is 13 insertions, 1 deletion — and the 1 deletion is the
+`ld` line. Resolution is "take every gcc line from every track, union the `.o`
+list." That is scriptable and needs no judgment. The same shape applies to
+`build64.sh`, `buildefi.sh`, `mkdisk.sh` and `kernel/hosttest/build.sh`.
+
+Conflict frequency across all 56 branch pairs:
+
+```
+34  kernel/kernel.zl        18  kernel/console.c       8  kernel/hosttest/build.sh
+20  kernel/mkdisk.sh        18  freestanding/runtime_kernel.c
+20  kernel/fb.c             14  kernel/wm.c            6  kernel/input.c
+20  kernel/build{,64,efi}.sh  14  kernel/idt.c         6  kernel/hosttest/inputtest.c
+18  kernel/term.c           10  kernel/HANDOFF.md      4  kernel/ui.h, kernel/wmglue.c
+```
+
+**So the hard pile is two files: `kernel/fb.c` and `kernel/kernel.zl`.**
+Everything else is additive, mechanical, or light. That is a materially smaller
+job than "116 source conflicts across eight codebases", and it should be
+budgeted as such — but see the caveat below, which the original document already
+got right and which still stands.
+
+### What still has not been verified
+
+Everything in the original "What has not been verified" section stands unchanged.
+Adding to it:
+
+- **"Purely additive" is a text measurement, not a semantic one.** Eight tracks
+  each appending 800–1100 lines to a `wm.c` that does not exist on `main` will
+  merge without a marker and then fail to link on duplicate symbols. `-0`
+  deletions means git won't stop you; it does not mean the result compiles. The
+  boot gate in §3 is what catches this, and it is still the only thing that does.
+- The 163 figure is one ordering, measured the same way as the 181/185/190 —
+  it is not evidence that this ordering is better, only that the spread stays
+  small.
+- No claim here has been tested against a build. Nothing has been merged.
+

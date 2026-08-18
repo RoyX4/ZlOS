@@ -2,6 +2,17 @@
 
 ## Read first, before changing anything
 
+`docs/CODE-MAP.md` says where the code actually lives. The layout is not what
+the directory names imply: the desktop and all eight apps are one zl file
+(`kernel/kernel.zl`), the browser exists only on the `desktop/browser` branch,
+and `kernel/out.c` is generated output that must never be edited or counted.
+Read it before searching for a subsystem.
+
+`docs/MERGE-EVIDENCE.md` is the measured account of the eight parallel
+tracks: the real shared base (`d61a481`, not `44346d6`), the landmines that
+merge clean and then fail, and the landing order. Read it before merging
+anything or starting a ninth track.
+
 `kernel/HANDOFF.md` is the orientation doc and it is kept honest — it records what
 is *verified* rather than what is intended. Read it before touching `kernel/`.
 
