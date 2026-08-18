@@ -2,6 +2,12 @@
 
 ## Read first, before changing anything
 
+`docs/CODE-MAP.md` says where the code actually lives. The layout is not what
+the directory names imply: the desktop and all eight apps are one zl file
+(`kernel/kernel.zl`), the browser exists only on the `desktop/browser` branch,
+and `kernel/out.c` is generated output that must never be edited or counted.
+Read it before searching for a subsystem.
+
 `kernel/HANDOFF.md` is the orientation doc and it is kept honest — it records what
 is *verified* rather than what is intended. Read it before touching `kernel/`.
 
