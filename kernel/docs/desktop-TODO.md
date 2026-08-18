@@ -18,6 +18,46 @@ Never run a QEMU boot alongside a multi-agent fan-out.
 
 ---
 
+## Phase −1 — DO THIS FIRST. Everything else is behind it.
+
+### [ ] -1a. Free `kernel.zl` and `runtime_kernel.c`, then wire the compositor in
+
+**Nine tasks are blocked on two files, and not for a technical reason.** Both
+have uncommitted work in them from the display session. Git stages whole files,
+so committing one desktop line would sweep that unfinished work into the same
+commit — which the overnight brief forbids, and which would be the wrong thing
+to do anyway.
+
+**Step 1 — Roy, or whoever owns that work:**
+
+```bash
+git add kernel/kernel.zl freestanding/runtime_kernel.c
+git commit -m "wip: usb pointer + serial timeout"
+# or: git stash push kernel/kernel.zl freestanding/runtime_kernel.c
+```
+
+**Step 2 — paste the zl from [`desktop-wiring.md`](desktop-wiring.md).** It is
+written out verbatim: the four `fn app_*` dispatchers, the boot sequence, and
+the ordering that matters (the shell window must EXIST before the boot log
+prints, because the log goes inside it).
+
+The C side is already done and already linked. `wmglue.c` holds every shim with
+**weak symbols**, so it links today doing nothing and starts working the moment
+those zl functions exist. **No C change is needed.**
+
+**Step 3 — keep the `wm_available() == 0` branch on the old shell loop.**
+`verify.sh` boots `-kernel -display none`, where there is no framebuffer, and
+its transcript must stay byte-identical.
+
+**What unblocks the moment this lands:** C4, C5, D2, E1, E2, E3, E6, E7 — and
+B5 needs only `runtime_kernel.c`.
+
+**Do C4 in the same change** (T-9): deleting the sticker-drag machinery frees
+128–176 MiB and takes the 640×480 drag ceiling and the 12 px shadow smear with
+it.
+
+---
+
 ## Phase 0 — no laptop, no touchpad, all testable in QEMU
 
 ### [x] 0a. Stop the back buffer switching itself off at high resolution — **DONE 2026-08-18**
