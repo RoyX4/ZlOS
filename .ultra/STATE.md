@@ -26,6 +26,21 @@ resolution recorded for all 55 multi-touch files.
 - **L1 landed** — the 33-commit shared spine (`d61a481`). `main` now carries
   `kernel/wm.c`, `ui.c`, `ui.h`, `wmglue.c`, `term.c` for the first time.
 - **L1 follow-up landed** — `da34635` cherry-picked. See TENSIONS T-1.
+- **Seven tracks landed.** `main` 104 -> 152 commits. In order:
+  `amazing-robinson`, the spine, `overnight-compositor`, `value-16`,
+  `dma-map-hid-arena`, `quirky-pare`, `browser`.
+  **overnight, value-16 and dma-map merged with ZERO conflicts** once the spine
+  was in. Trunk-first ordering matters: landing `apps-in-windows` first (per the
+  earlier plan's build-script argument) converted five clean merges into
+  conflicts, and was rolled back. See T-7.
+- **Hand-resolved:** `idt.c` (duplicate `idt_set_pointer_bounds`/`mouse_irqs`/
+  `idt_mouse_irqs` and two clamp variable pairs collapsed to one),
+  `HANDOFF.md` (both sides kept), `fb.c` (browser's synthesised rich text
+  replaced by a shim onto this tree's real bold atlas — see T-8),
+  `kernel.zl` (5 hunks; four pure unions, one hand-placed — see T-9).
+- **Compile state:** `./build.sh`, `kernel/build{,64,efi}.sh` and
+  `kernel/hosttest/build.sh` (17 harnesses) all pass. **No boot gate has run** —
+  the box has been at loadavg 14-17 from Cursor and the gates guard at 4.0.
 
 Effect on divergence, measured:
 
