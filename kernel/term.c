@@ -74,14 +74,27 @@ void term_clear(void)
  * system. Returns 1 if this key completed a command. */
 static int match_cmd(void);
 
+/* The kernel's one character sink: console (muted while the compositor owns
+ * the screen), this file's scrollback, and COM1. The echo below goes through
+ * it rather than through term_putc so that the SERIAL LOG still reads like a
+ * session - every gate in this repo greps that log for "zl> ", and with the
+ * console muted a scrollback-only echo would make the prompt invisible to all
+ * of them the moment the desktop became the boot state. */
+void zl_putc_pub(char c);
+
 int term_key(int code)
 {
     if (code == 13 || code == 10) {          /* Enter */
         input[in_len] = 0;
-        /* echo the typed line into the scrollback, so it reads like a session */
+        /* The prefix goes to the SCROLLBACK only and the typed characters go
+         * to both. That asymmetry is deliberate and it is what makes the two
+         * transcripts agree: the serial log was already given a bare "zl> "
+         * when this line was invited, so echoing the prefix there too would
+         * read "zl> zl> help". The window was not, because its live prompt is
+         * drawn by term_draw at the bottom rather than printed. */
         term_putc('z'); term_putc('l'); term_putc('>'); term_putc(' ');
-        for (int i = 0; i < in_len; i++) term_putc(input[i]);
-        term_putc('\n');
+        for (int i = 0; i < in_len; i++) zl_putc_pub(input[i]);
+        zl_putc_pub('\n');
         int got = match_cmd();
         in_len = 0;
         input[0] = 0;
@@ -105,23 +118,42 @@ int term_input_len(void) { return in_len; }
  * two runtime strings is the one thing the zl kernel subset cannot do.
  *
  * Every code here is one that run_command in kernel.zl already handles; this
- * adds no behaviour, it only gives the existing commands names. */
+ * adds no behaviour, it only gives the existing commands names.
+ *
+ * COMPLETENESS IS THE POINT, not convenience. Ten of run_command's commands
+ * had no name here - cpuid, poke, usbkbd, nvme, sched, smp, usbstor, i2c,
+ * input and bars - which was invisible while single keypresses still worked
+ * and became a straight capability regression the moment the compositor
+ * became the boot state: those ten could be reached from the text shell and
+ * from nothing else. Anything run_command dispatches should be typeable. */
 struct cmd { const char *word; int code; };
 
 static const struct cmd table[] = {
     { "help",    104 }, { "?",       104 },
     { "fib",     102 }, { "sum",     115 },
     { "uptime",  116 }, { "time",    116 },
-    { "beep",    101 },
+    { "beep",    101 }, { "bars",     98 }, { "colours", 98 }, { "colors", 98 },
     { "pci",     107 }, { "hw",      107 },
     { "mode",    110 }, { "res",     110 },
     { "usb",     117 }, { "cpu",     122 },
+    { "cpuid",   112 }, { "brand",   112 },
+    { "poke",    109 }, { "peek",    109 },
+    { "usbkbd",  106 }, { "kbd",     106 },
+    { "nvme",    111 }, { "disk",    111 },
+    { "sched",    43 }, { "tasks",    43 },
+    { "smp",      42 }, { "cores",    42 },
+    { "usbstor",  47 }, { "stor",     47 },
+    { "i2c",      63 }, { "touchpad", 63 },
+    { "input",    61 }, { "events",   61 },
+    { "panel",    80 },                       /* lights the real panel - laptop */
     { "gpu",     121 }, { "virtio",  121 },
     { "cube",    118 }, { "3d",      118 },
     { "windows", 119 }, { "wm",      119 },
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },
+    { "anim",     97 }, { "demo",     97 },
     { "ls",      108 }, { "files",   108 },
+    { "redraw",   99 },
     { "reboot",  114 }, { "halt",    113 }, { "quit",  113 }, { "exit", 113 },
     { "clear",     1 },                       /* handled here, not by zl */
     { 0, 0 }

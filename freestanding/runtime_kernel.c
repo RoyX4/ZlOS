@@ -77,10 +77,6 @@ extern void console_pointer_show(int x, int y);
 extern void console_pointer_hide(void);
 extern void console_present(void);
 extern void console_icon(int px, int py, int n, unsigned int rgb);
-extern void console_bg_snapshot(void);
-extern void console_bg_restore(int x, int y, int w, int h);
-extern void console_grab(int x, int y, int w, int h);
-extern void console_stamp(int x, int y);
 extern void console_cube_filled(int cx, int cy, int size, int angle, unsigned int rgb);
 extern void console_cube_clip(int x0, int y0, int x1, int y1);
 extern int  cpu_brand_byte(int i);
@@ -110,6 +106,19 @@ extern void console_box(int x, int y, int w, int h, unsigned char attr);
 extern void console_line(int x0, int y0, int x1, int y1, unsigned char attr);
 extern void console_mouse_cursor(int x, int y, unsigned char fill, unsigned char edge);
 extern int  console_kind(void);
+extern void console_mute(int on);
+extern void console_gradtop(int x, int y, int w, int h, int r, unsigned int t, unsigned int b);
+extern void console_blend(int x, int y, int w, int h, unsigned int rgb, int a);
+extern void console_rrblend(int x, int y, int w, int h, int r, unsigned int rgb, int a);
+extern void console_glow(int cx, int cy, int rx, int ry, unsigned int rgb, int ai, int ao, int stop);
+extern int  console_wall_save(void);
+extern void console_wall_paint(int x, int y, int w, int h);
+extern int  console_wall_ok(void);
+extern void console_wedge(int cx, int cy, unsigned int rgb, int a0, int f, int m, int e);
+extern int  console_blur(int x, int y, int w, int h, int r);
+extern void console_blur_paint(int slot, int x, int y);
+extern void console_blur_free(void);
+extern void ser_puts(const char *s);
 extern unsigned long console_vram(void);
 extern int  console_cols(void);
 extern int  console_cell_w(void);
@@ -317,6 +326,8 @@ extern void wm_frame(void);
 extern int  wm_running(void);
 extern void wm_stop(void);
 extern int  wm_focused(void);
+extern void wm_focus(int win);
+extern void wm_raise(int win);
 extern int  wm_count(void);
 extern int  wm_add_tab(int win, int app, const char *title);
 extern void wm_damage(int x, int y, int w, int h);
@@ -623,6 +634,29 @@ Value zl_calln(const char *name, int n, ...)
      * framebuffer, so zl asks rather than hardcoding it */
     if (streq(name, "status_row")) return zl_num((double)console_status_row());
     if (streq(name, "con_kind"))   return zl_num((double)console_kind());
+    /* Stop the console painting while the compositor owns the screen. The tee
+     * into term.c's scrollback and the write to COM1 both continue - see
+     * console.c for why that split is the point rather than a shortcut. */
+    if (streq(name, "con_mute"))   { console_mute((int)a[0].num); return zl_nil(); }
+    if (streq(name, "gradtop"))    { console_gradtop((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(unsigned int)(unsigned long long)a[5].num,(unsigned int)(unsigned long long)a[6].num); return zl_nil(); }
+    /* v10: translucency, the two gradient shapes, and the blur CACHE. The
+     * blur is a cache and not a filter on purpose - one is 7.4 ms and the
+     * other is 0.18 ms, and a panel that blurs while it moves pays the first
+     * every frame. See fb.c. */
+    if (streq(name, "blend"))      { console_blend((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num,(int)a[5].num); return zl_nil(); }
+    if (streq(name, "rrblend"))    { console_rrblend((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(unsigned int)(unsigned long long)a[5].num,(int)a[6].num); return zl_nil(); }
+    if (streq(name, "glow"))       { console_glow((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num,(int)a[5].num,(int)a[6].num,(int)a[7].num); return zl_nil(); }
+    if (streq(name, "wall_save"))  return zl_num((double)console_wall_save());
+    if (streq(name, "wall_ok"))    return zl_num((double)console_wall_ok());
+    if (streq(name, "wall_paint")) { console_wall_paint((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "wedge"))      { console_wedge((int)a[0].num,(int)a[1].num,(unsigned int)(unsigned long long)a[2].num,(int)a[3].num,(int)a[4].num,(int)a[5].num,(int)a[6].num); return zl_nil(); }
+    if (streq(name, "blur"))       return zl_num((double)console_blur((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num));
+    if (streq(name, "blurdraw"))   { console_blur_paint((int)a[0].num,(int)a[1].num,(int)a[2].num); return zl_nil(); }
+    if (streq(name, "blurfree"))   { console_blur_free(); return zl_nil(); }
+    /* COM1 only - see support.c. The shell prompt has to reach the serial log
+     * even when it is drawn as pixels at the bottom of a window, because that
+     * is the string every gate in this repo waits for. */
+    if (streq(name, "ser_out"))    { if (a[0].type==V_STR) ser_puts(a[0].str); return zl_nil(); }
     if (streq(name, "vram"))       return zl_num((double)console_vram());
     if (streq(name, "con_cols"))   return zl_num((double)console_cols());
     if (streq(name, "con_rows"))   return zl_num((double)console_rows());
@@ -760,6 +794,15 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_run"))     return zl_num((double)wm_running());
     if (streq(name, "wm_stop"))    { wm_stop(); return zl_nil(); }
     if (streq(name, "wm_focus"))   return zl_num((double)wm_focused());
+    /* ...and the SETTER, which had no builtin at all. Without it the window
+     * that owns the keyboard at boot is whichever one was opened last, and the
+     * ordering that decides that is fixed for a different reason entirely -
+     * the shell must exist before the boot log prints, because the log goes
+     * inside it. So the shell was opened first and the About window got the
+     * keys, and every character typed into a freshly booted desktop went to a
+     * window with no app_event. Focus is policy; policy lives in zl. */
+    if (streq(name, "wm_setfocus")) { wm_focus((int)a[0].num); return zl_nil(); }
+    if (streq(name, "wm_raise"))   { wm_raise((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_n"))       return zl_num((double)wm_count());
     if (streq(name, "wm_dmg"))     { wm_damage_win((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
@@ -908,10 +951,9 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "mhide"))     { console_pointer_hide(); return zl_nil(); }
     if (streq(name, "present"))   { console_present(); return zl_nil(); }
     if (streq(name, "icon"))      { console_icon((int)a[0].num,(int)a[1].num,(int)a[2].num,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
-    if (streq(name, "bg_snap"))   { console_bg_snapshot(); return zl_nil(); }
-    if (streq(name, "bg_rest"))   { console_bg_restore((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
-    if (streq(name, "grab"))      { console_grab((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
-    if (streq(name, "stamp"))     { console_stamp((int)a[0].num,(int)a[1].num); return zl_nil(); }
+    /* bg_snap / bg_rest / grab / stamp are GONE, C4. They were the
+     * snapshot-and-sticker drag; the compositor repaints from damage and needs
+     * no snapshot. See the note where they lived in fb.c. */
     if (streq(name, "cube3d"))    { console_cube_filled((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "cube_clip")) { console_cube_clip((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "cpu_char"))  return zl_num((double)cpu_brand_byte((int)a[0].num));

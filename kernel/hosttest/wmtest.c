@@ -63,6 +63,7 @@ int idt_mouse_btn(void) { return fake_btn; }
 unsigned int idt_ticks(void) { return fake_ticks; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }
+int ser_rx(void)        { return -1; }   /* no UART in the harness */
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
 void zl_putc_pub(char c) { (void)c; }        /* fb.c's boot line: not wanted here */
 
@@ -523,6 +524,59 @@ int main(void)
     frame();
     ok("a focus change leaves no shadow edge behind",
        all_wallpaper(200 - 60, 200 - 60, 200 + 300 + 60, 200 + 200 + 60));
+
+    /* --------------------------------------------- the animation timeline
+     * Three things have to be true and each has been got wrong by somebody:
+     * it STARTS, it ENDS, and it does not move the target. The third is the
+     * one that matters most - an animated window whose hit test follows the
+     * animation is a UI where clicks land where the control WAS, and it is
+     * invisible in any screenshot taken after the animation settles. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    pointer(1500, 1000, 0);
+    int aw = wm_open(1, "anim", 300, 300, 400, 300);
+    for (int i = 0; i < 8; i++) frame();          /* let the open scale settle */
+
+    ok("a fresh window is not animating", wm_anim_running(aw) == 0);
+    ok("...and is fully opaque", wm_anim_alpha(aw) == 255);
+
+    ok("an animation starts", wm_anim(aw, ANIM_PULSE) == 1
+                              && wm_anim_running(aw) == ANIM_PULSE);
+
+    /* HIT TESTING IS UNAFFECTED, checked at the animation's most distorted
+     * frame rather than at the end - checking after it settles proves nothing
+     * at all, which is exactly how this class of bug survives. */
+    frame(); frame();
+    ok("...and hit testing still finds it mid-animation",
+       wm_at(300 + 200, 300 + 150) == aw);
+    ok("...and the alpha really is partial", wm_anim_alpha(aw) < 255
+                                             && wm_anim_alpha(aw) > 0);
+
+    /* IT ENDS. A timeline entry that never frees its slot exhausts ANIM_MAX
+     * and every later animation is refused - which shows up as "the UI stopped
+     * animating after a while", the worst kind of bug to chase. */
+    for (int i = 0; i < 12; i++) frame();
+    ok("an animation ends and frees its slot", wm_anim_running(aw) == 0);
+    ok("...and leaves the window settled", wm_anim_alpha(aw) == 255);
+
+    /* A SCALE KIND DOES NOT MOVE THE TARGET EITHER. ANIM_PRESS shrinks the
+     * window to 96%, so a point 2% in from the edge is outside what is DRAWN
+     * and must still hit. */
+    ok("a scale animation starts", wm_anim(aw, ANIM_PRESS) == 1);
+    frame();
+    ok("...and an edge point still hits the settled rect",
+       wm_at(300 + 4, 300 + 4) == aw);
+    for (int i = 0; i < 8; i++) frame();
+    ok("...and it ends too", wm_anim_running(aw) == 0);
+
+    /* ANIM_MAX IS A REFUSAL, not a silent drop - the same discipline as
+     * wm_open's WM_MAX. Eight slots, nine distinct requests. */
+    int started = 0;
+    for (int i = 0; i < WM_MAX && i < 9; i++) {
+        int w2 = wm_open(1, "x", 10 + i * 30, 10, 60, 40);
+        if (w2 >= 0 && wm_anim(w2, ANIM_FADE)) started++;
+    }
+    ok("the animation array is a ceiling, and full refuses", started == 8);
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;

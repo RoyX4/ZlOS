@@ -23,8 +23,16 @@ OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT
 # generous ceiling; a healthy kernel now finishes as fast as the host allows,
 # and only a genuinely stuck one waits out the ceiling.
 CEILING=180
-# .=throwaway, h=help, 20f=fib(20), q=halt
-printf '.h20fq' | timeout "$CEILING" qemu-system-i386 \
+# THE KEYS CHANGED WITH THE INVERSION, and the reason is worth stating: this
+# path boots through raw_boot.asm, which asks the card for a linear framebuffer
+# itself - so px_w() is non-zero, the COMPOSITOR is the boot state here, and
+# the shell is a window inside it. Single keypresses are not commands any more.
+# `.h20fq` therefore typed five characters into a line buffer and pressed
+# nothing, and the gate correctly reported an unresponsive shell.
+#
+# The leading '.' is still the throwaway QEMU may eat before the guest runs;
+# the \r after it flushes whatever survived as one empty or unknown line.
+printf '.\rhelp\rfib 20\rquit\r' | timeout "$CEILING" qemu-system-i386 \
     -drive file=zlOS.img,format=raw -serial stdio -display none -no-reboot \
     >"$OUT" 2>/dev/null &
 QPID=$!

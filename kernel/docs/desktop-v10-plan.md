@@ -1,5 +1,10 @@
 # Making zlOS look like the v10 prototype — the plan
 
+> **DONE 2026-08-18. All ten items in §6 landed, plus five defects the work
+> exposed. What actually happened, with the numbers, is at the bottom of this
+> file under "§8 — the run".** The plan below is left exactly as written so the
+> two can be compared; where reality disagreed with it, §8 says so.
+
 **Written 2026-08-18, as the handoff into a fresh session.** Read this, then
 `desktop-TODO.md` for the numbered task list.
 
@@ -227,3 +232,107 @@ Prototype: `~/zl OS v10.dc.html` · Contract: [`../ui.h`](../ui.h) · Wiring:
 [`desktop-TODO.md`](desktop-TODO.md) · Numbers:
 [`desktop-polish-and-speed.md`](desktop-polish-and-speed.md) · Last night:
 [`desktop-overnight-run.md`](desktop-overnight-run.md)
+
+
+---
+
+## 8. The run — what landed, 2026-08-18
+
+All ten items in §6, in order, each gated. Five things the plan did not
+anticipate are in §8.2, and they are the more interesting half.
+
+### 8.1 The ten
+
+| # | task | gate | result |
+|---|---|---|---|
+| 1 | prove typed commands | `probe-shot.py` types `help` then a bad word | **green** — `shots/v10-typed.png` shows the help text and `unknown command: unknownthing` |
+| 2 | compositor as boot state | `verify.sh` byte-identical | **green**, and `verify-raw.sh` + `verify-efi.sh` too |
+| 3 | C4 — delete the sticker drag | all four boots; 4K back buffer | **green**. Scene hashes byte-identical at all three modes. 4K back buffer now **ON** |
+| 4 | `fb_fill_blend()` | fbbench hash + blend assertion | **green** — 22.2 cyc/px, hashes unchanged |
+| 5 | radial + conic gradients | a render | **green** — both in the wallpaper, proved by sampling a row |
+| 6 | the animation timeline | `wmtest` starts/ends/hit-test | **green** — 12 new assertions, 69 total |
+| 7 | cached blur | one blur ≤ 9 ms, cache hit ≈ 0 | **green** — **7.37 ms** cold, **0.18 ms** cached |
+| 8 | type scale 3×2 | kernel size stated; `verify-raw.sh` | **green** — +250 KiB, and see §8.2 |
+| 9 | more icons | dock screenshot | **green** — 10 → 20 icons, +28 KiB |
+| 10 | prototype spacing + shapes | side-by-side | **green** — radius 5 → 12, row_h 24 → 28 |
+
+Measured numbers, `hosttest/fbbench` at 1920×1200 on the i7-10510U:
+
+```
+fill_blend 600x460 (a=160)      2.655 ms    22.16 cyc/px
+rrect_blend 600x460 r=10        2.662 ms    22.22 cyc/px
+radial glow 900x700            12.348 ms    45.16 cyc/px
+conic wedge 900x700             7.344 ms    26.86 cyc/px
+BLUR 600x460 r=20 (cold)        7.368 ms    61.50 cyc/px
+...cached, painted              0.184 ms     1.54 cyc/px
+WHOLE DESKTOP redraw            5.377 ms     5.38 cyc/px
+```
+
+**C4's headline, and it is the one worth keeping:** at 3840×2160 the back
+buffer was OFF and a whole-desktop redraw cost 44 ms. It is ON now and costs
+**9.71 ms**. A full-screen fill went from 7.97 cyc/px to **0.71**.
+
+### 8.2 The five things the plan did not know
+
+**1. `probe-shot.py -k` could not type into the compositor at all.** §1a assumed
+it could. `wm_frame()` reads `input.c`'s queue; zl's `key_get()` read COM1
+directly; the two never met. So the moment the compositor became the boot
+state, *every gate and probe in the repo would have gone blind*. Serial is now
+a third source feeding the one queue, alongside PS/2 and USB — and it had to
+carry a UART-absence check, because an undecoded port floats high and would
+have injected an endless stream of 0xFF keystrokes on the ThinkPad, which has
+no serial port and no other way to be debugged.
+
+**2. Focus went to the wrong window, and the ordering that caused it was
+load-bearing.** `wm_open` focuses what it opens; the shell must be opened FIRST
+so the boot log lands inside it. Those two facts together gave the keyboard to
+the About window, which has no `app_event`. Typing did nothing and said
+nothing. There was no `wm_focus` **setter** builtin at all.
+
+**3. The console kept painting underneath the compositor.** Every `print()`
+went to the window (via term.c's scrollback) *and* to the framebuffer console's
+own scrolling region, leaving a black band across the desktop. `con_mute()`
+stops the pixels while the scrollback and COM1 both keep flowing — which is the
+split that keeps every gate reading what it read before.
+
+**4. The serial prompt vanished with the text shell**, and every probe waits for
+`zl> `. Restored as a serial-only write (`ser_out`), because routing it through
+`print` would put a permanently-empty second prompt in the window under the
+live one.
+
+**5. `verify-raw.sh` failed, correctly.** That path boots through
+`raw_boot.asm`, which sets up its own framebuffer — so the compositor is the
+boot state there and `.h20fq` typed five characters into a line buffer and
+pressed nothing. Also found on the way: **`raw_boot.asm` loads a fixed 40
+chunks**, 1.25 MiB, against a 1.23 MiB kernel — 84 KiB of headroom, which §6.8
+would have walked straight through. A kernel over that limit is not a build
+error, it is silently truncated and jumped into. `mkdisk.sh` now refuses to
+build such an image, and CHUNKS is 60.
+
+Two smaller ones: `wm_running()` was initialised to **1**, so it answered "the
+compositor is up" on a machine that had never had a framebuffer; and ten of
+`run_command`'s commands had no typed name, so they were reachable from the text
+shell and from nowhere else.
+
+### 8.3 What was deliberately not done
+
+- **A real opacity fade.** `ANIM_FADE`'s alpha is computed, exposed and
+  asserted, but nothing composites it: a fade needs the window drawn against
+  what is *behind* it, which needs a copy of the rectangle taken before the
+  window was drawn on it. `ANIM_PULSE` composites today because a tint needs no
+  such copy. Naming the difference beats shipping a tint that pretends.
+- **The seven full-screen demos are still full-screen.** Converting them is
+  desktop-TODO 2e and it was not on this plan's list.
+- **The start menu.** Deleted rather than ported — it rode on the same
+  grab/stamp C4 removed, and `WF_MODAL` is the mechanism that replaces it.
+
+### 8.4 One thing §4 got wrong, and it is worth the correction
+
+§4 said a translucent fill is "a `fb_fill_blend()`, ~20 lines". True. What it
+did not say is that **a full-screen translucent pass costs 22 ms**, and the
+compositor redraws the wallpaper inside *every* damage rectangle. The v10
+background is six such passes. There is no arrangement of that which fits in a
+frame — so the wallpaper is drawn once into a cache and blitted at 1.5 cyc/px.
+That is not an optimisation; it is the only way the look exists. The cache is
+one screen-sized buffer out of the arena C4 freed, and at 4K it refuses and
+says so.

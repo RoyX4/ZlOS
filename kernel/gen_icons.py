@@ -230,6 +230,86 @@ def icon_power(d):
     path(d, [(cx, 13), (cx, 48)], width=W_BOLD)
 
 
+
+# ---- the second set, v10 SS6.9 ---------------------------------------------
+# Taken from the vocabulary the prototype's own markup uses - Places, Devices,
+# Properties, Rename, Close, Cancel, OK, Unlock, End Process, Update interval,
+# Accent colour, plus the header's network state and its search field ("No
+# matches"). These are the controls that UI actually needs; the first ten were
+# app launchers, which is a different job.
+
+def icon_search(d):
+    """a magnifier: ring plus a handle on the lower right diagonal"""
+    cx, cy, r = 40, 40, 24
+    ring(d, cx, cy, r, width=W_MAIN)
+    a = polar(cx, cy, r + W_MAIN / 2, 45)
+    path(d, [a, (80, 80)], width=W_BOLD)
+
+
+def icon_lock(d):
+    """a padlock: shackle arc over a body. The shackle is drawn as an arc
+    rather than a rounded rect so the two uprights stay parallel at 24px."""
+    d.arc([30, 16, 66, 56], start=180, end=360, fill=INK, width=W_MAIN)
+    path(d, [(30, 40), (30, 50)], width=W_MAIN, caps=False)
+    path(d, [(66, 40), (66, 50)], width=W_MAIN, caps=False)
+    d.rounded_rectangle([22, 48, 74, 84], radius=8, outline=INK, width=W_MAIN)
+    dot(d, 48, 66, 6)
+
+
+def icon_drive(d):
+    """a disk: a wide rounded body with a status lamp - the Devices row"""
+    d.rounded_rectangle([LO, 30, HI, 68], radius=10, outline=INK, width=W_MAIN)
+    path(d, [(20, 49), (56, 49)], width=W_THIN)
+    dot(d, 74, 49, 6)
+
+
+def icon_close(d):
+    """an X. Two strokes, and they must CROSS at the centre - drawing them as
+    two independent diagonals with different lengths reads as a wonky X."""
+    path(d, [(26, 26), (70, 70)], width=W_BOLD)
+    path(d, [(70, 26), (26, 70)], width=W_BOLD)
+
+
+def icon_check(d):
+    """a tick - OK, and the on state of anything"""
+    path(d, [(22, 50), (40, 68), (76, 28)], width=W_BOLD)
+
+
+def icon_chevron(d):
+    """a right chevron: submenus, disclosure, the next page"""
+    path(d, [(38, 24), (64, 48), (38, 72)], width=W_BOLD)
+
+
+def icon_clock(d):
+    """a clock face with two hands - Update interval, and the tray"""
+    ring(d, S / 2, S / 2, 32, width=W_MAIN)
+    path(d, [(S / 2, S / 2), (S / 2, 26)], width=W_MAIN)        # minute
+    path(d, [(S / 2, S / 2), (66, 56)], width=W_MAIN)           # hour
+
+
+def icon_network(d):
+    """three rising bars under an arc - the header's "net up" """
+    for x, top in ((26, 66), (44, 54), (62, 42)):
+        path(d, [(x, 78), (x, top)], width=10)
+    d.arc([18, 18, 78, 78], start=225, end=315, fill=INK, width=W_THIN)
+
+
+def icon_volume(d):
+    """a speaker cone plus one wave. Two waves do not survive 24px - the outer
+    arc lands within a pixel of the inner one and they merge."""
+    poly(d, [(20, 40), (34, 40), (50, 24), (50, 72), (34, 56), (20, 56)],
+         width=W_THIN)
+    d.arc([44, 28, 76, 68], start=300, end=60, fill=INK, width=W_MAIN)
+
+
+def icon_grid(d):
+    """four rounded squares - Activities, the app grid"""
+    for cx in (32, 64):
+        for cy in (32, 64):
+            d.rounded_rectangle([cx - 15, cy - 15, cx + 15, cy + 15],
+                                radius=5, outline=INK, width=W_MAIN)
+
+
 ICONS = [
     ("terminal", icon_terminal),
     ("snake",    icon_snake),
@@ -241,6 +321,17 @@ ICONS = [
     ("files",    icon_files),
     ("settings", icon_settings),
     ("power",    icon_power),
+    # v10 SS6.9 - the control set, from the prototype's own vocabulary
+    ("search",   icon_search),
+    ("lock",     icon_lock),
+    ("drive",    icon_drive),
+    ("close",    icon_close),
+    ("check",    icon_check),
+    ("chevron",  icon_chevron),
+    ("clock",    icon_clock),
+    ("network",  icon_network),
+    ("volume",   icon_volume),
+    ("grid",     icon_grid),
 ]
 
 

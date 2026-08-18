@@ -97,10 +97,9 @@ int fb_get_rows(void) { return fb_rows; }
  * stopping one from eating the next is arithmetic. Every base below was read
  * out of the file that owns it - do not take this list on trust, re-grep it:
  *
- *   0x08000000  128 MiB   fb.c          bg_buf   drag background snapshot
- *   0x0A000000  160 MiB   fb.c          sp_buf   drag sprite
+ *   0x08000000  128 MiB   fb.c          back     the back buffer
  *   0x0B000000  176 MiB   sched.c       STACK_BASE, kernel task stacks
- *   0x0C000000  192 MiB   fb.c          back     the back buffer
+ *   0x0C000000  192 MiB   fb.c          blur     the cached-blur arena
  *   0x0D000000  208 MiB   nvme.c        NMEM_ASQ, admin queues
  *   0x0E000000  224 MiB   xhci.c        XMEM_DCBAA - the DMA arena
  *   0x0F000000  240 MiB   virtio_gpu.c  VMEM_DESC
@@ -112,42 +111,32 @@ int fb_get_rows(void) { return fb_rows; }
  * back_on 0 and took the back buffer, subpixel text, fast read-back AND
  * window dragging with it, without printing a word. desktop-TODO 0a, T-1.
  *
- * (Group C deletes bg_buf and sp_buf entirely - the snapshot-and-sticker drag
- * machinery - which frees 128..176 MiB and lets `back` move down to cover 4K.
- * Until then 192..208 MiB is what it has: 16 MiB, i.e. up to 4,194,304 pixels,
- * which covers 2560x1440 and 2560x1600 but not 3840x2160.)
+ * C4 CHANGED THIS MAP, and the change is the point of C4. 128 MiB and 160 MiB
+ * used to hold bg_buf and sp_buf - a whole-screen snapshot of the desktop and a
+ * bitmap of the window being dragged, the "sticky note" way to move a window
+ * without a GPU. The compositor repaints from damage and needs neither, so both
+ * are gone and `back` moved down into the 48 MiB they occupied.
+ *
+ * What that bought, all of it measurable rather than argued:
+ *
+ *   - the back buffer now covers 3840x2160 (31.6 MiB of 48). It could not
+ *     before: its own span is 16 MiB, so 4K fell back to writing straight to
+ *     VRAM, where a full-screen fill costs 7.97 cyc/px against 2.93.
+ *   - the 640x480 drag ceiling is gone. It is why the 1256x944 terminal could
+ *     never be dragged - nearly 4x over sp_buf's limit.
+ *   - the 12 px shadow smear is gone with it. fb_shadow reaches x + w + 28 at
+ *     ui() == 2 and the drag erased only w + 16, so every drag step left a
+ *     sliver of shadow behind. Damage-based repaint has no such arithmetic to
+ *     get wrong: a window's damage IS its frame plus its shadow.
+ *   - 192..208 MiB, which back has vacated, becomes the cached-blur arena.
  */
-#define HI_BG     0x08000000UL
-#define HI_SP     0x0A000000UL
+#define HI_BACK   0x08000000UL
 #define HI_SCHED  0x0B000000UL
-#define HI_BACK   0x0C000000UL
+#define HI_BLUR   0x0C000000UL
 #define HI_NVME   0x0D000000UL
 
-#define BG_LIMIT   ((unsigned int)(HI_SP    - HI_BG))    /* 32 MiB */
-#define SP_LIMIT   ((unsigned int)(HI_SCHED - HI_SP))    /* 16 MiB */
-#define BACK_LIMIT ((unsigned int)(HI_NVME  - HI_BACK))  /* 16 MiB */
-
-/* THE FALLBACK ARENA. 128..176 MiB is 48 MiB - the drag buffers plus the gap
- * to sched.c - and it is the only span in the map big enough for 3840x2160,
- * which needs 31.6 MiB and does not fit in back's own 16.
- *
- * At a mode that large the drag buffers are unusable ANYWAY: bg_buf would need
- * the same 31.6 MiB and has 32, leaving no room for a back buffer beside it.
- * So the choice is not "back buffer or dragging", it is "back buffer or
- * neither", and the arena is worth more as one big buffer than as two that
- * cannot both be used.
- *
- * The difference this makes is not marginal. With back off, every primitive
- * goes to VRAM through put_pixel instead of the fast row path, and a
- * full-screen fill at 4K costs 77x what it costs at 1920x1200 - for 3.6x the
- * pixels. Measured: a whole desktop redraw at 3840x2160 is 44 ms without a
- * back buffer, against 3.95 ms at 1920x1200 with one.
- *
- * C4 supersedes this properly: deleting the sticker-drag machinery frees the
- * arena outright and dragging comes back through damage-based repaint, which
- * needs no snapshot at all. Until then this is the honest trade, and the boot
- * log states it rather than leaving someone to wonder why dragging stopped. */
-#define BIG_LIMIT  ((unsigned int)(HI_SCHED - HI_BG))    /* 48 MiB */
+#define BACK_LIMIT ((unsigned int)(HI_SCHED - HI_BACK))  /* 48 MiB */
+#define BLUR_LIMIT ((unsigned int)(HI_NVME  - HI_BLUR))  /* 16 MiB */
 
 /* THE MAP MUST BE IN ORDER, AND THE COMPILER SHOULD SAY SO.
  *
@@ -160,17 +149,16 @@ int fb_get_rows(void) { return fb_rows; }
  *
  * These cost nothing at run time and fail the build the moment the map stops
  * making sense. A comment claiming the order would not have. */
-_Static_assert(HI_BG    < HI_SP,    "high-RAM map out of order: bg >= sp");
-_Static_assert(HI_SP    < HI_SCHED, "high-RAM map out of order: sp >= sched");
-_Static_assert(HI_SCHED < HI_BACK,  "high-RAM map out of order: sched >= back");
-_Static_assert(HI_BACK  < HI_NVME,  "high-RAM map out of order: back >= nvme");
-/* and the fallback arena must not reach into sched.c's stacks */
-_Static_assert(HI_BG + (unsigned long)BIG_LIMIT <= HI_SCHED,
-               "the back buffer's fallback arena overruns sched.c");
+_Static_assert(HI_BACK  < HI_SCHED, "high-RAM map out of order: back >= sched");
+_Static_assert(HI_SCHED < HI_BLUR,  "high-RAM map out of order: sched >= blur");
+_Static_assert(HI_BLUR  < HI_NVME,  "high-RAM map out of order: blur >= nvme");
+/* and 3840x2160x4 must actually fit in what back was given, or the headline
+ * claim of C4 is false in a way nobody would notice until a 4K panel */
+_Static_assert(3840UL * 2160UL * 4UL <= (unsigned long)BACK_LIMIT,
+               "the back buffer no longer covers 3840x2160");
 
 static unsigned int *back = (unsigned int *)HI_BACK;
 static int back_on = 0;
-static int back_took_arena = 0;   /* back is living in the drag buffers' space */
 
 /* ---- SIMD, and exactly where it is allowed --------------------------------
  * cpu.c has detected SSE/SSE2/SSE3/SSSE3 since it was written and NOTHING has
@@ -411,50 +399,35 @@ static void fb_putu(unsigned int v)
     while (i) zl_putc_pub(b[--i]);
 }
 
-/* Report EACH buffer separately, because they no longer fail together.
- * They used to: BACK_MAX and BG_MAX were both 1920*1200, so one resolution
- * killed the back buffer and dragging in the same step and it was fair to list
- * them as one loss. Sized from real neighbours they have different ceilings -
- * at 3840x2160 the back buffer does not fit but the drag snapshot does, by
- * 368 KiB. Saying "dragging is lost" there would be a lie the boot log tells
- * every time, which is worse than the silence this replaced. */
+/* There used to be a second verdict on this line - "drag ON/OFF" - because
+ * dragging went through its own pair of fixed buffers with their own ceiling,
+ * and at 2560x1440 it switched itself off without a word. C4 deleted those
+ * buffers: dragging is damage-based repaint now and has no buffer to run out
+ * of, so there is nothing left to report about it. That is the difference
+ * between removing a warning and removing the thing it warned about. */
 static void fb_report_mode(unsigned int need)
 {
-    int drag_ok = (need <= BG_LIMIT) && !back_took_arena;
-
     fb_puts("  fb: ");
     fb_putu(fb_w); fb_puts("x"); fb_putu(fb_h); fb_puts("x"); fb_putu(fb_bpp);
     fb_puts(" cell "); fb_putu((unsigned)cell_w); fb_puts("x"); fb_putu((unsigned)cell_h);
     fb_puts(", back "); fb_puts(back_on ? "ON" : "OFF");
-    fb_puts(", drag "); fb_puts(drag_ok ? "ON" : "OFF");
     fb_puts("  ("); fb_putu(need >> 10); fb_puts(" KiB/mode)\n");
 
     if (!back_on) {
         fb_puts("      back OFF: wants "); fb_putu(need >> 10);
         fb_puts(" KiB, "); fb_putu(BACK_LIMIT >> 10);
-        fb_puts(" KiB free below nvme - no subpixel text, read-back hits VRAM\n");
+        fb_puts(" KiB free below sched - no subpixel text, read-back hits VRAM\n");
     }
     /* Say where it ends, not just that it fits. "back ON" is a claim; an
      * address is a fact somebody can check against the map in this file. */
     if (back_on) {
         unsigned long top = (unsigned long)back + need;
-        unsigned long ceil = back_took_arena ? HI_SCHED : HI_NVME;
         fb_puts("      back at ");   fb_putu((unsigned)((unsigned long)back >> 20));
         fb_puts(" MiB, ends at ");   fb_putu((unsigned)(top >> 20));
-        fb_puts(" MiB, ceiling ");   fb_putu((unsigned)(ceil >> 20));
+        fb_puts(" MiB, ceiling ");   fb_putu((unsigned)(HI_SCHED >> 20));
         fb_puts(" MiB");
-        if (top > ceil) fb_puts("  *** OVERRUN - THIS WILL CORRUPT THE NEXT BUFFER ***");
+        if (top > HI_SCHED) fb_puts("  *** OVERRUN - THIS WILL CORRUPT THE NEXT BUFFER ***");
         fb_puts("\n");
-    }
-    if (!drag_ok) {
-        fb_puts("      drag OFF: ");
-        if (back_took_arena) {
-            fb_puts("the back buffer is using the drag arena at 128 MiB\n");
-        } else {
-            fb_puts("snapshot wants "); fb_putu(need >> 10);
-            fb_puts(" KiB, "); fb_putu(BG_LIMIT >> 10);
-            fb_puts(" KiB free below sp_buf - windows will not move\n");
-        }
     }
 }
 
@@ -529,26 +502,16 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
      * neighbour, in which case everything still works - just slower, straight
      * to VRAM - and the boot log SAYS SO. See the high-RAM map above. */
     unsigned int need = width * height * 4u;
-    /* Prefer back's own span; fall back to the drag arena; then give up. The
-     * BASE is computed from the map rather than hardcoded - which is what
-     * desktop-TODO 0a asked for and what the first version of this only did
-     * for the limit. */
-    back_took_arena = 0;
-    /* The static asserts above prove the MAP is sane. This proves the choice
-     * made from it is: a mode arrives at run time and `need` is computed from
-     * it, so the one thing a compile-time check cannot cover is whether this
-     * particular mode's buffer stays inside the span picked for it. */
-    if (need <= BACK_LIMIT) {
-        back = (unsigned int *)HI_BACK;
-        back_on = 1;
-    } else if (need <= BIG_LIMIT) {
-        back = (unsigned int *)HI_BG;
-        back_on = 1;
-        back_took_arena = 1;
-    } else {
-        back = (unsigned int *)HI_BACK;
-        back_on = 0;
-    }
+    /* One span, one test. There used to be a fallback into the drag buffers'
+     * arena because back's own 16 MiB could not hold 4K; C4 gave that arena to
+     * back outright, so the fallback has nothing left to fall back FROM.
+     *
+     * The static asserts above prove the MAP is sane, and one of them proves
+     * 3840x2160 fits. This is the run-time half: a mode arrives from firmware
+     * and `need` is computed from it, so a compile-time check cannot cover
+     * whether THIS mode's buffer stays inside the span. */
+    back = (unsigned int *)HI_BACK;
+    back_on = (need <= BACK_LIMIT);
     ndmg    = 0;                 /* the mode changed; old damage means nothing */
     pdirty  = 0;
     fb_report_mode(need);
@@ -970,6 +933,59 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
             put_pixel((unsigned)xx, (unsigned)yy, rgb);
 }
 
+/* ---- translucency ---------------------------------------------------------
+ * The v10 prototype uses rgba() 107 times: every panel, every hover state,
+ * every overlay is a colour laid over what is behind it rather than instead of
+ * it. This is the primitive that makes those expressible, and it is small
+ * because the hard part was already here - blend_rgb() has done gamma-correct
+ * linear-light compositing for every antialiased glyph and shadow pixel since
+ * the text renderer was written. A translucent fill is that, over a rectangle.
+ *
+ * IT IS ALSO THE PREREQUISITE FOR HALF THE ANIMATION KEYFRAMES. zpop, ztoast
+ * and zov are opacity fades, and a fade needs the thing composited at
+ * fractional opacity against whatever is behind it. wm.c's open animation is a
+ * SCALE rather than a fade precisely because this did not exist.
+ *
+ * Cost, measured rather than assumed: a translucent fill reads back every
+ * pixel and blends it, so it is nearer the shadow's cost than the fill's - see
+ * fbbench. Use fb_fill_px when the alpha is 255; this does that for you, but
+ * knowing why matters when a design asks for 254.
+ */
+void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a)
+{
+    if (w <= 0 || h <= 0 || a <= 0) return;
+    if (a >= 255) { fb_fill_px(x, y, w, h, rgb); return; }
+
+    int x0 = x, y0 = y, x1 = x + w, y1 = y + h;
+    /* against the SCISSOR, folded into the loop bounds rather than tested per
+     * pixel - the same rule as every other primitive in this file, and the
+     * reason a clipped draw costs no more per pixel than an unclipped one */
+    if (x0 < clip_x0) x0 = clip_x0;
+    if (y0 < clip_y0) y0 = clip_y0;
+    if (x1 > clip_x1) x1 = clip_x1;
+    if (y1 > clip_y1) y1 = clip_y1;
+    if (x0 >= x1 || y0 >= y1) return;
+
+    if (back_on) {
+        /* straight at the back buffer: the read-back IS the destination, so
+         * there is no reason to go through fb_get_px/put_pixel and pay their
+         * bounds test and address multiply twice per pixel */
+        for (int yy = y0; yy < y1; yy++) {
+            unsigned int *row = back + (unsigned long)yy * fb_w;
+            for (int xx = x0; xx < x1; xx++)
+                row[xx] = blend_rgb(row[xx], rgb, a);
+        }
+        fb_damage(x0, y0, x1 - x0, y1 - y0);
+        return;
+    }
+    /* no back buffer: every read crosses PCIe at 30-50x the cost. Correct,
+     * just slow, and the boot log has already said the back buffer is off. */
+    for (int yy = y0; yy < y1; yy++)
+        for (int xx = x0; xx < x1; xx++)
+            put_pixel((unsigned)xx, (unsigned)yy,
+                      blend_rgb(fb_get_px(xx, yy), rgb, a));
+}
+
 /* a vertical gradient band - top colour fading to bottom colour. A flat bar
  * reads as "text mode"; a gradient reads as "a real UI". */
 /* A gradient, DITHERED. Truncating the interpolation to whole bytes leaves
@@ -1220,6 +1236,307 @@ void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb)
         }
 }
 
+/* The same shape, TRANSLUCENT - which is what the prototype's panels actually
+ * are, because its 34 border-radius declarations and its 107 rgba() ones
+ * overlap. It reuses fb_rrect's exact corner supersample rather than inventing
+ * a second one: two roundings that disagree by a pixel is how a UI ends up
+ * with panels whose edges do not line up with each other.
+ *
+ * Coverage and opacity MULTIPLY. A half-covered corner pixel of a 40% panel is
+ * 20%, not 50% and not 40% - getting this wrong gives a translucent panel a
+ * hard opaque rim, which is the one artifact that makes it read as fake. */
+void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a)
+{
+    if (w <= 0 || h <= 0 || a <= 0) return;
+    if (a >= 255) { fb_rrect(x, y, w, h, r, rgb); return; }
+    if (2 * r > w) r = w / 2;
+    if (2 * r > h) r = h / 2;
+    if (r < 0) r = 0;
+
+    fb_fill_blend(x + r, y, w - 2 * r, h, rgb, a);              /* centre column */
+    fb_fill_blend(x, y + r, r, h - 2 * r, rgb, a);              /* left edge     */
+    fb_fill_blend(x + w - r, y + r, r, h - 2 * r, rgb, a);      /* right edge    */
+    if (r <= 0) return;
+
+    for (int cy = 0; cy < r; cy++)
+        for (int cx = 0; cx < r; cx++) {
+            int hits = 0;
+            for (int sy = 0; sy < 4; sy++)
+                for (int sx = 0; sx < 4; sx++) {
+                    int dx = (cx * 8 + sx * 2 + 1) - r * 8;
+                    int dy = (cy * 8 + sy * 2 + 1) - r * 8;
+                    if (dx * dx + dy * dy <= r * r * 64) hits++;
+                }
+            if (hits == 0) continue;
+            int ca = (hits * 255 / 16) * a / 255;
+            blend_px(x + cx,         y + cy,         rgb, ca);
+            blend_px(x + w - 1 - cx, y + cy,         rgb, ca);
+            blend_px(x + cx,         y + h - 1 - cy, rgb, ca);
+            blend_px(x + w - 1 - cx, y + h - 1 - cy, rgb, ca);
+        }
+}
+
+/* ---- radial and conic gradients -------------------------------------------
+ * Read off the prototype rather than guessed at. Every one of its six is a
+ * colour fading to TRANSPARENT, not one colour to another:
+ *
+ *   radial-gradient(64% 50% at 16% 8%, rgba(126,166,44,.3) 0%, transparent 62%)
+ *   conic-gradient(from 214deg at 50% 50%, transparent 0deg,
+ *                  rgba(184,232,56,.075) 34deg, transparent 82deg)
+ *
+ * So the primitive is a GLOW composited over what is behind it, elliptical and
+ * off-centre, not a two-colour fill. A two-colour version would have been
+ * easier and would have painted over the wallpaper these exist to sit on.
+ */
+
+/* Integer square root, 32-bit, no division and no libgcc. The restoring
+ * algorithm: two bits of the operand per iteration, sixteen iterations. */
+static unsigned int isqrt32(unsigned int n)
+{
+    unsigned int rem = 0, root = 0;
+    for (int i = 0; i < 16; i++) {
+        root <<= 1;
+        rem = (rem << 2) | (n >> 30);
+        n <<= 2;
+        if (root < rem) { rem -= root + 1; root += 2; }
+    }
+    return root >> 1;
+}
+
+/* ANGLE, without a division per pixel and without atan.
+ *
+ * |dy|/(|dx|+|dy|) is the cheap "diamond angle": monotone in the true angle,
+ * one divide, and WRONG by up to 4 degrees if used directly - which is fine
+ * for sorting and not fine for a wedge whose stops are given in degrees.
+ *
+ * So the diamond value is corrected through a table, built once by the same
+ * monotone-walk inversion gamma_init() uses. For a true angle t, the diamond
+ * value is 256*sin(t)/(sin(t)+cos(t)); walking t from 0 to 90 degrees fills
+ * the inverse. isin() is Bhaskara's approximation, so the result is good to a
+ * fraction of a degree - far tighter than anything a soft glow can show.
+ *
+ * Units are 1/1024 of a turn throughout, because a turn in 1024 parts divides
+ * by shifting and degrees do not. */
+static int isin(int deg);          /* the 3D engine's Bhaskara sine, below */
+static int icos(int deg);
+static unsigned short diamond_deg[257];
+static int angle_ready = 0;
+
+static void angle_init(void)
+{
+    int prev = 0;
+    for (int t = 0; t <= 256; t++) diamond_deg[t] = 0;
+    /* quarter-degree steps: 361 samples over the first quadrant */
+    for (int q = 0; q <= 360; q++) {
+        int deg4 = q;                       /* q/4 degrees */
+        int s = isin(deg4 / 4), c = icos(deg4 / 4);
+        if (s < 0) s = 0;
+        if (c < 0) c = 0;
+        if (s + c == 0) continue;
+        int d = s * 256 / (s + c);          /* the diamond value at this angle */
+        if (d > 256) d = 256;
+        int a = q * 256 / 360;              /* 0..256 = 0..90 deg, in 1/1024 turn */
+        for (int k = prev; k <= d; k++) diamond_deg[k] = (unsigned short)a;
+        if (d >= prev) prev = d + 1;
+    }
+    for (int k = prev; k <= 256; k++) diamond_deg[k] = 256;
+    angle_ready = 1;
+}
+
+/* 0..1023 anticlockwise from due east, in 1/1024 of a turn */
+static int fb_angle1024(int dx, int dy)
+{
+    if (!angle_ready) angle_init();
+    int ax = dx < 0 ? -dx : dx;
+    int ay = dy < 0 ? -dy : dy;
+    int s = ax + ay;
+    if (s == 0) return 0;
+    int q = diamond_deg[(ay * 256) / s];         /* 0..256 within the quadrant */
+    if (dx >= 0) return (dy >= 0) ? q : (1024 - q);
+    return (dy >= 0) ? (512 - q) : (512 + q);
+}
+
+/* One glow pixel. Split out because the radial and the conic differ only in
+ * how they compute alpha, and duplicating the back-buffer/VRAM branch is how
+ * two primitives drift apart. */
+static void glow_px(int xx, int yy, unsigned int rgb, int a)
+{
+    if (a <= 0) return;
+    if (a > 255) a = 255;
+    if (back_on) {
+        unsigned int *p = back + (unsigned long)yy * fb_w + xx;
+        *p = blend_rgb(*p, rgb, a);
+        return;
+    }
+    put_pixel((unsigned)xx, (unsigned)yy, blend_rgb(fb_get_px(xx, yy), rgb, a));
+}
+
+/* Clip a rectangle to the scissor. Returns 0 if nothing is left. */
+static int clip_rect(int *x0, int *y0, int *x1, int *y1)
+{
+    if (*x0 < clip_x0) *x0 = clip_x0;
+    if (*y0 < clip_y0) *y0 = clip_y0;
+    if (*x1 > clip_x1) *x1 = clip_x1;
+    if (*y1 > clip_y1) *y1 = clip_y1;
+    return (*x0 < *x1 && *y0 < *y1);
+}
+
+/* radial-gradient(rx ry at cx cy, rgba(rgb, a0) 0%, transparent stop%)
+ *
+ * rx and ry are the ellipse's radii IN PIXELS; the caller turns the
+ * prototype's percentages into those, because a percentage of what is a layout
+ * question and this file does not do layout. `stop` is where the ramp ends, as
+ * a percentage of the radius - 62 in the example above.
+ *
+ * TWO ALPHAS, because the prototype uses this shape in both directions. A GLOW
+ * is (a_in = 77, a_out = 0): opaque at the centre, gone by the stop. A
+ * VIGNETTE is (a_in = 0, a_out = 209, stop = 100): nothing at the centre,
+ * darkening to the edge and staying dark beyond it. One primitive, and the
+ * fourth radial-gradient in the source is the second kind. */
+void fb_grad_radial(int x, int y, int w, int h, int cx, int cy,
+                    int rx, int ry, unsigned int rgb, int a_in, int a_out,
+                    int stop_pct)
+{
+    if (w <= 0 || h <= 0 || rx <= 0 || ry <= 0) return;
+    if (a_in <= 0 && a_out <= 0) return;
+    if (stop_pct <= 0) return;
+    int x0 = x, y0 = y, x1 = x + w, y1 = y + h;
+    if (!clip_rect(&x0, &y0, &x1, &y1)) return;
+
+    /* distance is measured in 1/256 of a radius, so the stop is too */
+    int stop = stop_pct * 256 / 100;
+    if (stop <= 0) return;
+    /* 16.16 per-pixel step, so the inner loop has no divide in it */
+    int ustep = (int)((256 << 16) / rx);
+
+    for (int yy = y0; yy < y1; yy++) {
+        int v = (yy - cy) * 256 / ry;
+        int vv = v * v;
+        int uacc = ((x0 - cx) * 256 / rx) << 16;
+        for (int xx = x0; xx < x1; xx++, uacc += ustep) {
+            int u = uacc >> 16;
+            int d2 = u * u + vv;
+            if (d2 >= stop * stop) {
+                /* past the stop the ramp has finished. With a_out == 0 - the
+                 * glow case - that is nothing to draw, and skipping the square
+                 * root here is most of what makes the glow affordable. */
+                if (a_out <= 0) continue;
+                glow_px(xx, yy, rgb, a_out);
+                continue;
+            }
+            int d = (int)isqrt32((unsigned int)d2);
+            glow_px(xx, yy, rgb, a_in + (a_out - a_in) * d / stop);
+        }
+    }
+    fb_damage(x0, y0, x1 - x0, y1 - y0);
+}
+
+/* conic-gradient(from `from` at cx cy, transparent 0deg, rgba(rgb,a0) `mid`,
+ * transparent `end`) - a soft wedge. Angles are degrees, as the source writes
+ * them; they are converted to 1/1024 turn once, here, not per pixel. */
+void fb_grad_conic(int x, int y, int w, int h, int cx, int cy,
+                   unsigned int rgb, int a0, int from_deg, int mid_deg,
+                   int end_deg)
+{
+    if (w <= 0 || h <= 0 || a0 <= 0) return;
+    if (mid_deg <= 0 || end_deg <= mid_deg) return;
+    int x0 = x, y0 = y, x1 = x + w, y1 = y + h;
+    if (!clip_rect(&x0, &y0, &x1, &y1)) return;
+
+    int from = (from_deg * 1024 / 360) & 1023;
+    int mid  = mid_deg * 1024 / 360;
+    int end  = end_deg * 1024 / 360;
+
+    for (int yy = y0; yy < y1; yy++) {
+        for (int xx = x0; xx < x1; xx++) {
+            /* CSS measures a conic gradient CLOCKWISE from twelve o'clock;
+             * fb_angle1024 measures anticlockwise from three. Getting this
+             * wrong mirrors the wedge, which looks deliberate and is not. */
+            int a = fb_angle1024(xx - cx, cy - yy);
+            int rel = (256 - a - from) & 1023;
+            if (rel >= end) continue;
+            int alpha = (rel <= mid) ? (a0 * rel / mid)
+                                     : (a0 * (end - rel) / (end - mid));
+            glow_px(xx, yy, rgb, alpha);
+        }
+    }
+    fb_damage(x0, y0, x1 - x0, y1 - y0);
+}
+
+/* The zl-facing forms. A background decoration covers the whole screen, so the
+ * rectangle is implicit - which also keeps these inside the interpreter's
+ * eight-argument ceiling, and inside the zl parser's rule that a call must fit
+ * on one line. */
+void fb_glow(int cx, int cy, int rx, int ry, unsigned int rgb, int a_in, int a_out, int stop_pct)
+{ fb_grad_radial(0, 0, (int)fb_w, (int)fb_h, cx, cy, rx, ry, rgb, a_in, a_out, stop_pct); }
+
+void fb_wedge(int cx, int cy, unsigned int rgb, int a0, int from_deg,
+              int mid_deg, int end_deg)
+{ fb_grad_conic(0, 0, (int)fb_w, (int)fb_h, cx, cy, rgb, a0, from_deg, mid_deg, end_deg); }
+
+/* A TITLE BAR IS A ROUNDED-TOP GRADIENT, and it needs to be one primitive.
+ *
+ * The title band used to be a plain rectangle drawn inside the window's
+ * rounded frame. At radius 5 nobody could see the difference; at the radius the
+ * v10 metrics ask for - 12, from the prototype's 11..16 cluster - the square
+ * corners of the band sit visibly proud of the round corners of the frame, and
+ * the window reads as two shapes that do not fit each other.
+ *
+ * Top corners rounded, bottom square, because that is what a title bar is: the
+ * bottom edge butts into the client area and must not round away from it. A
+ * general "which corners" mask would be a parameter nobody would ever pass
+ * anything else to. */
+void fb_rrect_grad_top(int x, int y, int w, int h, int r,
+                       unsigned int top, unsigned int bot)
+{
+    if (w <= 0 || h <= 0) return;
+    if (2 * r > w) r = w / 2;
+    if (r > h) r = h;
+    if (r < 0) r = 0;
+
+    /* the gradient, in full, but only where the shape has ink. Drawing the
+     * whole band and then cutting the corners back would need to know what was
+     * underneath them, which is exactly the information a corner has lost by
+     * the time it is painted over. */
+    /* THE TOP STRIP IS A SLICE OF THE SAME RAMP, not a ramp of its own.
+     * fb_gradient interpolates top->bot across the height it is given, so
+     * handing it (top, bot) over r rows compresses the whole ramp into the
+     * first r rows and leaves a visible step where the strip meets the rest -
+     * a lighter block across the top of every title bar. Work out the colour
+     * the full-height ramp has reached at row r, and hand it that. */
+    int tr = (top >> 16) & 0xFF, tg = (top >> 8) & 0xFF, tb = top & 0xFF;
+    int br = (bot >> 16) & 0xFF, bg = (bot >> 8) & 0xFF, bb = bot & 0xFF;
+    unsigned int at_r = (unsigned)((tr + (br - tr) * r / h) << 16)
+                      | (unsigned)((tg + (bg - tg) * r / h) << 8)
+                      | (unsigned)( tb + (bb - tb) * r / h);
+    if (r > 0) fb_gradient(x + r, y, w - 2 * r, r, top, at_r);
+    fb_gradient(x, y + r, w, h - r, at_r, bot);
+    if (r <= 0) return;
+
+    /* The two top corners, at the SAME 4x4 supersample fb_rrect uses, so a
+     * title bar's curve and its frame's curve are the same curve. The colour
+     * comes from the gradient at that row, which is why this cannot just call
+     * fb_rrect with one colour. */
+    for (int cy = 0; cy < r; cy++) {
+        unsigned int c = (unsigned)((tr + (br - tr) * cy / h) << 16)
+                       | (unsigned)((tg + (bg - tg) * cy / h) << 8)
+                       | (unsigned)(tb + (bb - tb) * cy / h);
+        for (int cx = 0; cx < r; cx++) {
+            int hits = 0;
+            for (int sy = 0; sy < 4; sy++)
+                for (int sx = 0; sx < 4; sx++) {
+                    int dx = (cx * 8 + sx * 2 + 1) - r * 8;
+                    int dy = (cy * 8 + sy * 2 + 1) - r * 8;
+                    if (dx * dx + dy * dy <= r * r * 64) hits++;
+                }
+            if (hits == 0) continue;
+            int a = hits * 255 / 16;
+            blend_px(x + cx,         y + cy, c, a);
+            blend_px(x + w - 1 - cx, y + cy, c, a);
+        }
+    }
+}
+
 /* a rectangle OUTLINE - for panels, buttons and window frames */
 void fb_box(int x, int y, int w, int h, unsigned int rgb)
 {
@@ -1369,73 +1686,336 @@ void fb_pointer_show(int x, int y)
     fb_cursor_arrow(x, y, 0xEEF4FF, 0x0A0E18);   /* white arrow, dark outline */
 }
 
-/* ---- backing store, for dragging windows without a GPU -------------------
- * The sticky-note trick: keep a snapshot of the desktop background (no
- * windows), grab the window being dragged as a bitmap "sprite", then each
- * frame restore the background where the window WAS and stamp the sprite where
- * it now IS. Two copies per frame, no re-rendering - so a window glides.
- * Buffers are sized for up to 1024x768 background and a 640x480 window; bigger
- * modes fall back gracefully (dragging just no-ops). */
-/* These are multi-megabyte, so they must NOT live in BSS (the linker would put
- * them right after the kernel, where they collided with the stack/framebuffer
- * and corrupted memory). Park them in free high RAM instead - see the map at
- * the top of this file.
+/* ---- blur, cached ---------------------------------------------------------
+ * The prototype asks for backdrop-filter:blur() in six places and filter:blur()
+ * in two more. The v10 plan measured one menu-sized backdrop blur at 8.7 ms
+ * against a 16.67 ms frame budget and drew the right conclusion: a blur behind
+ * something that MOVES is half the frame, every frame, and cannot be afforded.
+ * A blur behind something that opens and then sits still is paid once.
  *
- * Their ceilings used to be compile-time PIXEL COUNTS - BG_MAX 1920*1200 and
- * SP_MAX 640*480 - which is the same bug the back buffer had: at 2560x1440
- * bg_ok went to 0 and dragging stopped working, silently. Both now measure the
- * mode against the actual gap to the next buffer. (SP_MAX 640x480 was also why
- * the 1256x944 terminal could not be dragged: nearly 4x over the ceiling.) */
-static unsigned int *bg_buf = (unsigned int *)HI_BG;
-static unsigned int *sp_buf = (unsigned int *)HI_SP;
-static int bg_w = 0, bg_h = 0, bg_ok = 0;
-static int sp_w = 0, sp_h = 0, sp_ok = 0;
+ * So this is a cache, not a filter. fb_blur_cache() blurs what is on screen
+ * behind a rectangle into a fixed slot; fb_blur_paint() blits that slot back,
+ * as many frames as you like, for the cost of a copy.
+ *
+ * THE DESIGN CONSEQUENCE IS A UI DECISION, and it is better taken here than
+ * discovered later: a panel that blurs must not be draggable, or must re-blur
+ * only on drop. Dragging one would look exactly like a frame-rate collapse.
+ *
+ * The algorithm is a BOX blur run twice, horizontally then vertically each
+ * time. Two box passes approximate a Gaussian closely enough that nobody can
+ * tell at these radii, and a box blur with a running sum costs O(1) per pixel
+ * per pass regardless of radius - so a 30 px blur costs what a 10 px blur
+ * costs. A true Gaussian would be radius-proportional and would need the
+ * multiply-heavy inner loop this kernel is trying to avoid.
+ *
+ * THE DIVIDE IS THE WHOLE COST, and that is worth writing down because the
+ * first version of this measured 15.0 ms - nearly twice the budget it was
+ * written to fit. Dividing the running sum by the window width is three
+ * divides per pixel per pass and there are four passes: twelve integer divides
+ * per pixel, at roughly twenty cycles each, which is 125 cyc/px of the 125
+ * cyc/px measured. The window width is constant for the whole call, so it
+ * becomes one reciprocal computed once and a multiply-and-shift per channel.
+ * Same pixels, 5.4x faster. (Contrast desktop-TODO 0i, where tabling a divide
+ * made a shadow SLOWER - that loop was not arithmetic-bound and this one is.
+ * Which is why both were measured instead of reasoned about.)
+ *
+ * The arena is the 16 MiB at 192 MiB that the back buffer vacated in C4 -
+ * three slots and one shared scratch, exactly filling it.
+ */
+/* ---- the cache arena ------------------------------------------------------
+ * 16 MiB at 192 MiB, which is exactly the span the back buffer vacated in C4.
+ * Two customers with very different shapes want it, so it is a BUMP ALLOCATOR
+ * rather than a fixed split:
+ *
+ *   the WALLPAPER cache   one screen-sized bitmap, taken first
+ *   the BLUR slots        a handful of panel-sized ones, out of what is left
+ *
+ * A fixed split would have to be sized for the largest screen and would then
+ * waste most of the arena on the common one. The bump pointer only ever moves
+ * forward and is reset wholesale; there is no free list, because nothing here
+ * frees one buffer and keeps another.
+ *
+ * WHY THE WALLPAPER NEEDS A CACHE AT ALL, with the number that decides it: the
+ * v10 background is a gradient plus three radial glows and two conic wedges,
+ * all translucent. A translucent full-screen pass costs 22 cyc/px measured -
+ * about 22 ms at 1920x1200 - and the compositor repaints the wallpaper inside
+ * every damage rectangle, so five of them would be 100 ms of a 16.67 ms frame.
+ * Drawn once and blitted, it is 1.5 cyc/px. There is no version of this that
+ * is affordable per frame; caching is not an optimisation here, it is the only
+ * way the look exists.
+ */
+static unsigned int *arena_next = (unsigned int *)HI_BLUR;
 
-/* snapshot the WHOLE screen as the background - call it after drawing the
- * wallpaper/header/dock but before the draggable windows go on top */
-void fb_bg_snapshot(void)
+static unsigned int *arena_take(unsigned int px)
 {
-    /* Refuse if the back buffer took this space - overwriting it would corrupt
-     * the very thing being snapshotted, and silently. */
-    if (back_took_arena || fb_w * fb_h * 4u > BG_LIMIT) { bg_ok = 0; return; }
-    bg_w = (int)fb_w; bg_h = (int)fb_h;
-    for (int y = 0; y < bg_h; y++)
-        for (int x = 0; x < bg_w; x++)
-            bg_buf[y * bg_w + x] = fb_get_px(x, y);
-    bg_ok = 1;
+    unsigned long top = (unsigned long)arena_next + (unsigned long)px * 4u;
+    if (top > (unsigned long)HI_BLUR + BLUR_LIMIT) return 0;
+    unsigned int *p = arena_next;
+    arena_next = (unsigned int *)top;
+    return p;
 }
 
-/* paint a rectangle of the saved background back onto the screen */
-void fb_bg_restore(int x, int y, int w, int h)
+static unsigned int arena_free_px(void)
 {
-    if (!bg_ok) return;
-    for (int yy = y; yy < y + h; yy++)
-        for (int xx = x; xx < x + w; xx++) {
-            if ((unsigned)xx >= (unsigned)bg_w || (unsigned)yy >= (unsigned)bg_h) continue;
-            put_pixel((unsigned)xx, (unsigned)yy, bg_buf[yy * bg_w + xx]);
+    return (unsigned int)(((unsigned long)HI_BLUR + BLUR_LIMIT
+                           - (unsigned long)arena_next) / 4u);
+}
+
+void fb_cache_reset(void)
+{
+    arena_next = (unsigned int *)HI_BLUR;
+}
+
+/* ---- the wallpaper cache -------------------------------------------------- */
+static unsigned int *wall_buf;
+static int wall_w, wall_h;
+
+int fb_wall_ok(void) { return wall_buf != 0 && wall_w == (int)fb_w && wall_h == (int)fb_h; }
+
+/* Copy what is currently on screen into the wallpaper cache. The caller draws
+ * the wallpaper it wants - gradient, glows, wedges, whatever policy says - and
+ * then calls this once. fb.c never decides what a wallpaper looks like. */
+int fb_wall_save(void)
+{
+    if (!fb_active()) return 0;
+    if (!wall_buf || wall_w != (int)fb_w || wall_h != (int)fb_h) {
+        wall_buf = arena_take(fb_w * fb_h);
+        if (!wall_buf) {
+            fb_puts("  fb: wallpaper cache refused - wants ");
+            fb_putu(fb_w * fb_h * 4u >> 10);
+            fb_puts(" KiB, "); fb_putu(arena_free_px() * 4u >> 10);
+            fb_puts(" KiB left in the arena. Plain gradient instead.\n");
+            return 0;
         }
+        wall_w = (int)fb_w; wall_h = (int)fb_h;
+    }
+    for (unsigned int y = 0; y < fb_h; y++)
+        for (unsigned int x = 0; x < fb_w; x++)
+            wall_buf[(unsigned long)y * fb_w + x] = fb_get_px((int)x, (int)y);
+    fb_puts("  fb: wallpaper cached, "); fb_putu(fb_w * fb_h * 4u >> 10);
+    fb_puts(" KiB; "); fb_putu(arena_free_px() * 4u >> 10);
+    fb_puts(" KiB left for blur\n");
+    return 1;
 }
 
-/* grab a screen rectangle into the sprite buffer (the window being lifted) */
-void fb_grab(int x, int y, int w, int h)
+/* Blit part of the cached wallpaper back. This is what desk_draw costs now. */
+void fb_wall_paint(int x, int y, int w, int h)
 {
-    if (back_took_arena || w <= 0 || h <= 0 ||
-        (unsigned int)(w * h) * 4u > SP_LIMIT) { sp_ok = 0; return; }
-    sp_w = w; sp_h = h;
-    for (int j = 0; j < h; j++)
-        for (int i = 0; i < w; i++)
-            sp_buf[j * w + i] = fb_get_px(x + i, y + j);
-    sp_ok = 1;
+    if (!fb_wall_ok()) return;
+    int x0 = x, y0 = y, x1 = x + w, y1 = y + h;
+    if (!clip_rect(&x0, &y0, &x1, &y1)) return;
+    if (back_on) {
+        for (int yy = y0; yy < y1; yy++) {
+            const unsigned int *s = wall_buf + (unsigned long)yy * wall_w + x0;
+            unsigned int *o = back + (unsigned long)yy * fb_w + x0;
+            for (int xx = x0; xx < x1; xx++) *o++ = *s++;
+        }
+        fb_damage(x0, y0, x1 - x0, y1 - y0);
+        return;
+    }
+    for (int yy = y0; yy < y1; yy++)
+        for (int xx = x0; xx < x1; xx++)
+            put_pixel((unsigned)xx, (unsigned)yy,
+                      wall_buf[(unsigned long)yy * wall_w + xx]);
 }
 
-/* stamp the grabbed sprite down at a new position */
-void fb_stamp(int x, int y)
+/* ---- blur slots ------------------------------------------------------------ */
+#define BLUR_SLOTS 4
+
+static struct { unsigned int *px; int w, h, cap, used; } blur_slot[BLUR_SLOTS];
+static unsigned int *blur_tmp;
+static unsigned int  blur_tmp_cap;
+
+void fb_blur_free(int slot)
 {
-    if (!sp_ok) return;
-    for (int j = 0; j < sp_h; j++)
-        for (int i = 0; i < sp_w; i++)
-            put_pixel((unsigned)(x + i), (unsigned)(y + j), sp_buf[j * sp_w + i]);
+    if (slot >= 0 && slot < BLUR_SLOTS) blur_slot[slot].used = 0;
 }
+
+void fb_blur_free_all(void)
+{
+    for (int i = 0; i < BLUR_SLOTS; i++) blur_slot[i].used = 0;
+}
+
+/* one box pass along rows, from src into dst, radius r */
+#define BOX_SHIFT 22
+static void box_h(unsigned int *dst, const unsigned int *src, int w, int h, int r)
+{
+    int d = 2 * r + 1;
+    unsigned int rec = ((1u << BOX_SHIFT) + (unsigned)d - 1) / (unsigned)d;
+    for (int y = 0; y < h; y++) {
+        const unsigned int *s = src + (unsigned long)y * w;
+        unsigned int *o = dst + (unsigned long)y * w;
+        /* prime the running sum with the left edge clamped - clamping rather
+         * than wrapping or zeroing is what stops a blurred panel growing a
+         * dark border out of nowhere */
+        unsigned int sr = 0, sg = 0, sb = 0;
+        for (int i = -r; i <= r; i++) {
+            int k = i < 0 ? 0 : (i >= w ? w - 1 : i);
+            sr += (s[k] >> 16) & 0xFF; sg += (s[k] >> 8) & 0xFF; sb += s[k] & 0xFF;
+        }
+        for (int x = 0; x < w; x++) {
+            o[x] = (((sr * rec) >> BOX_SHIFT) << 16)
+                 | (((sg * rec) >> BOX_SHIFT) << 8)
+                 |  ((sb * rec) >> BOX_SHIFT);
+            int add = x + r + 1, sub = x - r;
+            add = add >= w ? w - 1 : add;
+            sub = sub < 0 ? 0 : sub;
+            sr += ((s[add] >> 16) & 0xFF) - ((s[sub] >> 16) & 0xFF);
+            sg += ((s[add] >>  8) & 0xFF) - ((s[sub] >>  8) & 0xFF);
+            sb += ( s[add]        & 0xFF) - ( s[sub]        & 0xFF);
+        }
+    }
+}
+
+/* the same along columns */
+static void box_v(unsigned int *dst, const unsigned int *src, int w, int h, int r)
+{
+    int d = 2 * r + 1;
+    unsigned int rec = ((1u << BOX_SHIFT) + (unsigned)d - 1) / (unsigned)d;
+    for (int x = 0; x < w; x++) {
+        unsigned int sr = 0, sg = 0, sb = 0;
+        for (int i = -r; i <= r; i++) {
+            int k = i < 0 ? 0 : (i >= h ? h - 1 : i);
+            unsigned int v = src[(unsigned long)k * w + x];
+            sr += (v >> 16) & 0xFF; sg += (v >> 8) & 0xFF; sb += v & 0xFF;
+        }
+        for (int y = 0; y < h; y++) {
+            dst[(unsigned long)y * w + x] = (((sr * rec) >> BOX_SHIFT) << 16)
+                                          | (((sg * rec) >> BOX_SHIFT) << 8)
+                                          |  ((sb * rec) >> BOX_SHIFT);
+            int add = y + r + 1, sub = y - r;
+            add = add >= h ? h - 1 : add;
+            sub = sub < 0 ? 0 : sub;
+            unsigned int va = src[(unsigned long)add * w + x];
+            unsigned int vs = src[(unsigned long)sub * w + x];
+            sr += ((va >> 16) & 0xFF) - ((vs >> 16) & 0xFF);
+            sg += ((va >>  8) & 0xFF) - ((vs >>  8) & 0xFF);
+            sb += ( va        & 0xFF) - ( vs        & 0xFF);
+        }
+    }
+}
+
+/* Blur what is currently on screen inside (x,y,w,h) into a slot. Returns the
+ * slot, or -1 with a reason on the serial log - a refusal, never a silent
+ * no-op, the same rule as WM_MAX and ANIM_MAX. */
+int fb_blur_cache(int x, int y, int w, int h, int radius)
+{
+    if (w <= 0 || h <= 0) return -1;
+    unsigned int need = (unsigned int)(w * h);
+
+    /* an unused slot whose buffer is already big enough, or a free slot that
+     * can take a new one out of the arena */
+    int slot = -1;
+    for (int i = 0; i < BLUR_SLOTS; i++)
+        if (!blur_slot[i].used && blur_slot[i].px && (unsigned)blur_slot[i].cap >= need) { slot = i; break; }
+    if (slot < 0)
+        for (int i = 0; i < BLUR_SLOTS; i++)
+            if (!blur_slot[i].used && !blur_slot[i].px) { slot = i; break; }
+    if (slot < 0) { fb_puts("  fb: blur refused - every slot is in use\n"); return -1; }
+
+    if (!blur_slot[slot].px || (unsigned)blur_slot[slot].cap < need) {
+        unsigned int *p = arena_take(need);
+        if (!p) {
+            fb_puts("  fb: blur refused - wants "); fb_putu(need * 4u >> 10);
+            fb_puts(" KiB, arena has "); fb_putu(arena_free_px() * 4u >> 10);
+            fb_puts(" KiB\n");
+            return -1;
+        }
+        blur_slot[slot].px = p;
+        blur_slot[slot].cap = (int)need;
+    }
+    /* the horizontal pass needs somewhere to land that is not the destination */
+    if (!blur_tmp || blur_tmp_cap < need) {
+        unsigned int *p = arena_take(need);
+        if (!p) { fb_puts("  fb: blur refused - no arena for the scratch pass\n"); return -1; }
+        blur_tmp = p;
+        blur_tmp_cap = need;
+    }
+
+    if (radius < 1) radius = 1;
+    /* A box radius that reaches past the rectangle makes the running sum read
+     * nothing but the clamped edge, which blurs the panel to a flat colour. */
+    if (radius > w / 2) radius = w / 2;
+    if (radius > h / 2) radius = h / 2;
+    if (radius < 1) radius = 1;
+
+    unsigned int *dst = blur_slot[slot].px, *tmp = blur_tmp;
+    /* Read the source back. With a back buffer that is a row copy out of RAM;
+     * without one every pixel crosses PCIe, and fb_get_px is the only thing
+     * that knows the difference. Going through it per pixel cost a call and
+     * two bounds tests 276,000 times in the measured case. */
+    if (back_on && x >= 0 && y >= 0 &&
+        x + w <= (int)fb_w && y + h <= (int)fb_h) {
+        for (int j = 0; j < h; j++) {
+            const unsigned int *s = back + (unsigned long)(y + j) * fb_w + x;
+            unsigned int *o = dst + (unsigned long)j * w;
+            for (int i = 0; i < w; i++) o[i] = s[i];
+        }
+    } else {
+        for (int j = 0; j < h; j++)
+            for (int i = 0; i < w; i++)
+                dst[(unsigned long)j * w + i] = fb_get_px(x + i, y + j);
+    }
+
+    box_h(tmp, dst, w, h, radius);      /* pass 1 */
+    box_v(dst, tmp, w, h, radius);
+    box_h(tmp, dst, w, h, radius);      /* pass 2 - two boxes ~ a Gaussian */
+    box_v(dst, tmp, w, h, radius);
+
+    blur_slot[slot].w = w;
+    blur_slot[slot].h = h;
+    blur_slot[slot].used = 1;
+    return slot;
+}
+
+/* Paint a cached blur. This is the per-frame cost and it is a copy - the whole
+ * reason the cache exists. */
+void fb_blur_paint(int slot, int x, int y)
+{
+    if (slot < 0 || slot >= BLUR_SLOTS || !blur_slot[slot].used) return;
+    int w = blur_slot[slot].w, h = blur_slot[slot].h;
+    const unsigned int *src = blur_slot[slot].px;
+    int x0 = x, y0 = y, x1 = x + w, y1 = y + h;
+    if (!clip_rect(&x0, &y0, &x1, &y1)) return;
+
+    if (back_on) {
+        for (int yy = y0; yy < y1; yy++) {
+            unsigned int *o = back + (unsigned long)yy * fb_w + x0;
+            const unsigned int *s = src + (unsigned long)(yy - y) * w + (x0 - x);
+            for (int xx = x0; xx < x1; xx++) *o++ = *s++;
+        }
+        fb_damage(x0, y0, x1 - x0, y1 - y0);
+        return;
+    }
+    for (int yy = y0; yy < y1; yy++)
+        for (int xx = x0; xx < x1; xx++)
+            put_pixel((unsigned)xx, (unsigned)yy,
+                      src[(unsigned long)(yy - y) * w + (xx - x)]);
+}
+
+/* ---- what used to live here -----------------------------------------------
+ * fb_bg_snapshot / fb_bg_restore / fb_grab / fb_stamp, plus bg_buf at 128 MiB
+ * and sp_buf at 160 MiB: the sticky-note way to drag a window without a GPU.
+ * Snapshot the whole desktop, grab the window as a bitmap, then per frame
+ * restore the background where it WAS and stamp the sprite where it IS.
+ *
+ * DELETED, C4. Not because it was slow - it was fast, that was its point - but
+ * because a compositor that repaints from damage has no use for it and it cost
+ * three things that were nothing to do with dragging:
+ *
+ *   - 48 MiB of the high-RAM map, which the back buffer now has, and which is
+ *     what lets the back buffer cover 3840x2160 at all
+ *   - a 640x480 sprite ceiling, which is why the 1256x944 terminal was the one
+ *     window that could never be dragged
+ *   - a 12 px shadow smear on every drag step: fb_shadow reaches x + w + 28 at
+ *     ui() == 2 and the restore erased w + 16
+ *
+ * KEPT, deliberately: fb_pointer_show / fb_pointer_hide above. Save-under for
+ * an 11x17 cursor is the same technique at a size where it is correct - it has
+ * no ceiling to exceed and no shadow to smear.
+ */
+
+
 
 /* a software cursor block at a text cell (framebuffer has no hardware one) */
 void fb_cursor(int row, int col, int on, unsigned char attr)
@@ -1540,43 +2120,114 @@ int fb_get_col(void) { return fb_col; }
  * translation unit. */
 #include "font_prop.inc"
 
+/* ---- the type scale, v10 SS6.8 --------------------------------------------
+ * Three sizes and two weights, because that is what the prototype's source
+ * asks for: its font-size declarations cluster at 9.5-13px for body, 15 and 19
+ * for headings, and font-weight:700 appears fourteen times against a 400
+ * default. Six atlases, generated together so they cannot drift.
+ *
+ * A ROLE, NOT A SIZE, is what callers ask for. TEXT_BODY at ui() 1 and at
+ * ui() 2 are different pixel heights, and every caller that had to know which
+ * would be a caller that breaks on a screen nobody tested.
+ *
+ * AT ui() == 1 THE SCALE COLLAPSES TO TWO STEPS, and that is deliberate rather
+ * than an oversight. The console cell there is 8x16, so a caption below 16px
+ * would be smaller than the smallest atlas that exists - and three distinct
+ * sizes inside 16 pixels is not a type scale, it is three illegible sizes.
+ * Caption and body share the 16px atlas; the title steps up to 24.
+ */
+#define TEXT_CAPTION 0
+#define TEXT_BODY    1
+#define TEXT_TITLE   2
+
+#define TEXT_REGULAR 0
+#define TEXT_BOLD    1
+
 /* Follow the console's cell, the way fb_glyph_aa does, so UI text scales with
  * everything else rather than staying 8px tall on a 1920-wide desktop. */
 static int prop_big(void) { return cell_w != GLYPH_W; }
 
-static int prop_adv(char c)
+/* role -> cell height, per UI scale. The one place that mapping exists. */
+static int prop_cell(int role)
 {
-    if (c < FONT_FIRST || c > FONT_LAST) c = '?';
-    int i = (int)c - FONT_FIRST;
-    return prop_big() ? prop16_adv[i] : prop8_adv[i];
+    if (!prop_big()) {                 /* ui() == 1: two steps, see above */
+        return (role >= TEXT_TITLE) ? 24 : 16;
+    }
+    if (role <= TEXT_CAPTION) return 16;
+    if (role == TEXT_BODY)    return 24;
+    return 32;
 }
 
-/* How wide will this string be? A proportional layout cannot ask "length times
- * cell" any more, so anything that centres or right-aligns has to measure. */
-int fb_text_prop_w(const char *s)
+/* The atlas, its stride, its advances and its ink widths, all picked together.
+ * Four parallel switches is how one of them ends up disagreeing with the other
+ * three and a glyph gets indexed out of a neighbouring array. */
+static const unsigned char *prop_atlas(int cell, int weight, int *stride,
+                                       const unsigned char **adv,
+                                       const unsigned char **ink)
 {
+    if (cell <= 16) {
+        if (weight) { *stride = PROP16B_W; *adv = prop16b_adv; *ink = prop16b_ink;
+                      return &prop16b[0][0][0]; }
+        *stride = PROP16_W; *adv = prop16_adv; *ink = prop16_ink;
+        return &prop16[0][0][0];
+    }
+    if (cell <= 24) {
+        if (weight) { *stride = PROP24B_W; *adv = prop24b_adv; *ink = prop24b_ink;
+                      return &prop24b[0][0][0]; }
+        *stride = PROP24_W; *adv = prop24_adv; *ink = prop24_ink;
+        return &prop24[0][0][0];
+    }
+    if (weight) { *stride = PROP32B_W; *adv = prop32b_adv; *ink = prop32b_ink;
+                  return &prop32b[0][0][0]; }
+    *stride = PROP32_W; *adv = prop32_adv; *ink = prop32_ink;
+    return &prop32[0][0][0];
+}
+
+/* ---- the full form -------------------------------------------------------- */
+int fb_text_role_h(int role) { return prop_cell(role); }
+
+int fb_text_role_w(const char *s, int role, int weight)
+{
+    int stride, cell = prop_cell(role);
+    const unsigned char *adv, *ink;
+    prop_atlas(cell, weight, &stride, &adv, &ink);
     int w = 0;
-    while (*s) w += prop_adv(*s++);
+    while (*s) {
+        char c = *s++;
+        if (c < FONT_FIRST || c > FONT_LAST) c = '?';
+        w += adv[(int)c - FONT_FIRST];
+    }
     return w;
 }
 
-int fb_text_prop_h(void) { return prop_big() ? 32 : 16; }
-
-void fb_text_prop(int px, int py, const char *s, unsigned int fg)
+void fb_text_role(int px, int py, const char *s, unsigned int fg,
+                  int role, int weight)
 {
+    int stride, cell = prop_cell(role);
+    const unsigned char *adv, *ink;
+    const unsigned char *atlas = prop_atlas(cell, weight, &stride, &adv, &ink);
     while (*s) {
         char c = *s++;
         if (c < FONT_FIRST || c > FONT_LAST) c = '?';
         int i = (int)c - FONT_FIRST;
-        /* only the columns that can hold ink, not the whole cell */
-        if (prop_big())
-            blend_cov_s(px, py, &font16x32_prop[i][0][0],
-                        prop16_ink[i], 32, PROP16_W, fg);
-        else
-            blend_cov_s(px, py, &font8x16_prop[i][0][0],
-                        prop8_ink[i], 16, PROP8_W, fg);
-        px += prop_big() ? prop16_adv[i] : prop8_adv[i];
+        /* only the columns that can hold ink, not the whole cell - a comma's
+         * ink is 4px inside a 30px cell at title size */
+        blend_cov_s(px, py, atlas + (unsigned long)i * cell * stride,
+                    ink[i], cell, stride, fg);
+        px += adv[i];
     }
+}
+
+/* ---- the old two-argument form, which is TEXT_BODY ------------------------
+ * Kept because most callers do not want to make a typographic decision, and a
+ * default that has to be spelled out at every call site is a default nobody
+ * uses. */
+int fb_text_prop_w(const char *s) { return fb_text_role_w(s, TEXT_BODY, TEXT_REGULAR); }
+int fb_text_prop_h(void)          { return prop_cell(TEXT_BODY); }
+
+void fb_text_prop(int px, int py, const char *s, unsigned int fg)
+{
+    fb_text_role(px, py, s, fg, TEXT_BODY, TEXT_REGULAR);
 }
 
 /* ---- 24x24 icons: the dock, the start menu, window titlebars -------------

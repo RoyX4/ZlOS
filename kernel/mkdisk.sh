@@ -83,14 +83,28 @@ objcopy -O binary kernel_raw.elf kernel_raw.bin
 
 nasm -f bin raw_boot.asm -o raw_boot.bin
 
+# THE LOADER READS A FIXED NUMBER OF CHUNKS, so a kernel bigger than that is
+# silently TRUNCATED - raw_boot.asm jumps to 1 MiB and executes whatever half
+# of the kernel arrived. There is no error, no message, and the symptom is a
+# hang or a triple fault a long way from the cause. So check it here, where the
+# two numbers are both available, and refuse.
+CHUNKS=$(grep -oP 'CHUNKS\s+equ\s+\K[0-9]+' raw_boot.asm)
+LIMIT=$((CHUNKS * 64 * 512))
+KSIZE=$(stat -c%s kernel_raw.bin)
+if [ "$KSIZE" -gt "$LIMIT" ]; then
+    echo "FAIL: kernel is $KSIZE bytes; raw_boot.asm loads only $LIMIT" >&2
+    echo "      (CHUNKS=$CHUNKS x 32 KiB). Raise CHUNKS and the truncate below." >&2
+    exit 1
+fi
+
 # assemble the disk: boot sector first, then the kernel, padded to a round size
 cat raw_boot.bin kernel_raw.bin > zlOS.img
-# pad to at least what the loader reads (12 * 32 KiB) so no read runs off the end
+# pad to at least what the loader reads, so no read runs off the end
 truncate -s 2M zlOS.img
 
 echo "built zlOS.img - OUR bootloader, no GRUB"
 echo "  boot sector: $(stat -c%s raw_boot.bin) bytes  (must be 512)"
-echo "  kernel:      $(stat -c%s kernel_raw.bin) bytes"
+echo "  kernel:      $KSIZE bytes  ($(( (LIMIT - KSIZE) / 1024 )) KiB of loader headroom left)"
 echo "  disk image:  $(stat -c%s zlOS.img) bytes"
 echo
 echo "boot it:  qemu-system-i386 -drive file=zlOS.img,format=raw -serial stdio"

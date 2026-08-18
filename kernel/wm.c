@@ -31,8 +31,11 @@ void fb_clip(int x, int y, int w, int h);
 void fb_clip_none(void);
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot);
+void fb_rrect_grad_top(int x, int y, int w, int h, int r, unsigned int top, unsigned int bot);
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
 void fb_shadow(int x, int y, int w, int h, int off, int soft);
+void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a);
+void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
 /* Titles are LABELS, not console text, so they take the proportional path.
  * That is the single change desktop-look.md item 4 asks for at this layer. */
@@ -91,7 +94,14 @@ static struct win wins[WM_MAX];
 static int zorder[WM_MAX];          /* window indices, BACK to FRONT */
 static int nz;                      /* how many are in the z-order   */
 static int focus_win = -1;
-static int running = 1;
+/* ZERO UNTIL wm_init() RUNS, and that matters more than it looks. wm_running()
+ * is how the rest of the system asks "is the compositor the top of the system
+ * right now" - draw_screen() uses it to choose between damaging the screen and
+ * redrawing a text desktop, and help() uses it to choose which set of commands
+ * to describe. Initialised to 1, it answered yes on a machine with no
+ * framebuffer, where the compositor had never been near the screen: the text
+ * shell printed the compositor's help and verify.sh caught it. */
+static int running = 0;
 
 static app_draw_fn  hook_draw;
 static app_event_fn hook_event;
@@ -224,15 +234,151 @@ void wm_damage_win(int win)
  */
 #define ANIM_FRAMES 4
 
+/* ---- the timeline ---------------------------------------------------------
+ * What was here was ONE animation, hardcoded into the window struct as a frame
+ * counter, and it could only ever be the open-scale. The prototype names seven
+ * keyframes - zov, zpop, zpress, zpulse, zsweep, ztoast, zwin - which is not
+ * seven times as much code, it is the same code with the kind as a parameter
+ * and the steps in a table.
+ *
+ * A FIXED ARRAY, ticked once per frame, each entry marking its target damaged.
+ * No allocation, no list, no callbacks. An animation that finishes frees its
+ * slot; a slot that cannot be found is a refusal, not a silent drop.
+ *
+ * STILL NO EASING CURVES, deliberately. Each kind is 4-8 integer steps in a
+ * table. A table cannot produce a wrong in-between value, cannot overshoot
+ * into a negative size, and cannot be got wrong by a cubic evaluated in
+ * fixed point - and at 4-8 frames nobody can see the difference between a
+ * table and a curve anyway.
+ *
+ * WHAT EACH KIND IS, and which are drawn rather than merely stored:
+ *
+ *   ANIM_OPEN    scale from 82% to 100%   - the window open (was `anim`)
+ *   ANIM_CLOSE   scale from 100% to 82%   - its mirror
+ *   ANIM_PRESS   scale 100 -> 96 -> 100   - zpress, a control acknowledging
+ *   ANIM_PULSE   opacity 0 -> 40 -> 0     - zpulse, attention without motion
+ *   ANIM_FADE    opacity 0 -> 100         - zov/zpop/ztoast, the opacity fades
+ *
+ * The opacity kinds are expressible only because fb_fill_blend exists; before
+ * it, a fade needed an offscreen buffer per window and this kernel has nowhere
+ * to put one. That is why v10 orders translucency before the timeline.
+ */
+#define ANIM_MAX 8
+
+#define ANIM_NONE   0
+#define ANIM_OPEN   1
+#define ANIM_CLOSE  2
+#define ANIM_PRESS  3
+#define ANIM_PULSE  4
+#define ANIM_FADE   5
+
+/* Each row is read from the LAST element backwards as the counter runs down,
+ * so index 0 is where the animation starts and the settled value is what the
+ * window has when no animation is running at all. */
+static const unsigned char anim_scale[][8] = {
+    /* OPEN  */ { 82, 90, 95, 98, 100, 100, 100, 100 },
+    /* CLOSE */ { 98, 95, 90, 82,  70,  70,  70,  70 },
+    /* PRESS */ { 96, 97, 98, 99, 100, 100, 100, 100 },
+};
+static const unsigned char anim_len[] = {
+    /* NONE */ 0, /* OPEN */ 4, /* CLOSE */ 4, /* PRESS */ 4,
+    /* PULSE */ 6, /* FADE */ 5,
+};
+static const unsigned char anim_alpha[][8] = {
+    /* PULSE */ {  0, 24, 40, 40, 24,  0, 0, 0 },
+    /* FADE  */ { 60, 90, 120, 170, 220, 255, 255, 255 },
+};
+
+struct anim { int win; int kind; int frame; int len; };
+static struct anim anims[ANIM_MAX];
+
+/* Start one. Returns 0 and says so if every slot is busy - the same refusal
+ * discipline as wm_open's WM_MAX, and for the same reason: a silently dropped
+ * animation is a UI that is intermittently unresponsive for no visible cause. */
+int wm_anim(int win, int kind)
+{
+    if (kind <= ANIM_NONE || kind >= (int)(sizeof anim_len / sizeof anim_len[0]))
+        return 0;
+    /* One animation per window per kind. Re-triggering restarts it, which is
+     * what a button pressed twice in quick succession should look like. */
+    for (int i = 0; i < ANIM_MAX; i++)
+        if (anims[i].kind && anims[i].win == win && anims[i].kind == kind) {
+            anims[i].frame = 0;
+            return 1;
+        }
+    for (int i = 0; i < ANIM_MAX; i++) {
+        if (anims[i].kind) continue;
+        anims[i].win = win;
+        anims[i].kind = kind;
+        anims[i].frame = 0;
+        anims[i].len = anim_len[kind];
+        wm_damage_win(win);
+        return 1;
+    }
+    wm_puts("  wm: no free animation slot, refusing\n");
+    return 0;
+}
+
+/* Which frame of `kind` is window `win` on, or -1 for "not animating". */
+static int anim_frame_of(int win, int kind)
+{
+    for (int i = 0; i < ANIM_MAX; i++)
+        if (anims[i].kind == kind && anims[i].win == win) return anims[i].frame;
+    return -1;
+}
+
+int wm_anim_running(int win)
+{
+    for (int i = 0; i < ANIM_MAX; i++)
+        if (anims[i].kind && anims[i].win == win) return anims[i].kind;
+    return 0;
+}
+
+/* The extra opacity a window is being drawn with, 0..255, or 255 for settled.
+ * Read by the repaint; exposed so a test can assert on it without a screenshot. */
+int wm_anim_alpha(int win)
+{
+    int f = anim_frame_of(win, ANIM_FADE);
+    if (f >= 0) return anim_alpha[1][f];
+    f = anim_frame_of(win, ANIM_PULSE);
+    if (f >= 0) return anim_alpha[0][f];
+    return 255;
+}
+
+/* Advance every running animation by one frame and damage what moved.
+ * Damaging the SETTLED rect - which is the largest - is what erases the
+ * smaller frame drawn a moment ago. */
+static void anim_tick(void)
+{
+    for (int i = 0; i < ANIM_MAX; i++) {
+        if (!anims[i].kind) continue;
+        wm_damage_win(anims[i].win);
+        /* AN ANIMATION NEVER CHANGES WINDOW LIFETIME. It was tempting to have
+         * ANIM_CLOSE call wm_close() when it finishes, so a closing window
+         * shrinks away; that would make "the window closed" depend on a free
+         * animation slot, and wm_anim() is allowed to refuse. A window that
+         * sometimes does not close when every slot is busy is a far worse bug
+         * than a window that closes without a flourish. The timeline draws;
+         * the caller decides what exists. */
+        if (++anims[i].frame >= anims[i].len) anims[i].kind = ANIM_NONE;
+    }
+}
+
 /* how big window `win` should be DRAWN this frame, as a percentage */
 static int anim_pct(int win)
 {
+    /* the legacy per-window counter still drives the open scale, so that a
+     * window opened before the timeline existed animates identically */
     int a = wins[win].anim;
-    if (a <= 0) return 100;
-    /* 82, 90, 95, 98 -> 100. Decelerating, by subtracting a shrinking
-     * fraction rather than by evaluating a curve. */
-    static const unsigned char steps[ANIM_FRAMES] = { 82, 90, 95, 98 };
-    return steps[ANIM_FRAMES - a];
+    if (a > 0) {
+        static const unsigned char steps[ANIM_FRAMES] = { 82, 90, 95, 98 };
+        return steps[ANIM_FRAMES - a];
+    }
+    int f = anim_frame_of(win, ANIM_CLOSE);
+    if (f >= 0) return anim_scale[1][f];
+    f = anim_frame_of(win, ANIM_PRESS);
+    if (f >= 0) return anim_scale[2][f];
+    return 100;
 }
 
 static void anim_rect(int win, int *x, int *y, int *w, int *h)
@@ -544,12 +690,16 @@ static void chrome(int win, int focused)
 
     int tx = W->x + 2, tw = W->w - 4, th = t->title_h - 3;
     if (focused) {
-        fb_gradient(tx, W->y + 2, tw, th, t->title, t->title_bot);
+        /* rounded at the top, to the SAME radius as the frame one pixel
+         * outside it - see fb_rrect_grad_top */
+        fb_rrect_grad_top(tx, W->y + 2, tw, th, t->radius - 2,
+                          t->title, t->title_bot);
         /* focus is title-bar hue PLUS the accent underline. Both already
          * existed; a third signal would be one too many. */
         fb_fill_px(tx, W->y + t->title_h - 2, tw, 2, t->accent);
     } else {
-        fb_fill_px(tx, W->y + 2, tw, th, t->title_off);
+        fb_rrect_grad_top(tx, W->y + 2, tw, th, t->radius - 2,
+                          t->title_off, t->title_off);
     }
     if (wins[win].ntab > 1) {
         /* a tab strip instead of a title. The active one is a raised surface
@@ -621,6 +771,28 @@ void wm_repaint(void)
                                    rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
                 fb_clip(cx, cy, cw, ch);        /* clip 2: NARROWER - client   */
                 hook_draw(win_app(win), ax, ay, aw, ah, win == focus_win);
+            }
+
+            /* ANIM_PULSE, composited. A tint laid over the finished window at
+             * the pulse's alpha - correct with no offscreen buffer, because a
+             * tint IS a blend of one colour over what is already there, which
+             * is exactly what fb_fill_blend does.
+             *
+             * ANIM_FADE is a different animal and is NOT drawn here. A real
+             * fade needs the window composited against what is BEHIND it at
+             * fractional opacity, which needs a copy of the rectangle before
+             * the window was drawn on it. wm_anim_alpha() reports it and
+             * wmtest asserts it; the compositing waits for the scratch arena
+             * in fb.c. Saying so is better than a tint pretending to be a
+             * fade - they look different and only one of them is the effect
+             * the prototype asks for. */
+            if (wm_anim_running(win) == ANIM_PULSE) {
+                int pa = wm_anim_alpha(win);
+                if (pa > 0 && pa < 255) {
+                    fb_clip(cx, cy, cw, ch);
+                    fb_rrect_blend(fx, fy, fw, fh, ui_theme()->radius,
+                                   ui_theme()->accent, pa);
+                }
             }
         }
     }
@@ -802,6 +974,7 @@ void wm_frame(void)
         int win = zorder[i];
         if (wins[win].anim > 0) { wins[win].anim--; wm_damage_win(win); }
     }
+    anim_tick();                    /* ...and every timeline entry */
 
     if (hook_tick)
         for (int i = 0; i < nz; i++)

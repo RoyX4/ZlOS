@@ -61,6 +61,27 @@ static void send_scan(int sc)
     scan_tail = (scan_tail + 1) % 64;
 }
 
+/* COM1, the third source. -1 means "no byte", and it is ALSO what a machine
+ * with no UART answers forever - which is the case this stub can express and a
+ * real port cannot. */
+static int ser_q[64], ser_head, ser_tail;
+
+int ser_rx(void)
+{
+    if (ser_head == ser_tail) return -1;
+    int v = ser_q[ser_head];
+    ser_head = (ser_head + 1) % 64;
+    return v;
+}
+
+static void send_ser(const char *s)
+{
+    while (*s) {
+        ser_q[ser_tail] = (unsigned char)*s++;
+        ser_tail = (ser_tail + 1) % 64;
+    }
+}
+
 /* ---- assertions --------------------------------------------------------- */
 static int fails;
 
@@ -155,6 +176,49 @@ int main(void)
     for (int i = 0; i < 50; i++) input_poll();
     d = drain();
     ok("a parked pointer is silent, not a per-poll event", d.mouse == 0);
+
+    /* 9. SERIAL, the third source. This is not a nicety: once wm_frame() owns
+     *    the screen, apps read keys from this queue and from nowhere else, so
+     *    a serial byte that never enters it is a byte the desktop can never
+     *    see - and verify.sh and every probe-*.py drive this machine by typing
+     *    down that wire. */
+    drain();
+    send_ser("help\r");
+    d = drain();
+    ok("serial bytes arrive as characters", d.chars == 5);
+
+    /* ...in the order they were sent. A queue exists to preserve that, and it
+     *    is the reason zl's shell no longer reads COM1 itself: two readers of
+     *    one FIFO hand out a newly-arrived byte before a queued one. */
+    drain();
+    send_ser("abc");
+    ok("...in order", input_char() == 'a' && input_char() == 'b'
+                       && input_char() == 'c');
+
+    /* 10. NO key event beside the character, unlike PS/2 and USB. A serial
+     *     byte has no press, no release and no modifier state - it is already
+     *     the character. Synthesising a key would silently change an existing
+     *     behaviour: input_key() prefers a queued key, so a serial ESC would
+     *     start arriving as KEY_ESC (0x101) where the editor has always seen
+     *     27, and that is exactly the sort of change nothing would notice. */
+    drain();
+    send_ser("\033");
+    d = drain();
+    ok("serial emits no key event beside the character", d.keydown == 0);
+    drain();
+    send_ser("\033");
+    ok("...so input_key() still sees a serial ESC as 27", input_key() == 27);
+
+    /* 11. An absent UART must be silent. There is no serial port on the
+     *     ThinkPad; an undecoded port floats high, so the naive "is LSR bit 0
+     *     set" is true forever and RBR reads 0xFF forever. That would be an
+     *     endless stream of phantom keystrokes on the one machine that cannot
+     *     be debugged over serial. support.c's ser_rx() answers -1 there, and
+     *     an empty queue here is that same answer. */
+    drain();
+    for (int i = 0; i < 50; i++) input_poll();
+    d = drain();
+    ok("a silent UART produces no events at all", d.chars == 0 && d.n == 0);
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;

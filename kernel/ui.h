@@ -110,6 +110,22 @@ int  wm_ntabs(int win);
 void wm_move(int win, int x, int y);
 void wm_resize(int win, int w, int h);
 
+/* ---- the animation timeline -----------------------------------------------
+ * A fixed array of running animations, ticked once per frame by wm_frame().
+ * Kinds are integer step tables, not easing curves - see wm.c for why that is
+ * a decision rather than a shortcut. An animation NEVER changes what exists:
+ * it draws, and the caller decides lifetime. */
+#define ANIM_NONE   0
+#define ANIM_OPEN   1   /* scale 82 -> 100, the window open        */
+#define ANIM_CLOSE  2   /* scale 100 -> 70, its mirror             */
+#define ANIM_PRESS  3   /* scale 100 -> 96 -> 100, zpress          */
+#define ANIM_PULSE  4   /* opacity 0 -> 40 -> 0, zpulse            */
+#define ANIM_FADE   5   /* opacity up, zov / zpop / ztoast         */
+
+int  wm_anim(int win, int kind);      /* 0 = refused, every slot busy */
+int  wm_anim_running(int win);        /* the kind, or 0               */
+int  wm_anim_alpha(int win);          /* 0..255, 255 when settled     */
+
 void wm_damage(int x, int y, int w, int h);   /* mark a screen region dirty  */
 void wm_damage_win(int win);                  /* ...or a whole window        */
 void wm_frame(void);                          /* one pass of the frame loop  */

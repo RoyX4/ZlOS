@@ -18,9 +18,26 @@ Never run a QEMU boot alongside a multi-agent fan-out.
 
 ---
 
-## Phase −1 — DO THIS FIRST. Everything else is behind it.
+## Phase −1 — DONE 2026-08-18. The compositor is the boot state.
 
-### [ ] -1a. Free `kernel.zl` and `runtime_kernel.c`, then wire the compositor in
+### [x] -1a. Free `kernel.zl` and `runtime_kernel.c`, then wire the compositor in — **DONE**
+
+**Shipped, and it took five defects with it that nothing had noticed.** The
+full account with numbers is `desktop-v10-plan.md` §8. In brief:
+
+- the compositor is what boots. `wm_available() == 0` keeps the plain text
+  shell, and `verify.sh`'s transcript is byte-identical.
+- **C4 landed in the same change**, as this task asked. `bg_buf`, `sp_buf` and
+  the four sticker-drag functions are gone; the back buffer moved down into
+  their 48 MiB and now covers 3840×2160, where a whole-desktop redraw went from
+  44 ms to **9.71 ms**.
+- serial had to become a third input source first, or every gate in this repo
+  would have gone blind the moment the desktop booted — `wm_frame()` reads
+  `input.c`'s queue and zl's `key_get()` read COM1 directly.
+
+*(The original text of this task follows, for the record.)*
+
+### [x] -1a (original text). Free `kernel.zl` and `runtime_kernel.c`, then wire the compositor in
 
 **Nine tasks are blocked on two files, and not for a technical reason.** Both
 have uncommitted work in them from the display session. Git stages whole files,
@@ -444,7 +461,13 @@ Three modes, checked in this order: **pointer grab** (a drag owns all pointer
 events until button-up) → **modal** (menu open) → **normal** (pointer to topmost
 window containing the point; keys to focus).
 
-### [ ] 2d. Delete the photo-and-sticker code
+### [x] 2d. Delete the photo-and-sticker code — **DONE 2026-08-18 (C4)**
+
+Gone, along with the 640×480 drag ceiling, the 12 px shadow smear and 48 MiB of
+the high-RAM map. `fb_pointer_show`/`fb_pointer_hide` kept, as this said.
+Verified by FNV scene hash at all three modes — **byte-identical** pixels.
+
+### [x] 2d (original text). Delete the photo-and-sticker code
 
 `fb_bg_snapshot`, `fb_bg_restore`, `fb_grab`, `fb_stamp`, `bg_buf`, `sp_buf`
 (`fb.c:775-834`). Removing them also removes the 640×480 drag ceiling (the
@@ -500,7 +523,17 @@ Build order: `ui_label` → `ui_bar` → `ui_button` → `ui_sep`/`ui_space` →
 
 Needs `fb_clip` (step 0b) — a widget must not draw outside its window.
 
-### [ ] 2g. The shell becomes app 0
+### [x] 2g. The shell becomes app 0 — **DONE 2026-08-18**
+
+`read_line` no longer loops: `term_key()` is fed one character per `app_event`
+and `term.c` holds the scrollback the window redraws from. Typed commands
+replace single keypresses, and **ten commands that had no typed name got one** —
+they were reachable from the text shell and from nowhere else.
+
+Still open from this item: `run_command` still blocks for the seven
+full-screen demos (2e).
+
+### [x] 2g (original text). The shell becomes app 0
 
 - `read_line()` stops looping — becomes a state machine fed one char per event.
   Smaller than it sounds: `LINE_BUF` and the history are already in raw memory,
@@ -666,3 +699,42 @@ The track was as tall as it was wide with a knob nearly filling it, so the
 control read as a round button — "press me", not "I am on or off". Every
 assertion about it passed the whole time, because *does it toggle* and *does it
 look like a toggle* are different questions and only one of them had a test.
+
+
+---
+
+## What the v10 pass added, 2026-08-18
+
+All ten items of `desktop-v10-plan.md` §6. Full account and numbers there; the
+new surface, so it can be found:
+
+**fb.c**
+- `fb_fill_blend` / `fb_rrect_blend` — translucency, 22.2 cyc/px
+- `fb_grad_radial` / `fb_grad_conic` (+ the zl-facing `glow` / `wedge`) —
+  elliptical two-alpha radial gradients and conic wedges, both read off the
+  prototype's own CSS
+- `fb_rrect_grad_top` — a title bar is a rounded-TOP gradient. At radius 5
+  nobody could see that it was not; at 12 the square band sits visibly proud of
+  the round frame
+- `fb_blur_cache` / `fb_blur_paint` — **7.37 ms cold, 0.18 ms cached**
+- `fb_wall_save` / `fb_wall_paint` — the wallpaper is a cached bitmap, because
+  six translucent full-screen passes is 130 ms of a 16.67 ms frame
+- `fb_text_role` — three sizes × two weights, chosen by ROLE not by size
+- a bump-allocated cache arena in the 16 MiB C4 freed, which refuses and says
+  so rather than overrunning
+
+**wm.c**
+- `wm_anim` — a timeline: five kinds, integer step tables, eight slots, a
+  refusal when full. `ANIM_PULSE` composites; `ANIM_FADE` does not yet and the
+  reason is written down rather than papered over.
+
+**input.c / support.c**
+- COM1 as a third event source, with a scratch-register probe so an absent UART
+  cannot inject an endless stream of 0xFF keystrokes on the ThinkPad
+
+**gen_icons.py** — 10 → 20 icons, the second set taken from the prototype's own
+vocabulary (Places, Devices, Properties, Unlock, End Process, Update interval)
+
+**raw_boot.asm / mkdisk.sh** — the loader read a fixed 1.25 MiB against a
+1.23 MiB kernel. Over that limit the kernel is silently truncated and jumped
+into. `mkdisk.sh` now refuses to build such an image.

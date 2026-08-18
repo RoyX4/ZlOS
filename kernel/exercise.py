@@ -42,6 +42,14 @@ OVMF_CODE = "/usr/share/OVMF/OVMF_CODE_4M.fd"
 OVMF_VARS = "/usr/share/OVMF/OVMF_VARS_4M.fd"
 
 # name, keys, kind, exit, want, forbid
+#
+# `keys` IS A TYPED COMMAND NAME NOW, not a keypress. It used to be "h", "20f",
+# "?"  - single characters that run_command dispatched on directly. The
+# compositor is the boot state on every path that has a framebuffer, and in it
+# the shell is a window whose input is a LINE: characters accumulate until
+# Enter. So the driver appends a carriage return to each of these and term.c
+# looks the word up. The old form did not fail loudly; it typed five characters
+# into a line buffer and waited forever, which is why this note exists.
 #   kind  "text" - it prints its result and returns on its own
 #         "gfx"  - it draws; photograph it while it is up, then end it
 #   exit  None        - returns by itself
@@ -49,36 +57,37 @@ OVMF_VARS = "/usr/share/OVMF/OVMF_VARS_4M.fd"
 #         "qmp:KEY"   - send a PS/2 scancode (for anything reading kbd_scan)
 #   want / forbid are matched against what THIS step printed, not the whole log
 STEPS = [
-    ("help",       "h",   "text", None, ["h        this help", "q        halt the machine"], []),
-    ("fib",        "20f", "text", None, ["6765"], []),
-    ("sumsq",      "10s", "text", None, ["385"], []),
-    ("uptime",     "t",   "text", None, ["uptime:", "ticks at 100 Hz"], []),
-    ("cpuid",      "p",   "text", None, ["CPU:"], []),
-    ("pokepeek",   "m",   "text", None, ["read back: 42"], []),
-    ("beep",       "e",   "text", None, ["beep!"], []),
-    ("pci_intel",  "k",   "text", None,
+    ("help",       "help",   "text", None, ["help              this help",
+                       "quit              halt the machine"], []),
+    ("fib",        "fib 20", "text", None, ["6765"], []),
+    ("sumsq",      "sum 10", "text", None, ["385"], []),
+    ("uptime",     "uptime",   "text", None, ["uptime:", "ticks at 100 Hz"], []),
+    ("cpuid",      "cpuid",   "text", None, ["CPU:"], []),
+    ("pokepeek",   "poke",   "text", None, ["read back: 42"], []),
+    ("beep",       "beep",   "text", None, ["beep!"], []),
+    ("pci_intel",  "pci",   "text", None,
         ["PCI bus scan", "devices found:", "display adapter", "modesetting:"], []),
-    ("xhci",       "u",   "text", None,
+    ("xhci",       "usb",   "text", None,
         ["USB host controller (xHCI)", "it is ours", "no-op command completed",
          "devices attached:"],
         ["could not take the controller", "not backed by RAM", "enumeration failed"]),
     # j and = run a 60 s timer of their own, so they need a ceiling above it
-    ("usbkbd",     "j",   "text", "ser:\x1b",
+    ("usbkbd",     "usbkbd",   "text", "ser:\x1b",
         ["USB keyboard test", "keyboard on slot"], ["no keyboard"]),
-    ("cpu",        "z",   "text", None,
+    ("cpu",        "cpu",   "text", None,
         ["vendor:", "topology:", "cache L1", "features:"], []),
-    ("nvme",       "o",   "text", None,
+    ("nvme",       "nvme",   "text", None,
         ["admin + I/O queues created - it is ours", "read them back, all match"],
         ["not backed by RAM"]),
-    ("sched",      "+",   "text", None,
+    ("sched",      "sched",   "text", None,
         ["tasks now runnable:", "switches="], []),
-    ("smp",        "*",   "text", None,
+    ("smp",        "smp",   "text", None,
         ["cores online now: 4 of 4", "running on more than one core"], []),
-    ("usbstor",    "/",   "text", None,
+    ("usbstor",    "usbstor",   "text", None,
         ["bulk IN and OUT endpoints configured", "INQUIRY:",
          "read a sector off a USB stick"], []),
     # QEMU has no LPSS I2C - the pass here is that it says so instead of hanging
-    ("i2c_hid",    "?",   "text", None, ["I2C-HID touchpad"], []),
+    ("i2c_hid",    "i2c",   "text", None, ["I2C-HID touchpad"], []),
     # "keys" drives the emulated KEYBOARD rather than the serial line. The
     # input-events demo reads in_next(), the unified PS/2+USB event queue, and
     # never looks at serial - so this is the one step that proves a real key
@@ -87,20 +96,26 @@ STEPS = [
     # would come through as down/up scancodes) - so this also proves the xHCI
     # keyboard stack, the only keyboard a UEFI laptop has after boot services
     # go away.
-    # It runs its 30 s timer out rather than ending on ESC, and that is correct
-    # here: the demo only exits early on an EV_KEY_DOWN carrying 0x101, but the
-    # USB HID path pushes EV_CHAR and nothing else (input.c:270), so an ESC
-    # arriving over USB is a character, not a navigation key. Reporting the
-    # keystroke at all is the thing being tested.
-    ("input",      "=",   "keys", None, ["input events", "char ", "'a'"], []),
-    ("virtio_gpu", "y",   "gfx",  None,
+    # This step used to assert only that SOME keystroke was reported, and it
+    # passed for four rounds while ESC was broken over USB: the demo was ending
+    # on its 30 s timer, not on the key, and from outside those are the same
+    # thing - both finish at the prompt. So assert the difference directly.
+    # "ESC - done" is printed only on the early exit and "timed out" only on
+    # the timer, which makes want/forbid exact rather than circumstantial.
+    # "down " proves the key arrived as a KEY event and not just a character,
+    # and 0x0112 is KEY_UP - the arrows the demo tells you to try, which the
+    # HID decoder used to drop on the floor.
+    ("input",      "input",   "keys", None,
+        ["input events", "char ", "'a'", "down ", "0x0112", "ESC - done"],
+        ["timed out"]),
+    ("virtio_gpu", "gpu",   "gfx",  None,
         ["virtqueue up, DRIVER_OK", "TRANSFER_TO_HOST_2D + RESOURCE_FLUSH acknowledged"],
         ["refused our feature negotiation", "flush failed", "GET_DISPLAY_INFO failed"]),
-    ("colorbars",  "b",   "gfx",  None,
+    ("colorbars",  "bars",   "gfx",  None,
         ["14 colours, painted straight into the framebuffer"], ["needs the framebuffer"]),
-    ("windows",    "w",   "gfx",  "ser: ", [], ["needs the framebuffer"]),
-    ("cube3d",     "v",   "gfx",  "ser: ", [], ["needs the framebuffer"]),
-    ("anim",       "a",   "gfx",  "ser: ", [], ["needs the framebuffer"]),
+    ("windows",    "windows",   "gfx",  "ser: ", [], ["needs the framebuffer"]),
+    ("cube3d",     "cube",   "gfx",  "ser: ", [], ["needs the framebuffer"]),
+    ("anim",       "anim",   "gfx",  "ser: ", [], ["needs the framebuffer"]),
     # "pointer" shoves the emulated mouse and then reads back what the guest
     # says it received. Pixels are the WRONG test here and that cost real time:
     # the cursor is 12x18 on a 1920x1200 screen, so moving it repaints 0.02% -
@@ -110,12 +125,12 @@ STEPS = [
     # 75% of 1919 = 1439, 90% of 1199 = 1079. An absolute pointer must land on
     # exactly that pixel; anything else means the position is being accumulated
     # or scaled instead of taken at face value.
-    ("mouse",      "x",   "pointer", "ser: ",
+    ("mouse",      "mouse",   "pointer", "ser: ",
         ["last at 1439,1079"], ["needs the framebuffer"]),
-    ("snake",      "g",   "gfx",  "ser:\x1b\x1b", [], ["needs the framebuffer"]),
-    ("paint",      "d",   "gfx",  "ser:\x1b", [], ["needs the framebuffer"]),
-    ("fs_list",    "l",   "text", None, ["RAM files:"], []),
-    ("modeset",    "n",   "gfx",  None,
+    ("snake",      "snake",   "gfx",  "ser:\x1b\x1b", [], ["needs the framebuffer"]),
+    ("paint",      "paint",   "gfx",  "ser:\x1b", [], ["needs the framebuffer"]),
+    ("fs_list",    "ls",   "text", None, ["RAM files:"], []),
+    ("modeset",    "mode",   "gfx",  None,
         ["modesetting with our own driver"], ["the card refused that mode"]),
     # KNOWN ISSUE, ordered last on purpose. With usb-tablet attached, running
     # the input-events demo ('=') first leaves the USB keyboard not delivering,
@@ -125,8 +140,8 @@ STEPS = [
     # input->editor pass. Six hypotheses tested and none held (see
     # docs/input-stack.md). Kept here, last, so the failure is visible and
     # named rather than hidden by narrowing the test.
-    ("editor",     "3i",  "gfx",  "qmp:esc", ["saved"], ["needs the framebuffer"]),
-    ("clear",      "c",   "text", None, [], []),
+    ("editor",     "edit 3",  "gfx",  "qmp:esc", ["saved"], ["needs the framebuffer"]),
+    ("clear",      "clear",   "text", None, [], []),
 ]
 SETTLE = 2.5          # seconds of rendering before a photograph - decides nothing
 # Two demos run a 60 s timer of their own and print "timed out" when it expires.
@@ -357,6 +372,7 @@ def main():
     proc = subprocess.Popen(qemu_argv(tmp, args.uefi, ser_path, qmp_path),
                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     transcript, results = [], []
+    wedged = False        # a demo trapped the shell; later steps cannot run
     try:
         ser, qmp = Serial(ser_path), Qmp(qmp_path)
         ok, boot = ser.wait("ready.", args.boot_ceiling)
@@ -371,6 +387,11 @@ def main():
               f"({'UEFI/GOP' if args.uefi else 'GRUB multiboot'})\n", flush=True)
 
         for name, keys, kind, exit_how, want, forbid in steps:
+            if wedged:
+                print(f"  skip  {name:<11} (shell wedged by an earlier step)",
+                      flush=True)
+                results.append((name, None))      # None = skipped, not a failure
+                continue
             problems, shot = [], ""
             dev = "vgpu" if name == "virtio_gpu" else None
             before = None
@@ -384,7 +405,10 @@ def main():
                 if qmp.screendump(bpath, dev):
                     before = ppm_sample(bpath)
 
-            ser.send(keys)
+            # Enter is what submits a line. Sending the word alone leaves it
+            # sitting in the input buffer and the step times out looking like a
+            # hung demo.
+            ser.send(keys + "\r")
 
             carried = ""
             if kind == "keys":
@@ -392,7 +416,10 @@ def main():
                 # wait() CONSUMES what it matched, so keep it - the assertions
                 # below are made against this step's whole output.
                 _, carried = ser.wait("ESC ends.", args.step_ceiling)
-                for k in ("a", "b", "esc"):
+                # "up" covers the arrows, which have no character and so only
+                # exist as key events - the case that was silently missing.
+                # "esc" must END the demo; the step forbids "timed out".
+                for k in ("a", "b", "up", "esc"):
                     qmp.sendkey(k)
                     ser.drain(0.4)
 
@@ -444,6 +471,23 @@ def main():
                 out += more
                 if got:
                     problems.append("needed an unexpected second exit key")
+            if not got:
+                # Still wedged: the shell is inside a demo that will not let go,
+                # so nothing after this can be tested on this boot.
+                #
+                # QMP system_reset is NOT the answer here - the guest runs with
+                # -no-reboot (deliberately, so a triple fault exits instead of
+                # looping forever), which turns a reset into QEMU exiting and
+                # the serial socket breaking under us.
+                #
+                # So report the remaining steps as SKIPPED rather than FAILED.
+                # One stuck demo used to fail every step after it, which turned
+                # a single defect into 27/30 and buried the real failure in its
+                # own collateral. Skipped is the honest word: those steps were
+                # never run, and calling them failures overstates the damage
+                # just as much as hiding them would understate it.
+                problems.append("wedged the shell - later steps could not run")
+                wedged = True
 
             out = carried + out
             transcript.append(f"\n########## {name}  (sent {keys!r}) ##########\n" + out)
@@ -457,11 +501,18 @@ def main():
                 print(f"          - {p}", flush=True)
             results.append((name, not problems))
 
-        ser.send("q")
-        ok, out = ser.wait("halting.", 30)
-        transcript.append("\n########## halt ##########\n" + out)
-        print(f"  {'ok  ' if ok else 'FAIL'}  halt", flush=True)
-        results.append(("halt", ok))
+        # halt lives outside the loop, so it needs the same guard: a shell that
+        # is stuck inside a demo cannot be asked to halt, and reporting that as
+        # a halt FAILURE blames the wrong thing.
+        if wedged:
+            print("  skip  halt        (shell wedged by an earlier step)", flush=True)
+            results.append(("halt", None))
+        else:
+            ser.send("quit\r")
+            ok, out = ser.wait("halting.", 30)
+            transcript.append("\n########## halt ##########\n" + out)
+            print(f"  {'ok  ' if ok else 'FAIL'}  halt", flush=True)
+            results.append(("halt", ok))
     finally:
         proc.terminate()
         try:
@@ -472,8 +523,11 @@ def main():
             fh.write("".join(transcript))
         shutil.rmtree(tmp, ignore_errors=True)
 
-    bad = [n for n, good in results if not good]
-    print(f"\n{len(results) - len(bad)}/{len(results)} steps ok"
+    bad     = [n for n, good in results if good is False]
+    skipped = [n for n, good in results if good is None]
+    ok      = len(results) - len(bad) - len(skipped)
+    print(f"\n{ok}/{len(results)} steps ok"
+          + (f", {len(skipped)} skipped" if skipped else "")
           + (f" - failed: {', '.join(bad)}" if bad else ""))
     print(f"evidence: {outdir}")
     return 1 if bad else 0

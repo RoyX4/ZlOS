@@ -58,11 +58,33 @@ void ui_theme_init(int scale)
     theme.title_bot = 0x16285C;
     theme.title_off = 0x243350;
 
+    /* ---- metrics, v10 SS6.10 -----------------------------------------------
+     * Counted out of the prototype's stylesheet rather than picked by eye, and
+     * then snapped onto the 4/8/12/16/24 scale this file already enforces -
+     * which is the whole of "adopt its structure, keep our system":
+     *
+     *   border-radius   11..16px, mode 13/14   -> 12 (was 5)
+     *   gap             8 and 9 dominate       -> 8, unchanged
+     *   row height      26/30/32/34            -> 28 (was 24)
+     *   padding         9..14                  -> 12, unchanged
+     *
+     * THE RADIUS IS THE ONE THAT CHANGES HOW IT READS. At 5 the corners are a
+     * bevel; at 12 they are the soft rectangles the prototype is built out of,
+     * and it is the single largest visual difference between the two. The
+     * nested inner rrect stays exactly one pixel tighter, so the hairline
+     * border still follows the outer curve instead of cutting across it.
+     *
+     * title_h stays 28. It is the one metric desktop-TODO's design rules name
+     * as part of the existing system ("the nested 5px/4px rrect and TITLE_H 28
+     * are the system") - and 28 is already inside the prototype's own 26..34
+     * band, so there is nothing to gain by moving it and a whole layout to
+     * re-check if it moves.
+     */
     theme.scale   = scale;
-    theme.pad     = 12 * scale;      /* every one of these is on the scale */
+    theme.pad     = 12 * scale;
     theme.gap     =  8 * scale;
-    theme.row_h   = 24 * scale;
-    theme.radius  =  5 * scale;
+    theme.row_h   = 28 * scale;
+    theme.radius  = 12 * scale;
     theme.title_h = 28 * scale;
 }
 

@@ -21,6 +21,7 @@ int  vga_get_col(void);
 
 /* fb.c - the UEFI framebuffer */
 int  fb_active(void);
+unsigned long fb_phys(void);
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp);
 void fb_clear(void);
@@ -58,10 +59,6 @@ void fb_present(void);
 void fb_icon24(int px, int py, int n, unsigned int fg);
 int  fb_cell_w(void);
 int  fb_cell_h(void);
-void fb_bg_snapshot(void);
-void fb_bg_restore(int x, int y, int w, int h);
-void fb_grab(int x, int y, int w, int h);
-void fb_stamp(int x, int y);
 void fb_cube_filled(int cx, int cy, int size, int angle, unsigned int base);
 void fb3d_set_clip(int x0, int y0, int x1, int y1);
 
@@ -84,6 +81,12 @@ void console_set_region(int top, int bot) { log_top = top; log_bot = bot; }
  * while rendering into a UEFI framebuffer is exactly the sort of
  * comfortable lie that hides a broken assumption later. */
 int console_kind(void) { return fb_active() ? 1 : 0; }      /* 0 VGA, 1 framebuffer */
+
+/* Real video memory for whichever console is up. In a linear framebuffer mode
+ * the legacy text window at 0xB8000 is not decoded to anything, so a write
+ * there is dropped and the read back returns 0xFF - which is exactly what the
+ * poke/peek demo reported on the desktop before this existed. */
+unsigned long console_vram(void) { return fb_active() ? fb_phys() : 0xB8000UL; }
 int console_cols(void) { return fb_active() ? fb_get_cols() : 80; }
 /* the console cell size in pixels - zl needs it to turn a window rect into a
  * text box, and it is no longer always 8x16 */
@@ -218,8 +221,27 @@ void console_clear(void)                 { if (fb_active()) fb_clear(); else vga
  * nothing changed, and only ever copies the rectangle that actually moved. */
 void console_present(void) { if (fb_active()) fb_present(); }
 
+/* ---- muting, for when something else owns the screen -----------------------
+ * The console draws text at ITS cursor, inside ITS scrolling region, and knows
+ * nothing about windows. That is correct while it is the whole machine and
+ * wrong the moment a compositor is repainting from damage: `help` typed into
+ * the shell window printed the help text twice - once into the window, from
+ * term.c's scrollback, and once as raw console text scrolling across the
+ * desktop underneath it, leaving a black band where the region had scrolled.
+ *
+ * Muting stops the PIXELS only. zl_putc still tees every character into
+ * term.c's scrollback and still writes it to COM1, so the window redraws from
+ * a complete transcript and every automated gate reads exactly what it read
+ * before. That split is the whole point: the serial log must not depend on who
+ * owns the framebuffer. */
+static int con_muted = 0;
+
+void console_mute(int on) { con_muted = on ? 1 : 0; }
+int  console_muted(void)  { return con_muted; }
+
 void console_putc(char c)
 {
+    if (con_muted) return;
     if (!fb_active()) { vga_putc(c); return; }
     fb_putc(c, log_top, log_bot);
     /* flush a line at a time so the boot log still streams live, without
@@ -248,6 +270,45 @@ void console_gradient(int x, int y, int w, int h, unsigned char a_top, unsigned 
 /* true-colour versions: zl passes a packed 0xRRGGBB it computes as
  * r*65536 + g*256 + b, escaping the 16-colour VGA palette for the modern
  * gradients, shadows and wallpaper a desktop needs. */
+/* the v10 primitives: translucency, the two gradient shapes, the blur cache */
+void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
+void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a);
+void fb_glow(int cx, int cy, int rx, int ry, unsigned int rgb, int a_in, int a_out, int stop);
+void fb_wedge(int cx, int cy, unsigned int rgb, int a0, int f, int m, int e);
+int  fb_blur_cache(int x, int y, int w, int h, int radius);
+void fb_blur_paint(int slot, int x, int y);
+void fb_blur_free_all(void);
+
+void console_blend(int x, int y, int w, int h, unsigned int rgb, int a)
+{ if (fb_active()) fb_fill_blend(x, y, w, h, rgb, a); }
+void console_rrblend(int x, int y, int w, int h, int r, unsigned int rgb, int a)
+{ if (fb_active()) fb_rrect_blend(x, y, w, h, r, rgb, a); }
+void console_glow(int cx, int cy, int rx, int ry, unsigned int rgb, int ai, int ao, int stop)
+{ if (fb_active()) fb_glow(cx, cy, rx, ry, rgb, ai, ao, stop); }
+int  console_wall_save(void);
+void console_wall_paint(int x, int y, int w, int h);
+void console_wedge(int cx, int cy, unsigned int rgb, int a0, int f, int m, int e)
+{ if (fb_active()) fb_wedge(cx, cy, rgb, a0, f, m, e); }
+int  console_blur(int x, int y, int w, int h, int r)
+{ return fb_active() ? fb_blur_cache(x, y, w, h, r) : -1; }
+void console_blur_paint(int slot, int x, int y)
+{ if (fb_active()) fb_blur_paint(slot, x, y); }
+void console_blur_free(void) { if (fb_active()) fb_blur_free_all(); }
+
+/* the wallpaper cache: zl draws the wallpaper it wants once, then saves it,
+ * and every repaint after that is a blit */
+int  fb_wall_save(void);
+void fb_wall_paint(int x, int y, int w, int h);
+int  fb_wall_ok(void);
+int  console_wall_save(void)  { return fb_active() ? fb_wall_save() : 0; }
+void console_wall_paint(int x, int y, int w, int h)
+{ if (fb_active()) fb_wall_paint(x, y, w, h); }
+int  console_wall_ok(void)    { return fb_active() ? fb_wall_ok() : 0; }
+
+void fb_rrect_grad_top(int x, int y, int w, int h, int r, unsigned int t, unsigned int b);
+void console_gradtop(int x, int y, int w, int h, int r, unsigned int t, unsigned int b)
+{ if (fb_active()) fb_rrect_grad_top(x, y, w, h, r, t, b); }
+
 void console_fill_rgb(int x, int y, int w, int h, unsigned int rgb)
 { if (fb_active()) fb_fill_px(x, y, w, h, rgb); }
 
@@ -307,10 +368,6 @@ void console_pointer_show(int x, int y) { if (fb_active()) fb_pointer_show(x, y)
 void console_pointer_hide(void)         { if (fb_active()) fb_pointer_hide(); }
 
 /* window-drag backing store: snapshot background, grab/stamp a window bitmap */
-void console_bg_snapshot(void)                    { if (fb_active()) fb_bg_snapshot(); }
-void console_bg_restore(int x,int y,int w,int h)  { if (fb_active()) fb_bg_restore(x, y, w, h); }
-void console_grab(int x, int y, int w, int h)     { if (fb_active()) fb_grab(x, y, w, h); }
-void console_stamp(int x, int y)                  { if (fb_active()) fb_stamp(x, y); }
 
 /* the solid, flat-shaded, back-face-culled cube */
 void console_cube_filled(int cx, int cy, int size, int angle, unsigned int rgb)

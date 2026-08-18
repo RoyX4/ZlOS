@@ -26,7 +26,15 @@ KERNEL_SEG   equ 0x1000          ; bounce buffer at 0x10000, reused every chunk
 KERNEL_DEST  equ 0x100000        ; where the kernel actually runs: 1 MiB
 KERNEL_LBA   equ 1               ; kernel starts at the 2nd sector of the disk
 CHUNK_SECS   equ 64              ; sectors per BIOS read (32 KiB)
-CHUNKS       equ 40              ; 40 * 32 KiB = 1.25 MiB of headroom
+; 60 * 32 KiB = 1.875 MiB, and the disk mkdisk.sh builds is 2 MiB, so this is
+; the largest whole number of chunks that still fits behind the boot sector.
+; It was 40 (1.25 MiB) against a 1.23 MiB kernel - 84 KiB of headroom, which
+; the v10 type scale would have walked straight through. A kernel that outgrows
+; this is not a build error: the loader reads exactly CHUNKS chunks whatever
+; the kernel's size, so the tail is simply never loaded and the machine jumps
+; into whatever happens to be at 1 MiB. mkdisk.sh now refuses to build an image
+; that would do that.
+CHUNKS       equ 60
 
 ; Scratch below the kernel (the boot sector ends at 0x7E00, the kernel starts
 ; at 0x10000), used only while we are still in real mode.

@@ -34,6 +34,7 @@ extern int xhci_key(void);        /* a decoded character from USB HID      */
 extern int idt_mouse_x(void);     /* the PS/2 pointer, published by IRQ12  */
 extern int idt_mouse_y(void);
 extern int idt_mouse_btn(void);
+extern int ser_rx(void);          /* one byte from COM1, or -1 (support.c) */
 
 /* ---- event model ------------------------------------------------------- */
 #define EV_NONE      0
@@ -42,30 +43,9 @@ extern int idt_mouse_btn(void);
 #define EV_CHAR      3
 #define EV_MOUSE     4
 
-/* Key codes. Printable keys use their unshifted ASCII so the common case is
- * trivial; everything else is above 0x100 where it cannot collide. */
-#define KEY_ESC       0x101
-#define KEY_BACKSPACE 0x102
-#define KEY_TAB       0x103
-#define KEY_ENTER     0x104
-#define KEY_LEFT      0x110
-#define KEY_RIGHT     0x111
-#define KEY_UP        0x112
-#define KEY_DOWN      0x113
-#define KEY_HOME      0x114
-#define KEY_END       0x115
-#define KEY_PGUP      0x116
-#define KEY_PGDN      0x117
-#define KEY_INSERT    0x118
-#define KEY_DELETE    0x119
-#define KEY_F1        0x120        /* F1..F12 are KEY_F1 + n */
-
-#define MOD_SHIFT   (1 << 0)
-#define MOD_CTRL    (1 << 1)
-#define MOD_ALT     (1 << 2)
-#define MOD_CAPS    (1 << 3)
-#define MOD_NUM     (1 << 4)
-#define MOD_SUPER   (1 << 5)
+/* Key codes and modifier bits. Shared with xhci.c, which produces the same
+ * codes for USB HID - see keycodes.h for why they are not declared here. */
+#include "keycodes.h"
 
 struct event {
     u16 type;
@@ -290,6 +270,23 @@ static void pump_mouse(void)
     evq_push(EV_MOUSE, (u32)b, mods, x, y);
 }
 
+/* The key a character came from. Printable keys ARE their unshifted ASCII by
+ * the convention in keycodes.h, so this only has to name the four control
+ * characters that have a key code, and fold shifted letters back to the
+ * unshifted key - 'A' and 'a' are one key, and a consumer watching for
+ * KEY_DOWN 'a' should see it whichever was typed. */
+static u32 key_of_char(int c)
+{
+    switch (c) {
+        case 27: return KEY_ESC;
+        case  8: return KEY_BACKSPACE;
+        case  9: return KEY_TAB;
+        case 13: return KEY_ENTER;
+    }
+    if (c >= 'A' && c <= 'Z') return (u32)(c + 32);
+    return (u32)c;
+}
+
 /* ---- the pump ----------------------------------------------------------
  * Called from the shell's idle loop. Drains both hardware sources into the
  * one queue and generates repeats. Everything above is bookkeeping; this is
@@ -305,10 +302,53 @@ void input_poll(void)
 
     pump_mouse();
 
-    /* USB HID, which already hands us decoded characters */
+    /* USB HID.
+     *
+     * This used to push EV_CHAR and nothing else, which made the USB keyboard
+     * a second-class source: every consumer that waits for a KEY rather than a
+     * CHARACTER was deaf to it. The `=` demo in kernel.zl exits on EV_KEY_DOWN
+     * with KEY_ESC, so with a USB keyboard ESC did nothing at all and the demo
+     * could only end by timing out - and the sweep scored that "ok", because
+     * from outside, timing out and exiting look identical.
+     *
+     * PS/2 emits the key first and the character second (line 230), so this
+     * does the same. Codes at or above KEY_NONCHAR - the arrows, Home/End, the
+     * function keys - have no character and emit only the key event. */
     for (int i = 0; i < 8; i++) {
         int c = xhci_key();
         if (!c) break;
+        if (c >= KEY_NONCHAR) {
+            evq_push(EV_KEY_DOWN, (u32)c, mods, 0, 0);
+        } else {
+            evq_push(EV_KEY_DOWN, key_of_char(c), mods, 0, 0);
+            evq_push(EV_CHAR, (u32)c, mods, 0, 0);
+        }
+    }
+
+    /* SERIAL, the third source.
+     *
+     * A terminal on the other end of COM1 is a keyboard as far as this queue is
+     * concerned, and it has to be: once wm_frame() owns the screen, apps get
+     * keys from here and from nowhere else, so a byte that only zl's old shell
+     * loop could read is a byte the desktop can never see. verify.sh and every
+     * probe-*.py drive this machine down that wire.
+     *
+     * EV_CHAR ONLY, DELIBERATELY - no EV_KEY_DOWN beside it, unlike PS/2 and
+     * USB. A serial byte carries no press/release and no modifier state; it is
+     * already the character. Synthesising a key event would also CHANGE an
+     * existing behaviour: input_key() returns the key when one is queued, so a
+     * serial ESC would start arriving as KEY_ESC (0x101) where the editor has
+     * always seen 27. Pushing the character alone leaves every existing
+     * consumer byte-for-byte where it was and adds the compositor as a new one.
+     *
+     * Bounded at 16 per poll for the same reason as the PS/2 drain: a fast
+     * sender must not be able to hold this loop. ser_rx() answers -1 when the
+     * machine has no UART, which is the ThinkPad - see support.c for why that
+     * check is not optional. */
+    for (int i = 0; i < 16; i++) {
+        int c = ser_rx();
+        if (c < 0) break;
+        if (c == 0) continue;                    /* a NUL is not a keystroke */
         evq_push(EV_CHAR, (u32)c, mods, 0, 0);
     }
 
