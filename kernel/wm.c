@@ -91,6 +91,20 @@ static struct win wins[WM_MAX];
 static int zorder[WM_MAX];          /* window indices, BACK to FRONT */
 static int nz;                      /* how many are in the z-order   */
 static int focus_win = -1;
+
+/* THE HOME WINDOW: where focus goes when a window closes.
+ *
+ * wm_close used to hand focus to the topmost REMAINING window, which is a fine
+ * default on a desktop you drive with a mouse and wrong here - the shell is the
+ * only launcher, so after closing an app the next command you typed went to
+ * whatever happened to be on top and vanished. Setting a home is policy, so
+ * kernel.zl does it; honouring it is mechanism, so this file does.
+ *
+ * -1 means "no preference", which is the old behaviour exactly. */
+static int home_win = -1;
+
+void wm_set_home(int win) { home_win = win; }
+
 static int running = 1;
 
 static app_draw_fn  hook_draw;
@@ -411,7 +425,9 @@ void wm_close(int win)
     wins[win].flags = 0;
     z_remove(win);
     /* focus the new top, so closing never leaves keys going nowhere */
-    focus_win = nz ? zorder[nz - 1] : -1;
+    /* the home window if it is still open, else the topmost survivor */
+    if (home_win >= 0 && wm_is_open(home_win)) focus_win = home_win;
+    else                                       focus_win = nz ? zorder[nz - 1] : -1;
 }
 
 void wm_raise(int win)

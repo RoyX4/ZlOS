@@ -1106,59 +1106,80 @@ fn fs_list() {
 EDIT_BUF = 0x40000
 EDIT_MAX = 8000
 
-fn redraw_editor(len) {
-    fill_rect(0, 34, px_w(), px_h() - 50, C_BLACK)   # clear the text area
-    goto_row(3)
-    color(C_WHITE)
-    i = 0
-    while i < len {
-        sc(peek8(EDIT_BUF + i))                        # screen-only, no serial spam
-        i = i + 1
-    }
-    # a block cursor at the current position
-    cursor(row(), col(), 1, C_GREEN)
-    # sc() writes to the screen only and never emits a newline, so nothing here
-    # would otherwise reach the card - the editor drew into the back buffer and
-    # stayed invisible.
-    present()
+# redraw_editor was here - it cleared the screen with fill_rect(0, 34, px_w(),
+# ...), positioned with goto_row() and emitted through sc(), all of which are
+# console operations anchored to the display rather than to a window. Replaced
+# by editor_draw, which takes a rectangle.
+
+# ---- the editor, as an app -------------------------------------------------
+# Held until last, as the task list asks, because it has the most state to
+# hoist - and in the end that turned out to be two numbers. EDIT_BUF was
+# already raw memory; what was really tangled was the DRAWING, which went
+# through the console (cls, at, goto_row, sc, row(), col()) and so was anchored
+# to the screen rather than to a rectangle. A console cursor is not something
+# an app_draw can be position-pure about.
+#
+# ESC still saves and exits - but "exits" now means the window CLOSES, which is
+# the same thing every other window means by it. No "press any key".
+ed_slot = 0
+ed_len  = 0
+
+fn editor_open(slot) {
+    ed_slot = slot
+    ed_len = fs_load(slot)
+    return 0
 }
 
-fn editor(slot) {
-    if px_w() == 0 {
-        color(C_GREY)  print("  the editor needs the framebuffer console")
-        return 0
+# One key. Returns 1 if it changed anything, 2 if the editor is done.
+fn editor_key(code) {
+    if code == 27 {
+        fs_save(ed_slot, ed_len)
+        return 2
     }
-    cls()
-    fill_rect(0, 0, px_w(), 30, C_BLUE)
-    at(0, 2, "zlEDIT", C_WHITE)
-    at(0, 10, "file", C_CYAN)
-    at_num(0, 15, slot, C_YELLOW)
-    at(0, 20, "type to edit   backspace deletes   ESC saves file & exits", C_CYAN)
-    len = fs_load(slot)                # load the file's existing content
-    redraw_editor(len)
-    ed_run = 1
-    while ed_run == 1 {
-        k = edit_key()
-        if k > 0 {
-            if k == 27 { ed_run = 0 }
-            if k == 8 {
-                if len > 0 { len = len - 1  poke8(EDIT_BUF + len, 0) }
-                redraw_editor(len)
-            }
-            if k == 13 {
-                if len < EDIT_MAX - 1 { poke8(EDIT_BUF + len, 10)  len = len + 1 }
-                redraw_editor(len)
-            }
-            if k >= 32 {
-                if len < EDIT_MAX - 1 { poke8(EDIT_BUF + len, k)  len = len + 1 }
-                redraw_editor(len)
-            }
+    if code == 8 {
+        if ed_len > 0 { ed_len = ed_len - 1  poke8(EDIT_BUF + ed_len, 0) }
+        return 1
+    }
+    if code == 13 {
+        if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, 10)  ed_len = ed_len + 1 }
+        return 1
+    }
+    if code >= 32 {
+        if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, code)  ed_len = ed_len + 1 }
+        return 1
+    }
+    return 0
+}
+
+# POSITION-PURE, which the console version could not be. Lays the buffer out in
+# the client rect, wrapping at the right edge and breaking on newline, and
+# stops at the bottom rather than scrolling - a scrolling view needs a top-line
+# index, which is more state than this item is worth.
+fn editor_draw(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, PANEL)
+    ed_cw = cell_w()
+    ed_ch = cell_h()
+    ed_x = ax + 4
+    ed_y = ay + 4
+    ed_i = 0
+    while ed_i < ed_len {
+        ed_c = peek8(EDIT_BUF + ed_i)
+        if ed_c == 10 {
+            ed_x = ax + 4
+            ed_y = ed_y + ed_ch
+        } else {
+            if ed_c > 32 { char_aa(ed_x, ed_y, ed_c, TXT_HI) }
+            ed_x = ed_x + ed_cw
+            if ed_x > ax + aw - ed_cw { ed_x = ax + 4  ed_y = ed_y + ed_ch }
         }
+        if ed_y > ay + ah - ed_ch * 2 { ed_i = ed_len }
+        ed_i = ed_i + 1
     }
-    fs_save(slot, len)                 # write it back to the file on exit
-    draw_screen()
-    color(C_GREY)  put("  saved ")  color(C_WHITE)  put(len)
-    color(C_GREY)  put(" bytes to file ")  color(C_WHITE)  print(slot)
+    # the caret, where the next character will land
+    fill_rgb(ed_x, ed_y, ed_cw, ed_ch - 2, ACCENT)
+    text_aa(ax + 4, ay + ah - ed_ch, "ESC saves and closes   file", TXT_DIM)
+    num_aa(ax + 4 + 28 * ed_cw, ay + ah - ed_ch, ed_slot, TXT_HI)
+    num_aa(ax + aw - 8 * ed_cw, ay + ah - ed_ch, ed_len, TXT_DIM)
     return 0
 }
 
@@ -1781,7 +1802,7 @@ fn run_command(cmd, arg) {
     # open_app() gives it a window instead. snake_game() is deleted.
     if cmd == 103 { return needs_wm("snake") }
     if cmd == 100 { return needs_wm("paint") }
-    if cmd == 105 { return editor(arg) }  # i - text editor (arg = file slot 0-9)
+    if cmd == 105 { return needs_wm("the editor") }
     if cmd == 108 { return fs_list() }    # l - list RAM files
     if cmd == 114 {                       # r - reboot
         color(C_YELLOW)  print("  rebooting...")
@@ -1906,6 +1927,7 @@ APP_PAINT   = 4
 APP_CUBE    = 5
 APP_ANIM    = 6
 APP_MOUSE   = 7
+APP_EDIT    = 8
 
 # Which window each app is in, or -1. An app that is already open is FOCUSED
 # rather than opened twice - wm.c would happily give you a second Snake, and
@@ -1915,6 +1937,7 @@ paint_win = 0 - 1
 cube_win  = 0 - 1
 anim_win  = 0 - 1
 mouse_win = 0 - 1
+edit_win  = 0 - 1
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     wy = ay - TITLE_H * ui()
@@ -1925,6 +1948,7 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_CUBE    { return cube_draw(ax, ay, aw, ah) }
     if id == APP_ANIM    { return anim_draw(ax, ay, aw, ah) }
     if id == APP_MOUSE   { return mouse_draw(ax, ay, aw, ah) }
+    if id == APP_EDIT    { return editor_draw(ax, ay, aw, ah) }
     if id == APP_SHELL {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the
@@ -1974,6 +1998,23 @@ fn app_event(id, win, ety, ecode, ex, ey) {
     }
     if id == APP_SNAKE {
         if ety == 3 { if snake_key(ecode) == 1 { wm_dmg(win)  return 1 } }
+        return 0
+    }
+    if id == APP_EDIT {
+        if ety == 3 {
+            ek = editor_key(ecode)
+            # 2 means ESC: it saved, and the window closes. That is what every
+            # other window means by "exit", and it is the whole difference from
+            # "press any key" - there is nothing to press a key to get out of.
+            if ek == 2 {
+                wm_close(win)
+                edit_win = 0 - 1
+                # wm_close returns focus to the home window (wm_home, set to
+                # the shell in wm_session) - so this needs nothing here.
+                return 1
+            }
+            if ek == 1 { wm_dmg(win)  return 1 }
+        }
         return 0
     }
     if id == APP_PAINT {
@@ -2082,6 +2123,21 @@ fn open_app(cmd) {
         if anim_win < 0 { return 0 }
         if oa_f >= 0 { wm_focus(oa_f) }
         wm_report(anim_win)
+        return 1
+    }
+    if cmd == 105 {
+        if edit_win >= 0 { if wm_alive(edit_win) == 1 {
+            wm_focus(edit_win)  wm_raise(edit_win)  return 1
+        }}
+        edit_win = wm_open(APP_EDIT, "zlEDIT", 480 * oa_u, 230 * oa_u, 160 * oa_u, 160 * oa_u)
+        if edit_win < 0 { return 0 }
+        editor_open(0)
+        # THE EDITOR TAKES FOCUS, unlike every other app here, because it is the
+        # only one that is useless without the keyboard. Opening Snake and
+        # carrying on typing commands is reasonable; opening an editor and
+        # having your typing go to the shell is not.
+        wm_focus(edit_win)
+        wm_report(edit_win)
         return 1
     }
     if cmd == 120 {
@@ -2204,6 +2260,11 @@ fn wm_session() {
     # Focus does not imply raise (see wm_focus in wm.c), so this changes which
     # window gets the keys and nothing about the stacking.
     wm_focus(shell_win)
+    # ...and it is where focus RETURNS when any window closes - the close box,
+    # Ctrl+W or the editor's ESC. wm_close otherwise hands focus to whatever is
+    # topmost, and the shell is the only launcher, so the next command typed
+    # after closing an app went into a window that ignored it.
+    wm_home(shell_win)
     # SAY THAT THE COMPOSITOR STARTED, and say WHERE THE SHELL IS. It reaches
     # the serial log even though the console's pixels are muted, because
     # con_quiet mutes only the pixels - so a headless gate can tell "the

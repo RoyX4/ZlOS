@@ -348,6 +348,7 @@ extern int  wm_running(void);
 extern void wm_stop(void);
 extern int  wm_focused(void);
 extern unsigned int wm_frame_us(void);
+extern void wm_set_home(int win);
 extern void wm_focus(int win);
 extern void wm_raise(int win);
 extern void wm_client(int win, int *x, int *y, int *w, int *h);
@@ -838,6 +839,7 @@ Value zl_calln(const char *name, int n, ...)
      * no-op that reads as "the dock stopped working". */
     if (streq(name, "wm_alive"))   return zl_num((double)wm_is_open((int)a[0].num));
     if (streq(name, "wm_frame_us")) return zl_num((double)wm_frame_us());
+    if (streq(name, "wm_home"))    { wm_set_home((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_focused")) return zl_num((double)wm_focused());
     if (streq(name, "wm_focus"))   { wm_focus((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_raise"))   { wm_raise((int)a[0].num); return zl_nil(); }
