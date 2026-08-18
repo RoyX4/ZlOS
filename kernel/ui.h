@@ -153,6 +153,10 @@ int  wm_at(int x, int y);                     /* topmost window containing    */
 int  wm_zorder_at(int i);                     /* i-th from the BACK           */
 void wm_stop(void);                           /* 'q': ask the loop to end     */
 int  wm_running(void);
+/* what the last REPAINTING frame cost, in microseconds, and the worst so far */
+int  wm_frame_us(void);
+int  wm_peak_us(void);
+void wm_peak_reset(void);
 int  wm_win_app(int win);                      /* the ACTIVE tab.s app        */
 
 /* ---- ui.c ---------------------------------------------------------------- */

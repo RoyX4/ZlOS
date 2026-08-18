@@ -832,3 +832,69 @@ mean every app had to know about it.
 - **the four apps the mockup has and zlOS does not** — a file manager, a task
   manager, settings, a lock screen. Named in the prototype's own markup
   (Places, Devices, Properties, End Process, Update interval, Unlock).
+
+---
+
+## The honest re-grade, 2026-08-18 (asked directly: "do they look remotely similar")
+
+**No.** And the gap is not the renderer.
+
+### What is actually blocking everything: the toolkit has no zl bindings
+
+`ui.c` is a complete immediate-mode toolkit — label, bar, button, sep, space,
+toggle, slider, num, list_row, scroll — built, asserted, and named by every
+earlier plan as the layer that was missing.
+
+**`ui_scale` and `ui_theme` are the only `ui_*` builtins.** Neither is a
+widget. Every app in zlOS lives in `kernel.zl`, so not one of them can call a
+single control. The start menu written today draws its rows with raw
+`label()` and `rrblend()` — which is how this was found: by hitting the wall
+while building something, not by an audit.
+
+`desktop-northstar-feasibility.md` scored the toolkit at 90% and the mockup at
+65%. Both counted what was **built** rather than what was **reachable** — the
+same mistake as the original 95%, one layer up. Corrected to ~35%. T-18.
+
+**This is the highest-leverage item on the whole desktop board.** Thirteen
+applications are waiting behind it and every one is far cheaper with it than
+without. The work is a set of builtins plus one real design decision: how an
+immediate-mode API with an out-parameter (`ui_toggle(s, int *on)`) crosses into
+a language with no pointers.
+
+### What the prototype actually contains, from its own template model
+
+Thirteen applications with real state: a file manager (breadcrumbs, tree,
+mounts, icon/list views, properties, rename, search), a hex viewer, a code
+editor (tabs, gutter, syntax modes, find with a match count), a terminal (tabs,
+cwd, geometry), a system monitor (process list, kill, CPU graph, meters), a log
+viewer with filters, settings (nav, toggles, sliders, accent picker), a lock
+screen, an activities overview (apps, windows, workspaces, search), a command
+palette, a calendar, a GL view (orbit, spin, zoom, wireframe, render-ms), and a
+framebuffer test. Plus workspaces, window snapping, toasts, context menus,
+dialogs and a clipboard.
+
+zlOS has a shell, a three-line System Monitor, an identity card, and snake.
+
+### The three things that were making it look and feel wrong
+
+1. **The terminal drew with the PROPORTIONAL font.** Every column-aligned thing
+   the shell prints is aligned with spaces, which only lines up in monospace.
+   It read as broken formatting rather than as the wrong font, which is why it
+   survived. Fixed — the terminal is a grid again.
+2. **The type scale made body text SMALLER**, from a 32 px cell to 24 px at
+   ui 2, so "make the desktop bigger" arrived as "everything shrank". And the
+   ui-scale fix changes nothing at 1920 — it only steps up at 2560 and above.
+3. **`desk_draw` ignored the rectangle it was given.** Called once per damage
+   rectangle, up to eight a frame, and the dock — now a blur blit plus a
+   full-width translucent tint — redrew in full every time. ~2.5 ms × 8 = 20 ms
+   of dock alone against a 16.67 ms budget. T-19.
+
+### And there was no way to know any of that
+
+Nothing in this kernel had ever timed a frame. **0h has said "add a `tsc()`
+builtin and put frame time on screen — DO THIS BEFORE ANY PERFORMANCE WORK"
+since it was written**, and the v10 run did the performance work first and the
+measurement never. It exists now: `wm_frame()` times itself with the TSC in
+microseconds, counts only frames that repaint, resets its peak once boot
+settles, shows both in the tray, and `probe-frame.py` drives real interaction
+and reads them back.

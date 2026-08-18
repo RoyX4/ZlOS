@@ -72,6 +72,11 @@ int  input_y(void);
 #define MOD_SUPER   (1 << 5)
 
 unsigned int idt_ticks(void);
+/* cpu.c. The TSC has been readable since cpu.c was written and nothing in the
+ * compositor has ever timed a frame - desktop-TODO 0h says to do this BEFORE
+ * any performance work, and the v10 run did the performance work first. */
+unsigned int cpu_tsc_lo(void);
+unsigned int cpu_tsc_khz(void);
 
 /* The one character sink the whole kernel prints through. wm.c uses it for
  * refusals only - anything it declines to do says so, on the serial log, where
@@ -1077,11 +1082,28 @@ static void wm_route(int type)
  */
 static unsigned int last_tick;
 
+/* ---- what a frame actually costs -------------------------------------------
+ * idt_ticks() is 100 Hz, which is 10 ms of resolution against a 16.67 ms
+ * budget - useless. The TSC is a cycle counter and cpu.c has calibrated it
+ * against the PIT since it was written.
+ *
+ * Microseconds, not milliseconds: a cheap frame is well under 1 ms and an
+ * integer millisecond would report every one of them as "0". Only frames that
+ * REPAINT are timed - a frame that finds no damage returns almost immediately
+ * and averaging those in would report a desktop at rest as infinitely fast. */
+static unsigned int frame_us, frame_peak_us;
+
+int wm_frame_us(void)  { return (int)frame_us; }
+int wm_peak_us(void)   { return (int)frame_peak_us; }
+void wm_peak_reset(void) { frame_peak_us = 0; }
+
 void wm_frame(void)
 {
     unsigned int now = idt_ticks();
     if (now == last_tick) return;
     last_tick = now;
+    unsigned int t0 = cpu_tsc_lo();
+    int did_paint = 0;
 
     input_poll();
     for (int guard = 0; guard < 64; guard++) {
@@ -1105,7 +1127,23 @@ void wm_frame(void)
         fb_pointer_hide();      /* the sprite's save-under is stale once the
                                    pixels under it are about to be redrawn */
         wm_repaint();
+        did_paint = 1;
     }
     fb_pointer_show(ptr_x, ptr_y);
     fb_present();
+
+    if (did_paint) {
+        unsigned int khz = cpu_tsc_khz();
+        if (khz) {
+            /* 32-bit throughout: a 64-bit divide would pull in libgcc's
+             * __udivdi3 and this kernel links no libgcc at all. At 2.3 GHz a
+             * 32-bit TSC wraps every ~1.8 s, so a wrapped delta is discarded
+             * rather than reported as a colossal frame. */
+            unsigned int dt = cpu_tsc_lo() - t0;
+            if (dt < 0x40000000u) {
+                frame_us = dt / (khz / 1000u ? khz / 1000u : 1u);
+                if (frame_us > frame_peak_us) frame_peak_us = frame_us;
+            }
+        }
+    }
 }

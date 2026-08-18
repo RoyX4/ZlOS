@@ -335,6 +335,9 @@ extern int  wm_focused(void);
 extern int  wm_is_open(int win);
 extern void wm_set_modal(int win, int on);
 extern int  wm_anim(int win, int kind);
+extern int  wm_frame_us(void);
+extern int  wm_peak_us(void);
+extern void wm_peak_reset(void);
 extern void wm_client(int win, int *x, int *y, int *w, int *h);
 extern void wm_focus(int win);
 extern void wm_raise(int win);
@@ -835,6 +838,12 @@ Value zl_calln(const char *name, int n, ...)
     /* the animation timeline. wm.c had five kinds and no caller in zl at all -
      * built, asserted, and invisible. */
     if (streq(name, "wm_anim"))    return zl_num((double)wm_anim((int)a[0].num, (int)a[1].num));
+    /* THE FRAME TIMER. desktop-TODO 0h, and it should have come first: nothing
+     * in this kernel had ever measured a frame, so every performance claim
+     * about the compositor was arithmetic rather than measurement. */
+    if (streq(name, "wm_us"))      return zl_num((double)wm_frame_us());
+    if (streq(name, "wm_peak"))    return zl_num((double)wm_peak_us());
+    if (streq(name, "wm_peak0"))   { wm_peak_reset(); return zl_nil(); }
     /* the client rect, so an app can turn a screen-space pointer into a row */
     if (streq(name, "wm_cx"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)x); }
     if (streq(name, "wm_cy"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)y); }

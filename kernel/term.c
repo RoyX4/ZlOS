@@ -39,9 +39,22 @@ static int  pending_arg;
  * refusal you can SEE beats one you have to read, and the message scrolls. */
 static int  last_unknown;
 
-void fb_text_prop(int px, int py, const char *s, unsigned int fg);
-int  fb_text_prop_w(const char *s);
-int  fb_text_prop_h(void);
+/* A TERMINAL IS A GRID, and this drew with the PROPORTIONAL font.
+ *
+ * Every column-aligned thing the shell prints - the help table, the PCI dump,
+ * the CPUID report - is aligned with SPACES, which only lines up when every
+ * character is the same width. In a proportional face the columns come out
+ * ragged, and it reads as "the formatting is broken" rather than as "the font
+ * is wrong", which is why it survived.
+ *
+ * fb_text_prop is right for a LABEL - a dock tile, a window title, a menu row -
+ * and wrong for a terminal, and the split is exactly the one desktop-look.md
+ * item 4 draws: uniform advance is the "this is a terminal" signal, so use it
+ * on the one thing that IS a terminal. */
+void fb_text_aa(int px, int py, const char *s, unsigned int fg);
+void fb_text_aa2x(int px, int py, const char *s, unsigned int fg);
+int  fb_cell_w(void);
+int  fb_cell_h(void);
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 
 /* ---- capture ---------------------------------------------------------------
@@ -157,6 +170,7 @@ static const struct cmd table[] = {
     { "anim",     97 }, { "demo",     97 },
     { "ls",      108 }, { "files",   108 },
     { "redraw",   99 },
+    { "peak",     11 }, { "peakreset", 12 },   /* the frame timer */
     { "reboot",  114 }, { "halt",    113 }, { "quit",  113 }, { "exit", 113 },
     { "clear",     1 },                       /* handled here, not by zl */
     { 0, 0 }
@@ -215,8 +229,9 @@ int term_arg(void) { return pending_arg; }
 void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
                unsigned int accent, int cursor_on)
 {
-    int lh = fb_text_prop_h();
-    if (lh <= 0) return;
+    int lh = fb_cell_h();
+    int cw = fb_cell_w();
+    if (lh <= 0 || cw <= 0) return;
     int rows = h / lh;
     if (rows < 1) return;
 
@@ -231,18 +246,15 @@ void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
     int ty = y;
     for (int r = 0; r < show; r++) {
         const char *line = scroll[(first + r) % TERM_ROWS];
-        if (line[0]) fb_text_prop(x, ty, line, dim);
+        if (line[0]) fb_text_aa(x, ty, line, dim);
         ty += lh;
     }
 
     /* the prompt line, always at the bottom of the client area */
     int py = y + h - lh;
-    fb_text_prop(x, py, "zl>", accent);
-    int px = x + fb_text_prop_w("zl> ");
+    fb_text_aa(x, py, "zl>", accent);
+    int px = x + 4 * cw;
     input[in_len] = 0;
-    if (in_len) fb_text_prop(px, py, input, fg);
-    if (cursor_on) {
-        int cw = fb_text_prop_w("n");
-        fb_fill_px(px + fb_text_prop_w(input), py, cw, lh, accent);
-    }
+    if (in_len) fb_text_aa(px, py, input, fg);
+    if (cursor_on) fb_fill_px(px + in_len * cw, py, cw, lh, accent);
 }

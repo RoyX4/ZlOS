@@ -19,9 +19,15 @@ desktop. Not a literal target, a **direction**.
 > dressed up as **"the language cannot"**, which is the single most expensive
 > confusion available on this project — it costs you the wrong fix.
 >
-> **The number now is ~65%, and what is left is bounded and named.** Not
-> because much was written since — though it was — but because the count was
-> asking the wrong question.
+> **Then it said ~65%, and that was too generous.** It counted the toolkit as
+> "built, 90%" without checking whether the layer that writes apps can reach
+> it. `ui.c` has **no zl bindings at all** — `ui_scale` and `ui_theme` are the
+> only `ui_*` builtins and neither is a widget. Every app in zlOS lives in
+> `kernel.zl`, so not one of them can call `ui_button`, `ui_slider`,
+> `ui_list_row` or `ui_scroll`. The start menu had to be drawn with raw
+> primitives, which is how this was found.
+>
+> **The number is ~35%.** See §3.
 
 ---
 
@@ -37,16 +43,16 @@ Counted, not estimated. `grep -c` on the file.
 | `transform` | 29 | **mostly done** | scale is the animation timeline; translate is free |
 | `font-family` (Public Sans + Roboto Mono) | 24 | **done** | proportional atlas, 3 sizes × 2 weights |
 | `animation` / `@keyframes` | 22 / 7 | **done** | `wm_anim`, five kinds |
-| `display:flex` + `grid` | 63 + 13 | **done** | `ui.c`'s flowing cursor |
+| `display:flex` + `grid` | 63 + 13 | **in C only** | `ui.c`'s flowing cursor — no zl binding |
 | `box-shadow` | 11 | **done** | `fb_shadow`, three elevations |
 | linear gradients | 7 | **done** | `fb_gradient`, dithered |
 | radial gradients | 4 | **done** | `fb_grad_radial`, elliptical, two-alpha |
 | conic gradients | 2 | **done** | `fb_grad_conic` |
-| `sc-for` list loops | **106** | **done** | `ui_list_row` in a `while` |
+| `sc-for` list loops | **106** | **in C only** | `ui_list_row` exists and zl cannot call it |
 | `sc-if` | 84 | **done** | that is `if` |
 | `blur` | 9 (10–34 px) | **done, with a rule** | `fb_blur_cache` — §4 |
 | `onClick` / `onPointerDown` | 181 | **mechanism done** | `wm_route` → `app_event`; the handlers are per-app work |
-| 10 full applications | 10 | **~2** | the real remaining work — §5 |
+| **13 full applications** | 13 | **~1.5** | the real remaining work, and it is most of it — §3 |
 
 **The two claims that produced the 20% were both false.**
 
@@ -67,17 +73,18 @@ Counted, not estimated. `grep -c` on the file.
 |---|---|
 | **Renderer** — pixels | **~95%.** Real TrueType shapes, subpixel LCD, gamma-correct linear blending, dithered gradients, translucency, radial and conic gradients, a cached blur. Most hobby OSes have none of it. |
 | **Compositor** — windows, z-order, damage, routing | **built and shipping.** `wm.c`, 69 assertions in `wmtest`. It is the boot state. |
-| **Toolkit** — layout, widgets, events | **built.** `ui.c`: label, bar, button, toggle, slider, num, list row, scroll. |
-| **Apps** — ten real applications | **~20%.** The shell is a real app with scrollback and typed commands; the System Monitor and About are position-pure. The other seven demos still own the whole screen. |
+| **Toolkit** — layout, widgets, events | **built in C, unreachable from zl.** `ui.c` has label, bar, button, toggle, slider, num, list row and scroll, 90% complete and asserted — and **zero** builtins expose it. Apps live in `kernel.zl`. From where the apps are, the toolkit does not exist. |
+| **Apps** — the prototype has thirteen | **~10%.** A shell, a System Monitor of three lines, an identity card, and snake. |
 
-The shape of the answer inverted: the renderer was the finished part and the
-smallest; now the toolkit and compositor are finished too, and **the apps are
-the remaining 35%** — which is the part that is invisible in a screenshot and
-was always going to be the largest.
+**The toolkit line is the one that changed this document's answer.** `ui.c` is
+real, complete and asserted — and it is C, and every app is zl, and nothing
+bridges them. It was counted as done because it exists. That is the same
+mistake as the 95%, one layer up: measuring what was *built* rather than what
+is *reachable*.
 
 ---
 
-## 3. What "65%" is, precisely
+## 3. What the number is, precisely
 
 Weighted by the work each layer represents rather than by how much of the
 screen it occupies:
@@ -86,11 +93,34 @@ screen it occupies:
 |---|---|---|---|
 | Renderer | 25% | 95% | 23.8 |
 | Compositor | 20% | 95% | 19.0 |
-| Toolkit | 20% | 90% | 18.0 |
-| Apps | 35% | 20% | 7.0 |
-| | | | **~68%** |
+| Toolkit | 20% | **10%** — built in C, no zl bindings | 2.0 |
+| Apps | 35% | **10%** | 3.5 |
+| | | | **~48%** |
 
-Call it 65%. The weights are a judgement; the per-layer figures are not.
+...and even that flatters it, because the app figure is measured against "seven
+demos to convert" rather than against what the mockup actually contains. Its
+own template model names **thirteen applications with real state**:
+
+| the prototype has | zlOS has |
+|---|---|
+| a file manager — breadcrumbs, a tree, mounts, icon/list views, properties, rename, search | — |
+| a hex viewer — paged, with a status line | — |
+| a code editor — tabs, a gutter, syntax modes, find/next/prev with a match count | a line editor, full-screen, ESC to save |
+| a terminal — tabs, a cwd, geometry, a scan/run/reset toolbar | a shell in a window ✓ |
+| a system monitor — a process list, kill, tabs, a CPU graph, meters | three lines and a fake sparkline |
+| a log viewer with filters | — |
+| settings — nav, toggles, sliders, accent picker | — |
+| a lock screen | — |
+| an activities overview — apps, windows, workspaces, with search | — |
+| a command palette | — |
+| a calendar | — |
+| a GL view — orbit, spin, zoom, wireframe, a render-ms readout | a full-screen spinning cube |
+| a framebuffer test with counters | — |
+| plus: workspaces, window snapping, toasts, context menus, dialogs, a clipboard | — |
+
+**Call it 35%.** The renderer and the compositor are genuinely most of the way
+there and the two layers above them are barely started. That is the honest
+shape, and it is the opposite of what a screenshot suggests.
 
 **This is a number to be argued with, not trusted.** The only part of it that
 is measured is "what does the mockup ask for and does the primitive exist" in

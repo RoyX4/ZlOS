@@ -46,6 +46,16 @@ unsigned int idt_ticks(void) { return fake_ticks; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }
 int ser_rx(void)        { return -1; }   /* no UART in the harness */
+
+/* THE FRAME TIMER's clock. wm.c times itself with the TSC; the harness has no
+ * cpu.c, and a frame measured here would be measuring this machine rather than
+ * the guest anyway. Returning a monotonically rising count keeps the timing
+ * code on the same path it takes in the kernel - a stub that returned 0 would
+ * make wm_frame() take the "TSC unavailable" branch and stop exercising it. */
+static unsigned int fake_tsc;
+unsigned int cpu_tsc_lo(void)  { return (fake_tsc += 1000); }
+unsigned int cpu_tsc_khz(void) { return 2300000u; }
+
 static int fake_usb_ptr = 0, fake_ux = 0, fake_uy = 0, fake_ubtn = 0;
 
 /* No USB pointer in the harness - which is a case worth being able to express,

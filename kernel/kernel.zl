@@ -270,8 +270,19 @@ fn dock_tile(slot, dy, ic) {
     fill_rgb(dtx, dty, dtw, 1, hcol)
     icon(dtx + (dtw - 24 * u) / 2, dty + (dtw - 24 * u) / 2, ic, icol)
     # open-app marker: the accent bar the prototype puts under a running app
+    dock_running_bar(slot, dy)
+    return 0
+}
+
+# The open-app marker, on its own so the live pass can redraw just these nine
+# small rectangles instead of nine whole tiles. A tile is a rounded rect, a
+# hairline, a 24x24 blended icon and sometimes a bar; the bar alone is a fill.
+fn dock_running_bar(slot, dy) {
+    u = ui()
+    dbx = DOCK_X0 * u + slot * DOCK_PITCH * u
+    dbw = DOCK_TW * u
     if dock_running(slot) == 1 {
-        fill_rgb(dtx + dtw / 4, dty + dtw + 3 * u, dtw / 2, 3 * u, ACCENT)
+        fill_rgb(dbx + dbw / 4, dy + 8 * u + dbw + 3 * u, dbw / 2, 3 * u, ACCENT)
     }
     return 0
 }
@@ -323,33 +334,50 @@ fn tray_x() {
     return tx
 }
 
+# THE PART THAT NEVER CHANGES: the blurred, tinted strip, the start button and
+# the nine tiles in their rest state. Drawn ONCE, into the wallpaper cache.
+fn draw_dock_bg() {
+    w = px_w()
+    dy = dock_y()
+    u = ui()
+    grad_rgb(0, dy - 6, w, 6, WALL_BOT, rgb(6, 7, 12))    # soft shadow above
+    # BLUR, THEN TINT - backdrop-filter: blur() + rgba(), which the prototype
+    # asks for in six places. Both are paid here, once, and never again.
+    if dock_blur >= 0 {
+        blurdraw(dock_blur, 0, dy)
+        blend(0, dy, w, px_h() - dy, rgb(14, 19, 34), 150)
+    } else {
+        grad_rgb(0, dy, w, px_h() - dy, BAR_TOP, BAR_BOT)
+    }
+    fill_rgb(0, dy, w, 1, BAR_HI)                          # top highlight
+    rrect(10 * u, dy + 8 * u, 96 * u, DOCK_TW * u, 12 * u, rgb(48, 92, 168))
+    fill_rgb(10 * u, dy + 8 * u, 96 * u, 1, rgb(120, 170, 235))
+    fill_rgb(24 * u, dy + 26 * u, 11 * u, 11 * u, ACCENT)
+    label(48 * u, dy + 21 * u, "zlOS", C_WHITE, T_BODY, W_BOLD)
+    ds = 0
+    while ds < 9 {
+        dock_tile(ds, dy, dock_icon(ds))
+        ds = ds + 1
+    }
+    return 0
+}
+
+dock_baked = 0
 fn draw_status(msg) {
     sr = status_row()
     if px_w() > 0 {
         w = px_w()
         dy = dock_y()
-        grad_rgb(0, dy - 6, w, 6, WALL_BOT, rgb(6, 7, 12))    # soft shadow above
-        # BLUR, THEN TINT - which is backdrop-filter: blur() + rgba(), the
-        # thing the prototype asks for in six places and nothing here had ever
-        # drawn. The blur is cached (see wm_boot_start); this is a copy plus a
-        # translucent pass over a strip that is ~5% of the screen, which is
-        # where a translucent pass is affordable and a full-screen one is not.
-        if dock_blur >= 0 {
-            blurdraw(dock_blur, 0, dy)
-            blend(0, dy, w, px_h() - dy, rgb(14, 19, 34), 150)
-        } else {
-            grad_rgb(0, dy, w, px_h() - dy, BAR_TOP, BAR_BOT)
-        }
-        fill_rgb(0, dy, w, 1, BAR_HI)                          # top highlight
         u = ui()
-        rrect(10 * u, dy + 8 * u, 96 * u, DOCK_TW * u, 12 * u, rgb(48, 92, 168))
-        fill_rgb(10 * u, dy + 8 * u, 96 * u, 1, rgb(120, 170, 235))
-        fill_rgb(24 * u, dy + 26 * u, 11 * u, 11 * u, ACCENT)
-        label(48 * u, dy + 21 * u, "zlOS", C_WHITE, T_BODY, W_BOLD)
-        # app tiles - all icons
+        # THE LIVE PART ONLY. Everything above came out of the wallpaper blit
+        # the caller already did - see draw_dock_bg and wm_boot_start. What is
+        # left is the tile the pointer is on, the open-app markers, and the
+        # numbers in the tray.
+        if dock_baked == 0 { draw_dock_bg() }
+        if dock_hover >= 0 { dock_tile(dock_hover, dy, dock_icon(dock_hover)) }
         ds = 0
         while ds < 9 {
-            dock_tile(ds, dy, dock_icon(ds))
+            if ds != dock_hover { dock_running_bar(ds, dy) }
             ds = ds + 1
         }
         draw_tasklist(dy)
@@ -357,16 +385,25 @@ fn draw_status(msg) {
         # the tray must start AFTER the last dock tile, or on a narrow screen
         # the two overlap - at 800x600 nine tiles reach x=622 while w-300 is 500
         tray = tray_x()
-        label(tray, dy + 22 * u, "state:", TXT_DIM, T_CAPTION, W_REG)
-        label(tray + 60 * u, dy + 22 * u, msg, ACCENT, T_CAPTION, W_BOLD)
-        label(tray + 170 * u, dy + 22 * u, "up:", TXT_DIM, T_CAPTION, W_REG)
+        # THE FRAME TIME, ON SCREEN, in microseconds. Nothing in this kernel
+        # had ever measured a frame - desktop-TODO 0h asks for exactly this and
+        # says to do it BEFORE any performance work, which the v10 run did not.
+        # A number nobody can see is a number nobody checks, and "state:
+        # compositor" - which is what used to be here - is a label that has
+        # said the same thing on every boot since it was written.
+        label(tray, dy + 22 * u, "frame", TXT_DIM, T_CAPTION, W_REG)
+        label_num(tray + 44 * u, dy + 22 * u, wm_us(), ACCENT, T_CAPTION, W_BOLD)
+        label(tray + 92 * u, dy + 22 * u, "us   peak", TXT_DIM, T_CAPTION, W_REG)
+        label_num(tray + 152 * u, dy + 22 * u, wm_peak(), TXT_HI, T_CAPTION, W_BOLD)
+        label(tray + 210 * u, dy + 22 * u, "up", TXT_DIM, T_CAPTION, W_REG)
+        label_num(tray + 232 * u, dy + 22 * u, ticks() / 100, TXT_HI, T_CAPTION, W_BOLD)
         # THE UPTIME, drawn HERE rather than by draw_clock. draw_clock is only
         # ever called from the old text-shell loop, which now runs only on a
         # machine with no framebuffer - so under the compositor the tray said
         # "up:" and then nothing, every boot. The dock is wallpaper furniture
         # and furniture is redrawn from desk_draw, so this is where a live
         # number belongs; app_tick damages the tray once a second.
-        label_num(tray + 204 * u, dy + 22 * u, ticks() / 100, TXT_HI, T_CAPTION, W_BOLD)
+
     } else {
         bar(sr, C_STATUS)
         at(sr, 2,  "h help", C_STATUS)
@@ -384,8 +421,9 @@ fn draw_clock(sec) {
         w = px_w()
         dy = dock_y()
         ctray = tray_x()
-        grad_rgb(ctray + 200 * ui(), dy + 12 * ui(), 80 * ui(), 30 * ui(), BAR_TOP, BAR_BOT)
-        label_num(ctray + 204 * ui(), dy + 22 * ui(), sec, TXT_HI, T_CAPTION, W_BOLD)
+        grad_rgb(ctray + 226 * ui(), dy + 12 * ui(), 70 * ui(), 30 * ui(), BAR_TOP, BAR_BOT)
+        label(ctray + 210 * ui(), dy + 22 * ui(), "up", TXT_DIM, T_CAPTION, W_REG)
+        label_num(ctray + 232 * ui(), dy + 22 * ui(), sec, TXT_HI, T_CAPTION, W_BOLD)
     } else {
         at_num(status_row(), 70, sec, C_STATUS)
     }
@@ -1858,6 +1896,19 @@ fn run_command(cmd, arg) {
         color(C_GREY)  return 0
     }
     if cmd == 99  { draw_screen()  return 0 }
+    # THE FRAME TIMER, readable from the shell - which is what lets a probe
+    # measure it instead of a person squinting at the tray.
+    if cmd == 11 {
+        # ONE LINE, MACHINE-READABLE, with a marker a probe can wait for. The
+        # first version printed "last N us   peak N us" and probe-frame.py
+        # waited for "us" - which matched the FIRST one and returned before the
+        # peak had arrived. A gate that stops reading halfway through its own
+        # answer reports None and looks like a broken feature.
+        color(C_WHITE)  put("  FRAMEUS ")  put(wm_us())  put(" ")
+        put(wm_peak())  print(" END")
+        color(C_GREY)  return 0
+    }
+    if cmd == 12 { wm_peak0()  print("  peak reset")  return 0 }
     if cmd == 113 { return 1 }
     color(C_RED)  print("  unknown command - press h for help")
     color(C_GREY) return 0
@@ -2197,20 +2248,33 @@ fn app_tick(id, win) {
 # It may ignore the damage rectangle it is given - the scissor is already set to
 # it, so nothing outside can reach the screen. Using it would be the
 # optimisation; correctness does not depend on it.
+# DESK_DRAW IS CALLED ONCE PER DAMAGE RECTANGLE, up to eight times a frame, and
+# forgetting that is what made the desktop slow.
+#
+# The wallpaper was fine: wall_paint takes the rectangle and blits only that.
+# The header and the dock were not. Both redrew IN FULL every call, and the
+# dock had just become the most expensive thing on screen - a cached-blur blit
+# plus a full-width translucent tint over a 1920x128 strip. Measured from
+# fbbench's own numbers: 245,760 px at 1.54 cyc/px to blit the blur and 22.16
+# cyc/px to tint it, which is 5.8M cycles, about 2.5 ms. Eight damage
+# rectangles is 20 ms of dock alone, against a 16.67 ms budget - and seven of
+# those eight rectangles usually do not touch the dock at all.
+#
+# So the furniture is drawn only when the rectangle it is being asked about
+# actually overlaps it. That is not an optimisation of the drawing; it is
+# noticing that desk_draw was handed a rectangle and ignored it.
 fn desk_draw(dx, dy, dw, dh) {
-    # THE WALLPAPER IS A BITMAP, and that is a measurement rather than a
-    # preference. The decorations below are five translucent full-screen
-    # passes; a translucent pass costs 22 cycles per pixel, which is 22 ms at
-    # 1920x1200, and the compositor redraws the wallpaper inside EVERY damage
-    # rectangle. Five of them per frame is 100 ms against a 16.67 ms budget.
-    # Drawn once and blitted it is 1.5 cyc/px. See fb.c's cache arena.
     if wall_ok() == 1 {
         wall_paint(dx, dy, dw, dh)
     } else {
         grad_rgb(0, 0, px_w(), px_h(), WALL_TOP, WALL_BOT)
     }
-    draw_header()
-    draw_status("compositor")
+    # the header band: 0 .. TOPBAR_H + 8
+    # the header is entirely static - the resolution it prints does not change -
+    # so it is baked in with the wallpaper too and costs nothing per frame
+    if dock_baked == 0 { if dy < TOPBAR_H * ui() + 8 { draw_header() } }
+    # the dock band: dock_y() - 6 .. bottom
+    if dy + dh > dock_y() - 6 { draw_status("compositor") }
     return 0
 }
 
@@ -2628,15 +2692,28 @@ fn wm_boot_start() {
     # settled. wall_save() prints what it took and what is left; if it refuses
     # - a 4K screen wants 33 MiB and the arena is 16 - desk_draw falls back to
     # the plain gradient and says so rather than drawing nothing.
+    # THE STATIC FURNITURE IS BAKED IN WITH THE WALLPAPER, and this is the
+    # single biggest thing that made the desktop slow.
+    #
+    # Measured, with the frame timer that should have existed first: hovering
+    # one dock tile cost 7,426 us and peaked at 18,455 us - over the whole
+    # 16.67 ms budget, to light up one chip. The dock strip is 1920x128 =
+    # 245,760 px and the tint over it is 22.16 cyc/px, so recompositing
+    # blur-then-tint every time anything in the dock changed was ~2.4 ms of
+    # blend on its own, plus the blur blit, plus nine tiles.
+    #
+    # None of that ever CHANGES. The blur is of a wallpaper that is fixed, the
+    # tint over it is fixed, and eight of the nine tiles look the same as they
+    # did last frame. So all of it goes into the cached bitmap once, and a
+    # frame pays one blit at 1.54 cyc/px for the lot.
     draw_wallpaper()
-    wall_save()
-    # ...and blur the strip the dock sits on, ONCE. The dock is furniture: it
-    # is drawn before every window and never on top of one, so what is behind
-    # it is always the wallpaper and the wallpaper never changes. That makes it
-    # the cheapest possible backdrop blur - taken here, painted for the rest of
-    # the session at 1.5 cyc/px. A refusal (a 2560 panel leaves little arena
-    # after the wallpaper) simply means a flat dock, and blur() says so.
     dock_blur = blur(0, dock_y(), px_w(), px_h() - dock_y(), 10 * ui())
+    draw_header()
+    draw_dock_bg()
+    dock_baked = 1
+    wall_save()
+    blurfree()                 # the strip is inside the wallpaper now
+    dock_blur = 0 - 1
     return 1
 }
 
@@ -2862,6 +2939,13 @@ beep(784, 8)  beep(1046, 12)
 # reports "booted but no prompt" and every probe stops working the moment the
 # desktop becomes the boot state. Later prompts come with the echo in term.c.
 if wm_boot == 1 { ser_out("zl> ") }
+
+# THE PEAK MEASURES INTERACTION, NOT BOOT. The first frame repaints the whole
+# screen and bakes the wallpaper - three radial glows, two conic sweeps and a
+# vignette at full resolution - which is a one-off costing over a tenth of a
+# second and would otherwise sit in the peak for ever, hiding every real
+# regression underneath it.
+if wm_boot == 1 { wm_peak0() }
 
 
 # ---- the shell -------------------------------------------------------------

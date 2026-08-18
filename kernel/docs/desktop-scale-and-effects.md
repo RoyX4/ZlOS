@@ -213,6 +213,64 @@ the version that does nothing.
 
 ---
 
+## 4.5 "Why is it so slow" — and the instrument that should have existed first
+
+`desk_draw(x, y, w, h)` is called **once per damage rectangle**, up to eight
+times a frame. The wallpaper honoured the rectangle it was handed. The header
+and the dock did not — both redrew in full, every call.
+
+That was survivable while the dock was a flat gradient. Then §2 turned it into
+a cached-blur blit plus a full-width translucent tint, and from `fbbench`'s own
+numbers that is 245,760 px at 1.54 cyc/px plus 22.16 cyc/px — about 5.8M
+cycles, **2.5 ms**. Eight damage rectangles is **20 ms of dock alone** against
+a 16.67 ms budget, and seven of those eight usually do not touch the dock at
+all.
+
+**The fix is not an optimisation of the drawing.** It is noticing that
+`desk_draw` was handed a rectangle and ignored it.
+
+### The instrument came last, and desktop-TODO said it should come first
+
+> *0h. Add a `tsc()` builtin and put frame time on screen. **Do this before any
+> performance work.** Optimising without measurement is guessing.*
+
+That has been in the task list since it was written. The v10 run did the
+performance work first and the measurement never — so every claim about the
+compositor's speed rested on per-primitive numbers from `fbbench`, which is not
+the same thing as a frame.
+
+`wm_frame()` times itself with the TSC now:
+
+- **microseconds, not milliseconds.** A cheap frame is well under 1 ms and an
+  integer millisecond reports every one of them as "0".
+- **only frames that repaint are counted.** A frame that finds no damage
+  returns almost immediately, and averaging those in reports a desktop at rest
+  as infinitely fast.
+- **the peak is reset once boot settles.** The first frame repaints the whole
+  screen and bakes the wallpaper — three radial glows, two conic sweeps and a
+  vignette at full resolution — a one-off costing over a tenth of a second that
+  would otherwise sit in the peak for ever, hiding every real regression under
+  it. It measured **139,864 µs** on the run that found this.
+- **it is on screen**, in the tray, where "state: compositor" used to be — a
+  label that had said the same thing on every boot since it was written.
+
+`probe-frame.py` drives real interaction — hovering across the dock, dragging a
+window twelve steps — and reads the numbers back out of the shell.
+
+### And the terminal was drawing with the proportional font
+
+Every column-aligned thing the shell prints — the help table, the PCI dump, the
+CPUID report — is aligned with **spaces**, which only lines up when every
+character is the same width. `term_draw` used `fb_text_prop`. The columns came
+out ragged and it read as "the formatting is broken" rather than as "the font
+is wrong", which is exactly why it survived.
+
+A terminal is a grid. It uses the mono atlas, and `fb_text_prop` is for the
+things that are not terminals — which is the split desktop-look.md item 4 draws
+and this had inverted.
+
+---
+
 ## 5. The pattern underneath all of it
 
 Five separate things in `wm.c` and `fb.c` were complete, correct, gated — and
@@ -244,3 +302,46 @@ for hours while nothing drew one.
 Scale and cost numbers: `desktop-polish-and-speed.md` · What the mockup asks
 for: `desktop-northstar-feasibility.md` · The run that built the primitives:
 `desktop-v10-plan.md` §8 · Task list: `desktop-TODO.md`
+
+---
+
+## 6. The measurement, and what it cost to get
+
+`probe-frame.py`, 1920×1200, drives real interaction and reads the numbers back
+out of the shell.
+
+| | before the bake | after |
+|---|---|---|
+| hovering nine dock tiles, typical frame | **7,426 µs** | **1,258 µs** |
+
+**5.9× on the case a person actually feels.** 7.4 ms to light up one chip is
+not a subtle regression; it is most of a frame to change one rounded rectangle.
+
+### The peaks in that run are not usable, and saying so matters
+
+The host was at **load average 17.9** on a four-core box while these ran — a
+second session on the same machine was compiling and running QEMU alongside
+this one. TSC timing inside the guest measures wall-clock, so host contention
+inflates it directly: the peak went *up* between the two runs (18,455 →
+34,476 µs) while the typical frame fell 5.9×, which is contention, not code.
+
+`CLAUDE.md` already records this failure mode for the boot gates — *"an A/B
+against a clean worktree showed baseline and modified passing and failing
+together, tracking host load"* — and it applies to the frame timer with more
+force, because the frame timer has no golden value to compare against.
+
+**So: the 5.9× is real and repeatable; the peak numbers wait for a quiet box.**
+Quoting them would be the same mistake as the 65%.
+
+### The instrument itself
+
+- **microseconds, not milliseconds.** A cheap frame is well under 1 ms and an
+  integer millisecond reports every one of them as "0".
+- **only frames that repaint are counted**, or a desktop at rest averages out
+  as infinitely fast.
+- **the peak resets once boot settles.** The first frame repaints the screen
+  and bakes the wallpaper — over a tenth of a second, once — and it would
+  otherwise sit in the peak for ever, hiding every real regression under it.
+- **32-bit throughout.** A 64-bit divide would pull in libgcc's `__udivdi3` and
+  this kernel links no libgcc; a 32-bit TSC wraps every ~1.8 s at 2.3 GHz, so a
+  wrapped delta is discarded rather than reported as a colossal frame.
