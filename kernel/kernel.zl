@@ -1837,6 +1837,15 @@ fn net_gate() {
     }
     put("    link:         ")   print(net_link())
     put("    our MAC:      ")   mac_print(0)  print("")
+    # ONE LAYER MAY OWN THE RECEIVE QUEUE. The raw ARP probe below drains the
+    # card directly and throws away every frame that is not its own reply, so
+    # running it once net.c is also draining that queue eats exactly the frames
+    # net.c is waiting for. It is a bring-up test, and it is only valid before
+    # bring-up.
+    if ip_live() == 1 {
+        color(C_GREY)  print("    (link already proven; the IP stack owns the queue now)")
+        return ip_gate()
+    }
     color(C_GREY)  print("    sending an ARP request for 10.0.2.2 ...")
     if net_arp(NET_ME, NET_GW, 2000) == 0 {
         color(C_RED)  put("    no ARP reply. tx ")  put(net_tx())
@@ -1846,6 +1855,56 @@ fn net_gate() {
     put("    gateway MAC:  ")   mac_print(1)  print("")
     color(C_GREEN)  put("    LINK UP. frames out ")  put(net_tx())
     put(", in ")  print(net_rx())
+    color(C_GREY)  return ip_gate()
+}
+
+# ---- item 2: ARP, IPv4, ICMP -----------------------------------------------
+# One ping proves a round trip happened. It does NOT prove the stack works: a
+# stack that drops every fourth packet looks identical on a single ping, which
+# is why this runs twenty and reports loss and jitter as well as a time.
+#
+# The address is ASSERTED, not leased - there is no DHCP here. On QEMU's
+# user-mode network 10.0.2.15/24 via 10.0.2.2 is what the built-in server would
+# have handed out anyway, and saying that out loud is the point.
+NET_MASK = 4294967040        # 255.255.255.0
+
+fn ip_gate() {
+    color(C_CYAN)  print("  IPv4 / ICMP")
+    color(C_GREY)
+    if ip_up(NET_ME, NET_MASK, NET_GW) == 0 {
+        color(C_RED)  print("    the stack could not be brought up")
+        color(C_GREY) return 0
+    }
+    print("    10.0.2.15/24 via 10.0.2.2  (asserted, not leased - no DHCP)")
+    pg = ip_ping(NET_GW, 1000)
+    if pg < 0 {
+        color(C_RED)  print("    no echo reply from the gateway")
+        color(C_GREY) return 0
+    }
+    put("    ping 10.0.2.2:  ")  put(pg)  print(" us")
+    color(C_GREY)  print("    ...and 20 more, because one proves nothing:")
+    ip_run(NET_GW, 20, 1000)
+    put("      sent ")  put(ip_sent())  put("   received ")  put(ip_recv())
+    put("   lost ")     print(ip_lost())
+    put("      min ")   put(ip_min())   put(" us   avg ")  put(ip_avg())
+    put(" us   max ")   put(ip_max())   print(" us")
+    put("      jitter ")  put(ip_jit())  print(" us  (mean step between round trips)")
+    if ip_lost() > 0 { put("      lost pings (bit 0 = the first): 0x")  hex(ip_mask(), 8)  print("") }
+    put("      frames in ")  put(ip_rxf())  put("  arp ")  put(ip_rxarp())
+    put("  ip ")  put(ip_rxip())  put("  icmp ")  put(ip_rxicmp())
+    put("  bad-checksum ")  put(ip_badsum())  put("  not-ours ")  put(ip_notours())
+    put("  unmatched-echo ")  print(ip_stale())
+    put("      dropped: short ")  put(ip_short())  put("  bad-version ")  put(ip_badver())
+    put("  bad-ihl ")  put(ip_badihl())  put("  fragment ")  print(ip_frag())
+    put("      driver: tx ")  put(net_tx())  put("  rx ")  put(net_rx())
+    put("  rx-truncated ")  put(net_drop())  put("  runts ")  put(net_runt())  put("  tx-queue-full ")  print(net_txfull())
+    put("      rings: tx avail ")  put(net_txa())  put(" used ")  put(net_txu())
+    put("   rx avail ")  put(net_rxa())  put(" used ")  print(net_rxu())
+    if ip_lost() == 0 {
+        color(C_GREEN)  print("      no loss")
+    } else {
+        color(C_YELLOW)  print("      PACKETS WERE LOST - the stack is not clean")
+    }
     color(C_GREY)  return 0
 }
 

@@ -178,7 +178,7 @@ static u16  avail_idx[2];
 static u16  used_seen[2];
 static u16  tx_next;                /* round-robin over the transmit buffers */
 
-static u32  n_tx, n_rx, n_rx_drop;
+static u32  n_tx, n_rx, n_rx_drop, n_tx_full, n_runt;
 
 /* ---- helpers -------------------------------------------------------------- */
 static void zero_mem(u32 addr, u32 bytes)
@@ -413,7 +413,7 @@ int virtio_net_init(void)
             STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_FEATURES_OK | STATUS_DRIVER_OK);
 
     tx_next = 0;
-    n_tx = n_rx = n_rx_drop = 0;
+    n_tx = n_rx = n_rx_drop = n_tx_full = n_runt = 0;
     rx_fill();
 
     vn_ready = 1;
@@ -429,6 +429,35 @@ int virtio_net_send(const u8 *frame, int len)
 {
     if (!vn_ready || !frame) return 0;
     if (len <= 0 || len > FRAME_MAX) return 0;
+
+    /* RECLAIM BEFORE REUSING. tx_next walks the 32 buffers round-robin, and
+     * without this the 33rd frame overwrites the buffer and descriptor of the
+     * 1st - which the device may still be reading. It does not fail loudly: it
+     * silently corrupts or drops one frame, and only once traffic passes 32.
+     *
+     * Found by the 20-ping gate, and ONLY by running it twice. A single run
+     * sends 22 frames and is clean; the second run crosses 32 and lost exactly
+     * one packet, reproducibly, three times out of three. That is precisely
+     * the failure §4 item 2 predicts - "a stack that works once and drops
+     * every fourth packet looks identical on a single ping" - except it was
+     * the driver under the stack, and one ping in forty-odd.
+     *
+     * in-flight is publishes minus completions. u16 arithmetic wraps and the
+     * difference stays correct across the wrap, which is the whole reason
+     * virtio counts with a free-running index rather than a ring position. */
+    volatile u16 *tused = (volatile u16 *)(uptr)TX_USED;
+    if ((u16)(avail_idx[VQ_TX] - tused[1]) >= QSZ) {
+        u32 t0 = idt_ticks();
+        long spins = 2000000L;
+        while (spins-- > 0) {
+            if ((u16)(avail_idx[VQ_TX] - tused[1]) < QSZ) break;
+            if (idt_ticks() - t0 > 20) break;         /* ~200 ms */
+        }
+        if ((u16)(avail_idx[VQ_TX] - tused[1]) >= QSZ) {
+            n_tx_full++;                              /* say so, do not lie */
+            return 0;
+        }
+    }
 
     int i = tx_next % QSZ;
     volatile u8 *b = (volatile u8 *)(uptr)TX_BUF(i);
@@ -469,6 +498,9 @@ int virtio_net_poll(u8 *out, int max)
     u32 blen = ring[slot * 2 + 1];
     used_seen[VQ_RX]++;
 
+    if (blen <= (u32)HDR_LEN + 14u) n_runt++;    /* shorter than an ethernet
+                                                   header: it cannot be a
+                                                   frame, so record it */
     int n = 0;
     if (id < (u32)QSZ && blen > (u32)HDR_LEN) {
         n = (int)(blen - (u32)HDR_LEN);
@@ -500,6 +532,24 @@ int virtio_net_mac(int i)     { return (i >= 0 && i < 6) ? (int)vn_mac[i] : 0; }
 int virtio_net_tx_count(void) { return (int)n_tx; }
 int virtio_net_rx_count(void) { return (int)n_rx; }
 int virtio_net_rx_drops(void) { return (int)n_rx_drop; }
+/* frames refused because the transmit queue never drained. Non-zero here is
+ * a real stall, not a tuning number - the device stopped consuming. */
+int virtio_net_tx_full(void)  { return (int)n_tx_full; }
+/* raw ring state, so "the guard never fired" can be distinguished from "the
+ * guard is looking at a register the device never writes" */
+int virtio_net_runts(void)    { return (int)n_runt; }
+int virtio_net_tx_avail(void) { return (int)avail_idx[VQ_TX]; }
+int virtio_net_tx_used(void)
+{
+    volatile u16 *u = (volatile u16 *)(uptr)TX_USED;
+    return (int)u[1];
+}
+int virtio_net_rx_avail(void) { return (int)avail_idx[VQ_RX]; }
+int virtio_net_rx_used(void)
+{
+    volatile u16 *u = (volatile u16 *)(uptr)RX_USED;
+    return (int)u[1];
+}
 u32 virtio_net_features(void) { return vn_features; }
 u32 virtio_net_arena(void)    { return NET_BASE; }
 

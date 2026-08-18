@@ -18,6 +18,7 @@ outf.c
 kernel/hosttest/intel_probe
 kernel/hosttest/htmltest
 kernel/hosttest/browsershot
+kernel/hosttest/nettest
 kernel/hosttest/regs-*.txt
 
 # build outputs - regenerable, and large. Build them with:
@@ -35,6 +36,7 @@ kernel/_gen*.c
 kernel/hosttest/intel_probe
 kernel/hosttest/htmltest
 kernel/hosttest/browsershot
+kernel/hosttest/nettest
 kernel/hosttest/dpll_test
 kernel/hosttest/modeset_test
 kernel/hosttest/regs-*.txt

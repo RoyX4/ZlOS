@@ -63,15 +63,42 @@ code column excludes blank and comment-only lines.
 | `browser.c` — the app | ~350 | **267** | 382 | document + viewport + links; URL bar is item 7 |
 | `fb.c` — sized/bold/oblique text | — | — | **+124** | additive; nothing existing changed |
 | `kernel.zl` — the app's policy | — | — | **+23** | one `app_draw` branch, one event branch |
-| `virtio_net.c` | ~400 | 0 | 0 | **item 1 — no network driver exists** |
-| ARP + IPv4 + ICMP | ~300 | 0 | 0 | item 2 |
+| `virtio_net.c` | ~400 | **382** | 628 | done, gated |
+| `net.c` + `net.h` — ARP, IPv4, ICMP | ~300 | **359** | 579 | done, gated |
 | TCP, client, one connection | ~900 | 0 | 0 | item 3 |
 | HTTP/1.0 | ~150 | 0 | 0 | item 4 |
-| **total so far** | **~1,300 of ~3,050** | **1,118** | **1,677** | |
+| **total so far** | **~2,000 of ~3,050** | **1,859** | **2,884** | |
 
-The three budgeted-and-built pieces came in at **1,118 code lines against a
-1,300 estimate** — the estimate was good. The `wc -l` figure is larger because
-roughly a third of every file here is the reasoning behind it.
+The five budgeted-and-built pieces came in at **1,859 code lines against a
+2,000 estimate** — the estimate has held to within 10% twice. The `wc -l`
+figure is larger because roughly a third of every file here is the reasoning
+behind it.
+
+### One open bug, stated rather than buried
+
+**One echo reply is not delivered to the ICMP layer on every bring-up after the
+first.** Reproducible on every run; never on the first bring-up. What has been
+measured, and what it rules out:
+
+| | |
+|---|---|
+| a packet capture (`filter-dump`) | **42 echo requests, 42 replies.** The peer answered every one — the frame is not lost on the wire |
+| the lost reply's wire latency | **3 µs.** It was there; the guest then spun ~500 ms and gave up |
+| driver counters | frames delivered match frames the stack counted. No runts, no truncations, no transmit-queue stalls |
+| transmit ring | `avail == used` throughout — the device keeps up, the ring is never overrun |
+| receive ring size | identical behaviour at 16 and 32 descriptors, so it is not a wrap |
+| sequence matching | `unmatched-echo 0` — no reply arrived bearing an id/sequence we were not waiting for |
+| every IP drop path | now counted individually: short, bad-version, bad-ihl, fragment, bad-checksum, not-ours. **All zero** |
+| a second queue consumer | the item-1 raw ARP probe drained the same queue; that was fixed (one layer owns a receive queue) and the loss did not change |
+| the peer re-resolving us | a gratuitous ARP at bring-up changed nothing, and was reverted rather than left in looking useful |
+
+The invariant signature is that on the second bring-up the stack counts **one
+more ARP frame and one fewer IP frame**, totalling the same 22. Not closed.
+
+Six wrong hypotheses is itself the finding: `handle_ip` dropped malformed
+frames with a bare `return` and no counter, so the failure could not be located
+from outside. Every drop path is now named. That is the change worth keeping
+from the whole investigation.
 
 ---
 
@@ -108,6 +135,17 @@ kernel/hosttest/htmltest       # 101 checks, 0 failed
 ```bash
 kernel/hosttest/browsershot out.ppm    # the same page at 760/480/300px
 ```
+
+```bash
+kernel/hosttest/nettest        # 152 checks, 0 failed
+```
+
+`net.c` holds no link driver — the link is two function pointers — so the whole
+stack links into a harness that is the machine on the other end of the wire.
+That is what makes loss and jitter *measured* numbers with a known right
+answer: the harness can be told to lose one packet in four, or to alternate its
+delay, and the assertions are on the values that must come back. Nothing there
+depends on what a real network happened to do that afternoon.
 
 | width | height | lines |
 |---|---|---|

@@ -75,3 +75,12 @@ echo "built ./htmltest      (run: ./htmltest)"
 gcc -O2 -w -o browsershot browsershot.c ../browser.c ../html.c ../layout.c \
     ../ui.c ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./browsershot   (run: ./browsershot out.ppm)"
+
+# ARP, IPv4 and ICMP against scripted packets. net.c holds no link driver - the
+# link is two function pointers - so this harness IS the machine on the other
+# end of the wire: it answers ARP and ICMP, and it can be told to lose one
+# packet in four or to alternate its delay. That makes loss and jitter numbers
+# with a known right answer rather than whatever the network did that
+# afternoon, and the clock is virtual so the jitter assertion cannot be flaky.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o nettest nettest.c ../net.c
+echo "built ./nettest       (run: ./nettest)"

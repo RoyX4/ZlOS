@@ -342,10 +342,53 @@ extern int  virtio_net_link_up(void);
 extern int  virtio_net_tx_count(void);
 extern int  virtio_net_rx_count(void);
 extern int  virtio_net_rx_drops(void);
+extern int  virtio_net_tx_full(void);
+extern int  virtio_net_runts(void);
+extern int  virtio_net_tx_avail(void);
+extern int  virtio_net_tx_used(void);
+extern int  virtio_net_rx_avail(void);
+extern int  virtio_net_rx_used(void);
 extern unsigned int virtio_net_arena(void);
 extern int  virtio_net_arp_probe(unsigned int my_ip, unsigned int target_ip, int ms);
 extern int  virtio_net_peer_known(void);
 extern int  virtio_net_peer_mac(int i);
+
+/* ---- the IP stack (net.c) ----------------------------------------------
+ * net.c holds no link driver: the link is two function pointers, so the
+ * whole stack links into a host harness with no machine. Joining it to
+ * virtio_net.c is therefore something someone has to do, and this file is
+ * already the place where C subsystems are joined for zl - the same role
+ * wmglue.c plays for the compositor. */
+extern void net_link(int (*send)(const unsigned char *, int),
+                     int (*poll)(unsigned char *, int),
+                     const unsigned char mac[6]);
+extern void net_config(unsigned int ip, unsigned int mask, unsigned int gw);
+extern int  net_poll_once(void);
+extern int  net_live(void);
+extern int  net_ping(unsigned int ip, int ms);
+extern int  net_ping_run(unsigned int ip, int n, int ms);
+extern int  net_ping_sent(void);
+extern int  net_ping_recv(void);
+extern int  net_ping_lost(void);
+extern int  net_ping_min(void);
+extern int  net_ping_max(void);
+extern int  net_ping_avg(void);
+extern int  net_ping_jitter(void);
+extern int  net_ping_mask(void);
+extern int  net_rx_frames(void);
+extern int  net_rx_arp(void);
+extern int  net_rx_ip(void);
+extern int  net_rx_icmp(void);
+extern int  net_rx_bad_csum(void);
+extern int  net_rx_not_ours(void);
+extern int  net_tx_frames(void);
+extern int  net_rx_stale_echo(void);
+extern int  net_rx_short(void);
+extern int  net_rx_badver(void);
+extern int  net_rx_badihl(void);
+extern int  net_rx_frag(void);
+extern int  virtio_net_send(const unsigned char *frame, int len);
+extern int  virtio_net_poll(unsigned char *out, int max);
 
 extern void browser_home(void);
 extern void browser_load_mem(unsigned int addr, int len);
@@ -806,6 +849,41 @@ Value zl_calln(const char *name, int n, ...)
      * else reports what happened, because a driver that fails silently is
      * indistinguishable from one that is not there. */
     if (streq(name, "net_find"))   return zl_num((double)virtio_net_find());
+    /* ip_up(ip, mask, gw): bring the card up, then hand net.c the link. Two
+     * steps rather than one because a card that works and a stack that is
+     * misconfigured are different failures and should report separately. */
+    if (streq(name, "ip_up")) {
+        if (!virtio_net_init()) return zl_num(0.0);
+        unsigned char m[6];
+        for (int k = 0; k < 6; k++) m[k] = (unsigned char)virtio_net_mac(k);
+        net_link(virtio_net_send, virtio_net_poll, m);
+        net_config((unsigned)a[0].num, (unsigned)a[1].num, (unsigned)a[2].num);
+        return zl_num(1.0);
+    }
+    if (streq(name, "ip_live"))    return zl_num((double)net_live());
+    if (streq(name, "ip_poll"))    return zl_num((double)net_poll_once());
+    if (streq(name, "ip_ping"))    return zl_num((double)net_ping((unsigned)a[0].num,(int)a[1].num));
+    if (streq(name, "ip_run"))     return zl_num((double)net_ping_run((unsigned)a[0].num,(int)a[1].num,(int)a[2].num));
+    if (streq(name, "ip_sent"))    return zl_num((double)net_ping_sent());
+    if (streq(name, "ip_recv"))    return zl_num((double)net_ping_recv());
+    if (streq(name, "ip_lost"))    return zl_num((double)net_ping_lost());
+    if (streq(name, "ip_min"))     return zl_num((double)net_ping_min());
+    if (streq(name, "ip_max"))     return zl_num((double)net_ping_max());
+    if (streq(name, "ip_avg"))     return zl_num((double)net_ping_avg());
+    if (streq(name, "ip_jit"))     return zl_num((double)net_ping_jitter());
+    if (streq(name, "ip_mask"))    return zl_num((double)net_ping_mask());
+    if (streq(name, "ip_rxf"))     return zl_num((double)net_rx_frames());
+    if (streq(name, "ip_rxarp"))   return zl_num((double)net_rx_arp());
+    if (streq(name, "ip_rxip"))    return zl_num((double)net_rx_ip());
+    if (streq(name, "ip_rxicmp"))  return zl_num((double)net_rx_icmp());
+    if (streq(name, "ip_badsum"))  return zl_num((double)net_rx_bad_csum());
+    if (streq(name, "ip_notours")) return zl_num((double)net_rx_not_ours());
+    if (streq(name, "ip_txf"))     return zl_num((double)net_tx_frames());
+    if (streq(name, "ip_stale"))   return zl_num((double)net_rx_stale_echo());
+    if (streq(name, "ip_short"))   return zl_num((double)net_rx_short());
+    if (streq(name, "ip_badver"))  return zl_num((double)net_rx_badver());
+    if (streq(name, "ip_badihl"))  return zl_num((double)net_rx_badihl());
+    if (streq(name, "ip_frag"))    return zl_num((double)net_rx_frag());
     if (streq(name, "net_up"))     return zl_num((double)virtio_net_init());
     if (streq(name, "net_there"))  return zl_num((double)virtio_net_present());
     if (streq(name, "net_ok"))     return zl_num((double)virtio_net_ready());
@@ -816,6 +894,12 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "net_tx"))     return zl_num((double)virtio_net_tx_count());
     if (streq(name, "net_rx"))     return zl_num((double)virtio_net_rx_count());
     if (streq(name, "net_drop"))   return zl_num((double)virtio_net_rx_drops());
+    if (streq(name, "net_txfull")) return zl_num((double)virtio_net_tx_full());
+    if (streq(name, "net_runt"))   return zl_num((double)virtio_net_runts());
+    if (streq(name, "net_txa"))    return zl_num((double)virtio_net_tx_avail());
+    if (streq(name, "net_txu"))    return zl_num((double)virtio_net_tx_used());
+    if (streq(name, "net_rxa"))    return zl_num((double)virtio_net_rx_avail());
+    if (streq(name, "net_rxu"))    return zl_num((double)virtio_net_rx_used());
     if (streq(name, "net_arena"))  return zl_num((double)virtio_net_arena());
     if (streq(name, "net_arp"))    return zl_num((double)virtio_net_arp_probe((unsigned)a[0].num,(unsigned)a[1].num,(int)a[2].num));
     if (streq(name, "net_peerok")) return zl_num((double)virtio_net_peer_known());
