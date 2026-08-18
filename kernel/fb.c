@@ -17,6 +17,7 @@ extern const unsigned char font8x16[95][16];
 /* the anti-aliased twin of the same font: a coverage (alpha 0..255) per pixel,
  * generated from font8x16 by gen_aa_font.py. Blended over the background so
  * glyph edges go grey instead of staircasing. */
+#include "font_prop.h"
 extern const unsigned char font8x16_aa[95][16][8];
 #define FONT_FIRST 32
 #define FONT_LAST  126
@@ -41,7 +42,9 @@ int fb_cell_w(void) { return cell_w; }
 int fb_cell_h(void) { return cell_h; }
 
 unsigned int fb_get_px(int x, int y);   /* defined below; used by the AA text path */
+void idt_set_pointer_bounds(int w, int h);   /* the mouse clamp, pushed not pulled */
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);  /* the fast row fill */
+void fb_clip_none(void);                /* the scissor; defined below with put_pixel */
 
 static unsigned char *fb_base;
 static unsigned int   fb_pitch;      /* bytes per scanline, NOT pixels */
@@ -68,6 +71,11 @@ void fb_set_text_box(int c0, int c1)
 }
 
 int fb_active(void) { return fb_base != 0; }
+
+/* Where the card actually scans out of. NOT the back buffer below: this is
+ * real video memory, which is what a poke/peek proof has to write to. */
+unsigned long fb_phys(void) { return (unsigned long)fb_base; }
+
 int fb_get_cols(void) { return fb_cols; }
 int fb_get_rows(void) { return fb_rows; }
 
@@ -83,57 +91,423 @@ int fb_get_rows(void) { return fb_rows; }
  * The dirty box is tracked automatically by put_pixel, so nothing above this
  * file has to know the back buffer exists - callers just draw, then present.
  */
-#define BACK_MAX (1920 * 1200)   /* covers 1080p and 16:10 1920x1200 */
-static unsigned int *back = (unsigned int *)0x0C000000;   /* 192 MiB scratch */
+/* ---- the fixed high-RAM map ----------------------------------------------
+ * There is no allocator, so every multi-megabyte buffer in this kernel lives
+ * at a fixed physical address. They are NEIGHBOURS, and the only thing
+ * stopping one from eating the next is arithmetic. Every base below was read
+ * out of the file that owns it - do not take this list on trust, re-grep it:
+ *
+ *   0x08000000  128 MiB   fb.c          bg_buf   drag background snapshot
+ *   0x0A000000  160 MiB   fb.c          sp_buf   drag sprite
+ *   0x0B000000  176 MiB   sched.c       STACK_BASE, kernel task stacks
+ *   0x0C000000  192 MiB   fb.c          back     the back buffer
+ *   0x0D000000  208 MiB   nvme.c        NMEM_ASQ, admin queues
+ *   0x0E000000  224 MiB   xhci.c        XMEM_DCBAA - the DMA arena
+ *   0x0F000000  240 MiB   virtio_gpu.c  VMEM_DESC
+ *
+ * So each buffer's ceiling is set by whoever comes after it, and "does this
+ * mode fit" is that subtraction. It is NOT a compile-time pixel count that
+ * silently stops being true when the panel gets bigger - which is exactly the
+ * bug this replaces. BACK_MAX was 1920*1200, so the ThinkPad's 2560x1440 made
+ * back_on 0 and took the back buffer, subpixel text, fast read-back AND
+ * window dragging with it, without printing a word. desktop-TODO 0a, T-1.
+ *
+ * (Group C deletes bg_buf and sp_buf entirely - the snapshot-and-sticker drag
+ * machinery - which frees 128..176 MiB and lets `back` move down to cover 4K.
+ * Until then 192..208 MiB is what it has: 16 MiB, i.e. up to 4,194,304 pixels,
+ * which covers 2560x1440 and 2560x1600 but not 3840x2160.)
+ */
+#define HI_BG     0x08000000UL
+#define HI_SP     0x0A000000UL
+#define HI_SCHED  0x0B000000UL
+#define HI_BACK   0x0C000000UL
+#define HI_NVME   0x0D000000UL
+
+#define BG_LIMIT   ((unsigned int)(HI_SP    - HI_BG))    /* 32 MiB */
+#define SP_LIMIT   ((unsigned int)(HI_SCHED - HI_SP))    /* 16 MiB */
+#define BACK_LIMIT ((unsigned int)(HI_NVME  - HI_BACK))  /* 16 MiB */
+
+/* THE FALLBACK ARENA. 128..176 MiB is 48 MiB - the drag buffers plus the gap
+ * to sched.c - and it is the only span in the map big enough for 3840x2160,
+ * which needs 31.6 MiB and does not fit in back's own 16.
+ *
+ * At a mode that large the drag buffers are unusable ANYWAY: bg_buf would need
+ * the same 31.6 MiB and has 32, leaving no room for a back buffer beside it.
+ * So the choice is not "back buffer or dragging", it is "back buffer or
+ * neither", and the arena is worth more as one big buffer than as two that
+ * cannot both be used.
+ *
+ * The difference this makes is not marginal. With back off, every primitive
+ * goes to VRAM through put_pixel instead of the fast row path, and a
+ * full-screen fill at 4K costs 77x what it costs at 1920x1200 - for 3.6x the
+ * pixels. Measured: a whole desktop redraw at 3840x2160 is 44 ms without a
+ * back buffer, against 3.95 ms at 1920x1200 with one.
+ *
+ * C4 supersedes this properly: deleting the sticker-drag machinery frees the
+ * arena outright and dragging comes back through damage-based repaint, which
+ * needs no snapshot at all. Until then this is the honest trade, and the boot
+ * log states it rather than leaving someone to wonder why dragging stopped. */
+#define BIG_LIMIT  ((unsigned int)(HI_SCHED - HI_BG))    /* 48 MiB */
+
+/* THE MAP MUST BE IN ORDER, AND THE COMPILER SHOULD SAY SO.
+ *
+ * Every limit above is a subtraction of one base from the next, which is only
+ * meaningful if the bases are in ascending order. Reorder two of them by
+ * mistake and the subtraction underflows to a colossal unsigned number, every
+ * "does it fit" test passes, and a buffer lands on top of a neighbour - which
+ * is the DMA-arena collision this project has hit five times, in the shape
+ * that hides best.
+ *
+ * These cost nothing at run time and fail the build the moment the map stops
+ * making sense. A comment claiming the order would not have. */
+_Static_assert(HI_BG    < HI_SP,    "high-RAM map out of order: bg >= sp");
+_Static_assert(HI_SP    < HI_SCHED, "high-RAM map out of order: sp >= sched");
+_Static_assert(HI_SCHED < HI_BACK,  "high-RAM map out of order: sched >= back");
+_Static_assert(HI_BACK  < HI_NVME,  "high-RAM map out of order: back >= nvme");
+/* and the fallback arena must not reach into sched.c's stacks */
+_Static_assert(HI_BG + (unsigned long)BIG_LIMIT <= HI_SCHED,
+               "the back buffer's fallback arena overruns sched.c");
+
+static unsigned int *back = (unsigned int *)HI_BACK;
 static int back_on = 0;
-static int dx0, dy0, dx1, dy1, dirty;
+static int back_took_arena = 0;   /* back is living in the drag buffers' space */
+
+/* ---- SIMD, and exactly where it is allowed --------------------------------
+ * cpu.c has detected SSE/SSE2/SSE3/SSSE3 since it was written and NOTHING has
+ * ever used it. The reason to be careful rather than eager:
+ *
+ *   SSE IS ONLY ENABLED ON THE 64-BIT PATH. boot64.S sets CR4.OSFXSR (bit 9);
+ *   boot.S, the 32-bit multiboot entry that verify.sh boots, does not touch
+ *   CR4 at all. An SSE instruction there faults. So this cannot simply be
+ *   switched on for "the kernel" - fb.c is compiled into both.
+ *
+ * __SSE2__ is exactly the right predicate and needs no build-system change:
+ * gcc defines it for x86-64 (always, SSE2 is baseline) and leaves it undefined
+ * for -m32 without -msse2, which is what build.sh uses. So the 64-bit kernel,
+ * the UEFI application - the path the ThinkPad actually takes - and
+ * hosttest/fbbench all get the vector path, and the 32-bit kernel keeps the
+ * scalar one. The two must produce IDENTICAL pixels, which the FNV scene hash
+ * checks on every run.
+ *
+ * WHAT IS NOT VECTORISED, AND WHY: blend_rgb and blend_sub. They are three
+ * table lookups into srgb_to_lin per pixel, and a gather is the one thing SSE2
+ * cannot do. Vectorising around it would mean giving up the gamma-correct
+ * linear-light blend, which is the single best thing about this renderer. Not
+ * worth it, and saying so here is cheaper than someone rediscovering it.
+ */
+/* -DFB_NO_SIMD forces the scalar path even where SSE2 exists. That is not a
+ * debug switch, it is the A/B: DECISIONS.md #25 records an optimisation that
+ * was argued from an instruction count, shipped, and turned out 25% SLOWER
+ * when finally measured. Keeping both paths buildable is what makes the
+ * comparison a command rather than an opinion. */
+#if defined(__SSE2__) && !defined(FB_NO_SIMD)
+#include <emmintrin.h>
+#define FB_SIMD 1
+#else
+#define FB_SIMD 0
+#endif
+
+/* Fill n 32-bit pixels with one colour. Sixteen bytes a go once aligned.
+ * GCC will not do this itself at -O2: the "very-cheap" cost model refuses any
+ * loop whose trip count is a runtime value, because it would need a scalar
+ * epilogue - verified by objdump, which shows no xmm in fb_fill_px at all. */
+static inline void fill32(unsigned int *d, unsigned int rgb, int n)
+{
+#if FB_SIMD
+    while (n > 0 && ((unsigned long)d & 15)) { *d++ = rgb; n--; }
+    __m128i v = _mm_set1_epi32((int)rgb);
+    while (n >= 16) {
+        _mm_store_si128((__m128i *)d,      v);
+        _mm_store_si128((__m128i *)d + 1,  v);
+        _mm_store_si128((__m128i *)d + 2,  v);
+        _mm_store_si128((__m128i *)d + 3,  v);
+        d += 16; n -= 16;
+    }
+    while (n >= 4) { _mm_store_si128((__m128i *)d, v); d += 4; n -= 4; }
+#endif
+    while (n-- > 0) *d++ = rgb;
+}
+
+/* Copy n 32-bit pixels. This is the present blit, which crosses into
+ * write-combining VRAM on real hardware - wide stores are what WC is for. */
+static inline void copy32(unsigned int *d, const unsigned int *s, int n)
+{
+#if FB_SIMD
+    while (n >= 4) {
+        _mm_storeu_si128((__m128i *)d, _mm_loadu_si128((const __m128i *)s));
+        d += 4; s += 4; n -= 4;
+    }
+#endif
+    while (n-- > 0) *d++ = *s++;
+}
+
+/* ---- the damage list -----------------------------------------------------
+ * This was ONE rectangle that every touched pixel grew. A clock ticking in one
+ * corner and a monitor updating in the other unioned to the whole screen, every
+ * second, so the present blit copied 2.3 million pixels to move a few hundred.
+ * GNOME repaints ~2% of the screen per frame; zlOS repainted 100%.
+ *
+ * Eight rectangles, merged on contact. When it fills, everything collapses into
+ * one - which IS the old single box, so the worst case is "as slow as it was",
+ * never "wrong". That property is why 8 is enough and why there is no dynamic
+ * growth to get wrong.
+ *
+ * THE PIXEL ACCUMULATOR IS NOT AN OPTIMISATION, IT IS THE DESIGN. put_pixel is
+ * the hottest path in the renderer - every shadow pixel, every antialiased
+ * glyph edge, every rounded corner - and making it search an eight-entry list
+ * per pixel would tax the whole file to speed up the blit. So put_pixel keeps
+ * growing a single box exactly as before, at the same four compares, and that
+ * box is flushed into the list whenever a rect-shaped primitive reports its own
+ * damage, or at present time. Per-pixel primitives are spatially coherent
+ * anyway, so the box is the right shape for them.
+ */
+#define DMG_MAX 8
+struct dmg_rect { int x0, y0, x1, y1; };
+static struct dmg_rect dmg[DMG_MAX];
+static int ndmg;
+
+static int px0, py0, px1, py1, pdirty;   /* the put_pixel accumulator */
 
 static void mark(int x, int y)
 {
-    if (!dirty) { dx0 = x; dy0 = y; dx1 = x + 1; dy1 = y + 1; dirty = 1; return; }
-    if (x < dx0) dx0 = x;
-    if (y < dy0) dy0 = y;
-    if (x + 1 > dx1) dx1 = x + 1;
-    if (y + 1 > dy1) dy1 = y + 1;
+    if (!pdirty) { px0 = x; py0 = y; px1 = x + 1; py1 = y + 1; pdirty = 1; return; }
+    if (x < px0) px0 = x;
+    if (y < py0) py0 = y;
+    if (x + 1 > px1) px1 = x + 1;
+    if (y + 1 > py1) py1 = y + 1;
 }
 
-/* copy the dirty box out to the card, then forget it */
+/* Touching counts as overlapping. Two rectangles sharing an edge are cheaper
+ * to blit as one than as two, and merging them cannot cover a pixel that was
+ * not already going to be covered by one of them. */
+static int dmg_touches(const struct dmg_rect *a, int x0, int y0, int x1, int y1)
+{
+    return !(x0 > a->x1 || x1 < a->x0 || y0 > a->y1 || y1 < a->y0);
+}
+
+static void dmg_add(int x0, int y0, int x1, int y1)
+{
+    if (x0 >= x1 || y0 >= y1) return;
+
+    /* Absorb everything it touches, and RESTART after each absorption: one
+     * union makes the rectangle bigger, which can bring it into contact with
+     * something it did not touch a moment ago. Bounded by DMG_MAX either way. */
+    for (int i = 0; i < ndmg; ) {
+        if (dmg_touches(&dmg[i], x0, y0, x1, y1)) {
+            if (dmg[i].x0 < x0) x0 = dmg[i].x0;
+            if (dmg[i].y0 < y0) y0 = dmg[i].y0;
+            if (dmg[i].x1 > x1) x1 = dmg[i].x1;
+            if (dmg[i].y1 > y1) y1 = dmg[i].y1;
+            dmg[i] = dmg[--ndmg];
+            i = 0;
+            continue;
+        }
+        i++;
+    }
+
+    if (ndmg >= DMG_MAX) {              /* full: degrade to the old single box */
+        for (int i = 0; i < ndmg; i++) {
+            if (dmg[i].x0 < x0) x0 = dmg[i].x0;
+            if (dmg[i].y0 < y0) y0 = dmg[i].y0;
+            if (dmg[i].x1 > x1) x1 = dmg[i].x1;
+            if (dmg[i].y1 > y1) y1 = dmg[i].y1;
+        }
+        ndmg = 0;
+    }
+    dmg[ndmg].x0 = x0; dmg[ndmg].y0 = y0;
+    dmg[ndmg].x1 = x1; dmg[ndmg].y1 = y1;
+    ndmg++;
+}
+
+static void dmg_flush_pixels(void)
+{
+    if (!pdirty) return;
+    pdirty = 0;
+    dmg_add(px0, py0, px1, py1);
+}
+
+/* A primitive that knows its own rectangle says so here, instead of marking
+ * every pixel it wrote. That is what keeps two far-apart updates apart. */
+void fb_damage(int x, int y, int w, int h)
+{
+    dmg_flush_pixels();
+    dmg_add(x, y, x + w, y + h);
+}
+
+/* what fb_present would blit right now: how many rectangles, and how many
+ * pixels in total. The whole claim of this change is "the presented area is
+ * measurably smaller", and that needs a number - see hosttest/fbbench.c. */
+int fb_damage_count(void) { dmg_flush_pixels(); return ndmg; }
+
+unsigned int fb_damage_area(void)
+{
+    dmg_flush_pixels();
+    unsigned int a = 0;
+    for (int i = 0; i < ndmg; i++)
+        a += (unsigned)(dmg[i].x1 - dmg[i].x0) * (unsigned)(dmg[i].y1 - dmg[i].y0);
+    return a;
+}
+
+/* copy every damaged rectangle out to the card, then forget them */
 void fb_present(void)
 {
-    if (!back_on || !dirty) return;
-    int x0 = dx0, y0 = dy0, x1 = dx1, y1 = dy1;
-    dirty = 0;
-    if (x0 < 0) x0 = 0;
-    if (y0 < 0) y0 = 0;
-    if (x1 > (int)fb_w) x1 = (int)fb_w;
-    if (y1 > (int)fb_h) y1 = (int)fb_h;
-    if (x0 >= x1 || y0 >= y1) return;
+    if (!back_on) return;
+    dmg_flush_pixels();
+    if (!ndmg) return;
     int bpx = (int)(fb_bpp / 8);
-    for (int y = y0; y < y1; y++) {
-        unsigned int  *src = back + (unsigned long)y * fb_w + x0;
-        unsigned char *dst = fb_base + (unsigned long)y * fb_pitch + (unsigned long)x0 * bpx;
-        if (bpx == 4) {
-            unsigned int *d = (unsigned int *)dst;
-            for (int x = x0; x < x1; x++) *d++ = *src++;
-        } else {
-            for (int x = x0; x < x1; x++) {
-                unsigned int c = *src++;
-                dst[0] = (unsigned char)(c & 0xFF);
-                dst[1] = (unsigned char)((c >> 8) & 0xFF);
-                dst[2] = (unsigned char)((c >> 16) & 0xFF);
-                dst += 3;
+    for (int i = 0; i < ndmg; i++) {
+        int x0 = dmg[i].x0, y0 = dmg[i].y0, x1 = dmg[i].x1, y1 = dmg[i].y1;
+        if (x0 < 0) x0 = 0;
+        if (y0 < 0) y0 = 0;
+        if (x1 > (int)fb_w) x1 = (int)fb_w;
+        if (y1 > (int)fb_h) y1 = (int)fb_h;
+        if (x0 >= x1 || y0 >= y1) continue;
+        for (int y = y0; y < y1; y++) {
+            unsigned int  *src = back + (unsigned long)y * fb_w + x0;
+            unsigned char *dst = fb_base + (unsigned long)y * fb_pitch + (unsigned long)x0 * bpx;
+            if (bpx == 4) {
+                copy32((unsigned int *)dst, src, x1 - x0);
+            } else {
+                for (int x = x0; x < x1; x++) {
+                    unsigned int c = *src++;
+                    dst[0] = (unsigned char)(c & 0xFF);
+                    dst[1] = (unsigned char)((c >> 8) & 0xFF);
+                    dst[2] = (unsigned char)((c >> 16) & 0xFF);
+                    dst += 3;
+                }
             }
+        }
+    }
+    ndmg = 0;
+}
+
+/* ---- saying so out loud --------------------------------------------------
+ * The degradation above is legitimate. The SILENCE was the bug: four features
+ * turned themselves off at 2560x1440 and nothing anywhere said a word, so the
+ * first symptom would have been "the desktop is inexplicably a slideshow on
+ * the laptop and dragging does nothing".
+ *
+ * This goes out through zl_putc_pub, the same character sink the rest of the
+ * kernel prints through, so it lands on the serial log. On the FIRST call the
+ * screen is wiped immediately afterwards by console_init's fb_clear(), so the
+ * line is serial-only there - which is fine, because the serial log is what an
+ * unattended gate reads. On a later runtime mode switch (the `n` command, via
+ * console_init_fb) it lands on both.
+ *
+ * Note this cannot reach the text-mode path: fb_setup is only ever called when
+ * there IS a framebuffer, and on verify.sh's `-kernel -display none` there is
+ * not one, so golden.txt is untouched.
+ */
+void zl_putc_pub(char c);
+
+static void fb_puts(const char *s) { while (*s) zl_putc_pub(*s++); }
+
+static void fb_putu(unsigned int v)
+{
+    char b[12];
+    int i = 0;
+    if (!v) { zl_putc_pub('0'); return; }
+    while (v) { b[i++] = (char)('0' + v % 10u); v /= 10u; }
+    while (i) zl_putc_pub(b[--i]);
+}
+
+/* Report EACH buffer separately, because they no longer fail together.
+ * They used to: BACK_MAX and BG_MAX were both 1920*1200, so one resolution
+ * killed the back buffer and dragging in the same step and it was fair to list
+ * them as one loss. Sized from real neighbours they have different ceilings -
+ * at 3840x2160 the back buffer does not fit but the drag snapshot does, by
+ * 368 KiB. Saying "dragging is lost" there would be a lie the boot log tells
+ * every time, which is worse than the silence this replaced. */
+static void fb_report_mode(unsigned int need)
+{
+    int drag_ok = (need <= BG_LIMIT) && !back_took_arena;
+
+    fb_puts("  fb: ");
+    fb_putu(fb_w); fb_puts("x"); fb_putu(fb_h); fb_puts("x"); fb_putu(fb_bpp);
+    fb_puts(" cell "); fb_putu((unsigned)cell_w); fb_puts("x"); fb_putu((unsigned)cell_h);
+    fb_puts(", back "); fb_puts(back_on ? "ON" : "OFF");
+    fb_puts(", drag "); fb_puts(drag_ok ? "ON" : "OFF");
+    fb_puts("  ("); fb_putu(need >> 10); fb_puts(" KiB/mode)\n");
+
+    if (!back_on) {
+        fb_puts("      back OFF: wants "); fb_putu(need >> 10);
+        fb_puts(" KiB, "); fb_putu(BACK_LIMIT >> 10);
+        fb_puts(" KiB free below nvme - no subpixel text, read-back hits VRAM\n");
+    }
+    /* Say where it ends, not just that it fits. "back ON" is a claim; an
+     * address is a fact somebody can check against the map in this file. */
+    if (back_on) {
+        unsigned long top = (unsigned long)back + need;
+        unsigned long ceil = back_took_arena ? HI_SCHED : HI_NVME;
+        fb_puts("      back at ");   fb_putu((unsigned)((unsigned long)back >> 20));
+        fb_puts(" MiB, ends at ");   fb_putu((unsigned)(top >> 20));
+        fb_puts(" MiB, ceiling ");   fb_putu((unsigned)(ceil >> 20));
+        fb_puts(" MiB");
+        if (top > ceil) fb_puts("  *** OVERRUN - THIS WILL CORRUPT THE NEXT BUFFER ***");
+        fb_puts("\n");
+    }
+    if (!drag_ok) {
+        fb_puts("      drag OFF: ");
+        if (back_took_arena) {
+            fb_puts("the back buffer is using the drag arena at 128 MiB\n");
+        } else {
+            fb_puts("snapshot wants "); fb_putu(need >> 10);
+            fb_puts(" KiB, "); fb_putu(BG_LIMIT >> 10);
+            fb_puts(" KiB free below sp_buf - windows will not move\n");
         }
     }
 }
 
+/* NOTE, AND IT IS NOT THIS FILE'S BUG TO FIX: `addr` arrives TRUNCATED in the
+ * EFI build, and this signature is one link in that chain rather than its
+ * origin.
+ *
+ * buildefi.sh targets x86_64-unknown-windows, which is LLP64 - `unsigned long`
+ * is FOUR bytes there and eight everywhere else. Proven, not assumed:
+ * a _Static_assert(sizeof(unsigned long) == 8) fails on that target.
+ *
+ * The chain, all of it `unsigned long`:
+ *     efi.c:250   fb_addr = (unsigned long)gop->mode->framebuffer_base;
+ *                 <- the UINT64 loses its top half HERE, at the source
+ *     efi.c:287   console_init_efi(fb_addr, ...)
+ *     console.c   console_init_efi -> fb_setup(addr, ...)
+ *     here        fb_base = (unsigned char *)addr
+ * and back out through fb_phys() -> console_vram() -> the `vram` builtin.
+ *
+ * CLAUDE.md already names this bug class - "never put a pointer through
+ * unsigned long in the EFI build" - and buildefi.sh carries four -Werror flags
+ * against it. THOSE FLAGS ARE SILENT HERE, verified by compiling both cast
+ * shapes with the exact build line: they catch pointer<->int, and this is a
+ * UINT64 narrowed by an EXPLICIT cast, which no warning catches.
+ *
+ * Latent rather than active: a GOP framebuffer base is normally a PCI BAR in
+ * the 32-bit MMIO window, which is why QEMU and OVMF never show it. Firmware
+ * that places it above 4 GiB would give a black screen or write into whatever
+ * lives at the truncated address.
+ *
+ * The fix is three declarations, not one, and two of the files were mid-flight
+ * in another session: efi.c's fb_addr, console_init_efi, and this parameter all
+ * become `unsigned long long`. Changing only this one is WORSE than leaving it
+ * - console.c's declaration would then disagree with the definition about the
+ * size of a register argument. Logged as T-11. */
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp)
 {
     /* Only 32- and 24-bit packed pixel modes are handled. Anything else is
      * refused rather than drawn as garbage - a wrong depth paints noise and
      * looks like a crash. */
-    if (!addr || (bpp != 32 && bpp != 24)) { fb_base = 0; return; }
+    if (!addr || (bpp != 32 && bpp != 24)) {
+        /* Refusing is right - a wrong depth paints noise and reads as a crash.
+         * Refusing SILENTLY is the bug, and it is the same one 0a was about:
+         * the machine ends up with no framebuffer and nothing anywhere says
+         * why. On a real UEFI boot this is the difference between "the panel
+         * is black" and "the panel is black because firmware handed us 16bpp". */
+        fb_base = 0;
+        fb_puts("  fb: REFUSED the mode - ");
+        if (!addr) fb_puts("no framebuffer address\n");
+        else { fb_puts("bpp "); fb_putu(bpp); fb_puts(", only 24 and 32 are handled\n"); }
+        return;
+    }
 
     fb_base  = (unsigned char *)addr;
     fb_pitch = pitch;
@@ -148,17 +522,90 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
     fb_row   = 0;
     tx0      = 0;
     tx1      = fb_cols - 1;      /* full width until zl opens a text box */
+    fb_clip_none();              /* the scissor follows the new geometry */
 
     /* Draw into RAM and blit, rather than drawing straight into the card.
-     * Only refused if the mode is bigger than the buffer we reserved, in
-     * which case everything still works - just slower, straight to VRAM. */
-    back_on = ((int)(width * height) <= BACK_MAX);
-    dirty   = 0;
+     * Refused only when the mode does not fit between `back` and its
+     * neighbour, in which case everything still works - just slower, straight
+     * to VRAM - and the boot log SAYS SO. See the high-RAM map above. */
+    unsigned int need = width * height * 4u;
+    /* Prefer back's own span; fall back to the drag arena; then give up. The
+     * BASE is computed from the map rather than hardcoded - which is what
+     * desktop-TODO 0a asked for and what the first version of this only did
+     * for the limit. */
+    back_took_arena = 0;
+    /* The static asserts above prove the MAP is sane. This proves the choice
+     * made from it is: a mode arrives at run time and `need` is computed from
+     * it, so the one thing a compile-time check cannot cover is whether this
+     * particular mode's buffer stays inside the span picked for it. */
+    if (need <= BACK_LIMIT) {
+        back = (unsigned int *)HI_BACK;
+        back_on = 1;
+    } else if (need <= BIG_LIMIT) {
+        back = (unsigned int *)HI_BG;
+        back_on = 1;
+        back_took_arena = 1;
+    } else {
+        back = (unsigned int *)HI_BACK;
+        back_on = 0;
+    }
+    ndmg    = 0;                 /* the mode changed; old damage means nothing */
+    pdirty  = 0;
+    fb_report_mode(need);
+
+    /* Tell the mouse ISR how big the screen is. It cannot ask: idt.c is built
+     * -mgeneral-regs-only so that an interrupt never touches SSE, and calling
+     * out of that file into one that can use XMM corrupts whatever the
+     * interrupted code had in those registers. Every zl number is a double, so
+     * that is the interpreter itself - it killed the 64-bit boot outright. */
+    idt_set_pointer_bounds((int)width, (int)height);
+}
+
+/* ---- the scissor ---------------------------------------------------------
+ * Every primitive in this file clipped to the SCREEN and nothing else, which
+ * is what made a compositor impossible: there was no way to say "repaint only
+ * this rectangle" and be sure nothing escaped it. That, not the absence of
+ * window code, was the blocker (desktop-TODO 0b, DECISIONS.md #6).
+ *
+ * It is one rectangle, not a stack. A stack would need push/pop and a depth
+ * limit for no gain: the repaint loop sets the scissor twice per window - once
+ * to the frame so chrome cannot bleed onto a neighbour, then NARROWER to the
+ * client area so an app physically cannot draw over its own title bar - and
+ * both are computed, not nested.
+ *
+ * x1/y1 are EXCLUSIVE, and fb_clip() clamps to the screen on the way in, so
+ * the scissor test below subsumes the screen test it replaces rather than
+ * being an extra one.
+ */
+static int clip_x0, clip_y0, clip_x1, clip_y1;
+
+void fb_clip(int x, int y, int w, int h)
+{
+    int x1 = x + w, y1 = y + h;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x1 > (int)fb_w) x1 = (int)fb_w;
+    if (y1 > (int)fb_h) y1 = (int)fb_h;
+    if (x1 < x) x1 = x;              /* an empty rect clips everything away */
+    if (y1 < y) y1 = y;
+    clip_x0 = x; clip_y0 = y; clip_x1 = x1; clip_y1 = y1;
+}
+
+void fb_clip_none(void)
+{
+    clip_x0 = 0; clip_y0 = 0;
+    clip_x1 = (int)fb_w; clip_y1 = (int)fb_h;
 }
 
 static void put_pixel(unsigned int x, unsigned int y, unsigned int rgb)
 {
-    if (x >= fb_w || y >= fb_h) return;
+    /* Signed, deliberately. Callers pass (unsigned)(px + x) where px + x can
+     * be negative, and that arrives here as a huge unsigned - which the old
+     * `x >= fb_w` test rejected for the right reason by accident. Casting back
+     * to int makes any value at or above 2^31 negative, and everything below
+     * it is caught by the upper bound, so both halves still reject it. */
+    if ((int)x < clip_x0 || (int)x >= clip_x1 ||
+        (int)y < clip_y0 || (int)y >= clip_y1) return;
     if (back_on) { back[(unsigned long)y * fb_w + x] = rgb; mark((int)x, (int)y); return; }
     unsigned char *p = fb_base + (unsigned long)y * fb_pitch + (unsigned long)x * (fb_bpp / 8);
     p[0] = (unsigned char)(rgb & 0xFF);           /* B */
@@ -186,11 +633,10 @@ static void fill_cell(int cx, int cy, unsigned int rgb)
     fb_fill_px(cx * cell_w, cy * cell_h, cell_w, cell_h, rgb);
 }
 
-/* Divide by 255 without dividing. An integer div is 20-40 cycles on x86 and
- * does not pipeline; this shift-add pair is ~1 and gives the identical answer
- * for every value a blend can produce (0..255*255). It matters because this
- * runs three times per pixel, 128 times per antialiased glyph. */
-static inline int div255(int v) { v += 128; return (v + (v >> 8)) >> 8; }
+/* (div255() lived here - a shift-add replacement for /255, defined and NEVER
+ * called. GCC already strength-reduces the /255 in the blend path, verified by
+ * objdump: there is not a single div instruction in it. Deleted rather than
+ * left as a trap for the next person optimising this file. desktop-TODO 0i.) */
 
 /* ---- gamma-correct blending ---------------------------------------------
  * A screen value of 128 is NOT half the light of 255 - the display applies a
@@ -272,6 +718,76 @@ static unsigned int blend_rgb(unsigned int bg, unsigned int fg, int a)
          |  (unsigned)lin_to_srgb[lb];
 }
 
+/* ---- coverage blitting ---------------------------------------------------
+ * A coverage bitmap is one byte of alpha per pixel: the icons and every font
+ * atlas in this kernel are exactly that, and so is a resampled version of one.
+ * These three are the whole vocabulary for putting one on the screen, and
+ * everything that used to open-code the loop now goes through them.
+ */
+
+/* one coverage value, blended over whatever is already there */
+static void blend_px(int x, int y, unsigned int rgb, int a)
+{
+    if (a <= 0) return;
+    if (a >= 255) { put_pixel((unsigned)x, (unsigned)y, rgb); return; }
+    put_pixel((unsigned)x, (unsigned)y, blend_rgb(fb_get_px(x, y), rgb, a));
+}
+
+/* a coverage bitmap, one destination pixel per source pixel. `stride` is the
+ * source's row length, which is not always the width being drawn: a
+ * proportional glyph sits in a cell far wider than its own ink, and blitting
+ * the whole cell is up to 7x the pixels for no visible difference. */
+static void blend_cov_s(int px, int py, const unsigned char *src,
+                        int sw, int sh, int stride, unsigned int fg)
+{
+    for (int y = 0; y < sh; y++)
+        for (int x = 0; x < sw; x++)
+            blend_px(px + x, py + y, fg, src[(unsigned long)y * stride + x]);
+}
+
+static void blend_cov(int px, int py, const unsigned char *src,
+                      int sw, int sh, unsigned int fg)
+{
+    blend_cov_s(px, py, src, sw, sh, sw, fg);
+}
+
+/* the same, resampled BILINEARLY into a dw x dh box.
+ *
+ * The source coordinate of destination pixel i is (i + 0.5) * sw / dw - 0.5,
+ * held in 16.16 fixed point. Those half-pixel terms are not decoration: drop
+ * them and the resampled image drifts half a destination pixel up and left,
+ * which at icon sizes is visible as a wonky icon.
+ *
+ * This exists because the two places that used to scale a coverage bitmap
+ * both did it by COPYING pixels - fb_icon24 at 2x and fb_glyph_scaled for the
+ * logo - and copying is what throws the anti-aliasing away. */
+static void blend_cov_scaled(int px, int py, const unsigned char *src,
+                             int sw, int sh, int dw, int dh, unsigned int fg)
+{
+    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
+    if (dw == sw && dh == sh) { blend_cov(px, py, src, sw, sh, fg); return; }
+    int lastx = (sw - 1) << 16, lasty = (sh - 1) << 16;
+    for (int y = 0; y < dh; y++) {
+        int syq = (2 * y + 1) * sh * 32768 / dh - 32768;
+        if (syq < 0) syq = 0;
+        if (syq > lasty) syq = lasty;
+        int y0 = syq >> 16, fy = syq & 0xFFFF;
+        int y1 = (y0 + 1 < sh) ? y0 + 1 : y0;
+        const unsigned char *r0 = src + (unsigned long)y0 * sw;
+        const unsigned char *r1 = src + (unsigned long)y1 * sw;
+        for (int x = 0; x < dw; x++) {
+            int sxq = (2 * x + 1) * sw * 32768 / dw - 32768;
+            if (sxq < 0) sxq = 0;
+            if (sxq > lastx) sxq = lastx;
+            int x0 = sxq >> 16, fx = sxq & 0xFFFF;
+            int x1 = (x0 + 1 < sw) ? x0 + 1 : x0;
+            int top = (r0[x0] * (65536 - fx) + r0[x1] * fx) >> 16;
+            int bot = (r1[x0] * (65536 - fx) + r1[x1] * fx) >> 16;
+            blend_px(px + x, py + y, fg, (top * (65536 - fy) + bot * fy) >> 16);
+        }
+    }
+}
+
 /* a glyph in a text cell, anti-aliased over a SOLID cell background. The core
  * of the stroke is opaque (coverage 255 = fg); only the edges blend, so text
  * stays crisp but the diagonal staircase is gone. This is the whole console's
@@ -292,32 +808,40 @@ static void draw_glyph(int cx, int cy, char c, unsigned int fg, unsigned int bg)
         const unsigned char *sub = (cw == GLYPH_W)
             ? &font8x16_sub[(int)c - FONT_FIRST][0][0][0]
             : &font16x32_sub[(int)c - FONT_FIRST][0][0][0];
-        for (int y = 0; y < ch; y++) {
-            unsigned int *row = back + (unsigned long)(oy + y) * fb_w + ox;
-            const unsigned char *sr = sub + (unsigned long)y * cw * 3;
-            for (int x = 0; x < cw; x++) {
-                int ar = sr[x * 3], ag = sr[x * 3 + 1], ab = sr[x * 3 + 2];
+        /* clipped BOUNDS, not a clipped test per pixel: this path writes the
+         * back buffer directly and never sees put_pixel, so the scissor has to
+         * be folded into the loop range or the glyph escapes it. */
+        int gx0 = ox > clip_x0 ? ox : clip_x0, gx1 = ox + cw < clip_x1 ? ox + cw : clip_x1;
+        int gy0 = oy > clip_y0 ? oy : clip_y0, gy1 = oy + ch < clip_y1 ? oy + ch : clip_y1;
+        if (gx0 >= gx1 || gy0 >= gy1) return;
+        for (int y = gy0; y < gy1; y++) {
+            unsigned int *row = back + (unsigned long)y * fb_w;
+            const unsigned char *sr = sub + (unsigned long)(y - oy) * cw * 3;
+            for (int x = gx0; x < gx1; x++) {
+                int i = (x - ox) * 3;
+                int ar = sr[i], ag = sr[i + 1], ab = sr[i + 2];
                 if (!(ar | ag | ab)) { row[x] = bg; continue; }
                 row[x] = blend_sub(bg, fg, ar, ag, ab);
             }
         }
-        mark(ox, oy);
-        mark(ox + cw - 1, oy + ch - 1);
+        fb_damage(gx0, gy0, gx1 - gx0, gy1 - gy0);
         return;
     }
 
     if (back_on && ox >= 0 && oy >= 0 &&
         ox + cw <= (int)fb_w && oy + ch <= (int)fb_h) {
-        for (int y = 0; y < ch; y++) {
-            unsigned int *row = back + (unsigned long)(oy + y) * fb_w + ox;
-            const unsigned char *cr = cov + (unsigned long)y * cw;
-            for (int x = 0; x < cw; x++) {
-                int a = cr[x];
+        int gx0 = ox > clip_x0 ? ox : clip_x0, gx1 = ox + cw < clip_x1 ? ox + cw : clip_x1;
+        int gy0 = oy > clip_y0 ? oy : clip_y0, gy1 = oy + ch < clip_y1 ? oy + ch : clip_y1;
+        if (gx0 >= gx1 || gy0 >= gy1) return;
+        for (int y = gy0; y < gy1; y++) {
+            unsigned int *row = back + (unsigned long)y * fb_w;
+            const unsigned char *cr = cov + (unsigned long)(y - oy) * cw;
+            for (int x = gx0; x < gx1; x++) {
+                int a = cr[x - ox];
                 row[x] = (a <= 0) ? bg : (a >= 255) ? fg : blend_rgb(bg, fg, a);
             }
         }
-        mark(ox, oy);
-        mark(ox + cw - 1, oy + ch - 1);
+        fb_damage(gx0, gy0, gx1 - gx0, gy1 - gy0);
         return;
     }
     for (int y = 0; y < ch; y++)
@@ -427,19 +951,18 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
 {
     if (w <= 0 || h <= 0) return;
     int x0 = x, y0 = y, x1 = x + w, y1 = y + h;
-    if (x0 < 0) x0 = 0;
-    if (y0 < 0) y0 = 0;
-    if (x1 > (int)fb_w) x1 = (int)fb_w;
-    if (y1 > (int)fb_h) y1 = (int)fb_h;
+    /* against the SCISSOR, not the screen. fb_clip() already clamped the
+     * scissor to the screen, so this is the same test plus the window. */
+    if (x0 < clip_x0) x0 = clip_x0;
+    if (y0 < clip_y0) y0 = clip_y0;
+    if (x1 > clip_x1) x1 = clip_x1;
+    if (y1 > clip_y1) y1 = clip_y1;
     if (x0 >= x1 || y0 >= y1) return;
 
     if (back_on) {
-        for (int yy = y0; yy < y1; yy++) {
-            unsigned int *row = back + (unsigned long)yy * fb_w + x0;
-            for (int xx = x0; xx < x1; xx++) *row++ = rgb;
-        }
-        mark(x0, y0);
-        mark(x1 - 1, y1 - 1);
+        for (int yy = y0; yy < y1; yy++)
+            fill32(back + (unsigned long)yy * fb_w + x0, rgb, x1 - x0);
+        fb_damage(x0, y0, x1 - x0, y1 - y0);
         return;
     }
     for (int yy = y0; yy < y1; yy++)
@@ -466,6 +989,8 @@ static const unsigned char dither4[4][4] = {
 void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
 {
     if (h <= 0) return;
+    /* the union of every row actually written, reported once at the end */
+    int gx0 = 1 << 30, gy0 = 1 << 30, gx1 = -(1 << 30), gy1 = -(1 << 30);
     int tr = (top >> 16) & 0xFF, tg = (top >> 8) & 0xFF, tb = top & 0xFF;
     int br = (bot >> 16) & 0xFF, bg = (bot >> 8) & 0xFF, bb = bot & 0xFF;
     for (int i = 0; i < h; i++) {
@@ -476,10 +1001,14 @@ void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
         int b8 = (tb << 8) + ((bb - tb) * i * 256) / h;
         const unsigned char *drow = dither4[i & 3];
         int yy = y + i;
-        if ((unsigned)yy >= fb_h) continue;
+        /* the SCISSOR, not the screen - fb_clip() clamped it to the screen
+         * already. The back_on branch below writes rows straight into the back
+         * buffer without going near put_pixel, so this is the only thing
+         * keeping the wallpaper inside a damage rectangle. */
+        if (yy < clip_y0 || yy >= clip_y1) continue;
         int j0 = 0, j1 = w;
-        if (x + j0 < 0) j0 = -x;
-        if (x + j1 > (int)fb_w) j1 = (int)fb_w - x;
+        if (x + j0 < clip_x0) j0 = clip_x0 - x;
+        if (x + j1 > clip_x1) j1 = clip_x1 - x;
         if (j0 >= j1) continue;
 
         /* The dither pattern repeats every 4 pixels across, and the colour is
@@ -502,26 +1031,40 @@ void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
         if (back_on) {
             unsigned int *row = back + (unsigned long)yy * fb_w + x + j0;
             for (int j = j0; j < j1; j++) *row++ = quad[j & 3];
-            mark(x + j0, yy);
-            mark(x + j1 - 1, yy);
+            /* accumulate, do not report per row: a full-screen wallpaper is
+             * 1200 rows, and 1200 list insertions to describe one rectangle
+             * would cost more than the blit they are meant to shrink */
+            if (x + j0 < gx0) gx0 = x + j0;
+            if (x + j1 > gx1) gx1 = x + j1;
+            if (yy < gy0) gy0 = yy;
+            if (yy + 1 > gy1) gy1 = yy + 1;
         } else {
             for (int j = j0; j < j1; j++)
                 put_pixel((unsigned)(x + j), (unsigned)yy, quad[j & 3]);
         }
     }
+    if (gx0 < gx1 && gy0 < gy1) fb_damage(gx0, gy0, gx1 - gx0, gy1 - gy0);
 }
 
-/* one glyph, scaled up by an integer factor, drawn at a pixel position */
+/* one glyph, scaled up by an integer factor, drawn at a pixel position.
+ *
+ * This read the ONE-BIT font8x16 and drew each set bit as a solid scale x
+ * scale square. It was the blockiest path in the codebase and it drew the
+ * largest text on screen - the zlOS logo (desktop-look.md, bug 3). text_big
+ * already did the right thing; logo was the odd one out.
+ *
+ * Now it resamples the 16x32 COVERAGE atlas - the same real-TrueType,
+ * FreeType-hinted glyphs the console draws - into the 8*scale x 16*scale box
+ * this function has always occupied. At scale 2 that is 1:1 with the atlas and
+ * costs nothing extra; above it, an interpolated real glyph rather than
+ * staircase squares. Transparent where coverage is zero, exactly as before. */
 void fb_glyph_scaled(int px, int py, char c, int scale, unsigned int fg)
 {
     if (c < FONT_FIRST || c > FONT_LAST) c = '?';
-    const unsigned char *g = font8x16[(int)c - FONT_FIRST];
-    for (int y = 0; y < GLYPH_H; y++) {
-        unsigned char bits = g[y];
-        for (int x = 0; x < GLYPH_W; x++)
-            if (bits & (0x80 >> x))
-                fb_fill_px(px + x * scale, py + y * scale, scale, scale, fg);
-    }
+    if (scale < 1) scale = 1;
+    blend_cov_scaled(px, py, &font16x32_aa[(int)c - FONT_FIRST][0][0],
+                     GLYPH2_W, GLYPH2_H,
+                     GLYPH_W * scale, GLYPH_H * scale, fg);
 }
 
 /* a whole string, scaled - this is how the zlOS logo is drawn big */
@@ -584,10 +1127,31 @@ void fb_shadow(int x, int y, int w, int h, int off, int soft)
     int x1 = x + off + w + soft, y1 = y + off + h + soft;
     int ix0 = x + off, iy0 = y + off, ix1 = x + off + w, iy1 = y + off + h;
 
+    /* The caller draws the window itself on top of this immediately afterwards,
+     * so every shadow pixel under the window's own footprint is computed and
+     * then painted over. That is ~90% of the pixels this loop visits, and the
+     * shadow is the most expensive thing in a window redraw - measured at 4.3 ms
+     * of a 5.1 ms window at 1920x1200 (kernel/hosttest/fbbench.c).
+     *
+     * So skip that rectangle. It is inset by SHADOW_SKIP_INSET rather than
+     * skipped exactly, because the window has ROUNDED corners: the pixels just
+     * outside the arc are still visible and still need their shadow. The inset
+     * must stay larger than any radius draw_window uses (5 * ui() = 10 at 2x).
+     *
+     * Verified pixel-identical: FNV hash of the whole 1920x1200 back buffer
+     * after shadow + rrect + rrect + gradient + text is unchanged. */
+#define SHADOW_SKIP_INSET 16
+    int sk_on = (w > 2 * SHADOW_SKIP_INSET) && (h > 2 * SHADOW_SKIP_INSET);
+    int skx0 = x + SHADOW_SKIP_INSET, skx1 = x + w - SHADOW_SKIP_INSET;
+    int sky0 = y + SHADOW_SKIP_INSET, sky1 = y + h - SHADOW_SKIP_INSET;
+
     for (int yy = y0; yy < y1; yy++) {
         if ((unsigned)yy >= fb_h) continue;
+        int skip_row = sk_on && yy >= sky0 && yy < sky1;
         for (int xx = x0; xx < x1; xx++) {
             if ((unsigned)xx >= fb_w) continue;
+            /* jump straight past the strip the window will cover */
+            if (skip_row && xx >= skx0 && xx < skx1) { xx = skx1 - 1; continue; }
             /* how far outside the window's own footprint is this pixel? */
             int dx = 0, dy = 0;
             if (xx < ix0) dx = ix0 - xx; else if (xx >= ix1) dx = xx - ix1 + 1;
@@ -665,20 +1229,53 @@ void fb_box(int x, int y, int w, int h, unsigned int rgb)
     fb_fill_px(x + w - 1, y, 1, h, rgb);
 }
 
-/* a straight line, any angle - Bresenham, integer only, no floating point */
+/* A straight line, any angle - Wu's algorithm, integer only, no floating point.
+ *
+ * This was plain Bresenham: one hard on/off pixel per step, so every diagonal
+ * staircased. The System Monitor sparkline is eight diagonal segments sitting
+ * directly beside gamma-correct anti-aliased text, and the contrast made it
+ * worse rather than hiding it (desktop-look.md, bug 2).
+ *
+ * Wu's insight is that a diagonal line passes BETWEEN two pixels, so light
+ * both, in proportion to how close the true line is to each. The exact ratio
+ * is the fractional part of the line's position, which the 16.16 accumulator
+ * below already carries - so anti-aliasing costs one extra blended pixel per
+ * step and no arithmetic that was not already there.
+ *
+ * The axis with the greater extent is the one stepped along (`steep` swaps x
+ * and y to make that always x), which is what keeps the coverage sensible: on
+ * the other axis the line would move more than a pixel per step and the two
+ * lit pixels would not bracket it. */
 void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb)
 {
+    int adx = x1 - x0, ady = y1 - y0;
+    if (adx < 0) adx = -adx;
+    if (ady < 0) ady = -ady;
+
+    int steep = ady > adx;
+    if (steep) { int t; t = x0; x0 = y0; y0 = t; t = x1; x1 = y1; y1 = t; }
+    if (x0 > x1) { int t; t = x0; x0 = x1; x1 = t; t = y0; y0 = y1; y1 = t; }
+
     int dx = x1 - x0, dy = y1 - y0;
-    int sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1;
-    if (dx < 0) dx = -dx;
-    if (dy < 0) dy = -dy;
-    int err = (dx > dy ? dx : -dy) / 2, e2;
-    for (;;) {
-        put_pixel((unsigned)x0, (unsigned)y0, rgb);
-        if (x0 == x1 && y0 == y1) break;
-        e2 = err;
-        if (e2 > -dx) { err -= dy; x0 += sx; }
-        if (e2 <  dy) { err += dx; y0 += sy; }
+    /* 16.16 pixels of secondary axis per whole pixel of primary axis. dx == 0
+     * only for a single point, where the loop body runs once and grad is
+     * never applied. */
+    int grad = dx ? (int)(((long long)dy << 16) / dx) : 0;
+
+    int acc = y0 << 16;
+    for (int x = x0; x <= x1; x++) {
+        int yi = acc >> 16;            /* arithmetic shift: floor, not trunc */
+        int f  = acc & 0xFFFF;         /* ...so this fraction is always >= 0 */
+        int a2 = (f * 255) >> 16;      /* how far into the NEXT pixel we are  */
+        int a1 = 255 - a2;
+        if (steep) {
+            blend_px(yi,     x, rgb, a1);
+            blend_px(yi + 1, x, rgb, a2);
+        } else {
+            blend_px(x, yi,     rgb, a1);
+            blend_px(x, yi + 1, rgb, a2);
+        }
+        acc += grad;
     }
 }
 
@@ -779,14 +1376,18 @@ void fb_pointer_show(int x, int y)
  * it now IS. Two copies per frame, no re-rendering - so a window glides.
  * Buffers are sized for up to 1024x768 background and a 640x480 window; bigger
  * modes fall back gracefully (dragging just no-ops). */
-#define BG_MAX (1920 * 1200)    /* the widest mode the bootloader will pick */
-#define SP_MAX (640 * 480)
 /* These are multi-megabyte, so they must NOT live in BSS (the linker would put
  * them right after the kernel, where they collided with the stack/framebuffer
- * and corrupted memory). Park them in free high RAM instead - QEMU/-m 256 has
- * 256 MiB, and 16-25 MiB is clear of the kernel image and the framebuffer. */
-static unsigned int *bg_buf = (unsigned int *)0x08000000;   /* 128 MiB scratch */
-static unsigned int *sp_buf = (unsigned int *)0x0A000000;   /* 160 MiB scratch */
+ * and corrupted memory). Park them in free high RAM instead - see the map at
+ * the top of this file.
+ *
+ * Their ceilings used to be compile-time PIXEL COUNTS - BG_MAX 1920*1200 and
+ * SP_MAX 640*480 - which is the same bug the back buffer had: at 2560x1440
+ * bg_ok went to 0 and dragging stopped working, silently. Both now measure the
+ * mode against the actual gap to the next buffer. (SP_MAX 640x480 was also why
+ * the 1256x944 terminal could not be dragged: nearly 4x over the ceiling.) */
+static unsigned int *bg_buf = (unsigned int *)HI_BG;
+static unsigned int *sp_buf = (unsigned int *)HI_SP;
 static int bg_w = 0, bg_h = 0, bg_ok = 0;
 static int sp_w = 0, sp_h = 0, sp_ok = 0;
 
@@ -794,7 +1395,9 @@ static int sp_w = 0, sp_h = 0, sp_ok = 0;
  * wallpaper/header/dock but before the draggable windows go on top */
 void fb_bg_snapshot(void)
 {
-    if ((int)(fb_w * fb_h) > BG_MAX) { bg_ok = 0; return; }
+    /* Refuse if the back buffer took this space - overwriting it would corrupt
+     * the very thing being snapshotted, and silently. */
+    if (back_took_arena || fb_w * fb_h * 4u > BG_LIMIT) { bg_ok = 0; return; }
     bg_w = (int)fb_w; bg_h = (int)fb_h;
     for (int y = 0; y < bg_h; y++)
         for (int x = 0; x < bg_w; x++)
@@ -816,7 +1419,8 @@ void fb_bg_restore(int x, int y, int w, int h)
 /* grab a screen rectangle into the sprite buffer (the window being lifted) */
 void fb_grab(int x, int y, int w, int h)
 {
-    if (w <= 0 || h <= 0 || w * h > SP_MAX) { sp_ok = 0; return; }
+    if (back_took_arena || w <= 0 || h <= 0 ||
+        (unsigned int)(w * h) * 4u > SP_LIMIT) { sp_ok = 0; return; }
     sp_w = w; sp_h = h;
     for (int j = 0; j < h; j++)
         for (int i = 0; i < w; i++)
@@ -856,15 +1460,26 @@ static void fb_scroll(int top, int bot)
     /* move each scanline up by one text row, but only within the text box's
      * columns - so a floating terminal scrolls without touching its neighbours */
     if (back_on) {
+        /* the third and last direct writer of the back buffer, and it needs
+         * the scissor for the same reason the other two do. In practice the
+         * clamp is a no-op: once the shell is a window (E3) the text box sits
+         * inside the client area, which is what the scissor will be. It exists
+         * so that a NARROWER scissor scrolls only what it was told to. */
         int x0 = c0 * cell_w;
-        int npx = (c1 - c0 + 1) * cell_w;
-        for (int y = y_top; y < y_bot; y++) {
-            unsigned int *d = back + (unsigned long)y * fb_w + x0;
-            unsigned int *s = back + (unsigned long)(y + cell_h) * fb_w + x0;
-            for (int i = 0; i < npx; i++) d[i] = s[i];
+        int x1 = x0 + (c1 - c0 + 1) * cell_w;
+        if (x0 < clip_x0) x0 = clip_x0;
+        if (x1 > clip_x1) x1 = clip_x1;
+        int ys = y_top < clip_y0 ? clip_y0 : y_top;
+        int ye = y_bot < clip_y1 ? y_bot : clip_y1;
+        int npx = x1 - x0;
+        if (npx > 0 && ys < ye) {
+            for (int y = ys; y < ye; y++) {
+                unsigned int *d = back + (unsigned long)y * fb_w + x0;
+                unsigned int *s = back + (unsigned long)(y + cell_h) * fb_w + x0;
+                for (int i = 0; i < npx; i++) d[i] = s[i];
+            }
+            fb_damage(x0, ys, npx, ye - ys);
         }
-        mark(x0, y_top);
-        mark(x0 + npx - 1, y_bot - 1);
     } else {
         int bpx = (int)(fb_bpp / 8);
         unsigned long xoff = (unsigned long)c0 * cell_w * bpx;
@@ -905,6 +1520,65 @@ void fb_set_row(int r, int log_top, int log_bot)
 int fb_get_row(void) { return fb_row; }
 int fb_get_col(void) { return fb_col; }
 
+/* ---- proportional text ----------------------------------------------------
+ * fb_text_aa advances by exactly cell_w per character, so every string it
+ * draws is monospace-positioned - window titles, dock labels, button captions,
+ * all of it. desktop-look.md item 4: uniform advance is the single strongest
+ * "this is a terminal" signal there is, and it was being applied to things
+ * that are not terminals.
+ *
+ * This is the same blend and the same coverage-atlas machinery, with two
+ * differences: the glyphs come from DejaVu SANS rather than Sans Mono, and the
+ * pen moves by each glyph's real advance instead of by the cell.
+ *
+ * THE CONSOLE DOES NOT USE THIS AND MUST NOT. A terminal is a grid; text that
+ * reflows under it would break fb_scroll, the text box, and the cursor. Only
+ * labels change - which is exactly the split desktop-look.md asks for.
+ */
+/* The atlas itself, not a declaration of it. See the comment at the top of the
+ * generated file for why it rides along with fb.c rather than being its own
+ * translation unit. */
+#include "font_prop.inc"
+
+/* Follow the console's cell, the way fb_glyph_aa does, so UI text scales with
+ * everything else rather than staying 8px tall on a 1920-wide desktop. */
+static int prop_big(void) { return cell_w != GLYPH_W; }
+
+static int prop_adv(char c)
+{
+    if (c < FONT_FIRST || c > FONT_LAST) c = '?';
+    int i = (int)c - FONT_FIRST;
+    return prop_big() ? prop16_adv[i] : prop8_adv[i];
+}
+
+/* How wide will this string be? A proportional layout cannot ask "length times
+ * cell" any more, so anything that centres or right-aligns has to measure. */
+int fb_text_prop_w(const char *s)
+{
+    int w = 0;
+    while (*s) w += prop_adv(*s++);
+    return w;
+}
+
+int fb_text_prop_h(void) { return prop_big() ? 32 : 16; }
+
+void fb_text_prop(int px, int py, const char *s, unsigned int fg)
+{
+    while (*s) {
+        char c = *s++;
+        if (c < FONT_FIRST || c > FONT_LAST) c = '?';
+        int i = (int)c - FONT_FIRST;
+        /* only the columns that can hold ink, not the whole cell */
+        if (prop_big())
+            blend_cov_s(px, py, &font16x32_prop[i][0][0],
+                        prop16_ink[i], 32, PROP16_W, fg);
+        else
+            blend_cov_s(px, py, &font8x16_prop[i][0][0],
+                        prop8_ink[i], 16, PROP8_W, fg);
+        px += prop_big() ? prop16_adv[i] : prop8_adv[i];
+    }
+}
+
 /* ---- 24x24 icons: the dock, the start menu, window titlebars -------------
  * icons24 is a coverage atlas exactly like the font atlases - one byte of
  * alpha per pixel, generated by gen_icons.py - so an icon is a SHAPE, not a
@@ -912,34 +1586,38 @@ int fb_get_col(void) { return fb_col; }
  * fb_glyph_aa: transparent where coverage is zero, so an icon sits on the
  * wallpaper or a titlebar gradient with no box around it. */
 extern const unsigned char icons24[10][24][24];
-#define ICON_N 10
-#define ICON_W 24
-#define ICON_H 24
+/* the same ten icons RE-RASTERIZED at 48x48, not the 24x24 set scaled up.
+ * gen_icons.py draws each size from the geometry at its own 4x supersample,
+ * so this carries real anti-aliased edges. See the comment in fb_icon24. */
+extern const unsigned char icons48[10][48][48];
+#define ICON_N  10
+#define ICON_W  24
+#define ICON_H  24
+#define ICON2_W 48
+#define ICON2_H 48
 
+/* Draw icon `n` at the current UI scale.
+ *
+ * This used to be `ic[y / sc][x / sc]` - nearest-neighbour, i.e. each source
+ * pixel copied into an sc x sc block. `sc` is 2 on every screen 1400px or
+ * wider, which is every screen actually used, so the pipeline was: draw clean
+ * geometry at 96x96, box-filter it to 24x24, then throw away every one of
+ * those anti-aliased edge pixels by blowing it back up to 48x48 in squares.
+ * desktop-look.md called it the single most visible source of blockiness in
+ * the desktop, and it was.
+ *
+ * Now each scale reads the atlas that was RASTERIZED for it. Only a scale
+ * neither atlas covers (3x and up, which F4's fractional UI scale will want)
+ * resamples - and it interpolates rather than copies, from the 48x48 set. */
 void fb_icon24(int px, int py, int n, unsigned int fg)
 {
     if ((unsigned)n >= ICON_N) return;
-    const unsigned char (*ic)[ICON_W] = icons24[n];
-    /* draw at the UI scale - a 24px icon on a 1920 desktop is a speck */
     int sc = cell_w / GLYPH_W;
     if (sc < 1) sc = 1;
-    if (sc > 1) {
-        for (int y = 0; y < ICON_H * sc; y++)
-            for (int x = 0; x < ICON_W * sc; x++) {
-                int a = ic[y / sc][x / sc];
-                if (a <= 0) continue;
-                if (a >= 255) { put_pixel((unsigned)(px + x), (unsigned)(py + y), fg); continue; }
-                unsigned int bg = fb_get_px(px + x, py + y);
-                put_pixel((unsigned)(px + x), (unsigned)(py + y), blend_rgb(bg, fg, a));
-            }
-        return;
-    }
-    for (int y = 0; y < ICON_H; y++)
-        for (int x = 0; x < ICON_W; x++) {
-            int a = ic[y][x];
-            if (a <= 0) continue;
-            if (a >= 255) { put_pixel((unsigned)(px + x), (unsigned)(py + y), fg); continue; }
-            unsigned int bg = fb_get_px(px + x, py + y);
-            put_pixel((unsigned)(px + x), (unsigned)(py + y), blend_rgb(bg, fg, a));
-        }
+
+    if (sc == 1) { blend_cov(px, py, &icons24[n][0][0], ICON_W,  ICON_H,  fg); return; }
+    if (sc == 2) { blend_cov(px, py, &icons48[n][0][0], ICON2_W, ICON2_H, fg); return; }
+
+    blend_cov_scaled(px, py, &icons48[n][0][0], ICON2_W, ICON2_H,
+                     ICON_W * sc, ICON_H * sc, fg);
 }

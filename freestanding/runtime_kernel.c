@@ -90,10 +90,27 @@ extern void kreboot(void);
 extern int  idt_mouse_x(void);
 extern int  idt_mouse_y(void);
 extern int  idt_mouse_btn(void);
+extern unsigned idt_mouse_irqs(void);
+/* the USB pointer: absolute when it is a tablet, so it cannot drift */
+extern int xhci_ptr_ready(void);
+extern int xhci_ptr_abs(void);
+extern int xhci_ptr_x(void);
+extern int xhci_ptr_y(void);
+extern int xhci_ptr_btn(void);
+extern int xhci_ptr_poll(void);
+extern unsigned xhci_ptr_reports(void);
+extern unsigned xhci_ptr_events(void);
+extern int      xhci_ptr_lastcc(void);
+extern unsigned xhci_kbd_events(void);
+extern unsigned xhci_kbd_requeues(void);
+extern int      xhci_kbd_lastcc(void);
+extern int xhci_ptr_slot(void);
+extern int xhci_ptr_ep(void);
 extern void console_box(int x, int y, int w, int h, unsigned char attr);
 extern void console_line(int x0, int y0, int x1, int y1, unsigned char attr);
 extern void console_mouse_cursor(int x, int y, unsigned char fill, unsigned char edge);
 extern int  console_kind(void);
+extern unsigned long console_vram(void);
 extern int  console_cols(void);
 extern int  console_cell_w(void);
 extern int  console_cell_h(void);
@@ -276,6 +293,36 @@ extern int  i2c_hid_rdesc_len(void);
 extern int  i2c_hid_read_report(void);
 extern int  i2c_hid_byte(int i);
 /* the input stack: events, modifiers, repeat */
+/* ---- the compositor (wm.c / ui.c / wmglue.c) ---------------------------
+ * Mechanism only. kernel.zl supplies the policy through the app_* functions
+ * that wmglue.c binds to - see kernel/docs/desktop-wiring.md. */
+/* ---- the terminal app (term.c) -----------------------------------------
+ * A scrollback ring plus a typed-command matcher. The matcher is HERE, in C,
+ * because comparing two runtime strings is the one thing the zl kernel subset
+ * cannot do - it has string literals but no string values. */
+extern void term_putc(char c);
+extern int  term_key(int code);
+extern int  term_cmd(void);
+extern int  term_arg(void);
+extern void term_clear(void);
+extern void term_draw(int x, int y, int w, int h, unsigned int fg,
+                      unsigned int dim, unsigned int accent, int cursor_on);
+
+extern int  wm_available(void);
+extern int  wm_bind_zl(void);
+extern void wm_init(void);
+extern int  wm_open(int app, const char *title, int x, int y, int w, int h);
+extern void wm_close(int win);
+extern void wm_frame(void);
+extern int  wm_running(void);
+extern void wm_stop(void);
+extern int  wm_focused(void);
+extern int  wm_count(void);
+extern int  wm_add_tab(int win, int app, const char *title);
+extern void wm_damage(int x, int y, int w, int h);
+extern void wm_damage_win(int win);
+extern void ui_theme_init(int scale);
+
 extern void input_poll(void);
 extern int  input_next(void);
 extern int  input_type(void);
@@ -348,7 +395,20 @@ static void zl_putc(char c)
     /* screen for a human, serial for verify.sh - both, always, so a
      * headless test still sees everything the user would */
     console_putc(c);
-    while ((zl_inb(COM1 + 5) & 0x20) == 0) { }   /* wait for THR empty */
+    /* ...and into the terminal's scrollback, so the shell can be REDRAWN.
+     * A tee, not a redirect: the console and the serial log below are
+     * completely unaffected, which is what keeps verify.sh byte-identical.
+     * Without this the compositor has nothing to repaint the shell FROM, and
+     * dragging a window across it would erase it permanently. */
+    term_putc(c);
+    /* Wait for the transmit holding register - but never forever. A laptop has
+     * no UART at 0x3F8; an undecoded port floats high, so this reads 0xFF and
+     * falls straight through, which is why it has always worked. If a machine
+     * ever read back zero instead, the kernel would hang inside its FIRST
+     * printed character with nothing on screen to say why. The bound is ~1000x
+     * one character time at 115200, so a real UART is never cut short. */
+    for (int i = 0; i < 200000; i++)
+        if (zl_inb(COM1 + 5) & 0x20) break;
     zl_outb(COM1, (unsigned char)c);
 }
 #else
@@ -563,6 +623,7 @@ Value zl_calln(const char *name, int n, ...)
      * framebuffer, so zl asks rather than hardcoding it */
     if (streq(name, "status_row")) return zl_num((double)console_status_row());
     if (streq(name, "con_kind"))   return zl_num((double)console_kind());
+    if (streq(name, "vram"))       return zl_num((double)console_vram());
     if (streq(name, "con_cols"))   return zl_num((double)console_cols());
     if (streq(name, "con_rows"))   return zl_num((double)console_rows());
     if (streq(name, "cell_w"))     return zl_num((double)console_cell_w());
@@ -676,6 +737,33 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "gpu_fmt"))    return zl_num((double)intel_plane_format());
     if (streq(name, "gpu_tile"))   return zl_num((double)intel_plane_tiling());
     if (streq(name, "ggtt_map"))   return zl_num((double)intel_ggtt_map_range((unsigned)a[0].num,(unsigned)a[1].num,(int)a[2].num));
+    /* ---- the compositor. wm_avail() is the branch kernel.zl takes at boot:
+     * it is TRUE only when there is a framebuffer AND kernel.zl defines
+     * app_draw. On verify.sh's -kernel -display none there is no framebuffer,
+     * so this is 0 and the plain text shell runs exactly as before. */
+    if (streq(name, "term_key"))   return zl_num((double)term_key((int)a[0].num));
+    if (streq(name, "term_cmd"))   return zl_num((double)term_cmd());
+    if (streq(name, "term_arg"))   return zl_num((double)term_arg());
+    if (streq(name, "term_clear")) { term_clear(); return zl_nil(); }
+    if (streq(name, "term_draw"))  { term_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,
+                                               (unsigned int)(unsigned long long)a[4].num,
+                                               (unsigned int)(unsigned long long)a[5].num,
+                                               (unsigned int)(unsigned long long)a[6].num,
+                                               (int)a[7].num); return zl_nil(); }
+    if (streq(name, "wm_avail"))   return zl_num((double)wm_available());
+    if (streq(name, "wm_bind"))    return zl_num((double)wm_bind_zl());
+    if (streq(name, "wm_init"))    { wm_init(); return zl_nil(); }
+    if (streq(name, "wm_open"))    { if (a[1].type==V_STR) return zl_num((double)wm_open((int)a[0].num, a[1].str, (int)a[2].num, (int)a[3].num, (int)a[4].num, (int)a[5].num)); return zl_num(-1.0); }
+    if (streq(name, "wm_tab"))     { if (a[2].type==V_STR) return zl_num((double)wm_add_tab((int)a[0].num, (int)a[1].num, a[2].str)); return zl_num(-1.0); }
+    if (streq(name, "wm_close"))   { wm_close((int)a[0].num); return zl_nil(); }
+    if (streq(name, "wm_frame"))   { wm_frame(); return zl_nil(); }
+    if (streq(name, "wm_run"))     return zl_num((double)wm_running());
+    if (streq(name, "wm_stop"))    { wm_stop(); return zl_nil(); }
+    if (streq(name, "wm_focus"))   return zl_num((double)wm_focused());
+    if (streq(name, "wm_n"))       return zl_num((double)wm_count());
+    if (streq(name, "wm_dmg"))     { wm_damage_win((int)a[0].num); return zl_nil(); }
+    if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "ui_theme"))   { ui_theme_init((int)a[0].num); return zl_nil(); }
     if (streq(name, "in_poll"))    { input_poll(); return zl_nil(); }
     if (streq(name, "in_next"))    return zl_num((double)input_next());
     if (streq(name, "in_type"))    return zl_num((double)input_type());
@@ -833,9 +921,27 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "beep_on"))   { speaker_on((unsigned)(long long)a[0].num); return zl_nil(); }
     if (streq(name, "beep_off"))  { speaker_off(); return zl_nil(); }
     if (streq(name, "reboot"))    { kreboot(); return zl_nil(); }
-    if (streq(name, "mouse_x"))   return zl_num((double)idt_mouse_x());
-    if (streq(name, "mouse_y"))   return zl_num((double)idt_mouse_y());
-    if (streq(name, "mouse_btn")) return zl_num((double)idt_mouse_btn());
+    /* Prefer the USB pointer. A tablet reports an ABSOLUTE position, so the
+     * guest cursor sits exactly where the host one is with nothing to drift;
+     * the PS/2 mouse is relative and stays as the fallback (and is what the
+     * laptop's TrackPoint actually is). Polled here because the pointer shares
+     * the keyboard's event ring and something has to turn the handle. */
+    if (streq(name, "mouse_x"))   { if (xhci_ptr_ready()) { xhci_ptr_poll(); return zl_num((double)xhci_ptr_x()); }
+                                    return zl_num((double)idt_mouse_x()); }
+    if (streq(name, "mouse_y"))   { if (xhci_ptr_ready()) return zl_num((double)xhci_ptr_y());
+                                    return zl_num((double)idt_mouse_y()); }
+    if (streq(name, "mouse_btn")) { if (xhci_ptr_ready()) return zl_num((double)xhci_ptr_btn());
+                                    return zl_num((double)idt_mouse_btn()); }
+    if (streq(name, "ptr_abs"))    return zl_num((double)(xhci_ptr_ready() ? xhci_ptr_abs() : 0));
+    if (streq(name, "ptr_reports"))return zl_num((double)xhci_ptr_reports());
+    if (streq(name, "ptr_events")) return zl_num((double)xhci_ptr_events());
+    if (streq(name, "ptr_lastcc")) return zl_num((double)xhci_ptr_lastcc());
+    if (streq(name, "kbd_events")) return zl_num((double)xhci_kbd_events());
+    if (streq(name, "kbd_requeues"))return zl_num((double)xhci_kbd_requeues());
+    if (streq(name, "kbd_lastcc")) return zl_num((double)xhci_kbd_lastcc());
+    if (streq(name, "ptr_slot"))   return zl_num((double)xhci_ptr_slot());
+    if (streq(name, "ptr_ep"))     return zl_num((double)xhci_ptr_ep());
+    if (streq(name, "mouse_irqs")) return zl_num((double)idt_mouse_irqs());
     if (streq(name, "box"))       { console_box((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "line"))      { console_line((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "mcursor"))   { console_mouse_cursor((int)a[0].num,(int)a[1].num,(unsigned char)(unsigned long long)a[2].num,(unsigned char)(unsigned long long)a[3].num); return zl_nil(); }

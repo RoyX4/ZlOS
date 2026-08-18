@@ -189,6 +189,7 @@ u32  intel_wm_compute_level0(u32 w, u32 bpp, u32 khz, u32 lat);
 int  intel_modeset_run(int port);
 int  intel_modeset_teardown(int port);
 int  intel_backlight_save(void);
+int  intel_psr_save(void);
 int  intel_vbt_attach(uptr base, u32 len);
 int  intel_vbt_present(void);
 u32  intel_vbt_bdb_version(void);
@@ -421,6 +422,10 @@ int main(int argc, char **argv)
             { 0x68180, 0x68300, "SCALER"    },
             { 0x45260, 0x45280, "WM_LINET"  },
             { 0x420C0, 0x420D0, "CHICKEN"   },
+            { 0x44440, 0x44450, "DE_PORT"   },
+            { 0xC4030, 0xC4038, "SHOTPLUG"  },
+            { 0x65000, 0x650D0, "AUDIO"     },
+            { 0x162000, 0x162010, "TCSS"      },
             { 0x49010, 0x49040, "CSC_A"     },
             { 0x4A000, 0x4A020, "LGC_PAL_A" },
             { 0x4A400, 0x4A410, "PREC_PAL_A"},
@@ -1017,6 +1022,7 @@ int main(int argc, char **argv)
 
         intel_wm_save();                    /* so a failure can be walked back */
         intel_backlight_save();             /* so brightness survives the run */
+        intel_psr_save();                   /* and so i915 gets PSR back as found */
 
         if (!intel_modeset_set_from_hw()) {
             printf("  [ FAIL ] could not read the mode off the hardware.\n");

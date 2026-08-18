@@ -134,10 +134,28 @@ on ports B/C/D (it does not on DDI A), so the idle polls that had to be skipped
 become real; hotplug matters; and the sink can be anything, so the rate/lane
 ladder that this panel did not need becomes load-bearing.
 
-### 3.3 Type-C / Thunderbolt
-The two DP ports on this laptop are behind Thunderbolt. Materially harder —
-involves the TCSS, port ownership negotiation with the firmware, and DP-alt-mode.
-**Deliberately last**, and possibly not worth it.
+### 3.3 Type-C / Thunderbolt — **NOT a GPU task on this generation**
+
+Measured, not assumed:
+
+- The **TCSS block at `0x162000` reads all zero.** That register range is ICL+.
+  Gen9 has no Type-C subsystem inside the display engine at all.
+- Thunderbolt here is a **discrete chip** — `JHL6540 Thunderbolt 3 Bridge
+  (Alpine Ridge)` at `05:00.0` and `06:00.0`, not part of the GPU.
+
+So the DP-alt-mode mux is Alpine Ridge's job. The GPU simply drives DDI B and
+DDI C as ordinary DisplayPort and the Thunderbolt controller routes that onto
+the USB-C connector. Nothing in the display driver arbitrates it.
+
+That means **§3.2 is the whole of the display driver's external-port work**, and
+what is actually missing to light a monitor is a *Thunderbolt controller
+driver* — a separate device, in the same category as the HDA controller phase 8
+needs. Neither is display work.
+
+The earlier note calling this "materially harder, involves the TCSS, port
+ownership negotiation with the firmware" was describing Ice Lake and later. It
+was wrong for this machine, and it was wrong in the direction that would have
+cost the most: a long detour into a subsystem that is not there.
 
 ---
 
@@ -221,3 +239,76 @@ those first three failures was a bug in a *check*, not in the driver.
 
 Keep doing that. Firmware has already solved every problem in this document at
 least once, on this exact machine, and it leaves its answers lying around.
+
+---
+
+# STATUS (2026-08-18)
+
+| Phase | | Verified how |
+|---|---|---|
+| 0.1 zlOS calls its own driver | **done** | builds 4 ways, 3 gates; **`P` never pressed on hardware** |
+| 0.2 second modeset | **not done** | needs a hardware run |
+| 0.3 link-training retry | **done** | gates; never triggered — no link has failed |
+| 0.4 EDID over I2C-over-AUX | **done** | **128/128 bytes off the real panel**, checksum OK, 241690 kHz |
+| 0.5 tiling support | **done** | stride units checked; painter still linear |
+| 1 VBT parsing | **done** | **every value matches an independently known one** |
+| 2 pipe-indexed registers | **done** | pipe A reads byte-identical after the refactor |
+| 3 external DisplayPort | **written** | untestable — both ports behind Thunderbolt |
+| 3.3 Type-C / Thunderbolt | **not a GPU task** | TCSS reads 0 (ICL+ only); TBT is a discrete JHL6540 |
+| 4 hotplug | **done** | registers decoded and cross-checked against VBT |
+| 5 planes, rotation, scalers | **done** | gates; no second plane has been enabled |
+| 6 colour | **done** | palette base + format proved by firmware's identity ramp |
+| 7 DRRS / PSR | **done** | gates; neither has been switched on |
+| 8 audio | **deliberately not written** | see below |
+
+## Why phase 8 is not written
+
+The whole audio block, `0x65000`–`0x650D0`, reads **zero on this machine**. There
+is an HDMI codec at `/proc/asound/card0/codec#2`, but no display audio is active
+and the eDP panel has no audio path at all.
+
+So there is nothing to check against. Every other register in this driver was
+settled by comparing our value to what firmware programmed for the same
+hardware — that is the entire method, and it is why 34 untested steps worked on
+the fourth attempt. For audio that answer key does not exist here.
+
+Phase 8 also needs an **HDA controller driver**, which zlOS does not have. The
+display half alone produces no sound; it is one end of a link whose other end is
+absent.
+
+Writing speculative register pokes for a subsystem with no consumer and no way
+to verify them is precisely the failure this project's method is built to avoid.
+It stays unwritten until there is a machine that can prove it — which means
+external DP working first, since that is the only port here that carries audio.
+
+## What has NEVER executed on hardware
+
+Worth keeping separate from "done", because the two are not the same:
+
+- the `P` command — zlOS has never booted on the ThinkPad
+- the link-training retry — no link has failed
+- any second plane, rotation, or scaler
+- DRRS or PSR enable
+- any external port — nothing can be plugged in without Thunderbolt work
+- a second modeset (off → on → off → on)
+
+Everything above compiles four ways and passes three boot gates. That is a real
+bar and it is not the same bar as "runs".
+
+## The display driver is complete for this hardware
+
+Every phase that is display work is done. The two remaining items are **other
+drivers**, not display ones:
+
+- **Phase 8 (audio)** needs an HDA controller driver, and has no verifiable
+  state here — the whole audio block reads zero.
+- **Phase 3.3 (Type-C)** needs a Thunderbolt controller driver. The GPU side is
+  already finished; DDI B/C are ordinary DisplayPort and §3.2 covers them.
+
+Plus **0.2, the second modeset**, which is not code at all — it is a hardware run
+nobody has done: off → on → off → on, where T12 becomes a real debt and nothing
+is in its power-on-reset state.
+
+So the honest statement is: the display subsystem is written and gated. What
+stands between it and "finished" is one hardware run, and two drivers for other
+devices entirely.

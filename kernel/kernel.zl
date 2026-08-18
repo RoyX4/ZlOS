@@ -77,6 +77,12 @@ shift_state = 0
 # modifier / a release. Uppercases letters; leaves the rest as-is (v1).
 fn edit_key() {
     uk = usb_key()
+    # Codes >= 256 are keys with no character - arrows, F-keys, Home/End. The
+    # editor appends and deletes; it has no cursor to move, so it has no use
+    # for them. Dropping them here matters: further down, anything >= 32 gets
+    # poke8'd into the text buffer, and poke8 would truncate 0x110 to 0x10 and
+    # write a control byte into the file.
+    if uk >= 256 { return 0 }
     if uk != 0 { return uk }
     sc = scan_get()
     if sc == 0 { return 0 }
@@ -408,8 +414,42 @@ fn mousedemo() {
         oy = my
         at_num(2, 5, mx, C_WHITE)
         at_num(2, 16, my, C_WHITE)
+        present()          # drawing lands in the back buffer; this is the blit
     }
     draw_screen()
+    # Say how many IRQ12 packets actually arrived. A dead pointer has two very
+    # different causes and this separates them: 0 means no interrupt reached us
+    # at all, non-zero with a stuck cursor means the decode is wrong.
+    color(C_GREY)  put("  mouse: ")
+    color(C_WHITE) put(mouse_irqs())
+    color(C_GREY)  put(" IRQ12 packets, last at ")
+    color(C_WHITE) put(mouse_x())  put(",")  print(mouse_y())
+    # Which slot/endpoint each HID device landed on. They MUST differ: the
+    # interrupt ring is per-slot, so two devices sharing one would corrupt it
+    # and whichever spoke second would silence the other.
+    color(C_GREY)  put("  usb kbd slot ")  color(C_WHITE)  put(usb_kbd_slot())
+    color(C_GREY)  put(" ep ")             color(C_WHITE)  put(usb_kbd_ep())
+    color(C_GREY)  put("   ptr slot ")     color(C_WHITE)  put(ptr_slot())
+    color(C_GREY)  put(" ep ")             color(C_WHITE)  put(ptr_ep())
+    # How many pointer reports have been decoded in total. If this is enormous
+    # after a demo that never moved the pointer, the endpoint is storming the
+    # shared event ring and starving the keyboard behind it.
+    color(C_GREY)  put("  ptr reports ")   color(C_WHITE)  put(ptr_reports())
+    # Every dispatch, and the last completion code. ptr_reports counts only
+    # SUCCESSFUL decodes, so a stalled endpoint being requeued in a loop leaves
+    # it at 1 while events climbs without bound - which is why the earlier
+    # "no storm" reading was worthless.
+    color(C_GREY)  put("  events ")        color(C_WHITE)  put(ptr_events())
+    color(C_GREY)  put("  last cc ")       color(C_WHITE)  print(ptr_lastcc())
+    # The keyboard side, same shape. The pointer is healthy; the keyboard
+    # delivers exactly one report and then goes quiet, so what matters is
+    # whether kbd_events stops at 1 and whether the re-arm actually happened.
+    color(C_GREY)  put("  kbd events ")   color(C_WHITE)  put(kbd_events())
+    color(C_GREY)  put("  requeues ")     color(C_WHITE)  put(kbd_requeues())
+    color(C_GREY)  put("  last cc ")      color(C_WHITE)  print(kbd_lastcc())
+    color(C_GREY)
+    color(C_GREY)
+    color(C_GREY)
     return 0
 }
 
@@ -451,6 +491,7 @@ fn windows_demo() {
     draw_window(440, 258, 250, 120, "Clock", 0)
     text_aa(500, 300, "12:04:37", TXT_HI)
     text_aa(70, h - 58, "real windows - real shadows - press any key", ACCENT)
+    present()              # everything above is still in the back buffer
     while key_get() == 0 { }
     draw_screen()
     return 0
@@ -543,7 +584,12 @@ fn usbkey_demo() {
         uc = usb_key()
         if uc != 0 {
             if uc == 27 { print("")  print("    ESC - done")  return 0 }
-            if uc == 13 { print("")  put("    ") } else { emit(uc) }
+            # >= 256 is a key with no character (arrow, F-key, Home/End).
+            # emit() would draw whatever glyph that number lands on, so show
+            # the code instead - this test exists to prove keys arrive.
+            if uc >= 256 { put("<")  hex(uc, 3)  put(">") } else {
+                if uc == 13 { print("")  put("    ") } else { emit(uc) }
+            }
         }
     }
     print("")
@@ -749,6 +795,7 @@ fn cube_demo() {
         text_aa(vx + 18, vy + vh - 26, "press any key to exit", TXT_DIM)
         ang = ang + 5
         if ang >= 360 { ang = 0 }
+        present()          # show this frame before sleeping, not after
         wait_ticks(3)
     }
     draw_screen()
@@ -785,6 +832,7 @@ fn anim() {
         if ly < 72     { ly = 72      vy = 0 - vy }
         if ly > h - 48 { ly = h - 48  vy = 0 - vy }
         logo(lx, ly, "zlOS", 3, C_CYAN)
+        present()          # show this frame before sleeping, not after
         wait_ticks(2)
     }
     draw_screen()
@@ -832,7 +880,10 @@ fn snake_game() {
 
     nexttick = ticks() + 7
     while alive == 1 {
-        k = kbd_scan()
+        # key_get(), not kbd_scan(): kbd_scan() reads the PS/2 scancode queue
+        # and nothing else, so on a machine whose keyboard is USB the snake
+        # could not be steered and the game could not be quit.
+        k = key_get()
         if k == 119 { if dy == 0 { dx = 0  dy = 0 - 1 } }
         if k == 115 { if dy == 0 { dx = 0  dy = 1 } }
         if k == 97  { if dx == 0 { dx = 0 - 1  dy = 0 } }
@@ -886,12 +937,16 @@ fn snake_game() {
                 fill_rect(fx * 16, fy * 16 + 20, 15, 15, C_RED)
                 at_num(0, 67, score, C_YELLOW)
             }
+            present()      # one blit per tick, not per rectangle
         }
     }
     beep(200, 20)
     color(C_RED)   put("  game over - score ")  color(C_WHITE)  print(score)
     color(C_GREY)  print("  press any key")
-    while kbd_scan() == 0 { }
+    # Same reason as the steering loop above. This one was worse: with no PS/2
+    # keyboard there was no key that could end it, and the shell never came
+    # back - every command typed afterwards was swallowed by this loop.
+    while key_get() == 0 { }
     draw_screen()
     return 0
 }
@@ -926,6 +981,7 @@ fn paint() {
         if band(mouse_btn(), 1) != 0 { fill_rect(mx, my, 5, 5, col) }
         at_num(0, 62, mx, C_GREY)
         at_num(0, 70, my, C_GREY)
+        present()          # drawing lands in the back buffer; this is the blit
     }
     draw_screen()
     return 0
@@ -993,6 +1049,10 @@ fn redraw_editor(len) {
     }
     # a block cursor at the current position
     cursor(row(), col(), 1, C_GREEN)
+    # sc() writes to the screen only and never emits a newline, so nothing here
+    # would otherwise reach the card - the editor drew into the back buffer and
+    # stayed invisible.
+    present()
 }
 
 fn editor(slot) {
@@ -1632,7 +1692,7 @@ fn run_command(cmd, arg) {
         return 0
     }
     if cmd == 118 { return cube_demo() }     # v - spinning 3D cube (software)
-    if cmd == 119 { return windows_demo() }  # w - draggable-style window demo
+    if cmd == 119 { return wm_session() }    # w - the real compositor (wm.c)
     if cmd == 120 { return mousedemo() }  # x - mouse demo
     if cmd == 97  { return anim() }       # a - animation
     if cmd == 103 { return snake_game() } # g - snake game
@@ -1646,10 +1706,15 @@ fn run_command(cmd, arg) {
         return 0
     }
     if cmd == 109 {
-        poke8(VGA + 158, 42)
-        poke8(VGA + 159, 0x4E)
+        # Whichever console is up owns different video memory: the text buffer
+        # at 0xB8000, or the linear framebuffer. Poking VGA unconditionally
+        # read back 255 on the desktop, because in a framebuffer mode nothing
+        # decodes 0xB8000 and the write went nowhere.
+        mv = vram()
+        poke8(mv + 158, 42)
+        poke8(mv + 159, 0x4E)
         color(C_GREY)  put("  wrote a byte to video memory, read back: ")
-        color(C_WHITE) print(peek8(VGA + 158))
+        color(C_WHITE) print(peek8(mv + 158))
         color(C_GREY)  return 0
     }
     if cmd == 99  { draw_screen()  return 0 }
@@ -1663,6 +1728,16 @@ fn run_command(cmd, arg) {
 fn draw_sysmon(sx, sy, sfoc) {
     u = ui()
     draw_window(sx, sy, MON_W * u, MON_H * u, "System Monitor", sfoc)
+    sysmon_body(sx, sy)
+    return 0
+}
+
+# The CONTENTS, with no frame. Split out so the compositor can draw the chrome
+# itself and hand this only its client area - the app contract in ui.h requires
+# app_draw to be position-pure, and this already was: every coordinate here is
+# derived from sx,sy. Nothing is baked in.
+fn sysmon_body(sx, sy) {
+    u = ui()
     text_aa(sx + 14 * u, sy + 40 * u, "CPU", TXT_DIM)
     smi = 0
     smx = sx + 14 * u
@@ -1697,10 +1772,130 @@ fn draw_sysmon(sx, sy, sfoc) {
 fn draw_about(ax, ay, afoc) {
     u = ui()
     draw_window(ax, ay, MON_W * u, AB_H * u, "About", afoc)
+    about_body(ax, ay)
+    return 0
+}
+
+fn about_body(ax, ay) {
+    u = ui()
     text_aa(ax + 14 * u, ay + 32 * u, "zlOS 0.3", TXT_HI)
     text_aa(ax + 14 * u, ay + 54 * u, "a desktop written in zl", TXT_DIM)
     text_aa(ax + 14 * u, ay + 76 * u, "no OS   no libc   no GNU", ACCENT)
     text_aa(ax + 14 * u, ay + 98 * u, "press h for the app list", TXT_DIM)
+    return 0
+}
+
+# ---- THE APP CONTRACT ------------------------------------------------------
+# Three functions, no loop, ever. wm.c calls these through wmglue.c, which
+# reaches them as zl_fn_app_* because zl compiles TO C. See ui.h and
+# docs/desktop-wiring.md.
+#
+# app_draw is handed the CLIENT area. The bodies below were written against the
+# WINDOW origin, so the title bar height is subtracted back off - which is
+# exactly the kind of thing that has to be done once, here, rather than by
+# editing sixty coordinates.
+
+APP_SHELL   = 0
+APP_MONITOR = 1
+APP_ABOUT   = 2
+
+fn app_draw(id, ax, ay, aw, ah, afocus) {
+    wy = ay - TITLE_H * ui()
+    if id == APP_MONITOR { return sysmon_body(ax, wy) }
+    if id == APP_ABOUT   { return about_body(ax, wy) }
+    if id == APP_SHELL {
+        # The terminal redraws itself from its OWN scrollback, which is what
+        # makes it survive a window being dragged across it. Before term.c the
+        # shell's output existed only as pixels and could not be repainted.
+        u = ui()
+        cb = 0
+        if afocus == 1 { if band(ticks() / 50, 1) == 0 { cb = 1 } }
+        term_draw(ax + 8 * u, ay + 6 * u, aw - 16 * u, ah - 12 * u, TXT_HI, TXT_DIM, ACCENT, cb)
+        return 0
+    }
+    return 0
+}
+
+# Return 1 if handled. 'q' or Esc ends the session - NEVER "press any key",
+# which is the phrase this whole rewrite exists to delete.
+fn app_event(id, win, ety, ecode, ex, ey) {
+    if id == APP_SHELL {
+        # ONE CHARACTER PER CALL. No loop - that is the whole inversion.
+        # read_line used to block, which is exactly why the shell had to be the
+        # top of the system and why every demo needed "press any key to exit".
+        if ety == 3 {
+            if term_key(ecode) == 1 {
+                tc = term_cmd()
+                if tc > 0 {
+                    if tc == 113 { wm_stop()  return 1 }
+                    run_command(tc, term_arg())
+                }
+            }
+            wm_damage_win_all()
+        }
+        return 1
+    }
+    return 1
+}
+
+# Runs every frame, must be cheap, MUST NOT DRAW. Returning 1 means "my state
+# changed, repaint me" - which is how the monitor's clock advances without
+# owning the frame, and is the whole reason it needs no while-loop.
+last_tick_sec = 0 - 1
+# The shell window repaints after anything is typed or printed into it.
+shell_win = 0 - 1
+fn wm_damage_win_all() {
+    if shell_win >= 0 { wm_dmg(shell_win) }
+    return 0
+}
+
+fn app_tick(id, win) {
+    if id == APP_MONITOR {
+        tsec = ticks() / 100
+        if tsec != last_tick_sec { last_tick_sec = tsec  return 1 }
+    }
+    return 0
+}
+
+# The wallpaper pass: furniture, drawn before any window, never in the z-order.
+# It may ignore the damage rectangle it is given - the scissor is already set to
+# it, so nothing outside can reach the screen. Using it would be the
+# optimisation; correctness does not depend on it.
+fn desk_draw(dx, dy, dw, dh) {
+    grad_rgb(0, 0, px_w(), px_h(), WALL_TOP, WALL_BOT)
+    draw_header()
+    draw_status("compositor")
+    return 0
+}
+
+# ---- a real compositor session ---------------------------------------------
+# This replaces windows_demo, which desktop-TODO calls superseded. It is NOT
+# the full inversion - the shell is still the top of the system, and making it
+# app 0 needs read_line to become a state machine (2g). What this does is put
+# wm.c, ui.c and the whole damage/clip/z-order stack on the real screen, in the
+# kernel, so everything below the shell is proven before the shell moves.
+fn wm_session() {
+    if px_w() == 0 {
+        color(C_GREY)  print("  the compositor needs the framebuffer console")
+        return 0
+    }
+    u = ui()
+    ui_theme(u)
+    wm_init()
+    if wm_bind() == 0 {
+        color(C_RED)  print("  wm: kernel.zl defines no app_draw - nothing to composite")
+        color(C_GREY)
+        return 0
+    }
+    # THE SHELL IS WINDOW 0, and it is opened FIRST so the boot log that
+    # follows lands inside it - the same ordering draw_desk relied on, now
+    # expressed through wm_open.
+    sw = px_w()
+    sh = dock_y()
+    shell_win = wm_open(APP_SHELL, "zl shell", 40 * u, 52 * u, sw - 340 * u, sh - 90 * u)
+    wm_open(APP_MONITOR, "System Monitor", sw - 290 * u, 52 * u, MON_W * u, MON_H * u)
+    wm_open(APP_ABOUT, "About", sw - 290 * u, 52 * u + (MON_H + 16) * u, MON_W * u, AB_H * u)
+    while wm_run() == 1 { wm_frame() }
     return 0
 }
 

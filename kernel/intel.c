@@ -4010,6 +4010,49 @@ int intel_modeset_was_dry(void) { return ms_dry; }
 static u32 bl_saved_ctl = 0, bl_saved_freq = 0, bl_saved_duty = 0;
 static int bl_have_saved = 0;
 
+/* PSR as we found it, and the reason this exists.
+ *
+ * The modeset disables PSR as step 4 (hazard 4.3 #17: it fights every plane
+ * update and issues its own AUX traffic on our channel). The teardown then
+ * disabled it AGAIN "in case anything re-armed it" - and never put it back.
+ *
+ * That cost a real hang. Firmware leaves PSR ON here; we handed the device to
+ * i915 with it OFF while i915's software state still said ON, and i915's next
+ * atomic commit waited forever for a panel transition that could not happen:
+ *
+ *   i915 *ERROR* PSR wait timed out, atomic update may fail
+ *   i915 *ERROR* [CRTC:57:pipe A] flip_done timed out
+ *   i915 *ERROR* [CONNECTOR:109:eDP-1] commit wait timed out
+ *
+ * repeating every ten seconds until Xorg was blocked 1208 seconds inside
+ * intel_wait_for_vblank_workers and the machine had to be power-cycled.
+ *
+ * Same lesson as the backlight, which had the same shape: leaving the hardware
+ * in a state the next owner does not expect is worse than never touching it. */
+static u32 psr_saved_ctl = 0;
+static int psr_have_saved = 0;
+
+int intel_psr_save(void)
+{
+    if (!intel_present()) return 0;
+    psr_saved_ctl  = mmio_r(EDP_PSR_CTL);
+    psr_have_saved = 1;
+    return 1;
+}
+
+int intel_psr_restore(void)
+{
+    if (!intel_present() || !lt_armed || !psr_have_saved) return 0;
+    mmio_w(EDP_PSR_CTL, psr_saved_ctl);
+    (void)mmio_r(EDP_PSR_CTL);
+    return 1;
+}
+
+int intel_psr_saved_enabled(void)
+{
+    return psr_have_saved ? ((psr_saved_ctl & EDP_PSR_ENABLE) ? 1 : 0) : -1;
+}
+
 int intel_backlight_save(void)
 {
     if (!intel_present()) return 0;
@@ -4092,8 +4135,9 @@ int intel_modeset_teardown(int port)
     }
     if (!intel_backlight_pwm_disable()) bad++;
 
-    /* 4: PSR, in case anything re-armed it. */
-    if (mmio_r(EDP_PSR_CTL) & 0x80000000u) intel_psr_disable();
+    /* 4: PSR back to exactly what we found. NOT "disable it again" - that was
+     * the bug that hung i915 for twenty minutes and cost a power cycle. */
+    intel_psr_restore();
 
     /* 5: plane and cursor off. CTL first, then SURF/BASE - the SURF write is
      * what arms the CTL=0, exactly as it arms a real surface. */
@@ -4164,6 +4208,10 @@ u32 intel_bringup_panel(void)
      * POST, long before any bootloader, so the timing registers describe a real
      * mode even when zlOS was loaded by its own 512-byte bootloader. */
     if (!intel_modeset_set_from_hw()) return 0;
+
+    /* Snapshot what must be handed back untouched, BEFORE anything is changed. */
+    intel_psr_save();
+    intel_backlight_save();
 
     u32 w = (u32)intel_hactive(), h = (u32)intel_vactive();
     if (w < 640 || h < 480) return 0;
@@ -4655,4 +4703,382 @@ int intel_scaler_disable(int which)
     if (!intel_present() || !lt_armed || which < 1 || which > 2) return 0;
     mmio_w(PS_CTRL(which), 0);
     return 1;
+}
+
+/* ==== phase 7: DRRS and PSR ==============================================
+ *
+ * Both are power features and both are the reverse of something the modeset
+ * currently does on purpose. Step 45 writes M2/N2 as zero; step 4 disables PSR
+ * before anything else. This is where those become choices rather than
+ * blanket policy.
+ *
+ * ---- DRRS ----
+ *
+ * The transcoder holds two M/N pairs. M1/N1 is the mode as programmed; M2/N2 is
+ * a second, slower refresh rate, and TRANS_DDI_FUNC_CTL's DRRS bit picks
+ * between them without a modeset. A panel that idles at 40 Hz instead of 60
+ * saves real power on a laptop.
+ *
+ * The reason M2/N2 are zero today is not caution about the registers - it is
+ * that a non-zero M2/N2 with no DRRS logic is a second timing the hardware may
+ * switch to and nothing maintains. Now there is logic, so they can be filled.
+ *
+ * The low rate must divide into the same link: only the pixel clock changes,
+ * the link rate does not, so it is the same intel_mn_compute() with a smaller
+ * pixel clock. The panel must also support it - a fixed-refresh panel driven
+ * at 40 Hz shows nothing - which is a VBT and EDID question, not a register
+ * one, so this refuses to guess and takes the rate from the caller.
+ */
+#define TRANS_DRRS_BIT   (1u << 26)      /* TRANS_DDI_FUNC_CTL: select M2/N2 */
+
+static u32 drrs_low_khz = 0;
+
+/* Program the second M/N pair for a lower refresh of the same mode. */
+int intel_drrs_setup(u32 low_pixel_khz, u32 link_khz, int lanes, int bpp)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (!low_pixel_khz || low_pixel_khz >= ms_pixel_khz) return 0;  /* must be lower */
+    if (!intel_mn_compute(low_pixel_khz, link_khz, lanes, bpp)) return 0;
+
+    u32 base = trans_base();
+    mmio_w(base + TRANS_OFF_DATA_M2, ((M_N_TU_SIZE - 1) << 25) | intel_mn_data_m());
+    mmio_w(base + TRANS_OFF_DATA_N2, intel_mn_data_n());
+    mmio_w(base + TRANS_OFF_LINK_M2, intel_mn_link_m());
+    mmio_w(base + TRANS_OFF_LINK_N2, intel_mn_link_n());
+    drrs_low_khz = low_pixel_khz;
+
+    /* Recompute M1/N1 so the module state matches what is actually programmed
+     * for the high rate - otherwise the next caller of intel_mn_program()
+     * writes the LOW rate into the primary pair. */
+    intel_mn_compute(ms_pixel_khz, link_khz, lanes, bpp);
+    return 1;
+}
+
+/* Switch between them. No modeset, no retrain - the link is unchanged and only
+ * the rate at which pixels are metered onto it moves. */
+int intel_drrs_select(int low)
+{
+    if (!intel_present() || !lt_armed || !drrs_low_khz) return 0;
+    u32 v = mmio_r(TRANS_DDI_EDP);
+    if (!(v & 0x80000000u)) return 0;              /* transcoder must be up */
+    mmio_w(TRANS_DDI_EDP, low ? (v | TRANS_DRRS_BIT) : (v & ~TRANS_DRRS_BIT));
+    (void)mmio_r(TRANS_DDI_EDP);
+    return 1;
+}
+
+int intel_drrs_active(void)
+{
+    return intel_present() ? ((mmio_r(TRANS_DDI_EDP) & TRANS_DRRS_BIT) ? 1 : 0) : 0;
+}
+u32 intel_drrs_low_khz(void) { return drrs_low_khz; }
+
+/* ---- PSR ----
+ *
+ * Panel self-refresh: the panel keeps its own copy of the frame and the display
+ * engine stops fetching. Firmware leaves it ON, and the modeset's step 4
+ * disables it, for reasons that are worth keeping written down - it fights
+ * every plane update, and it issues its own fast-wake AUX transactions on the
+ * channel this driver is using (4.3 #17). It is also what froze the frame
+ * counter and sent us to PIPE_LINK_M/N for the pixel clock in the first place.
+ *
+ * So enabling it is a real trade, not a free win, and this deliberately does
+ * the minimum: arm the source, and require the caller to have established that
+ * the sink supports it. Anything that updates a plane must disable it first.
+ */
+#define EDP_PSR_ENABLE      (1u << 31)
+#define EDP_PSR_STATUS_MASK (7u << 29)
+
+int intel_psr_supported_sink(int port)
+{
+    /* DPCD 0x70 bit 0. Read into the latched cap copy, not aux_buf, so a
+     * concurrent link-status read cannot clobber it. */
+    if (!intel_dpcd_read(port, 0x070, 1)) return 0;
+    return intel_dpcd_byte(0) & 1;
+}
+
+int intel_psr_enable(void)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (!intel_pipe_enabled()) return 0;          /* nothing to self-refresh */
+    u32 v = mmio_r(EDP_PSR_CTL);
+    mmio_w(EDP_PSR_CTL, v | EDP_PSR_ENABLE);
+    (void)mmio_r(EDP_PSR_CTL);
+    return 1;
+}
+
+/* What state the source thinks it is in. 0 is idle/inactive; anything else
+ * means the panel is holding its own frame and the pipe is not fetching, which
+ * is exactly when the frame counter stops and a plane update will not appear. */
+u32 intel_psr_state(void)
+{
+    return intel_present() ? ((mmio_r(EDP_PSR_STATUS) & EDP_PSR_STATUS_MASK) >> 29) : 0;
+}
+
+/* ==== phase 4: hotplug ===================================================
+ *
+ * Zero lines before this. Every port probe in the driver is something a human
+ * started, which is fine for a fixed internal panel and useless for a socket.
+ *
+ * Two interrupt sources, and which one matters depends on where the port lives.
+ * DDI A..D live in the north display engine and report through GEN8_DE_PORT;
+ * the PCH has its own path through SDEIIR for ports it owns. On this part the
+ * DDIs are north, so GEN8_DE_PORT is the one that matters and SDE is read for
+ * completeness rather than acted on.
+ *
+ * Interrupts are NOT enabled here. This driver polls, deliberately - a modeset
+ * runs with interrupts masked and the whole timing base was rebuilt around that
+ * (see wait_bits_us). What this provides is the detection and decode: read the
+ * pending bits, say which port and what kind of event, and clear it. A kernel
+ * that wants an interrupt can unmask GEN8_DE_PORT_IMR and call the same code.
+ *
+ * The distinction that matters is short versus long pulse. A LONG pulse is a
+ * cable being connected or disconnected and means re-probe. A SHORT pulse on
+ * DisplayPort is the sink asking for attention - a link that has degraded and
+ * wants retraining, or an IRQ_HPD from the DPCD - and re-probing on one is both
+ * wrong and slow. Treating them the same is the classic hotplug bug: monitors
+ * that flicker and re-detect whenever the link hiccups.
+ */
+#define GEN8_DE_PORT_ISR   0x44440
+#define GEN8_DE_PORT_IMR   0x44444
+#define GEN8_DE_PORT_IIR   0x44448
+#define GEN8_DE_PORT_IER   0x4444C
+#define SDEIIR             0xC4008
+#define SHOTPLUG_CTL_DDI   0xC4030      /* PCH: per-port detect + status */
+
+/* Hotplug does NOT all live in one register, and guessing cost a rewrite.
+ *
+ * Measured on this machine:
+ *
+ *   GEN8_DE_PORT_IER  0E000001   bits 0, 25, 26, 27
+ *   GEN8_DE_PORT_IMR  C0000038   bits 3, 4, 5 masked
+ *   SHOTPLUG_CTL      10001010   bits 4, 12, 28 set
+ *
+ * Bits 25/26/27 of DE_PORT are AUX B/C/D DONE, not hotplug - the plan's own
+ * table says so, and a first version of this read them as DDI hotplug because
+ * "the DDI bits are up the top somewhere" is exactly the kind of assumption
+ * this driver keeps getting caught by. i915 enables them because it wants AUX
+ * completion interrupts.
+ *
+ * The real split on gen9:
+ *
+ *   DDI A hotplug  -> GEN8_DE_PORT bit 3   (north display engine)
+ *   DDI B/C/D      -> the PCH, SHOTPLUG_CTL at 0xC4030
+ *
+ * And SHOTPLUG_CTL's ports are 8 bits apart with A off on its own, not the
+ * regular 4 I assumed: enable B b4, C b12, D b20, A b28; status B 1:0, C 9:8,
+ * D 17:16, A 25:24.
+ *
+ * The reading confirms the VBT independently: enables set for B, C and A, which
+ * is exactly the three ports the VBT says are wired, and D - which the VBT does
+ * not list - is off. Two unrelated sources agreeing on the same three ports. */
+#define DE_PORT_DDI_A_HOTPLUG   (1u << 3)
+#define SHOTPLUG_EN(ddi)   (1u << ((ddi) == 0 ? 28 : 4 + ((ddi) - 1) * 8))
+#define SHOTPLUG_ST_SHIFT(ddi)  ((ddi) == 0 ? 24 : ((ddi) - 1) * 8)
+#define SHOTPLUG_ST_MASK        0x3u
+
+u32 intel_hpd_pending(void)
+{
+    if (!intel_present()) return 0;
+    return mmio_r(GEN8_DE_PORT_IIR);
+}
+
+/* Bitmask of DDIs with something pending. DDI A comes from the north engine,
+ * B/C/D from the PCH status field. */
+int intel_hpd_ports(void)
+{
+    if (!intel_present()) return 0;
+    int m = 0;
+    if (mmio_r(GEN8_DE_PORT_IIR) & DE_PORT_DDI_A_HOTPLUG) m |= 1;
+    u32 sh = mmio_r(SHOTPLUG_CTL_DDI);
+    for (int d = 1; d < 4; d++)
+        if ((sh >> SHOTPLUG_ST_SHIFT(d)) & SHOTPLUG_ST_MASK) m |= (1 << d);
+    return m;
+}
+
+/* Is the OEM's hotplug detection even enabled for this port? An unwired port
+ * has it clear, which is a second, independent check against the VBT. */
+int intel_hpd_enabled(int ddi)
+{
+    if (!intel_present() || ddi < 0 || ddi > 3) return 0;
+    return (mmio_r(SHOTPLUG_CTL_DDI) & SHOTPLUG_EN(ddi)) ? 1 : 0;
+}
+
+/* Acknowledge. Write ONLY the bit being handled: every bit in an IIR and in the
+ * SHOTPLUG status field is write-1-clear, so writing the register back
+ * acknowledges everything pending - including the AUX-done bit a transaction in
+ * flight is waiting on. That is the mistake intel_pipe_underrun_clear() had. */
+int intel_hpd_clear(int ddi)
+{
+    if (!intel_present() || !lt_armed || ddi < 0 || ddi > 3) return 0;
+    if (ddi == 0) mmio_w(GEN8_DE_PORT_IIR, DE_PORT_DDI_A_HOTPLUG);
+    else          mmio_w(SHOTPLUG_CTL_DDI, SHOTPLUG_ST_MASK << SHOTPLUG_ST_SHIFT(ddi));
+    return 1;
+}
+
+/* Long pulse or short, and the difference is the whole point.
+ *
+ * 00 none, 01 short, 10 long, 11 both. A LONG pulse is a cable arriving or
+ * leaving and means re-probe. A SHORT pulse on DisplayPort is the sink asking
+ * for attention - a degraded link wanting retraining, or an IRQ_HPD in the
+ * DPCD - and re-probing on one is both wrong and slow. Treating them the same
+ * is the classic hotplug bug: monitors that re-detect whenever the link
+ * hiccups. */
+int intel_hpd_pulse(int ddi)
+{
+    if (!intel_present() || ddi < 0 || ddi > 3) return 0;
+    return (int)((mmio_r(SHOTPLUG_CTL_DDI) >> SHOTPLUG_ST_SHIFT(ddi)) & SHOTPLUG_ST_MASK);
+}
+
+int intel_hpd_pulse_clear(int ddi) { return intel_hpd_clear(ddi); }
+
+/* Is anything actually connected to this DDI right now?
+ *
+ * The honest answer for DisplayPort is not a hotplug bit but whether the sink
+ * answers on AUX - a pulse says something changed, a DPCD read says something
+ * is there. This is what a re-probe should call after a long pulse, and it is
+ * also why it needs the port powered first. */
+int intel_port_connected(int port)
+{
+    if (!intel_present()) return 0;
+    if (!intel_dpcd_read(port, 0x000, 1)) return 0;
+    return intel_dpcd_byte(0) != 0;         /* DPCD_REV 0 means nothing home */
+}
+
+/* Whether the north engine's DDI A hotplug interrupt is unmasked.
+ * Informational: this driver polls, and a modeset masks interrupts anyway. */
+int intel_hpd_irq_enabled(void)
+{
+    if (!intel_present()) return 0;
+    return (mmio_r(GEN8_DE_PORT_IMR) & DE_PORT_DDI_A_HOTPLUG) ? 0 : 1;
+}
+
+/* ==== phase 3: external DisplayPort ======================================
+ *
+ * The VBT says this board has no HDMI port at all - eight child slots, three
+ * populated: DP-A (the eDP panel), DP-B and DP-C. So the roadmap's "HDMI first
+ * because it has no link training" is not available here, and external DP is
+ * the only reachable target. Confirmed twice over: SHOTPLUG_CTL has hotplug
+ * enables set for exactly A, B and C.
+ *
+ * Four things differ from the eDP path, and all four are the kind that fail
+ * quietly:
+ *
+ * 1. DP_TP_STATUS EXISTS on B/C/D. It does not on DDI A - the PRM says so and
+ *    i915 returns early for PORT_A - which is why the eDP path had to use a
+ *    blind 600 us where a poll belongs. On an external port the poll is real,
+ *    and using the blind wait there instead just makes every modeset slower.
+ *
+ * 2. No panel power sequencer. T12, T3, T9, FORCE_VDD, the whole PPS - none of
+ *    it applies. An external monitor powers itself. Running the panel power
+ *    path against DDI B would poke the internal panel's sequencer while
+ *    bringing up a different port.
+ *
+ * 3. A different buffer translation table. The eDP table is the OEM's
+ *    low-vswing choice for a soldered panel; an external port drives a cable of
+ *    unknown length to a sink of unknown make, and uses the DP table with its
+ *    higher swings and I_boost values.
+ *
+ * 4. The rate and lane ladder becomes load-bearing. The internal panel has one
+ *    working point and the plan says never to walk down from it. An external
+ *    sink can be anything - the ladder is how you find what it can take, and
+ *    intel_dp_choose_rate_for_panel() already implements it against the sink's
+ *    own DPCD.
+ */
+
+/* kbl_u_trans_dp - the table for an external port, from the plan. Nine entries
+ * against the eDP table's ten, so max vswing level is 2 not 3, and several
+ * entries set bit 31 (balance leg enable) and a non-zero I_boost where the
+ * low-vswing eDP table has neither. */
+static const u32 dp_buf_trans[9][2] = {
+    {0x0000201B, 0x000000A1}, {0x00005012, 0x00000088}, {0x80007011, 0x000000CD},
+    {0x80009010, 0x000000C0}, {0x0000201B, 0x0000009D}, {0x80005012, 0x000000C0},
+    {0x80007011, 0x000000C0}, {0x00002016, 0x0000004F}, {0x80005012, 0x000000C0},
+};
+
+/* I_boost for the DP table, per entry - the plan lists 0x3 where bit 31 is set
+ * and none elsewhere. It is programmed into DISPIO_CR_TX_BMU_CR0, not into
+ * DDI_BUF_TRANS, which is why it needs its own lookup. */
+static int dp_trans_iboost(int i)
+{
+    return (i >= 0 && i < 9 && (dp_buf_trans[i][0] & 0x80000000u)) ? 3 : 0;
+}
+
+int intel_is_edp_port(int port) { return port == 0; }   /* DDI A only */
+
+/* Program whichever table this port should use. Must happen BEFORE
+ * DDI_BUF_CTL is enabled - the hardware latches it at enable (4.3 #19). */
+int intel_ddi_program_trans_for_port(int port)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (port < 0 || port > 3) return 0;
+
+    if (intel_is_edp_port(port)) {
+        for (int i = 0; i < 10; i++) {
+            mmio_w(DDI_BUF_TRANS(port, i) + 0, edp_buf_trans[i][0]);
+            mmio_w(DDI_BUF_TRANS(port, i) + 4, edp_buf_trans[i][1]);
+        }
+        return intel_iboost_set(port, 0, 1);      /* low vswing: I_boost 0 */
+    }
+
+    for (int i = 0; i < 9; i++) {
+        mmio_w(DDI_BUF_TRANS(port, i) + 0, dp_buf_trans[i][0]);
+        mmio_w(DDI_BUF_TRANS(port, i) + 4, dp_buf_trans[i][1]);
+    }
+    /* Entry 0 is what the port starts training at, so its I_boost is the one
+     * to program here; a level change during training re-evaluates it. */
+    return intel_iboost_set(port, dp_trans_iboost(0), 0);
+}
+
+/* The idle wait that DDI A cannot do.
+ *
+ * On B/C/D, DP_TP_STATUS bit 25 is IDLE_DONE and polling it is the correct way
+ * to know the transport has settled. On DDI A the register does not exist, a
+ * read returns whatever the address decodes to, and a generic poll pointed at
+ * it spins its whole timeout on every modeset and then succeeds anyway - which
+ * looks like it works and costs the timeout every time (C3). */
+#define DP_TP_STATUS_IDLE   (1u << 25)
+
+int intel_dp_tp_wait_idle(int port, u32 us)
+{
+    if (!intel_present()) return 0;
+    if (intel_is_edp_port(port)) return 1;        /* no such register; blind wait covers it */
+    return wait_bits_us(DP_TP_STATUS(port), DP_TP_STATUS_IDLE, DP_TP_STATUS_IDLE, us);
+}
+
+/* Bring up an external DP port far enough to train.
+ *
+ * No panel power anywhere in here on purpose. The sink powers itself, and
+ * touching the PPS while bringing up DDI B would be operating the internal
+ * panel's power sequencer as a side effect of enabling a different port. */
+int intel_ext_port_prepare(int port, int lanes, int enhanced)
+{
+    if (!intel_present() || !lt_armed) return 0;
+    if (intel_is_edp_port(port)) return 0;        /* wrong function for eDP */
+    if (port < 1 || port > 3) return 0;
+
+    if (!intel_pwr_well_enable(PW_DDI_A_E + port)) return 0;
+    if (!intel_ddi_set_clock(port, 0)) return 0;
+    if (!intel_ddi_program_trans_for_port(port)) return 0;
+    if (!intel_port_enable(port, lanes, enhanced)) return 0;
+    /* Now that the port is up, the real idle poll is available. */
+    intel_dp_tp_wait_idle(port, 1000);
+    return 1;
+}
+
+/* Probe what is plugged in, and pick a working point for it.
+ *
+ * Unlike the panel, an external sink's capabilities are not known in advance,
+ * so this reads them and lets the existing chooser walk the ladder. Returns the
+ * rate index, or -1 if nothing is connected or nothing fits. */
+int intel_ext_port_probe(int port, u32 pixel_khz, int bpp)
+{
+    if (!intel_present()) return -1;
+    if (intel_is_edp_port(port)) return -1;
+    if (!intel_port_connected(port)) return -1;
+    if (!intel_dpcd_read_caps(port)) return -1;
+
+    return intel_dp_choose_rate_for_panel(pixel_khz, bpp,
+                                          intel_dpcd_max_rate(),
+                                          intel_dpcd_max_lanes(),
+                                          intel_dpcd_has_rate_table());
 }

@@ -14,13 +14,28 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-./build.sh >/dev/null
+# Which zl source to build. Overridable so a gate can boot a VARIANT kernel -
+# one that asks for a different resolution, say - without editing the tracked
+# kernel.zl, which another session may be part-way through.
+#
+#   ZLOS_SRC=/tmp/kernel-2560.zl ./mkiso.sh
+SRC_ARGS=()
+[ -n "${ZLOS_SRC:-}" ] && SRC_ARGS=("$ZLOS_SRC")
+./build.sh "${SRC_ARGS[@]+"${SRC_ARGS[@]}"}" >/dev/null
+
+# The mode GRUB asks for. Overridable so a gate can force a resolution the
+# kernel would not otherwise be handed - desktop-TODO 0a needs a 2560x1440
+# boot to prove the back buffer survives the ThinkPad's panel, and the kernel
+# only re-modesets itself when what it was given is under 1900 wide.
+#
+#   ZLOS_GFXMODE=2560x1440,auto ./mkiso.sh
+GFXMODE="${ZLOS_GFXMODE:-1280x720,1280x800,1024x768,auto}"
 
 rm -rf _iso
 mkdir -p _iso/boot/grub
 cp kernel.elf _iso/boot/kernel.elf
 
-cat > _iso/boot/grub/grub.cfg <<'EOF'
+cat > _iso/boot/grub/grub.cfg <<EOF
 # all_video pulls in the GOP/VBE drivers. Without it GRUB may have no video
 # driver loaded at all and cannot satisfy the kernel's framebuffer request.
 insmod all_video
@@ -31,7 +46,7 @@ insmod gfxterm
 # gfxpayload=keep makes the loaded kernel inherit GRUB's framebuffer instead
 # of the firmware default. The kernel READS width/height from multiboot, so it
 # adapts to whatever mode is actually set - no code change needed for the size.
-set gfxmode=1280x720,1280x800,1024x768,auto
+set gfxmode=$GFXMODE
 set gfxpayload=keep
 
 set timeout=3
