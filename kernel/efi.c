@@ -186,12 +186,15 @@ static void capture_acpi(efi_system_table *st)
     for (unsigned long long i = 0; i < st->n_config_entries; i++) {
         if (guid_eq(&e[i].guid, 0x8868e871, 0xe4f1, 0x11d3,
                     0xbc,0x22,0x00,0x80,0xc7,0x3c,0x88,0x81)) {
-            acpi_set_rsdp((unsigned long long)(unsigned long)e[i].table);
+            /* No intermediate `unsigned long`: it is 4 bytes in this build, and
+             * firmware is free to place the RSDP above 4 GiB. Truncating it
+             * would hand ACPI/APIC/SMP discovery a wild pointer. */
+            acpi_set_rsdp((u64)e[i].table);
             return;                                   /* ACPI 2.0+ - best */
         }
         if (guid_eq(&e[i].guid, 0xeb9d2d30, 0x2d88, 0x11d3,
                     0x9a,0x16,0x00,0x90,0x27,0x3f,0xc1,0x4d))
-            found_1 = (unsigned long long)(unsigned long)e[i].table;
+            found_1 = (u64)e[i].table;                    /* same truncation */
     }
     if (found_1) acpi_set_rsdp(found_1);
 }
@@ -205,6 +208,20 @@ void console_init_efi(unsigned long addr, unsigned int pitch, unsigned int width
 void console_init(unsigned long mb_addr);
 int  main(void);
 void kernel_done(void);
+
+/* The only way to say anything from here. It runs after console_init_efi(),
+ * so it reaches the screen and the serial line exactly like every other line
+ * of the boot log. */
+void zl_putc_pub(char c);
+static void efi_say(const char *s) { while (*s) zl_putc_pub(*s++); }
+static void efi_say_u64(unsigned long long v)
+{
+    char b[24];
+    int n = 0;
+    if (!v) { zl_putc_pub('0'); return; }
+    while (v) { b[n++] = (char)('0' + (v % 10)); v /= 10; }
+    while (n) zl_putc_pub(b[--n]);
+}
 
 /* Remember the mode across ExitBootServices. Everything the firmware owns
  * becomes invalid the moment that call returns, so anything we still need has
@@ -242,16 +259,22 @@ MS efi_status efi_main(efi_handle image, efi_system_table *st)
      * change underneath us (even asking for its size can allocate), so the
      * documented dance is: get the map, try to exit, and if the key went
      * stale, get it again and retry. */
-    static u8 map[16384];
-    u64 map_size, map_key = 0, desc_size;
+    /* 32 KiB, not 16: a laptop's map is bigger than a VM's, and if it does not
+     * fit there is no way to take the machine at all. At 48 bytes a descriptor
+     * this holds ~680 entries, against the 60-150 real firmware reports. */
+    static u8 map[32768];
+    u64 map_size, map_key = 0, desc_size, want = 0;
     u32 desc_ver;
-    for (int attempt = 0; attempt < 4; attempt++) {
+    int exited = 0;
+    for (int attempt = 0; attempt < 4 && !exited; attempt++) {
         map_size = sizeof(map);
         if (bs->get_memory_map(&map_size, (efi_memory_descriptor *)map,
-                               &map_key, &desc_size, &desc_ver) != EFI_SUCCESS)
+                               &map_key, &desc_size, &desc_ver) != EFI_SUCCESS) {
+            want = map_size;         /* the firmware reports what it needs */
             continue;
+        }
         if (bs->exit_boot_services(image, map_key) == EFI_SUCCESS)
-            break;
+            exited = 1;
     }
 
     /* From here the firmware no longer exists. We are the operating system:
@@ -263,7 +286,35 @@ MS efi_status efi_main(efi_handle image, efi_system_table *st)
     if (fb_addr) {
         console_init_efi(fb_addr, fb_pitch_bytes, fb_w, fb_h, 32);
     } else {
-        console_init(0);            /* no framebuffer - fall back to text */
+        /* There is no VGA text mode under UEFI, so this "fallback" reaches
+         * nothing at all - the panel stays black while the serial log below
+         * looks perfectly healthy, which is the most misleading failure this
+         * kernel can produce. Say it plainly instead. */
+        console_init(0);
+        efi_say("\n  zlOS: firmware gave us NO GOP framebuffer.\n"
+                "  UEFI has no text mode, so the screen stays black - "
+                "everything below is serial only.\n");
+    }
+
+    /* If that loop never exited, the firmware is STILL RUNNING: its timers, its
+     * interrupt handlers, its watchdog. Installing our own GDT and IDT on top
+     * of a live UEFI is not a degraded mode, it is a crash - and it used to be
+     * a silent one, because this fell straight through into main() and the
+     * screen simply stayed black. Say which of the two things went wrong. */
+    if (!exited) {
+        efi_say("\n  zlOS: ExitBootServices FAILED - the firmware still owns"
+                " this machine.\n  Halted rather than fight it.\n");
+        if (want) {
+            efi_say("  cause: the memory map needs ");
+            efi_say_u64(want);
+            efi_say(" bytes; the buffer in efi.c is ");
+            efi_say_u64(sizeof(map));
+            efi_say(".\n");
+        } else {
+            efi_say("  the map fitted, so the map key went stale 4 times"
+                    " running.\n");
+        }
+        for (;;) __asm__ volatile("hlt");
     }
 
     main();

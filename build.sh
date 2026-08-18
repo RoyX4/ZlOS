@@ -22,6 +22,9 @@ $CC $CFLAGS -DBUILD_PARSER -DBUILD_INTERP -o nativegen nativegen.c lexer.c parse
 echo "==> compilel  (zl -> LLVM IR -> clang -> native ELF)  [SPEED BACKEND]"
 $CC $CFLAGS -DBUILD_PARSER -DBUILD_INTERP -o compilel compilel.c lexer.c parser.c -lm
 
+echo "==> zlfmt     (re-indenter; --check is gate-able)"
+$CC $CFLAGS -DBUILD_PARSER -o zlfmt zlfmt.c lexer.c -lm
+
 echo "==> lexer, parser (standalone demo binaries)"
 $CC $CFLAGS -o lexer_demo  lexer.c  -lm
 $CC $CFLAGS -DBUILD_PARSER -o parser_demo parser.c lexer.c -lm
@@ -44,7 +47,7 @@ echo "==> compile_commands.json (for clangd / IntelliSense)"
 } > compile_commands.json
 
 echo
-echo "built: interp compile compilef compilel nativegen lexer_demo parser_demo"
+echo "built: interp compile compilef compilel nativegen zlfmt lexer_demo parser_demo"
 echo
 echo "usage:"
 echo "  ./interp program.zl                  # run directly"

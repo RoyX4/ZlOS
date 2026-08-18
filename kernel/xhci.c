@@ -1061,8 +1061,44 @@ int xhci_cur_speed(void) { return cur_speed; }
 #define CLASS_HID        3
 #define SUBCLASS_BOOT    1
 #define PROTOCOL_KEYBOARD 1
+#define PROTOCOL_MOUSE   2
+
+/* ---- the pointer ---------------------------------------------------------
+ * A PS/2 mouse is RELATIVE: it reports "moved 3 right, 2 up" and the driver
+ * accumulates. That is why a mouse in a window drifts out of step with the
+ * host pointer - two separate positions, kept in sync only by luck, and the
+ * guest cursor can never be made to point where the host one is. QEMU says so
+ * plainly: query-mice reports "absolute": false.
+ *
+ * A USB tablet is ABSOLUTE. Every report carries the position itself, 0..32767
+ * across each axis, so there is nothing to accumulate and nothing to drift.
+ * The guest cursor lands exactly where the host cursor is, with no grab.
+ *
+ * Both shapes are handled here, because they are the same driver with a
+ * different report layout:
+ *   boot mouse (subclass 1, protocol 2): [buttons, dx, dy, wheel]  - relative
+ *   tablet     (subclass 0, protocol 0): [buttons, xlo, xhi, ylo, yhi, wheel]
+ * The tablet is not a BOOT device, so it is matched on being HID with an
+ * interrupt IN endpoint and a 6-byte report rather than on the class triple. */
+#define PTR_REPORT   (XMEM_DATA + 0x480)     /* the pointer's report buffer    */
+#define PTR_ABS_MAX  32767                   /* HID logical maximum per axis   */
+
+extern int console_pxw(void);
+extern int console_pxh(void);
+
+static int ptr_slot = 0, ptr_dci = 0, ptr_mps = 8, ptr_ready = 0;
+static int ptr_abs  = 0;       /* 1 = absolute tablet, 0 = relative mouse     */
+static u32 ptr_enq  = 0, ptr_cyc = 1;
+static int ptr_x = 0, ptr_y = 0, ptr_btn = 0;
+static unsigned ptr_reports = 0;
+static unsigned ptr_events  = 0;   /* EVERY dispatch, any cc */
+static unsigned kbd_events  = 0;   /* keyboard dispatches, any cc */
+static unsigned kbd_requeues= 0;   /* how many times it was re-armed */
+static int      kbd_lastcc  = -1;
+static int      ptr_lastcc  = -1;  /* the last completion code */
 
 static int kbd_slot  = 0;      /* the device slot the keyboard lives in       */
+static int kbd_port  = 0;      /* and the port, so nothing re-enumerates it   */
 static int kbd_iface = 0;      /* which interface of it is the keyboard       */
 static int kbd_dci   = 0;      /* device context index of its IN endpoint     */
 static int kbd_mps   = 8;      /* max packet size of that endpoint            */
@@ -1153,8 +1189,14 @@ static int interval_encode(int speed, int binterval)
 static int configure_endpoint(int slot, int dci, int mps, int speed, int binterval)
 {
     ring_init(INT_RING(slot));
-    kbd_enq = 0;
-    kbd_cyc = 1;
+    /* NOTE: this used to reset kbd_enq/kbd_cyc here, unconditionally, for any
+     * slot. That was safe only while the keyboard was the sole caller. The
+     * pointer calls this too, for ITS slot, and the reset then rewound the
+     * KEYBOARD's producer index after the keyboard had already armed index 0:
+     * its next requeue wrote index 0 again while the controller sat waiting at
+     * index 1 with a cycle bit that would never match. One report, then dead
+     * forever. Each device now resets the state it owns, next to its own
+     * ring_init - the state is per-endpoint, so it does not belong here. */
 
     zero_mem(CTX_INPUT, 33u * (u32)xctxsize);
     /* A0 (the slot context, because Context Entries changes) plus this
@@ -1210,11 +1252,65 @@ static void kbd_requeue(void)
     doorbell((u32)kbd_slot, (u32)kbd_dci);
 }
 
-/* ---- HID usage IDs to characters ---------------------------------------
+/* Hand the pointer's buffer back to the controller for the next report. */
+static void ptr_requeue(void)
+{
+    zero_mem(PTR_REPORT, 64);
+    u32 ring = INT_RING(ptr_slot);
+    trb_write(ring, ptr_enq, (u64)PTR_REPORT, (u32)ptr_mps,
+              (TRB_NORMAL << 10) | (1u << 5) | ptr_cyc);   /* IOC */
+    ptr_enq++;
+    if (ptr_enq >= RING_TRBS - 1) {
+        trb_write(ring, RING_TRBS - 1, (u64)ring, 0,
+                  (TRB_LINK << 10) | (1u << 1) | ptr_cyc);
+        ptr_enq = 0;
+        ptr_cyc ^= 1;
+    }
+    doorbell((u32)ptr_slot, (u32)ptr_dci);
+}
+
+/* One report. Absolute reports are scaled from the HID 0..32767 range onto the
+ * live screen; relative ones are accumulated and clamped like the PS/2 path. */
+static void ptr_decode(void)
+{
+    volatile u8 *r = (volatile u8 *)PTR_REPORT;
+    int w = console_pxw(), h = console_pxh();
+    if (w <= 0) w = 1920;
+    if (h <= 0) h = 1200;
+
+    ptr_btn = (int)r[0] & 0x07;
+    if (ptr_abs) {
+        int rx = (int)r[1] | ((int)r[2] << 8);
+        int ry = (int)r[3] | ((int)r[4] << 8);
+        /* Scale the HID 0..32767 range onto the screen. Multiplying by (w - 1)
+         * rather than w is what makes the far edge reachable: at rx == 32767
+         * this yields exactly w - 1, the last real column. Using w would need a
+         * clamp to avoid landing one pixel off the end. */
+        ptr_x = (int)(((long long)rx * (w - 1)) / PTR_ABS_MAX);
+        ptr_y = (int)(((long long)ry * (h - 1)) / PTR_ABS_MAX);
+    } else {
+        int dx = (int)r[1], dy = (int)r[2];
+        if (dx > 127) dx -= 256;              /* signed bytes */
+        if (dy > 127) dy -= 256;
+        ptr_x += dx;
+        ptr_y += dy;                          /* HID mice count Y downward */
+    }
+    if (ptr_x < 0) ptr_x = 0;
+    if (ptr_y < 0) ptr_y = 0;
+    if (ptr_x > w - 1) ptr_x = w - 1;
+    if (ptr_y > h - 1) ptr_y = h - 1;
+    ptr_reports++;
+}
+
+/* ---- HID usage IDs to characters and keys -------------------------------
  * These are NOT ASCII and NOT PC scancodes - they are a third numbering, from
  * the HID Usage Tables. Usage 0x04 is 'a' and the alphabet runs contiguously
  * from there, which is why the letters and digits are computed rather than
- * tabulated; only the punctuation needs a table. */
+ * tabulated; only the punctuation needs a table.
+ *
+ * Returns a character (< KEY_NONCHAR) for keys that have one, a KEY_* code for
+ * keys that do not, and 0 for a usage this keyboard layout does not produce. */
+#include "keycodes.h"
 static int hid_to_ascii(int usage, int mods)
 {
     int shift = (mods & 0x22) ? 1 : 0;      /* bit 1 = left shift, bit 5 = right */
@@ -1246,6 +1342,30 @@ static int hid_to_ascii(int usage, int mods)
         case 0x36: return shift ? '<'  : ',';
         case 0x37: return shift ? '>'  : '.';
         case 0x38: return shift ? '?'  : '/';
+    }
+
+    /* Keys with no character. These returned 0 - indistinguishable from "no
+     * key" - so the arrows the `=` demo tells you to try were dropped in the
+     * driver and never reached the event queue at all. They come back as
+     * KEY_* codes, which are >= KEY_NONCHAR and so cannot be mistaken for a
+     * character by anything downstream. */
+    switch (usage) {
+        case 0x3A: return KEY_F1 + 0;   case 0x3B: return KEY_F1 + 1;
+        case 0x3C: return KEY_F1 + 2;   case 0x3D: return KEY_F1 + 3;
+        case 0x3E: return KEY_F1 + 4;   case 0x3F: return KEY_F1 + 5;
+        case 0x40: return KEY_F1 + 6;   case 0x41: return KEY_F1 + 7;
+        case 0x42: return KEY_F1 + 8;   case 0x43: return KEY_F1 + 9;
+        case 0x44: return KEY_F1 + 10;  case 0x45: return KEY_F1 + 11;
+        case 0x49: return KEY_INSERT;
+        case 0x4A: return KEY_HOME;
+        case 0x4B: return KEY_PGUP;
+        case 0x4C: return KEY_DELETE;
+        case 0x4D: return KEY_END;
+        case 0x4E: return KEY_PGDN;
+        case 0x4F: return KEY_RIGHT;
+        case 0x50: return KEY_LEFT;
+        case 0x51: return KEY_DOWN;
+        case 0x52: return KEY_UP;
     }
     return 0;
 }
@@ -1365,7 +1485,10 @@ int xhci_kbd_init(void)
         if (!configure_endpoint(slot, dci, ep_mps, xhci_port_speed(port), ep_int))
             continue;
 
+        kbd_enq   = 0;              /* our ring, our producer state */
+        kbd_cyc   = 1;
         kbd_slot  = slot;
+        kbd_port  = port;
         kbd_iface = found_iface;
         kbd_dci   = dci;
         kbd_mps   = ep_mps;
@@ -1379,6 +1502,127 @@ int xhci_kbd_init(void)
     return 0;
 }
 
+/* Find a pointing device and arm it. Same shape as xhci_kbd_init, matching a
+ * different interface: any HID interface whose protocol is not KEYBOARD. A
+ * tablet declares subclass 0 / protocol 0 because it is not a boot device, so
+ * "is it HID with an interrupt IN endpoint and not a keyboard" is the test
+ * that catches both a tablet and a boot mouse. */
+int xhci_ptr_init(void)
+{
+    if (!xhci_running()) return 0;
+    if (ptr_ready) return ptr_slot;
+
+    for (int port = 1; port <= xports; port++) {
+        if (!xhci_port_connected(port)) continue;
+
+        /* Skip the keyboard's port BEFORE touching it. xhci_enumerate() resets
+         * the port and re-addresses the device, so calling it on a device that
+         * is already configured pulls a working keyboard out from under
+         * itself - the slot check afterwards is far too late, the damage is
+         * done by then.
+         *
+         * NOTE, for whoever extends this: the same hazard applies to any port
+         * whose device is already in use, and only the keyboard is tracked.
+         * The mass-storage port IS re-enumerated here. That is safe only
+         * because ptr_ready short-circuits this function, so it runs once at
+         * bring-up, before '/' has claimed storage. If pointer discovery is
+         * ever re-run later, track claimed ports generally instead. */
+        if (port == kbd_port) continue;
+
+        int slot = xhci_enumerate(port);
+        if (!slot || slot >= MAX_SLOTS) continue;
+        if (slot == kbd_slot) continue;
+
+        if (!get_config(slot, 9)) continue;
+        int total = (int)cfg_byte(2) | ((int)cfg_byte(3) << 8);
+        if (total < 9) continue;
+        if (total > CFG_MAX) total = CFG_MAX;
+        if (!get_config(slot, total)) continue;
+
+        int cfgval = (int)cfg_byte(5);
+        int found_iface = -1, is_boot_mouse = 0;
+        int ep_addr = 0, ep_mps = 0, ep_int = 1;
+
+        int off = (int)cfg_byte(0);
+        while (off + 1 < total) {
+            int dlen  = (int)cfg_byte(off);
+            int dtype = (int)cfg_byte(off + 1);
+            if (dlen < 2) break;
+            if (off + dlen > total) break;
+
+            if (dtype == DESC_INTERFACE && dlen >= 9) {
+                int cls  = (int)cfg_byte(off + 5);
+                int sub  = (int)cfg_byte(off + 6);
+                int prot = (int)cfg_byte(off + 7);
+                if (cls == CLASS_HID && prot != PROTOCOL_KEYBOARD) {
+                    found_iface   = (int)cfg_byte(off + 2);
+                    is_boot_mouse = (sub == SUBCLASS_BOOT && prot == PROTOCOL_MOUSE);
+                    ep_addr = 0;
+                } else if (found_iface >= 0 && ep_addr == 0) {
+                    found_iface = -1;
+                }
+            } else if (dtype == DESC_ENDPOINT && dlen >= 7 &&
+                       found_iface >= 0 && ep_addr == 0) {
+                int addr = (int)cfg_byte(off + 2);
+                int attr = (int)cfg_byte(off + 3);
+                if ((addr & 0x80) && (attr & 0x03) == 3) {
+                    ep_addr = addr;
+                    ep_mps  = (int)cfg_byte(off + 4) |
+                              (((int)cfg_byte(off + 5) & 0x07) << 8);
+                    ep_int  = (int)cfg_byte(off + 6);
+                }
+            }
+            off += dlen;
+        }
+
+        if (found_iface < 0 || ep_addr == 0) continue;
+
+        if (!set_configuration(slot, cfgval)) continue;
+        /* A boot mouse is asked for boot protocol so its report is the fixed
+         * 4-byte layout. A tablet must NOT be: boot protocol would give us a
+         * relative mouse report and throw away the absolute position, which is
+         * the entire reason for using one. */
+        if (is_boot_mouse) set_boot_protocol(slot, found_iface);
+        set_idle(slot, found_iface);
+
+        int dci = ((ep_addr & 0x0F) * 2) + 1;
+        if (dci < 2 || dci > 31) continue;
+        if (ep_mps <= 0 || ep_mps > 1024) ep_mps = 8;
+
+        if (!configure_endpoint(slot, dci, ep_mps, xhci_port_speed(port), ep_int))
+            continue;
+
+        ptr_enq   = 0;              /* our ring, our producer state */
+        ptr_cyc   = 1;
+        ptr_slot  = slot;
+        ptr_dci   = dci;
+        ptr_mps   = ep_mps;
+        /* the tablet's report is 6 bytes and carries a position; the boot
+         * mouse's is 4 and carries deltas */
+        ptr_abs   = !is_boot_mouse && ep_mps >= 6;
+        ptr_ready = 1;
+        ptr_x = console_pxw() / 2;
+        ptr_y = console_pxh() / 2;
+        ptr_requeue();
+        return slot;
+    }
+    return 0;
+}
+
+int xhci_ptr_ready(void)   { return ptr_ready; }
+int xhci_ptr_abs(void)     { return ptr_abs; }
+int xhci_ptr_x(void)       { return ptr_x; }
+int xhci_ptr_y(void)       { return ptr_y; }
+int xhci_ptr_btn(void)     { return ptr_btn; }
+unsigned xhci_ptr_reports(void) { return ptr_reports; }
+unsigned xhci_ptr_events(void)  { return ptr_events; }
+int      xhci_ptr_lastcc(void)  { return ptr_lastcc; }
+unsigned xhci_kbd_events(void)  { return kbd_events; }
+unsigned xhci_kbd_requeues(void){ return kbd_requeues; }
+int      xhci_kbd_lastcc(void)  { return kbd_lastcc; }
+int xhci_ptr_slot(void)    { return ptr_slot; }
+int xhci_ptr_ep(void)      { return ptr_dci; }
+
 /* Bring the whole stack up, once, in the right order.
  *
  * The subtlety that cost a debugging round: the FIRMWARE leaves the controller
@@ -1391,7 +1635,7 @@ static int owned = 0;
 
 int xhci_bringup(void)
 {
-    if (kbd_ready) return kbd_slot;
+    if (kbd_ready && ptr_ready) return kbd_slot;
 
     if (!owned) {
         if (!xhci_present() && xhci_find() < 0) return 0;
@@ -1399,7 +1643,11 @@ int xhci_bringup(void)
         if (!xhci_init_rings()) return 0;     /* and give it OUR data structures */
         owned = 1;
     }
-    return xhci_kbd_init();
+    int k = kbd_ready ? kbd_slot : xhci_kbd_init();
+    /* A pointer is optional - a machine with no tablet and no USB mouse is
+     * still perfectly usable, so never let this fail the bring-up. */
+    if (!ptr_ready) xhci_ptr_init();
+    return k;
 }
 
 int xhci_owned(void)     { return owned; }
@@ -1416,16 +1664,28 @@ int xhci_kbd_ep(void)    { return kbd_dci;   }
  * code was an error. */
 static void kbd_event(u32 status, u32 ctrl)
 {
-    if (!kbd_ready) return;
-
     int slot = (int)((ctrl >> 24) & 0xFF);
     int epid = (int)((ctrl >> 16) & 0x1F);
+    int cc   = (int)((status >> 24) & 0xFF);
+
+    /* ONE event ring carries both HID devices, so whichever poll runs first
+     * sees the other's completions too. Dispatch on slot+endpoint rather than
+     * assuming; dropping a transfer event also drops the requeue, and that
+     * endpoint then goes silent for good. */
+    if (ptr_ready && slot == ptr_slot && epid == ptr_dci) {
+        ptr_events++;              /* counted BEFORE any cc filter */
+        ptr_lastcc = cc;
+        if (cc == 1 || cc == 13) ptr_decode();
+        ptr_requeue();
+        return;
+    }
+    if (!kbd_ready) return;
     if (slot != kbd_slot || epid != kbd_dci) return;
-
-    int cc = (int)((status >> 24) & 0xFF);
+    kbd_events++;
+    kbd_lastcc = cc;
     if (cc == 1 || cc == 13) hid_decode();    /* success or short packet */
-
     kbd_requeue();
+    kbd_requeues++;
 }
 
 int xhci_kbd_poll(void)
@@ -1440,10 +1700,39 @@ int xhci_kbd_poll(void)
     return 1;
 }
 
+/* Same ring, same dispatch - the pointer just needs someone to turn the
+ * handle when no key is being polled for. */
+int xhci_ptr_poll(void)
+{
+    if (!ptr_ready && !kbd_ready) return 0;
+
+    u32 status = 0, ctrl = 0;
+    int type = event_poll(0, &status, &ctrl, 1);
+    if (type != TRB_TRANSFER_EVENT) return 0;
+
+    kbd_event(status, ctrl);
+    return 1;
+}
+
 /* The whole point of this file: one character, or 0 if nothing was typed. */
 int xhci_key(void)
 {
-    xhci_kbd_poll();
+    /* Drain until a KEY comes out, or the ring is empty.
+     *
+     * Polling once and returning whatever happens to be in the queue was fine
+     * while the keyboard was the ONLY device on this controller. It is not any
+     * more: the pointer shares this event ring, so a poll that pops a POINTER
+     * completion leaves the key queue empty and returns 0 - and input.c reads
+     * that as "no more keys" and stops draining (input.c:271). With a pointer
+     * producing events steadily, real keystrokes queue up behind them and
+     * never surface. The keyboard looks completely dead while the ring is in
+     * fact busy, and it only recovers if something else drains far enough.
+     * Bounded so a flood cannot livelock the caller. */
+    for (int i = 0; i < 32; i++) {
+        int c = keyq_pop();
+        if (c) return c;
+        if (!xhci_kbd_poll()) break;        /* ring is empty - nothing queued */
+    }
     return keyq_pop();
 }
 

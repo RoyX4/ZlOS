@@ -213,6 +213,34 @@ the version that does nothing.
 
 ---
 
+## 5. The pattern underneath all of it
+
+Five separate things in `wm.c` and `fb.c` were complete, correct, gated — and
+had **no caller anywhere**. Each looked finished from the inside and did
+nothing from the outside:
+
+| | had | was missing |
+|---|---|---|
+| `WF_MODAL` | a setter and a branch in `route_mouse` | anything that set it |
+| `wm_resize()` | clamping, damage on both sides | anything that called it |
+| `fb_blur_cache` | 7.37 ms measured, three correctness assertions | anything that blurred |
+| the animation timeline | five kinds, eight slots, 12 assertions | anything that started one — and `wm_open` used a *separate* legacy counter |
+| `MOD_SUPER` | tracked since `input.c` was written | any event to fire on — a modifier emits none |
+
+This repo is written mechanism-first and gated hard, which is exactly what
+makes the shape so easy to produce: a primitive arrives with tests, a
+measurement and a comment explaining its design, and passes every check while
+being unreachable. `HANDOFF.md` already names it for `intel.c` — *"the code
+exists" is not "the code works" — check for an actual caller*. It had
+reappeared in three more files.
+
+**A primitive is not done when it passes its test. It is done when something
+calls it and a gate covers the call.** And for visual work the assertion has to
+check the *pixels*, not the state: `wm_anim_alpha()` reported a fade correctly
+for hours while nothing drew one.
+
+---
+
 Scale and cost numbers: `desktop-polish-and-speed.md` · What the mockup asks
 for: `desktop-northstar-feasibility.md` · The run that built the primitives:
 `desktop-v10-plan.md` §8 · Task list: `desktop-TODO.md`

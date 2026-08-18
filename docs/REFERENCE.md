@@ -5,6 +5,19 @@ functions. (See `MASTER_PLAN.md` for the design, `README.md` for the build.)
 
 ## Syntax
 
+Every construct below is exercised by **`examples/syntax_tour.zl`**, which is
+the tiebreaker if this page and the language disagree — it either runs or it
+does not:
+
+```bash
+./interp examples/syntax_tour.zl
+```
+
+The shape of the language in one breath: no declaration keyword, no type
+annotations, blocks in `{ }` with no significant indentation, no parens
+required around conditions, and word operators (`and` `or` `not`) instead of
+`&& || !`.
+
 ```
 # comment to end of line
 
@@ -14,9 +27,14 @@ nums = [1, 2, 3]           # lists
 
 print("hi " + name)        # + joins text
 
+print(f"{name} is {x * 2}") # f-string: {expr} is real code, not a template
+label = x > 3 ? "big" : "small"   # ternary; the untaken branch never runs
+
+import strx                # runs stdlib/strx.zl - its fns become callable
+
 if age >= 18 {             # blocks use { }
     print("adult")
-} else if age >= 13 {
+} elif age >= 13 {         # 'elif' is a keyword; 'else if' also works
     print("teen")
 } else {
     print("kid")
@@ -37,7 +55,32 @@ fn double(n) {             # functions
 nums[0] = 99               # index assignment (mutable lists)
 grid = [[1, 2], [3, 4]]
 grid[0][1] = 77            # nested index assignment
+
+nums = push(nums, 4)       # push RETURNS the grown list - always reassign
 ```
+
+### Three things that catch people
+
+- **`push` is not reliably in-place.** A bare `push(xs, v)` can leave `xs`
+  unchanged: the caller holds its own copy of the list header, so the grown
+  length is only visible through the return value. Write `xs = push(xs, v)`.
+  Same for anything that "modifies" a list. `xs[i] = v` *is* in-place.
+- **Only parameters are frame-scoped.** Recursion works because each call gets
+  fresh slots for its parameters — but a plain local inside a function is the
+  same variable as a same-named local in its caller. Make helpers' working
+  variables parameters, or give them distinct names.
+- **`nil` is a builtin function, not a literal.** `x = nil()` is how you get
+  it; `x = nil` is a runtime error. Likewise `pi()` and `e()`.
+
+### Not in the language
+
+No `&&` / `||` / `!` (the words `and` / `or` / `not` are the operators; a lone
+`!` means "I mean it, this is dangerous"). No bitwise operators — `band`,
+`bor`, `bxor`, `bnot`, `shl`, `shr` are builtins. No `switch`, no classes, no
+exceptions, no `try`. No integer type: every number is a double, so integers
+are exact to 2^53. No namespaces — `import` splices a module's definitions
+straight into the global scope, which is why stdlib modules prefix their
+names.
 
 ## Operators
 
@@ -52,9 +95,13 @@ grid[0][1] = 77            # nested index assignment
 
 ## Keywords
 
-`if  else  for  in  fn  return  while  not  and  or  true  false  break  continue`
+All 16, and there are no others (`lexer.c:48-55`):
 
-Built-ins below are ordinary identifiers, not keywords.
+`if  elif  else  for  in  fn  return  while  not  and  or  true  false
+break  continue  import`
+
+Built-ins below are ordinary identifiers, not keywords — and so are `do`,
+`loop`, `to`, `step` and `nil`, none of which are zl keywords.
 
 ## Built-in functions (93)
 
@@ -140,16 +187,16 @@ than saturating.
 | `graphx.zl`  | topo_sort, has_cycle, connected_components, bipartite |
 | `memo.zl`    | memoisation + an LRU cache |
 
-Run any of them: `interp.exe stdlib/<name>.zl`
+Run any of them: `./interp stdlib/<name>.zl`
 
 ## Running / compiling
 
 ```
-interp.exe prog.zl              # run on the tree-walking interpreter
-compile.exe prog.zl             # -> out.c  (boxed C, then cl/clang)
-compilef.exe prog.zl            # -> outf.c (unboxed long long - fast numeric)
-compilel.exe prog.zl            # -> out.ll (LLVM IR, then clang -O2)
-nativegen.exe prog.zl           # -> native.exe (own x86-64, no C compiler)
+./interp prog.zl                # run on the tree-walking interpreter
+./compile prog.zl               # -> out.c  (boxed C, then cl/clang)
+./compilef prog.zl              # -> outf.c (unboxed long long - fast numeric)
+./compilel prog.zl              # -> out.ll (LLVM IR, then clang -O2)
+./nativegen prog.zl              # -> ./native_out (own x86-64, no C compiler)
 ```
 
 Engine coverage differs. Only the interpreter and the boxed C backend run the

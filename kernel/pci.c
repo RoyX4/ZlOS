@@ -34,6 +34,8 @@ u8   zl_inb(u16 port);
 #define PCI_VENDOR_ID   0x00
 #define PCI_DEVICE_ID   0x02
 #define PCI_COMMAND     0x04
+
+void cpu_delay_ms(u32 ms);   /* cpu.c - the D3->D0 settle needs real time */
 #define PCI_CLASS_REV   0x08
 #define PCI_HEADER_TYPE 0x0E
 #define PCI_BAR0        0x10
@@ -229,10 +231,89 @@ u32 pci_bar_size(int i, int which)
 
 /* Let the device drive memory and act as a bus master. Nothing DMAs until
  * bus mastering is on, so any real GPU driver needs this. */
+/* ---- capabilities, and the power state nobody was checking ---------------
+ *
+ * PCI_STATUS bit 4 says a capability list exists; PCI_CAP_PTR is the offset of
+ * its head, and each entry is {id, next} with next == 0 ending the walk.
+ *
+ * The 0xFC mask on the pointer is not decoration: the low two bits are reserved
+ * and some devices leave rubbish there, so an unmasked walk lands mid-register
+ * and reads a capability ID out of the middle of somebody else's field. The
+ * bounded loop is not decoration either - a device with a self-referential next
+ * pointer would otherwise hang the boot, and this driver has no watchdog. */
+#define PCI_STATUS       0x06
+#define PCI_STATUS_CAPS  (1u << 4)
+#define PCI_CAP_PTR      0x34
+#define PCI_CAP_ID_PM    0x01
+
+int pci_find_cap(int bus, int dev, int fn, int id)
+{
+    if (!(pci_read16(bus, dev, fn, PCI_STATUS) & PCI_STATUS_CAPS)) return 0;
+    int off = pci_read8(bus, dev, fn, PCI_CAP_PTR) & 0xFC;
+    for (int guard = 0; guard < 48 && off >= 0x40; guard++) {
+        if (pci_read8(bus, dev, fn, off) == (u8)id) return off;
+        off = pci_read8(bus, dev, fn, off + 1) & 0xFC;
+    }
+    return 0;
+}
+
+/* Put a device into D0, and this is the one that would have cost days.
+ *
+ * MEASURED on this laptop, right now: the HD Audio controller at 00:1f.3, the
+ * LPSS I2C at 00:15.0 that the touchpad hangs off, and the USB controller at
+ * 00:14.0 are ALL sitting in D3hot. pci_enable() only ORs bits into COMMAND,
+ * which does nothing to a device that is powered down.
+ *
+ * MMIO to a device in D3 does not fault. It reads 0xFFFFFFFF. So a driver that
+ * skips this reads every status bit as set, every capability as present and
+ * every version as 0xFF, and behaves like the hardware is broken rather than
+ * asleep - with no error anywhere to say so.
+ *
+ * Worse, it will not reproduce on a cold boot. Firmware leaves most of these in
+ * D0; it is Linux that powers them down before handing over, so this bites
+ * exactly and only when zlOS is booted after Linux has run. That is the shape
+ * of a bug that survives months of testing.
+ *
+ * PMCSR bits 1:0 are the power state. A D3hot -> D0 transition needs 10 ms
+ * before any register is touched (PCI PM 1.2 section 5.6.1), and the device's
+ * state is undefined until then. */
+#define PCI_PM_CSR_OFF   4
+#define PCI_PM_STATE     0x3
+
+int pci_power_on(int bus, int dev, int fn)
+{
+    int pm = pci_find_cap(bus, dev, fn, PCI_CAP_ID_PM);
+    if (!pm) return 1;                    /* no PM capability: already awake */
+
+    u32 csr = pci_read32(bus, dev, fn, pm + PCI_PM_CSR_OFF);
+    if ((csr & PCI_PM_STATE) == 0) return 1;             /* already D0 */
+
+    /* Write only the state field back. The rest of PMCSR holds PME_En and the
+     * write-1-clear PME_Status, and writing the whole word back would ack a
+     * pending wake event as a side effect. */
+    pci_write32(bus, dev, fn, pm + PCI_PM_CSR_OFF, csr & ~(u32)PCI_PM_STATE);
+    cpu_delay_ms(10);
+
+    csr = pci_read32(bus, dev, fn, pm + PCI_PM_CSR_OFF);
+    return (csr & PCI_PM_STATE) == 0;
+}
+
+int pci_power_state(int bus, int dev, int fn)
+{
+    int pm = pci_find_cap(bus, dev, fn, PCI_CAP_ID_PM);
+    if (!pm) return 0;
+    return (int)(pci_read32(bus, dev, fn, pm + PCI_PM_CSR_OFF) & PCI_PM_STATE);
+}
+
 void pci_enable(int i)
 {
     if (i < 0 || i >= found_n) return;
     int b = found[i].bus, d = found[i].dev, f = found[i].fn;
+
+    /* Power BEFORE command bits. Enabling memory decode on a device in D3
+     * decodes nothing, and every subsequent read returns 0xFFFFFFFF. */
+    pci_power_on(b, d, f);
+
     u32 cmd = pci_read32(b, d, f, PCI_COMMAND);
     cmd |= 0x07;                    /* IO space | memory space | bus master */
     pci_write32(b, d, f, PCI_COMMAND, cmd);

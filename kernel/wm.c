@@ -34,6 +34,11 @@ void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
 void fb_rrect_grad_top(int x, int y, int w, int h, int r, unsigned int top, unsigned int bot);
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
 void fb_shadow(int x, int y, int w, int h, int off, int soft);
+void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
+/* the fade's two halves - see fb.c */
+int  fb_stash(int x, int y, int w, int h);
+void fb_stash_blend(int slot, int x, int y, int a);
+void fb_blur_free(int slot);
 void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a);
 void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
@@ -62,6 +67,7 @@ int  input_y(void);
 #define EV_CHAR      3
 #define EV_MOUSE     4
 
+#define KEY_SUPER   0x11A
 #define MOD_ALT     (1 << 2)
 #define MOD_SUPER   (1 << 5)
 
@@ -113,6 +119,7 @@ static desk_draw_fn hook_desk;
  * for the same reason it needs a draw of its own - it is not in the z-order
  * and never will be. */
 static desk_click_fn hook_desk_click;
+static desk_key_fn   hook_desk_key;
 
 /* ---- the damage list ------------------------------------------------------
  * NOT fb.c's. They are different questions and conflating them is a bug
@@ -478,6 +485,7 @@ void wm_init(void)
 }
 
 void wm_desk_click(desk_click_fn f) { hook_desk_click = f; }
+void wm_desk_key(desk_key_fn f)     { hook_desk_key = f; }
 
 void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk)
 {
@@ -711,6 +719,18 @@ static void chrome(int win, int focused)
 
     if (W->flags & WF_NOCHROME) return;
 
+    /* THE GRIP HAS TO BE VISIBLE or it is a secret. Three short diagonals in
+     * the bottom-right corner - the convention every desktop uses, and cheap
+     * enough to draw on every window every repaint. */
+    {
+        int gx = W->x + W->w - UI_S1(t) - 1, gy = W->y + W->h - UI_S1(t) - 1;
+        int step = UI_S1(t) / 2 + 1;
+        for (int i = 1; i <= 3; i++) {
+            int d = i * step * 2;
+            fb_line(gx - d, gy, gx, gy - d, t->border);
+        }
+    }
+
     int tx = W->x + 2, tw = W->w - 4, th = t->title_h - 3;
     if (focused) {
         /* rounded at the top, to the SAME radius as the frame one pixel
@@ -784,6 +804,21 @@ void wm_repaint(void)
                            W->x + W->w + reach, W->y + W->h + reach,
                            rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) continue;
             }
+            /* A REAL FADE, and it needs the rectangle taken BEFORE anything
+             * is drawn on it. window * a + behind * (1 - a) is not something
+             * that can be reconstructed afterwards: once the window is drawn,
+             * what was behind it is gone. So stash, draw, blend back.
+             *
+             * ANIM_PULSE is deliberately not routed through this - a tint is a
+             * blend of one colour over what is there and needs no copy at all.
+             * A refusal from fb_stash (every slot busy) degrades to drawing
+             * the window opaque, which is the right way for an effect to fail. */
+            int fade = 255, stash = -1;
+            if (wm_anim_running(win) == ANIM_FADE) {
+                fade = wm_anim_alpha(win);
+                if (fade < 255) stash = fb_stash(cx, cy, cw, ch);
+            }
+
             fb_clip(cx, cy, cw, ch);            /* clip 1: the frame + shadow */
             chrome(win, win == focus_win);
 
@@ -809,6 +844,12 @@ void wm_repaint(void)
              * in fb.c. Saying so is better than a tint pretending to be a
              * fade - they look different and only one of them is the effect
              * the prototype asks for. */
+            if (stash >= 0) {
+                fb_clip(cx, cy, cw, ch);
+                fb_stash_blend(stash, cx, cy, 255 - fade);
+                fb_blur_free(stash);
+            }
+
             if (wm_anim_running(win) == ANIM_PULSE) {
                 int pa = wm_anim_alpha(win);
                 if (pa > 0 && pa < 255) {
@@ -834,8 +875,36 @@ void wm_repaint(void)
  *                   walking the z-order backwards; keys to the focus window.
  */
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
-static int grab_drag;           /* 1 = we are moving it, 0 = the app has it */
+/* WHAT THE GRAB IS FOR. It was a flag - move, or hand the pointer to the app -
+ * and resizing is a third answer, not a variant of either. */
+#define GRAB_APP    0           /* the app has the pointer until button-up  */
+#define GRAB_MOVE   1
+#define GRAB_SIZE   2
+static int grab_drag;
 static int grab_dx, grab_dy;    /* pointer offset inside the frame          */
+
+/* THE RESIZE GRIP. wm_resize() has existed since wm.c was written and NOTHING
+ * HAS EVER CALLED IT - the same shape as WF_MODAL before the start menu, and
+ * as intel.c's write paths. A window table with no way to resize a window is a
+ * desktop where every window is the size somebody typed into wm_open.
+ *
+ * The grip is the bottom-right corner plus the right and bottom edges, which
+ * is where every desktop puts it, and it is checked BEFORE the client-area
+ * hand-off and AFTER the close box and tabs - an app that fills its window
+ * would otherwise swallow the grab. It is deliberately NOT on the left or top
+ * edges: those would need the origin to move as the size changes, which is a
+ * second arithmetic to get wrong for a corner nobody reaches for. */
+#define RESIZE_EDGE(t)  (UI_S2(t))          /* 8 * scale */
+
+static int in_resize_grip(int win, int x, int y)
+{
+    const struct ui_theme *t = ui_theme();
+    int e = RESIZE_EDGE(t);
+    int rx = wins[win].x + wins[win].w, by = wins[win].y + wins[win].h;
+    /* inside the window, within `e` of the right OR bottom edge */
+    if (x < wins[win].x || y < wins[win].y || x >= rx || y >= by) return 0;
+    return (x >= rx - e) || (y >= by - e);
+}
 
 /* Where tab `i` sits in the title bar. Drawing and hit-testing BOTH call this,
  * which is the only way to be sure a tab is clickable exactly where it looks -
@@ -892,8 +961,17 @@ static void route_mouse(int x, int y, int btn)
 
     /* 1. POINTER GRAB */
     if (pgrab >= 0) {
-        if (grab_drag) wm_move(pgrab, x - grab_dx, y - grab_dy);
-        else if (hook_event) hook_event(win_app(pgrab), pgrab, EV_MOUSE, btn, x, y);
+        if (grab_drag == GRAB_MOVE) {
+            wm_move(pgrab, x - grab_dx, y - grab_dy);
+        } else if (grab_drag == GRAB_SIZE) {
+            /* grab_dx/dy hold the pointer's offset from the corner it took
+             * hold of, so the corner stays under the pointer instead of
+             * jumping to it on the first motion event */
+            wm_resize(pgrab, x - wins[pgrab].x + grab_dx,
+                             y - wins[pgrab].y + grab_dy);
+        } else if (hook_event) {
+            hook_event(win_app(pgrab), pgrab, EV_MOUSE, btn, x, y);
+        }
         if (up) pgrab = -1;
         return;
     }
@@ -926,15 +1004,23 @@ static void route_mouse(int x, int y, int btn)
         int tb = in_tab(hit, x, y);
         if (tb >= 0) { wm_set_tab(hit, tb); return; }
         if (in_titlebar(hit, x, y)) {
-            pgrab = hit; grab_drag = 1;
+            pgrab = hit; grab_drag = GRAB_MOVE;
             grab_dx = x - wins[hit].x;
             grab_dy = y - wins[hit].y;
+            return;
+        }
+        /* the resize grip, before the app gets the pointer - an app that fills
+         * its window would otherwise swallow every grab at the edge */
+        if (in_resize_grip(hit, x, y)) {
+            pgrab = hit; grab_drag = GRAB_SIZE;
+            grab_dx = wins[hit].x + wins[hit].w - x;
+            grab_dy = wins[hit].y + wins[hit].h - y;
             return;
         }
         /* a press in the client area hands the pointer to the app until
          * button-up - that is what makes a slider work when the pointer
          * leaves the widget mid-drag */
-        pgrab = hit; grab_drag = 0;
+        pgrab = hit; grab_drag = GRAB_APP;
     }
     if (hook_event) hook_event(win_app(hit), hit, EV_MOUSE, btn, x, y);
 }
@@ -956,6 +1042,14 @@ static void route_key(int type, int code, int mods)
 {
     if (type == EV_KEY_DOWN && code == '\t' && (mods & MOD_ALT)) {
         cycle_focus();
+        return;
+    }
+    /* Super, TAPPED, belongs to the desktop and not to the focused window -
+     * routing it to whichever app has focus would mean every app had to know
+     * about the start menu. MOD_SUPER has been tracked since input.c was
+     * written and used for nothing at all. */
+    if (type == EV_KEY_DOWN && code == KEY_SUPER) {
+        if (hook_desk_key) hook_desk_key(code, mods);
         return;
     }
     /* Ctrl+W closes. Closing is the close box or Ctrl+W - NEVER "press any

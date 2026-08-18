@@ -270,6 +270,28 @@ int main(void)
     d = drain();
     ok("without a USB pointer, PS/2 is used", d.last_x == 300 && d.last_y == 200);
 
+    /* 13. SUPER, TAPPED. A modifier emits no event of its own, so a shortcut
+     *     bound to Super alone had nothing to fire on and MOD_SUPER had been
+     *     tracked and unused since this file was written. A tap - press and
+     *     release with nothing in between - emits KEY_SUPER; held with another
+     *     key it must stay a pure modifier, or Super+Tab opens the start menu
+     *     every time somebody switches window. 0xE0 0x5B is left Super. */
+    fake_usb_ptr = 0;
+    drain();
+    send_scan(0xE0); send_scan(0x5B);            /* press   */
+    send_scan(0xE0); send_scan(0xDB);            /* release */
+    d = drain();
+    ok("a Super TAP emits a key event", d.keydown == 1);
+
+    drain();
+    send_scan(0xE0); send_scan(0x5B);            /* Super down     */
+    send_scan(0x0F);                             /* ...then Tab    */
+    send_scan(0x8F);
+    send_scan(0xE0); send_scan(0xDB);            /* Super up       */
+    d = drain();
+    /* Tab's own key event is expected; Super's must NOT be there beside it */
+    ok("Super HELD with another key emits none", d.keydown == 1);
+
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;
 }

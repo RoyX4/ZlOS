@@ -1945,10 +1945,10 @@ static void box_v(unsigned int *dst, const unsigned int *src, int w, int h, int 
     }
 }
 
-/* Blur what is currently on screen inside (x,y,w,h) into a slot. Returns the
- * slot, or -1 with a reason on the serial log - a refusal, never a silent
- * no-op, the same rule as WM_MAX and ANIM_MAX. */
-int fb_blur_cache(int x, int y, int w, int h, int radius)
+/* Take a slot big enough for w x h and copy the screen into it. The half of
+ * fb_blur_cache that is not the blur - and the whole of fb_stash, which is the
+ * same operation with no filter on the end. */
+static int slot_capture(int x, int y, int w, int h)
 {
     if (w <= 0 || h <= 0) return -1;
     unsigned int need = (unsigned int)(w * h);
@@ -1982,14 +1982,7 @@ int fb_blur_cache(int x, int y, int w, int h, int radius)
         blur_tmp_cap = need;
     }
 
-    if (radius < 1) radius = 1;
-    /* A box radius that reaches past the rectangle makes the running sum read
-     * nothing but the clamped edge, which blurs the panel to a flat colour. */
-    if (radius > w / 2) radius = w / 2;
-    if (radius > h / 2) radius = h / 2;
-    if (radius < 1) radius = 1;
-
-    unsigned int *dst = blur_slot[slot].px, *tmp = blur_tmp;
+    unsigned int *dst = blur_slot[slot].px;
     /* Read the source back. With a back buffer that is a row copy out of RAM;
      * without one every pixel crosses PCIe, and fb_get_px is the only thing
      * that knows the difference. Going through it per pixel cost a call and
@@ -2007,15 +2000,80 @@ int fb_blur_cache(int x, int y, int w, int h, int radius)
                 dst[(unsigned long)j * w + i] = fb_get_px(x + i, y + j);
     }
 
-    box_h(tmp, dst, w, h, radius);      /* pass 1 */
-    box_v(dst, tmp, w, h, radius);
-    box_h(tmp, dst, w, h, radius);      /* pass 2 - two boxes ~ a Gaussian */
-    box_v(dst, tmp, w, h, radius);
-
     blur_slot[slot].w = w;
     blur_slot[slot].h = h;
     blur_slot[slot].used = 1;
     return slot;
+}
+
+/* Blur what is currently on screen inside (x,y,w,h) into a slot. Returns the
+ * slot, or -1 with a reason on the serial log - a refusal, never a silent
+ * no-op, the same rule as WM_MAX and ANIM_MAX. */
+int fb_blur_cache(int x, int y, int w, int h, int radius)
+{
+    int slot = slot_capture(x, y, w, h);
+    if (slot < 0) return -1;
+    if (radius < 1) radius = 1;
+    /* A box radius that reaches past the rectangle makes the running sum read
+     * nothing but the clamped edge, which blurs the panel to a flat colour. */
+    if (radius > w / 2) radius = w / 2;
+    if (radius > h / 2) radius = h / 2;
+    if (radius < 1) radius = 1;
+
+    unsigned int *dst = blur_slot[slot].px;
+    box_h(blur_tmp, dst, w, h, radius);      /* pass 1 */
+    box_v(dst, blur_tmp, w, h, radius);
+    box_h(blur_tmp, dst, w, h, radius);      /* pass 2 - two boxes ~ a Gaussian */
+    box_v(dst, blur_tmp, w, h, radius);
+    return slot;
+}
+
+/* ---- a real opacity fade --------------------------------------------------
+ * The one effect the v10 run shipped WITHOUT compositing, and the reason was
+ * honest: a fade needs the window drawn against what is BEHIND it at
+ * fractional opacity, which needs a copy of the rectangle taken before the
+ * window was drawn on it. ANIM_PULSE composited because a tint needs no copy.
+ *
+ * The cache arena can hold one, so:
+ *
+ *   stash the rect  ->  draw the window over it  ->  blend the stash back at
+ *   (255 - alpha)
+ *
+ * which is algebraically exactly `window * a + behind * (1 - a)`. It is not an
+ * approximation of a fade, it is one.
+ *
+ * A slot is taken and released every frame, and after the first frame that
+ * costs nothing: slot_capture reuses an unused slot whose buffer is already
+ * big enough, so the bump allocator only ever grows once per size. */
+void fb_blur_paint(int slot, int x, int y);
+
+int fb_stash(int x, int y, int w, int h) { return slot_capture(x, y, w, h); }
+
+void fb_stash_blend(int slot, int x, int y, int a)
+{
+    if (slot < 0 || slot >= BLUR_SLOTS || !blur_slot[slot].used) return;
+    if (a <= 0) return;
+    int w = blur_slot[slot].w, h = blur_slot[slot].h;
+    const unsigned int *src = blur_slot[slot].px;
+    int x0 = x, y0 = y, x1 = x + w, y1 = y + h;
+    if (!clip_rect(&x0, &y0, &x1, &y1)) return;
+
+    if (a >= 255) { fb_blur_paint(slot, x, y); return; }
+    if (back_on) {
+        for (int yy = y0; yy < y1; yy++) {
+            unsigned int *o = back + (unsigned long)yy * fb_w;
+            const unsigned int *s = src + (unsigned long)(yy - y) * w - x;
+            for (int xx = x0; xx < x1; xx++)
+                o[xx] = blend_rgb(o[xx], s[xx], a);
+        }
+        fb_damage(x0, y0, x1 - x0, y1 - y0);
+        return;
+    }
+    for (int yy = y0; yy < y1; yy++)
+        for (int xx = x0; xx < x1; xx++)
+            put_pixel((unsigned)xx, (unsigned)yy,
+                      blend_rgb(fb_get_px(xx, yy),
+                                src[(unsigned long)(yy - y) * w + (xx - x)], a));
 }
 
 /* Paint a cached blur. This is the per-frame cost and it is a copy - the whole

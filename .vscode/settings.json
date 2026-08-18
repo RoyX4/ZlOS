@@ -16,5 +16,6 @@
         "**/out.c": true,
         "**/out.ll": true,
         "**/compile_commands.json": true
-    }
+    },
+    "task.saveBeforeRun": "always"
 }

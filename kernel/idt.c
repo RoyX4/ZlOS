@@ -19,9 +19,29 @@
 typedef unsigned int   u32;
 typedef unsigned short u16;
 typedef unsigned char  u8;
+/* Explicitly 64 bits in every build. `unsigned long` is NOT: it is 4 bytes on
+ * the EFI build's clang target (x86_64-unknown-windows, LLP64) and 8 with gcc.
+ * Anything holding an address must use this, never `long`. */
+typedef unsigned long long u64;
 
 void          zl_outb(u16 port, u8 val);
 unsigned char zl_inb(u16 port);
+
+/* The live screen size, so the pointer can be clamped to pixels that exist.
+ * CACHED here rather than fetched by calling console_pxw() from the handler.
+ * This file is built -mgeneral-regs-only so an interrupt never touches SSE;
+ * console.c is not, so calling into it from an ISR can clobber XMM registers
+ * the handler never saved. Every zl number is a double, so the interpreter
+ * lives in those registers - on 64-bit that corrupted it mid-boot and the
+ * kernel died inside setup_idt(). The console pushes its size in instead. */
+static volatile int ptr_lim_x = 2000;   /* until a framebuffer says otherwise */
+static volatile int ptr_lim_y = 1500;
+
+void idt_set_pointer_bounds(int w, int h)
+{
+    if (w > 0) ptr_lim_x = w;
+    if (h > 0) ptr_lim_y = h;
+}
 
 /* ---- IDT ------------------------------------------------------------- */
 #ifdef ZL_64
@@ -29,7 +49,16 @@ unsigned char zl_inb(u16 port);
  * fields, and there is an IST index for a dedicated interrupt stack. The
  * 32-bit layout below simply does not fit a 64-bit address. */
 struct idt_entry { u16 lo; u16 sel; u8 ist; u8 flags; u16 mid; u32 hi; u32 zero; } __attribute__((packed));
-struct idt_ptr   { u16 limit; unsigned long base; } __attribute__((packed));
+/* The LIDT operand is 2 bytes of limit and EIGHT of base. `unsigned long` is
+ * 8 bytes with gcc (LP64) but only 4 with the EFI build's clang target
+ * (x86_64-unknown-windows, LLP64), which made this struct 6 bytes there - so
+ * lidt read a 10-byte operand from a 6-byte object and took the TOP HALF of
+ * the IDT base from whatever happened to follow it in memory. It worked only
+ * while those bytes were zero, which made it exquisitely sensitive to code
+ * layout: an unrelated edit could move things and the 64-bit boot would die at
+ * the lidt with no diagnostic at all. Use an explicitly-sized type. */
+struct idt_ptr   { u16 limit; unsigned long long base; } __attribute__((packed));
+_Static_assert(sizeof(struct idt_ptr) == 10, "LIDT operand must be 10 bytes");
 #else
 struct idt_entry { u16 lo; u16 sel; u8 zero; u8 flags; u16 hi; } __attribute__((packed));
 struct idt_ptr   { u16 limit; u32 base; } __attribute__((packed));
@@ -41,7 +70,12 @@ static struct idt_ptr   idtp;
 static void set_gate(int n, void *handler)
 {
 #ifdef ZL_64
-    unsigned long a = (unsigned long)handler;
+    /* MUST be 64 bits. As `unsigned long` this truncated the handler address to
+     * 32 bits in the EFI build, and `a >> 32` then shifted a 32-bit value by 32
+     * - undefined behaviour, which clang compiled to a bare `ret`, so the gate's
+     * top 32 bits came from whatever was left in eax. Every vector was one
+     * register's worth of luck away from pointing into nowhere. */
+    u64 a = (u64)handler;
     idt[n].lo    = a & 0xFFFF;
     idt[n].mid   = (a >> 16) & 0xFFFF;
     idt[n].hi    = (u32)(a >> 32);
@@ -105,6 +139,56 @@ int idt_mouse_x(void)   { return mouse_x; }
 int idt_mouse_y(void)   { return mouse_y; }
 int idt_mouse_btn(void) { return mouse_btn; }
 
+/* How many times IRQ12 has actually fired. The pointer being dead has two
+ * very different causes and they need telling apart: zero here means no
+ * interrupt is arriving at all (controller not enabled, or the line is not
+ * routed), non-zero with a stuck position means the packets are arriving and
+ * the decode is wrong. */
+static volatile unsigned mouse_irqs = 0;
+unsigned idt_mouse_irqs(void) { return mouse_irqs; }
+
+/* One byte of a mouse packet, wherever it was noticed.
+ *
+ * This has to be callable from BOTH interrupt handlers, and that is the whole
+ * point. The keyboard and the mouse are one 8042 controller sharing ONE output
+ * buffer at port 0x60; status bit 5 at 0x64 is the only thing that says which
+ * device the pending byte belongs to. IRQ1 used to read 0x60 unconditionally,
+ * so a key pressed while the mouse was moving swallowed a byte out of the
+ * middle of a 3-byte packet. The stream then read dx/dy from the wrong offsets
+ * and the pointer moved erratically - not dead, just wrong - until the framing
+ * happened to realign on the bit-3 check below. Intermittent by construction:
+ * it depends on the timing between a keystroke and a mouse packet. */
+static void mouse_byte(u8 b)
+{
+    /* byte 0 of a packet always has bit 3 set; anything else means we are
+     * mid-stream and out of sync, so drop until a real header shows up */
+    if (mphase == 0 && !(b & 0x08)) return;
+
+    mpkt[mphase++] = b;
+    if (mphase < 3) return;
+    mphase = 0;
+
+    u8 flags = mpkt[0];
+    if (flags & 0xC0) return;                  /* overflowed - ignore */
+
+    int dx = mpkt[1], dy = mpkt[2];
+    if (flags & 0x10) dx |= 0xFFFFFF00;        /* sign-extend */
+    if (flags & 0x20) dy |= 0xFFFFFF00;
+    mouse_x += dx;
+    mouse_y -= dy;                             /* mouse Y is inverted */
+
+    /* Clamp to the SCREEN, not to a guessed 2000x1500 - those constants sit
+     * 80 px right of and 300 px below a 1920x1200 panel, so the pointer could
+     * wander somewhere with no pixels and need 300 px of travel to come back.
+     * console_pxw/pxh are 0 on the VGA text console, which has no pointer. */
+    int lim_x = ptr_lim_x, lim_y = ptr_lim_y;
+    if (mouse_x < 0) mouse_x = 0;
+    if (mouse_y < 0) mouse_y = 0;
+    if (mouse_x > lim_x - 1) mouse_x = lim_x - 1;
+    if (mouse_y > lim_y - 1) mouse_y = lim_y - 1;
+    mouse_btn = flags & 0x07;
+}
+
 /* ---- the handlers ---------------------------------------------------- */
 #ifdef ZL_64
 struct interrupt_frame { unsigned long ip, cs, flags, sp, ss; };
@@ -127,10 +211,20 @@ __attribute__((interrupt))
 static void keyboard_isr(struct interrupt_frame *f)
 {
     (void)f;
-    u8 sc = zl_inb(0x60);
+    /* Read the status BEFORE the data: bit 5 says this byte came from the
+     * mouse, not the keyboard. Taking it regardless is what desynced the
+     * pointer whenever a key overlapped a mouse packet. */
+    u8 status = zl_inb(0x64);
+    u8 b = zl_inb(0x60);
+    if (status & 0x20) {                 /* the mouse's byte, on our line */
+        mouse_irqs++;
+        mouse_byte(b);
+        irq_done(1);
+        return;
+    }
     int next = (kbuf_head + 1) & (KBUF_SIZE - 1);
     if (next != kbuf_tail) {     /* drop it rather than overwrite unread input */
-        kbuf[kbuf_head] = sc;
+        kbuf[kbuf_head] = b;
         kbuf_head = next;
     }
     irq_done(1);
@@ -145,30 +239,17 @@ __attribute__((interrupt))
 static void mouse_isr(struct interrupt_frame *f)
 {
     (void)f;
-    u8 status = zl_inb(0x64);
-    if (status & 0x20) {                       /* bit 5: byte is from the mouse */
-        u8 b = zl_inb(0x60);
-        if (mphase == 0 && !(b & 0x08)) {
-            /* byte 0 always has bit 3 set; if not, we are out of sync - drop */
-        } else {
-            mpkt[mphase++] = b;
-            if (mphase == 3) {
-                mphase = 0;
-                u8 flags = mpkt[0];
-                if (!(flags & 0xC0)) {         /* ignore overflowed packets */
-                    int dx = mpkt[1], dy = mpkt[2];
-                    if (flags & 0x10) dx |= 0xFFFFFF00;   /* sign-extend */
-                    if (flags & 0x20) dy |= 0xFFFFFF00;
-                    mouse_x += dx;
-                    mouse_y -= dy;
-                    if (mouse_x < 0) mouse_x = 0;
-                    if (mouse_y < 0) mouse_y = 0;
-                    if (mouse_x > 2000) mouse_x = 2000;
-                    if (mouse_y > 1500) mouse_y = 1500;
-                    mouse_btn = flags & 0x07;
-                }
-            }
-        }
+    /* Drain every mouse byte the controller has, not just one. A single
+     * interrupt can cover more than one byte when packets arrive faster than
+     * we are scheduled, and leaving them queued lets the 16-byte buffer
+     * overflow - which loses a byte and desyncs the packet framing exactly
+     * like the IRQ1 theft did. Bounded so a stuck controller cannot wedge us. */
+    for (int i = 0; i < 16; i++) {
+        u8 status = zl_inb(0x64);
+        if (!(status & 0x01)) break;           /* output buffer empty */
+        if (!(status & 0x20)) break;           /* keyboard's byte - leave it */
+        mouse_irqs++;
+        mouse_byte(zl_inb(0x60));
     }
     irq_done(12);
 }
@@ -296,7 +377,7 @@ void idt_init(void)
     set_gate(0x2C, mouse_isr);      /* IRQ12 mouse (on slave) */
 
     idtp.limit = sizeof(idt) - 1;
-    idtp.base  = (unsigned long)&idt;
+    idtp.base  = (u64)&idt;      /* NOT `unsigned long` - see the typedef */
     __asm__ volatile("lidt %0" :: "m"(idtp));
 
     pic_remap();

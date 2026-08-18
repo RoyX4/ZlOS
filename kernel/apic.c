@@ -168,7 +168,13 @@ u64 acpi_find_rsdp(void)
 
 /* Walk the RSDT (32-bit entries) or XSDT (64-bit) looking for one signature.
  * Revision 0 means ACPI 1.0 and only the RSDT exists. */
-static uptr acpi_find_table(const char *sig)
+/* NOT static. Six unwritten subsystems are gated on reaching this one function:
+ * TPM2, HPET, FADT (reboot and power-off), ECDT (battery), MCFG (ECAM) and
+ * LPIT all need to find their own table, and every one of them would otherwise
+ * carry a copy of this RSDP walk. The driver survey called removing this
+ * keyword the highest leverage per line in the whole thirty-four driver review,
+ * which is a strange thing to be true and is true anyway. */
+uptr acpi_find_table(const char *sig)
 {
     u64 rsdp = acpi_find_rsdp();
     if (!rsdp) return 0;

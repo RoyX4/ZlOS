@@ -2316,6 +2316,17 @@ fn desk_click(cx, cy, cbtn) {
     return 0
 }
 
+# SUPER OPENS THE MENU. MOD_SUPER has been tracked by input.c since it was
+# written and used for nothing; a modifier emits no event of its own, so there
+# was nothing for a shortcut to fire on. input.c emits KEY_SUPER (0x11A) on a
+# TAP now - pressed and released with no other key between - and wm.c routes it
+# here rather than to whichever window has focus, because the start menu is the
+# desktop's and not any app's.
+fn desk_key(kcode, kmods) {
+    if kcode == 0x11A { return open_menu() }
+    return 0
+}
+
 # ---- the WINDOW LIST -------------------------------------------------------
 # THE DOCK IS THE TASKBAR, and a separate row of window chips beside it was the
 # wrong design - which the arithmetic said before the eye did. Nine launchers
@@ -2506,6 +2517,10 @@ fn open_menu() {
     menu_blur = blur(mx, my, 210 * u, mh, 10 * u)
     menu_win = wm_open(APP_MENU, "zlOS", mx, my, 210 * u, mh)
     wm_modal(menu_win, 1)
+    # zov / zpop in the prototype: the menu fades in over the blurred desktop
+    # behind it. This is a REAL fade - the rectangle is stashed before the
+    # window is drawn on it and blended back - not a tint pretending to be one.
+    wm_anim(menu_win, 5)
     return 0
 }
 

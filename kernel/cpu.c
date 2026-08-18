@@ -52,6 +52,24 @@ static u64 read_msr(u32 msr)
     return ((u64)hi << 32) | (u64)lo;
 }
 
+/* The write half, which did not exist anywhere in the tree - read_msr above has
+ * been here since the beginning with no counterpart, so every MSR-based feature
+ * (RAPL power reporting, C-state limits, frequency control, turbo) was blocked
+ * on three lines of inline asm.
+ *
+ * Deliberately not static and deliberately blunt: writing an MSR is a genuinely
+ * privileged act with no validation possible from here. A wrong MSR number is a
+ * general-protection fault at best and silently different CPU behaviour at
+ * worst, so the checking belongs in the caller that knows what it is writing,
+ * not in a wrapper pretending to make it safe. */
+void write_msr(u32 msr, u64 val)
+{
+    __asm__ volatile("wrmsr" : : "c"(msr), "a"((u32)val), "d"((u32)(val >> 32)));
+}
+
+/* And a reader that is reachable from outside this file, for the same reason. */
+u64 cpu_read_msr(u32 msr) { return read_msr(msr); }
+
 /* ---- what the CPU says it is ------------------------------------------- */
 u32 cpu_max_leaf(void)
 {

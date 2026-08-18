@@ -779,12 +779,56 @@ like one.
 Hover, press and rest states; an accent bar under a tile whose app is open;
 click-to-raise rather than launch-a-second-copy. The dock IS the taskbar.
 
+### [x] A real opacity fade — **DONE**
+
+`window * a + behind * (1 - a)`, and it needs the rectangle taken **before**
+anything is drawn on it: once the window is drawn, what was behind it is gone.
+So stash → draw → blend the stash back at `255 - alpha`. `fb_stash` /
+`fb_stash_blend`, out of the same cache arena, and after the first frame the
+slot is reused so it costs no allocation at all.
+
+Asserted the only way that means anything: two stacked windows, and at a middle
+frame of the fade the overlapping pixel must equal **neither** — checking it is
+not the window's colour would pass for a fade that drew nothing.
+
+The start menu fades in over its own blurred backdrop, which is `zov`/`zpop`.
+
+### [x] Window resize — **DONE**
+
+`wm_resize()` had existed since the day `wm.c` was written with **no caller** —
+the same shape as `WF_MODAL` before the start menu, and as `intel.c`'s write
+paths. A window table with no way to resize a window is a desktop where every
+window is the size somebody typed into `wm_open`.
+
+Right and bottom edges plus the corner, checked after the close box and tabs
+and **before** the client-area hand-off — an app that fills its window would
+otherwise swallow every grab at the edge. Deliberately not the left or top
+edges: those need the origin to move as the size changes, which is a second
+arithmetic to get wrong for a corner nobody reaches for.
+
+Three assertions, and the third is the one that is invisible: a window short
+enough that its title bar reaches the bottom edge must still MOVE, not resize.
+
+### [x] Super opens the menu — **DONE**
+
+`MOD_SUPER` had been tracked by `input.c` since it was written and used for
+nothing, because a modifier emits no event of its own and a shortcut bound to
+Super alone had nothing to fire on. A **tap** is the gesture - pressed and
+released with no other key between - and `input.c` emits `KEY_SUPER` for it.
+Held with another key it stays a pure modifier, which is asserted, or Super+Tab
+would open the start menu every time somebody switched window.
+
+`wm.c` routes it to the desktop rather than to the focused window: the start
+menu belongs to the desktop, and routing it to whichever app has focus would
+mean every app had to know about it.
+
 ### [ ] Still open
 
-- **the other six demos** (2e)
-- **a real opacity fade** — `wm_anim_alpha` is computed and asserted, nothing
-  composites it. It needs a copy of the rectangle taken before the window was
-  drawn on it; the cache arena can hold one.
-- **Alt+Tab and Super** — Alt+Tab is in `wm.c` and works; `MOD_SUPER` is
-  tracked and still opens nothing.
-- **window resize** — `wm_resize` exists, no edge grab calls it.
+- **the other six demos** (2e) — `paint`, `cube`, `anim`, `editor`,
+  `mousedemo`, the modeset viewer. Each still owns the whole screen and ends
+  with "press any key", which is the phrase this whole rewrite exists to
+  delete.
+- **left/top resize edges**, if anybody ever wants them.
+- **the four apps the mockup has and zlOS does not** — a file manager, a task
+  manager, settings, a lock screen. Named in the prototype's own markup
+  (Places, Devices, Properties, End Process, Update interval, Unlock).

@@ -179,6 +179,12 @@ static u32 to_char(int sc, int m)
 /* ---- feeding the queue from the PS/2 stream ---------------------------- */
 static int ext_pending = 0;
 
+/* SUPER, TAPPED. A modifier produces no event, so a shortcut bound to the
+ * modifier alone has nothing to fire on. This latches on the press and is
+ * cleared by any other key arriving while it is held, so Super+Tab stays a
+ * plain modifier and only a clean press-release emits KEY_SUPER. */
+static int super_alone = 0;
+
 static void handle_scancode(int sc)
 {
     if (sc == 0xE0) { ext_pending = 1; return; }
@@ -214,10 +220,20 @@ static void handle_scancode(int sc)
             return;
         }
         if (code == 0x5B || code == 0x5C) {          /* super */
-            if (release) mods &= ~MOD_SUPER; else mods |= MOD_SUPER;
+            if (release) {
+                mods &= ~MOD_SUPER;
+                if (super_alone) { evq_push(EV_KEY_DOWN, KEY_SUPER, mods, 0, 0); }
+                super_alone = 0;
+            } else {
+                mods |= MOD_SUPER;
+                super_alone = 1;
+            }
             return;
         }
     }
+
+    /* anything else arriving means Super is being used AS a modifier */
+    super_alone = 0;
 
     u32 key = ext ? sc_extended(code) : sc_special(code);
     u32 ch  = ext ? 0 : to_char(code, mods);
