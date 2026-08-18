@@ -1,0 +1,23 @@
+{
+  "_comment": "Gate 2 checks against this. Every cycle either moves the primary metric or is a named prerequisite that unblocks it.",
+  "primary": {
+    "name": "",
+    "unit": "",
+    "baseline": null,
+    "current": null,
+    "target": null,
+    "direction": "up"
+  },
+  "secondary": [],
+  "history": [
+    {
+      "_shape": "one entry per cycle; delete this placeholder on first real cycle",
+      "cycle": 0,
+      "date": "",
+      "metric": "",
+      "value": null,
+      "delta": null,
+      "note": ""
+    }
+  ]
+}
