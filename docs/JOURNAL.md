@@ -7,9 +7,9 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
-## 2026-08-19 — ci: write down what happens, keep the docs true, regenerate the TODO (45cd0f0)
+## 2026-08-19 — ci: write down what happens, keep the docs true, regenerate the TODO (cb17faf)
 
-`ci/gates-and-agent-brief` · 9 files changed, 716 insertions(+), 2 deletions(-)
+`ci/gates-and-agent-brief` · 9 files changed, 719 insertions(+), 2 deletions(-)
 
 | | |
 |---|---|
