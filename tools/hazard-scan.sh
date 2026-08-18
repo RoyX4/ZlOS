@@ -102,9 +102,11 @@ if command -v clang >/dev/null 2>&1; then
     base=$(grep -E '^efi_truncation_sites=' tools/hazard-baseline.txt 2>/dev/null | cut -d= -f2)
     base=${base:-0}
     if [ "$total" -gt "$base" ]; then
-        hit "$total truncation sites across $bad files - baseline is $base."
-        hit "  this change ADDED $(( total - base )). Harmless below 4 GiB, which"
-        hit "  is exactly why QEMU never shows them and why two shipped before."
+        # Advisory: the count is clang-version dependent, so this comparison
+        # cannot be the gate. CI compares base against HEAD in one container -
+        # see .github/workflows/gates.yml - which is compiler-independent.
+        warn "$total truncation sites across $bad files - local baseline is $base."
+        warn "  (baseline is advisory; a different clang counts differently)"
     elif [ "$total" -gt 0 ]; then
         warn "$total truncation sites across $bad files (baseline $base, not worse)"
         [ "$total" -lt "$base" ] && warn "  improved - lower efi_truncation_sites to $total in tools/hazard-baseline.txt"
