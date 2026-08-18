@@ -606,6 +606,85 @@ int main(void)
     ok("the animation array is a ceiling, and full refuses",
        started > 0 && refused > 0 && started + refused == nw2);
 
+    /* --------------------------------------------- the fade, COMPOSITED
+     * wm_anim_alpha() has reported a fade since the timeline was written and
+     * nothing drew it - the alpha was asserted and the pixels were not, which
+     * is precisely how an effect ends up "done" and invisible.
+     *
+     * A fade is only real if the result sits BETWEEN the window and what is
+     * behind it. Two windows, the top one fading in over the bottom one: at a
+     * partial alpha the pixel must equal neither. Checking it is not the
+     * window's colour would pass for a fade that drew nothing at all. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    pointer(1600, 1000, 0);
+    int fdlo = wm_open(1, "under", 200, 200, 600, 400);
+    for (int i = 0; i < 8; i++) frame();
+    frame();
+    unsigned int px_under = fb_get_px(400, 400);
+
+    int fdhi = wm_open(2, "over", 200, 200, 600, 400);
+    for (int i = 0; i < 8; i++) frame();
+    frame();
+    unsigned int px_over = fb_get_px(400, 400);
+    ok("two stacked windows differ where they overlap", px_under != px_over);
+
+    (void)fdlo;
+    wm_anim(fdhi, ANIM_FADE);
+    frame(); frame();                     /* a middle frame of the ramp */
+    unsigned int px_mid = fb_get_px(400, 400);
+    ok("a fading window is not fully drawn", px_mid != px_over);
+    ok("...and not fully absent either",    px_mid != px_under);
+    ok("...and the alpha is genuinely partial",
+       wm_anim_alpha(fdhi) > 0 && wm_anim_alpha(fdhi) < 255);
+
+    for (int i = 0; i < 10; i++) frame();
+    frame();
+    ok("when it settles it is the window again", fb_get_px(400, 400) == px_over);
+
+    /* --------------------------------------------- the resize grip
+     * wm_resize() existed from the day wm.c was written and had NO CALLER -
+     * the same shape as WF_MODAL before the start menu. These assert the three
+     * things a grip has to get right, and the third is the one that is
+     * invisible in a screenshot. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    pointer(1500, 1000, 0);
+    int rw = wm_open(1, "resize", 300, 300, 400, 300);
+    for (int i = 0; i < 8; i++) frame();
+    int grx, gry, rww, rhh;
+
+    /* 1. a press in the corner grabs the SIZE, not the app and not the move */
+    pointer(300 + 400 - 3, 300 + 300 - 3, 1);
+    pointer(300 + 500, 300 + 400, 1);            /* drag out */
+    wm_geometry(rw, &grx, &gry, &rww, &rhh);
+    ok("dragging the grip resizes the window", rww > 400 && rhh > 300);
+    ok("...and does NOT move it", grx == 300 && gry == 300);
+    pointer(300 + 500, 300 + 400, 0);
+
+    /* 2. the minimum is a floor, not a suggestion. A window dragged to zero is
+     *    a window that can never be grabbed again. */
+    wm_geometry(rw, &grx, &gry, &rww, &rhh);
+    pointer(grx + rww - 3, gry + rhh - 3, 1);
+    pointer(grx + 2, gry + 2, 1);                /* drag right past the origin */
+    pointer(grx + 2, gry + 2, 0);
+    wm_geometry(rw, &grx, &gry, &rww, &rhh);
+    ok("a window cannot be resized to nothing", rww >= 8 && rhh >= 8);
+
+    /* 3. THE GRIP MUST NOT STEAL THE TITLE BAR. They are both chrome and the
+     *    grip is checked second, but a window short enough that its title bar
+     *    reaches the bottom edge would hand every title-bar press to the
+     *    resize - i.e. the window could never be moved again. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    int sw2 = wm_open(1, "short", 500, 500, 300, th->title_h + 4);
+    for (int i = 0; i < 8; i++) frame();
+    pointer(560, 500 + 3, 1);
+    pointer(660, 600, 1);
+    wm_geometry(sw2, &grx, &gry, &rww, &rhh);
+    ok("the title bar still MOVES a very short window", grx != 500 || gry != 500);
+    pointer(660, 600, 0);
+
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;
 }

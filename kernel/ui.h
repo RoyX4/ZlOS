@@ -92,6 +92,11 @@ typedef void (*desk_draw_fn)(int x, int y, int w, int h);
  * click had nowhere to go. */
 typedef void (*desk_click_fn)(int x, int y, int btn);
 
+/* A SYSTEM KEY - one that belongs to the desktop rather than to whichever
+ * window happens to have focus. Super is the only one today. Routing it to the
+ * focused app instead would mean every app had to know about the start menu. */
+typedef void (*desk_key_fn)(int code, int mods);
+
 /* ---- wm.c ---------------------------------------------------------------- */
 #define WM_MAX 12
 #define WM_TABS 4        /* apps sharing one window frame */
@@ -103,6 +108,7 @@ typedef void (*desk_click_fn)(int x, int y, int btn);
 void wm_init(void);
 void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk);
 void wm_desk_click(desk_click_fn f);
+void wm_desk_key(desk_key_fn f);
 
 int  wm_open(int app, const char *title, int x, int y, int w, int h);
 void wm_close(int win);
@@ -114,6 +120,7 @@ void wm_set_tab(int win, int tab);
 int  wm_tab(int win);
 int  wm_ntabs(int win);
 void wm_move(int win, int x, int y);
+/* wm_resize had no caller at all until the resize grip; see wm.c. */
 void wm_resize(int win, int w, int h);
 
 /* ---- the animation timeline -----------------------------------------------

@@ -444,9 +444,27 @@ and typed commands. On a machine with no framebuffer the old text shell runs
 exactly as it always did, and `verify.sh` still diffs it byte-for-byte against
 `golden.txt`.
 
-**Verified by boot, not by assertion:** `shots/v10-final.png`. All four boot
+**Verified by boot, not by assertion:** `shots/v10-now.png`. All four boot
 paths green — `verify.sh`, `verify-raw.sh`, `verify-efi.sh`, and the ISO.
-`wmtest` 69 · `inputtest` 17 · `tritest` 9 · `fbbench` all green.
+`wmtest` 79 · `inputtest` 24 · `tritest` 9 · `fbbench` all green.
+
+**Two probes drive the POINTER rather than the keyboard**, and they exist
+because everything else in this repo types: `probe-dock.py` (hover, press,
+launch, the menu, dismiss) and `probe-resize.py` (the corner grows a window,
+the title bar still moves it). `probe-drag.py` confirms a drag moves 18% of the
+screen.
+
+**A PATTERN WORTH KNOWING BEFORE YOU ADD ANYTHING HERE.** Five things in
+`wm.c`/`fb.c` were complete, correct, gated, and had **no caller at all**:
+`WF_MODAL`, `wm_resize()`, `fb_blur_cache`, the whole animation timeline, and
+`MOD_SUPER`. This repo is written mechanism-first and gated hard, which is
+exactly what makes that easy to produce — a primitive arrives with tests, a
+measurement and a design comment, and passes every check while being
+unreachable. **A primitive is not done when it passes its test; it is done when
+something calls it and a gate covers the call.** For visual work the assertion
+has to check the PIXELS, not the state: `wm_anim_alpha()` reported a fade
+correctly for hours while nothing drew one. See T-16 and
+`docs/desktop-scale-and-effects.md` §5.
 
 **Why the desktop looked small on a big screen, and where the effects went:**
 `docs/desktop-scale-and-effects.md`. Short version: `ui()` was `cell_w() / 8`,
@@ -643,9 +661,19 @@ Five times now: **a DMA buffer outside guest RAM, or an address truncated to
 cd kernel
 ./verify.sh        # BIOS golden transcript
 ./verify-raw.sh    # our own bootloader
-./verify-iso.sh    # UEFI
+./verify-efi.sh    # zlOS as its OWN UEFI application - the ThinkPad's path
+./verify-iso.sh    # BIOS and UEFI through GRUB
+./probe-dock.py    # the POINTER: hover, press, launch, the menu, dismiss
+./probe-resize.py  # the corner grows a window; the title bar still moves it
+./probe-drag.py --grab 1500,125 --drop 700,700
 ./try.sh serial    # drive it from the terminal
+cd hosttest && ./build.sh && ./wmtest && ./inputtest && ./fbbench && ./tritest
 ```
+
+**The `probe-*.py` scripts that drive the POINTER are not optional extras.**
+Every other gate here types, and the compositor's entire pointer path - drag,
+click-to-focus, the close box, the dock, the menu - was dead for hours while
+all of them stayed green. See T-15.
 
 `try.sh` GUI mode is **verified working** (2026-08-17). It was booting
 `-kernel kernel.elf`, and QEMU's own multiboot loader never supplies the
