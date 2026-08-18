@@ -7,16 +7,20 @@
  *
  * It must be the very first thing in the flat binary, because the loader
  * jumps straight to the load address. The linker script link-raw.ld puts
- * this section first at 0x10000.
+ * this section first at 1 MiB, which is where raw_boot.asm copies us.
  */
 .code32
 .section .text.rawentry, "ax"
 .global _rawstart
 _rawstart:
-    mov $0x600000, %esp         /* a stack in high memory (6 MiB). The kernel fills
-                                   0x10000..~0x92000, leaving only ~55 KiB under the
-                                   640 KiB line - not enough for the framebuffer
-                                   compositor, which nests deep and needs ~256 KiB. */
+    mov $0x600000, %esp         /* a stack in high memory (6 MiB), growing down. It
+                                   was put here when the kernel still lived under the
+                                   640 KiB line and left only ~55 KiB for a stack -
+                                   not enough for the framebuffer compositor, which
+                                   nests deep and needs ~256 KiB. The kernel is loaded
+                                   at 1 MiB now and currently reaches __bss_end
+                                   ~0x20E000, so this leaves it roughly 4 MiB to grow
+                                   down into. Check that gap before moving either. */
 
     /* Zero the .bss ourselves. GRUB-loaded kernels get a zeroed .bss from
      * the ELF loader; a flat binary loaded off disk does not, so the font

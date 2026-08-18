@@ -684,6 +684,7 @@ that is what the negative half of that script is for.
 
 ```
 cd kernel
+./check-memmap.sh  # hand-placed buffers do not overlap (static, instant)
 ./verify.sh        # BIOS golden transcript
 ./verify-raw.sh    # our own bootloader
 ./verify-efi.sh    # zlOS as its OWN UEFI application - the ThinkPad's path
@@ -699,6 +700,19 @@ cd hosttest && ./build.sh && ./wmtest && ./inputtest && ./fbbench && ./tritest
 Every other gate here types, and the compositor's entire pointer path - drag,
 click-to-focus, the close box, the dock, the menu - was dead for hours while
 all of them stayed green. See T-15.
+
+`check-memmap.sh` parses the fixed addresses out of `kernel.zl` and derives
+their sizes from the same constants, so bumping `FS_SLOT` or `HIST_N` re-runs
+the arithmetic. It exists because `LINE_BUF`/`HIST_BUF` had been placed inside
+`FS_DATA`'s slots 7 and 8: editing RAM file 7 or 8 overwrote the shell's input
+line and history ring, and typing at the prompt overwrote those two files.
+There is no heap, so nothing catches this at runtime. It reads source and does
+arithmetic — no build, no QEMU, so it cannot fail because the host is busy.
+
+**But it does not catch everything it looks like it catches.** It iterates a
+hardcoded nine-name list and does not discover new constants, so `DISK_SCRATCH`
+— added on `desktop/system-track` at exactly the `0x02030000` this branch moved
+`LINE_BUF` to — is invisible to it. Fix the sweep before trusting it.
 
 `try.sh` GUI mode is **verified working** (2026-08-17). It was booting
 `-kernel kernel.elf`, and QEMU's own multiboot loader never supplies the
