@@ -1,0 +1,30 @@
+# Registered doc claims.  Format:   <doc> | <claim in words> | <shell check>
+#
+# A doc asserts something; this names the command that proves it. The point is
+# to convert a judgement call into something a machine re-checks forever, so a
+# claim cannot quietly stop being true the way these already have:
+#
+#   - .ultra/STATE.md said the compositor was unreachable while kernel.zl called
+#     wm_open_p in six places
+#   - CLAUDE.md said the four -Werror= flags were fatal; they were inert
+#
+# The check must exit 0 when the claim HOLDS. Keep them fast - this runs on
+# every commit. Anything needing an emulator does not belong here.
+
+AGENTS.md | the interpreter is ground truth and prints 7 for global write-through | printf 'c = 100\nfn b() { c = 7  return 0 }\nb()\nprint(c)\n' > /tmp/dc1.zl && [ "$(./interp /tmp/dc1.zl)" = "7" ]
+
+AGENTS.md | the LLVM backend disagrees, printing 100 for the same program | printf 'c = 100\nfn b() { c = 7  return 0 }\nb()\nprint(c)\n' > /tmp/dc2.zl && ./compilel /tmp/dc2.zl >/dev/null 2>&1 && clang -O2 out.ll runtime.c os_linux.c -I. -D_strdup=strdup -o /tmp/dc2.bin -lm 2>/dev/null && [ "$(/tmp/dc2.bin)" = "100" ]
+
+AGENTS.md | recursion works, so parameters are frame-scoped | printf 'fn f(n) { if n <= 1 { return 1 }  return n * f(n - 1) }\nprint(f(5))\n' > /tmp/dc3.zl && [ "$(./interp /tmp/dc3.zl)" = "120" ]
+
+AGENTS.md | two functions' locals do not collide | printf 'fn s() { t = 42  return 0 }\nfn r() { t = 1  s()  return t }\nprint(r())\n' > /tmp/dc4.zl && [ "$(./interp /tmp/dc4.zl)" = "1" ]
+
+CLAUDE.md | the EFI build targets LLP64, where unsigned long is 4 bytes | printf '_Static_assert(sizeof(unsigned long) == 4, "not LLP64");\n' > /tmp/dc5.c && clang --target=x86_64-unknown-windows -ffreestanding -c /tmp/dc5.c -o /tmp/dc5.o 2>/dev/null
+
+docs/design/ci-and-agent-pipeline.md | -w suppresses a later -Werror=, so the EFI guard is inert | printf 'int g;\nunsigned long t(void) { return (unsigned long)&g; }\n' > /tmp/dc6.c && clang -target x86_64-unknown-windows -ffreestanding -O2 -w -Werror=pointer-to-int-cast -c /tmp/dc6.c -o /tmp/dc6.o 2>/dev/null
+
+docs/design/ci-and-agent-pipeline.md | -Wno-everything does NOT suppress it, which is the fix | printf 'int g;\nunsigned long t(void) { return (unsigned long)&g; }\n' > /tmp/dc7.c && ! clang -target x86_64-unknown-windows -ffreestanding -O2 -Wno-everything -Werror=pointer-to-int-cast -c /tmp/dc7.c -o /tmp/dc7.o 2>/dev/null
+
+AGENTS.md | wmshot renders the compositor with no boot and no GPU | [ -f kernel/hosttest/wmshot.c ] && grep -q 'P6' kernel/hosttest/wmshot.c
+
+CLAUDE.md | verify-efi.sh no longer hard-requires KVM | grep -q 'accel tcg' kernel/verify-efi.sh
