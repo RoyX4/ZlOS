@@ -473,6 +473,63 @@ void zl_serial_putc(char c)
     zl_outb(COM1, (unsigned char)c);
 }
 
+/* ---- the system track: nvme.c, fs.c, rtc.c, clip.c, notify.c ------------ */
+extern int  nvme_read_to(unsigned dst, unsigned lba_lo, unsigned lba_hi);
+extern int  nvme_write_from(unsigned src, unsigned lba_lo, unsigned lba_hi);
+extern int  nvme_ram_ok(void);
+extern int  nvme_fault(void);
+
+extern int  fs_mkfs(void);
+extern int  fs_mount(void);
+extern int  fs_mounted(void);
+extern int  fs_count(void);
+extern int  fs_maxfiles(void);
+extern int  fs_used(int idx);
+extern unsigned fs_size(int idx);
+extern unsigned fs_start(int idx);
+extern unsigned fs_runlen(int idx);
+extern unsigned fs_mtime(int idx);
+extern unsigned fs_free_blocks(void);
+extern unsigned fs_capacity(void);
+extern unsigned fs_bsize(void);
+extern int  fs_name_byte(int idx, int i);
+extern void fs_name_clear(void);
+extern int  fs_name_push(int ch);
+extern int  fs_create_named(unsigned bytes);
+extern int  fs_find_named(void);
+extern int  fs_delete(int idx);
+extern int  fs_read(int idx, void *dst, unsigned max);
+extern int  fs_write(int idx, const void *src, unsigned bytes);
+extern void fs_set_time(unsigned secs);
+
+extern int  rtc_read(void);
+extern int  rtc_present(void);
+extern int  rtc_valid(void);
+extern int  rtc_fail(void);
+extern int  rtc_year(void);
+extern int  rtc_month(void);
+extern int  rtc_day(void);
+extern int  rtc_hour(void);
+extern int  rtc_min(void);
+extern int  rtc_sec(void);
+extern unsigned rtc_unix(void);
+extern int  rtc_hhmm_byte(int i);
+
+extern unsigned clip_len(void);
+extern int  clip_byte(int i);
+extern unsigned clip_seq(void);
+extern void clip_begin(void);
+extern int  clip_push(int ch);
+extern int  clip_commit(int type);
+extern void clip_clear(void);
+
+extern int  notify_post(const char *text, unsigned ticks);
+extern int  notify_tick(unsigned now);
+extern int  notify_active(void);
+extern int  notify_byte(int i);
+extern int  notify_dismiss(void);
+extern int  notify_queued(void);
+
 static void zl_putc(char c)
 {
     /* screen for a human, serial for verify.sh - both, always, so a
@@ -1093,6 +1150,86 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "line"))      { console_line((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "mcursor"))   { console_mouse_cursor((int)a[0].num,(int)a[1].num,(unsigned char)(unsigned long long)a[2].num,(unsigned char)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "goto_row")) { console_set_row((int)a[0].num); return zl_nil(); }
+
+    /* ---- the system track: storage, time, clipboard ---------------------
+     * Appended, never interleaved, so this block is one contiguous diff and
+     * three other sessions editing this file do not have to merge through it.
+     *
+     * The naming follows the file each one lives in rather than the zl verb,
+     * because when a builtin misbehaves the first question is always which
+     * driver it landed in. */
+
+    /* the disk, at an ARBITRARY address rather than the one fixed page.
+     * nv_read/nv_write above still exist and still use the bounce buffer;
+     * these are what a filesystem can actually be built on. */
+    if (streq(name, "nv_rd_to"))   return zl_num((double)nvme_read_to((unsigned)a[0].num,(unsigned)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "nv_wr_from")) return zl_num((double)nvme_write_from((unsigned)a[0].num,(unsigned)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "nv_ram"))     return zl_num((double)nvme_ram_ok());
+    if (streq(name, "nv_fault"))   return zl_num((double)nvme_fault());
+
+    /* zlfs. Names are pushed one character at a time and compared in C - the
+     * zl kernel subset has string literals and no string values, so two
+     * runtime strings can never meet in zl. Same seam term.c uses. */
+    if (streq(name, "fs_format"))  return zl_num((double)fs_mkfs());
+    if (streq(name, "fs_mount"))   return zl_num((double)fs_mount());
+    if (streq(name, "fs_ok"))      return zl_num((double)fs_mounted());
+    if (streq(name, "fs_n"))       return zl_num((double)fs_count());
+    if (streq(name, "fs_max"))     return zl_num((double)fs_maxfiles());
+    if (streq(name, "fs_inuse"))   return zl_num((double)fs_used((int)a[0].num));
+    if (streq(name, "fs_bytes"))   return zl_num((double)fs_size((int)a[0].num));
+    if (streq(name, "fs_lba"))     return zl_num((double)fs_start((int)a[0].num));
+    if (streq(name, "fs_run"))     return zl_num((double)fs_runlen((int)a[0].num));
+    if (streq(name, "fs_when"))    return zl_num((double)fs_mtime((int)a[0].num));
+    if (streq(name, "fs_ch"))      return zl_num((double)fs_name_byte((int)a[0].num,(int)a[1].num));
+    if (streq(name, "fs_free"))    return zl_num((double)fs_free_blocks());
+    if (streq(name, "fs_cap"))     return zl_num((double)fs_capacity());
+    if (streq(name, "fs_bs"))      return zl_num((double)fs_bsize());
+    if (streq(name, "fs_nclear"))  { fs_name_clear(); return zl_nil(); }
+    if (streq(name, "fs_npush"))   return zl_num((double)fs_name_push((int)a[0].num));
+    if (streq(name, "fs_new"))     return zl_num((double)fs_create_named((unsigned)a[0].num));
+    if (streq(name, "fs_get"))     return zl_num((double)fs_find_named());
+    if (streq(name, "fs_rm"))      return zl_num((double)fs_delete((int)a[0].num));
+    if (streq(name, "fs_rd"))      return zl_num((double)fs_read((int)a[0].num,(void *)(unsigned long)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "fs_wr"))      return zl_num((double)fs_write((int)a[0].num,(const void *)(unsigned long)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "fs_stamp"))   { fs_set_time((unsigned)a[0].num); return zl_nil(); }
+
+    /* the clock */
+    if (streq(name, "rtc_up"))     return zl_num((double)rtc_read());
+    if (streq(name, "rtc_here"))   return zl_num((double)rtc_present());
+    if (streq(name, "rtc_ok"))     return zl_num((double)rtc_valid());
+    if (streq(name, "rtc_why"))    return zl_num((double)rtc_fail());
+    if (streq(name, "rtc_y"))      return zl_num((double)rtc_year());
+    if (streq(name, "rtc_mo"))     return zl_num((double)rtc_month());
+    if (streq(name, "rtc_d"))      return zl_num((double)rtc_day());
+    if (streq(name, "rtc_h"))      return zl_num((double)rtc_hour());
+    if (streq(name, "rtc_mi"))     return zl_num((double)rtc_min());
+    if (streq(name, "rtc_s"))      return zl_num((double)rtc_sec());
+    if (streq(name, "rtc_epoch"))  return zl_num((double)rtc_unix());
+    if (streq(name, "rtc_ch"))     return zl_num((double)rtc_hhmm_byte((int)a[0].num));
+
+    /* the clipboard */
+    if (streq(name, "clip_n"))     return zl_num((double)clip_len());
+    if (streq(name, "clip_ch"))    return zl_num((double)clip_byte((int)a[0].num));
+    if (streq(name, "clip_seq"))   return zl_num((double)clip_seq());
+    if (streq(name, "clip_new"))   { clip_begin(); return zl_nil(); }
+    if (streq(name, "clip_add"))   return zl_num((double)clip_push((int)a[0].num));
+    if (streq(name, "clip_done"))  return zl_num((double)clip_commit(1));
+    if (streq(name, "clip_wipe"))  { clip_clear(); return zl_nil(); }
+
+    /* notifications */
+    if (streq(name, "note_tick"))  return zl_num((double)notify_tick((unsigned)a[0].num));
+    if (streq(name, "note_on"))    return zl_num((double)notify_active());
+    if (streq(name, "note_ch"))    return zl_num((double)notify_byte((int)a[0].num));
+    if (streq(name, "note_go"))    return zl_num((double)notify_dismiss());
+    if (streq(name, "note_q"))     return zl_num((double)notify_queued());
+    /* A string LITERAL is the one kind of string the zl kernel subset has, and
+     * it is exactly what a notification is: fixed text chosen at compile time.
+     * Same shape as the `at` builtin above - check the type, take the pointer,
+     * never store it. */
+    if (streq(name, "note_say")) {
+        if (a[0].type != V_STR) return zl_num(0);
+        return zl_num((double)notify_post(a[0].str, (unsigned)(n > 1 ? a[1].num : 0)));
+    }
 #endif
 
     /* Bitwise ops. A driver cannot be written without them - every status

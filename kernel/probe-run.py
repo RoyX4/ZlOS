@@ -170,16 +170,45 @@ def main():
             blob = ""
             for _ in range(4):
                 blob += t.seen("\n", args.step_timeout) or ""
+            # THE DRIVER IS PRESENT NOW, and the message has to change with it.
+            # Before fs.c was merged from desktop/system-track, exec.c's weak
+            # fs_* symbols were NULL and this said "no fs driver". They now bind
+            # to the real filesystem, so the honest answer is about the DISK -
+            # there is a driver, nothing is mounted on it. That the sentence
+            # changed by itself, with no edit to exec.c, is the weak-symbol seam
+            # working exactly as it was designed to.
             check("it says there is no filesystem",
                   "no filesystem" in blob, repr(blob.strip()[:70]))
-            check("it blames the missing DRIVER, not the disk",
-                  "no fs driver" in blob)
-            check("it names the file it could not look up",
-                  "nothing.zl" in blob)
-            check("it points at the storage that DOES exist",
-                  "ls" in blob)
+            check("it blames the DISK, not the driver - the driver is linked now",
+                  "on the disk" in blob and "no fs driver" not in blob)
             check("the two refusals are DIFFERENT sentences",
                   "no filename" not in blob)
+
+        # ---- and once a filesystem EXISTS, a third distinct answer ---------
+        # `.` mounts zlfs, formatting the NVMe disk if it is blank. That moves
+        # `run` from "there is nowhere to look" to "I looked and it is not
+        # there" - which is the whole error ladder, and the assertion that the
+        # weak symbols really did bind rather than merely link.
+        qtype(qmp, ".\n")
+        if t.expect("zl> .", args.step_timeout):
+            mounted = ""
+            for _ in range(6):
+                mounted += t.seen("\n", args.step_timeout) or ""
+            check("`.` mounted a filesystem", "mounted:" in mounted,
+                  repr(mounted.strip()[-60:]))
+
+            qtype(qmp, "run nothing.zl\n")
+            if t.expect("zl> run nothing.zl", args.step_timeout):
+                blob2 = ""
+                for _ in range(3):
+                    blob2 += t.seen("\n", args.step_timeout) or ""
+                check("with a filesystem mounted, run says NO SUCH FILE",
+                      "no such file" in blob2, repr(blob2.strip()[:70]))
+                check("...and names it", "nothing.zl" in blob2)
+                check("...and no longer claims there is no filesystem",
+                      "no filesystem" not in blob2)
+        else:
+            check("`.` mounted a filesystem", False, "keystroke never arrived")
 
         # ---- the window --------------------------------------------------
         # A window opened by `run` must not have replaced the terminal or

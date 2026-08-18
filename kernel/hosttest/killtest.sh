@@ -67,6 +67,39 @@ run_case() {
     echo "  ok    $name"
 }
 
+# Same, but with a memory WINDOW armed - which is what the kernel does when it
+# runs a foreign program, confining it to the arena. 0x20000000..0x20100000 is
+# a window that deliberately contains none of this process, so any raw access
+# outside it is a violation rather than a lucky hit.
+CONFINE_LO=0x20000000
+CONFINE_HI=0x20100000
+
+run_confined() {
+    local name="$1" want_rc="$2" want_msg="$3" steps="$4" depth="$5"
+    local src="$TMP/case.zl" out="$TMP/out" err="$TMP/err"
+    cat > "$src"
+    checks=$((checks+1))
+    timeout 20 "$INTERP" --steps "$steps" --depth "$depth" \
+        --confine "$CONFINE_LO" "$CONFINE_HI" "$src" >"$out" 2>"$err"
+    local rc=$?
+    if [ "$rc" = 124 ]; then
+        echo "  FAIL  $name - RAN FOREVER"; fails=$((fails+1)); return
+    fi
+    if [ "$rc" = 139 ]; then
+        echo "  FAIL  $name - SIGSEGV, the program killed the interpreter"
+        fails=$((fails+1)); return
+    fi
+    if [ "$rc" != "$want_rc" ]; then
+        echo "  FAIL  $name - exit $rc, wanted $want_rc"
+        sed 's/^/          /' "$err" | head -2; fails=$((fails+1)); return
+    fi
+    if ! grep -qF "$want_msg" "$err"; then
+        echo "  FAIL  $name - never said '$want_msg'"
+        sed 's/^/          /' "$err" | head -2; fails=$((fails+1)); return
+    fi
+    echo "  ok    $name"
+}
+
 echo "killtest - every one of these is trying to wedge the machine"
 echo
 
@@ -243,6 +276,81 @@ if [ -n "$a" ] && [ "$a" = "$b" ]; then
     echo "  ok    the budget is deterministic - two runs agree ($a)"
 else
     echo "  FAIL  the budget is not deterministic: '$a' vs '$b'"
+    fails=$((fails+1))
+fi
+
+# ---- 12. CONFINED: the holes an adversarial fan-out found ------------------
+# Every one of these was a VERIFIED WIN against the budget-and-depth version:
+# twelve payloads, three families, all of them exit 139 or a hang. None of them
+# went near eval() or exec() often enough to matter, which is the lesson - a
+# budget bounds TIME and an arena bounds HOW MUCH memory, and neither bounds
+# WHICH memory or what a builtin does natively.
+echo
+echo "  -- and now with the memory window armed, as the kernel runs them --"
+
+run_confined "poke to address 0 is refused, not a segfault" 2 "outside the memory" 100000 200 <<'ZL'
+poke32(0, 1)
+ZL
+
+run_confined "peek from address 0 is refused too" 2 "outside the memory" 100000 200 <<'ZL'
+x = peek8(0)
+print(x)
+ZL
+
+run_confined "copy_mem out of the window is refused" 2 "outside this program" 100000 200 <<'ZL'
+copy_mem(0, 0, 4096)
+ZL
+
+# fill_mem's length is now CHARGED as work, so a terabyte fill exhausts the
+# budget before the window check even matters. Both defences, in order.
+run_confined "a terabyte fill_mem cannot be one step" 2 "step budget exhausted" 100000 200 <<'ZL'
+fill_mem(0, 0, 1000000000000)
+ZL
+
+# THE ONE THAT NEEDED NO BUILTIN AT ALL. Pure grammar, and it crashed at
+# --steps 1 --depth 1 AND at --steps 0 --depth 0, because the parser runs
+# before the trap is armed. On the kernel's 256 KiB stack it fires at roughly
+# 200 brackets - a source file under a quarter of a kilobyte.
+checks=$((checks+1))
+python3 -c "open('$TMP/nest.zl','w').write('['*8000+chr(10))"
+timeout 20 "$INTERP" --steps 1 --depth 1 --confine "$CONFINE_LO" "$CONFINE_HI" \
+    "$TMP/nest.zl" >/dev/null 2>"$TMP/nest.err"; rc=$?
+if [ "$rc" = 2 ] && grep -qF "nesting 8000 deep" "$TMP/nest.err"; then
+    echo "  ok    8000 nested brackets are REFUSED before the parser recurses"
+else
+    echo "  FAIL  nested brackets: exit $rc (139 = it still overflows the stack)"
+    sed 's/^/          /' "$TMP/nest.err" | head -2
+    fails=$((fails+1))
+fi
+
+# A builtin that BLOCKS is unbounded no matter how small the budget is: the
+# budget counts statements, not seconds.
+run_confined "a blocking builtin is refused outright" 2 "not available" 100000 200 <<'ZL'
+run("sleep 3600")
+ZL
+
+# exit() is not an error, so the trap never sees it. In a kernel it is the
+# machine.
+run_confined "exit() cannot bypass the trap" 2 "not available" 100000 200 <<'ZL'
+exit(0)
+ZL
+
+# ...AND THE CONTROL, again. A sandbox that refuses everything is not a
+# sandbox. Confined programs must still be able to compute.
+checks=$((checks+1))
+cat > "$TMP/conf_ok.zl" <<'ZL'
+fn fib(n) {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+print(fib(20))
+ZL
+got=$(timeout 20 "$INTERP" --steps 10000000 --depth 500 \
+        --confine "$CONFINE_LO" "$CONFINE_HI" "$TMP/conf_ok.zl" 2>&1)
+if [ "$got" = "6765" ]; then
+    echo "  ok    a confined program can still compute (fib 20 = 6765)"
+else
+    echo "  FAIL  confinement broke a legitimate program: $got"
     fails=$((fails+1))
 fi
 

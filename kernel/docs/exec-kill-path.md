@@ -192,6 +192,102 @@ What it does **not** prove, and the kernel gate must: that the desktop stays
 responsive while a program is being stopped. That needs a machine, and it is
 Item 2's own gate.
 
+## What three attackers found that I did not
+
+I wrote fourteen adversarial cases and every one of them passed. `EXEC-PROMPT.md`
+§9 says to put an adversarial reader on this exact question — *"can you write a
+script that wedges the machine?" is exactly the question the author is worst
+placed to answer"* — so three agents were asked it, with different lenses. They
+produced **twelve verified payloads in three families**, and the budget could
+not see any of them.
+
+### Raw memory: three characters of zl, a dead machine
+
+```
+poke32(0, 1)                    -> SIGSEGV
+x = peek8(0)                    -> SIGSEGV
+fill_mem(0, 0, 1000000000000)   -> SIGSEGV
+copy_mem(0, 0, 4096)            -> SIGSEGV
+```
+
+The budget bounds *time*. The arena bounds *how much* memory. **Neither bounds
+which memory**, and `peek`/`poke`/`fill_mem`/`copy_mem` exist precisely to hand
+out arbitrary addresses — `design_memory_structs.md` §3.1 fixes their names
+because a page allocator is written against them. They are how zl drives
+hardware. But a program the kernel was not built with is not the kernel.
+
+A signal is not a `longjmp` and there is no handler; in ring 0 a page fault is
+not a signal at all.
+
+**The fix is a window.** `zi_confine(lo, hi)` says which addresses a program may
+touch; every raw access is checked and a violation is an ordinary
+`runtime_error` the trap already catches and reports. Unset by default — the
+hosted interpreter and `kernel.zl`'s own compiled code are untouched. The kernel
+confines a program to exactly the arena, which is non-negotiable 3 implemented
+rather than asserted. The bound is a subtraction (`len > hi - addr`), never an
+addition, for the same reason `arena.c`'s ceiling is.
+
+### The parser, upstream of every check
+
+```
+$ python3 -c "open('x.zl','w').write('['*8000)"
+$ ./interp --steps 1 --depth 1 x.zl
+Segmentation fault
+```
+
+`--steps 1 --depth 1` and it still crashes, because none of the kill path is
+involved: `parse()` runs before the trap is armed or any limit is set. The
+parser is uncapped recursive descent — every `[` re-enters `parse_expr` through
+about a dozen frames — and **the overflow happens on the descent**, so no
+closing bracket is ever needed.
+
+Measured on this host's 8 MiB stack: 6000 brackets survives, 6500 crashes. **The
+kernel has 256 KiB, roughly 32× less — about 200 brackets, a source file under a
+quarter of a kilobyte, with no memory protection to contain where it lands.**
+
+Capping recursion inside `parser.c` would mean threading a counter through
+eleven precedence levels in a file this track does not own. But parser recursion
+is bounded by bracket nesting, and bracket nesting is visible in the **token
+stream** before a single frame is pushed. One linear scan, no parser change, and
+it cannot be wrong about a construct it has not been taught because it counts
+the only thing that makes the parser recurse.
+
+### Builtins that leave the interpreter
+
+```
+run("sleep 3600")   one step, blocks forever
+exit(0)             not an error, so the trap never sees it
+```
+
+The budget counts statements, not seconds. A builtin that waits is unbounded no
+matter how small the budget is, and `exit()` is a machine in a kernel.
+
+Refused by name, at the single door into `call_builtin`, whenever a window is
+armed. The list is everything reaching outside the interpreter: the host, the
+filesystem, the clock, other programs. **A confined program is a pure
+computation over its own arena** — which is the whole of what Level 1 promised.
+
+`fill_mem` and `copy_mem` also now charge their length to the budget. They call
+`memset`/`memmove` directly, so `zi_alloc` never saw them and a terabyte fill was
+one step.
+
+### The one overclaim, for the record
+
+`sort(reverse(range(2000000)))` was reported as running forever. It does not —
+the per-byte allocation charge, added from the *first* attacker's finding before
+that agent ran, stops it at 250,010 steps. An independent verify pass confirmed
+it. **Attackers overclaim; the verify stage earned its place.**
+
+### Where it stands
+
+```
+25 cases, 0 failures
+ok    every program written to wedge the machine was stopped, and said why
+```
+
+and `run_tests.sh` is still ALL GREEN, which is the check that matters for "off
+by default" — none of this changed the hosted interpreter by a single behaviour.
+
 ## What this found on the way past
 
 `1 / 0` is **not** an error in the interpreter — it produces `inf` and exits 0.

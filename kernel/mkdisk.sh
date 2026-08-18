@@ -59,6 +59,18 @@ gcc $CFLAGS -c virtio_gpu.c -o _vgpu.o
 gcc $CFLAGS -c cpu.c -o _cpu.o
 # NVMe: real storage, so something survives a power cycle
 gcc $CFLAGS -c nvme.c -o _nvme.o
+# zlfs: the filesystem. Superblock, a directory of names, contiguous runs.
+# Tested without booting anything - hosttest/fstest.c compiles THIS file
+# against a RAM disk that can be told to fail a write.
+gcc $CFLAGS -c fs.c      -o _fs.o
+# the system track's three: the clipboard that makes this one machine rather
+# than several programs sharing a screen, window snapping (wm_resize finally
+# has a caller), and a toast that goes away by itself.
+gcc $CFLAGS -c clip.c    -o _clip.o
+gcc $CFLAGS -c snap.c    -o _snap.o
+gcc $CFLAGS -c notify.c  -o _notify.o
+# the clock. CMOS at 0x70/0x71 - the header drew uptime and called it a time.
+gcc $CFLAGS -c rtc.c     -o _rtc.o
 # the scheduler: more than one thing at a time
 gcc $CFLAGS -c sched.c -o _sched.o
 # SMP: waking the other cores
@@ -84,7 +96,7 @@ gcc $CFLAGS -c smp_trampoline.S -o _smptr.o
 gcc -m32 -c raw_entry.S -o _rawentry.o
 
 ld -m elf_i386 -T link-raw.ld -o kernel_raw.elf \
-   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _arena.o _exec.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o
+   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _fs.o _clip.o _snap.o _notify.o _rtc.o _sched.o _arena.o _exec.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o
 objcopy -O binary kernel_raw.elf kernel_raw.bin
 
 nasm -f bin raw_boot.asm -o raw_boot.bin

@@ -72,6 +72,10 @@ fn kbd_init() {
 
 # shift state, tracked for the editor so it can type capitals
 shift_state = 0
+# Ctrl, tracked the same way shift is. Without this the editor can never see
+# Ctrl+C: the PS/2 path builds characters from a scancode table and there is no
+# modifier state but shift, so `c` is all that ever arrives.
+ctrl_state = 0
 
 # a shift-aware read: returns a translated character, or 0 if nothing / a
 # modifier / a release. Uppercases letters; leaves the rest as-is (v1).
@@ -86,6 +90,8 @@ fn edit_key() {
     if uk != 0 { return uk }
     sc = scan_get()
     if sc == 0 { return 0 }
+    if sc == 0x1D { ctrl_state = 1   return 0 }      # ctrl down
+    if sc == 0x9D { ctrl_state = 0   return 0 }      # ctrl up
     if sc == 0x2A { shift_state = 1  return 0 }      # left shift down
     if sc == 0x36 { shift_state = 1  return 0 }      # right shift down
     if sc == 0xAA { shift_state = 0  return 0 }      # left shift up
@@ -94,6 +100,11 @@ fn edit_key() {
     ch = peek8(KBD_TABLE + sc)
     if ch == 0 { return 0 }
     if shift_state == 1 { if ch >= 97 { if ch <= 122 { ch = ch - 32 } } }
+    # Ctrl+letter is the letter with the top three bits cleared - Ctrl+C is 3,
+    # Ctrl+V is 22. That is not a convention this file invents: it is what
+    # input.c already produces on the USB path, so the editor sees the same
+    # codes whichever keyboard it is being typed on.
+    if ctrl_state == 1 { if ch >= 97 { if ch <= 122 { return band(ch, 31) } } }
     return ch
 }
 # The keyboard now arrives by INTERRUPT: the IRQ1 handler drops each scancode
@@ -188,9 +199,28 @@ fn draw_header() {
         num_aa(w - 276 * u, ht, w, TOP_TXT)
         text_aa(w - 200 * u, ht, "x", TOP_DIM)
         num_aa(w - 184 * u, ht, px_h(), TOP_TXT)
-        text_aa(w - 108 * u, ht, "net", TOP_DIM)
-        fill_rgb(w - 66 * u, (hb - 8 * u) / 2, 8 * u, 8 * u, OK_GRN)
-        text_aa(w - 48 * u, ht, "up", TOP_DIM)
+        # This corner used to draw "net", a green dot, and "up".
+        #
+        # There is no network driver anywhere in this tree - no e1000, no
+        # virtio-net, no rtl8139, no network code at all - so that green dot
+        # was a claim about hardware that does not exist, made to the user's
+        # face on every frame. HANDOFF.md is held to the standard that it
+        # records what is VERIFIED rather than what is intended; the screen is
+        # now held to the same one.
+        #
+        # What replaces it is the one thing this corner can truthfully say:
+        # the actual time, off the CMOS clock in rtc.c. Drawn a glyph at a
+        # time through char_aa, the same way sysmon_body draws the CPU brand
+        # string, because the zl kernel subset has no string values. When the
+        # clock cannot be read, rtc_ch spells "--:--" rather than a stale time.
+        rtc_up()
+        hdri = 0
+        hdrx = w - 108 * u
+        while hdri < 5 {
+            char_aa(hdrx, ht, rtc_ch(hdri), TOP_TXT)
+            hdrx = hdrx + cell_w()
+            hdri = hdri + 1
+        }
     } else {
         bar(0, C_TITLE)
         at(0, 2, "zlOS", C_TITLE)
@@ -343,6 +373,11 @@ fn help() {
     print("    <n> i    edit RAM file n (0-9) - ESC saves it")
     print("    l        list the RAM files")
     print("    run F    run a program from a file (type it - needs a name)")
+    print("    .        zlfs on the NVMe disk - mount, and count the boots")
+    print("    ,        list the files ON DISK, by name")
+    print("    ;        the real time, read off the CMOS clock")
+    print("    '        write the clipboard to clip.txt on disk")
+    print("             (Ctrl+C in the editor copies, Ctrl+V pastes)")
     print("    e        beep the PC speaker")
     print("    m        poke a byte into video memory and read it back")
     color(C_CYAN)  print("  our hardware drivers")
@@ -1003,6 +1038,13 @@ FS_META = 0x02010000    # 10 lengths, 4 bytes each
 FS_DATA = 0x02011000    # 10 slots of FS_SLOT bytes
 FS_SLOT = 8192
 
+# A page of scratch for the DISK filesystem's small reads and writes. It sits
+# above the RAM disk (FS_DATA + 10 * 8192 ends at 0x02025000) and far below the
+# DMA arena map at the top of fb.c - bg 128 MiB, sp 160, sched 176, back 192,
+# nvme 208, xhci 224, virtio-gpu 240. 32 MiB + 192 KiB collides with none of
+# them, which is the check this project's recurring bug says to do every time.
+DISK_SCRATCH = 0x02030000
+
 fn fs_init()      { fill_mem(FS_META, 0, 64) }
 fn fs_len(slot)   { return peek32(FS_META + slot * 4) }
 fn fs_save(slot, len) {
@@ -1080,6 +1122,30 @@ fn editor(slot) {
             }
             if k == 13 {
                 if len < EDIT_MAX - 1 { poke8(EDIT_BUF + len, 10)  len = len + 1 }
+                redraw_editor(len)
+            }
+            # Ctrl+C: the whole buffer goes to the clipboard. Pushed a byte at
+            # a time because the zl kernel subset has no string values - the
+            # same seam filenames and typed commands use.
+            if k == 3 {
+                clip_new()
+                ci = 0
+                while ci < len { clip_add(peek8(EDIT_BUF + ci))  ci = ci + 1 }
+                clip_done()
+            }
+            # Ctrl+V: whatever is on the clipboard, appended here. The bytes may
+            # have been put there by a completely different app; nothing in this
+            # function knows or needs to.
+            if k == 22 {
+                cn = clip_n()
+                ci = 0
+                while ci < cn {
+                    if len < EDIT_MAX - 1 {
+                        poke8(EDIT_BUF + len, clip_ch(ci))
+                        len = len + 1
+                    }
+                    ci = ci + 1
+                }
                 redraw_editor(len)
             }
             if k >= 32 {
@@ -1599,6 +1665,163 @@ fn run_command(cmd, arg) {
             put("    read back WRONG in ")  put(nvbad)  print(" of 512 bytes")
             color(C_GREY)
         }
+        return 0
+    }
+    # . - zlfs: mount the disk, and prove a NAMED FILE survives a power cycle.
+    #
+    # The 'o' command above already writes a block and reads it back, which
+    # proves the DMA round trip and nothing about persistence: it never
+    # reboots. This keeps a counter in a file called "boots" and increments it
+    # once per run, so the number on screen is the number of times this machine
+    # has been powered on since the volume was formatted. That number cannot be
+    # produced by a cache, a buffer or a lucky read - only by bytes that were
+    # on the platter before this kernel existed.
+    #
+    # verify-disk.sh drives exactly this, twice, against the same image file.
+    if cmd == 46 {
+        color(C_CYAN)  print("  zlfs on NVMe")
+        color(C_GREY)
+        if nv_setup() == 0 {
+            color(C_RED)
+            put("    no usable NVMe controller (fault ")  put(nv_fault())  print(")")
+            color(C_GREY)  return 0
+        }
+        if fs_mount() == 0 {
+            print("    no volume here yet - formatting")
+            if fs_format() == 0 {
+                color(C_RED)  print("    format failed")
+                color(C_GREY)  return 0
+            }
+            if fs_mount() == 0 {
+                color(C_RED)  print("    formatted, but will not mount")
+                color(C_GREY)  return 0
+            }
+        }
+        put("    mounted: ")  put(fs_n())  put(" file(s), ")
+        put(fs_free())  put(" of ")  put(fs_cap())  print(" blocks free")
+
+        # find "boots", or make it. The name is pushed one character at a
+        # time because the zl kernel subset has no string values.
+        fs_nclear()
+        fs_npush(98)  fs_npush(111)  fs_npush(111)  fs_npush(116)  fs_npush(115)
+        bi = fs_get()
+        if bi < 0 { bi = fs_new(4) }
+        if bi < 0 {
+            color(C_RED)  print("    could not create 'boots'")
+            color(C_GREY)  return 0
+        }
+
+        poke32(DISK_SCRATCH, 0)
+        fs_rd(bi, DISK_SCRATCH, 4)
+        bootn = peek32(DISK_SCRATCH) + 1
+        poke32(DISK_SCRATCH, bootn)
+        if fs_wr(bi, DISK_SCRATCH, 4) == 0 {
+            color(C_RED)  print("    could not write 'boots'")
+            color(C_GREY)  return 0
+        }
+        color(C_GREEN)
+        put("    BOOTCOUNT=")  print(bootn)
+        color(C_GREY)
+        print("    that number came off the disk, not out of memory")
+        # ...and say so on the desktop too. A toast is the right shape for
+        # this: it is worth knowing and not worth a window.
+        note_say("zlfs mounted", 300)
+        return 0
+    }
+    # ; - the real time, off the CMOS clock. The header draws this too, but the
+    # header only exists when there is a framebuffer, and verify.sh boots with
+    # -display none. This is how the clock gets gated.
+    if cmd == 59 {
+        color(C_CYAN)  print("  the clock")
+        color(C_GREY)
+        if rtc_here() == 0 {
+            color(C_RED)  print("    no RTC on this machine")
+            color(C_GREY)  return 0
+        }
+        if rtc_up() == 0 {
+            color(C_RED)
+            put("    the clock would not settle (reason ")  put(rtc_why())  print(")")
+            color(C_GREY)  return 0
+        }
+        put("    RTC=")
+        put(rtc_y())   put("-")
+        if rtc_mo() < 10 { put("0") }   put(rtc_mo())  put("-")
+        if rtc_d()  < 10 { put("0") }   put(rtc_d())   put(" ")
+        if rtc_h()  < 10 { put("0") }   put(rtc_h())   put(":")
+        if rtc_mi() < 10 { put("0") }   put(rtc_mi())  put(":")
+        if rtc_s()  < 10 { put("0") }   print(rtc_s())
+        put("    epoch=")  print(rtc_epoch())
+        # a file's mtime comes from here once the disk is mounted
+        fs_stamp(rtc_epoch())
+        return 0
+    }
+    # ' - write the clipboard to a file on disk, as "clip.txt".
+    #
+    # This is the half of the clipboard that makes the point. The editor puts
+    # bytes there with Ctrl+C and has no idea what happens to them; this takes
+    # them and writes them to the filesystem and has no idea where they came
+    # from. Two programs that share nothing but one buffer - which is the
+    # difference between a machine and several programs on one screen.
+    if cmd == 39 {
+        color(C_CYAN)  print("  clipboard -> disk")
+        color(C_GREY)
+        if clip_n() == 0 {
+            print("    the clipboard is empty - copy something first (Ctrl+C in the editor)")
+            return 0
+        }
+        if fs_ok() == 0 {
+            print("    no volume mounted - press . first")
+            return 0
+        }
+        # stage the name "clip.txt" a character at a time
+        fs_nclear()
+        fs_npush(99)  fs_npush(108) fs_npush(105) fs_npush(112)
+        fs_npush(46)  fs_npush(116) fs_npush(120) fs_npush(116)
+        cbi = fs_get()
+        if cbi < 0 { cbi = fs_new(clip_n()) }
+        if cbi < 0 {
+            color(C_RED)  print("    could not create clip.txt")
+            color(C_GREY)  return 0
+        }
+        # copy the clipboard into scratch RAM, then hand the disk one address
+        cbn = clip_n()
+        cbj = 0
+        while cbj < cbn { poke8(DISK_SCRATCH + cbj, clip_ch(cbj))  cbj = cbj + 1 }
+        if fs_wr(cbi, DISK_SCRATCH, cbn) == 0 {
+            color(C_RED)  print("    the write failed")
+            color(C_GREY)  return 0
+        }
+        color(C_GREEN)
+        put("    wrote ")  put(cbn)  print(" bytes of clipboard to clip.txt")
+        color(C_GREY)
+        note_say("clipboard saved", 300)
+        return 0
+    }
+    # , - list what is on the disk, by NAME
+    if cmd == 44 {
+        color(C_CYAN)  print("  zlfs")
+        color(C_GREY)
+        if fs_ok() == 0 {
+            print("    no volume mounted - press . first")
+            return 0
+        }
+        lsi = 0
+        while lsi < fs_max() {
+            if fs_inuse(lsi) == 1 {
+                put("    ")
+                lsc = 0
+                while lsc < 24 {
+                    lsb = fs_ch(lsi, lsc)
+                    if lsb > 0 { emit(lsb) }
+                    lsc = lsc + 1
+                }
+                put("  ")  put(fs_bytes(lsi))  put(" bytes at LBA ")
+                print(fs_lba(lsi))
+            }
+            lsi = lsi + 1
+        }
+        put("    ")  put(fs_n())  put(" file(s), ")
+        put(fs_free())  print(" blocks free")
         return 0
     }
     if cmd == 122 {                       # z - the processor, read from itself

@@ -19,11 +19,18 @@
  *   exectest         a fake filesystem IS linked  -> mounted/not-mounted,
  *                    found/not-found, empty, too-big, and the load path
  *   exectest-nofs    nothing defines fs_*         -> the weak symbols are
- *                    NULL, which is what the kernel looks like TODAY
+ *                    NULL, and exec.c reports "no fs driver"
  *
- * The second is the one that matters right now: it is the shipping
- * configuration, and it is the only way to prove the NULL-weak-symbol branch is
- * reached rather than merely written.
+ * UPDATE, and it is the point of the weak seam rather than a problem with it:
+ * fs.c has since been merged from desktop/system-track, so the SHIPPING kernel
+ * is now the first configuration, not the second. exec.c did not change by a
+ * character - the message it prints changed by itself when the symbols found
+ * something to bind to.
+ *
+ * exectest-nofs stays anyway. It is the only thing that proves the NULL-weak
+ * branch is REACHED rather than merely written, and that branch is what any
+ * future build without fs.c - the EFI target, a trimmed kernel, a bisect -
+ * still lands on. A branch with no test is a branch that rots.
  *
  * Build and run:  ./build.sh && ./exectest && ./exectest-nofs
  */
@@ -141,7 +148,7 @@ static void draw(int w, int h)
 int main(void)
 {
 #ifdef EXECTEST_NO_FS
-    printf("exectest-nofs - `run` with NO filesystem driver linked (the shipping case)\n\n");
+    printf("exectest-nofs - `run` with NO filesystem driver linked\n\n");
 #else
     printf("exectest - `run`, and every way it declines\n\n");
 #endif

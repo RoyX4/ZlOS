@@ -172,6 +172,122 @@ static void *zi_realloc(void *p, unsigned long bytes)
     return realloc(p, bytes);
 }
 
+
+/* ---- the memory window: which addresses a program may touch ---------------
+ * FOUND BY AN ADVERSARIAL READER, AND IT IS THE WHOLE OF NON-NEGOTIABLE 3.
+ *
+ *     poke32(0, 1)                    -> SIGSEGV
+ *     x = peek8(0)                    -> SIGSEGV
+ *     fill_mem(0, 0, 1000000000000)   -> SIGSEGV
+ *
+ * Three characters of zl, and on a hosted Linux that is a dead process. In the
+ * kernel - ring 0, no memory protection, which is exactly the situation
+ * EXEC-PROMPT.md describes - it is a dead machine, and none of the step budget
+ * or the depth cap or the longjmp trap comes anywhere near it. A signal is not
+ * a longjmp and there is no handler; a page fault in ring 0 is not a signal at
+ * all.
+ *
+ * The budget bounds TIME and the arena bounds HOW MUCH memory. Neither bounds
+ * WHICH memory, and the raw-memory builtins - peek*, poke*, alloc, copy_mem,
+ * fill_mem - exist precisely to hand out arbitrary addresses. They are not a
+ * mistake: design_memory_structs.md §3.1 fixes their names because a page
+ * allocator is written against them. They are how zl drives hardware. But a
+ * program the kernel was not built with is not the kernel.
+ *
+ * So there is a WINDOW. zi_confine(lo, hi) says "this program may touch
+ * [lo, hi) and nothing else"; every raw access is checked against it and a
+ * violation is an ordinary runtime_error, which the trap already catches and
+ * reports. Set to (0, 0) - the default - there is no window and nothing is
+ * checked, which is what the hosted interpreter and kernel.zl's own compiled
+ * code have always had. Only a foreign program gets confined, and the kernel
+ * confines it to exactly the arena.
+ *
+ * The check is a subtraction, not an addition: `len > hi - addr` cannot wrap,
+ * where `addr + len > hi` wraps for a length a script chose. That is the same
+ * form arena.c uses for its ceiling and for the same reason.
+ */
+static void runtime_error(const char *msg);   /* the trap - see below */
+static void zi_charge(long long units);
+
+static unsigned long long zi_win_lo, zi_win_hi;
+
+void zi_confine(unsigned long long lo, unsigned long long hi)
+{
+    zi_win_lo = lo;
+    zi_win_hi = hi;
+}
+
+static void zi_check(unsigned long long addr, unsigned long long len,
+                     const char *what)
+{
+    if (zi_win_hi == 0) return;                 /* no window: unconfined */
+    if (addr < zi_win_lo || addr >= zi_win_hi) {
+        zi_killed = 1;
+        runtime_error(what);
+    }
+    if (len > zi_win_hi - addr) {               /* subtraction: cannot wrap */
+        zi_killed = 1;
+        runtime_error(what);
+    }
+}
+
+/* ---- what a confined program may not do at all ---------------------------
+ * The window above says which ADDRESSES a program may touch. This says which
+ * BUILTINS it may call, and it exists because an adversarial reader found two
+ * more ways past everything else:
+ *
+ *     run("sleep 3600")     one eval() node, one step, blocks forever. The
+ *                           budget counts statements, not seconds, so a
+ *                           builtin that waits is unbounded no matter how
+ *                           small the budget is.
+ *     exit(0)               calls exit() directly. Not an error, so the trap
+ *                           never sees it; in a kernel it is the machine.
+ *
+ * Neither is a bug in those builtins - they are exactly what a shell language
+ * should have, and kernel.zl's own compiled code may want them. They are
+ * simply not things a program the kernel was NOT built with gets to do, and
+ * the honest way to say that is to refuse by name rather than to quietly
+ * return nil, which would look like the call had worked.
+ *
+ * The list is of everything that reaches OUTSIDE the interpreter: the host
+ * process, the filesystem, the clock, other programs. A confined program is a
+ * pure computation over its own arena, and that is the whole of what Level 1
+ * promised.
+ */
+static const char *const ZI_FORBIDDEN[] = {
+    "run", "start", "kill", "procs", "exit", "input",
+    "read", "write", "write_bytes", "dir", "rm", "move", "copy",
+    "env", "now",
+    0
+};
+/* NOT on the list, deliberately, and each for a reason:
+ *   seed    is srand() of a number the program supplies. It reaches nothing
+ *           outside the interpreter, and a confined program that wants
+ *           REPRODUCIBLE randomness needs it. Refusing it would be strictness
+ *           that costs something and buys nothing.
+ *   random,
+ *   randint are pure reads of that state.
+ *   print   is the whole point - a program that cannot say anything is not
+ *           worth running. It goes to the terminal, which is where the person
+ *           who typed `run` is looking.
+ * `now` IS on the list only because it is clock(), which has no freestanding
+ * implementation yet - an honest "not available" rather than a wrong number. */
+
+static void zi_forbid(const char *name)
+{
+    if (zi_win_hi == 0) return;                 /* unconfined: everything allowed */
+    for (int i = 0; ZI_FORBIDDEN[i]; i++) {
+        if (strcmp(name, ZI_FORBIDDEN[i]) == 0) {
+            char buf[96];
+            snprintf(buf, sizeof buf,
+                     "'%s' is not available to a program run this way", name);
+            zi_killed = 1;
+            runtime_error(buf);
+        }
+    }
+}
+
+
 /* =============================================================
  * VALUES - what an expression evaluates to
  * ============================================================= */
@@ -632,6 +748,9 @@ static void list_push_str(Value *list, int *cap, const char *p, int len)
 /* run a built-in by name, given already-evaluated argument values */
 static Value call_builtin(const char *name, Value *args, int nargs)
 {
+    /* One gate, at the one door. Putting this at each dangerous builtin
+     * instead would be a list that the next dangerous builtin is not on. */
+    zi_forbid(name);
     /* print(...) - the real one */
     if (strcmp(name, "print") == 0) {
         for (int i = 0; i < nargs; i++) {
@@ -1094,6 +1213,8 @@ static Value call_builtin(const char *name, Value *args, int nargs)
             if (nargs < 1 || args[0].type != V_NUM) runtime_error("peek needs an address");
             unsigned long long p = (unsigned long long)args[0].num;
             unsigned long long v = 0;
+            zi_check(p, (unsigned long long)(w / 8),
+                     "peek outside the memory this program is allowed to touch");
             if      (w == 8)  v = *(unsigned char *)(uintptr_t)p;
             else if (w == 16) v = *(unsigned short *)(uintptr_t)p;
             else if (w == 32) v = *(unsigned int *)(uintptr_t)p;
@@ -1123,6 +1244,8 @@ static Value call_builtin(const char *name, Value *args, int nargs)
             if (w == 64 && v > 9007199254740992ULL)
                 runtime_error("poke64: value above 2^53 has already lost precision "
                               "(a zl number is a double) - write it as two poke32 halves");
+            zi_check(p, (unsigned long long)(w / 8),
+                     "poke outside the memory this program is allowed to touch");
             if      (w == 8)  *(unsigned char *)(uintptr_t)p  = (unsigned char)v;
             else if (w == 16) *(unsigned short *)(uintptr_t)p = (unsigned short)v;
             else if (w == 32) *(unsigned int *)(uintptr_t)p   = (unsigned int)v;
@@ -1137,7 +1260,13 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (nargs < 1 || args[0].type != V_NUM) runtime_error("alloc needs a byte count");
         size_t n = (size_t)args[0].num;
         void *p = NULL;
-        if (posix_memalign(&p, 16, n ? n : 16) != 0 || !p) runtime_error("alloc failed");
+        /* Through the SAME seam as every other allocation, so it is charged to
+         * the budget and, in the kernel, comes out of the arena - which is what
+         * makes the address it returns land inside the window above. An alloc
+         * that bypassed this would hand a confined program a legal pointer to
+         * memory it is not allowed to touch. */
+        p = zi_alloc((unsigned long)(n ? n : 16));
+        if (!p) runtime_error("alloc failed");
         memset(p, 0, n ? n : 16);
         return make_num((double)(unsigned long long)(uintptr_t)p);
     }
@@ -1145,6 +1274,11 @@ static Value call_builtin(const char *name, Value *args, int nargs)
 
     if (strcmp(name, "copy_mem") == 0) {               /* memmove, overlap-safe */
         if (nargs < 3) runtime_error("copy_mem needs dst, src and a length");
+        zi_charge((long long)((unsigned long long)args[2].num / ZI_BYTES_PER_STEP) + 1);
+        zi_check((unsigned long long)args[0].num, (unsigned long long)args[2].num,
+                 "copy_mem destination is outside this program's memory");
+        zi_check((unsigned long long)args[1].num, (unsigned long long)args[2].num,
+                 "copy_mem source is outside this program's memory");
         memmove((void *)(uintptr_t)(unsigned long long)args[0].num,
                 (void *)(uintptr_t)(unsigned long long)args[1].num,
                 (size_t)args[2].num);
@@ -1152,6 +1286,9 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     }
     if (strcmp(name, "fill_mem") == 0) {               /* memset */
         if (nargs < 3) runtime_error("fill_mem needs an address, a byte and a length");
+        zi_charge((long long)((unsigned long long)args[2].num / ZI_BYTES_PER_STEP) + 1);
+        zi_check((unsigned long long)args[0].num, (unsigned long long)args[2].num,
+                 "fill_mem is outside the memory this program is allowed to touch");
         memset((void *)(uintptr_t)(unsigned long long)args[0].num,
                (int)args[1].num, (size_t)args[2].num);
         return make_nil();
@@ -2129,9 +2266,75 @@ static void exec_inner(Node *n, Env *env)
  *     works at -O0 and breaks at -O2, which is the optimisation level the
  *     kernel builds at.
  */
+
+/* ---- the nesting guard, and why it runs BEFORE the parser ----------------
+ * FOUND BY AN ADVERSARIAL READER. A file containing nothing but open brackets:
+ *
+ *     python3 -c "open('x.zl','w').write('['*8000)"
+ *     ./interp --steps 1 --depth 1 x.zl      ->  SIGSEGV
+ *
+ * `--steps 1 --depth 1` and it still crashes, because NONE of the kill path is
+ * involved. parse() runs before zl_run_program() arms the trap or sets a
+ * limit, and the parser is uncapped recursive descent: every `[` re-enters
+ * parse_expr through a dozen frames, and the overflow happens on the DESCENT,
+ * so no closing bracket is ever needed. Measured on this host's 8 MiB stack:
+ * 6000 brackets survives, 6500 crashes. THE KERNEL HAS 256 KiB, about 32x
+ * less - so roughly 200 brackets, a source file under a quarter of a kilobyte,
+ * and no memory protection to contain where it lands.
+ *
+ * Two ways to fix it and only one of them is small. Capping recursion inside
+ * parser.c means finding every recursive path through eleven precedence levels
+ * and threading a counter through all of them - in a file this track does not
+ * own. But parser recursion is bounded by BRACKET NESTING, and bracket nesting
+ * is visible in the token stream before a single frame is pushed. One linear
+ * scan, no parser change, and it cannot be wrong about a construct it has not
+ * been taught, because it counts the only thing that makes the parser recurse.
+ *
+ * The limit is deliberately generous. Real zl nests a handful deep; 64 is far
+ * past anything anyone writes and far below what either stack can take.
+ */
+
+#define ZI_MAX_NESTING 64
+
+static int zi_nesting_ok(const Token *tokens, int count, int *deepest, int *line)
+{
+    int depth = 0, worst = 0, worst_line = 0;
+    for (int i = 0; i < count; i++) {
+        if (tokens[i].type != T_SYMBOL) continue;
+        char c = tokens[i].text[0];
+        if (tokens[i].text[1] != '\0') continue;      /* ==, >=, ... are not brackets */
+        if (c == '(' || c == '[' || c == '{') {
+            depth++;
+            if (depth > worst) { worst = depth; worst_line = tokens[i].line; }
+        } else if (c == ')' || c == ']' || c == '}') {
+            if (depth > 0) depth--;
+        }
+    }
+    if (deepest) *deepest = worst;
+    if (line) *line = worst_line;
+    return worst <= ZI_MAX_NESTING;
+}
+
 #define ZI_OK      0
 #define ZI_ERROR   1     /* the program did something illegal - trap caught it */
 #define ZI_KILLED  2     /* the budget or the depth cap stopped it             */
+
+/* Parse, but refuse a program whose nesting would overflow the stack getting
+ * there. Returns NULL and reports; the caller must not parse it otherwise. */
+Node *zl_parse_guarded(Token *tokens, int count)
+{
+    int deepest = 0, line = 0;
+    if (!zi_nesting_ok(tokens, count, &deepest, &line)) {
+        zi_killed = 1;
+        zi_seterr("nested too deeply to parse - the program was refused");
+        fflush(stdout);
+        fprintf(stderr, "refused: nesting %d deep at line %d, limit %d "
+                        "(it would overflow the stack before it ran)\n",
+                deepest, line, ZI_MAX_NESTING);
+        return NULL;
+    }
+    return parse(tokens, count);
+}
 
 int zl_run_program(Node *program, long long steps, int max_depth)
 {
@@ -2159,7 +2362,7 @@ int zl_run_program(Node *program, long long steps, int max_depth)
 int main(int argc, char **argv)
 {
     if (argc < 2) {
-        fprintf(stderr, "usage: interp [--steps N] [--depth N] <file>\n");
+        fprintf(stderr, "usage: interp [--steps N] [--depth N] [--confine LO HI] <file>\n");
         return 1;
     }
 
@@ -2168,18 +2371,26 @@ int main(int argc, char **argv)
      * without a kernel - see kernel/hosttest/killtest.sh. */
     long long steps = 0;
     int depth = 0, argi = 1;
+    unsigned long long confine_lo = 0, confine_hi = 0;
     while (argi < argc - 1) {
         if (strcmp(argv[argi], "--steps") == 0 && argi + 1 < argc) {
             steps = atoll(argv[++argi]); argi++;
         } else if (strcmp(argv[argi], "--depth") == 0 && argi + 1 < argc) {
             depth = atoi(argv[++argi]); argi++;
+        } else if (strcmp(argv[argi], "--confine") == 0 && argi + 2 < argc) {
+            /* --confine LO HI: the only addresses raw memory may touch. This
+             * is what the kernel sets to the arena's bounds. */
+            confine_lo = strtoull(argv[++argi], NULL, 0);
+            confine_hi = strtoull(argv[++argi], NULL, 0); argi++;
         } else break;
     }
 
     int    count;
     Token *tokens  = lex_file(argv[argi], &count);
-    Node  *program = parse(tokens, count);
+    Node  *program = zl_parse_guarded(tokens, count);
+    if (!program) return 2;              /* refused - stopped, not a crash */
 
+    if (confine_hi) zi_confine(confine_lo, confine_hi);
     int r = zl_run_program(program, steps, depth);
     if (r != ZI_OK) {
         fflush(stdout);

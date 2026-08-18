@@ -33,7 +33,7 @@ echo "built ./inputtest     (run: ./inputtest)"
 # sliver of an old window left on the wallpaper, a click landing on the window
 # underneath, a drag that stops when the pointer outruns the frame. None of
 # those show in a screenshot taken a frame later.
-gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c ../notify.c ../snap.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest        (run: ./wmtest)"
 
@@ -41,7 +41,7 @@ echo "built ./wmtest        (run: ./wmtest)"
 # wrong window; eyes catch a title bar four pixels too tall, or a toggle that
 # renders as a circle instead of a pill. Both were real, and only the second
 # kind is found by looking.
-gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c \
+gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c ../notify.c ../snap.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmshot        (run: ./wmshot out.ppm)"
 
@@ -62,21 +62,61 @@ echo "built ./tritest       (run: ./tritest)"
 gcc -O2 -w -o arenatest arenatest.c ../arena.c
 echo "built ./arenatest     (run: ./arenatest)"
 
-# `run`, and every way it declines. TWO binaries from one source, and that is
-# the point of exec.c's weak fs_* references: with a fake filesystem linked it
-# reaches not-found / empty / too-big / loaded, none of which exist on this
-# branch; with nothing defining fs_* the weak symbols are NULL, which is what
-# the kernel actually ships today. The second is the one that proves the
-# NULL-weak branch is REACHED rather than merely written.
+# `run`, and every way it declines. TWO binaries from one source, which is the
+# point of exec.c's weak fs_* references: with a filesystem linked it reaches
+# not-found / empty / too-big / loaded; with nothing defining fs_* the weak
+# symbols are NULL and it says "no fs driver" instead. Since fs.c was merged the
+# FIRST is what the kernel ships - and exec.c did not change by a character to
+# make that happen. The second still earns its place: it is the only proof that
+# the NULL-weak branch is reached rather than merely written, and it is the
+# branch any build without fs.c still lands on.
 gcc -O2 -w -o exectest exectest.c ../exec.c
 echo "built ./exectest      (run: ./exectest)"
 gcc -O2 -w -DEXECTEST_NO_FS -o exectest-nofs exectest.c ../exec.c
 echo "built ./exectest-nofs (run: ./exectest-nofs)"
+# The filesystem, against a RAM disk that can be told to fail a write. fs.c
+# talks to storage through three functions, so replacing them with an array is
+# the whole of the fake hardware - and it buys the sequences that matter: a
+# torn write, a deleted file's blocks being reused under a live neighbour, a
+# superblock with one byte flipped in its tail. Built -Wall -Wextra, unlike the
+# harnesses above, because this one can lose data.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
+    -o fstest fstest.c ../fs.c
+echo "built ./fstest        (run: ./fstest)"
+
+# The clipboard, window snapping and notifications. All three are integer logic
+# with no framebuffer, and all three have bugs that a screenshot cannot show: a
+# clipboard that truncates silently, a snap that overwrites its restore
+# rectangle on the SECOND snap, a toast that eats the next keystroke.
+# Deliberately not folded into wmtest.c - that harness is being edited in
+# another worktree right now, and colliding with it would help nobody.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter \
+    -o systest systest.c ../clip.c ../snap.c ../notify.c
+echo "built ./systest       (run: ./systest)"
+
+# The clock. Two port instructions and a pile of decoding, and the bug it
+# exists to avoid - a read torn across the second boundary, giving a time an
+# hour wrong - lasts a few hundred microseconds a second and cannot be
+# reproduced on demand any other way. So the CMOS chip is faked: it can hold
+# UIP high, hand out a different time on the second sweep, claim any of the
+# three encodings, or not be there at all.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -DRTC_HOSTTEST \
+    -o rtctest rtctest.c ../rtc.c
+echo "built ./rtctest       (run: ./rtctest)"
+
+# The toast INSIDE the compositor. systest asserts notify.c's own queue and
+# expiry; this asserts the part that only exists once wm.c is involved - that
+# it paints ON TOP of a window, that it leaves no ghost when it retires, and
+# that focus never moves, because a toast is not a window and cannot be one.
+gcc -O2 -w -o toasttest toasttest.c ../wm.c ../ui.c ../wmglue.c ../fb.c \
+    ../input.c ../notify.c ../snap.c \
+    ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
+echo "built ./toasttest     (run: ./toasttest)"
 
 # The comparison number: what the REAL GPU on this same laptop does with a
 # blended full-screen layer. Offscreen pixmap, so it never touches the desktop.
 # Needs libGL - skipped silently if the dev headers are not installed.
-if [ -f /usr/include/GL/glx.h ]; then
+if [ -f /usr/include/GL/glx.h ] && [ -f gpu_fillrate.c ]; then
   gcc -O2 -w -o gpu_fillrate gpu_fillrate.c -lGL -lX11
   echo "built ./gpu_fillrate  (run: ./gpu_fillrate)"
 fi
