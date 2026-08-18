@@ -46,6 +46,22 @@ jobs:
           fi
           echo "only the known-structural skip (calc_repl) was reported"
 
+  parity:
+    name: the engines implement the same language
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc clang nasm llvm
+      - run: ./build.sh
+      # run_tests.sh cross-checks the C backend on every tests/*.zl, but only
+      # smoke-tests compilel with a list-and-string program - which never
+      # assigns to a global from inside a function, the one place the engines
+      # actually disagree. This runs the corner cases through all four.
+      - run: tools/engine-parity.sh
+
   fmt:
     name: formatter is byte-identical
     runs-on: ubuntu-latest

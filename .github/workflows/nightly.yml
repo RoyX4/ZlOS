@@ -1,0 +1,86 @@
+name: nightly
+
+# Everything, once a day, on main.
+#
+# Per-PR gates answer "did this change break something". This answers a
+# different question: "did the world move under us". New clang, new OVMF, new
+# QEMU, a runner image bump - all of those can break a boot without a single
+# commit, and finding that out on the next PR makes it look like the PR's fault.
+#
+# It also records the renderer's performance numbers over time, so a slow drift
+# is visible as a trend rather than discovered months later.
+
+on:
+  schedule:
+    - cron: '17 4 * * *'      # 04:17 UTC daily, off the hour to dodge the rush
+  workflow_dispatch:
+
+jobs:
+  everything:
+    name: all gates on main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: install
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            gcc clang nasm llvm lld \
+            qemu-system-x86 ovmf \
+            mtools dosfstools gdisk parted \
+            xorriso grub-pc-bin grub-efi-amd64-bin
+
+      - name: record the toolchain versions
+        run: |
+          { echo "## Toolchain"; echo '```'
+            gcc --version | head -1
+            clang --version | head -1
+            qemu-system-x86_64 --version | head -1
+            dpkg -s ovmf 2>/dev/null | grep '^Version:' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - run: ./build.sh
+
+      - name: language, formatter, parity, hazards
+        run: |
+          ./run_tests.sh
+          ./verify_fmt.sh
+          tools/engine-parity.sh
+          tools/hazard-scan.sh
+
+      - name: all four boot paths
+        run: |
+          set -o pipefail
+          for g in kernel/verify.sh kernel/verify-raw.sh kernel/verify-iso.sh kernel/verify-efi.sh; do
+            echo "── $g ──"
+            "$g" 2>&1 | tee /tmp/g.log
+            grep -qiE '^\s*skip:' /tmp/g.log && { echo "::error::$g skipped"; exit 1; }
+          done
+
+      # fb.c is freestanding C against memory, so the renderer benchmarks at
+      # native speed here with no boot. Numbers land in the run summary; a slow
+      # regression shows as a trend instead of a surprise.
+      - name: renderer performance
+        continue-on-error: true
+        run: |
+          bash kernel/hosttest/build.sh >/dev/null 2>&1 || true
+          if [ -x kernel/hosttest/fbbench ]; then
+            { echo "## Renderer (cyc/px)"; echo '```'
+              ( cd kernel/hosttest && ./fbbench 2>&1 | grep -E 'cyc/px|ms' | head -25 )
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "fbbench did not build" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: outstanding hazard count
+        if: always()
+        run: |
+          { echo "## Hazards"
+            echo "EFI pointer-truncation sites: **$(tools/hazard-scan.sh --count 2>/dev/null || echo '?')**"
+            echo "(target 0 - see docs/design/ci-and-agent-pipeline.md section 8b)"
+          } >> "$GITHUB_STEP_SUMMARY"
