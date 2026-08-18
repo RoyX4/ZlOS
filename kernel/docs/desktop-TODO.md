@@ -1,5 +1,11 @@
 # Desktop — the task list
 
+> **A full account of the 2026-08-17/18 overnight run — what landed, the four
+> things it got wrong, the two changes that measured *slower* and are still
+> here, and what is left — is in
+> [`desktop-overnight-run.md`](desktop-overnight-run.md).**
+
+
 **For whoever picks this up next, human or agent.** Ordered. Do them top to
 bottom. Each task says what to change, and how you know it worked.
 
