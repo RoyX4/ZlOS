@@ -328,6 +328,25 @@ extern void ui_theme_init(int scale);
  * nothing else. The parse, the box model and the paint are all C, because
  * the zl kernel subset has no runtime strings and a tokenizer is nothing
  * but string handling. Same split as term.c's command matcher. */
+/* ---- virtio-net (virtio_net.c) -----------------------------------------
+ * The network card. The browser's item 1: without it a browser is a file
+ * viewer. Everything below is diagnostic or one frame in each direction. */
+extern int  virtio_net_find(void);
+extern int  virtio_net_init(void);
+extern int  virtio_net_present(void);
+extern int  virtio_net_ready(void);
+extern int  virtio_net_ram_ok(void);
+extern int  virtio_net_has_mac(void);
+extern int  virtio_net_mac(int i);
+extern int  virtio_net_link_up(void);
+extern int  virtio_net_tx_count(void);
+extern int  virtio_net_rx_count(void);
+extern int  virtio_net_rx_drops(void);
+extern unsigned int virtio_net_arena(void);
+extern int  virtio_net_arp_probe(unsigned int my_ip, unsigned int target_ip, int ms);
+extern int  virtio_net_peer_known(void);
+extern int  virtio_net_peer_mac(int i);
+
 extern void browser_home(void);
 extern void browser_load_mem(unsigned int addr, int len);
 extern void browser_draw(int x, int y, int w, int h, int focused);
@@ -783,6 +802,24 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "ui_theme"))   { ui_theme_init((int)a[0].num); return zl_nil(); }
     /* ---- the browser. Everything below is one app's policy surface. */
+    /* ---- virtio-net. net_up() is the one that does the work; everything
+     * else reports what happened, because a driver that fails silently is
+     * indistinguishable from one that is not there. */
+    if (streq(name, "net_find"))   return zl_num((double)virtio_net_find());
+    if (streq(name, "net_up"))     return zl_num((double)virtio_net_init());
+    if (streq(name, "net_there"))  return zl_num((double)virtio_net_present());
+    if (streq(name, "net_ok"))     return zl_num((double)virtio_net_ready());
+    if (streq(name, "net_ram"))    return zl_num((double)virtio_net_ram_ok());
+    if (streq(name, "net_hasmac")) return zl_num((double)virtio_net_has_mac());
+    if (streq(name, "net_mac"))    return zl_num((double)virtio_net_mac((int)a[0].num));
+    if (streq(name, "net_link"))   return zl_num((double)virtio_net_link_up());
+    if (streq(name, "net_tx"))     return zl_num((double)virtio_net_tx_count());
+    if (streq(name, "net_rx"))     return zl_num((double)virtio_net_rx_count());
+    if (streq(name, "net_drop"))   return zl_num((double)virtio_net_rx_drops());
+    if (streq(name, "net_arena"))  return zl_num((double)virtio_net_arena());
+    if (streq(name, "net_arp"))    return zl_num((double)virtio_net_arp_probe((unsigned)a[0].num,(unsigned)a[1].num,(int)a[2].num));
+    if (streq(name, "net_peerok")) return zl_num((double)virtio_net_peer_known());
+    if (streq(name, "net_peer"))   return zl_num((double)virtio_net_peer_mac((int)a[0].num));
     if (streq(name, "br_home"))    { browser_home(); return zl_nil(); }
     if (streq(name, "br_load"))    { browser_load_mem((unsigned)a[0].num, (int)a[1].num); return zl_nil(); }
     if (streq(name, "br_draw"))    { browser_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num); return zl_nil(); }

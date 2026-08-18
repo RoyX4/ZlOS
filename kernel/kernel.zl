@@ -1699,6 +1699,8 @@ fn run_command(cmd, arg) {
     if cmd == 100 { return paint() }      # d - paint (draw)
     if cmd == 105 { return editor(arg) }  # i - text editor (arg = file slot 0-9)
     if cmd == 108 { return fs_list() }    # l - list RAM files
+    # 'N', not 'n': every lowercase code from a to z is already a command.
+    if cmd == 78 { return net_gate() }    # N - the network card, and an ARP probe
     if cmd == 114 {                       # r - reboot
         color(C_YELLOW)  print("  rebooting...")
         beep(1568, 6)  beep(784, 10)
@@ -1794,6 +1796,58 @@ fn about_body(ax, ay) {
 # WINDOW origin, so the title bar height is subtracted back off - which is
 # exactly the kind of thing that has to be done once, here, rather than by
 # editing sixty coordinates.
+
+# ---- the network card, and the two-frame proof that it works ---------------
+# Item 1's gate: send an ARP request into QEMU's user-mode network, receive the
+# reply, print both MACs. Two frames, and it exercises the whole path - PCI
+# capability walk, feature handshake, both virtqueues, DMA out and DMA in.
+#
+# 10.0.2.15 is the address QEMU's user-mode DHCP hands the guest and 10.0.2.2
+# is its gateway. We do not speak DHCP, so the address is asserted rather than
+# leased - which is fine for an ARP probe and is NOT fine for anything above it.
+NET_ME  = 167772687          # 10.0.2.15
+NET_GW  = 167772674          # 10.0.2.2
+
+fn mac_print(which) {
+    mpi = 0
+    while mpi < 6 {
+        if mpi > 0 { put(":") }
+        if which == 0 { hex(net_mac(mpi), 2) } else { hex(net_peer(mpi), 2) }
+        mpi = mpi + 1
+    }
+    return 0
+}
+
+fn net_gate() {
+    color(C_CYAN)  print("  network (virtio-net)")
+    color(C_GREY)
+    if net_find() < 0 {
+        print("    no virtio-net device on the PCI bus")
+        print("    QEMU needs: -device virtio-net-pci,netdev=n0 -netdev user,id=n0")
+        return 0
+    }
+    put("    DMA arena at  0x")  hex(net_arena(), 8)  print("")
+    if net_ram() == 0 {
+        color(C_RED)  print("    the arena is NOT backed by RAM - needs -m 256 or more")
+        color(C_GREY) return 0
+    }
+    if net_up() == 0 {
+        color(C_RED)  print("    the device refused the feature handshake")
+        color(C_GREY) return 0
+    }
+    put("    link:         ")   print(net_link())
+    put("    our MAC:      ")   mac_print(0)  print("")
+    color(C_GREY)  print("    sending an ARP request for 10.0.2.2 ...")
+    if net_arp(NET_ME, NET_GW, 2000) == 0 {
+        color(C_RED)  put("    no ARP reply. tx ")  put(net_tx())
+        put(" rx ")  put(net_rx())  put(" drops ")  print(net_drop())
+        color(C_GREY) return 0
+    }
+    put("    gateway MAC:  ")   mac_print(1)  print("")
+    color(C_GREEN)  put("    LINK UP. frames out ")  put(net_tx())
+    put(", in ")  print(net_rx())
+    color(C_GREY)  return 0
+}
 
 APP_SHELL   = 0
 APP_MONITOR = 1

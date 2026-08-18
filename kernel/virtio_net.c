@@ -1,0 +1,578 @@
+/* virtio_net.c - the network card. Two virtqueues instead of one.
+ *
+ * WHY VIRTIO AND NOT e1000. virtio_gpu.c is 495 lines and already drives a
+ * virtqueue - descriptor table, available ring, used ring, the capability
+ * walk, the feature handshake. A network card is the same shape with two
+ * queues instead of one and a different payload. e1000 would be a second
+ * device model learned from scratch for no gain.
+ *
+ * NOT SHARED WITH virtio_gpu.c, deliberately. Factoring the common virtqueue
+ * out into a virtio.c would be the tidy move and it would touch a file three
+ * other sessions are building against right now. The duplication here is the
+ * capability walk and ~60 lines of ring setup, and it is the cheaper of the
+ * two mistakes this week. If the tracks converge, that is the refactor.
+ *
+ * WHAT IS DIFFERENT FROM THE GPU, and each one is a place to get it wrong:
+ *
+ *   TWO QUEUES, so every piece of ring state is per-queue. virtio_gpu.c keeps
+ *   avail_idx and used_seen as file statics because it has exactly one queue;
+ *   copying that shape here would have receive and transmit sharing an index.
+ *
+ *   THE RECEIVE QUEUE IS FILLED IN ADVANCE. A GPU command is a request the
+ *   device answers; a packet arrives whether or not anyone asked. So all 32
+ *   receive buffers are published at init, and every one consumed is
+ *   immediately republished - a receive queue that runs dry stops receiving
+ *   and nothing says so.
+ *
+ *   THE HEADER IS ALWAYS 12 BYTES. virtio_net_hdr_v1 ends with num_buffers,
+ *   and under VIRTIO_F_VERSION_1 that field is present whether or not
+ *   VIRTIO_NET_F_MRG_RXBUF was negotiated. The legacy header is 10 bytes and
+ *   assuming it shifts every frame by two - which presents as "the card
+ *   receives garbage", not as a header bug.
+ *
+ * THE ARENA. §4 item 1: do not guess an address, compute it from the map and
+ * assert it. The map at the top of fb.c runs 128 MiB to 255 MiB and is FULL -
+ * bg 128, sp 160, sched 176, back 192, nvme 208, xhci 224, virtio-gpu 240,
+ * and virtio-gpu's framebuffer runs to 255. 256 MiB is a hard ceiling, not a
+ * soft one: zlOS requires -m 256, and virtio_gpu.c already records that a
+ * buffer at exactly 256 MiB is unreachable by the device.
+ *
+ * The unused tails of nvme's and xhci's regions are tempting and wrong. They
+ * are only unused today, they are inside a neighbour's declared span, and
+ * fb.c's assert chain does not cover either of them - so a later growth there
+ * would collide silently. That is the shape this project has hit FIVE times.
+ *
+ * So: BELOW the map. 32 MiB up holds the RAM filesystem, which ends at
+ * 0x02025000; 128 MiB is the first thing the map claims. 64 MiB is in the
+ * middle of an 80 MiB hole that nothing else touches, comfortably inside a
+ * -m 256 guest, and the asserts below fail the build if either neighbour ever
+ * grows into it.
+ */
+
+typedef unsigned long long u64;
+typedef unsigned int       u32;
+typedef unsigned short     u16;
+typedef unsigned char      u8;
+
+#if defined(ZL_64)
+typedef unsigned long long uptr;
+#else
+typedef unsigned int       uptr;
+#endif
+
+int  pci_count(void);
+int  pci_vendor(int i);
+int  pci_device(int i);
+void pci_scan(void);
+void pci_enable(int i);
+u32  pci_bar(int i, int which);
+u32  pci_bar_hi(int i, int which);
+u32  pci_read32(int bus, int dev, int fn, int off);
+int  pci_bus_of(int i);
+int  pci_dev_of(int i);
+int  pci_fn_of(int i);
+u32  idt_ticks(void);
+
+/* MMIO. volatile because these are registers - the compiler must not cache a
+ * value the hardware changes underneath it, nor reorder the accesses. The
+ * addresses are uptr and the DMA addresses below are u32: a BAR can live above
+ * 4 GiB under UEFI, everything the DEVICE reads from us cannot. */
+static u32  mmio_r(uptr a)          { return *(volatile u32 *)a; }
+static void mmio_w(uptr a, u32 v)   { *(volatile u32 *)a = v; }
+static u16  mmio_r16(uptr a)        { return *(volatile u16 *)a; }
+static void mmio_w16(uptr a, u16 v) { *(volatile u16 *)a = v; }
+static u8   mmio_r8(uptr a)         { return *(volatile u8 *)a; }
+static void mmio_w8(uptr a, u8 v)   { *(volatile u8 *)a = v; }
+
+/* ---- the arena ------------------------------------------------------------
+ * Computed from the map, not guessed, and asserted against both neighbours.
+ */
+#define NET_BASE   0x04000000u      /* 64 MiB                                */
+#define NET_SIZE   0x00100000u      /* 1 MiB reserved; 192 KiB used          */
+
+/* the neighbours, restated so the assertions below have something to compare
+ * against. Both are read out of the file that owns them - kernel.zl for the
+ * RAM filesystem's top, fb.c for the bottom of the high-RAM map. */
+#define NET_FLOOR  0x03000000u      /* kernel.zl: FS_DATA + 10*8192 = 0x02025000 */
+#define NET_CEIL   0x08000000u      /* fb.c: HI_BG, the first claimed address    */
+
+#define QSZ        32               /* descriptors per queue                 */
+#define BUF_SZ     2048             /* one frame plus the 12-byte header     */
+#define HDR_LEN    12               /* virtio_net_hdr_v1. NOT 10 - see above */
+#define FRAME_MAX  (BUF_SZ - HDR_LEN)
+
+#define RX_DESC    (NET_BASE + 0x00000u)
+#define RX_AVAIL   (NET_BASE + 0x01000u)
+#define RX_USED    (NET_BASE + 0x02000u)
+#define TX_DESC    (NET_BASE + 0x03000u)
+#define TX_AVAIL   (NET_BASE + 0x04000u)
+#define TX_USED    (NET_BASE + 0x05000u)
+#define RX_BUFS    (NET_BASE + 0x10000u)
+#define TX_BUFS    (NET_BASE + 0x20000u)
+#define NET_TOP    (TX_BUFS + (u32)QSZ * BUF_SZ)
+
+#define RX_BUF(i)  (RX_BUFS + (u32)(i) * BUF_SZ)
+#define TX_BUF(i)  (TX_BUFS + (u32)(i) * BUF_SZ)
+
+/* These cost nothing at run time and fail the build the moment the map stops
+ * making sense - which is the whole argument fb.c makes for its own chain, and
+ * the reason nvme.c's absence of one is a gap rather than a style. */
+_Static_assert(NET_BASE >= NET_FLOOR,
+               "virtio-net arena is below the RAM filesystem's top");
+_Static_assert(NET_TOP <= NET_BASE + NET_SIZE,
+               "virtio-net buffers overrun the arena they were sized for");
+_Static_assert(NET_BASE + NET_SIZE <= NET_CEIL,
+               "virtio-net arena reaches into fb.c's high-RAM map");
+_Static_assert(RX_BUFS + (u32)QSZ * BUF_SZ <= TX_BUFS,
+               "the receive buffers reach into the transmit buffers");
+
+/* ---- virtio PCI capability types --------------------------------------- */
+#define VIRTIO_PCI_CAP_COMMON_CFG  1
+#define VIRTIO_PCI_CAP_NOTIFY_CFG  2
+#define VIRTIO_PCI_CAP_ISR_CFG     3
+#define VIRTIO_PCI_CAP_DEVICE_CFG  4
+
+#define CC_DEVICE_FEATURE_SEL  0x00
+#define CC_DEVICE_FEATURE      0x04
+#define CC_DRIVER_FEATURE_SEL  0x08
+#define CC_DRIVER_FEATURE      0x0C
+#define CC_NUM_QUEUES          0x12
+#define CC_DEVICE_STATUS       0x14
+#define CC_QUEUE_SELECT        0x16
+#define CC_QUEUE_SIZE          0x18
+#define CC_QUEUE_ENABLE        0x1C
+#define CC_QUEUE_NOTIFY_OFF    0x1E
+#define CC_QUEUE_DESC          0x20
+#define CC_QUEUE_DRIVER        0x28
+#define CC_QUEUE_DEVICE        0x30
+
+#define STATUS_ACKNOWLEDGE 1
+#define STATUS_DRIVER      2
+#define STATUS_DRIVER_OK   4
+#define STATUS_FEATURES_OK 8
+#define STATUS_FAILED      128
+
+#define DESC_NEXT  1
+#define DESC_WRITE 2
+
+#define VQ_RX 0
+#define VQ_TX 1
+
+/* virtio-net feature bits, low word */
+#define VNET_F_MAC     (1u << 5)
+#define VNET_F_STATUS  (1u << 16)
+
+static int  vn_idx = -1;
+static uptr cfg_common = 0, cfg_notify = 0, cfg_device = 0, cfg_isr = 0;
+static u32  notify_mul = 0;
+static u32  notify_off[2];          /* PER QUEUE. Not one, as the GPU has.   */
+static int  vn_present_flag = 0;    /* found on PCI                          */
+static int  vn_ready = 0;           /* queues live, DRIVER_OK set            */
+static u8   vn_mac[6];
+static int  vn_have_mac = 0;
+static u32  vn_features = 0;
+
+/* per-queue ring state. Two of everything, which is the whole difference from
+ * the GPU driver and the easiest thing to get wrong by copying it. */
+static u16  avail_idx[2];
+static u16  used_seen[2];
+static u16  tx_next;                /* round-robin over the transmit buffers */
+
+static u32  n_tx, n_rx, n_rx_drop;
+
+/* ---- helpers -------------------------------------------------------------- */
+static void zero_mem(u32 addr, u32 bytes)
+{
+    volatile u32 *p = (volatile u32 *)(uptr)addr;
+    for (u32 i = 0; i < bytes / 4; i++) p[i] = 0;
+}
+
+static u32 q_desc(int q)  { return q == VQ_RX ? RX_DESC  : TX_DESC;  }
+static u32 q_avail(int q) { return q == VQ_RX ? RX_AVAIL : TX_AVAIL; }
+static u32 q_used(int q)  { return q == VQ_RX ? RX_USED  : TX_USED;  }
+
+static void desc_set(int q, int i, u32 addr, u32 len, u16 flags, u16 next)
+{
+    volatile u32 *d = (volatile u32 *)(uptr)(q_desc(q) + (u32)i * 16);
+    d[0] = addr;
+    d[1] = 0;                        /* the high half, always written        */
+    d[2] = len;
+    d[3] = (u32)flags | ((u32)next << 16);
+}
+
+/* Publish descriptor `head` on queue q and ring its doorbell.
+ *
+ * The ring entry goes in FIRST and idx second, with a barrier between, because
+ * the device may look the instant idx changes. Then the notify. This is
+ * virtio_gpu.c's order and it is the one ordering rule in the whole protocol
+ * that cannot be recovered from. */
+static void vq_publish(int q, u16 head, int notify)
+{
+    volatile u16 *avail = (volatile u16 *)(uptr)q_avail(q);
+    avail[2 + (avail_idx[q] % QSZ)] = head;
+    __asm__ volatile("" ::: "memory");
+    avail_idx[q]++;
+    avail[1] = avail_idx[q];
+    __asm__ volatile("" ::: "memory");
+    if (notify) mmio_w16(cfg_notify + (uptr)notify_off[q] * notify_mul, (u16)q);
+}
+
+/* ---- finding the device ---------------------------------------------------
+ * virtio 1.0 does not fix its registers at an offset: each block is described
+ * by a vendor-specific PCI capability holding {bar, offset, length}. */
+static int find_caps(int i)
+{
+    int bus = pci_bus_of(i), dev = pci_dev_of(i), fn = pci_fn_of(i);
+
+    u32 sr = pci_read32(bus, dev, fn, 0x04);
+    if (!((sr >> 16) & (1u << 4))) return 0;        /* no capability list */
+
+    u32 ptr = pci_read32(bus, dev, fn, 0x34) & 0xFC;
+    for (int guard = 0; guard < 48 && ptr >= 0x40; guard++) {
+        u32 hdr  = pci_read32(bus, dev, fn, (int)ptr);
+        u8  id   = (u8)(hdr & 0xFF);
+        u8  next = (u8)((hdr >> 8) & 0xFF);
+
+        if (id == 0x09) {                           /* vendor specific */
+            u8  type = (u8)((hdr >> 24) & 0xFF);
+            u8  bar  = (u8)(pci_read32(bus, dev, fn, (int)ptr + 4) & 0xFF);
+            u32 off  = pci_read32(bus, dev, fn, (int)ptr + 8);
+
+            u32 lo = pci_bar(i, bar);
+            u32 hi = pci_bar_hi(i, bar);
+            /* A 32-bit build cannot reach a BAR above 4 GiB and must SAY SO
+             * rather than silently using a truncated address - xhci.c learned
+             * this the expensive way: the reads looked perfect and every write
+             * went into low RAM. */
+            if (hi && sizeof(uptr) < 8) return 0;
+            /* `<< 16 << 16`, not `<< 32`. On the 32-bit build uptr is 32 bits
+             * wide and a shift by 32 is UNDEFINED - the guard above means it
+             * never executes, but the compiler still compiles it and warns,
+             * and buildefi.sh makes exactly this class -Werror because clang
+             * once turned such a shift into a bare `ret` in the boot path.
+             * Two 16-bit shifts are defined on both widths and identical on
+             * the one where the value is non-zero. */
+            uptr base = ((uptr)hi << 16 << 16) | (uptr)lo;
+            if (!base) { ptr = next; continue; }
+
+            if      (type == VIRTIO_PCI_CAP_COMMON_CFG) cfg_common = base + off;
+            else if (type == VIRTIO_PCI_CAP_DEVICE_CFG) cfg_device = base + off;
+            else if (type == VIRTIO_PCI_CAP_ISR_CFG)    cfg_isr    = base + off;
+            else if (type == VIRTIO_PCI_CAP_NOTIFY_CFG) {
+                cfg_notify = base + off;
+                notify_mul = pci_read32(bus, dev, fn, (int)ptr + 16);
+            }
+        }
+        if (!next) break;
+        ptr = next;
+    }
+    return cfg_common != 0 && cfg_notify != 0;
+}
+
+int virtio_net_find(void)
+{
+    pci_scan();
+    for (int i = 0; i < pci_count(); i++) {
+        if (pci_vendor(i) != 0x1AF4) continue;      /* Red Hat / virtio */
+        u32 d = (u32)pci_device(i);
+        /* 0x1041 is the modern virtio-net ID; 0x1000 the transitional one */
+        if (d != 0x1041 && d != 0x1000) continue;
+        pci_enable(i);
+        if (!find_caps(i)) continue;
+        vn_idx = i;
+        vn_present_flag = 1;
+        return i;
+    }
+    return -1;
+}
+
+int virtio_net_present(void) { return vn_present_flag && cfg_common != 0; }
+
+/* Prove the arena is backed by RAM before handing its address to a device that
+ * will DMA into it. Absent memory reads back wrong - or WRAPS to a lower
+ * address, which is why it is two different patterns at two addresses and not
+ * one at one - and the resulting failure looks exactly like a protocol bug.
+ * xhci.c and virtio_gpu.c both ship this; nvme.c does not, and that is a gap
+ * rather than a precedent. */
+int virtio_net_ram_ok(void)
+{
+    volatile u32 *lo = (volatile u32 *)(uptr)NET_BASE;
+    volatile u32 *hi = (volatile u32 *)(uptr)(NET_TOP - 4);
+    *lo = 0xA5A5F00Du;
+    *hi = 0x5A5A0FF0u;
+    if (*lo != 0xA5A5F00Du) return 0;
+    if (*hi != 0x5A5A0FF0u) return 0;
+    *lo = 0; *hi = 0;
+    return 1;
+}
+
+/* ---- queue setup ---------------------------------------------------------- */
+static int setup_queue(int q)
+{
+    mmio_w16(cfg_common + CC_QUEUE_SELECT, (u16)q);
+    u16 size = mmio_r16(cfg_common + CC_QUEUE_SIZE);
+    if (size == 0) return 0;                        /* queue does not exist */
+    if (size > QSZ) mmio_w16(cfg_common + CC_QUEUE_SIZE, QSZ);
+
+    /* PER QUEUE, and read AFTER the select. One shared notify offset is the
+     * bug this line exists to not have. */
+    notify_off[q] = (u32)mmio_r16(cfg_common + CC_QUEUE_NOTIFY_OFF);
+
+    zero_mem(q_desc(q), 4096);
+    zero_mem(q_avail(q), 4096);
+    zero_mem(q_used(q), 4096);
+
+    mmio_w(cfg_common + CC_QUEUE_DESC + 0, q_desc(q));
+    mmio_w(cfg_common + CC_QUEUE_DESC + 4, 0);
+    mmio_w(cfg_common + CC_QUEUE_DRIVER + 0, q_avail(q));
+    mmio_w(cfg_common + CC_QUEUE_DRIVER + 4, 0);
+    mmio_w(cfg_common + CC_QUEUE_DEVICE + 0, q_used(q));
+    mmio_w(cfg_common + CC_QUEUE_DEVICE + 4, 0);
+    mmio_w16(cfg_common + CC_QUEUE_ENABLE, 1);
+
+    avail_idx[q] = 0;
+    used_seen[q] = 0;
+    return 1;
+}
+
+/* Publish every receive buffer. A packet arrives whether or not anyone asked
+ * for it, so the device needs somewhere to put it before it needs it - and a
+ * receive queue that runs dry silently stops receiving. */
+static void rx_fill(void)
+{
+    for (int i = 0; i < QSZ; i++) {
+        zero_mem(RX_BUF(i), 64);          /* the header, so a short frame
+                                             cannot show the last one's */
+        desc_set(VQ_RX, i, RX_BUF(i), BUF_SZ, DESC_WRITE, 0);
+        vq_publish(VQ_RX, (u16)i, 0);     /* one notify at the end, not 32 */
+    }
+    mmio_w16(cfg_notify + (uptr)notify_off[VQ_RX] * notify_mul, (u16)VQ_RX);
+}
+
+int virtio_net_init(void)
+{
+    if (vn_ready) return 1;
+    if (!virtio_net_present() && virtio_net_find() < 0) return 0;
+    if (!virtio_net_ram_ok()) return 0;
+
+    /* the reset-and-negotiate handshake the spec requires, in order */
+    mmio_w8(cfg_common + CC_DEVICE_STATUS, 0);
+    /* Bounded, unlike virtio_gpu.c's bare while: a device that never clears
+     * its status register is a hang with no diagnostic, and this driver runs
+     * before the PIT on some paths so the spin count has to be the backstop. */
+    for (long spin = 0; spin < 10000000L; spin++)
+        if (mmio_r8(cfg_common + CC_DEVICE_STATUS) == 0) break;
+    if (mmio_r8(cfg_common + CC_DEVICE_STATUS) != 0) return 0;
+
+    mmio_w8(cfg_common + CC_DEVICE_STATUS, STATUS_ACKNOWLEDGE);
+    mmio_w8(cfg_common + CC_DEVICE_STATUS, STATUS_ACKNOWLEDGE | STATUS_DRIVER);
+
+    /* Negotiate NOTHING we do not handle. We want the MAC the host assigned
+     * (bit 5) and VIRTIO_F_VERSION_1 (bit 32, which is not optional - without
+     * it the device stays in legacy mode and every layout here is wrong).
+     *
+     * MRG_RXBUF is deliberately NOT taken: it lets the device split one frame
+     * across several buffers, and handling that needs a reassembly path this
+     * driver does not have. Refusing it is what makes "one descriptor is one
+     * frame" true. */
+    mmio_w(cfg_common + CC_DEVICE_FEATURE_SEL, 0);
+    u32 feat_lo = mmio_r(cfg_common + CC_DEVICE_FEATURE);
+    mmio_w(cfg_common + CC_DEVICE_FEATURE_SEL, 1);
+    u32 feat_hi = mmio_r(cfg_common + CC_DEVICE_FEATURE);
+
+    u32 want_lo = feat_lo & (VNET_F_MAC | VNET_F_STATUS);
+    vn_features = want_lo;
+
+    mmio_w(cfg_common + CC_DRIVER_FEATURE_SEL, 0);
+    mmio_w(cfg_common + CC_DRIVER_FEATURE, want_lo);
+    mmio_w(cfg_common + CC_DRIVER_FEATURE_SEL, 1);
+    mmio_w(cfg_common + CC_DRIVER_FEATURE, feat_hi & 1u);   /* VERSION_1 */
+
+    mmio_w8(cfg_common + CC_DEVICE_STATUS,
+            STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_FEATURES_OK);
+    if (!(mmio_r8(cfg_common + CC_DEVICE_STATUS) & STATUS_FEATURES_OK)) {
+        mmio_w8(cfg_common + CC_DEVICE_STATUS, STATUS_FAILED);
+        return 0;                                   /* it refused our terms */
+    }
+
+    /* the MAC, from device config space, byte at a time - it is six bytes and
+     * a 32-bit read of the last two would run off the end of the structure */
+    if (cfg_device && (want_lo & VNET_F_MAC)) {
+        for (int i = 0; i < 6; i++) vn_mac[i] = mmio_r8(cfg_device + i);
+        vn_have_mac = 1;
+    }
+
+    if (!setup_queue(VQ_RX)) return 0;
+    if (!setup_queue(VQ_TX)) return 0;
+
+    /* DRIVER_OK BEFORE filling the receive queue. The device is not allowed to
+     * touch a queue until the status bit is set, so publishing buffers first
+     * and notifying first would be a notification it may legitimately ignore -
+     * leaving 32 buffers posted that it never looks at. */
+    mmio_w8(cfg_common + CC_DEVICE_STATUS,
+            STATUS_ACKNOWLEDGE | STATUS_DRIVER | STATUS_FEATURES_OK | STATUS_DRIVER_OK);
+
+    tx_next = 0;
+    n_tx = n_rx = n_rx_drop = 0;
+    rx_fill();
+
+    vn_ready = 1;
+    return 1;
+}
+
+/* ---- transmit --------------------------------------------------------------
+ * One descriptor, not a chain: the 12-byte header and the frame are written
+ * into one contiguous buffer. A chain would be the general shape and it would
+ * also be a second descriptor to get wrong for no benefit at this size.
+ */
+int virtio_net_send(const u8 *frame, int len)
+{
+    if (!vn_ready || !frame) return 0;
+    if (len <= 0 || len > FRAME_MAX) return 0;
+
+    int i = tx_next % QSZ;
+    volatile u8 *b = (volatile u8 *)(uptr)TX_BUF(i);
+
+    for (int k = 0; k < HDR_LEN; k++) b[k] = 0;     /* no checksum offload,
+                                                       no GSO, num_buffers 0 */
+    for (int k = 0; k < len; k++) b[HDR_LEN + k] = frame[k];
+
+    /* An Ethernet frame is 60 bytes minimum before the FCS. QEMU's user-mode
+     * stack is forgiving; a real switch is not, and a runt ARP request is a
+     * frame that gets silently dropped by the first hop. */
+    int pad = len;
+    while (pad < 60) { b[HDR_LEN + pad] = 0; pad++; }
+
+    desc_set(VQ_TX, i, TX_BUF(i), (u32)(HDR_LEN + pad), 0, 0);
+    vq_publish(VQ_TX, (u16)i, 1);
+    tx_next++;
+    n_tx++;
+    return 1;
+}
+
+/* ---- receive ---------------------------------------------------------------
+ * Returns the frame length, or 0 if nothing has arrived. Non-blocking by
+ * design: the caller is a frame loop, not a thread, and this kernel's whole
+ * app contract is that nothing owns the loop.
+ */
+int virtio_net_poll(u8 *out, int max)
+{
+    if (!vn_ready || !out || max <= 0) return 0;
+
+    volatile u16 *used = (volatile u16 *)(uptr)RX_USED;
+    if (used[1] == used_seen[VQ_RX]) return 0;      /* nothing new */
+
+    /* used ring entry: { u32 id; u32 len; } at offset 4, indexed mod QSZ */
+    volatile u32 *ring = (volatile u32 *)(uptr)(RX_USED + 4);
+    u32 slot = (u32)(used_seen[VQ_RX] % QSZ);
+    u32 id   = ring[slot * 2 + 0];
+    u32 blen = ring[slot * 2 + 1];
+    used_seen[VQ_RX]++;
+
+    int n = 0;
+    if (id < (u32)QSZ && blen > (u32)HDR_LEN) {
+        n = (int)(blen - (u32)HDR_LEN);
+        if (n > FRAME_MAX) n = FRAME_MAX;           /* the device said more
+                                                       than the buffer holds */
+        if (n > max) { n = max; n_rx_drop++; }      /* caller's buffer is
+                                                       smaller: truncate and
+                                                       COUNT it */
+        volatile u8 *b = (volatile u8 *)(uptr)(RX_BUF(id) + HDR_LEN);
+        for (int k = 0; k < n; k++) out[k] = b[k];
+        n_rx++;
+    } else {
+        n_rx_drop++;
+    }
+
+    /* Republish the buffer IMMEDIATELY. Forgetting this is the failure that
+     * looks like "the card received exactly 32 packets and then died". */
+    if (id < (u32)QSZ) {
+        desc_set(VQ_RX, (int)id, RX_BUF(id), BUF_SZ, DESC_WRITE, 0);
+        vq_publish(VQ_RX, (u16)id, 1);
+    }
+    return n;
+}
+
+/* ---- accessors ------------------------------------------------------------- */
+int virtio_net_ready(void)    { return vn_ready; }
+int virtio_net_has_mac(void)  { return vn_have_mac; }
+int virtio_net_mac(int i)     { return (i >= 0 && i < 6) ? (int)vn_mac[i] : 0; }
+int virtio_net_tx_count(void) { return (int)n_tx; }
+int virtio_net_rx_count(void) { return (int)n_rx; }
+int virtio_net_rx_drops(void) { return (int)n_rx_drop; }
+u32 virtio_net_features(void) { return vn_features; }
+u32 virtio_net_arena(void)    { return NET_BASE; }
+
+/* Link status, when the device offers it. Bit 0 of the status word at offset 6
+ * of device config. Without VNET_F_STATUS the link is assumed up, which is
+ * what the spec says and is true of QEMU's user-mode network. */
+int virtio_net_link_up(void)
+{
+    if (!vn_ready) return 0;
+    if (!(vn_features & VNET_F_STATUS)) return 1;
+    return (mmio_r16(cfg_device + 6) & 1) ? 1 : 0;
+}
+
+/* ---- the link-up gate -------------------------------------------------------
+ * §4 item 1's gate: send an ARP request, receive the reply, print both MACs.
+ * Two frames, and it proves the whole path end to end - PCI discovery, the
+ * feature handshake, both queues, DMA in and DMA out.
+ *
+ * THE ARP HERE IS THE TEST, NOT THE PROTOCOL LAYER. It builds one hand-written
+ * request and matches one reply. net.c owns ARP proper - a cache, retries, the
+ * request/reply state - and when it exists this stays as what it is: the
+ * two-frame proof that the card works, which is worth keeping precisely
+ * because it does not depend on any layer above it.
+ */
+static u8  peer_mac[6];
+static int peer_known;
+
+int virtio_net_arp_probe(u32 my_ip, u32 target_ip, int ms)
+{
+    if (!vn_ready) return 0;
+
+    u8 f[42];
+    for (int i = 0; i < 6; i++) f[i] = 0xFF;             /* broadcast       */
+    for (int i = 0; i < 6; i++) f[6 + i] = vn_mac[i];    /* our MAC         */
+    f[12] = 0x08; f[13] = 0x06;                          /* ethertype ARP   */
+    f[14] = 0x00; f[15] = 0x01;                          /* hw: Ethernet    */
+    f[16] = 0x08; f[17] = 0x00;                          /* proto: IPv4     */
+    f[18] = 6;    f[19] = 4;                             /* lengths         */
+    f[20] = 0x00; f[21] = 0x01;                          /* opcode: request */
+    for (int i = 0; i < 6; i++) f[22 + i] = vn_mac[i];   /* sender MAC      */
+    f[28] = (u8)(my_ip >> 24); f[29] = (u8)(my_ip >> 16);
+    f[30] = (u8)(my_ip >> 8);  f[31] = (u8)my_ip;
+    for (int i = 0; i < 6; i++) f[32 + i] = 0;           /* target MAC: ?   */
+    f[38] = (u8)(target_ip >> 24); f[39] = (u8)(target_ip >> 16);
+    f[40] = (u8)(target_ip >> 8);  f[41] = (u8)target_ip;
+
+    if (!virtio_net_send(f, 42)) return 0;
+
+    /* Bounded two ways, whichever trips first: real milliseconds where the PIT
+     * is running, a spin count where it is not. A wait that depends on a timer
+     * which is not ticking is also a hang - xhci.c's wait_bit makes the same
+     * argument and this is the same discipline. */
+    u8  rx[FRAME_MAX];
+    u32 t0    = idt_ticks();
+    u32 ticks = (u32)(ms / 10) + 1;
+    long spins = (long)ms * 50000;
+
+    while (spins-- > 0) {
+        int n = virtio_net_poll(rx, (int)sizeof rx);
+        if (n >= 42 && rx[12] == 0x08 && rx[13] == 0x06 &&
+            rx[20] == 0x00 && rx[21] == 0x02) {          /* ARP reply */
+            u32 from = ((u32)rx[28] << 24) | ((u32)rx[29] << 16) |
+                       ((u32)rx[30] << 8)  | (u32)rx[31];
+            if (from == target_ip) {
+                for (int i = 0; i < 6; i++) peer_mac[i] = rx[22 + i];
+                peer_known = 1;
+                return 1;
+            }
+        }
+        if (idt_ticks() - t0 >= ticks) break;
+    }
+    return 0;
+}
+
+int virtio_net_peer_known(void) { return peer_known; }
+int virtio_net_peer_mac(int i)  { return (i >= 0 && i < 6) ? (int)peer_mac[i] : 0; }
