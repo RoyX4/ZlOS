@@ -54,3 +54,4 @@ kernel/hosttest/exectest
 kernel/hosttest/exectest-nofs
 kernel/hosttest/jmptest
 kernel/hosttest/jmptest32
+kernel/hosttest/libctest

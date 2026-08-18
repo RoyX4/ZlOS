@@ -68,6 +68,17 @@ gcc -O2 -w -o jmptest   jmptest.c ../ksetjmp.S
 gcc -m32 -O2 -w -o jmptest32 jmptest.c ../ksetjmp.S
 echo "built ./jmptest       (run: ./jmptest && ./jmptest32)"
 
+# The kernel's libc replacements, against the real libc. Fourteen functions,
+# each a dozen lines, each with a well-known way to be SUBTLY wrong - signed
+# chars in strcmp, strncpy forgetting to pad, memmove copying forwards through
+# an overlap. None of those crash; they return a plausible wrong answer inside
+# an interpreter running somebody's script. So they are checked against glibc's
+# own on tens of thousands of generated inputs rather than against what I
+# thought to test. Links the REAL arena.c, so the allocator is exercised for
+# real rather than stubbed.
+gcc -O2 -w -o libctest libctest.c ../interp_kernel.c ../arena.c -lm
+echo "built ./libctest      (run: ./libctest)"
+
 gcc -O2 -w -o arenatest arenatest.c ../arena.c
 echo "built ./arenatest     (run: ./arenatest)"
 
