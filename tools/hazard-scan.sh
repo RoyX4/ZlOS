@@ -15,11 +15,14 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
+COUNT_ONLY=0
+[ "${1:-}" = "--count" ] && COUNT_ONLY=1
+
 fail=0
 hit()  { echo "  HAZARD: $*"; fail=1; }
-ok()   { echo "  ok      $*"; }
-skip() { echo "  skip    $*"; }
-warn() { echo "  WARN:   $*"; }
+ok()   { [ "$COUNT_ONLY" -eq 1 ] || echo "  ok      $*"; }
+skip() { [ "$COUNT_ONLY" -eq 1 ] || echo "  skip    $*"; }
+warn() { [ "$COUNT_ONLY" -eq 1 ] || echo "  WARN:   $*"; }
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
@@ -30,7 +33,7 @@ efi_cflags() {
         | sed 's/^CF="//; s/"$//' | tr -d '\\' | tr '\n' ' '
 }
 
-echo "== 1. the EFI warning guard must actually FIRE, not merely be configured =="
+[ "$COUNT_ONLY" -eq 1 ] || echo "== 1. the EFI warning guard must actually FIRE, not merely be configured =="
 # buildefi.sh targets x86_64-unknown-windows, which is LLP64: unsigned long is 4
 # bytes there, 8 everywhere else. Five pointer truncations once sat in the boot
 # path because -w silenced the warnings that name this class.
@@ -69,7 +72,7 @@ else
     skip "clang not installed"
 fi
 
-echo "== 2. count real truncation sites in the EFI translation units =="
+[ "$COUNT_ONLY" -eq 1 ] || echo "== 2. count real truncation sites in the EFI translation units =="
 # Uses the compiler as the oracle, not a regex - no false positives from integer
 # arithmetic that merely mentions 'unsigned long'.
 if command -v clang >/dev/null 2>&1; then
@@ -89,9 +92,13 @@ if command -v clang >/dev/null 2>&1; then
         [ -f "$f" ] || continue
         EXTRA=(); case "$(basename "$f")" in idt.c|apic.c) EXTRA=(-mgeneral-regs-only);; esac
         n=$(clang "${CFA[@]}" "${EXTRA[@]}" -c "$f" -o "$tmp/o.o" 2>&1 | grep -c 'error:')
-        if [ "$n" -gt 0 ]; then printf "     %-36s %s\n" "$f" "$n"; total=$((total+n)); bad=$((bad+1)); fi
+        if [ "$n" -gt 0 ]; then
+            [ "$COUNT_ONLY" -eq 1 ] || printf "     %-36s %s\n" "$f" "$n"
+            total=$((total+n)); bad=$((bad+1))
+        fi
     done
     popd >/dev/null
+    if [ "$COUNT_ONLY" -eq 1 ]; then echo "$total"; exit 0; fi
     base=$(grep -E '^efi_truncation_sites=' tools/hazard-baseline.txt 2>/dev/null | cut -d= -f2)
     base=${base:-0}
     if [ "$total" -gt "$base" ]; then

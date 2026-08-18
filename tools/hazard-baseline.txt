@@ -1,6 +1,10 @@
-# Known-outstanding hazard counts. hazard-scan.sh fails when a count goes ABOVE
-# its baseline, so a pre-existing defect does not paint every PR red, but a new
-# one cannot slip in.
+# Known-outstanding hazard counts, for local runs.
+#
+# ADVISORY, not the CI gate. This number is clang-version dependent: the same
+# tree measures 34 on Kali's clang 21 and 37 on the Ubuntu runner. CI therefore
+# compares the base commit against HEAD inside one container
+# (.github/workflows/gates.yml) and fails only when a change ADDS sites, which
+# takes the compiler out of the question entirely.
 #
 # Lower these as they are fixed. Never raise one to make a build pass.
 

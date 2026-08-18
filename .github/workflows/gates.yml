@@ -51,10 +51,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # build.sh builds the whole toolchain, not just zlfmt, so it needs the
+      # same packages as the lang job - a short list here left zlfmt unbuilt
+      # and verify_fmt.sh exited 2.
       - name: install toolchain
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq gcc clang
+          sudo apt-get install -y -qq gcc clang nasm llvm
       - run: ./build.sh
       - run: ./verify_fmt.sh
 
@@ -63,5 +66,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: install toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc clang nasm llvm
+
+      # check 5 cross-checks interp against the C backend, so it needs them built
+      - run: ./build.sh
+
       - name: hazard scan
         run: tools/hazard-scan.sh
+
+      # The truncation count is clang-version dependent - the runner and Roy's
+      # Kali box disagree (37 vs 34) purely on compiler version, so a fixed
+      # baseline number cannot be the gate. Comparing base against HEAD inside
+      # ONE container removes the compiler from the question entirely, and asks
+      # the only thing that matters: did this change add any?
+      - name: did this change add truncation sites?
+        if: github.event_name == 'pull_request'
+        run: |
+          head_n=$(tools/hazard-scan.sh --count)
+          git worktree add -q /tmp/base "${{ github.event.pull_request.base.sha }}"
+          if [ -x /tmp/base/tools/hazard-scan.sh ]; then
+            base_n=$(cd /tmp/base && tools/hazard-scan.sh --count)
+          else
+            base_n="$head_n"   # gate did not exist on base; nothing to compare
+          fi
+          echo "base=$base_n head=$head_n (same container, same clang)"
+          if [ "$head_n" -gt "$base_n" ]; then
+            echo "::error::this PR adds $((head_n - base_n)) pointer-truncation site(s) to the EFI build"
+            exit 1
+          fi
+          [ "$head_n" -lt "$base_n" ] && echo "::notice::this PR removes $((base_n - head_n)) truncation site(s)"
+          echo "no new truncation sites"
