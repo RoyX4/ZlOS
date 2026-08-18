@@ -25,9 +25,18 @@ CF="-target x86_64-unknown-windows -ffreestanding -fno-stack-protector \
     -Werror=shift-count-overflow -Werror=void-pointer-to-int-cast \
     -Werror=pointer-to-int-cast -Werror=int-to-pointer-cast"
 
+# THE SHARED SOURCE LIST. See ./SOURCES - one file, read by all four build
+# scripts. This build and mkdisk.sh are the two that broke on 2026-08-18 when a
+# .c was added to build.sh alone, and verify.sh cannot see either of them.
+#
+# The four files ahead of the list are this target's own: the UEFI entry point
+# instead of a multiboot header, the generated C under its own name, the
+# runtime, and the 64-bit GDT. Everything after comes from SOURCES.
+CORE=$(grep -vE '^[[:space:]]*(#|$)' SOURCES | tr '\n' ' ')
+
 OBJS=""
-for f in efi.c _genefi.c ../freestanding/runtime_kernel.c support.c vga.c fb.c fb3d.c font8x16.c font_aa.c \
-         font_sub.c icons.c pci.c bga.c intel.c xhci.c console.c divmod.c gdt64.c idt.c apic.c virtio_gpu.c cpu.c nvme.c sched.c smp.c i2c_hid.c input.c wm.c ui.c wmglue.c term.c; do
+# shellcheck disable=SC2086
+for f in efi.c _genefi.c ../freestanding/runtime_kernel.c gdt64.c $CORE; do
     o="_efi_$(basename "$f" .c).o"
     # idt.c and apic.c hold the interrupt handlers, and they must be built
     # -mgeneral-regs-only so a handler can never touch SSE. build.sh and

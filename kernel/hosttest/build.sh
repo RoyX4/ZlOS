@@ -55,8 +55,23 @@ echo "built ./tritest       (run: ./tritest)"
 
 # The comparison number: what the REAL GPU on this same laptop does with a
 # blended full-screen layer. Offscreen pixmap, so it never touches the desktop.
-# Needs libGL - skipped silently if the dev headers are not installed.
-if [ -f /usr/include/GL/glx.h ]; then
+#
+# Guarded on BOTH the headers and the source. It used to check only
+# /usr/include/GL/glx.h, and gpu_fillrate.c has never been committed to any
+# branch - so on a machine with the GL headers installed (this one) every run
+# of this script ended:
+#
+#     cc1: fatal error: gpu_fillrate.c: No such file or directory
+#
+# after the seven harnesses above had built and passed. A fatal error at the
+# END of a successful build reads as noise, which is how it survived. Same
+# class as the four source lists this repo just consolidated: a build script
+# naming a file that is not there.
+if [ -f /usr/include/GL/glx.h ] && [ -f gpu_fillrate.c ]; then
   gcc -O2 -w -o gpu_fillrate gpu_fillrate.c -lGL -lX11
   echo "built ./gpu_fillrate  (run: ./gpu_fillrate)"
+elif [ -f /usr/include/GL/glx.h ]; then
+  echo "skip  ./gpu_fillrate  (gpu_fillrate.c is not in the tree)"
+else
+  echo "skip  ./gpu_fillrate  (no GL headers - apt install libgl1-mesa-dev)"
 fi
