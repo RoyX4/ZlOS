@@ -53,10 +53,20 @@ gcc -O2 -w -o tritest tritest.c ../fb3d.c ../fb.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./tritest       (run: ./tritest)"
 
+# The filesystem, against a RAM disk that can be told to fail a write. fs.c
+# talks to storage through three functions, so replacing them with an array is
+# the whole of the fake hardware - and it buys the sequences that matter: a
+# torn write, a deleted file's blocks being reused under a live neighbour, a
+# superblock with one byte flipped in its tail. Built -Wall -Wextra, unlike the
+# harnesses above, because this one can lose data.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
+    -o fstest fstest.c ../fs.c
+echo "built ./fstest        (run: ./fstest)"
+
 # The comparison number: what the REAL GPU on this same laptop does with a
 # blended full-screen layer. Offscreen pixmap, so it never touches the desktop.
 # Needs libGL - skipped silently if the dev headers are not installed.
-if [ -f /usr/include/GL/glx.h ]; then
+if [ -f /usr/include/GL/glx.h ] && [ -f gpu_fillrate.c ]; then
   gcc -O2 -w -o gpu_fillrate gpu_fillrate.c -lGL -lX11
   echo "built ./gpu_fillrate  (run: ./gpu_fillrate)"
 fi
