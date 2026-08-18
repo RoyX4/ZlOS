@@ -1,0 +1,25 @@
+# 09 - reading and writing files
+# read(path) -> text, write(path, text), lines(text), split(s, sep)
+
+fn save_csv(path, rows) {
+    # rows are lists of values; write one comma-joined line per row
+    return nil()
+}
+
+fn load_csv(path) {
+    # back to a list of rows of TEXT values; ignore a trailing blank line
+    return nil()
+}
+
+fn column_sum(rows, i) {
+    # sum of column i, skipping the header row. num() parses text.
+    return nil()
+}
+
+path = "/tmp/zl_learn_09.csv"
+rows = [["name", "score"], ["ada", "90"], ["alan", "84"]]
+save_csv(path, rows)
+back = load_csv(path)
+assert(back == rows, "csv round trip")
+assert(column_sum(back, 1) == 174, "column_sum")
+print("09 ok")

@@ -1,0 +1,67 @@
+fn make_grid(w, h, v) {
+    g = []
+    y = 0
+    while y < h {
+        row = []
+        x = 0
+        while x < w { row = push(row, v) x += 1 }
+        g = push(g, row)
+        y += 1
+    }
+    return g
+}
+fn transpose(g) {
+    out = []
+    x = 0
+    while x < len(g[0]) {
+        row = []
+        y = 0
+        while y < len(g) { row = push(row, g[y][x]) y += 1 }
+        out = push(out, row)
+        x += 1
+    }
+    return out
+}
+fn neighbors(g, x, y) {
+    n = 0
+    dy = -1
+    while dy <= 1 {
+        dx = -1
+        while dx <= 1 {
+            if not (dx == 0 and dy == 0) {
+                ny = y + dy
+                nx = x + dx
+                if ny >= 0 and ny < len(g) and nx >= 0 and nx < len(g[0]) {
+                    if g[ny][nx] == 1 { n += 1 }
+                }
+            }
+            dx += 1
+        }
+        dy += 1
+    }
+    return n
+}
+fn life_step(g) {
+    out = make_grid(len(g[0]), len(g), 0)
+    y = 0
+    while y < len(g) {
+        x = 0
+        while x < len(g[0]) {
+            n = neighbors(g, x, y)
+            if g[y][x] == 1 and (n == 2 or n == 3) { out[y][x] = 1 }
+            if g[y][x] == 0 and n == 3 { out[y][x] = 1 }
+            x += 1
+        }
+        y += 1
+    }
+    return out
+}
+
+gr = make_grid(3, 2, 0)
+gr[0][1] = 1
+assert(gr == [[0, 1, 0], [0, 0, 0]], "make_grid + write one cell")
+assert(transpose([[1, 2, 3], [4, 5, 6]]) == [[1, 4], [2, 5], [3, 6]], "transpose")
+blinker = [[0, 0, 0], [1, 1, 1], [0, 0, 0]]
+assert(neighbors(blinker, 1, 0) == 3, "neighbors")
+assert(life_step(blinker) == [[0, 1, 0], [0, 1, 0], [0, 1, 0]], "life_step")
+print("07 ok")

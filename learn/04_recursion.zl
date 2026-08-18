@@ -1,0 +1,27 @@
+# 04 - functions calling themselves
+# zl parameters are frame-scoped, so recursion works normally.
+
+fn fact(n) {
+    return nil()
+}
+
+fn fib(n) {
+    # fib(0)=0, fib(1)=1
+    return nil()
+}
+
+fn gcd_r(a, b) {
+    # Euclid, recursively: gcd(a,0) = a
+    return nil()
+}
+
+fn depth(xs) {
+    # nesting depth of a list: depth([1]) = 1, depth([1,[2,[3]]]) = 3
+    return nil()
+}
+
+assert(fact(6) == 720, "fact")
+assert(fib(10) == 55, "fib")
+assert(gcd_r(48, 36) == 12, "gcd_r")
+assert(depth([1, [2, [3]]]) == 3, "depth")
+print("04 ok")

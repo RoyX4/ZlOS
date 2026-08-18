@@ -1,0 +1,36 @@
+import mathx
+import dict
+import sortx
+
+fn primes(n) {
+    out = []
+    i = 2
+    while i <= n {
+        if is_prime(i) { out = push(out, i) }
+        i += 1
+    }
+    return out
+}
+fn tally(words) {
+    d = []
+    for w in words {
+        if dhas(d, w) { d = dset(d, w, dget(d, w) + 1) } else { d = dset(d, w, 1) }
+    }
+    return d
+}
+fn top_word(words) {
+    d = tally(words)
+    best = ""
+    n = 0
+    for k in dkeys(d) {
+        if dget(d, k) > n { n = dget(d, k) best = k }
+    }
+    return best
+}
+
+assert(primes(20) == [2, 3, 5, 7, 11, 13, 17, 19], "primes")
+t = tally(["a", "b", "a"])
+assert(dget(t, "a") == 2 and dget(t, "b") == 1, "tally")
+assert(top_word(["x", "y", "y", "z"]) == "y", "top_word")
+assert(binary_search(sort([5, 1, 9, 3]), 5) == 2, "sortx binary_search")
+print("08 ok")

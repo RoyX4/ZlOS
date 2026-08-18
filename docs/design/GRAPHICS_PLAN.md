@@ -1,5 +1,27 @@
 # Graphics plan — from BMP files to live windows to the GPU
 
+> **2026-08-17 — this is the WINDOWS-HOSTED plan. It is still correct for `zl`
+> the language. It does NOT describe zlOS, which went a different way.**
+>
+> This plan says layers 3–5 are gated on FFI into `user32.dll` / `opengl32.dll`.
+> Eight days after it was written, **zlOS reached layer 3 with no FFI at all** —
+> not by calling into an OS, but by *removing* the OS underneath. On bare metal
+> the framebuffer is just memory and `poke32` reaches it. The `bytes` type was
+> never needed either: the kernel's pixel buffers are C arrays at fixed physical
+> addresses.
+>
+> **The one line that must not be carried into zlOS work:** layer 5 says the GPU
+> is reached via `opengl32.dll`. **On bare metal that DLL does not exist and never
+> will.** GPU acceleration on zlOS would mean writing a Gen9 3D driver, and
+> `kernel/docs/desktop-prior-art.md` establishes that *no* hobby OS has done this
+> — SerenityOS runs Half-Life on a **software** rasterizer, and Essence OS does
+> animated vector UI on the CPU.
+>
+> So on zlOS, layer 5 is not "FFI to OpenGL". It is **"write a software
+> rasterizer"**, and `kernel/fb3d.c` is already its first step.
+>
+> See `kernel/docs/desktop-prior-art.md` and `kernel/docs/desktop-plan.md`.
+
 Drafted 2026-08-03. The layered path for zl graphics, what each layer needs, and what is buildable
 now versus gated on FFI. Complements the existing `design_game_system.md` (973 lines, the games-
 specific FFI+window design) by giving the whole graphics stack a single ordered map.

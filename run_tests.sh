@@ -203,6 +203,21 @@ if command -v qemu-system-i386 >/dev/null; then
             echo "  FAIL  raw-bootloader gate"; echo "$rout" | head -8; fail=1
         fi
     fi
+    # The native-EFI gate earns its minute, unlike the ISO one which is left
+    # out for cost. Both gates above boot the 32-BIT kernel, and so does
+    # verify-iso.sh's "UEFI" case (that one is GRUB's bootx64.efi loading it).
+    # So without this, NOTHING here covers kernel/efi.c, the 64-bit build, or
+    # the path a real laptop takes - and that gap already allowed a latent
+    # boot-killer to sit in the tree while all the other gates stayed green:
+    # struct idt_ptr/gdt_ptr were 6 bytes instead of 10 in the EFI build, so
+    # lidt/lgdt took the top half of each base from adjacent memory.
+    if [ -f /usr/share/OVMF/OVMF_CODE_4M.fd ] && command -v qemu-system-x86_64 >/dev/null; then
+        if eout=$(./kernel/verify-efi.sh 2>&1); then
+            echo "  ok    zlOS boots as its own UEFI application (64-bit)"
+        else
+            echo "  FAIL  native-EFI gate"; echo "$eout" | head -8; fail=1
+        fi
+    fi
 fi
 
 echo "== examples: interpreter runs clean =="

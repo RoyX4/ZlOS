@@ -1,0 +1,22 @@
+fn grade(score) {
+    if score >= 90 { return "A" } else if score >= 80 { return "B" } else if score >= 70 { return "C" }
+    return "F"
+}
+fn fizz(n) {
+    if n % 3 == 0 and n % 5 == 0 { return "FizzBuzz" }
+    if n % 3 == 0 { return "Fizz" }
+    if n % 5 == 0 { return "Buzz" }
+    return str(n)
+}
+fn is_leap(y) {
+    if y % 400 == 0 { return true }
+    if y % 100 == 0 { return false }
+    return y % 4 == 0
+}
+
+assert(grade(95) == "A" and grade(83) == "B", "grade high")
+assert(grade(71) == "C" and grade(12) == "F", "grade low")
+assert(fizz(15) == "FizzBuzz" and fizz(9) == "Fizz", "fizz")
+assert(fizz(10) == "Buzz" and fizz(7) == "7", "buzz")
+assert(is_leap(2024) and not is_leap(1900) and is_leap(2000), "leap")
+print("02 ok")

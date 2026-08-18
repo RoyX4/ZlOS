@@ -1,0 +1,30 @@
+# 06 - strings
+# A string is not indexable with s[i]. Use at(s, i) for the character and
+# code(s)/index_at(s, i) for character codes.
+
+fn is_palindrome(s) {
+    # ignore case and spaces: "Never odd or even" -> true
+    return nil()
+}
+
+fn word_count(s) {
+    # number of whitespace-separated words; handle repeated spaces
+    return nil()
+}
+
+fn caesar(s, k) {
+    # shift lowercase letters by k, wrapping z->a. Leave everything else.
+    return nil()
+}
+
+fn initials(name) {
+    # "ada lovelace king" -> "ALK"
+    return nil()
+}
+
+assert(is_palindrome("Never odd or even"), "palindrome")
+assert(not is_palindrome("hello"), "not palindrome")
+assert(word_count("  a  b c ") == 3, "word_count")
+assert(caesar("abc xyz!", 3) == "def abc!", "caesar")
+assert(initials("ada lovelace king") == "ALK", "initials")
+print("06 ok")

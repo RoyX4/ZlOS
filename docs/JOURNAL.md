@@ -7,6 +7,23 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-19 — docs: the journal entry for the commit that added the journal (b3f5fd2)
+
+`ci/gates-and-agent-brief` · 1 file changed, 2 insertions(+), 2 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 34 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | agree |
+
+<details><summary>1 file(s)</summary>
+
+- `docs/JOURNAL.md`
+
+</details>
+
 ## 2026-08-19 — ci: write down what happens, keep the docs true, regenerate the TODO (cb17faf)
 
 `ci/gates-and-agent-brief` · 9 files changed, 719 insertions(+), 2 deletions(-)

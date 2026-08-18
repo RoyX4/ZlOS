@@ -1,0 +1,24 @@
+# 02 - if / else if / else, and/or/not
+
+fn grade(score) {
+    # >=90 "A", >=80 "B", >=70 "C", else "F"
+    return nil()
+}
+
+fn fizz(n) {
+    # divisible by 3 and 5 -> "FizzBuzz", by 3 -> "Fizz", by 5 -> "Buzz",
+    # otherwise the number as text. % is the remainder operator.
+    return nil()
+}
+
+fn is_leap(y) {
+    # divisible by 4, except centuries that are not divisible by 400
+    return nil()
+}
+
+assert(grade(95) == "A" and grade(83) == "B", "grade high")
+assert(grade(71) == "C" and grade(12) == "F", "grade low")
+assert(fizz(15) == "FizzBuzz" and fizz(9) == "Fizz", "fizz")
+assert(fizz(10) == "Buzz" and fizz(7) == "7", "buzz")
+assert(is_leap(2024) and not is_leap(1900) and is_leap(2000), "leap")
+print("02 ok")
