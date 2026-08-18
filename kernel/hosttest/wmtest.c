@@ -63,6 +63,27 @@ int idt_mouse_btn(void) { return fake_btn; }
 unsigned int idt_ticks(void) { return fake_ticks; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }
+int ser_rx(void)        { return -1; }   /* no UART in the harness */
+
+/* THE FRAME TIMER's clock. wm.c times itself with the TSC; the harness has no
+ * cpu.c, and a frame measured here would be measuring this machine rather than
+ * the guest anyway. Returning a monotonically rising count keeps the timing
+ * code on the same path it takes in the kernel - a stub that returned 0 would
+ * make wm_frame() take the "TSC unavailable" branch and stop exercising it. */
+static unsigned int fake_tsc;
+unsigned int cpu_tsc_lo(void)  { return (fake_tsc += 1000); }
+unsigned int cpu_tsc_khz(void) { return 2300000u; }
+
+static int fake_usb_ptr = 0, fake_ux = 0, fake_uy = 0, fake_ubtn = 0;
+
+/* No USB pointer in the harness - which is a case worth being able to express,
+ * because it is the PS/2 fallback the laptop's TrackPoint takes. */
+int xhci_ptr_ready(void) { return fake_usb_ptr; }
+int xhci_ptr_poll(void)  { return 0; }
+int xhci_ptr_x(void)     { return fake_ux; }
+int xhci_ptr_y(void)     { return fake_uy; }
+int xhci_ptr_btn(void)   { return fake_ubtn; }
+
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
 void zl_putc_pub(char c) { (void)c; }        /* fb.c's boot line: not wanted here */
 
@@ -523,6 +544,156 @@ int main(void)
     frame();
     ok("a focus change leaves no shadow edge behind",
        all_wallpaper(200 - 60, 200 - 60, 200 + 300 + 60, 200 + 200 + 60));
+
+    /* --------------------------------------------- the animation timeline
+     * Three things have to be true and each has been got wrong by somebody:
+     * it STARTS, it ENDS, and it does not move the target. The third is the
+     * one that matters most - an animated window whose hit test follows the
+     * animation is a UI where clicks land where the control WAS, and it is
+     * invisible in any screenshot taken after the animation settles. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    pointer(1500, 1000, 0);
+    int aw = wm_open(1, "anim", 300, 300, 400, 300);
+    for (int i = 0; i < 8; i++) frame();          /* let the open scale settle */
+
+    ok("a fresh window is not animating", wm_anim_running(aw) == 0);
+    ok("...and is fully opaque", wm_anim_alpha(aw) == 255);
+
+    ok("an animation starts", wm_anim(aw, ANIM_PULSE) == 1
+                              && wm_anim_running(aw) == ANIM_PULSE);
+
+    /* HIT TESTING IS UNAFFECTED, checked at the animation's most distorted
+     * frame rather than at the end - checking after it settles proves nothing
+     * at all, which is exactly how this class of bug survives. */
+    frame(); frame();
+    ok("...and hit testing still finds it mid-animation",
+       wm_at(300 + 200, 300 + 150) == aw);
+    ok("...and the alpha really is partial", wm_anim_alpha(aw) < 255
+                                             && wm_anim_alpha(aw) > 0);
+
+    /* IT ENDS. A timeline entry that never frees its slot exhausts ANIM_MAX
+     * and every later animation is refused - which shows up as "the UI stopped
+     * animating after a while", the worst kind of bug to chase. */
+    for (int i = 0; i < 12; i++) frame();
+    ok("an animation ends and frees its slot", wm_anim_running(aw) == 0);
+    ok("...and leaves the window settled", wm_anim_alpha(aw) == 255);
+
+    /* A SCALE KIND DOES NOT MOVE THE TARGET EITHER. ANIM_PRESS shrinks the
+     * window to 96%, so a point 2% in from the edge is outside what is DRAWN
+     * and must still hit. */
+    ok("a scale animation starts", wm_anim(aw, ANIM_PRESS) == 1);
+    frame();
+    ok("...and an edge point still hits the settled rect",
+       wm_at(300 + 4, 300 + 4) == aw);
+    for (int i = 0; i < 8; i++) frame();
+    ok("...and it ends too", wm_anim_running(aw) == 0);
+
+    /* ANIM_MAX IS A REFUSAL, not a silent drop - the same discipline as
+     * wm_open's WM_MAX.
+     *
+     * The windows are opened and then LET SETTLE first, deliberately: wm_open
+     * starts an ANIM_OPEN of its own now, so opening and animating in the same
+     * loop measures "how many slots are left after the opens" rather than the
+     * ceiling. That is exactly the confusion this assertion exists to avoid,
+     * and it caught the change that introduced it. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    int wins2[WM_MAX], nw2 = 0;
+    for (int i = 0; i < 9 && nw2 < WM_MAX; i++) {
+        int w2 = wm_open(1, "x", 10 + i * 30, 10, 60, 40);
+        if (w2 >= 0) wins2[nw2++] = w2;
+    }
+    for (int i = 0; i < 10; i++) frame();          /* every open scale settles */
+    int still = 0;
+    for (int i = 0; i < nw2; i++) if (wm_anim_running(wins2[i])) still++;
+    ok("every open animation has finished before this", still == 0);
+
+    int started = 0, refused = 0;
+    for (int i = 0; i < nw2; i++) {
+        if (wm_anim(wins2[i], ANIM_FADE)) started++; else refused++;
+    }
+    ok("the animation array is a ceiling, and full refuses",
+       started > 0 && refused > 0 && started + refused == nw2);
+
+    /* --------------------------------------------- the fade, COMPOSITED
+     * wm_anim_alpha() has reported a fade since the timeline was written and
+     * nothing drew it - the alpha was asserted and the pixels were not, which
+     * is precisely how an effect ends up "done" and invisible.
+     *
+     * A fade is only real if the result sits BETWEEN the window and what is
+     * behind it. Two windows, the top one fading in over the bottom one: at a
+     * partial alpha the pixel must equal neither. Checking it is not the
+     * window's colour would pass for a fade that drew nothing at all. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    pointer(1600, 1000, 0);
+    int fdlo = wm_open(1, "under", 200, 200, 600, 400);
+    for (int i = 0; i < 8; i++) frame();
+    frame();
+    unsigned int px_under = fb_get_px(400, 400);
+
+    int fdhi = wm_open(2, "over", 200, 200, 600, 400);
+    for (int i = 0; i < 8; i++) frame();
+    frame();
+    unsigned int px_over = fb_get_px(400, 400);
+    ok("two stacked windows differ where they overlap", px_under != px_over);
+
+    (void)fdlo;
+    wm_anim(fdhi, ANIM_FADE);
+    frame(); frame();                     /* a middle frame of the ramp */
+    unsigned int px_mid = fb_get_px(400, 400);
+    ok("a fading window is not fully drawn", px_mid != px_over);
+    ok("...and not fully absent either",    px_mid != px_under);
+    ok("...and the alpha is genuinely partial",
+       wm_anim_alpha(fdhi) > 0 && wm_anim_alpha(fdhi) < 255);
+
+    for (int i = 0; i < 10; i++) frame();
+    frame();
+    ok("when it settles it is the window again", fb_get_px(400, 400) == px_over);
+
+    /* --------------------------------------------- the resize grip
+     * wm_resize() existed from the day wm.c was written and had NO CALLER -
+     * the same shape as WF_MODAL before the start menu. These assert the three
+     * things a grip has to get right, and the third is the one that is
+     * invisible in a screenshot. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    pointer(1500, 1000, 0);
+    int rw = wm_open(1, "resize", 300, 300, 400, 300);
+    for (int i = 0; i < 8; i++) frame();
+    int grx, gry, rww, rhh;
+
+    /* 1. a press in the corner grabs the SIZE, not the app and not the move */
+    pointer(300 + 400 - 3, 300 + 300 - 3, 1);
+    pointer(300 + 500, 300 + 400, 1);            /* drag out */
+    wm_geometry(rw, &grx, &gry, &rww, &rhh);
+    ok("dragging the grip resizes the window", rww > 400 && rhh > 300);
+    ok("...and does NOT move it", grx == 300 && gry == 300);
+    pointer(300 + 500, 300 + 400, 0);
+
+    /* 2. the minimum is a floor, not a suggestion. A window dragged to zero is
+     *    a window that can never be grabbed again. */
+    wm_geometry(rw, &grx, &gry, &rww, &rhh);
+    pointer(grx + rww - 3, gry + rhh - 3, 1);
+    pointer(grx + 2, gry + 2, 1);                /* drag right past the origin */
+    pointer(grx + 2, gry + 2, 0);
+    wm_geometry(rw, &grx, &gry, &rww, &rhh);
+    ok("a window cannot be resized to nothing", rww >= 8 && rhh >= 8);
+
+    /* 3. THE GRIP MUST NOT STEAL THE TITLE BAR. They are both chrome and the
+     *    grip is checked second, but a window short enough that its title bar
+     *    reaches the bottom edge would hand every title-bar press to the
+     *    resize - i.e. the window could never be moved again. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    int sw2 = wm_open(1, "short", 500, 500, 300, th->title_h + 4);
+    for (int i = 0; i < 8; i++) frame();
+    pointer(560, 500 + 3, 1);
+    pointer(660, 600, 1);
+    wm_geometry(sw2, &grx, &gry, &rww, &rhh);
+    ok("the title bar still MOVES a very short window", grx != 500 || gry != 500);
+    pointer(660, 600, 0);
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;

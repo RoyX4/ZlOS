@@ -117,6 +117,68 @@ void serial_init(void)
     zl_outb(COM1 + 4, 0x0B);   /* DTR + RTS + OUT2                      */
 }
 
+/* ---- COM1 as an INPUT source ---------------------------------------------
+ * Serial is not just the log. It is how every automated gate DRIVES this
+ * machine - verify.sh pipes `.h20f10smq` into it, and every probe-*.py sends
+ * keystrokes down the same wire. Once the compositor owns the screen, keys
+ * reach apps through input.c's queue and nothing else, so a serial byte that
+ * only zl's shell loop could read becomes unreachable: the whole harness goes
+ * blind the moment the desktop boots. So COM1 becomes a third source feeding
+ * the one queue, alongside PS/2 and USB.
+ *
+ * AN ABSENT UART FLOATS HIGH, AND THAT IS THE TRAP. There is no serial port on
+ * the ThinkPad. An undecoded port reads 0xFF, so the naive "is bit 0 of LSR
+ * set" is TRUE forever and RBR hands back 0xFF forever - an infinite stream of
+ * phantom keystrokes into the input queue, on the one machine that cannot be
+ * debugged over serial. zl's ser_ready() had exactly this shape.
+ *
+ * The scratch register settles it. SCR (COM1+7) is the one 16550 register with
+ * no side effects at all, so writing two values and reading them back proves
+ * something is actually decoding these ports. Probed once and remembered; the
+ * LSR == 0xFF check below is the second line of defence for a genuine 8250,
+ * which has no scratch register.
+ */
+static int ser_ok = -1;              /* -1 not probed, 0 absent, 1 present */
+
+int ser_present(void)
+{
+    if (ser_ok < 0) {
+        zl_outb(COM1 + 7, 0x5A);
+        int a = zl_inb(COM1 + 7);
+        zl_outb(COM1 + 7, 0xA5);
+        int b = zl_inb(COM1 + 7);
+        ser_ok = (a == 0x5A && b == 0xA5) ? 1 : 0;
+    }
+    return ser_ok;
+}
+
+/* Write a string to COM1 and NOWHERE ELSE - not the console, not term.c's
+ * scrollback. There is exactly one customer and it is a real one: every gate
+ * in this repo synchronises on the shell prompt appearing in the serial log,
+ * and once the compositor owns the screen the prompt is a thing drawn at the
+ * bottom of a window rather than a thing printed. Routing it through zl_putc
+ * instead would put a second, permanently-empty "zl> " line in the scrollback
+ * under the live one. */
+void ser_puts(const char *s)
+{
+    if (!ser_present()) return;
+    while (*s) {
+        for (int i = 0; i < 200000; i++)
+            if (zl_inb(COM1 + 5) & 0x20) break;
+        zl_outb(COM1, (unsigned char)*s++);
+    }
+}
+
+/* One received byte, or -1 if there is nothing (or no UART at all). */
+int ser_rx(void)
+{
+    if (!ser_present()) return -1;
+    int lsr = zl_inb(COM1 + 5);
+    if (lsr == 0xFF) return -1;                 /* floating port, not a UART */
+    if (!(lsr & 0x01)) return -1;               /* no data ready             */
+    return zl_inb(COM1);
+}
+
 /* Reached when the zl program's main() returns. A kernel has nowhere to
  * return TO, so say so and stop - and tell QEMU to exit so a headless test
  * can assert on it (isa-debug-exit maps a port write to an exit code). */
@@ -124,7 +186,10 @@ void kernel_done(void)
 {
     const char *m = "\n[kernel] main() returned - halting\n";
     while (*m) {
-        while ((zl_inb(COM1 + 5) & 0x20) == 0) { }
+        /* bounded for the same reason as zl_putc(): a machine with no UART
+         * here must not turn the last message into an infinite loop */
+        for (int i = 0; i < 200000; i++)
+            if (zl_inb(COM1 + 5) & 0x20) break;
         zl_outb(COM1, (unsigned char)*m++);
     }
     zl_outb(0xF4, 0x00);       /* QEMU isa-debug-exit -> exit code 1     */

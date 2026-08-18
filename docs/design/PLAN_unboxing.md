@@ -12,6 +12,13 @@ checker-shaped proposal it supersedes). This document is the *when and in what
 order*, and it corrects two things those docs assert that are no longer true
 (§2.1, §8 Stage 3 note).
 
+**Read alongside:** [`zl-for-the-kernel.md`](zl-for-the-kernel.md) — what this
+plan costs and buys *for zlOS specifically*. It records two things this document
+cannot know: that `Value` is now **64 bytes, not 48** (so Stage 2 is worth more
+than estimated here), that Stage 2's unverified Win64 register caveat **resolves
+favourably on Linux/SysV**, and that Stage 5 targets `compilel.c` while the
+kernel builds through `compile.c` — a gap this plan does not close.
+
 ---
 
 ## 0. The goal, in one paragraph

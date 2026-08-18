@@ -34,6 +34,14 @@ extern int xhci_key(void);        /* a decoded character from USB HID      */
 extern int idt_mouse_x(void);     /* the PS/2 pointer, published by IRQ12  */
 extern int idt_mouse_y(void);
 extern int idt_mouse_btn(void);
+extern int ser_rx(void);          /* one byte from COM1, or -1 (support.c) */
+/* The USB pointer. A tablet reports an ABSOLUTE position, which is why it is
+ * preferred over the PS/2 mouse's relative deltas whenever it is present. */
+extern int xhci_ptr_ready(void);
+extern int xhci_ptr_poll(void);
+extern int xhci_ptr_x(void);
+extern int xhci_ptr_y(void);
+extern int xhci_ptr_btn(void);
 
 /* ---- event model ------------------------------------------------------- */
 #define EV_NONE      0
@@ -42,30 +50,9 @@ extern int idt_mouse_btn(void);
 #define EV_CHAR      3
 #define EV_MOUSE     4
 
-/* Key codes. Printable keys use their unshifted ASCII so the common case is
- * trivial; everything else is above 0x100 where it cannot collide. */
-#define KEY_ESC       0x101
-#define KEY_BACKSPACE 0x102
-#define KEY_TAB       0x103
-#define KEY_ENTER     0x104
-#define KEY_LEFT      0x110
-#define KEY_RIGHT     0x111
-#define KEY_UP        0x112
-#define KEY_DOWN      0x113
-#define KEY_HOME      0x114
-#define KEY_END       0x115
-#define KEY_PGUP      0x116
-#define KEY_PGDN      0x117
-#define KEY_INSERT    0x118
-#define KEY_DELETE    0x119
-#define KEY_F1        0x120        /* F1..F12 are KEY_F1 + n */
-
-#define MOD_SHIFT   (1 << 0)
-#define MOD_CTRL    (1 << 1)
-#define MOD_ALT     (1 << 2)
-#define MOD_CAPS    (1 << 3)
-#define MOD_NUM     (1 << 4)
-#define MOD_SUPER   (1 << 5)
+/* Key codes and modifier bits. Shared with xhci.c, which produces the same
+ * codes for USB HID - see keycodes.h for why they are not declared here. */
+#include "keycodes.h"
 
 struct event {
     u16 type;
@@ -192,6 +179,12 @@ static u32 to_char(int sc, int m)
 /* ---- feeding the queue from the PS/2 stream ---------------------------- */
 static int ext_pending = 0;
 
+/* SUPER, TAPPED. A modifier produces no event, so a shortcut bound to the
+ * modifier alone has nothing to fire on. This latches on the press and is
+ * cleared by any other key arriving while it is held, so Super+Tab stays a
+ * plain modifier and only a clean press-release emits KEY_SUPER. */
+static int super_alone = 0;
+
 static void handle_scancode(int sc)
 {
     if (sc == 0xE0) { ext_pending = 1; return; }
@@ -227,10 +220,20 @@ static void handle_scancode(int sc)
             return;
         }
         if (code == 0x5B || code == 0x5C) {          /* super */
-            if (release) mods &= ~MOD_SUPER; else mods |= MOD_SUPER;
+            if (release) {
+                mods &= ~MOD_SUPER;
+                if (super_alone) { evq_push(EV_KEY_DOWN, KEY_SUPER, mods, 0, 0); }
+                super_alone = 0;
+            } else {
+                mods |= MOD_SUPER;
+                super_alone = 1;
+            }
             return;
         }
     }
+
+    /* anything else arriving means Super is being used AS a modifier */
+    super_alone = 0;
 
     u32 key = ext ? sc_extended(code) : sc_special(code);
     u32 ch  = ext ? 0 : to_char(code, mods);
@@ -281,13 +284,55 @@ static void handle_scancode(int sc)
  * text-mode gate path where there is no pointer at all. */
 static int ms_x, ms_y, ms_btn, ms_seen;
 
+/* THERE ARE TWO POINTERS AND THIS READ THE WRONG ONE.
+ *
+ * zlOS drives both: xhci.c an absolute usb-tablet, idt.c a relative PS/2
+ * mouse. The `mouse_x` builtin has preferred the tablet since it was written -
+ * a tablet cannot drift, and on a UEFI laptop the PS/2 emulation dies with
+ * ExitBootServices. This function read idt_mouse_x() and nothing else.
+ *
+ * While the shell owned the screen that was invisible, because the shell read
+ * mouse_x() directly and got the right answer. The moment wm_frame() became
+ * the top of the system, the compositor's ONLY source of pointer events was
+ * this queue - so on any machine with a usb-tablet, which is what QEMU gives
+ * and what try.sh attaches, no EV_MOUSE was ever pushed at all. No dragging,
+ * no clicking, no dock, no menu. The whole pointer half of the desktop.
+ *
+ * No gate caught it and none could have: every gate in this repo drives zlOS
+ * by TYPING, and a dock that does nothing photographs identically to one that
+ * works. probe-dock.py exists because of this.
+ *
+ * One rule, one place: prefer the tablet, exactly as the builtin does. */
 static void pump_mouse(void)
 {
-    int x = idt_mouse_x(), y = idt_mouse_y(), b = idt_mouse_btn();
+    int x, y, b;
+    if (xhci_ptr_ready()) {
+        xhci_ptr_poll();                 /* the report is pulled, not pushed */
+        x = xhci_ptr_x(); y = xhci_ptr_y(); b = xhci_ptr_btn();
+    } else {
+        x = idt_mouse_x(); y = idt_mouse_y(); b = idt_mouse_btn();
+    }
     if (!ms_seen) { ms_x = x; ms_y = y; ms_btn = b; ms_seen = 1; return; }
     if (x == ms_x && y == ms_y && b == ms_btn) return;
     ms_x = x; ms_y = y; ms_btn = b;
     evq_push(EV_MOUSE, (u32)b, mods, x, y);
+}
+
+/* The key a character came from. Printable keys ARE their unshifted ASCII by
+ * the convention in keycodes.h, so this only has to name the four control
+ * characters that have a key code, and fold shifted letters back to the
+ * unshifted key - 'A' and 'a' are one key, and a consumer watching for
+ * KEY_DOWN 'a' should see it whichever was typed. */
+static u32 key_of_char(int c)
+{
+    switch (c) {
+        case 27: return KEY_ESC;
+        case  8: return KEY_BACKSPACE;
+        case  9: return KEY_TAB;
+        case 13: return KEY_ENTER;
+    }
+    if (c >= 'A' && c <= 'Z') return (u32)(c + 32);
+    return (u32)c;
 }
 
 /* ---- the pump ----------------------------------------------------------
@@ -305,10 +350,53 @@ void input_poll(void)
 
     pump_mouse();
 
-    /* USB HID, which already hands us decoded characters */
+    /* USB HID.
+     *
+     * This used to push EV_CHAR and nothing else, which made the USB keyboard
+     * a second-class source: every consumer that waits for a KEY rather than a
+     * CHARACTER was deaf to it. The `=` demo in kernel.zl exits on EV_KEY_DOWN
+     * with KEY_ESC, so with a USB keyboard ESC did nothing at all and the demo
+     * could only end by timing out - and the sweep scored that "ok", because
+     * from outside, timing out and exiting look identical.
+     *
+     * PS/2 emits the key first and the character second (line 230), so this
+     * does the same. Codes at or above KEY_NONCHAR - the arrows, Home/End, the
+     * function keys - have no character and emit only the key event. */
     for (int i = 0; i < 8; i++) {
         int c = xhci_key();
         if (!c) break;
+        if (c >= KEY_NONCHAR) {
+            evq_push(EV_KEY_DOWN, (u32)c, mods, 0, 0);
+        } else {
+            evq_push(EV_KEY_DOWN, key_of_char(c), mods, 0, 0);
+            evq_push(EV_CHAR, (u32)c, mods, 0, 0);
+        }
+    }
+
+    /* SERIAL, the third source.
+     *
+     * A terminal on the other end of COM1 is a keyboard as far as this queue is
+     * concerned, and it has to be: once wm_frame() owns the screen, apps get
+     * keys from here and from nowhere else, so a byte that only zl's old shell
+     * loop could read is a byte the desktop can never see. verify.sh and every
+     * probe-*.py drive this machine down that wire.
+     *
+     * EV_CHAR ONLY, DELIBERATELY - no EV_KEY_DOWN beside it, unlike PS/2 and
+     * USB. A serial byte carries no press/release and no modifier state; it is
+     * already the character. Synthesising a key event would also CHANGE an
+     * existing behaviour: input_key() returns the key when one is queued, so a
+     * serial ESC would start arriving as KEY_ESC (0x101) where the editor has
+     * always seen 27. Pushing the character alone leaves every existing
+     * consumer byte-for-byte where it was and adds the compositor as a new one.
+     *
+     * Bounded at 16 per poll for the same reason as the PS/2 drain: a fast
+     * sender must not be able to hold this loop. ser_rx() answers -1 when the
+     * machine has no UART, which is the ThinkPad - see support.c for why that
+     * check is not optional. */
+    for (int i = 0; i < 16; i++) {
+        int c = ser_rx();
+        if (c < 0) break;
+        if (c == 0) continue;                    /* a NUL is not a keystroke */
         evq_push(EV_CHAR, (u32)c, mods, 0, 0);
     }
 

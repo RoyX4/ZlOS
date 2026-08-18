@@ -18,9 +18,26 @@ Never run a QEMU boot alongside a multi-agent fan-out.
 
 ---
 
-## Phase −1 — DO THIS FIRST. Everything else is behind it.
+## Phase −1 — DONE 2026-08-18. The compositor is the boot state.
 
-### [ ] -1a. Free `kernel.zl` and `runtime_kernel.c`, then wire the compositor in
+### [x] -1a. Free `kernel.zl` and `runtime_kernel.c`, then wire the compositor in — **DONE**
+
+**Shipped, and it took five defects with it that nothing had noticed.** The
+full account with numbers is `desktop-v10-plan.md` §8. In brief:
+
+- the compositor is what boots. `wm_available() == 0` keeps the plain text
+  shell, and `verify.sh`'s transcript is byte-identical.
+- **C4 landed in the same change**, as this task asked. `bg_buf`, `sp_buf` and
+  the four sticker-drag functions are gone; the back buffer moved down into
+  their 48 MiB and now covers 3840×2160, where a whole-desktop redraw went from
+  44 ms to **9.71 ms**.
+- serial had to become a third input source first, or every gate in this repo
+  would have gone blind the moment the desktop booted — `wm_frame()` reads
+  `input.c`'s queue and zl's `key_get()` read COM1 directly.
+
+*(The original text of this task follows, for the record.)*
+
+### [x] -1a (original text). Free `kernel.zl` and `runtime_kernel.c`, then wire the compositor in
 
 **Nine tasks are blocked on two files, and not for a technical reason.** Both
 have uncommitted work in them from the display session. Git stages whole files,
@@ -444,7 +461,13 @@ Three modes, checked in this order: **pointer grab** (a drag owns all pointer
 events until button-up) → **modal** (menu open) → **normal** (pointer to topmost
 window containing the point; keys to focus).
 
-### [ ] 2d. Delete the photo-and-sticker code
+### [x] 2d. Delete the photo-and-sticker code — **DONE 2026-08-18 (C4)**
+
+Gone, along with the 640×480 drag ceiling, the 12 px shadow smear and 48 MiB of
+the high-RAM map. `fb_pointer_show`/`fb_pointer_hide` kept, as this said.
+Verified by FNV scene hash at all three modes — **byte-identical** pixels.
+
+### [x] 2d (original text). Delete the photo-and-sticker code
 
 `fb_bg_snapshot`, `fb_bg_restore`, `fb_grab`, `fb_stamp`, `bg_buf`, `sp_buf`
 (`fb.c:775-834`). Removing them also removes the 640×480 drag ceiling (the
@@ -500,7 +523,17 @@ Build order: `ui_label` → `ui_bar` → `ui_button` → `ui_sep`/`ui_space` →
 
 Needs `fb_clip` (step 0b) — a widget must not draw outside its window.
 
-### [ ] 2g. The shell becomes app 0
+### [x] 2g. The shell becomes app 0 — **DONE 2026-08-18**
+
+`read_line` no longer loops: `term_key()` is fed one character per `app_event`
+and `term.c` holds the scrollback the window redraws from. Typed commands
+replace single keypresses, and **ten commands that had no typed name got one** —
+they were reachable from the text shell and from nowhere else.
+
+Still open from this item: `run_command` still blocks for the seven
+full-screen demos (2e).
+
+### [x] 2g (original text). The shell becomes app 0
 
 - `read_line()` stops looping — becomes a state machine fed one char per event.
   Smaller than it sounds: `LINE_BUF` and the history are already in raw memory,
@@ -666,3 +699,202 @@ The track was as tall as it was wide with a knob nearly filling it, so the
 control read as a round button — "press me", not "I am on or off". Every
 assertion about it passed the whole time, because *does it toggle* and *does it
 look like a toggle* are different questions and only one of them had a test.
+
+
+---
+
+## What the v10 pass added, 2026-08-18
+
+All ten items of `desktop-v10-plan.md` §6. Full account and numbers there; the
+new surface, so it can be found:
+
+**fb.c**
+- `fb_fill_blend` / `fb_rrect_blend` — translucency, 22.2 cyc/px
+- `fb_grad_radial` / `fb_grad_conic` (+ the zl-facing `glow` / `wedge`) —
+  elliptical two-alpha radial gradients and conic wedges, both read off the
+  prototype's own CSS
+- `fb_rrect_grad_top` — a title bar is a rounded-TOP gradient. At radius 5
+  nobody could see that it was not; at 12 the square band sits visibly proud of
+  the round frame
+- `fb_blur_cache` / `fb_blur_paint` — **7.37 ms cold, 0.18 ms cached**
+- `fb_wall_save` / `fb_wall_paint` — the wallpaper is a cached bitmap, because
+  six translucent full-screen passes is 130 ms of a 16.67 ms frame
+- `fb_text_role` — three sizes × two weights, chosen by ROLE not by size
+- a bump-allocated cache arena in the 16 MiB C4 freed, which refuses and says
+  so rather than overrunning
+
+**wm.c**
+- `wm_anim` — a timeline: five kinds, integer step tables, eight slots, a
+  refusal when full. `ANIM_PULSE` composites; `ANIM_FADE` does not yet and the
+  reason is written down rather than papered over.
+
+**input.c / support.c**
+- COM1 as a third event source, with a scratch-register probe so an absent UART
+  cannot inject an endless stream of 0xFF keystrokes on the ThinkPad
+
+**gen_icons.py** — 10 → 20 icons, the second set taken from the prototype's own
+vocabulary (Places, Devices, Properties, Unlock, End Process, Update interval)
+
+**raw_boot.asm / mkdisk.sh** — the loader read a fixed 1.25 MiB against a
+1.23 MiB kernel. Over that limit the kernel is silently truncated and jumped
+into. `mkdisk.sh` now refuses to build such an image.
+
+
+---
+
+## The pointer, the dock and the menu, 2026-08-18 (after v10)
+
+### [x] 2e (partial). Snake is a real app
+
+Three functions and no loop: `sn_draw` / `sn_event` / `sn_step`. Its state was
+already in raw memory, which is why desktop-TODO named it as the one to convert
+first, and the conversion was a `while` loop deleted rather than any state
+moved. It keeps playing while another window is dragged across it, which is the
+interaction target this file states in Roy's own words.
+
+It also starts PAUSED. Started moving, in a window, it is dead against the wall
+in under two seconds — before anyone has looked at it.
+
+Six demos still own the screen: `paint`, `cube`, `anim`, `editor`, `mousedemo`,
+and the modeset viewer.
+
+### [x] C5. The start menu is a `WF_MODAL` window
+
+`WF_MODAL` had a setter in `wm.c` and **no caller anywhere** — the exact hazard
+`HANDOFF.md` names for `intel.c`. The old menu drew straight onto the screen and
+saved the patch underneath with grab/stamp, the sticker technique C4 deleted.
+
+It blurs what is behind it, and the blur is taken **before the window exists** —
+`wm.c` draws the chrome and then calls `app_draw`, so by the time the menu could
+blur its own client rect the panel fill is already sitting in it.
+
+### [x] The dock is a control, not a picture of one
+
+It had been drawn since the compositor first booted and **nothing routed clicks
+to it**: the dock is not a window, so `wm_at()` found nothing and `route_mouse`
+returned. `wm.c` hands desktop-targeted pointer events to a hook now — every
+event, not just presses, because hover is most of what makes a control feel
+like one.
+
+Hover, press and rest states; an accent bar under a tile whose app is open;
+click-to-raise rather than launch-a-second-copy. The dock IS the taskbar.
+
+### [x] A real opacity fade — **DONE**
+
+`window * a + behind * (1 - a)`, and it needs the rectangle taken **before**
+anything is drawn on it: once the window is drawn, what was behind it is gone.
+So stash → draw → blend the stash back at `255 - alpha`. `fb_stash` /
+`fb_stash_blend`, out of the same cache arena, and after the first frame the
+slot is reused so it costs no allocation at all.
+
+Asserted the only way that means anything: two stacked windows, and at a middle
+frame of the fade the overlapping pixel must equal **neither** — checking it is
+not the window's colour would pass for a fade that drew nothing.
+
+The start menu fades in over its own blurred backdrop, which is `zov`/`zpop`.
+
+### [x] Window resize — **DONE**
+
+`wm_resize()` had existed since the day `wm.c` was written with **no caller** —
+the same shape as `WF_MODAL` before the start menu, and as `intel.c`'s write
+paths. A window table with no way to resize a window is a desktop where every
+window is the size somebody typed into `wm_open`.
+
+Right and bottom edges plus the corner, checked after the close box and tabs
+and **before** the client-area hand-off — an app that fills its window would
+otherwise swallow every grab at the edge. Deliberately not the left or top
+edges: those need the origin to move as the size changes, which is a second
+arithmetic to get wrong for a corner nobody reaches for.
+
+Three assertions, and the third is the one that is invisible: a window short
+enough that its title bar reaches the bottom edge must still MOVE, not resize.
+
+### [x] Super opens the menu — **DONE**
+
+`MOD_SUPER` had been tracked by `input.c` since it was written and used for
+nothing, because a modifier emits no event of its own and a shortcut bound to
+Super alone had nothing to fire on. A **tap** is the gesture - pressed and
+released with no other key between - and `input.c` emits `KEY_SUPER` for it.
+Held with another key it stays a pure modifier, which is asserted, or Super+Tab
+would open the start menu every time somebody switched window.
+
+`wm.c` routes it to the desktop rather than to the focused window: the start
+menu belongs to the desktop, and routing it to whichever app has focus would
+mean every app had to know about it.
+
+### [ ] Still open
+
+- **the other six demos** (2e) — `paint`, `cube`, `anim`, `editor`,
+  `mousedemo`, the modeset viewer. Each still owns the whole screen and ends
+  with "press any key", which is the phrase this whole rewrite exists to
+  delete.
+- **left/top resize edges**, if anybody ever wants them.
+- **the four apps the mockup has and zlOS does not** — a file manager, a task
+  manager, settings, a lock screen. Named in the prototype's own markup
+  (Places, Devices, Properties, End Process, Update interval, Unlock).
+
+---
+
+## The honest re-grade, 2026-08-18 (asked directly: "do they look remotely similar")
+
+**No.** And the gap is not the renderer.
+
+### What is actually blocking everything: the toolkit has no zl bindings
+
+`ui.c` is a complete immediate-mode toolkit — label, bar, button, sep, space,
+toggle, slider, num, list_row, scroll — built, asserted, and named by every
+earlier plan as the layer that was missing.
+
+**`ui_scale` and `ui_theme` are the only `ui_*` builtins.** Neither is a
+widget. Every app in zlOS lives in `kernel.zl`, so not one of them can call a
+single control. The start menu written today draws its rows with raw
+`label()` and `rrblend()` — which is how this was found: by hitting the wall
+while building something, not by an audit.
+
+`desktop-northstar-feasibility.md` scored the toolkit at 90% and the mockup at
+65%. Both counted what was **built** rather than what was **reachable** — the
+same mistake as the original 95%, one layer up. Corrected to ~35%. T-18.
+
+**This is the highest-leverage item on the whole desktop board.** Thirteen
+applications are waiting behind it and every one is far cheaper with it than
+without. The work is a set of builtins plus one real design decision: how an
+immediate-mode API with an out-parameter (`ui_toggle(s, int *on)`) crosses into
+a language with no pointers.
+
+### What the prototype actually contains, from its own template model
+
+Thirteen applications with real state: a file manager (breadcrumbs, tree,
+mounts, icon/list views, properties, rename, search), a hex viewer, a code
+editor (tabs, gutter, syntax modes, find with a match count), a terminal (tabs,
+cwd, geometry), a system monitor (process list, kill, CPU graph, meters), a log
+viewer with filters, settings (nav, toggles, sliders, accent picker), a lock
+screen, an activities overview (apps, windows, workspaces, search), a command
+palette, a calendar, a GL view (orbit, spin, zoom, wireframe, render-ms), and a
+framebuffer test. Plus workspaces, window snapping, toasts, context menus,
+dialogs and a clipboard.
+
+zlOS has a shell, a three-line System Monitor, an identity card, and snake.
+
+### The three things that were making it look and feel wrong
+
+1. **The terminal drew with the PROPORTIONAL font.** Every column-aligned thing
+   the shell prints is aligned with spaces, which only lines up in monospace.
+   It read as broken formatting rather than as the wrong font, which is why it
+   survived. Fixed — the terminal is a grid again.
+2. **The type scale made body text SMALLER**, from a 32 px cell to 24 px at
+   ui 2, so "make the desktop bigger" arrived as "everything shrank". And the
+   ui-scale fix changes nothing at 1920 — it only steps up at 2560 and above.
+3. **`desk_draw` ignored the rectangle it was given.** Called once per damage
+   rectangle, up to eight a frame, and the dock — now a blur blit plus a
+   full-width translucent tint — redrew in full every time. ~2.5 ms × 8 = 20 ms
+   of dock alone against a 16.67 ms budget. T-19.
+
+### And there was no way to know any of that
+
+Nothing in this kernel had ever timed a frame. **0h has said "add a `tsc()`
+builtin and put frame time on screen — DO THIS BEFORE ANY PERFORMANCE WORK"
+since it was written**, and the v10 run did the performance work first and the
+measurement never. It exists now: `wm_frame()` times itself with the TSC in
+microseconds, counts only frames that repaint, resets its peak once boot
+settles, shows both in the tray, and `probe-frame.py` drives real interaction
+and reads them back.

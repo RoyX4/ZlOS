@@ -35,10 +35,29 @@ static int  in_len;
 
 static int  pending_cmd = -1;       /* set by Enter, taken by zl          */
 static int  pending_arg;
+/* Set when a typed word matched nothing. zl reads it to pulse the window - a
+ * refusal you can SEE beats one you have to read, and the message scrolls. */
+static int  last_unknown;
 
-void fb_text_prop(int px, int py, const char *s, unsigned int fg);
-int  fb_text_prop_w(const char *s);
-int  fb_text_prop_h(void);
+/* A TERMINAL IS A GRID, and this drew with the PROPORTIONAL font.
+ *
+ * Every column-aligned thing the shell prints - the help table, the PCI dump,
+ * the CPUID report - is aligned with SPACES, which only lines up when every
+ * character is the same width. In a proportional face the columns come out
+ * ragged, and it reads as "the formatting is broken" rather than as "the font
+ * is wrong", which is why it survived.
+ *
+ * fb_text_prop is right for a LABEL - a dock tile, a window title, a menu row -
+ * and wrong for a terminal, and the split is exactly the one desktop-look.md
+ * item 4 draws: uniform advance is the "this is a terminal" signal, so use it
+ * on the one thing that IS a terminal. */
+void fb_text_aa(int px, int py, const char *s, unsigned int fg);
+/* the scissor, so a row that cannot be seen is not drawn - see below */
+int  fb_clip_top(void);
+int  fb_clip_bot(void);
+void fb_text_aa2x(int px, int py, const char *s, unsigned int fg);
+int  fb_cell_w(void);
+int  fb_cell_h(void);
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 
 /* ---- capture ---------------------------------------------------------------
@@ -74,14 +93,27 @@ void term_clear(void)
  * system. Returns 1 if this key completed a command. */
 static int match_cmd(void);
 
+/* The kernel's one character sink: console (muted while the compositor owns
+ * the screen), this file's scrollback, and COM1. The echo below goes through
+ * it rather than through term_putc so that the SERIAL LOG still reads like a
+ * session - every gate in this repo greps that log for "zl> ", and with the
+ * console muted a scrollback-only echo would make the prompt invisible to all
+ * of them the moment the desktop became the boot state. */
+void zl_putc_pub(char c);
+
 int term_key(int code)
 {
     if (code == 13 || code == 10) {          /* Enter */
         input[in_len] = 0;
-        /* echo the typed line into the scrollback, so it reads like a session */
+        /* The prefix goes to the SCROLLBACK only and the typed characters go
+         * to both. That asymmetry is deliberate and it is what makes the two
+         * transcripts agree: the serial log was already given a bare "zl> "
+         * when this line was invited, so echoing the prefix there too would
+         * read "zl> zl> help". The window was not, because its live prompt is
+         * drawn by term_draw at the bottom rather than printed. */
         term_putc('z'); term_putc('l'); term_putc('>'); term_putc(' ');
-        for (int i = 0; i < in_len; i++) term_putc(input[i]);
-        term_putc('\n');
+        for (int i = 0; i < in_len; i++) zl_putc_pub(input[i]);
+        zl_putc_pub('\n');
         int got = match_cmd();
         in_len = 0;
         input[0] = 0;
@@ -105,23 +137,43 @@ int term_input_len(void) { return in_len; }
  * two runtime strings is the one thing the zl kernel subset cannot do.
  *
  * Every code here is one that run_command in kernel.zl already handles; this
- * adds no behaviour, it only gives the existing commands names. */
+ * adds no behaviour, it only gives the existing commands names.
+ *
+ * COMPLETENESS IS THE POINT, not convenience. Ten of run_command's commands
+ * had no name here - cpuid, poke, usbkbd, nvme, sched, smp, usbstor, i2c,
+ * input and bars - which was invisible while single keypresses still worked
+ * and became a straight capability regression the moment the compositor
+ * became the boot state: those ten could be reached from the text shell and
+ * from nothing else. Anything run_command dispatches should be typeable. */
 struct cmd { const char *word; int code; };
 
 static const struct cmd table[] = {
     { "help",    104 }, { "?",       104 },
     { "fib",     102 }, { "sum",     115 },
     { "uptime",  116 }, { "time",    116 },
-    { "beep",    101 },
+    { "beep",    101 }, { "bars",     98 }, { "colours", 98 }, { "colors", 98 },
     { "pci",     107 }, { "hw",      107 },
     { "mode",    110 }, { "res",     110 },
     { "usb",     117 }, { "cpu",     122 },
+    { "cpuid",   112 }, { "brand",   112 },
+    { "poke",    109 }, { "peek",    109 },
+    { "usbkbd",  106 }, { "kbd",     106 },
+    { "nvme",    111 }, { "disk",    111 },
+    { "sched",    43 }, { "tasks",    43 },
+    { "smp",      42 }, { "cores",    42 },
+    { "usbstor",  47 }, { "stor",     47 },
+    { "i2c",      63 }, { "touchpad", 63 },
+    { "input",    61 }, { "events",   61 },
+    { "panel",    80 },                       /* lights the real panel - laptop */
     { "gpu",     121 }, { "virtio",  121 },
     { "cube",    118 }, { "3d",      118 },
     { "windows", 119 }, { "wm",      119 },
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },
+    { "anim",     97 }, { "demo",     97 },
     { "ls",      108 }, { "files",   108 },
+    { "redraw",   99 },
+    { "peak",     11 }, { "peakreset", 12 },   /* the frame timer */
     { "reboot",  114 }, { "halt",    113 }, { "quit",  113 }, { "exit", 113 },
     { "clear",     1 },                       /* handled here, not by zl */
     { 0, 0 }
@@ -159,6 +211,7 @@ static int match_cmd(void)
 
     /* An unknown command must SAY SO. A shell that silently ignores what you
      * typed is worse than one that has no commands at all. */
+    last_unknown = 1;
     const char *msg = "  unknown command: ";
     while (*msg) term_putc(*msg++);
     for (int k = start; k < start + wlen; k++) term_putc(input[k]);
@@ -169,6 +222,7 @@ static int match_cmd(void)
 }
 
 int term_cmd(void) { int c = pending_cmd; pending_cmd = -1; return c; }
+int term_unknown(void) { int u = last_unknown; last_unknown = 0; return u; }
 int term_arg(void) { return pending_arg; }
 
 /* ---- drawing ---------------------------------------------------------------
@@ -178,8 +232,9 @@ int term_arg(void) { return pending_arg; }
 void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
                unsigned int accent, int cursor_on)
 {
-    int lh = fb_text_prop_h();
-    if (lh <= 0) return;
+    int lh = fb_cell_h();
+    int cw = fb_cell_w();
+    if (lh <= 0 || cw <= 0) return;
     int rows = h / lh;
     if (rows < 1) return;
 
@@ -191,21 +246,32 @@ void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
     int first = s_head - show;
     while (first < 0) first += TERM_ROWS;
 
+    /* SKIP THE ROWS THAT CANNOT BE SEEN.
+     *
+     * app_draw is called once per damage rectangle, and a window being dragged
+     * across this one damages a band of it - typically two or three rows out
+     * of thirty-seven. Every other row was being walked, laid out and blitted
+     * glyph by glyph, and then rejected a pixel at a time by the scissor.
+     * fbbench measures forty lines of AA text at 4.588 ms, so a drag across
+     * the shell was paying most of that per frame to draw nothing.
+     *
+     * The scissor is still what GUARANTEES nothing escapes; this is about not
+     * doing the work first. Same reason ui_scroll rejects rows outside its
+     * viewport rather than drawing them and clipping. */
+    int c_top = fb_clip_top(), c_bot = fb_clip_bot();
     int ty = y;
     for (int r = 0; r < show; r++) {
         const char *line = scroll[(first + r) % TERM_ROWS];
-        if (line[0]) fb_text_prop(x, ty, line, dim);
+        if (line[0] && ty + lh > c_top && ty < c_bot) fb_text_aa(x, ty, line, dim);
         ty += lh;
     }
 
     /* the prompt line, always at the bottom of the client area */
     int py = y + h - lh;
-    fb_text_prop(x, py, "zl>", accent);
-    int px = x + fb_text_prop_w("zl> ");
+    if (py + lh <= c_top || py >= c_bot) return;      /* not in this band */
+    fb_text_aa(x, py, "zl>", accent);
+    int px = x + 4 * cw;
     input[in_len] = 0;
-    if (in_len) fb_text_prop(px, py, input, fg);
-    if (cursor_on) {
-        int cw = fb_text_prop_w("n");
-        fb_fill_px(px + fb_text_prop_w(input), py, cw, lh, accent);
-    }
+    if (in_len) fb_text_aa(px, py, input, fg);
+    if (cursor_on) fb_fill_px(px + in_len * cw, py, cw, lh, accent);
 }

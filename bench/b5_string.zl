@@ -1,0 +1,11 @@
+# b5_string - binop_plus on the stringify path. Guards the three-way + .
+n = 0
+r = 0
+while r < 300000 {
+    s = "n="
+    s = s + r
+    s = s + "-tail"
+    n = n + len(s)
+    r = r + 1
+}
+print(n)

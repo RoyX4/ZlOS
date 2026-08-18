@@ -1,0 +1,11 @@
+# b2_arith - hammers zl_binop. 7 operator dispatches per iteration:
+#   <   (loop test)
+#   *   /   %   +   -   (the body)
+#   +   (the increment)
+n = 0
+i = 0
+while i < 3000000 {
+    n = n + i * 2 - i / 2 % 7
+    i = i + 1
+}
+print(n)

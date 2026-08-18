@@ -1,0 +1,134 @@
+# test_list_aliasing.zl - the tip-tracking contract that push() depends on.
+#
+# WHY THIS FILE EXISTS. push() is the one place in the runtime where two zl
+# values deliberately SHARE mutable storage, and it has already been wrong
+# twice in this project (runtime.c, the comment above push):
+#
+#   appending unconditionally      -> a use-after-free
+#   copying on every push          -> O(n) per push, O(n^2) to build a list
+#
+# The version that is neither is tip tracking. Each items array carries a
+# shared counter - how many of its slots have ever been handed out - and a
+# push appends IN PLACE only when its source is the newest tip and there is
+# spare capacity. A push branched off an OLDER version sees nitems != *tip and
+# copies instead, so two branches can never write the same slot.
+#
+# That splits a Value's list state in two, and the split is the whole trick:
+#
+#   nitems          PER VALUE     - how much of the array this value can see
+#   items, cap, tip SHARED        - the array itself, and its high-water mark
+#
+# Anything that changes the layout of Value - PLAN_unboxing.md Stage 2 shrinks
+# it to 16 bytes by moving the shared fields behind a pointer - has to keep
+# that split intact. Merge the two, or make the shared part per-value, and the
+# checks below go red rather than the bug waiting to be found in a program.
+#
+# Style follows stdlib/testlib.zl - check(label, got, want) / report().
+
+g_pass = 0
+g_fail = 0
+
+fn check(label, got, want) {
+    if str(got) == str(want) {
+        g_pass = g_pass + 1
+        print("  PASS  " + label)
+    } else {
+        g_fail = g_fail + 1
+        print("  FAIL  " + label + "  got " + str(got) + " want " + str(want))
+    }
+}
+fn report() {
+    print("----")
+    print(str(g_pass) + " passed, " + str(g_fail) + " failed")
+}
+
+# ------------------------------------------------------- the branching case
+# THE ONE THAT CAUGHT THE ORIGINAL BUG. b takes the in-place fast path because
+# a is at the tip. c then branches off the SAME a, which is no longer at the
+# tip, so it must copy. If it appends in place instead, it overwrites slot 3
+# and b silently becomes [1, 2, 3, 99].
+print("-- branching off the same base --")
+a = [1, 2, 3]
+b = push(a, 4)
+c = push(a, 99)
+check("base unchanged",   a, [1, 2, 3])
+check("first branch",     b, [1, 2, 3, 4])
+check("second branch",    c, [1, 2, 3, 99])
+check("branches differ",  b == c, false)
+
+# THREE branches off one base, so the copy path is taken twice in a row.
+print("-- three branches --")
+base = [10, 20]
+p = push(base, 1)
+q = push(base, 2)
+r = push(base, 3)
+check("base still 2 long", base, [10, 20])
+check("branch p",          p,    [10, 20, 1])
+check("branch q",          q,    [10, 20, 2])
+check("branch r",          r,    [10, 20, 3])
+
+# BRANCHING OFF A BRANCH. p is at the tip of its own array, so this one takes
+# the fast path again - and must not disturb base, q or r.
+print("-- branch off a branch --")
+p2 = push(p, 7)
+check("p2",            p2,   [10, 20, 1, 7])
+check("p undisturbed", p,    [10, 20, 1])
+check("q undisturbed", q,    [10, 20, 2])
+check("base undisturbed", base, [10, 20])
+
+# ---------------------------------------------------- the linear fast path
+# The common case: build a list by repeated push, each from the newest value.
+# Every one of these should take the in-place path. This is the shape that was
+# O(n^2) under the copy-everything fix.
+print("-- linear build --")
+xs = []
+i = 0
+while i < 50 {
+    xs = push(xs, i * i)
+    i = i + 1
+}
+check("length after 50", len(xs), 50)
+check("first",  xs[0],  0)
+check("tenth",  xs[9],  81)
+check("last",   xs[49], 2401)
+
+# GROWTH ACROSS A REALLOC. capacity starts at 8 and doubles, so a 50-element
+# build crossed several reallocations above. Verify a value captured BEFORE
+# the growth still reads correctly afterwards - that is the use-after-free.
+print("-- a value captured before growth --")
+small = []
+j = 0
+while j < 3 {
+    small = push(small, j)
+    j = j + 1
+}
+snapshot = small
+k = 0
+while k < 40 {
+    small = push(small, 100 + k)
+    k = k + 1
+}
+check("snapshot length", len(snapshot), 3)
+check("snapshot intact", snapshot, [0, 1, 2])
+check("grown length",    len(small),  43)
+check("grown tail",      small[42],   139)
+
+# ------------------------------------------------------------- empty and one
+print("-- edges --")
+e = []
+e1 = push(e, "x")
+check("push onto empty",  e1, ["x"])
+check("empty unchanged",  len(e), 0)
+one = push([], 1)
+two = push(one, 2)
+check("one", one, [1])
+check("two", two, [1, 2])
+
+# PUSH DOES NOT DEEP-COPY ITS ITEM. A pushed list is still a list.
+print("-- nested --")
+inner = [1, 2]
+outer = push([], inner)
+check("nested length", len(outer), 1)
+check("nested item",   outer[0],   [1, 2])
+
+report()

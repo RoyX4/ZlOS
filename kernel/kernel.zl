@@ -40,9 +40,18 @@ PANEL    = rgb(0, 0, 0)        # content panel = black, matches text cell bg
 TXT_HI   = rgb(210, 228, 255)   # light text
 TXT_DIM  = rgb(150, 165, 195)   # dim text
 
-# ---- serial input, in zl ---------------------------------------------------
-fn ser_ready() { return band(inb(COM1 + 5), 1) }
-fn ser_read()  { return inb(COM1) }
+# ---- serial input -----------------------------------------------------------
+# It used to be read HERE, with band(inb(COM1 + 5), 1) as the ready test. Two
+# things were wrong with that and both are now input.c's problem instead:
+#
+#   1. An undecoded port floats high, so on a machine with no UART - the
+#      ThinkPad - that test is TRUE forever and inb(COM1) returns 0xFF forever.
+#   2. Two readers of one FIFO cannot keep the order. input.c drains COM1 into
+#      the event queue; a shell that ALSO read the port directly would hand out
+#      a byte that arrived after one still sitting in the queue.
+#
+# So serial is a source of the input stack now, like PS/2 and USB, and there is
+# exactly one reader. See support.c ser_rx() and input.c's pump.
 
 # ---- PS/2 keyboard, in zl --------------------------------------------------
 KBD_TABLE = 0x7000
@@ -105,19 +114,17 @@ fn kbd_scan() {
     if band(sc, 0x80) != 0 { return 0 }     # key release - ignore
     return peek8(KBD_TABLE + sc)
 }
-# The shell's character source. Serial stays first so the automated gates,
-# which drive zlOS over a pipe, behave exactly as before. Everything a human
-# types goes through the input stack: PS/2 and USB both land in one event
-# queue with modifiers, caps lock and auto-repeat already applied.
+# The shell's character source. ALL THREE sources - PS/2, USB and the serial
+# line the automated gates drive - land in one event queue with modifiers, caps
+# lock and auto-repeat already applied, so this is one call and the order is
+# whatever order the bytes actually arrived in.
 fn key_get() {
-    if ser_ready() == 1 { return ser_read() }
     return in_char()
 }
 
 # The editor's reader: a character, OR a navigation key above 0x100 so it can
 # tell an arrow from a letter.
 fn key_full() {
-    if ser_ready() == 1 { return ser_read() }
     return in_key()
 }
 
@@ -158,7 +165,29 @@ fn beep(freq, dur) {
 # cells. EVERY offset and size below is multiplied by it, so the desktop is
 # laid out in design units rather than raw pixels and stays correct at any
 # resolution instead of colliding when the text grows.
-fn ui() { return cell_w() / 8 }
+# THE LAYOUT SCALE. It was cell_w() / 8, so it was 1 below 1400 pixels and 2
+# above, and 2 for ever after - which is why the desktop looked smaller the
+# bigger the screen got. The layout is written in 800 design units; at 2560
+# wide with ui 2 there are 1280 units of space for an 800-unit design, and at
+# 3840 there are 1920. fb.c derives this from the screen now and the console
+# cell is a separate question. See its comment at fb_ui_scale.
+fn ui() { return ui_scale() }
+
+# ---- TEXT ROLES ------------------------------------------------------------
+# Every label this file drew went through text_aa, which is DejaVu Sans MONO.
+# wm.c's window titles were the only proportional text anywhere on screen, and
+# uniform advance is the single strongest "this is a terminal" signal there is
+# (desktop-look.md item 4) - applied, until now, to a dock, a menu, a tray and
+# an identity card, none of which are terminals.
+#
+# A role, never a size: T_BODY at ui 2 and at ui 4 are different pixel heights,
+# and any caller that had to know which is a caller that breaks on a screen
+# nobody tested.
+T_CAPTION = 0
+T_BODY    = 1
+T_TITLE   = 2
+W_REG     = 0
+W_BOLD    = 1
 TITLE_H = 28                       # window title bar height, in design units
 MON_W = 284                        # System Monitor / About width
 MON_H = 214                        # System Monitor height
@@ -181,16 +210,16 @@ fn draw_header() {
         grad_rgb(0, hb + 1, w, 7, rgb(12, 14, 21), WALL_TOP)
         ht = (hb - 16 * u) / 2                            # text baseline, centred
         fill_rgb(14 * u, (hb - 10 * u) / 2, 10 * u, 10 * u, ACCENT)
-        text_aa(34 * u, ht, "zlOS", TOP_TXT)
-        text_aa(90 * u, ht, "Activities", TOP_DIM)
+        label(34 * u, ht, "zlOS", TOP_TXT, T_BODY, W_BOLD)
+        label(90 * u, ht, "Activities", TOP_DIM, T_BODY, W_REG)
         # right side: live machine state, laid out from the right edge
-        text_aa(w - 300 * u, ht, "fb", TOP_DIM)
-        num_aa(w - 276 * u, ht, w, TOP_TXT)
-        text_aa(w - 200 * u, ht, "x", TOP_DIM)
-        num_aa(w - 184 * u, ht, px_h(), TOP_TXT)
-        text_aa(w - 108 * u, ht, "net", TOP_DIM)
+        label(w - 300 * u, ht, "fb", TOP_DIM, T_CAPTION, W_REG)
+        label_num(w - 276 * u, ht, w, TOP_TXT, T_CAPTION, W_BOLD)
+        label(w - 200 * u, ht, "x", TOP_DIM, T_CAPTION, W_REG)
+        label_num(w - 184 * u, ht, px_h(), TOP_TXT, T_CAPTION, W_BOLD)
+        label(w - 108 * u, ht, "net", TOP_DIM, T_CAPTION, W_REG)
         fill_rgb(w - 66 * u, (hb - 8 * u) / 2, 8 * u, 8 * u, OK_GRN)
-        text_aa(w - 48 * u, ht, "up", TOP_DIM)
+        label(w - 48 * u, ht, "up", TOP_DIM, T_CAPTION, W_REG)
     } else {
         bar(0, C_TITLE)
         at(0, 2, "zlOS", C_TITLE)
@@ -206,13 +235,65 @@ DOCK_X0 = 118            # first tile
 DOCK_PITCH = 56          # tile-to-tile spacing
 DOCK_TW = 48             # tile width/height
 
+# A TILE WITH STATES. Three of them, and each one earns its place:
+#   rest     a flat chip
+#   hover    lifted - lighter surface, a brighter top highlight, the icon in
+#            full white. This is the one that turns a picture of a dock into a
+#            control, and it needs nothing but knowing where the pointer is.
+#   pressed  pushed IN - drawn 2 units smaller and 1 down, which is zpress in
+#            the prototype and the same idea as ANIM_PRESS in wm.c. A tile is
+#            not a window, so it cannot use the timeline; the inset is the same
+#            effect drawn directly.
+# An accent underline marks a tile whose app is actually open, which is the
+# difference between a launcher and a taskbar.
 fn dock_tile(slot, dy, ic) {
     u = ui()
     dtx = DOCK_X0 * u + slot * DOCK_PITCH * u
     dtw = DOCK_TW * u
-    rrect(dtx, dy + 8 * u, dtw, dtw, 8 * u, rgb(34, 40, 58))
-    fill_rgb(dtx, dy + 8 * u, dtw, 1, rgb(66, 78, 108))
-    icon(dtx + (dtw - 24 * u) / 2, dy + 8 * u + (dtw - 24 * u) / 2, ic, TXT_HI)
+    dty = dy + 8 * u
+    hov = 0
+    if dock_hover == slot { hov = 1 }
+    prs = 0
+    if hov == 1 { if dock_press == 1 { prs = 1 } }
+
+    tcol = rgb(34, 40, 58)
+    hcol = rgb(66, 78, 108)
+    icol = TXT_HI
+    if hov == 1 { tcol = rgb(52, 64, 92)  hcol = rgb(110, 130, 175)  icol = C_WHITE }
+    if prs == 1 {
+        dtx = dtx + 2 * u
+        dty = dty + 2 * u
+        dtw = dtw - 4 * u
+        tcol = rgb(26, 32, 48)
+    }
+    rrect(dtx, dty, dtw, dtw, 12 * u, tcol)
+    fill_rgb(dtx, dty, dtw, 1, hcol)
+    icon(dtx + (dtw - 24 * u) / 2, dty + (dtw - 24 * u) / 2, ic, icol)
+    # open-app marker: the accent bar the prototype puts under a running app
+    dock_running_bar(slot, dy)
+    return 0
+}
+
+# The open-app marker, on its own so the live pass can redraw just these nine
+# small rectangles instead of nine whole tiles. A tile is a rounded rect, a
+# hairline, a 24x24 blended icon and sometimes a bar; the bar alone is a fill.
+fn dock_running_bar(slot, dy) {
+    u = ui()
+    dbx = DOCK_X0 * u + slot * DOCK_PITCH * u
+    dbw = DOCK_TW * u
+    if dock_running(slot) == 1 {
+        fill_rgb(dbx + dbw / 4, dy + 8 * u + dbw + 3 * u, dbw / 2, 3 * u, ACCENT)
+    }
+    return 0
+}
+
+# Which dock slots have a window open right now. A launcher does not know this
+# and a taskbar is exactly the thing that does.
+fn dock_running(slot) {
+    if slot == 0 { return wm_open_p(shell_win) }
+    if slot == 4 { return wm_open_p(snake_win) }
+    if slot == 6 { return wm_open_p(mon_win) }
+    if slot == 7 { return wm_open_p(about_win) }
     return 0
 }
 
@@ -242,34 +323,87 @@ fn dock_cmd(slot) {
 }
 
 # the dock: a taller gradient strip with a start button, app tiles and a tray
+# WHERE THE TRAY STARTS, in one place. It was computed twice - once in
+# draw_status and once in draw_clock - with the same three lines copied, which
+# is how a clock ends up drawn 4 px from where its label is.
+fn tray_x() {
+    u = ui()
+    tx = px_w() - 300 * u
+    tdend = DOCK_X0 * u + 9 * DOCK_PITCH * u + 16 * u
+    if tx < tdend { tx = tdend }
+    return tx
+}
+
+# THE PART THAT NEVER CHANGES: the blurred, tinted strip, the start button and
+# the nine tiles in their rest state. Drawn ONCE, into the wallpaper cache.
+fn draw_dock_bg() {
+    w = px_w()
+    dy = dock_y()
+    u = ui()
+    grad_rgb(0, dy - 6, w, 6, WALL_BOT, rgb(6, 7, 12))    # soft shadow above
+    # BLUR, THEN TINT - backdrop-filter: blur() + rgba(), which the prototype
+    # asks for in six places. Both are paid here, once, and never again.
+    if dock_blur >= 0 {
+        blurdraw(dock_blur, 0, dy)
+        blend(0, dy, w, px_h() - dy, rgb(14, 19, 34), 150)
+    } else {
+        grad_rgb(0, dy, w, px_h() - dy, BAR_TOP, BAR_BOT)
+    }
+    fill_rgb(0, dy, w, 1, BAR_HI)                          # top highlight
+    rrect(10 * u, dy + 8 * u, 96 * u, DOCK_TW * u, 12 * u, rgb(48, 92, 168))
+    fill_rgb(10 * u, dy + 8 * u, 96 * u, 1, rgb(120, 170, 235))
+    fill_rgb(24 * u, dy + 26 * u, 11 * u, 11 * u, ACCENT)
+    label(48 * u, dy + 21 * u, "zlOS", C_WHITE, T_BODY, W_BOLD)
+    ds = 0
+    while ds < 9 {
+        dock_tile(ds, dy, dock_icon(ds))
+        ds = ds + 1
+    }
+    return 0
+}
+
+dock_baked = 0
 fn draw_status(msg) {
     sr = status_row()
     if px_w() > 0 {
         w = px_w()
         dy = dock_y()
-        grad_rgb(0, dy - 6, w, 6, WALL_BOT, rgb(6, 7, 12))    # soft shadow above
-        grad_rgb(0, dy, w, px_h() - dy, BAR_TOP, BAR_BOT)     # the dock
-        fill_rgb(0, dy, w, 1, BAR_HI)                          # top highlight
         u = ui()
-        rrect(10 * u, dy + 8 * u, 96 * u, DOCK_TW * u, 8 * u, rgb(48, 92, 168))
-        fill_rgb(10 * u, dy + 8 * u, 96 * u, 1, rgb(120, 170, 235))
-        fill_rgb(24 * u, dy + 26 * u, 11 * u, 11 * u, ACCENT)
-        text_aa(44 * u, dy + 22 * u, "zlOS", C_WHITE)
-        # app tiles - all icons
+        # THE LIVE PART ONLY. Everything above came out of the wallpaper blit
+        # the caller already did - see draw_dock_bg and wm_boot_start. What is
+        # left is the tile the pointer is on, the open-app markers, and the
+        # numbers in the tray.
+        if dock_baked == 0 { draw_dock_bg() }
+        if dock_hover >= 0 { dock_tile(dock_hover, dy, dock_icon(dock_hover)) }
         ds = 0
         while ds < 9 {
-            dock_tile(ds, dy, dock_icon(ds))
+            if ds != dock_hover { dock_running_bar(ds, dy) }
             ds = ds + 1
         }
+        draw_tasklist(dy)
         # tray: state + uptime
         # the tray must start AFTER the last dock tile, or on a narrow screen
         # the two overlap - at 800x600 nine tiles reach x=622 while w-300 is 500
-        tray = w - 300 * u
-        dend = DOCK_X0 * u + 9 * DOCK_PITCH * u + 16 * u
-        if tray < dend { tray = dend }
-        text_aa(tray, dy + 22 * u, "state:", TXT_DIM)
-        text_aa(tray + 60 * u, dy + 22 * u, msg, ACCENT)
-        text_aa(tray + 170 * u, dy + 22 * u, "up:", TXT_DIM)
+        tray = tray_x()
+        # THE FRAME TIME, ON SCREEN, in microseconds. Nothing in this kernel
+        # had ever measured a frame - desktop-TODO 0h asks for exactly this and
+        # says to do it BEFORE any performance work, which the v10 run did not.
+        # A number nobody can see is a number nobody checks, and "state:
+        # compositor" - which is what used to be here - is a label that has
+        # said the same thing on every boot since it was written.
+        label(tray, dy + 22 * u, "frame", TXT_DIM, T_CAPTION, W_REG)
+        label_num(tray + 44 * u, dy + 22 * u, wm_us(), ACCENT, T_CAPTION, W_BOLD)
+        label(tray + 92 * u, dy + 22 * u, "us   peak", TXT_DIM, T_CAPTION, W_REG)
+        label_num(tray + 152 * u, dy + 22 * u, wm_peak(), TXT_HI, T_CAPTION, W_BOLD)
+        label(tray + 210 * u, dy + 22 * u, "up", TXT_DIM, T_CAPTION, W_REG)
+        label_num(tray + 232 * u, dy + 22 * u, ticks() / 100, TXT_HI, T_CAPTION, W_BOLD)
+        # THE UPTIME, drawn HERE rather than by draw_clock. draw_clock is only
+        # ever called from the old text-shell loop, which now runs only on a
+        # machine with no framebuffer - so under the compositor the tray said
+        # "up:" and then nothing, every boot. The dock is wallpaper furniture
+        # and furniture is redrawn from desk_draw, so this is where a live
+        # number belongs; app_tick damages the tray once a second.
+
     } else {
         bar(sr, C_STATUS)
         at(sr, 2,  "h help", C_STATUS)
@@ -286,11 +420,10 @@ fn draw_clock(sec) {
     if px_w() > 0 {
         w = px_w()
         dy = dock_y()
-        ctray = w - 300 * ui()
-        cdend = DOCK_X0 * ui() + 9 * DOCK_PITCH * ui() + 16 * ui()
-        if ctray < cdend { ctray = cdend }
-        grad_rgb(ctray + 200 * ui(), dy + 12 * ui(), 80 * ui(), 30 * ui(), BAR_TOP, BAR_BOT)
-        num_aa(ctray + 204 * ui(), dy + 22 * ui(), sec, TXT_HI)                  # AA, blends over dock
+        ctray = tray_x()
+        grad_rgb(ctray + 226 * ui(), dy + 12 * ui(), 70 * ui(), 30 * ui(), BAR_TOP, BAR_BOT)
+        label(ctray + 210 * ui(), dy + 22 * ui(), "up", TXT_DIM, T_CAPTION, W_REG)
+        label_num(ctray + 232 * ui(), dy + 22 * ui(), sec, TXT_HI, T_CAPTION, W_BOLD)
     } else {
         at_num(status_row(), 70, sec, C_STATUS)
     }
@@ -327,7 +460,57 @@ fn sum_squares(n) {
 }
 fn is_digit(c) { return c >= 48 and c <= 57 }
 
+# THE SHELL HAS TWO INPUT MODELS AND THIS HAS TO SAY WHICH ONE IS RUNNING.
+# Under the compositor a command is a typed word ending in Enter; on a machine
+# with no framebuffer the old text shell is still a single keypress per
+# command. Printing one list on both would be wrong on one of them, and a help
+# screen that lists commands the machine will not accept is worse than none.
 fn help() {
+    if wm_run() == 1 { return help_typed() }
+    return help_keys()
+}
+
+fn help_typed() {
+    color(C_CYAN)  print("  commands - type the name, then Enter")
+    color(C_GREY)
+    print("    help              this help")
+    print("    fib <n>           fib(n)              e.g.  fib 20")
+    print("    sum <n>           sum of squares      e.g.  sum 10")
+    print("    uptime            uptime, from the timer interrupt")
+    print("    cpuid             the CPU's own brand string, via CPUID")
+    print("    bars              colour-bar graphics demo (with sound)")
+    print("    anim              a bouncing logo over a starfield")
+    print("    mouse             a cursor driven by the PS/2 mouse")
+    print("    snake             play SNAKE (w a s d to steer)")
+    print("    paint             paint with the mouse")
+    print("    edit <n>          edit RAM file n (0-9) - ESC saves it")
+    print("    ls                list the RAM files")
+    print("    beep              beep the PC speaker")
+    print("    poke              poke a byte into video memory and read it back")
+    color(C_CYAN)  print("  our hardware drivers")
+    color(C_GREY)
+    print("    pci               PCI bus + the Intel GPU, read off real silicon")
+    print("    usb               take the xHCI controller and enumerate the bus")
+    print("    usbkbd            USB keyboard - live, straight off the HID reports")
+    print("    mode              change the screen resolution, no BIOS involved")
+    print("    cube              spinning 3D cube, rendered in software")
+    print("    gpu               virtio-gpu - a real GPU driver, virtqueues and all")
+    print("    cpu               the processor: CPUID, topology, caches, TSC clock")
+    print("    nvme              NVMe disk - identify, then write and read a block back")
+    print("    sched             multitasking - three tasks running beside the shell")
+    print("    smp               wake the other CPU cores with INIT/STARTUP IPIs")
+    print("    usbstor           USB mass storage - SCSI over USB, read a sector")
+    print("    i2c               I2C-HID touchpad (real hardware only - QEMU has no LPSS I2C)")
+    print("    input             input events - keys, modifiers, repeat, live")
+    print("    clear             clear the scrollback")
+    print("    reboot            reboot the machine")
+    print("    quit              halt the machine")
+    return 0
+}
+
+# TEXT MODE ONLY, and byte-for-byte what it has always printed - verify.sh
+# diffs this against golden.txt.
+fn help_keys() {
     color(C_CYAN)  print("  commands")
     color(C_GREY)
     print("    h        this help")
@@ -363,6 +546,7 @@ fn help() {
     print("    c        clear the screen")
     print("    r        reboot the machine")
     print("    q        halt the machine")
+    return 0
 }
 
 # a graphics demo: 14 colour bars, proving the framebuffer is ours to paint
@@ -459,12 +643,19 @@ fn mousedemo() {
 fn draw_window(wx, wy, ww, wh, title, focus) {
     u = ui()
     shadow(wx, wy, ww, wh, 8 * u, 6 * u)
-    rrect(wx, wy, ww, wh, 5 * u, rgb(20, 26, 42))
-    rrect(wx + 1, wy + 1, ww - 2, wh - 2, 4 * u, PANEL)
+    # v10 SS6.10: the prototype's radii cluster at 11..16px, mode 13/14. At 5
+    # the corners read as a bevel; at 12 they are the soft rectangles the whole
+    # mockup is built from. The inner rrect stays exactly one unit tighter so
+    # the hairline border follows the outer curve rather than cutting it.
+    rrect(wx, wy, ww, wh, 12 * u, rgb(20, 26, 42))
+    rrect(wx + 1, wy + 1, ww - 2, wh - 2, 11 * u, PANEL)
     tbt = rgb(48, 92, 168)
     tbb = rgb(22, 40, 92)
     if focus == 0 { tbt = rgb(42, 53, 80)  tbb = rgb(24, 34, 56) }
-    grad_rgb(wx + 4, wy + 3, ww - 8, TITLE_H * u - 5, tbt, tbb)
+    # rounded at the TOP to the same curve as the frame outside it. A square
+    # band inside a 12-unit corner is two shapes that do not fit; at radius 5
+    # it was invisible, which is why it survived this long.
+    gradtop(wx + 4, wy + 3, ww - 8, TITLE_H * u - 5, 10 * u, tbt, tbb)
     if focus == 1 { fill_rgb(wx + 4, wy + TITLE_H * u - 2, ww - 8, 2, ACCENT) }
     fill_rgb(wx + ww - 20 * u, wy + 9 * u, 11 * u, 11 * u, rgb(224, 90, 90))
     text_aa(wx + 12 * u, wy + 7 * u, title, rgb(234, 243, 255))
@@ -473,29 +664,9 @@ fn draw_window(wx, wy, ww, wh, title, focus) {
 
 # w - three overlapping windows over the wallpaper: the real thing next to the
 # mockup, so the software-vs-browser gap is judged by eye, not by promise
-fn windows_demo() {
-    if px_w() == 0 {
-        color(C_GREY)  print("  the window demo needs the framebuffer console")
-        return 0
-    }
-    w = px_w()
-    h = px_h()
-    grad_rgb(0, 0, w, h, WALL_TOP, WALL_BOT)            # fresh wallpaper
-    draw_window(70, 74, 300, 150, "System Monitor", 0)
-    text_aa(104, 118, "CPU  load  steady", TXT_DIM)
-    text_aa(104, 138, "mem  64 / 256 MiB", TXT_DIM)
-    draw_window(150, 150, 340, 200, "zl shell", 1)
-    text_aa(186, 194, "the quick brown fox jumps", TXT_HI)
-    text_aa(186, 214, "over 0123456789 !@#$%&*", TXT_DIM)
-    text_aa(186, 244, "zl> gfx compose --shadows", ACCENT)
-    draw_window(440, 258, 250, 120, "Clock", 0)
-    text_aa(500, 300, "12:04:37", TXT_HI)
-    text_aa(70, h - 58, "real windows - real shadows - press any key", ACCENT)
-    present()              # everything above is still in the back buffer
-    while key_get() == 0 { }
-    draw_screen()
-    return 0
-}
+# windows_demo drew three FAKE window frames and waited for a keypress. The
+# compositor draws real ones, from a window table, and never says "press any
+# key" - deleted, v10 plan SS1c.
 
 # a spinning 3D cube - proof the CPU can do real 3D with no GPU and no floats.
 # Two wireframe cubes counter-rotating in a viewport window; the maths lives in
@@ -1695,7 +1866,14 @@ fn run_command(cmd, arg) {
     if cmd == 119 { return wm_session() }    # w - the real compositor (wm.c)
     if cmd == 120 { return mousedemo() }  # x - mouse demo
     if cmd == 97  { return anim() }       # a - animation
-    if cmd == 103 { return snake_game() } # g - snake game
+    # SNAKE OPENS A WINDOW when there is a compositor to open it in, and falls
+    # back to the old full-screen loop when there is not. That branch is the
+    # shape every one of the seven demos wants (desktop-TODO 2e); snake is the
+    # first because its state was already external.
+    if cmd == 103 {
+        if wm_run() == 1 { return open_snake() }
+        return snake_game()
+    }
     if cmd == 100 { return paint() }      # d - paint (draw)
     if cmd == 105 { return editor(arg) }  # i - text editor (arg = file slot 0-9)
     if cmd == 108 { return fs_list() }    # l - list RAM files
@@ -1718,6 +1896,19 @@ fn run_command(cmd, arg) {
         color(C_GREY)  return 0
     }
     if cmd == 99  { draw_screen()  return 0 }
+    # THE FRAME TIMER, readable from the shell - which is what lets a probe
+    # measure it instead of a person squinting at the tray.
+    if cmd == 11 {
+        # ONE LINE, MACHINE-READABLE, with a marker a probe can wait for. The
+        # first version printed "last N us   peak N us" and probe-frame.py
+        # waited for "us" - which matched the FIRST one and returned before the
+        # peak had arrived. A gate that stops reading halfway through its own
+        # answer reports None and looks like a broken feature.
+        color(C_WHITE)  put("  FRAMEUS ")  put(wm_us())  put(" ")
+        put(wm_peak())  print(" END")
+        color(C_GREY)  return 0
+    }
+    if cmd == 12 { wm_peak0()  print("  peak reset")  return 0 }
     if cmd == 113 { return 1 }
     color(C_RED)  print("  unknown command - press h for help")
     color(C_GREY) return 0
@@ -1738,7 +1929,7 @@ fn draw_sysmon(sx, sy, sfoc) {
 # derived from sx,sy. Nothing is baked in.
 fn sysmon_body(sx, sy) {
     u = ui()
-    text_aa(sx + 14 * u, sy + 40 * u, "CPU", TXT_DIM)
+    label(sx + 14 * u, sy + 40 * u, "CPU", TXT_DIM, T_CAPTION, W_BOLD)
     smi = 0
     smx = sx + 14 * u
     smy = sy + 58 * u
@@ -1751,11 +1942,11 @@ fn sysmon_body(sx, sy) {
         }
         smi = smi + 1
     }
-    text_aa(sx + 14 * u, sy + 98 * u, "MEM", TXT_DIM)
+    label(sx + 14 * u, sy + 98 * u, "MEM", TXT_DIM, T_CAPTION, W_BOLD)
     fill_rgb(sx + 56 * u, sy + 100 * u, 214 * u, 12 * u, rgb(12, 18, 32))
     fill_rgb(sx + 56 * u, sy + 100 * u, 58 * u, 12 * u, ACCENT)
-    text_aa(sx + 14 * u, sy + 122 * u, "TICKS", TXT_DIM)
-    num_aa(sx + 68 * u, sy + 122 * u, ticks(), TXT_HI)
+    label(sx + 14 * u, sy + 122 * u, "TICKS", TXT_DIM, T_CAPTION, W_BOLD)
+    label_num(sx + 68 * u, sy + 122 * u, ticks(), TXT_HI, T_CAPTION, W_REG)
     # a little sparkline across the bottom, drawn as connected segments
     line(sx + 14,  sy + 182, sx + 46,  sy + 170, C_CYAN)
     line(sx + 46,  sy + 170, sx + 78,  sy + 176, C_CYAN)
@@ -1778,10 +1969,10 @@ fn draw_about(ax, ay, afoc) {
 
 fn about_body(ax, ay) {
     u = ui()
-    text_aa(ax + 14 * u, ay + 32 * u, "zlOS 0.3", TXT_HI)
-    text_aa(ax + 14 * u, ay + 54 * u, "a desktop written in zl", TXT_DIM)
-    text_aa(ax + 14 * u, ay + 76 * u, "no OS   no libc   no GNU", ACCENT)
-    text_aa(ax + 14 * u, ay + 98 * u, "press h for the app list", TXT_DIM)
+    label(ax + 14 * u, ay + 30 * u, "zlOS 0.3", TXT_HI, T_TITLE, W_BOLD)
+    label(ax + 14 * u, ay + 60 * u, "a desktop written in zl", TXT_DIM, T_BODY, W_REG)
+    label(ax + 14 * u, ay + 82 * u, "no OS   no libc   no GNU", ACCENT, T_BODY, W_BOLD)
+    label(ax + 14 * u, ay + 104 * u, "type help for the commands", TXT_DIM, T_CAPTION, W_REG)
     return 0
 }
 
@@ -1795,14 +1986,186 @@ fn about_body(ax, ay) {
 # exactly the kind of thing that has to be done once, here, rather than by
 # editing sixty coordinates.
 
+
+# ---- SNAKE AS A REAL APP ---------------------------------------------------
+# desktop-TODO 2e names this as the one to convert first, and it is right: the
+# game's state has lived in raw memory (SNAKE_X / SNAKE_Y) since long before
+# any of this, so there is nothing to move - only a `while` loop to delete.
+#
+# THE LOOP IS THE WHOLE POINT. snake_game() owned the screen and owned the
+# keyboard: it cleared the framebuffer, spun until you died, and ended with
+# "press any key". Three functions and no loop turn that into a window you can
+# drag another window across while the snake keeps moving. That sentence -
+# "Snake keeps playing while you drag the System Monitor" - is the interaction
+# target desktop-TODO states in Roy's words, and this is the first app to
+# actually meet it.
+#
+#   sn_draw   position-pure: every cell derived from the client rect it is
+#             handed, nothing baked in, called only when damaged
+#   sn_event  one key per call, no waiting
+#   sn_step   runs every frame, cheap, DRAWS NOTHING, returns 1 when the board
+#             changed - which is what asks for the repaint
+SN_CELL = 8                        # design units; x ui() for pixels
+sn_gw = 0                          # grid, in cells - set by the first draw
+sn_gh = 0
+sn_len = 0
+sn_dx = 1
+sn_dy = 0
+sn_fx = 0
+sn_fy = 0
+sn_score = 0
+sn_alive = 0
+sn_next = 0
+sn_seed = 12345
+sn_ready = 0
+
+fn sn_rand(n) {
+    sn_seed = sn_seed * 1103515245 + 12345
+    r = band(sn_seed / 256, 1023) % n
+    if r < 0 { r = 0 - r }
+    return r
+}
+
+# (Re)start on a grid of gw x gh cells. Called by the draw when the window it
+# is given is a different size from the one it last laid out for - which is
+# also what makes the game survive a resize instead of drawing off the edge.
+fn sn_reset(gw, gh) {
+    sn_gw = gw
+    sn_gh = gh
+    sn_len = 5
+    shx = gw / 2
+    shy = gh / 2
+    si = 0
+    while si < sn_len {
+        poke8(SNAKE_X + si, shx - si)
+        poke8(SNAKE_Y + si, shy)
+        si = si + 1
+    }
+    # PAUSED UNTIL THE FIRST STEER. It used to start moving right, and in a
+    # window it is dead against the wall in under two seconds - before anyone
+    # has looked at it, let alone touched a key. A game that requires you to
+    # already be holding a key when it opens is not a game.
+    sn_dx = 0
+    sn_dy = 0
+    sn_seed = ticks() + 7
+    sn_fx = sn_rand(gw)
+    sn_fy = sn_rand(gh)
+    sn_score = 0
+    sn_alive = 1
+    sn_next = ticks() + 7
+    sn_ready = 1
+    return 0
+}
+
+# ONE KEY PER CALL. w a s d steer; r restarts after a death. Nothing here
+# waits, and nothing here ends the app - the close box and Ctrl+W do that, like
+# every other window.
+fn sn_event(ety, ecode) {
+    if ety != 3 { return 1 }
+    if ecode == 119 { if sn_dy == 0 { sn_dx = 0  sn_dy = 0 - 1 } }
+    if ecode == 115 { if sn_dy == 0 { sn_dx = 0  sn_dy = 1 } }
+    if ecode == 97  { if sn_dx == 0 { sn_dx = 0 - 1  sn_dy = 0 } }
+    if ecode == 100 { if sn_dx == 0 { sn_dx = 1  sn_dy = 0 } }
+    if ecode == 114 { if sn_alive == 0 { sn_reset(sn_gw, sn_gh) } }
+    return 1
+}
+
+# Every frame, cheap, MUST NOT DRAW. Returns 1 to say "repaint me".
+fn sn_step() {
+    if sn_ready == 0 { return 0 }
+    if sn_alive == 0 { return 0 }
+    if sn_dx == 0 { if sn_dy == 0 { return 0 } }      # paused: nothing to do
+    if ticks() < sn_next { return 0 }
+    sn_next = ticks() + 7
+    nhx = peek8(SNAKE_X) + sn_dx
+    nhy = peek8(SNAKE_Y) + sn_dy
+    if nhx < 0      { sn_alive = 0 }
+    if nhx >= sn_gw { sn_alive = 0 }
+    if nhy < 0      { sn_alive = 0 }
+    if nhy >= sn_gh { sn_alive = 0 }
+    si = 0
+    while si < sn_len {
+        if peek8(SNAKE_X + si) == nhx {
+            if peek8(SNAKE_Y + si) == nhy { sn_alive = 0 }
+        }
+        si = si + 1
+    }
+    if sn_alive == 0 { return 1 }
+    if nhx == sn_fx {
+        if nhy == sn_fy {
+            sn_score = sn_score + 1
+            sn_len = sn_len + 1
+            sn_fx = sn_rand(sn_gw)
+            sn_fy = sn_rand(sn_gh)
+        }
+    }
+    si = sn_len - 1
+    while si > 0 {
+        poke8(SNAKE_X + si, peek8(SNAKE_X + si - 1))
+        poke8(SNAKE_Y + si, peek8(SNAKE_Y + si - 1))
+        si = si - 1
+    }
+    poke8(SNAKE_X, nhx)
+    poke8(SNAKE_Y, nhy)
+    return 1
+}
+
+# POSITION-PURE. The whole board every time, from state - which is what makes
+# it survive a window being dragged across it. The old version painted each
+# cell as it changed and could not be repainted at all, which is exactly the
+# problem term.c's scrollback solves for the shell.
+fn sn_draw(ax, ay, aw, ah) {
+    u = ui()
+    cell = SN_CELL * u
+    gw = aw / cell
+    gh = (ah - 3 * SN_CELL * u) / cell        # a strip at the top for the score
+    if gw < 8  { gw = 8 }
+    if gh < 6  { gh = 6 }
+    if gw > 200 { gw = 200 }                  # SNAKE_X is a 512-byte page
+    if gh > 200 { gh = 200 }
+    if sn_ready == 0 { sn_reset(gw, gh) }
+    if gw != sn_gw { sn_reset(gw, gh) }
+    if gh != sn_gh { sn_reset(gw, gh) }
+
+    by = ay + 3 * SN_CELL * u
+    fill_rgb(ax, by, gw * cell, gh * cell, rgb(9, 12, 22))
+    label(ax + 2 * u, ay + 2 * u, "SCORE", TXT_DIM, T_CAPTION, W_BOLD)
+    label_num(ax + 56 * u, ay + 2 * u, sn_score, ACCENT, T_CAPTION, W_BOLD)
+    if sn_alive == 0 { label(ax + 110 * u, ay + 2 * u, "game over - press r", C_RED, T_CAPTION, W_BOLD) }
+    if sn_alive == 1 {
+        if sn_dx == 0 { if sn_dy == 0 { label(ax + 110 * u, ay + 2 * u, "w a s d to start", ACCENT, T_CAPTION, W_REG) } }
+        if sn_dx != 0 { label(ax + 110 * u, ay + 2 * u, "w a s d to steer", TXT_DIM, T_CAPTION, W_REG) }
+        if sn_dy != 0 { label(ax + 110 * u, ay + 2 * u, "w a s d to steer", TXT_DIM, T_CAPTION, W_REG) }
+    }
+
+    # the food, then the body, then the head - painted last so a head that has
+    # just eaten is drawn over the food rather than under it
+    fill_rgb(ax + sn_fx * cell + 1, by + sn_fy * cell + 1, cell - 2, cell - 2, rgb(224, 85, 97))
+    si = sn_len - 1
+    while si > 0 {
+        sbx = ax + peek8(SNAKE_X + si) * cell
+        sby = by + peek8(SNAKE_Y + si) * cell
+        fill_rgb(sbx + 1, sby + 1, cell - 2, cell - 2, rgb(40, 120, 160))
+        si = si - 1
+    }
+    shx = ax + peek8(SNAKE_X) * cell
+    shy = by + peek8(SNAKE_Y) * cell
+    fill_rgb(shx + 1, shy + 1, cell - 2, cell - 2, ACCENT)
+    return 0
+}
+
 APP_SHELL   = 0
 APP_MONITOR = 1
 APP_ABOUT   = 2
+APP_SNAKE   = 3
+APP_MENU    = 4
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     wy = ay - TITLE_H * ui()
     if id == APP_MONITOR { return sysmon_body(ax, wy) }
     if id == APP_ABOUT   { return about_body(ax, wy) }
+    if id == APP_SNAKE   { return sn_draw(ax, ay, aw, ah) }
+    if id == APP_MENU    { return menu_draw(ax, ay, aw, ah) }
     if id == APP_SHELL {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the
@@ -1819,6 +2182,8 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
 # Return 1 if handled. 'q' or Esc ends the session - NEVER "press any key",
 # which is the phrase this whole rewrite exists to delete.
 fn app_event(id, win, ety, ecode, ex, ey) {
+    if id == APP_SNAKE { return sn_event(ety, ecode) }
+    if id == APP_MENU  { return menu_event(ety, ecode, ex, ey, win) }
     if id == APP_SHELL {
         # ONE CHARACTER PER CALL. No loop - that is the whole inversion.
         # read_line used to block, which is exactly why the shell had to be the
@@ -1831,6 +2196,19 @@ fn app_event(id, win, ety, ecode, ex, ey) {
                     run_command(tc, term_arg())
                 }
             }
+            # A REFUSAL YOU CAN SEE. term.c prints "unknown command" into the
+            # scrollback, and in a window that scrolls away while you are
+            # still looking at where you typed. ANIM_PULSE was one of five
+            # kinds in wm.c with no caller anywhere - built, asserted, and
+            # invisible. This is a caller.
+            if term_bad() == 1 { wm_anim(shell_win, 4) }
+            # A NEW PROMPT ON THE SERIAL LINE AFTER EVERY LINE ENTERED, whether
+            # it named a command, named nothing, or was empty. Every gate here
+            # types, then waits for "zl> " before typing again; a prompt that
+            # only appeared after a RECOGNISED command would hang the harness
+            # on exactly the case worth testing.
+            if ecode == 13 { ser_out("zl> ") }
+            if ecode == 10 { ser_out("zl> ") }
             wm_damage_win_all()
         }
         return 1
@@ -1850,9 +2228,18 @@ fn wm_damage_win_all() {
 }
 
 fn app_tick(id, win) {
+    if id == APP_SNAKE { return sn_step() }
     if id == APP_MONITOR {
         tsec = ticks() / 100
-        if tsec != last_tick_sec { last_tick_sec = tsec  return 1 }
+        if tsec != last_tick_sec {
+            last_tick_sec = tsec
+            # ...and the dock's clock, which is furniture rather than a window.
+            # Damaging just the tray strip rather than the whole dock is the
+            # difference between repainting 30,000 pixels a second and
+            # repainting 2,300,000.
+            wm_damage(px_w() - 130 * ui(), dock_y() + 10 * ui(), 120 * ui(), 34 * ui())
+            return 1
+        }
     }
     return 0
 }
@@ -1861,24 +2248,411 @@ fn app_tick(id, win) {
 # It may ignore the damage rectangle it is given - the scissor is already set to
 # it, so nothing outside can reach the screen. Using it would be the
 # optimisation; correctness does not depend on it.
+# DESK_DRAW IS CALLED ONCE PER DAMAGE RECTANGLE, up to eight times a frame, and
+# forgetting that is what made the desktop slow.
+#
+# The wallpaper was fine: wall_paint takes the rectangle and blits only that.
+# The header and the dock were not. Both redrew IN FULL every call, and the
+# dock had just become the most expensive thing on screen - a cached-blur blit
+# plus a full-width translucent tint over a 1920x128 strip. Measured from
+# fbbench's own numbers: 245,760 px at 1.54 cyc/px to blit the blur and 22.16
+# cyc/px to tint it, which is 5.8M cycles, about 2.5 ms. Eight damage
+# rectangles is 20 ms of dock alone, against a 16.67 ms budget - and seven of
+# those eight rectangles usually do not touch the dock at all.
+#
+# So the furniture is drawn only when the rectangle it is being asked about
+# actually overlaps it. That is not an optimisation of the drawing; it is
+# noticing that desk_draw was handed a rectangle and ignored it.
 fn desk_draw(dx, dy, dw, dh) {
-    grad_rgb(0, 0, px_w(), px_h(), WALL_TOP, WALL_BOT)
-    draw_header()
-    draw_status("compositor")
+    if wall_ok() == 1 {
+        wall_paint(dx, dy, dw, dh)
+    } else {
+        grad_rgb(0, 0, px_w(), px_h(), WALL_TOP, WALL_BOT)
+    }
+    # the header band: 0 .. TOPBAR_H + 8
+    # the header is entirely static - the resolution it prints does not change -
+    # so it is baked in with the wallpaper too and costs nothing per frame
+    if dock_baked == 0 { if dy < TOPBAR_H * ui() + 8 { draw_header() } }
+    # the dock band: dock_y() - 6 .. bottom
+    if dy + dh > dock_y() - 6 { draw_status("compositor") }
     return 0
 }
 
-# ---- a real compositor session ---------------------------------------------
-# This replaces windows_demo, which desktop-TODO calls superseded. It is NOT
-# the full inversion - the shell is still the top of the system, and making it
-# app 0 needs read_line to become a state machine (2g). What this does is put
-# wm.c, ui.c and the whole damage/clip/z-order stack on the real screen, in the
-# kernel, so everything below the shell is proven before the shell moves.
-fn wm_session() {
-    if px_w() == 0 {
-        color(C_GREY)  print("  the compositor needs the framebuffer console")
-        return 0
+# The v10 background, translated rather than copied. Its structure - a base
+# gradient, two offset elliptical glows, a corner shadow, a vignette and two
+# faint conic sweeps - is taken exactly; its palette is NOT. The prototype is
+# near-black and lime; this is navy and cyan, because desktop-look.md's rule is
+# to extend the visual system that exists rather than introduce a second one.
+# Percentages become pixels here, because a percentage of what is a layout
+# question and fb.c does not do layout.
+fn draw_wallpaper() {
+    ww = px_w()
+    wh = px_h()
+    grad_rgb(0, 0, ww, wh, WALL_TOP, WALL_BOT)
+    # radial-gradient(64% 50% at 16% 8%, accent .3, transparent 62%)
+    glow(ww * 16 / 100, wh * 8 / 100, ww * 64 / 100, wh * 50 / 100, rgb(40, 108, 150), 64, 0, 62)
+    # radial-gradient(58% 48% at 88% 92%, deep .62, transparent 68%)
+    glow(ww * 88 / 100, wh * 92 / 100, ww * 58 / 100, wh * 48 / 100, rgb(10, 16, 34), 140, 0, 68)
+    # radial-gradient(46% 34% at 76% 18%, cool .7, transparent 70%)
+    glow(ww * 76 / 100, wh * 18 / 100, ww * 46 / 100, wh * 34 / 100, rgb(22, 30, 52), 150, 0, 70)
+    # conic sweeps: two faint accent wedges, the prototype's 214 and 32 degrees
+    wedge(ww / 2, wh / 2, ACCENT, 20, 214, 34, 82)
+    wedge(ww / 2, wh / 2, ACCENT, 12, 32, 44, 98)
+    # radial-gradient(120% 96% at 50% 40%, transparent 26%, black .82 100%) -
+    # the vignette, which is this same primitive run the other way round
+    glow(ww / 2, wh * 40 / 100, ww * 120 / 100, wh * 96 / 100, rgb(0, 0, 0), 0, 190, 100)
+    return 0
+}
+
+# Open snake, or raise it if it is already open. A dock that opens a second
+# copy of an app every time it is clicked is the single most annoying thing a
+# dock can do, and wm.c gives no such rule for free - "one window per app" is
+# policy and this is where policy lives.
+snake_win = 0 - 1
+fn open_snake() {
+    u = ui()
+    if snake_win >= 0 {
+        if wm_open_p(snake_win) == 1 {
+            wm_setfocus(snake_win)
+            wm_raise(snake_win)
+            return 0
+        }
     }
+    sx = px_w() / 2 - 200 * u
+    sy = 120 * u
+    snake_win = wm_open(APP_SNAKE, "Snake", sx, sy, 400 * u, 330 * u)
+    wm_setfocus(snake_win)
+    wm_raise(snake_win)
+    return 0
+}
+
+dock_hover = 0 - 1                 # which tile the pointer is over, -1 = none
+dock_press = 0                     # ...and whether the button is down on it
+
+# WHICH TILE IS UNDER A POINT, or -1. One function, used by BOTH the hover
+# tracking and the click routing - two copies of this arithmetic is how a dock
+# ends up highlighting one tile and launching another.
+fn dock_slot_at(cx, cy) {
+    if cy < dock_y() { return 0 - 1 }
+    u = ui()
+    if cx < DOCK_X0 * u { return 0 - 1 }
+    dslot = (cx - DOCK_X0 * u) / (DOCK_PITCH * u)
+    dinto = cx - DOCK_X0 * u - dslot * DOCK_PITCH * u
+    if dslot >= 9 { return 0 - 1 }
+    if dinto >= DOCK_TW * u { return 0 - 1 }
+    return dslot
+}
+
+dock_blur = 0 - 1
+# ---- the dock, which is now CLICKABLE ---------------------------------------
+# desk_draw has painted a dock, a start button and a tray since the compositor
+# first booted, and every one of them was decoration: the dock is not a window,
+# so wm_at() found nothing under the pointer and route_mouse dropped the click.
+# wm.c hands presses that hit no window here now.
+fn desk_click(cx, cy, cbtn) {
+    u = ui()
+    down = band(cbtn, 1)
+
+    # HOVER FIRST, and only repaint when the answer CHANGES. Damaging the dock
+    # on every pointer event would repaint a 2560x128 strip sixty times a
+    # second to change nothing; damaging it when the hovered tile changes
+    # repaints it when there is something to see.
+    nh = dock_slot_at(cx, cy)
+    if nh != dock_hover {
+        dock_hover = nh
+        wm_damage(0, dock_y(), px_w(), px_h() - dock_y())
+    }
+    if down != dock_press {
+        dock_press = down
+        wm_damage(0, dock_y(), px_w(), px_h() - dock_y())
+    }
+
+    if down == 0 { return 0 }
+    if cy < dock_y() { return 0 }
+    if cx >= 10 * u { if cx < 106 * u { return open_menu() } }
+    if nh >= 0 { return dock_launch(nh) }
+    # the window list, to the right of the launchers
+    tw = task_slot_at(cx, cy)
+    if tw >= 0 {
+        wm_setfocus(tw)
+        wm_raise(tw)
+    }
+    return 0
+}
+
+# SUPER OPENS THE MENU. MOD_SUPER has been tracked by input.c since it was
+# written and used for nothing; a modifier emits no event of its own, so there
+# was nothing for a shortcut to fire on. input.c emits KEY_SUPER (0x11A) on a
+# TAP now - pressed and released with no other key between - and wm.c routes it
+# here rather than to whichever window has focus, because the start menu is the
+# desktop's and not any app's.
+fn desk_key(kcode, kmods) {
+    if kcode == 0x11A { return open_menu() }
+    return 0
+}
+
+# ---- the WINDOW LIST -------------------------------------------------------
+# THE DOCK IS THE TASKBAR, and a separate row of window chips beside it was the
+# wrong design - which the arithmetic said before the eye did. Nine launchers
+# end at 1244 px on a 1920 screen and the tray starts at 1320: 76 px of gap for
+# a row of 150-unit chips. The first version had a guard that silently drew
+# nothing, which is the worst of both.
+#
+# So a dock tile carries the accent bar when its app is open and clicking it
+# RAISES that window rather than launching a second one - which is a taskbar,
+# in the shape every modern dock uses. This row exists only for windows whose
+# app has NO tile, and today there are none, so it correctly draws nothing.
+# When there are, it will fit as many as the space between the last launcher
+# and the tray allows and stop - a count derived from the space, not a
+# hardcoded ceiling that happens to be wrong on one screen size.
+TASK_W = 92                        # design units
+TASK_PITCH = 100
+
+fn task_label(app) {
+    if app == APP_SHELL   { return "zl shell" }
+    if app == APP_MONITOR { return "Monitor" }
+    if app == APP_ABOUT   { return "About" }
+    if app == APP_SNAKE   { return "Snake" }
+    if app == APP_MENU    { return "Menu" }
+    return "window"
+}
+
+# Does this app already have a dock tile? If it does, the tile IS its taskbar
+# entry and a second one beside it would be the same window listed twice.
+fn app_has_tile(app) {
+    if app == APP_SHELL   { return 1 }
+    if app == APP_SNAKE   { return 1 }
+    if app == APP_MONITOR { return 1 }
+    if app == APP_ABOUT   { return 1 }
+    if app == APP_MENU    { return 1 }        # never listed at all
+    return 0
+}
+
+fn task_x0() { return DOCK_X0 * ui() + 9 * DOCK_PITCH * ui() + 16 * ui() }
+fn task_room() { return tray_x() - task_x0() }
+
+fn draw_tasklist(dy) {
+    u = ui()
+    nfit = task_room() / (TASK_PITCH * u)
+    ti = 0
+    tn = 0
+    while ti < wm_n() {
+        tw = wm_zat(ti)
+        ta = wm_app(tw)
+        if app_has_tile(ta) == 0 {
+            if tn < nfit {
+                tx = task_x0() + tn * TASK_PITCH * u
+                tsel = 0
+                if wm_focus() == tw { tsel = 1 }
+                tcol = rgb(30, 36, 54)
+                if tsel == 1 { tcol = rgb(48, 64, 104) }
+                rrect(tx, dy + 12 * u, TASK_W * u, 34 * u, 10 * u, tcol)
+                if tsel == 1 { fill_rgb(tx, dy + 12 * u, TASK_W * u, 2, ACCENT) }
+                label(tx + 10 * u, dy + 18 * u, task_label(ta), TXT_HI, T_CAPTION, W_REG)
+            }
+            tn = tn + 1
+        }
+        ti = ti + 1
+    }
+    return 0
+}
+
+fn task_slot_at(cx, cy) {
+    u = ui()
+    if cy < dock_y() + 12 * u { return 0 - 1 }
+    if cx < task_x0() { return 0 - 1 }
+    tsl = (cx - task_x0()) / (TASK_PITCH * u)
+    tinto = cx - task_x0() - tsl * TASK_PITCH * u
+    if tinto >= TASK_W * u { return 0 - 1 }
+    ti = 0
+    tn = 0
+    while ti < wm_n() {
+        tw = wm_zat(ti)
+        if app_has_tile(wm_app(tw)) == 0 {
+            if tn == tsl { return tw }
+            tn = tn + 1
+        }
+        ti = ti + 1
+    }
+    return 0 - 1
+}
+
+# WHAT A DOCK TILE DOES. Four of these open a real window; the rest still run a
+# full-screen demo, and that is stated rather than hidden - desktop-TODO 2e is
+# the work that makes them all the first kind, and pretending otherwise here
+# would just move the surprise.
+fn dock_launch(slot) {
+    if slot == 0 { return raise_shell() }
+    if slot == 4 { return open_snake() }
+    if slot == 6 { return reopen_mon() }
+    if slot == 7 { return reopen_about() }
+    dl = dock_cmd(slot)
+    if dl == 113 { wm_stop()  return 0 }
+    if dl > 0 {
+        raise_shell()
+        run_command(dl, 0)
+        wm_damage_win_all()
+    }
+    return 0
+}
+
+fn raise_shell() {
+    if shell_win >= 0 {
+        wm_setfocus(shell_win)
+        wm_raise(shell_win)
+    }
+    return 0
+}
+
+mon_win = 0 - 1
+about_win = 0 - 1
+fn reopen_mon() {
+    u = ui()
+    if mon_win >= 0 { if wm_open_p(mon_win) == 1 { wm_setfocus(mon_win)  wm_raise(mon_win)  return 0 } }
+    mon_win = wm_open(APP_MONITOR, "System Monitor", px_w() - 290 * u, 52 * u, MON_W * u, MON_H * u)
+    wm_setfocus(mon_win)
+    return 0
+}
+fn reopen_about() {
+    u = ui()
+    if about_win >= 0 { if wm_open_p(about_win) == 1 { wm_setfocus(about_win)  wm_raise(about_win)  return 0 } }
+    about_win = wm_open(APP_ABOUT, "About", px_w() - 290 * u, 52 * u + (MON_H + 16) * u, MON_W * u, AB_H * u)
+    wm_setfocus(about_win)
+    return 0
+}
+
+# ---- the start menu, as a MODAL WINDOW --------------------------------------
+# The old one drew straight onto the screen and saved the patch underneath with
+# grab/stamp - the sticker technique C4 deleted, at menu size. wm.c has had
+# WF_MODAL since it was written and NOTHING EVER SET IT, which is the exact
+# hazard HANDOFF.md names for intel.c: the code exists, so it looks done, and
+# it has no caller. This is the caller.
+#
+# A modal takes every event and a click outside dismisses it - both already in
+# route_mouse. Restoring what was underneath is a repaint of the damage it
+# leaves, which needs no saved bitmap at all.
+MENU_ROWS = 8
+menu_win = 0 - 1
+
+fn menu_label(idx) {
+    if idx == 0 { return "Terminal" }
+    if idx == 1 { return "Snake" }
+    if idx == 2 { return "System Monitor" }
+    if idx == 3 { return "About" }
+    if idx == 4 { return "3D Cube" }
+    if idx == 5 { return "Paint" }
+    if idx == 6 { return "Editor" }
+    return "Halt"
+}
+
+fn menu_pick(idx) {
+    if idx == 0 { return raise_shell() }
+    if idx == 1 { return open_snake() }
+    if idx == 2 { return reopen_mon() }
+    if idx == 3 { return reopen_about() }
+    if idx == 7 { wm_stop()  return 0 }
+    raise_shell()
+    if idx == 4 { run_command(118, 0) }
+    if idx == 5 { run_command(100, 0) }
+    if idx == 6 { run_command(105, 0) }
+    wm_damage_win_all()
+    return 0
+}
+
+menu_blur = 0 - 1
+menu_bx = 0
+menu_by = 0
+fn open_menu() {
+    u = ui()
+    if menu_win >= 0 { if wm_open_p(menu_win) == 1 { wm_close(menu_win)  menu_win = 0 - 1  return 0 } }
+    mh = MENU_ROWS * 26 * u + TITLE_H * u + 12 * u
+    mx = 10 * u
+    my = dock_y() - mh - 8 * u
+    # BLUR WHAT IS BEHIND IT, NOW - before the window exists. wm.c draws the
+    # chrome and then calls app_draw, so by the time the menu could blur its
+    # own client rect the panel fill is already sitting in it. This is the
+    # moment the screen still holds only what is underneath.
+    #
+    # It is a CACHE and never re-taken: 7.37 ms to blur, 0.18 ms to paint. That
+    # is the whole reason a blurred panel must not be draggable, and this one
+    # is not - a click outside dismisses it.
+    menu_bx = mx
+    menu_by = my
+    menu_blur = blur(mx, my, 210 * u, mh, 10 * u)
+    menu_win = wm_open(APP_MENU, "zlOS", mx, my, 210 * u, mh)
+    wm_modal(menu_win, 1)
+    # zov / zpop in the prototype: the menu fades in over the blurred desktop
+    # behind it. This is a REAL fade - the rectangle is stashed before the
+    # window is drawn on it and blended back - not a tint pretending to be one.
+    wm_anim(menu_win, 5)
+    return 0
+}
+
+menu_hover = 0 - 1
+fn menu_draw(ax, ay, aw, ah) {
+    u = ui()
+    # the cached blur of what is behind, then a translucent panel over it.
+    # Together that is backdrop-filter: blur() + rgba(), which the prototype
+    # asks for in six places and nothing here had ever drawn.
+    if menu_blur >= 0 { blurdraw(menu_blur, menu_bx, menu_by) }
+    rrblend(ax, ay, aw, ah, 10 * u, rgb(24, 32, 52), 205)
+    mi = 0
+    while mi < MENU_ROWS {
+        mry = ay + 4 * u + mi * 26 * u
+        mtc = TXT_HI
+        if mi == menu_hover {
+            # a translucent accent wash, not a solid bar - the row underneath
+            # is a blurred desktop and painting over it opaquely throws away
+            # the effect this menu exists to show
+            rrblend(ax + 2 * u, mry, aw - 4 * u, 24 * u, 8 * u, ACCENT, 55)
+            mtc = C_WHITE
+        }
+        label(ax + 12 * u, mry + 3 * u, menu_label(mi), mtc, T_BODY, W_REG)
+        mi = mi + 1
+    }
+    return 0
+}
+
+fn menu_row_at(win, ey) {
+    u = ui()
+    cy = wm_cy(win)
+    r = (ey - cy - 4 * u) / (26 * u)
+    if r < 0 { return 0 - 1 }
+    if r >= MENU_ROWS { return 0 - 1 }
+    return r
+}
+
+# A press inside the menu picks a row. wm.c hands the pointer position in
+# SCREEN coordinates, which is what the client rect is measured in too, so the
+# row is one subtraction - and the same arithmetic the draw above uses, which
+# is the only way a menu responds where it looks.
+fn menu_event(ety, ecode, ex, ey, win) {
+    if ety != 4 { return 1 }
+    # HOVER, and only repaint when the row CHANGES - the same rule the dock
+    # follows and for the same reason: a repaint per pointer event redraws the
+    # whole panel sixty times a second to change nothing.
+    nh = menu_row_at(win, ey)
+    if nh != menu_hover {
+        menu_hover = nh
+        wm_dmg(win)
+    }
+    if band(ecode, 1) == 0 { return 1 }
+    idx = menu_row_at(win, ey)
+    menu_hover = 0 - 1
+    wm_close(win)
+    menu_win = 0 - 1
+    blurfree()
+    menu_blur = 0 - 1
+    if idx >= 0 { if idx < MENU_ROWS { menu_pick(idx) } }
+    return 1
+}
+
+# ---- bringing the compositor up --------------------------------------------
+# Called from the boot sequence BEFORE the boot log prints, because the log
+# goes inside window 0 and a window has to exist to be printed into. Returns 1
+# if the desktop is up and the frame loop is worth entering.
+fn wm_boot_start() {
+    if wm_avail() == 0 { return 0 }
     u = ui()
     ui_theme(u)
     wm_init()
@@ -1887,6 +2661,15 @@ fn wm_session() {
         color(C_GREY)
         return 0
     }
+    # THE CONSOLE STOPS PAINTING HERE. It draws at its own cursor inside its
+    # own scrolling region and knows nothing about windows, so with the
+    # compositor repainting from damage every printed line landed twice: once
+    # in the shell window from term.c's scrollback, and once as raw text
+    # scrolling across the desktop underneath it. Muting stops the pixels only
+    # - the tee into the scrollback and the write to COM1 both continue, so the
+    # window has a complete transcript to redraw from and every automated gate
+    # reads exactly what it read before.
+    con_mute(1)
     # THE SHELL IS WINDOW 0, and it is opened FIRST so the boot log that
     # follows lands inside it - the same ordering draw_desk relied on, now
     # expressed through wm_open.
@@ -1895,7 +2678,54 @@ fn wm_session() {
     shell_win = wm_open(APP_SHELL, "zl shell", 40 * u, 52 * u, sw - 340 * u, sh - 90 * u)
     wm_open(APP_MONITOR, "System Monitor", sw - 290 * u, 52 * u, MON_W * u, MON_H * u)
     wm_open(APP_ABOUT, "About", sw - 290 * u, 52 * u + (MON_H + 16) * u, MON_W * u, AB_H * u)
-    while wm_run() == 1 { wm_frame() }
+    # THE SHELL TAKES THE KEYBOARD BACK. wm_open focuses whatever it just
+    # opened, and the shell has to be opened FIRST for an unrelated reason -
+    # the boot log prints into it, so it must exist before the log runs. Those
+    # two facts together handed every keystroke on a fresh desktop to the About
+    # window, which has no app_event at all: typing did nothing and said
+    # nothing. Focus is policy, so it is stated here rather than inherited from
+    # the order the windows happened to be created in.
+    wm_setfocus(shell_win)
+    wm_raise(shell_win)
+    # ...and bake the wallpaper. It has to happen while nothing is on top of
+    # it, which is now, and it has to happen after wm_init so the mode is
+    # settled. wall_save() prints what it took and what is left; if it refuses
+    # - a 4K screen wants 33 MiB and the arena is 16 - desk_draw falls back to
+    # the plain gradient and says so rather than drawing nothing.
+    # THE STATIC FURNITURE IS BAKED IN WITH THE WALLPAPER, and this is the
+    # single biggest thing that made the desktop slow.
+    #
+    # Measured, with the frame timer that should have existed first: hovering
+    # one dock tile cost 7,426 us and peaked at 18,455 us - over the whole
+    # 16.67 ms budget, to light up one chip. The dock strip is 1920x128 =
+    # 245,760 px and the tint over it is 22.16 cyc/px, so recompositing
+    # blur-then-tint every time anything in the dock changed was ~2.4 ms of
+    # blend on its own, plus the blur blit, plus nine tiles.
+    #
+    # None of that ever CHANGES. The blur is of a wallpaper that is fixed, the
+    # tint over it is fixed, and eight of the nine tiles look the same as they
+    # did last frame. So all of it goes into the cached bitmap once, and a
+    # frame pays one blit at 1.54 cyc/px for the lot.
+    draw_wallpaper()
+    dock_blur = blur(0, dock_y(), px_w(), px_h() - dock_y(), 10 * ui())
+    draw_header()
+    draw_dock_bg()
+    dock_baked = 1
+    wall_save()
+    blurfree()                 # the strip is inside the wallpaper now
+    dock_blur = 0 - 1
+    return 1
+}
+
+# 'w' used to launch the compositor. The compositor IS the desktop now, so the
+# only two machines that can reach this are one with no framebuffer, and a
+# mistake.
+fn wm_session() {
+    if wm_run() == 1 {
+        color(C_GREY)  print("  the compositor is already the desktop - you are in it")
+        return 0
+    }
+    color(C_GREY)  print("  the compositor needs the framebuffer console")
     return 0
 }
 
@@ -1953,86 +2783,35 @@ fn draw_desk() {
     }
 }
 
-# snapshot the static desktop as the drag background, then draw the DRAGGABLE
-# windows on top of it. Called once the terminal has its content, and again
-# after any redraw, so the background always matches what's really behind them.
-fn compose_windows() {
-    if px_w() > 0 {
-        bg_snap()                        # capture wallpaper+header+terminal+dock
-        raise_windows()                  # ... then the open windows, focused last
-        present()
-    }
-}
-
-# Draw the open windows in z-order: everything else first, the focused one LAST
-# so it lands on top. That single ordering is the whole "bring to front".
-fn raise_windows() {
-    rw_mf = 0                                  # is the monitor the focused one?
-    if focus_win == 1 { rw_mf = 1 }
-    if focus_win == 2 {
-        if mon_open == 1 { draw_sysmon(mon_x, mon_y, 0) }
-        if ab_open  == 1 { draw_about(ab_x, ab_y, 1) }
-    }
-    if focus_win != 2 {
-        if ab_open  == 1 { draw_about(ab_x, ab_y, 0) }
-        if mon_open == 1 { draw_sysmon(mon_x, mon_y, rw_mf) }
-    }
-    present()
-    return 0
-}
-
-# a full redraw: static desktop + the draggable windows composited over it
+# GIVING THE SCREEN BACK. Every full-screen demo in this file ends by calling
+# this, and each one used to mean "redraw the static desktop and re-composite
+# the two draggable windows over it" - which under a compositor would paint a
+# second, stale desktop on top of the real one.
+#
+# Under the compositor the correct answer is not to draw anything at all: mark
+# the whole screen damaged and let wm_frame repaint it from the window table,
+# in z-order, with the scissor set. One place says this, so all seven demos got
+# it right at once rather than seven times.
 fn draw_screen() {
+    if wm_run() == 1 {
+        wm_damage(0, 0, px_w(), px_h())
+        return 0
+    }
     draw_desk()
-    compose_windows()
+    return 0
 }
 
-# ---- the start menu --------------------------------------------------------
-# Click the zlOS button and a menu pops up above the dock. It saves the patch
-# of screen underneath (grab) so closing it just stamps that back - no full
-# redraw, so whatever was there (a window, the terminal) returns untouched.
-fn open_menu() {
-    mnx = 10
-    mnh = 10 * 26 + 36
-    mny = dock_y() - mnh - 6
-    grab(mnx - 2, mny - 2, 182, mnh + 16)               # save what's under the menu
-    shadow(mnx, mny, 172, mnh, 8, 6)
-    rrect(mnx, mny, 172, mnh, 6, rgb(20, 26, 42))
-    rrect(mnx + 1, mny + 1, 170, mnh - 2, 5, PANEL)
-    grad_rgb(mnx + 2, mny + 2, 168, 26, HDR_TOP, HDR_BOT)
-    fill_rgb(mnx + 2, mny + 28, 168, 2, ACCENT)
-    text_aa(mnx + 14, mny + 8, "zlOS menu", C_WHITE)
-    mrow = mny + 36
-    text_aa(mnx + 18, mrow, "Help", TXT_HI)       mrow = mrow + 26
-    text_aa(mnx + 18, mrow, "Snake", TXT_HI)      mrow = mrow + 26
-    text_aa(mnx + 18, mrow, "Paint", TXT_HI)      mrow = mrow + 26
-    text_aa(mnx + 18, mrow, "Editor", TXT_HI)     mrow = mrow + 26
-    text_aa(mnx + 18, mrow, "Demo", TXT_HI)       mrow = mrow + 26
-    text_aa(mnx + 18, mrow, "Windows", TXT_HI)    mrow = mrow + 26
-    text_aa(mnx + 18, mrow, "3D Cube", ACCENT)    mrow = mrow + 26
-    text_aa(mnx + 18, mrow, "System Monitor", TXT_HI)   mrow = mrow + 26
-    text_aa(mnx + 18, mrow, "About", TXT_HI)      mrow = mrow + 26
-    text_aa(mnx + 18, mrow, "Reboot", TXT_DIM)
-    menu_open = 1
-    return 0
-}
-fn close_menu() {
-    stamp(mnx - 2, mny - 2)                              # restore the saved patch
-    menu_open = 0
-    return 0
-}
-# map a menu row (0..7) to the command it launches
-fn menu_cmd(idx) {
-    if idx == 0 { return 104 }   # Help
-    if idx == 1 { return 103 }   # Snake
-    if idx == 2 { return 100 }   # Paint
-    if idx == 3 { return 105 }   # Editor
-    if idx == 4 { return 97 }    # Demo
-    if idx == 5 { return 119 }   # Windows
-    if idx == 6 { return 118 }   # 3D Cube
-    if idx == 9 { return 114 }   # Reboot
-    return 0                     # 7 and 8 reopen windows - the caller handles those
-}
+# ---- the start menu, and where it went --------------------------------------
+# open_menu / close_menu / menu_cmd lived here. They drew the menu straight
+# onto the screen and used grab/stamp to save and restore the patch underneath
+# - the same sticker technique C4 deleted, at menu size.
+#
+# The compositor already has the mechanism this needs and it is strictly
+# better: WF_MODAL. A modal window takes every event, a click outside dismisses
+# it, and it is restored by repainting the damage under it rather than by
+# stamping back a bitmap. That is desktop-TODO C5, and it is a wm_open call
+# with a flag, not a redraw of this file. Deleting the old one now keeps two
+# implementations of "the start menu" from existing at the same time.
 
 # ---- boot ------------------------------------------------------------------
 kbd_init()
@@ -2068,7 +2847,22 @@ if px_w() > 0 {
     }
 }
 if px_w() > 0 { layout() }
-draw_desk()                              # static desktop; the boot log fills the terminal
+
+# ---- THE INVERSION ---------------------------------------------------------
+# The compositor is the boot state, not something reached by pressing a key.
+# It has to come up HERE, before a single line of the boot log, because the log
+# prints into window 0 and a window has to exist to be printed into. That
+# ordering is not cosmetic: draw_desk() relied on exactly the same shape, and
+# it is why wm_boot_start() opens the shell first and the other two after.
+#
+# wm_avail() is FALSE when there is no framebuffer, and verify.sh boots
+# -kernel -display none where QEMU's multiboot loader supplies no framebuffer
+# tag at all. So on that gate this is 0, draw_desk() takes its text branch, and
+# the plain shell at the bottom of this file runs exactly as it always has -
+# byte-identical transcript, which is the single most likely thing here to go
+# red.
+wm_boot = wm_boot_start()
+if wm_boot == 0 { draw_desk() }          # static desktop; the boot log fills the terminal
 
 color(C_WHITE)  print("  zlOS starting")
 color(C_GREY)   print("")
@@ -2139,9 +2933,20 @@ print("")
 # a two-note boot chime - the timer is up, so we can time it
 beep(784, 8)  beep(1046, 12)
 
-# now that the terminal holds the boot log, snapshot it as the drag background
-# and drop the draggable windows on top
-compose_windows()
+# The FIRST prompt, on the serial line only. In the compositor the prompt is
+# pixels at the bottom of a window; every gate here waits for the string "zl> "
+# in the serial log before it types anything, so without this the harness
+# reports "booted but no prompt" and every probe stops working the moment the
+# desktop becomes the boot state. Later prompts come with the echo in term.c.
+if wm_boot == 1 { ser_out("zl> ") }
+
+# THE PEAK MEASURES INTERACTION, NOT BOOT. The first frame repaints the whole
+# screen and bakes the wallpaper - three radial glows, two conic sweeps and a
+# vignette at full resolution - which is a one-off costing over a tenth of a
+# second and would otherwise sit in the peak for ever, hiding every real
+# regression underneath it.
+if wm_boot == 1 { wm_peak0() }
+
 
 # ---- the shell -------------------------------------------------------------
 running = 1
@@ -2149,22 +2954,26 @@ pending = 0
 
 last_sec  = 0 - 1
 last_blink = 0 - 1
-last_mx = 0 - 1                           # mouse pointer position, tracked so the
-last_my = 0 - 1                           # cursor sprite only redraws when it moves
-last_lb = 0                               # last left-button state (drag edge detect)
-dragging = 0                             # 1 while a window is being dragged
-drag_win = 0                             # which window: 1 = monitor, 2 = about
-dox = 0                                  # the dragged window's current drawn origin
-doy = 0
-dgw = 0                                  # the dragged window's width/height
-dgh = 0
-gox = 0                                  # grab offset: mouse minus window origin
-goy = 0
-menu_open = 0                            # is the start menu showing?
-mnx = 0                                  # start menu geometry (set in open_menu)
-mny = 0
-mnh = 0
 
+# ---- the top of the system -------------------------------------------------
+# THE COMPOSITOR IS THE TOP OF THE SYSTEM when there is a screen. wm_frame()
+# owns the frame: it drains the input queue, ticks every app, repaints only
+# what is damaged and presents once. The shell is a window inside it and 'q'
+# reaches wm_stop() through the shell's app_event, exactly like any other app.
+#
+# `running = 0` afterwards is what keeps the old loop below unentered. It is
+# written this way rather than as an if/else around 230 lines so that the text
+# shell is not merely unchanged in behaviour but UNTOUCHED as a diff - that
+# loop is what verify.sh compares byte for byte, and the cheapest way to keep a
+# transcript identical is to not edit the code that produces it.
+if wm_boot == 1 {
+    while wm_run() == 1 { wm_frame() }
+    con_mute(0)                          # the halting message goes on screen
+    running = 0
+}
+
+# TEXT MODE, and only text mode. No framebuffer, so no compositor: this is the
+# path verify.sh takes.
 while running == 1 {
     color(C_GREEN)  put("  zl> ")
     color(C_WHITE)
@@ -2174,201 +2983,33 @@ while running == 1 {
     got = 0
     while got == 0 {
         tk = ticks()
-        cur_dirty = 0                     # does the mouse pointer need repainting?
 
-        # clock + text-cursor blink, paused while dragging or the menu is open
-        if dragging == 0 { if menu_open == 0 {
-            sec = tk / 100
-            if sec != last_sec {
-                mhide()
-                draw_clock(sec)
-                last_sec = sec
-                cur_dirty = 1
-            }
-            phase = tk % 100
-            bon = 0
-            if phase < 50 { bon = 1 }
-            if bon != last_blink {
-                mhide()
-                cursor(crow, ccol, bon, C_CURSOR)
-                last_blink = bon
-                cur_dirty = 1
-            }
-        }}
-
-        # ---- mouse: the live pointer, and window dragging ------------------
-        if px_w() > 0 {
-            mx = mouse_x()
-            my = mouse_y()
-            if mx > px_w() - 12 { mx = px_w() - 12 }
-            if my > px_h() - 18 { my = px_h() - 18 }
-            if my < 28 { my = 28 }
-            lb = band(mouse_btn(), 1)
-
-            if dragging == 1 {
-                # move the grabbed window as a bitmap: restore old spot, stamp new
-                nx = mx - gox
-                ny = my - goy
-                if nx < 0 { nx = 0 }
-                if ny < 28 { ny = 28 }
-                if nx > px_w() - dgw { nx = px_w() - dgw }
-                if ny > px_h() - 52 - dgh { ny = px_h() - 52 - dgh }
-                moved = 0
-                if nx != dox { moved = 1 }
-                if ny != doy { moved = 1 }
-                if moved == 1 {
-                    mhide()
-                    bg_rest(dox, doy, dgw + 16, dgh + 16)   # erase old (incl. shadow)
-                    stamp(nx, ny)                            # window bitmap at new spot
-                    dox = nx
-                    doy = ny
-                    mpoint(mx, my)
-                }
-                if lb == 0 {                                 # released - drop it
-                    if drag_win == 1 { mon_x = dox  mon_y = doy }
-                    if drag_win == 2 { ab_x = dox  ab_y = doy }
-                    mhide()
-                    focus_win = drag_win                     # dragging focuses it
-                    raise_windows()                          # redraw in z-order
-                    dragging = 0
-                    drag_win = 0
-                    mpoint(mx, my)
-                }
-            } else {
-                # not dragging: pointer follows the mouse; a click may grab a window
-                if mx != last_mx { cur_dirty = 1 }
-                if my != last_my { cur_dirty = 1 }
-                if cur_dirty == 1 { mpoint(mx, my) }
-                if lb == 1 {
-                    if last_lb == 0 {
-                        if menu_open == 1 {
-                            # a click while the menu is open: pick a row or dismiss it
-                            picked = 0 - 1
-                            if mx >= mnx { if mx < mnx + 172 { if my >= mny + 30 {
-                                idx = (my - mny - 30) / 26
-                                if idx >= 0 { if idx < 10 { picked = idx } }
-                            }}}
-                            mhide()  close_menu()  mpoint(mx, my)
-                            # rows 7 and 8 bring a closed window back
-                            if picked == 7 {
-                                mon_open = 1  focus_win = 1
-                                mhide()  raise_windows()  mpoint(mx, my)
-                            }
-                            if picked == 8 {
-                                ab_open = 1  focus_win = 2
-                                mhide()  raise_windows()  mpoint(mx, my)
-                            }
-                            if picked >= 0 {
-                                mcmd = menu_cmd(picked)
-                                if mcmd > 0 {
-                                    mhide()  print("")  draw_status("working")
-                                    r = run_command(mcmd, 0)
-                                    got = 1  last_sec = 0 - 1  last_mx = 0 - 1
-                                    draw_status("ready")
-                                    if r == 1 { running = 0 }
-                                }
-                            }
-                        } else {
-                            # menu closed. Work out which window was hit, if any:
-                            # 0 = none, 1 = monitor, 2 = about. Topmost (focused)
-                            # window wins, so a click on an overlap picks the one
-                            # you can actually see.
-                            hit = 0
-                            hbar = 0                        # was it on the title bar?
-                            hcls = 0                        # was it on the close box?
-                            if mon_open == 1 { if mx >= mon_x { if mx < mon_x + MON_W * ui() {
-                                if my >= mon_y { if my < mon_y + MON_H * ui() { hit = 1 }}}}}
-                            if ab_open == 1 { if mx >= ab_x { if mx < ab_x + MON_W * ui() {
-                                if my >= ab_y { if my < ab_y + AB_H * ui() {
-                                    if hit == 0 { hit = 2 }
-                                    if focus_win == 2 { hit = 2 }   # About is on top
-                                }}}}}
-                            hx = mon_x
-                            hy = mon_y
-                            if hit == 2 { hx = ab_x  hy = ab_y }
-                            if hit > 0 {
-                                if my < hy + TITLE_H * ui() { hbar = 1 }
-                                if my >= hy + 4 * ui() { if my < hy + 26 * ui() {
-                                    if mx >= hx + (MON_W - 26) * ui() { if mx < hx + (MON_W - 4) * ui() { hcls = 1 }}}}
-                            }
-
-                            if hcls == 1 {
-                                # the red box really closes the window now
-                                mhide()
-                                if hit == 1 { mon_open = 0  bg_rest(mon_x, mon_y, (MON_W + 16) * ui(), (MON_H + 16) * ui()) }
-                                if hit == 2 { ab_open = 0   bg_rest(ab_x, ab_y, (MON_W + 16) * ui(), (AB_H + 16) * ui()) }
-                                focus_win = 0
-                                raise_windows()             # whatever is left, redrawn
-                                mpoint(mx, my)
-                            }
-                            if hcls == 0 { if hit > 0 {
-                                # a click anywhere in a window raises and focuses it
-                                if focus_win != hit {
-                                    mhide()
-                                    focus_win = hit
-                                    raise_windows()
-                                    mpoint(mx, my)
-                                }
-                                if hbar == 1 {              # title bar: start a drag
-                                    if hit == 1 {
-                                        dragging = 1  drag_win = 1  dgw = MON_W * ui()  dgh = MON_H * ui()
-                                        dox = mon_x  doy = mon_y
-                                        gox = mx - mon_x  goy = my - mon_y
-                                        mhide()  grab(mon_x, mon_y, (MON_W + 16) * ui(), (MON_H + 16) * ui())
-                                    }
-                                    if hit == 2 {
-                                        dragging = 1  drag_win = 2  dgw = MON_W * ui()  dgh = AB_H * ui()
-                                        dox = ab_x  doy = ab_y
-                                        gox = mx - ab_x  goy = my - ab_y
-                                        mhide()  grab(ab_x, ab_y, (MON_W + 16) * ui(), (AB_H + 16) * ui())
-                                    }
-                                }
-                            }}
-                            # ...or click the dock: zlOS opens the menu, a tile launches an app
-                            if dragging == 0 { if hit == 0 {
-                                if my >= dock_y() {
-                                    if mx >= 10 * ui() { if mx < 106 * ui() {
-                                        mhide()  open_menu()  mpoint(mx, my)
-                                    }}
-                                    dcmd = 0
-                                    if mx >= DOCK_X0 * ui() {
-                                        dslot = (mx - DOCK_X0 * ui()) / (DOCK_PITCH * ui())
-                                        dinto = mx - DOCK_X0 * ui() - dslot * DOCK_PITCH * ui()
-                                        if dslot < 9 { if dinto < DOCK_TW * ui() {
-                                            if dslot == 6 {
-                                                mon_open = 1  focus_win = 1
-                                                mhide()  raise_windows()  mpoint(mx, my)
-                                            }
-                                            if dslot == 7 {
-                                                ab_open = 1   focus_win = 2
-                                                mhide()  raise_windows()  mpoint(mx, my)
-                                            }
-                                            dcmd = dock_cmd(dslot)
-                                        }}
-                                    }
-                                    if dcmd > 0 {
-                                        mhide()  print("")  draw_status("working")
-                                        r = run_command(dcmd, 0)
-                                        got = 1  last_sec = 0 - 1  last_mx = 0 - 1
-                                        draw_status("ready")
-                                        if r == 1 { running = 0 }
-                                    }
-                                }
-                            }}
-                        }
-                    }
-                }
-            }
-            last_mx = mx
-            last_my = my
-            last_lb = lb
+        # clock + text-cursor blink
+        sec = tk / 100
+        if sec != last_sec {
+            draw_clock(sec)
+            last_sec = sec
         }
+        phase = tk % 100
+        bon = 0
+        if phase < 50 { bon = 1 }
+        if bon != last_blink {
+            cursor(crow, ccol, bon, C_CURSOR)
+            last_blink = bon
+        }
+
+        # THE MOUSE BLOCK THAT WAS HERE IS GONE, C4. It was 165 lines of
+        # window dragging, hit testing, focus, the close box, the start menu
+        # and the dock - all of it guarded by `if px_w() > 0`, and all of it
+        # now unreachable: a framebuffer means the compositor booted, and this
+        # loop only runs when there is no framebuffer at all. wm.c does every
+        # one of those jobs, with a scissor and a damage list instead of a
+        # 640x480 sprite buffer.
 
         present()          # push this frame's changes out in one blit
 
         ch = key_get()
         if ch > 0 {
-            mhide()                                 # pointer off before text is drawn
             if is_digit(ch) == true {
                 cursor(crow, ccol, 0, C_CURSOR)
                 color(C_WHITE)  put(ch - 48)
@@ -2384,7 +3025,6 @@ while running == 1 {
                     pending = 0
                     got = 1
                     last_sec = 0 - 1                # clock lost to the redraw
-                    last_mx = 0 - 1                 # force the pointer to redraw too
                     draw_status("ready")
                     if r == 1 { running = 0 }
                 }

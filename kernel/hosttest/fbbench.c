@@ -32,28 +32,18 @@
  * fb.c now decides whether a mode fits by subtracting one base from the next,
  * so mapping a different amount here would make the harness disagree with the
  * kernel about what degrades. Re-read that comment block if this ever fails. */
-#define BG_ADDR   0x08000000UL   /* bg_buf - 128 MiB, ceiling = sp_buf   */
-#define SP_ADDR   0x0A000000UL   /* sp_buf - 160 MiB, ceiling = sched.c  */
-#define BACK_ADDR 0x0C000000UL   /* back   - 192 MiB, ceiling = nvme.c   */
-#define BG_SIZE   (SP_ADDR    - BG_ADDR)      /* 32 MiB */
-#define SP_SIZE   (0x0B000000UL - SP_ADDR)    /* 16 MiB */
-#define BACK_SIZE (0x0D000000UL - BACK_ADDR)  /* 16 MiB */
-#define BIG_SIZE  (0x0B000000UL - BG_ADDR)    /* 48 MiB: the fallback arena */
+/* C4 deleted bg_buf and sp_buf and gave their 48 MiB to `back`, so there is
+ * ONE buffer to map now and one ceiling to check. */
+#define BACK_ADDR 0x08000000UL   /* back - 128 MiB, ceiling = sched.c at 176 */
+#define BACK_SIZE (0x0B000000UL - BACK_ADDR)  /* 48 MiB */
+#define BLUR_ADDR 0x0C000000UL   /* the cached-blur arena - 192 MiB          */
+#define BLUR_SIZE (0x0D000000UL - BLUR_ADDR)  /* 16 MiB */
 
-/* What fb.c will decide, by the same arithmetic. Three-way now: back's own
- * span, then the drag arena, then nothing. Keeping this in step with fb.c
- * matters - a harness that disagrees with the kernel about what degraded is
- * worse than one that does not ask. */
+/* What fb.c will decide, by the same arithmetic. A harness that disagrees with
+ * the kernel about what degraded is worse than one that does not ask. */
 static int fits_back(int w, int h)
 {
-    unsigned long n = (unsigned long)w * h * 4;
-    return n <= BACK_SIZE || n <= BIG_SIZE;
-}
-/* ...and whether that cost us the drag buffers */
-static int took_arena(int w, int h)
-{
-    unsigned long n = (unsigned long)w * h * 4;
-    return n > BACK_SIZE && n <= BIG_SIZE;
+    return (unsigned long)w * h * 4 <= BACK_SIZE;
 }
 
 /* ---- fb.c's public surface --------------------------------------------- */
@@ -71,16 +61,23 @@ void fb_icon24(int px, int py, int n, unsigned int fg);
 void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
 void fb_box(int x, int y, int w, int h, unsigned int rgb);
 void fb_present(void);
+int  fb_blur_cache(int x, int y, int w, int h, int radius);
+void fb_blur_paint(int slot, int x, int y);
+void fb_blur_free_all(void);
+void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
+void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a);
+void fb_grad_radial(int x, int y, int w, int h, int cx, int cy,
+                    int rx, int ry, unsigned int rgb, int a_in, int a_out,
+                    int stop_pct);
+void fb_grad_conic(int x, int y, int w, int h, int cx, int cy,
+                   unsigned int rgb, int a0, int from_deg, int mid_deg,
+                   int end_deg);
 void fb_at(int row, int col, const char *s, unsigned char attr);
-void fb_bg_snapshot(void);
 void fb_clip(int x, int y, int w, int h);
 void fb_damage(int x, int y, int w, int h);
 int  fb_damage_count(void);
 unsigned int fb_damage_area(void);
 void fb_clip_none(void);
-void fb_bg_restore(int x, int y, int w, int h);
-void fb_grab(int x, int y, int w, int h);
-void fb_stamp(int x, int y);
 unsigned int fb_get_px(int x, int y);
 unsigned int fb_pxw(void);
 unsigned int fb_pxh(void);
@@ -180,7 +177,6 @@ static void b_gradient(void) { fb_gradient(0, 0, W, H, 0x141A2E, 0x2A3350); }
  * together with something that dirties the whole screen. Subtract the "fill
  * whole screen" row above to get the blit on its own. */
 static void b_present(void)  { fb_fill_px(0, 0, W, H, 0x1B2340); fb_present(); }
-static void b_snapshot(void) { fb_bg_snapshot(); }
 
 static void b_shadow(void)   { fb_shadow(200, 200, 600, 460, 16, 12); }
 static void b_rrect(void)    { fb_rrect(200, 200, 600, 460, 10, 0x1E2A44); }
@@ -218,6 +214,18 @@ static void b_lines(void)
 
 /* one window: shadow + two rrects + title gradient + a label. This is what
  * draw_window() in kernel.zl actually does. */
+static void b_blend(void)   { fb_fill_blend(200, 200, 600, 460, 0x0055D6FF, 160); }
+static void b_rrblend(void) { fb_rrect_blend(200, 200, 600, 460, 10, 0x0055D6FF, 160); }
+static void b_radial(void)
+{ fb_grad_radial(0, 0, 900, 700, 300, 200, 560, 340, 0x007EA62C, 77, 0, 62); }
+static void b_conic(void)
+{ fb_grad_conic(0, 0, 900, 700, 450, 350, 0x00B8E838, 19, 214, 34, 82); }
+/* COLD: read the screen back, four box passes, into a slot. This is the number
+ * the frame budget cares about. */
+static void b_blur(void)    { fb_blur_free_all(); fb_blur_cache(200, 200, 600, 460, 20); }
+/* WARM: what every subsequent frame actually pays - a copy. */
+static void b_blurhit(void) { fb_blur_paint(0, 200, 200); }
+
 static void b_window(void)
 {
     fb_shadow(200, 200, 600, 460, 16, 12);
@@ -267,61 +275,98 @@ static void scene(void)
         fb_at(r, 0, "the quick brown fox 0123456789", 0x07);
 }
 
-/* Does the DRAG machinery survive this mode?
+/* Does the back buffer survive this mode?
  *
- * Dragging goes through a second pair of fixed buffers, bg_buf and sp_buf,
- * each of which had its own compile-time PIXEL ceiling - and bg_buf's was
- * 1920x1200, so at 2560x1440 bg_ok went to 0 and every drag became a silent
- * no-op. That is a different failure from the back buffer's and it needs its
- * own check, because "the desktop draws" does not test it at all.
+ * This used to be drag_check(), and it asked whether bg_buf and sp_buf could
+ * hold the mode. C4 deleted both, so the question that remains is the one that
+ * actually costs something: at 3840x2160 the back buffer USED to switch itself
+ * off - 16 MiB of span against 31.6 MiB of pixels - and with it went subpixel
+ * text, fast read-back, and a 77x slowdown on a full-screen fill. It has 48 MiB
+ * now, so it must stay on at every mode this harness runs.
  *
- * bg_ok and sp_ok are static, so this asks functionally instead: snapshot,
- * scribble, restore, and see whether the scribble went away. A refused
- * snapshot makes fb_bg_restore a no-op and the scribble stays. Same for the
- * sprite: grab a patch, stamp it somewhere else, and look for it there. */
-static int drag_check(void)
+ * Asked FUNCTIONALLY rather than by re-doing the arithmetic: back_on is static
+ * inside fb.c, and a test that recomputes the kernel's sums agrees with itself
+ * rather than with the kernel. Writing a pixel and reading it back is only fast
+ * when the read comes from RAM, but correctness is the same either way - so
+ * this checks the thing that IS observable from outside: that fb.c said "back
+ * ON" for this mode, which it prints, and that a written pixel reads back. */
+static int back_check(void)
 {
-    const unsigned MARK = 0x00FF00FF, WALL = 0x00203040;
-    int ok = 1;
+    const unsigned MARK = 0x00FF00FF;
+    int want = fits_back((int)fb_pxw(), (int)fb_pxh());
 
-    if (took_arena(W, H)) {
-        /* Dragging is off BY DESIGN here: the back buffer is living in the
-         * drag buffers' space, and fb.c refuses the snapshot rather than
-         * overwriting the thing being snapshotted. Asserting the refusal is
-         * the test - a snapshot that "worked" here would be corruption. */
-        fb_bg_snapshot();
-        fb_fill_px(100, 100, 200, 200, MARK);
-        fb_bg_restore(100, 100, 200, 200);
-        printf("  %-34s %s\n", "drag: refused (arena taken by back)",
-               fb_get_px(150, 150) == MARK ? "ok  (refused, as it must)"
-                                           : "FAIL - it snapshotted anyway");
-        if (fb_get_px(150, 150) != MARK) ok = 0;
-        return ok;
-    }
-
-    fb_fill_px(0, 0, W, H, WALL);
-    fb_bg_snapshot();
     fb_fill_px(100, 100, 200, 200, MARK);
-    fb_bg_restore(100, 100, 200, 200);
-    if (fb_get_px(150, 150) != WALL) {
-        printf("  %-34s FAIL - bg_restore did not undo the scribble\n",
-               "drag: background snapshot");
-        ok = 0;
-    } else {
-        printf("  %-34s ok\n", "drag: background snapshot");
-    }
+    int reads_back = (fb_get_px(150, 150) == MARK);
 
-    /* a window-sized sprite: the System Monitor at ui()==2 is 568x428 */
-    fb_fill_px(400, 400, 568, 428, MARK);
-    fb_grab(400, 400, 568, 428);
-    fb_bg_restore(400, 400, 568, 428);
-    fb_stamp(900, 500);
-    if (fb_get_px(900 + 284, 500 + 214) != MARK) {
-        printf("  %-34s FAIL - the sprite did not land\n", "drag: window sprite");
-        ok = 0;
-    } else {
-        printf("  %-34s ok\n", "drag: window sprite");
+    printf("  %-34s %s\n", "back buffer: covers this mode",
+           want ? "ok" : "FAIL - 48 MiB was supposed to be enough");
+    printf("  %-34s %s\n", "back buffer: pixel reads back",
+           reads_back ? "ok" : "FAIL");
+    return want && reads_back;
+}
+
+/* Is the blur CORRECT, not merely fast?
+ *
+ * A box blur has three failure modes that a stopwatch cannot see, and two of
+ * them look like a design choice rather than a bug:
+ *
+ *   - a flat colour must come out the SAME colour. If the reciprocal is off by
+ *     one the whole panel drifts a shade, which reads as "the blur tints
+ *     things" and gets worked around in the theme instead of fixed here.
+ *   - the edges must CLAMP. Treating outside-the-rectangle as black grows a
+ *     dark border on every blurred panel - the single most common box-blur bug.
+ *   - it must actually AVERAGE. A checkerboard has to come out near grey; if
+ *     the running sum is wrong it comes out as a checkerboard.
+ */
+static int blur_check(void)
+{
+    const unsigned FLAT = 0x00405060;
+    int ok = 1;
+    fb_clip_none();
+    fb_blur_free_all();
+
+    /* 1. flat in, flat out */
+    fb_fill_px(100, 100, 400, 300, FLAT);
+    int s0 = fb_blur_cache(100, 100, 400, 300, 20);
+    fb_fill_px(100, 100, 400, 300, 0x00FFFFFF);      /* scribble over it */
+    fb_blur_paint(s0, 100, 100);
+    unsigned mid = fb_get_px(300, 250), corner = fb_get_px(101, 101);
+    int flat_ok = (mid == FLAT) && (corner == FLAT);
+    printf("  %-34s %s\n", "blur: flat stays flat, corners too",
+           flat_ok ? "ok" : "FAIL - reciprocal drift or a black edge");
+    if (!flat_ok) { printf("        mid %06X corner %06X want %06X\n", mid, corner, FLAT); ok = 0; }
+
+    /* 2. it averages. 16x16 black/white checks over the region; the interior
+     *    of a 20-radius double box must land near mid grey. */
+    fb_blur_free_all();
+    for (int y = 0; y < 300; y += 16)
+        for (int x = 0; x < 400; x += 16)
+            fb_fill_px(100 + x, 100 + y, 16, 16,
+                       ((x / 16 + y / 16) & 1) ? 0x00FFFFFF : 0x00000000);
+    int s1 = fb_blur_cache(100, 100, 400, 300, 20);
+    fb_blur_paint(s1, 100, 100);
+    int g = fb_get_px(300, 250) & 0xFF;
+    int avg_ok = (g > 100 && g < 155);
+    printf("  %-34s %s\n", "blur: a checkerboard averages to grey",
+           avg_ok ? "ok" : "FAIL - the running sum is wrong");
+    if (!avg_ok) { printf("        got %d, want 100..155\n", g); ok = 0; }
+
+    /* 3. the slots are a ceiling and a full set refuses, like WM_MAX. The
+     *    number granted is BLUR_SLOTS, which is fb.c's business - what this
+     *    asserts is the shape: some are granted, the rest are REFUSED with a
+     *    -1, and asking again after a refusal still refuses rather than
+     *    handing back a slot somebody else is using. */
+    fb_blur_free_all();
+    int got = 0, refused = 0;
+    for (int i = 0; i < 9; i++) {
+        if (fb_blur_cache(0, 0, 200, 200, 8) >= 0) got++; else refused++;
     }
+    int shape_ok = (got > 0) && (refused > 0) && (got + refused == 9);
+    printf("  %-34s %s (%d granted, %d refused)\n",
+           "blur: slots are a ceiling, full refuses",
+           shape_ok ? "ok" : "FAIL", got, refused);
+    if (!shape_ok) ok = 0;
+    fb_blur_free_all();
     return ok;
 }
 
@@ -499,7 +544,6 @@ static void run_at(int w, int h, unsigned long vram)
     bench("fill whole screen",        b_fill,     px);
     bench("gradient whole screen",    b_gradient, px);
     bench("fill + present (blit)",     b_present,  px);
-    bench("bg_snapshot",              b_snapshot, px);
     printf("\n");
     bench("shadow 600x460 soft=12",   b_shadow,   (600 + 24L) * (460 + 24));
     bench("rrect 600x460 r=10",       b_rrect,    600L * 460);
@@ -509,10 +553,22 @@ static void run_at(int w, int h, unsigned long vram)
     bench("40 rows console text",     b_console,  0);
     bench("200 diagonal lines",       b_lines,    0);
     printf("\n");
+    /* THE NEW PRIMITIVES. v10 asks for translucency, two gradient shapes and
+     * a cached blur; each has a budget and only a measurement can say whether
+     * it is met. The blur's is the sharp one: 8.7 ms was the number that made
+     * "blur behind a moving window" a no. */
+    bench("fill_blend 600x460 (a=160)",  b_blend,   600L * 460);
+    bench("rrect_blend 600x460 r=10",    b_rrblend, 600L * 460);
+    bench("radial glow 900x700",         b_radial,  900L * 700);
+    bench("conic wedge 900x700",         b_conic,   900L * 700);
+    bench("BLUR 600x460 r=20 (cold)",    b_blur,    600L * 460);
+    bench("...cached, painted",          b_blurhit, 600L * 460);
+    printf("\n");
     bench("ONE WINDOW (full chrome)", b_window,   0);
     bench("WHOLE DESKTOP redraw",     b_desktop,  px);
     printf("\n");
-    drag_check();
+    back_check();
+    blur_check();
     clip_check();
     damage_check();
     hash_report();
@@ -520,13 +576,12 @@ static void run_at(int w, int h, unsigned long vram)
 
 int main(void)
 {
-    /* map the three fixed scratch buffers fb.c expects at physical addresses */
+    /* map the fixed scratch buffer fb.c expects at a physical address */
     struct { unsigned long a; unsigned long n; const char *what; } bufs[] = {
-        { BG_ADDR,   BG_SIZE,   "bg_buf"   },
-        { SP_ADDR,   SP_SIZE,   "sp_buf"   },
         { BACK_ADDR, BACK_SIZE, "back"     },
+        { BLUR_ADDR, BLUR_SIZE, "blur"     },
     };
-    for (unsigned i = 0; i < 3; i++) {
+    for (unsigned i = 0; i < 2; i++) {
         void *p = mmap((void *)bufs[i].a, bufs[i].n, PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
         if (p == MAP_FAILED || p != (void *)bufs[i].a) {
@@ -553,7 +608,7 @@ int main(void)
     run_at(1920, 1200, (unsigned long)vram);   /* back buffer ON               */
     run_at(2560, 1440, (unsigned long)vram);   /* the ThinkPad panel - ON now, */
                                                /* OFF before desktop-TODO 0a   */
-    run_at(3840, 2160, (unsigned long)vram);   /* 4K: still OFF, and it says so */
+    run_at(3840, 2160, (unsigned long)vram);   /* 4K: ON since C4 freed 48 MiB */
 
     printf("\nnote: 'present' writes to ordinary RAM here. On the real machine\n");
     printf("it crosses PCIe into write-combining VRAM, so it is a FLOOR.\n");

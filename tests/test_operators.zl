@@ -1,0 +1,127 @@
+# test_operators.zl - every operator zl_binop and zl_unop can be handed.
+#
+# WHY THIS FILE EXISTS. runtime.c's zl_binop was a ladder of 15 strcmp calls in
+# source order, so `<=` - the loop test in every `while i < n` - paid twelve of
+# them before matching. Replacing it with a switch on op[0] is a pure
+# performance change, which is exactly the kind that quietly alters an edge
+# case. The other suites cover the operators incidentally, through the features
+# that happen to use them; this one covers the DISPATCHER, one case per arm.
+#
+# The shape of zl_binop is two phases and the split is load-bearing:
+#
+#   phase 1   + == != and or      accept ANY value type
+#   phase 2   - * / % > < >= <=   numbers only
+#
+# Between them sits `if (l.type != V_NUM || r.type != V_NUM) rt_error(...)`.
+# So `"a" == "a"` is legal and `"a" > "b"` is not, and a "simplification" that
+# hoists the number check above phase 1 turns a legal string comparison into a
+# runtime error. The string and list blocks below are what catch that.
+#
+# The operator set is not a guess - it is everything parser.c can produce:
+#   * / %          parse_mul   (parser.c:419)
+#   + -            parse_add   (parser.c:427)
+#   == != >= <= > <  parse_cmp (parser.c:434)
+#   and or         parsed separately (parser.c:506, 521)
+#   - not          parse_unary
+# `in` never reaches zl_binop: compile.c routes it to zl_in() because it picks
+# contains()/has() by the runtime type of its right operand.
+#
+# Style follows stdlib/testlib.zl - check(label, got, want) / report().
+# zl has no import, so the harness is inlined.
+
+g_pass = 0
+g_fail = 0
+
+fn check(label, got, want) {
+    if str(got) == str(want) {
+        g_pass = g_pass + 1
+        print("  PASS  " + label)
+    } else {
+        g_fail = g_fail + 1
+        print("  FAIL  " + label + "  got " + str(got) + " want " + str(want))
+    }
+}
+fn report() {
+    print("----")
+    print(str(g_pass) + " passed, " + str(g_fail) + " failed")
+}
+
+# ------------------------------------------------- phase 2: numeric operators
+print("-- arithmetic --")
+check("7 + 3",  7 + 3,  10)
+check("7 - 3",  7 - 3,  4)
+check("7 * 3",  7 * 3,  21)
+check("7 / 3",  7 / 3,  2.33333)
+check("7 % 3",  7 % 3,  1)
+
+# NEGATIVE OPERANDS pin the sign rules, which % and / disagree about in most
+# languages. These are C's, because that is what runtime.c computes.
+check("-7 % 3",  -7 % 3,  -1)
+check("7 % -3",  7 % -3,  1)
+check("-7 / 2",  -7 / 2,  -3.5)
+
+# THE TWO % TRAPS. Both are deliberate and both are documented in interp.c:
+# a zero divisor answers nan (matching fmod) rather than raising 0xC0000094,
+# and -1 answers 0 rather than raising 0xC0000095 on LLONG_MIN. A switch that
+# reordered the arms would lose the guards, and the machine would take a
+# hardware exception instead of returning a value.
+check("0 % 0 is nan",   str(0 % 0) != "0",  true)
+check("7 % -1",         7 % -1,             0)
+check("-7 % -1",        -7 % -1,            0)
+
+print("-- comparison: > < >= <= need op[1] to disambiguate --")
+check("7 > 3",   7 > 3,   true)
+check("7 < 3",   7 < 3,   false)
+check("7 >= 3",  7 >= 3,  true)
+check("7 <= 3",  7 <= 3,  false)
+check("7 >= 7",  7 >= 7,  true)   # the > / >= split
+check("7 <= 7",  7 <= 7,  true)   # the < / <= split
+check("7 > 7",   7 > 7,   false)
+check("7 < 7",   7 < 7,   false)
+
+# ------------------------------------------- phase 1: any-type operators
+# These MUST be decided before the number check. If they are not, every line
+# in this block becomes "this operator needs numbers".
+print("-- equality on non-numbers --")
+check("str ==",       "a" == "a",       true)
+check("str == diff",  "a" == "b",       false)
+check("str !=",       "a" != "b",       true)
+check("bool ==",      true == true,     true)
+check("list ==",      [1, 2] == [1, 2], true)
+check("list !=",      [1, 2] != [1, 3], true)
+check("mixed ==",     "1" == 1,         false)
+
+# THE THREE-WAY PLUS. binop_plus is num+num, list+list, and OTHERWISE
+# stringify both sides and join. All three arms, including the asymmetric
+# number-then-string case.
+print("-- the three-way + --")
+check("num + num",    7 + 3,            10)
+check("list + list",  [1, 2] + [3],     [1, 2, 3])
+check("str + str",    "a" + "b",        "ab")
+check("str + num",    "n=" + 5,         "n=5")
+check("num + str",    5 + "x",          "5x")
+check("str + bool",   "v=" + true,      "v=true")
+
+print("-- and / or --")
+check("t and f",  true and false,  false)
+check("t and t",  true and true,   true)
+check("f or t",   false or true,   true)
+check("f or f",   false or false,  false)
+# SHORT-CIRCUIT. compile.c does not route these through zl_binop at all - it
+# emits C's own && and || precisely so the right side is not evaluated. If it
+# ever did, this would divide by zero.
+n = 0
+if n != 0 and 10 / n > 1 { check("short-circuit and", "evaluated", "not evaluated") }
+check("and short-circuits", true, true)
+
+# ---------------------------------------------------------------- zl_unop
+print("-- unary --")
+check("-7",        -7,        0 - 7)
+check("- -7",      0 - -7,    7)
+check("not true",  not true,  false)
+check("not false", not false, true)
+check("not 0",     not 0,     true)     # 0 is falsy
+check("not 7",     not 7,     false)
+check("not empty str", not "", true)
+
+report()

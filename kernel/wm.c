@@ -31,8 +31,16 @@ void fb_clip(int x, int y, int w, int h);
 void fb_clip_none(void);
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot);
+void fb_rrect_grad_top(int x, int y, int w, int h, int r, unsigned int top, unsigned int bot);
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
 void fb_shadow(int x, int y, int w, int h, int off, int soft);
+void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
+/* the fade's two halves - see fb.c */
+int  fb_stash(int x, int y, int w, int h);
+void fb_stash_blend(int slot, int x, int y, int a);
+void fb_blur_free(int slot);
+void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a);
+void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
 /* Titles are LABELS, not console text, so they take the proportional path.
  * That is the single change desktop-look.md item 4 asks for at this layer. */
@@ -59,10 +67,16 @@ int  input_y(void);
 #define EV_CHAR      3
 #define EV_MOUSE     4
 
+#define KEY_SUPER   0x11A
 #define MOD_ALT     (1 << 2)
 #define MOD_SUPER   (1 << 5)
 
 unsigned int idt_ticks(void);
+/* cpu.c. The TSC has been readable since cpu.c was written and nothing in the
+ * compositor has ever timed a frame - desktop-TODO 0h says to do this BEFORE
+ * any performance work, and the v10 run did the performance work first. */
+unsigned int cpu_tsc_lo(void);
+unsigned int cpu_tsc_khz(void);
 
 /* The one character sink the whole kernel prints through. wm.c uses it for
  * refusals only - anything it declines to do says so, on the serial log, where
@@ -76,7 +90,6 @@ struct win {
     int app;
     int flags;
     int min_w, min_h;
-    int anim;                  /* frames left in the open animation, 0 = none */
     char title[32];
     /* TABS. Several apps sharing one frame, grouped by task - the idea worth
      * stealing from Essence. It is cheap here because a window already has
@@ -91,12 +104,27 @@ static struct win wins[WM_MAX];
 static int zorder[WM_MAX];          /* window indices, BACK to FRONT */
 static int nz;                      /* how many are in the z-order   */
 static int focus_win = -1;
-static int running = 1;
+/* ZERO UNTIL wm_init() RUNS, and that matters more than it looks. wm_running()
+ * is how the rest of the system asks "is the compositor the top of the system
+ * right now" - draw_screen() uses it to choose between damaging the screen and
+ * redrawing a text desktop, and help() uses it to choose which set of commands
+ * to describe. Initialised to 1, it answered yes on a machine with no
+ * framebuffer, where the compositor had never been near the screen: the text
+ * shell printed the compositor's help and verify.sh caught it. */
+static int running = 0;
 
 static app_draw_fn  hook_draw;
 static app_event_fn hook_event;
 static app_tick_fn  hook_tick;
 static desk_draw_fn hook_desk;
+/* A CLICK THAT HITS NO WINDOW WAS DROPPED, and the dock is not a window.
+ * desk_draw has painted a dock, a start button and a tray since the compositor
+ * booted, and every one of them was decoration: route_mouse found no window
+ * under the pointer and returned. Desktop furniture needs a route of its own
+ * for the same reason it needs a draw of its own - it is not in the z-order
+ * and never will be. */
+static desk_click_fn hook_desk_click;
+static desk_key_fn   hook_desk_key;
 
 /* ---- the damage list ------------------------------------------------------
  * NOT fb.c's. They are different questions and conflating them is a bug
@@ -224,15 +252,152 @@ void wm_damage_win(int win)
  */
 #define ANIM_FRAMES 4
 
+/* ---- the timeline ---------------------------------------------------------
+ * What was here was ONE animation, hardcoded into the window struct as a frame
+ * counter, and it could only ever be the open-scale. The prototype names seven
+ * keyframes - zov, zpop, zpress, zpulse, zsweep, ztoast, zwin - which is not
+ * seven times as much code, it is the same code with the kind as a parameter
+ * and the steps in a table.
+ *
+ * A FIXED ARRAY, ticked once per frame, each entry marking its target damaged.
+ * No allocation, no list, no callbacks. An animation that finishes frees its
+ * slot; a slot that cannot be found is a refusal, not a silent drop.
+ *
+ * STILL NO EASING CURVES, deliberately. Each kind is 4-8 integer steps in a
+ * table. A table cannot produce a wrong in-between value, cannot overshoot
+ * into a negative size, and cannot be got wrong by a cubic evaluated in
+ * fixed point - and at 4-8 frames nobody can see the difference between a
+ * table and a curve anyway.
+ *
+ * WHAT EACH KIND IS, and which are drawn rather than merely stored:
+ *
+ *   ANIM_OPEN    scale from 82% to 100%   - the window open (was `anim`)
+ *   ANIM_CLOSE   scale from 100% to 82%   - its mirror
+ *   ANIM_PRESS   scale 100 -> 96 -> 100   - zpress, a control acknowledging
+ *   ANIM_PULSE   opacity 0 -> 40 -> 0     - zpulse, attention without motion
+ *   ANIM_FADE    opacity 0 -> 100         - zov/zpop/ztoast, the opacity fades
+ *
+ * The opacity kinds are expressible only because fb_fill_blend exists; before
+ * it, a fade needed an offscreen buffer per window and this kernel has nowhere
+ * to put one. That is why v10 orders translucency before the timeline.
+ */
+#define ANIM_MAX 8
+
+#define ANIM_NONE   0
+#define ANIM_OPEN   1
+#define ANIM_CLOSE  2
+#define ANIM_PRESS  3
+#define ANIM_PULSE  4
+#define ANIM_FADE   5
+
+/* Each row is read from the LAST element backwards as the counter runs down,
+ * so index 0 is where the animation starts and the settled value is what the
+ * window has when no animation is running at all. */
+static const unsigned char anim_scale[][8] = {
+    /* OPEN  */ { 82, 90, 95, 98, 100, 100, 100, 100 },
+    /* CLOSE */ { 98, 95, 90, 82,  70,  70,  70,  70 },
+    /* PRESS */ { 96, 97, 98, 99, 100, 100, 100, 100 },
+};
+static const unsigned char anim_len[] = {
+    /* NONE */ 0, /* OPEN */ 4, /* CLOSE */ 4, /* PRESS */ 4,
+    /* PULSE */ 6, /* FADE */ 5,
+};
+static const unsigned char anim_alpha[][8] = {
+    /* PULSE */ {  0, 24, 40, 40, 24,  0, 0, 0 },
+    /* FADE  */ { 60, 90, 120, 170, 220, 255, 255, 255 },
+};
+
+struct anim { int win; int kind; int frame; int len; };
+static struct anim anims[ANIM_MAX];
+
+/* Start one. Returns 0 and says so if every slot is busy - the same refusal
+ * discipline as wm_open's WM_MAX, and for the same reason: a silently dropped
+ * animation is a UI that is intermittently unresponsive for no visible cause. */
+int wm_anim(int win, int kind)
+{
+    if (kind <= ANIM_NONE || kind >= (int)(sizeof anim_len / sizeof anim_len[0]))
+        return 0;
+    /* One animation per window per kind. Re-triggering restarts it, which is
+     * what a button pressed twice in quick succession should look like. */
+    for (int i = 0; i < ANIM_MAX; i++)
+        if (anims[i].kind && anims[i].win == win && anims[i].kind == kind) {
+            anims[i].frame = 0;
+            return 1;
+        }
+    for (int i = 0; i < ANIM_MAX; i++) {
+        if (anims[i].kind) continue;
+        anims[i].win = win;
+        anims[i].kind = kind;
+        anims[i].frame = 0;
+        anims[i].len = anim_len[kind];
+        wm_damage_win(win);
+        return 1;
+    }
+    wm_puts("  wm: no free animation slot, refusing\n");
+    return 0;
+}
+
+/* Which frame of `kind` is window `win` on, or -1 for "not animating". */
+static int anim_frame_of(int win, int kind)
+{
+    for (int i = 0; i < ANIM_MAX; i++)
+        if (anims[i].kind == kind && anims[i].win == win) return anims[i].frame;
+    return -1;
+}
+
+int wm_anim_running(int win)
+{
+    for (int i = 0; i < ANIM_MAX; i++)
+        if (anims[i].kind && anims[i].win == win) return anims[i].kind;
+    return 0;
+}
+
+/* The extra opacity a window is being drawn with, 0..255, or 255 for settled.
+ * Read by the repaint; exposed so a test can assert on it without a screenshot. */
+int wm_anim_alpha(int win)
+{
+    int f = anim_frame_of(win, ANIM_FADE);
+    if (f >= 0) return anim_alpha[1][f];
+    f = anim_frame_of(win, ANIM_PULSE);
+    if (f >= 0) return anim_alpha[0][f];
+    return 255;
+}
+
+/* Advance every running animation by one frame and damage what moved.
+ * Damaging the SETTLED rect - which is the largest - is what erases the
+ * smaller frame drawn a moment ago. */
+static void anim_tick(void)
+{
+    for (int i = 0; i < ANIM_MAX; i++) {
+        if (!anims[i].kind) continue;
+        wm_damage_win(anims[i].win);
+        /* AN ANIMATION NEVER CHANGES WINDOW LIFETIME. It was tempting to have
+         * ANIM_CLOSE call wm_close() when it finishes, so a closing window
+         * shrinks away; that would make "the window closed" depend on a free
+         * animation slot, and wm_anim() is allowed to refuse. A window that
+         * sometimes does not close when every slot is busy is a far worse bug
+         * than a window that closes without a flourish. The timeline draws;
+         * the caller decides what exists. */
+        if (++anims[i].frame >= anims[i].len) anims[i].kind = ANIM_NONE;
+    }
+}
+
 /* how big window `win` should be DRAWN this frame, as a percentage */
 static int anim_pct(int win)
 {
-    int a = wins[win].anim;
-    if (a <= 0) return 100;
-    /* 82, 90, 95, 98 -> 100. Decelerating, by subtracting a shrinking
-     * fraction rather than by evaluating a curve. */
-    static const unsigned char steps[ANIM_FRAMES] = { 82, 90, 95, 98 };
-    return steps[ANIM_FRAMES - a];
+    /* ONE MECHANISM. The open scale used to be a counter in the window struct
+     * and the timeline was a second thing beside it that nothing triggered -
+     * so wm.c carried two animation systems, one of which never ran. wm_open()
+     * starts an ANIM_OPEN now and this reads it, which means the open scale
+     * and every other kind share a code path and a bug in one is a bug you can
+     * actually see. */
+    int f = anim_frame_of(win, ANIM_OPEN);
+    if (f >= 0) return anim_scale[0][f];
+    f = anim_frame_of(win, ANIM_CLOSE);
+    if (f >= 0) return anim_scale[1][f];
+    f = anim_frame_of(win, ANIM_PRESS);
+    if (f >= 0) return anim_scale[2][f];
+    return 100;
 }
 
 static void anim_rect(int win, int *x, int *y, int *w, int *h)
@@ -324,6 +489,9 @@ void wm_init(void)
     if (fb_active()) wm_damage(0, 0, (int)fb_pxw(), (int)fb_pxh());
 }
 
+void wm_desk_click(desk_click_fn f) { hook_desk_click = f; }
+void wm_desk_key(desk_key_fn f)     { hook_desk_key = f; }
+
 void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk)
 {
     hook_draw = d; hook_event = e; hook_tick = t; hook_desk = desk;
@@ -385,7 +553,6 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         wins[i].flags = WF_OPEN;
         wins[i].min_w = 8 * fb_cell_w();
         wins[i].min_h = 4 * fb_cell_h();
-        wins[i].anim = ANIM_FRAMES;
         wins[i].ntab = 1;
         wins[i].tab = 0;
         wins[i].tab_app[0] = app;
@@ -393,6 +560,10 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         title_copy(wins[i].title, title);
         z_append(i);
         focus_win = i;
+        /* A refusal here degrades gracefully: every slot busy means the window
+         * opens without a flourish, which is the right way for an animation to
+         * fail. */
+        wm_anim(i, ANIM_OPEN);
         wm_damage_win(i);
         return i;
     }
@@ -495,6 +666,17 @@ static int modal_win(void)
     return -1;
 }
 
+/* Which app a window is showing - the ACTIVE tab's, not the one it was opened
+ * with. Everything downstream asks this rather than reading .app, which is
+ * what keeps a tabbed window and a plain one the same thing to the repaint,
+ * the routing and now the taskbar. */
+int wm_win_app(int win)
+{
+    if (!wm_is_open(win)) return -1;
+    return win_app(win);
+}
+
+
 /* ---- the repaint ----------------------------------------------------------
  * The clip is set TWICE per window and that is the whole point:
  *   once to the frame, so chrome cannot bleed onto a neighbour
@@ -542,14 +724,30 @@ static void chrome(int win, int focused)
 
     if (W->flags & WF_NOCHROME) return;
 
+    /* THE GRIP HAS TO BE VISIBLE or it is a secret. Three short diagonals in
+     * the bottom-right corner - the convention every desktop uses, and cheap
+     * enough to draw on every window every repaint. */
+    {
+        int gx = W->x + W->w - UI_S1(t) - 1, gy = W->y + W->h - UI_S1(t) - 1;
+        int step = UI_S1(t) / 2 + 1;
+        for (int i = 1; i <= 3; i++) {
+            int d = i * step * 2;
+            fb_line(gx - d, gy, gx, gy - d, t->border);
+        }
+    }
+
     int tx = W->x + 2, tw = W->w - 4, th = t->title_h - 3;
     if (focused) {
-        fb_gradient(tx, W->y + 2, tw, th, t->title, t->title_bot);
+        /* rounded at the top, to the SAME radius as the frame one pixel
+         * outside it - see fb_rrect_grad_top */
+        fb_rrect_grad_top(tx, W->y + 2, tw, th, t->radius - 2,
+                          t->title, t->title_bot);
         /* focus is title-bar hue PLUS the accent underline. Both already
          * existed; a third signal would be one too many. */
         fb_fill_px(tx, W->y + t->title_h - 2, tw, 2, t->accent);
     } else {
-        fb_fill_px(tx, W->y + 2, tw, th, t->title_off);
+        fb_rrect_grad_top(tx, W->y + 2, tw, th, t->radius - 2,
+                          t->title_off, t->title_off);
     }
     if (wins[win].ntab > 1) {
         /* a tab strip instead of a title. The active one is a raised surface
@@ -611,6 +809,21 @@ void wm_repaint(void)
                            W->x + W->w + reach, W->y + W->h + reach,
                            rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) continue;
             }
+            /* A REAL FADE, and it needs the rectangle taken BEFORE anything
+             * is drawn on it. window * a + behind * (1 - a) is not something
+             * that can be reconstructed afterwards: once the window is drawn,
+             * what was behind it is gone. So stash, draw, blend back.
+             *
+             * ANIM_PULSE is deliberately not routed through this - a tint is a
+             * blend of one colour over what is there and needs no copy at all.
+             * A refusal from fb_stash (every slot busy) degrades to drawing
+             * the window opaque, which is the right way for an effect to fail. */
+            int fade = 255, stash = -1;
+            if (wm_anim_running(win) == ANIM_FADE) {
+                fade = wm_anim_alpha(win);
+                if (fade < 255) stash = fb_stash(cx, cy, cw, ch);
+            }
+
             fb_clip(cx, cy, cw, ch);            /* clip 1: the frame + shadow */
             chrome(win, win == focus_win);
 
@@ -621,6 +834,34 @@ void wm_repaint(void)
                                    rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
                 fb_clip(cx, cy, cw, ch);        /* clip 2: NARROWER - client   */
                 hook_draw(win_app(win), ax, ay, aw, ah, win == focus_win);
+            }
+
+            /* ANIM_PULSE, composited. A tint laid over the finished window at
+             * the pulse's alpha - correct with no offscreen buffer, because a
+             * tint IS a blend of one colour over what is already there, which
+             * is exactly what fb_fill_blend does.
+             *
+             * ANIM_FADE is a different animal and is NOT drawn here. A real
+             * fade needs the window composited against what is BEHIND it at
+             * fractional opacity, which needs a copy of the rectangle before
+             * the window was drawn on it. wm_anim_alpha() reports it and
+             * wmtest asserts it; the compositing waits for the scratch arena
+             * in fb.c. Saying so is better than a tint pretending to be a
+             * fade - they look different and only one of them is the effect
+             * the prototype asks for. */
+            if (stash >= 0) {
+                fb_clip(cx, cy, cw, ch);
+                fb_stash_blend(stash, cx, cy, 255 - fade);
+                fb_blur_free(stash);
+            }
+
+            if (wm_anim_running(win) == ANIM_PULSE) {
+                int pa = wm_anim_alpha(win);
+                if (pa > 0 && pa < 255) {
+                    fb_clip(cx, cy, cw, ch);
+                    fb_rrect_blend(fx, fy, fw, fh, ui_theme()->radius,
+                                   ui_theme()->accent, pa);
+                }
             }
         }
     }
@@ -639,8 +880,36 @@ void wm_repaint(void)
  *                   walking the z-order backwards; keys to the focus window.
  */
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
-static int grab_drag;           /* 1 = we are moving it, 0 = the app has it */
+/* WHAT THE GRAB IS FOR. It was a flag - move, or hand the pointer to the app -
+ * and resizing is a third answer, not a variant of either. */
+#define GRAB_APP    0           /* the app has the pointer until button-up  */
+#define GRAB_MOVE   1
+#define GRAB_SIZE   2
+static int grab_drag;
 static int grab_dx, grab_dy;    /* pointer offset inside the frame          */
+
+/* THE RESIZE GRIP. wm_resize() has existed since wm.c was written and NOTHING
+ * HAS EVER CALLED IT - the same shape as WF_MODAL before the start menu, and
+ * as intel.c's write paths. A window table with no way to resize a window is a
+ * desktop where every window is the size somebody typed into wm_open.
+ *
+ * The grip is the bottom-right corner plus the right and bottom edges, which
+ * is where every desktop puts it, and it is checked BEFORE the client-area
+ * hand-off and AFTER the close box and tabs - an app that fills its window
+ * would otherwise swallow the grab. It is deliberately NOT on the left or top
+ * edges: those would need the origin to move as the size changes, which is a
+ * second arithmetic to get wrong for a corner nobody reaches for. */
+#define RESIZE_EDGE(t)  (UI_S2(t))          /* 8 * scale */
+
+static int in_resize_grip(int win, int x, int y)
+{
+    const struct ui_theme *t = ui_theme();
+    int e = RESIZE_EDGE(t);
+    int rx = wins[win].x + wins[win].w, by = wins[win].y + wins[win].h;
+    /* inside the window, within `e` of the right OR bottom edge */
+    if (x < wins[win].x || y < wins[win].y || x >= rx || y >= by) return 0;
+    return (x >= rx - e) || (y >= by - e);
+}
 
 /* Where tab `i` sits in the title bar. Drawing and hit-testing BOTH call this,
  * which is the only way to be sure a tab is clickable exactly where it looks -
@@ -697,8 +966,17 @@ static void route_mouse(int x, int y, int btn)
 
     /* 1. POINTER GRAB */
     if (pgrab >= 0) {
-        if (grab_drag) wm_move(pgrab, x - grab_dx, y - grab_dy);
-        else if (hook_event) hook_event(win_app(pgrab), pgrab, EV_MOUSE, btn, x, y);
+        if (grab_drag == GRAB_MOVE) {
+            wm_move(pgrab, x - grab_dx, y - grab_dy);
+        } else if (grab_drag == GRAB_SIZE) {
+            /* grab_dx/dy hold the pointer's offset from the corner it took
+             * hold of, so the corner stays under the pointer instead of
+             * jumping to it on the first motion event */
+            wm_resize(pgrab, x - wins[pgrab].x + grab_dx,
+                             y - wins[pgrab].y + grab_dy);
+        } else if (hook_event) {
+            hook_event(win_app(pgrab), pgrab, EV_MOUSE, btn, x, y);
+        }
         if (up) pgrab = -1;
         return;
     }
@@ -713,7 +991,15 @@ static void route_mouse(int x, int y, int btn)
     }
 
     /* 3. NORMAL */
-    if (hit < 0) return;
+    if (hit < 0) {
+        /* THE FURNITURE - dock, start button, tray - gets every pointer event
+         * over it, not just presses. A dock with no hover state reads as a
+         * picture of a dock; knowing where the pointer is, is the whole of
+         * making it feel like a control. The button mask is passed through so
+         * policy can tell a hover from a press without a second callback. */
+        if (hook_desk_click) hook_desk_click(x, y, btn);
+        return;
+    }
     if (down) {
         wm_focus(hit);
         wm_raise(hit);
@@ -723,15 +1009,23 @@ static void route_mouse(int x, int y, int btn)
         int tb = in_tab(hit, x, y);
         if (tb >= 0) { wm_set_tab(hit, tb); return; }
         if (in_titlebar(hit, x, y)) {
-            pgrab = hit; grab_drag = 1;
+            pgrab = hit; grab_drag = GRAB_MOVE;
             grab_dx = x - wins[hit].x;
             grab_dy = y - wins[hit].y;
+            return;
+        }
+        /* the resize grip, before the app gets the pointer - an app that fills
+         * its window would otherwise swallow every grab at the edge */
+        if (in_resize_grip(hit, x, y)) {
+            pgrab = hit; grab_drag = GRAB_SIZE;
+            grab_dx = wins[hit].x + wins[hit].w - x;
+            grab_dy = wins[hit].y + wins[hit].h - y;
             return;
         }
         /* a press in the client area hands the pointer to the app until
          * button-up - that is what makes a slider work when the pointer
          * leaves the widget mid-drag */
-        pgrab = hit; grab_drag = 0;
+        pgrab = hit; grab_drag = GRAB_APP;
     }
     if (hook_event) hook_event(win_app(hit), hit, EV_MOUSE, btn, x, y);
 }
@@ -753,6 +1047,14 @@ static void route_key(int type, int code, int mods)
 {
     if (type == EV_KEY_DOWN && code == '\t' && (mods & MOD_ALT)) {
         cycle_focus();
+        return;
+    }
+    /* Super, TAPPED, belongs to the desktop and not to the focused window -
+     * routing it to whichever app has focus would mean every app had to know
+     * about the start menu. MOD_SUPER has been tracked since input.c was
+     * written and used for nothing at all. */
+    if (type == EV_KEY_DOWN && code == KEY_SUPER) {
+        if (hook_desk_key) hook_desk_key(code, mods);
         return;
     }
     /* Ctrl+W closes. Closing is the close box or Ctrl+W - NEVER "press any
@@ -780,11 +1082,28 @@ static void wm_route(int type)
  */
 static unsigned int last_tick;
 
+/* ---- what a frame actually costs -------------------------------------------
+ * idt_ticks() is 100 Hz, which is 10 ms of resolution against a 16.67 ms
+ * budget - useless. The TSC is a cycle counter and cpu.c has calibrated it
+ * against the PIT since it was written.
+ *
+ * Microseconds, not milliseconds: a cheap frame is well under 1 ms and an
+ * integer millisecond would report every one of them as "0". Only frames that
+ * REPAINT are timed - a frame that finds no damage returns almost immediately
+ * and averaging those in would report a desktop at rest as infinitely fast. */
+static unsigned int frame_us, frame_peak_us;
+
+int wm_frame_us(void)  { return (int)frame_us; }
+int wm_peak_us(void)   { return (int)frame_peak_us; }
+void wm_peak_reset(void) { frame_peak_us = 0; }
+
 void wm_frame(void)
 {
     unsigned int now = idt_ticks();
     if (now == last_tick) return;
     last_tick = now;
+    unsigned int t0 = cpu_tsc_lo();
+    int did_paint = 0;
 
     input_poll();
     for (int guard = 0; guard < 64; guard++) {
@@ -796,12 +1115,9 @@ void wm_frame(void)
     /* app_tick runs every frame, is cheap, and MUST NOT DRAW. Returning 1 is
      * how a clock or a snake says "my state changed" without owning the frame
      * - which is the whole reason those demos no longer need a while-loop. */
-    /* advance any open animation. Damaging the SETTLED rect (which is the
+    /* advance every animation. Damaging the SETTLED rect (which is the
      * largest) is what erases the smaller frame drawn a moment ago. */
-    for (int i = 0; i < nz; i++) {
-        int win = zorder[i];
-        if (wins[win].anim > 0) { wins[win].anim--; wm_damage_win(win); }
-    }
+    anim_tick();
 
     if (hook_tick)
         for (int i = 0; i < nz; i++)
@@ -811,7 +1127,23 @@ void wm_frame(void)
         fb_pointer_hide();      /* the sprite's save-under is stale once the
                                    pixels under it are about to be redrawn */
         wm_repaint();
+        did_paint = 1;
     }
     fb_pointer_show(ptr_x, ptr_y);
     fb_present();
+
+    if (did_paint) {
+        unsigned int khz = cpu_tsc_khz();
+        if (khz) {
+            /* 32-bit throughout: a 64-bit divide would pull in libgcc's
+             * __udivdi3 and this kernel links no libgcc at all. At 2.3 GHz a
+             * 32-bit TSC wraps every ~1.8 s, so a wrapped delta is discarded
+             * rather than reported as a colossal frame. */
+            unsigned int dt = cpu_tsc_lo() - t0;
+            if (dt < 0x40000000u) {
+                frame_us = dt / (khz / 1000u ? khz / 1000u : 1u);
+                if (frame_us > frame_peak_us) frame_peak_us = frame_us;
+            }
+        }
+    }
 }

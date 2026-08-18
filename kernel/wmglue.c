@@ -48,6 +48,14 @@ extern Value zl_fn_app_tick(Value, Value) __attribute__((weak));
 /* fn desk_draw(x, y, w, h) - wallpaper, header bar, dock */
 extern Value zl_fn_desk_draw(Value, Value, Value, Value) __attribute__((weak));
 
+/* fn desk_click(x, y, btn) - a pointer event on the dock, the start button or
+ * the tray. Every event, not just presses: a dock with no hover state reads as
+ * a picture of a dock. */
+extern Value zl_fn_desk_click(Value, Value, Value) __attribute__((weak));
+
+/* fn desk_key(code, mods) - a system key: Super, today */
+extern Value zl_fn_desk_key(Value, Value) __attribute__((weak));
+
 /* ---- the shims ------------------------------------------------------------ */
 static void glue_draw(int app, int x, int y, int w, int h, int focused)
 {
@@ -71,6 +79,18 @@ static int glue_tick(int app, int win)
     return r.type == V_NUM && r.num != 0.0;
 }
 
+static void glue_desk_click(int x, int y, int btn)
+{
+    if (!zl_fn_desk_click) return;
+    zl_fn_desk_click(zl_num(x), zl_num(y), zl_num(btn));
+}
+
+static void glue_desk_key(int code, int mods)
+{
+    if (!zl_fn_desk_key) return;
+    zl_fn_desk_key(zl_num(code), zl_num(mods));
+}
+
 static void glue_desk(int x, int y, int w, int h)
 {
     if (!zl_fn_desk_draw) return;
@@ -89,6 +109,8 @@ int wm_bind_zl(void)
              zl_fn_app_event ? glue_event : 0,
              zl_fn_app_tick  ? glue_tick  : 0,
              zl_fn_desk_draw ? glue_desk  : 0);
+    if (zl_fn_desk_click) wm_desk_click(glue_desk_click);
+    if (zl_fn_desk_key)   wm_desk_key(glue_desk_key);
     return 1;
 }
 

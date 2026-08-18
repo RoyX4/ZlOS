@@ -326,6 +326,89 @@ State measured rather than remembered: **one port, one pipe, one panel, one mode
 polled.** 42 `*_A` registers, no VBT parser, no HDMI port bring-up (the DPLL
 clock math exists and is verified), and zero hotplug or interrupt code.
 
+## What is actually a wall: `docs/what-is-actually-impossible.md`
+
+**The project's thesis is that one person can do what is assumed to need a team,
+so "too big for one person" is not a valid objection here — it is the hypothesis
+under test.** That document re-grades the whole board against that bar. Summary:
+
+- **Nothing on the board is impossible because of size.** Refuted by Terry Davis
+  (TempleOS, ~10 yr solo), nakst (Essence, 9 yr solo), Kling, Bellard — and
+  partly by this repo already.
+- **The real walls are all one shape: a vendor holds a signing key, or the
+  target is a competitor's shipping product.** There are about six, each with a
+  legitimate route around: WiFi/CNVi (→ USB tether), Widevine (→ nothing to
+  build), cellular, Bluetooth, Secure-Boot *distribution* (→ enrol your own key),
+  GPU 3D (→ software rasterizer). **Modesetting is deliberately not on this
+  list** — no blob, no signature, which is why it was reachable.
+- **What kills solo OS projects is the breadth tax and stopping, not
+  difficulty.** The golden-transcript gates and this file's verified-not-intended
+  discipline are the defence. Don't let them slip.
+- **Highest impressive-per-remaining-work item on the whole board:** zlOS booting
+  the ThinkPad from `raw_boot.asm`, lighting its own panel at 2560×1440 through
+  its own modeset, drawing its own desktop — no GRUB, no Linux, no blob. Blocked
+  on **one missing caller**: nothing in the kernel arms `lt_armed`.
+
+## The three "what about…" questions, answered: `docs/beyond-the-kernel.md`
+
+Other languages on zlOS, the internet, and rewriting the C in zl. Asked and
+measured 2026-08-17. Short version:
+
+- **Other languages** — no heap, no ELF loader, no per-process address space
+  (all four cores share one CR3, `smp.c:129`), and `fs_save`/`fs_load` is a RAM
+  slot array, not a filesystem. Cheapest real win is hosting **zl's own
+  interpreter** (1,900 lines) on zlOS; highest leverage is a **WASM interpreter**
+  (~8k), which buys every language at once. POSIX ELF is a second project.
+- **Internet** — zero network code today, but `lspci` says the ThinkPad has a
+  real wired NIC (`8086:0d4f`, `Kernel driver in use: e1000e`). Wired is
+  bounded: ~10k lines to HTTPS, of which TLS is 5–8k.
+- **WiFi and Bluetooth** — Roy wants both. Plan: **`docs/wireless-plan.md`**.
+  That doc also **corrects two wrong claims** made earlier the same day in
+  `what-is-actually-impossible.md` and `beyond-the-kernel.md`:
+  - **Bluetooth is NOT a wall.** `lsusb` → `8087:0026 Intel AX201 Bluetooth`,
+    **on USB**, `Class=Wireless / RF / Bluetooth` (224/1/1) — the standard class
+    every BT dongle implements, and **HCI is a published Bluetooth SIG
+    standard**, not a vendor protocol. Its endpoints are control + interrupt IN
+    + bulk IN/OUT, and **`xhci.c` already implements all three**. ~6,800 lines
+    to a working BT keyboard; **~2,000 to "zlOS lists nearby devices"**. Build
+    against a **CSR dongle** (ROM firmware, no upload) before touching Intel's
+    704 KB `ibt-0040-0041.sfi`.
+  - **The iwlwifi blob is 1.3 MB, not 2–3 MB** (1,406,572 bytes, measured), and
+    it is redistributable — so the AX201 is Kind-1 hard (~40k lines of
+    undocumented protocol), not vendor-gated.
+  - **WiFi is only gated if you let Intel pick the radio.** The **AR9271 USB
+    dongle's firmware is 50 KB and open source** (`open-ath9k-htc-firmware`,
+    already at `/lib/firmware/htc_9271.fw`). ~8,000 lines to WPA2 association;
+    **~3,800 to "zlOS printed my SSID list"**. An ESP32 over UART is ~400 lines
+    if you just want the network stack unblocked now.
+  - Still true: **USB tethering or a USB NIC** is the shortest path to packets,
+    and `xhci.c:1709 configure_bulk()` is why.
+- **A browser** — `feature-catalogue.md` says don't; **that call was wrong as
+  stated** and `beyond-the-kernel.md` §2b supersedes it. "Unbounded" is true of
+  a Chrome-compatible browser, not of a *document* browser — Dillo, NetSurf and
+  w3m have shipped that for decades. A document browser (HTML+CSS, no JS) is
+  **~13,200 lines** plus the ~10k network stack. **The gate is a heap** (~300
+  lines) — which means building one is a *decision to relax a stated design
+  constraint*, not just work. Useful: the HTML→CSS→layout→paint branch needs no
+  network and is testable in QEMU against local files.
+  Also found: **the fonts are baked at build time into three fixed sizes only**
+  (8×16, 16×32, 24×48, monospace, from DejaVu Sans Mono via `gen_hd_font.py`).
+  There is **no runtime rasterizer** — see the correction below.
+- **C → zl** — the blocker is the compiler, not the kernel. The kernel builds
+  with `compile`, the backend the root README marks **ARCHIVED**. Measured:
+  `sizeof(Value)` 40 B, builtins dispatched through a **309-entry strcmp chain**
+  with `band` at #300, and every number a `double` so **64-bit BARs and DMA
+  addresses are not representable** — the project's own recurring bug class.
+  `compilel` emits real `i64`… until you use a bitwise operator, at which point
+  the return type degrades to `double` and every operand is boxed and dispatched
+  by name. 10M iterations: **C 7 ms, zl arithmetic 4 ms, zl bitwise 999 ms.**
+
+**The actionable part:** making `band/bor/bxor/shl/shr` native `i64` instructions
+in `compilel.c` is ~1,500 lines of compiler work total with the other three
+prerequisites, needs **no laptop, no panel, no hardware access**, cannot break a
+running driver, and is testable on the host against the interpreter. It is the
+only major item in that document with that property.
+
 ## The one thing blocking a cold-start modeset
 
 It needs the display to itself. gnome-shell + Xwayland hold `/dev/dri/card0`,
@@ -349,6 +432,219 @@ a line editor with history.
 
 **Unproven:** `i2c_hid.c` (QEMU has no Intel LPSS I2C) and the cold-start modeset.
 
+Worse than unproven, on `i2c_hid.c`: it is a **transport with no decoder**.
+`i2c_hid_byte(i)` returns raw undecoded bytes. Nothing turns a touchpad report
+into an x, a y and a button — that code does not exist yet.
+
+## The desktop — BUILT, and it is what boots
+
+The inversion landed 2026-08-18. `wm_frame()` is the top of the system on any
+machine with a framebuffer; the shell is window 0 inside it, with a scrollback
+and typed commands. On a machine with no framebuffer the old text shell runs
+exactly as it always did, and `verify.sh` still diffs it byte-for-byte against
+`golden.txt`.
+
+**Verified by boot, not by assertion:** `shots/v10-now.png`. All four boot
+paths green — `verify.sh`, `verify-raw.sh`, `verify-efi.sh`, and the ISO.
+`wmtest` 79 · `inputtest` 24 · `tritest` 9 · `fbbench` all green.
+
+**Two probes drive the POINTER rather than the keyboard**, and they exist
+because everything else in this repo types: `probe-dock.py` (hover, press,
+launch, the menu, dismiss) and `probe-resize.py` (the corner grows a window,
+the title bar still moves it). `probe-drag.py` confirms a drag moves 18% of the
+screen.
+
+**A PATTERN WORTH KNOWING BEFORE YOU ADD ANYTHING HERE.** Five things in
+`wm.c`/`fb.c` were complete, correct, gated, and had **no caller at all**:
+`WF_MODAL`, `wm_resize()`, `fb_blur_cache`, the whole animation timeline, and
+`MOD_SUPER`. This repo is written mechanism-first and gated hard, which is
+exactly what makes that easy to produce — a primitive arrives with tests, a
+measurement and a design comment, and passes every check while being
+unreachable. **A primitive is not done when it passes its test; it is done when
+something calls it and a gate covers the call.** For visual work the assertion
+has to check the PIXELS, not the state: `wm_anim_alpha()` reported a fade
+correctly for hours while nothing drew one. See T-16 and
+`docs/desktop-scale-and-effects.md` §5.
+
+**Why the desktop looked small on a big screen, and where the effects went:**
+`docs/desktop-scale-and-effects.md`. Short version: `ui()` was `cell_w() / 8`,
+so it was 1 or 2 and never more, while the layout is written in 800 design
+units - at 3840 wide that is 1920 units of space for an 800-unit design. It is
+derived from the screen now (1..4) and the console cell is a separate question.
+
+What the v10 pass added, with the numbers, is `docs/desktop-v10-plan.md` §8.
+The five that matter most to somebody touching this next:
+
+1. **Serial is an input source now**, not a thing the shell polls. `wm_frame()`
+   reads `input.c`'s queue and nothing else, so a byte only `key_get()` could
+   see was a byte the desktop could never see — every gate and probe in this
+   repo would have gone blind the moment the compositor booted. `ser_rx()`
+   probes the UART's scratch register first, because **an absent UART floats
+   high**: the naive "is LSR bit 0 set" is true forever on the ThinkPad and
+   would have injected an endless stream of 0xFF keystrokes on the one machine
+   with no other diagnostic.
+2. **C4 deleted the sticker-drag machinery** — `bg_buf` and `sp_buf` at 128 and
+   160 MiB, `fb_bg_snapshot`/`fb_bg_restore`/`fb_grab`/`fb_stamp`. The back
+   buffer moved into their 48 MiB and **now covers 3840×2160**: a whole-desktop
+   redraw there went 44 ms → **9.71 ms**, and a full-screen fill 7.97 → 0.71
+   cyc/px. Scene hashes byte-identical at every mode.
+3. **`raw_boot.asm` loads a FIXED number of chunks.** It was 40 (1.25 MiB)
+   against a 1.23 MiB kernel. A kernel over that limit is not a build error —
+   it is silently truncated and jumped into. `mkdisk.sh` refuses to build such
+   an image now, and CHUNKS is 60.
+4. **The wallpaper is a cached bitmap**, and that is arithmetic rather than
+   taste: a translucent full-screen pass is 22 cyc/px ≈ 22 ms at 1920×1200, the
+   compositor redraws the wallpaper inside *every* damage rectangle, and the
+   v10 background is six such passes. Cached it is 1.5 cyc/px. At 4K it does
+   not fit the arena, refuses, says so, and falls back to the plain gradient.
+5. **THE COMPOSITOR COULD NOT SEE THE MOUSE, and no gate could have caught
+   it.** zlOS drives two pointers - an absolute usb-tablet through `xhci.c` and
+   a relative PS/2 mouse through `idt.c` - and the `mouse_x` builtin has
+   preferred the tablet since it was written. `input.c`'s `pump_mouse()` read
+   `idt_mouse_x()` **and nothing else**. While the shell owned the screen that
+   was invisible, because the shell called `mouse_x()` directly. The moment
+   `wm_frame()` became the top of the system the queue was the compositor's
+   only source of pointer events, so on any machine with a tablet attached -
+   which is what QEMU gives and what `try.sh` attaches - **no EV_MOUSE was
+   pushed at all**. No dragging, no clicking, no dock, no menu.
+
+   Every gate in this repo drives zlOS by TYPING, and a dock that does nothing
+   photographs identically to one that works. `probe-dock.py` exists because
+   of this, and `inputtest` now asserts the preference directly.
+
+6. **`console_mute()`** stops the console painting while the compositor owns the
+   screen. The tee into term.c's scrollback and the write to COM1 both keep
+   going — which is what keeps every gate reading exactly what it read before.
+
+### The design docs, still worth reading
+
+The shell owns the main loop and windows are a demo it launches. A real desktop
+inverts that. Designed 2026-08-17:
+
+- **`docs/DECISIONS.md` — every decision from 2026-08-17 in one page**, including
+  the two that turned out wrong and why. Read this before the others.
+- `docs/desktop-build-guide.md` — start here. What a compositor is, in plain
+  words, and the build order.
+- **`docs/desktop-TODO.md` — the ordered task list. Pick it up here.**
+- `docs/desktop-plan.md` — the decisions, the evidence, and the line numbers.
+- `docs/desktop-toolkit.md` — **the layer that was missing from every earlier
+  plan.** An **immediate-mode** toolkit (`ui.c`), chosen because a retained
+  widget tree needs a heap and *is* a list of children — zlOS has neither.
+  Widgets return whether they fired; nothing is allocated. Hit testing re-runs
+  `app_draw` with drawing off, the same trick as `intel_modeset_dry()`.
+- `docs/desktop-look.md` — why it looks blocky. **The renderer is not the
+  problem** — real TrueType glyphs, subpixel LCD rendering and gamma-correct
+  linear-light blending are all already in. **Read "TrueType" precisely:** the
+  shapes come from DejaVu Sans Mono, but `gen_hd_font.py` rasterizes them **at
+  build time** into three fixed coverage atlases — `font8x16`, `font16x32`,
+  `font24x48`, monospace only. There is **no runtime rasterizer and no arbitrary
+  size**. Fine for a desktop, a hard blocker for a browser. It is three
+  resampling bugs, the
+  worst being `fb_icon24` nearest-neighbour upscaling every icon at 2×
+  (`fb.c:929`).
+- `docs/desktop-polish-and-speed.md` — what makes a desktop look modern, and
+  what it costs. Three facts up front: **three of four cores are parked** in
+  `cli; hlt` forever (`smp.c:79`) so all drawing is single-core; **nothing
+  measures a frame inside the kernel** (TSC exists in `cpu.c`, not exposed to
+  zl); and the renderer is now benchmarked — see below.
+
+- **`docs/feature-catalogue.md` — every feature found across ~15 hand-built OSes,
+  organised by subsystem with a zlOS have/partial/none column.** 16 categories,
+  from kernels to clipboard. Ends with a ranked shortlist of what is actually
+  worth taking, and an explicit list of what is not (microkernels, capability
+  security, filesystems, browsers — each needs a heap or processes).
+  Top of the shortlist is still **the clip rectangle**, which now has *three*
+  customers: compositor, toolkit, and the 3D rasterizer.
+- `docs/os-landscape.md` — survey of ~13 hobby OSes, written for the **3D goal**.
+  Headline: **SerenityOS runs Quake III on a software rasterizer, no GPU** —
+  LibSoftGPU, 16×16 tiles, barycentric, SIMD. That is the path, and `fb3d.c` is
+  its first step. Also: **Essence OS is one person since 2017** (nine years) with
+  an animated software *vector* renderer; **Haiku is 25 years old and its Intel
+  driver is modesetting only**, i.e. where `intel.c` is aiming; and **Redox has
+  excellent systems engineering and a "sluggish, unpolished" UI** — a good
+  desktop is not downstream of a good kernel.
+- `docs/desktop-prior-art.md` — how TempleOS, SerenityOS, Essence, Haiku, Redox,
+  Managarm and Asterinas do graphics. **Nobody in this space has GPU
+  acceleration.** SerenityOS runs Half-Life on a SIMD *software* rasterizer.
+  **Essence OS is the closest analogue** — one developer since 2017, software
+  *vector* renderer **with animation**, window manager **in the kernel** (same
+  choice as `desktop-plan.md`). TempleOS was 640×480/16 colours; **zlOS is
+  already well past it**. Do not write a 3D driver — the *display* driver alone
+  has cost a 13-conflict plan and an 86-defect audit.
+  **Note:** `docs/design/GRAPHICS_PLAN.md` (2026-08-03) says the GPU is reached
+  via `opengl32.dll` FFI. That is the **Windows-hosted** plan and does not apply
+  here — it has been annotated. On zlOS, 3D means a software rasterizer, and
+  `fb3d.c` is its first step.
+
+  **On "can we just take Linux's driver":** no, and the doc measures why on this
+  machine. `i915.ko` is **11.2 MB** uncompressed and ~100K lines; Mesa's Intel
+  Vulkan driver is **24.3 MB**; the **entire zlOS kernel is 1.07 MB** and 11,374
+  hand-written lines. FreeBSD runs i915 only via **LinuxKPI** — it emulates the
+  Linux kernel API rather than porting the driver, and i915 assumes GEM, TTM,
+  dma-buf/dma_fence locking, workqueues and a heap, none of which zlOS has by
+  design. **`intel.c` already does the correct thing: borrow Linux's knowledge,
+  not its code.** Also: `virtio_gpu.c:314` disables virgl on purpose — enabling
+  it would give real 3D in QEMU only, never on the laptop.
+- `docs/desktop-northstar-feasibility.md` — can zlOS run the `~/zl OS v10.dc.html`
+  mockup? **~65%, and what is left is applications, not machinery.** This file
+  has now been wrong twice in opposite directions — 95% by counting visual
+  effects and ignoring the toolkit, then 20% by counting "zl has no lists" and
+  "there is no layout engine" as *permanent*. Neither was a property of the
+  language: `ui.c` is a layout engine and `ui_list_row` expresses a list
+  without a list type. **Separating "the language cannot" from "nobody has
+  written it yet" is the whole lesson**, and getting it wrong costs you the
+  wrong fix.
+
+## The renderer is benchmarked: `hosttest/fbbench.c`
+
+**This dev box IS the test laptop** — `i7-10510U`, Comet Lake-U, same chip family
+as the `8086:9B41` graphics. So `fb.c` timed here runs on the real target CPU.
+
+`fbbench` compiles the **shipping `fb.c` unmodified** at the kernel's own `-O2`
+and `mmap`s the three fixed physical addresses fb.c hardcodes. No sudo.
+
+```
+cd kernel/hosttest && ./build.sh && ./fbbench
+```
+
+Baseline measured 2026-08-17, whole desktop with 3 windows:
+**19.98 ms @ 1920×1200, 26.80 ms @ 2560×1440** — a 50 and 37 fps ceiling with
+nothing else running.
+
+It also puts the resolution cliff on a stopwatch: a full-screen gradient costs
+2.93 cyc/px with the back buffer on and **7.97 cyc/px** with it off, and
+`bg_snapshot` returns in **0.00 ms** at 2560×1440 because `bg_ok = 0` — that is
+window dragging, doing nothing, measured. And it is a **floor**: the harness uses
+ordinary RAM for VRAM, so real hardware pays the 30–50× VRAM read on top.
+
+### `fb_shadow` fixed — 4.1× on a full desktop redraw
+
+`fb_shadow` darkened the window's **entire footprint**, and the caller drew the
+window on top of ~90% of it. It now skips the covered rectangle, inset by
+`SHADOW_SKIP_INSET` so the rounded corners keep their shadow.
+
+| | before | after |
+|---|---|---|
+| shadow 600×460 | 4.34 ms | **0.61 ms** |
+| one window, full chrome | 5.12 ms | **0.90 ms** |
+| whole desktop @1920×1200 | 19.98 ms | **4.88 ms** |
+
+**Verified pixel-identical** (FNV hash of the whole back buffer) and `verify.sh`
+passes. **A static instruction count first pointed at a per-pixel divide in that
+same loop — tabling it made the shadow 25% SLOWER.** The loop is not
+arithmetic-bound. Measure, then optimise, then measure again.
+
+Two things found while planning that you need before believing anything about
+the desktop on real hardware:
+
+1. **At 2560×1440 the back buffer switches itself off** (`fb.c:155` —
+   `BACK_MAX` is `1920*1200`), and it takes subpixel text, fast pixel readback
+   and **window dragging** with it, silently. The ThinkPad panel is 2560×1440.
+   Verified by reading; **not yet observed** — zlOS has never booted on it.
+2. **`fb.c` has no clipping.** Every primitive clips to the screen and nothing
+   else, so there is no way to repaint part of the screen. That, not the window
+   code, is what blocks a real compositor.
+
 ## The recurring bug class — check this FIRST
 
 Five times now: **a DMA buffer outside guest RAM, or an address truncated to
@@ -365,9 +661,19 @@ Five times now: **a DMA buffer outside guest RAM, or an address truncated to
 cd kernel
 ./verify.sh        # BIOS golden transcript
 ./verify-raw.sh    # our own bootloader
-./verify-iso.sh    # UEFI
+./verify-efi.sh    # zlOS as its OWN UEFI application - the ThinkPad's path
+./verify-iso.sh    # BIOS and UEFI through GRUB
+./probe-dock.py    # the POINTER: hover, press, launch, the menu, dismiss
+./probe-resize.py  # the corner grows a window; the title bar still moves it
+./probe-drag.py --grab 1500,125 --drop 700,700
 ./try.sh serial    # drive it from the terminal
+cd hosttest && ./build.sh && ./wmtest && ./inputtest && ./fbbench && ./tritest
 ```
+
+**The `probe-*.py` scripts that drive the POINTER are not optional extras.**
+Every other gate here types, and the compositor's entire pointer path - drag,
+click-to-focus, the close box, the dock, the menu - was dead for hours while
+all of them stayed green. See T-15.
 
 `try.sh` GUI mode is **verified working** (2026-08-17). It was booting
 `-kernel kernel.elf`, and QEMU's own multiboot loader never supplies the

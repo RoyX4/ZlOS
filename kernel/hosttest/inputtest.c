@@ -61,6 +61,37 @@ static void send_scan(int sc)
     scan_tail = (scan_tail + 1) % 64;
 }
 
+/* COM1, the third source. -1 means "no byte", and it is ALSO what a machine
+ * with no UART answers forever - which is the case this stub can express and a
+ * real port cannot. */
+static int ser_q[64], ser_head, ser_tail;
+
+int ser_rx(void)
+{
+    if (ser_head == ser_tail) return -1;
+    int v = ser_q[ser_head];
+    ser_head = (ser_head + 1) % 64;
+    return v;
+}
+
+static int fake_usb_ptr = 0, fake_ux = 0, fake_uy = 0, fake_ubtn = 0;
+
+/* No USB pointer in the harness - which is a case worth being able to express,
+ * because it is the PS/2 fallback the laptop's TrackPoint takes. */
+int xhci_ptr_ready(void) { return fake_usb_ptr; }
+int xhci_ptr_poll(void)  { return 0; }
+int xhci_ptr_x(void)     { return fake_ux; }
+int xhci_ptr_y(void)     { return fake_uy; }
+int xhci_ptr_btn(void)   { return fake_ubtn; }
+
+static void send_ser(const char *s)
+{
+    while (*s) {
+        ser_q[ser_tail] = (unsigned char)*s++;
+        ser_tail = (ser_tail + 1) % 64;
+    }
+}
+
 /* ---- assertions --------------------------------------------------------- */
 static int fails;
 
@@ -155,6 +186,111 @@ int main(void)
     for (int i = 0; i < 50; i++) input_poll();
     d = drain();
     ok("a parked pointer is silent, not a per-poll event", d.mouse == 0);
+
+    /* 9. SERIAL, the third source. This is not a nicety: once wm_frame() owns
+     *    the screen, apps read keys from this queue and from nowhere else, so
+     *    a serial byte that never enters it is a byte the desktop can never
+     *    see - and verify.sh and every probe-*.py drive this machine by typing
+     *    down that wire. */
+    drain();
+    send_ser("help\r");
+    d = drain();
+    ok("serial bytes arrive as characters", d.chars == 5);
+
+    /* ...in the order they were sent. A queue exists to preserve that, and it
+     *    is the reason zl's shell no longer reads COM1 itself: two readers of
+     *    one FIFO hand out a newly-arrived byte before a queued one. */
+    drain();
+    send_ser("abc");
+    ok("...in order", input_char() == 'a' && input_char() == 'b'
+                       && input_char() == 'c');
+
+    /* 10. NO key event beside the character, unlike PS/2 and USB. A serial
+     *     byte has no press, no release and no modifier state - it is already
+     *     the character. Synthesising a key would silently change an existing
+     *     behaviour: input_key() prefers a queued key, so a serial ESC would
+     *     start arriving as KEY_ESC (0x101) where the editor has always seen
+     *     27, and that is exactly the sort of change nothing would notice. */
+    drain();
+    send_ser("\033");
+    d = drain();
+    ok("serial emits no key event beside the character", d.keydown == 0);
+    drain();
+    send_ser("\033");
+    ok("...so input_key() still sees a serial ESC as 27", input_key() == 27);
+
+    /* 11. An absent UART must be silent. There is no serial port on the
+     *     ThinkPad; an undecoded port floats high, so the naive "is LSR bit 0
+     *     set" is true forever and RBR reads 0xFF forever. That would be an
+     *     endless stream of phantom keystrokes on the one machine that cannot
+     *     be debugged over serial. support.c's ser_rx() answers -1 there, and
+     *     an empty queue here is that same answer. */
+    drain();
+    for (int i = 0; i < 50; i++) input_poll();
+    d = drain();
+    ok("a silent UART produces no events at all", d.chars == 0 && d.n == 0);
+
+    /* 12. THE USB POINTER MUST WIN. There are two pointers - an absolute
+     *     usb-tablet through xhci.c and a relative PS/2 mouse through idt.c -
+     *     and mouse_x() has preferred the tablet since it was written. This
+     *     pump read the PS/2 one and nothing else, which was invisible while
+     *     the shell owned the screen and total the moment wm_frame() did: the
+     *     compositor's only source of pointer events is this queue, so on any
+     *     machine with a tablet attached - which is what QEMU gives - NO mouse
+     *     event was ever pushed. No dragging, no clicking, no dock, no menu.
+     *
+     *     Every gate in this repo types, so none of them could see it. This
+     *     assertion is the one that can. */
+    drain();
+    fake_usb_ptr = 1;
+    fake_ux = 1000; fake_uy = 700; fake_ubtn = 0;
+    d = drain();
+    /* A source switch REPORTS, unlike the very first poll, and that is
+     * correct rather than a lapse: the pointer really is somewhere else now,
+     * and swallowing it would leave every window believing the old position
+     * until the hand happened to move again. */
+    ok("plugging in a USB pointer reports the new position",
+       d.mouse == 1 && d.last_x == 1000 && d.last_y == 700);
+    fake_ux = 1100;
+    d = drain();
+    ok("the USB pointer produces events", d.mouse == 1);
+    ok("...and its position is the one reported",
+       d.last_x == 1100 && d.last_y == 700);
+
+    /* ...and the PS/2 mouse must NOT be able to talk over it. Both moving at
+     * once has to resolve to one answer, or the pointer jumps between them. */
+    fake_x = 5; fake_y = 5;
+    fake_ux = 1200;
+    d = drain();
+    ok("the PS/2 mouse cannot talk over it", d.last_x == 1200 && d.last_y == 700);
+
+    /* and unplugging it falls back, which is the laptop's TrackPoint */
+    fake_usb_ptr = 0;
+    fake_x = 300; fake_y = 200;
+    d = drain();
+    ok("without a USB pointer, PS/2 is used", d.last_x == 300 && d.last_y == 200);
+
+    /* 13. SUPER, TAPPED. A modifier emits no event of its own, so a shortcut
+     *     bound to Super alone had nothing to fire on and MOD_SUPER had been
+     *     tracked and unused since this file was written. A tap - press and
+     *     release with nothing in between - emits KEY_SUPER; held with another
+     *     key it must stay a pure modifier, or Super+Tab opens the start menu
+     *     every time somebody switches window. 0xE0 0x5B is left Super. */
+    fake_usb_ptr = 0;
+    drain();
+    send_scan(0xE0); send_scan(0x5B);            /* press   */
+    send_scan(0xE0); send_scan(0xDB);            /* release */
+    d = drain();
+    ok("a Super TAP emits a key event", d.keydown == 1);
+
+    drain();
+    send_scan(0xE0); send_scan(0x5B);            /* Super down     */
+    send_scan(0x0F);                             /* ...then Tab    */
+    send_scan(0x8F);
+    send_scan(0xE0); send_scan(0xDB);            /* Super up       */
+    d = drain();
+    /* Tab's own key event is expected; Super's must NOT be there beside it */
+    ok("Super HELD with another key emits none", d.keydown == 1);
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;
