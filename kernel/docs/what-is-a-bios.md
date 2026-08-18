@@ -41,12 +41,16 @@ Steps 4 and 5 are things you have already written for zlOS. Step 3 is the wall.
 
 ## Two different walls — do not confuse them
 
-**Wall 1 — the DRAM training blob.** On modern Intel the memory reference code is
-not published. coreboot does not write it either; it calls into Intel's FSP-M
-binary. AMD's equivalent is AGESA. This is *nobody outside Intel has the timing
-tables* — not a skill problem, not a language problem. On older platforms
-(Sandy/Ivy Bridge era) people have reverse-engineered it, and coreboot has native
-raminit for those. On Comet Lake, no.
+**Wall 1 — the DRAM training blob.** On modern *Intel* the memory reference code
+is not published. coreboot does not write it either; it calls into Intel's FSP-M
+binary. On older platforms people did it natively. On Comet Lake, no.
+
+> **Narrowed 2026-08-18 after actually researching it.** This wall is smaller
+> than the paragraph above implies and it is shrinking on a schedule. AMD is
+> open-sourcing memory training under MIT (openSIL), and native raminit for
+> Intel is public through Haswell. See
+> [Which hardware is actually open](#which-hardware-is-actually-open-researched-2026-08-18)
+> below — that section supersedes this one.
 
 **Wall 2 — Boot Guard, and this one is fused into the silicon.** Before your
 reset-vector code runs at all, CPU microcode loads a signed Authenticated Code
@@ -182,6 +186,73 @@ So, honestly:
 The claim "you cannot write a BIOS in your own language" is false. The true
 claim is much narrower: *one step of one kind of BIOS depends on a trade secret,
 and one particular laptop refuses to run anything it did not sign.*
+
+## Which hardware is actually open (researched 2026-08-18)
+
+The question that prompted this: *"why can't I use other modern hardware and
+research whether anyone has got past it?"* You can. Someone has. **The winning
+move turns out to be picking the house, not picking the lock.**
+
+### Boot Guard is not fused on most machines
+
+This is the correction that matters most. Fusing is an OEM *choice*, and most of
+them skip it. Trammell Hudson's Boot Guard writeup: many or most OEMs do not
+enable it, so any boot block flashed into the SPI chip will run
+([trmm.net](https://trmm.net/Bootguard/)). Lenovo fused this X1 Carbon. A
+random DIY desktop board very likely did not.
+
+Better still, some vendors ship it deliberately **unfused so the owner can put
+their own key in.** Dasharo enables Boot Guard on NovaCustom laptops but does not
+fuse the platform, leaving the key configuration mutable
+([docs.dasharo.com](https://docs.dasharo.com/variants/novacustom_v560tu/releases/)).
+That is not defeating verified boot — that is *being* the verifier. Your firmware,
+your key, signature checks still on.
+
+For completeness: people have also got past it by leaking keys — MSI in 2023,
+and Clevo published Boot Guard private keys in October 2025
+([VU#538470](https://cyberpress.org/exposure-of-clevo-uefi-bootguard-keys/)).
+Real, but it is signing with somebody's stolen key. Not a foundation to build on.
+
+### Native memory training already exists — for the right silicon
+
+*Intel, via coreboot:* Sandy Bridge, Ivy Bridge and Haswell have fully open native
+raminit. Broadwell is partial (only the non-ULT "trad" parts). **Skylake and
+newer use FSP-M** — that is the cutoff, and it is why this laptop is on the wrong
+side of it. As of coreboot 26.06, DDR5 has no native support at all.
+
+*AMD, via openSIL:* **MIT licensed**, written in C-17, and its scope explicitly
+includes memory-interface training and signal conditioning, DRAM JEDEC
+initialisation, and host memory controller initialisation
+([spec](https://www.opencompute.org/documents/firmware-architecture-specification-opensil-v1-0-pdf),
+[repo](https://github.com/openSIL/openSIL)). AMD has reaffirmed **production in
+2026**, replacing AGESA, shipping with 6th-gen EPYC "Venice" and Ryzen "Medusa",
+with Zen 6 targeted 1H 2027 ([Phoronix](https://www.phoronix.com/news/AMD-openSIL-2026)).
+The public repo today is a Genoa proof-of-concept on one board.
+
+So the sentence "nobody outside the vendor can train DRAM" is only true of
+**modern Intel**. On AMD it is becoming a published MIT-licensed algorithm, and
+an MIT-licensed algorithm is a thing you can port to zl.
+
+*No blobs at all:* Raptor's Talos II / Blackbird (POWER9) are open the whole way
+down, microcode included. Different ISA, so zl would need a POWER backend first.
+
+### Three routes, honestly ranked for zl
+
+| Route | RAM training | Will it run your firmware | zl cost |
+|---|---|---|---|
+| **Old Intel — X230 / T430 class** | Open **today** in coreboot | No Boot Guard, nothing to defeat | 16-bit backend only. **x86-64 backend already exists** |
+| **AMD + openSIL** | MIT source, production 2026 | Depends on the board's fuses | 16-bit backend + port a large C-17 codebase |
+| **Modern Intel, unfused (NovaCustom / Dasharo)** | Still FSP-M blob | Yes — you provision the key | 16-bit backend, but RAM init stays a blob |
+| This X1 Carbon | FSP-M blob | **No — fused** | irrelevant |
+
+**The cheapest path to "a BIOS entirely in zl, on real hardware, no blobs" is a
+£40 second-hand Ivy Bridge or Haswell ThinkPad**, not a new machine. Everything
+is public for it, nothing is fused, and coreboot's native raminit is a working
+reference implementation to port. "Old" costs nothing here — the firmware problem
+is identical, and the parts that make it hard are *more* open, not less.
+
+The years-out version is AMD: by the time zl has a 16-bit backend, openSIL should
+be shipping in production, and the last closed step on x86 becomes an MIT file.
 
 ## If you want to check any of this yourself
 
