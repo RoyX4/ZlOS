@@ -52,3 +52,5 @@ kernel/__pycache__/
 kernel/hosttest/arenatest
 kernel/hosttest/exectest
 kernel/hosttest/exectest-nofs
+kernel/hosttest/jmptest
+kernel/hosttest/jmptest32

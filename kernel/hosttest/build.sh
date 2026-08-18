@@ -59,6 +59,15 @@ echo "built ./tritest       (run: ./tritest)"
 # instead of a subtraction hands a script the whole machine. Built at the same
 # -O2 the kernel uses; the harness mmaps the address arena.c hardcodes so the
 # shipping source compiles unmodified.
+# The error boundary: twenty lines of assembly the whole kill path rests on.
+# Built for BOTH architectures, because a setjmp that forgets a callee-saved
+# register does not crash - it hands back a stale value after an unwind, and
+# the symptom surfaces in whatever loop was using that register, in another
+# file, later. The i386 build is the one the kernel actually ships.
+gcc -O2 -w -o jmptest   jmptest.c ../ksetjmp.S
+gcc -m32 -O2 -w -o jmptest32 jmptest.c ../ksetjmp.S
+echo "built ./jmptest       (run: ./jmptest && ./jmptest32)"
+
 gcc -O2 -w -o arenatest arenatest.c ../arena.c
 echo "built ./arenatest     (run: ./arenatest)"
 
