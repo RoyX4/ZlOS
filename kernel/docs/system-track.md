@@ -307,8 +307,29 @@ were both modified in the `desktop/overnight-compositor` worktree. So:
 **`term.c` is untouched** — platform track owns it. That is why the disk
 commands are single characters, `.` and `,`: the typed-word table lives there.
 
-**The clipboard has no app using it.** `clip.c` and its builtins are done and
-asserted across two separate apps in the harness. Ctrl+C is 3 and Ctrl+V is 22,
-which `input.c` already produces and `route_key` already delivers to the
-focused app as an ordinary `EV_CHAR` — so no routing change is needed, only an
-app that acts on them.
+---
+
+## The clipboard, and why no routing changed for it
+
+Ctrl+C is character 3 and Ctrl+V is 22 — `input.c` has always produced them and
+`route_key` has always delivered them to the focused app as an ordinary
+`EV_CHAR`. So the clipboard needed **no change to the compositor at all**, only
+apps that act on those two codes.
+
+There are two, and they share nothing else:
+
+- the **editor** copies its whole buffer on Ctrl+C and appends the clipboard on
+  Ctrl+V, and has no idea what else exists
+- the **`'` command** writes the clipboard to `clip.txt` on the disk, and has
+  no idea where the bytes came from
+
+That is the whole feature. Copy in the editor, press `'`, and the text is a
+file on a disk that survives the power going off — through one buffer that
+neither end knows anything about.
+
+One thing had to be added to make Ctrl+C reachable at all: the PS/2 path in
+`edit_key()` tracked **shift and nothing else**, so `Ctrl+C` arrived as plain
+`c`. It now tracks ctrl (scancodes 0x1D/0x9D) and returns `band(ch, 31)` for a
+ctrl+letter — which is not a convention invented here, it is exactly what
+`input.c` already produces on the USB path, so the editor sees the same codes
+whichever keyboard is being typed on.

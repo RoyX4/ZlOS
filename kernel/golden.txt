@@ -33,6 +33,8 @@
     .        zlfs on the NVMe disk - mount, and count the boots
     ,        list the files ON DISK, by name
     ;        the real time, read off the CMOS clock
+    '        write the clipboard to clip.txt on disk
+             (Ctrl+C in the editor copies, Ctrl+V pastes)
     e        beep the PC speaker
     m        poke a byte into video memory and read it back
   our hardware drivers
