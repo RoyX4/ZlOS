@@ -363,6 +363,7 @@ fn help() {
     print("    l        list the RAM files")
     print("    .        zlfs on the NVMe disk - mount, and count the boots")
     print("    ,        list the files ON DISK, by name")
+    print("    ;        the real time, read off the CMOS clock")
     print("    e        beep the PC speaker")
     print("    m        poke a byte into video memory and read it back")
     color(C_CYAN)  print("  our hardware drivers")
@@ -1684,6 +1685,33 @@ fn run_command(cmd, arg) {
         put("    BOOTCOUNT=")  print(bootn)
         color(C_GREY)
         print("    that number came off the disk, not out of memory")
+        return 0
+    }
+    # ; - the real time, off the CMOS clock. The header draws this too, but the
+    # header only exists when there is a framebuffer, and verify.sh boots with
+    # -display none. This is how the clock gets gated.
+    if cmd == 59 {
+        color(C_CYAN)  print("  the clock")
+        color(C_GREY)
+        if rtc_here() == 0 {
+            color(C_RED)  print("    no RTC on this machine")
+            color(C_GREY)  return 0
+        }
+        if rtc_up() == 0 {
+            color(C_RED)
+            put("    the clock would not settle (reason ")  put(rtc_why())  print(")")
+            color(C_GREY)  return 0
+        }
+        put("    RTC=")
+        put(rtc_y())   put("-")
+        if rtc_mo() < 10 { put("0") }   put(rtc_mo())  put("-")
+        if rtc_d()  < 10 { put("0") }   put(rtc_d())   put(" ")
+        if rtc_h()  < 10 { put("0") }   put(rtc_h())   put(":")
+        if rtc_mi() < 10 { put("0") }   put(rtc_mi())  put(":")
+        if rtc_s()  < 10 { put("0") }   print(rtc_s())
+        put("    epoch=")  print(rtc_epoch())
+        # a file's mtime comes from here once the disk is mounted
+        fs_stamp(rtc_epoch())
         return 0
     }
     # , - list what is on the disk, by NAME

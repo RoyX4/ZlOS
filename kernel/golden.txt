@@ -32,6 +32,7 @@
     l        list the RAM files
     .        zlfs on the NVMe disk - mount, and count the boots
     ,        list the files ON DISK, by name
+    ;        the real time, read off the CMOS clock
     e        beep the PC speaker
     m        poke a byte into video memory and read it back
   our hardware drivers
