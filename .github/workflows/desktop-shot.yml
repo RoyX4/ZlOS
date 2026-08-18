@@ -1,0 +1,76 @@
+name: desktop
+
+# A picture of the operating system, on every pull request.
+#
+# kernel/hosttest/wmshot.c renders one frame of the compositor to a PPM from
+# Linux - no boot, no GPU, no display, milliseconds. That is only possible
+# because fb.c / wm.c / ui.c are freestanding C against memory.
+#
+# Why bother when wmtest already asserts 47 properties: assertions catch a click
+# landing on the wrong window, eyes catch a title bar four pixels too tall. Both
+# were real here, and only the second kind is found by looking. wmshot caught
+# ui_toggle rendering as a circle instead of a pill, which every assertion passed.
+#
+# Two resolutions on purpose - the resolution cliff (buffers sized from the wrong
+# neighbour) is a bug class this repo has already hit.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  shot:
+    name: render the desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: install
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc imagemagick
+
+      - name: render this branch
+        run: |
+          bash .github/scripts/render-desktop.sh head
+
+      - name: render the base commit for comparison
+        continue-on-error: true
+        run: |
+          git worktree add /tmp/base "${{ github.event.pull_request.base.sha }}"
+          cd /tmp/base && bash "$GITHUB_WORKSPACE/.github/scripts/render-desktop.sh" base
+          cp -r /tmp/base/shots/. "$GITHUB_WORKSPACE/shots/" 2>/dev/null || true
+
+      - name: diff the frames
+        run: |
+          cd shots
+          changed=0
+          for size in 1024x768 1920x1200; do
+            h="head-$size.png"; b="base-$size.png"
+            [ -f "$h" ] || continue
+            if [ -f "$b" ]; then
+              # AE = count of differing pixels. `compare` exits 1 on any diff,
+              # so it must not be allowed to kill the step.
+              px=$(compare -metric AE "$b" "$h" "diff-$size.png" 2>&1 || true)
+              total=$(( ${size%x*} * ${size#*x} ))
+              echo "$size: $px of $total pixels differ"
+              case "$px" in ''|0) ;; *) changed=1 ;; esac
+            else
+              echo "$size: no base render to compare against (first run)"
+            fi
+          done
+          echo "changed=$changed" >> "$GITHUB_ENV"
+
+      - name: upload the frames
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-frames
+          path: shots/*.png
+          if-no-files-found: error
+
+      - name: note the result on the PR
+        if: env.changed == '1'
+        run: |
+          echo "::notice::the rendered desktop changed - open the 'desktop-frames' artifact and look at diff-*.png"

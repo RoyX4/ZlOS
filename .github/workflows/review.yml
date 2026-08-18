@@ -1,0 +1,96 @@
+name: second opinion
+
+# A different model family reads every PR.
+#
+# The argument is not "GPT is better than Claude". It is that two models fail
+# differently, and large parts of this kernel cannot be verified any other way:
+# most of intel.c's write paths are gated behind lt_armed and have never
+# executed, and no emulator reproduces the LLP64 truncation class at all.
+#
+# Track record for reading-as-verification in this repo:
+#   - 86 verified defects in intel.c, found by reading code no gate executes
+#   - 6 data-loss bugs found underneath 63 passing assertions
+#
+# Requires an OPENAI_API_KEY repo secret. Roy's local codex uses ChatGPT tokens
+# (~/.codex/auth.json), which do NOT work headlessly - so this job skips
+# cleanly until a key is added, rather than failing red every run.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  codex:
+    name: codex reads the diff
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: is a key configured?
+        id: gate
+        env:
+          KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "no OPENAI_API_KEY secret - skipping (this is not a failure)"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: install codex
+        if: steps.gate.outputs.run == 'true'
+        run: npm install -g @openai/codex
+
+      - name: review
+        if: steps.gate.outputs.run == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff "$BASE".."$HEAD" > /tmp/pr.diff
+          wc -l /tmp/pr.diff
+
+          # AGENTS.md is the zl brief. Without it a model pattern-matches zl to
+          # Python and files confident nonsense - that has already happened here.
+          codex exec \
+            --skip-git-repo-check \
+            -c approval_policy='"never"' \
+            -c sandbox_mode='"read-only"' \
+            "Read AGENTS.md first - it explains zl, whose semantics you have
+             never seen and which only look like Python.
+
+             Then review the diff in /tmp/pr.diff for this OS kernel.
+
+             Priorities, in order:
+             1. pointer truncation in the EFI build (LLP64: unsigned long is 4
+                bytes there). This class has shipped twice.
+             2. code added with no caller - 'it exists' is not 'it runs'.
+             3. gates that wait on wall-clock time instead of polling a marker.
+             4. anything touching panel power in intel.c, which can damage real
+                hardware.
+
+             State clearly what you READ versus what you RAN. If you make a claim
+             about zl language semantics and did not run ./interp, say so.
+             Be concise. No praise. If you find nothing, say so in one line." \
+            2>&1 | tee /tmp/review.md
+
+      - name: post the review
+        if: steps.gate.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "## Second opinion — Codex"
+            echo
+            echo "_A different model family, because two models fail differently._"
+            echo
+            cat /tmp/review.md
+          } > /tmp/comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/comment.md

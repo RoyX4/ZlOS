@@ -3,6 +3,7 @@ compile
 nativegen
 lexer_demo
 parser_demo
+zlfmt
 native_out
 out.c
 *.o
@@ -73,3 +74,7 @@ kernel/hosttest/exectest-nofs
 kernel/hosttest/jmptest
 kernel/hosttest/jmptest32
 kernel/hosttest/libctest
+scratch.zl
+
+# rendered compositor frames (.github/scripts/render-desktop.sh)
+shots/

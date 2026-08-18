@@ -1,0 +1,17 @@
+# Known-outstanding hazard counts, for local runs.
+#
+# ADVISORY, not the CI gate. This number is clang-version dependent: the same
+# tree measures 34 on Kali's clang 21 and 37 on the Ubuntu runner. CI therefore
+# compares the base commit against HEAD inside one container
+# (.github/workflows/gates.yml) and fails only when a change ADDS sites, which
+# takes the compiler out of the question entirely.
+#
+# Lower these as they are fixed. Never raise one to make a build pass.
+
+# Pointer truncations in the EFI build (LLP64: unsigned long is 4 bytes there).
+# Currently invisible because -w in kernel/buildefi.sh suppresses the four
+# -Werror= flags meant to catch them -- see docs/design/ci-and-agent-pipeline.md
+# section 8b. Fix is one word (-w -> -Wno-everything) plus repairing these:
+#   xhci.c 12, freestanding/runtime_kernel.c 11, fb.c 8, smp.c 2, console.c 1
+# Target: 0.
+efi_truncation_sites=34
