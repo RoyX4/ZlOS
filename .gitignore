@@ -20,6 +20,7 @@ kernel/hosttest/htmltest
 kernel/hosttest/browsershot
 kernel/hosttest/nettest
 kernel/hosttest/tcptest
+kernel/hosttest/httptest
 kernel/hosttest/regs-*.txt
 
 # build outputs - regenerable, and large. Build them with:
@@ -39,6 +40,7 @@ kernel/hosttest/htmltest
 kernel/hosttest/browsershot
 kernel/hosttest/nettest
 kernel/hosttest/tcptest
+kernel/hosttest/httptest
 kernel/hosttest/dpll_test
 kernel/hosttest/modeset_test
 kernel/hosttest/regs-*.txt

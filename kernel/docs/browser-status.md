@@ -180,6 +180,20 @@ kernel/hosttest/nettest        # 152 checks, 0 failed
 kernel/hosttest/tcptest        # 110 checks, 0 failed
 ```
 
+```bash
+kernel/hosttest/httptest       # 91 checks, 0 failed
+```
+
+`httptest` drives `http.c` over the **real** `tcp.c`, with the response
+arriving as scripted TCP segments — so it exercises the same reassembly path
+the kernel uses rather than a mock of it. It passed all 91 checks the first
+time it ran, which is not a claim worth making on its own: six deliberate
+mutations of `http.c` — dropping bare-LF header support, accepting every
+content type, not clamping the body to `Content-Length`, treating a 3xx with
+no `Location` as a redirect, making header names case-sensitive, and dropping
+the truncation flag — are each caught by between 1 and 16 assertions. The
+tests bite; the code passed.
+
 ### The adversarial review, and what it found
 
 §8 asks for "an adversarial reviewer on the TCP state machine — have one try to

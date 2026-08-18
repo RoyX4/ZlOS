@@ -93,3 +93,14 @@ echo "built ./nettest       (run: ./nettest)"
 # The harness IS the peer and the clock is a variable, so all of it is instant.
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o tcptest tcptest.c ../tcp.c ../net.c
 echo "built ./tcptest       (run: ./tcptest)"
+
+# HTTP/1.0 over the REAL tcp.c, driven by scripted TCP segments. http.c was
+# gated end to end against a python http.server, which proves the happy path
+# and nothing else - and the happy path is the one case a server will reliably
+# give you. Everything that makes a parser wrong is what happens when the
+# response is not what you expected: headers split across segments, bare LF
+# line endings, a body with no Content-Length, a Content-Length that lies, a
+# 3xx with no Location, a type that is not a page. None of those can be asked
+# for from a real server; all of them are two lines here.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o httptest httptest.c ../http.c ../tcp.c ../net.c
+echo "built ./httptest      (run: ./httptest)"
