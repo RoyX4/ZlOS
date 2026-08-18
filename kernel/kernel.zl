@@ -559,9 +559,28 @@ fn usbkey_demo() {
 #
 # The line lives in memory at LINE_BUF, the history is a ring of HIST_N slots
 # above it, and both are plain bytes - there is no allocator to ask.
-LINE_BUF  = 0x02020000
+#
+# With no allocator, the neighbour has to be checked by hand rather than
+# assumed. The neighbour here is the RAM filesystem below: FS_DATA holds 10
+# slots of FS_SLOT bytes, so it runs 0x02011000 .. 0x02025000 (see fs_init).
+# These used to sit at 0x02020000 and 0x02021000, which was *inside* it -
+# LINE_BUF landed in FS_DATA's slot 7 and HIST_BUF started exactly on slot 8.
+# So `7i` or `8i` in the editor overwrote the line being typed and the history
+# ring, and every keystroke at the prompt corrupted RAM files 7 and 8. Both
+# ends of that were reachable from the shell.
+#
+# Starting at 0x02030000 clears FS_DATA's end by 44 KiB, which is also room
+# for FS_SLOT or the file count to grow before this has to move again:
+#
+#   LINE_BUF  0x02030000 + LINE_MAX 200          -> 0x020300C8
+#   HIST_BUF  0x02031000 + HIST_N 16 * 256       -> 0x02032000
+#
+# The 256 is the per-entry stride hardcoded in hist_save/hist_load below; it
+# is comfortably above LINE_MAX, so a full-length line plus its terminator
+# still fits in one slot.
+LINE_BUF  = 0x02030000
 LINE_MAX  = 200
-HIST_BUF  = 0x02021000
+HIST_BUF  = 0x02031000
 HIST_N    = 16
 hist_count = 0
 hist_pos   = 0
@@ -937,13 +956,34 @@ fn paint() {
 # written in zl using copy_mem/poke32/peek32 - no new C. It is a RAM disk,
 # so it is wiped on reboot, but within a session the editor can save and
 # reload files by number.
-# These MUST live above the kernel image. Our own bootloader loads the kernel
-# at 0x10000 and it now reaches past 0x89000, so the old 0x50000 landed inside
-# the kernel's own code - fs_init() overwrote it and the machine died on an
-# invalid opcode the moment that code was reached. GRUB loads at 1 MiB, which
-# is why only the raw path ever showed it. 32 MiB is clear of everything.
+# These MUST live above the kernel image and its stack. The original address
+# was 0x50000, which back when our own bootloader ran the kernel from 0x10000
+# landed inside the kernel's own code - fs_init() overwrote it and the machine
+# died on an invalid opcode the moment that code was reached. GRUB loads at
+# 1 MiB, which is why only the raw path ever showed it.
+#
+# Both loaders put the kernel at 1 MiB now (raw_boot.asm's KERNEL_DEST), and
+# it reaches __bss_end ~0x20E000 with the stack at 6 MiB growing down. So
+# everything above 6 MiB is clear, and 32 MiB has room to spare.
+#
+# What actually lives in the 32 MiB region, so the next buffer added here can
+# check its neighbours instead of guessing. Everything below is byte arrays
+# addressed by hand; nothing hands out these addresses at runtime:
+#
+#   0x02000000  SNAKE_X   512                    -> 0x02000200
+#   0x02000200  SNAKE_Y   512                    -> 0x02000400
+#   0x02010000  FS_META   10 * 4, zeroed as 64   -> 0x02010040
+#   0x02011000  FS_DATA   10 * FS_SLOT = 80 KiB  -> 0x02025000
+#   0x02030000  LINE_BUF  LINE_MAX 200           -> 0x020300C8
+#   0x02031000  HIST_BUF  HIST_N 16 * 256        -> 0x02032000
+#
+# FS_DATA is the big one and it grows with both FS_SLOT and the file count:
+# 10 * 8192 = 80 KiB, so it reaches 0x02025000. LINE_BUF/HIST_BUF were once
+# at 0x02020000/0x02021000, i.e. inside slots 7 and 8 - see the note above
+# them. The other drivers keep well clear of all this: the NVMe and xHCI DMA
+# arenas start at 208 and 224 MiB.
 FS_META = 0x02010000    # 10 lengths, 4 bytes each
-FS_DATA = 0x02011000    # 10 slots of FS_SLOT bytes
+FS_DATA = 0x02011000    # 10 slots of FS_SLOT bytes -> ends 0x02025000
 FS_SLOT = 8192
 
 fn fs_init()      { fill_mem(FS_META, 0, 64) }

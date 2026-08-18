@@ -3,7 +3,8 @@
 ; This is the first code that runs after the BIOS: the BIOS loads exactly one
 ; sector (this one) to 0x7C00 and jumps to it. From nothing, it:
 ;
-;   1. loads the kernel off the disk into memory at 0x10000
+;   1. loads the kernel off the disk to 1 MiB, via a bounce buffer at 0x10000
+;      (the BIOS can only read into the first megabyte - see KERNEL_DEST)
 ;   2. turns on the A20 line (so addresses above 1 MiB are reachable)
 ;   3. loads a GDT and switches the CPU into 32-bit protected mode
 ;   4. jumps to the kernel's raw entry point
@@ -28,8 +29,8 @@ KERNEL_LBA   equ 1               ; kernel starts at the 2nd sector of the disk
 CHUNK_SECS   equ 64              ; sectors per BIOS read (32 KiB)
 CHUNKS       equ 40              ; 40 * 32 KiB = 1.25 MiB of headroom
 
-; Scratch below the kernel (the boot sector ends at 0x7E00, the kernel starts
-; at 0x10000), used only while we are still in real mode.
+; Scratch below the bounce buffer (the boot sector ends at 0x7E00, the buffer
+; starts at 0x10000), used only while we are still in real mode.
 VBE_INFO     equ 0x8000          ; VbeInfoBlock   (512 bytes)
 MODE_INFO    equ 0x8200          ; ModeInfoBlock  (256 bytes)
 FB_INFO      equ 0x8300          ; what we hand the kernel (addr,pitch,w,h,bpp)
@@ -193,9 +194,11 @@ pm_entry:
     mov ss, ax
     mov fs, ax
     mov gs, ax
-    mov esp, 0x600000            ; a stack in high memory (6 MiB). Low memory is
-                                 ; too tight now: the kernel fills 0x10000..~0x92000
-                                 ; and the framebuffer compositor nests deep.
+    mov esp, 0x600000            ; a stack in high memory (6 MiB), growing down.
+                                 ; Low memory is too tight: the framebuffer
+                                 ; compositor nests deep. The kernel sits at 1 MiB
+                                 ; and reaches ~0x20E000, so this leaves ~4 MiB.
+                                 ; Must match raw_entry.S, which sets it again.
     jmp KERNEL_DEST              ; into the kernel's raw entry, at 1 MiB
 
 ; ---- GDT: null, flat 32-bit code, flat 32-bit data ----

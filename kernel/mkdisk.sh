@@ -4,7 +4,7 @@
 #   kernel.zl -> ../compile -> out.c -> gcc -m32 -ffreestanding
 #             +  raw_entry.S (our entry, no multiboot)
 #             +  the same console/font/runtime objects
-#             -> link-raw.ld (linked at 0x10000) -> objcopy -> kernel_raw.bin
+#             -> link-raw.ld (linked at 1 MiB) -> objcopy -> kernel_raw.bin
 #   raw_boot.asm -> nasm -> raw_boot.bin (512-byte boot sector)
 #   disk = boot sector ++ kernel, padded
 #

@@ -363,11 +363,20 @@ Five times now: **a DMA buffer outside guest RAM, or an address truncated to
 
 ```
 cd kernel
+./check-memmap.sh  # hand-placed buffers do not overlap (static, instant)
 ./verify.sh        # BIOS golden transcript
 ./verify-raw.sh    # our own bootloader
 ./verify-iso.sh    # UEFI
 ./try.sh serial    # drive it from the terminal
 ```
+
+`check-memmap.sh` parses the fixed addresses out of `kernel.zl` and derives
+their sizes from the same constants, so bumping `FS_SLOT` or `HIST_N` re-runs
+the arithmetic. It exists because `LINE_BUF`/`HIST_BUF` had been placed inside
+`FS_DATA`'s slots 7 and 8: editing RAM file 7 or 8 overwrote the shell's input
+line and history ring, and typing at the prompt overwrote those two files.
+There is no heap, so nothing catches this at runtime. It reads source and does
+arithmetic — no build, no QEMU, so it cannot fail because the host is busy.
 
 `try.sh` GUI mode is **verified working** (2026-08-17). It was booting
 `-kernel kernel.elf`, and QEMU's own multiboot loader never supplies the
