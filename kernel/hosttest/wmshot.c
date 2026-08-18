@@ -42,6 +42,9 @@ static unsigned fake_ticks = 1;
 int idt_mouse_x(void)   { return fake_x; }
 int idt_mouse_y(void)   { return fake_y; }
 int idt_mouse_btn(void) { return fake_btn; }
+/* the scroll wheel: read-and-clear, so a harness with no wheel must return
+ * 0 rather than a stale notch (desktop/feel-and-control added this). */
+int idt_mouse_wheel(void) { return 0; }
 unsigned int idt_ticks(void) { return fake_ticks; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }

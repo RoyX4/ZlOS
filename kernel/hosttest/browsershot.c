@@ -49,6 +49,9 @@ static unsigned fake_ticks = 1;
 int idt_mouse_x(void)   { return -1; }
 int idt_mouse_y(void)   { return -1; }
 int idt_mouse_btn(void) { return 0; }
+/* the scroll wheel: read-and-clear, so a harness with no wheel must return
+ * 0 rather than a stale notch (desktop/feel-and-control added this). */
+int idt_mouse_wheel(void) { return 0; }
 unsigned int idt_ticks(void) { return fake_ticks; }
 /* browser.c now reaches http.c -> tcp.c -> net.c, and net.c wants the
  * calibrated TSC for its round-trip timing. Nothing in a still picture uses
@@ -62,6 +65,11 @@ void zl_putc_pub(char c) { (void)c; }
 Value zl_num(double n) { Value v; memset(&v, 0, sizeof v); v.type = V_NUM; v.num = n; return v; }
 
 static int W, H = 1000;
+
+/* fb_setup() tells input.c the new screen size so the pointer clamp follows
+ * the mode (desktop/feel-and-control). Harnesses that link fb.c without
+ * input.c have to answer for it. */
+void input_set_bounds(int w, int h) { (void)w; (void)h; }
 
 int main(int argc, char **argv)
 {

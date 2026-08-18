@@ -44,6 +44,9 @@ static int scan_q[64], scan_head, scan_tail;
 int idt_mouse_x(void)   { return fake_x; }
 int idt_mouse_y(void)   { return fake_y; }
 int idt_mouse_btn(void) { return fake_btn; }
+/* the scroll wheel: read-and-clear, so a harness with no wheel must return
+ * 0 rather than a stale notch (desktop/feel-and-control added this). */
+int idt_mouse_wheel(void) { return 0; }
 unsigned int idt_ticks(void) { return fake_ticks; }
 int xhci_key(void)      { return 0; }
 
@@ -132,8 +135,26 @@ static struct drained drain(void)
 int xhci_key_event(void) { return 0; }
 int xhci_kbd_mods(void)  { return 0; }
 
+/* Hardware this harness does not fake. The merge gave input.c and wm.c
+ * callers into the USB tablet, the USB keyboard, the scroll wheel, the
+ * serial port and the TSC. ser_rx returns -1 ("no UART"), not 0, which
+ * would be a NUL byte and a keystroke. */
+int cpu_tsc_lo(void) { return 0; }
+int cpu_tsc_khz(void) { return 0; }
+
+void input_set_accel(int on);
+
 int main(void)
 {
+    /* THESE TESTS ASSERT THE IDENTITY: that the event carries the position
+     * the ISR published. desktop/feel-and-control put an acceleration curve
+     * between the two - gain rises to 300%% past a threshold - and this
+     * harness moves the fake pointer in single large jumps, which is exactly
+     * what the curve is built to amplify. Turning it off restores the
+     * identity these assertions were written against; the curve itself is
+     * tested in inputtest_feel/wmtest_feel, which drive it deliberately. */
+    input_set_accel(0);
+
     printf("inputtest - the shipping input.c, against fake hardware\n\n");
 
     /* 1. The first poll must ADOPT the pointer, not announce it. idt.c starts

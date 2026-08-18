@@ -91,6 +91,7 @@ int  fb_get_subpixel(void);
  * link, and "fbbench does not build" is indistinguishable from "fb.c is
  * broken" at exactly the moment you want to tell those apart. */
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
+void input_set_bounds(int w, int h)        { (void)w; (void)h; }  /* fb.c pushes it; no input.c in this harness */
 
 /* fb_setup() reports the mode it took and whether the back buffer survived it.
  * That goes through the kernel's one character sink; here it is stdout, so the

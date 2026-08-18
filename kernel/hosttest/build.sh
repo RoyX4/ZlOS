@@ -33,15 +33,18 @@ echo "built ./inputtest_hid (run: ./inputtest_hid)"
 # sliver of an old window left on the wallpaper, a click landing on the window
 # underneath, a drag that stops when the pointer outruns the frame. None of
 # those show in a screenshot taken a frame later.
-gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest        (run: ./wmtest)"
+gcc -O2 -w -o wmtest_feel wmtest_feel.c ../wm.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+    ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
+echo "built ./wmtest_feel"
 
 # ...and one frame of it, as a picture. Assertions catch a click landing on the
 # wrong window; eyes catch a title bar four pixels too tall, or a toggle that
 # renders as a circle instead of a pill. Both were real, and only the second
 # kind is found by looking.
-gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c \
+gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmshot        (run: ./wmshot out.ppm)"
 
@@ -51,9 +54,14 @@ echo "built ./wmshot        (run: ./wmshot out.ppm)"
 # 2.25 and 16,000 us at load 7.43, which is not an A/B. Cycles counted here are
 # perturbed by cache pressure, not by an order of magnitude, and it attributes
 # the cost per app instead of reporting one number.
-gcc -O2 -w -o wmbench wmbench.c ../wm.c ../ui.c ../wmglue.c ../fb.c ../input.c \
+gcc -O2 -w -o wmbench wmbench.c ../wm.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../term.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmbench       (run: ./wmbench)"
+# The settings block, against a fake disk. This is the first code in the project
+# that WRITES to a disk, and its stated gate needs a booting kernel - so the
+# record gets a fake NVMe instead, and every single-bit flip of it is walked.
+gcc -O2 -w -o settingstest settingstest.c ../settings.c ../ui.c
+echo "built ./settingstest  (run: ./settingstest)"
 
 # The tiled rasterizer against the scanline one it does NOT replace. Two ways
 # to fill a polygon are only worth having if they draw the same pixels, and a
@@ -146,3 +154,6 @@ echo "built ./dnstest       (run: ./dnstest)"
 gcc -O1 -g -Wall -Wextra -Wno-unused-function -o inputtest \
     inputtest.c ../input.c
 echo "built ./inputtest     (run: ./inputtest)"
+gcc -O1 -g -Wall -Wextra -Wno-unused-function -o inputtest_feel \
+    inputtest_feel.c ../input.c
+echo "built ./inputtest_feel"

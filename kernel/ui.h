@@ -158,6 +158,41 @@ int  wm_frame_us(void);
 int  wm_peak_us(void);
 void wm_peak_reset(void);
 int  wm_win_app(int win);                      /* the ACTIVE tab.s app        */
+void wm_set_anim(int on);                     /* window open animation on/off */
+int  wm_anim_enabled(void);
+
+/* ---- the pointer -----------------------------------------------------------
+ * The cursor SHAPES, published so the compositor can ask for one. fb.c static-
+ * asserts these against cursor.inc's own CUR_* so the two cannot drift; a
+ * mismatch would silently show the wrong picture, which is the kind of thing
+ * nothing tests. */
+/* A double-click arrives as an ordinary EV_MOUSE press with this bit set in the
+ * button mask, rather than as a new event type. The PS/2 protocol uses bits
+ * 0..2 for left/right/middle, so bit 8 is free, and an app that does not care
+ * about double-clicks keeps working unchanged - it masks for button 1 and never
+ * sees this. A new event type would have made every existing app_event handler
+ * wrong by omission instead. */
+#define MOUSE_DOUBLE  (1 << 8)
+
+#define CURSOR_ARROW   0
+#define CURSOR_IBEAM   1
+#define CURSOR_RESIZE  2
+#define CURSOR_BUSY    3
+void fb_cursor_set(int kind);
+int  fb_cursor_get(void);
+
+/* ---- settings.c -------------------------------------------------------------
+ * The Settings app. Signatures match app_draw_fn / app_event_fn above, so it
+ * can be handed to wm_hooks or dispatched to from wmglue.c. */
+void settings_draw(int app, int x, int y, int w, int h, int focused);
+int  settings_event(int app, int win, int type, int code, int x, int y);
+void settings_apply(void);       /* push every setting to its sink */
+int  settings_accent(void);
+int  settings_scale(void);
+int  settings_speed(void);
+int  settings_accel(void);
+int  settings_subpixel(void);
+int  settings_anim(void);
 
 /* ---- ui.c ---------------------------------------------------------------- */
 #define UI_DRAW     0
@@ -178,6 +213,18 @@ int  ui_list_row(const char *s, int selected);
 void ui_scroll_begin(int h, int *off);
 void ui_scroll_end(int *off);
 int  ui_scroll_content(void);
+/* ---- keyboard focus --------------------------------------------------------
+ * Which control the keyboard is on. The INDEX lives in ui.c because it has to
+ * survive between the hit-test pass and the draw pass; choosing it is still the
+ * app's job, like every other piece of widget state. -1 is "nothing focused",
+ * and it is the default - a desktop that boots with a ring on some arbitrary
+ * control looks broken. */
+void ui_set_focus(int idx);
+int  ui_focus_get(void);
+int  ui_widget_count(void);     /* fired-capable widgets in the last pass    */
+void ui_activate_focus(void);   /* one-shot: the focused widget fires        */
+void ui_end_activate(void);     /* ...consumed after the app re-runs its UI  */
+
 void ui_row(void);              /* put the next widget beside this one       */
 void ui_endrow(void);
 

@@ -66,6 +66,7 @@ int  input_y(void);
 #define EV_KEY_UP    2
 #define EV_CHAR      3
 #define EV_MOUSE     4
+#define EV_WHEEL     5
 
 #define KEY_SUPER   0x11A
 #define MOD_ALT     (1 << 2)
@@ -98,6 +99,9 @@ struct win {
     char tab_title[WM_TABS][16];
     int  ntab;                 /* 1 for an ordinary window */
     int  tab;                  /* which one is showing     */
+    /* maximise/restore. The saved rect is only meaningful while maxed. */
+    int  maxed;
+    int  sav_x, sav_y, sav_w, sav_h;
 };
 
 static struct win wins[WM_MAX];
@@ -382,6 +386,15 @@ static void anim_tick(void)
     }
 }
 
+/* ...and a switch, because Settings exposes one. ANIM_FRAMES stays a constant
+ * - this is not "how long" but "at all", and a zero-length animation is the
+ * honest way to say off: anim_pct and anim_rect keep working unchanged and
+ * every window is simply born settled. Making ANIM_FRAMES itself variable
+ * would put a run-time value in the `steps` array bound. */
+static int anim_on = 1;
+void wm_set_anim(int on) { anim_on = on ? 1 : 0; }
+int  wm_anim_enabled(void) { return anim_on; }
+
 /* how big window `win` should be DRAWN this frame, as a percentage */
 static int anim_pct(int win)
 {
@@ -563,7 +576,7 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         /* A refusal here degrades gracefully: every slot busy means the window
          * opens without a flourish, which is the right way for an animation to
          * fail. */
-        wm_anim(i, ANIM_OPEN);
+        if (anim_on) wm_anim(i, ANIM_OPEN);   /* Settings can turn this off */
         wm_damage_win(i);
         return i;
     }
@@ -575,6 +588,10 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
     return -1;
 }
 
+/* Declared here because wm_close has to drop the grab and the grab state is
+ * declared with the routing, further down. */
+static void wm_drop_grab(int win);
+
 void wm_close(int win)
 {
     if (!wm_is_open(win)) return;
@@ -583,6 +600,16 @@ void wm_close(int win)
     z_remove(win);
     /* focus the new top, so closing never leaves keys going nowhere */
     focus_win = nz ? zorder[nz - 1] : -1;
+    /* ...and the POINTER, for the same reason. A press hands the window the
+     * pointer until button-up, and a window can close mid-press - Ctrl+W is a
+     * key event and arrives between the down and the up. Left alone, the app
+     * kept receiving mouse events for a window that no longer existed.
+     *
+     * The second half is worse: wm_open reuses the FIRST FREE SLOT, so a
+     * window opened before button-up lands in the dead window's index and
+     * silently inherits the drag - a brand new window that starts moving
+     * because of a press the user aimed at something else. */
+    wm_drop_grab(win);
 }
 
 void wm_raise(int win)
@@ -783,6 +810,30 @@ static void chrome(int win, int focused)
     unsigned face = !over ? (focused ? t->text_dim : t->title_off)
                           : ((last_btn & 1) ? t->danger : t->accent);
     fb_rrect(bx, by, cs, cs, UI_S1(t) / 2, face);
+
+    /* THE RESIZE GRIP, drawn. A corner you cannot see is a corner nobody finds,
+     * and the pointer shape only helps once you are already on it.
+     *
+     * Three short diagonal rules stepping in from the corner - the universal
+     * mark for it, and cheap: three fills, no new primitive. Dim by default so
+     * it does not compete with the close box, which is the only other thing on
+     * a window frame that does something. */
+    {
+        int gs = UI_S3(t);
+        int gx = W->x + W->w - gs, gy = W->y + W->h - gs;
+        int step = gs / 4;
+        unsigned ink = focused ? t->text_dim : t->title_off;
+        /* Three rules PARALLEL TO THE CORNER'S DIAGONAL, stepping inward. The
+         * first attempt drew them all at the same offset with different
+         * lengths, which merges into a single L-bracket - it renders, and it
+         * reads as a border artefact rather than as a grip. Only looking at it
+         * showed that. */
+        if (step > 0)
+            for (int i = 1; i <= 3; i++) {
+                int d = i * step;
+                fb_line(gx + gs - d, gy + gs - 1, gx + gs - 1, gy + gs - d, ink);
+            }
+    }
 }
 
 void wm_repaint(void)
@@ -800,15 +851,34 @@ void wm_repaint(void)
             int win = zorder[i];
             struct win *W = &wins[win];
             int cx, cy, cw, ch;
-            if (!isect(W->x, W->y, W->x + W->w, W->y + W->h,
-                       rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
-                /* the shadow reaches outside the frame, so a window can still
-                 * owe this rectangle something even when the frame misses it */
-                int reach = shadow_reach(win);
-                if (!isect(W->x - reach, W->y - reach,
-                           W->x + W->w + reach, W->y + W->h + reach,
-                           rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) continue;
-            }
+            /* THE FRAME PLUS ITS SHADOW REACH, always - not the frame with the
+             * reach as a fallback.
+             *
+             * This used to intersect the FRAME first and only expand by the
+             * reach when the frame missed the damage rect entirely. Whenever
+             * the frame did hit - which is every settled window in every
+             * ordinary repaint - the scissor handed to fb_clip was the frame
+             * alone, while the comment below claimed it was frame + shadow.
+             * chrome() then called fb_shadow, which paints from x+off-soft to
+             * x+off+w+soft, so at ui scale 2 the whole visible band lay
+             * outside the scissor: every shadow pixel computed and discarded.
+             *
+             * The result was a total loss of the elevation scheme - modal,
+             * focused and unfocused all rendered identically shadowless - and
+             * it hid because it just looked like shadows had never been
+             * designed. It survived transiently during the open animation,
+             * where anim_rect shrinks the drawn frame far enough inside the
+             * settled one that the band fits, and was then erased by the
+             * wallpaper pass. It also made fb_shadow, the single most
+             * expensive call in a window redraw at 4.3 ms of 5.1 ms, into the
+             * most expensive wasted work in the compositor.
+             *
+             * Expanding by reach >= 0 gives a strict superset of the frame, so
+             * the two tests collapse into this one. */
+            int reach = shadow_reach(win);
+            if (!isect(W->x - reach, W->y - reach,
+                       W->x + W->w + reach, W->y + W->h + reach,
+                       rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) continue;
             /* A REAL FADE, and it needs the rectangle taken BEFORE anything
              * is drawn on it. window * a + behind * (1 - a) is not something
              * that can be reconstructed afterwards: once the window is drawn,
@@ -879,12 +949,110 @@ void wm_repaint(void)
  *   3 NORMAL        pointer to the topmost window containing the point,
  *                   walking the z-order backwards; keys to the focus window.
  */
+/* ---- double-click ---------------------------------------------------------
+ * There was no notion of one anywhere in the kernel.
+ *
+ * It is decided HERE rather than in input.c because it is a question about
+ * PLACE as well as time - two presses 300 ms apart at opposite corners of the
+ * screen are not a double-click - and input.c deliberately knows nothing about
+ * where windows are. idt_ticks() is 100 Hz, which is ample: the window is 40
+ * ticks, and no human double-clicks faster than 10 ms.
+ *
+ * The slop follows ui() because a "few pixels" on a 2560-wide panel at 2x is
+ * not the same distance as on an 800-wide one, and a fixed number makes the
+ * gesture harder on exactly the screens where the pointer moves furthest.
+ */
+#define DBL_TICKS  40           /* 400 ms at 100 Hz */
+static int dbl_slop(void) { return UI_S2(ui_theme()); }
+
+static unsigned dbl_when;
+static int dbl_x, dbl_y, dbl_win = -1;
+
+static int is_double(int win, int x, int y)
+{
+    unsigned now = idt_ticks();
+    int dx = x - dbl_x, dy = y - dbl_y, s = dbl_slop();
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+    /* unsigned subtraction, so a tick counter that wraps cannot report a
+     * gigantic elapsed time and silently disable the gesture forever */
+    int soon = (now - dbl_when) < (unsigned)DBL_TICKS;
+    int near = dx <= s && dy <= s;
+    int same = (win == dbl_win);
+
+    dbl_when = now; dbl_x = x; dbl_y = y; dbl_win = win;
+    if (soon && near && same) {
+        /* consume it: three clicks in a row are a double and then a single,
+         * not two overlapping doubles */
+        dbl_win = -1;
+        return 1;
+    }
+    return 0;
+}
+
+/* ---- snapping -------------------------------------------------------------
+ * Maximise, the two halves, and back again. wm_move and wm_resize each damage
+ * the old rect and the new one, so none of this needs damage of its own.
+ *
+ * ONE saved rect serves all of them. `maxed` means "this window is snapped
+ * somewhere and sav_* holds where it came from", not specifically "maximised" -
+ * so snapping left and then right does NOT overwrite the original geometry with
+ * the left half, and one restore always gets you back to where you started.
+ * That is the bug every naive version of this has: the saved rect is captured
+ * on every snap instead of only on the first. */
+#define SNAP_NONE   0
+#define SNAP_MAX    1
+#define SNAP_LEFT   2
+#define SNAP_RIGHT  3
+
+static void wm_snap(int win, int how)
+{
+    if (!wm_is_open(win)) return;
+
+    if (how == SNAP_NONE) {
+        if (!wins[win].maxed) return;          /* nothing to go back to */
+        wins[win].maxed = 0;
+        wm_move(win, wins[win].sav_x, wins[win].sav_y);
+        wm_resize(win, wins[win].sav_w, wins[win].sav_h);
+        return;
+    }
+
+    if (!wins[win].maxed) {                    /* remember, ONCE */
+        wins[win].sav_x = wins[win].x; wins[win].sav_y = wins[win].y;
+        wins[win].sav_w = wins[win].w; wins[win].sav_h = wins[win].h;
+    }
+    wins[win].maxed = how;
+
+    int sw = (int)fb_pxw(), sh = (int)fb_pxh();
+    /* Move BEFORE resize when going left, resize before move when going right?
+     * No - wm_resize clamps to min_w/min_h and wm_move does not care, so the
+     * order cannot produce a rect neither call asked for. Move first, always,
+     * for one less thing to reason about. */
+    if (how == SNAP_MAX)   { wm_move(win, 0, 0);       wm_resize(win, sw, sh); }
+    if (how == SNAP_LEFT)  { wm_move(win, 0, 0);       wm_resize(win, sw / 2, sh); }
+    if (how == SNAP_RIGHT) { wm_move(win, sw / 2, 0);  wm_resize(win, sw - sw / 2, sh); }
+}
+
+/* the double-click gesture: maximise, or put it back */
+static void wm_toggle_max(int win)
+{
+    wm_snap(win, wins[win].maxed ? SNAP_NONE : SNAP_MAX);
+}
+
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
-/* WHAT THE GRAB IS FOR. It was a flag - move, or hand the pointer to the app -
- * and resizing is a third answer, not a variant of either. */
-#define GRAB_APP    0           /* the app has the pointer until button-up  */
-#define GRAB_MOVE   1
-#define GRAB_SIZE   2
+
+/* wm_close calls this. Defined here, beside the state it clears, so the grab
+ * and its lifetime stay in one place. */
+static void wm_drop_grab(int win)
+{
+    if (pgrab == win) pgrab = -1;
+}
+/* What the pointer grab is FOR. It used to be a bare 0/1 meaning "the app has
+ * it" or "we are moving it"; resize is a third answer, and three states with
+ * two values is how a bug gets in. */
+#define GRAB_APP    0           /* the app owns the pointer until button-up  */
+#define GRAB_MOVE   1           /* we are dragging the frame                 */
+#define GRAB_RESIZE 2           /* we are dragging the bottom-right corner   */
 static int grab_drag;
 static int grab_dx, grab_dy;    /* pointer offset inside the frame          */
 
@@ -904,6 +1072,10 @@ static int grab_dx, grab_dy;    /* pointer offset inside the frame          */
 static int in_resize_grip(int win, int x, int y)
 {
     const struct ui_theme *t = ui_theme();
+    /* a window with no chrome has no grip to grab - carried over from the
+       corner-square in_grip() this replaced, which had the guard where the
+       edge-band version did not */
+    if (wins[win].flags & WF_NOCHROME) return 0;
     int e = RESIZE_EDGE(t);
     int rx = wins[win].x + wins[win].w, by = wins[win].y + wins[win].h;
     /* inside the window, within `e` of the right OR bottom edge */
@@ -947,6 +1119,22 @@ static int in_titlebar(int win, int x, int y)
            x >= wins[win].x && x < wins[win].x + wins[win].w;
 }
 
+/* THE RESIZE GRIP.
+ *
+ * wm_resize has existed since the window table did - with min_w/min_h clamping
+ * and correct damage on both the old and the new rect - and NOTHING HAS EVER
+ * CALLED IT. That is this project's own named hazard, "the code exists is not
+ * the code works", sitting in the compositor.
+ *
+ * A corner, not an edge: an edge grip has to decide which edge from a few
+ * pixels of hit area, and every one of those decisions is another place for an
+ * off-by-one against the frame rect. The bottom-right corner is one rectangle,
+ * the same size as the close box, and it grows the window in the direction the
+ * pointer is already moving.
+ *
+ * It sits INSIDE the frame rather than straddling the border, so it cannot
+ * overlap the shadow - which is drawn outside the frame and is not part of the
+ * window for hit-testing purposes. */
 static int in_closebox(int win, int x, int y)
 {
     const struct ui_theme *t = ui_theme();
@@ -964,16 +1152,28 @@ static void route_mouse(int x, int y, int btn)
     last_btn = btn;
     ptr_x = x; ptr_y = y;
 
+    /* THE POINTER SHAPE IS THE ONLY AFFORDANCE A GRIP HAS. A resize corner you
+     * cannot see and that does not announce itself is a feature nobody finds.
+     * Held during a resize drag too, so the shape does not flicker back to an
+     * arrow the moment the pointer outruns the corner. */
+    {
+        int over = (pgrab >= 0 && grab_drag == GRAB_RESIZE);
+        if (!over) {
+            int top = wm_at(x, y);
+            over = (top >= 0 && in_resize_grip(top, x, y));
+        }
+        fb_cursor_set(over ? CURSOR_RESIZE : CURSOR_ARROW);
+    }
+
     /* 1. POINTER GRAB */
     if (pgrab >= 0) {
         if (grab_drag == GRAB_MOVE) {
             wm_move(pgrab, x - grab_dx, y - grab_dy);
-        } else if (grab_drag == GRAB_SIZE) {
-            /* grab_dx/dy hold the pointer's offset from the corner it took
-             * hold of, so the corner stays under the pointer instead of
-             * jumping to it on the first motion event */
-            wm_resize(pgrab, x - wins[pgrab].x + grab_dx,
-                             y - wins[pgrab].y + grab_dy);
+        } else if (grab_drag == GRAB_RESIZE) {
+            /* grab_dx/dy hold the offset from the pointer to the corner, so
+             * the corner stays under the cursor instead of snapping to it. */
+            wm_resize(pgrab, x + grab_dx - wins[pgrab].x,
+                             y + grab_dy - wins[pgrab].y);
         } else if (hook_event) {
             hook_event(win_app(pgrab), pgrab, EV_MOUSE, btn, x, y);
         }
@@ -1003,7 +1203,13 @@ static void route_mouse(int x, int y, int btn)
     if (down) {
         wm_focus(hit);
         wm_raise(hit);
+        int dbl = is_double(hit, x, y);
         if (in_closebox(hit, x, y)) { wm_close(hit); return; }
+        /* DOUBLE-CLICK THE TITLE BAR TO MAXIMISE, again to restore. Checked
+         * before the drag, or the second press starts a drag instead - and a
+         * maximise that also moves the window by however far the hand drifted
+         * between the two clicks is worse than no maximise. */
+        if (dbl && in_titlebar(hit, x, y)) { wm_toggle_max(hit); return; }
         /* a tab BEFORE the drag: the strip lives inside the title bar, so
          * checking the drag first would make tabs unclickable */
         int tb = in_tab(hit, x, y);
@@ -1014,18 +1220,26 @@ static void route_mouse(int x, int y, int btn)
             grab_dy = y - wins[hit].y;
             return;
         }
-        /* the resize grip, before the app gets the pointer - an app that fills
-         * its window would otherwise swallow every grab at the edge */
+        /* THE GRIP GOES AFTER THE TITLE BAR, and the comment that used to sit
+         * here said the opposite. That was true of the grip it was written
+         * for - a small square in the bottom-right corner, which cannot reach
+         * the title bar. This grip is a band along the whole right and bottom
+         * edge, so on a window barely taller than its own title bar the band
+         * covers the title bar, and checking it first made such a window
+         * impossible to drag. wmtest asserts exactly that case. */
         if (in_resize_grip(hit, x, y)) {
-            pgrab = hit; grab_drag = GRAB_SIZE;
-            grab_dx = wins[hit].x + wins[hit].w - x;
-            grab_dy = wins[hit].y + wins[hit].h - y;
+            pgrab = hit; grab_drag = GRAB_RESIZE;
+            grab_dx = (wins[hit].x + wins[hit].w) - x;
+            grab_dy = (wins[hit].y + wins[hit].h) - y;
             return;
         }
         /* a press in the client area hands the pointer to the app until
          * button-up - that is what makes a slider work when the pointer
          * leaves the widget mid-drag */
         pgrab = hit; grab_drag = GRAB_APP;
+        /* Hand the app the double-click too, as a bit in the button mask. An
+         * app that does not care masks for button 1 and never sees it. */
+        if (dbl) btn |= MOUSE_DOUBLE;
     }
     if (hook_event) hook_event(win_app(hit), hit, EV_MOUSE, btn, x, y);
 }
@@ -1043,12 +1257,33 @@ static void cycle_focus(void)
     wm_raise(win);
 }
 
+#define KEY_LEFT   0x110
+#define KEY_RIGHT  0x111
+#define KEY_UP     0x112
+#define KEY_DOWN   0x113
+
 static void route_key(int type, int code, int mods)
 {
     if (type == EV_KEY_DOWN && code == '\t' && (mods & MOD_ALT)) {
         cycle_focus();
         return;
     }
+
+    /* SUPER + ARROWS SNAP THE FOCUSED WINDOW. MOD_SUPER has been tracked by
+     * input.c since it was written and used for NOTHING - FEEL-PROMPT item 6.5.
+     *
+     * Snapping is the binding worth spending it on: it is the one window
+     * operation that is genuinely painful with a pointer and trivial with a
+     * key, and it needs no launcher, no menu and no new policy in kernel.zl -
+     * only wm_move and wm_resize, which the grip and the double-click already
+     * gave callers. */
+    if (type == EV_KEY_DOWN && (mods & MOD_SUPER) && focus_win >= 0) {
+        if (code == KEY_LEFT)  { wm_snap(focus_win, SNAP_LEFT);  return; }
+        if (code == KEY_RIGHT) { wm_snap(focus_win, SNAP_RIGHT); return; }
+        if (code == KEY_UP)    { wm_snap(focus_win, SNAP_MAX);   return; }
+        if (code == KEY_DOWN)  { wm_snap(focus_win, SNAP_NONE);  return; }
+    }
+
     /* Super, TAPPED, belongs to the desktop and not to the focused window -
      * routing it to whichever app has focus would mean every app had to know
      * about the start menu. MOD_SUPER has been tracked since input.c was
@@ -1069,8 +1304,22 @@ static void route_key(int type, int code, int mods)
     if (hook_event) hook_event(win_app(target), target, type, code, 0, 0);
 }
 
+/* A wheel notch goes to the window UNDER THE POINTER, not to the focused one.
+ * That is the behaviour every desktop has and the one people expect: you scroll
+ * what you are looking at without clicking it first. It deliberately does not
+ * raise or focus that window either - scrolling is not a click. */
+static void route_wheel(int x, int y, int notches)
+{
+    int m = modal_win();
+    int hit = wm_at(x, y);
+    if (m >= 0 && hit != m) return;          /* a modal owns everything */
+    if (hit < 0) return;
+    if (hook_event) hook_event(win_app(hit), hit, EV_WHEEL, notches, x, y);
+}
+
 static void wm_route(int type)
 {
+    if (type == EV_WHEEL) { route_wheel(input_x(), input_y(), input_code()); return; }
     if (type == EV_MOUSE) route_mouse(input_x(), input_y(), input_code());
     else                  route_key(type, input_code(), input_mods());
 }

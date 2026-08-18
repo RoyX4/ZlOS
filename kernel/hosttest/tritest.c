@@ -39,6 +39,7 @@ void fb3d_poly(const int *xs, const int *ys, int n, unsigned int rgb);
 void fb_cube_filled(int cx, int cy, int size, int angle, unsigned int base);
 
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
+void input_set_bounds(int w, int h)        { (void)w; (void)h; }  /* fb.c pushes it; no input.c in this harness */
 void zl_putc_pub(char c) { (void)c; }
 
 #define W 800

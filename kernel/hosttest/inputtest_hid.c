@@ -345,7 +345,17 @@ int xhci_ptr_btn(void) { return 0; }
 int idt_mouse_x(void) { return 0; }
 int idt_mouse_y(void) { return 0; }
 int idt_mouse_btn(void) { return 0; }
+/* the scroll wheel: read-and-clear, so a harness with no wheel must return
+ * 0 rather than a stale notch (desktop/feel-and-control added this). */
+int idt_mouse_wheel(void) { return 0; }
 int ser_rx(void) { return -1; }
+
+/* Hardware this harness does not fake. The merge gave input.c and wm.c
+ * callers into the USB tablet, the USB keyboard, the scroll wheel, the
+ * serial port and the TSC. ser_rx returns -1 ("no UART"), not 0, which
+ * would be a NUL byte and a keystroke. */
+int cpu_tsc_lo(void) { return 0; }
+int cpu_tsc_khz(void) { return 0; }
 
 int main(void)
 {

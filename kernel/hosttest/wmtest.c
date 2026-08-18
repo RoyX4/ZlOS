@@ -60,6 +60,9 @@ static unsigned fake_ticks = 1;
 int idt_mouse_x(void)   { return fake_x; }
 int idt_mouse_y(void)   { return fake_y; }
 int idt_mouse_btn(void) { return fake_btn; }
+/* the scroll wheel: read-and-clear, so a harness with no wheel must return
+ * 0 rather than a stale notch (desktop/feel-and-control added this). */
+int idt_mouse_wheel(void) { return 0; }
 unsigned int idt_ticks(void) { return fake_ticks; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }
@@ -140,6 +143,19 @@ static void frame(void) { fake_ticks++; wm_frame(); }
 
 static void pointer(int x, int y, int btn)
 {
+    /* DRIVE THE TABLET, NOT THE PS/2 MOUSE, because this helper is absolute:
+     * every caller says "the pointer is at (x,y)" and then asserts the app was
+     * told exactly that. desktop/feel-and-control made the PS/2 path RELATIVE -
+     * it accumulates scaled deltas into its own px_x/px_y - and a clamp at the
+     * screen edge permanently offsets that accumulator from the raw position,
+     * because the raw side keeps moving and the accumulated side cannot. The
+     * "wander off" step below deliberately drives 900 px past the edge, so
+     * every assertion after it was reading a pointer that had been silently
+     * shifted. A tablet reports an absolute position and is not accelerated,
+     * which is what this harness has always meant. inputtest covers the PS/2
+     * relative path, and inputtest_feel covers the accel curve. */
+    fake_usb_ptr = 1;
+    fake_ux = x; fake_uy = y; fake_ubtn = btn;
     fake_x = x; fake_y = y; fake_btn = btn;
     frame();
 }
@@ -169,8 +185,19 @@ static int all_wallpaper(int x0, int y0, int x1, int y1)
 int xhci_key_event(void) { return 0; }
 int xhci_kbd_mods(void)  { return 0; }
 
+void input_set_accel(int on);
+
 int main(void)
 {
+    /* THESE TESTS ASSERT THE IDENTITY: that the event carries the position
+     * the ISR published. desktop/feel-and-control put an acceleration curve
+     * between the two - gain rises to 300%% past a threshold - and this
+     * harness moves the fake pointer in single large jumps, which is exactly
+     * what the curve is built to amplify. Turning it off restores the
+     * identity these assertions were written against; the curve itself is
+     * tested in inputtest_feel/wmtest_feel, which drive it deliberately. */
+    input_set_accel(0);
+
     struct { unsigned long a, n; } bufs[] = {
         { BG_ADDR, 32UL << 20 }, { SP_ADDR, 16UL << 20 }, { BACK_ADDR, 16UL << 20 },
     };

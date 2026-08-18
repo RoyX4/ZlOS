@@ -62,5 +62,6 @@ kernel/hosttest/inputtest
 kernel/hosttest/wmtest
 kernel/hosttest/wmshot
 kernel/hosttest/tritest
+kernel/hosttest/settingstest
 
 kernel/__pycache__/

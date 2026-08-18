@@ -97,6 +97,7 @@ gcc $CFLAGS -c http.c -o _http.o
 gcc $CFLAGS -c html.c    -o _html.o
 gcc $CFLAGS -c layout.c  -o _layout.o
 gcc $CFLAGS -c browser.c -o _browser.o
+gcc $CFLAGS -c settings.c -o _settings.o
 gcc $CFLAGS -c smp_trampoline.S -o _smptr.o
 gcc -m32 -c boot.S -o _boot.o
 
@@ -104,8 +105,7 @@ gcc -m32 -c boot.S -o _boot.o
 # only things the kernel took from libgcc, and divmod.c now supplies them.
 # Nothing GNU is linked into the kernel any more - only gcc-the-tool that
 # compiled the C, which nativegen is on track to replace.
-ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o _vnet.o _net.o _dns.o _tcp.o _http.o _html.o _layout.o _browser.o
-
+ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o _vnet.o _net.o _dns.o _tcp.o _http.o _html.o _layout.o _browser.o _settings.o
 echo "built kernel.elf"
 echo "  undefined symbols: $(nm -u kernel.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"
 echo "  size:              $(stat -c%s kernel.elf) bytes"
