@@ -50,6 +50,11 @@ int idt_mouse_x(void)   { return -1; }
 int idt_mouse_y(void)   { return -1; }
 int idt_mouse_btn(void) { return 0; }
 unsigned int idt_ticks(void) { return fake_ticks; }
+/* browser.c now reaches http.c -> tcp.c -> net.c, and net.c wants the
+ * calibrated TSC for its round-trip timing. Nothing in a still picture uses
+ * it, so it is stubbed rather than the whole clock being dragged in. */
+unsigned long long cpu_tsc(void)  { return 0; }
+unsigned int cpu_tsc_khz(void)    { return 0; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }

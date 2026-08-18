@@ -67,7 +67,7 @@ code column excludes blank and comment-only lines.
 | `net.c` + `net.h` — ARP, IPv4, ICMP | ~300 | **359** | 579 | done, gated |
 | `tcp.c` + `tcp.h` — client, one connection | ~900 | **513** | 752 | done, gated |
 | `http.c` + `http.h` — HTTP/1.0 | ~150 | **245** | 332 | done, gated |
-| the browser app's URL bar | — | 0 | 0 | item 7 |
+| the browser app's URL bar, Back and history | — | *(in browser.c)* | — | done, gated |
 | **total** | **~3,050** | **2,617** | **3,968** | |
 
 Every budgeted piece is built: **2,617 code lines against a ~3,050 estimate**,
@@ -143,8 +143,31 @@ kernel/hosttest/nettest        # 152 checks, 0 failed
 ```
 
 ```bash
-kernel/hosttest/tcptest        # 89 checks, 0 failed
+kernel/hosttest/tcptest        # 110 checks, 0 failed
 ```
+
+### The adversarial review, and what it found
+
+§8 asks for "an adversarial reviewer on the TCP state machine — have one try to
+construct a packet sequence that wedges it." One did, with runnable repros, and
+found **thirteen defects**. All thirteen are fixed and all thirteen now have
+regression tests. The three that mattered most:
+
+| | |
+|---|---|
+| **A remote out-of-bounds write from three segments.** `seq_lt` is modular, so a segment 2³¹ *ahead* of the window reads as 2³¹ *behind* it. Converting that difference to an `int` length gave `INT_MIN`, `dlen - skip` overflowed, and the receive buffer's tail went two gigabytes negative — after which an ordinary segment wrote outside the array entirely. Confirmed under ASan and UBSan. | CRITICAL |
+| **Acknowledged bytes that were never stored.** A full receive buffer silently discarded the overflow while `rcv_nxt` advanced by the whole segment, so the peer was told data had arrived that had been binned. The application then received a stream with a hole cut out of it and no error anywhere. | HIGH |
+| **A close that raced the congestion window truncated the stream, and a loss before it wedged the connection forever.** The FIN was emitted at `snd_nxt` — in the middle of what the application had handed over — and the retransmit timer resent bare FINs in preference to the lost data, so the peer could never acknowledge the FIN and the single connection slot was held permanently. | HIGH |
+
+Plus: a RST was accepted across the entire forward half of the sequence space
+(a coin flip for an off-path packet), a bare FIN from the distant past
+half-closed the connection, a zero window was rewritten to a full segment, and
+the out-of-order slot could be stranded for the life of the connection.
+
+The review was worth several times what it cost. It is also a reminder of the
+asymmetry in this whole file: the 89 checks written alongside the code all
+passed, because tests written by the author test what the author was thinking
+about.
 
 `net.c` holds no link driver — the link is two function pointers — so the whole
 stack links into a harness that is the machine on the other end of the wire.

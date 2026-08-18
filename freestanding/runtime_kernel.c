@@ -429,6 +429,10 @@ extern void browser_load_mem(unsigned int addr, int len);
 extern void browser_draw(int x, int y, int w, int h, int focused);
 extern int  browser_key(int code);
 extern int  browser_click(int cx, int cy);
+extern int  browser_tick(void);
+extern int  browser_back(void);
+extern int  browser_can_back(void);
+extern int  browser_url_focus(void);
 extern int  browser_scroll_by(int d);
 extern int  browser_height(void);
 extern int  browser_lines(void);
@@ -977,6 +981,9 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "br_draw"))    { browser_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num); return zl_nil(); }
     if (streq(name, "br_key"))     return zl_num((double)browser_key((int)a[0].num));
     if (streq(name, "br_click"))   return zl_num((double)browser_click((int)a[0].num,(int)a[1].num));
+    if (streq(name, "br_tick"))    return zl_num((double)browser_tick());
+    if (streq(name, "br_back"))    return zl_num((double)browser_back());
+    if (streq(name, "br_focus"))   return zl_num((double)browser_url_focus());
     if (streq(name, "br_scroll"))  return zl_num((double)browser_scroll_by((int)a[0].num));
     if (streq(name, "br_h"))       return zl_num((double)browser_height());
     if (streq(name, "br_lines"))   return zl_num((double)browser_lines());

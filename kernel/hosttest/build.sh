@@ -73,7 +73,8 @@ echo "built ./htmltest      (run: ./htmltest)"
 # wmtest/wmshot: assertions catch a run escaping the content box, eyes catch
 # inline <code> set at the wrong size or a list marker sitting in its own text.
 gcc -O2 -w -o browsershot browsershot.c ../browser.c ../html.c ../layout.c \
-    ../ui.c ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
+    ../ui.c ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c \
+    ../http.c ../tcp.c ../net.c
 echo "built ./browsershot   (run: ./browsershot out.ppm)"
 
 # ARP, IPv4 and ICMP against scripted packets. net.c holds no link driver - the

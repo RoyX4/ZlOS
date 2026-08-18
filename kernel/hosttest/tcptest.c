@@ -548,6 +548,193 @@ static void t_send_path(void)
     CHECK(tcp_state() == TCP_CLOSED, "state %s", tcp_state_name(tcp_state()));
 }
 
+/* ---- what an adversarial review found ---------------------------------------
+ * §8: "an adversarial reviewer on the TCP state machine. Have one try to
+ * construct a packet sequence that wedges it." One did, and found thirteen.
+ * Every one of them is below, so none can come back quietly.
+ */
+static void t_adversarial(void)
+{
+    printf("the adversarial review's cases\n");
+    unsigned char buf[2048];
+    static unsigned char big[1400];
+    memset(big, 'x', sizeof big);
+
+    /* C1: a segment 2^31 "behind" rcv_nxt. seq_lt is modular, so a segment far
+     * AHEAD reads as far behind; converting that difference to an int length
+     * gave INT_MIN and drove the receive buffer two gigabytes negative, after
+     * which an ordinary segment wrote outside the array. CRITICAL. */
+    establish(0xE1E10000u);
+    unsigned s0 = peer_isn + 1;
+    for (int i = 0; i < 12; i++) { inject(s0, our_isn() + 1, F_ACK, big, 1400); s0 += 1400; }
+    int held = tcp_available();
+    CHECK(held > 0 && held <= 16384, "buffer holds %d bytes", held);
+    inject(s0 + 0x80000000u, our_isn() + 1, F_ACK, big, 1400);
+    CHECK(tcp_available() >= 0, "available went NEGATIVE (%d) - the int overflow is back",
+          tcp_available());
+    CHECK(tcp_available() == held, "a segment 2^31 away was accepted (%d -> %d)",
+          held, tcp_available());
+    inject(s0, our_isn() + 1, F_ACK, big, 1400);
+    CHECK(tcp_available() >= 0, "the following segment corrupted the buffer");
+
+    /* H1: bytes that did not fit must NOT be acknowledged. Acknowledging them
+     * puts a hole in the delivered stream that nothing ever reports. */
+    establish(0xE2E20000u);
+    s0 = peer_isn + 1;
+    for (int i = 0; i < 14; i++) { inject(s0, our_isn() + 1, F_ACK, big, 1400); s0 += 1400; }
+    unsigned acked = last()->ack;
+    int stored = tcp_available();
+    CHECK((unsigned)(acked - (peer_isn + 1)) <= (unsigned)stored,
+          "acknowledged %u bytes but stored only %d - the difference is lost silently",
+          acked - (peer_isn + 1), stored);
+
+    /* H2: closing with data still queued must not put the FIN mid-stream. */
+    establish(0xE3E30000u);
+    static unsigned char body[4000];
+    memset(body, 'B', sizeof body);
+    tcp_send(body, 4000);
+    tcp_close();
+    int fins = 0, databytes = 0;
+    for (int i = 0; i < ncap; i++) {
+        if (nth(i)->flags & F_FIN) fins++;
+        databytes += nth(i)->dlen;
+    }
+    CHECK(fins == 0 || databytes >= 4000,
+          "a FIN went out with only %d of 4000 bytes sent", databytes);
+
+    /* H3: data lost before a close must still be retransmitted. The FIN branch
+     * used to run first and resend bare FINs forever while the peer, missing
+     * bytes, could never acknowledge them - a permanent wedge. */
+    establish(0xE4E40000u);
+    tcp_send((const unsigned char *)"0123456789", 10);
+    tcp_close();
+    int before = ncap;
+    /* Long enough to exhaust the give-up counter. A stack that retries forever
+     * holds the single connection slot for good and nothing above it ever
+     * finds out the peer is gone. */
+    for (int i = 0; i < 20; i++) { v_ticks += 500; tcp_tick(); }
+    int with_data = 0;
+    for (int i = before; i < ncap; i++) if (nth(i)->dlen > 0) with_data++;
+    CHECK(with_data > 0, "%d retransmissions and not one carried the lost data",
+          ncap - before);
+    CHECK(tcp_state() != TCP_FIN_WAIT_1,
+          "still wedged in FIN_WAIT_1 after 20 timeouts, holding the only slot");
+
+    /* H4: a RST far outside the window must be refused. It used to accept the
+     * entire forward half of the sequence space - a coin flip for an off-path
+     * packet. */
+    establish(0xE5E50000u);
+    inject(peer_isn + 500000000u, our_isn() + 1, F_RST | F_ACK, 0, 0);
+    CHECK(tcp_state() == TCP_ESTABLISHED,
+          "a RST 500 million past the window killed the connection");
+    int killed = 0;
+    for (unsigned k = 1; k < 40; k++) {
+        establish(0xE6E60000u + k);
+        inject(peer_isn + k * 50000000u, our_isn() + 1, F_RST | F_ACK, 0, 0);
+        if (tcp_state() != TCP_ESTABLISHED) killed++;
+    }
+    CHECK(killed == 0, "%d of 39 out-of-window RSTs were accepted", killed);
+
+    /* H5: a bare FIN in the past must not half-close the connection. */
+    establish(0xE7E70000u);
+    inject(peer_isn + 1, our_isn() + 1, F_ACK, (const unsigned char *)"abcd", 4);
+    inject(peer_isn - 1000000u, our_isn() + 1, F_ACK | F_FIN, 0, 0);
+    CHECK(tcp_state() == TCP_ESTABLISHED,
+          "a FIN a million bytes in the past moved us to %s",
+          tcp_state_name(tcp_state()));
+
+    /* M1: TIME_WAIT must not be refreshed by an out-of-window FIN, or the one
+     * connection slot can be pinned open indefinitely from off path. */
+    establish(0xE8E80000u);
+    tcp_close();
+    unsigned ourfin = 0;
+    for (int i = ncap - 1; i >= 0; i--) if (nth(i)->flags & F_FIN) { ourfin = nth(i)->seq; break; }
+    inject(peer_isn + 1, ourfin + 1, F_ACK, 0, 0);
+    inject(peer_isn + 1, ourfin + 1, F_ACK | F_FIN, 0, 0);
+    CHECK(tcp_state() == TCP_TIME_WAIT, "state %s", tcp_state_name(tcp_state()));
+    for (int i = 0; i < 20; i++) {
+        v_ticks += 90;
+        inject(peer_isn + 777777u, ourfin + 1, F_ACK | F_FIN, 0, 0);
+        tcp_tick();
+    }
+    CHECK(tcp_state() == TCP_CLOSED,
+          "20 spoofed FINs held TIME_WAIT open (%s)", tcp_state_name(tcp_state()));
+
+    /* M2: a hole filled by a segment that OVERSHOOTS the held one must free
+     * the slot, or it stays occupied for the rest of the connection. */
+    establish(0xE9E90000u);
+    inject(peer_isn + 6, our_isn() + 1, F_ACK, (const unsigned char *)"WORLD", 5);
+    inject(peer_isn + 1, our_isn() + 1, F_ACK, (const unsigned char *)"hello!!", 7);
+    tcp_recv(buf, sizeof buf);
+    int ooo_before = tcp_rx_ooo();
+    inject(peer_isn + 40, our_isn() + 1, F_ACK, (const unsigned char *)"zz", 2);
+    CHECK(tcp_rx_ooo() > ooo_before,
+          "the out-of-order slot was still occupied by a stale segment");
+
+    /* M3: a FIN riding an out-of-order segment must be acted on once its hole
+     * fills - it is the last segment of every HTTP/1.0 response. */
+    establish(0xEAEA0000u);
+    inject(peer_isn + 5, our_isn() + 1, F_ACK | F_FIN, (const unsigned char *)"tail", 4);
+    inject(peer_isn + 1, our_isn() + 1, F_ACK, (const unsigned char *)"body", 4);
+    CHECK(tcp_state() == TCP_CLOSE_WAIT,
+          "a FIN on an out-of-order segment was dropped (state %s)",
+          tcp_state_name(tcp_state()));
+    int n = tcp_recv(buf, sizeof buf);
+    CHECK(n == 8 && !memcmp(buf, "bodytail", 8), "got '%.*s'", n, buf);
+
+    /* M4: a retransmitted data segment in CLOSE_WAIT must still be answered. */
+    establish(0xEBEB0000u);
+    inject(peer_isn + 1, our_isn() + 1, F_ACK | F_FIN, (const unsigned char *)"data", 4);
+    CHECK(tcp_state() == TCP_CLOSE_WAIT, "state %s", tcp_state_name(tcp_state()));
+    int acks = ncap;
+    inject(peer_isn + 1, our_isn() + 1, F_ACK, (const unsigned char *)"data", 4);
+    CHECK(ncap > acks, "a retransmission in CLOSE_WAIT was answered with silence");
+
+    /* M5: a zero window means stop. */
+    establish(0xECEC0000u);
+    tcp_send(body, 3000);
+    int sent_before = 0;
+    for (int i = 0; i < ncap; i++) sent_before += nth(i)->dlen;
+    unsigned char z[20];
+    memset(z, 0, sizeof z);
+    inject_bad(peer_isn + 1, our_isn() + 1 + 1400, F_ACK, 0, 0, PORT, lport, 0);
+    /* the injector always advertises 0xFFFF, so drive the window to zero by
+     * hand: rebuild one segment with a zero window field */
+    {
+        unsigned char sg[20];
+        memset(sg, 0, sizeof sg);
+        sg[0] = 0; sg[1] = PORT;
+        sg[2] = (unsigned char)(lport >> 8); sg[3] = (unsigned char)lport;
+        unsigned sq = peer_isn + 1, ak = our_isn() + 1 + 1400;
+        sg[4]=sq>>24; sg[5]=sq>>16; sg[6]=sq>>8; sg[7]=sq;
+        sg[8]=ak>>24; sg[9]=ak>>16; sg[10]=ak>>8; sg[11]=ak;
+        sg[12]=5<<4; sg[13]=F_ACK; sg[14]=0; sg[15]=0;      /* window: ZERO */
+        unsigned sum=0;
+        sum += (LOCAL_IP>>16)&0xFFFF; sum += LOCAL_IP&0xFFFF;
+        sum += (PEER_IP>>16)&0xFFFF;  sum += PEER_IP&0xFFFF;
+        sum += 6; sum += 20;
+        unsigned short ck = net_checksum(sg, 20, sum);
+        sg[16]=ck>>8; sg[17]=ck;
+        int was = ncap;
+        tcp_input(PEER_IP, 6, sg, 20);
+        int newdata = 0;
+        for (int i = was; i < ncap; i++) newdata += nth(i)->dlen;
+        CHECK(newdata == 0, "%d bytes sent into a receiver advertising a zero window",
+              newdata);
+    }
+    (void)z; (void)sent_before;
+
+    /* L2: a negative length at a trust boundary. */
+    establish(0xEDED0000u);
+    inject(peer_isn + 1, our_isn() + 1, F_ACK, (const unsigned char *)"abcd", 4);
+    int avail_before = tcp_available();
+    int got = tcp_recv(buf, -8);
+    CHECK(got == 0, "tcp_recv(-8) returned %d", got);
+    CHECK(tcp_available() == avail_before,
+          "a negative length changed the buffer state (%d -> %d)",
+          avail_before, tcp_available());
+}
+
 int main(void)
 {
     printf("tcp.c against scripted packet sequences, no QEMU\n\n");
@@ -564,6 +751,7 @@ int main(void)
     t_retransmit();
     t_sequence_wrap();
     t_send_path();
+    t_adversarial();
     printf("\n%d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

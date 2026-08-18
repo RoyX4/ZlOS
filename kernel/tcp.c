@@ -73,8 +73,14 @@ static int  rcv_head, rcv_tail;
 static u8   ooo[OOO_BUF];
 static int  ooo_len;
 static u32  ooo_seq;
+static int  ooo_fin;        /* the held segment carried a FIN      */
+static int  ooo_fin_ready;  /* ...and its hole has now been filled  */
 
 static int  fin_sent, fin_acked, fin_seen;
+static int  fin_wanted;   /* close() was called; the FIN follows the data */
+static int  seg_has_fin;  /* does the segment being handled carry a FIN? */
+static int  fin_tries;
+static int  rexmit_tries;   /* total retransmissions on this connection */
 static u32  fin_seq;              /* the sequence number our FIN occupies   */
 
 static u32  rt_deadline;          /* tick at which to retransmit            */
@@ -153,6 +159,7 @@ int tcp_available(void) { return rcv_tail - rcv_head; }
 
 int tcp_recv(u8 *out, int max)
 {
+    if (max <= 0) return 0;              /* a trust boundary, so it is checked */
     int n = tcp_available();
     if (n > max) n = max;
     for (int i = 0; i < n; i++) out[i] = rcvbuf[rcv_head + i];
@@ -190,8 +197,14 @@ static int send_seg(u32 seqno, u8 flags, const u8 *data, int dlen)
     put32(seg + 8, (flags & F_ACK) ? rcv_nxt : 0);
     seg[12] = 5 << 4;                       /* data offset: 5 words, no options */
     seg[13] = flags;
-    put16(seg + 14, (u16)(RCV_BUF - tcp_available() > 65535
-                          ? 65535 : RCV_BUF - tcp_available()));
+    /* THE WINDOW IS THE SPACE THAT ACTUALLY EXISTS. rcv_space() is what a new
+     * segment can be written into; RCV_BUF - tcp_available() counts bytes the
+     * reader has consumed but which have not been compacted away yet, and
+     * advertising those invites the peer to send data there is no room for. */
+    int freespace = rcv_space();
+    if (freespace < 0) freespace = 0;
+    if (freespace > 65535) freespace = 65535;
+    put16(seg + 14, (u16)freespace);
     put16(seg + 16, 0);                     /* checksum, below */
     put16(seg + 18, 0);                     /* urgent pointer  */
     for (int i = 0; i < dlen; i++) seg[20 + i] = data[i];
@@ -222,11 +235,11 @@ static int send_window(void)
  * from snd_una onward is unacknowledged and must be kept for retransmission. */
 static void pump_send(void)
 {
-    if (st != TCP_ESTABLISHED && st != TCP_CLOSE_WAIT) return;
+    if (st != TCP_ESTABLISHED && st != TCP_CLOSE_WAIT &&
+        st != TCP_FIN_WAIT_1 && st != TCP_LAST_ACK) return;
     int inflight = (int)(snd_nxt - snd_una);
     int avail = snd_len - inflight;
     int win = send_window() - inflight;
-    if (win <= 0 || avail <= 0) return;
 
     while (avail > 0 && win > 0) {
         int n = avail;
@@ -238,6 +251,19 @@ static void pump_send(void)
         avail -= n;
         win -= n;
         if (rt_deadline == 0) arm_timer();
+    }
+
+    /* THE FIN GOES AFTER THE DATA, NOT INSTEAD OF IT. tcp_close() used to send
+     * it at snd_nxt immediately, which on a slow-start connection is in the
+     * MIDDLE of what the application handed over - everything still queued was
+     * then abandoned, because the old pump_send refused to run once the state
+     * had moved on. Closing after a large send silently truncated the stream. */
+    if (fin_wanted && !fin_sent && snd_nxt == snd_una + (u32)snd_len) {
+        fin_seq = snd_nxt;
+        send_seg(snd_nxt, F_FIN | F_ACK, 0, 0);
+        snd_nxt++;                          /* the FIN consumes one */
+        fin_sent = 1;
+        arm_timer();
     }
 }
 
@@ -276,6 +302,11 @@ int tcp_connect(u32 ip, int port)
     rcv_head = rcv_tail = 0;
     ooo_len = 0;
     fin_sent = fin_acked = fin_seen = 0;
+    fin_wanted = 0;
+    fin_tries = 0;
+    rexmit_tries = 0;
+    ooo_fin = ooo_fin_ready = 0;
+    seg_has_fin = 0;
     cwnd = 1;
     rto = RTO_MIN;
     syn_tries = 0;
@@ -304,18 +335,14 @@ void tcp_abort(void)
 void tcp_close(void)
 {
     if (st == TCP_ESTABLISHED) {
-        fin_seq = snd_nxt;
-        send_seg(snd_nxt, F_FIN | F_ACK, 0, 0);
-        snd_nxt++;                          /* FIN consumes one */
-        fin_sent = 1;
+        fin_wanted = 1;
         st = TCP_FIN_WAIT_1;
+        pump_send();                        /* drains the buffer, then FINs */
         arm_timer();
     } else if (st == TCP_CLOSE_WAIT) {
-        fin_seq = snd_nxt;
-        send_seg(snd_nxt, F_FIN | F_ACK, 0, 0);
-        snd_nxt++;
-        fin_sent = 1;
+        fin_wanted = 1;
         st = TCP_LAST_ACK;
+        pump_send();
         arm_timer();
     } else if (st == TCP_SYN_SENT) {
         st = TCP_CLOSED;                    /* nothing was ever established */
@@ -324,17 +351,48 @@ void tcp_close(void)
 }
 
 /* ---- delivering received data ---------------------------------------------- */
-static void deliver(const u8 *p, int n)
+/* Returns 1 if the whole segment was taken. A PARTIAL TAKE IS NOT ALLOWED:
+ * rcv_nxt may only advance by bytes that are actually in the buffer, or the
+ * connection acknowledges data it discarded and the peer never resends it -
+ * the stream then has a hole in it with no error anywhere. The correct answer
+ * to a full buffer is to refuse the segment and advertise a smaller window,
+ * which is what flow control is for. */
+static int deliver(const u8 *p, int n)
 {
+    if (n > rcv_space()) return 0;            /* no room: do not ACK past it */
     rcv_put(p, n);
     rcv_nxt += (u32)n;
 
-    /* the one out-of-order slot: replay it the moment its hole fills */
-    if (ooo_len && ooo_seq == rcv_nxt) {
-        rcv_put(ooo, ooo_len);
-        rcv_nxt += (u32)ooo_len;
-        ooo_len = 0;
+    /* the one out-of-order slot */
+    for (;;) {
+        if (!ooo_len) break;
+        /* STALE: the hole was filled by a segment that overshot the held one,
+         * so its sequence number can never equal rcv_nxt again and the slot
+         * would stay occupied for the life of the connection. */
+        if (seq_le(ooo_seq + (u32)ooo_len, rcv_nxt)) { ooo_len = 0; break; }
+        if (ooo_seq == rcv_nxt) {
+            if (ooo_len > rcv_space()) break;  /* no room yet; keep holding it */
+            rcv_put(ooo, ooo_len);
+            rcv_nxt += (u32)ooo_len;
+            ooo_len = 0;
+            /* a FIN that rode the out-of-order segment is only ours NOW */
+            if (ooo_fin) { ooo_fin = 0; ooo_fin_ready = 1; }
+            continue;
+        }
+        if (seq_lt(ooo_seq, rcv_nxt)) {       /* partial overlap: trim it */
+            u32 skip = rcv_nxt - ooo_seq;
+            if (skip >= (u32)ooo_len) { ooo_len = 0; break; }
+            int keep = ooo_len - (int)skip;
+            if (keep > rcv_space()) break;
+            rcv_put(ooo + skip, keep);
+            rcv_nxt += (u32)keep;
+            ooo_len = 0;
+            if (ooo_fin) { ooo_fin = 0; ooo_fin_ready = 1; }
+            continue;
+        }
+        break;
     }
+    return 1;
 }
 
 /* ---- the transitions -------------------------------------------------------
@@ -392,7 +450,9 @@ static void st_syn_sent(u32 seqno, u32 ack, u8 flags, const u8 *data, int dlen)
     if (flags & F_RST) {
         /* A RST is only acceptable here if it acknowledges our SYN - otherwise
          * anyone who can guess the port can tear the connection down. */
-        if ((flags & F_ACK) && ack == iss + 1) { st = TCP_CLOSED; c_rst++; }
+        if ((flags & F_ACK) && ack == iss + 1) {
+            st = TCP_CLOSED; c_rst++; rt_deadline = 0;
+        }
         return;
     }
     if (!(flags & F_SYN)) return;
@@ -423,22 +483,47 @@ static void st_syn_sent(u32 seqno, u32 ack, u8 flags, const u8 *data, int dlen)
  * into the out-of-order slot, where its FIN must wait for the hole to fill. */
 static int take_data(u32 seqno, const u8 *data, int dlen)
 {
-    if (dlen <= 0) return seq_le(seqno, rcv_nxt);
+    /* A ZERO-LENGTH SEGMENT IS IN SEQUENCE ONLY AT rcv_nxt. `seq_le` accepted
+     * the entire backward half of the sequence space, so a bare FIN a million
+     * bytes in the past - or a spoofed one - moved the connection to
+     * CLOSE_WAIT and pushed rcv_nxt past the real stream. */
+    if (dlen <= 0) return seqno == rcv_nxt;
 
     if (seq_lt(seqno, rcv_nxt)) {
+        /* HOW FAR BACK, AND IS THAT EVEN POSSIBLE? seq_lt is modular, so a
+         * segment 2^31 AHEAD reads as one 2^31 behind. Converting that
+         * difference straight to an int gives INT_MIN, `dlen - skip`
+         * overflows, and rcv_put is handed a negative length that drives
+         * rcv_tail two gigabytes negative - after which an ordinary segment
+         * writes outside the buffer entirely. Found by an adversarial review
+         * and reproduced under ASan and UBSan before this line existed.
+         *
+         * A real retransmission overlaps by at most its own length. Anything
+         * further back is ancient or forged: re-acknowledge it and take
+         * nothing from it. */
+        u32 back = rcv_nxt - seqno;
+        if (back > (u32)dlen) {
+            c_dup++;
+            send_seg(snd_nxt, F_ACK, 0, 0);
+            return 0;                        /* nothing new, and no FIN either */
+        }
         /* Already taken. This is a RETRANSMISSION, not an error: the peer did
          * not see our ACK. Re-ACK immediately - staying silent is what turns
          * one lost ACK into a stalled connection. It may still carry NEW bytes
          * past rcv_nxt, so the overlap is delivered rather than the whole
          * segment discarded. */
         c_dup++;
-        int skip = (int)(rcv_nxt - seqno);
+        int skip = (int)back;
         if (skip < dlen) deliver(data + skip, dlen - skip);
         send_seg(snd_nxt, F_ACK, 0, 0);
         return 1;
     }
     if (seqno == rcv_nxt) {
-        deliver(data, dlen);
+        if (!deliver(data, dlen)) {          /* buffer full: refuse and say so */
+            c_oow++;
+            send_seg(snd_nxt, F_ACK, 0, 0);  /* the window we advertise is now 0 */
+            return 0;
+        }
         send_seg(snd_nxt, F_ACK, 0, 0);
         return 1;
     }
@@ -448,6 +533,7 @@ static int take_data(u32 seqno, const u8 *data, int dlen)
         for (int i = 0; i < dlen; i++) ooo[i] = data[i];
         ooo_len = dlen;
         ooo_seq = seqno;
+        ooo_fin = seg_has_fin;      /* a FIN on a held segment is not ours yet */
         c_ooo++;
     } else {
         c_oow++;
@@ -479,7 +565,18 @@ static void st_established(u32 seqno, u32 ack, u8 flags, const u8 *data, int dle
 {
     if (flags & F_ACK) on_ack(ack);
     int in_seq = take_data(seqno, data, dlen);
-    if ((flags & F_FIN) && take_fin(seqno, dlen, in_seq)) st = TCP_CLOSE_WAIT;
+    if ((flags & F_FIN) && take_fin(seqno, dlen, in_seq)) { st = TCP_CLOSE_WAIT; return; }
+    /* ...or a FIN that arrived on an out-of-order segment, whose hole the
+     * segment just delivered has now filled. Without this the last segment of
+     * an HTTP/1.0 response - data and FIN together - is silently stripped of
+     * its FIN whenever it arrives before the segment ahead of it. */
+    if (ooo_fin_ready) {
+        ooo_fin_ready = 0;
+        fin_seen = 1;
+        rcv_nxt++;
+        send_seg(snd_nxt, F_ACK, 0, 0);
+        st = TCP_CLOSE_WAIT;
+    }
 }
 
 static void st_fin_wait_1(u32 seqno, u32 ack, u8 flags, const u8 *data, int dlen)
@@ -536,15 +633,29 @@ void tcp_input(u32 src, int proto, const u8 *p, int len)
     int dlen = len - doff;
 
     c_rx++;
-    if (flags & F_ACK) snd_wnd = win ? win : MSS;
+    seg_has_fin = (flags & F_FIN) ? 1 : 0;
+    /* A ZERO WINDOW MEANS STOP. Rewriting it to MSS pushed another segment
+     * into a receiver that had just said it had no room. The persist probe
+     * in tcp_tick is what stops that being a deadlock. */
+    if (flags & F_ACK) snd_wnd = win;
 
     /* A RST tears the connection down from any state except SYN_SENT, where it
      * has to be validated first - see st_syn_sent. */
+    /* A RST MUST BE IN THE RECEIVE WINDOW. `seq_ge(seqno, rcv_nxt)` accepted
+     * the entire forward half of the sequence space - two billion values - so
+     * an off-path packet with a guessed port had a one-in-two chance of
+     * tearing the connection down. Measured at 50% by an adversarial review.
+     * The `|| seqno == rcv_nxt` clause was dead: seq_ge already includes it,
+     * and its presence is the clearest evidence that an in-window test was
+     * intended and mis-written. */
     if ((flags & F_RST) && st != TCP_SYN_SENT) {
-        if (seq_ge(seqno, rcv_nxt) || seqno == rcv_nxt) {
+        u32 w = (u32)rcv_space();
+        if (seq_ge(seqno, rcv_nxt) && seq_lt(seqno, rcv_nxt + (w ? w : 1))) {
             c_rst++;
             st = TCP_CLOSED;
             rt_deadline = 0;
+        } else {
+            c_oow++;
         }
         return;
     }
@@ -568,8 +679,10 @@ void tcp_input(u32 src, int proto, const u8 *p, int len)
         break;
     case TCP_CLOSE_WAIT:
         if (flags & F_ACK) on_ack(ack);
-        /* their FIN is already in; a retransmitted one must be re-ACKed or
-         * they keep sending it */
+        /* A RETRANSMITTED DATA SEGMENT MUST STILL BE ACKNOWLEDGED. Without
+         * take_data here the peer - which never saw our ACK - retransmits
+         * until it gives up, and we answer nothing at all. */
+        take_data(seqno, data, dlen);
         if (flags & F_FIN) send_seg(snd_nxt, F_ACK, 0, 0);
         break;
     case TCP_LAST_ACK:
@@ -577,11 +690,15 @@ void tcp_input(u32 src, int proto, const u8 *p, int len)
         if (fin_acked) { st = TCP_CLOSED; rt_deadline = 0; }
         break;
     case TCP_TIME_WAIT:
-        /* anything arriving here is a retransmission; re-ACK and restart the
-         * wait, which is what TIME_WAIT is for */
-        if (flags & F_FIN) {
+        /* A retransmitted FIN is re-ACKed and the wait restarts - that is what
+         * TIME_WAIT is for. But only an IN-WINDOW one: refreshing on any FIN
+         * at all lets an off-path packet every second hold the single
+         * connection slot open forever, so nothing else can be opened. */
+        if ((flags & F_FIN) && seqno == rcv_nxt - 1) {
             send_seg(snd_nxt, F_ACK, 0, 0);
             tw_deadline = idt_ticks() + TIME_WAIT_TICKS;
+        } else {
+            c_oow++;
         }
         break;
     default:
@@ -620,27 +737,58 @@ void tcp_tick(void)
         return;
     }
 
-    if (fin_sent && !fin_acked &&
-        (st == TCP_FIN_WAIT_1 || st == TCP_LAST_ACK || st == TCP_CLOSING)) {
-        send_seg(fin_seq, F_FIN | F_ACK, 0, 0);
-        c_rexmit++;
+    /* A ZERO-WINDOW PERSIST PROBE. Honouring a zero window is only safe if
+     * something eventually asks again: the peer's window update can itself be
+     * lost, and then both ends wait forever. One byte is enough to draw out a
+     * fresh advertisement. */
+    if (snd_wnd == 0 && snd_len > 0 && snd_una == snd_nxt) {
+        send_seg(snd_una, F_ACK, sndbuf, 1);
         rto = rto * 2 > RTO_MAX ? RTO_MAX : rto * 2;
         arm_timer();
         return;
     }
 
-    if (seq_lt(snd_una, snd_nxt)) {
-        /* Everything from snd_una is still in the buffer, so retransmit from
-         * there and rewind snd_nxt - a go-back-N, which is what a stack with
-         * no SACK has. */
-        int n = (int)(snd_nxt - snd_una);
-        if (n > MSS) n = MSS;
-        if (n > snd_len) n = snd_len;
-        if (n > 0) {
+    /* DATA BEFORE THE FIN, and this order is the whole fix. The FIN branch
+     * used to come first and fire whenever a FIN was unacknowledged - so if a
+     * data segment was lost before the close, the timer resent the FIN
+     * forever and never the data. The peer, missing bytes, could never
+     * cumulatively acknowledge the FIN, so the connection wedged in
+     * FIN_WAIT_1 permanently holding the one connection slot. Sixty seconds
+     * produced sixty bare FINs and not one byte of data. */
+    if (seq_lt(snd_una, snd_nxt) && snd_len > 0) {
+        int outstanding = (int)(snd_nxt - snd_una);
+        if (fin_sent) outstanding--;        /* the FIN is not a byte */
+        if (outstanding > snd_len) outstanding = snd_len;
+        if (outstanding > 0) {
+            /* AND EVENTUALLY GIVE UP. Retransmitting forever is the other way
+             * to hold the single connection slot open for good - the peer is
+             * gone and nothing above ever finds out. Twelve attempts at a
+             * backoff capped at four seconds is about half a minute. */
+            if (++rexmit_tries > 12) { tcp_abort(); return; }
+            int n = outstanding > MSS ? MSS : outstanding;
             send_seg(snd_una, F_ACK | F_PSH, sndbuf, n);
             c_rexmit++;
+            /* GO BACK N, properly. The old comment claimed this rewind and
+             * the code never performed it, so recovery resent one segment per
+             * timeout however much was outstanding. */
+            snd_nxt = snd_una + (u32)n;
+            if (fin_sent) fin_sent = 0;     /* the FIN follows the data again */
+            cwnd = 1;                       /* slow start, from the beginning */
+            rto = rto * 2 > RTO_MAX ? RTO_MAX : rto * 2;
+            arm_timer();
+            return;
         }
-        cwnd = 1;                           /* slow start, from the beginning */
+    }
+
+    if (fin_sent && !fin_acked &&
+        (st == TCP_FIN_WAIT_1 || st == TCP_LAST_ACK || st == TCP_CLOSING)) {
+        if (++fin_tries > SYN_TRIES) {      /* give up rather than hold the slot */
+            st = TCP_CLOSED;
+            rt_deadline = 0;
+            return;
+        }
+        send_seg(fin_seq, F_FIN | F_ACK, 0, 0);
+        c_rexmit++;
         rto = rto * 2 > RTO_MAX ? RTO_MAX : rto * 2;
         arm_timer();
         return;

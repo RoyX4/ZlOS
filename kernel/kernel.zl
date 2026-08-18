@@ -2035,6 +2035,10 @@ fn wm_damage_win_all() {
 }
 
 fn app_tick(id, win) {
+    # The browser drives its own fetch from the frame loop. app_tick MUST NOT
+    # DRAW and must be cheap; br_tick pumps the link, the TCP timers and the
+    # HTTP state machine, and returns 1 only when something actually changed.
+    if id == APP_BROWSER { return br_tick() }
     if id == APP_MONITOR {
         tsec = ticks() / 100
         if tsec != last_tick_sec { last_tick_sec = tsec  return 1 }
