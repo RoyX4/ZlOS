@@ -62,6 +62,17 @@ echo "built ./tritest       (run: ./tritest)"
 gcc -O2 -w -o arenatest arenatest.c ../arena.c
 echo "built ./arenatest     (run: ./arenatest)"
 
+# `run`, and every way it declines. TWO binaries from one source, and that is
+# the point of exec.c's weak fs_* references: with a fake filesystem linked it
+# reaches not-found / empty / too-big / loaded, none of which exist on this
+# branch; with nothing defining fs_* the weak symbols are NULL, which is what
+# the kernel actually ships today. The second is the one that proves the
+# NULL-weak branch is REACHED rather than merely written.
+gcc -O2 -w -o exectest exectest.c ../exec.c
+echo "built ./exectest      (run: ./exectest)"
+gcc -O2 -w -DEXECTEST_NO_FS -o exectest-nofs exectest.c ../exec.c
+echo "built ./exectest-nofs (run: ./exectest-nofs)"
+
 # The comparison number: what the REAL GPU on this same laptop does with a
 # blended full-screen layer. Offscreen pixmap, so it never touches the desktop.
 # Needs libGL - skipped silently if the dev headers are not installed.

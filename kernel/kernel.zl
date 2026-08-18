@@ -342,6 +342,7 @@ fn help() {
     print("    d        paint with the mouse")
     print("    <n> i    edit RAM file n (0-9) - ESC saves it")
     print("    l        list the RAM files")
+    print("    run F    run a program from a file (type it - needs a name)")
     print("    e        beep the PC speaker")
     print("    m        poke a byte into video memory and read it back")
     color(C_CYAN)  print("  our hardware drivers")
@@ -1718,9 +1719,70 @@ fn run_command(cmd, arg) {
         color(C_GREY)  return 0
     }
     if cmd == 99  { draw_screen()  return 0 }
+    # R - run a program the kernel was NOT built with. Typed only: `run` needs a
+    # FILENAME, and the single-key path folds everything after the letter into a
+    # decimal accumulator, so there is no character buffer on it to hold a word.
+    # term.c has the whole line already and hands the text to exec.c in C.
+    #
+    # exec_run() takes no argument and returns a state code, never a name. That
+    # is the whole safety property here: a filename that reached zl would meet
+    # zl_binop, which hard-faults on ANY string operand before it ever gets to
+    # `==`, so the natural way to write this in zl compiles clean and halts the
+    # machine. exec.c does the comparing.
+    if cmd == 82 {
+        exec_run()
+        # The window is opened only for a request that named something. `run`
+        # with no filename is a usage error and gets its line and nothing else;
+        # a window that says "you forgot the argument" is noise. Anything that
+        # names a file gets the window, because from Item 2 on that window is
+        # where the program lives - and a window that only ever appears on the
+        # success path is a window nobody has tested.
+        if exec_window() == 1 { open_run_window() }
+        return 0
+    }
     if cmd == 113 { return 1 }
     color(C_RED)  print("  unknown command - press h for help")
     color(C_GREY) return 0
+}
+
+# ONE window, reused. `run` twice should not leave two windows on the desktop,
+# and wm.c's table is WM_MAX=12 deep - a new window per invocation runs it out
+# in twelve commands and then fails silently, which is the failure shape this
+# project keeps paying for.
+run_win = 0 - 1
+fn open_run_window() {
+    if wm_avail() == 0 { return 0 }
+    u = ui()
+    if run_win >= 0 {
+        if wm_is_open(run_win) == 1 {
+            wm_raise(run_win)
+            wm_dmg(run_win)
+            # focus goes back below, for the same reason as on the open path
+            wm_focus(shell_win)
+            return 0
+        }
+    }
+    run_win = wm_open(APP_RUN, exec_title(), 90 * u, 90 * u, 320 * u, 110 * u)
+    # AND HAND THE KEYBOARD STRAIGHT BACK. wm_open focuses whatever it just
+    # opened, so without this the run window holds focus, app_event has no
+    # APP_RUN branch, and every subsequent keystroke is dropped - the terminal
+    # goes dead and looks for all the world like the compositor crashed.
+    #
+    # This is not a new discovery, it is the SAME bug the comment above
+    # app_event records: three wm_opens at startup left About focused and the
+    # shell untypeable. It was fixed there with an explicit wm_focus and it has
+    # to be fixed the same way at every later wm_open, because "wm_open steals
+    # focus" is a property of wm.c, not of that one call site.
+    #
+    # Focus does not imply raise (wm.c), so the run window stays on top and the
+    # keys still go to the terminal - which is what someone who just typed a
+    # command into that terminal expects.
+    #
+    # probe-run.py asserts this by typing `fib 20` afterwards and requiring
+    # 6765. Without the line below that assertion fails, which is how it was
+    # found rather than reasoned about.
+    wm_focus(shell_win)
+    return 0
 }
 
 # a live System Monitor window: the real CPUID brand, a memory bar, tick count
@@ -1798,11 +1860,21 @@ fn about_body(ax, ay) {
 APP_SHELL   = 0
 APP_MONITOR = 1
 APP_ABOUT   = 2
+APP_RUN     = 3
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     wy = ay - TITLE_H * ui()
     if id == APP_MONITOR { return sysmon_body(ax, wy) }
     if id == APP_ABOUT   { return about_body(ax, wy) }
+    # The exec track's window. Its body is written in C for the same reason
+    # term.c's is: what it has to say includes a FILENAME, and a filename
+    # cannot be a zl value - zl_binop hard-faults on any string operand. So
+    # this branch does nothing but hand exec.c the client rectangle.
+    if id == APP_RUN {
+        u = ui()
+        exec_draw(ax + 8 * u, ay + 6 * u, aw - 16 * u, ah - 12 * u, TXT_HI, TXT_DIM, ACCENT)
+        return 0
+    }
     if id == APP_SHELL {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the

@@ -142,6 +142,14 @@ extern unsigned long arena_high_water(void);
 extern unsigned long arena_refusals(void);
 extern unsigned long arena_base_addr(void);
 
+/* ---- exec.c: `run`, and every way it declines --------------------------- */
+extern int  exec_run(void);
+extern int  exec_state(void);
+extern int  exec_wants_window(void);
+extern const char *exec_title(void);
+extern void exec_draw(int x, int y, int w, int h,
+                      unsigned int fg, unsigned int dim, unsigned int accent);
+
 /* Is there a USB pointer at all? Two questions in one, and both have to be
  * yes: is the driver linked in (weak symbol non-NULL), and did it find a
  * device. Every xhci_ptr_* call below is guarded by this, so a NULL weak
@@ -367,6 +375,7 @@ extern void wm_stop(void);
 extern int  wm_focused(void);
 extern void wm_focus(int win);
 extern void wm_raise(int win);
+extern int  wm_is_open(int win);
 extern void wm_client(int win, int *x, int *y, int *w, int *h);
 extern int  wm_count(void);
 extern int  wm_add_tab(int win, int app, const char *title);
@@ -853,6 +862,10 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_focus"))   { wm_focus((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_raise"))   { wm_raise((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_n"))       return zl_num((double)wm_count());
+    /* Is that window still on screen? `run` reuses one window rather than
+     * opening a new one each time - wm.c's table is WM_MAX deep and a window
+     * per invocation runs it out and then fails silently. Asking needs this. */
+    if (streq(name, "wm_is_open")) return zl_num((double)wm_is_open((int)a[0].num));
     if (streq(name, "wm_dmg"))     { wm_damage_win((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "ui_theme"))   { ui_theme_init((int)a[0].num); return zl_nil(); }
@@ -1058,6 +1071,24 @@ Value zl_calln(const char *name, int n, ...)
      * and means nothing is holding a pointer into the arena at the moment it
      * is reclaimed except code that is about to be handed a new one. */
     if (streq(name, "arena_reset"))  { arena_reset(); return zl_nil(); }
+    /* ---- exec.c -----------------------------------------------------------
+     * exec_run takes NO arguments on purpose. The filename lives in term.c's
+     * buffer and exec.c reads it there, in C. Passing it through here would
+     * mean a V_STR in zl's hands, and zl_binop above hard-faults on any string
+     * operand BEFORE it reaches the `==` arm - so `if n == "hello.zl"`
+     * compiles clean, links clean, and halts the machine when it runs. */
+    if (streq(name, "exec_run"))    return zl_num((double)exec_run());
+    if (streq(name, "exec_state"))  return zl_num((double)exec_state());
+    if (streq(name, "exec_window")) return zl_num((double)exec_wants_window());
+    /* A pointer into exec.c's own buffer, handed straight to wm_open as a
+     * title and never compared. Passing a V_STR is safe; operating on one is
+     * not, and that is the entire distinction. */
+    if (streq(name, "exec_title"))  return zl_str(exec_title());
+    if (streq(name, "exec_draw"))   { exec_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,
+                                                (unsigned int)(unsigned long long)a[4].num,
+                                                (unsigned int)(unsigned long long)a[5].num,
+                                                (unsigned int)(unsigned long long)a[6].num);
+                                      return zl_nil(); }
     if (streq(name, "box"))       { console_box((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "line"))      { console_line((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "mcursor"))   { console_mouse_cursor((int)a[0].num,(int)a[1].num,(unsigned char)(unsigned long long)a[2].num,(unsigned char)(unsigned long long)a[3].num); return zl_nil(); }

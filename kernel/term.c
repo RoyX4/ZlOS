@@ -35,6 +35,7 @@ static int  in_len;
 
 static int  pending_cmd = -1;       /* set by Enter, taken by zl          */
 static int  pending_arg;
+static char argstr[TERM_COLS];      /* ...and the argument as TEXT, for C  */
 
 void fb_text_prop(int px, int py, const char *s, unsigned int fg);
 int  fb_text_prop_w(const char *s);
@@ -89,7 +90,7 @@ void term_clear(void)
  *
  * Bare LF, no CR, because that is what zl_putc emits and the serial log should
  * not have two conventions in it. */
-static void term_say(const char *s)
+void term_say(const char *s)
 {
     for (; *s; s++) { term_putc(*s); zl_serial_putc(*s); }
 }
@@ -153,6 +154,9 @@ static const struct cmd table[] = {
     { "paint",   100 }, { "edit",    105 },
     { "ls",      108 }, { "files",   108 },
     { "reboot",  114 }, { "halt",    113 }, { "quit",  113 }, { "exit", 113 },
+    /* 82 is 'R'. Lower-case 'r' (114) is already reboot, and the exec track
+     * needs a code run_command dispatches on that nothing else claims. */
+    { "run",      82 },
     { "clear",     1 },                       /* handled here, not by zl */
     { 0, 0 }
 };
@@ -174,8 +178,22 @@ static int match_cmd(void)
     int wlen = i - start;
     if (wlen <= 0) return 0;                  /* empty line: no command */
 
+    /* THE ARGUMENT, BOTH WAYS, AND FROM THE SAME START POINT.
+     *
+     * `arg` has always been a decimal number, which is all `fib 20` and
+     * `edit 3` ever needed. A filename is not a number, so the raw text is
+     * captured too - and both are read from the SAME offset rather than the
+     * text picking up where the digit scan stopped. That ordering is the whole
+     * correctness of it: `run 2048.zl` would otherwise let the digit loop eat
+     * "2048" and leave the text as ".zl", which is a file-not-found that reads
+     * like a typo. Taken from the same start, arg is 2048 and argstr is
+     * "2048.zl", each right for whoever asked.
+     *
+     * No existing command's behaviour changes - `arg` is parsed from exactly
+     * the offset it always was. */
     int arg = 0;
     while (input[i] == ' ') i++;
+    int astart = i;
     while (input[i] >= '0' && input[i] <= '9') arg = arg * 10 + (input[i++] - '0');
 
     for (int k = 0; table[k].word; k++) {
@@ -183,6 +201,21 @@ static int match_cmd(void)
             if (table[k].code == 1) { term_clear(); return 0; }
             pending_cmd = table[k].code;
             pending_arg = arg;
+            /* ...and the same argument as TEXT, read from the SAME offset the
+             * digit scan started at, not from where it stopped. That ordering
+             * is the whole correctness of it: `run 2048.zl` would otherwise
+             * leave the text as ".zl" - a file-not-found that reads like a
+             * typo - while arg quietly took the 2048. From one start point,
+             * arg is 2048 and argstr is "2048.zl", each right for whoever
+             * asked, and no existing command's `arg` changes by a digit. */
+            {
+                int n = 0;
+                while (input[astart + n] && n < TERM_COLS - 1) {
+                    argstr[n] = input[astart + n];
+                    n++;
+                }
+                argstr[n] = 0;
+            }
             return 1;
         }
     }
@@ -206,6 +239,12 @@ static int match_cmd(void)
 
 int term_cmd(void) { int c = pending_cmd; pending_cmd = -1; return c; }
 int term_arg(void) { return pending_arg; }
+
+/* The argument as TEXT. Deliberately not routed through zl: runtime_kernel.c
+ * hard-faults on any string operand (:562, before the `==` arm at :573), so a
+ * filename that reaches zl compiles clean and halts the machine. C callers
+ * read it here; zl only ever sees the int. */
+const char *term_argstr(void) { return argstr; }
 
 /* ---- drawing ---------------------------------------------------------------
  * POSITION-PURE, as the app contract requires: every coordinate is derived

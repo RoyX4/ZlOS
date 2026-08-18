@@ -381,6 +381,22 @@ cd kernel
 ./try.sh serial    # drive it from the terminal
 ```
 
+**`./build.sh` DOES NOT REBUILD WHAT THE PROBES BOOT, and this will cost you an
+afternoon.** `build.sh` produces `kernel.elf`. Every `probe-*.py` boots
+`zlOS.iso` (`exercise.py:280` `qemu_argv` → `-cdrom zlOS.iso`), which is made by
+`mkiso.sh` and only by `mkiso.sh`. `exercise.py:273` `build()` runs it for you —
+so a probe run WITHOUT `--no-build` is honest, and `./build.sh && ./probe-x.py
+--no-build` silently tests the kernel you had before your edit.
+
+Measured, the hard way: three consecutive diagnostics of a real bug were run
+against a stale ISO. A fix that worked looked like it had failed, was reverted,
+and the hunt moved to the wrong subsystem. The tell was a `term_say` printed
+*before* another one appearing in the log *after* it — impossible in the source,
+and the only explanation was that the source was not what was running.
+
+**If a diagnostic result is impossible, check what you actually booted before
+you check anything else.**
+
 `try.sh` GUI mode is **verified working** (2026-08-17). It was booting
 `-kernel kernel.elf`, and QEMU's own multiboot loader never supplies the
 framebuffer tag — it prints `multiboot knows VBE. we don't` — so `console_init()`

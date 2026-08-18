@@ -54,6 +54,9 @@ gcc $CFLAGS -c sched.c -o _sched.o
 # the program arena: where a program the kernel was NOT built with is
 # allowed to put its memory, and the ceiling it cannot cross
 gcc $CFLAGS -c arena.c -o _arena.o
+# `run`: the command, the window, and every way it declines. Built BEFORE
+# anything can execute - the failure modes are the only modes it has.
+gcc $CFLAGS -c exec.c -o _exec.o
 # SMP: waking the other cores
 gcc $CFLAGS -c smp.c -o _smp.o
 # I2C-HID: the touchpad
@@ -79,7 +82,7 @@ gcc -m32 -c boot.S -o _boot.o
 # only things the kernel took from libgcc, and divmod.c now supplies them.
 # Nothing GNU is linked into the kernel any more - only gcc-the-tool that
 # compiled the C, which nativegen is on track to replace.
-ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _arena.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o
+ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _arena.o _exec.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o
 
 echo "built kernel.elf"
 echo "  undefined symbols: $(nm -u kernel.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"

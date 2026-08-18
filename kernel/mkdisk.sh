@@ -65,6 +65,9 @@ gcc $CFLAGS -c sched.c -o _sched.o
 # the program arena: where a program the kernel was NOT built with is
 # allowed to put its memory, and the ceiling it cannot cross
 gcc $CFLAGS -c arena.c -o _arena.o
+# `run`: the command, the window, and every way it declines. Built BEFORE
+# anything can execute - the failure modes are the only modes it has.
+gcc $CFLAGS -c exec.c -o _exec.o
 gcc $CFLAGS -c smp.c -o _smp.o
 # I2C-HID: the touchpad
 gcc $CFLAGS -c i2c_hid.c -o _i2c.o
@@ -81,7 +84,7 @@ gcc $CFLAGS -c smp_trampoline.S -o _smptr.o
 gcc -m32 -c raw_entry.S -o _rawentry.o
 
 ld -m elf_i386 -T link-raw.ld -o kernel_raw.elf \
-   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _arena.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o
+   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _arena.o _exec.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o
 objcopy -O binary kernel_raw.elf kernel_raw.bin
 
 nasm -f bin raw_boot.asm -o raw_boot.bin
