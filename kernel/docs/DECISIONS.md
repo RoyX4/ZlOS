@@ -194,6 +194,56 @@ reached its layer 3 by *deleting* the OS underneath, not by calling into one.
 
 ---
 
+## The exec track — running code the kernel was not built with
+
+### #E1 | The execution level: **ASSUMED Level 1** (zlOS runs zl)
+
+`EXEC-PROMPT.md` §1 puts three incompatible operating systems on the table and
+says Roy chooses. No answer was given, so the brief's own escape hatch applies:
+proceed under a stated assumption. **Level 1 is assumed** — load a `.zl` source
+file and interpret it, ring 0, with the interpreter's memory confined to the
+arena. Not Level 2 (flat binaries, which the brief rejects as an end state), not
+Level 3 (ring 3, TSS, per-process page tables, and every driver becoming a
+syscall).
+
+**Reversal cost, stated up front so it can be spent knowingly:** Items 0 and 1 —
+the arena and the `run` command with its error paths — are level-independent.
+Level 3 needs a memory budget just as much and needs the same failure modes. So
+**this is free to override until Item 2 begins**, and after that costs whatever
+`interp_kernel.c` contains.
+
+### #E2 | The program arena goes at 8 MiB, below the high-RAM map, not above it
+
+Measured, not reasoned: **no gate in this project passes `-m` to QEMU**, and
+QEMU's i386 default is exactly 128 MiB (`query-memory-size-summary` →
+`base-memory: 134217728`). So the entire high-RAM map is unbacked on every gate,
+and a new fixed buffer placed above it would link, boot, pass review, and never
+execute. `kernel/docs/memory-map.md` has the full re-grepped map, the arithmetic,
+and the two collisions found while doing it.
+
+### #E3 | An arena with a reset is not a heap, and the boot log still says so
+
+`kernel.zl`'s `[ INFO ] no heap, no filesystem, no scheduler` was left standing.
+A bump allocator with no `free()` and no reuse inside a run has nothing to
+fragment, nothing to double-free, and nothing to leak that a reset does not
+reclaim. **The line stops being honest the day the interpreter boxes lists and
+strings** (`EXEC-PROMPT.md` §8), and that is the change that has to carry it —
+not this one. The arena instead prints its own line with an address in it, the
+way `fb.c` does, because "the arena is up" is a claim and "16 MiB at 8 MiB, ends
+at 24 MiB, ceiling 128 MiB" is a fact somebody can check.
+
+### #E4 | Refusals print, but the volume is bounded
+
+Item 0 requires that exceeding the ceiling is "a refusal that prints" — this
+project has shipped a silent fallback twice and paid for it twice. But an
+unbounded print from a program looping on a refused allocation pins the machine
+writing to a 115200 baud serial line, which is itself a way to wedge it, and
+Item 2 forbids exactly that. So the first eight refusals print in full, then one
+suppression notice, then silence — while the **count stays exact** and stays
+reachable through `arena_refused()`. Suppression hides volume, never the fact.
+
+---
+
 ## Open
 
 | # | Question | Owner |

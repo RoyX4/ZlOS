@@ -359,6 +359,18 @@ Five times now: **a DMA buffer outside guest RAM, or an address truncated to
   vanish**, 64-bit build only
 - Every driver now ships a `*_ram_ok()` probe
 
+**And the corollary nobody had written down: NOT ONE GATE passes `-m`.**
+`verify.sh`, `verify-raw.sh` and `verify-iso.sh` all boot QEMU's default, which
+is **measured** at exactly 128 MiB (`query-memory-size-summary` says
+`base-memory: 134217728`). So on every gate this project runs, the whole
+high-RAM map is unbacked, and **a new fixed buffer placed above 128 MiB is dead
+code that will still pass review**. That is why the program arena is at 8 MiB.
+
+The full map — every base and end re-grepped from the file that owns it, the
+kernel image end measured, the arithmetic for where a new buffer may go, and one
+collision `fb.c`'s map does not list (the SMP AP stacks at 168 MiB, inside
+`sp_buf`'s declared span) — is `kernel/docs/memory-map.md`.
+
 ## Verify before believing anything
 
 ```

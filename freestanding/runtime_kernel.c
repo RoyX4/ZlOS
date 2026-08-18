@@ -127,6 +127,21 @@ extern int      xhci_kbd_lastcc(void) ZL_WEAK;
 extern int xhci_ptr_slot(void) ZL_WEAK;
 extern int xhci_ptr_ep(void) ZL_WEAK;
 
+/* ---- arena.c: the memory a program the kernel was NOT built with may use --
+ * Not weak. arena.c is in all four source lists and is pure arithmetic against
+ * memory - if it is missing the build should fail, because unlike a USB
+ * pointer there is no fallback that "has always worked" to degrade to. */
+extern int arena_init(void);
+extern int arena_ok(void);
+extern void arena_reset(void);
+extern unsigned long arena_resets(void);
+extern unsigned long arena_capacity(void);
+extern unsigned long arena_used(void);
+extern unsigned long arena_available(void);
+extern unsigned long arena_high_water(void);
+extern unsigned long arena_refusals(void);
+extern unsigned long arena_base_addr(void);
+
 /* Is there a USB pointer at all? Two questions in one, and both have to be
  * yes: is the driver linked in (weak symbol non-NULL), and did it find a
  * device. Every xhci_ptr_* call below is guarded by this, so a NULL weak
@@ -1023,6 +1038,26 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ptr_slot"))   return zl_num((double)ZL_WEAK_CALL(xhci_ptr_slot));
     if (streq(name, "ptr_ep"))     return zl_num((double)ZL_WEAK_CALL(xhci_ptr_ep));
     if (streq(name, "mouse_irqs")) return zl_num((double)idt_mouse_irqs());
+    /* ---- the program arena (arena.c) --------------------------------------
+     * arena_up prints its own line, the way fb.c does, so the boot log states
+     * an ADDRESS rather than a claim - a number somebody can check against the
+     * map in fb.c and in arena.c's header comment. */
+    if (streq(name, "arena_up"))      return zl_num((double)arena_init());
+    if (streq(name, "arena_ok"))      return zl_num((double)arena_ok());
+    if (streq(name, "arena_cap"))     return zl_num((double)arena_capacity());
+    if (streq(name, "arena_used"))    return zl_num((double)arena_used());
+    if (streq(name, "arena_free"))    return zl_num((double)arena_available());
+    if (streq(name, "arena_hw"))      return zl_num((double)arena_high_water());
+    if (streq(name, "arena_refused")) return zl_num((double)arena_refusals());
+    if (streq(name, "arena_base"))    return zl_num((double)arena_base_addr());
+    if (streq(name, "arena_resets"))  return zl_num((double)arena_resets());
+    /* The one that makes the rest of the design work, and it was missed on the
+     * first pass: without a reset exposed, a bump allocator is a one-shot.
+     * `run` calls this BEFORE each program, never after - reclaiming on the way
+     * in means a program that faulted still has its memory intact to look at,
+     * and means nothing is holding a pointer into the arena at the moment it
+     * is reclaimed except code that is about to be handed a new one. */
+    if (streq(name, "arena_reset"))  { arena_reset(); return zl_nil(); }
     if (streq(name, "box"))       { console_box((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "line"))      { console_line((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "mcursor"))   { console_mouse_cursor((int)a[0].num,(int)a[1].num,(unsigned char)(unsigned long long)a[2].num,(unsigned char)(unsigned long long)a[3].num); return zl_nil(); }

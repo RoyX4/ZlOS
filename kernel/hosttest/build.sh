@@ -53,6 +53,15 @@ gcc -O2 -w -o tritest tritest.c ../fb3d.c ../fb.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./tritest       (run: ./tritest)"
 
+# The program arena, asserted. This one is the cheapest gate in the project -
+# no QEMU, no GPU, no sudo - because arena.c is just arithmetic against memory,
+# and the arithmetic is the entire point: a ceiling test written as an addition
+# instead of a subtraction hands a script the whole machine. Built at the same
+# -O2 the kernel uses; the harness mmaps the address arena.c hardcodes so the
+# shipping source compiles unmodified.
+gcc -O2 -w -o arenatest arenatest.c ../arena.c
+echo "built ./arenatest     (run: ./arenatest)"
+
 # The comparison number: what the REAL GPU on this same laptop does with a
 # blended full-screen layer. Offscreen pixmap, so it never touches the desktop.
 # Needs libGL - skipped silently if the dev headers are not installed.

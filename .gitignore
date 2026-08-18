@@ -47,3 +47,6 @@ kernel/hosttest/wmshot
 kernel/hosttest/tritest
 
 kernel/__pycache__/
+
+# hosttest binary: the arena gate (source is arenatest.c)
+kernel/hosttest/arenatest

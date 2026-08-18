@@ -2167,7 +2167,21 @@ ok_line("keyboard on IRQ1 - no more polling the port")
 # machine the firmware's PS/2 emulation dies with ExitBootServices, so this is
 # the only keyboard there will be.
 usb_boot()
+# The program arena. It prints its own line with an ADDRESS in it, the way fb.c
+# does, because "the arena is up" is a claim and "16 MiB at 8 MiB, ends at
+# 24 MiB, ceiling 128 MiB" is a fact somebody can check against the map.
+#
+# It is called HERE, at boot, rather than lazily on the first `run`: an arena
+# that is not backed by RAM is something you want to be told about while you
+# are still reading the boot log, not three keystrokes into a program.
+arena_up()
 ok_line("zl runtime, kernel subset")
+# STILL TRUE, and it is worth saying why rather than leaving the next reader to
+# wonder whether it was just missed. A bump allocator with no free() and no
+# reuse inside a run is not a heap - there is nothing to fragment, nothing to
+# double-free, and nothing to leak that a reset does not reclaim. The line stops
+# being honest the day the interpreter boxes lists and strings (EXEC-PROMPT §8),
+# and that is the change that has to carry it, not this one.
 info_line("no heap, no filesystem, no scheduler")
 
 print("")
