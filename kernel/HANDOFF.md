@@ -397,6 +397,31 @@ and the only explanation was that the source was not what was running.
 **If a diagnostic result is impossible, check what you actually booted before
 you check anything else.**
 
+## The exec track — running code the kernel was not built with
+
+Three docs, all written from measurement rather than intent:
+
+- `kernel/docs/memory-map.md` — every fixed physical address, re-grepped from the
+  file that owns it, the kernel image end measured, and **the fact that no gate
+  passes `-m` so every address above 128 MiB is unbacked under all of them**.
+  Also two collisions `fb.c`'s map does not list.
+- `kernel/docs/exec-kill-path.md` — how a program that will not stop is stopped:
+  a step budget and a depth cap at `eval`/`exec`, a `longjmp` boundary instead of
+  `exit(1)`, and why it is deliberately not the timer interrupt.
+- `kernel/docs/DECISIONS.md` §"The exec track" — the level choice (**Level 1,
+  ASSUMED not chosen**), and why the boot log still says "no heap".
+
+Gates the exec track added, cheapest first:
+
+```
+cd kernel/hosttest && ./build.sh
+./arenatest        # the program arena's ceiling      62 checks, no QEMU
+./exectest         # `run`, with a fake filesystem    44 checks, no QEMU
+./exectest-nofs    # `run`, as it actually ships      32 checks, no QEMU
+./killtest.sh      # adversarial: can a script wedge the machine?  14 cases
+cd .. && ./probe-run.py                # `run` in the real compositor
+```
+
 `try.sh` GUI mode is **verified working** (2026-08-17). It was booting
 `-kernel kernel.elf`, and QEMU's own multiboot loader never supplies the
 framebuffer tag — it prints `multiboot knows VBE. we don't` — so `console_init()`

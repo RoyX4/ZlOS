@@ -31,6 +31,147 @@
                             in its own file so <windows.h> can't
                             clash with our TokenType/Node names */
 
+
+/* =============================================================
+ * THE KILL PATH - how a program that misbehaves is stopped
+ *
+ * zlOS is about to run scripts it was not compiled with, in ring 0, with no
+ * memory protection (kernel/docs/EXEC-PROMPT.md, Item 2). Two of that item's
+ * three non-negotiables live here, and the brief is emphatic that they are
+ * decided BEFORE the loop is written rather than bolted on after:
+ *
+ *   1. a runaway program must be killable
+ *   2. a crashing program must not take the kernel with it
+ *
+ * A STEP BUDGET, NOT A TIMER. The obvious reflex is to preempt from the timer
+ * interrupt, and it is wrong twice over. DECISIONS.md #5 refused preemptive
+ * tasks sharing one framebuffer with no memory protection and no locks, and
+ * that call still stands. More basic than that: a timer does not DECIDE
+ * anything. Being interrupted 100 times a second does not make an infinite
+ * loop finite - you still need a policy that says "this has had enough", and
+ * the budget IS that policy. It is also reproducible, which a wall clock is
+ * not: the same script dies at the same step every time, on a loaded box or an
+ * idle one, so a gate written against it can never be timing-sensitive - the
+ * rule this project adopted after verify-raw.sh failed on an unchanged kernel.
+ *
+ * A DEPTH CAP AS WELL, because the budget alone does not save the stack. A
+ * script that recurses is consuming C stack frames per level, and the kernel
+ * has 256 KiB of stack in total. A budget of ten million steps is reached long
+ * after a recursion of a hundred thousand has walked off the bottom of it -
+ * and this project has already had a stack overflow write into console statics
+ * (16 KiB was not enough for the compositor). So depth is counted too, and it
+ * is the cheaper of the two checks.
+ *
+ * BOTH CHECKS ARE OFF BY DEFAULT. zi_limit(0, 0) means unlimited, which is
+ * exactly what the hosted `zl` interpreter has always done, so this changes
+ * nothing for it. The kernel arms them. That way there is ONE code path
+ * instead of an #ifdef pair, the hosted test suite exercises the same lines
+ * the kernel runs, and neither can drift from the other.
+ *
+ * THE TRAP. runtime_error() has always called exit(1), which is correct for a
+ * program and fatal for an operating system. When a trap is armed it longjmps
+ * back to whoever armed it instead, carrying the message. Nothing else about
+ * the error path changes, and with no trap armed the behaviour is identical to
+ * what it was.
+ * ============================================================= */
+
+#ifndef ZL_FREESTANDING
+#include <setjmp.h>
+#define zi_jmp_buf  jmp_buf
+#define zi_setjmp   setjmp
+#define zi_longjmp  longjmp
+#endif
+
+#define ZI_ERRMAX 192
+
+static long long zi_steps_left;      /* 0 = unlimited                        */
+static long long zi_steps_used;
+static int       zi_depth;
+static int       zi_depth_max;       /* 0 = unlimited                        */
+static int       zi_depth_peak;
+static zi_jmp_buf zi_trap;
+static int       zi_trap_armed;
+static int       zi_killed;          /* 1 = stopped by budget or depth       */
+static char      zi_errmsg[ZI_ERRMAX];
+
+long long zi_used(void)      { return zi_steps_used; }
+int       zi_peak_depth(void){ return zi_depth_peak; }
+int       zi_was_killed(void){ return zi_killed; }
+const char *zi_error(void)   { return zi_errmsg; }
+
+void zi_limit(long long steps, int max_depth)
+{
+    zi_steps_left = steps;
+    zi_steps_used = 0;
+    zi_depth      = 0;
+    zi_depth_max  = max_depth;
+    zi_depth_peak = 0;
+    zi_killed     = 0;
+    zi_errmsg[0]  = 0;
+}
+
+static void zi_seterr(const char *msg)
+{
+    int i = 0;
+    while (msg && msg[i] && i < ZI_ERRMAX - 1) { zi_errmsg[i] = msg[i]; i++; }
+    zi_errmsg[i] = 0;
+}
+
+
+/* ---- the allocation seam, and the second half of the budget --------------
+ * THE HOLE THIS CLOSES. The step budget counts visits to eval() and exec(),
+ * which bounds how many NODES a program executes and says nothing about how
+ * much WORK each one does. Found by an adversarial reader, and confirmed:
+ *
+ *     $ echo 'xs = range(50000000)
+ *             print(len(xs))' > onestep.zl
+ *     $ ./interp --steps 100 --depth 50 onestep.zl
+ *     50000000
+ *     exit=0
+ *
+ * A hundred steps of budget, fifty million allocations, and the program won.
+ * One eval() of one builtin call. Every container-building builtin has this
+ * shape - range, repeat, concat, join, split, sort - and capping them one at a
+ * time is whack-a-mole that the next builtin somebody adds walks straight past.
+ *
+ * So the budget is charged where the work actually is: PER BYTE ALLOCATED.
+ * That is one chokepoint, it cannot be forgotten by a new builtin because a new
+ * builtin cannot allocate without coming through here, and it makes the budget
+ * mean "work" rather than "statements" - which is what a caller wanting to
+ * bound a program actually means.
+ *
+ * It is ALSO the seam the kernel port needs for Item 2's third non-negotiable,
+ * that a program's memory must be its own. In the kernel zi_alloc becomes
+ * arena_alloc; here it stays malloc. One function to change instead of 68.
+ *
+ * THE DIVISOR. Charging one step per byte would make the budget's units
+ * incomparable between a loop that allocates and one that does not. A step is
+ * roughly "one node visited", and 64 bytes is roughly the cost of a Value, so
+ * a step per 64 bytes puts allocation and execution on the same scale: the
+ * fifty-million-element list above costs about 50 million steps rather than 1.
+ */
+#define ZI_BYTES_PER_STEP 64
+
+static void zi_charge(long long units);      /* defined with zi_step below */
+
+static void *zi_alloc(unsigned long bytes)
+{
+    zi_charge((long long)(bytes / ZI_BYTES_PER_STEP) + 1);
+    return malloc(bytes);
+}
+
+static char *zi_strdup(const char *s)
+{
+    zi_charge((long long)(s ? (strlen(s) / ZI_BYTES_PER_STEP) : 0) + 1);
+    return _strdup(s ? s : "");
+}
+
+static void *zi_realloc(void *p, unsigned long bytes)
+{
+    zi_charge((long long)(bytes / ZI_BYTES_PER_STEP) + 1);
+    return realloc(p, bytes);
+}
+
 /* =============================================================
  * VALUES - what an expression evaluates to
  * ============================================================= */
@@ -63,7 +204,7 @@ static Value make_bool(int b)        { Value v = make_nil(); v.type=V_BOOL; v.nu
 static Value make_str(const char *s)
 {
     Value v = make_nil(); v.type = V_STR;
-    v.str = malloc(strlen(s) + 1);
+    v.str = zi_alloc(strlen(s) + 1);
     strcpy(v.str, s);
     return v;
 }
@@ -106,17 +247,17 @@ static char *value_to_string_depth(Value v, int depth)
 {
     char buf[64];
     switch (v.type) {
-        case V_NIL:  return _strdup("nil");
-        case V_BOOL: return _strdup(v.num ? "true" : "false");
-        case V_STR:  return _strdup(v.str ? v.str : "");
-        case V_FN:   return _strdup("<function>");
+        case V_NIL:  return zi_strdup("nil");
+        case V_BOOL: return zi_strdup(v.num ? "true" : "false");
+        case V_STR:  return zi_strdup(v.str ? v.str : "");
+        case V_FN:   return zi_strdup("<function>");
         case V_NUM:
             /* whole numbers print without a trailing ".000000" */
             if (v.num == (long long)v.num)
                 snprintf(buf, sizeof(buf), "%lld", (long long)v.num);
             else
                 snprintf(buf, sizeof(buf), "%g", v.num);
-            return _strdup(buf);
+            return zi_strdup(buf);
         case V_LIST: {
             /* [a, b, c] */
             size_t cap = 3;
@@ -124,12 +265,12 @@ static char *value_to_string_depth(Value v, int depth)
             if (depth >= MAX_VALUE_DEPTH)
                 runtime_error("str nested too deep to print "
                               "(does a list contain itself?)");
-            out = malloc(cap);
+            out = zi_alloc(cap);
             strcpy(out, "[");
             for (int i = 0; i < v.nitems; i++) {
                 char *part = value_to_string_depth(*v.items[i], depth + 1);
                 cap += strlen(part) + 2;
-                out = realloc(out, cap);
+                out = zi_realloc(out, cap);
                 if (i) strcat(out, ", ");
                 strcat(out, part);
                 free(part);
@@ -138,7 +279,7 @@ static char *value_to_string_depth(Value v, int depth)
             return out;
         }
     }
-    return _strdup("?");
+    return zi_strdup("?");
 }
 
 static char *value_to_string(Value v) { return value_to_string_depth(v, 0); }
@@ -160,7 +301,7 @@ typedef struct Env {
 
 static Env *env_new(Env *parent)
 {
-    Env *e = malloc(sizeof(Env));
+    Env *e = zi_alloc(sizeof(Env));
     e->parent = parent;
     e->vars   = NULL;
     return e;
@@ -193,7 +334,7 @@ static Var *env_find_local(Env *e, const char *name)
  * a parameter there is a C function argument and shadows naturally. */
 static void env_define(Env *e, const char *name, Value val)
 {
-    Var *v = malloc(sizeof(Var));
+    Var *v = zi_alloc(sizeof(Var));
     strncpy(v->name, name, MAX_TEXT - 1);
     v->name[MAX_TEXT - 1] = '\0';
     v->val  = val;
@@ -220,6 +361,7 @@ static void env_assign(Env *e, const char *name, Value val)
  * ============================================================= */
 
 static Value eval(Node *n, Env *env);
+static Value eval_inner(Node *n, Env *env);
 
 /* statements can trigger a `return`. We carry that back up with a
  * flag + the returned value, checked after every statement. */
@@ -246,9 +388,24 @@ static int   g_depth = 0;
 static Env *g_global = NULL;
 
 static void exec(Node *n, Env *env);
+static void exec_inner(Node *n, Env *env);
 
 static void runtime_error(const char *msg)
 {
+    /* THE BOUNDARY. With a trap armed this unwinds to whoever armed it and the
+     * caller decides what to do; with none it exits, exactly as it always has.
+     * A kernel cannot afford the second: exit(1) there is the machine.
+     *
+     * The message is COPIED before unwinding. Several callers pass a pointer
+     * into a local buffer (see N_IDENT's "doesn't exist yet"), and that buffer
+     * is gone the moment the stack unwinds past it - so handing the caller the
+     * pointer would be a read of dead stack, which is the shape of bug that
+     * reproduces on one build and not the other. */
+    if (zi_trap_armed) {
+        zi_seterr(msg);
+        zi_trap_armed = 0;
+        zi_longjmp(zi_trap, 1);
+    }
     fflush(stdout);            /* stdout is block-buffered when redirected;
                                   without this the output that explains HOW
                                   we got here dies with the process. */
@@ -461,12 +618,12 @@ static void list_push_str(Value *list, int *cap, const char *p, int len)
 {
     if (list->nitems == *cap) {
         *cap *= 2;
-        list->items = realloc(list->items, sizeof(Value*) * (size_t)(*cap));
+        list->items = zi_realloc(list->items, sizeof(Value*) * (size_t)(*cap));
     }
-    char *buf = malloc((size_t)len + 1);
+    char *buf = zi_alloc((size_t)len + 1);
     memcpy(buf, p, (size_t)len);
     buf[len] = '\0';
-    list->items[list->nitems] = malloc(sizeof(Value));
+    list->items[list->nitems] = zi_alloc(sizeof(Value));
     Value v = make_nil(); v.type = V_STR; v.str = buf;
     *list->items[list->nitems] = v;
     list->nitems++;
@@ -513,7 +670,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (nargs < 1 || args[0].type != V_STR) runtime_error("lines needs a string");
         Value list = make_nil(); list.type = V_LIST; list.nitems = 0; list.cap = 0;
         int cap = 8;
-        list.items = malloc(sizeof(Value*) * (size_t)cap);
+        list.items = zi_alloc(sizeof(Value*) * (size_t)cap);
 
         const char *s = args[0].str, *start = s;
         while (*s) {
@@ -610,7 +767,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         int m = src.nitems;
 
         if (src.items && src.tip && *src.tip == m && m < src.cap) {
-            src.items[m] = malloc(sizeof(Value));
+            src.items[m] = zi_alloc(sizeof(Value));
             *src.items[m] = args[1];
             *src.tip = m + 1;
             src.nitems = m + 1;      /* same array, same tip, same cap */
@@ -621,11 +778,11 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         int newcap = (want > 1073741823) ? want : want * 2;
         if (newcap < 8) newcap = 8;
         Value v = make_nil(); v.type = V_LIST; v.nitems = want; v.cap = newcap;
-        v.items = malloc(sizeof(Value*) * (size_t)newcap);
+        v.items = zi_alloc(sizeof(Value*) * (size_t)newcap);
         if (m > 0) memcpy(v.items, src.items, sizeof(Value*) * (size_t)m);
-        v.items[m] = malloc(sizeof(Value));
+        v.items[m] = zi_alloc(sizeof(Value));
         *v.items[m] = args[1];
-        v.tip = malloc(sizeof(int)); *v.tip = want;
+        v.tip = zi_alloc(sizeof(int)); *v.tip = want;
         return v;
     }
 
@@ -686,8 +843,8 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (nargs < 1 || args[0].type != V_LIST) runtime_error("sort needs a list");
         int m = args[0].nitems;
         Value v = make_nil(); v.type = V_LIST; v.nitems = m; v.cap = m;
-        v.items = malloc(sizeof(Value*) * (m > 0 ? m : 1));
-        for (int i = 0; i < m; i++) { v.items[i] = malloc(sizeof(Value)); *v.items[i] = *args[0].items[i]; }
+        v.items = zi_alloc(sizeof(Value*) * (m > 0 ? m : 1));
+        for (int i = 0; i < m; i++) { v.items[i] = zi_alloc(sizeof(Value)); *v.items[i] = *args[0].items[i]; }
         for (int i = 1; i < m; i++) {           /* insertion sort */
             Value *key = v.items[i]; int j = i - 1;
             while (j >= 0 && value_compare(v.items[j], key) > 0) { v.items[j+1] = v.items[j]; j--; }
@@ -709,7 +866,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         int a = clamp_index(args[1].num, 0, L), b = clamp_index(args[2].num, 0, L);
         if (a > b) a = b;
         int m = b - a;
-        char *buf = malloc((size_t)m + 1);
+        char *buf = zi_alloc((size_t)m + 1);
         memcpy(buf, args[0].str + a, (size_t)m);
         buf[m] = '\0';
         Value v = make_nil(); v.type = V_STR; v.str = buf; return v;
@@ -729,7 +886,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (nargs < 1 || args[0].type != V_STR) runtime_error("upper/lower needs a string");
         int up = (strcmp(name, "upper") == 0);
         size_t L = strlen(args[0].str);
-        char *buf = malloc(L + 1);
+        char *buf = zi_alloc(L + 1);
         for (size_t i = 0; i < L; i++) {
             char ch = args[0].str[i];
             if (up  && ch >= 'a' && ch <= 'z') ch = (char)(ch - 32);
@@ -745,11 +902,11 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (nargs < 2 || args[0].type != V_LIST || args[1].type != V_STR)
             runtime_error("join needs a list and a separator string");
         size_t cap = 1;
-        char *out = malloc(cap); out[0] = '\0';
+        char *out = zi_alloc(cap); out[0] = '\0';
         for (int i = 0; i < args[0].nitems; i++) {
             char *part = value_to_string(*args[0].items[i]);
             cap += strlen(part) + strlen(args[1].str);
-            out = realloc(out, cap);
+            out = zi_realloc(out, cap);
             if (i) strcat(out, args[1].str);
             strcat(out, part);
             free(part);
@@ -763,7 +920,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
             runtime_error("split needs two strings");
         Value list = make_nil(); list.type = V_LIST; list.nitems = 0; list.cap = 0;
         int cap = 8;
-        list.items = malloc(sizeof(Value*) * (size_t)cap);
+        list.items = zi_alloc(sizeof(Value*) * (size_t)cap);
         const char *sep = args[1].str;
         size_t seplen = strlen(sep);
         const char *start = args[0].str;
@@ -786,7 +943,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         FILE *f = fopen(args[0].str, "rb");
         if (!f) { runtime_error("read: can't open that file"); }
         fseek(f, 0, SEEK_END); long sz = ftell(f); rewind(f);
-        char *buf = malloc((size_t)sz + 1);
+        char *buf = zi_alloc((size_t)sz + 1);
         size_t got = fread(buf, 1, (size_t)sz, f);
         buf[got] = '\0';
         fclose(f);
@@ -839,9 +996,9 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         char **names = os_dir(path, &count);
 
         Value list = make_nil(); list.type = V_LIST; list.nitems = count; list.cap = count;
-        list.items = malloc(sizeof(Value*) * (count > 0 ? count : 1));
+        list.items = zi_alloc(sizeof(Value*) * (count > 0 ? count : 1));
         for (int i = 0; i < count; i++) {
-            list.items[i] = malloc(sizeof(Value));
+            list.items[i] = zi_alloc(sizeof(Value));
             *list.items[i] = make_str(names[i]);
             free(names[i]);
         }
@@ -1018,9 +1175,9 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         char **names = os_procs(&count);
 
         Value list = make_nil(); list.type = V_LIST; list.nitems = count; list.cap = count;
-        list.items = malloc(sizeof(Value*) * (count > 0 ? count : 1));
+        list.items = zi_alloc(sizeof(Value*) * (count > 0 ? count : 1));
         for (int i = 0; i < count; i++) {
-            list.items[i] = malloc(sizeof(Value));
+            list.items[i] = zi_alloc(sizeof(Value));
             *list.items[i] = make_str(names[i]);
             free(names[i]);
         }
@@ -1130,21 +1287,21 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (dcnt > 100000000.0) runtime_error("range count is too large to build");
         int cnt = (int)dcnt;
         long long lo = cnt > 0 ? exact_i64(dlo, "range") : 0;
-        Value v = make_nil(); v.type=V_LIST; v.nitems=cnt; v.cap=cnt; v.items=malloc(sizeof(Value*)*(size_t)(cnt>0?cnt:1));
+        Value v = make_nil(); v.type=V_LIST; v.nitems=cnt; v.cap=cnt; v.items=zi_alloc(sizeof(Value*)*(size_t)(cnt>0?cnt:1));
         if (!v.items) runtime_error("out of memory building a range");
-        for (int i=0;i<cnt;i++){ v.items[i]=malloc(sizeof(Value)); *v.items[i]=make_num((double)(lo+i)); }
+        for (int i=0;i<cnt;i++){ v.items[i]=zi_alloc(sizeof(Value)); *v.items[i]=make_num((double)(lo+i)); }
         return v;
     }
     if (strcmp(name, "reverse") == 0) {
-        if (args[0].type==V_STR){ size_t L=strlen(args[0].str); char*b=malloc(L+1); for(size_t i=0;i<L;i++) b[i]=args[0].str[L-1-i]; b[L]='\0'; Value v = make_nil(); v.type=V_STR; v.str=b; return v; }
-        if (args[0].type==V_LIST){ int m=args[0].nitems; Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=malloc(sizeof(Value*)*(m>0?m:1)); for(int i=0;i<m;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=*args[0].items[m-1-i];} return v; }
+        if (args[0].type==V_STR){ size_t L=strlen(args[0].str); char*b=zi_alloc(L+1); for(size_t i=0;i<L;i++) b[i]=args[0].str[L-1-i]; b[L]='\0'; Value v = make_nil(); v.type=V_STR; v.str=b; return v; }
+        if (args[0].type==V_LIST){ int m=args[0].nitems; Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=zi_alloc(sizeof(Value*)*(m>0?m:1)); for(int i=0;i<m;i++){v.items[i]=zi_alloc(sizeof(Value)); *v.items[i]=*args[0].items[m-1-i];} return v; }
         runtime_error("reverse needs a string or list");
     }
     if (strcmp(name, "repeat") == 0) {
         if (args[0].type!=V_STR||args[1].type!=V_NUM) runtime_error("repeat needs a string and a count");
         int n=clamp_index(args[1].num, 0, 100000000); size_t L=strlen(args[0].str);
         if (L > 0 && (size_t)n > 100000000u / L) runtime_error("repeat result is too large to build");
-        char*b=malloc(L*(size_t)n+1);
+        char*b=zi_alloc(L*(size_t)n+1);
         if (!b) runtime_error("out of memory in repeat");
         for (int i=0;i<n;i++) memcpy(b+(size_t)i*L, args[0].str, L); b[L*(size_t)n]='\0';
         Value v = make_nil(); v.type=V_STR; v.str=b; return v;
@@ -1153,7 +1310,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (args[0].type!=V_STR) runtime_error("trim needs a string");
         const char*s=args[0].str; while(*s==' '||*s=='\t'||*s=='\n'||*s=='\r')s++;
         const char*e=s+strlen(s); while(e>s&&(e[-1]==' '||e[-1]=='\t'||e[-1]=='\n'||e[-1]=='\r'))e--;
-        size_t L=(size_t)(e-s); char*b=malloc(L+1); memcpy(b,s,L); b[L]='\0'; Value v = make_nil(); v.type=V_STR; v.str=b; return v;
+        size_t L=(size_t)(e-s); char*b=zi_alloc(L+1); memcpy(b,s,L); b[L]='\0'; Value v = make_nil(); v.type=V_STR; v.str=b; return v;
     }
     /* count(text, part) -> how many non-overlapping times part occurs.
      * The empty needle occurs at every position, so it occurs len+1
@@ -1177,7 +1334,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
          * the process. Clamp while it is still signed. */
         if (args[0].type!=V_STR||args[1].type!=V_NUM) runtime_error("pad needs a string and width");
         int w=clamp_index(args[1].num, 0, 100000000); size_t L=strlen(args[0].str); size_t o=((size_t)w>L)?(size_t)w:L;
-        char*b=malloc(o+1);
+        char*b=zi_alloc(o+1);
         if (!b) runtime_error("out of memory in pad");
         memcpy(b,args[0].str,L); for(size_t i=L;i<o;i++)b[i]=' '; b[o]='\0'; Value v = make_nil(); v.type=V_STR; v.str=b; return v;
     }
@@ -1186,17 +1343,17 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         const char*s=args[0].str,*o=args[1].str,*nw=args[2].str; size_t ol=strlen(o),nl=strlen(nw);
         if (ol==0) return make_str(s);
         int c=0; const char*p=s; while((p=strstr(p,o))){c++; p+=ol;}
-        size_t out=strlen(s)-(size_t)c*ol+(size_t)c*nl; char*b=malloc(out+1),*w=b; p=s; const char*q;
+        size_t out=strlen(s)-(size_t)c*ol+(size_t)c*nl; char*b=zi_alloc(out+1),*w=b; p=s; const char*q;
         while((q=strstr(p,o))){ memcpy(w,p,(size_t)(q-p)); w+=q-p; memcpy(w,nw,nl); w+=nl; p=q+ol; }
         strcpy(w,p); Value v = make_nil(); v.type=V_STR; v.str=b; return v;
     }
     if (strcmp(name, "insert") == 0) {
         if (args[0].type!=V_LIST||args[1].type!=V_NUM) runtime_error("insert needs a list, index, value");
         int m=args[0].nitems, idx=clamp_index(args[1].num, 0, m);
-        Value v = make_nil(); v.type=V_LIST; v.nitems=m+1; v.cap=m+1; v.items=malloc(sizeof(Value*)*(size_t)(m+1)); int k=0;
-        for(int i=0;i<idx;i++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
-        v.items[k]=malloc(sizeof(Value)); *v.items[k]=args[2]; k++;
-        for(int i=idx;i<m;i++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
+        Value v = make_nil(); v.type=V_LIST; v.nitems=m+1; v.cap=m+1; v.items=zi_alloc(sizeof(Value*)*(size_t)(m+1)); int k=0;
+        for(int i=0;i<idx;i++){v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
+        v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=args[2]; k++;
+        for(int i=idx;i<m;i++){v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
         return v;
     }
     if (strcmp(name, "remove") == 0) {
@@ -1204,8 +1361,8 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         int m=args[0].nitems;
         if (!(args[1].num >= 0 && args[1].num < (double)m)) runtime_error("remove index out of range");
         int idx=(int)args[1].num;
-        Value v = make_nil(); v.type=V_LIST; v.nitems=m-1; v.cap=(m-1>0)?m-1:1; v.items=malloc(sizeof(Value*)*(size_t)(m>1?m-1:1)); int k=0;
-        for(int i=0;i<m;i++){ if(i==idx)continue; v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++; }
+        Value v = make_nil(); v.type=V_LIST; v.nitems=m-1; v.cap=(m-1>0)?m-1:1; v.items=zi_alloc(sizeof(Value*)*(size_t)(m>1?m-1:1)); int k=0;
+        for(int i=0;i<m;i++){ if(i==idx)continue; v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++; }
         return v;
     }
 
@@ -1293,12 +1450,12 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (nargs<1||args[0].type!=V_STR) runtime_error("rtrim needs a string");
         const char*s=args[0].str; const char*e=s+strlen(s);
         while(e>s&&(e[-1]==' '||e[-1]=='\t'||e[-1]=='\n'||e[-1]=='\r'))e--;
-        size_t L=(size_t)(e-s); char*b=malloc(L+1); memcpy(b,s,L); b[L]='\0';
+        size_t L=(size_t)(e-s); char*b=zi_alloc(L+1); memcpy(b,s,L); b[L]='\0';
         Value v = make_nil(); v.type=V_STR; v.str=b; return v;
     }
     if (strcmp(name, "title") == 0) {  /* upper-case the first letter of each word */
         if (nargs<1||args[0].type!=V_STR) runtime_error("title needs a string");
-        size_t L=strlen(args[0].str); char*b=malloc(L+1); int at_start=1;
+        size_t L=strlen(args[0].str); char*b=zi_alloc(L+1); int at_start=1;
         for (size_t i=0;i<L;i++) {
             char ch=args[0].str[i];
             int alnum=(ch>='a'&&ch<='z')||(ch>='A'&&ch<='Z')||(ch>='0'&&ch<='9');
@@ -1309,7 +1466,7 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     }
     if (strcmp(name, "swapcase") == 0) {
         if (nargs<1||args[0].type!=V_STR) runtime_error("swapcase needs a string");
-        size_t L=strlen(args[0].str); char*b=malloc(L+1);
+        size_t L=strlen(args[0].str); char*b=zi_alloc(L+1);
         for (size_t i=0;i<L;i++) {
             char ch=args[0].str[i];
             if (ch>='a'&&ch<='z') ch=(char)(ch-32);
@@ -1329,29 +1486,29 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     if (strcmp(name, "concat") == 0) {
         if (nargs<2||args[0].type!=V_LIST||args[1].type!=V_LIST) runtime_error("concat needs two lists");
         int m=args[0].nitems+args[1].nitems;
-        Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=malloc(sizeof(Value*)*(m>0?m:1)); int k=0;
-        for(int i=0;i<args[0].nitems;i++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
-        for(int i=0;i<args[1].nitems;i++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[1].items[i]; k++;}
+        Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=zi_alloc(sizeof(Value*)*(m>0?m:1)); int k=0;
+        for(int i=0;i<args[0].nitems;i++){v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
+        for(int i=0;i<args[1].nitems;i++){v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*args[1].items[i]; k++;}
         return v;
     }
     if (strcmp(name, "fill") == 0) {
         if (nargs<2||args[0].type!=V_NUM) runtime_error("fill needs a count and a value");
         if (args[0].num > 100000000.0) runtime_error("fill count is too large to build");
         int m=clamp_index(args[0].num, 0, 100000000);
-        Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=malloc(sizeof(Value*)*(size_t)(m>0?m:1));
+        Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=zi_alloc(sizeof(Value*)*(size_t)(m>0?m:1));
         if (!v.items) runtime_error("out of memory in fill");
-        for(int i=0;i<m;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=args[1];}
+        for(int i=0;i<m;i++){v.items[i]=zi_alloc(sizeof(Value)); *v.items[i]=args[1];}
         return v;
     }
     if (strcmp(name, "flat") == 0) {   /* flattens ONE level */
         if (nargs<1||args[0].type!=V_LIST) runtime_error("flat needs a list");
         int m=0;
         for(int i=0;i<args[0].nitems;i++) m += (args[0].items[i]->type==V_LIST) ? args[0].items[i]->nitems : 1;
-        Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=malloc(sizeof(Value*)*(m>0?m:1)); int k=0;
+        Value v = make_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=zi_alloc(sizeof(Value*)*(m>0?m:1)); int k=0;
         for(int i=0;i<args[0].nitems;i++){
             Value *it=args[0].items[i];
-            if (it->type==V_LIST) { for(int j=0;j<it->nitems;j++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*it->items[j]; k++;} }
-            else { v.items[k]=malloc(sizeof(Value)); *v.items[k]=*it; k++; }
+            if (it->type==V_LIST) { for(int j=0;j<it->nitems;j++){v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*it->items[j]; k++;} }
+            else { v.items[k]=zi_alloc(sizeof(Value)); *v.items[k]=*it; k++; }
         }
         return v;
     }
@@ -1362,15 +1519,15 @@ static Value call_builtin(const char *name, Value *args, int nargs)
     if (strcmp(name, "take") == 0) {
         if (nargs<2||args[0].type!=V_LIST||args[1].type!=V_NUM) runtime_error("take needs a list and a number");
         int m=args[0].nitems, n=clamp_index(args[1].num, 0, m);
-        Value v = make_nil(); v.type=V_LIST; v.nitems=n; v.cap=n; v.items=malloc(sizeof(Value*)*(n>0?n:1));
-        for(int i=0;i<n;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=*args[0].items[i];}
+        Value v = make_nil(); v.type=V_LIST; v.nitems=n; v.cap=n; v.items=zi_alloc(sizeof(Value*)*(n>0?n:1));
+        for(int i=0;i<n;i++){v.items[i]=zi_alloc(sizeof(Value)); *v.items[i]=*args[0].items[i];}
         return v;
     }
     if (strcmp(name, "drop") == 0) {
         if (nargs<2||args[0].type!=V_LIST||args[1].type!=V_NUM) runtime_error("drop needs a list and a number");
         int m=args[0].nitems, n=clamp_index(args[1].num, 0, m); int c=m-n;
-        Value v = make_nil(); v.type=V_LIST; v.nitems=c; v.cap=c; v.items=malloc(sizeof(Value*)*(c>0?c:1));
-        for(int i=0;i<c;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=*args[0].items[n+i];}
+        Value v = make_nil(); v.type=V_LIST; v.nitems=c; v.cap=c; v.items=zi_alloc(sizeof(Value*)*(c>0?c:1));
+        for(int i=0;i<c;i++){v.items[i]=zi_alloc(sizeof(Value)); *v.items[i]=*args[0].items[n+i];}
         return v;
     }
 
@@ -1403,16 +1560,16 @@ static Value eval_plus(Value l, Value r)
 
     if (l.type == V_LIST && r.type == V_LIST) {
         Value v = make_nil(); v.type = V_LIST; v.nitems = l.nitems + r.nitems; v.cap = v.nitems;
-        v.items = malloc(sizeof(Value*) * (v.nitems > 0 ? v.nitems : 1));
+        v.items = zi_alloc(sizeof(Value*) * (v.nitems > 0 ? v.nitems : 1));
         int k = 0;
-        for (int i = 0; i < l.nitems; i++) { v.items[k] = malloc(sizeof(Value)); *v.items[k] = *l.items[i]; k++; }
-        for (int i = 0; i < r.nitems; i++) { v.items[k] = malloc(sizeof(Value)); *v.items[k] = *r.items[i]; k++; }
+        for (int i = 0; i < l.nitems; i++) { v.items[k] = zi_alloc(sizeof(Value)); *v.items[k] = *l.items[i]; k++; }
+        for (int i = 0; i < r.nitems; i++) { v.items[k] = zi_alloc(sizeof(Value)); *v.items[k] = *r.items[i]; k++; }
         return v;
     }
 
     char *ls = value_to_string(l);
     char *rs = value_to_string(r);
-    char *out = malloc(strlen(ls) + strlen(rs) + 1);
+    char *out = zi_alloc(strlen(ls) + strlen(rs) + 1);
     strcpy(out, ls); strcat(out, rs);
     Value v = make_nil(); v.type = V_STR; v.str = out;
     free(ls); free(rs);
@@ -1622,7 +1779,7 @@ static Value eval_call(Node *n, Env *env)
 {
     /* evaluate the arguments first */
     int nargs = n->nkids;
-    Value *args = malloc(sizeof(Value) * (nargs > 0 ? nargs : 1));
+    Value *args = zi_alloc(sizeof(Value) * (nargs > 0 ? nargs : 1));
     for (int i = 0; i < nargs; i++) args[i] = eval(n->kids[i], env);
 
     /* case 1: callee is a plain name */
@@ -1667,7 +1824,76 @@ static Value eval_call(Node *n, Env *env)
     return make_nil();
 }
 
+/* ---- the two places every step of a program passes through ---------------
+ * eval() is every expression, exec() is every statement, and a zl program
+ * cannot do ANYTHING without going through one of them - a loop body, a
+ * function call, an operand, all of it. So the budget needs exactly two check
+ * sites, not a sprinkling of them, and there is no path around it.
+ *
+ * The wrapper pair exists so that depth is decremented on the way out along
+ * EVERY return path. eval_inner has a dozen returns in a switch; putting a
+ * decrement before each was the alternative and it is one edit away from a
+ * permanent leak that only shows up as a spurious "too deep" ten thousand
+ * calls later.
+ *
+ * The unwind is the exception, and it is deliberate: runtime_error longjmps
+ * straight past these frames, so zi_depth is left high. It does not matter and
+ * must not be "fixed" with a cleanup - the trap catcher is the only code that
+ * runs afterwards and zi_limit() resets the counters before anything runs
+ * again. A cleanup here would be code that only ever executes while unwinding,
+ * i.e. code no test can reach. */
+/* Debit the budget by more than one step. Same kill as zi_step's, so a program
+ * cannot escape by doing its work in one enormous allocation instead of many
+ * small statements. Saturating rather than wrapping: a request big enough to
+ * overflow the counter must exhaust the budget, never lap it. */
+static void zi_charge(long long units)
+{
+    if (units < 1) units = 1;
+    zi_steps_used += units;
+    if (!zi_steps_left) return;
+    if (units >= zi_steps_left) {
+        zi_steps_left = 0;
+        zi_killed = 1;
+        runtime_error("step budget exhausted - the program was stopped");
+    }
+    zi_steps_left -= units;
+}
+
+static void zi_step(void)
+{
+    if (zi_steps_left) {
+        if (--zi_steps_left <= 0) {
+            zi_killed = 1;
+            runtime_error("step budget exhausted - the program was stopped");
+        }
+    }
+    zi_steps_used++;
+    if (zi_depth > zi_depth_peak) zi_depth_peak = zi_depth;
+    if (zi_depth_max && zi_depth >= zi_depth_max) {
+        zi_killed = 1;
+        runtime_error("too deeply nested - the program was stopped");
+    }
+}
+
 static Value eval(Node *n, Env *env)
+{
+    Value v;
+    zi_step();
+    zi_depth++;
+    v = eval_inner(n, env);
+    zi_depth--;
+    return v;
+}
+
+static void exec(Node *n, Env *env)
+{
+    zi_step();
+    zi_depth++;
+    exec_inner(n, env);
+    zi_depth--;
+}
+
+static Value eval_inner(Node *n, Env *env)
 {
     switch (n->type) {
         case N_NUMBER: return make_num(atof(n->text));
@@ -1686,9 +1912,9 @@ static Value eval(Node *n, Env *env)
 
         case N_LIST: {
             Value v = make_nil(); v.type = V_LIST; v.nitems = n->nkids; v.cap = n->nkids;
-            v.items = malloc(sizeof(Value*) * (n->nkids > 0 ? n->nkids : 1));
+            v.items = zi_alloc(sizeof(Value*) * (n->nkids > 0 ? n->nkids : 1));
             for (int i = 0; i < n->nkids; i++) {
-                v.items[i] = malloc(sizeof(Value));
+                v.items[i] = zi_alloc(sizeof(Value));
                 *v.items[i] = eval(n->kids[i], env);
             }
             return v;
@@ -1775,7 +2001,7 @@ static void exec_block(Node *block, Env *env)
     }
 }
 
-static void exec(Node *n, Env *env)
+static void exec_inner(Node *n, Env *env)
 {
     switch (n->type) {
         case N_EXPRSTMT:
@@ -1878,23 +2104,90 @@ static void exec(Node *n, Env *env)
  * MAIN
  * ============================================================= */
 
-int main(int argc, char **argv)
-{
-    if (argc < 2) {
-        fprintf(stderr, "usage: interp <file>\n");
-        return 1;
-    }
+/* ---- running a program, with a way out -----------------------------------
+ * The entry point the kernel needs and the one main() now uses, so the path a
+ * gate exercises is the path that ships rather than a parallel one written for
+ * testing.
+ *
+ * Everything that makes this safe is here rather than at the call sites:
+ *
+ *   - THE CONTROL-FLOW FLAGS ARE RESET FIRST. g_returning / g_breaking /
+ *     g_continuing are globals, and a program killed mid-loop leaves whichever
+ *     one it was carrying set. The next program then returns from its first
+ *     statement, for no visible reason, and the bug looks like it is in the
+ *     second program. Nothing resets these today because nothing has ever run
+ *     two programs in one process - the kernel will run one per `run`.
+ *
+ *   - THE TRAP IS ARMED AFTER setjmp AND DISARMED ON EVERY EXIT. Armed before,
+ *     and a longjmp taken during setup would jump into a frame that is not yet
+ *     valid. Left armed on the way out, and the NEXT runtime_error - possibly
+ *     from a completely different subsystem - would unwind into a dead frame.
+ *
+ *   - NOTHING LOCAL IS READ AFTER THE UNWIND. Locals modified between setjmp
+ *     and longjmp are indeterminate afterwards unless volatile, so the return
+ *     path reads only the zi_* globals. That is not pedantry: it is UB that
+ *     works at -O0 and breaks at -O2, which is the optimisation level the
+ *     kernel builds at.
+ */
+#define ZI_OK      0
+#define ZI_ERROR   1     /* the program did something illegal - trap caught it */
+#define ZI_KILLED  2     /* the budget or the depth cap stopped it             */
 
-    int    count;
-    Token *tokens  = lex_file(argv[1], &count);
-    Node  *program = parse(tokens, count);
+int zl_run_program(Node *program, long long steps, int max_depth)
+{
+    zi_limit(steps, max_depth);
+
+    g_returning = 0;
+    g_breaking  = 0;
+    g_continuing = 0;
 
     Env *global = env_new(NULL);
     g_global = global;                 /* functions scope off this */
+
+    if (zi_setjmp(zi_trap) != 0)
+        return zi_killed ? ZI_KILLED : ZI_ERROR;
+
+    zi_trap_armed = 1;
     for (int i = 0; i < program->nkids; i++) {
         exec(program->kids[i], global);
         if (g_returning) break;
     }
+    zi_trap_armed = 0;
+    return ZI_OK;
+}
 
+int main(int argc, char **argv)
+{
+    if (argc < 2) {
+        fprintf(stderr, "usage: interp [--steps N] [--depth N] <file>\n");
+        return 1;
+    }
+
+    /* Unlimited unless asked otherwise, which is what this interpreter has
+     * always been. The flags exist so the kill path can be driven from a gate
+     * without a kernel - see kernel/hosttest/killtest.sh. */
+    long long steps = 0;
+    int depth = 0, argi = 1;
+    while (argi < argc - 1) {
+        if (strcmp(argv[argi], "--steps") == 0 && argi + 1 < argc) {
+            steps = atoll(argv[++argi]); argi++;
+        } else if (strcmp(argv[argi], "--depth") == 0 && argi + 1 < argc) {
+            depth = atoi(argv[++argi]); argi++;
+        } else break;
+    }
+
+    int    count;
+    Token *tokens  = lex_file(argv[argi], &count);
+    Node  *program = parse(tokens, count);
+
+    int r = zl_run_program(program, steps, depth);
+    if (r != ZI_OK) {
+        fflush(stdout);
+        fprintf(stderr, "%s: %s\n",
+                r == ZI_KILLED ? "stopped" : "runtime error", zi_error());
+        fprintf(stderr, "  steps used %lld, peak depth %d\n",
+                zi_used(), zi_peak_depth());
+        return r == ZI_KILLED ? 2 : 1;
+    }
     return 0;
 }
