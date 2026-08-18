@@ -158,6 +158,14 @@ unsigned cpu_tsc_khz(void) { return 0; }
 /* Hardware this harness does not fake. ser_rx answers -1 ("no UART"),
  * never 0, which would be a NUL byte and therefore a keystroke. */
 int xhci_ptr_poll(void) { return 0; }
+int xhci_poll(int max)   { (void)max; return 0; }  /* the one ring drainer */
+/* When this harness has a USB pointer at all, what it supplies is an
+ * ABSOLUTE position - so it is a tablet, and it must say so. input.c no
+ * longer infers "absolute" from "a USB pointer exists", because that is
+ * exactly what sent every relative usb-mouse down the tablet branch. */
+int xhci_ptr_abs(void)   { return 1; }
+int xhci_ptr_take_dx(void) { return 0; }
+int xhci_ptr_take_dy(void) { return 0; }
 int xhci_key_event(void) { return 0; }
 int xhci_kbd_mods(void) { return 0; }
 int idt_mouse_wheel(void) { return 0; }

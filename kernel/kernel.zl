@@ -1600,10 +1600,31 @@ fn run_command(cmd, arg) {
         color(C_GREY)
         print("    every key press, release and character, with modifiers.")
         print("    try caps lock, ctrl, shift, arrows, and holding a key.")
+        print("    MOVE THE MOUSE too - the pointer rate is printed once a")
+        print("    second, and that number is the pointer's speed ceiling:")
+        print("    a USB mouse sends at most 127 counts per report.")
         print("    ESC ends.")
         print("")
         iestop = ticks() + 3000
+        # The drain rate, measured in the guest rather than inferred from a
+        # bench. ptr_reports counts every report xhci.c decoded; the difference
+        # over one second IS the rate, and reports/s * 127 is the fastest the
+        # pointer can possibly travel. It read 1 per frame before the event
+        # ring got a single owner - see docs/POINTER-EVIDENCE.md.
+        ptrbase = ptr_reports()
+        ptrnext = ticks() + 100
         while ticks() < iestop {
+            if ticks() >= ptrnext {
+                ptrnow = ptr_reports()
+                color(C_CYAN)
+                put("    pointer ")  put(ptrnow - ptrbase)
+                put(" reports/s  ->  ceiling ")  put((ptrnow - ptrbase) * 127)
+                put(" px/s   events ")  put(ptr_events())
+                print("")
+                color(C_GREY)
+                ptrbase = ptrnow
+                ptrnext = ticks() + 100
+            }
             iet = in_next()
             if iet != 0 {
                 iec = in_code()
