@@ -21,6 +21,7 @@ int  vga_get_col(void);
 
 /* fb.c - the UEFI framebuffer */
 int  fb_active(void);
+unsigned long fb_phys(void);
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp);
 void fb_clear(void);
@@ -90,6 +91,14 @@ int console_cols(void) { return fb_active() ? fb_get_cols() : 80; }
 int console_cell_w(void) { return fb_active() ? fb_cell_w() : 8; }
 int console_cell_h(void) { return fb_active() ? fb_cell_h() : 16; }
 int console_rows(void) { return fb_active() ? fb_get_rows() : 25; }
+
+/* WHERE VIDEO MEMORY ACTUALLY IS. The `m` command pokes a byte into it and
+ * reads it back, which is a real proof that we own the display - but only if
+ * it pokes the right memory. Poking 0xB8000 unconditionally read back 255 on
+ * the desktop, because in a framebuffer mode nothing decodes the VGA text
+ * buffer and the write went nowhere. So whichever console is up answers with
+ * its own memory: the linear framebuffer, or the text buffer at 0xB8000. */
+unsigned long console_vram(void) { return fb_active() ? fb_phys() : 0xB8000UL; }
 
 /* Which loader booted us. GRUB always passes a non-null multiboot info
  * pointer; our own raw_boot.asm hands over with ebx = 0. So a null mb_addr
@@ -218,8 +227,30 @@ void console_clear(void)                 { if (fb_active()) fb_clear(); else vga
  * nothing changed, and only ever copies the rectangle that actually moved. */
 void console_present(void) { if (fb_active()) fb_present(); }
 
+/* WHO OWNS THE SCREEN. Off by default: the console owns it, as it has since
+ * the kernel was written. The compositor turns it on for the duration of a
+ * session, because the two of them cannot both paint.
+ *
+ * The console draws at ITS OWN cursor inside ITS OWN text region, and that
+ * region is set once at boot from the static desktop's terminal frame. Under
+ * the compositor the shell lives in a wm_open window somewhere else entirely,
+ * so every character printed by a command running inside that window landed as
+ * an opaque glyph on the wallpaper, at coordinates from a layout that is no
+ * longer on screen - plus an fb_present() per line, fighting wm_frame for the
+ * blit.
+ *
+ * This mutes the PIXELS only. zl_putc still tees to term.c's scrollback and
+ * still writes the serial port, so the compositor has something to repaint the
+ * shell FROM and the headless gates see exactly what they saw before. That
+ * separation is the whole reason the three sinks in zl_putc are three calls. */
+static int quiet;
+
+void console_quiet(int on) { quiet = on ? 1 : 0; }
+int  console_is_quiet(void) { return quiet; }
+
 void console_putc(char c)
 {
+    if (quiet) return;
     if (!fb_active()) { vga_putc(c); return; }
     fb_putc(c, log_top, log_bot);
     /* flush a line at a time so the boot log still streams live, without

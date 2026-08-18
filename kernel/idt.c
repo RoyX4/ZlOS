@@ -100,10 +100,35 @@ static void irq_done(int irq)
 static volatile int mouse_x = 400, mouse_y = 300, mouse_btn = 0;
 static volatile u8  mpkt[3];
 static volatile int mphase = 0;
+static volatile int mouse_irqs = 0;
+
+/* The clamp the ISR applies. It used to be the literals 2000 and 1500, chosen
+ * to be "generous" because this file has no idea how big the screen is - and
+ * the cost of that was a pointer that could be driven a long way off a
+ * 1280x800 panel and then take a long drag back to reappear. fb_setup knows
+ * the real mode, so it tells us; until it does, the old literals stand and
+ * behave exactly as before. */
+static volatile int mouse_max_x = 2000, mouse_max_y = 1500;
 
 int idt_mouse_x(void)   { return mouse_x; }
 int idt_mouse_y(void)   { return mouse_y; }
 int idt_mouse_btn(void) { return mouse_btn; }
+
+/* How many IRQ12s have arrived. A pointer that does not move is ambiguous -
+ * no hand on the mouse, or no interrupts at all - and this is what tells the
+ * two apart from zl without a logic analyser. */
+unsigned idt_mouse_irqs(void) { return (unsigned)mouse_irqs; }
+
+void idt_set_pointer_bounds(int w, int h)
+{
+    if (w > 1) mouse_max_x = w - 1;
+    if (h > 1) mouse_max_y = h - 1;
+    /* A mode change can leave the pointer outside the new screen, where it is
+     * invisible and every clamp keeps it there. Pull it back in now rather
+     * than waiting for a move that reaches the edge. */
+    if (mouse_x > mouse_max_x) mouse_x = mouse_max_x;
+    if (mouse_y > mouse_max_y) mouse_y = mouse_max_y;
+}
 
 /* ---- the handlers ---------------------------------------------------- */
 #ifdef ZL_64
@@ -145,6 +170,7 @@ __attribute__((interrupt))
 static void mouse_isr(struct interrupt_frame *f)
 {
     (void)f;
+    mouse_irqs++;
     u8 status = zl_inb(0x64);
     if (status & 0x20) {                       /* bit 5: byte is from the mouse */
         u8 b = zl_inb(0x60);
@@ -163,8 +189,8 @@ static void mouse_isr(struct interrupt_frame *f)
                     mouse_y -= dy;
                     if (mouse_x < 0) mouse_x = 0;
                     if (mouse_y < 0) mouse_y = 0;
-                    if (mouse_x > 2000) mouse_x = 2000;
-                    if (mouse_y > 1500) mouse_y = 1500;
+                    if (mouse_x > mouse_max_x) mouse_x = mouse_max_x;
+                    if (mouse_y > mouse_max_y) mouse_y = mouse_max_y;
                     mouse_btn = flags & 0x07;
                 }
             }
