@@ -387,7 +387,18 @@ measured 2026-08-17. Short version:
     if you just want the network stack unblocked now.
   - Still true: **USB tethering or a USB NIC** is the shortest path to packets,
     and `xhci.c:1709 configure_bulk()` is why.
-- **A browser** — `feature-catalogue.md` says don't; **that call was wrong as
+- **A browser** — **BUILT, and the estimate below was wrong in both directions.**
+  It fetches `http://example.com/` by name off the real internet and renders it.
+  ~4,657 lines across `browser.c html.c layout.c http.c tcp.c net.c dns.c
+  virtio_net.c`, all in `SOURCES`, all gated. Not ~13,200 + ~10k — and **the
+  gate was not a heap**: there is none, and no design constraint was relaxed to
+  get here. `kernel/docs/browser-status.md` is the measured account, including
+  what it refuses (HTTPS, JavaScript, CSS beyond the built-in stylesheet) and
+  the two regressions the merge cost it. The reasoning below was right that
+  "unbounded" describes a Chrome-compatible browser and not a document one;
+  it was wrong about the price and about the blocker.
+  *Original text, kept because the shape of the error is the reusable part:*
+  `feature-catalogue.md` says don't; **that call was wrong as
   stated** and `beyond-the-kernel.md` §2b supersedes it. "Unbounded" is true of
   a Chrome-compatible browser, not of a *document* browser — Dillo, NetSurf and
   w3m have shipped that for decades. A document browser (HTML+CSS, no JS) is
@@ -568,7 +579,14 @@ inverts that. Designed 2026-08-17:
   organised by subsystem with a zlOS have/partial/none column.** 16 categories,
   from kernels to clipboard. Ends with a ranked shortlist of what is actually
   worth taking, and an explicit list of what is not (microkernels, capability
-  security, filesystems, browsers — each needs a heap or processes).
+  security, attribute-indexed filesystems).
+  **That list used to name filesystems, network stacks and browsers too, on the
+  grounds that "each needs a heap or processes". All three shipped, and none of
+  them needed either** — `fs.c`, `net.c`/`tcp.c`/`dns.c`/`http.c` and
+  `browser.c` use the same static arenas as the rest of the kernel. The
+  premise was never tested against an attempt. The rows are corrected in
+  `docs/feature-catalogue.md` §12 and §"Why a browser is in a category of its
+  own"; `kernel/docs/browser-status.md` is the measured account.
   Top of the shortlist is still **the clip rectangle**, which now has *three*
   customers: compositor, toolkit, and the 3D rasterizer.
 - `docs/os-landscape.md` — survey of ~13 hobby OSes, written for the **3D goal**.
