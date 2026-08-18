@@ -11,6 +11,10 @@ Boots three ways with no GRUB: BIOS multiboot, our own 512-byte bootloader
 **The point of the project is the Intel display driver — the DPLL and a
 cold-start modeset.** The laptop is a test PC. Optimise for that.
 
+Where the firmware boundary actually sits, what a BIOS does that this kernel
+already does for itself, and the two walls (an Intel DRAM-training blob, and
+Boot Guard fused *on* on this laptop — measured): [`docs/what-is-a-bios.md`](docs/what-is-a-bios.md).
+
 ## The development loop that matters
 
 `kernel/hosttest/` compiles **the same `intel.c` that ships in the kernel** as a
