@@ -602,15 +602,34 @@ void wm_repaint(void)
             int win = zorder[i];
             struct win *W = &wins[win];
             int cx, cy, cw, ch;
-            if (!isect(W->x, W->y, W->x + W->w, W->y + W->h,
-                       rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
-                /* the shadow reaches outside the frame, so a window can still
-                 * owe this rectangle something even when the frame misses it */
-                int reach = shadow_reach(win);
-                if (!isect(W->x - reach, W->y - reach,
-                           W->x + W->w + reach, W->y + W->h + reach,
-                           rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) continue;
-            }
+            /* THE FRAME PLUS ITS SHADOW REACH, always - not the frame with the
+             * reach as a fallback.
+             *
+             * This used to intersect the FRAME first and only expand by the
+             * reach when the frame missed the damage rect entirely. Whenever
+             * the frame did hit - which is every settled window in every
+             * ordinary repaint - the scissor handed to fb_clip was the frame
+             * alone, while the comment below claimed it was frame + shadow.
+             * chrome() then called fb_shadow, which paints from x+off-soft to
+             * x+off+w+soft, so at ui scale 2 the whole visible band lay
+             * outside the scissor: every shadow pixel computed and discarded.
+             *
+             * The result was a total loss of the elevation scheme - modal,
+             * focused and unfocused all rendered identically shadowless - and
+             * it hid because it just looked like shadows had never been
+             * designed. It survived transiently during the open animation,
+             * where anim_rect shrinks the drawn frame far enough inside the
+             * settled one that the band fits, and was then erased by the
+             * wallpaper pass. It also made fb_shadow, the single most
+             * expensive call in a window redraw at 4.3 ms of 5.1 ms, into the
+             * most expensive wasted work in the compositor.
+             *
+             * Expanding by reach >= 0 gives a strict superset of the frame, so
+             * the two tests collapse into this one. */
+            int reach = shadow_reach(win);
+            if (!isect(W->x - reach, W->y - reach,
+                       W->x + W->w + reach, W->y + W->h + reach,
+                       rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) continue;
             fb_clip(cx, cy, cw, ch);            /* clip 1: the frame + shadow */
             chrome(win, win == focus_win);
 

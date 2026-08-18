@@ -576,6 +576,45 @@ int main(void)
     ok("a focus change leaves no shadow edge behind",
        all_wallpaper(200 - 60, 200 - 60, 200 + 300 + 60, 200 + 200 + 60));
 
+    /* ------------------------------------------------------------- shadow */
+    /* THE ELEVATION SCHEME MUST REACH THE SCREEN.
+     *
+     * Found by the Item 5 bug hunt. wm_repaint intersects the damage rect with
+     * the window's FRAME first, and only falls back to the reach-expanded rect
+     * when the frame misses entirely - then hands the frame-only result to
+     * fb_clip under a comment reading "clip 1: the frame + shadow". chrome()
+     * calls fb_shadow, which paints from x+off-soft to x+off+w+soft, so at
+     * ui scale 2 (off 16, soft 12) the entire visible band lies outside that
+     * scissor and every shadow pixel is computed and then discarded.
+     *
+     * Nothing catches it by eye, because it only LOOKS like the shadows were
+     * never designed. It survives transiently during the 4-frame open
+     * animation - anim_rect shrinks the drawn frame far enough inside the
+     * settled one that the band briefly fits - and is then erased by the
+     * wallpaper pass and never comes back.
+     *
+     * The probe sits 10 px right of the frame's right edge, vertically
+     * centred. fb_shadow offsets the footprint by +off, so that pixel has
+     * chebyshev distance 0 and takes the full 62% darkening. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    pointer(20, 20, 0);                 /* cursor sprite well clear of the probe */
+    wm_damage(0, 0, W, H);
+    frame();
+    int sh = wm_open(7, "shadow", 300, 300, 400, 250);
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();   /* let the open animation settle */
+    wm_damage(0, 0, W, H);
+    frame();
+    ok("a SETTLED window draws its drop shadow at all",
+       fb_get_px(710, 425) != WALL);
+    /* WALL 0x203040 at 38% brightness: 0x20*38/100=0x0C, 0x30->0x12, 0x40->0x18 */
+    ok("...at full strength, 10 px outside the frame",
+       fb_get_px(710, 425) == 0x000C1218u);
+    /* ...and it must still stop at the rim rather than darkening the desktop */
+    ok("...and stops at the shadow's outer rim",
+       fb_get_px(300 + 400 + 40, 425) == WALL);
+    wm_close(sh);
+    frame();
+
     /* ------------------------------------------------------------- cursor */
     /* The pointer is the one thing the eye follows constantly, and every one
      * of its failure modes is invisible in a still: a halo left behind is only
