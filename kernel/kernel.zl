@@ -3581,6 +3581,22 @@ fn wm_boot_start() {
     wall_save()
     blurfree()                 # the strip is inside the wallpaper now
     dock_blur = 0 - 1
+    # SAY THAT THE COMPOSITOR STARTED, on the serial line, from the BOOT path.
+    #
+    # con_mute mutes only the pixels, so this reaches a headless gate and lets
+    # it tell "the compositor is up with windows in it" from "it never got
+    # there" - which are otherwise the same silence. verify-iso.sh greps for
+    # exactly this and desktop/apps-in-windows is where that check came from.
+    #
+    # It used to live only in wm_session(), which is the `w` command. That was
+    # enough on apps-in-windows, whose boot path WAS wm_session(); it is not
+    # enough here, where wm_boot_start() opens the windows and the frame loop
+    # runs directly. Same marker, emitted where the windows actually appear.
+    color(C_GREEN)  put("  compositor: ")
+    color(C_GREY)   put(wm_n())  put(" windows, shell client ")
+    put(wm_cx(shell_win))  put(",")  put(wm_cy(shell_win))  put(" ")
+    put(wm_cw(shell_win))  put("x")  print(wm_ch(shell_win))
+
     return 1
 }
 

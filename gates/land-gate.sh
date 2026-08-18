@@ -54,13 +54,32 @@ run "hosttest build"   "$WT/kernel/hosttest" ./build.sh
 # --- the reverse SOURCES check: a .c present but not listed is silently not compiled
 if [ -f "$WT/kernel/SOURCES" ]; then
   echo; echo "=== reverse SOURCES sweep ==="
-  miss=0
+  # SOURCES proves every listed file is compiled. This proves the reverse: that
+  # a .c sitting in kernel/ is not silently absent from the build. Three
+  # outcomes, and only one of them is a failure.
+  miss=0; hostonly=0; dead=0
   for f in "$WT"/kernel/*.c; do
     b=$(basename "$f")
+    # compiled outside the SOURCES loop by every target, deliberately
     case "$b" in _gen*.c|gdt.c|gdt64.c|efi.c|out.c) continue;; esac
-    grep -qx "$b" "$WT/kernel/SOURCES" || { echo "NOT IN SOURCES: $b"; miss=$((miss+1)); }
+    grep -qx "$b" "$WT/kernel/SOURCES" && continue
+    if grep -q "$b" "$WT/kernel/hosttest/build.sh" 2>/dev/null; then
+      # host-only: a harness compiles it, the kernel does not. Correct.
+      echo "host-only (not in the kernel): $b"; hostonly=$((hostonly+1))
+    elif grep -rqs -- "${b%.c}" "$WT"/kernel/*.c "$WT"/kernel/*.h --exclude="$b"; then
+      # something references it but SOURCES does not list it - this is the
+      # silent-drop this whole check exists for
+      echo "NOT IN SOURCES: $b"; miss=$((miss+1))
+    else
+      # referenced by nothing at all. Not a build failure; dead weight.
+      echo "dead (referenced by nothing): $b"; dead=$((dead+1))
+    fi
   done
-  [ $miss -gt 0 ] && FAIL=$((FAIL+1)) && echo ">>> FAIL (reverse SOURCES: $miss)" || echo ">>> ok (reverse SOURCES)"
+  if [ $miss -gt 0 ]; then
+    FAIL=$((FAIL+1)); echo ">>> FAIL (reverse SOURCES: $miss silently uncompiled)"
+  else
+    echo ">>> ok (reverse SOURCES; $hostonly host-only, $dead dead)"
+  fi
 fi
 
 # --- boot gates: QEMU under TCG, one at a time, guarded
