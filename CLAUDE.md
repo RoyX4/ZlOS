@@ -13,6 +13,11 @@ tracks: the real shared base (`d61a481`, not `44346d6`), the landmines that
 merge clean and then fail, and the landing order. Read it before merging
 anything or starting a ninth track.
 
+`kernel/docs/POINTER-PROMPT.md` is the CURRENT WORK: the pointer is
+visibly broken after the eleven-track merge, the lead suspect is measured
+(two drainers of one xHCI event ring), and a full-tree bug audit follows it.
+Read it before touching input, xhci or wm.
+
 `kernel/HANDOFF.md` is the orientation doc and it is kept honest — it records what
 is *verified* rather than what is intended. Read it before touching `kernel/`.
 
