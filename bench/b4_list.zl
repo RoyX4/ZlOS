@@ -1,0 +1,18 @@
+# b4_list - allocation-heavy. Guards against a Value-layout regression.
+total = 0
+r = 0
+while r < 2000 {
+    xs = []
+    i = 0
+    while i < 500 {
+        xs = push(xs, i * 3)
+        i = i + 1
+    }
+    j = 0
+    while j < 500 {
+        total = total + xs[j]
+        j = j + 1
+    }
+    r = r + 1
+}
+print(total)

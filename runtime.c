@@ -330,43 +330,95 @@ static Value binop_plus(Value l, Value r)
     return v;
 }
 
+/* zl_binop - THE dispatcher every compiled zl program runs its arithmetic
+ * through. `a + (b - a) * t / 255` is four calls to this function, so its cost
+ * is the floor under every compiled zl program's arithmetic.
+ *
+ * THE SIGNATURE DOES NOT CHANGE, deliberately. compile.c:305 emits the
+ * operator as a C string literal (`emit_c_string(out, n->text)`), and
+ * compiler.zl:487 builds the same call by concatenation. Keeping
+ * `const char *op` means no caller, no already-generated .c, and no line of
+ * the self-hosted compiler has to change for this - which is what makes it
+ * safe to do before the type system exists.
+ *
+ * WHY A SWITCH AND NOT A LADDER. This was 15 strcmp calls in source order, so
+ * `<=` - the loop test in every `while i < n` - paid twelve of them before
+ * matching. op[0] alone separates every operator the parser can produce:
+ *
+ *     * / % + -            parser.c:419,427   (parse_mul, parse_add)
+ *     == != >= <= > <      parser.c:434       (parse_cmp)
+ *     and or               parser.c:506,521   (parsed separately)
+ *
+ * `in` never arrives here - compile.c:296 routes it to zl_in() because it
+ * picks contains()/has() by the runtime type of its right operand. Only op[1]
+ * is ever needed, and only to split `>`/`>=` and `<`/`<=`.
+ *
+ * THE TWO-PHASE SHAPE IS LOAD-BEARING - do not merge the switches. The first
+ * group runs BEFORE the number check because those five accept any type:
+ * `"a" == "a"` is legal and `"a" > "b"` is not, and tests/test_syntax.zl
+ * locks that asymmetry along with the three-way `+` (num+num, list+list,
+ * otherwise stringify-and-join). Hoisting the number check above them would
+ * turn a legal string comparison into a runtime error.
+ */
 Value zl_binop(const char *op, Value l, Value r)
 {
-    if (strcmp(op, "+") == 0)  return binop_plus(l, r);
-    if (strcmp(op, "==") == 0) return zl_bool(values_equal(l, r));
-    if (strcmp(op, "!=") == 0) return zl_bool(!values_equal(l, r));
-    if (strcmp(op, "and") == 0) return zl_bool(zl_truthy(l) && zl_truthy(r));
-    if (strcmp(op, "or") == 0)  return zl_bool(zl_truthy(l) || zl_truthy(r));
+    /* Phase 1: operators that accept ANY value type. */
+    switch (op[0]) {
+    case '+': return binop_plus(l, r);
+    case '=': if (op[1] == '=') return zl_bool(values_equal(l, r));  break;
+    case '!': if (op[1] == '=') return zl_bool(!values_equal(l, r)); break;
+    /* `and`/`or` are the only word operators, and they are rare here:
+     * compile.c:287 short-circuits them into C's own && and || rather than
+     * calling this at all, because a function call evaluates both arguments.
+     * They still arrive from other front-ends, so the strcmp stays - one
+     * comparison on a cold path, after op[0] has already narrowed it to one
+     * candidate. */
+    case 'a': if (strcmp(op, "and") == 0) return zl_bool(zl_truthy(l) && zl_truthy(r)); break;
+    case 'o': if (strcmp(op, "or")  == 0) return zl_bool(zl_truthy(l) || zl_truthy(r)); break;
+    default:  break;
+    }
 
     if (l.type != V_NUM || r.type != V_NUM) rt_error("this operator needs numbers");
     double a = l.num, b = r.num;
-    if (strcmp(op, "-") == 0)  return zl_num(a - b);
-    if (strcmp(op, "*") == 0)  return zl_num(a * b);
-    if (strcmp(op, "/") == 0)  return zl_num(a / b);
+
+    /* Phase 2: numbers only. */
+    switch (op[0]) {
+    case '-': return zl_num(a - b);
+    case '*': return zl_num(a * b);
+    case '/': return zl_num(a / b);
     /* % traps on two divisors, identical to interp.c's copy - see the
      * long comment there. b == 0 is 0xC0000094 and answers nan (like
      * fmod), b == -1 is 0xC0000095 on LLONG_MIN and answers 0. */
-    if (strcmp(op, "%") == 0) {
+    case '%': {
         long long bi = (long long)b;
         if (bi == 0)  return zl_num(fmod(a, 0.0));
         if (bi == -1) return zl_num(0.0);
         return zl_num((double)((long long)a % bi));
     }
-    if (strcmp(op, ">")  == 0) return zl_bool(a >  b);
-    if (strcmp(op, "<")  == 0) return zl_bool(a <  b);
-    if (strcmp(op, ">=") == 0) return zl_bool(a >= b);
-    if (strcmp(op, "<=") == 0) return zl_bool(a <= b);
+    case '>': return zl_bool(op[1] == '=' ? a >= b : a >  b);
+    case '<': return zl_bool(op[1] == '=' ? a <= b : a <  b);
+    default:  break;
+    }
     rt_error("unknown operator");
     return zl_nil();
 }
 
+/* Same treatment as zl_binop, same reason. The parser produces exactly two
+ * unary operators (`-` and `not`, parser.c parse_unary), so op[0] separates
+ * them outright. `not` keeps its strcmp because it is a word and the cold one;
+ * negate is the hot one and now costs a compare.
+ *
+ * The type check stays INSIDE the negate arm: `not` is defined on every value
+ * (it is zl_truthy), and only negation demands a number. */
 Value zl_unop(const char *op, Value a)
 {
-    if (strcmp(op, "-") == 0) {
+    switch (op[0]) {
+    case '-':
         if (a.type != V_NUM) rt_error("cannot negate a non-number");
         return zl_num(-a.num);
+    case 'n': if (strcmp(op, "not") == 0) return zl_bool(!zl_truthy(a)); break;
+    default:  break;
     }
-    if (strcmp(op, "not") == 0) return zl_bool(!zl_truthy(a));
     rt_error("unknown unary operator");
     return zl_nil();
 }
