@@ -1,0 +1,13 @@
+# Known-outstanding hazard counts. hazard-scan.sh fails when a count goes ABOVE
+# its baseline, so a pre-existing defect does not paint every PR red, but a new
+# one cannot slip in.
+#
+# Lower these as they are fixed. Never raise one to make a build pass.
+
+# Pointer truncations in the EFI build (LLP64: unsigned long is 4 bytes there).
+# Currently invisible because -w in kernel/buildefi.sh suppresses the four
+# -Werror= flags meant to catch them -- see docs/design/ci-and-agent-pipeline.md
+# section 8b. Fix is one word (-w -> -Wno-everything) plus repairing these:
+#   xhci.c 12, freestanding/runtime_kernel.c 11, fb.c 8, smp.c 2, console.c 1
+# Target: 0.
+efi_truncation_sites=34

@@ -28,17 +28,23 @@ jobs:
           set -o pipefail
           ./run_tests.sh 2>&1 | tee gate.log
 
-      # run_tests.sh prints "skip:" lines when a dependency is missing and still
-      # exits 0. A skipped gate that reports green is the exact failure mode this
-      # repo has been bitten by before, so surface it loudly.
+      # run_tests.sh prints "skip" and still exits 0 when a dependency is
+      # missing. A skipped check that reports green is the exact failure mode
+      # this repo has been bitten by before, so it must not pass silently.
+      #
+      # But not every skip is a dependency problem: calc_repl is an interactive
+      # REPL and can never run non-interactively. That one is structural and
+      # permanent. Anything else means a tool we believe we installed is absent,
+      # and on a runner that is a real failure.
       - name: a skipped check is not a passing check
         run: |
-          if grep -qiE '^\s*(skip|SKIP)' gate.log; then
-            echo "::error::a gate skipped instead of running:"
-            grep -iE '^\s*(skip|SKIP)' gate.log
+          unexpected=$(grep -iE '^[[:space:]]*skip' gate.log | grep -v 'calc_repl' || true)
+          if [ -n "$unexpected" ]; then
+            echo "::error::a check skipped instead of running:"
+            echo "$unexpected"
             exit 1
           fi
-          echo "no skipped checks"
+          echo "only the known-structural skip (calc_repl) was reported"
 
   fmt:
     name: formatter is byte-identical
