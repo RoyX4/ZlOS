@@ -163,6 +163,7 @@ extern void console_line(int x0, int y0, int x1, int y1, unsigned char attr);
 extern void console_mouse_cursor(int x, int y, unsigned char fill, unsigned char edge);
 extern int  console_kind(void);
 extern void console_mute(int on);
+extern void console_unmute(void);
 extern void console_text_role(int x, int y, const char *s, unsigned int rgb, int role, int weight);
 extern int  console_text_role_w(const char *s, int role, int weight);
 extern int  console_text_role_h(int role);
@@ -286,6 +287,7 @@ extern int  cpu_apic_id(void);
 extern unsigned int cpu_tsc_khz(void);
 extern unsigned int cpu_mhz(void);
 extern unsigned int cpu_tsc_lo(void);
+extern unsigned long long cpu_tsc(void);
 extern int  cpu_tsc_invariant(void);
 extern int  cpu_cache_type(int i);
 extern int  cpu_cache_level(int i);
@@ -397,6 +399,7 @@ extern void wm_peak_reset(void);
 extern void wm_client(int win, int *x, int *y, int *w, int *h);
 extern void wm_focus(int win);
 extern void wm_raise(int win);
+extern void wm_set_home(int win);
 extern int  wm_count(void);
 extern int  wm_zorder_at(int i);
 extern int  wm_win_app(int win);
@@ -616,6 +619,8 @@ extern int  intel_pipe_enabled(void);
 extern unsigned int intel_surface(void);
 extern int  intel_frame_count(void);
 extern int  console_rows(void);
+    /* console_quiet was retired when desktop/exec-track landed: one flag,
+     * one builtin, con_mute. See console.c. */
 
 /* ONE byte to COM1, and nothing else. Extracted from zl_putc because there are
  * now two callers with different needs, and inlining it in one of them made the
@@ -744,6 +749,14 @@ static void zl_put_i64(long long v)
 /* A kernel has no way to report a fault except to say so and stop. */
 static void kfatal(const char *msg)
 {
+    /* ...and it must actually reach a SCREEN. The compositor mutes the
+     * console's pixels for the duration of a session (console_mute), so
+     * without this the machine would halt having drawn nothing, with the
+     * diagnostic in a scrollback that will never be repainted. Dropping the
+     * mute costs nothing here: the next statement is an infinite halt. */
+#ifdef ZL_KERNEL_SERIAL
+    console_unmute();  /* drops the mute for good - the next statement halts */
+#endif
     zl_puts("\nkernel runtime error: ");
     zl_puts(msg);
     zl_putc('\n');
@@ -1387,7 +1400,19 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "cpu_apicid")) return zl_num((double)cpu_apic_id());
     if (streq(name, "cpu_khz"))    return zl_num((double)cpu_tsc_khz());
     if (streq(name, "cpu_mhz"))    return zl_num((double)cpu_mhz());
-    if (streq(name, "cpu_tsc"))    return zl_num((double)cpu_tsc_lo());
+    /* THE FULL 64-BIT TSC, not its bottom half.
+     *
+     * This called cpu_tsc_lo(), which is a u32 - so zl saw a counter that
+     * WRAPPED EVERY 1.8 SECONDS at 2.4 GHz. A frame timer built on it reads
+     * correctly most of the time and returns a large negative number a few
+     * times a minute, which is the kind of intermittent wrong answer that gets
+     * blamed on the thing being measured rather than the clock.
+     *
+     * A zl number is a double, which holds an exact integer to 2^53 - about
+     * 43 days at 2.4 GHz, against the 1.8 s it had. cpu_tsc_lo stays exposed
+     * as cpu_tsc32 for anything that genuinely wants the low half. */
+    if (streq(name, "cpu_tsc"))    return zl_num((double)cpu_tsc());
+    if (streq(name, "cpu_tsc32"))  return zl_num((double)cpu_tsc_lo());
     if (streq(name, "cpu_inv"))    return zl_num((double)cpu_tsc_invariant());
     if (streq(name, "cpu_ctype"))  return zl_num((double)cpu_cache_type((int)a[0].num));
     if (streq(name, "cpu_clevel")) return zl_num((double)cpu_cache_level((int)a[0].num));

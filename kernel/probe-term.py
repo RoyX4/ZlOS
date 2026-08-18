@@ -204,6 +204,10 @@ def main():
                     help="seconds to let a frame render before photographing it")
     ap.add_argument("--keep-shots", action="store_true")
     ap.add_argument("--no-build", action="store_true")
+    ap.add_argument("--ps2-only", action="store_true",
+                    help="drop the USB keyboard - the ThinkPad's own keyboard "
+                         "is PS/2, and Enter/Backspace/ESC arrive there as "
+                         "navigation codes with no character attached")
     args = ap.parse_args()
 
     import time
@@ -214,7 +218,27 @@ def main():
     tmp = tempfile.mkdtemp(prefix="probeterm-")
     ser_path = os.path.join(tmp, "ser.sock")
     qmp_path = os.path.join(tmp, "qmp.sock")
-    proc = subprocess.Popen(qemu_argv(tmp, False, ser_path, qmp_path),
+    argv = qemu_argv(tmp, False, ser_path, qmp_path)
+    if args.ps2_only:
+        # Every probe in this tree boots with -device usb-kbd, which is why
+        # nothing could see that the PS/2 path never produces a character for
+        # Enter. Strip it and the emulated i8042 is the only way in.
+        #
+        # Indexed, not `argv.index(a)` - that returns the FIRST "-device" every
+        # time, so the first version of this tested the wrong device, removed
+        # nothing, and the gate passed against a USB keyboard while claiming to
+        # be PS/2-only. It is asserted below rather than assumed.
+        out, i = [], 0
+        while i < len(argv):
+            if argv[i] == "-device" and i + 1 < len(argv) and "usb-kbd" in argv[i + 1]:
+                i += 2
+                continue
+            out.append(argv[i]); i += 1
+        if any("usb-kbd" in a for a in out):
+            print("  FAIL  --ps2-only did not remove the USB keyboard"); return 1
+        print("  note  PS/2 only - the USB keyboard is not attached")
+        argv = out
+    proc = subprocess.Popen(argv,
                             cwd=HERE, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL)
     failures = []
@@ -238,7 +262,8 @@ def main():
         # prompt to send 'w' to and sending one would type a stray character
         # into the terminal. Ask which world we are in rather than assuming,
         # so this gate keeps working across that change unaltered.
-        if t.expect(COMPOSITOR, 8):
+        booted_into_wm = t.expect(COMPOSITOR, 8)
+        if booted_into_wm:
             print("  note  the compositor is the boot state - no 'w' needed")
         else:
             if not t.expect(PROMPT, args.step_timeout):
@@ -298,14 +323,22 @@ def main():
             check("clear empties the scrollback", i1 < i0 * 0.2,
                   f"ink {i0} -> {i1} inside the shell")
 
-        # ---- the double prompt, reported rather than asserted ------------
-        # PLATFORM-PROMPT item 1 names this and predicts it disappears when the
-        # compositor becomes the boot state, because then no text shell ever
-        # prints a prompt for the scrollback to capture. Print the evidence
-        # either way; asserting it before its fix has landed would gate this
-        # item on the next one.
-        captured = t.log.count(PROMPT)
-        print(f"  note  '{PROMPT.strip()}' appears {captured}x in this session's serial log")
+        # ---- the double prompt -------------------------------------------
+        # PLATFORM-PROMPT item 1 names two "zl>" prompts - one captured into
+        # the scrollback from the text shell before the compositor starts, one
+        # live - and predicts item 2 removes it. It does, and this is the
+        # measurement rather than the assumption: with the compositor as the
+        # BOOT STATE no text shell ever runs, so the only prompts on the wire
+        # are term.c's own echo of each line typed. Five commands, five
+        # prompts. Under 'w' it is six, and the extra one IS the bug.
+        typed = 5
+        prompts = t.log.count(PROMPT)
+        if booted_into_wm:
+            check("no captured prompt - one per line typed", prompts == typed,
+                  f"{prompts} on the wire, {typed} typed")
+        else:
+            print(f"  note  '{PROMPT.strip()}' x{prompts} for {typed} typed - "
+                  f"the extra one is the text shell's, captured (item 2 removes it)")
 
         print()
         if failures:

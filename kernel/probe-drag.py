@@ -26,7 +26,7 @@ into the top-left corner first, because there is no way to ask the guest where
 the pointer is and the kernel clamps to the screen, so overshooting the corner
 puts it somewhere known.
 """
-import argparse, os, subprocess, sys, tempfile
+import argparse, os, re, subprocess, sys, tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exercise import Serial, Qmp, ppm_sample, frame_delta, qemu_argv, build, PROMPT
@@ -74,7 +74,8 @@ def main():
     # where to grab, and where to drop. Defaults are the System Monitor's title
     # bar at 2560x1440: mon_x = 2560 - (MON_W + 16) * ui() = 1960, and
     # mon_y = (DESK_TOP + 8) * ui() = 96, with a 56px title bar above it.
-    ap.add_argument("--grab", default="2110,120", help="x,y to press at")
+    ap.add_argument("--grab", default="", help="x,y to press at "
+                    "(default: the title bar the kernel reports)")
     ap.add_argument("--drop", default="1100,760", help="x,y to release at")
     ap.add_argument("--boot-timeout", type=float, default=240)
     ap.add_argument("--no-tablet", action="store_true",
@@ -82,7 +83,8 @@ def main():
                          "relative events instead")
     args = ap.parse_args()
 
-    gx, gy = (int(v) for v in args.grab.split(","))
+    # 0,0 means "not given" - filled in from the kernel's own report below.
+    gx, gy = (int(v) for v in args.grab.split(",")) if args.grab else (0, 0)
     dx, dy = (int(v) for v in args.drop.split(","))
     os.makedirs(SHOTS, exist_ok=True)
 
@@ -109,7 +111,28 @@ def main():
         for line in log.splitlines():
             if line.strip().startswith("fb:") or "lost:" in line:
                 print(line.strip())
-        ser.wait(PROMPT, 60)
+        # WHERE TO PRESS. This used to be the literal default 2110,120, which
+        # is off the right edge of a 1920-wide screen - so the press landed on
+        # nothing and the gate reported "NOTHING MOVED - dragging is a no-op"
+        # for a drag that worked perfectly. The compositor prints every
+        # window's title bar on the serial log; aim at one of those instead of
+        # at a number that was true for one resolution on one day.
+        ok, more = ser.wait("compositor:", args.boot_timeout)
+        log += more
+        if ok:
+            ser.drain(1.0)
+            log += ser.buf; ser.buf = ""
+        bars = re.findall(r"wm: win (\d+) title (\d+),(\d+) (\d+)x(\d+)", log)
+        if not args.grab:
+            if not bars:
+                print("the compositor reported no window rects, and --grab was "
+                      "not given - refusing to press at a guess"); sys.exit(1)
+            # The LAST window opened is on top, so its title bar is the one a
+            # press actually reaches. Aim at the middle of it, left of the
+            # close box.
+            _, bx, by, bw, bh = (int(v) for v in bars[-1])
+            gx, gy = bx + bw // 3, by + bh // 2
+            print(f"  grabbing the title bar of window {bars[-1][0]} at {gx},{gy}")
         ser.drain(1.0)
 
         # one screendump first, purely to learn the screen size - the absolute

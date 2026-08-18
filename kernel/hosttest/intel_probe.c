@@ -233,7 +233,10 @@ static int cfg_fd = -1;
  * terminal - so this reports the handover instead of performing it. Same
  * arrangement as cpu_delay_us and host_cfg_read below: the driver states what
  * it needs from a kernel, and each host supplies its own. */
-void console_init_fb(uptr addr, u32 pitch, u32 width, u32 height, u32 bpp)
+/* Matches intel.c's prototype - unsigned long long, not uptr. This stub is a
+ * host-only definition, so a mismatch here is a link-time surprise rather than
+ * a silent ABI slide, but keeping it in step is free. */
+void console_init_fb(unsigned long long addr, u32 pitch, u32 width, u32 height, u32 bpp)
 {
     printf("  [console would move to 0x%llX, %ux%u, pitch %u, %u bpp]\n",
            (unsigned long long)addr, width, height, pitch, bpp);

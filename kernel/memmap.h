@@ -54,6 +54,22 @@
 #define ZL_MEMMAP_H
 
 #define HI_BACK   0x08000000UL   /* fb.c         - the back buffer          */
+/* THE AP STACKS, and this region is why BACK_LIMIT is 40 MiB and not 48.
+ *
+ * smp_trampoline.S:25 and smp_trampoline64.S:34 both hardcode
+ * .equ STACK_BASE, 0x0A800000 - and they do so on ALL EIGHT branches, while
+ * appearing in no memory map except desktop/apps-in-windows's. Without this
+ * line `back` runs to HI_SCHED, spans 128..176 MiB, and swallows the stacks
+ * every application processor is running on. apps's SMP band rendering makes
+ * those cores live every frame, so it would not even be a rare corruption.
+ *
+ * The _Static_asserts in fb.c cannot catch it on their own: they compare the
+ * constants this header declares, and STACK_BASE was not one of them. A
+ * compile-time check that reads as coverage without being it is worse than
+ * no check. Declaring the region here is what makes the assert honest. */
+#define HI_APSTK  0x0A800000UL   /* smp_trampoline{,64}.S STACK_BASE        */
+#define AP_STACK_SIZE 0x4000UL   /* 16 KiB per core                         */
+#define AP_STACK_SPAN (17UL * AP_STACK_SIZE)  /* cpu_apic_ids[] holds 16    */
 #define HI_SCHED  0x0B000000UL   /* sched.c      - stacks, counters         */
 #define HI_HID    0x0B800000UL   /* i2c_hid.c    - HID over I2C buffers     */
 #define HI_BLUR   0x0C000000UL   /* fb.c         - the cached-blur arena    */

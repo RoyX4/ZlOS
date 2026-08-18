@@ -76,6 +76,45 @@ static int smp_attempted = 0;
  * proves it is alive, and halts. That is a real milestone and an honest stopping
  * point: the cores are awake and reachable, and what they are allowed to touch
  * is a separate problem. */
+/* ---- band rendering: the one job an AP is allowed to do --------------------
+ *
+ * An AP still may not touch the console, the scheduler or any driver - none of
+ * them are protected by a lock. What it CAN do is write a rectangle of the
+ * back buffer, because fb.c hands out bands that are disjoint by construction:
+ * band i owns rows [y0,y1) and no other band can name those rows. There is
+ * nothing shared to lock, which is why this is safe and why nothing else is.
+ *
+ * The park loop is a SPIN, not `cli; hlt`. It has to be: a core halted with
+ * interrupts off can only be restarted by NMI/INIT/SIPI, so there is no way to
+ * hand it work without an interrupt path this kernel does not have. Spinning
+ * burns a core, and that is the honest cost of having no scheduler - the cores
+ * were doing nothing before either, just more quietly.
+ *
+ * ONE CACHE LINE PER SLOT. Two cores writing `done` flags in the same 64-byte
+ * line ping-pong that line between them on every store, and the loop ends up
+ * slower than serial with nothing in the code to show why. This is the single
+ * most common way band rendering fails to pay.
+ */
+#define SMP_LINE  64
+#define SMP_SLOTS 8
+
+typedef void (*fb_band_fn)(void *ctx, int y0, int y1);
+extern void fb_par_hook(void (*d)(fb_band_fn, void *, const int *, int), int n);
+
+struct ap_slot {
+    volatile u32 seq;          /* bumped by the BSP: here is work            */
+    volatile u32 done;         /* bumped by the AP: finished it              */
+    fb_band_fn   fn;
+    void        *ctx;
+    volatile int y0, y1;
+    char pad[SMP_LINE * 2];    /* keep the next slot off this line           */
+} __attribute__((aligned(SMP_LINE)));
+
+static struct ap_slot ap_slots[SMP_SLOTS];
+static volatile int   ap_slots_live = 0;   /* how many APs are in the spin   */
+
+static void smp_pause(void) { __asm__ volatile("pause" ::: "memory"); }
+
 void smp_ap_main(void)
 {
     u32 a, b, c, d;
@@ -86,10 +125,48 @@ void smp_ap_main(void)
     if (id < 32) ap_mask |= (1u << id);
     ap_online++;
 
-    /* Nothing here may touch the console, the scheduler or any driver: none of
-     * them are protected by a lock. Halt with interrupts off and stay out of
-     * the way. */
-    for (;;) __asm__ volatile("cli; hlt");
+    /* Claim a slot by arrival order, not by APIC id - ids are not dense and a
+     * sparse array would leave the dispatcher spinning on a slot nobody owns. */
+    int slot = ap_online;              /* 1..n-1; the BSP is band 0          */
+    if (slot < 1 || slot >= SMP_SLOTS) {
+        for (;;) __asm__ volatile("cli; hlt");   /* more cores than slots    */
+    }
+    ap_slots[slot].seq = ap_slots[slot].done = 0;
+    __sync_synchronize();
+    ap_slots_live = slot;
+
+    u32 seen = 0;
+    for (;;) {
+        while (ap_slots[slot].seq == seen) smp_pause();
+        seen = ap_slots[slot].seq;
+        ap_slots[slot].fn(ap_slots[slot].ctx, ap_slots[slot].y0, ap_slots[slot].y1);
+        /* x86 is store-ordered, so the band's writes are visible before this
+         * one - the barrier is against the COMPILER reordering them. */
+        __sync_synchronize();
+        ap_slots[slot].done = seen;
+    }
+}
+
+/* Hand one banded job to the parked cores and wait for all of them.
+ *
+ * Band 0 runs HERE, on the calling core, rather than the BSP sitting in the
+ * barrier watching three cores work. */
+static void smp_band_dispatch(fb_band_fn fn, void *ctx, const int *edges, int n)
+{
+    for (int i = 1; i < n; i++) {
+        ap_slots[i].fn = fn;
+        ap_slots[i].ctx = ctx;
+        ap_slots[i].y0 = edges[i];
+        ap_slots[i].y1 = edges[i + 1];
+        __sync_synchronize();
+        ap_slots[i].seq++;
+    }
+    fn(ctx, edges[0], edges[1]);
+    /* THE BARRIER, and it is not optional: fb_present must not blit a row a
+     * core is still writing into. */
+    for (int i = 1; i < n; i++)
+        while (ap_slots[i].done != ap_slots[i].seq) smp_pause();
+    __sync_synchronize();
 }
 
 static void wait_ticks(u32 n)
@@ -101,6 +178,7 @@ static void wait_ticks(u32 n)
 
 int smp_cpu_count(void) { return apic_cpus(); }
 int smp_online(void)    { return ap_online + 1; }   /* +1 for the boot core */
+int smp_bands(void)     { return ap_slots_live + 1; }
 int smp_last_id(void)   { return ap_last_id; }
 u32 smp_mask(void)      { return ap_mask | 1u; }
 int smp_ready(void)     { return smp_started; }
@@ -161,5 +239,13 @@ int smp_start(void)
     }
 
     smp_started = 1;
+
+    /* THE CORES ARE AWAKE, so let fb.c use them. Not before: fb_par_hook with
+     * a NULL dispatcher is the default and means "run every band on the
+     * calling core", which is exactly the behaviour of every build that never
+     * calls this. So nothing about the normal boot changes - verify.sh boots
+     * -smp 1 and never gets here at all. */
+    int bands = ap_slots_live + 1;
+    if (bands > 1) fb_par_hook(smp_band_dispatch, bands);
     return smp_online();
 }

@@ -194,6 +194,15 @@ static const struct cmd table[] = {
     { "panel",    80 },                       /* lights the real panel - laptop */
     { "gpu",     121 }, { "virtio",  121 },
     { "cube",    118 }, { "3d",      118 },
+    /* `anim` had no word at all - it was reachable only as the single key 'a'
+     * in the old text shell, so under the compositor there was no way to start
+     * it. A command in the help list with no way to type it is worse than one
+     * that does not exist. */
+    { "anim",     97 }, { "logo",     97 },
+    /* '*' is not a word, so under the compositor there was no way to wake the
+     * other cores at all - and band rendering is off until something does. */
+    { "smp",      42 }, { "cores",    42 },
+    { "frame",    70 }, { "fps",      70 },
     { "windows", 119 }, { "wm",      119 },
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },

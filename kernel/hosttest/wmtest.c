@@ -64,6 +64,15 @@ int idt_mouse_btn(void) { return fake_btn; }
  * 0 rather than a stale notch (desktop/feel-and-control added this). */
 int idt_mouse_wheel(void) { return 0; }
 unsigned int idt_ticks(void) { return fake_ticks; }
+
+/* wm.c times the body of a frame with the TSC (queue item 9). cpu.c is not
+ * linked here - this harness is wm.c + fb.c + ui.c + input.c against fake
+ * hardware - so the clock is faked too. A fixed rate and a counter that
+ * advances by a plausible frame's worth per call keeps wm_frame_us() in range
+ * without making any assertion depend on it. */
+static unsigned long long fake_tsc = 0;
+unsigned long long cpu_tsc(void) { fake_tsc += 2000000; return fake_tsc; }
+unsigned int cpu_tsc_khz(void) { return 2000000; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }
 int ser_rx(void)        { return -1; }   /* no UART in the harness */
@@ -73,9 +82,7 @@ int ser_rx(void)        { return -1; }   /* no UART in the harness */
  * the guest anyway. Returning a monotonically rising count keeps the timing
  * code on the same path it takes in the kernel - a stub that returned 0 would
  * make wm_frame() take the "TSC unavailable" branch and stop exercising it. */
-static unsigned int fake_tsc;
-unsigned int cpu_tsc_lo(void)  { return (fake_tsc += 1000); }
-unsigned int cpu_tsc_khz(void) { return 2300000u; }
+unsigned int cpu_tsc_lo(void)  { return (unsigned int)cpu_tsc(); }
 
 static int fake_usb_ptr = 0, fake_ux = 0, fake_uy = 0, fake_ubtn = 0;
 
@@ -92,9 +99,16 @@ void zl_putc_pub(char c) { (void)c; }        /* fb.c's boot line: not wanted her
 
 #define W 1280
 #define H 800
-#define BG_ADDR   0x08000000UL
-#define SP_ADDR   0x0A000000UL
-#define BACK_ADDR 0x0C000000UL
+/* ONE buffer now. C4 deleted the drag background and sprite, and the back
+ * buffer moved down into the space they freed - see the high-RAM map at the
+ * top of fb.c. 0x08000000..0x0A800000 is 40 MiB, bounded by the AP stacks. */
+#define BACK_ADDR 0x08000000UL
+#define BACK_SIZE (0x0A800000UL - BACK_ADDR)     /* 40 MiB */
+/* The cached-blur arena, a SECOND fixed mapping. apps-in-windows' memory map
+ * had no HI_BLUR - it arrived on overnight-compositor at 192 MiB, in the space
+ * `back` vacated. Map only `back` and slot_capture writes to an unmapped page. */
+#define BLUR_ADDR 0x0C000000UL
+#define BLUR_SIZE (0x0D000000UL - BLUR_ADDR)   /* 16 MiB */
 
 /* ---- the fake app --------------------------------------------------------
  * Fills its whole client area with a colour derived from its id, then
@@ -199,9 +213,10 @@ int main(void)
     input_set_accel(0);
 
     struct { unsigned long a, n; } bufs[] = {
-        { BG_ADDR, 32UL << 20 }, { SP_ADDR, 16UL << 20 }, { BACK_ADDR, 16UL << 20 },
+        { BACK_ADDR, BACK_SIZE },
+        { BLUR_ADDR, BLUR_SIZE },
     };
-    for (unsigned i = 0; i < 3; i++) {
+    for (unsigned i = 0; i < sizeof bufs / sizeof bufs[0]; i++) {
         void *p = mmap((void *)bufs[i].a, bufs[i].n, PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
         if (p != (void *)bufs[i].a) { fprintf(stderr, "mmap failed\n"); return 1; }

@@ -45,6 +45,9 @@ int idt_mouse_btn(void) { return fake_btn; }
 /* the scroll wheel: read-and-clear, so a harness with no wheel must return
  * 0 rather than a stale notch (desktop/feel-and-control added this). */
 int idt_mouse_wheel(void) { return 0; }
+unsigned long long cpu_tsc(void) { static unsigned long long t; t += 2000000; return t; }
+unsigned int cpu_tsc_khz(void) { return 2000000; }
+
 unsigned int idt_ticks(void) { return fake_ticks; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }
@@ -57,8 +60,7 @@ int ser_rx(void)        { return -1; }   /* no UART in the harness */
  * make wm_frame() take the "TSC unavailable" branch and stop exercising it. */
 static unsigned int fake_tsc;
 unsigned int cpu_tsc_lo(void)  { return (fake_tsc += 1000); }
-unsigned int cpu_tsc_khz(void) { return 2300000u; }
-
+/* (duplicate cpu_tsc_khz stub removed - the merge gave this harness two) */
 static int fake_usb_ptr = 0, fake_ux = 0, fake_uy = 0, fake_ubtn = 0;
 
 /* No USB pointer in the harness - which is a case worth being able to express,
@@ -194,11 +196,13 @@ int main(int argc, char **argv)
     const char *out = argc > 1 ? argv[1] : "wmshot.ppm";
     if (argc > 3) { W = atoi(argv[2]); H = atoi(argv[3]); }
 
+    /* ONE buffer now. C4 deleted the drag background and sprite, and the back
+     * buffer moved down into the space they freed - see fb.c's high-RAM map.
+     * 0x08000000..0x0A800000 is 40 MiB, bounded by the AP stacks. */
     struct { unsigned long a, n; } bufs[] = {
-        { 0x08000000UL, 32UL << 20 }, { 0x0A000000UL, 16UL << 20 },
-        { 0x0C000000UL, 16UL << 20 },
+        { 0x08000000UL, 0x0A800000UL - 0x08000000UL },
     };
-    for (unsigned i = 0; i < 3; i++) {
+    for (unsigned i = 0; i < 1; i++) {
         void *p = mmap((void *)bufs[i].a, bufs[i].n, PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
         if (p != (void *)bufs[i].a) { fprintf(stderr, "mmap\n"); return 1; }

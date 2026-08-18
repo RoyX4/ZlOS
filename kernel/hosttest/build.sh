@@ -17,7 +17,7 @@ echo "built ./modeset_test  (run: sudo ./modeset_test --survey)"
 # so it runs here at native speed with a cycle counter instead of a reboot and
 # a stopwatch. Built at the SAME -O2 the kernel uses, or the numbers are fiction.
 # No sudo - it maps its own anonymous memory at the addresses fb.c hardcodes.
-gcc -O2 -w -o fbbench fbbench.c \
+gcc -O2 -w -pthread -o fbbench fbbench.c \
     ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./fbbench       (run: ./fbbench)"
 
@@ -73,10 +73,25 @@ echo "built ./tritest       (run: ./tritest)"
 
 # The comparison number: what the REAL GPU on this same laptop does with a
 # blended full-screen layer. Offscreen pixmap, so it never touches the desktop.
-# Needs libGL - skipped silently if the dev headers are not installed.
-if [ -f /usr/include/GL/glx.h ]; then
+#
+# Guarded on BOTH the headers and the source. It used to check only
+# /usr/include/GL/glx.h, and gpu_fillrate.c has never been committed to any
+# branch - so on a machine with the GL headers installed (this one) every run
+# of this script ended:
+#
+#     cc1: fatal error: gpu_fillrate.c: No such file or directory
+#
+# after the seven harnesses above had built and passed. A fatal error at the
+# END of a successful build reads as noise, which is how it survived. Same
+# class as the four source lists this repo just consolidated: a build script
+# naming a file that is not there.
+if [ -f /usr/include/GL/glx.h ] && [ -f gpu_fillrate.c ]; then
   gcc -O2 -w -o gpu_fillrate gpu_fillrate.c -lGL -lX11
   echo "built ./gpu_fillrate  (run: ./gpu_fillrate)"
+elif [ -f /usr/include/GL/glx.h ]; then
+  echo "skip  ./gpu_fillrate  (gpu_fillrate.c is not in the tree)"
+else
+  echo "skip  ./gpu_fillrate  (no GL headers - apt install libgl1-mesa-dev)"
 fi
 
 # The browser's parser and box model, asserted. html.c and layout.c reach for

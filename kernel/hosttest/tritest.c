@@ -132,11 +132,13 @@ static uint64_t now_ns(void)
 
 int main(void)
 {
+    /* ONE buffer now. C4 deleted the drag background and sprite, and the back
+     * buffer moved down into the space they freed - see fb.c's high-RAM map.
+     * 0x08000000..0x0A800000 is 40 MiB, bounded by the AP stacks. */
     struct { unsigned long a, n; } bufs[] = {
-        { 0x08000000UL, 32UL << 20 }, { 0x0A000000UL, 16UL << 20 },
-        { 0x0C000000UL, 16UL << 20 },
+        { 0x08000000UL, 0x0A800000UL - 0x08000000UL },
     };
-    for (unsigned i = 0; i < 3; i++) {
+    for (unsigned i = 0; i < 1; i++) {
         void *p = mmap((void *)bufs[i].a, bufs[i].n, PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
         if (p != (void *)bufs[i].a) { fprintf(stderr, "mmap\n"); return 1; }

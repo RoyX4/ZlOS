@@ -1520,6 +1520,9 @@ void wm_frame(void)
     unsigned int now = idt_ticks();
     if (now == last_tick) return;
     last_tick = now;
+    /* apps-in-windows timed the frame with the 64-bit cpu_tsc(); this tree
+     * uses the 32-bit cpu_tsc_lo(). Both declarations survived the merge and
+     * shadowed each other on the same name. One timer. */
     unsigned int t0 = cpu_tsc_lo();
     int did_paint = 0;
 

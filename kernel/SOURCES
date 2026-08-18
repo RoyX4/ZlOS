@@ -1,0 +1,85 @@
+# SOURCES - the kernel sources that EVERY target compiles.
+#
+# There were four copies of this list: build.sh (32-bit multiboot), build64.sh
+# (64-bit multiboot), buildefi.sh (UEFI application, clang/LLP64) and mkdisk.sh
+# (our own bootloader). Adding one .c file to the one you were testing with and
+# forgetting the other three broke the UEFI and raw builds TWICE on 2026-08-18,
+# and verify.sh cannot see it because verify.sh only builds the first.
+#
+# Anything added here is compiled into all four. `./verify-sources.sh` proves
+# that by adding a throwaway file and looking for it in all four outputs, so
+# the claim is checked rather than asserted.
+#
+# WHAT IS NOT HERE, and why. Four things genuinely differ per target, and they
+# are structural rather than a list that drifts - a new driver is added here, a
+# new ENTRY POINT is a new port:
+#
+#   the generated C   _gen.c / _gen64.c / _genefi.c  (../compile kernel.zl)
+#   the GDT           gdt.c (32-bit) / gdt64.c (64-bit, and the EFI build)
+#   the AP trampoline smp_trampoline.S / smp_trampoline64.S
+#   the entry point   boot.S / boot64.S / raw_entry.S / efi.c
+#
+# freestanding/runtime_kernel.c is also per-target: three scripts compile it
+# with -DZL_KERNEL_SERIAL alone, while buildefi.sh applies that define to every
+# file in its loop. Folding it in here would bake that asymmetry into all four.
+#
+# Order is the order they are compiled and linked. It does not matter to the
+# linker; it is kept as it was so a diff against the old scripts is readable.
+
+support.c
+vga.c
+fb.c
+fb3d.c
+font8x16.c
+font_aa.c
+font_sub.c
+icons.c
+pci.c
+bga.c
+intel.c
+xhci.c
+console.c
+divmod.c
+idt.c
+apic.c
+virtio_gpu.c
+cpu.c
+nvme.c
+sched.c
+smp.c
+i2c_hid.c
+input.c
+term.c
+wm.c
+ui.c
+wmglue.c
+
+# ---- added when the parallel tracks landed ---------------------------------
+# Every one of these was compiled by main's four hand-maintained object lists
+# and absent from this file, which is the exact failure SOURCES exists to stop:
+# a .c that one target builds and three do not. Grouped by the track that
+# brought them so the provenance is readable, but the build does not care.
+
+# desktop/system-track (arrived inside desktop/exec-track)
+fs.c
+clip.c
+snap.c
+notify.c
+rtc.c
+
+# desktop/exec-track
+arena.c
+exec.c
+
+# desktop/feel-and-control
+settings.c
+
+# desktop/browser
+virtio_net.c
+net.c
+dns.c
+tcp.c
+http.c
+html.c
+layout.c
+browser.c

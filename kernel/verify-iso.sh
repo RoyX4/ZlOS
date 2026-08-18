@@ -27,7 +27,16 @@ check() {
     if ! grep -q "ready\." "$log" 2>/dev/null; then
         echo "  FAIL  $label - booted but never reached the prompt"; fail=1; return
     fi
-    echo "  ok    $label - $(grep -oE '(framebuffer|VGA text) console, [0-9]+x[0-9]+' "$log" | head -1)"
+    # THE COMPOSITOR IS THE BOOT STATE. Both legs here boot through GRUB, which
+    # supplies a multiboot framebuffer tag, so wm_avail() is true and kernel.zl
+    # must take the wm_session() branch rather than the text shell. "It reached
+    # the prompt" no longer distinguishes a working desktop from a kernel that
+    # silently fell back to text - and on the UEFI leg falling back to text
+    # means a blank screen, which is the exact failure this script exists for.
+    if ! grep -q "compositor: [1-9]" "$log" 2>/dev/null; then
+        echo "  FAIL  $label - reached the prompt but the compositor never opened a window"; fail=1; return
+    fi
+    echo "  ok    $label - $(grep -oE '(framebuffer|VGA text) console, [0-9]+x[0-9]+' "$log" | head -1), $(grep -oE 'compositor: [0-9]+ windows' "$log" | head -1)"
 }
 
 # Boot and wait for the console line, rather than for a fixed number of seconds.
@@ -38,16 +47,20 @@ boot_until() {           # $1 = log file, rest = qemu argv
     local ceiling=180
     timeout "$ceiling" "$@" >/dev/null 2>&1 &
     local pid=$!
-    # Wait for the LAST thing check() requires, which is the prompt - not the
-    # console line. The console line is printed early in boot, so waiting on it
-    # kills QEMU before "ready." is ever emitted and the gate then reports
-    # "booted but never reached the prompt" on a perfectly healthy kernel.
+    # Wait for the LAST thing check() requires, which is now the compositor
+    # line - not the console line and no longer "ready." either. The console
+    # line is printed early in boot, so waiting on it kills QEMU before
+    # "ready." is ever emitted and the gate then reports "booted but never
+    # reached the prompt" on a perfectly healthy kernel. "ready." has the same
+    # problem one step later: the boot chime and wm_session's three wm_open
+    # calls come after it, so waiting on it and then sleeping a fixed second
+    # made the compositor assertion a race against host load. Wait for the
+    # thing you are going to assert on.
     for _ in $(seq $((ceiling * 2))); do
-        grep -q "ready\." "$log" 2>/dev/null && break
+        grep -q "compositor:" "$log" 2>/dev/null && break
         kill -0 "$pid" 2>/dev/null || break
         sleep 0.5
     done
-    sleep 1        # let the line after the prompt land before we kill it
     kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
 }
 

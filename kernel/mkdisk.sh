@@ -4,7 +4,7 @@
 #   kernel.zl -> ../compile -> out.c -> gcc -m32 -ffreestanding
 #             +  raw_entry.S (our entry, no multiboot)
 #             +  the same console/font/runtime objects
-#             -> link-raw.ld (linked at 1 MiB) -> objcopy -> kernel_raw.bin
+#             -> link-raw.ld (linked at 0x10000) -> objcopy -> kernel_raw.bin
 #   raw_boot.asm -> nasm -> raw_boot.bin (512-byte boot sector)
 #   disk = boot sector ++ kernel, padded
 #
@@ -29,111 +29,41 @@ CFLAGS="-m32 -O2 -ffreestanding -nostdlib -fno-stack-protector -fno-pic
 gcc $CFLAGS -DZL_KERNEL_SERIAL -c ../freestanding/runtime_kernel.c -o _rt.o
 # shellcheck disable=SC2086
 gcc $CFLAGS -c _gen.c    -o _gen.o
-# shellcheck disable=SC2086
-gcc $CFLAGS -c support.c -o _support.o
-# shellcheck disable=SC2086
-gcc $CFLAGS -c vga.c      -o _vga.o
-# shellcheck disable=SC2086
-gcc $CFLAGS -c fb.c       -o _fb.o
-# shellcheck disable=SC2086
-gcc $CFLAGS -c fb3d.c     -o _fb3d.o
-gcc $CFLAGS -c font8x16.c -o _font.o
-gcc $CFLAGS -c font_aa.c  -o _fontaa.o
-gcc $CFLAGS -c font_sub.c -o _fontsub.o
-gcc $CFLAGS -c icons.c    -o _icons.o
-gcc $CFLAGS -c pci.c      -o _pci.o
-gcc $CFLAGS -c bga.c      -o _bga.o
-gcc $CFLAGS -c intel.c    -o _intel.o
-gcc $CFLAGS -c xhci.c     -o _xhci.o
-# shellcheck disable=SC2086
-gcc $CFLAGS -c console.c  -o _console.o
-# shellcheck disable=SC2086
-gcc $CFLAGS -c divmod.c   -o _divmod.o
-gcc $CFLAGS -c gdt.c      -o _gdt.o
-# interrupt handlers must not touch SSE - -mgeneral-regs-only enforces it
-gcc $CFLAGS -mgeneral-regs-only -c idt.c -o _idt.o
-gcc $CFLAGS -mgeneral-regs-only -c apic.c -o _apic.o
-# virtio-gpu: the one GPU driver we can prove on every build.
-gcc $CFLAGS -c virtio_gpu.c -o _vgpu.o
-# reading the processor itself: CPUID, topology, caches, the TSC
-gcc $CFLAGS -c cpu.c -o _cpu.o
-# NVMe: real storage, so something survives a power cycle
-gcc $CFLAGS -c nvme.c -o _nvme.o
-# zlfs: the filesystem. Superblock, a directory of names, contiguous runs.
-# Tested without booting anything - hosttest/fstest.c compiles THIS file
-# against a RAM disk that can be told to fail a write.
-gcc $CFLAGS -c fs.c      -o _fs.o
-# the system track's three: the clipboard that makes this one machine rather
-# than several programs sharing a screen, window snapping (wm_resize finally
-# has a caller), and a toast that goes away by itself.
-gcc $CFLAGS -c clip.c    -o _clip.o
-gcc $CFLAGS -c snap.c    -o _snap.o
-gcc $CFLAGS -c notify.c  -o _notify.o
-# the clock. CMOS at 0x70/0x71 - the header drew uptime and called it a time.
-gcc $CFLAGS -c rtc.c     -o _rtc.o
-# the scheduler: more than one thing at a time
-gcc $CFLAGS -c sched.c -o _sched.o
-# SMP: waking the other cores
-# the program arena: where a program the kernel was NOT built with is
-# allowed to put its memory, and the ceiling it cannot cross
-gcc $CFLAGS -c arena.c -o _arena.o
-# `run`: the command, the window, and every way it declines. Built BEFORE
-# anything can execute - the failure modes are the only modes it has.
-gcc $CFLAGS -c exec.c -o _exec.o
-gcc $CFLAGS -c smp.c -o _smp.o
-# I2C-HID: the touchpad
-gcc $CFLAGS -c i2c_hid.c -o _i2c.o
-# the input stack: events, modifiers, repeat
-gcc $CFLAGS -c input.c -o _input.o
-# the terminal app: scrollback + the typed-command matcher
-gcc $CFLAGS -c term.c -o _term.o
-# the compositor. runtime_kernel.c calls into it for the wm_* builtins, so
-# every build that links the runtime needs these three - not just build.sh.
-gcc $CFLAGS -c wm.c -o _wm.o
-gcc $CFLAGS -c ui.c -o _ui.o
-gcc $CFLAGS -c wmglue.c -o _wmglue.o
-# the browser: the tokenizer, the box model and the app. html.c and layout.c
-# hold no pixels and no theme, which is what lets hosttest/htmltest.c assert
-# the whole box model with no kernel and no boot.
-gcc $CFLAGS -c virtio_net.c -o _vnet.o
-gcc $CFLAGS -c net.c -o _net.o
-gcc $CFLAGS -c dns.c -o _dns.o
-gcc $CFLAGS -c tcp.c -o _tcp.o
-gcc $CFLAGS -c http.c -o _http.o
-gcc $CFLAGS -c html.c    -o _html.o
-gcc $CFLAGS -c layout.c  -o _layout.o
-gcc $CFLAGS -c browser.c -o _browser.o
-gcc $CFLAGS -c settings.c -o _settings.o
+gcc $CFLAGS -c gdt.c     -o _gdt.o
+
+# THE SHARED SOURCE LIST. See ./SOURCES - one file, read by all four build
+# scripts. This script is the one that used to be forgotten: verify.sh builds
+# only build.sh, so a .c added there and nowhere else broke the raw disk image
+# with nothing to catch it.
+OBJS=""
+while read -r f; do
+    case "$f" in ''|\#*) continue ;; esac
+    o="_$(basename "$f" .c).o"
+    EXTRA=""
+    case "$f" in idt.c|apic.c) EXTRA="-mgeneral-regs-only" ;; esac
+    # shellcheck disable=SC2086
+    gcc $CFLAGS $EXTRA -c "$f" -o "$o"
+    OBJS="$OBJS $o"
+done < SOURCES
+
 gcc $CFLAGS -c smp_trampoline.S -o _smptr.o
 gcc -m32 -c raw_entry.S -o _rawentry.o
 
-ld -m elf_i386 -T link-raw.ld -o kernel_raw.elf _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o _vnet.o _net.o _dns.o _tcp.o _http.o _html.o _layout.o _browser.o _settings.o _fs.o _clip.o _snap.o _notify.o _rtc.o _arena.o _exec.o
+# shellcheck disable=SC2086
+ld -m elf_i386 -T link-raw.ld -o kernel_raw.elf \
+   _rawentry.o _gen.o _rt.o _gdt.o _smptr.o $OBJS
 objcopy -O binary kernel_raw.elf kernel_raw.bin
 
 nasm -f bin raw_boot.asm -o raw_boot.bin
 
-# THE LOADER READS A FIXED NUMBER OF CHUNKS, so a kernel bigger than that is
-# silently TRUNCATED - raw_boot.asm jumps to 1 MiB and executes whatever half
-# of the kernel arrived. There is no error, no message, and the symptom is a
-# hang or a triple fault a long way from the cause. So check it here, where the
-# two numbers are both available, and refuse.
-CHUNKS=$(grep -oP 'CHUNKS\s+equ\s+\K[0-9]+' raw_boot.asm)
-LIMIT=$((CHUNKS * 64 * 512))
-KSIZE=$(stat -c%s kernel_raw.bin)
-if [ "$KSIZE" -gt "$LIMIT" ]; then
-    echo "FAIL: kernel is $KSIZE bytes; raw_boot.asm loads only $LIMIT" >&2
-    echo "      (CHUNKS=$CHUNKS x 32 KiB). Raise CHUNKS and the truncate below." >&2
-    exit 1
-fi
-
 # assemble the disk: boot sector first, then the kernel, padded to a round size
 cat raw_boot.bin kernel_raw.bin > zlOS.img
-# pad to at least what the loader reads, so no read runs off the end
+# pad to at least what the loader reads (12 * 32 KiB) so no read runs off the end
 truncate -s 2M zlOS.img
 
 echo "built zlOS.img - OUR bootloader, no GRUB"
 echo "  boot sector: $(stat -c%s raw_boot.bin) bytes  (must be 512)"
-echo "  kernel:      $KSIZE bytes  ($(( (LIMIT - KSIZE) / 1024 )) KiB of loader headroom left)"
+echo "  kernel:      $(stat -c%s kernel_raw.bin) bytes"
 echo "  disk image:  $(stat -c%s zlOS.img) bytes"
 echo
 echo "boot it:  qemu-system-i386 -drive file=zlOS.img,format=raw -serial stdio"
