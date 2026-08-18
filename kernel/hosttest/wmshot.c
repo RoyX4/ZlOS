@@ -154,7 +154,12 @@ static void desk_draw(int x, int y, int w, int h)
     fb_rrect(UI_S3(t), (hb - UI_S3(t)) / 2, UI_S3(t), UI_S3(t), UI_S1(t) / 2, t->accent);
     fb_text_prop(UI_S3(t) * 3, (hb - fb_text_prop_h()) / 2, "zlOS", t->text);
     fb_text_prop(UI_S3(t) * 3 + UI_S6(t) * 3, (hb - fb_text_prop_h()) / 2, "Activities", t->text_dim);
-    fb_text_prop(W - UI_S6(t) * 8, (hb - fb_text_prop_h()) / 2, "1920 x 1200", t->text_dim);
+    /* Report the size actually rendered. This was the literal "1920 x 1200",
+     * which made every render at another size a screenshot of a lie - and the
+     * resolution cliff is exactly the class this harness is meant to catch. */
+    char res[32];
+    snprintf(res, sizeof res, "%d x %d", W, H);
+    fb_text_prop(W - UI_S6(t) * 8, (hb - fb_text_prop_h()) / 2, res, t->text_dim);
 
     int dh = UI_S6(t) * 3;
     int dy = H - dh;

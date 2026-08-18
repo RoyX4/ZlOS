@@ -1,0 +1,61 @@
+name: gates
+
+# The fast gates: no emulator, no boot. These should stay under a couple of
+# minutes so they can run on every push to every branch.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lang:
+    name: language (interp vs C backend vs native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc clang nasm llvm
+
+      - name: build the zl toolchain
+        run: ./build.sh
+
+      - name: run_tests.sh
+        run: |
+          set -o pipefail
+          ./run_tests.sh 2>&1 | tee gate.log
+
+      # run_tests.sh prints "skip:" lines when a dependency is missing and still
+      # exits 0. A skipped gate that reports green is the exact failure mode this
+      # repo has been bitten by before, so surface it loudly.
+      - name: a skipped check is not a passing check
+        run: |
+          if grep -qiE '^\s*(skip|SKIP)' gate.log; then
+            echo "::error::a gate skipped instead of running:"
+            grep -iE '^\s*(skip|SKIP)' gate.log
+            exit 1
+          fi
+          echo "no skipped checks"
+
+  fmt:
+    name: formatter is byte-identical
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc clang
+      - run: ./build.sh
+      - run: ./verify_fmt.sh
+
+  hazards:
+    name: recorded hazard classes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: hazard scan
+        run: tools/hazard-scan.sh

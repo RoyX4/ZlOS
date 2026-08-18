@@ -1,0 +1,79 @@
+name: boot
+
+# The four boot paths, in parallel, on runners that are not Roy's laptop.
+#
+# This exists because of a specific, recorded failure: three gates were green
+# while the 64-bit build was dead, since nothing exercised kernel/efi.c or the
+# path a real laptop takes. Running all four by hand costs ~5 minutes of a
+# 4-core box, so in practice they did not all get run. CI does not get bored.
+#
+# Wall clock here is roughly the slowest single gate, not their sum.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  boot:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false          # one dead boot path must not hide the other three
+      matrix:
+        include:
+          - name: "bios32 — 32-bit multiboot vs golden transcript"
+            script: kernel/verify.sh
+          - name: "raw — our own bootloader"
+            script: kernel/verify-raw.sh
+          - name: "iso — GRUB, BIOS and UEFI"
+            script: kernel/verify-iso.sh
+          - name: "efi — zlOS as its OWN UEFI app (the ThinkPad path)"
+            script: kernel/verify-efi.sh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install toolchain and emulators
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            gcc clang nasm llvm \
+            qemu-system-x86 ovmf \
+            mtools xorriso grub-pc-bin grub-efi-amd64-bin
+
+      - name: confirm the firmware the EFI gates need is actually present
+        run: |
+          ls -la /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_VARS_4M.fd
+
+      - name: build the zl toolchain
+        run: ./build.sh
+
+      - name: ${{ matrix.script }}
+        run: |
+          set -o pipefail
+          ${{ matrix.script }} 2>&1 | tee boot.log
+
+      # Every verify-*.sh degrades to `echo "skip: ..."; exit 0` when qemu, nasm
+      # or OVMF is missing. That produces a green check for a boot that never
+      # happened — which is precisely the bug class this workflow exists to kill.
+      - name: a skipped boot is not a passing boot
+        run: |
+          if grep -qiE '^\s*skip:' boot.log; then
+            echo "::error::this gate skipped instead of booting:"
+            grep -iE '^\s*skip:' boot.log
+            exit 1
+          fi
+          echo "gate actually ran"
+
+      - name: keep the transcript on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-log-${{ strategy.job-index }}
+          path: |
+            boot.log
+            kernel/*.out
+            kernel/*.log
+          if-no-files-found: ignore
