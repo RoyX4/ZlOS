@@ -1795,6 +1795,7 @@ fn about_body(ax, ay) {
 # exactly the kind of thing that has to be done once, here, rather than by
 # editing sixty coordinates.
 
+APP_SHELL   = 0
 APP_MONITOR = 1
 APP_ABOUT   = 2
 
@@ -1802,14 +1803,38 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
     wy = ay - TITLE_H * ui()
     if id == APP_MONITOR { return sysmon_body(ax, wy) }
     if id == APP_ABOUT   { return about_body(ax, wy) }
+    if id == APP_SHELL {
+        # The terminal redraws itself from its OWN scrollback, which is what
+        # makes it survive a window being dragged across it. Before term.c the
+        # shell's output existed only as pixels and could not be repainted.
+        u = ui()
+        cb = 0
+        if afocus == 1 { if band(ticks() / 50, 1) == 0 { cb = 1 } }
+        term_draw(ax + 8 * u, ay + 6 * u, aw - 16 * u, ah - 12 * u, TXT_HI, TXT_DIM, ACCENT, cb)
+        return 0
+    }
     return 0
 }
 
 # Return 1 if handled. 'q' or Esc ends the session - NEVER "press any key",
 # which is the phrase this whole rewrite exists to delete.
 fn app_event(id, win, ety, ecode, ex, ey) {
-    if ety == 3 { if ecode == 113 { wm_stop() } }
-    if ety == 1 { if ecode == 257 { wm_stop() } }
+    if id == APP_SHELL {
+        # ONE CHARACTER PER CALL. No loop - that is the whole inversion.
+        # read_line used to block, which is exactly why the shell had to be the
+        # top of the system and why every demo needed "press any key to exit".
+        if ety == 3 {
+            if term_key(ecode) == 1 {
+                tc = term_cmd()
+                if tc > 0 {
+                    if tc == 113 { wm_stop()  return 1 }
+                    run_command(tc, term_arg())
+                }
+            }
+            wm_damage_win_all()
+        }
+        return 1
+    }
     return 1
 }
 
@@ -1817,6 +1842,13 @@ fn app_event(id, win, ety, ecode, ex, ey) {
 # changed, repaint me" - which is how the monitor's clock advances without
 # owning the frame, and is the whole reason it needs no while-loop.
 last_tick_sec = 0 - 1
+# The shell window repaints after anything is typed or printed into it.
+shell_win = 0 - 1
+fn wm_damage_win_all() {
+    if shell_win >= 0 { wm_dmg(shell_win) }
+    return 0
+}
+
 fn app_tick(id, win) {
     if id == APP_MONITOR {
         tsec = ticks() / 100
@@ -1855,12 +1887,15 @@ fn wm_session() {
         color(C_GREY)
         return 0
     }
-    wm_open(APP_MONITOR, "System Monitor", 60 * u, 70 * u, MON_W * u, MON_H * u)
-    wm_open(APP_ABOUT,   "About",         200 * u, 150 * u, MON_W * u, AB_H * u)
-    wt = wm_open(APP_MONITOR, "Monitor", 340 * u, 90 * u, MON_W * u, MON_H * u)
-    wm_tab(wt, APP_ABOUT, "About")
+    # THE SHELL IS WINDOW 0, and it is opened FIRST so the boot log that
+    # follows lands inside it - the same ordering draw_desk relied on, now
+    # expressed through wm_open.
+    sw = px_w()
+    sh = dock_y()
+    shell_win = wm_open(APP_SHELL, "zl shell", 40 * u, 52 * u, sw - 340 * u, sh - 90 * u)
+    wm_open(APP_MONITOR, "System Monitor", sw - 290 * u, 52 * u, MON_W * u, MON_H * u)
+    wm_open(APP_ABOUT, "About", sw - 290 * u, 52 * u + (MON_H + 16) * u, MON_W * u, AB_H * u)
     while wm_run() == 1 { wm_frame() }
-    draw_screen()
     return 0
 }
 

@@ -67,6 +67,8 @@ gcc $CFLAGS -c smp.c -o _smp.o
 gcc $CFLAGS -c i2c_hid.c -o _i2c.o
 # the input stack: events, modifiers, repeat
 gcc $CFLAGS -c input.c -o _input.o
+# the terminal app: scrollback + the typed-command matcher
+gcc $CFLAGS -c term.c -o _term.o
 # the compositor. runtime_kernel.c calls into it for the wm_* builtins, so
 # every build that links the runtime needs these three - not just build.sh.
 gcc $CFLAGS -c wm.c -o _wm.o
@@ -76,7 +78,7 @@ gcc $CFLAGS -c smp_trampoline.S -o _smptr.o
 gcc -m32 -c raw_entry.S -o _rawentry.o
 
 ld -m elf_i386 -T link-raw.ld -o kernel_raw.elf \
-   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o _input.o _wm.o _ui.o _wmglue.o
+   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o
 objcopy -O binary kernel_raw.elf kernel_raw.bin
 
 nasm -f bin raw_boot.asm -o raw_boot.bin

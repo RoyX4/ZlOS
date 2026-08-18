@@ -50,6 +50,8 @@ gcc $CFLAGS -c smp.c -o _smp64.o
 gcc $CFLAGS -c i2c_hid.c -o _i2c64.o
 # the input stack: events, modifiers, repeat
 gcc $CFLAGS -c input.c -o _input64.o
+# the terminal app: scrollback + the typed-command matcher
+gcc $CFLAGS -c term.c -o _term64.o
 # the compositor and the toolkit. This is the build where fb.c's SIMD path is
 # live (__SSE2__ is baseline on x86-64 and boot64.S sets CR4.OSFXSR), so it is
 # also the one that would fault first if that guard were wrong.
@@ -65,7 +67,7 @@ gcc -m64 -c boot64.S -o _boot64.o
 ld -m elf_x86_64 -T link64.ld -o kernel64.elf \
    _boot64.o _gen64.o _rt64.o _support64.o _vga64.o _fb64.o _fb3d64.o \
    _font64.o _fontaa64.o _fontsub64.o _icons64.o _pci64.o _bga64.o _intel64.o _xhci64.o \
-   _console64.o _divmod64.o _gdt64.o _idt64.o _apic64.o _vgpu64.o _cpu64.o _nvme64.o _sched64.o _smp64.o _smptr64.o _i2c64.o _input64.o _wm64.o _ui64.o _wmglue64.o
+   _console64.o _divmod64.o _gdt64.o _idt64.o _apic64.o _vgpu64.o _cpu64.o _nvme64.o _sched64.o _smp64.o _smptr64.o _i2c64.o _input64.o _term64.o _wm64.o _ui64.o _wmglue64.o
 
 echo "built kernel64.elf"
 echo "  undefined symbols: $(nm -u kernel64.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"

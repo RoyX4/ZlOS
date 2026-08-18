@@ -296,6 +296,18 @@ extern int  i2c_hid_byte(int i);
 /* ---- the compositor (wm.c / ui.c / wmglue.c) ---------------------------
  * Mechanism only. kernel.zl supplies the policy through the app_* functions
  * that wmglue.c binds to - see kernel/docs/desktop-wiring.md. */
+/* ---- the terminal app (term.c) -----------------------------------------
+ * A scrollback ring plus a typed-command matcher. The matcher is HERE, in C,
+ * because comparing two runtime strings is the one thing the zl kernel subset
+ * cannot do - it has string literals but no string values. */
+extern void term_putc(char c);
+extern int  term_key(int code);
+extern int  term_cmd(void);
+extern int  term_arg(void);
+extern void term_clear(void);
+extern void term_draw(int x, int y, int w, int h, unsigned int fg,
+                      unsigned int dim, unsigned int accent, int cursor_on);
+
 extern int  wm_available(void);
 extern int  wm_bind_zl(void);
 extern void wm_init(void);
@@ -308,6 +320,7 @@ extern int  wm_focused(void);
 extern int  wm_count(void);
 extern int  wm_add_tab(int win, int app, const char *title);
 extern void wm_damage(int x, int y, int w, int h);
+extern void wm_damage_win(int win);
 extern void ui_theme_init(int scale);
 
 extern void input_poll(void);
@@ -382,6 +395,12 @@ static void zl_putc(char c)
     /* screen for a human, serial for verify.sh - both, always, so a
      * headless test still sees everything the user would */
     console_putc(c);
+    /* ...and into the terminal's scrollback, so the shell can be REDRAWN.
+     * A tee, not a redirect: the console and the serial log below are
+     * completely unaffected, which is what keeps verify.sh byte-identical.
+     * Without this the compositor has nothing to repaint the shell FROM, and
+     * dragging a window across it would erase it permanently. */
+    term_putc(c);
     /* Wait for the transmit holding register - but never forever. A laptop has
      * no UART at 0x3F8; an undecoded port floats high, so this reads 0xFF and
      * falls straight through, which is why it has always worked. If a machine
@@ -722,6 +741,15 @@ Value zl_calln(const char *name, int n, ...)
      * it is TRUE only when there is a framebuffer AND kernel.zl defines
      * app_draw. On verify.sh's -kernel -display none there is no framebuffer,
      * so this is 0 and the plain text shell runs exactly as before. */
+    if (streq(name, "term_key"))   return zl_num((double)term_key((int)a[0].num));
+    if (streq(name, "term_cmd"))   return zl_num((double)term_cmd());
+    if (streq(name, "term_arg"))   return zl_num((double)term_arg());
+    if (streq(name, "term_clear")) { term_clear(); return zl_nil(); }
+    if (streq(name, "term_draw"))  { term_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,
+                                               (unsigned int)(unsigned long long)a[4].num,
+                                               (unsigned int)(unsigned long long)a[5].num,
+                                               (unsigned int)(unsigned long long)a[6].num,
+                                               (int)a[7].num); return zl_nil(); }
     if (streq(name, "wm_avail"))   return zl_num((double)wm_available());
     if (streq(name, "wm_bind"))    return zl_num((double)wm_bind_zl());
     if (streq(name, "wm_init"))    { wm_init(); return zl_nil(); }
@@ -733,6 +761,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_stop"))    { wm_stop(); return zl_nil(); }
     if (streq(name, "wm_focus"))   return zl_num((double)wm_focused());
     if (streq(name, "wm_n"))       return zl_num((double)wm_count());
+    if (streq(name, "wm_dmg"))     { wm_damage_win((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "ui_theme"))   { ui_theme_init((int)a[0].num); return zl_nil(); }
     if (streq(name, "in_poll"))    { input_poll(); return zl_nil(); }

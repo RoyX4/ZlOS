@@ -57,6 +57,8 @@ gcc $CFLAGS -c smp.c -o _smp.o
 gcc $CFLAGS -c i2c_hid.c -o _i2c.o
 # the input stack: events, modifiers, repeat
 gcc $CFLAGS -c input.c -o _input.o
+# the terminal app: scrollback + the typed-command matcher
+gcc $CFLAGS -c term.c -o _term.o
 # the compositor and the toolkit. Compiled and linked, but nothing CALLS them
 # yet: kernel.zl still ends in the shell's while-loop. That is deliberate -
 # the compositor must be optional, because verify.sh boots -kernel -display
@@ -74,7 +76,7 @@ gcc -m32 -c boot.S -o _boot.o
 # only things the kernel took from libgcc, and divmod.c now supplies them.
 # Nothing GNU is linked into the kernel any more - only gcc-the-tool that
 # compiled the C, which nativegen is on track to replace.
-ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o _input.o _wm.o _ui.o _wmglue.o
+ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o
 
 echo "built kernel.elf"
 echo "  undefined symbols: $(nm -u kernel.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"
