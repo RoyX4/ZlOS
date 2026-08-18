@@ -629,13 +629,38 @@ the desktop on real hardware:
 
 ## The recurring bug class — check this FIRST
 
-Five times now: **a DMA buffer outside guest RAM, or an address truncated to
-32 bits.** Symptoms look like protocol bugs.
+Six times now: **a DMA buffer outside guest RAM, on top of another buffer, or an
+address truncated to 32 bits.** Symptoms look like protocol bugs.
 
 - zlOS needs `-m 256` minimum; the DMA arena starts at 224 MiB
 - `u32 reg = xop + OFFSET` where xop is a 64-bit BAR → **reads correct, writes
   vanish**, 64-bit build only
 - Every driver now ships a `*_ram_ok()` probe
+
+**The sixth was caught by reading, not by running, and that is the lesson.**
+`i2c_hid.c` had `HID_BUF` at `0x0C900000` — 9 MiB inside the 16 MiB arena
+`fb.c` hands out for cached blurs, and inside the span `back` occupied before
+the compositor moved it. Two owners, one address range, neither aware of the
+other. It had never been *observed* because it could not be: QEMU has no Intel
+LPSS I2C controller, so the touchpad driver only runs on the laptop, which is
+also the only machine with a panel big enough to make the framebuffer reach.
+The two halves of the bug were never on the same machine as a working test.
+
+The map is now **[`kernel/memmap.h`](memmap.h)** — declared once, with every
+owner asserting its own extent against its neighbours at compile time. It
+replaced a comment in `fb.c` that carried the list *and told you not to trust
+it* ("do not take this list on trust, re-grep it"). That instruction was the
+admission; the list was already wrong when it was written.
+
+```
+cd kernel/hosttest && ./memmap-guard-test.sh    # seconds, no QEMU, no hardware
+```
+
+12 checks: the six owners compile, five deliberate breaks are each refused by
+the build (including a replay of this exact bug), and the 34 addresses that were
+rebased onto the header are proven identical to the literals they replaced.
+**A `_Static_assert` nobody has watched fail is a decoration, not a guard** —
+that is what the negative half of that script is for.
 
 ## Verify before believing anything
 

@@ -37,6 +37,8 @@
  * That is a deliberate trade and worth naming rather than hiding.
  */
 
+#include "memmap.h"
+
 typedef unsigned int   u32;
 typedef unsigned char  u8;
 
@@ -53,7 +55,7 @@ extern u32 idt_ticks(void);
 
 #define MAX_TASKS   8
 #define STACK_BYTES 32768              /* 32 KiB per task */
-#define STACK_BASE  0x0B000000u        /* 176 MiB: clear of everything else */
+#define STACK_BASE  ((unsigned int)HI_SCHED)   /* 176 MiB, from memmap.h */
 
 #define TASK_FREE    0
 #define TASK_READY   1
@@ -258,7 +260,18 @@ u32 sched_ticks(int i)   { return (i >= 0 && i < ntasks) ? tasks[i].ticks : 0; }
  * Three counters in memory, each incremented by its own task at its own rate.
  * The shell reads them. If they all advance while the shell is also running,
  * more than one thing is genuinely happening. */
-#define COUNTER_BASE 0x0B0F0000u
+#define COUNTER_BASE (STACK_BASE + 0x0F0000u)
+#define COUNTERS     3
+
+/* Stacks grow down from the top of each slot, so the highest byte this file
+ * touches is MAX_TASKS slots up from the base; the counters sit above that and
+ * must still land inside the region. Neither was checked before - sched.c was
+ * in no assertion at all, and COUNTER_BASE was not even in the map. */
+_Static_assert((unsigned long)STACK_BASE + (unsigned long)MAX_TASKS * STACK_BYTES
+                   <= COUNTER_BASE,
+               "sched: task stacks have grown into the demo counters");
+_Static_assert((unsigned long)COUNTER_BASE + COUNTERS * 4UL <= HI_HID,
+               "sched: counters escape their region into the HID buffers");
 
 static void counter_task(int slot, u32 delay)
 {
@@ -275,7 +288,7 @@ static void task_c(void) { counter_task(2, 25); }   /* every 250 ms */
 
 u32 sched_counter(int i)
 {
-    if (i < 0 || i > 2) return 0;
+    if (i < 0 || i >= COUNTERS) return 0;
     return *(volatile u32 *)(uptr)(COUNTER_BASE + (u32)i * 4);
 }
 
@@ -283,7 +296,7 @@ u32 sched_counter(int i)
 int sched_start_demo(void)
 {
     sched_init();
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < COUNTERS; i++)
         *(volatile u32 *)(uptr)(COUNTER_BASE + (u32)i * 4) = 0;
     task_create((uptr)task_a);
     task_create((uptr)task_b);

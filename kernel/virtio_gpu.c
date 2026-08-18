@@ -41,6 +41,8 @@
  *     TRANSFER_TO_HOST_2D + RESOURCE_FLUSH   per frame
  */
 
+#include "memmap.h"
+
 typedef unsigned long long u64;
 typedef unsigned int       u32;
 typedef unsigned short     u16;
@@ -117,18 +119,28 @@ static void mmio_w8(uptr a, u8 v)  { *(volatile u8 *)a = v; }
 /* ---- our memory. Same discipline as the USB driver: fixed physical
  * addresses, identity mapped on every boot path, comfortably clear of the
  * framebuffer back buffer and the xHCI arena. -------------------------- */
-#define VMEM_DESC     0x0F000000u   /* descriptor table                     */
-#define VMEM_AVAIL    0x0F001000u   /* available ring                       */
-#define VMEM_USED     0x0F002000u   /* used ring                            */
-#define VMEM_CMD      0x0F003000u   /* command buffers we send              */
-#define VMEM_RESP     0x0F004000u   /* replies the device writes            */
-#define VMEM_SGLIST   0x0F005000u   /* scatter list for the framebuffer     */
+#define VMEM_DESC     ((unsigned int)HI_VGPU)   /* descriptor table          */
+#define VMEM_AVAIL    (VMEM_DESC + 0x1000u)   /* available ring              */
+#define VMEM_USED     (VMEM_DESC + 0x2000u)   /* used ring                   */
+#define VMEM_CMD      (VMEM_DESC + 0x3000u)   /* command buffers we send     */
+#define VMEM_RESP     (VMEM_DESC + 0x4000u)   /* replies the device writes   */
+#define VMEM_SGLIST   (VMEM_DESC + 0x5000u)   /* scatter list for the fb     */
 /* 241 MiB. NOT 256: that is exactly the top of a -m 256 guest, so the device
  * cannot reach it and RESOURCE_ATTACH_BACKING fails with ERR_UNSPEC - which
  * reads like a driver bug and is not one. Everything the GPU DMAs has to be
  * inside real RAM, and this is the last clear region below the 256 MiB line. */
-#define VMEM_FB       0x0F100000u
+#define VMEM_FB       (VMEM_DESC + 0x100000u)
 #define VMEM_FB_MAX   0x00E00000u   /* 14 MiB - enough for 1920x1200x4 */
+
+/* The 256 MiB line, enforced rather than described. The paragraph above is the
+ * whole reason this assert exists: crossing HI_TOP does not fail loudly, it
+ * fails as ERR_UNSPEC from RESOURCE_ATTACH_BACKING and reads like a driver bug.
+ * virtio_gpu.c was in no assertion before - the top half of the map was held up
+ * by prose only. */
+_Static_assert((unsigned long)VMEM_FB + VMEM_FB_MAX <= HI_TOP,
+               "virtio-gpu: the framebuffer crosses the 256 MiB guest ceiling");
+_Static_assert((unsigned long)VMEM_SGLIST < VMEM_FB,
+               "virtio-gpu: the rings have grown into the framebuffer");
 #define QSZ           64            /* descriptors per queue                */
 
 static int  vg_idx = -1;

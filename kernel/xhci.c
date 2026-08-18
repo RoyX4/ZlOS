@@ -36,6 +36,8 @@
  *     5. HID boot protocol - actual keystrokes
  */
 
+#include "memmap.h"
+
 typedef unsigned long long u64;
 typedef unsigned int       u32;
 typedef unsigned short     u16;
@@ -359,15 +361,15 @@ int xhci_devices_attached(void)
  * zlOS's scratch does: there is no allocator, and this memory must be
  * physically contiguous and identity mapped, which it is on every path.
  */
-#define XMEM_DCBAA   0x0E000000u   /* 224 MiB: slot pointer array           */
-#define XMEM_CMDRING 0x0E001000u   /* the command ring                       */
-#define XMEM_EVTRING 0x0E002000u   /* the event ring                         */
-#define XMEM_ERST    0x0E003000u   /* event ring segment table               */
-#define XMEM_CTX     0x0E004000u   /* device + input contexts                */
-#define XMEM_XFER    0x0E010000u   /* per-endpoint transfer rings            */
-#define XMEM_DATA    0x0E020000u   /* DMA buffers for descriptors/reports    */
-#define XMEM_SCRATCH_ARR 0x0E030000u /* array of scratchpad buffer pointers  */
-#define XMEM_SCRATCH 0x0E040000u   /* the scratchpad pages themselves        */
+#define XMEM_DCBAA   ((unsigned int)HI_XHCI)   /* 224 MiB: slot pointer array */
+#define XMEM_CMDRING (XMEM_DCBAA + 0x1000u)  /* the command ring             */
+#define XMEM_EVTRING (XMEM_DCBAA + 0x2000u)  /* the event ring               */
+#define XMEM_ERST    (XMEM_DCBAA + 0x3000u)  /* event ring segment table     */
+#define XMEM_CTX     (XMEM_DCBAA + 0x4000u)  /* device + input contexts      */
+#define XMEM_XFER    (XMEM_DCBAA + 0x10000u) /* per-endpoint transfer rings  */
+#define XMEM_DATA    (XMEM_DCBAA + 0x20000u) /* DMA buffers for descriptors  */
+#define XMEM_SCRATCH_ARR (XMEM_DCBAA + 0x30000u) /* scratchpad pointer array */
+#define XMEM_SCRATCH (XMEM_DCBAA + 0x40000u) /* the scratchpad pages         */
 #define SCRATCH_MAX  64            /* entries the pointer array has room for */
 #define SCRATCH_BYTES 0x00400000u  /* 4 MiB reserved for scratchpad pages    */
 
@@ -742,6 +744,15 @@ int xhci_enable_slot(void)
 /* 32 KiB apart, not 16: EP0_RING(16) would otherwise land exactly on
  * INT_RING(0) and raising MAX_SLOTS would alias them with no diagnostic. */
 #define INT_RING(s)    (XMEM_XFER + 0x8000 + (u32)(s) * RING_STRIDE)
+
+/* "with no diagnostic" is now false, which is the point. Each family of
+ * per-slot allocations must stop before the next one starts. */
+_Static_assert(CTX_DEVICE(MAX_SLOTS) <= XMEM_XFER,
+               "xhci: device contexts have grown into the transfer rings");
+_Static_assert(EP0_RING(MAX_SLOTS) <= INT_RING(0),
+               "xhci: EP0 rings alias the interrupt rings (MAX_SLOTS too large)");
+_Static_assert(INT_RING(MAX_SLOTS) <= XMEM_DATA,
+               "xhci: interrupt rings have grown into the DMA buffers");
 
 static void ctx_set(u32 base, int which, int dword, u32 val)
 {
@@ -1474,12 +1485,26 @@ int xhci_kbd_report(int i)
  * the interrupt endpoint only in their type field and in having no polling
  * interval.
  */
-#define MSC_IN_RING(s)   (0x0E500000u + (u32)(s) * RING_STRIDE)
-#define MSC_OUT_RING(s)  (0x0E508000u + (u32)(s) * RING_STRIDE)
-#define MSC_CBW          0x0E510000u
-#define MSC_CSW          0x0E510200u
-#define MSC_DATA         0x0E511000u
+#define MSC_IN_RING(s)   (XMEM_DCBAA + 0x500000u + (u32)(s) * RING_STRIDE)
+#define MSC_OUT_RING(s)  (XMEM_DCBAA + 0x508000u + (u32)(s) * RING_STRIDE)
+#define MSC_CBW          (XMEM_DCBAA + 0x510000u)
+#define MSC_CSW          (XMEM_DCBAA + 0x510200u)
+#define MSC_DATA         (XMEM_DCBAA + 0x511000u)
 #define MSC_DATA_MAX     4096u
+
+/* The mass-storage buffers are the highest thing xhci.c touches, so this is
+ * where the arena's ceiling gets checked. The per-slot rings are indexed by
+ * MAX_SLOTS, which is exactly the aliasing hazard the EP0_RING comment warns
+ * about above - raising MAX_SLOTS now fails the build instead of silently
+ * overlapping the next ring set. */
+_Static_assert(XMEM_SCRATCH + SCRATCH_BYTES <= MSC_IN_RING(0),
+               "xhci: the scratchpad pages collide with the MSC rings");
+_Static_assert(MSC_IN_RING(MAX_SLOTS)  <= MSC_OUT_RING(0),
+               "xhci: MSC in-rings alias the out-rings (MAX_SLOTS too large)");
+_Static_assert(MSC_OUT_RING(MAX_SLOTS) <= MSC_CBW,
+               "xhci: MSC out-rings alias the command block wrapper");
+_Static_assert((unsigned long)MSC_DATA + MSC_DATA_MAX <= HI_VGPU,
+               "xhci: the DMA arena escapes into virtio-gpu's region");
 
 #define EPTYPE_BULK_OUT  2
 #define EPTYPE_BULK_IN   6

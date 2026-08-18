@@ -123,24 +123,18 @@ int fb_get_rows(void) { return fb_rows; }
  * file has to know the back buffer exists - callers just draw, then present.
  */
 /* ---- the fixed high-RAM map ----------------------------------------------
- * There is no allocator, so every multi-megabyte buffer in this kernel lives
- * at a fixed physical address. They are NEIGHBOURS, and the only thing
- * stopping one from eating the next is arithmetic. Every base below was read
- * out of the file that owns it - do not take this list on trust, re-grep it:
+ * The map itself now lives in memmap.h, declared once and checked by the
+ * compiler, because this comment used to carry the list AND tell you not to
+ * trust it. It was already wrong when it said that: i2c_hid.c had put its
+ * report buffer 9 MiB into the blur arena below, and no build ever complained.
+ * Read memmap.h for the regions and for why they are a header.
  *
- *   0x08000000  128 MiB   fb.c          back     the back buffer
- *   0x0B000000  176 MiB   sched.c       STACK_BASE, kernel task stacks
- *   0x0C000000  192 MiB   fb.c          blur     the cached-blur arena
- *   0x0D000000  208 MiB   nvme.c        NMEM_ASQ, admin queues
- *   0x0E000000  224 MiB   xhci.c        XMEM_DCBAA - the DMA arena
- *   0x0F000000  240 MiB   virtio_gpu.c  VMEM_DESC
- *
- * So each buffer's ceiling is set by whoever comes after it, and "does this
- * mode fit" is that subtraction. It is NOT a compile-time pixel count that
- * silently stops being true when the panel gets bigger - which is exactly the
- * bug this replaces. BACK_MAX was 1920*1200, so the ThinkPad's 2560x1440 made
- * back_on 0 and took the back buffer, subpixel text, fast read-back AND
- * window dragging with it, without printing a word. desktop-TODO 0a, T-1.
+ * What stays here is what fb.c owns: two of those regions, and the reason the
+ * ceiling of each is a SUBTRACTION rather than a pixel count. A pixel count
+ * silently stops being true when the panel gets bigger - BACK_MAX was
+ * 1920*1200, so the ThinkPad's 2560x1440 made back_on 0 and took the back
+ * buffer, subpixel text, fast read-back AND window dragging with it, without
+ * printing a word. desktop-TODO 0a, T-1.
  *
  * C4 CHANGED THIS MAP, and the change is the point of C4. 128 MiB and 160 MiB
  * used to hold bg_buf and sp_buf - a whole-screen snapshot of the desktop and a
@@ -161,32 +155,20 @@ int fb_get_rows(void) { return fb_rows; }
  *     get wrong: a window's damage IS its frame plus its shadow.
  *   - 192..208 MiB, which back has vacated, becomes the cached-blur arena.
  */
-#define HI_BACK   0x08000000UL
-#define HI_SCHED  0x0B000000UL
-#define HI_BLUR   0x0C000000UL
-#define HI_NVME   0x0D000000UL
+#include "memmap.h"
 
+/* Each region's ceiling is the base of whoever comes next. `back` runs up to
+ * sched.c's stacks; the blur arena runs up to nvme.c's queues. */
 #define BACK_LIMIT ((unsigned int)(HI_SCHED - HI_BACK))  /* 48 MiB */
 #define BLUR_LIMIT ((unsigned int)(HI_NVME  - HI_BLUR))  /* 16 MiB */
 
-/* THE MAP MUST BE IN ORDER, AND THE COMPILER SHOULD SAY SO.
- *
- * Every limit above is a subtraction of one base from the next, which is only
- * meaningful if the bases are in ascending order. Reorder two of them by
- * mistake and the subtraction underflows to a colossal unsigned number, every
- * "does it fit" test passes, and a buffer lands on top of a neighbour - which
- * is the DMA-arena collision this project has hit five times, in the shape
- * that hides best.
- *
- * These cost nothing at run time and fail the build the moment the map stops
- * making sense. A comment claiming the order would not have. */
-_Static_assert(HI_BACK  < HI_SCHED, "high-RAM map out of order: back >= sched");
-_Static_assert(HI_SCHED < HI_BLUR,  "high-RAM map out of order: sched >= blur");
-_Static_assert(HI_BLUR  < HI_NVME,  "high-RAM map out of order: blur >= nvme");
-/* and 3840x2160x4 must actually fit in what back was given, or the headline
- * claim of C4 is false in a way nobody would notice until a 4K panel */
+/* 3840x2160x4 must actually fit in what back was given, or the headline claim
+ * of C4 is false in a way nobody would notice until a 4K panel */
 _Static_assert(3840UL * 2160UL * 4UL <= (unsigned long)BACK_LIMIT,
                "the back buffer no longer covers 3840x2160");
+/* and the blur arena must still be the 16 MiB its allocator advertises */
+_Static_assert((unsigned long)HI_BLUR + BLUR_LIMIT <= HI_NVME,
+               "the blur arena overruns nvme's queues");
 
 static unsigned int *back = (unsigned int *)HI_BACK;
 static int back_on = 0;
