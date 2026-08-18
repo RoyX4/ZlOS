@@ -32,6 +32,8 @@ void fb_clip_none(void);
 void fb_clip(int x, int y, int w, int h);
 unsigned int fb_pxw(void);
 unsigned int fb_pxh(void);
+int  fb_pointer_extent(void);                  /* the cursor's size at this scale */
+void fb_pointer_saved(int *x, int *y, int *n); /* the patch ACTUALLY saved */
 
 /* ---- input.c ------------------------------------------------------------- */
 int input_next(void);
@@ -523,6 +525,94 @@ int main(void)
     frame();
     ok("a focus change leaves no shadow edge behind",
        all_wallpaper(200 - 60, 200 - 60, 200 + 300 + 60, 200 + 200 + 60));
+
+    /* ------------------------------------------------------------- cursor */
+    /* The pointer is the one thing the eye follows constantly, and every one
+     * of its failure modes is invisible in a still: a halo left behind is only
+     * visible if you move the pointer and look at where it WAS, and "the edges
+     * are hard" is invisible unless you magnify. So it gets assertions.
+     *
+     * The stated gate for this work is probe-shot.py with the cursor cropped
+     * and magnified 8x. That needs a booting kernel and the tree does not link
+     * (T-13, another session's uncommitted work). These check the same three
+     * properties mechanically, which is strictly stronger than looking:
+     * "no stair-steps" becomes "there exist intermediate blend values",
+     * "no trail" becomes "every pixel it left is exactly wallpaper again". */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    wm_damage(0, 0, W, H);
+    pointer(300, 300, 0);
+
+    int ext = fb_pointer_extent();
+    int ox, oy, sv;
+    fb_pointer_saved(&ox, &oy, &sv);
+
+    ok("the cursor sprite covers its own hotspot",
+       fb_get_px(300, 300) != WALL);
+
+    /* SOFT EDGES. Over a flat wallpaper the old row-by-row cursor produced
+     * exactly two colours - the fill and the edge - because every pixel it
+     * touched it overwrote. An anti-aliased one blends, so the majority of a
+     * 16x16 box is neither wallpaper, nor pure fill, nor pure edge. That
+     * difference is the whole item, and it is what "no stair-steps" means when
+     * you cannot look at a screenshot. */
+    int blended = 0, opaque = 0;
+    for (int y = oy; y < oy + ext; y++)
+        for (int x = ox; x < ox + ext; x++) {
+            unsigned int p = fb_get_px(x, y);
+            if (p == WALL) continue;
+            if (p == 0xEEF4FF || p == 0x0A0E18) opaque++;
+            else blended++;
+        }
+    ok("the cursor has opaque interior pixels", opaque > 0);
+    ok("...and MORE partially-blended ones: soft edges, not stair-steps",
+       blended > opaque);
+
+    /* THE INK FITS INSIDE THE SAVED PATCH. This is the property, and the trail
+     * is only its symptom. An anti-aliased cursor reaches a pixel further out
+     * in every direction than any hard-edged reading of the shape suggests, so
+     * a save-under sized from the visible arrow is short and every move leaves
+     * a half-blended pixel that nothing ever repaints. Measured against fb.c's
+     * OWN origin and extent, not a second copy of the arithmetic here. */
+    int ix0 = W, iy0 = H, ix1 = -1, iy1 = -1;
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++)
+            if (fb_get_px(x, y) != WALL) {
+                if (x < ix0) ix0 = x;
+                if (y < iy0) iy0 = y;
+                if (x > ix1) ix1 = x;
+                if (y > iy1) iy1 = y;
+            }
+    /* Against `sv`, what fb.c's restore loop ACTUALLY walks - not against
+     * `ext`, the size it was supposed to be. Pointed at `ext` this assertion
+     * passes with a save-under two pixels short, because then the check and
+     * the bug read different variables and the check agrees with the intent.
+     * Verified by injecting exactly that. */
+    ok("every inked pixel lies inside the ACTUALLY-saved patch",
+       sv > 0 && ix0 >= ox && iy0 >= oy && ix1 < ox + sv && iy1 < oy + sv);
+
+    /* NO TRAIL. Move it a long way and assert the place it left is wallpaper
+     * again - every pixel, not a sample. Nothing repaints that region, so a
+     * single stale blended pixel here stays on screen forever. */
+    pointer(700, 600, 0);
+    ok("moving the pointer leaves NO halo where it was",
+       all_wallpaper(300 - ext - 4, 300 - ext - 4, 300 + ext + 4, 300 + ext + 4));
+
+    /* ...and the same for a short move, where the old and new boxes OVERLAP.
+     * That is the harder case: the save happens after the restore, so an
+     * ordering slip shows here and not in the long move. */
+    pointer(300, 300, 0);
+    pointer(303, 302, 0);
+    fb_pointer_saved(&ox, &oy, &sv);
+    ok("...and after a 3-pixel move, where the boxes overlap",
+       all_wallpaper(300 - ext - 4, 300 - ext - 4, ox, 300 + ext + 4));
+
+    /* IT SCALES. The old cursor was 9x16 physical pixels on any panel, while
+     * the icons, the fonts and every metric in ui.h follow ui(). fb.c derives
+     * the cell from the mode, so a wider mode must give a bigger pointer.
+     * Last, because it changes the mode out from under everything above. */
+    ok("at a 1x cell the pointer is 16px", ext == 16);
+    fb_setup((unsigned long)vram, 1600 * 4, 1600, 900, 32);
+    ok("...and follows ui() to 32px at a 2x cell", fb_pointer_extent() == 32);
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;

@@ -43,6 +43,7 @@ int fb_cell_h(void) { return cell_h; }
 
 unsigned int fb_get_px(int x, int y);   /* defined below; used by the AA text path */
 void idt_set_pointer_bounds(int w, int h);   /* the mouse clamp, pushed not pulled */
+void fb_pointer_forget(void);           /* defined below; the sprite dies with the mode */
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);  /* the fast row fill */
 void fb_clip_none(void);                /* the scissor; defined below with put_pixel */
 
@@ -523,6 +524,7 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
     tx0      = 0;
     tx1      = fb_cols - 1;      /* full width until zl opens a text box */
     fb_clip_none();              /* the scissor follows the new geometry */
+    fb_pointer_forget();         /* ...and the cursor sprite does not survive it */
 
     /* Draw into RAM and blit, rather than drawing straight into the card.
      * Refused only when the mode does not fit between `back` and its
@@ -1321,53 +1323,202 @@ void fb_cube(int cx, int cy, int size, int angle, unsigned int color)
         fb_line(px[E[e][0]], py[E[e][0]], px[E[e][1]], py[E[e][1]], color);
 }
 
-/* a mouse pointer: a small filled arrow, plus a contrasting outline so it
- * shows on any background. Drawn/erased by the caller each frame. */
-void fb_cursor_arrow(int x, int y, unsigned int fill, unsigned int edge)
+/* ---- the mouse pointer ----------------------------------------------------
+ * The cursor was the LAST 1-bit asset in this renderer. Everything else -
+ * both mono font atlases, the proportional font, the icons at two sizes - is a
+ * gamma-correct coverage atlas, and the cursor was a 12x18 triangle built row
+ * by row with a hard step per row and a fixed pixel width. It is also the one
+ * thing the eye follows constantly, which is why "why does everything still
+ * look blocky" survived three resampling fixes: the cursor is drawn, not
+ * resampled, so no resampling audit could see it.
+ *
+ * It also never scaled. `sc` is 2 on every screen 1400px or wider, and the
+ * icons, the fonts and every metric in ui.h follow it - the cursor stayed 9x16
+ * physical pixels on a 2560-wide panel.
+ *
+ * Now it is two coverage planes from cursor.inc, blitted through the same
+ * blend_cov the fonts and icons use: the dark outline by `body`, the light
+ * interior by `fill` on top. See gen_cursor.py for why it is two planes.
+ */
+#include "cursor.inc"
+
+/* Which shape is showing. The kinds beyond the arrow exist for the I-beam over
+ * text, the corner grip, and a busy indicator; nothing selects them yet, so
+ * fb_cursor_set is the seam that keeps this from being an atlas with no
+ * caller. */
+static int cur_kind = CUR_ARROW;
+
+void fb_cursor_set(int kind)
 {
-    /* a simple 12x18 triangle-ish pointer, row by row */
-    for (int r = 0; r < 16; r++) {
-        int w = r < 12 ? r + 1 : (16 - r) * 2;
-        if (w < 1) w = 1;
-        if (w > 8) w = 8;
-        fb_fill_px(x, y + r, w, 1, fill);
-        put_pixel((unsigned)(x + w), (unsigned)(y + r), edge);   /* right edge */
-    }
-    fb_fill_px(x, y, 1, 16, edge);       /* left edge */
-    fb_fill_px(x, y, 9, 1, edge);        /* top edge  */
+    if ((unsigned)kind >= CUR_N) return;
+    cur_kind = kind;
 }
 
-/* ---- the live mouse pointer, as a sprite -------------------------------
- * No hardware cursor on a raw framebuffer, so we do it the way every pre-GPU
- * OS did: before drawing the arrow, SAVE the little patch of screen under it;
- * to move it, RESTORE that patch (erasing the arrow cleanly), then save + draw
- * at the new spot. Two tiny copies, no full redraw - the arrow glides. */
-#define CUR_W 11
-#define CUR_H 17
-static unsigned int cur_buf[CUR_W * CUR_H];
-static int cur_x = 0, cur_y = 0, cur_up = 0;
+int fb_cursor_get(void) { return cur_kind; }
 
-/* put the saved patch back, removing the arrow from the screen */
+/* Follow the console's cell exactly as fb_icon24 does, so the pointer grows
+ * with ui() rather than staying 16px on a 4K panel.
+ *
+ * Capped at 4. Above that the sprite buffer below would not hold the patch,
+ * and a cursor that silently stops being saved leaves a trail across the whole
+ * desktop - so the size stops growing rather than the save-under overflowing.
+ * cell_w only ever yields 1 or 2 today; fb_icon24 anticipates 3+ for a
+ * fractional UI scale. */
+#define CUR_MAX_SC 4
+static int cur_scale(void)
+{
+    int sc = cell_w / GLYPH_W;
+    if (sc < 1) sc = 1;
+    if (sc > CUR_MAX_SC) sc = CUR_MAX_SC;
+    return sc;
+}
+
+/* the drawn size of the cursor at the current scale, in screen pixels */
+static int cur_dim(void) { return CUR_SZ16 * cur_scale(); }
+
+/* Blit one plane of the current cursor with its top-left at (ox, oy).
+ *
+ * sc 1 and 2 read the atlas that was RASTERIZED for them and use the generated
+ * ink box, so no zero-coverage rows are walked. Anything else resamples from
+ * the 32 set - interpolating, never copying, which is the whole point of
+ * blend_cov_scaled - and blits the full box, because a resampled ink box is
+ * arithmetic that can only be got wrong for no visible gain. */
+static void cur_plane(int ox, int oy, int body, unsigned int rgb)
+{
+    int k = cur_kind;
+    int sc = cur_scale();
+
+    if (sc == 1) {
+        const unsigned char *a = body ? &cur_body16[k][0][0] : &cur_fill16[k][0][0];
+        const short *b = cur_box16[k];
+        blend_cov_s(ox + b[0], oy + b[1], a + b[1] * CUR_SZ16 + b[0],
+                    b[2], b[3], CUR_SZ16, rgb);
+        return;
+    }
+    if (sc == 2) {
+        const unsigned char *a = body ? &cur_body32[k][0][0] : &cur_fill32[k][0][0];
+        const short *b = cur_box32[k];
+        blend_cov_s(ox + b[0], oy + b[1], a + b[1] * CUR_SZ32 + b[0],
+                    b[2], b[3], CUR_SZ32, rgb);
+        return;
+    }
+    blend_cov_scaled(ox, oy, body ? &cur_body32[k][0][0] : &cur_fill32[k][0][0],
+                     CUR_SZ32, CUR_SZ32, cur_dim(), cur_dim(), rgb);
+}
+
+/* Draw the cursor with its HOTSPOT at (x, y).
+ *
+ * The hotspot is the pixel the pointer position actually means: the arrow's
+ * tip, and the middle of everything symmetric. The old arrow's tip was its
+ * top-left corner, so this used to be the identity; it is not any more, and
+ * getting it wrong is a systematic offset between where the user aims and what
+ * gets clicked rather than anything visible.
+ *
+ * The signature is unchanged because console.c calls it. */
+void fb_cursor_arrow(int x, int y, unsigned int fill, unsigned int edge)
+{
+    int sc = cur_scale();
+    const short *hot = (sc == 1) ? cur_hot16[cur_kind] : cur_hot32[cur_kind];
+    int hx = (sc <= 2) ? hot[0] : hot[0] * sc / 2;
+    int hy = (sc <= 2) ? hot[1] : hot[1] * sc / 2;
+    cur_plane(x - hx, y - hy, 1, edge);      /* the outline, underneath */
+    cur_plane(x - hx, y - hy, 0, fill);      /* the interior, over it   */
+}
+
+/* ---- the live pointer, as a sprite --------------------------------------
+ * No hardware cursor on a raw framebuffer, so we do it the way every pre-GPU
+ * OS did: before drawing, SAVE the patch of screen under the cursor; to move
+ * it, RESTORE that patch (erasing it cleanly), then save + draw at the new
+ * spot. Two small copies, no full redraw - the pointer glides.
+ *
+ * THE SAVED PATCH IS THE WHOLE ATLAS BOX, DELIBERATELY LARGER THAN THE INK.
+ *
+ * That is the bug this rewrite would otherwise have produced. The old cursor
+ * was opaque: every pixel it touched it overwrote, so an 11x17 save-under for
+ * a 9x16 arrow was enough. An anti-aliased cursor BLENDS with what is under
+ * it, and its soft edge reaches a pixel further out in every direction than
+ * any hard-edged reading of the shape suggests. A saved patch one pixel short
+ * of that leaves a partially-blended pixel behind on every move - a halo that
+ * trails the pointer across the desktop forever and never gets cleaned up,
+ * because nothing ever repaints that pixel again.
+ *
+ * Saving the ink box would be tighter and is exactly the arithmetic that gets
+ * that wrong. The box is 256 pixels at sc 1 and 1024 at sc 2, against 3.7M for
+ * one 2560x1440 frame - 0.03% - so the tight version buys nothing and costs a
+ * class of bug. Save the box, blit the ink, and the containment is true by
+ * construction rather than by a calculation.
+ */
+#define CUR_BUF_DIM (CUR_SZ16 * CUR_MAX_SC)
+static unsigned int cur_buf[CUR_BUF_DIM * CUR_BUF_DIM];
+static int cur_x = 0, cur_y = 0, cur_up = 0, cur_saved = 0;
+
+/* put the saved patch back, removing the cursor from the screen */
 void fb_pointer_hide(void)
 {
     if (!cur_up) return;
-    for (int j = 0; j < CUR_H; j++)
-        for (int i = 0; i < CUR_W; i++)
-            put_pixel((unsigned)(cur_x + i), (unsigned)(cur_y + j), cur_buf[j * CUR_W + i]);
+    for (int j = 0; j < cur_saved; j++)
+        for (int i = 0; i < cur_saved; i++)
+            put_pixel((unsigned)(cur_x + i), (unsigned)(cur_y + j),
+                      cur_buf[j * CUR_BUF_DIM + i]);
     cur_up = 0;
 }
 
-/* move/redraw the arrow to (x,y): hide the old one, save the new patch, draw */
+/* move/redraw the cursor so its hotspot lands on (x,y) */
 void fb_pointer_show(int x, int y)
 {
     fb_pointer_hide();
-    cur_x = x; cur_y = y;
-    for (int j = 0; j < CUR_H; j++)
-        for (int i = 0; i < CUR_W; i++)
-            cur_buf[j * CUR_W + i] = fb_get_px(x + i, y + j);
+
+    int sc = cur_scale();
+    const short *hot = (sc == 1) ? cur_hot16[cur_kind] : cur_hot32[cur_kind];
+    int hx = (sc <= 2) ? hot[0] : hot[0] * sc / 2;
+    int hy = (sc <= 2) ? hot[1] : hot[1] * sc / 2;
+
+    /* SAVE AT THE DRAW ORIGIN, not at the hotspot. They differ by the hotspot
+     * offset, and saving the wrong one restores a patch that is offset from
+     * the one the cursor was drawn into - which is the same trail, just moved. */
+    int n = cur_dim();
+    cur_x = x - hx;
+    cur_y = y - hy;
+    cur_saved = n;
+    for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++)
+            cur_buf[j * CUR_BUF_DIM + i] = fb_get_px(cur_x + i, cur_y + j);
     cur_up = 1;
-    fb_cursor_arrow(x, y, 0xEEF4FF, 0x0A0E18);   /* white arrow, dark outline */
+
+    fb_cursor_arrow(x, y, 0xEEF4FF, 0x0A0E18);   /* light body, dark outline */
 }
+
+/* How big the cursor is at the current scale - what the size SHOULD be. */
+int fb_pointer_extent(void) { return cur_dim(); }
+
+/* The patch that was ACTUALLY saved by the last fb_pointer_show: origin and
+ * edge. These two must be distinct from fb_pointer_extent() above, and the
+ * distinction cost a failing test to find.
+ *
+ * The containment assertion in wmtest asks "does every drawn pixel lie inside
+ * the saved patch". Pointed at cur_dim() it compares the ink against the size
+ * the save was SUPPOSED to be, so a save-under that is actually two pixels
+ * short still passes - the check and the bug read different variables and the
+ * check agrees with the intent rather than the behaviour. Injecting exactly
+ * that bug caught the trail test and not the containment test, which is the
+ * project's bug class 6: a predicate weaker than the property it names.
+ *
+ * Reporting cur_saved makes the assertion read what the restore loop reads. */
+void fb_pointer_saved(int *x, int *y, int *n)
+{
+    if (x) *x = cur_x;
+    if (y) *y = cur_y;
+    if (n) *n = cur_saved;
+}
+
+/* Drop the saved patch without painting it back.
+ *
+ * A mode change invalidates the sprite completely: cur_buf holds pixels from
+ * the old geometry and cur_x/cur_y are coordinates in it, so the next
+ * fb_pointer_hide would stamp stale pixels at a stale position into the new
+ * mode. fb_setup calls this. The old cursor had the same latent bug and only
+ * escaped it because nothing had re-run fb_setup yet. */
+void fb_pointer_forget(void) { cur_up = 0; }
 
 /* ---- backing store, for dragging windows without a GPU -------------------
  * The sticky-note trick: keep a snapshot of the desktop background (no

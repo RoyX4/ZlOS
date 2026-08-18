@@ -305,6 +305,9 @@ Authorised. Best used here for:
 
 ---
 
+**What came back: [`desktop-feel.md`](desktop-feel.md)** — this track's running
+record, gate output and measured numbers per item.
+
 Look: [`desktop-v10-plan.md`](desktop-v10-plan.md) · Platform:
 [`PLATFORM-PROMPT.md`](PLATFORM-PROMPT.md) · Contract: [`../ui.h`](../ui.h) ·
 History: [`desktop-overnight-run.md`](desktop-overnight-run.md)
