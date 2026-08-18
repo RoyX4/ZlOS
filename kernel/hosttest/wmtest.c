@@ -36,7 +36,9 @@ int  fb_pointer_extent(void);                  /* the cursor's size at this scal
 void fb_pointer_saved(int *x, int *y, int *n); /* the patch ACTUALLY saved */
 
 /* ---- input.c ------------------------------------------------------------- */
-int input_next(void);
+int  input_next(void);
+void input_set_speed(int pct);
+void input_set_accel(int on);
 
 /* ---- wmglue.c ------------------------------------------------------------ */
 int wm_bind_zl(void);
@@ -59,8 +61,27 @@ Value zl_num(double n)
 static int fake_x = 10, fake_y = 10, fake_btn = 0;
 static unsigned fake_ticks = 1;
 
-int idt_mouse_x(void)   { return fake_x; }
-int idt_mouse_y(void)   { return fake_y; }
+#define W 1280
+#define H 800
+
+/* THE REAL HARDWARE CLAMPS, SO THIS MUST TOO.
+ *
+ * idt.c's IRQ12 handler holds the pointer inside a bounded range and can never
+ * publish a negative or off-screen position. This harness used to hand back
+ * whatever a test set, which let assertions depend on pointer positions no
+ * real machine can produce - a drag was checked by pulling the pointer to
+ * -250,-86.
+ *
+ * That only became visible when input.c started clamping too, which it must:
+ * acceleration multiplies distance travelled, so a clamp adequate at 1:1 is
+ * not adequate at 4x, and off the edge the pointer is unreachable and the
+ * machine looks hung. Those tests then failed against a MORE faithful model,
+ * not a broken one. Clamping at the source keeps the harness honest and stops
+ * the same assumption creeping back in. */
+static int clampi(int v, int hi) { return v < 0 ? 0 : (v > hi ? hi : v); }
+
+int idt_mouse_x(void)   { return clampi(fake_x, W - 1); }
+int idt_mouse_y(void)   { return clampi(fake_y, H - 1); }
 int idt_mouse_btn(void) { return fake_btn; }
 unsigned int idt_ticks(void) { return fake_ticks; }
 int idt_scan(void)      { return 0; }
@@ -68,8 +89,6 @@ int xhci_key(void)      { return 0; }
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
 void zl_putc_pub(char c) { (void)c; }        /* fb.c's boot line: not wanted here */
 
-#define W 1280
-#define H 800
 #define BG_ADDR   0x08000000UL
 #define SP_ADDR   0x0A000000UL
 #define BACK_ADDR 0x0C000000UL
@@ -159,6 +178,21 @@ int main(void)
 
     printf("wmtest - fb.c + input.c + ui.c + wm.c, against fake hardware\n\n");
 
+    /* PIN THE POINTER GAIN TO THE IDENTITY.
+     *
+     * input.c now applies a speed multiplier and an acceleration curve, and
+     * ships with the curve ON - so the position the compositor receives is no
+     * longer the position the fake hardware was set to. Every assertion below
+     * that clicks a close box, a tab or a client area depends on pointer(x,y)
+     * actually putting the pointer at x,y; without this, eleven of them fail
+     * for a reason none of them is asking about.
+     *
+     * Aiming a click under acceleration would mean inverting the curve in the
+     * test, which tests the test. The curve gets asserted in inputtest, where
+     * it is the subject; here it is noise. */
+    input_set_speed(100);
+    input_set_accel(0);
+
     ui_theme_init(2);
     wm_init();
     wm_hooks(t_draw, t_event, t_tick, t_desk);
@@ -237,22 +271,38 @@ int main(void)
     ok("raise moves to the END of the z-order", wm_zorder_at(1) == a);
 
     /* ------------------------------------------------------------- routing */
-    /* press in the title bar and drag. The pointer deliberately leaves the
-     * window entirely mid-drag: without a pointer grab the drag would stop
-     * dead the moment it did, which is the whole reason grab exists. */
+    /* press in the title bar and drag. The pointer deliberately ends up
+     * entirely outside the window's ORIGINAL rectangle mid-drag: without a
+     * pointer grab the drag would stop dead the moment it did, which is the
+     * whole reason grab exists.
+     *
+     * It used to prove that by dragging to -150,-86 - off the screen, where a
+     * clamped pointer cannot go. Same property, same single drag, in a
+     * direction a real pointer can actually travel: 600 right and 300 down
+     * takes it clear of the original 100,100 400x300 rect and leaves it at
+     * 750,414, well inside a 1280x800 screen. */
     int wx, wy, ww, wh;
+    /* Put it somewhere KNOWN first. This test used to inherit whatever
+     * position earlier tests had left the window in - it is at 700,400 by the
+     * time control reaches here, not the 100,100 it was opened at - and then
+     * drag by a hardcoded offset. That was invisible while the pointer could
+     * go anywhere; with a clamped pointer the same offset runs off the right
+     * edge and the drag comes up 71px short. A test whose setup depends on the
+     * side effects of the tests above it will break for reasons that have
+     * nothing to do with what it checks. */
+    wm_move(a, 100, 100);
     wm_geometry(a, &wx, &wy, &ww, &wh);
     pointer(wx + 50, wy + th->title_h / 2, 0);
     pointer(wx + 50, wy + th->title_h / 2, 1);        /* press */
-    pointer(wx + 50 - 300, wy + th->title_h / 2 - 200, 1);   /* far outside */
+    pointer(wx + 50 + 600, wy + th->title_h / 2 + 300, 1);   /* clear of the rect */
     int nx, ny;
     wm_geometry(a, &nx, &ny, &ww, &wh);
     ok("a drag keeps tracking after the pointer leaves the window",
-       nx == wx - 300 && ny == wy - 200);
+       nx == wx + 600 && ny == wy + 300);
     pointer(nx + 50 - 100, ny + th->title_h / 2, 0);  /* release */
     int rx, ry;
     wm_geometry(a, &rx, &ry, &ww, &wh);
-    pointer(rx + 900, ry + 900, 0);                   /* wander off */
+    pointer(rx + 400, ry + 300, 0);                   /* wander off */
     int fx, fy;
     wm_geometry(a, &fx, &fy, &ww, &wh);
     ok("...and STOPS tracking after button-up", fx == rx && fy == ry);
@@ -514,7 +564,7 @@ int main(void)
      * left the pointer inside this region and the check failed on the cursor
      * rather than on any shadow. Which is a fair thing for the assertion to
      * notice; it just is not what this one is asking about. */
-    pointer(1500, 1000, 0);
+    pointer(1200, 760, 0);   /* a real pointer cannot be at 1500,1000 on a 1280x800 screen */
     int f1 = wm_open(1, "one", 200, 200, 300, 200);
     int f2 = wm_open(2, "two", 900, 600, 300, 200);
     frame();

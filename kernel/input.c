@@ -279,15 +279,154 @@ static void handle_scancode(int sc)
  * The first poll ADOPTS the pointer instead of announcing it. Otherwise the
  * initial 400,300 would arrive as a phantom move on every boot, including the
  * text-mode gate path where there is no pointer at all. */
-static int ms_x, ms_y, ms_btn, ms_seen;
+static int ms_x, ms_y, ms_btn, ms_seen;   /* the last RAW position seen       */
+static int px_x, px_y;                    /* the ACCELERATED pointer position */
+static int ms_pub_x, ms_pub_y;            /* ...and the last one ANNOUNCED    */
+
+/* ---- pointer speed and acceleration ------------------------------------
+ * There was none of this at all. idt.c's IRQ12 handler integrated raw 1:1
+ * deltas into a position and everything downstream read that position, so
+ * crossing a 2560-wide screen took a physical hand sweep and slow precise
+ * movement was exactly as coarse as fast movement. That is the whole of
+ * "mouse feel" and none of it existed.
+ *
+ * IT LIVES HERE AND NOT IN THE ISR, AND THAT IS NOT A STYLE CHOICE. idt.c is
+ * built -mgeneral-regs-only so a handler never touches SSE; putting a gain
+ * calculation in the IRQ12 path - or calling out from it to code that uses
+ * SSE - would corrupt whatever the interrupted code had in XMM. Every zl
+ * number is a double, so the interrupted code is usually the interpreter
+ * itself. This exact mistake killed the 64-bit boot once already. Everything
+ * below is integer, so it could not touch SSE even if it were inlined
+ * somewhere it should not be, and the gate checks that by disassembly.
+ *
+ * WORKING FROM A POSITION, NOT A DELTA. The ISR has already integrated the
+ * PS/2 deltas by the time this runs, so the raw delta is recovered here as the
+ * difference between consecutive raw positions. That is deliberate: the
+ * alternative is publishing a delta accumulator from idt.c, and idt.c has
+ * uncommitted changes in another session's worktree right now. This needs no
+ * idt.c change at all.
+ *
+ * The consequence is that a "delta" here is one POLL's worth of movement -
+ * roughly one frame - so it is a velocity, which is exactly the right input
+ * for an acceleration curve. It also means the curve is frame-rate dependent:
+ * under load a frame is longer, the per-frame delta is larger, and the pointer
+ * accelerates more. Fixing that needs a clock finer than idt_ticks()' 100 Hz,
+ * so it is noted rather than faked.
+ */
+#define SPD_MIN     25        /* 0.25x - percent, 100 is 1:1 */
+#define SPD_MAX    400        /* 4x                          */
+#define SPD_UNIT   100
+
+/* The curve, in two segments, as FEEL-PROMPT asks - not a spline.
+ * Below the threshold nothing is scaled at all, which is what makes slow
+ * precise movement precise; above it the gain climbs linearly to a ceiling. */
+#define ACC_THRESH   4        /* deltas at or under this are never accelerated */
+#define ACC_GAIN    12        /* extra percent per unit of delta past it       */
+#define ACC_MAX    300        /* the ceiling, in percent                       */
+
+static int spd_pct  = SPD_UNIT;
+static int accel_on = 1;
+
+/* The clamp. Defaults match idt.c's own 2000x1500 so that at 1x with no
+ * acceleration this stage is exactly the identity and the reported position is
+ * byte-identical to what the ISR published. fb_setup pushes the real screen
+ * size, next to where it pushes the same thing to idt.c. */
+static int bnd_w = 2000, bnd_h = 1500;
+
+void input_set_bounds(int w, int h)
+{
+    if (w > 0) bnd_w = w - 1;
+    if (h > 0) bnd_h = h - 1;
+}
+
+void input_set_speed(int pct)
+{
+    if (pct < SPD_MIN) pct = SPD_MIN;
+    if (pct > SPD_MAX) pct = SPD_MAX;
+    spd_pct = pct;
+}
+
+int  input_speed(void)       { return spd_pct; }
+void input_set_accel(int on) { accel_on = on ? 1 : 0; }
+int  input_accel(void)       { return accel_on; }
+
+/* Where the pointer IS, after scaling.
+ *
+ * Once acceleration exists this is a genuinely different number from
+ * idt_mouse_x(), which is the raw ISR position and is now only an input to
+ * this file rather than the answer. Anything asking "where is the pointer"
+ * must come here; kernel.zl's mouse_x() builtin still reads the raw one and is
+ * therefore unaccelerated - see docs/desktop-feel.md. */
+int input_ptr_x(void) { return px_x; }
+int input_ptr_y(void) { return px_y; }
+
+/* The gain for a move of magnitude m, in percent. */
+static int accel_pct(int m)
+{
+    if (!accel_on || m <= ACC_THRESH) return SPD_UNIT;
+    int g = SPD_UNIT + (m - ACC_THRESH) * ACC_GAIN;
+    return g > ACC_MAX ? ACC_MAX : g;
+}
+
+/* SUB-UNIT MOVEMENT MUST NOT BE THROWN AWAY. At 50% a delta of 1 scales to 0
+ * under integer division, so the pointer would simply never respond to slow
+ * one-unit movement - the precise case the curve exists to protect. The
+ * remainder is carried instead.
+ *
+ * Truncation toward zero is symmetric in C, so a negative delta accumulates
+ * the same way a positive one does and the pointer does not drift. */
+static int rem_x, rem_y;
+
+static int scale_axis(int d, int gain, int *rem)
+{
+    int t = *rem + d * gain;          /* in units of SPD_UNIT*SPD_UNIT */
+    int out = t / (SPD_UNIT * SPD_UNIT);
+    *rem = t - out * (SPD_UNIT * SPD_UNIT);
+    return out;
+}
 
 static void pump_mouse(void)
 {
     int x = idt_mouse_x(), y = idt_mouse_y(), b = idt_mouse_btn();
-    if (!ms_seen) { ms_x = x; ms_y = y; ms_btn = b; ms_seen = 1; return; }
-    if (x == ms_x && y == ms_y && b == ms_btn) return;
-    ms_x = x; ms_y = y; ms_btn = b;
-    evq_push(EV_MOUSE, (u32)b, mods, x, y);
+    if (!ms_seen) {
+        ms_x = x; ms_y = y; ms_btn = b; ms_seen = 1;
+        px_x = x; px_y = y;                 /* adopt, do not announce */
+        ms_pub_x = px_x; ms_pub_y = px_y;   /* ...and seed what "announced"
+                                               means, or the NEXT poll compares
+                                               a real position against 0 and
+                                               fires the phantom this adoption
+                                               exists to prevent */
+        return;
+    }
+
+    int dx = x - ms_x, dy = y - ms_y;
+    ms_x = x; ms_y = y;
+
+    if (dx | dy) {
+        /* ONE gain for both axes, from the magnitude of the move. Deriving it
+         * per-axis would give a fast-horizontal, slow-vertical move two
+         * different gains and bend the direction the hand actually moved.
+         * max + min/2 approximates the hypotenuse to about 12% with no sqrt. */
+        int a = dx < 0 ? -dx : dx;
+        int c = dy < 0 ? -dy : dy;
+        int m = (a > c) ? (a + c / 2) : (c + a / 2);
+        int gain = spd_pct * accel_pct(m);
+
+        px_x += scale_axis(dx, gain, &rem_x);
+        px_y += scale_axis(dy, gain, &rem_y);
+
+        if (px_x < 0) px_x = 0;
+        if (px_y < 0) px_y = 0;
+        if (px_x > bnd_w) px_x = bnd_w;
+        if (px_y > bnd_h) px_y = bnd_h;
+    }
+
+    /* Coalesce on the REPORTED position, not the raw one: below 1x a raw move
+     * can scale to nothing at all, and an event that says the pointer is where
+     * it already was is a lie the compositor would act on. */
+    if (px_x == ms_pub_x && px_y == ms_pub_y && b == ms_btn) return;
+    ms_pub_x = px_x; ms_pub_y = px_y; ms_btn = b;
+    evq_push(EV_MOUSE, (u32)b, mods, px_x, px_y);
 }
 
 /* ---- the pump ----------------------------------------------------------

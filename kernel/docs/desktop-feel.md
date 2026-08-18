@@ -199,7 +199,7 @@ In absolute terms 14.9 µs at 2560×1440 is **1.5% of one full-screen fill**
 (1020 µs) and **0.09% of a 16.7 ms frame at 60 Hz**. Not worth optimising, but
 it is 8×, and quoting only the 1.5% would be choosing the flattering framing.
 
-### Also fixed, found while working
+### Also fixed, found while working — Item 1
 
 `fb_setup` is fully re-entrant — it recomputes the cell, the scissor, the back
 buffer and the damage list from its arguments. It did **not** reset the cursor
@@ -209,3 +209,141 @@ from the old geometry and `cur_x`/`cur_y` addressing it, so the next
 mode. The old cursor had the same latent bug and escaped it only because
 nothing had re-run `fb_setup` yet — the new `wmtest` scale assertion does.
 `fb_pointer_forget()` now runs from `fb_setup`.
+
+---
+
+## Item 2 — pointer acceleration and speed
+
+### What was wrong
+
+`input.c` applied raw 1:1 deltas. No acceleration curve, no sensitivity, no
+smoothing. Crossing a 2560-wide screen took a physical hand sweep, and slow
+precise movement was exactly as coarse as fast movement.
+
+### Where it lives, and why that is not a style choice
+
+In `input.c`'s `pump_mouse`, **not** in the IRQ12 handler. `idt.c` is compiled
+`-mgeneral-regs-only` so an ISR never touches SSE; a gain calculation in the
+IRQ12 path — or a call out from it to code that uses SSE — corrupts whatever
+the interrupted code held in XMM, and since every zl number is a double the
+interrupted code is usually the interpreter itself. FEEL-PROMPT records that
+this exact mistake killed the 64-bit boot once.
+
+**Verified, not asserted.** `idt.c` still compiles under `-mgeneral-regs-only`,
+and its object's complete undefined-symbol list is:
+
+```
+$ nm -u _idt64.o
+    U apic_active     U apic_eoi     U zl_inb     U zl_outb
+```
+
+Nothing from `input.c`. The ISR cannot reach the acceleration code. `input.o`
+does contain 11 XMM instructions, and they are `movd`/`movdqa`/`movaps`/
+`punpckldq` — GCC using the wide registers as *integer* movers for the
+`struct event` copies. `pump_mouse` itself disassembles to **zero** SSE ops;
+the arithmetic is integer throughout. `input.c` is not built
+`-mgeneral-regs-only` and does not need to be.
+
+### Working from a position, not a delta
+
+The ISR has already integrated the PS/2 deltas by the time `pump_mouse` runs,
+so the raw delta is recovered as the difference between consecutive raw
+positions. The alternative — publishing a delta accumulator from `idt.c` —
+would mean editing a file with uncommitted changes in another session's
+worktree. This needs no `idt.c` change at all.
+
+A consequence worth stating: a "delta" here is one poll's worth of movement,
+roughly one frame, so it is a *velocity*, which is the right input for a curve.
+It also makes the curve frame-rate dependent — under load a frame is longer,
+the per-frame delta larger, and the pointer accelerates more. Fixing that needs
+a clock finer than `idt_ticks()`' 100 Hz, so it is **noted rather than faked**.
+
+### The shape
+
+Integer fixed-point, in percent, 100 = 1:1. Two segments, as asked, not a
+spline: at or below a 4-unit delta the curve contributes nothing at all, and
+above it the gain climbs linearly to a ceiling. One gain is derived from the
+2D magnitude and applied to **both** axes — deriving it per-axis would give a
+fast-horizontal, slow-vertical move two different gains and bend the direction
+the hand actually moved. `max + min/2` approximates the hypotenuse to ~12% with
+no `sqrt`.
+
+Sub-unit movement is **carried, not discarded**. At 50% a 1-unit delta
+truncates to zero, so without a remainder the pointer would simply never
+respond to slow movement — the precise case the two-segment curve exists to
+protect. C truncates toward zero, which is what makes the remainder symmetric
+so the pointer does not drift one way over time.
+
+### Gate
+
+`hosttest/inputtest.c`, 24 assertions, all green — the 12 that were there
+before plus 12 new:
+
+```
+  at 1x with accel off every delta is reproduced exactly ok
+  a 1-unit delta is never accelerated, at any speed    ok
+  a 100-unit delta moves 100 at 1x                     ok
+  ...and exactly 200 at 2x                             ok
+  at 0.5x ten 1-unit steps move 5, not 0 - the remainder is carried ok
+  ...and back to exactly where it started going the other way ok
+  a 3-unit move is unaccelerated                       ok
+  ...a 60-unit move travels further than 60            ok
+  ...and the curve SATURATES rather than running away  ok
+  accel off returns the same 60 units                  ok
+  at 4x with accel the pointer never leaves the screen ok
+  ...and comes straight back off the edge, not after an overshoot ok
+
+all good: 0 failure(s)
+```
+
+The saturation check deliberately does **not** name the ceiling's value.
+Mirroring `input.c`'s `ACC_MAX` in the test would be one constant in two places
+that can drift, and a gate agreeing with a stale copy of the thing it checks is
+bug class 6. Instead: past the ceiling the gain stops depending on the delta,
+so a 10× bigger move must travel exactly 10× further. An uncapped linear curve
+would make it 10× further *times* a 10× gain.
+
+### What this broke, and why the breakage was right
+
+Adding the clamp turned **`wmtest` red — 11 failures**, then 5, then 3. Every
+one was a real assumption, not a flake:
+
+1. **Acceleration ships ON by default**, so `pointer(x,y)` no longer put the
+   pointer at `x,y`, and every assertion that clicks a close box, a tab or a
+   client area failed. Both `inputtest`'s plumbing tests and `wmtest` now pin
+   the gain to the identity, because "does the queue behave" and "does the
+   curve behave" are two questions and aiming a click under acceleration would
+   mean inverting the curve inside the test.
+
+   Accel is on by default deliberately: a defect that persists until someone
+   finds a toggle is not fixed.
+
+2. **`wmtest`'s fake hardware returned unclamped positions.** The real IRQ12
+   handler can never publish a negative or off-screen pointer, but the harness
+   handed back whatever a test set — one drag was checked by pulling the
+   pointer to `-250,-86`. Those tests failed against a *more* faithful model,
+   not a broken one. The fake `idt_mouse_x/y` now clamp like the hardware.
+
+3. **The drag test inherited its setup from the tests above it.** It read
+   `wm_geometry(a)` and dragged by a hardcoded offset, and by the time control
+   reaches it window `a` is at 700,400 rather than the 100,100 it was opened
+   at — so the drag ran off the right edge and came up 71 px short. Invisible
+   while the pointer could go anywhere. It now moves the window to a known
+   position first.
+
+None of the three was caused by acceleration; acceleration only made them
+visible. That is what the harness is for.
+
+### Known divergence — `kernel.zl` is still unaccelerated
+
+There are two pointer consumers. `input.c`'s pump feeds `EV_MOUSE` to the
+compositor, and that path is accelerated. `kernel.zl` also calls the `mouse_x()`
+/ `mouse_y()` builtins directly (lines 403, 426, 976, 2201), which read the raw
+ISR position and are **not**.
+
+FEEL-PROMPT §2 scopes this track to "`input.c` — accel only", and the builtins
+resolve through `runtime_kernel.c`, which is the display session's file and the
+source of T-13. So the seam is provided rather than crossed:
+`input_ptr_x()` / `input_ptr_y()` return the accelerated position and are what
+anything asking "where is the pointer" should call. Unifying the builtins onto
+them is a one-line change per call site once T-13 closes.

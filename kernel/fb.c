@@ -43,6 +43,7 @@ int fb_cell_h(void) { return cell_h; }
 
 unsigned int fb_get_px(int x, int y);   /* defined below; used by the AA text path */
 void idt_set_pointer_bounds(int w, int h);   /* the mouse clamp, pushed not pulled */
+void input_set_bounds(int w, int h);         /* ...and the accelerated pointer's  */
 void fb_pointer_forget(void);           /* defined below; the sprite dies with the mode */
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);  /* the fast row fill */
 void fb_clip_none(void);                /* the scissor; defined below with put_pixel */
@@ -561,6 +562,13 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
      * interrupted code had in those registers. Every zl number is a double, so
      * that is the interpreter itself - it killed the 64-bit boot outright. */
     idt_set_pointer_bounds((int)width, (int)height);
+    input_set_bounds((int)width, (int)height);   /* ...and the ACCELERATED one,
+                                                    which is a different
+                                                    position: input.c scales
+                                                    the ISR's deltas, so its
+                                                    pointer needs its own clamp
+                                                    or 2x speed walks it off
+                                                    the right-hand edge */
 }
 
 /* ---- the scissor ---------------------------------------------------------
