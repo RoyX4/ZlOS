@@ -17,7 +17,7 @@ echo "built ./modeset_test  (run: sudo ./modeset_test --survey)"
 # so it runs here at native speed with a cycle counter instead of a reboot and
 # a stopwatch. Built at the SAME -O2 the kernel uses, or the numbers are fiction.
 # No sudo - it maps its own anonymous memory at the addresses fb.c hardcodes.
-gcc -O2 -w -o fbbench fbbench.c \
+gcc -O2 -w -pthread -o fbbench fbbench.c \
     ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./fbbench       (run: ./fbbench)"
 

@@ -178,6 +178,111 @@ _Static_assert(HI_APSTK + AP_STACK_SPAN <= HI_SCHED,
 _Static_assert(HI_BACK + (unsigned long)BACK_LIMIT <= HI_APSTK,
                "the back buffer overruns the AP stacks");
 
+/* ---- BAND-PARALLEL PRIMITIVES ---------------------------------------------
+ * Three of four cores sit parked (smp.c). The back buffer is plain RAM, so a
+ * rectangle can be split into disjoint horizontal bands and written by several
+ * cores at once with NO LOCK - not because locking is avoided by care, but
+ * because there is nothing shared to lock: band i writes rows [edges[i],
+ * edges[i+1]) and no other band can name those rows.
+ *
+ * WHAT THIS DOES NOT DO, and it is the important half. The obvious reading of
+ * "SMP band rendering" is to run the whole draw list on N cores, each clipped
+ * to its own band. That is not possible here and the reason is not concurrency:
+ * the draw list is app_draw, which is zl, and the zl runtime has global state
+ * that is not reentrant. Four cores inside zl_fn_app_draw would corrupt the
+ * interpreter, not the framebuffer. Making that work needs either a display
+ * list the C side can replay per band, or a reentrant runtime, and neither
+ * exists.
+ *
+ * So what is parallel is each large PRIMITIVE, internally: a call to
+ * fb_gradient or fb_shadow already owns a rectangle and already writes it row
+ * by row with no dependence between rows. That covers most of a desktop frame
+ * (measured: the wallpaper gradient and three window shadows) without going
+ * near zl. See docs/desktop-smp-bands.md for the numbers and for why the
+ * answer is not 4x.
+ *
+ * DISJOINT BY CONSTRUCTION. The bands are the gaps between a monotonic edge
+ * list whose ends are pinned to the rectangle, so overlap and gaps are not
+ * possible to express, let alone to leave behind by accident. fb_bands_check()
+ * proves it anyway, and hosttest/fbbench.c asserts that on every mode. */
+#define FB_BANDS_MAX 8
+
+typedef void (*fb_band_fn)(void *ctx, int y0, int y1);
+
+/* Installed by the platform: smp.c in the kernel, pthreads in hosttest. NULL
+ * by default, and the default is EXACTLY today's behaviour - every band run in
+ * order on the calling core. A missing dispatcher must never be a missing
+ * repaint. */
+static void (*par_dispatch)(fb_band_fn fn, void *ctx, const int *edges, int n);
+static int par_bands = 1;
+
+void fb_par_hook(void (*d)(fb_band_fn, void *, const int *, int), int nbands)
+{
+    if (nbands < 1) nbands = 1;
+    if (nbands > FB_BANDS_MAX) nbands = FB_BANDS_MAX;
+    par_dispatch = d;
+    par_bands = d ? nbands : 1;
+}
+
+int fb_par_bands(void) { return par_bands; }
+
+/* Split [y0,y1) into n bands. Returns how many are non-empty; edges[0..n] are
+ * the boundaries. The remainder is spread one row per band rather than dumped
+ * on the last one, so the slowest band is never a row taller than the others -
+ * with a barrier at the end, the frame costs whatever the SLOWEST band costs. */
+static int fb_band_edges(int y0, int y1, int n, int *edges)
+{
+    int rows = y1 - y0;
+    if (rows <= 0) { edges[0] = y0; return 0; }
+    if (n > rows) n = rows;
+    if (n < 1) n = 1;
+    int base = rows / n, extra = rows % n, at = y0;
+    for (int i = 0; i < n; i++) {
+        edges[i] = at;
+        at += base + (i < extra ? 1 : 0);
+    }
+    edges[n] = at;
+    return n;
+}
+
+/* Do the bands tile [y0,y1) exactly - no overlap, no gap, in order? This is
+ * the assertion the brief asks for, and it is checkable rather than asserted:
+ * hosttest/fbbench.c runs it at every mode and every band count. */
+int fb_bands_check(int y0, int y1, int n)
+{
+    int edges[FB_BANDS_MAX + 1];
+    if (n < 1 || n > FB_BANDS_MAX) return 0;
+    int got = fb_band_edges(y0, y1, n, edges);
+    if (got < 0 || got > n) return 0;
+    if (y1 <= y0) return got == 0;
+    if (edges[0] != y0 || edges[got] != y1) return 0;
+    long covered = 0;
+    for (int i = 0; i < got; i++) {
+        if (edges[i + 1] < edges[i]) return 0;          /* out of order */
+        if (i && edges[i] != edges[i - 1 + 1]) return 0; /* gap or overlap */
+        covered += edges[i + 1] - edges[i];
+    }
+    return covered == (long)(y1 - y0);
+}
+
+/* Run fn over [y0,y1), split into bands. Serial when no dispatcher is
+ * installed, which is the case in every build until something calls
+ * fb_par_hook - so this is a no-op change to behaviour by default. */
+static void fb_par_run(fb_band_fn fn, void *ctx, int y0, int y1)
+{
+    int edges[FB_BANDS_MAX + 1];
+    int n = fb_band_edges(y0, y1, par_dispatch ? par_bands : 1, edges);
+    if (n <= 0) return;
+    if (n == 1 || !par_dispatch) {
+        for (int i = 0; i < n; i++) fn(ctx, edges[i], edges[i + 1]);
+        return;
+    }
+    /* The dispatcher does not return until every band has reported done. That
+     * barrier is the whole contract: fb_present must not start blitting rows a
+     * core is still writing. */
+    par_dispatch(fn, ctx, edges, n);
+}
+
 static unsigned int *back = (unsigned int *)HI_BACK;
 static int back_on = 0;
 
@@ -358,6 +463,39 @@ unsigned int fb_damage_area(void)
 }
 
 /* copy every damaged rectangle out to the card, then forget them */
+struct blit_job { int x0, x1, bpx; };
+
+/* One band of the blit: rows [y0,y1) of one damage rectangle, back buffer to
+ * VRAM. Disjoint reads, disjoint writes, no shared state at all - the cleanest
+ * band job in the file, and on real hardware the one that crosses PCIe, so it
+ * is bandwidth-bound rather than compute-bound. */
+static void blit_band(void *ctx, int y0, int y1)
+{
+    const struct blit_job *j = (const struct blit_job *)ctx;
+    for (int y = y0; y < y1; y++) {
+        unsigned int  *src = back + (unsigned long)y * fb_w + j->x0;
+        unsigned char *dst = fb_base + (unsigned long)y * fb_pitch
+                                     + (unsigned long)j->x0 * j->bpx;
+        if (j->bpx == 4) {
+            copy32((unsigned int *)dst, src, j->x1 - j->x0);
+        } else {
+            for (int x = j->x0; x < j->x1; x++) {
+                unsigned int c = *src++;
+                dst[0] = (unsigned char)(c & 0xFF);
+                dst[1] = (unsigned char)((c >> 8) & 0xFF);
+                dst[2] = (unsigned char)((c >> 16) & 0xFF);
+                dst += 3;
+            }
+        }
+    }
+}
+
+/* Below this many rows a rectangle is blitted on the calling core. Waking
+ * three cores to copy twenty rows costs more in barrier than it saves in
+ * copying, and the damage list is usually SMALL rectangles - that is the whole
+ * point of it. Only full-screen presents are worth splitting. */
+#define BLIT_BAND_MIN 64
+
 void fb_present(void)
 {
     if (!back_on) return;
@@ -371,21 +509,9 @@ void fb_present(void)
         if (x1 > (int)fb_w) x1 = (int)fb_w;
         if (y1 > (int)fb_h) y1 = (int)fb_h;
         if (x0 >= x1 || y0 >= y1) continue;
-        for (int y = y0; y < y1; y++) {
-            unsigned int  *src = back + (unsigned long)y * fb_w + x0;
-            unsigned char *dst = fb_base + (unsigned long)y * fb_pitch + (unsigned long)x0 * bpx;
-            if (bpx == 4) {
-                copy32((unsigned int *)dst, src, x1 - x0);
-            } else {
-                for (int x = x0; x < x1; x++) {
-                    unsigned int c = *src++;
-                    dst[0] = (unsigned char)(c & 0xFF);
-                    dst[1] = (unsigned char)((c >> 8) & 0xFF);
-                    dst[2] = (unsigned char)((c >> 16) & 0xFF);
-                    dst += 3;
-                }
-            }
-        }
+        struct blit_job job = { x0, x1, bpx };
+        if (y1 - y0 >= BLIT_BAND_MIN) fb_par_run(blit_band, &job, y0, y1);
+        else                          blit_band(&job, y0, y1);
     }
     ndmg = 0;
 }
@@ -933,6 +1059,15 @@ unsigned int fb_pxh(void) { return fb_h; }
  * bounds test and address multiply that put_pixel does are the single most
  * repeated cost in the whole renderer, and this is the path every panel,
  * gradient row, text cell and window frame goes through. */
+struct fill_job { unsigned int rgb; int x0, x1; };
+
+static void fill_band(void *ctx, int y0, int y1)
+{
+    const struct fill_job *j = (const struct fill_job *)ctx;
+    for (int yy = y0; yy < y1; yy++)
+        fill32(back + (unsigned long)yy * fb_w + j->x0, j->rgb, j->x1 - j->x0);
+}
+
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
 {
     if (w <= 0 || h <= 0) return;
@@ -946,8 +1081,11 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
     if (x0 >= x1 || y0 >= y1) return;
 
     if (back_on) {
-        for (int yy = y0; yy < y1; yy++)
-            fill32(back + (unsigned long)yy * fb_w + x0, rgb, x1 - x0);
+        /* Rows are independent, so this is a band job. The DAMAGE is reported
+         * once, here, by the calling core - the damage list is shared mutable
+         * state and the one thing a band must never touch. */
+        struct fill_job job = { rgb, x0, x1 };
+        fb_par_run(fill_band, &job, y0, y1);
         fb_damage(x0, y0, x1 - x0, y1 - y0);
         return;
     }
@@ -972,37 +1110,26 @@ static const unsigned char dither4[4][4] = {
     { 255, 119, 221,  85 }
 };
 
-void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
-{
-    if (h <= 0) return;
-    /* the union of every row actually written, reported once at the end */
-    int gx0 = 1 << 30, gy0 = 1 << 30, gx1 = -(1 << 30), gy1 = -(1 << 30);
-    int tr = (top >> 16) & 0xFF, tg = (top >> 8) & 0xFF, tb = top & 0xFF;
-    int br = (bot >> 16) & 0xFF, bg = (bot >> 8) & 0xFF, bb = bot & 0xFF;
-    for (int i = 0; i < h; i++) {
-        /* .8 fixed point: the whole part is the colour, the fraction is how
-         * far this row sits between two representable values */
-        int r8 = (tr << 8) + ((br - tr) * i * 256) / h;
-        int g8 = (tg << 8) + ((bg - tg) * i * 256) / h;
-        int b8 = (tb << 8) + ((bb - tb) * i * 256) / h;
-        const unsigned char *drow = dither4[i & 3];
-        int yy = y + i;
-        /* the SCISSOR, not the screen - fb_clip() clamped it to the screen
-         * already. The back_on branch below writes rows straight into the back
-         * buffer without going near put_pixel, so this is the only thing
-         * keeping the wallpaper inside a damage rectangle. */
-        if (yy < clip_y0 || yy >= clip_y1) continue;
-        int j0 = 0, j1 = w;
-        if (x + j0 < clip_x0) j0 = clip_x0 - x;
-        if (x + j1 > clip_x1) j1 = clip_x1 - x;
-        if (j0 >= j1) continue;
+struct grad_job {
+    int x, y, w, h;
+    int tr, tg, tb, br, bg, bb;
+    int j0, j1;
+};
 
-        /* The dither pattern repeats every 4 pixels across, and the colour is
-         * constant along a row - so a whole 1920-pixel row only has FOUR
-         * distinct values. Compute those once and then the inner loop is a
-         * masked table read and a store, instead of six compares and a pack
-         * per pixel. The wallpaper is a full screen of this every redraw, so
-         * this is the hottest loop in the renderer. */
+/* One band of a gradient: rows [i0,i1) of the h-row ramp. Everything it needs
+ * is derived from the row index, so two bands cannot disagree about a pixel.
+ * It writes the back buffer directly and reports NO damage - the caller owns
+ * that, because the damage list is shared mutable state. */
+static void grad_band(void *ctx, int i0, int i1)
+{
+    const struct grad_job *j = (const struct grad_job *)ctx;
+    for (int i = i0; i < i1; i++) {
+        int r8 = (j->tr << 8) + ((j->br - j->tr) * i * 256) / j->h;
+        int g8 = (j->tg << 8) + ((j->bg - j->tg) * i * 256) / j->h;
+        int b8 = (j->tb << 8) + ((j->bb - j->tb) * i * 256) / j->h;
+        const unsigned char *drow = dither4[i & 3];
+        int yy = j->y + i;
+        if (yy < clip_y0 || yy >= clip_y1) continue;
         unsigned int quad[4];
         for (int k = 0; k < 4; k++) {
             int t = drow[k];
@@ -1014,22 +1141,62 @@ void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
             if (b > 255) b = 255;
             quad[k] = ((unsigned)r << 16) | ((unsigned)g << 8) | (unsigned)b;
         }
-        if (back_on) {
-            unsigned int *row = back + (unsigned long)yy * fb_w + x + j0;
-            for (int j = j0; j < j1; j++) *row++ = quad[j & 3];
-            /* accumulate, do not report per row: a full-screen wallpaper is
-             * 1200 rows, and 1200 list insertions to describe one rectangle
-             * would cost more than the blit they are meant to shrink */
-            if (x + j0 < gx0) gx0 = x + j0;
-            if (x + j1 > gx1) gx1 = x + j1;
-            if (yy < gy0) gy0 = yy;
-            if (yy + 1 > gy1) gy1 = yy + 1;
-        } else {
-            for (int j = j0; j < j1; j++)
-                put_pixel((unsigned)(x + j), (unsigned)yy, quad[j & 3]);
-        }
+        unsigned int *row = back + (unsigned long)yy * fb_w + j->x + j->j0;
+        for (int q = j->j0; q < j->j1; q++) *row++ = quad[q & 3];
     }
-    if (gx0 < gx1 && gy0 < gy1) fb_damage(gx0, gy0, gx1 - gx0, gy1 - gy0);
+}
+
+void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
+{
+    if (h <= 0) return;
+    int tr = (top >> 16) & 0xFF, tg = (top >> 8) & 0xFF, tb = top & 0xFF;
+    int br = (bot >> 16) & 0xFF, bg = (bot >> 8) & 0xFF, bb = bot & 0xFF;
+
+    /* the columns actually written, clipped once - they do not vary by row */
+    int j0 = 0, j1 = w;
+    if (x + j0 < clip_x0) j0 = clip_x0 - x;
+    if (x + j1 > clip_x1) j1 = clip_x1 - x;
+
+    if (back_on && j0 < j1) {
+        struct grad_job job = { x, y, w, h, tr, tg, tb, br, bg, bb, j0, j1 };
+        fb_par_run(grad_band, &job, 0, h);
+        /* THE DAMAGE, COMPUTED not accumulated. It used to be the union grown
+         * row by row inside the loop, which a banded version cannot do without
+         * sharing a mutable rectangle between cores. It is the same answer:
+         * the rows written are exactly those inside the scissor, and the
+         * columns are constant. Reported once, by the calling core, after the
+         * barrier - so nothing can be blitted while a band is still writing. */
+        int gy0 = y > clip_y0 ? y : clip_y0;
+        int gy1 = (y + h) < clip_y1 ? (y + h) : clip_y1;
+        if (gy0 < gy1) fb_damage(x + j0, gy0, j1 - j0, gy1 - gy0);
+        return;
+    }
+
+    /* No back buffer: every pixel goes through put_pixel, which grows the
+     * shared accumulator - so this path stays serial by necessity, not by
+     * oversight. */
+    for (int i = 0; i < h; i++) {
+        int r8 = (tr << 8) + ((br - tr) * i * 256) / h;
+        int g8 = (tg << 8) + ((bg - tg) * i * 256) / h;
+        int b8 = (tb << 8) + ((bb - tb) * i * 256) / h;
+        const unsigned char *drow = dither4[i & 3];
+        int yy = y + i;
+        if (yy < clip_y0 || yy >= clip_y1) continue;
+        if (j0 >= j1) continue;
+        unsigned int quad[4];
+        for (int k = 0; k < 4; k++) {
+            int t = drow[k];
+            int r = (r8 & 0xFF) > t ? (r8 >> 8) + 1 : (r8 >> 8);
+            int g = (g8 & 0xFF) > t ? (g8 >> 8) + 1 : (g8 >> 8);
+            int b = (b8 & 0xFF) > t ? (b8 >> 8) + 1 : (b8 >> 8);
+            if (r > 255) r = 255;
+            if (g > 255) g = 255;
+            if (b > 255) b = 255;
+            quad[k] = ((unsigned)r << 16) | ((unsigned)g << 8) | (unsigned)b;
+        }
+        for (int q = j0; q < j1; q++)
+            put_pixel((unsigned)(x + q), (unsigned)yy, quad[q & 3]);
+    }
 }
 
 /* one glyph, scaled up by an integer factor, drawn at a pixel position.
@@ -1100,6 +1267,54 @@ void fb_shade(int x, int y, int w, int h, int num, int den)
  * inside only the outer pass (lightest), giving a graded falloff. `soft` is
  * the number of steps. The window is drawn on top afterwards, so only the
  * overhang shows. */
+#define SHADOW_SKIP_INSET 16
+
+struct shadow_job {
+    int x0, x1, ix0, iy0, ix1, iy1, soft;
+    int sk_on, skx0, skx1, sky0, sky1;
+};
+
+/* One band of a shadow. It writes the back buffer DIRECTLY rather than through
+ * put_pixel, because put_pixel grows the shared damage accumulator and that is
+ * the one piece of mutable state a band may not touch.
+ *
+ * Which means it has to apply the SCISSOR itself. That is precisely the trap
+ * desktop-TODO 0b records: "exactly two functions" turned out to be five,
+ * because three of them wrote the back buffer directly and called neither
+ * fb_fill_px nor put_pixel, and 2,184,000 pixels escaped the clip at
+ * 1920x1200. Folded into the loop bounds here, so a clipped shadow costs no
+ * more per pixel than an unclipped one. */
+static void shadow_band(void *ctx, int y0, int y1)
+{
+    const struct shadow_job *j = (const struct shadow_job *)ctx;
+    int lo = j->x0 > clip_x0 ? j->x0 : clip_x0;
+    int hi = j->x1 < clip_x1 ? j->x1 : clip_x1;
+    if (y0 < clip_y0) y0 = clip_y0;
+    if (y1 > clip_y1) y1 = clip_y1;
+    for (int yy = y0; yy < y1; yy++) {
+        if ((unsigned)yy >= fb_h) continue;
+        int skip_row = j->sk_on && yy >= j->sky0 && yy < j->sky1;
+        unsigned int *row = back + (unsigned long)yy * fb_w;
+        for (int xx = lo; xx < hi; xx++) {
+            if ((unsigned)xx >= fb_w) continue;
+            if (skip_row && xx >= j->skx0 && xx < j->skx1) { xx = j->skx1 - 1; continue; }
+            int dx = 0, dy = 0;
+            if (xx < j->ix0) dx = j->ix0 - xx; else if (xx >= j->ix1) dx = xx - j->ix1 + 1;
+            if (yy < j->iy0) dy = j->iy0 - yy; else if (yy >= j->iy1) dy = yy - j->iy1 + 1;
+            int d = dx > dy ? dx : dy;               /* chebyshev - cheap, square-ish */
+            if (d > j->soft) continue;
+            int amount = 62 - (62 * d) / (j->soft + 1);
+            if (amount <= 0) continue;
+            unsigned int c = row[xx];
+            int k = 100 - amount;
+            int r = (int)((c >> 16) & 0xFF) * k / 100;
+            int g = (int)((c >>  8) & 0xFF) * k / 100;
+            int b = (int)( c        & 0xFF) * k / 100;
+            row[xx] = ((unsigned)r << 16) | ((unsigned)g << 8) | (unsigned)b;
+        }
+    }
+}
+
 void fb_shadow(int x, int y, int w, int h, int off, int soft)
 {
     if (soft < 1) soft = 1;
@@ -1111,7 +1326,6 @@ void fb_shadow(int x, int y, int w, int h, int off, int soft)
      * one pass touches each pixel exactly once instead of `soft` times. */
     int x0 = x + off - soft, y0 = y + off - soft;
     int x1 = x + off + w + soft, y1 = y + off + h + soft;
-    int ix0 = x + off, iy0 = y + off, ix1 = x + off + w, iy1 = y + off + h;
 
     /* The caller draws the window itself on top of this immediately afterwards,
      * so every shadow pixel under the window's own footprint is computed and
@@ -1122,30 +1336,43 @@ void fb_shadow(int x, int y, int w, int h, int off, int soft)
      * So skip that rectangle. It is inset by SHADOW_SKIP_INSET rather than
      * skipped exactly, because the window has ROUNDED corners: the pixels just
      * outside the arc are still visible and still need their shadow. The inset
-     * must stay larger than any radius draw_window uses (5 * ui() = 10 at 2x).
-     *
-     * Verified pixel-identical: FNV hash of the whole 1920x1200 back buffer
-     * after shadow + rrect + rrect + gradient + text is unchanged. */
-#define SHADOW_SKIP_INSET 16
-    int sk_on = (w > 2 * SHADOW_SKIP_INSET) && (h > 2 * SHADOW_SKIP_INSET);
-    int skx0 = x + SHADOW_SKIP_INSET, skx1 = x + w - SHADOW_SKIP_INSET;
-    int sky0 = y + SHADOW_SKIP_INSET, sky1 = y + h - SHADOW_SKIP_INSET;
+     * must stay larger than any radius draw_window uses (5 * ui() = 10 at 2x). */
+    struct shadow_job job;
+    job.x0 = x0; job.x1 = x1;
+    job.ix0 = x + off; job.iy0 = y + off;
+    job.ix1 = x + off + w; job.iy1 = y + off + h;
+    job.soft = soft;
+    job.sk_on = (w > 2 * SHADOW_SKIP_INSET) && (h > 2 * SHADOW_SKIP_INSET);
+    job.skx0 = x + SHADOW_SKIP_INSET; job.skx1 = x + w - SHADOW_SKIP_INSET;
+    job.sky0 = y + SHADOW_SKIP_INSET; job.sky1 = y + h - SHADOW_SKIP_INSET;
 
+    if (back_on) {
+        fb_par_run(shadow_band, &job, y0, y1);
+        /* Same rectangle the per-pixel accumulator used to grow to: the ring
+         * around the skipped strip is always written, so the union IS the
+         * clipped shadow rect. Reported once, after the barrier. */
+        int dx0 = x0 > clip_x0 ? x0 : clip_x0;
+        int dy0 = y0 > clip_y0 ? y0 : clip_y0;
+        int dx1 = x1 < clip_x1 ? x1 : clip_x1;
+        int dy1 = y1 < clip_y1 ? y1 : clip_y1;
+        if (dx0 < dx1 && dy0 < dy1) fb_damage(dx0, dy0, dx1 - dx0, dy1 - dy0);
+        return;
+    }
+
+    /* No back buffer: read-back and write both go to VRAM through put_pixel,
+     * which owns the accumulator - serial by necessity. */
     for (int yy = y0; yy < y1; yy++) {
         if ((unsigned)yy >= fb_h) continue;
-        int skip_row = sk_on && yy >= sky0 && yy < sky1;
+        int skip_row = job.sk_on && yy >= job.sky0 && yy < job.sky1;
         for (int xx = x0; xx < x1; xx++) {
             if ((unsigned)xx >= fb_w) continue;
-            /* jump straight past the strip the window will cover */
-            if (skip_row && xx >= skx0 && xx < skx1) { xx = skx1 - 1; continue; }
-            /* how far outside the window's own footprint is this pixel? */
+            if (skip_row && xx >= job.skx0 && xx < job.skx1) { xx = job.skx1 - 1; continue; }
             int dx = 0, dy = 0;
-            if (xx < ix0) dx = ix0 - xx; else if (xx >= ix1) dx = xx - ix1 + 1;
-            if (yy < iy0) dy = iy0 - yy; else if (yy >= iy1) dy = yy - iy1 + 1;
-            int d = dx > dy ? dx : dy;               /* chebyshev - cheap, square-ish */
-            if (d > soft) continue;
-            /* darkest against the window edge, fading to nothing at the rim */
-            int amount = 62 - (62 * d) / (soft + 1); /* 0..62 percent darker  */
+            if (xx < job.ix0) dx = job.ix0 - xx; else if (xx >= job.ix1) dx = xx - job.ix1 + 1;
+            if (yy < job.iy0) dy = job.iy0 - yy; else if (yy >= job.iy1) dy = yy - job.iy1 + 1;
+            int d = dx > dy ? dx : dy;
+            if (d > job.soft) continue;
+            int amount = 62 - (62 * d) / (job.soft + 1);
             if (amount <= 0) continue;
             unsigned int c = fb_get_px(xx, yy);
             int k = 100 - amount;

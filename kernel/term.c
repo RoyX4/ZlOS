@@ -153,6 +153,9 @@ static const struct cmd table[] = {
      * it. A command in the help list with no way to type it is worse than one
      * that does not exist. */
     { "anim",     97 }, { "logo",     97 },
+    /* '*' is not a word, so under the compositor there was no way to wake the
+     * other cores at all - and band rendering is off until something does. */
+    { "smp",      42 }, { "cores",    42 },
     { "windows", 119 }, { "wm",      119 },
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },
