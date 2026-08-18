@@ -30,9 +30,11 @@
  * _Static_assert keyword, so a size mismatch makes this typedef an array of
  * negative length and the compile fails loudly.
  *
- * It was 48 until first-class functions added fnptr+fnargs; if you change
- * the Value layout again, update compilel.c's VALSZ to match. */
-typedef char zl_value_is_64_bytes[(sizeof(Value) == 64) ? 1 : -1];
+ * It was 48 until first-class functions added fnptr+fnargs, then 64, and it
+ * is 16 since cap/tip moved in front of the items array and the payload
+ * became a union (runtime.h). If you change the Value layout again, update
+ * compilel.c's VALSZ to match. */
+typedef char zl_value_is_16_bytes[(sizeof(Value) == 16) ? 1 : -1];
 
 static void rt_error(const char *msg)
 {
@@ -42,6 +44,39 @@ static void rt_error(const char *msg)
     fprintf(stderr, "runtime error: %s\n", msg);
     exit(1);
 }
+
+/* ---- the items array, and its header -------------------------------------
+ * See runtime.h for why cap and tip live in front of the array rather than
+ * inside Value. These two functions and the zl_arr_hdr macro in runtime.h are
+ * the only code that knows the offset exists.
+ *
+ * NOTHING reads the header without checking items first. zl_nil() zeroes the
+ * whole struct, so a nil or never-allocated list has items == NULL, and the
+ * old code read a plain 0 out of v.cap where this would dereference. push()
+ * guards with `src.items &&` for exactly that reason. */
+static Value **zl_arr_new(int cap, int tip)
+{
+    if (cap < 1) cap = 1;
+    char *base = malloc((size_t)ZL_ARR_HDR + sizeof(Value *) * (size_t)cap);
+    if (!base) rt_error("out of memory building a list");
+    Value **items = (Value **)(base + ZL_ARR_HDR);
+    zl_arr_hdr(items)->cap = cap;
+    zl_arr_hdr(items)->tip = tip;
+    return items;
+}
+
+/* Only for a list still under construction - see the "never moves under an
+ * alias" note in runtime.h. */
+static Value **zl_arr_grow(Value **items, int newcap)
+{
+    char *base = realloc((char *)items - ZL_ARR_HDR,
+                         (size_t)ZL_ARR_HDR + sizeof(Value *) * (size_t)newcap);
+    if (!base) rt_error("out of memory growing a list");
+    Value **out = (Value **)(base + ZL_ARR_HDR);
+    zl_arr_hdr(out)->cap = newcap;
+    return out;
+}
+
 
 /* =============================================================
  * NARROWING A NUMBER TO A C INTEGER
@@ -157,7 +192,7 @@ Value zl_list_n(int count, ...)
     Value v = zl_nil();
     v.type   = V_LIST;
     v.nitems = count;
-    v.items  = malloc(sizeof(Value*) * (count > 0 ? count : 1));
+    v.items  = zl_arr_new(count, -1);
 
     va_list ap;
     va_start(ap, count);
@@ -314,7 +349,7 @@ static Value binop_plus(Value l, Value r)
 
     if (l.type == V_LIST && r.type == V_LIST) {
         Value v = zl_nil(); v.type = V_LIST; v.nitems = l.nitems + r.nitems;
-        v.items = malloc(sizeof(Value*) * (v.nitems > 0 ? v.nitems : 1));
+        v.items = zl_arr_new(v.nitems, -1);
         int k = 0;
         for (int i = 0; i < l.nitems; i++) { v.items[k] = malloc(sizeof(Value)); *v.items[k] = *l.items[i]; k++; }
         for (int i = 0; i < r.nitems; i++) { v.items[k] = malloc(sizeof(Value)); *v.items[k] = *r.items[i]; k++; }
@@ -450,7 +485,7 @@ static void list_push_str(Value *list, int *cap, const char *p, int len)
 {
     if (list->nitems == *cap) {
         *cap *= 2;
-        list->items = realloc(list->items, sizeof(Value*) * (size_t)(*cap));
+        list->items = zl_arr_grow(list->items, *cap);
     }
     char *buf = malloc((size_t)len + 1);
     memcpy(buf, p, (size_t)len);
@@ -539,7 +574,7 @@ static Value builtin(const char *name, Value *args, int nargs)
         if (nargs < 1 || args[0].type != V_STR) rt_error("lines needs a string");
         Value list = zl_nil(); list.type = V_LIST; list.nitems = 0;
         int cap = 8;
-        list.items = malloc(sizeof(Value*) * (size_t)cap);
+        list.items = zl_arr_new(cap, -1);
         const char *s = args[0].str, *start = s;
         while (*s) {
             if (*s == '\n') {
@@ -599,10 +634,11 @@ static Value builtin(const char *name, Value *args, int nargs)
         Value src = args[0];
         int m = src.nitems;
 
-        if (src.items && src.tip && *src.tip == m && m < src.cap) {
+        if (src.items && zl_arr_hdr(src.items)->tip == m
+                       && m < zl_arr_hdr(src.items)->cap) {
             src.items[m] = malloc(sizeof(Value));
             *src.items[m] = args[1];
-            *src.tip = m + 1;
+            zl_arr_hdr(src.items)->tip = m + 1;
             src.nitems = m + 1;      /* same array, same tip, same cap */
             return src;
         }
@@ -610,12 +646,14 @@ static Value builtin(const char *name, Value *args, int nargs)
         int want = m + 1;
         int newcap = (want > 1073741823) ? want : want * 2;
         if (newcap < 8) newcap = 8;
-        Value v = zl_nil(); v.type = V_LIST; v.nitems = want; v.cap = newcap;
-        v.items = malloc(sizeof(Value*) * (size_t)newcap);
+        Value v = zl_nil(); v.type = V_LIST; v.nitems = want;
+        /* tip = want: this value IS the newest tip of its own fresh array, so
+         * the next push from it takes the fast path above. The separate
+         * malloc that `int *tip` needed is gone - the header carries it. */
+        v.items = zl_arr_new(newcap, want);
         if (m > 0) memcpy(v.items, src.items, sizeof(Value*) * (size_t)m);
         v.items[m] = malloc(sizeof(Value));
         *v.items[m] = args[1];
-        v.tip = malloc(sizeof(int)); *v.tip = want;
         return v;
     }
 
@@ -665,7 +703,7 @@ static Value builtin(const char *name, Value *args, int nargs)
         if (nargs < 1 || args[0].type != V_LIST) rt_error("sort needs a list");
         int m = args[0].nitems;
         Value v = zl_nil(); v.type = V_LIST; v.nitems = m;
-        v.items = malloc(sizeof(Value*) * (m > 0 ? m : 1));
+        v.items = zl_arr_new(m, -1);
         for (int i = 0; i < m; i++) { v.items[i] = malloc(sizeof(Value)); *v.items[i] = *args[0].items[i]; }
         for (int i = 1; i < m; i++) {
             Value *key = v.items[i]; int j = i - 1;
@@ -735,7 +773,7 @@ static Value builtin(const char *name, Value *args, int nargs)
             rt_error("split needs two strings");
         Value list = zl_nil(); list.type = V_LIST; list.nitems = 0;
         int cap = 8;
-        list.items = malloc(sizeof(Value*) * (size_t)cap);
+        list.items = zl_arr_new(cap, -1);
         const char *sep = args[1].str;
         size_t seplen = strlen(sep);
         const char *start = args[0].str;
@@ -792,7 +830,7 @@ static Value builtin(const char *name, Value *args, int nargs)
         int count = 0;
         char **names = os_dir(path, &count);
         Value list = zl_nil(); list.type = V_LIST; list.nitems = count;
-        list.items = malloc(sizeof(Value*) * (count > 0 ? count : 1));
+        list.items = zl_arr_new(count, -1);
         for (int i = 0; i < count; i++) {
             list.items[i] = malloc(sizeof(Value));
             *list.items[i] = zl_str(names[i]);
@@ -941,7 +979,7 @@ static Value builtin(const char *name, Value *args, int nargs)
         int count = 0;
         char **names = os_procs(&count);
         Value list = zl_nil(); list.type = V_LIST; list.nitems = count;
-        list.items = malloc(sizeof(Value*) * (count > 0 ? count : 1));
+        list.items = zl_arr_new(count, -1);
         for (int i = 0; i < count; i++) {
             list.items[i] = malloc(sizeof(Value));
             *list.items[i] = zl_str(names[i]);
@@ -1043,14 +1081,14 @@ static Value builtin(const char *name, Value *args, int nargs)
         if (dcnt > 100000000.0) rt_error("range count is too large to build");
         int cnt = (int)dcnt;
         long long lo = cnt > 0 ? exact_i64(dlo, "range") : 0;
-        Value v=zl_nil(); v.type=V_LIST; v.nitems=cnt; v.cap=cnt; v.items=malloc(sizeof(Value*)*(size_t)(cnt>0?cnt:1));
+        Value v=zl_nil(); v.type=V_LIST; v.nitems=cnt; v.items=zl_arr_new(cnt, -1);
         if (!v.items) rt_error("out of memory building a range");
         for (int i=0;i<cnt;i++){ v.items[i]=malloc(sizeof(Value)); *v.items[i]=zl_num((double)(lo+i)); }
         return v;
     }
     if (strcmp(name, "reverse") == 0) {
         if (args[0].type==V_STR){ size_t L=strlen(args[0].str); char*b=malloc(L+1); for(size_t i=0;i<L;i++) b[i]=args[0].str[L-1-i]; b[L]='\0'; Value v=zl_nil(); v.type=V_STR; v.str=b; return v; }
-        if (args[0].type==V_LIST){ int m=args[0].nitems; Value v=zl_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=malloc(sizeof(Value*)*(m>0?m:1)); for(int i=0;i<m;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=*args[0].items[m-1-i];} return v; }
+        if (args[0].type==V_LIST){ int m=args[0].nitems; Value v=zl_nil(); v.type=V_LIST; v.nitems=m; v.items=zl_arr_new(m, -1); for(int i=0;i<m;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=*args[0].items[m-1-i];} return v; }
         rt_error("reverse needs a string or list");
     }
     if (strcmp(name, "repeat") == 0) {
@@ -1102,7 +1140,7 @@ static Value builtin(const char *name, Value *args, int nargs)
     if (strcmp(name, "insert") == 0) {
         if (args[0].type!=V_LIST||args[1].type!=V_NUM) rt_error("insert needs a list, index, value");
         int m=args[0].nitems, idx=clamp_index(args[1].num, 0, m);
-        Value v=zl_nil(); v.type=V_LIST; v.nitems=m+1; v.cap=m+1; v.items=malloc(sizeof(Value*)*(size_t)(m+1)); int k=0;
+        Value v=zl_nil(); v.type=V_LIST; v.nitems=m+1; v.items=zl_arr_new(m+1, -1); int k=0;
         for(int i=0;i<idx;i++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
         v.items[k]=malloc(sizeof(Value)); *v.items[k]=args[2]; k++;
         for(int i=idx;i<m;i++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
@@ -1113,7 +1151,7 @@ static Value builtin(const char *name, Value *args, int nargs)
         int m=args[0].nitems;
         if (!(args[1].num >= 0 && args[1].num < (double)m)) rt_error("remove index out of range");
         int idx=(int)args[1].num;
-        Value v=zl_nil(); v.type=V_LIST; v.nitems=m-1; v.cap=(m-1>0)?m-1:1; v.items=malloc(sizeof(Value*)*(size_t)(m>1?m-1:1)); int k=0;
+        Value v=zl_nil(); v.type=V_LIST; v.nitems=m-1; v.items=zl_arr_new((m-1>0)?m-1:1, -1); int k=0;
         for(int i=0;i<m;i++){ if(i==idx)continue; v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++; }
         return v;
     }
@@ -1234,7 +1272,7 @@ static Value builtin(const char *name, Value *args, int nargs)
     if (strcmp(name, "concat") == 0) {
         if (nargs<2||args[0].type!=V_LIST||args[1].type!=V_LIST) rt_error("concat needs two lists");
         int m=args[0].nitems+args[1].nitems;
-        Value v=zl_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=malloc(sizeof(Value*)*(m>0?m:1)); int k=0;
+        Value v=zl_nil(); v.type=V_LIST; v.nitems=m; v.items=zl_arr_new(m, -1); int k=0;
         for(int i=0;i<args[0].nitems;i++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[0].items[i]; k++;}
         for(int i=0;i<args[1].nitems;i++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*args[1].items[i]; k++;}
         return v;
@@ -1243,7 +1281,7 @@ static Value builtin(const char *name, Value *args, int nargs)
         if (nargs<2||args[0].type!=V_NUM) rt_error("fill needs a count and a value");
         if (args[0].num > 100000000.0) rt_error("fill count is too large to build");
         int m=clamp_index(args[0].num, 0, 100000000);
-        Value v=zl_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=malloc(sizeof(Value*)*(size_t)(m>0?m:1));
+        Value v=zl_nil(); v.type=V_LIST; v.nitems=m; v.items=zl_arr_new(m, -1);
         if (!v.items) rt_error("out of memory in fill");
         for(int i=0;i<m;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=args[1];}
         return v;
@@ -1252,7 +1290,7 @@ static Value builtin(const char *name, Value *args, int nargs)
         if (nargs<1||args[0].type!=V_LIST) rt_error("flat needs a list");
         int m=0;
         for(int i=0;i<args[0].nitems;i++) m += (args[0].items[i]->type==V_LIST) ? args[0].items[i]->nitems : 1;
-        Value v=zl_nil(); v.type=V_LIST; v.nitems=m; v.cap=m; v.items=malloc(sizeof(Value*)*(m>0?m:1)); int k=0;
+        Value v=zl_nil(); v.type=V_LIST; v.nitems=m; v.items=zl_arr_new(m, -1); int k=0;
         for(int i=0;i<args[0].nitems;i++){
             Value *it=args[0].items[i];
             if (it->type==V_LIST) { for(int j=0;j<it->nitems;j++){v.items[k]=malloc(sizeof(Value)); *v.items[k]=*it->items[j]; k++;} }
@@ -1267,14 +1305,14 @@ static Value builtin(const char *name, Value *args, int nargs)
     if (strcmp(name, "take") == 0) {
         if (nargs<2||args[0].type!=V_LIST||args[1].type!=V_NUM) rt_error("take needs a list and a number");
         int m=args[0].nitems, n=clamp_index(args[1].num, 0, m);
-        Value v=zl_nil(); v.type=V_LIST; v.nitems=n; v.cap=n; v.items=malloc(sizeof(Value*)*(n>0?n:1));
+        Value v=zl_nil(); v.type=V_LIST; v.nitems=n; v.items=zl_arr_new(n, -1);
         for(int i=0;i<n;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=*args[0].items[i];}
         return v;
     }
     if (strcmp(name, "drop") == 0) {
         if (nargs<2||args[0].type!=V_LIST||args[1].type!=V_NUM) rt_error("drop needs a list and a number");
         int m=args[0].nitems, n=clamp_index(args[1].num, 0, m); int c=m-n;
-        Value v=zl_nil(); v.type=V_LIST; v.nitems=c; v.cap=c; v.items=malloc(sizeof(Value*)*(c>0?c:1));
+        Value v=zl_nil(); v.type=V_LIST; v.nitems=c; v.items=zl_arr_new(c, -1);
         for(int i=0;i<c;i++){v.items[i]=malloc(sizeof(Value)); *v.items[i]=*args[0].items[n+i];}
         return v;
     }
@@ -1386,8 +1424,7 @@ void zlx_list_new(Value *out, long long n)
     Value v = zl_nil();
     v.type = V_LIST;
     v.nitems = (int)n;
-    v.cap    = (int)n;
-    v.items  = malloc(sizeof(Value*) * (size_t)(n > 0 ? n : 1));
+    v.items  = zl_arr_new((int)n, -1);
     for (long long i = 0; i < n; i++) {
         v.items[i] = malloc(sizeof(Value));
         *v.items[i] = zl_nil();

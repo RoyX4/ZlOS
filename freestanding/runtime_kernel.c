@@ -485,9 +485,17 @@ static void kfatal(const char *msg)
 }
 
 /* ------------------------------------------------------- making values */
-Value zl_nil(void)        { Value v; v.type = V_NIL; v.num = 0; v.str = 0;
-                            v.items = 0; v.nitems = 0; v.cap = 0; v.tip = 0;
-                            v.fnptr = 0; v.fnargs = 0; return v; }
+/* ZERO THE WHOLE STRUCT, not field by field. This used to assign every member
+ * in turn, which stopped working when Value's payload became a union
+ * (runtime.h): num, str, items and fnptr now overlap, so nine assignments
+ * leave only the last one's bytes behind, and cap/tip are not fields at all.
+ *
+ * Whole-struct zeroing is also what the rest of the system already depends
+ * on. interp.c:44-50 records why: the C backend has always relied on zl_nil
+ * clearing everything, because a partially initialised Value gave the
+ * interpreter garbage where the backend saw 0, and the two engines
+ * disagreed. `= {0}` needs no libc, which matters here. */
+Value zl_nil(void)        { Value v = {0}; return v; }
 Value zl_num(double n)    { Value v = zl_nil(); v.type = V_NUM;  v.num = n; return v; }
 Value zl_bool(int b)      { Value v = zl_nil(); v.type = V_BOOL; v.num = b ? 1 : 0; return v; }
 
