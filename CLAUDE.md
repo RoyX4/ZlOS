@@ -4,6 +4,11 @@
 
 `kernel/HANDOFF.md` is the orientation doc and it is kept honest — it records what
 is *verified* rather than what is intended. Read it before touching `kernel/`.
+
+**Eight tracks are in flight in parallel worktrees and none of them are merged.**
+`docs/INTEGRATION-PLAN.md` measures the divergence and sets the landing order,
+the per-landing gate, and which paths `main` owns. Read it before merging
+anything, and before starting a ninth track.
 `kernel/docs/gen9-modeset-plan.txt` is the researched Intel display plan (JSON;
 the text is in `.result.plan`). It resolves 13 conflicts between sources and lists
 hazards that can damage hardware.
