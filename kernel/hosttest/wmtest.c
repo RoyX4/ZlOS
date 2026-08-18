@@ -103,11 +103,25 @@ static int draw_calls[8];
 static int tick_returns;            /* what app_tick claims each frame */
 static int last_event_app = -1, last_event_type, last_event_x, last_event_y;
 
+/* When set, the app closes a SCROLL REGION before making its escape attempts.
+ * That is the interesting case: ui_scroll_end used to end with fb_clip_none(),
+ * which does not restore the caller's scissor - it removes it - so everything
+ * an app drew after a list was free to paint over the whole screen. The
+ * escaping fills below are identical either way; only the clip state differs. */
+static int scroll_escape = 0;
+static int scroll_off = 0;
+
 static void t_draw(int app, int x, int y, int w, int h, int focused)
 {
     (void)focused;
     if (app >= 0 && app < 8) draw_calls[app]++;
     fb_fill_px(x, y, w, h, APP_COLOUR(app));
+    if (scroll_escape) {
+        ui_begin(x, y, w, h, UI_DRAW, -1, -1, 0);
+        ui_scroll_begin(h / 3, &scroll_off);
+        for (int i = 0; i < 30; i++) ui_list_row("row", 0);
+        ui_scroll_end(&scroll_off);
+    }
     fb_fill_px(x - 500, y - 500, 400, 400, 0x00FF00FF);   /* must vanish */
     fb_fill_px(x, y - 40, w, 30, 0x00FF00FF);             /* into the title bar */
     fb_fill_px(x + w + 10, y, 200, h, 0x00FF00FF);        /* past the right edge */
@@ -575,6 +589,40 @@ int main(void)
     frame();
     ok("a focus change leaves no shadow edge behind",
        all_wallpaper(200 - 60, 200 - 60, 200 + 300 + 60, 200 + 200 + 60));
+
+    /* -------------------------------------------------- the scroll scissor */
+    /* A SCROLL REGION MUST NARROW THE SCISSOR AND THEN PUT IT BACK.
+     *
+     * Found by the Item 5 bug hunt. wm_repaint clips an app to its client
+     * rectangle before calling it, and "an app which draws at -500,-500
+     * physically cannot produce a pixel" is the guarantee the whole layering
+     * rests on - the assertions above already check it. ui_scroll_end ended
+     * with fb_clip_none(), which does not RESTORE that scissor, it REMOVES it.
+     * So the guarantee held for every app except one that had drawn a list,
+     * and there it silently stopped holding for everything drawn afterwards.
+     *
+     * ui.c has carried fields named "the scissor to put back" since the
+     * function was written, and nothing ever read them.
+     *
+     * Same escape attempts as the clipping tests above, with a scroll region
+     * closed first. Only the clip state differs. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    pointer(20, 20, 0);
+    wm_damage(0, 0, W, H);
+    frame();
+    int sc = wm_open(4, "scroller", 400, 300, 400, 300);
+    scroll_escape = 1;
+    wm_damage(0, 0, W, H);
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
+    scroll_escape = 0;
+    ok("after a scroll region, an app still cannot paint above its window",
+       !has_magenta(0, 0, W, 300));
+    ok("...nor to the left of it",
+       !has_magenta(0, 0, 400, H));
+    ok("...nor past its right edge",
+       !has_magenta(800 + 1, 0, W, H));
+    wm_close(sc);
+    frame();
 
     /* ------------------------------------------------------------- shadow */
     /* THE ELEVATION SCHEME MUST REACH THE SCREEN.

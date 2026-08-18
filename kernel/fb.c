@@ -607,6 +607,20 @@ void fb_clip_none(void)
     clip_x1 = (int)fb_w; clip_y1 = (int)fb_h;
 }
 
+/* Read the scissor back. Anything that narrows the clip TEMPORARILY has to put
+ * back what it found rather than opening it up again, and until this existed
+ * there was no way to find out - so ui.c's scroll region ended with
+ * fb_clip_none(), which is not "restore" but "remove", and every widget drawn
+ * after a list could paint over the whole screen. x1/y1 are EXCLUSIVE, as
+ * everywhere else in this file. */
+void fb_clip_get(int *x0, int *y0, int *x1, int *y1)
+{
+    if (x0) *x0 = clip_x0;
+    if (y0) *y0 = clip_y0;
+    if (x1) *x1 = clip_x1;
+    if (y1) *y1 = clip_y1;
+}
+
 static void put_pixel(unsigned int x, unsigned int y, unsigned int rgb)
 {
     /* Signed, deliberately. Callers pass (unsigned)(px + x) where px + x can

@@ -300,6 +300,7 @@ void ui_num(const char *s, int v)
  */
 void fb_clip(int x, int y, int w, int h);
 void fb_clip_none(void);
+void fb_clip_get(int *x0, int *y0, int *x1, int *y1);
 
 static struct {
     int on;                  /* inside a scroll region?                    */
@@ -354,7 +355,22 @@ void ui_scroll_begin(int h, int *off)
     S.save_cy = L.cy;
     S.save_h = L.h;
 
-    if (L.mode == UI_DRAW) fb_clip(x, y, L.w, h);
+    /* NARROW THE SCISSOR, DO NOT REPLACE IT.
+     *
+     * wm_repaint has already clipped this app to its own client rectangle, and
+     * that is the guarantee the whole layering rests on: an app which draws at
+     * -500,-500 physically cannot produce a pixel. Calling fb_clip() with the
+     * viewport alone throws that away and re-opens the app to anywhere the
+     * viewport reaches, which at a scroll position past the window edge is
+     * off the window entirely. Intersect instead. */
+    if (L.mode == UI_DRAW) {
+        fb_clip_get(&S.cx0, &S.cy0, &S.cx1, &S.cy1);
+        int nx0 = x     > S.cx0 ? x     : S.cx0;
+        int ny0 = y     > S.cy0 ? y     : S.cy0;
+        int nx1 = x + L.w < S.cx1 ? x + L.w : S.cx1;
+        int ny1 = y + h   < S.cy1 ? y + h   : S.cy1;
+        fb_clip(nx0, ny0, nx1 - nx0, ny1 - ny0);
+    }
     /* the cursor moves INTO the viewport, offset by the scroll position */
     L.cy = y - S.off;
     L.cx = L.x;
@@ -364,7 +380,17 @@ void ui_scroll_end(int *off)
 {
     S.content = L.cy + S.off - S.y;     /* how tall the content turned out */
     if (L.mode == UI_DRAW) {
-        fb_clip_none();
+        /* RESTORE, NOT REMOVE. This was fb_clip_none(), which does not put the
+         * caller's scissor back - it deletes it. wm_repaint sets the client
+         * rectangle before calling an app; the moment that app closed a scroll
+         * region every widget it drew afterwards was free to paint over the
+         * whole screen, including other windows and the desktop furniture.
+         *
+         * S.cx0..cy1 have been declared "the scissor to put back" since this
+         * function was written and nothing ever read them - the fix was half
+         * built and then never wired up, which is exactly the project's
+         * "the code exists is not the code works" class. */
+        fb_clip(S.cx0, S.cy0, S.cx1 - S.cx0, S.cy1 - S.cy0);
         /* the scrollbar, only when there is something to scroll. A bar that
          * is always there but sometimes full-height is a bar that means
          * nothing. */
