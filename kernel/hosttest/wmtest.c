@@ -61,6 +61,15 @@ int idt_mouse_x(void)   { return fake_x; }
 int idt_mouse_y(void)   { return fake_y; }
 int idt_mouse_btn(void) { return fake_btn; }
 unsigned int idt_ticks(void) { return fake_ticks; }
+
+/* wm.c times the body of a frame with the TSC (queue item 9). cpu.c is not
+ * linked here - this harness is wm.c + fb.c + ui.c + input.c against fake
+ * hardware - so the clock is faked too. A fixed rate and a counter that
+ * advances by a plausible frame's worth per call keeps wm_frame_us() in range
+ * without making any assertion depend on it. */
+static unsigned long long fake_tsc = 0;
+unsigned long long cpu_tsc(void) { fake_tsc += 2000000; return fake_tsc; }
+unsigned int cpu_tsc_khz(void) { return 2000000; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }

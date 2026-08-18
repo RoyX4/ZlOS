@@ -245,6 +245,7 @@ extern int  cpu_apic_id(void);
 extern unsigned int cpu_tsc_khz(void);
 extern unsigned int cpu_mhz(void);
 extern unsigned int cpu_tsc_lo(void);
+extern unsigned long long cpu_tsc(void);
 extern int  cpu_tsc_invariant(void);
 extern int  cpu_cache_type(int i);
 extern int  cpu_cache_level(int i);
@@ -346,6 +347,7 @@ extern void wm_frame(void);
 extern int  wm_running(void);
 extern void wm_stop(void);
 extern int  wm_focused(void);
+extern unsigned int wm_frame_us(void);
 extern void wm_focus(int win);
 extern void wm_raise(int win);
 extern void wm_client(int win, int *x, int *y, int *w, int *h);
@@ -835,6 +837,7 @@ Value zl_calln(const char *name, int n, ...)
      * the user hits its close box, and re-focusing a closed window is a silent
      * no-op that reads as "the dock stopped working". */
     if (streq(name, "wm_alive"))   return zl_num((double)wm_is_open((int)a[0].num));
+    if (streq(name, "wm_frame_us")) return zl_num((double)wm_frame_us());
     if (streq(name, "wm_focused")) return zl_num((double)wm_focused());
     if (streq(name, "wm_focus"))   { wm_focus((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_raise"))   { wm_raise((int)a[0].num); return zl_nil(); }
@@ -921,7 +924,19 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "cpu_apicid")) return zl_num((double)cpu_apic_id());
     if (streq(name, "cpu_khz"))    return zl_num((double)cpu_tsc_khz());
     if (streq(name, "cpu_mhz"))    return zl_num((double)cpu_mhz());
-    if (streq(name, "cpu_tsc"))    return zl_num((double)cpu_tsc_lo());
+    /* THE FULL 64-BIT TSC, not its bottom half.
+     *
+     * This called cpu_tsc_lo(), which is a u32 - so zl saw a counter that
+     * WRAPPED EVERY 1.8 SECONDS at 2.4 GHz. A frame timer built on it reads
+     * correctly most of the time and returns a large negative number a few
+     * times a minute, which is the kind of intermittent wrong answer that gets
+     * blamed on the thing being measured rather than the clock.
+     *
+     * A zl number is a double, which holds an exact integer to 2^53 - about
+     * 43 days at 2.4 GHz, against the 1.8 s it had. cpu_tsc_lo stays exposed
+     * as cpu_tsc32 for anything that genuinely wants the low half. */
+    if (streq(name, "cpu_tsc"))    return zl_num((double)cpu_tsc());
+    if (streq(name, "cpu_tsc32"))  return zl_num((double)cpu_tsc_lo());
     if (streq(name, "cpu_inv"))    return zl_num((double)cpu_tsc_invariant());
     if (streq(name, "cpu_ctype"))  return zl_num((double)cpu_cache_type((int)a[0].num));
     if (streq(name, "cpu_clevel")) return zl_num((double)cpu_cache_level((int)a[0].num));

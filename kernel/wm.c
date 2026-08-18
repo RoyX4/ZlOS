@@ -780,12 +780,37 @@ static void wm_route(int type)
  */
 static unsigned int last_tick;
 
+/* ---- how long a frame actually TAKES ---------------------------------------
+ * Not how long a frame LASTS. wm_frame() returns immediately unless the 100 Hz
+ * tick has moved, so the period between frames is pinned at 10 ms by
+ * construction and measuring it tells you the PIT frequency and nothing else.
+ * The first version of this measured exactly that and reported a confident
+ * 9997 us - a number that is plausible, stable, and completely uninformative.
+ *
+ * So this times the BODY: input, routing, ticks, repaint and present. That is
+ * the figure comparable to hosttest/fbbench.c's, which times the same drawing
+ * with no compositor around it.
+ *
+ * Only frames that REPAINTED are counted. An idle frame does no drawing, and
+ * averaging those in would drag the number toward zero in proportion to how
+ * bored the desktop was rather than how expensive its scene is. */
+#define WM_FT_WIN 16
+extern unsigned long long cpu_tsc(void);
+extern unsigned int cpu_tsc_khz(void);
+
+static unsigned long long ft_accum;
+static int ft_frames;
+static unsigned int ft_us;         /* rolling average, microseconds */
+
+unsigned int wm_frame_us(void) { return ft_us; }
+
 void wm_frame(void)
 {
     unsigned int now = idt_ticks();
     if (now == last_tick) return;
     last_tick = now;
 
+    unsigned long long t0 = cpu_tsc();
     input_poll();
     for (int guard = 0; guard < 64; guard++) {
         int t = input_next();
@@ -807,6 +832,10 @@ void wm_frame(void)
         for (int i = 0; i < nz; i++)
             if (hook_tick(win_app(zorder[i]), zorder[i])) wm_damage_win(zorder[i]);
 
+    /* SAMPLED BEFORE THE REPAINT, because wm_repaint consumes the list. Read
+     * after, this is always 0 and the frame timer reports 0 us forever - which
+     * it did, and which is a nicely plausible-looking answer. */
+    int drew = nwd != 0;
     if (nwd) {
         fb_pointer_hide();      /* the sprite's save-under is stale once the
                                    pixels under it are about to be redrawn */
@@ -814,4 +843,17 @@ void wm_frame(void)
     }
     fb_pointer_show(ptr_x, ptr_y);
     fb_present();
+
+    if (drew) {
+        ft_accum += cpu_tsc() - t0;
+        if (++ft_frames >= WM_FT_WIN) {
+            unsigned int khz = cpu_tsc_khz();
+            /* cycles -> us. khz is cycles per millisecond, so scale by 1000
+             * BEFORE dividing or the integer divide throws the answer away. */
+            if (khz) ft_us = (unsigned int)((ft_accum * 1000ULL)
+                                            / ((unsigned long long)khz * ft_frames));
+            ft_accum = 0;
+            ft_frames = 0;
+        }
+    }
 }

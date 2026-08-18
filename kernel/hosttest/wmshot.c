@@ -42,6 +42,9 @@ static unsigned fake_ticks = 1;
 int idt_mouse_x(void)   { return fake_x; }
 int idt_mouse_y(void)   { return fake_y; }
 int idt_mouse_btn(void) { return fake_btn; }
+unsigned long long cpu_tsc(void) { static unsigned long long t; t += 2000000; return t; }
+unsigned int cpu_tsc_khz(void) { return 2000000; }
+
 unsigned int idt_ticks(void) { return fake_ticks; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }

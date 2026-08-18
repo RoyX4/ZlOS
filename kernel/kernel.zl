@@ -1801,6 +1801,18 @@ fn run_command(cmd, arg) {
         color(C_WHITE) print(peek8(mv + 158))
         color(C_GREY)  return 0
     }
+    # FRAME TIME, on serial as well as on screen. The System Monitor shows it,
+    # but a picture of a number is not a number a gate can assert on - and the
+    # brief's gate is that it AGREES with fbbench, which needs the figure
+    # itself. Prints the TSC rate too, since the conversion depends on it and a
+    # wrong rate is the obvious way this number could be plausible and wrong.
+    if cmd == 70 {
+        color(C_GREY)   put("  frame: ")
+        color(C_WHITE)  put(wm_frame_us())
+        color(C_GREY)   put(" us avg over 16 painted frames   tsc ")
+        put(cpu_khz())  print(" kHz")
+        return 0
+    }
     if cmd == 99  { draw_screen()  return 0 }
     if cmd == 113 { return 1 }
     color(C_RED)  print("  unknown command - press h for help")
@@ -1840,6 +1852,13 @@ fn sysmon_body(sx, sy) {
     fill_rgb(sx + 56 * u, sy + 100 * u, 58 * u, 12 * u, ACCENT)
     text_aa(sx + 14 * u, sy + 122 * u, "TICKS", TXT_DIM)
     num_aa(sx + 68 * u, sy + 122 * u, ticks(), TXT_HI)
+    # FRAME TIME, in microseconds, averaged over the last 16 PAINTED frames. us
+    # rather than ms because a whole-desktop redraw here is single-digit
+    # milliseconds and "6" tells you nothing that "6042" does not tell you
+    # better.
+    text_aa(sx + 14 * u, sy + 142 * u, "FRAME", TXT_DIM)
+    num_aa(sx + 68 * u, sy + 142 * u, wm_frame_us(), TXT_HI)
+    text_aa(sx + 130 * u, sy + 142 * u, "us", TXT_DIM)
     # a little sparkline across the bottom, drawn as connected segments
     line(sx + 14,  sy + 182, sx + 46,  sy + 170, C_CYAN)
     line(sx + 46,  sy + 170, sx + 78,  sy + 176, C_CYAN)
@@ -2082,6 +2101,17 @@ fn open_app(cmd) {
 # changed, repaint me" - which is how the monitor's clock advances without
 # owning the frame, and is the whole reason it needs no while-loop.
 last_tick_sec = 0 - 1
+# ---- FRAME TIME ------------------------------------------------------------
+# Measured in wm.c, not here, and that distinction cost a wrong answer once.
+# The first version timed the gap between app_tick calls - but wm_frame()
+# returns immediately unless the 100 Hz tick has moved, so that gap is pinned
+# at 10 ms by construction. It reported a confident, stable 9997 us, which is
+# the PIT frequency wearing a frame timer's clothes.
+#
+# wm_frame_us() times the BODY of a frame - input, routing, ticks, repaint,
+# present - and only over frames that actually repainted. That is the figure
+# comparable to hosttest/fbbench.c, which times the same drawing with no
+# compositor around it.
 # The shell window repaints after anything is typed or printed into it.
 shell_win = 0 - 1
 # Is a compositor session already running? It matters now that the compositor

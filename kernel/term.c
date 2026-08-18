@@ -156,6 +156,7 @@ static const struct cmd table[] = {
     /* '*' is not a word, so under the compositor there was no way to wake the
      * other cores at all - and band rendering is off until something does. */
     { "smp",      42 }, { "cores",    42 },
+    { "frame",    70 }, { "fps",      70 },
     { "windows", 119 }, { "wm",      119 },
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },
