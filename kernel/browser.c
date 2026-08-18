@@ -217,6 +217,14 @@ static const char *status_text(void)
 
 void browser_draw(int x, int y, int w, int h, int focused)
 {
+    /* SELF-INITIALISING, and that is not laziness. The compositor used to call
+     * browser_home() when it opened the window, which meant opening the
+     * desktop AFTER fetching a page silently replaced the fetched page with
+     * the built-in one - the fetch had worked, the screenshot showed the home
+     * page, and nothing said why. An app that can be handed a document before
+     * its window exists must not have its content decided by window order. */
+    if (doc_len == 0) browser_home();
+
     const struct ui_theme *t = ui_theme();
     int em = fb_prop_em();
     int pad = em * PAD_EM / 8;

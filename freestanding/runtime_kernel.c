@@ -390,6 +390,40 @@ extern int  net_rx_frag(void);
 extern int  virtio_net_send(const unsigned char *frame, int len);
 extern int  virtio_net_poll(unsigned char *out, int max);
 
+/* ---- TCP and HTTP (tcp.c / http.c) -------------------------------------
+ * Both take their transport by injection so both run in a host harness with
+ * no machine; joining them to net.c is this file's job, as with the IP
+ * stack above. */
+extern void tcp_attach(int (*out)(unsigned int, int, const unsigned char *, int),
+                       unsigned int local_ip);
+extern int  tcp_connect(unsigned int ip, int port);
+extern int  tcp_state(void);
+extern void tcp_close(void);
+extern void tcp_abort(void);
+extern void tcp_tick(void);
+extern void tcp_input(unsigned int src, int proto, const unsigned char *p, int len);
+extern int  tcp_rx_segs(void);
+extern int  tcp_tx_segs(void);
+extern int  tcp_retransmits(void);
+extern int  tcp_rx_dup(void);
+extern int  tcp_rx_ooo(void);
+extern int  tcp_dup_acks(void);
+extern int  tcp_rx_bad_csum(void);
+extern int  tcp_cwnd(void);
+extern int  net_send_ip(unsigned int dst, int proto, const unsigned char *p, int len);
+extern void net_set_ip_sink(void (*f)(unsigned int, int, const unsigned char *, int));
+extern int  http_start(unsigned int ip, int port, const char *host, const char *path);
+extern int  http_poll(void);
+extern void http_reset(void);
+extern int  http_status(void);
+extern int  http_body_len(void);
+extern int  http_body_byte(int i);
+extern unsigned int http_body_addr(void);
+extern int  http_total(void);
+extern int  http_truncated(void);
+extern int  http_refused(void);
+extern int  http_redirects(void);
+
 extern void browser_home(void);
 extern void browser_load_mem(unsigned int addr, int len);
 extern void browser_draw(int x, int y, int w, int h, int focused);
@@ -861,6 +895,40 @@ Value zl_calln(const char *name, int n, ...)
         return zl_num(1.0);
     }
     if (streq(name, "ip_live"))    return zl_num((double)net_live());
+    /* tcp_up(): hand tcp.c the IP layer and register it as net.c's sink for
+     * everything that is not ICMP. Two calls, one place, once. */
+    if (streq(name, "tcp_up")) {
+        tcp_attach(net_send_ip, (unsigned)a[0].num);
+        net_set_ip_sink(tcp_input);
+        return zl_num(1.0);
+    }
+    if (streq(name, "tcp_open"))   return zl_num((double)tcp_connect((unsigned)a[0].num,(int)a[1].num));
+    if (streq(name, "tcp_st"))     return zl_num((double)tcp_state());
+    if (streq(name, "tcp_shut"))   { tcp_close(); return zl_nil(); }
+    if (streq(name, "tcp_kill"))   { tcp_abort(); return zl_nil(); }
+    if (streq(name, "tcp_tick"))   { tcp_tick(); return zl_nil(); }
+    if (streq(name, "tcp_rx"))     return zl_num((double)tcp_rx_segs());
+    if (streq(name, "tcp_tx"))     return zl_num((double)tcp_tx_segs());
+    if (streq(name, "tcp_rexmit")) return zl_num((double)tcp_retransmits());
+    if (streq(name, "tcp_dup"))    return zl_num((double)tcp_rx_dup());
+    if (streq(name, "tcp_ooo"))    return zl_num((double)tcp_rx_ooo());
+    if (streq(name, "tcp_dupack")) return zl_num((double)tcp_dup_acks());
+    if (streq(name, "tcp_badsum")) return zl_num((double)tcp_rx_bad_csum());
+    if (streq(name, "tcp_cwnd"))   return zl_num((double)tcp_cwnd());
+    if (streq(name, "http_get")) {
+        if (a[2].type != V_STR || a[3].type != V_STR) return zl_num(0.0);
+        return zl_num((double)http_start((unsigned)a[0].num,(int)a[1].num,a[2].str,a[3].str));
+    }
+    if (streq(name, "http_poll"))  return zl_num((double)http_poll());
+    if (streq(name, "http_reset")) { http_reset(); return zl_nil(); }
+    if (streq(name, "http_code"))  return zl_num((double)http_status());
+    if (streq(name, "http_len"))   return zl_num((double)http_body_len());
+    if (streq(name, "http_byte"))  return zl_num((double)http_body_byte((int)a[0].num));
+    if (streq(name, "http_addr"))  return zl_num((double)http_body_addr());
+    if (streq(name, "http_total")) return zl_num((double)http_total());
+    if (streq(name, "http_trunc")) return zl_num((double)http_truncated());
+    if (streq(name, "http_refused")) return zl_num((double)http_refused());
+    if (streq(name, "http_redir")) return zl_num((double)http_redirects());
     if (streq(name, "ip_poll"))    return zl_num((double)net_poll_once());
     if (streq(name, "ip_ping"))    return zl_num((double)net_ping((unsigned)a[0].num,(int)a[1].num));
     if (streq(name, "ip_run"))     return zl_num((double)net_ping_run((unsigned)a[0].num,(int)a[1].num,(int)a[2].num));

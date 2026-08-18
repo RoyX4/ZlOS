@@ -24,7 +24,7 @@ applies in the optimistic direction.
 
 | | |
 |---|---|
-| **A browser** | ⚠️ **Bounded, and partly built.** The maximal version is out of reach. A document renderer is ~3,000 lines of code; **1,118 of them exist and work.** No JavaScript, no HTTPS, no network yet — see the table below. |
+| **A browser** | ⚠️ **Bounded, and built.** The maximal version is out of reach. A document renderer was costed at ~3,000 lines of code; **2,617 of them exist and work, and they fetch a page over the network and render it.** No JavaScript, no HTTPS — see the table below. |
 
 ---
 
@@ -65,12 +65,14 @@ code column excludes blank and comment-only lines.
 | `kernel.zl` — the app's policy | — | — | **+23** | one `app_draw` branch, one event branch |
 | `virtio_net.c` | ~400 | **382** | 628 | done, gated |
 | `net.c` + `net.h` — ARP, IPv4, ICMP | ~300 | **359** | 579 | done, gated |
-| TCP, client, one connection | ~900 | 0 | 0 | item 3 |
-| HTTP/1.0 | ~150 | 0 | 0 | item 4 |
-| **total so far** | **~2,000 of ~3,050** | **1,859** | **2,884** | |
+| `tcp.c` + `tcp.h` — client, one connection | ~900 | **513** | 752 | done, gated |
+| `http.c` + `http.h` — HTTP/1.0 | ~150 | **245** | 332 | done, gated |
+| the browser app's URL bar | — | 0 | 0 | item 7 |
+| **total** | **~3,050** | **2,617** | **3,968** | |
 
-The five budgeted-and-built pieces came in at **1,859 code lines against a
-2,000 estimate** — the estimate has held to within 10% twice. The `wc -l`
+Every budgeted piece is built: **2,617 code lines against a ~3,050 estimate**,
+which is 14% under. The brief's costing was good, and it was good because it
+was arrived at by looking at what the tree already had rather than by guessing. The `wc -l`
 figure is larger because roughly a third of every file here is the reasoning
 behind it.
 
@@ -115,7 +117,7 @@ margin collapsing, hanging list markers, and reflow on resize.
 |---|---|
 | **JavaScript** | a JS engine is its own multi-year project. Not "hard" — a different project. |
 | **HTTPS** | `crypto.c` has SHA-1, SHA-256, HMAC and PBKDF2 — **543 lines of hashing and no cipher**. TLS needs AES-GCM, ECDHE and certificate-chain validation. A padlock that has not been earned is worse than no padlock, so an `https://` URL is refused by name. |
-| **The network** | there is no driver. The desktop header's `net up` is decorative and always was. |
+| **HTTP/1.1** | chunked transfer encoding, keep-alive and pipelining are requirements there, not options. 1.0 ends a body by closing the connection, which the TCP layer already handles. A decision, not a gap. |
 | **Full CSS** | the cascade, specificity, float, flex, grid. Two box types — block and inline — is enough for a document and is not enough for a web app. |
 
 ---
@@ -138,6 +140,10 @@ kernel/hosttest/browsershot out.ppm    # the same page at 760/480/300px
 
 ```bash
 kernel/hosttest/nettest        # 152 checks, 0 failed
+```
+
+```bash
+kernel/hosttest/tcptest        # 89 checks, 0 failed
 ```
 
 `net.c` holds no link driver — the link is two function pointers — so the whole

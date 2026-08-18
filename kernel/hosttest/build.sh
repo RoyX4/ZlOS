@@ -84,3 +84,11 @@ echo "built ./browsershot   (run: ./browsershot out.ppm)"
 # afternoon, and the clock is virtual so the jitter assertion cannot be flaky.
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o nettest nettest.c ../net.c
 echo "built ./nettest       (run: ./nettest)"
+
+# The TCP state machine against scripted packet sequences. Every case here is
+# one that either cannot be produced from a real peer on demand (a segment
+# arriving twice, a FIN mid-transfer, a RST with the wrong sequence number) or
+# takes minutes of wall clock (five SYN retransmits with exponential backoff).
+# The harness IS the peer and the clock is a variable, so all of it is instant.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o tcptest tcptest.c ../tcp.c ../net.c
+echo "built ./tcptest       (run: ./tcptest)"

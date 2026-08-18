@@ -1701,6 +1701,7 @@ fn run_command(cmd, arg) {
     if cmd == 108 { return fs_list() }    # l - list RAM files
     # 'N', not 'n': every lowercase code from a to z is already a command.
     if cmd == 78 { return net_gate() }    # N - the network card, and an ARP probe
+    if cmd == 87 { return web_gate() }    # W - TCP + HTTP/1.0 against a real server
     if cmd == 114 {                       # r - reboot
         color(C_YELLOW)  print("  rebooting...")
         beep(1568, 6)  beep(784, 10)
@@ -1796,6 +1797,56 @@ fn about_body(ax, ay) {
 # WINDOW origin, so the title bar height is subtracted back off - which is
 # exactly the kind of thing that has to be done once, here, rather than by
 # editing sixty coordinates.
+
+# ---- items 3 and 4: TCP and HTTP, against a real server --------------------
+# 10.0.2.2 is the HOST from inside QEMU's user-mode network, so this fetches
+# from a python3 -m http.server running on the machine the emulator is on.
+# That is a real server, a real three-way handshake and a real response body -
+# not a loopback and not a mock.
+HTTP_PORT = 8000
+
+fn web_gate() {
+    color(C_CYAN)  print("  TCP + HTTP/1.0")
+    color(C_GREY)
+    if ip_live() == 0 {
+        print("    the IP stack is not up - run the network gate first")
+        return 0
+    }
+    tcp_up(NET_ME)
+    http_reset()
+    if http_get(NET_GW, HTTP_PORT, "10.0.2.2", "/") == 0 {
+        color(C_RED)  print("    could not start the fetch")
+        color(C_GREY) return 0
+    }
+    put("    GET http://10.0.2.2:")  put(HTTP_PORT)  print("/  ...")
+    wgi = 0
+    wgs = 0
+    while wgi < 400000 {
+        ip_poll()
+        tcp_tick()
+        wgs = http_poll()
+        if wgs > 2 { wgi = 400000 } else { wgi = wgi + 1 }
+    }
+    put("    tcp state:    ")  print(tcp_st())
+    put("    segments:     out ")  put(tcp_tx())  put("  in ")  put(tcp_rx())
+    put("  retransmits ")  put(tcp_rexmit())  put("  dup ")  put(tcp_dup())
+    put("  out-of-order ")  print(tcp_ooo())
+    if wgs == 3 {
+        color(C_GREEN)  put("    HTTP ")  put(http_code())
+        put("   body ")  put(http_len())  put(" bytes of ")  put(http_total())
+        print(" received")
+        color(C_GREY)
+        if http_trunc() == 1 { color(C_YELLOW)  print("    body truncated - larger than the buffer")  color(C_GREY) }
+        # ...and hand it straight to the browser, which is the whole point
+        br_load(http_addr(), http_len())
+        color(C_CYAN)  print("    loaded into the browser. press w for the desktop.")
+        color(C_GREY)  return 0
+    }
+    if wgs == 5 { color(C_YELLOW)  print("    refused: not text/html or text/plain")  color(C_GREY)  return 0 }
+    color(C_RED)  put("    fetch failed in state ")  print(wgs)
+    print("    is there a server? on the host:  python3 -m http.server 8000")
+    color(C_GREY)  return 0
+}
 
 # ---- the network card, and the two-frame proof that it works ---------------
 # Item 1's gate: send an ARP request into QEMU's user-mode network, receive the
@@ -2029,7 +2080,6 @@ fn wm_session() {
     shell_win = wm_open(APP_SHELL, "zl shell", 40 * u, 52 * u, sw - 340 * u, sh - 90 * u)
     wm_open(APP_MONITOR, "System Monitor", sw - 290 * u, 52 * u, MON_W * u, MON_H * u)
     wm_open(APP_ABOUT, "About", sw - 290 * u, 52 * u + (MON_H + 16) * u, MON_W * u, AB_H * u)
-    br_home()
     wm_open(APP_BROWSER, "zlOS browser", 120 * u, 96 * u, 520 * u, 380 * u)
     while wm_run() == 1 { wm_frame() }
     return 0
