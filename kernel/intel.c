@@ -4267,7 +4267,14 @@ int intel_bringup_failed_step(void) { return intel_modeset_failed_at(); }
  *
  * Declared here rather than including console.h because intel.c takes its
  * kernel dependencies as externs - see idt_ticks and cpu_delay_us above. */
-void console_init_fb(uptr addr, u32 pitch, u32 width, u32 height, u32 bpp);
+/* `unsigned long long`, NOT uptr. console.c defines this with a 64-bit first
+ * argument (T-11), and uptr is `unsigned int` here whenever ZL_64 is undefined
+ * - which is both 32-bit builds. Separate translation units, so nothing
+ * diagnoses it: this side would push 20 bytes of arguments and the callee
+ * would read 24, sliding pitch/width/height along one slot and taking bpp from
+ * whatever sat above the frame. Exactly the failure raw_entry.S was fixed for,
+ * in the one C caller that was missed. */
+void console_init_fb(unsigned long long addr, u32 pitch, u32 width, u32 height, u32 bpp);
 
 int intel_panel_takeover(void)
 {
@@ -4282,7 +4289,7 @@ int intel_panel_takeover(void)
     volatile u32 *px = (volatile u32 *)(uptr)fb;
     for (u32 i = 0; i < (stride / 4u) * h; i++) px[i] = 0;
 
-    console_init_fb((uptr)fb, stride, w, h, 32);
+    console_init_fb((unsigned long long)fb, stride, w, h, 32);
     return 1;
 }
 

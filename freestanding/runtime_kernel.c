@@ -426,6 +426,7 @@ extern unsigned int intel_surface(void);
 extern int  intel_frame_count(void);
 extern int  console_rows(void);
 extern void console_quiet(int on);
+extern void console_unquiet(void);
 
 /* ONE byte to COM1, and nothing else. Extracted from zl_putc because there are
  * now two callers with different needs, and inlining it in one of them made the
@@ -497,6 +498,14 @@ static void zl_put_i64(long long v)
 /* A kernel has no way to report a fault except to say so and stop. */
 static void kfatal(const char *msg)
 {
+    /* ...and it must actually reach a SCREEN. The compositor mutes the
+     * console's pixels for the duration of a session (console_quiet), so
+     * without this the machine would halt having drawn nothing, with the
+     * diagnostic in a scrollback that will never be repainted. Dropping the
+     * mute costs nothing here: the next statement is an infinite halt. */
+#ifdef ZL_KERNEL_SERIAL
+    console_unquiet();
+#endif
     zl_puts("\nkernel runtime error: ");
     zl_puts(msg);
     zl_putc('\n');

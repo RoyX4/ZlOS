@@ -256,6 +256,17 @@ static int quiet;
 void console_quiet(int on) { quiet = on ? 1 : 0; }
 int  console_is_quiet(void) { return quiet; }
 
+/* A FATAL ERROR IS NEVER QUIET. kfatal prints through zl_putc, whose console
+ * sink this mutes - so a zl runtime fault during a compositor session would
+ * halt the machine having drawn nothing, with the diagnostic sitting in a
+ * scrollback nobody will ever repaint. That is the silent-refusal bug class
+ * this project is most expensive about, reintroduced by the very flag that was
+ * added to stop the console scribbling.
+ *
+ * console_unquiet() is what the fatal path calls: it drops the mute for good,
+ * so everything after it reaches the screen. */
+void console_unquiet(void) { quiet = 0; }
+
 void console_putc(char c)
 {
     if (quiet) return;

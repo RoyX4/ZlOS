@@ -204,6 +204,10 @@ def main():
                     help="seconds to let a frame render before photographing it")
     ap.add_argument("--keep-shots", action="store_true")
     ap.add_argument("--no-build", action="store_true")
+    ap.add_argument("--ps2-only", action="store_true",
+                    help="drop the USB keyboard - the ThinkPad's own keyboard "
+                         "is PS/2, and Enter/Backspace/ESC arrive there as "
+                         "navigation codes with no character attached")
     args = ap.parse_args()
 
     import time
@@ -214,7 +218,27 @@ def main():
     tmp = tempfile.mkdtemp(prefix="probeterm-")
     ser_path = os.path.join(tmp, "ser.sock")
     qmp_path = os.path.join(tmp, "qmp.sock")
-    proc = subprocess.Popen(qemu_argv(tmp, False, ser_path, qmp_path),
+    argv = qemu_argv(tmp, False, ser_path, qmp_path)
+    if args.ps2_only:
+        # Every probe in this tree boots with -device usb-kbd, which is why
+        # nothing could see that the PS/2 path never produces a character for
+        # Enter. Strip it and the emulated i8042 is the only way in.
+        #
+        # Indexed, not `argv.index(a)` - that returns the FIRST "-device" every
+        # time, so the first version of this tested the wrong device, removed
+        # nothing, and the gate passed against a USB keyboard while claiming to
+        # be PS/2-only. It is asserted below rather than assumed.
+        out, i = [], 0
+        while i < len(argv):
+            if argv[i] == "-device" and i + 1 < len(argv) and "usb-kbd" in argv[i + 1]:
+                i += 2
+                continue
+            out.append(argv[i]); i += 1
+        if any("usb-kbd" in a for a in out):
+            print("  FAIL  --ps2-only did not remove the USB keyboard"); return 1
+        print("  note  PS/2 only - the USB keyboard is not attached")
+        argv = out
+    proc = subprocess.Popen(argv,
                             cwd=HERE, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL)
     failures = []

@@ -25,7 +25,13 @@ cp SOURCES "$SOURCES_BAK"
 
 cleanup() {
     cp "$SOURCES_BAK" SOURCES
-    rm -f "$SOURCES_BAK" "$PROBE" _srcprobe.o _srcprobe64.o _efi__srcprobe.o
+    # The build scripts derive object names as _$(basename $f .c).o and
+    # friends, and $f is "_srcprobe.c" - so the objects are __srcprobe.o (TWO
+    # underscores), __srcprobe64.o and _efi__srcprobe.o. The first version of
+    # this named the one-underscore forms, removed nothing, and left two probe
+    # objects sitting in the tree. Globbed now, so a naming change in a build
+    # script cannot silently start leaking them again.
+    rm -f "$SOURCES_BAK" "$PROBE" _*srcprobe*.o
 }
 trap cleanup EXIT
 

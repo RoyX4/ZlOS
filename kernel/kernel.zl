@@ -1974,7 +1974,43 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
 # read it the moment there is a fallback path for an unhandled key, and
 # claiming to have handled something you dropped is the same bug class as a
 # silent fallback - which is this repo's most expensive recurring bug.
+# THE PS/2 KEYBOARD DOES NOT PRODUCE A CHARACTER FOR ENTER.
+#
+# input.c's sc_plain[] has 0 at 0x01 (ESC), 0x0E (backspace) and 0x1C (Enter),
+# so handle_scancode pushes EV_KEY_DOWN with a navigation code and skips the
+# `if (ch)` that would push EV_CHAR. Only the USB HID path turns those into
+# 27/8/13 (xhci.c hid_to_ascii). An app that listens for EV_CHAR alone can
+# therefore be TYPED INTO but never submitted to - letters arrive, Enter does
+# nothing, and no command ever runs.
+#
+# That is the ThinkPad's own keyboard, and no gate could see it: every probe
+# boots with -device usb-kbd attached. The old text shell was immune because
+# key_full()/edit_key() translated scancodes through KBD_TABLE themselves; the
+# conversion to app_event lost that, so this is a regression, not an old bug.
+#
+# Translated here, once, rather than in each app: policy about what a key MEANS
+# belongs above wm.c, and every app already speaks ASCII.
+KEY_ESC_NAV   = 0x101
+KEY_BACK_NAV  = 0x102
+KEY_ENTER_NAV = 0x104
+
+fn nav_to_char(ecode) {
+    if ecode == KEY_ENTER_NAV { return 13 }
+    if ecode == KEY_BACK_NAV  { return 8 }
+    if ecode == KEY_ESC_NAV   { return 27 }
+    return 0
+}
+
 fn app_event(id, win, ety, ecode, ex, ey) {
+    # EV_KEY_DOWN (1) carrying a navigation code becomes the character the apps
+    # below already handle. EV_CHAR (3) passes straight through.
+    ac = ecode
+    if ety == 1 {
+        ac = nav_to_char(ecode)
+        if ac == 0 { return 0 }
+        ety = 3
+    }
+    ecode = ac
     if id == APP_SHELL {
         # ONE CHARACTER PER CALL. No loop - that is the whole inversion.
         # read_line used to block, which is exactly why the shell had to be the
@@ -1989,7 +2025,8 @@ fn app_event(id, win, ety, ecode, ex, ey) {
                     # dock launches INTO a window, not over the whole screen",
                     # and it is why these commands no longer end with "press
                     # any key" - there is nothing to press a key to get out of.
-                    if open_app(tc) == 0 { run_command(tc, term_arg()) }
+                    ta = term_arg()
+                    if open_app(tc, ta) == 0 { run_command(tc, ta) }
                 }
             }
             wm_damage_win_all()
@@ -2077,7 +2114,7 @@ fn wm_report(w) {
 # typed into the first app, which dropped it. Asking for an app that is already
 # open DOES focus and raise it, because that is the only way to get to it from
 # the keyboard, and Alt+Tab cycles the rest.
-fn open_app(cmd) {
+fn open_app(cmd, arg) {
     oa_u = ui()
     # WHO HAD FOCUS BEFORE. wm_open() focuses the window it just opened
     # (wm.c: focus_win = i), so simply not calling wm_focus here is not enough
@@ -2131,7 +2168,12 @@ fn open_app(cmd) {
         }}
         edit_win = wm_open(APP_EDIT, "zlEDIT", 480 * oa_u, 230 * oa_u, 160 * oa_u, 160 * oa_u)
         if edit_win < 0 { return 0 }
-        editor_open(0)
+        # THE ARGUMENT WAS BEING DROPPED. term.c parses a trailing number into
+        # pending_arg, so `edit 7` really does reach here as arg 7 - and
+        # open_app took no argument at all, so every one of the ten RAM files
+        # except slot 0 was unreachable, silently, from the only shell there
+        # is. Same shape as a silent refusal: the command appeared to work.
+        editor_open(arg)
         # THE EDITOR TAKES FOCUS, unlike every other app here, because it is the
         # only one that is useless without the keyboard. Opening Snake and
         # carrying on typing commands is reasonable; opening an editor and

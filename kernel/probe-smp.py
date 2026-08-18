@@ -149,15 +149,19 @@ def main():
         for ln in log.splitlines():
             if "cores online now" in ln:
                 line = ln.strip()
-        check("the other cores woke up", okc and "of" in line, line)
+        # `"of" in line` passes for "cores online now: 1 of 4" - i.e. for a
+        # total failure to wake anything. The number is what matters, so parse
+        # it first and assert on THAT.
+        mm = re.search(r"cores online now:\s*(\d+)\s*of\s*(\d+)", line)
+        got = int(mm.group(1)) if mm else 0
+        want = int(mm.group(2)) if mm else 0
+        check("the other cores woke up", okc and mm is not None and got >= 2,
+              f"{line}  ({got} of {want})")
 
         # Band rendering is only enabled once the cores are actually in the
         # spin loop, so a run on a single-core QEMU proves nothing about bands
         # - say so rather than passing quietly.
-        cores = 0
-        mm = re.search(r"cores online now:\s*(\d+)", line)
-        if mm:
-            cores = int(mm.group(1))
+        cores = got
         if cores < 2:
             print(f"  note  only {cores} core(s) - band rendering stays serial, "
                   f"nothing to compare")
