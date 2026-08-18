@@ -104,5 +104,45 @@ server-side source (`gh api repos/RoyX4/zl-linux --jq .pushed_at`).
 ## Build outputs do not belong in git
 
 `.gitignore` covers them, but several were already tracked and had to be
-`git rm --cached`'d (`kernel/_gen64.c`, `kernel/hosttest/dpll_test`). Before
-committing, check that a new binary or generated `.c` is not being added.
+`git rm --cached`'d (`kernel/_gen64.c`, `kernel/hosttest/dpll_test`, and
+`kernel/_genefi.c`). Before committing, check that a new binary or generated
+`.c` is not being added.
+
+**A tracked file is never ignored.** `.gitignore` only applies to files git is
+not already following, so adding a pattern does nothing for a path that is
+already in the index — it has to be `git rm --cached`'d as well. That is why
+`kernel/_gen*.c` sat in `.gitignore` while `_genefi.c` still produced a
+~1400-line diff on every `buildefi.sh` run. To find the rest:
+
+```
+git ls-files -z | git check-ignore --no-index --stdin -z -v
+```
+
+As of the `_genefi.c` removal that command returns nothing — no tracked file in
+the repo matches an ignore rule.
+
+All four build scripts that emit generated C write under `kernel/_gen*.c`
+(`build.sh`/`mkdisk.sh` → `_gen.c`, `build64.sh` → `_gen64.c`, `buildefi.sh` →
+`_genefi.c`) and each `cp`s over its output unconditionally, so no committed
+copy is ever an input to a build.
+
+`font_aa.c`, `font_sub.c`, `font8x16.c`, `icons.c` and `icons_rgb.c` are also
+generated (by `gen_*.py` / `mkfont.py`) but are **deliberately tracked** — no
+build script regenerates them, and keeping them in git is what lets the kernel
+build without Python. The test is whether a *build script* rewrites the file,
+not whether a generator once produced it.
+
+## The zl compiler is deterministic — a generated-file diff is a real signal
+
+Verified, not assumed: `../compile kernel.zl` run three times on unchanged
+source gave byte-identical output, and regenerating from `kernel.zl` as of
+`f6e0ec3` with today's compiler reproduced the `_genefi.c` committed at
+`f6e0ec3` **byte for byte**. No timestamp, path or hash-ordering leaks into the
+output.
+
+So the ~1400 lines that made `_genefi.c` painful were pure staleness: it was
+last regenerated at `f6e0ec3`, and `kernel.zl` then gained 35 lines at `b55f3f9`
+which expanded to 737 added / 693 removed lines of boxed C.
+
+Consequence worth keeping: if a regenerated file differs from its committed
+copy, the source really changed. Don't wave such a diff off as compiler noise.
