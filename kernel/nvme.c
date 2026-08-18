@@ -36,6 +36,8 @@
  * the whole complication disappears.
  */
 
+#include "memmap.h"
+
 typedef unsigned long long u64;
 typedef unsigned int       u32;
 typedef unsigned short     u16;
@@ -96,15 +98,22 @@ static void wr64(uptr a, u64 v)
 #define IO_READ          0x02
 #define IO_FLUSH         0x00
 
-/* ---- our memory. 208 MiB: the gap between the framebuffer back buffer
- * (which ends around 201 MiB) and the xHCI arena at 224 MiB. ------------- */
-#define NMEM_ASQ     0x0D000000u   /* admin submission queue                */
-#define NMEM_ACQ     0x0D001000u   /* admin completion queue                */
-#define NMEM_IOSQ    0x0D002000u   /* I/O submission queue                  */
-#define NMEM_IOCQ    0x0D003000u   /* I/O completion queue                  */
-#define NMEM_IDENT   0x0D004000u   /* identify data lands here              */
-#define NMEM_DATA    0x0D010000u   /* one page of block data                */
+/* ---- our memory. 208 MiB: the region between fb.c's cached-blur arena and
+ * the xHCI arena at 224 MiB. Bases and bounds come from memmap.h. -------- */
+#define NMEM_ASQ     ((unsigned int)HI_NVME)  /* admin submission queue      */
+#define NMEM_ACQ     (NMEM_ASQ + 0x1000u)     /* admin completion queue      */
+#define NMEM_IOSQ    (NMEM_ASQ + 0x2000u)     /* I/O submission queue        */
+#define NMEM_IOCQ    (NMEM_ASQ + 0x3000u)     /* I/O completion queue        */
+#define NMEM_IDENT   (NMEM_ASQ + 0x4000u)     /* identify data lands here    */
+#define NMEM_DATA    (NMEM_ASQ + 0x10000u)    /* one page of block data      */
+#define NMEM_PAGE    4096u                    /* the page NMEM_DATA holds    */
 #define QDEPTH       64
+
+/* The highest byte this driver hands to the controller must land inside its
+ * own region. nvme.c had no assertion before; its ceiling was a prose comment
+ * that was already stale - it described a back buffer that has since moved. */
+_Static_assert((unsigned long)NMEM_DATA + NMEM_PAGE <= HI_XHCI,
+               "nvme: queues escape their region into the xHCI arena");
 
 static int  nv_idx   = -1;
 static uptr nv_base  = 0;

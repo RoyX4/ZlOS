@@ -25,6 +25,8 @@
  * and it cannot be wrong about a machine it was not written for.
  */
 
+#include "memmap.h"
+
 typedef unsigned long long u64;
 typedef unsigned int       u32;
 typedef unsigned short     u16;
@@ -101,7 +103,22 @@ static u16 hid_cmd_reg = 0, hid_data_reg = 0;
 static u16 hid_vid = 0, hid_pid = 0, hid_version = 0;
 static u16 hid_report_desc_len = 0;
 
-#define HID_BUF     0x0C900000u      /* input reports land here */
+/* ---- where the buffers live -------------------------------------------
+ * These were at 0x0C900000 and 0x0C900100, which is 9 MiB into fb.c's
+ * 16 MiB cached-blur arena - and before the compositor moved things, inside
+ * the span the framebuffer back buffer occupied at 2560x1440. Two buffers,
+ * one address range, neither file aware of the other: the DMA-arena collision
+ * HANDOFF.md had already counted five times before this one.
+ *
+ * It had never been seen because it could not be. QEMU has no Intel LPSS I2C
+ * controller, so this driver only runs on the laptop, which is also the only
+ * machine with the panel big enough to make the back buffer reach. The two
+ * halves of the bug were never on the same machine as a working test.
+ *
+ * HI_HID is now this driver's own region in memmap.h - 8 MiB for the 320 bytes
+ * below, which is what "clear of everything else" costs when there is no
+ * allocator. The asserts are the point, not the address. */
+#define HID_BUF     ((unsigned int)HI_HID)          /* input reports land here */
 #define HID_BUF_MAX 64u
 
 /* ---- finding the controller -------------------------------------------
@@ -236,17 +253,28 @@ static int i2c_write_read(int addr, const u8 *out, int nout, u32 inbuf, int nin)
  * own length and its second is the protocol version, so a device that answers
  * with 30 and 0x0100 is a HID device and everything else is noise. That is
  * what makes probing safe. */
-#define HID_DESC_BUF 0x0C900100u
+#define HID_DESC_BUF (HID_BUF + 0x100u)
+#define HID_DESC_LEN 30u
+
+/* Both buffers inside this driver's own region, and the report buffer clear of
+ * the descriptor buffer that follows it. HID_BUF_MAX is 64 and the gap is 256,
+ * but the gap is where a future max_input larger than 64 would land. */
+_Static_assert(HID_BUF == (unsigned int)HI_HID,
+               "i2c_hid: report buffer is not at the base of its region");
+_Static_assert(HID_BUF + HID_BUF_MAX <= HID_DESC_BUF,
+               "i2c_hid: report buffer overruns the descriptor buffer");
+_Static_assert((unsigned long)HID_DESC_BUF + HID_DESC_LEN <= HI_BLUR,
+               "i2c_hid: buffers escape their region into the blur arena");
 
 static int read_hid_descriptor(int addr, int reg)
 {
     u8 out[2] = { (u8)(reg & 0xFF), (u8)((reg >> 8) & 0xFF) };
-    if (!i2c_write_read(addr, out, 2, HID_DESC_BUF, 30)) return 0;
+    if (!i2c_write_read(addr, out, 2, HID_DESC_BUF, (int)HID_DESC_LEN)) return 0;
 
     volatile u8 *d = (volatile u8 *)(uptr)HID_DESC_BUF;
     u16 len = (u16)(d[0] | (d[1] << 8));
     u16 ver = (u16)(d[2] | (d[3] << 8));
-    if (len != 30) return 0;
+    if (len != HID_DESC_LEN) return 0;
     if (ver != 0x0100) return 0;
 
     hid_report_desc_len = (u16)(d[4]  | (d[5]  << 8));
