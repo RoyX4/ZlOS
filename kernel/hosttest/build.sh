@@ -84,7 +84,7 @@ echo "built ./htmltest      (run: ./htmltest)"
 # inline <code> set at the wrong size or a list marker sitting in its own text.
 gcc -O2 -w -o browsershot browsershot.c ../browser.c ../html.c ../layout.c \
     ../ui.c ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c \
-    ../http.c ../tcp.c ../net.c
+    ../http.c ../tcp.c ../net.c ../dns.c
 echo "built ./browsershot   (run: ./browsershot out.ppm)"
 
 # ARP, IPv4 and ICMP against scripted packets. net.c holds no link driver - the
@@ -122,7 +122,7 @@ echo "built ./httptest      (run: ./httptest)"
 # network below it is real: net.c, tcp.c and http.c are all linked, so "did it
 # parse the port" is answered by looking at the SYN that went out.
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o browsertest browsertest.c ../browser.c \
-    ../html.c ../layout.c ../http.c ../tcp.c ../net.c
+    ../html.c ../layout.c ../http.c ../tcp.c ../net.c ../dns.c
 echo "built ./browsertest   (run: ./browsertest)"
 
 # Every layer that takes bytes from somewhere else, fed garbage. The harnesses
