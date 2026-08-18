@@ -458,3 +458,121 @@ acceleration toggle and the speed slider too, after which the pointer overshoots
 by up to 3× and slams into the clamp. The harness re-pins the gain to the
 identity between clicks. That is the app working correctly, not a defect, and it
 is the same lesson `wmtest` learned in Item 2.
+
+---
+
+## Item 4 — settings that survive a reboot
+
+### The block
+
+```
+0   4   magic     'z' 'l' 'S' '1'
+4   2   version
+6   2   count     how many u32 fields follow
+8   4   checksum  FNV-1a over the record with THIS FIELD ZEROED
+12  4n  the settings, one u32 each
+```
+
+A fixed LBA, a magic number, a version field and a checksum, exactly as the
+item asks. A bad magic, a bad version, a bad count or a bad checksum falls back
+to defaults **and prints a line saying which**. `settings_load` never writes.
+
+One rule the brief does not name, because it is the one that bites later:
+**a valid checksum is not a valid value.** A block from a future version, or a
+bit flip that happens to collide, can carry a UI scale of two billion. Every
+field is clamped on the way in.
+
+### The bug that would have destroyed Roy's laptop
+
+FEEL-PROMPT §6 asks for an adversarial reviewer on this path because *"it is the
+first code in the project that can destroy data, and the author is the worst
+person to review it"*. That is exactly what happened.
+
+`SET_LBA` was **2048**, defended by a comment reading *"far enough from block 0
+that anything that later wants a superblock does not land on us"*. That is
+precisely backwards. LBA 2048 is the 1 MiB alignment boundary every partitioner
+since ~2010 uses for the start of partition 1. On the machine this was written
+on:
+
+```
+$ cat /sys/block/nvme0n1/nvme0n1p1/start
+2048
+$ lsblk -o NAME,START,SIZE,PARTTYPENAME
+nvme0n1p1   2048   200M   EFI System
+```
+
+And the safety argument — "the NVMe namespace is a dedicated scratch image,
+`try.sh` makes a 64 MiB `/tmp/zlos-nvme.img`" — is a property of **one shell
+script**, not of the code. `nvme_find()` takes the *first* PCI device with class
+01 / subclass 08 / prog-if 02 and stops, with no filter on model, serial or
+size; on the ThinkPad that is the internal 477 GB system SSD. `install-esp.sh`
+is a documented, supported way to boot zlOS on that laptop from its own ESP.
+
+So the full chain was: boot zlOS on the ThinkPad → open Settings → click any
+control → overwrite the EFI System Partition's boot sector. The machine would
+not have booted again, and nothing would have said why.
+
+I verified all three links myself rather than taking the agent's word: the
+partition start, `nvme_find`'s lack of any filter, and `install-esp.sh`.
+
+**The fix is not a better LBA.** The LBA is not the safety mechanism; the
+refusal is. `set_disk_is_ours()` now runs before **every** write and refuses:
+
+- a disk with an MBR or GPT protective MBR (`0x55 0xAA` at the end of LBA 0)
+- a GPT disk (`"EFI PART"` at LBA 1)
+- a namespace over 1 GiB — `try.sh` makes 64 MiB; anything larger is somebody's
+  real disk
+
+Any one of those stops the ThinkPad case dead. `SET_LBA` moved to 64 as well,
+but that is hygiene, not protection.
+
+### Gate
+
+The stated gate — change a setting, reboot in QEMU, confirm it survived, then
+corrupt the block and confirm the fallback — needs a booting kernel and is
+blocked by T-13. `hosttest/settingstest.c` runs the same `settings.c` against a
+fake NVMe instead, and is strictly more thorough than a reboot, which can only
+show one corruption at a time:
+
+```
+settingstest - the settings block, against a fake disk
+  ...  68 assertions  ...
+  every single-bit flip in the record is refused             ok
+  ...and none of them is refused SILENTLY                    ok
+       (288 flips, 288 caught, 0 silent)
+  a disk with a PARTITION TABLE is refused                   ok
+  a GPT disk is refused                                      ok
+  a namespace far too large to be the scratch disk is refused ok
+  ...and partitioning it later is caught on the NEXT write   ok
+  ...and 40 motion events later, STILL nothing has been written ok
+  ...the write happens once, on release                      ok
+
+all good: 0 failure(s)
+```
+
+The fixture is built by the **test**, independently of `settings.c`, and the
+round trip asserts the written block is byte-identical to it — so the writer is
+checked against a second implementation of the format rather than against its
+own reader. A writer and reader sharing one buggy encoder agree perfectly and
+are both wrong.
+
+### Three more the review caught
+
+- **A slider drag wrote the block once per mouse-motion event** — 376
+  synchronous writes for one gesture, measured. `wm.c` holds a pointer grab for
+  the whole press. Applying still happens on every change (that is the item);
+  persisting is now deferred to button-up, and asserted.
+- **Block size was bounded below but not above.** `nvme.c` transfers one block
+  into a single 4 KiB page and never programs PRP2, so an LBA format larger
+  than a page would write past it. Refused.
+- **The load clamp said 1..4 while the slider offered 1..3**, so a block
+  carrying 4 loaded and then drew a slider pinned past its own maximum. Both
+  now read one named constant.
+
+What the review could **not** break was the record format itself — all three
+lenses independently cleared the endianness, the checksum exclusion, the
+`set_lba_ok` off-by-one, the all-zero/all-0xFF rejection, and the nine return
+paths. Five further findings are real and either belong to `nvme.c` or are
+blocked by T-13; they are written up as T-16 in `.ultra/TENSIONS.md`, including
+that **persistence is currently write-only** because nothing in `kernel.zl`
+opens an `APP_SETTINGS` window or calls `settings_load()` yet.

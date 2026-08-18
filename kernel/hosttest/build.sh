@@ -33,7 +33,7 @@ echo "built ./inputtest     (run: ./inputtest)"
 # sliver of an old window left on the wallpaper, a click landing on the window
 # underneath, a drag that stops when the pointer outruns the frame. None of
 # those show in a screenshot taken a frame later.
-gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../wmglue.c ../settings.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ui.c ../wmglue.c ../settings.c nvme_stub.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest        (run: ./wmtest)"
 
@@ -41,9 +41,15 @@ echo "built ./wmtest        (run: ./wmtest)"
 # wrong window; eyes catch a title bar four pixels too tall, or a toggle that
 # renders as a circle instead of a pill. Both were real, and only the second
 # kind is found by looking.
-gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ui.c ../wmglue.c ../settings.c ../fb.c ../input.c \
+gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ui.c ../wmglue.c ../settings.c nvme_stub.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmshot        (run: ./wmshot out.ppm)"
+
+# The settings block, against a fake disk. This is the first code in the project
+# that WRITES to a disk, and its stated gate needs a booting kernel - so the
+# record gets a fake NVMe instead, and every single-bit flip of it is walked.
+gcc -O2 -w -o settingstest settingstest.c ../settings.c ../ui.c
+echo "built ./settingstest  (run: ./settingstest)"
 
 # The tiled rasterizer against the scanline one it does NOT replace. Two ways
 # to fill a polygon are only worth having if they draw the same pixels, and a
