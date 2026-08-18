@@ -51,6 +51,35 @@ run "kernel EFI"       "$WT/kernel"        ./buildefi.sh
 [ -x "$WT/kernel/verify-sources.sh" ] && run "SOURCES coverage" "$WT/kernel" ./verify-sources.sh
 run "hosttest build"   "$WT/kernel/hosttest" ./build.sh
 
+# --- RUN them. Building a test proves it compiles; it proves nothing else.
+# This gate built ~26 harnesses and executed none of them for its whole life -
+# roughly 276 assertions, including a 2.7-million-check fuzz, sitting as
+# decoration while the gate reported green. They were run by hand instead, which
+# is exactly the habit a gate exists to remove.
+echo; echo "=== hosttest run ==="
+hf=0; hp=0
+for t in "$WT"/kernel/hosttest/*; do
+  [ -x "$t" ] && [ ! -d "$t" ] || continue
+  case "$(basename "$t")" in
+    *.*|intel_probe|modeset_test|dpll_test|gpu_fillrate|gpu-dev.sh|modeset-run.sh|jmptest32) continue;;
+  esac
+  if ( cd "$WT/kernel/hosttest" && timeout 180 "./$(basename "$t")" >/dev/null 2>&1 ); then
+    hp=$((hp+1))
+  else
+    echo "FAIL: $(basename "$t")"; hf=$((hf+1))
+  fi
+done
+if [ $hf -gt 0 ]; then FAIL=$((FAIL+1)); echo ">>> FAIL (hosttest run: $hf of $((hp+hf)))"
+else echo ">>> ok (hosttest run: $hp passed)"; fi
+
+# --- the two static checkers. Neither builds anything or boots anything, so
+# there is no excuse for them not being in the gate: check-zl-calls proves every
+# kernel.zl call site resolves (zl has no compile-time check for that at all),
+# and check-memmap proves no two fixed addresses overlap - which is how
+# LINE_BUF and DISK_SCRATCH sat on 0x02030000 through a whole integration.
+[ -x "$WT/kernel/check-zl-calls.sh" ] && run "zl call sites" "$WT/kernel" ./check-zl-calls.sh
+[ -x "$WT/kernel/check-memmap.sh" ]   && run "memory map"    "$WT/kernel" ./check-memmap.sh
+
 # --- the reverse SOURCES check: a .c present but not listed is silently not compiled
 if [ -f "$WT/kernel/SOURCES" ]; then
   echo; echo "=== reverse SOURCES sweep ==="

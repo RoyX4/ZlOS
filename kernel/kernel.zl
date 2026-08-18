@@ -1250,7 +1250,23 @@ FS_SLOT = 8192
 # DMA arena map at the top of fb.c - bg 128 MiB, sp 160, sched 176, back 192,
 # nvme 208, xhci 224, virtio-gpu 240. 32 MiB + 192 KiB collides with none of
 # them, which is the check this project's recurring bug says to do every time.
-DISK_SCRATCH = 0x02030000
+# 0x02040000, NOT 0x02030000, which is LINE_BUF.
+#
+# claude/quirky-pare-05454c moved LINE_BUF out of FS_DATA's slot 7 to
+# 0x02030000; desktop/system-track independently put DISK_SCRATCH at the address
+# quirky-pare had just moved TO, reasoning correctly against the layout its own
+# branch could see - where LINE_BUF was still at 0x02020000. The two hunks are
+# ~400 lines apart on branches with different bases, so the merge took both with
+# no conflict, and zl has no static asserts to catch it.
+#
+# It has been inert only because read_line() currently has no caller. The moment
+# anything types at the shell while the clipboard or the boot counter is in use,
+# the shell's input line and the disk scratch are the same memory.
+#
+# Free space here: FS_DATA ends at 0x02025000, HIST_BUF ends at 0x02032000, and
+# PAINT_BUF starts at 0x02100000. This sits clear of all three, and the largest
+# use below is a clipboard write of cbn bytes.
+DISK_SCRATCH = 0x02040000
 
 fn fs_init()      { fill_mem(FS_META, 0, 64) }
 fn fs_len(slot)   { return peek32(FS_META + slot * 4) }

@@ -336,34 +336,3 @@ frame — so the wallpaper is drawn once into a cache and blitted at 1.5 cyc/px.
 That is not an optimisation; it is the only way the look exists. The cache is
 one screen-sized buffer out of the arena C4 freed, and at 4K it refuses and
 says so.
-
----
-
-## 9. Status after the eleven-track merge (2026-08-19)
-
-**All ten items of §6 were green at §8. All three things §8.3 deliberately did
-NOT do are now done as well** - and each was done by a *different* track, which
-is why no single document knew it:
-
-| §8.3 deferred | done by | evidence on `main` |
-|---|---|---|
-| a real opacity fade | `desktop/overnight-compositor`, after §8.3 was written | `wm.c` takes the rectangle with `fb_stash` BEFORE drawing and blends it back; 5 `ANIM_FADE` sites |
-| the seven full-screen demos, windowed | `desktop/apps-in-windows` | `APP_PAINT/CUBE/ANIM/MOUSE/EDIT` in `kernel.zl`, 7 windowed app bodies |
-| the start menu | returned as a window | `APP_MENU` with `menu_draw`/`menu_event`, over `WF_MODAL` as §8.3 predicted |
-
-So v10 is complete, including its own deferred list, **and that only became true
-when the branches merged**. Nobody could have read it off any one branch.
-
-This is the exact failure mode `docs/DOCS-RECONCILE-PROMPT.md` exists to fix:
-work that is finished, in the tree, gated - and still written down as open,
-because the document that deferred it and the branch that did it never met.
-
-Two caveats, both open and both recorded elsewhere:
-
-- The fade's stash/blend path is the code resolved by hand at hunk 4 of the
-  `apps-in-windows` landing. It builds and the gates pass; it has not been
-  watched frame by frame.
-- The desktop looks coarser than the v10 screenshots and the cause is not found.
-  `kernel/docs/POINTER-PROMPT.md` §1c has the comparison, both PNGs under
-  `docs/shots/`, and the list of what has already been ruled out.
-

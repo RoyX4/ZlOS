@@ -313,9 +313,19 @@ Every silent-collision class predicted in §2 occurred. Counted:
   builtins registered, `kernel.zl` calling both.
 - **The scroll wheel had to be taken as a unit**: the knock switches the device
   to 4-byte packets while the reader framed on 3.
-- **`LINE_BUF`/`DISK_SCRATCH` at `0x02030000`** — predicted, and it did not fire,
-  because `quirky-pare` landed before `exec-track` and the address was set to
-  `0x02040000` at the exec landing.
+- **`LINE_BUF`/`DISK_SCRATCH` at `0x02030000`** — **THIS ENTRY WAS FALSE WHEN
+  WRITTEN.** It claimed the address was set to `0x02040000` at the exec landing.
+  It was not. The fix was written into the plan and never applied to the code:
+  `git grep 0x02040000` returned only this document's own prose, twice, while
+  `kernel.zl` still had both constants on `0x02030000`. Found by the
+  documentation audit on 2026-08-19 and fixed then — `DISK_SCRATCH` is now
+  `0x02040000` with the reasoning in the source.
+
+  Worth keeping rather than quietly correcting, because the failure is
+  instructive: a planned fix was reported as a completed one. Every other
+  landmine in §2 was verified against the tree; this one was verified against
+  the plan. That is the difference between evidence and intention, and this
+  document is supposed to be the former.
 - **`HI_APSTK` was missing from `memmap.h`**, so `BACK_LIMIT` spanned 128–176 MiB
   while `STACK_BASE` sits at 168 MiB. The framebuffer back buffer would have
   grown over the stack of every application processor. Only `apps-in-windows`

@@ -57,13 +57,32 @@ objcopy -O binary kernel_raw.elf kernel_raw.bin
 nasm -f bin raw_boot.asm -o raw_boot.bin
 
 # assemble the disk: boot sector first, then the kernel, padded to a round size
+# THE KERNEL MUST FIT WHAT THE LOADER READS, and this check is the only thing
+# that says so. raw_boot.asm loads CHUNKS x 32 KiB and then jumps; a kernel
+# larger than that is silently TRUNCATED and jumped into, which is a hang with
+# no build error and no gate - verify-raw.sh boots the truncated image and can
+# only report that it did not come up.
+#
+# It was dropped by the apps-in-windows landing, which took that branch's
+# SOURCES-driven mkdisk.sh wholesale and with it lost this guard. Restored, and
+# worth stating plainly: the merge deleted a CHECK, which is worse than deleting
+# code, because a check is what catches the next one.
+CHUNKS=$(grep -oP 'CHUNKS\s+equ\s+\K[0-9]+' raw_boot.asm)
+LIMIT=$((CHUNKS * 64 * 512))
+KSIZE=$(stat -c%s kernel_raw.bin)
+if [ "$KSIZE" -gt "$LIMIT" ]; then
+    echo "FAIL: kernel is $KSIZE bytes; raw_boot.asm loads only $LIMIT" >&2
+    echo "      (CHUNKS=$CHUNKS x 32 KiB). Raise CHUNKS and the truncate below." >&2
+    exit 1
+fi
+
 cat raw_boot.bin kernel_raw.bin > zlOS.img
 # pad to at least what the loader reads (12 * 32 KiB) so no read runs off the end
 truncate -s 2M zlOS.img
 
 echo "built zlOS.img - OUR bootloader, no GRUB"
 echo "  boot sector: $(stat -c%s raw_boot.bin) bytes  (must be 512)"
-echo "  kernel:      $(stat -c%s kernel_raw.bin) bytes"
+echo "  kernel:      $KSIZE bytes  ($(( (LIMIT - KSIZE) / 1024 )) KiB of loader headroom left)"
 echo "  disk image:  $(stat -c%s zlOS.img) bytes"
 echo
 echo "boot it:  qemu-system-i386 -drive file=zlOS.img,format=raw -serial stdio"

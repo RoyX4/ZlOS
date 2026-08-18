@@ -18,11 +18,6 @@ documents (~392 KB, most written before the eleven-track merge) into one
 honest `docs/STATE-OF-THE-PROJECT.md`. They are stale by construction; every
 claim has to be checked against the merged tree.
 
-`kernel/docs/BROWSER-NEXT-PROMPT.md` continues the browser, which landed
-working - it fetches http://example.com/ by name and renders it. It records
-the two things the merge cost it (italic, and continuous text sizes) and the
-catalogue correction that was explicitly deferred until this branch merged.
-
 `kernel/docs/POINTER-PROMPT.md` is the CURRENT WORK: the pointer is
 visibly broken after the eleven-track merge, the lead suspect is measured
 (two drainers of one xHCI event ring), and a full-tree bug audit follows it.
