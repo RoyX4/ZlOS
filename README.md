@@ -81,8 +81,43 @@ statement-expression (see `emit_seq_call` in `compile.c`).
 ./build.sh
 ```
 
-Builds `interp`, `compile`, `nativegen`, and the standalone `lexer`/`parser`
-demo binaries. Needs `gcc` and `libm` - nothing else.
+Builds `interp`, `compile`, `nativegen`, `zlfmt`, and the standalone
+`lexer`/`parser` demo binaries. Needs `gcc` and `libm` - nothing else.
+
+## Formatting
+
+```bash
+./zlfmt file.zl              # formatted, to stdout
+./zlfmt --write file.zl      # rewrite in place
+./zlfmt --check stdlib/*.zl  # exit 1 and list files that need formatting
+./verify_fmt.sh              # prove it cannot damage a file (all 133 .zl)
+```
+
+`zlfmt` re-indents; it does not reformat. It rewrites leading whitespace and
+strips trailing whitespace, and copies every other byte through untouched.
+That is Option C from `docs/design/design_tooling.md` §3, and the restraint is
+load-bearing: `lexer.c:272-273` discards comments and `lexer.c:88` truncates
+token text at 128 bytes, so any formatter that *rebuilt* source from the token
+stream would delete every comment in the corpus and silently corrupt long
+string literals. `verify_fmt.sh` checks the output lexes, is idempotent, has
+identical non-whitespace bytes, and yields a byte-identical token stream
+including line numbers — the parser cannot tell the two files apart.
+
+26 of the 133 `.zl` files in the tree currently have inconsistent indentation.
+
+## Learning the language
+
+Ten graded exercises with failing asserts live in `learn/`, worked solutions
+in `learn/solutions/`. Start here:
+
+```bash
+learn/check.sh          # what's still red
+./interp learn/01_basics.zl
+```
+
+See [docs/LEARNING.md](docs/LEARNING.md) for the ladder, the VS Code loop, and
+the four places zl will bite you (`else` placement, pure list builtins,
+non-indexable strings, doubles-only numbers).
 
 ## Use
 
@@ -134,13 +169,19 @@ to match, which `runtime.c`'s static assert enforces.
 
 ## Editor support (VS Code)
 
-`editors/vscode-zl/` is the syntax-highlighting extension (carried over
-from the original repo, install instructions now cover Linux). Install it
-with:
+`editors/vscode-zl/` is the extension: syntax highlighting, formatting via
+`zlfmt`, and snippets. Install it with:
 
 ```bash
-cp -r editors/vscode-zl ~/.vscode/extensions/vscode-zl
+./editors/vscode-zl/install.sh
 ```
+
+**Do not install it by copying the folder into `~/.vscode/extensions/`**, which
+is what this README used to say. Current VS Code loads only what is listed in
+`~/.vscode/extensions/extensions.json`, and a folder-drop never gets an entry —
+so the extension is silently ignored and `.zl` files stay "Plain Text" with no
+error to explain it. `code --install-extension` is what writes that entry.
+See `editors/vscode-zl/README.md`.
 
 `.vscode/` in this repo adds, for anyone who opens the folder:
 

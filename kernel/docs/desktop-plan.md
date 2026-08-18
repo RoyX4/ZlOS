@@ -5,6 +5,7 @@
 > [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
 > work from the task list below.**
 
+
 # zlOS desktop — inverting the shell and the compositor
 
 > **New to this? Read `desktop-build-guide.md` first.** It explains what we are

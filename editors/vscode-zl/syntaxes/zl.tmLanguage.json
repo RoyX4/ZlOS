@@ -77,11 +77,11 @@
       "patterns": [
         {
           "name": "keyword.control.zl",
-          "match": "\\b(if|elif|else|while|for|do|loop|return|break|continue)\\b"
+          "match": "\\b(if|elif|else|while|for|return|break|continue|import)\\b"
         },
         {
           "name": "keyword.operator.word.zl",
-          "match": "\\b(and|or|not|in|to|step)\\b"
+          "match": "\\b(and|or|not|in)\\b"
         },
         {
           "name": "storage.type.function.zl",
@@ -92,12 +92,12 @@
 
     "constants": {
       "name": "constant.language.zl",
-      "match": "\\b(true|false|nil)\\b"
+      "match": "\\b(true|false)\\b"
     },
 
     "builtins": {
       "name": "support.function.builtin.zl",
-      "match": "\\b(abs|acos|asin|at|atan|band|bnot|bool|bor|bxor|ceil|chr|clamp|code|concat|contains|cos|count|dir|drop|ends|env|exit|exp|fill|find|first|flat|floor|fmod|gcd|has|hex|hypot|index_at|index_of|input|insert|int|join|last|len|lines|log|log10|log2|lower|ltrim|max|min|now|num|pad|pow|print|procs|push|randint|random|range|read|remove|repeat|replace|reverse|round|rtrim|seed|shl|shr|sign|sin|slice|sort|split|sqrt|starts|str|sum|swapcase|take|tan|title|trim|trunc|type|upper|write|write_bytes)\\b(?=\\s*\\()"
+      "match": "\\b(abs|acos|alloc|asin|assert|at|atan|band|bnot|bool|bor|bxor|ceil|chr|clamp|code|concat|contains|copy|copy_mem|cos|count|dir|drop|e|ends|env|exit|exp|fill|fill_mem|find|first|flat|floor|fmod|free|gcd|has|hex|hypot|index_at|index_of|input|insert|int|join|kill|last|len|lines|log|log10|log2|lower|ltrim|max|min|move|nil|now|num|pad|pi|pow|print|procs|push|randint|random|range|read|remove|repeat|replace|reverse|rm|round|rtrim|run|seed|sext|shl|shr|sign|sin|slice|sort|split|sqrt|start|starts|str|sum|swapcase|take|tan|title|trim|trunc|type|upper|write|write_bytes)\\b(?=\\s*\\()"
     },
 
     "function-def": {

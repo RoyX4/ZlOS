@@ -78,4 +78,40 @@ _none open._
 
 _Items here survive regeneration. Everything above does not._
 
+### Whole-tree Codex audit — ready to run, not yet run
+
+`tools/audit-prompt.md` is a self-contained prompt for a full read-only audit of
+the ~102k reviewable lines (163 `.zl` / 37,961 lines, 21 root `.c`/`.h` / 12,154,
+40 `kernel/*.c`/`.h` / 52,132). It excludes `.claude/worktrees/` (a ~6.7×
+duplicate) and the generated/data files.
+
+- [ ] run it and triage the report
+- [ ] fold anything real into this file; discard the rest
+
+Run it in a throwaway worktree, because the prompt's key instruction is "run
+`./interp` before claiming anything about zl semantics" and that needs write
+access for the probe program:
+
+```bash
+git worktree add /tmp/zl-audit HEAD && cd /tmp/zl-audit && ./build.sh
+CODEX_HOME=$HOME/.codex-audit codex exec "$(cat tools/audit-prompt.md)" </dev/null | tee ~/zl-audit-report.md
+git worktree remove /tmp/zl-audit --force
+```
+
+Two things measured while building it, both worth keeping:
+
+- `~/.codex-audit` is a plugin-free Codex profile. Same trivial prompt costs
+  **9,928 tokens** under the everyday `~/.codex` and **2,638** under it — ~7,300
+  tokens per call handed back to code.
+- A `read-only` sandbox **refuses to write a probe file even to `/tmp`**, while
+  still allowing an existing binary to execute. So read-only would let the audit
+  run `./interp` on files that already exist but never write its own test, which
+  removes the only defence against it hallucinating about a language no model has
+  seen. Hence workspace-write inside a disposable worktree.
+
+- [ ] **when the report lands, check the "what I did not cover" section first.**
+  If it is missing or vague the report is incomplete no matter how good the
+  findings read — that is the same failure shape as a gate that passes by not
+  running.
+
 <!-- END HAND-WRITTEN -->

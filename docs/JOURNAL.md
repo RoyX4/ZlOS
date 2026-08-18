@@ -17,6 +17,16 @@ the part that makes a change legible later, and the part nobody writes down.
 | pinned engine divergences | 2 |
 | baselined doc rot | 19 |
 | docs vs tree | STALE |
+## 2026-08-19 — docs: the journal entry for the commit that added the journal (b3f5fd2)
+
+`ci/gates-and-agent-brief` · 1 file changed, 2 insertions(+), 2 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 34 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | agree |
 
 <details><summary>1 file(s)</summary>
 
@@ -76,6 +86,7 @@ the part that makes a change legible later, and the part nobody writes down.
 - `kernel/hosttest/wmshot.c`
 
 </details>
+
 
 ## 2026-08-19 — ci: write down what happens, keep the docs true, regenerate the TODO (cb17faf)
 

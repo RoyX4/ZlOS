@@ -1,0 +1,64 @@
+fn apply_op(a, b, op) {
+    if op == "+" { return a + b }
+    if op == "-" { return a - b }
+    if op == "*" { return a * b }
+    return a / b
+}
+fn is_op(t) {
+    return t == "+" or t == "-" or t == "*" or t == "/"
+}
+fn is_number(t) {
+    if len(t) == 0 { return false }
+    i = 0
+    if at(t, 0) == "-" and len(t) > 1 { i = 1 }
+    while i < len(t) {
+        c = index_at(t, i)
+        if c < code("0") or c > code("9") { return false }
+        i += 1
+    }
+    return true
+}
+fn rpn(src) {
+    stack = []
+    for t in split(trim(src), " ") {
+        if len(t) == 0 { continue }
+        if is_op(t) {
+            b = last(stack)
+            stack = remove(stack, len(stack) - 1)
+            a = last(stack)
+            stack = remove(stack, len(stack) - 1)
+            stack = push(stack, apply_op(a, b, t))
+        } else {
+            stack = push(stack, num(t))
+        }
+    }
+    return last(stack)
+}
+fn rpn_safe(src) {
+    stack = []
+    for t in split(trim(src), " ") {
+        if len(t) == 0 { continue }
+        if is_op(t) {
+            if len(stack) < 2 { return "error" }
+            b = last(stack)
+            stack = remove(stack, len(stack) - 1)
+            a = last(stack)
+            stack = remove(stack, len(stack) - 1)
+            stack = push(stack, apply_op(a, b, t))
+        } else if is_number(t) {
+            stack = push(stack, num(t))
+        } else {
+            return "error"
+        }
+    }
+    if len(stack) != 1 { return "error" }
+    return last(stack)
+}
+
+assert(rpn("3 4 +") == 7, "add")
+assert(rpn("3 4 + 2 *") == 14, "add then mul")
+assert(rpn("10 2 /") == 5, "div")
+assert(rpn("5 1 2 + 4 * + 3 -") == 14, "classic")
+assert(rpn_safe("3 +") == "error", "too few operands")
+assert(rpn_safe("3 4 ^") == "error", "unknown token")
+print("10 ok")

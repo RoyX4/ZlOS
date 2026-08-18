@@ -1,0 +1,22 @@
+# 03 - while, for-in, break, continue
+
+fn count_down(n) {
+    # count_down(4) -> [4, 3, 2, 1]
+    return nil()
+}
+
+fn sum_evens(n) {
+    # sum of every even number strictly below n. Use continue.
+    return nil()
+}
+
+fn first_over(xs, limit) {
+    # first element greater than limit, or -1. Use break.
+    return nil()
+}
+
+assert(count_down(4) == [4, 3, 2, 1], "count_down")
+assert(sum_evens(10) == 20, "sum_evens")
+assert(first_over([1, 5, 9, 20], 6) == 9, "first_over")
+assert(first_over([1, 2], 100) == -1, "first_over none")
+print("03 ok")

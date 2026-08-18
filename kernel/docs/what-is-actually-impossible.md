@@ -5,6 +5,7 @@
 > [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
 > work from the task list below.**
 
+
 # What is actually impossible — the wall map
 
 ## The thesis this project is testing

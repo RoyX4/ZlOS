@@ -5,6 +5,7 @@
 > [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
 > work from the task list below.**
 
+
 # Overnight autonomous run — the prompt
 
 ## How to start it
@@ -663,6 +664,7 @@ DESIGN RULES — do not violate
 > Kept as a standing caution for this document's own genre: an exclusion table
 > is a list of things nobody will attempt, so a wrong entry in it costs work
 > that never gets done and never shows up missing.
+
 
 ## What Windows and Linux have that this run is chasing
 

@@ -1,0 +1,40 @@
+fn is_palindrome(s) {
+    clean = lower(replace(s, " ", ""))
+    return clean == reverse(clean)
+}
+fn word_count(s) {
+    n = 0
+    for w in split(trim(s), " ") {
+        if len(w) > 0 { n += 1 }
+    }
+    return n
+}
+fn caesar(s, k) {
+    out = ""
+    i = 0
+    a = code("a")
+    while i < len(s) {
+        c = index_at(s, i)
+        if c >= a and c <= code("z") {
+            out = out + chr(a + (c - a + k) % 26)
+        } else {
+            out = out + at(s, i)
+        }
+        i += 1
+    }
+    return out
+}
+fn initials(name) {
+    out = ""
+    for w in split(name, " ") {
+        if len(w) > 0 { out = out + upper(at(w, 0)) }
+    }
+    return out
+}
+
+assert(is_palindrome("Never odd or even"), "palindrome")
+assert(not is_palindrome("hello"), "not palindrome")
+assert(word_count("  a  b c ") == 3, "word_count")
+assert(caesar("abc xyz!", 3) == "def abc!", "caesar")
+assert(initials("ada lovelace king") == "ALK", "initials")
+print("06 ok")

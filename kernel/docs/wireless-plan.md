@@ -5,6 +5,7 @@
 > [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
 > work from the task list below.**
 
+
 # WiFi and Bluetooth on zlOS — the actual plan
 
 Roy asked for both. This is the build plan, not a feasibility argument.
