@@ -1208,6 +1208,30 @@ void fb_shadow(int x, int y, int w, int h, int off, int soft)
     int x1 = x + off + w + soft, y1 = y + off + h + soft;
     int ix0 = x + off, iy0 = y + off, ix1 = x + off + w, iy1 = y + off + h;
 
+    /* THE SCISSOR, FOLDED INTO THE LOOP BOUNDS - the rule every other
+     * primitive in this file follows, and this one did not.
+     *
+     * It clipped to the SCREEN and left put_pixel to reject the rest a pixel
+     * at a time. That is correct and it was the most expensive mistake in the
+     * renderer: wm.c calls chrome() once per window per damage rectangle, and
+     * a drag damages a band. Each call walked the WHOLE shadow band of a
+     * window - the widest, softest, most per-pixel loop in fb.c, measured at
+     * 0.88 ms for one 600x460 window - and threw nearly all of it away.
+     *
+     * Measured on wmbench, dragging one window across the shell at 1920x1200:
+     * chrome and wallpaper alone cost 6,651 us per frame, 55% of a 12,061 us
+     * frame, with three windows and no app drawing at all.
+     *
+     * fb_shadow predates fb_clip: desktop-TODO 0b listed the five direct
+     * back-buffer writers that needed the scissor folded in, and this is not
+     * one of them - it goes through put_pixel, so it was CORRECT the whole
+     * time and simply slow. Correct-but-slow is the harder kind to notice. */
+    if (x0 < clip_x0) x0 = clip_x0;
+    if (y0 < clip_y0) y0 = clip_y0;
+    if (x1 > clip_x1) x1 = clip_x1;
+    if (y1 > clip_y1) y1 = clip_y1;
+    if (x0 >= x1 || y0 >= y1) return;
+
     /* The caller draws the window itself on top of this immediately afterwards,
      * so every shadow pixel under the window's own footprint is computed and
      * then painted over. That is ~90% of the pixels this loop visits, and the

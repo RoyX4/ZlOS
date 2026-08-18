@@ -369,11 +369,73 @@ stopwatch is unreliable.
 | the row skip's contribution | **no** | argued, not measured |
 | any peak figure | no | contended every run |
 
-The remaining drag cost has not been attributed. `sysmon_body` redraws the
-48-character CPU brand string glyph by glyph and eight antialiased sparkline
-segments on every damage rectangle that touches it, and Wu's algorithm is
-4.3× the cost per line pixel of Bresenham — that is the next thing to look at,
-and it should be looked at with a stopwatch that works.
+## 7. A stopwatch that works: `hosttest/wmbench`
+
+The fix for "the stopwatch is unreliable" is the same trick `fbbench` plays for
+`fb.c`, one layer up. `wmbench` compiles the shipping `wm.c` + `ui.c` + `fb.c` +
+`input.c` + `term.c`, drives a real drag through `wm_frame()` against fake
+hardware, and times it with `rdtsc`. No QEMU, no boot.
+
+**It also attributes**, which is the part that mattered. A frame is not one
+number — it is a wallpaper blit, some chrome, and one `app_draw` per window the
+damage touches. Timing the same interaction with pieces switched off is the
+only way to say *where* the time went:
+
+```
+DRAGGING THE SYSTEM MONITOR ACROSS THE SHELL (12 steps)
+  everything                                   12061 us/frame
+  the shell's scrollback     4630 us   (38%)
+  the monitor's contents     2318 us   (19%)
+  chrome + wallpaper         6651 us   (55%)   <- the biggest single chunk
+```
+
+**Chrome, not the apps.** And chrome is mostly one thing.
+
+### `fb_shadow` clipped to the SCREEN, not the scissor
+
+`wm.c` calls `chrome()` once per window per damage rectangle, and a drag
+damages a band. Each call walked the **whole shadow band** of that window — the
+widest, softest, most per-pixel loop in `fb.c` — and left `put_pixel` to reject
+nearly all of it one pixel at a time.
+
+`fb_shadow` predates `fb_clip`. desktop-TODO 0b listed the five direct
+back-buffer writers that needed the scissor folded into their loop bounds, and
+`fb_shadow` is not one of them: it goes through `put_pixel`, so it was
+**correct the whole time and simply slow**. Correct-but-slow is the harder kind
+to notice, because nothing is ever wrong.
+
+Folded in. `chrome + wallpaper` went **6,651 → 4,213 µs/frame** in the run that
+followed, and `fbbench`'s scene hashes are **byte-identical at all three
+modes** — the change moves no pixels at all, which is the whole proof that it
+only skips work that was being discarded.
+
+### Two bugs in the benchmark, before it could be believed
+
+1. **Scenarios ran one at a time**, so two runs of identical code minutes apart
+   reported 12,061 and 20,210 µs/frame — a 70% swing. `rdtsc` counts at a
+   *constant* rate regardless of core frequency, so a contended or downclocked
+   core inflates the cycle count for identical work: **a cycle counter is not
+   immune to a busy machine, only to QEMU.** The four scenarios are interleaved
+   inside each repetition now, so they share the same span of time and the
+   *differences* survive drifting load. desktop-TODO 0c used the same
+   interleaved A/B to prove the damage list cost nothing.
+2. **Unsigned underflow.** When a component's cost fell inside the noise,
+   drawing less measured slower, `all - nomon` wrapped, and the harness printed
+   `667233241162193 us (8421476900969%)`. A benchmark that prints an absurd
+   number is worse than one that prints nothing, because the absurd number is
+   the one somebody quotes. Signed now, and a delta at or below zero is
+   reported as *"below the noise floor"* — which is real information, not an
+   error.
+
+### What is still slow, and honestly
+
+The shell's scrollback is still **~45% of a drag frame** even after `term_draw`
+learned to skip rows outside the band: a drag across the shell damages a band
+that genuinely covers several rows, and each row is a full antialiased string
+blit. That is the next target, and now there is an instrument pointed at it.
+
+**Absolutes in any of these numbers move with host load — the percentages are
+the trustworthy part.**
 
 ### The peaks in that run are not usable, and saying so matters
 
