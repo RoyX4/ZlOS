@@ -586,33 +586,58 @@ static void fb_report_mode(unsigned int need)
  * is FOUR bytes there and eight everywhere else. Proven, not assumed:
  * a _Static_assert(sizeof(unsigned long) == 8) fails on that target.
  *
- * The chain, all of it `unsigned long`:
- *     efi.c:250   fb_addr = (unsigned long)gop->mode->framebuffer_base;
- *                 <- the UINT64 loses its top half HERE, at the source
- *     efi.c:287   console_init_efi(fb_addr, ...)
- *     console.c   console_init_efi -> fb_setup(addr, ...)
- *     here        fb_base = (unsigned char *)addr
- * and back out through fb_phys() -> console_vram() -> the `vram` builtin.
+ * The chain, ALL OF IT `unsigned long long` now:
+ *     efi.c:218   static unsigned long long fb_addr;
+ *     efi.c:233   fb_addr = gop->mode->framebuffer_base;   <- no cast at all
+ *     efi.c:264   console_init_efi(fb_addr, ...)
+ *     console.c   console_init_efi -> console_init_fb -> fb_setup(addr, ...)
+ *     here        fb_base = (unsigned char *)(fb_uptr)addr
+ *
+ * SIX declarations, not the three the task list claimed - console_init_fb sits
+ * between the two it named and is declared in three places. Changing a subset
+ * is WORSE than changing none: the declaration and the definition would then
+ * disagree about the size of a register argument, which is undefined behaviour
+ * rather than a diagnostic.
+ *
+ * AND ONE OF THEM IS ASSEMBLY. raw_entry.S calls console_init_fb by hand for
+ * the raw-bootloader path, pushing five dwords and doing `add $20, %esp`.
+ * Widening the first argument to eight bytes silently breaks that stack layout
+ * in both 32-bit builds - nothing in C would have caught it. It pushes a zero
+ * high dword and adds 24 now.
  *
  * CLAUDE.md already names this bug class - "never put a pointer through
  * unsigned long in the EFI build" - and buildefi.sh carries four -Werror flags
- * against it. THOSE FLAGS ARE SILENT HERE, verified by compiling both cast
- * shapes with the exact build line: they catch pointer<->int, and this is a
- * UINT64 narrowed by an EXPLICIT cast, which no warning catches.
+ * against it. THOSE FLAGS WERE SILENT HERE, verified by compiling both cast
+ * shapes with the exact build line: they catch pointer<->int, and this was a
+ * UINT64 narrowed by an EXPLICIT cast, which no warning catches. The
+ * _Static_assert below does, at every hop, forever.
  *
  * Latent rather than active: a GOP framebuffer base is normally a PCI BAR in
- * the 32-bit MMIO window, which is why QEMU and OVMF never show it. Firmware
- * that places it above 4 GiB would give a black screen or write into whatever
- * lives at the truncated address.
- *
- * The fix is three declarations, not one, and two of the files were mid-flight
- * in another session: efi.c's fb_addr, console_init_efi, and this parameter all
- * become `unsigned long long`. Changing only this one is WORSE than leaving it
- * - console.c's declaration would then disagree with the definition about the
- * size of a register argument. Logged as T-11. */
-void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
+ * the 32-bit MMIO window, which is why QEMU and OVMF never showed it.
+ * Firmware that places it above 4 GiB would give a black screen or write into
+ * whatever lives at the truncated address. T-11, closed. */
+
+/* Pointer-sized, for the one place an address becomes a pointer. Casting a
+ * 64-bit integer straight to a 32-bit pointer is a warning on the 32-bit
+ * builds and an ERROR under buildefi.sh's -Werror=int-to-pointer-cast, so the
+ * narrowing is spelled out once, here, where it is provably safe: a
+ * framebuffer this kernel can address is by definition inside a pointer. */
+#if defined(ZL_64) || defined(__x86_64__)
+typedef unsigned long long fb_uptr;
+#else
+typedef unsigned int fb_uptr;
+#endif
+
+void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp)
 {
+    /* THE REGRESSION GUARD the task asked for. If anyone narrows this back to
+     * `unsigned long`, this fails the build on LLP64 - which is the exact
+     * target, and the exact type, that T-11 was. A comment would not have. */
+    _Static_assert(sizeof(addr) >= sizeof(void *),
+                   "fb_setup's address must be able to hold a pointer");
+    _Static_assert(sizeof(fb_uptr) == sizeof(void *),
+                   "fb_uptr must be exactly pointer-sized");
     /* Only 32- and 24-bit packed pixel modes are handled. Anything else is
      * refused rather than drawn as garbage - a wrong depth paints noise and
      * looks like a crash. */
@@ -629,7 +654,7 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
         return;
     }
 
-    fb_base  = (unsigned char *)addr;
+    fb_base  = (unsigned char *)(fb_uptr)addr;
     fb_pitch = pitch;
     fb_w     = width;
     fb_h     = height;

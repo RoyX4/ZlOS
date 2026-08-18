@@ -198,9 +198,9 @@ static void capture_acpi(efi_system_table *st)
 
 /* ---- what the kernel proper needs --------------------------------------- */
 void serial_init(void);
-void console_init_fb(unsigned long addr, unsigned int pitch, unsigned int width,
+void console_init_fb(unsigned long long addr, unsigned int pitch, unsigned int width,
                      unsigned int height, unsigned int bpp);
-void console_init_efi(unsigned long addr, unsigned int pitch, unsigned int width,
+void console_init_efi(unsigned long long addr, unsigned int pitch, unsigned int width,
                       unsigned int height, unsigned int bpp);
 void console_init(unsigned long mb_addr);
 int  main(void);
@@ -209,7 +209,13 @@ void kernel_done(void);
 /* Remember the mode across ExitBootServices. Everything the firmware owns
  * becomes invalid the moment that call returns, so anything we still need has
  * to be plain numbers in our own memory before then. */
-static unsigned long fb_addr;
+/* THE GOP BASE IS 64 BITS AND SO IS THIS. It used to be `unsigned long`, and
+ * buildefi.sh targets x86_64-unknown-windows, which is LLP64: `unsigned long`
+ * is FOUR bytes there while a pointer is eight. The explicit cast below then
+ * threw away the top half of a UINT64 silently, and the four -Werror flags in
+ * buildefi.sh do not catch it - they catch pointer<->int, and this is a UINT64
+ * narrowed by a cast the programmer wrote on purpose. T-11. */
+static unsigned long long fb_addr;
 static unsigned int  fb_w, fb_h, fb_pitch_bytes;
 
 MS efi_status efi_main(efi_handle image, efi_system_table *st)
@@ -230,7 +236,7 @@ MS efi_status efi_main(efi_handle image, efi_system_table *st)
     efi_gop *gop = 0;
     if (locate_protocol(&GOP_GUID, 0, (void **)&gop) == EFI_SUCCESS && gop && gop->mode) {
         efi_gop_mode_info *mi = gop->mode->info;
-        fb_addr        = (unsigned long)gop->mode->framebuffer_base;
+        fb_addr        = gop->mode->framebuffer_base;
         fb_w           = mi->horizontal_resolution;
         fb_h           = mi->vertical_resolution;
         /* the stride is given in pixels; our renderer wants bytes */

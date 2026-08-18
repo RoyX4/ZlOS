@@ -45,9 +45,18 @@ _rawstart:
     push %ecx
     movzwl 0x8304, %ecx         /* pitch  */
     push %ecx
-    push %eax                   /* addr   */
+    /* THE ADDRESS IS EIGHT BYTES NOW (T-11): console_init_fb takes an
+     * `unsigned long long` so that a UEFI framebuffer above 4 GiB survives the
+     * trip. cdecl puts the low dword at the lower address, so push the high
+     * half first. Our own bootloader only ever reports a 32-bit VBE base, so
+     * the high half is always zero here - but the CALL has to match the
+     * prototype or the four arguments after it land one slot too low, and
+     * nothing in C would have caught that. 5 args -> 6 dwords -> add $24. */
+    xor %edx, %edx
+    push %edx                   /* addr, high dword */
+    push %eax                   /* addr, low dword  */
     call console_init_fb
-    add $20, %esp
+    add $24, %esp
     jmp 2f
 1:  xor %ebx, %ebx              /* no framebuffer -> VGA text console */
     push %ebx

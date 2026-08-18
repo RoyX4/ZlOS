@@ -22,7 +22,10 @@ int  vga_get_col(void);
 /* fb.c - the UEFI framebuffer */
 int  fb_active(void);
 unsigned long fb_phys(void);
-void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
+/* 64 bits, on every target. See the note in fb_setup's definition - a
+ * framebuffer address is a PHYSICAL address and has no business being sized by
+ * whatever `long` happens to mean on the current ABI. */
+void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp);
 void fb_clear(void);
 void fb_putc(char c, int log_top, int log_bot);
@@ -140,7 +143,7 @@ void console_init(unsigned long mb_addr)
      * into that would paint garbage over a perfectly good text console. */
     if (mb && (mb->flags & MB_FLAG_FRAMEBUFFER) &&
         mb->framebuffer_type == FB_TYPE_RGB) {
-        fb_setup((unsigned long)mb->framebuffer_addr,
+        fb_setup(mb->framebuffer_addr,
                  mb->framebuffer_pitch,
                  mb->framebuffer_width,
                  mb->framebuffer_height,
@@ -162,21 +165,30 @@ void console_init(unsigned long mb_addr)
 /* The path where OUR bootloader did the whole job: raw_boot.asm asked the card
  * for a linear framebuffer through VBE itself and handed the details straight
  * over, so there is no multiboot info and no GRUB anywhere in the story. */
-void console_init_fb(unsigned long addr, unsigned int pitch, unsigned int width,
+void console_init_fb(unsigned long long addr, unsigned int pitch, unsigned int width,
                      unsigned int height, unsigned int bpp);
 
 /* Called only from the UEFI entry: the firmware loaded us directly, so there
  * was no bootloader of any kind in between - not GRUB, not ours. */
-void console_init_efi(unsigned long addr, unsigned int pitch, unsigned int width,
+void console_init_efi(unsigned long long addr, unsigned int pitch, unsigned int width,
                       unsigned int height, unsigned int bpp)
 {
+    /* CHANGING ONE OF THESE IS WORSE THAN CHANGING NONE: the declaration and
+     * the definition would then disagree about the size of a register
+     * argument, which is undefined behaviour rather than a diagnostic. This
+     * fails the build if it is ever narrowed back below pointer size, which is
+     * exactly the shape T-11 had on LLP64. */
+    _Static_assert(sizeof(addr) >= sizeof(void *),
+                   "console_init_efi's address must be able to hold a pointer");
     console_init_fb(addr, pitch, width, height, bpp);
     loaded_by_multiboot = 2;            /* 2 = booted as a UEFI application */
 }
 
-void console_init_fb(unsigned long addr, unsigned int pitch, unsigned int width,
+void console_init_fb(unsigned long long addr, unsigned int pitch, unsigned int width,
                      unsigned int height, unsigned int bpp)
 {
+    _Static_assert(sizeof(addr) >= sizeof(void *),
+                   "console_init_fb's address must be able to hold a pointer");
     loaded_by_multiboot = 0;
     fb_setup(addr, pitch, width, height, (unsigned char)bpp);
 
@@ -212,7 +224,7 @@ int console_set_res(int w, int h)
     /* ask the card what stride it settled on rather than assuming w*4 */
     int pitch = bga_get_pitch();
     if (pitch < w * 4) pitch = w * 4;
-    console_init_fb((unsigned long)lfb, (unsigned int)pitch,
+    console_init_fb((unsigned long long)lfb, (unsigned int)pitch,
                     (unsigned int)w, (unsigned int)h, 32);
     loaded_by_multiboot = was_multiboot;
     return 1;
