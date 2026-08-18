@@ -1968,6 +1968,19 @@ fn wm_session() {
     color(C_GREY)   put(wm_n())  put(" windows, shell client ")
     put(wm_cx(shell_win))  put(",")  put(wm_cy(shell_win))  put(" ")
     put(wm_cw(shell_win))  put("x")  print(wm_ch(shell_win))
+    # ...and where every window's TITLE BAR is, which is what a pointer gate
+    # has to aim at. probe-drag.py used to carry hardcoded coordinates
+    # (2110,120 - off the right edge of a 1920-wide screen) and reported
+    # "NOTHING MOVED - dragging is a no-op" for a drag that worked perfectly.
+    # A gate that fails for a reason unrelated to the code costs a bisect
+    # every time, which is the rule verify-raw.sh was rewritten for.
+    wi = 0
+    while wi < wm_n() {
+        put("  wm: win ")  put(wi)  put(" title ")
+        put(wm_cx(wi))  put(",")  put(wm_cy(wi) - TITLE_H * u)  put(" ")
+        put(wm_cw(wi))  put("x")  print(TITLE_H * u)
+        wi = wi + 1
+    }
     while wm_run() == 1 { wm_frame() }
     con_quiet(0)
     wm_live = 0
@@ -2028,13 +2041,14 @@ fn draw_desk() {
     }
 }
 
-# snapshot the static desktop as the drag background, then draw the DRAGGABLE
-# windows on top of it. Called once the terminal has its content, and again
-# after any redraw, so the background always matches what's really behind them.
+# Draw the windows on top of the static desktop. This used to bg_snap() the
+# whole screen first, as the background a dragged window would be lifted off
+# and dropped back onto - C4 deleted that, and with the compositor as the boot
+# state this whole path only runs when there is no framebuffer at all, where
+# px_w() is 0 and the body never executes.
 fn compose_windows() {
     if px_w() > 0 {
-        bg_snap()                        # capture wallpaper+header+terminal+dock
-        raise_windows()                  # ... then the open windows, focused last
+        raise_windows()                  # the open windows, focused last
         present()
     }
 }
@@ -2063,14 +2077,16 @@ fn draw_screen() {
 }
 
 # ---- the start menu --------------------------------------------------------
-# Click the zlOS button and a menu pops up above the dock. It saves the patch
-# of screen underneath (grab) so closing it just stamps that back - no full
-# redraw, so whatever was there (a window, the terminal) returns untouched.
+# Click the zlOS button and a menu pops up above the dock. It used to grab()
+# the patch of screen underneath and stamp() it back on close - the same
+# save-under C4 deleted. Closing now redraws instead, which is what the
+# compositor does for every window and needs no buffer. (C5 makes this a real
+# WF_MODAL window; until then this path is text-mode only and never runs,
+# because px_w() is 0 wherever the text shell is.)
 fn open_menu() {
     mnx = 10
     mnh = 10 * 26 + 36
     mny = dock_y() - mnh - 6
-    grab(mnx - 2, mny - 2, 182, mnh + 16)               # save what's under the menu
     shadow(mnx, mny, 172, mnh, 8, 6)
     rrect(mnx, mny, 172, mnh, 6, rgb(20, 26, 42))
     rrect(mnx + 1, mny + 1, 170, mnh - 2, 5, PANEL)
@@ -2092,8 +2108,9 @@ fn open_menu() {
     return 0
 }
 fn close_menu() {
-    stamp(mnx - 2, mny - 2)                              # restore the saved patch
     menu_open = 0
+    draw_desk()                          # repaint what the menu was covering
+    compose_windows()
     return 0
 }
 # map a menu row (0..7) to the command it launches
@@ -2299,7 +2316,18 @@ while running == 1 {
             lb = band(mouse_btn(), 1)
 
             if dragging == 1 {
-                # move the grabbed window as a bitmap: restore old spot, stamp new
+                # MOVE THE WINDOW BY REDRAWING IT, not by lifting a bitmap.
+                # This used to bg_rest() the old rectangle and stamp() a
+                # grabbed sprite at the new one - C4 deleted both, and the
+                # sprite ceiling was 640x480 while the terminal is 1256x944,
+                # so the thing you most wanted to drag was the one thing that
+                # could not move. It also erased w + 16 where the shadow
+                # reached w + 28, leaving 12 px of smear per step.
+                #
+                # This path is text-mode only now and unreachable: the whole
+                # block is inside `if px_w() > 0`, and px_w() is 0 wherever
+                # the text shell runs. The real drag is wm.c's, off the damage
+                # list, with shadow_reach() supplying the 28.
                 nx = mx - gox
                 ny = my - goy
                 if nx < 0 { nx = 0 }
@@ -2311,10 +2339,12 @@ while running == 1 {
                 if ny != doy { moved = 1 }
                 if moved == 1 {
                     mhide()
-                    bg_rest(dox, doy, dgw + 16, dgh + 16)   # erase old (incl. shadow)
-                    stamp(nx, ny)                            # window bitmap at new spot
                     dox = nx
                     doy = ny
+                    if drag_win == 1 { mon_x = dox  mon_y = doy }
+                    if drag_win == 2 { ab_x = dox  ab_y = doy }
+                    draw_desk()
+                    raise_windows()
                     mpoint(mx, my)
                 }
                 if lb == 0 {                                 # released - drop it
@@ -2388,8 +2418,11 @@ while running == 1 {
                             if hcls == 1 {
                                 # the red box really closes the window now
                                 mhide()
-                                if hit == 1 { mon_open = 0  bg_rest(mon_x, mon_y, (MON_W + 16) * ui(), (MON_H + 16) * ui()) }
-                                if hit == 2 { ab_open = 0   bg_rest(ab_x, ab_y, (MON_W + 16) * ui(), (AB_H + 16) * ui()) }
+                                # closing repaints rather than restoring a
+                                # saved patch of background - C4
+                                if hit == 1 { mon_open = 0 }
+                                if hit == 2 { ab_open = 0 }
+                                draw_desk()
                                 focus_win = 0
                                 raise_windows()             # whatever is left, redrawn
                                 mpoint(mx, my)
@@ -2407,13 +2440,13 @@ while running == 1 {
                                         dragging = 1  drag_win = 1  dgw = MON_W * ui()  dgh = MON_H * ui()
                                         dox = mon_x  doy = mon_y
                                         gox = mx - mon_x  goy = my - mon_y
-                                        mhide()  grab(mon_x, mon_y, (MON_W + 16) * ui(), (MON_H + 16) * ui())
+                                        mhide()
                                     }
                                     if hit == 2 {
                                         dragging = 1  drag_win = 2  dgw = MON_W * ui()  dgh = AB_H * ui()
                                         dox = ab_x  doy = ab_y
                                         gox = mx - ab_x  goy = my - ab_y
-                                        mhide()  grab(ab_x, ab_y, (MON_W + 16) * ui(), (AB_H + 16) * ui())
+                                        mhide()
                                     }
                                 }
                             }}

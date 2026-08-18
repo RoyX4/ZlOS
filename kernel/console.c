@@ -59,10 +59,6 @@ void fb_present(void);
 void fb_icon24(int px, int py, int n, unsigned int fg);
 int  fb_cell_w(void);
 int  fb_cell_h(void);
-void fb_bg_snapshot(void);
-void fb_bg_restore(int x, int y, int w, int h);
-void fb_grab(int x, int y, int w, int h);
-void fb_stamp(int x, int y);
 void fb_cube_filled(int cx, int cy, int size, int angle, unsigned int base);
 void fb3d_set_clip(int x0, int y0, int x1, int y1);
 
@@ -337,11 +333,9 @@ void console_icon(int px, int py, int n, unsigned int rgb)
 void console_pointer_show(int x, int y) { if (fb_active()) fb_pointer_show(x, y); }
 void console_pointer_hide(void)         { if (fb_active()) fb_pointer_hide(); }
 
-/* window-drag backing store: snapshot background, grab/stamp a window bitmap */
-void console_bg_snapshot(void)                    { if (fb_active()) fb_bg_snapshot(); }
-void console_bg_restore(int x,int y,int w,int h)  { if (fb_active()) fb_bg_restore(x, y, w, h); }
-void console_grab(int x, int y, int w, int h)     { if (fb_active()) fb_grab(x, y, w, h); }
-void console_stamp(int x, int y)                  { if (fb_active()) fb_stamp(x, y); }
+/* The window-drag backing store used to be wrapped here - bg_snapshot,
+ * bg_restore, grab, stamp. Deleted with fb.c's implementation (C4): dragging
+ * is the compositor's damage-based repaint now and needs no backing store. */
 
 /* the solid, flat-shaded, back-face-culled cube */
 void console_cube_filled(int cx, int cy, int size, int angle, unsigned int rgb)

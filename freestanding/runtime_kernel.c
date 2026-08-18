@@ -77,10 +77,6 @@ extern void console_pointer_show(int x, int y);
 extern void console_pointer_hide(void);
 extern void console_present(void);
 extern void console_icon(int px, int py, int n, unsigned int rgb);
-extern void console_bg_snapshot(void);
-extern void console_bg_restore(int x, int y, int w, int h);
-extern void console_grab(int x, int y, int w, int h);
-extern void console_stamp(int x, int y);
 extern void console_cube_filled(int cx, int cy, int size, int angle, unsigned int rgb);
 extern void console_cube_clip(int x0, int y0, int x1, int y1);
 extern int  cpu_brand_byte(int i);
@@ -985,10 +981,10 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "mhide"))     { console_pointer_hide(); return zl_nil(); }
     if (streq(name, "present"))   { console_present(); return zl_nil(); }
     if (streq(name, "icon"))      { console_icon((int)a[0].num,(int)a[1].num,(int)a[2].num,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
-    if (streq(name, "bg_snap"))   { console_bg_snapshot(); return zl_nil(); }
-    if (streq(name, "bg_rest"))   { console_bg_restore((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
-    if (streq(name, "grab"))      { console_grab((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
-    if (streq(name, "stamp"))     { console_stamp((int)a[0].num,(int)a[1].num); return zl_nil(); }
+    /* bg_snap / bg_rest / grab / stamp were here - the sticker drag (C4).
+     * Deleted with fb.c's implementation. A zl program calling one of these
+     * now gets kfatal("builtin not available in the kernel subset"), which is
+     * the right answer: the technique is gone, not renamed. */
     if (streq(name, "cube3d"))    { console_cube_filled((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "cube_clip")) { console_cube_clip((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "cpu_char"))  return zl_num((double)cpu_brand_byte((int)a[0].num));

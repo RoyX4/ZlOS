@@ -32,28 +32,19 @@
  * fb.c now decides whether a mode fits by subtracting one base from the next,
  * so mapping a different amount here would make the harness disagree with the
  * kernel about what degrades. Re-read that comment block if this ever fails. */
-#define BG_ADDR   0x08000000UL   /* bg_buf - 128 MiB, ceiling = sp_buf   */
-#define SP_ADDR   0x0A000000UL   /* sp_buf - 160 MiB, ceiling = sched.c  */
-#define BACK_ADDR 0x0C000000UL   /* back   - 192 MiB, ceiling = nvme.c   */
-#define BG_SIZE   (SP_ADDR    - BG_ADDR)      /* 32 MiB */
-#define SP_SIZE   (0x0B000000UL - SP_ADDR)    /* 16 MiB */
-#define BACK_SIZE (0x0D000000UL - BACK_ADDR)  /* 16 MiB */
-#define BIG_SIZE  (0x0B000000UL - BG_ADDR)    /* 48 MiB: the fallback arena */
+#define BACK_ADDR 0x08000000UL   /* back - 128 MiB, ceiling = the AP stacks */
+#define BACK_SIZE (0x0A800000UL - BACK_ADDR)  /* 40 MiB */
 
-/* What fb.c will decide, by the same arithmetic. Three-way now: back's own
- * span, then the drag arena, then nothing. Keeping this in step with fb.c
- * matters - a harness that disagrees with the kernel about what degraded is
- * worse than one that does not ask. */
+/* What fb.c will decide, by the same arithmetic. ONE span now: C4 deleted
+ * bg_buf and sp_buf, so the old three-way choice - back's own span, then the
+ * drag arena, then nothing - collapsed to "does it fit". 40 MiB covers
+ * 3840x2160's 31.6, so nothing this kernel can be handed degrades any more.
+ * Keeping this in step with fb.c matters: a harness that disagrees with the
+ * kernel about what degrades is worse than one that does not ask. */
 static int fits_back(int w, int h)
 {
     unsigned long n = (unsigned long)w * h * 4;
-    return n <= BACK_SIZE || n <= BIG_SIZE;
-}
-/* ...and whether that cost us the drag buffers */
-static int took_arena(int w, int h)
-{
-    unsigned long n = (unsigned long)w * h * 4;
-    return n > BACK_SIZE && n <= BIG_SIZE;
+    return n <= BACK_SIZE;
 }
 
 /* ---- fb.c's public surface --------------------------------------------- */
@@ -72,15 +63,11 @@ void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
 void fb_box(int x, int y, int w, int h, unsigned int rgb);
 void fb_present(void);
 void fb_at(int row, int col, const char *s, unsigned char attr);
-void fb_bg_snapshot(void);
 void fb_clip(int x, int y, int w, int h);
 void fb_damage(int x, int y, int w, int h);
 int  fb_damage_count(void);
 unsigned int fb_damage_area(void);
 void fb_clip_none(void);
-void fb_bg_restore(int x, int y, int w, int h);
-void fb_grab(int x, int y, int w, int h);
-void fb_stamp(int x, int y);
 unsigned int fb_get_px(int x, int y);
 unsigned int fb_pxw(void);
 unsigned int fb_pxh(void);
@@ -180,7 +167,6 @@ static void b_gradient(void) { fb_gradient(0, 0, W, H, 0x141A2E, 0x2A3350); }
  * together with something that dirties the whole screen. Subtract the "fill
  * whole screen" row above to get the blit on its own. */
 static void b_present(void)  { fb_fill_px(0, 0, W, H, 0x1B2340); fb_present(); }
-static void b_snapshot(void) { fb_bg_snapshot(); }
 
 static void b_shadow(void)   { fb_shadow(200, 200, 600, 460, 16, 12); }
 static void b_rrect(void)    { fb_rrect(200, 200, 600, 460, 10, 0x1E2A44); }
@@ -267,63 +253,21 @@ static void scene(void)
         fb_at(r, 0, "the quick brown fox 0123456789", 0x07);
 }
 
-/* Does the DRAG machinery survive this mode?
+/* THE DRAG CHECK WAS HERE, and it is gone with what it tested.
  *
- * Dragging goes through a second pair of fixed buffers, bg_buf and sp_buf,
- * each of which had its own compile-time PIXEL ceiling - and bg_buf's was
- * 1920x1200, so at 2560x1440 bg_ok went to 0 and every drag became a silent
- * no-op. That is a different failure from the back buffer's and it needs its
- * own check, because "the desktop draws" does not test it at all.
+ * It snapshotted the screen, scribbled on it, restored, and looked for the
+ * scribble - a functional test for bg_ok/sp_ok, which are static. C4 deleted
+ * fb_bg_snapshot, fb_bg_restore, fb_grab and fb_stamp outright: dragging is
+ * the compositor's damage-based repaint now, and hosttest/wmtest.c already
+ * asserts the property that actually matters - "a move leaves no smear",
+ * checked 40 px beyond the frame on every side, which is the bug the sticker
+ * drag had and could not be tested out of.
  *
- * bg_ok and sp_ok are static, so this asks functionally instead: snapshot,
- * scribble, restore, and see whether the scribble went away. A refused
- * snapshot makes fb_bg_restore a no-op and the scribble stays. Same for the
- * sprite: grab a patch, stamp it somewhere else, and look for it there. */
-static int drag_check(void)
-{
-    const unsigned MARK = 0x00FF00FF, WALL = 0x00203040;
-    int ok = 1;
-
-    if (took_arena(W, H)) {
-        /* Dragging is off BY DESIGN here: the back buffer is living in the
-         * drag buffers' space, and fb.c refuses the snapshot rather than
-         * overwriting the thing being snapshotted. Asserting the refusal is
-         * the test - a snapshot that "worked" here would be corruption. */
-        fb_bg_snapshot();
-        fb_fill_px(100, 100, 200, 200, MARK);
-        fb_bg_restore(100, 100, 200, 200);
-        printf("  %-34s %s\n", "drag: refused (arena taken by back)",
-               fb_get_px(150, 150) == MARK ? "ok  (refused, as it must)"
-                                           : "FAIL - it snapshotted anyway");
-        if (fb_get_px(150, 150) != MARK) ok = 0;
-        return ok;
-    }
-
-    fb_fill_px(0, 0, W, H, WALL);
-    fb_bg_snapshot();
-    fb_fill_px(100, 100, 200, 200, MARK);
-    fb_bg_restore(100, 100, 200, 200);
-    if (fb_get_px(150, 150) != WALL) {
-        printf("  %-34s FAIL - bg_restore did not undo the scribble\n",
-               "drag: background snapshot");
-        ok = 0;
-    } else {
-        printf("  %-34s ok\n", "drag: background snapshot");
-    }
-
-    /* a window-sized sprite: the System Monitor at ui()==2 is 568x428 */
-    fb_fill_px(400, 400, 568, 428, MARK);
-    fb_grab(400, 400, 568, 428);
-    fb_bg_restore(400, 400, 568, 428);
-    fb_stamp(900, 500);
-    if (fb_get_px(900 + 284, 500 + 214) != MARK) {
-        printf("  %-34s FAIL - the sprite did not land\n", "drag: window sprite");
-        ok = 0;
-    } else {
-        printf("  %-34s ok\n", "drag: window sprite");
-    }
-    return ok;
-}
+ * Deleting a test along with its subject is only correct when something else
+ * covers the behaviour. It does, and it covers it better: the old check could
+ * not have caught the 12 px shadow smear at all, because bg_restore genuinely
+ * did undo the rectangle it was given - the rectangle was just too small.
+ */
 
 /* Does the scissor actually scissor?
  *
@@ -499,7 +443,6 @@ static void run_at(int w, int h, unsigned long vram)
     bench("fill whole screen",        b_fill,     px);
     bench("gradient whole screen",    b_gradient, px);
     bench("fill + present (blit)",     b_present,  px);
-    bench("bg_snapshot",              b_snapshot, px);
     printf("\n");
     bench("shadow 600x460 soft=12",   b_shadow,   (600 + 24L) * (460 + 24));
     bench("rrect 600x460 r=10",       b_rrect,    600L * 460);
@@ -512,7 +455,6 @@ static void run_at(int w, int h, unsigned long vram)
     bench("ONE WINDOW (full chrome)", b_window,   0);
     bench("WHOLE DESKTOP redraw",     b_desktop,  px);
     printf("\n");
-    drag_check();
     clip_check();
     damage_check();
     hash_report();
@@ -520,13 +462,13 @@ static void run_at(int w, int h, unsigned long vram)
 
 int main(void)
 {
-    /* map the three fixed scratch buffers fb.c expects at physical addresses */
+    /* map the fixed scratch buffer fb.c expects at a physical address. There
+     * were three; C4 deleted bg_buf and sp_buf and `back` moved into the space
+     * they freed. */
     struct { unsigned long a; unsigned long n; const char *what; } bufs[] = {
-        { BG_ADDR,   BG_SIZE,   "bg_buf"   },
-        { SP_ADDR,   SP_SIZE,   "sp_buf"   },
-        { BACK_ADDR, BACK_SIZE, "back"     },
+        { BACK_ADDR, BACK_SIZE, "back" },
     };
-    for (unsigned i = 0; i < 3; i++) {
+    for (unsigned i = 0; i < 1; i++) {
         void *p = mmap((void *)bufs[i].a, bufs[i].n, PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
         if (p == MAP_FAILED || p != (void *)bufs[i].a) {

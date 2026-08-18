@@ -68,9 +68,11 @@ void zl_putc_pub(char c) { (void)c; }        /* fb.c's boot line: not wanted her
 
 #define W 1280
 #define H 800
-#define BG_ADDR   0x08000000UL
-#define SP_ADDR   0x0A000000UL
-#define BACK_ADDR 0x0C000000UL
+/* ONE buffer now. C4 deleted the drag background and sprite, and the back
+ * buffer moved down into the space they freed - see the high-RAM map at the
+ * top of fb.c. 0x08000000..0x0A800000 is 40 MiB, bounded by the AP stacks. */
+#define BACK_ADDR 0x08000000UL
+#define BACK_SIZE (0x0A800000UL - BACK_ADDR)     /* 40 MiB */
 
 /* ---- the fake app --------------------------------------------------------
  * Fills its whole client area with a colour derived from its id, then
@@ -143,9 +145,9 @@ static int all_wallpaper(int x0, int y0, int x1, int y1)
 int main(void)
 {
     struct { unsigned long a, n; } bufs[] = {
-        { BG_ADDR, 32UL << 20 }, { SP_ADDR, 16UL << 20 }, { BACK_ADDR, 16UL << 20 },
+        { BACK_ADDR, BACK_SIZE },
     };
-    for (unsigned i = 0; i < 3; i++) {
+    for (unsigned i = 0; i < 1; i++) {
         void *p = mmap((void *)bufs[i].a, bufs[i].n, PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
         if (p != (void *)bufs[i].a) { fprintf(stderr, "mmap failed\n"); return 1; }

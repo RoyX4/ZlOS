@@ -97,10 +97,9 @@ int fb_get_rows(void) { return fb_rows; }
  * stopping one from eating the next is arithmetic. Every base below was read
  * out of the file that owns it - do not take this list on trust, re-grep it:
  *
- *   0x08000000  128 MiB   fb.c          bg_buf   drag background snapshot
- *   0x0A000000  160 MiB   fb.c          sp_buf   drag sprite
+ *   0x08000000  128 MiB   fb.c          back     the back buffer
+ *   0x0A800000  168 MiB   smp_trampoline*.S       the AP stacks
  *   0x0B000000  176 MiB   sched.c       STACK_BASE, kernel task stacks
- *   0x0C000000  192 MiB   fb.c          back     the back buffer
  *   0x0D000000  208 MiB   nvme.c        NMEM_ASQ, admin queues
  *   0x0E000000  224 MiB   xhci.c        XMEM_DCBAA - the DMA arena
  *   0x0F000000  240 MiB   virtio_gpu.c  VMEM_DESC
@@ -112,42 +111,51 @@ int fb_get_rows(void) { return fb_rows; }
  * back_on 0 and took the back buffer, subpixel text, fast read-back AND
  * window dragging with it, without printing a word. desktop-TODO 0a, T-1.
  *
- * (Group C deletes bg_buf and sp_buf entirely - the snapshot-and-sticker drag
- * machinery - which frees 128..176 MiB and lets `back` move down to cover 4K.
- * Until then 192..208 MiB is what it has: 16 MiB, i.e. up to 4,194,304 pixels,
- * which covers 2560x1440 and 2560x1600 but not 3840x2160.)
+ * THE AP STACKS WERE NOT ON THIS LIST, AND THEY WERE INSIDE A BUFFER.
+ *
+ * smp_trampoline{,64}.S give each core 16 KiB at STACK_BASE 0x0A800000 -
+ * 168 MiB - and nothing here knew. 168 MiB sat inside sp_buf, the drag
+ * SPRITE buffer, which spanned 160..176 MiB: dragging a window while the
+ * other cores were awake wrote a window bitmap straight through their stacks.
+ * It never fired only because smp_go() is reached by typing '*' and nobody
+ * did both at once.
+ *
+ * The five _Static_asserts below could not have caught it. They compared the
+ * five bases they knew about, and STACK_BASE was not one of them - a
+ * compile-time check that proves the wrong thing is worse than none, because
+ * it reads as coverage. This is the project's named recurring bug class (a
+ * buffer landing on a neighbour, five times now per HANDOFF.md) in the shape
+ * that hides best: two owners, neither aware of the other.
+ *
+ * It is a first-class region now, so the arithmetic below cannot reach it.
+ *
+ * C4 DELETED THE DRAG BUFFERS, which is what freed 128..168 MiB for `back`.
+ * The snapshot-and-sticker drag is gone entirely; dragging comes back through
+ * the compositor's damage-based repaint, which needs no snapshot at all. That
+ * took with it a 640x480 sprite ceiling (the terminal is 1256x944, nearly 4x
+ * over - the real reason it could never be dragged), a 12 px shadow smear on
+ * every drag step, and the collision above.
+ *
+ * 40 MiB is enough for 3840x2160 (31.6 MiB) with 8.4 MiB to spare, so the
+ * back buffer is ON at every mode this kernel can be handed, and the
+ * "back OFF at 4K" degraded path is gone rather than merely unlikely.
+ *
+ * 0x0C000000..0x0D000000 (192..208 MiB) is FREE now - it is where `back` used
+ * to live. Left unassigned deliberately: the next multi-megabyte buffer this
+ * kernel needs should take it and add itself to this list.
  */
-#define HI_BG     0x08000000UL
-#define HI_SP     0x0A000000UL
+#define HI_BACK   0x08000000UL
+#define HI_APSTK  0x0A800000UL   /* smp_trampoline{,64}.S STACK_BASE */
 #define HI_SCHED  0x0B000000UL
-#define HI_BACK   0x0C000000UL
 #define HI_NVME   0x0D000000UL
 
-#define BG_LIMIT   ((unsigned int)(HI_SP    - HI_BG))    /* 32 MiB */
-#define SP_LIMIT   ((unsigned int)(HI_SCHED - HI_SP))    /* 16 MiB */
-#define BACK_LIMIT ((unsigned int)(HI_NVME  - HI_BACK))  /* 16 MiB */
+/* 16 KiB per core, and the trampoline indexes by APIC id, so the span is
+ * (max id + 1) stacks. cpu_apic_ids[] in apic.c holds 16, so 17 is the bound
+ * that matches what the rest of the kernel will actually wake. */
+#define AP_STACK_SIZE  0x4000UL
+#define AP_STACK_SPAN  (17UL * AP_STACK_SIZE)
 
-/* THE FALLBACK ARENA. 128..176 MiB is 48 MiB - the drag buffers plus the gap
- * to sched.c - and it is the only span in the map big enough for 3840x2160,
- * which needs 31.6 MiB and does not fit in back's own 16.
- *
- * At a mode that large the drag buffers are unusable ANYWAY: bg_buf would need
- * the same 31.6 MiB and has 32, leaving no room for a back buffer beside it.
- * So the choice is not "back buffer or dragging", it is "back buffer or
- * neither", and the arena is worth more as one big buffer than as two that
- * cannot both be used.
- *
- * The difference this makes is not marginal. With back off, every primitive
- * goes to VRAM through put_pixel instead of the fast row path, and a
- * full-screen fill at 4K costs 77x what it costs at 1920x1200 - for 3.6x the
- * pixels. Measured: a whole desktop redraw at 3840x2160 is 44 ms without a
- * back buffer, against 3.95 ms at 1920x1200 with one.
- *
- * C4 supersedes this properly: deleting the sticker-drag machinery frees the
- * arena outright and dragging comes back through damage-based repaint, which
- * needs no snapshot at all. Until then this is the honest trade, and the boot
- * log states it rather than leaving someone to wonder why dragging stopped. */
-#define BIG_LIMIT  ((unsigned int)(HI_SCHED - HI_BG))    /* 48 MiB */
+#define BACK_LIMIT ((unsigned int)(HI_APSTK - HI_BACK))  /* 40 MiB */
 
 /* THE MAP MUST BE IN ORDER, AND THE COMPILER SHOULD SAY SO.
  *
@@ -160,17 +168,18 @@ int fb_get_rows(void) { return fb_rows; }
  *
  * These cost nothing at run time and fail the build the moment the map stops
  * making sense. A comment claiming the order would not have. */
-_Static_assert(HI_BG    < HI_SP,    "high-RAM map out of order: bg >= sp");
-_Static_assert(HI_SP    < HI_SCHED, "high-RAM map out of order: sp >= sched");
-_Static_assert(HI_SCHED < HI_BACK,  "high-RAM map out of order: sched >= back");
-_Static_assert(HI_BACK  < HI_NVME,  "high-RAM map out of order: back >= nvme");
-/* and the fallback arena must not reach into sched.c's stacks */
-_Static_assert(HI_BG + (unsigned long)BIG_LIMIT <= HI_SCHED,
-               "the back buffer's fallback arena overruns sched.c");
+_Static_assert(HI_BACK  < HI_APSTK, "high-RAM map out of order: back >= ap stacks");
+_Static_assert(HI_APSTK < HI_SCHED, "high-RAM map out of order: ap stacks >= sched");
+_Static_assert(HI_SCHED < HI_NVME,  "high-RAM map out of order: sched >= nvme");
+/* the AP stacks must fit between their base and sched.c's */
+_Static_assert(HI_APSTK + AP_STACK_SPAN <= HI_SCHED,
+               "the AP stacks overrun sched.c's task stacks");
+/* and the back buffer must stop before the AP stacks - the collision C4 fixed */
+_Static_assert(HI_BACK + (unsigned long)BACK_LIMIT <= HI_APSTK,
+               "the back buffer overruns the AP stacks");
 
 static unsigned int *back = (unsigned int *)HI_BACK;
 static int back_on = 0;
-static int back_took_arena = 0;   /* back is living in the drag buffers' space */
 
 /* ---- SIMD, and exactly where it is allowed --------------------------------
  * cpu.c has detected SSE/SSE2/SSE3/SSSE3 since it was written and NOTHING has
@@ -411,50 +420,35 @@ static void fb_putu(unsigned int v)
     while (i) zl_putc_pub(b[--i]);
 }
 
-/* Report EACH buffer separately, because they no longer fail together.
- * They used to: BACK_MAX and BG_MAX were both 1920*1200, so one resolution
- * killed the back buffer and dragging in the same step and it was fair to list
- * them as one loss. Sized from real neighbours they have different ceilings -
- * at 3840x2160 the back buffer does not fit but the drag snapshot does, by
- * 368 KiB. Saying "dragging is lost" there would be a lie the boot log tells
- * every time, which is worse than the silence this replaced. */
+/* There is ONE buffer to report now. `drag` used to be reported beside it,
+ * separately, because the two had different ceilings and no longer failed
+ * together - and that mattered while a snapshot-and-sticker drag existed. C4
+ * deleted it, so a "drag ON/OFF" column would now be a claim about a feature
+ * that is not in the binary. Dragging is the compositor's damage-based repaint
+ * and needs no buffer at all, so there is nothing here to run out of. */
 static void fb_report_mode(unsigned int need)
 {
-    int drag_ok = (need <= BG_LIMIT) && !back_took_arena;
-
     fb_puts("  fb: ");
     fb_putu(fb_w); fb_puts("x"); fb_putu(fb_h); fb_puts("x"); fb_putu(fb_bpp);
     fb_puts(" cell "); fb_putu((unsigned)cell_w); fb_puts("x"); fb_putu((unsigned)cell_h);
     fb_puts(", back "); fb_puts(back_on ? "ON" : "OFF");
-    fb_puts(", drag "); fb_puts(drag_ok ? "ON" : "OFF");
     fb_puts("  ("); fb_putu(need >> 10); fb_puts(" KiB/mode)\n");
 
     if (!back_on) {
         fb_puts("      back OFF: wants "); fb_putu(need >> 10);
         fb_puts(" KiB, "); fb_putu(BACK_LIMIT >> 10);
-        fb_puts(" KiB free below nvme - no subpixel text, read-back hits VRAM\n");
+        fb_puts(" KiB free below the AP stacks - no subpixel text, read-back hits VRAM\n");
     }
     /* Say where it ends, not just that it fits. "back ON" is a claim; an
      * address is a fact somebody can check against the map in this file. */
     if (back_on) {
         unsigned long top = (unsigned long)back + need;
-        unsigned long ceil = back_took_arena ? HI_SCHED : HI_NVME;
         fb_puts("      back at ");   fb_putu((unsigned)((unsigned long)back >> 20));
         fb_puts(" MiB, ends at ");   fb_putu((unsigned)(top >> 20));
-        fb_puts(" MiB, ceiling ");   fb_putu((unsigned)(ceil >> 20));
-        fb_puts(" MiB");
-        if (top > ceil) fb_puts("  *** OVERRUN - THIS WILL CORRUPT THE NEXT BUFFER ***");
+        fb_puts(" MiB, ceiling ");   fb_putu((unsigned)(HI_APSTK >> 20));
+        fb_puts(" MiB (the AP stacks)");
+        if (top > HI_APSTK) fb_puts("  *** OVERRUN - THIS WILL CORRUPT THE AP STACKS ***");
         fb_puts("\n");
-    }
-    if (!drag_ok) {
-        fb_puts("      drag OFF: ");
-        if (back_took_arena) {
-            fb_puts("the back buffer is using the drag arena at 128 MiB\n");
-        } else {
-            fb_puts("snapshot wants "); fb_putu(need >> 10);
-            fb_puts(" KiB, "); fb_putu(BG_LIMIT >> 10);
-            fb_puts(" KiB free below sp_buf - windows will not move\n");
-        }
     }
 }
 
@@ -529,26 +523,18 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
      * neighbour, in which case everything still works - just slower, straight
      * to VRAM - and the boot log SAYS SO. See the high-RAM map above. */
     unsigned int need = width * height * 4u;
-    /* Prefer back's own span; fall back to the drag arena; then give up. The
-     * BASE is computed from the map rather than hardcoded - which is what
-     * desktop-TODO 0a asked for and what the first version of this only did
-     * for the limit. */
-    back_took_arena = 0;
-    /* The static asserts above prove the MAP is sane. This proves the choice
+    /* ONE SPAN NOW, and it is big enough for every mode this kernel can be
+     * handed. Deleting the drag buffers (C4) gave `back` 128..168 MiB - 40 MiB
+     * against 3840x2160's 31.6 - so the two-tier "prefer back's own span, fall
+     * back to the drag arena" choice is gone, and with it back_took_arena and
+     * every check that had to ask which span won.
+     *
+     * The static asserts above prove the MAP is sane. This proves the choice
      * made from it is: a mode arrives at run time and `need` is computed from
      * it, so the one thing a compile-time check cannot cover is whether this
      * particular mode's buffer stays inside the span picked for it. */
-    if (need <= BACK_LIMIT) {
-        back = (unsigned int *)HI_BACK;
-        back_on = 1;
-    } else if (need <= BIG_LIMIT) {
-        back = (unsigned int *)HI_BG;
-        back_on = 1;
-        back_took_arena = 1;
-    } else {
-        back = (unsigned int *)HI_BACK;
-        back_on = 0;
-    }
+    back = (unsigned int *)HI_BACK;
+    back_on = (need <= BACK_LIMIT);
     ndmg    = 0;                 /* the mode changed; old damage means nothing */
     pdirty  = 0;
     fb_report_mode(need);
@@ -1369,73 +1355,37 @@ void fb_pointer_show(int x, int y)
     fb_cursor_arrow(x, y, 0xEEF4FF, 0x0A0E18);   /* white arrow, dark outline */
 }
 
-/* ---- backing store, for dragging windows without a GPU -------------------
- * The sticky-note trick: keep a snapshot of the desktop background (no
- * windows), grab the window being dragged as a bitmap "sprite", then each
- * frame restore the background where the window WAS and stamp the sprite where
- * it now IS. Two copies per frame, no re-rendering - so a window glides.
- * Buffers are sized for up to 1024x768 background and a 640x480 window; bigger
- * modes fall back gracefully (dragging just no-ops). */
-/* These are multi-megabyte, so they must NOT live in BSS (the linker would put
- * them right after the kernel, where they collided with the stack/framebuffer
- * and corrupted memory). Park them in free high RAM instead - see the map at
- * the top of this file.
+/* ---- WHERE THE STICKER DRAG USED TO BE -----------------------------------
+ * fb_bg_snapshot / fb_bg_restore / fb_grab / fb_stamp and their two
+ * multi-megabyte buffers were deleted here (C4). The technique was: keep a
+ * snapshot of the desktop without windows, grab the window being dragged as a
+ * bitmap, then each frame restore the background where it WAS and stamp the
+ * bitmap where it now IS. Two copies per frame, no re-rendering.
  *
- * Their ceilings used to be compile-time PIXEL COUNTS - BG_MAX 1920*1200 and
- * SP_MAX 640*480 - which is the same bug the back buffer had: at 2560x1440
- * bg_ok went to 0 and dragging stopped working, silently. Both now measure the
- * mode against the actual gap to the next buffer. (SP_MAX 640x480 was also why
- * the 1256x944 terminal could not be dragged: nearly 4x over the ceiling.) */
-static unsigned int *bg_buf = (unsigned int *)HI_BG;
-static unsigned int *sp_buf = (unsigned int *)HI_SP;
-static int bg_w = 0, bg_h = 0, bg_ok = 0;
-static int sp_w = 0, sp_h = 0, sp_ok = 0;
-
-/* snapshot the WHOLE screen as the background - call it after drawing the
- * wallpaper/header/dock but before the draggable windows go on top */
-void fb_bg_snapshot(void)
-{
-    /* Refuse if the back buffer took this space - overwriting it would corrupt
-     * the very thing being snapshotted, and silently. */
-    if (back_took_arena || fb_w * fb_h * 4u > BG_LIMIT) { bg_ok = 0; return; }
-    bg_w = (int)fb_w; bg_h = (int)fb_h;
-    for (int y = 0; y < bg_h; y++)
-        for (int x = 0; x < bg_w; x++)
-            bg_buf[y * bg_w + x] = fb_get_px(x, y);
-    bg_ok = 1;
-}
-
-/* paint a rectangle of the saved background back onto the screen */
-void fb_bg_restore(int x, int y, int w, int h)
-{
-    if (!bg_ok) return;
-    for (int yy = y; yy < y + h; yy++)
-        for (int xx = x; xx < x + w; xx++) {
-            if ((unsigned)xx >= (unsigned)bg_w || (unsigned)yy >= (unsigned)bg_h) continue;
-            put_pixel((unsigned)xx, (unsigned)yy, bg_buf[yy * bg_w + xx]);
-        }
-}
-
-/* grab a screen rectangle into the sprite buffer (the window being lifted) */
-void fb_grab(int x, int y, int w, int h)
-{
-    if (back_took_arena || w <= 0 || h <= 0 ||
-        (unsigned int)(w * h) * 4u > SP_LIMIT) { sp_ok = 0; return; }
-    sp_w = w; sp_h = h;
-    for (int j = 0; j < h; j++)
-        for (int i = 0; i < w; i++)
-            sp_buf[j * w + i] = fb_get_px(x + i, y + j);
-    sp_ok = 1;
-}
-
-/* stamp the grabbed sprite down at a new position */
-void fb_stamp(int x, int y)
-{
-    if (!sp_ok) return;
-    for (int j = 0; j < sp_h; j++)
-        for (int i = 0; i < sp_w; i++)
-            put_pixel((unsigned)(x + i), (unsigned)(y + j), sp_buf[j * sp_w + i]);
-}
+ * It is not a smaller version of what replaced it - it is a different idea,
+ * and the compositor's damage-based repaint made it dead weight rather than an
+ * optimisation. Four things went with it:
+ *
+ *   a 640x480 sprite ceiling. The terminal is 1256x944, nearly 4x over, which
+ *   is the real reason it could never be dragged - not a bug, a design limit.
+ *
+ *   a 12 px smear on every drag step. fb_shadow reaches x + w + 28 at ui()==2
+ *   and the drag erased only w + 16, so each step left a sliver of shadow
+ *   behind. Repainting from damage cannot have that bug: a window's damage IS
+ *   its frame plus shadow_reach(), computed from the same elevation that drew
+ *   it.
+ *
+ *   40 MiB of fixed high RAM, which is what let `back` move down and cover
+ *   3840x2160 - so the "back OFF at 4K" degraded mode is gone too.
+ *
+ *   AND A COLLISION. sp_buf spanned 160..176 MiB, and the AP stacks live at
+ *   168 MiB. Dragging a window with the other cores awake wrote a window
+ *   bitmap through their stacks. See the map at the top of this file.
+ *
+ * fb_pointer_show / fb_pointer_hide above are DELIBERATELY KEPT. The 11x17
+ * cursor save-under is the same shape of trick and none of the same problems:
+ * it is bounded by the sprite, lives in BSS, and has no ceiling to exceed.
+ */
 
 /* a software cursor block at a text cell (framebuffer has no hardware one) */
 void fb_cursor(int row, int col, int on, unsigned char attr)
