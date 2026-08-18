@@ -25,3 +25,4 @@ hosttest/gpu_fillrate
 hosttest/*.ppm
 
 hosttest/systest
+hosttest/rtctest

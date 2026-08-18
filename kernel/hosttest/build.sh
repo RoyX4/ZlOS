@@ -73,6 +73,16 @@ gcc -O2 -g -Wall -Wextra -Wno-unused-parameter \
     -o systest systest.c ../clip.c ../snap.c ../notify.c
 echo "built ./systest       (run: ./systest)"
 
+# The clock. Two port instructions and a pile of decoding, and the bug it
+# exists to avoid - a read torn across the second boundary, giving a time an
+# hour wrong - lasts a few hundred microseconds a second and cannot be
+# reproduced on demand any other way. So the CMOS chip is faked: it can hold
+# UIP high, hand out a different time on the second sweep, claim any of the
+# three encodings, or not be there at all.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -DRTC_HOSTTEST \
+    -o rtctest rtctest.c ../rtc.c
+echo "built ./rtctest       (run: ./rtctest)"
+
 # The comparison number: what the REAL GPU on this same laptop does with a
 # blended full-screen layer. Offscreen pixmap, so it never touches the desktop.
 # Needs libGL - skipped silently if the dev headers are not installed.

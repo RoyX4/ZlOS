@@ -188,9 +188,28 @@ fn draw_header() {
         num_aa(w - 276 * u, ht, w, TOP_TXT)
         text_aa(w - 200 * u, ht, "x", TOP_DIM)
         num_aa(w - 184 * u, ht, px_h(), TOP_TXT)
-        text_aa(w - 108 * u, ht, "net", TOP_DIM)
-        fill_rgb(w - 66 * u, (hb - 8 * u) / 2, 8 * u, 8 * u, OK_GRN)
-        text_aa(w - 48 * u, ht, "up", TOP_DIM)
+        # This corner used to draw "net", a green dot, and "up".
+        #
+        # There is no network driver anywhere in this tree - no e1000, no
+        # virtio-net, no rtl8139, no network code at all - so that green dot
+        # was a claim about hardware that does not exist, made to the user's
+        # face on every frame. HANDOFF.md is held to the standard that it
+        # records what is VERIFIED rather than what is intended; the screen is
+        # now held to the same one.
+        #
+        # What replaces it is the one thing this corner can truthfully say:
+        # the actual time, off the CMOS clock in rtc.c. Drawn a glyph at a
+        # time through char_aa, the same way sysmon_body draws the CPU brand
+        # string, because the zl kernel subset has no string values. When the
+        # clock cannot be read, rtc_ch spells "--:--" rather than a stale time.
+        rtc_up()
+        hdri = 0
+        hdrx = w - 108 * u
+        while hdri < 5 {
+            char_aa(hdrx, ht, rtc_ch(hdri), TOP_TXT)
+            hdrx = hdrx + cell_w()
+            hdri = hdri + 1
+        }
     } else {
         bar(0, C_TITLE)
         at(0, 2, "zlOS", C_TITLE)
