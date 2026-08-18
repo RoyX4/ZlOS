@@ -293,6 +293,23 @@ extern int  i2c_hid_rdesc_len(void);
 extern int  i2c_hid_read_report(void);
 extern int  i2c_hid_byte(int i);
 /* the input stack: events, modifiers, repeat */
+/* ---- the compositor (wm.c / ui.c / wmglue.c) ---------------------------
+ * Mechanism only. kernel.zl supplies the policy through the app_* functions
+ * that wmglue.c binds to - see kernel/docs/desktop-wiring.md. */
+extern int  wm_available(void);
+extern int  wm_bind_zl(void);
+extern void wm_init(void);
+extern int  wm_open(int app, const char *title, int x, int y, int w, int h);
+extern void wm_close(int win);
+extern void wm_frame(void);
+extern int  wm_running(void);
+extern void wm_stop(void);
+extern int  wm_focused(void);
+extern int  wm_count(void);
+extern int  wm_add_tab(int win, int app, const char *title);
+extern void wm_damage(int x, int y, int w, int h);
+extern void ui_theme_init(int scale);
+
 extern void input_poll(void);
 extern int  input_next(void);
 extern int  input_type(void);
@@ -701,6 +718,23 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "gpu_fmt"))    return zl_num((double)intel_plane_format());
     if (streq(name, "gpu_tile"))   return zl_num((double)intel_plane_tiling());
     if (streq(name, "ggtt_map"))   return zl_num((double)intel_ggtt_map_range((unsigned)a[0].num,(unsigned)a[1].num,(int)a[2].num));
+    /* ---- the compositor. wm_avail() is the branch kernel.zl takes at boot:
+     * it is TRUE only when there is a framebuffer AND kernel.zl defines
+     * app_draw. On verify.sh's -kernel -display none there is no framebuffer,
+     * so this is 0 and the plain text shell runs exactly as before. */
+    if (streq(name, "wm_avail"))   return zl_num((double)wm_available());
+    if (streq(name, "wm_bind"))    return zl_num((double)wm_bind_zl());
+    if (streq(name, "wm_init"))    { wm_init(); return zl_nil(); }
+    if (streq(name, "wm_open"))    { if (a[1].type==V_STR) return zl_num((double)wm_open((int)a[0].num, a[1].str, (int)a[2].num, (int)a[3].num, (int)a[4].num, (int)a[5].num)); return zl_num(-1.0); }
+    if (streq(name, "wm_tab"))     { if (a[2].type==V_STR) return zl_num((double)wm_add_tab((int)a[0].num, (int)a[1].num, a[2].str)); return zl_num(-1.0); }
+    if (streq(name, "wm_close"))   { wm_close((int)a[0].num); return zl_nil(); }
+    if (streq(name, "wm_frame"))   { wm_frame(); return zl_nil(); }
+    if (streq(name, "wm_run"))     return zl_num((double)wm_running());
+    if (streq(name, "wm_stop"))    { wm_stop(); return zl_nil(); }
+    if (streq(name, "wm_focus"))   return zl_num((double)wm_focused());
+    if (streq(name, "wm_n"))       return zl_num((double)wm_count());
+    if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "ui_theme"))   { ui_theme_init((int)a[0].num); return zl_nil(); }
     if (streq(name, "in_poll"))    { input_poll(); return zl_nil(); }
     if (streq(name, "in_next"))    return zl_num((double)input_next());
     if (streq(name, "in_type"))    return zl_num((double)input_type());

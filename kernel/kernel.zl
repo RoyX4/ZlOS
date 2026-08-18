@@ -1692,7 +1692,7 @@ fn run_command(cmd, arg) {
         return 0
     }
     if cmd == 118 { return cube_demo() }     # v - spinning 3D cube (software)
-    if cmd == 119 { return windows_demo() }  # w - draggable-style window demo
+    if cmd == 119 { return wm_session() }    # w - the real compositor (wm.c)
     if cmd == 120 { return mousedemo() }  # x - mouse demo
     if cmd == 97  { return anim() }       # a - animation
     if cmd == 103 { return snake_game() } # g - snake game
@@ -1728,6 +1728,16 @@ fn run_command(cmd, arg) {
 fn draw_sysmon(sx, sy, sfoc) {
     u = ui()
     draw_window(sx, sy, MON_W * u, MON_H * u, "System Monitor", sfoc)
+    sysmon_body(sx, sy)
+    return 0
+}
+
+# The CONTENTS, with no frame. Split out so the compositor can draw the chrome
+# itself and hand this only its client area - the app contract in ui.h requires
+# app_draw to be position-pure, and this already was: every coordinate here is
+# derived from sx,sy. Nothing is baked in.
+fn sysmon_body(sx, sy) {
+    u = ui()
     text_aa(sx + 14 * u, sy + 40 * u, "CPU", TXT_DIM)
     smi = 0
     smx = sx + 14 * u
@@ -1762,10 +1772,95 @@ fn draw_sysmon(sx, sy, sfoc) {
 fn draw_about(ax, ay, afoc) {
     u = ui()
     draw_window(ax, ay, MON_W * u, AB_H * u, "About", afoc)
+    about_body(ax, ay)
+    return 0
+}
+
+fn about_body(ax, ay) {
+    u = ui()
     text_aa(ax + 14 * u, ay + 32 * u, "zlOS 0.3", TXT_HI)
     text_aa(ax + 14 * u, ay + 54 * u, "a desktop written in zl", TXT_DIM)
     text_aa(ax + 14 * u, ay + 76 * u, "no OS   no libc   no GNU", ACCENT)
     text_aa(ax + 14 * u, ay + 98 * u, "press h for the app list", TXT_DIM)
+    return 0
+}
+
+# ---- THE APP CONTRACT ------------------------------------------------------
+# Three functions, no loop, ever. wm.c calls these through wmglue.c, which
+# reaches them as zl_fn_app_* because zl compiles TO C. See ui.h and
+# docs/desktop-wiring.md.
+#
+# app_draw is handed the CLIENT area. The bodies below were written against the
+# WINDOW origin, so the title bar height is subtracted back off - which is
+# exactly the kind of thing that has to be done once, here, rather than by
+# editing sixty coordinates.
+
+APP_MONITOR = 1
+APP_ABOUT   = 2
+
+fn app_draw(id, ax, ay, aw, ah, afocus) {
+    wy = ay - TITLE_H * ui()
+    if id == APP_MONITOR { return sysmon_body(ax, wy) }
+    if id == APP_ABOUT   { return about_body(ax, wy) }
+    return 0
+}
+
+# Return 1 if handled. 'q' or Esc ends the session - NEVER "press any key",
+# which is the phrase this whole rewrite exists to delete.
+fn app_event(id, win, ety, ecode, ex, ey) {
+    if ety == 3 { if ecode == 113 { wm_stop() } }
+    if ety == 1 { if ecode == 257 { wm_stop() } }
+    return 1
+}
+
+# Runs every frame, must be cheap, MUST NOT DRAW. Returning 1 means "my state
+# changed, repaint me" - which is how the monitor's clock advances without
+# owning the frame, and is the whole reason it needs no while-loop.
+last_tick_sec = 0 - 1
+fn app_tick(id, win) {
+    if id == APP_MONITOR {
+        tsec = ticks() / 100
+        if tsec != last_tick_sec { last_tick_sec = tsec  return 1 }
+    }
+    return 0
+}
+
+# The wallpaper pass: furniture, drawn before any window, never in the z-order.
+# It may ignore the damage rectangle it is given - the scissor is already set to
+# it, so nothing outside can reach the screen. Using it would be the
+# optimisation; correctness does not depend on it.
+fn desk_draw(dx, dy, dw, dh) {
+    grad_rgb(0, 0, px_w(), px_h(), WALL_TOP, WALL_BOT)
+    draw_header()
+    draw_status("compositor")
+    return 0
+}
+
+# ---- a real compositor session ---------------------------------------------
+# This replaces windows_demo, which desktop-TODO calls superseded. It is NOT
+# the full inversion - the shell is still the top of the system, and making it
+# app 0 needs read_line to become a state machine (2g). What this does is put
+# wm.c, ui.c and the whole damage/clip/z-order stack on the real screen, in the
+# kernel, so everything below the shell is proven before the shell moves.
+fn wm_session() {
+    if px_w() == 0 {
+        color(C_GREY)  print("  the compositor needs the framebuffer console")
+        return 0
+    }
+    u = ui()
+    ui_theme(u)
+    wm_init()
+    if wm_bind() == 0 {
+        color(C_RED)  print("  wm: kernel.zl defines no app_draw - nothing to composite")
+        color(C_GREY)
+        return 0
+    }
+    wm_open(APP_MONITOR, "System Monitor", 60 * u, 70 * u, MON_W * u, MON_H * u)
+    wm_open(APP_ABOUT,   "About",         200 * u, 150 * u, MON_W * u, AB_H * u)
+    wt = wm_open(APP_MONITOR, "Monitor", 340 * u, 90 * u, MON_W * u, MON_H * u)
+    wm_tab(wt, APP_ABOUT, "About")
+    while wm_run() == 1 { wm_frame() }
+    draw_screen()
     return 0
 }
 
