@@ -432,6 +432,24 @@ extern int  http_truncated(void);
 extern int  http_refused(void);
 extern int  http_redirects(void);
 
+/* ---- DNS (dns.c) --------------------------------------------------------
+ * Names into addresses. Registered as net.c's UDP sink alongside tcp.c's. */
+extern void dns_server(unsigned int ip);
+extern int  dns_start(const char *name, int len);
+extern int  dns_poll(void);
+extern int  dns_state(void);
+extern unsigned int dns_result(void);
+extern void dns_reset(void);
+extern void dns_cache_clear(void);
+extern int  dns_cache_count(void);
+extern int  dns_queries(void);
+extern int  dns_replies(void);
+extern int  dns_rejected(void);
+extern int  dns_cache_hits(void);
+extern void dns_ip_sink(unsigned int src, int proto, const unsigned char *p, int len);
+extern void net_set_proto_sink(int proto, void (*f)(unsigned int, int, const unsigned char *, int));
+
+extern void browser_go(const char *u, int len);
 extern void browser_home(void);
 extern void browser_load_mem(unsigned int addr, int len);
 extern void browser_draw(int x, int y, int w, int h, int focused);
@@ -441,6 +459,7 @@ extern int  browser_tick(void);
 extern int  browser_back(void);
 extern int  browser_can_back(void);
 extern int  browser_url_focus(void);
+extern const char *browser_title(void);
 extern int  browser_scroll_by(int d);
 extern int  browser_height(void);
 extern int  browser_lines(void);
@@ -911,9 +930,31 @@ Value zl_calln(const char *name, int n, ...)
      * everything that is not ICMP. Two calls, one place, once. */
     if (streq(name, "tcp_up")) {
         tcp_attach(net_send_ip, (unsigned)a[0].num);
-        net_set_ip_sink(tcp_input);
+        net_set_proto_sink(6, tcp_input);
         return zl_num(1.0);
     }
+    /* dns_up(server): route UDP to the resolver and say who to ask. On QEMU's
+     * user-mode network the server is 10.0.2.3; on a real link it is whatever
+     * DHCP would have said, and there is no DHCP - so it is asserted, exactly
+     * like the address is. */
+    if (streq(name, "dns_up")) {
+        net_set_proto_sink(17, dns_ip_sink);
+        dns_server((unsigned)a[0].num);
+        dns_cache_clear();
+        return zl_num(1.0);
+    }
+    if (streq(name, "dns_ask")) {
+        if (a[0].type != V_STR) return zl_num(0.0);
+        const char *nm = a[0].str; int nl = 0; while (nm[nl]) nl++;
+        dns_reset();
+        return zl_num((double)dns_start(nm, nl));
+    }
+    if (streq(name, "dns_poll"))  return zl_num((double)dns_poll());
+    if (streq(name, "dns_ip"))    return zl_num((double)dns_result());
+    if (streq(name, "dns_n"))     return zl_num((double)dns_cache_count());
+    if (streq(name, "dns_q"))     return zl_num((double)dns_queries());
+    if (streq(name, "dns_r"))     return zl_num((double)dns_replies());
+    if (streq(name, "dns_bad"))   return zl_num((double)dns_rejected());
     if (streq(name, "tcp_open"))   return zl_num((double)tcp_connect((unsigned)a[0].num,(int)a[1].num));
     if (streq(name, "tcp_st"))     return zl_num((double)tcp_state());
     if (streq(name, "tcp_shut"))   { tcp_close(); return zl_nil(); }
@@ -993,6 +1034,14 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "net_peerok")) return zl_num((double)virtio_net_peer_known());
     if (streq(name, "net_peer"))   return zl_num((double)virtio_net_peer_mac((int)a[0].num));
     if (streq(name, "br_home"))    { browser_home(); return zl_nil(); }
+    /* br_go(url): exactly what the URL bar does, so the gate exercises the
+     * path a person uses rather than a parallel one built for the test. */
+    if (streq(name, "br_go")) {
+        if (a[0].type != V_STR) return zl_num(0.0);
+        const char *u = a[0].str; int ul = 0; while (u[ul]) ul++;
+        browser_go(u, ul);
+        return zl_num(1.0);
+    }
     if (streq(name, "br_load"))    { browser_load_mem((unsigned)a[0].num, (int)a[1].num); return zl_nil(); }
     if (streq(name, "br_draw"))    { browser_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num); return zl_nil(); }
     if (streq(name, "br_key"))     return zl_num((double)browser_key((int)a[0].num));
@@ -1000,6 +1049,9 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "br_tick"))    return zl_num((double)browser_tick());
     if (streq(name, "br_back"))    return zl_num((double)browser_back());
     if (streq(name, "br_focus"))   return zl_num((double)browser_url_focus());
+    if (streq(name, "br_state"))   return zl_num((double)browser_status());
+    if (streq(name, "br_h"))       return zl_num((double)browser_height());
+    if (streq(name, "br_title"))   return zl_str(browser_title());
     if (streq(name, "br_scroll"))  return zl_num((double)browser_scroll_by((int)a[0].num));
     if (streq(name, "br_h"))       return zl_num((double)browser_height());
     if (streq(name, "br_lines"))   return zl_num((double)browser_lines());

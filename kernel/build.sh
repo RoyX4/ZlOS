@@ -81,6 +81,11 @@ gcc $CFLAGS -c virtio_net.c -o _vnet.o
 # pointers, which is what lets hosttest/nettest.c drive the whole stack
 # with scripted packets and no machine.
 gcc $CFLAGS -c net.c -o _net.o
+# DNS, and UDP under it. The rung that reaches the real internet: everything
+# below is addressed by number and a person types a name. A response is
+# unauthenticated data with backward pointers in it, so the parser is written
+# defensively - see the header of dns.c.
+gcc $CFLAGS -c dns.c -o _dns.o
 # TCP: one connection, client only. The state enum first, the transitions
 # second - hosttest/tcptest.c drives all nine states against scripted packet
 # sequences, including a SYN-ACK that never comes and a FIN mid-transfer.
@@ -99,7 +104,7 @@ gcc -m32 -c boot.S -o _boot.o
 # only things the kernel took from libgcc, and divmod.c now supplies them.
 # Nothing GNU is linked into the kernel any more - only gcc-the-tool that
 # compiled the C, which nativegen is on track to replace.
-ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o _vnet.o _net.o _tcp.o _http.o _html.o _layout.o _browser.o
+ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o _vnet.o _net.o _dns.o _tcp.o _http.o _html.o _layout.o _browser.o
 
 echo "built kernel.elf"
 echo "  undefined symbols: $(nm -u kernel.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"

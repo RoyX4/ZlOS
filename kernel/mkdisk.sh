@@ -79,6 +79,7 @@ gcc $CFLAGS -c wmglue.c -o _wmglue.o
 # the whole box model with no kernel and no boot.
 gcc $CFLAGS -c virtio_net.c -o _vnet.o
 gcc $CFLAGS -c net.c -o _net.o
+gcc $CFLAGS -c dns.c -o _dns.o
 gcc $CFLAGS -c tcp.c -o _tcp.o
 gcc $CFLAGS -c http.c -o _http.o
 gcc $CFLAGS -c html.c    -o _html.o
@@ -89,7 +90,7 @@ gcc -m32 -c raw_entry.S -o _rawentry.o
 
 ld -m elf_i386 -T link-raw.ld -o kernel_raw.elf \
    _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o \
-   _vnet.o _net.o _tcp.o _http.o _html.o _layout.o _browser.o
+   _vnet.o _net.o _dns.o _tcp.o _http.o _html.o _layout.o _browser.o
 objcopy -O binary kernel_raw.elf kernel_raw.bin
 
 nasm -f bin raw_boot.asm -o raw_boot.bin

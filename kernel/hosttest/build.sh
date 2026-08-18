@@ -123,3 +123,11 @@ echo "built ./browsertest   (run: ./browsertest)"
 gcc -O1 -g -w -D_GNU_SOURCE -fsanitize=address,undefined -o fuzz fuzz.c \
     ../html.c ../layout.c ../net.c ../tcp.c ../http.c
 echo "built ./fuzz          (run: ./fuzz 3000 1)"
+
+# The resolver, mostly fed answers it should refuse. A DNS response is
+# unauthenticated data from a machine we did not choose, parsed by a walk over
+# length-prefixed labels with BACKWARD POINTERS in them - nothing in the format
+# stops a pointer aimed at itself. Most of this harness is malicious rather
+# than merely malformed, and none of it can be asked for from a real server.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o dnstest dnstest.c ../dns.c ../net.c
+echo "built ./dnstest       (run: ./dnstest)"

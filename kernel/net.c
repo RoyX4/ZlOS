@@ -212,7 +212,16 @@ int net_send_ip(u32 dst, int proto, const u8 *payload, int len)
     if (len < 0 || len > FRAME_MAX - ETH_HDR - 20) return 0;
     u32 hop = next_hop(dst);
     int ai = arp_find(hop);
-    if (ai < 0) return 0;                /* caller must resolve first */
+    if (ai < 0) {
+        /* ASK, then fail. The caller still has to retry - there is no queue
+         * here and a packet held pending an ARP reply is a buffer and a timer
+         * this stack does not have - but sending the request means the retry
+         * will succeed instead of failing identically forever. Without it, the
+         * first packet to any address we have not already talked to is a
+         * permanent failure rather than a one-off one. */
+        arp_send(hop, 0, 0);
+        return 0;
+    }
 
     u8 *h = txbuf + ETH_HDR;
     h[0] = 0x45;                         /* IPv4, 5 words of header */
@@ -241,7 +250,37 @@ static u8 rxbuf[FRAME_MAX];
  * on all four builds. tcp.c sets this in item 3. */
 static net_ip_sink_fn ip_sink;
 
+/* A SMALL PROTOCOL TABLE, not a second pointer. TCP and UDP both need to be
+ * routed now, and bolting on a `udp_sink` beside the first one would mean a
+ * third protocol needs a third global. Four slots is enough for everything
+ * this stack will ever carry and it costs a linear scan of four entries. */
+#define PROTO_N 4
+static struct { int proto; net_ip_sink_fn fn; } proto_sink[PROTO_N];
+
 void net_set_ip_sink(net_ip_sink_fn f) { ip_sink = f; }
+
+void net_set_proto_sink(int proto, net_ip_sink_fn f)
+{
+    for (int i = 0; i < PROTO_N; i++)
+        if (proto_sink[i].fn && proto_sink[i].proto == proto) {
+            proto_sink[i].fn = f;
+            return;
+        }
+    for (int i = 0; i < PROTO_N; i++)
+        if (!proto_sink[i].fn) {
+            proto_sink[i].proto = proto;
+            proto_sink[i].fn = f;
+            return;
+        }
+}
+
+static net_ip_sink_fn sink_for(int proto)
+{
+    for (int i = 0; i < PROTO_N; i++)
+        if (proto_sink[i].fn && proto_sink[i].proto == proto)
+            return proto_sink[i].fn;
+    return ip_sink;
+}
 
 static void handle_arp(const u8 *a, int len)
 {
@@ -328,8 +367,9 @@ static void handle_ip(const u8 *h, int len, const u8 *from_mac)
     const u8 *payload = h + ihl;
     int plen = total - ihl;
 
-    if (proto == 1)   handle_icmp(src, payload, plen);
-    else if (ip_sink) ip_sink(src, proto, payload, plen);
+    if (proto == 1) { handle_icmp(src, payload, plen); return; }
+    net_ip_sink_fn f = sink_for(proto);
+    if (f) f(src, proto, payload, plen);
 }
 
 int net_poll_once(void)

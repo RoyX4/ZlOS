@@ -70,6 +70,9 @@ int net_rx_frag(void);
 typedef void (*net_ip_sink_fn)(net_u32 src, int proto,
                                const net_u8 *payload, int len);
 void net_set_ip_sink(net_ip_sink_fn f);
+/* Route one protocol number somewhere specific. TCP and UDP both need this;
+ * anything unclaimed still goes to the sink above. */
+void net_set_proto_sink(int proto, net_ip_sink_fn f);
 
 /* Build and send an IPv4 packet. tcp.c's only way out. */
 int net_send_ip(net_u32 dst, int proto, const net_u8 *payload, int len);

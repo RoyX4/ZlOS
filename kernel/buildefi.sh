@@ -27,7 +27,7 @@ CF="-target x86_64-unknown-windows -ffreestanding -fno-stack-protector \
 
 OBJS=""
 for f in efi.c _genefi.c ../freestanding/runtime_kernel.c support.c vga.c fb.c fb3d.c font8x16.c font_aa.c \
-         font_sub.c icons.c pci.c bga.c intel.c xhci.c console.c divmod.c gdt64.c idt.c apic.c virtio_gpu.c cpu.c nvme.c sched.c smp.c i2c_hid.c input.c wm.c ui.c wmglue.c term.c virtio_net.c net.c tcp.c http.c html.c layout.c browser.c; do
+         font_sub.c icons.c pci.c bga.c intel.c xhci.c console.c divmod.c gdt64.c idt.c apic.c virtio_gpu.c cpu.c nvme.c sched.c smp.c i2c_hid.c input.c wm.c ui.c wmglue.c term.c virtio_net.c net.c dns.c tcp.c http.c html.c layout.c browser.c; do
     o="_efi_$(basename "$f" .c).o"
     # idt.c and apic.c hold the interrupt handlers, and they must be built
     # -mgeneral-regs-only so a handler can never touch SSE. build.sh and

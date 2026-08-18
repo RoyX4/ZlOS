@@ -21,6 +21,7 @@
 #include "ui.h"
 #include "http.h"
 #include "tcp.h"
+#include "dns.h"
 
 /* fb.c - the pixels. See the "rich text" block there for the style bits. */
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
@@ -72,6 +73,7 @@ static int  status;          /* BR_* below                              */
 #define BR_FETCHING  4
 #define BR_FAILED    5
 #define BR_BAD_TYPE  6
+#define BR_RESOLVING 7
 
 /* ---- the URL bar and the history -------------------------------------------
  * The line editing is term.c's SHAPE, not term.c's code: one character per
@@ -260,6 +262,7 @@ static int parse_quad(const char *s, int len, unsigned *out)
 static char req_host[URL_MAX], req_path[URL_MAX];
 static unsigned req_ip;
 static int req_port;
+static int req_needs_dns;   /* the host is a name, not a dotted quad */
 
 static int parse_url(const char *u, int len)
 {
@@ -286,7 +289,9 @@ static int parse_url(const char *u, int len)
     }
     int ps = i;
     if (he <= hs) { status = BR_FAILED; return 0; }
-    if (!parse_quad(u + hs, he - hs, &req_ip)) { status = BR_NO_DNS; return 0; }
+    /* A NAME IS NOT AN ERROR ANY MORE. It used to be refused outright, because
+     * there was no resolver; now it is a lookup, and the fetch waits for it. */
+    req_needs_dns = !parse_quad(u + hs, he - hs, &req_ip);
 
     int n = 0;
     for (int k = hs; k < he && n < URL_MAX - 1; k++) req_host[n++] = u[k];
@@ -313,6 +318,11 @@ static void hist_push(const char *u)
 static int navigate(const char *u, int len, int record)
 {
     status = BR_OK;
+    /* THE BAR SHOWS WHERE YOU ARE, however you got there. Only the typed path
+     * used to set it, so a navigation from anywhere else - Back, a link, the
+     * shell - left the previous address on screen while a different page
+     * loaded underneath it. */
+    if (u != url) { sset(url, u, URL_MAX); url_len = 0; while (url[url_len]) url_len++; }
     if (len == 10) {
         int home = 1;
         for (int k = 0; k < 10; k++) if (u[k] != HOME_URL[k]) { home = 0; break; }
@@ -328,8 +338,20 @@ static int navigate(const char *u, int len, int record)
     if (!net_live()) { status = BR_NO_NET; return 0; }
 
     tcp_attach(net_send_ip, net_ip());
-    net_set_ip_sink(tcp_input);
+    net_set_proto_sink(6, tcp_input);
+    net_set_proto_sink(17, dns_ip_sink);
     http_reset();
+
+    if (req_needs_dns) {
+        int hl = 0; while (req_host[hl]) hl++;
+        dns_reset();
+        if (!dns_start(req_host, hl)) { status = BR_NO_DNS; return 0; }
+        if (record) hist_push(u);
+        fetching = 1;
+        status = BR_RESOLVING;
+        return 1;
+    }
+
     if (!http_start(req_ip, req_port, req_host, req_path)) {
         status = BR_FAILED;
         return 0;
@@ -348,6 +370,27 @@ int browser_tick(void)
 {
     if (!fetching) return 0;
     for (int i = 0; i < 64; i++) net_poll_once();
+
+    /* The lookup comes first, and it is a separate state rather than a hidden
+     * pause inside the fetch: "looking up the name" and "connecting" fail for
+     * different reasons and the status strip says which. */
+    if (status == BR_RESOLVING) {
+        int d = dns_poll();
+        if (d == DNS_DONE) {
+            req_ip = dns_result();
+            req_needs_dns = 0;
+            if (!http_start(req_ip, req_port, req_host, req_path)) {
+                fetching = 0; status = BR_FAILED; return 1;
+            }
+            status = BR_FETCHING;
+            return 1;
+        }
+        if (d == DNS_ASKING) return 0;
+        fetching = 0;
+        status = BR_NO_DNS;
+        return 1;
+    }
+
     tcp_tick();
     int s = http_poll();
     if (s == HTTP_DONE) {
@@ -415,7 +458,8 @@ static const char *status_text(void)
     switch (status) {
     case BR_NO_TLS:   return "https is refused: this kernel has hashes but no cipher";
     case BR_NO_NET:   return "the network is not up - run the network gate first";
-    case BR_NO_DNS:   return "no resolver: use an address, not a name (there is no DNS)";
+    case BR_NO_DNS:   return "that name does not resolve";
+    case BR_RESOLVING: return "looking up the name...";
     case BR_FETCHING: return "fetching...";
     case BR_FAILED:   return "the fetch failed - is anything listening there?";
     case BR_BAD_TYPE: return "refused: not text/html or text/plain";
@@ -657,6 +701,7 @@ int browser_key(int code)
 }
 
 int browser_url_focus(void) { return url_focus; }
+const char *browser_title(void);
 
 /* The title from <title>, as a nul-terminated string the window frame can use.
  * html.c hands out lengths rather than C strings - the arena holds no

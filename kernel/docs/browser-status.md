@@ -24,7 +24,7 @@ applies in the optimistic direction.
 
 | | |
 |---|---|
-| **A browser** | ⚠️ **Bounded, and built.** The maximal version is out of reach. A document renderer was costed at ~3,000 lines of code; **2,617 of them exist and work, and they fetch a page over the network and render it.** No JavaScript, no HTTPS — see the table below. |
+| **A browser** | ⚠️ **Bounded, and built.** **It fetches `http://example.com/` by name, off the real internet, and renders it.** ~2,900 lines of code. No JavaScript, no HTTPS — see the table below. |
 
 ---
 
@@ -67,6 +67,7 @@ code column excludes blank and comment-only lines.
 | `net.c` + `net.h` — ARP, IPv4, ICMP | ~300 | **359** | 579 | done, gated |
 | `tcp.c` + `tcp.h` — client, one connection | ~900 | **513** | 752 | done, gated |
 | `http.c` + `http.h` — HTTP/1.0 | ~150 | **245** | 332 | done, gated |
+| `dns.c` + `dns.h` — UDP + a resolver | *(not in the brief)* | **283** | 424 | done, gated |
 | the browser app's URL bar, Back and history | — | *(in browser.c)* | — | done, gated |
 | **total** | **~3,050** | **2,617** | **3,968** | |
 
