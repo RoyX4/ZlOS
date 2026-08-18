@@ -261,6 +261,102 @@ uses is stated as an open question because it *is* one — it was not checked.
 
 ---
 
+## 10. The run — what actually happened
+
+### Stage 1 — landed, `c69ef4e`
+
+`zl_binop` and `zl_unop` now switch on `op[0]` instead of walking a ladder of
+15 `strcmp`s in source order. Signature unchanged, so no caller, no already
+generated `.c` and no line of `compiler.zl` moved.
+
+**Measured, interleaved A/B, best of 7:**
+
+| | before | after | |
+|---|---|---|---|
+| `b2_arith` | 561 ms | **459 ms** | **1.22x** |
+| `b4_list` | 300 ms | 286 ms | 1.05x |
+| `b5_string` | 152 ms | 151 ms | 1.01x |
+
+**The plan estimated 1.3–1.6x and it was optimistic.** The disassembly says
+why: `gcc -O2` had **already inlined every `strcmp` in both arms** — zero
+`strcmp` calls in either object file — so the win is dynamic path length, not
+call removal. Static size only moved 480 → 446 instructions.
+
+Gates: `run_tests.sh` ALL GREEN (40 ok, was 39), `verify_fmt.sh` PASS (557
+files). New: `tests/test_operators.zl`, 44 checks, one per dispatcher arm.
+
+### 10.1 The measurement harness, and why the first numbers were wrong
+
+`PLAN_unboxing.md` cites `bench\run_bench.ps1` throughout. **That harness does
+not exist in this repo** — it was never ported from Windows. `bench/` is new:
+`run_bench.sh` replaces it, and `ab.sh` was written after the first attempt
+produced a bad number.
+
+**Measuring one arm at a time reported `b4_list` at 12.8% faster while its own
+interpreter control moved 12%** — indistinguishable from host load, on a box
+that had three other sessions' QEMU instances running. Interleaving the two
+builds within the same seconds gives the real figure: **4.7%**. This is the
+same failure `kernel/CLAUDE.md` records under "Gates must never be timing-
+sensitive", arriving from a different direction.
+
+**One correction to the plan's method.** It says the interpreter column is a
+free control because `interp` does not link `runtime.c`. That is a Windows
+fact and it is false here — `build.sh:11` links it. It is still a valid
+control, for a different reason: `interp.c` makes **zero** calls to `zl_binop`
+(it has its own `Value` and its own `eval`), so a `zl_binop` change cannot move
+that column.
+
+### 10.2 Stage 2 is smaller than it looks, and lands on the kernel
+
+Counted, not estimated — list-field accesses (`items`/`nitems`/`cap`/`tip`) per
+file:
+
+| file | sites | consequence |
+|---|---|---|
+| `runtime.c` | ~160 | the work |
+| `interp.c` | ~150 | **none** — it does not include `runtime.h`, it has its own `Value` |
+| `compile.c` | **0** | **generated code is insulated** — it goes through `zl_len_list`/`zl_item`/`zl_index`/`zl_set`, never a field |
+| `compilel.c` | 3 | trivial |
+| `runtime_kernel.c` | 5 | all inside refusal stubs |
+
+**`compile.c` at zero is the important one.** It means the layout change cannot
+break a single line of already-generated output, which is what makes Stage 2 an
+afternoon rather than a week.
+
+**But `runtime.h` is shared with the kernel.** `kernel/build.sh` compiles with
+`-I..` and there is no second copy — verified, `kernel/runtime.h` does not
+exist. So Stage 2 changes the kernel's ABI directly and needs all four boot
+gates, not just `run_tests.sh`. That is the point rather than a cost: zlOS runs
+on fixed stacks, and a 4x smaller `Value` is a 4x smaller zl stack frame.
+
+### 10.3 The constraint Stage 2 must not break
+
+`push()` is the one place in the runtime where two zl values **deliberately
+share mutable storage**, and `runtime.c` records that it has been wrong twice —
+appending unconditionally was a use-after-free, copying every time was O(n²).
+Tip tracking is the version that is neither, and it splits a list's state:
+
+| | |
+|---|---|
+| `nitems` | **per value** — how much of the array this value can see |
+| `items`, `cap`, `tip` | **shared** — the array, and its high-water mark |
+
+A 16-byte `Value` has to keep that split, which rules out the obvious layout of
+allocating the header contiguously with the array: a `realloc` would move the
+header, and every aliasing value would hold a stale pointer to it.
+
+`tests/test_list_aliasing.zl` (`a8676e3`) pins it — 26 checks, green on both
+engines before any layout change, so it describes current behaviour rather than
+an assumption about it.
+
+### 10.4 Stage 2 belongs in a worktree
+
+Other sessions are editing this same checkout — a commit from another one
+landed between the two above. A half-applied `runtime.h` change breaks
+everyone's build, so this one does not get done in place.
+
+---
+
 Language plan: [`PLAN_unboxing.md`](PLAN_unboxing.md) · Type syntax:
 `design_type_system.md` · Records: `design_memory_structs.md` · Kernel builtins:
 `design_kernel.md` · FFI: `design_ffi_syscalls.md` · Kernel orientation:
