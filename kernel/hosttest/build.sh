@@ -12,3 +12,9 @@ echo "built ./intel_probe   (run: sudo ./intel_probe [--unsafe])"
 # through the driver's opinion of where things live.
 gcc -O2 -g -Wall -Wextra -o modeset_test modeset_test.c
 echo "built ./modeset_test  (run: sudo ./modeset_test --survey)"
+
+# The input stack, against fake hardware. No GPU, no root, no QEMU - so unlike
+# everything else here it can run on any box, in milliseconds.
+gcc -O1 -g -Wall -Wextra -Wno-unused-function -o inputtest \
+    inputtest.c ../input.c
+echo "built ./inputtest     (run: ./inputtest)"

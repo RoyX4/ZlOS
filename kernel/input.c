@@ -30,7 +30,8 @@ typedef unsigned char  u8;
 
 extern u32 idt_ticks(void);
 extern int idt_scan(void);        /* raw PS/2 scancode from the IRQ buffer */
-extern int xhci_key(void);        /* a decoded character from USB HID      */
+extern int xhci_key_event(void);  /* a raw USB HID key event               */
+extern int xhci_kbd_mods(void);   /* live USB modifier bitmap              */
 
 /* ---- event model ------------------------------------------------------- */
 #define EV_NONE      0
@@ -75,10 +76,17 @@ struct event {
 static struct event evq[EVQ_SIZE];
 static int evq_head = 0, evq_tail = 0;
 
-static int mods = 0;
+static int mods = 0;          /* PS/2 modifiers, plus the shared caps/num latch */
+static int usb_mods = 0;      /* USB modifiers, which arrive as their own snapshot */
 
-/* which keys are currently held, for repeat and for "is shift down" queries */
-static u8 key_down[512];
+/* Which keys are currently held, for repeat and for "is shift down" queries.
+ * Three regions, because three numberings reach this file and they collide:
+ *     0x000..0x0FF   PS/2 set 1
+ *     0x100..0x1FF   PS/2 set 1, 0xE0-prefixed
+ *     0x200..0x2FF   USB HID usage IDs
+ * Without the third region a USB 'a' (usage 0x04) and a PS/2 F9 (scancode
+ * 0x04) would be the same slot, and releasing one would un-hold the other. */
+static u8 key_down[768];
 static u32 repeat_code = 0;
 static u32 repeat_at   = 0;
 static int repeat_mods = 0;
@@ -186,6 +194,75 @@ static u32 to_char(int sc, int m)
     return (u32)(unsigned char)c;
 }
 
+/* ---- USB HID: a third numbering, folded onto the first two ---------------
+ * HID usage IDs are neither ASCII nor PC scancodes. Rather than carry a second
+ * character map - which is how the two keyboards would drift apart - the
+ * printable keys are translated into the set-1 scancode they correspond to and
+ * then handed to to_char() above. One keymap, one caps/ctrl/shift policy, both
+ * keyboards. The keys that have no character get a KEY_* code directly. */
+static u32 hid_to_key(int usage)
+{
+    switch (usage) {
+        case 0x28: return KEY_ENTER;
+        case 0x29: return KEY_ESC;
+        case 0x2A: return KEY_BACKSPACE;
+        case 0x2B: return KEY_TAB;
+        case 0x49: return KEY_INSERT;
+        case 0x4A: return KEY_HOME;
+        case 0x4B: return KEY_PGUP;
+        case 0x4C: return KEY_DELETE;
+        case 0x4D: return KEY_END;
+        case 0x4E: return KEY_PGDN;
+        case 0x4F: return KEY_RIGHT;
+        case 0x50: return KEY_LEFT;
+        case 0x51: return KEY_DOWN;
+        case 0x52: return KEY_UP;
+        case 0x58: return KEY_ENTER;                     /* keypad enter */
+    }
+    if (usage >= 0x3A && usage <= 0x45)                  /* F1..F12 */
+        return KEY_F1 + (u32)(usage - 0x3A);
+    return 0;
+}
+
+static int hid_to_sc1(int usage)
+{
+    /* HID runs the alphabet in alphabetical order; set 1 runs it in the order
+     * the keys sit on the board. Neither is derivable from the other. */
+    static const u8 letters[26] = {
+        0x1E, 0x30, 0x2E, 0x20, 0x12, 0x21, 0x22, 0x23, 0x17, 0x24, 0x25,
+        0x26, 0x32, 0x31, 0x18, 0x19, 0x10, 0x13, 0x1F, 0x14, 0x16, 0x2F,
+        0x11, 0x2D, 0x15, 0x2C
+    };
+    if (usage >= 0x04 && usage <= 0x1D) return letters[usage - 0x04];
+    if (usage >= 0x1E && usage <= 0x27) return 0x02 + (usage - 0x1E);  /* 1..9,0 */
+
+    switch (usage) {
+        case 0x2C: return 0x39;        /* space */
+        case 0x2D: return 0x0C;        /* -     */
+        case 0x2E: return 0x0D;        /* =     */
+        case 0x2F: return 0x1A;        /* [     */
+        case 0x30: return 0x1B;        /* ]     */
+        case 0x31: return 0x2B;        /* \     */
+        case 0x33: return 0x27;        /* ;     */
+        case 0x34: return 0x28;        /* '     */
+        case 0x35: return 0x29;        /* `     */
+        case 0x36: return 0x33;        /* ,     */
+        case 0x37: return 0x34;        /* .     */
+        case 0x38: return 0x35;        /* /     */
+    }
+    return 0;
+}
+
+static int hid_mods_to_mods(int h)
+{
+    int m = 0;
+    if (h & 0x22) m |= MOD_SHIFT;      /* bit 1 left, bit 5 right */
+    if (h & 0x11) m |= MOD_CTRL;
+    if (h & 0x44) m |= MOD_ALT;
+    if (h & 0x88) m |= MOD_SUPER;
+    return m;
+}
+
 /* ---- feeding the queue from the PS/2 stream ---------------------------- */
 static int ext_pending = 0;
 
@@ -254,6 +331,45 @@ static void handle_scancode(int sc)
     repeat_at   = idt_ticks() + REPEAT_DELAY;
 }
 
+/* The USB counterpart of handle_scancode, and deliberately the same shape: the
+ * two keyboards must produce identical events for the same key, or a bug will
+ * appear on one of them and not the other.
+ *
+ * Caps and num lock are the exception - they are latched state shared by both
+ * keyboards, so they live in the PS/2 `mods` word and both paths toggle it. */
+static void handle_hid_event(int ev)
+{
+    int usage = ev & 0xFF;
+    int press = (ev & 0x10000) ? 1 : 0;
+    int m     = hid_mods_to_mods((ev >> 8) & 0xFF) | (mods & (MOD_CAPS | MOD_NUM));
+
+    if (usage == 0x39) { if (press) mods ^= MOD_CAPS; return; }   /* caps lock */
+    if (usage == 0x53) { if (press) mods ^= MOD_NUM;  return; }   /* num lock  */
+
+    u32 key = hid_to_key(usage);
+    u32 ch  = key ? 0 : to_char(hid_to_sc1(usage), m);
+    if (!key && ch) key = ch;                        /* printable: code IS the char */
+    if (!key) return;
+
+    int slot = 0x200 + usage;
+    if (slot < 0 || slot >= 768) return;
+
+    if (!press) {
+        key_down[slot] = 0;
+        if (repeat_code == key) repeat_code = 0;
+        evq_push(EV_KEY_UP, key, m, 0, 0);
+        return;
+    }
+
+    key_down[slot] = 1;
+    evq_push(EV_KEY_DOWN, key, m, 0, 0);
+    if (ch) evq_push(EV_CHAR, ch, m, 0, 0);
+
+    repeat_code = key;
+    repeat_mods = m;
+    repeat_at   = idt_ticks() + REPEAT_DELAY;
+}
+
 /* ---- the pump ----------------------------------------------------------
  * Called from the shell's idle loop. Drains both hardware sources into the
  * one queue and generates repeats. Everything above is bookkeeping; this is
@@ -267,12 +383,18 @@ void input_poll(void)
         handle_scancode(sc);
     }
 
-    /* USB HID, which already hands us decoded characters */
-    for (int i = 0; i < 8; i++) {
-        int c = xhci_key();
-        if (!c) break;
-        evq_push(EV_CHAR, (u32)c, mods, 0, 0);
+    /* USB HID. It used to hand over decoded characters, which is why arrow
+     * keys never reached an application from a USB keyboard: there is no
+     * character for Up, so it decoded to 0 and 0 means "nothing typed". It
+     * hands over raw HID events now and this file translates them. */
+    for (int i = 0; i < 16; i++) {
+        int ev = xhci_key_event();
+        if (!ev) break;
+        handle_hid_event(ev);
     }
+    /* After the drain, not before: xhci_key_event() polls the controller, so
+     * reading the bitmap first would report the state one report out of date. */
+    usb_mods = hid_mods_to_mods(xhci_kbd_mods());
 
     /* auto-repeat: one key at a time, the most recently pressed */
     if (repeat_code) {
@@ -301,17 +423,26 @@ int input_next(void)
 int input_type(void)  { return last.type; }
 int input_code(void)  { return (int)last.code; }
 int input_mods(void)  { return last.mods; }
-int input_shift(void) { return (mods & MOD_SHIFT) ? 1 : 0; }
-int input_ctrl(void)  { return (mods & MOD_CTRL) ? 1 : 0; }
-int input_alt(void)   { return (mods & MOD_ALT) ? 1 : 0; }
-int input_caps(void)  { return (mods & MOD_CAPS) ? 1 : 0; }
+/* Either keyboard holding shift means shift is down - they are one logical
+ * keyboard, and the caller has no business knowing which one you reached for. */
+int input_shift(void) { return ((mods | usb_mods) & MOD_SHIFT) ? 1 : 0; }
+int input_ctrl(void)  { return ((mods | usb_mods) & MOD_CTRL) ? 1 : 0; }
+int input_alt(void)   { return ((mods | usb_mods) & MOD_ALT) ? 1 : 0; }
+int input_caps(void)  { return (mods & MOD_CAPS) ? 1 : 0; }   /* a latch, not held */
 
 int input_key_held(int code)
 {
-    for (int i = 0; i < 512; i++) {
+    for (int i = 0; i < 768; i++) {
         if (!key_down[i]) continue;
-        u32 k = (i >= 0x100) ? sc_extended(i - 0x100) : sc_special(i);
-        if (!k) k = to_char(i, 0);
+
+        u32 k;
+        if (i >= 0x200) {
+            k = hid_to_key(i - 0x200);
+            if (!k) k = to_char(hid_to_sc1(i - 0x200), 0);
+        } else {
+            k = (i >= 0x100) ? sc_extended(i - 0x100) : sc_special(i);
+            if (!k) k = to_char(i, 0);
+        }
         if ((int)k == code) return 1;
     }
     return 0;

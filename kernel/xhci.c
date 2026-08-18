@@ -1071,6 +1071,7 @@ static u32 kbd_enq   = 0;
 static u32 kbd_cyc   = 1;
 
 static u8  prev_keys[6];
+static u8  kbd_mods = 0;       /* modifier bitmap from the most recent report */
 static int keyq[32];
 static int keyq_head = 0, keyq_tail = 0;
 
@@ -1088,6 +1089,44 @@ static int keyq_pop(void)
     int ch = keyq[keyq_head];
     keyq_head = (keyq_head + 1) & 31;
     return ch;
+}
+
+/* ---- the EVENT queue, which is the one input.c reads --------------------
+ * A character queue cannot carry an arrow key. There is no character for Up,
+ * so the only honest answer hid_to_ascii() can give is 0, and 0 already means
+ * "nothing was typed" - so the key vanishes with no error anywhere. That is
+ * exactly the bug this queue exists to fix: it carries the HID usage ID, which
+ * every key has, and lets input.c decide what it means.
+ *
+ * Translation deliberately does NOT happen here. Which keymap, whether caps
+ * lock is on, whether ctrl folds a letter into a control code - that is policy,
+ * input.c already owns all of it for PS/2, and duplicating it here is how the
+ * two keyboards drift apart until "it works on the laptop but not the external
+ * one". The transport reports what the hardware said and stops there.
+ *
+ *     bits  7:0   HID usage ID   (never 0 for a real key, so 0 = queue empty)
+ *     bits 15:8   HID modifier bitmap from the same report
+ *     bit  16     1 = press, 0 = release
+ */
+#define KEV(press, mods, usage) (((press) << 16) | ((mods) << 8) | (usage))
+
+static int kevq[32];
+static int kevq_head = 0, kevq_tail = 0;
+
+static void kevq_push(int ev)
+{
+    int next = (kevq_tail + 1) & 31;
+    if (next == kevq_head) return;
+    kevq[kevq_tail] = ev;
+    kevq_tail = next;
+}
+
+static int kevq_pop(void)
+{
+    if (kevq_head == kevq_tail) return 0;
+    int ev = kevq[kevq_head];
+    kevq_head = (kevq_head + 1) & 31;
+    return ev;
 }
 
 static u8 cfg_byte(int i)
@@ -1257,9 +1296,27 @@ static int hid_to_ascii(int usage, int mods)
 static void hid_decode(void)
 {
     int mods = (int)*(volatile u8 *)(KBD_REPORT + 0);
+    u8  now[6];
+    int rollover = 0;
 
-    for (int i = 2; i < 8; i++) {
-        int usage = (int)*(volatile u8 *)(KBD_REPORT + (u32)i);
+    for (int i = 0; i < 6; i++) {
+        now[i] = *(volatile u8 *)(KBD_REPORT + (u32)(i + 2));
+        if (now[i] == 1) rollover = 1;
+    }
+
+    /* Publish the modifier bitmap even when nothing else in the report moved:
+     * pressing shift ALONE sends a report with no usage IDs at all, so this is
+     * the only moment anyone learns shift went down. */
+    kbd_mods = (u8)mods;
+
+    /* Do not record a rollover report as the new key state, and do not decode
+     * one. If we recorded it, the next ordinary report would find prev_keys
+     * full of 0x01 and re-emit every key still being held. */
+    if (rollover) return;
+
+    /* presses: in the new report and not in the old */
+    for (int i = 0; i < 6; i++) {
+        int usage = now[i];
         if (usage <= 3) continue;           /* 0 = empty, 1-3 = rollover errors */
 
         int held = 0;
@@ -1268,18 +1325,27 @@ static void hid_decode(void)
         if (held) continue;
 
         int ch = hid_to_ascii(usage, mods);
-        if (ch) keyq_push(ch);
+        if (ch) keyq_push(ch);              /* the legacy character view */
+        kevq_push(KEV(1, mods, usage));
     }
 
-    /* Do not record a rollover report as the new key state. If we did, the
-     * next ordinary report would find prev_keys full of 0x01 and re-emit every
-     * key still being held. */
-    int rollover = 0;
-    for (int i = 2; i < 8; i++)
-        if (*(volatile u8 *)(KBD_REPORT + (u32)i) == 1) rollover = 1;
-    if (!rollover)
-        for (int i = 0; i < 6; i++)
-            prev_keys[i] = *(volatile u8 *)(KBD_REPORT + (u32)(i + 2));
+    /* releases: in the old report and not in the new. These never existed
+     * before, and without them input.c can never clear its held-key state or
+     * stop auto-repeating - a key would repeat until a different one was
+     * pressed. */
+    for (int i = 0; i < 6; i++) {
+        int usage = prev_keys[i];
+        if (usage <= 3) continue;
+
+        int still = 0;
+        for (int j = 0; j < 6; j++)
+            if ((int)now[j] == usage) { still = 1; break; }
+        if (still) continue;
+
+        kevq_push(KEV(0, mods, usage));
+    }
+
+    for (int i = 0; i < 6; i++) prev_keys[i] = now[i];
 }
 
 /* ---- bringing a keyboard up --------------------------------------------
@@ -1371,7 +1437,9 @@ int xhci_kbd_init(void)
         kbd_mps   = ep_mps;
         kbd_ready = 1;
         for (int i = 0; i < 6; i++) prev_keys[i] = 0;
-        keyq_head = keyq_tail = 0;
+        keyq_head  = keyq_tail  = 0;
+        kevq_head  = kevq_tail  = 0;
+        kbd_mods   = 0;
 
         kbd_requeue();                        /* arm the first read */
         return slot;
@@ -1440,11 +1508,31 @@ int xhci_kbd_poll(void)
     return 1;
 }
 
-/* The whole point of this file: one character, or 0 if nothing was typed. */
+/* One character, or 0 if nothing was typed.
+ *
+ * This is the older, narrower view, kept because the zl `usb_key` builtin
+ * compares what it gets against 13 and 27. It reads its OWN queue rather than
+ * the event queue, so the shell reading characters and the compositor reading
+ * events cannot steal keystrokes from each other. */
 int xhci_key(void)
 {
     xhci_kbd_poll();
     return keyq_pop();
+}
+
+/* One key event - press or release, with the usage ID and the modifiers of the
+ * report it came in. This is what input.c reads, and the only view through
+ * which a key with no character can reach an application. */
+int xhci_key_event(void)
+{
+    xhci_kbd_poll();
+    return kevq_pop();
+}
+
+/* The live modifier bitmap, for a shift that is held with nothing else. */
+int xhci_kbd_mods(void)
+{
+    return (int)kbd_mods;
 }
 
 /* raw report bytes, for showing what the hardware actually sent */
