@@ -1038,7 +1038,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "fs_bs"))      return zl_num((double)fs_bsize());
     if (streq(name, "fs_nclear"))  { fs_name_clear(); return zl_nil(); }
     if (streq(name, "fs_npush"))   return zl_num((double)fs_name_push((int)a[0].num));
-    if (streq(name, "fs_new"))     return zl_num((double)fs_create_named((unsigned)a[1].num));
+    if (streq(name, "fs_new"))     return zl_num((double)fs_create_named((unsigned)a[0].num));
     if (streq(name, "fs_get"))     return zl_num((double)fs_find_named());
     if (streq(name, "fs_rm"))      return zl_num((double)fs_delete((int)a[0].num));
     if (streq(name, "fs_rd"))      return zl_num((double)fs_read((int)a[0].num,(void *)(unsigned long)a[1].num,(unsigned)a[2].num));

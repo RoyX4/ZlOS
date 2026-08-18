@@ -361,6 +361,8 @@ fn help() {
     print("    d        paint with the mouse")
     print("    <n> i    edit RAM file n (0-9) - ESC saves it")
     print("    l        list the RAM files")
+    print("    .        zlfs on the NVMe disk - mount, and count the boots")
+    print("    ,        list the files ON DISK, by name")
     print("    e        beep the PC speaker")
     print("    m        poke a byte into video memory and read it back")
     color(C_CYAN)  print("  our hardware drivers")
@@ -1021,6 +1023,13 @@ FS_META = 0x02010000    # 10 lengths, 4 bytes each
 FS_DATA = 0x02011000    # 10 slots of FS_SLOT bytes
 FS_SLOT = 8192
 
+# A page of scratch for the DISK filesystem's small reads and writes. It sits
+# above the RAM disk (FS_DATA + 10 * 8192 ends at 0x02025000) and far below the
+# DMA arena map at the top of fb.c - bg 128 MiB, sp 160, sched 176, back 192,
+# nvme 208, xhci 224, virtio-gpu 240. 32 MiB + 192 KiB collides with none of
+# them, which is the check this project's recurring bug says to do every time.
+DISK_SCRATCH = 0x02030000
+
 fn fs_init()      { fill_mem(FS_META, 0, 64) }
 fn fs_len(slot)   { return peek32(FS_META + slot * 4) }
 fn fs_save(slot, len) {
@@ -1617,6 +1626,91 @@ fn run_command(cmd, arg) {
             put("    read back WRONG in ")  put(nvbad)  print(" of 512 bytes")
             color(C_GREY)
         }
+        return 0
+    }
+    # . - zlfs: mount the disk, and prove a NAMED FILE survives a power cycle.
+    #
+    # The 'o' command above already writes a block and reads it back, which
+    # proves the DMA round trip and nothing about persistence: it never
+    # reboots. This keeps a counter in a file called "boots" and increments it
+    # once per run, so the number on screen is the number of times this machine
+    # has been powered on since the volume was formatted. That number cannot be
+    # produced by a cache, a buffer or a lucky read - only by bytes that were
+    # on the platter before this kernel existed.
+    #
+    # verify-disk.sh drives exactly this, twice, against the same image file.
+    if cmd == 46 {
+        color(C_CYAN)  print("  zlfs on NVMe")
+        color(C_GREY)
+        if nv_setup() == 0 {
+            color(C_RED)
+            put("    no usable NVMe controller (fault ")  put(nv_fault())  print(")")
+            color(C_GREY)  return 0
+        }
+        if fs_mount() == 0 {
+            print("    no volume here yet - formatting")
+            if fs_format() == 0 {
+                color(C_RED)  print("    format failed")
+                color(C_GREY)  return 0
+            }
+            if fs_mount() == 0 {
+                color(C_RED)  print("    formatted, but will not mount")
+                color(C_GREY)  return 0
+            }
+        }
+        put("    mounted: ")  put(fs_n())  put(" file(s), ")
+        put(fs_free())  put(" of ")  put(fs_cap())  print(" blocks free")
+
+        # find "boots", or make it. The name is pushed one character at a
+        # time because the zl kernel subset has no string values.
+        fs_nclear()
+        fs_npush(98)  fs_npush(111)  fs_npush(111)  fs_npush(116)  fs_npush(115)
+        bi = fs_get()
+        if bi < 0 { bi = fs_new(4) }
+        if bi < 0 {
+            color(C_RED)  print("    could not create 'boots'")
+            color(C_GREY)  return 0
+        }
+
+        poke32(DISK_SCRATCH, 0)
+        fs_rd(bi, DISK_SCRATCH, 4)
+        bootn = peek32(DISK_SCRATCH) + 1
+        poke32(DISK_SCRATCH, bootn)
+        if fs_wr(bi, DISK_SCRATCH, 4) == 0 {
+            color(C_RED)  print("    could not write 'boots'")
+            color(C_GREY)  return 0
+        }
+        color(C_GREEN)
+        put("    BOOTCOUNT=")  print(bootn)
+        color(C_GREY)
+        print("    that number came off the disk, not out of memory")
+        return 0
+    }
+    # , - list what is on the disk, by NAME
+    if cmd == 44 {
+        color(C_CYAN)  print("  zlfs")
+        color(C_GREY)
+        if fs_ok() == 0 {
+            print("    no volume mounted - press . first")
+            return 0
+        }
+        lsi = 0
+        while lsi < fs_max() {
+            if fs_inuse(lsi) == 1 {
+                put("    ")
+                lsc = 0
+                while lsc < 24 {
+                    lsb = fs_ch(lsi, lsc)
+                    if lsb > 0 { emit(lsb) }
+                    lsc = lsc + 1
+                }
+                put("  ")  put(fs_bytes(lsi))  put(" bytes at LBA ")
+                print(fs_lba(lsi))
+            }
+            lsi = lsi + 1
+        }
+        put("    ")  put(fs_n())  put(" file(s), ")
+        put(fs_free())  print(" blocks free")
         return 0
     }
     if cmd == 122 {                       # z - the processor, read from itself
