@@ -110,9 +110,24 @@ int settings_anim(void)     { return S.anim; }
  */
 void settings_apply(void)
 {
-    if (S.scale < 1) S.scale = 1;
-    if (S.accent < 0) S.accent = 0;
-    if (S.accent >= N_ACCENT) S.accent = N_ACCENT - 1;
+    /* THE ONLY CLAMP. It lives here because this is the funnel every path goes
+     * through - the widgets, the loader, and anything added later - and it is
+     * the last thing before ui_theme_init actually uses the value.
+     *
+     * It used to clamp scale from BELOW ONLY, with a literal 1, while
+     * settings_load clamped both ways with the named constants. Two clamps that
+     * disagree is the same defect as the 1..4-versus-1..3 mismatch fixed
+     * earlier, surviving in a second place - so settings_load's copy is gone
+     * and this one is exhaustive. */
+    if (S.scale  < SCALE_MIN)   S.scale  = SCALE_MIN;
+    if (S.scale  > SCALE_MAX)   S.scale  = SCALE_MAX;
+    if (S.speed  < SPD_MIN_PCT) S.speed  = SPD_MIN_PCT;
+    if (S.speed  > SPD_MAX_PCT) S.speed  = SPD_MAX_PCT;
+    if (S.accent < 0)           S.accent = 0;
+    if (S.accent >= N_ACCENT)   S.accent = N_ACCENT - 1;
+    S.accel    = S.accel    ? 1 : 0;
+    S.subpixel = S.subpixel ? 1 : 0;
+    S.anim     = S.anim     ? 1 : 0;
 
     ui_theme_init(S.scale);                 /* wipes the accent... */
     struct ui_theme t = *ui_theme();
@@ -503,15 +518,13 @@ int settings_load(void)
     S.accent   = (int)get32(rec + 12);
     S.scale    = (int)get32(rec + 16);
     S.speed    = (int)get32(rec + 20);
-    S.accel    = get32(rec + 24) ? 1 : 0;
-    S.subpixel = get32(rec + 28) ? 1 : 0;
-    S.anim     = get32(rec + 32) ? 1 : 0;
-    if (S.scale < SCALE_MIN) S.scale = SCALE_MIN;
-    if (S.scale > SCALE_MAX) S.scale = SCALE_MAX;
-    if (S.speed < SPD_MIN_PCT) S.speed = SPD_MIN_PCT;
-    if (S.speed > SPD_MAX_PCT) S.speed = SPD_MAX_PCT;
-    if (S.accent < 0 || S.accent >= N_ACCENT) S.accent = 0;
+    S.accel    = (int)get32(rec + 24);
+    S.subpixel = (int)get32(rec + 28);
+    S.anim     = (int)get32(rec + 32);
 
+    /* No clamping here on purpose - settings_apply is the one clamp, and it
+     * runs on the next line. A second copy is a second thing to keep in step,
+     * and keeping it in step is exactly what failed last time. */
     settings_apply();
     return 1;
 }
