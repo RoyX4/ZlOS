@@ -11,16 +11,70 @@
 
 typedef enum { V_NIL, V_NUM, V_STR, V_BOOL, V_LIST, V_FN } ValueType;
 
+/* ===========================================================================
+ * THE ITEMS ARRAY CARRIES ITS OWN HEADER.
+ *
+ * `cap` and `tip` used to be fields of Value. They are not properties of a
+ * VALUE, they are properties of the ARRAY - and push() depends on exactly
+ * that. Its tip tracking splits a list's state in two:
+ *
+ *     nitems              PER VALUE   how much of the array this value sees
+ *     items, cap, tip     SHARED      the array, and its high-water mark
+ *
+ * Two values that alias one array must agree about cap and tip, or a push
+ * branched off an older version appends into a slot the newer one is already
+ * using. That was a real use-after-free here once; runtime.c's comment above
+ * push() has the history.
+ *
+ * Keeping cap and tip inside Value made the sharing a convention that every
+ * copy had to preserve by hand. Putting them in front of the array makes it
+ * STRUCTURAL - there is one copy, at a fixed offset before items[0], and
+ * every value pointing at that array reaches the same one. It also drops the
+ * separate malloc that `int *tip` needed.
+ *
+ * SAFE ONLY BECAUSE THE ARRAY NEVER MOVES UNDER AN ALIAS. push() never
+ * reallocs: its fast path appends inside existing capacity, and its slow path
+ * allocates a FRESH array and copies. The one realloc in the runtime
+ * (list_push_str) runs on a list still under construction, before any other
+ * value can point at it.
+ * ========================================================================= */
+typedef struct { int cap; int tip; } ZlArrHdr;
+
+/* 8 bytes, so items[0] keeps the pointer alignment malloc already gave us -
+ * on 32-bit (the kernel builds -m32) and 64-bit alike. */
+#define ZL_ARR_HDR   ((int)sizeof(ZlArrHdr))
+#define zl_arr_hdr(items)  ((ZlArrHdr *)((char *)(items) - ZL_ARR_HDR))
+
+/* SIXTEEN BYTES, and the two unions are why.
+ *
+ * `type` stays first - zl_nil() memsets the whole struct and several places
+ * switch on type before touching anything else.
+ *
+ * The unions are ANONYMOUS on purpose: every existing `v.num`, `v.str`,
+ * `v.items`, `v.fnptr`, `v.nitems` and `v.fnargs` in the runtime keeps
+ * compiling unchanged, so shrinking the struct did not become a rename of
+ * several thousand field accesses. The pairs are disjoint by type, so no
+ * value ever needs two members of one union at once:
+ *
+ *     nitems  V_LIST      fnargs  V_FN
+ *     num     V_NUM/BOOL  str     V_STR   items  V_LIST   fnptr  V_FN
+ *
+ * THE COST OF THAT CONVENIENCE: reading a member that is not the active one
+ * is now garbage rather than a zero. Every read must be guarded by `type`.
+ * The runtime already switches on type first everywhere; that is no longer a
+ * style preference. */
 typedef struct Value {
-    ValueType      type;
-    double         num;      /* V_NUM, and V_BOOL (0/1) */
-    char          *str;      /* V_STR                   */
-    struct Value **items;    /* V_LIST                  */
-    int            nitems;
-    int            cap;      /* V_LIST spare capacity (amortized push)  */
-    int           *tip;      /* V_LIST slots handed out - see zl push() */
-    void          *fnptr;    /* V_FN - the compiled zl_fn_NAME function  */
-    int            fnargs;   /* V_FN - how many Value params it takes    */
+    ValueType type;
+    union {
+        int    nitems;       /* V_LIST                                   */
+        int    fnargs;       /* V_FN - how many Value params it takes    */
+    };
+    union {
+        double         num;   /* V_NUM, and V_BOOL (0/1)                 */
+        char          *str;   /* V_STR                                   */
+        struct Value **items; /* V_LIST - see ZlArrHdr above             */
+        void          *fnptr; /* V_FN - the compiled zl_fn_NAME function */
+    };
 } Value;
 
 /* making values */
