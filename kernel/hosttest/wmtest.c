@@ -419,6 +419,59 @@ int main(void)
     ui_slider(&v, 0, 100);
     ok("a toggle flips only when it is the thing hit", on == 0 || on == 1);
 
+    /* A SLIDER MUST BE ABLE TO REACH BOTH ENDS.
+     *
+     * It used to divide the track into (hi - lo) buckets for (hi - lo + 1)
+     * values, so the maximum was only selectable at exactly one pixel PAST the
+     * track's last pixel - i.e. never - and the `t > hi` clamp was dead code.
+     * A three-value slider could only ever produce two of them.
+     *
+     * Found by driving the Settings app's scale slider (1..3) from a harness
+     * and watching it refuse to reach 3. Both ends and the middle, on a small
+     * range where an off-by-one cannot hide in rounding. */
+    {
+        /* ui_begin insets the content box by theme.pad on every side, so the
+         * track starts at pad and the probe has to be INSIDE the first row
+         * vertically or nothing is hit at all. Taken from the theme rather
+         * than written out, so this keeps working at any scale. */
+        int px0 = th->pad, py0 = th->pad + th->row_h / 2;
+        int trackw = 300 - 2 * th->pad;
+        int s;
+
+        s = 2;
+        ui_begin(0, 0, 300, 400, UI_HITTEST, px0, py0, 1);
+        ui_slider(&s, 1, 3);
+        ok("a slider's LOW end is reachable", s == 1);
+
+        s = 2;
+        ui_begin(0, 0, 300, 400, UI_HITTEST, px0 + trackw - 1, py0, 1);
+        ui_slider(&s, 1, 3);
+        ok("...and so is its HIGH end", s == 3);
+
+        s = 1;
+        ui_begin(0, 0, 300, 400, UI_HITTEST, px0 + trackw / 2, py0, 1);
+        ui_slider(&s, 1, 3);
+        ok("...and the middle selects the middle", s == 2);
+
+        /* Outside the track, nothing happens - because ui.c's fire() requires
+         * a hit before it will report a widget as fired.
+         *
+         * That is worth pinning down, because ui.c's comment on this widget
+         * says the opposite: "once pressed it must keep tracking after the
+         * pointer leaves its rectangle, which only works because the window
+         * that owns the grab keeps receiving the events". wm.c's grab does
+         * keep delivering the events - that half is true and asserted above -
+         * but ui_slider drops them, so dragging a slider and straying a few
+         * pixels above it stops the drag dead. Logged against ui.c rather than
+         * changed here: giving a widget grab semantics needs identity that
+         * survives between frames, which is a real change to the toolkit and
+         * belongs with whoever owns it. */
+        s = 1;
+        ui_begin(0, 0, 300, 400, UI_HITTEST, px0 + trackw + 50, py0, 1);
+        ui_slider(&s, 1, 3);
+        ok("...and a click outside the track does not move it", s == 1);
+    }
+
     /* ------------------------------------------------------------ animation
      * Four frames of growth, then settled. The properties that matter are not
      * "it moves" but: it ENDS, it ends at exactly the requested geometry, and

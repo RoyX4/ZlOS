@@ -74,11 +74,12 @@ gcc $CFLAGS -c term.c -o _term.o
 gcc $CFLAGS -c wm.c -o _wm.o
 gcc $CFLAGS -c ui.c -o _ui.o
 gcc $CFLAGS -c wmglue.c -o _wmglue.o
+gcc $CFLAGS -c settings.c -o _settings.o
 gcc $CFLAGS -c smp_trampoline.S -o _smptr.o
 gcc -m32 -c raw_entry.S -o _rawentry.o
 
 ld -m elf_i386 -T link-raw.ld -o kernel_raw.elf \
-   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o
+   _rawentry.o _gen.o _rt.o _support.o _vga.o _fb.o _fb3d.o _font.o _fontaa.o _fontsub.o _icons.o _pci.o _bga.o _intel.o _xhci.o _console.o _divmod.o _gdt.o _idt.o _apic.o _vgpu.o _cpu.o _nvme.o _sched.o _smp.o _smptr.o _i2c.o _input.o _term.o _wm.o _ui.o _wmglue.o _settings.o
 objcopy -O binary kernel_raw.elf kernel_raw.bin
 
 nasm -f bin raw_boot.asm -o raw_boot.bin

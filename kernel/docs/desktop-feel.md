@@ -347,3 +347,114 @@ source of T-13. So the seam is provided rather than crossed:
 `input_ptr_x()` / `input_ptr_y()` return the accelerated position and are what
 anything asking "where is the pointer" should call. Unifying the builtins onto
 them is a one-line change per call site once T-13 closes.
+
+---
+
+## Item 3 — a Settings app that actually changes things
+
+### What was wrong
+
+FEEL-PROMPT finding 0.3: runtime customisation was **one function call away and
+unused**. `ui_theme_set()` already existed. Every colour and metric was already
+data in a struct on a 4/8/12/16/24 scale. `fb_set_subpixel()` existed and
+nothing exposed it. So this was never a feature to build — it was a feature to
+*expose*.
+
+Same for the toolkit. `ui_toggle`, `ui_slider`, `ui_label`, `ui_sep` were built
+and asserted and **nothing used them**: grepping `ui_begin` outside `ui.c` finds
+only `hosttest`. Nothing in the kernel or `wm.c` ever ran a `UI_HITTEST` pass
+either, so the widget layer had no event path at all.
+
+### Why it is C and not `kernel.zl`
+
+FEEL-PROMPT §2 offers the Settings app's `app_draw` branch in `kernel.zl`, and
+that is the natural home — policy belongs in zl. It is not reachable: **zl
+exposes no natives for `ui_*` at all**, so a zl Settings app needs ~15 new
+builtins in `runtime_kernel.c` first, and `runtime_kernel.c` is the display
+session's file and the source of T-13. In C it works and is gateable today, and
+moving it later is a translation rather than a redesign because the widget calls
+map one to one.
+
+It is dispatched from `wmglue.c`, which is already *"deliberately the ONLY
+place"* that crosses between the compositor and an app. `wm_bind_zl`'s control
+flow is untouched, because the boot transcript is ungateable under T-13 and
+`verify.sh` demands it be byte-identical.
+
+`settings.c` is added to all four kernel build scripts, which is what §1.4 asks
+for when a new `.c` is genuinely needed.
+
+### The one widget sequence
+
+`build_ui()` emits the controls once and **both passes call it**. An
+immediate-mode toolkit identifies a widget by its order, so a draw pass and a
+hit-test pass that emit different sequences hit-test the wrong control — and
+they drift the moment someone edits one and not the other.
+
+Draw passes always pass `click = 0`. `ui.c`'s `fire()` is level-triggered on
+`L.click` and `ui_toggle` flips its variable inside `fire()`, so a control
+visited twice with the button down toggles twice and nothing appears to happen.
+
+### Gate — the stated one
+
+*"a `wmshot`-style render at two accent colours and two scales from the same
+binary, side by side."*
+
+Four renders from one process, with nothing between them but **clicks on the
+Settings window's own controls** — no direct calls into `settings.c`. If the
+routing were wrong the images would be identical, which is the failure the gate
+is for.
+
+```
+Ice / scale 2      accent=0 scale=2  ok
+Amber / scale 2    accent=2 scale=2  ok
+Ice / scale 1      accent=0 scale=1  ok
+Amber / scale 1    accent=2 scale=1  ok
+all four variants set by clicking the app's own controls
+```
+
+Looked at as a 2×2 sheet: the accent drives the sliders, the toggles and the
+title-bar underline; the scale drives every metric — title bar height, row
+height, font size, padding — and at scale 1 the accent buttons fit on one row
+where at scale 2 they wrap to two, which is `ui_row()`'s wrap doing its job.
+
+`inputtest`, `wmtest` and `tritest` all green. `settings.c` compiles clean with
+`-Wall -Wextra` under both the 32-bit and 64-bit kernel flag sets.
+
+### Three bugs the gate found
+
+**1. `ui_slider` could never reach its maximum.** `t = (px-x)*(hi-lo)/w + lo`
+divides the track into `hi-lo` buckets for `hi-lo+1` values, so the top value
+was selectable only at exactly one pixel *past* the track's last pixel — and
+the `t > hi` clamp was dead code. A 1..3 scale slider could only ever produce 1
+or 2. Found by watching the harness refuse to reach scale 3. Every slider in the
+toolkit had it, so pointer speed could not reach 400 either. Fixed to
+`hi - lo + 1`, with four new `wmtest` assertions; the HIGH-end one fails on the
+old expression.
+
+**2. The panel's content silently overflowed its window.** `ui.c`'s `place()`
+advances a cursor and never reports running out of room, so a widget past the
+bottom of the client area is still laid out, still counted for widget identity,
+and simply drawn outside the scissor — invisible *and* unclickable, with nothing
+saying so. The first draft was ~995 px of content in a 642 px client at scale 2:
+everything from "Interface scale" down was unreachable, and it looked like a
+Settings window with two controls. The layout is compacted (accents as a button
+row, 112 px instead of 368); the silent overflow itself is logged against `ui.c`.
+
+**3. `ui_slider` does not track outside its own rectangle**, contrary to its own
+comment — which says *"once pressed it must keep tracking after the pointer
+leaves its rectangle, which only works because the window that owns the grab
+keeps receiving the events"*. `wm.c`'s grab does keep delivering the events and
+that half is asserted; `ui_slider` drops them, because `fire()` requires a hit.
+So straying a few pixels above a slider mid-drag stops the drag dead. Asserted
+as the behaviour it actually has and logged, rather than changed here: giving a
+widget grab semantics needs identity that survives between frames, which is a
+real change to the toolkit.
+
+### A note the harness earned
+
+Driving this by absolute pointer position does not work while acceleration is
+on — `settings_apply()` turns it on, and any sweep inevitably clicks the
+acceleration toggle and the speed slider too, after which the pointer overshoots
+by up to 3× and slams into the clamp. The harness re-pins the gain to the
+identity between clicks. That is the app working correctly, not a defect, and it
+is the same lesson `wmtest` learned in Item 2.

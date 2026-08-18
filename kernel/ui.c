@@ -244,7 +244,24 @@ int ui_slider(int *v, int lo, int hi)
     int fired = fire(x, y, w, h);
     if (hi <= lo) hi = lo + 1;
     if (fired) {
-        int t = (L.px - x) * (hi - lo) / (w ? w : 1) + lo;
+        /* THE SPAN IS THE NUMBER OF VALUES, NOT THE GAP BETWEEN THE ENDS.
+         *
+         * This was (hi - lo), which divides the track into (hi - lo) buckets
+         * for (hi - lo + 1) values - so the last value is only reachable at
+         * px == x + w exactly, one pixel PAST the track's last pixel. The
+         * maximum could not be selected at all, and both clamps below were
+         * dead code because the expression could never exceed hi.
+         *
+         * Found by driving the Settings app's own scale slider (1..3) from a
+         * harness: clicking the rightmost pixel of a 388 px track gave
+         * 387*2/388 + 1 = 2. Every slider in the toolkit had it, so pointer
+         * speed could not reach 400 either.
+         *
+         * With (hi - lo + 1) the track divides into equal buckets per value,
+         * the last pixel selects hi, and the clamp catches the genuine
+         * px == x + w case that a pointer grab can produce mid-drag. */
+        int span = hi - lo + 1;
+        int t = (L.px - x) * span / (w ? w : 1) + lo;
         if (t < lo) t = lo;
         if (t > hi) t = hi;
         *v = t;

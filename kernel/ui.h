@@ -124,6 +124,21 @@ int  wm_at(int x, int y);                     /* topmost window containing    */
 int  wm_zorder_at(int i);                     /* i-th from the BACK           */
 void wm_stop(void);                           /* 'q': ask the loop to end     */
 int  wm_running(void);
+void wm_set_anim(int on);                     /* window open animation on/off */
+int  wm_anim(void);
+
+/* ---- settings.c -------------------------------------------------------------
+ * The Settings app. Signatures match app_draw_fn / app_event_fn above, so it
+ * can be handed to wm_hooks or dispatched to from wmglue.c. */
+void settings_draw(int app, int x, int y, int w, int h, int focused);
+int  settings_event(int app, int win, int type, int code, int x, int y);
+void settings_apply(void);       /* push every setting to its sink */
+int  settings_accent(void);
+int  settings_scale(void);
+int  settings_speed(void);
+int  settings_accel(void);
+int  settings_subpixel(void);
+int  settings_anim(void);
 
 /* ---- ui.c ---------------------------------------------------------------- */
 #define UI_DRAW     0

@@ -48,9 +48,25 @@ extern Value zl_fn_app_tick(Value, Value) __attribute__((weak));
 /* fn desk_draw(x, y, w, h) - wallpaper, header bar, dock */
 extern Value zl_fn_desk_draw(Value, Value, Value, Value) __attribute__((weak));
 
+/* ---- apps that live in C --------------------------------------------------
+ * Settings is written in C rather than zl for a reason that is not preference:
+ * zl exposes no natives for ui_* at all, so a zl Settings app needs ~15 new
+ * builtins in runtime_kernel.c before it can draw a single toggle. See the
+ * header of settings.c.
+ *
+ * It is dispatched HERE because this file is already "deliberately the ONLY
+ * place" that crosses between the compositor and an app. A second dispatch
+ * point in wm.c would make the layering a suggestion again.
+ *
+ * The id continues kernel.zl's sequence (APP_SHELL 0, APP_MONITOR 1,
+ * APP_ABOUT 2), so zl and C apps share one namespace and a collision is a
+ * compile-time constant to look at, not a run-time mystery. */
+#define APP_SETTINGS 3
+
 /* ---- the shims ------------------------------------------------------------ */
 static void glue_draw(int app, int x, int y, int w, int h, int focused)
 {
+    if (app == APP_SETTINGS) { settings_draw(app, x, y, w, h, focused); return; }
     if (!zl_fn_app_draw) return;
     zl_fn_app_draw(zl_num(app), zl_num(x), zl_num(y),
                    zl_num(w), zl_num(h), zl_num(focused));
@@ -58,6 +74,7 @@ static void glue_draw(int app, int x, int y, int w, int h, int focused)
 
 static int glue_event(int app, int win, int type, int code, int x, int y)
 {
+    if (app == APP_SETTINGS) return settings_event(app, win, type, code, x, y);
     if (!zl_fn_app_event) return 0;
     Value r = zl_fn_app_event(zl_num(app), zl_num(win), zl_num(type),
                               zl_num(code), zl_num(x), zl_num(y));
@@ -85,8 +102,12 @@ static void glue_desk(int x, int y, int w, int h)
 int wm_bind_zl(void)
 {
     if (!zl_fn_app_draw) return 0;       /* nothing to composite yet */
+    /* glue_event goes in UNCONDITIONALLY now: it dispatches Settings before it
+     * looks at zl, so gating it on zl_fn_app_event would leave the C app
+     * drawable but dead. It still returns 0 for a zl app when zl defines no
+     * app_event, exactly as the conditional did. */
     wm_hooks(glue_draw,
-             zl_fn_app_event ? glue_event : 0,
+             glue_event,
              zl_fn_app_tick  ? glue_tick  : 0,
              zl_fn_desk_draw ? glue_desk  : 0);
     return 1;

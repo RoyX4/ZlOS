@@ -224,6 +224,15 @@ void wm_damage_win(int win)
  */
 #define ANIM_FRAMES 4
 
+/* ...and a switch, because Settings exposes one. ANIM_FRAMES stays a constant
+ * - this is not "how long" but "at all", and a zero-length animation is the
+ * honest way to say off: anim_pct and anim_rect keep working unchanged and
+ * every window is simply born settled. Making ANIM_FRAMES itself variable
+ * would put a run-time value in the `steps` array bound. */
+static int anim_on = 1;
+void wm_set_anim(int on) { anim_on = on ? 1 : 0; }
+int  wm_anim(void)       { return anim_on; }
+
 /* how big window `win` should be DRAWN this frame, as a percentage */
 static int anim_pct(int win)
 {
@@ -385,7 +394,7 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         wins[i].flags = WF_OPEN;
         wins[i].min_w = 8 * fb_cell_w();
         wins[i].min_h = 4 * fb_cell_h();
-        wins[i].anim = ANIM_FRAMES;
+        wins[i].anim = anim_on ? ANIM_FRAMES : 0;
         wins[i].ntab = 1;
         wins[i].tab = 0;
         wins[i].tab_app[0] = app;
