@@ -355,6 +355,79 @@ Other sessions are editing this same checkout — a commit from another one
 landed between the two above. A half-applied `runtime.h` change breaks
 everyone's build, so this one does not get done in place.
 
+### 10.5 Stage 2 — done, on `lang/value-16`, **deliberately not merged**
+
+`d004ca9` in the worktree `~/Documents/repos/zl-value16`. **`sizeof(Value)` is
+16, down from 64.**
+
+**Measured, interleaved A/B of the two whole checkouts (`bench/abtree.sh`),
+best of 7, on top of Stage 1:**
+
+| | 64-byte | 16-byte | |
+|---|---|---|---|
+| `b2_arith` | 554 ms | **354 ms** | **1.56x** |
+| `b4_list` | 287 ms | **162 ms** | **1.77x** |
+| `b5_string` | 158 ms | 139 ms | 1.14x |
+
+The plan estimated **1.5–2x** here and this one lands inside the band — unlike
+Stage 1, which came in under. **Both stages together, against the original
+baseline: 1.58x on arithmetic, 1.85x on lists.**
+
+**Two changes, and the second is what makes the first safe.**
+
+1. **The payload becomes two anonymous unions** — `nitems`/`fnargs`, and
+   `num`/`str`/`items`/`fnptr`. *Anonymous* so every existing `v.num`,
+   `v.str`, `v.items`, `v.nitems` and `v.fnargs` keeps compiling: shrinking
+   the struct did not become a rename of several thousand field accesses. The
+   pairs are disjoint by type, so no value needs two members of one union at
+   once. **The cost:** reading an inactive member is now garbage rather than a
+   zero, so every read must be guarded by `type`. The runtime already switched
+   on type first everywhere; that stopped being a style preference.
+
+2. **`cap` and `tip` move out of `Value` and in front of the items array.**
+   They were never properties of a *value* — they are properties of the
+   *array*, and §10.3's tip tracking depends on two aliasing values agreeing
+   about them. An 8-byte header at a fixed offset before `items[0]` makes that
+   sharing **structural** instead of a convention every copy has to preserve
+   by hand, and it drops the separate `malloc` that `int *tip` needed.
+
+   Safe only because **the array never moves under an alias**: `push` never
+   reallocs, and the runtime's one `realloc` runs on a list still under
+   construction. Every non-push allocation passes `tip = -1`, which is exactly
+   what `tip == NULL` used to mean.
+
+**Gates:** `run_tests.sh` ALL GREEN (40 ok) · `kernel/verify.sh` boots and
+matches `golden.txt` · **ASan + UBSan** with leaks off: `test_list_aliasing`
+26/26, `test_lists` 280/280, no heap-buffer-overflow, no use-after-free, no UB.
+
+The sanitizer run is the one that counts. The header is pointer arithmetic on
+either side of an allocation, in the same code that carried a real
+use-after-free once.
+
+### 10.6 Why it is not merged — and a problem worth fixing first
+
+**The kernel gates could not run against the committed tree, because HEAD does
+not build a kernel at all.**
+
+| | |
+|---|---|
+| `kernel/keycodes.h` | **untracked** |
+| `kernel/crypto.c` | **untracked** — and it is in `build.sh`'s source list |
+| 12 kernel/freestanding sources | interdependent **uncommitted** changes |
+
+A fresh clone of this repo cannot build zlOS. The two untracked `.c`/`.h` files
+are real source, not build output, and they exist only in one working
+directory on one machine — a `git clean` or a disk failure loses them.
+
+The Stage 2 boot gate above ran with those files copied in and the change
+re-applied on top, so it proves the layout is compatible with **the tree as it
+stands today**, not with the committed tree. That is why the branch stays
+unmerged: the gate has to be repeatable before the result means anything.
+
+**First action for whoever picks this up: commit `kernel/keycodes.h` and
+`kernel/crypto.c`.** Then re-run `kernel/verify.sh`, `verify-raw.sh`,
+`verify-efi.sh` and `verify-iso.sh` on `lang/value-16` and merge.
+
 ---
 
 Language plan: [`PLAN_unboxing.md`](PLAN_unboxing.md) · Type syntax:
