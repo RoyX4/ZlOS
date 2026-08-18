@@ -43,8 +43,24 @@ LOG=$(mktemp)
 # that fails because the host was busy costs a bisect every time it lies
 # (kernel/CLAUDE.md).
 CEILING=180
+
+# KVM when the box has it, TCG when it does not. This gate is the one that most
+# needs to run somewhere other than Roy's laptop - it is the only check on the
+# path real hardware takes - and a CI runner has no /dev/kvm, where `-accel kvm`
+# fails to start QEMU at all and reports as "the kernel never started".
+#
+# `-cpu host` is meaningless without KVM, so it moves with the accelerator.
+# TCG is several times slower; that is safe here only because the loop below
+# polls for the marker instead of racing a fixed clock.
+if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+    ACCEL=(-cpu host -accel kvm)
+else
+    echo "  note  no /dev/kvm - falling back to TCG (slower, still correct)"
+    ACCEL=(-cpu max -accel tcg)
+fi
+
 timeout "$CEILING" qemu-system-x86_64 \
-    -m 1G -smp 2 -cpu host -accel kvm \
+    -m 1G -smp 2 "${ACCEL[@]}" \
     -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
     -drive if=pflash,format=raw,unit=1,file="$VARS" \
     -device qemu-xhci,id=xhci \
