@@ -260,3 +260,102 @@ already cost one session three consecutive wrong diagnoses.
 
 Every other hard part has a mechanical backstop. This one has a person reading
 carefully.
+
+
+---
+
+## Outcome (2026-08-19)
+
+**All eleven tracks are on `main`.** 104 → 214 commits, pushed as a
+fast-forward. Gate green in one uninterrupted pass: toolchain, kernel 32/64/EFI,
+SOURCES coverage, hosttest build, reverse-SOURCES sweep, `mkiso`, and every boot
+gate — `verify.sh`, `verify-iso.sh`, `verify-efi.sh`, `verify-raw.sh`,
+`verify-disk.sh`, `verify-clock.sh`. 26 harnesses pass, 0 fail.
+
+Landing order, and what each cost:
+
+| # | Track | Conflicts |
+|---|---|---|
+| 1 | `claude/amazing-robinson` | clean |
+| 2 | **the 33-commit spine** (`d61a481`) | clean — and it collapsed everything else |
+| 3 | `desktop/overnight-compositor` | clean |
+| 4 | `lang/value-16` | clean |
+| 5 | `fix/dma-map-hid-arena` | clean |
+| 6 | `claude/quirky-pare` | 1 file |
+| 7 | `desktop/browser` | 2 files |
+| 8 | `claude/ecstatic-lewin` | 5 files |
+| 9 | `desktop/feel-and-control` | 13 files |
+| 10 | `desktop/exec-track` (carries `system-track`) | 14 files |
+| 11 | `desktop/apps-in-windows` | **47 hunks** |
+
+**Landing the spine first is the single decision that mattered.** Before it,
+sequential merging measured 163–190 conflicted-file events. After it, five
+tracks merged with zero conflicts. The 163 was measured against a `main` that
+was missing 33 commits every branch already had.
+
+Trunk-first also beat build-model-first: landing `apps-in-windows` early (per
+this document's own earlier reasoning about `SOURCES`) converted five clean
+merges into conflicts and was rolled back.
+
+### The landmines, and which were real
+
+Every silent-collision class predicted in §2 occurred. Counted:
+
+- **Eight app-id collisions.** `APP_SNAKE`/`APP_BROWSER`, `APP_SNAKE`/`APP_SETTINGS`
+  (in `wmglue.c`, whose own comment says zl and C apps share one namespace),
+  `APP_SNAKE`/`APP_RUN`, and four at once from apps. Every one silent: two arms
+  of one dispatch matching the same id, the second unreachable.
+- **Two snakes**, resolved — `sn_*` kept, apps's `snake_*` (104 lines) deleted.
+- **`wm_focus` meant opposite things** on `main` and `exec-track`: getter here,
+  setter there. A one-argument call to a zero-argument builtin, in a language
+  with no arity check.
+- **`console_mute` vs `console_quiet`** across three layers — two flags, *both*
+  builtins registered, `kernel.zl` calling both.
+- **The scroll wheel had to be taken as a unit**: the knock switches the device
+  to 4-byte packets while the reader framed on 3.
+- **`LINE_BUF`/`DISK_SCRATCH` at `0x02030000`** — predicted, and it did not fire,
+  because `quirky-pare` landed before `exec-track` and the address was set to
+  `0x02040000` at the exec landing.
+- **`HI_APSTK` was missing from `memmap.h`**, so `BACK_LIMIT` spanned 128–176 MiB
+  while `STACK_BASE` sits at 168 MiB. The framebuffer back buffer would have
+  grown over the stack of every application processor. Only `apps-in-windows`
+  had noticed. Now declared, with three `_Static_assert`s.
+
+### The class this document under-weighted
+
+Deletions that keep their callers. Not a conflict, not a duplicate — a merge
+takes one side's removal and the other side's use, and the result compiles or
+doesn't depending on luck:
+
+- `fb.c`'s entire band-parallel block (91 lines) removed, four call sites kept
+- `editor_key` given apps's signature over `main`'s body, calling a
+  `redraw_editor` apps had deleted
+- `verify-raw.sh` losing `OUT=$(mktemp)` while two uses remained, under `set -u`
+- apps's static-desktop mouse loop (182 lines) surviving into `main`'s text
+  shell, calling functions over globals that do not exist here
+
+### `kernel/check-zl-calls.sh`
+
+Written during the exec landing, because zl has no compile-time check that a
+call site resolves. It found one on its first run and it is **not merge
+damage**: `key()` has been called and defined nowhere on every branch since
+`b55f3f9`, on the panel-handover path immediately after *"press a key to move
+the console onto it"*. Tracked in the script's header rather than guessed at.
+
+### Two gate defects found by using them
+
+- **A gate that could not fail.** The first `land-gate.sh` piped every step
+  through `tail`, so `$?` was always `tail`'s. It reported green on a tree with
+  11 undefined references.
+- **A gate that assumed the other design.** `verify-iso.sh` (from apps) greps
+  for `compositor: [1-9]`. On apps that marker is emitted at boot because apps's
+  boot path *is* `wm_session()`; here `wm_boot_start()` opens the windows and
+  `wm_session()` is only the `w` command. Neither branch could catch this alone.
+
+### Still open
+
+- `key()` — see above. One line, needs someone who knows which builtin was meant.
+- `font_big.c`, `icons_rgb.c` — referenced by nothing at all.
+- The eight `prelanding/*` tags are the rollback points and are pushed. Three
+  extra worktrees (`zl-merge`, `zl-apps-merge`, and the six `claude/*`) can be
+  pruned once the tree has been used for a while.
