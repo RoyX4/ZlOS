@@ -360,8 +360,8 @@ usb-mouse, so it drives a PS/2-only machine, and its header still claims
 ever had.
 
 The same file, built against `HEAD`'s `xhci.c` and `input.c` with a two-line
-shim for the names the pre-fix driver does not have, **fails 8 assertions**.
-Against the fix it passes 22 of 22. A test that did not fail first would not be
+shim for the names the pre-fix driver does not have, **fails 14 assertions**.
+Against the fix it passes 26 of 26. A test that did not fail first would not be
 evidence of anything.
 
 ## 8. What this does NOT establish
