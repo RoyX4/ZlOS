@@ -21,6 +21,7 @@
 #include "../ui.h"
 
 #define ANIM_SETTLE 5   /* four animation frames plus one to settle */
+#define MOD_SUPER   (1 << 5)
 
 /* ---- fb.c ---------------------------------------------------------------- */
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
@@ -84,7 +85,19 @@ int idt_mouse_x(void)   { return clampi(fake_x, W - 1); }
 int idt_mouse_y(void)   { return clampi(fake_y, H - 1); }
 int idt_mouse_btn(void) { return fake_btn; }
 unsigned int idt_ticks(void) { return fake_ticks; }
-int idt_scan(void)      { return 0; }
+/* A real scancode queue, so key tests go through input.c's actual decoder -
+ * modifiers, the 0xE0 extended prefix and all - rather than through a faked
+ * event. A Super+arrow chord that only works against invented events proves
+ * nothing about the one a keyboard sends. */
+static int scanq[64], scanh, scant;
+int idt_scan(void)
+{
+    if (scanh == scant) return 0;
+    int v = scanq[scanh];
+    scanh = (scanh + 1) % 64;
+    return v;
+}
+static void scan(int sc) { scanq[scant] = sc; scant = (scant + 1) % 64; }
 int xhci_key(void)      { return 0; }
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
 void zl_putc_pub(char c) { (void)c; }        /* fb.c's boot line: not wanted here */
@@ -157,6 +170,22 @@ static void frame(void) { fake_ticks++; wm_frame(); }
 static void pointer(int x, int y, int btn)
 {
     fake_x = x; fake_y = y; fake_btn = btn;
+    frame();
+}
+
+/* Press a navigation key, optionally with Super held, then let go of both.
+ * Scancode set 1: 0xE0 prefixes the extended keys, and release is the make
+ * code with bit 7 set. 0x5B is left Super; the arrows are 0x48/0x50/0x4B/0x4D
+ * for up/down/left/right. */
+static void send_key(int keycode, int mods)
+{
+    int sc = keycode == 0x112 ? 0x48 : keycode == 0x113 ? 0x50
+           : keycode == 0x110 ? 0x4B : 0x4D;
+    if (mods & MOD_SUPER) { scan(0xE0); scan(0x5B); }
+    scan(0xE0); scan(sc);
+    frame();
+    scan(0xE0); scan(sc | 0x80);
+    if (mods & MOD_SUPER) { scan(0xE0); scan(0xDB); }
     frame();
 }
 
@@ -777,6 +806,58 @@ int main(void)
        (last_event_code & MOUSE_DOUBLE) == 0);
     pointer(dx0 + 60, cy2, 0);
     wm_close(dw);
+    frame();
+
+    /* ---------------------------------------------------------- Super key */
+    /* MOD_SUPER has been tracked by input.c since it was written and used for
+     * NOTHING. Snapping is the binding worth spending it on: the one window
+     * operation that is painful with a pointer and trivial with a key. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    wm_damage(0, 0, W, H);
+    pointer(20, 20, 0);
+    frame();
+    int sn = wm_open(8, "snap", 300, 260, 440, 300);
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
+    wm_focus(sn);
+    int snx, sny, snw, snh;
+    wm_geometry(sn, &snx, &sny, &snw, &snh);
+
+    send_key(0x110, MOD_SUPER);                       /* Super+Left */
+    int gx, gy, gw, gh;
+    wm_geometry(sn, &gx, &gy, &gw, &gh);
+    ok("Super+Left snaps to the left half",
+       gx == 0 && gy == 0 && gw == W / 2 && gh == H);
+
+    send_key(0x111, MOD_SUPER);                       /* Super+Right */
+    wm_geometry(sn, &gx, &gy, &gw, &gh);
+    ok("Super+Right snaps to the right half",
+       gx == W / 2 && gy == 0 && gw == W - W / 2 && gh == H);
+
+    send_key(0x112, MOD_SUPER);                       /* Super+Up */
+    wm_geometry(sn, &gx, &gy, &gw, &gh);
+    ok("Super+Up maximises", gx == 0 && gy == 0 && gw == W && gh == H);
+
+    /* THE SAVED RECT MUST SURVIVE THREE SNAPS. Capturing it on every snap
+     * instead of only the first is the bug every naive version has: restore
+     * then returns you to the previous SNAP rather than to where you started. */
+    send_key(0x113, MOD_SUPER);                       /* Super+Down */
+    wm_geometry(sn, &gx, &gy, &gw, &gh);
+    ok("Super+Down restores the rect it had BEFORE the first snap",
+       gx == snx && gy == sny && gw == snw && gh == snh);
+
+    /* ...and restoring twice is not a second, different move */
+    send_key(0x113, MOD_SUPER);
+    wm_geometry(sn, &gx, &gy, &gw, &gh);
+    ok("...and a second restore does nothing",
+       gx == snx && gy == sny && gw == snw && gh == snh);
+
+    /* the arrows must do nothing WITHOUT Super, or they stop reaching apps */
+    last_event_app = -1;
+    send_key(0x110, 0);
+    wm_geometry(sn, &gx, &gy, &gw, &gh);
+    ok("a bare arrow key does not snap", gx == snx && gw == snw);
+    ok("...it reaches the app instead", last_event_app == 8);
+    wm_close(sn);
     frame();
 
     /* ---------------------------------------------------------- focus ring */

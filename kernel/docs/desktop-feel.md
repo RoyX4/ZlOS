@@ -748,7 +748,40 @@ first, and a flag that is not one-shot means holding Enter toggles the control o
 every repaint. Confirmed by eye too — the ring renders as a clean accent hairline
 around the focused slider and around nothing else.
 
-### 6.5 — the Super key: not done
+### 6.5 — the Super key snaps windows
 
-`MOD_SUPER` is tracked and used for nothing. Not started, listed rather than
-quietly dropped.
+`MOD_SUPER` had been tracked by `input.c` since it was written and used for
+**nothing**.
+
+Snapping is the binding worth spending it on: it is the one window operation
+that is genuinely painful with a pointer and trivial with a key, and it needs no
+launcher, no menu and no new policy in `kernel.zl` — only `wm_move` and
+`wm_resize`, which the grip and the double-click had already given callers.
+Super+Left/Right for the halves, Super+Up to maximise, Super+Down to restore.
+
+**One saved rect serves all of them, and `maxed` means "snapped somewhere",
+not "maximised".** Snapping left and then right must not overwrite the original
+geometry with the left half — capturing the saved rect on every snap instead of
+only the first is the bug every naive version of this has, and it makes restore
+return you to the *previous snap* rather than to where you started. The test
+snaps three times before restoring, for exactly that reason.
+
+**Gate** — seven new `wmtest` assertions:
+
+```
+  Super+Left snaps to the left half                        ok
+  Super+Right snaps to the right half                      ok
+  Super+Up maximises                                       ok
+  Super+Down restores the rect it had BEFORE the first snap ok
+  ...and a second restore does nothing                     ok
+  a bare arrow key does not snap                           ok
+  ...it reaches the app instead                            ok
+```
+
+The last two matter: arrows that stopped reaching apps would break every text
+field in the system, which is a much worse bug than no snapping.
+
+The harness grew a real **scancode queue** for this, so the chord goes through
+`input.c`'s actual decoder — the `0xE0` extended prefix, the modifier tracking,
+the release codes. A Super+arrow chord that only works against invented events
+proves nothing about the one a keyboard sends.

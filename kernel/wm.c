@@ -735,21 +735,53 @@ static int is_double(int win, int x, int y)
     return 0;
 }
 
-/* Fill the screen, or go back. wm_move and wm_resize each damage the old rect
- * and the new one, so this needs no damage of its own. */
-static void wm_toggle_max(int win)
+/* ---- snapping -------------------------------------------------------------
+ * Maximise, the two halves, and back again. wm_move and wm_resize each damage
+ * the old rect and the new one, so none of this needs damage of its own.
+ *
+ * ONE saved rect serves all of them. `maxed` means "this window is snapped
+ * somewhere and sav_* holds where it came from", not specifically "maximised" -
+ * so snapping left and then right does NOT overwrite the original geometry with
+ * the left half, and one restore always gets you back to where you started.
+ * That is the bug every naive version of this has: the saved rect is captured
+ * on every snap instead of only on the first. */
+#define SNAP_NONE   0
+#define SNAP_MAX    1
+#define SNAP_LEFT   2
+#define SNAP_RIGHT  3
+
+static void wm_snap(int win, int how)
 {
-    if (wins[win].maxed) {
+    if (!wm_is_open(win)) return;
+
+    if (how == SNAP_NONE) {
+        if (!wins[win].maxed) return;          /* nothing to go back to */
         wins[win].maxed = 0;
         wm_move(win, wins[win].sav_x, wins[win].sav_y);
         wm_resize(win, wins[win].sav_w, wins[win].sav_h);
         return;
     }
-    wins[win].sav_x = wins[win].x; wins[win].sav_y = wins[win].y;
-    wins[win].sav_w = wins[win].w; wins[win].sav_h = wins[win].h;
-    wins[win].maxed = 1;
-    wm_move(win, 0, 0);
-    wm_resize(win, (int)fb_pxw(), (int)fb_pxh());
+
+    if (!wins[win].maxed) {                    /* remember, ONCE */
+        wins[win].sav_x = wins[win].x; wins[win].sav_y = wins[win].y;
+        wins[win].sav_w = wins[win].w; wins[win].sav_h = wins[win].h;
+    }
+    wins[win].maxed = how;
+
+    int sw = (int)fb_pxw(), sh = (int)fb_pxh();
+    /* Move BEFORE resize when going left, resize before move when going right?
+     * No - wm_resize clamps to min_w/min_h and wm_move does not care, so the
+     * order cannot produce a rect neither call asked for. Move first, always,
+     * for one less thing to reason about. */
+    if (how == SNAP_MAX)   { wm_move(win, 0, 0);       wm_resize(win, sw, sh); }
+    if (how == SNAP_LEFT)  { wm_move(win, 0, 0);       wm_resize(win, sw / 2, sh); }
+    if (how == SNAP_RIGHT) { wm_move(win, sw / 2, 0);  wm_resize(win, sw - sw / 2, sh); }
+}
+
+/* the double-click gesture: maximise, or put it back */
+static void wm_toggle_max(int win)
+{
+    wm_snap(win, wins[win].maxed ? SNAP_NONE : SNAP_MAX);
 }
 
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
@@ -935,11 +967,31 @@ static void cycle_focus(void)
     wm_raise(win);
 }
 
+#define KEY_LEFT   0x110
+#define KEY_RIGHT  0x111
+#define KEY_UP     0x112
+#define KEY_DOWN   0x113
+
 static void route_key(int type, int code, int mods)
 {
     if (type == EV_KEY_DOWN && code == '\t' && (mods & MOD_ALT)) {
         cycle_focus();
         return;
+    }
+
+    /* SUPER + ARROWS SNAP THE FOCUSED WINDOW. MOD_SUPER has been tracked by
+     * input.c since it was written and used for NOTHING - FEEL-PROMPT item 6.5.
+     *
+     * Snapping is the binding worth spending it on: it is the one window
+     * operation that is genuinely painful with a pointer and trivial with a
+     * key, and it needs no launcher, no menu and no new policy in kernel.zl -
+     * only wm_move and wm_resize, which the grip and the double-click already
+     * gave callers. */
+    if (type == EV_KEY_DOWN && (mods & MOD_SUPER) && focus_win >= 0) {
+        if (code == KEY_LEFT)  { wm_snap(focus_win, SNAP_LEFT);  return; }
+        if (code == KEY_RIGHT) { wm_snap(focus_win, SNAP_RIGHT); return; }
+        if (code == KEY_UP)    { wm_snap(focus_win, SNAP_MAX);   return; }
+        if (code == KEY_DOWN)  { wm_snap(focus_win, SNAP_NONE);  return; }
     }
     /* Ctrl+W closes. Closing is the close box or Ctrl+W - NEVER "press any
      * key", which is the phrase this whole rewrite exists to delete. */
