@@ -1,0 +1,8 @@
+fn greet(name) { return "hello, " + name }
+fn area(w, h) { return w * h }
+fn describe(n) { return "n is " + str(n) }
+
+assert(greet("Zac") == "hello, Zac", "greet")
+assert(area(3, 4) == 12, "area")
+assert(describe(7) == "n is 7", "describe")
+print("01 ok")

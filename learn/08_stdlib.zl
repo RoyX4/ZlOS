@@ -1,0 +1,31 @@
+# 08 - using the stdlib
+# `import name` pulls in stdlib/name.zl. Paths resolve from the repo root,
+# so run this from the repo root: ./interp learn/08_stdlib.zl
+# Browse what's available: ls stdlib/  and  docs/REFERENCE.md
+
+import mathx
+import dict
+import sortx
+
+fn primes(n) {
+    # every prime <= n, using mathx's is_prime
+    return nil()
+}
+
+fn tally(words) {
+    # count occurrences into a dict. Note dset RETURNS the dict:
+    #   d = dset(d, key, value)
+    return nil()
+}
+
+fn top_word(words) {
+    # the most frequent word; ties broken by whichever came first
+    return nil()
+}
+
+assert(primes(20) == [2, 3, 5, 7, 11, 13, 17, 19], "primes")
+t = tally(["a", "b", "a"])
+assert(dget(t, "a") == 2 and dget(t, "b") == 1, "tally")
+assert(top_word(["x", "y", "y", "z"]) == "y", "top_word")
+assert(binary_search(sort([5, 1, 9, 3]), 5) == 2, "sortx binary_search")
+print("08 ok")

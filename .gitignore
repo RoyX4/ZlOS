@@ -3,6 +3,7 @@ compile
 nativegen
 lexer_demo
 parser_demo
+zlfmt
 native_out
 out.c
 *.o
@@ -47,3 +48,4 @@ kernel/hosttest/wmshot
 kernel/hosttest/tritest
 
 kernel/__pycache__/
+scratch.zl

@@ -27,22 +27,43 @@ COMMON=(
   -device qemu-xhci,id=xhci
   -device usb-storage,bus=xhci.0,drive=stick
   -device usb-kbd,bus=xhci.0
-  -device usb-mouse,bus=xhci.0
+  # usb-tablet: an ABSOLUTE pointer. The guest is told the position rather than
+  # a delta, so the cursor lands exactly where your hand is and nothing drifts.
+  -device usb-tablet,bus=xhci.0
+  # NO usb-mouse. zlOS drives the PS/2 mouse on IRQ12 (idt.c) and has no USB
+  # mouse driver at all - xhci.c does not contain the word. Attaching one makes
+  # QEMU route every pointer event to it instead of to the PS/2 mouse, so the
+  # cursor simply never moves and the whole pointer UI looks broken. Leaving it
+  # off gives the guest QEMU's default PS/2 mouse, which zlOS does drive - and
+  # that is also what the real laptop has, because the TrackPoint is PS/2
+  # (isa0060/serio1). The touchpad is I2C-HID and is a separate driver.
   -no-reboot
 )
+
+# No grab options needed. zlOS drives the usb-tablet above, and QEMU reports it
+# as "absolute": true - the guest is handed the position itself rather than a
+# delta to accumulate, so the guest cursor is physically incapable of drifting
+# away from the host one and the whole screen is always reachable. A relative
+# PS/2 mouse could only be made usable by grabbing the pointer.
 
 case "$MODE" in
 uefi)
   ./mkusb.sh >/dev/null
   VARS=$(mktemp /tmp/zlos-vars-XXXX.fd)
   cp /usr/share/OVMF/OVMF_VARS_4M.fd "$VARS"
+  # -vga std, NOT -vga none. OVMF publishes no GOP this kernel can use for a
+  # bare virtio-gpu-pci, so efi.c finds no framebuffer and falls back to a VGA
+  # text console - which does not exist under UEFI. The result is a black
+  # screen while the serial log looks perfectly healthy, and it reads as "zlOS
+  # cannot boot UEFI" when the truth is "this display device has no GOP".
+  # kernel/probe-uefi.py measures it: std VGA, VMware svga and virtio-vga work.
   echo "booting the UEFI image - the same path the real laptop takes"
   exec qemu-system-x86_64 "${COMMON[@]}" \
     -drive if=pflash,format=raw,unit=0,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
     -drive if=pflash,format=raw,unit=1,file="$VARS" \
     -drive format=raw,file=zlOS-usb.img,if=none,id=boot \
     -device usb-storage,bus=xhci.0,drive=boot \
-    -vga none -device virtio-gpu-pci,xres=1280,yres=800 \
+    -vga std -device virtio-gpu-pci,xres=1280,yres=800 \
     -display gtk -serial mon:stdio
   ;;
 serial)

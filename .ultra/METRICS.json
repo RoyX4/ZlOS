@@ -1,0 +1,44 @@
+{
+  "_comment": "Gate 2 checks against this. Every cycle either moves the primary metric or is a named prerequisite that unblocks it. PRIMARY IS UNSET pending T-4 — two lines of work run in this repo and only one can be tracked. Gate 2 cannot pass until Roy picks.",
+  "primary": {
+    "name": "",
+    "unit": "",
+    "baseline": null,
+    "current": null,
+    "target": null,
+    "direction": "up"
+  },
+  "_candidates": [
+    {
+      "line": "A - Intel display (kernel/HANDOFF.md says this is the point of the project)",
+      "name": "modeset stages verified on the real panel",
+      "unit": "stages",
+      "baseline": 1,
+      "current": 1,
+      "target": 2,
+      "direction": "up",
+      "note": "Stage 1 = the read-only survey: 18 passed, 0 failed, 2026-08-17. Stage 2 = a cold-start modeset lights the panel. Blocked on a free console, not on code."
+    },
+    {
+      "line": "B - the desktop (planned 2026-08-17, kernel/docs/desktop-plan.md)",
+      "name": "apps running non-blocking in a window",
+      "unit": "apps",
+      "baseline": 0,
+      "current": 0,
+      "target": 7,
+      "direction": "up",
+      "note": "snake_game, paint, cube_demo, anim, editor, mousedemo, windows_demo each own a while loop today. Converting one to app_draw/app_event/app_tick is the unit. Gated behind Phase 0 (T-1) and Phase 1 (T-2)."
+    }
+  ],
+  "secondary": [
+    {
+      "name": "open tensions",
+      "unit": "count",
+      "baseline": 4,
+      "current": 4,
+      "target": 0,
+      "direction": "down"
+    }
+  ],
+  "history": []
+}

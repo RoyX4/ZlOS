@@ -1,0 +1,32 @@
+# 07 - 2D grids (nested lists)
+# grid[y][x] = v works, including on nested lists.
+
+fn make_grid(w, h, v) {
+    # h rows of w copies of v. Careful: each row must be its own list.
+    return nil()
+}
+
+fn transpose(g) {
+    return nil()
+}
+
+fn neighbors(g, x, y) {
+    # count the 8 surrounding cells equal to 1, ignoring out-of-bounds
+    return nil()
+}
+
+fn life_step(g) {
+    # Conway: a live cell with 2 or 3 neighbors lives, a dead cell with
+    # exactly 3 is born, everything else dies.
+    return nil()
+}
+
+gr = make_grid(3, 2, 0)
+gr[0][1] = 1
+assert(gr == [[0, 1, 0], [0, 0, 0]], "make_grid + write one cell")
+assert(transpose([[1, 2, 3], [4, 5, 6]]) == [[1, 4], [2, 5], [3, 6]], "transpose")
+
+blinker = [[0, 0, 0], [1, 1, 1], [0, 0, 0]]
+assert(neighbors(blinker, 1, 0) == 3, "neighbors")
+assert(life_step(blinker) == [[0, 1, 0], [0, 1, 0], [0, 1, 0]], "life_step")
+print("07 ok")

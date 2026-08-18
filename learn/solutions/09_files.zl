@@ -1,0 +1,30 @@
+fn save_csv(path, rows) {
+    out = ""
+    for r in rows { out = out + join(r, ",") + "\n" }
+    write(path, out)
+    return path
+}
+fn load_csv(path) {
+    rows = []
+    for ln in lines(read(path)) {
+        if len(trim(ln)) > 0 { rows = push(rows, split(ln, ",")) }
+    }
+    return rows
+}
+fn column_sum(rows, i) {
+    total = 0
+    r = 1
+    while r < len(rows) {
+        total += num(rows[r][i])
+        r += 1
+    }
+    return total
+}
+
+path = "/tmp/zl_learn_09.csv"
+rows = [["name", "score"], ["ada", "90"], ["alan", "84"]]
+save_csv(path, rows)
+back = load_csv(path)
+assert(back == rows, "csv round trip")
+assert(column_sum(back, 1) == 174, "column_sum")
+print("09 ok")

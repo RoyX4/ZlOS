@@ -27,17 +27,25 @@ static unsigned long long gdt[3] __attribute__((aligned(16))) = {
     0x00AF92000000FFFFULL       /* 0x10: data, present, writable, ring 0 */
 };
 
+/* Same trap as idt.c: LGDT wants 2 bytes of limit and EIGHT of base, but
+ * `unsigned long` is only 4 bytes on the EFI build's clang target, making this
+ * 6 bytes and leaving the top half of the base to be read from adjacent
+ * memory. Explicitly sized, and asserted so it cannot regress quietly. */
 struct gdt_ptr {
-    unsigned short limit;
-    unsigned long  base;
+    unsigned short     limit;
+    unsigned long long base;
 } __attribute__((packed));
+_Static_assert(sizeof(struct gdt_ptr) == 10, "LGDT operand must be 10 bytes");
 
 static struct gdt_ptr gp;
 
 void gdt_init(void)
 {
     gp.limit = sizeof(gdt) - 1;
-    gp.base  = (unsigned long)&gdt;
+    /* The cast matters as much as the struct field did: `unsigned long` is 4
+     * bytes here, so this truncated the GDT base to 32 bits before widening it
+     * again. Harmless only while the image loads below 4 GiB. */
+    gp.base  = (unsigned long long)&gdt;
 
     /* Loading the GDT does not change CS - the CPU keeps using the descriptor
      * it already cached. In 32-bit mode you reload CS with a far jump; that
