@@ -91,21 +91,54 @@ extern int  idt_mouse_x(void);
 extern int  idt_mouse_y(void);
 extern int  idt_mouse_btn(void);
 extern unsigned idt_mouse_irqs(void);
-/* the USB pointer: absolute when it is a tablet, so it cannot drift */
-extern int xhci_ptr_ready(void);
-extern int xhci_ptr_abs(void);
-extern int xhci_ptr_x(void);
-extern int xhci_ptr_y(void);
-extern int xhci_ptr_btn(void);
-extern int xhci_ptr_poll(void);
-extern unsigned xhci_ptr_reports(void);
-extern unsigned xhci_ptr_events(void);
-extern int      xhci_ptr_lastcc(void);
-extern unsigned xhci_kbd_events(void);
-extern unsigned xhci_kbd_requeues(void);
-extern int      xhci_kbd_lastcc(void);
-extern int xhci_ptr_slot(void);
-extern int xhci_ptr_ep(void);
+/* ---- the USB pointer: absolute when it is a tablet, so it cannot drift -----
+ *
+ * THESE ARE WEAK ON PURPOSE, and it is the same trick wmglue.c uses for the
+ * app callbacks. Commit b19207d ("wip(usb,input)") landed these CALL SITES
+ * without the driver that defines them: `git log --all -S"int xhci_ptr_ready"`
+ * finds no commit on any branch, so the tree as committed does not link, and
+ * every gate in the project has been unrunnable since. The definitions exist,
+ * uncommitted, in the display session's working tree.
+ *
+ * Writing a second USB pointer driver here to fix the link would be the wrong
+ * repair twice over - it is someone else's work in flight, and xhci.c is the
+ * file they have open. A weak reference is NULL when nothing defines it, so
+ * the kernel links today, falls back to the PS/2 mouse that has always worked,
+ * and BINDS TO THE REAL DRIVER the moment that commit lands, with no change
+ * here. Nothing to remember, nothing to undo.
+ *
+ * The fallback ANNOUNCES ITSELF (see usb_ptr_ok below). A silent fallback is
+ * this repo's most expensive recurring bug - `intel_backlight_set` computed a
+ * max of 0 and quietly did nothing for months - and one that hides a missing
+ * driver would be exactly that shape. */
+#define ZL_WEAK __attribute__((weak))
+extern int xhci_ptr_ready(void) ZL_WEAK;
+extern int xhci_ptr_abs(void) ZL_WEAK;
+extern int xhci_ptr_x(void) ZL_WEAK;
+extern int xhci_ptr_y(void) ZL_WEAK;
+extern int xhci_ptr_btn(void) ZL_WEAK;
+extern int xhci_ptr_poll(void) ZL_WEAK;
+extern unsigned xhci_ptr_reports(void) ZL_WEAK;
+extern unsigned xhci_ptr_events(void) ZL_WEAK;
+extern int      xhci_ptr_lastcc(void) ZL_WEAK;
+extern unsigned xhci_kbd_events(void) ZL_WEAK;
+extern unsigned xhci_kbd_requeues(void) ZL_WEAK;
+extern int      xhci_kbd_lastcc(void) ZL_WEAK;
+extern int xhci_ptr_slot(void) ZL_WEAK;
+extern int xhci_ptr_ep(void) ZL_WEAK;
+
+/* Is there a USB pointer at all? Two questions in one, and both have to be
+ * yes: is the driver linked in (weak symbol non-NULL), and did it find a
+ * device. Every xhci_ptr_* call below is guarded by this, so a NULL weak
+ * symbol can never be called. */
+static int usb_ptr_ok(void)
+{
+    return xhci_ptr_ready != 0 && xhci_ptr_ready() != 0;
+}
+
+/* Zero when the driver is absent, so the diagnostic builtins report 0 rather
+ * than jumping through a null pointer. */
+#define ZL_WEAK_CALL(fn) ((fn) ? (fn)() : 0)
 extern void console_box(int x, int y, int w, int h, unsigned char attr);
 extern void console_line(int x0, int y0, int x1, int y1, unsigned char attr);
 extern void console_mouse_cursor(int x, int y, unsigned char fill, unsigned char edge);
@@ -317,6 +350,9 @@ extern void wm_frame(void);
 extern int  wm_running(void);
 extern void wm_stop(void);
 extern int  wm_focused(void);
+extern void wm_focus(int win);
+extern void wm_raise(int win);
+extern void wm_client(int win, int *x, int *y, int *w, int *h);
 extern int  wm_count(void);
 extern int  wm_add_tab(int win, int app, const char *title);
 extern void wm_damage(int x, int y, int w, int h);
@@ -389,6 +425,29 @@ extern int  intel_pipe_enabled(void);
 extern unsigned int intel_surface(void);
 extern int  intel_frame_count(void);
 extern int  console_rows(void);
+extern void console_quiet(int on);
+
+/* ONE byte to COM1, and nothing else. Extracted from zl_putc because there are
+ * now two callers with different needs, and inlining it in one of them made the
+ * other impossible: term.c generates its own text (the unknown-command line,
+ * the echo of what you typed) which has to reach the serial log so a gate can
+ * assert on it, but must NOT reach console_putc - during a compositor session
+ * console_putc draws glyphs straight into the back buffer at the old text
+ * region, which is nowhere near the shell window. Three sinks, chosen
+ * per-caller, rather than one bundle nobody can take apart.
+ *
+ * Wait for the transmit holding register - but never forever. A laptop has no
+ * UART at 0x3F8; an undecoded port floats high, so this reads 0xFF and falls
+ * straight through, which is why it has always worked. If a machine ever read
+ * back zero instead, the kernel would hang inside its FIRST printed character
+ * with nothing on screen to say why. The bound is ~1000x one character time at
+ * 115200, so a real UART is never cut short. */
+void zl_serial_putc(char c)
+{
+    for (int i = 0; i < 200000; i++)
+        if (zl_inb(COM1 + 5) & 0x20) break;
+    zl_outb(COM1, (unsigned char)c);
+}
 
 /* ---- the system track: nvme.c, fs.c, rtc.c, clip.c, notify.c ------------ */
 extern int  nvme_read_to(unsigned dst, unsigned lba_lo, unsigned lba_hi);
@@ -457,15 +516,7 @@ static void zl_putc(char c)
      * Without this the compositor has nothing to repaint the shell FROM, and
      * dragging a window across it would erase it permanently. */
     term_putc(c);
-    /* Wait for the transmit holding register - but never forever. A laptop has
-     * no UART at 0x3F8; an undecoded port floats high, so this reads 0xFF and
-     * falls straight through, which is why it has always worked. If a machine
-     * ever read back zero instead, the kernel would hang inside its FIRST
-     * printed character with nothing on screen to say why. The bound is ~1000x
-     * one character time at 115200, so a real UART is never cut short. */
-    for (int i = 0; i < 200000; i++)
-        if (zl_inb(COM1 + 5) & 0x20) break;
-    zl_outb(COM1, (unsigned char)c);
+    zl_serial_putc(c);
 }
 #else
 /* On Linux, for testing the pipeline: write(1, &c, 1) by raw syscall.
@@ -682,6 +733,9 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "vram"))       return zl_num((double)console_vram());
     if (streq(name, "con_cols"))   return zl_num((double)console_cols());
     if (streq(name, "con_rows"))   return zl_num((double)console_rows());
+    /* Mute the console's PIXELS while the compositor owns the screen. The
+     * scrollback and the serial log are untouched - see console_quiet(). */
+    if (streq(name, "con_quiet"))  { console_quiet((int)a[0].num); return zl_nil(); }
     if (streq(name, "cell_w"))     return zl_num((double)console_cell_w());
     if (streq(name, "cell_h"))     return zl_num((double)console_cell_h());
     if (streq(name, "bits"))       return zl_num((double)(sizeof(void *) * 8));
@@ -815,7 +869,30 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_frame"))   { wm_frame(); return zl_nil(); }
     if (streq(name, "wm_run"))     return zl_num((double)wm_running());
     if (streq(name, "wm_stop"))    { wm_stop(); return zl_nil(); }
-    if (streq(name, "wm_focus"))   return zl_num((double)wm_focused());
+    /* GETTER and SETTER, named after the C functions they are. The builtin
+     * used to be called wm_focus and be the getter, which left the setter
+     * unreachable from zl - and wm_open focuses the window it just opened, so
+     * "open the shell, then two more windows" left the shell unfocused and
+     * UNTYPEABLE. There were no zl callers of the old name, so this renames
+     * rather than adds. */
+    /* A window's CLIENT rect, one component at a time - zl has no way to
+     * receive four values from one call. Exposed because a pixel-level gate
+     * has to know where to look: probe-term.py measures how much text is in
+     * the shell, and cropping to a rectangle the kernel REPORTS beats
+     * recomputing the layout in Python, which would go stale the first time
+     * the look track moves a window. */
+    if (streq(name, "wm_cx") || streq(name, "wm_cy") ||
+        streq(name, "wm_cw") || streq(name, "wm_ch")) {
+        int cx = 0, cy = 0, cw = 0, ch = 0;
+        wm_client((int)a[0].num, &cx, &cy, &cw, &ch);
+        if (name[4] == 'x') return zl_num((double)cx);
+        if (name[4] == 'y') return zl_num((double)cy);
+        if (name[4] == 'w') return zl_num((double)cw);
+        return zl_num((double)ch);
+    }
+    if (streq(name, "wm_focused")) return zl_num((double)wm_focused());
+    if (streq(name, "wm_focus"))   { wm_focus((int)a[0].num); return zl_nil(); }
+    if (streq(name, "wm_raise"))   { wm_raise((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_n"))       return zl_num((double)wm_count());
     if (streq(name, "wm_dmg"))     { wm_damage_win((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
@@ -982,21 +1059,25 @@ Value zl_calln(const char *name, int n, ...)
      * the PS/2 mouse is relative and stays as the fallback (and is what the
      * laptop's TrackPoint actually is). Polled here because the pointer shares
      * the keyboard's event ring and something has to turn the handle. */
-    if (streq(name, "mouse_x"))   { if (xhci_ptr_ready()) { xhci_ptr_poll(); return zl_num((double)xhci_ptr_x()); }
+    if (streq(name, "mouse_x"))   { if (usb_ptr_ok()) { xhci_ptr_poll(); return zl_num((double)xhci_ptr_x()); }
                                     return zl_num((double)idt_mouse_x()); }
-    if (streq(name, "mouse_y"))   { if (xhci_ptr_ready()) return zl_num((double)xhci_ptr_y());
+    if (streq(name, "mouse_y"))   { if (usb_ptr_ok()) return zl_num((double)xhci_ptr_y());
                                     return zl_num((double)idt_mouse_y()); }
-    if (streq(name, "mouse_btn")) { if (xhci_ptr_ready()) return zl_num((double)xhci_ptr_btn());
+    if (streq(name, "mouse_btn")) { if (usb_ptr_ok()) return zl_num((double)xhci_ptr_btn());
                                     return zl_num((double)idt_mouse_btn()); }
-    if (streq(name, "ptr_abs"))    return zl_num((double)(xhci_ptr_ready() ? xhci_ptr_abs() : 0));
-    if (streq(name, "ptr_reports"))return zl_num((double)xhci_ptr_reports());
-    if (streq(name, "ptr_events")) return zl_num((double)xhci_ptr_events());
-    if (streq(name, "ptr_lastcc")) return zl_num((double)xhci_ptr_lastcc());
-    if (streq(name, "kbd_events")) return zl_num((double)xhci_kbd_events());
-    if (streq(name, "kbd_requeues"))return zl_num((double)xhci_kbd_requeues());
-    if (streq(name, "kbd_lastcc")) return zl_num((double)xhci_kbd_lastcc());
-    if (streq(name, "ptr_slot"))   return zl_num((double)xhci_ptr_slot());
-    if (streq(name, "ptr_ep"))     return zl_num((double)xhci_ptr_ep());
+    if (streq(name, "ptr_abs"))    return zl_num((double)(usb_ptr_ok() ? xhci_ptr_abs() : 0));
+    /* 1 if the USB pointer driver is even linked in. Distinguishes "no driver"
+     * from "driver present, no device" - which look identical from ptr_ready
+     * alone, and cost a long hunt once already. */
+    if (streq(name, "ptr_driver")) return zl_num(xhci_ptr_ready != 0 ? 1.0 : 0.0);
+    if (streq(name, "ptr_reports"))return zl_num((double)ZL_WEAK_CALL(xhci_ptr_reports));
+    if (streq(name, "ptr_events")) return zl_num((double)ZL_WEAK_CALL(xhci_ptr_events));
+    if (streq(name, "ptr_lastcc")) return zl_num((double)ZL_WEAK_CALL(xhci_ptr_lastcc));
+    if (streq(name, "kbd_events")) return zl_num((double)ZL_WEAK_CALL(xhci_kbd_events));
+    if (streq(name, "kbd_requeues"))return zl_num((double)ZL_WEAK_CALL(xhci_kbd_requeues));
+    if (streq(name, "kbd_lastcc")) return zl_num((double)ZL_WEAK_CALL(xhci_kbd_lastcc));
+    if (streq(name, "ptr_slot"))   return zl_num((double)ZL_WEAK_CALL(xhci_ptr_slot));
+    if (streq(name, "ptr_ep"))     return zl_num((double)ZL_WEAK_CALL(xhci_ptr_ep));
     if (streq(name, "mouse_irqs")) return zl_num((double)idt_mouse_irqs());
     if (streq(name, "box"))       { console_box((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "line"))      { console_line((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }

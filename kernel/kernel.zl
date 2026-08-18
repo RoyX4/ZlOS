@@ -1929,8 +1929,18 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
     return 0
 }
 
-# Return 1 if handled. 'q' or Esc ends the session - NEVER "press any key",
-# which is the phrase this whole rewrite exists to delete.
+# Return 1 if handled, 0 if NOT. The fall-through used to `return 1`, so the
+# System Monitor and the About window each claimed to have handled every event
+# sent to them and then dropped it. wm.c discards this value at all three
+# hook_event call sites today, so that was not what made the terminal
+# untypeable - THAT was wm_open focusing the window it just opened, which left
+# the shell (opened first) unfocused while About (opened last) received every
+# keystroke and ignored it. Fixed where it belongs, with wm_focus below.
+#
+# The honest return value stays anyway. ui.h states the contract, wm.c will
+# read it the moment there is a fallback path for an unhandled key, and
+# claiming to have handled something you dropped is the same bug class as a
+# silent fallback - which is this repo's most expensive recurring bug.
 fn app_event(id, win, ety, ecode, ex, ey) {
     if id == APP_SHELL {
         # ONE CHARACTER PER CALL. No loop - that is the whole inversion.
@@ -1948,7 +1958,7 @@ fn app_event(id, win, ety, ecode, ex, ey) {
         }
         return 1
     }
-    return 1
+    return 0
 }
 
 # Runs every frame, must be cheap, MUST NOT DRAW. Returning 1 means "my state
@@ -2000,6 +2010,15 @@ fn wm_session() {
         color(C_GREY)
         return 0
     }
+    # THE COMPOSITOR NOW OWNS THE SCREEN, so the console must stop painting.
+    # Not a tidiness point: console_putc draws at the console's own cursor
+    # inside the text region draw_desk set from the STATIC desktop's terminal
+    # frame, which is not where the shell window is. Every line a command
+    # printed from inside a window was landing on the wallpaper, in a layout
+    # that is no longer on screen, and calling fb_present() per line while
+    # wm_frame was trying to blit. The scrollback and the serial log are
+    # untouched - that is what con_quiet does and does not do.
+    con_quiet(1)
     # THE SHELL IS WINDOW 0, and it is opened FIRST so the boot log that
     # follows lands inside it - the same ordering draw_desk relied on, now
     # expressed through wm_open.
@@ -2008,7 +2027,27 @@ fn wm_session() {
     shell_win = wm_open(APP_SHELL, "zl shell", 40 * u, 52 * u, sw - 340 * u, sh - 90 * u)
     wm_open(APP_MONITOR, "System Monitor", sw - 290 * u, 52 * u, MON_W * u, MON_H * u)
     wm_open(APP_ABOUT, "About", sw - 290 * u, 52 * u + (MON_H + 16) * u, MON_W * u, AB_H * u)
+    # THE SHELL TAKES FOCUS, and it has to be said explicitly: wm_open focuses
+    # whatever it just opened, so after three wm_opens the focus is on About
+    # and every key typed goes there. The shell is opened FIRST because the
+    # boot log has to land inside it, so it is always the one left unfocused.
+    # Focus does not imply raise (see wm_focus in wm.c), so this changes which
+    # window gets the keys and nothing about the stacking.
+    wm_focus(shell_win)
+    # SAY THAT THE COMPOSITOR STARTED, and say WHERE THE SHELL IS. It reaches
+    # the serial log even though the console's pixels are muted, because
+    # con_quiet mutes only the pixels - so a headless gate can tell "the
+    # compositor is up and listening" from "the w never arrived", which are
+    # otherwise the same silence. probe-term.py waits on this line rather than
+    # on a wall-clock guess, and crops its screendump to the rectangle printed
+    # here rather than recomputing this layout in Python, where it would go
+    # stale the first time a window moves.
+    color(C_GREEN)  put("  compositor: ")
+    color(C_GREY)   put(wm_n())  put(" windows, shell client ")
+    put(wm_cx(shell_win))  put(",")  put(wm_cy(shell_win))  put(" ")
+    put(wm_cw(shell_win))  put("x")  print(wm_ch(shell_win))
     while wm_run() == 1 { wm_frame() }
+    con_quiet(0)
     return 0
 }
 
