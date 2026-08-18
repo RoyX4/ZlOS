@@ -448,6 +448,12 @@ exactly as it always did, and `verify.sh` still diffs it byte-for-byte against
 paths green — `verify.sh`, `verify-raw.sh`, `verify-efi.sh`, and the ISO.
 `wmtest` 69 · `inputtest` 17 · `tritest` 9 · `fbbench` all green.
 
+**Why the desktop looked small on a big screen, and where the effects went:**
+`docs/desktop-scale-and-effects.md`. Short version: `ui()` was `cell_w() / 8`,
+so it was 1 or 2 and never more, while the layout is written in 800 design
+units - at 3840 wide that is 1920 units of space for an 800-unit design. It is
+derived from the screen now (1..4) and the console cell is a separate question.
+
 What the v10 pass added, with the numbers, is `docs/desktop-v10-plan.md` §8.
 The five that matter most to somebody touching this next:
 
@@ -473,7 +479,22 @@ The five that matter most to somebody touching this next:
    compositor redraws the wallpaper inside *every* damage rectangle, and the
    v10 background is six such passes. Cached it is 1.5 cyc/px. At 4K it does
    not fit the arena, refuses, says so, and falls back to the plain gradient.
-5. **`console_mute()`** stops the console painting while the compositor owns the
+5. **THE COMPOSITOR COULD NOT SEE THE MOUSE, and no gate could have caught
+   it.** zlOS drives two pointers - an absolute usb-tablet through `xhci.c` and
+   a relative PS/2 mouse through `idt.c` - and the `mouse_x` builtin has
+   preferred the tablet since it was written. `input.c`'s `pump_mouse()` read
+   `idt_mouse_x()` **and nothing else**. While the shell owned the screen that
+   was invisible, because the shell called `mouse_x()` directly. The moment
+   `wm_frame()` became the top of the system the queue was the compositor's
+   only source of pointer events, so on any machine with a tablet attached -
+   which is what QEMU gives and what `try.sh` attaches - **no EV_MOUSE was
+   pushed at all**. No dragging, no clicking, no dock, no menu.
+
+   Every gate in this repo drives zlOS by TYPING, and a dock that does nothing
+   photographs identically to one that works. `probe-dock.py` exists because
+   of this, and `inputtest` now asserts the preference directly.
+
+6. **`console_mute()`** stops the console painting while the compositor owns the
    screen. The tee into term.c's scrollback and the write to COM1 both keep
    going — which is what keeps every gate reading exactly what it read before.
 

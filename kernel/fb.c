@@ -41,6 +41,37 @@ static int cell_w = GLYPH_W, cell_h = GLYPH_H;
 int fb_cell_w(void) { return cell_w; }
 int fb_cell_h(void) { return cell_h; }
 
+/* ---- THE UI SCALE, WHICH IS NOT THE FONT CELL -----------------------------
+ * These were the same number and that was the bug behind "everything looks
+ * small on a big screen".
+ *
+ * The desktop's layout is written in DESIGN UNITS and the original layout was
+ * drawn for an 800-unit-wide screen. ui() multiplied those units, and ui() was
+ * cell_w / 8 - so it was 1 below 1400 pixels and 2 at or above, and 2 forever
+ * after. The console font cell has exactly two atlases, so it could not be
+ * anything else. The consequence, in units of layout space available for an
+ * 800-unit design:
+ *
+ *      1280 wide   ui 1   1280 units    1.6x too much room
+ *      1920 wide   ui 2    960 units    about right
+ *      2560 wide   ui 2   1280 units    1.6x too much room   <- the ThinkPad
+ *      3840 wide   ui 2   1920 units    2.4x too much room
+ *
+ * The scale stopped growing while the screen kept growing, so the bigger the
+ * panel the smaller the desktop looked on it. On the laptop's own 2560x1440
+ * that is the difference between a desktop and a postage stamp in the corner
+ * of one.
+ *
+ * They are now two different questions. The console cell still has two sizes
+ * because it is drawn from a fixed atlas and a resampled console would be both
+ * slow and soft. The LAYOUT scale is an integer derived from the screen, and
+ * proportional text resamples to meet it - which the type scale's atlases and
+ * blend_cov_scaled already make possible.
+ */
+static int ui_scale = 1;
+
+int fb_ui_scale(void) { return ui_scale; }
+
 unsigned int fb_get_px(int x, int y);   /* defined below; used by the AA text path */
 void idt_set_pointer_bounds(int w, int h);   /* the mouse clamp, pushed not pulled */
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);  /* the fast row fill */
@@ -410,6 +441,7 @@ static void fb_report_mode(unsigned int need)
     fb_puts("  fb: ");
     fb_putu(fb_w); fb_puts("x"); fb_putu(fb_h); fb_puts("x"); fb_putu(fb_bpp);
     fb_puts(" cell "); fb_putu((unsigned)cell_w); fb_puts("x"); fb_putu((unsigned)cell_h);
+    fb_puts(" ui "); fb_putu((unsigned)ui_scale); fb_puts("x");
     fb_puts(", back "); fb_puts(back_on ? "ON" : "OFF");
     fb_puts("  ("); fb_putu(need >> 10); fb_puts(" KiB/mode)\n");
 
@@ -489,6 +521,13 @@ void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
     fb_bpp   = bpp;
     cell_w   = (width >= 1400) ? GLYPH_W * 2 : GLYPH_W;
     cell_h   = (width >= 1400) ? GLYPH_H * 2 : GLYPH_H;
+    /* Rounded, not truncated: 1200 wide is much closer to 1.5 designs than to
+     * 1, and truncation would leave it at 1 with half the screen empty. Capped
+     * at 4 because beyond that a 24px title becomes 96px and the layout runs
+     * out of design units before it runs out of screen. */
+    ui_scale = (int)((width + 400u) / 800u);
+    if (ui_scale < 1) ui_scale = 1;
+    if (ui_scale > 4) ui_scale = 4;
     fb_cols  = (int)(width  / cell_w);
     fb_rows  = (int)(height / cell_h);
     fb_col   = 0;
@@ -724,11 +763,16 @@ static void blend_cov(int px, int py, const unsigned char *src,
  * This exists because the two places that used to scale a coverage bitmap
  * both did it by COPYING pixels - fb_icon24 at 2x and fb_glyph_scaled for the
  * logo - and copying is what throws the anti-aliasing away. */
-static void blend_cov_scaled(int px, int py, const unsigned char *src,
-                             int sw, int sh, int dw, int dh, unsigned int fg)
+/* The strided form. A font atlas row is `stride` wide while the ink that has
+ * to be resampled is `sw` - passing sw as the stride would step into the next
+ * glyph's row a fraction at a time, which reads as text smeared to the right.
+ * blend_cov_scaled is this with stride == sw. */
+static void blend_cov_scaled_s(int px, int py, const unsigned char *src,
+                               int sw, int sh, int stride,
+                               int dw, int dh, unsigned int fg)
 {
     if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
-    if (dw == sw && dh == sh) { blend_cov(px, py, src, sw, sh, fg); return; }
+    if (dw == sw && dh == sh) { blend_cov_s(px, py, src, sw, sh, stride, fg); return; }
     int lastx = (sw - 1) << 16, lasty = (sh - 1) << 16;
     for (int y = 0; y < dh; y++) {
         int syq = (2 * y + 1) * sh * 32768 / dh - 32768;
@@ -736,8 +780,8 @@ static void blend_cov_scaled(int px, int py, const unsigned char *src,
         if (syq > lasty) syq = lasty;
         int y0 = syq >> 16, fy = syq & 0xFFFF;
         int y1 = (y0 + 1 < sh) ? y0 + 1 : y0;
-        const unsigned char *r0 = src + (unsigned long)y0 * sw;
-        const unsigned char *r1 = src + (unsigned long)y1 * sw;
+        const unsigned char *r0 = src + (unsigned long)y0 * stride;
+        const unsigned char *r1 = src + (unsigned long)y1 * stride;
         for (int x = 0; x < dw; x++) {
             int sxq = (2 * x + 1) * sw * 32768 / dw - 32768;
             if (sxq < 0) sxq = 0;
@@ -749,6 +793,12 @@ static void blend_cov_scaled(int px, int py, const unsigned char *src,
             blend_px(px + x, py + y, fg, (top * (65536 - fy) + bot * fy) >> 16);
         }
     }
+}
+
+static void blend_cov_scaled(int px, int py, const unsigned char *src,
+                             int sw, int sh, int dw, int dh, unsigned int fg)
+{
+    blend_cov_scaled_s(px, py, src, sw, sh, sw, dw, dh, fg);
 }
 
 /* a glyph in a text cell, anti-aliased over a SOLID cell background. The core
@@ -2147,14 +2197,27 @@ int fb_get_col(void) { return fb_col; }
  * everything else rather than staying 8px tall on a 1920-wide desktop. */
 static int prop_big(void) { return cell_w != GLYPH_W; }
 
-/* role -> cell height, per UI scale. The one place that mapping exists. */
+/* role -> cell height IN PIXELS, following the UI scale rather than the font
+ * cell. At ui 2 these land exactly on the three generated atlases (16/24/32);
+ * at ui 1, 3 and 4 they land between them and the glyph is resampled, which is
+ * what stops text staying 32px tall on a 4K panel while everything around it
+ * grew. */
+static const unsigned char role_base[3] = { 8, 12, 16 };
+
 static int prop_cell(int role)
 {
-    if (!prop_big()) {                 /* ui() == 1: two steps, see above */
-        return (role >= TEXT_TITLE) ? 24 : 16;
-    }
-    if (role <= TEXT_CAPTION) return 16;
-    if (role == TEXT_BODY)    return 24;
+    if (role < 0) role = 0;
+    if (role > TEXT_TITLE) role = TEXT_TITLE;
+    int h = role_base[role] * ui_scale;
+    if (h < 12) h = 12;                /* below this nothing is legible */
+    return h;
+}
+
+/* the generated atlas nearest a wanted height: 16, 24 or 32 */
+static int prop_atlas_cell(int want)
+{
+    if (want <= 20) return 16;
+    if (want <= 28) return 24;
     return 32;
 }
 
@@ -2188,14 +2251,17 @@ int fb_text_role_h(int role) { return prop_cell(role); }
 
 int fb_text_role_w(const char *s, int role, int weight)
 {
-    int stride, cell = prop_cell(role);
+    int want = prop_cell(role), cell = prop_atlas_cell(want);
+    int stride;
     const unsigned char *adv, *ink;
     prop_atlas(cell, weight, &stride, &adv, &ink);
     int w = 0;
     while (*s) {
         char c = *s++;
         if (c < FONT_FIRST || c > FONT_LAST) c = '?';
-        w += adv[(int)c - FONT_FIRST];
+        /* the advance scales with the glyph, or a resampled string measures
+         * one width and draws another */
+        w += adv[(int)c - FONT_FIRST] * want / cell;
     }
     return w;
 }
@@ -2203,18 +2269,31 @@ int fb_text_role_w(const char *s, int role, int weight)
 void fb_text_role(int px, int py, const char *s, unsigned int fg,
                   int role, int weight)
 {
-    int stride, cell = prop_cell(role);
+    int want = prop_cell(role), cell = prop_atlas_cell(want);
+    int stride;
     const unsigned char *adv, *ink;
     const unsigned char *atlas = prop_atlas(cell, weight, &stride, &adv, &ink);
+
     while (*s) {
         char c = *s++;
         if (c < FONT_FIRST || c > FONT_LAST) c = '?';
         int i = (int)c - FONT_FIRST;
-        /* only the columns that can hold ink, not the whole cell - a comma's
-         * ink is 4px inside a 30px cell at title size */
-        blend_cov_s(px, py, atlas + (unsigned long)i * cell * stride,
-                    ink[i], cell, stride, fg);
-        px += adv[i];
+        const unsigned char *g = atlas + (unsigned long)i * cell * stride;
+        if (want == cell) {
+            /* the common case, and the fast one: only the columns that can
+             * hold ink, not the whole cell - a comma's ink is 4px inside a
+             * 30px cell at title size */
+            blend_cov_s(px, py, g, ink[i], cell, stride, fg);
+        } else {
+            /* No atlas at this size, so resample one. blend_cov_scaled wants a
+             * tight bitmap, and the atlas row is `stride` wide - so the ink
+             * width is passed as the source width and the stride is honoured
+             * by stepping rows, which is exactly what the ink-width form does
+             * for the unscaled case. */
+            blend_cov_scaled_s(px, py, g, ink[i], cell, stride,
+                               ink[i] * want / cell, want, fg);
+        }
+        px += adv[i] * want / cell;
     }
 }
 

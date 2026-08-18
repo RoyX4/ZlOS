@@ -64,6 +64,16 @@ unsigned int idt_ticks(void) { return fake_ticks; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }
 int ser_rx(void)        { return -1; }   /* no UART in the harness */
+static int fake_usb_ptr = 0, fake_ux = 0, fake_uy = 0, fake_ubtn = 0;
+
+/* No USB pointer in the harness - which is a case worth being able to express,
+ * because it is the PS/2 fallback the laptop's TrackPoint takes. */
+int xhci_ptr_ready(void) { return fake_usb_ptr; }
+int xhci_ptr_poll(void)  { return 0; }
+int xhci_ptr_x(void)     { return fake_ux; }
+int xhci_ptr_y(void)     { return fake_uy; }
+int xhci_ptr_btn(void)   { return fake_ubtn; }
+
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
 void zl_putc_pub(char c) { (void)c; }        /* fb.c's boot line: not wanted here */
 
@@ -570,13 +580,31 @@ int main(void)
     ok("...and it ends too", wm_anim_running(aw) == 0);
 
     /* ANIM_MAX IS A REFUSAL, not a silent drop - the same discipline as
-     * wm_open's WM_MAX. Eight slots, nine distinct requests. */
-    int started = 0;
-    for (int i = 0; i < WM_MAX && i < 9; i++) {
+     * wm_open's WM_MAX.
+     *
+     * The windows are opened and then LET SETTLE first, deliberately: wm_open
+     * starts an ANIM_OPEN of its own now, so opening and animating in the same
+     * loop measures "how many slots are left after the opens" rather than the
+     * ceiling. That is exactly the confusion this assertion exists to avoid,
+     * and it caught the change that introduced it. */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    frame();
+    int wins2[WM_MAX], nw2 = 0;
+    for (int i = 0; i < 9 && nw2 < WM_MAX; i++) {
         int w2 = wm_open(1, "x", 10 + i * 30, 10, 60, 40);
-        if (w2 >= 0 && wm_anim(w2, ANIM_FADE)) started++;
+        if (w2 >= 0) wins2[nw2++] = w2;
     }
-    ok("the animation array is a ceiling, and full refuses", started == 8);
+    for (int i = 0; i < 10; i++) frame();          /* every open scale settles */
+    int still = 0;
+    for (int i = 0; i < nw2; i++) if (wm_anim_running(wins2[i])) still++;
+    ok("every open animation has finished before this", still == 0);
+
+    int started = 0, refused = 0;
+    for (int i = 0; i < nw2; i++) {
+        if (wm_anim(wins2[i], ANIM_FADE)) started++; else refused++;
+    }
+    ok("the animation array is a ceiling, and full refuses",
+       started > 0 && refused > 0 && started + refused == nw2);
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;

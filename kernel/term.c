@@ -35,6 +35,9 @@ static int  in_len;
 
 static int  pending_cmd = -1;       /* set by Enter, taken by zl          */
 static int  pending_arg;
+/* Set when a typed word matched nothing. zl reads it to pulse the window - a
+ * refusal you can SEE beats one you have to read, and the message scrolls. */
+static int  last_unknown;
 
 void fb_text_prop(int px, int py, const char *s, unsigned int fg);
 int  fb_text_prop_w(const char *s);
@@ -191,6 +194,7 @@ static int match_cmd(void)
 
     /* An unknown command must SAY SO. A shell that silently ignores what you
      * typed is worse than one that has no commands at all. */
+    last_unknown = 1;
     const char *msg = "  unknown command: ";
     while (*msg) term_putc(*msg++);
     for (int k = start; k < start + wlen; k++) term_putc(input[k]);
@@ -201,6 +205,7 @@ static int match_cmd(void)
 }
 
 int term_cmd(void) { int c = pending_cmd; pending_cmd = -1; return c; }
+int term_unknown(void) { int u = last_unknown; last_unknown = 0; return u; }
 int term_arg(void) { return pending_arg; }
 
 /* ---- drawing ---------------------------------------------------------------

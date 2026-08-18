@@ -79,7 +79,6 @@ struct win {
     int app;
     int flags;
     int min_w, min_h;
-    int anim;                  /* frames left in the open animation, 0 = none */
     char title[32];
     /* TABS. Several apps sharing one frame, grouped by task - the idea worth
      * stealing from Essence. It is cheap here because a window already has
@@ -107,6 +106,13 @@ static app_draw_fn  hook_draw;
 static app_event_fn hook_event;
 static app_tick_fn  hook_tick;
 static desk_draw_fn hook_desk;
+/* A CLICK THAT HITS NO WINDOW WAS DROPPED, and the dock is not a window.
+ * desk_draw has painted a dock, a start button and a tray since the compositor
+ * booted, and every one of them was decoration: route_mouse found no window
+ * under the pointer and returned. Desktop furniture needs a route of its own
+ * for the same reason it needs a draw of its own - it is not in the z-order
+ * and never will be. */
+static desk_click_fn hook_desk_click;
 
 /* ---- the damage list ------------------------------------------------------
  * NOT fb.c's. They are different questions and conflating them is a bug
@@ -367,14 +373,15 @@ static void anim_tick(void)
 /* how big window `win` should be DRAWN this frame, as a percentage */
 static int anim_pct(int win)
 {
-    /* the legacy per-window counter still drives the open scale, so that a
-     * window opened before the timeline existed animates identically */
-    int a = wins[win].anim;
-    if (a > 0) {
-        static const unsigned char steps[ANIM_FRAMES] = { 82, 90, 95, 98 };
-        return steps[ANIM_FRAMES - a];
-    }
-    int f = anim_frame_of(win, ANIM_CLOSE);
+    /* ONE MECHANISM. The open scale used to be a counter in the window struct
+     * and the timeline was a second thing beside it that nothing triggered -
+     * so wm.c carried two animation systems, one of which never ran. wm_open()
+     * starts an ANIM_OPEN now and this reads it, which means the open scale
+     * and every other kind share a code path and a bug in one is a bug you can
+     * actually see. */
+    int f = anim_frame_of(win, ANIM_OPEN);
+    if (f >= 0) return anim_scale[0][f];
+    f = anim_frame_of(win, ANIM_CLOSE);
     if (f >= 0) return anim_scale[1][f];
     f = anim_frame_of(win, ANIM_PRESS);
     if (f >= 0) return anim_scale[2][f];
@@ -470,6 +477,8 @@ void wm_init(void)
     if (fb_active()) wm_damage(0, 0, (int)fb_pxw(), (int)fb_pxh());
 }
 
+void wm_desk_click(desk_click_fn f) { hook_desk_click = f; }
+
 void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk)
 {
     hook_draw = d; hook_event = e; hook_tick = t; hook_desk = desk;
@@ -531,7 +540,6 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         wins[i].flags = WF_OPEN;
         wins[i].min_w = 8 * fb_cell_w();
         wins[i].min_h = 4 * fb_cell_h();
-        wins[i].anim = ANIM_FRAMES;
         wins[i].ntab = 1;
         wins[i].tab = 0;
         wins[i].tab_app[0] = app;
@@ -539,6 +547,10 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         title_copy(wins[i].title, title);
         z_append(i);
         focus_win = i;
+        /* A refusal here degrades gracefully: every slot busy means the window
+         * opens without a flourish, which is the right way for an animation to
+         * fail. */
+        wm_anim(i, ANIM_OPEN);
         wm_damage_win(i);
         return i;
     }
@@ -640,6 +652,17 @@ static int modal_win(void)
         if (wins[zorder[i]].flags & WF_MODAL) return zorder[i];
     return -1;
 }
+
+/* Which app a window is showing - the ACTIVE tab's, not the one it was opened
+ * with. Everything downstream asks this rather than reading .app, which is
+ * what keeps a tabbed window and a plain one the same thing to the repaint,
+ * the routing and now the taskbar. */
+int wm_win_app(int win)
+{
+    if (!wm_is_open(win)) return -1;
+    return win_app(win);
+}
+
 
 /* ---- the repaint ----------------------------------------------------------
  * The clip is set TWICE per window and that is the whole point:
@@ -885,7 +908,15 @@ static void route_mouse(int x, int y, int btn)
     }
 
     /* 3. NORMAL */
-    if (hit < 0) return;
+    if (hit < 0) {
+        /* THE FURNITURE - dock, start button, tray - gets every pointer event
+         * over it, not just presses. A dock with no hover state reads as a
+         * picture of a dock; knowing where the pointer is, is the whole of
+         * making it feel like a control. The button mask is passed through so
+         * policy can tell a hover from a press without a second callback. */
+        if (hook_desk_click) hook_desk_click(x, y, btn);
+        return;
+    }
     if (down) {
         wm_focus(hit);
         wm_raise(hit);
@@ -968,13 +999,9 @@ void wm_frame(void)
     /* app_tick runs every frame, is cheap, and MUST NOT DRAW. Returning 1 is
      * how a clock or a snake says "my state changed" without owning the frame
      * - which is the whole reason those demos no longer need a while-loop. */
-    /* advance any open animation. Damaging the SETTLED rect (which is the
+    /* advance every animation. Damaging the SETTLED rect (which is the
      * largest) is what erases the smaller frame drawn a moment ago. */
-    for (int i = 0; i < nz; i++) {
-        int win = zorder[i];
-        if (wins[win].anim > 0) { wins[win].anim--; wm_damage_win(win); }
-    }
-    anim_tick();                    /* ...and every timeline entry */
+    anim_tick();
 
     if (hook_tick)
         for (int i = 0; i < nz; i++)

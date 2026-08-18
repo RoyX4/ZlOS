@@ -87,6 +87,11 @@ typedef int  (*app_tick_fn)(int app, int win);
  * window, because it has to appear on top of things. */
 typedef void (*desk_draw_fn)(int x, int y, int w, int h);
 
+/* ...and what happens when the pointer is pressed on it. The dock is drawn by
+ * desk_draw and is not in the z-order, so wm_at() finds nothing there and the
+ * click had nowhere to go. */
+typedef void (*desk_click_fn)(int x, int y, int btn);
+
 /* ---- wm.c ---------------------------------------------------------------- */
 #define WM_MAX 12
 #define WM_TABS 4        /* apps sharing one window frame */
@@ -97,6 +102,7 @@ typedef void (*desk_draw_fn)(int x, int y, int w, int h);
 
 void wm_init(void);
 void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk);
+void wm_desk_click(desk_click_fn f);
 
 int  wm_open(int app, const char *title, int x, int y, int w, int h);
 void wm_close(int win);
@@ -140,6 +146,7 @@ int  wm_at(int x, int y);                     /* topmost window containing    */
 int  wm_zorder_at(int i);                     /* i-th from the BACK           */
 void wm_stop(void);                           /* 'q': ask the loop to end     */
 int  wm_running(void);
+int  wm_win_app(int win);                      /* the ACTIVE tab.s app        */
 
 /* ---- ui.c ---------------------------------------------------------------- */
 #define UI_DRAW     0

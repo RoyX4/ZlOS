@@ -35,6 +35,13 @@ extern int idt_mouse_x(void);     /* the PS/2 pointer, published by IRQ12  */
 extern int idt_mouse_y(void);
 extern int idt_mouse_btn(void);
 extern int ser_rx(void);          /* one byte from COM1, or -1 (support.c) */
+/* The USB pointer. A tablet reports an ABSOLUTE position, which is why it is
+ * preferred over the PS/2 mouse's relative deltas whenever it is present. */
+extern int xhci_ptr_ready(void);
+extern int xhci_ptr_poll(void);
+extern int xhci_ptr_x(void);
+extern int xhci_ptr_y(void);
+extern int xhci_ptr_btn(void);
 
 /* ---- event model ------------------------------------------------------- */
 #define EV_NONE      0
@@ -261,9 +268,34 @@ static void handle_scancode(int sc)
  * text-mode gate path where there is no pointer at all. */
 static int ms_x, ms_y, ms_btn, ms_seen;
 
+/* THERE ARE TWO POINTERS AND THIS READ THE WRONG ONE.
+ *
+ * zlOS drives both: xhci.c an absolute usb-tablet, idt.c a relative PS/2
+ * mouse. The `mouse_x` builtin has preferred the tablet since it was written -
+ * a tablet cannot drift, and on a UEFI laptop the PS/2 emulation dies with
+ * ExitBootServices. This function read idt_mouse_x() and nothing else.
+ *
+ * While the shell owned the screen that was invisible, because the shell read
+ * mouse_x() directly and got the right answer. The moment wm_frame() became
+ * the top of the system, the compositor's ONLY source of pointer events was
+ * this queue - so on any machine with a usb-tablet, which is what QEMU gives
+ * and what try.sh attaches, no EV_MOUSE was ever pushed at all. No dragging,
+ * no clicking, no dock, no menu. The whole pointer half of the desktop.
+ *
+ * No gate caught it and none could have: every gate in this repo drives zlOS
+ * by TYPING, and a dock that does nothing photographs identically to one that
+ * works. probe-dock.py exists because of this.
+ *
+ * One rule, one place: prefer the tablet, exactly as the builtin does. */
 static void pump_mouse(void)
 {
-    int x = idt_mouse_x(), y = idt_mouse_y(), b = idt_mouse_btn();
+    int x, y, b;
+    if (xhci_ptr_ready()) {
+        xhci_ptr_poll();                 /* the report is pulled, not pushed */
+        x = xhci_ptr_x(); y = xhci_ptr_y(); b = xhci_ptr_btn();
+    } else {
+        x = idt_mouse_x(); y = idt_mouse_y(); b = idt_mouse_btn();
+    }
     if (!ms_seen) { ms_x = x; ms_y = y; ms_btn = b; ms_seen = 1; return; }
     if (x == ms_x && y == ms_y && b == ms_btn) return;
     ms_x = x; ms_y = y; ms_btn = b;

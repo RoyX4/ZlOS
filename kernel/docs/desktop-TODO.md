@@ -738,3 +738,53 @@ vocabulary (Places, Devices, Properties, Unlock, End Process, Update interval)
 **raw_boot.asm / mkdisk.sh** — the loader read a fixed 1.25 MiB against a
 1.23 MiB kernel. Over that limit the kernel is silently truncated and jumped
 into. `mkdisk.sh` now refuses to build such an image.
+
+
+---
+
+## The pointer, the dock and the menu, 2026-08-18 (after v10)
+
+### [x] 2e (partial). Snake is a real app
+
+Three functions and no loop: `sn_draw` / `sn_event` / `sn_step`. Its state was
+already in raw memory, which is why desktop-TODO named it as the one to convert
+first, and the conversion was a `while` loop deleted rather than any state
+moved. It keeps playing while another window is dragged across it, which is the
+interaction target this file states in Roy's own words.
+
+It also starts PAUSED. Started moving, in a window, it is dead against the wall
+in under two seconds — before anyone has looked at it.
+
+Six demos still own the screen: `paint`, `cube`, `anim`, `editor`, `mousedemo`,
+and the modeset viewer.
+
+### [x] C5. The start menu is a `WF_MODAL` window
+
+`WF_MODAL` had a setter in `wm.c` and **no caller anywhere** — the exact hazard
+`HANDOFF.md` names for `intel.c`. The old menu drew straight onto the screen and
+saved the patch underneath with grab/stamp, the sticker technique C4 deleted.
+
+It blurs what is behind it, and the blur is taken **before the window exists** —
+`wm.c` draws the chrome and then calls `app_draw`, so by the time the menu could
+blur its own client rect the panel fill is already sitting in it.
+
+### [x] The dock is a control, not a picture of one
+
+It had been drawn since the compositor first booted and **nothing routed clicks
+to it**: the dock is not a window, so `wm_at()` found nothing and `route_mouse`
+returned. `wm.c` hands desktop-targeted pointer events to a hook now — every
+event, not just presses, because hover is most of what makes a control feel
+like one.
+
+Hover, press and rest states; an accent bar under a tile whose app is open;
+click-to-raise rather than launch-a-second-copy. The dock IS the taskbar.
+
+### [ ] Still open
+
+- **the other six demos** (2e)
+- **a real opacity fade** — `wm_anim_alpha` is computed and asserted, nothing
+  composites it. It needs a copy of the rectangle taken before the window was
+  drawn on it; the cache arena can hold one.
+- **Alt+Tab and Super** — Alt+Tab is in `wm.c` and works; `MOD_SUPER` is
+  tracked and still opens nothing.
+- **window resize** — `wm_resize` exists, no edge grab calls it.

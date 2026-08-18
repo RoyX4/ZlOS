@@ -91,6 +91,10 @@ int console_cols(void) { return fb_active() ? fb_get_cols() : 80; }
 /* the console cell size in pixels - zl needs it to turn a window rect into a
  * text box, and it is no longer always 8x16 */
 int console_cell_w(void) { return fb_active() ? fb_cell_w() : 8; }
+/* The LAYOUT scale, which is no longer the font cell - see fb.c. On the VGA
+ * text path there are no pixels to scale, so it is 1. */
+int fb_ui_scale(void);
+int console_ui_scale(void) { return fb_active() ? fb_ui_scale() : 1; }
 int console_cell_h(void) { return fb_active() ? fb_cell_h() : 16; }
 int console_rows(void) { return fb_active() ? fb_get_rows() : 25; }
 
@@ -278,6 +282,41 @@ void fb_wedge(int cx, int cy, unsigned int rgb, int a0, int f, int m, int e);
 int  fb_blur_cache(int x, int y, int w, int h, int radius);
 void fb_blur_paint(int slot, int x, int y);
 void fb_blur_free_all(void);
+
+/* THE PROPORTIONAL PATH, exposed to zl. Everything kernel.zl draws - the dock,
+ * the start menu, the tray, the About card, the System Monitor - went through
+ * console_text_aa, which is DejaVu Sans MONO. wm.c's window titles were the
+ * only proportional text on screen. Uniform advance is the strongest "this is
+ * a terminal" signal there is (desktop-look.md item 4) and it was being applied
+ * to every label that is not a terminal. */
+void fb_text_role(int px, int py, const char *s, unsigned int fg, int role, int weight);
+int  fb_text_role_w(const char *s, int role, int weight);
+int  fb_text_role_h(int role);
+
+void console_text_role(int x, int y, const char *s, unsigned int rgb, int role, int weight)
+{ if (fb_active()) fb_text_role(x, y, s, rgb, role, weight); }
+int  console_text_role_w(const char *s, int role, int weight)
+{ return fb_active() ? fb_text_role_w(s, role, weight) : 0; }
+int  console_text_role_h(int role)
+{ return fb_active() ? fb_text_role_h(role) : 16; }
+
+/* Numbers, the same way. zl has no string values, so a number cannot be
+ * formatted into one - it is rendered digit by digit here, exactly as
+ * console_num_aa does for the mono path. */
+void console_num_role(int x, int y, long v, unsigned int rgb, int role, int weight)
+{
+    if (!fb_active()) return;
+    char b[24];
+    int n = 0, neg = v < 0;
+    unsigned long u = neg ? (unsigned long)(-v) : (unsigned long)v;
+    if (!u) b[n++] = '0';
+    while (u) { b[n++] = (char)('0' + u % 10); u /= 10; }
+    if (neg) b[n++] = '-';
+    char out[24];
+    for (int i = 0; i < n; i++) out[i] = b[n - 1 - i];
+    out[n] = 0;
+    fb_text_role(x, y, out, rgb, role, weight);
+}
 
 void console_blend(int x, int y, int w, int h, unsigned int rgb, int a)
 { if (fb_active()) fb_fill_blend(x, y, w, h, rgb, a); }

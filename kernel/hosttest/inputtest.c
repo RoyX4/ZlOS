@@ -74,6 +74,16 @@ int ser_rx(void)
     return v;
 }
 
+static int fake_usb_ptr = 0, fake_ux = 0, fake_uy = 0, fake_ubtn = 0;
+
+/* No USB pointer in the harness - which is a case worth being able to express,
+ * because it is the PS/2 fallback the laptop's TrackPoint takes. */
+int xhci_ptr_ready(void) { return fake_usb_ptr; }
+int xhci_ptr_poll(void)  { return 0; }
+int xhci_ptr_x(void)     { return fake_ux; }
+int xhci_ptr_y(void)     { return fake_uy; }
+int xhci_ptr_btn(void)   { return fake_ubtn; }
+
 static void send_ser(const char *s)
 {
     while (*s) {
@@ -219,6 +229,46 @@ int main(void)
     for (int i = 0; i < 50; i++) input_poll();
     d = drain();
     ok("a silent UART produces no events at all", d.chars == 0 && d.n == 0);
+
+    /* 12. THE USB POINTER MUST WIN. There are two pointers - an absolute
+     *     usb-tablet through xhci.c and a relative PS/2 mouse through idt.c -
+     *     and mouse_x() has preferred the tablet since it was written. This
+     *     pump read the PS/2 one and nothing else, which was invisible while
+     *     the shell owned the screen and total the moment wm_frame() did: the
+     *     compositor's only source of pointer events is this queue, so on any
+     *     machine with a tablet attached - which is what QEMU gives - NO mouse
+     *     event was ever pushed. No dragging, no clicking, no dock, no menu.
+     *
+     *     Every gate in this repo types, so none of them could see it. This
+     *     assertion is the one that can. */
+    drain();
+    fake_usb_ptr = 1;
+    fake_ux = 1000; fake_uy = 700; fake_ubtn = 0;
+    d = drain();
+    /* A source switch REPORTS, unlike the very first poll, and that is
+     * correct rather than a lapse: the pointer really is somewhere else now,
+     * and swallowing it would leave every window believing the old position
+     * until the hand happened to move again. */
+    ok("plugging in a USB pointer reports the new position",
+       d.mouse == 1 && d.last_x == 1000 && d.last_y == 700);
+    fake_ux = 1100;
+    d = drain();
+    ok("the USB pointer produces events", d.mouse == 1);
+    ok("...and its position is the one reported",
+       d.last_x == 1100 && d.last_y == 700);
+
+    /* ...and the PS/2 mouse must NOT be able to talk over it. Both moving at
+     * once has to resolve to one answer, or the pointer jumps between them. */
+    fake_x = 5; fake_y = 5;
+    fake_ux = 1200;
+    d = drain();
+    ok("the PS/2 mouse cannot talk over it", d.last_x == 1200 && d.last_y == 700);
+
+    /* and unplugging it falls back, which is the laptop's TrackPoint */
+    fake_usb_ptr = 0;
+    fake_x = 300; fake_y = 200;
+    d = drain();
+    ok("without a USB pointer, PS/2 is used", d.last_x == 300 && d.last_y == 200);
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;

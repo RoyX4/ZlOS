@@ -107,6 +107,10 @@ extern void console_line(int x0, int y0, int x1, int y1, unsigned char attr);
 extern void console_mouse_cursor(int x, int y, unsigned char fill, unsigned char edge);
 extern int  console_kind(void);
 extern void console_mute(int on);
+extern void console_text_role(int x, int y, const char *s, unsigned int rgb, int role, int weight);
+extern int  console_text_role_w(const char *s, int role, int weight);
+extern int  console_text_role_h(int role);
+extern void console_num_role(int x, int y, long v, unsigned int rgb, int role, int weight);
 extern void console_gradtop(int x, int y, int w, int h, int r, unsigned int t, unsigned int b);
 extern void console_blend(int x, int y, int w, int h, unsigned int rgb, int a);
 extern void console_rrblend(int x, int y, int w, int h, int r, unsigned int rgb, int a);
@@ -122,6 +126,7 @@ extern void ser_puts(const char *s);
 extern unsigned long console_vram(void);
 extern int  console_cols(void);
 extern int  console_cell_w(void);
+extern int  console_ui_scale(void);
 extern int  console_cell_h(void);
 extern void fb_set_subpixel(int on);
 extern int  fb_get_subpixel(void);
@@ -312,6 +317,7 @@ extern int  i2c_hid_byte(int i);
 extern void term_putc(char c);
 extern int  term_key(int code);
 extern int  term_cmd(void);
+extern int  term_unknown(void);
 extern int  term_arg(void);
 extern void term_clear(void);
 extern void term_draw(int x, int y, int w, int h, unsigned int fg,
@@ -326,9 +332,15 @@ extern void wm_frame(void);
 extern int  wm_running(void);
 extern void wm_stop(void);
 extern int  wm_focused(void);
+extern int  wm_is_open(int win);
+extern void wm_set_modal(int win, int on);
+extern int  wm_anim(int win, int kind);
+extern void wm_client(int win, int *x, int *y, int *w, int *h);
 extern void wm_focus(int win);
 extern void wm_raise(int win);
 extern int  wm_count(void);
+extern int  wm_zorder_at(int i);
+extern int  wm_win_app(int win);
 extern int  wm_add_tab(int win, int app, const char *title);
 extern void wm_damage(int x, int y, int w, int h);
 extern void wm_damage_win(int win);
@@ -638,6 +650,13 @@ Value zl_calln(const char *name, int n, ...)
      * into term.c's scrollback and the write to COM1 both continue - see
      * console.c for why that split is the point rather than a shortcut. */
     if (streq(name, "con_mute"))   { console_mute((int)a[0].num); return zl_nil(); }
+    /* PROPORTIONAL text, by ROLE - caption / body / title, regular or bold.
+     * Everything kernel.zl drew was monospace; only wm.c's window titles were
+     * not. See console.c. */
+    if (streq(name, "label"))      { if (a[2].type==V_STR) console_text_role((int)a[0].num,(int)a[1].num,a[2].str,(unsigned int)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
+    if (streq(name, "label_w"))    { if (a[0].type==V_STR) return zl_num((double)console_text_role_w(a[0].str,(int)a[1].num,(int)a[2].num)); return zl_num(0.0); }
+    if (streq(name, "label_h"))    return zl_num((double)console_text_role_h((int)a[0].num));
+    if (streq(name, "label_num"))  { console_num_role((int)a[0].num,(int)a[1].num,(long)a[2].num,(unsigned int)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
     if (streq(name, "gradtop"))    { console_gradtop((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(unsigned int)(unsigned long long)a[5].num,(unsigned int)(unsigned long long)a[6].num); return zl_nil(); }
     /* v10: translucency, the two gradient shapes, and the blur CACHE. The
      * blur is a cache and not a filter on purpose - one is 7.4 ms and the
@@ -661,6 +680,10 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "con_cols"))   return zl_num((double)console_cols());
     if (streq(name, "con_rows"))   return zl_num((double)console_rows());
     if (streq(name, "cell_w"))     return zl_num((double)console_cell_w());
+    /* THE LAYOUT SCALE, which used to be cell_w()/8 in zl and therefore could
+     * only ever be 1 or 2. See fb.c: the console cell has two atlases, the
+     * layout does not have to. */
+    if (streq(name, "ui_scale"))   return zl_num((double)console_ui_scale());
     if (streq(name, "cell_h"))     return zl_num((double)console_cell_h());
     if (streq(name, "bits"))       return zl_num((double)(sizeof(void *) * 8));
     if (streq(name, "hex"))        { console_puthex((unsigned long)(long long)a[0].num, (int)a[1].num); return zl_nil(); }
@@ -777,6 +800,7 @@ Value zl_calln(const char *name, int n, ...)
      * so this is 0 and the plain text shell runs exactly as before. */
     if (streq(name, "term_key"))   return zl_num((double)term_key((int)a[0].num));
     if (streq(name, "term_cmd"))   return zl_num((double)term_cmd());
+    if (streq(name, "term_bad"))   return zl_num((double)term_unknown());
     if (streq(name, "term_arg"))   return zl_num((double)term_arg());
     if (streq(name, "term_clear")) { term_clear(); return zl_nil(); }
     if (streq(name, "term_draw"))  { term_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,
@@ -802,8 +826,24 @@ Value zl_calln(const char *name, int n, ...)
      * keys, and every character typed into a freshly booted desktop went to a
      * window with no app_event. Focus is policy; policy lives in zl. */
     if (streq(name, "wm_setfocus")) { wm_focus((int)a[0].num); return zl_nil(); }
+    /* "is this window still open" - the question a dock has to ask before it
+     * decides between raising an app and launching a second copy of it */
+    if (streq(name, "wm_open_p")) return zl_num((double)wm_is_open((int)a[0].num));
+    /* WF_MODAL had a setter in wm.c and no caller anywhere - the start menu is
+     * the caller, and this is how policy reaches it. */
+    if (streq(name, "wm_modal"))   { wm_set_modal((int)a[0].num, (int)a[1].num); return zl_nil(); }
+    /* the animation timeline. wm.c had five kinds and no caller in zl at all -
+     * built, asserted, and invisible. */
+    if (streq(name, "wm_anim"))    return zl_num((double)wm_anim((int)a[0].num, (int)a[1].num));
+    /* the client rect, so an app can turn a screen-space pointer into a row */
+    if (streq(name, "wm_cx"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)x); }
+    if (streq(name, "wm_cy"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)y); }
     if (streq(name, "wm_raise"))   { wm_raise((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_n"))       return zl_num((double)wm_count());
+    /* the window list, for a taskbar: which window is i-th from the back, and
+     * which app is in it. A taskbar cannot exist without these. */
+    if (streq(name, "wm_zat"))     return zl_num((double)wm_zorder_at((int)a[0].num));
+    if (streq(name, "wm_app"))     return zl_num((double)wm_win_app((int)a[0].num));
     if (streq(name, "wm_dmg"))     { wm_damage_win((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "ui_theme"))   { ui_theme_init((int)a[0].num); return zl_nil(); }

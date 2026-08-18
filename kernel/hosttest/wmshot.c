@@ -46,6 +46,16 @@ unsigned int idt_ticks(void) { return fake_ticks; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }
 int ser_rx(void)        { return -1; }   /* no UART in the harness */
+static int fake_usb_ptr = 0, fake_ux = 0, fake_uy = 0, fake_ubtn = 0;
+
+/* No USB pointer in the harness - which is a case worth being able to express,
+ * because it is the PS/2 fallback the laptop's TrackPoint takes. */
+int xhci_ptr_ready(void) { return fake_usb_ptr; }
+int xhci_ptr_poll(void)  { return 0; }
+int xhci_ptr_x(void)     { return fake_ux; }
+int xhci_ptr_y(void)     { return fake_uy; }
+int xhci_ptr_btn(void)   { return fake_ubtn; }
+
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
 void zl_putc_pub(char c) { (void)c; }
 Value zl_num(double n) { Value v; memset(&v, 0, sizeof v); v.type = V_NUM; v.num = n; return v; }
