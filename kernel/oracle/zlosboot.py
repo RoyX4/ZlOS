@@ -104,6 +104,31 @@ def catalog_apps():
                          body.group(1)):
         if m.group(1) in ids:
             names.setdefault(m.group(2), ids[m.group(1)])
+    # ...and the per-slice tables. reg_name() only answers for the ids IT lists;
+    # everything from 40 up is answered by a slice file, so a parser reading
+    # apps_registry.zl alone knows about none of the ~27 apps added there and
+    # calls every one of them an unknown --app - which is most of the reason
+    # only three of 62 regions can be photographed with their window open.
+    # Slices spell the id as a NUMBER rather than an APP_* constant, which is
+    # why this is a second pass and not a wider regex.
+    import glob as _glob
+    for path in sorted(_glob.glob(os.path.join(KERNEL, "apps_*.zl"))):
+        sl = open(path, encoding="utf-8", errors="replace").read()
+        # A slice defines its own APP_* constants in its own file, so resolve
+        # against the union rather than against apps_registry.zl's set only.
+        sids = dict(ids)
+        # NOT just APP_*: the game slices name theirs G3_TETRIS, G4_REVERSI and
+        # so on. Match any top-level UPPERCASE constant assigned a plain
+        # integer, which is what every slice's id table actually looks like.
+        sids.update({m.group(1): int(m.group(2))
+                     for m in re.finditer(r"^([A-Z][A-Z0-9_]*)\s*=\s*(\d+)\s*(?:#|$)",
+                                          sl, re.M)})
+        for fn in re.finditer(r"fn \w+_name\(id\)\s*\{(.*?)\n\}", sl, re.S):
+            for m in re.finditer(r'if id == (\w+)\s*\{\s*return "([^"]+)"', fn.group(1)):
+                key = m.group(1)
+                val = int(key) if key.isdigit() else sids.get(key)
+                if val is not None:
+                    names.setdefault(m.group(2), val)
     # THE CATALOG INDEX IS DENSE NOW, not id - REG_FIRST.
     #
     # REG_COUNT is gone: the id space was carved into reserved per-slice ranges
