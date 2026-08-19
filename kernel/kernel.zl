@@ -2896,7 +2896,24 @@ fn app_event(id, win, ety, ecode, ex, ey) {
             if br_key(ecode) == 1 { wm_dmg(win) }
             return 1
         }
-        if ety == 1 { if br_key(ecode) == 1 { wm_dmg(win) }  return 1 }
+        # EVERY PRINTABLE KEY ARRIVED TWICE. A single keypress produces an
+        # EV_KEY_DOWN (1) *and* an EV_CHAR (3), and this branch fed both into
+        # br_key - so typing "Linux" into the URL bar produced "Liinnuuxx" and
+        # the address never resolved. Found by photographing the URL bar, not
+        # by any assertion: browsertest drives browser_key() directly and so
+        # never sees the compositor deliver an event twice.
+        #
+        # The generic path below already had this right - it converts a
+        # KEY_DOWN through nav_to_char and DROPS it when it is not a navigation
+        # key, leaving EV_CHAR to carry the printable ones. The browser branch
+        # simply skipped that step. br_key takes ASCII, so passing it a raw
+        # keycode was wrong twice over.
+        if ety == 1 {
+            ac = nav_to_char(ecode)
+            if ac == 0 { return 1 }
+            if br_key(ac) == 1 { wm_dmg(win) }
+            return 1
+        }
         if ety == 4 { if br_click(ex, ey) == 1 { wm_dmg(win) }  return 1 }
         return 1
     }
