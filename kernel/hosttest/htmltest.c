@@ -24,6 +24,7 @@
 
 #include "../html.h"
 #include "../layout.h"
+#include "../css.h"
 
 static int fails, checks;
 
@@ -442,12 +443,115 @@ static void t_deep(void)
 
     /* more nodes than the array holds: it must stop, not scribble */
     n = 0;
-    for (int i = 0; i < 3000 && n < (int)sizeof(buf) - 8; i++) {
-        memcpy(buf + n, "<p>x", 4); n += 4;
+    /* enough <p>x to overflow HTML_MAX_NODES twice over - each pair is two
+     * nodes, so this must outrun the cap however the cap is set */
+    static char over[HTML_MAX_NODES * 8];
+    for (int i = 0; i < HTML_MAX_NODES * 2 && n < (int)sizeof(over) - 8; i++) {
+        memcpy(over + n, "<p>x", 4); n += 4;
     }
-    html_parse(buf, n);
-    CHECK(html_count() <= 1024, "node array overran: %d", html_count());
+    html_parse(over, n);
+    CHECK(html_count() <= HTML_MAX_NODES, "node array overran: %d", html_count());
     CHECK(lay_run_doc(400, 16) > 0, "overflowing document laid out to nothing");
+}
+
+
+/* ---- CSS, end to end ------------------------------------------------------
+ * csstest asserts the ENGINE - selectors, cascade, values - with no html.c and
+ * no layout.c linked. This asserts the WIRING, which is a different thing and
+ * has already been wrong once in a way csstest could not see: text-align was
+ * computed correctly and applied to nothing, because layout.c restored the
+ * parent's alignment before closing the line box that needed it. Every
+ * per-property assertion passed while the page rendered left-aligned.
+ *
+ * So these run a whole styled document and look at the runs that come out.
+ */
+static void t_css(void)
+{
+    static const char page[] =
+        "<html><head><style>\n"
+        "  body { color: #222222 }\n"
+        "  h1 { color: #003366; font-size: 3em }\n"
+        "  .hide { display: none }\n"
+        "  .big { font-size: 200%; font-weight: bold }\n"
+        "  p.lead { text-align: center }\n"
+        "  code { background: #f4f4f4 }\n"
+        "</style></head><body>\n"
+        "<h1>Styled</h1>\n"
+        "<p class=\"lead\">centred</p>\n"
+        "<p class=\"hide\">MUST NOT APPEAR</p>\n"
+        "<p>plain <span class=\"big\">big</span> <code>mono</code></p>\n"
+        "<p style=\"color: #00ff00\">inline</p>\n"
+        "</body></html>\n";
+
+    html_parse(page, (int)sizeof page - 1);
+    CHECK(html_sheets() == 1, "the <style> block was not captured (%d)", html_sheets());
+    css_reset();
+    for (int k = 0; k < html_sheets(); k++) {
+        int l;
+        const char *sh = html_sheet(k, &l);
+        css_add_sheet(sh, l);
+    }
+    CHECK(css_rules() >= 6, "only %d rules parsed from the page", css_rules());
+
+    lay_set_measure(fake_measure);
+    CHECK(lay_run_doc(400, 16) > 0, "the styled document laid out to nothing");
+
+    int saw_h1 = 0, saw_big = 0, saw_bg = 0, saw_inline = 0, saw_hidden = 0;
+    int lead_x = -1, plain_rgb = -1;
+    for (int i = 0; i < lay_count(); i++) {
+        const struct lay_run *r = lay_at(i);
+        if (r->kind != LR_TEXT || r->len <= 0) continue;
+        if (r->len == 6 && !memcmp(r->text, "Styled", 6)) {
+            saw_h1 = 1;
+            CHECK(r->size == 48, "h1 font-size: 3em of 16 should be 48, got %d", r->size);
+            CHECK(r->rgb == 0x003366, "h1 colour, got %d", r->rgb);
+        }
+        if (r->len == 7 && !memcmp(r->text, "centred", 7)) lead_x = r->x;
+        if (r->len == 3 && !memcmp(r->text, "big", 3)) {
+            saw_big = 1;
+            CHECK(r->size == 32, "200%% of 16 should be 32, got %d", r->size);
+            CHECK((r->style & LS_BOLD) != 0, "font-weight: bold did not reach the run");
+        }
+        if (r->len == 4 && !memcmp(r->text, "mono", 4)) {
+            saw_bg = 1;
+            CHECK(r->bg == 0xF4F4F4, "code background, got %d", r->bg);
+        }
+        if (r->len == 6 && !memcmp(r->text, "inline", 6)) {
+            saw_inline = 1;
+            CHECK(r->rgb == 0x00FF00, "style= colour, got %d", r->rgb);
+        }
+        if (r->len == 5 && !memcmp(r->text, "plain", 5)) plain_rgb = r->rgb;
+        if (r->len == 4 && !memcmp(r->text, "MUST", 4)) saw_hidden = 1;
+    }
+    CHECK(saw_h1, "the h1 produced no run");
+    CHECK(saw_big, "the .big span produced no run");
+    CHECK(saw_bg, "the <code> produced no run");
+    CHECK(saw_inline, "the style= paragraph produced no run");
+    CHECK(!saw_hidden, "display:none rendered its text anyway");
+    CHECK(plain_rgb == 0x222222, "body colour did not inherit, got %d", plain_rgb);
+
+    /* THE ONE THAT REGRESSED. Centred in 400px, so it must not start at the
+     * left edge - and it must not be pushed outside the box either. */
+    CHECK(lead_x > 0, "text-align: center did not move the line (x=%d)", lead_x);
+    CHECK(lead_x < 400, "text-align: center pushed the line out of the box (x=%d)", lead_x);
+
+    /* A SECOND DOCUMENT MUST NOT INHERIT THE FIRST ONE'S SHEET. This is the
+     * bug that only ever shows on the second navigation. */
+    static const char plain_page[] = "<html><body><h1>Unstyled</h1></body></html>";
+    html_parse(plain_page, (int)sizeof plain_page - 1);
+    css_reset();
+    for (int k = 0; k < html_sheets(); k++) {
+        int l;
+        const char *sh = html_sheet(k, &l);
+        css_add_sheet(sh, l);
+    }
+    lay_run_doc(400, 16);
+    for (int i = 0; i < lay_count(); i++) {
+        const struct lay_run *r = lay_at(i);
+        if (r->kind == LR_TEXT && r->len == 8 && !memcmp(r->text, "Unstyled", 8))
+            CHECK(r->rgb == LR_NO_RGB,
+                  "the previous page's stylesheet leaked into the next (%d)", r->rgb);
+    }
 }
 
 int main(void)
@@ -461,6 +565,7 @@ int main(void)
     t_pre();
     t_empty();
     t_deep();
+    t_css();
     printf("\n%d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

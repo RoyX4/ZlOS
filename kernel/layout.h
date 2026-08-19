@@ -30,6 +30,13 @@
 #define LC_DIM    1
 #define LC_ACCENT 2
 
+/* AN AUTHOR COLOUR IS NOT A THEME COLOUR, which is why `rgb` can sit beside
+ * `color` without breaking the rule above. The role says how the THEME should
+ * paint this run; rgb is a value the DOCUMENT asked for by name. layout.c
+ * still has no idea what LC_TEXT resolves to - it only carries through what
+ * the stylesheet said. -1 means the document did not ask, so the role wins. */
+#define LR_NO_RGB (-1)
+
 struct lay_run {
     int kind;
     int x, y, w, h;
@@ -37,7 +44,9 @@ struct lay_run {
     int len;
     int size;            /* the em size this was measured at     */
     int style;
-    int color;
+    int color;           /* LC_* role, used when rgb is LR_NO_RGB */
+    int rgb;             /* author colour from CSS, or LR_NO_RGB  */
+    int bg;              /* author background, or LR_NO_RGB       */
     int node;            /* the html node it came from           */
     int link;            /* enclosing <a>, or -1                 */
 };

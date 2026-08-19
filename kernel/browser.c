@@ -18,6 +18,7 @@
 
 #include "html.h"
 #include "layout.h"
+#include "css.h"
 #include "ui.h"
 #include "http.h"
 #include "tcp.h"
@@ -53,7 +54,20 @@ static int fb_style(int ls)
     return s;
 }
 
-#define DOC_MAX 24576
+/* A REAL PAGE, NOT A DEMO PAGE. 24 KB was sized for the hand-written home
+ * page. Measured against the English Wikipedia article on Linux: 965,511
+ * bytes of HTML, 8,239 open tags, 15,806 words, 16 <style> blocks - so the
+ * old cap kept 2.5% of it. This is BSS, which is NOBITS: it never enters the
+ * disk image, so it costs nothing against raw_boot.asm's CHUNKS ceiling
+ * (60 x 32 KiB = 1.875 MiB of FILE). It costs RAM, and the binding limit
+ * there is raw_entry.S's stack at 6 MiB, not the 128 MiB of free space above
+ * it - see the note in that file before raising this further. */
+#define DOC_MAX 262144
+
+/* Exposed for the harness. browsertest hard-coded an 80 KB document against a
+ * 24 KB cap; raising the cap turned "is a huge page truncated AND flagged"
+ * into a test that quietly checked nothing. Same lesson as HTML_MAX_NODES. */
+int browser_doc_cap(void) { return DOC_MAX; }
 
 static char doc[DOC_MAX];
 static int  doc_len;
@@ -157,6 +171,9 @@ static const char home_page[] =
 "<li>links, entities (&amp; &lt; &gt;), and malformed markup</li>\n"
 "<li><strong>the network</strong> - a real URL over <code>http://</code> is "
 "resolved by name, fetched and drawn</li>\n"
+"<li><strong>the page's own stylesheet</strong> - "
+"<code>&lt;style&gt;</code> and <code>style=</code>, cascaded by "
+"specificity</li>\n"
 "</ul>\n"
 "<h2>What does not</h2>\n"
 "<ol>\n"
@@ -170,8 +187,11 @@ static const char home_page[] =
 "not supported.</li>\n"
 "<li><strong>JavaScript.</strong> An engine is its own multi-year project, "
 "not a hard afternoon.</li>\n"
-"<li><strong>CSS.</strong> The stylesheet is the one compiled into "
-"<code>layout.c</code>; a page cannot bring its own.</li>\n"
+"<li><strong>Most of CSS.</strong> A page's own <code>&lt;style&gt;</code> and "
+"<code>style=</code> are read - type, class, id and descendant selectors, the "
+"cascade, colours, sizes, weights, alignment, margins. Not float, not flex, "
+"not grid, not positioning, and no pseudo-classes: those are refused rather "
+"than half-matched.</li>\n"
 "</ol>\n"
 "<h3>Try it</h3>\n"
 "<p>Press <code>[</code> and <code>]</code> to narrow and widen this window. "
@@ -196,6 +216,20 @@ static void doc_set(const char *src, int len)
     doc[len] = 0;
     doc_len = len;
     html_parse(doc, doc_len);
+
+    /* THE DOCUMENT'S OWN STYLESHEETS, in document order, which is also their
+     * cascade order. Reset first: a stylesheet from the PREVIOUS page styling
+     * the next one is a bug that only shows on the second navigation, which is
+     * exactly the kind nobody looks for. The sheets are spans of `doc`, so
+     * they stay valid as long as this document is loaded - and doc_set is the
+     * only thing that replaces it. */
+    css_reset();
+    for (int k = 0; k < html_sheets(); k++) {
+        int slen;
+        const char *s = html_sheet(k, &slen);
+        css_add_sheet(s, slen);
+    }
+
     lay_set_measure(measure);
     laid_w = 0;                       /* force a layout on the next paint */
     scroll = 0;
@@ -588,6 +622,15 @@ void browser_draw(int x, int y, int w, int h, int focused)
         unsigned int col = t->text;
         if (r->color == LC_DIM)    col = t->text_dim;
         if (r->color == LC_ACCENT) col = t->accent;
+        /* An author colour overrides the ROLE, and only the role - the theme
+         * still owns everything the document did not ask for. This is the one
+         * place the two meet, which is why layout.c can carry an RGB without
+         * knowing a theme exists. */
+        if (r->rgb != LR_NO_RGB) col = (unsigned int)r->rgb;
+        /* the author's background, painted behind the run - what makes
+         * <code> and highlighted spans read as boxes rather than bare text */
+        if (r->bg != LR_NO_RGB && r->w > 0 && r->h > 0)
+            fb_fill_px(rx, ry, r->w, r->h, (unsigned int)r->bg);
 
         if (r->kind == LR_RULE) {
             fb_fill_px(rx, ry, r->w, r->h > 0 ? r->h : 1, t->border);

@@ -46,6 +46,7 @@ int  browser_key(int code);
 int  browser_url_focus(void);
 int  browser_status(void);
 int  browser_truncated(void);
+int  browser_doc_cap(void);
 int  browser_tick(void);
 int  browser_scroll(void);
 int  browser_scroll_by(int d);
@@ -441,12 +442,22 @@ static void t_document(void)
     CHECK(browser_scroll() <= browser_height(),
           "scrolled past the end (%d of %d)", browser_scroll(), browser_height());
 
-    /* a document larger than the buffer is truncated AND says so */
-    static char big[80000];
-    memset(big, 'x', sizeof big);
-    memcpy(big, "<html><body><p>", 15);
-    browser_load(big, (int)sizeof big);
-    CHECK(browser_truncated() == 1, "an 80 KB document was not flagged as truncated");
+    /* a document larger than the buffer is truncated AND says so. Sized from
+     * the REAL cap, not a literal - see browser_doc_cap(). */
+    {
+        int cap = browser_doc_cap();
+        int bign = cap + 4096;
+        char *big = malloc((size_t)bign);
+        CHECK(big != 0, "could not allocate the oversize document");
+        if (big) {
+            memset(big, 'x', (size_t)bign);
+            memcpy(big, "<html><body><p>", 15);
+            browser_load(big, bign);
+            CHECK(browser_truncated() == 1,
+                  "a %d-byte document (cap %d) was not flagged as truncated", bign, cap);
+            free(big);
+        }
+    }
     browser_draw(0, 0, 400, 300, 1);
     CHECK(browser_height() > 0, "the truncated document laid out to nothing");
 

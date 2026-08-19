@@ -23,6 +23,12 @@ enum {
     HT_UNKNOWN
 };
 
+/* The parser's hard limits, EXPOSED rather than duplicated. htmltest asserted
+ * `html_count() <= 1024` against a literal, so raising MAX_NODES turned a real
+ * bounds check into a failing test that said nothing about bounds. A limit a
+ * test restates by hand is a limit the test stops checking. */
+#define HTML_MAX_NODES 8192
+
 void html_reset(void);
 int  html_parse(const char *src, int len);   /* returns the node count */
 
@@ -42,5 +48,18 @@ int  html_is_block(int tag);
 const char *html_text(int i, int *len);      /* NOT nul-terminated */
 const char *html_href(int i, int *len);
 const char *html_title(int *len);
+
+/* What a stylesheet matches against. All total: an element with no class, no
+ * id or no style= answers "" and 0. */
+const char *html_tagname(int i, int *len);   /* the element's own name */
+const char *html_class(int i, int *len);
+const char *html_id(int i, int *len);
+const char *html_style_attr(int i, int *len);
+
+/* The document's own <style> blocks, in document order = cascade order.
+ * These are spans of the SOURCE buffer, not copies - it must outlive the
+ * parse, which it does: browser.c holds the document. */
+int         html_sheets(void);
+const char *html_sheet(int k, int *len);
 
 #endif

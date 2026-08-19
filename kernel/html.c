@@ -21,17 +21,18 @@
  * asserts it against deliberately broken input.
  *
  * What it does NOT do, and these are decisions rather than omissions:
- *   - no scripting, no styles: <script> and <style> contents are DISCARDED,
- *     not rendered, because rendering a stylesheet as body text is worse than
- *     ignoring it
+ *   - no scripting: <script> contents are DISCARDED, not rendered. <style> is
+ *     no longer discarded - its text is handed to css.c as the document's own
+ *     stylesheet - but it is still never RENDERED, because a stylesheet shown
+ *     as body text is worse than one ignored
  *   - no character set beyond ASCII: bytes >= 0x80 become '?'
  *   - no DOCTYPE handling beyond skipping it, no namespaces, no <table>
  */
 
 #include "html.h"
 
-#define MAX_NODES  1024
-#define ARENA      32768
+#define MAX_NODES  HTML_MAX_NODES   /* 8,239 open tags in a Wikipedia article */
+#define ARENA      196608  /* ~99 KB of visible text in that same article */
 #define MAX_DEPTH  32
 
 struct node {
@@ -43,6 +44,13 @@ struct node {
     int   next;          /* next sibling                                */
     int   toff, tlen;    /* text: where it lives in the arena           */
     int   aoff, alen;    /* an <a>'s href, or an <img>'s alt            */
+    /* THE THREE ATTRIBUTES CSS NEEDS, and no others. Every other attribute
+     * still hands its arena back the moment it is read - keeping them all
+     * would turn the arena into the document's whole attribute surface for
+     * the sake of properties nothing can act on. */
+    int   coff, clen;    /* class                                       */
+    int   ioff, ilen;    /* id                                          */
+    int   soff, slen;    /* style=                                      */
 };
 
 static struct node nodes[MAX_NODES];
@@ -51,6 +59,16 @@ static char arena[ARENA];
 static int  used;
 static int  title_off, title_len;
 static int  n_dropped;               /* recoveries, for the harness to see */
+
+/* The document's own stylesheets, as spans of the SOURCE rather than copies.
+ * A page's <style> can be tens of kilobytes, and copying sheets into the node
+ * arena would let a styled page starve its own text. The source buffer
+ * outlives the parse - browser.c holds the document - and css.c interns the
+ * few hundred bytes it actually keeps. */
+#define MAX_SHEETS 32                /* a Wikipedia article carries 16 */
+static struct { int off, len; } sheets[MAX_SHEETS];
+static int nsheets;
+static const char *doc_src;          /* what those offsets are relative to */
 
 /* ---- the tag table ---------------------------------------------------------
  * The supported set and no more. An unknown tag is not an error: it becomes
@@ -132,6 +150,9 @@ static int node_new(short kind, short tag, int parent)
     nodes[i].first = nodes[i].last = nodes[i].next = -1;
     nodes[i].toff = nodes[i].tlen = 0;
     nodes[i].aoff = nodes[i].alen = 0;
+    nodes[i].coff = nodes[i].clen = 0;
+    nodes[i].ioff = nodes[i].ilen = 0;
+    nodes[i].soff = nodes[i].slen = 0;
     if (parent >= 0) {
         if (nodes[parent].last < 0) nodes[parent].first = i;
         else nodes[nodes[parent].last].next = i;
@@ -366,11 +387,14 @@ void html_reset(void)
     pre_depth = 0;
     title_off = title_len = 0;
     n_dropped = 0;
+    nsheets = 0;
+    doc_src = 0;
 }
 
 int html_parse(const char *src, int len)
 {
     html_reset();
+    doc_src = src;                   /* the sheets are spans of THIS buffer */
     if (!src || len <= 0) { node_new(HN_ELEM, HT_HTML, -1); return 0; }
 
     int root = node_new(HN_ELEM, HT_HTML, -1);
@@ -418,11 +442,14 @@ int html_parse(const char *src, int len)
             continue;
         }
 
-        /* attributes: only href and alt are kept; the rest are parsed and
-         * discarded, because parsing them is what makes '>' inside a quoted
-         * attribute value not end the tag. */
+        /* attributes: href, alt, and the three css.c needs. The rest are
+         * parsed and discarded, because parsing them is what makes '>' inside
+         * a quoted attribute value not end the tag. */
         int j = ne;
         int href_off = 0, href_len = 0;
+        int cls_off = 0, cls_len = 0;
+        int id_off = 0, id_len = 0;
+        int sty_off = 0, sty_len = 0;
         int self_close = 0;
         while (j < len && src[j] != '>') {
             while (j < len && (is_ws(src[j]) || src[j] == '/')) {
@@ -436,9 +463,12 @@ int html_parse(const char *src, int len)
             int voff = 0, vlen = 0;
             int save = used;
             int got = attr_value(src, len, &j, &voff, &vlen);
-            int want = name_eq(src + as, alen2, "href") ||
-                       (t == HT_IMG && name_eq(src + as, alen2, "alt"));
-            if (got && want && !href_len) { href_off = voff; href_len = vlen; }
+            int is_href = name_eq(src + as, alen2, "href") ||
+                          (t == HT_IMG && name_eq(src + as, alen2, "alt"));
+            if (got && is_href && !href_len)                            { href_off = voff; href_len = vlen; }
+            else if (got && name_eq(src + as, alen2, "class") && !cls_len) { cls_off = voff; cls_len = vlen; }
+            else if (got && name_eq(src + as, alen2, "id")    && !id_len)  { id_off = voff;  id_len = vlen; }
+            else if (got && name_eq(src + as, alen2, "style") && !sty_len) { sty_off = voff; sty_len = vlen; }
             else if (got) used = save;        /* not wanted: give the arena back */
             if (!got) { /* a valueless attribute, e.g. <input disabled> */ }
         }
@@ -446,7 +476,26 @@ int html_parse(const char *src, int len)
         text_from = i;
 
         if (t == HT_SCRIPT || t == HT_STYLE) {
+            int raw0 = i;
             i = skip_raw(src, len, i, t == HT_SCRIPT ? "script" : "style");
+            /* A <style> element's TEXT is the document's stylesheet, so it is
+             * kept - as a span of the source, uncopied. <script> is still
+             * discarded: there is no engine, and keeping it would only mean
+             * holding a megabyte of JavaScript the renderer cannot use.
+             * Several <style> blocks concatenate in document order, which is
+             * also their cascade order. */
+            if (t == HT_STYLE && nsheets < MAX_SHEETS && i > raw0) {
+                int end = i;
+                /* skip_raw returns the index PAST </style>; walk back to the
+                 * '<' so the closing tag is not part of the sheet */
+                while (end > raw0 && src[end - 1] != '<') end--;
+                if (end > raw0) end--; else end = i;
+                if (end > raw0) {
+                    sheets[nsheets].off = raw0;
+                    sheets[nsheets].len = end - raw0;
+                    nsheets++;
+                }
+            }
             text_from = i;
             continue;
         }
@@ -463,6 +512,9 @@ int html_parse(const char *src, int len)
         if (n < 0) { n_dropped++; continue; }
         nodes[n].aoff = href_off;
         nodes[n].alen = href_len;
+        nodes[n].coff = cls_off; nodes[n].clen = cls_len;
+        nodes[n].ioff = id_off;  nodes[n].ilen = id_len;
+        nodes[n].soff = sty_off; nodes[n].slen = sty_len;
 
         /* an unsupported element keeps its NAME here instead of an href, so
          * its close tag can be matched exactly - see close_to() */
@@ -534,6 +586,70 @@ const char *html_href(int i, int *len)
     }
     if (len) *len = nodes[i].alen;
     return arena + nodes[i].aoff;
+}
+
+/* class, id and style=. Total like every other accessor: an element without
+ * one answers "" and length 0, which is exactly what css.c wants to see. */
+const char *html_class(int i, int *len)
+{
+    if ((unsigned)i >= (unsigned)nnodes || !nodes[i].clen) { if (len) *len = 0; return ""; }
+    if (len) *len = nodes[i].clen;
+    return arena + nodes[i].coff;
+}
+
+const char *html_id(int i, int *len)
+{
+    if ((unsigned)i >= (unsigned)nnodes || !nodes[i].ilen) { if (len) *len = 0; return ""; }
+    if (len) *len = nodes[i].ilen;
+    return arena + nodes[i].ioff;
+}
+
+const char *html_style_attr(int i, int *len)
+{
+    if ((unsigned)i >= (unsigned)nnodes || !nodes[i].slen) { if (len) *len = 0; return ""; }
+    if (len) *len = nodes[i].slen;
+    return arena + nodes[i].soff;
+}
+
+int html_sheets(void) { return nsheets; }
+
+const char *html_sheet(int k, int *len)
+{
+    if ((unsigned)k >= (unsigned)nsheets || !doc_src) { if (len) *len = 0; return ""; }
+    if (len) *len = sheets[k].len;
+    return doc_src + sheets[k].off;
+}
+
+/* The element's own tag NAME, which is what a CSS type selector matches
+ * against. HT_UNKNOWN already keeps its name in the href slot (see close_to),
+ * so this reaches <section> and <article> too. */
+const char *html_tagname(int i, int *len)
+{
+    static const char *names[] = {
+        "", "html", "head", "body", "title",
+        "h1", "h2", "h3", "h4", "h5", "h6",
+        "p", "br", "hr", "a",
+        "ul", "ol", "li",
+        "strong", "em", "b", "i",
+        "code", "pre",
+        "div", "span", "img",
+        "script", "style"
+    };
+    if ((unsigned)i >= (unsigned)nnodes || nodes[i].kind != HN_ELEM) {
+        if (len) *len = 0;
+        return "";
+    }
+    int t = nodes[i].tag;
+    if (t == HT_UNKNOWN) {
+        if (len) *len = nodes[i].alen;
+        return nodes[i].alen ? arena + nodes[i].aoff : "";
+    }
+    if (t <= 0 || t >= (int)(sizeof names / sizeof names[0])) { if (len) *len = 0; return ""; }
+    const char *s = names[t];
+    int n = 0;
+    while (s[n]) n++;
+    if (len) *len = n;
+    return s;
 }
 
 const char *html_title(int *len)

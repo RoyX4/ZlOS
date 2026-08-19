@@ -33,8 +33,9 @@
 
 #include "layout.h"
 #include "html.h"
+#include "css.h"
 
-#define MAX_RUNS 2048
+#define MAX_RUNS 12288   /* 15,806 words in a Wikipedia article */
 #define GEN_SIZE 256
 
 static struct lay_run runs[MAX_RUNS];
@@ -56,6 +57,22 @@ static int line_h;        /* the tallest run on it                      */
 static int line_start;    /* index of its first run                     */
 static int line_open;
 static int pend_m;        /* the collapsed margin waiting to be applied */
+
+/* ---- what the stylesheet is currently saying -------------------------------
+ * These are the CSS properties that cannot be walk() arguments, because the
+ * code that consumes them is not walk(): push_run() stamps every run and
+ * line_end() aligns a whole line box. They are saved and restored around each
+ * element exactly the way `left` and `right` already are - the walk is a
+ * single recursive descent, so a static here is a stack slot with a different
+ * spelling. */
+static int cur_rgb   = LR_NO_RGB;
+static int cur_bg    = LR_NO_RGB;
+static int cur_align = CSS_ALIGN_LEFT;
+
+/* the ancestor path a descendant selector is matched against */
+#define CSS_PATH_MAX 32
+static struct css_elem cpath[CSS_PATH_MAX];
+static int cdepth;
 
 void lay_set_measure(lay_measure_fn f) { measure = f; }
 
@@ -126,6 +143,28 @@ static void line_end(void)
     if (!line_open) return;
     for (int i = line_start; i < nruns; i++)
         runs[i].y = fy + line_h - runs[i].h;
+
+    /* TEXT-ALIGN IS A LINE-BOX PROPERTY, so this is the only place it can be
+     * applied: the slack is not known until the line is closed. Shift the
+     * whole line rather than each run, or the inter-word spacing changes with
+     * the alignment. A list marker hangs OUTSIDE the content edge on purpose
+     * and is left where it is - moving it would detach it from its item. */
+    if (cur_align != CSS_ALIGN_LEFT && nruns > line_start) {
+        int end = left;
+        for (int i = line_start; i < nruns; i++) {
+            if (runs[i].kind == LR_BULLET || runs[i].x < left) continue;
+            if (runs[i].x + runs[i].w > end) end = runs[i].x + runs[i].w;
+        }
+        int slack = (right - left) - (end - left);
+        if (slack > 0) {
+            int shift = (cur_align == CSS_ALIGN_CENTER) ? slack / 2 : slack;
+            for (int i = line_start; i < nruns; i++) {
+                if (runs[i].kind == LR_BULLET || runs[i].x < left) continue;
+                runs[i].x += shift;
+            }
+        }
+    }
+
     by = fy + line_h;
     nlines++;
     line_open = 0;
@@ -139,6 +178,9 @@ static struct lay_run *push_run(void)
     r->x = r->y = r->w = r->h = 0;
     r->text = ""; r->len = 0;
     r->size = em; r->style = 0; r->color = LC_TEXT;
+    /* the author's colours ride along on every run, so nothing downstream has
+     * to re-derive them from the node */
+    r->rgb = cur_rgb; r->bg = cur_bg;
     r->node = -1; r->link = -1;
     return r;
 }
@@ -332,23 +374,37 @@ static void walk(int n, int size, int style, int color, int link,
         }
 
         int t = html_tag(n);
+
+        /* These three render nothing and have no children worth walking, so
+         * they are handled before the path is pushed - which keeps the push
+         * and the pop adjacent, and that is what stops the path leaking on an
+         * early exit. */
+        if (t == HT_HEAD || t == HT_SCRIPT || t == HT_STYLE) continue;
+
         int csize = size, cstyle = style, ccolor = color, clink = link;
         int save_left = left, save_right = right;
+        int save_rgb = cur_rgb, save_bg = cur_bg, save_align = cur_align;
         int block = html_is_block(t);
         int my_item = 0;
         int child_ordered = ordered;
         int *child_item = item;
         int child_pre = pre;
 
+        int pushed = 0;
+        if (cdepth < CSS_PATH_MAX) {
+            cpath[cdepth].tag = html_tagname(n, &cpath[cdepth].tag_len);
+            cpath[cdepth].id  = html_id(n, &cpath[cdepth].id_len);
+            cpath[cdepth].cls = html_class(n, &cpath[cdepth].cls_len);
+            cdepth++;
+            pushed = 1;
+        }
+
         switch (t) {
-        case HT_HEAD:
-            continue;                                   /* never rendered */
-        case HT_SCRIPT: case HT_STYLE:
-            continue;
         case HT_BR:
             line_begin();
             if (line_h < line_height(size)) line_h = line_height(size);
             line_end();
+            cdepth -= pushed;
             continue;
         case HT_HR: {
             line_end();
@@ -364,6 +420,7 @@ static void walk(int n, int size, int style, int color, int link,
                 by += r->h;
             }
             margin(em * 3 / 4);
+            cdepth -= pushed;
             continue;
         }
         case HT_IMG: {
@@ -379,6 +436,7 @@ static void walk(int n, int size, int style, int color, int link,
                 if (line_open && fx > left) fx += meas(" ", 1, size, style);
                 emit_text(alt, alen, size, style | LS_ITALIC, LC_DIM, n, link);
             }
+            cdepth -= pushed;
             continue;
         }
         case HT_A:
@@ -397,6 +455,37 @@ static void walk(int n, int size, int style, int color, int link,
             break;
         default:
             break;
+        }
+
+        /* ---- the cascade, over the built-in rules ---------------------------
+         * Seeded from the INHERITED values, so a property no rule mentions is
+         * inherited rather than reset - which is what `has` is for. Computed
+         * here but applied AFTER the block rules below, because those set a
+         * heading's size and `h1 { font-size: 1.2em }` has to beat
+         * head_size(). */
+        struct css_style st;
+        st.has = 0;
+        st.rgb = cur_rgb; st.bg = cur_bg;
+        st.size = size;
+        st.bold      = (style & LS_BOLD)   != 0;
+        st.italic    = (style & LS_ITALIC) != 0;
+        st.mono      = (style & LS_MONO)   != 0;
+        st.underline = (style & LS_UNDER)  != 0;
+        st.align = cur_align;
+        st.display = block ? CSS_DISP_BLOCK : CSS_DISP_INLINE;
+        st.margin_t = st.margin_b = st.margin_l = st.margin_r = 0;
+        st.pad_t = st.pad_b = st.pad_l = st.pad_r = 0;
+        {
+            int slen;
+            const char *sattr = html_style_attr(n, &slen);
+            css_compute(cpath, cdepth, size, sattr, slen, &st);
+        }
+
+        /* display:none removes the element AND its subtree from the flow -
+         * before any margin or line break it would otherwise have caused. */
+        if ((st.has & CSS_P_DISPLAY) && st.display == CSS_DISP_NONE) {
+            cdepth -= pushed;
+            continue;
         }
 
         if (is_heading(t)) {
@@ -476,23 +565,54 @@ static void walk(int n, int size, int style, int color, int link,
                     if (r->x < 0) r->x = 0;
                 }
             }
-        } else if (block) {
+        } else if (block || ((st.has & CSS_P_DISPLAY) && st.display == CSS_DISP_BLOCK)) {
             line_end();
+            block = 1;                 /* display:block makes an inline stack */
         }
+
+        /* ---- now the stylesheet wins ---------------------------------------
+         * Only properties a rule actually SET are applied; everything else
+         * keeps the inherited value it was seeded with. */
+        if (st.has & CSS_P_SIZE)   csize = st.size > 0 ? st.size : csize;
+        if (st.has & CSS_P_WEIGHT) cstyle = st.bold      ? (cstyle | LS_BOLD)   : (cstyle & ~LS_BOLD);
+        if (st.has & CSS_P_STYLE)  cstyle = st.italic    ? (cstyle | LS_ITALIC) : (cstyle & ~LS_ITALIC);
+        if (st.has & CSS_P_FAMILY) cstyle = st.mono      ? (cstyle | LS_MONO)   : (cstyle & ~LS_MONO);
+        if (st.has & CSS_P_DECOR)  cstyle = st.underline ? (cstyle | LS_UNDER)  : (cstyle & ~LS_UNDER);
+        if (st.has & CSS_P_COLOR)  cur_rgb   = st.rgb;
+        if (st.has & CSS_P_BG)     cur_bg    = st.bg;
+        if (st.has & CSS_P_ALIGN)  cur_align = st.align;
+
+        /* A margin the author gave REPLACES the built-in one rather than
+         * maxing with it - margin() collapses, and `p { margin: 0 }` has to be
+         * able to CLOSE a gap, not merely fail to widen it. */
+        if (st.has & CSS_P_MARGIN_T) pend_m = st.margin_t > 0 ? st.margin_t : 0;
+        if (st.has & CSS_P_PAD_L)    indent(st.pad_l);
+        if (st.has & CSS_P_MARGIN_L) indent(st.margin_l);
 
         walk(html_first(n), csize, cstyle, ccolor, clink,
              child_item, child_ordered, child_pre);
 
+        cdepth -= pushed;
+
+        /* THE RESTORE HAPPENS AFTER line_end(), NOT BEFORE IT. This block's
+         * last line box is still open here, and line_end() is what applies
+         * text-align to it - restoring cur_align first aligned that line with
+         * the PARENT's setting, so `p { text-align: center }` centred nothing
+         * while its colour applied correctly. Found end to end, not by a unit
+         * test: every per-property assertion passed. */
         if (block) {
             line_end();
             left = save_left;
             right = save_right;
-            if (is_heading(t))      margin(csize / 2);
+            if (st.has & CSS_P_MARGIN_B) pend_m = st.margin_b > 0 ? st.margin_b : 0;
+            else if (is_heading(t)) margin(csize / 2);
             else if (t == HT_P)     margin(em * 3 / 4);
             else if (t == HT_PRE)   margin(em * 3 / 4);
             else if (t == HT_UL || t == HT_OL) margin(em / 2);
             else if (t == HT_LI)    margin(em / 6);
         }
+
+        cur_rgb = save_rgb; cur_bg = save_bg; cur_align = save_align;
     }
 }
 

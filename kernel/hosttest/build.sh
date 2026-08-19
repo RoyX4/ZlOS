@@ -110,13 +110,22 @@ fi
 # injecting a synthetic one turns both into ordinary programs. Malformed markup
 # recovering rather than faulting is unprovable by looking at a rendered page,
 # and reflow is a claim about numbers before it is a claim about pixels.
-gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o htmltest htmltest.c ../html.c ../layout.c
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o htmltest htmltest.c ../html.c ../css.c ../layout.c
 echo "built ./htmltest      (run: ./htmltest)"
+
+# The CSS engine, against hand-written stylesheets. css.c takes UNTRUSTED TEXT
+# from a machine we did not choose and turns it into numbers that move pixels -
+# the same trust boundary dns.c sits on - so most of this harness is malformed
+# or hostile rather than merely unusual. It needs no html.c and no layout.c:
+# matching takes an explicit ancestor path, so the engine is testable with
+# nothing else linked at all.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o csstest csstest.c ../css.c
+echo "built ./csstest       (run: ./csstest)"
 
 # ...and the same document at three widths, as a picture. Same argument as
 # wmtest/wmshot: assertions catch a run escaping the content box, eyes catch
 # inline <code> set at the wrong size or a list marker sitting in its own text.
-gcc -O2 -w -o browsershot browsershot.c ../browser.c ../html.c ../layout.c \
+gcc -O2 -w -o browsershot browsershot.c ../browser.c ../html.c ../css.c ../layout.c \
     ../ui.c ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c \
     ../http.c ../tcp.c ../net.c ../dns.c
 echo "built ./browsershot   (run: ./browsershot out.ppm)"
@@ -156,7 +165,7 @@ echo "built ./httptest      (run: ./httptest)"
 # network below it is real: net.c, tcp.c and http.c are all linked, so "did it
 # parse the port" is answered by looking at the SYN that went out.
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o browsertest browsertest.c ../browser.c \
-    ../html.c ../layout.c ../http.c ../tcp.c ../net.c ../dns.c
+    ../html.c ../css.c ../layout.c ../http.c ../tcp.c ../net.c ../dns.c
 echo "built ./browsertest   (run: ./browsertest)"
 
 # Every layer that takes bytes from somewhere else, fed garbage. The harnesses
@@ -165,7 +174,7 @@ echo "built ./browsertest   (run: ./browsertest)"
 # it WITH the sanitizers - a clean run without them proves almost nothing.
 #   ./fuzz [iterations] [seed]
 gcc -O1 -g -w -D_GNU_SOURCE -fsanitize=address,undefined -o fuzz fuzz.c \
-    ../html.c ../layout.c ../net.c ../tcp.c ../http.c
+    ../html.c ../css.c ../layout.c ../net.c ../tcp.c ../http.c
 echo "built ./fuzz          (run: ./fuzz 3000 1)"
 
 # The resolver, mostly fed answers it should refuse. A DNS response is
