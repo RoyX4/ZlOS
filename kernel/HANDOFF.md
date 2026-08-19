@@ -6,6 +6,23 @@ slots remain only as a compatibility path; new app work should use `zlfs`.
 
 Read this first in a new session. Everything below is verified, not remembered.
 
+> **Cloning the desktop mockup:**
+> [`../docs/design/ds-clone.md`](../docs/design/ds-clone.md) is the one page for
+> the ds-reference.html clone — the palette chain, the motion curves, the
+> fidelity oracle, and an explicit list of what is APPROXIMATED rather than
+> reproduced. Its companion
+> [`docs/reference-widgets.md`](docs/reference-widgets.md) is the measured
+> widget specification: 68 records, 178 line citations into the reference, and
+> an index of the 18 places the reference contradicts itself. Read both before
+> adding an app or a widget.
+>
+> Two facts from it that change what is possible, and are easy to waste hours
+> rediscovering: the reference **cannot render without a shim** (its runtime was
+> never delivered — `kernel/refrender/` reimplements it), and **every game
+> canvas in it is blank**, along with Renderer, Framebuffer, Console, Font Atlas
+> and Image Viewer, because seven more of its modules are missing too. For
+> those, only the shell can be cloned.
+
 > **Visual system status:** [`docs/visual-speed-northstar.md`](docs/visual-speed-northstar.md)
 > records the isolated 2026-08-19 implementation pass, its host/QEMU evidence,
 > and the exact target-hardware proof that remains. Keep visual polish and real
