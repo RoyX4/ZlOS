@@ -506,7 +506,10 @@ DOCK_BAR_W = DOCK_PADX * 2 + DOCK_N * DOCK_TW + (DOCK_N - 1) * DOCK_GAP + DOCK_G
 fn dock_fill() { return rgb(18, 21, 24) }
 fn dock_bar_x() { return (px_w() - DOCK_BAR_W * ui()) / 2 }
 fn dock_x0() { return dock_bar_x() + DOCK_PADX * ui() }
-fn dock_start_x() { return dock_bar_x() + DOCK_PADX * ui() }
+# dock_start_x() lived here and returned exactly what dock_x0() returns. It had
+# one caller, desk_click's start-button guard, and that guard is why the
+# Terminal tile did nothing - see the note there. A second name for the same
+# number is how a stale meaning survives a redesign.
 
 
 fn dock_name(slot) {
@@ -3549,7 +3552,10 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
     # Everything past APP_EDIT is the app suite (apps_registry.zl and the
     # category modules it fronts) - one seam, so this chain never grows past
     # the original 13 again.
-    if id >= APP_CATALOG { return reg_draw(id, ax, ay, aw, ah, afocus) }
+    # REG_FIRST, not APP_CATALOG. The floor is "the registry owns this id",
+    # and APP_CATALOG stopped being that number the moment APP_FILES was given
+    # 13 - see apps_registry.zl's note on the constant.
+    if id >= REG_FIRST { return reg_draw(id, ax, ay, aw, ah, afocus) }
     return 0
 }
 
@@ -3601,7 +3607,11 @@ fn app_event(id, win, ety, ecode, ex, ey) {
     # would silently eat every arrow-key press before a registry app ever saw
     # it. 2048 and the maze both steer by arrow key, so this needs the RAW
     # event, exactly as K_LEFT/K_RIGHT/K_UP/K_DOWN are already defined for.
-    if id >= APP_CATALOG { return reg_event(id, win, ety, ecode, ex, ey) }
+    # REG_FIRST, not APP_CATALOG - and here the old floor was actively wrong
+    # rather than merely misnamed. It sat ABOVE the `id == APP_FILES` arm
+    # below, and APP_FILES is 13, so every key and click aimed at the Files
+    # window was routed into cat_event() instead of files_event().
+    if id >= REG_FIRST { return reg_event(id, win, ety, ecode, ex, ey) }
     if id == APP_BROWSER {
         # '[' and ']' RESIZE THE WINDOW, and that is the gate rather than a
         # convenience: reflow is only observable if the width can change while
@@ -3752,7 +3762,7 @@ fn open_app(cmd, arg) {
         if snake_win >= 0 { if wm_open_p(snake_win) == 1 {
             wm_setfocus(snake_win)  wm_raise(snake_win)  return 1
         }}
-        snake_win = wm_open(APP_SNAKE, "Snake", 20 * oa_u, 60 * oa_u, 280 * oa_u, 160 * oa_u)
+        snake_win = wm_open(APP_SNAKE, "Snake", 120 * oa_u, 70 * oa_u, 420 * oa_u, 360 * oa_u)
         if snake_win < 0 { return 0 }
         sn_reset(wm_cw(snake_win), wm_ch(snake_win))
         if oa_f >= 0 { wm_setfocus(oa_f) }
@@ -3813,7 +3823,7 @@ fn open_app(cmd, arg) {
         if files_win >= 0 { if wm_open_p(files_win) == 1 {
             wm_setfocus(files_win)  wm_raise(files_win)  return 1
         }}
-        files_win = wm_open(APP_FILES, "Files", 310 * oa_u, 80 * oa_u, 520 * oa_u, 380 * oa_u)
+        files_win = wm_open(APP_FILES, "Files", 238 * oa_u, 346 * oa_u, 672 * oa_u, 352 * oa_u)
         if files_win < 0 { return 0 }
         files_refresh()
         wm_setfocus(files_win)
@@ -3928,7 +3938,7 @@ fn app_tick(id, win) {
     if id == APP_CUBE  { return cube_tick() }
     if id == APP_ANIM  { return anim_tick(wm_cw(win), wm_ch(win)) }
     if id == APP_MOUSE { return mouse_tick() }
-    if id >= APP_CATALOG { return reg_tick(id, win) }
+    if id >= REG_FIRST { return reg_tick(id, win) }
     return 0
 }
 
@@ -4094,7 +4104,7 @@ fn open_snake() {
     }
     sx = px_w() / 2 - 200 * u
     sy = 120 * u
-    snake_win = wm_open(APP_SNAKE, "Snake", sx, sy, 400 * u, 330 * u)
+    snake_win = wm_open(APP_SNAKE, "Snake", sx, sy, 420 * u, 360 * u)
     wm_setfocus(snake_win)
     wm_raise(snake_win)
     return 0
@@ -4155,8 +4165,20 @@ fn desk_click(cx, cy, cbtn) {
     if down == 0 { return 0 }
     if cy < TOPBAR_H * u { if cx < 210 * u { return open_menu() } }
     if cy < dock_y() { return 0 }
-    dsx = dock_start_x()
-    if cx >= dsx { if cx < dsx + 42 * u { return open_menu() } }
+    # THE START-BUTTON GUARD THAT USED TO BE HERE IS GONE. It read
+    #
+    #     dsx = dock_start_x()
+    #     if cx >= dsx { if cx < dsx + 42 * u { return open_menu() } }
+    #
+    # and dock_start_x() returns dock_x0() - the LEFT EDGE OF TILE 0. It is a
+    # leftover from the full-width bar, which really did put a start button
+    # there; the floating island that replaced it draws nine launcher tiles
+    # starting at exactly that x and no start button at all (draw_dock_bg).
+    # 42 design units is wider than one tile plus its gap (33 + 5), so the
+    # guard swallowed the whole Terminal tile and the first four units of the
+    # Browser tile, and returned before dock_launch could ever see them.
+    # The menu is still reachable, by the two routes that are real: the
+    # top-left of the topbar (above) and a Super tap (desk_key).
     if nh >= 0 { return dock_launch(nh) }
     # the window list, to the right of the launchers
     tw = task_slot_at(cx, cy)
@@ -4207,7 +4229,7 @@ fn task_label(app) {
     if app == APP_EDIT    { return "Text Editor" }
     # Every app-suite window falls through to the same registry the catalog
     # reads, so a new app's taskbar chip needs no entry here at all.
-    if app >= APP_CATALOG { return reg_name(app) }
+    if app >= REG_FIRST { return reg_name(app) }
     return "window"
 }
 
@@ -4324,7 +4346,7 @@ fn reopen_browser() {
 fn reopen_settings() {
     u = ui()
     if settings_win >= 0 { if wm_open_p(settings_win) == 1 { wm_setfocus(settings_win)  wm_raise(settings_win)  return 0 } }
-    settings_win = wm_open(APP_SETTINGS, "Settings", px_w() / 2 - 300 * u, 180 * u, 600 * u, 430 * u)
+    settings_win = wm_open(APP_SETTINGS, "Settings", 388 * u, 190 * u, 486 * u, 332 * u)
     wm_setfocus(settings_win)
     wm_raise(settings_win)
     return 0

@@ -27,7 +27,29 @@
 APP_SETTINGS = 6                    # settings.c; wmglue.c dispatches its
                                      # draw/event before zl ever sees them -
                                      # this only has to know how to OPEN one
-APP_CATALOG  = 13                   # "All Applications" - see cat_* below
+# "All Applications" - see cat_* below.
+#
+# 70 AND NOT 13, and that one digit is why the catalog never opened. 13 is
+# APP_FILES (kernel.zl:3499), added to the original suite AFTER this constant
+# was chosen at what was then one past APP_EDIT. Two apps sharing an id is not
+# a naming problem, it is a routing problem, and it broke in the worst
+# direction: reg_open() finds a window by ASKING wm which app each open window
+# is showing (reg_find_win), and the desktop opens a Files window at boot. So
+# `apps`, the dock's grid button and the start menu's "All Applications" all
+# reached reg_open(13), which matched the Files window already on screen,
+# raised and focused it, and returned 1 - success, no new window, no
+# diagnostic. 47 of 53 apps live behind that click and none of them could be
+# opened by a person or photographed by the oracle.
+#
+# It misrouted in the other direction too: app_event() tested `id >=
+# APP_CATALOG` BEFORE its `id == APP_FILES` arm, so every key and click aimed
+# at the Files window was handed to cat_event() instead of files_event().
+#
+# The seam those three dispatchers want is "is this id in the registry", which
+# is REG_FIRST, not "is this id the catalog". They say REG_FIRST now, and this
+# constant sits one past REG_LAST where reg_exists() already refuses it - the
+# catalog must not list itself as a tile.
+APP_CATALOG  = 70
 
 # ---- utilities (apps_utils.zl) ----------------------------------------------
 APP_CLIP  = 14
@@ -74,7 +96,9 @@ REG_LAST  = 69                      # highest id any slice owns
 # zl cannot test for, having no string comparison.
 fn reg_exists(id) {
     if id < REG_FIRST { return 0 }
-    if id > REG_LAST { return 0 }
+    if id > REG_LAST { return 0 }             # incl. APP_CATALOG, which is
+                                              # REG_LAST + 1 and must never
+                                              # appear as a tile in itself
     if id >= 34 { if id <= 39 { return 0 } }   # never allocated
     if id == 51 { return 0 }                   # apps_sys3.zl   spare
     if id == 60 { return 0 }                   # apps_games3.zl spare
@@ -118,6 +142,10 @@ fn reg_id_at(idx) {
 # ---- the table --------------------------------------------------------------
 # id -> display name (used by window titles, the catalog and the taskbar)
 fn reg_name(id) {
+    # The catalog is not a TILE (reg_exists refuses it) but it IS a window, so
+    # task_label() asks for its name like any other. Without this its taskbar
+    # chip read "App".
+    if id == APP_CATALOG { return "All Applications" }
     if id == APP_CLIP  { return "Clipboard" }
     if id == APP_COLOR { return "Colour Picker" }
     if id == APP_REGEX { return "Regex Tester" }      # the reference's own name
@@ -164,16 +192,33 @@ fn reg_cat(id) {
 
 # id -> default window size, in DESIGN UNITS (still needs * ui()).
 fn reg_w(id) {
-    if id == APP_COLOR  { return 260 }
-    if id == APP_UNIT   { return 260 }
-    if id == APP_NOTES  { return 300 }
-    if id == APP_WORDLE  { return 200 }
-    if id == APP_HANOI   { return 320 }
-    if id == APP_LIGHTS  { return 220 }
-    if id == APP_CLOCK   { return 220 }
-    if id == APP_SYSINFO { return 260 }
-    if id == APP_CALC    { return 200 }
-    if id == APP_MAZE    { return 380 }
+    # EVERY SIZE IS THE REFERENCE'S OWN, from ds-reference.html's APPS,
+    # UTILS and GAME_APPS arrays. They were not before: twenty of these
+    # apps carried a size picked when the app was written, and the errors
+    # were not small - Clocks & Timers opened 220x160 against the
+    # reference's 520x352, a quarter of the area. The oracle compares by
+    # REGION, so a window at the wrong size scores wrong however well its
+    # contents are drawn. All ten utilities are 470x352; the rest differ.
+    if id == APP_CLIP       { return 470 }
+    if id == APP_COLOR      { return 470 }
+    if id == APP_REGEX      { return 470 }
+    if id == APP_BASE       { return 470 }
+    if id == APP_DIFF       { return 470 }
+    if id == APP_HASH       { return 470 }
+    if id == APP_UNIT       { return 470 }
+    if id == APP_NOTES      { return 470 }
+    if id == APP_KEYS       { return 470 }
+    if id == APP_BENCH      { return 470 }
+    if id == APP_WORDLE     { return 400 }
+    if id == APP_TICTACTOE  { return 350 }
+    if id == APP_NIM        { return 400 }
+    if id == APP_HANOI      { return 430 }
+    if id == APP_LIGHTS     { return 360 }
+    if id == APP_CONNECT4   { return 430 }
+    if id == APP_MAZE       { return 500 }
+    if id == APP_CLOCK      { return 520 }
+    if id == APP_SYSINFO    { return 544 }
+    if id == APP_CALC       { return 300 }
     # ---- the per-slice tables. Each file owns a disjoint id range and answers
     # ---- only for its own; see apps_sys2.zl for why they are separate files.
     if sys2_has(id) == 1 { return sys2_w(id) }
@@ -183,25 +228,33 @@ fn reg_w(id) {
     return 300
 }
 fn reg_h(id) {
-    if id == APP_CLIP    { return 220 }
-    if id == APP_REGEX   { return 150 }
-    if id == APP_BASE    { return 140 }
-    if id == APP_DIFF    { return 140 }
-    if id == APP_HASH    { return 120 }
-    if id == APP_UNIT    { return 120 }
-    if id == APP_NOTES   { return 200 }
-    if id == APP_KEYS    { return 140 }
-    if id == APP_BENCH   { return 130 }
-    if id == APP_WORDLE  { return 230 }
-    if id == APP_TICTACTOE { return 220 }
-    if id == APP_NIM       { return 140 }
-    if id == APP_HANOI     { return 200 }
-    if id == APP_LIGHTS    { return 240 }
-    if id == APP_CONNECT4  { return 280 }
-    if id == APP_CLOCK   { return 160 }
-    if id == APP_SYSINFO { return 200 }
-    if id == APP_CALC    { return 240 }
-    if id == APP_MAZE    { return 260 }
+    # EVERY SIZE IS THE REFERENCE'S OWN, from ds-reference.html's APPS,
+    # UTILS and GAME_APPS arrays. They were not before: twenty of these
+    # apps carried a size picked when the app was written, and the errors
+    # were not small - Clocks & Timers opened 220x160 against the
+    # reference's 520x352, a quarter of the area. The oracle compares by
+    # REGION, so a window at the wrong size scores wrong however well its
+    # contents are drawn. All ten utilities are 470x352; the rest differ.
+    if id == APP_CLIP       { return 352 }
+    if id == APP_COLOR      { return 352 }
+    if id == APP_REGEX      { return 352 }
+    if id == APP_BASE       { return 352 }
+    if id == APP_DIFF       { return 352 }
+    if id == APP_HASH       { return 352 }
+    if id == APP_UNIT       { return 352 }
+    if id == APP_NOTES      { return 352 }
+    if id == APP_KEYS       { return 352 }
+    if id == APP_BENCH      { return 352 }
+    if id == APP_WORDLE     { return 380 }
+    if id == APP_TICTACTOE  { return 380 }
+    if id == APP_NIM        { return 330 }
+    if id == APP_HANOI      { return 320 }
+    if id == APP_LIGHTS     { return 390 }
+    if id == APP_CONNECT4   { return 400 }
+    if id == APP_MAZE       { return 390 }
+    if id == APP_CLOCK      { return 352 }
+    if id == APP_SYSINFO    { return 398 }
+    if id == APP_CALC       { return 404 }
     # ---- the per-slice tables. Each file owns a disjoint id range and answers
     # ---- only for its own; see apps_sys2.zl for why they are separate files.
     if sys2_has(id) == 1 { return sys2_h(id) }
@@ -274,7 +327,7 @@ fn reg_find_win(id) {
 # for anything that needs a fresh start each time it is opened - the same
 # rule open_app() already follows for Snake). Returns the new window, or -1.
 fn reg_new(id, u) {
-    if id == APP_SETTINGS { return wm_open(id, "Settings", 200 * u, 90 * u, 300 * u, 220 * u) }
+    if id == APP_SETTINGS { return wm_open(id, "Settings", 388 * u, 190 * u, 486 * u, 332 * u) }
     if id == APP_CATALOG  { return wm_open(id, "All Applications", 120 * u, 40 * u, CAT_W * u, CAT_H * u) }
     if id == APP_REGEX     { pt_reset() }
     if id == APP_WORDLE    { wg_reset() }
