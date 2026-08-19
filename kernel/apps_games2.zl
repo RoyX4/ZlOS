@@ -1,0 +1,114 @@
+# apps_games2.zl - grid/state games. See apps_registry.zl for the shared
+# registry and apps_common.zl for the grid helpers most of these use.
+#
+# kernel.elf is close to raw_boot.asm's CHUNKS ceiling (see the note in
+# apps_registry.zl's REG_COUNT comment) - every app added here has to earn
+# its bytes, so these are written tighter than apps_utils.zl's.
+
+# ==============================================================================
+# Word Guess - 8-word list, 6 rows x 5 columns, keyboard entry, per-letter
+# feedback (grey/yellow/green). WG_BOARD packs one cell per byte: letter in
+# bits 0-4 (a=0..z=25), status in bits 5-6 (0 untried, 1 absent, 2 present,
+# 3 correct).
+#
+# THE NAMED BUG: a previous attempt at this app started wg_row at 2, so the
+# first two rows of the grid were skipped and unusable. wg_reset() sets it to
+# 0, and there is no other assignment to wg_row anywhere below that could
+# move it before the first guess.
+# ==============================================================================
+WG_ROWS = 6
+WG_COLS = 5
+WG_WORDS = 8
+
+wg_widx = 0
+wg_row  = 0                         # ROW 0. Not 2. See the note above.
+wg_col  = 0
+wg_done = 0                         # 0 playing, 1 won, 2 lost
+
+fn wg_word(w, p) {
+    if w == 0 { if p == 0 { return 2 }  if p == 1 { return 17 }  if p == 2 { return 0 }  if p == 3 { return 13 }  return 4 }    # crane
+    if w == 1 { if p == 0 { return 15 } if p == 1 { return 11 }  if p == 2 { return 0 }  if p == 3 { return 13 }  return 19 }   # plant
+    if w == 2 { if p == 0 { return 18 } if p == 1 { return 19 }  if p == 2 { return 14 } if p == 3 { return 17 }  return 12 }   # storm
+    if w == 3 { if p == 0 { return 1 }  if p == 1 { return 17 }  if p == 2 { return 0 }  if p == 3 { return 21 }  return 4 }    # brave
+    if w == 4 { if p == 0 { return 12 } if p == 1 { return 14 }  if p == 2 { return 20 } if p == 3 { return 18 }  return 4 }    # mouse
+    if w == 5 { if p == 0 { return 6 }  if p == 1 { return 17 }  if p == 2 { return 0 }  if p == 3 { return 15 }  return 4 }    # grape
+    if w == 6 { if p == 0 { return 7 }  if p == 1 { return 14 }  if p == 2 { return 20 } if p == 3 { return 18 }  return 4 }    # house
+    if p == 0 { return 19 }  if p == 1 { return 17 }  if p == 2 { return 0 }  if p == 3 { return 8 }  return 13                # train
+}
+
+fn wg_reset() {
+    wg_widx = ac_rand(WG_WORDS)
+    wg_row = 0
+    wg_col = 0
+    wg_done = 0
+    fill_mem(WG_BOARD, 0, WG_ROWS * WG_COLS)
+    return 0
+}
+
+fn wg_submit() {
+    if wg_col != WG_COLS { return 0 }
+    ok = 1
+    ci = 0
+    while ci < WG_COLS {
+        g = peek8(WG_BOARD + wg_row * WG_COLS + ci)
+        t = wg_word(wg_widx, ci)
+        st = 1
+        if g == t { st = 3 } else {
+            fi = 0
+            while fi < WG_COLS { if wg_word(wg_widx, fi) == g { st = 2 }  fi = fi + 1 }
+        }
+        if st != 3 { ok = 0 }
+        poke8(WG_BOARD + wg_row * WG_COLS + ci, g + st * 32)
+        ci = ci + 1
+    }
+    if ok == 1 { wg_done = 1  return 0 }
+    wg_row = wg_row + 1
+    wg_col = 0
+    if wg_row >= WG_ROWS { wg_done = 2 }
+    return 0
+}
+
+fn wg_status_col(st) {
+    if st == 3 { return rgb(90, 170, 100) }
+    if st == 2 { return rgb(190, 170, 70) }
+    if st == 1 { return rgb(60, 64, 74) }
+    return rgb(30, 34, 46)
+}
+
+fn wg_draw(ax, ay, aw, ah) {
+    u = ui()
+    cell = 26 * u
+    gx = ax + (aw - WG_COLS * cell) / 2
+    ri = 0
+    while ri < WG_ROWS {
+        ci = 0
+        while ci < WG_COLS {
+            v = peek8(WG_BOARD + ri * WG_COLS + ci)
+            st = v / 32
+            cx = gx + ci * cell
+            cy = ay + 6 * u + ri * cell
+            rrect(cx + 2 * u, cy + 2 * u, cell - 4 * u, cell - 4 * u, 4 * u, wg_status_col(st))
+            if st != 0 { char_aa(cx + cell / 2 - cell_w() / 2, cy + cell / 2 - cell_h() / 2, 65 + (v % 32), TXT_HI) }
+            ci = ci + 1
+        }
+        ri = ri + 1
+    }
+    if wg_done == 1 { label(gx, ay + 8 * u + WG_ROWS * cell, "correct - r restarts", ac_cat_color(1), T_CAPTION, W_BOLD) }
+    if wg_done == 2 { label(gx, ay + 8 * u + WG_ROWS * cell, "out of guesses - r restarts", CRIT_RED, T_CAPTION, W_BOLD) }
+    if wg_done == 0 { label(gx, ay + 8 * u + WG_ROWS * cell, "type a 5-letter word, enter to guess", TXT_DIM, T_CAPTION, W_REG) }
+    return 0
+}
+
+fn wg_event(ety, ecode) {
+    if ety != 3 { return 0 }
+    if ecode == 114 { wg_reset()  return 1 }
+    if wg_done != 0 { return 1 }
+    if ecode == 13 { wg_submit()  return 1 }
+    if ecode == 8 { if wg_col > 0 { wg_col = wg_col - 1  poke8(WG_BOARD + wg_row * WG_COLS + wg_col, 0) }  return 1 }
+    lc = ecode
+    if lc >= 65 { if lc <= 90 { lc = lc + 32 } }
+    if lc < 97 { return 0 }
+    if lc > 122 { return 0 }
+    if wg_col < WG_COLS { poke8(WG_BOARD + wg_row * WG_COLS + wg_col, lc - 97)  wg_col = wg_col + 1 }
+    return 1
+}

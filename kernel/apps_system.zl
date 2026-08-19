@@ -1,0 +1,4 @@
+# apps_system.zl - system apps beyond the original 13, built entirely on
+# introspection builtins that already existed (cpu_*, fs_*, nv_*, net_*,
+# rtc_*, pci_*, usb_*) - each one a real read of live kernel state, not a
+# mockup.
