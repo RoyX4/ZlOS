@@ -79,6 +79,7 @@ virtio_net.c
 # --- HTTPS: the crypto, the certificate check, and the handshake ---
 crypto.c
 ecdsa.c
+rsa.c
 x509.c
 roots.c
 entropy.c

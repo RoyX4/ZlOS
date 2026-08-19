@@ -25,6 +25,11 @@ typedef unsigned char xu8;
 #define X509_MAX_CHAIN 8
 #define X509_TIME_LEN  16      /* YYYYMMDDHHMMSSZ */
 
+#define X509_KEY_EC    0
+#define X509_KEY_RSA   1
+#define X509_SIG_ECDSA 0
+#define X509_SIG_RSA   1
+
 struct x509_cert {
     const xu8 *der;  int derlen;
     const xu8 *tbs;  int tbslen;     /* exactly the bytes that were signed */
@@ -32,12 +37,20 @@ struct x509_cert {
     const xu8 *issuer;  int issuerlen;   /* raw DER of the Name, for matching */
     const xu8 *subject; int subjectlen;
 
-    const xu8 *pubkey; int pubkeylen;    /* the EC point, x||y, no 04 prefix  */
-    int curve_bits;                      /* 256 or 384; 0 = not ECDSA        */
+    /* THE KEY, in one of two shapes. key_kind says which, and every consumer
+     * must check it - a chain mixing RSA and ECDSA links is the normal case,
+     * not an exotic one (Google's leaf has an EC key signed with RSA). */
+    int key_kind;                        /* X509_KEY_EC or X509_KEY_RSA      */
+    const xu8 *pubkey; int pubkeylen;    /* EC: the point x||y, no 04 prefix */
+    int curve_bits;                      /* EC: 256 or 384                   */
+    const xu8 *rsa_n; int rsa_nlen;      /* RSA: modulus, big-endian         */
+    const xu8 *rsa_e; int rsa_elen;      /* RSA: public exponent             */
 
-    int sig_hash;                        /* 256 or 384; 0 = unsupported alg  */
-    xu8 sig_r[48], sig_s[48];
-    int sig_size;                        /* bytes per component              */
+    int sig_kind;                        /* X509_SIG_ECDSA or X509_SIG_RSA   */
+    int sig_hash;                        /* 256, 384 or 512; 0 = unsupported */
+    xu8 sig_r[48], sig_s[48];            /* ECDSA components                 */
+    int sig_size;
+    const xu8 *sig_raw; int sig_rawlen;  /* RSA: the signature as-is         */
 
     const xu8 *san; int sanlen;          /* SubjectAltName extension value   */
     char not_before[X509_TIME_LEN];

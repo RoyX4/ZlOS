@@ -128,7 +128,7 @@ echo "built ./tlscryptotest (run: ./tlscryptotest)"
 # produce a handshake that fails. So this talks to `openssl s_server` and
 # asserts interoperability, which is the only property a client actually needs.
 # Skips rather than fails when openssl is absent.
-gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o tlstest tlstest.c ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../roots.c
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o tlstest tlstest.c ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c
 echo "built ./tlstest       (run: ./tlstest)"
 
 # The bounded JavaScript interpreter. The SCOPE CLAIM in js.h is under test as
@@ -153,7 +153,7 @@ echo "built ./ecdsatest     (run: ./ecdsatest)"
 # wrong is checked individually. The certificates are en.wikipedia.org's REAL
 # chain, captured off the wire - a parser that only meets certificates made by
 # its own author agrees with its author, not with a certificate authority.
-gcc -O2 -g -Wall -Wextra -D_GNU_SOURCE -o x509test x509test.c ../x509.c ../ecdsa.c ../crypto.c
+gcc -O2 -g -Wall -Wextra -D_GNU_SOURCE -o x509test x509test.c ../x509.c ../ecdsa.c ../rsa.c ../crypto.c
 echo "built ./x509test      (run: ./x509test)"
 
 # The browser's parser and box model, asserted. html.c and layout.c reach for
@@ -177,7 +177,7 @@ echo "built ./csstest       (run: ./csstest)"
 # wmtest/wmshot: assertions catch a run escaping the content box, eyes catch
 # inline <code> set at the wrong size or a list marker sitting in its own text.
 gcc -O2 -w -o browsershot browsershot.c ../browser.c ../html.c ../css.c ../layout.c \
-    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../roots.c ../entropy.c ../js.c hostmachine.c \
+    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../rsa.c ../entropy.c ../js.c hostmachine.c \
     ../ui.c ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c \
     ../http.c ../tcp.c ../net.c ../dns.c
 echo "built ./browsershot   (run: ./browsershot out.ppm)"
@@ -218,7 +218,7 @@ echo "built ./httptest      (run: ./httptest)"
 # parse the port" is answered by looking at the SYN that went out.
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o browsertest browsertest.c ../browser.c \
     ../html.c ../css.c ../layout.c ../http.c ../tcp.c ../net.c ../dns.c \
-    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../roots.c ../entropy.c ../js.c hostmachine.c
+    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../rsa.c ../entropy.c ../js.c hostmachine.c
 echo "built ./browsertest   (run: ./browsertest)"
 
 # Every layer that takes bytes from somewhere else, fed garbage. The harnesses

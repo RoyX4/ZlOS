@@ -30,8 +30,11 @@ typedef unsigned char u8;
 
 int ecdsa_verify(int curve_bits, const u8 *pub, const u8 *r, const u8 *s,
                  const u8 *hash, int hashlen);
+int rsa_verify(const u8 *n, int nlen, const u8 *e, int elen,
+               const u8 *sig, int siglen, const u8 *hash, int hashlen);
 void sha256(const u8 *d, unsigned int n, u8 *out);
 void sha384(const u8 *d, unsigned int n, u8 *out);
+void sha512(const u8 *d, unsigned int n, u8 *out);
 
 static const char *why = "";
 const char *x509_why(void) { return why; }
@@ -98,6 +101,10 @@ static const u8 OID_ECDSA_SHA384[] = { 0x2A,0x86,0x48,0xCE,0x3D,0x04,0x03,0x03 }
 static const u8 OID_EC_PUBKEY[]    = { 0x2A,0x86,0x48,0xCE,0x3D,0x02,0x01 };
 static const u8 OID_P256[]         = { 0x2A,0x86,0x48,0xCE,0x3D,0x03,0x01,0x07 };
 static const u8 OID_P384[]         = { 0x2B,0x81,0x04,0x00,0x22 };
+static const u8 OID_RSA_PUB[]      = { 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x01,0x01 };
+static const u8 OID_RSA_SHA256[]   = { 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x01,0x0B };
+static const u8 OID_RSA_SHA384[]   = { 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x01,0x0C };
+static const u8 OID_RSA_SHA512[]   = { 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x01,0x0D };
 static const u8 OID_SAN[]          = { 0x55,0x1D,0x11 };
 static const u8 OID_BASIC[]        = { 0x55,0x1D,0x13 };
 
@@ -108,15 +115,21 @@ static int oid_is(const u8 *v, int n, const u8 *want, int wn)
 
 /* AlgorithmIdentifier ::= SEQUENCE { algorithm OID, parameters ANY }
  * Returns the hash size in bits, or 0 if it is not an ECDSA algorithm we do. */
-static int alg_hash(const u8 *p, int n)
+static int alg_hash(const u8 *p, int n, int *kind)
 {
     struct der d;
     int tag, vlen;
     const u8 *val;
+    *kind = X509_SIG_ECDSA;
     d_init(&d, p, n);
     if (!d_next(&d, &tag, &val, &vlen) || tag != 0x06) return 0;
     if (oid_is(val, vlen, OID_ECDSA_SHA256, sizeof OID_ECDSA_SHA256)) return 256;
     if (oid_is(val, vlen, OID_ECDSA_SHA384, sizeof OID_ECDSA_SHA384)) return 384;
+    *kind = X509_SIG_RSA;
+    if (oid_is(val, vlen, OID_RSA_SHA256, sizeof OID_RSA_SHA256)) return 256;
+    if (oid_is(val, vlen, OID_RSA_SHA384, sizeof OID_RSA_SHA384)) return 384;
+    if (oid_is(val, vlen, OID_RSA_SHA512, sizeof OID_RSA_SHA512)) return 512;
+    *kind = X509_SIG_ECDSA;
     return 0;
 }
 
@@ -154,7 +167,7 @@ int x509_parse(const u8 *der, int len, struct x509_cert *c)
 
     /* signatureAlgorithm */
     if (!d_next(&cert, &tag, &val, &vlen) || tag != 0x30) return fail("no signatureAlgorithm");
-    c->sig_hash = alg_hash(val, vlen);
+    c->sig_hash = alg_hash(val, vlen, &c->sig_kind);
 
     /* signatureValue: a BIT STRING wrapping SEQUENCE { r, s } */
     if (!d_next(&cert, &tag, &val, &vlen) || tag != 0x03 || vlen < 2)
@@ -170,7 +183,11 @@ int x509_parse(const u8 *der, int len, struct x509_cert *c)
      * The refusal belongs in x509_signed_by, which checks sig_hash before
      * trusting anything - so a certificate we cannot verify can be an anchor
      * but can never be a LINK. */
-    if (c->sig_hash) {
+    if (c->sig_hash && c->sig_kind == X509_SIG_RSA) {
+        /* an RSA signature is the raw padded block, not a SEQUENCE */
+        c->sig_raw = val + 1;
+        c->sig_rawlen = vlen - 1;
+    } else if (c->sig_hash) {
         struct der sig, rs;
         const u8 *sv; int sl;
         d_init(&sig, val + 1, vlen - 1);
@@ -254,24 +271,47 @@ sig_done:;
             const u8 *o1; int l1;
             d_init(&a, av, al);
             if (!d_next(&a, &tag, &o1, &l1) || tag != 0x06) return fail("no key OID");
-            if (!oid_is(o1, l1, OID_EC_PUBKEY, sizeof OID_EC_PUBKEY))
-                return fail("not an EC key (RSA is not supported)");
-            if (!d_next(&a, &tag, &o1, &l1) || tag != 0x06) return fail("no curve OID");
-            if (oid_is(o1, l1, OID_P256, sizeof OID_P256)) c->curve_bits = 256;
-            else if (oid_is(o1, l1, OID_P384, sizeof OID_P384)) c->curve_bits = 384;
-            else return fail("unsupported curve");
+            if (oid_is(o1, l1, OID_RSA_PUB, sizeof OID_RSA_PUB)) {
+                c->key_kind = X509_KEY_RSA;
+            } else if (oid_is(o1, l1, OID_EC_PUBKEY, sizeof OID_EC_PUBKEY)) {
+                c->key_kind = X509_KEY_EC;
+                if (!d_next(&a, &tag, &o1, &l1) || tag != 0x06) return fail("no curve OID");
+                if (oid_is(o1, l1, OID_P256, sizeof OID_P256)) c->curve_bits = 256;
+                else if (oid_is(o1, l1, OID_P384, sizeof OID_P384)) c->curve_bits = 384;
+                else return fail("unsupported curve");
+            } else return fail("unsupported key algorithm");
         }
         const u8 *kv; int kl;
         if (!d_next(&spki, &tag, &kv, &kl) || tag != 0x03 || kl < 2)
             return fail("no key bits");
         if (kv[0] != 0) return fail("key has unused bits");
         kv++; kl--;
-        /* 0x04 = uncompressed. Compressed points are legal DER and we do not
-         * decompress them, so they are refused rather than misread. */
-        if (kl < 1 || kv[0] != 0x04) return fail("key point is not uncompressed");
-        kv++; kl--;
-        if (kl != c->curve_bits / 4) return fail("key point is the wrong size");
-        c->pubkey = kv; c->pubkeylen = kl;
+        if (c->key_kind == X509_KEY_RSA) {
+            /* RSAPublicKey ::= SEQUENCE { modulus INTEGER, exponent INTEGER } */
+            struct der rk;
+            const u8 *sv2; int sl3;
+            d_init(&rk, kv, kl);
+            if (!d_next(&rk, &tag, &sv2, &sl3) || tag != 0x30) return fail("bad RSA key");
+            struct der pair;
+            d_init(&pair, sv2, sl3);
+            const u8 *nv, *ev; int nl2, el2;
+            if (!d_next(&pair, &tag, &nv, &nl2) || tag != 0x02) return fail("no RSA modulus");
+            if (!d_next(&pair, &tag, &ev, &el2) || tag != 0x02) return fail("no RSA exponent");
+            /* DER integers are signed, so a modulus with the top bit set
+             * carries a leading zero that is not part of the number */
+            while (nl2 > 1 && nv[0] == 0) { nv++; nl2--; }
+            while (el2 > 1 && ev[0] == 0) { ev++; el2--; }
+            if (nl2 < 128 || nl2 > 512) return fail("RSA modulus out of range");
+            c->rsa_n = nv; c->rsa_nlen = nl2;
+            c->rsa_e = ev; c->rsa_elen = el2;
+        } else {
+            /* 0x04 = uncompressed. Compressed points are legal DER and we do
+             * not decompress them, so they are refused rather than misread. */
+            if (kl < 1 || kv[0] != 0x04) return fail("key point is not uncompressed");
+            kv++; kl--;
+            if (kl != c->curve_bits / 4) return fail("key point is the wrong size");
+            c->pubkey = kv; c->pubkeylen = kl;
+        }
     }
     /* [3] extensions, optional */
     while (d_next(&tbs, &tag, &val, &vlen)) {
@@ -319,16 +359,37 @@ sig_done:;
 int x509_signed_by(const struct x509_cert *child, const struct x509_cert *issuer)
 {
     if (!child->sig_hash) return fail("unsupported signature algorithm");
-    if (!issuer->curve_bits || !issuer->pubkey) return fail("issuer has no usable key");
+    /* THE SIGNATURE ALGORITHM AND THE ISSUER'S KEY MUST AGREE. A certificate
+     * naming an RSA signature under an EC issuer key (or the reverse) is not a
+     * combination to try both ways - it is malformed, and picking whichever
+     * verifier the key suggests would let the algorithm field say anything. */
+    if (child->sig_kind == X509_SIG_RSA && issuer->key_kind != X509_KEY_RSA)
+        return fail("RSA signature but the issuer key is not RSA");
+    if (child->sig_kind == X509_SIG_ECDSA && issuer->key_kind != X509_KEY_EC)
+        return fail("ECDSA signature but the issuer key is not EC");
+    if (issuer->key_kind == X509_KEY_EC && (!issuer->curve_bits || !issuer->pubkey))
+        return fail("issuer has no usable key");
+    if (issuer->key_kind == X509_KEY_RSA && (!issuer->rsa_n || !issuer->rsa_e))
+        return fail("issuer has no usable key");
     /* the issuer's DN must be exactly the child's issuer field */
     if (child->issuerlen != issuer->subjectlen ||
         xmemcmp(child->issuer, issuer->subject, child->issuerlen))
         return fail("issuer name does not match");
 
-    u8 h[48];
+    u8 h[64];
     int hl;
-    if (child->sig_hash == 384) { sha384(child->tbs, (unsigned)child->tbslen, h); hl = 48; }
-    else                        { sha256(child->tbs, (unsigned)child->tbslen, h); hl = 32; }
+    if (child->sig_hash == 512)      { sha512(child->tbs, (unsigned)child->tbslen, h); hl = 64; }
+    else if (child->sig_hash == 384) { sha384(child->tbs, (unsigned)child->tbslen, h); hl = 48; }
+    else                             { sha256(child->tbs, (unsigned)child->tbslen, h); hl = 32; }
+
+    if (child->sig_kind == X509_SIG_RSA) {
+        if (!child->sig_raw || child->sig_rawlen <= 0) return fail("no RSA signature");
+        if (!rsa_verify(issuer->rsa_n, issuer->rsa_nlen,
+                        issuer->rsa_e, issuer->rsa_elen,
+                        child->sig_raw, child->sig_rawlen, h, hl))
+            return fail("signature does not verify");
+        return 1;
+    }
 
     /* The signature components are sized by the ISSUER's curve, and the stored
      * ones by whatever the certificate encoded.
@@ -470,12 +531,20 @@ int x509_chain_ok(const u8 *const *ders, const int *lens, int n,
          * freely; copying the KEY gains them nothing, because then every
          * signature below has to verify under a private key they do not
          * have. */
-        if (top->subjectlen == roots[r].subjectlen &&
-            top->pubkeylen == roots[r].pubkeylen && top->pubkeylen > 0 &&
-            top->curve_bits == roots[r].curve_bits &&
-            !xmemcmp(top->subject, roots[r].subject, top->subjectlen) &&
-            !xmemcmp(top->pubkey, roots[r].pubkey, top->pubkeylen))
-            return 1;
+        if (top->subjectlen != roots[r].subjectlen ||
+            xmemcmp(top->subject, roots[r].subject, top->subjectlen)) {
+            /* names differ - it can still be signed by this root, below */
+        } else if (top->key_kind == roots[r].key_kind) {
+            if (top->key_kind == X509_KEY_EC &&
+                top->pubkeylen == roots[r].pubkeylen && top->pubkeylen > 0 &&
+                top->curve_bits == roots[r].curve_bits &&
+                !xmemcmp(top->pubkey, roots[r].pubkey, top->pubkeylen))
+                return 1;
+            if (top->key_kind == X509_KEY_RSA &&
+                top->rsa_nlen == roots[r].rsa_nlen && top->rsa_nlen > 0 &&
+                !xmemcmp(top->rsa_n, roots[r].rsa_n, top->rsa_nlen))
+                return 1;
+        }
         if (x509_signed_by(top, &roots[r])) return 1;
     }
     return fail("chain does not reach a trusted root");
