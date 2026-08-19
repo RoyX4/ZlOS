@@ -38,3 +38,4 @@ hosttest/gpu-ring-*.log
 hosttest/gpu_ring
 hosttest/gputest
 hosttest/gpu_blt
+hosttest/gpu_planes

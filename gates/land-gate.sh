@@ -96,6 +96,11 @@ else echo ">>> ok (hosttest run: $hp passed, $hs skipped)"; fi
 # LINE_BUF and DISK_SCRATCH sat on 0x02030000 through a whole integration.
 [ -x "$WT/kernel/check-zl-calls.sh" ] && run "zl call sites" "$WT/kernel" ./check-zl-calls.sh
 [ -x "$WT/kernel/check-memmap.sh" ]   && run "memory map"    "$WT/kernel" ./check-memmap.sh
+# check-memmap.sh reads kernel.zl and no C at all, which is why intel.c's
+# edid_buf sat inside fb.c's blur arena while it printed a clean map. This is
+# the other half: every page-aligned hex literal in a .c or .h that lands
+# strictly inside a declared HI_* region without being its base.
+[ -x "$WT/kernel/check-himap.sh" ]    && run "high-RAM map"  "$WT/kernel" ./check-himap.sh
 
 # --- the reverse SOURCES check: a .c present but not listed is silently not compiled
 if [ -f "$WT/kernel/SOURCES" ]; then
