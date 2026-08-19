@@ -180,3 +180,17 @@ outside the rectangle are checked to still hold the poison.
 - **This part has LLC**, so a WB mapping is coherent and a plain read after
   `GEM_WAIT` sees the blit. A part without LLC would need WC plus explicit
   domain flushes. zlOS should not inherit the assumption casually.
+- **`exit 77` meant "skip" to nobody but this file.** `gpu_blt.c:624` returns 77
+  when there is no `/dev/dri/renderD128`, commented "77 = skip, not fail" — the
+  autotools convention. `gates/land-gate.sh`'s harness loop treated *every*
+  non-zero exit as a failure, so on any box with the drm headers and no Intel
+  render node the whole land gate would have gone red, blaming a harness that
+  had correctly declined to run. Fixed in the loop, not in the harness: 77 is
+  now a counted, printed **SKIP**, distinct from a pass, because "27 passed"
+  when three of them did nothing is the false green that gate exists to stop.
+  Validated in all three directions with stub scripts exiting 0, 77 and 1.
+
+  This is the same class as everything in `docs/GUARDS-THAT-DID-NOT-GUARD.md`:
+  a guarantee stated in a comment and implemented by no consumer. Worth knowing
+  for the next hardware-dependent harness — **the convention now exists, so use
+  77 rather than inventing a second one.**
