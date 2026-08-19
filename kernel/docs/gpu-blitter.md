@@ -308,6 +308,85 @@ Until one of those happens, `gpu.c` is as far as this can honestly go: the
 command stream is correct on silicon, pinned by `gputest`, compiled into all
 four targets, and calling nothing.
 
+## THE DECISIVE RESULT: the Gen9 blitter cannot meaningfully accelerate this compositor
+
+**Read this before building anything on the rest of the page.** Two measurements
+land together and they point the same way.
+
+### 1. The CPU column in every earlier sweep was not fb.c
+
+It was `for (x) row[x] = c`. gcc vectorises that to 16-byte stores, so it looked
+like a fair fight. It was not: `fb.c` fills through `fill32`, which is hand
+written SSE with four `_mm_store_si128` per iteration, and `fbbench` times the
+shipping code filling a whole 1920x1200 screen at **0.66 cyc/px — 3485 Mpix/s at
+2.304 GHz, faster than the blitter's 3337.**
+
+Re-run with `fill32` copied verbatim into the harness:
+
+```
+  rect          Mpix   K   blitter Mpix/s   fb.c SSE Mpix/s   winner
+  1024x768      0.79   64       3639             6530         CPU 1.79x
+  1920x1200     2.30   64       3643             3897         CPU 1.07x
+  3840x2160     8.29   64       3590             3037         blitter 1.18x
+```
+
+The blitter only wins once the surface no longer fits in cache, and then by
+~1.15x. At the ThinkPad's own 2560x1440 it is a coin toss. **The "2.2x win on
+fills" reported earlier on this page was an artefact of comparing a GPU against a
+weaker CPU implementation than the one that ships** — which is how a GPU wins a
+benchmark and loses in production.
+
+### 2. Fills are not where the frame goes anyway
+
+`fbbench` at 1920x1200, on the shipping `fb.c`:
+
+```
+  fill whole screen            0.661 ms    0.66 cyc/px   <- the only blitter op
+  gradient whole screen        1.589 ms    1.59 cyc/px
+  40 lines of AA text          3.933 ms
+  200 diagonal lines           4.221 ms
+  fill_blend 600x460          2.263 ms   18.89 cyc/px
+  radial glow 900x700         10.110 ms   36.97 cyc/px
+```
+
+Text, lines, blends and glows dominate, and `XY_COLOR_BLT` can do **none** of
+them — it is an opaque solid fill. The one thing it does is already the cheapest
+thing in the list.
+
+### So what is actually worth doing
+
+`fbbench`'s own SMP section, on this machine:
+
+```
+  SMP bands            desktop   gradient   shadow   present   speedup
+  1 (serial, today)    5.688ms    4.290ms   0.344ms  6.464ms    1.00x
+  2 bands              3.195ms    2.245ms   0.223ms  5.789ms    1.78x
+  4 bands              3.314ms    2.247ms   0.256ms  6.145ms    1.72x
+```
+
+**1.78x on the whole desktop redraw, from code that is already written and
+already in the tree, sitting off** because `smp_go()` is reachable only from the
+old text shell's `*` key (`docs/GUARDS-THAT-DID-NOT-GUARD.md` §3). That is a
+larger, cheaper, lower-risk win than anything the blitter offers, and it needs no
+ring, no GGTT and no hardware experiment.
+
+Note also that 2 bands ≈ 4 bands. The desktop redraw is memory-bandwidth bound,
+not core bound — which is the same reason the blitter does not help.
+
+### What the blitter work is still worth
+
+Not nothing, but be honest about it:
+
+- The command stream is correct and proven on silicon, and `gpu.c` + `gputest`
+  cost nothing to keep.
+- The remaining argument is that a blit costs the CPU **zero** — parity on
+  throughput while handing a core back. That only matters once something else
+  wants the core, and SMP bands want it first.
+- If zlOS ever targets a 4K external panel, the blitter's ~1.15x becomes real.
+
+**Recommendation: do not build the ring for performance.** Turn SMP bands on
+first and re-measure. Build the ring only if there is a reason beyond fill rate.
+
 ## The present path — and the prediction it refuted
 
 The commit that added `XY_SRC_COPY_BLT` predicted the copy would be the bigger

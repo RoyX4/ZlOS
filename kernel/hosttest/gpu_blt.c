@@ -56,6 +56,7 @@
 #include <time.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <emmintrin.h>
 #include <drm/drm.h>
 #include <drm/i915_drm.h>
 
@@ -139,6 +140,29 @@ _Static_assert(DST_GPU_ADDR + (unsigned long long)(W * BPP) * H <= BATCH_GPU_ADD
                                        * frame on screen is recognisable */
 
 static int drm_fd = -1;
+
+/* fb.c's ACTUAL fill, copied verbatim from fb.c:fill32.
+ *
+ * The CPU column used to be a plain `for (x) row[x] = c` loop. gcc vectorises
+ * that to 16-byte stores, so it looked like a fair fight - and it was not.
+ * fbbench times the shipping fb.c filling a whole 1920x1200 screen at 0.66
+ * cyc/px, which at 2.304 GHz is ~3485 Mpix/s, FASTER than the blitter's 3337.
+ * Comparing a GPU against a weaker CPU implementation than the one that ships
+ * is how a GPU wins a benchmark and loses in production. */
+static inline void fill32_like_fb(unsigned int *d, unsigned int rgb, int n)
+{
+    while (n > 0 && ((unsigned long long)(uintptr_t)d & 15)) { *d++ = rgb; n--; }
+    __m128i v = _mm_set1_epi32((int)rgb);
+    while (n >= 16) {
+        _mm_store_si128((__m128i *)d,     v);
+        _mm_store_si128((__m128i *)d + 1, v);
+        _mm_store_si128((__m128i *)d + 2, v);
+        _mm_store_si128((__m128i *)d + 3, v);
+        d += 16; n -= 16;
+    }
+    while (n >= 4) { _mm_store_si128((__m128i *)d, v); d += 4; n -= 4; }
+    while (n-- > 0) *d++ = rgb;
+}
 
 static double now_s(void)
 {
@@ -595,10 +619,8 @@ static int do_sweep(void)
             bo_to_cpu(dst_h);
             double c0 = now_s();
             for (int i = 0; i < iters * k; i++)
-                for (int y = 0; y < rh; y++) {
-                    unsigned *row = dst + (size_t)y * W;
-                    for (int x = 0; x < rw; x++) row[x] = FILL_COLOR;
-                }
+                for (int y = 0; y < rh; y++)
+                    fill32_like_fb(dst + (size_t)y * W, FILL_COLOR, rw);
             double c1 = now_s();
             double cpu_ms = (c1 - c0) * 1e3 / iters / k;
 
