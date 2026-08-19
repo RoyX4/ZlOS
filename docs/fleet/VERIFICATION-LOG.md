@@ -59,6 +59,46 @@ scene changes the number, so do it once and say so.
 
 ---
 
+## CONFIRMED — the HTTP body pointer is narrowed to 32 bits, and C code widens it back
+
+**Agent claim** (bug class `llp64`, severity `high`): *`http_body_addr()` narrows
+`&resp[body_at]` to `u32` and two reachable callers widen it back and dereference it.*
+
+**Confirmed.**
+
+```c
+/* kernel/http.c:278 */
+u32 http_body_addr(void)  { return (u32)(uptr)(resp + body_at); }
+```
+
+The narrowing is **deliberate and documented** — `http.c:31` says it *"narrows to u32 ON
+PURPOSE (zl reads the body through a …)"*, because zl numbers are doubles and the
+builtin at `runtime_kernel.c:1278` has to return one. For the zl path that is a
+considered trade.
+
+**The defect is the C caller:**
+
+```c
+/* kernel/browser.c:426 */
+doc_set((const char *)(uptr)http_body_addr(), http_body_len());
+```
+
+`browser.c` is C. It has direct access to the real pointer, and instead round-trips it
+through the 32-bit accessor and re-widens the result. If UEFI loads `BOOTX64.EFI` above
+4 GiB, this reconstructs a pointer with its top 32 bits zeroed and copies
+`http_body_len()` bytes from it. **Silent** — no fault, per this repo's own rule that an
+out-of-bounds read that does not fault landed in some other mapping.
+
+None of `buildefi.sh`'s four `-Werror=` flags fire, because the narrowing and the
+widening are in different translation units and each is individually well-formed.
+
+**Fix:** `browser.c:426` should take the body pointer directly rather than through the
+zl accessor — add a `const char *http_body_ptr(void)` for C callers and leave
+`http_body_addr()` to zl. The agent reports this is the only surviving instance of the
+"widen a 32-bit accessor result back into a pointer" shape in the EFI source set.
+
+---
+
 ## CONFIRMED — Alt+Tab never fires. One token.
 
 **Agent claim** (lens `wm-focus`, severity `high`): *`route_key` tests `'\t'` (9) but
