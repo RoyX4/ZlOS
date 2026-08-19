@@ -18,6 +18,11 @@ typedef unsigned int       cu32;
 int  crypto_equal(const cu8 *a, const cu8 *b, cu32 n);
 
 void sha256(const cu8 *data, cu32 n, cu8 *out);
+/* Real certificate chains need these: en.wikipedia.org's four certificates are
+ * all ecdsa-with-SHA384. SHA-384 is SHA-512 with different initial values and
+ * a truncated output, not a separate algorithm. */
+void sha384(const cu8 *data, cu32 n, cu8 *out);
+void sha512(const cu8 *data, cu32 n, cu8 *out);
 void hmac_sha256(const cu8 *key, cu32 klen, const cu8 *data, cu32 dlen, cu8 *out);
 
 void aes128_expand(const cu8 *key, cu8 *rk);

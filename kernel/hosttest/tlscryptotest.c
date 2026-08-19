@@ -133,6 +133,31 @@ int main(void)
         aad[0] ^= 1;
     }
 
+    printf("\n=== SHA-384 / SHA-512 (FIPS 180-4) ===\n");
+    {
+        u8 h[64];
+        sha384((const u8 *)"abc", 3, h);
+        chk("SHA-384 \"abc\"", h,
+            "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed"
+            "8086072ba1e7cc2358baeca134c825a7", 48);
+        sha384((const u8 *)"", 0, h);
+        chk("SHA-384 empty", h,
+            "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da"
+            "274edebfe76f65fbd51ad2f14898b95b", 48);
+        /* the multi-block case, which is where the padding and length encoding
+         * go wrong: 56 bytes is one byte past the point a length no longer
+         * fits in the first block */
+        const char *m = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+        sha384((const u8 *)m, 56, h);
+        chk("SHA-384 56 bytes (spills to a second block)", h,
+            "3391fdddfc8dc7393707a65b1b4709397cf8b1d162af05abfe8f450de5f36bc6"
+            "b0455a8520bc4e6f5fe95b1fe3c8452b", 48);
+        sha512((const u8 *)"abc", 3, h);
+        chk("SHA-512 \"abc\"", h,
+            "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a"
+            "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f", 64);
+    }
+
     printf("\n=== X25519 (RFC 7748) ===\n");
     {
         u8 s[32], u[32], out[32];

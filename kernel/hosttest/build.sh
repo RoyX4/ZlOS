@@ -138,6 +138,14 @@ echo "built ./tlstest       (run: ./tlstest)"
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o jstest jstest.c ../js.c
 echo "built ./jstest        (run: ./jstest)"
 
+# ECDSA verification, P-256 and P-384. A VERIFIER IS TESTED BY WHAT IT REJECTS:
+# an implementation that returns 1 unconditionally passes every "valid signature
+# verifies" test ever written, and one that returns 0 unconditionally passes
+# every rejection test. Both halves are here, and the second half caught a real
+# bug - two incompatible Jacobian addition formulas, which rejected everything.
+gcc -O2 -g -Wall -Wextra -D_GNU_SOURCE -o ecdsatest ecdsatest.c ../ecdsa.c
+echo "built ./ecdsatest     (run: ./ecdsatest)"
+
 # The browser's parser and box model, asserted. html.c and layout.c reach for
 # exactly one thing outside themselves - a function that measures a string - so
 # injecting a synthetic one turns both into ordinary programs. Malformed markup
