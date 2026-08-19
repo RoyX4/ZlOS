@@ -22,6 +22,7 @@
  */
 
 #include "ui.h"
+#include "ease.h"
 
 /* ---- fb.c ---------------------------------------------------------------- */
 unsigned int fb_pxw(void);
@@ -408,11 +409,41 @@ void wm_damage_win(int win)
 
 /* Durations are wall-clock ticks, not frame counts. The old four-step tables
  * changed speed whenever the compositor cadence changed and visibly stair-
- * stepped on a 60 Hz panel. These correspond to 80-180 ms at the measured
- * 100 Hz PIT while frame sampling is independently paced below. */
+ * stepped on a 60 Hz panel.
+ *
+ * THE NUMBERS ARE NOW THE REFERENCE'S, not ours. ease.h states each one in
+ * milliseconds exactly as docs/design/ds-reference.html declares it, and the
+ * conversion to ticks happens here and only here - so a change to the PIT
+ * rate can never silently change how the desktop feels. At the measured
+ * 100 Hz, one tick is 10 ms.
+ *
+ * What moved: OPEN was 16 ticks (160 ms) against the reference's 200, and
+ * PRESS was 8 (80 ms) against 250 - a press acknowledgement three times too
+ * fast to see. CLOSE has no counterpart in the reference, which does not
+ * animate closing at all; it keeps zwin's duration so the pair stays
+ * symmetric, and that is a choice rather than a measurement. */
+#define MS_TO_TICKS(ms) (((ms) + 5) / 10)
+
 static const unsigned char anim_ticks[] = {
-    /* NONE */ 0, /* OPEN */ 16, /* CLOSE */ 14, /* PRESS */ 8,
-    /* PULSE */ 18, /* FADE */ 14,
+    /* NONE  */ 0,
+    /* OPEN  */ MS_TO_TICKS(EASE_MS_WIN),     /* zwin   200 ms */
+    /* CLOSE */ MS_TO_TICKS(EASE_MS_WIN),     /* no reference counterpart */
+    /* PRESS */ MS_TO_TICKS(EASE_MS_PRESS),   /* zpress 250 ms */
+    /* PULSE */ MS_TO_TICKS(EASE_MS_PULSE),   /* zpulse 1000 ms */
+    /* FADE  */ MS_TO_TICKS(EASE_MS_OV),      /* zov/ztoast 160 ms */
+};
+
+/* Which curve each animation runs on. ds-reference.html lines 14-20: only the
+ * window open gets the bespoke cubic-bezier; the pops and fades are ease-out
+ * and the pulse is ease-in-out. Using one curve for all five - which is what
+ * this file did - is what made every animation feel like the same animation. */
+static const unsigned char anim_curve[] = {
+    /* NONE  */ EASE_LINEAR,
+    /* OPEN  */ EASE_WIN,
+    /* CLOSE */ EASE_WIN,
+    /* PRESS */ EASE_STD,
+    /* PULSE */ EASE_IN_OUT,
+    /* FADE  */ EASE_OUT,
 };
 
 struct anim { int win; int kind; unsigned start; unsigned duration; };
@@ -445,8 +476,13 @@ int wm_anim(int win, int kind)
     return 0;
 }
 
-/* Progress in thousandths. Smoothstep gives a short ease-out without floats,
- * a cubic library, overshoot, or table steps. */
+/* Progress in thousandths, eased by whichever curve this animation runs on.
+ *
+ * This used to apply smoothstep to everything. Smoothstep is symmetric: it
+ * eases IN as well as out, so a window opening spent its first quarter barely
+ * moving. The reference's zwin is 74% of the way there at the same point -
+ * hosttest/easetest.c prints both numbers side by side. That single difference
+ * is most of why the two desktops feel unalike in motion. */
 static int anim_progress(int win, int kind)
 {
     for (int i = 0; i < ANIM_MAX; i++)
@@ -455,7 +491,7 @@ static int anim_progress(int win, int kind)
             unsigned d = anims[i].duration ? anims[i].duration : 1u;
             if (elapsed >= d) return 1000;
             int p = (int)(elapsed * 1000u / d);
-            return p * p / 1000 * (3000 - 2 * p) / 1000;
+            return ease_apply(anim_curve[kind], p);
         }
     return -1;
 }
@@ -503,44 +539,64 @@ static void anim_tick(void)
 
 /* ...and a switch, because Settings exposes one. ANIM_FRAMES stays a constant
  * - this is not "how long" but "at all", and a zero-length animation is the
- * honest way to say off: anim_pct and anim_rect keep working unchanged and
+ * honest way to say off: anim_permille and anim_rect keep working unchanged and
  * every window is simply born settled. Making ANIM_FRAMES itself variable
  * would put a run-time value in the `steps` array bound. */
 static int anim_on = 1;
 void wm_set_anim(int on) { anim_on = on ? 1 : 0; }
 int  wm_anim_enabled(void) { return anim_on; }
 
-/* how big window `win` should be DRAWN this frame, as a percentage */
-static int anim_pct(int win)
+/* How big window `win` should be DRAWN this frame, in THOUSANDTHS.
+ *
+ * It was percent, and percent cannot express the reference's open scale: zwin
+ * starts at scale(.965), which is 96.5% and rounds to either 96 or 97. At the
+ * sizes windows actually are that is a 3-pixel difference in where the first
+ * frame lands, and it is visible as a jump. Thousandths throughout, matching
+ * ease.h, so no unit conversion happens at a call site.
+ *
+ * ONE MECHANISM. The open scale used to be a counter in the window struct and
+ * the timeline was a second thing beside it that nothing triggered - so wm.c
+ * carried two animation systems, one of which never ran. wm_open() starts an
+ * ANIM_OPEN now and this reads it, which means the open scale and every other
+ * kind share a code path and a bug in one is a bug you can actually see.
+ */
+static int anim_permille(int win)
 {
-    /* ONE MECHANISM. The open scale used to be a counter in the window struct
-     * and the timeline was a second thing beside it that nothing triggered -
-     * so wm.c carried two animation systems, one of which never ran. wm_open()
-     * starts an ANIM_OPEN now and this reads it, which means the open scale
-     * and every other kind share a code path and a bug in one is a bug you can
-     * actually see. */
+    /* THE OPEN SCALE WAS 82%. The reference's is 96.5% - ds-reference.html
+     * line 15, `scale(.965)`. 82% is a window that leaps at you from a sixth
+     * of its size; 96.5% is a window that is essentially already there and
+     * settles. Same duration, same curve, completely different gesture. */
     int p = anim_progress(win, ANIM_OPEN);
-    if (p >= 0) return 82 + 18 * p / 1000;
+    if (p >= 0)
+        return EASE_WIN_FROM_SCALE + (1000 - EASE_WIN_FROM_SCALE) * p / 1000;
     p = anim_progress(win, ANIM_CLOSE);
-    if (p >= 0) return 100 - 30 * p / 1000;
+    if (p >= 0)
+        return 1000 - (1000 - EASE_WIN_FROM_SCALE) * p / 1000;
     p = anim_progress(win, ANIM_PRESS);
-    if (p >= 0) {
-        int tri = p <= 500 ? p * 2 : (1000 - p) * 2;
-        return 100 - 4 * tri / 1000;
-    }
-    return 100;
+    if (p >= 0) return ease_press_scale(p);
+    return 1000;
 }
 
 static void anim_rect(int win, int *x, int *y, int *w, int *h)
 {
-    int p = anim_pct(win);
+    int p = anim_permille(win);
     struct win *W = &wins[win];
-    *w = W->w * p / 100;
-    *h = W->h * p / 100;
+    *w = W->w * p / 1000;
+    *h = W->h * p / 1000;
     /* grow from the CENTRE - a window that grows from its top-left corner
      * reads as sliding, which says something different */
     *x = W->x + (W->w - *w) / 2;
     *y = W->y + (W->h - *h) / 2;
+
+    /* zwin is `scale(.965) translateY(10px)`: the window does not only grow,
+     * it RISES the last 10 px into place. Dropping the translate leaves a
+     * scale-only pop, which is the animation this file already had. The offset
+     * is scaled with the UI so it is 10 design pixels, not 10 device ones. */
+    int op = anim_progress(win, ANIM_OPEN);
+    if (op >= 0) {
+        int dy = EASE_WIN_FROM_DY * ui_metric(UI_METRIC_SCALE_Q8) / 256;
+        *y += dy - dy * op / 1000;
+    }
 }
 
 /* ---- z-order ------------------------------------------------------------- */

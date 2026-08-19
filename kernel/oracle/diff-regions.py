@@ -6,6 +6,7 @@
   ./diff-regions.py ... --json                 machine-readable, for a gate
   ./diff-regions.py ... --only win_term,dock_band
   ./diff-regions.py ... --worst 10             only the regions furthest off
+  ./diff-regions.py --selftest                 check the measures themselves
 
 
 WHY NOT ONE RMS NUMBER
@@ -17,7 +18,7 @@ this corpus and every region comes back "about 0.25 off", which is the same as
 having no oracle: it cannot distinguish a window that is 40px too tall from a
 window whose font hints differently.
 
-So there are three measures, and they fail in different directions on purpose.
+So there are FOUR measures, and they fail in different directions on purpose.
 A region is only in trouble when the RIGHT one is bad:
 
   colour      mean absolute RGB error, normalised. Answers "is this region
@@ -26,26 +27,37 @@ A region is only in trouble when the RIGHT one is bad:
 
   palette     Earth-Mover distance between the two colour histograms, over a
               coarse RGB quantisation. Answers "do the same colours appear, in
-              the same proportion". THIS is what catches "the accent is cyan,
-              not lime": swapping one hue for another leaves mean error small
-              (both are mid-bright) and moves this a long way. It is
-              position-blind by construction, so moving a button does not
-              disturb it. EMD rather than a bin-by-bin distance because
-              bin-by-bin calls #b8e838 and #b9e838 as different as #b8e838 and
-              black - a quantisation boundary would otherwise dominate.
+              the same proportion". Position-blind by construction, so moving a
+              button does not disturb it. EMD rather than a bin-by-bin distance
+              because bin-by-bin calls #b8e838 and #b9e838 as different as
+              #b8e838 and black - a quantisation boundary would dominate.
 
-  structure   gradient magnitude, downsampled to a coarse grid, compared as a
-              normalised correlation. Answers "is the furniture in the same
-              place". Antialiasing is a high-frequency signal and the
-              downsample removes it; an edge that moved 40px survives it. THIS
-              is what catches "the toolbar is in the wrong place".
+  hue         angular distance between the two regions' dominant SATURATED
+              hues. THIS is what catches "the accent is cyan, not lime", and it
+              is separate from `palette` because of a measured failure: an
+              accent covers about 4% of a window, so swapping lime for cyan
+              moves `palette` by 0.021 - real, but indistinguishable from noise
+              at a glance. hue is area-independent and scored that swap at
+              0.561. It is the only measure here that does not scale with how
+              much of the region the difference covers.
 
-`score` is the worst of the three, because the point of the exercise is to find
+  structure   coarse-pooled luminance AND coarse-pooled gradient energy, each
+              standardised and compared as a mean absolute difference; the
+              worse of the two. Answers "is the furniture in the same place",
+              blind to overall brightness and contrast. Pooling to ~40x40px
+              cells is what removes antialiasing.
+
+`score` is the worst of the four, because the point of the exercise is to find
 what is wrong, not to average it away with what is right.
 
-All three are 0.0 = identical, 1.0 = maximally different, so a later agent
-gating on "my region is under 0.15" is asking the same question of every
-measure. See README.md for what the numbers actually mean on this corpus.
+All four are 0.0 = identical, 1.0 = maximally different. THEY ARE NOT ON THE
+SAME SCALE, and pretending otherwise would be the easiest way to make this
+lie: colour, palette and structure all scale with how much of the region the
+difference covers, and hue does not. --selftest prints the four measures
+against four synthetic pairs whose right answer is known by construction
+(including an antialias-only control that all four must ignore), which is the
+evidence for every claim in this docstring. Run it; it needs no QEMU and no
+reference render. README.md has what the numbers mean on the real corpus.
 
 Nothing here needs numpy tricks explained: the images are 1280x800 and the
 whole sweep takes under two seconds.
@@ -117,6 +129,54 @@ def palette_distance(a, b):
     return min(1.0, total / 3.0)
 
 
+def hue_distance(a, b):
+    """Angular distance between the two regions' dominant saturated hues, 0..1.
+
+    THE AREA-INDEPENDENT ONE, and it is here because the other three are not.
+    Every measure above scales with how much of the region the difference
+    covers, which is mathematically honest and practically useless for an
+    accent: a lime toolbar swapped for a cyan one covers about 4% of a window,
+    so it moves `palette` by about 0.02 and could be mistaken for noise. Hue
+    does not care how much of the region the accent occupies, only whether it
+    is the same hue.
+
+    Guarded by mass, because "a handful of stray saturated pixels" is not an
+    accent: at least 0.5% of the region must be saturated. If neither image has
+    that, there is no accent to disagree about and this is 0. If exactly one
+    does, the accent is present in one render and absent in the other, which is
+    a real and severe difference - 1.0.
+    """
+    def dominant(img):
+        mx = img.max(axis=2)
+        mn = img.min(axis=2)
+        chroma = mx - mn
+        sat = np.where(mx > 1e-6, chroma / np.maximum(mx, 1e-6), 0.0)
+        mask = (sat > 0.35) & (mx > 64)
+        n = int(mask.sum())
+        if n < 0.005 * img.shape[0] * img.shape[1]:
+            return None, n
+        r, g, bl = img[:, :, 0][mask], img[:, :, 1][mask], img[:, :, 2][mask]
+        # hue as an angle, then a circular mean - averaging raw hue degrees
+        # puts the mean of red-ish 350 and red-ish 10 at 180, which is cyan.
+        mxv = np.maximum(np.maximum(r, g), bl)
+        mnv = np.minimum(np.minimum(r, g), bl)
+        c = np.maximum(mxv - mnv, 1e-6)
+        h = np.where(mxv == r, ((g - bl) / c) % 6,
+            np.where(mxv == g, (bl - r) / c + 2, (r - g) / c + 4)) * 60.0
+        rad = np.deg2rad(h)
+        return float(np.rad2deg(np.arctan2(np.sin(rad).mean(),
+                                           np.cos(rad).mean())) % 360.0), n
+
+    ha, na = dominant(a)
+    hb, nb = dominant(b)
+    if ha is None and hb is None:
+        return 0.0
+    if ha is None or hb is None:
+        return 1.0
+    d = abs(ha - hb) % 360.0
+    return float(min(d, 360.0 - d) / 180.0)
+
+
 def _gradient(img):
     g = img.mean(axis=2)
     gx = np.zeros_like(g)
@@ -141,26 +201,46 @@ def _pool(m, ny, nx):
     return out
 
 
-def structure_distance(a, b):
-    """1 - correlation of coarse gradient-energy maps, 0..1.
+def _standardise(m):
+    """Zero mean, unit standard deviation. Makes the comparison blind to
+    overall brightness and to overall contrast, so a darker theme is not
+    reported as a misplaced one - that is the colour measure's job."""
+    s = m.std()
+    return (m - m.mean()) / s if s > 1e-6 else np.zeros_like(m)
 
-    Gradient energy is "where are the edges"; pooling to a coarse grid throws
-    away the antialias ramp (a 1-2px signal) and keeps the furniture (tens of
-    px). Correlation rather than absolute difference so a region that is
-    uniformly busier does not score as misplaced - being darker is the colour
-    measure's job.
+
+def structure_distance(a, b):
+    """Mean absolute difference of standardised coarse maps, 0..1.
+
+    Two coarse maps per image, and the answer is the worse of them:
+
+      LAYOUT   pooled luminance. A block that moved 140px moves this a long
+               way. It is what catches "the toolbar is in the wrong place".
+      TEXTURE  pooled gradient energy. Catches "this panel is full of text and
+               that one is empty", which pooled luminance can miss when the
+               mean brightness happens to match.
+
+    THE FIRST VERSION OF THIS WAS GRADIENT-CORRELATION ONLY, AND THE SELFTEST
+    BELOW CAUGHT IT SCORING 0.002 ON A TOOLBAR THAT HAD MOVED 140 PIXELS. The
+    reason is worth keeping: a solid block of colour has gradient only at its
+    border, so in any region that also contains text - i.e. every region in
+    this corpus - dense glyph edges dominate the gradient map and a block
+    sliding across it barely registers. Pooled luminance has the opposite
+    bias, which is why both are here.
+
+    Pooling to ~40x40px cells is what removes antialiasing: a 1-2px grey ramp
+    averages out, a piece of furniture tens of pixels across does not.
     """
     h, w = a.shape[0], a.shape[1]
     ny, nx = max(2, min(GRID, h // 4)), max(2, min(GRID, w // 4))
-    ga, gb = _pool(_gradient(a), ny, nx).ravel(), _pool(_gradient(b), ny, nx).ravel()
-    ga -= ga.mean()
-    gb -= gb.mean()
-    na, nb = np.linalg.norm(ga), np.linalg.norm(gb)
-    if na < 1e-9 and nb < 1e-9:
-        return 0.0            # both flat: no structure to disagree about
-    if na < 1e-9 or nb < 1e-9:
-        return 1.0            # one flat, one not: maximally different
-    return float(min(1.0, max(0.0, (1.0 - float(ga @ gb) / (na * nb)) / 2.0)))
+    worst = 0.0
+    for f in (lambda i: i.mean(axis=2), _gradient):
+        pa = _standardise(_pool(f(a), ny, nx))
+        pb = _standardise(_pool(f(b), ny, nx))
+        # Standardised maps live in roughly [-3, 3]; a mean absolute difference
+        # of 2 is already "nothing is where it was", so halve to land 0..1.
+        worst = max(worst, float(min(1.0, np.abs(pa - pb).mean() / 2.0)))
+    return worst
 
 
 # ---- report -----------------------------------------------------------------
@@ -174,8 +254,91 @@ def band(score):
     return "WRONG"
 
 
+# ---- the check that the three measures do what the docstring claims ---------
+def selftest():
+    """Three synthetic pairs whose right answer is known by construction.
+
+    The claims in this file's header are the whole reason anyone would trust a
+    number out of it, and they are exactly the kind of claim that is easy to
+    write and never verified. So: build the three failures each measure is
+    supposed to own, and assert that the measure that owns it is the one that
+    fires.
+
+    Runs in well under a second, needs no QEMU and no reference render.
+    """
+    rng = np.random.default_rng(7)
+    h, w = 200, 320
+
+    def panel(bg, accent, ax):
+        img = np.zeros((h, w, 3), dtype=np.float32)
+        img[:, :] = bg
+        img[20:44, ax:ax + 120] = accent            # an accent-coloured toolbar
+        # some text-ish high-frequency detail, identical in both members of a
+        # pair unless the case deliberately changes it
+        img[80:180:4, 30:290:2] = (200, 205, 210)
+        return img
+
+    LIME, CYAN = (184, 232, 56), (56, 232, 224)
+    base = panel((16, 18, 21), LIME, 30)
+
+    cases = []
+    # 1. identical
+    cases.append(("identical", base, base.copy(), "none"))
+    # 2. the accent is cyan, not lime - same brightness, same position
+    cases.append(("accent hue swapped", base, panel((16, 18, 21), CYAN, 30),
+                  "hue"))
+    # 3. the toolbar moved 140px right - same colours, same amount of them
+    cases.append(("toolbar moved 140px", base, panel((16, 18, 21), LIME, 170),
+                  "structure"))
+    # 4. antialiasing noise only: every edge pixel jittered by a few levels.
+    #    This is the CONTROL - the thing all four measures must ignore, and
+    #    the reason a single RMS number is useless on this corpus.
+    noisy = base + rng.normal(0, 6, base.shape).astype(np.float32)
+    cases.append(("antialias jitter only", base, np.clip(noisy, 0, 255), "none"))
+
+    print(f"{'case':<26}{'colour':>9}{'palette':>9}{'hue':>9}{'struct':>9}   "
+          f"expected to fire")
+    print("-" * 82)
+    bad = []
+    for name, a, b, expect in cases:
+        got = dict(colour=colour_error(a, b), palette=palette_distance(a, b),
+                   hue=hue_distance(a, b), structure=structure_distance(a, b))
+        print(f"{name:<26}{got['colour']:>9.3f}{got['palette']:>9.3f}"
+              f"{got['hue']:>9.3f}{got['structure']:>9.3f}   {expect}")
+        # The assertion is DISCRIMINATION, not magnitude, and that distinction
+        # is the whole design. colour/palette/structure all scale with how much
+        # of the region the difference covers - a 4%-area accent swap moving
+        # `palette` by 0.02 is arithmetically correct, and demanding 0.15 there
+        # would only mean tuning the measure until it lied. So: the measure
+        # that owns a failure must clearly beat the others on it, and must
+        # clearly beat its own reading on the antialias control.
+        floor = 0.01
+        if expect == "none":
+            if max(got.values()) > 0.05:
+                bad.append(f"{name}: something fired ({got}) and nothing should")
+        else:
+            others = [v for k, v in got.items() if k != expect]
+            if got[expect] < floor:
+                bad.append(f"{name}: {expect} only reached {got[expect]:.3f}, "
+                           f"under the {floor} noise floor")
+            if got[expect] <= max(others):
+                bad.append(f"{name}: {expect}={got[expect]:.3f} did not exceed "
+                           f"the others {[round(v, 3) for v in others]}")
+    print("-" * 82)
+    for b in bad:
+        print("FAIL:", b)
+    print("selftest: " + ("ok - each measure fires on its own failure and not "
+                          "on antialiasing" if not bad else f"{len(bad)} problem(s)"))
+    return 1 if bad else 0
+
+
 def main():
+    if "--selftest" in sys.argv:
+        return selftest()
     ap = argparse.ArgumentParser()
+    ap.add_argument("--selftest", action="store_true",
+                    help="check the four measures against synthetic pairs "
+                         "whose right answer is known by construction")
     ap.add_argument("--zlos", required=True)
     ap.add_argument("--ref", required=True)
     ap.add_argument("--regions", default=os.path.join(HERE, "regions.json"))
@@ -204,13 +367,18 @@ def main():
             continue
         col = colour_error(ca, cb)
         pal = palette_distance(ca, cb)
+        hue = hue_distance(ca, cb)
         st = structure_distance(ca, cb)
+        worst = max(col, pal, hue, st)
         rows.append(dict(id=r["id"], kind=r["kind"], rect=r["rect"],
                          visible=r.get("visible", True),
                          colour=round(col, 4), palette=round(pal, 4),
-                         structure=round(st, 4),
-                         score=round(max(col, pal, st), 4),
-                         verdict=band(max(col, pal, st)),
+                         hue=round(hue, 4), structure=round(st, 4),
+                         score=round(worst, 4), verdict=band(worst),
+                         worst_measure=max(
+                             (("colour", col), ("palette", pal),
+                              ("hue", hue), ("structure", st)),
+                             key=lambda t: t[1])[0],
                          derivation=r["derivation"].split(".")[0]))
 
     rows.sort(key=lambda d: -d["score"])
@@ -225,28 +393,36 @@ def main():
                        measures=dict(
                            colour="mean absolute RGB error / 255",
                            palette="mean per-channel 1-D earth-mover distance "
-                                   f"over {QUANT}-level histograms",
-                           structure=f"1 - correlation of {GRID}x{GRID}-pooled "
-                                     "gradient energy, halved to 0..1",
-                           score="max of the three"),
+                                   f"over {QUANT}-level histograms; scales with "
+                                   "the AREA of the difference",
+                           hue="angular distance between dominant saturated "
+                               "hues / 180; area-INdependent; 1.0 means an "
+                               "accent exists in one render and not the other",
+                           structure="worse of two standardised "
+                                     f"{GRID}x{GRID}-pooled maps (luminance and "
+                                     "gradient energy), mean abs diff / 2",
+                           score="max of the four - the measures are NOT on a "
+                                 "common scale, so read `worst_measure` with it"),
                        results=rows), sys.stdout, indent=1)
         print()
     else:
         print(f"zlOS  {args.zlos}")
         print(f"ref   {args.ref}")
         print(f"      {want[0]}x{want[1]}, {len(rows)} regions\n")
-        print(f"{'region':<24}{'rect':<22}{'colour':>8}{'palette':>9}"
-              f"{'struct':>8}{'score':>8}  verdict   src")
-        print("-" * 96)
+        print(f"{'region':<24}{'rect':<22}{'colour':>8}{'palette':>9}{'hue':>7}"
+              f"{'struct':>8}{'score':>8}  verdict   worst      src")
+        print("-" * 108)
         for d in rows:
             print(f"{d['id']:<24}{str(d['rect']):<22}{d['colour']:>8.3f}"
-                  f"{d['palette']:>9.3f}{d['structure']:>8.3f}{d['score']:>8.3f}"
-                  f"  {d['verdict']:<9} {d['derivation']}")
+                  f"{d['palette']:>9.3f}{d['hue']:>7.3f}{d['structure']:>8.3f}"
+                  f"{d['score']:>8.3f}  {d['verdict']:<9} "
+                  f"{d['worst_measure']:<10} {d['derivation']}")
         if rows:
-            print("-" * 96)
+            print("-" * 108)
             print(f"{'MEAN':<24}{'':<22}"
                   f"{sum(d['colour'] for d in rows) / len(rows):>8.3f}"
                   f"{sum(d['palette'] for d in rows) / len(rows):>9.3f}"
+                  f"{sum(d['hue'] for d in rows) / len(rows):>7.3f}"
                   f"{sum(d['structure'] for d in rows) / len(rows):>8.3f}"
                   f"{sum(d['score'] for d in rows) / len(rows):>8.3f}")
 

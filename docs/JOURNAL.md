@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-20 — feat(design): the palette gate now checks the chain, not itself (c4c8581)
+
+`claude/compassionate-curie-a0599c` · 15 files changed, 1310 insertions(+), 233 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>15 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/hosttest/build.sh`
+- `kernel/hosttest/fbtext`
+- `kernel/hosttest/inputtest_feel`
+- `kernel/hosttest/palette`
+- `kernel/hosttest/palette.c`
+- `kernel/hosttest/termwrap`
+- `kernel/hosttest/walltest`
+- `kernel/hosttest/wmtest_feel`
+- `kernel/oracle/diff-regions.py`
+- `kernel/oracle/shot-zlos.py`
+- `kernel/oracle/zlosboot.py`
+- _…and 3 more_
+
+</details>
+
 ## 2026-08-20 — feat(refrender): support.js shim renders the ds.html desktop reference (84a8195)
 
 `claude/compassionate-curie-a0599c` · 4 files changed, 793 insertions(+)

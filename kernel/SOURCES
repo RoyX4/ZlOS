@@ -52,6 +52,7 @@ input.c
 term.c
 wm.c
 ui.c
+ease.c
 wmglue.c
 
 # ---- added when the parallel tracks landed ---------------------------------
