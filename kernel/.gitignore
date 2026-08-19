@@ -34,6 +34,17 @@ hosttest/xhcitest
 # four binaries in the index on every run. A tracked file is never ignored, so
 # adding them here fixes nothing; they need `git rm --cached`. Left for the
 # phase 2 sweep rather than smuggled into a pointer fix.
+# Five more that were untracked-and-unlisted, i.e. they showed up as `??` in
+# every status and were one `git add -A` away from being committed as binaries.
+# heaptest is new with the allocator; the other four predate it. This is the
+# cheap half of the sweep the note above defers - adding an unlisted, UNTRACKED
+# binary works immediately, unlike the four tracked ones, which still need
+# `git rm --cached` before a line here does anything.
+hosttest/heaptest
+hosttest/fbtext
+hosttest/palette
+hosttest/termwrap
+hosttest/walltest
 hosttest/gpu-ring-*.log
 hosttest/gpu_ring
 hosttest/gputest

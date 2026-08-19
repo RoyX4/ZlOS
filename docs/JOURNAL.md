@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-20 — feat(mem): raise the RAM ceiling to 1 GiB, and make it the first one that is enforced (078ebf8)
+
+`claude/recursing-ellis-82c8e8` · 16 files changed, 373 insertions(+), 62 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>16 file(s)</summary>
+
+- `kernel/HANDOFF.md`
+- `kernel/arena.c`
+- `kernel/check-himap.sh`
+- `kernel/check-ram.sh`
+- `kernel/intel.c`
+- `kernel/kernel.zl`
+- `kernel/memmap.h`
+- `kernel/run-vm.sh`
+- `kernel/run.sh`
+- `kernel/verify-clock.sh`
+- `kernel/verify-disk.sh`
+- `kernel/verify-iso.sh`
+- _…and 4 more_
+
+</details>
+
 ## 2026-08-19 — chore: regenerated journal/TODO (post-commit hook) (2c2092f)
 
 `main` · 1 file changed, 17 insertions(+)

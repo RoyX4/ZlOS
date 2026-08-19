@@ -36,7 +36,7 @@
 /* Must match arena.c. Duplicated on purpose: if somebody moves the arena and
  * does not move the harness, the mmap fails loudly here rather than the test
  * quietly exercising a different address than the kernel uses. */
-#define ARENA_BASE   0x00800000UL
+#define ARENA_BASE   0x00E00000UL
 #define ARENA_BYTES  0x01000000UL
 #define ARENA_ALIGN  16UL
 

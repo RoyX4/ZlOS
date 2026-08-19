@@ -14,11 +14,11 @@ SECTIONS
     . = ALIGN(16);
     __bss_end = .;
 
-    /* See link.ld for why. arena.c's ARENA_BASE is 8 MiB and the image must
-     * not reach it; the raw-boot stack at 6 MiB comes first either way. */
+    /* See link.ld for why. arena.c's ARENA_BASE is 14 MiB and the image must
+     * not reach it; the raw-boot stack at 12 MiB comes first either way. */
     __kernel_end = .;
-    ASSERT(__kernel_end <= 0x00600000,
-           "the kernel image has grown into the raw-boot stack at 6 MiB (raw_entry.S:16)")
-    ASSERT(__kernel_end <= 0x00800000,
-           "the kernel image has grown into the program arena at 8 MiB (arena.c ARENA_BASE)")
+    ASSERT(__kernel_end <= 0x00C00000,
+           "the kernel image has grown into the raw-boot stack at 12 MiB (raw_entry.S)")
+    ASSERT(__kernel_end <= 0x00E00000,
+           "the kernel image has grown into the program arena at 14 MiB (arena.c ARENA_BASE)")
 }

@@ -20,7 +20,6 @@ Both unboxed backends sit on the far side of the scoping decision in
 
 ## Documented but not in git
 
-- [ ] `examples/Zaccoding.zl`
 - [ ] `kernel/_gen64.c`
 - [ ] `kernel/_genefi.c`
 - [ ] `kernel/out.c`

@@ -10,7 +10,7 @@
   [  OK  ] PIT timer running at 100 Hz on IRQ0
   [  OK  ] keyboard on IRQ1 - no more polling the port
   USB: no xHCI controller (6 PCI devices seen)
-  arena: 16 MiB at 8 MiB, ends at 24 MiB, ceiling 128 MiB (bg_buf)
+  arena: 16 MiB at 14 MiB, ends at 30 MiB, ceiling 128 MiB (bg_buf)
   [  OK  ] zl runtime, kernel subset
   [ INFO ] no heap, no filesystem, no scheduler
 

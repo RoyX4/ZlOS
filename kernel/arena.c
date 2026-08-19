@@ -74,31 +74,44 @@
  *   0x00008FF0..0x00008FFF   smp.c:56           ENTRY_PTR
  *   0x00009000..0x00009FF0   smp.c:55,124       the SMP trampoline
  *   0x000A0000..0x000FFFFF   -                  VGA hole and BIOS ROM
- *   0x00100000..0x0028F044   link.ld            the kernel image - MEASURED
- *   0x00600000               raw_entry.S:16     raw-boot stack TOP, grows DOWN
- *                            raw_boot.asm:196   the same address, same stack
+ *   0x00100000..0x002E15C0   link-raw.ld        the kernel image - MEASURED
+ *   0x00100000..0x00700000   raw_boot.asm       what the LOADER fills: CHUNKS
+ *                                               x 32 KiB = 6 MiB from 1 MiB
+ *   0x00C00000               raw_entry.S        raw-boot stack TOP, grows DOWN
+ *                            raw_boot.asm       the same address, same stack
+ *   0x00E00000..0x01E00000   HERE               the program arena
+ *   0x02000000               kernel.zl          SNAKE_X, the fixed zl buffers
+ *   0x04000000..0x04100000   virtio_net.c       NET_BASE, the NIC's rings
  *   0x08000000               fb.c:120           bg_buf - the high map starts
  *
  * The kernel image end is measured too, because it is the one entry above that
  * moves every time somebody adds a file:
  *
- *     $ readelf -S kernel.elf | grep '\.bss'
- *     [ 6] .bss  NOBITS  00241820 142810 04d824
- *     -> 0x00241820 + 0x0004D824 = 0x0028F044 = 2.559 MiB
+ *     $ readelf -s kernel_raw.elf | grep -E '__bss_start|__bss_end'
+ *     __bss_start  0028a2d0        __bss_end  002e15c0
+ *     -> image ends at 0x002E15C0 = 2.880 MiB, of which the LOADER must carry
+ *        0x100000..0x28A2D0 = 1.540 MiB (.bss is NOBITS and zeroed by
+ *        raw_entry.S, so it is not on the disk)
  *
- * ARENA_BASE is 8 MiB, and that is arithmetic rather than taste:
+ * ARENA_BASE is 14 MiB, and that is arithmetic rather than taste:
  *
- *   - it clears the raw-boot stack top at 6 MiB, which grows DOWN, by 2 MiB;
- *     the kernel image has 3.4 MiB of room to grow UP into before it reaches
- *     that stack, and the linker script now fails the build if it ever does
+ *   - it clears the raw-boot stack top at 12 MiB, which grows DOWN, by 2 MiB;
+ *     the kernel image has 9.1 MiB of room to grow UP into before it reaches
+ *     that stack, and the linker script fails the build if it ever does
  *   - it is 2 MiB aligned, which the 64-bit path cares about: boot64.S maps
  *     the low address space with 2 MiB pages
- *   - it ends 104 MiB below bg_buf. It used to end 104 MiB below the RAM
- *     ceiling as well - the same number for two entirely different reasons,
- *     asserted separately below because "the day somebody passes -m 512 they
- *     stop being the same number". That day is this commit: the ceiling is now
- *     HI_TOP at 1 GiB and the two checks have visibly different slack, which is
- *     exactly why they were written as two.
+ *   - it ends at 30 MiB, 2 MiB below kernel.zl's fixed buffers at 32 MiB, and
+ *     98 MiB below bg_buf. It used to end 104 MiB below the RAM ceiling as
+ *     well - the same number for two entirely different reasons, asserted
+ *     separately below because "the day somebody passes -m 512 they stop being
+ *     the same number". That day has been and gone: HI_TOP is 1 GiB now and
+ *     the checks have visibly different slack, which is why they were two.
+ *
+ * IT WAS 8 MiB UNTIL raw_boot.asm's CHUNKS WENT TO 192. The loader fills
+ * 1 MiB .. 7 MiB now, which put the old raw-boot stack (6 MiB) inside the
+ * region being loaded; the stack went to 12 MiB and the arena had to clear it.
+ * Both moves are one commit, because half of it is a machine that overwrites
+ * its own stack while booting.
  */
 
 typedef unsigned int   u32;
@@ -118,9 +131,9 @@ typedef unsigned long long uptr;
 typedef unsigned int       uptr;
 #endif
 
-#define ARENA_BASE    0x00800000UL     /*   8 MiB */
+#define ARENA_BASE    0x00E00000UL     /*  14 MiB */
 #define ARENA_BYTES   0x01000000UL     /*  16 MiB - the BUDGET, not the span */
-#define ARENA_END     (ARENA_BASE + ARENA_BYTES)
+#define ARENA_END     (ARENA_BASE + ARENA_BYTES)   /* 30 MiB */
 
 /* The neighbours, by the file and line that owns each one. Re-grep these; the
  * comment in fb.c invites exactly that and it was right to - see T-EXEC-1.
@@ -140,9 +153,20 @@ typedef unsigned int       uptr;
  * are facts about someone else's memory. */
 #include "memmap.h"
 
-#define RAW_STACK_TOP 0x00600000UL     /* raw_entry.S:16, raw_boot.asm:196   */
+#define RAW_STACK_TOP 0x00C00000UL     /* raw_entry.S, raw_boot.asm pm_entry */
 #define HI_BG         HI_BACK          /* memmap.h - bg_buf, the map's floor */
 #define RAM_CEILING   HI_TOP           /* memmap.h - the RAM we promise      */
+
+/* THE NEIGHBOUR NOBODY WAS CHECKING. kernel.zl parks its fixed buffers from
+ * 0x02000000 up - SNAKE_X is the lowest, then FS_META, FS_DATA, LINE_BUF,
+ * HIST_BUF, DISK_SCRATCH, PAINT_BUF. check-memmap.sh sweeps those against each
+ * other and memmap.h's chain covers the high map, and the 16 MiB arena sat
+ * between the two, in NEITHER. It had 8 MiB of clearance and so the gap never
+ * mattered; moving the arena up by 6 MiB is exactly the change that would make
+ * it matter, which is the right moment to write the assert rather than the
+ * moment after. check-memmap.sh now folds the arena into its overlap sweep as
+ * well, so this is checked from both directions. */
+#define ZL_FIXED_FLOOR 0x02000000UL    /* kernel.zl: SNAKE_X, the lowest one  */
 
 /* Sixteen bytes, not eight: the 64-bit build's `long double` and any SSE value
  * the interpreter ends up boxing want it, and an arena that hands out
@@ -153,7 +177,9 @@ typedef unsigned int       uptr;
 /* THE MAP MUST BE IN ORDER AND THE COMPILER SHOULD SAY SO - the same argument
  * fb.c:152-169 makes, applied to the one buffer that is not the kernel's. */
 _Static_assert(ARENA_BASE >= RAW_STACK_TOP,
-               "the program arena starts below the raw-boot stack at 6 MiB");
+               "the program arena starts below the raw-boot stack top");
+_Static_assert(ARENA_END <= ZL_FIXED_FLOOR,
+               "the program arena runs into kernel.zl's fixed buffers at 32 MiB");
 _Static_assert(ARENA_END <= HI_BG,
                "the program arena runs into bg_buf, the high-RAM map's floor");
 _Static_assert(ARENA_END <= RAM_CEILING,

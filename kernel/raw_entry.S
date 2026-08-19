@@ -13,14 +13,22 @@
 .section .text.rawentry, "ax"
 .global _rawstart
 _rawstart:
-    mov $0x600000, %esp         /* a stack in high memory (6 MiB), growing down. It
-                                   was put here when the kernel still lived under the
-                                   640 KiB line and left only ~55 KiB for a stack -
-                                   not enough for the framebuffer compositor, which
-                                   nests deep and needs ~256 KiB. The kernel is loaded
-                                   at 1 MiB now and currently reaches __bss_end
-                                   ~0x20E000, so this leaves it roughly 4 MiB to grow
-                                   down into. Check that gap before moving either. */
+    mov $0x00C00000, %esp       /* a stack in high memory (12 MiB), growing down. It
+                                   was put at 6 MiB when the kernel still lived under
+                                   the 640 KiB line and left only ~55 KiB for a stack
+                                   - not enough for the framebuffer compositor, which
+                                   nests deep and needs ~256 KiB.
+
+                                   It moved to 12 MiB when raw_boot.asm's CHUNKS went
+                                   to 192: the loader now fills 1 MiB .. 7 MiB, so
+                                   6 MiB is INSIDE the region being loaded. The
+                                   kernel image currently reaches __bss_end 0x2E15C0
+                                   (2.88 MiB), so this leaves it about 9 MiB to grow
+                                   down into. Check that gap before moving either.
+
+                                   raw_boot.asm:pm_entry sets the same value before
+                                   jumping here, and arena.c's RAW_STACK_TOP asserts
+                                   against it. Three copies; all three or none. */
 
     /* Zero the .bss ourselves. GRUB-loaded kernels get a zeroed .bss from
      * the ELF loader; a flat binary loaded off disk does not, so the font
