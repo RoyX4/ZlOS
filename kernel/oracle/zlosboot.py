@@ -104,15 +104,36 @@ def catalog_apps():
                          body.group(1)):
         if m.group(1) in ids:
             names.setdefault(m.group(2), ids[m.group(1)])
+    # THE CATALOG INDEX IS DENSE NOW, not id - REG_FIRST.
+    #
+    # REG_COUNT is gone: the id space was carved into reserved per-slice ranges
+    # with holes in it (34..39 unallocated, and one spare id at the end of each
+    # slice), so the catalog walks a dense list built by reg_exists() and a tile
+    # index no longer equals an id offset. Reading REG_COUNT and assuming
+    # contiguity would click the wrong tile - silently, and for every app past
+    # the first hole.
+    #
+    # So mirror reg_exists() by parsing the gaps it names, rather than
+    # hardcoding them here where they would go stale independently.
     first = re.search(r"^REG_FIRST\s*=\s*(\d+)", src, re.M)
-    count = re.search(r"^REG_COUNT\s*=\s*(\d+)", src, re.M)
-    if not first or not count:
-        raise SystemExit("apps_registry.zl: REG_FIRST/REG_COUNT not found")
-    base, n = int(first.group(1)), int(count.group(1))
+    last = re.search(r"^REG_LAST\s*=\s*(\d+)", src, re.M)
+    if not first or not last:
+        raise SystemExit("apps_registry.zl: REG_FIRST/REG_LAST not found")
+    base, top = int(first.group(1)), int(last.group(1))
     if base != REG_FIRST:
         raise SystemExit(f"apps_registry.zl REG_FIRST is {base}, this module "
                          f"was written for {REG_FIRST} - re-check cat_hit()")
-    return {name: i - base for name, i in names.items() if base <= i < base + n}
+    ex = re.search(r"fn reg_exists\(id\) \{(.*?)\n\}", src, re.S)
+    if not ex:
+        raise SystemExit("apps_registry.zl: reg_exists() not found")
+    holes = set()
+    for m in re.finditer(r"if id >= (\d+) \{ if id <= (\d+) \{ return 0", ex.group(1)):
+        holes.update(range(int(m.group(1)), int(m.group(2)) + 1))
+    for m in re.finditer(r"if id == (\d+) \{ return 0", ex.group(1)):
+        holes.add(int(m.group(1)))
+    dense = [i for i in range(base, top + 1) if i not in holes]
+    index = {i: k for k, i in enumerate(dense)}
+    return {name: index[i] for name, i in names.items() if i in index}
 
 
 # ---- pointer ----------------------------------------------------------------
