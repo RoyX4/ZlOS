@@ -26,6 +26,39 @@ SRC=${1:-kernel.zl}
 # because `exit` inside a command substitution only leaves the subshell - the
 # script would carry on with an empty value, size everything at 0 and report
 # a clean map. A check that can pass vacuously is worse than no check.
+# ---- DISCOVERY SWEEP: every fixed address, not a hand-written list -------
+#
+# The list below is hand-maintained and that is exactly how LINE_BUF and
+# DISK_SCRATCH both sat on 0x02030000 through an entire eleven-branch
+# integration. DISK_SCRATCH arrived on desktop/system-track; this file was
+# written on another branch and never learned the name, so the check ran, passed
+# and proved nothing. A detector that cannot see a new constant is not a
+# detector - it is a green light with a hardcoded allowlist.
+#
+# So before anything else: pull EVERY `NAME = 0xADDR` out of the source and fail
+# on any address claimed twice. No list to keep in step, and a constant added
+# tomorrow is covered the moment it is written.
+dupes=$(grep -oP '^[A-Z_]+\s*=\s*\K0x0[0-9A-Fa-f]{5,}' "$SRC" | sort | uniq -d)
+if [ -n "$dupes" ]; then
+    echo "FAIL: two fixed constants share an address:"
+    for a in $dupes; do
+        printf '  %s  <- ' "$a"
+        grep -oP "^\K[A-Z_]+(?=\s*=\s*$a\b)" "$SRC" | tr '\n' ' '
+        echo
+    done
+    exit 1
+fi
+
+# ...and say which constants the sized checks below do NOT cover, so the gap is
+# visible rather than silent. Not a failure: a new address is not automatically
+# wrong, it is automatically unexamined.
+known=" SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT LINE_BUF LINE_MAX HIST_BUF HIST_N "
+unsized=""
+for n in $(grep -oP '^\K[A-Z_]+(?=\s*=\s*0x0[0-9A-Fa-f]{5,})' "$SRC" | sort -u); do
+    case "$known" in *" $n "*) ;; *) unsized="$unsized $n";; esac
+done
+[ -n "$unsized" ] && echo "note: fixed addresses with no size check here:$unsized"
+
 declare -A K
 for name in SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT \
             LINE_BUF LINE_MAX HIST_BUF HIST_N; do
