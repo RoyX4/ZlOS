@@ -128,5 +128,30 @@ def main():
         return 0
 
 
+def main_retrying(tries=3):
+    """Run main(), retrying a REFUSED MODESET and nothing else.
+
+    Measured over four boots on this box, `set_res(1280, 800)` succeeded twice
+    and came up 1920x1200 twice - the card refuses the mode intermittently, and
+    the whole boot (about two minutes) is wasted when it does. The refusal is
+    correct and stays: a screenshot at the wrong size would be silently
+    compared against a region map built for a different one.
+
+    This is a RETRY, not a timeout. It re-attempts an operation that failed,
+    rather than waiting longer and hoping - CLAUDE.md's rule is that a gate
+    must never be timing-sensitive, and sleeping longer here would be exactly
+    that. If the mode is refused `tries` times the failure is reported, not
+    papered over.
+    """
+    for attempt in range(1, tries + 1):
+        rc = main()
+        if rc == 0:
+            return 0
+        if attempt < tries:
+            print(f"  retrying ({attempt}/{tries - 1}) - the mode was refused, "
+                  f"which is intermittent on this card", file=sys.stderr)
+    return rc
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main_retrying())

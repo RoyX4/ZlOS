@@ -4459,12 +4459,30 @@ fn wm_boot_start() {
     # Terminal is a compact command surface, Browser anchors the lower half
     # and Resources balances it on the right. Empty black client area is not
     # minimalism here; it reads as an unfinished debug panel.
+    # THE BOOT COMPOSITION IS THE REFERENCE'S, EXACTLY. ds-reference.html's
+    # initial state opens three windows - `open:{term:true, mon:true,
+    # files:true}` - and its APPS table gives each one a size and a position:
+    #
+    #   term   600 x 368  at 132, 60
+    #   files  672 x 352  at 238, 346
+    #   mon    424 x 376  at 758, 76
+    #
+    # These are not "about right". They are the numbers, and they are what the
+    # oracle's regions.json compares against - win_term, win_files, win_mon are
+    # three of its named boxes. A Terminal 680 wide at y=140 scores as WRONG on
+    # structure no matter how good it looks, because it is not where the thing
+    # it is being compared to is.
+    #
+    # BROWSER IS NOT IN THE REFERENCE'S BOOT SET and is no longer in ours. It
+    # was anchoring the lower half, where Files belongs; leaving it there put a
+    # window over the dock and left Files closed, so two of the three boxes
+    # were empty and a fourth was occupied by something with no counterpart.
     if sw >= 1240 * u {
         desk_ox = (sw - 1280 * u) / 2
         if desk_ox < 0 { desk_ox = 0 }
-        shell_win = wm_open(APP_SHELL, "Terminal", desk_ox + 40 * u, 140 * u, 680 * u, 360 * u)
-        browser_win = wm_open(APP_BROWSER, "Browser", desk_ox + 200 * u, 560 * u, 800 * u, 400 * u)
-        mon_win = wm_open(APP_MONITOR, "System Monitor", desk_ox + 800 * u, 160 * u, MON_W * u, MON_H * u)
+        shell_win = wm_open(APP_SHELL, "Terminal", desk_ox + 132 * u, 60 * u, 600 * u, 368 * u)
+        files_win = wm_open(APP_FILES, "Files", desk_ox + 238 * u, 346 * u, 672 * u, 352 * u)
+        mon_win = wm_open(APP_MONITOR, "System Monitor", desk_ox + 758 * u, 76 * u, 424 * u, 376 * u)
     } else {
         shell_win = wm_open(APP_SHELL, "Terminal", 16 * u, 56 * u, sw - 32 * u, sh - 72 * u)
     }
