@@ -559,8 +559,22 @@ The five that matter most to somebody touching this next:
 The shell owns the main loop and windows are a demo it launches. A real desktop
 inverts that. Designed 2026-08-17:
 
+- **`docs/visual-speed-northstar.md` — Roy's actual intent for the v10 HTML.**
+  Read this first for visual work. The target is how polished the desktop looks
+  and how fast it feels, not a demand to clone every simulated app before the
+  comparison counts. It separates look, feel, machinery and application
+  completeness, and records the 16.67 ms / `late = 0` interaction target.
 - **`docs/DECISIONS.md` — every decision from 2026-08-17 in one page**, including
-  the two that turned out wrong and why. Read this before the others.
+  the two that turned out wrong and why. Read this before the others. **#29–#33
+  (2026-08-19) settle the kernel against `docs/design/zlOS-design-northstar.html`
+  item by item** — the blur is gone and the reason is that it was disabling the
+  wallpaper cache on the ThinkPad's 2560x1440 panel, not that it looked wrong.
+- **`docs/look-and-speed.md` — what a frame costs, what paces it, what is
+  next.** The frame target (every frame AND the peak under 16.67 ms), the
+  vsync survey per backend (one source exists, `intel.c`'s `PIPE_FRMCNT_A`, and
+  it has zero callers), the blast radius of raising the PIT, and why SMP band
+  rendering is one call that should not be made yet — 1.76x measured, not 4x,
+  and two bands is slower than serial.
 - `docs/desktop-build-guide.md` — start here. What a compositor is, in plain
   words, and the build order.
 - **`docs/desktop-TODO.md` — the ordered task list. Pick it up here.**
@@ -631,13 +645,11 @@ inverts that. Designed 2026-08-17:
   not its code.** Also: `virtio_gpu.c:314` disables virgl on purpose — enabling
   it would give real 3D in QEMU only, never on the laptop.
 - `docs/desktop-northstar-feasibility.md` — can zlOS run the `~/zl OS v10.dc.html`
-  mockup? **~65%, and what is left is applications, not machinery.** This file
-  has now been wrong twice in opposite directions — 95% by counting visual
-  effects and ignoring the toolkit, then 20% by counting "zl has no lists" and
-  "there is no layout engine" as *permanent*. Neither was a property of the
-  language: `ui.c` is a layout engine and `ui_list_row` expresses a list
-  without a list type. **Separating "the language cannot" from "nobody has
-  written it yet" is the whole lesson**, and getting it wrong costs you the
+  mockup? Keep its layer breakdown and gap list; **ignore every percentage in
+  it.** Successive 95%, 20%, 65% and 35% figures each collapsed different
+  layers and each misled. `ui.c` is a layout engine and `ui_list_row` expresses
+  a list without a list type. **Separating "the language cannot" from "nobody
+  has written it yet" is the whole lesson**, and getting it wrong costs the
   wrong fix.
 
 ## The renderer is benchmarked: `hosttest/fbbench.c`
@@ -735,6 +747,31 @@ cd kernel/hosttest && ./build.sh && ./inputtest
 ```
 
 Full write-up: `docs/input-stack.md`.
+
+## How a harness types a command — `docs/typing-into-the-compositor.md`
+
+**Serial reaches the compositor.** `input.c` feeds COM1 into the same event
+queue as PS/2 and USB (`SERIAL, the third source`), which is what kept every
+gate in this repo working when the desktop became the boot state.
+
+What does not work is sending a bare character. The shell is a window whose
+input is a **line**: `term.c` buffers printable characters and only on Enter
+echoes the line and looks the first **word** up in its table. So `windows`,
+not `w` — `w` was a command in the old text shell and is now one character in
+a buffer.
+
+**A single character produces no serial output at all**, because the echo lives
+in the Enter branch. That silence is identical to a dropped key, and reading it
+as one is how two probes came to document "serial cannot reach the compositor"
+on branches whose own `input.c` says otherwise. Measured 2026-08-19: `-k w`
+changes 1 225 pixels, all inside the prompt line, with the `w` visibly sitting
+in the buffer.
+
+`probe-shot.py -k` takes a command, submits it, and waits for term.c to echo
+the line back — the one marker that proves it was taken, on either wire. It
+exits non-zero when the echo never comes, instead of photographing a frame no
+command ran in, which is what it used to do.
+
 ## zlOS keeps things now — `docs/system-track.md`
 
 Files had no names and nothing survived a reboot. **zlfs** (`fs.c`) is a

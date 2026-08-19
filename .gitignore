@@ -76,6 +76,14 @@ kernel/hosttest/jmptest32
 kernel/hosttest/libctest
 scratch.zl
 
-# rendered compositor frames (.github/scripts/render-desktop.sh)
-shots/
+# rendered compositor frames (.github/scripts/render-desktop.sh, which does
+# `mkdir -p shots` at the repo root and writes shots/$label-$size.png there).
+#
+# ANCHORED. Written as a bare `shots/` it matched a directory of that name at
+# ANY depth, which is not what the line above describes and not what it was for:
+# it also swallowed `docs/shots/`, where the two reference screenshots for
+# POINTER-PROMPT.md 1c live. Those are evidence, not output - the "before" one
+# cannot be regenerated at all, because the branch that drew it has never been
+# identified - so an ignore rule aimed at CI output must not reach them.
+/shots/
 kernel/hosttest/wmbench

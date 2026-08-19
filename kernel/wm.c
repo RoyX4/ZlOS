@@ -1511,14 +1511,57 @@ static unsigned int last_tick;
  * and averaging those in would report a desktop at rest as infinitely fast. */
 static unsigned int frame_us, frame_peak_us;
 
+/* ---- the number that describes SMOOTHNESS, which neither of the two above does
+ *
+ * An average hides stutter by construction and a peak is one sample: both are
+ * compatible with a desktop that hitches once a second, and a person perceives
+ * exactly that. What they perceive is the COUNT of frames that missed, so count
+ * them.
+ *
+ * Two different misses, counted separately because they have different causes:
+ *
+ *   frame_late  a frame that was TIMED and came in over FRAME_BUDGET_US. This
+ *               is the compositor's own fault - it drew too much.
+ *   frame_lost  a 100 Hz tick that no frame ran in at all. wm_frame() is called
+ *               from the idle loop and returns immediately unless the tick
+ *               changed, so `now - last_tick > 1` means the previous pass
+ *               overran its 10 ms slot and the ticks in between are simply
+ *               gone. Nothing counted them before; a dropped frame was silent.
+ *
+ * THE BUDGET IS 16667 us AND NOT 10000 us, deliberately. The PIT gives a 10 ms
+ * slot, but the thing being missed is a panel refresh, and the ThinkPad's panel
+ * was measured at 59.998 Hz (kernel/HANDOFF.md, from PIPE_LINK_M1/N1). A frame
+ * between 10 and 16.6 ms loses a tick without ever being visible as a dropped
+ * refresh, so charging it as stutter would report a smooth desktop as broken.
+ * frame_lost catches those; frame_late is what a person can actually see.
+ *
+ * Neither is a rate. They are totals since the last reset, because a rate needs
+ * a denominator and the honest denominator - painted frames - is not the same
+ * as elapsed ticks on a desktop that idles. `peak` prints both alongside the
+ * frame count so a probe can divide if it wants to. */
+#define FRAME_BUDGET_US 16667u
+static unsigned int frame_late, frame_lost, frame_painted;
+static int          paced;      /* has a first frame set last_tick yet? */
+
 int wm_frame_us(void)  { return (int)frame_us; }
 int wm_peak_us(void)   { return (int)frame_peak_us; }
-void wm_peak_reset(void) { frame_peak_us = 0; }
+int wm_late(void)      { return (int)frame_late; }
+int wm_lost(void)      { return (int)frame_lost; }
+int wm_painted(void)   { return (int)frame_painted; }
+int wm_budget_us(void) { return (int)FRAME_BUDGET_US; }
+void wm_peak_reset(void) { frame_peak_us = 0; frame_late = 0; frame_lost = 0;
+                           frame_painted = 0; }
 
 void wm_frame(void)
 {
     unsigned int now = idt_ticks();
     if (now == last_tick) return;
+    /* Ticks between this pass and the last one that nothing ran in. Skipped on
+     * the very first frame: last_tick is 0 until then and boot takes hundreds
+     * of ticks, which would otherwise be charged to the compositor as one
+     * enormous stall before it had drawn anything. */
+    if (paced && now - last_tick > 1) frame_lost += now - last_tick - 1;
+    paced = 1;
     last_tick = now;
     /* apps-in-windows timed the frame with the 64-bit cpu_tsc(); this tree
      * uses the 32-bit cpu_tsc_lo(). Both declarations survived the merge and
@@ -1576,6 +1619,12 @@ void wm_frame(void)
             if (dt < 0x40000000u) {
                 frame_us = dt / (khz / 1000u ? khz / 1000u : 1u);
                 if (frame_us > frame_peak_us) frame_peak_us = frame_us;
+                /* counted only where the frame was actually TIMED - a wrapped
+                 * TSC delta is discarded above, and charging a discarded
+                 * measurement as a miss would invent stutter out of a 1.8 s
+                 * counter wrap. */
+                frame_painted++;
+                if (frame_us > FRAME_BUDGET_US) frame_late++;
             }
         }
     }

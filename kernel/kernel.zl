@@ -33,12 +33,31 @@ WALL_BOT = rgb(10, 12, 22)      # ... to near-black at the bottom
 HDR_TOP  = rgb(48, 92, 168)     # title bar: bright blue
 HDR_BOT  = rgb(22, 40, 92)      # ... to deep blue
 ACCENT   = rgb(96, 210, 235)    # bright cyan accent line
-BAR_TOP  = rgb(40, 46, 66)      # taskbar top
-BAR_BOT  = rgb(18, 20, 32)      # taskbar bottom
-BAR_HI   = rgb(78, 92, 128)     # taskbar top highlight
+BAR_TOP  = rgb(40, 46, 66)      # taskbar top          = --bar-top #282e42
+BAR_BOT  = rgb(18, 20, 31)      # taskbar bottom       = --bar-bot #12141f
+BAR_HI   = rgb(78, 92, 128)     # taskbar top highlight= --bar-hi  #4e5c80
 PANEL    = rgb(0, 0, 0)        # content panel = black, matches text cell bg
+# ---- the three the northstar names and kernel.zl did not have ---------------
+# LOOK-AND-SPEED-PROMPT asked specifically about `panel` and `ok`. Both were
+# genuinely absent, and they are absent for two different reasons:
+#
+#   --panel #05060a   PANEL above is rgb(0,0,0), pure black, and that is a
+#                     DELIBERATE difference: an app's content panel has to match
+#                     the VGA text cell background exactly or the shell's own
+#                     scrollback sits on a slightly different black. So PANEL
+#                     stays 0,0,0 and the reference's near-black gets its own
+#                     name, for the chrome that is not a text surface.
+#   --ok #5bd66e      OK_GRN was rgb(120,220,140) - a lighter, greyer green
+#                     picked before the reference existed. Drift rather than a
+#                     decision, so the reference wins and OK_GRN now holds it.
+PANEL_NS  = rgb(5, 6, 10)       # --panel    #05060a - floating panels, menus
+LINE_SOFT = rgb(38, 48, 74)     # --line     #26304a - hairline borders
 TXT_HI   = rgb(210, 228, 255)   # light text
 TXT_DIM  = rgb(150, 165, 195)   # dim text
+# --crit from the northstar (#e05a5a). It was already on screen as a literal in
+# the window close button and nowhere else; a colour the reference NAMES should
+# be named here too, or the next use of it guesses a different red.
+CRIT_RED = rgb(224, 90, 90)     # something is wrong and you should look
 
 # ---- serial input -----------------------------------------------------------
 # It used to be read HERE, with band(inb(COM1 + 5), 1) as the ready test. Two
@@ -228,7 +247,7 @@ TOP_BG   = rgb(20, 23, 33)
 TOP_LINE = rgb(8, 9, 14)
 TOP_TXT  = rgb(226, 234, 248)
 TOP_DIM  = rgb(128, 140, 166)
-OK_GRN   = rgb(120, 220, 140)
+OK_GRN   = rgb(91, 214, 110)    # --ok #5bd66e
 
 fn draw_header() {
     if px_w() > 0 {
@@ -356,13 +375,41 @@ fn dock_cmd(slot) {
 # WHERE THE TRAY STARTS, in one place. It was computed twice - once in
 # draw_status and once in draw_clock - with the same three lines copied, which
 # is how a clock ends up drawn 4 px from where its label is.
+# THE ROW, AS A TABLE. These were eight literals inline in the draw calls and a
+# ninth, different, pair of literals in the damage rectangle that invalidates
+# them - which is how the peak number ended up drawn outside its own damage rect
+# and kept the head of its previous value on screen for ever. A row laid out in
+# one place cannot disagree with itself about where it is.
+#
+# Design units, so they scale with ui() like everything else. Each NUMBER gets a
+# FIXED cell rather than flowing after its label: label_w() exists and would let
+# the row reflow to fit, but these values change every frame, and a readout
+# whose labels slide sideways as the digits change is unreadable. A fixed cell
+# wide enough for the worst case is the correct shape for a live number.
+TRAY_W       = 330       # the whole row, and the width tray_x() steps back by
+TRAY_FRAME_L = 0         # "frame"
+TRAY_FRAME_N = 44        #   wm_us(),   up to 6 digits
+TRAY_PEAK_L  = 92        # "peak"
+TRAY_PEAK_N  = 124       #   wm_peak(), up to 6 digits
+TRAY_LATE_L  = 172       # "late"
+TRAY_LATE_N  = 204       #   wm_late(), up to 5 digits
+TRAY_UP_L    = 244       # "up"
+TRAY_UP_N    = 266       #   uptime in seconds
+TRAY_NUM_W   = 48        # room a number cell needs for its widest value
+
 fn tray_x() {
     u = ui()
-    tx = px_w() - 300 * u
+    tx = px_w() - TRAY_W * u
     tdend = DOCK_X0 * u + 9 * DOCK_PITCH * u + 16 * u
     if tx < tdend { tx = tdend }
     return tx
 }
+
+# THE RECTANGLE THAT INVALIDATES THE ROW ABOVE, derived from the same tray_x().
+# Everything from where the row starts to the right edge of the screen: the row
+# is the last thing on that line and nothing lives to the right of it, so this
+# cannot be too narrow the way a hand-counted width can.
+fn tray_dmg_w() { return px_w() - tray_x() }
 
 # THE PART THAT NEVER CHANGES: the blurred, tinted strip, the start button and
 # the nine tiles in their rest state. Drawn ONCE, into the wallpaper cache.
@@ -371,14 +418,20 @@ fn draw_dock_bg() {
     dy = dock_y()
     u = ui()
     grad_rgb(0, dy - 6, w, 6, WALL_BOT, rgb(6, 7, 12))    # soft shadow above
-    # BLUR, THEN TINT - backdrop-filter: blur() + rgba(), which the prototype
-    # asks for in six places. Both are paid here, once, and never again.
-    if dock_blur >= 0 {
-        blurdraw(dock_blur, 0, dy)
-        blend(0, dy, w, px_h() - dy, rgb(14, 19, 34), 150)
-    } else {
-        grad_rgb(0, dy, w, px_h() - dy, BAR_TOP, BAR_BOT)
-    }
+    # AN OPAQUE VERTICAL GRADIENT, which is what the northstar asks for:
+    #
+    #   .dock{ background:linear-gradient(180deg,var(--bar-top),var(--bar-bot));
+    #          border-top:1px solid var(--bar-hi) }
+    #
+    # This used to be blur-then-tint - the v10 prototype's backdrop-filter -
+    # with this gradient sitting underneath as the fallback branch. The gradient
+    # WON, and the reason is measured rather than aesthetic: see DECISIONS #29.
+    # The blur took its slot out of the same 16 MiB arena as the wallpaper cache
+    # and took it FIRST, so on the ThinkPad's 2560x1440 panel 3.75 MiB of blur
+    # left 12.25 MiB for a wallpaper that wants 14.06, and the cache - which
+    # fb.c's own comment calls "not an optimisation, the only way the look
+    # exists" - was refused on the one machine this OS is actually for.
+    grad_rgb(0, dy, w, px_h() - dy, BAR_TOP, BAR_BOT)
     fill_rgb(0, dy, w, 1, BAR_HI)                          # top highlight
     rrect(10 * u, dy + 8 * u, 96 * u, DOCK_TW * u, 12 * u, rgb(48, 92, 168))
     fill_rgb(10 * u, dy + 8 * u, 96 * u, 1, rgb(120, 170, 235))
@@ -421,12 +474,38 @@ fn draw_status(msg) {
         # A number nobody can see is a number nobody checks, and "state:
         # compositor" - which is what used to be here - is a label that has
         # said the same thing on every boot since it was written.
-        label(tray, dy + 22 * u, "frame", TXT_DIM, T_CAPTION, W_REG)
-        label_num(tray + 44 * u, dy + 22 * u, wm_us(), ACCENT, T_CAPTION, W_BOLD)
-        label(tray + 92 * u, dy + 22 * u, "us   peak", TXT_DIM, T_CAPTION, W_REG)
-        label_num(tray + 152 * u, dy + 22 * u, wm_peak(), TXT_HI, T_CAPTION, W_BOLD)
-        label(tray + 210 * u, dy + 22 * u, "up", TXT_DIM, T_CAPTION, W_REG)
-        label_num(tray + 232 * u, dy + 22 * u, ticks() / 100, TXT_HI, T_CAPTION, W_BOLD)
+        # LATE is here because the other two cannot show stutter. An average
+        # hides it by construction and a peak is a single sample; both are
+        # consistent with a desktop that hitches once a second, which is
+        # precisely what a person notices. `late` is how many painted frames
+        # went over the 16.67 ms budget since the last `peakreset`, so a
+        # healthy desktop reads 0 and any other number is a thing to chase.
+        ty = dy + 22 * u
+        # red the moment anything has missed, because a 0 that can silently
+        # become a 3 in the same colour is a number nobody re-reads
+        tlc = TXT_HI
+        if wm_late() > 0 { tlc = CRIT_RED }
+        # A FIELD IS DRAWN ONLY IF IT FITS. At 800x600 the nine dock tiles
+        # already reach x=622, tray_x() clamps to 638 to clear them, and 162 px
+        # is all that is left - so the row has been running off the right edge
+        # of the screen at that mode since it was written, silently, because
+        # fb.c clips and says nothing. Drawing off-screen is not a smaller
+        # problem than drawing nothing; it is the same problem with no evidence.
+        avail = px_w() - tray
+        label    (tray + TRAY_FRAME_L * u, ty, "frame",     TXT_DIM, T_CAPTION, W_REG)
+        label_num(tray + TRAY_FRAME_N * u, ty, wm_us(),     ACCENT,  T_CAPTION, W_BOLD)
+        if avail >= (TRAY_PEAK_N + TRAY_NUM_W) * u {
+            label    (tray + TRAY_PEAK_L * u, ty, "peak",    TXT_DIM, T_CAPTION, W_REG)
+            label_num(tray + TRAY_PEAK_N * u, ty, wm_peak(), TXT_HI,  T_CAPTION, W_BOLD)
+        }
+        if avail >= (TRAY_LATE_N + TRAY_NUM_W) * u {
+            label    (tray + TRAY_LATE_L * u, ty, "late",    TXT_DIM, T_CAPTION, W_REG)
+            label_num(tray + TRAY_LATE_N * u, ty, wm_late(), tlc,     T_CAPTION, W_BOLD)
+        }
+        if avail >= (TRAY_UP_N + TRAY_NUM_W) * u {
+            label    (tray + TRAY_UP_L * u, ty, "up",        TXT_DIM, T_CAPTION, W_REG)
+            label_num(tray + TRAY_UP_N * u, ty, ticks() / 100, TXT_HI, T_CAPTION, W_BOLD)
+        }
         # THE UPTIME, drawn HERE rather than by draw_clock. draw_clock is only
         # ever called from the old text-shell loop, which now runs only on a
         # machine with no framebuffer - so under the compositor the tray said
@@ -450,10 +529,25 @@ fn draw_clock(sec) {
     if px_w() > 0 {
         w = px_w()
         dy = dock_y()
+        cu = ui()
         ctray = tray_x()
-        grad_rgb(ctray + 226 * ui(), dy + 12 * ui(), 70 * ui(), 30 * ui(), BAR_TOP, BAR_BOT)
-        label(ctray + 210 * ui(), dy + 22 * ui(), "up", TXT_DIM, T_CAPTION, W_REG)
-        label_num(ctray + 232 * ui(), dy + 22 * ui(), sec, TXT_HI, T_CAPTION, W_BOLD)
+        # The clear behind the uptime, and it uses the SAME table draw_status
+        # lays the row out from - it used to be `+ 226` and `70` wide, a third
+        # set of literals for the same row.
+        #
+        # BAR_TOP/BAR_BOT is the right background only when the dock fell back
+        # to a plain gradient. Once the dock is baked into the wallpaper cache
+        # this strip is blur-then-tint, and painting a gradient over it puts a
+        # visible patch where the clock is. Repaint from the cache when there is
+        # one; the gradient stays as the fallback it always was.
+        cw = TRAY_W * cu - TRAY_UP_L * cu
+        if wall_ok() == 1 {
+            wall_paint(ctray + TRAY_UP_L * cu, dy + 12 * cu, cw, 30 * cu)
+        } else {
+            grad_rgb(ctray + TRAY_UP_L * cu, dy + 12 * cu, cw, 30 * cu, BAR_TOP, BAR_BOT)
+        }
+        label(ctray + TRAY_UP_L * cu, dy + 22 * cu, "up", TXT_DIM, T_CAPTION, W_REG)
+        label_num(ctray + TRAY_UP_N * cu, dy + 22 * cu, sec, TXT_HI, T_CAPTION, W_BOLD)
     } else {
         at_num(status_row(), 70, sec, C_STATUS)
     }
@@ -2202,6 +2296,22 @@ fn run_command(cmd, arg) {
         # answer reports None and looks like a broken feature.
         color(C_WHITE)  put("  FRAMEUS ")  put(wm_us())  put(" ")
         put(wm_peak())  print(" END")
+        # THE MISS COUNTS, on their own line so the regex above keeps working -
+        # probe-frame.py waits for END and appending fields before it would have
+        # broken a gate to add a number to it.
+        #
+        # late  painted frames over the budget    <- what a person sees
+        # lost  100 Hz ticks no frame ran in      <- what the pacing costs
+        # of    painted frames since the reset    <- the honest denominator
+        # ...and the terminator here must NOT contain "END". exercise.py's
+        # Serial.wait() finds a marker as a SUBSTRING and leaves the rest of the
+        # line in the buffer, so an "END2" would be matched by the next probe
+        # that waits for "END" and hand it half of the previous answer. Measured:
+        # probe-tray.py read None for its first sample until this said FIN.
+        color(C_WHITE)  put("  FRAMEMISS late ")  put(wm_late())
+        put(" lost ")  put(wm_lost())
+        put(" of ")    put(wm_painted())
+        put(" budget ")  put(wm_budget())  print(" FIN")
         color(C_GREY)  return 0
     }
     if cmd == 12 { wm_peak0()  print("  peak reset")  return 0 }
@@ -3131,7 +3241,28 @@ fn app_tick(id, win) {
             # Damaging just the tray strip rather than the whole dock is the
             # difference between repainting 30,000 pixels a second and
             # repainting 2,300,000.
-            wm_damage(px_w() - 130 * ui(), dock_y() + 10 * ui(), 120 * ui(), 34 * ui())
+            #
+            # THE RECTANGLE IS DERIVED FROM tray_x(), NOT FROM px_w() AGAIN.
+            # It used to be `px_w() - 130 * ui()` wide `120 * ui()`, a second
+            # origin for a row that draw_status lays out from tray_x() - which
+            # is px_w() - 300 * ui(). So the invalidated strip began at
+            # tray + 170 while the row begins at tray + 0, and the two LIVE
+            # numbers in it sat outside their own damage rectangle:
+            #
+            #   wm_us()   at tray +  44 * ui()   never invalidated
+            #   wm_peak() at tray + 152 * ui()   invalidated from +170 onward,
+            #                                    so its first 18 * ui() columns
+            #                                    were never cleared
+            #
+            # desk_draw repaints the tray from the wallpaper cache, but only
+            # inside the damage rect, so a number that SHRANK kept the head of
+            # its previous value on screen forever - the `)08` debris in
+            # POINTER-PROMPT.md 1b. Only `up` looked right, because `up` is the
+            # one field that happened to fall inside the old rectangle.
+            #
+            # This is the same defect tray_x() was extracted to kill (see its
+            # comment): one row, two origins. There is now one.
+            wm_damage(tray_x(), dock_y() + 10 * ui(), tray_dmg_w(), 34 * ui())
             return 1
         }
     }
@@ -3246,7 +3377,6 @@ fn dock_slot_at(cx, cy) {
     return dslot
 }
 
-dock_blur = 0 - 1
 # ---- the dock, which is now CLICKABLE ---------------------------------------
 # desk_draw has painted a dock, a start button and a tray since the compositor
 # first booted, and every one of them was decoration: the dock is not a window,
@@ -3462,7 +3592,6 @@ fn menu_pick(idx) {
     return 0
 }
 
-menu_blur = 0 - 1
 menu_bx = 0
 menu_by = 0
 fn open_menu() {
@@ -3471,17 +3600,14 @@ fn open_menu() {
     mh = MENU_ROWS * 26 * u + TITLE_H * u + 12 * u
     mx = 10 * u
     my = dock_y() - mh - 8 * u
-    # BLUR WHAT IS BEHIND IT, NOW - before the window exists. wm.c draws the
-    # chrome and then calls app_draw, so by the time the menu could blur its
-    # own client rect the panel fill is already sitting in it. This is the
-    # moment the screen still holds only what is underneath.
-    #
-    # It is a CACHE and never re-taken: 7.37 ms to blur, 0.18 ms to paint. That
-    # is the whole reason a blurred panel must not be draggable, and this one
-    # is not - a click outside dismisses it.
+    # This used to blur what is behind the menu here, before the window existed,
+    # because wm.c draws the chrome and then calls app_draw - by which time the
+    # panel fill is already sitting in the client rect and there is nothing left
+    # underneath to blur. The blur is gone (DECISIONS #29); the menu is an
+    # OPAQUE panel now, so there is nothing to capture and the ordering problem
+    # that made this awkward has gone with it.
     menu_bx = mx
     menu_by = my
-    menu_blur = blur(mx, my, 210 * u, mh, 10 * u)
     menu_win = wm_open(APP_MENU, "zlOS", mx, my, 210 * u, mh)
     wm_modal(menu_win, 1)
     # zov / zpop in the prototype: the menu fades in over the blurred desktop
@@ -3494,20 +3620,30 @@ fn open_menu() {
 menu_hover = 0 - 1
 fn menu_draw(ax, ay, aw, ah) {
     u = ui()
-    # the cached blur of what is behind, then a translucent panel over it.
-    # Together that is backdrop-filter: blur() + rgba(), which the prototype
-    # asks for in six places and nothing here had ever drawn.
-    if menu_blur >= 0 { blurdraw(menu_blur, menu_bx, menu_by) }
-    rrblend(ax, ay, aw, ah, 10 * u, rgb(24, 32, 52), 205)
+    # THE NORTHSTAR'S ANSWER FOR A FLOATING PANEL, which is not a tint over a
+    # blur - it has no blur anywhere and its only panel rule is opaque:
+    #
+    #   .win{ background:var(--panel); border:1px solid var(--line) }
+    #     --panel #05060a   --line #26304a
+    #
+    # An alpha tint over an UNBLURRED desktop reads as a rendering fault rather
+    # than as translucency, so removing the blur and keeping the 205/255 tint
+    # would have been the worst of the three options. The border is drawn as the
+    # outer rrect with the panel one unit inside it, the same nesting the window
+    # frame uses, so the hairline follows the curve instead of cutting it.
+    rrect(ax, ay, aw, ah, 10 * u, LINE_SOFT)
+    rrect(ax + 1, ay + 1, aw - 2, ah - 2, 10 * u - 1, PANEL_NS)
     mi = 0
     while mi < MENU_ROWS {
         mry = ay + 4 * u + mi * 26 * u
         mtc = TXT_HI
         if mi == menu_hover {
-            # a translucent accent wash, not a solid bar - the row underneath
-            # is a blurred desktop and painting over it opaquely throws away
-            # the effect this menu exists to show
-            rrblend(ax + 2 * u, mry, aw - 4 * u, 24 * u, 8 * u, ACCENT, 55)
+            # The northstar's own hover, from .menubar .mi:hover -
+            # background:rgba(96,210,235,.16), i.e. the accent at 16%. It was
+            # 55/255 = 22% over a blurred desktop; over an opaque panel the
+            # reference's own number is the one to use. Still a wash rather
+            # than a solid bar, which is what the reference draws too.
+            rrblend(ax + 2 * u, mry, aw - 4 * u, 24 * u, 8 * u, ACCENT, 41)
             mtc = C_WHITE
         }
         label(ax + 12 * u, mry + 3 * u, menu_label(mi), mtc, T_BODY, W_REG)
@@ -3544,8 +3680,6 @@ fn menu_event(ety, ecode, ex, ey, win) {
     menu_hover = 0 - 1
     wm_close(win)
     menu_win = 0 - 1
-    blurfree()
-    menu_blur = 0 - 1
     if idx >= 0 { if idx < MENU_ROWS { menu_pick(idx) } }
     return 1
 }
@@ -3611,13 +3745,17 @@ fn wm_boot_start() {
     # did last frame. So all of it goes into the cached bitmap once, and a
     # frame pays one blit at 1.54 cyc/px for the lot.
     draw_wallpaper()
-    dock_blur = blur(0, dock_y(), px_w(), px_h() - dock_y(), 10 * ui())
     draw_header()
     draw_dock_bg()
-    dock_baked = 1
-    wall_save()
-    blurfree()                 # the strip is inside the wallpaper now
-    dock_blur = 0 - 1
+    # DOCK_BAKED IS THE RETURN VALUE, not 1. wall_save() returns 0 when the
+    # arena cannot hold the bitmap - 3840x2160 wants 31.6 MiB of 16 - and it
+    # was being ignored, so on any screen where the cache is refused the flag
+    # still said "the furniture is in the wallpaper". desk_draw and draw_status
+    # both skip drawing the header and the dock background when it is set, and
+    # the wallpaper they were relying on does not exist, so both were painted
+    # once at boot and then never again: a header and a dock that vanish under
+    # the first window you move. Only true when the save actually happened.
+    dock_baked = wall_save()
     # SAY THAT THE COMPOSITOR STARTED, on the serial line, from the BOOT path.
     #
     # con_mute mutes only the pixels, so this reaches a headless gate and lets

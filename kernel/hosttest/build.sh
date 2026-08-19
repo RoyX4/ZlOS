@@ -21,6 +21,14 @@ gcc -O2 -w -pthread -o fbbench fbbench.c \
     ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./fbbench       (run: ./fbbench)"
 
+# The wallpaper cache against the arena it shares with the blur slots. This is
+# the ONLY way 2560x1440 - the ThinkPad's panel - gets exercised before somebody
+# flashes a USB stick: GRUB falls back to 800x600 on the emulated card and
+# kernel.zl's set_res() ladder stops at 1920x1200, so no boot gate can reach it.
+gcc -O2 -w -o walltest walltest.c \
+    ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
+echo "built ./walltest      (run: ./walltest)"
+
 # The proportional text engine, asserted. fbbench times fb.c and browsershot
 # photographs it; neither NOTICES when a style flag stops changing the pixels.
 # Both regressions this gate exists for shipped green: italic silently rendered
@@ -277,3 +285,25 @@ gcc -O2 -w -o toasttest toasttest.c ../wm.c ../ui.c ../wmglue.c ../settings.c ho
     ../input.c ../notify.c ../snap.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./toasttest     (run: ./toasttest)"
+
+# THE BLITTER. The first thing in this project that asks a GPU to draw.
+#
+# Raw ioctl on /dev/dri/renderD128 - no libdrm, no Mesa, no -l flags at all,
+# because the point is to learn the command level zlOS will have to speak and
+# zlOS cannot link a library. It runs ALONGSIDE i915 and does not detach it:
+# the blitter is a DMA engine, not the display, so unlike modeset-run.sh this
+# cannot blank the screen of whoever is using the laptop.
+#
+# Guarded on the header AND on hardware being present, so a box with no Intel
+# GPU skips instead of failing. `--negative` is the one that matters in CI: it
+# proves the verification can still reject a blit that writes nothing.
+if [ -f /usr/include/drm/i915_drm.h ]; then
+  gcc -O2 -g -Wall -Wextra -o gpu_blt gpu_blt.c
+  if [ -e /dev/dri/renderD128 ]; then
+    echo "built ./gpu_blt       (run: ./gpu_blt --blit --negative, or --sweep)"
+  else
+    echo "built ./gpu_blt       (no /dev/dri/renderD128 here - it will skip at run time)"
+  fi
+else
+  echo "skip  ./gpu_blt       (no drm headers - apt install libdrm-dev)"
+fi

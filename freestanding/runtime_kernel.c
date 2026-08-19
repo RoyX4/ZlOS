@@ -407,6 +407,11 @@ extern int  wm_anim(int win, int kind);
 extern int  wm_frame_us(void);
 extern int  wm_peak_us(void);
 extern void wm_peak_reset(void);
+/* the miss counters - an average hides stutter and a peak is one sample */
+extern int  wm_late(void);
+extern int  wm_lost(void);
+extern int  wm_painted(void);
+extern int  wm_budget_us(void);
 extern void wm_client(int win, int *x, int *y, int *w, int *h);
 extern void wm_focus(int win);
 extern void wm_raise(int win);
@@ -1153,6 +1158,13 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_us"))      return zl_num((double)wm_frame_us());
     if (streq(name, "wm_peak"))    return zl_num((double)wm_peak_us());
     if (streq(name, "wm_peak0"))   { wm_peak_reset(); return zl_nil(); }
+    /* HOW MANY frames missed, which is what a person perceives as stutter -
+     * the peak is one sample and the average hides it. wm_late is frames over
+     * the 16.67 ms budget; wm_lost is 100 Hz ticks no frame ran in at all. */
+    if (streq(name, "wm_late"))    return zl_num((double)wm_late());
+    if (streq(name, "wm_lost"))    return zl_num((double)wm_lost());
+    if (streq(name, "wm_painted")) return zl_num((double)wm_painted());
+    if (streq(name, "wm_budget"))  return zl_num((double)wm_budget_us());
     /* the client rect, so an app can turn a screen-space pointer into a row */
     if (streq(name, "wm_cx"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)x); }
     if (streq(name, "wm_cy"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)y); }

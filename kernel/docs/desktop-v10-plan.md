@@ -64,6 +64,17 @@ than one with no commands.
 `probe-shot.py -k w` sends keys over serial, so this can be a gate rather than
 a hand test.
 
+> **Corrected 2026-08-19.** Both paragraphs above are pre-compositor. `w` was a
+> command when `run_command` dispatched on single characters; in the desktop it
+> is one character in `term.c`'s line buffer and runs nothing. And `-k` as
+> shipped typed characters without ever pressing Enter, so **the gate named here
+> could not produce the result claimed for it in §8.1** — it photographed a
+> frame no command had run in, silently. `-k` now takes a command and submits
+> it, and fails loudly if the shell does not echo the line back. The
+> reproducible form of this gate is
+> `./probe-shot.py -k help -k unknownthing -o v10-typed`.
+> Full measurement: `docs/typing-into-the-compositor.md`.
+
 ### 1b. Make the compositor the boot state
 
 At the bottom of `kernel.zl`, the old `while running == 1 { ... }` becomes:
@@ -147,8 +158,27 @@ session.
 
 **Measured: 8.7 ms for one menu-sized backdrop blur.** Frame budget 16.67 ms.
 
-The prototype wants `backdrop-filter:blur(10..22px)` in 6 places and
-`filter:blur(30..34px)` in 2.
+The prototype wants `backdrop-filter:blur(10..22px)` in **7** places and
+`filter:blur(30..34px)` in 2 — nine in total, which is what §3's own table
+already said.
+
+> **Corrected 2026-08-19, twice over.**
+>
+> **The count was 6, and it is 7.** `grep -o 'blur([^)]*)' "~/zl OS v10.dc.html"`
+> gives 10, 16, 18, 18, 20, 22, 22, 30, 34. The seventh backdrop blur is a JS
+> inline style — `backdropFilter:'blur(16px)'` at line 2685 — which a
+> `backdrop-filter:` grep cannot see. §3's "9, 10–34 px" was right all along.
+>
+> **And "the prototype" is not the northstar.** `LOOK-AND-SPEED-PROMPT.md`
+> suspected this paragraph was written from memory, because
+> `docs/design/zlOS-design-northstar.html` contains **zero** blur of either
+> kind. It was not: this paragraph describes `~/zl OS v10.dc.html`, 216 KB,
+> named at §5 and §8 below and never committed to this repo — verified, no
+> blur-using HTML has ever existed here on any branch, tag, remote or
+> `refs/wip/*` ref. The two documents are a day apart and describe different
+> artifacts. Which one wins, per item, is `DECISIONS.md` #29–#32; the answer for
+> blur specifically is the northstar, and the reason turned out to be memory
+> rather than taste — see #29.
 
 | case | verdict |
 |---|---|
@@ -198,7 +228,7 @@ assertion, never "looks right to me".
 
 | # | task | where | gate |
 |---|---|---|---|
-| 1 | prove typed commands | — | `probe-shot.py -k w` types `help`, `nonsense` |
+| 1 | prove typed commands | — | ~~`probe-shot.py -k w` types `help`, `nonsense`~~ — `-k w` typed one character and never pressed Enter; see §1a. Now `probe-shot.py -k help -k unknownthing` |
 | 2 | compositor as boot state | `kernel.zl` | `verify.sh` byte-identical |
 | 3 | C4 — delete the sticker drag | `fb.c`, `kernel.zl`, runtime | all four boots; 4K back buffer moves to its own span |
 | 4 | `fb_fill_blend()` — translucency | `fb.c` | `fbbench` hash + a blend-over-known-background assertion |
@@ -252,7 +282,7 @@ anticipate are in §8.2, and they are the more interesting half.
 
 | # | task | gate | result |
 |---|---|---|---|
-| 1 | prove typed commands | `probe-shot.py` types `help` then a bad word | **green** — `shots/v10-typed.png` shows the help text and `unknown command: unknownthing` |
+| 1 | prove typed commands | `probe-shot.py` types `help` then a bad word | **green** — `shots/v10-typed.png` shows the help text and `unknown command: unknownthing`. **The capability is real; the gate as written was not runnable** — `-k` typed characters without an Enter, so no invocation of it could have produced that picture, and the row went unchallenged for a day. Reproducible since 2026-08-19: `./probe-shot.py -k help -k unknownthing -o v10-typed` |
 | 2 | compositor as boot state | `verify.sh` byte-identical | **green**, and `verify-raw.sh` + `verify-efi.sh` too |
 | 3 | C4 — delete the sticker drag | all four boots; 4K back buffer | **green**. Scene hashes byte-identical at all three modes. 4K back buffer now **ON** |
 | 4 | `fb_fill_blend()` | fbbench hash + blend assertion | **green** — 22.2 cyc/px, hashes unchanged |
