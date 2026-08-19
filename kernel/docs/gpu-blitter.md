@@ -116,6 +116,38 @@ harness now prints the load next to every result and flags it above 2.0, so a
 figure copied out of the output carries its caveat. **Re-run on a quiet box
 before quoting any of these.**
 
+### Re-run at load 3.81 — the caveat was right, and the honest range is narrower
+
+The instruction above was followed rather than left as advice. Same binary, same
+`--sweep`, box at **3.81** instead of 11–14:
+
+```
+    rect        Mpix   K   blitter Mpix/s   CPU Mpix/s   winner
+      64x64     0.00    1        201           1687      CPU 8.39x
+      64x64     0.00   64       2530           2213      blitter 1.14x
+     256x256    0.07   64       3310           1857      blitter 1.78x
+    1024x768    0.79   64       3178           1499      blitter 2.12x
+    1920x1200   2.30   64       3339           1704      blitter 1.96x
+    3840x2160   8.29   64       3424           1925      blitter 1.78x
+```
+
+Two things change and one does not.
+
+1. **The blitter column barely moves** — 3339 vs 3333 Mpix/s at 1920x1200. It is
+   a DMA engine; host load is not its problem.
+2. **The CPU column is what load was distorting**, 995 -> 1704 Mpix/s at the same
+   size. So the contended runs were flattering the GPU, not the CPU.
+3. **So the honest headline is ~1.8–2.1x at compositor sizes**, not 2.8–3.35x.
+   That sits inside the "1.3x to 3x" summary above, which stands, but the top of
+   that range was a load artefact and should not be quoted.
+
+**And the small-rectangle result is the one to design around:** at 64x64 with one
+blit per submission the CPU wins by **8.4x**. That is the ioctl, not the engine —
+the same rect at K=64 wins by 1.14x. zlOS owns its ring and pays no ioctl, but it
+does pay a submission and a wait, so **a blitter call per small damage rect is
+the wrong shape**. Batch the frame's rects into one submission, or keep small
+fills on the CPU.
+
 ### The throughput ratio is probably not the real argument
 
 zlOS's compositor is paced by a 100 Hz timer and runs on **one** core — `smp.c`
