@@ -14,9 +14,13 @@ file. Five other worktrees were live in sibling directories during the run
 
 ## Read these first — hand-verified, highest consequence
 
-Every claim in the four files below was re-derived directly from the tree by hand,
-not taken from an agent's report. Where an agent's evidence was wrong but its
-conclusion right, both are recorded.
+Every claim in the ten files below was re-derived directly from the tree by hand, not
+taken from an agent's report. Where an agent's evidence was wrong but its conclusion
+right, both are recorded — see `VERIFIED-WM-SNAP.md` for the reference case.
+
+Leads that were reported but **not** hand-checked are labelled as leads wherever they
+appear, including inside these files. That distinction is load-bearing: treat an
+unlabelled claim as verified and a labelled one as a hypothesis.
 
 | file | what it settles |
 |---|---|
@@ -28,6 +32,7 @@ conclusion right, both are recorded.
 | [`CRITICAL-browser-urlbar-keys.md`](CRITICAL-browser-urlbar-keys.md) | The URL bar **inserts every character twice**, and Enter/Esc/Backspace are **dead on the ThinkPad's own keyboard**. `kernel.zl:2993` handles `APP_BROWSER` above the `nav_to_char` translation and returns before reaching it — `nav_to_char` has exactly one call site and the browser is not it. One line. Invisible to every gate because every probe boots `-device usb-kbd`. |
 | [`CRITICAL-browser-cluster.md`](CRITICAL-browser-cluster.md) | **The CSS engine is dead code** — `css.c` (704 lines) + `csstest.c` (328) are in no build and have no caller, so the browser has no cascade. `land-gate.sh` already flagged it and `.ultra/STATE.md` explained it away alongside `crypto.c`, for which the explanation was correct. Also: **pointer motion navigates** (`kernel.zl:2994` never checks the button mask), 3xx hangs forever, and `parse_url` has no base URL. |
 | [`CRITICAL-smp-bands-have-no-idt.md`](CRITICAL-smp-bands-have-no-idt.md) | The APs run with **no IDT** — `grep lidt` over `smp.c` and the trampoline returns nothing — while executing framebuffer band code. Any fault triple-faults the laptop, which has no serial port. The barrier at `smp.c:177` is unbounded. `.ultra/STATE.md` ranks this change "best win-to-risk on the board"; the risk is not what it says. Also corrects the reachability claim: `smp`/`cores` are typeable **today**. |
+| [`CRITICAL-gates-that-cannot-fail.md`](CRITICAL-gates-that-cannot-fail.md) | **Seven more gates that cannot fail**, on top of the five `GUARDS-THAT-DID-NOT-GUARD.md` already lists. `land-gate.sh:137` skips any non-executable boot gate in total silence and still prints `GATE GREEN` — `verify-efi.sh` is in that list. `run_tests.sh:192` drops the whole kernel-boot section with no output when QEMU is absent. Plus a separate CRITICAL: `xhci_ram_ok()` zeroes the live DCBAA scratchpad pointer and the zl builtin `usb_ram` reaches it at any time. |
 | [`VERIFIED-WM-SNAP.md`](VERIFIED-WM-SNAP.md) | Drag-to-edge snapping is a **one-way door** — but not for the reason reported. The agent's evidence (`snap_release` has no caller) is false; the real cause is the `z != SNAP_NONE` guard at `wm.c:1358`. Also: `SNAP_NONE` is `#define`d twice in one file for two different enums whose values interleave. |
 
 ---
@@ -74,7 +79,7 @@ dominant failure mode:
 
 ## Standing caveat
 
-Findings in the wave boards are **agent output**. The five files at the top of this page
+Findings in the wave boards are **agent output**. The ten files at the top of this page
 are hand-verified; the boards are not, and at least one agent finding has already been
 shown to have a correct conclusion resting on false evidence. Reproduce before acting —
 which is this repo's existing rule for cross-model review, applied to its own fleet.
