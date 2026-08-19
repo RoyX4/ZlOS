@@ -27,35 +27,35 @@
 APP_SETTINGS = 6                    # settings.c; wmglue.c dispatches its
                                      # draw/event before zl ever sees them -
                                      # this only has to know how to OPEN one
-APP_CATALOG  = 13                   # "All Applications" - see cat_* below
+APP_CATALOG  = 14                   # "All Applications" - see cat_* below
 
 # ---- utilities (apps_utils.zl) ----------------------------------------------
-APP_CLIP  = 14
-APP_COLOR = 15
-APP_REGEX = 16
-APP_BASE  = 17
-APP_DIFF  = 18
-APP_HASH  = 19
-APP_UNIT  = 20
-APP_NOTES = 21
-APP_KEYS  = 22
-APP_BENCH = 23
+APP_CLIP  = 15
+APP_COLOR = 16
+APP_REGEX = 17
+APP_BASE  = 18
+APP_DIFF  = 19
+APP_HASH  = 20
+APP_UNIT  = 21
+APP_NOTES = 22
+APP_KEYS  = 23
+APP_BENCH = 24
 
 # ---- games (apps_games1.zl / apps_games2.zl) --------------------------------
-APP_WORDLE   = 24
-APP_TICTACTOE = 25
-APP_NIM       = 26
-APP_HANOI     = 27
-APP_LIGHTS    = 28
-APP_CONNECT4  = 29
+APP_WORDLE   = 25
+APP_TICTACTOE = 26
+APP_NIM       = 27
+APP_HANOI     = 28
+APP_LIGHTS    = 29
+APP_CONNECT4  = 30
 
 # ---- system (apps_system.zl) -------------------------------------------------
-APP_CLOCK   = 30
-APP_SYSINFO = 31
-APP_CALC    = 32
+APP_CLOCK   = 31
+APP_SYSINFO = 32
+APP_CALC    = 33
 
 # ---- more games (apps_games2.zl) ---------------------------------------------
-APP_MAZE = 33
+APP_MAZE = 34
 
 REG_FIRST = 14                      # first id this table actually lists
 REG_COUNT = 20                      # bumped as each batch of apps is wired in
