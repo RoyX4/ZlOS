@@ -141,6 +141,15 @@ static int zl_duplicates_theme(const char *zl, const struct token *toks, int n_t
     int n = 0;
     for (const char *p = zl; (p = strstr(p, "rgb(")) != NULL; p += 4) {
         int r, g, b;
+        /* SKIP COMMENTS. zl comments run from '#' to end of line, and this
+         * scanner used to read straight through them - so a comment SAYING
+         * "rgb(7,8,10) is a duplicate, do not write it" was itself reported as
+         * the duplicate. A gate that fails on its own documentation trains
+         * people to stop writing documentation. */
+        int in_comment = 0;
+        for (const char *q = p; q > zl && q[-1] != '\n'; q--)
+            if (q[-1] == '#') { in_comment = 1; break; }
+        if (in_comment) continue;
         if (sscanf(p, "rgb(%d, %d, %d)", &r, &g, &b) != 3) continue;
         if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) continue;
         unsigned v = ((unsigned)r << 16) | ((unsigned)g << 8) | (unsigned)b;
@@ -296,6 +305,17 @@ int main(void)
         ok(zl_duplicates_theme(planted, TOKENS, N_TOKENS, &pv, &pn) == 1
            && pv == ZD_ACCENT,
            "control: a planted second accent IS caught by the duplicate scan");
+
+        /* ...and the comment-skip must not have turned the scan off. The same
+         * duplicate, once inside a comment and once not, must be found exactly
+         * once. Without the second half of this, "skip comments" could be
+         * implemented as "skip everything" and every check above would pass. */
+        static const char mixed[] =
+            "# MY_ACCENT = rgb(184, 232, 56) would be a duplicate\n"
+            "MY_ACCENT = rgb(184, 232, 56)\n";
+        unsigned mv = 0; const char *mn = NULL;
+        ok(zl_duplicates_theme(mixed, TOKENS, N_TOKENS, &mv, &mn) == 1,
+           "control: a commented duplicate is ignored, a real one beside it is not");
     }
 
     printf("\n%s (%d failure%s)\n", fails ? "FAILED" : "all passed",

@@ -90,8 +90,14 @@ void ui_theme_init_q8(int scale_q8)
     theme.title_bot = ZD_SURF_TABS;   /* flat in the reference               */
     theme.title_off = ZD_SURF_BAR_OFF;/* unfocused chrome #131518            */
     theme.title_off_bot = ZD_SURF_BAR_OFF;
-    theme.wallpaper_top = ZD_SURF_0;
-    theme.wallpaper_bot = ZD_SURF_BODY;
+    /* The wallpaper gradient's two ends, and they are NOT surface steps -
+     * ds-reference.html:37 is linear-gradient(168deg,#0a1005,#080a0b,#07080a),
+     * so it starts on a dark green and lands on SURF_0. Naming the ends as
+     * roles is what lets kernel.zl draw the gradient with no colour of its
+     * own; when they were SURF_0/SURF_BODY the top stop was simply missing
+     * and the wallpaper had no green in it at all. */
+    theme.wallpaper_top = ZD_WALL_0;
+    theme.wallpaper_bot = ZD_WALL_100;
     theme.bar_top   = ZD_SURF_4;
     theme.bar_bot   = ZD_SURF_3;
     theme.bar_hi    = ZD_SURF_6;

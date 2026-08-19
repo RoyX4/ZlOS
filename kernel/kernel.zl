@@ -317,17 +317,32 @@ fn set_ws(n) {
 # HH:MM, drawn as two numbers and a colon rather than one string, because there
 # is no string to build. Leading zero is explicit: label_num(9) prints "9", and
 # a clock that reads "9:5" is worse than no clock.
+# One zero-padded two-digit field, returning the x after it.
+#
+# THIS EXISTS BECAUSE THE INLINE VERSION DREW "0000". Written straight through,
+# the single-digit branch printed the leading zero, advanced, printed the digit
+# and then did NOT advance again - so the colon landed on top of the digit and
+# the whole clock collapsed into four touching glyphs. Splitting it out makes
+# the advance unconditional and impossible to forget on one branch.
+#
+# A digit gets a FIXED cell rather than a measured one: label_num has no width
+# function, and a clock whose colon slides as the digits change is the thing
+# the fixed-cell rule elsewhere in this file exists to prevent.
+CLOCK_DIGIT = 8
+fn clock_field(nx, cy, v, u) {
+    if v < 10 {
+        label(nx, cy, "0", theme(TH_TEXT_HI), T_BODY, W_REG)
+        label_num(nx + CLOCK_DIGIT * u, cy, v, theme(TH_TEXT_HI), T_BODY, W_REG)
+        return nx + CLOCK_DIGIT * 2 * u
+    }
+    label_num(nx, cy, v, theme(TH_TEXT_HI), T_BODY, W_REG)
+    return nx + CLOCK_DIGIT * 2 * u
+}
+
 fn draw_island_clock(cx, cy, u) {
-    ch = rtc_h()
-    cm = rtc_mi()
-    nx = cx
-    if ch < 10 { label(nx, cy, "0", theme(TH_TEXT_HI), T_BODY, W_REG)  nx = nx + 8 * u }
-    label_num(nx, cy, ch, theme(TH_TEXT_HI), T_BODY, W_REG)
-    if ch >= 10 { nx = nx + 16 * u }
+    nx = clock_field(cx, cy, rtc_h(), u)
     label(nx, cy, ":", theme(TH_TEXT_HI), T_BODY, W_REG)
-    nx = nx + 5 * u
-    if cm < 10 { label(nx, cy, "0", theme(TH_TEXT_HI), T_BODY, W_REG)  nx = nx + 8 * u }
-    label_num(nx, cy, cm, theme(TH_TEXT_HI), T_BODY, W_REG)
+    nx = clock_field(nx + 5 * u, cy, rtc_mi(), u)
     return 0
 }
 
@@ -3931,43 +3946,71 @@ fn desk_draw(dx, dy, dw, dh) {
 # to extend the visual system that exists rather than introduce a second one.
 # Percentages become pixels here, because a percentage of what is a layout
 # question and fb.c does not do layout.
+# THE WALLPAPER'S COLOURS, and the one place in this file that still holds a
+# colour literal on purpose.
+#
+# These are the reference's, and design.h holds the same nine values as
+# ZD_WALL_*. They are duplicated here rather than read through theme() because
+# ui_theme has no wallpaper-glow role and adding four is a change to ui.h, ui.c
+# and the zl-visible role enum all at once - which is being edited by other work
+# in this same tree right now. MOVING THEM IS THE FOLLOW-UP, and until then the
+# rule is that design.h is the source and this is the copy.
+#
+# The gate cannot catch this drifting yet, which is stated plainly rather than
+# glossed: hosttest/palette.c asserts kernel.zl holds no second copy of a
+# design.h token, and ZD_WALL_* are deliberately outside that table, so nothing
+# would fail if these two lists disagreed. That is a known, recorded hole.
+# The gradient's two ends are theme roles now - TH_WALL_TOP is ZD_WALL_0 and
+# TH_WALL_BOT is ZD_WALL_100 - so no literal is needed for them at all. The
+# palette gate caught the first attempt at this: rgb(7,8,10) IS #07080a IS
+# ZD_SURF_0, so writing it here was literally a second copy of a theme colour,
+# which is the exact regression that check exists to prevent. It worked.
+fn wall_glow_a()   { return rgb(126, 166, 44) } # ZD_WALL_GLOW_A
+fn wall_glow_b()   { return rgb(46, 58, 20) }   # ZD_WALL_GLOW_B
+fn wall_glow_c()   { return rgb(24, 32, 38) }   # ZD_WALL_GLOW_C
+
 fn draw_wallpaper() {
     ww = px_w()
     wh = px_h()
     wu = ui()
     grad_rgb(0, 0, ww, wh, theme(TH_WALL_TOP), theme(TH_WALL_BOT))
-    # radial-gradient(64% 50% at 16% 8%, accent .3, transparent 62%)
-    glow(ww * 16 / 100, wh * 8 / 100, ww * 64 / 100, wh * 50 / 100, rgb(40, 108, 150), 64, 0, 62)
-    # radial-gradient(58% 48% at 88% 92%, deep .62, transparent 68%)
-    glow(ww * 88 / 100, wh * 92 / 100, ww * 58 / 100, wh * 48 / 100, rgb(10, 16, 34), 140, 0, 68)
-    # radial-gradient(46% 34% at 76% 18%, cool .7, transparent 70%)
-    glow(ww * 76 / 100, wh * 18 / 100, ww * 46 / 100, wh * 34 / 100, rgb(22, 30, 52), 150, 0, 70)
-    # conic sweeps: two faint accent wedges, the prototype's 214 and 32 degrees
-    wedge(ww / 2, wh / 2, theme(TH_ACCENT), 20, 214, 34, 82)
-    wedge(ww / 2, wh / 2, theme(TH_ACCENT), 12, 32, 44, 98)
+    # radial-gradient(64% 50% at 16% 8%, rgba(126,166,44,.3), transparent 62%)
+    glow(ww * 16 / 100, wh * 8 / 100, ww * 64 / 100, wh * 50 / 100, wall_glow_a(), 77, 0, 62)
+    # radial-gradient(58% 48% at 88% 92%, rgba(46,58,20,.62), transparent 68%)
+    glow(ww * 88 / 100, wh * 92 / 100, ww * 58 / 100, wh * 48 / 100, wall_glow_b(), 158, 0, 68)
+    # radial-gradient(46% 34% at 76% 18%, rgba(24,32,38,.7), transparent 70%)
+    glow(ww * 76 / 100, wh * 18 / 100, ww * 46 / 100, wh * 34 / 100, wall_glow_c(), 179, 0, 70)
+    # conic sweeps: two faint accent wedges, the reference's 214 and 32 degrees,
+    # at .075 and .045 rather than the .078/.047 this was rounded to before
+    wedge(ww / 2, wh / 2, theme(TH_ACCENT), 19, 214, 34, 82)
+    wedge(ww / 2, wh / 2, theme(TH_ACCENT), 11, 32, 44, 98)
     # The prototype's two-scale technical grid gives the broad glows a crisp
     # spatial rhythm. Both grids are almost invisible and baked once; they
     # should be felt as structure, not read as graph paper.
-    grid = 64 * wu
-    major = 256 * wu
+    # The two-scale grid, to the reference's pitches and alphas. The major
+    # pitch was 256 and the reference's is 252 - a rounding that looks
+    # harmless and is not: over a 1280-wide screen 256 puts five lines on
+    # screen and 252 puts six, so the whole rhythm was off by a line.
+    grid = 64 * wu                 # ZD_WALL_GRID
+    major = 252 * wu               # ZD_WALL_GRID_MAJOR - the reference's, not 256
     gx = 0
     while gx < ww {
-        blend(gx, 0, 1, wh, theme(TH_ACCENT), 4)
+        blend(gx, 0, 1, wh, theme(TH_ACCENT), 7)
         gx = gx + grid
     }
     gy = 0
     while gy < wh {
-        blend(0, gy, ww, 1, theme(TH_ACCENT), 3)
+        blend(0, gy, ww, 1, theme(TH_ACCENT), 5)
         gy = gy + grid
     }
     gx = 0
     while gx < ww {
-        blend(gx, 0, 1, wh, theme(TH_ACCENT), 8)
+        blend(gx, 0, 1, wh, theme(TH_ACCENT), 13)
         gx = gx + major
     }
     gy = 0
     while gy < wh {
-        blend(0, gy, ww, 1, theme(TH_ACCENT), 7)
+        blend(0, gy, ww, 1, theme(TH_ACCENT), 10)
         gy = gy + major
     }
     # A faint physical grain joins the broad fields into one surface. It is
