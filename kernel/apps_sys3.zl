@@ -4,8 +4,11 @@
 # this file exactly once, so a slice can be written without touching the shared
 # registry at all. That is not tidiness: five agents editing seven if-chains in
 # one working tree clobber each other, and a duplicate app id compiles clean and
-# misroutes at RUNTIME - APP_CATALOG is a dispatch FLOOR, so `id >= APP_CATALOG`
+# misroutes at RUNTIME - REG_FIRST is a dispatch FLOOR, so `id >= REG_FIRST`
 # routes into the registry and a collision is invisible until you open the app.
+# That floor used to be APP_CATALOG, which is exactly how it went wrong: the
+# catalog was given id 13 and so was APP_FILES, and for months `apps` raised
+# the Files window instead of opening the catalog.
 #
 # THIS SLICE OWNS IDS 46..50 AND NO OTHERS.
 #
@@ -113,6 +116,20 @@ fn sys3_name(id) {
     return ""
 }
 fn sys3_cat(id) { return 0 }
+
+# reg_mono() forwards here and nothing defined it - the same hole apps_sys2.zl
+# had, and see that file's sys2_mono for what an undefined zl function actually
+# does at runtime. It never fired HERE only because sys3_icon() answers for all
+# five of these apps, so the catalog draws an icon and never asks. That is luck,
+# not design: give one of them -1 and the whole grid stops drawing again.
+fn sys3_mono(id) {
+    if id == APP_DISK { return "DU" }
+    if id == APP_SVC  { return "SV" }
+    if id == APP_ARCH { return "AR" }
+    if id == APP_IMG  { return "IV" }
+    if id == APP_NET  { return "NW" }
+    return "??"
+}
 
 # The reference's own window sizes, ds-reference.html APPS table. Design
 # units; reg_new multiplies by ui().

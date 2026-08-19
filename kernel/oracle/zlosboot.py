@@ -329,59 +329,93 @@ def win_count(log):
     return len(re.findall(r"wm: win \d+ title", log))
 
 
-def open_by_catalog(ser, qmp, idx, W, H, name):
-    """Start button -> All Applications -> the tile at `idx`.
+WIN_REPORT = re.compile(r"wm: win (\d+) title \d+,\d+ \d+x\d+ "
+                        r"client (\d+),(\d+) (\d+)x(\d+)")
 
-    The same three clicks probe-catalog.py makes, with two differences: ui
-    comes from fb.c's real formula rather than a width threshold, and the tile
-    arithmetic is done in the catalog's OWN reported client rect, so a catalog
-    that opened somewhere unexpected fails here instead of silently sending the
-    third click into the wallpaper.
+
+def wheel(qmp, notches):
+    """`notches` wheel steps, negative for down.
+
+    input-send-event, exactly like every other pointer event here. QEMU carries
+    a notch in the usb-tablet's HID wheel byte, xhci.c accumulates it and
+    input.c pushes EV_WHEEL; wm.c routes it to the window UNDER THE POINTER, so
+    the caller must have moved the pointer over the catalog first.
+    """
+    btn = "wheel-down" if notches < 0 else "wheel-up"
+    for _ in range(abs(notches)):
+        qmp.cmd("input-send-event", events=[
+            {"type": "btn", "data": {"down": True, "button": btn}}])
+        qmp.cmd("input-send-event", events=[
+            {"type": "btn", "data": {"down": False, "button": btn}}])
+
+
+def open_by_catalog(ser, qmp, idx, W, H, name):
+    """`apps` -> scroll the grid to the tile at `idx` -> click it.
+
+    The tile arithmetic is done in the catalog's OWN reported client rect, so a
+    catalog that opened somewhere unexpected fails here instead of silently
+    sending the click into the wallpaper.
     """
     u = guest_ui(W)
     settle = ser.drain
-    dock_y = H - DOCK_H * u
 
-    # THE CATALOG IS OPENED BY A SHELL WORD, not by clicking chrome.
+    # THE CATALOG IS OPENED BY A SHELL WORD, not by clicking chrome. A shell
+    # word does not depend on the chrome's geometry being right, so a future
+    # change to the dock cannot silently break every per-app measurement. The
+    # dock's grid button reaches the same reg_open(APP_CATALOG) and is covered
+    # by probe-catalog.py instead.
     #
-    # Three separate stale assumptions were fixed in the click path - the start
-    # button's coordinates, DOCK_H (64 vs 52), and a second click that
-    # dismissed what the first one opened - and it STILL did not open. Rather
-    # than keep guessing at two minutes a boot, this types `apps` at the prompt,
-    # which run_command() routes straight to reg_open(APP_CATALOG).
-    #
-    # That is also the more robust harness: a shell word does not depend on the
-    # chrome's geometry being right, so a future change to the dock cannot
-    # silently break every per-app measurement. The pointer route to the
-    # catalog is a real and separate defect, tracked as such.
-    ser.send("apps\r")
-    settle(1.5)
+    # WAIT FOR THE CATALOG'S OWN REPORT, not for a wall clock. reg_open() calls
+    # wm_report() on the window it just opened and zl_putc tees every printed
+    # character to COM1, so `wm: win ...` really does arrive on the serial line
+    # - which is what makes this a marker and not a guess. (It does not appear
+    # at BOOT: nothing in the boot path calls wm_report, so an absence there
+    # says nothing, and reading it as "the catalog is not up" is what sent an
+    # earlier version of this function hunting the wrong bug.)
+    seen = len(ser.all)
+    type_line(ser, "apps", 30.0)
+    if not ser.wait("wm: win ", 30.0)[0]:
+        raise SystemExit(
+            "`apps` was submitted and the compositor reported no new window.\n"
+            "  reg_open(APP_CATALOG) either found the id already open (it is a\n"
+            "  raise-and-focus in that case, and returns before wm_report) or\n"
+            "  wm_open refused. Serial tail:\n" + ser.all[-800:])
+    settle(1.0)
 
-    # ONE CLICK, not two. The grid button opens the catalog directly; the
-
-    # second click here used to pick "All Applications" out of the start
-
-    # menu, and against the new chrome it lands on the desktop and
-
-    # dismisses what the first click just opened.
-    settle(1.5)
-    # ser.all, never ser.buf: wait() consumes, so the buffer holds only
-    # whatever arrived since the last match. The full transcript is the only
-    # place the catalog's own report is guaranteed to still be.
-    rows = re.findall(r"wm: win (\d+) title \d+,\d+ \d+x\d+ "
-                      r"client (\d+),(\d+) (\d+)x(\d+)", ser.all)
+    # The LAST report after the `apps` line is the catalog: reg_open reports
+    # exactly one window and nothing else prints between.
+    rows = WIN_REPORT.findall(ser.all[seen:])
     if not rows:
-        raise SystemExit("'All Applications' did not open a window - the "
-                         "catalog is not up, so a tile click would land on "
-                         "whatever is underneath it")
-    _, cx, cy, cw, _ = (int(v) for v in rows[-1])
+        raise SystemExit("a window opened but did not report its rectangle - "
+                         "wm_report's format changed and WIN_REPORT is stale")
+    _, cx, cy, cw, ch = (int(v) for v in rows[-1])
 
     cols = max(1, cw // (CAT_TILE_W * u))
+    # How many tile rows the client area actually shows. cat_max_scroll() in
+    # apps_registry.zl computes it the same way; getting it wrong here means
+    # clicking a row that is drawn off the bottom edge.
+    vis = max(1, (ch - CAT_HEADER * u) // (CAT_TILE_H * u))
     col, row = idx % cols, idx // cols
+
+    # SCROLL, because 47 tiles do not fit. At 1280x800 the catalog shows 4x3 =
+    # 12 of them, so 35 of the 47 apps are below the fold and a click computed
+    # for row 7 lands on the wallpaper. cat_event's wheel arm is the only
+    # scroll control the catalog has.
+    scroll = 0
+    if row >= vis:
+        scroll = row - vis + 1
+        # Park the pointer inside the catalog first - route_wheel() delivers to
+        # the window under the pointer, deliberately without focusing it.
+        at(qmp, cx + cw // 2, cy + ch // 2, W, H)
+        settle(0.3)
+        wheel(qmp, -scroll)
+        settle(1.0)
+
     tx = cx + col * CAT_TILE_W * u + CAT_TILE_W * u // 2
-    ty = cy + CAT_HEADER * u + row * CAT_TILE_H * u + CAT_TILE_H * u // 2
+    ty = cy + CAT_HEADER * u + (row - scroll) * CAT_TILE_H * u + CAT_TILE_H * u // 2
     print(f"  catalog tile {idx} ({name}) at {tx},{ty} "
-          f"(catalog client {cx},{cy}, {cw}px wide, {cols} cols, ui {u}x)")
+          f"(catalog client {cx},{cy} {cw}x{ch}, {cols} cols, {vis} rows "
+          f"visible, scrolled {scroll}, ui {u}x)")
     click(qmp, tx, ty, W, H, settle)
     settle(2.0)
 

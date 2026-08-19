@@ -1814,7 +1814,15 @@ fn run_command(cmd, arg) {
         put("    the panel is ours. framebuffer at 0x")  hex(fb, 8)  print("")
         color(C_GREY)
         print("    press a key to move the console onto it")
-        key()
+        # `key()` USED TO BE HERE AND NOTHING DEFINES IT. zl resolves calls by
+        # name at runtime, so it is not a link error - it falls through the
+        # builtin table to kfatal("builtin not available in the kernel
+        # subset"), which halts the machine. On the one path where that is most
+        # expensive: the panel has just been brought up by our own driver on
+        # the real ThinkPad, and the next statement moves the console onto it.
+        # Caught by check-zlcalls.py, which exists because of this class.
+        pk = 0
+        while pk == 0 { pk = key_get()  idle() }
         panel_console()
         color(C_GREEN)
         print("  this text is being scanned out by our own driver.")

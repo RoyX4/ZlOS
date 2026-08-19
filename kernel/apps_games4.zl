@@ -4,8 +4,11 @@
 # this file exactly once, so a slice can be written without touching the shared
 # registry at all. That is not tidiness: five agents editing seven if-chains in
 # one working tree clobber each other, and a duplicate app id compiles clean and
-# misroutes at RUNTIME - APP_CATALOG is a dispatch FLOOR, so `id >= APP_CATALOG`
+# misroutes at RUNTIME - REG_FIRST is a dispatch FLOOR, so `id >= REG_FIRST`
 # routes into the registry and a collision is invisible until you open the app.
+# That floor used to be APP_CATALOG, which is exactly how it went wrong: the
+# catalog was given id 13 and so was APP_FILES, and for months `apps` raised
+# the Files window instead of opening the catalog.
 #
 # THIS SLICE OWNS IDS 61..69 AND NO OTHERS.
 #

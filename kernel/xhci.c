@@ -1192,6 +1192,14 @@ static int ptr_abs  = 0;       /* 1 = absolute tablet, 0 = relative mouse     */
 static u32 ptr_enq  = 0, ptr_cyc = 1;
 static int ptr_x = 0, ptr_y = 0, ptr_btn = 0;
 static int ptr_dx_acc = 0, ptr_dy_acc = 0;  /* raw relative motion, unclamped */
+/* THE WHEEL, which this driver decoded in a comment and nowhere else. Both
+ * report layouts documented above end in a wheel byte and both were dropped on
+ * the floor, so idt_mouse_wheel() (PS/2) was the only source of a notch in the
+ * whole kernel - and every probe here, and a real laptop, attach a USB
+ * pointer. The consequence was not subtle: the app catalog is 47 tiles in a
+ * window that shows twelve, and the wheel is its ONLY scroll control, so 35 of
+ * them could not be reached by any pointer at all. */
+static int ptr_wz_acc = 0;                  /* wheel notches, read-and-cleared */
 static unsigned ptr_reports = 0;
 static unsigned ptr_events  = 0;   /* EVERY dispatch, any cc */
 static unsigned kbd_events  = 0;   /* keyboard dispatches, any cc */
@@ -1440,6 +1448,17 @@ static void ptr_decode(u32 buf)
     if (h <= 0) h = 1200;
 
     ptr_btn = (int)r[0] & 0x07;
+    /* The wheel byte sits at the END of whichever layout this device uses:
+     * index 3 on a 4-byte boot mouse, index 5 on a 6-byte tablet. It is
+     * SIGNED, and it is a delta, so it accumulates the same way dx/dy do -
+     * publishing it as a level would count a notch twice or not at all.
+     * ptr_requeue() zeroes the whole buffer before handing it back, so a short
+     * report reads 0 here rather than a stale notch. */
+    {
+        int wz = (int)r[ptr_abs ? 5 : 3];
+        if (wz > 127) wz -= 256;
+        ptr_wz_acc += wz;
+    }
     if (ptr_abs) {
         int rx = (int)r[1] | ((int)r[2] << 8);
         int ry = (int)r[3] | ((int)r[4] << 8);
@@ -1821,6 +1840,7 @@ int xhci_ptr_abs(void)     { return ptr_abs; }
 /* Read-and-clear: how far a RELATIVE mouse has moved since anyone last asked.
  * Meaningless for a tablet, which reports a position; ptr_decode only ever
  * accumulates these on the relative path. */
+int xhci_ptr_take_wheel(void) { int v = ptr_wz_acc; ptr_wz_acc = 0; return v; }
 int xhci_ptr_take_dx(void) { int v = ptr_dx_acc; ptr_dx_acc = 0; return v; }
 int xhci_ptr_take_dy(void) { int v = ptr_dy_acc; ptr_dy_acc = 0; return v; }
 int xhci_ptr_x(void)       { return ptr_x; }

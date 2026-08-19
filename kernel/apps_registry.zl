@@ -381,14 +381,22 @@ fn reg_open(id) {
     # mouse event routes by SCREEN POSITION, not focus) while arrow keys
     # went nowhere (a key event has no position - it needs focus).
     rw = reg_new(id, ru)
-    if rw < 0 { return 0 }
+    # A REFUSAL HAS TO SAY SO, and say which id. wm_open already prints when
+    # WM_MAX is reached; this is the other half - reg_new returns -1 when no
+    # arm claims the id at all, which is what a wrong id looks like from here.
+    # It returned a bare 0 before, and a bare 0 is how "the catalog opens
+    # nothing" stayed a mystery for six QEMU boots.
+    if rw < 0 {
+        put("  reg: no window for app id ")  print(id)
+        return 0
+    }
     wm_report(rw)
     return 1
 }
 
 # app_draw / app_event / app_tick fallbacks. kernel.zl calls these for any id
-# its own explicit chain does not recognise (id >= APP_CATALOG); nothing
-# above APP_EDIT touches these except through this one seam.
+# the registry owns (id >= REG_FIRST); nothing above APP_FILES touches these
+# except through this one seam.
 fn reg_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_CATALOG { return cat_draw(ax, ay, aw, ah) }
     if id == APP_CLIP  { return cb_draw(ax, ay, aw, ah) }
@@ -581,7 +589,13 @@ fn cat_event(win, ety, ecode, ex, ey) {
             wm_dmg(win)
         }
         if band(ecode, 1) != 0 {
-            if nh >= 0 { reg_open(REG_FIRST + nh) }
+            # reg_id_at(nh), NOT REG_FIRST + nh. nh is an index into the DENSE
+            # list; the id space has holes in it (34..39 unallocated, one spare
+            # at the end of each slice), so the two stopped being the same
+            # number at the first hole. Every tile from index 20 on - which is
+            # every app in every slice file, 27 of the 47 - opened the app six
+            # or more ids below the one whose name and icon were on the tile.
+            if nh >= 0 { reg_open(reg_id_at(nh)) }
             return 1
         }
         return 1
