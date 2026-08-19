@@ -379,13 +379,13 @@ int main(void)
     clear();
     fb_icon24(40, 40, icons_n - 1, FG);
     okf(measure_ink(0, 0, W, 200).n > 0,
-        "icon %ld, the final atlas entry, is reachable and draws",
-        (long)(icons_n - 1));
+        "icon %ld, the final entry of an atlas of %ld, is reachable and draws",
+        (long)(icons_n - 1), (long)icons_n);
     clear();
     fb_icon24(40, 40, icons_n, FG);
     okf(measure_ink(0, 0, W, 200).n == 0,
-        "icon %ld is rejected instead of reading past the atlas",
-        (long)icons_n);
+        "icon %ld is rejected instead of reading past the atlas of %ld",
+        (long)icons_n, (long)icons_n);
     clear();
     fb_icon24(40, 40, -1, FG);
     ok(measure_ink(0, 0, W, 200).n == 0,

@@ -1199,6 +1199,21 @@ void wm_focus(int win)
         wins[win].flags &= ~WF_MINIMIZED;
         wm_damage_win(win);
     }
+    /* ...and off another workspace, for the same reason it un-minimises. Focus
+     * means "the keyboard goes here", and the keyboard cannot go to something
+     * that is not on screen: the frame loop would keep routing every key to a
+     * window nobody can see, which is indistinguishable from a dead keyboard.
+     *
+     * This is NOT the same thing as raising - the z-order is untouched, and
+     * "focus does not imply raise" (wmtest asserts it) still holds. It is a
+     * different axis: which workspace, not which depth. wm_raise does it too,
+     * and both need it because the two are called separately - reg_open() in
+     * apps_registry.zl calls focus THEN raise, and between those two lines the
+     * invariant would otherwise be broken. */
+    if (wm_is_open(win) && wins[win].ws != ws_cur) {
+        wins[win].ws = ws_cur;
+        wm_damage_win(win);
+    }
     if (focus_win == win) return;
     int old = focus_win;
     focus_win = win;

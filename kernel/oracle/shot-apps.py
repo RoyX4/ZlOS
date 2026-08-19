@@ -188,7 +188,12 @@ def tile_click(m, cat, idx, u):
 # it, so no tile exists for any of them. Three are already open at boot and
 # three are shell words - except Settings, which is a dock tile and nothing
 # else, and is therefore the one app in the reference this script cannot reach.
-WORD_OF = {"edit": "edit", "g_snake": "snake", "files": "files"}
+#
+# `files` is NOT here even though "files" is a shell word: open_app(108) finds
+# the boot Files window already open, raises it and returns WITHOUT calling
+# wm_report, so there is no rectangle on the serial line to photograph against.
+# It is one of the three that come from the desktop shot instead.
+WORD_OF = {"edit": "edit", "g_snake": "snake"}
 BOOT_OPEN = {"term", "mon", "files"}
 
 

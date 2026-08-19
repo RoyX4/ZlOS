@@ -24,10 +24,25 @@
 #
 # Milliseconds. No QEMU, no framebuffer, no host-load sensitivity.
 #
-# WHAT BREAKS IT - the mutation test, stated per section so a future reader can
-# check the assertions still bite rather than taking this header's word for it.
-# Each one was applied to the shipping source, this file was run, and the named
-# check went red. See the report in the commit that added this file.
+# WHAT BREAKS IT. A test nobody has tried to fool is a test nobody has any
+# reason to believe. Ten defects were planted in apps_games1.zl and
+# apps_games2.zl one at a time, this file was run against each, and the source
+# restored. All ten were caught - the exact edit, and the first check to go red:
+#
+#   tt_line's third comparison forced true          two X and an O is not a win
+#   nim_ai's `if t < p` never satisfied             a non-zero nim-sum answered
+#   ho_can's `d > s` weakened to `d >= 0`           disk 1 may NOT sit on disk 0
+#   lo_press's north neighbour moved off-board      a middle press lights five
+#   lo_reset's re-draw loop deleted                 the cancelling shuffle
+#   c4_run counting the colour, not the run         three, a hole, and a fourth
+#   mz_reset not marking the carved-into cell       (the run aborts - no maze)
+#   mz_move's wall mask changed to 99               north out of the corner
+#   wg_submit's `used` claim check forced true      the second o is GREY
+#   wg_put masking the letter to four bits          STORM against STORM
+#
+# Two of the ten do not produce a FAIL line: they make the interpreter give up
+# on step count, because a maze that never finishes carving is an endless loop
+# rather than a wrong answer. A run that does not reach the summary is red too.
 
 import apps_common
 import apps_games1
@@ -499,8 +514,22 @@ gt_ok(lo_solved() == 0, "five presses leave a lit board")
 lo_press(0, 1)  lo_press(4, 4)  lo_press(2, 0)  lo_press(1, 3)  lo_press(3, 3)
 gt_eq(lo_solved(), 1, "...and repeating them solves it, so a shuffled board always has a solution")
 
-# A NEW PUZZLE IS NEVER ALREADY SOLVED. Twelve presses can cancel out; the
-# retry loop is what stops that being handed over as a win.
+# A NEW PUZZLE IS NEVER ALREADY SOLVED. Twelve presses CAN cancel out - the
+# 5x5 board has a two-dimensional space of "quiet patterns" that toggle back to
+# all-off - and the retry loop in lo_reset is what stops such a draw being
+# handed over as a puzzle that is already won.
+#
+# THE SEED IS CHOSEN, not hoped for. Sixty random resets never hit a cancelling
+# shuffle, so an assertion over sixty of them proves the loop is HARMLESS
+# rather than proving it is NEEDED - remove the loop and all sixty still pass.
+# Seed 37610 was found by search (this harness's ac_rand, twelve presses, all
+# lights out) and is driven in through the clock, because lo_reset seeds itself
+# from ticks() + 19 and that is the shipping path. With the retry loop the
+# reset must survive it; without the loop this check goes red on its own.
+gt_clock = 37610 - 19 - 7919
+lo_reset()
+gt_eq(lo_solved(), 0, "the one shuffle known to cancel is re-drawn, not handed over solved")
+
 t_bad = 0
 t_i = 0
 while t_i < 60 {
@@ -509,7 +538,7 @@ while t_i < 60 {
     if lo_moves != 0 { t_bad = t_bad + 1 }
     t_i = t_i + 1
 }
-gt_eq(t_bad, 0, "sixty fresh puzzles, none of them already solved and all at zero presses")
+gt_eq(t_bad, 0, "sixty more fresh puzzles, none already solved and all at zero presses")
 
 # =============================================================================
 # CONNECT FOUR. Gravity, and a real four-in-a-row on all four axes.

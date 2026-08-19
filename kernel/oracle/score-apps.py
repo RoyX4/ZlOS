@@ -132,12 +132,13 @@ def main():
                  if not (d["app"].startswith("g_") or d["app"] in BLANK_IN_REF)]
         if drawn:
             n = len(drawn)
-            print(f"{'MEAN (ref-drawn only)':<13}"
-                  f"{sum(d['colour'] for d in drawn) / n:>0.3f}"
-                  f"  palette {sum(d['palette'] for d in drawn) / n:.3f}"
-                  f"  hue {sum(d['hue'] for d in drawn) / n:.3f}"
-                  f"  struct {sum(d['structure'] for d in drawn) / n:.3f}"
-                  f"  score {sum(d['score'] for d in drawn) / n:.3f}  ({n} apps)")
+            print(f"{'MEAN*':<13}"
+                  f"{sum(d['colour'] for d in drawn) / n:>8.3f}"
+                  f"{sum(d['palette'] for d in drawn) / n:>9.3f}"
+                  f"{sum(d['hue'] for d in drawn) / n:>7.3f}"
+                  f"{sum(d['structure'] for d in drawn) / n:>8.3f}"
+                  f"{sum(d['score'] for d in drawn) / n:>8.3f}"
+                  f"  * the {n} apps whose canvas the reference DOES draw")
     for rid, err in failed:
         print(f"  NOT SCORED  {rid:<12} {' '.join(err or [])}")
     return 0

@@ -23,6 +23,16 @@ Read this first in a new session. Everything below is verified, not remembered.
 > and Image Viewer, because seven more of its modules are missing too. For
 > those, only the shell can be cloned.
 
+> **Workspaces are real as of 2026-08-20:**
+> [`docs/workspaces.md`](docs/workspaces.md) — what filters (the paint walk,
+> `wm_at`, the modal and focus walks, both taskbar loops), what deliberately
+> does not (damage, the dock's running-accent), and why `wm_raise`/`wm_focus`
+> PULL a window to the current workspace instead of refusing. Read it before
+> touching `wm.c`'s z-order or `kernel.zl`'s island. It also records the trap
+> that shapes the per-app oracle: **serial bytes are routed to the focus
+> window**, so on a workspace with no windows the serial console is dead and
+> you cannot switch to an empty workspace and then type a command to fill it.
+
 > **Visual system status:** [`docs/visual-speed-northstar.md`](docs/visual-speed-northstar.md)
 > records the isolated 2026-08-19 implementation pass, its host/QEMU evidence,
 > and the exact target-hardware proof that remains. Keep visual polish and real

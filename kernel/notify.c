@@ -21,6 +21,22 @@
  * notify_tick(now) rather than notify.c reading the timer. It makes expiry
  * testable without waiting - the harness advances `now` by 300 and asserts the
  * toast retired - and it means this file has no dependency on idt.c at all.
+ *
+ * ZTOAST IS NOT IN THIS FILE, AND THAT IS DELIBERATE
+ * --------------------------------------------------
+ * The reference's `ztoast` - `.16s ease-out`, opacity 0 to 1 with
+ * translateY(10px) to 0 - is the toast's ENTRY, and for a while this file was
+ * the obvious place to look for it. It is not here and should not be: this
+ * file owns the QUEUE and nothing else, which is why notify_rect() is the
+ * only geometry in it and why even that is computed from a screen size handed
+ * in rather than read.
+ *
+ * The animation lives in wm.c beside toast_draw(), on the same timeline as
+ * every other one, started by the same wm_frame() branch that already damages
+ * the toast's rectangle when notify_tick() reports a change. Look for
+ * WM_FX_TOAST there. Putting it here would have given this file an opinion
+ * about where a toast is drawn and a dependency on the compositor's clock -
+ * the two things the paragraphs above exist to keep out.
  */
 
 typedef unsigned int u32;

@@ -61,7 +61,7 @@ fn wg_reset() {
 fn wg_letter(r, c) { return band(peek8(WG_BOARD + r * WG_COLS + c), 31) }
 fn wg_state(r, c)  { return shr(peek8(WG_BOARD + r * WG_COLS + c), 5) }
 fn wg_put(r, c, letter, st) {
-    poke8(WG_BOARD + r * WG_COLS + c, bor(band(letter, 15), shl(st, 5)))
+    poke8(WG_BOARD + r * WG_COLS + c, bor(band(letter, 31), shl(st, 5)))
     return 0
 }
 
