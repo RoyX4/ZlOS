@@ -7,6 +7,23 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-19 — fix(fb): icons24/icons48 externs said 10, icons.c has 20 (76d15aa)
+
+`desktop/v10-look` · 1 file changed, 10 insertions(+), 4 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>1 file(s)</summary>
+
+- `kernel/fb.c`
+
+</details>
+
 ## 2026-08-19 — chore: regenerated journal/TODO (post-commit hook) (2c2092f)
 
 `main` · 1 file changed, 17 insertions(+)

@@ -813,17 +813,15 @@ static void chrome(int win, int focused)
 
     if (W->flags & WF_NOCHROME) return;
 
-    /* THE GRIP HAS TO BE VISIBLE or it is a secret. Three short diagonals in
-     * the bottom-right corner - the convention every desktop uses, and cheap
-     * enough to draw on every window every repaint. */
-    {
-        int gx = W->x + W->w - UI_S1(t) - 1, gy = W->y + W->h - UI_S1(t) - 1;
-        int step = UI_S1(t) / 2 + 1;
-        for (int i = 1; i <= 3; i++) {
-            int d = i * step * 2;
-            fb_line(gx - d, gy, gx, gy - d, t->border);
-        }
-    }
+    /* THE GRIP HAS TO BE VISIBLE or it is a secret - drawn once, below, at
+     * UI_S3 after the close box. This used to ALSO draw here, smaller
+     * (UI_S1) and in a different colour, before the title bar was even
+     * composited - two renderers for one corner, from two merge parents
+     * (STATE-OF-THE-PROJECT.md #4.6). Only the later one matches
+     * RESIZE_EDGE's UI_S2 hit region and carries the fix for the L-bracket
+     * merge bug (see "THE RESIZE GRIP, drawn" below); this one was strictly
+     * the earlier, dimmer, wrongly-scaled leftover, and every window paid
+     * for both on every repaint. */
 
     int tx = W->x + 2, tw = W->w - 4, th = t->title_h - 3;
     if (focused) {
