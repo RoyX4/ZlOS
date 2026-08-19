@@ -53,6 +53,26 @@
 /* CLAUDE.md: map 8 MiB, not the full 16 - the kernel refuses the whole BAR
  * while i915 holds it, and everything we need is far below that. BCS is at
  * 0x22000 and the GGTT window starts at 0x800000, so 8 MiB covers both. */
+/* SIXTEEN MiB, not eight - and this was the bug that made the first two --ring
+ * runs draw nothing.
+ *
+ * CLAUDE.md says to map 8 MiB "because every display register is under 1 MiB",
+ * and for the modeset work that is right. THE GGTT WINDOW IS AT 8 MiB. Mapping
+ * exactly 8 MiB puts every PTE write one byte past the end of the mapping, so
+ * not one GGTT entry was ever written - the engine read zeros, parsed them as
+ * MI_NOOP, and advanced HEAD through them. "HEAD chased TAIL" looked like
+ * success and meant the opposite.
+ *
+ * MEASURED, and the answer is stranger than either guess. A 16 MiB mmap of
+ * resource0 is REFUSED with EINVAL - with i915 bound or unbound, so the
+ * CLAUDE.md reasoning is not the whole story. And an 8 MiB mmap does NOT fault
+ * at offset 0x800000: the kernel maps the whole BAR resource regardless of the
+ * length asked for, so the GGTT window IS reachable through an 8 MiB mapping
+ * even though it sits past its nominal end.
+ *
+ * So 8 MiB it is - not because the window is inside it, but because it is the
+ * largest map the kernel grants and the window is reachable anyway. The PTE
+ * readback in ggtt_map is what turns that from a hope into a check. */
 #define BAR0_MAP_BYTES (8u << 20)
 
 /* Engine MMIO bases, read off this machine's i915_engine_info rather than a
@@ -80,6 +100,7 @@
  * 4 KiB graphics page, 8 bytes each, and on Gen9 an entry is simply the
  * physical page address with bit 0 for present. */
 #define GGTT_OFFSET 0x800000u
+#define GGTT_WINDOW_BYTES (8u << 20)
 
 /* Graphics addresses we will use. High enough to be clear of whatever the
  * firmware and i915 left mapped low. */
@@ -92,7 +113,8 @@
 #define DEST_BYTES (DEST_PITCH * DEST_H)
 #define FILL_COLOR 0x60D2EBu
 
-static volatile unsigned char *bar0;
+static volatile unsigned char *bar0;   /* registers: BAR0 offset 0, 8 MiB */
+static volatile unsigned char *ggtt;   /* the PTE table: BAR0 offset 8 MiB  */
 
 static unsigned mmio_r(unsigned off)
 {
@@ -119,9 +141,36 @@ static int map_bar0(void)
     int fd = open(BAR0_PATH, O_RDWR | O_SYNC);
     if (fd < 0) { fprintf(stderr, "open %s: %s\n", BAR0_PATH, strerror(errno)); return 0; }
     void *p = mmap(NULL, BAR0_MAP_BYTES, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    close(fd);
-    if (p == MAP_FAILED) { fprintf(stderr, "mmap BAR0: %s\n", strerror(errno)); return 0; }
+    if (p == MAP_FAILED) { close(fd); fprintf(stderr, "mmap BAR0: %s\n", strerror(errno)); return 0; }
     bar0 = p;
+
+    /* THE GGTT IS A SECOND MAPPING, AND GETTING THIS WRONG COST THREE RUNS.
+     *
+     * BAR0 is 16 MiB: 8 MiB of registers, then 8 MiB of PTE table (confirmed -
+     * MGGC0 reads GGMS=3, so the table is 8 MiB / 1048576 entries). The obvious
+     * move is to map all 16 and index at 0x800000. THAT FAILS: a 16 MiB mmap of
+     * resource0 is refused with EINVAL, bound or unbound.
+     *
+     * The trap is what happens next. Mapping 8 MiB and writing at 0x800000
+     * anyway does NOT fault - it lands in whatever the process mapped after the
+     * BAR. A read there returned 0x65725F5F, which is the ASCII of
+     * "__res_context_hostalias": glibc's symbol table. Every GGTT entry this
+     * harness wrote went into its own heap, the engine saw no mapping, read
+     * zeros, parsed them as MI_NOOP and advanced HEAD through them. "HEAD
+     * chased TAIL" looked like a clean submission and meant nothing had been
+     * mapped at all.
+     *
+     * mmap'ing the window at file offset 0x800000, as its own mapping, works.
+     *
+     * NOTE THIS IS A HARNESS BUG, NOT A DRIVER BUG. kernel/gpuring.c reaches the
+     * same table as intel_mmio() + 0x800000 with no mmap in the way, which is
+     * correct for a kernel addressing physical memory directly. */
+    ggtt = mmap(NULL, GGTT_WINDOW_BYTES, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GGTT_OFFSET);
+    close(fd);
+    if (ggtt == MAP_FAILED) {
+        fprintf(stderr, "mmap GGTT window at 0x%X: %s\n", GGTT_OFFSET, strerror(errno));
+        return 0;
+    }
     return 1;
 }
 
@@ -172,10 +221,19 @@ static void *alloc_locked(size_t bytes)
 
 static int ggtt_map(unsigned gfx_page, unsigned long long phys)
 {
-    volatile unsigned *pte =
-        (volatile unsigned *)(bar0 + GGTT_OFFSET + (unsigned long)gfx_page * 8u);
-    pte[0] = (unsigned)(phys & 0xFFFFF000ull) | 1u;      /* address | present */
+    volatile unsigned *pte = (volatile unsigned *)(ggtt + (unsigned long)gfx_page * 8u);
+    unsigned want = (unsigned)(phys & 0xFFFFF000ull) | 1u;
+    pte[0] = want;
     pte[1] = (unsigned)(phys >> 32) & 0x7Fu;             /* HAW=39 on a client part */
+    /* READ IT BACK. A PTE write that goes nowhere is invisible: the engine then
+     * reads zeros, parses them as MI_NOOP and advances HEAD, which looks
+     * exactly like a successful submission that drew nothing. Two runs were
+     * lost to that before this check existed. */
+    if (pte[0] != want) {
+        fprintf(stderr, "  FAIL  GGTT[%u] read back 0x%08X, wrote 0x%08X\n",
+                gfx_page, pte[0], want);
+        return 0;
+    }
     return 1;
 }
 
@@ -199,7 +257,7 @@ static int survey(void)
     dump_ring("bcs0 ring");
 
     /* A GGTT entry, just read. Entry 0 usually maps the scratch page. */
-    volatile unsigned *pte0 = (volatile unsigned *)(bar0 + GGTT_OFFSET);
+    volatile unsigned *pte0 = (volatile unsigned *)ggtt;
     printf("  GGTT[0]                0x%08X%08X\n", pte0[1], pte0[0]);
 
     /* Prove the pagemap path works before --ring depends on it. */
@@ -249,9 +307,11 @@ static int ring_test(void)
     /* Map both through the GGTT. The destination is DEST_BYTES, so every page
      * of it needs an entry - mapping only the first page is a blit that writes
      * one page correctly and scribbles wherever the stale entries point. */
-    ggtt_map((unsigned)(GFX_RING >> 12), ring_phys);
+    if (!ggtt_map((unsigned)(GFX_RING >> 12), ring_phys)) { forcewake_put(); return 1; }
     for (unsigned i = 0; i * 4096 < DEST_BYTES; i++)
-        ggtt_map((unsigned)(GFX_DEST >> 12) + i, phys_of(dest + i * 4096));
+        if (!ggtt_map((unsigned)(GFX_DEST >> 12) + i, phys_of(dest + i * 4096))) {
+            forcewake_put(); return 1;
+        }
     (void)mmio_r(GGTT_OFFSET);            /* posting read: flush the PTE writes */
 
     /* Poison the destination so "filled" cannot be confused with "never ran" -
@@ -267,6 +327,24 @@ static int ring_test(void)
     if (!gpu_fill_rect(&b, GFX_DEST, DEST_PITCH, 0, 0, DEST_W, DEST_H, FILL_COLOR)) {
         fprintf(stderr, "  FAIL  gpu_fill_rect refused\n"); return 1;
     }
+    /* MI_FLUSH_DW, and its absence is why the first run drew nothing.
+     *
+     * gpu_blt.c gets away without one because it submits through i915, and GEM
+     * does the domain management - GEM_WAIT plus SET_DOMAIN(CPU) is what makes
+     * the blit visible to a CPU read there. THERE IS NO GEM HERE. We own the
+     * ring, so we own the coherency: without a flush the blitter's writes sit
+     * in the render cache and the CPU reads stale memory, which looks exactly
+     * like "the blit did nothing".
+     *
+     * Gen8+ MI_FLUSH_DW is 5 dwords: opcode 0x26 in the MI client, length
+     * (5-2). No post-sync write, so the address and immediate are zero - the
+     * flush itself is the point. */
+    ring[b.at++] = (0x26u << 23) | 3u;   /* MI_FLUSH_DW */
+    ring[b.at++] = 0;                    /* address low  (no post-sync) */
+    ring[b.at++] = 0;                    /* address high */
+    ring[b.at++] = 0;                    /* immediate low */
+    ring[b.at++] = 0;                    /* immediate high */
+
     /* Pad to a qword boundary with MI_NOOPs; the ring's tail must be qword
      * aligned and the engine must not read past what we wrote. */
     while (b.at & 1u) ring[b.at++] = 0;   /* MI_NOOP is 0 */
