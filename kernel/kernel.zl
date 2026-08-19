@@ -251,30 +251,178 @@ AB_H  = 150                        # About height; no clipped final line at 2x
 TOPBAR_H = 48
 DESK_TOP = 56                    # first row of desktop below the bar + hairline
 
+# ---- the top island ---------------------------------------------------------
+# The reference does NOT have a top BAR. It has a floating pill, centred, with
+# the wallpaper visible on both sides of it and above it. That is a different
+# object, not a restyled one, and swapping the full-width slab for it is the
+# single largest structural change to the chrome.
+#
+# MEASURED, not guessed. The numbers below were taken two ways and they agree:
+#
+#   from ds-reference.html:3374-3455  top:8px, height:32px, padding:0 4px,
+#                                     gap:3px, border-radius:16px, left:50%
+#   from the rendered PNG             x 455..826, y 8..40 - so 372 x 32,
+#                                     centred on 640 at a 1280-wide screen
+#
+# The 372 is not hardcoded: island_w() sums the parts, so the pill is as wide
+# as what is in it and stays right when the clock text or the scale changes.
+# It came out at 372 design units on the first try, which is why the measured
+# width is quoted here as a check rather than used as a constant.
+ISLAND_H   = 32
+ISLAND_TOP = 8
+ISLAND_R   = 16
+ISLAND_PAD = 4
+ISLAND_GAP = 3
+CHIP_H     = 24                  # the pills inside the pill
+CHIP_R     = 12
+CHIP_PAD   = 12
+CHIP_GAP   = 7
+SEP_H      = 15                  # the 1px dividers between groups
+PIP_H      = 7                   # a workspace pip
+PIP_W_ON   = 20                  # ...which widens to this when it is current
+BELL_W     = 20
+BELL_H     = 17
+
+# THE CLOCK GETS A FIXED CELL, and that is this file's own established rule for
+# a live number, stated a few hundred lines down: "a readout whose labels slide
+# sideways as the digits change is unreadable". A fixed cell wide enough for the
+# worst case is the correct shape. It also means island_w() does not have to
+# measure a string that changes every minute.
+#
+# DIVERGENCE, recorded rather than hidden: the reference's clock reads
+# "Tue 22:00" and this one reads "22:00". zl's kernel subset has no runtime
+# string type - label() takes a literal and label_num() takes an integer - so a
+# weekday name would need a lookup table returning one of seven string literals
+# and a way to concatenate it with the time, and there is no concatenation. The
+# time itself is real: rtc_h() and rtc_mi() off the CMOS clock.
+CLOCK_W = 36
+
+# ---- workspaces --------------------------------------------------------------
+# The reference has three and the pip row is where you see which one you are on.
+# zlOS had none at all - no window carried a workspace and nothing switched -
+# so this is the state the pips read. Windows are filtered by it as that lands;
+# until then switching changes the indicator and nothing else, which is stated
+# here rather than left to be discovered.
+WS_N = 3
+ws_cur = 1
+fn cur_ws() { return ws_cur }
+fn set_ws(n) {
+    if n < 1 { return 0 }
+    if n > WS_N { return 0 }
+    ws_cur = n
+    wm_damage_win_all()
+    return 1
+}
+
+# HH:MM, drawn as two numbers and a colon rather than one string, because there
+# is no string to build. Leading zero is explicit: label_num(9) prints "9", and
+# a clock that reads "9:5" is worse than no clock.
+fn draw_island_clock(cx, cy, u) {
+    ch = rtc_h()
+    cm = rtc_mi()
+    nx = cx
+    if ch < 10 { label(nx, cy, "0", theme(TH_TEXT_HI), T_BODY, W_REG)  nx = nx + 8 * u }
+    label_num(nx, cy, ch, theme(TH_TEXT_HI), T_BODY, W_REG)
+    if ch >= 10 { nx = nx + 16 * u }
+    label(nx, cy, ":", theme(TH_TEXT_HI), T_BODY, W_REG)
+    nx = nx + 5 * u
+    if cm < 10 { label(nx, cy, "0", theme(TH_TEXT_HI), T_BODY, W_REG)  nx = nx + 8 * u }
+    label_num(nx, cy, cm, theme(TH_TEXT_HI), T_BODY, W_REG)
+    return 0
+}
+
+# The island fill is rgba(12,14,16,.82) over a blur(20px) backdrop. There is no
+# GPU and no gaussian blur, and rrect is opaque, so this is an APPROXIMATION and
+# is labelled as one: over the near-black wallpaper the 82% tint dominates, and
+# the composite it settles at is within a couple of levels of SURF_2, which is
+# already a token. Sampling the reference PNG inside the pill gives (11,13,13),
+# (12,14,13), (13,16,13); SURF_2 is (11,13,15). Close enough that the remaining
+# error is far below the noise floor the oracle measures.
+fn island_fill() { return theme(TH_CHROME_LINE) }
+
+# The 1px ring is rgba(184,232,56,.09) - lime at 9%. Drawn as an outer rrect one
+# pixel larger rather than a real alpha stroke, because the primitives here have
+# no rounded alpha outline. A 1px ring reads as its own colour rather than as a
+# blend, so this is a fair trade; the cost is that the ring does not pick up the
+# wallpaper behind the corners.
+fn island_ring() { return rgb(26, 35, 10) }
+
+fn island_w() {
+    iu = ui()
+    iw = ISLAND_PAD * 2
+    iw = iw + CHIP_PAD * 2 + 5 * iu + CHIP_GAP + label_w("Activities", T_BODY, W_BOLD)
+    iw = iw + ISLAND_GAP * 3 + 1
+    iw = iw + PIP_W_ON + PIP_H * 2 + ISLAND_GAP * 2
+    iw = iw + ISLAND_GAP * 3 + 1
+    iw = iw + CHIP_PAD * 2 + CLOCK_W * iu
+    iw = iw + ISLAND_GAP * 3 + 1
+    iw = iw + 11 * 2 + label_w("heap", T_CAPTION, W_REG) + CHIP_GAP * 3 + 13 * 3
+    iw = iw + ISLAND_GAP * 3 + 1
+    iw = iw + BELL_W
+    return iw
+}
+
 fn draw_header() {
     if px_w() > 0 {
         w = px_w()
         u = ui()
-        hb = TOPBAR_H * u
-        fill_rgb(0, 0, w, hb, theme(TH_CHROME))                     # flat, no gradient
-        fill_rgb(0, hb, w, 1, theme(TH_CHROME_LINE))                   # hairline separator
-        grad_rgb(0, hb + 1, w, 7, theme(TH_WALL_BOT), theme(TH_WALL_TOP))
-        ht = (hb - 16 * u) / 2                            # text baseline, centred
-        icon(8 * u, (hb - 24 * u) / 2, 19, theme(TH_ACCENT))
-        label(34 * u, ht, "zlOS", theme(TH_TEXT), T_BODY, W_BOLD)
-        label(90 * u, ht, "Activities", theme(TH_TEXT_DIM), T_BODY, W_REG)
-        # Product state, not framebuffer diagnostics. Resolution and frame
-        # counters live in System Monitor; the bar says where you are and
-        # whether the machine is healthy.
-        label(w / 2 - 38 * u, ht, "workspace 1", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
-        icon(w - 128 * u, (hb - 24 * u) / 2, 17, theme(TH_TEXT_DIM))
-        icon(w - 96 * u,  (hb - 24 * u) / 2, 18, theme(TH_TEXT_DIM))
-        icon(w - 64 * u,  (hb - 24 * u) / 2, 35, theme(TH_TEXT_DIM))
-        icon(w - 32 * u,  (hb - 24 * u) / 2, 39, theme(TH_TEXT_HI))
+        ih = ISLAND_H * u
+        iy = ISLAND_TOP * u
+        iw = island_w()
+        ix = (w - iw) / 2
+        # ring first, fill on top: the outer rrect is one pixel proud on every
+        # side, so the ring follows the curve instead of cutting across it
+        rrect(ix - 1, iy - 1, iw + 2, ih + 2, ISLAND_R * u + 1, island_ring())
+        rrect(ix, iy, iw, ih, ISLAND_R * u, island_fill())
+        cx = ix + ISLAND_PAD * u
+        cy = iy + (ih - CHIP_H * u) / 2
+        # Activities: a 5px lime dot with a glow, then the word. The dot is the
+        # only thing in the chrome that is accent-coloured when nothing is
+        # active, so it is what tells you the desktop is alive.
+        dy = iy + (ih - 5 * u) / 2
+        rrect(cx + CHIP_PAD * u, dy, 5 * u, 5 * u, 3 * u, theme(TH_ACCENT))
+        tx = cx + CHIP_PAD * u + 5 * u + CHIP_GAP * u
+        label(tx, iy + (ih - 16 * u) / 2, "Activities", theme(TH_TEXT_HI), T_BODY, W_BOLD)
+        cx = cx + CHIP_PAD * 2 * u + 5 * u + CHIP_GAP * u + label_w("Activities", T_BODY, W_BOLD)
+        cx = island_sep(cx, iy, ih, u)
+        # three workspace pips. The CURRENT one is a 20px lime lozenge and the
+        # others are 7px dots - the reference animates that width over .16s,
+        # which is why the two widths are named constants rather than inline.
+        py = iy + (ih - PIP_H * u) / 2
+        wsi = 1
+        while wsi <= 3 {
+            pw = PIP_H * u
+            pc = theme(TH_BORDER)
+            if wsi == cur_ws() { pw = PIP_W_ON * u  pc = theme(TH_ACCENT) }
+            rrect(cx, py, pw, PIP_H * u, 3 * u, pc)
+            cx = cx + pw + ISLAND_GAP * u
+            wsi = wsi + 1
+        }
+        cx = cx - ISLAND_GAP * u
+        cx = island_sep(cx, iy, ih, u)
+        draw_island_clock(cx + CHIP_PAD * u, iy + (ih - 16 * u) / 2, u)
+        cx = cx + CHIP_PAD * 2 * u + CLOCK_W * u
+        cx = island_sep(cx, iy, ih, u)
+        label(cx + 11 * u, iy + (ih - 14 * u) / 2, "heap", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        gx = cx + 11 * u + label_w("heap", T_CAPTION, W_REG) + CHIP_GAP * u
+        icon(gx, iy + (ih - 13 * u) / 2, 17, theme(TH_TEXT_DIM))
+        icon(gx + 13 * u + CHIP_GAP * u, iy + (ih - 13 * u) / 2, 18, theme(TH_TEXT_DIM))
+        icon(gx + 26 * u + CHIP_GAP * 2 * u, iy + (ih - 13 * u) / 2, 35, theme(TH_TEXT_DIM))
+        cx = cx + 22 * u + label_w("heap", T_CAPTION, W_REG) + CHIP_GAP * 3 * u + 39 * u
+        cx = island_sep(cx, iy, ih, u)
+        icon(cx, iy + (ih - BELL_H * u) / 2, 39, theme(TH_TEXT_HI))
     } else {
         bar(0, C_TITLE)
         at(0, 2, "zlOS", C_TITLE)
     }
+}
+
+# One 1px divider, 15px tall, vertically centred. Returns the next x. The
+# reference puts ISLAND_GAP either side of it, so the caller never has to.
+fn island_sep(sx, iy, ih, u) {
+    sy = iy + (ih - SEP_H * u) / 2
+    fill_rgb(sx + ISLAND_GAP * u, sy, 1, SEP_H * u, theme(TH_BORDER))
+    return sx + ISLAND_GAP * 2 * u + 1
 }
 
 # the dock top edge, cell-aligned to row (rows-3) so at_num can place the clock
