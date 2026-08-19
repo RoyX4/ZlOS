@@ -305,12 +305,40 @@ smallest one.
 
 # Part 4 — what would be needed to go further
 
-| Goal | Needs | Verdict for zlOS |
+> **This table said "No" twice, and that was the wrong word both times.** Rewritten
+> 2026-08-19 after the blitter ring ran on this silicon. Nothing here is
+> impossible; each row has a *bounded* version and an *unbounded* one, and the
+> old table costed the unbounded one and then wrote off the whole row. Naming the
+> bounded version and its price is the useful answer. See the note under the
+> table for what changed.
+
+| Goal | Needs | Where zlOS is |
 |---|---|---|
-| **Modesetting** (current) | DPLL, transcoder, pipe, plane, DDI, AUX/DPCD, link training, watermarks, panel power | **In progress. Correct target.** Haiku, at 25 years old, has exactly this and no more. |
-| **2D blit acceleration** | Blitter engine, a ring buffer, GEM-style buffer objects, fences | Plausible but needs a memory manager and command submission — i.e. a heap |
-| **3D acceleration** | Render engine command streamer, GuC firmware, per-process page tables, hardware contexts, **a shader compiler targeting Gen ISA** | **No.** The shader compiler alone is a multi-year project; Mesa is 24 MB of it. |
-| **Video decode** | HuC firmware, VCS engine | No |
+| **Modesetting** (current) | DPLL, transcoder, pipe, plane, DDI, AUX/DPCD, link training, watermarks, panel power | **Done for this hardware.** Haiku, at 25 years old, has exactly this and no more. Never yet run *on* the ThinkPad. |
+| **2D blit acceleration** | Blitter engine, a ring buffer, buffer placement, fences | **The ring is proven on silicon** — 16384/16384 pixels, our own GGTT entries, no i915 (`gpu-driver.md`). No heap was needed: zlOS uses fixed regions (`HI_GPU`). What is left is choosing what to accelerate, and the measurements say a plain fill is not it. |
+| **3D acceleration, for a COMPOSITOR** | Render engine ring, the 3D pipeline packets, **three fixed shaders** | **Weeks, and now unblocked.** A compositor needs a handful of fixed operations - solid fill, blended fill, textured blit - not arbitrary programs. One shader is already captured out of Mesa (80 bytes, `gpu_shader.inc`) and the 77-packet pipeline with it (`gen9-blend-pipeline.md`). The one outstanding piece is `RENDER_SURFACE_STATE`'s bit layout. |
+| **3D acceleration, for ARBITRARY programs** | all of the above **plus a shader compiler targeting Gen ISA** | **Years, and the compiler is the reason** — Mesa is 24 MB of exactly that. This is the row that makes people say "impossible", and it is the only row where the cost is genuinely that shape. |
+| **Video decode** | HuC firmware, VCS engine | **Not attempted, not ruled out.** The engine is present and enumerated (`VCS` in `i915_engine_info`). The firmware and the bitstream work are the cost, and nobody has priced them here. |
+
+### What changed, and why the old verdict was wrong
+
+The old table collapsed two very different goals into one row called "3D
+acceleration" and then priced the harder one. That is what produced "No".
+
+**A compositor does not need a shader compiler.** It needs the same three or four
+shaders forever, and each can be lifted out of Mesa as bytes -
+`INTEL_DEBUG=fs,hex` prints the machine code, and the constant-colour case is
+**five instructions, 80 bytes, with the colour patchable in place**. A compiler
+exists to turn *arbitrary* source into ISA. Nothing in a desktop needs that.
+
+So the honest split is:
+
+- **arbitrary GPU programs, like Windows and Linux run** — the compiler, years.
+- **a GPU-accelerated desktop** — three captured shaders, a ring that already
+  works, and one missing struct. Weeks.
+
+The second is what a fast zlOS desktop actually requires, and the old table hid
+it inside the first.
 
 ## The one honest datapoint about difficulty
 
