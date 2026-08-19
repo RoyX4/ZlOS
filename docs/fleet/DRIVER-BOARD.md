@@ -119,6 +119,37 @@ The two genuinely new, fully host-verifiable drivers remain `entropy.c`
 (RDSEED → HMAC-DRBG-SHA256 on the existing `hmac_sha256`, testable against CAVP vectors
 with no hardware) and `gpt.c` (CRC32 poly `0xEDB88320`, golden values already measured).
 
+> **CORRECTION 2026-08-19, verified against the object store — and it is this
+> board's own headline pattern happening inside this board's own recommendation.**
+> `entropy.c` is **not** unwritten. It exists on `desktop/browser-next`, 160 lines,
+> and unlike `crypto.c` it is **in that branch's `SOURCES` (line 85)** alongside
+> `crypto.c`, `rsa.c`, `ecdsa.c`, `x509.c` and `tls.c` — so it is linked, not
+> stranded.
+>
+> ```
+> $ git show desktop/browser-next:kernel/entropy.c | wc -l
+> 160
+> $ git show desktop/browser-next:kernel/SOURCES | grep -n entropy
+> 85:entropy.c
+> ```
+>
+> This is the second instance of `UNBLOCKED-render-engine.md`'s exact finding —
+> work that landed while the roadmap still costs it as unstarted. The lesson
+> generalises: **before costing anything here as new, check every ref, not just
+> `main`.** `STATE-OF-THE-PROJECT.md` §7.1 learned this once already, for
+> `crypto.c` in `refs/wip`.
+>
+> **The technical recommendation survives, narrowed.** What exists is *not* the
+> DRBG this board proposes: `entropy.c:81-83` returns `RND_HW` on a raw
+> `cpu_rdrand32()`, with a TSC/RTC jitter hash as `RND_WEAK` fallback and
+> `RND_NONE` when nothing varies. There is no HMAC-DRBG and no CAVP vector test.
+> So the work is an **upgrade over 160 existing lines**, not a greenfield driver —
+> re-cost it from 160, not from 0. What the existing file already gets right, and
+> what a rewrite must keep: it reports its own quality tier and requires the
+> caller to refuse on `RND_NONE`.
+>
+> `gpt.c` was re-checked and is genuinely absent from every ref. That half stands.
+
 ---
 
 ## Suggested order
