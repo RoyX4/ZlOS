@@ -125,6 +125,40 @@ The three real ones were all the same mistake — a reference under `docs/` to a
 file that lives under `kernel/docs/`: `what-is-a-bios.md`,
 `typing-into-the-compositor.md`, `gen9-modeset-plan.txt`.
 
+### A false claim the doc-checker could never have caught
+
+`kernel/docs/system-track.md:359` states, as fact:
+
+> the **editor** copies its whole buffer on Ctrl+C and appends the clipboard
+
+It does not, and never did. `editor_key(code)` on `main` handles exactly four
+cases — `27` (ESC/save), `8` (backspace), `13` (enter), and `code >= 32`
+(printable). Codes **3** (Ctrl+C), **22** (Ctrl+V) and **19** (Ctrl+S) fall
+through to `return 0`. Verified by extracting the whole function body from
+`git show main:kernel/kernel.zl`, lines 1426-1450.
+
+The same doc's §"The clipboard, and why no routing changed for it" is correct
+about the *plumbing* — `input.c` really does produce chars 3 and 22, and the
+compositor really did need no change. The claim that fails is the last mile: the
+editor was never taught to consume them.
+
+Eight lines below `editor_key`, the source says:
+
+> a command that silently returns is this repo's most expensive recurring bug,
+> and "the app list offers it but nothing happens" is exactly that shape
+
+which is precisely what `editor_key` was doing for Ctrl+C, Ctrl+V and Ctrl+S.
+
+**This is the finding that matters most for how to audit this repo.** It was not
+found by reading docs, and `tools/doc-check.sh` cannot find it — the file it
+references exists, so every path check passes. It surfaced only because someone
+sat down to *implement* the feature and discovered it was already promised.
+Now closed on `desktop/files-app`.
+
+It also qualifies the audit's headline: this repo's docs are careful about file
+references and about status, but "the feature exists" claims are a class nothing
+currently checks.
+
 ### The biggest gap: 41 commits have never been through CI
 
 `git rev-list --left-right --count origin/main...main` → **`0  41`**.
@@ -245,6 +279,58 @@ two GPU docs — 7 files, all GPU-ring work. None of it overlaps the filesystem,
 editor, compositor or memory-map surfaces the three rebuilds touch, except
 `kernel/hosttest/build.sh`. So rebasing `desktop/files-app` forward should be
 clean or near-clean; expect the only contention at `hosttest/build.sh`.
+
+### Results — independently verified
+
+Each branch was re-verified by a script that never pipes a build (the
+land-gate's own header records that piping through `tail` made a non-linking
+tree gate green). All three kernel builds, all three static gates, the hosttest
+harness, and `nm -u` on both ELFs.
+
+**`desktop/v10-look` → GREEN** (`afc04d0`, 5 commits)
+Three real defects, each confirmed by reading before fixing:
+- `fb.c`'s `icons24`/`icons48` externs declared `[10]`; `icons.c` defines `[20]`.
+  Linked fine because the element type matched — silently unreachable icons.
+- `wm.c`'s `chrome()` drew the resize grip **twice**, the first at the wrong
+  size and colour. Before/after `wmshot` crops committed as evidence.
+- `wm.c`'s `wm_repaint()` composited a fading window's saved backdrop at the
+  **wrong origin** — `cx/cy/cw/ch` were captured for the stash then clobbered by
+  a later `isect()` before the blend reused them. Measured: 19 of 20 sampled
+  rows changed, largest single-channel delta 40/255.
+
+Most of the v10 look backlog turned out to be **already closed** by an earlier
+session — including the dock digit-debris bug, which re-derivation showed was
+already fixed at `kernel.zl:3247-3265`. The same pattern as everything else here.
+
+**`desktop/files-app` → GREEN** (`2c4fe1e`, 2 commits)
+The full spec shipped: a Files window (`APP_FILES`, reachable as `filemgr` /
+`explorer`), auto-mount on open, create/open/delete by name, and the editor's
+disk-backed mode with real Ctrl+S, Ctrl+C and Ctrl+V. The ten numbered RAM slots
+are untouched, as the spec required.
+
+**The cold-boot gate actually ran**, which is the part that matters: boot 1
+created `probe.txt` and saved it, the QEMU process was **killed**, and an
+independent `qemu-system-i386` against the same NVMe image reopened the file
+with matching content (ink 1016 in both boots). Committed as
+`kernel/probe-files.py`, so it is now a permanent gate rather than a one-off.
+`hosttest/fstest`: 117 assertions, 0 failures.
+
+One deviation, correctly flagged rather than hidden: the brief said to declare
+the new buffer in `memmap.h`, but that file's own header scopes it to the
+≥128 MiB high-RAM map. `FILES_NAME_BUF` is a 24-byte low-memory buffer, so it
+was registered in `check-memmap.sh`'s sized overlap check instead — the file
+that actually governs that range.
+
+**Both branches boot.** `kernel/verify-raw.sh` run independently on each once
+box load fell below the gate's own 4.0 threshold:
+
+```
+zl-linux-v10look    exit=0  ok  kernel boots via our own bootloader (no GRUB), shell responds
+zl-linux-files-app  exit=0  ok  kernel boots via our own bootloader (no GRUB), shell responds
+```
+
+That closes the one gap the v10-look builder had flagged as unverified — it
+could not boot-test while six concurrent sessions held the box above load 6.
 
 ### Verification stance
 

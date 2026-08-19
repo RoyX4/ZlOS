@@ -7,26 +7,9 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
-## 2026-08-20 — docs: journal entry for the five memory-model commits (932a2ec)
+## 2026-08-19 — feat(apps): 3 system apps, RNG seeding, and a proven interactive probe (94cd4c8)
 
-`claude/recursing-ellis-82c8e8` · 1 file changed, 18 insertions(+)
-
-| | |
-|---|---|
-| EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
-| baselined doc rot | 19 |
-| docs vs tree | STALE |
-
-<details><summary>1 file(s)</summary>
-
-- `docs/JOURNAL.md`
-
-</details>
-
-## 2026-08-20 — chore: drop the Stage 5 work-in-progress holding directory (339de58)
-
-`claude/recursing-ellis-82c8e8` · 2 files changed, 25 insertions(+), 4 deletions(-)
+`desktop/app-suite` · 8 files changed, 435 insertions(+), 10 deletions(-)
 
 | | |
 |---|---|
@@ -35,125 +18,22 @@ the part that makes a change legible later, and the part nobody writes down.
 | baselined doc rot | 19 |
 | docs vs tree | STALE |
 
-<details><summary>2 file(s)</summary>
+<details><summary>8 file(s)</summary>
 
-- `.gitignore`
-- `docs/JOURNAL.md`
-
-</details>
-
-## 2026-08-20 — feat(kernel): ring 3 and a syscall - the first privilege boundary zlOS has had (e984c17)
-
-`claude/recursing-ellis-82c8e8` · 9 files changed, 650 insertions(+), 6 deletions(-)
-
-| | |
-|---|---|
-| EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
-| baselined doc rot | 19 |
-| docs vs tree | STALE |
-
-<details><summary>9 file(s)</summary>
-
-- `docs/JOURNAL.md`
-- `freestanding/runtime_kernel.c`
-- `kernel/SOURCES`
-- `kernel/docs/memory-model.md`
-- `kernel/gdt.c`
-- `kernel/golden.txt`
-- `kernel/idt.c`
-- `kernel/kernel.zl`
-- `kernel/usermode.c`
-
-</details>
-
-## 2026-08-20 — feat(mem): kernel virtual memory - one window, and a DMA seam at all 51 sites (07c079f)
-
-`claude/recursing-ellis-82c8e8` · 21 files changed, 1450 insertions(+), 90 deletions(-)
-
-| | |
-|---|---|
-| EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
-| baselined doc rot | 19 |
-| docs vs tree | STALE |
-
-<details><summary>21 file(s)</summary>
-
-- `.gitignore`
-- `docs/JOURNAL.md`
-- `freestanding/runtime_kernel.c`
-- `kernel/.gitignore`
-- `kernel/SOURCES`
-- `kernel/check-dma.sh`
-- `kernel/dma.h`
-- `kernel/docs/dma-sites.md`
-- `kernel/docs/memory-model.md`
-- `kernel/golden.txt`
-- `kernel/heap.c`
-- `kernel/hosttest/build.sh`
-- _…and 9 more_
-
-</details>
-
-## 2026-08-20 — feat(mem): a real allocator - free, reuse, coalesce, bounded worst case (6f28a22)
-
-`claude/recursing-ellis-82c8e8` · 10 files changed, 1440 insertions(+), 14 deletions(-)
-
-| | |
-|---|---|
-| EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
-| baselined doc rot | 19 |
-| docs vs tree | STALE |
-
-<details><summary>10 file(s)</summary>
-
-- `docs/JOURNAL.md`
-- `freestanding/runtime_kernel.c`
-- `kernel/SOURCES`
-- `kernel/docs/memory-model.md`
-- `kernel/golden.txt`
-- `kernel/heap.c`
-- `kernel/hosttest/build.sh`
-- `kernel/hosttest/heaptest.c`
-- `kernel/kernel.zl`
-- `kernel/memmap.h`
-
-</details>
-
-## 2026-08-20 — feat(mem): raise the kernel size ceiling to 6 MiB, and move the two things in its way (fb3d32e)
-
-`claude/recursing-ellis-82c8e8` · 16 files changed, 381 insertions(+), 65 deletions(-)
-
-| | |
-|---|---|
-| EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
-| baselined doc rot | 19 |
-| docs vs tree | STALE |
-
-<details><summary>16 file(s)</summary>
-
-- `CLAUDE.md`
 - `TODO.md`
 - `docs/JOURNAL.md`
-- `kernel/.gitignore`
-- `kernel/arena.c`
-- `kernel/check-memmap.sh`
-- `kernel/docs/memory-model.md`
-- `kernel/golden.txt`
-- `kernel/hosttest/arenatest.c`
-- `kernel/hosttest/libctest.c`
-- `kernel/link-raw.ld`
-- `kernel/link.ld`
-- _…and 4 more_
+- `kernel/apps_games1.zl`
+- `kernel/apps_games2.zl`
+- `kernel/apps_registry.zl`
+- `kernel/apps_system.zl`
+- `kernel/apps_utils.zl`
+- `kernel/probe-catalog.py`
 
 </details>
 
-## 2026-08-20 — feat(mem): raise the RAM ceiling to 1 GiB, and make it the first one that is enforced (078ebf8)
+## 2026-08-19 — feat(apps): app-suite registry, catalog window, 11 utilities, 6 games (24c06bd)
 
-`claude/recursing-ellis-82c8e8` · 16 files changed, 373 insertions(+), 62 deletions(-)
+`desktop/app-suite` · 11 files changed, 1731 insertions(+), 22 deletions(-)
 
 | | |
 |---|---|
@@ -162,21 +42,19 @@ the part that makes a change legible later, and the part nobody writes down.
 | baselined doc rot | 19 |
 | docs vs tree | STALE |
 
-<details><summary>16 file(s)</summary>
+<details><summary>11 file(s)</summary>
 
-- `kernel/HANDOFF.md`
-- `kernel/arena.c`
-- `kernel/check-himap.sh`
-- `kernel/check-ram.sh`
-- `kernel/intel.c`
+- `compile.c`
+- `kernel/apps_common.zl`
+- `kernel/apps_games1.zl`
+- `kernel/apps_games2.zl`
+- `kernel/apps_registry.zl`
+- `kernel/apps_system.zl`
+- `kernel/apps_utils.zl`
+- `kernel/check-zl-calls.sh`
 - `kernel/kernel.zl`
-- `kernel/memmap.h`
-- `kernel/run-vm.sh`
-- `kernel/run.sh`
-- `kernel/verify-clock.sh`
-- `kernel/verify-disk.sh`
-- `kernel/verify-iso.sh`
-- _…and 4 more_
+- `kernel/mkdisk.sh`
+- `kernel/raw_boot.asm`
 
 </details>
 

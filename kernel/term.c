@@ -212,6 +212,9 @@ static const struct cmd table[] = {
     { "paint",   100 }, { "edit",    105 },
     { "anim",     97 }, { "demo",     97 },
     { "ls",      108 }, { "files",   108 },
+    /* NOT "files" - that word already means "ls" above, the ten numbered RAM
+     * slots. This is the OTHER one: the zlfs Files window, by name. */
+    { "filemgr",  77 }, { "explorer", 77 },
     /* THE SAME REGRESSION THIS TABLE'S HEADER DESCRIBES, HAPPENING AGAIN.
      * 78/87/69 are 'N', 'W' and 'E' - the network card + ARP probe, TCP +
      * HTTP/1.0 against a real server, and a real website by name off the
