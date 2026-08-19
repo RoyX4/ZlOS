@@ -99,6 +99,12 @@ void        notify_rect(int sw, int sh, int reserve_bot, int scale,
 int  snap_zone_for_point(int px, int py, int sw, int sh);
 int  snap_apply(int win, int z, int cx, int cy, int cw, int ch,
                 int sw, int sh, int rt, int rb, int *x, int *y, int *w, int *h);
+/* the same arithmetic snap_apply uses, WITHOUT committing it to a window.
+ * That is the whole point for the drag preview: the outline you see while
+ * dragging and the rectangle you get on drop are computed by one function, so
+ * the preview cannot promise a landing spot the snap then disagrees with. */
+void snap_rect(int z, int sw, int sh, int reserve_top, int reserve_bot,
+               int *x, int *y, int *w, int *h);
 int  snap_release(int win, int *x, int *y, int *w, int *h);
 int  snap_key_zone(int win, int dir);
 void snap_note_moved(int win);
@@ -942,6 +948,19 @@ static void toast_draw(int rx0, int ry0, int rx1, int ry1)
     fb_text_prop(x + UI_S3(t), y + (h - th) / 2, msg, t->text);
 }
 
+/* ---- the snap preview -----------------------------------------------------
+ * visual-speed-northstar.md §"Five-part working direction" item 3 lists "add
+ * the missing snap preview" as outstanding: snap.c and the drop-time wiring
+ * both existed, so dragging a window to an edge DID snap it - you just could
+ * not see where it was going to land until you let go.
+ *
+ * The state lives here, above wm_repaint, because the repaint has to read it
+ * and pgrab/RESERVE_TOP are declared further down the file. Only the cached
+ * rectangle is read during paint; snap_preview_set() below does the geometry,
+ * because RESERVE_TOP/RESERVE_BOT are not defined until line ~1280. */
+static int sp_zone = SNAP_NONE;      /* SNAP_NONE when nothing is previewing */
+static int sp_x, sp_y, sp_w, sp_h;   /* where the window would land          */
+
 void wm_repaint(void)
 {
     if (!fb_active() || !nwd) return;
@@ -1047,6 +1066,20 @@ void wm_repaint(void)
                                    ui_theme()->accent, pa);
                 }
             }
+        }
+
+        /* the snap preview sits above the windows and below the toast: it is a
+         * hint about where the drag will land, so it must not be hidden behind
+         * the window being dragged, and must not cover a notification.
+         * Re-clipped to this damage rectangle like everything else in here. */
+        if (sp_zone != SNAP_NONE) {
+            const struct ui_theme *pt = ui_theme();
+            fb_clip(rx0, ry0, rx1 - rx0, ry1 - ry0);
+            /* low alpha on purpose - this is a hint, not a window. The accent
+             * is the one saturated colour in the theme (ui.h:39), which is
+             * what makes it read as "the system is about to do something"
+             * rather than as another surface. */
+            fb_rrect_blend(sp_x, sp_y, sp_w, sp_h, pt->radius, pt->accent, 64);
         }
 
         /* ...and the toast on top of all of them, still inside this damage
@@ -1159,11 +1192,19 @@ static void wm_toggle_max(int win)
 
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
 
+/* defined below, after RESERVE_TOP/BOT, which its geometry needs */
+static void snap_preview_set(int z);
+
 /* wm_close calls this. Defined here, beside the state it clears, so the grab
  * and its lifetime stay in one place. */
 static void wm_drop_grab(int win)
 {
     if (pgrab == win) pgrab = -1;
+    /* A window CLOSED while being dragged - the button-up that would normally
+     * clear the preview is never going to arrive. Without this the hint stays
+     * painted on the desktop for the rest of the session, because nothing else
+     * in the compositor owns those pixels. */
+    snap_preview_set(SNAP_NONE);
 }
 /* What the pointer grab is FOR. It used to be a bare 0/1 meaning "the app has
  * it" or "we are moving it"; resize is a third answer, and three states with
@@ -1275,6 +1316,32 @@ static int in_closebox(int win, int x, int y)
 #define RESERVE_TOP(t)  (32 * (t)->scale)
 #define RESERVE_BOT(t)  (64 * (t)->scale)
 
+/* Show, move or clear the drag preview. Called on every pointer motion during
+ * a frame drag, so it does nothing at all when the zone has not changed - the
+ * common case is dragging around the middle of the screen with no zone, and
+ * that must not damage anything or every drag frame would repaint the desktop.
+ *
+ * Damage is issued for the rectangle being LEFT as well as the one being
+ * entered, because the preview is not a window: nothing else in the compositor
+ * knows those pixels changed, and a preview that only damages where it is
+ * going leaves its previous outline painted on the wallpaper. That is the same
+ * mistake snap_to_rect just below documents having made with wm_move. */
+static void snap_preview_set(int z)
+{
+    if (z == sp_zone) return;
+
+    if (sp_zone != SNAP_NONE) wm_damage(sp_x, sp_y, sp_w, sp_h);
+
+    sp_zone = z;
+
+    if (z != SNAP_NONE) {
+        const struct ui_theme *t = ui_theme();
+        snap_rect(z, (int)fb_pxw(), (int)fb_pxh(),
+                  RESERVE_TOP(t), RESERVE_BOT(t), &sp_x, &sp_y, &sp_w, &sp_h);
+        wm_damage(sp_x, sp_y, sp_w, sp_h);
+    }
+}
+
 /* Snap `win` to `z` (or un-snap it if z is SNAP_NONE), applying whatever
  * geometry snap.c hands back. The two triggers below both end here, so there
  * is one place where a snap actually changes a window. */
@@ -1341,6 +1408,12 @@ static void route_mouse(int x, int y, int btn)
     if (pgrab >= 0) {
         if (grab_drag == GRAB_MOVE) {
             wm_move(pgrab, x - grab_dx, y - grab_dy);
+            /* the preview follows the POINTER, not the window, because the
+             * drop below asks snap_zone_for_point about the pointer too. Using
+             * the window's own rectangle here would light up a different zone
+             * than the one the drop actually takes. */
+            snap_preview_set(snap_zone_for_point(x, y,
+                                                 (int)fb_pxw(), (int)fb_pxh()));
         } else if (grab_drag == GRAB_RESIZE) {
             /* grab_dx/dy hold the offset from the pointer to the corner, so
              * the corner stays under the cursor instead of snapping to it. */
@@ -1361,6 +1434,13 @@ static void route_mouse(int x, int y, int btn)
              * it currently has, which is half the screen. */
             if (grab_drag == GRAB_MOVE) {
                 int z = snap_zone_for_point(x, y, (int)fb_pxw(), (int)fb_pxh());
+                /* clear BEFORE the snap. snap_to_rect damages and moves the
+                 * window into (usually) the very rectangle the preview is
+                 * occupying, so clearing afterwards would damage that region a
+                 * second time for nothing - and clearing it later still, on
+                 * the next motion, would leave the hint painted under a window
+                 * that has already arrived. */
+                snap_preview_set(SNAP_NONE);
                 if (z != SNAP_NONE) snap_to_rect(pgrab, z, grab_ox, grab_oy, grab_ow, grab_oh);
                 else                snap_note_moved(pgrab);
             }

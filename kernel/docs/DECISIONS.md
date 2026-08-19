@@ -968,3 +968,69 @@ Docs: `look-and-speed.md` (the frame budget, the vsync survey, what is next) ·
 `desktop-plan.md` · `desktop-look.md` · `desktop-polish-and-speed.md` ·
 `desktop-northstar-feasibility.md` · `desktop-prior-art.md` ·
 `os-landscape.md` · `intel-graphics-stack.md`
+
+### #43 | The snap preview: snapping worked, but you could not see where it would land
+
+`snap.c` has had the whole geometry for a long time — `snap_zone_for_point`,
+`snap_rect`, `snap_apply`, `snap_release` — and `route_mouse`'s drop path has
+called it since the exec-track merge. Dragging a window to an edge **did** snap
+it. What was missing was any indication *before* letting go, so the feature was
+invisible until it had already happened.
+
+**What was added.** A cached rectangle (`sp_zone`, `sp_x/y/w/h`) declared above
+`wm_repaint`, filled by `snap_preview_set()` on every pointer motion during a
+`GRAB_MOVE`, and drawn with `fb_rrect_blend()` at alpha 64 in the theme accent —
+above the windows, below the toast.
+
+**Four decisions in it that were not arbitrary:**
+
+1. **The preview and the drop share one geometry function.** `snap_rect()` is
+   the same arithmetic `snap_apply()` uses, minus the commit. It is declared in
+   `wm.c` for this. A preview computed independently is a preview that can
+   promise a landing spot the snap then disagrees with.
+2. **It follows the POINTER, not the window.** The drop asks
+   `snap_zone_for_point` about the pointer, so the preview must too. Using the
+   window rectangle would light up a different zone than the drop takes.
+3. **It damages the rectangle it LEAVES as well as the one it enters.** The
+   preview is not a window; nothing else in the compositor knows those pixels
+   changed. This is the same mistake `snap_to_rect` documents having made with
+   `wm_move`, and it is why `snap_preview_set` returns early when the zone has
+   not changed — otherwise every drag frame in the middle of the screen would
+   repaint the desktop.
+4. **`wm_drop_grab()` clears it.** A window CLOSED mid-drag clears `pgrab`, and
+   the button-up that would normally clear the preview never arrives. Without
+   this the hint stays painted for the rest of the session.
+
+All seven zones work for free, corners included: `snap_rect`'s `default:` arm
+fills the work area, so no zone can produce an uninitialised rectangle.
+
+**Evidence — `kernel/probe-snap.py`, committed, real QEMU and real pointer.**
+A green build proves nothing about paint, so this drives an actual drag and
+asks whether the screen changed, in which half, at which moment:
+
+```
+booted 1920x1200
+  1 left edge shows a preview        985575 px  ok
+  2 leaving the edge clears it        14523 px  ok
+  3 right edge previews the RIGHT    975365 px right,   31811 px left  ok
+snap preview gate green
+```
+
+Step 3 is the one with teeth: a constant rectangle, or one derived from the
+window, passes 1 and 2 and fails 3.
+
+**The probe's first two runs reported RED, and both were the probe.** A drag
+moves the window with the pointer, so comparing an edge shot against a
+mid-screen shot measures the window travelling across the display as much as it
+measures the preview — the first version saw the window *vacate* the left half
+and called it a stray preview. Fixed by taking each reference a few pixels the
+other side of the same threshold, and by setting the thresholds from the
+measured confound (~30,000 px of window repaint) rather than tuning until green:
+the signal is ~985,000 px, so 100,000 separates them by an order of magnitude
+in both directions. Screenshots in `kernel/shots/snap-preview-{left,right}.png`
+were what settled it — the numbers alone would have had me "fixing" working code.
+
+**Not done:** the preview is a flat blend with no border and no transition. It
+appears and disappears instantly rather than easing, which is the same
+frame-step-versus-time-based-motion gap the north star raises for the rest of
+the compositor's animation. Left alone deliberately rather than half-done.
