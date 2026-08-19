@@ -230,6 +230,48 @@ false evidence, and the false evidence is what a reader would have quoted.
 
 ---
 
+## CONFIRMED — settings are written to NVMe and never read back
+
+**Agent claim** (bug class `orphans`): *`settings_load` has no caller: the Settings app
+writes to NVMe on every gesture and nothing ever reads it back.*
+
+**Confirmed.**
+
+```
+$ grep -rn "settings_load\|settings_save" kernel/ freestanding/ | grep -v 'out.c\|_gen'
+kernel/settings.c:125:     * settings_load clamped both ways with the named constants…   ← comment
+kernel/settings.c:127:     * earlier, surviving in a second place - so settings_load's…   ← comment
+kernel/settings.c:157: int settings_save(void);
+kernel/settings.c:185:     settings_save();                                              ← the one real caller
+kernel/settings.c:441: int settings_save(void)
+kernel/settings.c:483: int settings_load(void)                                           ← definition
+kernel/hosttest/settingstest.c:34: int  settings_load(void);                             ← prototype only
+```
+
+`settings_save` has exactly one caller, at `settings.c:185`, and its own comment
+(`settings.c:169`) says so approvingly. `settings_load` has **none** outside the test
+harness.
+
+So zlOS persists settings correctly on every change and never loads them at boot.
+**Settings do not survive a reboot**, and the reason is a missing call rather than a
+missing feature — `settings_load` is written, careful, and documents its own discipline:
+
+```c
+/* kernel/settings.c:478-482 */
+/* Read them back. Returns 1 if a good block was found and applied, 0 if the
+ * defaults are in force - and in every 0 case it has printed WHY.
+ *
+ * Never writes. A load that repaired the block would turn a read-only boot into
+ * a write, which is exactly what "never write on boot" forbids. */
+```
+
+**Fix:** one call in `kernel.zl`'s boot path. This is the cleanest
+*exists ≠ reachable* instance the run found — a complete, tested, self-documenting
+primitive with a user-visible consequence and no caller. It is the sixth such primitive
+in a repo whose `HANDOFF.md:473-483` already lists five.
+
+---
+
 ## NOT A DEFECT — "three forcewake domains" is a measurement, not a claim about the code
 
 **Agent claim** (lens `gpu-forcewake`): *"The brief is wrong that three domains are
