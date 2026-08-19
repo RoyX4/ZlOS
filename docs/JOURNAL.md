@@ -7,9 +7,9 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
-## 2026-08-20 — merge: desktop/v10-recovered - the visual/theme/motion foundation (953e74d)
+## 2026-08-19 — feat(apps): 3 system apps, RNG seeding, and a proven interactive probe (94cd4c8)
 
-`claude/compassionate-curie-a0599c` · 23 files changed, 3234 insertions(+), 728 deletions(-)
+`desktop/app-suite` · 8 files changed, 435 insertions(+), 10 deletions(-)
 
 | | |
 |---|---|
@@ -17,6 +17,46 @@ the part that makes a change legible later, and the part nobody writes down.
 | pinned engine divergences | 2 |
 | baselined doc rot | 19 |
 | docs vs tree | STALE |
+
+<details><summary>8 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+- `kernel/apps_games1.zl`
+- `kernel/apps_games2.zl`
+- `kernel/apps_registry.zl`
+- `kernel/apps_system.zl`
+- `kernel/apps_utils.zl`
+- `kernel/probe-catalog.py`
+
+</details>
+
+## 2026-08-19 — feat(apps): app-suite registry, catalog window, 11 utilities, 6 games (24c06bd)
+
+`desktop/app-suite` · 11 files changed, 1731 insertions(+), 22 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>11 file(s)</summary>
+
+- `compile.c`
+- `kernel/apps_common.zl`
+- `kernel/apps_games1.zl`
+- `kernel/apps_games2.zl`
+- `kernel/apps_registry.zl`
+- `kernel/apps_system.zl`
+- `kernel/apps_utils.zl`
+- `kernel/check-zl-calls.sh`
+- `kernel/kernel.zl`
+- `kernel/mkdisk.sh`
+- `kernel/raw_boot.asm`
+
+</details>
 
 ## 2026-08-19 — chore: regenerated journal/TODO (post-commit hook) (2c2092f)
 

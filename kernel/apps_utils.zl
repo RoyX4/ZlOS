@@ -1,0 +1,574 @@
+# apps_utils.zl - the 10 utility apps (ds.html's UTILS list). See
+# apps_registry.zl for the shared registry these plug into and
+# apps_common.zl for ac_draw_base (hex/dec/oct/bin text, by hand - there are
+# no string values here to format with).
+#
+# INPUT CONVENTION shared by every typing app below: EV_CHAR (ety 3) already
+# carries the fully-resolved, shift-aware ASCII character - input.c's to_char()
+# does that once, for every app, the same way term.c and the editor rely on.
+# 8 = Backspace, 13 = Enter, 32..126 = printable.
+
+# ==============================================================================
+# Clipboard - read-only view of clip.c's ONE buffer (clip_n/clip_ch/clip_seq),
+# plus the one write clip.c exposes to zl: wipe it.
+# ==============================================================================
+CB_ROW_CH = 40                      # characters per row before wrapping
+
+fn cb_draw(ax, ay, aw, ah) {
+    u = ui()
+    dw = cell_w()
+    n = clip_n()
+    label(ax + 8 * u, ay + 8 * u, "clipboard", TXT_DIM, T_CAPTION, W_BOLD)
+    label_num(ax + 90 * u, ay + 8 * u, n, TXT_HI, T_CAPTION, W_REG)
+    label(ax + 120 * u, ay + 8 * u, "bytes", TXT_DIM, T_CAPTION, W_REG)
+    if n == 0 {
+        label(ax + 8 * u, ay + 34 * u, "empty - Ctrl+C in the shell to copy", TXT_DIM, T_BODY, W_REG)
+    } else {
+        by = ay + 34 * u
+        bi = 0
+        col = 0
+        while bi < n {
+            char_aa(ax + 8 * u + col * dw, by, clip_ch(bi), TXT_HI)
+            col = col + 1
+            if col >= CB_ROW_CH { col = 0  by = by + cell_h() }
+            bi = bi + 1
+        }
+    }
+    rrect(ax + 8 * u, ay + ah - 30 * u, 70 * u, 22 * u, 6 * u, rgb(70, 40, 44))
+    label(ax + 18 * u, ay + ah - 24 * u, "wipe", TXT_HI, T_CAPTION, W_REG)
+    return 0
+}
+
+fn cb_event(win, ety, ecode, ex, ey) {
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    u = ui()
+    cx = ex - wm_cx(win)
+    cy = ey - wm_cy(win)
+    ah = wm_ch(win)
+    if cx >= 8 * u { if cx < 78 * u { if cy >= ah - 30 * u { if cy < ah - 8 * u {
+        clip_wipe()
+        wm_dmg(win)
+        return 1
+    }}}}
+    return 0
+}
+
+# ==============================================================================
+# Colour Picker - three sliders, an RGB swatch, the packed hex value.
+# ==============================================================================
+cp_r = 96
+cp_g = 210
+cp_b = 235
+cp_drag = 0 - 1                     # which slider (0/1/2) the pointer owns
+CP_SLIDER_W = 200
+
+fn cp_chan(i) {
+    if i == 0 { return cp_r }
+    if i == 1 { return cp_g }
+    return cp_b
+}
+fn cp_set_chan(i, v) {
+    if v < 0 { v = 0 }
+    if v > 255 { v = 255 }
+    if i == 0 { cp_r = v }
+    if i == 1 { cp_g = v }
+    if i == 2 { cp_b = v }
+    return 0
+}
+fn cp_label(i) {
+    if i == 0 { return "R" }
+    if i == 1 { return "G" }
+    return "B"
+}
+
+fn cp_draw(ax, ay, aw, ah) {
+    u = ui()
+    fill_rgb(ax + 8 * u, ay + 8 * u, 64 * u, 64 * u, rgb(cp_r, cp_g, cp_b))
+    label(ax + 84 * u, ay + 10 * u, "#", TXT_DIM, T_TITLE, W_BOLD)
+    ac_draw_base(ax + 96 * u, ay + 14 * u, cp_r, 2, 16, TXT_HI)
+    ac_draw_base(ax + 96 * u + 2 * cell_w(), ay + 14 * u, cp_g, 2, 16, TXT_HI)
+    ac_draw_base(ax + 96 * u + 4 * cell_w(), ay + 14 * u, cp_b, 2, 16, TXT_HI)
+
+    si = 0
+    while si < 3 {
+        sy = ay + 84 * u + si * 26 * u
+        label(ax + 8 * u, sy, cp_label(si), TXT_DIM, T_CAPTION, W_BOLD)
+        fill_rgb(ax + 24 * u, sy + 4 * u, CP_SLIDER_W * u, 6 * u, rgb(40, 46, 66))
+        kx = ax + 24 * u + cp_chan(si) * CP_SLIDER_W * u / 255
+        fill_rgb(kx - 3 * u, sy, 6 * u, 14 * u, ac_cat_color(1))
+        label_num(ax + 24 * u + (CP_SLIDER_W + 12) * u, sy, cp_chan(si), TXT_DIM, T_CAPTION, W_REG)
+        si = si + 1
+    }
+    return 0
+}
+
+fn cp_slider_at(cx, cy) {
+    u = ui()
+    if cx < 24 * u { return 0 - 1 }
+    if cx >= (24 + CP_SLIDER_W) * u { return 0 - 1 }
+    # cy < 84u must be checked BEFORE dividing, not after: `/` truncates
+    # toward zero, so a cy just above the sliders would give si = 0 instead
+    # of a negative row and be treated as a click on slider 0.
+    if cy < 84 * u { return 0 - 1 }
+    si = (cy - 84 * u) / (26 * u)
+    if si >= 3 { return 0 - 1 }
+    # must actually be within the slider row's height, not just its column
+    into = cy - 84 * u - si * 26 * u
+    if into >= 20 * u { return 0 - 1 }
+    return si
+}
+
+fn cp_event(win, ety, ecode, ex, ey) {
+    if ety != 4 { return 0 }
+    u = ui()
+    cx = ex - wm_cx(win)
+    cy = ey - wm_cy(win)
+    down = band(ecode, 1)
+    if down == 0 { cp_drag = 0 - 1  return 0 }
+    if cp_drag < 0 { cp_drag = cp_slider_at(cx, cy) }
+    if cp_drag < 0 { return 0 }
+    v = (cx - 24 * u) * 255 / (CP_SLIDER_W * u)
+    cp_set_chan(cp_drag, v)
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# Pattern Tester - a small, REAL regex engine: literal characters, `.` (any
+# character), `*` (zero-or-more of the PRECEDING atom), and `^`/`$` anchors.
+# Not a full regex library (no classes, no alternation) - a bounded, honest
+# subset, which is what fits without string values: both the pattern and the
+# subject are typed into fixed byte buffers and matched by peek8, one byte
+# at a time.
+# ==============================================================================
+pt_plen = 0
+pt_tlen = 0
+pt_field = 0                        # 0 = editing the pattern, 1 = the text
+PT_MAX = 48
+
+fn pt_reset() { pt_plen = 0  pt_tlen = 0  pt_field = 0  return 0 }
+
+# matches_here(pi, ti): does pattern[pi..] match text[ti..] to the end of the
+# pattern, given the two lengths above? Classic tiny-regex recursion - `*`
+# looks one atom back, everything else consumes one character of both.
+fn pt_matches_here(pi, ti) {
+    if pi >= pt_plen { return 1 }
+    pc = peek8(PT_PATTERN + pi)
+    # a `*` immediately after the atom we are about to try: greedy, then
+    # backtrack down to zero repeats.
+    if pi + 1 < pt_plen {
+        if peek8(PT_PATTERN + pi + 1) == 42 {
+            n = ti
+            while 1 == 1 {
+                if pt_matches_here(pi + 2, n) == 1 { return 1 }
+                if n >= pt_tlen { return 0 }
+                tc = peek8(PT_TEXT + n)
+                if pc != 46 { if pc != tc { return 0 } }
+                n = n + 1
+            }
+        }
+    }
+    if pc == 36 { if pi + 1 == pt_plen { return ti == pt_tlen } }
+    if ti >= pt_tlen { return 0 }
+    tc = peek8(PT_TEXT + ti)
+    if pc != 46 { if pc != tc { return 0 } }
+    return pt_matches_here(pi + 1, ti + 1)
+}
+
+fn pt_match() {
+    p0 = 0
+    anchored = 0
+    if pt_plen > 0 { if peek8(PT_PATTERN) == 94 { anchored = 1  p0 = 1 } }
+    if anchored == 1 { return pt_matches_here(p0, 0) }
+    t0 = 0
+    while t0 <= pt_tlen {
+        if pt_matches_here(p0, t0) == 1 { return 1 }
+        t0 = t0 + 1
+    }
+    return 0
+}
+
+fn pt_draw(ax, ay, aw, ah) {
+    u = ui()
+    dw = cell_w()
+    label(ax + 8 * u, ay + 8 * u, "pattern  ( . * ^ $ )", TXT_DIM, T_CAPTION, W_BOLD)
+    fill_rgb(ax + 8 * u, ay + 24 * u, aw - 16 * u, cell_h() + 6 * u, rgb(18, 22, 34))
+    pi = 0
+    while pi < pt_plen { char_aa(ax + 12 * u + pi * dw, ay + 27 * u, peek8(PT_PATTERN + pi), TXT_HI)  pi = pi + 1 }
+    if pt_field == 0 { fill_rgb(ax + 12 * u + pt_plen * dw, ay + 27 * u, 2 * u, cell_h(), ACCENT) }
+
+    label(ax + 8 * u, ay + 58 * u, "text", TXT_DIM, T_CAPTION, W_BOLD)
+    fill_rgb(ax + 8 * u, ay + 74 * u, aw - 16 * u, cell_h() + 6 * u, rgb(18, 22, 34))
+    ti = 0
+    while ti < pt_tlen { char_aa(ax + 12 * u + ti * dw, ay + 77 * u, peek8(PT_TEXT + ti), TXT_HI)  ti = ti + 1 }
+    if pt_field == 1 { fill_rgb(ax + 12 * u + pt_tlen * dw, ay + 77 * u, 2 * u, cell_h(), ACCENT) }
+
+    if pt_plen == 0 {
+        label(ax + 8 * u, ay + 112 * u, "Tab switches field, type to edit", TXT_DIM, T_CAPTION, W_REG)
+    } else {
+        if pt_match() == 1 {
+            label(ax + 8 * u, ay + 112 * u, "MATCH", ac_cat_color(1), T_BODY, W_BOLD)
+        } else {
+            label(ax + 8 * u, ay + 112 * u, "no match", CRIT_RED, T_BODY, W_BOLD)
+        }
+    }
+    return 0
+}
+
+fn pt_event(win, ety, ecode) {
+    if ety != 3 { return 0 }
+    if ecode == 9 { pt_field = 1 - pt_field  wm_dmg(win)  return 1 }
+    if ecode == 8 {
+        if pt_field == 0 { if pt_plen > 0 { pt_plen = pt_plen - 1 } }
+        if pt_field == 1 { if pt_tlen > 0 { pt_tlen = pt_tlen - 1 } }
+        wm_dmg(win)
+        return 1
+    }
+    if ecode < 32 { return 0 }
+    if ecode > 126 { return 0 }
+    if pt_field == 0 { if pt_plen < PT_MAX { poke8(PT_PATTERN + pt_plen, ecode)  pt_plen = pt_plen + 1 } }
+    if pt_field == 1 { if pt_tlen < PT_MAX { poke8(PT_TEXT + pt_tlen, ecode)  pt_tlen = pt_tlen + 1 } }
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# Base Converter - type decimal digits, see the same value in hex/oct/bin.
+# ==============================================================================
+bc_val = 0
+
+fn bc_draw(ax, ay, aw, ah) {
+    u = ui()
+    label(ax + 8 * u, ay + 10 * u, "dec", TXT_DIM, T_CAPTION, W_BOLD)
+    label_num(ax + 60 * u, ay + 10 * u, bc_val, TXT_HI, T_BODY, W_REG)
+    label(ax + 8 * u, ay + 38 * u, "hex", TXT_DIM, T_CAPTION, W_BOLD)
+    ac_draw_base(ax + 60 * u, ay + 40 * u, bc_val, 6, 16, ACCENT)
+    label(ax + 8 * u, ay + 62 * u, "oct", TXT_DIM, T_CAPTION, W_BOLD)
+    ac_draw_base(ax + 60 * u, ay + 64 * u, bc_val, 8, 8, TXT_HI)
+    label(ax + 8 * u, ay + 86 * u, "bin", TXT_DIM, T_CAPTION, W_BOLD)
+    ac_draw_base(ax + 60 * u, ay + 88 * u, bc_val, 24, 2, TXT_DIM)
+    label(ax + 8 * u, ay + ah - 22 * u, "type digits, backspace clears one", TXT_DIM, T_CAPTION, W_REG)
+    return 0
+}
+
+fn bc_event(win, ety, ecode) {
+    if ety != 3 { return 0 }
+    if ecode == 8 { bc_val = bc_val / 10  wm_dmg(win)  return 1 }
+    if ecode < 48 { return 0 }
+    if ecode > 57 { return 0 }
+    nv = bc_val * 10 + (ecode - 48)
+    if nv < 16777216 { bc_val = nv }
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# Line Diff - one line each side, typed; first differing column, and the
+# length delta. Bounded to a line on purpose - the same reason Pattern Tester
+# is bounded to . * ^ $: real rules, honestly scoped, rather than a stub.
+# ==============================================================================
+ld_alen = 0
+ld_blen = 0
+ld_field = 0
+LD_MAX = 48
+
+fn ld_draw(ax, ay, aw, ah) {
+    u = ui()
+    dw = cell_w()
+    firstdiff = 0 - 1
+    short = ld_alen
+    if ld_blen < short { short = ld_blen }
+    di = 0
+    while di < short {
+        if peek8(DIFF_A + di) != peek8(DIFF_B + di) { firstdiff = di  di = short } else { di = di + 1 }
+    }
+    if firstdiff < 0 { if ld_alen != ld_blen { firstdiff = short } }
+
+    label(ax + 8 * u, ay + 8 * u, "A", TXT_DIM, T_CAPTION, W_BOLD)
+    fill_rgb(ax + 24 * u, ay + 24 * u, aw - 32 * u, cell_h() + 4 * u, rgb(18, 22, 34))
+    ai = 0
+    while ai < ld_alen {
+        col = TXT_HI
+        if firstdiff >= 0 { if ai >= firstdiff { col = CRIT_RED } }
+        char_aa(ax + 26 * u + ai * dw, ay + 26 * u, peek8(DIFF_A + ai), col)
+        ai = ai + 1
+    }
+    if ld_field == 0 { fill_rgb(ax + 26 * u + ld_alen * dw, ay + 26 * u, 2 * u, cell_h(), ACCENT) }
+
+    label(ax + 8 * u, ay + 54 * u, "B", TXT_DIM, T_CAPTION, W_BOLD)
+    fill_rgb(ax + 24 * u, ay + 70 * u, aw - 32 * u, cell_h() + 4 * u, rgb(18, 22, 34))
+    bi = 0
+    while bi < ld_blen {
+        col = TXT_HI
+        if firstdiff >= 0 { if bi >= firstdiff { col = CRIT_RED } }
+        char_aa(ax + 26 * u + bi * dw, ay + 72 * u, peek8(DIFF_B + bi), col)
+        bi = bi + 1
+    }
+    if ld_field == 1 { fill_rgb(ax + 26 * u + ld_blen * dw, ay + 72 * u, 2 * u, cell_h(), ACCENT) }
+
+    if ld_alen == 0 { if ld_blen == 0 {
+        label(ax + 8 * u, ay + 104 * u, "Tab switches line, type to edit", TXT_DIM, T_CAPTION, W_REG)
+        return 0
+    }}
+    if firstdiff < 0 {
+        label(ax + 8 * u, ay + 104 * u, "identical", ac_cat_color(1), T_BODY, W_BOLD)
+    } else {
+        label(ax + 8 * u, ay + 104 * u, "differs at column", CRIT_RED, T_BODY, W_REG)
+        label_num(ax + 8 * u + label_w("differs at column ", T_BODY, W_REG), ay + 104 * u, firstdiff, CRIT_RED, T_BODY, W_BOLD)
+    }
+    return 0
+}
+
+fn ld_event(win, ety, ecode) {
+    if ety != 3 { return 0 }
+    if ecode == 9 { ld_field = 1 - ld_field  wm_dmg(win)  return 1 }
+    if ecode == 8 {
+        if ld_field == 0 { if ld_alen > 0 { ld_alen = ld_alen - 1 } }
+        if ld_field == 1 { if ld_blen > 0 { ld_blen = ld_blen - 1 } }
+        wm_dmg(win)
+        return 1
+    }
+    if ecode < 32 { return 0 }
+    if ecode > 126 { return 0 }
+    if ld_field == 0 { if ld_alen < LD_MAX { poke8(DIFF_A + ld_alen, ecode)  ld_alen = ld_alen + 1 } }
+    if ld_field == 1 { if ld_blen < LD_MAX { poke8(DIFF_B + ld_blen, ecode)  ld_blen = ld_blen + 1 } }
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# Checksum - Fletcher-16 over the typed bytes, recomputed live. A real,
+# well-known checksum (not a stub, and not oversold as cryptographic - this
+# kernel has no crypto.c at all, browser.c's HTTPS refusal says so).
+# ==============================================================================
+ck_len = 0
+CK_MAX = 64
+
+fn ck_fletcher() {
+    s1 = 0
+    s2 = 0
+    ci = 0
+    while ci < ck_len {
+        s1 = (s1 + peek8(HASH_BUF + ci)) % 255
+        s2 = (s2 + s1) % 255
+        ci = ci + 1
+    }
+    return s2 * 256 + s1
+}
+
+fn ck_draw(ax, ay, aw, ah) {
+    u = ui()
+    dw = cell_w()
+    label(ax + 8 * u, ay + 8 * u, "input", TXT_DIM, T_CAPTION, W_BOLD)
+    fill_rgb(ax + 8 * u, ay + 24 * u, aw - 16 * u, 2 * cell_h() + 8 * u, rgb(18, 22, 34))
+    ci = 0
+    row = 0
+    col = 0
+    while ci < ck_len {
+        char_aa(ax + 12 * u + col * dw, ay + 27 * u + row * cell_h(), peek8(HASH_BUF + ci), TXT_HI)
+        col = col + 1
+        if col >= 28 { col = 0  row = 1 }
+        ci = ci + 1
+    }
+    fill_rgb(ax + 12 * u + col * dw, ay + 27 * u + row * cell_h(), 2 * u, cell_h(), ACCENT)
+
+    label(ax + 8 * u, ay + 80 * u, "fletcher-16", TXT_DIM, T_CAPTION, W_BOLD)
+    ac_draw_base(ax + 96 * u, ay + 80 * u, ck_fletcher(), 4, 16, ACCENT)
+    return 0
+}
+
+fn ck_event(win, ety, ecode) {
+    if ety != 3 { return 0 }
+    if ecode == 8 { if ck_len > 0 { ck_len = ck_len - 1 }  wm_dmg(win)  return 1 }
+    if ecode < 32 { return 0 }
+    if ecode > 126 { return 0 }
+    if ck_len < CK_MAX { poke8(HASH_BUF + ck_len, ecode)  ck_len = ck_len + 1 }
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# Unit Converter - click to cycle category, type a whole number, see it
+# converted. Integer arithmetic throughout (this kernel's zl_binop truncates
+# on purpose - "numbers here are whole", freestanding/runtime_kernel.c), so
+# results are truncated, not rounded, and drawn as whole numbers honestly.
+# ==============================================================================
+uc_cat = 0                          # 0 km<->mi, 1 kg<->lb, 2 C<->F
+uc_val = 0
+
+fn uc_cat_label(c) {
+    if c == 0 { return "length: km -> miles" }
+    if c == 1 { return "weight: kg -> pounds" }
+    return "temp: Celsius -> Fahrenheit"
+}
+fn uc_convert() {
+    if uc_cat == 0 { return uc_val * 1000 / 1609 }
+    if uc_cat == 1 { return uc_val * 22 / 10 }
+    return uc_val * 9 / 5 + 32
+}
+
+fn uc_draw(ax, ay, aw, ah) {
+    u = ui()
+    rrect(ax + 8 * u, ay + 8 * u, aw - 16 * u, 24 * u, 6 * u, rgb(30, 36, 54))
+    label(ax + 16 * u, ay + 14 * u, uc_cat_label(uc_cat), TXT_HI, T_CAPTION, W_REG)
+    label(ax + 8 * u, ay + 48 * u, "value", TXT_DIM, T_CAPTION, W_BOLD)
+    label_num(ax + 70 * u, ay + 48 * u, uc_val, TXT_HI, T_BODY, W_REG)
+    label(ax + 8 * u, ay + 76 * u, "=", TXT_DIM, T_TITLE, W_BOLD)
+    label_num(ax + 30 * u, ay + 74 * u, uc_convert(), ACCENT, T_TITLE, W_BOLD)
+    label(ax + 8 * u, ay + ah - 22 * u, "click the bar to switch, type to enter", TXT_DIM, T_CAPTION, W_REG)
+    return 0
+}
+
+fn uc_event(win, ety, ecode, ex, ey) {
+    if ety == 4 {
+        if band(ecode, 1) == 0 { return 0 }
+        u = ui()
+        cy = ey - wm_cy(win)
+        if cy >= 8 * u { if cy < 32 * u {
+            uc_cat = (uc_cat + 1) % 3
+            wm_dmg(win)
+            return 1
+        }}
+        return 0
+    }
+    if ety != 3 { return 0 }
+    if ecode == 8 { uc_val = uc_val / 10  return 1 }
+    if ecode < 48 { return 0 }
+    if ecode > 57 { return 0 }
+    uc_val = uc_val * 10 + (ecode - 48)
+    return 1
+}
+
+# ==============================================================================
+# Sticky Notes - one typed note, kept in its own buffer (2 pages: NOTES_BUF).
+# ==============================================================================
+nt_len = 0
+NOTES_MAX = 800                     # comfortably inside the 2 reserved pages
+NOTES_COLS = 34
+
+fn nt_draw(ax, ay, aw, ah) {
+    u = ui()
+    dw = cell_w()
+    fill_rgb(ax + 6 * u, ay + 6 * u, aw - 12 * u, ah - 12 * u, rgb(58, 54, 24))
+    ni = 0
+    row = 0
+    col = 0
+    while ni < nt_len {
+        cc = peek8(NOTES_BUF + ni)
+        if cc == 10 { row = row + 1  col = 0 } else {
+            char_aa(ax + 12 * u + col * dw, ay + 12 * u + row * cell_h(), cc, rgb(240, 230, 180))
+            col = col + 1
+            if col >= NOTES_COLS { col = 0  row = row + 1 }
+        }
+        ni = ni + 1
+    }
+    fill_rgb(ax + 12 * u + col * dw, ay + 12 * u + row * cell_h(), 2 * u, cell_h(), rgb(240, 230, 180))
+    return 0
+}
+
+fn nt_event(win, ety, ecode) {
+    if ety != 3 { return 0 }
+    if ecode == 8 { if nt_len > 0 { nt_len = nt_len - 1 }  wm_dmg(win)  return 1 }
+    if ecode == 13 {
+        if nt_len < NOTES_MAX { poke8(NOTES_BUF + nt_len, 10)  nt_len = nt_len + 1 }
+        wm_dmg(win)
+        return 1
+    }
+    if ecode < 32 { return 0 }
+    if ecode > 126 { return 0 }
+    if nt_len < NOTES_MAX { poke8(NOTES_BUF + nt_len, ecode)  nt_len = nt_len + 1 }
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# Keyboard Tester - shows the last event this window received, live: the
+# type, the raw code, and the character if it has one. No state beyond that.
+# ==============================================================================
+kt_ety = 0 - 1
+kt_ecode = 0
+
+fn kt_ety_name(e) {
+    if e == 1 { return "KEY DOWN" }
+    if e == 2 { return "KEY UP" }
+    if e == 3 { return "CHAR" }
+    if e == 4 { return "MOUSE" }
+    if e == 5 { return "WHEEL" }
+    return "-"
+}
+
+fn kt_draw(ax, ay, aw, ah) {
+    u = ui()
+    label(ax + 8 * u, ay + 10 * u, "press any key", TXT_DIM, T_CAPTION, W_REG)
+    if kt_ety < 0 { return 0 }
+    label(ax + 8 * u, ay + 40 * u, "type", TXT_DIM, T_CAPTION, W_BOLD)
+    label(ax + 70 * u, ay + 40 * u, kt_ety_name(kt_ety), ACCENT, T_BODY, W_BOLD)
+    label(ax + 8 * u, ay + 68 * u, "code", TXT_DIM, T_CAPTION, W_BOLD)
+    label_num(ax + 70 * u, ay + 68 * u, kt_ecode, TXT_HI, T_BODY, W_REG)
+    if kt_ety == 3 {
+        if kt_ecode >= 32 { if kt_ecode < 127 {
+            label(ax + 8 * u, ay + 96 * u, "char", TXT_DIM, T_CAPTION, W_BOLD)
+            char_aa(ax + 70 * u, ay + 98 * u, kt_ecode, TXT_HI)
+        }}
+    }
+    return 0
+}
+
+fn kt_event(win, ety, ecode) {
+    if ety == 4 { return 0 }            # mouse motion would repaint every pixel
+    kt_ety = ety
+    kt_ecode = ecode
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# Benchmark - a real timed workload (recursive fib, the same function the
+# text shell's `f` command already runs - reused, not reinvented), reporting
+# elapsed 100Hz ticks. Click to run; n grows each run so the number means
+# something newer hardware would show smaller.
+# ==============================================================================
+bm_n = 24
+bm_ticks = 0 - 1
+bm_result = 0
+
+fn bm_draw(ax, ay, aw, ah) {
+    u = ui()
+    label(ax + 8 * u, ay + 10 * u, "fib(n), n =", TXT_DIM, T_CAPTION, W_BOLD)
+    label_num(ax + 90 * u, ay + 10 * u, bm_n, TXT_HI, T_CAPTION, W_REG)
+    rrect(ax + 8 * u, ay + 32 * u, 60 * u, 22 * u, 6 * u, ac_cat_color(1))
+    label(ax + 22 * u, ay + 38 * u, "run", PANEL, T_CAPTION, W_BOLD)
+    if bm_ticks >= 0 {
+        label(ax + 8 * u, ay + 70 * u, "result", TXT_DIM, T_CAPTION, W_BOLD)
+        label_num(ax + 70 * u, ay + 70 * u, bm_result, TXT_HI, T_CAPTION, W_REG)
+        label(ax + 8 * u, ay + 92 * u, "elapsed", TXT_DIM, T_CAPTION, W_BOLD)
+        label_num(ax + 70 * u, ay + 92 * u, bm_ticks, ACCENT, T_CAPTION, W_BOLD)
+        label(ax + 70 * u + label_w("0000", T_CAPTION, W_BOLD), ay + 92 * u, "ticks (100 Hz)", TXT_DIM, T_CAPTION, W_REG)
+    }
+    return 0
+}
+
+fn bm_event(win, ety, ecode, ex, ey) {
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    u = ui()
+    cx = ex - wm_cx(win)
+    cy = ey - wm_cy(win)
+    if cx < 8 * u { return 0 }
+    if cx >= 68 * u { return 0 }
+    if cy < 32 * u { return 0 }
+    if cy >= 54 * u { return 0 }
+    t0 = ticks()
+    bm_result = fib(bm_n)
+    bm_ticks = ticks() - t0
+    bm_n = bm_n + 1
+    # Capped well below what the shell's own `f` command already allows
+    # unbounded (kernel.zl run_command cmd 102) - fib is recursive and this
+    # runs synchronously inside an event handler, which the frame loop waits
+    # on, so growing this without a ceiling would eventually stall the whole
+    # desktop for one click. 27 keeps every run comfortably sub-second.
+    if bm_n > 27 { bm_n = 20 }
+    wm_dmg(win)
+    return 1
+}
