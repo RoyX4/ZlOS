@@ -252,7 +252,8 @@
    * template compilation
    * ------------------------------------------------------------------ */
 
-  var MUSTACHE = /\{\{([^}]*)\}\}/g;
+  var MUSTACHE = /\{\{([^}]*)\}\}/g;   // stateful (g): only ever used with .exec in a reset loop
+  var HAS_MUSTACHE = /\{\{/;           // stateless: safe for .test anywhere
   var PATH_RE = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
   var nodeId = 0;
 
@@ -351,11 +352,9 @@
         var pn = name === 'style' ? 'style' : name === 'ref' ? 'ref' : propName(name);
         if (pn === null) continue;
         dprops.push({ name: pn, path: expr.split('.'), style: name === 'style' });
-      } else if (MUSTACHE.test(value)) {
-        MUSTACHE.lastIndex = 0;
+      } else if (HAS_MUSTACHE.test(value)) {
         note('warnings', 'partial interpolation in attribute ' + name + ' is not supported: ' + value);
       } else {
-        MUSTACHE.lastIndex = 0;
         if (name === 'style') sprops.style = cssToObj(value);
         else {
           var sn = propName(name);
