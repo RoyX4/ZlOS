@@ -4106,7 +4106,18 @@ fn dock_slot_at(cx, cy) {
     if cx < dx0 { return 0 - 1 }
     dslot = (cx - dx0) / (DOCK_PITCH * u)
     dinto = cx - dx0 - dslot * DOCK_PITCH * u
-    if dslot >= DOCK_N { return 0 - 1 }
+    # THE GRID BUTTON, past the divider at the end of the strip. Slot DOCK_N is
+    # not an app - it is the reference's "Show Applications", and it is the ONLY
+    # route to the catalog now that the full-width bar with its start button has
+    # been replaced by the floating island. Without this the 47 registry apps
+    # are reachable by id and by nothing a person can click, which is how the
+    # oracle found it: --app could not open the catalog to click a tile in.
+    if dslot >= DOCK_N {
+        gx0 = dock_x0() + DOCK_N * DOCK_PITCH * u + DOCK_GAP * u + 1
+        if cx < gx0 { return 0 - 1 }
+        if cx >= gx0 + DOCK_TW * u { return 0 - 1 }
+        return DOCK_N
+    }
     if dinto >= DOCK_TW * u { return 0 - 1 }
     return dslot
 }
@@ -4267,6 +4278,7 @@ fn task_slot_at(cx, cy) {
 # the work that makes them all the first kind, and pretending otherwise here
 # would just move the surprise.
 fn dock_launch(slot) {
+    if slot == DOCK_N { return reg_open(APP_CATALOG) }   # Show Applications
     if slot == 0 { return raise_shell() }
     if slot == 1 { return reopen_browser() }
     if slot == 4 { return open_snake() }
