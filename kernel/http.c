@@ -345,6 +345,22 @@ int http_poll(void)
         if (avail > 0) resp_len += xport_recv(resp + resp_len, avail);
     }
 
+    /* A FULL BUFFER USED TO BE A DEADLOCK, and only an in-kernel fetch found
+     * it. With no room left, `avail` clamps to zero, nothing is read, the peer
+     * never gets its window back and never finishes, the content-length is
+     * never reached and the connection never closes - so http_poll spins for
+     * ever and the browser sits in FETCHING. Every host test passed because
+     * every page in them is smaller than the buffer.
+     *
+     * A truncated page is the documented behaviour; hanging is not. Stop
+     * reading, say so, and render what arrived. */
+    if (hdr_done && resp_len >= HTTP_BUF) {
+        truncated = 1;
+        tcp_abort();
+        state = HTTP_DONE;
+        return state;
+    }
+
     if (!hdr_done) {
         int b = find_body();
         if (b >= 0) {

@@ -10,7 +10,11 @@
 
 #include "net.h"
 
-#define HTTP_BUF 32768
+/* Sized against a REAL page, not a demo one. 32 KB predates the browser
+ * fetching anything but hand-written test pages; www.wikipedia.org's front
+ * page is 120 KB and every https target worth reaching is bigger than 32 KB.
+ * Still under browser.c's DOC_MAX so a page that fits here fits there. */
+#define HTTP_BUF 131072
 #define HTTP_MAX_REDIRECTS 5
 
 enum {

@@ -2124,6 +2124,7 @@ fn run_command(cmd, arg) {
     if cmd == 78 { return net_gate() }    # N - the network card, and an ARP probe
     if cmd == 87 { return web_gate() }    # W - TCP + HTTP/1.0 against a real server
     if cmd == 69 { return real_gate() }   # E - a real website, by name, off the internet
+    if cmd == 83 { return tls_gate() }    # S - the same, over verified HTTPS
     if cmd == 114 {                       # r - reboot
         color(C_YELLOW)  print("  rebooting...")
         beep(1568, 6)  beep(784, 10)
@@ -2526,6 +2527,40 @@ fn dns_gate() {
 # The whole stack in one command: resolve a name we did not choose, open a
 # connection to whatever address came back, fetch over HTTP/1.0, parse the
 # markup and lay it out. Every layer under this was written this session.
+fn tls_gate() {
+    color(C_CYAN)  print("  a real website over HTTPS")
+    color(C_GREY)
+    if ip_live() == 0 {
+        print("    the network is not up - run net first")
+        return 0
+    }
+    dns_up(NET_DNS)
+    # www.wikipedia.org is ~120 KB and chains to ISRG Root X2, which is the
+    # root roots.c carries. A page that does not chain to it MUST be refused,
+    # and that refusal is the point of this gate as much as the success is.
+    print("    GET https://www.wikipedia.org/   (verified, not just encrypted)")
+    br_go("https://www.wikipedia.org/")
+    tgi = 0
+    tgs = 7
+    while tgi < 900000 {
+        br_tick()
+        tgs = br_state()
+        if tgs == 4 { tgi = tgi + 1 } else {
+            if tgs == 7 { tgi = tgi + 1 } else { tgi = 900000 }
+        }
+    }
+    if tgs == 0 {
+        color(C_GREEN)  put("    HTTPS OK: ")
+        put(br_h())  print(" pixels of laid-out page")
+        color(C_GREY)  put("    HTTP ")  put(http_code())
+        put("   body ")  put(http_len())  print(" bytes")
+        put("    title: ")  print(br_title())
+        color(C_GREY)  return 0
+    }
+    color(C_RED)  put("    HTTPS FAILED, browser status ")  print(br_state())
+    color(C_GREY)  return 0
+}
+
 fn real_gate() {
     color(C_CYAN)  print("  a real website")
     color(C_GREY)
