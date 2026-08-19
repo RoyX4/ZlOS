@@ -106,7 +106,10 @@ fn s2_strip_h(aw, n, minw) {
     cols = aw / (minw * u)
     if cols < 1 { cols = 1 }
     rows = (n + cols - 1) / cols
-    return rows * (sch + 1)
+    # the gap is DP(1), not 1: it is 1 px at ui 1 and 2 px at ui 2, and hard-
+    # coding the 1 would have drifted this strip a row-count of pixels away
+    # from where ui_stat_end() says it ends on a 4K panel.
+    return rows * (sch + 1 * u)
 }
 
 # ==============================================================================
