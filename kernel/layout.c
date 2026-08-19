@@ -121,7 +121,6 @@
 #include "html.h"
 #include "css.h"
 
-#define MAX_RUNS   12288   /* 15,806 words in a Wikipedia article */
 #define GEN_SIZE   256
 
 /* THE OUT-OF-FLOW LIMITS. Each of these refuses and records through
@@ -186,8 +185,20 @@
  * refusal. */
 #define LAY_MAX_PASSES 20000
 
-static struct lay_run runs[MAX_RUNS];
+/* The caller's, via lay_set_arena - see layout.h. */
+static struct lay_run *runs;
+static int max_runs;
 static int nruns, dropped;
+
+void lay_set_arena(struct lay_run *r, int max)
+{
+    runs = r;
+    max_runs = (r && max > 0) ? max : 0;
+    nruns = 0;
+    dropped = 0;
+}
+
+int lay_run_cap(void) { return max_runs; }
 static int doc_w, em, total_h, nlines;
 static int passes;
 static lay_measure_fn measure;
@@ -586,7 +597,7 @@ static void line_end(void)
 
 static struct lay_run *push_run(void)
 {
-    if (nruns >= MAX_RUNS) { dropped++; return 0; }
+    if (nruns >= max_runs) { dropped++; return 0; }
     struct lay_run *r = &runs[nruns++];
     r->kind = LR_TEXT;
     r->x = r->y = r->w = r->h = 0;
@@ -831,7 +842,7 @@ static void walk_node(int n, const struct inh *in, const struct css_style *pre);
  * assertion is built on, and a measuring pass that inflates it makes "narrower
  * means more lines" true for the wrong reason; `pend_m` and the rest of
  * flowpos are restored wholesale because a measuring pass must leave NOTHING
- * behind. `dropped` is deliberately NOT restored: a pass that hit MAX_RUNS
+ * behind. `dropped` is deliberately NOT restored: a pass that hit the run cap
  * produced a wrong measurement and the document should say so. */
 static int sub_layout(int n, const struct inh *in, const struct css_style *pre,
                       int w, int *r0, int *r1, int *natw, int keep)
@@ -2316,6 +2327,13 @@ static void walk(int n, const struct inh *in)
 
 int lay_run_doc(int width, int base)
 {
+    /* NO STORAGE, NO LAYOUT, AND SAY SO THROUGH THE FLAG THAT ALREADY MEANS
+     * "output was refused". emit_run() would refuse on its own with max_runs
+     * at 0, so this is not needed for safety - but it would refuse SILENTLY
+     * once per run, and lay_overflowed() would then be the only difference
+     * between "nobody called lay_set_arena" and "this document is empty". */
+    if (!runs || max_runs <= 0) { nruns = 0; dropped = 1; total_h = 0;
+                                  nlines = 0; return 0; }
     nruns = 0;
     dropped = 0;
     gused = 0;

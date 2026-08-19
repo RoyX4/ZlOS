@@ -23,15 +23,21 @@ working - it fetches http://example.com/ by name and renders it. It records
 the two things the merge cost it (italic, and continuous text sizes) and the
 catalogue correction that was explicitly deferred until this branch merged.
 
-`kernel/docs/BROWSER-STORAGE-PROMPT.md` is the NEXT BROWSER WORK, and it is
-one change that every remaining rendering improvement is behind: the parser's
-node array, its text arena, layout's runs and css's selectors are all static
-and all full on a real page, and none can grow - the browser is 1.95 MB of a
-3.34 MB BSS with 128 KB of headroom. The fix is the one `png.c` proved: the
-caller supplies the storage. It carries the measurements, the two
-fixed-address maps that must both be checked, and the traps that cost this
-session an hour each (chief among them: `build.sh` makes `kernel.elf` but the
-QEMU harness boots `zlOS.iso`).
+`kernel/docs/BROWSER-STORAGE-PROMPT.md` was the brief for that work and it is
+**DONE** - see `kernel/docs/browser-storage-run.md` for the run. The parser's
+node array, its text arena, layout's runs and css's selectors were all static
+and all full on a real page; they are the caller's now, in `memmap.h`'s new
+`HI_DOM` region, and a real article parses whole (`8192/8192 with 7,807
+dropped` -> `15,574/32,768 with 0 dropped`, `css_overflowed()` 1 -> 0).
+
+Read the run doc before the brief, for three things the brief did not know:
+the brief says there are **two** fixed-address maps and there were **five**
+(`virtio_net.c` owns the 64 MiB the storage was about to be placed on, and
+`intel.c` was writing its EDID inside `fb.c`'s blur arena); a full CSS string
+arena refused rules **without setting `css_overflowed()`**, invisible until
+`MAX_SELS` moved; and `memmap-guard-test.sh` was scoring 10/12, having gone
+stale when the AP stacks were inserted. `hosttest/parsestat.c` is the
+measuring instrument, committed this time.
 
 `kernel/docs/browser-render-run.md` is the record of the run that produced the
 current state - images, flexbox, grid, `@media`, search, the network at boot -

@@ -540,8 +540,20 @@ separate track with its own review. **Nothing here depends on it yet.**
   32px, so h1 at `em` 24 is a 1.5× bilinear upscale and is measurably softer
   than a natively rasterized 48px would be. That was chosen over generating a
   `prop48` — see the decision note in `fb.c`.
-- Documents are capped at 24 KB, the node array at 1024 and the run array at
-  2048. All three are fixed arrays because there is no heap. Overflow
+- ~~Documents are capped at 24 KB, the node array at 1024 and the run array at
+  2048.~~ **Every one of those three numbers was already wrong when you read
+  it** — they were 256 KB, 8192 and 12288 by the time this line was last
+  touched, and are now 2 MiB, 32768 and 65536. A cap restated in prose is a cap
+  that goes stale in the optimistic direction, which is the whole reason
+  `HTML_MAX_NODES` is exported from `html.h` instead of written down twice.
+  **Ask the code:** `browser_doc_cap()`, `html_node_cap()`, `css_sel_cap()`,
+  `lay_run_cap()`, and `hosttest/parsestat` to see what a real page does to
+  them.
+- The arrays are still fixed and there is still no heap — but they are no
+  longer **this code's** arrays. `html.c`, `css.c`, `layout.c` and `png.c` are
+  handed their storage by the caller, which is why the caps could move at all:
+  they were 1.95 MB of a kernel BSS with 126 KB of link headroom left. See
+  [`browser-storage-run.md`](browser-storage-run.md). Overflow still
   **truncates and says so on screen**; it does not scribble.
 - Baselines are approximated by bottom-aligning the glyph cell. Correct only
   because every glyph comes from one atlas; wrong the moment a second face with

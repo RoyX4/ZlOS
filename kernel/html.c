@@ -31,8 +31,6 @@
 
 #include "html.h"
 
-#define MAX_NODES  HTML_MAX_NODES   /* 8,239 open tags in a Wikipedia article */
-#define ARENA      196608  /* ~99 KB of visible text in that same article */
 #define MAX_DEPTH  32
 
 struct node {
@@ -66,12 +64,51 @@ struct node {
     int   soff, slen;    /* style=                                      */
 };
 
-static struct node nodes[MAX_NODES];
+/* ---- the storage, which this file does not own ----------------------------
+ * IT USED TO BE `static struct node nodes[8192]` AND `static char arena[196608]`
+ * AND THAT IS WHY A REAL PAGE DID NOT FIT. Together they were ~786 KB of a
+ * kernel BSS with 126,336 bytes of link headroom left, so neither could grow by
+ * one element - and both were full, with 7,807 nodes dropped, on the first real
+ * article anyone pointed the browser at.
+ *
+ * png.c already had the answer and png.h already argued it: the caller supplies
+ * the storage. The kernel hands over a slice of memmap.h's HI_DOM; a host
+ * harness hands over an ordinary static array and needs no kernel, no
+ * framebuffer and no fixed address at all - which is the property that keeps
+ * htmltest an ordinary Linux program.
+ *
+ * THE SIZE IS CHECKED, NOT ASSUMED. html.h has to state sizeof(struct node) as
+ * a literal, because the struct is private and the caller still has to do byte
+ * arithmetic; this assert is what stops the two from drifting. */
+_Static_assert(sizeof(struct node) == HTML_NODE_BYTES,
+               "HTML_NODE_BYTES in html.h no longer matches struct node - "
+               "every caller sizing a region from it is now short");
+
+static struct node *nodes;           /* the caller's, via html_set_arena */
+static int  max_nodes;
 static int  nnodes;
-static char arena[ARENA];
+static char *arena;
+static int  arena_size;
 static int  used;
 static int  title_off, title_len;
 static int  n_dropped;               /* recoveries, for the harness to see */
+
+/* Drops the whole tree, because the old one points into memory that is no
+ * longer this parser's - the same reason png_set_arena drops every slot. The
+ * full reset rather than just nnodes/used: html_dropped(), the sheet spans and
+ * doc_src all describe a document in the OLD arena, and a stale one of those
+ * is a pointer into somebody else's memory rather than a stale number. */
+void html_set_arena(void *n, int max, char *a, int abytes)
+{
+    nodes     = (struct node *)n;
+    max_nodes = (n && max > 0) ? max : 0;
+    arena     = a;
+    arena_size = (a && abytes > 0) ? abytes : 0;
+    html_reset();
+}
+
+int html_node_cap(void)  { return max_nodes; }
+int html_arena_cap(void) { return arena_size; }
 
 /* The document's own stylesheets, as spans of the SOURCE rather than copies.
  * A page's <style> can be tens of kilobytes, and copying sheets into the node
@@ -168,7 +205,7 @@ int html_is_block(int t)
 /* ---- the arena ------------------------------------------------------------ */
 static int arena_put(char c)
 {
-    if (used >= ARENA - 1) return 0;
+    if (used >= arena_size - 1) return 0;
     arena[used++] = c;
     return 1;
 }
@@ -176,7 +213,7 @@ static int arena_put(char c)
 /* ---- nodes ---------------------------------------------------------------- */
 static int node_new(short kind, short tag, int parent)
 {
-    if (nnodes >= MAX_NODES) return -1;
+    if (nnodes >= max_nodes) return -1;
     int i = nnodes++;
     nodes[i].kind = kind;
     nodes[i].tag = tag;
@@ -439,6 +476,15 @@ int html_parse(const char *src, int len)
 {
     html_reset();
     doc_src = src;                   /* the sheets are spans of THIS buffer */
+
+    /* NO STORAGE, NO PARSE - and this is a guard rather than a formality.
+     * Without it node_new returns -1 for the root, push() stacks -1, and the
+     * next emit_text indexes nodes[-1]: a fail-closed API that faults on the
+     * failure it exists to signal is worse than none. html.h says every
+     * accessor is total, and html_count() == 0 keeps that promise - a caller
+     * that forgot html_set_arena gets an empty document, not a wild write. */
+    if (!nodes || max_nodes <= 0 || !arena || arena_size <= 0) return 0;
+
     if (!src || len <= 0) { node_new(HN_ELEM, HT_HTML, -1); return 0; }
 
     int root = node_new(HN_ELEM, HT_HTML, -1);
@@ -827,7 +873,7 @@ int html_depth(int i)
     int d = 0;
     while ((unsigned)i < (unsigned)nnodes && nodes[i].parent >= 0) {
         i = nodes[i].parent;
-        if (++d > MAX_NODES) return d;        /* a cycle cannot happen; prove it */
+        if (++d > nnodes) return d;           /* a cycle cannot happen; prove it */
     }
     return d;
 }

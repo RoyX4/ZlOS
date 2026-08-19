@@ -83,6 +83,8 @@
  *     stop being the same number and only one of the two checks still applies.
  */
 
+#include "memmap.h"
+
 typedef unsigned int   u32;
 typedef unsigned char  u8;
 
@@ -100,9 +102,13 @@ typedef unsigned long long uptr;
 typedef unsigned int       uptr;
 #endif
 
-#define ARENA_BASE    0x00800000UL     /*   8 MiB */
-#define ARENA_BYTES   0x01000000UL     /*  16 MiB - the BUDGET, not the span */
-#define ARENA_END     (ARENA_BASE + ARENA_BYTES)
+/* FROM memmap.h. This file used to own these two literals and restate its
+ * neighbours from memory, and the restatement had gone stale - see HI_IMG_BASE
+ * below. The extent is declared with every other region now; the allocator,
+ * the alignment rule and the budget argument above are still this file's. */
+#define ARENA_BASE    LO_ARENA
+#define ARENA_BYTES   (LO_ARENA_END - LO_ARENA)  /* the BUDGET, not the span */
+#define ARENA_END     LO_ARENA_END
 
 /* The neighbours, by the file and line that owns each one. Re-grep these; the
  * comment in fb.c invites exactly that and it was right to - see T-EXEC-1. */
@@ -115,8 +121,19 @@ typedef unsigned int       uptr;
  * regions away keeps passing while the actual neighbour is overrun. That is
  * the failure memmap.h was written to end, and its rule is "the owning file
  * asserts against the NEXT base". */
-#define HI_BG         0x08000000UL     /* fb.c:120 - bg_buf, no longer next  */
-#define HI_IMG_BASE   0x02000000UL     /* memmap.h HI_IMG - the real ceiling */
+/* THIS BLOCK WAS THE STALE COPY, and it is worth keeping the shape of the
+ * mistake. HI_IMG_BASE was written here as 0x02000000 with the comment
+ * "memmap.h HI_IMG - the real ceiling", and memmap.h had MOVED HI_IMG to
+ * 0x03000000 - because a 4 MiB picture arena at 32 MiB landed on Snake and the
+ * RAM filesystem. The assert below did not catch the drift, because 24 MiB is
+ * under 32 AND under 48, so it kept passing while naming the wrong number.
+ *
+ * A CHECK THAT IS GREEN FOR THE WRONG REASON IS THE FAILURE MODE THIS WHOLE
+ * SCHEME EXISTS TO END. Both now come from memmap.h, so there is nothing left
+ * here to drift. */
+#define HI_BG         HI_BACK          /* fb.c - bg_buf, no longer next      */
+#define HI_IMG_BASE   HI_IMG           /* memmap.h - now literally, not by  */
+                                       /* transcription                     */
 #define RAM_CEILING   0x08000000UL     /* MEASURED qemu default, 128 MiB     */
 
 /* Sixteen bytes, not eight: the 64-bit build's `long double` and any SSE value
@@ -129,8 +146,11 @@ typedef unsigned int       uptr;
  * fb.c:152-169 makes, applied to the one buffer that is not the kernel's. */
 _Static_assert(ARENA_BASE >= RAW_STACK_TOP,
                "the program arena starts below the raw-boot stack at 6 MiB");
-_Static_assert(ARENA_END <= HI_IMG_BASE,
-               "the program arena runs into png.c's picture arena at 32 MiB (memmap.h HI_IMG)");
+_Static_assert(ARENA_END <= ZL_LOW_BASE,
+               "the program arena runs into kernel.zl's block at 32 MiB "
+               "(SNAKE_X/FS_DATA/HIST_BUF - see check-memmap.sh)");
+_Static_assert(ZL_LOW_END <= HI_IMG_BASE,
+               "kernel.zl's block runs into png.c's picture arena (memmap.h HI_IMG)");
 _Static_assert(HI_IMG_BASE <= HI_BG,
                "HI_IMG_BASE and memmap.h's HI_IMG have drifted apart");
 _Static_assert(ARENA_END <= RAM_CEILING,

@@ -26,6 +26,34 @@
 #include "../layout.h"
 #include "../css.h"
 
+/* THE STORAGE, AS AN ORDINARY STATIC ARRAY, AND THAT IS THE WHOLE POINT.
+ *
+ * html.c, css.c and layout.c stopped owning their arrays: the caller supplies
+ * them, exactly as it already did for png.c's pixels. In the kernel that
+ * storage is a slice of memmap.h's HI_DOM, because 10 MiB cannot be BSS in an
+ * image with 126 KB of link headroom. Here it is BSS, because a Linux process
+ * has plenty and this harness must keep needing no kernel, no framebuffer and
+ * no fixed address - which is the property the injection was designed to
+ * preserve rather than one it costs.
+ *
+ * Sized from the headers, never from a literal. A harness that restated the
+ * cap would stop checking it the moment the cap moved, which is the lesson
+ * HTML_MAX_NODES is in html.h to avoid. */
+static unsigned char node_mem[HTML_NODES_BYTES] __attribute__((aligned(8)));
+static char          text_mem[HTML_ARENA];
+static unsigned char sel_mem[CSS_SELS_BYTES]   __attribute__((aligned(8)));
+static unsigned char decl_mem[CSS_DECLS_BYTES] __attribute__((aligned(8)));
+static char          cssa_mem[CSS_ARENA];
+static struct lay_run run_mem[LAY_MAX_RUNS];
+
+static void host_arenas(void)
+{
+    html_set_arena(node_mem, HTML_MAX_NODES, text_mem, HTML_ARENA);
+    css_set_arena(sel_mem, CSS_MAX_SELS, decl_mem, CSS_MAX_DECLS,
+                  cssa_mem, CSS_ARENA);
+    lay_set_arena(run_mem, LAY_MAX_RUNS);
+}
+
 static int fails, checks;
 
 #define CHECK(cond, ...) do {                                    \
@@ -2003,9 +2031,63 @@ static void t_position(void)
     }
 }
 
+/* ---- the fail-closed contract, and it only runs ONCE ----------------------
+ * All three headers now promise the same thing in the same words: until the
+ * caller hands over storage, the file does nothing and SAYS SO. That promise
+ * is worth exactly as much as a test of it, and there is only one moment in a
+ * process's life when it can be tested - before host_arenas() - so this runs
+ * first and never again.
+ *
+ * WHY IT MATTERS MORE THAN IT LOOKS: the alternative design was a small
+ * built-in fallback array, which is what these files had before. A fallback
+ * would make every assertion below pass anyway, on a truncated document,
+ * silently. png.h already argued this for pixels ("a decoder that silently
+ * fell back to a small built-in buffer would work on icons, fail on
+ * photographs, and give nobody a reason"); this is the assertion that the
+ * argument was actually implemented three more times.
+ *
+ * It is also a real bounds check. Without the guard in html_parse, node_new
+ * returns -1 for the root, push() stacks -1, and emit_text indexes nodes[-1]
+ * - so a green line here is also "the fail-closed path does not fault". */
+static void t_no_arena(void)
+{
+    printf("no storage handed over yet\n");
+
+    CHECK(html_node_cap() == 0, "a node cap before html_set_arena");
+    CHECK(html_arena_cap() == 0, "a text cap before html_set_arena");
+    CHECK(css_sel_cap() == 0, "a selector cap before css_set_arena");
+    CHECK(lay_run_cap() == 0, "a run cap before lay_set_arena");
+
+    int n = html_parse(clean_doc, (int)strlen(clean_doc));
+    CHECK(n == 0, "html_parse built %d nodes with no array", n);
+    CHECK(html_count() == 0, "html_count() is %d with no array", html_count());
+    CHECK(html_root() == -1, "html_root() is not -1 with no array");
+    /* total accessors, the promise at the top of html.h, on the one input
+     * that never had a node to be total about */
+    int l = -1;
+    CHECK(html_kind(0) == -1, "html_kind(0) answered with no tree");
+    CHECK(html_text(0, &l) != 0 && l == 0, "html_text(0) is not empty");
+    CHECK(html_title(&l) != 0 && l == 0, "html_title() is not empty");
+
+    css_reset();
+    int took = css_add_sheet("p { color: #ff0000 }", 20);
+    CHECK(took == 0, "css took %d rules with no array", took);
+    CHECK(css_overflowed() == 1,
+          "css refused the sheet without recording it - "
+          "'no storage' and 'empty stylesheet' must not look the same");
+
+    lay_set_measure(fake_measure);
+    lay_set_image(0);
+    CHECK(lay_run_doc(300, 16) == 0, "layout produced height with no runs");
+    CHECK(lay_count() == 0, "layout emitted %d runs with no array", lay_count());
+    CHECK(lay_overflowed() != 0, "layout refused silently");
+}
+
 int main(void)
 {
     printf("html.c + layout.c, no kernel\n\n");
+    t_no_arena();
+    host_arenas();
     t_clean();
     t_broken();
     t_close_matching();

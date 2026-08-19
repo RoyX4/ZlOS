@@ -76,21 +76,58 @@ static int fb_style(int ls)
 }
 
 /* A REAL PAGE, NOT A DEMO PAGE. 24 KB was sized for the hand-written home
- * page. Measured against the English Wikipedia article on Linux: 965,511
- * bytes of HTML, 8,239 open tags, 15,806 words, 16 <style> blocks - so the
- * old cap kept 2.5% of it. This is BSS, which is NOBITS: it never enters the
- * disk image, so it costs nothing against raw_boot.asm's CHUNKS ceiling
- * (60 x 32 KiB = 1.875 MiB of FILE). It costs RAM, and the binding limit
- * there is raw_entry.S's stack at 6 MiB, not the 128 MiB of free space above
- * it - see the note in that file before raising this further. */
-#define DOC_MAX 262144
+ * page, then 256 KB for a real one. Measured against the English Wikipedia
+ * article on Linux - 982,395 bytes as served today, 8,239 open tags, 15,806
+ * words, 16 <style> blocks - 256 KB kept 27% of it and truncated the rest at a
+ * tag boundary, honestly and visibly.
+ *
+ * IT IS NOT BSS ANY MORE, so the sentence that used to be here - "the binding
+ * limit is raw_entry.S's stack at 6 MiB, not the 128 MiB of free space above
+ * it" - has stopped being true, which is exactly why it is quoted rather than
+ * deleted. The document now lives in the free space above, with the tree, the
+ * stylesheet and the runs. 2 MiB holds that article twice. */
+#define DOC_MAX 0x200000
 
 /* Exposed for the harness. browsertest hard-coded an 80 KB document against a
  * 24 KB cap; raising the cap turned "is a huge page truncated AND flagged"
  * into a test that quietly checked nothing. Same lesson as HTML_MAX_NODES. */
 int browser_doc_cap(void) { return DOC_MAX; }
 
-static char doc[DOC_MAX];
+/* ---- THE ONE REGION, CARVED ONCE ------------------------------------------
+ * memmap.h owns the base and the span; this is the only place the six
+ * sub-arenas inside it are laid out, and every offset is a running sum of the
+ * budgets the four headers state. ONE region rather than six bases in
+ * memmap.h, because six bases is six subtractions to get wrong and memmap.h's
+ * header is a list of people who got a subtraction wrong.
+ *
+ * ALIGNMENT IS CHECKED, NOT REASONED ABOUT. Every budget below happens to be a
+ * multiple of 8 today; the day one is not, struct lay_run's pointer member
+ * lands unaligned on the 64-bit build and the fault is nowhere near here. */
+#define BR_OFF_DOC    0L
+#define BR_OFF_NODES  (BR_OFF_DOC   + DOC_MAX)
+#define BR_OFF_HARENA (BR_OFF_NODES + HTML_NODES_BYTES)
+#define BR_OFF_SELS   (BR_OFF_HARENA + HTML_ARENA)
+#define BR_OFF_DECLS  (BR_OFF_SELS  + CSS_SELS_BYTES)
+#define BR_OFF_CARENA (BR_OFF_DECLS + CSS_DECLS_BYTES)
+#define BR_OFF_RUNS   (BR_OFF_CARENA + CSS_ARENA)
+#define BR_STORAGE_BYTES (BR_OFF_RUNS + LAY_RUNS_BYTES)
+
+_Static_assert(BR_OFF_NODES  % 8 == 0, "html.c's node array lands unaligned");
+_Static_assert(BR_OFF_HARENA % 8 == 0, "html.c's text arena lands unaligned");
+_Static_assert(BR_OFF_SELS   % 8 == 0, "css.c's selector array lands unaligned");
+_Static_assert(BR_OFF_DECLS  % 8 == 0, "css.c's decl array lands unaligned");
+_Static_assert(BR_OFF_CARENA % 8 == 0, "css.c's string arena lands unaligned");
+_Static_assert(BR_OFF_RUNS   % 8 == 0,
+               "layout.c's run array lands unaligned - struct lay_run holds a "
+               "pointer and the 64-bit build needs it 8-aligned");
+/* THE SUBTRACTION THAT MATTERS, and it is the one memmap.h's header asks every
+ * owning file to write down: does the highest byte land under the next base? */
+_Static_assert(BR_STORAGE_BYTES <= (long)(HI_DOM_END - HI_DOM),
+               "the browser's storage no longer fits its region in memmap.h - "
+               "raise HI_DOM_END and check it against HI_BACK, do not shave a "
+               "cap to make this line pass");
+
+static char * const doc = (char *)(uptr)(HI_DOM + BR_OFF_DOC);
 static int  doc_len;
 static int  doc_truncated;
 
@@ -543,22 +580,51 @@ static int img_try_data_uri(const char *src, int slen)
     return png_decode(img_buf, n);
 }
 
+/* ---- handing the storage over ---------------------------------------------
+ * ONCE, AND NOT AT BOOT. There is no browser_init in this app - it is
+ * self-initialising by design (see browser_draw's header on why the compositor
+ * must not decide its content), so every arena is handed over the first time a
+ * document could possibly want one.
+ *
+ * ALL FOUR TOGETHER, and that is not tidiness. png.c's arena used to be set
+ * from img_collect() alone, which was correct while it was the only injected
+ * storage; html.c's has to be set BEFORE html_parse and css.c's before the
+ * first css_add_sheet, both of which happen earlier in doc_set than
+ * img_collect does. Four separate lazy initialisers ordered by hand is four
+ * chances for the next person to add a fifth in the wrong place, so there is
+ * one, and doc_set calls it first thing.
+ *
+ * Until it runs, html.c parses nothing, css.c takes no rules, layout.c emits
+ * no runs and png.c fails every decode - each loudly, through the counter it
+ * already exposes. That is deliberate: see the header of each.
+ *
+ * THE INVARIANT THAT MAKES ONE CALL SITE ENOUGH, written down because it is
+ * load-bearing and lives in another function: browser_draw does
+ * `if (doc_len == 0) browser_home()` before it lays anything out, and
+ * browser_home goes through doc_set. So relayout() cannot be reached without
+ * a document, and therefore cannot be reached before this has run. Break that
+ * line in browser_draw and layout.c starts refusing every run - visibly, via
+ * lay_overflowed(), rather than by faulting on a null array. */
+static int storage_set;
+
+static void storage_init(void)
+{
+    if (storage_set) return;
+    storage_set = 1;
+    html_set_arena((void *)(uptr)(HI_DOM + BR_OFF_NODES), HTML_MAX_NODES,
+                   (char *)(uptr)(HI_DOM + BR_OFF_HARENA), HTML_ARENA);
+    css_set_arena((void *)(uptr)(HI_DOM + BR_OFF_SELS),  CSS_MAX_SELS,
+                  (void *)(uptr)(HI_DOM + BR_OFF_DECLS), CSS_MAX_DECLS,
+                  (char *)(uptr)(HI_DOM + BR_OFF_CARENA), CSS_ARENA);
+    lay_set_arena((struct lay_run *)(uptr)(HI_DOM + BR_OFF_RUNS), LAY_MAX_RUNS);
+    png_set_arena(png_arena, PNG_ARENA_PX);
+}
+
 /* Collect the document's <img> elements. Called once per parse, from doc_set,
  * so the list can never disagree with the tree layout is walking. */
-static int img_arena_set;
-
 static void img_collect(void)
 {
-    /* ONCE, AND NOT AT BOOT. There is no browser_init in this app - it is
-     * self-initialising by design (see browser_draw's header on why the
-     * compositor must not decide its content), so the arena is handed over
-     * the first time a document could possibly want one. png.c fails every
-     * decode with PNG_E_NO_ROOM until this happens, which is the loud
-     * behaviour rather than a silent small fallback buffer. */
-    if (!img_arena_set) {
-        png_set_arena(png_arena, PNG_ARENA_PX);
-        img_arena_set = 1;
-    }
+    storage_init();
     png_reset();
     nimgs = 0;
     img_cur = -1;
@@ -618,6 +684,9 @@ static int img_for_node(int node, int *w, int *h)
 /* ---- loading --------------------------------------------------------------- */
 static void doc_set(const char *src, int len)
 {
+    /* FIRST, BEFORE THE COPY INTO `doc`. `doc` is itself part of the region
+     * this hands out, and html_parse two lines below wants the tree array. */
+    storage_init();
     doc_truncated = 0;
     if (len > DOC_MAX - 1) { len = DOC_MAX - 1; doc_truncated = 1; }
     for (int i = 0; i < len; i++) doc[i] = src[i];

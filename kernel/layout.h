@@ -71,6 +71,34 @@ struct lay_run {
     int img;
 };
 
+/* WHERE THE RUNS LIVE IS THE CALLER'S DECISION, for the reason the comment
+ * above already half-states: struct lay_run was emitted 12,288 times into BSS,
+ * and 12,288 was not a design, it was what fitted. The English Wikipedia
+ * article produced 9,886 runs while html.c was DROPPING 7,807 of its nodes -
+ * so the run array was never the binding limit, it was merely next in line,
+ * and raising the node cap without raising this one just moves the truncation.
+ *
+ * Injected rather than fixed, because layout.c reaches for exactly two things
+ * outside itself (a measure function and an image lookup) and that is the
+ * property that makes the whole box model an ordinary Linux program. A third
+ * reach - to a hardcoded physical address - would end it.
+ *
+ * LAY_RUN_BYTES is a sizeof rather than a literal, unlike html.h's and css.h's,
+ * because struct lay_run is public here - and it is NOT the same number on
+ * every target: 60 bytes on the 32-bit kernel, 72 on a 64-bit host, because of
+ * the one pointer. A caller sizing a region needs the target's own answer, so
+ * it gets the compiler's.
+ *
+ * UNTIL lay_set_arena IS CALLED, lay_run_doc LAYS OUT NOTHING, RETURNS 0 AND
+ * SETS lay_overflowed(). png.h's argument, third time: a silent small fallback
+ * renders the top of every page and looks like a short document. */
+#define LAY_MAX_RUNS  65536
+#define LAY_RUN_BYTES ((long)sizeof(struct lay_run))
+#define LAY_RUNS_BYTES ((long)LAY_MAX_RUNS * LAY_RUN_BYTES)
+
+void lay_set_arena(struct lay_run *runs, int max_runs);
+int  lay_run_cap(void);      /* what was actually handed over */
+
 /* How wide is s[0..len) at this size and style? The one thing layout cannot
  * work out for itself, so it is injected: the kernel passes the real font
  * metrics, the harness passes a synthetic one and gets deterministic numbers. */

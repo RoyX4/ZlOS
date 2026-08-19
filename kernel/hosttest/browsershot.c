@@ -99,6 +99,10 @@ int main(int argc, char **argv)
     struct { unsigned long a, n; } bufs[] = {
         /* from memmap.h, not from a literal - see browsertest.c's note */
         { (unsigned long)HI_IMG, (unsigned long)(HI_IMG_END - HI_IMG) },
+        /* the document, the tree, its text, the stylesheet and the runs - all
+         * six of browser.c's arenas live in this one region now. See the note
+         * in browsertest.c's map_high_ram. */
+        { (unsigned long)HI_DOM, (unsigned long)(HI_DOM_END - HI_DOM) },
         { 0x08000000UL, 32UL << 20 }, { 0x0A000000UL, 16UL << 20 },
         { 0x0C000000UL, 16UL << 20 },
     };
@@ -140,7 +144,12 @@ int main(int argc, char **argv)
          * known until the first layout. Two paints, and the second is the one
          * that is photographed. */
         if (html_file) {
-            static char buf[1 << 20];
+            /* 2 MiB, matching browser.c's DOC_MAX. It was 1 MiB, which is 66 KB
+             * SHORT of the English Wikipedia article this is usually pointed at
+             * - so the harness would have truncated the page before browser.c
+             * got the chance, and the truncation flag under test would have
+             * been the harness's rather than the browser's. */
+            static char buf[2 << 20];
             FILE *hf = fopen(html_file, "rb");
             if (!hf) { fprintf(stderr, "cannot open %s\n", html_file); return 1; }
             int hn = (int)fread(buf, 1, sizeof buf - 1, hf);

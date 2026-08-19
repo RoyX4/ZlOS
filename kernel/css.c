@@ -34,9 +34,14 @@
  * documented intent rather than deleted, and named here so the next reader
  * does not spend an afternoon looking for the check. */
 #define MAX_RULES  192          /* a rule is one selector + its block      */
-#define MAX_SELS   384          /* comma groups make these outnumber rules */
 
-/* MAX_DECLS WAS 1024 AND THE BOX PROPERTIES MADE THAT TOO SMALL, measured
+/* MAX_SELS, MAX_DECLS AND ARENA NOW LIVE IN css.h AND THE STORAGE IS THE
+ * CALLER'S. See the block above css_set_arena there for the measurement that
+ * forced it: at 384 selectors Wikipedia's skin yielded 235 rules with
+ * css_overflowed() set, and at 4096 it yields 375 with it clear. 4096 * 112
+ * bytes cannot be BSS in this kernel, so it is not BSS any more.
+ *
+ * MAX_DECLS WAS 1024 AND THE BOX PROPERTIES MADE THAT TOO SMALL, measured
  * rather than guessed. Every shorthand is expanded at parse time, so one
  * ordinary modern rule
  *
@@ -49,14 +54,16 @@
  * would silently lose its footer's styling. 3072 keeps the two arrays at
  * roughly the same ceiling (384 selectors * ~8 declarations).
  *
- * BSS COST: struct decl was reordered (v first) so it is 8 bytes rather than
- * 12 - the old 1024*12 = 12288 becomes 3072*8 = 24576, a rise of 12288 bytes.
- * ARENA goes 12288 -> 24576 for another 12288, because every selector part is
- * interned separately (there is no dedup) and 384 selectors of three ~8-byte
- * parts is 9 KB before any margin. Total added BSS: 24576 bytes. */
-#define MAX_DECLS  3072
+ * struct decl was reordered (v first) so it is 8 bytes rather than 12, which
+ * is why the array could triple for 12 KB. That reasoning still holds; only
+ * the ceiling moved. At CSS_MAX_SELS 4096 the same ratio gives 32768
+ * declarations, and the arena scales with it - every selector part is interned
+ * separately (there is no dedup), so the arena is a function of the selector
+ * count and not of the sheet's size. */
+#define MAX_SELS   CSS_MAX_SELS
+#define MAX_DECLS  CSS_MAX_DECLS
 #define MAX_COMP   6            /* compound selectors per selector         */
-#define ARENA      24576
+#define ARENA      CSS_ARENA
 
 struct comp {                   /* one compound selector: div#id.a.b       */
     unsigned short tag, tag_len;
@@ -123,11 +130,37 @@ enum { U_PX = 0, U_EM, U_PCT, U_AUTO };
 #define LEN_MAX  100000
 #define REL_MAX  10000
 
-static struct sel  sels[MAX_SELS];
-static struct decl decls[MAX_DECLS];
-static char  arena[ARENA];
+/* ---- the storage, which this file does not own ----------------------------
+ * See css.h. The literals there are the caller's only way to size a region for
+ * private structs, and these two asserts are what stop them drifting: add a
+ * field to struct sel and the build stops HERE, rather than handing the engine
+ * an array a quarter short and losing a page's footer to an overflow flag. */
+_Static_assert(sizeof(struct sel)  == CSS_SEL_BYTES,
+               "CSS_SEL_BYTES in css.h no longer matches struct sel - "
+               "every caller sizing a region from it is now short");
+_Static_assert(sizeof(struct decl) == CSS_DECL_BYTES,
+               "CSS_DECL_BYTES in css.h no longer matches struct decl");
+
+static struct sel  *sels;
+static struct decl *decls;
+static char  *arena;
+static int   max_sels, max_decls, arena_size;
 static int   nsels, ndecls, aused, nrules, overflow, order_seq;
 
+void css_set_arena(void *s, int ms, void *d, int md, char *a, int abytes)
+{
+    sels       = (struct sel *)s;
+    max_sels   = (s && ms > 0) ? ms : 0;
+    decls      = (struct decl *)d;
+    max_decls  = (d && md > 0) ? md : 0;
+    arena      = a;
+    arena_size = (a && abytes > 0) ? abytes : 0;
+    css_reset();
+}
+
+int css_sel_cap(void)     { return max_sels; }
+int css_decl_cap(void)    { return max_decls; }
+int css_arena_cap(void)   { return arena_size; }
 
 void css_reset(void)
 {
@@ -135,6 +168,7 @@ void css_reset(void)
 }
 
 int css_rules(void)       { return nrules; }
+int css_sels(void)        { return nsels; }
 int css_decls(void)       { return ndecls; }
 int css_arena_used(void)  { return aused; }
 int css_overflowed(void)  { return overflow; }
@@ -203,13 +237,34 @@ static int ieq(const char *a, int alen, const char *b)
 
 /* Copy into the arena and return the offset, or -1 when full. Offsets are
  * unsigned short in the structs, so the arena cannot exceed 65535 either -
- * ARENA is well under that and this checks anyway, because the day someone
- * raises it is the day the truncation would go silent. */
+ * see css.h, where that ceiling is now stated as the real limit rather than
+ * "ARENA is well under that". "The day someone raises it is the day the
+ * truncation would go silent" was written here, and it was right:
+ *
+ * A FULL ARENA REFUSED SELECTORS WITHOUT SETTING `overflow`, AND THAT WAS THE
+ * ONE PATH THAT DID. parse_comp turns a -1 from here into `return 0`, and
+ * parse_sel turns that into "drop this selector" - the SAME return value it
+ * uses for `a:hover`, which is a deliberate refusal that must not raise the
+ * flag. So the two were indistinguishable, and a sheet that ran out of arena
+ * was silently truncated while css_overflowed() said 0.
+ *
+ * Measured on the sheet csstest builds for exactly this case: 3,743 rules in,
+ * arena 65,535 of 65,536, 2,185 selectors taken, 1,558 refused, overflow 0.
+ * The gate did not catch it because at MAX_SELS 384 the SELECTOR array always
+ * filled first and set the flag - so "a sheet that exhausts the arena reports
+ * overflow" passed while testing the other array. Raising MAX_SELS is what
+ * made the arena the binding limit and the silence visible.
+ *
+ * The flag belongs HERE rather than in parse_comp because this is the function
+ * that knows the difference between "no room" and "not supported". */
 static int intern(const char *s, int len)
 {
     if (len < 0) len = 0;
     if (len > 255) len = 255;              /* no selector part is longer   */
-    if (aused + len + 1 > ARENA || aused + len + 1 > 65535) return -1;
+    if (aused + len + 1 > arena_size || aused + len + 1 > 65535) {
+        overflow = 1;
+        return -1;
+    }
     int off = aused;
     for (int i = 0; i < len; i++) arena[aused++] = s[i];
     arena[aused++] = 0;
@@ -525,7 +580,7 @@ static int tokenise(const char *v, int vl, struct tok *t, int max)
 
 static void add_decl(int prop, int v, int unit)
 {
-    if (ndecls >= MAX_DECLS) { overflow = 1; return; }
+    if (ndecls >= max_decls) { overflow = 1; return; }
     decls[ndecls].prop = (unsigned char)prop;
     decls[ndecls].v = v;
     decls[ndecls].unit = (unsigned char)unit;
@@ -1291,7 +1346,7 @@ static int parse_comp(const char *s, int len, struct comp *c, int *spec)
  * for, and over-matching a stylesheet is worse than ignoring one rule. */
 static int parse_sel(const char *s, int len, int d0, int nd)
 {
-    if (nsels >= MAX_SELS) { overflow = 1; return 0; }
+    if (nsels >= max_sels) { overflow = 1; return 0; }
     struct sel *sl = &sels[nsels];
     sl->n = 0; sl->spec = 0;
     int i = 0;
@@ -1327,6 +1382,12 @@ static int parse_sel(const char *s, int len, int d0, int nd)
 int css_add_sheet(const char *src, int len)
 {
     if (!src || len <= 0) return 0;
+    /* NO STORAGE, NO RULES, AND SAY SO. Every array below refuses on its own
+     * with `overflow` set, so this is not needed for safety - it is needed for
+     * HONESTY: a sheet with no rules in it would otherwise return 0 with
+     * overflow clear, which reads as "that stylesheet was empty" rather than
+     * "nobody called css_set_arena". Those two need to look different. */
+    if (!sels || !decls || !arena) { overflow = 1; return 0; }
     int i = 0, took = 0, media_depth = 0;
 
     while (i < len) {
@@ -1416,7 +1477,7 @@ int css_add_sheet(const char *src, int len)
         while (k < sel_end) {
             int st = k;
             while (k < sel_end && src[k] != ',') k++;
-            if (nsels >= MAX_SELS) { overflow = 1; break; }
+            if (nsels >= max_sels) { overflow = 1; break; }
             if (parse_sel(src + st, k - st, d0, nd)) any = 1;
             if (k < sel_end) k++;
         }
@@ -1659,7 +1720,7 @@ void css_compute(const struct css_elem *path, int n,
 
     /* Selection sort by (specificity, source order) WITHOUT a scratch array:
      * repeatedly find the lowest-ranked selector that still matches and has
-     * not been applied, and apply it. MAX_SELS is 384 and a document has a
+     * not been applied, and apply it. The sheet holds thousands and a document has a
      * handful of matching rules, so this is n_matched passes over the sheet
      * rather than a sort of the whole sheet - and it needs no memory, which
      * is the constraint that decides it. */

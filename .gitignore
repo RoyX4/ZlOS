@@ -39,6 +39,11 @@ kernel/hosttest/browsertest_san
 kernel/hosttest/arenatest
 kernel/hosttest/settingstest
 kernel/hosttest/systest
+# parsestat is the measuring instrument for the parser caps (browser-storage-run.md).
+# Listed the same day its .c was written, because four ELF binaries in this
+# directory ARE tracked and dirty ~5 MB on every gate run - and each of them got
+# there by being merely unlisted at the moment somebody ran `git add -A`.
+kernel/hosttest/parsestat
 kernel/hosttest/rtctest
 kernel/hosttest/fstest
 kernel/hosttest/exectest

@@ -936,15 +936,29 @@ static int map_high_ram(void)
      * harness mapped 32 MiB while browser.c wrote to 48 and the whole thing
      * segfaulted inside b64_decode. Two copies of one address is the bug
      * memmap.h exists to end; a harness is not exempt from that. */
-    void *want = (void *)(unsigned long)HI_IMG;
-    unsigned long span = (unsigned long)(HI_IMG_END - HI_IMG);
-    void *p = mmap(want, span, PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
-    if (p != want) {
-        printf("could not map the picture arena at %p\n", want);
-        return 0;
+    static const struct { unsigned long a, n; const char *what; } regions[] = {
+        { (unsigned long)HI_IMG, (unsigned long)(HI_IMG_END - HI_IMG),
+          "the picture arena" },
+        /* AND THE SECOND REGION, which is new and is most of browser.c's
+         * memory now: the document, the parse tree, its text, the stylesheet's
+         * selectors and declarations, and layout's runs. All six were static
+         * arrays inside html.c/css.c/layout.c/browser.c until they filled up on
+         * a real page and could not grow - the kernel had 126,336 bytes of link
+         * headroom and they needed 10 MiB. browser.c carves this one region
+         * into all six; this harness only has to make the region exist. */
+        { (unsigned long)HI_DOM, (unsigned long)(HI_DOM_END - HI_DOM),
+          "the browser's storage" },
+    };
+    for (unsigned i = 0; i < sizeof regions / sizeof regions[0]; i++) {
+        void *want = (void *)regions[i].a;
+        void *p = mmap(want, regions[i].n, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+        if (p != want) {
+            printf("could not map %s at %p\n", regions[i].what, want);
+            return 0;
+        }
+        memset(p, 0, regions[i].n);
     }
-    memset(p, 0, span);
     return 1;
 }
 

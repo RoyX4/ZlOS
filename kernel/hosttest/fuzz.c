@@ -33,6 +33,7 @@
 
 #include "../html.h"
 #include "../layout.h"
+#include "../css.h"
 #include "../net.h"
 #include "../tcp.h"
 #include "../http.h"
@@ -131,19 +132,45 @@ static int gen_markup(char *buf, int max)
     return n;
 }
 
+/* THE STORAGE, which html.c, css.c and layout.c no longer own. In the kernel
+ * it is a slice of memmap.h's HI_DOM; under ASan here it is BSS, and that is
+ * the arrangement that matters most in this file - ASan's redzones sit around
+ * these arrays, so a walk off the end of the node array or the run array is a
+ * reported error rather than a neighbouring static quietly changing.
+ *
+ * css.c is linked (layout.c calls css_compute) and therefore has to be handed
+ * its arrays too: without them every style= attribute in the generated markup
+ * would silently apply nothing, and this fuzzer would stop exercising the
+ * inline-style path while still reporting the same number of checks. */
+static unsigned char node_mem[HTML_NODES_BYTES] __attribute__((aligned(8)));
+static char          text_mem[HTML_ARENA];
+static unsigned char sel_mem[CSS_SELS_BYTES]   __attribute__((aligned(8)));
+static unsigned char decl_mem[CSS_DECLS_BYTES] __attribute__((aligned(8)));
+static char          cssa_mem[CSS_ARENA];
+static struct lay_run run_mem[LAY_MAX_RUNS];
+
 static void fuzz_markup(int iters)
 {
     printf("html.c + layout.c\n");
     static char buf[8192];
+    html_set_arena(node_mem, HTML_MAX_NODES, text_mem, HTML_ARENA);
+    css_set_arena(sel_mem, CSS_MAX_SELS, decl_mem, CSS_MAX_DECLS,
+                  cssa_mem, CSS_ARENA);
+    lay_set_arena(run_mem, LAY_MAX_RUNS);
     lay_set_measure(meas);
     for (iter = 0; iter < iters; iter++) {
         int n = gen_markup(buf, (int)sizeof buf);
         int nodes = html_parse(buf, n);
 
-        CHECK(nodes >= 0 && nodes <= 1024, "node count %d out of range", nodes);
+        /* AGAINST THE CAP THAT WAS HANDED OVER. These were `<= 1024` and
+         * `<= 32768` against arrays of 8192 and 196608 - bounds that a
+         * generated 8 KB document never came near, so they asserted nothing
+         * about the array and everything about the generator. */
+        CHECK(nodes >= 0 && nodes <= html_node_cap(),
+              "node count %d out of range", nodes);
         CHECK(html_count() == nodes, "html_count disagrees with the parse");
         CHECK(html_max_depth() <= 64, "depth %d", html_max_depth());
-        CHECK(html_arena_used() >= 0 && html_arena_used() <= 32768,
+        CHECK(html_arena_used() >= 0 && html_arena_used() <= html_arena_cap(),
               "arena used %d", html_arena_used());
 
         /* every edge must stay inside the array, or the tree is not a tree */

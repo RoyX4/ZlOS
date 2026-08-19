@@ -173,6 +173,16 @@ echo "built ./htmltest      (run: ./htmltest)"
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o csstest csstest.c ../css.c
 echo "built ./csstest       (run: ./csstest)"
 
+# NOT A GATE - a measuring instrument, and the only one that answers "does a
+# real page fit". Every cap number in browser-render-run.md §11 and §12 came
+# from a throwaway program that was thrown away, so the next person to raise
+# HTML_MAX_NODES or CSS_MAX_SELS had to either trust a document or rebuild the
+# measurement from scratch. It builds here so that it exists; it asserts
+# nothing, because its right answer depends on which page you fed it.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o parsestat parsestat.c \
+    ../html.c ../css.c ../layout.c
+echo "built ./parsestat     (run: ./parsestat page.html sheet.css [viewport])"
+
 # ...and the same document at three widths, as a picture. Same argument as
 # wmtest/wmshot: assertions catch a run escaping the content box, eyes catch
 # inline <code> set at the wrong size or a list marker sitting in its own text.

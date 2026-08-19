@@ -228,6 +228,68 @@ struct css_elem {
     const char *cls; int cls_len;    /* the raw space-separated class list */
 };
 
+/* THE THREE ARRAYS, AND WHY THE CALLER OWNS THEM NOW.
+ *
+ * MAX_SELS WAS 384 AND IT WAS THE LIMIT THAT DECIDED WHAT THIS ENGINE COULD
+ * RENDER - measured, not guessed. Wikipedia's skin, 271,848 bytes:
+ *
+ *     MAX_SELS  384   235 rules taken, css_overflowed() == 1
+ *     MAX_SELS 4096   375 rules taken, css_overflowed() == 0
+ *
+ * `@media` evaluation landed and bought four declarations, because the parse
+ * ran out of selectors long before it reached most of the blocks. It could not
+ * be raised: sizeof(struct sel) is 112 bytes, so 4096 selectors is 458,752 -
+ * against 126,336 bytes of link headroom in the whole kernel.
+ *
+ * So the storage is the caller's, as png.h argues for pixels and html.h now
+ * argues for the tree. The counts below are the budget; the addresses are the
+ * caller's decision. The *_BYTES are literals because the structs are private,
+ * and css.c _Static_asserts each against the real sizeof - a duplicated number
+ * that nothing checks is the failure memmap.h's header is a list of.
+ *
+ * UNTIL css_set_arena IS CALLED, css_add_sheet TAKES NOTHING AND SETS
+ * css_overflowed(). Loud, for png.h's reason: a stylesheet engine that
+ * silently applied no rules renders a page as unstyled text, which looks
+ * exactly like a page whose stylesheet 404'd. */
+#define CSS_MAX_SELS    4096
+#define CSS_SEL_BYTES   112       /* sizeof(struct sel),  asserted in css.c */
+#define CSS_MAX_DECLS   32768     /* ~8 declarations a selector             */
+#define CSS_DECL_BYTES  8         /* sizeof(struct decl), asserted in css.c */
+/* THE STRING ARENA, AND ITS CEILING IS NOT A BUDGET - IT IS A STRUCT FIELD.
+ *
+ * struct comp holds each interned part as an `unsigned short` OFFSET, so no
+ * offset can exceed 65535 however much memory the caller hands over. intern()
+ * has always checked both. Reserving 512 KB here would have looked generous
+ * and been 458 KB of region that css.c can provably never address - a number
+ * that lies in the direction nobody checks.
+ *
+ * MEASURED against Wikipedia's skin (271,848 bytes, viewport 1036): 375
+ * selectors intern 21,160 bytes, so 65,536 is room for roughly 1,160
+ * selectors' worth of parts - three times the whole old MAX_SELS, and 2.8x
+ * what the largest sheet anyone has pointed this at needs.
+ *
+ * SO CSS_MAX_SELS 4096 IS NOT REACHABLE ON A SHEET OF DISTINCT SELECTORS, and
+ * that is written down rather than hidden: the arena fills first, at about
+ * 1,160. Both refusals set css_overflowed(), so this fails the same visible
+ * way either cap bites. If a sheet ever needs more, the fix is to widen
+ * struct comp's four offsets from unsigned short to int - which costs
+ * sizeof(struct sel) 112 -> 160 bytes and nothing else, now that the array is
+ * not BSS. It is not done here because no measured sheet needs it, and a hot
+ * matcher is a bad place to change a field width speculatively. */
+#define CSS_ARENA       65536     /* every selector part is interned, no dedup */
+
+#define CSS_SELS_BYTES  ((long)CSS_MAX_SELS  * CSS_SEL_BYTES)
+#define CSS_DECLS_BYTES ((long)CSS_MAX_DECLS * CSS_DECL_BYTES)
+
+void css_set_arena(void *sels, int max_sels, void *decls, int max_decls,
+                   char *arena, int arena_bytes);
+
+/* The caps actually in force - a harness that restates them stops checking
+ * them, which is the lesson HTML_MAX_NODES already cost this project once. */
+int  css_sel_cap(void);
+int  css_decl_cap(void);
+int  css_arena_cap(void);
+
 void css_reset(void);
 
 /* Add a stylesheet. Later sheets win ties against earlier ones, so the UA
@@ -271,6 +333,13 @@ void css_viewport(int w);
 int  css_viewport_get(void);
 
 int  css_rules(void);
+/* SELECTORS, WHICH IS NOT THE SAME COUNTER AS css_rules() AND IS THE ONE THAT
+ * ACTUALLY HITS A CAP. `p, a, span { ... }` is one rule and three selectors,
+ * and MAX_SELS is what refuses work - css.c's own comment says so ("MAX_RULES
+ * IS NOT ENFORCED ANYWHERE and never was"). There was no accessor for it,
+ * which is why "235 rules taken" was the number everyone quoted while the
+ * thing that stopped the parse was invisible. */
+int  css_sels(void);
 int  css_decls(void);
 int  css_arena_used(void);
 int  css_overflowed(void);    /* rules refused because a limit was hit */

@@ -111,9 +111,41 @@ static void sheet(const char *css)
     css_add_sheet(css, (int)strlen(css));
 }
 
+/* THE ENGINE'S ARRAYS, AS ORDINARY STATICS. css.c stopped owning them - see
+ * the block above css_set_arena in css.h for the measurement that forced it -
+ * and the caller supplies them instead. In the kernel that is a slice of
+ * memmap.h's HI_DOM; here it is BSS, which keeps this harness what its build
+ * line says it is: css.c linked against nothing else at all.
+ *
+ * Sized from css.h, never restated. */
+static unsigned char sel_mem[CSS_SELS_BYTES]   __attribute__((aligned(8)));
+static unsigned char decl_mem[CSS_DECLS_BYTES] __attribute__((aligned(8)));
+static char          arena_mem[CSS_ARENA];
+
+/* The fail-closed contract, tested in the one window where it can be: before
+ * the storage is handed over. See htmltest's t_no_arena for the full argument
+ * - in short, the alternative design was a small built-in array, and a built-in
+ * array makes every other assertion in this file pass anyway. */
+static void t_no_arena(void)
+{
+    printf("\n0. before css_set_arena\n");
+    okn(css_sel_cap(),   0, "selector cap before css_set_arena");
+    okn(css_decl_cap(),  0, "declaration cap before css_set_arena");
+    okn(css_arena_cap(), 0, "string arena cap before css_set_arena");
+    okn(css_add_sheet("p { color: #ff0000 }", 20), 0, "no rules taken with no arrays");
+    okn(css_rules(), 0, "no rules counted with no arrays");
+    okn(css_overflowed(), 1, "refusing without an array is recorded");
+    /* and a match against the empty engine must be total, not a fault */
+    okn(compute("html body p", 16, 0).rgb, -1, "no rule can match with no arrays");
+}
+
 int main(void)
 {
     printf("csstest: the bounded CSS engine\n");
+
+    t_no_arena();
+    css_set_arena(sel_mem, CSS_MAX_SELS, decl_mem, CSS_MAX_DECLS,
+                  arena_mem, CSS_ARENA);
 
     /* ---- 1. selectors ---------------------------------------------------- */
     printf("\n1. selectors\n");
@@ -302,15 +334,27 @@ int main(void)
     printf("\n6. bounds\n");
     css_reset();
     {
-        /* far more rules than the arrays hold */
-        static char big[400000];
+        /* FAR MORE RULES THAN THE ARRAYS HOLD, AT WHATEVER SIZE THE CALLER
+         * SET THEM. This said 4000 against a selector cap of 384. The cap is
+         * now the caller's, and 4000 is under it - so the literal would have
+         * turned "a sheet past the limits reports overflow" into a sheet that
+         * fits, asserting that overflow is reported when it is not. A harness
+         * that hardcodes the other side of the limit it is testing stops
+         * testing the limit the day the limit moves. */
+        static char big[CSS_MAX_SELS * 40 + 65536];
+        int lim = css_sel_cap() + 1000;
         int n = 0;
-        for (int i = 0; i < 4000 && n < (int)sizeof big - 64; i++)
+        for (int i = 0; i < lim && n < (int)sizeof big - 64; i++)
             n += snprintf(big + n, sizeof big - n, ".c%d { color: red; margin: %dpx }\n", i, i);
         css_add_sheet(big, n);
         ok(css_overflowed(), "a sheet past the limits reports overflow");
-        ok(css_arena_used() <= 24576, "the arena stayed inside itself");
-        ok(css_decls() <= 3072, "the declaration array stayed inside itself");
+        /* AGAINST THE CAP THAT WAS HANDED OVER, NOT AGAINST A LITERAL. These
+         * read `<= 24576` and `<= 3072` while css.c owned its arrays. The
+         * moment the caller started supplying them those became two numbers
+         * this file had to keep in step by hand - which is precisely how
+         * htmltest's `html_count() <= 1024` stopped being a bounds check. */
+        ok(css_arena_used() <= css_arena_cap(), "the arena stayed inside itself");
+        ok(css_decls() <= css_decl_cap(), "the declaration array stayed inside itself");
         /* and the rules it DID take still work */
         okn(compute("html p.c0", 16, 0).rgb, 0xFF0000, "rules taken before the limit still apply");
     }
@@ -976,18 +1020,21 @@ int main(void)
 
     css_reset();
     {
-        /* FIVE THOUSAND DECLARATIONS IN ONE BLOCK. MAX_DECLS is 3072, so this
-         * must stop taking them and say so - and the ones it did take must
+        /* MORE DECLARATIONS IN ONE BLOCK THAN THE ARRAY HOLDS, whatever the
+         * caller sized it at - so the count comes from css_decl_cap() rather
+         * than from a literal that used to say 5000 against a cap of 3072.
+         * It must stop taking them and say so, and the ones it did take must
          * still work, because a limit that loses the whole sheet is a limit
          * that renders a blank page. */
-        static char huge[200000];
+        static char huge[CSS_MAX_DECLS * 24 + 4096];
+        int lim = css_decl_cap() + 1000;
         int n = snprintf(huge, sizeof huge, "p { color: red;");
-        for (int i = 0; i < 5000 && n < (int)sizeof huge - 64; i++)
+        for (int i = 0; i < lim && n < (int)sizeof huge - 64; i++)
             n += snprintf(huge + n, sizeof huge - n, " padding-top: 3px;");
         n += snprintf(huge + n, sizeof huge - n, " }");
         css_add_sheet(huge, n);
         ok(css_overflowed(), "5000 declarations in one block reports overflow");
-        ok(css_decls() <= 3072, "and the declaration array stayed inside itself");
+        ok(css_decls() <= css_decl_cap(), "and the declaration array stayed inside itself");
         m = compute("html p", 16, 0);
         okn(m.rgb, 0xFF0000, "and the declarations it DID take still apply");
         okn(m.pad_t, 3, "including the repeated one");
@@ -996,15 +1043,18 @@ int main(void)
     /* the two-hundred-selector case, where the ARENA is what runs out */
     css_reset();
     {
-        static char sel[200000];
+        /* enough distinct selector parts to exhaust the arena at ANY cap the
+         * caller sets: each pair interns ~24 bytes and nothing is deduped */
+        static char sel[CSS_ARENA * 4 + 4096];
+        int lim = css_arena_cap() / 8 + 1000;
         int n = 0;
-        for (int i = 0; i < 3000 && n < (int)sizeof sel - 128; i++)
+        for (int i = 0; i < lim && n < (int)sizeof sel - 128; i++)
             n += snprintf(sel + n, sizeof sel - n,
                           "div.wrapper%d span.inner%d { width: %dpx; border: 1px solid red }\n",
                           i, i, i + 1);
         css_add_sheet(sel, n);
         ok(css_overflowed(), "a sheet that exhausts the arena reports overflow");
-        ok(css_arena_used() <= 24576, "and the arena stayed inside itself");
+        ok(css_arena_used() <= css_arena_cap(), "and the arena stayed inside itself");
         okn(compute("html div.wrapper0 span.inner0", 16, 0).width, 1,
             "rules taken before the arena filled still apply");
     }
@@ -1024,6 +1074,41 @@ int main(void)
     m = compute("html p", 16, 0);
     ok(m.n_grid_cols == CSS_GRID_MAX && css_overflowed(),
        "one more than fits does report overflow");
+    /* A REFUSAL BY POLICY IS NOT AN OVERFLOW, and this pair is the mutation
+     * guard on the fix in intern(). A full string arena used to refuse
+     * selectors through the SAME `return 0` that `a:hover` uses, so the two
+     * were indistinguishable and the resource case was silent. intern() now
+     * raises the flag itself, which is the only place that can tell them
+     * apart - and if anyone ever moves that flag up into parse_comp or
+     * parse_sel to "simplify" it, these two lines fail. */
+    sheet("a:hover { color: red } p::before { color: red } q[x=1] { color: red }");
+    ok(!css_overflowed(),
+       "pseudo-classes and attribute selectors are refused BY DESIGN, "
+       "which must not read as a limit being hit");
+    okn(css_sels(), 0, "and none of them were taken");
+    {
+        /* the resource case, from the other side: fill the arena and nothing
+         * else. Enough distinct class names to outrun 65,535 bytes of interned
+         * parts while staying well under the selector and declaration caps. */
+        static char fill[CSS_ARENA * 3];
+        int n = 0, i;
+        for (i = 0; i < CSS_MAX_SELS - 1 && n < (int)sizeof fill - 128; i++)
+            n += snprintf(fill + n, sizeof fill - n,
+                          ".averyLongClassNameToEatArena%d { color: red }\n", i);
+        css_reset();
+        css_add_sheet(fill, n);
+        ok(css_arena_used() >= css_arena_cap() - 256, "the arena really did fill");
+        ok(css_sels() < i, "and it stopped taking selectors before the sheet ended");
+        ok(css_sels() < css_sel_cap(),
+           "with the SELECTOR array still spare - so this is the arena's refusal, "
+           "not the selector array's");
+        ok(css_overflowed(),
+           "a full string arena reports overflow - it used to refuse silently, "
+           "because the selector array always filled first at MAX_SELS 384");
+        okn(compute("html p.averyLongClassNameToEatArena0", 16, 0).rgb, 0xFF0000,
+            "and the rules taken before it filled still apply");
+    }
+
     sheet(
         "body { color: #222; font-size: 16px }\n"
         ".page { max-width: 960px; margin: 0 auto; padding: 0 16px }\n"

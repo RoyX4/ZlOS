@@ -32,6 +32,8 @@
  *     4. full cold-start modeset (DPLL/DDI/link/panel)  <- NOT attempted
  */
 
+#include "memmap.h"
+
 typedef unsigned int   u32;
 typedef unsigned short u16;
 typedef unsigned char  u8;
@@ -758,8 +760,19 @@ static int gmbus_read_edid(int pin, uptr dest, int len)
 }
 
 /* Where a 128-byte EDID lands. In the kernel this is fixed physical scratch;
- * a host harness has no such address and supplies its own buffer instead. */
-static uptr edid_buf = 0x0C980000u;
+ * a host harness has no such address and supplies its own buffer instead.
+ *
+ * IT WAS 0x0C980000 AND THAT WAS INSIDE fb.c's CACHED-BLUR ARENA - 9.5 MiB
+ * into the 16 MiB region memmap.h calls HI_BLUR. A sensible-looking aligned
+ * address, in no map, colliding with a neighbour that also did not know. That
+ * is the i2c_hid.c failure verbatim, which memmap.h's header opens by
+ * describing, one driver over and two reviews later.
+ *
+ * It only bites on the machine that has both a real panel to read an EDID from
+ * and a desktop drawing blurs, i.e. the ThinkPad, and 128 bytes of a cached
+ * blur is a smear rather than a crash - so nothing would have reported it.
+ * From memmap.h now, and in the ordering chain there. */
+static uptr edid_buf = (uptr)HI_EDID;
 void intel_set_edid_buffer(uptr p) { if (p) edid_buf = p; }
 
 /* An EDID always begins 00 FF FF FF FF FF FF 00. That fixed header is how we
