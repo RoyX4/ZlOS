@@ -4023,6 +4023,12 @@ fn draw_screen() {
 # ---- boot ------------------------------------------------------------------
 kbd_init()
 fs_init()
+# READ THE SAVED SETTINGS BACK. settings.c writes one record per gesture and
+# settings_load() had no caller anywhere, so accent, scale, pointer speed,
+# subpixel and animation were all persisted to NVMe and then thrown away on
+# every boot. It applies what it finds, prints why when it finds nothing, and
+# never writes - so a read-only boot stays read-only.
+set_load()
 mon_x = 0                                # window positions - layout() fills these in
 mon_y = 0                                # from the real screen size, and dragging
 ab_x = 0                                 # updates them from there

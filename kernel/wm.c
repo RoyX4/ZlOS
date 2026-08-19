@@ -430,11 +430,37 @@ int wm_anim_alpha(int win)
     return 255;
 }
 
-/* Advance every running animation by one frame and damage what moved.
+/* Advance every running animation by the ELAPSED TIME and damage what moved.
  * Damaging the SETTLED rect - which is the largest - is what erases the
- * smaller frame drawn a moment ago. */
+ * smaller frame drawn a moment ago.
+ *
+ * THIS USED TO ADVANCE BY ONE INDEX PER CALL, which made every duration in this
+ * file a count of compositor passes rather than a length of time. The comment
+ * on ANIM_FRAMES says "four frames at 100 Hz is 40 ms", and that was only true
+ * if a pass happened to cost exactly 10 ms - so animation speed tracked host
+ * load, scene complexity and resolution. Making the redraw faster made the
+ * animations faster instead of smoother, which is the opposite of the point.
+ *
+ * idt_ticks() is 100 Hz, so one tick IS one intended frame and the conversion
+ * is a subtraction. Two other subsystems in this file already reason about that
+ * (see the notes at the drag threshold and the double-click window); the
+ * timeline was the one that did not.
+ *
+ * anim_tick() is called every compositor pass whether or not anything is
+ * animating, so anim_last stays current and an animation that starts after a
+ * long idle does not jump straight to its end. The clamp is belt and braces for
+ * the case where it does not - a stall long enough to skip a whole timeline
+ * should end the animation, not wrap its index. */
+static unsigned anim_last = 0;
+
 static void anim_tick(void)
 {
+    unsigned now  = idt_ticks();
+    unsigned step = now - anim_last;          /* 100 Hz: one tick, one frame */
+    anim_last = now;
+    if (step == 0) return;                    /* no time passed: nothing moved */
+    if (step > (unsigned)ANIM_FRAMES) step = (unsigned)ANIM_FRAMES;
+
     for (int i = 0; i < ANIM_MAX; i++) {
         if (!anims[i].kind) continue;
         wm_damage_win(anims[i].win);
@@ -445,7 +471,8 @@ static void anim_tick(void)
          * sometimes does not close when every slot is busy is a far worse bug
          * than a window that closes without a flourish. The timeline draws;
          * the caller decides what exists. */
-        if (++anims[i].frame >= anims[i].len) anims[i].kind = ANIM_NONE;
+        anims[i].frame += (int)step;
+        if (anims[i].frame >= anims[i].len) anims[i].kind = ANIM_NONE;
     }
 }
 
