@@ -2574,9 +2574,20 @@ int intel_link_train(int port, int rate_idx, int lanes, int tps3, int enhanced)
     if (!train_clock_recovery(port, lanes)) return 0;
     if (!train_channel_eq(port, lanes, tps3)) return 0;
 
-    /* done: stop the pattern at both ends and let real pixels flow */
+    /* done: stop the pattern at both ends and let real pixels flow.
+     *
+     * THIS WRITE IS CHECKED, and it is the one that was not. Every other
+     * intel_dpcd_write in this function guards with `if (!... ) return 0;` -
+     * this one discarded its result and the function then returned 1
+     * unconditionally. If the AUX transaction fails or the sink NAKs, the
+     * SOURCE goes on to DP_TP_CTL_LINK_TRAIN_NORM and starts sending real
+     * pixels while the SINK is still in training pattern and displays nothing.
+     * A black panel, reported up the stack as a successful modeset, on a
+     * machine whose only diagnostic is the panel. Telling the sink to leave
+     * training is not an optional courtesy at the end of link training; it is
+     * the step that makes the link usable. */
     u8 none = DP_TRAIN_PAT_NONE;
-    intel_dpcd_write(port, DPCD_TRAINING_PATTERN, &none, 1);
+    if (!intel_dpcd_write(port, DPCD_TRAINING_PATTERN, &none, 1)) return 0;
     tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_IDLE, enhanced);
     cpu_delay_us(500);
     tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_NORM, enhanced);
@@ -3889,21 +3900,36 @@ u32 intel_backlight_duty_wanted(void);
  */
 #define MS_MAX_STEPS 40
 
-static struct { int plan_step; const char *name; int result; } ms_log[MS_MAX_STEPS];
+static struct { int plan_step; const char *name; int result; int soft; } ms_log[MS_MAX_STEPS];
 static int ms_count = 0;
 static int ms_failed_at = 0;
 
 static int ms_dry = 0;
 
-static int ms_do(int plan_step, const char *name, int result)
+/* `soft` is why this takes a fourth argument. MS_STEP and MS_STEP_SOFT differ
+ * correctly at the macro - one returns, the other carries on - but both used to
+ * land here, and here is where ms_failed_at was set. So a soft step's failure
+ * still poisoned the verdict at the end of intel_modeset_run:
+ *
+ *     return ms_failed_at ? 0 : 1;
+ *
+ * which made "the backlight did not come up" indistinguishable from "the
+ * modeset failed", on a panel that was lit, trained and scanning out. The soft
+ * steps are DPLL0-at-wanted-rate, the underrun telltale, backlight PWM and
+ * backlight enable - none of which stop pixels reaching the screen.
+ *
+ * The failure is still RECORDED, in ms_log, and now carries its own softness so
+ * a reader can tell the two apart. It just no longer decides the verdict. */
+static int ms_do(int plan_step, const char *name, int result, int soft)
 {
     if (ms_count < MS_MAX_STEPS) {
         ms_log[ms_count].plan_step = plan_step;
         ms_log[ms_count].name      = name;
         ms_log[ms_count].result    = result;
+        ms_log[ms_count].soft      = soft;
         ms_count++;
     }
-    if (!result && !ms_failed_at) ms_failed_at = plan_step;
+    if (!result && !soft && !ms_failed_at) ms_failed_at = plan_step;
     return result;
 }
 
@@ -3915,16 +3941,19 @@ static int ms_do(int plan_step, const char *name, int result)
  * MS_STEP aborts the sequence on failure. MS_STEP_SOFT records and carries on,
  * for steps whose failure is worth knowing but is not fatal to the modeset. */
 #define MS_STEP(n, name, call) \
-    do { if (ms_dry) ms_do((n), name, 1); \
-         else if (!ms_do((n), name, (call))) return 0; } while (0)
+    do { if (ms_dry) ms_do((n), name, 1, 0); \
+         else if (!ms_do((n), name, (call), 0)) return 0; } while (0)
 
 #define MS_STEP_SOFT(n, name, call) \
-    do { if (ms_dry) ms_do((n), name, 1); else ms_do((n), name, (call)); } while (0)
+    do { if (ms_dry) ms_do((n), name, 1, 1); else ms_do((n), name, (call), 1); } while (0)
 
 int         intel_modeset_steps(void)          { return ms_count; }
 int         intel_modeset_step_plan(int i)     { return (i >= 0 && i < ms_count) ? ms_log[i].plan_step : 0; }
 const char *intel_modeset_step_name(int i)     { return (i >= 0 && i < ms_count) ? ms_log[i].name : ""; }
 int         intel_modeset_step_result(int i)   { return (i >= 0 && i < ms_count) ? ms_log[i].result : 0; }
+/* Which kind of step it was, so a reader can tell "the panel did not come up"
+ * from "the backlight did not" without consulting the source. */
+int         intel_modeset_step_soft(int i)     { return (i >= 0 && i < ms_count) ? ms_log[i].soft : 0; }
 int         intel_modeset_failed_at(void)      { return ms_failed_at; }
 
 /* ---- the mode, staged in pieces so no single call takes 16 arguments ----
