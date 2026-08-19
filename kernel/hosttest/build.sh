@@ -131,6 +131,13 @@ echo "built ./tlscryptotest (run: ./tlscryptotest)"
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o tlstest tlstest.c ../tls.c ../crypto.c
 echo "built ./tlstest       (run: ./tlstest)"
 
+# The bounded JavaScript interpreter. The SCOPE CLAIM in js.h is under test as
+# much as the code: section 7 asserts that what it cannot do fails cleanly with
+# a message, because a parser that accepts garbage and evaluates it to 0 is
+# worse than one that refuses.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o jstest jstest.c ../js.c
+echo "built ./jstest        (run: ./jstest)"
+
 # The browser's parser and box model, asserted. html.c and layout.c reach for
 # exactly one thing outside themselves - a function that measures a string - so
 # injecting a synthetic one turns both into ordinary programs. Malformed markup
