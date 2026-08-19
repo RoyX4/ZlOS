@@ -1040,7 +1040,8 @@ fn sk_draw(ax, ay, aw, ah) {
     cell = sk_cell(aw, ah)
     gx = ax + sk_gx(aw, ah)
     gy = ay + sk_gy(aw, ah)
-    g4_head(ax, ay, "push every crate onto a goal")
+    # NOT g4_head here: the level readout below already occupies that line, and
+    # the two were drawn one on top of the other.
     g4_stat(ax, ay, aw, "pushes", sk_pushes)
     ri = 0
     while ri < SK_H {
@@ -1072,8 +1073,9 @@ fn sk_draw(ax, ay, aw, ah) {
     py = gy + sk_py * cell
     rrect(px + 3 * u, py + 3 * u, cell - 6 * u, cell - 6 * u, cell / 2, g4_col(1))
     label(ax + 12 * u, gy + SK_H * cell + 6 * u, sk_msg(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-    label(ax + 12 * u, ay + 8 * u + 0, "level", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label(ax + 12 * u, ay + 8 * u, "level", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     label_num(ax + 46 * u, ay + 8 * u, sk_lvl + 1, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 70 * u, ay + 8 * u, "of 3", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     return 0
 }
 
@@ -1107,12 +1109,19 @@ fn sk_event(win, ety, ecode, ex, ey) {
 # for indexing a handful of globals through a function in a language with no
 # arrays; this is the same shape.
 #
-# VELOCITY IS IN EIGHTHS OF A PIXEL. An integer pixel per frame is either far
-# too fast or a bird that does not move at all, and this kernel has no floats
-# in the parts that matter (idt.c is built -mgeneral-regs-only). Position stays
-# in whole pixels and only the velocity is fractional, which is enough: the
-# error per step is under an eighth of a pixel and never accumulates, because
-# fl_y is the integral, not a rounded copy of one.
+# POSITION AND VELOCITY ARE BOTH IN EIGHTHS OF A PIXEL. An integer pixel per
+# frame is either far too fast or a bird that does not move at all, and this
+# kernel has no floats in the parts that matter (idt.c is built
+# -mgeneral-regs-only).
+#
+# The obvious version - keep y in whole pixels and add `v / 8` each step -
+# looks equivalent and is not. This kernel's `/` truncates TOWARD ZERO, so
+# every step throws its remainder away and the loss is signed: rising at -30
+# eighths adds -3 pixels a step instead of -3.75, falling at +30 adds +3
+# instead of +3.75. The bird loses about a fifth of every impulse to rounding,
+# in both directions, and the flap feels weaker the smaller it is. Keeping the
+# POSITION in eighths makes fl_y8 the actual integral of fl_v8 and the
+# truncation happens once, at the pixel it is drawn at.
 # ==============================================================================
 FL_GRAV = 1                         # eighths of a pixel, per step, per step
 FL_FLAP = 0 - 30                    # the impulse, same units
@@ -1123,7 +1132,7 @@ FL_GAP = 84                         # the hole, design units
 FL_BIRD = 13                        # the bird's box, design units
 
 fl_state = 0                        # 0 ready, 1 flying, 2 dead
-fl_y = 0
+fl_y8 = 0                           # eighths of a pixel from the top
 fl_v8 = 0
 fl_score = 0
 fl_best = 0
@@ -1176,7 +1185,7 @@ fn fl_reset() {
     fl_state = 0
     fl_score = 0
     fl_v8 = 0
-    fl_y = 0
+    fl_y8 = 0
     fl_next = 0
     # OFF TO THE RIGHT AND ALREADY SCORED, so a window opened but not started
     # draws no pipes and cannot bank a point. The layout needs the client
@@ -1190,8 +1199,8 @@ fn fl_start(win) {
     aw = wm_cw(win)
     ph = g4_ph(wm_ch(win))
     ac_seed_from(ticks() + 65)
-    fl_y = ph / 2
-    fl_v8 = FL_FLAP
+    fl_y8 = ph * 8 / 2
+    fl_v8 = FL_FLAP * ui()
     fl_score = 0
     fl_state = 1
     fl_next = ticks()
@@ -1205,11 +1214,14 @@ fn fl_start(win) {
     return 0
 }
 
+fn fl_y_px() { return fl_y8 / 8 }
+
 fn fl_dead(bx, ph) {
     u = ui()
     bw = FL_BIRD * u
-    if fl_y < 0 { return 1 }
-    if fl_y + bw > ph { return 1 }
+    fy = fl_y_px()
+    if fy < 0 { return 1 }
+    if fy + bw > ph { return 1 }
     pw = FL_PIPEW * u
     hg = FL_GAP * u / 2
     ix = 0
@@ -1218,8 +1230,8 @@ fn fl_dead(bx, ph) {
         if pxx < bx + bw {
             if pxx + pw > bx {
                 gy = fl_pg(ix)
-                if fl_y < gy - hg { return 1 }
-                if fl_y + bw > gy + hg { return 1 }
+                if fy < gy - hg { return 1 }
+                if fy + bw > gy + hg { return 1 }
             }
         }
         ix = ix + 1
@@ -1236,7 +1248,7 @@ fn fl_tick(win) {
     ph = g4_ph(wm_ch(win))
     fl_v8 = fl_v8 + FL_GRAV * u
     if fl_v8 > FL_TERM * u { fl_v8 = FL_TERM * u }
-    fl_y = fl_y + fl_v8 / 8
+    fl_y8 = fl_y8 + fl_v8
     bx = fl_birdx(aw)
     pw = FL_PIPEW * u
     ix = 0
@@ -1305,7 +1317,7 @@ fn fl_draw(ax, ay, aw, ah) {
     }
     bw = FL_BIRD * u
     bx = ax + fl_birdx(aw)
-    by = ay + fl_y
+    by = ay + fl_y_px()
     rrect(bx, by, bw, bw, bw / 2, g4_col(4))
     fill_rgb(bx + bw - 4 * u, by + 3 * u, 3 * u, 3 * u, theme(TH_BG))
     label_num(ax + aw / 2 - 6 * u, ay + 12 * u, fl_score, theme(TH_TEXT_HI), T_TITLE, W_BOLD)
