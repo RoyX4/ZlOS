@@ -3112,12 +3112,18 @@ void fb_text_rich(int px, int py, const char *s, int len, unsigned int fg,
  * picture, and the caller picks the colour. Same read-back blend as
  * fb_glyph_aa: transparent where coverage is zero, so an icon sits on the
  * wallpaper or a titlebar gradient with no box around it. */
-extern const unsigned char icons24[10][24][24];
-/* the same ten icons RE-RASTERIZED at 48x48, not the 24x24 set scaled up.
+extern const unsigned char icons24[20][24][24];
+/* the same twenty icons RE-RASTERIZED at 48x48, not the 24x24 set scaled up.
  * gen_icons.py draws each size from the geometry at its own 4x supersample,
  * so this carries real anti-aliased edges. See the comment in fb_icon24. */
-extern const unsigned char icons48[10][48][48];
-#define ICON_N  10
+extern const unsigned char icons48[20][48][48];
+/* icons.c actually defines 20 (see its own index comment); this extern
+ * used to say 10 and still worked, because C does not check array bounds
+ * across a translation unit - it only linked because the ELEMENT type
+ * matched. The ten icons the v10 pass added (search/lock/drive/close/
+ * check/chevron/clock/network/volume/grid) were silently unreachable:
+ * fb_icon24 refuses n >= ICON_N before ever touching the array. */
+#define ICON_N  20
 #define ICON_W  24
 #define ICON_H  24
 #define ICON2_W 48
