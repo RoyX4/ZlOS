@@ -18,24 +18,24 @@ fn cb_draw(ax, ay, aw, ah) {
     u = ui()
     dw = cell_w()
     n = clip_n()
-    label(ax + 8 * u, ay + 8 * u, "clipboard", TXT_DIM, T_CAPTION, W_BOLD)
-    label_num(ax + 90 * u, ay + 8 * u, n, TXT_HI, T_CAPTION, W_REG)
-    label(ax + 120 * u, ay + 8 * u, "bytes", TXT_DIM, T_CAPTION, W_REG)
+    label(ax + 8 * u, ay + 8 * u, "clipboard", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    label_num(ax + 90 * u, ay + 8 * u, n, theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    label(ax + 120 * u, ay + 8 * u, "bytes", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     if n == 0 {
-        label(ax + 8 * u, ay + 34 * u, "empty - Ctrl+C in the shell to copy", TXT_DIM, T_BODY, W_REG)
+        label(ax + 8 * u, ay + 34 * u, "empty - Ctrl+C in the shell to copy", theme(TH_TEXT_DIM), T_BODY, W_REG)
     } else {
         by = ay + 34 * u
         bi = 0
         col = 0
         while bi < n {
-            char_aa(ax + 8 * u + col * dw, by, clip_ch(bi), TXT_HI)
+            char_aa(ax + 8 * u + col * dw, by, clip_ch(bi), theme(TH_TEXT_HI))
             col = col + 1
             if col >= CB_ROW_CH { col = 0  by = by + cell_h() }
             bi = bi + 1
         }
     }
     rrect(ax + 8 * u, ay + ah - 30 * u, 70 * u, 22 * u, 6 * u, rgb(70, 40, 44))
-    label(ax + 18 * u, ay + ah - 24 * u, "wipe", TXT_HI, T_CAPTION, W_REG)
+    label(ax + 18 * u, ay + ah - 24 * u, "wipe", theme(TH_TEXT_HI), T_CAPTION, W_REG)
     return 0
 }
 
@@ -85,19 +85,19 @@ fn cp_label(i) {
 fn cp_draw(ax, ay, aw, ah) {
     u = ui()
     fill_rgb(ax + 8 * u, ay + 8 * u, 64 * u, 64 * u, rgb(cp_r, cp_g, cp_b))
-    label(ax + 84 * u, ay + 10 * u, "#", TXT_DIM, T_TITLE, W_BOLD)
-    ac_draw_base(ax + 96 * u, ay + 14 * u, cp_r, 2, 16, TXT_HI)
-    ac_draw_base(ax + 96 * u + 2 * cell_w(), ay + 14 * u, cp_g, 2, 16, TXT_HI)
-    ac_draw_base(ax + 96 * u + 4 * cell_w(), ay + 14 * u, cp_b, 2, 16, TXT_HI)
+    label(ax + 84 * u, ay + 10 * u, "#", theme(TH_TEXT_DIM), T_TITLE, W_BOLD)
+    ac_draw_base(ax + 96 * u, ay + 14 * u, cp_r, 2, 16, theme(TH_TEXT_HI))
+    ac_draw_base(ax + 96 * u + 2 * cell_w(), ay + 14 * u, cp_g, 2, 16, theme(TH_TEXT_HI))
+    ac_draw_base(ax + 96 * u + 4 * cell_w(), ay + 14 * u, cp_b, 2, 16, theme(TH_TEXT_HI))
 
     si = 0
     while si < 3 {
         sy = ay + 84 * u + si * 26 * u
-        label(ax + 8 * u, sy, cp_label(si), TXT_DIM, T_CAPTION, W_BOLD)
+        label(ax + 8 * u, sy, cp_label(si), theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
         fill_rgb(ax + 24 * u, sy + 4 * u, CP_SLIDER_W * u, 6 * u, rgb(40, 46, 66))
         kx = ax + 24 * u + cp_chan(si) * CP_SLIDER_W * u / 255
         fill_rgb(kx - 3 * u, sy, 6 * u, 14 * u, ac_cat_color(1))
-        label_num(ax + 24 * u + (CP_SLIDER_W + 12) * u, sy, cp_chan(si), TXT_DIM, T_CAPTION, W_REG)
+        label_num(ax + 24 * u + (CP_SLIDER_W + 12) * u, sy, cp_chan(si), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         si = si + 1
     }
     return 0
@@ -192,25 +192,25 @@ fn pt_match() {
 fn pt_draw(ax, ay, aw, ah) {
     u = ui()
     dw = cell_w()
-    label(ax + 8 * u, ay + 8 * u, "pattern  ( . * ^ $ )", TXT_DIM, T_CAPTION, W_BOLD)
+    label(ax + 8 * u, ay + 8 * u, "pattern  ( . * ^ $ )", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
     fill_rgb(ax + 8 * u, ay + 24 * u, aw - 16 * u, cell_h() + 6 * u, rgb(18, 22, 34))
     pi = 0
-    while pi < pt_plen { char_aa(ax + 12 * u + pi * dw, ay + 27 * u, peek8(PT_PATTERN + pi), TXT_HI)  pi = pi + 1 }
-    if pt_field == 0 { fill_rgb(ax + 12 * u + pt_plen * dw, ay + 27 * u, 2 * u, cell_h(), ACCENT) }
+    while pi < pt_plen { char_aa(ax + 12 * u + pi * dw, ay + 27 * u, peek8(PT_PATTERN + pi), theme(TH_TEXT_HI))  pi = pi + 1 }
+    if pt_field == 0 { fill_rgb(ax + 12 * u + pt_plen * dw, ay + 27 * u, 2 * u, cell_h(), theme(TH_ACCENT)) }
 
-    label(ax + 8 * u, ay + 58 * u, "text", TXT_DIM, T_CAPTION, W_BOLD)
+    label(ax + 8 * u, ay + 58 * u, "text", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
     fill_rgb(ax + 8 * u, ay + 74 * u, aw - 16 * u, cell_h() + 6 * u, rgb(18, 22, 34))
     ti = 0
-    while ti < pt_tlen { char_aa(ax + 12 * u + ti * dw, ay + 77 * u, peek8(PT_TEXT + ti), TXT_HI)  ti = ti + 1 }
-    if pt_field == 1 { fill_rgb(ax + 12 * u + pt_tlen * dw, ay + 77 * u, 2 * u, cell_h(), ACCENT) }
+    while ti < pt_tlen { char_aa(ax + 12 * u + ti * dw, ay + 77 * u, peek8(PT_TEXT + ti), theme(TH_TEXT_HI))  ti = ti + 1 }
+    if pt_field == 1 { fill_rgb(ax + 12 * u + pt_tlen * dw, ay + 77 * u, 2 * u, cell_h(), theme(TH_ACCENT)) }
 
     if pt_plen == 0 {
-        label(ax + 8 * u, ay + 112 * u, "Tab switches field, type to edit", TXT_DIM, T_CAPTION, W_REG)
+        label(ax + 8 * u, ay + 112 * u, "Tab switches field, type to edit", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     } else {
         if pt_match() == 1 {
             label(ax + 8 * u, ay + 112 * u, "MATCH", ac_cat_color(1), T_BODY, W_BOLD)
         } else {
-            label(ax + 8 * u, ay + 112 * u, "no match", CRIT_RED, T_BODY, W_BOLD)
+            label(ax + 8 * u, ay + 112 * u, "no match", theme(TH_DANGER), T_BODY, W_BOLD)
         }
     }
     return 0
@@ -240,15 +240,15 @@ bc_val = 0
 
 fn bc_draw(ax, ay, aw, ah) {
     u = ui()
-    label(ax + 8 * u, ay + 10 * u, "dec", TXT_DIM, T_CAPTION, W_BOLD)
-    label_num(ax + 60 * u, ay + 10 * u, bc_val, TXT_HI, T_BODY, W_REG)
-    label(ax + 8 * u, ay + 38 * u, "hex", TXT_DIM, T_CAPTION, W_BOLD)
-    ac_draw_base(ax + 60 * u, ay + 40 * u, bc_val, 6, 16, ACCENT)
-    label(ax + 8 * u, ay + 62 * u, "oct", TXT_DIM, T_CAPTION, W_BOLD)
-    ac_draw_base(ax + 60 * u, ay + 64 * u, bc_val, 8, 8, TXT_HI)
-    label(ax + 8 * u, ay + 86 * u, "bin", TXT_DIM, T_CAPTION, W_BOLD)
-    ac_draw_base(ax + 60 * u, ay + 88 * u, bc_val, 24, 2, TXT_DIM)
-    label(ax + 8 * u, ay + ah - 22 * u, "type digits, backspace clears one", TXT_DIM, T_CAPTION, W_REG)
+    label(ax + 8 * u, ay + 10 * u, "dec", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    label_num(ax + 60 * u, ay + 10 * u, bc_val, theme(TH_TEXT_HI), T_BODY, W_REG)
+    label(ax + 8 * u, ay + 38 * u, "hex", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    ac_draw_base(ax + 60 * u, ay + 40 * u, bc_val, 6, 16, theme(TH_ACCENT))
+    label(ax + 8 * u, ay + 62 * u, "oct", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    ac_draw_base(ax + 60 * u, ay + 64 * u, bc_val, 8, 8, theme(TH_TEXT_HI))
+    label(ax + 8 * u, ay + 86 * u, "bin", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    ac_draw_base(ax + 60 * u, ay + 88 * u, bc_val, 24, 2, theme(TH_TEXT_DIM))
+    label(ax + 8 * u, ay + ah - 22 * u, "type digits, backspace clears one", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     return 0
 }
 
@@ -285,37 +285,37 @@ fn ld_draw(ax, ay, aw, ah) {
     }
     if firstdiff < 0 { if ld_alen != ld_blen { firstdiff = short } }
 
-    label(ax + 8 * u, ay + 8 * u, "A", TXT_DIM, T_CAPTION, W_BOLD)
+    label(ax + 8 * u, ay + 8 * u, "A", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
     fill_rgb(ax + 24 * u, ay + 24 * u, aw - 32 * u, cell_h() + 4 * u, rgb(18, 22, 34))
     ai = 0
     while ai < ld_alen {
-        col = TXT_HI
-        if firstdiff >= 0 { if ai >= firstdiff { col = CRIT_RED } }
+        col = theme(TH_TEXT_HI)
+        if firstdiff >= 0 { if ai >= firstdiff { col = theme(TH_DANGER) } }
         char_aa(ax + 26 * u + ai * dw, ay + 26 * u, peek8(DIFF_A + ai), col)
         ai = ai + 1
     }
-    if ld_field == 0 { fill_rgb(ax + 26 * u + ld_alen * dw, ay + 26 * u, 2 * u, cell_h(), ACCENT) }
+    if ld_field == 0 { fill_rgb(ax + 26 * u + ld_alen * dw, ay + 26 * u, 2 * u, cell_h(), theme(TH_ACCENT)) }
 
-    label(ax + 8 * u, ay + 54 * u, "B", TXT_DIM, T_CAPTION, W_BOLD)
+    label(ax + 8 * u, ay + 54 * u, "B", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
     fill_rgb(ax + 24 * u, ay + 70 * u, aw - 32 * u, cell_h() + 4 * u, rgb(18, 22, 34))
     bi = 0
     while bi < ld_blen {
-        col = TXT_HI
-        if firstdiff >= 0 { if bi >= firstdiff { col = CRIT_RED } }
+        col = theme(TH_TEXT_HI)
+        if firstdiff >= 0 { if bi >= firstdiff { col = theme(TH_DANGER) } }
         char_aa(ax + 26 * u + bi * dw, ay + 72 * u, peek8(DIFF_B + bi), col)
         bi = bi + 1
     }
-    if ld_field == 1 { fill_rgb(ax + 26 * u + ld_blen * dw, ay + 72 * u, 2 * u, cell_h(), ACCENT) }
+    if ld_field == 1 { fill_rgb(ax + 26 * u + ld_blen * dw, ay + 72 * u, 2 * u, cell_h(), theme(TH_ACCENT)) }
 
     if ld_alen == 0 { if ld_blen == 0 {
-        label(ax + 8 * u, ay + 104 * u, "Tab switches line, type to edit", TXT_DIM, T_CAPTION, W_REG)
+        label(ax + 8 * u, ay + 104 * u, "Tab switches line, type to edit", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         return 0
     }}
     if firstdiff < 0 {
         label(ax + 8 * u, ay + 104 * u, "identical", ac_cat_color(1), T_BODY, W_BOLD)
     } else {
-        label(ax + 8 * u, ay + 104 * u, "differs at column", CRIT_RED, T_BODY, W_REG)
-        label_num(ax + 8 * u + label_w("differs at column ", T_BODY, W_REG), ay + 104 * u, firstdiff, CRIT_RED, T_BODY, W_BOLD)
+        label(ax + 8 * u, ay + 104 * u, "differs at column", theme(TH_DANGER), T_BODY, W_REG)
+        label_num(ax + 8 * u + label_w("differs at column ", T_BODY, W_REG), ay + 104 * u, firstdiff, theme(TH_DANGER), T_BODY, W_BOLD)
     }
     return 0
 }
@@ -360,21 +360,21 @@ fn ck_fletcher() {
 fn ck_draw(ax, ay, aw, ah) {
     u = ui()
     dw = cell_w()
-    label(ax + 8 * u, ay + 8 * u, "input", TXT_DIM, T_CAPTION, W_BOLD)
+    label(ax + 8 * u, ay + 8 * u, "input", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
     fill_rgb(ax + 8 * u, ay + 24 * u, aw - 16 * u, 2 * cell_h() + 8 * u, rgb(18, 22, 34))
     ci = 0
     row = 0
     col = 0
     while ci < ck_len {
-        char_aa(ax + 12 * u + col * dw, ay + 27 * u + row * cell_h(), peek8(HASH_BUF + ci), TXT_HI)
+        char_aa(ax + 12 * u + col * dw, ay + 27 * u + row * cell_h(), peek8(HASH_BUF + ci), theme(TH_TEXT_HI))
         col = col + 1
         if col >= 28 { col = 0  row = 1 }
         ci = ci + 1
     }
-    fill_rgb(ax + 12 * u + col * dw, ay + 27 * u + row * cell_h(), 2 * u, cell_h(), ACCENT)
+    fill_rgb(ax + 12 * u + col * dw, ay + 27 * u + row * cell_h(), 2 * u, cell_h(), theme(TH_ACCENT))
 
-    label(ax + 8 * u, ay + 80 * u, "fletcher-16", TXT_DIM, T_CAPTION, W_BOLD)
-    ac_draw_base(ax + 96 * u, ay + 80 * u, ck_fletcher(), 4, 16, ACCENT)
+    label(ax + 8 * u, ay + 80 * u, "fletcher-16", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    ac_draw_base(ax + 96 * u, ay + 80 * u, ck_fletcher(), 4, 16, theme(TH_ACCENT))
     return 0
 }
 
@@ -411,12 +411,12 @@ fn uc_convert() {
 fn uc_draw(ax, ay, aw, ah) {
     u = ui()
     rrect(ax + 8 * u, ay + 8 * u, aw - 16 * u, 24 * u, 6 * u, rgb(30, 36, 54))
-    label(ax + 16 * u, ay + 14 * u, uc_cat_label(uc_cat), TXT_HI, T_CAPTION, W_REG)
-    label(ax + 8 * u, ay + 48 * u, "value", TXT_DIM, T_CAPTION, W_BOLD)
-    label_num(ax + 70 * u, ay + 48 * u, uc_val, TXT_HI, T_BODY, W_REG)
-    label(ax + 8 * u, ay + 76 * u, "=", TXT_DIM, T_TITLE, W_BOLD)
-    label_num(ax + 30 * u, ay + 74 * u, uc_convert(), ACCENT, T_TITLE, W_BOLD)
-    label(ax + 8 * u, ay + ah - 22 * u, "click the bar to switch, type to enter", TXT_DIM, T_CAPTION, W_REG)
+    label(ax + 16 * u, ay + 14 * u, uc_cat_label(uc_cat), theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    label(ax + 8 * u, ay + 48 * u, "value", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    label_num(ax + 70 * u, ay + 48 * u, uc_val, theme(TH_TEXT_HI), T_BODY, W_REG)
+    label(ax + 8 * u, ay + 76 * u, "=", theme(TH_TEXT_DIM), T_TITLE, W_BOLD)
+    label_num(ax + 30 * u, ay + 74 * u, uc_convert(), theme(TH_ACCENT), T_TITLE, W_BOLD)
+    label(ax + 8 * u, ay + ah - 22 * u, "click the bar to switch, type to enter", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     return 0
 }
 
@@ -500,16 +500,16 @@ fn kt_ety_name(e) {
 
 fn kt_draw(ax, ay, aw, ah) {
     u = ui()
-    label(ax + 8 * u, ay + 10 * u, "press any key", TXT_DIM, T_CAPTION, W_REG)
+    label(ax + 8 * u, ay + 10 * u, "press any key", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     if kt_ety < 0 { return 0 }
-    label(ax + 8 * u, ay + 40 * u, "type", TXT_DIM, T_CAPTION, W_BOLD)
-    label(ax + 70 * u, ay + 40 * u, kt_ety_name(kt_ety), ACCENT, T_BODY, W_BOLD)
-    label(ax + 8 * u, ay + 68 * u, "code", TXT_DIM, T_CAPTION, W_BOLD)
-    label_num(ax + 70 * u, ay + 68 * u, kt_ecode, TXT_HI, T_BODY, W_REG)
+    label(ax + 8 * u, ay + 40 * u, "type", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    label(ax + 70 * u, ay + 40 * u, kt_ety_name(kt_ety), theme(TH_ACCENT), T_BODY, W_BOLD)
+    label(ax + 8 * u, ay + 68 * u, "code", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    label_num(ax + 70 * u, ay + 68 * u, kt_ecode, theme(TH_TEXT_HI), T_BODY, W_REG)
     if kt_ety == 3 {
         if kt_ecode >= 32 { if kt_ecode < 127 {
-            label(ax + 8 * u, ay + 96 * u, "char", TXT_DIM, T_CAPTION, W_BOLD)
-            char_aa(ax + 70 * u, ay + 98 * u, kt_ecode, TXT_HI)
+            label(ax + 8 * u, ay + 96 * u, "char", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+            char_aa(ax + 70 * u, ay + 98 * u, kt_ecode, theme(TH_TEXT_HI))
         }}
     }
     return 0
@@ -535,16 +535,16 @@ bm_result = 0
 
 fn bm_draw(ax, ay, aw, ah) {
     u = ui()
-    label(ax + 8 * u, ay + 10 * u, "fib(n), n =", TXT_DIM, T_CAPTION, W_BOLD)
-    label_num(ax + 90 * u, ay + 10 * u, bm_n, TXT_HI, T_CAPTION, W_REG)
+    label(ax + 8 * u, ay + 10 * u, "fib(n), n =", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    label_num(ax + 90 * u, ay + 10 * u, bm_n, theme(TH_TEXT_HI), T_CAPTION, W_REG)
     rrect(ax + 8 * u, ay + 32 * u, 60 * u, 22 * u, 6 * u, ac_cat_color(1))
-    label(ax + 22 * u, ay + 38 * u, "run", PANEL, T_CAPTION, W_BOLD)
+    label(ax + 22 * u, ay + 38 * u, "run", theme(TH_PANEL), T_CAPTION, W_BOLD)
     if bm_ticks >= 0 {
-        label(ax + 8 * u, ay + 70 * u, "result", TXT_DIM, T_CAPTION, W_BOLD)
-        label_num(ax + 70 * u, ay + 70 * u, bm_result, TXT_HI, T_CAPTION, W_REG)
-        label(ax + 8 * u, ay + 92 * u, "elapsed", TXT_DIM, T_CAPTION, W_BOLD)
-        label_num(ax + 70 * u, ay + 92 * u, bm_ticks, ACCENT, T_CAPTION, W_BOLD)
-        label(ax + 70 * u + label_w("0000", T_CAPTION, W_BOLD), ay + 92 * u, "ticks (100 Hz)", TXT_DIM, T_CAPTION, W_REG)
+        label(ax + 8 * u, ay + 70 * u, "result", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+        label_num(ax + 70 * u, ay + 70 * u, bm_result, theme(TH_TEXT_HI), T_CAPTION, W_REG)
+        label(ax + 8 * u, ay + 92 * u, "elapsed", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+        label_num(ax + 70 * u, ay + 92 * u, bm_ticks, theme(TH_ACCENT), T_CAPTION, W_BOLD)
+        label(ax + 70 * u + label_w("0000", T_CAPTION, W_BOLD), ay + 92 * u, "ticks (100 Hz)", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     }
     return 0
 }

@@ -583,8 +583,8 @@ fn help_typed() {
     print("    mouse             a cursor driven by the PS/2 mouse")
     print("    snake             play SNAKE (w a s d to steer)")
     print("    paint             paint with the mouse")
-    print("    edit <n>          edit RAM file n (0-9) - ESC saves it")
-    print("    ls                list the RAM files")
+    print("    edit <n>          edit legacy RAM slot n (0-9)")
+    print("    files             persistent zlfs file manager")
     print("    beep              beep the PC speaker")
     print("    poke              poke a byte into video memory and read it back")
     color(C_CYAN)  print("  our hardware drivers")
@@ -623,8 +623,8 @@ fn help_keys() {
     print("    x        mouse demo - a cursor driven by the PS/2 mouse")
     print("    g        play SNAKE (w a s d to steer)")
     print("    d        paint with the mouse")
-    print("    <n> i    edit RAM file n (0-9) - ESC saves it")
-    print("    l        list the RAM files")
+    print("    <n> i    edit legacy RAM slot n (0-9)")
+    print("    l        Files app (graphical mode) / RAM slots (text mode)")
     print("    run F    run a program from a file (type it - needs a name)")
     print("    .        zlfs on the NVMe disk - mount, and count the boots")
     print("    ,        list the files ON DISK, by name")
@@ -714,8 +714,22 @@ fn editor_draw(ax, ay, aw, ah) {
     }
     # the caret, where the next character will land
     fill_rgb(ed_x, ed_y, ed_cw, ed_ch - 2, theme(TH_ACCENT))
-    text_aa(ax + 4, ay + ah - ed_ch, "ESC saves and closes   file", theme(TH_TEXT_DIM))
-    num_aa(ax + 4 + 28 * ed_cw, ay + ah - ed_ch, ed_slot, theme(TH_TEXT_HI))
+    text_aa(ax + 4, ay + ah - ed_ch, "Ctrl+S save  ESC save+close", theme(TH_TEXT_DIM))
+    if ed_disk == 0 {
+        text_aa(ax + aw - 15 * ed_cw, ay + ah - ed_ch, "RAM", theme(TH_TEXT_DIM))
+        num_aa(ax + aw - 11 * ed_cw, ay + ah - ed_ch, ed_slot, theme(TH_TEXT_HI))
+    }
+    if ed_disk == 1 {
+        ed_ni = 0
+        ed_nx = ax + aw - 24 * ed_cw
+        while ed_ni < 23 {
+            ed_nc = fs_ch(ed_slot, ed_ni)
+            if ed_nc > 0 { char_aa(ed_nx, ay + ah - ed_ch, ed_nc, theme(TH_ACCENT)) }
+            ed_nx = ed_nx + ed_cw
+            ed_ni = ed_ni + 1
+        }
+    }
+    if ed_dirty == 1 { text_aa(ax + aw - 2 * ed_cw, ay + ah - ed_ch, "*", theme(TH_ACCENT)) }
     num_aa(ax + aw - 8 * ed_cw, ay + ah - ed_ch, ed_len, theme(TH_TEXT_DIM))
     return 0
 }
@@ -1425,29 +1439,83 @@ EDIT_MAX = 8000
 # the same thing every other window means by it. No "press any key".
 ed_slot = 0
 ed_len  = 0
+ed_disk = 0
+ed_dirty = 0
 
 fn editor_open(slot) {
     ed_slot = slot
     ed_len = fs_load(slot)
+    ed_disk = 0
+    ed_dirty = 0
     return 0
+}
+
+fn editor_open_disk(slot) {
+    if fs_ok() == 0 { return 0 }
+    if fs_inuse(slot) == 0 { return 0 }
+    if fs_bytes(slot) >= EDIT_MAX { return 0 }
+    fill_mem(EDIT_BUF, 0, EDIT_MAX)
+    ed_len = fs_rd(slot, EDIT_BUF, EDIT_MAX - 1)
+    ed_slot = slot
+    ed_disk = 1
+    ed_dirty = 0
+    return 1
+}
+
+fn editor_save() {
+    if ed_disk == 1 {
+        if fs_wr(ed_slot, EDIT_BUF, ed_len) == 0 {
+            note_say("file save failed", 400)
+            return 0
+        }
+        ed_dirty = 0
+        note_say("file saved to zlfs", 240)
+        return 1
+    }
+    fs_save(ed_slot, ed_len)
+    ed_dirty = 0
+    return 1
 }
 
 # One key. Returns 1 if it changed anything, 2 if the editor is done.
 fn editor_key(code) {
     if code == 27 {
-        fs_save(ed_slot, ed_len)
-        return 2
+        if editor_save() == 1 { return 2 }
+        return 1
+    }
+    if code == 19 {
+        editor_save()
+        return 1
+    }
+    if code == 3 {
+        clip_new()
+        ed_ci = 0
+        while ed_ci < ed_len { clip_add(peek8(EDIT_BUF + ed_ci))  ed_ci = ed_ci + 1 }
+        if clip_done() == 1 { note_say("document copied", 180) }
+        return 1
+    }
+    if code == 22 {
+        ed_pi = 0
+        while ed_pi < clip_n() {
+            if ed_len < EDIT_MAX - 1 {
+                poke8(EDIT_BUF + ed_len, clip_ch(ed_pi))
+                ed_len = ed_len + 1
+                ed_dirty = 1
+            }
+            ed_pi = ed_pi + 1
+        }
+        return 1
     }
     if code == 8 {
-        if ed_len > 0 { ed_len = ed_len - 1  poke8(EDIT_BUF + ed_len, 0) }
+        if ed_len > 0 { ed_len = ed_len - 1  poke8(EDIT_BUF + ed_len, 0)  ed_dirty = 1 }
         return 1
     }
     if code == 13 {
-        if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, 10)  ed_len = ed_len + 1 }
+        if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, 10)  ed_len = ed_len + 1  ed_dirty = 1 }
         return 1
     }
     if code >= 32 {
-        if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, code)  ed_len = ed_len + 1 }
+        if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, code)  ed_len = ed_len + 1  ed_dirty = 1 }
         return 1
     }
     return 0
@@ -2693,6 +2761,247 @@ fn sn_draw(ax, ay, aw, ah) {
     return 0
 }
 
+# ---- Files: the persistent zlfs file manager ------------------------------
+FILES_ROW = 24
+files_sel = 0 - 1
+files_scroll = 0
+files_new = 0
+files_delete = 0 - 1
+files_format = 0
+
+fn files_select_first() {
+    if fs_ok() == 0 { files_sel = 0 - 1  return 0 }
+    if files_sel >= 0 { if fs_inuse(files_sel) == 1 { return 1 } }
+    files_sel = 0 - 1
+    files_fi = 0
+    while files_fi < fs_max() {
+        if files_sel < 0 { if fs_inuse(files_fi) == 1 { files_sel = files_fi } }
+        files_fi = files_fi + 1
+    }
+    return 1
+}
+
+fn files_refresh() {
+    files_new = 0
+    files_delete = 0 - 1
+    files_format = 0
+    if fs_ok() == 0 { fs_mount() }
+    files_select_first()
+    return fs_ok()
+}
+
+fn files_prev() {
+    files_pi = files_sel - 1
+    while files_pi >= 0 {
+        if fs_inuse(files_pi) == 1 { files_sel = files_pi  files_delete = 0 - 1  return 1 }
+        files_pi = files_pi - 1
+    }
+    return 0
+}
+
+fn files_next() {
+    files_ni = files_sel + 1
+    if files_ni < 0 { files_ni = 0 }
+    while files_ni < fs_max() {
+        if fs_inuse(files_ni) == 1 { files_sel = files_ni  files_delete = 0 - 1  return 1 }
+        files_ni = files_ni + 1
+    }
+    return 0
+}
+
+fn files_sel_order() {
+    files_oi = 0
+    files_on = 0
+    while files_oi < fs_max() {
+        if fs_inuse(files_oi) == 1 {
+            if files_oi == files_sel { return files_on }
+            files_on = files_on + 1
+        }
+        files_oi = files_oi + 1
+    }
+    return 0
+}
+
+fn files_keep_visible(rows) {
+    files_ord = files_sel_order()
+    if files_ord < files_scroll { files_scroll = files_ord }
+    if files_ord >= files_scroll + rows { files_scroll = files_ord - rows + 1 }
+    if files_scroll < 0 { files_scroll = 0 }
+    return 0
+}
+
+fn files_slot_at_order(want) {
+    files_ai = 0
+    files_an = 0
+    while files_ai < fs_max() {
+        if fs_inuse(files_ai) == 1 {
+            if files_an == want { return files_ai }
+            files_an = files_an + 1
+        }
+        files_ai = files_ai + 1
+    }
+    return 0 - 1
+}
+
+fn files_open_selected() {
+    if files_sel < 0 { return 0 }
+    return open_disk_editor(files_sel)
+}
+
+fn files_finish_new() {
+    if fs_nlen() == 0 { note_say("a file needs a name", 260)  return 0 }
+    if fs_get() >= 0 { note_say("that file already exists", 300)  return 0 }
+    files_made = fs_new(0)
+    if files_made < 0 { note_say("could not create file", 300)  return 0 }
+    files_sel = files_made
+    files_new = 0
+    files_scroll = 0
+    note_say("file created", 180)
+    return files_open_selected()
+}
+
+fn files_draw_name(slot, x, y, colour) {
+    files_ci = 0
+    while files_ci < 23 {
+        files_cc = fs_ch(slot, files_ci)
+        if files_cc > 0 { char_aa(x + files_ci * cell_w(), y, files_cc, colour) }
+        files_ci = files_ci + 1
+    }
+    return 0
+}
+
+fn files_draw(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
+    files_u = ui()
+    files_rh = FILES_ROW * files_u
+    label(ax + 12 * files_u, ay + 8 * files_u, "Files", theme(TH_TEXT_HI), T_BODY, W_BOLD)
+    if fs_ok() == 0 {
+        label(ax + 12 * files_u, ay + 42 * files_u, "No mounted zlfs volume", theme(TH_TEXT_HI), T_BODY, W_REG)
+        label(ax + 12 * files_u, ay + 68 * files_u, "R retries. Press Shift+F twice to format.", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        if files_format == 1 {
+            label(ax + 12 * files_u, ay + 98 * files_u, "WARNING: Shift+F again erases this disk", theme(TH_DANGER), T_CAPTION, W_BOLD)
+        }
+        return 0
+    }
+    label_num(ax + aw - 130 * files_u, ay + 8 * files_u, fs_n(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label(ax + aw - 108 * files_u, ay + 8 * files_u, "files", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    if files_new == 1 {
+        rrect(ax + 10 * files_u, ay + 34 * files_u, aw - 20 * files_u, 30 * files_u, 6 * files_u, theme(TH_PANEL_HI))
+        label(ax + 18 * files_u, ay + 40 * files_u, "New:", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        files_nci = 0
+        while files_nci < fs_nlen() {
+            char_aa(ax + 66 * files_u + files_nci * cell_w(), ay + 40 * files_u, fs_nch(files_nci), theme(TH_TEXT_HI))
+            files_nci = files_nci + 1
+        }
+        fill_rgb(ax + 66 * files_u + fs_nlen() * cell_w(), ay + 40 * files_u, 2 * files_u, cell_h() - 4 * files_u, theme(TH_ACCENT))
+    } else {
+        label(ax + 12 * files_u, ay + 40 * files_u, "N new   Enter open   Delete twice remove   R refresh", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    }
+    files_y0 = ay + 72 * files_u
+    files_rows = (ah - 104 * files_u) / files_rh
+    if files_rows < 1 { files_rows = 1 }
+    files_keep_visible(files_rows)
+    files_di = 0
+    files_dn = 0
+    files_seen = 0
+    while files_di < fs_max() {
+        if fs_inuse(files_di) == 1 {
+            if files_seen >= files_scroll { if files_dn < files_rows {
+                files_ry = files_y0 + files_dn * files_rh
+                if files_di == files_sel {
+                    rrect(ax + 8 * files_u, files_ry, aw - 16 * files_u, files_rh - 2 * files_u, 5 * files_u, rgb(35, 58, 78))
+                }
+                files_draw_name(files_di, ax + 18 * files_u, files_ry + 4 * files_u, theme(TH_TEXT_HI))
+                label_num(ax + aw - 112 * files_u, files_ry + 4 * files_u, fs_bytes(files_di), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+                label(ax + aw - 58 * files_u, files_ry + 4 * files_u, "bytes", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+                files_dn = files_dn + 1
+            }}
+            files_seen = files_seen + 1
+        }
+        files_di = files_di + 1
+    }
+    if fs_n() == 0 { label(ax + 18 * files_u, files_y0 + 8 * files_u, "Empty volume. Press N to create a file.", theme(TH_TEXT_DIM), T_BODY, W_REG) }
+    if files_delete >= 0 {
+        label(ax + 12 * files_u, ay + ah - 24 * files_u, "Press Delete again to permanently remove the selected file", theme(TH_DANGER), T_CAPTION, W_BOLD)
+    } else {
+        label_num(ax + 12 * files_u, ay + ah - 24 * files_u, fs_free() * fs_bs(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label(ax + 90 * files_u, ay + ah - 24 * files_u, "bytes free", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    }
+    return 0
+}
+
+fn files_mouse_slot(win, ey) {
+    files_mu = ui()
+    files_my0 = wm_cy(win) + 72 * files_mu
+    if ey < files_my0 { return 0 - 1 }
+    files_mrow = (ey - files_my0) / (FILES_ROW * files_mu)
+    files_mrows = (wm_ch(win) - 104 * files_mu) / (FILES_ROW * files_mu)
+    if files_mrow < 0 { return 0 - 1 }
+    if files_mrow >= files_mrows { return 0 - 1 }
+    return files_slot_at_order(files_scroll + files_mrow)
+}
+
+fn files_event(win, ety, ecode, ex, ey) {
+    if files_new == 1 {
+        if ety == 1 {
+            if ecode == K_ESC { files_new = 0  fs_nclear()  wm_dmg(win)  return 1 }
+            if ecode == K_BKSP { fs_npop()  wm_dmg(win)  return 1 }
+            if ecode == K_ENTER { files_finish_new()  wm_dmg(win)  return 1 }
+        }
+        if ety == 3 {
+            if ecode == 27 { files_new = 0  fs_nclear()  wm_dmg(win)  return 1 }
+            if ecode == 8 { fs_npop()  wm_dmg(win)  return 1 }
+            if ecode == 13 { files_finish_new()  wm_dmg(win)  return 1 }
+            if ecode >= 32 { if ecode <= 126 { fs_npush(ecode)  wm_dmg(win)  return 1 } }
+        }
+        return 1
+    }
+    if ety == 1 {
+        files_rows_now = (wm_ch(win) - 104 * ui()) / (FILES_ROW * ui())
+        if files_rows_now < 1 { files_rows_now = 1 }
+        if ecode == K_UP { files_prev()  files_keep_visible(files_rows_now)  wm_dmg(win)  return 1 }
+        if ecode == K_DOWN { files_next()  files_keep_visible(files_rows_now)  wm_dmg(win)  return 1 }
+        if ecode == K_ENTER { files_open_selected()  return 1 }
+        if ecode == K_DEL {
+            if files_sel < 0 { return 1 }
+            if files_delete == files_sel {
+                fs_rm(files_sel)
+                files_delete = 0 - 1
+                files_select_first()
+            } else { files_delete = files_sel }
+            wm_dmg(win)
+            return 1
+        }
+    }
+    if ety == 3 {
+        if ecode == 13 { files_open_selected()  return 1 }
+        if ecode == 110 { fs_nclear()  files_new = 1  files_delete = 0 - 1  wm_dmg(win)  return 1 }
+        if ecode == 114 { files_refresh()  wm_dmg(win)  return 1 }
+        if ecode == 70 {
+            if fs_ok() == 0 {
+                if files_format == 1 {
+                    if fs_format() == 1 { files_format = 0  files_select_first()  note_say("zlfs formatted", 300) }
+                } else { files_format = 1 }
+                wm_dmg(win)
+            }
+            return 1
+        }
+    }
+    if ety == 4 {
+        if band(ecode, 1) != 0 {
+            files_hit = files_mouse_slot(win, ey)
+            if files_hit >= 0 {
+                files_sel = files_hit
+                files_delete = 0 - 1
+                wm_dmg(win)
+                if band(ecode, 256) != 0 { files_open_selected() }
+            }
+            return 1
+        }
+    }
+    return 0
+}
+
 APP_SHELL   = 0
 APP_MONITOR = 1
 APP_ABOUT   = 2
@@ -2961,6 +3270,7 @@ APP_CUBE    = 9
 APP_ANIM    = 10
 APP_MOUSE   = 11
 APP_EDIT    = 12
+APP_FILES   = 13
 
 # Which window each app is in, or -1. An app that is already open is FOCUSED
 # rather than opened twice - wm.c would happily give you a second Snake, and
@@ -2973,6 +3283,7 @@ mouse_win = 0 - 1
 edit_win  = 0 - 1
 browser_win = 0 - 1
 settings_win = 0 - 1
+files_win = 0 - 1
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_MONITOR { return sysmon_body(ax, ay, aw, ah) }
@@ -2998,6 +3309,7 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_ANIM    { return anim_draw(ax, ay, aw, ah) }
     if id == APP_MOUSE   { return mouse_draw(ax, ay, aw, ah) }
     if id == APP_EDIT    { return editor_draw(ax, ay, aw, ah) }
+    if id == APP_FILES   { return files_draw(ax, ay, aw, ah) }
     if id == APP_SHELL {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the
@@ -3079,6 +3391,7 @@ fn app_event(id, win, ety, ecode, ex, ey) {
         if ety == 4 { if br_click(ex, ey) == 1 { wm_dmg(win) }  return 1 }
         return 1
     }
+    if id == APP_FILES { return files_event(win, ety, ecode, ex, ey) }
     # EV_KEY_DOWN (1) carrying a navigation code becomes the character the apps
     # below already handle. EV_CHAR (3) passes straight through.
     ac = ecode
@@ -3270,6 +3583,17 @@ fn open_app(cmd, arg) {
         wm_report(edit_win)
         return 1
     }
+    if cmd == 108 {
+        if files_win >= 0 { if wm_open_p(files_win) == 1 {
+            wm_setfocus(files_win)  wm_raise(files_win)  return 1
+        }}
+        files_win = wm_open(APP_FILES, "Files", 310 * oa_u, 80 * oa_u, 520 * oa_u, 380 * oa_u)
+        if files_win < 0 { return 0 }
+        files_refresh()
+        wm_setfocus(files_win)
+        wm_report(files_win)
+        return 1
+    }
     if cmd == 120 {
         if mouse_win >= 0 { if wm_open_p(mouse_win) == 1 {
             wm_setfocus(mouse_win)  wm_raise(mouse_win)  return 1
@@ -3281,6 +3605,25 @@ fn open_app(cmd, arg) {
         return 1
     }
     return 0
+}
+
+fn open_disk_editor(slot) {
+    if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
+        note_say("close the current editor first", 300)
+        wm_setfocus(edit_win)
+        wm_raise(edit_win)
+        return 0
+    }}
+    if editor_open_disk(slot) == 0 {
+        note_say("file is missing or too large", 320)
+        return 0
+    }
+    ode_u = ui()
+    edit_win = wm_open(APP_EDIT, "zlEDIT - disk", 420 * ode_u, 150 * ode_u, 560 * ode_u, 390 * ode_u)
+    if edit_win < 0 { return 0 }
+    wm_setfocus(edit_win)
+    wm_report(edit_win)
+    return 1
 }
 
 # Runs every frame, must be cheap, MUST NOT DRAW. Returning 1 means "my state
@@ -3581,6 +3924,8 @@ fn task_label(app) {
     if app == APP_MENU    { return "Menu" }
     if app == APP_BROWSER { return "Browser" }
     if app == APP_SETTINGS { return "Settings" }
+    if app == APP_FILES   { return "Files" }
+    if app == APP_EDIT    { return "Editor" }
     # Every app-suite window falls through to the same registry the catalog
     # reads, so a new app's taskbar chip needs no entry here at all.
     if app >= APP_CATALOG { return reg_name(app) }
@@ -3600,6 +3945,10 @@ fn app_has_tile(app) {
     if app == APP_CUBE    { return 1 }
     if app == APP_SETTINGS { return 1 }
     if app == APP_MENU    { return 1 }        # never listed at all
+    if app == APP_FILES   { return 1 }
+    if app == APP_EDIT    { return 1 }
+    if app == APP_PAINT   { return 1 }
+    if app == APP_CUBE    { return 1 }
     return 0
 }
 
@@ -3660,6 +4009,7 @@ fn dock_launch(slot) {
     if slot == 0 { return raise_shell() }
     if slot == 1 { return reopen_browser() }
     if slot == 4 { return open_snake() }
+    if slot == 5 { return open_app(118, 0) }
     if slot == 6 { return reopen_mon() }
     if slot == 7 { return reopen_about() }
     if slot == 8 { return reopen_settings() }
@@ -4289,7 +4639,7 @@ ok_line("zl runtime, kernel subset")
 # double-free, and nothing to leak that a reset does not reclaim. The line stops
 # being honest the day the interpreter boxes lists and strings (EXEC-PROMPT §8),
 # and that is the change that has to carry it, not this one.
-info_line("no heap, no filesystem, no scheduler")
+info_line("no heap, zlfs mounts on demand, no scheduler")
 
 print("")
 color(C_GREEN)  print("  ready.")

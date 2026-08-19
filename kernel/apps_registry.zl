@@ -353,7 +353,7 @@ fn cat_max_scroll(win) {
 
 fn cat_draw(ax, ay, aw, ah) {
     u = ui()
-    fill_rgb(ax, ay, aw, ah, PANEL)
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
 
     # the legend: three swatches, so the colour on every tile MEANS something
     # rather than being decoration - the anti-slop reading of "colour work".
@@ -361,12 +361,12 @@ fn cat_draw(ax, ay, aw, ah) {
     li = 0
     while li < 3 {
         fill_rgb(lx, ay + 9 * u, 8 * u, 8 * u, ac_cat_color(li))
-        label(lx + 12 * u, ay + 6 * u, reg_cat_label(li), TXT_DIM, T_CAPTION, W_REG)
+        label(lx + 12 * u, ay + 6 * u, reg_cat_label(li), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         lx = lx + label_w(reg_cat_label(li), T_CAPTION, W_REG) + 32 * u
         li = li + 1
     }
     if REG_COUNT == 0 {
-        label(ax + 8 * u, ay + CAT_HEADER * u + 8 * u, "no applications registered yet", TXT_DIM, T_BODY, W_REG)
+        label(ax + 8 * u, ay + CAT_HEADER * u + 8 * u, "no applications registered yet", theme(TH_TEXT_DIM), T_BODY, W_REG)
         return 0
     }
 
@@ -395,11 +395,11 @@ fn cat_draw(ax, ay, aw, ah) {
                 fill_rgb(tx + 6 * u, ty + 4 * u, CAT_TILE_W * u - 12 * u, 3 * u, ac_cat_color(reg_cat(id)))
                 ic = reg_icon(id)
                 if ic >= 0 {
-                    icon(tx + CAT_TILE_W * u / 2 - 12 * u, ty + 16 * u, ic, TXT_HI)
+                    icon(tx + CAT_TILE_W * u / 2 - 12 * u, ty + 16 * u, ic, theme(TH_TEXT_HI))
                 } else {
-                    label(tx + 16 * u, ty + 18 * u, reg_mono(id), TXT_HI, T_TITLE, W_BOLD)
+                    label(tx + 16 * u, ty + 18 * u, reg_mono(id), theme(TH_TEXT_HI), T_TITLE, W_BOLD)
                 }
-                label(tx + 10 * u, ty + CAT_TILE_H * u - 24 * u, reg_name(id), TXT_HI, T_CAPTION, W_REG)
+                label(tx + 10 * u, ty + CAT_TILE_H * u - 24 * u, reg_name(id), theme(TH_TEXT_HI), T_CAPTION, W_REG)
             }
         }
         i = i + 1

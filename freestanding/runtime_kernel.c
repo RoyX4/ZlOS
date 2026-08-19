@@ -708,6 +708,9 @@ extern unsigned fs_bsize(void);
 extern int  fs_name_byte(int idx, int i);
 extern void fs_name_clear(void);
 extern int  fs_name_push(int ch);
+extern int  fs_name_pop(void);
+extern int  fs_name_stage_len(void);
+extern int  fs_name_stage_byte(int i);
 extern int  fs_create_named(unsigned bytes);
 extern int  fs_find_named(void);
 extern int  fs_delete(int idx);
@@ -1686,6 +1689,9 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "fs_bs"))      return zl_num((double)fs_bsize());
     if (streq(name, "fs_nclear"))  { fs_name_clear(); return zl_nil(); }
     if (streq(name, "fs_npush"))   return zl_num((double)fs_name_push((int)a[0].num));
+    if (streq(name, "fs_npop"))    return zl_num((double)fs_name_pop());
+    if (streq(name, "fs_nlen"))    return zl_num((double)fs_name_stage_len());
+    if (streq(name, "fs_nch"))     return zl_num((double)fs_name_stage_byte((int)a[0].num));
     if (streq(name, "fs_new"))     return zl_num((double)fs_create_named((unsigned)a[0].num));
     if (streq(name, "fs_get"))     return zl_num((double)fs_find_named());
     if (streq(name, "fs_rm"))      return zl_num((double)fs_delete((int)a[0].num));

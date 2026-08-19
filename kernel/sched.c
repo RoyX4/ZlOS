@@ -3,7 +3,7 @@
  * Up to now zlOS has run exactly one thread of control. The shell loops
  * waiting for a key; while it waits, nothing else in the machine happens. That
  * is the last structural thing separating it from an operating system, and the
- * boot log has been honest about it: "no heap, no filesystem, no scheduler".
+ * boot log has been honest about it: "no heap, zlfs mounts on demand, no scheduler".
  *
  * WHAT A SCHEDULER ACTUALLY IS
  * ----------------------------

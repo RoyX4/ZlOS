@@ -93,14 +93,14 @@ fn wg_draw(ax, ay, aw, ah) {
             cx = gx + ci * cell
             cy = ay + 6 * u + ri * cell
             rrect(cx + 2 * u, cy + 2 * u, cell - 4 * u, cell - 4 * u, 4 * u, wg_status_col(st))
-            if st != 0 { char_aa(cx + cell / 2 - cell_w() / 2, cy + cell / 2 - cell_h() / 2, 65 + (v % 32), TXT_HI) }
+            if st != 0 { char_aa(cx + cell / 2 - cell_w() / 2, cy + cell / 2 - cell_h() / 2, 65 + (v % 32), theme(TH_TEXT_HI)) }
             ci = ci + 1
         }
         ri = ri + 1
     }
     if wg_done == 1 { label(gx, ay + 8 * u + WG_ROWS * cell, "correct - r restarts", ac_cat_color(1), T_CAPTION, W_BOLD) }
-    if wg_done == 2 { label(gx, ay + 8 * u + WG_ROWS * cell, "out of guesses - r restarts", CRIT_RED, T_CAPTION, W_BOLD) }
-    if wg_done == 0 { label(gx, ay + 8 * u + WG_ROWS * cell, "type a 5-letter word, enter to guess", TXT_DIM, T_CAPTION, W_REG) }
+    if wg_done == 2 { label(gx, ay + 8 * u + WG_ROWS * cell, "out of guesses - r restarts", theme(TH_DANGER), T_CAPTION, W_BOLD) }
+    if wg_done == 0 { label(gx, ay + 8 * u + WG_ROWS * cell, "type a 5-letter word, enter to guess", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
     return 0
 }
 
@@ -226,7 +226,7 @@ fn mz_draw(ax, ay, aw, ah) {
     cell = MZ_CELL * u
     gx = ax + (aw - MAZE_W * cell) / 2
     gy = ay + 4 * u
-    wallcol = TXT_DIM
+    wallcol = theme(TH_TEXT_DIM)
     fill_rgb(gx, gy, MAZE_W * cell, MAZE_H * cell, rgb(10, 12, 20))
     ri = 0
     while ri < MAZE_H {
@@ -247,7 +247,7 @@ fn mz_draw(ax, ay, aw, ah) {
     fill_rgb(gx + mz_px * cell + 3 * u, gy + mz_py * cell + 3 * u, cell - 6 * u, cell - 6 * u, ac_cat_color(2))
     msg_y = gy + MAZE_H * cell + 8 * u
     if mz_won == 1 { label(gx, msg_y, "found the exit - r generates a new maze", ac_cat_color(1), T_CAPTION, W_BOLD) }
-    if mz_won == 0 { label(gx, msg_y, "arrow keys to the teal exit", TXT_DIM, T_CAPTION, W_REG) }
+    if mz_won == 0 { label(gx, msg_y, "arrow keys to the teal exit", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
     return 0
 }
 

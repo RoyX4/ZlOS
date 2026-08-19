@@ -8,7 +8,7 @@
  [  OK  ] VGA text console, 80x25
  [  OK  ] zl runtime, kernel subset
  [ INFO ] no interrupts - the shell polls
- [ INFO ] no heap, no filesystem, no scheduler
+ [ INFO ] no heap, zlfs mounts on demand, no scheduler
 
  ready.
  zl> 20f
@@ -19,6 +19,11 @@
 `kernel.zl` runs on bare metal. No operating system underneath it, no libc,
 no syscalls. `print()` talks to COM1 by polling the UART; `poke8` writes to
 VGA text memory at `0xB8000` and the characters appear on screen.
+
+On a graphical boot, the Files app mounts the NVMe-backed `zlfs`, creates and
+deletes named files, and opens them in the disk-backed editor. `Ctrl+S` writes
+through to disk; `Esc` saves and closes. See
+[`docs/storage-and-files.md`](docs/storage-and-files.md).
 
 ```bash
 ./build.sh          # kernel.zl -> kernel.elf
@@ -167,9 +172,10 @@ the kernel. A human at a terminal cannot type before the machine boots, so
 this never shows up interactively. `verify.sh` sends a throwaway `.` first
 for exactly this reason.
 
-## What this is not
+## Current limits
 
-It owns the machine, prints, and takes input. It has no interrupts (the
-shell polls), no timer, no memory manager, no scheduler, no filesystem, and
-cannot load a program from disk. `design_kernel.md` draws the line:
-**W6 owns the machine and can print; W7 does something with it.**
+The early polling-only description above is historical. The current kernel has
+interrupt-driven input, a timer, a compositor, NVMe and zlfs. It still has no
+general-purpose heap or active process scheduler, and the kernel-side zl
+interpreter is not linked into production. Read [`HANDOFF.md`](HANDOFF.md) for
+the measured current state rather than inferring it from this bring-up guide.

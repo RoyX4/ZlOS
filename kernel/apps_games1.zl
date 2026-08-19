@@ -37,7 +37,7 @@ fn tt_check() {
 
 fn tt_mark_col(m) {
     if m == 1 { return ac_cat_color(2) }
-    return ACCENT
+    return theme(TH_ACCENT)
 }
 fn tt_draw(ax, ay, aw, ah) {
     u = ui()
@@ -56,10 +56,10 @@ fn tt_draw(ax, ay, aw, ah) {
         ci = ci + 1
     }
     msg_y = gy + 3 * cell + 8 * u
-    if tt_win == 0 { label(gx, msg_y, tt_turn_str(), TXT_DIM, T_CAPTION, W_REG) }
+    if tt_win == 0 { label(gx, msg_y, tt_turn_str(), theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
     if tt_win == 1 { label(gx, msg_y, "X wins - r restarts", ac_cat_color(2), T_CAPTION, W_BOLD) }
-    if tt_win == 2 { label(gx, msg_y, "O wins - r restarts", ACCENT, T_CAPTION, W_BOLD) }
-    if tt_win == 3 { label(gx, msg_y, "draw - r restarts", TXT_DIM, T_CAPTION, W_BOLD) }
+    if tt_win == 2 { label(gx, msg_y, "O wins - r restarts", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
+    if tt_win == 3 { label(gx, msg_y, "draw - r restarts", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD) }
     return 0
 }
 fn tt_mark_str(m) { if m == 1 { return "X" }  return "O" }
@@ -118,7 +118,7 @@ fn nim_draw(ax, ay, aw, ah) {
         pi = pi + 1
     }
     if nim_win == 0 {
-        label(ax + 10 * u, ay + 92 * u, nim_turn_str(), TXT_DIM, T_CAPTION, W_REG)
+        label(ax + 10 * u, ay + 92 * u, nim_turn_str(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     } else {
         label(ax + 10 * u, ay + 92 * u, nim_win_str(), ac_cat_color(2), T_CAPTION, W_BOLD)
     }
@@ -204,8 +204,8 @@ fn ho_draw(ax, ay, aw, ah) {
     pi = 0
     while pi < 3 {
         px = ax + pi * pw + pw / 2
-        col = TXT_DIM
-        if ho_sel == pi { col = ACCENT }
+        col = theme(TH_TEXT_DIM)
+        if ho_sel == pi { col = theme(TH_ACCENT) }
         fill_rgb(px - 1 * u, baseY - 70 * u, 2 * u, 70 * u, col)
         fill_rgb(ax + pi * pw + 10 * u, baseY, pw - 20 * u, 4 * u, col)
         pi = pi + 1
@@ -226,8 +226,8 @@ fn ho_draw(ax, ay, aw, ah) {
         label(ax + 8 * u, ay + 8 * u, "solved - r restarts", ac_cat_color(2), T_CAPTION, W_BOLD)
         return 0
     }}}}}
-    label(ax + 8 * u, ay + 8 * u, "moves", TXT_DIM, T_CAPTION, W_REG)
-    label_num(ax + 56 * u, ay + 8 * u, ho_moves, TXT_HI, T_CAPTION, W_REG)
+    label(ax + 8 * u, ay + 8 * u, "moves", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 56 * u, ay + 8 * u, ho_moves, theme(TH_TEXT_HI), T_CAPTION, W_REG)
     return 0
 }
 
@@ -315,7 +315,7 @@ fn lo_draw(ax, ay, aw, ah) {
     if lo_solved() == 1 {
         label(gx, gy + LO_N * cell + 8 * u, "solved - r shuffles again", ac_cat_color(2), T_CAPTION, W_BOLD)
     } else {
-        label(gx, gy + LO_N * cell + 8 * u, "click to turn off every light", TXT_DIM, T_CAPTION, W_REG)
+        label(gx, gy + LO_N * cell + 8 * u, "click to turn off every light", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     }
     return 0
 }
@@ -380,7 +380,7 @@ fn c4_full() {
     return 1
 }
 
-fn c4_col_color(m) { if m == 1 { return ac_cat_color(2) }  return ACCENT }
+fn c4_col_color(m) { if m == 1 { return ac_cat_color(2) }  return theme(TH_ACCENT) }
 fn c4_draw(ax, ay, aw, ah) {
     u = ui()
     cell = 30 * u
@@ -400,10 +400,10 @@ fn c4_draw(ax, ay, aw, ah) {
         ri = ri + 1
     }
     msg_y = gy + C4_H * cell + 8 * u
-    if c4_win == 0 { label(gx, msg_y, c4_turn_str(), TXT_DIM, T_CAPTION, W_REG) }
+    if c4_win == 0 { label(gx, msg_y, c4_turn_str(), theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
     if c4_win == 1 { label(gx, msg_y, "red wins - r restarts", ac_cat_color(2), T_CAPTION, W_BOLD) }
-    if c4_win == 2 { label(gx, msg_y, "yellow wins - r restarts", ACCENT, T_CAPTION, W_BOLD) }
-    if c4_win == 3 { label(gx, msg_y, "draw - r restarts", TXT_DIM, T_CAPTION, W_BOLD) }
+    if c4_win == 2 { label(gx, msg_y, "yellow wins - r restarts", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
+    if c4_win == 3 { label(gx, msg_y, "draw - r restarts", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD) }
     return 0
 }
 fn c4_turn_str() { if c4_turn == 1 { return "red to drop" }  return "yellow to drop" }
