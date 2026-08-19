@@ -545,6 +545,7 @@ extern int  browser_back(void);
 extern int  browser_can_back(void);
 extern int  browser_url_focus(void);
 extern const char *browser_title(void);
+const char *browser_why(void);
 extern int  browser_scroll_by(int d);
 extern int  browser_height(void);
 extern int  browser_lines(void);
@@ -1306,6 +1307,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "br_click"))   return zl_num((double)browser_click((int)a[0].num,(int)a[1].num));
     if (streq(name, "br_tick"))    return zl_num((double)browser_tick());
     if (streq(name, "br_back"))    return zl_num((double)browser_back());
+    if (streq(name, "br_why"))     return zl_str(browser_why());
     if (streq(name, "br_focus"))   return zl_num((double)browser_url_focus());
     if (streq(name, "br_state"))   return zl_num((double)browser_status());
     if (streq(name, "br_h"))       return zl_num((double)browser_height());

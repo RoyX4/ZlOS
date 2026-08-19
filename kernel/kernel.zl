@@ -2540,15 +2540,28 @@ fn tls_gate() {
     # and that refusal is the point of this gate as much as the success is.
     print("    GET https://www.wikipedia.org/   (verified, not just encrypted)")
     br_go("https://www.wikipedia.org/")
-    tgi = 0
+    # A TIME BUDGET, NOT AN ITERATION BUDGET, and that distinction is why the
+    # first version of this gate reported a failure that was not one.
+    #
+    # real_gate's `while i < 900000` works for a 1 KB page over plain HTTP:
+    # the ticks are cheap and 900000 of them outlast the fetch. HTTPS is a
+    # different shape of wait - a TLS handshake, then SIX ECDSA scalar
+    # multiplications through shift-and-add modular arithmetic under TCG, then
+    # 120 KB of transfer. The iterations ran out while the work was still in
+    # flight, and the gate called that "HTTPS FAILED" when nothing had failed.
+    #
+    # ticks() is 100 Hz, so a tick is 10 ms and 9000 of them is 90 seconds.
+    tgt = ticks() + 9000
     tgs = 7
-    while tgi < 900000 {
+    while ticks() < tgt {
         br_tick()
         tgs = br_state()
-        if tgs == 4 { tgi = tgi + 1 } else {
-            if tgs == 7 { tgi = tgi + 1 } else { tgi = 900000 }
+        if tgs == 4 { } else {
+            if tgs == 7 { } else { tgt = 0 }
         }
     }
+    put("    finished in ")  put(9000 - (tgt - ticks()))
+    print(" ticks (100 per second)")
     if tgs == 0 {
         color(C_GREEN)  put("    HTTPS OK: ")
         put(br_h())  print(" pixels of laid-out page")
@@ -2557,7 +2570,11 @@ fn tls_gate() {
         put("    title: ")  print(br_title())
         color(C_GREY)  return 0
     }
-    color(C_RED)  put("    HTTPS FAILED, browser status ")  print(br_state())
+    # WHERE it stopped, not just that it did. 4 is still fetching (the budget
+    # ran out), 2 is a TLS or certificate refusal, 3 is DNS, 5 is the fetch.
+    color(C_RED)  put("    HTTPS FAILED, browser status ")  put(br_state())
+    print("   (4 = still fetching, 2 = refused, 3 = no DNS, 5 = failed)")
+    put("    the browser says: ")  print(br_why())
     color(C_GREY)  return 0
 }
 

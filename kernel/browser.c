@@ -615,7 +615,7 @@ int browser_scroll_by(int d)
 
 /* Every refusal says WHICH one it is. A browser that only says "could not
  * load" makes the user guess between four different causes. */
-static const char *status_text(void)
+const char *status_text(void)
 {
     switch (status) {
     case BR_NO_TLS:   return browser_tls_reason();
@@ -878,6 +878,10 @@ const char *browser_title(void);
  * html.c hands out lengths rather than C strings - the arena holds no
  * terminators - so the copy happens here, once, into a fixed buffer. */
 static char title_buf[64];
+
+/* The reason the status line already shows, for a gate that needs to report
+ * WHERE a fetch stopped rather than only that it did. */
+const char *browser_why(void) { return status_text(); }
 
 const char *browser_title(void)
 {
