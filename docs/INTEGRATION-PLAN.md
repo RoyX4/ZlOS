@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · SUPERSEDED.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. Superseded by `docs/MERGE-EVIDENCE.md`, which was written against the correct base. This file was written against the wrong one and its headline figure is wrong: it says 332 commits were at risk; the whole repository is 186. Its own later section says 69. Kept for history only — do not plan a merge from it.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # Integration plan — landing the eight parallel tracks
 
 Written 2026-08-18 against `main` = `44346d6`. Every number below was measured

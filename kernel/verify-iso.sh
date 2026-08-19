@@ -66,7 +66,10 @@ boot_until() {           # $1 = log file, rest = qemu argv
 
 echo "== ISO: legacy BIOS boot =="
 BLOG=$(mktemp)
-boot_until "$BLOG" qemu-system-i386 -cdrom zlOS.iso -display none \
+# -m 1G is HI_TOP (memmap.h). Both boots below passed no -m for their whole
+# lives and got qemu's 128 MiB default, so the high-RAM map above 128 MiB was
+# unbacked on the only gate that boots through GRUB.
+boot_until "$BLOG" qemu-system-i386 -cdrom zlOS.iso -m 1G -display none \
     -serial "file:$BLOG" -no-reboot
 tr -d '\r' < "$BLOG" > "$BLOG.c" && mv "$BLOG.c" "$BLOG"
 check "BIOS" "$BLOG"
@@ -80,7 +83,7 @@ else
     boot_until "$ULOG" qemu-system-x86_64 \
         -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,unit=1,file="$VARS" \
-        -cdrom zlOS.iso -display none \
+        -cdrom zlOS.iso -m 1G -display none \
         -serial "file:$ULOG" -no-reboot
     tr -d '\r' < "$ULOG" > "$ULOG.c" && mv "$ULOG.c" "$ULOG"
     check "UEFI" "$ULOG"

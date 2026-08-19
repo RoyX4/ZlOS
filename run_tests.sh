@@ -6,6 +6,8 @@
 #    output to the interpreter for every one of those files.
 # 3. Cross-checks the hand-assembled native x86-64 backend (integer subset
 #    only) against the interpreter on a small integer-only smoke program.
+# 4. Checks the self-hosting fixpoint (./verify_selfhost.sh) - compiler.zl
+#    compiled by the interpreter must compile itself to byte-identical output.
 set -uo pipefail
 cd "$(dirname "$0")"
 
@@ -203,6 +205,21 @@ if command -v qemu-system-i386 >/dev/null; then
             echo "  FAIL  raw-bootloader gate"; echo "$rout" | head -8; fail=1
         fi
     fi
+    # The native-EFI gate earns its minute, unlike the ISO one which is left
+    # out for cost. Both gates above boot the 32-BIT kernel, and so does
+    # verify-iso.sh's "UEFI" case (that one is GRUB's bootx64.efi loading it).
+    # So without this, NOTHING here covers kernel/efi.c, the 64-bit build, or
+    # the path a real laptop takes - and that gap already allowed a latent
+    # boot-killer to sit in the tree while all the other gates stayed green:
+    # struct idt_ptr/gdt_ptr were 6 bytes instead of 10 in the EFI build, so
+    # lidt/lgdt took the top half of each base from adjacent memory.
+    if [ -f /usr/share/OVMF/OVMF_CODE_4M.fd ] && command -v qemu-system-x86_64 >/dev/null; then
+        if eout=$(./kernel/verify-efi.sh 2>&1); then
+            echo "  ok    zlOS boots as its own UEFI application (64-bit)"
+        else
+            echo "  FAIL  native-EFI gate"; echo "$eout" | head -8; fail=1
+        fi
+    fi
 fi
 
 echo "== examples: interpreter runs clean =="
@@ -389,6 +406,18 @@ if grep -q "in .*al,dx" <<<"$dis" && grep -q "out .*dx,al" <<<"$dis"; then
     echo "  ok    nativegen emits correct in/out port instructions"
 else
     echo "  FAIL  nativegen port I/O encoding"; fail=1
+fi
+
+# The self-hosting fixpoint. Last, because it is the slowest single check here
+# (~35 s: the interpreter, then gcc -O2 on the generated C) and because it is
+# the one whose failure means the LANGUAGE broke rather than one backend.
+echo
+# Absent rather than failing is still a failure: an unchecked fixpoint that
+# reports green is the exact shape this repo keeps getting bitten by.
+if [ -x ./verify_selfhost.sh ]; then
+    ./verify_selfhost.sh || fail=1
+else
+    echo "  FAIL  verify_selfhost.sh is missing - the fixpoint is unchecked"; fail=1
 fi
 
 echo

@@ -1,0 +1,36 @@
+# Pinned engine divergences. Format:  <case> <engine>
+#
+# Each line says "this engine is KNOWN to disagree with the interpreter on this
+# case". tools/engine-parity.sh fails on any divergence not listed here, and
+# ALSO fails when a listed one starts matching - a pin that quietly stops being
+# true is how a stale expectation outlives the bug it described.
+#
+# Ground truth is ./interp (AGENTS.md section 3).
+#
+# ---------------------------------------------------------------------------
+# global_writethrough
+#
+#     counter = 100
+#     fn bump() { counter = 7  return 0 }
+#     bump()
+#     print(counter)
+#
+#     interp 7 | compile 7 | compilel 100 | nativegen 100
+#
+# Assigning a name inside a function writes the GLOBAL of that name when one
+# exists. The interpreter and the C backend implement that; the two unboxed
+# backends give every name a function assigns its own slot, so they never touch
+# the global.
+#
+# This is not a surprise - docs/design/design_scoping_decision.md section 0
+# states that "the engines already disagree" and names these exact two as being
+# on the far side of it. What was missing was anything that would notice, since
+# run_tests.sh only smoke-tests compilel with a list-and-string program that
+# never assigns to a global from inside a function.
+#
+# Both lines should be DELETED, not edited, when the scoping decision lands
+# (assignment binds locally, explicit `global` opts into write-through). At that
+# point the interpreter moves to the backends' behaviour and these pins will
+# fail as FIXED, which is the intended signal.
+global_writethrough  compilel
+global_writethrough  nativegen

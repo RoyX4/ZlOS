@@ -139,7 +139,10 @@ int i2c_find(int which)
         u32 lo = pci_bar(i, 0);
         u32 hi = pci_bar_hi(i, 0);
         if (hi && sizeof(uptr) < 8) return -1;
-        uptr b = ((uptr)hi << 32) | (uptr)lo;
+        /* `<< 16 << 16`, not `<< 32` - see virtio_net.c's note. This was the
+         * last of the four copies of this combine still shifting by the full
+         * width; on the 32-bit build that is UB and gcc says so on every run. */
+        uptr b = ((uptr)hi << 16 << 16) | (uptr)lo;
         if (!b) return -1;
 
         i2c_idx  = i;
@@ -263,7 +266,7 @@ _Static_assert(HID_BUF == (unsigned int)HI_HID,
                "i2c_hid: report buffer is not at the base of its region");
 _Static_assert(HID_BUF + HID_BUF_MAX <= HID_DESC_BUF,
                "i2c_hid: report buffer overruns the descriptor buffer");
-_Static_assert((unsigned long)HID_DESC_BUF + HID_DESC_LEN <= HI_BLUR,
+_Static_assert((unsigned long)HID_DESC_BUF + HID_DESC_LEN <= HI_GPU,
                "i2c_hid: buffers escape their region into the blur arena");
 
 static int read_hid_descriptor(int addr, int reg)

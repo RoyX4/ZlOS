@@ -1,0 +1,523 @@
+<title>zlOS — Design North Star</title>
+<style>
+  /* ============================================================
+     zlOS design north star.
+     A single committed visual world: a dark, CPU-rendered desktop.
+     Every choice here is constrained to what an 800x600 linear
+     framebuffer with no GPU can actually draw: vertical gradients
+     only, a fixed palette, tight low-spread shadows, small radii,
+     alpha blends but no gaussian blur. No light theme on purpose —
+     this is a screen, not a document surface.
+     ============================================================ */
+  :root{
+    /* -- the zlOS palette, straight from kernel.zl's rgb() theme -- */
+    --wall-top:#1a1e32;  --wall-bot:#0a0c16;
+    --hdr-top:#305ca8;   --hdr-bot:#16285c;
+    --accent:#60d2eb;    --accent-dim:#3aa9c4;
+    --bar-top:#282e42;   --bar-bot:#12141f;  --bar-hi:#4e5c80;
+    --panel:#05060a;     --panel-2:#0b0e18;
+    --txt-hi:#d2e4ff;    --txt-dim:#96a5c3;  --txt-mute:#5c6a86;
+    --ok:#5bd66e; --term-green:#55ff55; --warn:#e6b23c; --crit:#e05a5a; --mag:#c98cff;
+    --line:#26304a; --line-soft:#1a2136;
+    --win-shadow:0 2px 0 rgba(0,0,0,.55), 0 10px 22px rgba(0,0,0,.55), 0 0 0 1px #000;
+
+    --mono:'Cascadia Mono','JetBrains Mono','DejaVu Sans Mono','Consolas',ui-monospace,monospace;
+    --sans:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:#06070d;
+    color:var(--txt-hi);
+    font-family:var(--mono);
+    -webkit-font-smoothing:antialiased;
+    line-height:1.4;
+  }
+  img{max-width:100%}
+
+  /* ============================ THE SCREEN ============================ */
+  .screen{
+    position:relative;
+    height:100vh; min-height:600px;
+    overflow:hidden;
+    background:linear-gradient(180deg,var(--wall-top),var(--wall-bot));
+    isolation:isolate;
+    cursor:none;
+  }
+  /* faint scanline/grid texture — the "framebuffer" feel, near-free to fake */
+  .screen::before{
+    content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+    background:
+      repeating-linear-gradient(180deg,rgba(255,255,255,.012) 0 1px,transparent 1px 3px);
+    mix-blend-mode:screen;opacity:.6;
+  }
+  /* big centred watermark logo behind the windows */
+  .wall-logo{
+    position:absolute;z-index:0;left:50%;top:46%;transform:translate(-50%,-50%);
+    font-weight:800;font-size:clamp(90px,20vw,240px);letter-spacing:-.04em;
+    color:transparent;-webkit-text-stroke:2px rgba(96,210,235,.06);
+    user-select:none;pointer-events:none;white-space:nowrap;
+  }
+  .wall-tag{
+    position:absolute;z-index:0;left:50%;top:62%;transform:translateX(-50%);
+    color:rgba(150,165,195,.14);font-size:14px;letter-spacing:.5em;text-transform:uppercase;
+    user-select:none;pointer-events:none;
+  }
+
+  /* ============================ TOP MENU BAR ============================ */
+  .menubar{
+    position:absolute;z-index:40;top:0;left:0;right:0;height:26px;
+    display:flex;align-items:center;gap:2px;padding:0 8px;
+    background:linear-gradient(180deg,#1c2236,#10131f);
+    border-bottom:1px solid #000;
+    box-shadow:0 1px 0 rgba(255,255,255,.03) inset;
+    font-size:12.5px;
+  }
+  .menubar .brand{color:var(--accent);font-weight:700;padding:0 10px 0 4px;letter-spacing:.02em}
+  .menubar .mi{padding:3px 9px;border-radius:3px;color:var(--txt-hi);cursor:default}
+  .menubar .mi:hover{background:rgba(96,210,235,.16);color:#fff}
+  .menubar .spacer{flex:1}
+  .menubar .stat{color:var(--txt-dim);font-size:12px;padding:0 6px}
+  .menubar .stat b{color:var(--txt-hi);font-weight:600}
+  .menubar .stat .dot{color:var(--txt-mute);padding:0 6px}
+
+  /* ============================ WINDOWS ============================ */
+  .win{
+    position:absolute;z-index:10;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:5px;
+    box-shadow:var(--win-shadow);
+    display:flex;flex-direction:column;
+    overflow:hidden;
+  }
+  .win.focus{z-index:30;box-shadow:0 2px 0 rgba(0,0,0,.6),0 16px 34px rgba(0,0,0,.62),0 0 0 1px #000,0 0 0 1px rgba(96,210,235,.25)}
+  .titlebar{
+    height:28px;flex:0 0 28px;
+    display:flex;align-items:center;gap:8px;padding:0 8px;
+    background:linear-gradient(180deg,var(--hdr-top),var(--hdr-bot));
+    border-bottom:1px solid #0a1730;
+    box-shadow:0 1px 0 rgba(255,255,255,.08) inset, 0 -2px 0 var(--accent) inset;
+    cursor:default;user-select:none;
+  }
+  .win:not(.focus) .titlebar{background:linear-gradient(180deg,#2a3550,#182238);box-shadow:0 -2px 0 #33465f inset}
+  .titlebar .tname{font-size:12.5px;font-weight:700;color:#eaf3ff;letter-spacing:.01em;flex:1;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .titlebar .tname small{font-weight:400;color:#bcd2f2;opacity:.8}
+  .tbtn{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.4);
+    display:grid;place-items:center;font-size:10px;color:#0a1730;line-height:1;cursor:default}
+  .tbtn.min{background:#e6b23c}
+  .tbtn.max{background:#5bd66e}
+  .tbtn.cls{background:#e05a5a}
+  .tbtn:hover{filter:brightness(1.15)}
+  .win-body{flex:1;overflow:hidden;position:relative}
+
+  /* ---- terminal window ---- */
+  .term{background:var(--panel);height:100%;padding:8px 10px;font-size:12.5px;overflow:hidden}
+  .term .ok{color:var(--ok)} .term .info{color:var(--accent)} .term .g{color:var(--term-green)}
+  .term .dim{color:var(--txt-dim)}
+  .term .row{white-space:pre;overflow:hidden;text-overflow:ellipsis}
+  .caret{display:inline-block;width:8px;height:15px;background:var(--term-green);vertical-align:-2px;margin-left:2px;animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  /* ---- system monitor ---- */
+  .mon{height:100%;padding:9px 11px;font-size:12px;display:flex;flex-direction:column;gap:8px;background:linear-gradient(180deg,var(--panel-2),var(--panel))}
+  .mon .cpu{color:var(--txt-dim)} .mon .cpu b{color:var(--txt-hi)}
+  .mon .meter{height:12px;border-radius:3px;background:#0c1120;border:1px solid #1c2338;overflow:hidden;position:relative}
+  .mon .meter i{display:block;height:100%;background:linear-gradient(180deg,#7fe0ee,#37a7c2)}
+  .mon .lab{display:flex;justify-content:space-between;color:var(--txt-mute);font-size:11px;letter-spacing:.03em}
+  .mon svg{width:100%;height:56px;display:block;border:1px solid #1c2338;border-radius:3px;background:#0a0e1a}
+
+  /* ---- clock ---- */
+  .clockwin .win-body{display:grid;place-items:center;background:radial-gradient(120% 120% at 50% 35%,#141a2c,#080a12)}
+  .clockface{width:100%;height:100%;display:block}
+
+  /* ---- paint ---- */
+  .paint{height:100%;display:grid;grid-template-columns:34px 1fr;background:var(--panel-2)}
+  .paint .tools{background:linear-gradient(180deg,#161c2c,#0d1120);border-right:1px solid #000;
+    display:flex;flex-direction:column;align-items:center;gap:5px;padding:6px 0}
+  .paint .tool{width:22px;height:22px;border-radius:4px;background:linear-gradient(180deg,#2b3450,#1a2138);
+    border:1px solid #0a0e18;display:grid;place-items:center;font-size:12px;color:#cfe0ff;box-shadow:0 1px 0 rgba(255,255,255,.06) inset}
+  .paint .tool.on{background:linear-gradient(180deg,#3f76c8,#274f8e);color:#fff;box-shadow:0 0 0 1px var(--accent) inset}
+  .paint .canvas{position:relative;overflow:hidden;background:#0c1018}
+  .paint .swatches{position:absolute;left:6px;bottom:6px;display:flex;gap:3px;padding:3px;border-radius:4px;background:rgba(0,0,0,.4)}
+  .paint .sw{width:12px;height:12px;border-radius:2px;border:1px solid rgba(0,0,0,.5)}
+
+  /* ---- tetris ---- */
+  .tetris{height:100%;display:flex;flex-direction:column;background:linear-gradient(180deg,#0c1020,#070910)}
+  .tetris .grid{flex:1;display:grid;grid-template-columns:repeat(10,1fr);gap:2px;padding:8px}
+  .tcell{border-radius:2px;background:#0f1424}
+  .tetris .hud{height:22px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;
+    font-size:11px;color:var(--txt-dim);border-top:1px solid #141a2c}
+  .tetris .hud b{color:var(--accent)}
+
+  /* ============================ DOCK ============================ */
+  .dock{
+    position:absolute;z-index:40;left:0;right:0;bottom:0;height:44px;
+    display:flex;align-items:center;gap:6px;padding:0 8px;
+    background:linear-gradient(180deg,var(--bar-top),var(--bar-bot));
+    border-top:1px solid var(--bar-hi);
+    box-shadow:0 1px 0 rgba(255,255,255,.05) inset, 0 -8px 18px rgba(0,0,0,.35);
+  }
+  .startbtn{display:flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:5px;
+    background:linear-gradient(180deg,#2f5ca8,#1a2f5c);border:1px solid #0c1730;
+    color:#fff;font-weight:700;font-size:13px;letter-spacing:.02em;cursor:default;
+    box-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 0 0 1px rgba(96,210,235,.2)}
+  .startbtn:hover{filter:brightness(1.12)}
+  .startbtn .b{color:var(--accent)}
+  .dock .sep{width:1px;height:26px;background:#000;box-shadow:1px 0 0 rgba(255,255,255,.05);margin:0 3px}
+  .app{width:32px;height:32px;border-radius:6px;display:grid;place-items:center;
+    background:linear-gradient(180deg,#232b40,#151a2a);border:1px solid #0a0e18;
+    color:#cfe0ff;font-size:15px;font-weight:700;cursor:default;position:relative;
+    box-shadow:0 1px 0 rgba(255,255,255,.05) inset}
+  .app:hover{background:linear-gradient(180deg,#2c3a58,#1a2236);color:#fff;transform:translateY(-1px)}
+  .app.run::after{content:"";position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);
+    width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 5px var(--accent)}
+  .dock .spacer{flex:1}
+  .tray{display:flex;align-items:center;gap:12px;color:var(--txt-dim);font-size:12px;padding-right:6px}
+  .tray .clk{color:var(--txt-hi);font-weight:600;font-variant-numeric:tabular-nums}
+  .tray .glyph{width:18px;height:18px;display:grid;place-items:center;color:var(--txt-dim)}
+
+  /* ---- the software mouse cursor ---- */
+  .cursor{position:absolute;z-index:60;width:16px;height:22px;pointer-events:none;left:60%;top:40%;
+    filter:drop-shadow(1px 1px 0 rgba(0,0,0,.7))}
+  .hint{position:absolute;z-index:40;left:50%;bottom:58px;transform:translateX(-50%);
+    color:var(--txt-mute);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    animation:floaty 2.4s ease-in-out infinite;pointer-events:none}
+  @keyframes floaty{50%{transform:translateX(-50%) translateY(-3px)}}
+
+  /* ============================ DESIGN DOC BELOW ============================ */
+  .doc{max-width:1080px;margin:0 auto;padding:72px 28px 96px;font-family:var(--sans);color:#c6d2e8}
+  .doc h2{font-family:var(--sans);font-size:13px;letter-spacing:.24em;text-transform:uppercase;
+    color:var(--accent-dim);margin:64px 0 6px;font-weight:700}
+  .doc h2:first-child{margin-top:0}
+  .doc h3{font-size:26px;line-height:1.15;letter-spacing:-.01em;margin:0 0 18px;color:#eef4ff;text-wrap:balance;font-weight:700}
+  .doc p{font-size:15.5px;line-height:1.65;color:#b3c0da;max-width:65ch;margin:0 0 14px}
+  .doc p b{color:#e7eefb;font-weight:600}
+  .doc .lead{font-size:18px;color:#cdd8ee}
+  .doc code{font-family:var(--mono);font-size:.88em;background:#121826;border:1px solid #1e2740;
+    padding:1px 6px;border-radius:4px;color:var(--accent)}
+  .rule{height:1px;background:linear-gradient(90deg,transparent,#2a3450,transparent);margin:8px 0 4px}
+
+  .swatches-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin:22px 0}
+  .chip{border-radius:8px;overflow:hidden;border:1px solid #1c2338;background:#0d1220}
+  .chip .cap{height:64px}
+  .chip .meta{padding:9px 11px;font-family:var(--mono);font-size:11.5px}
+  .chip .meta .n{color:#e7eefb;font-weight:600}
+  .chip .meta .h{color:var(--txt-mute);text-transform:uppercase;letter-spacing:.05em}
+
+  .type-spec{display:flex;flex-direction:column;gap:14px;margin:20px 0;border-left:2px solid #26304a;padding-left:20px}
+  .type-spec .r{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+  .type-spec .r .k{font-family:var(--mono);font-size:11px;color:var(--txt-mute);width:120px;flex:0 0 120px;text-transform:uppercase;letter-spacing:.05em}
+
+  .apps{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:14px;margin:24px 0}
+  .appcard{border:1px solid #1c2338;border-radius:9px;background:linear-gradient(180deg,#0e1424,#0a0e18);padding:16px;position:relative}
+  .appcard .ic{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;font-size:17px;font-weight:700;
+    background:linear-gradient(180deg,#2a3450,#18203a);border:1px solid #0a0e18;color:var(--accent);margin-bottom:11px}
+  .appcard h4{font-family:var(--mono);font-size:14px;margin:0 0 5px;color:#eef4ff}
+  .appcard p{font-size:13px;line-height:1.5;color:#9fb0cd;margin:0}
+  .appcard .prim{position:absolute;top:14px;right:14px;font-family:var(--mono);font-size:10px;color:var(--txt-mute);
+    border:1px solid #24304a;border-radius:20px;padding:2px 8px}
+
+  .steps{display:flex;flex-direction:column;gap:2px;margin:22px 0;counter-reset:s}
+  .step{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:14px;padding:13px 16px;
+    border:1px solid #1a2136;border-radius:8px;background:#0c1120}
+  .step .num{font-family:var(--mono);font-size:15px;color:var(--accent-dim);font-weight:700}
+  .step .t{font-size:14.5px;color:#e2eafa}.step .t span{color:#8fa0bd;font-size:13px}
+  .step .st{font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:20px;white-space:nowrap}
+  .st.done{color:#0b1a10;background:var(--ok)}
+  .st.next{color:#04121a;background:var(--accent)}
+  .st.todo{color:var(--txt-dim);border:1px solid #24304a}
+  .st.star{color:#1a1204;background:var(--warn)}
+
+  .callout{border:1px solid #24304a;border-left:3px solid var(--accent);border-radius:8px;background:#0c1322;
+    padding:16px 18px;margin:22px 0}
+  .callout .ct{font-family:var(--mono);font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px}
+  .callout p{margin:0;font-size:14px;color:#b8c5df}
+
+  .footer{font-family:var(--mono);text-align:center;color:var(--txt-mute);font-size:12px;padding:30px 0 10px;border-top:1px solid #141a2c;margin-top:60px}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+  @media (max-width:640px){
+    .win.hide-sm{display:none}
+    .doc h3{font-size:22px}
+  }
+</style>
+
+<!-- =================================================================
+                       THE SCREEN — the north star
+     ================================================================= -->
+<div class="screen" id="screen">
+  <div class="wall-logo">zlOS</div>
+  <div class="wall-tag">written in zl</div>
+
+  <!-- top menu bar -->
+  <div class="menubar">
+    <span class="brand">◆ zlOS</span>
+    <span class="mi">File</span><span class="mi">Edit</span><span class="mi">View</span>
+    <span class="mi">Apps</span><span class="mi">Window</span><span class="mi">Help</span>
+    <span class="spacer"></span>
+    <span class="stat"><b>800×600</b><span class="dot">•</span>fb 32bpp<span class="dot">•</span>up <b>0:14</b><span class="dot">•</span>heap <b>none</b></span>
+  </div>
+
+  <!-- terminal -->
+  <div class="win focus" style="left:34px;top:56px;width:430px;height:312px" data-win>
+    <div class="titlebar">
+      <span class="tname">zl shell &nbsp;<small>— /</small></span>
+      <span class="tbtn min">–</span><span class="tbtn max">□</span><span class="tbtn cls">×</span>
+    </div>
+    <div class="win-body"><div class="term">
+      <div class="row"><span class="dim">zlOS 0.3 · boot log</span></div>
+      <div class="row"><span class="ok">[  OK  ]</span> multiboot handoff, 32-bit protected mode</div>
+      <div class="row"><span class="ok">[  OK  ]</span> GDT · flat 4 GiB code + data</div>
+      <div class="row"><span class="ok">[  OK  ]</span> IDT · PIC remapped · IRQs live</div>
+      <div class="row"><span class="ok">[  OK  ]</span> PIT 100 Hz · PS/2 kbd + mouse</div>
+      <div class="row"><span class="ok">[  OK  ]</span> framebuffer 800×600×32 · compositor</div>
+      <div class="row"><span class="info">[ INFO ]</span> heap: none · fs: ramdisk · sched: none</div>
+      <div class="row">&nbsp;</div>
+      <div class="row"><span class="g">ready.</span> <span class="dim">18 apps · h for help</span></div>
+      <div class="row"><span class="g">zl&gt;</span> gfx compose --shadows<span class="caret"></span></div>
+    </div></div>
+  </div>
+
+  <!-- system monitor -->
+  <div class="win hide-sm" style="left:492px;top:56px;width:330px;height:214px" data-win>
+    <div class="titlebar">
+      <span class="tname">System Monitor</span>
+      <span class="tbtn min">–</span><span class="tbtn cls">×</span>
+    </div>
+    <div class="win-body"><div class="mon">
+      <div class="cpu">CPU · <b id="cpuName">QEMU Virtual CPU v2.5+</b></div>
+      <div class="lab"><span>MEMORY</span><span id="memPct">63.9 / 256 MiB</span></div>
+      <div class="meter"><i style="width:25%"></i></div>
+      <div class="lab"><span>TICKS · IRQ0</span><span>1 480</span></div>
+      <svg viewBox="0 0 300 56" preserveAspectRatio="none" aria-hidden="true">
+        <defs><linearGradient id="spk" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#60d2eb" stop-opacity=".38"/>
+          <stop offset="1" stop-color="#60d2eb" stop-opacity="0"/></linearGradient></defs>
+        <polygon fill="url(#spk)" points="0,56 0,40 20,44 40,30 60,36 80,20 100,28 120,14 140,26 160,12 180,22 200,9 220,20 240,16 260,24 280,11 300,18 300,56"/>
+        <polyline fill="none" stroke="#60d2eb" stroke-width="1.5" points="0,40 20,44 40,30 60,36 80,20 100,28 120,14 140,26 160,12 180,22 200,9 220,20 240,16 260,24 280,11 300,18"/>
+        <circle cx="300" cy="18" r="2.4" fill="#eafcff"/>
+      </svg>
+    </div></div>
+  </div>
+
+  <!-- analog clock -->
+  <div class="win clockwin hide-sm" style="left:640px;top:288px;width:184px;height:210px" data-win>
+    <div class="titlebar"><span class="tname">Clock</span><span class="tbtn cls">×</span></div>
+    <div class="win-body">
+      <svg class="clockface" id="clock" viewBox="0 0 200 200" aria-hidden="true">
+        <circle cx="100" cy="100" r="92" fill="#0c1220" stroke="#26304a" stroke-width="2"/>
+        <circle cx="100" cy="100" r="92" fill="none" stroke="#60d2eb" stroke-width="1" opacity=".28"/>
+        <g id="ticks" stroke="#5c6a86"></g>
+        <line id="hh" x1="100" y1="100" x2="100" y2="54" stroke="#d2e4ff" stroke-width="5" stroke-linecap="round"/>
+        <line id="mh" x1="100" y1="100" x2="100" y2="34" stroke="#d2e4ff" stroke-width="3.5" stroke-linecap="round"/>
+        <line id="sh" x1="100" y1="100" x2="100" y2="30" stroke="#60d2eb" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="100" cy="100" r="4.5" fill="#60d2eb"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- paint -->
+  <div class="win hide-sm" style="left:214px;top:246px;width:352px;height:250px" data-win>
+    <div class="titlebar"><span class="tname">Paint <small>— untitled.raw</small></span>
+      <span class="tbtn min">–</span><span class="tbtn cls">×</span></div>
+    <div class="win-body"><div class="paint">
+      <div class="tools">
+        <div class="tool on">✎</div><div class="tool">▤</div><div class="tool">◯</div>
+        <div class="tool">◇</div><div class="tool">⬒</div><div class="tool">⌫</div>
+      </div>
+      <div class="canvas" id="paintCanvas">
+        <div class="swatches">
+          <span class="sw" style="background:#e05a5a"></span><span class="sw" style="background:#e6b23c"></span>
+          <span class="sw" style="background:#5bd66e"></span><span class="sw" style="background:#60d2eb"></span>
+          <span class="sw" style="background:#c98cff"></span><span class="sw" style="background:#fff"></span>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- tetris -->
+  <div class="win hide-sm" style="left:582px;top:300px;width:172px;height:206px;z-index:12" data-win>
+    <div class="titlebar"><span class="tname">Tetris</span><span class="tbtn cls">×</span></div>
+    <div class="win-body"><div class="tetris">
+      <div class="grid" id="tgrid"></div>
+      <div class="hud"><span>LINES <b>7</b></span><span>LV <b>2</b></span></div>
+    </div></div>
+  </div>
+
+  <div class="hint">drag the windows · this is the target</div>
+
+  <!-- software cursor -->
+  <svg class="cursor" id="cursor" viewBox="0 0 16 22" aria-hidden="true">
+    <path d="M1 1 L1 17 L5 13 L8 20 L11 19 L8 12 L14 12 Z" fill="#eef4ff" stroke="#0a0e18" stroke-width="1"/>
+  </svg>
+
+  <!-- dock / taskbar -->
+  <div class="dock">
+    <div class="startbtn"><span class="b">◆</span> zlOS</div>
+    <div class="sep"></div>
+    <div class="app run" title="Terminal">&gt;_</div>
+    <div class="app run" title="Files">▤</div>
+    <div class="app" title="Paint">✎</div>
+    <div class="app run" title="Monitor">▦</div>
+    <div class="app" title="Clock">◔</div>
+    <div class="app" title="Tetris">▣</div>
+    <div class="app" title="Calculator">▪</div>
+    <div class="spacer"></div>
+    <div class="tray">
+      <span class="glyph" title="sound">♪</span>
+      <span class="glyph" title="net">↯</span>
+      <span class="clk" id="dockClk">0:14</span>
+    </div>
+  </div>
+</div>
+
+<!-- =================================================================
+                    DESIGN DOC — the system behind it
+     ================================================================= -->
+<div class="doc">
+  <h2>The north star</h2>
+  <h3>A CPU-rendered desktop that looks intentional, not unfinished.</h3>
+  <p class="lead">The screen above is the target for zlOS — the look once the windowing system, soft shadows, and anti-aliased text land. It is not a Windows clone. It is what TempleOS would be if it cared about visual polish and had a true-colour framebuffer to work with.</p>
+  <p>Everything above obeys the same hardware limits the kernel does: no GPU, no floating point, a single linear framebuffer drawn one pixel at a time by the CPU. That constraint is a design language, not a handicap — <b>vertical gradients only, a fixed palette, tight low-spread shadows, small corner radii, alpha blends but no gaussian blur.</b> Lean into it and the result reads as a deliberate aesthetic instead of a failed imitation.</p>
+
+  <h2>Palette</h2>
+  <h3>One cool blue-slate world, one cyan accent, spent sparingly.</h3>
+  <p>The whole system lives in a narrow band of desaturated blues so the single cyan accent — used only for focus, links, and live state — actually pops. Semantic greens/ambers/reds are separate from the accent and only ever mean status.</p>
+  <div class="swatches-grid" id="swatches"></div>
+
+  <h2>Typography</h2>
+  <h3>Monospace is the OS voice; the bitmap grid is the texture.</h3>
+  <p>A console-rooted OS earns its monospace type honestly. The real win queued in the build is <b>anti-aliased glyphs</b> — greying the edges of the 8×16 font so text stops screaming 1990. Everything inside the screen is mono; this document you're reading is set in the system sans, so the OS and the writing about it stay visually distinct.</p>
+  <div class="type-spec">
+    <div class="r"><span class="k">Title bars</span><span style="font-family:var(--mono);font-weight:700;font-size:15px;color:#eaf3ff">System Monitor</span><code>mono 700 · 12.5px</code></div>
+    <div class="r"><span class="k">Body / log</span><span style="font-family:var(--mono);font-size:14px;color:#d2e4ff">[  OK  ] framebuffer up</span><code>mono 400 · 12.5px</code></div>
+    <div class="r"><span class="k">Accent state</span><span style="font-family:var(--mono);font-size:14px;color:#60d2eb">zl&gt; ready.</span><code>accent · live only</code></div>
+    <div class="r"><span class="k">Logo</span><span style="font-family:var(--mono);font-weight:800;font-size:22px;letter-spacing:-.02em;color:#eaf3ff">zlOS</span><code>scaled bitmap ×2–×3</code></div>
+  </div>
+
+  <h2>Window anatomy</h2>
+  <h3>Gradient title bar, cyan focus underline, a real drop shadow.</h3>
+  <p>Each window is a gradient title bar (focused = brighter blue + a 2px cyan underline), a hairline black border, a 5px radius, and a soft shadow offset down-right. Depth comes entirely from that shadow and the border — the one cue a software compositor can afford. Unfocused windows drop the cyan and dim their bar so focus reads instantly.</p>
+  <div class="callout">
+    <div class="ct">Critical path</div>
+    <p><code>get_px</code> — reading a pixel back — is the primitive everything visual depends on: soft shadows, anti-aliased text over the wallpaper, and a mouse cursor that doesn't smear. It ships first and must mirror the framebuffer byte order exactly, or every shadow comes out with red and blue swapped.</p>
+  </div>
+
+  <h2>App suite</h2>
+  <h3>Each app is a small C primitive plus a few hundred lines of zl.</h3>
+  <div class="apps">
+    <div class="appcard"><div class="ic">&gt;_</div><h4>Terminal</h4><p>The zl shell — the boot log, the prompt, every command already built. The home base.</p><span class="prim">have it</span></div>
+    <div class="appcard"><div class="ic">◔</div><h4>Clock</h4><p>Analog face drawn with <code>disc</code> + <code>spoke</code>. First real "it's alive" moment.</p><span class="prim">disc/spoke</span></div>
+    <div class="appcard"><div class="ic">▦</div><h4>System Monitor</h4><p>CPUID brand, memory bar, tick sparkline. Reads the machine back to you.</p><span class="prim">rtc/mem</span></div>
+    <div class="appcard"><div class="ic">✎</div><h4>Paint</h4><p>Mouse-driven canvas, tool rail, 16-colour palette. Already half-built.</p><span class="prim">widgets</span></div>
+    <div class="appcard"><div class="ic">▤</div><h4>Files</h4><p>Browse the RAM disk — list, open, save. Wraps the fs we already have.</p><span class="prim">fs_*</span></div>
+    <div class="appcard"><div class="ic">▣</div><h4>Tetris</h4><p>The screenshot winner. Pure zl logic over a grid blitter. Watch the no-locals gotcha.</p><span class="prim">grid</span></div>
+  </div>
+
+  <h2>Build order</h2>
+  <h3>Ranked by visual impact ÷ effort. Cheapest whole-screen wins first.</h3>
+  <div class="steps">
+    <div class="step"><span class="num">01</span><span class="t">Theme reskin <span>— RGB palette across every app</span></span><span class="st done">shipped</span></div>
+    <div class="step"><span class="num">02</span><span class="t">Wallpaper <span>— one full-screen gradient at boot</span></span><span class="st done">shipped</span></div>
+    <div class="step"><span class="num">03</span><span class="t">get_px + soft shadows <span>— the critical unlock</span></span><span class="st next">next</span></div>
+    <div class="step"><span class="num">04</span><span class="t">Rounded panels + cursor save/restore</span><span class="st todo">queued</span></div>
+    <div class="step"><span class="num">05</span><span class="t">Taskbar / dock + live clock</span><span class="st todo">queued</span></div>
+    <div class="step"><span class="num">06</span><span class="t">Start menu <span>— launch into any app</span></span><span class="st todo">queued</span></div>
+    <div class="step"><span class="num">07</span><span class="t">Anti-aliased text <span>— the single biggest lever</span></span><span class="st star">★ marquee</span></div>
+    <div class="step"><span class="num">08</span><span class="t">Widget toolkit <span>— clickable buttons, scrollbars</span></span><span class="st todo">queued</span></div>
+    <div class="step"><span class="num">09</span><span class="t">Windowing system <span>— draggable windows, z-order</span></span><span class="st todo">queued</span></div>
+    <div class="step"><span class="num">10</span><span class="t">App suite <span>— calc, clock, files, monitor, Tetris</span></span><span class="st todo">queued</span></div>
+    <div class="step"><span class="num">11</span><span class="t">Effects + boot splash <span>— plasma, fire, animation</span></span><span class="st todo">queued</span></div>
+  </div>
+
+  <div class="footer">zlOS · a desktop written in zl · no OS · no libc · no GNU · no GPU</div>
+</div>
+
+<script>
+  /* ---- palette swatches, generated from the token list ---- */
+  const PAL=[
+    ['Wallpaper','#1a1e32','wall-top'],['Wallpaper bot','#0a0c16','wall-bot'],
+    ['Header','#305ca8','hdr-top'],['Header bot','#16285c','hdr-bot'],
+    ['Accent','#60d2eb','accent · the one bold'],['Panel','#05060a','panel'],
+    ['Text hi','#d2e4ff','txt-hi'],['Text dim','#96a5c3','txt-dim'],
+    ['OK','#5bd66e','status'],['Warn','#e6b23c','status'],
+    ['Crit','#e05a5a','status'],['Magenta','#c98cff','status']];
+  const sw=document.getElementById('swatches');
+  PAL.forEach(([n,hex,h])=>{
+    const d=document.createElement('div');d.className='chip';
+    d.innerHTML=`<div class="cap" style="background:${hex}"></div>
+      <div class="meta"><div class="n">${n}</div><div class="h">${hex} · ${h}</div></div>`;
+    sw.appendChild(d);
+  });
+
+  /* ---- tetris cells: a plausible mid-game board ---- */
+  const COL={r:'#e05a5a',o:'#e6b23c',g:'#5bd66e',c:'#60d2eb',m:'#c98cff',b:'#5b7de0',y:'#e6d84a'};
+  const board=[
+    '..........','..........','..........','...cc.....','...cc.....',
+    '..........','......m...','.....mmm..','..o.......','..o....gg.',
+    '.oo...ggg.','rrobb.yyyy','rrbbb.yyy.','rgbbcmyyyo'];
+  const tg=document.getElementById('tgrid');
+  const ROWS=14;
+  for(let y=0;y<ROWS;y++)for(let x=0;x<10;x++){
+    const c=document.createElement('div');c.className='tcell';
+    const ch=(board[y]||'..........')[x];
+    if(ch&&ch!=='.'&&COL[ch]){c.style.background=COL[ch];c.style.boxShadow='inset 0 0 0 1px rgba(255,255,255,.12)';}
+    tg.appendChild(c);
+  }
+
+  /* ---- clock ticks + live hands ---- */
+  const ticks=document.getElementById('ticks');
+  for(let i=0;i<12;i++){const a=i*Math.PI/6,r1=i%3?84:78,r2=90;
+    const x1=100+r1*Math.sin(a),y1=100-r1*Math.cos(a),x2=100+r2*Math.sin(a),y2=100-r2*Math.cos(a);
+    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1',x1);l.setAttribute('y1',y1);l.setAttribute('x2',x2);l.setAttribute('y2',y2);
+    l.setAttribute('stroke-width',i%3?1:2.4);ticks.appendChild(l);}
+  function hand(id,ang,len){const el=document.getElementById(id);const a=ang*Math.PI/180;
+    el.setAttribute('x2',100+len*Math.sin(a));el.setAttribute('y2',100-len*Math.cos(a));}
+  function tick(){const d=new Date();const s=d.getSeconds(),m=d.getMinutes(),h=d.getHours();
+    hand('sh',s*6,70);hand('mh',m*6+s*.1,66);hand('hh',(h%12)*30+m*.5,46);
+    const dc=document.getElementById('dockClk');
+    dc.textContent=((h%12)||12)+':'+String(m).padStart(2,'0');}
+  tick();setInterval(tick,1000);
+
+  /* ---- paint: scatter a few strokes so the canvas isn't empty ---- */
+  (function(){const cv=document.getElementById('paintCanvas');
+    const strokes=[['#60d2eb',40,60,140,90],['#e05a5a',60,120,180,70],['#5bd66e',90,40,90,140]];
+    strokes.forEach(([c,x1,y1,x2,y2])=>{
+      const s=document.createElement('div');
+      const dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy),ang=Math.atan2(dy,dx)*180/Math.PI;
+      s.style.cssText=`position:absolute;left:${x1}px;top:${y1}px;width:${len}px;height:4px;
+        background:${c};border-radius:2px;transform-origin:0 50%;transform:rotate(${ang}deg);opacity:.9`;
+      cv.appendChild(s);});
+  })();
+
+  /* ---- draggable windows + focus + software cursor ---- */
+  const screen=document.getElementById('screen');
+  const cursor=document.getElementById('cursor');
+  let z=30;
+  document.querySelectorAll('[data-win]').forEach(w=>{
+    const bar=w.querySelector('.titlebar');
+    w.addEventListener('pointerdown',()=>{
+      document.querySelectorAll('[data-win]').forEach(o=>o.classList.remove('focus'));
+      w.classList.add('focus');w.style.zIndex=++z;});
+    let sx,sy,ox,oy,drag=false;
+    bar.addEventListener('pointerdown',e=>{drag=true;sx=e.clientX;sy=e.clientY;
+      const r=w.getBoundingClientRect(),pr=screen.getBoundingClientRect();
+      ox=r.left-pr.left;oy=r.top-pr.top;bar.setPointerCapture(e.pointerId);});
+    bar.addEventListener('pointermove',e=>{if(!drag)return;
+      let nx=ox+(e.clientX-sx),ny=oy+(e.clientY-sy);
+      nx=Math.max(0,Math.min(nx,screen.clientWidth-w.offsetWidth));
+      ny=Math.max(26,Math.min(ny,screen.clientHeight-44-30));
+      w.style.left=nx+'px';w.style.top=ny+'px';});
+    bar.addEventListener('pointerup',e=>{drag=false;bar.releasePointerCapture(e.pointerId);});
+    w.querySelectorAll('.tbtn.cls').forEach(b=>b.addEventListener('pointerup',ev=>{
+      ev.stopPropagation();w.style.transition='opacity .12s,transform .12s';
+      w.style.opacity='0';w.style.transform='scale(.97)';
+      setTimeout(()=>w.style.display='none',120);}));
+  });
+  /* software mouse cursor follows the pointer over the screen only */
+  screen.addEventListener('pointermove',e=>{
+    const r=screen.getBoundingClientRect();
+    cursor.style.left=(e.clientX-r.left)+'px';cursor.style.top=(e.clientY-r.top)+'px';});
+</script>

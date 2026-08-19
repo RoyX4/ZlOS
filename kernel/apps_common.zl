@@ -1,0 +1,94 @@
+# apps_common.zl - grid/board helpers shared by the app-suite modules.
+#
+# Every board game in apps_games1.zl / apps_games2.zl draws a grid of square
+# cells and hit-tests a click against that same grid. Before this file that
+# logic would have been copy-pasted into each game (and drifted, the way
+# dock_tile/dock_slot_at were kept honest by sharing DOCK_X0/DOCK_PITCH). This
+# is that shared arithmetic, written once.
+#
+# zl has no lists, no arrays-of-struct and no function values (wm.c's own
+# comment: "the zl kernel subset has no lists at all, zl_list_n is a hard
+# fault") - so "shared" here means shared FUNCTIONS over explicit coordinates,
+# the same idiom dock_tile/menu_row_at already use, not a shared data
+# structure.
+
+# The cell a screen point falls in, as a single flat index (row * gw + col),
+# or -1 if the point is outside the grid. ax,ay is the grid's ORIGIN in screen
+# coordinates (already client-relative-corrected by the caller, exactly like
+# paint_dab takes ex - wm_cx(win)); cell is one cell's side in pixels.
+fn ac_cell_idx(ax, ay, cell, gw, gh, ex, ey) {
+    if ex < ax { return 0 - 1 }
+    if ey < ay { return 0 - 1 }
+    cc = (ex - ax) / cell
+    cr = (ey - ay) / cell
+    if cc >= gw { return 0 - 1 }
+    if cr >= gh { return 0 - 1 }
+    return cr * gw + cc
+}
+
+# A flat board background plus internal grid lines - the part every board
+# game repaints before drawing its own pieces on top.
+fn ac_board_bg(ax, ay, cell, gw, gh, bgcol, linecol) {
+    fill_rgb(ax, ay, gw * cell, gh * cell, bgcol)
+    gi = 1
+    while gi < gw {
+        fill_rgb(ax + gi * cell, ay, 1, gh * cell, linecol)
+        gi = gi + 1
+    }
+    gi = 1
+    while gi < gh {
+        fill_rgb(ax, ay + gi * cell, gw * cell, 1, linecol)
+        gi = gi + 1
+    }
+    return 0
+}
+
+# The three category colours, used by the catalog tiles AND by anything else
+# that wants to show "this is a game / a utility / a system app" at a glance.
+# 0 = system, 1 = utility, 2 = game - matches reg_cat() in apps_registry.zl.
+fn ac_cat_color(cat) {
+    if cat == 0 { return rgb(110, 170, 245) }
+    if cat == 1 { return rgb(110, 225, 200) }
+    return rgb(215, 150, 235)
+}
+
+# A small deterministic PRNG, independent of sn_seed (Snake's own) so two
+# games open at once never share or perturb each other's sequence. Same LCG
+# shape as sn_rand - proven already, not reinvented.
+ac_seed = 1
+fn ac_seed_from(n) { ac_seed = n  return 0 }
+fn ac_rand(n) {
+    ac_seed = ac_seed * 1103515245 + 12345
+    r = band(ac_seed / 256, 32767) % n
+    if r < 0 { r = 0 - r }
+    return r
+}
+
+# ---- hex/binary text, by hand ------------------------------------------------
+# The `hex` builtin (console_puthex) writes to the VGA/serial TEXT console,
+# not the framebuffer - it is for the old shell, not a window. A windowed app
+# has no string values to build ("42" is not a zl value it can construct), so
+# base-converting a number into on-screen text means picking digits apart with
+# arithmetic and drawing each one with char_aa, which takes a character CODE
+# rather than a string. Shared here because Base Converter and Checksum both
+# need it.
+fn ac_hexchar(v) {
+    if v < 10 { return 48 + v }        # '0'..'9'
+    return 55 + v                       # 'A'..'F'  (55 + 10 = 'A' = 65)
+}
+
+# Draws `digits` hex characters of `val`, most significant first, at (x,y).
+# `val` is treated as an unsigned magnitude - callers pass band()'d values.
+fn ac_draw_base(x, y, val, digits, base, color) {
+    dw = cell_w()
+    di = digits - 1
+    while di >= 0 {
+        place = 1
+        pk = 0
+        while pk < di { place = place * base  pk = pk + 1 }
+        dv = (val / place) % base
+        char_aa(x + (digits - 1 - di) * dw, y, ac_hexchar(dv), color)
+        di = di - 1
+    }
+    return 0
+}

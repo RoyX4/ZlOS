@@ -1,0 +1,30 @@
+fn count_down(n) {
+    out = []
+    i = n
+    while i > 0 {
+        out = push(out, i)
+        i -= 1
+    }
+    return out
+}
+fn sum_evens(n) {
+    total = 0
+    for i in range(n) {
+        if i % 2 != 0 { continue }
+        total += i
+    }
+    return total
+}
+fn first_over(xs, limit) {
+    found = -1
+    for x in xs {
+        if x > limit { found = x break }
+    }
+    return found
+}
+
+assert(count_down(4) == [4, 3, 2, 1], "count_down")
+assert(sum_evens(10) == 20, "sum_evens")
+assert(first_over([1, 5, 9, 20], 6) == 9, "first_over")
+assert(first_over([1, 2], 100) == -1, "first_over none")
+print("03 ok")

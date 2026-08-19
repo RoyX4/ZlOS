@@ -26,9 +26,42 @@ SRC=${1:-kernel.zl}
 # because `exit` inside a command substitution only leaves the subshell - the
 # script would carry on with an empty value, size everything at 0 and report
 # a clean map. A check that can pass vacuously is worse than no check.
+# ---- DISCOVERY SWEEP: every fixed address, not a hand-written list -------
+#
+# The list below is hand-maintained and that is exactly how LINE_BUF and
+# DISK_SCRATCH both sat on 0x02030000 through an entire eleven-branch
+# integration. DISK_SCRATCH arrived on desktop/system-track; this file was
+# written on another branch and never learned the name, so the check ran, passed
+# and proved nothing. A detector that cannot see a new constant is not a
+# detector - it is a green light with a hardcoded allowlist.
+#
+# So before anything else: pull EVERY `NAME = 0xADDR` out of the source and fail
+# on any address claimed twice. No list to keep in step, and a constant added
+# tomorrow is covered the moment it is written.
+dupes=$(grep -oP '^[A-Z_]+\s*=\s*\K0x0[0-9A-Fa-f]{5,}' "$SRC" | sort | uniq -d)
+if [ -n "$dupes" ]; then
+    echo "FAIL: two fixed constants share an address:"
+    for a in $dupes; do
+        printf '  %s  <- ' "$a"
+        grep -oP "^\K[A-Z_]+(?=\s*=\s*$a\b)" "$SRC" | tr '\n' ' '
+        echo
+    done
+    exit 1
+fi
+
+# ...and say which constants the sized checks below do NOT cover, so the gap is
+# visible rather than silent. Not a failure: a new address is not automatically
+# wrong, it is automatically unexamined.
+known=" SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT LINE_BUF LINE_MAX HIST_BUF HIST_N FILES_NAME_BUF "
+unsized=""
+for n in $(grep -oP '^\K[A-Z_]+(?=\s*=\s*0x0[0-9A-Fa-f]{5,})' "$SRC" | sort -u); do
+    case "$known" in *" $n "*) ;; *) unsized="$unsized $n";; esac
+done
+[ -n "$unsized" ] && echo "note: fixed addresses with no size check here:$unsized"
+
 declare -A K
 for name in SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT \
-            LINE_BUF LINE_MAX HIST_BUF HIST_N; do
+            LINE_BUF LINE_MAX HIST_BUF HIST_N FILES_NAME_BUF; do
     v=$(grep -oP "^$name\s*=\s*\K(0x[0-9A-Fa-f]+|[0-9]+)" "$SRC" | head -1)
     [ -n "$v" ] || { echo "FAIL: constant $name not found in $SRC"; exit 1; }
     K[$name]=$((v))
@@ -45,19 +78,41 @@ SNAKE_X=${K[SNAKE_X]}; SNAKE_Y=${K[SNAKE_Y]}
 FS_META=${K[FS_META]}; FS_DATA=${K[FS_DATA]}; FS_SLOT=${K[FS_SLOT]}
 LINE_BUF=${K[LINE_BUF]}; LINE_MAX=${K[LINE_MAX]}
 HIST_BUF=${K[HIST_BUF]}; HIST_N=${K[HIST_N]}
+FILES_NAME_BUF=${K[FILES_NAME_BUF]}
 
 # SNAKE_X/SNAKE_Y are one byte per body cell and the code bounds neither by a
 # named constant; the gap between them is what each actually gets.
 SNAKE_CELLS=$((SNAKE_Y - SNAKE_X))
 
+# THE PROGRAM ARENA, WHICH WAS IN NEITHER CHECKER.
+#
+# check-memmap.sh sweeps kernel.zl's fixed buffers against each other from
+# 32 MiB up. memmap.h's _Static_assert chain covers the high map from 128 MiB
+# up. arena.c's 16 MiB arena sits between the two and was in NEITHER - a region
+# larger than everything this script checks put together, invisible to it.
+#
+# It never mattered while the arena was at 8 MiB with 24 MiB of clearance. It
+# started mattering the moment the arena MOVED (8 -> 14 MiB, when the raw
+# loader's CHUNKS went to 192), because a move is when a gap gets spent. Read
+# from arena.c rather than restated, so this cannot drift from the value the
+# kernel actually uses.
+AB=$(grep -oP '^#define\s+ARENA_BASE\s+\K0x[0-9A-Fa-f]+' arena.c)
+AZ=$(grep -oP '^#define\s+ARENA_BYTES\s+\K0x[0-9A-Fa-f]+' arena.c)
+[ -n "$AB" ] && [ -n "$AZ" ] || { echo "FAIL: ARENA_BASE/ARENA_BYTES not found in arena.c"; exit 1; }
+
 # name:start:size - keep in sync with the map comment in kernel.zl
 REGIONS=(
+    "ARENA:$((AB)):$((AZ))"
     "SNAKE_X:$SNAKE_X:$SNAKE_CELLS"
     "SNAKE_Y:$SNAKE_Y:$SNAKE_CELLS"
     "FS_META:$FS_META:64"
     "FS_DATA:$FS_DATA:$((10 * FS_SLOT))"
     "LINE_BUF:$LINE_BUF:$LINE_MAX"
     "HIST_BUF:$HIST_BUF:$((HIST_N * HIST_STRIDE))"
+    # 24, not a named constant here: it is fs.c's FS_NAME_MAX, which this
+    # script has no visibility into (it parses kernel.zl only). FS_META just
+    # above does the same thing for its own C-side size.
+    "FILES_NAME_BUF:$FILES_NAME_BUF:24"
 )
 
 mapfile -t SORTED < <(printf '%s\n' "${REGIONS[@]}" | sort -t: -k2 -n)

@@ -13,15 +13,33 @@ cp out.c _genefi.c
 # -fshort-wchar: UEFI strings are UTF-16
 # -mno-red-zone: mandatory - interrupts would clobber it
 # -fno-stack-protector / -ffreestanding: no runtime under us
-# -w silences everything, which is how FIVE pointer truncations sat in the boot
-# path unseen. This target is LLP64: `unsigned long` is 4 bytes, so casting a
-# pointer through it silently drops the top half, and shifting such a value by
-# 32 is undefined - clang compiled one such shift to a bare `ret`, leaving an
-# IDT gate's high half to whatever was in eax. The three warnings below are
-# exactly the ones that catch that class, so they are re-enabled after -w (clang
-# applies flags left to right) and made fatal. Do not reorder them before -w.
+# THERE IS NO -w HERE ANY MORE, AND THAT IS THE POINT. Do not put it back.
+#
+# This target is LLP64: `unsigned long` is 4 bytes here and 8 everywhere else,
+# so casting a pointer through it silently drops the top half, and shifting
+# such a value by 32 is undefined - clang compiled one such shift to a bare
+# `ret`, leaving an IDT gate's high half to whatever was in eax. The four
+# -Werror= flags below name that class exactly.
+#
+# They used to sit AFTER a -w, on the stated reasoning that "clang applies
+# flags left to right, so these must stay after the -w". MEASURED FALSE on
+# 2026-08-19 with clang 21.1.8: -w suppresses these regardless of position -
+# before them, after them, either way. The guard reported nothing for its
+# entire life, while 33 casts of exactly this class sat in the build. One of
+# them, smp.c's ENTRY_PTR store, is the documented bug verbatim: a 64-bit
+# destination handed an address already truncated to 32 bits.
+#
+# ./wguard.sh reproduces both halves - the suppression, and the guard biting
+# once -w is gone. Run it if you are tempted to change this line.
+#
+# -Wexcessive-regsave is the ONLY warning -w was legitimately buying: it fires
+# 11 times in idt.c because an __attribute__((interrupt)) handler saves a lot
+# of registers, which is the entire job of an interrupt handler. It is
+# suppressed BY NAME, so that a new warning class shows up rather than being
+# swallowed with it.
 CF="-target x86_64-unknown-windows -ffreestanding -fno-stack-protector \
-    -fshort-wchar -mno-red-zone -O2 -DZL_64 -DZL_EFI -w -I.. \
+    -fshort-wchar -mno-red-zone -O2 -DZL_64 -DZL_EFI -I.. \
+    -Wno-excessive-regsave \
     -Werror=shift-count-overflow -Werror=void-pointer-to-int-cast \
     -Werror=pointer-to-int-cast -Werror=int-to-pointer-cast"
 

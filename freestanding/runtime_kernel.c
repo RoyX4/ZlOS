@@ -25,6 +25,17 @@
  */
 #include "../runtime.h"
 
+/* Pointer-sized, for the raw-memory builtins below. NOT `unsigned long`: the
+ * EFI target is LLP64, where it is 4 bytes, so peek/poke/fill_mem/copy_mem and
+ * the fs read/write buffers all silently capped at 4 GiB there - and a zl
+ * number carries 53 bits of address, which is the whole point of having them.
+ * Same shape as fb.c's fb_uptr and xhci.c's uptr. */
+#if defined(ZL_64) || defined(__x86_64__)
+typedef unsigned long long zl_uptr;
+#else
+typedef unsigned int       zl_uptr;
+#endif
+
 /* ---------------------------------------------------------------- seam */
 #ifdef ZL_KERNEL_SERIAL
 /* In a kernel: COM1, polled. §7.1's registers. outb is the intrinsic the
@@ -127,6 +138,29 @@ extern int xhci_ptr_ep(void) ZL_WEAK;
  * Not weak. arena.c is in all four source lists and is pure arithmetic against
  * memory - if it is missing the build should fail, because unlike a USB
  * pointer there is no fallback that "has always worked" to degrade to. */
+/* heap.c, the general allocator. Same argument as arena.c for not being weak:
+ * it is in all four source lists and is arithmetic against memory. The two are
+ * NOT alternatives - the arena hands memory to zl programs and reclaims it
+ * wholesale on reset, the heap is for memory the kernel keeps and frees one
+ * object at a time. Both exist on purpose. */
+extern void user_selftest(void);
+extern int  user_has_exited(void);
+extern unsigned int user_call_count(void);
+
+extern void vmm_report(void);
+extern int  vmm_active(void);
+extern unsigned long long vmm_window_virt(void);
+
+extern int heap_init(void);
+extern int heap_ok(void);
+extern unsigned long heap_capacity(void);
+extern unsigned long heap_used(void);
+extern unsigned long heap_available(void);
+extern unsigned long heap_high_water(void);
+extern unsigned long heap_refusals(void);
+extern unsigned long heap_blocks(void);
+extern unsigned long heap_check(void);
+
 extern int arena_init(void);
 extern int arena_ok(void);
 extern void arena_reset(void);
@@ -180,7 +214,7 @@ extern int  console_blur(int x, int y, int w, int h, int r);
 extern void console_blur_paint(int slot, int x, int y);
 extern void console_blur_free(void);
 extern void ser_puts(const char *s);
-extern unsigned long console_vram(void);
+extern unsigned long long console_vram(void);
 extern int  console_cols(void);
 extern int  console_cell_w(void);
 extern int  console_ui_scale(void);
@@ -240,6 +274,7 @@ extern int  xhci_kbd_poll(void);
 extern int  xhci_key(void);
 extern int  xhci_kbd_report(int i);
 extern int  xhci_ram_ok(void);
+extern int  settings_load(void);
 extern int  xhci_bringup(void);
 extern int  xhci_owned(void);
 extern unsigned int xhci_portsc(int p);
@@ -396,6 +431,11 @@ extern int  wm_anim(int win, int kind);
 extern int  wm_frame_us(void);
 extern int  wm_peak_us(void);
 extern void wm_peak_reset(void);
+/* the miss counters - an average hides stutter and a peak is one sample */
+extern int  wm_late(void);
+extern int  wm_lost(void);
+extern int  wm_painted(void);
+extern int  wm_budget_us(void);
 extern void wm_client(int win, int *x, int *y, int *w, int *h);
 extern void wm_focus(int win);
 extern void wm_raise(int win);
@@ -588,6 +628,16 @@ extern unsigned int intel_backlight_max(void);
 extern unsigned int intel_backlight_get(void);
 extern int  intel_backlight_set(int percent);
 extern int  intel_panel_on(void);
+/* gpuring.c - the GPU self-test. There is no serial port on the ThinkPad, so
+ * every number this exposes exists so kernel.zl can put it on the SCREEN. */
+extern int      gpu_selftest(void);
+extern unsigned gpu_st_filled(void);
+extern unsigned gpu_st_want(void);
+extern unsigned gpu_st_poison(void);
+extern unsigned gpu_st_ctl(void);
+extern unsigned gpu_st_head(void);
+extern unsigned gpu_st_tail(void);
+
 extern int  intel_cursor_enable(unsigned gfx, int size64);
 extern int  intel_cursor_move(int x, int y);
 extern int  intel_cursor_disable(void);
@@ -599,6 +649,11 @@ extern int  intel_plane_tiling(void);
 extern int  intel_ggtt_map_range(unsigned page, unsigned phys, int pages);
 /* the Intel Gen9 display driver */
 extern int  intel_find(void);
+/* 1 when a display controller WAS found and refused because its 64-bit BAR is
+ * above 4 GiB and this build has 32-bit pointers. intel_find() returns -1 in
+ * both cases; this is what tells "there is no Intel GPU" from "there is one and
+ * we cannot reach it", which are different things to print. */
+extern int  intel_bar_too_high(void);
 extern int  intel_present(void);
 extern int  intel_supported(void);
 extern int  intel_devid(void);
@@ -913,12 +968,12 @@ Value zl_calln(const char *name, int n, ...)
     }
 
     /* raw memory - the whole point of a kernel runtime */
-    if (streq(name, "peek8"))  return zl_num((double)*(volatile unsigned char  *)(unsigned long)a[0].num);
-    if (streq(name, "peek16")) return zl_num((double)*(volatile unsigned short *)(unsigned long)a[0].num);
-    if (streq(name, "peek32")) return zl_num((double)*(volatile unsigned int   *)(unsigned long)a[0].num);
-    if (streq(name, "poke8"))  { *(volatile unsigned char  *)(unsigned long)a[0].num = (unsigned char )(unsigned long long)a[1].num; return zl_nil(); }
-    if (streq(name, "poke16")) { *(volatile unsigned short *)(unsigned long)a[0].num = (unsigned short)(unsigned long long)a[1].num; return zl_nil(); }
-    if (streq(name, "poke32")) { *(volatile unsigned int   *)(unsigned long)a[0].num = (unsigned int  )(unsigned long long)a[1].num; return zl_nil(); }
+    if (streq(name, "peek8"))  return zl_num((double)*(volatile unsigned char  *)(zl_uptr)a[0].num);
+    if (streq(name, "peek16")) return zl_num((double)*(volatile unsigned short *)(zl_uptr)a[0].num);
+    if (streq(name, "peek32")) return zl_num((double)*(volatile unsigned int   *)(zl_uptr)a[0].num);
+    if (streq(name, "poke8"))  { *(volatile unsigned char  *)(zl_uptr)a[0].num = (unsigned char )(unsigned long long)a[1].num; return zl_nil(); }
+    if (streq(name, "poke16")) { *(volatile unsigned short *)(zl_uptr)a[0].num = (unsigned short)(unsigned long long)a[1].num; return zl_nil(); }
+    if (streq(name, "poke32")) { *(volatile unsigned int   *)(zl_uptr)a[0].num = (unsigned int  )(unsigned long long)a[1].num; return zl_nil(); }
 
     /* Port I/O - design_kernel.md §6.3 lists these among the intrinsics a
      * kernel backend must provide. Exposing them as builtins is what lets a
@@ -1041,6 +1096,11 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "usb_key"))    return zl_num((double)xhci_key());
     if (streq(name, "usb_rep"))    return zl_num((double)xhci_kbd_report((int)a[0].num));
     if (streq(name, "usb_ram"))    return zl_num((double)xhci_ram_ok());
+    /* Read the saved settings back. settings_save() has had a caller since it
+     * was written - one write per gesture, from settings_flush - and
+     * settings_load() has never had one, so every setting was persisted to NVMe
+     * and then ignored at boot. It applies on success and never writes. */
+    if (streq(name, "set_load"))   return zl_num((double)settings_load());
     if (streq(name, "usb_up"))     return zl_num((double)xhci_bringup());
     if (streq(name, "usb_ours"))   return zl_num((double)xhci_owned());
     if (streq(name, "usb_portsc")) return zl_num((double)xhci_portsc((int)a[0].num));
@@ -1089,12 +1149,31 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "bl_get"))     return zl_num((double)intel_backlight_get());
     if (streq(name, "bl_set"))     return zl_num((double)intel_backlight_set((int)a[0].num));
     if (streq(name, "panel_on"))   return zl_num((double)intel_panel_on());
+    if (streq(name, "gpu_test"))    return zl_num((double)gpu_selftest());
+    if (streq(name, "gpu_filled"))  return zl_num((double)gpu_st_filled());
+    if (streq(name, "gpu_want"))    return zl_num((double)gpu_st_want());
+    if (streq(name, "gpu_poison"))  return zl_num((double)gpu_st_poison());
+    if (streq(name, "gpu_ctl"))     return zl_num((double)gpu_st_ctl());
+    if (streq(name, "gpu_head"))    return zl_num((double)gpu_st_head());
+    if (streq(name, "gpu_tail"))    return zl_num((double)gpu_st_tail());
     if (streq(name, "cur_on"))     return zl_num((double)intel_cursor_enable((unsigned)a[0].num,(int)a[1].num));
     if (streq(name, "cur_move"))   return zl_num((double)intel_cursor_move((int)a[0].num,(int)a[1].num));
     if (streq(name, "cur_off"))    return zl_num((double)intel_cursor_disable());
     if (streq(name, "gpu_flip"))   return zl_num((double)intel_flip((unsigned)a[0].num));
     if (streq(name, "gpu_vbl"))    return zl_num((double)intel_wait_vblank());
     if (streq(name, "gpu_flips"))  return zl_num((double)intel_flip_count());
+    /* PIPE_FRMCNT_A, straight. Declared at :636 for years with no binding, so
+     * zl could not read the one register every vblank-paced thing starts from -
+     * which is also why "it returns 0" was invisible from the desktop. It is 0
+     * whenever mmio is 0 (mmio_r's own guard), i.e. whenever intel_find() has
+     * not run, so a nonzero answer means BOTH that the driver found the part
+     * and that the pipe is scanning out. */
+    /* through `unsigned` first: intel_frame_count() hands back an `int`, and
+     * PIPE_FRMCNT is a free-running 32-bit counter, so for half of every cycle
+     * the top bit is set and a straight (double) cast reports a NEGATIVE frame
+     * count. The register is unsigned; say so here rather than changing the
+     * driver's signature, which intel.c's own f1 - f0 deltas rely on. */
+    if (streq(name, "gpu_frames")) return zl_num((double)(unsigned)intel_frame_count());
     if (streq(name, "gpu_fmt"))    return zl_num((double)intel_plane_format());
     if (streq(name, "gpu_tile"))   return zl_num((double)intel_plane_tiling());
     if (streq(name, "ggtt_map"))   return zl_num((double)intel_ggtt_map_range((unsigned)a[0].num,(unsigned)a[1].num,(int)a[2].num));
@@ -1145,6 +1224,13 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_us"))      return zl_num((double)wm_frame_us());
     if (streq(name, "wm_peak"))    return zl_num((double)wm_peak_us());
     if (streq(name, "wm_peak0"))   { wm_peak_reset(); return zl_nil(); }
+    /* HOW MANY frames missed, which is what a person perceives as stutter -
+     * the peak is one sample and the average hides it. wm_late is frames over
+     * the 16.67 ms budget; wm_lost is 100 Hz ticks no frame ran in at all. */
+    if (streq(name, "wm_late"))    return zl_num((double)wm_late());
+    if (streq(name, "wm_lost"))    return zl_num((double)wm_lost());
+    if (streq(name, "wm_painted")) return zl_num((double)wm_painted());
+    if (streq(name, "wm_budget"))  return zl_num((double)wm_budget_us());
     /* the client rect, so an app can turn a screen-space pointer into a row */
     if (streq(name, "wm_cx"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)x); }
     if (streq(name, "wm_cy"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)y); }
@@ -1436,6 +1522,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "vg_resp"))    return zl_num((double)virtio_gpu_last_resp());
     if (streq(name, "vg_flush"))   return zl_num((double)virtio_gpu_flush((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num));
     if (streq(name, "intel_find"))  return zl_num((double)intel_find());
+    if (streq(name, "intel_hibar")) return zl_num((double)intel_bar_too_high());
     if (streq(name, "intel_ok"))    return zl_num((double)intel_supported());
     if (streq(name, "intel_id"))    return zl_num((double)intel_devid());
     if (streq(name, "intel_mmio"))  return zl_num((double)intel_mmio());
@@ -1524,6 +1611,34 @@ Value zl_calln(const char *name, int n, ...)
      * arena_up prints its own line, the way fb.c does, so the boot log states
      * an ADDRESS rather than a claim - a number somebody can check against the
      * map in fb.c and in arena.c's header comment. */
+    /* ---- the general heap (heap.c) ----------------------------------------
+     * heap_up prints its own line for the same reason arena_up does. heap_chk
+     * is the one that matters operationally: it walks every block by boundary
+     * tag and returns 0 if the heap still adds up, so "is the heap sound" is a
+     * command somebody can type rather than a thing to hope about. It is O(the
+     * number of blocks) and deliberately NOT on the alloc/free path. */
+    /* vmm_up prints one line with ADDRESSES in it - "64 MiB mapped: virtual
+     * 4096 MiB -> physical 256 MiB" is a fact somebody can check against
+     * memmap.h; "virtual memory is on" would not be. */
+    /* ring 3. user_up runs the self-test, which prints from BOTH sides of the
+     * privilege boundary - the "u3" in the boot log is produced by syscalls
+     * made from ring 3 and can be produced no other way. */
+    if (streq(name, "user_up"))       { user_selftest(); return zl_num((double)user_call_count()); }
+    if (streq(name, "user_calls"))    return zl_num((double)user_call_count());
+
+    if (streq(name, "vmm_up"))        { vmm_report(); return zl_num((double)vmm_active()); }
+    if (streq(name, "vmm_on"))        return zl_num((double)vmm_active());
+
+    if (streq(name, "heap_up"))       return zl_num((double)heap_init());
+    if (streq(name, "heap_ok"))       return zl_num((double)heap_ok());
+    if (streq(name, "heap_cap"))      return zl_num((double)heap_capacity());
+    if (streq(name, "heap_used"))     return zl_num((double)heap_used());
+    if (streq(name, "heap_free"))     return zl_num((double)heap_available());
+    if (streq(name, "heap_hw"))       return zl_num((double)heap_high_water());
+    if (streq(name, "heap_refused"))  return zl_num((double)heap_refusals());
+    if (streq(name, "heap_blocks"))   return zl_num((double)heap_blocks());
+    if (streq(name, "heap_chk"))      return zl_num((double)heap_check());
+
     if (streq(name, "arena_up"))      return zl_num((double)arena_init());
     if (streq(name, "arena_ok"))      return zl_num((double)arena_ok());
     if (streq(name, "arena_cap"))     return zl_num((double)arena_capacity());
@@ -1601,8 +1716,8 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "fs_new"))     return zl_num((double)fs_create_named((unsigned)a[0].num));
     if (streq(name, "fs_get"))     return zl_num((double)fs_find_named());
     if (streq(name, "fs_rm"))      return zl_num((double)fs_delete((int)a[0].num));
-    if (streq(name, "fs_rd"))      return zl_num((double)fs_read((int)a[0].num,(void *)(unsigned long)a[1].num,(unsigned)a[2].num));
-    if (streq(name, "fs_wr"))      return zl_num((double)fs_write((int)a[0].num,(const void *)(unsigned long)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "fs_rd"))      return zl_num((double)fs_read((int)a[0].num,(void *)(zl_uptr)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "fs_wr"))      return zl_num((double)fs_write((int)a[0].num,(const void *)(zl_uptr)a[1].num,(unsigned)a[2].num));
     if (streq(name, "fs_stamp"))   { fs_set_time((unsigned)a[0].num); return zl_nil(); }
 
     /* the clock */
@@ -1655,26 +1770,26 @@ Value zl_calln(const char *name, int n, ...)
     /* peek64/poke64 carry the 2^53 hazard (design_kernel.md §2); the two
      * -halves rule means a kernel should not need them for descriptors. */
     if (streq(name, "peek64")) {
-        unsigned long long v = *(volatile unsigned long long *)(unsigned long)a[0].num;
+        unsigned long long v = *(volatile unsigned long long *)(zl_uptr)a[0].num;
         if (v > 9007199254740992ULL) kfatal("peek64 above 2^53 - read two peek32 halves");
         return zl_num((double)v);
     }
     if (streq(name, "poke64")) {
         unsigned long long v = (unsigned long long)a[1].num;
         if (v > 9007199254740992ULL) kfatal("poke64 above 2^53 - write two poke32 halves");
-        *(volatile unsigned long long *)(unsigned long)a[0].num = v;
+        *(volatile unsigned long long *)(zl_uptr)a[0].num = v;
         return zl_nil();
     }
     if (streq(name, "fill_mem")) {
-        volatile unsigned char *p = (volatile unsigned char *)(unsigned long)a[0].num;
+        volatile unsigned char *p = (volatile unsigned char *)(zl_uptr)a[0].num;
         unsigned long long cnt = (unsigned long long)a[2].num;
         unsigned char b = (unsigned char)(unsigned long long)a[1].num;
         while (cnt--) *p++ = b;
         return zl_nil();
     }
     if (streq(name, "copy_mem")) {
-        volatile unsigned char *d = (volatile unsigned char *)(unsigned long)a[0].num;
-        volatile const unsigned char *s = (volatile const unsigned char *)(unsigned long)a[1].num;
+        volatile unsigned char *d = (volatile unsigned char *)(zl_uptr)a[0].num;
+        volatile const unsigned char *s = (volatile const unsigned char *)(zl_uptr)a[1].num;
         unsigned long long cnt = (unsigned long long)a[2].num;
         if (d < s) { while (cnt--) *d++ = *s++; }
         else       { d += cnt; s += cnt; while (cnt--) *--d = *--s; }

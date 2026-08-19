@@ -45,6 +45,13 @@ typedef unsigned long long uptr;
 typedef unsigned int       uptr;
 #endif
 
+/* The ONLY header this file includes, and it earns it: gpu.h carries the one
+ * declaration of the MMIO base that both this file and gpuring.c must agree
+ * on. Everything else intel.c needs it declares itself, which is the style
+ * here - but a prototype that differs between two .c files is precisely the
+ * defect this include exists to make impossible. */
+#include "gpu.h"
+
 u32 idt_ticks(void);
 
 /* Real timing, from cpu.c's PIT-calibrated TSC. idt_ticks() resolves 10 ms and
@@ -63,6 +70,9 @@ void pci_scan(void);
 void pci_enable(int i);
 u32  pci_bar(int i, int which);
 u32  pci_bar_size(int i, int which);
+/* pci_bar() returns the LOW DWORD of a memory BAR. GTTMMADR and GMADR are
+ * 64-bit BARs on this part, so the high half has to come from here. */
+u32  pci_bar_hi(int i, int which);
 u32  pci_read32(int bus, int dev, int fn, int off);
 
 /* ---- config-space registers on the GPU's own function (0:2:0) ------------
@@ -367,20 +377,61 @@ static int is_gen9(u16 id)
     return 0;
 }
 
+/* Set when an Intel display controller WAS found and had to be refused because
+ * its BAR sits above 4 GiB and this build has 32-bit pointers. Distinct from
+ * "no Intel GPU", which is what intel_find()'s -1 means on its own. */
+static int bar_too_high;
+int intel_bar_too_high(void) { return bar_too_high; }
+
 /* Find the Intel integrated GPU and map its register block. */
 int intel_find(void)
 {
+    bar_too_high = 0;
     pci_scan();
     for (int i = 0; i < pci_count(); i++) {
         if (pci_vendor(i) != 0x8086) continue;   /* Intel            */
         if (pci_class(i)  != 0x03)   continue;   /* display controller */
         gpu_idx   = i;
         gpu_devid = (u16)pci_device(i);
+        /* ---- THE HIGH HALF OF A 64-BIT BAR ---------------------------------
+         * GTTMMADR (BAR0) and GMADR (BAR2) are 64-bit BARs on Gen9, and
+         * `pci_bar()` returns the LOW DWORD ONLY. Below 4 GiB that low dword is
+         * the whole address — which is why this laptop, at 0xE9000000, never
+         * showed it, and why it survived: until intel_find() started running at
+         * boot it was reachable only by typing `k`. Firmware is free to place
+         * either BAR high, and `pci.c`'s own comment on pci_bar_is64 says so:
+         * "This is not a theoretical case."
+         *
+         * Truncating is worse than failing. The low dword of a high BAR is a
+         * DIFFERENT, unrelated physical address, so a truncated `mmio` does not
+         * read nothing — it reads whatever else lives there, and every register
+         * this driver goes on to check answers with someone else's memory.
+         * That is exactly the class CLAUDE.md and AGENTS.md are about. */
+        u32 mmio_hi = pci_bar_hi(i, 0);
+        u32 aper_hi = pci_bar_hi(i, 2);
+        if (sizeof(uptr) < 8 && (mmio_hi | aper_hi)) {
+            /* A 32-bit build cannot address it at all. Refuse, and say which
+             * refusal this is — intel_present() stays false either way, but
+             * "there is no Intel GPU" and "there is one and we cannot reach it"
+             * are different facts and the boot log prints them differently. */
+            bar_too_high = 1;
+            gpu_idx = -1;
+            return -1;
+        }
         pci_enable(i);                            /* memory + bus master */
         mmio      = (uptr)pci_bar(i, 0);          /* GTTMMADR */
         mmio_size = pci_bar_size(i, 0);
         aperture  = (uptr)pci_bar(i, 2);          /* GMADR    */
         aper_size = pci_bar_size(i, 2);
+        /* Written as two 16-bit shifts, never one 32-bit shift. On a 32-bit
+         * uptr `x << 32` is undefined, and CLAUDE.md records what this exact
+         * toolchain did with it: clang compiled the expression to a bare `ret`.
+         * The branch above already makes this dead on 32-bit; the idiom is here
+         * so it stays correct if that branch ever changes. */
+        if (sizeof(uptr) >= 8) {
+            mmio     |= ((uptr)mmio_hi << 16) << 16;
+            aperture |= ((uptr)aper_hi << 16) << 16;
+        }
         return i;
     }
     gpu_idx = -1;
@@ -390,10 +441,27 @@ int intel_find(void)
 int intel_present(void)   { return gpu_idx >= 0 && mmio != 0; }
 int intel_devid(void)     { return gpu_devid; }
 int intel_supported(void) { return intel_present() && is_gen9(gpu_devid); }
+/* THESE TWO TRUNCATE, DELIBERATELY, AND ARE FOR REPORTING ONLY.
+ *
+ * freestanding/runtime_kernel.c binds both as zl builtins and zl numbers are
+ * doubles, so they hand back a u32 on purpose. That is fine for printing an
+ * address and wrong for reaching one: above 4 GiB the low dword is a different,
+ * unrelated physical address - the exact wording used at the refusal in
+ * intel_find() above. Anything that DEREFERENCES the base must use
+ * intel_mmio_ptr() / intel_aperture_ptr() below, which gpu.h declares so the
+ * two sides cannot disagree again. */
 u32 intel_mmio(void)      { return (u32)mmio; }
 u32 intel_mmio_size(void) { return mmio_size; }
 u32 intel_aperture(void)  { return (u32)aperture; }
 u32 intel_aper_size(void) { return aper_size; }
+
+/* The full-width pair. `uptr` here and `gpu_uptr` in gpu.h are the same width
+ * by construction on every target this builds for; the assert says so out loud
+ * rather than leaving it to be discovered. */
+_Static_assert(sizeof(uptr) == sizeof(gpu_uptr),
+               "intel.c's uptr and gpu.h's gpu_uptr have drifted apart");
+gpu_uptr intel_mmio_ptr(void)     { return (gpu_uptr)mmio; }
+gpu_uptr intel_aperture_ptr(void) { return (gpu_uptr)aperture; }
 
 /* ---- stolen memory: the RAM the firmware reserved for graphics ----------
  * GMS is bits 15:8 of MGGC0. On Gen9 the size is 32 MiB per step below 0xF0,
@@ -524,11 +592,35 @@ int intel_ggtt_map(u32 gfx_page, u32 phys_addr)
     if (!intel_present()) return 0;
     u32 ggtt = intel_ggtt_size();
     if (!ggtt) return 0;
-    if (gfx_page * 8u >= ggtt) return 0;      /* past the end of the table */
+
+    /* COMPARE PAGE COUNTS, NOT BYTE OFFSETS. `gfx_page * 8u` is a u32 multiply:
+     * any gfx_page at or above 0x20000000 wraps to a small number, sails
+     * through the bound, and writes a PTE at the START of the table instead of
+     * where it belongs - the base is always mmio + 0x800000, so a wrapped
+     * offset corrupts early GGTT entries rather than the register file. Either
+     * way it is someone else's mapping. A bounds check that overflows is worse
+     * than none, because it reads as protection. Dividing the limit instead
+     * cannot overflow. */
+    if (gfx_page >= ggtt / 8u) return 0;      /* past the end of the table */
 
     volatile u32 *pte = (volatile u32 *)(mmio + (uptr)GGTT_OFFSET + (uptr)gfx_page * 8u);
     pte[0] = (phys_addr & 0xFFFFF000u) | 1u;  /* address | present */
-    pte[1] = 0;                                /* HAW=39 on a client part */
+    /* The high dword carries physical address bits 39:32, and this driver
+     * always writes zero - which is correct ONLY because phys_addr is a u32, so
+     * nothing above 4 GiB can be expressed here in the first place. That is a
+     * real ceiling, not a hardware one: measured on 8086:9B41 with the desktop
+     * running, i915's own live entries use it -
+     *
+     *     GGTT[0x01F40] = 00000001 20C00001   phys 0x01_20C00000
+     *
+     * so the hardware maps above 4 GiB happily. Every buffer zlOS actually
+     * places still lives under 256 MiB, so the ceiling costs nothing today -
+     * but note that is now a fact about where things HAPPEN to be, not a rule.
+     * memmap.h's HI_TOP is 1 GiB and the space between the map and it is
+     * unclaimed, so the first allocator that hands out an address up there is
+     * still fine (1 GiB < 4 GiB) and the first one that goes past 4 GiB is not.
+     * Widening phys_addr to u64 is what it would take to lift it. */
+    pte[1] = 0;
     return 1;
 }
 
@@ -759,21 +851,31 @@ static int gmbus_read_edid(int pin, uptr dest, int len)
     return got == len;
 }
 
-/* Where a 128-byte EDID lands. In the kernel this is fixed physical scratch;
- * a host harness has no such address and supplies its own buffer instead.
+/* Where a 128-byte EDID lands.
  *
- * IT WAS 0x0C980000 AND THAT WAS INSIDE fb.c's CACHED-BLUR ARENA - 9.5 MiB
- * into the 16 MiB region memmap.h calls HI_BLUR. A sensible-looking aligned
- * address, in no map, colliding with a neighbour that also did not know. That
- * is the i2c_hid.c failure verbatim, which memmap.h's header opens by
- * describing, one driver over and two reviews later.
+ * IT USED TO BE A HARDCODED 0x0C980000, WHICH IS INSIDE THE BLUR ARENA.
+ * memmap.h puts HI_BLUR at 0x0C000000 with a 16 MiB limit, so that address is
+ * 9.5 MiB into fb.c's cached-blur allocator - which hands out arena space from
+ * HI_BLUR upward and knows nothing about this. Reading an EDID would shred a
+ * cached blur, or a big enough blur cache would shred the EDID; whichever ran
+ * second won. Nothing in the map declared the address, so check-memmap.sh could
+ * not see it either.
  *
- * It only bites on the machine that has both a real panel to read an EDID from
- * and a desktop drawing blurs, i.e. the ThinkPad, and 128 bytes of a cached
- * blur is a smear rather than a crash - so nothing would have reported it.
- * From memmap.h now, and in the ordering chain there. */
-static uptr edid_buf = (uptr)HI_EDID;
+ * It does not need a physical address AT ALL. Every byte here arrives by CPU
+ * store - gmbus_read_edid reads the GMBUS3 register and writes bytes out one
+ * at a time, and the AUX path does the same. No engine DMAs into it, which is
+ * the only thing that would require a known physical address. So it is an
+ * ordinary 128-byte object and cannot collide with anything by construction.
+ *
+ * intel_set_edid_buffer stays: kernel/hosttest/intel_probe.c drives this file
+ * from Linux userspace and supplies storage of its own. */
+static u8   edid_store[128];
+static uptr edid_buf = 0;               /* 0 = "nobody overrode it" */
 void intel_set_edid_buffer(uptr p) { if (p) edid_buf = p; }
+/* Resolved through a function, not a static initializer: `(uptr)edid_store` at
+ * file scope is not a constant expression a compiler has to accept, and this
+ * file is built by both gcc (32- and 64-bit) and clang (LLP64). */
+static uptr edid_addr(void) { return edid_buf ? edid_buf : (uptr)edid_store; }
 
 /* An EDID always begins 00 FF FF FF FF FF FF 00. That fixed header is how we
  * know we read a display and not an empty bus. */
@@ -793,8 +895,8 @@ int intel_read_edid(void)
 {
     if (!intel_present()) return 0;
     for (int pin = 1; pin <= 4; pin++) {
-        if (!gmbus_read_edid(pin, edid_buf, 128)) continue;
-        if (!edid_valid(edid_buf)) continue;
+        if (!gmbus_read_edid(pin, edid_addr(), 128)) continue;
+        if (!edid_valid(edid_addr())) continue;
         edid_pin = pin;
         return pin;
     }
@@ -805,7 +907,7 @@ int intel_edid_pin(void)  { return edid_pin; }
 int intel_edid_byte(int i)
 {
     if (i < 0 || i >= 128) return 0;
-    return (int)*(volatile u8 *)(edid_buf + (uptr)i);
+    return (int)*(volatile u8 *)(edid_addr() + (uptr)i);
 }
 
 /* The three manufacturer letters are packed five bits each, big endian, in
@@ -979,6 +1081,12 @@ int intel_wait_vblank(void)
 int intel_ggtt_map_range(u32 gfx_page, u32 phys_addr, int pages)
 {
     if (!intel_present() || pages <= 0) return 0;
+    /* The per-page call bounds gfx_page, but `gfx_page + i` and
+     * `phys_addr + i * 4096` are u32 sums that can wrap before it ever sees
+     * them - and a wrapped pair is a perfectly valid-looking mapping of the
+     * wrong page to the wrong frame. Refuse the whole range up front. */
+    if ((u32)pages > 0xFFFFFFFFu - gfx_page) return 0;
+    if ((u32)pages > (0xFFFFFFFFu - phys_addr) / 4096u) return 0;
     for (int i = 0; i < pages; i++)
         if (!intel_ggtt_map(gfx_page + (u32)i, phys_addr + (u32)i * 4096u)) return 0;
     return 1;
@@ -1903,7 +2011,7 @@ static int aux_i2c(int port, u32 cmd, const u8 *out, int out_len, u8 *in, int in
  * transaction open and the next caller starts mid-stream. */
 int intel_edid_over_aux(int port, u32 off, int len)
 {
-    if (len < 1 || len > 128 || !edid_buf) return 0;
+    if (len < 1 || len > 128) return 0;
 
     u8 addr = (u8)off;
     if (aux_i2c(port, AUX_I2C_WRITE | AUX_I2C_MOT, &addr, 1, aux_buf, 1) < 0)
@@ -1919,7 +2027,7 @@ int intel_edid_over_aux(int port, u32 off, int len)
         int n = aux_i2c(port, cmd, 0, 0, aux_buf, chunk);
         if (n <= 0) return done;
         for (int i = 0; i < n; i++)
-            *(volatile u8 *)(edid_buf + (uptr)(done + i)) = aux_buf[i];
+            *(volatile u8 *)(edid_addr() + (uptr)(done + i)) = aux_buf[i];
         done += n;
         if (n < chunk) break;              /* short read - the sink stopped */
     }
@@ -1932,7 +2040,7 @@ int intel_edid_over_aux(int port, u32 off, int len)
 int intel_read_edid_aux(int port)
 {
     if (intel_edid_over_aux(port, 0, 128) != 128) return 0;
-    return edid_valid(edid_buf);
+    return edid_valid(edid_addr());
 }
 
 int intel_dpcd_write(int port, u32 addr, const u8 *data, int len)
@@ -2472,9 +2580,20 @@ int intel_link_train(int port, int rate_idx, int lanes, int tps3, int enhanced)
     if (!train_clock_recovery(port, lanes)) return 0;
     if (!train_channel_eq(port, lanes, tps3)) return 0;
 
-    /* done: stop the pattern at both ends and let real pixels flow */
+    /* done: stop the pattern at both ends and let real pixels flow.
+     *
+     * THIS WRITE IS CHECKED, and it is the one that was not. Every other
+     * intel_dpcd_write in this function guards with `if (!... ) return 0;` -
+     * this one discarded its result and the function then returned 1
+     * unconditionally. If the AUX transaction fails or the sink NAKs, the
+     * SOURCE goes on to DP_TP_CTL_LINK_TRAIN_NORM and starts sending real
+     * pixels while the SINK is still in training pattern and displays nothing.
+     * A black panel, reported up the stack as a successful modeset, on a
+     * machine whose only diagnostic is the panel. Telling the sink to leave
+     * training is not an optional courtesy at the end of link training; it is
+     * the step that makes the link usable. */
     u8 none = DP_TRAIN_PAT_NONE;
-    intel_dpcd_write(port, DPCD_TRAINING_PATTERN, &none, 1);
+    if (!intel_dpcd_write(port, DPCD_TRAINING_PATTERN, &none, 1)) return 0;
     tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_IDLE, enhanced);
     cpu_delay_us(500);
     tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_NORM, enhanced);
@@ -3787,21 +3906,36 @@ u32 intel_backlight_duty_wanted(void);
  */
 #define MS_MAX_STEPS 40
 
-static struct { int plan_step; const char *name; int result; } ms_log[MS_MAX_STEPS];
+static struct { int plan_step; const char *name; int result; int soft; } ms_log[MS_MAX_STEPS];
 static int ms_count = 0;
 static int ms_failed_at = 0;
 
 static int ms_dry = 0;
 
-static int ms_do(int plan_step, const char *name, int result)
+/* `soft` is why this takes a fourth argument. MS_STEP and MS_STEP_SOFT differ
+ * correctly at the macro - one returns, the other carries on - but both used to
+ * land here, and here is where ms_failed_at was set. So a soft step's failure
+ * still poisoned the verdict at the end of intel_modeset_run:
+ *
+ *     return ms_failed_at ? 0 : 1;
+ *
+ * which made "the backlight did not come up" indistinguishable from "the
+ * modeset failed", on a panel that was lit, trained and scanning out. The soft
+ * steps are DPLL0-at-wanted-rate, the underrun telltale, backlight PWM and
+ * backlight enable - none of which stop pixels reaching the screen.
+ *
+ * The failure is still RECORDED, in ms_log, and now carries its own softness so
+ * a reader can tell the two apart. It just no longer decides the verdict. */
+static int ms_do(int plan_step, const char *name, int result, int soft)
 {
     if (ms_count < MS_MAX_STEPS) {
         ms_log[ms_count].plan_step = plan_step;
         ms_log[ms_count].name      = name;
         ms_log[ms_count].result    = result;
+        ms_log[ms_count].soft      = soft;
         ms_count++;
     }
-    if (!result && !ms_failed_at) ms_failed_at = plan_step;
+    if (!result && !soft && !ms_failed_at) ms_failed_at = plan_step;
     return result;
 }
 
@@ -3813,16 +3947,19 @@ static int ms_do(int plan_step, const char *name, int result)
  * MS_STEP aborts the sequence on failure. MS_STEP_SOFT records and carries on,
  * for steps whose failure is worth knowing but is not fatal to the modeset. */
 #define MS_STEP(n, name, call) \
-    do { if (ms_dry) ms_do((n), name, 1); \
-         else if (!ms_do((n), name, (call))) return 0; } while (0)
+    do { if (ms_dry) ms_do((n), name, 1, 0); \
+         else if (!ms_do((n), name, (call), 0)) return 0; } while (0)
 
 #define MS_STEP_SOFT(n, name, call) \
-    do { if (ms_dry) ms_do((n), name, 1); else ms_do((n), name, (call)); } while (0)
+    do { if (ms_dry) ms_do((n), name, 1, 1); else ms_do((n), name, (call), 1); } while (0)
 
 int         intel_modeset_steps(void)          { return ms_count; }
 int         intel_modeset_step_plan(int i)     { return (i >= 0 && i < ms_count) ? ms_log[i].plan_step : 0; }
 const char *intel_modeset_step_name(int i)     { return (i >= 0 && i < ms_count) ? ms_log[i].name : ""; }
 int         intel_modeset_step_result(int i)   { return (i >= 0 && i < ms_count) ? ms_log[i].result : 0; }
+/* Which kind of step it was, so a reader can tell "the panel did not come up"
+ * from "the backlight did not" without consulting the source. */
+int         intel_modeset_step_soft(int i)     { return (i >= 0 && i < ms_count) ? ms_log[i].soft : 0; }
 int         intel_modeset_failed_at(void)      { return ms_failed_at; }
 
 /* ---- the mode, staged in pieces so no single call takes 16 arguments ----

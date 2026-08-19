@@ -237,6 +237,49 @@ class Qmp:
         return os.path.exists(path) and os.path.getsize(path) > 64
 
 
+# ---- typing on the EMULATED KEYBOARD ---------------------------------------
+# THE CANONICAL COPY. probe-term.py and probe-net.py each carry their own,
+# because a module name with a hyphen in it is not importable and neither could
+# import the other; both import THIS file already, so this is where the one
+# copy belongs. When either lands on this line, delete its local QCODE/qtype
+# and import these instead.
+#
+# Typing over the emulated keyboard is a DIFFERENT ASSERTION from typing over
+# serial, not a workaround for it - serial reaches the compositor perfectly
+# well (input.c "SERIAL, the third source"). This exercises the PS/2 and USB
+# HID decoders, which is the only input a laptop has and the only path with no
+# wire to fall back on. Use it when the keyboard is the thing under test.
+#
+# A character with no qcode is a hard error, never a silent skip: a probe that
+# quietly drops a keystroke asserts against a command nobody typed and passes
+# for the wrong reason. probe-mouse.py already cost this project one of those.
+QCODE = {
+    " ": "spc", "\n": "ret", "-": "minus", "=": "equal",
+    ".": "dot", ",": "comma", "/": "slash", ";": "semicolon", "'": "apostrophe",
+    ":": "semicolon",
+}
+for _c in "abcdefghijklmnopqrstuvwxyz":
+    QCODE[_c] = _c
+for _c in "0123456789":
+    QCODE[_c] = _c
+
+
+def qtype(qmp, text, settle=0.12):
+    """Type `text` on the emulated keyboard, one key at a time.
+
+    input-send-event, not send-key: under -display none there is no active
+    console handler and send-key is silently dropped. Both the PS/2 and the USB
+    path turn a key into an EV_CHAR (input.c handle_scancode and the xhci_key
+    drain), so either keyboard QEMU routes this to will do.
+    """
+    for ch in text:
+        code = QCODE.get(ch)
+        if code is None:
+            raise RuntimeError(f"no qcode for {ch!r} - add one rather than skipping it")
+        qmp.sendkey(code)
+        time.sleep(settle)
+
+
 def _connect(path):
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     for _ in range(400):

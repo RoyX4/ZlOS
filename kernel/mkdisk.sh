@@ -57,13 +57,44 @@ objcopy -O binary kernel_raw.elf kernel_raw.bin
 nasm -f bin raw_boot.asm -o raw_boot.bin
 
 # assemble the disk: boot sector first, then the kernel, padded to a round size
+# THE KERNEL MUST FIT WHAT THE LOADER READS, and this check is the only thing
+# that says so. raw_boot.asm loads CHUNKS x 32 KiB and then jumps; a kernel
+# larger than that is silently TRUNCATED and jumped into, which is a hang with
+# no build error and no gate - verify-raw.sh boots the truncated image and can
+# only report that it did not come up.
+#
+# It was dropped by the apps-in-windows landing, which took that branch's
+# SOURCES-driven mkdisk.sh wholesale and with it lost this guard. Restored, and
+# worth stating plainly: the merge deleted a CHECK, which is worse than deleting
+# code, because a check is what catches the next one.
+CHUNKS=$(grep -oP 'CHUNKS\s+equ\s+\K[0-9]+' raw_boot.asm)
+LIMIT=$((CHUNKS * 64 * 512))
+KSIZE=$(stat -c%s kernel_raw.bin)
+if [ "$KSIZE" -gt "$LIMIT" ]; then
+    echo "FAIL: kernel is $KSIZE bytes; raw_boot.asm loads only $LIMIT" >&2
+    echo "      (CHUNKS=$CHUNKS x 32 KiB). Raise CHUNKS and the truncate below." >&2
+    exit 1
+fi
+
 cat raw_boot.bin kernel_raw.bin > zlOS.img
-# pad to at least what the loader reads (12 * 32 KiB) so no read runs off the end
-truncate -s 2M zlOS.img
+
+# PAD TO WHAT THE LOADER READS, DERIVED - never a literal.
+#
+# The loader reads CHUNKS chunks from LBA 1 unconditionally. If the image is
+# shorter than 512 + CHUNKS*32 KiB the last reads run off the end of the file,
+# INT 13h returns carry, and raw_boot.asm prints 'D' and halts - a dead machine
+# with no build error, from two numbers in two files drifting apart.
+#
+# This was `truncate -s 2M` beside a comment claiming "12 * 32 KiB", against a
+# CHUNKS of 60. All three disagreed: 2 MiB, 384 KiB and 1.875 MiB. It happened
+# to work only because 2 MiB was the largest of them. Deriving it means raising
+# CHUNKS is now a one-line change that cannot leave this behind.
+IMG_MIN=$(( 512 + CHUNKS * 64 * 512 ))
+truncate -s "$IMG_MIN" zlOS.img
 
 echo "built zlOS.img - OUR bootloader, no GRUB"
 echo "  boot sector: $(stat -c%s raw_boot.bin) bytes  (must be 512)"
-echo "  kernel:      $(stat -c%s kernel_raw.bin) bytes"
+echo "  kernel:      $KSIZE bytes  ($(( (LIMIT - KSIZE) / 1024 )) KiB of loader headroom left)"
 echo "  disk image:  $(stat -c%s zlOS.img) bytes"
 echo
 echo "boot it:  qemu-system-i386 -drive file=zlOS.img,format=raw -serial stdio"

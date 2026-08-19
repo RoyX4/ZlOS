@@ -1,3 +1,11 @@
+> **AUDITED 2026-08-19 · PARTLY OPEN.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. The survey of ~15 hand-built OSes is still good and its citations still hold. The zlOS have/partial/none column is stale in one direction: eleven tracks landed nine of the things it marks absent, including three of the five it tells you not to build.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
+
 # Feature catalogue — everything the other OSes have
 
 Compiled 2026-08-17 from research across ~15 hand-built operating systems.
@@ -189,6 +197,15 @@ internet is not a stale row, it is a contradiction.
 | Servers (ftp/http) | KolibriOS | ❌ |
 | Network-transparent filesystem | Plan 9 (9P), `drawterm` | ❌ |
 | WiFi | 9front, Haiku | ❌ — `wireless-plan.md` is a plan, not a driver |
+| Feature | Who | zlOS |
+|---|---|---|
+| TCP/IP stack | SerenityOS, Haiku, Essence, KolibriOS, Managarm | ❌ |
+| HTTP/TLS client | SerenityOS (`LibHTTP`, `LibTLS`) | ❌ |
+| **A web browser** | SerenityOS (Ladybird), Haiku, KolibriOS, MenuetOS | ❌ |
+| Email / IMAP | SerenityOS | ❌ |
+| Servers (ftp/http) | KolibriOS | ❌ |
+| Network-transparent filesystem | Plan 9 (9P), `drawterm` | ❌ |
+| WiFi | 9front, Haiku | ❌ |
 
 ## 13. Boot and platform
 
@@ -315,6 +332,8 @@ against an attempt. `net.c`, `tcp.c`, `dns.c` and `http.c` use the same static
 arenas as the rest of the kernel and introduce no heap, no filesystem and no
 process. The premise was wrong, and it was wrong in a way that only building the
 thing could show.
+attribute-indexed filesystems, network stacks, a browser. Each needs a heap, a
+filesystem, or processes — all of which zlOS refuses by design.
 
 ---
 
@@ -342,6 +361,7 @@ thing could show.
 >
 > What it cost, measured: **~4,657 lines across eight files**, against a ~3,050
 > estimate. What it does and refuses is in `kernel/docs/browser-status.md`.
+
 
 It comes up because SerenityOS has one, so it looks reachable. It is not, and
 the reason is worth understanding because **it is a different kind of hard from
@@ -439,6 +459,12 @@ Where this reasoning still holds exactly as written: **do not aim at "a
 browser"** in the sense of "the web works." That target does move, it is defined
 by a competitor, and there is no state in which you are finished. Aim at a
 sentence you can put a ✅ next to.
+| **A browser** | **the target moves and is defined by a competitor** | **no** |
+
+**Verdict: not "too hard". Unbounded.** If zlOS ever needs to show a web page,
+the answer is to render a *subset* — a documentation viewer, a Markdown or
+DolDoc-style hypertext reader like TempleOS's — and call it that honestly,
+rather than aiming at "a browser" and never arriving.
 
 *(TempleOS's DolDoc is the interesting precedent here: hypertext with links,
 images and 3D meshes embedded in plain ASCII, used for both the shell and the

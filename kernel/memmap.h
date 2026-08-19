@@ -36,14 +36,17 @@
  *   0x05000000   80   browser.c     the document, tree, CSS, runs 16 MiB
  *   0x08000000  128   fb.c          back, the back buffer         48 MiB
  *   0x0B000000  176   sched.c       task stacks + demo counters    8 MiB
- *   0x0B800000  184   i2c_hid.c     HID report + descriptor bufs   8 MiB
+ *   0x0B800000  184   i2c_hid.c     HID report + descriptor bufs   4 MiB
+ *   0x0BC00000  188   gpuring.c     the GPU command ring           4 MiB
  *   0x0C000000  192   fb.c          the cached-blur arena         16 MiB
  *                     (0x0C980000 was intel.c's EDID scratch, 9.5 MiB INSIDE
  *                      this region. See below; it is at 52 MiB now.)
  *   0x0D000000  208   nvme.c        admin + I/O queues            16 MiB
  *   0x0E000000  224   xhci.c        the USB DMA arena             16 MiB
  *   0x0F000000  240   virtio_gpu.c  rings + the GPU framebuffer   16 MiB
- *   0x10000000  256   --- top of a -m 256 guest, nothing above ---
+ *   0x10000000  256   heap.c        the general allocator         64 MiB
+ *   0x14000000  320   --- everything above here is unclaimed ---
+ *   0x40000000 1024   --- HI_TOP: the smallest machine we promise ---
  *
  * FIVE FILES BELOW THE LINE ABOVE HELD A FIXED ADDRESS THIS FILE DID NOT KNOW
  * ABOUT, and four of them are in the list above because of that. Found while
@@ -73,11 +76,33 @@
  * being true when the panel gets bigger, which is how the ThinkPad's 2560x1440
  * lost the back buffer without printing a word.
  *
- * 256 MiB IS A HARD CEILING, NOT A ROUND NUMBER. HANDOFF.md records `-m 256` as
- * the minimum zlOS boots with, and virtio_gpu.c explains what happens when a
- * buffer crosses it: the device cannot reach the memory and
- * RESOURCE_ATTACH_BACKING fails with ERR_UNSPEC, which reads like a driver bug
- * and is not one. Nothing may be placed at or above HI_TOP.
+ * WHAT HI_TOP IS, AND WHAT IT IS NOT
+ * ----------------------------------
+ * It is NOT a hardware limit and never was. It is one promise, in one number:
+ * *the smallest guest zlOS claims to boot on.* Everything a device DMAs must
+ * sit below it, because below it is the only memory we have promised exists.
+ * virtio_gpu.c records the failure when a buffer crosses that line - the device
+ * cannot reach it and RESOURCE_ATTACH_BACKING returns ERR_UNSPEC, which reads
+ * like a driver bug and is not one.
+ *
+ * It was 256 MiB, and that number bought nothing. The gates did not honour it
+ * in either direction:
+ *
+ *   - verify.sh, verify-raw.sh and verify-iso.sh passed NO `-m` at all, so
+ *     qemu-system-i386 gave them its default 128 MiB and HALF the map above was
+ *     unbacked RAM on every one of them (measured; arena.c:38-52 has the
+ *     query-memory-size-summary output, and it is why the program arena sits at
+ *     8 MiB rather than above the map where it belongs)
+ *   - verify-efi.sh and exercise.py already passed `-m 1G`, four times the
+ *     ceiling the header was asserting against
+ *
+ * So the 256 MiB line was a promise nothing kept and nothing checked. It is now
+ * 1 GiB and every gate passes `-m 1G`, which makes HI_TOP the first ceiling in
+ * this file that is true where it is enforced. The trade is written down in
+ * HANDOFF.md: zlOS no longer claims to boot on a 256 MB machine.
+ *
+ * Nothing may be placed at or above HI_TOP. Raising it again means raising
+ * every gate's `-m` in the same commit, or it goes back to being decoration.
  *
  * ADDING A REGION: put its base here in ascending order, add it to the ordering
  * chain below, and have the owning file assert that its highest byte lands
@@ -239,11 +264,28 @@
 #define AP_STACK_SPAN (17UL * AP_STACK_SIZE)  /* cpu_apic_ids[] holds 16    */
 #define HI_SCHED  0x0B000000UL   /* sched.c      - stacks, counters         */
 #define HI_HID    0x0B800000UL   /* i2c_hid.c    - HID over I2C buffers     */
+#define HI_GPU    0x0BC00000UL   /* gpuring.c    - the GPU command ring      */
 #define HI_BLUR   0x0C000000UL   /* fb.c         - the cached-blur arena    */
 #define HI_NVME   0x0D000000UL   /* nvme.c       - admin + I/O queues       */
 #define HI_XHCI   0x0E000000UL   /* xhci.c       - the USB DMA arena        */
 #define HI_VGPU   0x0F000000UL   /* virtio_gpu.c - rings + GPU framebuffer  */
-#define HI_TOP    0x10000000UL   /* 256 MiB - the guest ends here           */
+/* THE FIRST REGION THAT IS NOT HAND-PLACED. Everything above is one buffer at
+ * one address chosen by a person; this is 64 MiB that heap.c hands out and
+ * takes back, so nothing inside it has a fixed address and nothing inside it
+ * appears in this file. That is the point of it.
+ *
+ * It is at 256 MiB - above every existing region rather than between two of
+ * them - so adding it moved nothing. That was deliberate: a second job was
+ * building the desktop app suite against this map at the time, and the one
+ * thing that could not happen was an occupied region changing address. */
+#define HI_HEAP   0x10000000UL   /* heap.c       - the general allocator     */
+#define HI_TOP    0x40000000UL   /* 1 GiB - the smallest guest we promise   */
+
+/* The same number the gates must pass to `-m`, in the units `-m` takes, so the
+ * two cannot drift apart silently. check-ram.sh greps this line and every
+ * qemu invocation in the tree and fails if they disagree. */
+#define HI_TOP_MB (HI_TOP >> 20)
+_Static_assert(HI_TOP_MB == 1024, "HI_TOP and the gates' -m no longer agree");
 
 /* THE MAP MUST BE IN ORDER, AND THE COMPILER SHOULD SAY SO.
  *
@@ -298,10 +340,12 @@ _Static_assert(HI_APSTK + AP_STACK_SPAN <= HI_SCHED,
                "the SMP AP stacks have grown into sched.c's task stacks");
 _Static_assert(HI_BACK  < HI_SCHED, "high-RAM map out of order: back >= sched");
 _Static_assert(HI_SCHED < HI_HID,   "high-RAM map out of order: sched >= hid");
-_Static_assert(HI_HID   < HI_BLUR,  "high-RAM map out of order: hid >= blur");
+_Static_assert(HI_HID   < HI_GPU,   "high-RAM map out of order: hid >= gpu");
+_Static_assert(HI_GPU   < HI_BLUR,  "high-RAM map out of order: gpu >= blur");
 _Static_assert(HI_BLUR  < HI_NVME,  "high-RAM map out of order: blur >= nvme");
 _Static_assert(HI_NVME  < HI_XHCI,  "high-RAM map out of order: nvme >= xhci");
 _Static_assert(HI_XHCI  < HI_VGPU,  "high-RAM map out of order: xhci >= vgpu");
-_Static_assert(HI_VGPU  < HI_TOP,   "high-RAM map out of order: vgpu >= 256 MiB");
+_Static_assert(HI_VGPU  < HI_HEAP,  "high-RAM map out of order: vgpu >= heap");
+_Static_assert(HI_HEAP  < HI_TOP,   "high-RAM map out of order: heap >= HI_TOP");
 
 #endif /* ZL_MEMMAP_H */

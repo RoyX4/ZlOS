@@ -1,4 +1,33 @@
+> **AUDITED 2026-08-19 · SUPERSEDED.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. A Windows-hosted graphics ladder (user32/gdi32/d2d1/opengl32 via FFI) added by the very commit that ported zl to Linux, never edited since. It has never described a platform this repo targets. The annotation `HANDOFF.md` and `DECISIONS.md` both claim was written into this file does not exist — this banner is it. On zlOS, 3D means a software rasterizer.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # Graphics plan — from BMP files to live windows to the GPU
+
+> **2026-08-17 — this is the WINDOWS-HOSTED plan. It is still correct for `zl`
+> the language. It does NOT describe zlOS, which went a different way.**
+>
+> This plan says layers 3–5 are gated on FFI into `user32.dll` / `opengl32.dll`.
+> Eight days after it was written, **zlOS reached layer 3 with no FFI at all** —
+> not by calling into an OS, but by *removing* the OS underneath. On bare metal
+> the framebuffer is just memory and `poke32` reaches it. The `bytes` type was
+> never needed either: the kernel's pixel buffers are C arrays at fixed physical
+> addresses.
+>
+> **The one line that must not be carried into zlOS work:** layer 5 says the GPU
+> is reached via `opengl32.dll`. **On bare metal that DLL does not exist and never
+> will.** GPU acceleration on zlOS would mean writing a Gen9 3D driver, and
+> `kernel/docs/desktop-prior-art.md` establishes that *no* hobby OS has done this
+> — SerenityOS runs Half-Life on a **software** rasterizer, and Essence OS does
+> animated vector UI on the CPU.
+>
+> So on zlOS, layer 5 is not "FFI to OpenGL". It is **"write a software
+> rasterizer"**, and `kernel/fb3d.c` is already its first step.
+>
+> See `kernel/docs/desktop-prior-art.md` and `kernel/docs/desktop-plan.md`.
 
 Drafted 2026-08-03. The layered path for zl graphics, what each layer needs, and what is buildable
 now versus gated on FFI. Complements the existing `design_game_system.md` (973 lines, the games-

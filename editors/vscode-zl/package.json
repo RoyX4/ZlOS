@@ -1,11 +1,13 @@
 {
   "name": "zl-lang",
   "displayName": "zl language",
-  "description": "Syntax highlighting and editor support for the zl programming language",
-  "version": "0.1.0",
+  "description": "Syntax highlighting, completions, formatting and editor support for the zl programming language",
+  "version": "0.3.2",
   "publisher": "zl",
   "engines": { "vscode": "^1.60.0" },
-  "categories": ["Programming Languages"],
+  "categories": ["Programming Languages", "Formatters"],
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:zl"],
   "contributes": {
     "languages": [
       {
@@ -20,6 +22,92 @@
         "language": "zl",
         "scopeName": "source.zl",
         "path": "./syntaxes/zl.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "zl",
+        "path": "./snippets/zl.json"
+      }
+    ],
+    "configuration": {
+      "title": "zl",
+      "properties": {
+        "zl.formatterPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to the `zlfmt` binary. Leave empty to search the open workspace folders for `./zlfmt` (where `build.sh` puts it), then `PATH`."
+        },
+        "zl.interpreterPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to the `interp` binary (the reference interpreter). Leave empty to search the open workspace folders for `./interp`, then `zl` / `interp` on `PATH`."
+        },
+        "zl.compilerPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to the `compilel` binary (zl -> LLVM IR, the speed backend). Leave empty to search the open workspace folders for `./compilel`, then `PATH`."
+        },
+        "zl.saveBeforeRun": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Save the file before running it. Both runners read the file from disk, so an unsaved buffer would run stale bytes."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "zl.showFormatterPath",
+        "title": "zl: Show formatter path",
+        "category": "zl"
+      },
+      {
+        "command": "zl.run",
+        "title": "zl: Run file (interpreter)",
+        "category": "zl",
+        "icon": "$(play)"
+      },
+      {
+        "command": "zl.runCompiled",
+        "title": "zl: Run file (compiled, LLVM backend)",
+        "category": "zl",
+        "icon": "$(rocket)"
+      }
+    ],
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "zl.run",
+          "when": "resourceLangId == zl",
+          "group": "navigation@1"
+        },
+        {
+          "command": "zl.runCompiled",
+          "when": "resourceLangId == zl",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "zl.run",
+          "when": "resourceLangId == zl"
+        },
+        {
+          "command": "zl.runCompiled",
+          "when": "resourceLangId == zl"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "zl.run",
+        "key": "ctrl+f5",
+        "when": "editorTextFocus && resourceLangId == zl"
+      },
+      {
+        "command": "zl.runCompiled",
+        "key": "ctrl+shift+f5",
+        "when": "editorTextFocus && resourceLangId == zl"
       }
     ]
   }

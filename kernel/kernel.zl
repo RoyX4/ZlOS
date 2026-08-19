@@ -33,12 +33,45 @@ WALL_BOT = rgb(10, 12, 22)      # ... to near-black at the bottom
 HDR_TOP  = rgb(48, 92, 168)     # title bar: bright blue
 HDR_BOT  = rgb(22, 40, 92)      # ... to deep blue
 ACCENT   = rgb(96, 210, 235)    # bright cyan accent line
-BAR_TOP  = rgb(40, 46, 66)      # taskbar top
-BAR_BOT  = rgb(18, 20, 32)      # taskbar bottom
-BAR_HI   = rgb(78, 92, 128)     # taskbar top highlight
+BAR_TOP  = rgb(40, 46, 66)      # taskbar top          = --bar-top #282e42
+BAR_BOT  = rgb(18, 20, 31)      # taskbar bottom       = --bar-bot #12141f
+BAR_HI   = rgb(78, 92, 128)     # taskbar top highlight= --bar-hi  #4e5c80
 PANEL    = rgb(0, 0, 0)        # content panel = black, matches text cell bg
+# ---- the three the northstar names and kernel.zl did not have ---------------
+# LOOK-AND-SPEED-PROMPT asked specifically about `panel` and `ok`. Both were
+# genuinely absent, and they are absent for two different reasons:
+#
+#   --panel #05060a   PANEL above is rgb(0,0,0), pure black, and that is a
+#                     DELIBERATE difference: an app's content panel has to match
+#                     the VGA text cell background exactly or the shell's own
+#                     scrollback sits on a slightly different black. So PANEL
+#                     stays 0,0,0 and the reference's near-black gets its own
+#                     name, for the chrome that is not a text surface.
+#   --ok #5bd66e      OK_GRN was rgb(120,220,140) - a lighter, greyer green
+#                     picked before the reference existed. Drift rather than a
+#                     decision, so the reference wins and OK_GRN now holds it.
+PANEL_NS  = rgb(5, 6, 10)       # --panel    #05060a - floating panels, menus
+LINE_SOFT = rgb(38, 48, 74)     # --line     #26304a - hairline borders
 TXT_HI   = rgb(210, 228, 255)   # light text
 TXT_DIM  = rgb(150, 165, 195)   # dim text
+# --crit from the northstar (#e05a5a). It was already on screen as a literal in
+# the window close button and nowhere else; a colour the reference NAMES should
+# be named here too, or the next use of it guesses a different red.
+CRIT_RED = rgb(224, 90, 90)     # something is wrong and you should look
+
+# ---- the app suite ----------------------------------------------------------
+# Everything past the original 13 apps (APP_SHELL..APP_EDIT, APP_SETTINGS,
+# APP_RUN) lives in these imported modules rather than bolted straight into
+# this file - see docs/app-suite.md for the registry design. `import`
+# splices each module's top level into this program at PARSE time (same
+# mechanism for every backend, see docs/design/design_imports.md), so this
+# is the one place that says what the suite is made of.
+import apps_common
+import apps_registry
+import apps_utils
+import apps_games1
+import apps_games2
+import apps_system
 
 # ---- serial input -----------------------------------------------------------
 # It used to be read HERE, with band(inb(COM1 + 5), 1) as the ready test. Two
@@ -228,7 +261,7 @@ TOP_BG   = rgb(20, 23, 33)
 TOP_LINE = rgb(8, 9, 14)
 TOP_TXT  = rgb(226, 234, 248)
 TOP_DIM  = rgb(128, 140, 166)
-OK_GRN   = rgb(120, 220, 140)
+OK_GRN   = rgb(91, 214, 110)    # --ok #5bd66e
 
 fn draw_header() {
     if px_w() > 0 {
@@ -356,13 +389,41 @@ fn dock_cmd(slot) {
 # WHERE THE TRAY STARTS, in one place. It was computed twice - once in
 # draw_status and once in draw_clock - with the same three lines copied, which
 # is how a clock ends up drawn 4 px from where its label is.
+# THE ROW, AS A TABLE. These were eight literals inline in the draw calls and a
+# ninth, different, pair of literals in the damage rectangle that invalidates
+# them - which is how the peak number ended up drawn outside its own damage rect
+# and kept the head of its previous value on screen for ever. A row laid out in
+# one place cannot disagree with itself about where it is.
+#
+# Design units, so they scale with ui() like everything else. Each NUMBER gets a
+# FIXED cell rather than flowing after its label: label_w() exists and would let
+# the row reflow to fit, but these values change every frame, and a readout
+# whose labels slide sideways as the digits change is unreadable. A fixed cell
+# wide enough for the worst case is the correct shape for a live number.
+TRAY_W       = 330       # the whole row, and the width tray_x() steps back by
+TRAY_FRAME_L = 0         # "frame"
+TRAY_FRAME_N = 44        #   wm_us(),   up to 6 digits
+TRAY_PEAK_L  = 92        # "peak"
+TRAY_PEAK_N  = 124       #   wm_peak(), up to 6 digits
+TRAY_LATE_L  = 172       # "late"
+TRAY_LATE_N  = 204       #   wm_late(), up to 5 digits
+TRAY_UP_L    = 244       # "up"
+TRAY_UP_N    = 266       #   uptime in seconds
+TRAY_NUM_W   = 48        # room a number cell needs for its widest value
+
 fn tray_x() {
     u = ui()
-    tx = px_w() - 300 * u
+    tx = px_w() - TRAY_W * u
     tdend = DOCK_X0 * u + 9 * DOCK_PITCH * u + 16 * u
     if tx < tdend { tx = tdend }
     return tx
 }
+
+# THE RECTANGLE THAT INVALIDATES THE ROW ABOVE, derived from the same tray_x().
+# Everything from where the row starts to the right edge of the screen: the row
+# is the last thing on that line and nothing lives to the right of it, so this
+# cannot be too narrow the way a hand-counted width can.
+fn tray_dmg_w() { return px_w() - tray_x() }
 
 # THE PART THAT NEVER CHANGES: the blurred, tinted strip, the start button and
 # the nine tiles in their rest state. Drawn ONCE, into the wallpaper cache.
@@ -371,14 +432,20 @@ fn draw_dock_bg() {
     dy = dock_y()
     u = ui()
     grad_rgb(0, dy - 6, w, 6, WALL_BOT, rgb(6, 7, 12))    # soft shadow above
-    # BLUR, THEN TINT - backdrop-filter: blur() + rgba(), which the prototype
-    # asks for in six places. Both are paid here, once, and never again.
-    if dock_blur >= 0 {
-        blurdraw(dock_blur, 0, dy)
-        blend(0, dy, w, px_h() - dy, rgb(14, 19, 34), 150)
-    } else {
-        grad_rgb(0, dy, w, px_h() - dy, BAR_TOP, BAR_BOT)
-    }
+    # AN OPAQUE VERTICAL GRADIENT, which is what the northstar asks for:
+    #
+    #   .dock{ background:linear-gradient(180deg,var(--bar-top),var(--bar-bot));
+    #          border-top:1px solid var(--bar-hi) }
+    #
+    # This used to be blur-then-tint - the v10 prototype's backdrop-filter -
+    # with this gradient sitting underneath as the fallback branch. The gradient
+    # WON, and the reason is measured rather than aesthetic: see DECISIONS #29.
+    # The blur took its slot out of the same 16 MiB arena as the wallpaper cache
+    # and took it FIRST, so on the ThinkPad's 2560x1440 panel 3.75 MiB of blur
+    # left 12.25 MiB for a wallpaper that wants 14.06, and the cache - which
+    # fb.c's own comment calls "not an optimisation, the only way the look
+    # exists" - was refused on the one machine this OS is actually for.
+    grad_rgb(0, dy, w, px_h() - dy, BAR_TOP, BAR_BOT)
     fill_rgb(0, dy, w, 1, BAR_HI)                          # top highlight
     rrect(10 * u, dy + 8 * u, 96 * u, DOCK_TW * u, 12 * u, rgb(48, 92, 168))
     fill_rgb(10 * u, dy + 8 * u, 96 * u, 1, rgb(120, 170, 235))
@@ -421,12 +488,38 @@ fn draw_status(msg) {
         # A number nobody can see is a number nobody checks, and "state:
         # compositor" - which is what used to be here - is a label that has
         # said the same thing on every boot since it was written.
-        label(tray, dy + 22 * u, "frame", TXT_DIM, T_CAPTION, W_REG)
-        label_num(tray + 44 * u, dy + 22 * u, wm_us(), ACCENT, T_CAPTION, W_BOLD)
-        label(tray + 92 * u, dy + 22 * u, "us   peak", TXT_DIM, T_CAPTION, W_REG)
-        label_num(tray + 152 * u, dy + 22 * u, wm_peak(), TXT_HI, T_CAPTION, W_BOLD)
-        label(tray + 210 * u, dy + 22 * u, "up", TXT_DIM, T_CAPTION, W_REG)
-        label_num(tray + 232 * u, dy + 22 * u, ticks() / 100, TXT_HI, T_CAPTION, W_BOLD)
+        # LATE is here because the other two cannot show stutter. An average
+        # hides it by construction and a peak is a single sample; both are
+        # consistent with a desktop that hitches once a second, which is
+        # precisely what a person notices. `late` is how many painted frames
+        # went over the 16.67 ms budget since the last `peakreset`, so a
+        # healthy desktop reads 0 and any other number is a thing to chase.
+        ty = dy + 22 * u
+        # red the moment anything has missed, because a 0 that can silently
+        # become a 3 in the same colour is a number nobody re-reads
+        tlc = TXT_HI
+        if wm_late() > 0 { tlc = CRIT_RED }
+        # A FIELD IS DRAWN ONLY IF IT FITS. At 800x600 the nine dock tiles
+        # already reach x=622, tray_x() clamps to 638 to clear them, and 162 px
+        # is all that is left - so the row has been running off the right edge
+        # of the screen at that mode since it was written, silently, because
+        # fb.c clips and says nothing. Drawing off-screen is not a smaller
+        # problem than drawing nothing; it is the same problem with no evidence.
+        avail = px_w() - tray
+        label    (tray + TRAY_FRAME_L * u, ty, "frame",     TXT_DIM, T_CAPTION, W_REG)
+        label_num(tray + TRAY_FRAME_N * u, ty, wm_us(),     ACCENT,  T_CAPTION, W_BOLD)
+        if avail >= (TRAY_PEAK_N + TRAY_NUM_W) * u {
+            label    (tray + TRAY_PEAK_L * u, ty, "peak",    TXT_DIM, T_CAPTION, W_REG)
+            label_num(tray + TRAY_PEAK_N * u, ty, wm_peak(), TXT_HI,  T_CAPTION, W_BOLD)
+        }
+        if avail >= (TRAY_LATE_N + TRAY_NUM_W) * u {
+            label    (tray + TRAY_LATE_L * u, ty, "late",    TXT_DIM, T_CAPTION, W_REG)
+            label_num(tray + TRAY_LATE_N * u, ty, wm_late(), tlc,     T_CAPTION, W_BOLD)
+        }
+        if avail >= (TRAY_UP_N + TRAY_NUM_W) * u {
+            label    (tray + TRAY_UP_L * u, ty, "up",        TXT_DIM, T_CAPTION, W_REG)
+            label_num(tray + TRAY_UP_N * u, ty, ticks() / 100, TXT_HI, T_CAPTION, W_BOLD)
+        }
         # THE UPTIME, drawn HERE rather than by draw_clock. draw_clock is only
         # ever called from the old text-shell loop, which now runs only on a
         # machine with no framebuffer - so under the compositor the tray said
@@ -450,10 +543,25 @@ fn draw_clock(sec) {
     if px_w() > 0 {
         w = px_w()
         dy = dock_y()
+        cu = ui()
         ctray = tray_x()
-        grad_rgb(ctray + 226 * ui(), dy + 12 * ui(), 70 * ui(), 30 * ui(), BAR_TOP, BAR_BOT)
-        label(ctray + 210 * ui(), dy + 22 * ui(), "up", TXT_DIM, T_CAPTION, W_REG)
-        label_num(ctray + 232 * ui(), dy + 22 * ui(), sec, TXT_HI, T_CAPTION, W_BOLD)
+        # The clear behind the uptime, and it uses the SAME table draw_status
+        # lays the row out from - it used to be `+ 226` and `70` wide, a third
+        # set of literals for the same row.
+        #
+        # BAR_TOP/BAR_BOT is the right background only when the dock fell back
+        # to a plain gradient. Once the dock is baked into the wallpaper cache
+        # this strip is blur-then-tint, and painting a gradient over it puts a
+        # visible patch where the clock is. Repaint from the cache when there is
+        # one; the gradient stays as the fallback it always was.
+        cw = TRAY_W * cu - TRAY_UP_L * cu
+        if wall_ok() == 1 {
+            wall_paint(ctray + TRAY_UP_L * cu, dy + 12 * cu, cw, 30 * cu)
+        } else {
+            grad_rgb(ctray + TRAY_UP_L * cu, dy + 12 * cu, cw, 30 * cu, BAR_TOP, BAR_BOT)
+        }
+        label(ctray + TRAY_UP_L * cu, dy + 22 * cu, "up", TXT_DIM, T_CAPTION, W_REG)
+        label_num(ctray + TRAY_UP_N * cu, dy + 22 * cu, sec, TXT_HI, T_CAPTION, W_BOLD)
     } else {
         at_num(status_row(), 70, sec, C_STATUS)
     }
@@ -513,8 +621,9 @@ fn help_typed() {
     print("    mouse             a cursor driven by the PS/2 mouse")
     print("    snake             play SNAKE (w a s d to steer)")
     print("    paint             paint with the mouse")
-    print("    edit <n>          edit RAM file n (0-9) - ESC saves it")
+    print("    edit <n>          edit RAM file n (0-9) - ESC saves, so does Ctrl+S")
     print("    ls                list the RAM files")
+    print("    filemgr           Files app - create/open/delete files on zlfs, by name")
     print("    beep              beep the PC speaker")
     print("    poke              poke a byte into video memory and read it back")
     color(C_CYAN)  print("  our hardware drivers")
@@ -644,8 +753,23 @@ fn editor_draw(ax, ay, aw, ah) {
     }
     # the caret, where the next character will land
     fill_rgb(ed_x, ed_y, ed_cw, ed_ch - 2, ACCENT)
-    text_aa(ax + 4, ay + ah - ed_ch, "ESC saves and closes   file", TXT_DIM)
-    num_aa(ax + 4 + 28 * ed_cw, ay + ah - ed_ch, ed_slot, TXT_HI)
+    # "file"/"disk" are deliberately the same length (27 chars total either
+    # way) so the 28*ed_cw column below lines up under both - a RAM slot
+    # NUMBER in one mode, the zlfs NAME in the other, same starting cell.
+    if ed_disk == 1 {
+        text_aa(ax + 4, ay + ah - ed_ch, "ESC saves and closes   disk", TXT_DIM)
+        edfx = ax + 4 + 28 * ed_cw
+        edfi = 0
+        while edfi < 23 {
+            edfc = fs_ch(ed_fidx, edfi)
+            if edfc > 0 { char_aa(edfx, ay + ah - ed_ch, edfc, TXT_HI) }
+            edfx = edfx + ed_cw
+            edfi = edfi + 1
+        }
+    } else {
+        text_aa(ax + 4, ay + ah - ed_ch, "ESC saves and closes   file", TXT_DIM)
+        num_aa(ax + 4 + 28 * ed_cw, ay + ah - ed_ch, ed_slot, TXT_HI)
+    }
     num_aa(ax + aw - 8 * ed_cw, ay + ah - ed_ch, ed_len, TXT_DIM)
     return 0
 }
@@ -1250,7 +1374,83 @@ FS_SLOT = 8192
 # DMA arena map at the top of fb.c - bg 128 MiB, sp 160, sched 176, back 192,
 # nvme 208, xhci 224, virtio-gpu 240. 32 MiB + 192 KiB collides with none of
 # them, which is the check this project's recurring bug says to do every time.
-DISK_SCRATCH = 0x02030000
+# 0x02040000, NOT 0x02030000, which is LINE_BUF.
+#
+# claude/quirky-pare-05454c moved LINE_BUF out of FS_DATA's slot 7 to
+# 0x02030000; desktop/system-track independently put DISK_SCRATCH at the address
+# quirky-pare had just moved TO, reasoning correctly against the layout its own
+# branch could see - where LINE_BUF was still at 0x02020000. The two hunks are
+# ~400 lines apart on branches with different bases, so the merge took both with
+# no conflict, and zl has no static asserts to catch it.
+#
+# It has been inert only because read_line() currently has no caller. The moment
+# anything types at the shell while the clipboard or the boot counter is in use,
+# the shell's input line and the disk scratch are the same memory.
+#
+# Free space here: FS_DATA ends at 0x02025000, HIST_BUF ends at 0x02032000, and
+# PAINT_BUF starts at 0x02100000. This sits clear of all three, and the largest
+# use below is a clipboard write of cbn bytes.
+DISK_SCRATCH = 0x02040000
+
+# The Files app's typed-name field. It has to be a real address rather than a
+# zl variable because the kernel subset has no runtime string values or
+# arrays - see EDIT_BUF above for the same reason. DISK_SCRATCH is documented
+# as "a page" (4096 bytes) and is never asked to hold more than a 4096-byte
+# clipboard write, so one full page of headroom sits between the two: this
+# starts at DISK_SCRATCH + 0x2000, not DISK_SCRATCH + 0x1000, on purpose.
+# FS_NAME_MAX bytes (fs.c) is enough for the longest name fs_create will
+# ever accept - check-memmap.sh's discovery sweep covers the dupe check, and
+# it is registered in that script's sized list too, generously clear of
+# PAINT_BUF at 0x02100000.
+FILES_NAME_BUF = 0x02042000
+# ---- app suite: fixed buffers -----------------------------------------------
+# One page (0x1000 = 4096 bytes) PER CONSUMER, deliberately generous rather
+# than packed - a previous attempt at this suite put several boards in one
+# undersized shared buffer and the maze (needs 273 cells) silently overran it.
+# A dedicated page per board makes that class of bug impossible by
+# construction: nobody's growth can ever reach a neighbour's byte 0, because
+# every neighbour starts a full page away.
+#
+# Base picked clear of everything else in this range (checked against every
+# .c and .zl file in the tree, not just kernel.zl - see the comment at
+# DISK_SCRATCH above for why that matters): PAINT_BUF ends near 0x02102000,
+# virtio_net.c's own arena doc puts its NET_FLOOR at 0x03000000, so this
+# block (0x02200000..0x02215000, 84 KiB) sits in the middle of the same
+# "80 MiB hole" with well over 0xDE0000 bytes of headroom on either side.
+# check-memmap.sh's dupe sweep covers every constant below because they are
+# declared here, in kernel.zl, rather than in the modules that use them.
+TT_BOARD      = 0x02200000   # apps_games1.zl: Tic-Tac-Toe,  3x3  =  9 cells
+LIGHTS_BOARD  = 0x02201000   # apps_games1.zl: Lights Out,   5x5  = 25 cells
+C4_BOARD      = 0x02202000   # apps_games1.zl: Connect Four, 7x6  = 42 cells
+RV_BOARD      = 0x02203000   # apps_games1.zl: Reversi,      8x8  = 64 cells
+FIFTEEN_BOARD = 0x02204000   # apps_games1.zl: 15 Puzzle,    4x4  = 16 cells
+MINE_BOARD    = 0x02205000   # apps_games2.zl: Minesweeper, 12x9  = 108 cells
+G2048_BOARD   = 0x02206000   # apps_games2.zl: 2048,         4x4  = 16 cells
+SIMON_SEQ     = 0x02207000   # apps_games2.zl: Simon,        sequence, max 32
+MAZE_BOARD    = 0x02208000   # apps_games2.zl: Maze, 21x13 = 273 cells (the
+                              # count the brief names) - own page, nothing
+                              # else can ever share it
+WG_BOARD      = 0x02209000   # apps_games2.zl: Word Guess,   6x5  = 30 cells
+LIFE_BOARD    = 0x0220A000   # apps_games2.zl: Conway's Life,24x18= 432 cells
+LIFE_NEXT     = 0x0220B000   # apps_games2.zl: ...next generation, scratch
+PT_PATTERN    = 0x0220C000   # apps_utils.zl:  Pattern Tester, the pattern
+PT_TEXT       = 0x0220D000   # apps_utils.zl:  Pattern Tester, the subject
+DIFF_A        = 0x0220E000   # apps_utils.zl:  Line Diff, side A
+DIFF_B        = 0x0220F000   # apps_utils.zl:  Line Diff, side B
+HASH_BUF      = 0x02210000   # apps_utils.zl:  Checksum, the input bytes
+NOTES_BUF     = 0x02211000   # apps_utils.zl:  Sticky Notes (2 pages)
+FILES_BUF     = 0x02213000   # apps_system.zl: Files, one entry's bytes
+MAZE_STACK    = 0x02214000   # apps_games2.zl: Maze generation's OWN stack -
+                              # an iterative backtracker, not a 273-deep zl
+                              # recursion. boot.S:36 documents this kernel's
+                              # 256 KiB compositor stack as already having
+                              # overflowed once at 16 KiB because "the zl
+                              # compositor nests deep... each zl frame is
+                              # large"; carving a maze from inside a click
+                              # handler (itself several frames into the
+                              # frame loop) is exactly that nesting, so the
+                              # DFS stack is 273 u16 cell indices in RAM
+                              # instead, same idea as the board itself.
 
 fn fs_init()      { fill_mem(FS_META, 0, 64) }
 fn fs_len(slot)   { return peek32(FS_META + slot * 4) }
@@ -1305,18 +1505,93 @@ EDIT_MAX = 8000
 # the same thing every other window means by it. No "press any key".
 ed_slot = 0
 ed_len  = 0
+# Disk-backed mode. The ten numbered RAM slots (fs_save/fs_load, FS_DATA) stay
+# the compatibility path - editor_open still uses them exactly as before, and
+# nothing here deletes them. Opening a window from the Files app instead loads
+# and saves through zlfs by name: ed_disk picks which branch editor_save()
+# below takes, and ed_fidx is the zlfs directory index it saves back to,
+# meaningful only while ed_disk == 1.
+ed_disk = 0
+ed_fidx = 0 - 1
 
 fn editor_open(slot) {
+    ed_disk = 0
     ed_slot = slot
     ed_len = fs_load(slot)
     return 0
 }
 
+# The disk-backed counterpart to editor_open(). idx is always a committed
+# zlfs directory entry already - the Files app creates it with fs_new() before
+# ever calling this - so there is always something for editor_save() to write
+# back to. EDIT_BUF is the SAME buffer either mode uses; only where it is
+# loaded from, and saved to, changes.
+fn editor_open_disk(idx) {
+    ed_disk = 1
+    ed_fidx = idx
+    fill_mem(EDIT_BUF, 0, EDIT_MAX)
+    edn = fs_bytes(idx)
+    if edn > EDIT_MAX { edn = EDIT_MAX }
+    if edn > 0 { fs_rd(idx, EDIT_BUF, edn) }
+    ed_len = edn
+    return 0
+}
+
+# The one real save-through, called from both ESC and Ctrl+S rather than each
+# doing its own thing - there is exactly one place that decides RAM slot vs
+# disk. Says so on screen when a disk write fails (the file could have been
+# deleted from the Files app while this window sat open) rather than quietly
+# doing nothing - the same rule the clipboard-to-disk command follows.
+fn editor_save() {
+    if ed_disk == 1 {
+        if ed_fidx < 0 { return 0 }
+        if fs_wr(ed_fidx, EDIT_BUF, ed_len) == 0 {
+            note_say("save failed - the file may be gone", 400)
+            return 0
+        }
+        return 1
+    }
+    fs_save(ed_slot, ed_len)
+    return 1
+}
+
 # One key. Returns 1 if it changed anything, 2 if the editor is done.
 fn editor_key(code) {
     if code == 27 {
-        fs_save(ed_slot, ed_len)
+        editor_save()
         return 2
+    }
+    # Ctrl+S: save without closing. input.c already turns Ctrl+<letter> into
+    # its control code for BOTH keyboards (to_char(), input.c:207-211) - Ctrl+S
+    # is 19 - so nothing below this file has to change for the key to arrive.
+    if code == 19 {
+        if editor_save() == 1 { if ed_disk == 1 { note_say("saved", 200) } }
+        return 0
+    }
+    # Ctrl+C copies the whole buffer; Ctrl+V pastes the clipboard at the end.
+    # clip.c's own header already documents these two codes as needing no
+    # change to the routing layer - "these arrive at the focused app as an
+    # ordinary EV_CHAR" - this is that caller, the one system-track.md
+    # describes and this file did not, until now, actually contain.
+    if code == 3 {
+        clip_new()
+        eci = 0
+        while eci < ed_len { clip_add(peek8(EDIT_BUF + eci))  eci = eci + 1 }
+        if clip_done() == 1 {
+            note_say("copied", 200)
+        } else {
+            note_say("copy failed - too big for the clipboard", 400)
+        }
+        return 0
+    }
+    if code == 22 {
+        ecn = clip_n()
+        eci = 0
+        while eci < ecn {
+            if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, clip_ch(eci))  ed_len = ed_len + 1 }
+            eci = eci + 1
+        }
+        return 1
     }
     if code == 8 {
         if ed_len > 0 { ed_len = ed_len - 1  poke8(EDIT_BUF + ed_len, 0) }
@@ -1331,6 +1606,224 @@ fn editor_key(code) {
         return 1
     }
     return 0
+}
+
+# ---- the Files app, as a window --------------------------------------------
+# zlfs already exists (fs.c) and could only be driven from the shell, one
+# typed character at a time, by NUMBER - '.' to mount, ',' to list, and no way
+# at all to create, open or delete a file BY NAME without going through the
+# editor's numbered RAM slots. This is the window: it mounts zlfs the moment
+# it opens (no manual step), lists what is already there, and turns typed
+# text into fs_new/fs_get/fs_rm calls the same way the '.' and "'" shell
+# commands already stage a name a character at a time - see FILES_NAME_BUF's
+# comment for why that has to be a real address rather than a zl array.
+fl_len     = 0           # characters typed into the name field, 0..23
+fl_hover   = 0 - 1        # the row the pointer is over, or -1
+fl_pressed = 0            # edge-detect for click-to-open - see files_event
+
+# Auto-mount, silently on the happy path. A window opening is not a
+# diagnostic and should not spam the shell scrollback every time it is
+# opened - contrast the '.' command, which is a deliberate request to be told
+# what happened and is untouched by this. Mirrors '.'s own
+# setup-then-mount-or-format sequence (run_command cmd==46).
+fn files_ensure_mounted() {
+    if fs_ok() == 1 { return 1 }
+    if nv_setup() == 0 { return 0 }
+    if fs_mount() == 1 { return 1 }
+    if fs_format() == 0 { return 0 }
+    return fs_mount()
+}
+
+# Both files_draw() and files_row_at() derive the row layout from these two,
+# so a click can never land on a different row than the one actually drawn
+# there - the two are never allowed to compute the layout independently.
+fn files_row_h()     { return cell_h() + 4 }
+fn files_list_y0(ay) { return ay + cell_h() + 8 }
+
+fn files_draw(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, PANEL)
+    fcw = cell_w()
+    fch = cell_h()
+    rh  = files_row_h()
+    y0  = files_list_y0(ay)
+    if fs_ok() == 0 {
+        text_aa(ax + 4, ay + 4, "not mounted - no NVMe disk found", TXT_DIM)
+        return 0
+    }
+    text_aa(ax + 4, ay + 4, "type a name - Enter opens/creates, Ctrl+D deletes", TXT_DIM)
+    fbot = ay + ah - rh * 2
+    row = 0
+    fi = 0
+    while fi < fs_max() {
+        if fs_inuse(fi) == 1 {
+            ry = y0 + row * rh
+            if ry < fbot {
+                # only the BACKGROUND changes on hover - the text stays TXT_HI
+                # either way, so this never risks a VGA palette index (C_WHITE)
+                # reading as a barely-visible dark blue in the RGB theme the
+                # way menu_draw's own hover text color would if copied here.
+                if row == fl_hover { rrblend(ax + 2, ry - 2, aw - 4, rh, 4, ACCENT, 41) }
+                rx = ax + 4
+                nch = 0
+                while nch < 23 {
+                    nb = fs_ch(fi, nch)
+                    if nb > 0 { char_aa(rx, ry, nb, TXT_HI) }
+                    rx = rx + fcw
+                    nch = nch + 1
+                }
+                num_aa(ax + aw - 8 * fcw, ry, fs_bytes(fi), TXT_DIM)
+            }
+            row = row + 1
+        }
+        fi = fi + 1
+    }
+    if row == 0 { text_aa(ax + 4, y0, "no files yet - type a name and press Enter", TXT_DIM) }
+    # the typed-name field, bottom line
+    tny = ay + ah - fch
+    text_aa(ax + 4, tny, ">", ACCENT)
+    tx = ax + 4 + 2 * fcw
+    tci = 0
+    while tci < fl_len {
+        char_aa(tx, tny, peek8(FILES_NAME_BUF + tci), TXT_HI)
+        tx = tx + fcw
+        tci = tci + 1
+    }
+    fill_rgb(tx, tny, fcw, fch - 2, ACCENT)
+    num_aa(ax + aw - 4 * fcw, tny, fs_n(), TXT_DIM)
+    return 0
+}
+
+# SCREEN y -> visual row index (0-based among USED files only), or -1. Which
+# fs SLOT that row names is a second step, files_row_to_idx() below - kept
+# apart because drawing and hover both only ever need "row N", and only a
+# click needs to turn that into a directory index.
+fn files_row_at(win, ey) {
+    y0 = files_list_y0(wm_cy(win))
+    rh = files_row_h()
+    r = (ey - y0) / rh
+    if r < 0 { return 0 - 1 }
+    return r
+}
+
+# Replays the SAME used-slot walk files_draw() renders, so row N always names
+# the file that is actually drawn on row N at click time too.
+fn files_row_to_idx(row) {
+    fi = 0
+    seen = 0 - 1
+    while fi < fs_max() {
+        if fs_inuse(fi) == 1 {
+            seen = seen + 1
+            if seen == row { return fi }
+        }
+        fi = fi + 1
+    }
+    return 0 - 1
+}
+
+# Stage the typed name into zlfs's own name buffer, one character at a time -
+# fs_nclear/fs_npush is the same seam the '.' and "'" shell commands already
+# use, because the zl kernel subset has no runtime strings to hand over
+# instead.
+fn files_stage_typed() {
+    fs_nclear()
+    fsi = 0
+    while fsi < fl_len { fs_npush(peek8(FILES_NAME_BUF + fsi))  fsi = fsi + 1 }
+    return 0
+}
+
+# Enter: open the file the typed name already names, or create it empty and
+# open that. A file is always created through the Files app before the editor
+# ever sees it, so editor_open_disk() never has to handle "no such index".
+fn files_commit() {
+    if fl_len == 0 { return 0 }
+    if files_ensure_mounted() == 0 {
+        note_say("no NVMe disk found", 300)
+        return 0
+    }
+    files_stage_typed()
+    bi = fs_get()
+    if bi < 0 { bi = fs_new(0) }
+    if bi < 0 {
+        note_say("could not create file", 300)
+        return 0
+    }
+    fl_len = 0
+    files_open_editor(bi)
+    return 1
+}
+
+# Ctrl+D: delete the file the typed name currently names. Deliberately a
+# different key from Enter - Enter always OPENS something, so deleting can
+# never be one accidental extra keystroke away from it.
+fn files_delete_typed() {
+    if fl_len == 0 { return 0 }
+    if fs_ok() == 0 { return 0 }
+    files_stage_typed()
+    bi = fs_get()
+    if bi < 0 {
+        note_say("no such file", 300)
+        return 0
+    }
+    fs_rm(bi)
+    note_say("deleted", 300)
+    fl_len = 0
+    return 1
+}
+
+# Open (or just raise) the editor on a zlfs file. If the editor is ALREADY
+# open this does not switch what it is showing - open_app's cmd==105 (RAM
+# slots) has made exactly that choice since before this app existed, so
+# opening a second file here can never silently discard an unsaved buffer the
+# editor already has open. Raising it is still useful: it proves it exists.
+fn files_open_editor(idx) {
+    fu = ui()
+    if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
+        wm_setfocus(edit_win)  wm_raise(edit_win)
+        return 0
+    }}
+    edit_win = wm_open(APP_EDIT, "zlEDIT", 480 * fu, 230 * fu, 160 * fu, 160 * fu)
+    if edit_win < 0 { return 0 }
+    editor_open_disk(idx)
+    wm_setfocus(edit_win)
+    wm_report(edit_win)
+    return 0
+}
+
+fn files_key(code) {
+    if code == 27 {                        # Esc cancels what you were typing
+        if fl_len > 0 { fl_len = 0  return 1 }
+        return 0
+    }
+    if code == 8 {                         # Backspace
+        if fl_len > 0 { fl_len = fl_len - 1  return 1 }
+        return 0
+    }
+    if code == 13 { return files_commit() }
+    if code == 4  { return files_delete_typed() }    # Ctrl+D
+    if code >= 32 { if code < 127 {
+        if fl_len < 23 { poke8(FILES_NAME_BUF + fl_len, code)  fl_len = fl_len + 1  return 1 }
+    }}
+    return 0
+}
+
+# EV_MOUSE only - hover highlights a row, a PRESS EDGE (not "held") opens it.
+# Edge-detected here rather than level-triggered like paint's brush, because
+# opening a file is a one-shot action and EV_MOUSE republishes every frame
+# the button stays down, not just on the transition.
+fn files_event(ety, ecode, ex, ey, win) {
+    if ety != 4 { return 0 }
+    nh = files_row_at(win, ey)
+    if nh != fl_hover { fl_hover = nh  wm_dmg(win) }
+    down = band(ecode, 1)
+    if down != 0 { if fl_pressed == 0 {
+        fl_pressed = 1
+        if nh >= 0 {
+            idx = files_row_to_idx(nh)
+            if idx >= 0 { files_open_editor(idx) }
+        }
+    }}
+    if down == 0 { fl_pressed = 0 }
+    return 1
 }
 
 # An app with no text-mode form. Says which one and why, rather than doing
@@ -1600,10 +2093,31 @@ fn run_command(cmd, arg) {
         color(C_GREY)
         print("    every key press, release and character, with modifiers.")
         print("    try caps lock, ctrl, shift, arrows, and holding a key.")
+        print("    MOVE THE MOUSE too - the pointer rate is printed once a")
+        print("    second, and that number is the pointer's speed ceiling:")
+        print("    a USB mouse sends at most 127 counts per report.")
         print("    ESC ends.")
         print("")
         iestop = ticks() + 3000
+        # The drain rate, measured in the guest rather than inferred from a
+        # bench. ptr_reports counts every report xhci.c decoded; the difference
+        # over one second IS the rate, and reports/s * 127 is the fastest the
+        # pointer can possibly travel. It read 1 per frame before the event
+        # ring got a single owner - see docs/POINTER-EVIDENCE.md.
+        ptrbase = ptr_reports()
+        ptrnext = ticks() + 100
         while ticks() < iestop {
+            if ticks() >= ptrnext {
+                ptrnow = ptr_reports()
+                color(C_CYAN)
+                put("    pointer ")  put(ptrnow - ptrbase)
+                put(" reports/s  ->  ceiling ")  put((ptrnow - ptrbase) * 127)
+                put(" px/s   events ")  put(ptr_events())
+                print("")
+                color(C_GREY)
+                ptrbase = ptrnow
+                ptrnext = ticks() + 100
+            }
             iet = in_next()
             if iet != 0 {
                 iec = in_code()
@@ -1738,6 +2252,42 @@ fn run_command(cmd, arg) {
         } else {
             color(C_RED)  print("    READ(10) of block 0 failed")  color(C_GREY)
         }
+        return 0
+    }
+    if cmd == 71 {                        # G - drive the GPU ring ourselves
+        # THIS IS WHAT A USB BOOT IS FOR. The sequence below is proven on this
+        # exact silicon from Linux (docs/gpu-driver.md: 16384/16384 pixels), but
+        # never from inside zlOS - and there is no serial port on the ThinkPad,
+        # so every number has to land on the SCREEN or the boot proves nothing.
+        #
+        # A COMMAND, not a boot step. If it wedges the GPU, a desktop that
+        # already came up is worth more than one that never did.
+        color(C_CYAN)  print("  GPU - our own ring on the blitter")
+        color(C_GREY)
+        print("    arming, mapping the GGTT, submitting one XY_COLOR_BLT...")
+        gst = gpu_test()
+        put("    RING_CTL 0x")   hex(gpu_ctl(), 8)
+        put("   HEAD 0x")        hex(gpu_head(), 8)
+        put("   TAIL 0x")        hex(gpu_tail(), 8)
+        print("")
+        put("    filled ")  put(gpu_filled())
+        put(" of ")         put(gpu_want())
+        put(" px, still poison ")  print(gpu_poison())
+        if gst == 0 {
+            color(C_GREEN)
+            print("    THE GPU DREW IT. zlOS drove the ring itself.")
+            color(C_GREY)
+            return 0
+        }
+        color(C_RED)
+        if gst == 1 { print("    step 1: no supported Intel GPU found") }
+        if gst == 2 { print("    step 2: the ring would not enable (RING_CTL above)") }
+        if gst == 3 { print("    step 3: GGTT mapping refused") }
+        if gst == 4 { print("    step 4: the command would not encode") }
+        if gst == 5 { print("    step 5: submitted, engine never caught up") }
+        if gst == 6 { print("    step 6: engine ran but the pixels did not land") }
+        color(C_GREY)
+        print("    (the number IS the step - nothing else is needed to place it)")
         return 0
     }
     if cmd == 42 {                        # * - wake the other CPU cores
@@ -2119,6 +2669,9 @@ fn run_command(cmd, arg) {
     }
     if cmd == 100 { if wm_run() == 1 { return open_app(100, 0) }  return needs_wm("paint") }
     if cmd == 105 { if wm_run() == 1 { return open_app(105, arg) } return needs_wm("the editor") }
+    # M - the Files app: zlfs by name, in a window. Same shape as every other
+    # windowed app above - text mode has no windows to put it in at all.
+    if cmd == 77  { if wm_run() == 1 { return open_app(77, 0) }    return needs_wm("the Files app") }
     if cmd == 108 { return fs_list() }    # l - list RAM files
     # 'N', not 'n': every lowercase code from a to z is already a command.
     if cmd == 78 { return net_gate() }    # N - the network card, and an ARP probe
@@ -2166,6 +2719,22 @@ fn run_command(cmd, arg) {
         # answer reports None and looks like a broken feature.
         color(C_WHITE)  put("  FRAMEUS ")  put(wm_us())  put(" ")
         put(wm_peak())  print(" END")
+        # THE MISS COUNTS, on their own line so the regex above keeps working -
+        # probe-frame.py waits for END and appending fields before it would have
+        # broken a gate to add a number to it.
+        #
+        # late  painted frames over the budget    <- what a person sees
+        # lost  100 Hz ticks no frame ran in      <- what the pacing costs
+        # of    painted frames since the reset    <- the honest denominator
+        # ...and the terminator here must NOT contain "END". exercise.py's
+        # Serial.wait() finds a marker as a SUBSTRING and leaves the rest of the
+        # line in the buffer, so an "END2" would be matched by the next probe
+        # that waits for "END" and hand it half of the previous answer. Measured:
+        # probe-tray.py read None for its first sample until this said FIN.
+        color(C_WHITE)  put("  FRAMEMISS late ")  put(wm_late())
+        put(" lost ")  put(wm_lost())
+        put(" of ")    put(wm_painted())
+        put(" budget ")  put(wm_budget())  print(" FIN")
         color(C_GREY)  return 0
     }
     if cmd == 12 { wm_peak0()  print("  peak reset")  return 0 }
@@ -2776,7 +3345,7 @@ fn net_gate() {
     }
     put("    DMA arena at  0x")  hex(net_arena(), 8)  print("")
     if net_ram() == 0 {
-        color(C_RED)  print("    the arena is NOT backed by RAM - needs -m 256 or more")
+        color(C_RED)  print("    the arena is NOT backed by RAM - needs -m 1G or more")
         color(C_GREY) return 0
     }
     if net_up() == 0 {
@@ -2876,6 +3445,7 @@ APP_CUBE    = 9
 APP_ANIM    = 10
 APP_MOUSE   = 11
 APP_EDIT    = 12
+APP_FILES   = 13
 
 # Which window each app is in, or -1. An app that is already open is FOCUSED
 # rather than opened twice - wm.c would happily give you a second Snake, and
@@ -2886,6 +3456,7 @@ cube_win  = 0 - 1
 anim_win  = 0 - 1
 mouse_win = 0 - 1
 edit_win  = 0 - 1
+files_win = 0 - 1
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     wy = ay - TITLE_H * ui()
@@ -2912,6 +3483,7 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_ANIM    { return anim_draw(ax, ay, aw, ah) }
     if id == APP_MOUSE   { return mouse_draw(ax, ay, aw, ah) }
     if id == APP_EDIT    { return editor_draw(ax, ay, aw, ah) }
+    if id == APP_FILES   { return files_draw(ax, ay, aw, ah) }
     if id == APP_SHELL {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the
@@ -2922,6 +3494,10 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
         term_draw(ax + 8 * u, ay + 6 * u, aw - 16 * u, ah - 12 * u, TXT_HI, TXT_DIM, ACCENT, cb)
         return 0
     }
+    # Everything past APP_EDIT is the app suite (apps_registry.zl and the
+    # category modules it fronts) - one seam, so this chain never grows past
+    # the original 13 again.
+    if id >= APP_CATALOG { return reg_draw(id, ax, ay, aw, ah, afocus) }
     return 0
 }
 
@@ -2967,6 +3543,45 @@ fn nav_to_char(ecode) {
 fn app_event(id, win, ety, ecode, ex, ey) {
     if id == APP_SNAKE { return sn_event(ety, ecode) }
     if id == APP_MENU  { return menu_event(ety, ecode, ex, ey, win) }
+    # BEFORE the nav_to_char translation below, like Snake and the browser -
+    # not after it. That block turns an untranslatable EV_KEY_DOWN (anything
+    # that is not Esc/Backspace/Enter) into an immediate `return 0`, which
+    # would silently eat every arrow-key press before a registry app ever saw
+    # it. 2048 and the maze both steer by arrow key, so this needs the RAW
+    # event, exactly as K_LEFT/K_RIGHT/K_UP/K_DOWN are already defined for.
+    if id >= APP_CATALOG { return reg_event(id, win, ety, ecode, ex, ey) }
+
+    # THE BROWSER USED TO BE HANDLED HERE, ABOVE THE TRANSLATION, AND THAT WAS
+    # TWO BUGS. It took `if ety == 1 { br_key(ecode) }` with the RAW code and
+    # returned, so it never reached the four lines below - and nav_to_char has
+    # exactly one call site, which is those four lines.
+    #
+    #   1. EVERY CHARACTER WENT IN TWICE. input.c pushes both EV_KEY_DOWN and
+    #      EV_CHAR for one printable keypress, carrying the SAME value
+    #      ("printable: code IS the char", input.c:345). The generic path drops
+    #      the EV_KEY_DOWN at `if ac == 0 { return 0 }` - that return IS the
+    #      deduplication. The browser skipped it and appended on both, so
+    #      typing "ab" produced "aabb". Select-all-on-focus hid the first
+    #      duplicate, which is why it looked like a rendering glitch.
+    #
+    #   2. ENTER, ESC AND BACKSPACE WERE DEAD ON THE THINKPAD'S OWN KEYBOARD.
+    #      The comment above nav_to_char says exactly why: PS/2 pushes those as
+    #      EV_KEY_DOWN with a navigation code and NO EV_CHAR, so browser_key -
+    #      which tests 13, 27 and 8 - matched none of them. "Typed into but
+    #      never submitted to", verbatim, on the machine the browser is for.
+    #      No gate could see it: every probe boots -device usb-kbd.
+    #
+    # APP_SNAKE and APP_MENU stay above: snake filters to EV_CHAR and drives on
+    # WASD, menu is mouse-only, so neither wants the translation and neither has
+    # either bug. The browser is the only app that handled both event types.
+    ac = ecode
+    if ety == 1 {
+        ac = nav_to_char(ecode)
+        if ac == 0 { return 0 }
+        ety = 3
+    }
+    ecode = ac
+
     if id == APP_BROWSER {
         # '[' and ']' RESIZE THE WINDOW, and that is the gate rather than a
         # convenience: reflow is only observable if the width can change while
@@ -2978,41 +3593,18 @@ fn app_event(id, win, ety, ecode, ex, ey) {
             if br_key(ecode) == 1 { wm_dmg(win) }
             return 1
         }
-        # EVERY PRINTABLE KEY ARRIVED TWICE. A single keypress produces an
-        # EV_KEY_DOWN (1) *and* an EV_CHAR (3), and this branch fed both into
-        # br_key - so typing "Linux" into the URL bar produced "Liinnuuxx" and
-        # the address never resolved. Found by photographing the URL bar, not
-        # by any assertion: browsertest drives browser_key() directly and so
-        # never sees the compositor deliver an event twice.
-        #
-        # The generic path below already had this right - it converts a
-        # KEY_DOWN through nav_to_char and DROPS it when it is not a navigation
-        # key, leaving EV_CHAR to carry the printable ones. The browser branch
-        # simply skipped that step. br_key takes ASCII, so passing it a raw
-        # keycode was wrong twice over.
-        if ety == 1 {
-            ac = nav_to_char(ecode)
-            if ac == 0 { return 1 }
-            if br_key(ac) == 1 { wm_dmg(win) }
+        # THE BUTTON MASK, which was not checked. EV_MOUSE carries it in ecode
+        # (input.c:620 pushes `(u32)b`), and it is pushed for MOTION too - the
+        # coalescer above it only suppresses events where position AND buttons
+        # are both unchanged. So calling br_click on every EV_MOUSE meant moving
+        # the pointer across a link fired a full fetch. menu_event gets this
+        # right with the same test.
+        if ety == 4 {
+            if band(ecode, 1) != 0 { if br_click(ex, ey) == 1 { wm_dmg(win) } }
             return 1
         }
-        # THE BUTTON MASK GOES THROUGH, and it has to: wm.c sends EV_MOUSE on
-        # the press, on every motion sample while the button is held, and again
-        # on the release. Without the mask br_click cannot tell those apart, so
-        # one click on a link navigated twice - and the URL bar had no hit test
-        # at all, which is what made typing an address impossible by hand.
-        if ety == 4 { if br_click(ex, ey, ecode) == 1 { wm_dmg(win) }  return 1 }
         return 1
     }
-    # EV_KEY_DOWN (1) carrying a navigation code becomes the character the apps
-    # below already handle. EV_CHAR (3) passes straight through.
-    ac = ecode
-    if ety == 1 {
-        ac = nav_to_char(ecode)
-        if ac == 0 { return 0 }
-        ety = 3
-    }
-    ecode = ac
     if id == APP_SHELL {
         # ONE CHARACTER PER CALL. No loop - that is the whole inversion.
         # read_line used to block, which is exactly why the shell had to be the
@@ -3065,6 +3657,11 @@ fn app_event(id, win, ety, ecode, ex, ey) {
             }
             if ek == 1 { wm_dmg(win)  return 1 }
         }
+        return 0
+    }
+    if id == APP_FILES {
+        if ety == 3 { if files_key(ecode) == 1 { wm_dmg(win) }  return 1 }
+        if ety == 4 { return files_event(ety, ecode, ex, ey, win) }
         return 0
     }
     if id == APP_PAINT {
@@ -3195,6 +3792,25 @@ fn open_app(cmd, arg) {
         wm_report(edit_win)
         return 1
     }
+    if cmd == 77 {
+        if files_win >= 0 { if wm_open_p(files_win) == 1 {
+            wm_setfocus(files_win)  wm_raise(files_win)  return 1
+        }}
+        # Mount on OPEN, not as a separate manual step - files_ensure_mounted
+        # tries setup+mount and formats a fresh disk if nothing is there yet,
+        # silently on the happy path (see its own comment for why).
+        files_ensure_mounted()
+        files_win = wm_open(APP_FILES, "Files", 480 * oa_u, 400 * oa_u, 220 * oa_u, 190 * oa_u)
+        if files_win < 0 { return 0 }
+        fl_len = 0
+        fl_hover = 0 - 1
+        # THE FILES APP TAKES FOCUS for the same reason the editor does: it is
+        # useless without the keyboard, since names are typed rather than
+        # clicked from a menu.
+        wm_setfocus(files_win)
+        wm_report(files_win)
+        return 1
+    }
     if cmd == 120 {
         if mouse_win >= 0 { if wm_open_p(mouse_win) == 1 {
             wm_setfocus(mouse_win)  wm_raise(mouse_win)  return 1
@@ -3251,7 +3867,28 @@ fn app_tick(id, win) {
             # Damaging just the tray strip rather than the whole dock is the
             # difference between repainting 30,000 pixels a second and
             # repainting 2,300,000.
-            wm_damage(px_w() - 130 * ui(), dock_y() + 10 * ui(), 120 * ui(), 34 * ui())
+            #
+            # THE RECTANGLE IS DERIVED FROM tray_x(), NOT FROM px_w() AGAIN.
+            # It used to be `px_w() - 130 * ui()` wide `120 * ui()`, a second
+            # origin for a row that draw_status lays out from tray_x() - which
+            # is px_w() - 300 * ui(). So the invalidated strip began at
+            # tray + 170 while the row begins at tray + 0, and the two LIVE
+            # numbers in it sat outside their own damage rectangle:
+            #
+            #   wm_us()   at tray +  44 * ui()   never invalidated
+            #   wm_peak() at tray + 152 * ui()   invalidated from +170 onward,
+            #                                    so its first 18 * ui() columns
+            #                                    were never cleared
+            #
+            # desk_draw repaints the tray from the wallpaper cache, but only
+            # inside the damage rect, so a number that SHRANK kept the head of
+            # its previous value on screen forever - the `)08` debris in
+            # POINTER-PROMPT.md 1b. Only `up` looked right, because `up` is the
+            # one field that happened to fall inside the old rectangle.
+            #
+            # This is the same defect tray_x() was extracted to kill (see its
+            # comment): one row, two origins. There is now one.
+            wm_damage(tray_x(), dock_y() + 10 * ui(), tray_dmg_w(), 34 * ui())
             return 1
         }
     }
@@ -3264,6 +3901,7 @@ fn app_tick(id, win) {
     if id == APP_CUBE  { return cube_tick() }
     if id == APP_ANIM  { return anim_tick(wm_cw(win), wm_ch(win)) }
     if id == APP_MOUSE { return mouse_tick() }
+    if id >= APP_CATALOG { return reg_tick(id, win) }
     return 0
 }
 
@@ -3366,7 +4004,6 @@ fn dock_slot_at(cx, cy) {
     return dslot
 }
 
-dock_blur = 0 - 1
 # ---- the dock, which is now CLICKABLE ---------------------------------------
 # desk_draw has painted a dock, a start button and a tray since the compositor
 # first booted, and every one of them was decoration: the dock is not a window,
@@ -3437,6 +4074,9 @@ fn task_label(app) {
     if app == APP_ABOUT   { return "About" }
     if app == APP_SNAKE   { return "Snake" }
     if app == APP_MENU    { return "Menu" }
+    # Every app-suite window falls through to the same registry the catalog
+    # reads, so a new app's taskbar chip needs no entry here at all.
+    if app >= APP_CATALOG { return reg_name(app) }
     return "window"
 }
 
@@ -3554,7 +4194,10 @@ fn reopen_about() {
 # A modal takes every event and a click outside dismisses it - both already in
 # route_mouse. Restoring what was underneath is a repaint of the damage it
 # leaves, which needs no saved bitmap at all.
-MENU_ROWS = 8
+# 10 rows now: the original 8 plus Settings and All Applications, both of
+# which existed already (settings.c; the catalog above) and had no caller
+# anywhere on the running desktop until this brief.
+MENU_ROWS = 10
 menu_win = 0 - 1
 
 fn menu_label(idx) {
@@ -3565,6 +4208,8 @@ fn menu_label(idx) {
     if idx == 4 { return "3D Cube" }
     if idx == 5 { return "Paint" }
     if idx == 6 { return "Editor" }
+    if idx == 7 { return "Settings" }
+    if idx == 8 { return "All Applications" }
     return "Halt"
 }
 
@@ -3573,7 +4218,12 @@ fn menu_pick(idx) {
     if idx == 1 { return open_snake() }
     if idx == 2 { return reopen_mon() }
     if idx == 3 { return reopen_about() }
-    if idx == 7 { wm_stop()  return 0 }
+    # Settings (settings.c) is compiled into every build and wmglue.c has
+    # dispatched its draw/event since it was written - it just had nothing
+    # anywhere that called wm_open(APP_SETTINGS, ...). This is that call.
+    if idx == 7 { return reg_open(APP_SETTINGS) }
+    if idx == 8 { return reg_open(APP_CATALOG) }
+    if idx == 9 { wm_stop()  return 0 }
     raise_shell()
     if idx == 4 { run_command(118, 0) }
     if idx == 5 { run_command(100, 0) }
@@ -3582,7 +4232,6 @@ fn menu_pick(idx) {
     return 0
 }
 
-menu_blur = 0 - 1
 menu_bx = 0
 menu_by = 0
 fn open_menu() {
@@ -3591,17 +4240,14 @@ fn open_menu() {
     mh = MENU_ROWS * 26 * u + TITLE_H * u + 12 * u
     mx = 10 * u
     my = dock_y() - mh - 8 * u
-    # BLUR WHAT IS BEHIND IT, NOW - before the window exists. wm.c draws the
-    # chrome and then calls app_draw, so by the time the menu could blur its
-    # own client rect the panel fill is already sitting in it. This is the
-    # moment the screen still holds only what is underneath.
-    #
-    # It is a CACHE and never re-taken: 7.37 ms to blur, 0.18 ms to paint. That
-    # is the whole reason a blurred panel must not be draggable, and this one
-    # is not - a click outside dismisses it.
+    # This used to blur what is behind the menu here, before the window existed,
+    # because wm.c draws the chrome and then calls app_draw - by which time the
+    # panel fill is already sitting in the client rect and there is nothing left
+    # underneath to blur. The blur is gone (DECISIONS #29); the menu is an
+    # OPAQUE panel now, so there is nothing to capture and the ordering problem
+    # that made this awkward has gone with it.
     menu_bx = mx
     menu_by = my
-    menu_blur = blur(mx, my, 210 * u, mh, 10 * u)
     menu_win = wm_open(APP_MENU, "zlOS", mx, my, 210 * u, mh)
     wm_modal(menu_win, 1)
     # zov / zpop in the prototype: the menu fades in over the blurred desktop
@@ -3614,20 +4260,30 @@ fn open_menu() {
 menu_hover = 0 - 1
 fn menu_draw(ax, ay, aw, ah) {
     u = ui()
-    # the cached blur of what is behind, then a translucent panel over it.
-    # Together that is backdrop-filter: blur() + rgba(), which the prototype
-    # asks for in six places and nothing here had ever drawn.
-    if menu_blur >= 0 { blurdraw(menu_blur, menu_bx, menu_by) }
-    rrblend(ax, ay, aw, ah, 10 * u, rgb(24, 32, 52), 205)
+    # THE NORTHSTAR'S ANSWER FOR A FLOATING PANEL, which is not a tint over a
+    # blur - it has no blur anywhere and its only panel rule is opaque:
+    #
+    #   .win{ background:var(--panel); border:1px solid var(--line) }
+    #     --panel #05060a   --line #26304a
+    #
+    # An alpha tint over an UNBLURRED desktop reads as a rendering fault rather
+    # than as translucency, so removing the blur and keeping the 205/255 tint
+    # would have been the worst of the three options. The border is drawn as the
+    # outer rrect with the panel one unit inside it, the same nesting the window
+    # frame uses, so the hairline follows the curve instead of cutting it.
+    rrect(ax, ay, aw, ah, 10 * u, LINE_SOFT)
+    rrect(ax + 1, ay + 1, aw - 2, ah - 2, 10 * u - 1, PANEL_NS)
     mi = 0
     while mi < MENU_ROWS {
         mry = ay + 4 * u + mi * 26 * u
         mtc = TXT_HI
         if mi == menu_hover {
-            # a translucent accent wash, not a solid bar - the row underneath
-            # is a blurred desktop and painting over it opaquely throws away
-            # the effect this menu exists to show
-            rrblend(ax + 2 * u, mry, aw - 4 * u, 24 * u, 8 * u, ACCENT, 55)
+            # The northstar's own hover, from .menubar .mi:hover -
+            # background:rgba(96,210,235,.16), i.e. the accent at 16%. It was
+            # 55/255 = 22% over a blurred desktop; over an opaque panel the
+            # reference's own number is the one to use. Still a wash rather
+            # than a solid bar, which is what the reference draws too.
+            rrblend(ax + 2 * u, mry, aw - 4 * u, 24 * u, 8 * u, ACCENT, 41)
             mtc = C_WHITE
         }
         label(ax + 12 * u, mry + 3 * u, menu_label(mi), mtc, T_BODY, W_REG)
@@ -3664,8 +4320,6 @@ fn menu_event(ety, ecode, ex, ey, win) {
     menu_hover = 0 - 1
     wm_close(win)
     menu_win = 0 - 1
-    blurfree()
-    menu_blur = 0 - 1
     if idx >= 0 { if idx < MENU_ROWS { menu_pick(idx) } }
     return 1
 }
@@ -3731,13 +4385,17 @@ fn wm_boot_start() {
     # did last frame. So all of it goes into the cached bitmap once, and a
     # frame pays one blit at 1.54 cyc/px for the lot.
     draw_wallpaper()
-    dock_blur = blur(0, dock_y(), px_w(), px_h() - dock_y(), 10 * ui())
     draw_header()
     draw_dock_bg()
-    dock_baked = 1
-    wall_save()
-    blurfree()                 # the strip is inside the wallpaper now
-    dock_blur = 0 - 1
+    # DOCK_BAKED IS THE RETURN VALUE, not 1. wall_save() returns 0 when the
+    # arena cannot hold the bitmap - 3840x2160 wants 31.6 MiB of 16 - and it
+    # was being ignored, so on any screen where the cache is refused the flag
+    # still said "the furniture is in the wallpaper". desk_draw and draw_status
+    # both skip drawing the header and the dock background when it is set, and
+    # the wallpaper they were relying on does not exist, so both were painted
+    # once at boot and then never again: a header and a dock that vanish under
+    # the first window you move. Only true when the save actually happened.
+    dock_baked = wall_save()
     # SAY THAT THE COMPOSITOR STARTED, on the serial line, from the BOOT path.
     #
     # con_mute mutes only the pixels, so this reaches a headless gate and lets
@@ -3749,11 +4407,89 @@ fn wm_boot_start() {
     # enough on apps-in-windows, whose boot path WAS wm_session(); it is not
     # enough here, where wm_boot_start() opens the windows and the frame loop
     # runs directly. Same marker, emitted where the windows actually appear.
-    # THE NETWORK, BEFORE THE FRAME LOOP TAKES OVER. It has to happen here
-    # rather than lazily on the browser's first fetch: bring-up sends an ARP
-    # and waits for the reply, and doing that from inside a paint would stall
-    # the compositor for as long as the wire takes to answer.
-    net_boot()
+    # ---- FIND THE INTEL GPU, HERE, once, at boot ---------------------------
+    # intel_find() had exactly two callers and both were interactive shell
+    # commands - `P` and `k`, kernel.zl:1496 and :1539. So on a desktop nobody
+    # typed a diagnostic into, `mmio` was 0 for the entire session, and every
+    # consequence of that is silent rather than loud: mmio_r() returns 0 when
+    # mmio is 0, so intel_frame_count() answered 0 forever, and
+    # intel_wait_vblank() (zl: gpu_vbl) tested intel_pipe_enabled(), read 0 out
+    # of a register it never mapped, and reported "no vblank" immediately. Not
+    # an error anywhere - just a driver that was never asked to look.
+    #
+    # That is what blocks the pacing work in look-and-speed.md §4: replacing the
+    # 100 Hz PIT release with a 59.998 Hz panel deadline starts by being able to
+    # read the frame counter, and nothing could.
+    #
+    # WHAT THIS TOUCHES, precisely, because intel.c is the one file here that
+    # can damage hardware: a PCI scan, then pci_enable() setting memory-decode
+    # and bus-master on a device the firmware is ALREADY scanning out of, then
+    # two BAR reads. No panel register, no AUX, no power sequencing - none of
+    # intel.c's hazard list (the 500 ms T12 delay, AUX into an unpowered panel)
+    # is reachable from here, and nothing arms lt_armed.
+    #
+    # It lives inside wm_boot_start rather than in the boot log because
+    # wm_avail() is 0 on verify.sh - no framebuffer, no compositor - and that
+    # gate diffs its whole transcript against golden.txt byte for byte.
+    if intel_find() < 0 {
+        # TWO DIFFERENT FACTS, and printing the wrong one sends the next reader
+        # looking for a missing device. intel_find() returns -1 both when there
+        # is no Intel display controller and when there IS one whose 64-bit BAR
+        # sits above 4 GiB, which a 32-bit build cannot address - and which it
+        # now refuses rather than truncating, because the low dword of a high
+        # BAR is a different, unrelated physical address.
+        if intel_hibar() == 1 {
+            info_line("Intel GPU found but its BAR is above 4 GiB - refused, not truncated")
+        } else {
+            info_line("no Intel GPU on the bus - vblank pacing unavailable here")
+        }
+    } else {
+        if intel_ok() == 0 {
+            info_line("Intel GPU present but not Gen9 - vblank pacing unavailable")
+        } else {
+            # THE PIXEL CLOCK, NOT THE FRAME COUNTER, and that ordering is a
+            # correction: the first version of this line printed the frame
+            # counter as the liveness fact, on the reasoning that 0 means the
+            # pipe is not scanning out. `hosttest/intel_probe` against this
+            # laptop's own GPU refutes it -
+            #
+            #     frame counter   0 -> 0 in 0.5 s  =  0.0 Hz   <- frozen: PSR is on
+            #     pixel clock     241690 kHz  (from PIPE_LINK_M1/N1 - PSR-immune)
+            #
+            # - and intel.c's own comment above intel_pixel_clock_khz() had said
+            # so all along: with self-refresh on, the panel redraws from its own
+            # memory, the pipe is not fetching, and PIPE_FRMCNT does not move.
+            # Firmware leaves PSR on here (EDP_PSR_CTL = 0x81F00406). So a
+            # zeroed frame counter on this machine means PSR, not a dead pipe,
+            # and printing it as a health indicator would be exactly the thing
+            # the northstar forbids: a status that claims something the machine
+            # has not proved.
+            color(C_GREY)  put("  [")
+            color(C_GREEN) put("  OK  ")
+            color(C_GREY)  put("] Intel 0x")  hex(intel_id(), 4)
+            put(" mapped at boot, pipe ")     put(intel_pipe())
+            put(", pixel clock ")             put(gpu_clk())  print(" kHz")
+            # Say which of the two clocks the pacing work can actually use, on
+            # THIS machine, rather than leaving the next session to rediscover
+            # PSR the expensive way.
+            #
+            # GATED ON THE PIPE BEING ON, because 0 has two causes and only one
+            # of them is PSR: a supported Gen9 part whose pipe A is disabled -
+            # another adapter supplied the boot framebuffer, say - also reads 0,
+            # and blaming PSR there is a diagnosis nobody checked. With the pipe
+            # enabled and the counter at 0 the panel is scanning from its own
+            # memory, which is what PSR is. Even then it is stated as the
+            # reading plus its cause, not as a verdict: HANDOFF.md records that
+            # this counter is INTERMITTENTLY zero, not reliably so - 0 idle,
+            # a correct 60.0 Hz with a terminal scrolling.
+            if intel_pipe() == 1 {
+                if gpu_frames() == 0 {
+                    info_line("PIPE_FRMCNT reads 0 with pipe A on - that is PSR; pace off the pixel clock")
+                }
+            }
+        }
+    }
+
     color(C_GREEN)  put("  compositor: ")
     color(C_GREY)   put(wm_n())  put(" windows, shell client ")
     put(wm_cx(shell_win))  put(",")  put(wm_cy(shell_win))  put(" ")
@@ -3917,6 +4653,12 @@ fn draw_screen() {
 # ---- boot ------------------------------------------------------------------
 kbd_init()
 fs_init()
+# READ THE SAVED SETTINGS BACK. settings.c writes one record per gesture and
+# settings_load() had no caller anywhere, so accent, scale, pointer speed,
+# subpixel and animation were all persisted to NVMe and then thrown away on
+# every boot. It applies what it finds, prints why when it finds nothing, and
+# never writes - so a read-only boot stays read-only.
+set_load()
 mon_x = 0                                # window positions - layout() fills these in
 mon_y = 0                                # from the real screen size, and dragging
 ab_x = 0                                 # updates them from there
@@ -4031,14 +4773,34 @@ usb_boot()
 # that is not backed by RAM is something you want to be told about while you
 # are still reading the boot log, not three keystrokes into a program.
 arena_up()
+# The general heap, and it is a DIFFERENT thing from the arena above rather than
+# a better one. The arena hands memory to zl programs and takes it all back in
+# one move between runs; this hands out memory the kernel keeps, and takes it
+# back one object at a time. Neither replaces the other and both are called at
+# boot, for the same reason arena_up is: an allocator that is not backed by RAM
+# is something you want to read in the boot log, not discover three keystrokes
+# into a program.
+heap_up()
+# AFTER heap_up, not before: heap_init() is what ASKS paging.c for the window, so
+# there is nothing to report until it has. Printing "no window" before the only
+# caller has run would be true and useless.
+vmm_up()
+# RING 3. Runs a tiny program at ring 3 that talks to the kernel only through
+# int 0x80, then comes back. The "u3" in the line below is written by syscalls
+# made from the far side of the privilege boundary - there is no other way for
+# those bytes to reach the serial port - so this line failing to appear is a
+# real regression rather than a cosmetic one, and golden.txt pins it.
+user_up()
 ok_line("zl runtime, kernel subset")
-# STILL TRUE, and it is worth saying why rather than leaving the next reader to
-# wonder whether it was just missed. A bump allocator with no free() and no
-# reuse inside a run is not a heap - there is nothing to fragment, nothing to
-# double-free, and nothing to leak that a reset does not reclaim. The line stops
-# being honest the day the interpreter boxes lists and strings (EXEC-PROMPT §8),
-# and that is the change that has to carry it, not this one.
-info_line("no heap, no filesystem, no scheduler")
+# THIS LINE USED TO SAY "no heap", and the comment under it said the line would
+# stop being honest "the day the interpreter boxes lists and strings, and that
+# is the change that has to carry it, not this one." A different change carried
+# it: heap.c is a real allocator - segregated free lists, boundary tags,
+# free/reuse/coalesce, and a worst case measured at 3 steps for alloc and 4 for
+# free with thousands of free blocks outstanding (hosttest/heaptest.c).
+#
+# The filesystem and the scheduler claims are unchanged and still true.
+info_line("no filesystem, no scheduler, no per-process address space")
 
 print("")
 color(C_GREEN)  print("  ready.")

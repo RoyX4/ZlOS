@@ -1,3 +1,11 @@
+> **AUDITED 2026-08-19 · REFERENCE, STILL VALID.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. Its method — separate "no because it is enormous" from "no because a vendor holds a key" — survives the merge intact and is worth keeping as written. Two lines must be corrected before acting on it: its closing paragraph says "about six" walls where its own body says four, and its most actionable claim (blocked on one missing caller, nothing arms `lt_armed`) is false — `kernel.zl:1395` calls `panel_up()`, which arms it.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
+
 # What is actually impossible — the wall map
 
 ## The thesis this project is testing
@@ -62,7 +70,7 @@ legally controls the thing you would have to write.**
 | **Widevine / DRM video** | Cryptographically gated by design, forever. Not hard — *forbidden* | Don't. Nothing to build |
 | **Cellular modem** | Signed firmware + carrier certification | USB tether |
 | **Shipping a Secure-Boot-signed image** | Needs Microsoft's signature to boot on other people's machines | **Soft no** — you can enrol your own key (MOK/setup mode) and boot your own hardware. Only *distribution* is gated |
-| **GPU 3D acceleration** | i915 is **11.2 MB**, Mesa's Vulkan **24.3 MB**; newer parts need signed GuC/HuC | **Software rasterizer.** SerenityOS runs Quake III with no GPU. `fb3d.c` is step one |
+| **GPU 3D acceleration** | i915 is **11.2 MB**, Mesa's Vulkan **24.3 MB**; newer parts need signed GuC/HuC | **Split the row — 2026-08-19.** For a COMPOSITOR: the ring is proven on this silicon (`gpu-driver.md`, 16384/16384 px) and a fixed shader is 80 bytes lifted from Mesa, so it is weeks, not megabytes. For ARBITRARY programs: the compiler is the cost, and that is the 24 MB. Also still true: a software rasterizer needs no GPU at all — SerenityOS runs Quake III on one, `fb3d.c` is step one |
 
 **The genuine list is four, not six.** And the lesson generalises: *"a vendor
 holds a key" is a claim about a specific part, not about a capability.* Check

@@ -30,6 +30,15 @@
 typedef unsigned int   u32;
 typedef unsigned char  u8;
 
+/* Pointer-sized. `unsigned long` is 4 bytes under buildefi.sh's LLP64 target,
+ * so putting smp_ap_main's address through it truncated the entry point every
+ * AP jumps to - see the ENTRY_PTR store below. */
+#if defined(ZL_64) || defined(__x86_64__)
+typedef unsigned long long uptr;
+#else
+typedef unsigned int       uptr;
+#endif
+
 extern u32  idt_ticks(void);
 extern int  apic_active(void);
 extern int  apic_init(void);
@@ -201,7 +210,7 @@ int smp_start(void)
     u32 size = (u32)(TRAMP_END - TRAMP_BEGIN);
     if (size == 0 || size > 0x0FF0) return 1;       /* would not fit below ENTRY_PTR */
     for (u32 i = 0; i < size; i++)
-        *(volatile u8 *)(unsigned long)(TRAMP_ADDR + i) = TRAMP_BEGIN[i];
+        *(volatile u8 *)(uptr)(TRAMP_ADDR + i) = TRAMP_BEGIN[i];
 
     /* Values the trampoline reads out of memory rather than having patched into
      * it. The 64-bit path also needs our page tables: sharing CR3 means there
@@ -209,11 +218,18 @@ int smp_start(void)
 #if defined(ZL_64)
     unsigned long long cr3;
     __asm__ volatile("movq %%cr3, %0" : "=r"(cr3));
-    *(volatile unsigned long long *)(unsigned long)CR3_PTR = cr3;
-    *(volatile unsigned long long *)(unsigned long)ENTRY_PTR =
-        (unsigned long long)(unsigned long)smp_ap_main;
+    *(volatile unsigned long long *)(uptr)CR3_PTR = cr3;
+    /* (uptr), NOT (unsigned long). This is the exact defect CLAUDE.md records
+     * under "As a cast, which the struct fix did NOT cover": the destination
+     * was already 64 bits wide, and it was being handed a value truncated to
+     * 32 on the way in. Every application processor jumps to whatever address
+     * lands here, so a kernel image the firmware placed above 4 GiB sent all
+     * three APs into nothing. Below 4 GiB it is harmless, which is why QEMU
+     * never showed it - the same reason the other five sites hid. */
+    *(volatile unsigned long long *)(uptr)ENTRY_PTR =
+        (unsigned long long)(uptr)smp_ap_main;
 #else
-    *(volatile u32 *)ENTRY_PTR = (u32)(unsigned long)smp_ap_main;
+    *(volatile u32 *)(uptr)ENTRY_PTR = (u32)(uptr)smp_ap_main;
 #endif
 
     /* our own APIC id - never send ourselves a startup IPI */

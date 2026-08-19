@@ -67,6 +67,14 @@ static int fake_usb_ptr = 0, fake_ux = 0, fake_uy = 0, fake_ubtn = 0;
  * because it is the PS/2 fallback the laptop's TrackPoint takes. */
 int xhci_ptr_ready(void) { return fake_usb_ptr; }
 int xhci_ptr_poll(void)  { return 0; }
+int xhci_poll(int max)   { (void)max; return 0; }  /* the one ring drainer */
+/* When this harness has a USB pointer at all, what it supplies is an
+ * ABSOLUTE position - so it is a tablet, and it must say so. input.c no
+ * longer infers "absolute" from "a USB pointer exists", because that is
+ * exactly what sent every relative usb-mouse down the tablet branch. */
+int xhci_ptr_abs(void)   { return 1; }
+int xhci_ptr_take_dx(void) { return 0; }
+int xhci_ptr_take_dy(void) { return 0; }
 int xhci_ptr_x(void)     { return fake_ux; }
 int xhci_ptr_y(void)     { return fake_uy; }
 int xhci_ptr_btn(void)   { return fake_ubtn; }
@@ -159,7 +167,12 @@ static void desk_draw(int x, int y, int w, int h)
     fb_rrect(UI_S3(t), (hb - UI_S3(t)) / 2, UI_S3(t), UI_S3(t), UI_S1(t) / 2, t->accent);
     fb_text_prop(UI_S3(t) * 3, (hb - fb_text_prop_h()) / 2, "zlOS", t->text);
     fb_text_prop(UI_S3(t) * 3 + UI_S6(t) * 3, (hb - fb_text_prop_h()) / 2, "Activities", t->text_dim);
-    fb_text_prop(W - UI_S6(t) * 8, (hb - fb_text_prop_h()) / 2, "1920 x 1200", t->text_dim);
+    /* Report the size actually rendered. This was the literal "1920 x 1200",
+     * which made every render at another size a screenshot of a lie - and the
+     * resolution cliff is exactly the class this harness is meant to catch. */
+    char res[32];
+    snprintf(res, sizeof res, "%d x %d", W, H);
+    fb_text_prop(W - UI_S6(t) * 8, (hb - fb_text_prop_h()) / 2, res, t->text_dim);
 
     int dh = UI_S6(t) * 3;
     int dy = H - dh;

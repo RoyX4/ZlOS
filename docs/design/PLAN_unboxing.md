@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · PARTLY OPEN.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. Stages 1 and 2 landed exactly as specified, with measured numbers and named commits. Stages 3–9 are untouched, and every tool they name (`verify.ps1`, `run_bench.ps1`, `build.bat`) does not exist on this Linux tree. Keep it as analysis — its lexer safety proof reproduces verbatim today — and re-base the build plan: `compilel` is not the backend zlOS builds through.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # PLAN: Removing Boxing, in Stages
 
 **Status:** implementation plan (the ordering, not the analysis)

@@ -42,6 +42,7 @@
  */
 
 #include "memmap.h"
+#include "dma.h"
 
 typedef unsigned long long u64;
 typedef unsigned int       u32;
@@ -125,20 +126,34 @@ static void mmio_w8(uptr a, u8 v)  { *(volatile u8 *)a = v; }
 #define VMEM_CMD      (VMEM_DESC + 0x3000u)   /* command buffers we send     */
 #define VMEM_RESP     (VMEM_DESC + 0x4000u)   /* replies the device writes   */
 #define VMEM_SGLIST   (VMEM_DESC + 0x5000u)   /* scatter list for the fb     */
-/* 241 MiB. NOT 256: that is exactly the top of a -m 256 guest, so the device
- * cannot reach it and RESOURCE_ATTACH_BACKING fails with ERR_UNSPEC - which
- * reads like a driver bug and is not one. Everything the GPU DMAs has to be
- * inside real RAM, and this is the last clear region below the 256 MiB line. */
+/* 241 MiB, and it stays there. It was placed here when HI_TOP was 256 MiB and
+ * this was the last clear region below that line; HI_TOP is now 1 GiB, so the
+ * address is no longer FORCED - but nothing above it is claimed either, and
+ * moving a live DMA region buys nothing. Everything the GPU DMAs still has to
+ * be inside memory we promised exists, which is what HI_TOP means: cross it and
+ * RESOURCE_ATTACH_BACKING fails with ERR_UNSPEC, which reads like a driver bug
+ * and is not one.
+ *
+ * VMEM_FB_MAX is 14 MiB and is NOT sized by the ceiling - it is sized by
+ * 1920x1200x4 = 9.2 MiB, with room. The ThinkPad's 2560x1440x4 is 14.06 MiB and
+ * does NOT fit; virtio_gpu_setup() refuses it out loud rather than truncating
+ * (see the `bytes > VMEM_FB_MAX` return below). That refusal is unchanged by
+ * this commit and is a real limit, not an artefact of the old ceiling. */
 #define VMEM_FB       (VMEM_DESC + 0x100000u)
 #define VMEM_FB_MAX   0x00E00000u   /* 14 MiB - enough for 1920x1200x4 */
 
-/* The 256 MiB line, enforced rather than described. The paragraph above is the
- * whole reason this assert exists: crossing HI_TOP does not fail loudly, it
- * fails as ERR_UNSPEC from RESOURCE_ATTACH_BACKING and reads like a driver bug.
+/* HI_TOP, enforced rather than described. The paragraph above is the whole
+ * reason this assert exists: crossing it does not fail loudly, it fails as
+ * ERR_UNSPEC from RESOURCE_ATTACH_BACKING and reads like a driver bug.
  * virtio_gpu.c was in no assertion before - the top half of the map was held up
- * by prose only. */
+ * by prose only.
+ *
+ * This assert has MORE SLACK than it used to (0x0FF00000 against 1 GiB instead
+ * of against 256 MiB) and that is worth saying plainly rather than leaving for
+ * someone to notice: it is no longer the tight constraint on this region. The
+ * tight one is VMEM_FB_MAX above, and it is checked at run time. */
 _Static_assert((unsigned long)VMEM_FB + VMEM_FB_MAX <= HI_TOP,
-               "virtio-gpu: the framebuffer crosses the 256 MiB guest ceiling");
+               "virtio-gpu: the framebuffer crosses the guest RAM ceiling");
 _Static_assert((unsigned long)VMEM_SGLIST < VMEM_FB,
                "virtio-gpu: the rings have grown into the framebuffer");
 #define QSZ           64            /* descriptors per queue                */
@@ -179,7 +194,9 @@ static int find_caps(int i)
             u32 lo = pci_bar(i, bar);
             u32 hi = pci_bar_hi(i, bar);
             if (hi && sizeof(uptr) < 8) return 0;   /* unreachable from 32-bit */
-            uptr base = ((uptr)hi << 32) | (uptr)lo;
+            /* `<< 16 << 16`, not `<< 32` - see virtio_net.c's note. UB on the
+             * 32-bit build, where uptr is 32 bits, guard above notwithstanding. */
+            uptr base = ((uptr)hi << 16 << 16) | (uptr)lo;
             if (!base) { ptr = next; continue; }
 
             if      (type == VIRTIO_PCI_CAP_COMMON_CFG) cfg_common = base + off;
@@ -251,13 +268,22 @@ static int setup_queue(int q)
     zero_mem(VMEM_AVAIL, 4096);
     zero_mem(VMEM_USED, 4096);
 
-    /* 64-bit physical addresses, low half first */
-    mmio_w(cfg_common + CC_QUEUE_DESC + 0, VMEM_DESC);
-    mmio_w(cfg_common + CC_QUEUE_DESC + 4, 0);
-    mmio_w(cfg_common + CC_QUEUE_DRIVER + 0, VMEM_AVAIL);
-    mmio_w(cfg_common + CC_QUEUE_DRIVER + 4, 0);
-    mmio_w(cfg_common + CC_QUEUE_DEVICE + 0, VMEM_USED);
-    mmio_w(cfg_common + CC_QUEUE_DEVICE + 4, 0);
+    /* 64-bit physical addresses, low half first. Through dma_addr(), which is
+     * the identity function today and is the ONE place that changes when the
+     * kernel stops being identity-mapped - see dma.h. The high halves are no
+     * longer a hardcoded 0: they are the top 32 bits of the translated address,
+     * which is the same 0 today and is not guaranteed to stay 0. */
+    {
+        unsigned long long d = dma_addr(VMEM_DESC);
+        unsigned long long a = dma_addr(VMEM_AVAIL);
+        unsigned long long u = dma_addr(VMEM_USED);
+        mmio_w(cfg_common + CC_QUEUE_DESC   + 0, (u32)d);
+        mmio_w(cfg_common + CC_QUEUE_DESC   + 4, (u32)(d >> 32));
+        mmio_w(cfg_common + CC_QUEUE_DRIVER + 0, (u32)a);
+        mmio_w(cfg_common + CC_QUEUE_DRIVER + 4, (u32)(a >> 32));
+        mmio_w(cfg_common + CC_QUEUE_DEVICE + 0, (u32)u);
+        mmio_w(cfg_common + CC_QUEUE_DEVICE + 4, (u32)(u >> 32));
+    }
     mmio_w16(cfg_common + CC_QUEUE_ENABLE, 1);
 
     avail_idx = 0;
@@ -274,8 +300,8 @@ static int setup_queue(int q)
 static int vq_send(u32 cmd_len, u32 resp_len)
 {
     int head = 0;
-    desc_set(0, (u64)VMEM_CMD,  cmd_len,  DESC_NEXT, 1);
-    desc_set(1, (u64)VMEM_RESP, resp_len, DESC_WRITE, 0);
+    desc_set(0, dma_addr(VMEM_CMD),  cmd_len,  DESC_NEXT, 1);
+    desc_set(1, dma_addr(VMEM_RESP), resp_len, DESC_WRITE, 0);
 
     volatile u16 *avail = (volatile u16 *)(uptr)VMEM_AVAIL;
     avail[2 + (avail_idx % QSZ)] = (u16)head;
@@ -398,8 +424,13 @@ int virtio_gpu_attach_backing(u32 id, u32 bytes)
     volatile u32 *c = (volatile u32 *)(uptr)VMEM_CMD;
     c[6] = id;
     c[7] = 1;                       /* nr_entries */
-    c[8] = VMEM_FB;                 /* addr low   */
-    c[9] = 0;                       /* addr high  */
+    {   /* THE framebuffer address the GPU DMAs from - the single most
+         * important address in this file to get right, and the one whose
+         * failure mode (ERR_UNSPEC) reads like a driver bug. */
+        unsigned long long fb = dma_addr(VMEM_FB);
+        c[8] = (u32)fb;             /* addr low   */
+        c[9] = (u32)(fb >> 32);     /* addr high  */
+    }
     c[10] = bytes;
     c[11] = 0;                      /* padding    */
     if (!vq_send(24 + 8 + 16, 24)) return 0;

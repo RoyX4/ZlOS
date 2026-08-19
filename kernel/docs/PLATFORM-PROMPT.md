@@ -1,3 +1,10 @@
+> **AUDITED 2026-08-19 · MOSTLY DONE.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. The track ran to completion and merged last, as the most expensive landing (47 hunks). Nine of ten items are verifiably done, but the merge chose `overnight-compositor` as the `kernel.zl` trunk, so several landed in a different SHAPE than specified. Its headline "4× SMP" is contradicted by a measured 1.64×, and the six probes it commissioned are invoked by nothing.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
 # The platform track — apps, speed, and the things that bite
 
 Companion to `desktop-v10-plan.md`, which is the **look**. This is everything

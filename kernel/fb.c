@@ -79,6 +79,19 @@ void fb_pointer_forget(void);           /* defined below; the sprite dies with t
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);  /* the fast row fill */
 void fb_clip_none(void);                /* the scissor; defined below with put_pixel */
 
+/* Pointer-sized, for every place in this file an address becomes a pointer or
+ * a pointer becomes an address. `unsigned long` CANNOT be used for either:
+ * buildefi.sh targets x86_64-unknown-windows, which is LLP64, so it is 4 bytes
+ * there and 8 everywhere else. It lived further down this file until
+ * 2026-08-19, below six casts that therefore still used `unsigned long` and
+ * truncated - see the measurement note on buildefi.sh. Declared here, above
+ * fb_base, so every one of them can reach it. */
+#if defined(ZL_64) || defined(__x86_64__)
+typedef unsigned long long fb_uptr;
+#else
+typedef unsigned int fb_uptr;
+#endif
+
 static unsigned char *fb_base;
 static unsigned int   fb_pitch;      /* bytes per scanline, NOT pixels */
 static unsigned int   fb_w, fb_h;
@@ -106,8 +119,17 @@ void fb_set_text_box(int c0, int c1)
 int fb_active(void) { return fb_base != 0; }
 
 /* Where the card actually scans out of. NOT the back buffer below: this is
- * real video memory, which is what a poke/peek proof has to write to. */
-unsigned long fb_phys(void) { return (unsigned long)fb_base; }
+ * real video memory, which is what a poke/peek proof has to write to.
+ *
+ * RETURNS unsigned long long, and the three declarations downstream of it
+ * (console.c's prototype, console_vram, runtime_kernel.c's extern) match.
+ * fb_setup's comment below traces the INBOUND chain being widened to 64 bits
+ * so a GOP framebuffer above 4 GiB survives; this is the OUTBOUND half of that
+ * same chain and it was left at `unsigned long`. Under buildefi.sh's LLP64
+ * target that is 32 bits, so on firmware that places the framebuffer high,
+ * fb_phys() -> console_vram() -> zl's `vram()` handed back a truncated
+ * address - and `vram()` exists precisely so zl can poke at it. */
+unsigned long long fb_phys(void) { return (unsigned long long)(fb_uptr)fb_base; }
 
 int fb_get_cols(void) { return fb_cols; }
 int fb_get_rows(void) { return fb_rows; }
@@ -346,7 +368,7 @@ static int back_on = 0;
 static inline void fill32(unsigned int *d, unsigned int rgb, int n)
 {
 #if FB_SIMD
-    while (n > 0 && ((unsigned long)d & 15)) { *d++ = rgb; n--; }
+    while (n > 0 && ((fb_uptr)d & 15)) { *d++ = rgb; n--; }
     __m128i v = _mm_set1_epi32((int)rgb);
     while (n >= 16) {
         _mm_store_si128((__m128i *)d,      v);
@@ -588,8 +610,8 @@ static void fb_report_mode(unsigned int need)
     /* Say where it ends, not just that it fits. "back ON" is a claim; an
      * address is a fact somebody can check against the map in this file. */
     if (back_on) {
-        unsigned long top = (unsigned long)back + need;
-        fb_puts("      back at ");   fb_putu((unsigned)((unsigned long)back >> 20));
+        fb_uptr top = (fb_uptr)back + need;
+        fb_puts("      back at ");   fb_putu((unsigned)((fb_uptr)back >> 20));
         fb_puts(" MiB, ends at ");   fb_putu((unsigned)(top >> 20));
         fb_puts(" MiB, ceiling ");   fb_putu((unsigned)(HI_APSTK >> 20));
         fb_puts(" MiB (the AP stacks)");
@@ -637,16 +659,7 @@ static void fb_report_mode(unsigned int need)
  * Firmware that places it above 4 GiB would give a black screen or write into
  * whatever lives at the truncated address. T-11, closed. */
 
-/* Pointer-sized, for the one place an address becomes a pointer. Casting a
- * 64-bit integer straight to a 32-bit pointer is a warning on the 32-bit
- * builds and an ERROR under buildefi.sh's -Werror=int-to-pointer-cast, so the
- * narrowing is spelled out once, here, where it is provably safe: a
- * framebuffer this kernel can address is by definition inside a pointer. */
-#if defined(ZL_64) || defined(__x86_64__)
-typedef unsigned long long fb_uptr;
-#else
-typedef unsigned int fb_uptr;
-#endif
+void fb_cache_reset(void);   /* defined with the blur slots, ~1700 lines down */
 
 void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp)
@@ -673,6 +686,25 @@ void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
         else { fb_puts("bpp "); fb_putu(bpp); fb_puts(", only 24 and 32 are handled\n"); }
         return;
     }
+
+    /* THE GEOMETRY IS CHANGING, so everything sized to the old one is void -
+     * the same reason fb_clip_none() and fb_pointer_forget() run below. The
+     * cache arena is the third such thing and was the one nobody rewound.
+     *
+     * What it cost, concretely, because "it leaks" undersells it: the arena is
+     * 16 MiB and only ever moved forward, so `mode` at 1920x1200 asked for a
+     * SECOND 8.8 MiB wallpaper with 7.2 MiB left. That is a refusal, not a
+     * leak - and a refused wallpaper cache is a desktop that repaints three
+     * radial glows and two conic wedges inside every damage rectangle, 22 ms
+     * of a 16.67 ms frame. One runtime resolution change turned the cache off
+     * for the rest of the session, and the boot log's "wallpaper cached" line
+     * was printed before it happened.
+     *
+     * Only when the geometry actually MOVES. fb_setup is also the re-init path
+     * for a framebuffer that changed address at the same size (a GOP re-init),
+     * and the cache is a copy in RAM - it does not care where VRAM went, and
+     * re-rendering the wallpaper costs ~12 ms per glow. */
+    if (width != fb_w || height != fb_h) fb_cache_reset();
 
     fb_base  = (unsigned char *)(fb_uptr)addr;
     fb_pitch = pitch;
@@ -1190,6 +1222,22 @@ static void fill_band(void *ctx, int y0, int y1)
         fill32(back + (unsigned long)yy * fb_w + j->x0, j->rgb, j->x1 - j->x0);
 }
 
+/* gpuring.c. Returns 0 unless the ring is armed on real hardware AND the
+ * rectangle is big enough to be worth a submission - measured, and the
+ * threshold is four megapixels, so on a 2560x1440 panel this never fires. See
+ * the note on GPU_FILL_MIN_PX for why a lower one would make things worse. */
+int gpu_fill_try(int x, int y, int w, int h, unsigned int rgb);
+
+/* ...with a WEAK default of "no", right here, because five host harnesses link
+ * fb.c without gpuring.c - fbbench, walltest, fbtext, tritest and browsershot -
+ * and none of them has a GPU. gpuring.c's strong definition wins the link in
+ * every real kernel build. Same trick, same reason, as hoststubs.c's weak
+ * idt_mouse_wheel: the default has to be inert rather than absent, or every
+ * harness pays for a subsystem it does not test. */
+__attribute__((weak))
+int gpu_fill_try(int x, int y, int w, int h, unsigned int rgb)
+{ (void)x; (void)y; (void)w; (void)h; (void)rgb; return 0; }
+
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
 {
     if (w <= 0 || h <= 0) return;
@@ -1203,6 +1251,16 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
     if (x0 >= x1 || y0 >= y1) return;
 
     if (back_on) {
+        /* Ask the blitter first. It declines unless armed and unless the
+         * rectangle is large enough that a submission is cheaper than the
+         * fill, so today this is always a no and the band job below runs
+         * exactly as before. The damage is still reported HERE either way -
+         * the damage list is shared mutable state and neither a band nor the
+         * GPU may touch it. */
+        if (gpu_fill_try(x0, y0, x1 - x0, y1 - y0, rgb)) {
+            fb_damage(x0, y0, x1 - x0, y1 - y0);
+            return;
+        }
         /* Rows are independent, so this is a band job. The DAMAGE is reported
          * once, here, by the calling core - the damage list is shared mutable
          * state and the one thing a band must never touch. */
@@ -2422,8 +2480,8 @@ static unsigned int *arena_next = (unsigned int *)HI_BLUR;
 
 static unsigned int *arena_take(unsigned int px)
 {
-    unsigned long top = (unsigned long)arena_next + (unsigned long)px * 4u;
-    if (top > (unsigned long)HI_BLUR + BLUR_LIMIT) return 0;
+    fb_uptr top = (fb_uptr)arena_next + (fb_uptr)px * 4u;
+    if (top > (fb_uptr)HI_BLUR + BLUR_LIMIT) return 0;
     unsigned int *p = arena_next;
     arena_next = (unsigned int *)top;
     return p;
@@ -2431,14 +2489,14 @@ static unsigned int *arena_take(unsigned int px)
 
 static unsigned int arena_free_px(void)
 {
-    return (unsigned int)(((unsigned long)HI_BLUR + BLUR_LIMIT
-                           - (unsigned long)arena_next) / 4u);
+    return (unsigned int)(((fb_uptr)HI_BLUR + BLUR_LIMIT
+                           - (fb_uptr)arena_next) / 4u);
 }
 
-void fb_cache_reset(void)
-{
-    arena_next = (unsigned int *)HI_BLUR;
-}
+/* fb_cache_reset() is defined below the blur slots, not here, because rewinding
+ * the bump pointer is only ONE of the three things it has to do - see the note
+ * on its definition. It used to live here and rewind `arena_next` alone, which
+ * is why it could never safely be called. */
 
 /* ---- the wallpaper cache -------------------------------------------------- */
 static unsigned int *wall_buf;
@@ -2468,7 +2526,10 @@ int fb_wall_save(void)
             wall_buf[(unsigned long)y * fb_w + x] = fb_get_px((int)x, (int)y);
     fb_puts("  fb: wallpaper cached, "); fb_putu(fb_w * fb_h * 4u >> 10);
     fb_puts(" KiB; "); fb_putu(arena_free_px() * 4u >> 10);
-    fb_puts(" KiB left for blur\n");
+    fb_puts(" KiB left in the arena\n");   /* same words as the refusal above:
+                                            * the arena is not the blur's, it
+                                            * is shared and first-come, which is
+                                            * the whole of DECISIONS #29 */
     return 1;
 }
 
@@ -2508,6 +2569,39 @@ void fb_blur_free(int slot)
 void fb_blur_free_all(void)
 {
     for (int i = 0; i < BLUR_SLOTS; i++) blur_slot[i].used = 0;
+}
+
+/* ---- rewinding the arena, which is THREE things and not one ----------------
+ * This had no caller for its whole life, and the reason it was unsafe to give
+ * one is the reason it is defined down here rather than next to arena_take():
+ * rewinding `arena_next` on its own hands the same bytes out twice while three
+ * sets of live pointers still refer to them.
+ *
+ *   wall_buf                the wallpaper cache
+ *   blur_slot[i].px/.cap    the blur and stash slots
+ *   blur_tmp/blur_tmp_cap   the box-blur scratch row
+ *
+ * `wall_buf` is the dangerous one, because fb_wall_ok() answers from the SIZE
+ * (wall_w == fb_w && wall_h == fb_h), not from the allocation. Rewind the bump
+ * pointer without clearing it and any caller that re-enters at the same
+ * geometry gets a confident yes for a buffer the next arena_take() is about to
+ * reissue - a use-after-free that paints, because the memory is still mapped
+ * and still holds a plausible picture. `.cap` matters for the same reason:
+ * slot_capture() reuses a slot whose cap is already big enough and never
+ * re-takes, so a stale cap keeps a stale pointer alive past the rewind.
+ *
+ * So the rule is that every pointer INTO the arena is cleared in the same
+ * breath as the pointer that allocates from it. Anything added to this arena
+ * later has to be forgotten here too. */
+void fb_cache_reset(void)
+{
+    arena_next = (unsigned int *)HI_BLUR;
+    wall_buf = 0; wall_w = 0; wall_h = 0;
+    for (int i = 0; i < BLUR_SLOTS; i++) {
+        blur_slot[i].px = 0; blur_slot[i].cap = 0;
+        blur_slot[i].w = 0;  blur_slot[i].h = 0; blur_slot[i].used = 0;
+    }
+    blur_tmp = 0; blur_tmp_cap = 0;
 }
 
 /* one box pass along rows, from src into dst, radius r */
@@ -3121,12 +3215,18 @@ void fb_text_rich(int px, int py, const char *s, int len, unsigned int fg,
  * picture, and the caller picks the colour. Same read-back blend as
  * fb_glyph_aa: transparent where coverage is zero, so an icon sits on the
  * wallpaper or a titlebar gradient with no box around it. */
-extern const unsigned char icons24[10][24][24];
-/* the same ten icons RE-RASTERIZED at 48x48, not the 24x24 set scaled up.
+extern const unsigned char icons24[20][24][24];
+/* the same twenty icons RE-RASTERIZED at 48x48, not the 24x24 set scaled up.
  * gen_icons.py draws each size from the geometry at its own 4x supersample,
  * so this carries real anti-aliased edges. See the comment in fb_icon24. */
-extern const unsigned char icons48[10][48][48];
-#define ICON_N  10
+extern const unsigned char icons48[20][48][48];
+/* icons.c actually defines 20 (see its own index comment); this extern
+ * used to say 10 and still worked, because C does not check array bounds
+ * across a translation unit - it only linked because the ELEMENT type
+ * matched. The ten icons the v10 pass added (search/lock/drive/close/
+ * check/chevron/clock/network/volume/grid) were silently unreachable:
+ * fb_icon24 refuses n >= ICON_N before ever touching the array. */
+#define ICON_N  20
 #define ICON_W  24
 #define ICON_H  24
 #define ICON2_W 48

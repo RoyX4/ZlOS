@@ -31,3 +31,15 @@ void nvme_data_set(int i, int v) { (void)i; (void)v; }
  * rather than absent, or every harness pays for a feature it does not test. */
 __attribute__((weak))
 int  idt_mouse_wheel(void)     { return 0; }
+
+/* The hardware cursor, absent. wm.c asks the GPU to move the pointer before it
+ * falls back to compositing a sprite; a host harness has no display engine, so
+ * "not live" is the honest answer and every drawing test keeps taking exactly
+ * the path it took before this existed.
+ *
+ * WEAK, like idt_mouse_wheel above, so a harness that wants to assert the
+ * hardware path was TAKEN can define its own and win the link. */
+__attribute__((weak))
+int gpu_cursor_move(int x, int y) { (void)x; (void)y; return 0; }
+__attribute__((weak))
+int gpu_cursor_is_live(void)      { return 0; }

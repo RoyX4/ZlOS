@@ -1,0 +1,23 @@
+# 10 - capstone: an RPN calculator
+# "3 4 + 2 *" -> 14.  Tokens are numbers or one of + - * /
+# Build a stack as a list. Remember remove() is pure:
+#   top = last(stack)
+#   stack = remove(stack, len(stack) - 1)
+
+fn rpn(src) {
+    return nil()
+}
+
+fn rpn_safe(src) {
+    # same, but return the text "error" instead of crashing when the
+    # expression is malformed (too few operands, or an unknown token)
+    return nil()
+}
+
+assert(rpn("3 4 +") == 7, "add")
+assert(rpn("3 4 + 2 *") == 14, "add then mul")
+assert(rpn("10 2 /") == 5, "div")
+assert(rpn("5 1 2 + 4 * + 3 -") == 14, "classic")
+assert(rpn_safe("3 +") == "error", "too few operands")
+assert(rpn_safe("3 4 ^") == "error", "unknown token")
+print("10 ok")

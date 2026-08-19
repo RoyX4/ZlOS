@@ -50,6 +50,17 @@ int  fb_text_prop_h(void);
 void fb_present(void);
 void fb_pointer_show(int x, int y);
 void fb_pointer_hide(void);
+
+/* gpucursor.c - the pointer as a display PLANE instead of a sprite.
+ *
+ * Gen9 composites a 64x64 ARGB cursor over the primary at scanout for free, so
+ * a pointer move costs one register write instead of a save-under, a two-plane
+ * composite and a restore inside the frame loop. gpu_cursor_move returns 0
+ * whenever that path is not live - which is every build until someone calls
+ * gpu_cursor_arm(1) on real hardware - so the software sprite below stays the
+ * fallback and nothing here changes until the hardware path is proven. */
+int gpu_cursor_move(int x, int y);
+int gpu_cursor_is_live(void);
 int  fb_cell_w(void);
 int  fb_cell_h(void);
 
@@ -88,6 +99,12 @@ void        notify_rect(int sw, int sh, int reserve_bot, int scale,
 int  snap_zone_for_point(int px, int py, int sw, int sh);
 int  snap_apply(int win, int z, int cx, int cy, int cw, int ch,
                 int sw, int sh, int rt, int rb, int *x, int *y, int *w, int *h);
+/* the same arithmetic snap_apply uses, WITHOUT committing it to a window.
+ * That is the whole point for the drag preview: the outline you see while
+ * dragging and the rectangle you get on drop are computed by one function, so
+ * the preview cannot promise a landing spot the snap then disagrees with. */
+void snap_rect(int z, int sw, int sh, int reserve_top, int reserve_bot,
+               int *x, int *y, int *w, int *h);
 int  snap_release(int win, int *x, int *y, int *w, int *h);
 int  snap_key_zone(int win, int dir);
 void snap_note_moved(int win);
@@ -108,24 +125,21 @@ int  input_y(void);
 #define EV_MOUSE     4
 #define EV_WHEEL     5
 
-/* THE KEYCODES COME FROM THE SHARED HEADER NOW, and this file is the reason
- * that header's own warning is worth reading: "a second copy of a numeric
- * table is a copy that eventually disagrees with the first". This file had one.
+#define MOD_ALT     (1 << 2)
+#define MOD_SUPER   (1 << 5)
+
+/* The key codes come from keycodes.h, which is the file that owns them, rather
+ * than from a copy here.
  *
- * It defined KEY_SUPER, MOD_ALT, MOD_SUPER and the four arrows - all of which
- * happened to agree - and it did NOT define KEY_TAB. So the Alt+Tab handler
- * below was written as `code == '\t'`, comparing against 9, while every
- * producer of key events sends KEY_TAB = 0x103. Both keyboards: input.c maps
- * PS/2 scancode 0x0F and USB HID usage 0x2B to KEY_TAB, and even converts a
- * literal 9 to it. 0x103 is never 9.
- *
- * **Alt+Tab has therefore never worked, on any keyboard, since the compositor
- * was written.** It reads as implemented - there is a handler, a comment and a
- * cycle_focus() that is correct - and nothing exercised it, because window
- * switching is the kind of thing you assume works until you need it in a gate.
- * Found by a probe that tried to raise a window with it and measured four
- * identical frames. */
-#include "keycodes.h" 
+ * There used to be a copy - twice, in this one file, at what were lines 128-131
+ * and 1443-1446 - and both happened to hold the right values. The cost was not a
+ * wrong number, it was a MISSING one: whoever wrote the Alt+Tab test had no
+ * KEY_TAB in scope because nobody had copied that line in, reached for '\t'
+ * instead, and Alt+Tab has never fired. keycodes.h:14-16 states the rule the
+ * copy could not enforce - codes live above 0x100 "where it cannot collide with
+ * a character", and `code >= KEY_NONCHAR` is the test for "this key has no
+ * character". A partial copy of a table cannot carry a rule. */
+#include "keycodes.h"
 
 unsigned int idt_ticks(void);
 /* cpu.c. The TSC has been readable since cpu.c was written and nothing in the
@@ -422,11 +436,37 @@ int wm_anim_alpha(int win)
     return 255;
 }
 
-/* Advance every running animation by one frame and damage what moved.
+/* Advance every running animation by the ELAPSED TIME and damage what moved.
  * Damaging the SETTLED rect - which is the largest - is what erases the
- * smaller frame drawn a moment ago. */
+ * smaller frame drawn a moment ago.
+ *
+ * THIS USED TO ADVANCE BY ONE INDEX PER CALL, which made every duration in this
+ * file a count of compositor passes rather than a length of time. The comment
+ * on ANIM_FRAMES says "four frames at 100 Hz is 40 ms", and that was only true
+ * if a pass happened to cost exactly 10 ms - so animation speed tracked host
+ * load, scene complexity and resolution. Making the redraw faster made the
+ * animations faster instead of smoother, which is the opposite of the point.
+ *
+ * idt_ticks() is 100 Hz, so one tick IS one intended frame and the conversion
+ * is a subtraction. Two other subsystems in this file already reason about that
+ * (see the notes at the drag threshold and the double-click window); the
+ * timeline was the one that did not.
+ *
+ * anim_tick() is called every compositor pass whether or not anything is
+ * animating, so anim_last stays current and an animation that starts after a
+ * long idle does not jump straight to its end. The clamp is belt and braces for
+ * the case where it does not - a stall long enough to skip a whole timeline
+ * should end the animation, not wrap its index. */
+static unsigned anim_last = 0;
+
 static void anim_tick(void)
 {
+    unsigned now  = idt_ticks();
+    unsigned step = now - anim_last;          /* 100 Hz: one tick, one frame */
+    anim_last = now;
+    if (step == 0) return;                    /* no time passed: nothing moved */
+    if (step > (unsigned)ANIM_FRAMES) step = (unsigned)ANIM_FRAMES;
+
     for (int i = 0; i < ANIM_MAX; i++) {
         if (!anims[i].kind) continue;
         wm_damage_win(anims[i].win);
@@ -437,7 +477,8 @@ static void anim_tick(void)
          * sometimes does not close when every slot is busy is a far worse bug
          * than a window that closes without a flourish. The timeline draws;
          * the caller decides what exists. */
-        if (++anims[i].frame >= anims[i].len) anims[i].kind = ANIM_NONE;
+        anims[i].frame += (int)step;
+        if (anims[i].frame >= anims[i].len) anims[i].kind = ANIM_NONE;
     }
 }
 
@@ -810,17 +851,15 @@ static void chrome(int win, int focused)
 
     if (W->flags & WF_NOCHROME) return;
 
-    /* THE GRIP HAS TO BE VISIBLE or it is a secret. Three short diagonals in
-     * the bottom-right corner - the convention every desktop uses, and cheap
-     * enough to draw on every window every repaint. */
-    {
-        int gx = W->x + W->w - UI_S1(t) - 1, gy = W->y + W->h - UI_S1(t) - 1;
-        int step = UI_S1(t) / 2 + 1;
-        for (int i = 1; i <= 3; i++) {
-            int d = i * step * 2;
-            fb_line(gx - d, gy, gx, gy - d, t->border);
-        }
-    }
+    /* THE GRIP HAS TO BE VISIBLE or it is a secret - drawn once, below, at
+     * UI_S3 after the close box. This used to ALSO draw here, smaller
+     * (UI_S1) and in a different colour, before the title bar was even
+     * composited - two renderers for one corner, from two merge parents
+     * (STATE-OF-THE-PROJECT.md #4.6). Only the later one matches
+     * RESIZE_EDGE's UI_S2 hit region and carries the fix for the L-bracket
+     * merge bug (see "THE RESIZE GRIP, drawn" below); this one was strictly
+     * the earlier, dimmer, wrongly-scaled leftover, and every window paid
+     * for both on every repaint. */
 
     int tx = W->x + 2, tw = W->w - 4, th = t->title_h - 3;
     if (focused) {
@@ -832,8 +871,11 @@ static void chrome(int win, int focused)
          * existed; a third signal would be one too many. */
         fb_fill_px(tx, W->y + t->title_h - 2, tw, 2, t->accent);
     } else {
+        /* a GRADIENT, same as the focused bar and same as kernel.zl:794 - it
+         * was two copies of one colour because the theme struct had one field
+         * for it. The reference's own stops: #2a3550 -> #182238. */
         fb_rrect_grad_top(tx, W->y + 2, tw, th, t->radius - 2,
-                          t->title_off, t->title_off);
+                          t->title_off, t->title_off_bot);
     }
     if (wins[win].ntab > 1) {
         /* a tab strip instead of a title. The active one is a raised surface
@@ -938,6 +980,19 @@ static void toast_draw(int rx0, int ry0, int rx1, int ry1)
     fb_text_prop(x + UI_S3(t), y + (h - th) / 2, msg, t->text);
 }
 
+/* ---- the snap preview -----------------------------------------------------
+ * visual-speed-northstar.md §"Five-part working direction" item 3 lists "add
+ * the missing snap preview" as outstanding: snap.c and the drop-time wiring
+ * both existed, so dragging a window to an edge DID snap it - you just could
+ * not see where it was going to land until you let go.
+ *
+ * The state lives here, above wm_repaint, because the repaint has to read it
+ * and pgrab/RESERVE_TOP are declared further down the file. Only the cached
+ * rectangle is read during paint; snap_preview_set() below does the geometry,
+ * because RESERVE_TOP/RESERVE_BOT are not defined until line ~1280. */
+static int sp_zone = SNAP_NONE;      /* SNAP_NONE when nothing is previewing */
+static int sp_x, sp_y, sp_w, sp_h;   /* where the window would land          */
+
 void wm_repaint(void)
 {
     if (!fb_active() || !nwd) return;
@@ -991,9 +1046,19 @@ void wm_repaint(void)
              * A refusal from fb_stash (every slot busy) degrades to drawing
              * the window opaque, which is the right way for an effect to fail. */
             int fade = 255, stash = -1;
+            /* WHERE THE STASH WAS TAKEN FROM, kept in its own variables.
+             * cx/cy/cw/ch get reused and overwritten below by the CLIENT
+             * isect (narrower - inset by the border and title bar), and
+             * fb_stash_blend used to be handed that clobbered pair as its
+             * destination origin: a fading window composited its saved
+             * backdrop offset by the border width and the title-bar height,
+             * intermittent because it only showed when the client isect
+             * actually ran. sx/sy/sw/sh are the one thing this rectangle
+             * must not share a name with. */
+            int sx = cx, sy = cy, sw = cw, sh = ch;
             if (wm_anim_running(win) == ANIM_FADE) {
                 fade = wm_anim_alpha(win);
-                if (fade < 255) stash = fb_stash(cx, cy, cw, ch);
+                if (fade < 255) stash = fb_stash(sx, sy, sw, sh);
             }
 
             fb_clip(cx, cy, cw, ch);            /* clip 1: the frame + shadow */
@@ -1013,17 +1078,15 @@ void wm_repaint(void)
              * tint IS a blend of one colour over what is already there, which
              * is exactly what fb_fill_blend does.
              *
-             * ANIM_FADE is a different animal and is NOT drawn here. A real
-             * fade needs the window composited against what is BEHIND it at
-             * fractional opacity, which needs a copy of the rectangle before
-             * the window was drawn on it. wm_anim_alpha() reports it and
-             * wmtest asserts it; the compositing waits for the scratch arena
-             * in fb.c. Saying so is better than a tint pretending to be a
-             * fade - they look different and only one of them is the effect
-             * the prototype asks for. */
+             * ANIM_FADE IS drawn here, below - a real fade, the window
+             * composited against what was BEHIND it at fractional opacity,
+             * from the copy `stash` took of the rectangle before the window
+             * was drawn on it. Blended at (sx, sy) - where it was TAKEN
+             * FROM - never at (cx, cy), which by this point is whatever the
+             * client isect above left behind. */
             if (stash >= 0) {
-                fb_clip(cx, cy, cw, ch);
-                fb_stash_blend(stash, cx, cy, 255 - fade);
+                fb_clip(sx, sy, sw, sh);
+                fb_stash_blend(stash, sx, sy, 255 - fade);
                 fb_blur_free(stash);
             }
 
@@ -1035,6 +1098,20 @@ void wm_repaint(void)
                                    ui_theme()->accent, pa);
                 }
             }
+        }
+
+        /* the snap preview sits above the windows and below the toast: it is a
+         * hint about where the drag will land, so it must not be hidden behind
+         * the window being dragged, and must not cover a notification.
+         * Re-clipped to this damage rectangle like everything else in here. */
+        if (sp_zone != SNAP_NONE) {
+            const struct ui_theme *pt = ui_theme();
+            fb_clip(rx0, ry0, rx1 - rx0, ry1 - ry0);
+            /* low alpha on purpose - this is a hint, not a window. The accent
+             * is the one saturated colour in the theme (ui.h:39), which is
+             * what makes it read as "the system is about to do something"
+             * rather than as another surface. */
+            fb_rrect_blend(sp_x, sp_y, sp_w, sp_h, pt->radius, pt->accent, 64);
         }
 
         /* ...and the toast on top of all of them, still inside this damage
@@ -1147,11 +1224,19 @@ static void wm_toggle_max(int win)
 
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
 
+/* defined below, after RESERVE_TOP/BOT, which its geometry needs */
+static void snap_preview_set(int z);
+
 /* wm_close calls this. Defined here, beside the state it clears, so the grab
  * and its lifetime stay in one place. */
 static void wm_drop_grab(int win)
 {
     if (pgrab == win) pgrab = -1;
+    /* A window CLOSED while being dragged - the button-up that would normally
+     * clear the preview is never going to arrive. Without this the hint stays
+     * painted on the desktop for the rest of the session, because nothing else
+     * in the compositor owns those pixels. */
+    snap_preview_set(SNAP_NONE);
 }
 /* What the pointer grab is FOR. It used to be a bare 0/1 meaning "the app has
  * it" or "we are moving it"; resize is a third answer, and three states with
@@ -1263,6 +1348,32 @@ static int in_closebox(int win, int x, int y)
 #define RESERVE_TOP(t)  (32 * (t)->scale)
 #define RESERVE_BOT(t)  (64 * (t)->scale)
 
+/* Show, move or clear the drag preview. Called on every pointer motion during
+ * a frame drag, so it does nothing at all when the zone has not changed - the
+ * common case is dragging around the middle of the screen with no zone, and
+ * that must not damage anything or every drag frame would repaint the desktop.
+ *
+ * Damage is issued for the rectangle being LEFT as well as the one being
+ * entered, because the preview is not a window: nothing else in the compositor
+ * knows those pixels changed, and a preview that only damages where it is
+ * going leaves its previous outline painted on the wallpaper. That is the same
+ * mistake snap_to_rect just below documents having made with wm_move. */
+static void snap_preview_set(int z)
+{
+    if (z == sp_zone) return;
+
+    if (sp_zone != SNAP_NONE) wm_damage(sp_x, sp_y, sp_w, sp_h);
+
+    sp_zone = z;
+
+    if (z != SNAP_NONE) {
+        const struct ui_theme *t = ui_theme();
+        snap_rect(z, (int)fb_pxw(), (int)fb_pxh(),
+                  RESERVE_TOP(t), RESERVE_BOT(t), &sp_x, &sp_y, &sp_w, &sp_h);
+        wm_damage(sp_x, sp_y, sp_w, sp_h);
+    }
+}
+
 /* Snap `win` to `z` (or un-snap it if z is SNAP_NONE), applying whatever
  * geometry snap.c hands back. The two triggers below both end here, so there
  * is one place where a snap actually changes a window. */
@@ -1329,6 +1440,12 @@ static void route_mouse(int x, int y, int btn)
     if (pgrab >= 0) {
         if (grab_drag == GRAB_MOVE) {
             wm_move(pgrab, x - grab_dx, y - grab_dy);
+            /* the preview follows the POINTER, not the window, because the
+             * drop below asks snap_zone_for_point about the pointer too. Using
+             * the window's own rectangle here would light up a different zone
+             * than the one the drop actually takes. */
+            snap_preview_set(snap_zone_for_point(x, y,
+                                                 (int)fb_pxw(), (int)fb_pxh()));
         } else if (grab_drag == GRAB_RESIZE) {
             /* grab_dx/dy hold the offset from the pointer to the corner, so
              * the corner stays under the cursor instead of snapping to it. */
@@ -1349,6 +1466,13 @@ static void route_mouse(int x, int y, int btn)
              * it currently has, which is half the screen. */
             if (grab_drag == GRAB_MOVE) {
                 int z = snap_zone_for_point(x, y, (int)fb_pxw(), (int)fb_pxh());
+                /* clear BEFORE the snap. snap_to_rect damages and moves the
+                 * window into (usually) the very rectangle the preview is
+                 * occupying, so clearing afterwards would damage that region a
+                 * second time for nothing - and clearing it later still, on
+                 * the next motion, would leave the hint painted under a window
+                 * that has already arrived. */
+                snap_preview_set(SNAP_NONE);
                 if (z != SNAP_NONE) snap_to_rect(pgrab, z, grab_ox, grab_oy, grab_ow, grab_oh);
                 else                snap_note_moved(pgrab);
             }
@@ -1434,13 +1558,14 @@ static void cycle_focus(void)
     wm_raise(win);
 }
 
-#define KEY_LEFT   0x110
-#define KEY_RIGHT  0x111
-#define KEY_UP     0x112
-#define KEY_DOWN   0x113
-
 static void route_key(int type, int code, int mods)
 {
+    /* KEY_TAB, not '\t'. Both keyboards deliver the KEY code here, never the
+     * character: input.c:155 and :227 map the PS/2 scancodes straight to
+     * KEY_TAB, and the USB HID path goes through key_of_char (input.c:633)
+     * which does the same. input_code() returns last.code, the key. So
+     * `code == '\t'` compared 0x103 against 9 and this branch had never once
+     * been taken. */
     if (type == EV_KEY_DOWN && code == KEY_TAB && (mods & MOD_ALT)) {
         cycle_focus();
         return;
@@ -1519,14 +1644,57 @@ static unsigned int last_tick;
  * and averaging those in would report a desktop at rest as infinitely fast. */
 static unsigned int frame_us, frame_peak_us;
 
+/* ---- the number that describes SMOOTHNESS, which neither of the two above does
+ *
+ * An average hides stutter by construction and a peak is one sample: both are
+ * compatible with a desktop that hitches once a second, and a person perceives
+ * exactly that. What they perceive is the COUNT of frames that missed, so count
+ * them.
+ *
+ * Two different misses, counted separately because they have different causes:
+ *
+ *   frame_late  a frame that was TIMED and came in over FRAME_BUDGET_US. This
+ *               is the compositor's own fault - it drew too much.
+ *   frame_lost  a 100 Hz tick that no frame ran in at all. wm_frame() is called
+ *               from the idle loop and returns immediately unless the tick
+ *               changed, so `now - last_tick > 1` means the previous pass
+ *               overran its 10 ms slot and the ticks in between are simply
+ *               gone. Nothing counted them before; a dropped frame was silent.
+ *
+ * THE BUDGET IS 16667 us AND NOT 10000 us, deliberately. The PIT gives a 10 ms
+ * slot, but the thing being missed is a panel refresh, and the ThinkPad's panel
+ * was measured at 59.998 Hz (kernel/HANDOFF.md, from PIPE_LINK_M1/N1). A frame
+ * between 10 and 16.6 ms loses a tick without ever being visible as a dropped
+ * refresh, so charging it as stutter would report a smooth desktop as broken.
+ * frame_lost catches those; frame_late is what a person can actually see.
+ *
+ * Neither is a rate. They are totals since the last reset, because a rate needs
+ * a denominator and the honest denominator - painted frames - is not the same
+ * as elapsed ticks on a desktop that idles. `peak` prints both alongside the
+ * frame count so a probe can divide if it wants to. */
+#define FRAME_BUDGET_US 16667u
+static unsigned int frame_late, frame_lost, frame_painted;
+static int          paced;      /* has a first frame set last_tick yet? */
+
 int wm_frame_us(void)  { return (int)frame_us; }
 int wm_peak_us(void)   { return (int)frame_peak_us; }
-void wm_peak_reset(void) { frame_peak_us = 0; }
+int wm_late(void)      { return (int)frame_late; }
+int wm_lost(void)      { return (int)frame_lost; }
+int wm_painted(void)   { return (int)frame_painted; }
+int wm_budget_us(void) { return (int)FRAME_BUDGET_US; }
+void wm_peak_reset(void) { frame_peak_us = 0; frame_late = 0; frame_lost = 0;
+                           frame_painted = 0; }
 
 void wm_frame(void)
 {
     unsigned int now = idt_ticks();
     if (now == last_tick) return;
+    /* Ticks between this pass and the last one that nothing ran in. Skipped on
+     * the very first frame: last_tick is 0 until then and boot takes hundreds
+     * of ticks, which would otherwise be charged to the compositor as one
+     * enormous stall before it had drawn anything. */
+    if (paced && now - last_tick > 1) frame_lost += now - last_tick - 1;
+    paced = 1;
     last_tick = now;
     /* apps-in-windows timed the frame with the 64-bit cpu_tsc(); this tree
      * uses the 32-bit cpu_tsc_lo(). Both declarations survived the merge and
@@ -1565,12 +1733,18 @@ void wm_frame(void)
     }
 
     if (nwd) {
-        fb_pointer_hide();      /* the sprite's save-under is stale once the
+        /* Only the SPRITE has a save-under to go stale. A cursor on its own
+         * plane is not in the back buffer at all, so a repaint cannot smear
+         * it and hiding it would be a visible flicker for no reason. */
+        if (!gpu_cursor_is_live())
+            fb_pointer_hide();  /* the sprite's save-under is stale once the
                                    pixels under it are about to be redrawn */
         wm_repaint();
         did_paint = 1;
     }
-    fb_pointer_show(ptr_x, ptr_y);
+    /* The plane first; the sprite only if it did not take. */
+    if (!gpu_cursor_move(ptr_x, ptr_y))
+        fb_pointer_show(ptr_x, ptr_y);
     fb_present();
 
     if (did_paint) {
@@ -1584,6 +1758,12 @@ void wm_frame(void)
             if (dt < 0x40000000u) {
                 frame_us = dt / (khz / 1000u ? khz / 1000u : 1u);
                 if (frame_us > frame_peak_us) frame_peak_us = frame_us;
+                /* counted only where the frame was actually TIMED - a wrapped
+                 * TSC delta is discarded above, and charging a discarded
+                 * measurement as a miss would invent stutter out of a 1.8 s
+                 * counter wrap. */
+                frame_painted++;
+                if (frame_us > FRAME_BUDGET_US) frame_late++;
             }
         }
     }

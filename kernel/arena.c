@@ -32,55 +32,86 @@
  *
  * fb.c:94-119 documents a fixed map running from 128 MiB (bg_buf) up to
  * 255 MiB (the end of virtio-gpu's framebuffer), and the obvious place for a
- * new buffer is above it, at 256 MiB. That would be dead code on every machine
- * this project tests on.
+ * new buffer is above it.
  *
- * MEASURED, not assumed - qemu-system-i386 with no -m flag gives the guest
- * exactly 134217728 bytes, which is 128 MiB:
+ * THE ORIGINAL REASON THIS IS AT 8 MiB HAS EXPIRED. Read it, because the
+ * arithmetic below still depends on the neighbours and not on the reason:
  *
- *     $ (echo '{"execute":"qmp_capabilities"}'; sleep 0.4;
- *        echo '{"execute":"query-memory-size-summary"}'; sleep 0.4) |
- *       qemu-system-i386 -machine pc -display none -S -qmp stdio
- *     {"return": {"base-memory": 134217728, "plugged-memory": 0}}
+ *     MEASURED, not assumed - qemu-system-i386 with no -m flag gives the guest
+ *     exactly 134217728 bytes, which is 128 MiB:
  *
- * and NOT ONE gate passes -m. verify.sh, verify-raw.sh and verify-iso.sh all
- * boot the default, so on every gate this project has, 0x08000000 and every
- * address above it is unbacked RAM. That is not a new discovery so much as the
- * reason fb.c probes before trusting the back buffer and the reason xhci.c has
- * xhci_ram_ok() at all. run-vm.sh passes -m 256, which reaches the top of the
- * map at 255 MiB and not one byte further.
+ *         $ (echo '{"execute":"qmp_capabilities"}'; sleep 0.4;
+ *            echo '{"execute":"query-memory-size-summary"}'; sleep 0.4) |
+ *           qemu-system-i386 -machine pc -display none -S -qmp stdio
+ *         {"return": {"base-memory": 134217728, "plugged-memory": 0}}
  *
- * So the arena goes BELOW the map, in the span between the kernel image and
- * bg_buf. Everything in that span, each read out of the file that owns it:
+ *     and NOT ONE gate passes -m. verify.sh, verify-raw.sh and verify-iso.sh
+ *     all boot the default, so on every gate this project has, 0x08000000 and
+ *     every address above it is unbacked RAM.
+ *
+ * The measurement is still true of a bare qemu. The conclusion is not: every
+ * gate now passes `-m 1G`, which is memmap.h's HI_TOP, and check-ram.sh fails
+ * the build if any of them stops. So placing a buffer above 128 MiB is no
+ * longer writing dead code.
+ *
+ * The arena STAYS at 8 MiB anyway, and that is a decision rather than an
+ * oversight: moving a live region buys nothing on its own, and the reasons it
+ * is a good address (2 MiB aligned, clear of the raw-boot stack, clear of the
+ * map) were never about the RAM ceiling. What changed is that it is no longer
+ * FORCED here. When a real allocator wants a heap bigger than the 120 MiB hole
+ * below the map, the space above the map is now genuinely available.
+ *
+ * None of this weakens ram_backed() below - it is what proves the memory is
+ * there on the ONE machine no gate covers, the laptop, where firmware chose the
+ * layout. That is also why fb.c probes before trusting the back buffer and why
+ * xhci.c has xhci_ram_ok().
+ *
+ * The span between the kernel image and bg_buf, each entry read out of the file
+ * that owns it:
  *
  *   0x00000000..0x00006FFF   boot64.S:40-42     PML4, PDPT, PD0..PD3
  *   0x00008FE0..0x00008FEF   smp.c:57           CR3_PTR
  *   0x00008FF0..0x00008FFF   smp.c:56           ENTRY_PTR
  *   0x00009000..0x00009FF0   smp.c:55,124       the SMP trampoline
  *   0x000A0000..0x000FFFFF   -                  VGA hole and BIOS ROM
- *   0x00100000..0x0028F044   link.ld            the kernel image - MEASURED
- *   0x00600000               raw_entry.S:16     raw-boot stack TOP, grows DOWN
- *                            raw_boot.asm:196   the same address, same stack
+ *   0x00100000..0x002E15C0   link-raw.ld        the kernel image - MEASURED
+ *   0x00100000..0x00700000   raw_boot.asm       what the LOADER fills: CHUNKS
+ *                                               x 32 KiB = 6 MiB from 1 MiB
+ *   0x00C00000               raw_entry.S        raw-boot stack TOP, grows DOWN
+ *                            raw_boot.asm       the same address, same stack
+ *   0x00E00000..0x01E00000   HERE               the program arena
+ *   0x02000000               kernel.zl          SNAKE_X, the fixed zl buffers
+ *   0x04000000..0x04100000   virtio_net.c       NET_BASE, the NIC's rings
  *   0x08000000               fb.c:120           bg_buf - the high map starts
  *
  * The kernel image end is measured too, because it is the one entry above that
  * moves every time somebody adds a file:
  *
- *     $ readelf -S kernel.elf | grep '\.bss'
- *     [ 6] .bss  NOBITS  00241820 142810 04d824
- *     -> 0x00241820 + 0x0004D824 = 0x0028F044 = 2.559 MiB
+ *     $ readelf -s kernel_raw.elf | grep -E '__bss_start|__bss_end'
+ *     __bss_start  0028a2d0        __bss_end  002e15c0
+ *     -> image ends at 0x002E15C0 = 2.880 MiB, of which the LOADER must carry
+ *        0x100000..0x28A2D0 = 1.540 MiB (.bss is NOBITS and zeroed by
+ *        raw_entry.S, so it is not on the disk)
  *
- * ARENA_BASE is 8 MiB, and that is arithmetic rather than taste:
+ * ARENA_BASE is 14 MiB, and that is arithmetic rather than taste:
  *
- *   - it clears the raw-boot stack top at 6 MiB, which grows DOWN, by 2 MiB;
- *     the kernel image has 3.4 MiB of room to grow UP into before it reaches
- *     that stack, and the linker script now fails the build if it ever does
+ *   - it clears the raw-boot stack top at 12 MiB, which grows DOWN, by 2 MiB;
+ *     the kernel image has 9.1 MiB of room to grow UP into before it reaches
+ *     that stack, and the linker script fails the build if it ever does
  *   - it is 2 MiB aligned, which the 64-bit path cares about: boot64.S maps
  *     the low address space with 2 MiB pages
- *   - it ends 104 MiB below bg_buf AND 104 MiB below the RAM ceiling. Those
- *     are the same number for two entirely different reasons, and both are
- *     asserted separately below, because the day somebody passes -m 512 they
- *     stop being the same number and only one of the two checks still applies.
+ *   - it ends at 30 MiB, 2 MiB below kernel.zl's fixed buffers at 32 MiB, and
+ *     98 MiB below bg_buf. It used to end 104 MiB below the RAM ceiling as
+ *     well - the same number for two entirely different reasons, asserted
+ *     separately below because "the day somebody passes -m 512 they stop being
+ *     the same number". That day has been and gone: HI_TOP is 1 GiB now and
+ *     the checks have visibly different slack, which is why they were two.
+ *
+ * IT WAS 8 MiB UNTIL raw_boot.asm's CHUNKS WENT TO 192. The loader fills
+ * 1 MiB .. 7 MiB now, which put the old raw-boot stack (6 MiB) inside the
+ * region being loaded; the stack went to 12 MiB and the arena had to clear it.
+ * Both moves are one commit, because half of it is a machine that overwrites
+ * its own stack while booting.
  */
 
 #include "memmap.h"
@@ -154,7 +185,7 @@ _Static_assert(ZL_LOW_END <= HI_IMG_BASE,
 _Static_assert(HI_IMG_BASE <= HI_BG,
                "HI_IMG_BASE and memmap.h's HI_IMG have drifted apart");
 _Static_assert(ARENA_END <= RAM_CEILING,
-               "the program arena runs past the 128 MiB the gates actually boot with");
+               "the program arena runs past HI_TOP, the RAM every gate promises");
 _Static_assert((ARENA_BASE & (2UL * 1024 * 1024 - 1)) == 0,
                "the program arena is not 2 MiB aligned - boot64.S maps in 2 MiB pages");
 _Static_assert(ARENA_BYTES >= ARENA_ALIGN,

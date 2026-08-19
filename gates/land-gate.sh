@@ -51,6 +51,57 @@ run "kernel EFI"       "$WT/kernel"        ./buildefi.sh
 [ -x "$WT/kernel/verify-sources.sh" ] && run "SOURCES coverage" "$WT/kernel" ./verify-sources.sh
 run "hosttest build"   "$WT/kernel/hosttest" ./build.sh
 
+# --- RUN them. Building a test proves it compiles; it proves nothing else.
+# This gate built ~26 harnesses and executed none of them for its whole life -
+# roughly 276 assertions, including a 2.7-million-check fuzz, sitting as
+# decoration while the gate reported green. They were run by hand instead, which
+# is exactly the habit a gate exists to remove.
+#
+# EXIT 77 MEANS SKIPPED, NOT FAILED, and this loop has to know that or the
+# convention is decoration. gpu_blt.c:624 returns 77 when there is no
+# /dev/dri/renderD128 - it is a harness for the Intel blitter and there is
+# nothing for it to talk to on a machine without an Intel GPU. Its comment says
+# "77 = skip, not fail"; this loop treated every non-zero as FAIL, so that
+# contract was honoured by nobody and the gate would have gone red on every
+# box without the hardware. Same class as everything in
+# docs/GUARDS-THAT-DID-NOT-GUARD.md: a stated guarantee whose only consumer
+# never implemented it.
+#
+# A skip is COUNTED AND PRINTED rather than folded into the pass count. "27
+# passed" when three of them did nothing is the false green this gate exists to
+# stop, and a hardware harness that silently stops running is exactly how GPU
+# work would rot.
+echo; echo "=== hosttest run ==="
+hf=0; hp=0; hs=0
+for t in "$WT"/kernel/hosttest/*; do
+  [ -x "$t" ] && [ ! -d "$t" ] || continue
+  case "$(basename "$t")" in
+    *.*|intel_probe|modeset_test|dpll_test|gpu_fillrate|gpu-dev.sh|modeset-run.sh|jmptest32) continue;;
+  esac
+  ( cd "$WT/kernel/hosttest" && timeout 180 "./$(basename "$t")" >/dev/null 2>&1 )
+  case $? in
+    0)  hp=$((hp+1));;
+    77) echo "SKIP: $(basename "$t") (77 - hardware or device not present here)"
+        hs=$((hs+1));;
+    *)  echo "FAIL: $(basename "$t")"; hf=$((hf+1));;
+  esac
+done
+if [ $hf -gt 0 ]; then FAIL=$((FAIL+1)); echo ">>> FAIL (hosttest run: $hf of $((hp+hf)))"
+else echo ">>> ok (hosttest run: $hp passed, $hs skipped)"; fi
+
+# --- the two static checkers. Neither builds anything or boots anything, so
+# there is no excuse for them not being in the gate: check-zl-calls proves every
+# kernel.zl call site resolves (zl has no compile-time check for that at all),
+# and check-memmap proves no two fixed addresses overlap - which is how
+# LINE_BUF and DISK_SCRATCH sat on 0x02030000 through a whole integration.
+[ -x "$WT/kernel/check-zl-calls.sh" ] && run "zl call sites" "$WT/kernel" ./check-zl-calls.sh
+[ -x "$WT/kernel/check-memmap.sh" ]   && run "memory map"    "$WT/kernel" ./check-memmap.sh
+# check-memmap.sh reads kernel.zl and no C at all, which is why intel.c's
+# edid_buf sat inside fb.c's blur arena while it printed a clean map. This is
+# the other half: every page-aligned hex literal in a .c or .h that lands
+# strictly inside a declared HI_* region without being its base.
+[ -x "$WT/kernel/check-himap.sh" ]    && run "high-RAM map"  "$WT/kernel" ./check-himap.sh
+
 # --- the reverse SOURCES check: a .c present but not listed is silently not compiled
 if [ -f "$WT/kernel/SOURCES" ]; then
   echo; echo "=== reverse SOURCES sweep ==="

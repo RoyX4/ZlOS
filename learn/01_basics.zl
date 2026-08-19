@@ -1,0 +1,23 @@
+# 01 - variables, strings, numbers
+# Fill in each fn so every assert passes. Run: ./interp learn/01_basics.zl
+# Reference: docs/REFERENCE.md
+
+fn greet(name) {
+    # return "hello, Zac" for name "Zac"
+    return nil()
+}
+
+fn area(w, h) {
+    # return width times height
+    return nil()
+}
+
+fn describe(n) {
+    # "n is 7" -- str() turns a number into text, + joins text
+    return nil()
+}
+
+assert(greet("Zac") == "hello, Zac", "greet")
+assert(area(3, 4) == 12, "area")
+assert(describe(7) == "n is 7", "describe")
+print("01 ok")

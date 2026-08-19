@@ -2,6 +2,17 @@
 
 Read this first in a new session. Everything below is verified, not remembered.
 
+> **What is still OPEN is not in this file — it is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../docs/STATE-OF-THE-PROJECT.md),** which
+> audited twenty-one planning documents against the merged tree on 2026-08-19.
+> This file remains the authority on what the hardware has *proven*. It is
+> **stale on five checkable points**, each corrected there with a command: it
+> says nothing in the kernel arms `lt_armed` (`intel.c:4232` does, reachable
+> from `kernel.zl:1395`); it says there is no VBT parser (there is, unwired);
+> it says `fb.c` has no clipping (`fb.c:763-798` is the scissor, with four
+> callers); it describes a boot fork `kernel.zl` no longer has; and it carries a
+> northstar percentage its own source retracted.
+
 ## What this is
 
 An OS written in `zl` (Roy's own language) at `~/Documents/repos/zl-linux/kernel/`.
@@ -548,8 +559,29 @@ The five that matter most to somebody touching this next:
 The shell owns the main loop and windows are a demo it launches. A real desktop
 inverts that. Designed 2026-08-17:
 
+- **`docs/visual-speed-northstar.md` — Roy's actual intent for the v10 HTML.**
+  Read this first for visual work. The target is how polished the desktop looks
+  and how fast it feels, not a demand to clone every simulated app before the
+  comparison counts. It separates look, feel, machinery and application
+  completeness, and records the 16.67 ms / `late = 0` interaction target.
 - **`docs/DECISIONS.md` — every decision from 2026-08-17 in one page**, including
-  the two that turned out wrong and why. Read this before the others.
+  the two that turned out wrong and why. Read this before the others. **#29–#33
+  (2026-08-19) settle the kernel against `docs/design/zlOS-design-northstar.html`
+  item by item** — the blur is gone and the reason is that it was disabling the
+  wallpaper cache on the ThinkPad's 2560x1440 panel, not that it looked wrong.
+- **`docs/NEXT-PROMPT.md` — WHICH ONE TO DO NEXT, ranked, with the measurement
+  that ranks it.** Start a new session here. It also carries the standing
+  hazard nothing else states plainly: three to five agent sessions share this
+  one checkout, and on 2026-08-19 that produced two simultaneous land gates,
+  one session's commit sweeping another's in-progress edits, and load average
+  15.
+- **`docs/look-and-speed.md` — what a frame costs, what paces it, what is
+  next.** The frame target (every frame AND the peak under 16.67 ms), the
+  vsync survey per backend (one source exists, `intel.c`'s `PIPE_FRMCNT_A`, and
+  it has zero callers), the blast radius of raising the PIT, and why SMP band
+  rendering is one call that should not be made yet — 1.76x measured, not 4x,
+  and two bands is slower than serial. **Two of its entries carry correction
+  banners** — one claim in it was wrong and says so.
 - `docs/desktop-build-guide.md` — start here. What a compositor is, in plain
   words, and the build order.
 - **`docs/desktop-TODO.md` — the ordered task list. Pick it up here.**
@@ -620,13 +652,11 @@ inverts that. Designed 2026-08-17:
   not its code.** Also: `virtio_gpu.c:314` disables virgl on purpose — enabling
   it would give real 3D in QEMU only, never on the laptop.
 - `docs/desktop-northstar-feasibility.md` — can zlOS run the `~/zl OS v10.dc.html`
-  mockup? **~65%, and what is left is applications, not machinery.** This file
-  has now been wrong twice in opposite directions — 95% by counting visual
-  effects and ignoring the toolkit, then 20% by counting "zl has no lists" and
-  "there is no layout engine" as *permanent*. Neither was a property of the
-  language: `ui.c` is a layout engine and `ui_list_row` expresses a list
-  without a list type. **Separating "the language cannot" from "nobody has
-  written it yet" is the whole lesson**, and getting it wrong costs you the
+  mockup? Keep its layer breakdown and gap list; **ignore every percentage in
+  it.** Successive 95%, 20%, 65% and 35% figures each collapsed different
+  layers and each misled. `ui.c` is a layout engine and `ui_list_row` expresses
+  a list without a list type. **Separating "the language cannot" from "nobody
+  has written it yet" is the whole lesson**, and getting it wrong costs the
   wrong fix.
 
 ## The renderer is benchmarked: `hosttest/fbbench.c`
@@ -724,6 +754,31 @@ cd kernel/hosttest && ./build.sh && ./inputtest
 ```
 
 Full write-up: `docs/input-stack.md`.
+
+## How a harness types a command — `docs/typing-into-the-compositor.md`
+
+**Serial reaches the compositor.** `input.c` feeds COM1 into the same event
+queue as PS/2 and USB (`SERIAL, the third source`), which is what kept every
+gate in this repo working when the desktop became the boot state.
+
+What does not work is sending a bare character. The shell is a window whose
+input is a **line**: `term.c` buffers printable characters and only on Enter
+echoes the line and looks the first **word** up in its table. So `windows`,
+not `w` — `w` was a command in the old text shell and is now one character in
+a buffer.
+
+**A single character produces no serial output at all**, because the echo lives
+in the Enter branch. That silence is identical to a dropped key, and reading it
+as one is how two probes came to document "serial cannot reach the compositor"
+on branches whose own `input.c` says otherwise. Measured 2026-08-19: `-k w`
+changes 1 225 pixels, all inside the prompt line, with the `w` visibly sitting
+in the buffer.
+
+`probe-shot.py -k` takes a command, submits it, and waits for term.c to echo
+the line back — the one marker that proves it was taken, on either wire. It
+exits non-zero when the echo never comes, instead of photographing a frame no
+command ran in, which is what it used to do.
+
 ## zlOS keeps things now — `docs/system-track.md`
 
 Files had no names and nothing survived a reboot. **zlfs** (`fs.c`) is a
@@ -750,7 +805,8 @@ undone in `wm.c`, is in [`docs/system-track.md`](docs/system-track.md).
 Six times now: **a DMA buffer outside guest RAM, on top of another buffer, or an
 address truncated to 32 bits.** Symptoms look like protocol bugs.
 
-- zlOS needs `-m 256` minimum; the DMA arena starts at 224 MiB
+- **zlOS needs 1 GiB of RAM minimum.** See "The RAM floor" below — this was
+  `-m 256` until 2026-08-20 and the change is a deliberate trade, not a drift
 - `u32 reg = xop + OFFSET` where xop is a 64-bit BAR → **reads correct, writes
   vanish**, 64-bit build only
 - Every driver now ships a `*_ram_ok()` probe
@@ -800,6 +856,51 @@ It is also why the browser's storage region (`HI_DOM`) is at **80 MiB** and not
 at some round number above `HI_BACK`: 80..96 MiB is under the 128 MiB every
 gate actually boots with, so `verify.sh` exercises it rather than stepping
 around it.
+
+## The RAM floor — 1 GiB, and what it cost
+
+Fixed 2026-08-20. The paragraph directly above was true when written and is now
+the *history* of this section, kept because the shape is worth recognising.
+
+`memmap.h`'s `HI_TOP` is one promise: **the smallest guest zlOS claims to boot
+on.** Every DMA buffer sits below it because below it is the only memory we have
+said exists. Until now, nothing compared that promise to what the gates
+actually booted, and all three of these were simultaneously true:
+
+| what | `-m` it passed | against `HI_TOP` = 256 MiB |
+|---|---|---|
+| `verify.sh`, `verify-raw.sh`, `verify-iso.sh`, `run.sh` | **none** → 128 MiB | top **half** of the map unbacked |
+| `verify-disk.sh`, `verify-clock.sh` | 512 | fine |
+| `verify-efi.sh`, `exercise.py`, `try.sh` | 1G | 4× the asserted ceiling |
+
+`HI_TOP` is now **`0x40000000`, 1 GiB**, and every QEMU in the tree passes
+`-m 1G`. `kernel/check-ram.sh` is the gate: it reads `HI_TOP` out of `memmap.h`,
+finds every QEMU launch in every `.sh` and `.py` here, and fails if any of them
+passes less than that or passes no `-m` at all. Static — no build, no QEMU, so
+it cannot fail because the host is busy. Validated against three planted
+defects (a gate with `-m` removed, a gate lowered to `-m 512`, and a brand-new
+gate written without one); all three go red, the clean tree goes green.
+
+**The trade, stated rather than implied: zlOS no longer claims to boot on a
+256 MB machine.** Nothing in the tree needed 1 GiB — the highest thing claimed
+is virtio-gpu's framebuffer ending at 255 MiB — so this buys room, not
+correctness. It is worth it because 256 MiB was never a hardware limit; it was
+`-m 256` written down once and then asserted against forever, and it had already
+started blocking work that has real use for the space above it.
+
+Two consequences worth knowing:
+
+- **The program arena's justification changed.** `arena.c` sits at 8 MiB
+  *because* everything above 128 MiB used to be unbacked on every gate. It is
+  still at 8 MiB — moving a live region buys nothing — but it is no longer
+  forced there, and the space above the map is now genuinely allocatable.
+- **`check-himap.sh` needed widening in the same commit.** Its literal-scanner
+  matched `0x0` followed by seven hex digits, which cannot express any value at
+  or above `0x10000000`. With `HI_TOP` at 1 GiB it would have gone on comparing
+  against a ceiling of `0x40000000` while structurally unable to see two thirds
+  of the span — reporting a region as covered that it could not look at. That
+  is the shape `docs/GUARDS-THAT-DID-NOT-GUARD.md` exists for, and it would have
+  been introduced *by* the fix.
 
 The full map — every base and end re-grepped from the file that owns it, the
 kernel image end measured, the arithmetic for where a new buffer may go, and one

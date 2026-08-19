@@ -21,6 +21,30 @@ gcc -O2 -w -pthread -o fbbench fbbench.c \
     ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./fbbench       (run: ./fbbench)"
 
+# The wallpaper cache against the arena it shares with the blur slots. This is
+# the ONLY way 2560x1440 - the ThinkPad's panel - gets exercised before somebody
+# flashes a USB stick: GRUB falls back to 800x600 on the emulated card and
+# kernel.zl's set_res() ladder stops at 1920x1200, so no boot gate can reach it.
+gcc -O2 -w -o walltest walltest.c \
+    ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
+echo "built ./walltest      (run: ./walltest)"
+
+# The shell's long lines against the shell's window - DECISIONS.md item G.
+# term.c ALONE, against recording stubs, because the defect is that characters
+# are LOST and the scissor guarantees no ink escapes the client rect either way:
+# a pixel test is green before and after. This asserts on what term_draw asks to
+# be drawn instead.
+gcc -O2 -w -o termwrap termwrap.c ../term.c
+echo "built ./termwrap      (run: ./termwrap)"
+
+# ONE palette across the three files that carry it - DECISIONS.md item E.
+# Parses the reference HTML and kernel.zl rather than restating their values,
+# because a test that hardcoded the numbers would be a FOURTH copy of the
+# palette. ui.c is linked for real. Run from this directory: it opens
+# ../kernel.zl, ../settings.c and ../../docs/design/.
+gcc -O2 -w -o palette palette.c ../ui.c
+echo "built ./palette       (run: ./palette)"
+
 # The proportional text engine, asserted. fbbench times fb.c and browsershot
 # photographs it; neither NOTICES when a style flag stops changing the pixels.
 # Both regressions this gate exists for shipped green: italic silently rendered
@@ -286,6 +310,21 @@ echo "built ./dnstest       (run: ./dnstest)"
 gcc -O1 -g -Wall -Wextra -Wno-unused-function -o inputtest \
     inputtest.c ../input.c
 echo "built ./inputtest     (run: ./inputtest)"
+
+# The xHCI EVENT RING, with this harness playing the controller. The layer
+# inputtest.c cannot reach: it stubs xhci_ptr_poll() as `return 0`, so the ring
+# that the pointer bug actually lived in is not in its picture at all. Here the
+# real xhci.c is compiled unmodified (included, not linked, to reach the static
+# state an enumeration would have set) and driven by a fake controller that
+# walks the transfer ring, honours the cycle bit and the Link TRB, and fills the
+# buffer each TRB names.
+#
+# It exists because every probe-*.py in this repo attaches a usb-TABLET while
+# try.sh attaches a usb-MOUSE, so the relative path a person actually uses had
+# no coverage of any kind. -DZL_64 only widens xhci.c's `uptr`; every DMA
+# address it puts in a ring stays 32-bit, exactly as in the kernel.
+gcc -O1 -g -w -D_GNU_SOURCE -DZL_64 -o xhcitest xhcitest.c ../input.c
+echo "built ./xhcitest      (run: ./xhcitest)"
 gcc -O1 -g -Wall -Wextra -Wno-unused-function -o inputtest_feel \
     inputtest_feel.c ../input.c
 echo "built ./inputtest_feel"
@@ -318,6 +357,26 @@ echo "built ./libctest      (run: ./libctest)"
 
 gcc -O2 -w -o arenatest arenatest.c ../arena.c
 echo "built ./arenatest     (run: ./arenatest)"
+
+# The general allocator, and this one is built with the WARNINGS ON rather than
+# -w. arena.c is a bump pointer and an addition; heap.c has boundary tags, two
+# levels of size class and three bitmaps, so it is the file in this tree where
+# an unused variable or a signed/unsigned comparison is most likely to be an
+# actual bug rather than noise. It found nothing on the way in, which is worth
+# rather more than -w finding nothing.
+#
+# Links the REAL heap.c, unmodified. The harness mmaps HEAP_BASE and supplies
+# putc, exactly as arenatest does for the arena.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -o heaptest heaptest.c ../heap.c
+echo "built ./heaptest      (run: ./heaptest)"
+
+# The virtual-memory arithmetic. NOT the mapping - installing a PDPT entry needs
+# CR3 and ring 0, and the only proof of that is verify-efi.sh booting green. But
+# vmm_phys()/vmm_virt() are called from dma_addr() on every keystroke, mouse
+# report, disk block and network frame, and they are the twelve lines where an
+# off-by-one hands a device an address one page out.
+gcc -O2 -g -Wall -Wextra -o pagingtest pagingtest.c ../paging.c
+echo "built ./pagingtest    (run: ./pagingtest)"
 
 # `run`, and every way it declines. TWO binaries from one source, which is the
 # point of exec.c's weak fs_* references: with a filesystem linked it reaches
@@ -368,3 +427,54 @@ gcc -O2 -w -o toasttest toasttest.c ../wm.c ../ui.c ../wmglue.c ../settings.c ho
     ../input.c ../notify.c ../snap.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./toasttest     (run: ./toasttest)"
+
+# THE BLITTER. The first thing in this project that asks a GPU to draw.
+#
+# Raw ioctl on /dev/dri/renderD128 - no libdrm, no Mesa, no -l flags at all,
+# because the point is to learn the command level zlOS will have to speak and
+# zlOS cannot link a library. It runs ALONGSIDE i915 and does not detach it:
+# the blitter is a DMA engine, not the display, so unlike modeset-run.sh this
+# cannot blank the screen of whoever is using the laptop.
+#
+# Guarded on the header AND on hardware being present, so a box with no Intel
+# GPU skips instead of failing. `--negative` is the one that matters in CI: it
+# proves the verification can still reject a blit that writes nothing.
+if [ -f /usr/include/drm/i915_drm.h ]; then
+  gcc -O2 -g -Wall -Wextra -o gpu_blt gpu_blt.c
+  if [ -e /dev/dri/renderD128 ]; then
+    echo "built ./gpu_blt       (run: ./gpu_blt --blit --negative, or --sweep)"
+  else
+    echo "built ./gpu_blt       (no /dev/dri/renderD128 here - it will skip at run time)"
+  fi
+else
+  echo "skip  ./gpu_blt       (no drm headers - apt install libdrm-dev)"
+fi
+
+# The blitter command stream, asserted against the dwords that really drew.
+# gpu_blt proves the encoding on the GPU; this proves it on any machine in
+# milliseconds, and covers what hardware cannot reach cheaply - the refusals,
+# and a batch-buffer overflow, which in the kernel means a DMA engine parsing
+# whatever followed the batch in memory. Both mutations were watched failing
+# it before it was committed.
+gcc -O2 -g -Wall -Wextra -o gputest gputest.c
+echo "built ./gputest       (run: ./gputest)"
+
+# The ring experiment. Builds anywhere; needs root AND i915 unbound to do
+# anything, so it is not part of any gate - gpu-ring-run.sh drives it and always
+# gives the display back. --survey is read-only and safe with i915 loaded.
+gcc -O2 -g -Wall -Wextra -o gpu_ring gpu_ring.c
+echo "built ./gpu_ring      (run: sudo ./gpu-ring-run.sh --survey)"
+
+# The plane registers, read rather than assumed. intel.c's method is "verified
+# against what firmware programmed"; the timing registers had modeset_test and
+# the PLANE registers had no witness at all. Read-only, 77 without root or
+# without an Intel GPU.
+gcc -O2 -g -Wall -Wextra -o gpu_planes gpu_planes.c
+echo "built ./gpu_planes    (run: sudo ./gpu_planes)"
+
+# GPU-visible memory through the aperture (GMADR/BAR2). This is how anything
+# confirms the GPU wrote something WITHOUT trusting the GPU - /dev/mem is refused
+# for normal RAM on this kernel (STRICT_DEVMEM=y) and a GEM buffer only works
+# while i915 is driving. Read-only, 77 without root or without an Intel BAR2.
+gcc -O2 -g -Wall -Wextra -o gpu_aperture gpu_aperture.c
+echo "built ./gpu_aperture  (run: sudo ./gpu_aperture)"

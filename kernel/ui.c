@@ -43,20 +43,60 @@ void ui_theme_set(const struct ui_theme *t) { theme = *t; }
 void ui_theme_init(int scale)
 {
     if (scale < 1) scale = 1;
-    /* Deep navy, nested rounded panels, focused-blue title gradients with an
-     * accent underline. This is the look that already exists - extended, not
-     * replaced. Do not introduce a second visual system. */
-    theme.bg        = 0x141A2E;
-    theme.panel     = 0x1E2A44;
-    theme.panel_hi  = 0x27354F;
-    theme.text      = 0xE4EDFF;
-    theme.text_dim  = 0x8FA0C0;
-    theme.accent    = 0x55D6FF;
-    theme.border    = 0x141A2A;
-    theme.danger    = 0xE05561;
-    theme.title     = 0x305CA8;
-    theme.title_bot = 0x16285C;
-    theme.title_off = 0x243350;
+    /* ---- ONE PALETTE, and kernel.zl's is the one -- DECISIONS.md item E -----
+     * "Do not introduce a second visual system" is what this comment used to
+     * say, and a second visual system is exactly what these eleven values were.
+     * kernel.zl's rgb() constants painted the header bar, the dock and the two
+     * legacy app bodies; this struct painted EVERY WINDOW FRAME ON SCREEN, and
+     * the two agreed on 2 of 10 roles. Two cyans and two panel colours were up
+     * at the same time. visual-speed-northstar.md names "duplicated palette
+     * roles" as a thing that must not ship.
+     *
+     * WHICH ONE IS THE SOURCE OF TRUTH IS NOT A TASTE CALL, which is why this
+     * could be closed rather than escalated. docs/design/zlOS-design-northstar.
+     * html:13 says, in its own words, what it is:
+     *
+     *     -- the zlOS palette, straight from kernel.zl's rgb() theme --
+     *
+     * The reference was transcribed FROM kernel.zl. So "agree with the
+     * reference" and "agree with kernel.zl" are the same instruction, and this
+     * file was the only one of the three that had drifted - DECISIONS #33
+     * counted it at 11 of 21 roles for kernel.zl against 2 of 10 here.
+     *
+     * Every value below is now a named token of that reference, and the token
+     * is in the comment so the next drift is a diff and not an argument.
+     * REVERSING IS THIS BLOCK, nothing else - no call site names a colour. */
+    theme.bg        = 0x1A1E32;   /* --wall-top   the desktop behind it all  */
+    theme.panel     = 0x05060A;   /* --panel      .win body. WAS 0x1E2A44,   */
+                                  /*              a mid-navy against the     */
+                                  /*              reference's near-black.    */
+                                  /*              visual-speed-northstar.md  */
+                                  /*              §identity 3 asks for       */
+                                  /*              "near-black content" too.  */
+    /* THE ONE ROLE THE REFERENCE DOES NOT DEFINE, flagged rather than faked.
+     * It is a static mockup: its own step list has "Widget toolkit - clickable
+     * buttons, scrollbars" as QUEUED, so there is no button face in it to copy.
+     * --panel-2 (#0b0e18) is its nearest "raised surface", and it is a ~3%
+     * luminance step off --panel - which would make every button, slider track
+     * and toggle in ui.c effectively invisible. So this takes --line-soft,
+     * which IS a reference token, sits clearly above the panel, and stays below
+     * --line so a hairline still reads on top of a control. */
+    theme.panel_hi  = 0x1A2136;   /* --line-soft  raised: control faces      */
+    theme.text      = 0xD2E4FF;   /* --txt-hi                                */
+    theme.text_dim  = 0x96A5C3;   /* --txt-dim                               */
+    theme.accent    = 0x60D2EB;   /* --accent     was 0x55D6FF - THE SECOND  */
+                                  /*              CYAN, next to kernel.zl's  */
+                                  /*              ACCENT on the same screen. */
+    theme.border    = 0x26304A;   /* --line       .win border                */
+    theme.danger    = 0xE05A5A;   /* --crit                                  */
+    theme.title     = 0x305CA8;   /* --hdr-top    already agreed             */
+    theme.title_bot = 0x16285C;   /* --hdr-bot    already agreed             */
+    /* The unfocused title bar is a GRADIENT in the reference and in kernel.zl
+     * (:794, tbt/tbb) and was a flat slab here, because the struct had one
+     * field for it. Both ends now, and they are the reference's own two stops:
+     * .win:not(.focus) .titlebar{linear-gradient(180deg,#2a3550,#182238)}. */
+    theme.title_off = 0x2A3550;   /* unfocused title, top                    */
+    theme.title_off_bot = 0x182238; /* ...and bottom                         */
 
     /* ---- metrics, v10 SS6.10 -----------------------------------------------
      * Counted out of the prototype's stylesheet rather than picked by eye, and

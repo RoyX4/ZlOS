@@ -69,10 +69,33 @@ rtc.c
 
 # desktop/exec-track
 arena.c
+heap.c
+paging.c
+usermode.c
 exec.c
 
 # desktop/feel-and-control
 settings.c
+
+# The blitter command stream. Nothing calls it yet - zlOS has no ring to submit
+# through - but it is compiled into all four targets so it cannot rot, and
+# hosttest/gputest.c pins its output to the dwords that drew on real Gen9.5
+# silicon. See kernel/docs/gpu-blitter.md.
+gpu.c
+
+# The ring those commands are submitted through. Its ARITHMETIC is tested by
+# gputest; its MMIO has never executed on hardware and is gated behind
+# gpu_ring_arm(), which defaults to off - the same shape as intel.c's lt_armed
+# and for the same reason.
+gpuring.c
+
+# The hardware cursor image. intel.c has had the three cursor registers and
+# runtime_kernel.c has published cur_on/cur_move/cur_off to zl for as long as
+# either has existed, and NOTHING called them - there was no image and no GGTT
+# mapping, so cur_on would have pointed the display engine at nothing. This is
+# the missing middle. Its arithmetic is tested; its install path is gated behind
+# gpu_cursor_arm() and has never executed.
+gpucursor.c
 
 # desktop/browser
 virtio_net.c

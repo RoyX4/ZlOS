@@ -1,3 +1,11 @@
+> **AUDITED 2026-08-19 · MOSTLY DONE.** Checked item by item against `main` at `06ced13`,
+> after the eleven-track merge. 44 of 58 asks are done and reachable, and both architectural inversions this prompt exists for landed. What is left is not unbuilt code but unrun gates — every harness named here is compiled by `land-gate.sh` and never executed. Two of its eight READ FIRST documents do not exist in the repo.
+>
+> **What is still open from this document is in
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> work from the task list below.**
+
+
 # Overnight autonomous run — the prompt
 
 ## How to start it
@@ -656,6 +664,7 @@ DESIGN RULES — do not violate
 > Kept as a standing caution for this document's own genre: an exclusion table
 > is a list of things nobody will attempt, so a wrong entry in it costs work
 > that never gets done and never shows up missing.
+
 
 ## What Windows and Linux have that this run is chasing
 

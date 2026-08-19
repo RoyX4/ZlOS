@@ -308,7 +308,7 @@ static int measure(const char *s, int len, int size, int style)
  * cipher in this kernel - only hashes". There are no hashes either: nothing
  * crypto is in SOURCES on any ref. A `crypto.c` does exist - 543 lines of
  * SHA-1, SHA-256, HMAC, PBKDF2 and AES-128, with `cryptotest.c` against
- * published FIPS and RFC vectors - but only inside the refs/wip snapshots, and
+ * published FIPS and RFC vectors - but only inside the `refs/wip` snapshots, and
  * a file that is in no build is not in the kernel. The refusal POLICY is
  * unchanged and correct; only the reason given for it was false.
  *
@@ -1295,6 +1295,25 @@ int browser_tick(void)
     }
     if (s == HTTP_REFUSED) { fetching = 0; status = BR_BAD_TYPE; return 1; }
     if (s == HTTP_ERROR)   { fetching = 0; status = BR_FAILED;   return 1; }
+    /* FOLLOW THE REDIRECT. http.h defines HTTP_REDIRECT as "3xx with a Location,
+     * under the redirect limit" - i.e. the state means the redirect is valid and
+     * followable - and nothing consumed it, so every 3xx left `fetching` set and
+     * this function returning 0 for ever, with no timeout. http.c has already
+     * done the work: it found the Location, counted the hop and checked it
+     * against HTTP_MAX_REDIRECTS before entering this state, so the loop guard
+     * is upstream and this side just has to act.
+     *
+     * record = 0: a redirect is not a page the user navigated to, so it does not
+     * belong in Back history - otherwise Back walks through every hop. */
+    if (s == HTTP_REDIRECT) {
+        const char *loc = http_location();
+        int n = 0;
+        while (loc[n]) n++;
+        if (n > 0 && navigate(loc, n, 0)) return 1;   /* navigate() re-arms fetching */
+        fetching = 0;
+        status = BR_FAILED;
+        return 1;
+    }
     return 0;
 }
 

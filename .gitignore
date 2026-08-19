@@ -3,6 +3,7 @@ compile
 nativegen
 lexer_demo
 parser_demo
+zlfmt
 native_out
 out.c
 *.o
@@ -114,3 +115,20 @@ kernel/hosttest/exectest-nofs
 kernel/hosttest/jmptest
 kernel/hosttest/jmptest32
 kernel/hosttest/libctest
+scratch.zl
+
+# rendered compositor frames (.github/scripts/render-desktop.sh, which does
+# `mkdir -p shots` at the repo root and writes shots/$label-$size.png there).
+#
+# ANCHORED. Written as a bare `shots/` it matched a directory of that name at
+# ANY depth, which is not what the line above describes and not what it was for:
+# it also swallowed `docs/shots/`, where the two reference screenshots for
+# POINTER-PROMPT.md 1c live. Those are evidence, not output - the "before" one
+# cannot be regenerated at all, because the branch that drew it has never been
+# identified - so an ignore rule aimed at CI output must not reach them.
+/shots/
+kernel/hosttest/wmbench
+
+# clangd's index and Cursor's per-worktree state. Machine-local, never shared.
+.cache/
+.cursor/

@@ -1,0 +1,27 @@
+fn fact(n) {
+    if n <= 1 { return 1 }
+    return n * fact(n - 1)
+}
+fn fib(n) {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+fn gcd_r(a, b) {
+    if b == 0 { return a }
+    return gcd_r(b, a % b)
+}
+fn depth(xs) {
+    if type(xs) != "list" { return 0 }
+    best = 0
+    for x in xs {
+        d = depth(x)
+        if d > best { best = d }
+    }
+    return best + 1
+}
+
+assert(fact(6) == 720, "fact")
+assert(fib(10) == 55, "fib")
+assert(gcd_r(48, 36) == 12, "gcd_r")
+assert(depth([1, [2, [3]]]) == 3, "depth")
+print("04 ok")
