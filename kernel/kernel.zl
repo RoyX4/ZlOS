@@ -348,8 +348,7 @@ fn dock_running_bar(slot, dy) {
     dbx = dock_x0() + slot * DOCK_PITCH * u
     dbw = DOCK_TW * u
     if dock_running(slot) == 1 {
-        rrblend(dbx + (dbw - 4 * u) / 2, dy + 8 * u + dbw + 3 * u,
-                4 * u, 4 * u, 2 * u, theme(TH_ACCENT), 255)
+        rrblend(dbx + (dbw - 4 * u) / 2, dy + 8 * u + dbw + 3 * u, 4 * u, 4 * u, 2 * u, theme(TH_ACCENT), 255)
     }
     return 0
 }
