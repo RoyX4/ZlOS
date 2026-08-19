@@ -65,6 +65,35 @@ Add a truncating cast to any of them and `hazard-scan.sh` counts the same number
 before. `.github/workflows/gates.yml` compares `head_n == base_n`, finds no change, and
 prints **"no new truncation sites."**
 
+### Corrected by adversarial verification — the class is not unguarded, only uncounted
+
+**An earlier version of this file implied the bug class itself is unprotected in those 44
+files. That is too strong**, and a fleet verifier caught it. `kernel/buildefi.sh:40-44`
+carries the four flags with no `-w`, and they apply to **every** translation unit in the
+real build:
+
+```sh
+CF="-target x86_64-unknown-windows -ffreestanding -fno-stack-protector \
+    -fshort-wchar -mno-red-zone -O2 -DZL_64 -DZL_EFI -I.. \
+    -Wno-excessive-regsave \
+    -Werror=shift-count-overflow -Werror=void-pointer-to-int-cast \
+    -Werror=pointer-to-int-cast -Werror=int-to-pointer-cast"
+```
+
+So a new **pointer↔integer** cast in `fb.c` or `xhci.c` fails the build even though the
+gate never counts it. The gate is blind; the compiler is not.
+
+**What neither catches is the shape that actually bit.** `intel.c:435`'s
+`return (u32)mmio` narrows an address already held as an *integer* (`uptr`) to another
+integer. That is not a pointer-to-int cast, so none of the four `-Werror=` flags
+diagnose it — and `hazard-scan.sh` never opens `intel.c` to count it either.
+
+The honest statement is therefore: **the gate is uncounted across 44 files, the compiler
+covers the pointer-cast half of the class in all of them, and the integer-narrowing half
+is covered by nothing anywhere.** Fixing the extractor is still worth doing; adding
+`-Wconversion` (or a targeted check for narrowing casts of `uptr`) is what would have
+caught `intel.c:435`.
+
 That is not a gate failing to catch something hard. It is a gate reporting a green
 result about files it never opened — which is exactly the class
 `docs/GUARDS-THAT-DID-NOT-GUARD.md` exists to enumerate, and it is currently not in it.

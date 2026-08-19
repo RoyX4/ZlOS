@@ -82,12 +82,37 @@ This is the identical failure the repo already documented for the physical memor
 recurring in **GGTT space**, where there is no `memmap.h` equivalent and no checker at
 all.
 
-## Consequence
+## Consequence — corrected by adversarial verification
 
-`gpu_selftest()` writes its 64×64 pattern through GGTT entries that also back the
-hardware cursor image. Whichever ran last wins for the shared 3 pages: the self-test
-either corrupts the cursor, or validates against pixels the cursor wrote and reports a
-result that says nothing about the ring.
+**An earlier version of this file said the self-test "validates against pixels the cursor
+wrote." That half is wrong**, and a fleet verifier caught it. The correction matters
+because it changes which symptom you would see.
+
+The self-test does **not** read back through the aperture. It poisons and verifies via
+the *physical* address:
+
+```c
+/* kernel/gpuring.c:521-527 */
+if (!intel_ggtt_map_range(GPU_ST_GFX >> 12, (gr_u32)GPU_ST_PHYS,
+                          (int)(GPU_ST_BYTES / 4096u))) { gpu_ring_arm(0); return 3; }
+...
+gr_u32 *dst = (gr_u32 *)(gr_uptr)GPU_ST_PHYS;
+for (gr_u32 i = 0; i < GPU_ST_BYTES / 4u; i++) dst[i] = GPU_ST_POISON;
+```
+
+So the CPU side touches `GPU_ST_PHYS`, which does **not** alias the cursor. Only the
+*graphics* addresses collide, and only the GPU's own writes travel through them.
+
+Whichever `intel_ggtt_map_range` ran last owns graphics `0x04002000`–`0x04005000`:
+
+| last mapper | what happens |
+|---|---|
+| the cursor | the ring's blit to `GPU_ST_GFX` lands in the **cursor's** physical pages. The self-test then reads `GPU_ST_PHYS`, finds its poison intact for 3 of 4 pages, and **reports failure** — while the cursor image is corrupted |
+| the self-test | the cursor hardware scans out of the **self-test's** physical pages and renders garbage |
+
+**The self-test can only fail spuriously, never pass falsely.** That is the better
+outcome of the two and it is worth knowing: the symptom is "the ring self-test fails on
+3 of 4 pages" plus "the cursor looks wrong", not "a green self-test that proved nothing."
 
 It has not bitten yet for the reason everything in this subsystem has not bitten yet —
 `gpu_ring_arm(1)` and `gpu_cursor_arm(1)` are both deliberately unwired
