@@ -2,6 +2,125 @@
 # each with its own board rather than a reskin of another (see
 # apps_registry.zl for why). apps_common.zl's ac_cell_idx/ac_board_bg carry
 # the grid arithmetic every one of these shares.
+#
+# THE SHELL FOR THE SEVEN OLDER GAMES LIVES HERE. Word Guess, Tic-Tac-Toe,
+# Nim, Tower of Hanoi, Lights Out, Connect Four and Maze were written before
+# ds-reference.html's game window was established and before apps_games3.zl's
+# g3_bar existed, so all seven drew straight onto the window body with no
+# canvas and no status bar. gs_canvas() and gs_bar() below are that shell,
+# once, and every one of the seven now calls them - the five in this file and
+# the two in apps_games2.zl, which is imported after this one.
+#
+# It is a THIRD copy of the same thirty pixels (g3_bar, g4_bar, gs_bar) and
+# that is deliberate, not an oversight: apps_registry.zl dispatches these
+# seven DIRECTLY to wg_draw/tt_draw/... with no per-slice games1_draw() to
+# hang a shared shell on, and apps_registry.zl belongs to another agent in
+# this working tree. Hoisting one shell into apps_common.zl means editing a
+# file four other jobs are also editing. The three copies should collapse into
+# apps_common.zl the moment one agent owns both files.
+
+# ==============================================================================
+# The game-window shell - docs/design/ds-reference.html:569-581.
+#
+#   a canvas filling the window on #0b0d10, and under it a 30px status bar:
+#   background #14171a, a 1px #0b0d0f top border, 11px horizontal padding,
+#   an 8px gap, a pid chip on the left and a 9.5px mono #5c6167 key-hints
+#   line that ellipsises.
+#
+# Every colour there is a design.h token: #14171a is ZD_SURF_4 = TH_CHROME,
+# #0b0d0f is ZD_SURF_2 = TH_CHROME_LINE (and the canvas's own #0b0d10 is that
+# same token to within one unit of blue - design.h names it ZD_SURF_GAME but
+# no ui_color() role points at it), and #5c6167 is ZD_TEXT_6 = TH_TEXT_6
+# exactly. The hint therefore uses TH_TEXT_6 rather than the TH_TEXT_DIM
+# (= ZD_TEXT_4 #9ba0a6) g3_bar reaches for; the reference is unambiguous.
+# ==============================================================================
+GS_BAR = 30
+
+fn gs_ph(ah) { return ah - GS_BAR * ui() }
+
+fn gs_canvas(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, gs_ph(ah), theme(TH_CHROME_LINE))
+    return 0
+}
+
+# THE SLOT, NOT THE APP ID. These helpers key off a 0..6 index declared right
+# here rather than off APP_WORDLE..APP_MAZE, so this file and apps_games2.zl
+# carry no copy of an app id. A duplicated app id compiles clean and misroutes
+# at runtime - apps_games3.zl's header records six months of `apps` opening
+# the wrong window for exactly that reason - and the cheapest way not to
+# duplicate one is not to write it down twice.
+GS_WG  = 0
+GS_TT  = 1
+GS_NIM = 2
+GS_HO  = 3
+GS_LO  = 4
+GS_C4  = 5
+GS_MZ  = 6
+
+# THE PID IS DERIVED, NOT READ, and said out loud rather than dressed up. The
+# reference looks a real process up (`st.kern.procs.find(...)`); this kernel
+# has a scheduler in sched.c but no zl builtin that reports a per-app pid, so
+# the chip shows a stable number derived from the slot. 271..295 by fours: all
+# three digits (which is what makes the chip width below exact) and disjoint
+# from g3_pid()'s 400..421, so two games from different slices never show the
+# same number.
+fn gs_pid(slot) { return 271 + slot * 4 }
+
+# TWO HINTS PER GAME, WHICH IS THIS TREE'S ELLIPSIS. The reference sets
+# text-overflow:ellipsis; label() has no such thing and the compositor's client
+# scissor would chop the line mid-glyph at the window edge instead. Measuring
+# the long form and falling back to a short one gets the same outcome - the
+# hint always fits - without a string builtin zl does not have.
+fn gs_keys(slot) {
+    if slot == GS_WG  { return "type five letters   enter guesses   backspace deletes   r new word" }
+    if slot == GS_TT  { return "click a square to place   x and o alternate   r restarts" }
+    if slot == GS_NIM { return "click a pile where you want it cut   take the last stick to win   r restarts" }
+    if slot == GS_HO  { return "click a peg to lift its top disk   click another to drop it   r restarts" }
+    if slot == GS_LO  { return "click toggles the cell and its four neighbours   r shuffles" }
+    if slot == GS_C4  { return "click a column to drop   four in a row wins   r restarts" }
+    if slot == GS_MZ  { return "arrows or wasd walk   reach the teal exit   r generates a new maze" }
+    return ""
+}
+fn gs_keys_short(slot) {
+    if slot == GS_WG  { return "type   enter   bksp   r new" }
+    if slot == GS_TT  { return "click a square   r new" }
+    if slot == GS_NIM { return "click a pile   r new" }
+    if slot == GS_HO  { return "click peg, click peg   r new" }
+    if slot == GS_LO  { return "click a cell   r new" }
+    if slot == GS_C4  { return "click a column   r new" }
+    if slot == GS_MZ  { return "arrows or wasd   r new" }
+    return ""
+}
+
+fn gs_bar(ax, ay, aw, ah, slot) {
+    u = ui()
+    bh = GS_BAR * u
+    by = ay + gs_ph(ah)
+    fill_rgb(ax, by, aw, bh, theme(TH_CHROME))
+    fill_rgb(ax, by, aw, 1, theme(TH_CHROME_LINE))
+    th = label_h(T_CAPTION)
+    ty = by + (bh - th) / 2
+    # The chip: padding 3px 8px, radius 8px. Its width is MEASURED - "pid",
+    # a gap, and three digits - rather than the fixed fudge g3_bar uses, which
+    # is why gs_pid() is constrained to three digits above. ZD_SURF_6 is the
+    # token design.h itself annotates "borders, scrollbar thumb, chip faces";
+    # the reference tints the chip with the accent at 10% alpha and there is
+    # no rounded-rect blend builtin to do that with, so the face is the chip
+    # token and the INK is the accent, which is the part that carries meaning.
+    pw = label_w("pid", T_CAPTION, W_REG)
+    nw = label_w("000", T_CAPTION, W_REG)
+    cw = pw + nw + 20 * u
+    chh = th + 6 * u
+    rrect(ax + 11 * u, by + (bh - chh) / 2, cw, chh, 8 * u, theme(TH_BORDER))
+    label(ax + 19 * u, ty, "pid", theme(TH_ACCENT), T_CAPTION, W_REG)
+    label_num(ax + 19 * u + pw + 4 * u, ty, gs_pid(slot), theme(TH_ACCENT), T_CAPTION, W_REG)
+    kx = ax + 11 * u + cw + 8 * u
+    room = ax + aw - 11 * u - kx
+    ks = gs_keys(slot)
+    if label_w(ks, T_CAPTION, W_REG) > room { ks = gs_keys_short(slot) }
+    label(kx, ty, ks, theme(TH_TEXT_6), T_CAPTION, W_REG)
+    return 0
+}
 
 # ==============================================================================
 # Tic-Tac-Toe - 3x3, two players share the keyboard-less window, click to
@@ -41,10 +160,11 @@ fn tt_mark_col(m) {
 }
 fn tt_draw(ax, ay, aw, ah) {
     u = ui()
+    gs_canvas(ax, ay, aw, ah)
     cell = TT_CELL * u
     gx = ax + (aw - 3 * cell) / 2
     gy = ay + 4 * u
-    ac_board_bg(gx, gy, cell, 3, 3, rgb(20, 24, 36), rgb(60, 68, 92))
+    ac_board_bg(gx, gy, cell, 3, 3, theme(TH_SURF_1), theme(TH_BORDER))
     ci = 0
     while ci < 9 {
         m = peek8(TT_BOARD + ci)
@@ -60,6 +180,7 @@ fn tt_draw(ax, ay, aw, ah) {
     if tt_win == 1 { label(gx, msg_y, "X wins - r restarts", ac_cat_color(2), T_CAPTION, W_BOLD) }
     if tt_win == 2 { label(gx, msg_y, "O wins - r restarts", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
     if tt_win == 3 { label(gx, msg_y, "draw - r restarts", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD) }
+    gs_bar(ax, ay, aw, ah, GS_TT)
     return 0
 }
 fn tt_mark_str(m) { if m == 1 { return "X" }  return "O" }
@@ -105,6 +226,7 @@ fn nim_set(i, v) {
 
 fn nim_draw(ax, ay, aw, ah) {
     u = ui()
+    gs_canvas(ax, ay, aw, ah)
     dw = 18 * u
     pi = 0
     while pi < 3 {
@@ -122,6 +244,7 @@ fn nim_draw(ax, ay, aw, ah) {
     } else {
         label(ax + 10 * u, ay + 92 * u, nim_win_str(), ac_cat_color(2), T_CAPTION, W_BOLD)
     }
+    gs_bar(ax, ay, aw, ah, GS_NIM)
     return 0
 }
 fn nim_turn_str() { if nim_turn == 1 { return "player 1 to move" }  return "player 2 to move" }
@@ -197,8 +320,19 @@ fn ho_top(p) {
     return 0 - 1
 }
 
+# The win condition, as a predicate rather than as a five-deep nest inside the
+# draw. ho_draw held the only copy and returned early from the middle of it,
+# so nothing else in the file could ask "is it finished?" - which is how
+# ho_event came to accept moves on a solved puzzle and go on counting them.
+fn ho_solved() {
+    d = 0
+    while d < 5 { if ho_peg(d) != 2 { return 0 }  d = d + 1 }
+    return 1
+}
+
 fn ho_draw(ax, ay, aw, ah) {
     u = ui()
+    gs_canvas(ax, ay, aw, ah)
     baseY = ay + 90 * u
     pw = aw / 3
     pi = 0
@@ -222,12 +356,14 @@ fn ho_draw(ax, ay, aw, ah) {
         fill_rgb(px - w / 2, py, w, 10 * u, ac_cat_color(2))
         d = d - 1
     }
-    if ho_peg(0) == 2 { if ho_peg(1) == 2 { if ho_peg(2) == 2 { if ho_peg(3) == 2 { if ho_peg(4) == 2 {
+    if ho_solved() == 1 {
         label(ax + 8 * u, ay + 8 * u, "solved - r restarts", ac_cat_color(2), T_CAPTION, W_BOLD)
+        gs_bar(ax, ay, aw, ah, GS_HO)
         return 0
-    }}}}}
+    }
     label(ax + 8 * u, ay + 8 * u, "moves", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     label_num(ax + 56 * u, ay + 8 * u, ho_moves, theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    gs_bar(ax, ay, aw, ah, GS_HO)
     return 0
 }
 
@@ -297,6 +433,7 @@ fn lo_solved() {
 
 fn lo_draw(ax, ay, aw, ah) {
     u = ui()
+    gs_canvas(ax, ay, aw, ah)
     cell = 34 * u
     gx = ax + (aw - LO_N * cell) / 2
     gy = ay + 6 * u
@@ -305,8 +442,8 @@ fn lo_draw(ax, ay, aw, ah) {
         ci = 0
         while ci < LO_N {
             on = peek8(LIGHTS_BOARD + ri * LO_N + ci)
-            col = rgb(24, 28, 40)
-            if on == 1 { col = rgb(230, 200, 90) }
+            col = theme(TH_SURF_1)
+            if on == 1 { col = theme(TH_WARN) }
             rrect(gx + ci * cell + 2 * u, gy + ri * cell + 2 * u, cell - 4 * u, cell - 4 * u, 6 * u, col)
             ci = ci + 1
         }
@@ -317,6 +454,7 @@ fn lo_draw(ax, ay, aw, ah) {
     } else {
         label(gx, gy + LO_N * cell + 8 * u, "click to turn off every light", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     }
+    gs_bar(ax, ay, aw, ah, GS_LO)
     return 0
 }
 
@@ -383,10 +521,11 @@ fn c4_full() {
 fn c4_col_color(m) { if m == 1 { return ac_cat_color(2) }  return theme(TH_ACCENT) }
 fn c4_draw(ax, ay, aw, ah) {
     u = ui()
+    gs_canvas(ax, ay, aw, ah)
     cell = 30 * u
     gx = ax + (aw - C4_W * cell) / 2
     gy = ay + 6 * u
-    ac_board_bg(gx, gy, cell, C4_W, C4_H, rgb(20, 30, 60), rgb(50, 66, 110))
+    ac_board_bg(gx, gy, cell, C4_W, C4_H, theme(TH_SURF_1), theme(TH_BORDER))
     ri = 0
     while ri < C4_H {
         ci = 0
@@ -404,6 +543,7 @@ fn c4_draw(ax, ay, aw, ah) {
     if c4_win == 1 { label(gx, msg_y, "red wins - r restarts", ac_cat_color(2), T_CAPTION, W_BOLD) }
     if c4_win == 2 { label(gx, msg_y, "yellow wins - r restarts", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
     if c4_win == 3 { label(gx, msg_y, "draw - r restarts", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD) }
+    gs_bar(ax, ay, aw, ah, GS_C4)
     return 0
 }
 fn c4_turn_str() { if c4_turn == 1 { return "red to drop" }  return "yellow to drop" }

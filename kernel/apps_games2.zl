@@ -82,6 +82,7 @@ fn wg_status_col(st) {
 
 fn wg_draw(ax, ay, aw, ah) {
     u = ui()
+    gs_canvas(ax, ay, aw, ah)
     cell = 26 * u
     gx = ax + (aw - WG_COLS * cell) / 2
     ri = 0
@@ -101,6 +102,7 @@ fn wg_draw(ax, ay, aw, ah) {
     if wg_done == 1 { label(gx, ay + 8 * u + WG_ROWS * cell, "correct - r restarts", ac_cat_color(1), T_CAPTION, W_BOLD) }
     if wg_done == 2 { label(gx, ay + 8 * u + WG_ROWS * cell, "out of guesses - r restarts", theme(TH_DANGER), T_CAPTION, W_BOLD) }
     if wg_done == 0 { label(gx, ay + 8 * u + WG_ROWS * cell, "type a 5-letter word, enter to guess", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+    gs_bar(ax, ay, aw, ah, GS_WG)
     return 0
 }
 
@@ -223,11 +225,12 @@ fn mz_reset() {
 MZ_CELL = 15
 fn mz_draw(ax, ay, aw, ah) {
     u = ui()
+    gs_canvas(ax, ay, aw, ah)
     cell = MZ_CELL * u
     gx = ax + (aw - MAZE_W * cell) / 2
     gy = ay + 4 * u
     wallcol = theme(TH_TEXT_DIM)
-    fill_rgb(gx, gy, MAZE_W * cell, MAZE_H * cell, rgb(10, 12, 20))
+    fill_rgb(gx, gy, MAZE_W * cell, MAZE_H * cell, theme(TH_SURF_1))
     ri = 0
     while ri < MAZE_H {
         ci = 0
@@ -248,6 +251,7 @@ fn mz_draw(ax, ay, aw, ah) {
     msg_y = gy + MAZE_H * cell + 8 * u
     if mz_won == 1 { label(gx, msg_y, "found the exit - r generates a new maze", ac_cat_color(1), T_CAPTION, W_BOLD) }
     if mz_won == 0 { label(gx, msg_y, "arrow keys to the teal exit", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+    gs_bar(ax, ay, aw, ah, GS_MZ)
     return 0
 }
 
