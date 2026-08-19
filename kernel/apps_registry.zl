@@ -74,9 +74,9 @@ REG_COUNT = 20                      # bumped as each batch of apps is wired in
 fn reg_name(id) {
     if id == APP_CLIP  { return "Clipboard" }
     if id == APP_COLOR { return "Colour Picker" }
-    if id == APP_REGEX { return "Pattern Tester" }
+    if id == APP_REGEX { return "Regex Tester" }      # the reference's own name
     if id == APP_BASE  { return "Base Converter" }
-    if id == APP_DIFF  { return "Line Diff" }
+    if id == APP_DIFF  { return "Text Diff" }         # the reference's own name
     if id == APP_HASH  { return "Checksum" }
     if id == APP_UNIT  { return "Unit Converter" }
     if id == APP_NOTES { return "Sticky Notes" }
@@ -92,13 +92,13 @@ fn reg_name(id) {
     if id == APP_SYSINFO { return "System Info" }
     if id == APP_CALC    { return "Calculator" }
     if id == APP_MAZE    { return "Maze" }
-    return "App"
     # ---- the per-slice tables. Each file owns a disjoint id range and answers
     # ---- only for its own; see apps_sys2.zl for why they are separate files.
     if sys2_has(id) == 1 { return sys2_name(id) }
     if sys3_has(id) == 1 { return sys3_name(id) }
     if games3_has(id) == 1 { return games3_name(id) }
     if games4_has(id) == 1 { return games4_name(id) }
+    return "App"
 }
 
 # id -> category: 0 system, 1 utility, 2 game. Governs the catalog's swatch
@@ -107,13 +107,13 @@ fn reg_cat(id) {
     if id >= APP_CLIP { if id <= APP_BENCH { return 1 } }
     if id >= APP_WORDLE { if id <= APP_CONNECT4 { return 2 } }
     if id == APP_MAZE { return 2 }
-    return 0
     # ---- the per-slice tables. Each file owns a disjoint id range and answers
     # ---- only for its own; see apps_sys2.zl for why they are separate files.
     if sys2_has(id) == 1 { return sys2_cat(id) }
     if sys3_has(id) == 1 { return sys3_cat(id) }
     if games3_has(id) == 1 { return games3_cat(id) }
     if games4_has(id) == 1 { return games4_cat(id) }
+    return 0
 }
 
 # id -> default window size, in DESIGN UNITS (still needs * ui()).
@@ -128,13 +128,13 @@ fn reg_w(id) {
     if id == APP_SYSINFO { return 260 }
     if id == APP_CALC    { return 200 }
     if id == APP_MAZE    { return 380 }
-    return 300
     # ---- the per-slice tables. Each file owns a disjoint id range and answers
     # ---- only for its own; see apps_sys2.zl for why they are separate files.
     if sys2_has(id) == 1 { return sys2_w(id) }
     if sys3_has(id) == 1 { return sys3_w(id) }
     if games3_has(id) == 1 { return games3_w(id) }
     if games4_has(id) == 1 { return games4_w(id) }
+    return 300
 }
 fn reg_h(id) {
     if id == APP_CLIP    { return 220 }
@@ -156,13 +156,13 @@ fn reg_h(id) {
     if id == APP_SYSINFO { return 200 }
     if id == APP_CALC    { return 240 }
     if id == APP_MAZE    { return 260 }
-    return 160
     # ---- the per-slice tables. Each file owns a disjoint id range and answers
     # ---- only for its own; see apps_sys2.zl for why they are separate files.
     if sys2_has(id) == 1 { return sys2_h(id) }
     if sys3_has(id) == 1 { return sys3_h(id) }
     if games3_has(id) == 1 { return games3_h(id) }
     if games4_has(id) == 1 { return games4_h(id) }
+    return 160
 }
 
 # id -> icon24 index (icons.c), or -1 for "no icon this small suite ships,
@@ -171,13 +171,13 @@ fn reg_h(id) {
 # something it does not depict is worse than an honest monogram.
 fn reg_icon(id) {
     if id == APP_CLOCK { return 16 }    # icons.c: 16 clock - an exact match
-    return 0 - 1
     # ---- the per-slice tables. Each file owns a disjoint id range and answers
     # ---- only for its own; see apps_sys2.zl for why they are separate files.
     if sys2_has(id) == 1 { return sys2_icon(id) }
     if sys3_has(id) == 1 { return sys3_icon(id) }
     if games3_has(id) == 1 { return games3_icon(id) }
     if games4_has(id) == 1 { return games4_icon(id) }
+    return 0 - 1
 }
 
 # id -> two-letter monogram, drawn when reg_icon() is -1.
@@ -299,12 +299,12 @@ fn reg_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_SYSINFO { return si_draw(ax, ay, aw, ah) }
     if id == APP_CALC    { return ca_draw(ax, ay, aw, ah) }
     if id == APP_MAZE    { return mz_draw(ax, ay, aw, ah) }
-    return 0
     # ---- the per-slice tables, same rule as reg_name above.
     if sys2_has(id) == 1 { return sys2_draw(id, ax, ay, aw, ah) }
     if sys3_has(id) == 1 { return sys3_draw(id, ax, ay, aw, ah) }
     if games3_has(id) == 1 { return games3_draw(id, ax, ay, aw, ah) }
     if games4_has(id) == 1 { return games4_draw(id, ax, ay, aw, ah) }
+    return 0
 }
 fn reg_event(id, win, ety, ecode, ex, ey) {
     if id == APP_CATALOG { return cat_event(win, ety, ecode, ex, ey) }
@@ -326,12 +326,12 @@ fn reg_event(id, win, ety, ecode, ex, ey) {
     if id == APP_CONNECT4  { return c4_event(win, ety, ecode, ex, ey) }
     if id == APP_CALC { return ca_event(win, ety, ecode, ex, ey) }
     if id == APP_MAZE { return mz_event(win, ety, ecode) }
-    return 0
     # ---- the per-slice tables, same rule as reg_name above.
     if sys2_has(id) == 1 { return sys2_event(id, win, ety, ecode, ex, ey) }
     if sys3_has(id) == 1 { return sys3_event(id, win, ety, ecode, ex, ey) }
     if games3_has(id) == 1 { return games3_event(id, win, ety, ecode, ex, ey) }
     if games4_has(id) == 1 { return games4_event(id, win, ety, ecode, ex, ey) }
+    return 0
 }
 fn reg_tick(id, win) {
     if id == APP_CLOCK { return clk_tick() }
