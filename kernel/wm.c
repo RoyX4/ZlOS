@@ -995,9 +995,19 @@ void wm_repaint(void)
              * A refusal from fb_stash (every slot busy) degrades to drawing
              * the window opaque, which is the right way for an effect to fail. */
             int fade = 255, stash = -1;
+            /* WHERE THE STASH WAS TAKEN FROM, kept in its own variables.
+             * cx/cy/cw/ch get reused and overwritten below by the CLIENT
+             * isect (narrower - inset by the border and title bar), and
+             * fb_stash_blend used to be handed that clobbered pair as its
+             * destination origin: a fading window composited its saved
+             * backdrop offset by the border width and the title-bar height,
+             * intermittent because it only showed when the client isect
+             * actually ran. sx/sy/sw/sh are the one thing this rectangle
+             * must not share a name with. */
+            int sx = cx, sy = cy, sw = cw, sh = ch;
             if (wm_anim_running(win) == ANIM_FADE) {
                 fade = wm_anim_alpha(win);
-                if (fade < 255) stash = fb_stash(cx, cy, cw, ch);
+                if (fade < 255) stash = fb_stash(sx, sy, sw, sh);
             }
 
             fb_clip(cx, cy, cw, ch);            /* clip 1: the frame + shadow */
@@ -1017,17 +1027,15 @@ void wm_repaint(void)
              * tint IS a blend of one colour over what is already there, which
              * is exactly what fb_fill_blend does.
              *
-             * ANIM_FADE is a different animal and is NOT drawn here. A real
-             * fade needs the window composited against what is BEHIND it at
-             * fractional opacity, which needs a copy of the rectangle before
-             * the window was drawn on it. wm_anim_alpha() reports it and
-             * wmtest asserts it; the compositing waits for the scratch arena
-             * in fb.c. Saying so is better than a tint pretending to be a
-             * fade - they look different and only one of them is the effect
-             * the prototype asks for. */
+             * ANIM_FADE IS drawn here, below - a real fade, the window
+             * composited against what was BEHIND it at fractional opacity,
+             * from the copy `stash` took of the rectangle before the window
+             * was drawn on it. Blended at (sx, sy) - where it was TAKEN
+             * FROM - never at (cx, cy), which by this point is whatever the
+             * client isect above left behind. */
             if (stash >= 0) {
-                fb_clip(cx, cy, cw, ch);
-                fb_stash_blend(stash, cx, cy, 255 - fade);
+                fb_clip(sx, sy, sw, sh);
+                fb_stash_blend(stash, sx, sy, 255 - fade);
                 fb_blur_free(stash);
             }
 
