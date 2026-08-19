@@ -87,7 +87,7 @@ rule from `.ultra/TENSIONS.md` T-2.
 | # | fix |
 |---|---|
 | 15 | ✓ **`http.c:89` — `build_request` writes 9 bytes past `req[512]`** [→](CRITICAL-http-request-overflow.md). Add the reserve **and** a `_Static_assert` tied to the tail literal |
-| 16 | **`http.c:227`** — any response over ~49 KB deadlocks the fetch permanently. Two lenses, independently. No crafted input needed |
+| 16 | ✓ **`http.c:229`** — a full response buffer deadlocks the fetch permanently. `tcp_recv(resp, 0)` was meant to drain-and-discard, but `tcp_recv`'s own **correct** `if (max <= 0) return 0` trust-boundary guard makes it a no-op. Neither function is wrong. Needs a named `tcp_discard()` [→](VERIFICATION-LOG.md) |
 | 17 | **`HTTP_REDIRECT`** — defined in `http.h:21`, consumed by no branch in `browser_tick`. Three lenses, independently. Any 3xx hangs forever |
 | 18 | ✓ **`xhci_ram_ok()`** zeroes the live DCBAA scratchpad pointer; the zl builtin `usb_ram` reaches it at any time [→](CRITICAL-gates-that-cannot-fail.md) |
 | 19 | **`xhci.c:989`** — `reset_endpoint` points any endpoint at EP0's ring and wipes EP0's producer state, reachable with a bulk DCI from `:2127` |

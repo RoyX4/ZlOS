@@ -230,6 +230,65 @@ false evidence, and the false evidence is what a reader would have quoted.
 
 ---
 
+## CONFIRMED — a full response buffer deadlocks the fetch, because a correct guard disables the drain
+
+**Agent claim** (lenses `http` and `memory-safety`, independently, severity critical):
+*any response over ~49 KB deadlocks the fetch permanently — `tcp_recv(resp, 0)` is a
+no-op, so a full buffer stops draining TCP.*
+
+**Confirmed.** Two functions, each individually reasonable.
+
+```c
+/* kernel/http.c:224-230 */
+int avail = tcp_available();
+if (avail > 0) {
+    int room = HTTP_BUF - resp_len;
+    if (avail > room) { avail = room; truncated = 1; }
+    if (avail > 0) resp_len += tcp_recv(resp + resp_len, avail);
+    else           tcp_recv(resp, 0);      /* ← meant to drain and discard */
+}
+```
+
+```c
+/* kernel/tcp.c */
+int tcp_recv(u8 *out, int max)
+{
+    if (max <= 0) return 0;              /* a trust boundary, so it is checked */
+    ...
+}
+```
+
+The `else tcp_recv(resp, 0)` is clearly *intended* to keep draining the TCP receive
+buffer and throw the excess away once `truncated` is set — that is the only reading of
+why it is there at all. But `tcp_recv`'s `if (max <= 0) return 0` guard — which is
+**correct**, and whose comment correctly identifies it as a trust boundary — makes the
+call a no-op.
+
+So once `resp_len == HTTP_BUF`: `room` is 0, `avail` becomes 0, the `else` fires, nothing
+drains, the TCP receive window never reopens, and `state` stays `HTTP_RECEIVING`
+**forever**. No timeout exists on that path.
+
+**This is the most instructive bug in the run.** Neither function is wrong. A defensive
+guard added at a trust boundary silently disabled a drain in a caller that was written
+assuming `tcp_recv(buf, 0)` meant *"discard everything available."* Nothing in either
+file records that assumption, so nothing could have flagged its removal.
+
+**Fix:** give `tcp.c` an explicit discard with a name that cannot be mistaken for a
+length:
+
+```c
+int tcp_discard(int max);   /* drop up to max bytes from the receive buffer, return count */
+```
+
+and call `tcp_discard(tcp_available())` from the `else`. Leave `tcp_recv`'s guard exactly
+as it is — it is right, and it is right for the reason its comment gives.
+
+**Then assert it:** `httptest.c` has 91 checks over the real `tcp.c` and none of them
+fill the buffer. A test that pushes `HTTP_BUF + 1` bytes and asserts the fetch still
+reaches a terminal state would have caught this, and would go red today.
+
+---
+
 ## CONFIRMED — settings are written to NVMe and never read back
 
 **Agent claim** (bug class `orphans`): *`settings_load` has no caller: the Settings app
