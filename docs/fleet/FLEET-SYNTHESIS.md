@@ -75,7 +75,8 @@ incomplete. [→](CRITICAL-gates-that-cannot-fail.md)
 | 11 | ✓ `run_tests.sh:192` — add the `else` that says the kernel gate was skipped |
 | 12 | ✓ `hazard-scan.sh:86` — expand the file list instead of scraping it. Scans 6 of ~50 TUs [→](CRITICAL-ci-truncation-gate-is-blind.md) |
 | 13 | ✓ `fbbench.c` — put `fb_fill_blend` and `fb_rrect_blend` in the hashed scene. The two most performance-critical primitives in `fb.c` have no correctness coverage, under a comment claiming every risky primitive appears |
-| 14 | — add `-Wconversion` or a narrowing check on `uptr`. Neither the gate nor the four `-Werror=` flags can see the `intel.c:435` shape |
+| 14 | ✓ `wguard.sh:45` — make it parse `CF=` out of `buildefi.sh` (`hazard-scan.sh:31-34` already has `efi_cflags()` for exactly this) and assert per-flag instead of `-ge 4`. Today it never reads the flag line it exists to guard, and it is not in CI [→](CRITICAL-gates-that-cannot-fail.md) |
+| 15 | — add `-Wconversion` or a narrowing check on `uptr`. Neither the gate nor the four `-Werror=` flags can see the `intel.c:435` shape |
 
 Every one of these must be **watched going red** before it is trusted — the repo's own
 rule from `.ultra/TENSIONS.md` T-2.

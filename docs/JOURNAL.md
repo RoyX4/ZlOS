@@ -7,6 +7,25 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-19 — docs(fleet): HTTP_REDIRECT is produced and consumed by nobody (305ab8d)
+
+`fleet/audit-2026-08-19` · 3 files changed, 57 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>3 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/fleet/FLEET-SYNTHESIS.md`
+- `docs/fleet/VERIFICATION-LOG.md`
+
+</details>
+
 ## 2026-08-19 — chore(fleet): journal refresh from the post-commit hook (1a99606)
 
 `fleet/audit-2026-08-19` · 1 file changed, 19 insertions(+)

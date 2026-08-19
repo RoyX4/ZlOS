@@ -134,3 +134,72 @@ of the four USB bugs recorded as *only appearing outside QEMU*.
 **Fix:** save and restore, exactly as `arena.c:198` describes, or probe an address that
 is not the DCBAA. The second is better — a liveness probe should not write to a
 structure the hardware owns.
+
+
+---
+
+## ✓ VERIFIED — `wguard.sh` cannot see the flag line it exists to guard
+
+Promoted from a lead after wave 3's refutation stage re-derived it and I checked it by
+hand. `CLAUDE.md:100-103` says *"`kernel/wguard.sh` is the check, and it runs all three
+directions… Run it before touching that flag line."* **The flag line is the one input it
+cannot observe.**
+
+```
+$ grep -n 'buildefi\|CF=' kernel/wguard.sh
+2:# wguard.sh - prove buildefi.sh's four -Werror= flags actually bite.
+4:# WHY THIS EXISTS. From 2026-08-18 to 2026-08-19 buildefi.sh carried
+78:    echo "   buildefi.sh's -w could be restored; re-read this script's header."
+87:    # buildefi.sh, on purpose.
+```
+
+**Four hits, all comments.** The script never greps, sources or parses `buildefi.sh`. It
+defines its own:
+
+```sh
+# kernel/wguard.sh:45-48
+GUARD="-Werror=shift-count-overflow -Werror=void-pointer-to-int-cast \
+       -Werror=pointer-to-int-cast  -Werror=int-to-pointer-cast"
+BASE="-target x86_64-unknown-windows -ffreestanding -fno-stack-protector \
+      -fshort-wchar -mno-red-zone -O2"
+```
+
+So **restoring `-w` to `buildefi.sh` leaves all three directions green.** The script
+proves that *clang* honours four flags, not that *the build* passes them.
+
+### The threshold is the second half
+
+```sh
+# kernel/wguard.sh:58-60
+n=$(grep -c 'error:' "$TMP/a.log" || true)
+if [ "$n" -ge 4 ]; then
+    say "A. guard catches a planted truncation" "ok ($n errors)"
+```
+
+A count over a *mixed* probe cannot say which flag is live. The planted file yields 5
+errors under all four flags, and one line contributes two of them — so removing
+`-Werror=shift-count-overflow` leaves 4 and still prints **ok**. That is the flag whose
+absence let clang compile an IDT gate store to a bare `ret`.
+
+*(The refuter's own correction, kept: this is not true of all four —
+`-Werror=pointer-to-int-cast` is detected. "Cannot detect any single flag" overstates it.)*
+
+### And it never runs
+
+```
+$ grep -rn "wguard" gates/ .github/ tools/
+  (no output)
+```
+
+Not in `land-gate.sh`, not in the workflows. It is a manual check that four documents
+point at.
+
+### Fix — the right pattern is already in the tree
+
+`tools/hazard-scan.sh:31-34` has `efi_cflags()`, which parses `CF=` straight out of
+`buildefi.sh` *"so this test can never drift from the real build."* Have `wguard.sh` call
+that instead of defining its own `GUARD`/`BASE`, and replace the `-ge 4` count with four
+compiles, each carrying exactly one flag, each required to fail.
+
+**The tree contains both the right pattern and the wrong one, and `CLAUDE.md` points
+people at the wrong one.**
