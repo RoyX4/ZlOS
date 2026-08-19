@@ -39,12 +39,43 @@ not have. **It does not remove all the work**, and the gap is specific:
 | `COLOR_CALC_STATE` | **yes** |
 | `CC_VIEWPORT`, `SF_CLIP_VIEWPORT` | **yes** |
 | **`RENDER_SURFACE_STATE`** | **NO — zlOS must build it** |
-| **`BINDING_TABLE_STATE`** | **NO — zlOS must build it** |
+| **`BINDING_TABLE_STATE`** | not decoded, but its **contents are known** — see below |
 
 The batch only *points* at those last two. The render target surface state is
 the one that describes the destination — format, pitch, base address, tiling —
 so it is exactly the part that has to be zlOS's own anyway; a captured one would
 describe Mesa's buffer, not the back buffer.
+
+### The binding table is one entry
+
+`INTEL_DEBUG=bt` prints the table's *contents* even though `bat` does not decode
+the structure:
+
+```
+Binding table for MESA_SHADER_FRAGMENT (compacted to 1 entries from 2 entries)
+  [0] render target #0
+```
+
+So for a blended solid fill the PS binding table is **a single dword**: an offset
+to one `RENDER_SURFACE_STATE` describing the render target. Not an array to
+build, not a sampler in sight. That reduces the outstanding gap to exactly one
+structure.
+
+### What is still genuinely unavailable on this box
+
+`RENDER_SURFACE_STATE`'s **bit layout**. Searched for, and not present:
+
+| source | result |
+|---|---|
+| Mesa `genxml` on disk | absent |
+| ISL / Intel headers in `/usr/include` | absent |
+| `libdrm-dev` i915 files | none |
+| zlib-scan of `iris_dri.so` for an embedded genxml | nothing decompressible |
+| `INTEL_DEBUG` = `fs bat hex bt surf surface state submit blit color sync stall` | `bt` gives contents, none give the layout |
+
+The decoder knows the layout — it is compiled in — but will not print a surface
+state it was not asked to follow. Getting it needs Intel's public Gen9 PRM,
+which is not on this machine.
 
 **Every address in the capture is Mesa's.** 268 of the 3240 dwords are
 page-aligned and in GPU-address range, which makes them patch candidates:
