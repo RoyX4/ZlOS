@@ -566,11 +566,29 @@ int intel_ggtt_map(u32 gfx_page, u32 phys_addr)
     if (!intel_present()) return 0;
     u32 ggtt = intel_ggtt_size();
     if (!ggtt) return 0;
-    if (gfx_page * 8u >= ggtt) return 0;      /* past the end of the table */
+
+    /* COMPARE PAGE COUNTS, NOT BYTE OFFSETS. `gfx_page * 8u` is a u32 multiply:
+     * any gfx_page at or above 0x20000000 wraps to a small number, sails
+     * through the bound, and writes a PTE at mmio + a small offset - which is
+     * the REGISTER file, not the table. A bounds check that overflows is worse
+     * than none, because it reads as protection. Dividing the limit instead
+     * cannot overflow. */
+    if (gfx_page >= ggtt / 8u) return 0;      /* past the end of the table */
 
     volatile u32 *pte = (volatile u32 *)(mmio + (uptr)GGTT_OFFSET + (uptr)gfx_page * 8u);
     pte[0] = (phys_addr & 0xFFFFF000u) | 1u;  /* address | present */
-    pte[1] = 0;                                /* HAW=39 on a client part */
+    /* The high dword carries physical address bits 39:32, and this driver
+     * always writes zero - which is correct ONLY because phys_addr is a u32, so
+     * nothing above 4 GiB can be expressed here in the first place. That is a
+     * real ceiling, not a hardware one: measured on 8086:9B41 with the desktop
+     * running, i915's own live entries use it -
+     *
+     *     GGTT[0x01F40] = 00000001 20C00001   phys 0x01_20C00000
+     *
+     * so the hardware maps above 4 GiB happily. zlOS's whole RAM map lives
+     * under 256 MiB, so the ceiling costs nothing today; widening phys_addr to
+     * u64 is what it would take to lift it. */
+    pte[1] = 0;
     return 1;
 }
 
@@ -1031,6 +1049,12 @@ int intel_wait_vblank(void)
 int intel_ggtt_map_range(u32 gfx_page, u32 phys_addr, int pages)
 {
     if (!intel_present() || pages <= 0) return 0;
+    /* The per-page call bounds gfx_page, but `gfx_page + i` and
+     * `phys_addr + i * 4096` are u32 sums that can wrap before it ever sees
+     * them - and a wrapped pair is a perfectly valid-looking mapping of the
+     * wrong page to the wrong frame. Refuse the whole range up front. */
+    if ((u32)pages > 0xFFFFFFFFu - gfx_page) return 0;
+    if ((u32)pages > (0xFFFFFFFFu - phys_addr) / 4096u) return 0;
     for (int i = 0; i < pages; i++)
         if (!intel_ggtt_map(gfx_page + (u32)i, phys_addr + (u32)i * 4096u)) return 0;
     return 1;
