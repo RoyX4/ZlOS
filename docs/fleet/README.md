@@ -10,6 +10,9 @@ Nothing here was committed to `main`, and no agent in the run had write access t
 file. Five other worktrees were live in sibling directories during the run
 (`zl-browser2` had a QEMU running); none were touched.
 
+**Start at [`FLEET-SYNTHESIS.md`](FLEET-SYNTHESIS.md)** — one ranked list across all four
+fronts, with the hand-verified items marked. The files below are its evidence.
+
 ---
 
 ## Read these first — hand-verified, highest consequence
