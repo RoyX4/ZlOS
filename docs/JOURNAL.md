@@ -7,6 +7,25 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-19 — docs(fleet): correct two of my own findings that adversarial verification broke (d3da1a0)
+
+`fleet/audit-2026-08-19` · 3 files changed, 77 insertions(+), 5 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>3 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/fleet/CRITICAL-ci-truncation-gate-is-blind.md`
+- `docs/fleet/VERIFIED-ggtt-span-collision.md`
+
+</details>
+
 ## 2026-08-19 — docs(fleet): the browser board - the engine is better than its harness (5bf762e)
 
 `fleet/audit-2026-08-19` · 2 files changed, 145 insertions(+)
