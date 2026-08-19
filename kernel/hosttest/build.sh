@@ -366,3 +366,10 @@ echo "built ./gputest       (run: ./gputest)"
 # gives the display back. --survey is read-only and safe with i915 loaded.
 gcc -O2 -g -Wall -Wextra -o gpu_ring gpu_ring.c
 echo "built ./gpu_ring      (run: sudo ./gpu-ring-run.sh --survey)"
+
+# The plane registers, read rather than assumed. intel.c's method is "verified
+# against what firmware programmed"; the timing registers had modeset_test and
+# the PLANE registers had no witness at all. Read-only, 77 without root or
+# without an Intel GPU.
+gcc -O2 -g -Wall -Wextra -o gpu_planes gpu_planes.c
+echo "built ./gpu_planes    (run: sudo ./gpu_planes)"

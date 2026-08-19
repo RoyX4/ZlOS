@@ -39,6 +39,44 @@ What **is** proven, and needs no hardware:
 - cursor alpha compositing, including the premultiplied/straight distinction
 - that the memory map rejects an overlapping region at compile time
 
+## Verified against live hardware, 2026-08-19
+
+`intel.c`'s stated method is *"verified against what firmware programmed for the
+same hardware."* The timing registers had `modeset_test` as their witness; the
+**plane** registers had none — so the constants `gpucursor.c` depends on were the
+one part of this work with nothing behind them. `hosttest/gpu_planes.c` is that
+witness. Read-only, safe with i915 loaded, 77 without root.
+
+Against a live 2560x1440 desktop:
+
+```
+plane 1  CTL=0xC2042400  ENABLED
+         format 0x2  XRGB2101010 (XR30 - 30-bit)
+         tiling 0x1  X-tiled
+         alpha  0x0  ignored (opaque)
+         size   2560x1440
+cursor   CUR_CTL=0x04000027  mode 0x27
+         mode 0x27 == intel.c's CUR_MODE_64_ARGB - CONFIRMED
+```
+
+Three results:
+
+1. **`CUR_MODE_64_ARGB` is right.** `gpucursor.c` hands that exact value to the
+   display engine and nothing had ever checked it. Now something has.
+2. **The panel is running XR30, not 8888.** `intel.c`'s
+   `PLANE_CTL_FORMAT_XRGB8888` is `0x4` and the live plane reads `0x2` — not a
+   contradiction, those are different formats, but it means a zlOS takeover
+   inherits nothing about pixel format and must set it.
+3. **The blended-alpha encoding is still unverified.** Alpha bits read `0`
+   (ignored) because nothing on this system uses a blended plane. So the bits
+   for a *blending* overlay cannot be confirmed this way and **must not be
+   guessed** — which is exactly why `intel_plane_setup` still writes
+   `XRGB8888` and the overlay cannot blend yet.
+
+That third point is the honest limit on the shader-free path: Gen9's display
+engine can blend an overlay plane at scanout with no ring and no shader, and
+this driver cannot yet do it because the register encoding has no witness.
+
 ## Three things were wired and had no ignition
 
 The same shape turned up three times in one day, and it is worth naming:
