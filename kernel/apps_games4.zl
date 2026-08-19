@@ -587,6 +587,190 @@ fn rv_event(win, ety, ecode, ex, ey) {
 }
 
 # ==============================================================================
+# 63 - SIMON. The machine plays a colour sequence, you play it back, it adds
+# one and plays the whole thing again. SIMON_SEQ holds one pad index (0..3)
+# per byte.
+#
+# THE PLAYBACK IS A CLOCK, NOT A LOOP. ui.h: "If you are writing `while (...)`
+# inside an app you have made a mistake". A pad that lights for 300 ms and goes
+# dark 120 ms later is two state transitions on a deadline, and sim_tick is
+# where they happen - so the sequence keeps playing while another window is
+# being dragged over it, the same property probe-snake.py asserts for Snake.
+# ==============================================================================
+SIM_MAX  = 32
+SIM_ON   = 30                       # ticks a pad stays lit during playback
+SIM_OFF  = 12                       # ...and dark between two pads
+SIM_LEAD = 45                       # the pause before a sequence starts
+
+sim_len  = 0
+sim_pos  = 0
+sim_mode = 0                        # 0 ready, 1 playback, 2 your turn, 3 failed
+sim_lit  = 0 - 1
+sim_next = 0
+sim_best = 0
+
+fn sim_reset() {
+    ac_seed_from(ticks() + 63)
+    sim_len = 0
+    sim_pos = 0
+    sim_mode = 0
+    sim_lit = 0 - 1
+    sim_next = 0
+    return 0
+}
+
+fn sim_grow() {
+    if sim_len < SIM_MAX {
+        poke8(SIMON_SEQ + sim_len, ac_rand(4))
+        sim_len = sim_len + 1
+    }
+    sim_mode = 1
+    sim_pos = 0
+    sim_lit = 0 - 1
+    sim_next = ticks() + SIM_LEAD
+    return 0
+}
+
+fn sim_tick(win) {
+    # your turn: the only thing on a deadline is un-lighting the pad you just
+    # pressed, so the next press of the SAME pad is visibly a second press.
+    if sim_mode == 2 {
+        if sim_lit < 0 { return 0 }
+        if ticks() < sim_next { return 0 }
+        sim_lit = 0 - 1
+        wm_dmg(win)
+        return 1
+    }
+    if sim_mode != 1 { return 0 }
+    if ticks() < sim_next { return 0 }
+    if sim_lit >= 0 {
+        sim_lit = 0 - 1
+        sim_pos = sim_pos + 1
+        sim_next = ticks() + SIM_OFF
+        if sim_pos >= sim_len { sim_mode = 2  sim_pos = 0 }
+        wm_dmg(win)
+        return 1
+    }
+    sim_lit = peek8(SIMON_SEQ + sim_pos)
+    sim_next = ticks() + SIM_ON
+    wm_dmg(win)
+    return 1
+}
+
+fn sim_press(win, pad) {
+    if sim_mode == 0 { sim_grow()  wm_dmg(win)  return 1 }
+    if sim_mode == 3 { return 1 }
+    if sim_mode == 1 { return 1 }               # you cannot play over playback
+    if pad != peek8(SIMON_SEQ + sim_pos) {
+        sim_mode = 3
+        sim_lit = 0 - 1
+        wm_dmg(win)
+        return 1
+    }
+    sim_pos = sim_pos + 1
+    sim_lit = pad
+    sim_next = ticks() + SIM_OFF
+    if sim_pos >= sim_len {
+        if sim_len > sim_best { sim_best = sim_len }
+        sim_grow()
+    }
+    wm_dmg(win)
+    return 1
+}
+
+# The four pads, laid out 2x2 around a hub. Same derived geometry as the board
+# games so the hit test cannot drift from the drawing.
+fn sim_pad(aw, ah) {
+    u = ui()
+    pw = (aw - 40 * u) / 2
+    ph = (g4_ph(ah) - 60 * u) / 2
+    if ph < pw { pw = ph }
+    if pw < 8 { pw = 8 }
+    return pw
+}
+fn sim_px(aw, ah) { return (aw - 2 * sim_pad(aw, ah) - 8 * ui()) / 2 }
+fn sim_py(aw, ah) { return 34 * ui() }
+
+fn sim_padcol(ix) {
+    if ix == 0 { return g4_col(1) }             # blue
+    if ix == 1 { return g4_col(0) }             # teal
+    if ix == 2 { return g4_col(4) }             # amber
+    return g4_col(3)                             # pink
+}
+
+fn sim_msg() {
+    if sim_mode == 0 { return "click any pad to start" }
+    if sim_mode == 1 { return "watch" }
+    if sim_mode == 2 { return "your turn - repeat it" }
+    return "wrong pad - r restarts"
+}
+
+fn sim_draw(ax, ay, aw, ah) {
+    u = ui()
+    pw = sim_pad(aw, ah)
+    gx = ax + sim_px(aw, ah)
+    gy = ay + sim_py(aw, ah)
+    g4_head(ax, ay, "repeat the sequence")
+    g4_stat(ax, ay, aw, "best", sim_best)
+    ix = 0
+    while ix < 4 {
+        px = gx + (ix % 2) * (pw + 8 * u)
+        py = gy + (ix / 2) * (pw + 8 * u)
+        # A DARK PAD IS THE SAME HUE AT LOW ALPHA, not a different colour.
+        # There are twenty theme roles and none of them is "a dimmer teal", so
+        # the lit colour is blended onto the canvas instead of a second
+        # constant being invented for the unlit state.
+        if sim_lit == ix {
+            rrect(px, py, pw, pw, 12 * u, sim_padcol(ix))
+        } else {
+            rrect(px, py, pw, pw, 12 * u, theme(TH_CHROME_LINE))
+            rrblend(px, py, pw, pw, 12 * u, sim_padcol(ix), 58)
+        }
+        ix = ix + 1
+    }
+    # the hub: the level, which is what the whole game is a counter for
+    hx = gx + pw - 14 * u + 4 * u
+    hy = gy + pw - 14 * u + 4 * u
+    rrect(hx, hy, 28 * u, 28 * u, 14 * u, theme(TH_CHROME))
+    label_num(hx + 11 * u, hy + 6 * u, sim_len, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    mc = theme(TH_TEXT_DIM)
+    if sim_mode == 3 { mc = theme(TH_DANGER) }
+    label(gx, gy + 2 * pw + 16 * u, sim_msg(), mc, T_CAPTION, W_REG)
+    return 0
+}
+
+fn sim_hit(win, ex, ey) {
+    aw = wm_cw(win)
+    ah = wm_ch(win)
+    u = ui()
+    pw = sim_pad(aw, ah)
+    gx = wm_cx(win) + sim_px(aw, ah)
+    gy = wm_cy(win) + sim_py(aw, ah)
+    # the 8u gutter between pads is dead space, not the nearest pad: the
+    # index is only accepted if the point is inside the pad's own square.
+    ix = ac_cell_idx(gx, gy, pw + 8 * u, 2, 2, ex, ey)
+    if ix < 0 { return 0 - 1 }
+    inx = (ex - gx) % (pw + 8 * u)
+    iny = (ey - gy) % (pw + 8 * u)
+    if inx >= pw { return 0 - 1 }
+    if iny >= pw { return 0 - 1 }
+    return ix
+}
+
+fn sim_event(win, ety, ecode, ex, ey) {
+    if ety == 3 {
+        if ecode == 114 { sim_reset()  wm_dmg(win)  return 1 }
+        if ecode >= 49 { if ecode <= 52 { return sim_press(win, ecode - 49) } }
+        return 0
+    }
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    pad = sim_hit(win, ex, ey)
+    if pad < 0 { return 0 }
+    return sim_press(win, pad)
+}
+
+# ==============================================================================
 # the per-slice tables. Each is a plain if-chain on `id`; the fallback at the
 # end means "not mine" and lets the next slice answer.
 # ==============================================================================
@@ -640,6 +824,7 @@ fn games4_draw(id, ax, ay, aw, ah) {
     g4_canvas(ax, ay, aw, ah)
     if id == G4_FIFTEEN { fi_draw(ax, ay, aw, ah) }
     if id == G4_REVERSI { rv_draw(ax, ay, aw, ah) }
+    if id == G4_SIMON   { sim_draw(ax, ay, aw, ah) }
     g4_bar(ax, ay, aw, ah, id)
     return 0
 }
@@ -647,9 +832,18 @@ fn games4_draw(id, ax, ay, aw, ah) {
 fn games4_event(id, win, ety, ecode, ex, ey) {
     if id == G4_FIFTEEN { return fi_event(win, ety, ecode, ex, ey) }
     if id == G4_REVERSI { return rv_event(win, ety, ecode, ex, ey) }
+    if id == G4_SIMON   { return sim_event(win, ety, ecode, ex, ey) }
     return 0
 }
 
+# EVERY MOVING GAME IN THIS SLICE ADVANCES HERE AND DRAWS NOTHING. wm.c calls
+# this once per frame per window and damages the window when it returns 1
+# (wm.c:1756-1759), so a game keeps playing while another window is dragged
+# over it. The wm_dmg(win) inside each of these is belt and braces: reg_event's
+# return value IS discarded at all three of wm.c's hook_event call sites, and
+# an app that relies on a return value being read is one refactor away from
+# repainting nothing.
 fn games4_tick(id, win) {
+    if id == G4_SIMON { return sim_tick(win) }
     return 0
 }
