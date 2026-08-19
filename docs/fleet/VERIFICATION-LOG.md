@@ -230,6 +230,50 @@ false evidence, and the false evidence is what a reader would have quoted.
 
 ---
 
+## NOT A DEFECT — "three forcewake domains" is a measurement, not a claim about the code
+
+**Agent claim** (lens `gpu-forcewake`): *"The brief is wrong that three domains are
+implemented: only RENDER and BLITTER."*
+
+**The agent is right about the code, and there is no repo error here.** Recording it so
+nobody re-files it as one.
+
+```
+$ grep -cn "forcewake\|FORCEWAKE" kernel/intel.c
+0
+
+$ grep -n "FORCEWAKE_.*_GEN9" kernel/gpuring.c
+127:#define FORCEWAKE_BLITTER_GEN9     0x0A188u
+128:#define FORCEWAKE_ACK_BLITTER_GEN9 0x130044u
+129:#define FORCEWAKE_RENDER_GEN9      0x0A278u
+130:#define FORCEWAKE_ACK_RENDER_GEN9  0x00D84u
+```
+
+Two domains, selected per engine at `gpuring.c:151,155`. And `intel.c` contains **no**
+forcewake code at all — its only power gating is the display power wells at
+`PWR_WELL_CTL`, a different mechanism. So my brief was wrong to look for forcewake in
+`intel.c`; the agent corrected it.
+
+**But the "three domains" wording is not a documentation defect.** It comes from a commit
+subject:
+
+```
+85516b7 feat(gpu): all three forcewake domains confirmed on silicon - RCS unblocked
+```
+
+*Confirmed* and *implemented* are different statements. A host-side survey establishing
+that three domains ack on this part is a measurement; a driver choosing to implement the
+two it needs (RENDER for RCS, BLITTER for BCS) is a design decision. Both can be true at
+once, and `.ultra/STATE.md` does not contain the word "forcewake" at all.
+
+No correction is required. The genuine open items in this area are the ones the same
+agent raised about *discipline* rather than count — forcewake taken and never released
+on the success path (`gpuring.c:325`), and the host survey reading RCS registers while
+holding only the BLITTER domain (`hosttest/gpu_ring.c:315`). Those are in the driver
+board and have not been hand-verified.
+
+---
+
 ## Method
 
 Where an agent and this log disagree, **this log was checked against the tree and the
