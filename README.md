@@ -19,11 +19,11 @@ NVMe, a filesystem, and a windowed compositor.
 
 Two more orientation docs worth knowing about:
 
-- [`docs/CODE-MAP.md`](docs/CODE-MAP.md) — where the code really is. The directory
-  names mislead: there is no `apps/` or `desktop/`, the desktop and all eight
-  apps are one file (`kernel/kernel.zl`, 4,289 lines), and `kernel/out.c` is
-  generated output that must never be edited or counted. Stale from its "The
-  browser" heading onward; §11 of `STATE-OF-THE-PROJECT.md` has the corrections.
+- [`docs/CODE-MAP.md`](docs/CODE-MAP.md) — where the code really is, and which of
+  the files a build leaves behind are generated rather than written. The directory
+  names mislead: there is no `apps/` or `desktop/`, and the desktop plus all eight
+  apps are one file (`kernel/kernel.zl`, 4,289 lines). Stale from its "The browser"
+  heading onward; §11 of `STATE-OF-THE-PROJECT.md` has the corrections.
 - [`docs/GUARDS-THAT-DID-NOT-GUARD.md`](docs/GUARDS-THAT-DID-NOT-GUARD.md) — five
   checks in this tree that reported green while checking nothing. Read it before
   trusting any green result here, and before writing a new gate.
