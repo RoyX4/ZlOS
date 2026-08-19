@@ -125,6 +125,40 @@ The three real ones were all the same mistake — a reference under `docs/` to a
 file that lives under `kernel/docs/`: `what-is-a-bios.md`,
 `typing-into-the-compositor.md`, `gen9-modeset-plan.txt`.
 
+### A false claim the doc-checker could never have caught
+
+`kernel/docs/system-track.md:359` states, as fact:
+
+> the **editor** copies its whole buffer on Ctrl+C and appends the clipboard
+
+It does not, and never did. `editor_key(code)` on `main` handles exactly four
+cases — `27` (ESC/save), `8` (backspace), `13` (enter), and `code >= 32`
+(printable). Codes **3** (Ctrl+C), **22** (Ctrl+V) and **19** (Ctrl+S) fall
+through to `return 0`. Verified by extracting the whole function body from
+`git show main:kernel/kernel.zl`, lines 1426-1450.
+
+The same doc's §"The clipboard, and why no routing changed for it" is correct
+about the *plumbing* — `input.c` really does produce chars 3 and 22, and the
+compositor really did need no change. The claim that fails is the last mile: the
+editor was never taught to consume them.
+
+Eight lines below `editor_key`, the source says:
+
+> a command that silently returns is this repo's most expensive recurring bug,
+> and "the app list offers it but nothing happens" is exactly that shape
+
+which is precisely what `editor_key` was doing for Ctrl+C, Ctrl+V and Ctrl+S.
+
+**This is the finding that matters most for how to audit this repo.** It was not
+found by reading docs, and `tools/doc-check.sh` cannot find it — the file it
+references exists, so every path check passes. It surfaced only because someone
+sat down to *implement* the feature and discovered it was already promised.
+Now closed on `desktop/files-app`.
+
+It also qualifies the audit's headline: this repo's docs are careful about file
+references and about status, but "the feature exists" claims are a class nothing
+currently checks.
+
 ### The biggest gap: 41 commits have never been through CI
 
 `git rev-list --left-right --count origin/main...main` → **`0  41`**.
