@@ -1873,6 +1873,326 @@ fn bj_event(win, ety, ecode, ex, ey) {
 }
 
 # ==============================================================================
+# 68 - FROGGER. Five lanes of traffic, five lanes of river, and five bays.
+#
+#   row 0        the home bank, five bays cut into it
+#   rows 1..5    the river. NO LOG UNDER YOU IS A DROWNING, and a log carries
+#                you sideways - the river is not "traffic you must dodge", it
+#                is the exact inverse of the road, and getting that backwards
+#                is the single thing that makes a Frogger clone not Frogger.
+#   row 6        the median, always safe
+#   rows 7..11   the road. Anything under you is a squashing.
+#   row 12       the start bank
+#
+# THE LANES HOLD NO STATE. A lane is a period, a length, a direction and a
+# speed; where its objects are at time t is `(t * speed) mod (period)`, so
+# thirteen lanes cost thirteen functions of `t` and not one byte of RAM. The
+# frog's x is in EIGHTHS OF A CELL so that being carried by a log is smooth
+# rather than a cell-per-tick jump, and so that "half on the log" is a state
+# the collision test can even express.
+# ==============================================================================
+FR_COLS = 13
+FR_ROWS = 13
+FR_SUB  = 8
+
+fr_x8 = 48
+fr_row = 12
+fr_t = 0
+fr_lives = 3
+fr_score = 0
+fr_level = 1
+fr_home = 0                         # five bits, one per filled bay
+fr_state = 0                        # 0 ready, 1 hopping, 2 dying, 3 over
+fr_next = 0
+fr_why = 0                          # 1 squashed, 2 drowned, 3 bad bay
+
+# even rows run right, odd rows run left - so no two adjacent lanes ever move
+# the same way, which is what makes the crossing readable
+fn fr_dir(ri) { if ri % 2 == 0 { return 1 }  return 0 - 1 }
+fn fr_base(ri) {
+    if ri == 1 { return 2 }
+    if ri == 2 { return 3 }
+    if ri == 3 { return 1 }
+    if ri == 4 { return 4 }
+    if ri == 5 { return 2 }
+    if ri == 7 { return 3 }
+    if ri == 8 { return 2 }
+    if ri == 9 { return 5 }
+    if ri == 10 { return 2 }
+    return 3
+}
+fn fr_spd(ri) { return fr_base(ri) + fr_level - 1 }
+fn fr_len(ri) {
+    if ri < 6 { if ri == 3 { return 2 }  return 3 }
+    if ri == 9 { return 1 }
+    return 2
+}
+fn fr_gap(ri) {
+    if ri < 6 { if ri == 3 { return 5 }  return 6 }
+    if ri == 9 { return 4 }
+    return 5
+}
+fn fr_lane(ri) {
+    if ri < 1 { return 0 }
+    if ri == 6 { return 0 }
+    if ri > 11 { return 0 }
+    return 1
+}
+fn fr_river(ri) {
+    if ri < 1 { return 0 }
+    if ri > 5 { return 0 }
+    return 1
+}
+
+# Where lane ri's objects start, in eighths of a cell, at the current time.
+fn fr_off(ri) {
+    pd = fr_gap(ri) * FR_SUB
+    ov = (fr_t * fr_spd(ri)) % pd
+    if fr_dir(ri) < 0 { ov = pd - ov }
+    if ov >= pd { ov = 0 }
+    return ov
+}
+
+# Does the frog's own 1-cell footprint at x8 overlap an object in lane ri?
+# In the lane's modular frame an object occupies [0, len) and the NEXT one
+# starts at [period), so a footprint straddling the wrap has to be tested
+# against both - checking only `rel < len` loses every object the frog is
+# hanging off the back of, which on the river reads as drowning while
+# standing on a log.
+fn fr_hit(ri, x8) {
+    if fr_lane(ri) == 0 { return 0 }
+    pd = fr_gap(ri) * FR_SUB
+    ln = fr_len(ri) * FR_SUB
+    rel = (x8 - fr_off(ri)) % pd
+    if rel < 0 { rel = rel + pd }
+    if rel < ln { return 1 }
+    if rel + FR_SUB > pd { return 1 }
+    return 0
+}
+
+fn fr_spawn() {
+    fr_x8 = 6 * FR_SUB
+    fr_row = 12
+    fr_state = 1
+    fr_why = 0
+    return 0
+}
+
+fn fr_reset() {
+    ac_seed_from(ticks() + 68)
+    fr_t = 0
+    fr_lives = 3
+    fr_score = 0
+    fr_level = 1
+    fr_home = 0
+    fr_next = 0
+    fr_spawn()
+    fr_state = 0
+    return 0
+}
+
+fn fr_die(why) {
+    fr_why = why
+    fr_lives = fr_lives - 1
+    fr_next = ticks() + 90
+    if fr_lives <= 0 { fr_state = 3 } else { fr_state = 2 }
+    return 0
+}
+
+# bays sit at columns 0, 3, 6, 9 and 12 - five of them across thirteen columns,
+# with a cell of bank between each pair.
+fn fr_bay(x8) {
+    bi = 0
+    while bi < 5 {
+        dv = x8 - bi * 3 * FR_SUB
+        if dv < 0 { dv = 0 - dv }
+        if dv <= 3 { return bi }
+        bi = bi + 1
+    }
+    return 0 - 1
+}
+
+fn fr_home_in() {
+    bi = fr_bay(fr_x8)
+    if bi < 0 { fr_die(3)  return 0 }
+    if band(fr_home, shl(1, bi)) != 0 { fr_die(3)  return 0 }
+    fr_home = bor(fr_home, shl(1, bi))
+    fr_score = fr_score + 50
+    if fr_home == 31 {
+        fr_level = fr_level + 1
+        fr_home = 0
+        fr_score = fr_score + 200
+        fr_lives = fr_lives + 1
+    }
+    fr_spawn()
+    return 0
+}
+
+fn fr_hop(win, dd) {
+    if fr_state == 0 { fr_state = 1  fr_next = ticks() }
+    if fr_state != 1 { return 0 }
+    if dd == 0 {
+        if fr_row == 1 { fr_home_in()  wm_dmg(win)  return 1 }
+        fr_row = fr_row - 1
+        fr_score = fr_score + 1
+        # LEAVING THE RIVER SNAPS BACK TO THE GRID. A log leaves the frog on a
+        # fraction of a cell, and a fractional frog on the road would sit
+        # between two lanes' worth of car and be hit by neither.
+        if fr_river(fr_row) == 0 { fr_x8 = (fr_x8 + FR_SUB / 2) / FR_SUB * FR_SUB }
+    }
+    if dd == 2 { if fr_row < FR_ROWS - 1 { fr_row = fr_row + 1 } }
+    if dd == 3 { fr_x8 = fr_x8 - FR_SUB }
+    if dd == 1 { fr_x8 = fr_x8 + FR_SUB }
+    if fr_x8 < 0 { fr_x8 = 0 }
+    if fr_x8 > (FR_COLS - 1) * FR_SUB { fr_x8 = (FR_COLS - 1) * FR_SUB }
+    fr_check()
+    wm_dmg(win)
+    return 1
+}
+
+# The whole of "did that kill me", in one place so a hop and a tick cannot
+# disagree about it.
+fn fr_check() {
+    if fr_state != 1 { return 0 }
+    if fr_river(fr_row) == 1 {
+        if fr_hit(fr_row, fr_x8) == 0 { fr_die(2)  return 0 }
+        return 0
+    }
+    if fr_lane(fr_row) == 1 { if fr_hit(fr_row, fr_x8) == 1 { fr_die(1)  return 0 } }
+    return 0
+}
+
+fn fr_tick(win) {
+    if fr_state == 2 {
+        if ticks() < fr_next { return 0 }
+        fr_spawn()
+        wm_dmg(win)
+        return 1
+    }
+    if fr_state != 1 { return 0 }
+    if ticks() < fr_next { return 0 }
+    fr_next = ticks() + 3
+    fr_t = fr_t + 1
+    if fr_river(fr_row) == 1 {
+        if fr_hit(fr_row, fr_x8) == 1 {
+            # carried. The log moves and so does the frog, which is the only
+            # place in this game where the world changes the player's position.
+            fr_x8 = fr_x8 + fr_dir(fr_row) * fr_spd(fr_row)
+            if fr_x8 < 0 { fr_die(2) }
+            if fr_x8 > (FR_COLS - 1) * FR_SUB { fr_die(2) }
+        } else {
+            fr_die(2)
+        }
+    } else {
+        fr_check()
+    }
+    wm_dmg(win)
+    return 1
+}
+
+fn fr_cell(aw, ah) {
+    u = ui()
+    cw = (aw - 12 * u) / FR_COLS
+    chh = (g4_ph(ah) - 28 * u) / FR_ROWS
+    if chh < cw { cw = chh }
+    if cw < 6 { cw = 6 }
+    return cw
+}
+fn fr_gx(aw, ah) { return (aw - FR_COLS * fr_cell(aw, ah)) / 2 }
+fn fr_gy(aw, ah) { return 24 * ui() }
+
+fn fr_rowcol(ri) {
+    if ri == 0 { return g4_col(0) }
+    if fr_river(ri) == 1 { return g4_col(1) }
+    if ri == 6 { return g4_col(0) }
+    if ri == 12 { return g4_col(0) }
+    return theme(TH_TEXT_DIM)
+}
+
+fn fr_msg() {
+    if fr_state == 0 { return "arrows to hop - reach the five bays" }
+    if fr_state == 3 { return "out of lives - r restarts" }
+    if fr_why == 1 { return "squashed" }
+    if fr_why == 2 { return "drowned" }
+    if fr_why == 3 { return "that bay is taken" }
+    return ""
+}
+
+fn fr_draw(ax, ay, aw, ah) {
+    u = ui()
+    cell = fr_cell(aw, ah)
+    gx = ax + fr_gx(aw, ah)
+    gy = ay + fr_gy(aw, ah)
+    ri = 0
+    while ri < FR_ROWS {
+        ry = gy + ri * cell
+        # every band is one reference hue laid over the canvas at low alpha,
+        # so the field is dark enough for the pieces on it to read
+        blend(gx, ry, FR_COLS * cell, cell, fr_rowcol(ri), 34)
+        ri = ri + 1
+    }
+    # the home bank: five bays cut out of it
+    bi = 0
+    while bi < 5 {
+        bx = gx + bi * 3 * cell
+        fc = theme(TH_CHROME_LINE)
+        if band(fr_home, shl(1, bi)) != 0 { fc = theme(TH_ACCENT) }
+        rrect(bx + 1 * u, gy + 1 * u, cell - 2 * u, cell - 2 * u, 3 * u, fc)
+        bi = bi + 1
+    }
+    ri = 1
+    while ri < FR_ROWS - 1 {
+        if fr_lane(ri) == 1 {
+            pd = fr_gap(ri) * FR_SUB
+            ln = fr_len(ri) * FR_SUB
+            oc = g4_col(4)
+            if fr_river(ri) == 1 { oc = g4_col(2) }
+            ox = fr_off(ri) - pd
+            while ox < FR_COLS * FR_SUB {
+                x0 = ox
+                x1 = ox + ln
+                if x0 < 0 { x0 = 0 }
+                if x1 > FR_COLS * FR_SUB { x1 = FR_COLS * FR_SUB }
+                if x1 > x0 {
+                    rrect(gx + x0 * cell / FR_SUB, gy + ri * cell + 2 * u, (x1 - x0) * cell / FR_SUB, cell - 4 * u, 3 * u, oc)
+                }
+                ox = ox + pd
+            }
+        }
+        ri = ri + 1
+    }
+    if fr_state != 3 {
+        fx = gx + fr_x8 * cell / FR_SUB
+        fy = gy + fr_row * cell
+        fc = theme(TH_ACCENT)
+        if fr_state == 2 { fc = theme(TH_DANGER) }
+        rrect(fx + 2 * u, fy + 2 * u, cell - 4 * u, cell - 4 * u, 4 * u, fc)
+        fill_rgb(fx + 4 * u, fy + 4 * u, 2 * u, 2 * u, theme(TH_BG))
+        fill_rgb(fx + cell - 6 * u, fy + 4 * u, 2 * u, 2 * u, theme(TH_BG))
+    }
+    label(ax + 12 * u, ay + 6 * u, "lives", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 46 * u, ay + 6 * u, fr_lives, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 68 * u, ay + 6 * u, "level", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 102 * u, ay + 6 * u, fr_level, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    g4_stat(ax, ay - 2 * u, aw, "score", fr_score)
+    mc2 = theme(TH_TEXT_DIM)
+    if fr_why > 0 { mc2 = theme(TH_DANGER) }
+    label(gx, gy + FR_ROWS * cell + 4 * u, fr_msg(), mc2, T_CAPTION, W_BOLD)
+    return 0
+}
+
+fn fr_event(win, ety, ecode, ex, ey) {
+    if ety == 3 { if ecode == 114 { fr_reset()  wm_dmg(win)  return 1 }  return 0 }
+    if ety != 1 { return 0 }
+    if fr_state == 3 { return 1 }
+    if ecode == K_UP    { return fr_hop(win, 0) }
+    if ecode == K_RIGHT { return fr_hop(win, 1) }
+    if ecode == K_DOWN  { return fr_hop(win, 2) }
+    if ecode == K_LEFT  { return fr_hop(win, 3) }
+    return 0
+}
+
+# ==============================================================================
 # the per-slice tables. Each is a plain if-chain on `id`; the fallback at the
 # end means "not mine" and lets the next slice answer.
 # ==============================================================================
@@ -1931,6 +2251,7 @@ fn games4_draw(id, ax, ay, aw, ah) {
     if id == G4_FLAPPY  { fl_draw(ax, ay, aw, ah) }
     if id == G4_MISSILE { mc_draw(ax, ay, aw, ah) }
     if id == G4_BLACKJK { bj_draw(ax, ay, aw, ah) }
+    if id == G4_FROGGER { fr_draw(ax, ay, aw, ah) }
     g4_bar(ax, ay, aw, ah, id)
     return 0
 }
@@ -1943,6 +2264,7 @@ fn games4_event(id, win, ety, ecode, ex, ey) {
     if id == G4_FLAPPY  { return fl_event(win, ety, ecode, ex, ey) }
     if id == G4_MISSILE { return mc_event(win, ety, ecode, ex, ey) }
     if id == G4_BLACKJK { return bj_event(win, ety, ecode, ex, ey) }
+    if id == G4_FROGGER { return fr_event(win, ety, ecode, ex, ey) }
     return 0
 }
 
@@ -1957,6 +2279,7 @@ fn games4_tick(id, win) {
     if id == G4_SIMON  { return sim_tick(win) }
     if id == G4_FLAPPY { return fl_tick(win) }
     if id == G4_MISSILE { return mc_tick(win) }
+    if id == G4_FROGGER { return fr_tick(win) }
     return 0
 }
 
