@@ -23,6 +23,12 @@ working - it fetches http://example.com/ by name and renders it. It records
 the two things the merge cost it (italic, and continuous text sizes) and the
 catalogue correction that was explicitly deferred until this branch merged.
 
+`kernel/docs/BROWSER-RENDER-PROMPT.md` is the CURRENT BROWSER WORK: make pages
+LOOK right. It opens by correcting two things a fresh session is likely to be
+told to do that are already done - Google works, and AES-256 is not needed -
+then orders the rendering work by visual win per line, and records the one open
+URL-bar bug with what is known and what is not.
+
 `kernel/docs/POINTER-PROMPT.md` is the CURRENT WORK: the pointer is
 visibly broken after the eleven-track merge, the lead suspect is measured
 (two drainers of one xHCI event ring), and a full-tree bug audit follows it.
