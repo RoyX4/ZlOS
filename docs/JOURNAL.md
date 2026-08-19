@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-20 — feat(gpu): drive the Intel ring from inside zlOS - the 'G' command (107dedb)
+
+`main` · 29 files changed, 2506 insertions(+), 159 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>29 file(s)</summary>
+
+- `.github/workflows/gates.yml`
+- `.vscode/settings.json`
+- `CLAUDE.md`
+- `README.md`
+- `docs/JOURNAL.md`
+- `docs/LEARNING.md`
+- `docs/MERGE-ROUND-2.md`
+- `docs/ROAD-TO-TEN.md`
+- `docs/STATE-OF-THE-PROJECT.md`
+- `editors/vscode-zl/README.md`
+- `editors/vscode-zl/extension.js`
+- `editors/vscode-zl/install.sh`
+- _…and 17 more_
+
+</details>
+
 ## 2026-08-20 — chore: untrack build outputs and machine-local state (38a9402)
 
 `main` · 147 files changed, 18 insertions(+)
