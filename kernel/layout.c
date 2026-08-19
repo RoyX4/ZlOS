@@ -356,6 +356,169 @@ static int is_heading(int t) { return t >= HT_H1 && t <= HT_H6; }
  * because a block restores them on the way out.
  */
 static void walk(int n, int size, int style, int color, int link,
+                 int *item, int ordered, int pre);
+
+/* ---- tables ----------------------------------------------------------------
+ * A REAL TWO-PASS TABLE, because the one-pass alternative does not work: a
+ * column's width depends on every cell in it, including ones that have not
+ * been read yet, so nothing can be placed until the whole table has been
+ * measured. That is why this is a separate function rather than more cases in
+ * walk().
+ *
+ *   pass 1  measure each cell's NATURAL width - the width it would take with
+ *           no wrapping - and keep the widest per column
+ *   pass 2  scale the columns to the content width and lay each cell out as an
+ *           ordinary block flow inside its own column
+ *
+ * SCALED PROPORTIONALLY, NOT EQUALLY. Equal columns are one line of code and
+ * they make a table of one long cell and four short ones unreadable. When the
+ * natural widths already fit, they are used as-is and the table looks like the
+ * author intended; only when they overflow are they scaled down, which is the
+ * case that matters on a narrow window.
+ *
+ * WHAT IT DOES NOT DO: colspan, rowspan, borders, or per-cell alignment.
+ * Wikipedia's infoboxes use colspan, so those cells will be narrower than the
+ * author meant rather than spanning - wrong-looking, not broken, and the honest
+ * limit for a first table implementation.
+ */
+#define TBL_COLS 16
+#define TBL_ROWS 256
+
+static int cell_natural(int n, int size, int style)
+{
+    /* the sum of this subtree's text at its own size - what it wants before
+     * anything wraps it */
+    int w = 0;
+    for (; n >= 0; n = html_next(n)) {
+        if (html_kind(n) == HN_TEXT) {
+            int len;
+            const char *t = html_text(n, &len);
+            w += meas(t, len, size, style);
+            continue;
+        }
+        int tag = html_tag(n);
+        if (tag == HT_HEAD || tag == HT_SCRIPT || tag == HT_STYLE) continue;
+        int cs = size, cy = style;
+        if (tag == HT_STRONG || tag == HT_B || tag == HT_TH) cy |= LS_BOLD;
+        if (tag == HT_EM || tag == HT_I) cy |= LS_ITALIC;
+        if (tag == HT_CODE) cy |= LS_MONO;
+        if (is_heading(tag)) { cs = head_size(tag); cy |= LS_BOLD; }
+        w += cell_natural(html_first(n), cs, cy);
+    }
+    return w;
+}
+
+/* rows are HT_TR anywhere under the table - thead/tbody/tfoot are transparent */
+static int collect_rows(int n, int *rows, int nrows, int max)
+{
+    for (; n >= 0; n = html_next(n)) {
+        if (html_kind(n) != HN_ELEM) continue;
+        int t = html_tag(n);
+        if (t == HT_TR) {
+            if (nrows < max) rows[nrows++] = n;
+        } else if (t == HT_THEAD || t == HT_TBODY || t == HT_TFOOT) {
+            nrows = collect_rows(html_first(n), rows, nrows, max);
+        }
+    }
+    return nrows;
+}
+
+static void lay_table(int tnode, int size, int style, int color, int link)
+{
+    int rows[TBL_ROWS];
+    int nrows = collect_rows(html_first(tnode), rows, 0, TBL_ROWS);
+    if (nrows <= 0) return;
+
+    int colw[TBL_COLS];
+    for (int i = 0; i < TBL_COLS; i++) colw[i] = 0;
+    int ncols = 0;
+
+    /* pass 1: the widest natural cell per column */
+    for (int r = 0; r < nrows; r++) {
+        int col = 0;
+        for (int cnode = html_first(rows[r]); cnode >= 0 && col < TBL_COLS;
+             cnode = html_next(cnode)) {
+            if (html_kind(cnode) != HN_ELEM) continue;
+            int ct = html_tag(cnode);
+            if (ct != HT_TD && ct != HT_TH) continue;
+            int cstyle = style | (ct == HT_TH ? LS_BOLD : 0);
+            int w = cell_natural(html_first(cnode), size, cstyle);
+            if (w > colw[col]) colw[col] = w;
+            col++;
+        }
+        if (col > ncols) ncols = col;
+    }
+    if (ncols <= 0) return;
+
+    int pad = size / 2 > 0 ? size / 2 : 1;
+    int avail = right - left;
+    int total = 0;
+    for (int i = 0; i < ncols; i++) { if (colw[i] < size) colw[i] = size; total += colw[i] + pad; }
+
+    /* scale down only if they do not already fit */
+    if (total > avail && total > 0) {
+        int room = avail - ncols * pad;
+        if (room < ncols) room = ncols;
+        int sum = 0;
+        for (int i = 0; i < ncols; i++) sum += colw[i];
+        if (sum <= 0) sum = 1;
+        for (int i = 0; i < ncols; i++) {
+            colw[i] = colw[i] * room / sum;
+            if (colw[i] < size) colw[i] = size;
+        }
+    }
+
+    int save_left = left, save_right = right;
+    line_end();
+    margin(size / 2);
+    apply_margin();
+
+    for (int r = 0; r < nrows; r++) {
+        int row_top = by, row_bottom = by;
+        int x = save_left, col = 0;
+        for (int cnode = html_first(rows[r]); cnode >= 0 && col < ncols;
+             cnode = html_next(cnode)) {
+            if (html_kind(cnode) != HN_ELEM) continue;
+            int ct = html_tag(cnode);
+            if (ct != HT_TD && ct != HT_TH) continue;
+
+            left = x;
+            right = x + colw[col];
+            if (right > save_right) right = save_right;
+            by = row_top;
+            /* a cell is an ordinary block flow in its own column box */
+            int item = 0;
+            walk(html_first(cnode), size,
+                 style | (ct == HT_TH ? LS_BOLD : 0), color, link,
+                 &item, 0, 0);
+            line_end();
+            if (by > row_bottom) row_bottom = by;
+            x += colw[col] + pad;
+            col++;
+        }
+        by = row_bottom;
+        /* a hairline under every row but the last - without one a table reads
+         * as a paragraph with strange spacing */
+        if (r + 1 < nrows) {
+            struct lay_run *rl = push_run();
+            if (rl) {
+                rl->kind = LR_RULE;
+                rl->x = save_left; rl->y = by;
+                rl->w = save_right - save_left;
+                rl->h = 1;
+                rl->color = LC_DIM;
+                rl->node = rows[r];
+                by += 1 + size / 4;
+            }
+        }
+    }
+
+    left = save_left;
+    right = save_right;
+    margin(size / 2);
+}
+
+static void walk(int n, int size, int style, int color, int link,
                  int *item, int ordered, int pre)
 {
     for (; n >= 0; n = html_next(n)) {
@@ -453,6 +616,10 @@ static void walk(int n, int size, int style, int color, int link,
         case HT_CODE:
             cstyle = style | LS_MONO;
             break;
+        case HT_TABLE:
+            lay_table(n, size, style, color, link);
+            cdepth -= pushed;
+            continue;
         default:
             break;
         }

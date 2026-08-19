@@ -87,6 +87,9 @@ static const struct tag_ent tags[] = {
     { "code", HT_CODE }, { "pre", HT_PRE },
     { "div", HT_DIV }, { "span", HT_SPAN }, { "img", HT_IMG },
     { "script", HT_SCRIPT }, { "style", HT_STYLE },
+    { "table", HT_TABLE }, { "tr", HT_TR }, { "td", HT_TD }, { "th", HT_TH },
+    { "thead", HT_THEAD }, { "tbody", HT_TBODY }, { "tfoot", HT_TFOOT },
+    { "caption", HT_CAPTION },
     { 0, 0 }
 };
 
@@ -125,6 +128,8 @@ int html_is_block(int t)
     case HT_P: case HT_PRE: case HT_UL: case HT_OL: case HT_LI:
     case HT_H1: case HT_H2: case HT_H3: case HT_H4: case HT_H5: case HT_H6:
     case HT_HR:
+    case HT_TABLE: case HT_TR: case HT_TD: case HT_TH:
+    case HT_THEAD: case HT_TBODY: case HT_TFOOT: case HT_CAPTION:
         return 1;
     default:
         return 0;
@@ -264,6 +269,14 @@ static void imply_close(short t)
         if (o == HT_P && t == HT_P) { sp--; break; }
         if (o == HT_LI && t == HT_LI) { sp--; break; }
         if (o == HT_LI && (t == HT_UL || t == HT_OL)) break;   /* nested list */
+        /* TABLES ARE WRITTEN WITHOUT CLOSE TAGS far more often than they are
+         * written with them: `<tr><td>a<td>b<tr><td>c` is legal and common.
+         * Without these three rules every cell nests inside the previous one
+         * and a table becomes a staircase running off the right edge. */
+        if ((o == HT_TD || o == HT_TH) && (t == HT_TD || t == HT_TH)) { sp--; break; }
+        if ((o == HT_TD || o == HT_TH) && t == HT_TR) { sp--; continue; }
+        if (o == HT_TR && t == HT_TR) { sp--; break; }
+        if (o == HT_TR && (t == HT_TBODY || t == HT_THEAD || t == HT_TFOOT)) { sp--; continue; }
         break;
     }
 }
@@ -633,7 +646,8 @@ const char *html_tagname(int i, int *len)
         "strong", "em", "b", "i",
         "code", "pre",
         "div", "span", "img",
-        "script", "style"
+        "script", "style",
+        "table", "tr", "td", "th", "thead", "tbody", "tfoot", "caption"
     };
     if ((unsigned)i >= (unsigned)nnodes || nodes[i].kind != HN_ELEM) {
         if (len) *len = 0;

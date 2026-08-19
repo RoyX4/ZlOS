@@ -554,6 +554,88 @@ static void t_css(void)
     }
 }
 
+
+/* ---- tables ---------------------------------------------------------------
+ * A table is the first thing in this layout engine that CANNOT be done in one
+ * pass: a column's width depends on cells that have not been read yet. So the
+ * assertions here are mostly about geometry rather than about parsing - that
+ * cells in a row share a top, that columns line up down the table, and that
+ * nothing escapes the content box, which is the failure a one-pass
+ * implementation produces.
+ *
+ * The markup is deliberately written WITHOUT closing tags, because that is how
+ * real tables are written and it is what the implied-close rules exist for.
+ */
+static void t_table(void)
+{
+    static const char doc[] =
+        "<html><body><table>"
+        "<tr><th>Name<th>Value"
+        "<tr><td>alpha<td>1"
+        "<tr><td>a much longer cell than the others<td>2"
+        "</table></body></html>";
+    html_parse(doc, (int)sizeof doc - 1);
+    css_reset();
+    lay_set_measure(fake_measure);
+    int h = lay_run_doc(400, 16);
+    CHECK(h > 0, "the table laid out to nothing");
+
+    int nfound = 0, minx = 1 << 30, maxx = 0;
+    int name_x = -1, value_x = -1, alpha_x = -1, one_x = -1;
+    int name_y = -1, value_y = -1;
+    for (int i = 0; i < lay_count(); i++) {
+        const struct lay_run *r = lay_at(i);
+        if (r->kind != LR_TEXT || r->len <= 0) continue;
+        nfound++;
+        if (r->x < minx) minx = r->x;
+        if (r->x + r->w > maxx) maxx = r->x + r->w;
+        if (r->len == 4 && !memcmp(r->text, "Name", 4))  { name_x = r->x;  name_y = r->y; }
+        if (r->len == 5 && !memcmp(r->text, "Value", 5)) { value_x = r->x; value_y = r->y; }
+        if (r->len == 5 && !memcmp(r->text, "alpha", 5)) alpha_x = r->x;
+        if (r->len == 1 && r->text[0] == '1')            one_x = r->x;
+    }
+    CHECK(nfound > 0, "the table produced no text runs");
+    CHECK(name_x >= 0 && value_x >= 0, "the header cells did not render");
+    CHECK(alpha_x >= 0 && one_x >= 0, "the body cells did not render");
+
+    /* the two columns must actually be two columns */
+    CHECK(value_x > name_x, "column 2 is not right of column 1 (%d vs %d)", value_x, name_x);
+    /* cells of one row share a top */
+    CHECK(name_y == value_y, "cells in a row do not share a top (%d vs %d)", name_y, value_y);
+    /* and the columns line up down the table */
+    CHECK(alpha_x == name_x, "column 1 does not line up (%d vs %d)", alpha_x, name_x);
+    CHECK(one_x == value_x, "column 2 does not line up (%d vs %d)", one_x, value_x);
+    /* nothing escapes - this is what a one-pass table gets wrong */
+    CHECK(maxx <= 400, "a cell escaped the content box (%d > 400)", maxx);
+    CHECK(minx >= 0, "a cell started left of the box (%d)", minx);
+
+    /* a header cell is bold, a body cell is not */
+    for (int i = 0; i < lay_count(); i++) {
+        const struct lay_run *r = lay_at(i);
+        if (r->kind != LR_TEXT) continue;
+        if (r->len == 4 && !memcmp(r->text, "Name", 4))
+            CHECK((r->style & LS_BOLD) != 0, "<th> is not bold");
+        if (r->len == 5 && !memcmp(r->text, "alpha", 5))
+            CHECK((r->style & LS_BOLD) == 0, "<td> is bold");
+    }
+
+    /* a narrow window must still not overflow - the scale-down path */
+    lay_run_doc(80, 16);
+    int over = 0;
+    for (int i = 0; i < lay_count(); i++) {
+        const struct lay_run *r = lay_at(i);
+        if (r->x + r->w > 80) over++;
+    }
+    CHECK(over == 0, "%d runs escaped an 80px table", over);
+
+    /* degenerate tables must not fault */
+    static const char junk[] = "<table><tr><tr></table><table></table>"
+                               "<table><td>orphan cell</table>";
+    html_parse(junk, (int)sizeof junk - 1);
+    lay_run_doc(300, 16);
+    CHECK(1, "degenerate tables did not fault");
+}
+
 int main(void)
 {
     printf("html.c + layout.c, no kernel\n\n");
@@ -566,6 +648,7 @@ int main(void)
     t_empty();
     t_deep();
     t_css();
+    t_table();
     printf("\n%d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }
