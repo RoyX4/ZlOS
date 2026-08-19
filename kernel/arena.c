@@ -143,7 +143,13 @@ typedef unsigned int       uptr;
 
 /* The neighbours, by the file and line that owns each one. Re-grep these; the
  * comment in fb.c invites exactly that and it was right to - see T-EXEC-1. */
-#define RAW_STACK_TOP 0x00600000UL     /* raw_entry.S:16, raw_boot.asm:196   */
+/* 12 MiB, NOT 6. This said 0x00600000 and cited raw_entry.S:16, which now
+ * reads 0x00C00000 - the stack moved when raw_boot.asm CHUNKS went to 192 and
+ * this restatement did not follow. The assert below is the only guard on the
+ * arena-vs-stack boundary (check-memmap.sh covers kernel.zl only, by its own
+ * closing note), and against a stale 6 MiB it passed for an arena based at
+ * 8 MiB - which is precisely the collision it exists to stop. */
+#define RAW_STACK_TOP 0x00C00000UL     /* raw_entry.S:16, raw_boot.asm:220   */
 /* THE NEIGHBOUR ABOVE IS NO LONGER bg_buf. png.c's decoded-picture arena
  * landed at 32 MiB - the first 2 MiB-aligned address above this one - so the
  * program arena's real ceiling moved down by 96 MiB. The old assert against
@@ -176,7 +182,7 @@ typedef unsigned int       uptr;
 /* THE MAP MUST BE IN ORDER AND THE COMPILER SHOULD SAY SO - the same argument
  * fb.c:152-169 makes, applied to the one buffer that is not the kernel's. */
 _Static_assert(ARENA_BASE >= RAW_STACK_TOP,
-               "the program arena starts below the raw-boot stack at 6 MiB");
+               "the program arena starts below the raw-boot stack at 12 MiB");
 _Static_assert(ARENA_END <= ZL_LOW_BASE,
                "the program arena runs into kernel.zl's block at 32 MiB "
                "(SNAKE_X/FS_DATA/HIST_BUF - see check-memmap.sh)");

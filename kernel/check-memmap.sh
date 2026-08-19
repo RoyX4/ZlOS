@@ -98,7 +98,25 @@ SNAKE_CELLS=$((SNAKE_Y - SNAKE_X))
 # kernel actually uses.
 AB=$(grep -oP '^#define\s+ARENA_BASE\s+\K0x[0-9A-Fa-f]+' arena.c)
 AZ=$(grep -oP '^#define\s+ARENA_BYTES\s+\K0x[0-9A-Fa-f]+' arena.c)
-[ -n "$AB" ] && [ -n "$AZ" ] || { echo "FAIL: ARENA_BASE/ARENA_BYTES not found in arena.c"; exit 1; }
+
+# FOLLOW ONE LEVEL OF INDIRECTION. arena.c stopped restating literals and now
+# DERIVES both from memmap.h - which is the entire point of memmap.h - and this
+# gate could only read literals, so it failed with "not found" against correct
+# code. A gate that cannot see the CORRECT form of what it checks is worse than
+# no gate: it trains you to ignore it. It also earned its keep on the way past:
+# the derivation exposed that memmap.h's LO_ARENA still said 8 MiB while the
+# arena had moved to 14, which would have put a 16 MiB arena on top of the
+# raw-boot stack at 12 MiB.
+if [ -z "$AB" ]; then
+    n=$(grep -oP '^#define\s+ARENA_BASE\s+\K[A-Z_][A-Z0-9_]*' arena.c)
+    [ -n "$n" ] && AB=$(grep -oP "^#define\\s+${n}\\s+\\K0x[0-9A-Fa-f]+" memmap.h)
+fi
+if [ -z "$AZ" ]; then
+    e=$(grep -oP '^#define\s+LO_ARENA_END\s+\K0x[0-9A-Fa-f]+' memmap.h)
+    b=$(grep -oP '^#define\s+LO_ARENA\s+\K0x[0-9A-Fa-f]+' memmap.h)
+    [ -n "$e" ] && [ -n "$b" ] && AZ=$(printf '0x%X' $(( e - b )))
+fi
+[ -n "$AB" ] && [ -n "$AZ" ] || { echo "FAIL: ARENA_BASE/ARENA_BYTES not found in arena.c or memmap.h"; exit 1; }
 
 # name:start:size - keep in sync with the map comment in kernel.zl
 REGIONS=(
