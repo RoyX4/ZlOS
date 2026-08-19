@@ -59,7 +59,7 @@ int ser_rx(void)        { return -1; }   /* no UART in the harness */
  * code on the same path it takes in the kernel - a stub that returned 0 would
  * make wm_frame() take the "TSC unavailable" branch and stop exercising it. */
 static unsigned int fake_tsc;
-unsigned int cpu_tsc_lo(void)  { return (fake_tsc += 1000); }
+unsigned int cpu_tsc_lo(void)  { return (fake_tsc += 20000000); }
 /* (duplicate cpu_tsc_khz stub removed - the merge gave this harness two) */
 static int fake_usb_ptr = 0, fake_ux = 0, fake_uy = 0, fake_ubtn = 0;
 

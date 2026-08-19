@@ -37,6 +37,8 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 void fb_clip(int x, int y, int w, int h);
 void fb_clip_none(void);
 unsigned int fb_get_px(int x, int y);
+void fb_icon24(int px, int py, int n, unsigned int fg);
+int  fb_ui_scale_q8(void);
 
 int  fb_prop_em(void);
 int  fb_text_rich_w(const char *s, int len, int size, int style);
@@ -356,6 +358,26 @@ int main(void)
     ok(km.n > 0, "mono drew ink");
     okf(km.x1 <= 40 + m1 + 2, "mono ink fits its measured width (%ld vs %ld)",
         (long)km.x1, (long)(40 + m1 + 2));
+
+    /* ---- 9. density-aware scale and the complete icon atlas --------------
+     * 1280 and 1920 are both normal desktop canvases, not reasons to zoom the
+     * interface. Fractional growth begins above the 1920 reference and reaches
+     * 2x at 4K. Restore the original mode before the icon checks. */
+    printf("\n9. density-aware UI scale and complete icon atlas\n");
+    fb_setup((unsigned long)vram, (unsigned)W * 4, 1280, H, 32);
+    okf(fb_ui_scale_q8() == 256, "1280px gives q8 scale %ld, want %ld",
+        (long)fb_ui_scale_q8(), 256L);
+    fb_setup((unsigned long)vram, (unsigned)W * 4, W, H, 32);
+    fb_clip_none();
+
+    clear();
+    fb_icon24(40, 40, 43, FG);
+    ok(measure_ink(0, 0, W, 200).n > 0,
+       "icon 43, the final atlas entry, is reachable and draws");
+    clear();
+    fb_icon24(40, 40, 44, FG);
+    ok(measure_ink(0, 0, W, 200).n == 0,
+       "icon 44 is rejected instead of reading past the atlas");
 
     printf("\n%d checks, %d failed\n", checks, failures);
     return failures ? 1 : 0;

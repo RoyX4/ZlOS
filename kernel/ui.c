@@ -40,9 +40,12 @@ static struct ui_theme theme;
 const struct ui_theme *ui_theme(void) { return &theme; }
 void ui_theme_set(const struct ui_theme *t) { theme = *t; }
 
-void ui_theme_init(int scale)
+static int dp(int n, int q8) { return (n * q8 + 128) >> 8; }
+
+void ui_theme_init_q8(int scale_q8)
 {
-    if (scale < 1) scale = 1;
+    if (scale_q8 < 192) scale_q8 = 192;
+    if (scale_q8 > 768) scale_q8 = 768;
     /* ---- ONE PALETTE, and kernel.zl's is the one -- DECISIONS.md item E -----
      * "Do not introduce a second visual system" is what this comment used to
      * say, and a second visual system is exactly what these eleven values were.
@@ -89,14 +92,23 @@ void ui_theme_init(int scale)
                                   /*              ACCENT on the same screen. */
     theme.border    = 0x26304A;   /* --line       .win border                */
     theme.danger    = 0xE05A5A;   /* --crit                                  */
-    theme.title     = 0x305CA8;   /* --hdr-top    already agreed             */
-    theme.title_bot = 0x16285C;   /* --hdr-bot    already agreed             */
+    theme.title     = 0x182238;   /* focused chrome: quiet, not a blue slab  */
+    theme.title_bot = 0x0B0E18;   /* focus belongs to border/shadow, not fill */
     /* The unfocused title bar is a GRADIENT in the reference and in kernel.zl
      * (:794, tbt/tbb) and was a flat slab here, because the struct had one
      * field for it. Both ends now, and they are the reference's own two stops:
      * .win:not(.focus) .titlebar{linear-gradient(180deg,#2a3550,#182238)}. */
-    theme.title_off = 0x2A3550;   /* unfocused title, top                    */
-    theme.title_off_bot = 0x182238; /* ...and bottom                         */
+    theme.title_off = 0x121722;   /* unfocused chrome, top                   */
+    theme.title_off_bot = 0x080A10; /* ...and bottom                         */
+    theme.wallpaper_top = 0x1A1E32;
+    theme.wallpaper_bot = 0x0A0C16;
+    theme.bar_top   = 0x161B29;
+    theme.bar_bot   = 0x090B12;
+    theme.bar_hi    = 0x26304A;
+    theme.chrome    = 0x0B0E18;
+    theme.chrome_line = 0x05060A;
+    theme.text_hi   = 0xD2E4FF;
+    theme.ok        = 0x5BD66E;
 
     /* ---- metrics, v10 SS6.10 -----------------------------------------------
      * Counted out of the prototype's stylesheet rather than picked by eye, and
@@ -114,18 +126,41 @@ void ui_theme_init(int scale)
      * nested inner rrect stays exactly one pixel tighter, so the hairline
      * border still follows the outer curve instead of cutting across it.
      *
-     * title_h stays 28. It is the one metric desktop-TODO's design rules name
-     * as part of the existing system ("the nested 5px/4px rrect and TITLE_H 28
-     * are the system") - and 28 is already inside the prototype's own 26..34
-     * band, so there is nothing to gain by moving it and a whole layout to
-     * re-check if it moves.
+     * The prototype's silhouette is a 16px outer radius and a 36px title bar.
+     * Those two measurements matter more than another colour tweak: together
+     * they stop a window reading as a square debug panel with a label nailed
+     * across its top.
      */
-    theme.scale   = scale;
-    theme.pad     = 12 * scale;
-    theme.gap     =  8 * scale;
-    theme.row_h   = 28 * scale;
-    theme.radius  = 12 * scale;
-    theme.title_h = 28 * scale;
+    theme.scale_q8 = scale_q8;
+    theme.scale   = (scale_q8 + 128) >> 8;
+    if (theme.scale < 1) theme.scale = 1;
+    theme.pad     = dp(12, scale_q8);
+    theme.gap     = dp( 8, scale_q8);
+    theme.row_h   = dp(28, scale_q8);
+    theme.radius  = dp(16, scale_q8);
+    theme.title_h = dp(36, scale_q8);
+}
+
+void ui_theme_init(int scale) { ui_theme_init_q8(scale * 256); }
+
+unsigned ui_color(int role)
+{
+    const unsigned *first = &theme.bg;
+    if ((unsigned)role >= UI_COLOR_COUNT) return theme.danger;
+    return first[role];
+}
+
+int ui_metric(int role)
+{
+    switch (role) {
+    case UI_METRIC_PAD: return theme.pad;
+    case UI_METRIC_GAP: return theme.gap;
+    case UI_METRIC_ROW_H: return theme.row_h;
+    case UI_METRIC_RADIUS: return theme.radius;
+    case UI_METRIC_TITLE_H: return theme.title_h;
+    case UI_METRIC_SCALE_Q8: return theme.scale_q8;
+    default: return 0;
+    }
 }
 
 /* ---- the layout cursor ---------------------------------------------------- */
@@ -351,6 +386,13 @@ int ui_toggle(const char *s, int *on)
     return fired;
 }
 
+int ui_toggle_value(const char *s, int on)
+{
+    int v = on ? 1 : 0;
+    ui_toggle(s, &v);
+    return v;
+}
+
 /* The slider is what PROVES wm.c's pointer grab: once pressed it must keep
  * tracking after the pointer leaves its rectangle, which only works because
  * the window that owns the grab keeps receiving the events. */
@@ -398,6 +440,12 @@ int ui_slider(int *v, int lo, int hi)
         focus_ring(x, y, w, h);
     }
     return fired;
+}
+
+int ui_slider_value(int v, int lo, int hi)
+{
+    ui_slider(&v, lo, hi);
+    return v;
 }
 
 /* A number with a label, right-aligned - the System Monitor's readouts. No
@@ -556,3 +604,19 @@ void ui_scroll_end(int *off)
 }
 
 int ui_scroll_content(void) { return S.content; }
+
+/* zl numbers cross the runtime boundary by value, while the C toolkit keeps a
+ * scroll offset through an out-parameter. App draws are sequential and scroll
+ * regions cannot nest, so one bridge slot preserves the exact C semantics
+ * without inventing a retained widget object. */
+static int zl_scroll_off;
+void ui_scroll_begin_value(int h, int off)
+{
+    zl_scroll_off = off;
+    ui_scroll_begin(h, &zl_scroll_off);
+}
+int ui_scroll_end_value(void)
+{
+    ui_scroll_end(&zl_scroll_off);
+    return zl_scroll_off;
+}

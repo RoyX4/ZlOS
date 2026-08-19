@@ -195,6 +195,7 @@ extern unsigned long long console_vram(void);
 extern int  console_cols(void);
 extern int  console_cell_w(void);
 extern int  console_ui_scale(void);
+extern int  console_ui_scale_q8(void);
 extern int  console_cell_h(void);
 extern void fb_set_subpixel(int on);
 extern int  fb_get_subpixel(void);
@@ -423,6 +424,26 @@ extern int  wm_add_tab(int win, int app, const char *title);
 extern void wm_damage(int x, int y, int w, int h);
 extern void wm_damage_win(int win);
 extern void ui_theme_init(int scale);
+extern void ui_theme_init_q8(int scale_q8);
+extern unsigned ui_color(int role);
+extern int ui_metric(int role);
+extern void ui_begin(int x, int y, int w, int h, int mode, int px, int py, int click);
+extern int  ui_fired(void);
+extern void ui_label(const char *s);
+extern void ui_label_dim(const char *s);
+extern void ui_bar(int pct);
+extern int  ui_button(const char *s);
+extern void ui_sep(void);
+extern void ui_space(int n);
+extern int  ui_toggle_value(const char *s, int on);
+extern int  ui_slider_value(int v, int lo, int hi);
+extern void ui_num(const char *s, int v);
+extern int  ui_list_row(const char *s, int selected);
+extern void ui_scroll_begin_value(int h, int off);
+extern int  ui_scroll_end_value(void);
+extern int  ui_scroll_content(void);
+extern void ui_row(void);
+extern void ui_endrow(void);
 
 /* ---- the browser (browser.c / html.c / layout.c) ------------------------
  * kernel.zl owns the browser app's policy - which window, which keys - and
@@ -930,6 +951,16 @@ Value zl_calln(const char *name, int n, ...)
         return zl_nil();
     }
 
+    /* The graphical session is an event loop, not a benchmark. `sti; hlt` is
+     * the race-free x86 idle pair: interrupts become visible immediately
+     * before the halt and the next timer/input interrupt resumes the loop. */
+    if (streq(name, "idle")) {
+#ifdef ZL_KERNEL_SERIAL
+        __asm__ volatile("sti; hlt" ::: "memory");
+#endif
+        return zl_nil();
+    }
+
     /* raw memory - the whole point of a kernel runtime */
     if (streq(name, "peek8"))  return zl_num((double)*(volatile unsigned char  *)(zl_uptr)a[0].num);
     if (streq(name, "peek16")) return zl_num((double)*(volatile unsigned short *)(zl_uptr)a[0].num);
@@ -1005,7 +1036,8 @@ Value zl_calln(const char *name, int n, ...)
     /* THE LAYOUT SCALE, which used to be cell_w()/8 in zl and therefore could
      * only ever be 1 or 2. See fb.c: the console cell has two atlases, the
      * layout does not have to. */
-    if (streq(name, "ui_scale"))   return zl_num((double)console_ui_scale());
+    if (streq(name, "ui_scale"))   return zl_num((double)console_ui_scale_q8() / 256.0);
+    if (streq(name, "ui_scale_q8"))return zl_num((double)console_ui_scale_q8());
     if (streq(name, "cell_h"))     return zl_num((double)console_cell_h());
     if (streq(name, "bits"))       return zl_num((double)(sizeof(void *) * 8));
     if (streq(name, "hex"))        { console_puthex((unsigned long)(long long)a[0].num, (int)a[1].num); return zl_nil(); }
@@ -1206,7 +1238,28 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_ch"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)h); }
     if (streq(name, "wm_dmg"))     { wm_damage_win((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
-    if (streq(name, "ui_theme"))   { ui_theme_init((int)a[0].num); return zl_nil(); }
+    if (streq(name, "ui_theme"))   { ui_theme_init_q8((int)(a[0].num * 256.0)); return zl_nil(); }
+    if (streq(name, "ui_theme_q8")){ ui_theme_init_q8((int)a[0].num); return zl_nil(); }
+    if (streq(name, "ui_color"))   return zl_num((double)ui_color((int)a[0].num));
+    if (streq(name, "ui_metric"))  return zl_num((double)ui_metric((int)a[0].num));
+    if (streq(name, "ui_begin"))   { ui_begin((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,
+                                              (int)a[4].num,(int)a[5].num,(int)a[6].num,(int)a[7].num); return zl_nil(); }
+    if (streq(name, "ui_fired"))   return zl_num((double)ui_fired());
+    if (streq(name, "ui_label"))   { if (a[0].type==V_STR) ui_label(a[0].str); return zl_nil(); }
+    if (streq(name, "ui_dim"))     { if (a[0].type==V_STR) ui_label_dim(a[0].str); return zl_nil(); }
+    if (streq(name, "ui_bar"))     { ui_bar((int)a[0].num); return zl_nil(); }
+    if (streq(name, "ui_button"))  { if (a[0].type==V_STR) return zl_num((double)ui_button(a[0].str)); return zl_num(0); }
+    if (streq(name, "ui_sep"))     { ui_sep(); return zl_nil(); }
+    if (streq(name, "ui_space"))   { ui_space((int)a[0].num); return zl_nil(); }
+    if (streq(name, "ui_toggle"))  { if (a[0].type==V_STR) return zl_num((double)ui_toggle_value(a[0].str,(int)a[1].num)); return zl_num(a[1].num); }
+    if (streq(name, "ui_slider"))  return zl_num((double)ui_slider_value((int)a[0].num,(int)a[1].num,(int)a[2].num));
+    if (streq(name, "ui_num"))     { if (a[0].type==V_STR) ui_num(a[0].str,(int)a[1].num); return zl_nil(); }
+    if (streq(name, "ui_list"))    { if (a[0].type==V_STR) return zl_num((double)ui_list_row(a[0].str,(int)a[1].num)); return zl_num(0); }
+    if (streq(name, "ui_scroll"))  { ui_scroll_begin_value((int)a[0].num,(int)a[1].num); return zl_nil(); }
+    if (streq(name, "ui_scroll_end")) return zl_num((double)ui_scroll_end_value());
+    if (streq(name, "ui_scroll_content")) return zl_num((double)ui_scroll_content());
+    if (streq(name, "ui_row"))     { ui_row(); return zl_nil(); }
+    if (streq(name, "ui_endrow"))  { ui_endrow(); return zl_nil(); }
     /* ---- the browser. Everything below is one app's policy surface. */
     /* ---- virtio-net. net_up() is the one that does the work; everything
      * else reports what happened, because a driver that fails silently is

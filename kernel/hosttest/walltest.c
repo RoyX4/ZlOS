@@ -12,13 +12,13 @@
  * detail, it is whether the desktop exists.
  *
  * The cache and the blur slots come out of ONE 16 MiB bump arena (fb.c's
- * HI_BLUR..HI_NVME) that never rewinds - fb_cache_reset() has no callers. So
- * whoever asks first wins, and kernel.zl's boot order decided that. It used to
- * take the dock blur FIRST:
+ * HI_BLUR..HI_NVME). fb_setup() now rewinds that cache on a mode change. The
+ * historical failure was a 32-bit wallpaper competing with a dock blur, where
+ * whoever asked first won. kernel.zl used to take the dock blur FIRST:
  *
  *     draw_wallpaper();  dock_blur = blur(dock strip);  wall_save()
  *
- * which is fine at 1920x1200 and fatal at 2560x1440 - the ThinkPad X1 Carbon
+ * which was fine at 1920x1200 and fatal at 2560x1440 - the ThinkPad X1 Carbon
  * Gen 8's panel, per kernel/docs/gen9-modeset-plan.txt ("2560x1440 active /
  * 2720x1481 total"). This asserts that arithmetic against the SHIPPING fb.c
  * rather than restating it, because the numbers involved are exactly the kind
@@ -43,7 +43,8 @@
 /* Must match the high-RAM map in fb.c and memmap.h. Duplicated deliberately,
  * exactly as fbbench.c duplicates them: if somebody moves the arena and does
  * not move the harness, the mmap fails loudly here instead of the test quietly
- * exercising a different address than the kernel uses. */
+ * exercising a different address than the kernel uses. The wallpaper is now
+ * dithered RGB565; blur slots intentionally remain 32-bit. */
 #define BACK_ADDR 0x08000000UL
 #define BACK_SIZE (0x0A800000UL - BACK_ADDR)   /* 40 MiB, ceiling = AP stacks */
 #define BLUR_ADDR 0x0C000000UL
@@ -91,6 +92,7 @@ static void ok(int cond, const char *what)
 static int dock_rows(void) { return 64 * fb_ui_scale(); }
 
 static unsigned long kib(unsigned long px) { return px * 4u / 1024u; }
+static unsigned long wall_kib(unsigned long px) { return px * 2u / 1024u; }
 
 /* One mode, one boot order. Returns 1 if the wallpaper cache held. */
 static int run(unsigned long vram, int w, int h, int blur_first, int verbose)
@@ -105,7 +107,7 @@ static int run(unsigned long vram, int w, int h, int blur_first, int verbose)
     log_stop();
     if (verbose) {
         printf("      %dx%d ui %dx  wallpaper %lu KiB, dock strip %lu KiB x2\n",
-               w, h, fb_ui_scale(), kib((unsigned long)w * h),
+               w, h, fb_ui_scale(), wall_kib((unsigned long)w * h),
                kib((unsigned long)w * dock_rows()));
         for (char *p = log_buf, *e; *p; p = e) {
             e = strchr(p, '\n'); if (!e) break; e++;
@@ -188,18 +190,17 @@ int main(void)
               "(so QEMU could never show the problem)");
     ok(a2560, "2560x1440 without the blur: wallpaper cached "
               "<- the ThinkPad's panel");
-    ok(!b2560, "2560x1440 WITH the blur: wallpaper REFUSED "
-               "<- the regression this decision removed");
-    ok(strstr(log_buf, "wallpaper") != NULL,
-       "a refusal PRINTS rather than falling back silently");
+    ok(b2560, "2560x1440 WITH the old blur order also fits after RGB565");
 
-    /* 4K is refused either way and that is EXPECTED, not a defect: 31.6 MiB of
-     * wallpaper cannot fit a 16 MiB arena and no boot order changes that. It is
-     * asserted so that a future arena resize has to come and look at this line
-     * rather than silently changing what the desktop does at 4K. */
-    int a3840 = run(vram, 3840, 2160, 0, 0);
-    ok(!a3840, "3840x2160: refused even without the blur - "
-               "31.6 MiB will not fit 16, by design");
+    /* Full-resolution RGB565 is 15.82 MiB at 4K, so it fits without moving a
+     * single fixed-memory neighbour. The obsolete blur-first order still has
+     * to refuse loudly rather than overrun NVMe. */
+    int a3840 = run(vram, 3840, 2160, 0, 1);
+    int b3840 = run(vram, 3840, 2160, 1, 1);
+    ok(a3840, "3840x2160: full-resolution wallpaper cached in RGB565");
+    ok(!b3840, "3840x2160 plus the obsolete dock blur is refused safely");
+    ok(strstr(log_buf, "wallpaper cache refused") != NULL,
+       "the over-budget 4K combination PRINTS its refusal");
 
     ok(c1, "mode switch, hop 1 (1280x800): cached");
     ok(c2, "mode switch, hop 2 (1920x1200): cached - fits either way, "

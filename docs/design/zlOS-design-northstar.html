@@ -3,16 +3,17 @@
   /* ============================================================
      zlOS design north star.
      A single committed visual world: a dark, CPU-rendered desktop.
-     Every choice here is constrained to what an 800x600 linear
-     framebuffer with no GPU can actually draw: vertical gradients
-     only, a fixed palette, tight low-spread shadows, small radii,
-     alpha blends but no gaussian blur. No light theme on purpose —
+     Every choice here is constrained to what the CPU framebuffer
+     renderer can actually draw: cached gradients and texture, a fixed
+     semantic palette, tight shadows, 16px window radii and alpha blends.
+     No light theme on purpose —
      this is a screen, not a document surface.
      ============================================================ */
   :root{
     /* -- the zlOS palette, straight from kernel.zl's rgb() theme -- */
     --wall-top:#1a1e32;  --wall-bot:#0a0c16;
-    --hdr-top:#305ca8;   --hdr-bot:#16285c;
+    --hdr-top:#182238;   --hdr-bot:#0b0e18;
+    --hdr-off-top:#121722; --hdr-off-bot:#080a10;
     --accent:#60d2eb;    --accent-dim:#3aa9c4;
     --bar-top:#282e42;   --bar-bot:#12141f;  --bar-hi:#4e5c80;
     --panel:#05060a;     --panel-2:#0b0e18;
@@ -66,7 +67,7 @@
 
   /* ============================ TOP MENU BAR ============================ */
   .menubar{
-    position:absolute;z-index:40;top:0;left:0;right:0;height:26px;
+    position:absolute;z-index:40;top:0;left:0;right:0;height:48px;
     display:flex;align-items:center;gap:2px;padding:0 8px;
     background:linear-gradient(180deg,#1c2236,#10131f);
     border-bottom:1px solid #000;
@@ -86,29 +87,28 @@
     position:absolute;z-index:10;
     background:var(--panel);
     border:1px solid var(--line);
-    border-radius:5px;
+    border-radius:16px;
     box-shadow:var(--win-shadow);
     display:flex;flex-direction:column;
     overflow:hidden;
   }
   .win.focus{z-index:30;box-shadow:0 2px 0 rgba(0,0,0,.6),0 16px 34px rgba(0,0,0,.62),0 0 0 1px #000,0 0 0 1px rgba(96,210,235,.25)}
   .titlebar{
-    height:28px;flex:0 0 28px;
+    height:36px;flex:0 0 36px;
     display:flex;align-items:center;gap:8px;padding:0 8px;
     background:linear-gradient(180deg,var(--hdr-top),var(--hdr-bot));
-    border-bottom:1px solid #0a1730;
-    box-shadow:0 1px 0 rgba(255,255,255,.08) inset, 0 -2px 0 var(--accent) inset;
+    border-bottom:1px solid var(--line);
+    box-shadow:0 1px 0 rgba(255,255,255,.04) inset;
     cursor:default;user-select:none;
   }
-  .win:not(.focus) .titlebar{background:linear-gradient(180deg,#2a3550,#182238);box-shadow:0 -2px 0 #33465f inset}
+  .win:not(.focus) .titlebar{background:linear-gradient(180deg,var(--hdr-off-top),var(--hdr-off-bot));box-shadow:none}
   .titlebar .tname{font-size:12.5px;font-weight:700;color:#eaf3ff;letter-spacing:.01em;flex:1;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .titlebar .tname small{font-weight:400;color:#bcd2f2;opacity:.8}
-  .tbtn{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.4);
-    display:grid;place-items:center;font-size:10px;color:#0a1730;line-height:1;cursor:default}
-  .tbtn.min{background:#e6b23c}
-  .tbtn.max{background:#5bd66e}
-  .tbtn.cls{background:#e05a5a}
+  .tbtn{width:26px;height:26px;border-radius:50%;border:0;
+    display:grid;place-items:center;font-size:12px;color:var(--txt-dim);line-height:1;cursor:default}
+  .tbtn.min,.tbtn.max,.tbtn.cls{background:var(--panel-2)}
+  .tbtn.cls:active{background:var(--crit)}
   .tbtn:hover{filter:brightness(1.15)}
   .win-body{flex:1;overflow:hidden;position:relative}
 
@@ -153,20 +153,20 @@
 
   /* ============================ DOCK ============================ */
   .dock{
-    position:absolute;z-index:40;left:0;right:0;bottom:0;height:44px;
+    position:absolute;z-index:40;left:0;right:0;bottom:0;height:64px;
     display:flex;align-items:center;gap:6px;padding:0 8px;
     background:linear-gradient(180deg,var(--bar-top),var(--bar-bot));
     border-top:1px solid var(--bar-hi);
     box-shadow:0 1px 0 rgba(255,255,255,.05) inset, 0 -8px 18px rgba(0,0,0,.35);
   }
-  .startbtn{display:flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:5px;
-    background:linear-gradient(180deg,#2f5ca8,#1a2f5c);border:1px solid #0c1730;
+  .startbtn{display:flex;align-items:center;gap:7px;height:40px;padding:0 12px;border-radius:16px;
+    background:var(--line-soft);border:0;
     color:#fff;font-weight:700;font-size:13px;letter-spacing:.02em;cursor:default;
     box-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 0 0 1px rgba(96,210,235,.2)}
   .startbtn:hover{filter:brightness(1.12)}
   .startbtn .b{color:var(--accent)}
   .dock .sep{width:1px;height:26px;background:#000;box-shadow:1px 0 0 rgba(255,255,255,.05);margin:0 3px}
-  .app{width:32px;height:32px;border-radius:6px;display:grid;place-items:center;
+  .app{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
     background:linear-gradient(180deg,#232b40,#151a2a);border:1px solid #0a0e18;
     color:#cfe0ff;font-size:15px;font-weight:700;cursor:default;position:relative;
     box-shadow:0 1px 0 rgba(255,255,255,.05) inset}

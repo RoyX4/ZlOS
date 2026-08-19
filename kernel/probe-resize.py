@@ -59,12 +59,17 @@ def main():
         ser.drain(1.5)
         base = shot(qmp, tmp, "base")
         W, H = base.size
-        ui = 2 if W >= 1400 else 1
+        # fb.c keeps common 1080/1200p modes at 1x and rounds the q8 scale to
+        # 2x only from 2880px wide. Keep the probe on the same rule.
+        ui = 2 if W >= 2880 else 1
         print(f"booted {W}x{H}, ui {ui}x")
 
-        # the System Monitor: mon_x = W - 290*ui, mon_y = 52*ui, MON_W x MON_H
-        mx, my = W - 290 * ui, 52 * ui
-        mw, mh = 284 * ui, 214 * ui
+        # The boot workspace is a centred 1280-unit canvas. Do not guess from
+        # the right edge: changing the composition should break this probe at
+        # the same coordinate the visible window actually moved to.
+        ox = max(0, (W - 1280 * ui) // 2)
+        mx, my = ox + 800 * ui, 160 * ui
+        mw, mh = 424 * ui, 376 * ui
         # its bottom-right corner, one pixel inside
         cx, cy = mx + mw - 3, my + mh - 3
 

@@ -1,6 +1,6 @@
 /* palette.c - ONE palette, asserted across the three files that carry it.
  *
- * DECISIONS.md open item E. Two palettes shipped simultaneously:
+ * DECISIONS.md open item E. Two palettes once shipped simultaneously:
  *
  *   kernel.zl's rgb() constants   header bar, dock, two legacy app bodies
  *   ui.c's ui_theme struct        EVERY WINDOW FRAME ON SCREEN
@@ -9,14 +9,10 @@
  * once. visual-speed-northstar.md names "duplicated palette roles" as a thing
  * that must not ship.
  *
- * WHICH IS THE SOURCE OF TRUTH IS SETTLED BY THE REFERENCE'S OWN HEADER, and
- * this test is the reason that stays settled - docs/design/
- * zlOS-design-northstar.html:13 says:
- *
- *     -- the zlOS palette, straight from kernel.zl's rgb() theme --
- *
- * So the reference was transcribed FROM kernel.zl, and ui.c was the only one of
- * the three that had drifted.
+ * ui.c is now the runtime source of truth. kernel.zl carries semantic role
+ * numbers and calls ui_color(), so it intentionally has no RGB copy left.
+ * The HTML north star is the reviewable specification this gate compares it
+ * against.
  *
  * THIS READS ALL THREE FILES rather than restating their values. A test that
  * hardcoded the numbers would be a fourth copy of the palette, and the fourth
@@ -127,15 +123,15 @@ struct role {
 #define F(name) offsetof(struct ui_theme, name)
 
 static const struct role ROLES[] = {
-    { "desktop background", "--wall-top", "WALL_TOP",  F(bg)        },
-    { "window body",        "--panel",    "PANEL_NS",  F(panel)     },
-    { "primary text",       "--txt-hi",   "TXT_HI",    F(text)      },
-    { "secondary text",     "--txt-dim",  "TXT_DIM",   F(text_dim)  },
-    { "the accent",         "--accent",   "ACCENT",    F(accent)    },
-    { "hairline border",    "--line",     "LINE_SOFT", F(border)    },
-    { "destructive",        "--crit",     "CRIT_RED",  F(danger)    },
-    { "focused title top",  "--hdr-top",  "HDR_TOP",   F(title)     },
-    { "focused title bot",  "--hdr-bot",  "HDR_BOT",   F(title_bot) },
+    { "desktop background", "--wall-top", NULL, F(bg)        },
+    { "window body",        "--panel",    NULL, F(panel)     },
+    { "primary text",       "--txt-hi",   NULL, F(text)      },
+    { "secondary text",     "--txt-dim",  NULL, F(text_dim)  },
+    { "the accent",         "--accent",   NULL, F(accent)    },
+    { "hairline border",    "--line",     NULL, F(border)    },
+    { "destructive",        "--crit",     NULL, F(danger)    },
+    { "focused title top",  "--hdr-top",  NULL, F(title)     },
+    { "focused title bot",  "--hdr-bot",  NULL, F(title_bot) },
     /* the reference gives this one no VARIABLE - it is --line-soft, and ui.c
      * takes it because the mockup has no button face to copy (its own step list
      * has the widget toolkit as "queued"). kernel.zl has no counterpart. */
@@ -173,16 +169,13 @@ int main(void)
     printf("\n");
 
     ok(agree_ref == N_ROLES, "ui.c agrees with the reference on every role it has");
-    ok(agree_zl == zl_have,
-       "ui.c agrees with kernel.zl's rgb() constants on every shared role");
+    ok(agree_zl == zl_have && strstr(zl, "fn theme(role) { return ui_color(role) }") != NULL,
+       "kernel.zl consumes semantic roles from ui.c instead of copying RGB");
 
-    /* the unfocused title bar has no CSS VARIABLE - it is a literal inside
-     * `.win:not(.focus) .titlebar`. Asserted against the reference text so the
-     * gate still breaks if the reference moves. */
-    ok(strstr(html, "#2a3550") != NULL && t->title_off == 0x2A3550,
-       "unfocused title top is the reference's #2a3550");
-    ok(strstr(html, "#182238") != NULL && t->title_off_bot == 0x182238,
-       "unfocused title bottom is the reference's #182238 - a GRADIENT, "
+    ok(css_token(html, "--hdr-off-top") == (long)t->title_off,
+       "unfocused title top agrees with --hdr-off-top");
+    ok(css_token(html, "--hdr-off-bot") == (long)t->title_off_bot,
+       "unfocused title bottom agrees with --hdr-off-bot - a GRADIENT, "
        "not one colour twice");
 
     /* THE WAY THE SECOND CYAN COMES BACK. settings_apply() rebuilds the theme
@@ -204,8 +197,8 @@ int main(void)
      * distinguish. */
     ok(css_token(html, "--accent") == 0x60D2EB,
        "control: the CSS parser reads --accent as #60D2EB");
-    ok(zl_rgb(zl, "ACCENT") == 0x60D2EB,
-       "control: the zl parser reads ACCENT as rgb(96,210,235)");
+    ok(zl_rgb(zl, "ACCENT") == -1,
+       "control: kernel.zl has no duplicate ACCENT RGB constant");
     ok(css_token(html, "--no-such-token") == -1,
        "control: the CSS parser reports a missing token rather than 0");
     ok(zl_rgb(zl, "NO_SUCH_CONST") == -1,

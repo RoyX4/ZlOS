@@ -2,6 +2,11 @@
 
 Read this first in a new session. Everything below is verified, not remembered.
 
+> **Visual system status:** [`docs/visual-speed-northstar.md`](docs/visual-speed-northstar.md)
+> records the isolated 2026-08-19 implementation pass, its host/QEMU evidence,
+> and the exact target-hardware proof that remains. Keep visual polish and real
+> application completeness as separate claims.
+
 > **What is still OPEN is not in this file — it is in
 > [`docs/STATE-OF-THE-PROJECT.md`](../docs/STATE-OF-THE-PROJECT.md),** which
 > audited twenty-one planning documents against the merged tree on 2026-08-19.

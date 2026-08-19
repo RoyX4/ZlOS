@@ -111,6 +111,8 @@ int console_cell_w(void) { return fb_active() ? fb_cell_w() : 8; }
  * text path there are no pixels to scale, so it is 1. */
 int fb_ui_scale(void);
 int console_ui_scale(void) { return fb_active() ? fb_ui_scale() : 1; }
+int fb_ui_scale_q8(void);
+int console_ui_scale_q8(void) { return fb_active() ? fb_ui_scale_q8() : 256; }
 int console_cell_h(void) { return fb_active() ? fb_cell_h() : 16; }
 int console_rows(void) { return fb_active() ? fb_get_rows() : 25; }
 

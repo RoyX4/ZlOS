@@ -41,8 +41,19 @@ struct ui_theme {
     unsigned danger;      /* destructive only - the close box   */
     unsigned title;       /* focused title bar, top of gradient */
     unsigned title_bot;   /* focused title bar, bottom          */
-    unsigned title_off;   /* unfocused title bar, TOP of grad   */
-    unsigned title_off_bot; /* ...and its bottom                */
+    unsigned title_off;   /* unfocused title bar, flat          */
+    unsigned wallpaper_top;
+    unsigned wallpaper_bot;
+    unsigned bar_top;
+    unsigned bar_bot;
+    unsigned bar_hi;
+    unsigned chrome;
+    unsigned chrome_line;
+    unsigned text_hi;
+    unsigned ok;
+    /* Direct C-only role kept after the zl-visible contiguous colour array,
+     * so adding a second gradient stop cannot shift every ui_color() index. */
+    unsigned title_off_bot;
 
     /* metrics, all already multiplied by the UI scale */
     int pad;              /* inside a panel, edge to content    */
@@ -51,18 +62,37 @@ struct ui_theme {
     int radius;           /* the OUTER corner. Inner is this - 1 */
     int title_h;          /* window title bar                   */
     int scale;            /* ui(): 1 at 8px cells, 2 at 16px    */
+    int scale_q8;         /* continuous scale, 256 == 1 design unit */
 };
 
 /* The scale everything snaps to. Use these, never a literal. */
-#define UI_S1(t)  (4  * (t)->scale)
-#define UI_S2(t)  (8  * (t)->scale)
-#define UI_S3(t)  (12 * (t)->scale)
-#define UI_S4(t)  (16 * (t)->scale)
-#define UI_S6(t)  (24 * (t)->scale)
+#define UI_DP(t,n) ((((n) * (t)->scale_q8) + 128) >> 8)
+#define UI_S1(t)  UI_DP((t), 4)
+#define UI_S2(t)  UI_DP((t), 8)
+#define UI_S3(t)  UI_DP((t), 12)
+#define UI_S4(t)  UI_DP((t), 16)
+#define UI_S6(t)  UI_DP((t), 24)
+
+enum ui_color_role {
+    UI_COLOR_BG = 0, UI_COLOR_PANEL, UI_COLOR_PANEL_HI, UI_COLOR_TEXT,
+    UI_COLOR_TEXT_DIM, UI_COLOR_ACCENT, UI_COLOR_BORDER, UI_COLOR_DANGER,
+    UI_COLOR_TITLE, UI_COLOR_TITLE_BOT, UI_COLOR_TITLE_OFF,
+    UI_COLOR_WALL_TOP, UI_COLOR_WALL_BOT,
+    UI_COLOR_BAR_TOP, UI_COLOR_BAR_BOT, UI_COLOR_BAR_HI,
+    UI_COLOR_CHROME, UI_COLOR_CHROME_LINE, UI_COLOR_TEXT_HI, UI_COLOR_OK,
+    UI_COLOR_COUNT
+};
+enum ui_metric_role {
+    UI_METRIC_PAD = 0, UI_METRIC_GAP, UI_METRIC_ROW_H, UI_METRIC_RADIUS,
+    UI_METRIC_TITLE_H, UI_METRIC_SCALE_Q8, UI_METRIC_COUNT
+};
 
 const struct ui_theme *ui_theme(void);
 void ui_theme_init(int scale);          /* build the default theme at a scale */
+void ui_theme_init_q8(int scale_q8);    /* continuous scale; 256 == 1x */
 void ui_theme_set(const struct ui_theme *t);
+unsigned ui_color(int role);            /* shared C/zl source of colour truth */
+int ui_metric(int role);
 
 /* ---- the app contract -----------------------------------------------------
  * Three functions, NO LOOP, EVER. If you are writing `while (...)` inside an
@@ -105,6 +135,7 @@ typedef void (*desk_key_fn)(int code, int mods);
 #define WF_OPEN     (1 << 0)
 #define WF_MODAL    (1 << 1)   /* takes everything; a click outside dismisses */
 #define WF_NOCHROME (1 << 2)   /* draws its own frame, e.g. the start menu    */
+#define WF_MINIMIZED (1 << 3)  /* remains in taskbar/z-order, paints nothing */
 
 void wm_init(void);
 void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk);
@@ -113,6 +144,8 @@ void wm_desk_key(desk_key_fn f);
 
 int  wm_open(int app, const char *title, int x, int y, int w, int h);
 void wm_close(int win);
+void wm_minimize(int win);
+int  wm_is_minimized(int win);
 void wm_raise(int win);
 void wm_focus(int win);
 void wm_set_modal(int win, int on);
@@ -209,11 +242,15 @@ void ui_sep(void);
 void ui_space(int n);
 int  ui_toggle(const char *s, int *on);
 int  ui_slider(int *v, int lo, int hi);
+int  ui_toggle_value(const char *s, int on);       /* scalar bridge for zl */
+int  ui_slider_value(int v, int lo, int hi);       /* scalar bridge for zl */
 void ui_num(const char *s, int v);
 int  ui_list_row(const char *s, int selected);
 void ui_scroll_begin(int h, int *off);
 void ui_scroll_end(int *off);
 int  ui_scroll_content(void);
+void ui_scroll_begin_value(int h, int off);        /* one sequential zl pass */
+int  ui_scroll_end_value(void);
 /* ---- keyboard focus --------------------------------------------------------
  * Which control the keyboard is on. The INDEX lives in ui.c because it has to
  * survive between the hit-test pass and the draw pass; choosing it is still the

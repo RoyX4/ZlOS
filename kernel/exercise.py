@@ -340,8 +340,13 @@ def qemu_argv(tmp, uefi, ser_path, qmp_path, tablet=True, net=False):
     for p, mb in ((disk, 64), (stick, 32)):
         subprocess.run(["qemu-img", "create", "-f", "raw", p, f"{mb}M"],
                        check=True, capture_output=True)
+    # CI/sandbox runners often expose QEMU but not /dev/kvm. `-cpu host` is
+    # legal only with KVM, so choose the accelerator and CPU as one pair. This
+    # is a slower proof of the same guest image, not a different boot path.
+    accel = ("-cpu", "host", "-accel", "kvm") if os.path.exists("/dev/kvm") \
+            else ("-cpu", "max", "-accel", "tcg,thread=multi")
     common = [
-        "-m", "1G", "-smp", "4", "-cpu", "host", "-accel", "kvm",
+        "-m", "1G", "-smp", "4", *accel,
         "-drive", f"file={disk},if=none,id=nvm,format=raw",
         "-device", "nvme,serial=zlos001,drive=nvm",
         "-drive", f"file={stick},if=none,id=stick,format=raw",
