@@ -693,6 +693,53 @@ fn sys2_h(id) {
 # arbitrary picture on all six.
 fn sys2_icon(id) { return 0 - 1 }
 
+# WHERE, not just how big. ds-reference.html's APPS table (lines 1000-1006)
+# gives every window an x and a y as well as a w and an h, and the oracle
+# compares NAMED REGIONS of the screen - so a window that is the right size in
+# the wrong place scores wrong on structure however well it is drawn. These are
+# those coordinates.
+fn sys2_x(id) {
+    if id == APP_KLOG { return 200 }
+    if id == APP_REND { return 800 }
+    if id == APP_HEXV { return 264 }
+    if id == APP_FBUF { return 150 }
+    if id == APP_TTY  { return 186 }
+    if id == APP_FONT { return 210 }
+    return 160
+}
+fn sys2_y(id) {
+    if id == APP_KLOG { return 250 }
+    if id == APP_REND { return 340 }
+    if id == APP_HEXV { return 196 }
+    if id == APP_FBUF { return 70 }
+    if id == APP_TTY  { return 96 }
+    if id == APP_FONT { return 112 }
+    return 80
+}
+
+# The reference composes for a 1280-wide screen and this panel may be wider, so
+# every reference x is offset by the same centring term the boot composition
+# uses (kernel.zl 4503). RECOMPUTED here rather than read from `desk_ox`: that
+# name is assigned inside wm_boot_open and never declared at top level, so it
+# is that function's local and reading it from another module would silently
+# get nothing. One expression, and it cannot go stale in only one of the two
+# places, because it is derived from the panel rather than stored.
+fn sys2_ox() {
+    dox = (px_w() - 1280 * ui()) / 2
+    if dox < 0 { dox = 0 }
+    return dox
+}
+
+# HOW THIS SLICE'S WINDOWS OPEN. reg_new() gates on explicit id ranges and none
+# of them covered this slice, so without this every app here would have been
+# unopenable - reg_open() would find no window, get -1 back and return without
+# doing anything, silently. Owning the open here is also what lets an app pick
+# its own start position, which for these six is not a preference: it is the
+# oracle's region map.
+fn sys2_new(id, u) {
+    return wm_open(id, reg_name(id), sys2_ox() + sys2_x(id) * u, sys2_y(id) * u, sys2_w(id) * u, sys2_h(id) * u)
+}
+
 fn sys2_draw(id, ax, ay, aw, ah) {
     ui_begin(ax, ay, aw, ah, 0, 0, 0, 0)
     if id == APP_KLOG { kl_ui(ax, ay, aw, ah, 1)  return 0 }
@@ -738,13 +785,4 @@ fn sys2_tick(id, win) {
     if id == APP_FBUF { return fbv_tick(win) }
     if id == APP_TTY  { return cn_tick(win) }
     return 0
-}
-
-# HOW THIS SLICE'S WINDOWS OPEN. reg_new() gates on explicit id ranges and none
-# of them covered this slice, so every app here would have been unopenable -
-# reg_open() would find no window and return without doing anything, silently.
-# Owning the open here also means an app can choose its own start position and
-# reset its state before the first frame, which is what a game needs.
-fn sys2_new(id, u) {
-    return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
 }
