@@ -26,7 +26,10 @@ OUT = os.path.join(HERE, "out")
 # independent arithmetic here drifting quietly away from it.
 TITLE_H = 28
 MENU_ROWS = 10
-DOCK_H = 64
+# The dock's TOP, measured from the bottom of the screen: kernel.zl's
+# DOCK_H (43) + DOCK_BOT (9). It was 64, from the 56px slab the reference's
+# 43px pill replaced - so every dock click landed 12px above the strip.
+DOCK_H = 52
 CAT_HEADER = 26
 CAT_TILE_W = 130
 CAT_TILE_H = 108
@@ -339,14 +342,26 @@ def open_by_catalog(ser, qmp, idx, W, H, name):
     settle = ser.drain
     dock_y = H - DOCK_H * u
 
-    click(qmp, 40 * u, dock_y + 32 * u, W, H, settle)      # start button
+    # THE DOCK'S GRID BUTTON, not a start button. The full-width bar that
+    # carried one was replaced by the reference's floating island, and the
+    # route to the catalog is now "Show Applications" at the end of the dock -
+    # past the divider, which is why this is not simply slot 0's x.
+    # Mirrors kernel.zl's dock_slot_at(): dock_x0() + DOCK_N*PITCH + GAP + 1.
+    DOCK_PADX, DOCK_GAP, DOCK_TW, DOCK_PITCH, DOCK_N = 7, 5, 33, 38, 9
+    DOCK_BAR_W = DOCK_PADX * 2 + DOCK_N * DOCK_TW + (DOCK_N - 1) * DOCK_GAP \
+                 + DOCK_GAP * 2 + 1 + DOCK_TW
+    bar_x = (W - DOCK_BAR_W * u) // 2
+    grid_x = bar_x + DOCK_PADX * u + DOCK_N * DOCK_PITCH * u + DOCK_GAP * u + 1
+    click(qmp, grid_x + DOCK_TW * u // 2, dock_y + 22 * u, W, H, settle)
     settle(1.0)
 
-    # "All Applications" is row 8 of the 10-row menu; row_y is menu_draw's own
-    # formula: client top + 4u + row*26u, client top = menu y + TITLE_H*u.
-    mh = MENU_ROWS * 26 * u + TITLE_H * u + 12 * u
-    menu_client_y = (dock_y - mh - 8 * u) + TITLE_H * u
-    click(qmp, 110 * u, menu_client_y + 4 * u + 8 * 26 * u + 13 * u, W, H, settle)
+    # ONE CLICK, not two. The grid button opens the catalog directly; the
+
+    # second click here used to pick "All Applications" out of the start
+
+    # menu, and against the new chrome it lands on the desktop and
+
+    # dismisses what the first click just opened.
     settle(1.5)
     # ser.all, never ser.buf: wait() consumes, so the buffer holds only
     # whatever arrived since the last match. The full transcript is the only
