@@ -105,6 +105,20 @@ else
   echo "skip  ./gpu_fillrate  (no GL headers - apt install libgl1-mesa-dev)"
 fi
 
+# The crypto primitives, against published test vectors. Both of these
+# #include ../crypto.c rather than linking it: the file has no header of its
+# own for the host path, and compiling it once per harness keeps each one a
+# single translation unit with no link order to get wrong.
+#
+# EVERY expected value in both is from a published standard - FIPS 180/197,
+# RFC 2202/4231/6070/4493/5869/7748, NIST SP 800-38D, IEEE 802.11i - and not
+# from a previous run. That is what let all of this be written and finished
+# with no server to talk to and no hardware present.
+gcc -O2 -g -Wall -Wextra -D_GNU_SOURCE -o cryptotest cryptotest.c
+echo "built ./cryptotest    (run: ./cryptotest)"
+gcc -O2 -g -Wall -Wextra -D_GNU_SOURCE -o tlscryptotest tlscryptotest.c
+echo "built ./tlscryptotest (run: ./tlscryptotest)"
+
 # The browser's parser and box model, asserted. html.c and layout.c reach for
 # exactly one thing outside themselves - a function that measures a string - so
 # injecting a synthetic one turns both into ordinary programs. Malformed markup
