@@ -813,17 +813,15 @@ static void chrome(int win, int focused)
 
     if (W->flags & WF_NOCHROME) return;
 
-    /* THE GRIP HAS TO BE VISIBLE or it is a secret. Three short diagonals in
-     * the bottom-right corner - the convention every desktop uses, and cheap
-     * enough to draw on every window every repaint. */
-    {
-        int gx = W->x + W->w - UI_S1(t) - 1, gy = W->y + W->h - UI_S1(t) - 1;
-        int step = UI_S1(t) / 2 + 1;
-        for (int i = 1; i <= 3; i++) {
-            int d = i * step * 2;
-            fb_line(gx - d, gy, gx, gy - d, t->border);
-        }
-    }
+    /* THE GRIP HAS TO BE VISIBLE or it is a secret - drawn once, below, at
+     * UI_S3 after the close box. This used to ALSO draw here, smaller
+     * (UI_S1) and in a different colour, before the title bar was even
+     * composited - two renderers for one corner, from two merge parents
+     * (STATE-OF-THE-PROJECT.md #4.6). Only the later one matches
+     * RESIZE_EDGE's UI_S2 hit region and carries the fix for the L-bracket
+     * merge bug (see "THE RESIZE GRIP, drawn" below); this one was strictly
+     * the earlier, dimmer, wrongly-scaled leftover, and every window paid
+     * for both on every repaint. */
 
     int tx = W->x + 2, tw = W->w - 4, th = t->title_h - 3;
     if (focused) {
@@ -997,9 +995,19 @@ void wm_repaint(void)
              * A refusal from fb_stash (every slot busy) degrades to drawing
              * the window opaque, which is the right way for an effect to fail. */
             int fade = 255, stash = -1;
+            /* WHERE THE STASH WAS TAKEN FROM, kept in its own variables.
+             * cx/cy/cw/ch get reused and overwritten below by the CLIENT
+             * isect (narrower - inset by the border and title bar), and
+             * fb_stash_blend used to be handed that clobbered pair as its
+             * destination origin: a fading window composited its saved
+             * backdrop offset by the border width and the title-bar height,
+             * intermittent because it only showed when the client isect
+             * actually ran. sx/sy/sw/sh are the one thing this rectangle
+             * must not share a name with. */
+            int sx = cx, sy = cy, sw = cw, sh = ch;
             if (wm_anim_running(win) == ANIM_FADE) {
                 fade = wm_anim_alpha(win);
-                if (fade < 255) stash = fb_stash(cx, cy, cw, ch);
+                if (fade < 255) stash = fb_stash(sx, sy, sw, sh);
             }
 
             fb_clip(cx, cy, cw, ch);            /* clip 1: the frame + shadow */
@@ -1019,17 +1027,15 @@ void wm_repaint(void)
              * tint IS a blend of one colour over what is already there, which
              * is exactly what fb_fill_blend does.
              *
-             * ANIM_FADE is a different animal and is NOT drawn here. A real
-             * fade needs the window composited against what is BEHIND it at
-             * fractional opacity, which needs a copy of the rectangle before
-             * the window was drawn on it. wm_anim_alpha() reports it and
-             * wmtest asserts it; the compositing waits for the scratch arena
-             * in fb.c. Saying so is better than a tint pretending to be a
-             * fade - they look different and only one of them is the effect
-             * the prototype asks for. */
+             * ANIM_FADE IS drawn here, below - a real fade, the window
+             * composited against what was BEHIND it at fractional opacity,
+             * from the copy `stash` took of the rectangle before the window
+             * was drawn on it. Blended at (sx, sy) - where it was TAKEN
+             * FROM - never at (cx, cy), which by this point is whatever the
+             * client isect above left behind. */
             if (stash >= 0) {
-                fb_clip(cx, cy, cw, ch);
-                fb_stash_blend(stash, cx, cy, 255 - fade);
+                fb_clip(sx, sy, sw, sh);
+                fb_stash_blend(stash, sx, sy, 255 - fade);
                 fb_blur_free(stash);
             }
 
