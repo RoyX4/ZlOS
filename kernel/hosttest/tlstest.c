@@ -35,6 +35,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 
 #include "../tls.h"
 
@@ -204,6 +205,78 @@ int main(void)
         char rm[256];
         snprintf(rm, sizeof rm, "rm -rf %s", dir);
         if (system(rm) != 0) {}
+    }
+
+    /* ---- and now the real internet ------------------------------------
+     * The loopback test proves interop with OpenSSL. This proves it against a
+     * production server that has never heard of us: a different TLS stack, a
+     * real certificate chain, SNI actually mattering because the address is
+     * shared, and a response far larger than one record.
+     *
+     * OPT-IN, because a gate that needs the network is a gate that fails on a
+     * train. ZLOS_NET_TESTS=1 turns it on; without it this says so and stops,
+     * which is a skip rather than a pass. */
+    if (!getenv("ZLOS_NET_TESTS")) {
+        printf("\n  skip  the live-internet check (set ZLOS_NET_TESTS=1 to run it)\n");
+    } else {
+        printf("\n=== against the real internet ===\n");
+        struct addrinfo hints, *res = 0;
+        memset(&hints, 0, sizeof hints);
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        if (getaddrinfo("en.wikipedia.org", "443", &hints, &res) == 0 && res) {
+            int w = socket(AF_INET, SOCK_STREAM, 0);
+            if (connect(w, res->ai_addr, res->ai_addrlen) == 0) {
+                static struct tls_conn wc;
+                int u = open("/dev/urandom", O_RDONLY);
+                if (u >= 0) { if (read(u, wc.priv, 32) != 32) {} close(u); }
+                tls_start(&wc, "en.wikipedia.org");
+                int g2 = 0;
+                while (tls_state(&wc) != TLS_READY && tls_state(&wc) != TLS_ERROR && g2++ < 600) {
+                    const unsigned char *q;
+                    int n2 = tls_take(&wc, &q);
+                    if (n2 > 0) { int k = (int)write(w, q, (size_t)n2); if (k > 0) tls_sent(&wc, k); }
+                    if (tls_state(&wc) == TLS_READY) break;
+                    int got = (int)read(w, rx, sizeof rx);
+                    if (got <= 0) break;
+                    if (tls_feed(&wc, rx, got) < 0) break;
+                }
+                ok("handshake with en.wikipedia.org completed",
+                   tls_state(&wc) == TLS_READY);
+                if (tls_state(&wc) == TLS_READY) {
+                    char rq[256];
+                    int rn = snprintf(rq, sizeof rq,
+                        "GET /wiki/Linux HTTP/1.1\r\nHost: en.wikipedia.org\r\n"
+                        "Connection: close\r\nUser-Agent: zlOS\r\n\r\n");
+                    tls_write(&wc, (const unsigned char *)rq, rn);
+                    const unsigned char *q;
+                    int n2 = tls_take(&wc, &q);
+                    if (n2 > 0) { int k = (int)write(w, q, (size_t)n2); if (k > 0) tls_sent(&wc, k); }
+                    long total = 0;
+                    char head[64];
+                    int hn = 0;
+                    for (int i = 0; i < 6000; i++) {
+                        int got = (int)read(w, rx, sizeof rx);
+                        if (got <= 0) break;
+                        if (tls_feed(&wc, rx, got) < 0) break;
+                        unsigned char tmp[16384];
+                        int m;
+                        while ((m = tls_read(&wc, tmp, sizeof tmp)) > 0) {
+                            for (int k = 0; k < m && hn < (int)sizeof head - 1; k++) head[hn++] = (char)tmp[k];
+                            total += m;
+                        }
+                    }
+                    head[hn] = 0;
+                    ok("the article decrypted to an HTTP 200",
+                       !memcmp(head, "HTTP/1.1 200", 12));
+                    ok("and it is a whole article, not one record",
+                       total > 100000);
+                    printf("       %ld bytes decrypted from Wikimedia\n", total);
+                }
+            }
+            close(w);
+            freeaddrinfo(res);
+        }
     }
 
     printf("\n%d passed, %d failed\n", passed, failed);
