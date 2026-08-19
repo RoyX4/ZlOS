@@ -50,6 +50,18 @@ TH_CHROME = 16
 TH_CHROME_LINE = 17
 TH_TEXT_HI = 18
 TH_OK = 19
+# Nine more roles, appended so no existing index moves. Before these an app had
+# no way to say "warning" and spent the accent on it, and three text tiers and
+# three surfaces collapsed onto two colours each.
+TH_TEXT_2 = 20
+TH_TEXT_5 = 21
+TH_TEXT_6 = 22
+TH_WARN = 23
+TH_SURF_1 = 24
+TH_SURF_5 = 25
+TH_SURF_7 = 26
+TH_SURF_WELL = 27
+TH_ACCENT_BR = 28
 fn theme(role) { return ui_color(role) }
 
 # ---- the app suite ----------------------------------------------------------

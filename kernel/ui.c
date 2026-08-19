@@ -105,6 +105,16 @@ void ui_theme_init_q8(int scale_q8)
     theme.chrome_line = ZD_SURF_2;    /* the 47-use hairline                 */
     theme.text_hi   = ZD_TEXT_0;      /* emphasis, above body                */
     theme.ok        = ZD_OK;
+    /* the nine that let an app say what it means - see ui.h */
+    theme.text_2    = ZD_TEXT_2;
+    theme.text_5    = ZD_TEXT_5;
+    theme.text_6    = ZD_TEXT_6;
+    theme.warn      = ZD_WARN;
+    theme.surf_1    = ZD_SURF_1;
+    theme.surf_5    = ZD_SURF_5;
+    theme.surf_7    = ZD_SURF_7;
+    theme.surf_well = ZD_SURF_WELL;
+    theme.accent_br = ZD_ACCENT_BR;
 
     /* ---- metrics, v10 SS6.10 -----------------------------------------------
      * Counted out of the prototype's stylesheet rather than picked by eye, and

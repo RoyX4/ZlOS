@@ -51,6 +51,22 @@ struct ui_theme {
     unsigned chrome_line;
     unsigned text_hi;
     unsigned ok;
+    /* NINE MORE, added because the twenty above could not say what the
+     * reference says. An app slice reported collapsing ZD_TEXT_5, ZD_TEXT_6
+     * and ZD_TEXT_2 onto two roles, ZD_WARN onto the accent, ZD_SURF_WELL onto
+     * the background and ZD_SURF_7 onto the border - six tokens rendering as
+     * three colours. A palette with no name for "warning" spends the accent on
+     * it, and then the accent no longer means "this is the one thing to look
+     * at". These are appended, so no existing ui_color() index moves. */
+    unsigned text_2;      /* ZD_TEXT_2   #c4c9cf                 */
+    unsigned text_5;      /* ZD_TEXT_5   #74797f  labels, heads  */
+    unsigned text_6;      /* ZD_TEXT_6   #5c6167  hints, units   */
+    unsigned warn;        /* ZD_WARN     #f5b93c  NOT the accent */
+    unsigned surf_1;      /* ZD_SURF_1   #090a0c  sunken wells   */
+    unsigned surf_5;      /* ZD_SURF_5   #1c2024  menus, modals  */
+    unsigned surf_7;      /* ZD_SURF_7   #474b50  dimmest ink    */
+    unsigned surf_well;   /* ZD_SURF_WELL #0d0f12               */
+    unsigned accent_br;   /* ZD_ACCENT_BR #cdf25a live values    */
     /* Direct C-only role kept after the zl-visible contiguous colour array,
      * so adding a second gradient stop cannot shift every ui_color() index. */
     unsigned title_off_bot;
@@ -80,6 +96,9 @@ enum ui_color_role {
     UI_COLOR_WALL_TOP, UI_COLOR_WALL_BOT,
     UI_COLOR_BAR_TOP, UI_COLOR_BAR_BOT, UI_COLOR_BAR_HI,
     UI_COLOR_CHROME, UI_COLOR_CHROME_LINE, UI_COLOR_TEXT_HI, UI_COLOR_OK,
+    UI_COLOR_TEXT_2, UI_COLOR_TEXT_5, UI_COLOR_TEXT_6, UI_COLOR_WARN,
+    UI_COLOR_SURF_1, UI_COLOR_SURF_5, UI_COLOR_SURF_7, UI_COLOR_SURF_WELL,
+    UI_COLOR_ACCENT_BR,
     UI_COLOR_COUNT
 };
 enum ui_metric_role {
