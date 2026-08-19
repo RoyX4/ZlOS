@@ -331,21 +331,20 @@ fn draw_island_clock(cx, cy, u) {
     return 0
 }
 
-# The island fill is rgba(12,14,16,.82) over a blur(20px) backdrop. There is no
-# GPU and no gaussian blur, and rrect is opaque, so this is an APPROXIMATION and
-# is labelled as one: over the near-black wallpaper the 82% tint dominates, and
-# the composite it settles at is within a couple of levels of SURF_2, which is
-# already a token. Sampling the reference PNG inside the pill gives (11,13,13),
-# (12,14,13), (13,16,13); SURF_2 is (11,13,15). Close enough that the remaining
-# error is far below the noise floor the oracle measures.
-fn island_fill() { return theme(TH_CHROME_LINE) }
-
-# The 1px ring is rgba(184,232,56,.09) - lime at 9%. Drawn as an outer rrect one
-# pixel larger rather than a real alpha stroke, because the primitives here have
-# no rounded alpha outline. A 1px ring reads as its own colour rather than as a
-# blend, so this is a fair trade; the cost is that the ring does not pick up the
-# wallpaper behind the corners.
-fn island_ring() { return rgb(26, 35, 10) }
+# The island fill is rgba(12,14,16,.82). rrblend() is a real rounded-rect ALPHA
+# fill, so the tint is applied as a tint over whatever is behind it rather than
+# faked with an opaque approximation. ISLAND_A is .82 as 0..255.
+#
+# The one thing that is NOT reproduced is backdrop-filter: blur(20px). There is
+# no GPU and fb.c's blur is a cache of a rectangle, not a live filter under a
+# rounded mask. What sits behind the island is wallpaper - a smooth gradient
+# with no high-frequency detail - so blurring it would change very little; the
+# tint is doing nearly all of the work. That is the claim, and it is a claim
+# about this wallpaper, not a general one: over a busy window the same shortcut
+# would look obviously wrong.
+ISLAND_A = 209                   # .82 * 255
+ISLAND_RING_A = 23               # .09 * 255, the lime ring
+fn island_fill() { return rgb(12, 14, 16) }
 
 fn island_w() {
     iu = ui()
@@ -370,10 +369,12 @@ fn draw_header() {
         iy = ISLAND_TOP * u
         iw = island_w()
         ix = (w - iw) / 2
-        # ring first, fill on top: the outer rrect is one pixel proud on every
-        # side, so the ring follows the curve instead of cutting across it
-        rrect(ix - 1, iy - 1, iw + 2, ih + 2, ISLAND_R * u + 1, island_ring())
-        rrect(ix, iy, iw, ih, ISLAND_R * u, island_fill())
+        # ring first, fill on top: the outer shape is one pixel proud on every
+        # side, so the lime ring follows the curve instead of cutting across it.
+        # Both are ALPHA blends, so the wallpaper still shows through exactly as
+        # the reference's rgba() fills intend.
+        rrblend(ix - 1, iy - 1, iw + 2, ih + 2, ISLAND_R * u + 1, theme(TH_ACCENT), ISLAND_RING_A)
+        rrblend(ix, iy, iw, ih, ISLAND_R * u, island_fill(), ISLAND_A)
         cx = ix + ISLAND_PAD * u
         cy = iy + (ih - CHIP_H * u) / 2
         # Activities: a 5px lime dot with a glow, then the word. The dot is the
@@ -426,30 +427,52 @@ fn island_sep(sx, iy, ih, u) {
 }
 
 # the dock top edge, cell-aligned to row (rows-3) so at_num can place the clock
-fn dock_y() { return px_h() - 72 * ui() }
+fn dock_y() { return px_h() - (DOCK_H + DOCK_BOT) * ui() }
 
 # one app-launcher tile: a rounded chip with a real 24x24 icon in it. Icons,
 # not key letters - you are meant to click these, not memorise a hotkey.
-DOCK_PITCH = 48          # dense enough to read as one launcher strip
-DOCK_TW = 42             # enough face for the icon without becoming a card
-DOCK_N = 9
-DOCK_BAR_W = 502
+# THE DOCK, to the reference's own numbers. ds-reference.html:865 for the strip
+# and :3424 for a tile:
+#
+#   strip   left:50% bottom:9px, padding:5px 7px, gap:5px, radius:16px,
+#           background rgba(18,21,24,.82), border 1px rgba(255,255,255,.11)
+#   tile    33x33, radius:13, icon 20px, rgba(255,255,255,.085),
+#           focused ACC with a rgba(255,255,255,.22) border
+#   dot     3.5px, 3.5px BELOW the tile, pulsing on zpulse 2.6s
+#
+# Confirmed against the rendered PNG: the strip occupies y 746..790 at
+# 1280x800 - height 45, bottom gap 9 - which is 5 + 33 + 5 plus the 1px border
+# top and bottom. The oracle's regions.json, generated independently from the
+# DOM, calls it [325, 746, 629, 45]. Three sources, one answer.
+#
+# It was a 502x56 slab with 42px tiles on a 48px pitch and a start button.
+# THE WIDTH IS NOT COPIED. The reference's 629 is what fifteen tiles come to;
+# zlOS has nine, so the strip is computed from its own contents and will widen
+# on its own as apps are added. Copying 629 would have left a strip with a
+# third of it empty.
+DOCK_PADX  = 7
+DOCK_PADY  = 5
+DOCK_GAP   = 5
+DOCK_TW    = 33          # the tile
+DOCK_TR    = 13          # ...and its radius
+DOCK_R     = 16          # the strip's radius
+DOCK_H     = 43          # PADY + TW + PADY
+DOCK_BOT   = 9           # gap below the strip
+DOCK_PITCH = 38          # TW + GAP
+DOCK_N     = 9
+DOCK_A       = 209       # .82 * 255, the strip body
+DOCK_BORDER_A = 28       # .11 * 255, the 1px border
+DOCK_TILE_A   = 22       # .085 * 255, a resting tile
+DOCK_TILE_ON_A = 56      # .22 * 255, the focused tile's border
 
+# 2 * PADX + N tiles + (N-1) gaps + [gap + divider + gap] + the grid button
+DOCK_BAR_W = DOCK_PADX * 2 + DOCK_N * DOCK_TW + (DOCK_N - 1) * DOCK_GAP + DOCK_GAP * 2 + 1 + DOCK_TW
+
+fn dock_fill() { return rgb(18, 21, 24) }
 fn dock_bar_x() { return (px_w() - DOCK_BAR_W * ui()) / 2 }
-fn dock_x0() { return dock_bar_x() + 66 * ui() }
-fn dock_start_x() { return dock_bar_x() + 10 * ui() }
+fn dock_x0() { return dock_bar_x() + DOCK_PADX * ui() }
+fn dock_start_x() { return dock_bar_x() + DOCK_PADX * ui() }
 
-fn dock_face(slot) {
-    if slot == 0 { return rgb(35, 55, 82) }
-    if slot == 1 { return rgb(24, 105, 113) }
-    if slot == 2 { return rgb(40, 95, 154) }
-    if slot == 3 { return rgb(164, 73, 99) }
-    if slot == 4 { return rgb(51, 116, 79) }
-    if slot == 5 { return rgb(105, 78, 160) }
-    if slot == 6 { return rgb(56, 91, 120) }
-    if slot == 7 { return rgb(67, 81, 106) }
-    return rgb(89, 79, 72)
-}
 
 fn dock_name(slot) {
     if slot == 0 { return "Terminal" }
@@ -478,25 +501,32 @@ fn dock_tile(slot, dy, ic) {
     u = ui()
     dtx = dock_x0() + slot * DOCK_PITCH * u
     dtw = DOCK_TW * u
-    dty = dy + 8 * u
+    dty = dy + DOCK_PADY * u
     hov = 0
     if dock_hover == slot { hov = 1 }
     prs = 0
     if hov == 1 { if dock_press == 1 { prs = 1 } }
 
-    tcol = dock_face(slot)
-    hcol = theme(TH_BAR_HI)
+    # THE TILES ARE NOT TINTED PER APP. zlOS gave each slot its own colour from
+    # dock_face() - nine hand-picked blue-slate fills. The reference gives every
+    # tile the same rgba(255,255,255,.085) and spends the accent ONLY on the
+    # focused one, which is what makes the focused app findable at a glance. Nine
+    # coloured tiles and one accent tile cannot both be the thing your eye goes
+    # to. dock_face() is gone with the rest of the blue-slate palette.
     icol = theme(TH_TEXT_HI)
-    if hov == 1 { hcol = theme(TH_ACCENT)  icol = theme(TH_TEXT) }
+    tona = DOCK_TILE_A
+    tcol = theme(TH_TEXT_HI)
+    if hov == 1 { tcol = theme(TH_ACCENT)  tona = 255  icol = theme(TH_BG) }
     if prs == 1 {
+        # zpress: the reference scales the tile to .88 and back over 250 ms.
+        # Here it is the settled inset - the animation itself is wm.c's, which
+        # now runs the same curve and duration.
         dtx = dtx + 2 * u
         dty = dty + 2 * u
         dtw = dtw - 4 * u
-        tcol = dock_face(slot)
     }
-    rrect(dtx, dty, dtw, dtw, 12 * u, tcol)
-    fill_rgb(dtx, dty, dtw, 1, hcol)
-    icon(dtx + (dtw - 24 * u) / 2, dty + (dtw - 24 * u) / 2, ic, icol)
+    rrblend(dtx, dty, dtw, dtw, DOCK_TR * u, tcol, tona)
+    icon(dtx + (dtw - 20 * u) / 2, dty + (dtw - 20 * u) / 2, ic, icol)
     # open-app marker: the accent bar the prototype puts under a running app
     dock_running_bar(slot, dy)
     return 0
@@ -595,18 +625,24 @@ fn draw_dock_bg() {
     u = ui()
     bx = dock_bar_x()
     bw = DOCK_BAR_W * u
-    rrblend(bx - 6 * u, dy + 7 * u, bw + 12 * u, 60 * u, 25 * u, theme(TH_BG), 120)
-    rrect(bx, dy, bw, 56 * u, 22 * u, theme(TH_BAR_HI))
-    rrect(bx + u, dy + u, bw - 2 * u, 54 * u, 21 * u, theme(TH_BAR_BOT))
-    fill_rgb(bx + 22 * u, dy + u, bw - 44 * u, u, theme(TH_BAR_TOP))
-    sx = dock_start_x()
-    rrect(sx, dy + 8 * u, 42 * u, 42 * u, 13 * u, theme(TH_TITLE_OFF))
-    icon(sx + 9 * u, dy + 17 * u, 19, theme(TH_ACCENT))
+    bh = DOCK_H * u
+    # the reference's drop shadow: 0 12px 34px rgba(0,0,0,.5)
+    rrblend(bx - 4 * u, dy + 6 * u, bw + 8 * u, bh, DOCK_R * u + 4, theme(TH_BG), 128)
+    # 1px rgba(255,255,255,.11) border, then the rgba(18,21,24,.82) body
+    rrblend(bx - 1, dy - 1, bw + 2, bh + 2, DOCK_R * u + 1, theme(TH_TEXT_HI), DOCK_BORDER_A)
+    rrblend(bx, dy, bw, bh, DOCK_R * u, dock_fill(), DOCK_A)
     ds = 0
     while ds < DOCK_N {
         dock_tile(ds, dy, dock_icon(ds))
         ds = ds + 1
     }
+    # the divider and the Show Applications grid button close the strip, exactly
+    # as the reference does - the grid is not a dock app, it is the app grid
+    gx = dock_x0() + DOCK_N * DOCK_PITCH * u - DOCK_GAP * u
+    fill_rgb(gx + DOCK_GAP * u, dy + (bh - 22 * u) / 2, 1, 22 * u, theme(TH_BORDER))
+    gx = gx + DOCK_GAP * 2 * u + 1
+    rrblend(gx, dy + DOCK_PADY * u, DOCK_TW * u, DOCK_TW * u, DOCK_TR * u, theme(TH_TEXT_HI), DOCK_TILE_A)
+    icon(gx + 7 * u, dy + DOCK_PADY * u + 7 * u, 40, theme(TH_TEXT_HI))
     return 0
 }
 
