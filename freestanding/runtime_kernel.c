@@ -612,6 +612,11 @@ extern int  intel_plane_tiling(void);
 extern int  intel_ggtt_map_range(unsigned page, unsigned phys, int pages);
 /* the Intel Gen9 display driver */
 extern int  intel_find(void);
+/* 1 when a display controller WAS found and refused because its 64-bit BAR is
+ * above 4 GiB and this build has 32-bit pointers. intel_find() returns -1 in
+ * both cases; this is what tells "there is no Intel GPU" from "there is one and
+ * we cannot reach it", which are different things to print. */
+extern int  intel_bar_too_high(void);
 extern int  intel_present(void);
 extern int  intel_supported(void);
 extern int  intel_devid(void);
@@ -1108,6 +1113,18 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "gpu_flip"))   return zl_num((double)intel_flip((unsigned)a[0].num));
     if (streq(name, "gpu_vbl"))    return zl_num((double)intel_wait_vblank());
     if (streq(name, "gpu_flips"))  return zl_num((double)intel_flip_count());
+    /* PIPE_FRMCNT_A, straight. Declared at :636 for years with no binding, so
+     * zl could not read the one register every vblank-paced thing starts from -
+     * which is also why "it returns 0" was invisible from the desktop. It is 0
+     * whenever mmio is 0 (mmio_r's own guard), i.e. whenever intel_find() has
+     * not run, so a nonzero answer means BOTH that the driver found the part
+     * and that the pipe is scanning out. */
+    /* through `unsigned` first: intel_frame_count() hands back an `int`, and
+     * PIPE_FRMCNT is a free-running 32-bit counter, so for half of every cycle
+     * the top bit is set and a straight (double) cast reports a NEGATIVE frame
+     * count. The register is unsigned; say so here rather than changing the
+     * driver's signature, which intel.c's own f1 - f0 deltas rely on. */
+    if (streq(name, "gpu_frames")) return zl_num((double)(unsigned)intel_frame_count());
     if (streq(name, "gpu_fmt"))    return zl_num((double)intel_plane_format());
     if (streq(name, "gpu_tile"))   return zl_num((double)intel_plane_tiling());
     if (streq(name, "ggtt_map"))   return zl_num((double)intel_ggtt_map_range((unsigned)a[0].num,(unsigned)a[1].num,(int)a[2].num));
@@ -1453,6 +1470,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "vg_resp"))    return zl_num((double)virtio_gpu_last_resp());
     if (streq(name, "vg_flush"))   return zl_num((double)virtio_gpu_flush((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num));
     if (streq(name, "intel_find"))  return zl_num((double)intel_find());
+    if (streq(name, "intel_hibar")) return zl_num((double)intel_bar_too_high());
     if (streq(name, "intel_ok"))    return zl_num((double)intel_supported());
     if (streq(name, "intel_id"))    return zl_num((double)intel_devid());
     if (streq(name, "intel_mmio"))  return zl_num((double)intel_mmio());

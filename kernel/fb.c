@@ -659,6 +659,8 @@ static void fb_report_mode(unsigned int need)
  * Firmware that places it above 4 GiB would give a black screen or write into
  * whatever lives at the truncated address. T-11, closed. */
 
+void fb_cache_reset(void);   /* defined with the blur slots, ~1700 lines down */
+
 void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp)
 {
@@ -684,6 +686,25 @@ void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
         else { fb_puts("bpp "); fb_putu(bpp); fb_puts(", only 24 and 32 are handled\n"); }
         return;
     }
+
+    /* THE GEOMETRY IS CHANGING, so everything sized to the old one is void -
+     * the same reason fb_clip_none() and fb_pointer_forget() run below. The
+     * cache arena is the third such thing and was the one nobody rewound.
+     *
+     * What it cost, concretely, because "it leaks" undersells it: the arena is
+     * 16 MiB and only ever moved forward, so `mode` at 1920x1200 asked for a
+     * SECOND 8.8 MiB wallpaper with 7.2 MiB left. That is a refusal, not a
+     * leak - and a refused wallpaper cache is a desktop that repaints three
+     * radial glows and two conic wedges inside every damage rectangle, 22 ms
+     * of a 16.67 ms frame. One runtime resolution change turned the cache off
+     * for the rest of the session, and the boot log's "wallpaper cached" line
+     * was printed before it happened.
+     *
+     * Only when the geometry actually MOVES. fb_setup is also the re-init path
+     * for a framebuffer that changed address at the same size (a GOP re-init),
+     * and the cache is a copy in RAM - it does not care where VRAM went, and
+     * re-rendering the wallpaper costs ~12 ms per glow. */
+    if (width != fb_w || height != fb_h) fb_cache_reset();
 
     fb_base  = (unsigned char *)(fb_uptr)addr;
     fb_pitch = pitch;
@@ -2343,10 +2364,10 @@ static unsigned int arena_free_px(void)
                            - (fb_uptr)arena_next) / 4u);
 }
 
-void fb_cache_reset(void)
-{
-    arena_next = (unsigned int *)HI_BLUR;
-}
+/* fb_cache_reset() is defined below the blur slots, not here, because rewinding
+ * the bump pointer is only ONE of the three things it has to do - see the note
+ * on its definition. It used to live here and rewind `arena_next` alone, which
+ * is why it could never safely be called. */
 
 /* ---- the wallpaper cache -------------------------------------------------- */
 static unsigned int *wall_buf;
@@ -2419,6 +2440,39 @@ void fb_blur_free(int slot)
 void fb_blur_free_all(void)
 {
     for (int i = 0; i < BLUR_SLOTS; i++) blur_slot[i].used = 0;
+}
+
+/* ---- rewinding the arena, which is THREE things and not one ----------------
+ * This had no caller for its whole life, and the reason it was unsafe to give
+ * one is the reason it is defined down here rather than next to arena_take():
+ * rewinding `arena_next` on its own hands the same bytes out twice while three
+ * sets of live pointers still refer to them.
+ *
+ *   wall_buf                the wallpaper cache
+ *   blur_slot[i].px/.cap    the blur and stash slots
+ *   blur_tmp/blur_tmp_cap   the box-blur scratch row
+ *
+ * `wall_buf` is the dangerous one, because fb_wall_ok() answers from the SIZE
+ * (wall_w == fb_w && wall_h == fb_h), not from the allocation. Rewind the bump
+ * pointer without clearing it and any caller that re-enters at the same
+ * geometry gets a confident yes for a buffer the next arena_take() is about to
+ * reissue - a use-after-free that paints, because the memory is still mapped
+ * and still holds a plausible picture. `.cap` matters for the same reason:
+ * slot_capture() reuses a slot whose cap is already big enough and never
+ * re-takes, so a stale cap keeps a stale pointer alive past the rewind.
+ *
+ * So the rule is that every pointer INTO the arena is cleared in the same
+ * breath as the pointer that allocates from it. Anything added to this arena
+ * later has to be forgotten here too. */
+void fb_cache_reset(void)
+{
+    arena_next = (unsigned int *)HI_BLUR;
+    wall_buf = 0; wall_w = 0; wall_h = 0;
+    for (int i = 0; i < BLUR_SLOTS; i++) {
+        blur_slot[i].px = 0; blur_slot[i].cap = 0;
+        blur_slot[i].w = 0;  blur_slot[i].h = 0; blur_slot[i].used = 0;
+    }
+    blur_tmp = 0; blur_tmp_cap = 0;
 }
 
 /* one box pass along rows, from src into dst, radius r */

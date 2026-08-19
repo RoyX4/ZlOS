@@ -835,8 +835,11 @@ static void chrome(int win, int focused)
          * existed; a third signal would be one too many. */
         fb_fill_px(tx, W->y + t->title_h - 2, tw, 2, t->accent);
     } else {
+        /* a GRADIENT, same as the focused bar and same as kernel.zl:794 - it
+         * was two copies of one colour because the theme struct had one field
+         * for it. The reference's own stops: #2a3550 -> #182238. */
         fb_rrect_grad_top(tx, W->y + 2, tw, th, t->radius - 2,
-                          t->title_off, t->title_off);
+                          t->title_off, t->title_off_bot);
     }
     if (wins[win].ntab > 1) {
         /* a tab strip instead of a title. The active one is a raised surface

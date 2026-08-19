@@ -454,7 +454,315 @@ with the reference on 2 of 10 roles: its panel is `rgb(30,42,68)` against
 `rgb(5,6,10)`, and it ships a second cyan (`rgb(85,214,255)` for window focus
 against `ACCENT`'s `rgb(96,210,235)`). Two accents and two panel colours are on
 screen simultaneously. That is a bigger divergence than any of #29–#31 and it is
-**open** — see the table below.
+~~**open**~~ — **closed by #34 below.**
+
+---
+
+## Four taken 2026-08-19, second session — the ranked items from `NEXT-PROMPT.md`
+
+### #34 | The two palettes — **`kernel.zl` wins, and the reference says so itself.** Closes E
+
+Open item E was owned by Roy as a taste call. It turned out not to be one, which
+is why it could be closed rather than escalated. `docs/design/zlOS-design-northstar.html:13`
+says what it is, in its own words:
+
+```
+/* -- the zlOS palette, straight from kernel.zl's rgb() theme -- */
+```
+
+**The reference was transcribed FROM `kernel.zl`.** So "agree with the reference"
+and "agree with `kernel.zl`" are one instruction, not two competing ones, and
+`ui.c` was the only one of the three files that had drifted. #33 counted it —
+11 of 21 roles for `kernel.zl`, 2 of 10 for `ui.c` — and
+`hosttest/palette` now reproduces that count mechanically: run against the
+pre-fix `ui_theme_init` it prints eight `<-- ui.c differs` rows and leaves
+exactly `--hdr-top` and `--hdr-bot` agreeing. Two of ten, independently.
+
+Every value in `ui_theme_init` is now a named reference token, with the token in
+the comment beside it. The visible changes:
+
+| role | was | now | token |
+|---|---|---|---|
+| window body | `#1E2A44` mid-navy | **`#05060A`** | `--panel` |
+| the accent | `#55D6FF` | **`#60D2EB`** | `--accent` — the second cyan is gone |
+| primary text | `#E4EDFF` | `#D2E4FF` | `--txt-hi` |
+| secondary text | `#8FA0C0` | `#96A5C3` | `--txt-dim` |
+| hairline | `#141A2A` | `#26304A` | `--line` |
+| destructive | `#E05561` | `#E05A5A` | `--crit` |
+| desktop bg | `#141A2E` | `#1A1E32` | `--wall-top` |
+| unfocused title | `#243350`, flat | **`#2A3550 → #182238`** | the reference's own two stops |
+
+The window body is the big one and it is not only the reference asking for it:
+`visual-speed-northstar.md`'s identity list item 3 says "**near-black content**,
+restrained navy chrome, one cyan focus line and a soft shadow" independently.
+
+**Looked at, not asserted** — `visual-speed-northstar.md`'s rule 4 is that
+appearance is gated with pixel evidence. `hosttest/wmshot` at 1920×1200, same
+scene, the only difference being which `ui_theme_init` is linked:
+
+| | |
+|---|---|
+| [`docs/shots/palette-before-two-palettes.png`](../../docs/shots/palette-before-two-palettes.png) | mid-navy bodies |
+| [`docs/shots/palette-after-one-palette.png`](../../docs/shots/palette-after-one-palette.png) | `--panel` bodies |
+
+Three things the pictures show that the table does not. The chrome and the
+content stop being one blue wash and become separate layers, which is the
+"windows recede" effect the northstar's depth-level idea asks for. **The resize
+grips become visible** — they are drawn in `title_off` ink and were nearly the
+same value as the old panel. And the buttons still read, which is the check that
+mattered for `panel_hi`: at the reference's own `--panel-2` they would have
+been all but invisible.
+
+**Two things that are not the reference's, flagged rather than hidden:**
+
+1. **`panel_hi` — the reference does not define a control face.** It is a static
+   mockup; its own step list has "Widget toolkit — clickable buttons,
+   scrollbars" as **queued**. Its nearest raised surface, `--panel-2 #0b0e18`,
+   is a ~3% luminance step off `--panel` and would make every button, slider
+   track and toggle in `ui.c` effectively invisible. `panel_hi` takes
+   `--line-soft #1a2136` instead: a reference token, clearly above the panel,
+   still below `--line` so a hairline reads on top of a control.
+2. **`title_off_bot` is a new struct field.** The unfocused title bar is a
+   gradient in the reference and in `kernel.zl:794`, and was a flat slab here
+   because `ui_theme` had one field for it — `wm.c:828` passed the same colour
+   twice.
+
+**And the way it would have come back.** `settings.c`'s accent table had
+`{ "Ice", 0x55D6FF }` marked "the default — unchanged from `ui_theme_init`".
+`settings_apply()` rebuilds the theme and then writes `ACCENTS[S.accent]` over
+the accent, so leaving that entry behind meant opening Settings and choosing the
+entry labelled *the default* would silently repaint the desktop in the old cyan
+— the divergence returning through the panel rather than through the palette.
+Now `0x60D2EB`, and `palette` asserts the two are equal.
+
+*Gate:* `hosttest/palette` **reads all three files** rather than restating them —
+it parses the CSS variables out of the reference, parses `rgb()` out of
+`kernel.zl`, and links `ui.c` for real. A test that hardcoded the numbers would
+be a fourth copy of the palette, and the fourth copy is how you get a fifth.
+Watched going red on the pre-fix values (4 failures, every diverged role named);
+five of its checks are controls on its own two parsers, because every assertion
+in it is an equality between two numbers it read, and the silent failure mode is
+a parser that returns `-1` for everything.
+
+### #35 | The clipped shell — **it wraps.** Closes G
+
+`term_draw` now wraps a stored line across as many display rows as it needs, and
+walks the scrollback backwards counting **display** rows rather than stored ones
+so the newest line still lands against the prompt.
+
+**The measured numbers, and one correction to the record.** §1c and item G both
+say 77 columns, from the client rect: 1236 / 16. But `kernel.zl:2934` insets the
+client by the toolkit's padding before `term_draw` sees it —
+`term_draw(ax + 8*u, ay + 6*u, aw - 16*u, ah - 12*u, ...)` at `u = 2` — so the
+terminal gets **1204 px = 75 columns**, against a longest `help` line of 82
+(`kernel.zl:627`, the i2c row). Seven characters past the edge, not five.
+
+**Width would not have fixed it,** and that is why wrapping was the choice out of
+the two the item allowed. A wider boot window fixes 1920×1200 and nothing else:
+the window has a resize grip, `mode` changes the screen under it, and `cols` is
+`w / cell_w` at whatever size it currently is. The font stays monospace — that
+half was settled and measured in §1c, three space-aligned tables depend on a
+uniform advance, and mono costs 5.147 ms against 3.584 for forty lines.
+
+**The typed line got the same defect and the opposite fix.** `input` holds 198
+characters against 75 columns, so typing past the edge ran off it too — but the
+prompt owns exactly one row, and a prompt that wrapped downward would walk up
+over the scrollback. It scrolls sideways, anchored on the cursor.
+
+*Gate:* `hosttest/termwrap`, `term.c` alone against recording stubs. **Not a
+pixel test, deliberately:** the scissor guarantees no ink escapes the client rect
+either way, so "nothing drew outside the window" is green before and after and
+proves nothing — the defect is that *characters are lost*. It asserts on what
+`term_draw` asks to be drawn: no segment wider than the window, and the segments
+of a line concatenating back to the line. It carries its own negative control,
+and the control found something worth keeping: **the reassembly check alone is
+green against the bug**, because one segment equal to the whole line does
+reassemble to it. The width check is the one that catches it. Both are asserted
+so nobody later deletes the one that works.
+
+### #36 | `fb_cache_reset()` had no caller because it was **incomplete**, not because nobody thought of it
+
+`NEXT-PROMPT.md` §4 has this as "the arena never rewinds, so one mode switch
+leaks the previous wallpaper". Giving it a caller as it stood would have been
+worse than the leak: it rewound `arena_next` alone while three sets of live
+pointers still referred to the bytes it just freed — `wall_buf`,
+`blur_slot[i].px/.cap`, and `blur_tmp/blur_tmp_cap`.
+
+`wall_buf` is the dangerous one. `fb_wall_ok()` answers from the **size**
+(`wall_w == fb_w && wall_h == fb_h`), not from the allocation, so a rewind
+without a clear gives a confident yes for a buffer the next `arena_take()` is
+about to reissue — a use-after-free that *paints*, because the memory is still
+mapped and still holds a plausible picture. It now clears every pointer into the
+arena in the same breath as the pointer that allocates from it, and is defined
+below the blur slots so it can see them.
+
+**And it is not a leak, it is a refusal.** The arena is 16 MiB and only moved
+forward, so `mode` at 1920×1200 asked for a *second* 8.8 MiB wallpaper with
+7.2 MiB left. A refused wallpaper cache is not a slower desktop, it is a
+different one — `desk_draw` falls back to the plain vertical gradient — and the
+boot log's `wallpaper cached` line was printed one mode ago and still on screen
+saying otherwise. One runtime resolution change turned the cache off for the
+rest of the session.
+
+`fb_setup` calls it, next to `fb_clip_none()` and `fb_pointer_forget()` and for
+the same reason. **Only when the geometry actually moves:** `fb_setup` is also
+the re-init path for a framebuffer that changed address at the same size, the
+cache is a copy in RAM that does not care where VRAM went, and re-rendering the
+wallpaper costs ~12 ms per glow.
+
+*Gate:* `hosttest/walltest` case C, and it is **twice round the `n` command's
+toggle, not once**, because one hop fits in what is left and would have been
+green against the bug:
+
+```
+  1280x800    4000 KiB taken, 12384 left
+  1920x1200   9000 KiB taken,  3384 left
+  1280x800    wants 4000, 3384 left  ->  REFUSED
+```
+
+Watched going red on a control build with the `fb_setup` call removed.
+
+### #37 | `intel_find()` runs at boot, and `gpu_frames` exists so the result is visible
+
+Its only two callers were interactive shell commands — `kernel.zl:1496` (`P`)
+and `:1539` (`k`) — so on a desktop nobody typed a diagnostic into, `mmio` was 0
+for the whole session. Every consequence of that is **silent rather than loud**:
+`mmio_r()` returns 0 when `mmio` is 0, so `intel_frame_count()` answered 0
+forever, and `intel_wait_vblank()` tested `intel_pipe_enabled()`, read 0 out of a
+register it had never mapped, and reported "no vblank" immediately. No error
+anywhere — just a driver nobody asked to look.
+
+That is what blocks `look-and-speed.md` §4: replacing the 100 Hz PIT release with
+a 59.998 Hz panel deadline starts by reading the frame counter, and nothing
+could — **`intel_frame_count` had no zl binding at all**, declared at
+`runtime_kernel.c:636` and bound nowhere, which is also why "it returns 0" was
+invisible from the desktop. `gpu_frames` is that binding, next to `gpu_vbl` and
+`gpu_flips`.
+
+**What it touches, precisely, because `intel.c` is the one file here that can
+damage hardware:** a PCI scan, `pci_enable()` setting memory-decode and
+bus-master on a device the firmware is already scanning out of, and two BAR
+reads. No panel register, no AUX, no power sequencing. Nothing on §4.1's hazard
+list is reachable from it and nothing arms `lt_armed`.
+
+**It goes inside `wm_boot_start()`, not in the boot log**, and that placement is
+load-bearing: `wm_avail()` is 0 on `verify.sh` — `-kernel -display none`, no
+multiboot framebuffer tag — and that gate diffs its whole serial transcript
+against `golden.txt` byte for byte. A line in the boot log proper would have
+turned it red for a change that cannot affect the path it tests. Confirmed:
+`verify.sh` passes unchanged.
+
+**The boot line prints the PIXEL CLOCK, and that is a correction made during this
+session rather than a design.** It first printed the frame counter as the
+liveness fact, reasoning that 0 means the pipe is not scanning out. Running
+`hosttest/intel_probe` against this laptop's own GPU — read-only, i915 left
+running — refuted it:
+
+```
+  device id       0x9B41
+  supported       yes - Gen9/9.5
+  pipe A enabled  1
+  frame counter   0 -> 0 in 0.5 s  =  0.0 Hz   <- frozen: PSR is on
+  pixel clock     241690 kHz   (from PIPE_LINK_M1/N1 - exact, PSR-immune)
+```
+
+**On this panel `PIPE_FRMCNT` does not advance while Panel Self Refresh is
+active**, and two documents in this repo had already said so — `intel.c`'s own
+comment above `intel_pixel_clock_khz()` (firmware leaves PSR on here,
+`EDP_PSR_CTL = 0x81F00406`), and `HANDOFF.md`'s pixel-clock section, which puts
+it more sharply than the probe run did:
+
+> **Do not trust the frame counter for this.** It is not reliably zero, it is
+> *intermittently* zero — 0.0 Hz idle, a correct 60.0 Hz with a terminal
+> scrolling. It passes in testing and returns 0 in the field.
+
+**Intermittent is worse than frozen**, and that is the sentence that decides
+item 2 in `NEXT-PROMPT.md`: a pacer built on the frame counter works on the
+desk, with something on screen moving, and stalls exactly when the desktop goes
+quiet. So a zeroed counter means PSR, not a dead pipe, and printing it as a
+health indicator would have been precisely what the northstar forbids: a status
+claiming something the machine has not proved. It prints `gpu_clk` instead —
+M/N-derived, read-only, exact, correct while PSR is on — and adds one `[ INFO ]`
+line naming PSR when the counter reads 0.
+
+**Which qualifies the item itself.** `NEXT-PROMPT.md` §4 calls this "what
+unblocks any vblank work at all". It is necessary and it is *not sufficient*: a
+frame-counter-based pacer will read a frozen counter on the only machine this OS
+targets. The pacing design in `look-and-speed.md` §4 has to start from the pixel
+clock, or from turning PSR off, and that is a decision nobody has taken.
+
+**Only the negative branch is reachable under QEMU** — it has no Intel display
+controller, so a boot gate prints `no Intel GPU on the bus` and the `OK` branch
+has never executed on a booted zlOS. That is the same "write paths that have
+never run" caveat `CLAUDE.md` attaches to all of `intel.c`. What *is* verified is
+that the driver code the line depends on works on this silicon, via
+`intel_probe`, which runs the same `intel.c`.
+
+### #38 | What a different model family found in #34–#37, and one of the four was a P1
+
+`CLAUDE.md`'s rule — anything memory-, data- or irreversibility-adjacent gets
+graded by a different model family, because the context that wrote it is biased
+toward it and a fresh subagent is the *same weights inheriting the same blind
+spots*. `mcp__codex__codex_review` over the uncommitted diff, pointed at memory
+safety and silent wrong behaviour. **Four findings, all four reproduced against
+the tree before being acted on, all four real.** Recorded because three of them
+are a class, not an incident.
+
+**P1 — `intel_find()` truncates a 64-bit BAR, and #37 promoted that to every
+boot.** `pci_bar()` returns the low dword of a memory BAR. GTTMMADR (BAR0) and
+GMADR (BAR2) are 64-bit BARs on Gen9. **`pci_bar_is64()` and `pci_bar_hi()`
+already exist in `pci.c`, written for exactly this**, with a comment saying "this
+is not a theoretical case" — and `intel_find()` never called them. Below 4 GiB
+the low dword is the whole address, which is why this laptop at `0xE9000000`
+never showed it and why it survived: until #37 it ran only when somebody typed
+`k`. The failure is not "reads nothing": the low dword of a high BAR is a
+different, unrelated physical address, so every register the driver then checks
+answers with someone else's memory.
+
+Fixed by reading the high half, and by **refusing rather than truncating** on a
+32-bit build, which cannot address it at all. The high half is combined as two
+16-bit shifts and never one 32-bit shift, because `CLAUDE.md` records what this
+toolchain does with `x << 32` on a 32-bit type: **clang compiled it to a bare
+`ret`**. `intel_bar_too_high()` / zl `intel_hibar()` exist so the boot log can
+tell "there is no Intel GPU" from "there is one and we cannot reach it" —
+`intel_find()` returns -1 for both, and printing the wrong one sends the next
+reader hunting a missing device.
+
+**P2 — the wrap clamp shrank the prompt.** `seg[]` in `term_draw` is one stored
+line wide, so the wrap column count is clamped to `TERM_COLS - 1`. #35 then used
+that same clamped number for the *typed line*, which is not a stored line: it is
+198 characters and it scrolls rather than wraps. On a window of 203+ cells a
+full-length line that fitted was scrolled anyway and lost its first four
+characters. Two counts now. Gated, and the check was watched failing on the
+pre-review code: **194 of 198 shown**, exactly the four predicted.
+
+**P2 — `gpu_frames` reported a negative frame count.** `intel_frame_count()`
+returns `int` from a free-running unsigned 32-bit register, so for half of every
+cycle the top bit is set. Cast through `unsigned` in the binding rather than
+changing the driver signature, which `intel.c`'s own `f1 - f0` deltas rely on.
+**Corroborated by accident on the next `intel_probe` run**, which printed
+`frame counter 7 -> 0 in 0.5 s = -14.0 Hz` — the counter going backwards through
+a signed subtraction, the same defect one layer up.
+
+**P2 — the PSR line blamed PSR without checking.** `if gpu_frames() == 0` printed
+"PSR freezes it" unconditionally. A supported Gen9 part whose pipe A is disabled
+— another adapter supplied the boot framebuffer — also reads 0. Now gated on
+`intel_pipe() == 1`. This is `feedback_diagnosis_is_a_claim` committed by the
+same session that had just written that rule into #37.
+
+**The pattern worth keeping: three of the four were cases where the repo already
+held the answer** — `pci_bar_hi` existed, the `<< 32` hazard was in `CLAUDE.md`,
+the PSR intermittency was in `HANDOFF.md`. None of them needed new information,
+only somebody who had not just written the code looking at it.
+
+**One finding NOT from the review, found while running the land gate**, and it
+belongs to the GPU-track session rather than to these four: `hosttest/gpu_ring`
+exits **2** when run without root, so `gates/land-gate.sh` counts it a FAIL and
+the whole gate goes red on a box that simply is not root. Commit `e1eb44a`
+established `exit 77 = SKIP` five commits earlier and `gpu-blitter.md` says "the
+convention now exists — use it for the next hardware harness". `gpu_ring` is the
+next hardware harness. Not fixed here — it is another session's file and it was
+in flight.
 
 ---
 
@@ -463,9 +771,9 @@ screen simultaneously. That is a bigger divergence than any of #29–#31 and it 
 | # | Question | Owner |
 |---|---|---|
 | **A** | `.ultra/METRICS.json` primary metric is blank — **modeset or desktop?** They give different numbers. Logged as T-4. | Roy |
-| **E** | **Two palettes ship at once** (#33): `kernel.zl`'s `rgb()` constants vs `ui.c`'s `ui_theme`. Two accents, two panel colours, on screen together. Which is the source of truth? | Roy |
+| ~~E~~ | ~~Two palettes ship at once~~ — **closed by #34.** Not a taste call in the end: the reference's own header says it was transcribed *from* `kernel.zl`, so `ui.c` was the only file that had drifted. Gated by `hosttest/palette`. **The window body going near-black is the visible half — if that reads wrong, #34's table is the one block to revert.** | closed |
 | **F** | **The northstar wants all-mono chrome** ("Everything inside the screen is mono"); the kernel deliberately moved every dock/menu/tray/title label to proportional DejaVu Sans, citing `desktop-look.md` item 4. A straight contradiction, not drift — one of the two documents has to lose. | Roy |
-| **G** | The shell's longest lines are **clipped** at 1920x1200 (§1c, `POINTER-PROMPT.md`). Cause named and measured; the terminal staying monospace is right, so the fix is width or wrapping. | open |
+| ~~G~~ | ~~The shell's longest lines are clipped~~ — **closed by #35**, by wrapping. Note the correction: it is **75** columns, not the 77 §1c computed, because `kernel.zl:2934` insets the client before `term_draw` sees it. Gated by `hosttest/termwrap`. | closed |
 | ~~B~~ | ~~No layout engine~~ — **now designed**, see #28 and `desktop-toolkit.md` | closed |
 | **C** | Whether to add "ideas worth stealing" + sources to `os-landscape.md` (edit was declined) | Roy |
 | **D** | C9 watermark encoding still unsettled — firmware's values fit both narrow and wide | Intel side |

@@ -61,6 +61,9 @@ void pci_scan(void);
 void pci_enable(int i);
 u32  pci_bar(int i, int which);
 u32  pci_bar_size(int i, int which);
+/* pci_bar() returns the LOW DWORD of a memory BAR. GTTMMADR and GMADR are
+ * 64-bit BARs on this part, so the high half has to come from here. */
+u32  pci_bar_hi(int i, int which);
 u32  pci_read32(int bus, int dev, int fn, int off);
 
 /* ---- config-space registers on the GPU's own function (0:2:0) ------------
@@ -365,20 +368,61 @@ static int is_gen9(u16 id)
     return 0;
 }
 
+/* Set when an Intel display controller WAS found and had to be refused because
+ * its BAR sits above 4 GiB and this build has 32-bit pointers. Distinct from
+ * "no Intel GPU", which is what intel_find()'s -1 means on its own. */
+static int bar_too_high;
+int intel_bar_too_high(void) { return bar_too_high; }
+
 /* Find the Intel integrated GPU and map its register block. */
 int intel_find(void)
 {
+    bar_too_high = 0;
     pci_scan();
     for (int i = 0; i < pci_count(); i++) {
         if (pci_vendor(i) != 0x8086) continue;   /* Intel            */
         if (pci_class(i)  != 0x03)   continue;   /* display controller */
         gpu_idx   = i;
         gpu_devid = (u16)pci_device(i);
+        /* ---- THE HIGH HALF OF A 64-BIT BAR ---------------------------------
+         * GTTMMADR (BAR0) and GMADR (BAR2) are 64-bit BARs on Gen9, and
+         * `pci_bar()` returns the LOW DWORD ONLY. Below 4 GiB that low dword is
+         * the whole address — which is why this laptop, at 0xE9000000, never
+         * showed it, and why it survived: until intel_find() started running at
+         * boot it was reachable only by typing `k`. Firmware is free to place
+         * either BAR high, and `pci.c`'s own comment on pci_bar_is64 says so:
+         * "This is not a theoretical case."
+         *
+         * Truncating is worse than failing. The low dword of a high BAR is a
+         * DIFFERENT, unrelated physical address, so a truncated `mmio` does not
+         * read nothing — it reads whatever else lives there, and every register
+         * this driver goes on to check answers with someone else's memory.
+         * That is exactly the class CLAUDE.md and AGENTS.md are about. */
+        u32 mmio_hi = pci_bar_hi(i, 0);
+        u32 aper_hi = pci_bar_hi(i, 2);
+        if (sizeof(uptr) < 8 && (mmio_hi | aper_hi)) {
+            /* A 32-bit build cannot address it at all. Refuse, and say which
+             * refusal this is — intel_present() stays false either way, but
+             * "there is no Intel GPU" and "there is one and we cannot reach it"
+             * are different facts and the boot log prints them differently. */
+            bar_too_high = 1;
+            gpu_idx = -1;
+            return -1;
+        }
         pci_enable(i);                            /* memory + bus master */
         mmio      = (uptr)pci_bar(i, 0);          /* GTTMMADR */
         mmio_size = pci_bar_size(i, 0);
         aperture  = (uptr)pci_bar(i, 2);          /* GMADR    */
         aper_size = pci_bar_size(i, 2);
+        /* Written as two 16-bit shifts, never one 32-bit shift. On a 32-bit
+         * uptr `x << 32` is undefined, and CLAUDE.md records what this exact
+         * toolchain did with it: clang compiled the expression to a bare `ret`.
+         * The branch above already makes this dead on 32-bit; the idiom is here
+         * so it stays correct if that branch ever changes. */
+        if (sizeof(uptr) >= 8) {
+            mmio     |= ((uptr)mmio_hi << 16) << 16;
+            aperture |= ((uptr)aper_hi << 16) << 16;
+        }
         return i;
     }
     gpu_idx = -1;

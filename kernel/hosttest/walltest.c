@@ -148,6 +148,40 @@ int main(void)
     int b2560 = run(vram, 2560, 1440, 1, 1);
     printf("\n");
 
+    /* ---- C. A RUNTIME MODE SWITCH, with nothing reset by hand ---------------
+     * A and B each call fb_cache_reset() themselves, so neither of them can
+     * see what a real machine does. kernel.zl's `n` command toggles
+     * 1280x800 <-> 1920x1200 through console_set_res -> console_init_fb ->
+     * fb_setup, and NOTHING in that chain used to rewind the arena, so every
+     * switch took a fresh wallpaper buffer and never gave the old one back:
+     *
+     *   1280x800    4000 KiB taken, 12384 left
+     *   1920x1200   9000 KiB taken,  3384 left
+     *   1280x800    wants 4000, 3384 left  ->  REFUSED
+     *
+     * That is not a leak you pay for in RAM you were not using. A refused
+     * wallpaper cache is a DIFFERENT DESKTOP: desk_draw falls back to a plain
+     * vertical gradient, and the boot log's "wallpaper cached" line was printed
+     * one mode ago and is still on screen saying otherwise.
+     *
+     * TWICE ROUND, not once. One switch fits in what is left and passes either
+     * way - a gate that only did the first hop would have been green against
+     * the bug, which is the exact shape docs/GUARDS-THAT-DID-NOT-GUARD.md is a
+     * list of. */
+    printf("  C. A RUNTIME MODE SWITCH - fb_setup rewinds, nothing else does\n");
+    fb_cache_reset();                          /* known-empty arena to start */
+    int c1 = 0, c2 = 0, c3 = 0;
+    log_start();
+    fb_setup(vram, 1280 * 4, 1280, 800, 32);   c1 = fb_wall_save() && fb_wall_ok();
+    fb_setup(vram, 1920 * 4, 1920, 1200, 32);  c2 = fb_wall_save() && fb_wall_ok();
+    fb_setup(vram, 1280 * 4, 1280,  800, 32);  c3 = fb_wall_save() && fb_wall_ok();
+    log_stop();
+    for (char *p = log_buf, *e; *p; p = e) {
+        e = strchr(p, '\n'); if (!e) break; e++;
+        if (strstr(p, "wallpaper")) printf("      |%.*s\n", (int)(e - p - 1), p);
+    }
+    printf("\n");
+
     printf("  assertions\n");
     ok(a1920, "1920x1200 without the blur: wallpaper cached");
     ok(b1920, "1920x1200 WITH the blur: wallpaper cached "
@@ -166,6 +200,12 @@ int main(void)
     int a3840 = run(vram, 3840, 2160, 0, 0);
     ok(!a3840, "3840x2160: refused even without the blur - "
                "31.6 MiB will not fit 16, by design");
+
+    ok(c1, "mode switch, hop 1 (1280x800): cached");
+    ok(c2, "mode switch, hop 2 (1920x1200): cached - fits either way, "
+           "which is why one hop proves nothing");
+    ok(c3, "mode switch, hop 3 (back to 1280x800): cached "
+           "<- RED until fb_setup rewound the arena");
 
     printf("\n%s (%d failure%s)\n", fails ? "FAILED" : "all passed",
            fails, fails == 1 ? "" : "s");

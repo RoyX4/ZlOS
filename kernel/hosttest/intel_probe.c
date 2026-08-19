@@ -283,6 +283,10 @@ void pci_scan(void)                   { }
 void pci_enable(int i)                { (void)i; }
 u32  pci_bar(int i, int w)            { (void)i; (void)w; return 0; }
 u32  pci_bar_size(int i, int w)       { (void)i; (void)w; return 0; }
+/* 0 = "not a 64-bit BAR", which is the right answer for a harness that finds no
+ * devices at all: intel_find() is not the path this program uses - it maps
+ * BAR0 itself from sysfs - so the stub only has to link, not to be true. */
+u32  pci_bar_hi(int i, int w)         { (void)i; (void)w; return 0; }
 u32  pci_read32(int b, int d, int f, int o) { return host_cfg_read(b, d, f, o); }
 
 /* ---- helpers ----------------------------------------------------------- */

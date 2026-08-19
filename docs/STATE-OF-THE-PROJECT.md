@@ -521,7 +521,30 @@ already exists as the harness shape.
 
 *Source: DESKPLAN-15; corroborated `HANDOFF.md:450-453`.*
 
-### 3.6 The desktop looks coarser than v10 and the cause is not found
+### 3.6 The desktop looks coarser than v10 — ~~cause not found~~ **cause found, and both halves are now closed**
+
+> **UPDATED 2026-08-19, second session.** The entry below is the state before
+> §1c was answered. Both halves are settled and the answer is not in this
+> section any more:
+>
+> - **Why it looked coarser:** §1c's own ANSWERED box. `term_draw` went
+>   monospace at `663a110`, so the shell's text got 15% wider inside an
+>   unchanged window. That change is **right** — a terminal is monospace and
+>   three space-aligned tables depend on it — so the look difference stays.
+> - **The clipping it caused** was `DECISIONS.md` item G and is closed by **#35**:
+>   `term_draw` wraps. One correction to §1c's arithmetic while doing it — the
+>   shell is **75** columns, not 77, because `kernel.zl:2934` insets the client
+>   by the toolkit's padding before `term_draw` is handed it. Gated by
+>   `hosttest/termwrap`.
+> - **A second, larger contributor found separately:** two palettes were on
+>   screen at once — two cyans and two panel colours. `DECISIONS.md` item E,
+>   closed by **#34**, gated by `hosttest/palette`. Before/after renders are in
+>   [`shots/palette-before-two-palettes.png`](shots/palette-before-two-palettes.png)
+>   and [`shots/palette-after-one-palette.png`](shots/palette-after-one-palette.png).
+>
+> The concurrency note below turned out to be right and is worth keeping as the
+> example: that session's deletion of §1c and its two PNGs was in-progress work,
+> not a resolution, and §1c was later restored byte-identical from `ff27d57`.
 
 `kernel/docs/POINTER-PROMPT.md` Phase 1c records this as an open question with
 four things already ruled out by command — no visual function was lost,

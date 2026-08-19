@@ -29,6 +29,22 @@ gcc -O2 -w -o walltest walltest.c \
     ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./walltest      (run: ./walltest)"
 
+# The shell's long lines against the shell's window - DECISIONS.md item G.
+# term.c ALONE, against recording stubs, because the defect is that characters
+# are LOST and the scissor guarantees no ink escapes the client rect either way:
+# a pixel test is green before and after. This asserts on what term_draw asks to
+# be drawn instead.
+gcc -O2 -w -o termwrap termwrap.c ../term.c
+echo "built ./termwrap      (run: ./termwrap)"
+
+# ONE palette across the three files that carry it - DECISIONS.md item E.
+# Parses the reference HTML and kernel.zl rather than restating their values,
+# because a test that hardcoded the numbers would be a FOURTH copy of the
+# palette. ui.c is linked for real. Run from this directory: it opens
+# ../kernel.zl, ../settings.c and ../../docs/design/.
+gcc -O2 -w -o palette palette.c ../ui.c
+echo "built ./palette       (run: ./palette)"
+
 # The proportional text engine, asserted. fbbench times fb.c and browsershot
 # photographs it; neither NOTICES when a style flag stops changing the pixels.
 # Both regressions this gate exists for shipped green: italic silently rendered

@@ -55,7 +55,14 @@ void wm_set_anim(int on);
  * switching accent never changes how readable anything is - which is the
  * property a palette has to have and a free colour picker cannot promise. */
 static const struct { const char *name; unsigned rgb; } ACCENTS[] = {
-    { "Ice",     0x55D6FF },     /* the default - unchanged from ui_theme_init */
+    /* Ice MUST equal ui_theme_init's accent, or the default is a colour you
+     * cannot get back to: settings_apply() rebuilds the theme and then writes
+     * ACCENTS[S.accent] over it, so a mismatch means opening Settings and
+     * choosing the entry marked "the default" silently repaints the desktop in
+     * a different cyan. That is how the second cyan would come back after
+     * DECISIONS item E removed it - through the panel rather than through the
+     * palette. --accent #60d2eb. */
+    { "Ice",     0x60D2EB },     /* == ui_theme_init's accent. Keep them equal. */
     { "Mint",    0x4FE0B0 },
     { "Amber",   0xFFB454 },
     { "Rose",    0xFF7A9C },

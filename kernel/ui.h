@@ -41,7 +41,8 @@ struct ui_theme {
     unsigned danger;      /* destructive only - the close box   */
     unsigned title;       /* focused title bar, top of gradient */
     unsigned title_bot;   /* focused title bar, bottom          */
-    unsigned title_off;   /* unfocused title bar, flat          */
+    unsigned title_off;   /* unfocused title bar, TOP of grad   */
+    unsigned title_off_bot; /* ...and its bottom                */
 
     /* metrics, all already multiplied by the UI scale */
     int pad;              /* inside a panel, edge to content    */

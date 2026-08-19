@@ -320,10 +320,36 @@ int term_arg(void) { return pending_arg; }
  * read it here; zl only ever sees the int. */
 const char *term_argstr(void) { return argstr; }
 
+/* How many display rows one stored line needs at `cols` columns. An EMPTY line
+ * still needs one - it is a blank row on screen, not an absence - and that is
+ * what keeps this in step with the drawing loop below, which also emits one
+ * (blank) row for it. */
+static int wrapped_rows(const char *s, int cols)
+{
+    int n = 0;
+    while (s[n]) n++;
+    if (n <= cols) return 1;
+    return (n + cols - 1) / cols;
+}
+
 /* ---- drawing ---------------------------------------------------------------
  * POSITION-PURE, as the app contract requires: every coordinate is derived
  * from the x,y,w,h passed in. Draws the last rows that fit, bottom-anchored,
- * then the prompt and the line being typed. */
+ * then the prompt and the line being typed.
+ *
+ * IT WRAPS, and that is DECISIONS.md open item G. At 1920x1200 the shell client
+ * is 1236 px wide, the monospace cell is 16 px, so 77 columns fit - and the
+ * longest line `help` prints is 82 (kernel.zl:627, the i2c row). Five
+ * characters were being drawn past the client edge and cut mid-glyph by the
+ * scissor, which the northstar names outright as a thing that must not ship.
+ *
+ * WIDTH WOULD NOT HAVE FIXED IT. A wider boot window fixes 1920x1200 and
+ * nothing else: the window has a resize grip, `mode` changes the screen under
+ * it, and `cols` is w/cell_w at whatever size the user just dragged it to. The
+ * defect is "a line longer than the window", and only wrapping answers that at
+ * every width. The font stays monospace - that half was settled and measured
+ * (POINTER-PROMPT §1c): three space-aligned tables depend on a uniform advance,
+ * and a terminal is monospace. */
 void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
                unsigned int accent, int cursor_on)
 {
@@ -333,12 +359,40 @@ void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
     int rows = h / lh;
     if (rows < 1) return;
 
+    int view_cols = w / cw;                  /* what the WINDOW can show */
+    if (view_cols < 1) return;               /* narrower than one glyph */
+    /* CLAMP, because `seg` below is one stored line and no wider. A 3840-px
+     * client at a 16-px cell is 240 columns and would run 40 bytes off the end
+     * of it. Nothing is lost for the SCROLLBACK by clamping: term_putc (:85)
+     * refuses to store past TERM_COLS - 1, so no stored line can be longer.
+     *
+     * The two are kept apart because the PROMPT is not a stored line - `input`
+     * is 198 characters and does not wrap, it scrolls, so on a window wider
+     * than 203 cells clamping would scroll a line that fits. */
+    int cols = view_cols;
+    if (cols > TERM_COLS - 1) cols = TERM_COLS - 1;
+
     /* one row is reserved for the prompt at the bottom */
     int show = rows - 1;
-    if (show > s_live) show = s_live;
 
-    /* walk back `show` committed rows from the newest */
-    int first = s_head - show;
+    /* WALK BACK FROM THE NEWEST LINE, counting DISPLAY rows rather than stored
+     * ones, until the visible band is full. With wrapping the two are no longer
+     * the same number - one `help` row can be two rows on screen - so the old
+     * `first = s_head - show` arithmetic would scroll the newest line off the
+     * bottom by however many lines happened to wrap. */
+    int nlines = 0, drows = 0;
+    while (nlines < s_live && drows < show) {
+        int idx = s_head - 1 - nlines;
+        while (idx < 0) idx += TERM_ROWS;
+        drows += wrapped_rows(scroll[idx], cols);
+        nlines++;
+    }
+    /* the oldest line reached may only be PARTLY visible: drop that many of its
+     * leading segments so the newest row still lands against the prompt */
+    int skip = drows - show;
+    if (skip < 0) skip = 0;
+
+    int first = s_head - nlines;
     while (first < 0) first += TERM_ROWS;
 
     /* SKIP THE ROWS THAT CANNOT BE SEEN.
@@ -355,10 +409,28 @@ void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
      * viewport rather than drawing them and clipping. */
     int c_top = fb_clip_top(), c_bot = fb_clip_bot();
     int ty = y;
-    for (int r = 0; r < show; r++) {
+    char seg[TERM_COLS];
+    for (int r = 0; r < nlines; r++) {
         const char *line = scroll[(first + r) % TERM_ROWS];
-        if (line[0] && ty + lh > c_top && ty < c_bot) fb_text_aa(x, ty, line, dim);
-        ty += lh;
+        int n = 0;
+        while (line[n]) n++;
+        int off = 0;
+        do {
+            int len = n - off;
+            if (len > cols) len = cols;
+            if (skip > 0) {                  /* above the band - not drawn, and
+                                              * ty must NOT advance for it */
+                skip--;
+            } else {
+                if (len > 0 && ty + lh > c_top && ty < c_bot) {
+                    for (int i = 0; i < len; i++) seg[i] = line[off + i];
+                    seg[len] = 0;
+                    fb_text_aa(x, ty, seg, dim);
+                }
+                ty += lh;
+            }
+            off += cols;
+        } while (off < n);
     }
 
     /* the prompt line, always at the bottom of the client area */
@@ -366,7 +438,20 @@ void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
     if (py + lh <= c_top || py >= c_bot) return;      /* not in this band */
     fb_text_aa(x, py, "zl>", accent);
     int px = x + 4 * cw;
+
+    /* THE TYPED LINE SCROLLS SIDEWAYS instead of running off the edge - the
+     * same defect as the scrollback and the same fix, but wrapping is wrong
+     * here: the prompt owns exactly one row, and a line that grew downward
+     * would walk up over the scrollback. `input` holds up to TERM_COLS - 2 =
+     * 198 characters and the client is 77 columns wide, so this is reachable by
+     * typing, not a theoretical case. Anchored on the CURSOR, which is the only
+     * part you have to be able to see while typing. */
+    int avail = view_cols - 4;               /* "zl>" and a space. view_cols,
+                                              * not cols - see the note above */
+    if (avail < 1) avail = 1;
+    int from = 0;
+    if (in_len >= avail) from = in_len - avail + 1;
     input[in_len] = 0;
-    if (in_len) fb_text_aa(px, py, input, fg);
-    if (cursor_on) fb_fill_px(px + in_len * cw, py, cw, lh, accent);
+    if (in_len > from) fb_text_aa(px, py, input + from, fg);
+    if (cursor_on) fb_fill_px(px + (in_len - from) * cw, py, cw, lh, accent);
 }

@@ -220,6 +220,22 @@ identical apart from the digits that changed.
 > now `DECISIONS.md` open item G: at 1920x1200 the shell client is 1236 px = 77
 > columns of 16 px, and the longest `help` line needs ~82. Fix is width or
 > wrapping, not font.
+>
+> > **CLOSED 2026-08-19 by `DECISIONS.md` #35 — wrapping, and one correction to
+> > the count above.** It is **75** columns, not 77. 1236/16 = 77 is the CLIENT
+> > rect; `kernel.zl:2934` insets it by the toolkit's padding before `term_draw`
+> > sees it — `term_draw(ax + 8*u, ay + 6*u, aw - 16*u, ah - 12*u, ...)` at
+> > `u = 2` — so the terminal gets 1204 px. The longest `help` line is exactly
+> > **82** characters (`kernel.zl:627`, the i2c row), so seven characters went
+> > past the edge, not five.
+> >
+> > Width was the other option this box allowed and it is the wrong one: the
+> > window has a resize grip and `mode` changes the screen under it, so a wider
+> > boot window fixes one size and no other. `term_draw` wraps, walking the
+> > scrollback backwards by **display** rows rather than stored ones so the
+> > newest line still lands against the prompt. The typed line had the same
+> > defect and scrolls sideways instead, because the prompt owns one row.
+> > Gated by `hosttest/termwrap`, watched going red.
 
 Zac's report, and he is right that the two screens differ. Compare
 `docs/shots/before-merge-help.png` (~~desktop/overnight-compositor~~ **the

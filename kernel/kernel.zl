@@ -3767,6 +3767,89 @@ fn wm_boot_start() {
     # enough on apps-in-windows, whose boot path WAS wm_session(); it is not
     # enough here, where wm_boot_start() opens the windows and the frame loop
     # runs directly. Same marker, emitted where the windows actually appear.
+    # ---- FIND THE INTEL GPU, HERE, once, at boot ---------------------------
+    # intel_find() had exactly two callers and both were interactive shell
+    # commands - `P` and `k`, kernel.zl:1496 and :1539. So on a desktop nobody
+    # typed a diagnostic into, `mmio` was 0 for the entire session, and every
+    # consequence of that is silent rather than loud: mmio_r() returns 0 when
+    # mmio is 0, so intel_frame_count() answered 0 forever, and
+    # intel_wait_vblank() (zl: gpu_vbl) tested intel_pipe_enabled(), read 0 out
+    # of a register it never mapped, and reported "no vblank" immediately. Not
+    # an error anywhere - just a driver that was never asked to look.
+    #
+    # That is what blocks the pacing work in look-and-speed.md §4: replacing the
+    # 100 Hz PIT release with a 59.998 Hz panel deadline starts by being able to
+    # read the frame counter, and nothing could.
+    #
+    # WHAT THIS TOUCHES, precisely, because intel.c is the one file here that
+    # can damage hardware: a PCI scan, then pci_enable() setting memory-decode
+    # and bus-master on a device the firmware is ALREADY scanning out of, then
+    # two BAR reads. No panel register, no AUX, no power sequencing - none of
+    # intel.c's hazard list (the 500 ms T12 delay, AUX into an unpowered panel)
+    # is reachable from here, and nothing arms lt_armed.
+    #
+    # It lives inside wm_boot_start rather than in the boot log because
+    # wm_avail() is 0 on verify.sh - no framebuffer, no compositor - and that
+    # gate diffs its whole transcript against golden.txt byte for byte.
+    if intel_find() < 0 {
+        # TWO DIFFERENT FACTS, and printing the wrong one sends the next reader
+        # looking for a missing device. intel_find() returns -1 both when there
+        # is no Intel display controller and when there IS one whose 64-bit BAR
+        # sits above 4 GiB, which a 32-bit build cannot address - and which it
+        # now refuses rather than truncating, because the low dword of a high
+        # BAR is a different, unrelated physical address.
+        if intel_hibar() == 1 {
+            info_line("Intel GPU found but its BAR is above 4 GiB - refused, not truncated")
+        } else {
+            info_line("no Intel GPU on the bus - vblank pacing unavailable here")
+        }
+    } else {
+        if intel_ok() == 0 {
+            info_line("Intel GPU present but not Gen9 - vblank pacing unavailable")
+        } else {
+            # THE PIXEL CLOCK, NOT THE FRAME COUNTER, and that ordering is a
+            # correction: the first version of this line printed the frame
+            # counter as the liveness fact, on the reasoning that 0 means the
+            # pipe is not scanning out. `hosttest/intel_probe` against this
+            # laptop's own GPU refutes it -
+            #
+            #     frame counter   0 -> 0 in 0.5 s  =  0.0 Hz   <- frozen: PSR is on
+            #     pixel clock     241690 kHz  (from PIPE_LINK_M1/N1 - PSR-immune)
+            #
+            # - and intel.c's own comment above intel_pixel_clock_khz() had said
+            # so all along: with self-refresh on, the panel redraws from its own
+            # memory, the pipe is not fetching, and PIPE_FRMCNT does not move.
+            # Firmware leaves PSR on here (EDP_PSR_CTL = 0x81F00406). So a
+            # zeroed frame counter on this machine means PSR, not a dead pipe,
+            # and printing it as a health indicator would be exactly the thing
+            # the northstar forbids: a status that claims something the machine
+            # has not proved.
+            color(C_GREY)  put("  [")
+            color(C_GREEN) put("  OK  ")
+            color(C_GREY)  put("] Intel 0x")  hex(intel_id(), 4)
+            put(" mapped at boot, pipe ")     put(intel_pipe())
+            put(", pixel clock ")             put(gpu_clk())  print(" kHz")
+            # Say which of the two clocks the pacing work can actually use, on
+            # THIS machine, rather than leaving the next session to rediscover
+            # PSR the expensive way.
+            #
+            # GATED ON THE PIPE BEING ON, because 0 has two causes and only one
+            # of them is PSR: a supported Gen9 part whose pipe A is disabled -
+            # another adapter supplied the boot framebuffer, say - also reads 0,
+            # and blaming PSR there is a diagnosis nobody checked. With the pipe
+            # enabled and the counter at 0 the panel is scanning from its own
+            # memory, which is what PSR is. Even then it is stated as the
+            # reading plus its cause, not as a verdict: HANDOFF.md records that
+            # this counter is INTERMITTENTLY zero, not reliably so - 0 idle,
+            # a correct 60.0 Hz with a terminal scrolling.
+            if intel_pipe() == 1 {
+                if gpu_frames() == 0 {
+                    info_line("PIPE_FRMCNT reads 0 with pipe A on - that is PSR; pace off the pixel clock")
+                }
+            }
+        }
+    }
+
     color(C_GREEN)  put("  compositor: ")
     color(C_GREY)   put(wm_n())  put(" windows, shell client ")
     put(wm_cx(shell_win))  put(",")  put(wm_cy(shell_win))  put(" ")
