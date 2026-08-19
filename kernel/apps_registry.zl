@@ -49,8 +49,13 @@ APP_HANOI     = 27
 APP_LIGHTS    = 28
 APP_CONNECT4  = 29
 
+# ---- system (apps_system.zl) -------------------------------------------------
+APP_CLOCK   = 30
+APP_SYSINFO = 31
+APP_CALC    = 32
+
 REG_FIRST = 14                      # first id this table actually lists
-REG_COUNT = 16                      # bumped as each batch of apps is wired in
+REG_COUNT = 19                      # bumped as each batch of apps is wired in
 
 # kernel.elf is measured against raw_boot.asm's CHUNKS ceiling (1,966,080
 # bytes - the 32 KiB-chunk BIOS raw-boot loader silently truncates anything
@@ -80,6 +85,9 @@ fn reg_name(id) {
     if id == APP_HANOI     { return "Tower of Hanoi" }
     if id == APP_LIGHTS    { return "Lights Out" }
     if id == APP_CONNECT4  { return "Connect Four" }
+    if id == APP_CLOCK   { return "Clocks & Timers" }
+    if id == APP_SYSINFO { return "System Info" }
+    if id == APP_CALC    { return "Calculator" }
     return "App"
 }
 
@@ -96,9 +104,12 @@ fn reg_w(id) {
     if id == APP_COLOR  { return 260 }
     if id == APP_UNIT   { return 260 }
     if id == APP_NOTES  { return 300 }
-    if id == APP_WORDLE { return 200 }
-    if id == APP_HANOI  { return 320 }
-    if id == APP_LIGHTS { return 220 }
+    if id == APP_WORDLE  { return 200 }
+    if id == APP_HANOI   { return 320 }
+    if id == APP_LIGHTS  { return 220 }
+    if id == APP_CLOCK   { return 220 }
+    if id == APP_SYSINFO { return 260 }
+    if id == APP_CALC    { return 200 }
     return 300
 }
 fn reg_h(id) {
@@ -117,6 +128,9 @@ fn reg_h(id) {
     if id == APP_HANOI     { return 200 }
     if id == APP_LIGHTS    { return 240 }
     if id == APP_CONNECT4  { return 280 }
+    if id == APP_CLOCK   { return 160 }
+    if id == APP_SYSINFO { return 200 }
+    if id == APP_CALC    { return 240 }
     return 160
 }
 
@@ -124,7 +138,10 @@ fn reg_h(id) {
 # draw the two-letter monogram instead". Only reused where the shape is a
 # real match (files/network/disk/clock) - forcing a stretch icon onto
 # something it does not depict is worse than an honest monogram.
-fn reg_icon(id) { return 0 - 1 }
+fn reg_icon(id) {
+    if id == APP_CLOCK { return 16 }    # icons.c: 16 clock - an exact match
+    return 0 - 1
+}
 
 # id -> two-letter monogram, drawn when reg_icon() is -1.
 fn reg_mono(id) {
@@ -144,6 +161,8 @@ fn reg_mono(id) {
     if id == APP_HANOI     { return "TH" }
     if id == APP_LIGHTS    { return "LO" }
     if id == APP_CONNECT4  { return "C4" }
+    if id == APP_SYSINFO { return "SI" }
+    if id == APP_CALC    { return "CA" }
     return "??"
 }
 
@@ -174,10 +193,14 @@ fn reg_new(id, u) {
     if id == APP_HANOI     { ho_reset() }
     if id == APP_LIGHTS    { lo_reset() }
     if id == APP_CONNECT4  { c4_reset() }
+    if id == APP_CALC      { ca_clear() }
     if id >= APP_CLIP { if id <= APP_BENCH {
         return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
     }}
     if id >= APP_WORDLE { if id <= APP_CONNECT4 {
+        return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
+    }}
+    if id >= APP_CLOCK { if id <= APP_CALC {
         return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
     }}
     return 0 - 1
@@ -222,6 +245,9 @@ fn reg_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_HANOI     { return ho_draw(ax, ay, aw, ah) }
     if id == APP_LIGHTS    { return lo_draw(ax, ay, aw, ah) }
     if id == APP_CONNECT4  { return c4_draw(ax, ay, aw, ah) }
+    if id == APP_CLOCK   { return clk_draw(ax, ay, aw, ah) }
+    if id == APP_SYSINFO { return si_draw(ax, ay, aw, ah) }
+    if id == APP_CALC    { return ca_draw(ax, ay, aw, ah) }
     return 0
 }
 fn reg_event(id, win, ety, ecode, ex, ey) {
@@ -242,9 +268,11 @@ fn reg_event(id, win, ety, ecode, ex, ey) {
     if id == APP_HANOI     { return ho_event(win, ety, ecode, ex, ey) }
     if id == APP_LIGHTS    { return lo_event(win, ety, ecode, ex, ey) }
     if id == APP_CONNECT4  { return c4_event(win, ety, ecode, ex, ey) }
+    if id == APP_CALC { return ca_event(win, ety, ecode, ex, ey) }
     return 0
 }
 fn reg_tick(id, win) {
+    if id == APP_CLOCK { return clk_tick() }
     return 0
 }
 

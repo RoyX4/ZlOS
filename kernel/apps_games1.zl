@@ -276,6 +276,7 @@ fn lo_toggle(r, c) {
 }
 fn lo_reset() {
     fill_mem(LIGHTS_BOARD, 0, LO_N * LO_N)
+    ac_seed_from(ticks() + 19)          # see the note in wg_reset
     ki = 0
     while ki < 12 {
         cell = ac_rand(LO_N * LO_N)

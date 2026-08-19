@@ -37,6 +37,11 @@ fn wg_word(w, p) {
 }
 
 fn wg_reset() {
+    # Seeded from ticks(), the same technique sn_reset() already uses for
+    # Snake's food placement - without it ac_seed starts at the same
+    # compile-time constant every boot, so the very first Word Guess of any
+    # session would always land on the same word.
+    ac_seed_from(ticks() + 11)
     wg_widx = ac_rand(WG_WORDS)
     wg_row = 0
     wg_col = 0

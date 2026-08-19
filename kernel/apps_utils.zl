@@ -550,7 +550,12 @@ fn bm_event(win, ety, ecode, ex, ey) {
     bm_result = fib(bm_n)
     bm_ticks = ticks() - t0
     bm_n = bm_n + 1
-    if bm_n > 30 { bm_n = 20 }
+    # Capped well below what the shell's own `f` command already allows
+    # unbounded (kernel.zl run_command cmd 102) - fib is recursive and this
+    # runs synchronously inside an event handler, which the frame loop waits
+    # on, so growing this without a ceiling would eventually stall the whole
+    # desktop for one click. 27 keeps every run comfortably sub-second.
+    if bm_n > 27 { bm_n = 20 }
     wm_dmg(win)
     return 1
 }
