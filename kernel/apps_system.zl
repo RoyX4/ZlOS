@@ -1,0 +1,195 @@
+# apps_system.zl - system apps beyond the original 13, built entirely on
+# introspection builtins that already existed (cpu_*, rtc_*, smp_*, apic_*)
+# - each one a real read of live kernel state, not a mockup.
+
+# ==============================================================================
+# Clocks & Timers - digital clock off rtc.c. GIVEN ITS OWN TICK SOURCE
+# (clk_last_s below), deliberately NOT kernel.zl's app_tick `last_tick_sec`,
+# which APP_MONITOR already owns: app_tick runs once per open window per
+# frame, and two apps comparing the same shared "last second" variable race
+# - whichever is ticked first in a frame updates it, so the second app's
+# `if tsec != last_tick_sec` sees no change and never asks for a repaint.
+# That is the exact bug this brief named ("one shared second-timer starved
+# the Clock when another live system app ticked first"). One clock, one
+# variable, nobody else touches it.
+# ==============================================================================
+clk_last_s = 0 - 1
+
+fn clk_draw(ax, ay, aw, ah) {
+    u = ui()
+    if rtc_ok() == 0 {
+        label(ax + 8 * u, ay + 10 * u, "no real-time clock on this machine", TXT_DIM, T_BODY, W_REG)
+        return 0
+    }
+    label(ax + 8 * u, ay + 8 * u, "local time", TXT_DIM, T_CAPTION, W_REG)
+    ac_draw_base(ax + 8 * u, ay + 28 * u, rtc_h(), 2, 10, TXT_HI)
+    char_aa(ax + 8 * u + 2 * cell_w(), ay + 28 * u, 58, TXT_HI)
+    ac_draw_base(ax + 8 * u + 3 * cell_w(), ay + 28 * u, rtc_mi(), 2, 10, TXT_HI)
+    char_aa(ax + 8 * u + 5 * cell_w(), ay + 28 * u, 58, TXT_HI)
+    ac_draw_base(ax + 8 * u + 6 * cell_w(), ay + 28 * u, rtc_s(), 2, 10, ACCENT)
+
+    label(ax + 8 * u, ay + 66 * u, "date", TXT_DIM, T_CAPTION, W_REG)
+    ac_draw_base(ax + 8 * u, ay + 84 * u, rtc_y(), 4, 10, TXT_HI)
+    char_aa(ax + 8 * u + 4 * cell_w(), ay + 84 * u, 45, TXT_DIM)
+    ac_draw_base(ax + 8 * u + 5 * cell_w(), ay + 84 * u, rtc_mo(), 2, 10, TXT_HI)
+    char_aa(ax + 8 * u + 7 * cell_w(), ay + 84 * u, 45, TXT_DIM)
+    ac_draw_base(ax + 8 * u + 8 * cell_w(), ay + 84 * u, rtc_d(), 2, 10, TXT_HI)
+
+    label(ax + 8 * u, ay + 116 * u, "uptime ticks", TXT_DIM, T_CAPTION, W_REG)
+    label_num(ax + 8 * u, ay + 132 * u, ticks(), TXT_DIM, T_CAPTION, W_REG)
+    return 0
+}
+
+fn clk_tick() {
+    if rtc_ok() == 0 { return 0 }
+    s = rtc_s()
+    if s != clk_last_s { clk_last_s = s  return 1 }
+    return 0
+}
+
+# ==============================================================================
+# System Info - live cpu_*/smp_*/apic_* reads. No state, no tick: none of
+# this changes fast enough to need one, and app_draw already re-runs on
+# every repaint.
+# ==============================================================================
+fn si_yn(v) { if v == 1 { return "yes" }  return "no" }
+fn si_row(ax, y, k, v) {
+    label(ax, y, k, TXT_DIM, T_CAPTION, W_REG)
+    label(ax + 130 * ui(), y, v, TXT_HI, T_CAPTION, W_BOLD)
+    return 0
+}
+fn si_rownum(ax, y, k, v) {
+    label(ax, y, k, TXT_DIM, T_CAPTION, W_REG)
+    label_num(ax + 130 * ui(), y, v, TXT_HI, T_CAPTION, W_BOLD)
+    return 0
+}
+
+fn si_draw(ax, ay, aw, ah) {
+    u = ui()
+    x = ax + 8 * u
+    y = ay + 8 * u
+    si_rownum(x, y, "cores", cpu_cores())               y = y + 20 * u
+    si_rownum(x, y, "threads", cpu_thr())               y = y + 20 * u
+    si_rownum(x, y, "SMP online", smp_n())               y = y + 20 * u
+    si_rownum(x, y, "CPU MHz", cpu_mhz())                y = y + 20 * u
+    si_rownum(x, y, "TSC kHz", cpu_khz())                y = y + 20 * u
+    si_row(x, y, "SSE2", si_yn(cpu_sse2()))              y = y + 20 * u
+    si_row(x, y, "AVX", si_yn(cpu_avx()))                y = y + 20 * u
+    si_row(x, y, "hypervisor", si_yn(cpu_hv()))          y = y + 20 * u
+    si_row(x, y, "APIC active", si_yn(apic_on()))
+    return 0
+}
+
+# ==============================================================================
+# Calculator - four functions. Keyboard (digits, + - * / . = c) and a
+# clickable pad both drive the same entry/accumulator state.
+# ==============================================================================
+ca_acc  = 0
+ca_op   = 0                         # 0 none, 1 + , 2 - , 3 * , 4 /
+ca_entry = 0
+ca_has_entry = 0
+
+fn ca_apply() {
+    if ca_op == 1 { ca_acc = ca_acc + ca_entry }
+    if ca_op == 2 { ca_acc = ca_acc - ca_entry }
+    if ca_op == 3 { ca_acc = ca_acc * ca_entry }
+    if ca_op == 4 { if ca_entry != 0 { ca_acc = ca_acc / ca_entry } }
+    if ca_op == 0 { ca_acc = ca_entry }
+    return 0
+}
+fn ca_clear() { ca_acc = 0  ca_op = 0  ca_entry = 0  ca_has_entry = 0  return 0 }
+fn ca_digit(n) { ca_entry = ca_entry * 10 + n  ca_has_entry = 1  return 0 }
+fn ca_setop(o) {
+    if ca_has_entry == 1 { ca_apply() } else { ca_op = o  return 0 }
+    ca_op = o
+    ca_entry = 0
+    ca_has_entry = 0
+    return 0
+}
+fn ca_equals() { ca_apply()  ca_op = 0  ca_entry = 0  ca_has_entry = 0  return 0 }
+
+fn ca_btn_label(i) {
+    if i == 0 { return "7" }  if i == 1 { return "8" }  if i == 2 { return "9" }  if i == 3 { return "/" }
+    if i == 4 { return "4" }  if i == 5 { return "5" }  if i == 6 { return "6" }  if i == 7 { return "*" }
+    if i == 8 { return "1" }  if i == 9 { return "2" }  if i == 10 { return "3" }  if i == 11 { return "-" }
+    if i == 12 { return "C" }  if i == 13 { return "0" }  if i == 14 { return "=" }  return "+"
+}
+fn ca_btn_press(i) {
+    if i == 0 { ca_digit(7)  return 0 }
+    if i == 1 { ca_digit(8)  return 0 }
+    if i == 2 { ca_digit(9)  return 0 }
+    if i == 3 { ca_setop(4)  return 0 }
+    if i == 4 { ca_digit(4)  return 0 }
+    if i == 5 { ca_digit(5)  return 0 }
+    if i == 6 { ca_digit(6)  return 0 }
+    if i == 7 { ca_setop(3)  return 0 }
+    if i == 8 { ca_digit(1)  return 0 }
+    if i == 9 { ca_digit(2)  return 0 }
+    if i == 10 { ca_digit(3)  return 0 }
+    if i == 11 { ca_setop(2)  return 0 }
+    if i == 12 { ca_clear()  return 0 }
+    if i == 13 { ca_digit(0)  return 0 }
+    if i == 14 { ca_equals()  return 0 }
+    ca_setop(1)
+    return 0
+}
+
+CA_BTN = 44
+fn ca_draw(ax, ay, aw, ah) {
+    u = ui()
+    fill_rgb(ax + 8 * u, ay + 6 * u, aw - 16 * u, 30 * u, rgb(14, 17, 26))
+    if ca_has_entry == 1 { label_num(ax + 12 * u, ay + 14 * u, ca_entry, TXT_HI, T_TITLE, W_BOLD) }
+    if ca_has_entry == 0 { label_num(ax + 12 * u, ay + 14 * u, ca_acc, TXT_HI, T_TITLE, W_BOLD) }
+
+    gy = ay + 46 * u
+    i = 0
+    while i < 16 {
+        r = i / 4
+        c = i % 4
+        bx = ax + 8 * u + c * CA_BTN * u
+        by = gy + r * CA_BTN * u
+        bg = rgb(30, 36, 54)
+        if i == 15 { bg = ac_cat_color(1) }
+        rrect(bx + 2 * u, by + 2 * u, CA_BTN * u - 4 * u, CA_BTN * u - 4 * u, 6 * u, bg)
+        label(bx + CA_BTN * u / 2 - 4 * u, by + CA_BTN * u / 2 - 8 * u, ca_btn_label(i), TXT_HI, T_BODY, W_BOLD)
+        i = i + 1
+    }
+    return 0
+}
+
+fn ca_event(win, ety, ecode, ex, ey) {
+    if ety == 4 {
+        if band(ecode, 1) == 0 { return 0 }
+        u = ui()
+        # ca_draw's grid starts at (ax + 8u, ay + 46u); cx/cy here are
+        # already client-relative (matching ax/ay), so BOTH margins have to
+        # be subtracted before dividing, and both checked non-negative
+        # first - `/` truncates toward zero, so skipping either check would
+        # be the same off-by-a-row/column misses this brief already warned
+        # about elsewhere in this suite.
+        cx = ex - wm_cx(win) - 8 * u
+        cy = ey - wm_cy(win) - 46 * u
+        if cx < 0 { return 0 }
+        if cy < 0 { return 0 }
+        c = cx / (CA_BTN * u)
+        r = cy / (CA_BTN * u)
+        if c > 3 { return 0 }
+        if r > 3 { return 0 }
+        ca_btn_press(r * 4 + c)
+        wm_dmg(win)
+        return 1
+    }
+    if ety != 3 { return 0 }
+    if ecode == 99 { ca_clear()  wm_dmg(win)  return 1 }
+    if ecode == 61 { ca_equals()  wm_dmg(win)  return 1 }
+    if ecode == 13 { ca_equals()  wm_dmg(win)  return 1 }
+    if ecode == 43 { ca_setop(1)  wm_dmg(win)  return 1 }
+    if ecode == 45 { ca_setop(2)  wm_dmg(win)  return 1 }
+    if ecode == 42 { ca_setop(3)  wm_dmg(win)  return 1 }
+    if ecode == 47 { ca_setop(4)  wm_dmg(win)  return 1 }
+    if ecode < 48 { return 0 }
+    if ecode > 57 { return 0 }
+    ca_digit(ecode - 48)
+    wm_dmg(win)
+    return 1
+}

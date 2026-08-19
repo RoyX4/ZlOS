@@ -59,6 +59,20 @@ TXT_DIM  = rgb(150, 165, 195)   # dim text
 # be named here too, or the next use of it guesses a different red.
 CRIT_RED = rgb(224, 90, 90)     # something is wrong and you should look
 
+# ---- the app suite ----------------------------------------------------------
+# Everything past the original 13 apps (APP_SHELL..APP_EDIT, APP_SETTINGS,
+# APP_RUN) lives in these imported modules rather than bolted straight into
+# this file - see docs/app-suite.md for the registry design. `import`
+# splices each module's top level into this program at PARSE time (same
+# mechanism for every backend, see docs/design/design_imports.md), so this
+# is the one place that says what the suite is made of.
+import apps_common
+import apps_registry
+import apps_utils
+import apps_games1
+import apps_games2
+import apps_system
+
 # ---- serial input -----------------------------------------------------------
 # It used to be read HERE, with band(inb(COM1 + 5), 1) as the ready test. Two
 # things were wrong with that and both are now input.c's problem instead:
@@ -1389,6 +1403,54 @@ DISK_SCRATCH = 0x02040000
 # it is registered in that script's sized list too, generously clear of
 # PAINT_BUF at 0x02100000.
 FILES_NAME_BUF = 0x02042000
+# ---- app suite: fixed buffers -----------------------------------------------
+# One page (0x1000 = 4096 bytes) PER CONSUMER, deliberately generous rather
+# than packed - a previous attempt at this suite put several boards in one
+# undersized shared buffer and the maze (needs 273 cells) silently overran it.
+# A dedicated page per board makes that class of bug impossible by
+# construction: nobody's growth can ever reach a neighbour's byte 0, because
+# every neighbour starts a full page away.
+#
+# Base picked clear of everything else in this range (checked against every
+# .c and .zl file in the tree, not just kernel.zl - see the comment at
+# DISK_SCRATCH above for why that matters): PAINT_BUF ends near 0x02102000,
+# virtio_net.c's own arena doc puts its NET_FLOOR at 0x03000000, so this
+# block (0x02200000..0x02215000, 84 KiB) sits in the middle of the same
+# "80 MiB hole" with well over 0xDE0000 bytes of headroom on either side.
+# check-memmap.sh's dupe sweep covers every constant below because they are
+# declared here, in kernel.zl, rather than in the modules that use them.
+TT_BOARD      = 0x02200000   # apps_games1.zl: Tic-Tac-Toe,  3x3  =  9 cells
+LIGHTS_BOARD  = 0x02201000   # apps_games1.zl: Lights Out,   5x5  = 25 cells
+C4_BOARD      = 0x02202000   # apps_games1.zl: Connect Four, 7x6  = 42 cells
+RV_BOARD      = 0x02203000   # apps_games1.zl: Reversi,      8x8  = 64 cells
+FIFTEEN_BOARD = 0x02204000   # apps_games1.zl: 15 Puzzle,    4x4  = 16 cells
+MINE_BOARD    = 0x02205000   # apps_games2.zl: Minesweeper, 12x9  = 108 cells
+G2048_BOARD   = 0x02206000   # apps_games2.zl: 2048,         4x4  = 16 cells
+SIMON_SEQ     = 0x02207000   # apps_games2.zl: Simon,        sequence, max 32
+MAZE_BOARD    = 0x02208000   # apps_games2.zl: Maze, 21x13 = 273 cells (the
+                              # count the brief names) - own page, nothing
+                              # else can ever share it
+WG_BOARD      = 0x02209000   # apps_games2.zl: Word Guess,   6x5  = 30 cells
+LIFE_BOARD    = 0x0220A000   # apps_games2.zl: Conway's Life,24x18= 432 cells
+LIFE_NEXT     = 0x0220B000   # apps_games2.zl: ...next generation, scratch
+PT_PATTERN    = 0x0220C000   # apps_utils.zl:  Pattern Tester, the pattern
+PT_TEXT       = 0x0220D000   # apps_utils.zl:  Pattern Tester, the subject
+DIFF_A        = 0x0220E000   # apps_utils.zl:  Line Diff, side A
+DIFF_B        = 0x0220F000   # apps_utils.zl:  Line Diff, side B
+HASH_BUF      = 0x02210000   # apps_utils.zl:  Checksum, the input bytes
+NOTES_BUF     = 0x02211000   # apps_utils.zl:  Sticky Notes (2 pages)
+FILES_BUF     = 0x02213000   # apps_system.zl: Files, one entry's bytes
+MAZE_STACK    = 0x02214000   # apps_games2.zl: Maze generation's OWN stack -
+                              # an iterative backtracker, not a 273-deep zl
+                              # recursion. boot.S:36 documents this kernel's
+                              # 256 KiB compositor stack as already having
+                              # overflowed once at 16 KiB because "the zl
+                              # compositor nests deep... each zl frame is
+                              # large"; carving a maze from inside a click
+                              # handler (itself several frames into the
+                              # frame loop) is exactly that nesting, so the
+                              # DFS stack is 273 u16 cell indices in RAM
+                              # instead, same idea as the board itself.
 
 fn fs_init()      { fill_mem(FS_META, 0, 64) }
 fn fs_len(slot)   { return peek32(FS_META + slot * 4) }
@@ -3261,6 +3323,10 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
         term_draw(ax + 8 * u, ay + 6 * u, aw - 16 * u, ah - 12 * u, TXT_HI, TXT_DIM, ACCENT, cb)
         return 0
     }
+    # Everything past APP_EDIT is the app suite (apps_registry.zl and the
+    # category modules it fronts) - one seam, so this chain never grows past
+    # the original 13 again.
+    if id >= APP_CATALOG { return reg_draw(id, ax, ay, aw, ah, afocus) }
     return 0
 }
 
@@ -3306,6 +3372,13 @@ fn nav_to_char(ecode) {
 fn app_event(id, win, ety, ecode, ex, ey) {
     if id == APP_SNAKE { return sn_event(ety, ecode) }
     if id == APP_MENU  { return menu_event(ety, ecode, ex, ey, win) }
+    # BEFORE the nav_to_char translation below, like Snake and the browser -
+    # not after it. That block turns an untranslatable EV_KEY_DOWN (anything
+    # that is not Esc/Backspace/Enter) into an immediate `return 0`, which
+    # would silently eat every arrow-key press before a registry app ever saw
+    # it. 2048 and the maze both steer by arrow key, so this needs the RAW
+    # event, exactly as K_LEFT/K_RIGHT/K_UP/K_DOWN are already defined for.
+    if id >= APP_CATALOG { return reg_event(id, win, ety, ecode, ex, ey) }
     if id == APP_BROWSER {
         # '[' and ']' RESIZE THE WINDOW, and that is the gate rather than a
         # convenience: reflow is only observable if the width can change while
@@ -3626,6 +3699,7 @@ fn app_tick(id, win) {
     if id == APP_CUBE  { return cube_tick() }
     if id == APP_ANIM  { return anim_tick(wm_cw(win), wm_ch(win)) }
     if id == APP_MOUSE { return mouse_tick() }
+    if id >= APP_CATALOG { return reg_tick(id, win) }
     return 0
 }
 
@@ -3798,6 +3872,9 @@ fn task_label(app) {
     if app == APP_ABOUT   { return "About" }
     if app == APP_SNAKE   { return "Snake" }
     if app == APP_MENU    { return "Menu" }
+    # Every app-suite window falls through to the same registry the catalog
+    # reads, so a new app's taskbar chip needs no entry here at all.
+    if app >= APP_CATALOG { return reg_name(app) }
     return "window"
 }
 
@@ -3915,7 +3992,10 @@ fn reopen_about() {
 # A modal takes every event and a click outside dismisses it - both already in
 # route_mouse. Restoring what was underneath is a repaint of the damage it
 # leaves, which needs no saved bitmap at all.
-MENU_ROWS = 8
+# 10 rows now: the original 8 plus Settings and All Applications, both of
+# which existed already (settings.c; the catalog above) and had no caller
+# anywhere on the running desktop until this brief.
+MENU_ROWS = 10
 menu_win = 0 - 1
 
 fn menu_label(idx) {
@@ -3926,6 +4006,8 @@ fn menu_label(idx) {
     if idx == 4 { return "3D Cube" }
     if idx == 5 { return "Paint" }
     if idx == 6 { return "Editor" }
+    if idx == 7 { return "Settings" }
+    if idx == 8 { return "All Applications" }
     return "Halt"
 }
 
@@ -3934,7 +4016,12 @@ fn menu_pick(idx) {
     if idx == 1 { return open_snake() }
     if idx == 2 { return reopen_mon() }
     if idx == 3 { return reopen_about() }
-    if idx == 7 { wm_stop()  return 0 }
+    # Settings (settings.c) is compiled into every build and wmglue.c has
+    # dispatched its draw/event since it was written - it just had nothing
+    # anywhere that called wm_open(APP_SETTINGS, ...). This is that call.
+    if idx == 7 { return reg_open(APP_SETTINGS) }
+    if idx == 8 { return reg_open(APP_CATALOG) }
+    if idx == 9 { wm_stop()  return 0 }
     raise_shell()
     if idx == 4 { run_command(118, 0) }
     if idx == 5 { run_command(100, 0) }

@@ -20,12 +20,25 @@ RT=../freestanding/runtime_kernel.c
 [ -f "$ZL" ] || { echo "no $ZL"; exit 2; }
 [ -f "$RT" ] || { echo "no $RT"; exit 2; }
 
+# EVERY MODULE kernel.zl ACTUALLY `import`s, not just kernel.zl itself.
+# parser.c splices an imported module's top level into the program at parse
+# time (docs/design/design_imports.md), so the real compiled program is
+# kernel.zl PLUS every "./<name>.zl" its import lines name - the app suite
+# (apps_registry.zl, apps_games1.zl, ...) lives there, not in kernel.zl. A
+# checker that only read kernel.zl would report every fn in those modules as
+# "unresolved" the moment kernel.zl called one, which is a false alarm this
+# script must not raise. Same resolution rule the parser uses: ./<name>.zl.
+ZLFILES="$ZL"
+for m in $(grep -oP '^import\s+\K[a-zA-Z0-9_, ]+' "$ZL" | tr ',' '\n' | tr -d ' '); do
+    [ -f "$m.zl" ] && ZLFILES="$ZLFILES $m.zl"
+done
+
 # builtins the runtime registers
 grep -oE 'streq\(name, "[a-z_0-9]+"\)' "$RT" | sed 's/.*"\(.*\)".*/\1/' | sort -u > /tmp/zl_reg.$$
 
 # zl's own functions, and the language's keywords/builtins that are not
 # registered by name in the runtime
-grep -oE '^fn [a-z_0-9]+' "$ZL" | awk '{print $2}' | sort -u > /tmp/zl_fns.$$
+grep -hoE '^fn [a-z_0-9]+' $ZLFILES | awk '{print $2}' | sort -u > /tmp/zl_fns.$$
 cat > /tmp/zl_kw.$$ <<'KW'
 if
 elif
@@ -52,7 +65,7 @@ sort -u -o /tmp/zl_kw.$$ /tmp/zl_kw.$$
 # Call sites. STRINGS AND COMMENTS COME OUT FIRST: prose is full of words
 # followed by a bracket - "a bootloader (512 bytes)" reads as a call to
 # bootloader() otherwise, and this check is worthless the moment it cries wolf.
-sed 's/"[^"]*"/""/g; s/#.*//' "$ZL" \
+sed 's/"[^"]*"/""/g; s/#.*//' $ZLFILES \
   | grep -oE '\b[a-z_][a-z_0-9]*[ ]*\(' \
   | tr -d ' (' | sort -u > /tmp/zl_calls.$$
 
@@ -78,14 +91,14 @@ unused=$(comm -13 /tmp/zl_calls.$$ /tmp/zl_reg.$$)
 rm -f /tmp/zl_reg.$$ /tmp/zl_fns.$$ /tmp/zl_kw.$$ /tmp/zl_calls.$$ /tmp/zl_known.$$
 
 if [ -n "$missing" ]; then
-    echo "UNRESOLVED - kernel.zl calls these and nothing defines them:"
+    echo "UNRESOLVED - kernel.zl (+ its imports) call these and nothing defines them:"
     echo "$missing" | sed 's/^/    /'
     echo
     echo "FAIL: $(echo "$missing" | grep -c .) unresolved call site(s)"
     exit 1
 fi
 
-echo "ok: every kernel.zl call resolves to a builtin or a zl fn"
+echo "ok: every call in kernel.zl and its imports ($ZLFILES) resolves to a builtin or a zl fn"
 [ -n "$known_hit" ] && echo "KNOWN UNRESOLVED (pre-existing, see the header): $(echo "$known_hit" | tr '\n' ' ')"
-[ -n "$unused" ] && echo "note: $(echo "$unused" | grep -c .) registered builtin(s) with no caller in kernel.zl"
+[ -n "$unused" ] && echo "note: $(echo "$unused" | grep -c .) registered builtin(s) with no caller"
 exit 0

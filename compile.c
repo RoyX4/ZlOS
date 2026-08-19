@@ -23,8 +23,22 @@
  * A tiny set of names (for tracking variables and functions)
  * ============================================================= */
 
+/* NAMESET_MAX was 256 and set_add() silently drops anything past it - no
+ * error, no truncation warning, just a name that never joins the set. That is
+ * exactly what a zlOS app suite hit: kernel.zl plus its app-suite imports
+ * (apps_registry.zl and the category modules) pushed the GLOBAL-VARIABLE
+ * count past 256, so main()'s own pre-existing shell loop locals (pending,
+ * crow, ccol, ...) silently stopped being recognised as globals and gcc
+ * reported them "undeclared" - a cap inside the COMPILER surfacing as a
+ * compile error in code that never changed. Same shape as the maze's
+ * undersized shared board this suite's own brief warns about: a fixed size
+ * that was fine at the old scale and silently wrong at the new one. 1024 is
+ * headroom, not a guess - the kernel is nowhere near it either way, and
+ * set_add()'s bound stops it from ever overflowing the array again. */
+#define NAMESET_MAX 1024
+
 typedef struct {
-    char names[256][MAX_TEXT];
+    char names[NAMESET_MAX][MAX_TEXT];
     int  count;
 } NameSet;
 
@@ -32,7 +46,7 @@ static void set_add(NameSet *s, const char *name)
 {
     for (int i = 0; i < s->count; i++)
         if (strcmp(s->names[i], name) == 0) return;   /* already there */
-    if (s->count < 256) {
+    if (s->count < NAMESET_MAX) {
         strncpy(s->names[s->count], name, MAX_TEXT - 1);
         s->names[s->count][MAX_TEXT - 1] = '\0';
         s->count++;
@@ -60,7 +74,7 @@ static NameSet g_funcs;
 /* each function's parameter count, index-parallel to g_funcs. Needed to
  * emit a function VALUE: zl_callv has to cast the pointer back to the
  * exact signature, so the arity travels with the pointer. */
-static int g_func_arity[256];
+static int g_func_arity[NAMESET_MAX];
 
 /* the names bound in the scope being emitted (params + locals, or the
  * top-level's globals). A call to a name in here is an INDIRECT call
@@ -524,7 +538,7 @@ int main(int argc, char **argv)
         if (program->kids[i]->type == N_FN) {
             set_add(&g_funcs, program->kids[i]->text);
             int fi = set_index(&g_funcs, program->kids[i]->text);
-            if (fi >= 0 && fi < 256) g_func_arity[fi] = program->kids[i]->nkids;
+            if (fi >= 0 && fi < NAMESET_MAX) g_func_arity[fi] = program->kids[i]->nkids;
         }
 
     FILE *out = fopen("out.c", "wb");

@@ -1,0 +1,432 @@
+# apps_registry.zl - the ONE shared app registry (see docs/app-suite.md).
+#
+# Every app added on top of the original 13 (APP_SHELL..APP_EDIT, plus
+# APP_SETTINGS/APP_RUN/APP_BROWSER) is listed here ONCE: its name, which
+# category it belongs to, its default window size, and which icon (if any) it
+# reuses from the 20-icon atlas. The catalog window below reads this table to
+# draw itself; task_label() in kernel.zl reads reg_name() so a new app's
+# window gets a real taskbar chip instead of the generic "window" fallback.
+#
+# WHY ONE TABLE INSTEAD OF 30-ODD open_xxx() FUNCTIONS. open_app() (the
+# original 13) repeats six lines - "already open? raise and focus; else
+# open, restore focus, log it" - once per app. That was fine at 13 apps and
+# would have been ~180 duplicated lines at 40. reg_open() below is that
+# pattern written once; reg_new() is the only place that still varies per
+# app (because a window's title and size are inherently per-app), and it is
+# reached through reg_find_win(), not through a stored "myapp_win" global -
+# wm already knows which windows are open (wm_n/wm_zat/wm_app), so asking it
+# is simpler than keeping a second copy of that answer in sync.
+#
+# zl has no function values, so "dispatch" below is the same shape as
+# app_draw/app_event/app_tick themselves: one big if-chain. What stays SMALL
+# is the actual per-app STATE and LOGIC, which lives in apps_utils.zl,
+# apps_games1.zl, apps_games2.zl and apps_system.zl - grouped by category, a
+# handful of apps per file, none of them touching this dispatch table's
+# shape.
+
+APP_SETTINGS = 6                    # settings.c; wmglue.c dispatches its
+                                     # draw/event before zl ever sees them -
+                                     # this only has to know how to OPEN one
+APP_CATALOG  = 13                   # "All Applications" - see cat_* below
+
+# ---- utilities (apps_utils.zl) ----------------------------------------------
+APP_CLIP  = 14
+APP_COLOR = 15
+APP_REGEX = 16
+APP_BASE  = 17
+APP_DIFF  = 18
+APP_HASH  = 19
+APP_UNIT  = 20
+APP_NOTES = 21
+APP_KEYS  = 22
+APP_BENCH = 23
+
+# ---- games (apps_games1.zl / apps_games2.zl) --------------------------------
+APP_WORDLE   = 24
+APP_TICTACTOE = 25
+APP_NIM       = 26
+APP_HANOI     = 27
+APP_LIGHTS    = 28
+APP_CONNECT4  = 29
+
+# ---- system (apps_system.zl) -------------------------------------------------
+APP_CLOCK   = 30
+APP_SYSINFO = 31
+APP_CALC    = 32
+
+# ---- more games (apps_games2.zl) ---------------------------------------------
+APP_MAZE = 33
+
+REG_FIRST = 14                      # first id this table actually lists
+REG_COUNT = 20                      # bumped as each batch of apps is wired in
+
+# kernel.elf is measured against raw_boot.asm's CHUNKS ceiling (1,966,080
+# bytes - the 32 KiB-chunk BIOS raw-boot loader silently truncates anything
+# past it, per that file's own comment) after every app added here. That
+# ceiling does NOT gate build.sh/build64.sh/buildefi.sh - none of them touch
+# raw_boot.asm - so it cannot fail any of this brief's three required builds,
+# but it is real and it is why this suite stops well short of the ~40 apps
+# the mockup lists. Raising CHUNKS is a separate, boot-path change and
+# deliberately not made here; see the report for the measured numbers.
+
+# ---- the table --------------------------------------------------------------
+# id -> display name (used by window titles, the catalog and the taskbar)
+fn reg_name(id) {
+    if id == APP_CLIP  { return "Clipboard" }
+    if id == APP_COLOR { return "Colour Picker" }
+    if id == APP_REGEX { return "Pattern Tester" }
+    if id == APP_BASE  { return "Base Converter" }
+    if id == APP_DIFF  { return "Line Diff" }
+    if id == APP_HASH  { return "Checksum" }
+    if id == APP_UNIT  { return "Unit Converter" }
+    if id == APP_NOTES { return "Sticky Notes" }
+    if id == APP_KEYS  { return "Keyboard Tester" }
+    if id == APP_BENCH { return "Benchmark" }
+    if id == APP_WORDLE    { return "Word Guess" }
+    if id == APP_TICTACTOE { return "Tic-Tac-Toe" }
+    if id == APP_NIM       { return "Nim" }
+    if id == APP_HANOI     { return "Tower of Hanoi" }
+    if id == APP_LIGHTS    { return "Lights Out" }
+    if id == APP_CONNECT4  { return "Connect Four" }
+    if id == APP_CLOCK   { return "Clocks & Timers" }
+    if id == APP_SYSINFO { return "System Info" }
+    if id == APP_CALC    { return "Calculator" }
+    if id == APP_MAZE    { return "Maze" }
+    return "App"
+}
+
+# id -> category: 0 system, 1 utility, 2 game. Governs the catalog's swatch
+# colour (ac_cat_color) - there is no per-app colour anywhere else.
+fn reg_cat(id) {
+    if id >= APP_CLIP { if id <= APP_BENCH { return 1 } }
+    if id >= APP_WORDLE { if id <= APP_CONNECT4 { return 2 } }
+    if id == APP_MAZE { return 2 }
+    return 0
+}
+
+# id -> default window size, in DESIGN UNITS (still needs * ui()).
+fn reg_w(id) {
+    if id == APP_COLOR  { return 260 }
+    if id == APP_UNIT   { return 260 }
+    if id == APP_NOTES  { return 300 }
+    if id == APP_WORDLE  { return 200 }
+    if id == APP_HANOI   { return 320 }
+    if id == APP_LIGHTS  { return 220 }
+    if id == APP_CLOCK   { return 220 }
+    if id == APP_SYSINFO { return 260 }
+    if id == APP_CALC    { return 200 }
+    if id == APP_MAZE    { return 380 }
+    return 300
+}
+fn reg_h(id) {
+    if id == APP_CLIP    { return 220 }
+    if id == APP_REGEX   { return 150 }
+    if id == APP_BASE    { return 140 }
+    if id == APP_DIFF    { return 140 }
+    if id == APP_HASH    { return 120 }
+    if id == APP_UNIT    { return 120 }
+    if id == APP_NOTES   { return 200 }
+    if id == APP_KEYS    { return 140 }
+    if id == APP_BENCH   { return 130 }
+    if id == APP_WORDLE  { return 230 }
+    if id == APP_TICTACTOE { return 220 }
+    if id == APP_NIM       { return 140 }
+    if id == APP_HANOI     { return 200 }
+    if id == APP_LIGHTS    { return 240 }
+    if id == APP_CONNECT4  { return 280 }
+    if id == APP_CLOCK   { return 160 }
+    if id == APP_SYSINFO { return 200 }
+    if id == APP_CALC    { return 240 }
+    if id == APP_MAZE    { return 260 }
+    return 160
+}
+
+# id -> icon24 index (icons.c), or -1 for "no icon this small suite ships,
+# draw the two-letter monogram instead". Only reused where the shape is a
+# real match (files/network/disk/clock) - forcing a stretch icon onto
+# something it does not depict is worse than an honest monogram.
+fn reg_icon(id) {
+    if id == APP_CLOCK { return 16 }    # icons.c: 16 clock - an exact match
+    return 0 - 1
+}
+
+# id -> two-letter monogram, drawn when reg_icon() is -1.
+fn reg_mono(id) {
+    if id == APP_CLIP  { return "CB" }
+    if id == APP_COLOR { return "CP" }
+    if id == APP_REGEX { return "PT" }
+    if id == APP_BASE  { return "BC" }
+    if id == APP_DIFF  { return "LD" }
+    if id == APP_HASH  { return "CK" }
+    if id == APP_UNIT  { return "UC" }
+    if id == APP_NOTES { return "NT" }
+    if id == APP_KEYS  { return "KT" }
+    if id == APP_BENCH { return "BM" }
+    if id == APP_WORDLE    { return "WG" }
+    if id == APP_TICTACTOE { return "TT" }
+    if id == APP_NIM       { return "NM" }
+    if id == APP_HANOI     { return "TH" }
+    if id == APP_LIGHTS    { return "LO" }
+    if id == APP_CONNECT4  { return "C4" }
+    if id == APP_SYSINFO { return "SI" }
+    if id == APP_CALC    { return "CA" }
+    if id == APP_MAZE    { return "MZ" }
+    return "??"
+}
+
+# ---- the generic opener ------------------------------------------------------
+# Every window currently open, searched by APP ID rather than by a stored
+# handle - wm.c's z-order already drops a window the moment it closes
+# (wm_close -> z_remove), so this can never find a stale one.
+fn reg_find_win(id) {
+    ri = 0
+    while ri < wm_n() {
+        rw = wm_zat(ri)
+        if wm_app(rw) == id { return rw }
+        ri = ri + 1
+    }
+    return 0 - 1
+}
+
+# The only per-app branch left: construct the window (and reset its state,
+# for anything that needs a fresh start each time it is opened - the same
+# rule open_app() already follows for Snake). Returns the new window, or -1.
+fn reg_new(id, u) {
+    if id == APP_SETTINGS { return wm_open(id, "Settings", 200 * u, 90 * u, 300 * u, 220 * u) }
+    if id == APP_CATALOG  { return wm_open(id, "All Applications", 120 * u, 40 * u, CAT_W * u, CAT_H * u) }
+    if id == APP_REGEX     { pt_reset() }
+    if id == APP_WORDLE    { wg_reset() }
+    if id == APP_TICTACTOE { tt_reset() }
+    if id == APP_NIM       { nim_reset() }
+    if id == APP_HANOI     { ho_reset() }
+    if id == APP_LIGHTS    { lo_reset() }
+    if id == APP_CONNECT4  { c4_reset() }
+    if id == APP_CALC      { ca_clear() }
+    if id == APP_MAZE      { mz_reset() }
+    if id >= APP_CLIP { if id <= APP_BENCH {
+        return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
+    }}
+    if id >= APP_WORDLE { if id <= APP_CONNECT4 {
+        return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
+    }}
+    if id >= APP_CLOCK { if id <= APP_CALC {
+        return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
+    }}
+    if id == APP_MAZE {
+        return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
+    }
+    return 0 - 1
+}
+
+# raise-and-focus if already open; otherwise open it, and it gets focus too
+# (see the comment below - this is where it differs from open_app()).
+fn reg_open(id) {
+    ru = ui()
+    rw = reg_find_win(id)
+    if rw >= 0 {
+        wm_setfocus(rw)
+        wm_raise(rw)
+        return 1
+    }
+    # UNLIKE open_app() (the original 13), this does NOT restore whichever
+    # window had focus before. open_app() exists because the SHELL calls it
+    # mid command-line - you typed "snake" and want to keep typing, so
+    # focus must stay put. Every caller here is a deliberate CLICK (a
+    # catalog tile, a menu row): wm_open() already focuses the window it
+    # just opened, and restoring focus to the catalog behind it silently
+    # sent every subsequent keystroke to the wrong window. Caught by
+    # probe-catalog.py's Maze case: the click-to-place games worked (a
+    # mouse event routes by SCREEN POSITION, not focus) while arrow keys
+    # went nowhere (a key event has no position - it needs focus).
+    rw = reg_new(id, ru)
+    if rw < 0 { return 0 }
+    wm_report(rw)
+    return 1
+}
+
+# app_draw / app_event / app_tick fallbacks. kernel.zl calls these for any id
+# its own explicit chain does not recognise (id >= APP_CATALOG); nothing
+# above APP_EDIT touches these except through this one seam.
+fn reg_draw(id, ax, ay, aw, ah, afocus) {
+    if id == APP_CATALOG { return cat_draw(ax, ay, aw, ah) }
+    if id == APP_CLIP  { return cb_draw(ax, ay, aw, ah) }
+    if id == APP_COLOR { return cp_draw(ax, ay, aw, ah) }
+    if id == APP_REGEX { return pt_draw(ax, ay, aw, ah) }
+    if id == APP_BASE  { return bc_draw(ax, ay, aw, ah) }
+    if id == APP_DIFF  { return ld_draw(ax, ay, aw, ah) }
+    if id == APP_HASH  { return ck_draw(ax, ay, aw, ah) }
+    if id == APP_UNIT  { return uc_draw(ax, ay, aw, ah) }
+    if id == APP_NOTES { return nt_draw(ax, ay, aw, ah) }
+    if id == APP_KEYS  { return kt_draw(ax, ay, aw, ah) }
+    if id == APP_BENCH { return bm_draw(ax, ay, aw, ah) }
+    if id == APP_WORDLE    { return wg_draw(ax, ay, aw, ah) }
+    if id == APP_TICTACTOE { return tt_draw(ax, ay, aw, ah) }
+    if id == APP_NIM       { return nim_draw(ax, ay, aw, ah) }
+    if id == APP_HANOI     { return ho_draw(ax, ay, aw, ah) }
+    if id == APP_LIGHTS    { return lo_draw(ax, ay, aw, ah) }
+    if id == APP_CONNECT4  { return c4_draw(ax, ay, aw, ah) }
+    if id == APP_CLOCK   { return clk_draw(ax, ay, aw, ah) }
+    if id == APP_SYSINFO { return si_draw(ax, ay, aw, ah) }
+    if id == APP_CALC    { return ca_draw(ax, ay, aw, ah) }
+    if id == APP_MAZE    { return mz_draw(ax, ay, aw, ah) }
+    return 0
+}
+fn reg_event(id, win, ety, ecode, ex, ey) {
+    if id == APP_CATALOG { return cat_event(win, ety, ecode, ex, ey) }
+    if id == APP_CLIP  { return cb_event(win, ety, ecode, ex, ey) }
+    if id == APP_COLOR { return cp_event(win, ety, ecode, ex, ey) }
+    if id == APP_REGEX { return pt_event(win, ety, ecode) }
+    if id == APP_BASE  { return bc_event(win, ety, ecode) }
+    if id == APP_DIFF  { return ld_event(win, ety, ecode) }
+    if id == APP_HASH  { return ck_event(win, ety, ecode) }
+    if id == APP_UNIT  { return uc_event(win, ety, ecode, ex, ey) }
+    if id == APP_NOTES { return nt_event(win, ety, ecode) }
+    if id == APP_KEYS  { return kt_event(win, ety, ecode) }
+    if id == APP_BENCH { return bm_event(win, ety, ecode, ex, ey) }
+    if id == APP_WORDLE    { return wg_event(win, ety, ecode) }
+    if id == APP_TICTACTOE { return tt_event(win, ety, ecode, ex, ey) }
+    if id == APP_NIM       { return nim_event(win, ety, ecode, ex, ey) }
+    if id == APP_HANOI     { return ho_event(win, ety, ecode, ex, ey) }
+    if id == APP_LIGHTS    { return lo_event(win, ety, ecode, ex, ey) }
+    if id == APP_CONNECT4  { return c4_event(win, ety, ecode, ex, ey) }
+    if id == APP_CALC { return ca_event(win, ety, ecode, ex, ey) }
+    if id == APP_MAZE { return mz_event(win, ety, ecode) }
+    return 0
+}
+fn reg_tick(id, win) {
+    if id == APP_CLOCK { return clk_tick() }
+    return 0
+}
+
+# ---- the catalog window ------------------------------------------------------
+# One grid, one scroll offset, one hover index - the same shape as the dock
+# (dock_hover/dock_press) and the start menu (menu_hover), just bigger.
+CAT_W = 560
+CAT_H = 380
+CAT_TILE_W = 130
+CAT_TILE_H = 108
+CAT_HEADER = 26
+
+cat_scroll = 0
+cat_hover  = 0 - 1
+
+fn cat_cols(win) {
+    cc = wm_cw(win) / (CAT_TILE_W * ui())
+    if cc < 1 { cc = 1 }
+    return cc
+}
+
+fn reg_cat_label(cat) {
+    if cat == 0 { return "System" }
+    if cat == 1 { return "Utility" }
+    return "Game"
+}
+
+# Shared by drawing (position-pure) and hit-testing, so a click always lands
+# on the tile it looks like it landed on - the same discipline menu_row_at
+# documents for the start menu.
+fn cat_hit(win, ex, ey) {
+    u = ui()
+    cx = ex - wm_cx(win)
+    cy = ey - wm_cy(win) - CAT_HEADER * u
+    if cx < 0 { return 0 - 1 }
+    if cy < 0 { return 0 - 1 }
+    cols = cat_cols(win)
+    col = cx / (CAT_TILE_W * u)
+    if col >= cols { return 0 - 1 }
+    row = cy / (CAT_TILE_H * u) + cat_scroll
+    idx = row * cols + col
+    if idx < 0 { return 0 - 1 }
+    if idx >= REG_COUNT { return 0 - 1 }
+    return idx
+}
+
+fn cat_max_scroll(win) {
+    cols = cat_cols(win)
+    rows = (REG_COUNT + cols - 1) / cols
+    vis  = (wm_ch(win) - CAT_HEADER * ui()) / (CAT_TILE_H * ui())
+    if vis < 1 { vis = 1 }
+    ms = rows - vis
+    if ms < 0 { ms = 0 }
+    return ms
+}
+
+fn cat_draw(ax, ay, aw, ah) {
+    u = ui()
+    fill_rgb(ax, ay, aw, ah, PANEL)
+
+    # the legend: three swatches, so the colour on every tile MEANS something
+    # rather than being decoration - the anti-slop reading of "colour work".
+    lx = ax + 8 * u
+    li = 0
+    while li < 3 {
+        fill_rgb(lx, ay + 9 * u, 8 * u, 8 * u, ac_cat_color(li))
+        label(lx + 12 * u, ay + 6 * u, reg_cat_label(li), TXT_DIM, T_CAPTION, W_REG)
+        lx = lx + label_w(reg_cat_label(li), T_CAPTION, W_REG) + 32 * u
+        li = li + 1
+    }
+    if REG_COUNT == 0 {
+        label(ax + 8 * u, ay + CAT_HEADER * u + 8 * u, "no applications registered yet", TXT_DIM, T_BODY, W_REG)
+        return 0
+    }
+
+    cols = 1
+    cc = aw / (CAT_TILE_W * u)
+    if cc >= 1 { cols = cc }
+    gy = ay + CAT_HEADER * u
+
+    i = 0
+    while i < REG_COUNT {
+        id = REG_FIRST + i
+        crow = i / cols - cat_scroll
+        ccol = i % cols
+        ty = gy + crow * CAT_TILE_H * u
+        # only the rough vertical band, to skip work for rows scrolled off -
+        # fb_clip (set to the client rect before app_draw runs) is what makes
+        # this an optimisation rather than a correctness requirement.
+        if ty + CAT_TILE_H * u >= ay {
+            if ty < ay + ah {
+                tx = ax + ccol * CAT_TILE_W * u
+                hv = 0
+                if cat_hover == i { hv = 1 }
+                bgc = rgb(26, 32, 48)
+                if hv == 1 { bgc = rgb(46, 58, 84) }
+                rrect(tx + 6 * u, ty + 4 * u, CAT_TILE_W * u - 12 * u, CAT_TILE_H * u - 16 * u, 10 * u, bgc)
+                fill_rgb(tx + 6 * u, ty + 4 * u, CAT_TILE_W * u - 12 * u, 3 * u, ac_cat_color(reg_cat(id)))
+                ic = reg_icon(id)
+                if ic >= 0 {
+                    icon(tx + CAT_TILE_W * u / 2 - 12 * u, ty + 16 * u, ic, TXT_HI)
+                } else {
+                    label(tx + 16 * u, ty + 18 * u, reg_mono(id), TXT_HI, T_TITLE, W_BOLD)
+                }
+                label(tx + 10 * u, ty + CAT_TILE_H * u - 24 * u, reg_name(id), TXT_HI, T_CAPTION, W_REG)
+            }
+        }
+        i = i + 1
+    }
+    return 0
+}
+
+fn cat_event(win, ety, ecode, ex, ey) {
+    if ety == 5 {
+        cat_scroll = cat_scroll - ecode
+        if cat_scroll < 0 { cat_scroll = 0 }
+        ms = cat_max_scroll(win)
+        if cat_scroll > ms { cat_scroll = ms }
+        wm_dmg(win)
+        return 1
+    }
+    if ety == 4 {
+        nh = cat_hit(win, ex, ey)
+        if nh != cat_hover {
+            cat_hover = nh
+            wm_dmg(win)
+        }
+        if band(ecode, 1) != 0 {
+            if nh >= 0 { reg_open(REG_FIRST + nh) }
+            return 1
+        }
+        return 1
+    }
+    return 0
+}

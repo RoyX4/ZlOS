@@ -77,8 +77,11 @@ if [ "$KSIZE" -gt "$LIMIT" ]; then
 fi
 
 cat raw_boot.bin kernel_raw.bin > zlOS.img
-# pad to at least what the loader reads (12 * 32 KiB) so no read runs off the end
-truncate -s 2M zlOS.img
+# pad to more than what the loader reads (CHUNKS * 32 KiB, currently 2.5 MiB)
+# so no read runs off the end - 3 MiB leaves headroom rather than fitting
+# exactly, the same margin the previous size (2 MiB against a 1.875 MiB
+# CHUNKS budget) gave.
+truncate -s 3M zlOS.img
 
 echo "built zlOS.img - OUR bootloader, no GRUB"
 echo "  boot sector: $(stat -c%s raw_boot.bin) bytes  (must be 512)"

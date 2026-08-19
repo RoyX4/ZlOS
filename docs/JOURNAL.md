@@ -7,9 +7,9 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
-## 2026-08-19 — feat(desktop): the Files app, and the editor's disk-backed save-through (e4e8cce)
+## 2026-08-19 — feat(apps): 3 system apps, RNG seeding, and a proven interactive probe (94cd4c8)
 
-`desktop/files-app` · 5 files changed, 691 insertions(+), 6 deletions(-)
+`desktop/app-suite` · 8 files changed, 435 insertions(+), 10 deletions(-)
 
 | | |
 |---|---|
@@ -18,13 +18,43 @@ the part that makes a change legible later, and the part nobody writes down.
 | baselined doc rot | 19 |
 | docs vs tree | STALE |
 
-<details><summary>5 file(s)</summary>
+<details><summary>8 file(s)</summary>
 
-- `kernel/check-memmap.sh`
-- `kernel/docs/files-app-handoff.md`
+- `TODO.md`
+- `docs/JOURNAL.md`
+- `kernel/apps_games1.zl`
+- `kernel/apps_games2.zl`
+- `kernel/apps_registry.zl`
+- `kernel/apps_system.zl`
+- `kernel/apps_utils.zl`
+- `kernel/probe-catalog.py`
+
+</details>
+
+## 2026-08-19 — feat(apps): app-suite registry, catalog window, 11 utilities, 6 games (24c06bd)
+
+`desktop/app-suite` · 11 files changed, 1731 insertions(+), 22 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>11 file(s)</summary>
+
+- `compile.c`
+- `kernel/apps_common.zl`
+- `kernel/apps_games1.zl`
+- `kernel/apps_games2.zl`
+- `kernel/apps_registry.zl`
+- `kernel/apps_system.zl`
+- `kernel/apps_utils.zl`
+- `kernel/check-zl-calls.sh`
 - `kernel/kernel.zl`
-- `kernel/probe-files.py`
-- `kernel/term.c`
+- `kernel/mkdisk.sh`
+- `kernel/raw_boot.asm`
 
 </details>
 
