@@ -569,12 +569,19 @@ inverts that. Designed 2026-08-17:
   (2026-08-19) settle the kernel against `docs/design/zlOS-design-northstar.html`
   item by item** — the blur is gone and the reason is that it was disabling the
   wallpaper cache on the ThinkPad's 2560x1440 panel, not that it looked wrong.
+- **`docs/NEXT-PROMPT.md` — WHICH ONE TO DO NEXT, ranked, with the measurement
+  that ranks it.** Start a new session here. It also carries the standing
+  hazard nothing else states plainly: three to five agent sessions share this
+  one checkout, and on 2026-08-19 that produced two simultaneous land gates,
+  one session's commit sweeping another's in-progress edits, and load average
+  15.
 - **`docs/look-and-speed.md` — what a frame costs, what paces it, what is
   next.** The frame target (every frame AND the peak under 16.67 ms), the
   vsync survey per backend (one source exists, `intel.c`'s `PIPE_FRMCNT_A`, and
   it has zero callers), the blast radius of raising the PIT, and why SMP band
   rendering is one call that should not be made yet — 1.76x measured, not 4x,
-  and two bands is slower than serial.
+  and two bands is slower than serial. **Two of its entries carry correction
+  banners** — one claim in it was wrong and says so.
 - `docs/desktop-build-guide.md` — start here. What a compositor is, in plain
   words, and the build order.
 - **`docs/desktop-TODO.md` — the ordered task list. Pick it up here.**

@@ -177,11 +177,27 @@ Read in order of what that tells you:
    closed.** It was "4.3 ms of a 5.1 ms window redraw" before the fix in
    `DECISIONS.md` #12. It is now 0.626 ms — ~4% of the budget. The scissor fix
    (#6) changed it neither way; that is re-measured and recorded there.
-2. **The terminal is.** 5.1 ms of a 16.67 ms budget to draw 40 lines, and a real
-   drag spends 41–48% of its frame in the shell's scrollback redraw, because
-   `term_draw` redraws the whole scrollback into the window rather than the
-   intersection with the damage rect. **This is the next target** and it is the
-   same function as §1c's font finding.
+2. **The terminal is the most expensive single thing here** — 5.1 ms of a
+   16.67 ms budget for 40 lines of mono AA text, against 3.6 ms for the same
+   text proportional.
+
+   > **I got the mechanism wrong and it is worth saying why.** This entry
+   > originally read "a real drag spends 41–48% of its frame in the shell's
+   > scrollback redraw, **because `term_draw` redraws the whole scrollback
+   > rather than the intersection with the damage rect**". The second half is
+   > false: `term.c:357` rejects every row outside `fb_clip_top()`/
+   > `fb_clip_bot()` before laying out a glyph, and has since before the merge —
+   > `git log -- kernel/term.c` puts the last change at `df77bcd`. I took it
+   > from a sub-agent's summary, and unlike the other figures in this document
+   > it never went through the adversarial pass. A mechanism that is asserted
+   > and not read is a guess; this one then got promoted to "the next target".
+   >
+   > What survives: the 41–48% is a **wmbench attribution**, not a mechanism,
+   > and it stands or falls on its own. What is still true is that a row inside
+   > the band is drawn at **full width** regardless of the damage rect's x
+   > extent, so a narrow vertical strip still pays whole-line layout for the
+   > rows it crosses. That is a real cost and a much smaller one than "the whole
+   > scrollback". **Re-measure before acting on it.**
 3. **The wallpaper cannot be drawn live and never could.** One radial glow is
    12.2 ms on its own and the wallpaper has three, plus two wedges. This is why
    `fb.c` calls the cache "not an optimisation, the only way the look exists" —
