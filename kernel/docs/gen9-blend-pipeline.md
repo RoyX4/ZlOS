@@ -16,6 +16,41 @@ person actually needs: the order, and the state that is not a default.
 compile and the interesting state never appears. That one variable is what made
 `INTEL_DEBUG` look broken for most of a day.
 
+## It is emittable, not just readable — and here is exactly what is missing
+
+The decoder prints the raw dword **beside** each decoded field:
+
+```
+0xfffffffefffdc004:  0x00101021 : Dword 1
+    Depth Cache Flush Enable: true
+```
+
+So the capture is a command stream zlOS can **emit**, not a reading aid it has
+to reverse-engineer. `kernel/gpu_batch.inc` (from `gen_gpu_batch.py`) carries all
+**3240 dwords across 77 packets**, with a name/offset table so a caller can find
+any packet.
+
+That removes the need to derive 77 packet encodings from a PRM this tree does
+not have. **It does not remove all the work**, and the gap is specific:
+
+| referenced state | in the dump? |
+|---|---|
+| `BLEND_STATE`, `BLEND_STATE_ENTRY` | **yes**, with dwords |
+| `COLOR_CALC_STATE` | **yes** |
+| `CC_VIEWPORT`, `SF_CLIP_VIEWPORT` | **yes** |
+| **`RENDER_SURFACE_STATE`** | **NO — zlOS must build it** |
+| **`BINDING_TABLE_STATE`** | **NO — zlOS must build it** |
+
+The batch only *points* at those last two. The render target surface state is
+the one that describes the destination — format, pitch, base address, tiling —
+so it is exactly the part that has to be zlOS's own anyway; a captured one would
+describe Mesa's buffer, not the back buffer.
+
+**Every address in the capture is Mesa's.** 268 of the 3240 dwords are
+page-aligned and in GPU-address range, which makes them patch candidates:
+`STATE_BASE_ADDRESS`, the kernel pointer, the vertex buffer, the state-block
+pointers. Substituting those is the other half of the work.
+
 ## Two shaders, two byte counts — not a contradiction
 
 `gen9-shader-source.md` says the kernel is **5 instructions, 48 bytes**;
