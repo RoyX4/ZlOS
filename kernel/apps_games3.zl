@@ -566,8 +566,12 @@ fn pg_event(win, ety, ecode, ex, ey) {
     if ch < 1 { return 1 }
     cy = ey - wm_cy(win)
     if cy < 0 { return 1 }
-    pg_ly = g3_clamp(cy * PG_FH / ch - PG_PH / 2, 0, PG_FH - PG_PH)
-    wm_dmg(win)
+    # ONLY A MOVE THAT MOVED THE PADDLE REPAINTS. Pointer motion arrives as a
+    # stream of EV_MOUSE events with an empty button mask, so an unconditional
+    # wm_dmg here would repaint the whole window for every pixel the cursor
+    # crossed - and the paddle is clamped, so most of those change nothing.
+    ny = g3_clamp(cy * PG_FH / ch - PG_PH / 2, 0, PG_FH - PG_PH)
+    if ny != pg_ly { pg_ly = ny  wm_dmg(win) }
     return 1
 }
 
@@ -770,7 +774,9 @@ fn bo_event(win, ety, ecode, ex, ey) {
     if cw < 1 { return 1 }
     cx = ex - wm_cx(win)
     if cx < 0 { return 1 }
-    bo_px = g3_clamp(cx * BO_FW / cw - BO_PW / 2, 0, BO_FW - BO_PW)
+    nx = g3_clamp(cx * BO_FW / cw - BO_PW / 2, 0, BO_FW - BO_PW)
+    if nx == bo_px { return 1 }             # see the note in pg_event
+    bo_px = nx
     if bo_state == 0 { bo_park() }
     wm_dmg(win)
     return 1
@@ -2116,6 +2122,18 @@ fn iv_tick(win) {
 # touch instead makes the slice correct whether or not the registry ever learns
 # to call into it - and it is also what makes each _tick's `_ready == 0` guard
 # a real check rather than a formality.
+fn games3_reset(id) {
+    if id == G3_TETRIS { tet_reset() }
+    if id == G3_PONG   { pg_reset() }
+    if id == G3_BREAK  { bo_reset() }
+    if id == G3_MINES  { ms_reset() }
+    if id == G3_2048   { g48_reset() }
+    if id == G3_LIFE   { lf_reset() }
+    if id == G3_ROIDS  { as_reset() }
+    if id == G3_INVAD  { iv_reset() }
+    return 0
+}
+
 fn games3_ensure(id) {
     if id == G3_TETRIS { if tet_ready == 0 { tet_reset() } }
     if id == G3_PONG   { if pg_ready == 0 { pg_reset() } }
@@ -2126,6 +2144,15 @@ fn games3_ensure(id) {
     if id == G3_ROIDS  { if as_ready == 0 { as_reset() } }
     if id == G3_INVAD  { if iv_ready == 0 { iv_reset() } }
     return 0
+}
+
+# reg_new()'s per-slice arm. A fresh game every time the window is opened is
+# the rule reg_new already follows for Wordle, Tic-Tac-Toe, Hanoi and the rest;
+# games3_ensure above is the SECOND line of defence, for the case where a draw
+# or an event reaches this slice without ever having come through here.
+fn games3_new(id, u) {
+    games3_reset(id)
+    return wm_open(id, games3_name(id), 150 * u, 70 * u, games3_w(id) * u, games3_h(id) * u)
 }
 
 fn games3_name(id) {

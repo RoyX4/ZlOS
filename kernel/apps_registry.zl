@@ -245,6 +245,13 @@ fn reg_new(id, u) {
     if id == APP_MAZE {
         return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
     }
+
+    # ---- the per-slice opens. Each file owns its own, so an app can pick its
+    # ---- start position and reset its state before the first frame.
+    if sys2_has(id) == 1 { return sys2_new(id, u) }
+    if sys3_has(id) == 1 { return sys3_new(id, u) }
+    if games3_has(id) == 1 { return games3_new(id, u) }
+    if games4_has(id) == 1 { return games4_new(id, u) }
     return 0 - 1
 }
 
