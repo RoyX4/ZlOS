@@ -143,6 +143,10 @@ extern int xhci_ptr_ep(void) ZL_WEAK;
  * NOT alternatives - the arena hands memory to zl programs and reclaims it
  * wholesale on reset, the heap is for memory the kernel keeps and frees one
  * object at a time. Both exist on purpose. */
+extern void vmm_report(void);
+extern int  vmm_active(void);
+extern unsigned long long vmm_window_virt(void);
+
 extern int heap_init(void);
 extern int heap_ok(void);
 extern unsigned long heap_capacity(void);
@@ -1580,6 +1584,12 @@ Value zl_calln(const char *name, int n, ...)
      * tag and returns 0 if the heap still adds up, so "is the heap sound" is a
      * command somebody can type rather than a thing to hope about. It is O(the
      * number of blocks) and deliberately NOT on the alloc/free path. */
+    /* vmm_up prints one line with ADDRESSES in it - "64 MiB mapped: virtual
+     * 4096 MiB -> physical 256 MiB" is a fact somebody can check against
+     * memmap.h; "virtual memory is on" would not be. */
+    if (streq(name, "vmm_up"))        { vmm_report(); return zl_num((double)vmm_active()); }
+    if (streq(name, "vmm_on"))        return zl_num((double)vmm_active());
+
     if (streq(name, "heap_up"))       return zl_num((double)heap_init());
     if (streq(name, "heap_ok"))       return zl_num((double)heap_ok());
     if (streq(name, "heap_cap"))      return zl_num((double)heap_capacity());

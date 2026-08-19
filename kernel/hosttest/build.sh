@@ -264,6 +264,14 @@ echo "built ./arenatest     (run: ./arenatest)"
 gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -o heaptest heaptest.c ../heap.c
 echo "built ./heaptest      (run: ./heaptest)"
 
+# The virtual-memory arithmetic. NOT the mapping - installing a PDPT entry needs
+# CR3 and ring 0, and the only proof of that is verify-efi.sh booting green. But
+# vmm_phys()/vmm_virt() are called from dma_addr() on every keystroke, mouse
+# report, disk block and network frame, and they are the twelve lines where an
+# off-by-one hands a device an address one page out.
+gcc -O2 -g -Wall -Wextra -o pagingtest pagingtest.c ../paging.c
+echo "built ./pagingtest    (run: ./pagingtest)"
+
 # `run`, and every way it declines. TWO binaries from one source, which is the
 # point of exec.c's weak fs_* references: with a filesystem linked it reaches
 # not-found / empty / too-big / loaded; with nothing defining fs_* the weak

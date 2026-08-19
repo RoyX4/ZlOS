@@ -53,6 +53,8 @@
  * neighbour ever grows into it.
  */
 
+#include "dma.h"
+
 typedef unsigned long long u64;
 typedef unsigned int       u32;
 typedef unsigned short     u16;
@@ -212,11 +214,15 @@ static u32 q_desc(int q)  { return q == VQ_RX ? RX_DESC  : TX_DESC;  }
 static u32 q_avail(int q) { return q == VQ_RX ? RX_AVAIL : TX_AVAIL; }
 static u32 q_used(int q)  { return q == VQ_RX ? RX_USED  : TX_USED;  }
 
-static void desc_set(int q, int i, u32 addr, u32 len, u16 flags, u16 next)
+/* `addr` is a DEVICE address and arrives already translated - every caller
+ * wraps it in dma_addr(). It is 64-bit because the descriptor field is 64-bit
+ * on every build, and taking a u32 here was how the high half came to be a
+ * hardcoded zero rather than the top of a real address. See dma.h. */
+static void desc_set(int q, int i, unsigned long long addr, u32 len, u16 flags, u16 next)
 {
     volatile u32 *d = (volatile u32 *)(uptr)(q_desc(q) + (u32)i * 16);
-    d[0] = addr;
-    d[1] = 0;                        /* the high half, always written        */
+    d[0] = (u32)addr;
+    d[1] = (u32)(addr >> 32);        /* the high half, always written        */
     d[2] = len;
     d[3] = (u32)flags | ((u32)next << 16);
 }
@@ -343,12 +349,18 @@ static int setup_queue(int q)
     zero_mem(q_avail(q), 4096);
     zero_mem(q_used(q), 4096);
 
-    mmio_w(cfg_common + CC_QUEUE_DESC + 0, q_desc(q));
-    mmio_w(cfg_common + CC_QUEUE_DESC + 4, 0);
-    mmio_w(cfg_common + CC_QUEUE_DRIVER + 0, q_avail(q));
-    mmio_w(cfg_common + CC_QUEUE_DRIVER + 4, 0);
-    mmio_w(cfg_common + CC_QUEUE_DEVICE + 0, q_used(q));
-    mmio_w(cfg_common + CC_QUEUE_DEVICE + 4, 0);
+    {   /* Through dma_addr(): identity today, the one place that changes when
+         * the kernel stops being identity-mapped. See dma.h. */
+        unsigned long long d = dma_addr(q_desc(q));
+        unsigned long long a = dma_addr(q_avail(q));
+        unsigned long long u = dma_addr(q_used(q));
+        mmio_w(cfg_common + CC_QUEUE_DESC   + 0, (u32)d);
+        mmio_w(cfg_common + CC_QUEUE_DESC   + 4, (u32)(d >> 32));
+        mmio_w(cfg_common + CC_QUEUE_DRIVER + 0, (u32)a);
+        mmio_w(cfg_common + CC_QUEUE_DRIVER + 4, (u32)(a >> 32));
+        mmio_w(cfg_common + CC_QUEUE_DEVICE + 0, (u32)u);
+        mmio_w(cfg_common + CC_QUEUE_DEVICE + 4, (u32)(u >> 32));
+    }
     mmio_w16(cfg_common + CC_QUEUE_ENABLE, 1);
 
     avail_idx[q] = 0;
@@ -364,7 +376,7 @@ static void rx_fill(void)
     for (int i = 0; i < QSZ; i++) {
         zero_mem(RX_BUF(i), 64);          /* the header, so a short frame
                                              cannot show the last one's */
-        desc_set(VQ_RX, i, RX_BUF(i), BUF_SZ, DESC_WRITE, 0);
+        desc_set(VQ_RX, i, dma_addr(RX_BUF(i)), BUF_SZ, DESC_WRITE, 0);
         vq_publish(VQ_RX, (u16)i, 0);     /* one notify at the end, not 32 */
     }
     mmio_w16(cfg_notify + (uptr)notify_off[VQ_RX] * notify_mul, (u16)VQ_RX);
@@ -497,7 +509,7 @@ int virtio_net_send(const u8 *frame, int len)
     int pad = len;
     while (pad < 60) { b[HDR_LEN + pad] = 0; pad++; }
 
-    desc_set(VQ_TX, i, TX_BUF(i), (u32)(HDR_LEN + pad), 0, 0);
+    desc_set(VQ_TX, i, dma_addr(TX_BUF(i)), (u32)(HDR_LEN + pad), 0, 0);
     vq_publish(VQ_TX, (u16)i, 1);
     tx_next++;
     n_tx++;
@@ -613,7 +625,7 @@ int virtio_net_poll(u8 *out, int max)
         if (!written) {
             n_unwritten++;
             zero_mem(RX_BUF(id), 64);
-            desc_set(VQ_RX, (int)id, RX_BUF(id), BUF_SZ, DESC_WRITE, 0);
+            desc_set(VQ_RX, (int)id, dma_addr(RX_BUF(id)), BUF_SZ, DESC_WRITE, 0);
             vq_publish(VQ_RX, (u16)id, 1);
             id_inflight[id] = 1;
             return 0;
@@ -649,7 +661,7 @@ int virtio_net_poll(u8 *out, int max)
          * and the re-post did not, which is exactly the asymmetry that let a
          * stale frame be read as a live one. */
         zero_mem(RX_BUF(id), 64);
-        desc_set(VQ_RX, (int)id, RX_BUF(id), BUF_SZ, DESC_WRITE, 0);
+        desc_set(VQ_RX, (int)id, dma_addr(RX_BUF(id)), BUF_SZ, DESC_WRITE, 0);
         vq_publish(VQ_RX, (u16)id, 1);
         id_inflight[id] = 1;
     }

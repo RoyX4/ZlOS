@@ -41,6 +41,7 @@ hosttest/xhcitest
 # binary works immediately, unlike the four tracked ones, which still need
 # `git rm --cached` before a line here does anything.
 hosttest/heaptest
+hosttest/pagingtest
 hosttest/fbtext
 hosttest/palette
 hosttest/termwrap

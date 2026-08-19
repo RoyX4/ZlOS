@@ -42,6 +42,7 @@
  */
 
 #include "memmap.h"
+#include "dma.h"
 
 typedef unsigned long long u64;
 typedef unsigned int       u32;
@@ -267,13 +268,22 @@ static int setup_queue(int q)
     zero_mem(VMEM_AVAIL, 4096);
     zero_mem(VMEM_USED, 4096);
 
-    /* 64-bit physical addresses, low half first */
-    mmio_w(cfg_common + CC_QUEUE_DESC + 0, VMEM_DESC);
-    mmio_w(cfg_common + CC_QUEUE_DESC + 4, 0);
-    mmio_w(cfg_common + CC_QUEUE_DRIVER + 0, VMEM_AVAIL);
-    mmio_w(cfg_common + CC_QUEUE_DRIVER + 4, 0);
-    mmio_w(cfg_common + CC_QUEUE_DEVICE + 0, VMEM_USED);
-    mmio_w(cfg_common + CC_QUEUE_DEVICE + 4, 0);
+    /* 64-bit physical addresses, low half first. Through dma_addr(), which is
+     * the identity function today and is the ONE place that changes when the
+     * kernel stops being identity-mapped - see dma.h. The high halves are no
+     * longer a hardcoded 0: they are the top 32 bits of the translated address,
+     * which is the same 0 today and is not guaranteed to stay 0. */
+    {
+        unsigned long long d = dma_addr(VMEM_DESC);
+        unsigned long long a = dma_addr(VMEM_AVAIL);
+        unsigned long long u = dma_addr(VMEM_USED);
+        mmio_w(cfg_common + CC_QUEUE_DESC   + 0, (u32)d);
+        mmio_w(cfg_common + CC_QUEUE_DESC   + 4, (u32)(d >> 32));
+        mmio_w(cfg_common + CC_QUEUE_DRIVER + 0, (u32)a);
+        mmio_w(cfg_common + CC_QUEUE_DRIVER + 4, (u32)(a >> 32));
+        mmio_w(cfg_common + CC_QUEUE_DEVICE + 0, (u32)u);
+        mmio_w(cfg_common + CC_QUEUE_DEVICE + 4, (u32)(u >> 32));
+    }
     mmio_w16(cfg_common + CC_QUEUE_ENABLE, 1);
 
     avail_idx = 0;
@@ -290,8 +300,8 @@ static int setup_queue(int q)
 static int vq_send(u32 cmd_len, u32 resp_len)
 {
     int head = 0;
-    desc_set(0, (u64)VMEM_CMD,  cmd_len,  DESC_NEXT, 1);
-    desc_set(1, (u64)VMEM_RESP, resp_len, DESC_WRITE, 0);
+    desc_set(0, dma_addr(VMEM_CMD),  cmd_len,  DESC_NEXT, 1);
+    desc_set(1, dma_addr(VMEM_RESP), resp_len, DESC_WRITE, 0);
 
     volatile u16 *avail = (volatile u16 *)(uptr)VMEM_AVAIL;
     avail[2 + (avail_idx % QSZ)] = (u16)head;
@@ -414,8 +424,13 @@ int virtio_gpu_attach_backing(u32 id, u32 bytes)
     volatile u32 *c = (volatile u32 *)(uptr)VMEM_CMD;
     c[6] = id;
     c[7] = 1;                       /* nr_entries */
-    c[8] = VMEM_FB;                 /* addr low   */
-    c[9] = 0;                       /* addr high  */
+    {   /* THE framebuffer address the GPU DMAs from - the single most
+         * important address in this file to get right, and the one whose
+         * failure mode (ERR_UNSPEC) reads like a driver bug. */
+        unsigned long long fb = dma_addr(VMEM_FB);
+        c[8] = (u32)fb;             /* addr low   */
+        c[9] = (u32)(fb >> 32);     /* addr high  */
+    }
     c[10] = bytes;
     c[11] = 0;                      /* padding    */
     if (!vq_send(24 + 8 + 16, 24)) return 0;

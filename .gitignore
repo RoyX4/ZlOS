@@ -87,3 +87,7 @@ scratch.zl
 # identified - so an ignore rule aimed at CI output must not reach them.
 /shots/
 kernel/hosttest/wmbench
+
+# Stage 5 work in progress, held on real disk rather than /tmp (which this box
+# wipes, and which destroyed three earlier sessions). Removed when Stage 5 lands.
+.stage5-wip/

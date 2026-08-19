@@ -70,6 +70,18 @@ unsigned long heap_worst_free(void);
 static int quiet = 0;
 void zl_putc_pub(char c) { if (!quiet) fputc(c, stdout); }
 
+/* paging.c's job, stubbed. There is no CR3 to extend in a Linux process, so the
+ * honest answer here is the same one the 32-bit kernel build gives: no window,
+ * use the physical address. That keeps this test exercising heap.c's ordinary
+ * path - which is also the path the 32-bit kernel and any failed mapping take,
+ * so it is the majority case rather than a special one. paging.c's own
+ * arithmetic is tested separately in pagingtest.c. */
+unsigned long long vmm_map_window(unsigned long long phys, unsigned long long bytes)
+{
+    (void)phys; (void)bytes;
+    return 0;
+}
+
 /* ---- tiny assert harness, same shape as arenatest.c ----------------------*/
 static int checks = 0, failures = 0;
 

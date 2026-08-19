@@ -98,6 +98,24 @@ unsigned int idt_ticks(void) { return fake_ticks; }
  * state in reach so the test can start from "a mouse is enumerated" and go
  * straight to the thing under test, which is the ring. The shipping file is
  * not modified by a character and not #ifdef'd. */
+/* paging.c's two translators, stubbed as the identity.
+ *
+ * xhci.c now routes every device-visible address through dma_addr()/dma_kaddr()
+ * (dma.h), which call these. In the kernel they are a range check against the
+ * one virtual window paging.c maps over the heap - and no xHCI buffer is in it,
+ * so they return the identity for every address this file will ever see.
+ * Identity here is therefore not a simplification, it is the same answer the
+ * kernel gives.
+ *
+ * That makes this harness the ONLY place the dma_addr conversion is exercised
+ * by something that actually walks the rings: it plays the controller, follows
+ * the cycle bit and the Link TRB, and reads the buffer each TRB names. If the
+ * conversion had broken a TRB address, the fake controller would read the wrong
+ * memory and the pointer reports would stop decoding.
+ */
+unsigned long long vmm_phys(unsigned long long virt) { return virt; }
+unsigned long long vmm_virt(unsigned long long phys) { return phys; }
+
 #include "../xhci.c"
 
 /* ---- the rest of input.c's world ---------------------------------------- */

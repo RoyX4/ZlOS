@@ -70,6 +70,7 @@ rtc.c
 # desktop/exec-track
 arena.c
 heap.c
+paging.c
 exec.c
 
 # desktop/feel-and-control

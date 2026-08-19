@@ -104,12 +104,16 @@ that shape: raising (1) pushed the loaded region through the stack, which is
   realloc-in-place, and a worst case **measured** at 3 steps for `alloc` and 4
   for `free`. It is added *alongside* `arena.c`, which is unchanged — see "two
   allocators, on purpose" below.
-- **Stage 4 — paging for the kernel's own use.** NOT STARTED. Page tables exist
-  on the 64-bit path (`boot64.S` identity-maps the first 4 GiB with 2 MiB pages)
-  but the kernel runs identity-mapped, which is *why* every buffer above needs a
-  hand-chosen physical address.
-- **Stage 5 — ring 3 and syscalls.** NOT STARTED. There is no user mode at all:
-  no ring 3, no syscall entry, no user/kernel boundary.
+- **Stage 4 — paging for the kernel's own use. DONE, for one region.**
+  `paging.c` maps the heap's 64 MiB at virtual 4 GiB on the 64-bit builds, with
+  everything else identity-mapped underneath. `dma.h` is the seam every
+  device-visible address now passes through — 48 forward sites and 3 inverse —
+  and `check-dma.sh` fails the build if a new one skips it. See below.
+- **Stage 5 — ring 3 and syscalls. PARTIALLY DONE.** Ring 3, a TSS, a DPL-3
+  syscall gate and a working `int 0x80` round trip exist on the 32-bit build and
+  are pinned by `verify.sh`'s golden transcript. **Per-process address spaces do
+  NOT exist.** See "what Stage 5 does and does not buy" below — the distinction
+  between privilege separation and memory isolation is the whole of it.
 
 ---
 
@@ -260,6 +264,164 @@ found so a probe alone is harmless, but `heap_init()` writes a block header
 straight after. **Turning that convention into a check means reading the UEFI
 memory map, which is Stage 4 work.** Until then the evidence is `verify-efi.sh`
 booting green with it running.
+
+---
+
+## Stage 4 in detail: one window, and a seam everywhere else
+
+### What actually got mapped, measured
+
+`paging.c` takes a free **PML4** slot, hangs its own PDPT and page directory off
+it, and maps the heap's 64 MiB physical at 256 MiB into it with 2 MiB pages. On
+the 64-bit EFI path — the only 64-bit path with a boot gate:
+
+```
+  arena: 16 MiB at 14 MiB, ends at 30 MiB, ceiling 128 MiB (bg_buf)
+  heap: 64 MiB at 130560 GiB [VIRTUAL, physical 256 MiB]
+  vmm: 64 MiB mapped: virtual 130560 GiB -> physical 256 MiB  (everything else identity)
+  ready.
+```
+
+130560 GiB is PML4 slot 255 (255 × 512 GiB). The kernel boots to `ready.` with
+its heap living at an address that is not its physical address.
+
+### It took two wrong answers, and the first one was silent
+
+Both were the same mistake — reasoning about *firmware's* page tables from *our
+bootloader's*:
+
+1. hardcoded PDPT slot 4 (virtual 4 GiB), because `boot64.S` fills PDPT[0..3]
+   and leaves the rest zero;
+2. scanned PDPT slots 4..511 for a free one.
+
+Both refused on every EFI boot. **The first version refused silently**, and the
+boot line read `vmm: identity only - no window` — which is exactly what a build
+with no paging prints, so it looked intentional. Making every refusal name its
+reason produced the actual answer in one boot:
+
+```
+  vmm: refused - every PDPT slot from 4 to 511 is already mapped
+```
+
+OVMF identity-maps its whole address space with 1 GiB pages, so under `PML4[0]`
+there is no free PDPT slot at all. One level up there is room to spare.
+
+**A third trap sat under that one:** the first measurement of the fix was taken
+against a *stale* `zlOS-usb.img`. `buildefi.sh` builds `BOOTX64.EFI`; it does
+**not** build the USB image — `mkusb.sh` does, and `verify-efi.sh` calls it. So
+a rebuilt binary and an unchanged image gave a result that described the old
+code. `HANDOFF.md` already says it: *if a diagnostic result is impossible, check
+what you actually booted before you check anything else.*
+
+The heap is the right first region and the choice is not arbitrary:
+
+- nothing inside it has a fixed address, so no other file names one;
+- **no device is ever given a pointer into it** — `heap.c` is deliberately
+  outside `check-dma.sh`'s DMA set, and `docs/dma-sites.md` enumerates every
+  address that reaches hardware, none of which is a heap pointer;
+- if the window fails, the physical address is a complete, already-tested
+  system. There is no half state.
+
+### How it refuses
+
+Four layers, because this is the file where "it looked right" is worth least:
+
+1. the walk is validated at every step (CR3 sane, `PML4[0]` present and not a
+   huge page, **the PDPT slot currently absent**);
+2. the entries are **read back** after writing and compared — fault-free, it
+   dereferences no new address;
+3. only then is the virtual address touched, and the probe writes through
+   *virtual* and reads at *physical*, **both directions**. That is what catches
+   a window that works but aliases the wrong memory. A merely-absent mapping
+   faults instead, and `idt.c` installs `fault_isr` on all 32 exception vectors,
+   so it halts with a message rather than triple-faulting;
+4. any failure zeroes the entry, reloads CR3, and returns 0 — loudly.
+
+`CR0.WP` is cleared around the table write and restored immediately, because on
+the EFI path the PDPT is *firmware's* and firmware commonly marks its own page
+tables read-only.
+
+### What is still identity, deliberately
+
+Every region a **device** can reach — `HI_XHCI`, `HI_NVME`, `HI_VGPU`,
+virtio-net's arena — stays identity-mapped, and there is no plan to change it. A
+driver handed a physical address today and a physical address tomorrow does not
+have to change at all, and DMA is where this project's recurring bug class
+lives. `dma_addr()` exists so that *if* it ever changes, it changes in one
+place. It is not a promise that it will.
+
+The 32-bit build has paging **off** (`CR0.PG` is never set). There is nothing to
+extend, and `vmm_map_window()` says so and returns 0.
+
+### The DMA seam, and the four sites I missed
+
+`docs/dma-sites.md` is the full account. The short version, because it is the
+part worth remembering:
+
+**My own enumeration found 44 sites and missed four**, all in `xhci.c`, all live
+— every keystroke and every mouse report went through two of them. They were
+found by an independent audit whose only brief was to break the conversion. A
+second audit found that my *checker* was structurally blind to 11 of the 20
+virtio sites, because those passed region bases with no cast at all.
+
+Both holes are closed (`check-dma.sh` rules 3 and 4, each validated against the
+exact shape that slipped through). **The honest answer to "how do you know you
+found them all" is that a single careful pass did not — three independent
+things agreeing is what closes it.**
+
+The audit also found the half nobody looks for: **the seam needs an inverse.**
+A device reports addresses *back* — an xHCI Command Completion Event carries the
+address of the TRB it completed — and two places compare those against kernel
+addresses. Neither is an outbound site, so no outbound enumeration finds them,
+and both break on the identical commit. `dma_kaddr()` is that inverse.
+
+---
+
+## Stage 5 in detail: what ring 3 does and does not buy
+
+`usermode.c` runs a program at ring 3 that talks to the kernel only through
+`int 0x80`, and comes back. `verify.sh`'s golden transcript pins the result, so
+the bytes in the boot log were produced by syscalls made from the far side of
+the privilege boundary and can be produced no other way.
+
+**Three things must all be true or ring 3 triple-faults** (a silent reboot loop
+with no message):
+
+1. a TSS with `ss0`/`esp0`, loaded with `ltr` — the CPU reads the ring-0 stack
+   out of it on the first interrupt taken in ring 3;
+2. an IDT gate with **DPL 3** for the syscall vector, and only that vector — a
+   ring-3 `int` through a DPL-0 gate is a `#GP`, which is exactly why ring 3
+   cannot fake a page fault or a timer interrupt;
+3. an `iret` with a ring-3 frame — there is no "drop privilege" instruction.
+
+### The distinction that matters
+
+> **Ring 3 is privilege separation. It is NOT memory isolation.**
+
+What a ring-3 program can no longer do — each is a `#GP` instead of an
+instruction: `cli`/`sti`, `hlt`, `in`/`out`, `lgdt`/`lidt`/`ltr`, writes to
+`cr0`/`cr3`/`cr4`, `wrmsr`, `invlpg`. That is the difference between a runaway
+program that corrupts a buffer and one that disables interrupts and wedges the
+machine.
+
+What it does **not** buy on the 32-bit build: paging is off, the ring-3 segments
+are flat 4 GiB, and a flat segment isolates nothing. **A ring-3 program can
+still read and write any address.** It simply cannot reprogram the machine.
+
+### What is left, precisely
+
+Per-process address spaces need, in order: the page-table `U/S` bit honoured
+per region; a per-process CR3 and the tables behind it; a process abstraction
+that owns one; a loader that places a program in it; and the syscall ABI
+extended to take **pointers**, which today it deliberately does not — a pointer
+argument has to be range-checked against an address space that does not exist
+yet. `syscall_dispatch()`'s three calls pass values only, on purpose.
+
+Ring 3 is 32-bit-only, and that is a scope decision: the entry stub is
+hand-written assembly, and a 64-bit one wants `syscall`/`sysret` plus three MSRs
+— writable, but with **no boot gate that could prove it works**, since the only
+64-bit boot gate is `verify-efi.sh`. Shipping an untested second copy is how
+this repo acquires subsystems that have never executed.
 
 ---
 

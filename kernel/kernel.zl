@@ -4114,6 +4114,10 @@ arena_up()
 # is something you want to read in the boot log, not discover three keystrokes
 # into a program.
 heap_up()
+# AFTER heap_up, not before: heap_init() is what ASKS paging.c for the window, so
+# there is nothing to report until it has. Printing "no window" before the only
+# caller has run would be true and useless.
+vmm_up()
 ok_line("zl runtime, kernel subset")
 # THIS LINE USED TO SAY "no heap", and the comment under it said the line would
 # stop being honest "the day the interpreter boxes lists and strings, and that

@@ -258,8 +258,29 @@ static void hpu(unsigned long v)
     while (i) zl_putc_pub(b[--i]);
 }
 
+/* ---- WHERE THE HEAP IS ACTUALLY REACHED THROUGH ---------------------------
+ *
+ * HEAP_BASE is the PHYSICAL address and stays a compile-time constant, because
+ * the _Static_asserts above are about the physical map and must keep being
+ * checked by the compiler. heap_win is the address the CPU uses, and it is a
+ * RUNTIME value because on the 64-bit builds paging.c may map this region at a
+ * virtual address that is not its physical one.
+ *
+ * They are equal on the 32-bit build (paging is off), equal if the window fails
+ * to materialise, and different when it works. Every dereference below goes
+ * through heap_win; nothing goes through HEAP_BASE.
+ *
+ * NO DEVICE EVER SEES ONE OF THESE POINTERS. That is what makes this region
+ * safe to move: heap.c is deliberately not in check-dma.sh's DMA set, and
+ * docs/dma-sites.md enumerates every address that reaches hardware. If that
+ * ever stops being true, the pointer must go through dma_addr() like every
+ * other one - and dma_addr() consults paging.c, so it would come out right. */
+extern unsigned long long vmm_map_window(unsigned long long phys,
+                                         unsigned long long bytes);
+static uptr heap_win = (uptr)HEAP_BASE;
+
 /* ---- block <-> offset -----------------------------------------------------*/
-static struct blk *at(u32 off) { return (struct blk *)(uptr)(HEAP_BASE + off); }
+static struct blk *at(u32 off) { return (struct blk *)(heap_win + (uptr)off); }
 
 /* ---- corruption -----------------------------------------------------------
  * Not recoverable, and deliberately not an error return. See the header.
@@ -419,9 +440,9 @@ static void list_remove(u32 off)
  * evidence is verify-efi.sh booting green with this running. */
 static int ram_backed(void)
 {
-    volatile u32 *lo  = (volatile u32 *)(uptr)HEAP_BASE;
-    volatile u32 *mid = (volatile u32 *)(uptr)(HEAP_BASE + HEAP_BYTES / 2UL);
-    volatile u32 *hi  = (volatile u32 *)(uptr)(HEAP_END - 4UL);
+    volatile u32 *lo  = (volatile u32 *)(heap_win);
+    volatile u32 *mid = (volatile u32 *)(heap_win + (uptr)(HEAP_BYTES / 2UL));
+    volatile u32 *hi  = (volatile u32 *)(heap_win + (uptr)HEAP_BYTES - 4);
     u32 s_lo = *lo, s_mid = *mid, s_hi = *hi;
     int ok;
 
@@ -439,6 +460,16 @@ int heap_init(void)
 
     tried = 1;
     panicked = 0;
+
+    /* Ask paging.c for a virtual window over our physical region. 0 means
+     * "there isn't one" - the 32-bit build, or a mapping that refused to
+     * verify - and the physical address is then a complete, already-tested
+     * answer. There is deliberately no half state. */
+    {
+        unsigned long long w = vmm_map_window((unsigned long long)HEAP_BASE,
+                                              (unsigned long long)HEAP_BYTES);
+        heap_win = w ? (uptr)w : (uptr)HEAP_BASE;
+    }
     used = 0; high_water = 0; refusals = 0; live_blocks = 0;
     worst_alloc_steps = 0; worst_free_steps = 0;
     small_map = 0; fl_map = 0;
@@ -464,10 +495,19 @@ int heap_init(void)
     hp("  heap: ");
     hpu(HEAP_BYTES >> 20);
     hp(" MiB at ");
-    hpu(HEAP_BASE >> 20);
-    hp(" MiB, ends at ");
-    hpu(HEAP_END >> 20);
-    hp(" MiB");
+    /* GiB once the window puts us above 4 GiB - see paging.c's vmm_report for
+     * why an eight-digit MiB figure is not checkable by a reader. */
+    if ((unsigned long long)heap_win >= (1ULL << 32)) {
+        hpu((unsigned long)(heap_win >> 30));
+        hp(" GiB [VIRTUAL, physical ");
+        hpu((unsigned long)(HEAP_BASE >> 20));
+        hp(" MiB]");
+    } else {
+        hpu((unsigned long)(heap_win >> 20));
+        hp(" MiB, ends at ");
+        hpu((unsigned long)((heap_win + (uptr)HEAP_BYTES) >> 20));
+        hp(" MiB");
+    }
     if (!live) hp("  *** NOT BACKED BY RAM - heap allocation refused ***");
     hp("\n");
 
@@ -476,7 +516,7 @@ int heap_init(void)
 
 int heap_ok(void) { return live; }
 
-unsigned long heap_base_addr(void)   { return HEAP_BASE; }
+unsigned long heap_base_addr(void)   { return (unsigned long)heap_win; }
 unsigned long heap_capacity(void)    { return HEAP_BYTES; }
 unsigned long heap_used(void)        { return used; }
 unsigned long heap_high_water(void)  { return high_water; }
@@ -694,7 +734,7 @@ void heap_free(void *p)
 
     {
         uptr a = (uptr)p;
-        if (a < (uptr)HEAP_BASE + HDR_BYTES || a >= (uptr)HEAP_END) {
+        if (a < heap_win + HDR_BYTES || a >= heap_win + (uptr)HEAP_BYTES) {
             /* NOT a panic. A pointer from somewhere else - the arena, a static
              * buffer - reaching here is a caller bug, but it is a caller bug
              * that says nothing about whether the HEAP's metadata is sound, and
@@ -702,7 +742,7 @@ void heap_free(void *p)
             hp("  heap: free() of a pointer that is not in the heap - ignored\n");
             return;
         }
-        off = (u32)(a - (uptr)HEAP_BASE - HDR_BYTES);
+        off = (u32)(a - heap_win - HDR_BYTES);
     }
 
     if (!blk_ok(off, "free() of something that is not a block")) return;
@@ -777,11 +817,11 @@ void *heap_realloc(void *p, unsigned long bytes)
 
     {
         uptr a = (uptr)p;
-        if (a < (uptr)HEAP_BASE + HDR_BYTES || a >= (uptr)HEAP_END) {
+        if (a < heap_win + HDR_BYTES || a >= heap_win + (uptr)HEAP_BYTES) {
             hp("  heap: realloc() of a pointer that is not in the heap\n");
             return 0;
         }
-        off = (u32)(a - (uptr)HEAP_BASE - HDR_BYTES);
+        off = (u32)(a - heap_win - HDR_BYTES);
     }
     if (!blk_ok(off, "realloc() of something that is not a block")) return 0;
     b = at(off);
