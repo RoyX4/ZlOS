@@ -51,10 +51,15 @@ One zl file, 2,121 nonblank lines on `main` and up to 2,823 on
 | `APP_MONITOR` | System Monitor |
 | `APP_ABOUT` | About |
 | `APP_SNAKE` | Snake |
+| `APP_MENU` | start menu (modal) |
+| `APP_BROWSER` | Browser |
+| `APP_SETTINGS` | Settings |
+| `APP_RUN` | run |
 | `APP_PAINT` | Paint |
 | `APP_CUBE` | 3D |
 | `APP_ANIM` | zlOS |
 | `APP_MOUSE` | Pointer |
+| `APP_EDIT` | Editor |
 
 Each app is a branch in the dispatch on window id, plus a `wm_open()`
 call at startup. There is no per-app file and no per-app directory. If

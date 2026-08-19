@@ -191,13 +191,13 @@ Compare per-file symbol lists across `prelanding/*` tags.
 ### 3. Fixed addresses
 
 `kernel/memmap.h` is the single source of truth now and has `_Static_assert`s,
-but `check-memmap.sh` iterates a **hardcoded nine-name list** and does not
-discover new constants - it could not see `DISK_SCRATCH`. Rewrite it to sweep
-every `^[A-Z_]+ *= *0x` in `kernel.zl` and every `#define HI_*` in `memmap.h`,
-and to fail on any overlap.
+but `check-memmap.sh` used to iterate a **hardcoded nine-name list** and could
+not see `DISK_SCRATCH`. It now parses `DISK_SCRATCH`, `DISK_SCRATCH_SIZE`,
+`PAINT_BUF` and `PAINT_MAX`. A full sweep of every `^[A-Z_]+ *= *0x` is still
+the better detector.
 
-Known live: `intel.c`'s `edid_buf` is still a hardcoded `0x0C980000`, which is
-inside `HI_BLUR`. `intel_set_edid_buffer()` exists and is the one-line fix.
+`intel.c`'s `edid_buf` default is `HI_EDID` (`0x0BFF0000`, top of the HID
+window). Host harnesses still override via `intel_set_edid_buffer()`.
 
 ### 4. Gates that cannot fail
 
@@ -208,13 +208,11 @@ never gone red has not been tested.
 
 ### 5. The known-broken list
 
-- `key()` is called in `kernel.zl` on the panel-handover path and is defined
-  **nowhere**, on every branch, since `b55f3f9`. Pick the right builtin
-  (`in_key`, `term_key`, `usb_key`) and remove it from `check-zl-calls.sh`'s
-  known list.
+- `key()` on the panel-handover path is gone: it waits on `in_char()` like
+  every other blocking read. `check-zl-calls.sh`'s known-unresolved list is
+  empty; the next hole is a FAIL.
 - `font_big.c` and `icons_rgb.c` are referenced by nothing at all.
-- `ci/gates-and-agent-brief` is 9 commits unmerged, and carries the fix that
-  makes `build.sh` build `zlfmt`.
+- `ci/gates-and-agent-brief` landed on `main` (`2550091`).
 - 55 files exist only in `refs/wip/*` snapshots and on no branch - the whole
   `learn/` course, `crypto.c`, `zlfmt.c`, 7 probes, 12 docs.
 
