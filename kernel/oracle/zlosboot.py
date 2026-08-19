@@ -41,6 +41,34 @@ WORD_APPS = {
 }
 
 
+class LoggedSerial(Serial):
+    """Serial that also keeps everything it ever received.
+
+    THIS IS NOT A CONVENIENCE. Serial.wait() CONSUMES the buffer up to and
+    including the marker it matched, so by the time the boot has been waited
+    for, every `wm: win N title x,y WxH` line the compositor printed on the way
+    up is gone. probe-drag.py documents the same trap from the other side -
+    waiting for `compositor:` a second time burns the whole timeout and then
+    falsely reports that no rectangles were printed - and animate.py hit it
+    exactly once: "the compositor reported no window title rects" on a boot
+    that had printed several.
+
+    pump() is the only place bytes enter the buffer, so overriding it captures
+    everything regardless of who consumes what afterwards.
+    """
+
+    def __init__(self, path):
+        super().__init__(path)
+        self.all = ""
+
+    def pump(self):
+        n = len(self.buf)
+        r = super().pump()
+        if len(self.buf) > n:
+            self.all += self.buf[n:]
+        return r
+
+
 def guest_ui(width):
     """What ui() returns in the guest at this width. fb.c:726-729, exactly.
 
@@ -274,10 +302,11 @@ def open_by_catalog(ser, qmp, idx, W, H, name):
     menu_client_y = (dock_y - mh - 8 * u) + TITLE_H * u
     click(qmp, 110 * u, menu_client_y + 4 * u + 8 * 26 * u + 13 * u, W, H, settle)
     settle(1.5)
-    log = ser.buf
-    ser.buf = ""
+    # ser.all, never ser.buf: wait() consumes, so the buffer holds only
+    # whatever arrived since the last match. The full transcript is the only
+    # place the catalog's own report is guaranteed to still be.
     rows = re.findall(r"wm: win (\d+) title \d+,\d+ \d+x\d+ "
-                      r"client (\d+),(\d+) (\d+)x(\d+)", log)
+                      r"client (\d+),(\d+) (\d+)x(\d+)", ser.all)
     if not rows:
         raise SystemExit("'All Applications' did not open a window - the "
                          "catalog is not up, so a tile click would land on "
@@ -304,7 +333,7 @@ def open_app(ser, qmp, name, W, H, ceiling, cat=None):
     """
     cat = cat if cat is not None else catalog_apps()
     ser.drain(0.5)
-    before = win_count(ser.buf)
+    before = win_count(ser.all)
     if name in WORD_APPS:
         print(f"opening {name!r} by shell word")
         type_line(ser, name, ceiling)
@@ -317,7 +346,7 @@ def open_app(ser, qmp, name, W, H, ceiling, cat=None):
         raise SystemExit(f"unknown app {name!r}"
                          + (f" - did you mean {near}?" if near else ""))
     ser.drain(0.5)
-    after = win_count(ser.buf)
+    after = win_count(ser.all)
     if after <= before:
         raise SystemExit(f"no new window was reported ({before} -> {after}). "
                          f"{name!r} did not open, so anything measured after "
@@ -367,7 +396,7 @@ class Machine:
         self.proc = subprocess.Popen(
             qemu_argv(self.tmp, False, ser_path, qmp_path, tablet=self.tablet),
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.ser, self.qmp = Serial(ser_path), Qmp(qmp_path)
+        self.ser, self.qmp = LoggedSerial(ser_path), Qmp(qmp_path)
         ok, log = self.ser.wait("ready.", self.boot_timeout)
         if not ok:
             raise SystemExit("never booted. serial so far:\n" + log[-2000:])

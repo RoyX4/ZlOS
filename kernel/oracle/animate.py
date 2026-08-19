@@ -76,8 +76,10 @@ def do_drag(m, frames):
     """
     import re
     m.ser.drain(1.0)
-    log = m.ser.buf
-    bars = re.findall(r"wm: win (\d+) title (\d+),(\d+) (\d+)x(\d+)", log)
+    # ser.all, not ser.buf - see LoggedSerial. The boot-time window reports are
+    # printed BEFORE "ready.", so the wait that proved the machine booted has
+    # already consumed them out of the buffer.
+    bars = re.findall(r"wm: win (\d+) title (\d+),(\d+) (\d+)x(\d+)", m.ser.all)
     if not bars:
         raise SystemExit("the compositor reported no window title rects, so "
                          "there is nothing to aim at - refusing to press at a "
