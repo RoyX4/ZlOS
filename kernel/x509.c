@@ -330,12 +330,24 @@ int x509_signed_by(const struct x509_cert *child, const struct x509_cert *issuer
     if (child->sig_hash == 384) { sha384(child->tbs, (unsigned)child->tbslen, h); hl = 48; }
     else                        { sha256(child->tbs, (unsigned)child->tbslen, h); hl = 32; }
 
-    /* the signature components are sized by the ISSUER's curve */
+    /* The signature components are sized by the ISSUER's curve, and the stored
+     * ones by whatever the certificate encoded.
+     *
+     * THE SUBTRACTION HERE WAS AN OUT-OF-BOUNDS READ. `child->sig_size - size`
+     * is NEGATIVE whenever a certificate carries short r/s while naming a
+     * larger issuer curve - a P-384 issuer with a signature whose integers
+     * both fit in 33 bytes. That is attacker-controlled: the certificate bytes
+     * come from whoever answered the connection. It read up to 16 bytes before
+     * sig_r. Right-align instead, which is what a fixed-width big-endian field
+     * means, and a value too large for the curve is refused. */
     int size = issuer->curve_bits / 8;
+    if (size > 48 || child->sig_size > 48) return fail("signature size out of range");
     u8 r[48], s[48];
-    for (int i = 0; i < size; i++) {
-        r[i] = child->sig_r[child->sig_size - size + i];
-        s[i] = child->sig_s[child->sig_size - size + i];
+    for (int i = 0; i < 48; i++) { r[i] = 0; s[i] = 0; }
+    int take = child->sig_size < size ? child->sig_size : size;
+    for (int i = 0; i < take; i++) {
+        r[size - take + i] = child->sig_r[child->sig_size - take + i];
+        s[size - take + i] = child->sig_s[child->sig_size - take + i];
     }
     if (!ecdsa_verify(issuer->curve_bits, issuer->pubkey, r, s, h, hl))
         return fail("signature does not verify");
@@ -437,11 +449,33 @@ int x509_chain_ok(const u8 *const *ders, const int *lens, int n,
     const struct x509_cert *top = &c[n - 1];
     for (int r = 0; r < nroots; r++) {
         if (!roots[r].is_ca && roots[r].has_bc) continue;
+        /* THE CHAIN MAY INCLUDE THE ROOT ITSELF, and accepting that needs an
+         * IDENTITY, which is the subject AND THE PUBLIC KEY - never the name
+         * alone, and not the whole DER either.
+         *
+         * COMPARING SUBJECTS ALONE WAS A COMPLETE AUTHENTICATION BYPASS. It
+         * was here until an adversarial pass built the certificate that
+         * exploits it: a self-signed CA whose subject DN is byte-identical to
+         * ISRG Root X2's - same PrintableString encoding and all - holding an
+         * ATTACKER's key. Every link below verifies because the attacker
+         * signed them, the top matched a trusted NAME, and the chain was
+         * accepted. Any host, no warning.
+         *
+         * COMPARING THE WHOLE DER IS TOO STRICT, and that was the next
+         * mistake: Wikimedia sends the CROSS-SIGNED X2 (issued by ISRG Root
+         * X1) while the store holds the SELF-SIGNED one. Same subject, same
+         * key, different bytes, same root. Byte equality refused the real web.
+         *
+         * Subject plus key is exactly right. An attacker can copy the name
+         * freely; copying the KEY gains them nothing, because then every
+         * signature below has to verify under a private key they do not
+         * have. */
         if (top->subjectlen == roots[r].subjectlen &&
-            !xmemcmp(top->subject, roots[r].subject, top->subjectlen)) {
-            /* the chain already contains the root itself */
+            top->pubkeylen == roots[r].pubkeylen && top->pubkeylen > 0 &&
+            top->curve_bits == roots[r].curve_bits &&
+            !xmemcmp(top->subject, roots[r].subject, top->subjectlen) &&
+            !xmemcmp(top->pubkey, roots[r].pubkey, top->pubkeylen))
             return 1;
-        }
         if (x509_signed_by(top, &roots[r])) return 1;
     }
     return fail("chain does not reach a trusted root");

@@ -17,6 +17,7 @@
 #include <string.h>
 #include "../x509.h"
 #include "chain_der.h"
+#include "forged.h"
 
 static int passed, failed;
 
@@ -140,7 +141,42 @@ int main(void)
            !x509_chain_ok(DERS, LENS, 4, roots, 1, "en.wikipedia.org", "20000101000000Z"));
     }
 
-    printf("\n6. malformed input must not fault\n");
+    printf("\n6. a forged root with a stolen NAME\n");
+    {
+        /* THE BYPASS THIS SECTION EXISTS FOR, and it was real.
+         *
+         * FAKE_ROOT is a self-signed CA whose subject DN is byte-for-byte
+         * identical to ISRG Root X2's - same country, same organisation, same
+         * common name, same PrintableString encoding - holding an attacker's
+         * P-384 key. FAKE_LEAF is a certificate for en.wikipedia.org signed by
+         * it. Every link verifies, because the attacker made them.
+         *
+         * x509_chain_ok used to anchor by comparing the top certificate's
+         * SUBJECT to a trusted root's subject. This chain matched, and was
+         * accepted: any host, any chain, no warning. A name is not an
+         * identity - the key is - and the only thing tying a presented
+         * certificate to the one in the store is being the same bytes.
+         *
+         * The first attempt at this forgery was REFUSED, and for the wrong
+         * reason: python's default UTF8String encoding made the DN bytes
+         * differ. That near-miss is why the test says PrintableString. */
+        const unsigned char *fd[2] = { FAKE_LEAF, FAKE_ROOT };
+        int fl[2] = { (int)sizeof FAKE_LEAF, (int)sizeof FAKE_ROOT };
+        ok("a forged root with a trusted root's exact name is REFUSED",
+           !x509_chain_ok(fd, fl, 2, roots, 1, "en.wikipedia.org", "20260601000000Z"));
+
+        /* and the forged root must not be usable as an anchor even if it is
+         * offered as one - being in a store is what makes a root trusted */
+        struct x509_cert fake_anchor[1];
+        if (x509_parse(FAKE_ROOT, (int)sizeof FAKE_ROOT, &fake_anchor[0])) {
+            ok("...but it validates against ITSELF, proving the chain is "
+               "otherwise well-formed and the refusal is the anchor check",
+               x509_chain_ok(fd, fl, 2, fake_anchor, 1, "en.wikipedia.org",
+                             "20260601000000Z"));
+        }
+    }
+
+    printf("\n7. malformed input must not fault\n");
     {
         struct x509_cert junk;
         ok("an empty buffer is refused", !x509_parse((const unsigned char *)"", 0, &junk));
