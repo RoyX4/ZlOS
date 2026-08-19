@@ -342,6 +342,12 @@ fn reg_event(id, win, ety, ecode, ex, ey) {
 }
 fn reg_tick(id, win) {
     if id == APP_CLOCK { return clk_tick() }
+    # ---- the per-slice ticks. Without these an animated app never advances:
+    # ---- its draw is called, its events arrive, and nothing moves on its own.
+    if sys2_has(id) == 1 { return sys2_tick(id, win) }
+    if sys3_has(id) == 1 { return sys3_tick(id, win) }
+    if games3_has(id) == 1 { return games3_tick(id, win) }
+    if games4_has(id) == 1 { return games4_tick(id, win) }
     return 0
 }
 
