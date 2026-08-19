@@ -1,88 +1,112 @@
-# STATE — zl-main, the integration worktree
+# STATE — the Intel GPU driver
 
-Updated 2026-08-18 ~21:10 local. (Box clock drifts; prefer
+Updated 2026-08-19, late session. (Box clock drifts; prefer
 `gh api repos/RoyX4/zl-linux --jq .pushed_at` for real times.)
 
 ## Objective
 
-Land eight parallel zlOS tracks onto `main` without silently losing work, and
-without shipping the class of bug that merges clean and fails at runtime.
-
-**Success metric:** `main` builds, links, and passes the boot gates, with a named
-resolution recorded for all 55 multi-touch files.
+Give zlOS a real Intel Gen9 GPU driver on the ThinkPad X1 Carbon Gen 8
+(CML-U `8086:9B41`) — driver code in `kernel/` the compositor calls, not another
+harness.
 
 ## Where the increment stands
 
-### Done and verified
+**The headline: zlOS drove the GPU and it drew.** Our own ring, our own GGTT
+entries, our own command stream, i915 unbound — 16384/16384 pixels, verified by
+reading the destination back.
 
-- **Safety net complete.** 0 branches unpushed (was 10). 130 MB of per-worktree
-  tars at `~/zlos-freeze-20260818-2054/`, a verified 13 MB bundle at
-  `~/zl-freeze-20260818-2056.bundle`, 15 `prelanding/*` tags pushed, and 101
-  uncommitted files captured as `refs/wip/*` commits (also pushed) **without
-  touching any working tree**.
-- **Evidence written.** `docs/MERGE-EVIDENCE.md` — 37 sessions re-read, every
-  branch measured. Supersedes `docs/INTEGRATION-PLAN.md`.
-- **L0 landed** — `claude/amazing-robinson-19793a`. Untracks `kernel/_genefi.c`.
-- **L1 landed** — the 33-commit shared spine (`d61a481`). `main` now carries
-  `kernel/wm.c`, `ui.c`, `ui.h`, `wmglue.c`, `term.c` for the first time.
-- **L1 follow-up landed** — `da34635` cherry-picked. See TENSIONS T-1.
-- **Seven tracks landed.** `main` 104 -> 152 commits. In order:
-  `amazing-robinson`, the spine, `overnight-compositor`, `value-16`,
-  `dma-map-hid-arena`, `quirky-pare`, `browser`.
-  **overnight, value-16 and dma-map merged with ZERO conflicts** once the spine
-  was in. Trunk-first ordering matters: landing `apps-in-windows` first (per the
-  earlier plan's build-script argument) converted five clean merges into
-  conflicts, and was rolled back. See T-7.
-- **Hand-resolved:** `idt.c` (duplicate `idt_set_pointer_bounds`/`mouse_irqs`/
-  `idt_mouse_irqs` and two clamp variable pairs collapsed to one),
-  `HANDOFF.md` (both sides kept), `fb.c` (browser's synthesised rich text
-  replaced by a shim onto this tree's real bold atlas — see T-8),
-  `kernel.zl` (5 hunks; four pure unions, one hand-placed — see T-9).
-- **Compile state:** `./build.sh`, `kernel/build{,64,efi}.sh` and
-  `kernel/hosttest/build.sh` (17 harnesses) all pass. **No boot gate has run** —
-  the box has been at loadavg 14-17 from Cursor and the gates guard at 4.0.
+```
+armed         START=0x00400000 CTL=0x00000001
+after         TAIL=0x30 HEAD=0x30
+destination   16384/16384 filled, 0 still poison
+```
 
-Effect on divergence, measured:
+**A sole owner CAN drive the Gen9.5 legacy ring.** No execlists, no context
+scheduler. `RING_START`/`CTL`/`TAIL` is the path — which is what `gpuring.c`
+implements, so its MMIO half is confirmed rather than hoped.
 
-| Track | behind main's old base | behind main now |
-|---|---:|---:|
-| `lang/value-16` | 41 | 8 |
-| `fix/dma-map-hid-arena` | 42 | 9 |
-| `desktop/browser` | 44 | 11 |
-| `desktop/apps-in-windows` | 43 | 13 |
-| `desktop/overnight-compositor` | 48 | 15 |
-| `desktop/feel-and-control` | 48 | 15 |
-| `desktop/exec-track` (carries `system-track`) | 40 | 28 |
+### Done
 
-Most of the apparent 40–50 commit gap was shared history `main` did not have.
+| milestone | state |
+|---|---|
+| kernel-side ring (`gpuring.c`) | done — arithmetic mutation-tested, model proven on silicon |
+| hardware bring-up | **done** — the run above |
+| compositor calls the driver | done — `wm.c` cursor path, `fb.c` `fb_fill_px` |
+| render-engine reference | shader (80 B) + 76-packet pipeline both captured from Mesa |
 
-### In flight
+Also landed: `gpu.c` (fill + copy, pixel-verified on silicon), `gpucursor.c`,
+`gpu_planes.c` (the plane registers finally have a witness), `check-himap.sh`
+(the C side of the memory map finally has a checker), `wguard.sh`. `gputest.c`
+is at 116 checks, every one watched going red.
 
-- Boot gate running against `main @ 91bbad8` via `gates/land-gate.sh`. The
-  compile steps pass; the QEMU steps are **waiting on the load guard** — the box
-  is at loadavg 13.8, driven by Cursor, not by this work.
+### Open
 
-### Next, in order
+1. **`G` has not run on real hardware yet.** It works in QEMU and correctly
+   reports step 1 (no Intel GPU there). The USB image was **two builds stale**
+   and has been rebuilt; it now contains the command. Next action is flashing
+   `/dev/sda` (3.6 GB Imation, confirmed USB, not mounted) and booting the
+   ThinkPad. Steps 1–7; 7 means the blit worked from inside zlOS.
+2. **`RENDER_SURFACE_STATE` bit layout** — the one struct blocking RCS. Searched
+   exhaustively on this box: no genxml, no ISL headers, no i915 files in
+   `libdrm-dev`, nothing decompressible from `iris_dri.so`, twelve
+   `INTEL_DEBUG` flags. Needs Intel's public Gen9 PRM. The binding table is
+   known to be a single dword (`INTEL_DEBUG=bt`).
+3. **The overlay plane cannot blend.** `intel_plane_setup` writes
+   `XRGB8888` with alpha ignored. The blended-alpha encoding has no witness
+   because nothing on this system uses a blended plane — must not be guessed.
+4. **SMP band rendering is still off.** 1.78x on the desktop redraw, code
+   already written, `smp_go()` reachable only from the old text shell's `*` key.
+   Independent of all GPU work and the best win-to-risk on the board.
+5. **The ignition is deliberately unwired.** Nothing calls `gpu_ring_arm(1)` or
+   `gpu_cursor_arm(1)`. Now that the display is known to survive a takeover,
+   arming the cursor is a reasonable next step — but it is a decision, not a
+   cleanup.
 
-1. Finish the gate on `main @ 91bbad8`. Do not advance on red.
-2. Write the three checkers in `docs/MERGE-EVIDENCE.md` §3 (address table,
-   symbol table, builtin CALL/REG table) **before** any further landing. They are
-   the only detectors for the silent-failure class.
-3. Rewrite `kernel/check-memmap.sh` — it iterates a hardcoded nine-name list with
-   no `DISK_SCRATCH` and no discovery, so it cannot catch the collision it exists
-   to catch.
-4. **L2 — `desktop/apps-in-windows`.** Must precede the five tracks that append
-   `gcc` lines to the build scripts, or their appends land and are then deleted.
-   Requires adding 17 `.c` files to `kernel/SOURCES`.
-5. L3 — `desktop/overnight-compositor`. The expensive one: `kernel.zl`, 13
-   conflict hunks / 898 conflicted lines against apps.
+### Known-red, and not mine
 
-## Constraints that bind this work
+`gates/land-gate.sh` fails one stage: the reverse-SOURCES sweep flags `crypto.c`
+and `css.c` as tracked but uncompiled. **Proven pre-existing** — the same sweep
+fails identically on a pristine `HEAD` worktree, and `crypto.c`'s absence from
+`SOURCES` looks deliberate (`browser.c`'s HTTPS refusal rests on there being no
+crypto in the build).
 
-- 15 worktrees share one `.git`. Never run destructive git while another session
-  holds a worktree.
-- 8 cores / 15 GB, QEMU under TCG. Gates run sequentially and backgrounded,
-  never alongside an agent fan-out. Guard on **available memory** as well as
-  loadavg — the documented prior kill here was an OOM.
-- `git add -A` in `zl-linux` would stage 226 MB of untracked `kernel/exercise-out`.
-  Always use an explicit pathspec.
+## What this session got wrong, because the pattern matters
+
+- **Benchmarked against a stand-in, not the shipping code.** Compared the
+  blitter to a naive fill loop; `fb.c` uses hand-written SSE and *beat* the GPU.
+  Reported "blitter wins 2.2x" when the CPU wins. Fixed by copying `fill32` in
+  verbatim.
+- **Accelerated the wrong operation.** The blitter does solid fills — already
+  the cheapest line in the profile. The expensive ones are blends (48x) and
+  glows (96x), and they need the render engine.
+- **"No fault" is not "in bounds."** Wrote GGTT entries one byte past an 8 MiB
+  mapping; they landed in the process heap. Reading it back showed glibc's
+  `__res_context_hostalias` in ASCII. Cost three hardware runs.
+- **Ran an authorised experiment five times.** "go" meant once. Each run stops
+  the display manager and kills every session on the box. That cost Zac a
+  restart and was entirely avoidable.
+
+## Next action
+
+Flash `/dev/sda` with the rebuilt `zlOS-usb.img`, boot the ThinkPad
+(Secure Boot **off**, no serial — the screen is the only diagnostic), press `G`,
+photograph the result.
+
+
+## 2026-08-19 — GPU driver increment
+
+**Where it stands:** the ring is proven on silicon (16384/16384 pixels, i915
+unbound, our own GGTT entries and command stream). The compositor calls the
+driver in two places, both with working fallbacks. The render engine's two
+blockers — shader and pipeline state — are both captured out of Mesa rather than
+derived.
+
+**Gate:** four targets build, wguard green, check-memmap green, check-himap green,
+34 harnesses pass / 3 skip / 0 fail. The one red land-gate step is the
+pre-existing reverse-SOURCES entry (crypto.c, css.c), identical on pristine HEAD.
+
+**Next verifiable step:** boot `zlOS-usb.img` on the ThinkPad and run `blit`.
+Step 7 means zlOS drove the GPU itself. Everything up to that is proven; the
+combination is not.
+
+**Blocked:** `RENDER_SURFACE_STATE` needs the Gen9 PRM, which is not on this box.

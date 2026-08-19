@@ -7,20 +7,6 @@ Every item below was measured by a command, not remembered. Regenerate with:
 tools/todo.sh
 ```
 
-## EFI pointer truncation — 14 sites
-
-The four `-Werror=` flags in `kernel/buildefi.sh` are inert: `-w` is a
-blanket suppression a later `-Werror=` does not survive. Harmless below
-4 GiB, which is why no emulator shows them, and why this class shipped twice.
-
-- [ ] replace `-w` with `-Wno-everything` in `kernel/buildefi.sh` (verified fix)
-- [ ] repair the sites it then reports, per file:
-
-  - [ ] `kernel/efi.c` — 2 site(s)
-  - [ ] `freestanding/runtime_kernel.c` — 11 site(s)
-  - [ ] `kernel/gdt64.c` — 1 site(s)
-- [ ] then run `kernel/verify-efi.sh` before believing the boot path
-
 ## Engine divergence — 2 pinned
 
 `./interp` is ground truth. These engines disagree with it today:
@@ -34,6 +20,7 @@ Both unboxed backends sit on the far side of the scoping decision in
 
 ## Documented but not in git
 
+- [ ] `examples/Zaccoding.zl`
 - [ ] `kernel/_gen64.c`
 - [ ] `kernel/_genefi.c`
 - [ ] `kernel/out.c`
@@ -68,6 +55,7 @@ _none open._
 
 ## Open pull requests
 
+- [ ] #5 feat: remaining-work H0–H3 — stop lying, then a desktop, then the panel, then zl on zlOS  `cursor/remaining-work-map-b8fe`
 - [ ] #2 fix(kernel): HID buffers sat inside fb.c's blur arena — the high-RAM map is now compiler-enforced  `fix/dma-map-hid-arena`
 
 ---
@@ -113,5 +101,56 @@ Two things measured while building it, both worth keeping:
   If it is missing or vague the report is incomplete no matter how good the
   findings read — that is the same failure shape as a gate that passes by not
   running.
+
+### GPU driver — where it stands, 2026-08-19
+
+CLOSED, each with the command that established it:
+
+- [x] **A sole owner can drive the Gen9.5 blitter ring.** The question the whole
+      driver was gated on. i915 unbound on the target machine: `START=0x400000`,
+      `CTL=1`, HEAD chased TAIL, **16384/16384 pixels filled**. No execlists
+      needed — `RING_START`/`CTL`/`TAIL` is the path. `docs/gpu-driver.md`.
+- [x] **The compositor calls the driver.** `wm.c` tries the display plane before
+      compositing a sprite; `fb_fill_px` offers large fills to the blitter. Both
+      fall back and both were proven to switch (a `wmshot` render diff of 927
+      bytes), not assumed.
+- [x] **The render engine's two blockers.** The Gen9 pixel shader (80 bytes,
+      lifted out of Mesa, colour patchable) and the 77-packet blended-draw
+      pipeline (3240 dwords, captured from the vendor driver). `gpu_shader.inc`,
+      `gpu_batch.inc`, `docs/gen9-blend-pipeline.md`.
+- [x] **`check-himap.sh`** — the C side of the memory map finally has a checker,
+      validated by watching it reject `edid_buf` put back where it was.
+
+OPEN:
+
+- [ ] **Boot the USB and run `blit` on the ThinkPad.** The one thing left for
+      milestone 2. The sequence is proven on this silicon *from Linux*, and the
+      command is proven to dispatch and print *in QEMU* — but never both at once,
+      and that is exactly what a USB boot is for. Step 7 is the win; 1–6 each
+      name where it stopped.
+- [ ] **`RENDER_SURFACE_STATE`'s bit layout** — the last piece for RCS. Not on
+      this box: no genxml, no ISL headers, no i915 files in `libdrm-dev`, nothing
+      decompressible out of `iris_dri.so`, and twelve `INTEL_DEBUG` flags tried.
+      Needs Intel's public Gen9 PRM. The binding table beside it is one dword.
+- [ ] **The cursor ignition.** `gpucursor.c` is complete and gated;
+      `gpu_cursor_arm(1)` is called by nothing, deliberately, until a hardware run
+      shows the display survives a takeover. It now has — so this is a decision,
+      not a blocker.
+- [ ] **SMP band rendering** — 1.78x on the desktop redraw, code already in the
+      tree, switched off because `smp_go()` is reachable only from the old text
+      shell. Bigger and cheaper than anything the blitter offers. Untouched
+      because another session held `kernel.zl` all day.
+
+Two corrections worth keeping, both cost real time:
+
+- **`G` is the wrong key on the desktop.** The shell is a *window* and takes
+  words plus Enter, so a single keypress sits in the line buffer and does
+  nothing. `blit` (or `ring`). This is the trap in
+  `docs/typing-into-the-compositor.md`, and I handed out the wrong instruction
+  after reading that file the same day.
+- **The command output never reaches serial on the desktop path**, because the
+  shell is a window. The ThinkPad has no serial port anyway. Every number has to
+  land on the screen, which is why the command prints `RING_CTL`, `HEAD`, `TAIL`
+  and the pixel count rather than a verdict.
 
 <!-- END HAND-WRITTEN -->
