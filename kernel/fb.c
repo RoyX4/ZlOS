@@ -3157,12 +3157,22 @@ void fb_text_rich(int px, int py, const char *s, int len, unsigned int fg,
  * picture, and the caller picks the colour. Same read-back blend as
  * fb_glyph_aa: transparent where coverage is zero, so an icon sits on the
  * wallpaper or a titlebar gradient with no box around it. */
-extern const unsigned char icons24[44][24][24];
-/* the same ten icons RE-RASTERIZED at 48x48, not the 24x24 set scaled up.
+extern const unsigned char icons24[][24][24];
+/* the same icons RE-RASTERIZED at 48x48, not the 24x24 set scaled up.
  * gen_icons.py draws each size from the geometry at its own 4x supersample,
  * so this carries real anti-aliased edges. See the comment in fb_icon24. */
-extern const unsigned char icons48[44][48][48];
-#define ICON_N  44
+extern const unsigned char icons48[][48][48];
+/* HOW MANY, generated alongside the atlases rather than repeated here.
+ *
+ * This used to be `#define ICON_N 44`, with the 44 repeated a third and fourth
+ * time in the two extern dimensions above. Every one of those is a copy of a
+ * number that lives in gen_icons.py, and they only agree until someone adds an
+ * icon: the bounds check below would then refuse every new index - silently,
+ * because fb_icon24's out-of-range path is `return`, not a diagnostic - while
+ * the externs claimed a smaller object than the definitions provide. Leaving
+ * the outer dimension incomplete means C itself will not let this file hold an
+ * opinion about the count. */
+extern const int icons_n;
 #define ICON_W  24
 #define ICON_H  24
 #define ICON2_W 48
@@ -3183,7 +3193,7 @@ extern const unsigned char icons48[44][48][48];
  * resamples - and it interpolates rather than copies, from the 48x48 set. */
 void fb_icon24(int px, int py, int n, unsigned int fg)
 {
-    if ((unsigned)n >= ICON_N) return;
+    if (n < 0 || n >= icons_n) return;
     int dst = (ICON_W * ui_scale_q8 + 128) / 256;
     if (dst < ICON_W) dst = ICON_W;
 

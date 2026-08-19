@@ -584,6 +584,23 @@ static int anim_progress(int win, int kind)
     return -1;
 }
 
+/* IS THIS PARTICULAR KIND RUNNING? Not "what is running", which is a different
+ * question and the wrong one for the repaint to ask.
+ *
+ * wm_anim_running() below returns the kind in the LOWEST-NUMBERED slot, so a
+ * window carrying two animations at once answers with whichever of them
+ * happened to be started into an earlier slot. The repaint asked it
+ * `== ANIM_FADE` to decide whether to composite, which means a window that was
+ * still opening when something faded it was drawn OPAQUE - the fade ran, the
+ * alpha was correct, the timeline was correct, and no pixel was blended.
+ *
+ * It hid because slot order usually agreed with intent, and it surfaced the
+ * moment wm_close began freeing its window's slots: an open animation that had
+ * previously been REFUSED for want of a slot now succeeded, landed in slot 0,
+ * and silently outvoted the fade in slot 2. wmtest's "a fading window is not
+ * fully drawn" is the assertion that caught it. */
+static int anim_is(int id, int kind) { return anim_progress(id, kind) >= 0; }
+
 int wm_anim_running(int win)
 {
     for (int i = 0; i < ANIM_MAX; i++)
@@ -779,6 +796,12 @@ static int sweep_on;
 static int sweep_last_top;
 void wm_set_sweep(int on) { sweep_on = on ? 1 : 0; }
 int  wm_sweep_enabled(void) { return sweep_on && anim_on; }
+static int sweep_top(void);
+/* Published because the quantised position IS the cost: the band only forces
+ * a repaint on the ticks where this number changes, and "how often is that"
+ * is the only performance question the sweep raises. A caller that wants to
+ * know can count, rather than be told a figure in a comment. */
+int wm_sweep_y(void) { return wm_sweep_enabled() ? sweep_top() : 0; }
 
 static int sweep_band_h(void)
 {
@@ -1629,7 +1652,7 @@ void wm_repaint(void)
              * the window opaque, which is the right way for an effect to fail. */
             int fade = 255, stash = -1;
             int stash_x = cx, stash_y = cy, stash_w = cw, stash_h = ch;
-            if (wm_anim_running(win) == ANIM_FADE) {
+            if (anim_is(win, ANIM_FADE)) {
                 fade = wm_anim_alpha(win);
                 if (fade < 255) stash = fb_stash(cx, cy, cw, ch);
             }
@@ -1668,7 +1691,7 @@ void wm_repaint(void)
                 fb_blur_free(stash);
             }
 
-            if (wm_anim_running(win) == ANIM_PULSE) {
+            if (anim_is(win, ANIM_PULSE)) {
                 int pa = wm_anim_alpha(win);
                 if (pa > 0 && pa < 255) {
                     fb_clip(cx, cy, cw, ch);

@@ -154,10 +154,13 @@ fn tt_newgame() {
 # window starts a fresh match, a fresh round inside one keeps the score.
 fn tt_reset() { tt_newgame()  tt_sx = 0  tt_so = 0  tt_sd = 0  return 0 }
 
+fn tt_at(i) { return peek8(TT_BOARD + i) }
+fn tt_set(i, m) { poke8(TT_BOARD + i, m)  return 0 }
+
 fn tt_line(a, b, c) {
-    va = peek8(TT_BOARD + a)
+    va = tt_at(a)
     if va == 0 { return 0 }
-    if va == peek8(TT_BOARD + b) { if va == peek8(TT_BOARD + c) {
+    if va == tt_at(b) { if va == tt_at(c) {
         tt_wa = a
         tt_wb = b
         tt_wc = c
@@ -182,7 +185,7 @@ fn tt_check() {
     r = tt_line(2, 4, 6)  if r > 0 { return r }
     ci = 0
     full = 1
-    while ci < 9 { if peek8(TT_BOARD + ci) == 0 { full = 0 }  ci = ci + 1 }
+    while ci < 9 { if tt_at(ci) == 0 { full = 0 }  ci = ci + 1 }
     if full == 1 { return 3 }
     return 0
 }
@@ -204,7 +207,7 @@ fn tt_draw(ax, ay, aw, ah) {
         cy = gy + (ci / 3) * cell
         # the three cells that won, lit before the marks go on top
         if tt_won_cell(ci) == 1 { fill_rgb(cx + 1, cy + 1, cell - 1, cell - 1, theme(TH_SURF_5)) }
-        m = peek8(TT_BOARD + ci)
+        m = tt_at(ci)
         if m > 0 {
             label(cx + cell / 2 - 6 * u, cy + cell / 2 - 8 * u, tt_mark_str(m), tt_mark_col(m), T_TITLE, W_BOLD)
         }
@@ -240,8 +243,8 @@ fn tt_event(win, ety, ecode, ex, ey) {
     gy = wm_cy(win) + 4 * u
     idx = ac_cell_idx(gx, gy, cell, 3, 3, ex, ey)
     if idx < 0 { return 0 }
-    if peek8(TT_BOARD + idx) != 0 { return 0 }
-    poke8(TT_BOARD + idx, tt_turn)
+    if tt_at(idx) != 0 { return 0 }
+    tt_set(idx, tt_turn)
     tt_win = tt_check()
     if tt_win == 0 { if tt_turn == 1 { tt_turn = 2 } else { tt_turn = 1 } }
     # The tally is stepped HERE, on the transition, not in tt_draw. A counter
@@ -446,6 +449,15 @@ ho_d3 = 0
 ho_d4 = 0
 ho_sel = 0 - 1
 ho_moves = 0
+# THE REFUSAL, MADE VISIBLE. An illegal drop - a larger disk onto a smaller
+# one - used to be discarded in silence, so the only feedback for the rule
+# that IS this puzzle was the disk not moving, which is indistinguishable from
+# a missed click. This is set by the attempt and cleared by the next thing
+# that succeeds.
+ho_bad = 0
+# 2^5 - 1, and it is a fact about the puzzle rather than a number picked to
+# look encouraging: five disks cannot be moved in fewer.
+HO_OPT = 31
 
 fn ho_peg(d) {
     if d == 0 { return ho_d0 }
@@ -462,7 +474,7 @@ fn ho_set(d, p) {
     if d == 4 { ho_d4 = p }
     return 0
 }
-fn ho_reset() { ho_d0 = 0  ho_d1 = 0  ho_d2 = 0  ho_d3 = 0  ho_d4 = 0  ho_sel = 0 - 1  ho_moves = 0  return 0 }
+fn ho_reset() { ho_d0 = 0  ho_d1 = 0  ho_d2 = 0  ho_d3 = 0  ho_d4 = 0  ho_sel = 0 - 1  ho_moves = 0  ho_bad = 0  return 0 }
 
 # smallest disk index currently on peg p, the standard "top of stack" rule
 # for this puzzle (larger disks can never sit above smaller ones), or -1.
@@ -479,6 +491,35 @@ fn ho_top(p) {
 fn ho_solved() {
     d = 0
     while d < 5 { if ho_peg(d) != 2 { return 0 }  d = d + 1 }
+    return 1
+}
+
+# THE RULE OF THE PUZZLE, as a predicate. It existed only inside ho_event, as
+# `if dtop > src`, with the "peg is empty" case as a separate arm - so nothing
+# could ask whether a move was legal without performing it, and the test below
+# would have had to restate the rule to check it.
+#
+# ho_top returns the SMALLEST disk index on a peg, which is its top disk
+# (larger disks can never sit above smaller ones, so smallest == topmost is an
+# invariant of the game rather than an assumption about the array).
+fn ho_can(src, dst) {
+    if src < 0 { return 0 }
+    if src > 2 { return 0 }
+    if dst < 0 { return 0 }
+    if dst > 2 { return 0 }
+    if src == dst { return 0 }
+    s = ho_top(src)
+    if s < 0 { return 0 }
+    d = ho_top(dst)
+    if d < 0 { return 1 }
+    if d > s { return 1 }
+    return 0
+}
+fn ho_move(src, dst) {
+    if ho_solved() == 1 { return 0 }
+    if ho_can(src, dst) == 0 { return 0 }
+    ho_set(ho_top(src), dst)
+    ho_moves = ho_moves + 1
     return 1
 }
 
@@ -509,12 +550,22 @@ fn ho_draw(ax, ay, aw, ah) {
         d = d - 1
     }
     if ho_solved() == 1 {
-        label(ax + 8 * u, ay + 8 * u, "solved - r restarts", ac_cat_color(2), T_CAPTION, W_BOLD)
+        label(ax + 8 * u, ay + 8 * u, "solved in", theme(TH_OK), T_CAPTION, W_BOLD)
+        label_num(ax + 74 * u, ay + 8 * u, ho_moves, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+        if ho_moves == HO_OPT {
+            label(ax + 100 * u, ay + 8 * u, "- the minimum. r restarts", theme(TH_OK), T_CAPTION, W_BOLD)
+        } else {
+            label(ax + 100 * u, ay + 8 * u, "- 31 is the minimum. r restarts", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        }
         gs_bar(ax, ay, aw, ah, GS_HO)
         return 0
     }
     label(ax + 8 * u, ay + 8 * u, "moves", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     label_num(ax + 56 * u, ay + 8 * u, ho_moves, theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    label(ax + 84 * u, ay + 8 * u, "of 31 minimum", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    if ho_bad == 1 {
+        label(ax + 8 * u, ay + 24 * u, "a disk may not sit on a smaller one", theme(TH_WARN), T_CAPTION, W_REG)
+    }
     gs_bar(ax, ay, aw, ah, GS_HO)
     return 0
 }
@@ -523,6 +574,7 @@ fn ho_event(win, ety, ecode, ex, ey) {
     if ety == 3 { if ecode == 114 { ho_reset()  wm_dmg(win)  return 1 }  return 0 }
     if ety != 4 { return 0 }
     if band(ecode, 1) == 0 { return 0 }
+    if ho_solved() == 1 { return 0 }
     aw = wm_cw(win)
     pw = aw / 3
     cx = ex - wm_cx(win)
@@ -530,28 +582,51 @@ fn ho_event(win, ety, ecode, ex, ey) {
     p = cx / pw
     if p > 2 { return 0 }
     if ho_sel < 0 {
-        if ho_top(p) >= 0 { ho_sel = p }
+        # An empty peg cannot be picked up FROM, and saying so is the point -
+        # this used to leave ho_sel unchanged and still report the event
+        # handled and damage the window, so a click on an empty peg looked
+        # exactly like a click on a full one and did nothing.
+        if ho_top(p) < 0 { return 0 }
+        ho_sel = p
+        ho_bad = 0
         wm_dmg(win)
         return 1
     }
-    if ho_sel == p { ho_sel = 0 - 1  wm_dmg(win)  return 1 }
-    src = ho_top(ho_sel)
-    dtop = ho_top(p)
-    if dtop < 0 { ho_set(src, p)  ho_moves = ho_moves + 1 } else {
-        if dtop > src { ho_set(src, p)  ho_moves = ho_moves + 1 }
-    }
+    if ho_sel == p { ho_sel = 0 - 1  ho_bad = 0  wm_dmg(win)  return 1 }
+    if ho_move(ho_sel, p) == 1 { ho_bad = 0 } else { ho_bad = 1 }
     ho_sel = 0 - 1
     wm_dmg(win)
     return 1
 }
 
 # ==============================================================================
-# Lights Out - 5x5, click toggles the cell and its four neighbours, win when
-# every light is off. Starts from an all-off (solved) board and applies K
-# random valid toggles, which is the standard way to guarantee a solvable
-# puzzle without writing a solver.
+# Lights Out - 5x5, a press toggles the cell and its four neighbours, win when
+# every light is off.
+#
+# SOLVABLE BY CONSTRUCTION, and now provably so. The board starts solved (all
+# off) and the shuffle is nothing but a sequence of ORDINARY PRESSES - the same
+# lo_press() a click goes through. Pressing that same sequence again returns
+# the board to all-off, so a solution demonstrably exists; and because a press
+# is its own inverse and presses commute, the ORDER does not matter either.
+# That is the whole argument, and it needs no solver.
+#
+# It is worth saying what the alternative would have cost: only 2^23 of the
+# 2^25 boards are reachable at all, so scattering random bits gives a board
+# that is unsolvable three times in four, and finding that out needs the
+# solver this construction avoids.
+#
+# TWO THINGS CHANGED. The shuffle used to pick a flat 0..24 index and split it
+# with `cell / LO_N` and `cell % LO_N`. LO_N is 5, so that is not a shift, and
+# `/` is a DIFFERENT OPERATION in this project's two runtimes - it truncates in
+# the kernel and does not in the host interpreter, which makes the shuffle a
+# different shuffle depending on the backend. A row and a column are now drawn
+# separately and nothing here divides. And the shuffle could land back on an
+# all-off board - twelve presses can cancel - handing the player a puzzle that
+# was already won; it now redraws until the board is not solved.
 # ==============================================================================
 LO_N = 5
+LO_SHUFFLE = 12
+lo_moves = 0
 
 fn lo_toggle(r, c) {
     if r < 0 { return 0 }
@@ -562,25 +637,51 @@ fn lo_toggle(r, c) {
     poke8(a, 1 - peek8(a))
     return 0
 }
-fn lo_reset() {
+# ONE press, the plus-shape. The shuffle and the click used to carry a copy
+# each - five lo_toggle calls apiece - which is two places for the shape of the
+# move to drift, and a shuffle that presses a different shape from the one the
+# player presses is a shuffle that does not guarantee anything.
+fn lo_press(r, c) {
+    lo_toggle(r, c)
+    lo_toggle(r - 1, c)
+    lo_toggle(r + 1, c)
+    lo_toggle(r, c - 1)
+    lo_toggle(r, c + 1)
+    return 0
+}
+fn lo_shuffle() {
     fill_mem(LIGHTS_BOARD, 0, LO_N * LO_N)
-    ac_seed_from(ticks() + 19)          # see the note in wg_reset
     ki = 0
-    while ki < 12 {
-        cell = ac_rand(LO_N * LO_N)
-        lo_toggle(cell / LO_N, cell % LO_N)
-        lo_toggle(cell / LO_N - 1, cell % LO_N)
-        lo_toggle(cell / LO_N + 1, cell % LO_N)
-        lo_toggle(cell / LO_N, cell % LO_N - 1)
-        lo_toggle(cell / LO_N, cell % LO_N + 1)
+    while ki < LO_SHUFFLE {
+        lo_press(ac_rand(LO_N), ac_rand(LO_N))
         ki = ki + 1
     }
+    return 0
+}
+fn lo_reset() {
+    ac_seed_from(ticks() + 19)          # see the note in wg_reset
+    lo_shuffle()
+    # A shuffle that cancels itself out hands over a solved board. Bounded, not
+    # `while`: the generator is deterministic, and a bug that makes every
+    # shuffle cancel would otherwise hang the compositor inside a click
+    # handler rather than show a dull puzzle.
+    tries = 0
+    while tries < 8 {
+        if lo_solved() == 0 { tries = 8 } else { lo_shuffle()  tries = tries + 1 }
+    }
+    lo_moves = 0
     return 0
 }
 fn lo_solved() {
     ci = 0
     while ci < LO_N * LO_N { if peek8(LIGHTS_BOARD + ci) != 0 { return 0 }  ci = ci + 1 }
     return 1
+}
+fn lo_lit() {
+    n = 0
+    ci = 0
+    while ci < LO_N * LO_N { if peek8(LIGHTS_BOARD + ci) != 0 { n = n + 1 }  ci = ci + 1 }
+    return n
 }
 
 fn lo_draw(ax, ay, aw, ah) {
@@ -601,10 +702,17 @@ fn lo_draw(ax, ay, aw, ah) {
         }
         ri = ri + 1
     }
+    my = gy + LO_N * cell + 8 * u
     if lo_solved() == 1 {
-        label(gx, gy + LO_N * cell + 8 * u, "solved - r shuffles again", ac_cat_color(2), T_CAPTION, W_BOLD)
+        label(gx, my, "all out in", theme(TH_OK), T_CAPTION, W_BOLD)
+        label_num(gx + 76 * u, my, lo_moves, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+        label(gx + 100 * u, my, "presses - r shuffles again", theme(TH_OK), T_CAPTION, W_BOLD)
     } else {
-        label(gx, gy + LO_N * cell + 8 * u, "click to turn off every light", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label(gx, my, "click to turn off every light", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label_num(gx, my + 16 * u, lo_lit(), theme(TH_WARN), T_CAPTION, W_BOLD)
+        label(gx + 22 * u, my + 16 * u, "still lit", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label_num(gx + 90 * u, my + 16 * u, lo_moves, theme(TH_TEXT_HI), T_CAPTION, W_REG)
+        label(gx + 112 * u, my + 16 * u, "presses", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     }
     gs_bar(ax, ay, aw, ah, GS_LO)
     return 0
@@ -621,13 +729,15 @@ fn lo_event(win, ety, ecode, ex, ey) {
     gy = wm_cy(win) + 6 * u
     idx = ac_cell_idx(gx, gy, cell, LO_N, LO_N, ex, ey)
     if idx < 0 { return 0 }
-    r = idx / LO_N
-    c = idx % LO_N
-    lo_toggle(r, c)
-    lo_toggle(r - 1, c)
-    lo_toggle(r + 1, c)
-    lo_toggle(r, c - 1)
-    lo_toggle(r, c + 1)
+    # ac_cell_idx hands back a FLAT index and LO_N is 5, so splitting it needs
+    # a divide - and `/` is a different operation in this project's two
+    # runtimes. Twenty-five cells is a short walk; exactness is worth more here
+    # than the four instructions it saves.
+    r = 0
+    while (r + 1) * LO_N <= idx { r = r + 1 }
+    c = idx - r * LO_N
+    lo_press(r, c)
+    lo_moves = lo_moves + 1
     wm_dmg(win)
     return 1
 }
@@ -641,8 +751,29 @@ C4_W = 7
 C4_H = 6
 c4_turn = 1
 c4_win  = 0                         # 0 playing, 1/2 winner, 3 draw
+# WHERE the four are, not just that there are four. c4_check knew the axis and
+# the run length and threw both away, so a win was announced in a sentence and
+# the player had to find the line on the board themselves.
+c4_wr  = 0 - 1
+c4_wc  = 0 - 1
+c4_wdr = 0
+c4_wdc = 0
+# the cell the last piece landed in, ringed so a drop is visible
+c4_lastr = 0 - 1
+c4_lastc = 0 - 1
 
-fn c4_reset() { fill_mem(C4_BOARD, 0, C4_W * C4_H)  c4_turn = 1  c4_win = 0  return 0 }
+fn c4_reset() {
+    fill_mem(C4_BOARD, 0, C4_W * C4_H)
+    c4_turn = 1
+    c4_win = 0
+    c4_wr = 0 - 1
+    c4_wc = 0 - 1
+    c4_wdr = 0
+    c4_wdc = 0
+    c4_lastr = 0 - 1
+    c4_lastc = 0 - 1
+    return 0
+}
 fn c4_at(r, c) {
     if r < 0 { return 0 - 1 }
     if r >= C4_H { return 0 - 1 }
@@ -650,24 +781,82 @@ fn c4_at(r, c) {
     if c >= C4_W { return 0 - 1 }
     return peek8(C4_BOARD + r * C4_W + c)
 }
+fn c4_set(r, c, m) { poke8(C4_BOARD + r * C4_W + c, m)  return 0 }
 fn c4_run(r, c, dr, dc, m) {
     n = 0
     while c4_at(r, c) == m { n = n + 1  r = r + dr  c = c + dc }
     return n
 }
+# One axis through the landing cell: the run forward plus the run backward,
+# minus the cell they share. c4_at answers -1 off the board and 0 for empty, so
+# neither walk can leave the grid or run through a hole - which is the whole
+# reason the count is done this way rather than by scanning the board for
+# patterns.
+#
+# It also RECORDS the four when it finds them: back - 1 steps against the
+# direction from the landing cell is where the run starts.
+fn c4_axis(r, c, dr, dc, m) {
+    fwd = c4_run(r, c, dr, dc, m)
+    back = c4_run(r, c, 0 - dr, 0 - dc, m)
+    if fwd + back - 1 < 4 { return 0 }
+    c4_wr = r - (back - 1) * dr
+    c4_wc = c - (back - 1) * dc
+    c4_wdr = dr
+    c4_wdc = dc
+    return m
+}
+# ALL FOUR AXES: horizontal, vertical, and both diagonals. Each is checked
+# through the cell just played, which is the only cell that can have completed
+# a line - a full-board scan would be four times the work for the same answer.
 fn c4_check(r, c) {
     m = c4_at(r, c)
-    if m == 0 { return 0 }
-    if c4_run(r, c, 0, 1, m) + c4_run(r, c, 0, 0 - 1, m) - 1 >= 4 { return m }
-    if c4_run(r, c, 1, 0, m) + c4_run(r, c, 0 - 1, 0, m) - 1 >= 4 { return m }
-    if c4_run(r, c, 1, 1, m) + c4_run(r, c, 0 - 1, 0 - 1, m) - 1 >= 4 { return m }
-    if c4_run(r, c, 1, 0 - 1, m) + c4_run(r, c, 0 - 1, 1, m) - 1 >= 4 { return m }
+    if m < 1 { return 0 }
+    if c4_axis(r, c, 0, 1, m) > 0 { return m }
+    if c4_axis(r, c, 1, 0, m) > 0 { return m }
+    if c4_axis(r, c, 1, 1, m) > 0 { return m }
+    if c4_axis(r, c, 1, 0 - 1, m) > 0 { return m }
+    return 0
+}
+fn c4_won_cell(r, c) {
+    if c4_wr < 0 { return 0 }
+    k = 0
+    while k < 4 {
+        if c4_wr + k * c4_wdr == r { if c4_wc + k * c4_wdc == c { return 1 } }
+        k = k + 1
+    }
     return 0
 }
 fn c4_full() {
     ci = 0
     while ci < C4_W { if c4_at(0, ci) == 0 { return 0 }  ci = ci + 1 }
     return 1
+}
+
+# ONE DROP, the whole move. This lived inside the click handler and needed a
+# `landrow` sentinel and a scan of the entire column, because the loop it was
+# written into could not stop early - and that shape is what let an earlier
+# version run the win check and the turn switch after a click on a FULL column,
+# on nothing. Returning from inside the loop needs no sentinel at all.
+#
+# Returns the row the piece landed in, or -1 if the move was refused.
+fn c4_drop(col) {
+    if c4_win != 0 { return 0 - 1 }
+    if col < 0 { return 0 - 1 }
+    if col >= C4_W { return 0 - 1 }
+    r = C4_H - 1
+    while r >= 0 {
+        if c4_at(r, col) == 0 {
+            c4_set(r, col, c4_turn)
+            c4_lastr = r
+            c4_lastc = col
+            if c4_check(r, col) > 0 { c4_win = c4_turn  return r }
+            if c4_full() == 1 { c4_win = 3  return r }
+            if c4_turn == 1 { c4_turn = 2 } else { c4_turn = 1 }
+            return r
+        }
+        r = r - 1
+    }
+    return 0 - 1
 }
 
 fn c4_col_color(m) { if m == 1 { return ac_cat_color(2) }  return theme(TH_ACCENT) }
@@ -682,9 +871,22 @@ fn c4_draw(ax, ay, aw, ah) {
     while ri < C4_H {
         ci = 0
         while ci < C4_W {
+            cx = gx + ci * cell
+            cy = gy + ri * cell
+            # the four that won, lit behind the pieces
+            if c4_won_cell(ri, ci) == 1 { fill_rgb(cx + 1, cy + 1, cell - 1, cell - 1, theme(TH_SURF_5)) }
             m = c4_at(ri, ci)
             if m > 0 {
-                fill_rgb(gx + ci * cell + 3 * u, gy + ri * cell + 3 * u, cell - 6 * u, cell - 6 * u, c4_col_color(m))
+                fill_rgb(cx + 3 * u, cy + 3 * u, cell - 6 * u, cell - 6 * u, c4_col_color(m))
+                # the piece that just landed, ringed. Seven columns of the
+                # same two colours and no marker is a board you have to
+                # re-read from scratch every turn.
+                if ri == c4_lastr { if ci == c4_lastc {
+                    fill_rgb(cx + 3 * u, cy + 3 * u, cell - 6 * u, 2 * u, theme(TH_TEXT_HI))
+                    fill_rgb(cx + 3 * u, cy + cell - 5 * u, cell - 6 * u, 2 * u, theme(TH_TEXT_HI))
+                    fill_rgb(cx + 3 * u, cy + 3 * u, 2 * u, cell - 6 * u, theme(TH_TEXT_HI))
+                    fill_rgb(cx + cell - 5 * u, cy + 3 * u, 2 * u, cell - 6 * u, theme(TH_TEXT_HI))
+                }}
             }
             ci = ci + 1
         }
@@ -712,25 +914,10 @@ fn c4_event(win, ety, ecode, ex, ey) {
     if cx < 0 { return 0 }
     col = cx / cell
     if col >= C4_W { return 0 }
-    # landrow is a real sentinel (-1 = "not placed yet"), unlike overloading
-    # the scan cursor itself - a full column and a successful drop both left
-    # the scan cursor at -1, so the first version of this could not tell a
-    # click on a full column from a real move and ran the win check and the
-    # turn switch on nothing.
-    landrow = 0 - 1
-    r = C4_H - 1
-    while r >= 0 {
-        if c4_at(r, col) == 0 {
-            if landrow < 0 {
-                poke8(C4_BOARD + r * C4_W + col, c4_turn)
-                landrow = r
-            }
-        }
-        r = r - 1
-    }
-    if landrow < 0 { return 1 }
-    if c4_check(landrow, col) > 0 { c4_win = c4_turn }
-    if c4_win == 0 { if c4_full() == 1 { c4_win = 3 } else { if c4_turn == 1 { c4_turn = 2 } else { c4_turn = 1 } } }
+    # A refused drop - a full column - changes nothing, so it must not damage
+    # the window either. Reporting the event handled is still right: the click
+    # was inside this app's board and no other window should see it.
+    if c4_drop(col) < 0 { return 1 }
     wm_dmg(win)
     return 1
 }

@@ -244,6 +244,446 @@ while t_l < 26 {
 gt_eq(t_bad, 0, "all 104 letter/status pairs survive the pack and unpack")
 
 # =============================================================================
+# TIC-TAC-TOE. Eight lines, and a full board with none of them is a draw.
+# =============================================================================
+print("")
+print("Tic-Tac-Toe - the eight lines, and the draw")
+
+fn t_tt_line(a, b, c, m) {
+    tt_newgame()
+    tt_set(a, m)
+    tt_set(b, m)
+    tt_set(c, m)
+    return tt_check()
+}
+t_bad = 0
+if t_tt_line(0, 1, 2, 1) != 1 { t_bad = t_bad + 1 }
+if t_tt_line(3, 4, 5, 1) != 1 { t_bad = t_bad + 1 }
+if t_tt_line(6, 7, 8, 1) != 1 { t_bad = t_bad + 1 }
+if t_tt_line(0, 3, 6, 1) != 1 { t_bad = t_bad + 1 }
+if t_tt_line(1, 4, 7, 1) != 1 { t_bad = t_bad + 1 }
+if t_tt_line(2, 5, 8, 1) != 1 { t_bad = t_bad + 1 }
+if t_tt_line(0, 4, 8, 1) != 1 { t_bad = t_bad + 1 }
+if t_tt_line(2, 4, 6, 1) != 1 { t_bad = t_bad + 1 }
+gt_eq(t_bad, 0, "all three rows, all three columns and both diagonals win for X")
+t_bad = 0
+if t_tt_line(0, 1, 2, 2) != 2 { t_bad = t_bad + 1 }
+if t_tt_line(2, 4, 6, 2) != 2 { t_bad = t_bad + 1 }
+gt_eq(t_bad, 0, "...and for O, who is a different mark and not a different rule")
+
+# THE LINE IS RECORDED, which is what the highlight draws.
+t_tt_line(2, 4, 6, 1)
+gt_eq(tt_wa, 2, "the winning line's first cell is recorded")
+gt_eq(tt_wc, 6, "...and its last")
+gt_eq(tt_won_cell(4), 1, "the middle of the line is part of it")
+gt_eq(tt_won_cell(0), 0, "...and a cell off the line is not")
+
+# TWO OF A KIND IS NOT THREE. The obvious wrong check - "does this line hold
+# my mark" rather than "does it hold three of my mark" - passes this board.
+tt_newgame()
+tt_set(0, 1)
+tt_set(1, 1)
+tt_set(2, 2)
+gt_eq(tt_check(), 0, "two X and an O in a row is not a win")
+gt_eq(tt_wa, 0 - 1, "...and records no line")
+
+# AN EMPTY LINE IS NOT A WIN either - three zeroes are three equal values.
+tt_newgame()
+gt_eq(tt_check(), 0, "an empty board is not a win for the empty square")
+
+# A FULL BOARD WITH NO LINE IS A DRAW, and a full board is checked AFTER the
+# lines, so a board that is both full and won reports the win.
+tt_newgame()
+tt_set(0, 1)  tt_set(1, 2)  tt_set(2, 1)
+tt_set(3, 1)  tt_set(4, 2)  tt_set(5, 2)
+tt_set(6, 2)  tt_set(7, 1)  tt_set(8, 1)
+gt_eq(tt_check(), 3, "a full board with no line is a draw")
+
+# =============================================================================
+# NIM. Bouton 1901: a position is lost for the player to move exactly when the
+# XOR of the pile sizes is zero.
+# =============================================================================
+print("")
+print("Nim - the cut, and Bouton's strategy")
+
+nim_reset()
+gt_eq(nim_total(), 15, "a new game is 3, 5 and 7")
+gt_eq(nim_sum(), 1, "...whose nim-sum is 1, so the player to move can win")
+
+# THE CUT THAT COULD NOT BE MADE. This is the bug that made the game
+# unwinnable: `cut` is the number of sticks LEFT, so cut == 0 empties the pile,
+# and the old handler's + 1 meant no click anywhere produced it. With piles
+# stuck at 1 nobody could ever take the last object.
+nim_reset()
+gt_eq(nim_take(0, 0), 1, "a pile can be emptied")
+gt_eq(nim_pile(0), 0, "...and it really is empty")
+
+nim_reset()
+gt_eq(nim_take(0, 3), 0, "leaving a pile the size it already is is not a move")
+gt_eq(nim_take(0, 4), 0, "...and neither is growing it")
+gt_eq(nim_take(3, 0), 0, "there is no fourth pile")
+gt_eq(nim_take(0 - 1, 0), 0, "...nor a pile before the first")
+gt_eq(nim_total(), 15, "none of those four changed the board")
+
+# TAKING THE LAST STICK WINS - normal play, not misere.
+nim_a = 0
+nim_b = 0
+nim_c = 1
+nim_win = 0
+gt_eq(nim_take(2, 0), 1, "taking the last stick is a legal move")
+gt_eq(nim_win, 1, "...and it wins the game for the player who took it")
+
+# ...and the machine taking the last one wins for the machine.
+nim_a = 0
+nim_b = 1
+nim_c = 1
+nim_win = 0
+nim_take(1, 0)
+gt_eq(nim_win, 2, "leaving the machine one stick loses")
+
+# THE STRATEGY, over every position up to 7 sticks a pile. From a non-zero
+# nim-sum the machine must always reach zero; from zero it must still MOVE,
+# because a reply that moves nothing hangs the turn and the window looks dead.
+t_bad = 0
+t_stuck = 0
+t_a = 0
+while t_a < 8 {
+    t_b = 0
+    while t_b < 8 {
+        t_c = 0
+        while t_c < 8 {
+            nim_a = t_a
+            nim_b = t_b
+            nim_c = t_c
+            nim_win = 0
+            t_before = nim_total()
+            t_s = nim_sum()
+            nim_ai()
+            if t_before > 0 {
+                if nim_total() >= t_before { t_stuck = t_stuck + 1 }
+                if t_s != 0 { if nim_sum() != 0 { t_bad = t_bad + 1 } }
+            }
+            t_c = t_c + 1
+        }
+        t_b = t_b + 1
+    }
+    t_a = t_a + 1
+}
+gt_eq(t_bad, 0, "over all 512 positions, a non-zero nim-sum is always answered with zero")
+gt_eq(t_stuck, 0, "...and the machine never fails to move on a non-empty board")
+
+# THE GAME ENDS. A player who always takes one stick from pile 0, then 1, then
+# 2 runs the machine's reply every turn; the whole thing must terminate with a
+# winner rather than spinning.
+nim_reset()
+t_i = 0
+while t_i < 40 {
+    if nim_win == 0 {
+        t_p = 0
+        while t_p < 3 {
+            if nim_win == 0 { if nim_pile(t_p) > 0 { nim_take(t_p, nim_pile(t_p) - 1)  t_p = 3 } }
+            t_p = t_p + 1
+        }
+    }
+    t_i = t_i + 1
+}
+gt_ok(nim_win != 0, "a game played out to the end has a winner")
+gt_eq(nim_total(), 0, "...and no sticks left")
+
+# =============================================================================
+# TOWER OF HANOI. A disk may never sit on a smaller one, and five disks cannot
+# be moved in fewer than 31 moves.
+# =============================================================================
+print("")
+print("Tower of Hanoi - the rule, and the 31")
+
+ho_reset()
+gt_eq(ho_top(0), 0, "every disk starts on the left peg, smallest on top")
+gt_eq(ho_top(1), 0 - 1, "...so the middle peg is empty")
+gt_eq(ho_solved(), 0, "a fresh puzzle is not solved")
+gt_eq(ho_can(1, 0), 0, "an empty peg has nothing to lift")
+gt_eq(ho_can(0, 0), 0, "a peg cannot move to itself")
+gt_eq(ho_can(0, 1), 1, "the smallest disk may go anywhere")
+
+ho_move(0, 1)
+gt_eq(ho_peg(0), 1, "...and it went")
+gt_eq(ho_moves, 1, "...and was counted")
+gt_eq(ho_can(0, 1), 0, "disk 1 may NOT sit on disk 0 - the rule of the puzzle")
+gt_eq(ho_can(0, 2), 1, "...but the empty peg still takes it")
+gt_eq(ho_move(0, 1), 0, "the illegal move is refused")
+gt_eq(ho_moves, 1, "...and a refused move is not counted")
+
+# THE OPTIMAL SOLUTION, played out. For an odd number of disks the smallest
+# disk cycles peg 0 -> 2 -> 1 -> 0, and between those moves there is exactly
+# ONE other legal move. 31 alternating moves solve it, which is both the proof
+# that the rules permit a solution and the proof that ho_can admits every move
+# the solution needs.
+ho_reset()
+t_i = 0
+while t_i < 31 {
+    if band(t_i, 1) == 0 {
+        t_p = ho_peg(0)
+        t_q = t_p + 2
+        if t_q > 2 { t_q = t_q - 3 }
+        ho_move(t_p, t_q)
+    } else {
+        t_done = 0
+        t_s = 0
+        while t_s < 3 {
+            t_d = 0
+            while t_d < 3 {
+                if t_done == 0 { if ho_top(t_s) != 0 { if ho_can(t_s, t_d) == 1 {
+                    ho_move(t_s, t_d)
+                    t_done = 1
+                }}}
+                t_d = t_d + 1
+            }
+            t_s = t_s + 1
+        }
+    }
+    t_i = t_i + 1
+}
+gt_eq(ho_solved(), 1, "the 31-move solution solves it")
+gt_eq(ho_moves, HO_OPT, "...in exactly HO_OPT moves, so every one of them was legal")
+gt_eq(ho_move(0, 1), 0, "a solved puzzle accepts no further moves")
+
+# =============================================================================
+# LIGHTS OUT. The shuffle is a sequence of ordinary presses from a solved
+# board, which is what makes every puzzle solvable without a solver.
+# =============================================================================
+print("")
+print("Lights Out - the press, and solvability by construction")
+
+# A PRESS IS ITS OWN INVERSE. This is half the argument: press the shuffle's
+# cells again in any order and the board returns to all-off.
+fill_mem(LIGHTS_BOARD, 0, LO_N * LO_N)
+lo_press(2, 2)
+gt_eq(lo_lit(), 5, "a press in the middle lights five cells")
+lo_press(2, 2)
+gt_eq(lo_solved(), 1, "...and pressing it again puts them all out")
+
+# THE EDGES CLAMP. A corner press lights three, not five - lo_toggle drops the
+# two that fall off the board rather than wrapping to the far side, which would
+# make the puzzle a torus and a different game.
+fill_mem(LIGHTS_BOARD, 0, LO_N * LO_N)
+lo_press(0, 0)
+gt_eq(lo_lit(), 3, "a corner press lights three cells")
+fill_mem(LIGHTS_BOARD, 0, LO_N * LO_N)
+lo_press(0, 2)
+gt_eq(lo_lit(), 4, "an edge press lights four")
+
+# PRESSES COMMUTE. The other half: the order of the shuffle cannot matter, so
+# replaying it in any order solves the board.
+fill_mem(LIGHTS_BOARD, 0, LO_N * LO_N)
+lo_press(1, 1)
+lo_press(3, 2)
+t_first = lo_lit()
+t_cells = 0
+t_i = 0
+while t_i < LO_N * LO_N { t_cells = t_cells + peek8(LIGHTS_BOARD + t_i) * (t_i + 1)  t_i = t_i + 1 }
+fill_mem(LIGHTS_BOARD, 0, LO_N * LO_N)
+lo_press(3, 2)
+lo_press(1, 1)
+t_second = 0
+t_i = 0
+while t_i < LO_N * LO_N { t_second = t_second + peek8(LIGHTS_BOARD + t_i) * (t_i + 1)  t_i = t_i + 1 }
+gt_eq(t_second, t_cells, "two presses give the same board in either order")
+
+# THE SHUFFLE IS REVERSIBLE, played out. Press a known list from solved, then
+# press the same list again - the board must be all-off. That is exactly what
+# lo_shuffle does with random cells, so this IS the solvability argument with
+# the randomness taken out so it can be asserted.
+fill_mem(LIGHTS_BOARD, 0, LO_N * LO_N)
+lo_press(0, 1)  lo_press(4, 4)  lo_press(2, 0)  lo_press(1, 3)  lo_press(3, 3)
+gt_ok(lo_solved() == 0, "five presses leave a lit board")
+lo_press(0, 1)  lo_press(4, 4)  lo_press(2, 0)  lo_press(1, 3)  lo_press(3, 3)
+gt_eq(lo_solved(), 1, "...and repeating them solves it, so a shuffled board always has a solution")
+
+# A NEW PUZZLE IS NEVER ALREADY SOLVED. Twelve presses can cancel out; the
+# retry loop is what stops that being handed over as a win.
+t_bad = 0
+t_i = 0
+while t_i < 60 {
+    lo_reset()
+    if lo_solved() == 1 { t_bad = t_bad + 1 }
+    if lo_moves != 0 { t_bad = t_bad + 1 }
+    t_i = t_i + 1
+}
+gt_eq(t_bad, 0, "sixty fresh puzzles, none of them already solved and all at zero presses")
+
+# =============================================================================
+# CONNECT FOUR. Gravity, and a real four-in-a-row on all four axes.
+# =============================================================================
+print("")
+print("Connect Four - gravity, and the four axes")
+
+c4_reset()
+gt_eq(c4_drop(3), C4_H - 1, "the first piece in a column lands on the floor")
+gt_eq(c4_drop(3), C4_H - 2, "...and the next one sits on it")
+gt_eq(c4_at(C4_H - 1, 3), 1, "the floor piece belongs to the first player")
+gt_eq(c4_at(C4_H - 2, 3), 2, "...and the one above it to the second")
+gt_eq(c4_drop(0 - 1), 0 - 1, "there is no column before the first")
+gt_eq(c4_drop(C4_W), 0 - 1, "...nor one after the last")
+
+# A FULL COLUMN REFUSES. Six drops fill it; the seventh must be turned away
+# without touching the turn or the board.
+c4_reset()
+t_i = 0
+while t_i < C4_H { c4_drop(2)  t_i = t_i + 1 }
+t_turn = c4_turn
+gt_eq(c4_drop(2), 0 - 1, "a seventh piece will not go into a six-deep column")
+gt_eq(c4_turn, t_turn, "...and a refused drop does not pass the turn")
+
+# HORIZONTAL. Both players drop in the same four columns; the first player
+# completes a row along the floor.
+c4_reset()
+c4_drop(0)  c4_drop(0)
+c4_drop(1)  c4_drop(1)
+c4_drop(2)  c4_drop(2)
+gt_eq(c4_win, 0, "three along the floor is not four")
+c4_drop(3)
+gt_eq(c4_win, 1, "four along the floor wins")
+gt_eq(c4_won_cell(C4_H - 1, 0), 1, "the winning run starts at the first column")
+gt_eq(c4_won_cell(C4_H - 1, 3), 1, "...and ends at the fourth")
+gt_eq(c4_won_cell(C4_H - 1, 4), 0, "...and does not include the fifth")
+gt_eq(c4_drop(5), 0 - 1, "a finished game takes no more pieces")
+
+# VERTICAL.
+c4_reset()
+c4_drop(0)  c4_drop(1)
+c4_drop(0)  c4_drop(1)
+c4_drop(0)  c4_drop(1)
+gt_eq(c4_win, 0, "three stacked is not four")
+c4_drop(0)
+gt_eq(c4_win, 1, "four stacked wins")
+gt_eq(c4_won_cell(C4_H - 4, 0), 1, "...and the top of the stack is in the run")
+
+# BOTH DIAGONALS, built directly so the staircase does not need eleven drops.
+# c4_check is called at the cell just played, exactly as c4_drop calls it.
+fill_mem(C4_BOARD, 0, C4_W * C4_H)
+c4_reset()
+c4_set(5, 0, 1)
+c4_set(4, 1, 1)
+c4_set(3, 2, 1)
+c4_set(2, 3, 1)
+gt_eq(c4_check(3, 2), 1, "a rising diagonal wins, checked from the middle of it")
+gt_eq(c4_won_cell(5, 0), 1, "...and the run is recorded from its bottom end")
+
+fill_mem(C4_BOARD, 0, C4_W * C4_H)
+c4_reset()
+c4_set(2, 0, 2)
+c4_set(3, 1, 2)
+c4_set(4, 2, 2)
+c4_set(5, 3, 2)
+gt_eq(c4_check(5, 3), 2, "a falling diagonal wins too")
+
+# A GAP BREAKS THE RUN. Four of one colour in a row of five with a hole in the
+# middle is not a win, and the classic wrong implementation - counting the
+# colour along the row rather than walking an unbroken run - says it is.
+fill_mem(C4_BOARD, 0, C4_W * C4_H)
+c4_reset()
+c4_set(5, 0, 1)
+c4_set(5, 1, 1)
+c4_set(5, 2, 1)
+c4_set(5, 4, 1)
+gt_eq(c4_check(5, 0), 0, "three, a hole, and a fourth is not four in a row")
+c4_set(5, 3, 1)
+gt_eq(c4_check(5, 0), 1, "...and filling the hole makes it one")
+
+# THE RUN DOES NOT WRAP. Three at the right-hand edge and one at the left is
+# not a line, however the flat index is walked.
+fill_mem(C4_BOARD, 0, C4_W * C4_H)
+c4_reset()
+c4_set(5, 5, 1)
+c4_set(5, 6, 1)
+c4_set(4, 0, 1)
+c4_set(4, 1, 1)
+gt_eq(c4_check(5, 6), 0, "a run does not continue onto the next row")
+
+# THE DRAW. A board full with no four is 3, not a win and not still playing.
+fill_mem(C4_BOARD, 0, C4_W * C4_H)
+c4_reset()
+gt_eq(c4_full(), 0, "an empty board is not full")
+t_r = 0
+while t_r < C4_H {
+    t_c = 0
+    while t_c < C4_W { c4_set(t_r, t_c, 1)  t_c = t_c + 1 }
+    t_r = t_r + 1
+}
+gt_eq(c4_full(), 1, "a board with every column topped up is full")
+
+# =============================================================================
+# MAZE. A randomised backtracker produces a PERFECT maze: every cell reachable,
+# and exactly one route between any two. Neither is visible by playing it.
+# =============================================================================
+print("")
+print("Maze - a perfect maze, generated")
+
+t_bad_cells = 0
+t_bad_edges = 0
+t_i = 0
+while t_i < 12 {
+    mz_reset()
+    if mz_reached() != MAZE_W * MAZE_H { t_bad_cells = t_bad_cells + 1 }
+    # A spanning tree over N cells has exactly N - 1 edges. One more is a loop
+    # (two routes between some pair); one fewer is a pocket nothing reaches.
+    if mz_edges() != MAZE_W * MAZE_H - 1 { t_bad_edges = t_bad_edges + 1 }
+    t_i = t_i + 1
+}
+gt_eq(t_bad_cells, 0, "twelve mazes, every one of the 273 cells reached in each")
+gt_eq(t_bad_edges, 0, "...and exactly 272 passages, so no loop and no pocket")
+
+mz_reset()
+gt_eq(mz_px, 0, "the player starts in the top-left corner")
+gt_eq(mz_steps, 0, "...having taken no steps")
+gt_eq(mz_won, 0, "...and not having won")
+gt_eq(mz_trodden(0, 0), 1, "the starting cell is already on the trail")
+
+# A WALL STOPS YOU. The cell (0,0) has no passage north or west - it is the
+# corner - so both must be refused and neither may cost a step.
+gt_eq(mz_move(0), 0, "north out of the top-left corner is a wall")
+gt_eq(mz_move(3), 0, "...and so is west")
+gt_eq(mz_steps, 0, "...and walking into a wall is not a step")
+gt_eq(mz_px, 0, "...and does not move you")
+
+# AN OPEN PASSAGE LETS YOU THROUGH, and the corner always has one - it is a
+# connected maze. Whichever of east and south is open, taking it is a step.
+t_v = peek8(MAZE_BOARD + 0 * MAZE_W + 0)
+t_d = 1
+if band(t_v, 2) == 0 { t_d = 2 }
+gt_eq(mz_move(t_d), 1, "the corner's one open side lets the player through")
+gt_eq(mz_steps, 1, "...and that is one step")
+gt_eq(mz_trodden(mz_px, mz_py), 1, "...and the new cell joins the trail")
+
+# THE EXIT WINS. The bottom-right corner is reachable from one of two
+# neighbours; stand in whichever one it is and step in.
+mz_reset()
+t_v = peek8(MAZE_BOARD + (MAZE_H - 1) * MAZE_W + (MAZE_W - 1))
+t_d = 0 - 1
+if band(t_v, 1) != 0 { mz_px = MAZE_W - 1  mz_py = MAZE_H - 2  t_d = 2 }
+if t_d < 0 { if band(t_v, 8) != 0 { mz_px = MAZE_W - 2  mz_py = MAZE_H - 1  t_d = 1 } }
+gt_ok(t_d >= 0, "the exit cell has at least one way in")
+mz_move(t_d)
+gt_eq(mz_won, 1, "stepping into the bottom-right corner wins")
+gt_eq(mz_move(1), 0, "...and a won maze accepts no more moves")
+
+# THE PACKED (y, x) SURVIVES a round trip for every cell, which is what the
+# generator's stack stores. This is the check that catches a shift off by one.
+t_bad = 0
+t_y = 0
+while t_y < MAZE_H {
+    t_x = 0
+    while t_x < MAZE_W {
+        t_p = mz_pack(t_x, t_y)
+        if mz_ux(t_p) != t_x { t_bad = t_bad + 1 }
+        if mz_uy(t_p) != t_y { t_bad = t_bad + 1 }
+        t_x = t_x + 1
+    }
+    t_y = t_y + 1
+}
+gt_eq(t_bad, 0, "all 273 cell coordinates survive the pack and unpack")
+
+# =============================================================================
 print("")
 print(" ", gt_n, "checks,", gt_fail, "failures")
 if gt_fail > 0 { exit(1) }

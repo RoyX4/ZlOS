@@ -651,7 +651,7 @@ pt_ms = 0 - 1                       # where the first match starts, or -1
 pt_me = 0 - 1                       # ...and where it ends
 PT_MAX = 48
 
-fn pt_reset() { pt_plen = 0  pt_tlen = 0  pt_field = 0  return 0 }
+fn pt_reset() { pt_plen = 0  pt_tlen = 0  pt_field = 0  pt_ms = 0 - 1  pt_me = 0 - 1  return 0 }
 
 # Does pattern[pi..] match text[ti..] to the end of the pattern? Returns the
 # END index in the text on success, -1 on failure. Classic tiny-regex
@@ -1377,9 +1377,10 @@ fn kt_draw(ax, ay, aw, ah) {
             }
         }
     }
-    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "Keys arrive already shift-resolved: input.c's to_char runs before the window") }
-    y = y + au_note_adv()
-    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "manager forwards anything, once, for every app.") }
+    # ONE line, not two. A full log is 11 rows and the body has room for
+    # exactly one note under it - the second line measured 2px past the client
+    # rect at ui() 1, and au_fits would have dropped half a sentence.
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "Shift is already resolved: input.c's to_char runs before the WM.") }
     return 0
 }
 

@@ -264,14 +264,99 @@ fn reg_h(id) {
     return 160
 }
 
-# id -> icon24 index (icons.c), or -1 for "no icon this small suite ships,
-# draw the two-letter monogram instead". Only reused where the shape is a
-# real match (files/network/disk/clock) - forcing a stretch icon onto
-# something it does not depict is worse than an honest monogram.
+# id -> icon24 index (icons.c), or -1 for "no icon, draw the two-letter
+# monogram instead" (reg_mono below).
+#
+# THIS TABLE USED TO BE ONE LINE LONG. Everything else fell through to the
+# slices, three of which answered -1 unconditionally, so 46 of the 47 registry
+# apps showed lettering in the app grid and the dock where ds-reference.html
+# shows a glyph. The reference assigns each of its 53 apps an icon id in its
+# APPS/UTILS/GAME_APPS arrays and DRAWS every one of them (its ICONS table,
+# ds-reference.html:1121); gen_icons.py now renders those paths into the atlas
+# at indices 44..88, so the answer for each app is the reference's own answer
+# rather than a stand-in.
+#
+# The numbers are icons.c atlas indices. That file's header block is the
+# authority on which index is which - it is generated, so it cannot drift from
+# the atlas - and REF_ORDER in gen_icons.py is append-only for exactly this
+# reason: reordering it would silently repoint every line below.
 fn reg_icon(id) {
-    if id == APP_CLOCK { return 16 }    # icons.c: 16 clock - an exact match
+    # ---- utilities (UTILS) --------------------------------------------------
+    if id == APP_CLIP  { return 56 }    # uClip
+    if id == APP_COLOR { return 57 }    # uColor
+    if id == APP_REGEX { return 58 }    # uRegex
+    if id == APP_BASE  { return 59 }    # uBase
+    if id == APP_DIFF  { return 60 }    # uDiff
+    if id == APP_HASH  { return 61 }    # uHash
+    if id == APP_UNIT  { return 62 }    # uUnit
+    if id == APP_NOTES { return 63 }    # uNote
+    if id == APP_KEYS  { return 64 }    # uKeys
+    if id == APP_BENCH { return 65 }    # uBench
+
+    # ---- games that live in this file's id range (GAME_APPS) ----------------
+    if id == APP_WORDLE    { return 88 }   # gWord
+    if id == APP_TICTACTOE { return 74 }   # gCross
+    if id == APP_NIM       { return 85 }   # gSticks
+    if id == APP_HANOI     { return 84 }   # gTower
+    if id == APP_LIGHTS    { return 78 }   # gBulb
+    if id == APP_CONNECT4  { return 76 }   # gDrop
+    if id == APP_MAZE      { return 80 }   # gMaze
+
+    # ---- system (APPS) ------------------------------------------------------
+    if id == APP_CLOCK   { return 16 }  # clock - the atlas glyph already IS the
+                                        # reference's, so it is not redrawn
+    if id == APP_SYSINFO { return 55 }  # chip
+    if id == APP_CALC    { return 49 }  # calcApp
+
+    # ---- apps_sys2.zl's range (40..45) --------------------------------------
+    # Answered here rather than in sys2_icon() because sys2_icon() is the
+    # -1 stub this whole table exists to replace; see the note below.
+    if id == APP_KLOG { return 44 }     # log
+    if id == APP_REND { return 45 }     # render
+    if id == APP_HEXV { return 46 }     # hex
+    if id == APP_FBUF { return 47 }     # snap
+    if id == APP_TTY  { return 48 }     # tty
+    if id == APP_FONT { return 50 }     # font
+
+    # ---- apps_sys3.zl's range (46..50) --------------------------------------
+    # sys3_icon() answers for all five, but with STAND-INS chosen before the
+    # reference's glyphs existed: Archive Manager got the folder, Image Viewer
+    # got the paint palette, Services got the bar chart. The reference draws a
+    # binary block, a photo and a service-row for those three, so they are
+    # repointed here. disk and wifi keep the same picture either way.
+    if id == APP_DISK { return 51 }     # disk
+    if id == APP_SVC  { return 52 }     # svc
+    if id == APP_ARCH { return 53 }     # binary
+    if id == APP_IMG  { return 54 }     # imgv
+    if id == APP_NET  { return 17 }     # network - the atlas's wifi fan
+
+    # ---- apps_games3.zl's range (52..59) ------------------------------------
+    if id == G3_TETRIS { return 66 }    # gTetris
+    if id == G3_PONG   { return 67 }    # gPong
+    if id == G3_BREAK  { return 68 }    # gBrick
+    if id == G3_MINES  { return 69 }    # gMine
+    if id == G3_2048   { return 70 }    # gNum
+    if id == G3_LIFE   { return 71 }    # gLife
+    if id == G3_ROIDS  { return 72 }    # gRock
+    if id == G3_INVAD  { return 73 }    # gAlien
+
+    # ---- apps_games4.zl's range (61..68) ------------------------------------
+    if id == G4_FIFTEEN { return 75 }   # gTiles
+    if id == G4_REVERSI { return 77 }   # gDisc
+    if id == G4_SIMON   { return 79 }   # gWave
+    if id == G4_SOKOBAN { return 81 }   # gCrate
+    if id == G4_FLAPPY  { return 82 }   # gBird
+    if id == G4_MISSILE { return 83 }   # gTarget
+    if id == G4_BLACKJK { return 86 }   # gCard
+    if id == G4_FROGGER { return 87 }   # gFrog
+
     # ---- the per-slice tables. Each file owns a disjoint id range and answers
     # ---- only for its own; see apps_sys2.zl for why they are separate files.
+    #
+    # Every registry app is now answered above, so these four are reached only
+    # by an id a slice claims but this table has not been told about - a newly
+    # added app, before someone gives it its icon. They stay as that fallback,
+    # and as the seam a slice would use if it ever wanted a per-instance icon.
     if sys2_has(id) == 1 { return sys2_icon(id) }
     if sys3_has(id) == 1 { return sys3_icon(id) }
     if games3_has(id) == 1 { return games3_icon(id) }

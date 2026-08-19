@@ -39,6 +39,7 @@ void fb_clip_none(void);
 unsigned int fb_get_px(int x, int y);
 void fb_icon24(int px, int py, int n, unsigned int fg);
 int  fb_ui_scale_q8(void);
+extern const int icons_n;       /* generated into icons.c by gen_icons.py */
 
 int  fb_prop_em(void);
 int  fb_text_rich_w(const char *s, int len, int size, int style);
@@ -370,14 +371,25 @@ int main(void)
     fb_setup((unsigned long)vram, (unsigned)W * 4, W, H, 32);
     fb_clip_none();
 
+    /* The two indices here are DERIVED from the atlas, not written down. They
+     * were literals - 43 and 44 - which meant the check only proved something
+     * about an atlas of exactly 44 icons: growing it turned "44 is rejected"
+     * from a bounds check into a false alarm, and left the real last entry
+     * untested. icons_n comes out of gen_icons.py with the atlas itself. */
     clear();
-    fb_icon24(40, 40, 43, FG);
-    ok(measure_ink(0, 0, W, 200).n > 0,
-       "icon 43, the final atlas entry, is reachable and draws");
+    fb_icon24(40, 40, icons_n - 1, FG);
+    okf(measure_ink(0, 0, W, 200).n > 0,
+        "icon %ld, the final atlas entry, is reachable and draws",
+        (long)(icons_n - 1));
     clear();
-    fb_icon24(40, 40, 44, FG);
+    fb_icon24(40, 40, icons_n, FG);
+    okf(measure_ink(0, 0, W, 200).n == 0,
+        "icon %ld is rejected instead of reading past the atlas",
+        (long)icons_n);
+    clear();
+    fb_icon24(40, 40, -1, FG);
     ok(measure_ink(0, 0, W, 200).n == 0,
-       "icon 44 is rejected instead of reading past the atlas");
+       "a negative icon index is rejected too");
 
     printf("\n%d checks, %d failed\n", checks, failures);
     return failures ? 1 : 0;

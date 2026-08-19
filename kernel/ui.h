@@ -215,6 +215,7 @@ int  wm_pulse(int period_ms);
  * its CRT toggle too - and gated by wm_set_anim on top of that. */
 void wm_set_sweep(int on);
 int  wm_sweep_enabled(void);
+int  wm_sweep_y(void);            /* the band's quantised top edge, or 0 off */
 
 /* Close it AND shrink a ghost of it away - the gesture form of wm_close.
  * wm_close() stays instantaneous, because teardown loops and policy use it. */

@@ -407,6 +407,11 @@ extern int  wm_focused(void);
 extern int  wm_is_open(int win);
 extern void wm_set_modal(int win, int on);
 extern int  wm_anim(int win, int kind);
+extern int  wm_anim_at(int id, int kind, int x, int y, int w, int h);
+extern int  wm_anim_scale(int id);
+extern int  wm_pulse(int period_ms);
+extern void wm_set_sweep(int on);
+extern void wm_close_fx(int win);
 extern int  wm_frame_us(void);
 extern int  wm_peak_us(void);
 extern void wm_peak_reset(void);
@@ -1314,6 +1319,19 @@ Value zl_calln(const char *name, int n, ...)
     /* the animation timeline. wm.c had five kinds and no caller in zl at all -
      * built, asserted, and invisible. */
     if (streq(name, "wm_anim"))    return zl_num((double)wm_anim((int)a[0].num, (int)a[1].num));
+    /* ...and the four calls the DOCK needs, which is where four of the
+     * reference's seven animations live. A dock tile is not a window, so
+     * wm_anim_at carries the rectangle to repaint; wm_anim_scale is the press
+     * curve sampled per frame; wm_pulse is the infinite one and holds no slot;
+     * wm_sweep is the wallpaper band, off in wm.c until policy asks. */
+    if (streq(name, "wm_anim_at"))  return zl_num((double)wm_anim_at((int)a[0].num, (int)a[1].num, (int)a[2].num, (int)a[3].num, (int)a[4].num, (int)a[5].num));
+    if (streq(name, "wm_anim_scale")) return zl_num((double)wm_anim_scale((int)a[0].num));
+    if (streq(name, "wm_pulse"))   return zl_num((double)wm_pulse((int)a[0].num));
+    if (streq(name, "wm_sweep"))   { wm_set_sweep((int)a[0].num); return zl_nil(); }
+    /* Closing WITH the shrink. wm_close stays exactly as it was - teardown
+     * loops and policy reshuffles must not animate - so the gesture form is a
+     * separate name rather than a flag nobody would remember to pass. */
+    if (streq(name, "wm_close_fx")) { wm_close_fx((int)a[0].num); return zl_nil(); }
     /* THE FRAME TIMER. desktop-TODO 0h, and it should have come first: nothing
      * in this kernel had ever measured a frame, so every performance claim
      * about the compositor was arithmetic rather than measurement. */

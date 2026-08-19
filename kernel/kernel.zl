@@ -626,8 +626,6 @@ fn dock_tile(slot, dy, ic) {
     dty = dy + DOCK_PADY * u
     hov = 0
     if dock_hover == slot { hov = 1 }
-    prs = 0
-    if hov == 1 { if dock_press == 1 { prs = 1 } }
 
     # THE TILES ARE NOT TINTED PER APP. zlOS gave each slot its own colour from
     # dock_face() - nine hand-picked blue-slate fills. The reference gives every
@@ -639,13 +637,25 @@ fn dock_tile(slot, dy, ic) {
     tona = DOCK_TILE_A
     tcol = theme(TH_TEXT_HI)
     if hov == 1 { tcol = theme(TH_ACCENT)  tona = 255  icol = theme(TH_BG) }
-    if prs == 1 {
-        # zpress: the reference scales the tile to .88 and back over 250 ms.
-        # Here it is the settled inset - the animation itself is wm.c's, which
-        # now runs the same curve and duration.
-        dtx = dtx + 2 * u
-        dty = dty + 2 * u
-        dtw = dtw - 4 * u
+    # ZPRESS, AND IT IS THE REAL ONE NOW.
+    #
+    # This used to be a fixed 2-unit inset with a comment saying "the animation
+    # itself is wm.c's, which now runs the same curve and duration". It did
+    # not: ANIM_PRESS had no caller anywhere in the tree, so the only zpress on
+    # this desktop was these three lines - a still frame of an animation,
+    # holding at the wrong scale for as long as the button was held.
+    #
+    # The reference is `animation:zpress .25s ease`, which is a PLAY-ONCE: the
+    # tile dips to .88 at 45% and comes back to 1, and it does that whether or
+    # not you are still holding the button. wm_anim_scale() is that curve,
+    # sampled per frame, from wm.c's own timeline - so the dock cannot drift
+    # from the window animations the way a hand-drawn inset did.
+    psc = wm_anim_scale(dock_fx(slot))
+    if psc < 1000 {
+        ptw = dtw * psc / 1000
+        dtx = dtx + (dtw - ptw) / 2
+        dty = dty + (dtw - ptw) / 2
+        dtw = ptw
     }
     rrblend(dtx, dty, dtw, dtw, DOCK_TR * u, tcol, tona)
     icon(dtx + (dtw - 20 * u) / 2, dty + (dtw - 20 * u) / 2, ic, icol)
@@ -653,6 +663,31 @@ fn dock_tile(slot, dy, ic) {
     dock_running_bar(slot, dy)
     return 0
 }
+
+# WHICH TIMELINE SLOT A DOCK TILE OWNS. wm.c's animation ids are window
+# indices when they are >= 0 and furniture when they are negative; WM_FX_USER
+# is -16 and everything below it belongs to the policy layer. Nine tiles need
+# nine of them, and having the arithmetic in one place is what stops the press
+# that fires and the tile that draws from disagreeing about which id they mean.
+WM_FX_USER = 0 - 16
+fn dock_fx(slot) { return WM_FX_USER - slot }
+
+# THE DOT'S OPACITY - `zpulse 2.6s ease-in-out infinite`, ds-reference.html
+# line 17 and the dock note above (:476, "pulsing on zpulse 2.6s").
+#
+# Infinite is the word that matters. wm.c's timeline is eight fixed slots and
+# an entry that never ends never frees one, so two infinite animations would
+# cost a quarter of it for the life of the boot - which shows up later as "the
+# UI stopped animating after a while". wm_pulse() holds no slot: it is a pure
+# function of the clock and cannot be refused.
+#
+# QUANTISED TO 8 OF 255, and that is the whole reason this is affordable. The
+# dot has to be repainted whenever its opacity changes, and over a 2.6 s period
+# an un-quantised value changes on every single tick - which turns a damage-
+# based compositor into a full-frame one for a 4-unit square. Eight steps is
+# below what the eye resolves on a 4x4 lime dot over a dark strip, and it means
+# the dots ask for a repaint roughly every ninth tick instead of every one.
+fn dock_dot_alpha() { return band(wm_pulse(2600), 248) }
 
 # The open-app marker, on its own so the live pass can redraw just these nine
 # small rectangles instead of nine whole tiles. A tile is a rounded rect, a
@@ -662,7 +697,37 @@ fn dock_running_bar(slot, dy) {
     dbx = dock_x0() + slot * DOCK_PITCH * u
     dbw = DOCK_TW * u
     if dock_running(slot) == 1 {
-        rrblend(dbx + (dbw - 4 * u) / 2, dy + 8 * u + dbw + 3 * u, 4 * u, 4 * u, 2 * u, theme(TH_ACCENT), 255)
+        rrblend(dbx + (dbw - 4 * u) / 2, dy + 8 * u + dbw + 3 * u, 4 * u, 4 * u, 2 * u, theme(TH_ACCENT), dock_dot_alpha())
+    }
+    return 0
+}
+
+# ...and the invalidation that makes the pulse visible. An animation with no
+# end has no "finished" frame to damage on, so nothing in wm.c will ever ask
+# for these four-pixel squares to be redrawn - the dot would sit at whatever
+# opacity it had when something else happened to repaint the dock.
+#
+# app_tick is the only per-frame hook the policy layer has. It runs once per
+# open window, so the tick guard keeps this to at most one pass per tick rather
+# than one per window, and the alpha guard keeps it to the ticks where the
+# quantised opacity actually moved.
+dot_tick_at = 0 - 1
+dot_alpha_at = 0 - 1
+fn dock_dot_tick() {
+    dt = ticks()
+    if dt == dot_tick_at { return 0 }
+    dot_tick_at = dt
+    da = dock_dot_alpha()
+    if da == dot_alpha_at { return 0 }
+    dot_alpha_at = da
+    u = ui()
+    dy = dock_y()
+    ds = 0
+    while ds < DOCK_N {
+        if dock_running(ds) == 1 {
+            wm_damage(dock_x0() + ds * DOCK_PITCH * u + (DOCK_TW * u - 4 * u) / 2 - u, dy + 8 * u + DOCK_TW * u + 2 * u, 6 * u, 6 * u)
+        }
+        ds = ds + 1
     }
     return 0
 }
@@ -2758,6 +2823,11 @@ fn open_run_window() {
         }
     }
     run_win = wm_open(APP_RUN, exec_title(), 90 * u, 90 * u, 320 * u, 110 * u)
+    # ZPOP. A Run box is a popover in every sense except modality - it cannot
+    # be modal, because the keys have to keep reaching the terminal (see
+    # below) - so it does not get the fade from wm_modal and asks for it here.
+    # 5 is ANIM_FADE; ui.h names it.
+    wm_anim(run_win, 5)
     # AND HAND THE KEYBOARD STRAIGHT BACK. wm_open focuses whatever it just
     # opened, so without this the run window holds focus, app_event has no
     # APP_RUN branch, and every subsequent keystroke is dropped - the terminal
@@ -3773,7 +3843,10 @@ fn app_event(id, win, ety, ecode, ex, ey) {
             # other window means by "exit", and it is the whole difference from
             # "press any key" - there is nothing to press a key to get out of.
             if ek == 2 {
-                wm_close(win)
+                # A user gesture - ESC in the editor is 'exit', which is exactly
+                # what the closebox means. wm_close_fx() is wm_close plus the
+                # ANIM_CLOSE shrink; wm_close() stays for teardown.
+                wm_close_fx(win)
                 edit_win = 0 - 1
                 # wm_close returns focus to the home window (wm_home, set to
                 # the shell in wm_session) - so this needs nothing here.
@@ -3983,6 +4056,10 @@ fn wm_damage_win_all() {
 }
 
 fn app_tick(id, win) {
+    # The dock's running-app dots, which pulse forever and so belong to no
+    # window's tick. Guarded twice inside itself so this costs a comparison on
+    # every call but a repaint only when the pulse has actually moved.
+    dock_dot_tick()
     if id == APP_SNAKE { return sn_step() }
     # The browser drives its own fetch from the frame loop. app_tick MUST NOT
     # DRAW and must be cheap; br_tick pumps the link, the TCP timers and the
@@ -4252,6 +4329,19 @@ fn desk_click(cx, cy, cbtn) {
     if down != dock_press {
         dock_press = down
         wm_damage(0, dock_y() - 36 * u, px_w(), px_h() - dock_y() + 36 * u)
+        # ZPRESS FIRES ON THE EDGE, not while the button is held. The reference
+        # is `animation:zpress .25s ease`, which plays once per press - firing
+        # per event would restart it sixty times a second and the tile would
+        # freeze at its first frame, which is exactly the still-life this
+        # replaced. wm_anim_at wants the rectangle to repaint because wm.c has
+        # no idea where the dock is.
+        if down == 1 {
+            if nh >= 0 {
+                if nh < DOCK_N {
+                    wm_anim_at(dock_fx(nh), 3, dock_x0() + nh * DOCK_PITCH * u, dock_y() + DOCK_PADY * u, DOCK_TW * u, DOCK_TW * u)
+                }
+            }
+        }
     }
 
     if down == 0 { return 0 }
@@ -4533,7 +4623,7 @@ menu_bx = 0
 menu_by = 0
 fn open_menu() {
     u = ui()
-    if menu_win >= 0 { if wm_open_p(menu_win) == 1 { wm_close(menu_win)  menu_win = 0 - 1  return 0 } }
+    if menu_win >= 0 { if wm_open_p(menu_win) == 1 { wm_close_fx(menu_win)  menu_win = 0 - 1  return 0 } }
     mh = MENU_ROWS * (ui_metric(2) + ui_metric(1)) + 2 * ui_metric(0) + ui_metric(4)
     mx = 10 * u
     my = dock_y() - mh - 8 * u
@@ -4546,11 +4636,18 @@ fn open_menu() {
     menu_bx = mx
     menu_by = my
     menu_win = wm_open(APP_MENU, "zlOS", mx, my, 210 * u, mh)
+    # zov / zpop in the prototype: the menu fades in over the desktop behind
+    # it. This is a REAL fade - the rectangle is stashed before the window is
+    # drawn on it and blended back - not a tint pretending to be one.
+    #
+    # THE `wm_anim(menu_win, 5)` THAT USED TO BE HERE IS GONE, and its absence
+    # is the point. It was ANIM_FADE's only caller in the entire tree, so this
+    # menu faded and every other overlay in the system appeared instantly.
+    # wm_modal() starts it now: "becoming modal" is the one thing a popover, a
+    # dialog and a context menu have in common, so an overlay written next
+    # year is animated by having been written rather than by somebody
+    # remembering this line.
     wm_modal(menu_win, 1)
-    # zov / zpop in the prototype: the menu fades in over the blurred desktop
-    # behind it. This is a REAL fade - the rectangle is stashed before the
-    # window is drawn on it and blended back - not a tint pretending to be one.
-    wm_anim(menu_win, 5)
     return 0
 }
 
@@ -4608,7 +4705,7 @@ fn menu_event(ety, ecode, ex, ey, win) {
         mi = mi + 1
     }
     menu_hover = 0 - 1
-    wm_close(win)
+    wm_close_fx(win)
     menu_win = 0 - 1
     if idx >= 0 { if idx < MENU_ROWS { menu_pick(idx) } }
     return 1
@@ -4633,6 +4730,13 @@ fn wm_boot_start() {
     # Super+9 cannot strand you on an empty workspace with no pip to return
     # from. WS_N is this file's, because three pips is a design decision.
     wm_wsn(WS_N)
+    # ZSWEEP, ON. The band drifting down the wallpaper is off in wm.c by
+    # default for the same reason wm_wsn exists: the host gates never call this
+    # function, and several of them assert that a region is EXACTLY the
+    # wallpaper colour. Turning it on here is the policy decision - the
+    # reference keeps it behind its own `crtOn` toggle too - and it stays under
+    # the Settings animation switch on top of that.
+    wm_sweep(1)
     if wm_bind() == 0 {
         color(C_RED)  print("  wm: kernel.zl defines no app_draw - nothing to composite")
         color(C_GREY)

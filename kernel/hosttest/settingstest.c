@@ -629,7 +629,11 @@ int main(void)
      * debug cycle. */
     {
         int lo_seen = 1 << 30, hi_seen = -1;
-        for (int x = ui_sidebar_w(); x < client_w(); x += 2) {
+        /* EVERY column, not every second one. The bucket arithmetic gives the
+         * top value exactly one pixel of track (376 values over ~536 px), so a
+         * stride of 2 reports 399 and calls the maximum unreachable - which is
+         * the very bug this assertion exists to catch. */
+        for (int x = ui_sidebar_w(); x < client_w(); x++) {
             settings_event(3, 0, 4, 1, x, moved);
             if (settings_speed() < lo_seen) lo_seen = settings_speed();
             if (settings_speed() > hi_seen) hi_seen = settings_speed();

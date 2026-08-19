@@ -7,6 +7,52 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-20 — feat(oracle): every app in ONE boot, and a per-WINDOW fidelity score (c935814)
+
+`claude/compassionate-curie-a0599c` · 3 files changed, 544 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>3 file(s)</summary>
+
+- `kernel/oracle/diff-regions.py`
+- `kernel/oracle/score-apps.py`
+- `kernel/oracle/shot-apps.py`
+
+</details>
+
+## 2026-08-20 — checkpoint: five agents' in-flight work, committed to protect it (d82f599)
+
+`claude/compassionate-curie-a0599c` · 11 files changed, 2098 insertions(+), 163 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>11 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/apps_games1.zl`
+- `kernel/apps_games2.zl`
+- `kernel/hosttest/build.sh`
+- `kernel/hosttest/games12_rules.zl`
+- `kernel/hosttest/settingstest.c`
+- `kernel/kernel.zl`
+- `kernel/settings.c`
+- `kernel/ui.h`
+- `kernel/wm.c`
+
+</details>
+
 ## 2026-08-20 — feat(utils): the ten utility apps get the reference's own internal layout (6365b55)
 
 `claude/compassionate-curie-a0599c` · 1 file changed, 1201 insertions(+), 299 deletions(-)
