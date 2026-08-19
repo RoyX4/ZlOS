@@ -1,5 +1,10 @@
 # The Intel blitter — the first GPU work zlOS has ever done
 
+> **If you only read one thing, read `kernel/docs/gpu-next.md`.** This page is
+> the full account of taking the blitter to working silicon; that one is the
+> decision it leads to, which is *not* "build the blitter ring".
+
+
 2026-08-19. Measured on the target machine itself: this laptop **is** the
 ThinkPad X1 Carbon Gen 8 the driver was written for. `LENOVO 20U90041AU`,
 `8086:9B41` CometLake-U GT2, BAR0 at `0xE9000000` / 16 MiB — the same address
