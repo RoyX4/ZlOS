@@ -757,10 +757,31 @@ static int gmbus_read_edid(int pin, uptr dest, int len)
     return got == len;
 }
 
-/* Where a 128-byte EDID lands. In the kernel this is fixed physical scratch;
- * a host harness has no such address and supplies its own buffer instead. */
-static uptr edid_buf = 0x0C980000u;
+/* Where a 128-byte EDID lands.
+ *
+ * IT USED TO BE A HARDCODED 0x0C980000, WHICH IS INSIDE THE BLUR ARENA.
+ * memmap.h puts HI_BLUR at 0x0C000000 with a 16 MiB limit, so that address is
+ * 9.5 MiB into fb.c's cached-blur allocator - which hands out arena space from
+ * HI_BLUR upward and knows nothing about this. Reading an EDID would shred a
+ * cached blur, or a big enough blur cache would shred the EDID; whichever ran
+ * second won. Nothing in the map declared the address, so check-memmap.sh could
+ * not see it either.
+ *
+ * It does not need a physical address AT ALL. Every byte here arrives by CPU
+ * store - gmbus_read_edid reads the GMBUS3 register and writes bytes out one
+ * at a time, and the AUX path does the same. No engine DMAs into it, which is
+ * the only thing that would require a known physical address. So it is an
+ * ordinary 128-byte object and cannot collide with anything by construction.
+ *
+ * intel_set_edid_buffer stays: kernel/hosttest/intel_probe.c drives this file
+ * from Linux userspace and supplies storage of its own. */
+static u8   edid_store[128];
+static uptr edid_buf = 0;               /* 0 = "nobody overrode it" */
 void intel_set_edid_buffer(uptr p) { if (p) edid_buf = p; }
+/* Resolved through a function, not a static initializer: `(uptr)edid_store` at
+ * file scope is not a constant expression a compiler has to accept, and this
+ * file is built by both gcc (32- and 64-bit) and clang (LLP64). */
+static uptr edid_addr(void) { return edid_buf ? edid_buf : (uptr)edid_store; }
 
 /* An EDID always begins 00 FF FF FF FF FF FF 00. That fixed header is how we
  * know we read a display and not an empty bus. */
@@ -780,8 +801,8 @@ int intel_read_edid(void)
 {
     if (!intel_present()) return 0;
     for (int pin = 1; pin <= 4; pin++) {
-        if (!gmbus_read_edid(pin, edid_buf, 128)) continue;
-        if (!edid_valid(edid_buf)) continue;
+        if (!gmbus_read_edid(pin, edid_addr(), 128)) continue;
+        if (!edid_valid(edid_addr())) continue;
         edid_pin = pin;
         return pin;
     }
@@ -792,7 +813,7 @@ int intel_edid_pin(void)  { return edid_pin; }
 int intel_edid_byte(int i)
 {
     if (i < 0 || i >= 128) return 0;
-    return (int)*(volatile u8 *)(edid_buf + (uptr)i);
+    return (int)*(volatile u8 *)(edid_addr() + (uptr)i);
 }
 
 /* The three manufacturer letters are packed five bits each, big endian, in
@@ -1890,7 +1911,7 @@ static int aux_i2c(int port, u32 cmd, const u8 *out, int out_len, u8 *in, int in
  * transaction open and the next caller starts mid-stream. */
 int intel_edid_over_aux(int port, u32 off, int len)
 {
-    if (len < 1 || len > 128 || !edid_buf) return 0;
+    if (len < 1 || len > 128) return 0;
 
     u8 addr = (u8)off;
     if (aux_i2c(port, AUX_I2C_WRITE | AUX_I2C_MOT, &addr, 1, aux_buf, 1) < 0)
@@ -1906,7 +1927,7 @@ int intel_edid_over_aux(int port, u32 off, int len)
         int n = aux_i2c(port, cmd, 0, 0, aux_buf, chunk);
         if (n <= 0) return done;
         for (int i = 0; i < n; i++)
-            *(volatile u8 *)(edid_buf + (uptr)(done + i)) = aux_buf[i];
+            *(volatile u8 *)(edid_addr() + (uptr)(done + i)) = aux_buf[i];
         done += n;
         if (n < chunk) break;              /* short read - the sink stopped */
     }
@@ -1919,7 +1940,7 @@ int intel_edid_over_aux(int port, u32 off, int len)
 int intel_read_edid_aux(int port)
 {
     if (intel_edid_over_aux(port, 0, 128) != 128) return 0;
-    return edid_valid(edid_buf);
+    return edid_valid(edid_addr());
 }
 
 int intel_dpcd_write(int port, u32 addr, const u8 *data, int len)

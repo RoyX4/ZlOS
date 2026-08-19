@@ -24,6 +24,13 @@ anything or starting a ninth track.
 `docs/DOCS-RECONCILE-PROMPT.md` is the brief that produced
 `STATE-OF-THE-PROJECT.md`. Done 2026-08-19; kept for method, not for work.
 
+**`docs/GUARDS-THAT-DID-NOT-GUARD.md`** is five checks in this tree that
+reported green while checking nothing, each with the command that establishes
+it — including the `-w` claim this file used to make (below), a `check-memmap.sh`
+discovery sweep that reads no C at all, and why a gate in this shared checkout
+can fail for reasons that are not the code. Read it before trusting any green
+result here, and before writing a new gate.
+
 `kernel/docs/POINTER-PROMPT.md` is the CURRENT WORK: the pointer is
 visibly broken after the eleven-track merge, the lead suspect is measured
 (two drainers of one xHCI event ring), and a full-tree bug audit follows it.
@@ -65,17 +72,39 @@ showed them. Real firmware is free to load the image, or place the ACPI RSDP,
 above 4 GiB.
 
 **`-w` is why nobody saw any of it.** The EFI build silenced every warning,
-including the four that name this bug class precisely. They are now re-enabled
-after `-w` and fatal:
+including the four that name this bug class precisely:
 
 ```
 -Werror=shift-count-overflow  -Werror=void-pointer-to-int-cast
 -Werror=pointer-to-int-cast   -Werror=int-to-pointer-cast
 ```
 
-Clang applies flags left to right, so these must stay *after* the `-w`. The
-whole 28-file EFI build is clean under them; a reintroduction now fails the
-build instead of failing on the laptop.
+**This paragraph used to say the four worked because "clang applies flags left
+to right, so these must stay *after* the `-w`". That was never run, and it is
+false.** Measured 2026-08-19 on clang 21.1.8: `-w` suppresses all four
+regardless of position — before them, after them, either way. The guard
+reported nothing for its entire life.
+
+Behind it were **33 casts of exactly this class**, including `smp.c`'s
+`ENTRY_PTR` store — the documented bug verbatim, a 64-bit destination handed an
+address already truncated to 32 bits, which is the entry point every
+application processor jumps to. Two other files, `virtio_net.c` and `fb.c`, had
+already written defensive code *citing this guard as the reason*, for a guard
+that did nothing.
+
+`-w` is now gone from `buildefi.sh` and the four are genuinely fatal. The one
+warning `-w` was legitimately buying, `-Wexcessive-regsave` (11 hits in
+`idt.c`, inherent to `__attribute__((interrupt))`), is suppressed by name so a
+*new* class surfaces instead of being swallowed.
+
+**`kernel/wguard.sh` is the check, and it runs all three directions** — the
+guard catches a planted defect, `-w` is shown to still silence it, and the real
+source set is clean under it. Two seconds, no QEMU. Run it before touching that
+flag line.
+
+Note the guard is **EFI-only**. `idt.c:465`'s `(u64)&idt` warns on the 32-bit
+gcc build and is *correct* — that is the widening direction, and it is the
+fixed form of the bug above. Do not "fix" it back.
 
 
 `kernel/HANDOFF.md` is the orientation doc and it is kept honest — it records what

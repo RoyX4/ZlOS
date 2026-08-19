@@ -967,7 +967,29 @@ would have caught this class. Leave it alone.
 
 *Source: xcheck-contradiction XC-02, XC-03; xcheck-status-conflict lens.*
 
-### 5.3 `edid_buf` is still at `0x0C980000`, inside `HI_BLUR`, and `intel.c` asserts nothing
+### 5.3 `edid_buf` was at `0x0C980000`, inside `HI_BLUR` — CLOSED 2026-08-19
+
+> **Fixed, and NOT by the three edits proposed below.** `edid_buf` is now an
+> ordinary `static u8 edid_store[128]` in `intel.c`, reached through an
+> `edid_addr()` accessor that still honours `intel_set_edid_buffer()` for
+> `hosttest/intel_probe.c`.
+>
+> **It never needed a physical address.** Every byte arrives by CPU store —
+> `gmbus_read_edid` reads the `GMBUS3` register and writes bytes out one at a
+> time (`intel.c:751`), and the AUX path at `intel.c:1909` does the same. No
+> engine DMAs into it, and DMA is the only thing that would require a known
+> physical address. So the fix is not "give it a map entry and assert it" but
+> "take it out of the map", which needs no `HI_EDID`, no ordering-chain entry,
+> no `#include "memmap.h"` and no assert — there is nothing left to collide.
+>
+> The analysis below is kept because it is correct about the *defect*; only its
+> prescription was one rung too high on the ladder.
+>
+> Verified: all four targets build; `verify.sh` and `verify-efi.sh` green.
+
+*What follows is the original diagnosis.*
+
+### 5.3-orig `edid_buf` is still at `0x0C980000`, inside `HI_BLUR`, and `intel.c` asserts nothing
 
 ```
 $ grep -n 'edid_buf' kernel/intel.c

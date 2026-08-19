@@ -25,6 +25,17 @@
  */
 #include "../runtime.h"
 
+/* Pointer-sized, for the raw-memory builtins below. NOT `unsigned long`: the
+ * EFI target is LLP64, where it is 4 bytes, so peek/poke/fill_mem/copy_mem and
+ * the fs read/write buffers all silently capped at 4 GiB there - and a zl
+ * number carries 53 bits of address, which is the whole point of having them.
+ * Same shape as fb.c's fb_uptr and xhci.c's uptr. */
+#if defined(ZL_64) || defined(__x86_64__)
+typedef unsigned long long zl_uptr;
+#else
+typedef unsigned int       zl_uptr;
+#endif
+
 /* ---------------------------------------------------------------- seam */
 #ifdef ZL_KERNEL_SERIAL
 /* In a kernel: COM1, polled. §7.1's registers. outb is the intrinsic the
@@ -180,7 +191,7 @@ extern int  console_blur(int x, int y, int w, int h, int r);
 extern void console_blur_paint(int slot, int x, int y);
 extern void console_blur_free(void);
 extern void ser_puts(const char *s);
-extern unsigned long console_vram(void);
+extern unsigned long long console_vram(void);
 extern int  console_cols(void);
 extern int  console_cell_w(void);
 extern int  console_ui_scale(void);
@@ -910,12 +921,12 @@ Value zl_calln(const char *name, int n, ...)
     }
 
     /* raw memory - the whole point of a kernel runtime */
-    if (streq(name, "peek8"))  return zl_num((double)*(volatile unsigned char  *)(unsigned long)a[0].num);
-    if (streq(name, "peek16")) return zl_num((double)*(volatile unsigned short *)(unsigned long)a[0].num);
-    if (streq(name, "peek32")) return zl_num((double)*(volatile unsigned int   *)(unsigned long)a[0].num);
-    if (streq(name, "poke8"))  { *(volatile unsigned char  *)(unsigned long)a[0].num = (unsigned char )(unsigned long long)a[1].num; return zl_nil(); }
-    if (streq(name, "poke16")) { *(volatile unsigned short *)(unsigned long)a[0].num = (unsigned short)(unsigned long long)a[1].num; return zl_nil(); }
-    if (streq(name, "poke32")) { *(volatile unsigned int   *)(unsigned long)a[0].num = (unsigned int  )(unsigned long long)a[1].num; return zl_nil(); }
+    if (streq(name, "peek8"))  return zl_num((double)*(volatile unsigned char  *)(zl_uptr)a[0].num);
+    if (streq(name, "peek16")) return zl_num((double)*(volatile unsigned short *)(zl_uptr)a[0].num);
+    if (streq(name, "peek32")) return zl_num((double)*(volatile unsigned int   *)(zl_uptr)a[0].num);
+    if (streq(name, "poke8"))  { *(volatile unsigned char  *)(zl_uptr)a[0].num = (unsigned char )(unsigned long long)a[1].num; return zl_nil(); }
+    if (streq(name, "poke16")) { *(volatile unsigned short *)(zl_uptr)a[0].num = (unsigned short)(unsigned long long)a[1].num; return zl_nil(); }
+    if (streq(name, "poke32")) { *(volatile unsigned int   *)(zl_uptr)a[0].num = (unsigned int  )(unsigned long long)a[1].num; return zl_nil(); }
 
     /* Port I/O - design_kernel.md §6.3 lists these among the intrinsics a
      * kernel backend must provide. Exposing them as builtins is what lets a
@@ -1595,8 +1606,8 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "fs_new"))     return zl_num((double)fs_create_named((unsigned)a[0].num));
     if (streq(name, "fs_get"))     return zl_num((double)fs_find_named());
     if (streq(name, "fs_rm"))      return zl_num((double)fs_delete((int)a[0].num));
-    if (streq(name, "fs_rd"))      return zl_num((double)fs_read((int)a[0].num,(void *)(unsigned long)a[1].num,(unsigned)a[2].num));
-    if (streq(name, "fs_wr"))      return zl_num((double)fs_write((int)a[0].num,(const void *)(unsigned long)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "fs_rd"))      return zl_num((double)fs_read((int)a[0].num,(void *)(zl_uptr)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "fs_wr"))      return zl_num((double)fs_write((int)a[0].num,(const void *)(zl_uptr)a[1].num,(unsigned)a[2].num));
     if (streq(name, "fs_stamp"))   { fs_set_time((unsigned)a[0].num); return zl_nil(); }
 
     /* the clock */
@@ -1649,26 +1660,26 @@ Value zl_calln(const char *name, int n, ...)
     /* peek64/poke64 carry the 2^53 hazard (design_kernel.md §2); the two
      * -halves rule means a kernel should not need them for descriptors. */
     if (streq(name, "peek64")) {
-        unsigned long long v = *(volatile unsigned long long *)(unsigned long)a[0].num;
+        unsigned long long v = *(volatile unsigned long long *)(zl_uptr)a[0].num;
         if (v > 9007199254740992ULL) kfatal("peek64 above 2^53 - read two peek32 halves");
         return zl_num((double)v);
     }
     if (streq(name, "poke64")) {
         unsigned long long v = (unsigned long long)a[1].num;
         if (v > 9007199254740992ULL) kfatal("poke64 above 2^53 - write two poke32 halves");
-        *(volatile unsigned long long *)(unsigned long)a[0].num = v;
+        *(volatile unsigned long long *)(zl_uptr)a[0].num = v;
         return zl_nil();
     }
     if (streq(name, "fill_mem")) {
-        volatile unsigned char *p = (volatile unsigned char *)(unsigned long)a[0].num;
+        volatile unsigned char *p = (volatile unsigned char *)(zl_uptr)a[0].num;
         unsigned long long cnt = (unsigned long long)a[2].num;
         unsigned char b = (unsigned char)(unsigned long long)a[1].num;
         while (cnt--) *p++ = b;
         return zl_nil();
     }
     if (streq(name, "copy_mem")) {
-        volatile unsigned char *d = (volatile unsigned char *)(unsigned long)a[0].num;
-        volatile const unsigned char *s = (volatile const unsigned char *)(unsigned long)a[1].num;
+        volatile unsigned char *d = (volatile unsigned char *)(zl_uptr)a[0].num;
+        volatile const unsigned char *s = (volatile const unsigned char *)(zl_uptr)a[1].num;
         unsigned long long cnt = (unsigned long long)a[2].num;
         if (d < s) { while (cnt--) *d++ = *s++; }
         else       { d += cnt; s += cnt; while (cnt--) *--d = *--s; }

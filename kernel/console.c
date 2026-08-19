@@ -9,6 +9,16 @@
  * talks only to these functions and never learns which one it is on.
  */
 
+/* Pointer-sized. NOT `unsigned long`, which is 4 bytes under buildefi.sh's
+ * LLP64 target and 8 everywhere else - the whole hazard class this file's
+ * multiboot pointer and fb_phys prototype below sit in. Same shape as fb.c's
+ * fb_uptr and xhci.c's uptr. */
+#if defined(ZL_64) || defined(__x86_64__)
+typedef unsigned long long con_uptr;
+#else
+typedef unsigned int con_uptr;
+#endif
+
 /* vga.c - the BIOS text buffer */
 void vga_clear(void);
 void vga_putc(char c);
@@ -21,7 +31,10 @@ int  vga_get_col(void);
 
 /* fb.c - the UEFI framebuffer */
 int  fb_active(void);
-unsigned long fb_phys(void);
+/* 64 bits for the SAME reason fb_setup is, and it was not until 2026-08-19:
+ * the address coming IN had been widened end to end while the one going back
+ * OUT still went through `unsigned long`, which is 32 bits under buildefi.sh. */
+unsigned long long fb_phys(void);
 /* 64 bits, on every target. See the note in fb_setup's definition - a
  * framebuffer address is a PHYSICAL address and has no business being sized by
  * whatever `long` happens to mean on the current ABI. */
@@ -89,7 +102,7 @@ int console_kind(void) { return fb_active() ? 1 : 0; }      /* 0 VGA, 1 framebuf
  * the legacy text window at 0xB8000 is not decoded to anything, so a write
  * there is dropped and the read back returns 0xFF - which is exactly what the
  * poke/peek demo reported on the desktop before this existed. */
-unsigned long console_vram(void) { return fb_active() ? fb_phys() : 0xB8000UL; }
+unsigned long long console_vram(void) { return fb_active() ? fb_phys() : 0xB8000ULL; }
 int console_cols(void) { return fb_active() ? fb_get_cols() : 80; }
 /* the console cell size in pixels - zl needs it to turn a window rect into a
  * text box, and it is no longer always 8x16 */
@@ -145,7 +158,7 @@ struct mb_info {
 void console_init(unsigned long mb_addr)
 {
     loaded_by_multiboot = (mb_addr != 0);
-    struct mb_info *mb = (struct mb_info *)mb_addr;
+    struct mb_info *mb = (struct mb_info *)(con_uptr)mb_addr;
 
     /* Take the framebuffer only if GRUB says it gave us a packed-RGB one.
      * type 2 is EGA text living behind the same fields, and drawing pixels

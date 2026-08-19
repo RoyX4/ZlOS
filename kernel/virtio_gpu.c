@@ -179,7 +179,9 @@ static int find_caps(int i)
             u32 lo = pci_bar(i, bar);
             u32 hi = pci_bar_hi(i, bar);
             if (hi && sizeof(uptr) < 8) return 0;   /* unreachable from 32-bit */
-            uptr base = ((uptr)hi << 32) | (uptr)lo;
+            /* `<< 16 << 16`, not `<< 32` - see virtio_net.c's note. UB on the
+             * 32-bit build, where uptr is 32 bits, guard above notwithstanding. */
+            uptr base = ((uptr)hi << 16 << 16) | (uptr)lo;
             if (!base) { ptr = next; continue; }
 
             if      (type == VIRTIO_PCI_CAP_COMMON_CFG) cfg_common = base + off;

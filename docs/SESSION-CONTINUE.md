@@ -59,6 +59,38 @@ correctly, both times.
    named which parameter. A human pointing at the picture and saying "that" is
    worth more than another sweep.
 
+## Closed since this file was written — 2026-08-19
+
+`docs/GUARDS-THAT-DID-NOT-GUARD.md` is the evidence for all of it. Read that
+before the list below; three of these were guards reporting green while
+checking nothing, which is this project's recurring failure and now has a page.
+
+- **The EFI `-Werror=` guard was inert.** Settled by measurement, not argument:
+  `-w` suppresses those four flags *regardless of position*, so the CI hazard
+  scan was right and `CLAUDE.md` was wrong. Behind it sat **33 casts of the
+  exact class it names** — including `smp.c`'s `ENTRY_PTR` store, which is the
+  documented bug verbatim. `-w` is gone, all 33 are fixed, all four targets
+  build clean, and `kernel/wguard.sh` proves the guard bites (and that `-w`
+  still silences it) in two seconds with no QEMU.
+- **`intel.c`'s `edid_buf`** is out of `HI_BLUR` — as a `static u8[128]`, not a
+  new map entry. It never needed a physical address: nothing DMAs into it.
+- **Three more `(uptr)hi << 32` sites** (`xhci.c`, `virtio_gpu.c`, `i2c_hid.c`)
+  now use the `<< 16 << 16` idiom `nvme.c` and `virtio_net.c` had already
+  settled on. That shift is UB on the 32-bit build and gcc warned on every run.
+- **The dock digit debris** is fixed in the working tree by another session
+  (`kernel.zl`, `tray_x()`-derived damage rect) — uncommitted at the time of
+  writing, not mine to land.
+
+## Still open, and one correction to how it is described
+
+**The SMP band-rendering item below points at the wrong file.** Something *does*
+call `fb_par_hook` — `smp.c:265`, and the wiring under it is complete. The gap
+is one rung up: `smp_go()` appears exactly once in `kernel.zl`, under `cmd == 42`
+(the `*` key of the old text shell), so `smp_start()` never runs on a desktop
+boot. Follow the instruction as written and you find `fb_par_hook` properly
+called, conclude the path is live, and stop. Also worth knowing before you
+switch it on: **no gate covers more than one core** — `verify.sh` boots `-smp 1`.
+
 ## Open, diagnosed, not fixed
 
 - **The dock readout leaves digit debris** (`frame 0 us peak 0 )08 up 1`). Fixed

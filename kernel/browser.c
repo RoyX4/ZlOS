@@ -133,7 +133,7 @@ static int measure(const char *s, int len, int size, int style)
  * cipher in this kernel - only hashes". There are no hashes either: nothing
  * crypto is in SOURCES on any ref. A `crypto.c` does exist - 543 lines of
  * SHA-1, SHA-256, HMAC, PBKDF2 and AES-128, with `cryptotest.c` against
- * published FIPS and RFC vectors - but only inside `refs/wip/*` snapshots, and
+ * published FIPS and RFC vectors - but only inside the `refs/wip` snapshots, and
  * a file that is in no build is not in the kernel. The refusal POLICY is
  * unchanged and correct; only the reason given for it was false.
  *

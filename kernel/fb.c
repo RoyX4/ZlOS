@@ -79,6 +79,19 @@ void fb_pointer_forget(void);           /* defined below; the sprite dies with t
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);  /* the fast row fill */
 void fb_clip_none(void);                /* the scissor; defined below with put_pixel */
 
+/* Pointer-sized, for every place in this file an address becomes a pointer or
+ * a pointer becomes an address. `unsigned long` CANNOT be used for either:
+ * buildefi.sh targets x86_64-unknown-windows, which is LLP64, so it is 4 bytes
+ * there and 8 everywhere else. It lived further down this file until
+ * 2026-08-19, below six casts that therefore still used `unsigned long` and
+ * truncated - see the measurement note on buildefi.sh. Declared here, above
+ * fb_base, so every one of them can reach it. */
+#if defined(ZL_64) || defined(__x86_64__)
+typedef unsigned long long fb_uptr;
+#else
+typedef unsigned int fb_uptr;
+#endif
+
 static unsigned char *fb_base;
 static unsigned int   fb_pitch;      /* bytes per scanline, NOT pixels */
 static unsigned int   fb_w, fb_h;
@@ -106,8 +119,17 @@ void fb_set_text_box(int c0, int c1)
 int fb_active(void) { return fb_base != 0; }
 
 /* Where the card actually scans out of. NOT the back buffer below: this is
- * real video memory, which is what a poke/peek proof has to write to. */
-unsigned long fb_phys(void) { return (unsigned long)fb_base; }
+ * real video memory, which is what a poke/peek proof has to write to.
+ *
+ * RETURNS unsigned long long, and the three declarations downstream of it
+ * (console.c's prototype, console_vram, runtime_kernel.c's extern) match.
+ * fb_setup's comment below traces the INBOUND chain being widened to 64 bits
+ * so a GOP framebuffer above 4 GiB survives; this is the OUTBOUND half of that
+ * same chain and it was left at `unsigned long`. Under buildefi.sh's LLP64
+ * target that is 32 bits, so on firmware that places the framebuffer high,
+ * fb_phys() -> console_vram() -> zl's `vram()` handed back a truncated
+ * address - and `vram()` exists precisely so zl can poke at it. */
+unsigned long long fb_phys(void) { return (unsigned long long)(fb_uptr)fb_base; }
 
 int fb_get_cols(void) { return fb_cols; }
 int fb_get_rows(void) { return fb_rows; }
@@ -346,7 +368,7 @@ static int back_on = 0;
 static inline void fill32(unsigned int *d, unsigned int rgb, int n)
 {
 #if FB_SIMD
-    while (n > 0 && ((unsigned long)d & 15)) { *d++ = rgb; n--; }
+    while (n > 0 && ((fb_uptr)d & 15)) { *d++ = rgb; n--; }
     __m128i v = _mm_set1_epi32((int)rgb);
     while (n >= 16) {
         _mm_store_si128((__m128i *)d,      v);
@@ -588,8 +610,8 @@ static void fb_report_mode(unsigned int need)
     /* Say where it ends, not just that it fits. "back ON" is a claim; an
      * address is a fact somebody can check against the map in this file. */
     if (back_on) {
-        unsigned long top = (unsigned long)back + need;
-        fb_puts("      back at ");   fb_putu((unsigned)((unsigned long)back >> 20));
+        fb_uptr top = (fb_uptr)back + need;
+        fb_puts("      back at ");   fb_putu((unsigned)((fb_uptr)back >> 20));
         fb_puts(" MiB, ends at ");   fb_putu((unsigned)(top >> 20));
         fb_puts(" MiB, ceiling ");   fb_putu((unsigned)(HI_APSTK >> 20));
         fb_puts(" MiB (the AP stacks)");
@@ -636,17 +658,6 @@ static void fb_report_mode(unsigned int need)
  * the 32-bit MMIO window, which is why QEMU and OVMF never showed it.
  * Firmware that places it above 4 GiB would give a black screen or write into
  * whatever lives at the truncated address. T-11, closed. */
-
-/* Pointer-sized, for the one place an address becomes a pointer. Casting a
- * 64-bit integer straight to a 32-bit pointer is a warning on the 32-bit
- * builds and an ERROR under buildefi.sh's -Werror=int-to-pointer-cast, so the
- * narrowing is spelled out once, here, where it is provably safe: a
- * framebuffer this kernel can address is by definition inside a pointer. */
-#if defined(ZL_64) || defined(__x86_64__)
-typedef unsigned long long fb_uptr;
-#else
-typedef unsigned int fb_uptr;
-#endif
 
 void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp)
@@ -2319,8 +2330,8 @@ static unsigned int *arena_next = (unsigned int *)HI_BLUR;
 
 static unsigned int *arena_take(unsigned int px)
 {
-    unsigned long top = (unsigned long)arena_next + (unsigned long)px * 4u;
-    if (top > (unsigned long)HI_BLUR + BLUR_LIMIT) return 0;
+    fb_uptr top = (fb_uptr)arena_next + (fb_uptr)px * 4u;
+    if (top > (fb_uptr)HI_BLUR + BLUR_LIMIT) return 0;
     unsigned int *p = arena_next;
     arena_next = (unsigned int *)top;
     return p;
@@ -2328,8 +2339,8 @@ static unsigned int *arena_take(unsigned int px)
 
 static unsigned int arena_free_px(void)
 {
-    return (unsigned int)(((unsigned long)HI_BLUR + BLUR_LIMIT
-                           - (unsigned long)arena_next) / 4u);
+    return (unsigned int)(((fb_uptr)HI_BLUR + BLUR_LIMIT
+                           - (fb_uptr)arena_next) / 4u);
 }
 
 void fb_cache_reset(void)
@@ -2365,7 +2376,10 @@ int fb_wall_save(void)
             wall_buf[(unsigned long)y * fb_w + x] = fb_get_px((int)x, (int)y);
     fb_puts("  fb: wallpaper cached, "); fb_putu(fb_w * fb_h * 4u >> 10);
     fb_puts(" KiB; "); fb_putu(arena_free_px() * 4u >> 10);
-    fb_puts(" KiB left for blur\n");
+    fb_puts(" KiB left in the arena\n");   /* same words as the refusal above:
+                                            * the arena is not the blur's, it
+                                            * is shared and first-come, which is
+                                            * the whole of DECISIONS #29 */
     return 1;
 }
 

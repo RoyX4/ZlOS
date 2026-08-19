@@ -27,6 +27,16 @@
 typedef net_u8  u8;
 typedef net_u32 u32;
 
+/* Pointer-sized - `unsigned long` is 4 bytes under buildefi.sh's LLP64 target.
+ * http_body_addr below narrows to u32 ON PURPOSE (zl reads the body through a
+ * 32-bit address), but it must narrow from the FULL pointer, not from a value
+ * something already truncated on the way. */
+#if defined(ZL_64) || defined(__x86_64__)
+typedef unsigned long long uptr;
+#else
+typedef unsigned int       uptr;
+#endif
+
 #define REQ_MAX  512
 #define URL_MAX  256
 
@@ -265,7 +275,7 @@ int http_truncated(void)  { return truncated; }
 int http_refused(void)    { return refused_type; }
 int http_redirects(void)  { return redirects; }
 int http_body_len(void)   { return hdr_done ? resp_len - body_at : 0; }
-u32 http_body_addr(void)  { return (u32)(unsigned long)(resp + body_at); }
+u32 http_body_addr(void)  { return (u32)(uptr)(resp + body_at); }
 int http_total(void)      { return resp_len; }
 
 const char *http_content_type(void) { return ctype; }

@@ -178,7 +178,10 @@ int xhci_find(void)
         u32 lo = pci_bar(i, 0);
         u32 hi = pci_bar_hi(i, 0);
         if (hi != 0 && sizeof(uptr) < 8) { xbar_high = 1; continue; }
-        xbase = ((uptr)hi << 32) | (uptr)lo;
+        /* `<< 16 << 16`, not `<< 32` - see virtio_net.c's note. The guard above
+         * means the shift never MATTERS on the 32-bit build, but it is still
+         * compiled there, where uptr is 32 bits and a shift by 32 is UB. */
+        xbase = ((uptr)hi << 16 << 16) | (uptr)lo;
         if (!xbase) continue;
 
         xhci_idx = i;
@@ -419,14 +422,14 @@ int xhci_ram_ok(void)
 
 static void zero_mem(u32 addr, u32 bytes)
 {
-    volatile u32 *p = (volatile u32 *)addr;
+    volatile u32 *p = (volatile u32 *)(uptr)addr;
     for (u32 i = 0; i < bytes / 4; i++) p[i] = 0;
 }
 
 /* write one TRB: two dwords of parameter, one of status, one of control */
 static void trb_write(u32 ring, u32 index, u64 param, u32 status, u32 control)
 {
-    volatile u32 *t = (volatile u32 *)(ring + index * TRB_BYTES);
+    volatile u32 *t = (volatile u32 *)(uptr)(ring + index * TRB_BYTES);
     t[0] = (u32)(param & 0xFFFFFFFFu);
     t[1] = (u32)(param >> 32);
     t[2] = status;
@@ -551,7 +554,7 @@ static u32 cmd_submit(u64 param, u32 status, u32 type, u32 extra)
 static int event_poll(u32 *out_param_lo, u32 *out_status, u32 *out_ctrl, int spins)
 {
     while (spins--) {
-        volatile u32 *e = (volatile u32 *)(XMEM_EVTRING + evt_dequeue * TRB_BYTES);
+        volatile u32 *e = (volatile u32 *)(uptr)(XMEM_EVTRING + evt_dequeue * TRB_BYTES);
         u32 ctrl = e[3];
         if ((ctrl & 1u) != evt_cycle) continue;      /* not ours yet */
         if (out_param_lo) *out_param_lo = e[0];
@@ -778,12 +781,12 @@ _Static_assert(INT_RING(MAX_SLOTS) <= XMEM_DATA,
 
 static void ctx_set(u32 base, int which, int dword, u32 val)
 {
-    *(volatile u32 *)(base + (u32)which * (u32)xctxsize + (u32)dword * 4) = val;
+    *(volatile u32 *)(uptr)(base + (u32)which * (u32)xctxsize + (u32)dword * 4) = val;
 }
 
 static u32 ctx_get(u32 base, int which, int dword)
 {
-    return *(volatile u32 *)(base + (u32)which * (u32)xctxsize + (u32)dword * 4);
+    return *(volatile u32 *)(uptr)(base + (u32)which * (u32)xctxsize + (u32)dword * 4);
 }
 
 /* EP0's maximum packet size is fixed by the link speed, and the device cannot
@@ -939,7 +942,7 @@ int xhci_get_device_descriptor(int slot)
 int xhci_desc_byte(int i)
 {
     if (i < 0 || i >= 18) return 0;     /* only the device descriptor is here */
-    return (int)*(volatile u8 *)(XMEM_DATA + (u32)i);
+    return (int)*(volatile u8 *)(uptr)(XMEM_DATA + (u32)i);
 }
 
 static int desc16(int off)
@@ -1267,7 +1270,7 @@ static int kevq_pop(void)
 static u8 cfg_byte(int i)
 {
     if (i < 0 || i >= CFG_MAX) return 0;
-    return *(volatile u8 *)(CFG_BUF + (u32)i);
+    return *(volatile u8 *)(uptr)(CFG_BUF + (u32)i);
 }
 
 /* GET_DESCRIPTOR(CONFIGURATION). The first nine bytes carry wTotalLength,
@@ -1431,7 +1434,7 @@ static void ptr_arm_all(void)
  * accumulated and clamped like the PS/2 path. */
 static void ptr_decode(u32 buf)
 {
-    volatile u8 *r = (volatile u8 *)buf;
+    volatile u8 *r = (volatile u8 *)(uptr)buf;
     int w = console_pxw(), h = console_pxh();
     if (w <= 0) w = 1920;
     if (h <= 0) h = 1200;
@@ -1554,7 +1557,7 @@ static void hid_decode(void)
     int rollover = 0;
 
     for (int i = 0; i < 6; i++) {
-        now[i] = *(volatile u8 *)(KBD_REPORT + (u32)(i + 2));
+        now[i] = *(volatile u8 *)(uptr)(KBD_REPORT + (u32)(i + 2));
         if (now[i] == 1) rollover = 1;
     }
 
@@ -2000,7 +2003,7 @@ int xhci_kbd_mods(void)
 int xhci_kbd_report(int i)
 {
     if (i < 0 || i > 7) return 0;
-    return (int)*(volatile u8 *)(KBD_REPORT + (u32)i);
+    return (int)*(volatile u8 *)(uptr)(KBD_REPORT + (u32)i);
 }
 
 /* ==== USB mass storage: Bulk-Only Transport ==============================
@@ -2198,7 +2201,7 @@ int xhci_msc_read_block(u32 lba)
 int xhci_msc_byte(int i)
 {
     if (i < 0 || i >= (int)MSC_DATA_MAX) return 0;
-    return (int)*(volatile u8 *)(MSC_DATA + (u32)i);
+    return (int)*(volatile u8 *)(uptr)(MSC_DATA + (u32)i);
 }
 
 u32 xhci_msc_blocks(void)    { return msc_blocks; }
