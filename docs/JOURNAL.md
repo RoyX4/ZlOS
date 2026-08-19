@@ -7,6 +7,27 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-19 — feat(desktop): the Files app, and the editor's disk-backed save-through (e4e8cce)
+
+`desktop/files-app` · 5 files changed, 691 insertions(+), 6 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>5 file(s)</summary>
+
+- `kernel/check-memmap.sh`
+- `kernel/docs/files-app-handoff.md`
+- `kernel/kernel.zl`
+- `kernel/probe-files.py`
+- `kernel/term.c`
+
+</details>
+
 ## 2026-08-19 — chore: regenerated journal/TODO (post-commit hook) (2c2092f)
 
 `main` · 1 file changed, 17 insertions(+)
