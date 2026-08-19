@@ -389,3 +389,10 @@ echo "built ./gpu_ring      (run: sudo ./gpu-ring-run.sh --survey)"
 # without an Intel GPU.
 gcc -O2 -g -Wall -Wextra -o gpu_planes gpu_planes.c
 echo "built ./gpu_planes    (run: sudo ./gpu_planes)"
+
+# GPU-visible memory through the aperture (GMADR/BAR2). This is how anything
+# confirms the GPU wrote something WITHOUT trusting the GPU - /dev/mem is refused
+# for normal RAM on this kernel (STRICT_DEVMEM=y) and a GEM buffer only works
+# while i915 is driving. Read-only, 77 without root or without an Intel BAR2.
+gcc -O2 -g -Wall -Wextra -o gpu_aperture gpu_aperture.c
+echo "built ./gpu_aperture  (run: sudo ./gpu_aperture)"

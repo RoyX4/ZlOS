@@ -39,3 +39,4 @@ hosttest/gpu_ring
 hosttest/gputest
 hosttest/gpu_blt
 hosttest/gpu_planes
+hosttest/gpu_aperture
