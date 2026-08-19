@@ -16,6 +16,25 @@ person actually needs: the order, and the state that is not a default.
 compile and the interesting state never appears. That one variable is what made
 `INTEL_DEBUG` look broken for most of a day.
 
+## Two shaders, two byte counts — not a contradiction
+
+`gen9-shader-source.md` says the kernel is **5 instructions, 48 bytes**;
+`gpu_shader.inc` here says **5 instructions, 80 bytes**. Both are right, and the
+difference is the point:
+
+- **48 bytes** comes from a shader that reads the colour from a **push
+  constant** — supplied at draw time, nothing to patch.
+- **80 bytes** comes from `gl_FragColor = vec4(<literal>)`, where the four
+  channels are **float immediates inside the movs**. Mesa reports
+  `Compacted 80 to 80 bytes (0%)` — an immediate cannot be compacted, which is
+  exactly why it is bigger.
+
+Same five instructions either way, because blending is the fixed-function output
+merger and not the shader's job. The push-constant version is the better design
+for a driver that fills in many colours; the immediate version is the simpler
+one to embed and patch. Pick per use, and do not "fix" either to match the
+other's byte count.
+
 ## Why this exists
 
 `gpu-driver.md` had the render engine blocked on *"no Gen9 assembler"*. The
