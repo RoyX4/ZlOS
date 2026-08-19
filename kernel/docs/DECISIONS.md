@@ -158,9 +158,17 @@ Order: `fb_clip` → tiled rasterization → SIMD → depth buffer → textures.
 **22. SSE is on and nothing uses it.** `cpu.c` detects it, the 64-bit build
 enables it. `fb.c`'s blend loops are the first customer, before any 3D.
 
-**23. Three of four cores are parked** in `cli; hlt` (`smp.c:79`). Drawing into
-disjoint horizontal bands of the back buffer needs no lock. A real 4×, after
-damage tracking, not before.
+**23. Three of four cores are parked** in ~~`cli; hlt` (`smp.c:79`)~~. Drawing into
+disjoint horizontal bands of the back buffer needs no lock. ~~A real 4×, after
+damage tracking, not before.~~
+
+> **BOTH HALVES OF THAT ARE NOW WRONG — corrected 2026-08-19 from the source,
+> see #39.** The park loop is a **spin**, not `cli; hlt`; `smp.c` says why in as
+> many words ("a core halted with interrupts off can only be restarted by
+> NMI/INIT/SIPI, so there is no way to hand it work"). And it is not a 4×: 1.78×
+> measured, with 4 bands slower than 2 on the worst run. This entry matters
+> because it is the one somebody reads when judging whether SMP bands are cheap,
+> and read as written it says they are free. They cost three cores.
 
 **24. `virtio_gpu.c:314` disables virgl on purpose.** Enabling it gives real 3D
 **in QEMU only** — nothing on the laptop, which has no hypervisor. Worth
@@ -763,6 +771,56 @@ established `exit 77 = SKIP` five commits earlier and `gpu-blitter.md` says "the
 convention now exists — use it for the next hardware harness". `gpu_ring` is the
 next hardware harness. Not fixed here — it is another session's file and it was
 in flight.
+
+### #39 | SMP bands: two docs written the same day disagree, and the code settles it — **do not turn them on**
+
+`gpu-driver.md`'s "the order that follows from all of it" ranks SMP bands **#1**:
+*"1.78x on the desktop redraw, already written, switched off, no hardware
+risk."* `NEXT-PROMPT.md` and `look-and-speed.md` §2 say the opposite: *"it is one
+call and it should not be made."* Same measurement, same day, opposite advice,
+and it sits at the top of the driver's own recommended order — so it gets
+settled here rather than picked by whoever reads which file first.
+
+**Three facts, all read out of the source rather than out of a doc.**
+
+1. **The park loop is a spin.** `smp.c`'s own comment: *"The park loop is a
+   SPIN, not `cli; hlt`. It has to be: a core halted with interrupts off can only
+   be restarted by NMI/INIT/SIPI, so there is no way to hand it work without an
+   interrupt path this kernel does not have."* Turning bands on burns three cores
+   from `smp_go()` until reboot. **`DECISIONS.md` #23 said `cli; hlt` and is now
+   corrected** — that entry is the one somebody reads when judging the cost, and
+   as written it said the cost was nothing.
+
+2. **The expensive thing is not on the band path.** Exactly four primitives
+   route through `fb_par_run`: `fill_band` (:1242), `grad_band` (:1369),
+   `shadow_band` (:1581), `blit_band` (:554, and only for spans ≥ 64 rows).
+   `fb_grad_radial` (:1824) and the conic wedge (:1862) **do not.** Those are the
+   three radial glows and two conic wedges of the wallpaper — the single most
+   expensive full-screen work this system does, ~12.2 ms for one 900×700 glow.
+   Band rendering does not touch it.
+
+3. **What it does buy, from `desktop-smp-bands.md`'s own table:** whole desktop
+   4.833 ms → 2.949 ms at four bands. **1.88 ms**, on a full-screen redraw that
+   damage tracking already made rare, and the worst run has 4 bands slower than
+   2. `fb.c:229` also rules out the reading that would make it worth more: the
+   draw list is `app_draw`, which is zl, and the zl runtime is not reentrant —
+   *"Four cores inside `zl_fn_app_draw` would corrupt the interpreter, not the
+   framebuffer."*
+
+**So: 1.88 ms on a rare path, nothing on the expensive path, three cores
+permanently.** `NEXT-PROMPT.md` is right and `gpu-driver.md`'s #1 should not be
+taken. Corrected there in place.
+
+**The proposal neither doc makes, stated but NOT built.** The wallpaper bake is
+the one place the trade inverts: it is full-screen by definition, it is the
+expensive path, it is pure C with no zl anywhere near it, and it happens **once
+at boot** — so the cores could be woken, used, and left parked, and the
+permanent-spin objection does not apply to a bounded window. It needs
+`fb_grad_radial`/`fb_grad_conic` put on `fb_par_run`, which is the same shape as
+the four that already are. **Not done here:** it is new scope outside this
+session's brief, it is in `fb.c` which another session also holds, and the
+measurement that would justify it — bake time serial vs banded — has not been
+taken. Take that measurement before writing it.
 
 ---
 

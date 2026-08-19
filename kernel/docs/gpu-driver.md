@@ -175,8 +175,22 @@ handful of instructions, and the encoding is documented.
 
 ## The order that follows from all of it
 
-1. **SMP bands** — 1.78x on the desktop redraw, already written, switched off,
-   no hardware risk. Independent of everything above.
+1. ~~**SMP bands** — 1.78x on the desktop redraw, already written, switched off,
+   no hardware risk. Independent of everything above.~~
+
+   > **RETRACTED, `DECISIONS.md` #39.** "No hardware risk" is true and it is not
+   > the cost. The park loop is a **spin**, not `cli; hlt` — `smp.c` says so and
+   > explains why there is no alternative without an interrupt path this kernel
+   > lacks — so this burns three cores from `smp_go()` until reboot. The 1.78x is
+   > **1.88 ms** on a full-screen redraw that damage tracking already made rare,
+   > and the expensive full-screen work is not even on the band path:
+   > `fb_grad_radial` and the conic wedge, the wallpaper's three glows and two
+   > wedges at ~12.2 ms each, do not route through `fb_par_run`. Only fill,
+   > gradient, shadow and present do.
+   >
+   > The one variant worth measuring is the **boot wallpaper bake** — full-screen,
+   > expensive, pure C, and once, so the cores can be parked again afterwards.
+   > Unmeasured; #39 says what to measure first.
 2. **`--survey` → `--dry` → `--ring`** — answers whether a sole owner can drive
    the Gen9 legacy ring, which decides whether `gpuring.c` is a driver or a
    sketch.
