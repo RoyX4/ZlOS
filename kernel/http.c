@@ -40,8 +40,15 @@ const struct x509_cert *zl_roots(int *n);
 typedef net_u8  u8;
 typedef net_u32 u32;
 
-#define REQ_MAX  512
-#define URL_MAX  256
+/* REQ_MAX AND URL_MAX BOTH HAD TO GROW, and they are related: build_request
+ * copies `path` into `req`, so a request buffer smaller than the path silently
+ * builds a SHORTER request rather than failing. Measured on the English
+ * Wikipedia article: its first stylesheet path is 522 characters. At the old
+ * 256/512 that request went out truncated, which is not a failed fetch - it is
+ * a request for a different resource, and the 404 that comes back reads as the
+ * server's fault. */
+#define REQ_MAX  1536
+#define URL_MAX  1024
 
 static u8   req[REQ_MAX];
 static char host[URL_MAX];
@@ -228,14 +235,40 @@ static int find_body(void)
     return -1;
 }
 
+/* WHAT THIS FETCH IS WILLING TO RECEIVE. The type check used to be a
+ * constant - text/html or text/plain - which was right while every fetch was
+ * a page. It stops being right the moment a page's <img> is fetched: an
+ * image/png response is exactly what was asked for, and refusing it is the
+ * check being wrong rather than the server.
+ *
+ * A MASK PER FETCH, NOT A LOOSENED CONSTANT. Widening type_acceptable() to
+ * always allow images would mean a document fetch silently accepting a JPEG
+ * and handing 40 KB of binary to the HTML parser, and "the page rendered as
+ * mojibake" is a far worse failure than "refused: not text/html". So the
+ * caller declares what it asked for, and the default stays exactly what it
+ * was - http_reset() puts it back, so a caller that forgets gets the strict
+ * behaviour rather than the loose one. */
+#define HTTP_ACC_TEXT  (1 << 0)
+#define HTTP_ACC_IMAGE (1 << 1)
+#define HTTP_ACC_CSS   (1 << 2)
+static int accept_mask = HTTP_ACC_TEXT;
+
+void http_accept(int mask) { accept_mask = mask ? mask : HTTP_ACC_TEXT; }
+
+static int ctype_is(const char *want)
+{
+    for (int i = 0; want[i]; i++) if (ctype[i] != want[i]) return 0;
+    return 1;
+}
+
 static int type_acceptable(void)
 {
     if (!ctype[0]) return 1;                       /* unstated: allow it */
-    const char *ok1 = "text/html", *ok2 = "text/plain";
-    int m1 = 1, m2 = 1;
-    for (int i = 0; ok1[i]; i++) if (ctype[i] != ok1[i]) { m1 = 0; break; }
-    for (int i = 0; ok2[i]; i++) if (ctype[i] != ok2[i]) { m2 = 0; break; }
-    return m1 || m2;
+    if ((accept_mask & HTTP_ACC_TEXT) &&
+        (ctype_is("text/html") || ctype_is("text/plain"))) return 1;
+    if ((accept_mask & HTTP_ACC_IMAGE) && ctype_is("image/")) return 1;
+    if ((accept_mask & HTTP_ACC_CSS) && ctype_is("text/css")) return 1;
+    return 0;
 }
 
 /* ---- the TLS transport ------------------------------------------------------
@@ -428,4 +461,5 @@ void http_reset(void)
     hdr_done = 0;
     truncated = 0;
     refused_type = 0;
+    accept_mask = HTTP_ACC_TEXT;   /* strict by default - see http_accept */
 }

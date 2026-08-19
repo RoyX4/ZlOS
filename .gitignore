@@ -25,6 +25,42 @@ kernel/hosttest/browsertest
 kernel/hosttest/fuzz
 kernel/hosttest/dnstest
 kernel/hosttest/regs-*.txt
+# The harnesses whose binaries were never listed. csstest and fbtext have been
+# built by ./build.sh since they were written and have shown up as untracked
+# ever since; pngtest is new. A build output that is merely UNLISTED rather
+# than ignored is one `git add -A` away from being committed, which is how
+# _genefi.c got into this repo in the first place.
+kernel/hosttest/csstest
+kernel/hosttest/fbtext
+kernel/hosttest/pngtest
+kernel/hosttest/csstest_san
+kernel/hosttest/pngtest_san
+kernel/hosttest/browsertest_san
+kernel/hosttest/arenatest
+kernel/hosttest/settingstest
+kernel/hosttest/systest
+kernel/hosttest/rtctest
+kernel/hosttest/fstest
+kernel/hosttest/exectest
+kernel/hosttest/libctest
+kernel/hosttest/toasttest
+kernel/hosttest/tritest
+kernel/hosttest/jstest
+kernel/hosttest/x509test
+kernel/hosttest/ecdsatest
+kernel/hosttest/tlstest
+kernel/hosttest/cryptotest
+kernel/hosttest/tlscryptotest
+kernel/hosttest/jmptest
+kernel/hosttest/jmptest32
+kernel/hosttest/modeset_test
+# NOT *.ppm here: kernel/.gitignore:25 already says hosttest/*.ppm, and
+# browsershot.ppm and wmshot.ppm are TRACKED - so that rule does nothing for
+# them (a tracked file is never ignored) while looking like it does. Adding a
+# second copy of a rule that is already inert would make it harder to find,
+# not easier. Both are ~5 MB and are rewritten by every gate run, so every
+# visual gate produces a multi-megabyte diff. Untracking them is a call for
+# whoever owns those goldens.
 
 # build outputs - regenerable, and large. Build them with:
 #   kernel/build.sh      kernel.elf        (BIOS multiboot)

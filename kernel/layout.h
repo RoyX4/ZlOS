@@ -14,9 +14,23 @@
 #define LAYOUT_H
 
 #define LR_TEXT   0
-#define LR_RULE   1      /* <hr>, and the line under an h1  */
-#define LR_BULLET 2      /* a list marker                   */
-#define LR_IMG    3      /* an image placeholder box        */
+#define LR_RULE   1      /* <hr>, an h1's underline, AND a border edge      */
+#define LR_BULLET 2      /* a list marker                                   */
+#define LR_IMG    3      /* an image: decoded when `img` >= 0, else a frame */
+#define LR_BOX    4      /* a block's own background - see below            */
+
+/* A BORDER IS FOUR FILLED RECTANGLES, so it is four LR_RULE runs carrying an
+ * `rgb`, not five new fields on every run in the document. struct lay_run is
+ * already emitted 12,288 times into BSS; widening it by a border spec would
+ * cost a quarter of a megabyte to describe something that four existing runs
+ * describe exactly. LR_RULE with no rgb keeps meaning "the theme's rule
+ * colour", which is what <hr> wants.
+ *
+ * LR_BOX exists for the same economy from the other side: a block-level
+ * background is a rectangle behind its contents, and the painter ALREADY
+ * fills `bg` behind any run with a positive w and h. So LR_BOX is a run that
+ * carries only geometry and a background, draws nothing of its own, and is
+ * emitted BEFORE its children so document order is paint order. */
 
 #define LS_BOLD   (1 << 0)
 #define LS_ITALIC (1 << 1)
@@ -49,6 +63,12 @@ struct lay_run {
     int bg;              /* author background, or LR_NO_RGB       */
     int node;            /* the html node it came from           */
     int link;            /* enclosing <a>, or -1                 */
+    /* LR_IMG only: the decoded picture's slot in png.c's arena, or -1 for
+     * "we know its box and not its pixels", which is what an <img> is between
+     * the document arriving and the picture arriving. layout.c never calls
+     * png.c - it is handed the slot, exactly as it is handed a measure
+     * function, so the box model still links with no decoder present. */
+    int img;
 };
 
 /* How wide is s[0..len) at this size and style? The one thing layout cannot
@@ -57,6 +77,18 @@ struct lay_run {
 typedef int (*lay_measure_fn)(const char *s, int len, int size, int style);
 
 void lay_set_measure(lay_measure_fn f);
+
+/* What are this <img>'s real pixels? Injected for the same reason the measure
+ * function is: layout.c must keep linking with no decoder and no framebuffer,
+ * so it asks rather than includes. `node` is the html node of the <img>;
+ * fill *w and *h with the intrinsic size and return the arena slot, or return
+ * -1 for "not here (yet)", leaving both out-parameters alone. A NULL hook
+ * means every image lays out at its attribute size or the placeholder
+ * default, which is what every host harness wants and what the browser shows
+ * before a picture has been fetched. */
+typedef int (*lay_image_fn)(int node, int *w, int *h);
+
+void lay_set_image(lay_image_fn f);
 
 /* Lay the parsed document out into `width` pixels with `base` as the body font
  * size. Returns the total content height. */

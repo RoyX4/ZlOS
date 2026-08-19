@@ -26,6 +26,10 @@
  * THE MAP
  * -------
  *   base        MiB   owner         what lives there              span
+ *   0x02000000   32   kernel.zl     snake, fs, shell line + history  1 MiB
+ *                       (check-memmap.sh owns the detail; the SPAN is here
+ *                        so this file's asserts can see it)
+ *   0x03000000   48   png.c         decoded pictures + scratch     4 MiB
  *   0x08000000  128   fb.c          back, the back buffer         48 MiB
  *   0x0B000000  176   sched.c       task stacks + demo counters    8 MiB
  *   0x0B800000  184   i2c_hid.c     HID report + descriptor bufs   8 MiB
@@ -52,6 +56,66 @@
  */
 #ifndef ZL_MEMMAP_H
 #define ZL_MEMMAP_H
+
+/* THE FIRST REGION BELOW 128 MiB, and the first thing in this map that is not
+ * a driver's DMA arena. A decoded picture is 4 bytes a pixel and a page has
+ * several, so this is megabytes - and megabytes cannot be BSS here.
+ *
+ * MEASURED, on this branch, with everything in: __kernel_end is 0x005DAAC0 =
+ * 5.854 MiB against link.ld's ASSERT that it stays under 0x00600000, which
+ * leaves the WHOLE KERNEL 152,896 bytes - 149 KiB - of room to grow. A static
+ * 2 MiB arena in png.c could not link, and the error it produced would read
+ * "the kernel image has grown into the raw-boot stack at 6 MiB", naming the
+ * stack rather than the picture that took the space.
+ *
+ * 149 KiB IS THE NUMBER TO CHECK BEFORE ADDING ANY ARRAY ANYWHERE IN THIS
+ * KERNEL, not just here. Total BSS is already 3,339,328 bytes; the browser's
+ * share of it (a 256 KiB document, ~700 KiB of runs, ~650 KiB of html nodes)
+ * is most of the recent growth. Re-measure with:
+ *     ./build.sh && nm kernel.elf | grep __kernel_end
+ *
+ * IT WAS AT 32 MiB AND THAT WAS WRONG, which is worth keeping rather than
+ * quietly correcting, because the mistake is the exact one this file exists
+ * to prevent and it was made by someone who had this file open.
+ *
+ * 32 MiB looked free: it is 2 MiB aligned, it is the first such address above
+ * arena.c's program arena (8..24 MiB), and every assert in this file passed.
+ * **It is not free.** kernel.zl keeps a SECOND fixed-address block there -
+ * SNAKE_X/SNAKE_Y at 0x02000000, FS_META and FS_DATA at 0x02010000, and the
+ * shell's LINE_BUF and HIST_BUF at 0x02030000 - and a 4 MiB picture arena
+ * based at 0x02000000 lands on all six. The bundled 32x32 home-page image
+ * already overwrote both Snake arrays; a 132x132 PNG from any server would
+ * have written through the RAM filesystem's metadata and data.
+ *
+ * THE ASSERTS DID NOT CATCH IT BECAUSE THEY ONLY COMPARE THIS FILE'S OWN
+ * REGIONS TO EACH OTHER. That is the same hole, one map over, that this
+ * file's header describes i2c_hid.c falling into: "the bases are each
+ * individually sensible and only collide when you subtract them." Two maps
+ * that do not know about each other are two maps that will collide.
+ *
+ * So: the region moved to 48 MiB, which is above the whole zl block and 80 MiB
+ * clear of HI_BACK - and, more importantly, the zl block is now DECLARED here
+ * so the compiler checks it too. Found by an adversarial review from a
+ * different model family, after check-memmap.sh had printed the colliding
+ * addresses in this very session and nobody joined them up.
+ *
+ * THE REGION IS CARVED IN TWO, and the split is here rather than in png.c
+ * because this file is where a neighbour would come looking:
+ *   HI_IMG            .. +2 MiB   png.c's pixel arena, 524288 ARGB pixels
+ *   HI_IMG_SCRATCH    .. +2 MiB   browser.c's base64 buffer for data: URIs
+ * The second half is nearly all spare on purpose: a data: URI is bounded by
+ * the 256 KiB document that carries it, so 2 MiB can never be short. */
+/* kernel.zl's OWN fixed addresses, declared here so this file's asserts can
+ * see them. They are not owned by memmap.h - check-memmap.sh derives their
+ * exact extents from kernel.zl and is still the authority on the details -
+ * but their SPAN belongs in the map, or the map is lying by omission.
+ * 0x02000000 (SNAKE_X) to 0x02032000 (end of HIST_BUF), rounded up. */
+#define ZL_LOW_BASE  0x02000000UL
+#define ZL_LOW_END   0x02100000UL   /* 33 MiB - covers the block with room  */
+
+#define HI_IMG    0x03000000UL   /* png.c        - decoded picture arena    */
+#define HI_IMG_SCRATCH (HI_IMG + 0x200000UL)
+#define HI_IMG_END     (HI_IMG + 0x400000UL)
 
 #define HI_BACK   0x08000000UL   /* fb.c         - the back buffer          */
 /* THE AP STACKS, and this region is why BACK_LIMIT is 40 MiB and not 48.
@@ -87,6 +151,15 @@
  *
  * These cost nothing at run time and fail the build the moment the map stops
  * making sense. A comment claiming the order would not have. */
+_Static_assert(HI_IMG   < HI_BACK,  "high-RAM map out of order: img >= back");
+_Static_assert(HI_IMG_END <= HI_BACK,
+               "the picture arena has grown into fb.c's back buffer");
+/* THE ONE THAT WAS MISSING. Without it the picture arena sat on Snake, the
+ * filesystem and the shell's history for the length of one review cycle. */
+_Static_assert(HI_IMG >= ZL_LOW_END,
+               "the picture arena overlaps kernel.zl's fixed block at 32 MiB "
+               "(SNAKE_X/FS_DATA/HIST_BUF - see check-memmap.sh)");
+_Static_assert(ZL_LOW_BASE < ZL_LOW_END, "zl low block is inverted");
 _Static_assert(HI_BACK  < HI_SCHED, "high-RAM map out of order: back >= sched");
 _Static_assert(HI_SCHED < HI_HID,   "high-RAM map out of order: sched >= hid");
 _Static_assert(HI_HID   < HI_BLUR,  "high-RAM map out of order: hid >= blur");

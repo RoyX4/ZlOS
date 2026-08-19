@@ -39,6 +39,14 @@ const char *http_tls_why(void); /* the certificate reason, if that is why  */
 int http_poll(void);
 void http_reset(void);
 
+/* What content types THIS fetch will accept. Call it after http_reset() and
+ * before http_start(); http_reset puts it back to text-only, so forgetting is
+ * the strict behaviour and not the loose one. */
+#define HTTP_ACCEPT_TEXT  (1 << 0)
+#define HTTP_ACCEPT_IMAGE (1 << 1)
+#define HTTP_ACCEPT_CSS   (1 << 2)
+void http_accept(int mask);
+
 int http_state(void);
 int http_status(void);
 int http_body_len(void);

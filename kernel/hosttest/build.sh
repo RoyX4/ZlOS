@@ -176,8 +176,8 @@ echo "built ./csstest       (run: ./csstest)"
 # ...and the same document at three widths, as a picture. Same argument as
 # wmtest/wmshot: assertions catch a run escaping the content box, eyes catch
 # inline <code> set at the wrong size or a list marker sitting in its own text.
-gcc -O2 -w -o browsershot browsershot.c ../browser.c ../html.c ../css.c ../layout.c \
-    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../rsa.c ../entropy.c ../js.c hostmachine.c \
+gcc -O2 -w -o browsershot browsershot.c ../browser.c ../html.c ../css.c ../layout.c ../png.c \
+    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../entropy.c ../js.c hostmachine.c \
     ../ui.c ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c \
     ../http.c ../tcp.c ../net.c ../dns.c
 echo "built ./browsershot   (run: ./browsershot out.ppm)"
@@ -207,7 +207,16 @@ echo "built ./tcptest       (run: ./tcptest)"
 # line endings, a body with no Content-Length, a Content-Length that lies, a
 # 3xx with no Location, a type that is not a page. None of those can be asked
 # for from a real server; all of them are two lines here.
-gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o httptest httptest.c ../http.c ../tcp.c ../net.c
+#
+# THIS LINE WAS STALE AND THE GATE COULD NOT BUILD AT ALL. http.c gained the
+# TLS transport when https landed, and this link line was never updated - so
+# `httptest` had 18 undefined references and produced no binary, while
+# browser-status.md went on citing "91 checks, 0 failed" from the last time it
+# ran. A gate that cannot build is indistinguishable from a gate that passes
+# if nobody looks at the build output, and this script prints a lot of it.
+# Verified by rebuilding HEAD's http.c against HEAD's httptest.c: same 18.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o httptest httptest.c ../http.c ../tcp.c ../net.c \
+    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../entropy.c hostmachine.c
 echo "built ./httptest      (run: ./httptest)"
 
 # The browser app's LOGIC - URL parsing, history, the URL bar's key machine -
@@ -217,17 +226,42 @@ echo "built ./httptest      (run: ./httptest)"
 # network below it is real: net.c, tcp.c and http.c are all linked, so "did it
 # parse the port" is answered by looking at the SYN that went out.
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o browsertest browsertest.c ../browser.c \
-    ../html.c ../css.c ../layout.c ../http.c ../tcp.c ../net.c ../dns.c \
-    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../rsa.c ../entropy.c ../js.c hostmachine.c
+    ../html.c ../css.c ../layout.c ../png.c ../http.c ../tcp.c ../net.c ../dns.c \
+    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../entropy.c ../js.c hostmachine.c
 echo "built ./browsertest   (run: ./browsertest)"
+
+# ...AND THE SAME HARNESS WITH THE SANITIZERS ON, which is not redundant: this
+# is the gap that let a signed-overflow bug through. `fuzz` below is built with
+# ASan and UBSan and the PNG decoder was fuzzed under them, but browser.c sits
+# BETWEEN the two and was covered by neither - so b64_decode shifted a signed
+# int past 31 bits on the home page's own inline image, every single time, and
+# 103 green checks said nothing. A clean run without the sanitizers proves
+# almost nothing; that sentence was already written in this file, about a
+# different harness.
+gcc -O1 -g -w -D_GNU_SOURCE -fsanitize=address,undefined -fno-sanitize-recover=all \
+    -o browsertest_san browsertest.c ../browser.c \
+    ../html.c ../css.c ../layout.c ../png.c ../http.c ../tcp.c ../net.c ../dns.c \
+    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../entropy.c ../js.c hostmachine.c
+echo "built ./browsertest_san (run: ./browsertest_san)"
 
 # Every layer that takes bytes from somewhere else, fed garbage. The harnesses
 # above check the code does the right thing with inputs someone thought of;
 # this checks it does nothing catastrophic with inputs nobody thought of. Build
 # it WITH the sanitizers - a clean run without them proves almost nothing.
 #   ./fuzz [iterations] [seed]
+#
+# THIS LINE WAS STALE TOO, and this is the gate that found four real layout
+# defects nobody would have typed. Same cause as httptest above: http.c gained
+# the TLS transport and neither link line followed it, so the fuzzer has not
+# built - and therefore has not run - since https landed. Verified against a
+# clean `git archive HEAD` tree, not against the working copy: the first A/B I
+# ran compiled HEAD's layout.c against the NEW css.h, which failed at COMPILE
+# and never reached the link, so "0 undefined references" was true for entirely
+# the wrong reason. A measurement that can be right by accident is not one.
 gcc -O1 -g -w -D_GNU_SOURCE -fsanitize=address,undefined -o fuzz fuzz.c \
-    ../html.c ../css.c ../layout.c ../net.c ../tcp.c ../http.c
+    ../html.c ../css.c ../layout.c ../png.c ../net.c ../tcp.c ../http.c \
+    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../entropy.c \
+    hostmachine.c
 echo "built ./fuzz          (run: ./fuzz 3000 1)"
 
 # The resolver, mostly fed answers it should refuse. A DNS response is

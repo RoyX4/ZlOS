@@ -48,6 +48,9 @@ int  html_is_block(int tag);
 
 const char *html_text(int i, int *len);      /* NOT nul-terminated */
 const char *html_href(int i, int *len);
+const char *html_src(int i, int *len);       /* an <img>'s src, "" otherwise */
+int         html_attr_w(int i);              /* width=,  0 when not given    */
+int         html_attr_h(int i);              /* height=, 0 when not given    */
 const char *html_title(int *len);
 
 /* What a stylesheet matches against. All total: an element with no class, no
@@ -61,6 +64,8 @@ const char *html_style_attr(int i, int *len);
  * These are spans of the SOURCE buffer, not copies - it must outlive the
  * parse, which it does: browser.c holds the document. */
 int         html_sheets(void);
+int         html_css_links(void);          /* <link rel=stylesheet> URLs */
+const char *html_css_link(int k, int *len);
 const char *html_sheet(int k, int *len);
 
 /* the document's <script> blocks, in document order. Kept for js.c; still

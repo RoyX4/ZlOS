@@ -317,6 +317,16 @@ int main(void)
                     ok("the chain validated to a trusted root", vc.cert_ok == 1);
                     ok("CertificateVerify proved the server holds the key", vc.saw_cv == 1);
                     ok("the verified handshake completed", tls_state(&vc) == TLS_READY);
+                    /* A DIAGNOSTIC THAT LIES ON THE SUCCESS PATH is worse than
+                     * none, because nobody doubts it. x509_chain_ok tries every
+                     * root and each miss writes a reason; a later root
+                     * succeeding used to leave the last miss's complaint in
+                     * place, so a perfectly verified handshake reported "RSA
+                     * signature but the issuer key is not RSA". browser.c puts
+                     * this string on the screen. */
+                    if (tls_state(&vc) == TLS_READY)
+                        ok("a verified chain leaves NO stale reason behind",
+                           x509_why()[0] == 0);
                     if (tls_state(&vc) != TLS_READY)
                         printf("       err=%d why=%s\n", tls_error(&vc), x509_why());
                 }
@@ -324,7 +334,23 @@ int main(void)
                 freeaddrinfo(r2);
             }
 
-            /* the refusal half: a site chained to a CA we do not carry */
+            /* THE REFUSAL HALF, and it used to pick www.google.com as "a CA we
+             * do not carry". That was true when this was written and stopped
+             * being true the moment GTS Root R1 was added to roots.c - which
+             * the project announced as a feature. The assertion then failed on
+             * a correctly VERIFIED handshake, and it went unnoticed because
+             * this whole half only runs under ZLOS_NET_TESTS=1.
+             *
+             * A test whose premise is "some third party still uses a CA we
+             * chose not to carry" is a test that decays on somebody else's
+             * schedule. So the store is narrowed instead of the host changed:
+             * connect to a real site and offer a trust store that deliberately
+             * EXCLUDES its root. The chain is genuine, the refusal is genuine,
+             * and nothing about it depends on what the internet does next.
+             *
+             * `nr - 1` drops the last root, which roots.c orders as GTS - the
+             * one Google chains to. If that order ever changes this assertion
+             * fails loudly rather than passing for the wrong reason. */
             struct addrinfo h3, *r3 = 0;
             memset(&h3, 0, sizeof h3);
             h3.ai_family = AF_INET; h3.ai_socktype = SOCK_STREAM;
@@ -334,7 +360,7 @@ int main(void)
                     static struct tls_conn bc;
                     int u = open("/dev/urandom", O_RDONLY);
                     if (u >= 0) { if (read(u, bc.priv, 32) != 32) {} close(u); }
-                    tls_trust(&bc, rt, nr, "20260819000000Z");
+                    tls_trust(&bc, rt, nr - 1, "20260819000000Z");
                     tls_start(&bc, "www.google.com");
                     int g4 = 0;
                     while (tls_state(&bc) != TLS_READY && tls_state(&bc) != TLS_ERROR && g4++ < 600) {
@@ -348,6 +374,13 @@ int main(void)
                     }
                     ok("a chain to a CA we do not carry is REFUSED",
                        tls_state(&bc) == TLS_ERROR && bc.cert_ok == 0);
+                    /* AND FOR THE RIGHT REASON. "it was refused" passes just
+                     * as well when the refusal came from a parse error or a
+                     * clock problem, which are different bugs with different
+                     * fixes - the same argument this file makes about the
+                     * accept case. */
+                    ok("...and the reason names the trust store",
+                       !strcmp(x509_why(), "chain does not reach a trusted root"));
                     printf("       refused with: %s\n", x509_why());
                 }
                 close(w);

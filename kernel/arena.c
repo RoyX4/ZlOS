@@ -107,7 +107,16 @@ typedef unsigned int       uptr;
 /* The neighbours, by the file and line that owns each one. Re-grep these; the
  * comment in fb.c invites exactly that and it was right to - see T-EXEC-1. */
 #define RAW_STACK_TOP 0x00600000UL     /* raw_entry.S:16, raw_boot.asm:196   */
-#define HI_BG         0x08000000UL     /* fb.c:120 - bg_buf, the map's floor */
+/* THE NEIGHBOUR ABOVE IS NO LONGER bg_buf. png.c's decoded-picture arena
+ * landed at 32 MiB - the first 2 MiB-aligned address above this one - so the
+ * program arena's real ceiling moved down by 96 MiB. The old assert against
+ * 128 MiB still PASSED, because 24 MiB is under both numbers, which is exactly
+ * how this check would have gone quiet: a ceiling test that names a region two
+ * regions away keeps passing while the actual neighbour is overrun. That is
+ * the failure memmap.h was written to end, and its rule is "the owning file
+ * asserts against the NEXT base". */
+#define HI_BG         0x08000000UL     /* fb.c:120 - bg_buf, no longer next  */
+#define HI_IMG_BASE   0x02000000UL     /* memmap.h HI_IMG - the real ceiling */
 #define RAM_CEILING   0x08000000UL     /* MEASURED qemu default, 128 MiB     */
 
 /* Sixteen bytes, not eight: the 64-bit build's `long double` and any SSE value
@@ -120,8 +129,10 @@ typedef unsigned int       uptr;
  * fb.c:152-169 makes, applied to the one buffer that is not the kernel's. */
 _Static_assert(ARENA_BASE >= RAW_STACK_TOP,
                "the program arena starts below the raw-boot stack at 6 MiB");
-_Static_assert(ARENA_END <= HI_BG,
-               "the program arena runs into bg_buf at 128 MiB (fb.c:120)");
+_Static_assert(ARENA_END <= HI_IMG_BASE,
+               "the program arena runs into png.c's picture arena at 32 MiB (memmap.h HI_IMG)");
+_Static_assert(HI_IMG_BASE <= HI_BG,
+               "HI_IMG_BASE and memmap.h's HI_IMG have drifted apart");
 _Static_assert(ARENA_END <= RAM_CEILING,
                "the program arena runs past the 128 MiB the gates actually boot with");
 _Static_assert((ARENA_BASE & (2UL * 1024 * 1024 - 1)) == 0,

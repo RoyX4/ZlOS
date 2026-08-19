@@ -108,16 +108,24 @@ int  input_y(void);
 #define EV_MOUSE     4
 #define EV_WHEEL     5
 
-#define KEY_SUPER   0x11A
-#define MOD_ALT     (1 << 2)
-#define MOD_SUPER   (1 << 5)
-
-/* The navigation keys, as input.c numbers them. Above 0xFF on purpose: they
- * have no character, so they can never be confused with one. */
-#define KEY_LEFT      0x110
-#define KEY_RIGHT     0x111
-#define KEY_UP        0x112
-#define KEY_DOWN      0x113
+/* THE KEYCODES COME FROM THE SHARED HEADER NOW, and this file is the reason
+ * that header's own warning is worth reading: "a second copy of a numeric
+ * table is a copy that eventually disagrees with the first". This file had one.
+ *
+ * It defined KEY_SUPER, MOD_ALT, MOD_SUPER and the four arrows - all of which
+ * happened to agree - and it did NOT define KEY_TAB. So the Alt+Tab handler
+ * below was written as `code == '\t'`, comparing against 9, while every
+ * producer of key events sends KEY_TAB = 0x103. Both keyboards: input.c maps
+ * PS/2 scancode 0x0F and USB HID usage 0x2B to KEY_TAB, and even converts a
+ * literal 9 to it. 0x103 is never 9.
+ *
+ * **Alt+Tab has therefore never worked, on any keyboard, since the compositor
+ * was written.** It reads as implemented - there is a handler, a comment and a
+ * cycle_focus() that is correct - and nothing exercised it, because window
+ * switching is the kind of thing you assume works until you need it in a gate.
+ * Found by a probe that tried to raise a window with it and measured four
+ * identical frames. */
+#include "keycodes.h" 
 
 unsigned int idt_ticks(void);
 /* cpu.c. The TSC has been readable since cpu.c was written and nothing in the
@@ -1433,7 +1441,7 @@ static void cycle_focus(void)
 
 static void route_key(int type, int code, int mods)
 {
-    if (type == EV_KEY_DOWN && code == '\t' && (mods & MOD_ALT)) {
+    if (type == EV_KEY_DOWN && code == KEY_TAB && (mods & MOD_ALT)) {
         cycle_focus();
         return;
     }

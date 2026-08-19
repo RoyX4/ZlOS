@@ -34,7 +34,20 @@ applies in the optimistic direction.
 
 | | |
 |---|---|
-| **A browser** | ⚠️ **Bounded, and built.** **It fetches `http://example.com/` by name, off the real internet, and renders it.** ~2,900 lines of code. No JavaScript, no HTTPS — see the table below. |
+| **A browser** | ⚠️ **Bounded, and built.** **It fetches `https://en.wikipedia.org/` by name over verified TLS 1.3, and renders it with images, flexbox and grid.** ~14,550 lines across the whole stack. |
+
+> **The row above has been corrected twice, in the same direction each time.**
+> It first read "no JavaScript, no HTTPS" and then "~2,900 lines"; both were
+> true when written. HTTPS landed with a real certificate chain check, a
+> bounded JavaScript interpreter landed, and then images, flex, grid and the
+> box model landed. Measured now with `wc -l`: html 795, css 1,592, layout
+> 2,373, browser 1,429, png 944, js 1,146, plus the network and crypto stack —
+> **14,552 lines.**
+>
+> Keeping the count honest matters more here than usual, because this file's
+> whole argument is that the original "unbounded, therefore ❌" was a
+> measurement of the maximal version reported as the capability. A stale
+> *optimistic* number would be the same error with the sign flipped.
 
 ---
 
@@ -82,7 +95,28 @@ code column excludes blank and comment-only lines.
 | **total** | **~3,050** | **2,617** | **3,968** | |
 
 Every budgeted piece is built: **2,617 code lines against a ~3,050 estimate**,
-which is 14% under. The brief's costing was good, and it was good because it
+which is 14% under.
+
+> **That table is the ORIGINAL build and is kept as the record of the costing,
+> which was good.** It is not the current size. Measured 2026-08-19 with
+> `wc -l`, after HTTPS, JavaScript, images, flex, grid and the box model:
+>
+> | | then | now |
+> |---|---|---|
+> | `html.c` | 613 | **795** |
+> | `css.c` | *(did not exist)* | **1,592** |
+> | `layout.c` | 535 | **2,373** |
+> | `browser.c` | 382 | **1,429** |
+> | `png.c` | *(did not exist)* | **944** |
+> | `js.c` | *(did not exist)* | **1,146** |
+> | `tls.c` + `x509.c` + `ecdsa.c` + `rsa.c` + `roots.c` + `crypto.c` + `entropy.c` | *(did not exist)* | **~4,400** |
+> | whole stack incl. net/tcp/http/dns/virtio_net | 3,968 | **14,552** |
+>
+> The costing was good BOTH times, and the second time taught something the
+> first did not: **flex, grid, float and positioning are one change, not four.**
+> They all need the same box, so doing them as four separate increments would
+> have meant building that box three times over. The brief's ~1,200 + ~800 +
+> ~800 split was right about the total and wrong about the seams. The brief's costing was good, and it was good because it
 was arrived at by looking at what the tree already had rather than by guessing. The `wc -l`
 figure is larger because roughly a third of every file here is the reasoning
 behind it.
@@ -152,18 +186,33 @@ from the whole investigation.
 ## What it does, and what it refuses
 
 **Renders:** `html head body title h1`–`h6` `p br hr a ul ol li strong em b i
-code pre div span img`. Entities named, decimal and hex. Malformed markup
-recovers rather than faults. A real type scale, synthesised bold and oblique,
+code pre div span img` and tables. Entities named, decimal and hex. Malformed
+markup recovers rather than faults. A real type scale, a real bold face,
 margin collapsing, hanging list markers, and reflow on resize.
+
+**And, since 2026-08-19:** **real decoded PNG images** (from the network and
+from inline `data:` URIs), **flexbox**, **CSS grid**, a real box model
+(width/min/max, `box-sizing`, padding that insets, borders, block backgrounds,
+`margin: 0 auto` centring, `overflow: hidden`), **floats** and **positioning**.
+See [`browser-render-run.md`](browser-render-run.md) for the measurements.
 
 **Refuses, and says so on screen rather than in a comment:**
 
 | | why |
 |---|---|
 | **JavaScript** | a JS engine is its own multi-year project. Not "hard" — a different project. |
-| **HTTPS** | `crypto.c` has SHA-1, SHA-256, HMAC and PBKDF2 — **543 lines of hashing and no cipher**. TLS needs AES-GCM, ECDHE and certificate-chain validation. A padlock that has not been earned is worse than no padlock, so an `https://` URL is refused by name. |
+| ~~**HTTPS**~~ | **BUILT.** TLS 1.3 with AES-128-GCM, ECDHE, and a real X.509 chain check to a carried root — the padlock is earned. The refusal below stood only while `crypto.c` was 543 lines of hashing with no cipher. What is still refused is a chain to a CA not in the trust store, by name, via `x509_why()`. |
 | **HTTP/1.1** | chunked transfer encoding, keep-alive and pipelining are requirements there, not options. 1.0 ends a body by closing the connection, which the TCP layer already handles. A decision, not a gap. |
-| **Full CSS** | the cascade, specificity, float, flex, grid. Two box types — block and inline — is enough for a document and is not enough for a web app. |
+| ~~**Full CSS**~~ | **MOSTLY BUILT, and the sentence below was wrong in the way this file exists to catch.** The cascade and specificity were already there; float, flex, grid, positioning and a real box landed 2026-08-19. "Two box types is enough for a document and not enough for a web app" was true about the CODE and wrong about the BOUNDARY — it named an *absence* as a limit. Flex and grid have specifications; they are finite and they are built. |
+| **Pixel parity with another browser** | **This** is the genuinely unbounded one, and it is refused on purpose. A specification is finite; matching Chrome exactly is not a specification, it is a moving target. |
+
+The two struck rows are kept rather than deleted because the shape of the
+mistake is the reusable part — the same reason the "unbounded, therefore ❌"
+row at the top of this file is kept. What is still refused, precisely:
+pseudo-classes, `calc()`, media queries, grid areas/spans/`order`, baseline
+alignment, `position: sticky` (lays out as relative), cross-host image fetches
+(needs a second DNS state machine), APNG, colour management, and 16-bit PNG
+output. Every one of those is named in the code that refuses it.
 
 ---
 
@@ -194,6 +243,23 @@ kernel/hosttest/tcptest        # 110 checks, 0 failed
 ```bash
 kernel/hosttest/httptest       # 91 checks, 0 failed
 ```
+
+> **That number was true when it was written and had not been true since.**
+> `http.c` gained the TLS transport when https landed, and `build.sh`'s
+> `httptest` line was never updated - so the harness had **18 undefined
+> references and produced no binary at all**. Confirmed pre-existing by
+> rebuilding `HEAD`'s `http.c` against `HEAD`'s `httptest.c`: the same 18.
+>
+> A gate that cannot BUILD looks exactly like a gate that passes, because
+> `build.sh` prints a screenful of successful builds around the failure -
+> the same shape as the `gpu_fillrate` error this script's own comments
+> already record surviving at the end of a successful run. Fixed by linking
+> `tls.c crypto.c x509.c ecdsa.c rsa.c roots.c entropy.c hostmachine.c`; it
+> now builds and reports 91 checks, 0 failed against the current `http.c`.
+>
+> The reusable part: **a gate's own BUILD is part of what has to be re-run.**
+> Every citation in this file is a measurement, and this one aged into a
+> falsehood without a single line of the file changing.
 
 ```bash
 kernel/hosttest/browsertest    # 58 checks, 0 failed

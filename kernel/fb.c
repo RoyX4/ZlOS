@@ -1777,6 +1777,109 @@ static int clip_rect(int *x0, int *y0, int *x1, int *y1)
     return (*x0 < *x1 && *y0 < *y1);
 }
 
+/* ---- a decoded picture, scaled to its box ----------------------------------
+ * ADDITIVE. Nothing above this changes; the browser is the first caller that
+ * has a rectangle of real pixels rather than a glyph, an icon or a solid, and
+ * every existing path drew one of those three.
+ *
+ * `src` is 0xAARRGGBB, `sw` by `sh`, row-major and unpadded - png.c's arena
+ * format, and the same word order fb_get_px already returns.
+ *
+ * TWO RESAMPLERS, and the reason is what the picture looks like rather than
+ * tidiness. A photograph on a real page is a thousand pixels wide arriving in
+ * a box a third of that, and NEAREST-NEIGHBOUR DOWNSCALING THROWS AWAY
+ * EIGHT OF EVERY NINE PIXELS - which does not read as "smaller", it reads as
+ * noise, and it is worst on exactly the fine detail (text in a screenshot, a
+ * thin logo stroke) that a reader is trying to see. Averaging the source box
+ * costs a few lines and is the difference between a picture and a mess.
+ * Upscaling gets nearest, which is honest: there is no detail to invent, and
+ * fb.c already made the same call for glyphs (see the note by fb_glyph_scaled).
+ *
+ * The sample box is capped at 16x16. That bounds the cost of a hostile
+ * 1024x1024 image dropped into a 1-pixel box, and it bounds the accumulator:
+ * 256 samples * 255 cannot come near overflowing an unsigned int, where the
+ * uncapped 1,048,576 * 255 would be a quarter of the way there and the next
+ * person to raise PNG_MAX_W would take it the rest of the way.
+ *
+ * ALPHA IS PREMULTIPLIED NOWHERE. png.c hands over straight alpha, so this
+ * blends with blend_rgb, which is the same gamma-correct blend the text
+ * engine uses - a PNG logo with soft edges lands on the page background
+ * looking the way it does in a real browser rather than with a grey halo. */
+void fb_image(int px, int py, int w, int h,
+              const unsigned int *src, int sw, int sh)
+{
+    if (!src || w <= 0 || h <= 0 || sw <= 0 || sh <= 0) return;
+
+    int x0 = px, y0 = py, x1 = px + w, y1 = py + h;
+    if (!clip_rect(&x0, &y0, &x1, &y1)) return;
+
+    /* how many source pixels land in one destination pixel, at least one */
+    int bx = sw / w, by = sh / h;
+    if (bx < 1) bx = 1;
+    if (by < 1) by = 1;
+    if (bx > 16) bx = 16;
+    if (by > 16) by = 16;
+
+    for (int yy = y0; yy < y1; yy++) {
+        /* The source row for this destination row. Multiplied before dividing
+         * so the mapping is exact at both ends of the box; doing it the other
+         * way collapses every destination row onto source row 0 for any
+         * upscale, which is a blank stripe rather than a wrong pixel. */
+        int sy = (int)(((long)(yy - py) * sh) / h);
+        if (sy < 0) sy = 0;
+        if (sy >= sh) sy = sh - 1;
+
+        for (int xx = x0; xx < x1; xx++) {
+            int sx = (int)(((long)(xx - px) * sw) / w);
+            if (sx < 0) sx = 0;
+            if (sx >= sw) sx = sw - 1;
+
+            unsigned int a, r, g, b;
+            if (bx == 1 && by == 1) {
+                unsigned int s = src[(unsigned long)sy * sw + sx];
+                a = (s >> 24) & 0xFF;
+                r = (s >> 16) & 0xFF; g = (s >> 8) & 0xFF; b = s & 0xFF;
+            } else {
+                unsigned int sa = 0, sr = 0, sg = 0, sb = 0, n = 0;
+                for (int j = 0; j < by; j++) {
+                    int ry = sy + j;
+                    if (ry >= sh) break;
+                    for (int i = 0; i < bx; i++) {
+                        int rx = sx + i;
+                        if (rx >= sw) break;
+                        unsigned int s = src[(unsigned long)ry * sw + rx];
+                        unsigned int pa = (s >> 24) & 0xFF;
+                        /* WEIGHTED BY ALPHA, or a transparent pixel's colour
+                         * - which encoders routinely leave as black - drags
+                         * every soft edge towards black. That is the halo
+                         * every hand-rolled image scaler ships with once. */
+                        sa += pa;
+                        sr += ((s >> 16) & 0xFF) * pa;
+                        sg += ((s >>  8) & 0xFF) * pa;
+                        sb += ( s        & 0xFF) * pa;
+                        n++;
+                    }
+                }
+                if (!n) continue;
+                a = sa / n;
+                if (sa == 0) { r = g = b = 0; }
+                else { r = sr / sa; g = sg / sa; b = sb / sa; }
+            }
+            if (a == 0) continue;
+            unsigned int col = (r << 16) | (g << 8) | b;
+            if (back_on) {
+                unsigned int *o = back + (unsigned long)yy * fb_w + xx;
+                *o = (a >= 255) ? col : blend_rgb(*o, col, (int)a);
+            } else {
+                put_pixel((unsigned)xx, (unsigned)yy,
+                          (a >= 255) ? col
+                                     : blend_rgb(fb_get_px(xx, yy), col, (int)a));
+            }
+        }
+    }
+    fb_damage(x0, y0, x1 - x0, y1 - y0);
+}
+
 /* radial-gradient(rx ry at cx cy, rgba(rgb, a0) 0%, transparent stop%)
  *
  * rx and ry are the ellipse's radii IN PIXELS; the caller turns the

@@ -91,5 +91,9 @@ http.c
 html.c
 css.c
 layout.c
+# the picture decoder. Its pixel arena is NOT in this binary - it lives at
+# memmap.h's HI_IMG, because link.ld caps the image at 6 MiB and it already
+# reaches 5.573.
+png.c
 js.c
 browser.c

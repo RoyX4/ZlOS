@@ -44,6 +44,19 @@ struct node {
     int   next;          /* next sibling                                */
     int   toff, tlen;    /* text: where it lives in the arena           */
     int   aoff, alen;    /* an <a>'s href, or an <img>'s alt            */
+    /* AN <img> NEEDS ITS src, AND alt IS ALREADY IN THE SLOT ABOVE. Sharing
+     * one slot between href and alt was right while an image was a box with a
+     * caption; it stops being right the moment the picture is actually
+     * fetched, because then the element has two strings that both matter and
+     * one of them is a URL. A second slot, taken only for <img>, is cheaper
+     * than a general attribute map and keeps the rule this struct states: an
+     * attribute is kept when something can act on it, and not otherwise. */
+    int   roff, rlen;    /* an <img>'s src                              */
+    /* width= and height= as NUMBERS, not arena strings. They are how a page
+     * reserves an image's space before the picture arrives, so layout needs
+     * them on the first pass - and shorts because an <img> claiming 40,000
+     * pixels is not a size, it is an attack. 0 means "not given". */
+    short aw, ah;
     /* THE THREE ATTRIBUTES CSS NEEDS, and no others. Every other attribute
      * still hands its arena back the moment it is read - keeping them all
      * would turn the arena into the document's whole attribute surface for
@@ -67,6 +80,20 @@ static int  n_dropped;               /* recoveries, for the harness to see */
  * few hundred bytes it actually keeps. */
 #define MAX_SHEETS 32                /* a Wikipedia article carries 16 */
 static struct { int off, len; } sheets[MAX_SHEETS];
+
+/* EXTERNAL STYLESHEETS, as URLs to fetch later. Measured on the English
+ * Wikipedia article for Linux: 9,168 bytes of CSS are inline in <style> and
+ * the ENTIRE SKIN - every rule that hides the mobile navigation, lays out the
+ * sidebar and sets the article column - is in TWO <link rel=stylesheet> files
+ * that were parsed and thrown away. The visible result was the whole page's
+ * navigation chrome stacked down the first screen with the article below it,
+ * which looks like a layout bug and is a missing fetch.
+ *
+ * Only the URL is kept here; browser.c decides whether to go and get it,
+ * exactly as it does for an <img>. html.c still fetches nothing. */
+#define MAX_LINKS 8
+static struct { int off, len; } css_links[MAX_LINKS];
+static int ncss_links;
 static int nsheets;
 static struct { int off, len; } scripts[MAX_SHEETS];
 static int nscripts;
@@ -404,6 +431,7 @@ void html_reset(void)
     n_dropped = 0;
     nsheets = 0;
     nscripts = 0;
+    ncss_links = 0;
     doc_src = 0;
 }
 
@@ -463,6 +491,9 @@ int html_parse(const char *src, int len)
          * a quoted attribute value not end the tag. */
         int j = ne;
         int href_off = 0, href_len = 0;
+        int src_off = 0, src_len = 0;
+        int attr_w = 0, attr_h = 0;
+        int link_css = 0, lhref_off = 0, lhref_len = 0;
         int cls_off = 0, cls_len = 0;
         int id_off = 0, id_len = 0;
         int sty_off = 0, sty_len = 0;
@@ -481,7 +512,46 @@ int html_parse(const char *src, int len)
             int got = attr_value(src, len, &j, &voff, &vlen);
             int is_href = name_eq(src + as, alen2, "href") ||
                           (t == HT_IMG && name_eq(src + as, alen2, "alt"));
-            if (got && is_href && !href_len)                            { href_off = voff; href_len = vlen; }
+            int is_src = (t == HT_IMG && name_eq(src + as, alen2, "src"));
+            /* <link>'s two attributes we care about. It is HT_UNKNOWN - there
+             * is nothing to render - so this cannot ride on the tag id, and
+             * both `rel` and `href` have to be remembered until the tag ends
+             * because HTML does not order attributes. */
+            int is_lnk = (t == HT_UNKNOWN && ne - ns == 4 &&
+                          name_eq(src + ns, 4, "link"));
+            int is_rel  = is_lnk && name_eq(src + as, alen2, "rel");
+            int is_lhref= is_lnk && name_eq(src + as, alen2, "href");
+            int is_dim = (t == HT_IMG && (name_eq(src + as, alen2, "width") ||
+                                          name_eq(src + as, alen2, "height")));
+            if (got && is_rel) {
+                /* rel can be "stylesheet" or a list containing it */
+                for (int k = 0; k + 10 <= vlen; k++)
+                    if (name_eq(arena + voff + k, 10, "stylesheet")) { link_css = 1; break; }
+                used = save;
+            }
+            else if (got && is_lhref && !lhref_len) { lhref_off = voff; lhref_len = vlen; }
+            else if (got && is_href && !href_len)                            { href_off = voff; href_len = vlen; }
+            else if (got && is_src && !src_len)                         { src_off = voff;  src_len = vlen; }
+            else if (got && is_dim) {
+                /* Parsed here and the arena handed straight back: the VALUE is
+                 * a number, so keeping the digits would spend arena on text
+                 * nothing reads. Capped rather than wrapped - a width= of
+                 * 999999999 overflows an int before it ever reaches layout,
+                 * and an <img> is a place a hostile page will put one. */
+                int v = 0, ok = 0;
+                for (int k = 0; k < vlen; k++) {
+                    char c = arena[voff + k];
+                    if (c < '0' || c > '9') { ok = 0; break; }
+                    v = v * 10 + (c - '0');
+                    if (v > 32000) { v = 32000; }
+                    ok = 1;
+                }
+                if (ok) {
+                    if (name_eq(src + as, alen2, "width")) attr_w = v;
+                    else                                   attr_h = v;
+                }
+                used = save;
+            }
             else if (got && name_eq(src + as, alen2, "class") && !cls_len) { cls_off = voff; cls_len = vlen; }
             else if (got && name_eq(src + as, alen2, "id")    && !id_len)  { id_off = voff;  id_len = vlen; }
             else if (got && name_eq(src + as, alen2, "style") && !sty_len) { sty_off = voff; sty_len = vlen; }
@@ -543,6 +613,16 @@ int html_parse(const char *src, int len)
         if (n < 0) { n_dropped++; continue; }
         nodes[n].aoff = href_off;
         nodes[n].alen = href_len;
+        /* keep the URL only when the rel really said stylesheet; a <link> is
+         * also how a page names its icon, its canonical address and a dozen
+         * other things nobody here can act on */
+        if (link_css && lhref_len > 0 && ncss_links < MAX_LINKS) {
+            css_links[ncss_links].off = lhref_off;
+            css_links[ncss_links].len = lhref_len;
+            ncss_links++;
+        }
+        nodes[n].roff = src_off;  nodes[n].rlen = src_len;
+        nodes[n].aw = (short)attr_w; nodes[n].ah = (short)attr_h;
         nodes[n].coff = cls_off; nodes[n].clen = cls_len;
         nodes[n].ioff = id_off;  nodes[n].ilen = id_len;
         nodes[n].soff = sty_off; nodes[n].slen = sty_len;
@@ -629,6 +709,26 @@ const char *html_href(int i, int *len)
     return arena + nodes[i].aoff;
 }
 
+/* An <img>'s src, and only an <img>'s. <script src> and <link href> are not
+ * kept: there is no engine for the first and no stylesheet loader for the
+ * second, so keeping either would be holding a string to prove a point. */
+const char *html_src(int i, int *len)
+{
+    if ((unsigned)i >= (unsigned)nnodes || nodes[i].tag != HT_IMG ||
+        !nodes[i].rlen) {
+        if (len) *len = 0;
+        return "";
+    }
+    if (len) *len = nodes[i].rlen;
+    return arena + nodes[i].roff;
+}
+
+/* The width= and height= attributes, 0 when the element did not give one. */
+int html_attr_w(int i)
+{ return (unsigned)i < (unsigned)nnodes ? nodes[i].aw : 0; }
+int html_attr_h(int i)
+{ return (unsigned)i < (unsigned)nnodes ? nodes[i].ah : 0; }
+
 /* class, id and style=. Total like every other accessor: an element without
  * one answers "" and length 0, which is exactly what css.c wants to see. */
 const char *html_class(int i, int *len)
@@ -653,6 +753,17 @@ const char *html_style_attr(int i, int *len)
 }
 
 int html_sheets(void) { return nsheets; }
+
+/* The external stylesheets this document asked for, as URLs. Total, like every
+ * other accessor here: an out-of-range index answers "" and 0. */
+int html_css_links(void) { return ncss_links; }
+const char *html_css_link(int k, int *len)
+{
+    if (k < 0 || k >= ncss_links) { if (len) *len = 0; return ""; }
+    if (len) *len = css_links[k].len;
+    return arena + css_links[k].off;
+}
+
 
 int html_scripts(void) { return nscripts; }
 

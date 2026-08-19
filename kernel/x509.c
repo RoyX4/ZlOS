@@ -40,6 +40,23 @@ static const char *why = "";
 const char *x509_why(void) { return why; }
 static int fail(const char *m) { why = m; return 0; }
 
+/* CLEARED ON SUCCESS, and that is not tidiness. x509_chain_ok tries the top
+ * certificate against EVERY root in the store, and each attempt that does not
+ * match writes its reason here through fail(). When a LATER root succeeds the
+ * function returns 1 with `why` still holding the previous root's complaint -
+ * so a caller that prints x509_why() after a SUCCESSFUL verification prints a
+ * reason belonging to a root that had nothing to do with the result.
+ *
+ * That is exactly what it did: a fully verified handshake to Google reported
+ * "RSA signature but the issuer key is not RSA", which is the residue of
+ * testing an EC-signed chain against an RSA root before reaching the right
+ * one. browser.c puts this string ON THE SCREEN, and this project's own brief
+ * tells the next session to "check x509_why() before assuming otherwise" - so
+ * a stale reason here sends a reader at the cipher suite when nothing is
+ * wrong at all. A diagnostic that lies on the success path is worse than none,
+ * because nobody doubts it. */
+static int succeed(void) { why = ""; return 1; }
+
 static int xmemcmp(const u8 *a, const u8 *b, int n)
 {
     for (int i = 0; i < n; i++) if (a[i] != b[i]) return 1;
@@ -539,13 +556,15 @@ int x509_chain_ok(const u8 *const *ders, const int *lens, int n,
                 top->pubkeylen == roots[r].pubkeylen && top->pubkeylen > 0 &&
                 top->curve_bits == roots[r].curve_bits &&
                 !xmemcmp(top->pubkey, roots[r].pubkey, top->pubkeylen))
-                return 1;
+                return succeed();
             if (top->key_kind == X509_KEY_RSA &&
                 top->rsa_nlen == roots[r].rsa_nlen && top->rsa_nlen > 0 &&
                 !xmemcmp(top->rsa_n, roots[r].rsa_n, top->rsa_nlen))
-                return 1;
+                return succeed();
         }
-        if (x509_signed_by(top, &roots[r])) return 1;
+        if (x509_signed_by(top, &roots[r])) return succeed();
     }
+    /* EVERY root was tried and none worked, so the residue of the last attempt
+     * is not the answer - "we do not carry this CA" is. */
     return fail("chain does not reach a trusted root");
 }
