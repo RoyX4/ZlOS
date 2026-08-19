@@ -144,6 +144,76 @@ int gpu_fill_rect(struct gpu_batch *b, gpu_u64 dst_gfx, gpu_u32 pitch_bytes,
     return !b->overflow;
 }
 
+/* ---- XY_SRC_COPY_BLT: rectangle from one surface to another ---------------
+ *
+ * TEN dwords on Gen8+, because there are two 64-bit addresses. Same shape as
+ * the fill with a source bolted on:
+ *
+ *   DW0  opcode | write-alpha | write-rgb | (dwords - 2)
+ *   DW1  BR13:  raster op | colour depth | DESTINATION pitch in bytes
+ *   DW2  dst top-left      y in 31:16, x in 15:0
+ *   DW3  dst bottom-right  y in 31:16, x in 15:0, EXCLUSIVE
+ *   DW4  dst graphics address, low 32
+ *   DW5  dst graphics address, high 32
+ *   DW6  SRC top-left      y in 31:16, x in 15:0
+ *   DW7  SOURCE pitch in bytes, 16-bit field of its own
+ *   DW8  src graphics address, low 32
+ *   DW9  src graphics address, high 32
+ *
+ * The raster op is SRCCOPY (0xCC), not PATCOPY - PATCOPY here would ignore the
+ * source entirely and fill with the pattern colour, which is a copy that
+ * silently produces a solid rectangle.
+ *
+ * WHY THIS ONE MATTERS MORE THAN THE FILL. fb.c's `blit_band` is the PRESENT
+ * path: it copies the back buffer into `fb_base`, which is real scanout memory,
+ * once per frame across the whole damaged area. It is the largest single copy
+ * in the system, and the CPU is bad at it specifically - scanout memory is not
+ * write-back cached, so `copy32` there runs at uncached-write speed while the
+ * GPU writes it at native speed. A fill that beats the CPU by ~2x is worth
+ * having; this is the one where the gap should be wider.
+ */
+#define GPU_XY_SRC_COPY_OP   (0x53u << 22)
+#define GPU_XY_SRC_COPY_DW   10u
+#define GPU_BR13_ROP_SRCCOPY (0xCCu << 16)
+
+/* Both surfaces are GRAPHICS addresses, and both pitches are in bytes. The
+ * source rectangle is given by its top-left only - its size is the
+ * destination's, because a blit cannot scale. */
+int gpu_copy_rect(struct gpu_batch *b,
+                  gpu_u64 dst_gfx, gpu_u32 dst_pitch, int dx1, int dy1, int dx2, int dy2,
+                  gpu_u64 src_gfx, gpu_u32 src_pitch, int sx1, int sy1)
+{
+    if (!b || b->overflow) return 0;
+    if (dst_pitch == 0 || dst_pitch > GPU_PITCH_MAX) return 0;
+    if (src_pitch == 0 || src_pitch > GPU_PITCH_MAX) return 0;
+    if (dx1 < 0 || dy1 < 0 || dx2 < 0 || dy2 < 0) return 0;
+    if (sx1 < 0 || sy1 < 0) return 0;
+    if (dx2 <= dx1 || dy2 <= dy1) return 0;
+    if (dx2 > (int)GPU_COORD_MAX || dy2 > (int)GPU_COORD_MAX) return 0;
+    if (sx1 > (int)GPU_COORD_MAX || sy1 > (int)GPU_COORD_MAX) return 0;
+    /* The source rectangle is the destination's size placed at (sx1,sy1); if
+     * that runs past the coordinate field the hardware wraps rather than
+     * clipping, so refuse instead. */
+    if (sx1 + (dx2 - dx1) > (int)GPU_COORD_MAX) return 0;
+    if (sy1 + (dy2 - dy1) > (int)GPU_COORD_MAX) return 0;
+    if (b->at + GPU_XY_SRC_COPY_DW > b->cap) { b->overflow = 1; return 0; }
+
+    gpu_push(b, GPU_BLT_CLIENT | GPU_XY_SRC_COPY_OP |
+                GPU_BLT_WRITE_ALPHA | GPU_BLT_WRITE_RGB |
+                (GPU_XY_SRC_COPY_DW - 2u));
+    gpu_push(b, GPU_BR13_ROP_SRCCOPY | GPU_BR13_DEPTH_32BPP |
+                (dst_pitch & 0xFFFFu));
+    gpu_push(b, ((gpu_u32)dy1 << 16) | ((gpu_u32)dx1 & 0xFFFFu));
+    gpu_push(b, ((gpu_u32)dy2 << 16) | ((gpu_u32)dx2 & 0xFFFFu));
+    gpu_push(b, (gpu_u32)(dst_gfx & 0xFFFFFFFFu));
+    gpu_push(b, (gpu_u32)(dst_gfx >> 32));
+    gpu_push(b, ((gpu_u32)sy1 << 16) | ((gpu_u32)sx1 & 0xFFFFu));
+    gpu_push(b, src_pitch & 0xFFFFu);
+    gpu_push(b, (gpu_u32)(src_gfx & 0xFFFFFFFFu));
+    gpu_push(b, (gpu_u32)(src_gfx >> 32));
+    return !b->overflow;
+}
+
 /* Close the batch. The engine keeps parsing until it sees this, so a batch
  * submitted without it runs off into whatever follows.
  *

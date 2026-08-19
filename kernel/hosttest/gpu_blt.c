@@ -116,6 +116,7 @@
                                         * overlap". Softpin means these
                                         * addresses are OURS to get right. */
 #define BATCH_GPU_ADDR 0x08000000ull   /* 128 MiB, clear of a 33 MiB 4K surface */
+#define SRC_GPU_ADDR   0x10000000ull   /* 256 MiB, the copy source */
 
 /* The surface is allocated at the largest size any mode uses, once, and the
  * smaller tests fill a rectangle inside it. Same buffer, same pitch, same
@@ -603,18 +604,119 @@ out:
     return rc;
 }
 
+/* ---- the copy: the present path, which is what a compositor really does ---- */
+
+static int do_copy(void)
+{
+    const size_t bytes = (size_t)PITCH * H;
+    unsigned dst_h = 0, src_h = 0, batch_h = 0;
+    unsigned *dst = NULL, *src = NULL, *batch = NULL;
+    int rc = 1;
+
+    if (!bo_create(bytes, &dst_h) || !bo_create(bytes, &src_h) ||
+        !bo_create(BATCH_BYTES, &batch_h)) goto out;
+    dst = bo_map(dst_h, bytes); src = bo_map(src_h, bytes);
+    batch = bo_map(batch_h, BATCH_BYTES);
+    if (!dst || !src || !batch) goto out;
+
+    /* A source with STRUCTURE, not a constant. A copy that drops the source
+     * and fills with a colour would pass a uniform-source test perfectly -
+     * that is what SRCCOPY vs PATCOPY gets wrong, and it is the whole reason
+     * this checks a gradient instead of a flat fill. */
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++)
+            src[(size_t)y * W + x] = (unsigned)((x & 0xFF) | ((y & 0xFF) << 8) | 0x400000u);
+
+    const unsigned POISON = 0xDEADBEEFu;
+    for (size_t i = 0; i < bytes / 4; i++) dst[i] = POISON;
+
+    /* Copy a rectangle from an OFFSET in the source, so a harness that
+     * ignored the source origin still fails. */
+    const int dx1 = 64, dy1 = 32, dx2 = 1088, dy2 = 800;
+    const int sx1 = 16, sy1 = 8;
+
+    struct gpu_batch b;
+    gpu_batch_init(&b, batch, BATCH_BYTES / 4);
+    if (!gpu_copy_rect(&b, DST_GPU_ADDR, PITCH, dx1, dy1, dx2, dy2,
+                       SRC_GPU_ADDR, PITCH, sx1, sy1)) {
+        fprintf(stderr, "  FAIL  gpu_copy_rect refused\n"); goto out;
+    }
+    gpu_batch_end(&b);
+    printf("  batch         %u bytes: DW0=0x%08X BR13=0x%08X\n",
+           gpu_batch_bytes(&b), batch[0], batch[1]);
+    printf("  copy          src(%d,%d) -> dst(%d,%d)..(%d,%d)  %dx%d\n",
+           sx1, sy1, dx1, dy1, dx2, dy2, dx2 - dx1, dy2 - dy1);
+
+    struct drm_i915_gem_exec_object2 obj[3];
+    struct drm_i915_gem_execbuffer2 eb;
+    memset(obj, 0, sizeof obj); memset(&eb, 0, sizeof eb);
+    obj[0].handle = dst_h; obj[0].offset = DST_GPU_ADDR;
+    obj[0].flags = EXEC_OBJECT_PINNED | EXEC_OBJECT_SUPPORTS_48B_ADDRESS | EXEC_OBJECT_WRITE;
+    obj[1].handle = src_h; obj[1].offset = SRC_GPU_ADDR;
+    obj[1].flags = EXEC_OBJECT_PINNED | EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+    obj[2].handle = batch_h; obj[2].offset = BATCH_GPU_ADDR;
+    obj[2].flags = EXEC_OBJECT_PINNED | EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+    eb.buffers_ptr = (unsigned long long)(uintptr_t)obj;
+    eb.buffer_count = 3;
+    eb.batch_len = gpu_batch_bytes(&b);
+    eb.flags = I915_EXEC_BLT | I915_EXEC_NO_RELOC;
+
+    double t0 = now_s();
+    if (drm_ioctl(DRM_IOCTL_I915_GEM_EXECBUFFER2, &eb)) {
+        fprintf(stderr, "  FAIL  EXECBUFFER2: %s\n", strerror(errno)); goto out;
+    }
+    struct drm_i915_gem_wait w; memset(&w, 0, sizeof w);
+    w.bo_handle = dst_h; w.timeout_ns = 2000000000ll;
+    if (drm_ioctl(DRM_IOCTL_I915_GEM_WAIT, &w)) {
+        fprintf(stderr, "  FAIL  GEM_WAIT: %s\n", strerror(errno)); goto out;
+    }
+    double t1 = now_s();
+    bo_to_cpu(dst_h);
+
+    /* Every destination pixel must equal the SOURCE pixel it came from. */
+    size_t good = 0, bad = 0, outside = 0;
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            unsigned got = dst[(size_t)y * W + x];
+            if (x >= dx1 && x < dx2 && y >= dy1 && y < dy2) {
+                unsigned want = src[(size_t)(sy1 + y - dy1) * W + (sx1 + x - dx1)];
+                if (got == want) good++; else bad++;
+            } else if (got != POISON) outside++;
+        }
+    size_t want_n = (size_t)(dx2 - dx1) * (size_t)(dy2 - dy1);
+    printf("  matched src   %zu/%zu   mismatched %zu   outside clobbered %zu\n",
+           good, want_n, bad, outside);
+    printf("  submit+wait   %.3f ms\n", (t1 - t0) * 1e3);
+    warn_if_busy();
+    if (good == want_n && bad == 0 && outside == 0) {
+        printf("  ok    THE BLITTER COPIED IT, pixel for pixel, from the right origin.\n");
+        rc = 0;
+    } else {
+        printf("  FAIL  the copy did not reproduce the source\n");
+    }
+out:
+    if (dst) munmap(dst, bytes);
+    if (src) munmap(src, bytes);
+    if (batch) munmap(batch, BATCH_BYTES);
+    if (dst_h) bo_close(dst_h);
+    if (src_h) bo_close(src_h);
+    if (batch_h) bo_close(batch_h);
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
-    int want_probe = 0, want_blit = 0, want_bench = 0, want_sweep = 0, want_negative = 0;
+    int want_probe = 0, want_blit = 0, want_bench = 0, want_sweep = 0, want_negative = 0, want_copy = 0;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--probe")) want_probe = 1;
         else if (!strcmp(argv[i], "--blit")) want_blit = 1;
         else if (!strcmp(argv[i], "--bench")) { want_blit = 1; want_bench = 1; }
         else if (!strcmp(argv[i], "--sweep")) want_sweep = 1;
         else if (!strcmp(argv[i], "--negative")) want_negative = 1;
+        else if (!strcmp(argv[i], "--copy")) want_copy = 1;
         else { fprintf(stderr, "usage: %s [--probe|--blit|--bench|--sweep|--negative]\n", argv[0]); return 2; }
     }
-    if (!want_probe && !want_blit && !want_sweep && !want_negative) { want_probe = 1; want_blit = 1; }
+    if (!want_probe && !want_blit && !want_sweep && !want_negative && !want_copy) { want_probe = 1; want_blit = 1; }
 
     if (!open_render_node()) return 77;   /* 77 = skip, not fail: no GPU here */
 
@@ -628,6 +730,10 @@ int main(int argc, char **argv)
     if (want_blit) {
         printf("\nblit:\n");
         rc = do_blit(want_bench);
+    }
+    if (want_copy && rc == 0) {
+        printf("\ncopy (the present path - back buffer to scanout):\n");
+        rc = do_copy();
     }
     if (want_sweep && rc == 0) {
         printf("\nsweep:\n");

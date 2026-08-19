@@ -90,6 +90,55 @@ static void test_high_address(void)
     eq32(buf[5], 0x00000012u, "high half of a >4 GiB address");
 }
 
+/* ---- 1b. the copy, pinned to what really copied ---------------------------- */
+
+static void test_copy_golden(void)
+{
+    /* The parameters gpu_blt --copy ran when it matched 786432/786432 source
+     * pixels on 8086:9B41: dst rect (64,32)..(1088,800), src origin (16,8),
+     * both pitches 15360. */
+    gpu_u32 buf[24];
+    struct gpu_batch b;
+    memset(buf, 0xAA, sizeof buf);
+    gpu_batch_init(&b, buf, 24);
+
+    ok(gpu_copy_rect(&b, 0x200000ull, 15360, 64, 32, 1088, 800,
+                     0x10000000ull, 15360, 16, 8), "gpu_copy_rect accepted it");
+
+    eq32(buf[0], 0x54F00008u, "copy DW0 opcode word");
+    /* SRCCOPY, not PATCOPY. PATCOPY here ignores the source entirely and fills
+     * with a colour - a copy that silently produces a solid rectangle, and it
+     * passes any test whose source is uniform. */
+    eq32(buf[1], 0x03CC3C00u, "copy DW1 BR13 (ROP must be SRCCOPY 0xCC)");
+    ok(((buf[1] >> 16) & 0xFFu) == 0xCCu, "ROP is SRCCOPY");
+    eq32(buf[2], (32u << 16) | 64u,    "dst top-left");
+    eq32(buf[3], (800u << 16) | 1088u, "dst bottom-right");
+    eq32(buf[4], 0x00200000u, "dst address low");
+    eq32(buf[5], 0u,          "dst address high");
+    eq32(buf[6], (8u << 16) | 16u, "SRC top-left - a copy from the wrong origin still copies");
+    eq32(buf[7], 15360u,      "SRC pitch is its own field, not the dst pitch");
+    eq32(buf[8], 0x10000000u, "src address low");
+    eq32(buf[9], 0u,          "src address high");
+    ok(gpu_batch_end(&b), "closed");
+    ok(gpu_batch_bytes(&b) % 8 == 0, "copy batch is a multiple of 8 bytes");
+}
+
+static void test_copy_refusals(void)
+{
+    gpu_u32 buf[64];
+    struct gpu_batch b;
+#define FRESH() gpu_batch_init(&b, buf, 64)
+    FRESH(); ok(!gpu_copy_rect(&b, 0x1000, 0, 0,0,8,8, 0x2000, 4096, 0,0), "dst pitch 0 refused");
+    FRESH(); ok(!gpu_copy_rect(&b, 0x1000, 4096, 0,0,8,8, 0x2000, 0, 0,0), "src pitch 0 refused");
+    FRESH(); ok(!gpu_copy_rect(&b, 0x1000, 4096, 8,0,8,8, 0x2000, 4096, 0,0), "empty dst rect refused");
+    FRESH(); ok(!gpu_copy_rect(&b, 0x1000, 4096, 0,0,8,8, 0x2000, 4096, -1,0), "negative src x refused");
+    /* A source rectangle that would run past the 16-bit coordinate field wraps
+     * in hardware rather than clipping, so it must be refused here. */
+    FRESH(); ok(!gpu_copy_rect(&b, 0x1000, 4096, 0,0,64,8, 0x2000, 4096, 0xFFF0,0),
+                "src rect running past the coord field refused");
+#undef FRESH
+}
+
 /* ---- 2. the refusals ------------------------------------------------------ */
 
 static void test_refusals(void)
@@ -175,6 +224,8 @@ int main(void)
 {
     printf("gputest: gpu.c emits the stream the GPU accepted\n\n");
     test_golden();
+    test_copy_golden();
+    test_copy_refusals();
     test_high_address();
     test_refusals();
     test_overflow();
