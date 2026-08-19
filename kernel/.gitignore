@@ -40,3 +40,17 @@ hosttest/gputest
 hosttest/gpu_blt
 hosttest/gpu_planes
 hosttest/gpu_aperture
+
+# Derived from kernel/hosttest/build.sh's own `-o` targets, 2026-08-20.
+# The list above was a hand-maintained allowlist and it drifted: these seven
+# were tracked-or-untracked build outputs rewritten by every ./build.sh run,
+# which is why six worktrees showed the same "dirty" files. Re-derive with:
+#   for t in $(grep -oE '\-o +[A-Za-z_]+' kernel/hosttest/build.sh | awk '{print $2}' | sort -u); do
+#     git check-ignore -q "kernel/hosttest/$t" || echo "$t"; done
+hosttest/fbtext
+hosttest/inputtest_feel
+hosttest/inputtest_hid
+hosttest/palette
+hosttest/termwrap
+hosttest/walltest
+hosttest/wmtest_feel

@@ -87,3 +87,7 @@ scratch.zl
 # identified - so an ignore rule aimed at CI output must not reach them.
 /shots/
 kernel/hosttest/wmbench
+
+# clangd's index and Cursor's per-worktree state. Machine-local, never shared.
+.cache/
+.cursor/
