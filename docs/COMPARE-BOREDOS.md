@@ -107,7 +107,7 @@ zlOS has and BoredOS does not:
   `PIPE_LINK_M/N`. BoredOS's graphics layer is `graphics.c` + `vga.c`,
   826 lines — it takes the framebuffer Limine hands it.
 - **Its own bootloader**, and a documented answer to where the firmware
-  boundary actually sits (`docs/what-is-a-bios.md`).
+  boundary actually sits (`kernel/docs/what-is-a-bios.md`).
 - **A USB stack**: xHCI + HID keyboard, debugged against real hardware
   rather than QEMU.
 - **A host-side driver development loop.** `kernel/hosttest/` compiles the
