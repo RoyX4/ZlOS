@@ -1222,6 +1222,22 @@ static void fill_band(void *ctx, int y0, int y1)
         fill32(back + (unsigned long)yy * fb_w + j->x0, j->rgb, j->x1 - j->x0);
 }
 
+/* gpuring.c. Returns 0 unless the ring is armed on real hardware AND the
+ * rectangle is big enough to be worth a submission - measured, and the
+ * threshold is four megapixels, so on a 2560x1440 panel this never fires. See
+ * the note on GPU_FILL_MIN_PX for why a lower one would make things worse. */
+int gpu_fill_try(int x, int y, int w, int h, unsigned int rgb);
+
+/* ...with a WEAK default of "no", right here, because five host harnesses link
+ * fb.c without gpuring.c - fbbench, walltest, fbtext, tritest and browsershot -
+ * and none of them has a GPU. gpuring.c's strong definition wins the link in
+ * every real kernel build. Same trick, same reason, as hoststubs.c's weak
+ * idt_mouse_wheel: the default has to be inert rather than absent, or every
+ * harness pays for a subsystem it does not test. */
+__attribute__((weak))
+int gpu_fill_try(int x, int y, int w, int h, unsigned int rgb)
+{ (void)x; (void)y; (void)w; (void)h; (void)rgb; return 0; }
+
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
 {
     if (w <= 0 || h <= 0) return;
@@ -1235,6 +1251,16 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
     if (x0 >= x1 || y0 >= y1) return;
 
     if (back_on) {
+        /* Ask the blitter first. It declines unless armed and unless the
+         * rectangle is large enough that a submission is cheaper than the
+         * fill, so today this is always a no and the band job below runs
+         * exactly as before. The damage is still reported HERE either way -
+         * the damage list is shared mutable state and neither a band nor the
+         * GPU may touch it. */
+        if (gpu_fill_try(x0, y0, x1 - x0, y1 - y0, rgb)) {
+            fb_damage(x0, y0, x1 - x0, y1 - y0);
+            return;
+        }
         /* Rows are independent, so this is a band job. The DAMAGE is reported
          * once, here, by the calling core - the damage list is shared mutable
          * state and the one thing a band must never touch. */

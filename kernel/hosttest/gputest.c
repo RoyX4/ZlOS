@@ -431,6 +431,29 @@ static void test_cursor_combine(void)
     }
 }
 
+/* ---- 7. the compositor fill path refuses safely ---------------------------
+ * fb_fill_px calls gpu_fill_try on every large fill. It must decline - quietly
+ * and always - until a ring is live, or every drawing test in this tree would
+ * be filling through a GPU that does not exist. */
+static void test_fill_try_refuses(void)
+{
+    ok(gpu_fill_try(0, 0, 4000, 4000, 0x60D2EB) == 0,
+       "gpu_fill_try declines with no ring, even for a huge rect");
+    ok(gpu_fill_try(0, 0, 8, 8, 0x60D2EB) == 0, "and for a small one");
+    ok(gpu_fill_try(0, 0, 0, 0, 0) == 0, "and for an empty one");
+    ok(gpu_fill_try(0, 0, -5, 10, 0) == 0, "and for a negative one");
+
+    /* Attaching a framebuffer must fail the same way rather than half-succeed
+     * and leave fb_mapped set - a mapped framebuffer with no ring is a fill
+     * that submits into nothing. */
+    ok(gpu_fb_attach(0x08000000u, 4096u * 100u, 10240u) == 0,
+       "gpu_fb_attach refuses with no ring");
+    ok(gpu_fb_attach(0x08000000u, 4096u, 0x10000u) == 0,
+       "and refuses a pitch past BR13's 16-bit field");
+    ok(gpu_fill_try(0, 0, 4000, 4000, 0) == 0,
+       "and after a refused attach, a fill still declines");
+}
+
 int main(void)
 {
     printf("gputest: gpu.c emits the stream the GPU accepted\n\n");
@@ -447,6 +470,7 @@ int main(void)
     test_cursor_image();
     test_cursor_alpha();
     test_cursor_combine();
+    test_fill_try_refuses();
 
     printf("\n  %d checks, %d failures\n", checks, failures);
     if (failures == 0)

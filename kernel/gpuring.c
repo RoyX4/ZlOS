@@ -33,6 +33,7 @@
  */
 
 #include "memmap.h"
+#include "gpu.h"
 
 typedef unsigned int       gr_u32;
 typedef unsigned long long gr_u64;
@@ -66,6 +67,10 @@ int  intel_ggtt_map(gr_u32 gfx_page, gr_u32 phys_addr);
 #define GPU_RING_BYTES 4096u                 /* one page, and RING_CTL's length
                                               * field counts pages minus one   */
 #define GPU_RING_GFX   0x04000000u           /* 64 MiB into the graphics space */
+#define GPU_FB_GFX     0x08000000u           /* 128 MiB: the back buffer, mapped
+                                              * for gpu_fill_try. Clear of the
+                                              * ring above and of intel.c's
+                                              * scanout at graphics 1 MiB. */
 
 _Static_assert(GPU_RING_BYTES == 4096u, "the RING_CTL length field below assumes one page");
 _Static_assert((gr_u64)HI_GPU + GPU_RING_BYTES <= (gr_u64)HI_BLUR,
@@ -235,4 +240,71 @@ int gpu_ring_submit(const gr_u32 *dw, gr_u32 n)
         if (h == ring_tail) return 1;
     }
     return 0;                                 /* engine never caught up */
+}
+
+/* ---- the compositor's fill path ------------------------------------------
+ *
+ * fb_fill_px calls gpu_fill_try first and falls back to its own SSE path when
+ * this returns 0 - which is every build until the ring is armed on hardware.
+ *
+ * THE THRESHOLD IS NOT A GUESS AND IT IS DELIBERATELY HUGE. Measured on this
+ * exact part against fb.c's real fill32 (docs/gpu-blitter.md), with ONE
+ * submission per rectangle, which is what a call from fb_fill_px is:
+ *
+ *     64x64        CPU wins 8.39x   - submission cost dwarfs the fill
+ *     1024x768     CPU wins 1.62x
+ *     1920x1200    CPU wins 1.74x
+ *     3840x2160    blitter wins 1.14x
+ *
+ * So the blitter only pays off for a rectangle bigger than roughly four
+ * megapixels, submitted on its own. Anything smaller is slower, and a naive
+ * "send every fill to the GPU" wiring would make the compositor worse - which
+ * is exactly why this exists as a threshold rather than an unconditional call.
+ *
+ * Being honest about the consequence: at 2560x1440 the whole screen is 3.7
+ * Mpix, so on THIS panel this path will essentially never fire. It is wired
+ * because the milestone asked for it and because the shape is right for a 4K
+ * external panel; it is not wired because it is expected to help here. The
+ * number that settles it is frame time with the flag on, not fill rate.
+ */
+#define GPU_FILL_MIN_PX 4000000u
+
+static gr_u32 fb_gfx    = 0;      /* the back buffer's graphics address */
+static gr_u32 fb_pitch  = 0;      /* bytes per row */
+static int    fb_mapped = 0;
+
+/* Map the back buffer where the engine can reach it. Called once, after
+ * gpu_ring_init. `phys` is HI_BACK; `bytes` is what fb.c actually uses. */
+int gpu_fb_attach(gr_u32 phys, gr_u32 bytes, gr_u32 pitch)
+{
+    fb_mapped = 0;
+    if (!ring_live || !pitch || !bytes) return 0;
+    if (pitch > 0xFFFFu) return 0;              /* BR13's field, see gpu.c */
+
+    /* Every page needs an entry. Mapping a prefix is a fill that is correct at
+     * the top of the screen and lands somewhere else below it. */
+    gr_u32 pages = (bytes + 4095u) / 4096u;
+    for (gr_u32 i = 0; i < pages; i++)
+        if (!intel_ggtt_map((GPU_FB_GFX >> 12) + i, phys + i * 4096u)) return 0;
+
+    fb_gfx   = GPU_FB_GFX;
+    fb_pitch = pitch;
+    fb_mapped = 1;
+    return 1;
+}
+
+/* Returns 1 if the GPU did the fill, 0 if the caller should do it itself. */
+int gpu_fill_try(int x, int y, int w, int h, gr_u32 rgb)
+{
+    if (!ring_live || !fb_mapped) return 0;
+    if (w <= 0 || h <= 0) return 0;
+    if ((gr_u32)w * (gr_u32)h < GPU_FILL_MIN_PX) return 0;
+
+    gr_u32 dw[16];
+    struct gpu_batch b;
+    gpu_batch_init(&b, dw, 16);
+    if (!gpu_fill_rect(&b, fb_gfx, fb_pitch, x, y, x + w, y + h, rgb)) return 0;
+    /* No MI_BATCH_BUFFER_END: these dwords go straight into the RING, which the
+     * engine executes up to TAIL. An END here would stop the ring, not a batch. */
+    return gpu_ring_submit(dw, b.at);
 }

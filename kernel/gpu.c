@@ -30,8 +30,7 @@
  * identical text.
  */
 
-typedef unsigned int       gpu_u32;
-typedef unsigned long long gpu_u64;
+#include "gpu.h"
 
 /* ---- XY_COLOR_BLT, the seven dwords ---------------------------------------
  *
@@ -79,13 +78,6 @@ typedef unsigned long long gpu_u64;
  * many the buffer holds. Nothing here allocates - the caller owns the memory,
  * because in the kernel it has to be memory the GGTT maps and in the harness it
  * is a GEM buffer. */
-struct gpu_batch {
-    gpu_u32 *dw;
-    unsigned cap;
-    unsigned at;
-    int      overflow;      /* sticky: set once, never silently cleared */
-};
-
 void gpu_batch_init(struct gpu_batch *b, gpu_u32 *storage, unsigned cap_dwords)
 {
     b->dw = storage;

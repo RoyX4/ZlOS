@@ -146,7 +146,32 @@ that has never run, and the whole point of the gate is that a human turns it on
 *after* a hardware run shows the display survives a takeover. Wiring the
 ignition now would be the exact mistake this file's own table is about.
 
-### Blocked on an unanswered question
+### ~~Blocked on an unanswered question~~ — ANSWERED, [`gen9-shader-source.md`](gen9-shader-source.md)
+
+> **The `INTEL_DEBUG=fs` row below is wrong, and it is the row the rest of this
+> section rests on.** It is not "that build has no debug dump" — **the shader
+> cache was eating it.** `~/.cache/mesa_shader_cache` is 7.8 MB; on a hit iris
+> loads the compiled binary and the compiler never runs, so there is nothing to
+> print. Reproduced three times with one program: cold **82 lines**, warm
+> **0 lines**, `MESA_SHADER_CACHE_DISABLE=true` **82 lines** again. Mesa 26.1.5
+> has been a working Gen9 compiler *and* disassembler on this exact part
+> (`Mesa Intel(R) UHD Graphics (CML GT2)`) the entire time.
+>
+> The kernel is **five instructions, 48 bytes** — four moves of a push constant
+> into the RT write payload and one `send` with EOT, because blending is the
+> fixed-function output merger and not the shader. Verified *running* by pixel
+> readback: predicted `30 69 76`, read back `30 69 76`.
+>
+> The paragraph below is right that hand-encoding "is not absurd" and right about
+> why — it just did not need to be hand-encoded. **What this changes is the
+> estimate, not the difficulty:** the 48 bytes were never the cost. `3DSTATE_PS`,
+> `3DSTATE_CONSTANT_PS`, binding tables, `RENDER_SURFACE_STATE`, blend state and
+> `STATE_BASE_ADDRESS` are. Weighing "write a Gen9 shader" as the expensive part
+> was weighing the wrong thing.
+>
+> The `glGetProgramBinary` finding below stands and is still worth keeping — that
+> blob really is a Mesa cache entry and really would have been the wrong thing to
+> embed.
 
 **The render engine**, which is where the 48x on blends lives. It needs a Gen9
 pixel shader, and getting one is genuinely open.
