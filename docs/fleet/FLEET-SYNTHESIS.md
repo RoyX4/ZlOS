@@ -88,7 +88,7 @@ rule from `.ultra/TENSIONS.md` T-2.
 |---|---|
 | 15 | ✓ **`http.c:89` — `build_request` writes 9 bytes past `req[512]`** [→](CRITICAL-http-request-overflow.md). Add the reserve **and** a `_Static_assert` tied to the tail literal |
 | 16 | ✓ **`http.c:229`** — a full response buffer deadlocks the fetch permanently. `tcp_recv(resp, 0)` was meant to drain-and-discard, but `tcp_recv`'s own **correct** `if (max <= 0) return 0` trust-boundary guard makes it a no-op. Neither function is wrong. Needs a named `tcp_discard()` [→](VERIFICATION-LOG.md) |
-| 17 | **`HTTP_REDIRECT`** — defined in `http.h:21`, consumed by no branch in `browser_tick`. Three lenses, independently. Any 3xx hangs forever |
+| 17 | ✓ **`HTTP_REDIRECT`** — `http.c:267` sets it; `browser_tick` (`browser.c:422-432`) handles only `HTTP_DONE`, `HTTP_REFUSED`, `HTTP_ERROR` then `return 0`. `fetching` stays 1 forever. The state exists for the *successful* redirect case — `http.h:21` says "3xx with a Location, **under the redirect limit**" — so `http.c` detects and validates the redirect, then hands the caller a state it does not know [→](VERIFICATION-LOG.md) |
 | 18 | ✓ **`xhci_ram_ok()`** zeroes the live DCBAA scratchpad pointer; the zl builtin `usb_ram` reaches it at any time [→](CRITICAL-gates-that-cannot-fail.md) |
 | 19 | **`xhci.c:989`** — `reset_endpoint` points any endpoint at EP0's ring and wipes EP0's producer state, reachable with a bulk DCI from `:2127` |
 

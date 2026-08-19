@@ -230,6 +230,45 @@ false evidence, and the false evidence is what a reader would have quoted.
 
 ---
 
+## CONFIRMED — `HTTP_REDIRECT` is produced and consumed by nobody
+
+**Agent claim** (lenses `browser-app`, `http`, `memory-safety` — three, independently):
+*a 3xx wedges the browser in "fetching…" forever.*
+
+**Confirmed.**
+
+```
+$ grep -n "HTTP_REDIRECT" kernel/*.c kernel/*.h
+kernel/http.c:267:        state = HTTP_REDIRECT;
+kernel/http.h:21:    HTTP_REDIRECT,     /* 3xx with a Location, under the redirect limit */
+```
+
+`http.c` **enters** the state. `browser_tick` never leaves it:
+
+```c
+/* kernel/browser.c:422-432 */
+int s = http_poll();
+if (s == HTTP_DONE)    { fetching = 0; ... return 1; }
+if (s == HTTP_REFUSED) { fetching = 0; status = BR_BAD_TYPE; return 1; }
+if (s == HTTP_ERROR)   { fetching = 0; status = BR_FAILED;   return 1; }
+return 0;
+```
+
+Three terminal states handled out of four. On `HTTP_REDIRECT`, `fetching` stays 1,
+`status` is never set, and `browser_tick` returns 0 on every subsequent call. There is no
+timeout on that path.
+
+**The sharp part is the comment.** `http.h:21` reads *"3xx with a Location, **under the
+redirect limit**"* — this state exists for the case where the redirect is **valid and
+followable**. `http.c` does the work of detecting a 3xx, finding the `Location`, and
+checking the redirect count, and then hands its caller a state the caller has never heard
+of. The success path of a feature that was deliberately built is the one that hangs.
+
+**Fix:** in `browser_tick`, on `HTTP_REDIRECT`, call `navigate(http_location(), …)` —
+`http_location()` already exists at `http.c:283`. That is what the state was for.
+
+---
+
 ## CONFIRMED — a full response buffer deadlocks the fetch, because a correct guard disables the drain
 
 **Agent claim** (lenses `http` and `memory-safety`, independently, severity critical):
