@@ -307,3 +307,25 @@ if [ -f /usr/include/drm/i915_drm.h ]; then
 else
   echo "skip  ./gpu_blt       (no drm headers - apt install libdrm-dev)"
 fi
+
+# THE BLITTER. The first thing in this project that asks a GPU to draw.
+#
+# Raw ioctl on /dev/dri/renderD128 - no libdrm, no Mesa, no -l flags at all,
+# because the point is to learn the command level zlOS will have to speak and
+# zlOS cannot link a library. It runs ALONGSIDE i915 and does not detach it:
+# the blitter is a DMA engine, not the display, so unlike modeset-run.sh this
+# cannot blank the screen of whoever is using the laptop.
+#
+# Guarded on the header AND on hardware being present, so a box with no Intel
+# GPU skips instead of failing. `--negative` is the one that matters in CI: it
+# proves the verification can still reject a blit that writes nothing.
+if [ -f /usr/include/drm/i915_drm.h ]; then
+  gcc -O2 -g -Wall -Wextra -o gpu_blt gpu_blt.c
+  if [ -e /dev/dri/renderD128 ]; then
+    echo "built ./gpu_blt       (run: ./gpu_blt --blit --negative, or --sweep)"
+  else
+    echo "built ./gpu_blt       (no /dev/dri/renderD128 here - it will skip at run time)"
+  fi
+else
+  echo "skip  ./gpu_blt       (no drm headers - apt install libdrm-dev)"
+fi
