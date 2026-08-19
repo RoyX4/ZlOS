@@ -1303,6 +1303,42 @@ fn s3nw_event(win, ety, ecode, ex, ey) {
 # and it needs its OWN last-second variable per app: apps_system.zl's clk_tick
 # documents the race two apps get when they share one.
 # ==============================================================================
+# reg_new's per-slice hook. The POSITIONS are the reference's own, from
+# ds-reference.html's APPS table (995-1013): disk 300,150 - svc 172,82 -
+# arch 196,104 - img 280,120 - net 212,112.
+#
+# The reference composes for a 1280-wide screen and this panel may be wider,
+# so every reference x carries the same centring term the boot composition
+# uses (kernel.zl 4503). RECOMPUTED rather than read from `desk_ox`: that name
+# is only ever assigned INSIDE wm_boot_start, which makes it that function's
+# local, so `desk_ox + ...` here would silently add nothing. Derived from the
+# panel, so it cannot go stale. apps_sys2.zl has the same three lines as
+# sys2_ox() - the duplication is deliberate for now (a slice may not depend on
+# another slice's private file) and belongs in apps_common.zl the moment
+# somebody owns that move.
+fn s3_ox() {
+    dox = (px_w() - 1280 * ui()) / 2
+    if dox < 0 { dox = 0 }
+    return dox
+}
+fn s3_x(id) {
+    if id == APP_DISK { return 300 }
+    if id == APP_SVC  { return 172 }
+    if id == APP_ARCH { return 196 }
+    if id == APP_IMG  { return 280 }
+    return 212
+}
+fn s3_y(id) {
+    if id == APP_DISK { return 150 }
+    if id == APP_SVC  { return 82 }
+    if id == APP_ARCH { return 104 }
+    if id == APP_IMG  { return 120 }
+    return 112
+}
+fn sys3_new(id, u) {
+    return wm_open(id, reg_name(id), s3_ox() + s3_x(id) * u, s3_y(id) * u, sys3_w(id) * u, sys3_h(id) * u)
+}
+
 fn sys3_draw(id, ax, ay, aw, ah) {
     if id == APP_DISK { return s3du_draw(ax, ay, aw, ah) }
     if id == APP_SVC  { return s3sv_draw(ax, ay, aw, ah) }
@@ -1319,12 +1355,3 @@ fn sys3_event(id, win, ety, ecode, ex, ey) {
     return 0
 }
 fn sys3_tick(id, win) { return 0 }
-
-# HOW THIS SLICE'S WINDOWS OPEN. reg_new() gates on explicit id ranges and none
-# of them covered this slice, so every app here would have been unopenable -
-# reg_open() would find no window and return without doing anything, silently.
-# Owning the open here also means an app can choose its own start position and
-# reset its state before the first frame, which is what a game needs.
-fn sys3_new(id, u) {
-    return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
-}
