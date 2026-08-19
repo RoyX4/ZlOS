@@ -209,7 +209,27 @@ gate, wait for the expected output, never for a fixed wall-clock time.**
 `kernel/intel.c` drives the real panel on the test laptop (ThinkPad X1 Carbon
 Gen 8, CML-U 8086:9B41). Two rules:
 
-1. **Write paths are gated behind `lt_armed` and most have never executed.**
+1. **MOST write paths are gated behind `lt_armed`, and four are not.** Measured
+   2026-08-19, because the blanket version of this sentence was wrong and it is
+   the sentence people rely on:
+
+   | function | `lt_armed`? | reachable from |
+   |---|---|---|
+   | `intel_plane_setup` | yes | — |
+   | `intel_gamma_ramp` | yes | — |
+   | `intel_cursor_enable` | **no** | zl builtin `cur_on` |
+   | `intel_cursor_move` | **no** | zl builtin `cur_move` |
+   | `intel_cursor_disable` | **no** | zl builtin `cur_off` |
+   | `intel_set_surface` | **no** | the modeset sequence, `intel.c:4075` |
+
+   `mmio_w` itself is **not** gated either — it writes whenever `mmio` is set.
+   So the three cursor functions write display registers with no gate at all,
+   and a zl program can reach every one of them. Nothing in the kernel calls
+   them, so gating them would break nothing; `intel_set_surface` is different,
+   it has a real internal caller inside the modeset, and adding a gate there
+   needs someone who knows whether that path runs armed.
+
+   **Write paths are gated behind `lt_armed` and most have never executed.**
    "The code exists" is not "the code works" — check for an actual caller, and
    check whether anything arms `lt_armed`, before believing a function runs.
 2. **Some of it can damage hardware**, not merely fail: violating the panel's
