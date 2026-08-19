@@ -1,10 +1,10 @@
-# Seven gates in this tree cannot fail, or skip silently
+# Eight gates in this tree cannot fail, or skip silently
 
 **2026-08-19 · worktree `zl-linux-fleet` · tree `3f00366`**
 
 `docs/GUARDS-THAT-DID-NOT-GUARD.md` documents five checks that reported green while
-checking nothing. The fleet's `fake-gates` bug-class sweep found **seven more**. Three
-are hand-verified below; four are recorded as leads.
+checking nothing. The fleet's `fake-gates` and `llp64` sweeps found **eight more**. Four are hand-verified
+here; three remain leads.
 
 The repo's own rule, from `.ultra/TENSIONS.md` T-2: *"a gate that can only pass is worse
 than no gate. Any new gate must be shown failing on a case it is supposed to fail on
@@ -81,11 +81,10 @@ Two independent fleet agents found this one — the `llp64` class sweep and the
 | `tools/hazard-scan.sh:62` | checks 1 and 2 report through `warn()`, which never sets `fail` — so the EFI guard checks are advisory while appearing to gate |
 | `tools/engine-parity.sh:141` | treats a **total engine build failure** as not-a-failure |
 | `kernel/check-himap.sh:107` | cannot see the address it was written to catch if it is spelled with one fewer leading zero |
-| `kernel/wguard.sh:45` | never reads the flag line it claims to guard, so it cannot detect any single `-Werror=` flag being removed |
 
-`wguard.sh` is the sharpest of the four if it holds, because `CLAUDE.md` presents it as
-the check that *"runs all three directions"* and is the stated reason the `-w` class is
-believed closed.
+A fifth lead, `kernel/wguard.sh:45`, **was** on this list and has since been verified —
+see the section at the end of this file. It was the sharpest of them, because `CLAUDE.md`
+presents `wguard.sh` as the reason the `-w` bug class is believed closed.
 
 ---
 
