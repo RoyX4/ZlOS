@@ -308,7 +308,66 @@ Until one of those happens, `gpu.c` is as far as this can honestly go: the
 command stream is correct on silicon, pinned by `gputest`, compiled into all
 four targets, and calling nothing.
 
-## THE DECISIVE RESULT: the Gen9 blitter cannot meaningfully accelerate this compositor
+## THE BIGGER RESULT: the blitter was the wrong ENGINE
+
+Everything below is still true — the blitter does not beat `fb.c`. But that is a
+statement about the blitter, and it was hiding the real question. `gpu_fillrate`,
+which has been sitting in this directory unbuilt and uncommitted for weeks,
+answers it in one run on this same GPU:
+
+```
+$ ./gpu_fillrate
+GL renderer: Mesa Intel(R) UHD Graphics (CML GT2)
+300 blended full-screen quads at 1920x1200 in 0.117 s
+  -> 5.93 Gpixel/s blended
+  -> one 1920x1200 blended layer costs 0.3884 ms
+```
+
+Against what `fb.c` costs for the same work:
+
+| operation | CPU (fb.c) | GPU | ratio |
+|---|---|---|---|
+| plain fill | 3486 Mpix/s | ~3600 (blitter) | **~1x — no win** |
+| `fill_blend` a=160 | **122 Mpix/s** | 5930 Mpix/s | **48x** |
+| radial glow | **62 Mpix/s** | 5930 Mpix/s | **96x** |
+
+**The blitter does the one thing the CPU is already good at.** A solid fill is
+0.66 cyc/px on SSE — near memory bandwidth, nothing left to win. Alpha blending
+is 18.89 cyc/px and a radial glow 36.97, because every pixel is a read, a
+multiply per channel, and a write. That is the work, and `XY_COLOR_BLT` cannot
+do any of it.
+
+The engine that can is the **render engine (RCS, MMIO base 0x2000)**, through the
+3D pipeline — which is what Mesa is using to reach 5.93 Gpix/s above.
+
+### What that costs, honestly
+
+This is not "swap BCS for RCS". The blitter needed a ring and seven dwords. The
+render engine needs, at minimum: a ring, a pipeline state object, surface state
+and binding tables, a vertex buffer, and a pixel shader compiled to Gen9 ISA —
+the last of which has no assembler in this tree. It is a project measured in
+weeks, not the afternoon the blitter took.
+
+But the prize is the right shape. `desktop-v10-plan.md` measured the cached blur
+at 7.37 ms cold, and the northstar's whole visual language is **alpha blends,
+gradients and soft shadows** — precisely the operations where the CPU is 48–96x
+behind. The look Zac wants is the look the GPU is for.
+
+### The order this argues for
+
+1. **SMP bands** — 1.78x on the desktop redraw, already written, sitting off, no
+   hardware risk. Do this first regardless.
+2. **Decide on the render engine** as a project, with the 48x in hand. Not the
+   blitter ring.
+3. **The blitter ring** only if something needs a large write-only fill on a 4K
+   external panel, which is the one case it wins.
+
+`gpu.c`, `gputest` and `gpu-ring-run.sh` stay: the ring work is a prerequisite
+for RCS too — the same GGTT mapping, the same ring registers at a different base,
+the same forcewake. Nothing done here is wasted if step 2 happens; it is just not
+justified by fill rate alone.
+
+## The blitter itself: it does not beat fb.c
 
 **Read this before building anything on the rest of the page.** Two measurements
 land together and they point the same way.
