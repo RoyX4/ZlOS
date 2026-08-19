@@ -38,6 +38,8 @@
 #include <netdb.h>
 
 #include "../tls.h"
+#include "../x509.h"
+const struct x509_cert *zl_roots(int *n);
 
 static int passed, failed;
 static void ok(const char *what, int cond)
@@ -276,6 +278,81 @@ int main(void)
             }
             close(w);
             freeaddrinfo(res);
+        }
+
+        /* ---- and the same handshake, VERIFIED ---------------------------
+         * The check above proves the bytes flow. This proves they flow to the
+         * right server: the chain is validated to a real ISRG root and
+         * CertificateVerify is checked, so an impostor replaying Wikipedia's
+         * (entirely public) certificate chain without its private key is
+         * rejected. Both directions are asserted, because a verifier that
+         * accepts everything and one that accepts nothing each pass half. */
+        printf("\n=== a VERIFIED handshake ===\n");
+        {
+            int nr;
+            const struct x509_cert *rt = zl_roots(&nr);
+            ok("the trust store parsed at least one root", nr >= 1);
+
+            struct addrinfo h2, *r2 = 0;
+            memset(&h2, 0, sizeof h2);
+            h2.ai_family = AF_INET; h2.ai_socktype = SOCK_STREAM;
+            if (getaddrinfo("en.wikipedia.org", "443", &h2, &r2) == 0 && r2) {
+                int w = socket(AF_INET, SOCK_STREAM, 0);
+                if (connect(w, r2->ai_addr, r2->ai_addrlen) == 0) {
+                    static struct tls_conn vc;
+                    int u = open("/dev/urandom", O_RDONLY);
+                    if (u >= 0) { if (read(u, vc.priv, 32) != 32) {} close(u); }
+                    tls_trust(&vc, rt, nr, "20260819000000Z");
+                    tls_start(&vc, "en.wikipedia.org");
+                    int g3 = 0;
+                    while (tls_state(&vc) != TLS_READY && tls_state(&vc) != TLS_ERROR && g3++ < 600) {
+                        const unsigned char *q;
+                        int n3 = tls_take(&vc, &q);
+                        if (n3 > 0) { int k = (int)write(w, q, (size_t)n3); if (k > 0) tls_sent(&vc, k); }
+                        if (tls_state(&vc) == TLS_READY) break;
+                        int got = (int)read(w, rx, sizeof rx);
+                        if (got <= 0) break;
+                        if (tls_feed(&vc, rx, got) < 0) break;
+                    }
+                    ok("the chain validated to a trusted root", vc.cert_ok == 1);
+                    ok("CertificateVerify proved the server holds the key", vc.saw_cv == 1);
+                    ok("the verified handshake completed", tls_state(&vc) == TLS_READY);
+                    if (tls_state(&vc) != TLS_READY)
+                        printf("       err=%d why=%s\n", tls_error(&vc), x509_why());
+                }
+                close(w);
+                freeaddrinfo(r2);
+            }
+
+            /* the refusal half: a site chained to a CA we do not carry */
+            struct addrinfo h3, *r3 = 0;
+            memset(&h3, 0, sizeof h3);
+            h3.ai_family = AF_INET; h3.ai_socktype = SOCK_STREAM;
+            if (getaddrinfo("www.google.com", "443", &h3, &r3) == 0 && r3) {
+                int w = socket(AF_INET, SOCK_STREAM, 0);
+                if (connect(w, r3->ai_addr, r3->ai_addrlen) == 0) {
+                    static struct tls_conn bc;
+                    int u = open("/dev/urandom", O_RDONLY);
+                    if (u >= 0) { if (read(u, bc.priv, 32) != 32) {} close(u); }
+                    tls_trust(&bc, rt, nr, "20260819000000Z");
+                    tls_start(&bc, "www.google.com");
+                    int g4 = 0;
+                    while (tls_state(&bc) != TLS_READY && tls_state(&bc) != TLS_ERROR && g4++ < 600) {
+                        const unsigned char *q;
+                        int n4 = tls_take(&bc, &q);
+                        if (n4 > 0) { int k = (int)write(w, q, (size_t)n4); if (k > 0) tls_sent(&bc, k); }
+                        if (tls_state(&bc) == TLS_READY) break;
+                        int got = (int)read(w, rx, sizeof rx);
+                        if (got <= 0) break;
+                        if (tls_feed(&bc, rx, got) < 0) break;
+                    }
+                    ok("a chain to a CA we do not carry is REFUSED",
+                       tls_state(&bc) == TLS_ERROR && bc.cert_ok == 0);
+                    printf("       refused with: %s\n", x509_why());
+                }
+                close(w);
+                freeaddrinfo(r3);
+            }
         }
     }
 

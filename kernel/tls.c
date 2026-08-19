@@ -26,9 +26,13 @@
  */
 #include "tls.h"
 #include "crypto.h"
+#include "x509.h"
 
 typedef unsigned char u8;
 typedef unsigned int  u32;
+
+int ecdsa_verify(int curve_bits, const u8 *pub, const u8 *r, const u8 *s,
+                 const u8 *hash, int hashlen);
 
 static void tmemcpy(void *d, const void *s, int n)
 {
@@ -233,9 +237,25 @@ static void send_client_hello(struct tls_conn *c)
     c->state = TLS_WAIT_SH;
 }
 
+void tls_trust(struct tls_conn *c, const struct x509_cert *roots, int nroots,
+               const char *nowZ)
+{
+    c->verify = 1;
+    c->roots = roots;
+    c->nroots = nroots;
+    c->nowZ = nowZ;
+}
+
 void tls_start(struct tls_conn *c, const char *host)
 {
+    /* the trust settings survive tls_start, because a caller naturally calls
+     * tls_trust first and would otherwise silently lose them */
+    int v = c->verify;
+    const struct x509_cert *rt = c->roots;
+    int nr = c->nroots;
+    const char *nz = c->nowZ;
     tmemset(c, 0, (int)sizeof *c);
+    c->verify = v; c->roots = rt; c->nroots = nr; c->nowZ = nz;
     int i = 0;
     while (host && host[i] && i < TLS_HOST_MAX - 1) { c->host[i] = host[i]; i++; }
     c->host[i] = 0;
@@ -318,6 +338,106 @@ static int check_server_finished(struct tls_conn *c, const u8 *body, int n,
     return 0;
 }
 
+/* ---- the certificate, and the proof the server holds its key ---------------
+ * TWO SEPARATE CHECKS, and skipping either makes the other pointless:
+ *
+ *   THE CHAIN says the certificate is genuine - a real CA issued it, for this
+ *   host, and it has not expired. x509.c does that.
+ *
+ *   CERTIFICATEVERIFY says the peer HOLDS THE PRIVATE KEY for it. Certificates
+ *   are public: anyone can download Wikipedia's whole chain and replay it. A
+ *   client that checks only the chain accepts an impostor presenting a real
+ *   certificate, which is the entire attack TLS exists to stop.
+ *
+ * The signed content is fixed by RFC 8446 SS4.4.3: 64 spaces, a context string,
+ * a zero byte, then the transcript hash up to and including Certificate. The 64
+ * spaces exist so a signature made here can never be mistaken for one made over
+ * a certificate's TBS - a cross-protocol confusion that was a real attack.
+ */
+static int verify_cert_chain(struct tls_conn *c, const u8 *thash);
+
+static int check_cert_verify(const u8 *body, int len,
+                             const u8 *thash, const struct x509_cert *leaf)
+{
+    if (len < 4) return -1;
+    int scheme = be16(body);
+    int siglen = be16(body + 2);
+    if (4 + siglen > len) return -1;
+    const u8 *sig = body + 4;
+
+    int hbits;
+    if (scheme == 0x0403)      hbits = 256;    /* ecdsa_secp256r1_sha256 */
+    else if (scheme == 0x0503) hbits = 384;    /* ecdsa_secp384r1_sha384 */
+    else if (scheme == 0x0603) hbits = 512;    /* ecdsa_secp521r1 - unsupported */
+    else return -1;                            /* RSA schemes: unsupported */
+    if (hbits == 512) return -1;
+
+    /* the content that was signed */
+    static u8 sc[64 + 34 + 32];
+    int n = 0;
+    for (int i = 0; i < 64; i++) sc[n++] = 0x20;
+    const char *ctx = "TLS 1.3, server CertificateVerify";
+    for (int i = 0; ctx[i]; i++) sc[n++] = (u8)ctx[i];
+    sc[n++] = 0;
+    for (int i = 0; i < 32; i++) sc[n++] = thash[i];
+
+    u8 h[48];
+    int hl;
+    if (hbits == 384) { sha384(sc, (u32)n, h); hl = 48; }
+    else              { sha256(sc, (u32)n, h); hl = 32; }
+
+    /* the DER SEQUENCE { r, s } - reuse x509.c's decoder shape inline */
+    if (siglen < 8 || sig[0] != 0x30) return -1;
+    int p = 2;
+    if (sig[1] & 0x80) p = 2 + (sig[1] & 0x7F);
+    if (p + 2 > siglen || sig[p] != 0x02) return -1;
+    int rl = sig[p + 1];
+    const u8 *rv = sig + p + 2;
+    p = p + 2 + rl;
+    if (p + 2 > siglen || sig[p] != 0x02) return -1;
+    int sl = sig[p + 1];
+    const u8 *sv = sig + p + 2;
+    if (p + 2 + sl > siglen) return -1;
+
+    int size = leaf->curve_bits / 8;
+    u8 r[48], s[48];
+    tmemset(r, 0, 48); tmemset(s, 0, 48);
+    while (rl > 0 && rv[0] == 0) { rv++; rl--; }
+    while (sl > 0 && sv[0] == 0) { sv++; sl--; }
+    if (rl > size || sl > size) return -1;
+    tmemcpy(r + size - rl, rv, rl);
+    tmemcpy(s + size - sl, sv, sl);
+
+    return ecdsa_verify(leaf->curve_bits, leaf->pubkey, r, s, h, hl) ? 0 : -1;
+}
+
+static int verify_cert_chain(struct tls_conn *c, const u8 *thash)
+{
+    if (!c->verify) return 0;              /* the caller knowingly opted out */
+    if (!c->saw_cert || c->ncerts <= 0) {
+        c->err = TLS_E_CERT; c->state = TLS_ERROR; return -1;
+    }
+    const u8 *ders[8];
+    int lens[8];
+    for (int i = 0; i < c->ncerts; i++) {
+        ders[i] = c->tx + c->cert_off[i];
+        lens[i] = c->cert_len[i];
+    }
+    if (!x509_chain_ok(ders, lens, c->ncerts, c->roots, c->nroots,
+                       c->host, c->nowZ)) {
+        c->err = TLS_E_CERT; c->state = TLS_ERROR; return -1;
+    }
+    struct x509_cert leaf;
+    if (!x509_parse(ders[0], lens[0], &leaf)) {
+        c->err = TLS_E_CERT; c->state = TLS_ERROR; return -1;
+    }
+    c->cert_ok = 1;
+    /* the CertificateVerify body is handled by the caller, which has it */
+    c->cv_hashlen = 32;
+    tmemcpy(c->cv_hash, thash, 32);
+    return 0;
+}
+
 /* ---- handshake messages inside the encrypted stream ------------------------ */
 static int handle_handshake(struct tls_conn *c, const u8 *p, int n)
 {
@@ -334,6 +454,13 @@ static int handle_handshake(struct tls_conn *c, const u8 *p, int n)
             tx_hash(c, thash);
             if (check_server_finished(c, body, len, thash) < 0) return -1;
             tx_add(c, p + i, 4 + len);
+            /* A VERIFYING CONNECTION THAT NEVER SAW A CERTIFICATE MUST NOT
+             * COMPLETE. Without this a server that simply omits Certificate
+             * and CertificateVerify gets an encrypted, unauthenticated session
+             * - the check would be skipped rather than failed. */
+            if (c->verify && (!c->cert_ok || !c->saw_cv)) {
+                c->err = TLS_E_CERT; c->state = TLS_ERROR; return -1;
+            }
             derive_app_keys(c);                /* master, from CH..SF        */
             send_finished(c);                  /* still under handshake keys */
             install_keys(c, 1);                /* now switch to application  */
@@ -342,9 +469,61 @@ static int handle_handshake(struct tls_conn *c, const u8 *p, int n)
             i += 4 + len;
             continue;
         }
-        /* EncryptedExtensions(8), Certificate(11), CertificateVerify(15),
-         * NewSessionTicket(4): all go into the transcript. The certificate is
-         * NOT checked - see the warning in tls.h. */
+        if (type == 11) {                      /* Certificate */
+            /* Certificate ::= { context<1>, list<3>, {cert<3>, ext<2>}... }
+             * The certificates are recorded as offsets into the TRANSCRIPT,
+             * which already keeps every handshake byte - so tx_add first and
+             * then point into it. */
+            int base = c->txn + 4;             /* where the body will land */
+            tx_add(c, p + i, 4 + len);
+            if (c->state == TLS_ERROR) return -1;
+            int j = 0;
+            if (j >= len) { c->err = TLS_E_PROTOCOL; return -1; }
+            int ctxlen = body[j]; j += 1 + ctxlen;
+            if (j + 3 > len) { c->err = TLS_E_PROTOCOL; return -1; }
+            int listlen = be24(body + j); j += 3;
+            int end = j + listlen;
+            if (end > len) { c->err = TLS_E_PROTOCOL; return -1; }
+            c->ncerts = 0;
+            while (j + 3 <= end && c->ncerts < 8) {
+                int clen = be24(body + j); j += 3;
+                if (j + clen > end) break;
+                c->cert_off[c->ncerts] = base + j;
+                c->cert_len[c->ncerts] = clen;
+                c->ncerts++;
+                j += clen;
+                if (j + 2 > end) break;
+                int xl = (body[j] << 8) | body[j + 1];
+                j += 2 + xl;
+            }
+            c->saw_cert = 1;
+            i += 4 + len;
+            continue;
+        }
+
+        if (type == 15) {                      /* CertificateVerify */
+            /* THE SIGNATURE IS OVER THE TRANSCRIPT UP TO AND INCLUDING THE
+             * CERTIFICATE - so the hash must be taken BEFORE this message is
+             * added. This is the message that proves the server HOLDS the
+             * private key. Without it a chain is worthless: certificates are
+             * public, so anyone can replay Wikipedia's real chain. */
+            u8 th[32];
+            tx_hash(c, th);
+            if (verify_cert_chain(c, th) < 0) return -1;
+            if (c->verify) {
+                struct x509_cert leaf;
+                if (!x509_parse(c->tx + c->cert_off[0], c->cert_len[0], &leaf) ||
+                    check_cert_verify(body, len, th, &leaf) < 0) {
+                    c->err = TLS_E_CERTVERIFY; c->state = TLS_ERROR; return -1;
+                }
+                c->saw_cv = 1;
+            }
+            tx_add(c, p + i, 4 + len);
+            i += 4 + len;
+            continue;
+        }
+
+        /* EncryptedExtensions(8), NewSessionTicket(4): transcript only. */
         tx_add(c, p + i, 4 + len);
         i += 4 + len;
     }

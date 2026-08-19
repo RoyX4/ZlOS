@@ -9,18 +9,29 @@
  * TLS_AES_128_GCM_SHA256 AND X25519, and nothing else is offered. A second
  * ciphersuite is not more security, it is a negotiation to get wrong.
  *
- * WHAT THIS DOES NOT DO, stated here because the whole point of TLS is a claim
- * about who you are talking to:
+ * IT NOW VERIFIES THE SERVER, and that claim is worth stating precisely
+ * because the earlier version of this comment said the opposite. Call
+ * tls_trust() before tls_start() and the handshake checks BOTH halves:
  *
- *   IT DOES NOT VERIFY THE SERVER'S CERTIFICATE.
+ *   THE CHAIN     x509.c walks it to a root in the caller's store, checks the
+ *                 host against subjectAltName, checks every signature and
+ *                 every CA constraint, and checks the dates.
+ *   THE KEY       CertificateVerify proves the peer HOLDS the private key.
+ *                 Without this a chain is worthless: certificates are public,
+ *                 so anyone can replay Wikipedia's real chain.
  *
- * The handshake completes, the traffic is encrypted, and an attacker who can
- * intercept the connection can present any certificate at all and be believed.
- * That is confidentiality against a passive eavesdropper and NOTHING against
- * an active one. browser.c must not show a padlock, must not call this
- * "secure", and must say on screen what it is. BROWSER-PROMPT.md §5 forbids a
- * half-TLS that pretends otherwise, and this header exists partly to make that
- * impossible to forget: x509.c is the other half and is not written yet.
+ * A verifying connection that never saw a Certificate refuses to complete, so
+ * a server cannot get an unauthenticated session by simply omitting one.
+ *
+ * WITHOUT tls_trust() NOTHING IS CHECKED, and that is still a real mode - a
+ * local server or a captive portal has no chain worth walking. It is opt-out
+ * rather than opt-in on purpose: a caller that forgets gets no verification
+ * and must not be told otherwise. browser.c calls tls_trust.
+ *
+ * WHAT IS STILL MISSING, honestly: only ECDSA over P-256 and P-384 is
+ * supported, so an RSA chain - which is most of the web outside Let's Encrypt
+ * - is REFUSED rather than trusted. No revocation checking of any kind. And
+ * expiry needs a clock the caller supplies; pass null and dates go unchecked.
  */
 #ifndef ZL_TLS_H
 #define ZL_TLS_H
@@ -72,6 +83,24 @@ struct tls_conn {
     int appn, appr;
 
     int saw_sh, saw_fin;
+
+    /* ---- the certificate chain ------------------------------------------
+     * Offsets into `tx`, not copies: the transcript already holds every
+     * handshake byte for the whole connection, and the Certificate message is
+     * one of them. */
+    int cert_off[8], cert_len[8], ncerts;
+    unsigned char cv_hash[48];      /* transcript hash at CertificateVerify */
+    int cv_hashlen;
+    int saw_cert, saw_cv, cert_ok;
+
+    /* THE CALLER MUST SUPPLY THESE OR GET NOTHING. verify == 0 means the chain
+     * is parsed and ignored, exactly as before x509.c existed - kept only so a
+     * caller can knowingly connect to a host with no trust store (a local
+     * server, a captive portal) and must say so. browser.c sets verify = 1. */
+    int verify;
+    const struct x509_cert *roots;
+    int nroots;
+    const char *nowZ;               /* may be null: no clock, no expiry check */
 };
 
 #define TLS_E_NONE      0
@@ -83,9 +112,18 @@ struct tls_conn {
 #define TLS_E_ALERT     6     /* the peer sent a fatal alert            */
 #define TLS_E_OVERFLOW  7     /* a message larger than we will hold     */
 #define TLS_E_PROTOCOL  8     /* malformed                              */
+#define TLS_E_CERT      9     /* the chain did not validate             */
+#define TLS_E_CERTVERIFY 10   /* the server does not hold the cert key  */
 
 /* Begin a handshake with `host` (used for SNI, which Wikipedia and every
  * other shared-IP server requires). After this, tls_take() has a ClientHello. */
+/* Turn on certificate verification. Call BEFORE tls_start. Without it the
+ * handshake still completes and the chain is ignored - see the warning at the
+ * top of this file. */
+struct x509_cert;
+void tls_trust(struct tls_conn *c, const struct x509_cert *roots, int nroots,
+               const char *nowZ);
+
 void tls_start(struct tls_conn *c, const char *host);
 
 /* Hand it bytes that arrived from the peer. Returns how many it consumed, or
