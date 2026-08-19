@@ -1180,7 +1180,7 @@ fn g48_draw(ax, ay, aw, ah) {
         rrect(cx + 4 * u, cy + 4 * u, cell - 8 * u, cell - 8 * u, 6 * u, theme(TH_BG))
         e = g48_get(i)
         if e > 0 {
-            blend(cx + 4 * u, cy + 4 * u, cell - 8 * u, cell - 8 * u, theme(TH_ACCENT), g48_alpha(e))
+            rrblend(cx + 4 * u, cy + 4 * u, cell - 8 * u, cell - 8 * u, 6 * u, theme(TH_ACCENT), g48_alpha(e))
             label_num(cx + cell / 2 - 14 * u, cy + cell / 2 - 9 * u, shl(1, e), g48_ink(e), T_BODY, W_BOLD)
         }
         i = i + 1
