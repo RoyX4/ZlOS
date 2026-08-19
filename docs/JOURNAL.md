@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-20 — merge: main into desktop/browser-next - catching up 150 commits (76ea304)
+
+`desktop/browser-next` · 321 files changed, 751874 insertions(+), 3499 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>18 file(s)</summary>
+
+- `.gitignore`
+- `.ultra/STATE.md`
+- `CLAUDE.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/HANDOFF.md`
+- `kernel/SOURCES`
+- `kernel/arena.c`
+- `kernel/browser.c`
+- `kernel/check-memmap.sh`
+- `kernel/fb.c`
+- `kernel/hosttest/build.sh`
+- `kernel/hosttest/wmtest.c`
+- _…and 6 more_
+
+</details>
+
 ## 2026-08-19 — docs(fleet): wguard.sh was listed as both a lead and verified - resolved (fc6fac6)
 
 `fleet/audit-2026-08-19` · 2 files changed, 25 insertions(+), 7 deletions(-)

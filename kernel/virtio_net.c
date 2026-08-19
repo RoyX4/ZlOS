@@ -51,11 +51,6 @@
  * middle of an 80 MiB hole that nothing else touches, comfortably inside the
  * smallest guest we support, and the asserts below fail the build if either
  * neighbour ever grows into it.
- */
-
-#include "dma.h"
- * middle of an 80 MiB hole that nothing else touches, comfortably inside a
- * -m 256 guest.
  *
  * "AN 80 MiB HOLE THAT NOTHING ELSE TOUCHES" WAS TRUE WHEN IT WAS WRITTEN AND
  * IS THE REASON THIS REGION IS NOW IN memmap.h. It stopped being this file's
@@ -65,6 +60,7 @@
  * 80..96 of it.
  */
 
+#include "dma.h"
 #include "memmap.h"
 
 typedef unsigned long long u64;
