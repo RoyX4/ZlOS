@@ -69,6 +69,7 @@ rtc.c
 
 # desktop/exec-track
 arena.c
+heap.c
 exec.c
 
 # desktop/feel-and-control

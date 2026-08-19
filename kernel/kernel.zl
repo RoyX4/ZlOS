@@ -4106,14 +4106,24 @@ usb_boot()
 # that is not backed by RAM is something you want to be told about while you
 # are still reading the boot log, not three keystrokes into a program.
 arena_up()
+# The general heap, and it is a DIFFERENT thing from the arena above rather than
+# a better one. The arena hands memory to zl programs and takes it all back in
+# one move between runs; this hands out memory the kernel keeps, and takes it
+# back one object at a time. Neither replaces the other and both are called at
+# boot, for the same reason arena_up is: an allocator that is not backed by RAM
+# is something you want to read in the boot log, not discover three keystrokes
+# into a program.
+heap_up()
 ok_line("zl runtime, kernel subset")
-# STILL TRUE, and it is worth saying why rather than leaving the next reader to
-# wonder whether it was just missed. A bump allocator with no free() and no
-# reuse inside a run is not a heap - there is nothing to fragment, nothing to
-# double-free, and nothing to leak that a reset does not reclaim. The line stops
-# being honest the day the interpreter boxes lists and strings (EXEC-PROMPT §8),
-# and that is the change that has to carry it, not this one.
-info_line("no heap, no filesystem, no scheduler")
+# THIS LINE USED TO SAY "no heap", and the comment under it said the line would
+# stop being honest "the day the interpreter boxes lists and strings, and that
+# is the change that has to carry it, not this one." A different change carried
+# it: heap.c is a real allocator - segregated free lists, boundary tags,
+# free/reuse/coalesce, and a worst case measured at 3 steps for alloc and 4 for
+# free with thousands of free blocks outstanding (hosttest/heaptest.c).
+#
+# The filesystem and the scheduler claims are unchanged and still true.
+info_line("no filesystem, no scheduler")
 
 print("")
 color(C_GREEN)  print("  ready.")

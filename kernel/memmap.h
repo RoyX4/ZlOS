@@ -34,7 +34,8 @@
  *   0x0D000000  208   nvme.c        admin + I/O queues            16 MiB
  *   0x0E000000  224   xhci.c        the USB DMA arena             16 MiB
  *   0x0F000000  240   virtio_gpu.c  rings + the GPU framebuffer   16 MiB
- *   0x10000000  256   --- everything above here is unclaimed ---
+ *   0x10000000  256   heap.c        the general allocator         64 MiB
+ *   0x14000000  320   --- everything above here is unclaimed ---
  *   0x40000000 1024   --- HI_TOP: the smallest machine we promise ---
  *
  * A region's ceiling is the next region's base. "Does this fit" is that
@@ -101,6 +102,16 @@
 #define HI_NVME   0x0D000000UL   /* nvme.c       - admin + I/O queues       */
 #define HI_XHCI   0x0E000000UL   /* xhci.c       - the USB DMA arena        */
 #define HI_VGPU   0x0F000000UL   /* virtio_gpu.c - rings + GPU framebuffer  */
+/* THE FIRST REGION THAT IS NOT HAND-PLACED. Everything above is one buffer at
+ * one address chosen by a person; this is 64 MiB that heap.c hands out and
+ * takes back, so nothing inside it has a fixed address and nothing inside it
+ * appears in this file. That is the point of it.
+ *
+ * It is at 256 MiB - above every existing region rather than between two of
+ * them - so adding it moved nothing. That was deliberate: a second job was
+ * building the desktop app suite against this map at the time, and the one
+ * thing that could not happen was an occupied region changing address. */
+#define HI_HEAP   0x10000000UL   /* heap.c       - the general allocator     */
 #define HI_TOP    0x40000000UL   /* 1 GiB - the smallest guest we promise   */
 
 /* The same number the gates must pass to `-m`, in the units `-m` takes, so the
@@ -125,6 +136,7 @@ _Static_assert(HI_GPU   < HI_BLUR,  "high-RAM map out of order: gpu >= blur");
 _Static_assert(HI_BLUR  < HI_NVME,  "high-RAM map out of order: blur >= nvme");
 _Static_assert(HI_NVME  < HI_XHCI,  "high-RAM map out of order: nvme >= xhci");
 _Static_assert(HI_XHCI  < HI_VGPU,  "high-RAM map out of order: xhci >= vgpu");
-_Static_assert(HI_VGPU  < HI_TOP,   "high-RAM map out of order: vgpu >= HI_TOP");
+_Static_assert(HI_VGPU  < HI_HEAP,  "high-RAM map out of order: vgpu >= heap");
+_Static_assert(HI_HEAP  < HI_TOP,   "high-RAM map out of order: heap >= HI_TOP");
 
 #endif /* ZL_MEMMAP_H */

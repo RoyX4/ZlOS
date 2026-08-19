@@ -11,8 +11,9 @@
   [  OK  ] keyboard on IRQ1 - no more polling the port
   USB: no xHCI controller (6 PCI devices seen)
   arena: 16 MiB at 14 MiB, ends at 30 MiB, ceiling 128 MiB (bg_buf)
+  heap: 64 MiB at 256 MiB, ends at 320 MiB
   [  OK  ] zl runtime, kernel subset
-  [ INFO ] no heap, no filesystem, no scheduler
+  [ INFO ] no filesystem, no scheduler
 
   ready.
   press h for help, q to halt

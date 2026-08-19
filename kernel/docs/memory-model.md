@@ -38,8 +38,15 @@ in the same session, not from arithmetic.
 | `0x0D000000` | 208 MiB | NVMe admin + I/O queues | `nvme.c` | `memmap.h` chain |
 | `0x0E000000` | 224 MiB | the USB DMA arena | `xhci.c` | `memmap.h` chain |
 | `0x0F000000` | 240 MiB | virtio-gpu rings + framebuffer | `virtio_gpu.c` | `memmap.h` chain |
-| `0x10000000` | 256 MiB | — unclaimed — | | |
+| `0x10000000` | 256 MiB | **the heap**, 64 MiB, hands out and takes back | `heap.c` | `memmap.h` chain |
+| `0x14000000` | 320 MiB | — unclaimed — | | |
 | `0x40000000` | 1 GiB | **`HI_TOP`** — the smallest guest we promise | `memmap.h` | `check-ram.sh` |
+
+Note what the heap row does to this table: it is the first region whose
+*contents* have no fixed addresses. Everything above it is one buffer at one
+address chosen by a person. Nothing inside the heap appears in `memmap.h`,
+because nothing inside it has an address until something asks for one. That is
+the whole direction of travel — Stage 4 extends it to the rest of the table.
 
 Measured build sizes, 2026-08-20:
 
@@ -92,9 +99,11 @@ that shape: raising (1) pushed the loaded region through the stack, which is
   6 MiB), which forced the raw-boot stack 6 → 12 MiB and the program arena
   8 → 14 MiB. `mkdisk.sh`'s image size is now *derived* from `CHUNKS` instead of
   being a literal that could drift from it. See below.
-- **Stage 3 — a real allocator with free/reuse.** NOT STARTED. `arena.c` is a
-  bump allocator with a reset and no `free()`; `k_malloc` in `interp_kernel.c`
-  forwards to it.
+- **Stage 3 — a real allocator with free/reuse. DONE.** `heap.c`, 64 MiB at
+  256 MiB, segregated free lists over boundary tags. Free, reuse, coalesce,
+  realloc-in-place, and a worst case **measured** at 3 steps for `alloc` and 4
+  for `free`. It is added *alongside* `arena.c`, which is unchanged — see "two
+  allocators, on purpose" below.
 - **Stage 4 — paging for the kernel's own use.** NOT STARTED. Page tables exist
   on the 64-bit path (`boot64.S` identity-maps the first 4 GiB with 2 MiB pages)
   but the kernel runs identity-mapped, which is *why* every buffer above needs a
@@ -161,6 +170,96 @@ overlap sweep (read from `arena.c`, not restated), plus a `_Static_assert` in
 `ARENA_BASE` that overlaps `SNAKE_X` — six overlap FAILs — and by renaming the
 constant away entirely, which fails loudly rather than sweeping a map with no
 arena in it.
+
+---
+
+## Stage 3 in detail: two allocators, on purpose
+
+`arena.c` is **not** replaced and **not** deprecated. The two answer different
+questions and keeping both is a decision, not a migration that stalled:
+
+| | `arena.c` | `heap.c` |
+|---|---|---|
+| whose memory | a zl program's | the kernel's own |
+| freeing | all of it at once, `arena_reset()` | one object at a time |
+| `free()` | there isn't one | `heap_free`, with coalescing |
+| lifetime | one `run` | the uptime of the machine |
+| what it defends against | use-after-free, by making every pointer die at the same instant | fragmentation and leaks |
+
+`k_malloc`/`k_free`/`k_realloc` in `interp_kernel.c` **still forward to the
+arena, deliberately.** Pointing them at the heap would look like progress and
+would be a regression: zl programs currently get their memory reclaimed
+wholesale between runs, and a program that leaks cannot hurt the next one. On
+the heap they would leak for real. The migration candidates are kernel-side
+allocations that outlive a program — window lists, the browser's DOM, anything
+that today gets a fixed buffer sized for the worst case — not `k_malloc`.
+
+### The design, and the two things that were hard
+
+**Segregated free lists over boundary tags.** Free blocks are filed by size into
+175 bins with a bitmap per level, so "find a block big enough" is a mask and a
+count-trailing-zeros, never a walk. Every block records its own size and its
+predecessor's, so coalescing on free is arithmetic on both neighbours.
+
+**Hard thing 1 — a bin holds a RANGE, so its head may not fit.** One bin per
+power of two is the obvious scheme and it is wrong under fragmentation: the
+allocator must either walk the list (the unbounded pause a compositor cannot
+afford) or skip the bin, which **refuses an allocation while a block that would
+have fitted sits in the list it skipped**. The first draft did the second. The
+fix is TLSF's: cut each power of two into 8 slices and round the request up to a
+slice boundary, so every block in the chosen bin is at least the request. The
+head always fits. Cost is ≤12.5% waste on the size class.
+
+**Hard thing 2 — `split()` could leave two adjacent free blocks.** From
+`heap_alloc` this is impossible: the block being split just came off a free
+list, and a free block can never have a free neighbour. From `heap_realloc`'s
+shrink path it happens routinely, because the block being split is *live* and
+its successor is free as often as not. `heaptest.c` caught it — 1921 of 1923
+checks passed and both failures were `realloc shrink`. It is invisible from
+inside `alloc`/`free`: the metadata stays self-consistent and the heap merely
+stops coalescing, which surfaces days later as an out-of-memory the byte counts
+contradict.
+
+### Offsets, not pointers
+
+Free-list links are `u32` offsets from `HEAP_BASE`, never pointers, so the
+block header is 16 bytes on the 32-bit kernel, the 64-bit kernel, the LLP64 EFI
+target and the 64-bit Linux host alike — asserted, not hoped. `CLAUDE.md` opens
+with the two times this project shipped a pointer-sized quantity that differed
+between builds. An allocator's header is that hazard in its purest form: three
+different heaps compiled from one file, corrupting on one target only.
+
+### What proves it
+
+`hosttest/heaptest.c` compiles the shipping `heap.c` unmodified as a Linux
+program. **1923 checks, 0 failures**, no QEMU:
+
+- `heap_check()` — a full boundary-tag walk — after **every** operation in the
+  stress phases, not at the end. An allocator that is sound at the end and
+  briefly corrupt in the middle is an allocator that corrupts memory.
+- 32 MiB allocated, freed, and allocated again *at the same address*: the one
+  behaviour `arena.c` cannot produce.
+- 1024 blocks freed in scrambled order, then the whole heap allocated as one
+  block — coalescing proved by its consequence, not by reading its metadata.
+- 4000 random operations straddling the 512-byte small/large boundary, with
+  every payload verified byte-for-byte before it is freed. That is what catches
+  two live allocations that overlap, which `heap_check()` cannot see because the
+  metadata stays consistent.
+- the determinism claim **measured**: `alloc 3 steps, free 4 steps` worst case
+  over the whole run, with thousands of free blocks outstanding. If the bound
+  were secretly O(free blocks) those numbers would be in the thousands.
+
+### The limit worth knowing
+
+`ram_backed()` answers *"is there RAM here"*. It does **not** answer *"is this
+RAM unclaimed"*, and on the EFI path that second question is open — firmware
+chooses where to load the image and nothing here reads the UEFI memory map. That
+is true of every region in `memmap.h` and is why each driver ships a
+`*_ram_ok()`; the heap is no worse and no better. The probe restores what it
+found so a probe alone is harmless, but `heap_init()` writes a block header
+straight after. **Turning that convention into a check means reading the UEFI
+memory map, which is Stage 4 work.** Until then the evidence is `verify-efi.sh`
+booting green with it running.
 
 ---
 
