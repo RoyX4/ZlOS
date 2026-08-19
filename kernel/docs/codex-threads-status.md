@@ -280,6 +280,58 @@ editor, compositor or memory-map surfaces the three rebuilds touch, except
 `kernel/hosttest/build.sh`. So rebasing `desktop/files-app` forward should be
 clean or near-clean; expect the only contention at `hosttest/build.sh`.
 
+### Results — independently verified
+
+Each branch was re-verified by a script that never pipes a build (the
+land-gate's own header records that piping through `tail` made a non-linking
+tree gate green). All three kernel builds, all three static gates, the hosttest
+harness, and `nm -u` on both ELFs.
+
+**`desktop/v10-look` → GREEN** (`afc04d0`, 5 commits)
+Three real defects, each confirmed by reading before fixing:
+- `fb.c`'s `icons24`/`icons48` externs declared `[10]`; `icons.c` defines `[20]`.
+  Linked fine because the element type matched — silently unreachable icons.
+- `wm.c`'s `chrome()` drew the resize grip **twice**, the first at the wrong
+  size and colour. Before/after `wmshot` crops committed as evidence.
+- `wm.c`'s `wm_repaint()` composited a fading window's saved backdrop at the
+  **wrong origin** — `cx/cy/cw/ch` were captured for the stash then clobbered by
+  a later `isect()` before the blend reused them. Measured: 19 of 20 sampled
+  rows changed, largest single-channel delta 40/255.
+
+Most of the v10 look backlog turned out to be **already closed** by an earlier
+session — including the dock digit-debris bug, which re-derivation showed was
+already fixed at `kernel.zl:3247-3265`. The same pattern as everything else here.
+
+**`desktop/files-app` → GREEN** (`2c4fe1e`, 2 commits)
+The full spec shipped: a Files window (`APP_FILES`, reachable as `filemgr` /
+`explorer`), auto-mount on open, create/open/delete by name, and the editor's
+disk-backed mode with real Ctrl+S, Ctrl+C and Ctrl+V. The ten numbered RAM slots
+are untouched, as the spec required.
+
+**The cold-boot gate actually ran**, which is the part that matters: boot 1
+created `probe.txt` and saved it, the QEMU process was **killed**, and an
+independent `qemu-system-i386` against the same NVMe image reopened the file
+with matching content (ink 1016 in both boots). Committed as
+`kernel/probe-files.py`, so it is now a permanent gate rather than a one-off.
+`hosttest/fstest`: 117 assertions, 0 failures.
+
+One deviation, correctly flagged rather than hidden: the brief said to declare
+the new buffer in `memmap.h`, but that file's own header scopes it to the
+≥128 MiB high-RAM map. `FILES_NAME_BUF` is a 24-byte low-memory buffer, so it
+was registered in `check-memmap.sh`'s sized overlap check instead — the file
+that actually governs that range.
+
+**Both branches boot.** `kernel/verify-raw.sh` run independently on each once
+box load fell below the gate's own 4.0 threshold:
+
+```
+zl-linux-v10look    exit=0  ok  kernel boots via our own bootloader (no GRUB), shell responds
+zl-linux-files-app  exit=0  ok  kernel boots via our own bootloader (no GRUB), shell responds
+```
+
+That closes the one gap the v10-look builder had flagged as unverified — it
+could not boot-test while six concurrent sessions held the box above load 6.
+
 ### Verification stance
 
 An agent reporting "build green" is a claim, not evidence. Every branch gets its
