@@ -422,6 +422,14 @@ extern void wm_set_home(int win);
 extern int  wm_count(void);
 extern int  wm_zorder_at(int i);
 extern int  wm_win_app(int win);
+/* workspaces. The compositor owns which one is current because it owns the
+ * window table; kernel.zl owns how many there are and what the pips look
+ * like. cur_ws()/set_ws() in kernel.zl are these four. */
+extern int  wm_ws(void);
+extern int  wm_set_ws(int n);
+extern int  wm_win_ws(int win);
+extern int  wm_set_win_ws(int win, int n);
+extern int  wm_set_ws_n(int n);
 extern int  wm_add_tab(int win, int app, const char *title);
 extern void wm_damage(int x, int y, int w, int h);
 extern void wm_damage_win(int win);
@@ -1328,6 +1336,14 @@ Value zl_calln(const char *name, int n, ...)
      * which app is in it. A taskbar cannot exist without these. */
     if (streq(name, "wm_zat"))     return zl_num((double)wm_zorder_at((int)a[0].num));
     if (streq(name, "wm_app"))     return zl_num((double)wm_win_app((int)a[0].num));
+    /* workspaces. wm_ws/wm_setws are the desktop's current one; wm_winws/
+     * wm_setwinws are one window's. All four are the compositor's, so the
+     * pips, the taskbar and the filter cannot disagree about which is which. */
+    if (streq(name, "wm_ws"))      return zl_num((double)wm_ws());
+    if (streq(name, "wm_setws"))   return zl_num((double)wm_set_ws((int)a[0].num));
+    if (streq(name, "wm_winws"))   return zl_num((double)wm_win_ws((int)a[0].num));
+    if (streq(name, "wm_setwinws"))return zl_num((double)wm_set_win_ws((int)a[0].num,(int)a[1].num));
+    if (streq(name, "wm_wsn"))     return zl_num((double)wm_set_ws_n((int)a[0].num));
     /* ---- from desktop/exec-track ------------------------------------------
      * NAMING: exec-track had renamed wm_focus to be the SETTER and wm_focused
      * the getter. On this side wm_focus is the GETTER and wm_setfocus the

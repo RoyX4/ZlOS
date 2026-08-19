@@ -76,10 +76,10 @@ echo "built ./inputtest_hid (run: ./inputtest_hid)"
 # sliver of an old window left on the wallpaper, a click landing on the window
 # underneath, a drag that stops when the pointer outruns the frame. None of
 # those show in a screenshot taken a frame later.
-gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../uikit.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest        (run: ./wmtest)"
-gcc -O2 -w -o wmtest_feel wmtest_feel.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest_feel wmtest_feel.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../uikit.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest_feel"
 
@@ -87,7 +87,7 @@ echo "built ./wmtest_feel"
 # wrong window; eyes catch a title bar four pixels too tall, or a toggle that
 # renders as a circle instead of a pill. Both were real, and only the second
 # kind is found by looking.
-gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../uikit.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmshot        (run: ./wmshot out.ppm)"
 
@@ -97,13 +97,13 @@ echo "built ./wmshot        (run: ./wmshot out.ppm)"
 # 2.25 and 16,000 us at load 7.43, which is not an A/B. Cycles counted here are
 # perturbed by cache pressure, not by an order of magnitude, and it attributes
 # the cost per app instead of reporting one number.
-gcc -O2 -w -o wmbench wmbench.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmbench wmbench.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../uikit.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../term.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmbench       (run: ./wmbench)"
 # The settings block, against a fake disk. This is the first code in the project
 # that WRITES to a disk, and its stated gate needs a booting kernel - so the
 # record gets a fake NVMe instead, and every single-bit flip of it is walked.
-gcc -O2 -w -o settingstest settingstest.c ../settings.c ../ui.c
+gcc -O2 -w -o settingstest settingstest.c ../settings.c ../ui.c ../uikit.c
 echo "built ./settingstest  (run: ./settingstest)"
 
 # The tiled rasterizer against the scanline one it does NOT replace. Two ways
@@ -305,7 +305,7 @@ echo "built ./rtctest       (run: ./rtctest)"
 # expiry; this asserts the part that only exists once wm.c is involved - that
 # it paints ON TOP of a window, that it leaves no ghost when it retires, and
 # that focus never moves, because a toast is not a window and cannot be one.
-gcc -O2 -w -o toasttest toasttest.c ../wm.c ../ease.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c \
+gcc -O2 -w -o toasttest toasttest.c ../wm.c ../ease.c ../ui.c ../uikit.c ../wmglue.c ../settings.c hoststubs.c ../fb.c \
     ../input.c ../notify.c ../snap.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./toasttest     (run: ./toasttest)"

@@ -319,18 +319,63 @@ CLOCK_W = 36
 
 # ---- workspaces --------------------------------------------------------------
 # The reference has three and the pip row is where you see which one you are on.
-# zlOS had none at all - no window carried a workspace and nothing switched -
-# so this is the state the pips read. Windows are filtered by it as that lands;
-# until then switching changes the indicator and nothing else, which is stated
-# here rather than left to be discovered.
+#
+# THE CURRENT WORKSPACE IS THE COMPOSITOR'S NOW, not a variable in this file.
+# It used to be a `ws_cur` here that only the pips read: switching changed the
+# indicator and nothing else, and the comment that used to sit in this spot
+# said so. That is the shape of an indicator that tells the truth about a
+# variable and lies about the machine, and the fix is not to add filtering
+# beside the variable - it is to move the variable to where the windows are.
+# wm.c holds it, wm.c filters the paint walk, the hit test and both focus
+# walks by it, and these two functions are now one call each.
+#
+# HOW MANY there are stays here, because that is policy: three pips, three
+# workspaces. wm_wsn() tells the compositor the ceiling so Super+9 is refused
+# rather than switching to an empty ninth workspace with no pip to return from.
 WS_N = 3
-ws_cur = 1
-fn cur_ws() { return ws_cur }
-fn set_ws(n) {
-    if n < 1 { return 0 }
-    if n > WS_N { return 0 }
-    ws_cur = n
-    wm_damage_win_all()
+fn cur_ws() { return wm_ws() }
+fn set_ws(n) { return wm_setws(n) }
+
+# WHERE AN APP LIVES WHEN NOTHING HAS OPENED IT YET - the reference's own
+# assignment, from ds-reference.html's three tables:
+#
+#   APPS       each entry carries its own `ws:`, listed one per app below
+#   UTILS      `ws:2` for all ten, applied by the .map() that builds them
+#   GAME_APPS  `ws:3` for all twenty-four, the same way
+#
+# This is the INITIAL table and not a rule about opening. The reference's
+# openApp() writes `winWs[id] = s.ws` every time, so an app you launch appears
+# on the workspace you are looking at, which is what wm_open does here too. The
+# table is what a window carries before anyone has opened it - which is why the
+# only place it is read is the boot composition, where the three windows the
+# desktop opens for itself get their workspace from it rather than from the
+# accident of which workspace happened to be current at boot.
+fn app_ws(id) {
+    if id == APP_SHELL   { return 1 }         # Terminal
+    if id == APP_FILES   { return 1 }
+    if id == APP_MONITOR { return 1 }
+    if id == APP_EDIT    { return 2 }         # Text Editor
+    if id == APP_SETTINGS { return 1 }
+    if id == APP_KLOG    { return 2 }         # Kernel Log
+    if id == APP_REND    { return 3 }         # Renderer
+    if id == APP_HEXV    { return 3 }         # Hex Viewer
+    if id == APP_FBUF    { return 3 }         # Framebuffer
+    if id == APP_TTY     { return 2 }         # Console (tty1)
+    if id == APP_FONT    { return 3 }         # Font Atlas
+    if id == APP_DISK    { return 1 }         # Disk Usage
+    if id == APP_SVC     { return 1 }         # Services
+    if id == APP_ARCH    { return 3 }         # Archive Manager
+    if id == APP_IMG     { return 3 }         # Image Viewer
+    if id == APP_NET     { return 2 }         # Network
+    if id == APP_CLOCK   { return 2 }         # Clocks & Timers
+    if id == APP_SYSINFO { return 1 }         # System Info
+    if id == APP_CALC    { return 2 }         # Calculator
+    # The two whole categories. reg_cat() answers 1 for a utility and 2 for a
+    # game, which is exactly the split the reference's two .map()s make, so
+    # these two lines stand in for thirty-four entries and cannot go stale when
+    # a game is added.
+    if reg_cat(id) == 1 { return 2 }
+    if reg_cat(id) == 2 { return 3 }
     return 1
 }
 
@@ -459,6 +504,45 @@ fn island_sep(sx, iy, ih, u) {
     sy = iy + (ih - SEP_H * u) / 2
     fill_rgb(sx + ISLAND_GAP * u, sy, 1, SEP_H * u, theme(TH_BORDER))
     return sx + ISLAND_GAP * 2 * u + 1
+}
+
+# WHICH PIP IS UNDER A POINT, or -1. The pips were decoration until this
+# existed: draw_header painted three of them and nothing in desk_click ever
+# looked at that band, so the only way to change workspace was a key binding
+# that did not exist either.
+#
+# It repeats draw_header's arithmetic rather than reading a stored x, and that
+# is deliberate but it is the SECOND-best shape: the island is laid out as it
+# is painted, so the pip row's x exists only as a local inside that loop. The
+# rule this file already learned the hard way (see app_tick's note on
+# draw_status and the tray strip) is that a second INDEPENDENTLY-DERIVED origin
+# for the same row is how a control ends up drawn in one place and clickable in
+# another - so this is written directly below the function it mirrors, one
+# term at a time in the same order, and island_sep's advance is spelled out
+# here because island_sep itself DRAWS and a hit test must not.
+#
+# THE HIT BAND IS THE WHOLE ISLAND HEIGHT, not the 7px pip. A seven-pixel-tall
+# target is not clickable by a person, and nothing else in the island occupies
+# that column, so widening it costs nothing and steals nothing.
+fn pip_at(hx, hy) {
+    if px_w() == 0 { return 0 - 1 }
+    u = ui()
+    ih = ISLAND_H * u
+    iy = ISLAND_TOP * u
+    if hy < iy { return 0 - 1 }
+    if hy >= iy + ih { return 0 - 1 }
+    px = (px_w() - island_w()) / 2 + ISLAND_PAD * u
+    px = px + CHIP_PAD * 2 * u + 5 * u + CHIP_GAP * u + label_w("Activities", T_BODY, W_BOLD)
+    px = px + ISLAND_GAP * 2 * u + 1
+    wsi = 1
+    while wsi <= WS_N {
+        pw = PIP_H * u
+        if wsi == cur_ws() { pw = PIP_W_ON * u }
+        if hx >= px { if hx < px + pw + ISLAND_GAP * u { return wsi } }
+        px = px + pw + ISLAND_GAP * u
+        wsi = wsi + 1
+    }
+    return 0 - 1
 }
 
 # the dock top edge, cell-aligned to row (rows-3) so at_num can place the clock
@@ -4172,6 +4256,12 @@ fn desk_click(cx, cy, cbtn) {
 
     if down == 0 { return 0 }
     if cy < TOPBAR_H * u { if cx < 210 * u { return open_menu() } }
+    # A PIP IS A CONTROL NOW. It is checked after the Activities corner and
+    # before the dock, which is the order the bands actually sit in.
+    if cy < TOPBAR_H * u {
+        pn = pip_at(cx, cy)
+        if pn > 0 { return set_ws(pn) }
+    }
     if cy < dock_y() { return 0 }
     # THE START-BUTTON GUARD THAT USED TO BE HERE IS GONE. It read
     #
@@ -4272,7 +4362,17 @@ fn draw_tasklist(dy) {
     while ti < wm_n() {
         tw = wm_zat(ti)
         ta = wm_app(tw)
-        if app_has_tile(ta) == 0 {
+        # LISTED ONLY IF IT IS ON THIS WORKSPACE, as well as having no dock
+        # tile. The reference filters the same way
+        # (`openIds.filter(a => winWs[a.id] === ws)`), and the alternative is a
+        # chip for a window that is not on screen - a control that lies about
+        # what it does. Written as a flag rather than folded into the tile test
+        # because app_has_tile(-1) is 0, so "hide it by spoiling the app id"
+        # would have SHOWN it.
+        tshow = 0
+        if app_has_tile(ta) == 0 { tshow = 1 }
+        if wm_winws(tw) != cur_ws() { tshow = 0 }
+        if tshow == 1 {
             if tn < nfit {
                 tx = task_x0() + tn * TASK_PITCH * u
                 tsel = 0
@@ -4301,7 +4401,14 @@ fn task_slot_at(cx, cy) {
     tn = 0
     while ti < wm_n() {
         tw = wm_zat(ti)
-        if app_has_tile(wm_app(tw)) == 0 {
+        # THE SAME TWO TESTS AS draw_tasklist, in the same order. A hit test
+        # that counts a different set of chips than the draw does hands the
+        # click to the window next door - which is the whole reason the
+        # workspace filter had to be added to BOTH loops in one edit.
+        tshow = 0
+        if app_has_tile(wm_app(tw)) == 0 { tshow = 1 }
+        if wm_winws(tw) != cur_ws() { tshow = 0 }
+        if tshow == 1 {
             if tn == tsl { return tw }
             tn = tn + 1
         }
@@ -4519,6 +4626,13 @@ fn wm_boot_start() {
     # reachable. Non-Intel and unsupported devices simply keep TSC pacing.
     intel_find()
     wm_init()
+    # HOW MANY WORKSPACES THERE ARE, told to the compositor rather than
+    # duplicated inside it. wm.c defaults to 1 - which is what keeps the host
+    # tests, none of which call this, behaving exactly as they did before
+    # workspaces existed - and refuses any switch past the ceiling, so
+    # Super+9 cannot strand you on an empty workspace with no pip to return
+    # from. WS_N is this file's, because three pips is a design decision.
+    wm_wsn(WS_N)
     if wm_bind() == 0 {
         color(C_RED)  print("  wm: kernel.zl defines no app_draw - nothing to composite")
         color(C_GREY)
@@ -4566,6 +4680,17 @@ fn wm_boot_start() {
         shell_win = wm_open(APP_SHELL, "Terminal", desk_ox + 132 * u, 60 * u, 600 * u, 368 * u)
         files_win = wm_open(APP_FILES, "Files", desk_ox + 238 * u, 346 * u, 672 * u, 352 * u)
         mon_win = wm_open(APP_MONITOR, "System Monitor", desk_ox + 758 * u, 76 * u, 424 * u, 376 * u)
+        # THE BOOT SET GETS ITS WORKSPACE FROM THE TABLE, not from whichever
+        # one happens to be current. wm_open puts a new window on the current
+        # workspace - correct for everything a person launches, and the wrong
+        # source for the composition the desktop builds for itself. All three
+        # are ws 1 in the reference, so today these three calls change nothing
+        # and are refused as no-ops; they are here so that the day the boot set
+        # gains a fourth window, its workspace comes from the same place its
+        # size and position already do.
+        wm_setwinws(shell_win, app_ws(APP_SHELL))
+        wm_setwinws(files_win, app_ws(APP_FILES))
+        wm_setwinws(mon_win, app_ws(APP_MONITOR))
     } else {
         shell_win = wm_open(APP_SHELL, "Terminal", 16 * u, 56 * u, sw - 32 * u, sh - 72 * u)
     }

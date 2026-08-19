@@ -192,6 +192,34 @@ int  wm_anim(int win, int kind);      /* 0 = refused, every slot busy */
 int  wm_anim_running(int win);        /* the kind, or 0               */
 int  wm_anim_alpha(int win);          /* 0..255, 255 when settled     */
 
+/* ---- animating something that is NOT a window -----------------------------
+ * A dock tile, the dot under it, a toast, the wallpaper. Same slots, same
+ * curves, same durations; the caller supplies the rectangle to repaint,
+ * because wm.c does not know where the dock is. The id must be negative or it
+ * collides with a window index and wm_anim_at refuses. */
+#define WM_FX_TOAST  (-1)     /* wm.c's own: ztoast                          */
+#define WM_FX_GHOST  (-2)     /* wm.c's own: ANIM_CLOSE, the closing window  */
+#define WM_FX_USER   (-16)    /* the policy layer's, -16 and downward        */
+
+int  wm_anim_at(int id, int kind, int x, int y, int w, int h);
+int  wm_anim_scale(int id);           /* thousandths; 1000 when settled      */
+int  wm_anim_progress(int id, int kind);  /* eased 0..1000, or -1 if not run */
+
+/* zpulse and zsweep are `infinite` in the reference and so hold no slot at
+ * all - an entry that never ends would take a quarter of the timeline for the
+ * life of the boot. This is a pure function of the clock: opacity 0..255,
+ * never below the reference's .55 floor, and 255 when animations are off. */
+int  wm_pulse(int period_ms);
+
+/* zsweep, the wallpaper band. OFF until asked - the reference keeps it behind
+ * its CRT toggle too - and gated by wm_set_anim on top of that. */
+void wm_set_sweep(int on);
+int  wm_sweep_enabled(void);
+
+/* Close it AND shrink a ghost of it away - the gesture form of wm_close.
+ * wm_close() stays instantaneous, because teardown loops and policy use it. */
+void wm_close_fx(int win);
+
 void wm_damage(int x, int y, int w, int h);   /* mark a screen region dirty  */
 void wm_damage_win(int win);                  /* ...or a whole window        */
 void wm_frame(void);                          /* one pass of the frame loop  */
@@ -211,6 +239,18 @@ int  wm_frame_us(void);
 int  wm_peak_us(void);
 void wm_peak_reset(void);
 int  wm_win_app(int win);                      /* the ACTIVE tab.s app        */
+/* ---- workspaces -------------------------------------------------------------
+ * A window is on exactly one, numbered from 1. The z-order is GLOBAL and a
+ * switch never touches it, so a workspace you come back to looks exactly as
+ * you left it. wm_set_ws / wm_set_win_ws return 0 when they refuse (a number
+ * below 1, a window that is not open, or a move that changes nothing).
+ * HOW MANY workspaces exist is policy and lives in kernel.zl. */
+int  wm_ws(void);                              /* the one being looked at     */
+int  wm_set_ws(int n);
+int  wm_win_ws(int win);                       /* 0 if the window is not open */
+int  wm_set_win_ws(int win, int n);
+int  wm_ws_count(void);                        /* defaults to 1 until told    */
+int  wm_set_ws_n(int n);
 void wm_set_anim(int on);                     /* window open animation on/off */
 int  wm_anim_enabled(void);
 

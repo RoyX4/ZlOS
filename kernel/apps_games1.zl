@@ -129,13 +129,46 @@ fn gs_bar(ax, ay, aw, ah, slot) {
 TT_CELL = 44
 tt_turn = 1
 tt_win  = 0                         # 0 playing, 1/2 winner, 3 draw
+# The three cells that won, or -1. tt_check knew which line it was and threw
+# the answer away, so the board said "X wins" and left the player to find the
+# line themselves - the one thing the screen is better at than the sentence.
+tt_wa = 0 - 1
+tt_wb = 0 - 1
+tt_wc = 0 - 1
+# The match tally. It survives `r` and is cleared only when the window is
+# opened, which is why there are two resets below rather than one.
+tt_sx = 0
+tt_so = 0
+tt_sd = 0
 
-fn tt_reset() { fill_mem(TT_BOARD, 0, 9)  tt_turn = 1  tt_win = 0  return 0 }
+fn tt_newgame() {
+    fill_mem(TT_BOARD, 0, 9)
+    tt_turn = 1
+    tt_win = 0
+    tt_wa = 0 - 1
+    tt_wb = 0 - 1
+    tt_wc = 0 - 1
+    return 0
+}
+# reg_new() calls this when the window opens; `r` calls tt_newgame(). A fresh
+# window starts a fresh match, a fresh round inside one keeps the score.
+fn tt_reset() { tt_newgame()  tt_sx = 0  tt_so = 0  tt_sd = 0  return 0 }
 
 fn tt_line(a, b, c) {
     va = peek8(TT_BOARD + a)
     if va == 0 { return 0 }
-    if va == peek8(TT_BOARD + b) { if va == peek8(TT_BOARD + c) { return va } }
+    if va == peek8(TT_BOARD + b) { if va == peek8(TT_BOARD + c) {
+        tt_wa = a
+        tt_wb = b
+        tt_wc = c
+        return va
+    }}
+    return 0
+}
+fn tt_won_cell(i) {
+    if i == tt_wa { return 1 }
+    if i == tt_wb { return 1 }
+    if i == tt_wc { return 1 }
     return 0
 }
 fn tt_check() {
@@ -167,19 +200,29 @@ fn tt_draw(ax, ay, aw, ah) {
     ac_board_bg(gx, gy, cell, 3, 3, theme(TH_SURF_1), theme(TH_BORDER))
     ci = 0
     while ci < 9 {
+        cx = gx + (ci % 3) * cell
+        cy = gy + (ci / 3) * cell
+        # the three cells that won, lit before the marks go on top
+        if tt_won_cell(ci) == 1 { fill_rgb(cx + 1, cy + 1, cell - 1, cell - 1, theme(TH_SURF_5)) }
         m = peek8(TT_BOARD + ci)
         if m > 0 {
-            cx = gx + (ci % 3) * cell
-            cy = gy + (ci / 3) * cell
             label(cx + cell / 2 - 6 * u, cy + cell / 2 - 8 * u, tt_mark_str(m), tt_mark_col(m), T_TITLE, W_BOLD)
         }
         ci = ci + 1
     }
     msg_y = gy + 3 * cell + 8 * u
     if tt_win == 0 { label(gx, msg_y, tt_turn_str(), theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
-    if tt_win == 1 { label(gx, msg_y, "X wins - r restarts", ac_cat_color(2), T_CAPTION, W_BOLD) }
-    if tt_win == 2 { label(gx, msg_y, "O wins - r restarts", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
-    if tt_win == 3 { label(gx, msg_y, "draw - r restarts", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD) }
+    if tt_win == 1 { label(gx, msg_y, "X wins - r plays again", ac_cat_color(2), T_CAPTION, W_BOLD) }
+    if tt_win == 2 { label(gx, msg_y, "O wins - r plays again", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
+    if tt_win == 3 { label(gx, msg_y, "draw - r plays again", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD) }
+    # the tally, which is what makes a second round worth playing
+    sy = msg_y + 18 * u
+    label(gx, sy, "X", ac_cat_color(2), T_CAPTION, W_BOLD)
+    label_num(gx + 14 * u, sy, tt_sx, theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    label(gx + 44 * u, sy, "O", theme(TH_ACCENT), T_CAPTION, W_BOLD)
+    label_num(gx + 58 * u, sy, tt_so, theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    label(gx + 88 * u, sy, "drawn", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(gx + 132 * u, sy, tt_sd, theme(TH_TEXT_HI), T_CAPTION, W_REG)
     gs_bar(ax, ay, aw, ah, GS_TT)
     return 0
 }
@@ -187,7 +230,7 @@ fn tt_mark_str(m) { if m == 1 { return "X" }  return "O" }
 fn tt_turn_str() { if tt_turn == 1 { return "X to move" }  return "O to move" }
 
 fn tt_event(win, ety, ecode, ex, ey) {
-    if ety == 3 { if ecode == 114 { tt_reset()  wm_dmg(win)  return 1 }  return 0 }
+    if ety == 3 { if ecode == 114 { tt_newgame()  wm_dmg(win)  return 1 }  return 0 }
     if ety != 4 { return 0 }
     if band(ecode, 1) == 0 { return 0 }
     if tt_win != 0 { return 0 }
@@ -201,21 +244,54 @@ fn tt_event(win, ety, ecode, ex, ey) {
     poke8(TT_BOARD + idx, tt_turn)
     tt_win = tt_check()
     if tt_win == 0 { if tt_turn == 1 { tt_turn = 2 } else { tt_turn = 1 } }
+    # The tally is stepped HERE, on the transition, not in tt_draw. A counter
+    # incremented from a draw counts repaints: drag another window across a
+    # finished game and X wins fifty times.
+    if tt_win == 1 { tt_sx = tt_sx + 1 }
+    if tt_win == 2 { tt_so = tt_so + 1 }
+    if tt_win == 3 { tt_sd = tt_sd + 1 }
     wm_dmg(win)
     return 1
 }
 
 # ==============================================================================
-# Nim - three piles, normal play (whoever takes the last object wins). Click
-# a pile at the dot you want to cut it down to - the standard Nim UI.
+# Nim - three piles, normal play (whoever takes the last object wins). Click a
+# stick and it goes, along with every stick to its right - the standard Nim UI,
+# where a click picks the size you are cutting the pile DOWN TO.
+#
+# TWO THINGS WERE WRONG HERE AND THE SECOND ONE MADE THE GAME UNWINNABLE.
+#
+# 1. The cut was `(cx - 10u) / (18u) + 1`. That + 1 means clicking the very
+#    first stick of a pile leaves ONE stick, and no click anywhere leaves
+#    zero - `if cut >= nim_pile(pi) { return 0 }` then refuses every attempt
+#    on a pile of one. So piles ratcheted down to 1, 1, 1 and stuck there.
+#    Nobody can take the last object, which is the only way this game ends.
+#    A player could not win, lose or draw it.
+# 2. It divided a possibly-negative numerator. This kernel's `/` truncates
+#    toward zero, so a click LEFT of the piles gave (negative)/(18u) = 0 and
+#    landed as a click on stick 0 rather than being rejected - the exact shape
+#    the comment inside nim_event already warned about for the row index while
+#    the column index below it did the same thing.
+#
+# And it was two players sharing one mouse with no opponent. It is now the
+# machine, playing Bouton's optimal strategy - see nim_ai.
 # ==============================================================================
 nim_a = 3
 nim_b = 5
 nim_c = 7
-nim_turn = 1
-nim_win  = 0
+nim_win  = 0                        # 0 playing, 1 you won, 2 the machine won
+nim_lastp = 0 - 1                   # the pile the machine last took from
+nim_lastn = 0                       # ...and how many it took
 
-fn nim_reset() { nim_a = 3  nim_b = 5  nim_c = 7  nim_turn = 1  nim_win = 0  return 0 }
+fn nim_reset() {
+    nim_a = 3
+    nim_b = 5
+    nim_c = 7
+    nim_win = 0
+    nim_lastp = 0 - 1
+    nim_lastn = 0
+    return 0
+}
 fn nim_pile(i) { if i == 0 { return nim_a }  if i == 1 { return nim_b }  return nim_c }
 fn nim_set(i, v) {
     if i == 0 { nim_a = v }
@@ -223,32 +299,109 @@ fn nim_set(i, v) {
     if i == 2 { nim_c = v }
     return 0
 }
+fn nim_total() { return nim_a + nim_b + nim_c }
 
+# THE NIM-SUM, and the whole theory of the game in one line. Bouton proved in
+# 1901 that a position is lost for whoever has to move exactly when the XOR of
+# the pile sizes is zero. bxor is exact in both this project's runtimes; `+`
+# and `-` would not answer the same question at all.
+fn nim_sum() { return bxor(bxor(nim_a, nim_b), nim_c) }
+
+# The machine's move. From a non-zero nim-sum there is always a move to zero,
+# and it is found by asking each pile what it would have to become: pile p
+# wants to be p XOR s, which is a legal take exactly when that is smaller.
+#
+# From a ZERO nim-sum every move loses against perfect play, so it takes one
+# stick from the largest pile and plays on. That branch is not decoration -
+# without it the function returns having moved nothing, the turn never comes
+# back to the player and the window looks frozen.
+fn nim_ai() {
+    s = nim_sum()
+    if s != 0 {
+        i = 0
+        while i < 3 {
+            p = nim_pile(i)
+            t = bxor(p, s)
+            if t < p {
+                nim_lastp = i
+                nim_lastn = p - t
+                nim_set(i, t)
+                return 1
+            }
+            i = i + 1
+        }
+    }
+    big = 0
+    i = 1
+    while i < 3 { if nim_pile(i) > nim_pile(big) { big = i }  i = i + 1 }
+    if nim_pile(big) == 0 { return 0 }
+    nim_lastp = big
+    nim_lastn = 1
+    nim_set(big, nim_pile(big) - 1)
+    return 1
+}
+
+# One player move and the reply to it, factored out of the click handler so the
+# rules can be played by a test as well as by a mouse. `cut` is the number of
+# sticks the pile is being left with, so cut == 0 empties it.
+fn nim_take(pi, cut) {
+    if nim_win != 0 { return 0 }
+    if pi < 0 { return 0 }
+    if pi > 2 { return 0 }
+    if cut < 0 { return 0 }
+    if cut >= nim_pile(pi) { return 0 }
+    nim_set(pi, cut)
+    nim_lastp = 0 - 1
+    nim_lastn = 0
+    if nim_total() == 0 { nim_win = 1  return 1 }
+    nim_ai()
+    if nim_total() == 0 { nim_win = 2  return 1 }
+    return 1
+}
+
+NIM_DOT = 18
+NIM_ROW = 26
 fn nim_draw(ax, ay, aw, ah) {
     u = ui()
     gs_canvas(ax, ay, aw, ah)
-    dw = 18 * u
+    dw = NIM_DOT * u
     pi = 0
     while pi < 3 {
-        py = ay + 10 * u + pi * 26 * u
-        di = 0
+        py = ay + 10 * u + pi * NIM_ROW * u
         n = nim_pile(pi)
-        while di < n {
-            fill_rgb(ax + 10 * u + di * dw, py, dw - 4 * u, 16 * u, ac_cat_color(2))
+        # The empty slots stay drawn, in the sunken-well token: a pile that
+        # simply vanishes gives the player nothing to compare against, and the
+        # whole skill of this game is comparing pile sizes.
+        di = 0
+        while di < 7 {
+            col = theme(TH_SURF_1)
+            if di < n { col = ac_cat_color(2) }
+            # the ghost of the machine's last take, so its move is visible
+            # rather than only stated in words underneath
+            if di >= n { if pi == nim_lastp { if di < n + nim_lastn { col = theme(TH_SURF_5) } } }
+            fill_rgb(ax + 10 * u + di * dw, py, dw - 4 * u, 16 * u, col)
             di = di + 1
         }
+        label_num(ax + 10 * u + 7 * dw + 8 * u, py + 2 * u, n, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         pi = pi + 1
     }
+    my = ay + 92 * u
     if nim_win == 0 {
-        label(ax + 10 * u, ay + 92 * u, nim_turn_str(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label(ax + 10 * u, my, "your move - click the stick you want to leave", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        if nim_lastp >= 0 {
+            label(ax + 10 * u, my + 16 * u, "it took", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+            label_num(ax + 56 * u, my + 16 * u, nim_lastn, theme(TH_TEXT_HI), T_CAPTION, W_REG)
+            label(ax + 74 * u, my + 16 * u, "from pile", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+            label_num(ax + 132 * u, my + 16 * u, nim_lastp + 1, theme(TH_TEXT_HI), T_CAPTION, W_REG)
+        }
     } else {
-        label(ax + 10 * u, ay + 92 * u, nim_win_str(), ac_cat_color(2), T_CAPTION, W_BOLD)
+        label(ax + 10 * u, my, nim_win_str(), nim_win_col(), T_CAPTION, W_BOLD)
     }
     gs_bar(ax, ay, aw, ah, GS_NIM)
     return 0
 }
-fn nim_turn_str() { if nim_turn == 1 { return "player 1 to move" }  return "player 2 to move" }
-fn nim_win_str()  { if nim_win  == 1 { return "player 1 wins - r restarts" }  return "player 2 wins - r restarts" }
+fn nim_win_str() { if nim_win == 1 { return "you took the last stick - you win. r restarts" }  return "it took the last stick - r restarts" }
+fn nim_win_col() { if nim_win == 1 { return theme(TH_OK) }  return theme(TH_DANGER) }
 
 fn nim_event(win, ety, ecode, ex, ey) {
     if ety == 3 { if ecode == 114 { nim_reset()  wm_dmg(win)  return 1 }  return 0 }
@@ -258,27 +411,26 @@ fn nim_event(win, ety, ecode, ex, ey) {
     u = ui()
     cx = ex - wm_cx(win)
     cy = ey - wm_cy(win)
-    # cy must be checked non-negative BEFORE the divide, not after: this
-    # kernel's `/` truncates toward zero (freestanding/runtime_kernel.c),
+    # BOTH coordinates are checked non-negative BEFORE their divide, not after.
+    # This kernel's `/` truncates toward zero (freestanding/runtime_kernel.c),
     # so (cy - 10u) at, say, cy = 8u gives -2u/26u = 0, not -1 - a click just
-    # above the first pile would silently pass a `pi < 0` check done after
-    # the division and register as a click ON pile 0. ac_cell_idx in
-    # apps_common.zl already gets this right; the sliders below (cp_slider_at)
-    # and the Hanoi pegs (ho_event) had the same shape and are fixed with it.
+    # above the first pile would silently pass a `pi < 0` check done after the
+    # division and register as a click ON pile 0. That was written down here
+    # for the ROW and then the COLUMN two lines below did exactly the same
+    # thing, unguarded, for the whole life of the file. ac_cell_idx in
+    # apps_common.zl gets both right; cp_slider_at and ho_event had the same
+    # shape and are fixed with it.
     if cy < 10 * u { return 0 }
-    pi = (cy - 10 * u) / (26 * u)
+    if cx < 10 * u { return 0 }
+    pi = (cy - 10 * u) / (NIM_ROW * u)
     if pi > 2 { return 0 }
-    into = cy - 10 * u - pi * 26 * u
+    into = cy - 10 * u - pi * NIM_ROW * u
     if into >= 16 * u { return 0 }
-    cut = (cx - 10 * u) / (18 * u) + 1
-    if cut < 0 { cut = 0 }
-    if cut >= nim_pile(pi) { return 0 }
-    nim_set(pi, cut)
-    if nim_a + nim_b + nim_c == 0 {
-        nim_win = nim_turn
-    } else {
-        if nim_turn == 1 { nim_turn = 2 } else { nim_turn = 1 }
-    }
+    # NO + 1. Clicking stick k leaves k sticks, so clicking the first stick
+    # empties the pile - which is the only way anyone ever takes the last
+    # object, and therefore the only way this game ends.
+    cut = (cx - 10 * u) / (NIM_DOT * u)
+    if nim_take(pi, cut) == 0 { return 0 }
     wm_dmg(win)
     return 1
 }

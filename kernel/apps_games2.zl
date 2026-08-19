@@ -50,20 +50,76 @@ fn wg_reset() {
     return 0
 }
 
+# ---- the packed cell, unpacked with BIT OPS and never with `/` ---------------
+# A cell is `letter | status << 5`. It used to be read back as `v / 32` and
+# `v % 32`, and that makes the rule BACKEND-DEPENDENT: the kernel runtime casts
+# both operands of `/` to long long, the host interpreter does not, so 96 / 32
+# is 3 in one and 3.0 in the other and 97 / 32 is 3 in one and 3.03125 in the
+# other. hosttest/games4_rules.zl's header documents that trap and the fix -
+# band and shr are exact in both - so the accessors below are the only way this
+# file touches a packed cell.
+fn wg_letter(r, c) { return band(peek8(WG_BOARD + r * WG_COLS + c), 31) }
+fn wg_state(r, c)  { return shr(peek8(WG_BOARD + r * WG_COLS + c), 5) }
+fn wg_put(r, c, letter, st) {
+    poke8(WG_BOARD + r * WG_COLS + c, bor(band(letter, 31), shl(st, 5)))
+    return 0
+}
+
+# ---- scoring, and the duplicate letter that the first version got wrong -----
+# The old rule was "green if it matches here, else yellow if this letter occurs
+# ANYWHERE in the target". That is the classic wrong answer, and it is wrong in
+# both directions at once:
+#
+#   target STORM, guess ROOMS -> the second O has nothing left to match (STORM
+#   has one O and the first already claimed it) but the old rule paints both
+#   yellow, so the board says the word has two Os.
+#   target GRAPE, guess EERIE -> R and E are green/placed, yet every remaining
+#   E was painted yellow as well, which says "there are more Es" when there
+#   are none.
+#
+# The rule every implementation of this game actually uses is a two-pass
+# consumption: greens first, each claiming its own target letter, then each
+# remaining guess letter takes ONE unclaimed target letter or stays grey.
+#
+# The claim set is FIVE BITS OF AN INTEGER, not a 26-entry tally in memory. It
+# only ever has WG_COLS members, band/shl are exact in both runtimes, and it
+# needs no address - so it cannot collide with a page some other slice owns.
 fn wg_submit() {
     if wg_col != WG_COLS { return 0 }
+    if wg_done != 0 { return 0 }
+    used = 0
     ok = 1
     ci = 0
     while ci < WG_COLS {
-        g = peek8(WG_BOARD + wg_row * WG_COLS + ci)
-        t = wg_word(wg_widx, ci)
-        st = 1
-        if g == t { st = 3 } else {
-            fi = 0
-            while fi < WG_COLS { if wg_word(wg_widx, fi) == g { st = 2 }  fi = fi + 1 }
+        g = wg_letter(wg_row, ci)
+        if g == wg_word(wg_widx, ci) {
+            wg_put(wg_row, ci, g, 3)
+            used = bor(used, shl(1, ci))
+        } else {
+            wg_put(wg_row, ci, g, 1)
+            ok = 0
         }
-        if st != 3 { ok = 0 }
-        poke8(WG_BOARD + wg_row * WG_COLS + ci, g + st * 32)
+        ci = ci + 1
+    }
+    ci = 0
+    while ci < WG_COLS {
+        if wg_state(wg_row, ci) == 1 {
+            g = wg_letter(wg_row, ci)
+            hit = 0 - 1
+            fi = 0
+            while fi < WG_COLS {
+                if hit < 0 {
+                    if band(used, shl(1, fi)) == 0 {
+                        if wg_word(wg_widx, fi) == g { hit = fi }
+                    }
+                }
+                fi = fi + 1
+            }
+            if hit >= 0 {
+                used = bor(used, shl(1, hit))
+                wg_put(wg_row, ci, g, 2)
+            }
+        }
         ci = ci + 1
     }
     if ok == 1 { wg_done = 1  return 0 }
@@ -73,11 +129,25 @@ fn wg_submit() {
     return 0
 }
 
+# Green is TH_OK and amber is TH_WARN - the reference's own state pair, wired
+# to meaning rather than to the accent setting, exactly as ui.c:78-80 says
+# those two roles are for. Grey-absent is TH_BORDER (ZD_SURF_6, "chip faces")
+# and an untouched cell is TH_SURF_1, the sunken-well token, which is what an
+# empty input slot is everywhere else in this desktop.
 fn wg_status_col(st) {
-    if st == 3 { return rgb(90, 170, 100) }
-    if st == 2 { return rgb(190, 170, 70) }
-    if st == 1 { return rgb(60, 64, 74) }
-    return rgb(30, 34, 46)
+    if st == 3 { return theme(TH_OK) }
+    if st == 2 { return theme(TH_WARN) }
+    if st == 1 { return theme(TH_BORDER) }
+    return theme(TH_SURF_1)
+}
+# Ink that survives its tile. TH_OK and TH_WARN are bright fills; the same
+# near-white the grey tiles use disappears on them. theme(TH_BG) is the
+# dark-ink-on-a-bright-fill idiom apps_games3.zl/apps_games4.zl already use
+# (g48_ink, the Fifteen puzzle's solved tile).
+fn wg_ink(st) {
+    if st == 3 { return theme(TH_BG) }
+    if st == 2 { return theme(TH_BG) }
+    return theme(TH_TEXT_HI)
 }
 
 fn wg_draw(ax, ay, aw, ah) {
@@ -89,18 +159,46 @@ fn wg_draw(ax, ay, aw, ah) {
     while ri < WG_ROWS {
         ci = 0
         while ci < WG_COLS {
-            v = peek8(WG_BOARD + ri * WG_COLS + ci)
-            st = v / 32
+            st = wg_state(ri, ci)
             cx = gx + ci * cell
             cy = ay + 6 * u + ri * cell
             rrect(cx + 2 * u, cy + 2 * u, cell - 4 * u, cell - 4 * u, 4 * u, wg_status_col(st))
-            if st != 0 { char_aa(cx + cell / 2 - cell_w() / 2, cy + cell / 2 - cell_h() / 2, 65 + (v % 32), theme(TH_TEXT_HI)) }
+            # THE LETTER YOU ARE TYPING WAS INVISIBLE. This drew a character
+            # only when the status was non-zero, and a letter typed into the
+            # live row has no status until enter is pressed - so five keys went
+            # in and the grid stayed blank, which reads as a dead app. Status
+            # cannot mark it either: a fourth status value would need a third
+            # bit, and "typed but unscored" is not a scoring state. The live
+            # row is bounded by wg_col instead, which is already exact -
+            # backspace zeroes the cell it retreats over.
+            show = 0
+            if st != 0 { show = 1 }
+            if ri == wg_row { if ci < wg_col { show = 1 } }
+            if show == 1 {
+                char_aa(cx + cell / 2 - cell_w() / 2, cy + cell / 2 - cell_h() / 2, 65 + wg_letter(ri, ci), wg_ink(st))
+            }
+            # the caret, so an empty grid still says where the next key lands
+            if wg_done == 0 { if ri == wg_row { if ci == wg_col {
+                fill_rgb(cx + 2 * u, cy + cell - 5 * u, cell - 4 * u, 2 * u, theme(TH_ACCENT))
+            }}}
             ci = ci + 1
         }
         ri = ri + 1
     }
     if wg_done == 1 { label(gx, ay + 8 * u + WG_ROWS * cell, "correct - r restarts", ac_cat_color(1), T_CAPTION, W_BOLD) }
-    if wg_done == 2 { label(gx, ay + 8 * u + WG_ROWS * cell, "out of guesses - r restarts", theme(TH_DANGER), T_CAPTION, W_BOLD) }
+    if wg_done == 2 {
+        # THE ANSWER, on a loss. Six wrong guesses and then never being told
+        # the word is the one outcome of this game that teaches nothing. There
+        # is no string to draw - wg_word returns letter indices - so it is
+        # drawn a character at a time, which is what char_aa is for.
+        label(gx, ay + 8 * u + WG_ROWS * cell, "the word was", theme(TH_DANGER), T_CAPTION, W_BOLD)
+        lx = gx + label_w("the word was", T_CAPTION, W_BOLD) + 8 * u
+        ci = 0
+        while ci < WG_COLS {
+            char_aa(lx + ci * cell_w(), ay + 8 * u + WG_ROWS * cell, 65 + wg_word(wg_widx, ci), theme(TH_TEXT_HI))
+            ci = ci + 1
+        }
+    }
     if wg_done == 0 { label(gx, ay + 8 * u + WG_ROWS * cell, "type a 5-letter word, enter to guess", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
     gs_bar(ax, ay, aw, ah, GS_WG)
     return 0

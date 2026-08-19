@@ -1,4 +1,5 @@
-/* settingstest.c - the settings block, against a fake disk.
+/* settingstest.c - the settings block against a fake disk, and the two-pane
+ * layout against the client rectangle it actually gets.
  *
  * This is the FIRST CODE IN THE PROJECT THAT WRITES TO A DISK, and its stated
  * gate - change a setting, reboot in QEMU, confirm it survived; then corrupt
@@ -23,17 +24,44 @@
  * block, which is exactly what the QEMU gate is for. Run it the moment T-13
  * closes.
  *
+ * ...AND THE LAYOUT, because the failure mode of an immediate-mode app is not
+ * a crash. ui.c's place() never reports running out of room: a widget past the
+ * bottom of the client area is still laid out, still counted for widget
+ * identity, and simply drawn outside the scissor - invisible AND unclickable,
+ * with nothing anywhere saying so. This file has already shipped that bug once
+ * (roughly 995 px of content in a 642 px client). So the last section asserts,
+ * for every page and at every UI scale the app can be set to:
+ *
+ *   - the page's content ends INSIDE the client rectangle it really gets
+ *     (486x332 design px minus wm.c's own chrome), with slack to spare
+ *   - the draw pass and the hit-test pass emit the SAME widget count, which is
+ *     the whole of widget identity in an immediate-mode toolkit
+ *   - the shadow cursor never fails a step (settings_flow_fault)
+ *   - every sidebar row selects its own page, and selecting a page WRITES
+ *     NOTHING - which pane is open is not a setting
+ *   - one write per gesture still holds, driven through the real slider on the
+ *     Devices page rather than through whatever a blind y-scan first hit
+ *
  * Build and run:  ./build.sh && ./settingstest
  */
 #include <stdio.h>
 #include <string.h>
 
 #include "../ui.h"
+#include "../design.h"
 
 int  settings_save(void);
 int  settings_load(void);
 int  settings_event(int app,int win,int type,int code,int x,int y);
+void settings_draw(int app,int x,int y,int w,int h,int focused);
 void settings_apply(void);
+/* Declared here rather than in ui.h: they exist for this gate, and ui.h is the
+ * contract between the compositor, the toolkit and the apps. */
+int  settings_page(void);
+int  settings_page_count(void);
+const char *settings_page_name(int i);
+int  settings_probe_fit(int page,int w,int h);
+int  settings_flow_fault(void);
 
 /* ---- the fake disk -------------------------------------------------------- */
 #define BLOCKS   131072u          /* 64 MiB of 512-byte blocks, like try.sh   */
@@ -75,23 +103,55 @@ void zl_putc_pub(char c){ if (loglen < (int)sizeof logbuf - 1) logbuf[loglen++] 
 static void logclear(void){ loglen = 0; logbuf[0] = 0; }
 static const char *logtext(void){ logbuf[loglen] = 0; return logbuf; }
 
-/* fb.c is NOT linked. settings.c and ui.c between them touch a dozen fb_*
- * symbols and none of them matters to a disk block, so they are stubs - the
- * test stays about the record and links in a fraction of a second. ui.c IS
- * linked for real, so ui_theme_init/ui_theme_set behave exactly as they do in
- * the kernel and "the loaded scale was actually applied" means something. */
+/* fb.c is NOT linked. settings.c, ui.c and uikit.c between them touch two dozen
+ * fb_* symbols and none of them matters to a disk block, so they are stubs -
+ * the test stays about the record and links in a fraction of a second. ui.c
+ * AND uikit.c are linked for real, so ui_theme_init/ui_theme_set and the whole
+ * widget catalogue behave exactly as they do in the kernel: "the loaded scale
+ * was actually applied" and "this page fits" both mean something.
+ *
+ * THE TEXT METRICS ARE NOT ARBITRARY. fb.c sizes proportional text by ROLE and
+ * follows the UI scale - `role_base[3] = {8, 12, 16}` design px, scaled, with a
+ * 12 px legibility floor (fb.c prop_cell, ~line 2921). A stub returning a
+ * constant would make every layout assertion below scale-blind, and scale is
+ * precisely the axis the overflow bug lived on. So prop_cell is mirrored here.
+ * The per-glyph ADVANCE is still an approximation - half the cell, against
+ * fb.c's generated advance tables - so widths here are indicative while
+ * heights are exact, and the assertions below lean on heights and leave slack
+ * on widths. */
 void fb_set_subpixel(int on){ (void)on; }
 unsigned int fb_pxw(void){ return 1280; }
 unsigned int fb_pxh(void){ return 800; }
+
+static int stub_strlen(const char*s){ int n=0; if(!s) return 0; while(s[n])n++; return n; }
+static int prop_cell_stub(int role)
+{
+    static const int base[3] = { 8, 12, 16 };   /* fb.c role_base, verbatim */
+    int q8 = ui_metric(UI_METRIC_SCALE_Q8), h;
+    if (role < 0) role = 0;
+    if (role > 2) role = 2;
+    h = (base[role] * q8 + 128) / 256;
+    return h < 12 ? 12 : h;                     /* fb.c's legibility floor  */
+}
+int  fb_text_role_h(int role){ return prop_cell_stub(role); }
+int  fb_text_role_w(const char*s,int role,int weight)
+{ (void)weight; return stub_strlen(s) * prop_cell_stub(role) / 2; }
+void fb_text_role(int x,int y,const char*s,unsigned c,int role,int weight)
+{(void)x;(void)y;(void)s;(void)c;(void)role;(void)weight;}
+void fb_text_aa(int x,int y,const char*s,unsigned c){(void)x;(void)y;(void)s;(void)c;}
+
 void fb_fill_px(int x,int y,int w,int h,unsigned c){(void)x;(void)y;(void)w;(void)h;(void)c;}
+void fb_box(int x,int y,int w,int h,unsigned c){(void)x;(void)y;(void)w;(void)h;(void)c;}
+void fb_line(int x0,int y0,int x1,int y1,unsigned c){(void)x0;(void)y0;(void)x1;(void)y1;(void)c;}
 void fb_rrect(int x,int y,int w,int h,int r,unsigned c){(void)x;(void)y;(void)w;(void)h;(void)r;(void)c;}
 void fb_fill_blend(int x,int y,int w,int h,unsigned c,int a){(void)x;(void)y;(void)w;(void)h;(void)c;(void)a;}
 void fb_rrect_blend(int x,int y,int w,int h,int r,unsigned c,int a){(void)x;(void)y;(void)w;(void)h;(void)r;(void)c;(void)a;}
 void fb_text_prop(int x,int y,const char*s,unsigned c){(void)x;(void)y;(void)s;(void)c;}
-int  fb_text_prop_w(const char*s){ int n=0; while(s[n])n++; return n*8; }
-int  fb_text_prop_h(void){ return 16; }
-int  fb_cell_w(void){ return 8; }
-int  fb_cell_h(void){ return 16; }
+int  fb_text_prop_w(const char*s){ return fb_text_role_w(s, 1, 0); }
+int  fb_text_prop_h(void){ return prop_cell_stub(1); }
+/* the console cell, which fb.c also scales - uikit.c draws every mono run in it */
+int  fb_cell_w(void){ return (8 * ui_metric(UI_METRIC_SCALE_Q8) + 128) / 256; }
+int  fb_cell_h(void){ return (16 * ui_metric(UI_METRIC_SCALE_Q8) + 128) / 256; }
 void fb_clip(int x,int y,int w,int h){(void)x;(void)y;(void)w;(void)h;}
 void fb_clip_none(void){}
 void fb_clip_get(int*a,int*b,int*c,int*d){ if(a)*a=0; if(b)*b=0; if(c)*c=1280; if(d)*d=800; }
@@ -99,10 +159,21 @@ void input_set_speed(int p){ (void)p; }
 void input_set_accel(int o){ (void)o; }
 void wm_set_anim(int o){ (void)o; }
 void wm_damage(int x,int y,int w,int h){ (void)x;(void)y;(void)w;(void)h; }
-void wm_client(int win,int*x,int*y,int*w,int*h)
-{ (void)win; *x=0; *y=0; *w=400; *h=600; }
 
-/* ui.c is linked for real, so ui_theme_init/set behave as they do in the kernel */
+/* THE CLIENT RECTANGLE THE APP REALLY GETS. kernel.zl:4357 opens Settings at
+ * 486x332 design px; wm.c's client_of takes 2 px of border off each side and
+ * the title bar off the top. This stub used to return a made-up 400x600, which
+ * would let a page that does not fit the real window pass the gate below - and
+ * a page that does not fit is invisible and unclickable with nothing anywhere
+ * reporting it. Ask the toolkit for the numbers rather than writing them down. */
+static int client_w(void){ return UI_DP(ui_theme(), 486) - 4; }
+static int client_h(void)
+{ return UI_DP(ui_theme(), 332) - ui_metric(UI_METRIC_TITLE_H) - 2; }
+void wm_client(int win,int*x,int*y,int*w,int*h)
+{ (void)win; *x=0; *y=0; *w=client_w(); *h=client_h(); }
+
+/* ui.c and uikit.c are linked for real, so the theme and every widget behave
+ * exactly as they do in the kernel */
 
 /* ---- assertions ----------------------------------------------------------- */
 static int fails;
@@ -114,6 +185,9 @@ static void ok(const char *what, int cond)
 
 #define LBA 64u
 #define RECLEN 36
+/* input.c's own SPD_MIN/SPD_MAX, which settings.c mirrors. */
+#define SPD_MIN  25
+#define SPD_MAX 400
 
 /* Build a VALID record independently of settings.c and put it on the disk.
  *
@@ -391,35 +465,180 @@ int main(void)
        settings_save() == 0 && writes == 0);
     disk[0][510] = 0; disk[0][511] = 0;
 
+    /* ====================================================================
+     * THE TWO-PANE LAYOUT - ds-reference.html 700-740
+     *
+     * Everything above this line is about 36 bytes on a disk. Everything below
+     * is about the app being reachable, which is the other half of "it works"
+     * and the half that has already failed silently once.
+     * ==================================================================== */
+    printf("\n  -- the two-pane layout --\n");
+
+    memset(disk, 0, sizeof disk[0] * 4);
+    set_all(0, 2, 100, 1, 1, 1);              /* a known scale to measure at */
+
+    /* The sidebar's own geometry, asked of the toolkit rather than written
+     * down here - settings.c lays the nav rows out with exactly these three
+     * calls, so a change to any of them moves the test's clicks with it. */
+    int nav_x0 = UI_DP(ui_theme(), ZD_SIDEBAR_PX);
+    int nav_y0 = UI_DP(ui_theme(), ZD_SIDEBAR_PY);
+    int nav_st = ui_nav_h();
+    int nav_w  = ui_sidebar_w() - 2 * nav_x0;
+    int npage  = settings_page_count();
+
+    ok("the sidebar carries five pages", npage == 5);
+    ok("...named as the reference names them (3854)",
+       strcmp(settings_page_name(0), "Appearance") == 0 &&
+       strcmp(settings_page_name(1), "Windows")    == 0 &&
+       strcmp(settings_page_name(2), "Displays")   == 0 &&
+       strcmp(settings_page_name(3), "Devices")    == 0 &&
+       strcmp(settings_page_name(4), "About")      == 0);
+    ok("...and the sidebar rows fit inside the window",
+       nav_y0 + npage * nav_st <= client_h());
+
+    /* ---- EVERY PAGE FITS, AT EVERY SCALE --------------------------------
+     * ui.c's place() does not report a widget that fell off the bottom: it is
+     * laid out, counted for widget identity, and drawn outside the scissor -
+     * invisible and unclickable, with nothing saying so. So the check has to
+     * be arithmetic on the layout, and it has to run at every scale the UI
+     * scale slider can select, because a page that fits at 1x is not a page
+     * that fits at 3x. */
+    {
+        int worst = 1 << 30, worst_pg = -1, worst_sc = -1;
+        int overflow = 0;
+        for (int sc = 1; sc <= 3; sc++) {
+            ui_theme_init(sc);
+            for (int p = 0; p < npage; p++) {
+                int slack = settings_probe_fit(p, client_w(), client_h());
+                if (slack < 0) overflow++;
+                if (slack < worst) { worst = slack; worst_pg = p; worst_sc = sc; }
+            }
+        }
+        ok("no page overflows its client area at any UI scale", overflow == 0);
+        printf("       (tightest: %s at %dx, %d px of slack)\n",
+               settings_page_name(worst_pg), worst_sc, worst);
+        ui_theme_init(2);
+        settings_apply();
+    }
+
+    /* ---- THE DRAW PASS AND THE HIT-TEST PASS EMIT THE SAME SEQUENCE -----
+     * This is the whole of widget identity in an immediate-mode toolkit: a
+     * widget IS its ordinal. Two passes that emit different sequences hit-test
+     * the wrong control, and they drift the moment someone edits one branch of
+     * build_ui and not the other. Both passes now go through run_ui(), so the
+     * counts must agree on every page. */
+    {
+        int mismatch = 0, empty = 0;
+        for (int p = 0; p < npage; p++) {
+            /* select the page through the real event path */
+            settings_event(3, 0, 4, 1, nav_x0 + nav_w / 2,
+                           nav_y0 + p * nav_st + nav_st / 2);
+            settings_event(3, 0, 4, 0, 0, 0);
+            settings_draw(3, 0, 0, client_w(), client_h(), 1);
+            int drawn = ui_widget_count();
+            /* a hit-test pass with the pointer nowhere: same sequence, no fire */
+            settings_event(3, 0, 4, 1, -50, -50);
+            int hit = ui_widget_count();
+            settings_event(3, 0, 4, 0, 0, 0);
+            if (drawn != hit) mismatch++;
+            /* ui_widget_count counts what can FIRE. Four pages carry controls;
+             * About carries ui_kv rows, which are information and fire
+             * nothing - so it is the nav rows and only the nav rows. */
+            if (p == 4 ? drawn != npage : drawn <= npage) empty++;
+        }
+        ok("draw and hit-test emit the same widget count on every page",
+           mismatch == 0);
+        ok("...four pages carry controls and About carries none", empty == 0);
+        ok("...and the cursor never failed a step", settings_flow_fault() == 0);
+    }
+
+    /* ---- A PAGE IS NOT A SETTING ---------------------------------------
+     * The sidebar changes what is on screen and nothing else. If selecting a
+     * pane applied or persisted anything, reading the About page would issue a
+     * disk write - and this app's whole write policy is "only when a setting
+     * changes". */
+    {
+        int wrong = 0;
+        writes = 0;
+        for (int p = 0; p < npage; p++) {
+            settings_event(3, 0, 4, 1, nav_x0 + nav_w / 2,
+                           nav_y0 + p * nav_st + nav_st / 2);
+            if (settings_page() != p) wrong++;
+            settings_event(3, 0, 4, 0, 0, 0);          /* release the gesture */
+        }
+        ok("every sidebar row selects its own page", wrong == 0);
+        ok("...and selecting a page writes NOTHING", writes == 0);
+    }
+
     /* ---- ONE WRITE PER GESTURE, NOT PER MOUSE EVENT ---------------------
      * wm.c hands the app a pointer grab for the whole duration of a press and
      * delivers an event per mouse motion, so saving inside settings_commit
      * issued a synchronous block write for every pixel a slider was dragged -
      * the adversarial review measured 376 for one gesture. A change now marks
-     * the block dirty and the write happens on button-up. */
+     * the block dirty and the write happens on button-up.
+     *
+     * This used to hunt for "a live control" by pressing every second row of a
+     * made-up 400x600 client. That found whatever happened to be first, which
+     * in a two-pane app is a sidebar row - and a sidebar row changes no
+     * setting, so the hunt would have failed while reporting a layout problem
+     * as a persistence problem. It now names the control: the Devices pane's
+     * pointer-speed slider. */
     memset(disk, 0, sizeof disk[0] * 4);
-    mk_block(0, 1, 100, 1, 1, 1);
-    settings_load();
+    set_all(0, 2, 100, 1, 1, 1);
+    settings_event(3, 0, 4, 1, nav_x0 + nav_w / 2,
+                   nav_y0 + 3 * nav_st + nav_st / 2);      /* Devices */
+    settings_event(3, 0, 4, 0, 0, 0);
+    ok("the Devices pane is open", settings_page() == 3);
+
     writes = 0;
-    int moved = 0;
-    for (int y = 0; y < 600; y += 2) {                 /* find a live control */
-        int before = settings_scale() + settings_speed() + settings_accent();
-        settings_event(3, 0, 4 /*EV_MOUSE*/, 1, 200, y);
-        if (settings_scale() + settings_speed() + settings_accent() != before) {
-            moved = y;
-            break;
-        }
+    int moved = 0, press_x = ui_sidebar_w() + UI_DP(ui_theme(), 16 + 13) + 4;
+    for (int y = 0; y < client_h(); y += 2) {
+        int before = settings_speed();
+        settings_event(3, 0, 4 /*EV_MOUSE*/, 1, press_x, y);
+        if (settings_speed() != before) { moved = y; break; }
     }
-    ok("a press on a control changes it", moved != 0);
+    ok("a press on the pointer-speed slider moves it", moved != 0);
+    ok("...and it is inside the first card, not off the bottom",
+       moved > 0 && moved < client_h());
     /* ...now drag: 40 more motion events with the button still down */
     for (int i = 0; i < 40; i++)
-        settings_event(3, 0, 4, 1, 100 + i * 5, moved);
+        settings_event(3, 0, 4, 1, press_x + i * 5, moved);
     ok("...and 40 motion events later, STILL nothing has been written",
        writes == 0);
+    ok("...and the drag actually moved the value",
+       settings_speed() != 100);
     settings_event(3, 0, 4, 0, 300, moved);            /* button up */
     ok("...the write happens once, on release", writes == 1);
     settings_event(3, 0, 4, 0, 300, moved);            /* a second release */
     ok("...and a release with nothing pending writes nothing", writes == 1);
+
+    /* ---- THE SLIDER STILL REACHES BOTH ENDS -----------------------------
+     * ui.c's slider had an off-by-one that made its maximum unreachable, and
+     * it was found by driving THIS app's own slider. The control has moved
+     * from the full client width into a card, so the span it is driven over
+     * changed and the property has to be re-established at the new width.
+     *
+     * The sweep does not hardcode where the card is: ui.c's fire() needs the
+     * pointer inside the widget's rect, so pressing every column of the row
+     * and taking the extremes finds the track wherever the layout put it.
+     *
+     * It starts at the sidebar's right edge and not at zero. A press left of
+     * that lands on a nav row, which changes the page - and then there is no
+     * pointer-speed slider to sweep. That is a two-pane app's version of the
+     * "find a live control by scanning" mistake, and it cost this block one
+     * debug cycle. */
+    {
+        int lo_seen = 1 << 30, hi_seen = -1;
+        for (int x = ui_sidebar_w(); x < client_w(); x += 2) {
+            settings_event(3, 0, 4, 1, x, moved);
+            if (settings_speed() < lo_seen) lo_seen = settings_speed();
+            if (settings_speed() > hi_seen) hi_seen = settings_speed();
+        }
+        settings_event(3, 0, 4, 0, 0, 0);
+        ok("sweeping the slider reaches its minimum", lo_seen == SPD_MIN);
+        ok("...and reaches its maximum", hi_seen == SPD_MAX);
+        printf("       (swept %d..%d over the card's track)\n", lo_seen, hi_seen);
+    }
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;
