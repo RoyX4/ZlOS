@@ -471,18 +471,21 @@ int gpu_ring_engine(void);
 
 static void test_engine_select(void)
 {
-    /* Point it at BCS first so the check below cannot pass by luck. */
+    /* RCS is ACCEPTED as a selection now - its forcewake domain was confirmed on
+     * hardware (0x0A278 / ack 0x00D84). It still returns 0 here because this
+     * harness has no GPU, so the return value alone says nothing; what proves the
+     * selection took is reading the engine back. */
     gpu_ring_init_engine(GPU_ENGINE_BCS);
-    ok(gpu_ring_init_engine(GPU_ENGINE_RCS) == 0,
-       "RCS is refused - its forcewake domain is unverified");
-    /* THE CHECK THAT MATTERS. The return value cannot distinguish the RCS guard
-     * from "no GPU here" - both are 0. But the guard returns BEFORE assigning
-     * the engine, so if RCS was really refused the ring is still pointed at the
-     * blitter. Without this, deleting the guard leaves the suite green. */
-    ok(gpu_ring_engine() == GPU_ENGINE_BCS,
-       "...and refused BEFORE switching the engine, so the ring still means BCS");
+    ok(gpu_ring_engine() == GPU_ENGINE_BCS, "selecting BCS points the ring at BCS");
+    gpu_ring_init_engine(GPU_ENGINE_RCS);
+    ok(gpu_ring_engine() == GPU_ENGINE_RCS, "selecting RCS points the ring at RCS");
+    /* An invalid id must NOT move it - a rejected selection that still switched
+     * the engine would leave the ring aimed somewhere nobody asked for. */
+    gpu_ring_init_engine(GPU_ENGINE_BCS);
+    gpu_ring_init_engine(99);
+    ok(gpu_ring_engine() == GPU_ENGINE_BCS, "a rejected engine id leaves the ring where it was");
     ok(gpu_ring_init_engine(GPU_ENGINE_BCS) == 0,
-       "BCS also refuses here (no GPU in this harness) - but for a different reason");
+       "init still refuses with no GPU present");
     ok(gpu_ring_init_engine(2) == 0,  "an unknown engine id is refused");
     ok(gpu_ring_init_engine(-1) == 0, "a negative engine id is refused");
     /* The default entry point must still mean the blitter, so no existing

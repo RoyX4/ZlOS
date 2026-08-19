@@ -109,12 +109,10 @@ _Static_assert((gr_u64)HI_GPU + GPU_RING_BYTES <= (gr_u64)HI_BLUR,
  * one the MEASUREMENTS want - blending is 48x there and a plain fill is a tie on
  * the blitter - and its ring is this same sequence at a different base.
  *
- * WHAT IS NOT YET KNOWN ABOUT RCS, and must not be guessed: its FORCEWAKE
- * domain. The blitter's pair (0x0A188 / ack 0x130044) is confirmed acking on
- * this part; the render domain has different registers and none of them have
- * been verified here. gpu_ring_init refuses RCS until they are, rather than
- * writing a register nobody has checked - forcewake failing is silent, and a
- * dropped write looks exactly like hardware that ignored you. */
+ * RCS's FORCEWAKE domain is now CONFIRMED on this part - see the note by
+ * FORCEWAKE_RENDER_GEN9 below. What RCS still needs beyond a ring is pipeline
+ * state, surface state and a binding table; the ring is necessary, not
+ * sufficient. */
 #define GPU_ENGINE_BCS 0
 #define GPU_ENGINE_RCS 1
 
@@ -128,7 +126,34 @@ int gpu_ring_init_engine(int engine);
  * part by hosttest/gpu_ring.c --survey. */
 #define FORCEWAKE_BLITTER_GEN9     0x0A188u
 #define FORCEWAKE_ACK_BLITTER_GEN9 0x130044u
+#define FORCEWAKE_RENDER_GEN9      0x0A278u
+#define FORCEWAKE_ACK_RENDER_GEN9  0x00D84u
 #define FW_KERNEL_BIT 1u
+
+/* ALL THREE DOMAINS CONFIRMED ON THIS PART, 2026-08-19, and none of them looked
+ * up - found by reading the request block and then watching which ack answered:
+ *
+ *   RENDER   req 0x0A278  ack 0x00D84    0 -> 1 -> 0
+ *   MEDIA    req 0x0A270  ack 0x00D88    0 -> 1 -> 0
+ *   BLITTER  req 0x0A188  ack 0x130044   0 -> 1 -> 0
+ *
+ * The three request registers sit together and share a resting value of
+ * 0x00010000 (mask latched, value clear), which is what identified them.
+ *
+ * THE RENDER WELL IS SLOWER, and this is the part that matters. The blitter acks
+ * on the first read; render took **312 polls**. A single read after a settle loop
+ * reported the ack as 0 and made the register look wrong - the same experiment
+ * with a poll instead of a read confirmed it immediately. So forcewake_get polls
+ * for the ack and never assumes a fixed delay is enough, exactly as this repo's
+ * boot gates learned to wait for output rather than a clock. */
+static gr_u32 engine_fw_req(int engine)
+{
+    return engine == GPU_ENGINE_RCS ? FORCEWAKE_RENDER_GEN9 : FORCEWAKE_BLITTER_GEN9;
+}
+static gr_u32 engine_fw_ack(int engine)
+{
+    return engine == GPU_ENGINE_RCS ? FORCEWAKE_ACK_RENDER_GEN9 : FORCEWAKE_ACK_BLITTER_GEN9;
+}
 
 /* ---- the pure bookkeeping ------------------------------------------------
  * Everything in this section is arithmetic on integers, has no side effects,
@@ -240,14 +265,18 @@ static void mmio_w(gr_u32 off, gr_u32 val)
  * this repo builds all four targets rather than the one being worked on. */
 static void forcewake_put(void)
 {
-    mmio_w(FORCEWAKE_BLITTER_GEN9, (FW_KERNEL_BIT << 16) | 0u);
+    mmio_w(engine_fw_req(ring_engine), (FW_KERNEL_BIT << 16) | 0u);
 }
 
 static int forcewake_get(void)
 {
-    mmio_w(FORCEWAKE_BLITTER_GEN9, (FW_KERNEL_BIT << 16) | FW_KERNEL_BIT);
-    for (int i = 0; i < 100000; i++)
-        if (mmio_r(FORCEWAKE_ACK_BLITTER_GEN9) & FW_KERNEL_BIT) return 1;
+    gr_u32 req = engine_fw_req(ring_engine), ack = engine_fw_ack(ring_engine);
+    mmio_w(req, (FW_KERNEL_BIT << 16) | FW_KERNEL_BIT);
+    /* Poll. The render well needed 312 iterations on this part where the blitter
+     * answers on the first read; a fixed settle makes a correct register look
+     * wrong. The ceiling is generous rather than tuned. */
+    for (int i = 0; i < 2000000; i++)
+        if (mmio_r(ack) & FW_KERNEL_BIT) return 1;
     return 0;
 }
 
@@ -261,10 +290,11 @@ int gpu_ring_init_engine(int engine)
     ring_live = 0;
     ring_tail = 0;
     if (engine != GPU_ENGINE_BCS && engine != GPU_ENGINE_RCS) return 0;
-    /* RCS is refused until its forcewake domain is verified on hardware. See
-     * the note by GPU_ENGINE_RCS: holding the wrong well is a silent no-op, and
-     * every register write after it would be discarded while reporting success. */
-    if (engine == GPU_ENGINE_RCS) return 0;
+    /* RCS is no longer refused: its forcewake domain is confirmed on this part
+     * (0x0A278 / ack 0x00D84, watched going 0 -> 1 -> 0). What is still true is
+     * that a RENDER submission needs pipeline state, surface state and a binding
+     * table that BCS does not - so a ring on RCS is necessary and not sufficient,
+     * and gpu_fill_try deliberately still runs on the blitter. */
     ring_engine = engine;
     if (!intel_present() || !intel_supported()) return 0;
     if (!ring_armed) return 0;               /* refuse rather than half-arm */
