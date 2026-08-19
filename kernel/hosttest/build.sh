@@ -277,3 +277,14 @@ gcc -O2 -w -o toasttest toasttest.c ../wm.c ../ui.c ../wmglue.c ../settings.c ho
     ../input.c ../notify.c ../snap.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./toasttest     (run: ./toasttest)"
+
+# H3: the interpreter is linked, so `run hello.zl` must execute, not stop at
+# EX_LOADED. exectest.c deliberately leaves lex_text unbound to keep the
+# refusal table; this binary is the other half of that seam.
+gcc -O2 -w -I../.. -DZL_FREESTANDING -DBUILD_PARSER -c ../../lexer.c -o _run_lex.o
+gcc -O2 -w -I../.. -DZL_FREESTANDING -DBUILD_INTERP -c ../../parser.c -o _run_par.o
+gcc -O2 -w -I../.. -DZL_FREESTANDING -c ../../interp.c -o _run_int.o
+gcc -O2 -w -I../.. -o runtest runtest.c ../exec.c ../interp_kernel.c ../ksetjmp.S \
+    _run_lex.o _run_par.o _run_int.o -lm
+rm -f _run_lex.o _run_par.o _run_int.o
+echo "built ./runtest       (run: ./runtest)"

@@ -35,8 +35,9 @@ content, not architecture.
 **H0 — Stop lying.** The land gate runs the harnesses it builds. The three
 static checkers run. `key()` does not halt the panel-handover path.
 `check-memmap.sh` sees `DISK_SCRATCH` and `PAINT_BUF`. Pointer-drain is on
-`main` (`7ddedb0`); confirm on a live `./try.sh` VM — a green `xhcitest` is
-not that confirmation.
+`main` (`7ddedb0`). Confirmed on a live ISO VM with `usb-mouse` (relative,
+the `./try.sh` device): `probe-pointer-usb.py` saw the compositor pointer
+move. gtk `./try.sh` *feel* is still **[HUMAN]** — this box has no display.
 
 **H1 — Desktop you can actually use.** Settings opens from the start menu and
 `settings_load` runs at boot when NVMe is up. Editor Ctrl+C/V is the clipboard
