@@ -59,6 +59,49 @@ scene changes the number, so do it once and say so.
 
 ---
 
+## CONFIRMED — `anim_tick` counts frames, not time, and the clock is already in the file
+
+**Agent claim** (lens `motion`): *`anim_tick()` advances exactly one table index per
+compositor pass, never per unit of elapsed time.*
+
+**Confirmed.** The whole advance is one line:
+
+```c
+/* kernel/wm.c:431-445 */
+static void anim_tick(void)
+{
+    for (int i = 0; i < ANIM_MAX; i++) {
+        if (!anims[i].kind) continue;
+        wm_damage_win(anims[i].win);
+        ...
+        if (++anims[i].frame >= anims[i].len) anims[i].kind = ANIM_NONE;
+    }
+}
+```
+
+No time source is consulted. `anim_tick` has one caller, `wm.c:1598`, once per
+compositor pass. So `anims[i].len` is a count of *passes*, and `wm.c:299`'s
+*"four frames at 100 Hz is 40 ms"* holds only if a pass costs exactly 10 ms.
+
+**The fix is small because the clock is already here.** `idt_ticks()` is declared at
+`wm.c:133` and used by other code in the same file:
+
+```
+wm.c:1070:  * where windows are. idt_ticks() is 100 Hz, which is ample: the window is 40
+wm.c:1085:      unsigned now = idt_ticks();
+wm.c:1518:  * idt_ticks() is 100 Hz, which is 10 ms of resolution against a 16.67 ms
+```
+
+Two subsystems in `wm.c` already reason correctly about the tick's 100 Hz / 10 ms
+resolution. The animation timeline is the one that does not use it. `anim_tick` should
+sample `idt_ticks()` and advance `frame` by elapsed ticks, exactly as `wm.c:1085` does.
+
+**Watch out for the name collision:** `kernel.zl:1146` also defines `fn anim_tick(aw, ah)`,
+which is the Animation *app* (`kernel.zl:3276`) and is unrelated. Patching that one does
+nothing for the compositor.
+
+---
+
 ## CONFIRMED — the HTTP body pointer is narrowed to 32 bits, and C code widens it back
 
 **Agent claim** (bug class `llp64`, severity `high`): *`http_body_addr()` narrows

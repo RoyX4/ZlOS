@@ -28,7 +28,7 @@ four above are negative results.
 
 ---
 
-## The real headline: there is no time base
+## The real headline: there is no time base  ✓ verified
 
 **Lens `motion`.** The animation system is complete except for the one thing that makes
 it an animation:
@@ -43,6 +43,12 @@ function of host load, scene complexity and resolution.
 This is the single change with the largest visible effect on the look, and it is small:
 sample `idt_ticks()` in `anim_tick` and advance the index by elapsed time rather than by
 call count. Everything else in the timeline already exists.
+
+**The clock is already in the file.** `idt_ticks()` is declared at `wm.c:133` and used
+at `wm.c:1085`, and comments at `wm.c:1070` and `wm.c:1518` already reason correctly
+about its 100 Hz / 10 ms resolution. Two subsystems in `wm.c` consult it; the animation
+timeline is the one that does not. (Name collision to avoid: `kernel.zl:1146`'s
+`fn anim_tick(aw, ah)` is the Animation *app*, not this.)
 
 It also interacts with the SMP-bands work: making the redraw 1.78× faster currently
 makes every animation 1.78× **faster**, not smoother.
