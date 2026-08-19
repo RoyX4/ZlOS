@@ -108,18 +108,43 @@ sudo ./gpu-ring-run.sh --ring     # the real thing.
 The runner re-execs under `setsid` first so its recovery outlives the session it
 kills, and that recovery has been watched firing on `SIGTERM`.
 
-### Blocked on file ownership
+### DONE — the compositor calls the driver
 
-**Wiring the cursor into the compositor.** The pointer lives in `wm.c`
-(`fb_pointer_show`/`fb_pointer_hide`, `ptr_x`/`ptr_y`) and `fb.c`, and both had
-another session's uncommitted work in them at the time of writing. The seam is
-already the right shape and needs no new code here:
+`wm.c` now asks the display engine to move the pointer before compositing a
+sprite. This is the first time anything in zlOS's compositor calls the GPU
+driver at all.
 
 ```c
-/* gpu_cursor_move returns 0 whenever the hardware path is not live, so the
- * software sprite stays the fallback and nothing regresses if it never is. */
-if (!gpu_cursor_move(x, y)) fb_pointer_show(x, y);
+/* The plane first; the sprite only if it did not take. */
+if (!gpu_cursor_move(ptr_x, ptr_y))
+    fb_pointer_show(ptr_x, ptr_y);
+
+/* ...and only the SPRITE has a save-under to go stale before a repaint. */
+if (!gpu_cursor_is_live())
+    fb_pointer_hide();
 ```
+
+Safe to land because `gpu_cursor_move` returns 0 until `gpu_cursor_arm(1)` is
+called on real hardware, and nothing calls that — so every build today takes
+exactly the path it took before.
+
+**The branch was proven to switch**, not assumed. `hoststubs.c` provides both
+symbols as *weak* stubs (the trick `idt_mouse_wheel` already uses), so a harness
+can override them and win the link. `wmshot` was built twice, once each way, and
+the rendered PPMs compared:
+
+```
+bytes differing between the software-cursor and hardware-cursor renders: 927
+```
+
+Non-zero is the result that matters: with the plane live, the sprite is not
+drawn. Zero would have meant the wiring was inert.
+
+**What is deliberately NOT done: the ignition.** Nothing calls
+`gpu_cursor_arm(1)` or `gpu_cursor_install()`. Arming it executes display MMIO
+that has never run, and the whole point of the gate is that a human turns it on
+*after* a hardware run shows the display survives a takeover. Wiring the
+ignition now would be the exact mistake this file's own table is about.
 
 ### Blocked on an unanswered question
 
