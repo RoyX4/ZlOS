@@ -119,16 +119,21 @@ int  input_y(void);
 #define EV_MOUSE     4
 #define EV_WHEEL     5
 
-#define KEY_SUPER   0x11A
 #define MOD_ALT     (1 << 2)
 #define MOD_SUPER   (1 << 5)
 
-/* The navigation keys, as input.c numbers them. Above 0xFF on purpose: they
- * have no character, so they can never be confused with one. */
-#define KEY_LEFT      0x110
-#define KEY_RIGHT     0x111
-#define KEY_UP        0x112
-#define KEY_DOWN      0x113
+/* The key codes come from keycodes.h, which is the file that owns them, rather
+ * than from a copy here.
+ *
+ * There used to be a copy - twice, in this one file, at what were lines 128-131
+ * and 1443-1446 - and both happened to hold the right values. The cost was not a
+ * wrong number, it was a MISSING one: whoever wrote the Alt+Tab test had no
+ * KEY_TAB in scope because nobody had copied that line in, reached for '\t'
+ * instead, and Alt+Tab has never fired. keycodes.h:14-16 states the rule the
+ * copy could not enforce - codes live above 0x100 "where it cannot collide with
+ * a character", and `code >= KEY_NONCHAR` is the test for "this key has no
+ * character". A partial copy of a table cannot carry a rule. */
+#include "keycodes.h"
 
 unsigned int idt_ticks(void);
 /* cpu.c. The TSC has been readable since cpu.c was written and nothing in the
@@ -1440,14 +1445,15 @@ static void cycle_focus(void)
     wm_raise(win);
 }
 
-#define KEY_LEFT   0x110
-#define KEY_RIGHT  0x111
-#define KEY_UP     0x112
-#define KEY_DOWN   0x113
-
 static void route_key(int type, int code, int mods)
 {
-    if (type == EV_KEY_DOWN && code == '\t' && (mods & MOD_ALT)) {
+    /* KEY_TAB, not '\t'. Both keyboards deliver the KEY code here, never the
+     * character: input.c:155 and :227 map the PS/2 scancodes straight to
+     * KEY_TAB, and the USB HID path goes through key_of_char (input.c:633)
+     * which does the same. input_code() returns last.code, the key. So
+     * `code == '\t'` compared 0x103 against 9 and this branch had never once
+     * been taken. */
+    if (type == EV_KEY_DOWN && code == KEY_TAB && (mods & MOD_ALT)) {
         cycle_focus();
         return;
     }
