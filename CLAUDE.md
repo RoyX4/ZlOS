@@ -8,6 +8,13 @@ against the merged tree on 2026-08-19 and every open item, with its evidence,
 lives there ranked by leverage. The twenty-one now carry banners pointing at it.
 Read it before picking up any task list.
 
+**`docs/ROAD-TO-TEN.md`** is the leverage ranking for the project as a whole —
+what it scores today against a real external rubric, what is already excellent
+and invisible, and the ordered list of what moves it. Read it when deciding
+*what to work on*, as opposed to `STATE-OF-THE-PROJECT.md`, which tells you what
+is broken. It also records the first measured run of the self-hosting fixpoint on
+Linux (it holds), and the fact that no gate runs it.
+
 `docs/CODE-MAP.md` says where the code actually lives. The layout is not what
 the directory names imply: the desktop and all eight apps are one zl file
 (`kernel/kernel.zl`), and `kernel/out.c` is generated output that must never be
@@ -21,6 +28,14 @@ tracks: the real shared base (`d61a481`, not `44346d6`), the landmines that
 merge clean and then fail, and the landing order. Read it before merging
 anything or starting a ninth track.
 
+**`docs/MERGE-ROUND-2.md` is round 2** — the twelve worktrees standing on
+2026-08-20, measured: 165 commits, 219 files, 129 uncommitted, **0 pushed**, and
+`kernel/kernel.zl` contested by nine branches. It also records why opening a PR
+per branch is the wrong shape here (local `main` is 45 ahead of `origin/main`,
+so every PR would diff against a stale base), the landing order, and two places
+`MERGE-EVIDENCE.md` is now stale in the pessimistic direction. Read it before
+touching any `zl-linux-*` worktree.
+
 `docs/DOCS-RECONCILE-PROMPT.md` is the brief that produced
 `STATE-OF-THE-PROJECT.md`. Done 2026-08-19; kept for method, not for work.
 
@@ -30,6 +45,35 @@ it — including the `-w` claim this file used to make (below), a `check-memmap.
 discovery sweep that reads no C at all, and why a gate in this shared checkout
 can fail for reasons that are not the code. Read it before trusting any green
 result here, and before writing a new gate.
+
+`kernel/docs/BROWSER-STORAGE-PROMPT.md` was the brief for that work and it is
+**DONE** - see `kernel/docs/browser-storage-run.md` for the run. The parser's
+node array, its text arena, layout's runs and css's selectors were all static
+and all full on a real page; they are the caller's now, in `memmap.h`'s new
+`HI_DOM` region, and a real article parses whole (`8192/8192 with 7,807
+dropped` -> `15,574/32,768 with 0 dropped`, `css_overflowed()` 1 -> 0).
+
+Read the run doc before the brief, for three things the brief did not know:
+the brief says there are **two** fixed-address maps and there were **five**
+(`virtio_net.c` owns the 64 MiB the storage was about to be placed on, and
+`intel.c` was writing its EDID inside `fb.c`'s blur arena); a full CSS string
+arena refused rules **without setting `css_overflowed()`**, invisible until
+`MAX_SELS` moved; and `memmap-guard-test.sh` was scoring 10/12, having gone
+stale when the AP stacks were inserted. `hosttest/parsestat.c` is the
+measuring instrument, committed this time.
+
+`kernel/docs/browser-render-run.md` is the record of the run that produced the
+current state - images, flexbox, grid, `@media`, search, the network at boot -
+with every number and the command that measured it, including the four gates
+that turned out to be testing something other than what they claimed.
+
+`kernel/docs/BROWSER-RENDER-PROMPT.md` is the brief that run worked from, and
+both its items are now marked done. Worth reading anyway for two reasons: it
+opens by correcting two things a fresh session is likely to be told to do that
+are already done (Google works, and AES-256 is not needed), and its §1 records
+a diagnosis that was precise, plausible and WRONG - the URL-bar bug it blames
+on the keyboard was in the mouse path, and the symptom it reasoned from was a
+coincidence of one URL. The shape of that mistake is kept deliberately.
 
 `kernel/docs/POINTER-PROMPT.md` is the CURRENT WORK: the pointer is
 visibly broken after the eleven-track merge, the lead suspect is measured
@@ -44,6 +88,12 @@ area:
 - `kernel/docs/thinkpad-first-boot.md` — the step-by-step for booting the
   laptop, including the two things that waste an hour (Secure Boot, and the fact
   that there is no serial port so the screen is the only diagnostic).
+- `kernel/docs/memory-model.md` — **the address space and, for each boundary in
+  it, the thing that actually enforces it.** The four ceilings people conflate
+  (what the loader carries, where the image may end, who owns which address, how
+  much RAM exists) are four different numbers with four different guards. Read
+  it before placing any buffer, and before believing a `_Static_assert` covers
+  what you think it covers.
 - `kernel/docs/overnight-2026-08-18.md` — one page covering the descriptor-pointer
   bug that made the 64-bit boot layout-sensitive, why three green gates missed it,
   and what is still open.

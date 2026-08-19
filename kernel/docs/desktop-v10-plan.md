@@ -73,7 +73,7 @@ a hand test.
 > it, and fails loudly if the shell does not echo the line back. The
 > reproducible form of this gate is
 > `./probe-shot.py -k help -k unknownthing -o v10-typed`.
-> Full measurement: `docs/typing-into-the-compositor.md`.
+> Full measurement: `kernel/docs/typing-into-the-compositor.md`.
 
 ### 1b. Make the compositor the boot state
 

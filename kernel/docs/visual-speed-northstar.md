@@ -108,6 +108,54 @@ The existing navy/cyan zlOS identity stays unless Roy explicitly chooses a
 repaint. The useful thing to take from the v10 HTML is its polish, hierarchy,
 spacing, motion and responsiveness, not automatically its lime/black palette.
 
+## Why the current desktop still feels blocky
+
+The renderer is capable of smooth pixels, but the current composition often
+reads as large blocks placed on a grid. These are the concrete contributors:
+
+- the wallpaper's broad dark regions are visually obvious; the glows, sweeps
+  and vignette exist, but their composition still needs an art-direction pass
+  so the background reads as one flowing field;
+- UI scale changes in whole-number steps rather than adapting continuously;
+- fonts are build-time atlases at a few fixed sizes, not continuously scalable
+  runtime vector text;
+- several windows contain large flat areas with strong rectangular boundaries;
+- much of `kernel.zl` manually positions rectangles and text instead of using
+  the shared layout/widget toolkit;
+- icons, spacing, colour roles and corner treatment are not yet completely
+  consistent, and only 10 of the 20 generated 24 px icons are currently
+  reachable because `fb.c` still declares `ICON_N` as 10;
+- animation uses a few discrete frames, while compositor work is released by a
+  100 Hz PIT against a 59.998 Hz panel, so motion can be uneven even when an
+  individual frame renders quickly;
+- terminal drawing historically dominated drag frames. `term_draw()` now skips
+  rows outside the active damage clip, but that path still needs a fresh
+  measurement before the old hitch is declared closed.
+
+Do not pretend one exact cause has been proved. The earlier coarse-screenshot
+investigation did not isolate a single dominant defect. Scaling, fixed font
+sizes, icon resampling, spacing and composition are evidenced contributors;
+which one dominates must be settled by like-for-like screenshots and
+measurements.
+
+## The intended background and visual flow
+
+Treat the desktop as one deliberate scene rather than independent rectangles:
+
+- a broad navy gradient establishes the overall direction;
+- two or three subtle overlapping light fields create depth and guide the eye;
+- a soft vignette pulls attention inward;
+- a very faint structure or texture prevents large areas from feeling empty;
+- restrained shadow and contrast separate windows without thick rectangular
+  outlines;
+- one spacing scale and smaller visual steps connect every surface;
+- short, smooth motion connects one state to the next.
+
+The gradient, light fields, vignette and cached wallpaper already exist in the
+static background path. The subtle texture layer does not. The remaining task
+is partly implementation and partly composition: tune the layers together at
+the real display mode rather than merely proving each primitive can draw.
+
 ## Can the current system draw it?
 
 **Yes.** This is no longer speculative. The shipping renderer and compositor
@@ -136,11 +184,11 @@ counterexample: its widget and layout surface is callable from zl.
 ### Already possible with the current machinery
 
 - flowing linear-gradient backgrounds;
-- radial glows, conic sweeps, a vignette and subtle generated texture;
+- radial glows, conic sweeps and a vignette;
 - rounded windows, panels and controls;
 - soft shadows, alpha blending and translucent stationary surfaces;
 - anti-aliased proportional and monospace text at the built-in atlas sizes;
-- crisp generated icons;
+- crisp generated icons, with a current 10-of-20 reachability bug to fix;
 - hover, press, focus, selection and error states;
 - opening, closing, dragging, resizing and snapping windows;
 - a cached detailed wallpaper at the ThinkPad's 2560x1440 mode;
@@ -174,6 +222,88 @@ panel measurement remains a gate; a TCG screenshot cannot settle it.
 
 The design rule is simple: compute expensive static appearance once, cache it,
 and animate or repaint only the small region that actually changes.
+
+## Five-part working direction
+
+This is the concrete visual-and-feel pass Roy was describing. Each item states
+what exists and what remains so it cannot be misread as either "all done" or
+"start from zero".
+
+1. **Make the background flow.** The base gradient, three elliptical glows, two
+   conic sweeps, vignette and wallpaper cache exist. Tune them as one scene and
+   add the missing faint texture if it improves the comparison.
+2. **Remove the blocky composition.** Rounded geometry, type atlases and shared
+   metrics exist. The remaining work is better padding hierarchy, softer
+   separation, fewer giant empty rectangles, consistent corners, flexible
+   scaling and one palette source.
+3. **Make movement connect states.** Open/close/press/pulse/fade mechanisms,
+   hover, direct pointer dragging, resizing and snapping exist. Convert motion
+   from a few frame steps to short time-based transitions, fix the fade origin,
+   and add the missing snap preview. Dragging itself stays directly attached to
+   the pointer rather than eased behind it.
+4. **Fix what people physically feel.** Damage tracking, frame timing, miss
+   counters and source-level terminal row clipping exist. Remeasure the terminal
+   drag, stop idle busy-spin, and replace uneven 100 Hz release with a measured
+   60 Hz deadline/vblank design.
+5. **Unify the toolkit.** `ui.c` already implements layout and widgets. Expose
+   those widgets to zl, migrate the raw drawing call sites, remove the duplicate
+   theme and make applications share one spacing scale and component set.
+
+The practical result uses a beautiful background rendered once, damage tracking
+for moving windows, cached expensive effects, time-based 60 Hz motion, more
+flexible typography/scaling and consistent shared UI components.
+
+## Visual hierarchy and identity ideas
+
+These are the next brainstorm, not locked implementation decisions. Preserve
+them as a direction to test side by side rather than silently treating every
+idea as mandatory.
+
+1. **Four explicit depth levels:** wallpaper, ordinary windows, focused window,
+   modal/menu. Give each one a defined shadow, brightness and contrast so
+   inactive windows genuinely recede.
+2. **Break up the giant bottom block:** test a floating dock plus a separate
+   compact status island, or make the full-width surrounding bar visually
+   disappear. The current bottom slab is one of the largest rectangles on the
+   screen.
+3. **Simplify window chrome:** near-black content, restrained navy chrome, one
+   cyan focus line and a soft shadow. Use fewer outlines and reserve the
+   strongest colour for the focused window.
+4. **One motion language:** roughly 140–180 ms open/close, 70–90 ms press,
+   gentle hover brightening and a short snap preview. Drag stays directly under
+   the pointer. Errors pulse briefly; nothing bounces for decoration.
+5. **Strong typography roles:** proportional UI/chrome, monospace terminal/code/
+   measurements, bold only for selected or important content, and small
+   uppercase text for hardware/status labels.
+6. **One icon family:** shared stroke thickness, optical size, curve language
+   and padding. Fix the 10-of-20 reachability bug before judging the complete
+   set.
+7. **Colour carries truth:** cyan means interaction/focus, green means verified
+   healthy, amber means attention or unfinished, red means failure/destructive,
+   everything else stays neutral. Never draw a healthy indicator without a
+   live fact behind it.
+8. **Applications have internal structure:** toolbars, quiet dividers, grouped
+   rows, side navigation, compact charts and designed empty states. Giant empty
+   panels are a major source of the blocky/unfinished feeling.
+9. **A signature zlOS transition:** preserve boot output by transforming it into
+   the terminal window when the compositor appears, instead of hiding startup
+   history behind a generic loading screen.
+10. **Make the background feel alive cheaply:** let tiny cached details respond
+    to workspace, focus, activity or real warning state. Do not continuously
+    rebuild the full-screen background.
+
+Three identity directions were considered:
+
+- **Precision instrument:** navy/cyan, crisp, dense and exact — a machine-control
+  cockpit.
+- **Cinematic dark desktop:** softer glows, floating surfaces and fluid motion —
+  closest to the v10 HTML.
+- **Neo-retro system:** black, mono, lime, scanlines and hard geometry — strong
+  identity, but likely to reinforce the blockiness Roy wants removed.
+
+Current recommendation: **precision instrument as the foundation, with the
+cinematic background and motion layered over it.** It fits an OS that controls
+real hardware while still allowing the softness and polish of the prototype.
 
 ## What the 4K memory limit actually means
 

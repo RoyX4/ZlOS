@@ -32,7 +32,7 @@ Verified on VS Code 1.132.1.
 code --list-extensions --show-versions | grep zl
 ```
 
-Expect `zl.zl-lang@0.3.1`. In the editor, the status bar of an open `.zl`
+Expect `zl.zl-lang@0.3.2`. In the editor, the status bar of an open `.zl`
 file should read **zl**, not "Plain Text".
 
 ## Running a file
@@ -151,10 +151,16 @@ error, not a constant. `nil` *is* a builtin **function**: `nil()` returns nil.
 (f-string), and `check` (the assertion helper that ten `tests/*.zl` files
 each define by hand).
 
+## Completions
+
+Ctrl+Space (and as-you-type) offers keywords, `true`/`false`, and all builtins
+with `name()` snippet insert. Static list in `extension.js`, kept in sync with
+the TextMate grammar — not an LSP. No go-to-definition, no errors-as-you-type.
+
 ## Still missing
 
-- **An LSP** for go-to-definition, errors-as-you-type and autocomplete. Blocked
-  on the parser gaining error recovery — `parse_error` calls `exit(1)` today
+- **An LSP** for go-to-definition and errors-as-you-type. Blocked on the parser
+  gaining error recovery — `parse_error` calls `exit(1)` today
   (`parser.c:67-72`), and on `Node` carrying a line number, which it does not
   (`parser.h:33-42`). See `docs/design/design_tooling.md` §5.
 - **Line wrapping / operator spacing.** Needs the comment-aware pretty-printer

@@ -87,6 +87,18 @@ def type_command(ser, qmp, cmd, via, ceiling):
     emulated keyboard. A demo that then blocks does not affect it, which is why
     this waits for the echo rather than for the prompt to come back.
     """
+    # Drop what the PREVIOUS command printed before typing this one, so only
+    # bytes that arrive after the send can satisfy the echo. Without this the
+    # marker is a substring search over a buffer that still holds the last
+    # command's output, and any command whose output ends a line with this
+    # command's name would match instantly and assert nothing. `help` prints
+    # "    w        draggable windows" in the text shell, which is exactly that
+    # shape. Closed by construction rather than by enumerating which pairs
+    # collide - the compositor's help_typed() happens not to, and that is not a
+    # property worth depending on.
+    ser.drain(0.2)
+    ser.buf = ""
+
     if via == "keyboard":
         qtype(qmp, cmd + "\n")
     else:

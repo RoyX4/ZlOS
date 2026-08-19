@@ -46,6 +46,22 @@ jobs:
           fi
           echo "only the known-structural skip (calc_repl) was reported"
 
+  selfhost:
+    name: the compiler still reproduces itself
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc clang nasm llvm
+      - run: ./build.sh
+      # The fixpoint check lived in verify.ps1 and did not survive the port from
+      # Windows, so from the port until 2026-08-19 nothing checked the language's
+      # central property. f(f(x)) == f(x): the interpreter compiles compiler.zl,
+      # that output is built, and it must compile the same source byte for byte.
+      - run: ./verify_selfhost.sh
+
   parity:
     name: the engines implement the same language
     runs-on: ubuntu-latest

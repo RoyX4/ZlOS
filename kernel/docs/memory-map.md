@@ -58,7 +58,7 @@ size that code can actually reach, not the size it usually uses.
 | `0x00008FF0` | `0x00008FFF` | smp.c | `ENTRY_PTR` | `smp.c:56` |
 | `0x00009000` | `0x00009FF0` | smp.c | SMP trampoline | `smp.c:55,124` |
 | `0x000A0000` | `0x000FFFFF` | — | VGA hole, BIOS ROM | — |
-| `0x00100000` | `0x0028F044` | link.ld | **the kernel image** | measured, below |
+| `0x00100000` | `0x0028F044 (STALE - see the note below)` | link.ld | **the kernel image** | measured, below |
 | ↓ | `0x00600000` | raw_entry.S | raw-boot stack **top**, grows **down** | `raw_entry.S:16`, `raw_boot.asm:196` |
 | **`0x00800000`** | **`0x01800000`** | **arena.c** | **the program arena** | `arena.c` `ARENA_BASE` |
 | *(free)* | `0x08000000` | — | 104 MiB unclaimed | — |
@@ -190,3 +190,40 @@ firmware loader is more likely to have put something.
 tests, so a probe of an address that turned out to be occupied does not corrupt
 it. `xhci_ram_ok()` does not bother and is right not to — it owns its arena
 outright. Tracked as T-EXEC-3.
+
+
+---
+
+## STALE BY THREE MEGABYTES, and the argument above depends on the stale number
+
+**Measured 2026-08-19 on `desktop/browser-next`, with the browser, HTTPS, the
+JavaScript interpreter and the picture decoder all linked in:**
+
+```
+$ ./build.sh && nm kernel.elf | grep __kernel_end
+005daac0 A __kernel_end
+
+__kernel_end = 0x005DAAC0 = 5.854 MiB   link.ld ASSERT ceiling 6.000 MiB
+HEADROOM     = 152,896 bytes = 149.3 KiB
+text 1,750,279   data 332   bss 3,339,328
+```
+
+This file states the image ends at `0x0028F044` (2.559 MiB) and reasons from
+"the kernel image has 3.4 MiB of room to grow up" when deciding the program
+arena's base. **That figure is three megabytes out of date and the headroom is
+now 149 KiB, not 3.4 MiB.** The placement conclusion still holds - the arena is
+at 8 MiB and the image is nowhere near it - but the *margin* the reasoning
+relied on is gone, so the next person to add a multi-megabyte array must not
+take the old number as licence.
+
+That is exactly what happened while writing `png.c`: a 2 MiB pixel arena as
+BSS would not have linked, and the error would have read *"the kernel image has
+grown into the raw-boot stack at 6 MiB"* - naming the stack rather than the
+picture. The pixels went to `memmap.h`'s `HI_IMG` at 32 MiB instead.
+
+This file's own header says to re-grep rather than trust it. This is that
+re-grep, with the command that produced it, so the next one is cheaper:
+
+```
+./build.sh && nm kernel.elf | grep __kernel_end
+```

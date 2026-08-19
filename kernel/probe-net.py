@@ -73,41 +73,35 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from exercise import Serial, Qmp, qemu_argv, build, PROMPT
+from exercise import Serial, Qmp, qemu_argv, build, qtype, PROMPT
 
-# QEMU qcodes. Same table as probe-term.py, kept local rather than imported
-# because that module's name has a hyphen in it and is not importable without
-# gymnastics. A character with no qcode is a hard error, never a silent skip: a
-# probe that quietly drops a keystroke asserts against a command nobody typed
-# and passes for the wrong reason.
-QCODE = {" ": "spc", "\n": "ret", "-": "minus", "=": "equal",
-         ".": "dot", ",": "comma", "/": "slash", ";": "semicolon",
-         "'": "apostrophe", ":": "semicolon"}
-for _c in "abcdefghijklmnopqrstuvwxyz0123456789":
-    QCODE[_c] = _c
-
-
-def qtype(qmp, text, settle=0.12):
-    """Type `text` on the emulated keyboard, one key at a time.
-
-    THE SERIAL LINE CANNOT BE USED FOR THIS, and that is the whole reason this
-    function exists. When there is a framebuffer the compositor is the top of
-    the system (kernel.zl:3901) and the text shell's loop is never entered;
-    wm_frame() reads PS/2 and USB HID only, and nothing in the compositor path
-    looks at COM1. Measured on this gate's first run: with a NIC attached and
-    the "zl> " prompt on the serial log, sending 'N' produced no output at all,
-    and neither did 'h'. The prompt is a courtesy string (kernel.zl:3873), not
-    a shell waiting for serial input.
-
-    input-send-event, not send-key: under -display none there is no active
-    console handler and send-key is silently dropped.
-    """
-    for ch in text:
-        code = QCODE.get(ch)
-        if code is None:
-            raise RuntimeError(f"no qcode for {ch!r} - add one rather than skipping it")
-        qmp.sendkey(code)
-        time.sleep(settle)
+# QCODE and qtype() come from exercise.py, which is where the one copy lives.
+# They used to be duplicated here and in probe-term.py, on the reasoning that a
+# module name with a hyphen in it is not importable - true, but this file
+# already imports exercise.py, so that was never the obstacle.
+#
+# THE ORIGINAL REASON GIVEN FOR TYPING OVER QMP WAS WRONG, and is corrected
+# here rather than deleted, because a false "that is not supported" is the
+# expensive kind of stale - nobody re-tests what they have been told is absent.
+# What qtype()'s docstring used to say: the serial line cannot be used, because
+# wm_frame() reads PS/2 and USB HID only and nothing in the compositor path
+# looks at COM1, evidenced by 'N' and 'h' producing no output at all.
+#
+# Serial reaches the compositor. input.c drains COM1 into the same event queue
+# as PS/2 and USB - the block commented `SERIAL, the third source`, which is in
+# THIS BRANCH'S OWN input.c and was there when the claim was written. It exists
+# precisely so every gate here kept working once the desktop became the boot
+# state. Measured 2026-08-19: exercise.py types help, fib 20 and windows as
+# words over serial and scores 4/4.
+#
+# The silence that misled it is real but means something else: term.c buffers
+# printable characters and echoes only in its Enter branch, so a single 'N'
+# submits nothing and prints nothing. A delivered keystroke and a dropped one
+# are the same silence until Enter. See docs/typing-into-the-compositor.md.
+#
+# Typing on the emulated keyboard is still the right choice for this gate - it
+# exercises the PS/2 and USB HID decoders, the only input a laptop has. Keep
+# it; only the stated reason was wrong.
 
 
 def main():

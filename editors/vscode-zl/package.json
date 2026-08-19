@@ -1,8 +1,8 @@
 {
   "name": "zl-lang",
   "displayName": "zl language",
-  "description": "Syntax highlighting, formatting and editor support for the zl programming language",
-  "version": "0.3.1",
+  "description": "Syntax highlighting, completions, formatting and editor support for the zl programming language",
+  "version": "0.3.2",
   "publisher": "zl",
   "engines": { "vscode": "^1.60.0" },
   "categories": ["Programming Languages", "Formatters"],

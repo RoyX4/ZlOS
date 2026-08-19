@@ -138,6 +138,29 @@ extern int xhci_ptr_ep(void) ZL_WEAK;
  * Not weak. arena.c is in all four source lists and is pure arithmetic against
  * memory - if it is missing the build should fail, because unlike a USB
  * pointer there is no fallback that "has always worked" to degrade to. */
+/* heap.c, the general allocator. Same argument as arena.c for not being weak:
+ * it is in all four source lists and is arithmetic against memory. The two are
+ * NOT alternatives - the arena hands memory to zl programs and reclaims it
+ * wholesale on reset, the heap is for memory the kernel keeps and frees one
+ * object at a time. Both exist on purpose. */
+extern void user_selftest(void);
+extern int  user_has_exited(void);
+extern unsigned int user_call_count(void);
+
+extern void vmm_report(void);
+extern int  vmm_active(void);
+extern unsigned long long vmm_window_virt(void);
+
+extern int heap_init(void);
+extern int heap_ok(void);
+extern unsigned long heap_capacity(void);
+extern unsigned long heap_used(void);
+extern unsigned long heap_available(void);
+extern unsigned long heap_high_water(void);
+extern unsigned long heap_refusals(void);
+extern unsigned long heap_blocks(void);
+extern unsigned long heap_check(void);
+
 extern int arena_init(void);
 extern int arena_ok(void);
 extern void arena_reset(void);
@@ -254,6 +277,7 @@ extern int  xhci_kbd_poll(void);
 extern int  xhci_key(void);
 extern int  xhci_kbd_report(int i);
 extern int  xhci_ram_ok(void);
+extern int  settings_load(void);
 extern int  xhci_bringup(void);
 extern int  xhci_owned(void);
 extern unsigned int xhci_portsc(int p);
@@ -689,12 +713,15 @@ extern void browser_home(void);
 extern void browser_load_mem(unsigned int addr, int len);
 extern void browser_draw(int x, int y, int w, int h, int focused);
 extern int  browser_key(int code);
-extern int  browser_click(int cx, int cy);
+extern int  browser_click(int cx, int cy, int btn);
 extern int  browser_tick(void);
+extern int  browser_code(void);
+extern int  browser_doc_len(void);
 extern int  browser_back(void);
 extern int  browser_can_back(void);
 extern int  browser_url_focus(void);
 extern const char *browser_title(void);
+const char *browser_why(void);
 extern int  browser_scroll_by(int d);
 extern int  browser_height(void);
 extern int  browser_lines(void);
@@ -735,6 +762,16 @@ extern unsigned int intel_backlight_max(void);
 extern unsigned int intel_backlight_get(void);
 extern int  intel_backlight_set(int percent);
 extern int  intel_panel_on(void);
+/* gpuring.c - the GPU self-test. There is no serial port on the ThinkPad, so
+ * every number this exposes exists so kernel.zl can put it on the SCREEN. */
+extern int      gpu_selftest(void);
+extern unsigned gpu_st_filled(void);
+extern unsigned gpu_st_want(void);
+extern unsigned gpu_st_poison(void);
+extern unsigned gpu_st_ctl(void);
+extern unsigned gpu_st_head(void);
+extern unsigned gpu_st_tail(void);
+
 extern int  intel_cursor_enable(unsigned gfx, int size64);
 extern int  intel_cursor_move(int x, int y);
 extern int  intel_cursor_disable(void);
@@ -1209,6 +1246,11 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "usb_key"))    return zl_num((double)xhci_key());
     if (streq(name, "usb_rep"))    return zl_num((double)xhci_kbd_report((int)a[0].num));
     if (streq(name, "usb_ram"))    return zl_num((double)xhci_ram_ok());
+    /* Read the saved settings back. settings_save() has had a caller since it
+     * was written - one write per gesture, from settings_flush - and
+     * settings_load() has never had one, so every setting was persisted to NVMe
+     * and then ignored at boot. It applies on success and never writes. */
+    if (streq(name, "set_load"))   return zl_num((double)settings_load());
     if (streq(name, "usb_up"))     return zl_num((double)xhci_bringup());
     if (streq(name, "usb_ours"))   return zl_num((double)xhci_owned());
     if (streq(name, "usb_portsc")) return zl_num((double)xhci_portsc((int)a[0].num));
@@ -1257,6 +1299,13 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "bl_get"))     return zl_num((double)intel_backlight_get());
     if (streq(name, "bl_set"))     return zl_num((double)intel_backlight_set((int)a[0].num));
     if (streq(name, "panel_on"))   return zl_num((double)intel_panel_on());
+    if (streq(name, "gpu_test"))    return zl_num((double)gpu_selftest());
+    if (streq(name, "gpu_filled"))  return zl_num((double)gpu_st_filled());
+    if (streq(name, "gpu_want"))    return zl_num((double)gpu_st_want());
+    if (streq(name, "gpu_poison"))  return zl_num((double)gpu_st_poison());
+    if (streq(name, "gpu_ctl"))     return zl_num((double)gpu_st_ctl());
+    if (streq(name, "gpu_head"))    return zl_num((double)gpu_st_head());
+    if (streq(name, "gpu_tail"))    return zl_num((double)gpu_st_tail());
     if (streq(name, "cur_on"))     return zl_num((double)intel_cursor_enable((unsigned)a[0].num,(int)a[1].num));
     if (streq(name, "cur_move"))   return zl_num((double)intel_cursor_move((int)a[0].num,(int)a[1].num));
     if (streq(name, "cur_off"))    return zl_num((double)intel_cursor_disable());
@@ -1581,9 +1630,12 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "br_load"))    { browser_load_mem((unsigned)a[0].num, (int)a[1].num); return zl_nil(); }
     if (streq(name, "br_draw"))    { browser_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num); return zl_nil(); }
     if (streq(name, "br_key"))     return zl_num((double)browser_key((int)a[0].num));
-    if (streq(name, "br_click"))   return zl_num((double)browser_click((int)a[0].num,(int)a[1].num));
+    if (streq(name, "br_click"))   return zl_num((double)browser_click((int)a[0].num,(int)a[1].num,(int)a[2].num));
     if (streq(name, "br_tick"))    return zl_num((double)browser_tick());
     if (streq(name, "br_back"))    return zl_num((double)browser_back());
+    if (streq(name, "br_code"))    return zl_num((double)browser_code());
+    if (streq(name, "br_doclen"))  return zl_num((double)browser_doc_len());
+    if (streq(name, "br_why"))     return zl_str(browser_why());
     if (streq(name, "br_focus"))   return zl_num((double)browser_url_focus());
     if (streq(name, "br_state"))   return zl_num((double)browser_status());
     if (streq(name, "br_h"))       return zl_num((double)browser_height());
@@ -1797,6 +1849,34 @@ Value zl_calln(const char *name, int n, ...)
      * arena_up prints its own line, the way fb.c does, so the boot log states
      * an ADDRESS rather than a claim - a number somebody can check against the
      * map in fb.c and in arena.c's header comment. */
+    /* ---- the general heap (heap.c) ----------------------------------------
+     * heap_up prints its own line for the same reason arena_up does. heap_chk
+     * is the one that matters operationally: it walks every block by boundary
+     * tag and returns 0 if the heap still adds up, so "is the heap sound" is a
+     * command somebody can type rather than a thing to hope about. It is O(the
+     * number of blocks) and deliberately NOT on the alloc/free path. */
+    /* vmm_up prints one line with ADDRESSES in it - "64 MiB mapped: virtual
+     * 4096 MiB -> physical 256 MiB" is a fact somebody can check against
+     * memmap.h; "virtual memory is on" would not be. */
+    /* ring 3. user_up runs the self-test, which prints from BOTH sides of the
+     * privilege boundary - the "u3" in the boot log is produced by syscalls
+     * made from ring 3 and can be produced no other way. */
+    if (streq(name, "user_up"))       { user_selftest(); return zl_num((double)user_call_count()); }
+    if (streq(name, "user_calls"))    return zl_num((double)user_call_count());
+
+    if (streq(name, "vmm_up"))        { vmm_report(); return zl_num((double)vmm_active()); }
+    if (streq(name, "vmm_on"))        return zl_num((double)vmm_active());
+
+    if (streq(name, "heap_up"))       return zl_num((double)heap_init());
+    if (streq(name, "heap_ok"))       return zl_num((double)heap_ok());
+    if (streq(name, "heap_cap"))      return zl_num((double)heap_capacity());
+    if (streq(name, "heap_used"))     return zl_num((double)heap_used());
+    if (streq(name, "heap_free"))     return zl_num((double)heap_available());
+    if (streq(name, "heap_hw"))       return zl_num((double)heap_high_water());
+    if (streq(name, "heap_refused"))  return zl_num((double)heap_refusals());
+    if (streq(name, "heap_blocks"))   return zl_num((double)heap_blocks());
+    if (streq(name, "heap_chk"))      return zl_num((double)heap_check());
+
     if (streq(name, "arena_up"))      return zl_num((double)arena_init());
     if (streq(name, "arena_ok"))      return zl_num((double)arena_ok());
     if (streq(name, "arena_cap"))     return zl_num((double)arena_capacity());

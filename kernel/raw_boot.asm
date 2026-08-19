@@ -27,24 +27,30 @@ KERNEL_SEG   equ 0x1000          ; bounce buffer at 0x10000, reused every chunk
 KERNEL_DEST  equ 0x100000        ; where the kernel actually runs: 1 MiB
 KERNEL_LBA   equ 1               ; kernel starts at the 2nd sector of the disk
 CHUNK_SECS   equ 64              ; sectors per BIOS read (32 KiB)
-; 80 * 32 KiB = 2.5 MiB, and the disk mkdisk.sh builds is 3 MiB (mkdisk.sh's
-; own truncate), leaving headroom rather than fitting exactly. A kernel that
-; outgrows CHUNKS is not a build error: the loader reads exactly CHUNKS
-; chunks whatever the kernel's size, so the tail is simply never loaded and
-; the machine jumps into whatever happens to be at 1 MiB. mkdisk.sh's own
-; guard refuses to build an image that would do that - it is the thing that
-; actually caught this, not eyeballing a size.
+; 192 * 32 KiB = 6 MiB, so the loaded image spans 1 MiB .. 7 MiB.
 ;
-; Raised from 60 (1.875 MiB) by the app-suite brief: kernel.zl plus
-; apps_registry.zl/apps_utils.zl/apps_games1.zl/apps_games2.zl/
-; apps_system.zl crossed 60's ceiling at 11 apps in - measured
-; (mkdisk.sh's own KSIZE-vs-LIMIT check), not guessed. History repeats:
-; this was 40 before it was 60, for the same reason - the kernel grew and a
-; fixed loader-read count that was generous once stopped being generous.
-; KERNEL_DEST (1 MiB) growing to 1 MiB + 2.5 MiB = 3.5 MiB stays well clear
-; of both raw_entry.S's own stack (0x600000, 6 MiB) and arena.c's
-; ARENA_BASE (0x800000, 8 MiB) - checked, not assumed, before picking 80.
-CHUNKS       equ 80
+; A kernel that outgrows this is not a build error: the loader reads exactly
+; CHUNKS chunks whatever the kernel's size, so the tail is simply never loaded
+; and the machine jumps into a partially-loaded image. mkdisk.sh refuses to
+; build an image that would do that, and mkdisk.sh now also DERIVES the disk
+; image's size from this number instead of carrying its own literal - those two
+; were free to drift, and a CHUNKS raised without the truncate raised with it
+; makes the loader read off the end of the image and take the disk_error path.
+;
+; THE HISTORY IS THE ARGUMENT FOR THE HEADROOM. It was 40 (1.25 MiB) against a
+; 1.23 MiB kernel - 84 KiB spare, which the v10 type scale walked straight
+; through. It was then 60 (1.875 MiB) against a 1.54 MiB kernel - 343 KiB
+; spare, and the 53-app desktop suite already planned is about 660 KB, so that
+; one was overrun before it was written. Both times the number was set to just
+; past where the kernel happened to be that day.
+;
+; 6 MiB is set against where the kernel can plausibly GO, not where it is:
+; measured payload 1,614,532 bytes, so this is 3.9x the current image. Raising
+; it cost moving two neighbours up (the raw-boot stack 6 -> 12 MiB, the program
+; arena 8 -> 14 MiB) because at 6 MiB of capacity the loaded image would have
+; run into the stack. That is the right trade: those two had no reason to be
+; where they were beyond a kernel that used to be smaller.
+CHUNKS       equ 192
 
 ; Scratch below the bounce buffer (the boot sector ends at 0x7E00, the buffer
 ; starts at 0x10000), used only while we are still in real mode.
@@ -211,11 +217,15 @@ pm_entry:
     mov ss, ax
     mov fs, ax
     mov gs, ax
-    mov esp, 0x600000            ; a stack in high memory (6 MiB), growing down.
+    mov esp, 0x00C00000          ; a stack in high memory (12 MiB), growing down.
                                  ; Low memory is too tight: the framebuffer
-                                 ; compositor nests deep. The kernel sits at 1 MiB
-                                 ; and reaches ~0x20E000, so this leaves ~4 MiB.
-                                 ; Must match raw_entry.S, which sets it again.
+                                 ; compositor nests deep. It was 6 MiB, which the
+                                 ; loader now writes THROUGH - CHUNKS covers 1..7
+                                 ; MiB - so a stack at 6 MiB would be inside the
+                                 ; region the loader is still filling.
+                                 ; Must match raw_entry.S, which sets it again,
+                                 ; and arena.c's RAW_STACK_TOP, which asserts on
+                                 ; it. Three copies; all three or none.
     jmp KERNEL_DEST              ; into the kernel's raw entry, at 1 MiB
 
 ; ---- GDT: null, flat 32-bit code, flat 32-bit data ----

@@ -841,7 +841,8 @@ undone in `wm.c`, is in [`docs/system-track.md`](docs/system-track.md).
 Six times now: **a DMA buffer outside guest RAM, on top of another buffer, or an
 address truncated to 32 bits.** Symptoms look like protocol bugs.
 
-- zlOS needs `-m 256` minimum; the DMA arena starts at 224 MiB
+- **zlOS needs 1 GiB of RAM minimum.** See "The RAM floor" below — this was
+  `-m 256` until 2026-08-20 and the change is a deliberate trade, not a drift
 - `u32 reg = xop + OFFSET` where xop is a 64-bit BAR → **reads correct, writes
   vanish**, 64-bit build only
 - Every driver now ships a `*_ram_ok()` probe
@@ -865,9 +866,20 @@ admission; the list was already wrong when it was written.
 cd kernel/hosttest && ./memmap-guard-test.sh    # seconds, no QEMU, no hardware
 ```
 
-12 checks: the six owners compile, five deliberate breaks are each refused by
-the build (including a replay of this exact bug), and the 34 addresses that were
-rebased onto the header are proven identical to the literals they replaced.
+**That paragraph said "12 checks" and the script was scoring 10 passed, 2
+failed** — verified against a clean `git archive HEAD` tree, not the working
+copy. Both failures were the same staleness: `HI_APSTK` (the AP stacks) was
+inserted between `HI_BACK` and `HI_SCHED`, `BACK_LIMIT` became
+`HI_APSTK - HI_BACK` = 40 MiB, and neither the break that perturbs it nor the
+literal that pins it followed. So the script whose whole job is to prove
+guards are not decorations had a decoration of its own, and its own failure
+message — *"the map was broken and NOTHING complained"* — was on screen for
+anyone who ran it.
+
+It is **20 checks** now, all green: one baseline compile of ten owners, ten
+deliberate breaks each refused by the build (including replays of both real
+collisions), and nine files whose rebased addresses are proven identical to the
+literals they replaced.
 **A `_Static_assert` nobody has watched fail is a decoration, not a guard** —
 that is what the negative half of that script is for.
 **And the corollary nobody had written down: NOT ONE GATE passes `-m`.**
@@ -876,6 +888,55 @@ is **measured** at exactly 128 MiB (`query-memory-size-summary` says
 `base-memory: 134217728`). So on every gate this project runs, the whole
 high-RAM map is unbacked, and **a new fixed buffer placed above 128 MiB is dead
 code that will still pass review**. That is why the program arena is at 8 MiB.
+It is also why the browser's storage region (`HI_DOM`) is at **80 MiB** and not
+at some round number above `HI_BACK`: 80..96 MiB is under the 128 MiB every
+gate actually boots with, so `verify.sh` exercises it rather than stepping
+around it.
+
+## The RAM floor — 1 GiB, and what it cost
+
+Fixed 2026-08-20. The paragraph directly above was true when written and is now
+the *history* of this section, kept because the shape is worth recognising.
+
+`memmap.h`'s `HI_TOP` is one promise: **the smallest guest zlOS claims to boot
+on.** Every DMA buffer sits below it because below it is the only memory we have
+said exists. Until now, nothing compared that promise to what the gates
+actually booted, and all three of these were simultaneously true:
+
+| what | `-m` it passed | against `HI_TOP` = 256 MiB |
+|---|---|---|
+| `verify.sh`, `verify-raw.sh`, `verify-iso.sh`, `run.sh` | **none** → 128 MiB | top **half** of the map unbacked |
+| `verify-disk.sh`, `verify-clock.sh` | 512 | fine |
+| `verify-efi.sh`, `exercise.py`, `try.sh` | 1G | 4× the asserted ceiling |
+
+`HI_TOP` is now **`0x40000000`, 1 GiB**, and every QEMU in the tree passes
+`-m 1G`. `kernel/check-ram.sh` is the gate: it reads `HI_TOP` out of `memmap.h`,
+finds every QEMU launch in every `.sh` and `.py` here, and fails if any of them
+passes less than that or passes no `-m` at all. Static — no build, no QEMU, so
+it cannot fail because the host is busy. Validated against three planted
+defects (a gate with `-m` removed, a gate lowered to `-m 512`, and a brand-new
+gate written without one); all three go red, the clean tree goes green.
+
+**The trade, stated rather than implied: zlOS no longer claims to boot on a
+256 MB machine.** Nothing in the tree needed 1 GiB — the highest thing claimed
+is virtio-gpu's framebuffer ending at 255 MiB — so this buys room, not
+correctness. It is worth it because 256 MiB was never a hardware limit; it was
+`-m 256` written down once and then asserted against forever, and it had already
+started blocking work that has real use for the space above it.
+
+Two consequences worth knowing:
+
+- **The program arena's justification changed.** `arena.c` sits at 8 MiB
+  *because* everything above 128 MiB used to be unbacked on every gate. It is
+  still at 8 MiB — moving a live region buys nothing — but it is no longer
+  forced there, and the space above the map is now genuinely allocatable.
+- **`check-himap.sh` needed widening in the same commit.** Its literal-scanner
+  matched `0x0` followed by seven hex digits, which cannot express any value at
+  or above `0x10000000`. With `HI_TOP` at 1 GiB it would have gone on comparing
+  against a ceiling of `0x40000000` while structurally unable to see two thirds
+  of the span — reporting a region as covered that it could not look at. That
+  is the shape `docs/GUARDS-THAT-DID-NOT-GUARD.md` exists for, and it would have
+  been introduced *by* the fix.
 
 The full map — every base and end re-grepped from the file that owns it, the
 kernel image end measured, the arithmetic for where a new buffer may go, and one

@@ -17,7 +17,7 @@ OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
 
 if [ "${1:-}" = "--bios" ]; then
     echo "booting zlOS.iso - legacy BIOS"
-    exec qemu-system-i386 -cdrom zlOS.iso -m 256 -no-reboot "${@:2}"
+    exec qemu-system-i386 -cdrom zlOS.iso -m 1G -no-reboot "${@:2}"
 fi
 
 [ -f "$OVMF_CODE" ] || { echo "no OVMF firmware. apt install ovmf"; exit 1; }
@@ -44,4 +44,4 @@ EOT
 exec qemu-system-x86_64 \
     -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
     -drive if=pflash,format=raw,unit=1,file="$VARS" \
-    -cdrom zlOS.iso -m 256 -no-reboot "$@"
+    -cdrom zlOS.iso -m 1G -no-reboot "$@"

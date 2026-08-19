@@ -1,5 +1,13 @@
 # LOOK-AND-SPEED-PROMPT — make it look like the northstar, and make it fast
 
+> **USER INTENT CLARIFIED 2026-08-19.** Roy is pointing at the v10 HTML mainly
+> because of how polished it looks and how fast it feels. Do not turn that into
+> a demand to clone every simulated application or into another completeness
+> percentage. Read [`visual-speed-northstar.md`](visual-speed-northstar.md)
+> first; it is the durable intent. This prompt is the older execution brief and
+> much of it has already been answered by `DECISIONS.md` and
+> `look-and-speed.md`.
+
 Written 2026-08-19, for a fresh session. Two halves. **Do the look first** — a
 frame budget is meaningless until you know what has to be in the frame.
 

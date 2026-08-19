@@ -824,6 +824,123 @@ taken. Take that measurement before writing it.
 
 ---
 
+## Three taken 2026-08-19, the v10 look-and-speed rebuild — LOOK-AND-SPEED-PROMPT.md, resumed
+
+`STATE-OF-THE-PROJECT.md`'s audit named several already-diagnosed visual
+defects; these three were re-derived from the tree (not taken on the audit's
+word — its own §3.6 shows a diagnosis can go stale between the writing and the
+reading) and are small enough to fix and gate in one pass. The audit's §3.2
+(dock digit debris) was checked the same way and turned out to be **already
+fixed** on this branch (`kernel.zl:3247-3265`, closed by unifying the tray's
+damage rect on `tray_x()`) — not re-touched here, and not re-claimed here.
+
+### #40 | `icons24`/`icons48` externs said 10, `icons.c` has always had 20
+
+`fb.c` declared both atlases at `[10]`; `icons.c` defines `[20]` for each, with
+its own index comment naming all twenty. It linked because the element type
+matched, and `fb_icon24()` refuses `n >= ICON_N` before touching the array, so
+the ten icons the v10 pass generated (search, lock, drive, close, check,
+chevron, clock, network, volume, grid) were unreachable from any caller.
+
+`ICON_N` raised 10 → 20. **This has no visible effect by itself** — grepped
+`dock_icon()` in `kernel.zl`, every slot returns 0–9, so nothing today asks for
+icon 10+. Wiring any of the ten to a dock slot, a menu row or a title-bar icon
+is a separate, undecided design question (which icon means what is not this
+document's call) and is not done here.
+
+*Gate:* `build.sh`/`build64.sh`/`buildefi.sh` clean, `hosttest/build.sh`
+rebuilds all harnesses with no new warnings, `fbbench`/`wmtest`/`tritest`/
+`toasttest`/`walltest`/`palette` (everything that links `icons.c`) still green.
+
+### #41 | The resize grip was drawn twice; deleted the earlier, dimmer, wrongly-scaled one
+
+`chrome()` drew the bottom-right grip **twice**, from two merge parents: a
+`UI_S1`-scaled set of 3 diagonals in `t->border`, before the title bar was
+composited, and a `UI_S3`-scaled set in `t->text_dim`/`t->title_off` after the
+close box, which is the one whose own comment already documents a "looking at
+it" fix for an L-bracket merge bug. Only the second matches `RESIZE_EDGE`'s
+`UI_S2` hit region — the first drew an affordance *smaller* than its own hit
+target, the second draws one slightly larger, which is the right direction for
+a visual cue.
+
+Deleted the first block. `wmshot` before/after at the same corner
+(`docs/shots/grip-before-two-renderers.png`,
+`docs/shots/grip-after-one-renderer.png`, 80×80 crop at 6×, point-filtered)
+shows the extra, longer diagonal strokes gone.
+
+*Gate:* the three kernel builds clean; `hosttest/wmtest` green including the
+grip's own hit-test assertions ("dragging the grip resizes the window", "...and
+does NOT move it") — unaffected, because only the drawing half changed, which
+is the point of having both a hit-test suite and a screenshot tool.
+
+### #42 | The window fade blended its saved backdrop at the wrong origin, and I widened its scissor too
+
+`STATE-OF-THE-PROJECT.md` §4.14 named this; re-derived independently by
+reading `wm_repaint()` rather than trusting the citation, because the doc's own
+method (§3.6) is "re-check, don't inherit." Confirmed exactly as described:
+`cx, cy, cw, ch` are declared once per window, set first to the frame+shadow
+box, then `fb_stash(cx, cy, cw, ch)` captures that box for the fade — but a
+later `isect()` against the *client* rect (narrower, inset by the border and
+title bar) overwrites the same four variables before `fb_stash_blend(stash,
+cx, cy, ...)` runs, so the saved backdrop was painted back at the client
+origin instead of where it was taken from.
+
+Fixed by capturing `sx, sy, sw, sh` at the point of the stash call, before the
+client `isect` can touch them, and blending against those. **A second,
+deliberate change beyond the minimal one:** the blend's scissor also moved from
+the (clobbered) client rect to the full `sx, sy, sw, sh` frame+shadow box. The
+surrounding comment's own algebra is `window * a + behind * (1 - a)` for *the
+window*, not for its client area alone — a title bar that pops in at full
+opacity while only the content fades is a second, smaller defect the minimal
+fix would have left in place. Consequence worth knowing: the window's frame,
+border and shadow now fade in step with its content, which changes the visible
+top few pixels of any window using `ANIM_FADE` (today, only the start menu).
+
+**Found while checking that, not part of this fix:** `ui.h:107`'s own comment
+names the start menu as the example of `WF_NOCHROME` ("draws its own frame"),
+but nothing in the tree ever sets it — `wm_open()` takes no flags argument and
+always assigns exactly `WF_OPEN`, and a repo-wide grep for
+`flags |= WF_NOCHROME` or an equivalent finds zero writers, only the six
+readers. So the menu has ordinary full chrome (title bar, close box, resize
+grip) today, same as any other window, and the widened scissor above genuinely
+applies to it. This is the same "checked but never set" pattern
+`HANDOFF.md` already names for `WF_MODAL` before it got a caller — logged here
+rather than fixed, because deciding whether the menu SHOULD go chromeless is a
+design call this document does not make unilaterally.
+
+**Measured, not just read.** A standalone host probe (one window alone over
+`fb_gradient`'s vertical wallpaper, so "what's behind it" varies by row and the
+origin shift has somewhere to show up) sampled a column of pixels near the
+frame's top edge at a fixed mid-fade frame, built once against pre-fix `wm.c`
+and once against post-fix, same probe, same scene:
+
+```
+  y     before   after   delta (R,G,B)
+  306   161c2e   181e32   (+2,  +2,  +4)
+  312   2c539a   233e72   (-9, -21, -40)
+  316   2a4f94   223b6e   (-8, -20, -38)
+  320   284b8f   21396b   (-7, -18, -36)
+```
+
+19 of 20 sampled rows changed; the largest single-row channel delta is 40/255.
+The probe was not kept as a committed harness — it needed a second, undocumented
+mmap (`0x0C000000`, the blur/wallpaper arena `slot_capture` reads, which
+`wmshot.c`'s stub set never maps because nothing there calls `fb_stash`) before
+it stopped segfaulting, which is exactly the kind of fragile one-off this repo
+prefers not to check in without more scrutiny than one session had time for.
+**Gap, stated rather than hidden:** `hosttest/wmtest`'s existing `ANIM_FADE`
+assertions (`px_mid != px_over`, `px_mid != px_under`, alpha genuinely partial)
+stayed green before AND after this fix — they assert a fade composites
+*something*, not that it composites the *right* rectangle, so they could not
+have caught this bug and would not catch its return. A precision regression
+assertion for the origin specifically does not exist yet.
+
+*Gate:* the three kernel builds clean; `check-memmap.sh`/`check-zl-calls.sh`
+pass; `hosttest/wmtest` green (0 failures) both before and after, which is
+this fix's regression floor, not its proof — see the gap above.
+
+---
+
 ## Open
 
 | # | Question | Owner |
@@ -851,3 +968,69 @@ Docs: `look-and-speed.md` (the frame budget, the vsync survey, what is next) ·
 `desktop-plan.md` · `desktop-look.md` · `desktop-polish-and-speed.md` ·
 `desktop-northstar-feasibility.md` · `desktop-prior-art.md` ·
 `os-landscape.md` · `intel-graphics-stack.md`
+
+### #43 | The snap preview: snapping worked, but you could not see where it would land
+
+`snap.c` has had the whole geometry for a long time — `snap_zone_for_point`,
+`snap_rect`, `snap_apply`, `snap_release` — and `route_mouse`'s drop path has
+called it since the exec-track merge. Dragging a window to an edge **did** snap
+it. What was missing was any indication *before* letting go, so the feature was
+invisible until it had already happened.
+
+**What was added.** A cached rectangle (`sp_zone`, `sp_x/y/w/h`) declared above
+`wm_repaint`, filled by `snap_preview_set()` on every pointer motion during a
+`GRAB_MOVE`, and drawn with `fb_rrect_blend()` at alpha 64 in the theme accent —
+above the windows, below the toast.
+
+**Four decisions in it that were not arbitrary:**
+
+1. **The preview and the drop share one geometry function.** `snap_rect()` is
+   the same arithmetic `snap_apply()` uses, minus the commit. It is declared in
+   `wm.c` for this. A preview computed independently is a preview that can
+   promise a landing spot the snap then disagrees with.
+2. **It follows the POINTER, not the window.** The drop asks
+   `snap_zone_for_point` about the pointer, so the preview must too. Using the
+   window rectangle would light up a different zone than the drop takes.
+3. **It damages the rectangle it LEAVES as well as the one it enters.** The
+   preview is not a window; nothing else in the compositor knows those pixels
+   changed. This is the same mistake `snap_to_rect` documents having made with
+   `wm_move`, and it is why `snap_preview_set` returns early when the zone has
+   not changed — otherwise every drag frame in the middle of the screen would
+   repaint the desktop.
+4. **`wm_drop_grab()` clears it.** A window CLOSED mid-drag clears `pgrab`, and
+   the button-up that would normally clear the preview never arrives. Without
+   this the hint stays painted for the rest of the session.
+
+All seven zones work for free, corners included: `snap_rect`'s `default:` arm
+fills the work area, so no zone can produce an uninitialised rectangle.
+
+**Evidence — `kernel/probe-snap.py`, committed, real QEMU and real pointer.**
+A green build proves nothing about paint, so this drives an actual drag and
+asks whether the screen changed, in which half, at which moment:
+
+```
+booted 1920x1200
+  1 left edge shows a preview        985575 px  ok
+  2 leaving the edge clears it        14523 px  ok
+  3 right edge previews the RIGHT    975365 px right,   31811 px left  ok
+snap preview gate green
+```
+
+Step 3 is the one with teeth: a constant rectangle, or one derived from the
+window, passes 1 and 2 and fails 3.
+
+**The probe's first two runs reported RED, and both were the probe.** A drag
+moves the window with the pointer, so comparing an edge shot against a
+mid-screen shot measures the window travelling across the display as much as it
+measures the preview — the first version saw the window *vacate* the left half
+and called it a stray preview. Fixed by taking each reference a few pixels the
+other side of the same threshold, and by setting the thresholds from the
+measured confound (~30,000 px of window repaint) rather than tuning until green:
+the signal is ~985,000 px, so 100,000 separates them by an order of magnitude
+in both directions. Screenshots in `kernel/shots/snap-preview-{left,right}.png`
+were what settled it — the numbers alone would have had me "fixing" working code.
+
+**Not done:** the preview is a flat blend with no border and no transition. It
+appears and disappears instantly rather than easing, which is the same
+frame-step-versus-time-based-motion gap the north star raises for the rest of
+the compositor's animation. Left alone deliberately rather than half-done.

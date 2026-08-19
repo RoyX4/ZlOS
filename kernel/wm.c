@@ -108,6 +108,12 @@ void snap_rect(int z, int sw, int sh, int reserve_top, int reserve_bot,
                int *x, int *y, int *w, int *h);
 int  snap_apply(int win, int z, int cx, int cy, int cw, int ch,
                 int sw, int sh, int rt, int rb, int *x, int *y, int *w, int *h);
+/* the same arithmetic snap_apply uses, WITHOUT committing it to a window.
+ * That is the whole point for the drag preview: the outline you see while
+ * dragging and the rectangle you get on drop are computed by one function, so
+ * the preview cannot promise a landing spot the snap then disagrees with. */
+void snap_rect(int z, int sw, int sh, int reserve_top, int reserve_bot,
+               int *x, int *y, int *w, int *h);
 int  snap_release(int win, int *x, int *y, int *w, int *h);
 int  snap_key_zone(int win, int dir);
 int  snap_state(int win);
@@ -182,12 +188,18 @@ int  input_y(void);
 #define MOD_ALT     (1 << 2)
 #define MOD_SUPER   (1 << 5)
 
-/* The navigation keys, as input.c numbers them. Above 0xFF on purpose: they
- * have no character, so they can never be confused with one. */
-#define KEY_LEFT      0x110
-#define KEY_RIGHT     0x111
-#define KEY_UP        0x112
-#define KEY_DOWN      0x113
+/* The key codes come from keycodes.h, which is the file that owns them, rather
+ * than from a copy here.
+ *
+ * There used to be a copy - twice, in this one file, at what were lines 128-131
+ * and 1443-1446 - and both happened to hold the right values. The cost was not a
+ * wrong number, it was a MISSING one: whoever wrote the Alt+Tab test had no
+ * KEY_TAB in scope because nobody had copied that line in, reached for '\t'
+ * instead, and Alt+Tab has never fired. keycodes.h:14-16 states the rule the
+ * copy could not enforce - codes live above 0x100 "where it cannot collide with
+ * a character", and `code >= KEY_NONCHAR` is the test for "this key has no
+ * character". A partial copy of a table cannot carry a rule. */
+#include "keycodes.h"
 
 unsigned int idt_ticks(void);
 /* cpu.c. The TSC has been readable since cpu.c was written and nothing in the
@@ -624,9 +636,35 @@ int wm_anim_alpha(int win)
 
 /* Sample every running animation and damage what moved.
  * Damaging the SETTLED rect - which is the largest - is what erases the
- * smaller frame drawn a moment ago. */
+ * smaller frame drawn a moment ago.
+ *
+ * THIS USED TO ADVANCE BY ONE INDEX PER CALL, which made every duration in this
+ * file a count of compositor passes rather than a length of time. The comment
+ * on ANIM_FRAMES says "four frames at 100 Hz is 40 ms", and that was only true
+ * if a pass happened to cost exactly 10 ms - so animation speed tracked host
+ * load, scene complexity and resolution. Making the redraw faster made the
+ * animations faster instead of smoother, which is the opposite of the point.
+ *
+ * idt_ticks() is 100 Hz, so one tick IS one intended frame and the conversion
+ * is a subtraction. Two other subsystems in this file already reason about that
+ * (see the notes at the drag threshold and the double-click window); the
+ * timeline was the one that did not.
+ *
+ * anim_tick() is called every compositor pass whether or not anything is
+ * animating, so anim_last stays current and an animation that starts after a
+ * long idle does not jump straight to its end. The clamp is belt and braces for
+ * the case where it does not - a stall long enough to skip a whole timeline
+ * should end the animation, not wrap its index. */
+static unsigned anim_last = 0;
+
 static void anim_tick(void)
 {
+    unsigned now  = idt_ticks();
+    unsigned step = now - anim_last;          /* 100 Hz: one tick, one frame */
+    anim_last = now;
+    if (step == 0) return;                    /* no time passed: nothing moved */
+    if (step > (unsigned)ANIM_FRAMES) step = (unsigned)ANIM_FRAMES;
+
     for (int i = 0; i < ANIM_MAX; i++) {
         if (!anims[i].kind) continue;
         anim_damage(&anims[i]);
@@ -1604,6 +1642,19 @@ static void sweep_draw(int rx0, int ry0, int rx1, int ry1)
     }
 }
 
+/* ---- the snap preview -----------------------------------------------------
+ * visual-speed-northstar.md §"Five-part working direction" item 3 lists "add
+ * the missing snap preview" as outstanding: snap.c and the drop-time wiring
+ * both existed, so dragging a window to an edge DID snap it - you just could
+ * not see where it was going to land until you let go.
+ *
+ * The state lives here, above wm_repaint, because the repaint has to read it
+ * and pgrab/RESERVE_TOP are declared further down the file. Only the cached
+ * rectangle is read during paint; snap_preview_set() below does the geometry,
+ * because RESERVE_TOP/RESERVE_BOT are not defined until line ~1280. */
+static int sp_zone = SNAP_NONE;      /* SNAP_NONE when nothing is previewing */
+static int sp_x, sp_y, sp_w, sp_h;   /* where the window would land          */
+
 void wm_repaint(void)
 {
     if (!fb_active() || !nwd) return;
@@ -1669,7 +1720,7 @@ void wm_repaint(void)
             int stash_x = cx, stash_y = cy, stash_w = cw, stash_h = ch;
             if (anim_is(win, ANIM_FADE)) {
                 fade = wm_anim_alpha(win);
-                if (fade < 255) stash = fb_stash(cx, cy, cw, ch);
+                if (fade < 255) stash = fb_stash(sx, sy, sw, sh);
             }
 
             fb_clip(cx, cy, cw, ch);            /* clip 1: the frame + shadow */
@@ -1689,14 +1740,12 @@ void wm_repaint(void)
              * tint IS a blend of one colour over what is already there, which
              * is exactly what fb_fill_blend does.
              *
-             * ANIM_FADE is a different animal and is NOT drawn here. A real
-             * fade needs the window composited against what is BEHIND it at
-             * fractional opacity, which needs a copy of the rectangle before
-             * the window was drawn on it. wm_anim_alpha() reports it and
-             * wmtest asserts it; the compositing waits for the scratch arena
-             * in fb.c. Saying so is better than a tint pretending to be a
-             * fade - they look different and only one of them is the effect
-             * the prototype asks for. */
+             * ANIM_FADE IS drawn here, below - a real fade, the window
+             * composited against what was BEHIND it at fractional opacity,
+             * from the copy `stash` took of the rectangle before the window
+             * was drawn on it. Blended at (sx, sy) - where it was TAKEN
+             * FROM - never at (cx, cy), which by this point is whatever the
+             * client isect above left behind. */
             if (stash >= 0) {
                 /* cx/cy are reused by the narrower client intersection above.
                  * Restoring at that later origin shifted the saved backdrop
@@ -1782,6 +1831,9 @@ static int is_double(int win, int x, int y)
 }
 
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
+
+/* defined below, after RESERVE_TOP/BOT, which its geometry needs */
+static void snap_preview_set(int z);
 
 /* wm_close calls this. Defined here, beside the state it clears, so the grab
  * and its lifetime stay in one place. */
@@ -1902,6 +1954,32 @@ static int in_closebox(int win, int x, int y)
  * the dock cannot reach its own status bar. */
 #define RESERVE_TOP(t)  UI_DP((t), 48)
 #define RESERVE_BOT(t)  UI_DP((t), 72)
+
+/* Show, move or clear the drag preview. Called on every pointer motion during
+ * a frame drag, so it does nothing at all when the zone has not changed - the
+ * common case is dragging around the middle of the screen with no zone, and
+ * that must not damage anything or every drag frame would repaint the desktop.
+ *
+ * Damage is issued for the rectangle being LEFT as well as the one being
+ * entered, because the preview is not a window: nothing else in the compositor
+ * knows those pixels changed, and a preview that only damages where it is
+ * going leaves its previous outline painted on the wallpaper. That is the same
+ * mistake snap_to_rect just below documents having made with wm_move. */
+static void snap_preview_set(int z)
+{
+    if (z == sp_zone) return;
+
+    if (sp_zone != SNAP_NONE) wm_damage(sp_x, sp_y, sp_w, sp_h);
+
+    sp_zone = z;
+
+    if (z != SNAP_NONE) {
+        const struct ui_theme *t = ui_theme();
+        snap_rect(z, (int)fb_pxw(), (int)fb_pxh(),
+                  RESERVE_TOP(t), RESERVE_BOT(t), &sp_x, &sp_y, &sp_w, &sp_h);
+        wm_damage(sp_x, sp_y, sp_w, sp_h);
+    }
+}
 
 /* Snap `win` to `z` (or un-snap it if z is SNAP_NONE), applying whatever
  * geometry snap.c hands back. The two triggers below both end here, so there
@@ -2108,14 +2186,15 @@ static void cycle_focus(void)
     }
 }
 
-#define KEY_LEFT   0x110
-#define KEY_RIGHT  0x111
-#define KEY_UP     0x112
-#define KEY_DOWN   0x113
-
 static void route_key(int type, int code, int mods)
 {
-    if (type == EV_KEY_DOWN && code == '\t' && (mods & MOD_ALT)) {
+    /* KEY_TAB, not '\t'. Both keyboards deliver the KEY code here, never the
+     * character: input.c:155 and :227 map the PS/2 scancodes straight to
+     * KEY_TAB, and the USB HID path goes through key_of_char (input.c:633)
+     * which does the same. input_code() returns last.code, the key. So
+     * `code == '\t'` compared 0x103 against 9 and this branch had never once
+     * been taken. */
+    if (type == EV_KEY_DOWN && code == KEY_TAB && (mods & MOD_ALT)) {
         cycle_focus();
         return;
     }

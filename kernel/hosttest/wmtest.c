@@ -95,7 +95,20 @@ unsigned int idt_ticks(void) { return fake_ticks; }
 static unsigned long long fake_tsc = 0;
 unsigned long long cpu_tsc(void) { fake_tsc += 20000000; return fake_tsc; }
 unsigned int cpu_tsc_khz(void) { return 2000000; }
-int idt_scan(void)      { return 0; }
+/* A SCANCODE QUEUE THE TEST CAN FILL. It was a constant 0, which meant every
+ * keyboard path through wm.c was unreachable from this harness - and that is
+ * how Alt+Tab shipped comparing against the wrong constant and was never
+ * caught. Feeding real PS/2 set-1 scancodes drives the REAL input.c, so what
+ * is under test is the whole chain from scancode to focus change and not a
+ * mock of it. */
+#define SCQ 32
+static int scq[SCQ], scq_head, scq_tail;
+static void scan_push(int sc) { if ((scq_tail + 1) % SCQ != scq_head) { scq[scq_tail] = sc; scq_tail = (scq_tail + 1) % SCQ; } }
+int idt_scan(void)
+{
+    if (scq_head == scq_tail) return 0;
+    int v = scq[scq_head]; scq_head = (scq_head + 1) % SCQ; return v;
+}
 int xhci_key(void)      { return 0; }
 int ser_rx(void)        { return -1; }   /* no UART in the harness */
 

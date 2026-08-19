@@ -52,7 +52,7 @@ fi
 # ...and say which constants the sized checks below do NOT cover, so the gap is
 # visible rather than silent. Not a failure: a new address is not automatically
 # wrong, it is automatically unexamined.
-known=" SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT LINE_BUF LINE_MAX HIST_BUF HIST_N "
+known=" SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT LINE_BUF LINE_MAX HIST_BUF HIST_N FILES_NAME_BUF "
 unsized=""
 for n in $(grep -oP '^\K[A-Z_]+(?=\s*=\s*0x0[0-9A-Fa-f]{5,})' "$SRC" | sort -u); do
     case "$known" in *" $n "*) ;; *) unsized="$unsized $n";; esac
@@ -61,7 +61,7 @@ done
 
 declare -A K
 for name in SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT \
-            LINE_BUF LINE_MAX HIST_BUF HIST_N; do
+            LINE_BUF LINE_MAX HIST_BUF HIST_N FILES_NAME_BUF; do
     v=$(grep -oP "^$name\s*=\s*\K(0x[0-9A-Fa-f]+|[0-9]+)" "$SRC" | head -1)
     [ -n "$v" ] || { echo "FAIL: constant $name not found in $SRC"; exit 1; }
     K[$name]=$((v))
@@ -78,24 +78,64 @@ SNAKE_X=${K[SNAKE_X]}; SNAKE_Y=${K[SNAKE_Y]}
 FS_META=${K[FS_META]}; FS_DATA=${K[FS_DATA]}; FS_SLOT=${K[FS_SLOT]}
 LINE_BUF=${K[LINE_BUF]}; LINE_MAX=${K[LINE_MAX]}
 HIST_BUF=${K[HIST_BUF]}; HIST_N=${K[HIST_N]}
+FILES_NAME_BUF=${K[FILES_NAME_BUF]}
 
 # SNAKE_X/SNAKE_Y are one byte per body cell and the code bounds neither by a
 # named constant; the gap between them is what each actually gets.
 SNAKE_CELLS=$((SNAKE_Y - SNAKE_X))
 
+# THE PROGRAM ARENA, WHICH WAS IN NEITHER CHECKER.
+#
+# check-memmap.sh sweeps kernel.zl's fixed buffers against each other from
+# 32 MiB up. memmap.h's _Static_assert chain covers the high map from 128 MiB
+# up. arena.c's 16 MiB arena sits between the two and was in NEITHER - a region
+# larger than everything this script checks put together, invisible to it.
+#
+# It never mattered while the arena was at 8 MiB with 24 MiB of clearance. It
+# started mattering the moment the arena MOVED (8 -> 14 MiB, when the raw
+# loader's CHUNKS went to 192), because a move is when a gap gets spent. Read
+# from arena.c rather than restated, so this cannot drift from the value the
+# kernel actually uses.
+AB=$(grep -oP '^#define\s+ARENA_BASE\s+\K0x[0-9A-Fa-f]+' arena.c)
+AZ=$(grep -oP '^#define\s+ARENA_BYTES\s+\K0x[0-9A-Fa-f]+' arena.c)
+
+# FOLLOW ONE LEVEL OF INDIRECTION. arena.c stopped restating literals and now
+# DERIVES both from memmap.h - which is the entire point of memmap.h - and this
+# gate could only read literals, so it failed with "not found" against correct
+# code. A gate that cannot see the CORRECT form of what it checks is worse than
+# no gate: it trains you to ignore it. It also earned its keep on the way past:
+# the derivation exposed that memmap.h's LO_ARENA still said 8 MiB while the
+# arena had moved to 14, which would have put a 16 MiB arena on top of the
+# raw-boot stack at 12 MiB.
+if [ -z "$AB" ]; then
+    n=$(grep -oP '^#define\s+ARENA_BASE\s+\K[A-Z_][A-Z0-9_]*' arena.c)
+    [ -n "$n" ] && AB=$(grep -oP "^#define\\s+${n}\\s+\\K0x[0-9A-Fa-f]+" memmap.h)
+fi
+if [ -z "$AZ" ]; then
+    e=$(grep -oP '^#define\s+LO_ARENA_END\s+\K0x[0-9A-Fa-f]+' memmap.h)
+    b=$(grep -oP '^#define\s+LO_ARENA\s+\K0x[0-9A-Fa-f]+' memmap.h)
+    [ -n "$e" ] && [ -n "$b" ] && AZ=$(printf '0x%X' $(( e - b )))
+fi
+[ -n "$AB" ] && [ -n "$AZ" ] || { echo "FAIL: ARENA_BASE/ARENA_BYTES not found in arena.c or memmap.h"; exit 1; }
+
 # name:start:size - keep in sync with the map comment in kernel.zl
 REGIONS=(
+    "ARENA:$((AB)):$((AZ))"
     "SNAKE_X:$SNAKE_X:$SNAKE_CELLS"
     "SNAKE_Y:$SNAKE_Y:$SNAKE_CELLS"
     "FS_META:$FS_META:64"
     "FS_DATA:$FS_DATA:$((10 * FS_SLOT))"
     "LINE_BUF:$LINE_BUF:$LINE_MAX"
     "HIST_BUF:$HIST_BUF:$((HIST_N * HIST_STRIDE))"
+    # 24, not a named constant here: it is fs.c's FS_NAME_MAX, which this
+    # script has no visibility into (it parses kernel.zl only). FS_META just
+    # above does the same thing for its own C-side size.
+    "FILES_NAME_BUF:$FILES_NAME_BUF:24"
 )
 
 mapfile -t SORTED < <(printf '%s\n' "${REGIONS[@]}" | sort -t: -k2 -n)
 
-echo "  zlOS fixed-address map:"
+echo "  zlOS fixed-address map (kernel.zl's block ONLY - see the note below):"
 for r in "${SORTED[@]}"; do
     IFS=: read -r n s z <<<"$r"
     printf '    0x%08X .. 0x%08X  %-9s %7d bytes\n' "$s" "$((s + z))" "$n" "$z"
@@ -126,3 +166,19 @@ fi
 
 [ "$fail" = 0 ] || exit 1
 echo "  OK: no overlaps, $((HIST_STRIDE - LINE_MAX)) bytes spare in each history slot"
+
+# THIS IS NOT THE WHOLE MAP, AND READING IT AS THOUGH IT WERE COST A P1.
+# There are TWO fixed-address maps in this kernel:
+#   this one   - kernel.zl's block at 32 MiB, derived from the source above
+#   memmap.h   - the high-RAM regions (fb.c's back buffer, the DMA arenas,
+#                png.c's decoded pictures), checked by _Static_assert
+# A picture arena was placed at 0x02000000 because every assert in memmap.h
+# passed - and it landed directly on SNAKE_X, FS_META, FS_DATA, LINE_BUF and
+# HIST_BUF, all of which THIS script had just printed in the same session.
+# The output was read and not joined up. memmap.h now declares
+# ZL_LOW_BASE/ZL_LOW_END so the compiler checks across the boundary, but a
+# human reading either map alone still sees half of one.
+echo
+echo "  NOTE: this covers kernel.zl only. The high-RAM regions (fb.c, the DMA"
+echo "        arenas, png.c's pictures) live in memmap.h and are checked by"
+echo "        _Static_assert there. Neither map is the whole map."

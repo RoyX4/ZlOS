@@ -137,18 +137,89 @@ else
   echo "skip  ./gpu_fillrate  (no GL headers - apt install libgl1-mesa-dev)"
 fi
 
+# The crypto primitives, against published test vectors. Both of these
+# #include ../crypto.c rather than linking it: the file has no header of its
+# own for the host path, and compiling it once per harness keeps each one a
+# single translation unit with no link order to get wrong.
+#
+# EVERY expected value in both is from a published standard - FIPS 180/197,
+# RFC 2202/4231/6070/4493/5869/7748, NIST SP 800-38D, IEEE 802.11i - and not
+# from a previous run. That is what let all of this be written and finished
+# with no server to talk to and no hardware present.
+gcc -O2 -g -Wall -Wextra -D_GNU_SOURCE -o cryptotest cryptotest.c
+echo "built ./cryptotest    (run: ./cryptotest)"
+gcc -O2 -g -Wall -Wextra -D_GNU_SOURCE -o tlscryptotest tlscryptotest.c
+echo "built ./tlscryptotest (run: ./tlscryptotest)"
+
+# The TLS 1.3 handshake, against OpenSSL. Every primitive underneath is already
+# checked against published constants by tlscryptotest; what that cannot check
+# is the hundred small ways a handshake goes wrong - a length written
+# little-endian, an extension out of order, a transcript hash taken one message
+# too late, a nonce that does not advance, the record header left out of the
+# additional data. None of those produce a wrong constant anywhere; all of them
+# produce a handshake that fails. So this talks to `openssl s_server` and
+# asserts interoperability, which is the only property a client actually needs.
+# Skips rather than fails when openssl is absent.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o tlstest tlstest.c ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c
+echo "built ./tlstest       (run: ./tlstest)"
+
+# The bounded JavaScript interpreter. The SCOPE CLAIM in js.h is under test as
+# much as the code: section 7 asserts that what it cannot do fails cleanly with
+# a message, because a parser that accepts garbage and evaluates it to 0 is
+# worse than one that refuses.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o jstest jstest.c ../js.c
+echo "built ./jstest        (run: ./jstest)"
+
+# ECDSA verification, P-256 and P-384. A VERIFIER IS TESTED BY WHAT IT REJECTS:
+# an implementation that returns 1 unconditionally passes every "valid signature
+# verifies" test ever written, and one that returns 0 unconditionally passes
+# every rejection test. Both halves are here, and the second half caught a real
+# bug - two incompatible Jacobian addition formulas, which rejected everything.
+gcc -O2 -g -Wall -Wextra -D_GNU_SOURCE -o ecdsatest ecdsatest.c ../ecdsa.c
+echo "built ./ecdsatest     (run: ./ecdsatest)"
+
+# Certificate parsing and chain validation - the half of TLS that decides
+# whether "encrypted" means "encrypted TO THEM". Written the way ecdsatest is:
+# a validator that returns 1 unconditionally passes every accept-the-real-chain
+# test ever written, so the accept case is checked once and every way of being
+# wrong is checked individually. The certificates are en.wikipedia.org's REAL
+# chain, captured off the wire - a parser that only meets certificates made by
+# its own author agrees with its author, not with a certificate authority.
+gcc -O2 -g -Wall -Wextra -D_GNU_SOURCE -o x509test x509test.c ../x509.c ../ecdsa.c ../rsa.c ../crypto.c
+echo "built ./x509test      (run: ./x509test)"
+
 # The browser's parser and box model, asserted. html.c and layout.c reach for
 # exactly one thing outside themselves - a function that measures a string - so
 # injecting a synthetic one turns both into ordinary programs. Malformed markup
 # recovering rather than faulting is unprovable by looking at a rendered page,
 # and reflow is a claim about numbers before it is a claim about pixels.
-gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o htmltest htmltest.c ../html.c ../layout.c
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o htmltest htmltest.c ../html.c ../css.c ../layout.c
 echo "built ./htmltest      (run: ./htmltest)"
+
+# The CSS engine, against hand-written stylesheets. css.c takes UNTRUSTED TEXT
+# from a machine we did not choose and turns it into numbers that move pixels -
+# the same trust boundary dns.c sits on - so most of this harness is malformed
+# or hostile rather than merely unusual. It needs no html.c and no layout.c:
+# matching takes an explicit ancestor path, so the engine is testable with
+# nothing else linked at all.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o csstest csstest.c ../css.c
+echo "built ./csstest       (run: ./csstest)"
+
+# NOT A GATE - a measuring instrument, and the only one that answers "does a
+# real page fit". Every cap number in browser-render-run.md §11 and §12 came
+# from a throwaway program that was thrown away, so the next person to raise
+# HTML_MAX_NODES or CSS_MAX_SELS had to either trust a document or rebuild the
+# measurement from scratch. It builds here so that it exists; it asserts
+# nothing, because its right answer depends on which page you fed it.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o parsestat parsestat.c \
+    ../html.c ../css.c ../layout.c
+echo "built ./parsestat     (run: ./parsestat page.html sheet.css [viewport])"
 
 # ...and the same document at three widths, as a picture. Same argument as
 # wmtest/wmshot: assertions catch a run escaping the content box, eyes catch
 # inline <code> set at the wrong size or a list marker sitting in its own text.
-gcc -O2 -w -o browsershot browsershot.c ../browser.c ../html.c ../layout.c \
+gcc -O2 -w -o browsershot browsershot.c ../browser.c ../html.c ../css.c ../layout.c ../png.c \
+    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../entropy.c ../js.c hostmachine.c \
     ../ui.c ../fb.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c \
     ../http.c ../tcp.c ../net.c ../dns.c
 echo "built ./browsershot   (run: ./browsershot out.ppm)"
@@ -178,7 +249,16 @@ echo "built ./tcptest       (run: ./tcptest)"
 # line endings, a body with no Content-Length, a Content-Length that lies, a
 # 3xx with no Location, a type that is not a page. None of those can be asked
 # for from a real server; all of them are two lines here.
-gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o httptest httptest.c ../http.c ../tcp.c ../net.c
+#
+# THIS LINE WAS STALE AND THE GATE COULD NOT BUILD AT ALL. http.c gained the
+# TLS transport when https landed, and this link line was never updated - so
+# `httptest` had 18 undefined references and produced no binary, while
+# browser-status.md went on citing "91 checks, 0 failed" from the last time it
+# ran. A gate that cannot build is indistinguishable from a gate that passes
+# if nobody looks at the build output, and this script prints a lot of it.
+# Verified by rebuilding HEAD's http.c against HEAD's httptest.c: same 18.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o httptest httptest.c ../http.c ../tcp.c ../net.c \
+    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../entropy.c hostmachine.c
 echo "built ./httptest      (run: ./httptest)"
 
 # The browser app's LOGIC - URL parsing, history, the URL bar's key machine -
@@ -188,16 +268,42 @@ echo "built ./httptest      (run: ./httptest)"
 # network below it is real: net.c, tcp.c and http.c are all linked, so "did it
 # parse the port" is answered by looking at the SYN that went out.
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o browsertest browsertest.c ../browser.c \
-    ../html.c ../layout.c ../http.c ../tcp.c ../net.c ../dns.c
+    ../html.c ../css.c ../layout.c ../png.c ../http.c ../tcp.c ../net.c ../dns.c \
+    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../entropy.c ../js.c hostmachine.c
 echo "built ./browsertest   (run: ./browsertest)"
+
+# ...AND THE SAME HARNESS WITH THE SANITIZERS ON, which is not redundant: this
+# is the gap that let a signed-overflow bug through. `fuzz` below is built with
+# ASan and UBSan and the PNG decoder was fuzzed under them, but browser.c sits
+# BETWEEN the two and was covered by neither - so b64_decode shifted a signed
+# int past 31 bits on the home page's own inline image, every single time, and
+# 103 green checks said nothing. A clean run without the sanitizers proves
+# almost nothing; that sentence was already written in this file, about a
+# different harness.
+gcc -O1 -g -w -D_GNU_SOURCE -fsanitize=address,undefined -fno-sanitize-recover=all \
+    -o browsertest_san browsertest.c ../browser.c \
+    ../html.c ../css.c ../layout.c ../png.c ../http.c ../tcp.c ../net.c ../dns.c \
+    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../entropy.c ../js.c hostmachine.c
+echo "built ./browsertest_san (run: ./browsertest_san)"
 
 # Every layer that takes bytes from somewhere else, fed garbage. The harnesses
 # above check the code does the right thing with inputs someone thought of;
 # this checks it does nothing catastrophic with inputs nobody thought of. Build
 # it WITH the sanitizers - a clean run without them proves almost nothing.
 #   ./fuzz [iterations] [seed]
+#
+# THIS LINE WAS STALE TOO, and this is the gate that found four real layout
+# defects nobody would have typed. Same cause as httptest above: http.c gained
+# the TLS transport and neither link line followed it, so the fuzzer has not
+# built - and therefore has not run - since https landed. Verified against a
+# clean `git archive HEAD` tree, not against the working copy: the first A/B I
+# ran compiled HEAD's layout.c against the NEW css.h, which failed at COMPILE
+# and never reached the link, so "0 undefined references" was true for entirely
+# the wrong reason. A measurement that can be right by accident is not one.
 gcc -O1 -g -w -D_GNU_SOURCE -fsanitize=address,undefined -o fuzz fuzz.c \
-    ../html.c ../layout.c ../net.c ../tcp.c ../http.c
+    ../html.c ../css.c ../layout.c ../png.c ../net.c ../tcp.c ../http.c \
+    ../tls.c ../crypto.c ../x509.c ../ecdsa.c ../rsa.c ../roots.c ../entropy.c \
+    hostmachine.c
 echo "built ./fuzz          (run: ./fuzz 3000 1)"
 
 # The resolver, mostly fed answers it should refuse. A DNS response is
@@ -260,6 +366,26 @@ echo "built ./libctest      (run: ./libctest)"
 gcc -O2 -w -o arenatest arenatest.c ../arena.c
 echo "built ./arenatest     (run: ./arenatest)"
 
+# The general allocator, and this one is built with the WARNINGS ON rather than
+# -w. arena.c is a bump pointer and an addition; heap.c has boundary tags, two
+# levels of size class and three bitmaps, so it is the file in this tree where
+# an unused variable or a signed/unsigned comparison is most likely to be an
+# actual bug rather than noise. It found nothing on the way in, which is worth
+# rather more than -w finding nothing.
+#
+# Links the REAL heap.c, unmodified. The harness mmaps HEAP_BASE and supplies
+# putc, exactly as arenatest does for the arena.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -o heaptest heaptest.c ../heap.c
+echo "built ./heaptest      (run: ./heaptest)"
+
+# The virtual-memory arithmetic. NOT the mapping - installing a PDPT entry needs
+# CR3 and ring 0, and the only proof of that is verify-efi.sh booting green. But
+# vmm_phys()/vmm_virt() are called from dma_addr() on every keystroke, mouse
+# report, disk block and network frame, and they are the twelve lines where an
+# off-by-one hands a device an address one page out.
+gcc -O2 -g -Wall -Wextra -o pagingtest pagingtest.c ../paging.c
+echo "built ./pagingtest    (run: ./pagingtest)"
+
 # `run`, and every way it declines. TWO binaries from one source, which is the
 # point of exec.c's weak fs_* references: with a filesystem linked it reaches
 # not-found / empty / too-big / loaded; with nothing defining fs_* the weak
@@ -309,50 +435,6 @@ gcc -O2 -w -o toasttest toasttest.c ../wm.c ../ease.c ../ui.c ../uikit.c ../wmgl
     ../input.c ../notify.c ../snap.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./toasttest     (run: ./toasttest)"
-
-# THE BLITTER. The first thing in this project that asks a GPU to draw.
-#
-# Raw ioctl on /dev/dri/renderD128 - no libdrm, no Mesa, no -l flags at all,
-# because the point is to learn the command level zlOS will have to speak and
-# zlOS cannot link a library. It runs ALONGSIDE i915 and does not detach it:
-# the blitter is a DMA engine, not the display, so unlike modeset-run.sh this
-# cannot blank the screen of whoever is using the laptop.
-#
-# Guarded on the header AND on hardware being present, so a box with no Intel
-# GPU skips instead of failing. `--negative` is the one that matters in CI: it
-# proves the verification can still reject a blit that writes nothing.
-if [ -f /usr/include/drm/i915_drm.h ]; then
-  gcc -O2 -g -Wall -Wextra -o gpu_blt gpu_blt.c
-  if [ -e /dev/dri/renderD128 ]; then
-    echo "built ./gpu_blt       (run: ./gpu_blt --blit --negative, or --sweep)"
-  else
-    echo "built ./gpu_blt       (no /dev/dri/renderD128 here - it will skip at run time)"
-  fi
-else
-  echo "skip  ./gpu_blt       (no drm headers - apt install libdrm-dev)"
-fi
-
-# THE BLITTER. The first thing in this project that asks a GPU to draw.
-#
-# Raw ioctl on /dev/dri/renderD128 - no libdrm, no Mesa, no -l flags at all,
-# because the point is to learn the command level zlOS will have to speak and
-# zlOS cannot link a library. It runs ALONGSIDE i915 and does not detach it:
-# the blitter is a DMA engine, not the display, so unlike modeset-run.sh this
-# cannot blank the screen of whoever is using the laptop.
-#
-# Guarded on the header AND on hardware being present, so a box with no Intel
-# GPU skips instead of failing. `--negative` is the one that matters in CI: it
-# proves the verification can still reject a blit that writes nothing.
-if [ -f /usr/include/drm/i915_drm.h ]; then
-  gcc -O2 -g -Wall -Wextra -o gpu_blt gpu_blt.c
-  if [ -e /dev/dri/renderD128 ]; then
-    echo "built ./gpu_blt       (run: ./gpu_blt --blit --negative, or --sweep)"
-  else
-    echo "built ./gpu_blt       (no /dev/dri/renderD128 here - it will skip at run time)"
-  fi
-else
-  echo "skip  ./gpu_blt       (no drm headers - apt install libdrm-dev)"
-fi
 
 # THE BLITTER. The first thing in this project that asks a GPU to draw.
 #

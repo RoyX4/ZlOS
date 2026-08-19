@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-# install.sh - build zlfmt, package this extension, and install it into VS Code.
+# install.sh [editor] - build zlfmt, package this extension, install it.
+#
+#   ./install.sh            # VS Code  (default)
+#   ./install.sh cursor     # Cursor
+#
+# Cursor is a VS Code fork: same manifest format, same CLI verbs, its own
+# extensions dir at ~/.cursor/extensions/extensions.json. Verified that
+# `cursor --install-extension` exists. Without this, .zl files are Plain Text in
+# Cursor - which wastes the one thing Cursor is actually best at, on the main
+# language of this repo.
 #
 # Why this exists instead of the one-line `cp -r` the README used to give:
 # copying a folder into ~/.vscode/extensions/ does NOT register an extension
@@ -13,7 +22,13 @@ set -euo pipefail
 cd "$(dirname "$0")"
 REPO=$(cd ../.. && pwd)
 
-command -v code >/dev/null || { echo "install: 'code' is not on PATH"; exit 1; }
+EDITOR_CMD="${1:-code}"
+case "$EDITOR_CMD" in
+    code|cursor|codium|code-insiders) ;;
+    *) echo "install: unknown editor '$EDITOR_CMD' (try: code, cursor)"; exit 1 ;;
+esac
+
+command -v "$EDITOR_CMD" >/dev/null || { echo "install: '$EDITOR_CMD' is not on PATH"; exit 1; }
 command -v npx  >/dev/null || { echo "install: needs npx (node) to package the .vsix"; exit 1; }
 
 # The formatter is a real binary; the extension shells out to it.
@@ -29,14 +44,14 @@ echo "==> packaging $VSIX"
 npx --yes @vscode/vsce@latest package --allow-missing-repository --skip-license -o "$VSIX" >/dev/null
 
 echo "==> installing"
-code --install-extension "$VSIX" --force
+"$EDITOR_CMD" --install-extension "$VSIX" --force
 
 echo
 echo "installed:"
-code --list-extensions --show-versions | grep '^zl\.' || echo "  (not listed - something went wrong)"
+"$EDITOR_CMD" --list-extensions --show-versions | grep '^zl\.' || echo "  (not listed - something went wrong)"
 echo
-echo "Point the extension at the formatter by adding this to VS Code settings:"
+echo "Point the extension at the formatter by adding this to $EDITOR_CMD settings:"
 echo "    \"zl.formatterPath\": \"$REPO/zlfmt\""
 echo "(or just open $REPO as a workspace folder - it finds ./zlfmt on its own)"
 echo
-echo "Reload VS Code (Ctrl+Shift+P -> Developer: Reload Window) to pick it up."
+echo "Reload $EDITOR_CMD (Ctrl+Shift+P -> Developer: Reload Window) to pick it up."

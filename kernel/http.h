@@ -10,7 +10,11 @@
 
 #include "net.h"
 
-#define HTTP_BUF 32768
+/* Sized against a REAL page, not a demo one. 32 KB predates the browser
+ * fetching anything but hand-written test pages; www.wikipedia.org's front
+ * page is 120 KB and every https target worth reaching is bigger than 32 KB.
+ * Still under browser.c's DOC_MAX so a page that fits here fits there. */
+#define HTTP_BUF 131072
 #define HTTP_MAX_REDIRECTS 5
 
 enum {
@@ -20,12 +24,28 @@ enum {
     HTTP_DONE,
     HTTP_REDIRECT,     /* 3xx with a Location, under the redirect limit */
     HTTP_REFUSED,      /* not text/html or text/plain - refused, not fetched */
-    HTTP_ERROR
+    HTTP_ERROR,
+    HTTP_TLS_FAIL      /* the handshake or the certificate check failed */
 };
 
 int http_start(net_u32 ip, int port, const char *hostname, const char *path);
+
+/* The same fetch over TLS. Certificate verification is ALWAYS ON here - there
+ * is no unverified https, because an https:// URL is a promise to the user and
+ * a "just connect anyway" path is how that promise gets quietly broken. */
+int http_start_tls(net_u32 ip, int port, const char *hostname, const char *path);
+int http_tls_error(void);       /* a TLS_E_* when state is HTTP_TLS_FAIL */
+const char *http_tls_why(void); /* the certificate reason, if that is why  */
 int http_poll(void);
 void http_reset(void);
+
+/* What content types THIS fetch will accept. Call it after http_reset() and
+ * before http_start(); http_reset puts it back to text-only, so forgetting is
+ * the strict behaviour and not the loose one. */
+#define HTTP_ACCEPT_TEXT  (1 << 0)
+#define HTTP_ACCEPT_IMAGE (1 << 1)
+#define HTTP_ACCEPT_CSS   (1 << 2)
+void http_accept(int mask);
 
 int http_state(void);
 int http_status(void);

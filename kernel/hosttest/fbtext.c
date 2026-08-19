@@ -129,7 +129,7 @@ int main(void)
         { 0x08000000UL, 32UL << 20 }, { 0x0A000000UL, 16UL << 20 },
         { 0x0C000000UL, 16UL << 20 },
     };
-    for (unsigned i = 0; i < 3; i++) {
+    for (unsigned i = 0; i < sizeof bufs / sizeof bufs[0]; i++) {
         void *p = mmap((void *)bufs[i].a, bufs[i].n, PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
         if (p != (void *)bufs[i].a) { fprintf(stderr, "mmap failed\n"); return 1; }

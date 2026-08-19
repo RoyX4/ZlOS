@@ -7,7 +7,8 @@ fn greet(name) {
     return nil()
 }
 
-fn area(w, h) {/home/roy/Documents/repos/zl-linux/learn
+fn area(w, h) {
+    # return width times height
     return nil()
 }
 

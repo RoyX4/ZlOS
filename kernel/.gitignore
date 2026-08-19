@@ -34,6 +34,18 @@ hosttest/xhcitest
 # four binaries in the index on every run. A tracked file is never ignored, so
 # adding them here fixes nothing; they need `git rm --cached`. Left for the
 # phase 2 sweep rather than smuggled into a pointer fix.
+# Five more that were untracked-and-unlisted, i.e. they showed up as `??` in
+# every status and were one `git add -A` away from being committed as binaries.
+# heaptest is new with the allocator; the other four predate it. This is the
+# cheap half of the sweep the note above defers - adding an unlisted, UNTRACKED
+# binary works immediately, unlike the four tracked ones, which still need
+# `git rm --cached` before a line here does anything.
+hosttest/heaptest
+hosttest/pagingtest
+hosttest/fbtext
+hosttest/palette
+hosttest/termwrap
+hosttest/walltest
 hosttest/gpu-ring-*.log
 hosttest/gpu_ring
 hosttest/gputest
@@ -48,6 +60,12 @@ hosttest/gpu_aperture
 # next one; a pattern is what stops there being a next one.
 hosttest/cryptotest
 hosttest/easetest
+# Derived from kernel/hosttest/build.sh's own `-o` targets, 2026-08-20.
+# The list above was a hand-maintained allowlist and it drifted: these seven
+# were tracked-or-untracked build outputs rewritten by every ./build.sh run,
+# which is why six worktrees showed the same "dirty" files. Re-derive with:
+#   for t in $(grep -oE '\-o +[A-Za-z_]+' kernel/hosttest/build.sh | awk '{print $2}' | sort -u); do
+#     git check-ignore -q "kernel/hosttest/$t" || echo "$t"; done
 hosttest/fbtext
 hosttest/inputtest_feel
 hosttest/inputtest_hid

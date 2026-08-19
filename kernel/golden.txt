@@ -10,7 +10,10 @@
   [  OK  ] PIT timer running at 100 Hz on IRQ0
   [  OK  ] keyboard on IRQ1 - no more polling the port
   USB: no xHCI controller (6 PCI devices seen)
-  arena: 16 MiB at 8 MiB, ends at 24 MiB, ceiling 128 MiB (bg_buf)
+  arena: 16 MiB at 14 MiB, ends at 30 MiB, ceiling 128 MiB (bg_buf)
+  heap: 64 MiB at 256 MiB, ends at 320 MiB
+  vmm: paging is off on this build - identity, by construction
+  ring 3: u31 <- from ring 3 via int 0x80, 5 syscalls, returned to ring 0
   [  OK  ] zl runtime, kernel subset
   [ INFO ] no heap, zlfs mounts on demand, no scheduler
 

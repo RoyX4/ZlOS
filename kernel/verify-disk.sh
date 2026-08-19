@@ -54,7 +54,7 @@ fi
 boot_once () {
     local tag=$1 keys=$2 log=$3
     printf '%s' "$keys" | timeout "$CEILING" qemu-system-i386 \
-        -kernel kernel.elf -m 512 \
+        -kernel kernel.elf -m 1G \
         -drive "file=$IMG,if=none,id=nvm,format=raw" \
         -device nvme,serial=zlosgate,drive=nvm \
         -serial stdio -display none -no-reboot >"$log" 2>/dev/null &

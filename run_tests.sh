@@ -6,6 +6,8 @@
 #    output to the interpreter for every one of those files.
 # 3. Cross-checks the hand-assembled native x86-64 backend (integer subset
 #    only) against the interpreter on a small integer-only smoke program.
+# 4. Checks the self-hosting fixpoint (./verify_selfhost.sh) - compiler.zl
+#    compiled by the interpreter must compile itself to byte-identical output.
 set -uo pipefail
 cd "$(dirname "$0")"
 
@@ -404,6 +406,18 @@ if grep -q "in .*al,dx" <<<"$dis" && grep -q "out .*dx,al" <<<"$dis"; then
     echo "  ok    nativegen emits correct in/out port instructions"
 else
     echo "  FAIL  nativegen port I/O encoding"; fail=1
+fi
+
+# The self-hosting fixpoint. Last, because it is the slowest single check here
+# (~35 s: the interpreter, then gcc -O2 on the generated C) and because it is
+# the one whose failure means the LANGUAGE broke rather than one backend.
+echo
+# Absent rather than failing is still a failure: an unchecked fixpoint that
+# reports green is the exact shape this repo keeps getting bitten by.
+if [ -x ./verify_selfhost.sh ]; then
+    ./verify_selfhost.sh || fail=1
+else
+    echo "  FAIL  verify_selfhost.sh is missing - the fixpoint is unchecked"; fail=1
 fi
 
 echo

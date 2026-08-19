@@ -24,12 +24,20 @@ SECTIONS
     . = ALIGN(16);
     __bss_end = .;
 
-    /* See link.ld. This path matters MOST of the three: raw_entry.S:16 puts
-     * the stack top at 6 MiB and it grows DOWN toward this symbol, so the
-     * image and the stack are walking at each other. */
+    /* See link.ld. This path matters MOST of the three: raw_entry.S puts the
+     * stack top at 12 MiB and it grows DOWN toward this symbol, so the image
+     * and the stack are walking at each other.
+     *
+     * There is a THIRD constraint on this path that these two asserts do not
+     * express, and it is the tighter one: raw_boot.asm loads only CHUNKS x
+     * 32 KiB (192 x 32 KiB = 6 MiB, so 1 MiB .. 7 MiB), and anything past that
+     * is never read off the disk at all. .bss is exempt - it is NOBITS, it is
+     * not in the image, and raw_entry.S zeroes it - so the number that must fit
+     * under 7 MiB is __bss_start, not __kernel_end. mkdisk.sh checks it, on the
+     * objcopy'd binary, where the size is a fact rather than a symbol. */
     __kernel_end = .;
-    ASSERT(__kernel_end <= 0x00600000,
-           "the kernel image has grown into the raw-boot stack at 6 MiB (raw_entry.S:16)")
-    ASSERT(__kernel_end <= 0x00800000,
-           "the kernel image has grown into the program arena at 8 MiB (arena.c ARENA_BASE)")
+    ASSERT(__kernel_end <= 0x00C00000,
+           "the kernel image has grown into the raw-boot stack at 12 MiB (raw_entry.S)")
+    ASSERT(__kernel_end <= 0x00E00000,
+           "the kernel image has grown into the program arena at 14 MiB (arena.c ARENA_BASE)")
 }

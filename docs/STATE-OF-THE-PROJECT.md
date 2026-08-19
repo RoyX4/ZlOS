@@ -3,6 +3,17 @@
 **2026-08-19 · `06ced13` (audit baseline) · `ff27d57` (tree at writing) ·
 `faac0f4` (tree at repair; both commits ahead are docs-only)**
 
+> **Evening re-check, 2026-08-19 (HEAD `3f00366`, plus a dirty tree).** §1's
+> ranking is stale against this checkout. Closed: land-gate now runs the host
+> harnesses *and* `check-zl-calls.sh` / `check-memmap.sh` (§2.1–2.2);
+> `fix/pointer-drain` is in the tree as a single `xhci_poll()` (§3.1);
+> `mkdisk.sh`'s kernel-size guard is back (§2.4); CI is tracked (8 files under
+> `.github/`); the self-hosting fixpoint is in `run_tests.sh` and
+> `gates.yml`; `DISK_SCRATCH` is at `0x02040000` (the checker still does not
+> name it). Still first: `key()` at `kernel.zl:1517` (§5.1), boot the ThinkPad,
+> land `desktop/browser-next` (21 commits), Ring 3. Ranked plan for score, not
+> bugs: [`docs/ROAD-TO-TEN.md`](ROAD-TO-TEN.md).
+
 > **Repair pass, 2026-08-19.** Four adversarial reviewers attacked the first
 > draft and raised 44 defects. Every one was re-verified against the tree by a
 > fifth pass before being applied; 39 were confirmed, 5 were rejected or settled
@@ -700,7 +711,14 @@ describe the clipboard as a shipped feature.**
 
 *Source: xcheck-unowned lens; SYSTEM-PROMPT reader.*
 
-### 4.5 `fb.c` declares `icons24[10]`; `icons.c` defines `icons24[20]`
+### 4.5 `fb.c` declares `icons24[10]`; `icons.c` defines `icons24[20]` — CLOSED 2026-08-19
+
+> **CLOSED**, `desktop/v10-look` `76d15aa`. `ICON_N` raised 10 → 20, both
+> externs corrected. **Only the mismatch is fixed** — no caller in `kernel.zl`
+> passes `n >= 10` yet (`dock_icon()` still returns 0–9 only), so the ten
+> icons are drawable now but nothing draws them. Wiring one to a dock slot,
+> menu row or title-bar icon is a separate, undecided design question.
+> `kernel/docs/DECISIONS.md` #40.
 
 ```
 $ grep -n 'icons24\|ICON_N' kernel/fb.c
@@ -717,7 +735,14 @@ bug, not just an unreachable feature.
 
 *Source: xcheck-contradiction XC-14.*
 
-### 4.6 Two resize-grip renderers ship inside one function
+### 4.6 Two resize-grip renderers ship inside one function — CLOSED 2026-08-19
+
+> **CLOSED**, `desktop/v10-look` `580aabe`. Deleted the earlier `:805-815`
+> block exactly as this entry recommended. What was "unverifiable statically"
+> here is now verified: `hosttest/wmshot` before/after at the same corner is
+> `docs/shots/grip-before-two-renderers.png` /
+> `docs/shots/grip-after-one-renderer.png` — the extra, longer diagonal
+> strokes are gone. `kernel/docs/DECISIONS.md` #41.
 
 ```
 $ grep -n 'THE GRIP HAS TO BE VISIBLE\|THE RESIZE GRIP' kernel/wm.c
@@ -875,7 +900,22 @@ statement is the scoped one.
 
 *Source: OSLAND-03 vs GRAPHICS-18; xcheck-status-conflict lens.*
 
-### 4.14 The window fade blends its saved backdrop at the wrong origin
+### 4.14 The window fade blends its saved backdrop at the wrong origin — CLOSED 2026-08-19
+
+> **CLOSED**, `desktop/v10-look` `6e63bf8`. `sx/sy/sw/sh` now capture the
+> stash's own rectangle before the client `isect` below can clobber
+> `cx/cy/cw/ch`, and the blend uses those. Also widened the blend's scissor
+> from the client rect to the full frame+shadow box, on the reasoning that the
+> surrounding comment's own algebra (`window * a + behind * (1-a)`) is for the
+> whole window, not the client alone — see `kernel/docs/DECISIONS.md` #42 for
+> that call and for a "found while checking this" note that `WF_NOCHROME` is
+> declared and checked in six places and set in none. **"Whether the
+> misalignment is visible is unverifiable statically" is no longer true**: a
+> standalone probe measured up to a 40/255 per-channel shift at a fixed
+> mid-fade frame, before vs after, on the same scene — numbers in #42. What is
+> still true: `hosttest/wmtest`'s existing `ANIM_FADE` assertions passed
+> before AND after this fix, so they are a regression floor, not proof of it —
+> a precision-of-origin assertion does not exist yet.
 
 **Added by the repair pass. The northstar audit found this and the first
 synthesis dropped it** — the only entry in §4 that is a live bug in the shipped

@@ -320,7 +320,12 @@ static void t_truncation(void)
     feed("HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n", -1);
     static char chunk[1000];
     memset(chunk, 'A', sizeof chunk);
-    for (int i = 0; i < 40; i++) feed(chunk, (int)sizeof chunk);
+    /* Overflow the REAL buffer, not a literal 40 KB. This said 40 when
+     * HTTP_BUF was 32768; raising the buffer to hold a real page turned a
+     * genuine bounds check into a test that fed less than the buffer and
+     * asserted truncation anyway. Same drift HTML_MAX_NODES and
+     * browser_doc_cap were fixed for. */
+    for (int i = 0; i < (HTTP_BUF / 1000) + 8; i++) feed(chunk, (int)sizeof chunk);
     feed_fin();
     CHECK(http_truncated() == 1, "40 KB into a %d byte buffer was not flagged",
           HTTP_BUF);

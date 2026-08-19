@@ -33,9 +33,13 @@
  * THE ARENA. §4 item 1: do not guess an address, compute it from the map and
  * assert it. The map at the top of fb.c runs 128 MiB to 255 MiB and is FULL -
  * bg 128, sp 160, sched 176, back 192, nvme 208, xhci 224, virtio-gpu 240,
- * and virtio-gpu's framebuffer runs to 255. 256 MiB is a hard ceiling, not a
- * soft one: zlOS requires -m 256, and virtio_gpu.c already records that a
- * buffer at exactly 256 MiB is unreachable by the device.
+ * and virtio-gpu's framebuffer runs to 255. The ceiling above that is
+ * memmap.h's HI_TOP - the smallest guest zlOS promises to boot on, and the line
+ * a DMA buffer may not cross because past it is memory nobody promised exists.
+ * virtio_gpu.c records what crossing it looks like: not a loud failure but
+ * ERR_UNSPEC out of RESOURCE_ATTACH_BACKING, which reads like a driver bug.
+ * HI_TOP was 256 MiB when this paragraph was written and is now 1 GiB; the
+ * arena below is unaffected, because it was never near either number.
  *
  * The unused tails of nvme's and xhci's regions are tempting and wrong. They
  * are only unused today, they are inside a neighbour's declared span, and
@@ -44,10 +48,20 @@
  *
  * So: BELOW the map. 32 MiB up holds the RAM filesystem, which ends at
  * 0x02025000; 128 MiB is the first thing the map claims. 64 MiB is in the
- * middle of an 80 MiB hole that nothing else touches, comfortably inside a
- * -m 256 guest, and the asserts below fail the build if either neighbour ever
- * grows into it.
+ * middle of an 80 MiB hole that nothing else touches, comfortably inside the
+ * smallest guest we support, and the asserts below fail the build if either
+ * neighbour ever grows into it.
+ *
+ * "AN 80 MiB HOLE THAT NOTHING ELSE TOUCHES" WAS TRUE WHEN IT WAS WRITTEN AND
+ * IS THE REASON THIS REGION IS NOW IN memmap.h. It stopped being this file's
+ * fact to know the moment somebody else went looking for space in the same
+ * hole - and they would have gone looking in memmap.h, where this region was
+ * not. The hole is now 52..64 and 65..128 MiB, and the browser's storage has
+ * 80..96 of it.
  */
+
+#include "dma.h"
+#include "memmap.h"
 
 typedef unsigned long long u64;
 typedef unsigned int       u32;
@@ -87,14 +101,26 @@ static void mmio_w8(uptr a, u8 v)   { *(volatile u8 *)a = v; }
 /* ---- the arena ------------------------------------------------------------
  * Computed from the map, not guessed, and asserted against both neighbours.
  */
-#define NET_BASE   0x04000000u      /* 64 MiB                                */
-#define NET_SIZE   0x00100000u      /* 1 MiB reserved; 192 KiB used          */
-
-/* the neighbours, restated so the assertions below have something to compare
- * against. Both are read out of the file that owns them - kernel.zl for the
- * RAM filesystem's top, fb.c for the bottom of the high-RAM map. */
-#define NET_FLOOR  0x03000000u      /* kernel.zl: FS_DATA + 10*8192 = 0x02025000 */
-#define NET_CEIL   0x08000000u      /* fb.c: HI_BG, the first claimed address    */
+/* FROM memmap.h, NOT FROM A LITERAL, AND THE NEIGHBOURS COME FROM THERE TOO.
+ *
+ * This region was 0x04000000 written here, with the two neighbours RESTATED as
+ * NET_FLOOR 0x03000000 and NET_CEIL 0x08000000 - and memmap.h, the file whose
+ * entire header is an argument against exactly that, did not know this region
+ * existed. Two consequences, both real:
+ *
+ *   - NET_FLOOR named png.c's BASE. The assert read "I am above the picture
+ *     arena" while comparing against the address the picture arena STARTS at,
+ *     so a picture arena grown from 4 MiB to 20 would have passed it.
+ *   - anyone placing a new region worked from memmap.h and could not see this
+ *     one. That is not hypothetical: the browser's storage was going to 64 MiB
+ *     until a grep for hex literals found this line.
+ *
+ * So the base and the span are declared in memmap.h with everything else, the
+ * ordering chain there checks both neighbours, and what stays here is the only
+ * thing that is genuinely this driver's business: that its own buffers fit
+ * inside the region it was given. */
+#define NET_BASE   ((u32)HI_NET)
+#define NET_SIZE   ((u32)(HI_NET_END - HI_NET))
 
 #define QSZ        32               /* descriptors per queue                 */
 #define BUF_SZ     2048             /* one frame plus the 12-byte header     */
@@ -117,12 +143,8 @@ static void mmio_w8(uptr a, u8 v)   { *(volatile u8 *)a = v; }
 /* These cost nothing at run time and fail the build the moment the map stops
  * making sense - which is the whole argument fb.c makes for its own chain, and
  * the reason nvme.c's absence of one is a gap rather than a style. */
-_Static_assert(NET_BASE >= NET_FLOOR,
-               "virtio-net arena is below the RAM filesystem's top");
 _Static_assert(NET_TOP <= NET_BASE + NET_SIZE,
                "virtio-net buffers overrun the arena they were sized for");
-_Static_assert(NET_BASE + NET_SIZE <= NET_CEIL,
-               "virtio-net arena reaches into fb.c's high-RAM map");
 _Static_assert(RX_BUFS + (u32)QSZ * BUF_SZ <= TX_BUFS,
                "the receive buffers reach into the transmit buffers");
 
@@ -208,11 +230,15 @@ static u32 q_desc(int q)  { return q == VQ_RX ? RX_DESC  : TX_DESC;  }
 static u32 q_avail(int q) { return q == VQ_RX ? RX_AVAIL : TX_AVAIL; }
 static u32 q_used(int q)  { return q == VQ_RX ? RX_USED  : TX_USED;  }
 
-static void desc_set(int q, int i, u32 addr, u32 len, u16 flags, u16 next)
+/* `addr` is a DEVICE address and arrives already translated - every caller
+ * wraps it in dma_addr(). It is 64-bit because the descriptor field is 64-bit
+ * on every build, and taking a u32 here was how the high half came to be a
+ * hardcoded zero rather than the top of a real address. See dma.h. */
+static void desc_set(int q, int i, unsigned long long addr, u32 len, u16 flags, u16 next)
 {
     volatile u32 *d = (volatile u32 *)(uptr)(q_desc(q) + (u32)i * 16);
-    d[0] = addr;
-    d[1] = 0;                        /* the high half, always written        */
+    d[0] = (u32)addr;
+    d[1] = (u32)(addr >> 32);        /* the high half, always written        */
     d[2] = len;
     d[3] = (u32)flags | ((u32)next << 16);
 }
@@ -339,12 +365,18 @@ static int setup_queue(int q)
     zero_mem(q_avail(q), 4096);
     zero_mem(q_used(q), 4096);
 
-    mmio_w(cfg_common + CC_QUEUE_DESC + 0, q_desc(q));
-    mmio_w(cfg_common + CC_QUEUE_DESC + 4, 0);
-    mmio_w(cfg_common + CC_QUEUE_DRIVER + 0, q_avail(q));
-    mmio_w(cfg_common + CC_QUEUE_DRIVER + 4, 0);
-    mmio_w(cfg_common + CC_QUEUE_DEVICE + 0, q_used(q));
-    mmio_w(cfg_common + CC_QUEUE_DEVICE + 4, 0);
+    {   /* Through dma_addr(): identity today, the one place that changes when
+         * the kernel stops being identity-mapped. See dma.h. */
+        unsigned long long d = dma_addr(q_desc(q));
+        unsigned long long a = dma_addr(q_avail(q));
+        unsigned long long u = dma_addr(q_used(q));
+        mmio_w(cfg_common + CC_QUEUE_DESC   + 0, (u32)d);
+        mmio_w(cfg_common + CC_QUEUE_DESC   + 4, (u32)(d >> 32));
+        mmio_w(cfg_common + CC_QUEUE_DRIVER + 0, (u32)a);
+        mmio_w(cfg_common + CC_QUEUE_DRIVER + 4, (u32)(a >> 32));
+        mmio_w(cfg_common + CC_QUEUE_DEVICE + 0, (u32)u);
+        mmio_w(cfg_common + CC_QUEUE_DEVICE + 4, (u32)(u >> 32));
+    }
     mmio_w16(cfg_common + CC_QUEUE_ENABLE, 1);
 
     avail_idx[q] = 0;
@@ -360,7 +392,7 @@ static void rx_fill(void)
     for (int i = 0; i < QSZ; i++) {
         zero_mem(RX_BUF(i), 64);          /* the header, so a short frame
                                              cannot show the last one's */
-        desc_set(VQ_RX, i, RX_BUF(i), BUF_SZ, DESC_WRITE, 0);
+        desc_set(VQ_RX, i, dma_addr(RX_BUF(i)), BUF_SZ, DESC_WRITE, 0);
         vq_publish(VQ_RX, (u16)i, 0);     /* one notify at the end, not 32 */
     }
     mmio_w16(cfg_notify + (uptr)notify_off[VQ_RX] * notify_mul, (u16)VQ_RX);
@@ -493,7 +525,7 @@ int virtio_net_send(const u8 *frame, int len)
     int pad = len;
     while (pad < 60) { b[HDR_LEN + pad] = 0; pad++; }
 
-    desc_set(VQ_TX, i, TX_BUF(i), (u32)(HDR_LEN + pad), 0, 0);
+    desc_set(VQ_TX, i, dma_addr(TX_BUF(i)), (u32)(HDR_LEN + pad), 0, 0);
     vq_publish(VQ_TX, (u16)i, 1);
     tx_next++;
     n_tx++;
@@ -609,7 +641,7 @@ int virtio_net_poll(u8 *out, int max)
         if (!written) {
             n_unwritten++;
             zero_mem(RX_BUF(id), 64);
-            desc_set(VQ_RX, (int)id, RX_BUF(id), BUF_SZ, DESC_WRITE, 0);
+            desc_set(VQ_RX, (int)id, dma_addr(RX_BUF(id)), BUF_SZ, DESC_WRITE, 0);
             vq_publish(VQ_RX, (u16)id, 1);
             id_inflight[id] = 1;
             return 0;
@@ -645,7 +677,7 @@ int virtio_net_poll(u8 *out, int max)
          * and the re-post did not, which is exactly the asymmetry that let a
          * stale frame be read as a live one. */
         zero_mem(RX_BUF(id), 64);
-        desc_set(VQ_RX, (int)id, RX_BUF(id), BUF_SZ, DESC_WRITE, 0);
+        desc_set(VQ_RX, (int)id, dma_addr(RX_BUF(id)), BUF_SZ, DESC_WRITE, 0);
         vq_publish(VQ_RX, (u16)id, 1);
         id_inflight[id] = 1;
     }

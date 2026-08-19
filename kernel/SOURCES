@@ -70,6 +70,9 @@ rtc.c
 
 # desktop/exec-track
 arena.c
+heap.c
+paging.c
+usermode.c
 exec.c
 
 # desktop/feel-and-control
@@ -97,12 +100,26 @@ gpucursor.c
 
 # desktop/browser
 virtio_net.c
+# --- HTTPS: the crypto, the certificate check, and the handshake ---
+crypto.c
+ecdsa.c
+rsa.c
+x509.c
+roots.c
+entropy.c
+tls.c
 net.c
 dns.c
 tcp.c
 http.c
 html.c
+css.c
 layout.c
+# the picture decoder. Its pixel arena is NOT in this binary - it lives at
+# memmap.h's HI_IMG, because link.ld caps the image at 6 MiB and it already
+# reaches 5.573.
+png.c
+js.c
 browser.c
 
 # The shared widget catalogue - reference-widgets.md S3-S18. Separate from

@@ -100,9 +100,10 @@ there is worth reading before you write anything bit-twiddly.
 
 ## What the editor gives you
 
-The VS Code extension (`editors/vscode-zl`, installed as `zl.zl-lang`) does
-syntax highlighting, bracket matching, snippets, and format-on-demand through
-`zlfmt`. The repo's `.vscode/tasks.json` already defines:
+The VS Code / Cursor extension (`editors/vscode-zl`, installed as `zl.zl-lang`)
+does syntax highlighting, keyword/builtin autocomplete (Ctrl+Space), snippets,
+and format-on-demand through `zlfmt`. Cursor Tab also works once the file is
+language **zl**, not Plain Text — install with `./editors/vscode-zl/install.sh cursor`. The repo's `.vscode/tasks.json` already defines:
 
 - **build toolchain** — `./build.sh`
 - **run tests** — `./run_tests.sh`

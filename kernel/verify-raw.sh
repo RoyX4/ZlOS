@@ -32,8 +32,10 @@ CEILING=180
 #
 # The leading '.' is still the throwaway QEMU may eat before the guest runs;
 # the \r after it flushes whatever survived as one empty or unknown line.
+# -m 1G is HI_TOP (memmap.h). This gate passed no -m for its whole life and got
+# qemu's 128 MiB default, so the high-RAM map above 128 MiB was unbacked here.
 printf '.\rhelp\rfib 20\rquit\r' | timeout "$CEILING" qemu-system-i386 \
-    -drive file=zlOS.img,format=raw -serial stdio -display none -no-reboot \
+    -drive file=zlOS.img,format=raw -m 1G -serial stdio -display none -no-reboot \
     >"$OUT" 2>/dev/null &
 QPID=$!
 for _ in $(seq $((CEILING * 2))); do

@@ -192,6 +192,10 @@ static const struct cmd table[] = {
     { "i2c",      63 }, { "touchpad", 63 },
     { "input",    61 }, { "events",   61 },
     { "panel",    80 },                       /* lights the real panel - laptop */
+    /* OUR OWN ring on the blitter, not virtio's. "gpu" was already taken by
+     * virtio_gpu (121) - this is the Intel one, and it is the whole reason to
+     * boot this from a USB stick. See kernel/docs/gpu-driver.md. */
+    { "blit",     71 }, { "ring",     71 },
     { "gpu",     121 }, { "virtio",  121 },
     { "cube",    118 }, { "3d",      118 },
     /* ALL APPLICATIONS. The catalog is the only route to 47 of the 53 apps and
@@ -214,6 +218,9 @@ static const struct cmd table[] = {
     { "paint",   100 }, { "edit",    105 },
     { "anim",     97 }, { "demo",     97 },
     { "ls",      108 }, { "files",   108 },
+    /* NOT "files" - that word already means "ls" above, the ten numbered RAM
+     * slots. This is the OTHER one: the zlfs Files window, by name. */
+    { "filemgr",  77 }, { "explorer", 77 },
     /* THE SAME REGRESSION THIS TABLE'S HEADER DESCRIBES, HAPPENING AGAIN.
      * 78/87/69 are 'N', 'W' and 'E' - the network card + ARP probe, TCP +
      * HTTP/1.0 against a real server, and a real website by name off the
@@ -229,6 +236,7 @@ static const struct cmd table[] = {
     { "net",      78 }, { "arp",      78 },
     { "web",      87 }, { "http",     87 },
     { "fetch",    69 }, { "site",     69 },
+    { "https",    83 }, { "tls",      83 },   /* the same fetch, verified */
     { "redraw",   99 },
     { "peak",     11 }, { "peakreset", 12 },   /* the frame timer */
     { "reboot",  114 }, { "halt",    113 }, { "quit",  113 }, { "exit", 113 },
