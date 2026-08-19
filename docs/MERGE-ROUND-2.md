@@ -218,3 +218,77 @@ done
 for b in $(git worktree list --porcelain | grep '^branch ' | sed 's|^branch refs/heads/||'); do
   git diff --name-only main..."$b"; done | sort | uniq -c | sort -rn | awk '$1>1'
 ```
+
+---
+
+## Outcome (2026-08-20)
+
+**7 of 12 landed. 1 deferred. 4 needed no merge at all.** `main` builds and both
+runnable gates pass; nothing has been pushed.
+
+| Branch | Result |
+|---|---|
+| `claude/recursing-ellis-82c8e8` | **landed** |
+| `integration/codex-threads` | **landed** (boot-loader conflict, below) |
+| `fleet/audit-2026-08-19` | **landed** (`kernel.zl` union, below) |
+| `docs/fix-stale-links` | **landed** |
+| `desktop/browser-next` | **landed** — caught up in its own worktree first |
+| `desktop/v10-look`, `desktop/app-suite`, `desktop/files-app` | **dissolved** — ahead 0 after the first three landings; their work arrived inside them |
+| `files-app` (cursor worktree) | already merged before round 2 started |
+| `desktop/storage-recovered` | **SUPERSEDED, do not merge** — 1278 insertions / 14207 deletions |
+| `desktop/v10-recovered` | **SUPERSEDED, do not merge** — 3998 / 15408, zero unique files |
+| `claude/compassionate-curie-a0599c` | **DEFERRED** — 23 conflict hunks, 11 in `kernel.zl` |
+
+### The two "recovered" branches are traps
+
+Both say *"recovered from a lost session"* and both are ~75-85 commits behind.
+Merging either applies far more deletion than insertion: `storage-recovered`
+would delete `kernel/usermode.c` (420 lines), `verify_selfhost.sh`, and most of
+`wm.c`/`xhci.c`/`virtio_gpu.c`. Their features are already in `main` in richer
+form — `main` has `filemgr`, `fs_ch`, 8 `ed_disk` sites and the 249-line
+`probe-files.py` gate; `storage-recovered` has none of the first three. This is
+`MERGE-EVIDENCE.md` §2.2's two-implementations class. Only one file was worth
+rescuing (`kernel/docs/storage-and-files.md`) and it was cherry-picked.
+
+### Conflicts that mattered
+
+- **Boot loader** (`raw_boot.asm` + `mkdisk.sh`). `main` `CHUNKS=192` (6 MiB,
+  image size derived); `codex-threads` `CHUNKS=80` (2.5 MiB, hardcoded 3 MiB)
+  reasoning against a stack at 6 MiB that `main` had already moved to 12. Took
+  `main` — they are only correct as a pair, and 2.5 MiB would not hold the
+  53-app suite.
+- **`kernel.zl` app_event** — both sides were needed. `main`'s registry
+  early-return comment says *"BEFORE the nav_to_char translation below"*; it was
+  written expecting `fleet`'s block. Union, registry first.
+- **`browser-next`** was merged *into* by `main` in its own worktree — one
+  resolution pass (12 hunks) instead of 21 through a rebase — and
+  `kernel/build.sh` was green there before it landed.
+
+### What the landing found
+
+Three staleness bugs of one class, all in commit `018abc6`, all invisible until
+`arena.c` stopped restating literals and started deriving from `memmap.h`:
+
+1. `memmap.h`'s `LO_ARENA` was 8 MiB; the arena moved to 14 MiB when `CHUNKS`
+   went to 192. An 8 MiB base with a 16 MiB budget spans 8..24 MiB and swallows
+   the raw-boot stack at 12 MiB.
+2. `arena.c`'s `RAW_STACK_TOP` said 6 MiB, citing a line that reads 12 MiB. The
+   `_Static_assert` against it is the **only** guard on that boundary, and a
+   stale 6 MiB lets an 8 MiB arena through.
+3. `check-memmap.sh` could only read literals, so it printed
+   `FAIL: not found` against correct code.
+
+**Negative-tested, not just green:** with `LO_ARENA` planted back at 8 MiB the
+build fails on the static assert (exit 1); restored, exit 0. Note the shell gate
+does **not** catch this — it covers `kernel.zl` only, by its own closing note.
+
+### Still open
+
+- **`compassionate-curie` (68 commits, 98 files).** Merge aborted clean. 23
+  hunks over 13 files, **11 in `kernel.zl`** — a language with no compiler, no
+  linker and no type checker, which is the one place this repo has repeatedly
+  produced silent breakage. It needs a dedicated pass, not the tail of another.
+  It was also committing to itself during this work (`56cca54` -> `a48d85c` ->
+  `a998a6c`); confirm it is idle first. Rollback: `prelanding2/claude-compassionate-curie-a0599c`.
+- **Nothing is pushed.** `prelanding2/*` tags exist locally only.
+- `kernel/hosttest/cryptotest` is still a tracked ELF with no build script.
