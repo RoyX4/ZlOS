@@ -148,10 +148,30 @@ ignition now would be the exact mistake this file's own table is about.
 
 ### Blocked on an unanswered question
 
-**The render engine**, which is where the 48x on blends lives. There is no Gen9
-shader assembler in this tree *or on this box* — no `intel_clc`, no `aubinator`,
-and `INTEL_DEBUG=fs` dumps nothing from the installed Mesa. Settle where a
-pixel shader comes from before committing weeks to RCS.
+**The render engine**, which is where the 48x on blends lives. It needs a Gen9
+pixel shader, and getting one is genuinely open.
+
+Ruled out so far, each with the command that established it:
+
+| idea | result |
+|---|---|
+| a Gen9 assembler in this tree | none |
+| `intel_clc` / `aubinator` on this box | neither installed |
+| `INTEL_DEBUG=fs` shader dump from Mesa | silent — that build has no debug dump |
+| **`glGetProgramBinary`** | **works, and gives the wrong thing** |
+
+The last one was worth trying and is worth writing down. Mesa 26.1.5 on this
+part *does* advertise `GL_ARB_get_program_binary` with one supported format, and
+a trivial constant-colour fragment shader links and hands back **4510 bytes**.
+But that blob is Mesa's own cache format, not Gen9 ISA: one string
+(`gl_FragColor`), a hash-like header, no `send` opcodes at any 8-byte stride,
+and it is neither zlib nor zstd at the top level. Embedding it in zlOS would
+embed a Mesa cache entry, not a program the EUs can run.
+
+So the shader still has to come from somewhere — installing Intel's tools, or
+hand-encoding Gen9 EU ISA. **Settle that before committing weeks to RCS**, and
+note that hand-encoding is not absurd: a constant-colour pixel shader is a
+handful of instructions, and the encoding is documented.
 
 ## The order that follows from all of it
 
