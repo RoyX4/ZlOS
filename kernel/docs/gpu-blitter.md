@@ -307,3 +307,67 @@ Two ways to get it, both needing a human:
 Until one of those happens, `gpu.c` is as far as this can honestly go: the
 command stream is correct on silicon, pinned by `gputest`, compiled into all
 four targets, and calling nothing.
+
+## The experiment is written and waiting — three commands, in this order
+
+`kernel/hosttest/gpu_ring.c` + `gpu-ring-run.sh`. Everything that can be proven
+without taking the GPU already has been (see below), so only the ring write is
+left.
+
+```bash
+cd kernel/hosttest
+sudo ./gpu-ring-run.sh --survey    # read-only, i915 stays bound. Zero risk.
+sudo ./gpu-ring-run.sh --dry       # unbinds and rebinds, writes NOTHING.
+sudo ./gpu-ring-run.sh --ring      # the real thing.
+```
+
+**Do not skip `--dry`.** It is the recovery rehearsal: the screen goes dark, no
+register is written, and the only thing under test is whether the display comes
+back. If it does not, `--ring` must not be run.
+
+### What is already proven, with i915 still loaded
+
+```
+BAR0 mapped            8 MiB of 0000:00:02.0
+forcewake blitter      acked
+bcs0 ring              TAIL=0x420 HEAD=0x420 START=0xFFFE4000 CTL=0
+pagemap                va -> phys 0x362388000
+```
+
+Forcewake is the one that would have failed silently: on Gen9 a read of a
+sleeping GT power well returns 0 and **a write is discarded**. Without holding
+it, every ring write would vanish and the run would report "the hardware ignored
+me". It acks.
+
+Note the physical address is **above 4 GiB**. The GGTT PTE writes the high half
+into `pte[1]`; a 32-bit type there would have truncated it silently — the same
+class as the `-Werror` guard work earlier the same day, in a different place.
+
+### The runner survives the session it kills
+
+`modeset-run.sh` says to run it from a TTY, because stopping the display manager
+kills the terminal — and with it the recovery trap. This machine runs a Wayland
+session (`loginctl`: `Type=wayland`) with many agent sessions inside it, all of
+which die with the display manager. So `gpu-ring-run.sh` re-execs itself under
+`setsid` onto a log file **before** stopping anything. The trap then belongs to a
+process with no session to lose.
+
+**Recovery is proven, not asserted.** The survey run was killed with `SIGTERM`
+mid-flight and the trap fired:
+
+```
+== restoring ==
+  i915 already bound
+  brightness restored to 21842
+  lightdm restarted
+```
+
+### What the result will mean
+
+`gpu_ring --ring` reports one of three things, and all three are useful:
+
+| outcome | meaning |
+|---|---|
+| pixels land | a sole owner **can** drive the legacy ring; zlOS's path is `RING_START/CTL/TAIL`, no execlists |
+| `RING_CTL` will not enable | Gen9.5 refuses legacy submission; zlOS needs the execlist path |
+| HEAD reaches TAIL, no pixels | submission works, addressing is wrong — a GGTT problem, not a ring problem |
