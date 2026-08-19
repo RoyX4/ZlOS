@@ -301,8 +301,8 @@ int gpu_ring_submit(const gr_u32 *dw, gr_u32 n)
  * fb_fill_px calls gpu_fill_try first and falls back to its own SSE path when
  * this returns 0 - which is every build until the ring is armed on hardware.
  *
- * THE THRESHOLD IS NOT A GUESS AND IT IS DELIBERATELY HUGE. Measured on this
- * exact part against fb.c's real fill32 (docs/gpu-blitter.md), with ONE
+ * THE THRESHOLD IS NOT A GUESS, AND ITS STATED REASON WAS WRONG. Measured on
+ * this exact part against fb.c's real fill32 (docs/gpu-blitter.md), with ONE
  * submission per rectangle, which is what a call from fb_fill_px is:
  *
  *     64x64        CPU wins 8.39x   - submission cost dwarfs the fill
@@ -310,10 +310,28 @@ int gpu_ring_submit(const gr_u32 *dw, gr_u32 n)
  *     1920x1200    CPU wins 1.74x
  *     3840x2160    blitter wins 1.14x
  *
- * So the blitter only pays off for a rectangle bigger than roughly four
- * megapixels, submitted on its own. Anything smaller is slower, and a naive
- * "send every fill to the GPU" wiring would make the compositor worse - which
- * is exactly why this exists as a threshold rather than an unconditional call.
+ * So the blitter only pays off above roughly four megapixels. The number
+ * stands; the REASON originally given for it - "submission cost dominates
+ * below this" - does not, and the correction matters because it changes what
+ * would move the threshold.
+ *
+ * Those figures were taken through i915's ioctl path, which costs 0.652 ms per
+ * submit+wait (docs/gpu-blitter.md). zlOS pays nothing like that: it owns the
+ * ring, so a submission is a register write and a poll, and the --ring run on
+ * real silicon reported submit-to-complete as 0.00 ms - below the timer's
+ * resolution. So if submission cost were the binding constraint, zlOS's
+ * threshold would be far LOWER than the harness data suggests.
+ *
+ * It is not the binding constraint. Look at the raw rates: at 1920x1200 the
+ * blitter does 3643 Mpix/s against fb.c's 3897, and at 3840x2160 it does 3590
+ * against 3037. The blitter has no fill-rate advantage at all until the surface
+ * stops fitting in cache, and that crossover - not submission overhead - is
+ * what sits near four megapixels. Removing submission cost entirely would move
+ * the threshold hardly at all.
+ *
+ * Consequence for anyone tempted to tune this: making submission cheaper is not
+ * the lever. The lever is surface size, and on a 2560x1440 panel there is no
+ * size that helps.
  *
  * Being honest about the consequence: at 2560x1440 the whole screen is 3.7
  * Mpix, so on THIS panel this path will essentially never fire. It is wired
@@ -369,4 +387,83 @@ int gpu_fill_try(int x, int y, int w, int h, gr_u32 rgb)
     /* No MI_BATCH_BUFFER_END: these dwords go straight into the RING, which the
      * engine executes up to TAIL. An END here would stop the ring, not a batch. */
     return gpu_ring_submit(dw, b.at);
+}
+
+/* ---- the self-test: what a USB boot is FOR ---------------------------------
+ *
+ * There is no serial port on the ThinkPad, so the screen is the only
+ * diagnostic (docs/thinkpad-first-boot.md). A boot that arms the ring and says
+ * nothing is a boot wasted. This runs the whole sequence and leaves every
+ * number a human needs behind it, for kernel.zl to print.
+ *
+ * It is a COMMAND, not a boot step, deliberately. If this hangs the GPU, a
+ * desktop that already came up is worth far more than one that never did - and
+ * the person running it chose the moment.
+ *
+ * The sequence is the one proven on 8086:9B41 (docs/gpu-driver.md). What is NOT
+ * proven is this implementation of it, which is the entire point of running it.
+ */
+#define GPU_ST_W     64u
+#define GPU_ST_H     64u
+#define GPU_ST_PITCH (GPU_ST_W * 4u)
+#define GPU_ST_BYTES (GPU_ST_PITCH * GPU_ST_H)
+#define GPU_ST_PHYS  ((gr_u64)HI_GPU + 4096u + 16384u)   /* after ring + cursor */
+#define GPU_ST_GFX   0x04002000u                          /* ring gfx + 2 pages */
+#define GPU_ST_COLOR 0x60D2EBu
+#define GPU_ST_POISON 0xDEADBEEFu
+
+_Static_assert(GPU_ST_PHYS + GPU_ST_BYTES <= (gr_u64)HI_BLUR,
+               "the self-test surface runs past HI_GPU into the blur arena");
+
+static gr_u32 st_filled, st_poison, st_ctl, st_head, st_tail;
+
+gr_u32 gpu_st_filled(void) { return st_filled; }
+gr_u32 gpu_st_want(void)   { return GPU_ST_W * GPU_ST_H; }
+gr_u32 gpu_st_poison(void) { return st_poison; }
+gr_u32 gpu_st_ctl(void)    { return st_ctl; }
+gr_u32 gpu_st_head(void)   { return st_head; }
+gr_u32 gpu_st_tail(void)   { return st_tail; }
+
+/* Returns 0 on success, or the number of the step that failed - so a screen
+ * with one integer on it still says WHERE it stopped. */
+int gpu_selftest(void)
+{
+    st_filled = st_poison = st_ctl = st_head = st_tail = 0;
+
+    if (!intel_present() || !intel_supported()) return 1;
+
+    gpu_ring_arm(1);                      /* the caller asked for this */
+    if (!gpu_ring_init()) { gpu_ring_arm(0); return 2; }
+    st_ctl = mmio_r(BCS_BASE + REG_CTL);
+
+    if (!intel_ggtt_map_range(GPU_ST_GFX >> 12, (gr_u32)GPU_ST_PHYS,
+                              (int)(GPU_ST_BYTES / 4096u))) { gpu_ring_arm(0); return 3; }
+
+    /* Poison first, so "filled" can never be confused with "never ran" - the
+     * same discipline every other check in this driver uses. */
+    gr_u32 *dst = (gr_u32 *)(gr_uptr)GPU_ST_PHYS;
+    for (gr_u32 i = 0; i < GPU_ST_BYTES / 4u; i++) dst[i] = GPU_ST_POISON;
+
+    gr_u32 dw[16];
+    struct gpu_batch b;
+    gpu_batch_init(&b, dw, 16);
+    if (!gpu_fill_rect(&b, GPU_ST_GFX, GPU_ST_PITCH, 0, 0,
+                       (int)GPU_ST_W, (int)GPU_ST_H, GPU_ST_COLOR)) {
+        gpu_ring_arm(0); return 4;
+    }
+    /* No MI_BATCH_BUFFER_END: these go into the RING, and gpu_ring_submit
+     * appends the flush itself. */
+    int ok = gpu_ring_submit(dw, b.at);
+    st_head = mmio_r(BCS_BASE + REG_HEAD);
+    st_tail = mmio_r(BCS_BASE + REG_TAIL);
+
+    for (gr_u32 i = 0; i < GPU_ST_BYTES / 4u; i++) {
+        if ((dst[i] & 0xFFFFFFu) == GPU_ST_COLOR) st_filled++;
+        else if (dst[i] == GPU_ST_POISON) st_poison++;
+    }
+
+    gpu_ring_arm(0);                      /* leave it disarmed either way */
+    if (!ok) return 5;                    /* engine never caught up */
+    if (st_filled != GPU_ST_W * GPU_ST_H) return 6;   /* ran, drew nothing/partial */
+    return 0;
 }
