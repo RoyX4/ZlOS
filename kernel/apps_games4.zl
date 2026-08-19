@@ -36,7 +36,7 @@ G4_FLAPPY  = 65
 G4_MISSILE = 66
 G4_BLACKJK = 67
 G4_FROGGER = 68
-# 69 is deliberately unused - the brief reserves it as a spare.
+G4_SPARE   = 69                     # deliberately not an app; games4_new refuses it
 
 # ==============================================================================
 # THIS SLICE'S FIXED BUFFERS, AND WHY THEY ARE DECLARED HERE
@@ -2196,6 +2196,40 @@ fn fr_event(win, ety, ecode, ex, ey) {
 # the per-slice tables. Each is a plain if-chain on `id`; the fallback at the
 # end means "not mine" and lets the next slice answer.
 # ==============================================================================
+# Every one of these opens FRESH. That is reg_new()'s existing rule for
+# Wordle, Tic-Tac-Toe, Hanoi and the rest, and it is what makes "close it and
+# open it again" a restart rather than a resume of a game you already lost.
+#
+# It is also the ONLY place the fixed buffers are initialised: fi_reset writes
+# FIFTEEN_BOARD, sk_reset writes SK_BOARD, mc_reset writes MC_BUF, bj_reset
+# writes the shoe. A draw that reached this slice without an open would
+# otherwise read whatever the last app to use that page left behind - which is
+# exactly the class of bug a kernel with no allocator invites.
+fn games4_reset(id) {
+    if id == G4_FIFTEEN { return fi_reset() }
+    if id == G4_REVERSI { return rv_reset() }
+    if id == G4_SIMON   { return sim_reset() }
+    if id == G4_SOKOBAN { return sk_reset() }
+    if id == G4_FLAPPY  { return fl_reset() }
+    if id == G4_MISSILE { return mc_reset() }
+    if id == G4_BLACKJK { return bj_reset() }
+    if id == G4_FROGGER { return fr_reset() }
+    return 0
+}
+
+# reg_new()'s per-slice arm. WITHOUT ONE, EVERY APP HERE IS UNOPENABLE and
+# says nothing about it: reg_new() gates on explicit id ranges, none of which
+# covers 61..69, so it would return -1 and reg_open() would quietly do nothing.
+#
+# Id 69 is inside games4_has's range and is deliberately not an app, so it is
+# refused here too rather than opening an untitled window.
+fn games4_new(id, u) {
+    if games4_has(id) == 0 { return 0 - 1 }
+    if id == G4_SPARE { return 0 - 1 }
+    games4_reset(id)
+    return wm_open(id, games4_name(id), 150 * u, 70 * u, games4_w(id) * u, games4_h(id) * u)
+}
+
 fn games4_name(id) {
     if id == G4_FIFTEEN { return "15 Puzzle" }
     if id == G4_REVERSI { return "Reversi" }
@@ -2281,13 +2315,4 @@ fn games4_tick(id, win) {
     if id == G4_MISSILE { return mc_tick(win) }
     if id == G4_FROGGER { return fr_tick(win) }
     return 0
-}
-
-# HOW THIS SLICE'S WINDOWS OPEN. reg_new() gates on explicit id ranges and none
-# of them covered this slice, so every app here would have been unopenable -
-# reg_open() would find no window and return without doing anything, silently.
-# Owning the open here also means an app can choose its own start position and
-# reset its state before the first frame, which is what a game needs.
-fn games4_new(id, u) {
-    return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
 }
