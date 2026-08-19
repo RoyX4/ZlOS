@@ -33,9 +33,13 @@
  * THE ARENA. §4 item 1: do not guess an address, compute it from the map and
  * assert it. The map at the top of fb.c runs 128 MiB to 255 MiB and is FULL -
  * bg 128, sp 160, sched 176, back 192, nvme 208, xhci 224, virtio-gpu 240,
- * and virtio-gpu's framebuffer runs to 255. 256 MiB is a hard ceiling, not a
- * soft one: zlOS requires -m 256, and virtio_gpu.c already records that a
- * buffer at exactly 256 MiB is unreachable by the device.
+ * and virtio-gpu's framebuffer runs to 255. The ceiling above that is
+ * memmap.h's HI_TOP - the smallest guest zlOS promises to boot on, and the line
+ * a DMA buffer may not cross because past it is memory nobody promised exists.
+ * virtio_gpu.c records what crossing it looks like: not a loud failure but
+ * ERR_UNSPEC out of RESOURCE_ATTACH_BACKING, which reads like a driver bug.
+ * HI_TOP was 256 MiB when this paragraph was written and is now 1 GiB; the
+ * arena below is unaffected, because it was never near either number.
  *
  * The unused tails of nvme's and xhci's regions are tempting and wrong. They
  * are only unused today, they are inside a neighbour's declared span, and
@@ -44,9 +48,9 @@
  *
  * So: BELOW the map. 32 MiB up holds the RAM filesystem, which ends at
  * 0x02025000; 128 MiB is the first thing the map claims. 64 MiB is in the
- * middle of an 80 MiB hole that nothing else touches, comfortably inside a
- * -m 256 guest, and the asserts below fail the build if either neighbour ever
- * grows into it.
+ * middle of an 80 MiB hole that nothing else touches, comfortably inside the
+ * smallest guest we support, and the asserts below fail the build if either
+ * neighbour ever grows into it.
  */
 
 typedef unsigned long long u64;

@@ -104,7 +104,16 @@ for f in *.c *.h; do
         echo "      Either give it its own region in $MAP, or - better - find out"
         echo "      whether it needs a fixed physical address at all."
         fail=1
-    done < <(grep -oP '0x0[0-9A-Fa-f]{7}(?![0-9A-Fa-f])' <<<"$stripped" | sort -u)
+    # SEVEN OR EIGHT DIGITS, and the second one was added when HI_TOP went from
+    # 256 MiB to 1 GiB. The pattern used to be `0x0[0-9A-Fa-f]{7}`, which pins
+    # the leading nibble to 0 and therefore cannot express any value at or above
+    # 0x10000000. With HI_TOP at 256 MiB that was exactly the governed span and
+    # cost nothing. With HI_TOP at 1 GiB the loop above would have gone on
+    # comparing against a ceiling of 0x40000000 while the pattern feeding it was
+    # incapable of producing a single literal in 0x10000000..0x3FFFFFFF - the
+    # span would read as covered and be invisible. Nothing lives up there today,
+    # which is precisely why it would have stayed unnoticed until something did.
+    done < <(grep -oP '0x[0-9A-Fa-f]{7,8}(?![0-9A-Fa-f])' <<<"$stripped" | sort -u)
 done
 
 if [ "$fail" = 0 ]; then

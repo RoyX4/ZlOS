@@ -125,20 +125,34 @@ static void mmio_w8(uptr a, u8 v)  { *(volatile u8 *)a = v; }
 #define VMEM_CMD      (VMEM_DESC + 0x3000u)   /* command buffers we send     */
 #define VMEM_RESP     (VMEM_DESC + 0x4000u)   /* replies the device writes   */
 #define VMEM_SGLIST   (VMEM_DESC + 0x5000u)   /* scatter list for the fb     */
-/* 241 MiB. NOT 256: that is exactly the top of a -m 256 guest, so the device
- * cannot reach it and RESOURCE_ATTACH_BACKING fails with ERR_UNSPEC - which
- * reads like a driver bug and is not one. Everything the GPU DMAs has to be
- * inside real RAM, and this is the last clear region below the 256 MiB line. */
+/* 241 MiB, and it stays there. It was placed here when HI_TOP was 256 MiB and
+ * this was the last clear region below that line; HI_TOP is now 1 GiB, so the
+ * address is no longer FORCED - but nothing above it is claimed either, and
+ * moving a live DMA region buys nothing. Everything the GPU DMAs still has to
+ * be inside memory we promised exists, which is what HI_TOP means: cross it and
+ * RESOURCE_ATTACH_BACKING fails with ERR_UNSPEC, which reads like a driver bug
+ * and is not one.
+ *
+ * VMEM_FB_MAX is 14 MiB and is NOT sized by the ceiling - it is sized by
+ * 1920x1200x4 = 9.2 MiB, with room. The ThinkPad's 2560x1440x4 is 14.06 MiB and
+ * does NOT fit; virtio_gpu_setup() refuses it out loud rather than truncating
+ * (see the `bytes > VMEM_FB_MAX` return below). That refusal is unchanged by
+ * this commit and is a real limit, not an artefact of the old ceiling. */
 #define VMEM_FB       (VMEM_DESC + 0x100000u)
 #define VMEM_FB_MAX   0x00E00000u   /* 14 MiB - enough for 1920x1200x4 */
 
-/* The 256 MiB line, enforced rather than described. The paragraph above is the
- * whole reason this assert exists: crossing HI_TOP does not fail loudly, it
- * fails as ERR_UNSPEC from RESOURCE_ATTACH_BACKING and reads like a driver bug.
+/* HI_TOP, enforced rather than described. The paragraph above is the whole
+ * reason this assert exists: crossing it does not fail loudly, it fails as
+ * ERR_UNSPEC from RESOURCE_ATTACH_BACKING and reads like a driver bug.
  * virtio_gpu.c was in no assertion before - the top half of the map was held up
- * by prose only. */
+ * by prose only.
+ *
+ * This assert has MORE SLACK than it used to (0x0FF00000 against 1 GiB instead
+ * of against 256 MiB) and that is worth saying plainly rather than leaving for
+ * someone to notice: it is no longer the tight constraint on this region. The
+ * tight one is VMEM_FB_MAX above, and it is checked at run time. */
 _Static_assert((unsigned long)VMEM_FB + VMEM_FB_MAX <= HI_TOP,
-               "virtio-gpu: the framebuffer crosses the 256 MiB guest ceiling");
+               "virtio-gpu: the framebuffer crosses the guest RAM ceiling");
 _Static_assert((unsigned long)VMEM_SGLIST < VMEM_FB,
                "virtio-gpu: the rings have grown into the framebuffer");
 #define QSZ           64            /* descriptors per queue                */

@@ -2788,7 +2788,7 @@ fn net_gate() {
     }
     put("    DMA arena at  0x")  hex(net_arena(), 8)  print("")
     if net_ram() == 0 {
-        color(C_RED)  print("    the arena is NOT backed by RAM - needs -m 256 or more")
+        color(C_RED)  print("    the arena is NOT backed by RAM - needs -m 1G or more")
         color(C_GREY) return 0
     }
     if net_up() == 0 {

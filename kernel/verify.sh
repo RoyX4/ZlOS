@@ -21,8 +21,13 @@ KEYS='.h20f10smq'
 # on host load, and a fixed timeout turns a busy machine into a failed gate on
 # an unchanged kernel. 'halting' is the last thing the kernel prints for 'q'.
 CEILING=180
+# -m 1G is HI_TOP (memmap.h), not a round number. This gate passed no -m for its
+# whole life, so it booted qemu-system-i386's default 128 MiB and every address
+# in the high-RAM map above 128 MiB was UNBACKED - the map was half-imaginary on
+# the gate that is supposed to prove it. check-ram.sh now fails if this number
+# and HI_TOP ever disagree.
 printf '%s' "$KEYS" | timeout "$CEILING" qemu-system-i386 \
-    -kernel kernel.elf -serial stdio -display none -no-reboot \
+    -kernel kernel.elf -m 1G -serial stdio -display none -no-reboot \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 >"$OUT" 2>/dev/null &
 QPID=$!
 for _ in $(seq $((CEILING * 2))); do
