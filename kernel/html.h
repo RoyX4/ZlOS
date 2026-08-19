@@ -63,4 +63,9 @@ const char *html_style_attr(int i, int *len);
 int         html_sheets(void);
 const char *html_sheet(int k, int *len);
 
+/* the document's <script> blocks, in document order. Kept for js.c; still
+ * never rendered as text. */
+int         html_scripts(void);
+const char *html_script(int k, int *len);
+
 #endif

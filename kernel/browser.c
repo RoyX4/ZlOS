@@ -19,8 +19,11 @@
 #include "html.h"
 #include "layout.h"
 #include "css.h"
+#include "js.h"
 #include "ui.h"
 #include "http.h"
+#include "tls.h"
+int http_rnd_quality(void);
 #include "tcp.h"
 #include "dns.h"
 
@@ -73,6 +76,12 @@ static char doc[DOC_MAX];
 static int  doc_len;
 static int  doc_truncated;
 
+/* what the page's scripts produced, and why one stopped if it did */
+#define JS_OUT_MAX 4096
+static char js_out[JS_OUT_MAX];
+static int  js_out_len;
+static char js_err[128];
+
 static int  laid_w;          /* the width the current layout was run at */
 static int  scroll;
 static int  content_h;
@@ -82,7 +91,7 @@ static int  status;          /* BR_* below                              */
 
 #define BR_OK        0
 #define BR_NO_NET    1       /* an http:// URL with no network driver    */
-#define BR_NO_TLS    2       /* https:// - refused on purpose            */
+#define BR_NO_TLS    2       /* an https:// fetch failed - see the reason */
 #define BR_NO_DNS    3       /* a name, and there is no resolver         */
 #define BR_FETCHING  4
 #define BR_FAILED    5
@@ -121,6 +130,32 @@ static void sset(char *d, const char *s, int max)
 /* ---- the measure ----------------------------------------------------------
  * The one thing layout.c cannot know. Everything else about the type - the
  * atlas, the gamma-correct blend, the synthesised bold - stays in fb.c. */
+/* WHY AN HTTPS FETCH FAILED, in the user's words rather than an error number.
+ * Each of these is a DIFFERENT problem with a different fix, and collapsing
+ * them into "connection failed" is how a certificate error gets mistaken for a
+ * network outage - which is exactly the confusion an attacker benefits from. */
+static const char *browser_tls_reason(void)
+{
+    switch (http_tls_error()) {
+    case TLS_E_CERT:
+        /* the specific reason from x509.c: expired, wrong host, unknown CA */
+        return http_tls_why();
+    case TLS_E_CERTVERIFY:
+        return "the server did not prove it owns that certificate";
+    case TLS_E_VERSION:
+        return "the server does not speak TLS 1.3";
+    case TLS_E_SUITE:
+    case TLS_E_GROUP:
+        return "the server offered no cipher this kernel implements";
+    case TLS_E_PROTOCOL:
+        if (http_rnd_quality() == 0)
+            return "no entropy source: a key would be predictable, so https is refused";
+        return "the TLS handshake was malformed";
+    default:
+        return "the secure connection failed";
+    }
+}
+
 static int measure(const char *s, int len, int size, int style)
 {
     return fb_text_rich_w(s, len, size, fb_style(style));
@@ -147,7 +182,7 @@ static int measure(const char *s, int len, int size, int style)
  * cipher in this kernel - only hashes". There are no hashes either: nothing
  * crypto is in SOURCES on any ref. A `crypto.c` does exist - 543 lines of
  * SHA-1, SHA-256, HMAC, PBKDF2 and AES-128, with `cryptotest.c` against
- * published FIPS and RFC vectors - but only inside `refs/wip/*` snapshots, and
+ * published FIPS and RFC vectors - but only inside the refs/wip snapshots, and
  * a file that is in no build is not in the kernel. The refusal POLICY is
  * unchanged and correct; only the reason given for it was false.
  *
@@ -174,19 +209,32 @@ static const char home_page[] =
 "<li><strong>the page's own stylesheet</strong> - "
 "<code>&lt;style&gt;</code> and <code>style=</code>, cascaded by "
 "specificity</li>\n"
+"<li><strong>HTTPS</strong> - TLS 1.3, and the certificate is checked: the "
+"chain to a known root, the host name, the dates, and a proof the server "
+"holds the key</li>\n"
+"<li><strong>tables</strong>, with columns sized to their contents</li>\n"
+"<li><strong>JavaScript</strong>, of a bounded kind - see below</li>\n"
 "</ul>\n"
 "<h2>What does not</h2>\n"
 "<ol>\n"
-"<li><strong>HTTPS.</strong> Refused, deliberately. There is no TLS in this "
-"kernel - no ciphersuite, no certificate chain validation, and no cipher or "
-"hash primitive linked into it at all - and a padlock that has not been "
-"earned is worse than no padlock at all.</li>\n"
+"<li><strong>HTTPS with an RSA certificate.</strong> TLS 1.3 works and the "
+"certificate is verified, but only ECDSA over P-256 and P-384 is implemented, "
+"so a site chained to an RSA authority is <em>refused</em> rather than "
+"trusted. Most of Let's Encrypt works; much of the rest of the web does "
+"not.</li>\n"
+"<li><strong>Certificate revocation.</strong> Not checked at all. A "
+"certificate withdrawn by its authority is still accepted until it "
+"expires.</li>\n"
 "<li><strong>Any card but virtio-net.</strong> The driver matches PCI "
 "<code>1af4:1041</code> and <code>1af4:1000</code> and nothing else, so QEMU "
 "needs <code>-device virtio-net-pci</code>, and the ThinkPad's Intel part is "
 "not supported.</li>\n"
-"<li><strong>JavaScript.</strong> An engine is its own multi-year project, "
-"not a hard afternoon.</li>\n"
+"<li><strong>JavaScript for the modern web.</strong> There is an "
+"interpreter - functions, recursion, arrays, strings, loops, "
+"<code>document.write</code> - and it runs the kind of script a document "
+"carries. It is not an <em>engine</em>: no DOM, no events, no promises, no "
+"prototypes, no regular expressions. A page that is an application rather "
+"than a document will not run, and that part really is unbounded.</li>\n"
 "<li><strong>Most of CSS.</strong> A page's own <code>&lt;style&gt;</code> and "
 "<code>style=</code> are read - type, class, id and descendant selectors, the "
 "cascade, colours, sizes, weights, alignment, margins. Not float, not flex, "
@@ -228,6 +276,55 @@ static void doc_set(const char *src, int len)
         int slen;
         const char *s = html_sheet(k, &slen);
         css_add_sheet(s, slen);
+    }
+
+    /* ---- the scripts -----------------------------------------------------
+     * RUN AFTER THE PARSE, NOT DURING IT. A real browser executes a <script>
+     * at the point the parser reaches it, because document.write injects text
+     * INTO the parse. Doing that here would mean re-entering html_parse from
+     * inside itself, and this parser is not re-entrant.
+     *
+     * So the bounded version: run every script once the tree is built, append
+     * whatever they wrote to the document, and reparse ONCE if anything did.
+     * That gets a script whose output is its whole purpose - the common case
+     * in a document - and does NOT get a script that expects to interleave
+     * with the parser. js.h says which is which.
+     *
+     * ONE REPARSE, not a loop: a script that writes a script that writes a
+     * script is a fixed point nobody needs, and bounding it here is cheaper
+     * than discovering the loop in a kernel. */
+    js_out_len = 0;
+    if (html_scripts() > 0) {
+        int wrote = 0;
+        for (int k = 0; k < html_scripts(); k++) {
+            int sl;
+            const char *sc = html_script(k, &sl);
+            if (sl <= 0) continue;
+            if (js_eval(sc, sl) != 0) {
+                /* a script that fails is REPORTED, not hidden - a blank area
+                 * where content should be is the least debuggable outcome */
+                sset(js_err, js_error(), (int)sizeof js_err);
+                continue;
+            }
+            int ol;
+            const char *o = js_output(&ol);
+            for (int i = 0; i < ol && js_out_len < JS_OUT_MAX - 1; i++)
+                js_out[js_out_len++] = o[i];
+            if (ol > 0) wrote = 1;
+        }
+        js_out[js_out_len] = 0;
+        if (wrote && doc_len + js_out_len < DOC_MAX - 1) {
+            for (int i = 0; i < js_out_len; i++) doc[doc_len + i] = js_out[i];
+            doc_len += js_out_len;
+            doc[doc_len] = 0;
+            html_parse(doc, doc_len);
+            css_reset();
+            for (int k = 0; k < html_sheets(); k++) {
+                int sl2;
+                const char *s2 = html_sheet(k, &sl2);
+                css_add_sheet(s2, sl2);
+            }
+        }
     }
 
     lay_set_measure(measure);
@@ -324,16 +421,18 @@ static char req_host[URL_MAX], req_path[URL_MAX];
 static unsigned req_ip;
 static int req_port;
 static int req_needs_dns;   /* the host is a name, not a dotted quad */
+static int req_tls;         /* the URL said https                     */
 
 static int parse_url(const char *u, int len)
 {
     int i = 0;
+    req_tls = 0;
     if (len >= 8) {
         int https = 1;
         for (int k = 0; k < 8; k++) if (u[k] != "https://"[k]) { https = 0; break; }
-        if (https) { status = BR_NO_TLS; return 0; }
+        if (https) { req_tls = 1; i = 8; }
     }
-    if (len >= 7) {
+    if (!req_tls && len >= 7) {
         int http = 1;
         for (int k = 0; k < 7; k++) if (u[k] != "http://"[k]) { http = 0; break; }
         if (http) i = 7;
@@ -341,7 +440,7 @@ static int parse_url(const char *u, int len)
     int hs = i;
     while (i < len && u[i] != '/' && u[i] != ':') i++;
     int he = i;
-    req_port = 80;
+    req_port = req_tls ? 443 : 80;
     if (i < len && u[i] == ':') {
         i++;
         int p = 0;
@@ -413,7 +512,8 @@ static int navigate(const char *u, int len, int record)
         return 1;
     }
 
-    if (!http_start(req_ip, req_port, req_host, req_path)) {
+    if (!(req_tls ? http_start_tls(req_ip, req_port, req_host, req_path)
+                  : http_start(req_ip, req_port, req_host, req_path))) {
         status = BR_FAILED;
         return 0;
     }
@@ -440,7 +540,8 @@ int browser_tick(void)
         if (d == DNS_DONE) {
             req_ip = dns_result();
             req_needs_dns = 0;
-            if (!http_start(req_ip, req_port, req_host, req_path)) {
+            if (!(req_tls ? http_start_tls(req_ip, req_port, req_host, req_path)
+                  : http_start(req_ip, req_port, req_host, req_path))) {
                 fetching = 0; status = BR_FAILED; return 1;
             }
             status = BR_FETCHING;
@@ -517,7 +618,7 @@ int browser_scroll_by(int d)
 static const char *status_text(void)
 {
     switch (status) {
-    case BR_NO_TLS:   return "https is refused: this kernel has hashes but no cipher";
+    case BR_NO_TLS:   return browser_tls_reason();
     case BR_NO_NET:   return "the network is not up - run the network gate first";
     case BR_NO_DNS:   return "that name does not resolve";
     case BR_RESOLVING: return "looking up the name...";

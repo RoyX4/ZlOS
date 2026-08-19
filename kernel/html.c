@@ -68,6 +68,8 @@ static int  n_dropped;               /* recoveries, for the harness to see */
 #define MAX_SHEETS 32                /* a Wikipedia article carries 16 */
 static struct { int off, len; } sheets[MAX_SHEETS];
 static int nsheets;
+static struct { int off, len; } scripts[MAX_SHEETS];
+static int nscripts;
 static const char *doc_src;          /* what those offsets are relative to */
 
 /* ---- the tag table ---------------------------------------------------------
@@ -401,6 +403,7 @@ void html_reset(void)
     title_off = title_len = 0;
     n_dropped = 0;
     nsheets = 0;
+    nscripts = 0;
     doc_src = 0;
 }
 
@@ -497,6 +500,21 @@ int html_parse(const char *src, int len)
              * holding a megabyte of JavaScript the renderer cannot use.
              * Several <style> blocks concatenate in document order, which is
              * also their cascade order. */
+            if (t == HT_SCRIPT && nscripts < MAX_SHEETS && i > raw0) {
+                /* SCRIPTS ARE KEPT NOW, for the same reason stylesheets are:
+                 * there is an interpreter to give them to. js.c runs a bounded
+                 * subset - see its header for exactly what - so a script this
+                 * kernel cannot run fails inside the interpreter with a
+                 * message, rather than being silently dropped here. */
+                int end = i;
+                while (end > raw0 && src[end - 1] != '<') end--;
+                if (end > raw0) end--; else end = i;
+                if (end > raw0) {
+                    scripts[nscripts].off = raw0;
+                    scripts[nscripts].len = end - raw0;
+                    nscripts++;
+                }
+            }
             if (t == HT_STYLE && nsheets < MAX_SHEETS && i > raw0) {
                 int end = i;
                 /* skip_raw returns the index PAST </style>; walk back to the
@@ -625,6 +643,15 @@ const char *html_style_attr(int i, int *len)
 }
 
 int html_sheets(void) { return nsheets; }
+
+int html_scripts(void) { return nscripts; }
+
+const char *html_script(int k, int *len)
+{
+    if ((unsigned)k >= (unsigned)nscripts || !doc_src) { if (len) *len = 0; return ""; }
+    if (len) *len = scripts[k].len;
+    return doc_src + scripts[k].off;
+}
 
 const char *html_sheet(int k, int *len)
 {

@@ -20,10 +20,18 @@ enum {
     HTTP_DONE,
     HTTP_REDIRECT,     /* 3xx with a Location, under the redirect limit */
     HTTP_REFUSED,      /* not text/html or text/plain - refused, not fetched */
-    HTTP_ERROR
+    HTTP_ERROR,
+    HTTP_TLS_FAIL      /* the handshake or the certificate check failed */
 };
 
 int http_start(net_u32 ip, int port, const char *hostname, const char *path);
+
+/* The same fetch over TLS. Certificate verification is ALWAYS ON here - there
+ * is no unverified https, because an https:// URL is a promise to the user and
+ * a "just connect anyway" path is how that promise gets quietly broken. */
+int http_start_tls(net_u32 ip, int port, const char *hostname, const char *path);
+int http_tls_error(void);       /* a TLS_E_* when state is HTTP_TLS_FAIL */
+const char *http_tls_why(void); /* the certificate reason, if that is why  */
 int http_poll(void);
 void http_reset(void);
 

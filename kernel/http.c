@@ -22,6 +22,19 @@
  */
 
 #include "http.h"
+#include "tls.h"
+#include "x509.h"
+
+static int use_tls;
+static struct tls_conn tls;
+static int tls_failed;
+static int tls_err;
+static int tls_rnd_quality;
+
+int rnd_bytes(unsigned char *out, int n);
+int zl_now_z(char *out);
+const struct x509_cert *zl_roots(int *n);
+
 #include "tcp.h"
 
 typedef net_u8  u8;
@@ -101,6 +114,8 @@ int http_start(u32 ip, int port, const char *hostname, const char *p)
     scopy(host, hostname ? hostname : "", URL_MAX);
     scopy(path, (p && *p) ? p : "/", URL_MAX);
 
+    use_tls = 0;
+    tls_failed = 0;
     resp_len = 0;
     body_at = 0;
     status_code = 0;
@@ -116,6 +131,34 @@ int http_start(u32 ip, int port, const char *hostname, const char *p)
     state = HTTP_CONNECTING;
     return 1;
 }
+
+int http_start_tls(net_u32 ip, int port, const char *hostname, const char *path)
+{
+    if (!http_start(ip, port ? port : 443, hostname, path)) return 0;
+    use_tls = 1;
+    tls_failed = 0;
+    tls_err = 0;
+    for (int i = 0; i < (int)sizeof tls; i++) ((unsigned char *)&tls)[i] = 0;
+
+    /* THE EPHEMERAL KEY, and the one place its quality matters. rnd_bytes
+     * reports which tier produced it; a key from nothing is refused outright
+     * rather than used, because a predictable scalar makes the whole session
+     * readable while every other check still passes. */
+    int q = rnd_bytes(tls.priv, 32);
+    tls_rnd_quality = q;
+    if (q == 0) { state = HTTP_TLS_FAIL; tls_err = TLS_E_PROTOCOL; return 0; }
+
+    int nroots = 0;
+    const struct x509_cert *roots = zl_roots(&nroots);
+    static char nowbuf[20];
+    int have_clock = zl_now_z(nowbuf);
+    tls_trust(&tls, roots, nroots, have_clock ? nowbuf : 0);
+    return 1;
+}
+
+int http_tls_error(void) { return tls_err; }
+const char *http_tls_why(void) { return x509_why(); }
+int http_rnd_quality(void) { return tls_rnd_quality; }
 
 /* ---- the response ----------------------------------------------------------
  * Headers are parsed once, in place, the moment the blank line arrives. There
@@ -195,13 +238,97 @@ static int type_acceptable(void)
     return m1 || m2;
 }
 
+/* ---- the TLS transport ------------------------------------------------------
+ * HTTPS IS THE SAME HTTP OVER A DIFFERENT PIPE, and this is the whole of the
+ * difference. The parsing, the redirect logic and the type check below do not
+ * know which pipe they are on: they call xport_* instead of tcp_*, and when
+ * TLS is on those move bytes through tls.c on the way past.
+ *
+ * tls_pump() is called once per poll and does both directions - drain whatever
+ * the handshake wants to send into the socket, push whatever arrived into the
+ * handshake. It has to run even while state is HTTP_CONNECTING, because that
+ * is when the handshake happens.
+ */
+
+static void tls_pump(void)
+{
+    if (!use_tls) return;
+    const tu8 *p;
+    int n = tls_take(&tls, &p);
+    if (n > 0) {
+        int w = tcp_send(p, n);
+        if (w > 0) tls_sent(&tls, w);
+    }
+    int avail = tcp_available();
+    while (avail > 0) {
+        net_u8 buf[4096];
+        int take = avail > (int)sizeof buf ? (int)sizeof buf : avail;
+        int got = tcp_recv(buf, take);
+        if (got <= 0) break;
+        if (tls_feed(&tls, buf, got) < 0) { tls_failed = 1; return; }
+        avail = tcp_available();
+    }
+    /* the handshake may have produced a reply to what just arrived */
+    n = tls_take(&tls, &p);
+    if (n > 0) {
+        int w = tcp_send(p, n);
+        if (w > 0) tls_sent(&tls, w);
+    }
+}
+
+static int xport_send(const net_u8 *d, int n)
+{
+    if (!use_tls) return tcp_send(d, n);
+    int w = tls_write(&tls, d, n);
+    tls_pump();
+    return w;
+}
+
+static int xport_recv(net_u8 *out, int max)
+{
+    if (!use_tls) return tcp_recv(out, max);
+    return tls_read(&tls, out, max);
+}
+
+static int xport_available(void)
+{
+    if (!use_tls) return tcp_available();
+    return tls.appn - tls.appr;
+}
+
+/* "the peer is finished with us". Under TLS that is still a TCP condition -
+ * a close_notify or a FIN - but any buffered plaintext must be drained first,
+ * which is why this is not simply tcp_state(). */
+static int xport_closing(void)
+{
+    int s = tcp_state();
+    int tcp_done = (s == TCP_CLOSE_WAIT || s == TCP_CLOSED || s == TCP_TIME_WAIT);
+    if (!use_tls) return tcp_done;
+    return tcp_done || tls_state(&tls) == TLS_CLOSED || tls_failed;
+}
+
 int http_poll(void)
 {
+    tls_pump();
+    if (use_tls && (tls_failed || tls_state(&tls) == TLS_ERROR)) {
+        tls_err = tls_error(&tls);
+        tcp_abort();
+        state = HTTP_TLS_FAIL;
+        return state;
+    }
+
     if (state == HTTP_CONNECTING) {
         int s = tcp_state();
-        if (s == TCP_ESTABLISHED) {
+        if (s == TCP_ESTABLISHED && use_tls && tls_state(&tls) == TLS_START) {
+            /* the socket is up; start the handshake now that there is
+             * somewhere to put the ClientHello */
+            tls_start(&tls, host);
+            tls_pump();
+            return state;
+        }
+        if (s == TCP_ESTABLISHED && (!use_tls || tls_state(&tls) == TLS_READY)) {
             int n = build_request();
-            tcp_send(req, n);
+            xport_send(req, n);
             state = HTTP_RECEIVING;
         } else if (s == TCP_CLOSED) {
             state = HTTP_ERROR;                    /* refused, or never answered */
@@ -211,12 +338,11 @@ int http_poll(void)
 
     if (state != HTTP_RECEIVING) return state;
 
-    int avail = tcp_available();
+    int avail = xport_available();
     if (avail > 0) {
         int room = HTTP_BUF - resp_len;
         if (avail > room) { avail = room; truncated = 1; }
-        if (avail > 0) resp_len += tcp_recv(resp + resp_len, avail);
-        else           tcp_recv(resp, 0);
+        if (avail > 0) resp_len += xport_recv(resp + resp_len, avail);
     }
 
     if (!hdr_done) {
@@ -242,9 +368,8 @@ int http_poll(void)
         resp_len = body_at + content_len;
         tcp_close();
         state = HTTP_DONE;
-    } else if (tcp_state() == TCP_CLOSE_WAIT || tcp_state() == TCP_CLOSED ||
-               tcp_state() == TCP_TIME_WAIT) {
-        if (tcp_available() == 0) {
+    } else if (xport_closing()) {
+        if (xport_available() == 0) {
             if (!hdr_done) { state = HTTP_ERROR; return state; }
             state = HTTP_DONE;
             if (tcp_state() == TCP_CLOSE_WAIT) tcp_close();

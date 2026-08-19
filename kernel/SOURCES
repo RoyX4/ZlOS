@@ -76,6 +76,13 @@ settings.c
 
 # desktop/browser
 virtio_net.c
+# --- HTTPS: the crypto, the certificate check, and the handshake ---
+crypto.c
+ecdsa.c
+x509.c
+roots.c
+entropy.c
+tls.c
 net.c
 dns.c
 tcp.c
@@ -83,4 +90,5 @@ http.c
 html.c
 css.c
 layout.c
+js.c
 browser.c

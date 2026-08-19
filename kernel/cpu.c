@@ -142,6 +142,25 @@ int cpu_has_sse42(void) { return (cpu_feat_ecx() & (1u << 20)) ? 1 : 0; }
 int cpu_has_aes(void)   { return (cpu_feat_ecx() & (1u << 25)) ? 1 : 0; }
 int cpu_has_avx(void)   { return (cpu_feat_ecx() & (1u << 28)) ? 1 : 0; }
 int cpu_has_rdrand(void){ return (cpu_feat_ecx() & (1u << 30)) ? 1 : 0; }
+
+/* RDRAND, with the retry the spec requires.
+ *
+ * The instruction sets CF when the value is good and CLEARS it when the
+ * hardware pool is momentarily empty - and the register is UNDEFINED in that
+ * case, not zero. Reading it without checking CF is a bug that produces
+ * plausible-looking rubbish under load and perfect output on an idle machine,
+ * which is the worst possible failure mode for a key. Intel's guidance is ten
+ * retries; after that the caller must be told, not quietly handed a zero. */
+int cpu_rdrand32(u32 *out)
+{
+    for (int i = 0; i < 10; i++) {
+        u32 v = 0;
+        unsigned char ok = 0;
+        __asm__ volatile("rdrand %0; setc %1" : "=r"(v), "=qm"(ok) :: "cc");
+        if (ok) { *out = v; return 1; }
+    }
+    return 0;
+}
 int cpu_has_hypervisor(void) { return (cpu_feat_ecx() & (1u << 31)) ? 1 : 0; }
 int cpu_has_avx2(void)  { return (cpu_feat7_ebx() & (1u << 5))  ? 1 : 0; }
 int cpu_has_bmi1(void)  { return (cpu_feat7_ebx() & (1u << 3))  ? 1 : 0; }

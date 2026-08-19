@@ -23,6 +23,7 @@
 
 #include "../ui.h"
 #include "../net.h"
+#include "../layout.h"
 
 static int fails, checks;
 #define CHECK(cond, ...) do {                                    \
@@ -236,11 +237,23 @@ static void t_urls(void)
     printf("URL parsing\n");
     reset();
 
-    /* https is refused BY NAME, not by failing to connect */
+    /* HTTPS IS NO LONGER REFUSED BY SCHEME, and these two assertions changed
+     * with the code rather than being deleted. They now prove the opposite
+     * property: that an https:// URL takes the SAME path an http:// one does
+     * and fails for the same real reasons, instead of being turned away at the
+     * door. A status of BR_NO_TLS here would mean the scheme was refused.
+     *
+     * a name, and no resolver in this harness -> the DNS answer, not a scheme
+     * complaint */
     go("https://example.com/");
-    CHECK(browser_status() == BR_NO_TLS, "https gave status %d", browser_status());
+    CHECK(browser_status() == BR_NO_DNS,
+          "https by name gave %d, wanted the DNS refusal", browser_status());
+    CHECK(browser_status() != BR_NO_TLS, "https was refused by scheme");
+    /* an address, so it gets as far as trying to connect - and there is no
+     * network here, so it fails as a fetch */
     go("https://10.0.2.2/");
-    CHECK(browser_status() == BR_NO_TLS, "https to an address gave %d",
+    CHECK(browser_status() == BR_FAILED || browser_status() == BR_FETCHING,
+          "https to an address gave %d, wanted a real connect attempt",
           browser_status());
 
     /* a NAME is refused by name too - there is no resolver, and failing to
@@ -474,11 +487,70 @@ static void t_document(void)
     CHECK(browser_link_at(-100, -100) == -1, "a link was found outside the window");
 }
 
+
+/* ---- scripts ---------------------------------------------------------------
+ * The page carries a <script> and the text it writes must end up as RENDERED
+ * CONTENT - not as source shown on screen, and not silently dropped. Those are
+ * the two ways this goes wrong and both look plausible from a distance.
+ */
+static void t_scripts(void)
+{
+    printf("scripts\n");
+    reset();
+
+    static const char page[] =
+        "<html><body><h1>Before</h1>"
+        "<script>\n"
+        "  var out = '';\n"
+        "  for (var i = 1; i <= 3; i++) { out += '<p>row ' + i + '</p>'; }\n"
+        "  document.write(out);\n"
+        "</script>"
+        "</body></html>";
+    browser_load(page, (int)sizeof page - 1);
+    browser_draw(0, 0, 600, 400, 1);
+    CHECK(browser_height() > 0, "the scripted page laid out to nothing");
+
+    int rows = 0, saw_src = 0, saw_before = 0;
+    for (int i = 0; i < lay_count(); i++) {
+        const struct lay_run *r = lay_at(i);
+        if (!r || r->kind != LR_TEXT || r->len <= 0) continue;
+        if (r->len == 3 && !memcmp(r->text, "row", 3)) rows++;
+        if (r->len == 6 && !memcmp(r->text, "Before", 6)) saw_before = 1;
+        /* the SOURCE must never be rendered */
+        if (r->len >= 8 && !memcmp(r->text, "document", 8)) saw_src = 1;
+        if (r->len >= 3 && !memcmp(r->text, "var", 3)) saw_src = 1;
+    }
+    CHECK(saw_before, "the static content before the script vanished");
+    CHECK(rows == 3, "document.write produced %d rows, wanted 3", rows);
+    CHECK(!saw_src, "the script SOURCE was rendered as page text");
+
+    /* a script that fails must not take the page with it */
+    static const char bad[] =
+        "<html><body><h1>Kept</h1><script>this is not ( valid javascript</script>"
+        "<p>and this still renders</p></body></html>";
+    browser_load(bad, (int)sizeof bad - 1);
+    browser_draw(0, 0, 600, 400, 1);
+    int saw_kept = 0, saw_after = 0;
+    for (int i = 0; i < lay_count(); i++) {
+        const struct lay_run *r = lay_at(i);
+        if (!r || r->kind != LR_TEXT || r->len <= 0) continue;
+        if (r->len == 4 && !memcmp(r->text, "Kept", 4)) saw_kept = 1;
+        if (r->len == 5 && !memcmp(r->text, "still", 5)) saw_after = 1;
+    }
+    CHECK(saw_kept && saw_after, "a broken script took the rest of the page with it");
+
+    static const char plain[] = "<html><body><p>plain</p></body></html>";
+    browser_load(plain, (int)sizeof plain - 1);
+    browser_draw(0, 0, 600, 400, 1);
+    CHECK(browser_height() > 0, "a script-free page broke");
+}
+
 int main(void)
 {
     printf("browser.c's logic, no pixels and no machine\n\n");
     t_fresh();
     t_urls();
+    t_scripts();
     t_url_targets();
     t_history();
     t_urlbar();
