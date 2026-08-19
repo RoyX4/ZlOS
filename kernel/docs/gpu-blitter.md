@@ -308,6 +308,51 @@ Until one of those happens, `gpu.c` is as far as this can honestly go: the
 command stream is correct on silicon, pinned by `gputest`, compiled into all
 four targets, and calling nothing.
 
+## The present path — and the prediction it refuted
+
+The commit that added `XY_SRC_COPY_BLT` predicted the copy would be the bigger
+win: `blit_band` copies the back buffer into scanout memory every frame, scanout
+is not write-back cached, so "the CPU is bad at it specifically". **Measured, and
+that was wrong.**
+
+`gpu_blt --present`, 1920x1200, the *same* GEM object mapped twice so the caching
+mode is the only thing that differs between the two CPU rows:
+
+```
+blitter COPY     1.808 ms   1274 Mpix/s   (reads + writes)
+blitter FILL     0.691 ms   3337 Mpix/s   (writes only)
+CPU memcpy WC    1.530 ms   1506 Mpix/s   <- what fb.c actually does
+CPU memcpy WB    1.221 ms   1887 Mpix/s
+
+copy: CPU wins by 1.18x
+fill: blitter wins by 2.22x
+```
+
+Three things, and together they are the design answer:
+
+1. **Write-combining is not the penalty I assumed.** WC costs the CPU about 20%
+   (1887 -> 1506 Mpix/s), not a collapse. Write-combining buffers coalesce
+   sequential stores; WC is punishing for read-modify-write, and a `memcpy` into
+   it is neither.
+2. **The blitter is bandwidth-bound, and a copy costs twice a fill.** Same
+   engine, same surface: 3337 Mpix/s writing, 1274 Mpix/s reading *and* writing.
+   That is the whole difference between the two rows, and it is why the fill wins
+   and the copy loses.
+3. **So: fills to the blitter, copies stay on the CPU.** Not "GPU-accelerate the
+   compositor" — `fb_fill_px` yes, `blit_band` no. At 1920x1200 the present blit
+   costs ~9% of a 60 Hz frame on the CPU and would cost ~11% on the blitter.
+
+That also sharpens the earlier small-rectangle finding. The blitter is worth
+reaching for when the work is **large and write-only**; every other case is
+either a loss or inside the noise.
+
+### What the blitter is still worth having for
+
+The throughput ratio was never the strongest argument. zlOS's compositor runs on
+one core, and a fill the GPU performs costs the CPU *nothing* — it frees the core
+rather than speeding it up. A 2.2x win on fills that also hands a core back is
+worth the ring; a 1.18x loss on copies is not worth moving them.
+
 ## The experiment is written and waiting — three commands, in this order
 
 `kernel/hosttest/gpu_ring.c` + `gpu-ring-run.sh`. Everything that can be proven

@@ -267,6 +267,21 @@ static int bo_create(unsigned long long size, unsigned *handle)
     return 1;
 }
 
+static void *bo_map_mode(unsigned handle, size_t size, unsigned long long mode)
+{
+    struct drm_i915_gem_mmap_offset mo;
+    memset(&mo, 0, sizeof mo);
+    mo.handle = handle;
+    mo.flags = mode;
+    if (drm_ioctl(DRM_IOCTL_I915_GEM_MMAP_OFFSET, &mo)) {
+        fprintf(stderr, "  FAIL  MMAP_OFFSET(mode %llu): %s\n", mode, strerror(errno));
+        return NULL;
+    }
+    void *p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, drm_fd, (off_t)mo.offset);
+    if (p == MAP_FAILED) { fprintf(stderr, "  FAIL  mmap: %s\n", strerror(errno)); return NULL; }
+    return p;
+}
+
 static void *bo_map(unsigned handle, size_t size)
 {
     struct drm_i915_gem_mmap_offset mo;
@@ -704,9 +719,141 @@ out:
     return rc;
 }
 
+/* ---- --present: the comparison that actually decides this -----------------
+ *
+ * Everything measured so far copied between two write-back cached buffers,
+ * which flatters the CPU: fb.c's present blit writes into `fb_base`, and
+ * scanout memory is NOT write-back cached. A CPU store there goes out at
+ * write-combining speed with no cache to absorb it, while the GPU writes it at
+ * native speed and never touches a cache line.
+ *
+ * So this maps the destination WRITE-COMBINED - the same caching the real
+ * framebuffer has - and copies into it both ways. That is the present path as
+ * the compositor actually experiences it.
+ */
+static int do_present(void)
+{
+    const int PW = 1920, PH = 1200;
+    const unsigned ppitch = PW * 4;
+    const size_t bytes = (size_t)ppitch * PH;
+    unsigned dst_h = 0, src_h = 0, batch_h = 0;
+    unsigned *src = NULL, *batch = NULL;
+    unsigned char *dst_wc = NULL, *dst_wb = NULL;
+    int rc = 1;
+
+    if (!bo_create(bytes, &dst_h) || !bo_create(bytes, &src_h) ||
+        !bo_create(BATCH_BYTES, &batch_h)) goto out;
+
+    /* The SAME buffer, mapped twice: write-combined for the CPU-side timing,
+     * write-back only to fill the source. Two mappings of one object, so the
+     * comparison is not confounded by different memory. */
+    dst_wc = bo_map_mode(dst_h, bytes, I915_MMAP_OFFSET_WC);
+    src    = bo_map(src_h, bytes);
+    batch  = bo_map(batch_h, BATCH_BYTES);
+    if (!dst_wc || !src || !batch) goto out;
+
+    for (size_t i = 0; i < bytes / 4; i++) src[i] = (unsigned)(i * 2654435761u);
+
+    struct gpu_batch b;
+    gpu_batch_init(&b, batch, BATCH_BYTES / 4);
+    gpu_copy_rect(&b, DST_GPU_ADDR, ppitch, 0, 0, PW, PH, SRC_GPU_ADDR, ppitch, 0, 0);
+    gpu_batch_end(&b);
+
+    struct drm_i915_gem_exec_object2 obj[3];
+    struct drm_i915_gem_execbuffer2 eb;
+    memset(obj, 0, sizeof obj); memset(&eb, 0, sizeof eb);
+    obj[0].handle = dst_h;  obj[0].offset = DST_GPU_ADDR;
+    obj[0].flags = EXEC_OBJECT_PINNED | EXEC_OBJECT_SUPPORTS_48B_ADDRESS | EXEC_OBJECT_WRITE;
+    obj[1].handle = src_h;  obj[1].offset = SRC_GPU_ADDR;
+    obj[1].flags = EXEC_OBJECT_PINNED | EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+    obj[2].handle = batch_h; obj[2].offset = BATCH_GPU_ADDR;
+    obj[2].flags = EXEC_OBJECT_PINNED | EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+    eb.buffers_ptr = (unsigned long long)(uintptr_t)obj;
+    eb.buffer_count = 3;
+    eb.batch_len = gpu_batch_bytes(&b);
+    eb.flags = I915_EXEC_BLT | I915_EXEC_NO_RELOC;
+
+    /* A SECOND mapping of the SAME object, write-back, so the only variable
+     * between the two CPU rows is the caching mode. */
+    dst_wb = bo_map_mode(dst_h, bytes, I915_MMAP_OFFSET_WB);
+    if (!dst_wb) goto out;
+
+    const int N = 60;
+    double mpix = (double)PW * PH / 1e6;
+    printf("  surface       %dx%d 32bpp (%.1f MiB)\n", PW, PH, (double)bytes / (1024*1024));
+    printf("  the same GEM object is mapped twice - WC and WB - so the caching\n");
+    printf("  mode is the only thing that differs between the two CPU rows.\n\n");
+
+    /* GPU */
+    drm_ioctl(DRM_IOCTL_I915_GEM_EXECBUFFER2, &eb);
+    struct drm_i915_gem_wait w; memset(&w, 0, sizeof w);
+    w.bo_handle = dst_h; w.timeout_ns = 2000000000ll;
+    drm_ioctl(DRM_IOCTL_I915_GEM_WAIT, &w);
+    double g0 = now_s();
+    for (int i = 0; i < N; i++) {
+        if (drm_ioctl(DRM_IOCTL_I915_GEM_EXECBUFFER2, &eb)) { fprintf(stderr, "  exec failed\n"); goto out; }
+    }
+    drm_ioctl(DRM_IOCTL_I915_GEM_WAIT, &w);
+    double g1 = now_s();
+    double gpu_ms = (g1 - g0) * 1e3 / N;
+
+    /* CPU into write-combined (what fb_base really is) and into write-back. */
+    double c0 = now_s();
+    for (int i = 0; i < N; i++) memcpy(dst_wc, src, bytes);
+    double c1 = now_s();
+    double cpu_wc_ms = (c1 - c0) * 1e3 / N;
+
+    double d0 = now_s();
+    for (int i = 0; i < N; i++) memcpy(dst_wb, src, bytes);
+    double d1 = now_s();
+    double cpu_wb_ms = (d1 - d0) * 1e3 / N;
+
+    /* And a GPU FILL of the same area, to separate "the blitter is slow" from
+     * "a copy costs twice the memory traffic of a fill". */
+    struct gpu_batch fb2;
+    gpu_batch_init(&fb2, batch, BATCH_BYTES / 4);
+    gpu_fill_rect(&fb2, DST_GPU_ADDR, ppitch, 0, 0, PW, PH, FILL_COLOR);
+    gpu_batch_end(&fb2);
+    eb.batch_len = gpu_batch_bytes(&fb2);
+    drm_ioctl(DRM_IOCTL_I915_GEM_EXECBUFFER2, &eb);
+    drm_ioctl(DRM_IOCTL_I915_GEM_WAIT, &w);
+    double f0 = now_s();
+    for (int i = 0; i < N; i++) drm_ioctl(DRM_IOCTL_I915_GEM_EXECBUFFER2, &eb);
+    drm_ioctl(DRM_IOCTL_I915_GEM_WAIT, &w);
+    double f1 = now_s();
+    double gpu_fill_ms = (f1 - f0) * 1e3 / N;
+
+    printf("    blitter COPY   %7.3f ms  %8.0f Mpix/s   (reads + writes)\n",
+           gpu_ms, mpix / (gpu_ms / 1e3));
+    printf("    blitter FILL   %7.3f ms  %8.0f Mpix/s   (writes only)\n",
+           gpu_fill_ms, mpix / (gpu_fill_ms / 1e3));
+    printf("    CPU memcpy WC  %7.3f ms  %8.0f Mpix/s   <- what fb.c actually does\n",
+           cpu_wc_ms, mpix / (cpu_wc_ms / 1e3));
+    printf("    CPU memcpy WB  %7.3f ms  %8.0f Mpix/s\n",
+           cpu_wb_ms, mpix / (cpu_wb_ms / 1e3));
+    double cpu_ms = cpu_wc_ms;
+    printf("\n    copy: %s by %.2fx\n", gpu_ms < cpu_ms ? "blitter wins" : "CPU wins",
+           gpu_ms < cpu_ms ? cpu_ms / gpu_ms : gpu_ms / cpu_ms);
+    printf("    fill: %s by %.2fx\n", gpu_fill_ms < cpu_ms ? "blitter wins" : "CPU wins",
+           gpu_fill_ms < cpu_ms ? cpu_ms / gpu_fill_ms : gpu_fill_ms / cpu_ms);
+    printf("    frame budget at 60 Hz is 16.67 ms; present alone costs %.1f%% (GPU) vs %.1f%% (CPU)\n",
+           gpu_ms / 16.67 * 100, cpu_ms / 16.67 * 100);
+    warn_if_busy();
+    rc = 0;
+out:
+    if (dst_wc) munmap(dst_wc, bytes);
+    if (dst_wb) munmap(dst_wb, bytes);
+    if (src) munmap(src, bytes);
+    if (batch) munmap(batch, BATCH_BYTES);
+    if (dst_h) bo_close(dst_h);
+    if (src_h) bo_close(src_h);
+    if (batch_h) bo_close(batch_h);
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
-    int want_probe = 0, want_blit = 0, want_bench = 0, want_sweep = 0, want_negative = 0, want_copy = 0;
+    int want_probe = 0, want_blit = 0, want_bench = 0, want_sweep = 0, want_negative = 0, want_copy = 0, want_present = 0;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--probe")) want_probe = 1;
         else if (!strcmp(argv[i], "--blit")) want_blit = 1;
@@ -714,9 +861,10 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--sweep")) want_sweep = 1;
         else if (!strcmp(argv[i], "--negative")) want_negative = 1;
         else if (!strcmp(argv[i], "--copy")) want_copy = 1;
+        else if (!strcmp(argv[i], "--present")) want_present = 1;
         else { fprintf(stderr, "usage: %s [--probe|--blit|--bench|--sweep|--negative]\n", argv[0]); return 2; }
     }
-    if (!want_probe && !want_blit && !want_sweep && !want_negative && !want_copy) { want_probe = 1; want_blit = 1; }
+    if (!want_probe && !want_blit && !want_sweep && !want_negative && !want_copy && !want_present) { want_probe = 1; want_blit = 1; }
 
     if (!open_render_node()) return 77;   /* 77 = skip, not fail: no GPU here */
 
@@ -734,6 +882,10 @@ int main(int argc, char **argv)
     if (want_copy && rc == 0) {
         printf("\ncopy (the present path - back buffer to scanout):\n");
         rc = do_copy();
+    }
+    if (want_present && rc == 0) {
+        printf("\npresent (back buffer -> WRITE-COMBINED scanout, as fb.c really does it):\n");
+        rc = do_present();
     }
     if (want_sweep && rc == 0) {
         printf("\nsweep:\n");
