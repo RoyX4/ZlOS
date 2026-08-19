@@ -48,6 +48,11 @@ echo "built ./termwrap      (run: ./termwrap)"
 gcc -O2 -Wall -Wextra -o palette palette.c ../ui.c
 echo "built ./palette       (run: ./palette)"
 
+# The reference's motion curves. Pure math, no framebuffer, no window table -
+# so this runs in milliseconds and is the cheapest gate in the tree.
+gcc -O2 -Wall -Wextra -o easetest easetest.c ../ease.c -lm
+echo "built ./easetest      (run: ./easetest)"
+
 # The proportional text engine, asserted. fbbench times fb.c and browsershot
 # photographs it; neither NOTICES when a style flag stops changing the pixels.
 # Both regressions this gate exists for shipped green: italic silently rendered
@@ -71,10 +76,10 @@ echo "built ./inputtest_hid (run: ./inputtest_hid)"
 # sliver of an old window left on the wallpaper, a click landing on the window
 # underneath, a drag that stops when the pointer outruns the frame. None of
 # those show in a screenshot taken a frame later.
-gcc -O2 -w -o wmtest wmtest.c ../wm.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest        (run: ./wmtest)"
-gcc -O2 -w -o wmtest_feel wmtest_feel.c ../wm.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest_feel wmtest_feel.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest_feel"
 

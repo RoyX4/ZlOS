@@ -7,6 +7,49 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-20 — feat(oracle): boot at 1280x800, and four complementary fidelity measures (6c0e0d6)
+
+`claude/compassionate-curie-a0599c` · 9 files changed, 1019 insertions(+), 74 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>9 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/SOURCES`
+- `kernel/ease.c`
+- `kernel/ease.h`
+- `kernel/hosttest/easetest`
+- `kernel/hosttest/easetest.c`
+- `kernel/oracle/animate.py`
+- `kernel/oracle/diff-regions.py`
+- `kernel/wm.c`
+
+</details>
+
+## 2026-08-20 — feat(refrender): shots.sh captures all 54 reference frames, plus README (117e53b)
+
+`claude/compassionate-curie-a0599c` · 2 files changed, 244 insertions(+), 4 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>2 file(s)</summary>
+
+- `kernel/refrender/README.md`
+- `kernel/refrender/support.js`
+
+</details>
+
 ## 2026-08-20 — feat(design): the palette gate now checks the chain, not itself (c4c8581)
 
 `claude/compassionate-curie-a0599c` · 15 files changed, 1310 insertions(+), 233 deletions(-)

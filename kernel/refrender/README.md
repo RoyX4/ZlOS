@@ -153,6 +153,26 @@ duplicate both as state defaults, so nothing currently reads the props.
   range widgets described in `data-props`. Irrelevant to rendering.
 - **Comments in the template.** Dropped, like the zl lexer drops them.
 
+## The weakest link, stated up front
+
+This is a reimplementation. The original `support.js` does not exist, so
+**nothing here can be proven identical to it** — only self-consistent. The
+evidence that it is right is: every one of the 594 distinct template expressions
+is a plain dotted path, so nothing is being approximated; zero uninterpolated
+`{{` survive into the DOM in any of the 54 shots; and all 54 render as coherent,
+correctly-fonted, correctly-laid-out frames.
+
+The single most likely place for a **silent** divergence is **whitespace
+collapsing**. The rule implemented is Babel's JSX rule, chosen because the
+original was evidently a React template compiler — but that is an inference, not
+a measurement, and it is unfalsifiable without the original. If a later pixel
+diff shows text sitting a few pixels off inside a flex row and nothing else
+explains it, suspect this first: `cleanText()` in `support.js`.
+
+Second most likely: `style-hover` using `!important`. It is correct for the
+screenshots (nothing is hovered) but is a stronger rule than the original
+probably used.
+
 ## What is missing from ds.html itself, not from the shim
 
 This is the important caveat and it is not a shim defect. `ds.html` dynamically

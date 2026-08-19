@@ -96,7 +96,7 @@ def crop(img, rect):
     return img[y0:y1, x0:x1]
 
 
-# ---- the three measures -----------------------------------------------------
+# ---- the four measures ------------------------------------------------------
 def colour_error(a, b):
     """Mean absolute RGB error, 0..1. 255 per channel is the worst case."""
     return float(np.abs(a - b).mean() / 255.0)
@@ -167,14 +167,21 @@ def hue_distance(a, b):
         return float(np.rad2deg(np.arctan2(np.sin(rad).mean(),
                                            np.cos(rad).mean())) % 360.0), n
 
-    ha, na = dominant(a)
-    hb, nb = dominant(b)
+    ha, _ = dominant(a)
+    hb, _ = dominant(b)
+    # The reason matters as much as the number, and 1.0 means two different
+    # things: "both render an accent and they are opposite hues" is a palette
+    # bug, while "one renders an accent and the other renders none" is a
+    # missing element. Fifty agents reading one column would conflate them.
     if ha is None and hb is None:
-        return 0.0
-    if ha is None or hb is None:
-        return 1.0
+        return 0.0, "neither has an accent"
+    if hb is None:
+        return 1.0, "zlOS has an accent, the reference has none"
+    if ha is None:
+        return 1.0, "the reference has an accent, zlOS has none"
     d = abs(ha - hb) % 360.0
-    return float(min(d, 360.0 - d) / 180.0)
+    return (float(min(d, 360.0 - d) / 180.0),
+            f"zlOS hue {ha:.0f} deg vs reference {hb:.0f} deg")
 
 
 def _gradient(img):
@@ -302,7 +309,7 @@ def selftest():
     bad = []
     for name, a, b, expect in cases:
         got = dict(colour=colour_error(a, b), palette=palette_distance(a, b),
-                   hue=hue_distance(a, b), structure=structure_distance(a, b))
+                   hue=hue_distance(a, b)[0], structure=structure_distance(a, b))
         print(f"{name:<26}{got['colour']:>9.3f}{got['palette']:>9.3f}"
               f"{got['hue']:>9.3f}{got['structure']:>9.3f}   {expect}")
         # The assertion is DISCRIMINATION, not magnitude, and that distinction
@@ -367,13 +374,14 @@ def main():
             continue
         col = colour_error(ca, cb)
         pal = palette_distance(ca, cb)
-        hue = hue_distance(ca, cb)
+        hue, hue_why = hue_distance(ca, cb)
         st = structure_distance(ca, cb)
         worst = max(col, pal, hue, st)
         rows.append(dict(id=r["id"], kind=r["kind"], rect=r["rect"],
                          visible=r.get("visible", True),
                          colour=round(col, 4), palette=round(pal, 4),
-                         hue=round(hue, 4), structure=round(st, 4),
+                         hue=round(hue, 4), hue_reason=hue_why,
+                         structure=round(st, 4),
                          score=round(worst, 4), verdict=band(worst),
                          worst_measure=max(
                              (("colour", col), ("palette", pal),
@@ -417,6 +425,8 @@ def main():
                   f"{d['palette']:>9.3f}{d['hue']:>7.3f}{d['structure']:>8.3f}"
                   f"{d['score']:>8.3f}  {d['verdict']:<9} "
                   f"{d['worst_measure']:<10} {d['derivation']}")
+            if d["worst_measure"] == "hue":
+                print(f"{'':<24}  -> {d['hue_reason']}")
         if rows:
             print("-" * 108)
             print(f"{'MEAN':<24}{'':<22}"
