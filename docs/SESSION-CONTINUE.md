@@ -89,7 +89,10 @@ is one rung up: `smp_go()` appears exactly once in `kernel.zl`, under `cmd == 42
 (the `*` key of the old text shell), so `smp_start()` never runs on a desktop
 boot. Follow the instruction as written and you find `fb_par_hook` properly
 called, conclude the path is live, and stop. Also worth knowing before you
-switch it on: **no gate covers more than one core** — `verify.sh` boots `-smp 1`.
+switch it on: **only one of the seven boot gates runs more than one core.**
+`verify-efi.sh` boots `-smp 2`; the other six pass no `-smp` at all and get
+QEMU's default of one. (This file first said "no gate covers more than one
+core", which was wrong - checked with `grep -o '\-smp [0-9]*' kernel/verify*.sh`.)
 
 ## Open, diagnosed, not fixed
 

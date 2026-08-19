@@ -191,7 +191,11 @@ Two things to know before switching it on, neither of them blocking:
 - `kernel.zl:1874`'s own text says *"they park immediately: nothing is
   lock-protected yet"*. The APs' only job would be `smp_band_dispatch`; that
   needs to be true, not assumed.
-- **No gate covers more than one core.** `verify.sh` boots `-smp 1`, so a
+- **Almost no gate covers more than one core.** Corrected 2026-08-19: this
+  first said "no gate", and `verify-efi.sh` boots `-smp 2`. The rest run one
+  core, and not by an explicit `-smp 1` either - they pass no `-smp` at all and
+  QEMU defaults to one. So SMP band rendering is exercised by exactly one of the
+  seven boot gates, the EFI one, and a
   regression here is invisible to every boot gate in the repo.
 
 ---
