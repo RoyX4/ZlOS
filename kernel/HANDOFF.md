@@ -830,9 +830,20 @@ admission; the list was already wrong when it was written.
 cd kernel/hosttest && ./memmap-guard-test.sh    # seconds, no QEMU, no hardware
 ```
 
-12 checks: the six owners compile, five deliberate breaks are each refused by
-the build (including a replay of this exact bug), and the 34 addresses that were
-rebased onto the header are proven identical to the literals they replaced.
+**That paragraph said "12 checks" and the script was scoring 10 passed, 2
+failed** — verified against a clean `git archive HEAD` tree, not the working
+copy. Both failures were the same staleness: `HI_APSTK` (the AP stacks) was
+inserted between `HI_BACK` and `HI_SCHED`, `BACK_LIMIT` became
+`HI_APSTK - HI_BACK` = 40 MiB, and neither the break that perturbs it nor the
+literal that pins it followed. So the script whose whole job is to prove
+guards are not decorations had a decoration of its own, and its own failure
+message — *"the map was broken and NOTHING complained"* — was on screen for
+anyone who ran it.
+
+It is **20 checks** now, all green: one baseline compile of ten owners, ten
+deliberate breaks each refused by the build (including replays of both real
+collisions), and nine files whose rebased addresses are proven identical to the
+literals they replaced.
 **A `_Static_assert` nobody has watched fail is a decoration, not a guard** —
 that is what the negative half of that script is for.
 **And the corollary nobody had written down: NOT ONE GATE passes `-m`.**
@@ -841,6 +852,10 @@ is **measured** at exactly 128 MiB (`query-memory-size-summary` says
 `base-memory: 134217728`). So on every gate this project runs, the whole
 high-RAM map is unbacked, and **a new fixed buffer placed above 128 MiB is dead
 code that will still pass review**. That is why the program arena is at 8 MiB.
+It is also why the browser's storage region (`HI_DOM`) is at **80 MiB** and not
+at some round number above `HI_BACK`: 80..96 MiB is under the 128 MiB every
+gate actually boots with, so `verify.sh` exercises it rather than stepping
+around it.
 
 ## The RAM floor — 1 GiB, and what it cost
 
@@ -891,6 +906,17 @@ The full map — every base and end re-grepped from the file that owns it, the
 kernel image end measured, the arithmetic for where a new buffer may go, and one
 collision `fb.c`'s map does not list (the SMP AP stacks at 168 MiB, inside
 `sp_buf`'s declared span) — is `kernel/docs/memory-map.md`.
+
+**AND THERE WERE FIVE MAPS, NOT TWO.** Placing the browser's storage meant
+grepping every 7- and 8-digit hex literal in the tree, and `memmap.h` did not
+know about three of them: `virtio_net.c`'s virtqueues at **64 MiB** (which is
+exactly where the new region was going), `intel.c`'s EDID scratch at
+**0x0C980000** — 9.5 MiB inside `fb.c`'s cached-blur arena, a real overlap of
+the same shape as the `HID_BUF` one above — and `arena.c`'s restated
+`HI_IMG_BASE`, stale by 16 MiB since the picture arena moved. All three are
+declared now, and the ordering chain runs unbroken from 8 MiB to 256 where it
+used to start at 48. See
+[`docs/browser-storage-run.md`](docs/browser-storage-run.md) §7.
 
 ## Verify before believing anything
 

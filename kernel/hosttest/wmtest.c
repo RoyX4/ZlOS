@@ -73,7 +73,20 @@ unsigned int idt_ticks(void) { return fake_ticks; }
 static unsigned long long fake_tsc = 0;
 unsigned long long cpu_tsc(void) { fake_tsc += 2000000; return fake_tsc; }
 unsigned int cpu_tsc_khz(void) { return 2000000; }
-int idt_scan(void)      { return 0; }
+/* A SCANCODE QUEUE THE TEST CAN FILL. It was a constant 0, which meant every
+ * keyboard path through wm.c was unreachable from this harness - and that is
+ * how Alt+Tab shipped comparing against the wrong constant and was never
+ * caught. Feeding real PS/2 set-1 scancodes drives the REAL input.c, so what
+ * is under test is the whole chain from scancode to focus change and not a
+ * mock of it. */
+#define SCQ 32
+static int scq[SCQ], scq_head, scq_tail;
+static void scan_push(int sc) { if ((scq_tail + 1) % SCQ != scq_head) { scq[scq_tail] = sc; scq_tail = (scq_tail + 1) % SCQ; } }
+int idt_scan(void)
+{
+    if (scq_head == scq_tail) return 0;
+    int v = scq[scq_head]; scq_head = (scq_head + 1) % SCQ; return v;
+}
 int xhci_key(void)      { return 0; }
 int ser_rx(void)        { return -1; }   /* no UART in the harness */
 
@@ -752,6 +765,44 @@ int main(void)
     wm_geometry(sw2, &grx, &gry, &rww, &rhh);
     ok("the title bar still MOVES a very short window", grx != 500 || gry != 500);
     pointer(660, 600, 0);
+
+    /* ---- Alt+Tab, from a scancode ------------------------------------
+     * THE BUG THIS EXISTS FOR: wm.c carried its own copy of the keycode
+     * numbers, that copy did not include KEY_TAB, and the handler was written
+     * `code == '\t'` - comparing against 9 while every producer sends
+     * KEY_TAB = 0x103. Alt+Tab had therefore never worked on any keyboard,
+     * and it read as implemented: a handler, a comment, and a correct
+     * cycle_focus() underneath.
+     *
+     * Driven as SCANCODES through the real input.c, because the bug was in the
+     * translation between the two layers and a test that called cycle_focus()
+     * directly would have passed throughout. */
+    {
+        printf("\nAlt+Tab\n");
+        int w1 = wm_open(0, "one", 40, 40, 200, 150);
+        int w2 = wm_open(0, "two", 80, 80, 200, 150);
+        wm_focus(w2);
+        int before = wm_focused();
+        ok("two windows, the second focused", before == w2);
+
+        scan_push(0x38);        /* left alt down */
+        scan_push(0x0F);        /* tab down      */
+        scan_push(0x8F);        /* tab up        */
+        scan_push(0xB8);        /* left alt up   */
+        for (int i = 0; i < 8; i++) frame();
+
+        ok("Alt+Tab moved the focus", wm_focused() != before);
+        ok("...and it moved it to the other window", wm_focused() == w1);
+
+        /* and Tab WITHOUT alt must not switch windows - otherwise the fix is
+         * "any tab cycles", which breaks typing a tab into anything */
+        int mid = wm_focused();
+        scan_push(0x0F); scan_push(0x8F);
+        for (int i = 0; i < 8; i++) frame();
+        ok("Tab alone does not switch windows", wm_focused() == mid);
+
+        wm_close(w1); wm_close(w2);
+    }
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;

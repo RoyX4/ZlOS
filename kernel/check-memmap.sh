@@ -117,7 +117,7 @@ REGIONS=(
 
 mapfile -t SORTED < <(printf '%s\n' "${REGIONS[@]}" | sort -t: -k2 -n)
 
-echo "  zlOS fixed-address map:"
+echo "  zlOS fixed-address map (kernel.zl's block ONLY - see the note below):"
 for r in "${SORTED[@]}"; do
     IFS=: read -r n s z <<<"$r"
     printf '    0x%08X .. 0x%08X  %-9s %7d bytes\n' "$s" "$((s + z))" "$n" "$z"
@@ -148,3 +148,19 @@ fi
 
 [ "$fail" = 0 ] || exit 1
 echo "  OK: no overlaps, $((HIST_STRIDE - LINE_MAX)) bytes spare in each history slot"
+
+# THIS IS NOT THE WHOLE MAP, AND READING IT AS THOUGH IT WERE COST A P1.
+# There are TWO fixed-address maps in this kernel:
+#   this one   - kernel.zl's block at 32 MiB, derived from the source above
+#   memmap.h   - the high-RAM regions (fb.c's back buffer, the DMA arenas,
+#                png.c's decoded pictures), checked by _Static_assert
+# A picture arena was placed at 0x02000000 because every assert in memmap.h
+# passed - and it landed directly on SNAKE_X, FS_META, FS_DATA, LINE_BUF and
+# HIST_BUF, all of which THIS script had just printed in the same session.
+# The output was read and not joined up. memmap.h now declares
+# ZL_LOW_BASE/ZL_LOW_END so the compiler checks across the boundary, but a
+# human reading either map alone still sees half of one.
+echo
+echo "  NOTE: this covers kernel.zl only. The high-RAM regions (fb.c, the DMA"
+echo "        arenas, png.c's pictures) live in memmap.h and are checked by"
+echo "        _Static_assert there. Neither map is the whole map."

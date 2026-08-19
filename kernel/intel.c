@@ -32,6 +32,8 @@
  *     4. full cold-start modeset (DPLL/DDI/link/panel)  <- NOT attempted
  */
 
+#include "memmap.h"
+
 typedef unsigned int   u32;
 typedef unsigned short u16;
 typedef unsigned char  u8;

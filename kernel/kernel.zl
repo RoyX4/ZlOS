@@ -2677,6 +2677,7 @@ fn run_command(cmd, arg) {
     if cmd == 78 { return net_gate() }    # N - the network card, and an ARP probe
     if cmd == 87 { return web_gate() }    # W - TCP + HTTP/1.0 against a real server
     if cmd == 69 { return real_gate() }   # E - a real website, by name, off the internet
+    if cmd == 83 { return tls_gate() }    # S - the same, over verified HTTPS
     if cmd == 114 {                       # r - reboot
         color(C_YELLOW)  print("  rebooting...")
         beep(1568, 6)  beep(784, 10)
@@ -3095,6 +3096,84 @@ fn dns_gate() {
 # The whole stack in one command: resolve a name we did not choose, open a
 # connection to whatever address came back, fetch over HTTP/1.0, parse the
 # markup and lay it out. Every layer under this was written this session.
+fn tls_gate() {
+    color(C_CYAN)  print("  a real website over HTTPS")
+    color(C_GREY)
+    if ip_live() == 0 {
+        print("    the network is not up - run net first")
+        return 0
+    }
+    dns_up(NET_DNS)
+    # www.wikipedia.org is ~120 KB and chains to ISRG Root X2, which is the
+    # root roots.c carries. A page that does not chain to it MUST be refused,
+    # and that refusal is the point of this gate as much as the success is.
+    print("    GET https://www.wikipedia.org/   (verified, not just encrypted)")
+    br_go("https://www.wikipedia.org/")
+    # A TIME BUDGET, NOT AN ITERATION BUDGET, and that distinction is why the
+    # first version of this gate reported a failure that was not one.
+    #
+    # real_gate's `while i < 900000` works for a 1 KB page over plain HTTP:
+    # the ticks are cheap and 900000 of them outlast the fetch. HTTPS is a
+    # different shape of wait - a TLS handshake, then SIX ECDSA scalar
+    # multiplications through shift-and-add modular arithmetic under TCG, then
+    # 120 KB of transfer. The iterations ran out while the work was still in
+    # flight, and the gate called that "HTTPS FAILED" when nothing had failed.
+    #
+    # ticks() is 100 Hz, so a tick is 10 ms and 9000 of them is 90 seconds.
+    tgs0 = ticks()
+    tgt = tgs0 + 9000
+    tgs = 7
+    while ticks() < tgt {
+        br_tick()
+        tgs = br_state()
+        # 4 is fetching the document and 7 is resolving its name. Both mean
+        # keep pumping; anything else has finished, one way or another.
+        if tgs == 4 { } else {
+            if tgs == 7 { } else { tgt = 0 }
+        }
+    }
+    put("    took ")  put((ticks() - tgs0) / 100)
+    print(" seconds")
+    # 8 IS SUCCESS, and getting that wrong reported a working fetch as broken.
+    # State 8 is "the page is up, its pictures are arriving" - browser.c moves
+    # to it the moment the DOCUMENT has landed and it starts on the
+    # stylesheets and images the page asked for. This gate is about the
+    # document, so 8 and 0 are the same answer to the question it asks; the
+    # difference is only whether the subresources have finished too, and under
+    # TCG each of those is its own TLS handshake and can outlast any budget.
+    #
+    # The state was added this session and this test was not revisited, so it
+    # reported "HTTPS FAILED, browser status 8" for a fetch that had entirely
+    # succeeded. Adding a state means revisiting everything that enumerates
+    # states - there were two loops and this test, and only the loops are
+    # obvious.
+    # Written as two tests rather than `tgs == 0 or tgs == 8`, because this
+    # language's precedence for `or` against `==` is not something to find out
+    # from a gate that reports a working fetch as broken.
+    tgok = 0
+    if tgs == 0 { tgok = 1 }
+    if tgs == 8 { tgok = 1 }
+    if tgok == 1 {
+        color(C_GREEN)  put("    HTTPS OK: ")
+        put(br_h())  print(" pixels of laid-out page")
+        # THE PAGE'S OWN NUMBERS, not http.c's current ones. By the time this
+        # prints, http.c may be describing a stylesheet or a picture the page
+        # asked for, so it reported "HTTP 0   body 0 bytes" for a fetch that
+        # had worked perfectly. The raw http gate below still reads http.c
+        # directly, because there it IS the subject.
+        color(C_GREY)  put("    HTTP ")  put(br_code())
+        put("   body ")  put(br_doclen())  print(" bytes")
+        put("    title: ")  print(br_title())
+        color(C_GREY)  return 0
+    }
+    # WHERE it stopped, not just that it did. 4 is still fetching (the budget
+    # ran out), 2 is a TLS or certificate refusal, 3 is DNS, 5 is the fetch.
+    color(C_RED)  put("    HTTPS FAILED, browser status ")  put(br_state())
+    print("   (4 = still fetching, 2 = refused, 3 = no DNS, 5 = failed)")
+    put("    the browser says: ")  print(br_why())
+    color(C_GREY)  return 0
+}
+
 fn real_gate() {
     color(C_CYAN)  print("  a real website")
     color(C_GREY)
@@ -3116,11 +3195,20 @@ fn real_gate() {
             if rgs == 7 { rgi = rgi + 1 } else { rgi = 900000 }
         }
     }
-    if rgs == 0 {
+    # 8 IS SUCCESS HERE TOO - see the note in the https gate above.
+    rgok = 0
+    if rgs == 0 { rgok = 1 }
+    if rgs == 8 { rgok = 1 }
+    if rgok == 1 {
         color(C_GREEN)  put("    fetched and rendered: ")
         put(br_h())  print(" pixels of laid-out page")
-        color(C_GREY)  put("    HTTP ")  put(http_code())
-        put("   body ")  put(http_len())  print(" bytes")
+        # THE PAGE'S OWN NUMBERS, not http.c's current ones. By the time this
+        # prints, http.c may be describing a stylesheet or a picture the page
+        # asked for, so it reported "HTTP 0   body 0 bytes" for a fetch that
+        # had worked perfectly. The raw http gate below still reads http.c
+        # directly, because there it IS the subject.
+        color(C_GREY)  put("    HTTP ")  put(br_code())
+        put("   body ")  put(br_doclen())  print(" bytes")
         put("    title: ")  print(br_title())
         color(C_CYAN)  print("    press w for the desktop - it is on screen")
         color(C_GREY)  return 0
@@ -3198,6 +3286,53 @@ fn mac_print(which) {
         mpi = mpi + 1
     }
     return 0
+}
+
+# THE NETWORK COMES UP AT BOOT, WITHOUT BEING ASKED.
+#
+# It used to require typing `net` (or pressing N), and the browser said so:
+# "the network is not up - run the network gate first". That is a fine message
+# for a bring-up GATE and a terrible one for a browser - a person who opens a
+# browser has already said what they want, and being told to go and run a
+# diagnostic first is the shape of a demo rather than a desktop. Every other
+# device this kernel drives comes up at boot; the card was the exception only
+# because its bring-up started life as a test.
+#
+# QUIET, AND NOT FATAL. net_gate() prints a page of diagnostics and runs twenty
+# pings, which is right for a gate and wrong for a boot. This does the four
+# steps that actually matter - find the card, hand it its arena, bring the IP
+# stack up, point it at a resolver - reports ONE line, and returns 0 without
+# complaint when there is no card. Most gates in this repo boot with no
+# -device virtio-net-pci at all, and a boot that printed an error for a machine
+# with no network would make every one of those transcripts noisy.
+#
+# net_gate() is untouched and still does the full diagnostic; it now finds the
+# link already up and says so, which is the branch ip_live() already handled.
+fn net_boot() {
+    # NO CARD IS SILENT; A CARD THAT FAILS IS NOT. Most gates here boot with no
+    # -device virtio-net-pci at all, so complaining about a machine that simply
+    # has no network would make every one of those transcripts noisy. But a
+    # card that IS present and does not come up is a fault, and a boot that
+    # says nothing about it is how "the browser cannot reach the network"
+    # becomes a mystery later.
+    if net_find() < 0 { return 0 }
+    if net_ram() == 0 {
+        color(C_RED)  print("  network: the DMA arena is not backed by RAM (needs -m 256)")
+        color(C_GREY) return 0
+    }
+    if net_up() == 0 {
+        color(C_RED)  print("  network: the card refused the feature handshake")
+        color(C_GREY) return 0
+    }
+    if ip_up(NET_ME, NET_MASK, NET_GW) == 0 {
+        color(C_RED)  print("  network: the IP stack would not come up")
+        color(C_GREY) return 0
+    }
+    dns_up(NET_DNS)
+    color(C_GREEN)  put("  network: ")
+    color(C_GREY)   put("10.0.2.15/24 via 10.0.2.2, resolver 10.0.2.3")
+    print("")
+    return 1
 }
 
 fn net_gate() {
@@ -4359,6 +4494,27 @@ fn wm_boot_start() {
     color(C_GREY)   put(wm_n())  put(" windows, shell client ")
     put(wm_cx(shell_win))  put(",")  put(wm_cy(shell_win))  put(" ")
     put(wm_cw(shell_win))  put("x")  print(wm_ch(shell_win))
+    # ...AND EVERY WINDOW'S RECTANGLE, WHICH THIS PATH WAS NOT DOING.
+    #
+    # The comment above records moving the compositor marker out of
+    # wm_session() and into the boot path, because wm_session() is the `w`
+    # command and nothing with a framebuffer reaches it. That move was HALF
+    # DONE: the marker came here, the wm_report loop underneath it did not.
+    #
+    # So wm_report's own header - "printed when the session starts AND whenever
+    # a window opens afterwards" - described a thing that on the shipped boot
+    # path happened NEVER, and every pointer gate that reads those lines was
+    # aiming at nothing. probe-drag.py without --grab exits with "the
+    # compositor reported no window rects", and probe-urlbar.py found it by
+    # doing exactly that.
+    #
+    # A written rationale nobody ran is a guess with a citation. Same marker,
+    # same loop, emitted where the windows actually appear.
+    wi = 0
+    while wi < wm_n() {
+        wm_report(wi)
+        wi = wi + 1
+    }
 
     return 1
 }

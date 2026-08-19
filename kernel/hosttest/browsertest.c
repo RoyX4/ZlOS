@@ -20,9 +20,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/mman.h>
 
 #include "../ui.h"
+#include "../memmap.h"
 #include "../net.h"
+#include "../dns.h"
+#include "../layout.h"
 
 static int fails, checks;
 #define CHECK(cond, ...) do {                                    \
@@ -46,11 +50,13 @@ int  browser_key(int code);
 int  browser_url_focus(void);
 int  browser_status(void);
 int  browser_truncated(void);
+int  browser_doc_cap(void);
 int  browser_tick(void);
 int  browser_scroll(void);
 int  browser_scroll_by(int d);
 int  browser_height(void);
 int  browser_link_at(int cx, int cy);
+int  browser_click(int cx, int cy, int btn);
 void browser_draw(int x, int y, int w, int h, int focused);
 const char *browser_title(void);
 
@@ -64,6 +70,8 @@ const char *browser_title(void);
 #define BR_FETCHING  4
 #define BR_FAILED    5
 #define BR_BAD_TYPE  6
+#define BR_RESOLVING 7
+#define BR_IMAGES    8
 
 /* ---- the clock and the drawing, stubbed ------------------------------------- */
 static unsigned v_ticks;
@@ -92,6 +100,13 @@ void fb_clip(int x, int y, int w, int h) { (void)x;(void)y;(void)w;(void)h; }
 void fb_clip_none(void) { }
 void fb_text_prop(int px, int py, const char *s, unsigned int fg)
 { (void)px;(void)py;(void)s;(void)fg; }
+/* The picture blit, stubbed like every other pixel here. What THIS harness
+ * asserts about an image is that layout gave the run its real size and an
+ * arena slot; whether the pixels land correctly is fbtext's job, and it
+ * mutation-tests the scaling and the alpha against a real framebuffer. */
+void fb_image(int px, int py, int w, int h,
+              const unsigned int *src, int sw, int sh)
+{ (void)px;(void)py;(void)w;(void)h;(void)src;(void)sw;(void)sh; }
 int  fb_text_prop_h(void) { return 16; }
 int  fb_prop_em(void)     { return 16; }
 int  fb_text_prop_w(const char *s) { int n=0; while (s[n]) n++; return n * 8; }
@@ -118,50 +133,79 @@ static int fake_send(const net_u8 *f, int len)
 }
 static int fake_poll(net_u8 *out, int max) { (void)out; (void)max; return 0; }
 
-/* hands over one seeded frame, then behaves like fake_poll */
-static unsigned char seed_frame[42];
-static int seed_served;
+/* Hands over the seeded frames, then behaves like fake_poll. TWO of them, not
+ * one: the resolver is a different host from the gateway (on QEMU it is .3
+ * where the gateway is .2) and dns_start ARP-resolves it separately before it
+ * will send a query at all. With only the gateway seeded, dns_start returns 0
+ * and every lookup reports "no resolver" - which is a harness gap that reads
+ * exactly like a browser bug. */
+static const unsigned char OUR_MAC_[6] = { 0x52,0x54,0x00,0x12,0x34,0x56 };
+#define SEED_MAX 4
+static unsigned char seed_frames[SEED_MAX][42];
+static int seed_n, seed_served;
 static int seed_poll(net_u8 *out, int max)
 {
     (void)max;
-    if (seed_served) return 0;
-    seed_served = 1;
-    memcpy(out, seed_frame, 42);
+    if (seed_served >= seed_n) return 0;
+    memcpy(out, seed_frames[seed_served++], 42);
     return 42;
+}
+
+/* an ARP reply from `ip` with a made-up MAC, into the next seed slot */
+static void seed_arp(unsigned ip, unsigned char last)
+{
+    if (seed_n >= SEED_MAX) return;
+    unsigned char *a = seed_frames[seed_n++];
+    memset(a, 0, 42);
+    memcpy(a, OUR_MAC_, 6);
+    a[6]=0x52; a[7]=0x55; a[8]=0x0A; a[9]=0x00; a[10]=0x02; a[11]=last;
+    a[12]=0x08; a[13]=0x06;
+    a[15]=1; a[16]=0x08; a[18]=6; a[19]=4; a[21]=2;
+    memcpy(a+22, a+6, 6);
+    a[28]=(unsigned char)(ip >> 24); a[29]=(unsigned char)(ip >> 16);
+    a[30]=(unsigned char)(ip >> 8);  a[31]=(unsigned char)ip;
+    memcpy(a+32, OUR_MAC_, 6);
+    a[38]=10; a[39]=0; a[40]=2; a[41]=15;
 }
 
 static const unsigned char OUR_MAC[6] = { 0x52,0x54,0x00,0x12,0x34,0x56 };
 #define OUR_IP 0x0A00020Fu
 #define GW_IP  0x0A000202u
+#define DNS_IP 0x0A000203u     /* QEMU's resolver: .3, not the gateway */
 
 static void net_up(void)
 {
     net_link(fake_send, fake_poll, OUR_MAC);
     net_config(OUR_IP, 0xFFFFFF00u, GW_IP);
-    /* seed the ARP cache by handing net.c an ARP reply from the gateway, so a
-     * fetch can actually get as far as sending a SYN */
-    unsigned char a[42];
-    memset(a, 0, sizeof a);
-    memcpy(a, OUR_MAC, 6);
-    a[6]=0x52; a[7]=0x55; a[8]=0x0A; a[9]=0x00; a[10]=0x02; a[11]=0x02;
-    a[12]=0x08; a[13]=0x06;
-    a[15]=1; a[16]=0x08; a[18]=6; a[19]=4; a[21]=2;
-    memcpy(a+22, a+6, 6);
-    a[28]=10; a[29]=0; a[30]=2; a[31]=2;
-    memcpy(a+32, OUR_MAC, 6);
-    a[38]=10; a[39]=0; a[40]=2; a[41]=15;
+    /* seed the ARP cache by handing net.c ARP replies from the gateway AND the
+     * resolver, so a fetch gets as far as a SYN and a lookup as far as a query */
+    seed_n = seed_served = 0;
+    seed_arp(GW_IP, 0x02);
+    seed_arp(DNS_IP, 0x03);
     /* net.c has no "inject" entry point, so drive it through its own poll with
-     * a link that hands over this one frame and then goes quiet.
+     * a link that hands over these frames and then goes quiet.
      *
      * AND DO NOT CALL net_link AGAIN AFTERWARDS. It clears the ARP cache -
      * correctly, a new link is a new segment - so re-installing the plain
      * link after seeding threw away the entry that had just been learned, and
      * every fetch then failed to send anything at all. */
-    memcpy(seed_frame, a, 42);
-    seed_served = 0;
     net_link(fake_send, seed_poll, OUR_MAC);
     net_config(OUR_IP, 0xFFFFFF00u, GW_IP);
+    dns_server(DNS_IP);
     net_poll_once();
+    net_poll_once();
+}
+
+/* Is this byte string anywhere in what we transmitted? Used to check WHICH
+ * name a lookup asked for: DNS writes each label with a length prefix, so the
+ * labels of a host name appear contiguously in the query frame. */
+static int frames_contain(const char *needle)
+{
+    int nl = 0; while (needle[nl]) nl++;
+    for (int i = 0; i < nframes; i++)
+        for (int j = 0; j + nl <= frame_len[i]; j++)
+            if (!memcmp(frames[i] + j, needle, (size_t)nl)) return 1;
+    return 0;
 }
 
 /* the last TCP SYN we sent: destination address and port */
@@ -235,19 +279,44 @@ static void t_urls(void)
     printf("URL parsing\n");
     reset();
 
-    /* https is refused BY NAME, not by failing to connect */
+    /* HTTPS IS NO LONGER REFUSED BY SCHEME, and these two assertions changed
+     * with the code rather than being deleted. They now prove the opposite
+     * property: that an https:// URL takes the SAME path an http:// one does
+     * and fails for the same real reasons, instead of being turned away at the
+     * door. A status of BR_NO_TLS here would mean the scheme was refused.
+     *
+     * A NAME NOW STARTS A LOOKUP. These four assertions used to expect
+     * BR_NO_DNS, and that was never a property of the browser - it was a
+     * property of this harness, which had no resolver configured, so
+     * dns_start() returned 0 for every name. Adding one (net_up now seeds the
+     * resolver's ARP as well as the gateway's, and calls dns_server) turned
+     * them red, which is the correct outcome: they were asserting the absence
+     * of test setup. What they should say, and now do, is that a name takes
+     * the NAME path rather than being refused by scheme. */
     go("https://example.com/");
-    CHECK(browser_status() == BR_NO_TLS, "https gave status %d", browser_status());
+    CHECK(browser_status() == BR_RESOLVING,
+          "https by name gave %d, wanted a name lookup", browser_status());
+    CHECK(browser_status() != BR_NO_TLS, "https was refused by scheme");
+    /* an address, so it gets as far as trying to connect - and there is no
+     * network here, so it fails as a fetch */
     go("https://10.0.2.2/");
-    CHECK(browser_status() == BR_NO_TLS, "https to an address gave %d",
+    CHECK(browser_status() == BR_FAILED || browser_status() == BR_FETCHING,
+          "https to an address gave %d, wanted a real connect attempt",
           browser_status());
 
-    /* a NAME is refused by name too - there is no resolver, and failing to
-     * connect would blame the wrong thing */
+    /* a NAME goes to the resolver, with or without a scheme */
     go("http://example.com/");
-    CHECK(browser_status() == BR_NO_DNS, "a hostname gave status %d", browser_status());
+    CHECK(browser_status() == BR_RESOLVING, "a hostname gave status %d", browser_status());
     go("example.com");
-    CHECK(browser_status() == BR_NO_DNS, "a bare hostname gave %d", browser_status());
+    CHECK(browser_status() == BR_RESOLVING, "a bare hostname gave %d", browser_status());
+    /* ...and a bare name must NOT have become a search - it has a dot, so it
+     * is an address. This is the boundary looks_like_url() draws. */
+    nframes = 0;
+    go("example.com");
+    CHECK(frames_contain("example"),
+          "'example.com' was turned into a search instead of resolved");
+    CHECK(!frames_contain("duckduckgo"),
+          "'example.com' was treated as a search query");
 
     /* malformed addresses are not addresses */
     const char *bad[] = { "http://", "http:///path", "http://999.1.1.1/",
@@ -261,10 +330,22 @@ static void t_urls(void)
               bad[i], browser_status());
     }
 
-    /* a 256 in any octet is not a dotted quad */
+    /* A 256 IN ANY OCTET IS NOT A DOTTED QUAD, so it is a NAME - which is what
+     * a real browser does with it too, and the lookup then fails on its own
+     * merits. The old assertion expected BR_NO_DNS and was reading "this
+     * harness has no resolver" as "the address was rejected"; what actually
+     * matters is that it was not accepted AS AN ADDRESS, i.e. no SYN went
+     * anywhere. */
+    reset(); net_up(); nframes = 0;
     go("http://10.0.2.256/");
-    CHECK(browser_status() == BR_NO_DNS || browser_status() == BR_FAILED,
+    CHECK(browser_status() == BR_RESOLVING || browser_status() == BR_NO_DNS ||
+          browser_status() == BR_FAILED,
           "10.0.2.256 was accepted (status %d)", browser_status());
+    {
+        unsigned ip = 0; int port = 0;
+        CHECK(!last_syn(&ip, &port),
+              "10.0.2.256 was connected to as though it were an address");
+    }
 
     /* an absurdly long URL must not run off the buffer */
     static char longu[4096];
@@ -424,6 +505,316 @@ static void t_urlbar(void)
     CHECK(browser_scroll() == before, "space scrolled while typing a URL");
 }
 
+/* ---- clicking the chrome -------------------------------------------------------
+ *
+ * THE BUG THIS EXISTS FOR. browser_click had no URL-bar hit test at all, so
+ * clicking the bar did nothing at all and typing fell through browser_key's
+ * unfocused switch, which drops everything that is not a shortcut - until the
+ * string's first `l`, which IS the focus shortcut. That `l` was swallowed
+ * arming select-all, and the character after it cleared the buffer. Typing
+ * "https://en.wikipedia.org/wiki/Linux" therefore left exactly "inux".
+ *
+ * Every test above pressed 'l' first, so all of them focused the bar by the
+ * one route that worked and not one of them could see it - the failure mode
+ * this file's own header warns about, where a test that cannot observe the
+ * property it names reports PASS. The fix is a hit test; this is the
+ * assertion that would have found it.
+ *
+ * The geometry is the stubs at the top of this file, written out rather than
+ * hidden so that changing them breaks this loudly: em is 16, so rowh is
+ * 16 + 8 = 24 and the chrome row spans y 4..28; Back is
+ * strlen(" Back ") * 8 + 8 = 56 wide at x 4; the bar starts at 4+56+4 = 64
+ * and runs to w - 4.
+ */
+static void t_chrome_click(void)
+{
+    printf("clicking the chrome\n");
+    reset(); net_up();
+    browser_draw(0, 0, 400, 300, 1);
+
+    /* reset() UNWINDS THE HISTORY AND NOTHING ELSE, so the focus the previous
+     * test left behind is still here - the browser is one global with no
+     * teardown, exactly as this file's header says. Esc is the shipping way to
+     * put it back, and asserting that it worked is what stops this test from
+     * silently starting in the wrong state later. */
+    browser_key(27);
+    CHECK(!browser_url_focus(), "Esc did not leave the URL bar unfocused");
+
+    /* a press in the bar focuses it and selects all, as 'l' already did */
+    CHECK(browser_click(200, 10, 1), "a press in the URL bar was not handled");
+    CHECK(browser_url_focus(), "clicking the URL bar did not focus it");
+
+    /* THE RELEASE MUST CHANGE NOTHING. wm.c delivers EV_MOUSE again with an
+     * empty button mask, and once more for every motion sample in between; an
+     * app that treats each of those as a click re-arms select-all after the
+     * first keystroke has already cleared it, and navigates a link twice. */
+    CHECK(!browser_click(200, 10, 0), "the release counted as a second click");
+    CHECK(browser_click(200, 10, 1) == 1, "a second press was not handled");
+    CHECK(!browser_click(200, 10, 1), "the button being HELD counted as a click");
+    browser_click(200, 10, 0);
+    CHECK(browser_url_focus(), "the release unfocused the bar");
+
+    /* THE REPRO ITSELF. An address with an `l` in the middle, typed after a
+     * CLICK and never after an 'l' keystroke. Every character before that `l`
+     * is what the bug threw away, and if any of them is missing the address
+     * does not parse as a dotted quad and no SYN goes out at all. */
+    nframes = 0;
+    for (const char *p = "http://10.0.2.2:8081/l/x"; *p; p++) browser_key(*p);
+    browser_key(13);
+    unsigned ip = 0; int port = 0;
+    CHECK(last_syn(&ip, &port),
+          "nothing was fetched: the characters typed before the URL's first "
+          "'l' were dropped, which is the bug this test exists for");
+    CHECK(ip == GW_IP, "SYN went to %08X, wanted %08X", ip, GW_IP);
+    CHECK(port == 8081, "the typed URL parsed to port %d, wanted 8081", port);
+
+    /* CLICKING THE PAGE DEFOCUSES. Not politeness: while the bar has focus
+     * every key is text, so a bar that keeps it after you click into the
+     * document leaves PgDn and the arrow keys dead with nothing saying why. */
+    reset();
+    browser_draw(0, 0, 400, 300, 1);
+    browser_click(200, 10, 1); browser_click(200, 10, 0);
+    CHECK(browser_url_focus(), "the URL bar did not focus");
+    browser_click(200, 200, 1); browser_click(200, 200, 0);
+    CHECK(!browser_url_focus(), "clicking the page left the URL bar focused");
+
+    /* BACK IS A BUTTON, and it was drawn as one from the first commit while
+     * being reachable only from the keyboard. */
+    reset(); net_up();
+    browser_draw(0, 0, 400, 300, 1);
+    go("http://10.0.2.2:8000/one");
+    browser_draw(0, 0, 400, 300, 1);
+    CHECK(browser_can_back(), "nothing to go Back from");
+    browser_click(20, 10, 1); browser_click(20, 10, 0);
+    CHECK(!browser_can_back(), "clicking Back did not go back");
+
+    /* A LINK NAVIGATES ONCE. The press and the release are two EV_MOUSE
+     * events for one click; before the edge test above, both navigated, so a
+     * single click pushed two identical entries onto an eight-slot history. */
+    reset(); net_up();
+    static const char page[] =
+        "<html><body><p><a href=\"http://10.0.2.2:8000/two\">go</a></p></body></html>";
+    browser_load(page, (int)sizeof page - 1);
+    browser_draw(0, 0, 400, 300, 1);
+
+    /* WHERE the link is, asked of the shipping hit test rather than worked out
+     * from the run array plus a second copy of the content origin. That second
+     * copy is precisely what browser_link_at's own comment refuses to keep, and
+     * a test carrying one would drift away from the code the day the status
+     * strip gains a line. */
+    int px = -1, py = -1;
+    for (int sy = 0; sy < 300 && px < 0; sy++)
+        for (int sx = 0; sx < 400; sx++)
+            if (browser_link_at(sx, sy) >= 0) { px = sx; py = sy; break; }
+    CHECK(px >= 0, "the test page produced no link to click");
+    if (px >= 0) {
+        int depth = 0;
+        browser_click(px, py, 1);
+        browser_click(px, py, 0);
+        while (browser_can_back() && depth < 40) { browser_back(); depth++; }
+        /* Back is enabled once there are two entries, so ONE navigation
+         * unwinds exactly once. Two is the signature of the bug: the press and
+         * the release each pushed the same address. */
+        CHECK(depth == 1, "one click on a link unwound %d history entries, "
+              "wanted 1 - two means the release navigated as well", depth);
+    }
+}
+
+/* ---- pictures, end to end -------------------------------------------------------
+ * A `data:` URI is the one image path that needs no machine on the other end
+ * of a wire, which is exactly why it is worth having: it makes "the document
+ * said <img>, png.c decoded it, and layout.c gave the run its real size" a
+ * host assertion instead of something only a booted kernel can show.
+ *
+ * The payload is a genuine 424-byte RGBA PNG produced by an unrelated encoder
+ * (python's zlib), not by png.c - a decoder that only ever meets files made by
+ * its own author agrees with its author. Its corners are fully transparent and
+ * its centre is opaque, which is the property that catches an alpha channel
+ * being dropped or filled with 0xFF.
+ */
+static const char img_page[] =
+    "<html><body><p>before</p>"
+    "<img alt=\"mark\" src=\"data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABb0lEQVR42u2X"
+        "x1ICQRCGeSITYkREFBFR9B1NmHNWzAnTCygiJsScw6VdD162urt6hqpZD/xV"
+        "ff6+menp3XG58vlvKeg4gsLOYyjqsqo7CcU9SSiJnYA7lgJ3bwpK+07B058G"
+        "z0AaygbPoHzIquFzqBi5gMpRq8YuoWr8Cqqt8k5kwDuZgZqpa/BNZ8E3kwVH"
+        "4bWzN+Cfu6UlTMD984yACXjdwh0jYAAeWLynBSi4bjB4IM4IUCvXDQavX3qg"
+        "Baht1xZA4A2sAHHmusHgweVHWiDXhrMHgwdXnmgBXbh05b/wxlVOQBGusu1/"
+        "8NDaMy2QC5xqODs8tP5CC0jgKt2OwZs2OAFFOHXPOXh485UWoODSCSeBh7cY"
+        "ATtcZbxK4c3bb4yAQrdLgsEjO++0gPSeS4PBIwlGQDrhpMHgLYkPWoD6nmsL"
+        "IPDW3U9GQPAzodpwdnh0jxEwAY/uf9ECJuBtB5yAAXj74Tf/NnAUno8T+QGD"
+        "/zPt3aHfvwAAAABJRU5ErkJggg=="
+    "\"><p>after</p></body></html>";
+
+static void t_images(void)
+{
+    printf("pictures\n");
+    reset();
+    browser_load(img_page, (int)sizeof img_page - 1);
+    browser_draw(0, 0, 400, 300, 1);
+
+    int nimg = 0, decoded = 0, iw = 0, ih = 0;
+    for (int i = 0; i < lay_count(); i++) {
+        const struct lay_run *r = lay_at(i);
+        if (!r || r->kind != LR_IMG) continue;
+        nimg++;
+        if (r->img >= 0) { decoded++; iw = r->w; ih = r->h; }
+    }
+    CHECK(nimg == 1, "the page produced %d image runs, wanted 1", nimg);
+    CHECK(decoded == 1,
+          "the inline PNG was not decoded - the run carries no arena slot");
+    CHECK(iw == 32 && ih == 32,
+          "the decoded image laid out at %dx%d, wanted its intrinsic 32x32",
+          iw, ih);
+
+    /* THE TEXT AROUND IT MUST SURVIVE. An image that swallows its siblings is
+     * the failure mode a picture on screen hides best - the picture looks
+     * right and the paragraph after it is simply gone. */
+    int before = 0, after = 0;
+    for (int i = 0; i < lay_count(); i++) {
+        const struct lay_run *r = lay_at(i);
+        if (!r || r->kind != LR_TEXT || r->len <= 0) continue;
+        if (r->len == 6 && !memcmp(r->text, "before", 6)) before = 1;
+        if (r->len == 5 && !memcmp(r->text, "after", 5)) after = 1;
+    }
+    CHECK(before && after, "the text around the image was lost");
+
+    /* A BROKEN PICTURE MUST NOT BREAK THE PAGE. Each of these is a different
+     * way for a data: URI to be wrong, and every one of them has to end as the
+     * same placeholder box the browser already shows for a picture that has
+     * not arrived - not as a fault, and not as a missing paragraph. */
+    static const char *bad[] = {
+        "<html><body><p>kept</p><img src=\"data:image/png;base64,!!!!\"></body></html>",
+        "<html><body><p>kept</p><img src=\"data:image/png;base64,\"></body></html>",
+        "<html><body><p>kept</p><img src=\"data:image/png,notbase64\"></body></html>",
+        "<html><body><p>kept</p><img src=\"data:\"></body></html>",
+        "<html><body><p>kept</p><img src=\"\"></body></html>",
+        "<html><body><p>kept</p><img></body></html>",
+        /* valid base64 that is not a PNG at all */
+        "<html><body><p>kept</p><img src=\"data:image/png;base64,SGVsbG8sIHdvcmxkIQ==\"></body></html>",
+        /* a PNG signature and nothing after it */
+        "<html><body><p>kept</p><img src=\"data:image/png;base64,iVBORw0KGgo=\"></body></html>",
+    };
+    for (unsigned k = 0; k < sizeof bad / sizeof bad[0]; k++) {
+        reset();
+        browser_load(bad[k], (int)strlen(bad[k]));
+        browser_draw(0, 0, 400, 300, 1);
+        int kept = 0, slotted = 0;
+        for (int i = 0; i < lay_count(); i++) {
+            const struct lay_run *r = lay_at(i);
+            if (!r) continue;
+            if (r->kind == LR_TEXT && r->len == 4 && !memcmp(r->text, "kept", 4)) kept = 1;
+            if (r->kind == LR_IMG && r->img >= 0) slotted = 1;
+        }
+        CHECK(kept, "malformed image #%u took the page's text with it", k);
+        CHECK(!slotted, "malformed image #%u produced an arena slot", k);
+    }
+
+    /* the good one still works after all of that - the decoder's state did not
+     * get stuck on the last failure */
+    reset();
+    browser_load(img_page, (int)sizeof img_page - 1);
+    browser_draw(0, 0, 400, 300, 1);
+    int again = 0;
+    for (int i = 0; i < lay_count(); i++) {
+        const struct lay_run *r = lay_at(i);
+        if (r && r->kind == LR_IMG && r->img >= 0) again = 1;
+    }
+    CHECK(again, "a good image stopped decoding after a run of bad ones");
+}
+
+/* ---- typing words instead of an address ----------------------------------------
+ * The last thing between this browser and being usable by hand. The assertions
+ * are on the SYN and the request that actually go out, not on an accessor, for
+ * the same reason the rest of this file works that way.
+ */
+static void t_search(void)
+{
+    printf("searching from the URL bar\n");
+
+    /* Things that ARE addresses must never become searches. Each of these is a
+     * shape a person really types. */
+    static const char *urls[] = {
+        "http://10.0.2.2:8000/", "https://10.0.2.2/", "10.0.2.2:8080/x",
+        "example.com", "example.com/a/b", "sub.example.com:99/p",
+    };
+    for (unsigned k = 0; k < sizeof urls / sizeof urls[0]; k++) {
+        reset(); net_up(); nframes = 0;
+        go(urls[k]);
+        unsigned ip = 0; int port = 0;
+        /* a search would resolve a NAME, so it would go to DNS and send no SYN
+         * to the address in the string - checking the SYN's destination is what
+         * distinguishes "treated as an address" from "treated as words" */
+        int syn = last_syn(&ip, &port);
+        CHECK(syn || browser_status() == BR_RESOLVING || browser_status() == BR_NO_DNS,
+              "'%s' did not start a fetch at all", urls[k]);
+    }
+
+    /* ...and things that are NOT addresses must become searches, which means
+     * resolving the search host rather than the words. */
+    static const char *queries[] = {
+        "zlos", "what is a browser", "1 + 1", "hello world",
+    };
+    for (unsigned k = 0; k < sizeof queries / sizeof queries[0]; k++) {
+        reset(); net_up(); nframes = 0;
+        go(queries[k]);
+        /* WHICH HOST DID IT ACTUALLY GO TO? "it did not fail" is the weak
+         * assertion this file keeps warning about - it passes just as well if
+         * the words were treated as a host name and the lookup is failing
+         * somewhere else. A DNS query encodes each label with a length prefix,
+         * so the host's labels appear contiguously in the frame; finding
+         * "duckduckgo" in what went out is the difference between "a search
+         * happened" and "something happened". */
+        CHECK(browser_status() == BR_RESOLVING,
+              "the search for '%s' did not start a name lookup (status %d)",
+              queries[k], browser_status());
+        CHECK(frames_contain("duckduckgo"),
+              "the search for '%s' resolved something other than the search "
+              "host - the query was treated as an address", queries[k]);
+    }
+
+    /* THE TRAP THIS TEST EXISTS FOR. The URL bar calls navigate(url, url_len),
+     * so `u` and `url` are the SAME buffer. Building the search address into
+     * `url` would overwrite the query with the prefix while still reading it,
+     * and the result would be a search for a mangled fragment of itself. The
+     * bar's own path is the one that hits it, so drive the bar. */
+    reset(); net_up();
+    browser_draw(0, 0, 400, 300, 1);
+    browser_key(27);
+    browser_click(200, 10, 1); browser_click(200, 10, 0);
+    for (const char *p = "hello world"; *p; p++) browser_key(*p);
+    nframes = 0;
+    browser_key(13);
+    CHECK(browser_status() != BR_FAILED,
+          "a search typed into the BAR failed where the same words via go() did "
+          "not - the query was consumed while the address was built over it");
+
+    /* an empty bar must not navigate to a search for nothing */
+    reset(); net_up();
+    browser_draw(0, 0, 400, 300, 1);
+    browser_click(200, 10, 1); browser_click(200, 10, 0);
+    browser_key(8);                       /* clears the selection, empties it */
+    nframes = 0;
+    browser_key(13);
+    CHECK(1, "an empty URL bar did not fault");
+
+    /* a query longer than the buffer must truncate, not overrun */
+    reset(); net_up();
+    {
+        char big[1024];
+        for (int i = 0; i < 1000; i++) big[i] = (i % 7) ? 'a' : ' ';
+        big[1000] = 0;
+        go(big);
+        CHECK(1, "a 1000-character search did not fault");
+    }
+
+    /* every byte that needs escaping, including high ones */
+    reset(); net_up();
+    go("a&b=c?d#e /f%g\x80\xff");
+    CHECK(1, "a query full of reserved and high bytes did not fault");
+}
+
 /* ---- documents and scrolling --------------------------------------------------- */
 static void t_document(void)
 {
@@ -441,12 +832,22 @@ static void t_document(void)
     CHECK(browser_scroll() <= browser_height(),
           "scrolled past the end (%d of %d)", browser_scroll(), browser_height());
 
-    /* a document larger than the buffer is truncated AND says so */
-    static char big[80000];
-    memset(big, 'x', sizeof big);
-    memcpy(big, "<html><body><p>", 15);
-    browser_load(big, (int)sizeof big);
-    CHECK(browser_truncated() == 1, "an 80 KB document was not flagged as truncated");
+    /* a document larger than the buffer is truncated AND says so. Sized from
+     * the REAL cap, not a literal - see browser_doc_cap(). */
+    {
+        int cap = browser_doc_cap();
+        int bign = cap + 4096;
+        char *big = malloc((size_t)bign);
+        CHECK(big != 0, "could not allocate the oversize document");
+        if (big) {
+            memset(big, 'x', (size_t)bign);
+            memcpy(big, "<html><body><p>", 15);
+            browser_load(big, bign);
+            CHECK(browser_truncated() == 1,
+                  "a %d-byte document (cap %d) was not flagged as truncated", bign, cap);
+            free(big);
+        }
+    }
     browser_draw(0, 0, 400, 300, 1);
     CHECK(browser_height() > 0, "the truncated document laid out to nothing");
 
@@ -463,14 +864,117 @@ static void t_document(void)
     CHECK(browser_link_at(-100, -100) == -1, "a link was found outside the window");
 }
 
+
+/* ---- scripts ---------------------------------------------------------------
+ * The page carries a <script> and the text it writes must end up as RENDERED
+ * CONTENT - not as source shown on screen, and not silently dropped. Those are
+ * the two ways this goes wrong and both look plausible from a distance.
+ */
+static void t_scripts(void)
+{
+    printf("scripts\n");
+    reset();
+
+    static const char page[] =
+        "<html><body><h1>Before</h1>"
+        "<script>\n"
+        "  var out = '';\n"
+        "  for (var i = 1; i <= 3; i++) { out += '<p>row ' + i + '</p>'; }\n"
+        "  document.write(out);\n"
+        "</script>"
+        "</body></html>";
+    browser_load(page, (int)sizeof page - 1);
+    browser_draw(0, 0, 600, 400, 1);
+    CHECK(browser_height() > 0, "the scripted page laid out to nothing");
+
+    int rows = 0, saw_src = 0, saw_before = 0;
+    for (int i = 0; i < lay_count(); i++) {
+        const struct lay_run *r = lay_at(i);
+        if (!r || r->kind != LR_TEXT || r->len <= 0) continue;
+        if (r->len == 3 && !memcmp(r->text, "row", 3)) rows++;
+        if (r->len == 6 && !memcmp(r->text, "Before", 6)) saw_before = 1;
+        /* the SOURCE must never be rendered */
+        if (r->len >= 8 && !memcmp(r->text, "document", 8)) saw_src = 1;
+        if (r->len >= 3 && !memcmp(r->text, "var", 3)) saw_src = 1;
+    }
+    CHECK(saw_before, "the static content before the script vanished");
+    CHECK(rows == 3, "document.write produced %d rows, wanted 3", rows);
+    CHECK(!saw_src, "the script SOURCE was rendered as page text");
+
+    /* a script that fails must not take the page with it */
+    static const char bad[] =
+        "<html><body><h1>Kept</h1><script>this is not ( valid javascript</script>"
+        "<p>and this still renders</p></body></html>";
+    browser_load(bad, (int)sizeof bad - 1);
+    browser_draw(0, 0, 600, 400, 1);
+    int saw_kept = 0, saw_after = 0;
+    for (int i = 0; i < lay_count(); i++) {
+        const struct lay_run *r = lay_at(i);
+        if (!r || r->kind != LR_TEXT || r->len <= 0) continue;
+        if (r->len == 4 && !memcmp(r->text, "Kept", 4)) saw_kept = 1;
+        if (r->len == 5 && !memcmp(r->text, "still", 5)) saw_after = 1;
+    }
+    CHECK(saw_kept && saw_after, "a broken script took the rest of the page with it");
+
+    static const char plain[] = "<html><body><p>plain</p></body></html>";
+    browser_load(plain, (int)sizeof plain - 1);
+    browser_draw(0, 0, 600, 400, 1);
+    CHECK(browser_height() > 0, "a script-free page broke");
+}
+
+/* THE ONE ADDRESS THIS HARNESS HAS TO HONOUR. browser.c keeps its decoded
+ * pictures and its base64 scratch in the fixed high-RAM map (memmap.h HI_IMG),
+ * because a couple of megabytes cannot be BSS in a kernel whose image already
+ * reaches 5.573 MiB against a 6 MiB link ceiling. fbbench.c states the rule
+ * this follows: mmap the same address the shipping source hardcodes, so that
+ * source compiles unmodified rather than growing a host-only branch that the
+ * kernel then never executes. */
+static int map_high_ram(void)
+{
+    /* THE ADDRESS COMES FROM memmap.h, NOT FROM A LITERAL. It was a literal
+     * for exactly as long as it took for the region to move, and then this
+     * harness mapped 32 MiB while browser.c wrote to 48 and the whole thing
+     * segfaulted inside b64_decode. Two copies of one address is the bug
+     * memmap.h exists to end; a harness is not exempt from that. */
+    static const struct { unsigned long a, n; const char *what; } regions[] = {
+        { (unsigned long)HI_IMG, (unsigned long)(HI_IMG_END - HI_IMG),
+          "the picture arena" },
+        /* AND THE SECOND REGION, which is new and is most of browser.c's
+         * memory now: the document, the parse tree, its text, the stylesheet's
+         * selectors and declarations, and layout's runs. All six were static
+         * arrays inside html.c/css.c/layout.c/browser.c until they filled up on
+         * a real page and could not grow - the kernel had 126,336 bytes of link
+         * headroom and they needed 10 MiB. browser.c carves this one region
+         * into all six; this harness only has to make the region exist. */
+        { (unsigned long)HI_DOM, (unsigned long)(HI_DOM_END - HI_DOM),
+          "the browser's storage" },
+    };
+    for (unsigned i = 0; i < sizeof regions / sizeof regions[0]; i++) {
+        void *want = (void *)regions[i].a;
+        void *p = mmap(want, regions[i].n, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+        if (p != want) {
+            printf("could not map %s at %p\n", regions[i].what, want);
+            return 0;
+        }
+        memset(p, 0, regions[i].n);
+    }
+    return 1;
+}
+
 int main(void)
 {
     printf("browser.c's logic, no pixels and no machine\n\n");
+    if (!map_high_ram()) return 2;
     t_fresh();
     t_urls();
+    t_scripts();
     t_url_targets();
     t_history();
     t_urlbar();
+    t_chrome_click();
+    t_images();
+    t_search();
     t_document();
     printf("\n%d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;

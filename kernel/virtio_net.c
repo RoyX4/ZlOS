@@ -51,9 +51,17 @@
  * middle of an 80 MiB hole that nothing else touches, comfortably inside the
  * smallest guest we support, and the asserts below fail the build if either
  * neighbour ever grows into it.
+ *
+ * "AN 80 MiB HOLE THAT NOTHING ELSE TOUCHES" WAS TRUE WHEN IT WAS WRITTEN AND
+ * IS THE REASON THIS REGION IS NOW IN memmap.h. It stopped being this file's
+ * fact to know the moment somebody else went looking for space in the same
+ * hole - and they would have gone looking in memmap.h, where this region was
+ * not. The hole is now 52..64 and 65..128 MiB, and the browser's storage has
+ * 80..96 of it.
  */
 
 #include "dma.h"
+#include "memmap.h"
 
 typedef unsigned long long u64;
 typedef unsigned int       u32;
@@ -93,14 +101,26 @@ static void mmio_w8(uptr a, u8 v)   { *(volatile u8 *)a = v; }
 /* ---- the arena ------------------------------------------------------------
  * Computed from the map, not guessed, and asserted against both neighbours.
  */
-#define NET_BASE   0x04000000u      /* 64 MiB                                */
-#define NET_SIZE   0x00100000u      /* 1 MiB reserved; 192 KiB used          */
-
-/* the neighbours, restated so the assertions below have something to compare
- * against. Both are read out of the file that owns them - kernel.zl for the
- * RAM filesystem's top, fb.c for the bottom of the high-RAM map. */
-#define NET_FLOOR  0x03000000u      /* kernel.zl: FS_DATA + 10*8192 = 0x02025000 */
-#define NET_CEIL   0x08000000u      /* fb.c: HI_BG, the first claimed address    */
+/* FROM memmap.h, NOT FROM A LITERAL, AND THE NEIGHBOURS COME FROM THERE TOO.
+ *
+ * This region was 0x04000000 written here, with the two neighbours RESTATED as
+ * NET_FLOOR 0x03000000 and NET_CEIL 0x08000000 - and memmap.h, the file whose
+ * entire header is an argument against exactly that, did not know this region
+ * existed. Two consequences, both real:
+ *
+ *   - NET_FLOOR named png.c's BASE. The assert read "I am above the picture
+ *     arena" while comparing against the address the picture arena STARTS at,
+ *     so a picture arena grown from 4 MiB to 20 would have passed it.
+ *   - anyone placing a new region worked from memmap.h and could not see this
+ *     one. That is not hypothetical: the browser's storage was going to 64 MiB
+ *     until a grep for hex literals found this line.
+ *
+ * So the base and the span are declared in memmap.h with everything else, the
+ * ordering chain there checks both neighbours, and what stays here is the only
+ * thing that is genuinely this driver's business: that its own buffers fit
+ * inside the region it was given. */
+#define NET_BASE   ((u32)HI_NET)
+#define NET_SIZE   ((u32)(HI_NET_END - HI_NET))
 
 #define QSZ        32               /* descriptors per queue                 */
 #define BUF_SZ     2048             /* one frame plus the 12-byte header     */
@@ -123,12 +143,8 @@ static void mmio_w8(uptr a, u8 v)   { *(volatile u8 *)a = v; }
 /* These cost nothing at run time and fail the build the moment the map stops
  * making sense - which is the whole argument fb.c makes for its own chain, and
  * the reason nvme.c's absence of one is a gap rather than a style. */
-_Static_assert(NET_BASE >= NET_FLOOR,
-               "virtio-net arena is below the RAM filesystem's top");
 _Static_assert(NET_TOP <= NET_BASE + NET_SIZE,
                "virtio-net buffers overrun the arena they were sized for");
-_Static_assert(NET_BASE + NET_SIZE <= NET_CEIL,
-               "virtio-net arena reaches into fb.c's high-RAM map");
 _Static_assert(RX_BUFS + (u32)QSZ * BUF_SZ <= TX_BUFS,
                "the receive buffers reach into the transmit buffers");
 

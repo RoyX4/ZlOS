@@ -541,3 +541,443 @@ void ieee80211_prf(const u8 *key, u32 klen, const char *label,
         pos += take;
     }
 }
+
+/* ==================================================================== TLS 1.3
+ * Everything below exists because TLS 1.3 with the single ciphersuite
+ * TLS_AES_128_GCM_SHA256 needs exactly four things this file did not have:
+ * AES-GCM, X25519, HKDF, and TLS's own labelled form of HKDF. SHA-256, HMAC
+ * and the AES block cipher above are the rest of it.
+ *
+ * ONE CIPHERSUITE, deliberately. A second is not more security, it is a
+ * negotiation to get wrong, and every server that matters offers this one.
+ */
+
+/* ---- GF(2^128) and GHASH, for AES-GCM -------------------------------------
+ * The bit-by-bit multiply, not a table. A 4-bit table is 16x faster and costs
+ * 4 KiB of precomputed state per key; this fetches a page, not a video stream,
+ * and the table version is also where cache-timing leaks live. Slow and
+ * obviously-correct is the right trade here.
+ *
+ * The bit order is GCM's, which is the reverse of the usual convention: bit 0
+ * of the first byte is the MOST significant coefficient. Getting that backwards
+ * produces a tag that is wrong in a way that looks like a key problem. */
+static void gf128_mul(u8 *x, const u8 *y)
+{
+    u8 z[16], v[16];
+    cmemset(z, 0, 16);
+    cmemcpy(v, y, 16);
+    for (int i = 0; i < 128; i++) {
+        if ((x[i >> 3] >> (7 - (i & 7))) & 1)
+            for (int j = 0; j < 16; j++) z[j] ^= v[j];
+        int lsb = v[15] & 1;
+        for (int j = 15; j > 0; j--) v[j] = (u8)((v[j] >> 1) | ((v[j - 1] & 1) << 7));
+        v[0] >>= 1;
+        if (lsb) v[0] ^= 0xE1;          /* the reduction polynomial */
+    }
+    cmemcpy(x, z, 16);
+}
+
+static void ghash(const u8 *H, const u8 *aad, u32 alen,
+                  const u8 *ct, u32 clen, u8 *out)
+{
+    u8 y[16], L[16];
+    cmemset(y, 0, 16);
+    for (u32 i = 0; i < alen; i += 16) {
+        u32 n = (alen - i < 16) ? alen - i : 16;
+        for (u32 j = 0; j < n; j++) y[j] ^= aad[i + j];
+        gf128_mul(y, H);
+    }
+    for (u32 i = 0; i < clen; i += 16) {
+        u32 n = (clen - i < 16) ? clen - i : 16;
+        for (u32 j = 0; j < n; j++) y[j] ^= ct[i + j];
+        gf128_mul(y, H);
+    }
+    /* the trailing block is the two lengths in BITS, big-endian */
+    u64 ab = (u64)alen * 8, cb = (u64)clen * 8;
+    for (int i = 0; i < 8; i++) L[7 - i]  = (u8)(ab >> (8 * i));
+    for (int i = 0; i < 8; i++) L[15 - i] = (u8)(cb >> (8 * i));
+    for (int i = 0; i < 16; i++) y[i] ^= L[i];
+    gf128_mul(y, H);
+    cmemcpy(out, y, 16);
+}
+
+/* AES-128-GCM with a 96-bit IV, which is the only length TLS 1.3 uses.
+ * `data` is encrypted IN PLACE. */
+void aes128_gcm_encrypt(const u8 *key, const u8 *iv12,
+                        const u8 *aad, u32 alen,
+                        u8 *data, u32 len, u8 *tag)
+{
+    u8 rk[176], H[16], J0[16], ek[16], ctr[16], ks[16], zero[16];
+    aes128_expand(key, rk);
+    cmemset(zero, 0, 16);
+    aes128_encrypt(rk, zero, H);
+    cmemcpy(J0, iv12, 12);
+    J0[12] = 0; J0[13] = 0; J0[14] = 0; J0[15] = 1;
+    aes128_encrypt(rk, J0, ek);              /* the tag mask */
+    cmemcpy(ctr, J0, 16);
+    for (u32 off = 0; off < len; off += 16) {
+        for (int i = 15; i >= 12; i--) if (++ctr[i]) break;   /* J0+1, J0+2... */
+        aes128_encrypt(rk, ctr, ks);
+        u32 n = (len - off < 16) ? len - off : 16;
+        for (u32 j = 0; j < n; j++) data[off + j] ^= ks[j];
+    }
+    ghash(H, aad, alen, data, len, tag);
+    for (int i = 0; i < 16; i++) tag[i] ^= ek[i];
+}
+
+/* Returns 1 if the tag verified and `data` now holds plaintext, 0 if it did
+ * NOT - in which case data is left as ciphertext and must not be used.
+ *
+ * THE TAG IS CHECKED BEFORE ANYTHING IS DECRYPTED. Releasing plaintext that
+ * failed authentication, even briefly, even to a caller that promises to
+ * discard it, is the whole class of attack AEAD exists to stop. */
+int aes128_gcm_decrypt(const u8 *key, const u8 *iv12,
+                       const u8 *aad, u32 alen,
+                       u8 *data, u32 len, const u8 *tag)
+{
+    u8 rk[176], H[16], J0[16], ek[16], ctr[16], ks[16], zero[16], want[16];
+    aes128_expand(key, rk);
+    cmemset(zero, 0, 16);
+    aes128_encrypt(rk, zero, H);
+    cmemcpy(J0, iv12, 12);
+    J0[12] = 0; J0[13] = 0; J0[14] = 0; J0[15] = 1;
+    aes128_encrypt(rk, J0, ek);
+
+    ghash(H, aad, alen, data, len, want);
+    for (int i = 0; i < 16; i++) want[i] ^= ek[i];
+    if (!crypto_equal(want, tag, 16)) return 0;
+
+    cmemcpy(ctr, J0, 16);
+    for (u32 off = 0; off < len; off += 16) {
+        for (int i = 15; i >= 12; i--) if (++ctr[i]) break;
+        aes128_encrypt(rk, ctr, ks);
+        u32 n = (len - off < 16) ? len - off : 16;
+        for (u32 j = 0; j < n; j++) data[off + j] ^= ks[j];
+    }
+    return 1;
+}
+
+/* ---- X25519 ---------------------------------------------------------------
+ * The Montgomery ladder over Curve25519, in the 16-limb 16-bit representation
+ * TweetNaCl uses. That representation is chosen for a 32-bit target: every
+ * intermediate fits in an i64, so there is no 128-bit arithmetic and no
+ * assembly, which is what makes this compile for i386 unchanged.
+ *
+ * CONSTANT TIME BY CONSTRUCTION. The ladder does the same work for every bit
+ * and the conditional swap is arithmetic, not a branch - sel25519 builds a
+ * mask from the bit rather than testing it. A key-dependent branch here leaks
+ * the private key through timing, which is not a theoretical attack.
+ */
+typedef long long i64;
+typedef i64 gf[16];
+
+static const gf gf121665 = { 0xDB41, 1 };
+
+static void car25519(gf o)
+{
+    i64 c;
+    for (int i = 0; i < 16; i++) {
+        o[i] += (1LL << 16);
+        c = o[i] >> 16;
+        o[(i + 1) * (i < 15)] += c - 1 + 37 * (c - 1) * (i == 15);
+        o[i] -= c << 16;
+    }
+}
+
+static void sel25519(gf p, gf q, int b)
+{
+    i64 t, c = ~(i64)(b - 1);
+    for (int i = 0; i < 16; i++) {
+        t = c & (p[i] ^ q[i]);
+        p[i] ^= t;
+        q[i] ^= t;
+    }
+}
+
+static void pack25519(u8 *o, const gf n)
+{
+    int b;
+    gf m, t;
+    for (int i = 0; i < 16; i++) t[i] = n[i];
+    car25519(t); car25519(t); car25519(t);
+    for (int j = 0; j < 2; j++) {
+        m[0] = t[0] - 0xFFED;
+        for (int i = 1; i < 15; i++) {
+            m[i] = t[i] - 0xFFFF - ((m[i - 1] >> 16) & 1);
+            m[i - 1] &= 0xFFFF;
+        }
+        m[15] = t[15] - 0x7FFF - ((m[14] >> 16) & 1);
+        b = (int)((m[15] >> 16) & 1);
+        m[14] &= 0xFFFF;
+        sel25519(t, m, 1 - b);
+    }
+    for (int i = 0; i < 16; i++) {
+        o[2 * i]     = (u8)(t[i] & 0xFF);
+        o[2 * i + 1] = (u8)(t[i] >> 8);
+    }
+}
+
+static void unpack25519(gf o, const u8 *n)
+{
+    for (int i = 0; i < 16; i++) o[i] = n[2 * i] + ((i64)n[2 * i + 1] << 8);
+    o[15] &= 0x7FFF;
+}
+
+static void gf_add(gf o, const gf a, const gf b) { for (int i = 0; i < 16; i++) o[i] = a[i] + b[i]; }
+static void gf_sub(gf o, const gf a, const gf b) { for (int i = 0; i < 16; i++) o[i] = a[i] - b[i]; }
+
+static void gf_mul(gf o, const gf a, const gf b)
+{
+    i64 t[31];
+    for (int i = 0; i < 31; i++) t[i] = 0;
+    for (int i = 0; i < 16; i++)
+        for (int j = 0; j < 16; j++) t[i + j] += a[i] * b[j];
+    for (int i = 0; i < 15; i++) t[i] += 38 * t[i + 16];
+    for (int i = 0; i < 16; i++) o[i] = t[i];
+    car25519(o); car25519(o);
+}
+
+static void gf_sq(gf o, const gf a) { gf_mul(o, a, a); }
+
+static void inv25519(gf o, const gf i)
+{
+    gf c;
+    for (int a = 0; a < 16; a++) c[a] = i[a];
+    for (int a = 253; a >= 0; a--) {
+        gf_sq(c, c);
+        if (a != 2 && a != 4) gf_mul(c, c, i);
+    }
+    for (int a = 0; a < 16; a++) o[a] = c[a];
+}
+
+void x25519(u8 *out, const u8 *scalar, const u8 *point)
+{
+    u8 z[32];
+    gf x, a, b, c, d, e, f;
+    i64 r;
+    for (int i = 0; i < 31; i++) z[i] = scalar[i];
+    /* the clamp: RFC 7748 requires it and it is what keeps the scalar in the
+     * prime-order subgroup */
+    z[31] = (u8)((scalar[31] & 127) | 64);
+    z[0] &= 248;
+    unpack25519(x, point);
+    for (int i = 0; i < 16; i++) { b[i] = x[i]; d[i] = a[i] = c[i] = 0; }
+    a[0] = d[0] = 1;
+    for (int i = 254; i >= 0; --i) {
+        r = (z[i >> 3] >> (i & 7)) & 1;
+        sel25519(a, b, (int)r);
+        sel25519(c, d, (int)r);
+        gf_add(e, a, c);
+        gf_sub(a, a, c);
+        gf_add(c, b, d);
+        gf_sub(b, b, d);
+        gf_sq(d, e);
+        gf_sq(f, a);
+        gf_mul(a, c, a);
+        gf_mul(c, b, e);
+        gf_add(e, a, c);
+        gf_sub(a, a, c);
+        gf_sq(b, a);
+        gf_sub(c, d, f);
+        gf_mul(a, c, gf121665);
+        gf_add(a, a, d);
+        gf_mul(c, c, a);
+        gf_mul(a, d, f);
+        gf_mul(d, b, x);
+        gf_sq(b, e);
+        sel25519(a, b, (int)r);
+        sel25519(c, d, (int)r);
+    }
+    inv25519(c, c);
+    gf_mul(a, a, c);
+    pack25519(out, a);
+}
+
+/* the base point is u=9, so a public key is x25519(priv, {9,0,0,...}) */
+void x25519_base(u8 *out, const u8 *scalar)
+{
+    u8 nine[32];
+    cmemset(nine, 0, 32);
+    nine[0] = 9;
+    x25519(out, scalar, nine);
+}
+
+/* ---- HKDF (RFC 5869) and TLS 1.3's labelled form -------------------------- */
+
+void hkdf_extract(const u8 *salt, u32 slen, const u8 *ikm, u32 ilen, u8 *prk)
+{
+    hmac_sha256(salt, slen, ikm, ilen, prk);
+}
+
+void hkdf_expand(const u8 *prk, const u8 *info, u32 ilen, u8 *out, u32 olen)
+{
+    u8 t[32], buf[32 + 256 + 1];
+    u32 tlen = 0, done = 0;
+    u8 ctr = 1;
+    if (ilen > 256) ilen = 256;          /* bounded, like everything here */
+    while (done < olen) {
+        u32 n = 0;
+        for (u32 i = 0; i < tlen; i++) buf[n++] = t[i];
+        for (u32 i = 0; i < ilen; i++) buf[n++] = info[i];
+        buf[n++] = ctr++;
+        hmac_sha256(prk, 32, buf, n, t);
+        tlen = 32;
+        u32 take = (olen - done < 32) ? olen - done : 32;
+        for (u32 i = 0; i < take; i++) out[done + i] = t[i];
+        done += take;
+    }
+}
+
+/* HKDF-Expand-Label from RFC 8446 §7.1. The "tls13 " prefix is what stops a
+ * key derived for one purpose being valid for another. */
+void tls13_expand_label(const u8 *secret, const char *label,
+                        const u8 *ctx, u32 clen, u8 *out, u32 olen)
+{
+    u8 info[2 + 1 + 6 + 64 + 1 + 64];
+    u32 n = 0, lab = 0;
+    while (label[lab]) lab++;
+    if (lab > 64) lab = 64;
+    if (clen > 64) clen = 64;
+    info[n++] = (u8)(olen >> 8);
+    info[n++] = (u8)olen;
+    info[n++] = (u8)(6 + lab);
+    const char *p = "tls13 ";
+    for (u32 i = 0; i < 6; i++) info[n++] = (u8)p[i];
+    for (u32 i = 0; i < lab; i++) info[n++] = (u8)label[i];
+    info[n++] = (u8)clen;
+    for (u32 i = 0; i < clen; i++) info[n++] = ctx[i];
+    hkdf_expand(secret, info, n, out, olen);
+}
+
+/* Derive-Secret(secret, label, messages) = Expand-Label(secret, label,
+ * Hash(messages), 32). Split out because the transcript hash is what binds a
+ * key to the exact handshake it came from. */
+void tls13_derive_secret(const u8 *secret, const char *label,
+                         const u8 *thash, u8 *out)
+{
+    tls13_expand_label(secret, label, thash, 32, out, 32);
+}
+
+/* ---- SHA-512 and SHA-384 --------------------------------------------------
+ * Needed because REAL CERTIFICATE CHAINS ARE SIGNED WITH THEM. Measured rather
+ * than assumed: en.wikipedia.org's chain is four certificates and every one is
+ * ecdsa-with-SHA384. A verifier built for SHA-256 alone could not check a
+ * single link of it.
+ *
+ * SHA-384 is SHA-512 with different initial values and the output truncated to
+ * 48 bytes. It is not a separate algorithm and is not written as one.
+ */
+static const u64 sha512_k[80] = {
+    0x428a2f98d728ae22ULL, 0x7137449123ef65cdULL, 0xb5c0fbcfec4d3b2fULL, 0xe9b5dba58189dbbcULL,
+    0x3956c25bf348b538ULL, 0x59f111f1b605d019ULL, 0x923f82a4af194f9bULL, 0xab1c5ed5da6d8118ULL,
+    0xd807aa98a3030242ULL, 0x12835b0145706fbeULL, 0x243185be4ee4b28cULL, 0x550c7dc3d5ffb4e2ULL,
+    0x72be5d74f27b896fULL, 0x80deb1fe3b1696b1ULL, 0x9bdc06a725c71235ULL, 0xc19bf174cf692694ULL,
+    0xe49b69c19ef14ad2ULL, 0xefbe4786384f25e3ULL, 0x0fc19dc68b8cd5b5ULL, 0x240ca1cc77ac9c65ULL,
+    0x2de92c6f592b0275ULL, 0x4a7484aa6ea6e483ULL, 0x5cb0a9dcbd41fbd4ULL, 0x76f988da831153b5ULL,
+    0x983e5152ee66dfabULL, 0xa831c66d2db43210ULL, 0xb00327c898fb213fULL, 0xbf597fc7beef0ee4ULL,
+    0xc6e00bf33da88fc2ULL, 0xd5a79147930aa725ULL, 0x06ca6351e003826fULL, 0x142929670a0e6e70ULL,
+    0x27b70a8546d22ffcULL, 0x2e1b21385c26c926ULL, 0x4d2c6dfc5ac42aedULL, 0x53380d139d95b3dfULL,
+    0x650a73548baf63deULL, 0x766a0abb3c77b2a8ULL, 0x81c2c92e47edaee6ULL, 0x92722c851482353bULL,
+    0xa2bfe8a14cf10364ULL, 0xa81a664bbc423001ULL, 0xc24b8b70d0f89791ULL, 0xc76c51a30654be30ULL,
+    0xd192e819d6ef5218ULL, 0xd69906245565a910ULL, 0xf40e35855771202aULL, 0x106aa07032bbd1b8ULL,
+    0x19a4c116b8d2d0c8ULL, 0x1e376c085141ab53ULL, 0x2748774cdf8eeb99ULL, 0x34b0bcb5e19b48a8ULL,
+    0x391c0cb3c5c95a63ULL, 0x4ed8aa4ae3418acbULL, 0x5b9cca4f7763e373ULL, 0x682e6ff3d6b2b8a3ULL,
+    0x748f82ee5defb2fcULL, 0x78a5636f43172f60ULL, 0x84c87814a1f0ab72ULL, 0x8cc702081a6439ecULL,
+    0x90befffa23631e28ULL, 0xa4506cebde82bde9ULL, 0xbef9a3f7b2c67915ULL, 0xc67178f2e372532bULL,
+    0xca273eceea26619cULL, 0xd186b8c721c0c207ULL, 0xeada7dd6cde0eb1eULL, 0xf57d4f7fee6ed178ULL,
+    0x06f067aa72176fbaULL, 0x0a637dc5a2c898a6ULL, 0x113f9804bef90daeULL, 0x1b710b35131c471bULL,
+    0x28db77f523047d84ULL, 0x32caab7b40c72493ULL, 0x3c9ebe0a15c9bebcULL, 0x431d67c49c100d4cULL,
+    0x4cc5d4becb3e42b6ULL, 0x597f299cfc657e2aULL, 0x5fcb6fab3ad6faecULL, 0x6c44198c4a475817ULL
+};
+
+typedef struct { u64 h[8]; u8 buf[128]; u64 len; u32 n; } sha512_ctx;
+
+static u64 ror64(u64 x, int k) { return (x >> k) | (x << (64 - k)); }
+
+static void sha512_block(sha512_ctx *c, const u8 *p)
+{
+    u64 w[80];
+    for (int i = 0; i < 16; i++) {
+        w[i] = 0;
+        for (int j = 0; j < 8; j++) w[i] = (w[i] << 8) | p[i * 8 + j];
+    }
+    for (int i = 16; i < 80; i++) {
+        u64 s0 = ror64(w[i-15], 1) ^ ror64(w[i-15], 8) ^ (w[i-15] >> 7);
+        u64 s1 = ror64(w[i-2], 19) ^ ror64(w[i-2], 61) ^ (w[i-2] >> 6);
+        w[i] = w[i-16] + s0 + w[i-7] + s1;
+    }
+    u64 a = c->h[0], b = c->h[1], cc = c->h[2], d = c->h[3];
+    u64 e = c->h[4], f = c->h[5], g = c->h[6], h = c->h[7];
+    for (int i = 0; i < 80; i++) {
+        u64 S1 = ror64(e, 14) ^ ror64(e, 18) ^ ror64(e, 41);
+        u64 ch = (e & f) ^ ((~e) & g);
+        u64 t1 = h + S1 + ch + sha512_k[i] + w[i];
+        u64 S0 = ror64(a, 28) ^ ror64(a, 34) ^ ror64(a, 39);
+        u64 mj = (a & b) ^ (a & cc) ^ (b & cc);
+        u64 t2 = S0 + mj;
+        h = g; g = f; f = e; e = d + t1;
+        d = cc; cc = b; b = a; a = t1 + t2;
+    }
+    c->h[0] += a; c->h[1] += b; c->h[2] += cc; c->h[3] += d;
+    c->h[4] += e; c->h[5] += f; c->h[6] += g; c->h[7] += h;
+}
+
+static void sha512_start(sha512_ctx *c, int is384)
+{
+    if (is384) {
+        c->h[0] = 0xcbbb9d5dc1059ed8ULL; c->h[1] = 0x629a292a367cd507ULL;
+        c->h[2] = 0x9159015a3070dd17ULL; c->h[3] = 0x152fecd8f70e5939ULL;
+        c->h[4] = 0x67332667ffc00b31ULL; c->h[5] = 0x8eb44a8768581511ULL;
+        c->h[6] = 0xdb0c2e0d64f98fa7ULL; c->h[7] = 0x47b5481dbefa4fa4ULL;
+    } else {
+        c->h[0] = 0x6a09e667f3bcc908ULL; c->h[1] = 0xbb67ae8584caa73bULL;
+        c->h[2] = 0x3c6ef372fe94f82bULL; c->h[3] = 0xa54ff53a5f1d36f1ULL;
+        c->h[4] = 0x510e527fade682d1ULL; c->h[5] = 0x9b05688c2b3e6c1fULL;
+        c->h[6] = 0x1f83d9abfb41bd6bULL; c->h[7] = 0x5be0cd19137e2179ULL;
+    }
+    c->len = 0; c->n = 0;
+}
+
+static void sha512_feed(sha512_ctx *c, const u8 *d, u32 n)
+{
+    c->len += n;
+    while (n) {
+        u32 take = 128 - c->n;
+        if (take > n) take = n;
+        cmemcpy(c->buf + c->n, d, take);
+        c->n += take; d += take; n -= take;
+        if (c->n == 128) { sha512_block(c, c->buf); c->n = 0; }
+    }
+}
+
+static void sha512_end(sha512_ctx *c, u8 *out, int is384)
+{
+    u64 bits = c->len * 8;
+    u8 pad = 0x80;
+    sha512_feed(c, &pad, 1);
+    u8 z = 0;
+    while (c->n != 112) sha512_feed(c, &z, 1);
+    u8 L[16];
+    cmemset(L, 0, 8);
+    for (int i = 0; i < 8; i++) L[15 - i] = (u8)(bits >> (8 * i));
+    sha512_feed(c, L, 16);
+    int words = is384 ? 6 : 8;
+    for (int i = 0; i < words; i++)
+        for (int j = 0; j < 8; j++) out[i * 8 + j] = (u8)(c->h[i] >> (56 - 8 * j));
+}
+
+void sha512(const u8 *data, u32 n, u8 *out)
+{
+    sha512_ctx c;
+    sha512_start(&c, 0);
+    sha512_feed(&c, data, n);
+    sha512_end(&c, out, 0);
+}
+
+void sha384(const u8 *data, u32 n, u8 *out)
+{
+    sha512_ctx c;
+    sha512_start(&c, 1);
+    sha512_feed(&c, data, n);
+    sha512_end(&c, out, 1);
+}

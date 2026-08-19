@@ -230,6 +230,7 @@ static const struct cmd table[] = {
     { "net",      78 }, { "arp",      78 },
     { "web",      87 }, { "http",     87 },
     { "fetch",    69 }, { "site",     69 },
+    { "https",    83 }, { "tls",      83 },   /* the same fetch, verified */
     { "redraw",   99 },
     { "peak",     11 }, { "peakreset", 12 },   /* the frame timer */
     { "reboot",  114 }, { "halt",    113 }, { "quit",  113 }, { "exit", 113 },
