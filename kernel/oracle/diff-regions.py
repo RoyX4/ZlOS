@@ -6,6 +6,12 @@
   ./diff-regions.py ... --json                 machine-readable, for a gate
   ./diff-regions.py ... --only win_term,dock_band
   ./diff-regions.py ... --worst 10             only the regions furthest off
+  ./diff-regions.py ... --zlos-regions FILE    read the zlOS side at DIFFERENT
+                                               origins - same ids, same rect
+                                               sizes. For a per-app shot, where
+                                               the reference centres the window
+                                               and zlOS does not; see
+                                               shot-apps.py / score-apps.py.
   ./diff-regions.py --selftest                 check the measures themselves
 
 
@@ -349,6 +355,15 @@ def main():
     ap.add_argument("--zlos", required=True)
     ap.add_argument("--ref", required=True)
     ap.add_argument("--regions", default=os.path.join(HERE, "regions.json"))
+    ap.add_argument("--zlos-regions", default=None,
+                    help="a SECOND region map, applied to the zlOS image only. "
+                         "Same ids, same rect SIZES, different origins - for "
+                         "when the two renders put the same thing in different "
+                         "places and the question is whether the thing itself "
+                         "matches. shot-apps.py writes one per app: the "
+                         "reference centres an --app shot and zlOS cannot be "
+                         "put in that state, so comparing screen to screen "
+                         "measures the composition and drowns the app in it.")
     ap.add_argument("--only", default="", help="comma-separated region ids")
     ap.add_argument("--visible-only", action="store_true",
                     help="skip regions the default view does not show")
@@ -362,6 +377,28 @@ def main():
     want = (doc["screen"]["w"], doc["screen"]["h"])
     zl, rf = load(args.zlos, want), load(args.ref, want)
 
+    # The zlOS side may be read at DIFFERENT origins. Refused unless every
+    # shared id keeps the same size, because two crops of different shapes
+    # cannot be subtracted and the only ways to make them so - rescaling or
+    # truncating - would each corrupt the exact edges the structure measure
+    # exists to find.
+    zdoc = json.load(open(args.zlos_regions)) if args.zlos_regions else None
+    zrect = {}
+    if zdoc:
+        by_id = {r["id"]: r["rect"] for r in doc["regions"]}
+        for r in zdoc["regions"]:
+            if r["id"] not in by_id:
+                continue
+            a, b = by_id[r["id"]], r["rect"]
+            if (a[2], a[3]) != (b[2], b[3]):
+                raise SystemExit(
+                    f"--zlos-regions: {r['id']} is {b[2]}x{b[3]} there and "
+                    f"{a[2]}x{a[3]} in --regions. Two crops of different "
+                    f"shapes cannot be compared, and rescaling one would smear "
+                    f"the edges this tool exists to measure. A size difference "
+                    f"IS the finding - report it, do not paper over it.")
+            zrect[r["id"]] = b
+
     keep = {s.strip() for s in args.only.split(",") if s.strip()}
     rows = []
     for r in doc["regions"]:
@@ -369,9 +406,13 @@ def main():
             continue
         if args.visible_only and not r.get("visible", True):
             continue
-        ca, cb = crop(zl, r["rect"]), crop(rf, r["rect"])
+        ca, cb = crop(zl, zrect.get(r["id"], r["rect"])), crop(rf, r["rect"])
         if ca is None or cb is None:
             continue
+        if ca.shape != cb.shape:
+            raise SystemExit(f"{r['id']}: the two crops came out "
+                             f"{ca.shape} and {cb.shape} - one of the "
+                             f"rectangles runs off its image.")
         col = colour_error(ca, cb)
         pal = palette_distance(ca, cb)
         hue, hue_why = hue_distance(ca, cb)
