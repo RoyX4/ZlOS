@@ -49,6 +49,7 @@ int intel_cursor_enable(gc_u32 gfx_addr, int size64);
 int intel_cursor_move(int x, int y);
 int intel_cursor_disable(void);
 int intel_ggtt_map(gc_u32 gfx_page, gc_u32 phys_addr);
+int intel_ggtt_map_range(gc_u32 gfx_page, gc_u32 phys_addr, int pages);
 
 /* ---- where the image lives ----------------------------------------------
  * HI_GPU is gpuring.c's region: 4 MiB for a 4 KiB ring. The cursor image is
@@ -156,10 +157,13 @@ int gpu_cursor_install(int kind, gc_u32 fill, gc_u32 edge, int scale, int premul
 
     /* 16 KiB is four pages, and every one of them needs a GGTT entry. Mapping
      * only the first is a cursor whose top quarter is correct and whose rest is
-     * whatever those stale entries point at. */
-    for (gc_u32 p = 0; p * 4096u < GPU_CURSOR_BYTES; p++)
-        if (!intel_ggtt_map((GPU_CURSOR_GFX >> 12) + p,
-                            (gc_u32)(GPU_CURSOR_PHYS + p * 4096u))) return 0;
+     * whatever those stale entries point at.
+     *
+     * Through the RANGE function, which carries the overflow guards eaa5492
+     * added - four pages cannot wrap anything, but there is no reason for two
+     * callers in this driver to use two different paths to the same table. */
+    if (!intel_ggtt_map_range(GPU_CURSOR_GFX >> 12, (gc_u32)GPU_CURSOR_PHYS,
+                              (int)(GPU_CURSOR_BYTES / 4096u))) return 0;
 
     if (!intel_cursor_enable(GPU_CURSOR_GFX, 1)) return 0;   /* 1 = 64x64 */
     cursor_live = 1;

@@ -56,6 +56,7 @@ int  intel_supported(void);
 gr_u32 intel_mmio(void);
 gr_u32 intel_ggtt_size(void);
 int  intel_ggtt_map(gr_u32 gfx_page, gr_u32 phys_addr);
+int  intel_ggtt_map_range(gr_u32 gfx_page, gr_u32 phys_addr, int pages);
 
 /* ---- where the ring lives ------------------------------------------------
  *
@@ -334,11 +335,19 @@ int gpu_fb_attach(gr_u32 phys, gr_u32 bytes, gr_u32 pitch)
     if (!ring_live || !pitch || !bytes) return 0;
     if (pitch > 0xFFFFu) return 0;              /* BR13's field, see gpu.c */
 
-    /* Every page needs an entry. Mapping a prefix is a fill that is correct at
-     * the top of the screen and lands somewhere else below it. */
+    /* USE THE RANGE FUNCTION, not an open-coded loop.
+     *
+     * eaa5492 gave intel_ggtt_map_range overflow guards this loop does not
+     * have: `gfx_page + i` and `phys_addr + i * 4096` are u32 sums, and a
+     * wrapped pair is a perfectly valid-looking mapping of the wrong page to
+     * the wrong frame. The back buffer is up to 40 MiB - 10240 pages - so this
+     * is the one caller in the driver with enough pages to care.
+     *
+     * Mapping a PREFIX rather than the whole surface is the failure this
+     * protects against in the other direction: a fill correct at the top of the
+     * screen and landing somewhere else below it. */
     gr_u32 pages = (bytes + 4095u) / 4096u;
-    for (gr_u32 i = 0; i < pages; i++)
-        if (!intel_ggtt_map((GPU_FB_GFX >> 12) + i, phys + i * 4096u)) return 0;
+    if (!intel_ggtt_map_range(GPU_FB_GFX >> 12, phys, (int)pages)) return 0;
 
     fb_gfx   = GPU_FB_GFX;
     fb_pitch = pitch;

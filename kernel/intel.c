@@ -569,8 +569,10 @@ int intel_ggtt_map(u32 gfx_page, u32 phys_addr)
 
     /* COMPARE PAGE COUNTS, NOT BYTE OFFSETS. `gfx_page * 8u` is a u32 multiply:
      * any gfx_page at or above 0x20000000 wraps to a small number, sails
-     * through the bound, and writes a PTE at mmio + a small offset - which is
-     * the REGISTER file, not the table. A bounds check that overflows is worse
+     * through the bound, and writes a PTE at the START of the table instead of
+     * where it belongs - the base is always mmio + 0x800000, so a wrapped
+     * offset corrupts early GGTT entries rather than the register file. Either
+     * way it is someone else's mapping. A bounds check that overflows is worse
      * than none, because it reads as protection. Dividing the limit instead
      * cannot overflow. */
     if (gfx_page >= ggtt / 8u) return 0;      /* past the end of the table */
