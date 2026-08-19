@@ -31,6 +31,7 @@
  */
 
 #include "memmap.h"
+#include "ggttmap.h"
 #include "cursor.inc"
 
 typedef unsigned int       gc_u32;
@@ -58,10 +59,15 @@ int intel_ggtt_map_range(gc_u32 gfx_page, gc_u32 phys_addr, int pages);
 #define GPU_CURSOR_DIM   64u
 #define GPU_CURSOR_BYTES (GPU_CURSOR_DIM * GPU_CURSOR_DIM * 4u)
 #define GPU_CURSOR_PHYS  ((gc_u64)HI_GPU + 4096u)          /* after the ring */
-#define GPU_CURSOR_GFX   0x04001000u                        /* ring gfx + one page */
+#define GPU_CURSOR_GFX   GGTT_CURSOR_GFX                    /* ggttmap.h owns it */
 
 _Static_assert(GPU_CURSOR_PHYS + GPU_CURSOR_BYTES <= (gc_u64)HI_BLUR,
                "the cursor image runs past HI_GPU into the blur arena");
+/* The graphics span this file actually uses must be the span ggttmap.h reserved
+ * for it. Changing GPU_CURSOR_DIM without changing the header is the way this
+ * drifts back. */
+_Static_assert(GPU_CURSOR_BYTES == GGTT_CURSOR_SPAN,
+               "the cursor image is not the size ggttmap.h reserved for it");
 
 /* ---- the compositing, which is the part that can be tested ---------------
  *

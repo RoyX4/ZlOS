@@ -86,6 +86,25 @@ static int hdr_is(const u8 *p, int len, const char *name)
 }
 
 /* ---- the request ----------------------------------------------------------- */
+/* No Accept-Encoding: asking for gzip and then not having an inflate is how a
+ * browser gets a body it cannot read. No User-Agent games either - this is what
+ * it is.
+ *
+ * THE TAIL IS A NAMED CONSTANT BECAUSE ITS LENGTH IS LOAD-BEARING. The host
+ * loop below reserves room for it and then writes it unguarded, so the reserve
+ * and this string have to agree. They did not: the reserve was 32 and the tail
+ * is 41 bytes (2 + 16 + 2 + 17 + 2 + 2), so a host long enough to reach the
+ * guard left n at 480 and the tail took it to 521 - nine bytes past req[512],
+ * into whatever static the linker placed next, with no fault and no MMU to
+ * catch it. A hand-counted reserve drifting from a string literal someone later
+ * edited is exactly what a _Static_assert removes permanently. */
+static const char req_tail[] = "\r\nUser-Agent: zlOS\r\nConnection: close\r\n\r\n";
+#define REQ_TAIL_LEN (sizeof(req_tail) - 1)
+#define REQ_HOST_RESERVE ((int)REQ_TAIL_LEN + 8)   /* the tail, plus slack */
+
+_Static_assert(REQ_MAX - REQ_HOST_RESERVE + (int)REQ_TAIL_LEN <= REQ_MAX,
+               "build_request's host reserve no longer covers the request tail");
+
 static int build_request(void)
 {
     int n = 0;
@@ -94,12 +113,14 @@ static int build_request(void)
     for (int i = 0; path[i] && n < REQ_MAX - 64; i++) req[n++] = (u8)path[i];
     const char *v = " HTTP/1.0\r\nHost: ";
     while (*v) req[n++] = (u8)*v++;
-    for (int i = 0; host[i] && n < REQ_MAX - 32; i++) req[n++] = (u8)host[i];
-    /* No Accept-Encoding: asking for gzip and then not having an inflate is
-     * how a browser gets a body it cannot read. No User-Agent games either -
-     * this is what it is. */
-    const char *t = "\r\nUser-Agent: zlOS\r\nConnection: close\r\n\r\n";
-    while (*t) req[n++] = (u8)*t++;
+    for (int i = 0; host[i] && n < REQ_MAX - REQ_HOST_RESERVE; i++) req[n++] = (u8)host[i];
+    /* Belt as well as braces: the assert above proves the reserve is big
+     * enough, this proves the write cannot leave the buffer even if someone
+     * changes one without the other. */
+    for (const char *t = req_tail; *t; t++) {
+        if (n >= REQ_MAX) return 0;
+        req[n++] = (u8)*t;
+    }
     return n;
 }
 
@@ -226,7 +247,12 @@ int http_poll(void)
         int room = HTTP_BUF - resp_len;
         if (avail > room) { avail = room; truncated = 1; }
         if (avail > 0) resp_len += tcp_recv(resp + resp_len, avail);
-        else           tcp_recv(resp, 0);
+        /* Buffer full: keep the connection draining and throw the rest away.
+         * This used to be `tcp_recv(resp, 0)`, which tcp_recv correctly refuses
+         * (max <= 0), so nothing drained - the receive window never reopened
+         * and the fetch hung in HTTP_RECEIVING for ever. `truncated` is already
+         * set above, so the discarded bytes are accounted for. */
+        else           tcp_discard(tcp_available());
     }
 
     if (!hdr_done) {

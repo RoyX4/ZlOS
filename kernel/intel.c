@@ -43,6 +43,13 @@ typedef unsigned long long uptr;
 typedef unsigned int       uptr;
 #endif
 
+/* The ONLY header this file includes, and it earns it: gpu.h carries the one
+ * declaration of the MMIO base that both this file and gpuring.c must agree
+ * on. Everything else intel.c needs it declares itself, which is the style
+ * here - but a prototype that differs between two .c files is precisely the
+ * defect this include exists to make impossible. */
+#include "gpu.h"
+
 u32 idt_ticks(void);
 
 /* Real timing, from cpu.c's PIT-calibrated TSC. idt_ticks() resolves 10 ms and
@@ -432,10 +439,27 @@ int intel_find(void)
 int intel_present(void)   { return gpu_idx >= 0 && mmio != 0; }
 int intel_devid(void)     { return gpu_devid; }
 int intel_supported(void) { return intel_present() && is_gen9(gpu_devid); }
+/* THESE TWO TRUNCATE, DELIBERATELY, AND ARE FOR REPORTING ONLY.
+ *
+ * freestanding/runtime_kernel.c binds both as zl builtins and zl numbers are
+ * doubles, so they hand back a u32 on purpose. That is fine for printing an
+ * address and wrong for reaching one: above 4 GiB the low dword is a different,
+ * unrelated physical address - the exact wording used at the refusal in
+ * intel_find() above. Anything that DEREFERENCES the base must use
+ * intel_mmio_ptr() / intel_aperture_ptr() below, which gpu.h declares so the
+ * two sides cannot disagree again. */
 u32 intel_mmio(void)      { return (u32)mmio; }
 u32 intel_mmio_size(void) { return mmio_size; }
 u32 intel_aperture(void)  { return (u32)aperture; }
 u32 intel_aper_size(void) { return aper_size; }
+
+/* The full-width pair. `uptr` here and `gpu_uptr` in gpu.h are the same width
+ * by construction on every target this builds for; the assert says so out loud
+ * rather than leaving it to be discovered. */
+_Static_assert(sizeof(uptr) == sizeof(gpu_uptr),
+               "intel.c's uptr and gpu.h's gpu_uptr have drifted apart");
+gpu_uptr intel_mmio_ptr(void)     { return (gpu_uptr)mmio; }
+gpu_uptr intel_aperture_ptr(void) { return (gpu_uptr)aperture; }
 
 /* ---- stolen memory: the RAM the firmware reserved for graphics ----------
  * GMS is bits 15:8 of MGGC0. On Gen9 the size is 32 MiB per step below 0xF0,
@@ -2554,9 +2578,20 @@ int intel_link_train(int port, int rate_idx, int lanes, int tps3, int enhanced)
     if (!train_clock_recovery(port, lanes)) return 0;
     if (!train_channel_eq(port, lanes, tps3)) return 0;
 
-    /* done: stop the pattern at both ends and let real pixels flow */
+    /* done: stop the pattern at both ends and let real pixels flow.
+     *
+     * THIS WRITE IS CHECKED, and it is the one that was not. Every other
+     * intel_dpcd_write in this function guards with `if (!... ) return 0;` -
+     * this one discarded its result and the function then returned 1
+     * unconditionally. If the AUX transaction fails or the sink NAKs, the
+     * SOURCE goes on to DP_TP_CTL_LINK_TRAIN_NORM and starts sending real
+     * pixels while the SINK is still in training pattern and displays nothing.
+     * A black panel, reported up the stack as a successful modeset, on a
+     * machine whose only diagnostic is the panel. Telling the sink to leave
+     * training is not an optional courtesy at the end of link training; it is
+     * the step that makes the link usable. */
     u8 none = DP_TRAIN_PAT_NONE;
-    intel_dpcd_write(port, DPCD_TRAINING_PATTERN, &none, 1);
+    if (!intel_dpcd_write(port, DPCD_TRAINING_PATTERN, &none, 1)) return 0;
     tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_IDLE, enhanced);
     cpu_delay_us(500);
     tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_NORM, enhanced);
@@ -3869,21 +3904,36 @@ u32 intel_backlight_duty_wanted(void);
  */
 #define MS_MAX_STEPS 40
 
-static struct { int plan_step; const char *name; int result; } ms_log[MS_MAX_STEPS];
+static struct { int plan_step; const char *name; int result; int soft; } ms_log[MS_MAX_STEPS];
 static int ms_count = 0;
 static int ms_failed_at = 0;
 
 static int ms_dry = 0;
 
-static int ms_do(int plan_step, const char *name, int result)
+/* `soft` is why this takes a fourth argument. MS_STEP and MS_STEP_SOFT differ
+ * correctly at the macro - one returns, the other carries on - but both used to
+ * land here, and here is where ms_failed_at was set. So a soft step's failure
+ * still poisoned the verdict at the end of intel_modeset_run:
+ *
+ *     return ms_failed_at ? 0 : 1;
+ *
+ * which made "the backlight did not come up" indistinguishable from "the
+ * modeset failed", on a panel that was lit, trained and scanning out. The soft
+ * steps are DPLL0-at-wanted-rate, the underrun telltale, backlight PWM and
+ * backlight enable - none of which stop pixels reaching the screen.
+ *
+ * The failure is still RECORDED, in ms_log, and now carries its own softness so
+ * a reader can tell the two apart. It just no longer decides the verdict. */
+static int ms_do(int plan_step, const char *name, int result, int soft)
 {
     if (ms_count < MS_MAX_STEPS) {
         ms_log[ms_count].plan_step = plan_step;
         ms_log[ms_count].name      = name;
         ms_log[ms_count].result    = result;
+        ms_log[ms_count].soft      = soft;
         ms_count++;
     }
-    if (!result && !ms_failed_at) ms_failed_at = plan_step;
+    if (!result && !soft && !ms_failed_at) ms_failed_at = plan_step;
     return result;
 }
 
@@ -3895,16 +3945,19 @@ static int ms_do(int plan_step, const char *name, int result)
  * MS_STEP aborts the sequence on failure. MS_STEP_SOFT records and carries on,
  * for steps whose failure is worth knowing but is not fatal to the modeset. */
 #define MS_STEP(n, name, call) \
-    do { if (ms_dry) ms_do((n), name, 1); \
-         else if (!ms_do((n), name, (call))) return 0; } while (0)
+    do { if (ms_dry) ms_do((n), name, 1, 0); \
+         else if (!ms_do((n), name, (call), 0)) return 0; } while (0)
 
 #define MS_STEP_SOFT(n, name, call) \
-    do { if (ms_dry) ms_do((n), name, 1); else ms_do((n), name, (call)); } while (0)
+    do { if (ms_dry) ms_do((n), name, 1, 1); else ms_do((n), name, (call), 1); } while (0)
 
 int         intel_modeset_steps(void)          { return ms_count; }
 int         intel_modeset_step_plan(int i)     { return (i >= 0 && i < ms_count) ? ms_log[i].plan_step : 0; }
 const char *intel_modeset_step_name(int i)     { return (i >= 0 && i < ms_count) ? ms_log[i].name : ""; }
 int         intel_modeset_step_result(int i)   { return (i >= 0 && i < ms_count) ? ms_log[i].result : 0; }
+/* Which kind of step it was, so a reader can tell "the panel did not come up"
+ * from "the backlight did not" without consulting the source. */
+int         intel_modeset_step_soft(int i)     { return (i >= 0 && i < ms_count) ? ms_log[i].soft : 0; }
 int         intel_modeset_failed_at(void)      { return ms_failed_at; }
 
 /* ---- the mode, staged in pieces so no single call takes 16 arguments ----

@@ -39,6 +39,7 @@
  */
 
 #include "memmap.h"
+#include "ggttmap.h"
 #include "gpu.h"
 
 typedef unsigned int       gr_u32;
@@ -50,10 +51,13 @@ typedef unsigned long long gr_uptr;
 typedef unsigned int       gr_uptr;
 #endif
 
-/* from intel.c - the BAR0 mapping and the GGTT it already knows how to program */
+/* from intel.c - the BAR0 mapping and the GGTT it already knows how to program.
+ * intel_mmio_ptr() is NOT declared here on purpose: it lives in gpu.h, which
+ * this file already includes, so this file and intel.c cannot disagree about
+ * its width. A private `gr_u32 intel_mmio(void);` here is what truncated every
+ * ring register on a >4 GiB BAR. */
 int  intel_present(void);
 int  intel_supported(void);
-gr_u32 intel_mmio(void);
 gr_u32 intel_ggtt_size(void);
 int  intel_ggtt_map(gr_u32 gfx_page, gr_u32 phys_addr);
 int  intel_ggtt_map_range(gr_u32 gfx_page, gr_u32 phys_addr, int pages);
@@ -73,7 +77,7 @@ int  intel_ggtt_map_range(gr_u32 gfx_page, gr_u32 phys_addr, int pages);
  */
 #define GPU_RING_BYTES 4096u                 /* one page, and RING_CTL's length
                                               * field counts pages minus one   */
-#define GPU_RING_GFX   0x04000000u           /* 64 MiB into the graphics space */
+#define GPU_RING_GFX   GGTT_RING_GFX          /* ggttmap.h owns it */
 #define GPU_FB_GFX     0x08000000u           /* 128 MiB: the back buffer, mapped
                                               * for gpu_fill_try. Clear of the
                                               * ring above and of intel.c's
@@ -244,15 +248,18 @@ static gr_u32 ring_tail = 0;
 void gpu_ring_arm(int on) { ring_armed = on ? 1 : 0; }
 int  gpu_ring_is_live(void) { return ring_live; }
 
+/* intel_mmio_ptr(), never intel_mmio(). The latter returns u32 for the zl
+ * builtin and truncates a >4 GiB BAR; casting its result back to a pointer
+ * width here would look correct and reach a different physical address. */
 static gr_u32 mmio_r(gr_u32 off)
 {
-    return *(volatile gr_u32 *)((gr_uptr)intel_mmio() + (gr_uptr)off);
+    return *(volatile gr_u32 *)(intel_mmio_ptr() + (gpu_uptr)off);
 }
 static void mmio_w(gr_u32 off, gr_u32 val)
 {
     if (!ring_armed) return;                 /* the gate, checked at the ONE
                                               * place every write goes through */
-    *(volatile gr_u32 *)((gr_uptr)intel_mmio() + (gr_uptr)off) = val;
+    *(volatile gr_u32 *)(intel_mmio_ptr() + (gpu_uptr)off) = val;
 }
 
 /* Release the well. Holding forcewake permanently keeps the GT awake and burns
@@ -490,12 +497,16 @@ int gpu_fill_try(int x, int y, int w, int h, gr_u32 rgb)
 #define GPU_ST_PITCH (GPU_ST_W * 4u)
 #define GPU_ST_BYTES (GPU_ST_PITCH * GPU_ST_H)
 #define GPU_ST_PHYS  ((gr_u64)HI_GPU + 4096u + 16384u)   /* after ring + cursor */
-#define GPU_ST_GFX   0x04002000u                          /* ring gfx + 2 pages */
+#define GPU_ST_GFX   GGTT_ST_GFX                          /* ggttmap.h owns it */
 #define GPU_ST_COLOR 0x60D2EBu
 #define GPU_ST_POISON 0xDEADBEEFu
 
 _Static_assert(GPU_ST_PHYS + GPU_ST_BYTES <= (gr_u64)HI_BLUR,
                "the self-test surface runs past HI_GPU into the blur arena");
+/* and it must be the size ggttmap.h reserved, or the disjointness asserts there
+ * are checking a span this file no longer uses */
+_Static_assert(GPU_ST_BYTES == GGTT_ST_SPAN,
+               "the self-test surface is not the size ggttmap.h reserved for it");
 
 static gr_u32 st_filled, st_poison, st_ctl, st_head, st_tail;
 

@@ -168,6 +168,28 @@ int tcp_recv(u8 *out, int max)
     return n;
 }
 
+/* THROW BYTES AWAY, and it needs its own name.
+ *
+ * http.c wanted "drain whatever is there and discard it" once its response
+ * buffer was full, and spelled it `tcp_recv(resp, 0)`. That reads as "receive
+ * zero bytes into resp", and tcp_recv's guard above - which is correct, and
+ * correct for the reason its comment gives - returns 0 immediately. So nothing
+ * drained, the receive window never reopened, and the fetch sat in
+ * HTTP_RECEIVING for ever with no timeout on that path.
+ *
+ * Neither function was wrong. A defensive check at a trust boundary silently
+ * disabled a drain in a caller written around an assumption that nothing
+ * recorded. The fix is a verb that cannot be mistaken for a length. */
+int tcp_discard(int max)
+{
+    if (max <= 0) return 0;
+    int n = tcp_available();
+    if (n > max) n = max;
+    rcv_head += n;
+    if (rcv_head == rcv_tail) rcv_head = rcv_tail = 0;   /* the same compaction */
+    return n;
+}
+
 /* ---- segments out ---------------------------------------------------------- */
 static u8 seg[MSS + 20];
 

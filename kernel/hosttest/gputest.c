@@ -30,7 +30,19 @@
  * code runs against a model of the hardware rather than the hardware. */
 static int    intel_present(void)   { return 0; }
 static int    intel_supported(void) { return 0; }
-static unsigned intel_mmio(void)    { return 0; }
+__attribute__((unused)) static unsigned intel_mmio(void) { return 0; }
+/* The full-width accessor gpuring.c actually dereferences. Zero, deliberately,
+ * and NOT a >4 GiB sentinel: mmio_r() has no ring_armed gate and dereferences
+ * unconditionally, so a plausible-looking sentinel would turn a harness run into
+ * a segfault the moment any test reached it.
+ *
+ * That means this harness cannot catch a truncating accessor, and it is worth
+ * being explicit that it never could - the previous stub returned 0 too, which
+ * is why 116 green checks sat over the bug. The guard against that class is a
+ * COMPILE-time one: gpu.h now carries the single declaration both intel.c and
+ * gpuring.c must agree with, so a width mismatch is a build error rather than
+ * something a runtime probe would have to notice. */
+gpu_uptr intel_mmio_ptr(void) { return 0; }   /* non-static: gpu.h declares it, and the two must match */
 __attribute__((unused)) static unsigned intel_ggtt_size(void) { return 0; }
 static int    intel_ggtt_map(unsigned p, unsigned a) { (void)p; (void)a; return 0; }
 /* gpu_fb_attach maps the back buffer as a RANGE, so the stub set needs this one

@@ -59,6 +59,10 @@ int  tcp_send(const net_u8 *data, int len);
 
 /* Take delivered bytes out of the receive buffer. */
 int  tcp_recv(net_u8 *out, int max);
+/* Drop up to `max` bytes from the receive buffer without copying them. Use this
+ * to keep a connection draining when the consumer has nowhere to put the data -
+ * tcp_recv(buf, 0) does NOT do that, it returns 0 and drains nothing. */
+int  tcp_discard(int max);
 int  tcp_available(void);
 
 void tcp_close(void);
