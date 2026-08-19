@@ -31,7 +31,7 @@
 #include <math.h>
 #include <sys/mman.h>
 
-#define ARENA_BASE  0x00800000UL
+#define ARENA_BASE  0x00E00000UL
 #define ARENA_BYTES 0x01000000UL
 
 typedef unsigned long ul;

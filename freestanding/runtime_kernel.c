@@ -138,6 +138,29 @@ extern int xhci_ptr_ep(void) ZL_WEAK;
  * Not weak. arena.c is in all four source lists and is pure arithmetic against
  * memory - if it is missing the build should fail, because unlike a USB
  * pointer there is no fallback that "has always worked" to degrade to. */
+/* heap.c, the general allocator. Same argument as arena.c for not being weak:
+ * it is in all four source lists and is arithmetic against memory. The two are
+ * NOT alternatives - the arena hands memory to zl programs and reclaims it
+ * wholesale on reset, the heap is for memory the kernel keeps and frees one
+ * object at a time. Both exist on purpose. */
+extern void user_selftest(void);
+extern int  user_has_exited(void);
+extern unsigned int user_call_count(void);
+
+extern void vmm_report(void);
+extern int  vmm_active(void);
+extern unsigned long long vmm_window_virt(void);
+
+extern int heap_init(void);
+extern int heap_ok(void);
+extern unsigned long heap_capacity(void);
+extern unsigned long heap_used(void);
+extern unsigned long heap_available(void);
+extern unsigned long heap_high_water(void);
+extern unsigned long heap_refusals(void);
+extern unsigned long heap_blocks(void);
+extern unsigned long heap_check(void);
+
 extern int arena_init(void);
 extern int arena_ok(void);
 extern void arena_reset(void);
@@ -1576,6 +1599,34 @@ Value zl_calln(const char *name, int n, ...)
      * arena_up prints its own line, the way fb.c does, so the boot log states
      * an ADDRESS rather than a claim - a number somebody can check against the
      * map in fb.c and in arena.c's header comment. */
+    /* ---- the general heap (heap.c) ----------------------------------------
+     * heap_up prints its own line for the same reason arena_up does. heap_chk
+     * is the one that matters operationally: it walks every block by boundary
+     * tag and returns 0 if the heap still adds up, so "is the heap sound" is a
+     * command somebody can type rather than a thing to hope about. It is O(the
+     * number of blocks) and deliberately NOT on the alloc/free path. */
+    /* vmm_up prints one line with ADDRESSES in it - "64 MiB mapped: virtual
+     * 4096 MiB -> physical 256 MiB" is a fact somebody can check against
+     * memmap.h; "virtual memory is on" would not be. */
+    /* ring 3. user_up runs the self-test, which prints from BOTH sides of the
+     * privilege boundary - the "u3" in the boot log is produced by syscalls
+     * made from ring 3 and can be produced no other way. */
+    if (streq(name, "user_up"))       { user_selftest(); return zl_num((double)user_call_count()); }
+    if (streq(name, "user_calls"))    return zl_num((double)user_call_count());
+
+    if (streq(name, "vmm_up"))        { vmm_report(); return zl_num((double)vmm_active()); }
+    if (streq(name, "vmm_on"))        return zl_num((double)vmm_active());
+
+    if (streq(name, "heap_up"))       return zl_num((double)heap_init());
+    if (streq(name, "heap_ok"))       return zl_num((double)heap_ok());
+    if (streq(name, "heap_cap"))      return zl_num((double)heap_capacity());
+    if (streq(name, "heap_used"))     return zl_num((double)heap_used());
+    if (streq(name, "heap_free"))     return zl_num((double)heap_available());
+    if (streq(name, "heap_hw"))       return zl_num((double)heap_high_water());
+    if (streq(name, "heap_refused"))  return zl_num((double)heap_refusals());
+    if (streq(name, "heap_blocks"))   return zl_num((double)heap_blocks());
+    if (streq(name, "heap_chk"))      return zl_num((double)heap_check());
+
     if (streq(name, "arena_up"))      return zl_num((double)arena_init());
     if (streq(name, "arena_ok"))      return zl_num((double)arena_ok());
     if (streq(name, "arena_cap"))     return zl_num((double)arena_capacity());

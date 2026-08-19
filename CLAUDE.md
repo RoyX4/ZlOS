@@ -59,6 +59,12 @@ area:
 - `kernel/docs/thinkpad-first-boot.md` — the step-by-step for booting the
   laptop, including the two things that waste an hour (Secure Boot, and the fact
   that there is no serial port so the screen is the only diagnostic).
+- `kernel/docs/memory-model.md` — **the address space and, for each boundary in
+  it, the thing that actually enforces it.** The four ceilings people conflate
+  (what the loader carries, where the image may end, who owns which address, how
+  much RAM exists) are four different numbers with four different guards. Read
+  it before placing any buffer, and before believing a `_Static_assert` covers
+  what you think it covers.
 - `kernel/docs/overnight-2026-08-18.md` — one page covering the descriptor-pointer
   bug that made the 64-bit boot layout-sensitive, why three green gates missed it,
   and what is still open.

@@ -252,6 +252,26 @@ echo "built ./libctest      (run: ./libctest)"
 gcc -O2 -w -o arenatest arenatest.c ../arena.c
 echo "built ./arenatest     (run: ./arenatest)"
 
+# The general allocator, and this one is built with the WARNINGS ON rather than
+# -w. arena.c is a bump pointer and an addition; heap.c has boundary tags, two
+# levels of size class and three bitmaps, so it is the file in this tree where
+# an unused variable or a signed/unsigned comparison is most likely to be an
+# actual bug rather than noise. It found nothing on the way in, which is worth
+# rather more than -w finding nothing.
+#
+# Links the REAL heap.c, unmodified. The harness mmaps HEAP_BASE and supplies
+# putc, exactly as arenatest does for the arena.
+gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -o heaptest heaptest.c ../heap.c
+echo "built ./heaptest      (run: ./heaptest)"
+
+# The virtual-memory arithmetic. NOT the mapping - installing a PDPT entry needs
+# CR3 and ring 0, and the only proof of that is verify-efi.sh booting green. But
+# vmm_phys()/vmm_virt() are called from dma_addr() on every keystroke, mouse
+# report, disk block and network frame, and they are the twelve lines where an
+# off-by-one hands a device an address one page out.
+gcc -O2 -g -Wall -Wextra -o pagingtest pagingtest.c ../paging.c
+echo "built ./pagingtest    (run: ./pagingtest)"
+
 # `run`, and every way it declines. TWO binaries from one source, which is the
 # point of exec.c's weak fs_* references: with a filesystem linked it reaches
 # not-found / empty / too-big / loaded; with nothing defining fs_* the weak

@@ -37,6 +37,7 @@
  */
 
 #include "memmap.h"
+#include "dma.h"
 
 typedef unsigned long long u64;
 typedef unsigned int       u32;
@@ -466,14 +467,19 @@ int xhci_init_rings(void)
         for (int i = 0; i < xscratch; i++) {
             u32 page = XMEM_SCRATCH + (u32)i * xpagesize;
             zero_mem(page, xpagesize);
-            sp[i * 2]     = page;                   /* low half  */
-            sp[i * 2 + 1] = 0;                      /* high half */
+            {   /* The controller dereferences these. dma.h. */
+                unsigned long long pa = dma_addr(page);
+                sp[i * 2]     = (u32)pa;            /* low half  */
+                sp[i * 2 + 1] = (u32)(pa >> 32);    /* high half */
+            }
         }
         volatile u32 *dcbaa = (volatile u32 *)XMEM_DCBAA;
-        dcbaa[0] = XMEM_SCRATCH_ARR;
-        dcbaa[1] = 0;
+        {   unsigned long long pa = dma_addr(XMEM_SCRATCH_ARR);
+            dcbaa[0] = (u32)pa;
+            dcbaa[1] = (u32)(pa >> 32);
+        }
     }
-    wr64(xop + XOP_DCBAAP, (u64)XMEM_DCBAA);
+    wr64(xop + XOP_DCBAAP, dma_addr(XMEM_DCBAA));
 
     /* ---- command ring, with a Link TRB closing the loop ----------------- */
     zero_mem(XMEM_CMDRING, RING_TRBS * TRB_BYTES);
@@ -482,26 +488,28 @@ int xhci_init_rings(void)
     cmd_enqueue = 0;
     cmd_cycle   = 1;              /* set BEFORE the link TRB is written, or a
                                      re-init lays it down with a stale cycle */
-    trb_write(XMEM_CMDRING, RING_TRBS - 1, (u64)XMEM_CMDRING, 0,
+    trb_write(XMEM_CMDRING, RING_TRBS - 1, dma_addr(XMEM_CMDRING), 0,
               (TRB_LINK << 10) | (1u << 1) | cmd_cycle);
     /* CRCR also carries our initial cycle state in bit 0 */
-    wr64(xop + XOP_CRCR, (u64)XMEM_CMDRING | 1u);
+    wr64(xop + XOP_CRCR, dma_addr(XMEM_CMDRING) | 1u);
 
     /* ---- event ring: the segment, then the table describing it ---------- */
     zero_mem(XMEM_EVTRING, RING_TRBS * TRB_BYTES);
     zero_mem(XMEM_ERST, 64);
     volatile u32 *erst = (volatile u32 *)XMEM_ERST;
-    erst[0] = XMEM_EVTRING;         /* segment base, low                     */
-    erst[1] = 0;                    /* segment base, high                    */
+    {   unsigned long long pa = dma_addr(XMEM_EVTRING);
+        erst[0] = (u32)pa;          /* segment base, low                     */
+        erst[1] = (u32)(pa >> 32);  /* segment base, high                    */
+    }
     erst[2] = RING_TRBS;            /* how many TRBs in this segment         */
     erst[3] = 0;
     evt_dequeue = 0;
     evt_cycle   = 1;
 
     /* the dequeue pointer must be set BEFORE the table base, per the spec */
-    wr64(xrt + XRT_ERDP, (u64)XMEM_EVTRING);
+    wr64(xrt + XRT_ERDP, dma_addr(XMEM_EVTRING));
     wr32(xrt + XRT_ERSTSZ, 1);      /* one segment */
-    wr64(xrt + XRT_ERSTBA, (u64)XMEM_ERST);
+    wr64(xrt + XRT_ERSTBA, dma_addr(XMEM_ERST));
 
     /* ---- run ------------------------------------------------------------ */
     wr32(xop + XOP_USBCMD, rd32(xop + XOP_USBCMD) | USBCMD_RS);
@@ -540,7 +548,7 @@ static u32 cmd_submit(u64 param, u32 status, u32 type, u32 extra)
     if (cmd_enqueue >= RING_TRBS - 1) {     /* the link TRB is not usable */
         /* hand the link TRB to the controller with the current cycle, then
          * flip ours - that is what makes the wrap visible to it */
-        trb_write(XMEM_CMDRING, RING_TRBS - 1, (u64)XMEM_CMDRING, 0,
+        trb_write(XMEM_CMDRING, RING_TRBS - 1, dma_addr(XMEM_CMDRING), 0,
                   (TRB_LINK << 10) | (1u << 1) | cmd_cycle);
         cmd_enqueue = 0;
         cmd_cycle ^= 1;
@@ -566,7 +574,7 @@ static int event_poll(u32 *out_param_lo, u32 *out_status, u32 *out_ctrl, int spi
         if (evt_dequeue >= RING_TRBS) { evt_dequeue = 0; evt_cycle ^= 1; }
         /* tell the controller how far we have consumed, and clear the
          * event handler busy bit (bit 3) while we are there */
-        wr64(xrt + XRT_ERDP, (u64)(XMEM_EVTRING + evt_dequeue * TRB_BYTES) | (1u << 3));
+        wr64(xrt + XRT_ERDP, dma_addr(XMEM_EVTRING + evt_dequeue * TRB_BYTES) | (1u << 3));
         return type;
     }
     return 0;
@@ -598,7 +606,11 @@ static int cmd_wait(u32 trb_addr, u32 *status, u32 *ctrl, int spins)
         if (t == 0) return 0;
         if (t == TRB_TRANSFER_EVENT) { kbd_event(p, s, c); continue; }
         if (t != TRB_CMD_COMPLETION) continue;      /* port change etc */
-        if (p != trb_addr) continue;                /* a stale completion */
+        /* p is a DEVICE address - the controller reports the address of the
+         * Command TRB it completed. trb_addr is a KERNEL address. Identity
+         * today; dma_kaddr() is what keeps this comparison true the day it is
+         * not, and without it every command here would time out. See dma.h. */
+        if (dma_kaddr(p) != trb_addr) continue;     /* a stale completion */
         if (status) *status = s;
         if (ctrl)   *ctrl   = c;
         return 1;
@@ -811,7 +823,7 @@ static int cur_speed   = 0;
 static void ring_init(u32 ring)
 {
     zero_mem(ring, RING_TRBS * TRB_BYTES);
-    trb_write(ring, RING_TRBS - 1, (u64)ring, 0,
+    trb_write(ring, RING_TRBS - 1, dma_addr(ring), 0,
               (TRB_LINK << 10) | (1u << 1) | 1u);
 }
 
@@ -827,8 +839,10 @@ int xhci_address_device(int slot, int port, int speed)
      * tells it where to find it */
     zero_mem(CTX_DEVICE(slot), 2048);
     volatile u32 *dcbaa = (volatile u32 *)XMEM_DCBAA;
-    dcbaa[slot * 2]     = CTX_DEVICE(slot);
-    dcbaa[slot * 2 + 1] = 0;
+    {   unsigned long long pa = dma_addr(CTX_DEVICE(slot));
+        dcbaa[slot * 2]     = (u32)pa;
+        dcbaa[slot * 2 + 1] = (u32)(pa >> 32);
+    }
 
     /* EP0's own transfer ring - one per slot, never shared */
     ring_init(EP0_RING(slot));
@@ -848,11 +862,11 @@ int xhci_address_device(int slot, int port, int speed)
      * bidirectional, and the max packet size for this speed */
     ctx_set(CTX_INPUT, 2, 1, (3u << 1) | (4u << 3) | ((u32)ep0_mps(speed) << 16));
     /* TR dequeue pointer, with DCS=1 to match the ring's initial cycle */
-    ctx_set(CTX_INPUT, 2, 2, EP0_RING(slot) | 1u);
-    ctx_set(CTX_INPUT, 2, 3, 0);
+    ctx_set(CTX_INPUT, 2, 2, (u32)dma_addr(EP0_RING(slot)) | 1u);
+    ctx_set(CTX_INPUT, 2, 3, (u32)(dma_addr(EP0_RING(slot)) >> 32));
     ctx_set(CTX_INPUT, 2, 4, 8);            /* average TRB length */
 
-    u32 trb = cmd_submit((u64)CTX_INPUT, 0, TRB_ADDRESS_DEVICE, (u32)slot << 24);
+    u32 trb = cmd_submit(dma_addr(CTX_INPUT), 0, TRB_ADDRESS_DEVICE, (u32)slot << 24);
     u32 status = 0, ctrl = 0;
     if (!cmd_wait(trb, &status, &ctrl, 5000000)) return 0;
     if (((status >> 24) & 0xFF) != 1) return 0;
@@ -888,7 +902,7 @@ static void ep0_push(int slot, u64 param, u32 status, u32 control)
     if (ep0_enqueue[slot] >= RING_TRBS - 1) {
         /* hand the link TRB over with the CURRENT cycle, then flip ours - that
          * is what makes the wrap visible to the controller */
-        trb_write(ring, RING_TRBS - 1, (u64)ring, 0,
+        trb_write(ring, RING_TRBS - 1, dma_addr(ring), 0,
                   (TRB_LINK << 10) | (1u << 1) | ep0_cycle[slot]);
         ep0_enqueue[slot] = 0;
         ep0_cycle[slot] ^= 1;
@@ -909,7 +923,7 @@ int xhci_control_in(int slot, u32 setup_lo, u32 setup_hi, u32 buf, int len)
      * one interrupt for the whole transfer means one event to match, and a
      * short descriptor is not an error we need to hear about separately. */
     if (len > 0)
-        ep0_push(slot, (u64)buf, (u32)len, (TRB_DATA << 10) | (1u << 16));
+        ep0_push(slot, dma_addr(buf), (u32)len, (TRB_DATA << 10) | (1u << 16));
 
     /* Status stage, in the OPPOSITE direction to the data, with IOC set so the
      * controller tells us the whole thing landed. */
@@ -991,7 +1005,7 @@ static int reset_endpoint(int slot, int dci)
     ep0_enqueue[slot] = 0;
     ep0_cycle[slot]   = 1;
 
-    u32 trb2 = cmd_submit((u64)(ring | 1u), 0, 16 /* Set TR Dequeue Ptr */,
+    u32 trb2 = cmd_submit(dma_addr(ring) | 1u, 0, 16 /* Set TR Dequeue Ptr */,
                           ((u32)slot << 24) | ((u32)dci << 16));
     u32 st2 = 0;
     if (!cmd_wait(trb2, &st2, 0, 2000000)) return 0;
@@ -1023,7 +1037,7 @@ static int fix_ep0_packet_size(int slot, int speed)
     ctx_set(CTX_INPUT, 0, 1, (1u << 1));
     ctx_set(CTX_INPUT, 2, 1, (3u << 1) | (4u << 3) | ((u32)real_mps << 16));
 
-    u32 trb = cmd_submit((u64)CTX_INPUT, 0, TRB_EVALUATE_CTX, (u32)slot << 24);
+    u32 trb = cmd_submit(dma_addr(CTX_INPUT), 0, TRB_EVALUATE_CTX, (u32)slot << 24);
     u32 status = 0;
     if (!cmd_wait(trb, &status, 0, 2000000)) return 0;
     return ((status >> 24) & 0xFF) == 1;
@@ -1358,13 +1372,13 @@ static int configure_endpoint(int slot, int dci, int mps, int speed, int binterv
     /* CErr=3, EP type 7 = Interrupt IN, and the packet size the descriptor
      * asked for */
     ctx_set(CTX_INPUT, ic, 1, (3u << 1) | (7u << 3) | ((u32)mps << 16));
-    ctx_set(CTX_INPUT, ic, 2, INT_RING(slot) | 1u);   /* dequeue ptr, DCS=1 */
-    ctx_set(CTX_INPUT, ic, 3, 0);
+    ctx_set(CTX_INPUT, ic, 2, (u32)dma_addr(INT_RING(slot)) | 1u);   /* dequeue ptr, DCS=1 */
+    ctx_set(CTX_INPUT, ic, 3, (u32)(dma_addr(INT_RING(slot)) >> 32));
     /* average TRB length, and Max ESIT Payload in the high half - the most
      * this endpoint can move in one service interval */
     ctx_set(CTX_INPUT, ic, 4, (u32)mps | ((u32)mps << 16));
 
-    u32 trb = cmd_submit((u64)CTX_INPUT, 0, TRB_CONFIGURE_EP, (u32)slot << 24);
+    u32 trb = cmd_submit(dma_addr(CTX_INPUT), 0, TRB_CONFIGURE_EP, (u32)slot << 24);
     u32 status = 0, ctrl = 0;
     if (!cmd_wait(trb, &status, &ctrl, 5000000)) return 0;
     return ((status >> 24) & 0xFF) == 1;
@@ -1381,11 +1395,11 @@ static void kbd_requeue(void)
      * hid_decode would see keys that are not held. */
     zero_mem(KBD_REPORT, 64);
     u32 ring = INT_RING(kbd_slot);
-    trb_write(ring, kbd_enq, (u64)KBD_REPORT, (u32)kbd_mps,
+    trb_write(ring, kbd_enq, dma_addr(KBD_REPORT), (u32)kbd_mps,
               (TRB_NORMAL << 10) | (1u << 5) | kbd_cyc);   /* IOC */
     kbd_enq++;
     if (kbd_enq >= RING_TRBS - 1) {
-        trb_write(ring, RING_TRBS - 1, (u64)ring, 0,
+        trb_write(ring, RING_TRBS - 1, dma_addr(ring), 0,
                   (TRB_LINK << 10) | (1u << 1) | kbd_cyc);
         kbd_enq = 0;
         kbd_cyc ^= 1;
@@ -1405,11 +1419,11 @@ static void ptr_requeue(void)
      * still hold an older report, and a stale delta is movement that never
      * happened. */
     zero_mem(PTR_BUF(ptr_enq), PTR_BUFSZ);
-    trb_write(ring, ptr_enq, (u64)PTR_BUF(ptr_enq), (u32)ptr_mps,
+    trb_write(ring, ptr_enq, dma_addr(PTR_BUF(ptr_enq)), (u32)ptr_mps,
               (TRB_NORMAL << 10) | (1u << 5) | ptr_cyc);   /* IOC */
     ptr_enq++;
     if (ptr_enq >= PTR_RING_USE) {
-        trb_write(ring, PTR_RING_USE, (u64)ring, 0,
+        trb_write(ring, PTR_RING_USE, dma_addr(ring), 0,
                   (TRB_LINK << 10) | (1u << 1) | ptr_cyc);
         ptr_enq = 0;
         ptr_cyc ^= 1;
@@ -1895,11 +1909,14 @@ static void kbd_event(u32 param, u32 status, u32 ctrl)
              * PTR_NBUF in flight those are different buffers, and reading the
              * wrong one replays or skips a delta. */
             u32 ring = INT_RING(ptr_slot);
-            u32 idx  = (param - ring) / TRB_BYTES;
+            /* param is the DEVICE address of the TRB that completed; ring is a
+             * KERNEL address. Same reasoning as cmd_wait above - see dma.h. */
+            u32 pk   = (u32)dma_kaddr(param);
+            u32 idx  = (pk - ring) / TRB_BYTES;
             /* A completion pointing outside our ring is not ours to decode.
              * Requeue anyway - the endpoint's liveness must not depend on the
              * event making sense. */
-            if (param >= ring && idx < PTR_RING_USE) ptr_decode(PTR_BUF(idx));
+            if (pk >= ring && idx < PTR_RING_USE) ptr_decode(PTR_BUF(idx));
         }
         ptr_requeue();
         return;
@@ -2083,18 +2100,18 @@ static int configure_bulk(int slot)
     int ic_in = msc_in_dci + 1;
     ctx_set(CTX_INPUT, ic_in, 0, 0);                  /* bulk has no interval */
     ctx_set(CTX_INPUT, ic_in, 1, (3u << 1) | ((u32)EPTYPE_BULK_IN << 3) | ((u32)msc_in_mps << 16));
-    ctx_set(CTX_INPUT, ic_in, 2, MSC_IN_RING(slot) | 1u);
-    ctx_set(CTX_INPUT, ic_in, 3, 0);
+    ctx_set(CTX_INPUT, ic_in, 2, (u32)dma_addr(MSC_IN_RING(slot)) | 1u);
+    ctx_set(CTX_INPUT, ic_in, 3, (u32)(dma_addr(MSC_IN_RING(slot)) >> 32));
     ctx_set(CTX_INPUT, ic_in, 4, (u32)msc_in_mps);
 
     int ic_out = msc_out_dci + 1;
     ctx_set(CTX_INPUT, ic_out, 0, 0);
     ctx_set(CTX_INPUT, ic_out, 1, (3u << 1) | ((u32)EPTYPE_BULK_OUT << 3) | ((u32)msc_out_mps << 16));
-    ctx_set(CTX_INPUT, ic_out, 2, MSC_OUT_RING(slot) | 1u);
-    ctx_set(CTX_INPUT, ic_out, 3, 0);
+    ctx_set(CTX_INPUT, ic_out, 2, (u32)dma_addr(MSC_OUT_RING(slot)) | 1u);
+    ctx_set(CTX_INPUT, ic_out, 3, (u32)(dma_addr(MSC_OUT_RING(slot)) >> 32));
     ctx_set(CTX_INPUT, ic_out, 4, (u32)msc_out_mps);
 
-    u32 trb = cmd_submit((u64)CTX_INPUT, 0, TRB_CONFIGURE_EP, (u32)slot << 24);
+    u32 trb = cmd_submit(dma_addr(CTX_INPUT), 0, TRB_CONFIGURE_EP, (u32)slot << 24);
     u32 status = 0;
     if (!cmd_wait(trb, &status, 0, 5000000)) return 0;
     return ((status >> 24) & 0xFF) == 1;
@@ -2108,10 +2125,10 @@ static int bulk_xfer(int slot, int dci, u32 buf, u32 len, int is_in)
     u32 *enq = is_in ? &msc_in_enq : &msc_out_enq;
     u32 *cyc = is_in ? &msc_in_cyc : &msc_out_cyc;
 
-    trb_write(ring, *enq, (u64)buf, len, (TRB_NORMAL << 10) | (1u << 5) | *cyc);
+    trb_write(ring, *enq, dma_addr(buf), len, (TRB_NORMAL << 10) | (1u << 5) | *cyc);
     (*enq)++;
     if (*enq >= RING_TRBS - 1) {
-        trb_write(ring, RING_TRBS - 1, (u64)ring, 0,
+        trb_write(ring, RING_TRBS - 1, dma_addr(ring), 0,
                   (TRB_LINK << 10) | (1u << 1) | *cyc);
         *enq = 0;
         *cyc ^= 1;

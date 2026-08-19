@@ -83,8 +83,25 @@ HIST_BUF=${K[HIST_BUF]}; HIST_N=${K[HIST_N]}
 # named constant; the gap between them is what each actually gets.
 SNAKE_CELLS=$((SNAKE_Y - SNAKE_X))
 
+# THE PROGRAM ARENA, WHICH WAS IN NEITHER CHECKER.
+#
+# check-memmap.sh sweeps kernel.zl's fixed buffers against each other from
+# 32 MiB up. memmap.h's _Static_assert chain covers the high map from 128 MiB
+# up. arena.c's 16 MiB arena sits between the two and was in NEITHER - a region
+# larger than everything this script checks put together, invisible to it.
+#
+# It never mattered while the arena was at 8 MiB with 24 MiB of clearance. It
+# started mattering the moment the arena MOVED (8 -> 14 MiB, when the raw
+# loader's CHUNKS went to 192), because a move is when a gap gets spent. Read
+# from arena.c rather than restated, so this cannot drift from the value the
+# kernel actually uses.
+AB=$(grep -oP '^#define\s+ARENA_BASE\s+\K0x[0-9A-Fa-f]+' arena.c)
+AZ=$(grep -oP '^#define\s+ARENA_BYTES\s+\K0x[0-9A-Fa-f]+' arena.c)
+[ -n "$AB" ] && [ -n "$AZ" ] || { echo "FAIL: ARENA_BASE/ARENA_BYTES not found in arena.c"; exit 1; }
+
 # name:start:size - keep in sync with the map comment in kernel.zl
 REGIONS=(
+    "ARENA:$((AB)):$((AZ))"
     "SNAKE_X:$SNAKE_X:$SNAKE_CELLS"
     "SNAKE_Y:$SNAKE_Y:$SNAKE_CELLS"
     "FS_META:$FS_META:64"

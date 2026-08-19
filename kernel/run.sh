@@ -12,7 +12,12 @@ cd "$(dirname "$0")"
 
 ./build.sh >/dev/null
 
+# -m 1G is HI_TOP (memmap.h). This script passed no -m for its whole life, so a
+# hand-run boot got qemu's 128 MiB default and behaved differently from every
+# gate - the high-RAM map above 128 MiB was simply absent. check-ram.sh fails if
+# this and HI_TOP ever disagree.
 COMMON=(-kernel kernel.elf
+        -m 1G
         -device isa-debug-exit,iobase=0xf4,iosize=0x04
         -no-reboot)
 

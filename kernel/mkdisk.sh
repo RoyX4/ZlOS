@@ -77,8 +77,20 @@ if [ "$KSIZE" -gt "$LIMIT" ]; then
 fi
 
 cat raw_boot.bin kernel_raw.bin > zlOS.img
-# pad to at least what the loader reads (12 * 32 KiB) so no read runs off the end
-truncate -s 2M zlOS.img
+
+# PAD TO WHAT THE LOADER READS, DERIVED - never a literal.
+#
+# The loader reads CHUNKS chunks from LBA 1 unconditionally. If the image is
+# shorter than 512 + CHUNKS*32 KiB the last reads run off the end of the file,
+# INT 13h returns carry, and raw_boot.asm prints 'D' and halts - a dead machine
+# with no build error, from two numbers in two files drifting apart.
+#
+# This was `truncate -s 2M` beside a comment claiming "12 * 32 KiB", against a
+# CHUNKS of 60. All three disagreed: 2 MiB, 384 KiB and 1.875 MiB. It happened
+# to work only because 2 MiB was the largest of them. Deriving it means raising
+# CHUNKS is now a one-line change that cannot leave this behind.
+IMG_MIN=$(( 512 + CHUNKS * 64 * 512 ))
+truncate -s "$IMG_MIN" zlOS.img
 
 echo "built zlOS.img - OUR bootloader, no GRUB"
 echo "  boot sector: $(stat -c%s raw_boot.bin) bytes  (must be 512)"

@@ -587,9 +587,13 @@ int intel_ggtt_map(u32 gfx_page, u32 phys_addr)
      *
      *     GGTT[0x01F40] = 00000001 20C00001   phys 0x01_20C00000
      *
-     * so the hardware maps above 4 GiB happily. zlOS's whole RAM map lives
-     * under 256 MiB, so the ceiling costs nothing today; widening phys_addr to
-     * u64 is what it would take to lift it. */
+     * so the hardware maps above 4 GiB happily. Every buffer zlOS actually
+     * places still lives under 256 MiB, so the ceiling costs nothing today -
+     * but note that is now a fact about where things HAPPEN to be, not a rule.
+     * memmap.h's HI_TOP is 1 GiB and the space between the map and it is
+     * unclaimed, so the first allocator that hands out an address up there is
+     * still fine (1 GiB < 4 GiB) and the first one that goes past 4 GiB is not.
+     * Widening phys_addr to u64 is what it would take to lift it. */
     pte[1] = 0;
     return 1;
 }

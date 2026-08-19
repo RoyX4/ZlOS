@@ -37,6 +37,7 @@
  */
 
 #include "memmap.h"
+#include "dma.h"
 
 typedef unsigned long long u64;
 typedef unsigned int       u32;
@@ -283,8 +284,8 @@ int nvme_init(void)
 
     /* queue sizes are zero-based in AQA */
     wr32(nv_base + NVME_AQA, ((QDEPTH - 1) << 16) | (QDEPTH - 1));
-    wr64(nv_base + NVME_ASQ, (u64)NMEM_ASQ);
-    wr64(nv_base + NVME_ACQ, (u64)NMEM_ACQ);
+    wr64(nv_base + NVME_ASQ, dma_addr(NMEM_ASQ));
+    wr64(nv_base + NVME_ACQ, dma_addr(NMEM_ACQ));
 
     /* CC: 4 KiB pages (MPS=0), NVM command set (CSS=0), round-robin
      * arbitration, and the queue entry sizes as powers of two - 2^6 = 64 for
@@ -308,7 +309,7 @@ int nvme_identify_controller(void)
 {
     if (!nv_ready) return 0;
     zero_mem(NMEM_IDENT, 4096);
-    if (admin_cmd(ADMIN_IDENTIFY, 0, (u64)NMEM_IDENT, 1, 0) != 0) return 0;
+    if (admin_cmd(ADMIN_IDENTIFY, 0, dma_addr(NMEM_IDENT), 1, 0) != 0) return 0;
 
     /* Copy the strings out NOW. Identify Namespace reuses this same buffer,
      * and reading the model afterwards returns namespace fields interpreted as
@@ -324,7 +325,7 @@ int nvme_identify_namespace(void)
 {
     if (!nv_ready) return 0;
     zero_mem(NMEM_IDENT, 4096);
-    if (admin_cmd(ADMIN_IDENTIFY, nv_nsid, (u64)NMEM_IDENT, 0, 0) != 0) return 0;
+    if (admin_cmd(ADMIN_IDENTIFY, nv_nsid, dma_addr(NMEM_IDENT), 0, 0) != 0) return 0;
 
     volatile u32 *id = (volatile u32 *)(uptr)NMEM_IDENT;
     nv_blocks    = ((u64)id[1] << 32) | (u64)id[0];       /* NSZE, in blocks */
@@ -402,11 +403,11 @@ int nvme_create_io_queues(void)
 
     /* CREATE_CQ: cdw10 = qid | (size-1)<<16, cdw11 = PC | IEN.
      * PC (physically contiguous) is bit 0; interrupts stay off - we poll. */
-    if (admin_cmd(ADMIN_CREATE_CQ, 0, (u64)NMEM_IOCQ,
+    if (admin_cmd(ADMIN_CREATE_CQ, 0, dma_addr(NMEM_IOCQ),
                   1u | ((QDEPTH - 1) << 16), 1u) != 0) return 0;
 
     /* CREATE_SQ: cdw11 = PC | (completion queue id)<<16 */
-    if (admin_cmd(ADMIN_CREATE_SQ, 0, (u64)NMEM_IOSQ,
+    if (admin_cmd(ADMIN_CREATE_SQ, 0, dma_addr(NMEM_IOSQ),
                   1u | ((QDEPTH - 1) << 16), 1u | (1u << 16)) != 0) return 0;
     return 1;
 }
@@ -418,7 +419,7 @@ static int io_one(u8 opcode, u32 lba_lo, u32 lba_hi)
 {
     if (!nv_ready) return 0;
     u16 cid = next_cid++;
-    sqe(NMEM_IOSQ, iosq_tail, opcode, cid, nv_nsid, (u64)NMEM_DATA,
+    sqe(NMEM_IOSQ, iosq_tail, opcode, cid, nv_nsid, dma_addr(NMEM_DATA),
         lba_lo, lba_hi, 0 /* NLB is zero-based: 0 means one block */);
     iosq_tail = (u16)((iosq_tail + 1) % QDEPTH);
     wr32(doorbell(1, 0), (u32)iosq_tail);

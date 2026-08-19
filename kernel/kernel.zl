@@ -2824,7 +2824,7 @@ fn net_gate() {
     }
     put("    DMA arena at  0x")  hex(net_arena(), 8)  print("")
     if net_ram() == 0 {
-        color(C_RED)  print("    the arena is NOT backed by RAM - needs -m 256 or more")
+        color(C_RED)  print("    the arena is NOT backed by RAM - needs -m 1G or more")
         color(C_GREY) return 0
     }
     if net_up() == 0 {
@@ -4142,14 +4142,34 @@ usb_boot()
 # that is not backed by RAM is something you want to be told about while you
 # are still reading the boot log, not three keystrokes into a program.
 arena_up()
+# The general heap, and it is a DIFFERENT thing from the arena above rather than
+# a better one. The arena hands memory to zl programs and takes it all back in
+# one move between runs; this hands out memory the kernel keeps, and takes it
+# back one object at a time. Neither replaces the other and both are called at
+# boot, for the same reason arena_up is: an allocator that is not backed by RAM
+# is something you want to read in the boot log, not discover three keystrokes
+# into a program.
+heap_up()
+# AFTER heap_up, not before: heap_init() is what ASKS paging.c for the window, so
+# there is nothing to report until it has. Printing "no window" before the only
+# caller has run would be true and useless.
+vmm_up()
+# RING 3. Runs a tiny program at ring 3 that talks to the kernel only through
+# int 0x80, then comes back. The "u3" in the line below is written by syscalls
+# made from the far side of the privilege boundary - there is no other way for
+# those bytes to reach the serial port - so this line failing to appear is a
+# real regression rather than a cosmetic one, and golden.txt pins it.
+user_up()
 ok_line("zl runtime, kernel subset")
-# STILL TRUE, and it is worth saying why rather than leaving the next reader to
-# wonder whether it was just missed. A bump allocator with no free() and no
-# reuse inside a run is not a heap - there is nothing to fragment, nothing to
-# double-free, and nothing to leak that a reset does not reclaim. The line stops
-# being honest the day the interpreter boxes lists and strings (EXEC-PROMPT §8),
-# and that is the change that has to carry it, not this one.
-info_line("no heap, no filesystem, no scheduler")
+# THIS LINE USED TO SAY "no heap", and the comment under it said the line would
+# stop being honest "the day the interpreter boxes lists and strings, and that
+# is the change that has to carry it, not this one." A different change carried
+# it: heap.c is a real allocator - segregated free lists, boundary tags,
+# free/reuse/coalesce, and a worst case measured at 3 steps for alloc and 4 for
+# free with thousands of free blocks outstanding (hosttest/heaptest.c).
+#
+# The filesystem and the scheduler claims are unchanged and still true.
+info_line("no filesystem, no scheduler, no per-process address space")
 
 print("")
 color(C_GREEN)  print("  ready.")

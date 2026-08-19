@@ -36,7 +36,7 @@ check () {
     : > "$OUT"
     # '.' throwaway (QEMU can eat the first serial byte), ';' the clock, 'q' halt
     printf '.;q' | timeout "$CEILING" qemu-system-i386 \
-        -kernel kernel.elf -m 512 -rtc "base=$base" \
+        -kernel kernel.elf -m 1G -rtc "base=$base" \
         -serial stdio -display none -no-reboot >"$OUT" 2>/dev/null &
     local qpid=$!
     for _ in $(seq $((CEILING * 2))); do
