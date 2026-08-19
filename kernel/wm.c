@@ -50,6 +50,17 @@ int  fb_text_prop_h(void);
 void fb_present(void);
 void fb_pointer_show(int x, int y);
 void fb_pointer_hide(void);
+
+/* gpucursor.c - the pointer as a display PLANE instead of a sprite.
+ *
+ * Gen9 composites a 64x64 ARGB cursor over the primary at scanout for free, so
+ * a pointer move costs one register write instead of a save-under, a two-plane
+ * composite and a restore inside the frame loop. gpu_cursor_move returns 0
+ * whenever that path is not live - which is every build until someone calls
+ * gpu_cursor_arm(1) on real hardware - so the software sprite below stays the
+ * fallback and nothing here changes until the hardware path is proven. */
+int gpu_cursor_move(int x, int y);
+int gpu_cursor_is_live(void);
 int  fb_cell_w(void);
 int  fb_cell_h(void);
 
@@ -1600,12 +1611,18 @@ void wm_frame(void)
     }
 
     if (nwd) {
-        fb_pointer_hide();      /* the sprite's save-under is stale once the
+        /* Only the SPRITE has a save-under to go stale. A cursor on its own
+         * plane is not in the back buffer at all, so a repaint cannot smear
+         * it and hiding it would be a visible flicker for no reason. */
+        if (!gpu_cursor_is_live())
+            fb_pointer_hide();  /* the sprite's save-under is stale once the
                                    pixels under it are about to be redrawn */
         wm_repaint();
         did_paint = 1;
     }
-    fb_pointer_show(ptr_x, ptr_y);
+    /* The plane first; the sprite only if it did not take. */
+    if (!gpu_cursor_move(ptr_x, ptr_y))
+        fb_pointer_show(ptr_x, ptr_y);
     fb_present();
 
     if (did_paint) {
