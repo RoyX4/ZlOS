@@ -262,6 +262,60 @@ static int survey(void)
     volatile unsigned *pte0 = (volatile unsigned *)ggtt;
     printf("  GGTT[0]                0x%08X%08X\n", pte0[1], pte0[0]);
 
+    /* ---- the things today's one-off probes established, made permanent ----
+     *
+     * Every check below is read-only and runs with i915 loaded, so it costs a
+     * user nothing. They exist because each was verified once by hand while
+     * chasing the ring, and a fact verified once by hand is a fact that goes
+     * stale silently.
+     */
+
+    /* GGTT size, from GGMS in MGGC0. This is what bounds gfx_page, and
+     * intel_ggtt_map's bound was overflowing until it was compared as a page
+     * count instead of a byte offset. */
+    int cf = open("/sys/bus/pci/devices/" PCI_DEV "/config", O_RDONLY);
+    unsigned short mggc0 = 0;
+    if (cf >= 0) { if (pread(cf, &mggc0, 2, 0x50) != 2) mggc0 = 0; close(cf); }
+    unsigned ggms = (mggc0 >> 6) & 3u;
+    unsigned ggtt_mb = ggms ? (1u << ggms) : 0u;
+    printf("  MGGC0 / GGMS           0x%04X / %u  -> GGTT %u MiB, %u entries\n",
+           mggc0, ggms, ggtt_mb, (ggtt_mb << 20) / 8u);
+
+    /* A LIVE PTE, decoded. This is what proved the entry format zlOS writes:
+     * low dword = address | present, high dword = address bits 39:32. It also
+     * proves the high dword is really used - intel_ggtt_map writes zero there
+     * and can therefore never map above 4 GiB, which is a driver ceiling and
+     * not a hardware one. */
+    unsigned surf = mmio_r(0x7019Cu) & 0xFFFFF000u;      /* PLANE_SURF_1_A */
+    if (surf) {
+        unsigned pg = surf >> 12;
+        volatile unsigned *e = (volatile unsigned *)(ggtt + (unsigned long)pg * 8u);
+        unsigned long long ph = ((unsigned long long)(e[1] & 0x7Fu) << 32)
+                              | (unsigned long long)(e[0] & 0xFFFFF000u);
+        printf("  live scanout PTE       GGTT[0x%05X] = %08X %08X -> phys 0x%010llX %s\n",
+               pg, e[1], e[0], ph, (e[0] & 1u) ? "present" : "NOT PRESENT");
+        if (!(e[0] & 1u))
+            printf("      the scanout entry is not marked present - the format assumption is wrong\n");
+        if (e[1])
+            printf("      high dword is NON-ZERO, so this part does map above 4 GiB\n");
+    }
+
+    /* The cursor mode constant gpucursor.c hands the display engine. 0x27 is
+     * intel.c's CUR_MODE_64_ARGB; nothing checked it against hardware until a
+     * live read did. */
+    unsigned cc = mmio_r(0x70080u);                      /* CUR_CTL_A */
+    printf("  CUR_CTL_A              0x%08X  mode 0x%02X %s\n", cc, cc & 0x3Fu,
+           (cc & 0x3Fu) == 0x27u ? "== intel.c CUR_MODE_64_ARGB" :
+           (cc & 0x3Fu) == 0x22u ? "== intel.c CUR_MODE_128_ARGB" :
+                                   "matches NEITHER intel.c constant");
+
+    /* RCS as well as BCS. The render engine is where the measured 48x on
+     * blending lives, and its ring registers are the same four at a different
+     * base - so a survey that only looks at BCS cannot say that. */
+    printf("  rcs0 ring              TAIL=0x%08X HEAD=0x%08X START=0x%08X CTL=0x%08X\n",
+           mmio_r(0x2000u + 0x30u), mmio_r(0x2000u + 0x34u),
+           mmio_r(0x2000u + 0x38u), mmio_r(0x2000u + 0x3Cu));
+
     /* Prove the pagemap path works before --ring depends on it. */
     void *p = alloc_locked(4096);
     if (p) {
