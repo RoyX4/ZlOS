@@ -607,8 +607,9 @@ fn help_typed() {
     print("    mouse             a cursor driven by the PS/2 mouse")
     print("    snake             play SNAKE (w a s d to steer)")
     print("    paint             paint with the mouse")
-    print("    edit <n>          edit RAM file n (0-9) - ESC saves it")
+    print("    edit <n>          edit RAM file n (0-9) - ESC saves, so does Ctrl+S")
     print("    ls                list the RAM files")
+    print("    filemgr           Files app - create/open/delete files on zlfs, by name")
     print("    beep              beep the PC speaker")
     print("    poke              poke a byte into video memory and read it back")
     color(C_CYAN)  print("  our hardware drivers")
@@ -738,8 +739,23 @@ fn editor_draw(ax, ay, aw, ah) {
     }
     # the caret, where the next character will land
     fill_rgb(ed_x, ed_y, ed_cw, ed_ch - 2, ACCENT)
-    text_aa(ax + 4, ay + ah - ed_ch, "ESC saves and closes   file", TXT_DIM)
-    num_aa(ax + 4 + 28 * ed_cw, ay + ah - ed_ch, ed_slot, TXT_HI)
+    # "file"/"disk" are deliberately the same length (27 chars total either
+    # way) so the 28*ed_cw column below lines up under both - a RAM slot
+    # NUMBER in one mode, the zlfs NAME in the other, same starting cell.
+    if ed_disk == 1 {
+        text_aa(ax + 4, ay + ah - ed_ch, "ESC saves and closes   disk", TXT_DIM)
+        edfx = ax + 4 + 28 * ed_cw
+        edfi = 0
+        while edfi < 23 {
+            edfc = fs_ch(ed_fidx, edfi)
+            if edfc > 0 { char_aa(edfx, ay + ah - ed_ch, edfc, TXT_HI) }
+            edfx = edfx + ed_cw
+            edfi = edfi + 1
+        }
+    } else {
+        text_aa(ax + 4, ay + ah - ed_ch, "ESC saves and closes   file", TXT_DIM)
+        num_aa(ax + 4 + 28 * ed_cw, ay + ah - ed_ch, ed_slot, TXT_HI)
+    }
     num_aa(ax + aw - 8 * ed_cw, ay + ah - ed_ch, ed_len, TXT_DIM)
     return 0
 }
@@ -1362,6 +1378,18 @@ FS_SLOT = 8192
 # use below is a clipboard write of cbn bytes.
 DISK_SCRATCH = 0x02040000
 
+# The Files app's typed-name field. It has to be a real address rather than a
+# zl variable because the kernel subset has no runtime string values or
+# arrays - see EDIT_BUF above for the same reason. DISK_SCRATCH is documented
+# as "a page" (4096 bytes) and is never asked to hold more than a 4096-byte
+# clipboard write, so one full page of headroom sits between the two: this
+# starts at DISK_SCRATCH + 0x2000, not DISK_SCRATCH + 0x1000, on purpose.
+# FS_NAME_MAX bytes (fs.c) is enough for the longest name fs_create will
+# ever accept - check-memmap.sh's discovery sweep covers the dupe check, and
+# it is registered in that script's sized list too, generously clear of
+# PAINT_BUF at 0x02100000.
+FILES_NAME_BUF = 0x02042000
+
 fn fs_init()      { fill_mem(FS_META, 0, 64) }
 fn fs_len(slot)   { return peek32(FS_META + slot * 4) }
 fn fs_save(slot, len) {
@@ -1415,18 +1443,93 @@ EDIT_MAX = 8000
 # the same thing every other window means by it. No "press any key".
 ed_slot = 0
 ed_len  = 0
+# Disk-backed mode. The ten numbered RAM slots (fs_save/fs_load, FS_DATA) stay
+# the compatibility path - editor_open still uses them exactly as before, and
+# nothing here deletes them. Opening a window from the Files app instead loads
+# and saves through zlfs by name: ed_disk picks which branch editor_save()
+# below takes, and ed_fidx is the zlfs directory index it saves back to,
+# meaningful only while ed_disk == 1.
+ed_disk = 0
+ed_fidx = 0 - 1
 
 fn editor_open(slot) {
+    ed_disk = 0
     ed_slot = slot
     ed_len = fs_load(slot)
     return 0
 }
 
+# The disk-backed counterpart to editor_open(). idx is always a committed
+# zlfs directory entry already - the Files app creates it with fs_new() before
+# ever calling this - so there is always something for editor_save() to write
+# back to. EDIT_BUF is the SAME buffer either mode uses; only where it is
+# loaded from, and saved to, changes.
+fn editor_open_disk(idx) {
+    ed_disk = 1
+    ed_fidx = idx
+    fill_mem(EDIT_BUF, 0, EDIT_MAX)
+    edn = fs_bytes(idx)
+    if edn > EDIT_MAX { edn = EDIT_MAX }
+    if edn > 0 { fs_rd(idx, EDIT_BUF, edn) }
+    ed_len = edn
+    return 0
+}
+
+# The one real save-through, called from both ESC and Ctrl+S rather than each
+# doing its own thing - there is exactly one place that decides RAM slot vs
+# disk. Says so on screen when a disk write fails (the file could have been
+# deleted from the Files app while this window sat open) rather than quietly
+# doing nothing - the same rule the clipboard-to-disk command follows.
+fn editor_save() {
+    if ed_disk == 1 {
+        if ed_fidx < 0 { return 0 }
+        if fs_wr(ed_fidx, EDIT_BUF, ed_len) == 0 {
+            note_say("save failed - the file may be gone", 400)
+            return 0
+        }
+        return 1
+    }
+    fs_save(ed_slot, ed_len)
+    return 1
+}
+
 # One key. Returns 1 if it changed anything, 2 if the editor is done.
 fn editor_key(code) {
     if code == 27 {
-        fs_save(ed_slot, ed_len)
+        editor_save()
         return 2
+    }
+    # Ctrl+S: save without closing. input.c already turns Ctrl+<letter> into
+    # its control code for BOTH keyboards (to_char(), input.c:207-211) - Ctrl+S
+    # is 19 - so nothing below this file has to change for the key to arrive.
+    if code == 19 {
+        if editor_save() == 1 { if ed_disk == 1 { note_say("saved", 200) } }
+        return 0
+    }
+    # Ctrl+C copies the whole buffer; Ctrl+V pastes the clipboard at the end.
+    # clip.c's own header already documents these two codes as needing no
+    # change to the routing layer - "these arrive at the focused app as an
+    # ordinary EV_CHAR" - this is that caller, the one system-track.md
+    # describes and this file did not, until now, actually contain.
+    if code == 3 {
+        clip_new()
+        eci = 0
+        while eci < ed_len { clip_add(peek8(EDIT_BUF + eci))  eci = eci + 1 }
+        if clip_done() == 1 {
+            note_say("copied", 200)
+        } else {
+            note_say("copy failed - too big for the clipboard", 400)
+        }
+        return 0
+    }
+    if code == 22 {
+        ecn = clip_n()
+        eci = 0
+        while eci < ecn {
+            if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, clip_ch(eci))  ed_len = ed_len + 1 }
+            eci = eci + 1
+        }
+        return 1
     }
     if code == 8 {
         if ed_len > 0 { ed_len = ed_len - 1  poke8(EDIT_BUF + ed_len, 0) }
@@ -1441,6 +1544,224 @@ fn editor_key(code) {
         return 1
     }
     return 0
+}
+
+# ---- the Files app, as a window --------------------------------------------
+# zlfs already exists (fs.c) and could only be driven from the shell, one
+# typed character at a time, by NUMBER - '.' to mount, ',' to list, and no way
+# at all to create, open or delete a file BY NAME without going through the
+# editor's numbered RAM slots. This is the window: it mounts zlfs the moment
+# it opens (no manual step), lists what is already there, and turns typed
+# text into fs_new/fs_get/fs_rm calls the same way the '.' and "'" shell
+# commands already stage a name a character at a time - see FILES_NAME_BUF's
+# comment for why that has to be a real address rather than a zl array.
+fl_len     = 0           # characters typed into the name field, 0..23
+fl_hover   = 0 - 1        # the row the pointer is over, or -1
+fl_pressed = 0            # edge-detect for click-to-open - see files_event
+
+# Auto-mount, silently on the happy path. A window opening is not a
+# diagnostic and should not spam the shell scrollback every time it is
+# opened - contrast the '.' command, which is a deliberate request to be told
+# what happened and is untouched by this. Mirrors '.'s own
+# setup-then-mount-or-format sequence (run_command cmd==46).
+fn files_ensure_mounted() {
+    if fs_ok() == 1 { return 1 }
+    if nv_setup() == 0 { return 0 }
+    if fs_mount() == 1 { return 1 }
+    if fs_format() == 0 { return 0 }
+    return fs_mount()
+}
+
+# Both files_draw() and files_row_at() derive the row layout from these two,
+# so a click can never land on a different row than the one actually drawn
+# there - the two are never allowed to compute the layout independently.
+fn files_row_h()     { return cell_h() + 4 }
+fn files_list_y0(ay) { return ay + cell_h() + 8 }
+
+fn files_draw(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, PANEL)
+    fcw = cell_w()
+    fch = cell_h()
+    rh  = files_row_h()
+    y0  = files_list_y0(ay)
+    if fs_ok() == 0 {
+        text_aa(ax + 4, ay + 4, "not mounted - no NVMe disk found", TXT_DIM)
+        return 0
+    }
+    text_aa(ax + 4, ay + 4, "type a name - Enter opens/creates, Ctrl+D deletes", TXT_DIM)
+    fbot = ay + ah - rh * 2
+    row = 0
+    fi = 0
+    while fi < fs_max() {
+        if fs_inuse(fi) == 1 {
+            ry = y0 + row * rh
+            if ry < fbot {
+                # only the BACKGROUND changes on hover - the text stays TXT_HI
+                # either way, so this never risks a VGA palette index (C_WHITE)
+                # reading as a barely-visible dark blue in the RGB theme the
+                # way menu_draw's own hover text color would if copied here.
+                if row == fl_hover { rrblend(ax + 2, ry - 2, aw - 4, rh, 4, ACCENT, 41) }
+                rx = ax + 4
+                nch = 0
+                while nch < 23 {
+                    nb = fs_ch(fi, nch)
+                    if nb > 0 { char_aa(rx, ry, nb, TXT_HI) }
+                    rx = rx + fcw
+                    nch = nch + 1
+                }
+                num_aa(ax + aw - 8 * fcw, ry, fs_bytes(fi), TXT_DIM)
+            }
+            row = row + 1
+        }
+        fi = fi + 1
+    }
+    if row == 0 { text_aa(ax + 4, y0, "no files yet - type a name and press Enter", TXT_DIM) }
+    # the typed-name field, bottom line
+    tny = ay + ah - fch
+    text_aa(ax + 4, tny, ">", ACCENT)
+    tx = ax + 4 + 2 * fcw
+    tci = 0
+    while tci < fl_len {
+        char_aa(tx, tny, peek8(FILES_NAME_BUF + tci), TXT_HI)
+        tx = tx + fcw
+        tci = tci + 1
+    }
+    fill_rgb(tx, tny, fcw, fch - 2, ACCENT)
+    num_aa(ax + aw - 4 * fcw, tny, fs_n(), TXT_DIM)
+    return 0
+}
+
+# SCREEN y -> visual row index (0-based among USED files only), or -1. Which
+# fs SLOT that row names is a second step, files_row_to_idx() below - kept
+# apart because drawing and hover both only ever need "row N", and only a
+# click needs to turn that into a directory index.
+fn files_row_at(win, ey) {
+    y0 = files_list_y0(wm_cy(win))
+    rh = files_row_h()
+    r = (ey - y0) / rh
+    if r < 0 { return 0 - 1 }
+    return r
+}
+
+# Replays the SAME used-slot walk files_draw() renders, so row N always names
+# the file that is actually drawn on row N at click time too.
+fn files_row_to_idx(row) {
+    fi = 0
+    seen = 0 - 1
+    while fi < fs_max() {
+        if fs_inuse(fi) == 1 {
+            seen = seen + 1
+            if seen == row { return fi }
+        }
+        fi = fi + 1
+    }
+    return 0 - 1
+}
+
+# Stage the typed name into zlfs's own name buffer, one character at a time -
+# fs_nclear/fs_npush is the same seam the '.' and "'" shell commands already
+# use, because the zl kernel subset has no runtime strings to hand over
+# instead.
+fn files_stage_typed() {
+    fs_nclear()
+    fsi = 0
+    while fsi < fl_len { fs_npush(peek8(FILES_NAME_BUF + fsi))  fsi = fsi + 1 }
+    return 0
+}
+
+# Enter: open the file the typed name already names, or create it empty and
+# open that. A file is always created through the Files app before the editor
+# ever sees it, so editor_open_disk() never has to handle "no such index".
+fn files_commit() {
+    if fl_len == 0 { return 0 }
+    if files_ensure_mounted() == 0 {
+        note_say("no NVMe disk found", 300)
+        return 0
+    }
+    files_stage_typed()
+    bi = fs_get()
+    if bi < 0 { bi = fs_new(0) }
+    if bi < 0 {
+        note_say("could not create file", 300)
+        return 0
+    }
+    fl_len = 0
+    files_open_editor(bi)
+    return 1
+}
+
+# Ctrl+D: delete the file the typed name currently names. Deliberately a
+# different key from Enter - Enter always OPENS something, so deleting can
+# never be one accidental extra keystroke away from it.
+fn files_delete_typed() {
+    if fl_len == 0 { return 0 }
+    if fs_ok() == 0 { return 0 }
+    files_stage_typed()
+    bi = fs_get()
+    if bi < 0 {
+        note_say("no such file", 300)
+        return 0
+    }
+    fs_rm(bi)
+    note_say("deleted", 300)
+    fl_len = 0
+    return 1
+}
+
+# Open (or just raise) the editor on a zlfs file. If the editor is ALREADY
+# open this does not switch what it is showing - open_app's cmd==105 (RAM
+# slots) has made exactly that choice since before this app existed, so
+# opening a second file here can never silently discard an unsaved buffer the
+# editor already has open. Raising it is still useful: it proves it exists.
+fn files_open_editor(idx) {
+    fu = ui()
+    if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
+        wm_setfocus(edit_win)  wm_raise(edit_win)
+        return 0
+    }}
+    edit_win = wm_open(APP_EDIT, "zlEDIT", 480 * fu, 230 * fu, 160 * fu, 160 * fu)
+    if edit_win < 0 { return 0 }
+    editor_open_disk(idx)
+    wm_setfocus(edit_win)
+    wm_report(edit_win)
+    return 0
+}
+
+fn files_key(code) {
+    if code == 27 {                        # Esc cancels what you were typing
+        if fl_len > 0 { fl_len = 0  return 1 }
+        return 0
+    }
+    if code == 8 {                         # Backspace
+        if fl_len > 0 { fl_len = fl_len - 1  return 1 }
+        return 0
+    }
+    if code == 13 { return files_commit() }
+    if code == 4  { return files_delete_typed() }    # Ctrl+D
+    if code >= 32 { if code < 127 {
+        if fl_len < 23 { poke8(FILES_NAME_BUF + fl_len, code)  fl_len = fl_len + 1  return 1 }
+    }}
+    return 0
+}
+
+# EV_MOUSE only - hover highlights a row, a PRESS EDGE (not "held") opens it.
+# Edge-detected here rather than level-triggered like paint's brush, because
+# opening a file is a one-shot action and EV_MOUSE republishes every frame
+# the button stays down, not just on the transition.
+fn files_event(ety, ecode, ex, ey, win) {
+    if ety != 4 { return 0 }
+    nh = files_row_at(win, ey)
+    if nh != fl_hover { fl_hover = nh  wm_dmg(win) }
+    down = band(ecode, 1)
+    if down != 0 { if fl_pressed == 0 {
+        fl_pressed = 1
+        if nh >= 0 {
+            idx = files_row_to_idx(nh)
+            if idx >= 0 { files_open_editor(idx) }
+        }
+    }}
+    if down == 0 { fl_pressed = 0 }
+    return 1
 }
 
 # An app with no text-mode form. Says which one and why, rather than doing
@@ -2250,6 +2571,9 @@ fn run_command(cmd, arg) {
     }
     if cmd == 100 { if wm_run() == 1 { return open_app(100, 0) }  return needs_wm("paint") }
     if cmd == 105 { if wm_run() == 1 { return open_app(105, arg) } return needs_wm("the editor") }
+    # M - the Files app: zlfs by name, in a window. Same shape as every other
+    # windowed app above - text mode has no windows to put it in at all.
+    if cmd == 77  { if wm_run() == 1 { return open_app(77, 0) }    return needs_wm("the Files app") }
     if cmd == 108 { return fs_list() }    # l - list RAM files
     # 'N', not 'n': every lowercase code from a to z is already a command.
     if cmd == 78 { return net_gate() }    # N - the network card, and an ARP probe
@@ -2888,6 +3212,7 @@ APP_CUBE    = 9
 APP_ANIM    = 10
 APP_MOUSE   = 11
 APP_EDIT    = 12
+APP_FILES   = 13
 
 # Which window each app is in, or -1. An app that is already open is FOCUSED
 # rather than opened twice - wm.c would happily give you a second Snake, and
@@ -2898,6 +3223,7 @@ cube_win  = 0 - 1
 anim_win  = 0 - 1
 mouse_win = 0 - 1
 edit_win  = 0 - 1
+files_win = 0 - 1
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     wy = ay - TITLE_H * ui()
@@ -2924,6 +3250,7 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_ANIM    { return anim_draw(ax, ay, aw, ah) }
     if id == APP_MOUSE   { return mouse_draw(ax, ay, aw, ah) }
     if id == APP_EDIT    { return editor_draw(ax, ay, aw, ah) }
+    if id == APP_FILES   { return files_draw(ax, ay, aw, ah) }
     if id == APP_SHELL {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the
@@ -3057,6 +3384,11 @@ fn app_event(id, win, ety, ecode, ex, ey) {
         }
         return 0
     }
+    if id == APP_FILES {
+        if ety == 3 { if files_key(ecode) == 1 { wm_dmg(win) }  return 1 }
+        if ety == 4 { return files_event(ety, ecode, ex, ey, win) }
+        return 0
+    }
     if id == APP_PAINT {
         if ety == 3 { if paint_key(ecode) == 1 { wm_dmg(win)  return 1 } }
         # EV_MOUSE (4) carries the position and the button mask. Painting on
@@ -3183,6 +3515,25 @@ fn open_app(cmd, arg) {
         # having your typing go to the shell is not.
         wm_setfocus(edit_win)
         wm_report(edit_win)
+        return 1
+    }
+    if cmd == 77 {
+        if files_win >= 0 { if wm_open_p(files_win) == 1 {
+            wm_setfocus(files_win)  wm_raise(files_win)  return 1
+        }}
+        # Mount on OPEN, not as a separate manual step - files_ensure_mounted
+        # tries setup+mount and formats a fresh disk if nothing is there yet,
+        # silently on the happy path (see its own comment for why).
+        files_ensure_mounted()
+        files_win = wm_open(APP_FILES, "Files", 480 * oa_u, 400 * oa_u, 220 * oa_u, 190 * oa_u)
+        if files_win < 0 { return 0 }
+        fl_len = 0
+        fl_hover = 0 - 1
+        # THE FILES APP TAKES FOCUS for the same reason the editor does: it is
+        # useless without the keyboard, since names are typed rather than
+        # clicked from a menu.
+        wm_setfocus(files_win)
+        wm_report(files_win)
         return 1
     }
     if cmd == 120 {

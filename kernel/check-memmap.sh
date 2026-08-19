@@ -52,7 +52,7 @@ fi
 # ...and say which constants the sized checks below do NOT cover, so the gap is
 # visible rather than silent. Not a failure: a new address is not automatically
 # wrong, it is automatically unexamined.
-known=" SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT LINE_BUF LINE_MAX HIST_BUF HIST_N "
+known=" SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT LINE_BUF LINE_MAX HIST_BUF HIST_N FILES_NAME_BUF "
 unsized=""
 for n in $(grep -oP '^\K[A-Z_]+(?=\s*=\s*0x0[0-9A-Fa-f]{5,})' "$SRC" | sort -u); do
     case "$known" in *" $n "*) ;; *) unsized="$unsized $n";; esac
@@ -61,7 +61,7 @@ done
 
 declare -A K
 for name in SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT \
-            LINE_BUF LINE_MAX HIST_BUF HIST_N; do
+            LINE_BUF LINE_MAX HIST_BUF HIST_N FILES_NAME_BUF; do
     v=$(grep -oP "^$name\s*=\s*\K(0x[0-9A-Fa-f]+|[0-9]+)" "$SRC" | head -1)
     [ -n "$v" ] || { echo "FAIL: constant $name not found in $SRC"; exit 1; }
     K[$name]=$((v))
@@ -78,6 +78,7 @@ SNAKE_X=${K[SNAKE_X]}; SNAKE_Y=${K[SNAKE_Y]}
 FS_META=${K[FS_META]}; FS_DATA=${K[FS_DATA]}; FS_SLOT=${K[FS_SLOT]}
 LINE_BUF=${K[LINE_BUF]}; LINE_MAX=${K[LINE_MAX]}
 HIST_BUF=${K[HIST_BUF]}; HIST_N=${K[HIST_N]}
+FILES_NAME_BUF=${K[FILES_NAME_BUF]}
 
 # SNAKE_X/SNAKE_Y are one byte per body cell and the code bounds neither by a
 # named constant; the gap between them is what each actually gets.
@@ -91,6 +92,10 @@ REGIONS=(
     "FS_DATA:$FS_DATA:$((10 * FS_SLOT))"
     "LINE_BUF:$LINE_BUF:$LINE_MAX"
     "HIST_BUF:$HIST_BUF:$((HIST_N * HIST_STRIDE))"
+    # 24, not a named constant here: it is fs.c's FS_NAME_MAX, which this
+    # script has no visibility into (it parses kernel.zl only). FS_META just
+    # above does the same thing for its own C-side size.
+    "FILES_NAME_BUF:$FILES_NAME_BUF:24"
 )
 
 mapfile -t SORTED < <(printf '%s\n' "${REGIONS[@]}" | sort -t: -k2 -n)
