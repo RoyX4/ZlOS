@@ -146,6 +146,16 @@ echo "built ./jstest        (run: ./jstest)"
 gcc -O2 -g -Wall -Wextra -D_GNU_SOURCE -o ecdsatest ecdsatest.c ../ecdsa.c
 echo "built ./ecdsatest     (run: ./ecdsatest)"
 
+# Certificate parsing and chain validation - the half of TLS that decides
+# whether "encrypted" means "encrypted TO THEM". Written the way ecdsatest is:
+# a validator that returns 1 unconditionally passes every accept-the-real-chain
+# test ever written, so the accept case is checked once and every way of being
+# wrong is checked individually. The certificates are en.wikipedia.org's REAL
+# chain, captured off the wire - a parser that only meets certificates made by
+# its own author agrees with its author, not with a certificate authority.
+gcc -O2 -g -Wall -Wextra -D_GNU_SOURCE -o x509test x509test.c ../x509.c ../ecdsa.c ../crypto.c
+echo "built ./x509test      (run: ./x509test)"
+
 # The browser's parser and box model, asserted. html.c and layout.c reach for
 # exactly one thing outside themselves - a function that measures a string - so
 # injecting a synthetic one turns both into ordinary programs. Malformed markup
