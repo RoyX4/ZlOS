@@ -58,6 +58,7 @@ typedef unsigned int u32;
 extern int fs_mounted(void) ZL_WEAK;
 extern int fs_find(const char *name) ZL_WEAK;
 extern u32 fs_size(int idx) ZL_WEAK;
+extern int fs_read(int idx, void *dst, u32 max) ZL_WEAK;
 
 /* term.c owns the typed line; this reads the argument out of it rather than
  * keeping a second copy of the parser. */
@@ -68,7 +69,15 @@ extern void term_say(const char *s);
  * in all four source lists and a missing arena has no safe fallback. */
 extern unsigned long arena_capacity(void);
 extern unsigned long arena_available(void);
+extern unsigned long arena_base_addr(void);
+extern void *arena_alloc(unsigned long bytes);
 extern void arena_reset(void);
+
+/* The interpreter. Weak so hosttest/exectest.c keeps the EX_LOADED path. */
+extern void *lex_text(const char *src, int *out_count) ZL_WEAK;
+extern void *zl_parse_guarded(void *tokens, int count) ZL_WEAK;
+extern void  zi_confine(unsigned long long lo, unsigned long long hi) ZL_WEAK;
+extern int   zl_run_program(void *program, long long steps, int max_depth) ZL_WEAK;
 
 /* ---- what happened ------------------------------------------------------ */
 #define EX_IDLE       0    /* nothing has been run yet                       */
@@ -78,7 +87,9 @@ extern void arena_reset(void);
 #define EX_NOT_FOUND  4    /* filesystem present, no such file               */
 #define EX_EMPTY      5    /* the file exists and is zero bytes              */
 #define EX_TOO_BIG    6    /* larger than the arena's ceiling                */
-#define EX_LOADED     7    /* in the arena - nothing executes it yet (Item 2)*/
+#define EX_LOADED     7    /* in the arena - interpreter not linked         */
+#define EX_RAN        8    /* the program ran to completion                 */
+#define EX_FAIL       9    /* lexer, parser or interpreter refused it       */
 
 #define EX_NAME_MAX   64
 
@@ -226,16 +237,60 @@ int exec_run(void)
         return state;
     }
 
-    /* Everything above this line is reachable and gated today. Below it is not:
-     * loading needs a filesystem this branch does not have, and RUNNING needs
-     * the interpreter that is Item 2. Saying so is better than a stub that
-     * returns success. */
-    state = EX_LOADED;
+    /* Load, parse, run. The interpreter is a weak symbol so a kernel that
+     * has not linked it still takes the EX_LOADED path, which is what
+     * hosttest/exectest.c asserts. */
+    if (lex_text == 0 || zl_parse_guarded == 0 || zl_run_program == 0 ||
+        fs_read == 0) {
+        state = EX_LOADED;
+        term_say("  run: '");
+        term_say(name);
+        term_say("' found, ");
+        say_u((unsigned long)bytes);
+        term_say(" bytes - but nothing can execute it yet (Item 2).\n");
+        return state;
+    }
+
+    char *buf = (char *)arena_alloc((unsigned long)bytes + 1UL);
+    if (!buf)
+        return decline(EX_TOO_BIG, "the arena refused the allocation");
+
+    int n = fs_read(idx, buf, bytes);
+    if (n <= 0)
+        return decline(EX_FAIL, "could not read that file");
+    buf[n] = 0;
+
+    int count = 0;
+    void *tok = lex_text(buf, &count);
+    if (!tok)
+        return decline(EX_FAIL, "the lexer refused that file");
+
+    void *prog = zl_parse_guarded(tok, count);
+    if (!prog)
+        return decline(EX_FAIL, "the parser refused that file");
+
+    if (zi_confine != 0) {
+        unsigned long base = arena_base_addr();
+        unsigned long cap  = arena_capacity();
+        zi_confine((unsigned long long)base,
+                   (unsigned long long)base + (unsigned long long)cap);
+    }
+
+    int r = zl_run_program(prog, 1000000LL, 64);
+    if (r != 0) {
+        state = EX_FAIL;
+        term_say("  run: '");
+        term_say(name);
+        term_say("' stopped (");
+        say_u((unsigned long)(unsigned)r);
+        term_say(")\n");
+        return state;
+    }
+
+    state = EX_RAN;
     term_say("  run: '");
     term_say(name);
-    term_say("' found, ");
-    say_u((unsigned long)bytes);
-    term_say(" bytes - but nothing can execute it yet (Item 2).\n");
+    term_say("' finished.\n");
     return state;
 }
 
@@ -260,6 +315,8 @@ static const char *state_line(void)
     case EX_EMPTY:     return "that file is empty.";
     case EX_TOO_BIG:   return "that file is larger than the program arena.";
     case EX_LOADED:    return "found it, but nothing can execute it yet.";
+    case EX_RAN:       return "the program ran.";
+    case EX_FAIL:      return "the program was refused or stopped.";
     }
     return "unknown state.";
 }
@@ -270,6 +327,8 @@ static const char *state_line2(void)
     case EX_NO_DRIVER: return "so there is nothing to look a name up in.";
     case EX_NO_FS:     return "so there is nothing to look a name up in.";
     case EX_LOADED:    return "the interpreter is Item 2 of the exec track.";
+    case EX_RAN:       return "its output is in the terminal.";
+    case EX_FAIL:      return "see the line above for why.";
     }
     return 0;
 }

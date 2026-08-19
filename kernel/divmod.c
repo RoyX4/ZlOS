@@ -71,3 +71,8 @@ s64 __moddi3(s64 a, s64 b)
 u64 __udivdi3(u64 a, u64 b) { return udivmod(a, b, 0); }
 
 u64 __umoddi3(u64 a, u64 b) { u64 r = 0; udivmod(a, b, &r); return r; }
+
+/* Combined unsigned divide: quotient in the return, remainder through rem.
+ * gcc emits this when a function does both / and % on the same unsigned
+ * long long pair (interp_kernel.c kf_u64). */ 
+u64 __udivmoddi4(u64 a, u64 b, u64 *rem) { return udivmod(a, b, rem); }

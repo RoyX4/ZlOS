@@ -221,7 +221,7 @@ W_BOLD    = 1
 TITLE_H = 28                       # window title bar height, in design units
 MON_W = 284                        # System Monitor / About width
 MON_H = 214                        # System Monitor height
-AB_H  = 122                        # About height
+AB_H  = 148                        # About height (room for a ui_* line)
 TOPBAR_H = 32
 DESK_TOP = 40                    # first row of desktop below the bar + hairline
 TOP_BG   = rgb(20, 23, 33)
@@ -422,6 +422,13 @@ fn draw_status(msg) {
         # compositor" - which is what used to be here - is a label that has
         # said the same thing on every boot since it was written.
         label(tray, dy + 22 * u, "frame", TXT_DIM, T_CAPTION, W_REG)
+        # Clear the number slots first. Live numbers of changing width leave
+        # the tail of a wider previous value (`)08`) if they paint on top of
+        # whatever was there. draw_clock already did this for `up`; the frame
+        # and peak counters never did.
+        fill_rgb(tray + 44 * u, dy + 18 * u, 48 * u, 18 * u, rgb(14, 19, 34))
+        fill_rgb(tray + 152 * u, dy + 18 * u, 56 * u, 18 * u, rgb(14, 19, 34))
+        fill_rgb(tray + 232 * u, dy + 18 * u, 50 * u, 18 * u, rgb(14, 19, 34))
         label_num(tray + 44 * u, dy + 22 * u, wm_us(), ACCENT, T_CAPTION, W_BOLD)
         label(tray + 92 * u, dy + 22 * u, "us   peak", TXT_DIM, T_CAPTION, W_REG)
         label_num(tray + 152 * u, dy + 22 * u, wm_peak(), TXT_HI, T_CAPTION, W_BOLD)
@@ -1265,8 +1272,10 @@ FS_SLOT = 8192
 #
 # Free space here: FS_DATA ends at 0x02025000, HIST_BUF ends at 0x02032000, and
 # PAINT_BUF starts at 0x02100000. This sits clear of all three, and the largest
-# use below is a clipboard write of cbn bytes.
+# use below is a clipboard write of cbn bytes. CLIP_MAX is 4096; 8192 is
+# headroom, and check-memmap.sh sizes the region from this constant.
 DISK_SCRATCH = 0x02040000
+DISK_SCRATCH_SIZE = 8192
 
 fn fs_init()      { fill_mem(FS_META, 0, 64) }
 fn fs_len(slot)   { return peek32(FS_META + slot * 4) }
@@ -1340,6 +1349,29 @@ fn editor_key(code) {
     }
     if code == 13 {
         if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, 10)  ed_len = ed_len + 1 }
+        return 1
+    }
+    # Ctrl+C / Ctrl+V. The write path in clip.c had no caller; this is it.
+    if code == 3 {
+        clip_new()
+        ci = 0
+        while ci < ed_len {
+            clip_add(peek8(EDIT_BUF + ci))
+            ci = ci + 1
+        }
+        clip_done()
+        return 1
+    }
+    if code == 22 {
+        cbn = clip_n()
+        ci = 0
+        while ci < cbn {
+            if ed_len >= EDIT_MAX - 1 { ci = cbn } else {
+                poke8(EDIT_BUF + ed_len, clip_ch(ci))
+                ed_len = ed_len + 1
+            }
+            ci = ci + 1
+        }
         return 1
     }
     if code >= 32 {
@@ -1420,7 +1452,10 @@ fn run_command(cmd, arg) {
         put("    the panel is ours. framebuffer at 0x")  hex(fb, 8)  print("")
         color(C_GREY)
         print("    press a key to move the console onto it")
-        key()
+        # Block the same way the shell does: in_char() is 0 until a key
+        # arrives. `key()` was never a builtin - it fell through to kfatal
+        # and halted the machine on the panel-handover path.
+        while in_char() == 0 { }
         panel_console()
         color(C_GREEN)
         print("  this text is being scanned out by our own driver.")
@@ -1919,6 +1954,7 @@ fn run_command(cmd, arg) {
         }
         put("    mounted: ")  put(fs_n())  put(" file(s), ")
         put(fs_free())  put(" of ")  put(fs_cap())  print(" blocks free")
+        fs_seed()
 
         # find "boots", or make it. The name is pushed one character at a
         # time because the zl kernel subset has no string values.
@@ -2330,6 +2366,9 @@ fn about_body(ax, ay) {
     label(ax + 14 * u, ay + 60 * u, "a desktop written in zl", TXT_DIM, T_BODY, W_REG)
     label(ax + 14 * u, ay + 82 * u, "no OS   no libc   no GNU", ACCENT, T_BODY, W_BOLD)
     label(ax + 14 * u, ay + 104 * u, "type help for the commands", TXT_DIM, T_CAPTION, W_REG)
+    # Prove the ui_* bridge without migrating the 82 fill_rgb/label sites.
+    ui_begin(ax + 14 * u, ay + 126 * u, 240 * u, 20 * u, 0, 0, 0, 0)
+    ui_label_dim("widgets reachable from zl")
     return 0
 }
 
@@ -2770,6 +2809,7 @@ fn ip_gate() {
 }
 
 APP_BROWSER = 5                     # 3 was APP_SNAKE; the union merge gave both the same id
+APP_SETTINGS = 6
 APP_RUN     = 7                     # 3 is APP_SNAKE, 5 APP_BROWSER, 6 APP_SETTINGS
 # apps-in-windows numbered these 4..8, which are APP_MENU, APP_BROWSER,
 # APP_SETTINGS and APP_RUN here. Renumbered from 8.
@@ -3317,6 +3357,8 @@ fn task_label(app) {
     if app == APP_ABOUT   { return "About" }
     if app == APP_SNAKE   { return "Snake" }
     if app == APP_MENU    { return "Menu" }
+    if app == APP_SETTINGS { return "Settings" }
+    if app == APP_RUN     { return "run" }
     return "window"
 }
 
@@ -3424,6 +3466,16 @@ fn reopen_about() {
     return 0
 }
 
+settings_win = 0 - 1
+fn open_settings() {
+    u = ui()
+    if settings_win >= 0 { if wm_open_p(settings_win) == 1 { wm_setfocus(settings_win)  wm_raise(settings_win)  return 0 } }
+    settings_win = wm_open(APP_SETTINGS, "Settings", px_w() / 2 - 180 * u, 80 * u, 360 * u, 280 * u)
+    wm_setfocus(settings_win)
+    wm_raise(settings_win)
+    return 0
+}
+
 # ---- the start menu, as a MODAL WINDOW --------------------------------------
 # The old one drew straight onto the screen and saved the patch underneath with
 # grab/stamp - the sticker technique C4 deleted, at menu size. wm.c has had
@@ -3434,7 +3486,7 @@ fn reopen_about() {
 # A modal takes every event and a click outside dismisses it - both already in
 # route_mouse. Restoring what was underneath is a repaint of the damage it
 # leaves, which needs no saved bitmap at all.
-MENU_ROWS = 8
+MENU_ROWS = 9
 menu_win = 0 - 1
 
 fn menu_label(idx) {
@@ -3442,9 +3494,10 @@ fn menu_label(idx) {
     if idx == 1 { return "Snake" }
     if idx == 2 { return "System Monitor" }
     if idx == 3 { return "About" }
-    if idx == 4 { return "3D Cube" }
-    if idx == 5 { return "Paint" }
-    if idx == 6 { return "Editor" }
+    if idx == 4 { return "Settings" }
+    if idx == 5 { return "3D Cube" }
+    if idx == 6 { return "Paint" }
+    if idx == 7 { return "Editor" }
     return "Halt"
 }
 
@@ -3453,11 +3506,12 @@ fn menu_pick(idx) {
     if idx == 1 { return open_snake() }
     if idx == 2 { return reopen_mon() }
     if idx == 3 { return reopen_about() }
-    if idx == 7 { wm_stop()  return 0 }
+    if idx == 4 { return open_settings() }
+    if idx == 8 { wm_stop()  return 0 }
     raise_shell()
-    if idx == 4 { run_command(118, 0) }
-    if idx == 5 { run_command(100, 0) }
-    if idx == 6 { run_command(105, 0) }
+    if idx == 5 { run_command(118, 0) }
+    if idx == 6 { run_command(100, 0) }
+    if idx == 7 { run_command(105, 0) }
     wm_damage_win_all()
     return 0
 }
@@ -3886,13 +3940,27 @@ usb_boot()
 # are still reading the boot log, not three keystrokes into a program.
 arena_up()
 ok_line("zl runtime, kernel subset")
-# STILL TRUE, and it is worth saying why rather than leaving the next reader to
-# wonder whether it was just missed. A bump allocator with no free() and no
-# reuse inside a run is not a heap - there is nothing to fragment, nothing to
-# double-free, and nothing to leak that a reset does not reclaim. The line stops
-# being honest the day the interpreter boxes lists and strings (EXEC-PROMPT §8),
-# and that is the change that has to carry it, not this one.
-info_line("no heap, no filesystem, no scheduler")
+# NVMe, then Settings persistence, then zlfs. verify.sh has no NVMe, so none
+# of this prints and the golden transcript stays byte-identical. A blank
+# disk is silent (fs_try); a damaged one is loud.
+if nv_find() >= 0 {
+    if nv_setup() == 1 {
+        settings_load()
+        fs_try()
+    }
+}
+# STILL TRUE when there is no volume, and it is worth saying why rather than
+# leaving the next reader to wonder whether it was just missed. A bump
+# allocator with no free() and no reuse inside a run is not a heap - there is
+# nothing to fragment, nothing to double-free, and nothing to leak that a
+# reset does not reclaim. The line stops being honest the day the interpreter
+# boxes lists and strings (EXEC-PROMPT §8), and that is the change that has
+# to carry it, not this one.
+if fs_ok() == 0 {
+    info_line("no heap, no filesystem, no scheduler")
+} else {
+    ok_line("zlfs mounted, hello.zl on disk")
+}
 
 print("")
 color(C_GREEN)  print("  ready.")

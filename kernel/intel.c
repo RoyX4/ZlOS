@@ -43,6 +43,8 @@ typedef unsigned long long uptr;
 typedef unsigned int       uptr;
 #endif
 
+#include "memmap.h"
+
 u32 idt_ticks(void);
 
 /* Real timing, from cpu.c's PIT-calibrated TSC. idt_ticks() resolves 10 ms and
@@ -759,8 +761,10 @@ static int gmbus_read_edid(int pin, uptr dest, int len)
 
 /* Where a 128-byte EDID lands. In the kernel this is fixed physical scratch;
  * a host harness has no such address and supplies its own buffer instead. */
-static uptr edid_buf = 0x0C980000u;
+static uptr edid_buf = (uptr)HI_EDID;
 void intel_set_edid_buffer(uptr p) { if (p) edid_buf = p; }
+_Static_assert(HI_EDID >= HI_HID && HI_EDID + 128ul <= HI_BLUR,
+               "EDID scratch is not inside the HID window");
 
 /* An EDID always begins 00 FF FF FF FF FF FF 00. That fixed header is how we
  * know we read a display and not an empty bus. */
@@ -2617,12 +2621,32 @@ int intel_pp_sequencing(void)
  * does, and it is the reason this function exists rather than being folded
  * into the power-on path - it has to happen before power is asserted, not with
  * it. */
+int intel_vbt_find(void);
+int intel_vbt_present(void);
+int intel_vbt_t1_t3(void);
+int intel_vbt_t8(void);
+int intel_vbt_t9(void);
+int intel_vbt_t10(void);
+int intel_vbt_t11_t12(void);
+int intel_vbt_low_vswing(void);
+
 int intel_pp_delays_program(void)
 {
     if (!intel_present() || !lt_armed) return 0;
 
     /* eDP-spec ceilings, used only where the register reads lower */
     u32 want_t3 = 2000, want_bl_on = 10, want_t10 = 500, want_bl_off = 500;
+
+    /* VBT values are milliseconds (verified on this machine: T1+T3 200, T8 1,
+     * T9 260, T10 50). The PP delay registers count 100 us units, so *10.
+     * Take the larger of firmware, VBT and the eDP-spec floor - never shorten. */
+    if (intel_vbt_present()) {
+        u32 v;
+        v = (u32)intel_vbt_t1_t3() * 10u; if (v > want_t3)     want_t3     = v;
+        v = (u32)intel_vbt_t8()    * 10u; if (v > want_bl_on)  want_bl_on  = v;
+        v = (u32)intel_vbt_t10()   * 10u; if (v > want_t10)    want_t10    = v;
+        v = (u32)intel_vbt_t9()    * 10u; if (v > want_bl_off) want_bl_off = v;
+    }
 
     u32 on  = mmio_r(PP_ON_DELAYS);
     u32 off = mmio_r(PP_OFF_DELAYS);
@@ -2643,6 +2667,14 @@ int intel_pp_delays_program(void)
     u32 ctl = mmio_r(PP_CONTROL) & 0xFFFF;
     u32 cyc = (ctl >> 4) & 0x1F;
     if (cyc < 6) cyc = 6;                       /* >= 500 ms */
+    if (intel_vbt_present()) {
+        int t12ms = intel_vbt_t11_t12();
+        if (t12ms > 0) {
+            /* field is "+1" encoded in 100 ms units: 6 means 500 ms */
+            u32 need = (u32)t12ms / 100u + 1u;
+            if (need > cyc) cyc = need;
+        }
+    }
     ctl = (ctl & ~(0x1Fu << 4)) | (cyc << 4);
     ctl |= PP_PWR_DOWN_ON_RESET;                /* H4 - i915 leaves this clear */
 
@@ -3926,7 +3958,13 @@ int intel_modeset_run_ex(int port, int dry)
     /* Step 31 before 34, always: the hardware latches the buffer translation
      * at DDI_BUF_CTL enable, so programming it afterwards does nothing. */
     MS_STEP(31, "buf-trans entry 0",    intel_ddi_program_buf_trans(port, 0, 0));
-    MS_STEP(32, "I_boost / balance leg", intel_iboost_set(port, 0, lanes == 4));
+    /* Low-vswing panels (this ThinkPad) keep I_boost 0. A VBT that says the
+     * opposite is the only thing that turns it on - the safe default is off. */
+    {
+        int ib = 0;
+        if (intel_vbt_present() && intel_vbt_low_vswing() == 0) ib = 1;
+        MS_STEP(32, "I_boost / balance leg", intel_iboost_set(port, ib, lanes == 4));
+    }
     MS_STEP(34, "port enable + 600us",  intel_port_enable(port, lanes, enhanced));
 
     /* -- Phase G: link training ------------------------------------------
@@ -4197,6 +4235,11 @@ int intel_modeset_teardown(int port)
 u32 intel_bringup_panel(void)
 {
     if (!intel_present() || !intel_supported()) return 0;
+
+    /* Phase 1 of the gen9 plan: consult the VBT before any write. Host
+     * harnesses attach a blob via intel_vbt_attach; the kernel finds it
+     * itself from ASLS. Either way, delays and I_boost below read vbt_ok. */
+    intel_vbt_find();
 
     u32 stolen = intel_stolen_base();
     u32 ssize  = intel_stolen_size();

@@ -407,6 +407,25 @@ extern int  wm_add_tab(int win, int app, const char *title);
 extern void wm_damage(int x, int y, int w, int h);
 extern void wm_damage_win(int win);
 extern void ui_theme_init(int scale);
+extern void ui_begin(int x, int y, int w, int h, int mode, int px, int py, int click);
+extern void ui_label(const char *s);
+extern void ui_label_dim(const char *s);
+extern void ui_bar(int pct);
+extern int  ui_button(const char *s);
+extern void ui_sep(void);
+extern void ui_space(int n);
+extern int  ui_toggle(const char *s, int *on);
+extern int  ui_slider(int *v, int lo, int hi);
+extern void ui_num(const char *s, int v);
+extern int  ui_list_row(const char *s, int selected);
+extern void ui_scroll_begin(int h, int *off);
+extern void ui_scroll_end(int *off);
+extern int  ui_scroll_content(void);
+extern void ui_row(void);
+extern void ui_endrow(void);
+extern int  settings_load(void);
+extern int  fs_try_boot(void);
+extern void fs_seed_hello(void);
 
 /* ---- the browser (browser.c / html.c / layout.c) ------------------------
  * kernel.zl owns the browser app's policy - which window, which keys - and
@@ -1167,6 +1186,44 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_dmg"))     { wm_damage_win((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "ui_theme"))   { ui_theme_init((int)a[0].num); return zl_nil(); }
+    /* ui.c widgets. zl has no pointers, so toggle/slider/scroll state lives
+     * in a small slot table addressed by integer id. New UI uses these;
+     * the existing 82 fill_rgb/label sites stay as they are. */
+    {
+        static int ui_slotv[16];
+        #define UI_NSLOT 16
+        #define UI_STR(i) ((a[i].type == V_STR && a[i].str) ? a[i].str : "")
+        #define UI_SLOT(i) (((int)a[i].num >= 0 && (int)a[i].num < UI_NSLOT) \
+                            ? (int)a[i].num : 0)
+        if (streq(name, "ui_begin")) {
+            ui_begin((int)a[0].num, (int)a[1].num, (int)a[2].num, (int)a[3].num,
+                     (int)a[4].num, (int)a[5].num, (int)a[6].num, (int)a[7].num);
+            return zl_nil();
+        }
+        if (streq(name, "ui_label"))     { ui_label(UI_STR(0)); return zl_nil(); }
+        if (streq(name, "ui_label_dim")) { ui_label_dim(UI_STR(0)); return zl_nil(); }
+        if (streq(name, "ui_bar"))       { ui_bar((int)a[0].num); return zl_nil(); }
+        if (streq(name, "ui_button"))    return zl_num((double)ui_button(UI_STR(0)));
+        if (streq(name, "ui_sep"))       { ui_sep(); return zl_nil(); }
+        if (streq(name, "ui_space"))     { ui_space((int)a[0].num); return zl_nil(); }
+        if (streq(name, "ui_toggle"))    return zl_num((double)ui_toggle(UI_STR(0), &ui_slotv[UI_SLOT(1)]));
+        if (streq(name, "ui_slider"))    return zl_num((double)ui_slider(&ui_slotv[UI_SLOT(0)], (int)a[1].num, (int)a[2].num));
+        if (streq(name, "ui_num"))       { ui_num(UI_STR(0), (int)a[1].num); return zl_nil(); }
+        if (streq(name, "ui_list_row"))  return zl_num((double)ui_list_row(UI_STR(0), (int)a[1].num));
+        if (streq(name, "ui_scroll_begin")) { ui_scroll_begin((int)a[0].num, &ui_slotv[UI_SLOT(1)]); return zl_nil(); }
+        if (streq(name, "ui_scroll_end"))   { ui_scroll_end(&ui_slotv[UI_SLOT(0)]); return zl_nil(); }
+        if (streq(name, "ui_scroll_content")) return zl_num((double)ui_scroll_content());
+        if (streq(name, "ui_row"))       { ui_row(); return zl_nil(); }
+        if (streq(name, "ui_endrow"))    { ui_endrow(); return zl_nil(); }
+        if (streq(name, "ui_slot"))      return zl_num((double)ui_slotv[UI_SLOT(0)]);
+        if (streq(name, "ui_set"))       { ui_slotv[UI_SLOT(0)] = (int)a[1].num; return zl_nil(); }
+        #undef UI_NSLOT
+        #undef UI_STR
+        #undef UI_SLOT
+    }
+    if (streq(name, "settings_load")) return zl_num((double)settings_load());
+    if (streq(name, "fs_try"))        return zl_num((double)fs_try_boot());
+    if (streq(name, "fs_seed"))       { fs_seed_hello(); return zl_nil(); }
     /* ---- the browser. Everything below is one app's policy surface. */
     /* ---- virtio-net. net_up() is the one that does the work; everything
      * else reports what happened, because a driver that fails silently is

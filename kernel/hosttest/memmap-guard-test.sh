@@ -16,7 +16,7 @@ set -u
 
 KDIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 CFLAGS="-m32 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -Wno-unused-parameter"
-OWNERS="fb.c sched.c i2c_hid.c nvme.c xhci.c virtio_gpu.c"
+OWNERS="fb.c sched.c i2c_hid.c nvme.c xhci.c virtio_gpu.c intel.c"
 
 pass=0; fail=0
 work=$(mktemp -d) || exit 1
@@ -72,7 +72,7 @@ expect_break() {
 echo "memmap guard test - $KDIR"
 echo
 mkroom base
-expect_pass "baseline: all six owners compile against the real map"
+expect_pass "baseline: all seven owners compile against the real map"
 
 echo
 echo "each of these breaks the map on purpose; the build MUST refuse it:"
@@ -88,8 +88,10 @@ expect_break "map out of order: blur placed below sched" \
     "out of order"
 
 # A region squeezed until its owner's buffers no longer fit inside it.
+# BACK_LIMIT is HI_APSTK - HI_BACK, so squeezing HI_SCHED no longer shrinks
+# the back buffer - it hits the AP-stack assert first. Squeeze the stacks.
 expect_break "back buffer no longer covers 3840x2160" \
-    's/^#define HI_SCHED  0x0B000000UL/#define HI_SCHED  0x09000000UL/' \
+    's/^#define HI_APSTK  0x0A800000UL/#define HI_APSTK  0x08100000UL/' \
     "3840x2160"
 
 # The 256 MiB ceiling: crossing it fails as ERR_UNSPEC at run time, not loudly.
@@ -156,7 +158,7 @@ same virtio_gpu.c \
 
 same fb.c \
     "HI_BACK == 0x08000000UL" "HI_BLUR == 0x0C000000UL" \
-    "BACK_LIMIT == 0x03000000u" "BLUR_LIMIT == 0x01000000u"
+    "BACK_LIMIT == 0x02800000u" "BLUR_LIMIT == 0x01000000u"
 
 # i2c_hid.c is the one that is SUPPOSED to have moved - out of the blur arena.
 same i2c_hid.c \

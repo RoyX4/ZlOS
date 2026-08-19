@@ -41,7 +41,47 @@
 
     .text
 
-#if defined(__x86_64__)
+#if defined(ZL_EFI)
+
+    /* Win64 ABI: first arg in rcx, second in rdx. rdi/rsi are callee-saved.
+     * PE's assembler has no .type/.size. */
+    .globl ksetjmp
+ksetjmp:
+    movq    %rbx,  0(%rcx)
+    movq    %rbp,  8(%rcx)
+    movq    %rdi, 16(%rcx)
+    movq    %rsi, 24(%rcx)
+    movq    %r12, 32(%rcx)
+    movq    %r13, 40(%rcx)
+    movq    %r14, 48(%rcx)
+    movq    %r15, 56(%rcx)
+    leaq    8(%rsp), %rax
+    movq    %rax, 64(%rcx)
+    movq    (%rsp), %rax
+    movq    %rax, 72(%rcx)
+    xorl    %eax, %eax
+    ret
+
+    .globl klongjmp
+klongjmp:
+    movl    %edx, %eax
+    testl   %eax, %eax
+    jnz     1f
+    movl    $1, %eax
+1:
+    movq    0(%rcx), %rbx
+    movq    8(%rcx), %rbp
+    movq   16(%rcx), %rdi
+    movq   24(%rcx), %rsi
+    movq   32(%rcx), %r12
+    movq   40(%rcx), %r13
+    movq   48(%rcx), %r14
+    movq   56(%rcx), %r15
+    movq   72(%rcx), %r8
+    movq   64(%rcx), %rsp
+    jmp    *%r8
+
+#elif defined(__x86_64__)
 
     .globl ksetjmp
     .type  ksetjmp, @function
@@ -119,6 +159,8 @@ klongjmp:
 
 #endif
 
-/* No executable stack, on both paths - the linker warns otherwise and a kernel
- * that ships a writable+executable segment for no reason is a bad habit. */
+/* No executable stack, on ELF. PE has no GNU-stack note; emitting one
+ * under the Windows EFI target is a useless (and sometimes fatal) section. */
+#if !defined(ZL_EFI)
     .section .note.GNU-stack,"",@progbits
+#endif

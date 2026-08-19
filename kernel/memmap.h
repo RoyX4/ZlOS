@@ -72,6 +72,11 @@
 #define AP_STACK_SPAN (17UL * AP_STACK_SIZE)  /* cpu_apic_ids[] holds 16    */
 #define HI_SCHED  0x0B000000UL   /* sched.c      - stacks, counters         */
 #define HI_HID    0x0B800000UL   /* i2c_hid.c    - HID over I2C buffers     */
+/* intel.c's 128-byte EDID scratch. It used to sit at 0x0C980000 - 9.5 MiB
+ * into the cached-blur arena - and intel.c asserted nothing, so a blur tile
+ * and an EDID read could occupy the same bytes. Top of the HID window, 64 KiB
+ * below HI_BLUR, far above the 320 bytes HID actually uses. */
+#define HI_EDID   0x0BFF0000UL   /* intel.c      - EDID scratch (128 bytes) */
 #define HI_BLUR   0x0C000000UL   /* fb.c         - the cached-blur arena    */
 #define HI_NVME   0x0D000000UL   /* nvme.c       - admin + I/O queues       */
 #define HI_XHCI   0x0E000000UL   /* xhci.c       - the USB DMA arena        */
@@ -90,6 +95,8 @@
 _Static_assert(HI_BACK  < HI_SCHED, "high-RAM map out of order: back >= sched");
 _Static_assert(HI_SCHED < HI_HID,   "high-RAM map out of order: sched >= hid");
 _Static_assert(HI_HID   < HI_BLUR,  "high-RAM map out of order: hid >= blur");
+_Static_assert(HI_HID   < HI_EDID,  "high-RAM map out of order: hid >= edid");
+_Static_assert(HI_EDID + 128ul <= HI_BLUR, "high-RAM map: EDID overruns blur");
 _Static_assert(HI_BLUR  < HI_NVME,  "high-RAM map out of order: blur >= nvme");
 _Static_assert(HI_NVME  < HI_XHCI,  "high-RAM map out of order: nvme >= xhci");
 _Static_assert(HI_XHCI  < HI_VGPU,  "high-RAM map out of order: xhci >= vgpu");

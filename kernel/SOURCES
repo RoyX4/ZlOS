@@ -70,6 +70,7 @@ rtc.c
 # desktop/exec-track
 arena.c
 exec.c
+interp_kernel.c
 
 # desktop/feel-and-control
 settings.c

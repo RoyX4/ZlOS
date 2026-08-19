@@ -12,7 +12,16 @@
 #ifndef ZL_FREESTANDING_H
 #define ZL_FREESTANDING_H
 
+/* clang's Windows/EFI target (LLP64) already typedefs size_t as
+ * unsigned long long. Repeating `typedef unsigned long size_t` is a
+ * different type and a hard error. Linux ELF builds do not provide it. */
+#if !defined(_WIN32) && !defined(_WIN64)
+#ifdef __SIZE_TYPE__
+typedef __SIZE_TYPE__ size_t;
+#else
 typedef unsigned long size_t;
+#endif
+#endif
 #ifndef NULL
 #define NULL ((void *)0)
 #endif
@@ -100,8 +109,12 @@ int    k_isnan(double);
 double k_atan2(double, double);
 #define atan2 k_atan2
 
-/* ---- the error boundary (ksetjmp.S) --------------------------------------*/
-typedef unsigned long zi_jmp_buf[8];
+/* ---- the error boundary (ksetjmp.S) --------------------------------------
+ * unsigned long is 4 bytes on the EFI LLP64 target and on the 32-bit kernel,
+ * and 8 on the 64-bit ELF kernel. ksetjmp.S stores 8-byte slots on x86-64
+ * (and 10 of them under the Win64 EFI ABI), so this must be qwords on every
+ * target. */
+typedef unsigned long long zi_jmp_buf[16];
 int  ksetjmp(zi_jmp_buf);
 void klongjmp(zi_jmp_buf, int) __attribute__((noreturn));
 #define zi_setjmp  ksetjmp
@@ -144,6 +157,7 @@ int  k_rand(void);
 #define isdigit  k_isdigit
 #define isspace  k_isspace
 #define isalpha  k_isalpha
+#define isalnum  k_isalnum
 #define strcspn  k_strcspn
 #define atol     k_atol
 #define strtoull k_strtoull
@@ -153,5 +167,20 @@ int  k_rand(void);
 #define rand     k_rand
 #define RAND_MAX 0x7FFFFFFF
 #define HUGE_VAL (1.0e308 * 10.0)
+
+int k_isalnum(int);
+int k_exit(int);
+void *k_calloc(unsigned long, unsigned long);
+#define exit     k_exit
+#define calloc   k_calloc
+
+/* Imports and lex_file need a FILE type. The kernel has no filesystem of
+ * that shape, so these always fail - hello.zl has no import, and the kernel
+ * path tokenises from memory via lex_text. */
+typedef struct { int unused; } FILE;
+static inline FILE *fopen(const char *p, const char *m)
+{ (void)p; (void)m; return 0; }
+static inline int fclose(FILE *f) { (void)f; return 0; }
+static inline char *getenv(const char *s) { (void)s; return 0; }
 
 #endif /* ZL_FREESTANDING_H */

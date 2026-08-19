@@ -22,9 +22,13 @@
  * so the tighter-binding operators end up deeper in the tree.
  */
 
+#ifdef ZL_FREESTANDING
+#include "freestanding/zl_freestanding.h"
+#else
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#endif
 
 #include "lexer.h"
 #include "parser.h"     /* NodeType and Node now live here */

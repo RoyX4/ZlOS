@@ -201,9 +201,9 @@ void *k_realloc(void *p, ul n)
     if (!p) return k_malloc(n);
     void *q = k_malloc(n);
     if (!q) return 0;
-    ul base = (ul)arena_base_addr();
-    ul off  = (ul)(uptr)p - base;
-    ul left = arena_capacity() - off;
+    uptr base = (uptr)arena_base_addr();
+    uptr off  = (uptr)p - base;
+    ul left = arena_capacity() - (ul)off;
     k_memcpy(q, p, n < left ? n : left);
     return q;
 }
@@ -652,6 +652,25 @@ int k_putchar(int c) { char b[2]; b[0] = (char)c; b[1] = 0; term_say(b); return 
 int k_isdigit(int c) { return c >= '0' && c <= '9'; }
 int k_isspace(int c) { return c==' '||c=='\t'||c=='\n'||c=='\r'||c=='\v'||c=='\f'; }
 int k_isalpha(int c) { return (c>='a'&&c<='z')||(c>='A'&&c<='Z'); }
+int k_isalnum(int c) { return k_isdigit(c) || k_isalpha(c); }
+
+void *k_calloc(ul n, ul sz)
+{
+    ul bytes = n * sz;
+    if (n && bytes / n != sz) return 0;   /* overflow */
+    void *p = k_malloc(bytes ? bytes : 1);
+    if (p) k_memset(p, 0, bytes ? bytes : 1);
+    return p;
+}
+
+/* Weak: the kernel defines a real kfatal; libctest does not. */
+extern void kfatal(const char *msg) __attribute__((weak));
+int k_exit(int c)
+{
+    (void)c;
+    if (kfatal) kfatal("interpreter exit");
+    for (;;) {}
+}
 
 unsigned long k_strcspn(const char *s, const char *reject)
 {

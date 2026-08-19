@@ -105,6 +105,7 @@ static u8  blkbuf[FS_BLK_MAX];            /* one block, for I/O staging      */
 static u8  sbbuf[FS_BLK_MAX];             /* the superblock block            */
 
 static int  mounted;
+static int  fs_quiet;   /* boot path: silent on no-disk and no-volume */
 static u32  dev_bsize;
 static u32  dev_nblocks;
 static u32  sb_dir_lba, sb_dir_blocks;
@@ -169,6 +170,7 @@ u32  fsdev_blocks(void);
 #else
 extern int nvme_ready(void);
 extern int nvme_setup(void);
+extern int nvme_find(void);
 extern int nvme_read_to(u32 dst, u32 lba_lo, u32 lba_hi);
 extern int nvme_write_from(u32 src, u32 lba_lo, u32 lba_hi);
 extern u32 nvme_blocksize(void);
@@ -342,7 +344,7 @@ static int probe_device(void)
 {
 #ifndef FS_HOSTTEST
     if (!nvme_ready() && !nvme_setup()) {
-        p_str("  zlfs: no disk - NVMe controller did not come ready\n");
+        if (!fs_quiet) p_str("  zlfs: no disk - NVMe controller did not come ready\n");
         return 0;
     }
 #endif
@@ -432,9 +434,11 @@ int fs_mount(void)
 
     u32 magic = rd32(sbbuf + SB_MAGIC);
     if (magic != FS_MAGIC) {
-        p_str("  zlfs: no filesystem here - magic is "); p_hex(magic);
-        p_str(", expected "); p_hex(FS_MAGIC);
-        p_str("\n  zlfs: format it first\n");
+        if (!fs_quiet) {
+            p_str("  zlfs: no filesystem here - magic is "); p_hex(magic);
+            p_str(", expected "); p_hex(FS_MAGIC);
+            p_str("\n  zlfs: format it first\n");
+        }
         return 0;
     }
     u32 ver = rd32(sbbuf + SB_VERSION);
@@ -805,3 +809,25 @@ int fs_name_push(int ch)
 int fs_name_len(void)            { return stage_len; }
 int fs_create_named(u32 bytes)   { return fs_create(stage, bytes); }
 int fs_find_named(void)          { return fs_find(stage); }
+
+/* A .zl that is not compiled into the kernel. Seeded once, on a live volume,
+ * so `run hello.zl` has something to execute that did not come out of the
+ * compiler that built this image. */
+void fs_seed_hello(void)
+{
+    static const char src[] = "print(40 + 2)\n";
+    if (!mounted) return;
+    if (fs_find("hello.zl") >= 0) return;
+    int idx = fs_create("hello.zl", (u32)(sizeof src - 1));
+    if (idx < 0) return;
+    (void)fs_write(idx, src, (u32)(sizeof src - 1));
+}
+
+int fs_try_boot(void)
+{
+    fs_quiet = 1;
+    int r = fs_mount();
+    fs_quiet = 0;
+    if (r) fs_seed_hello();
+    return r;
+}

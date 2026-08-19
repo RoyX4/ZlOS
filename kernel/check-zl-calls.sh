@@ -56,16 +56,10 @@ sed 's/"[^"]*"/""/g; s/#.*//' "$ZL" \
   | grep -oE '\b[a-z_][a-z_0-9]*[ ]*\(' \
   | tr -d ' (' | sort -u > /tmp/zl_calls.$$
 
-# KNOWN, PRE-EXISTING, AND TRACKED - not merge damage. `key()` has been called
-# and defined nowhere since b55f3f9 ("feat(intel): zlOS can light its own panel
-# - phase 0.1"), on every one of the eight branches. It sits on the panel
-# handover path, right after "press a key to move the console onto it", so the
-# most important code path in this project ends in a call to nothing. It is
-# listed rather than fixed because guessing the intended builtin - in_key,
-# term_key and usb_key are all plausible - inside a merge is how a second bug
-# gets in. Delete this line the moment it is fixed.
+# Empty on purpose. `key()` on the panel-handover path used to live here as a
+# tracked hole; it now waits on in_char() like every other blocking read.
+# A new unresolved call is a FAIL, not a footnote.
 cat > /tmp/zl_known.$$ <<'KNOWN'
-key
 KNOWN
 
 missing=$(comm -23 /tmp/zl_calls.$$ <(cat /tmp/zl_reg.$$ /tmp/zl_fns.$$ /tmp/zl_kw.$$ /tmp/zl_known.$$ | sort -u))

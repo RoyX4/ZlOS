@@ -28,7 +28,8 @@ SRC=${1:-kernel.zl}
 # a clean map. A check that can pass vacuously is worse than no check.
 declare -A K
 for name in SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT \
-            LINE_BUF LINE_MAX HIST_BUF HIST_N; do
+            LINE_BUF LINE_MAX HIST_BUF HIST_N \
+            DISK_SCRATCH DISK_SCRATCH_SIZE PAINT_BUF PAINT_MAX; do
     v=$(grep -oP "^$name\s*=\s*\K(0x[0-9A-Fa-f]+|[0-9]+)" "$SRC" | head -1)
     [ -n "$v" ] || { echo "FAIL: constant $name not found in $SRC"; exit 1; }
     K[$name]=$((v))
@@ -45,6 +46,8 @@ SNAKE_X=${K[SNAKE_X]}; SNAKE_Y=${K[SNAKE_Y]}
 FS_META=${K[FS_META]}; FS_DATA=${K[FS_DATA]}; FS_SLOT=${K[FS_SLOT]}
 LINE_BUF=${K[LINE_BUF]}; LINE_MAX=${K[LINE_MAX]}
 HIST_BUF=${K[HIST_BUF]}; HIST_N=${K[HIST_N]}
+DISK_SCRATCH=${K[DISK_SCRATCH]}; DISK_SCRATCH_SIZE=${K[DISK_SCRATCH_SIZE]}
+PAINT_BUF=${K[PAINT_BUF]}; PAINT_MAX=${K[PAINT_MAX]}
 
 # SNAKE_X/SNAKE_Y are one byte per body cell and the code bounds neither by a
 # named constant; the gap between them is what each actually gets.
@@ -58,6 +61,8 @@ REGIONS=(
     "FS_DATA:$FS_DATA:$((10 * FS_SLOT))"
     "LINE_BUF:$LINE_BUF:$LINE_MAX"
     "HIST_BUF:$HIST_BUF:$((HIST_N * HIST_STRIDE))"
+    "DISK_SCRATCH:$DISK_SCRATCH:$DISK_SCRATCH_SIZE"
+    "PAINT_BUF:$PAINT_BUF:$((PAINT_MAX * 4))"
 )
 
 mapfile -t SORTED < <(printf '%s\n' "${REGIONS[@]}" | sort -t: -k2 -n)

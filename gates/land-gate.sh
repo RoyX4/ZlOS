@@ -79,6 +79,8 @@ else echo ">>> ok (hosttest run: $hp passed)"; fi
 # LINE_BUF and DISK_SCRATCH sat on 0x02030000 through a whole integration.
 [ -x "$WT/kernel/check-zl-calls.sh" ] && run "zl call sites" "$WT/kernel" ./check-zl-calls.sh
 [ -x "$WT/kernel/check-memmap.sh" ]   && run "memory map"    "$WT/kernel" ./check-memmap.sh
+[ -x "$WT/kernel/hosttest/memmap-guard-test.sh" ] && \
+  run "memmap guards" "$WT/kernel/hosttest" ./memmap-guard-test.sh
 
 # --- the reverse SOURCES check: a .c present but not listed is silently not compiled
 if [ -f "$WT/kernel/SOURCES" ]; then
@@ -113,7 +115,7 @@ if [ -f "$WT/kernel/SOURCES" ]; then
 fi
 
 # --- boot gates: QEMU under TCG, one at a time, guarded
-for g in mkiso.sh verify.sh verify-iso.sh verify-efi.sh verify-raw.sh verify-disk.sh verify-clock.sh; do
+for g in mkiso.sh verify.sh verify-iso.sh verify-efi.sh verify-raw.sh verify-disk.sh verify-clock.sh verify-net.sh; do
   [ -x "$WT/kernel/$g" ] || continue
   until guard; do sleep 30; done
   run "boot: $g" "$WT/kernel" "./$g"

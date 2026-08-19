@@ -82,6 +82,8 @@ static int resets;
 
 unsigned long arena_capacity(void)  { return fake_cap; }
 unsigned long arena_available(void) { return fake_free; }
+unsigned long arena_base_addr(void) { return 0; }
+void *arena_alloc(unsigned long n)  { (void)n; return 0; }
 void arena_reset(void)              { fake_free = fake_cap; resets++; }
 
 /* ---- the seam: fb.c ------------------------------------------------------
