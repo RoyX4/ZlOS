@@ -2552,6 +2552,13 @@ fn run_command(cmd, arg) {
     if cmd == 78 { return net_gate() }    # N - the network card, and an ARP probe
     if cmd == 87 { return web_gate() }    # W - TCP + HTTP/1.0 against a real server
     if cmd == 69 { return real_gate() }   # E - a real website, by name, off the internet
+    # A - All Applications. The catalog is the ONLY route to 47 of the 53
+    # apps, and until the dock's grid button is fixed it has no pointer
+    # route at all - which also means the fidelity oracle cannot open any
+    # of them to photograph. A shell word is a route that does not depend
+    # on chrome geometry being right, so it is the one the harness can
+    # trust. Keep it even after the button works.
+    if cmd == 65 { if wm_run() == 1 { return reg_open(APP_CATALOG) }  return needs_wm("the catalog") }
     if cmd == 114 {                       # r - reboot
         color(C_YELLOW)  print("  rebooting...")
         beep(1568, 6)  beep(784, 10)

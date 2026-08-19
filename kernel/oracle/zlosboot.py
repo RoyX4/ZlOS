@@ -342,18 +342,20 @@ def open_by_catalog(ser, qmp, idx, W, H, name):
     settle = ser.drain
     dock_y = H - DOCK_H * u
 
-    # THE DOCK'S GRID BUTTON, not a start button. The full-width bar that
-    # carried one was replaced by the reference's floating island, and the
-    # route to the catalog is now "Show Applications" at the end of the dock -
-    # past the divider, which is why this is not simply slot 0's x.
-    # Mirrors kernel.zl's dock_slot_at(): dock_x0() + DOCK_N*PITCH + GAP + 1.
-    DOCK_PADX, DOCK_GAP, DOCK_TW, DOCK_PITCH, DOCK_N = 7, 5, 33, 38, 9
-    DOCK_BAR_W = DOCK_PADX * 2 + DOCK_N * DOCK_TW + (DOCK_N - 1) * DOCK_GAP \
-                 + DOCK_GAP * 2 + 1 + DOCK_TW
-    bar_x = (W - DOCK_BAR_W * u) // 2
-    grid_x = bar_x + DOCK_PADX * u + DOCK_N * DOCK_PITCH * u + DOCK_GAP * u + 1
-    click(qmp, grid_x + DOCK_TW * u // 2, dock_y + 22 * u, W, H, settle)
-    settle(1.0)
+    # THE CATALOG IS OPENED BY A SHELL WORD, not by clicking chrome.
+    #
+    # Three separate stale assumptions were fixed in the click path - the start
+    # button's coordinates, DOCK_H (64 vs 52), and a second click that
+    # dismissed what the first one opened - and it STILL did not open. Rather
+    # than keep guessing at two minutes a boot, this types `apps` at the prompt,
+    # which run_command() routes straight to reg_open(APP_CATALOG).
+    #
+    # That is also the more robust harness: a shell word does not depend on the
+    # chrome's geometry being right, so a future change to the dock cannot
+    # silently break every per-app measurement. The pointer route to the
+    # catalog is a real and separate defect, tracked as such.
+    ser.send("apps\r")
+    settle(1.5)
 
     # ONE CLICK, not two. The grid button opens the catalog directly; the
 

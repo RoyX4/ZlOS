@@ -194,6 +194,12 @@ static const struct cmd table[] = {
     { "panel",    80 },                       /* lights the real panel - laptop */
     { "gpu",     121 }, { "virtio",  121 },
     { "cube",    118 }, { "3d",      118 },
+    /* ALL APPLICATIONS. The catalog is the only route to 47 of the 53 apps and
+     * had no typed word at all - the same defect the `anim` comment below
+     * describes, with forty-seven times the consequence. It also had no working
+     * pointer route after the top bar became the reference's floating island,
+     * so for a while it had none of either. */
+    { "apps",     65 }, { "catalog",  65 },
     /* `anim` had no word at all - it was reachable only as the single key 'a'
      * in the old text shell, so under the compositor there was no way to start
      * it. A command in the help list with no way to type it is worse than one
