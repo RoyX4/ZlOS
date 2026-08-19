@@ -33,6 +33,13 @@ static int    intel_supported(void) { return 0; }
 static unsigned intel_mmio(void)    { return 0; }
 __attribute__((unused)) static unsigned intel_ggtt_size(void) { return 0; }
 static int    intel_ggtt_map(unsigned p, unsigned a) { (void)p; (void)a; return 0; }
+/* gpu_fb_attach maps the back buffer as a RANGE, so the stub set needs this one
+ * too. It went missing when gpuring.c switched from a per-page loop to
+ * intel_ggtt_map_range, and the result was that gputest stopped BUILDING - which
+ * is worse than failing, because a suite that does not compile reports nothing
+ * at all and a commit message claiming "116 checks pass" sailed through on it. */
+static int    intel_ggtt_map_range(unsigned p, unsigned a, int n)
+{ (void)p; (void)a; (void)n; return 0; }
 #include "../gpuring.c"
 
 /* The cursor image builder. Its install path needs intel.c's cursor registers;
