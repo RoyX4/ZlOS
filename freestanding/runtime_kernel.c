@@ -527,14 +527,20 @@ static unsigned zl_design_ink(int i)
  * This is the ONE wrapper: format the integer here and hand the catalogue the
  * string it already wanted. Not a new widget; the same cell, reached with a
  * number. */
-static const char *zl_itoa(long long v)
+
+/* 32-BIT DIVISION, DELIBERATELY. The obvious `unsigned long long % 10` here
+ * links against __udivmoddi4, which divmod.c does not supply (it supplies
+ * __divdi3/__moddi3 only) - so the -m32 kernel failed to LINK, and it failed
+ * behind a `| tail` that reported exit 0. A counter that needs more than 32
+ * bits is saturated rather than given a libgcc dependency. */
+static const char *zl_itoa(int v)
 {
-    static char buf[24];
+    static char buf[16];
     int i = (int)sizeof buf - 1;
     int neg = v < 0;
-    unsigned long long u = neg ? (unsigned long long)(-v) : (unsigned long long)v;
+    unsigned u = neg ? (unsigned)(-v) : (unsigned)v;
     buf[i] = 0;
-    do { buf[--i] = (char)('0' + (int)(u % 10ULL)); u /= 10ULL; } while (u && i > 1);
+    do { buf[--i] = (char)('0' + (int)(u % 10u)); u /= 10u; } while (u && i > 1);
     if (neg && i > 0) buf[--i] = '-';
     return &buf[i];
 }
@@ -1369,6 +1375,13 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ui_tw"))      { if (a[0].type==V_STR) return zl_num((double)ui_text_w(a[0].str,(int)a[1].num,(int)a[2].num)); return zl_num(0.0); }
     if (streq(name, "ui_th"))      return zl_num((double)ui_text_h((int)a[0].num));
     if (streq(name, "ui_txt"))     { if (a[2].type==V_STR) ui_text((int)a[0].num,(int)a[1].num,a[2].str,(unsigned)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
+    /* The number forms of ui_text/ui_text_w. zl cannot build "412" - there are
+     * no runtime strings - and label_num/num_aa draw unconditionally, which is
+     * wrong for an app that runs its widget sequence a second time to
+     * hit-test: the hit-test pass would repaint. These go through ui_text, so
+     * they honour ui_mode_get() like every other widget. */
+    if (streq(name, "ui_txtn"))    { ui_text((int)a[0].num,(int)a[1].num, zl_itoa((int)a[2].num),(unsigned)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
+    if (streq(name, "ui_tnw"))     return zl_num((double)ui_text_w(zl_itoa((int)a[0].num),(int)a[1].num,(int)a[2].num));
     if (streq(name, "ui_pill_w"))  { if (a[0].type==V_STR) return zl_num((double)ui_pill_w(a[0].str,(int)a[1].num,(int)a[2].num)); return zl_num(0.0); }
     if (streq(name, "ui_pill_h"))  return zl_num((double)ui_pill_h((int)a[0].num));
     if (streq(name, "ui_pill"))    { if (a[4].type==V_STR) return zl_num((double)ui_pill((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,a[4].str,(int)a[5].num,(int)a[6].num,(int)a[7].num)); return zl_num(0.0); }
@@ -1382,7 +1395,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ui_sb"))      { ui_statusbar((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "ui_stat"))    { ui_stat_begin((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "ui_statc"))   { if (a[0].type==V_STR && a[1].type==V_STR) ui_stat_cell(a[0].str,a[1].str,(unsigned)(unsigned long long)a[2].num); return zl_nil(); }
-    if (streq(name, "ui_statn"))   { if (a[0].type==V_STR) ui_stat_cell(a[0].str, zl_itoa((long long)a[1].num),(unsigned)(unsigned long long)a[2].num); return zl_nil(); }
+    if (streq(name, "ui_statn"))   { if (a[0].type==V_STR) ui_stat_cell(a[0].str, zl_itoa((int)a[1].num),(unsigned)(unsigned long long)a[2].num); return zl_nil(); }
     if (streq(name, "ui_stat_end"))return zl_num((double)ui_stat_end());
     if (streq(name, "ui_mono"))    { ui_mono_panel((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num); return zl_nil(); }
     if (streq(name, "ui_mono_h"))  return zl_num((double)ui_mono_line_h((int)a[0].num));
