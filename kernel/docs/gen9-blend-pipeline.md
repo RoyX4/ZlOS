@@ -61,6 +61,34 @@ to one `RENDER_SURFACE_STATE` describing the render target. Not an array to
 build, not a sampler in sight. That reduces the outstanding gap to exactly one
 structure.
 
+### Following the live render ring — tried, and closed by kernel config
+
+The render engine's ring is live while the desktop runs, so its command stream
+is *somewhere* readable in principle, and that stream contains
+`STATE_BASE_ADDRESS` and the binding-table pointer — the route to the one struct
+that is missing. The GGTT translation works:
+
+```
+rcs0 START=0xFFF68000  CTL=0x00003001
+GGTT[0xFFF68] = 00000003 8F9FC001  ->  ring phys 0x038F9FC000  present=1
+```
+
+Reading that page does not:
+
+```
+mmap /dev/mem @0x38F9FC000: Operation not permitted
+CONFIG_STRICT_DEVMEM=y
+CONFIG_IO_STRICT_DEVMEM=y
+```
+
+This kernel refuses arbitrary physical RAM through `/dev/mem` by design. Closed.
+
+**Two facts worth keeping anyway.** The translation itself is a working
+capability — a graphics address can be turned into a physical one from userspace,
+read-only, any time. And the render ring physically lives at `0x038F9FC000`,
+**above 4 GiB, with GGTT high dword = 3** — which is direct evidence that
+`intel_ggtt_map`'s `pte[1] = 0` ceiling is real rather than theoretical.
+
 ### What is still genuinely unavailable on this box
 
 `RENDER_SURFACE_STATE`'s **bit layout**. Searched for, and not present:
@@ -72,6 +100,8 @@ structure.
 | `libdrm-dev` i915 files | none |
 | zlib-scan of `iris_dri.so` for an embedded genxml | nothing decompressible |
 | `INTEL_DEBUG` = `fs bat hex bt surf surface state submit blit color sync stall` | `bt` gives contents, none give the layout |
+| `glGetProgramBinary` | works — returns Mesa's cache blob, not ISA |
+| following the live RCS ring via `/dev/mem` | GGTT translation works; `/dev/mem` refused (`STRICT_DEVMEM`) |
 
 The decoder knows the layout — it is compiled in — but will not print a surface
 state it was not asked to follow. Getting it needs Intel's public Gen9 PRM,
