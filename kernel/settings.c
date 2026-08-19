@@ -32,6 +32,7 @@
  */
 
 #include "ui.h"
+#include "design.h"
 
 /* ---- what this file drives ------------------------------------------------
  * Six sinks, all of which already existed. Only wm_set_anim is new, because
@@ -55,18 +56,27 @@ void wm_set_anim(int on);
  * switching accent never changes how readable anything is - which is the
  * property a palette has to have and a free colour picker cannot promise. */
 static const struct { const char *name; unsigned rgb; } ACCENTS[] = {
-    /* Ice MUST equal ui_theme_init's accent, or the default is a colour you
-     * cannot get back to: settings_apply() rebuilds the theme and then writes
-     * ACCENTS[S.accent] over it, so a mismatch means opening Settings and
-     * choosing the entry marked "the default" silently repaints the desktop in
-     * a different cyan. That is how the second cyan would come back after
-     * DECISIONS item E removed it - through the panel rather than through the
-     * palette. --accent #60d2eb. */
-    { "Ice",     0x60D2EB },     /* == ui_theme_init's accent. Keep them equal. */
-    { "Mint",    0x4FE0B0 },
-    { "Amber",   0xFFB454 },
-    { "Rose",    0xFF7A9C },
-    { "Violet",  0xB08CFF },
+    /* THE FIVE ARE THE REFERENCE'S OWN, not a set invented here.
+     * docs/design/ds-reference.html line 1212, verbatim:
+     *
+     *     const ACCENTS = ['#b8e838','#4ce0b3','#57b6ff','#8f7bff','#e86ec4'];
+     *
+     * It names none of them, so the names are ours; the values are not.
+     *
+     * ENTRY 0 MUST EQUAL ui_theme_init's accent, or the default is a colour
+     * you cannot get back to: settings_apply() rebuilds the theme and then
+     * writes ACCENTS[S.accent] over it, so a mismatch means opening Settings,
+     * choosing the entry marked "the default", and silently repainting the
+     * desktop in a different colour. hosttest/palette.c asserts the equality
+     * rather than trusting this comment.
+     *
+     * This table previously led with "Ice" #60D2EB, the blue-slate accent.
+     * That colour is retired along with the rest of the old palette. */
+    { "Lime",    ZD_ACCENT },    /* == ui_theme_init's accent. Keep them equal. */
+    { "Mint",    ZD_ACCENT_ALT_1 },
+    { "Azure",   ZD_ACCENT_ALT_2 },
+    { "Violet",  ZD_ACCENT_ALT_3 },
+    { "Magenta", ZD_ACCENT_ALT_4 },
 };
 #define N_ACCENT ((int)(sizeof ACCENTS / sizeof ACCENTS[0]))
 

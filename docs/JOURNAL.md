@@ -7,6 +7,69 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-20 — feat(refrender): support.js shim renders the ds.html desktop reference (84a8195)
+
+`claude/compassionate-curie-a0599c` · 4 files changed, 793 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>4 file(s)</summary>
+
+- `kernel/refrender/.gitignore`
+- `kernel/refrender/package.json`
+- `kernel/refrender/render-ref.mjs`
+- `kernel/refrender/support.js`
+
+</details>
+
+## 2026-08-20 — feat(oracle): region map generated from the mockup, not transcribed (a4ae44b)
+
+`claude/compassionate-curie-a0599c` · 3 files changed, 1314 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>3 file(s)</summary>
+
+- `kernel/oracle/.gitignore`
+- `kernel/oracle/gen-regions.py`
+- `kernel/oracle/regions.json`
+
+</details>
+
+## 2026-08-20 — feat(design): ONE palette source, and it is the reference's lime-on-grey (506a6a9)
+
+`claude/compassionate-curie-a0599c` · 8 files changed, 9282 insertions(+), 62 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>8 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+- `docs/design/ds-reference.html`
+- `kernel/design.h`
+- `kernel/refrender/ds.html`
+- `kernel/refrender/vendor/react-dom.js`
+- `kernel/refrender/vendor/react.js`
+- `kernel/ui.c`
+
+</details>
+
 ## 2026-08-20 — merge: desktop/storage-recovered, and port every app onto the theme roles (57ee9e9)
 
 `claude/compassionate-curie-a0599c` · 16 files changed, 677 insertions(+), 134 deletions(-)

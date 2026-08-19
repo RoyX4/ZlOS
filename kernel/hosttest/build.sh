@@ -42,7 +42,10 @@ echo "built ./termwrap      (run: ./termwrap)"
 # because a test that hardcoded the numbers would be a FOURTH copy of the
 # palette. ui.c is linked for real. Run from this directory: it opens
 # ../kernel.zl, ../settings.c and ../../docs/design/.
-gcc -O2 -w -o palette palette.c ../ui.c
+# No -w. CLAUDE.md documents -w silencing four warnings that name a real bug
+# class in this tree for the whole life of the guard; this file builds clean
+# with -Wall -Wextra, so there is nothing to buy by hiding them.
+gcc -O2 -Wall -Wextra -o palette palette.c ../ui.c
 echo "built ./palette       (run: ./palette)"
 
 # The proportional text engine, asserted. fbbench times fb.c and browsershot
