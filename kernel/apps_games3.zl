@@ -1366,8 +1366,12 @@ fn lf_reset() {
     return 0
 }
 
+# 30, NOT 36. The canvas is 400 - 30 = 370 design units tall and the grid is
+# 24 * 14 = 336, so a 36-unit header put the last two units of the bottom row
+# underneath the status bar - g3_bar paints after the game body and would have
+# quietly eaten it. 30 + 336 = 366 clears it with four to spare.
 fn lf_ox(a0, span) { return a0 + (span - LF_W * LF_CELL * ui()) / 2 }
-fn lf_oy(a0) { return a0 + 36 * ui() }
+fn lf_oy(a0) { return a0 + 30 * ui() }
 
 fn lf_draw(ax, ay, aw, ah) {
     u = ui()
@@ -1385,11 +1389,11 @@ fn lf_draw(ax, ay, aw, ah) {
         }
         y = y + 1
     }
-    label(ax + 16 * u, ay + 12 * u, "gen", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-    label_num(ax + 48 * u, ay + 12 * u, lf_gen, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
-    label(ax + 116 * u, ay + 12 * u, "pop", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-    label_num(ax + 148 * u, ay + 12 * u, lf_pop(), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
-    if lf_run == 1 { label(ax + 216 * u, ay + 12 * u, "running", theme(TH_ACCENT), T_CAPTION, W_BOLD) } else { label(ax + 216 * u, ay + 12 * u, "paused", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD) }
+    label(ax + 16 * u, ay + 8 * u, "gen", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 48 * u, ay + 8 * u, lf_gen, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 116 * u, ay + 8 * u, "pop", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 148 * u, ay + 8 * u, lf_pop(), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    if lf_run == 1 { label(ax + 216 * u, ay + 8 * u, "running", theme(TH_ACCENT), T_CAPTION, W_BOLD) } else { label(ax + 216 * u, ay + 8 * u, "paused", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD) }
     return 0
 }
 
@@ -1747,15 +1751,6 @@ fn as_tick(win) {
     if ticks() < as_when { return 0 }
     as_when = ticks() + 3
     return as_step()
-}
-
-# HOW THIS SLICE'S WINDOWS OPEN. reg_new() gates on explicit id ranges and none
-# of them covered this slice, so every app here would have been unopenable -
-# reg_open() would find no window and return without doing anything, silently.
-# Owning the open here also means an app can choose its own start position and
-# reset its state before the first frame, which is what a game needs.
-fn games3_new(id, u) {
-    return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
 }
 
 # ==============================================================================
@@ -2146,10 +2141,16 @@ fn games3_ensure(id) {
     return 0
 }
 
-# reg_new()'s per-slice arm. A fresh game every time the window is opened is
-# the rule reg_new already follows for Wordle, Tic-Tac-Toe, Hanoi and the rest;
-# games3_ensure above is the SECOND line of defence, for the case where a draw
-# or an event reaches this slice without ever having come through here.
+# HOW THIS SLICE'S WINDOWS OPEN, and the only entry point that did not exist
+# when the slice was written. reg_new() gates on explicit id ranges and none of
+# them covered 52..60, so every app here was unopenable - reg_open() found no
+# window and returned having done nothing, silently. reg_new now has a
+# per-slice arm calling this.
+#
+# A fresh game every time the window is opened is the rule reg_new already
+# follows for Wordle, Tic-Tac-Toe, Hanoi and the rest. games3_ensure above is
+# the SECOND line of defence, for a draw or an event that reaches this slice
+# without having come through here.
 fn games3_new(id, u) {
     games3_reset(id)
     return wm_open(id, games3_name(id), 150 * u, 70 * u, games3_w(id) * u, games3_h(id) * u)
