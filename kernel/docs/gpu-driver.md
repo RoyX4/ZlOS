@@ -146,6 +146,22 @@ that has never run, and the whole point of the gate is that a human turns it on
 *after* a hardware run shows the display survives a takeover. Wiring the
 ignition now would be the exact mistake this file's own table is about.
 
+### ~~Blocked on an unanswered question~~ — ANSWERED, both halves
+
+The render engine needed two things and neither is missing now, and neither was
+derived from a manual this tree does not have:
+
+| piece | where | how |
+|---|---|---|
+| the pixel shader | [`gen9-shader-source.md`](gen9-shader-source.md), `kernel/gpu_shader.inc` | lifted out of Mesa — 80 bytes, colour patchable in place |
+| the pipeline state | [`gen9-blend-pipeline.md`](gen9-blend-pipeline.md) | captured from the vendor driver — 76 packets, decoded |
+
+What remains for RCS is real work — emitting those packets, building surface
+state and a binding table, landing the first `3DPRIMITIVE` — but it is
+transcription against a working reference rather than archaeology.
+
+Original section follows.
+
 ### ~~Blocked on an unanswered question~~ — ANSWERED, [`gen9-shader-source.md`](gen9-shader-source.md)
 
 > **The `INTEL_DEBUG=fs` row below is wrong, and it is the row the rest of this
