@@ -117,22 +117,29 @@ fn g4_keys(id) {
 # The game palette. EVERY value here is a token from kernel/design.h, and
 # hosttest/palette.c has already proved each of those occurs literally in
 # docs/design/ds-reference.html - so these are the reference's own colours, not
-# colours picked by eye. They are restated as rgb() triples because design.h is
-# C and zl cannot include it, and they are NOT theme roles because a role means
-# "window chrome" and a crate is not chrome.
+# colours picked by eye.
 #
-# ui_color() carries 20 roles and none of them is "a second saturated hue";
-# ZD_ACCENT_ALT_1..4 exist in the reference for exactly this, as the accents
-# the settings panel offers.
+# THE ROLE TABLE IS ALWAYS THE FIRST ANSWER. ui_color() grew from twenty roles
+# to twenty-nine while this file was being written, and three of the eight
+# below became nameable the moment it did - amber, bright lime and the sunken
+# well are TH_WARN, TH_ACCENT_BR and TH_SURF_1 now, so they are named rather
+# than repeated. If a future role covers one of the remaining five, it should
+# lose its literal the same way.
+#
+# The five that are left are the four ZD_ACCENT_ALT_* and ZD_BAD_SOFT. Those
+# are not chrome and have no role, which is correct: a role says what a colour
+# MEANS to a window, and "the second of four pads a player must tell apart" is
+# not a meaning a window frame has. They are restated as rgb() triples because
+# design.h is C and zl cannot include it.
 fn g4_col(i) {
     if i == 0 { return rgb(0x4C, 0xE0, 0xB3) }      # ZD_ACCENT_ALT_1  teal
     if i == 1 { return rgb(0x57, 0xB6, 0xFF) }      # ZD_ACCENT_ALT_2  blue
     if i == 2 { return rgb(0x8F, 0x7B, 0xFF) }      # ZD_ACCENT_ALT_3  violet
     if i == 3 { return rgb(0xE8, 0x6E, 0xC4) }      # ZD_ACCENT_ALT_4  pink
-    if i == 4 { return rgb(0xF5, 0xB9, 0x3C) }      # ZD_WARN          amber
+    if i == 4 { return theme(TH_WARN) }             # ZD_WARN          amber
     if i == 5 { return rgb(0xFF, 0x9C, 0x88) }      # ZD_BAD_SOFT      soft red
-    if i == 6 { return rgb(0xCD, 0xF2, 0x5A) }      # ZD_ACCENT_BR     bright lime
-    return rgb(0x09, 0x0A, 0x0C)                     # ZD_SURF_1        sunken well
+    if i == 6 { return theme(TH_ACCENT_BR) }        # ZD_ACCENT_BR     bright lime
+    return theme(TH_SURF_1)                          # ZD_SURF_1        sunken well
 }
 
 # A heading line, drawn identically by all eight so the games read as one suite.
