@@ -255,3 +255,55 @@ into the batch. In the kernel that is a DMA engine parsing whatever followed it.
   a guarantee stated in a comment and implemented by no consumer. Worth knowing
   for the next hardware-dependent harness — **the convention now exists, so use
   77 rather than inventing a second one.**
+
+## The BCS register map, read off this running GPU — not from a datasheet
+
+The next step needs these addresses, and guessing them is how a bring-up loses a
+day. `i915_engine_info` reports what the hardware actually has, on this exact
+part, right now:
+
+```
+$ sudo cat /sys/kernel/debug/dri/0/i915_engine_info
+rcs0    MMIO base: 0x00002000     render
+bcs0    MMIO base: 0x00022000     THE BLITTER - this is the one
+vcs0    MMIO base: 0x00012000     video decode
+vecs0   MMIO base: 0x0001a000     video enhance
+```
+
+`bcs0`, idle, with i915 holding it:
+
+```
+RING_START: 0xfffe4000     RING_HEAD: 0x00000300    RING_TAIL: 0x00000300
+RING_CTL:   0x00000000     RING_MODE: 0x00000200 [idle]
+RING_IMR:   0xf6f7ffff     RING_ESR:  0x00000000
+EL_STAT_LO: 0x00000301     EL_STAT_HI: 0x00000000
+```
+
+Two things follow, and both shape the next session:
+
+1. **The legacy ring registers are real and live on Gen9.** `RING_START`,
+   `RING_HEAD`, `RING_TAIL`, `RING_CTL` all exist at `base + 0x30..0x3C` and hold
+   sensible values. zlOS can address them.
+2. **i915 drives this part through EXECLISTS, not the legacy ring** — all four
+   engines report `EL_STAT`, and `RING_CTL` reads 0 while idle because the
+   context, not the driver, owns the ring. So the open question for zlOS is
+   whether a sole owner can still program the legacy ringbuffer path directly on
+   Gen9.5, as i915 itself did on Gen8 before it switched. **Not answered here.**
+   It is answerable in one experiment, and that experiment needs the GPU to
+   itself.
+
+### Why the next step is blocked, specifically
+
+Everything so far ran alongside i915 on purpose, and that is now exhausted:
+building a command stream needs no ownership, but **programming `RING_CTL` does**.
+Two ways to get it, both needing a human:
+
+- **Detach i915** (`modeset-run.sh`'s pattern, EXIT-trap recovery). This blanks
+  the screen of whoever is using the laptop, so it is not something to start
+  while someone is working.
+- **Boot zlOS on the ThinkPad from USB.** `kernel/docs/thinkpad-first-boot.md`
+  has the procedure, including the two things that waste an hour.
+
+Until one of those happens, `gpu.c` is as far as this can honestly go: the
+command stream is correct on silicon, pinned by `gputest`, compiled into all
+four targets, and calling nothing.
