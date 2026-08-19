@@ -7,6 +7,45 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-20 — docs: extract the complete widget specification from ds-reference.html (a2c5693)
+
+`claude/compassionate-curie-a0599c` · 1 file changed, 1803 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>1 file(s)</summary>
+
+- `kernel/docs/reference-widgets.md`
+
+</details>
+
+## 2026-08-20 — fix(oracle): keep the full serial transcript, and add the README (11c3dc8)
+
+`claude/compassionate-curie-a0599c` · 6 files changed, 480 insertions(+), 11 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>6 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/hosttest/build.sh`
+- `kernel/hosttest/wmtest_feel`
+- `kernel/oracle/README.md`
+- `kernel/oracle/animate.py`
+- `kernel/oracle/zlosboot.py`
+
+</details>
+
 ## 2026-08-20 — feat(oracle): animate.py, and hue reports WHY it fired (6315f35)
 
 `claude/compassionate-curie-a0599c` · 4 files changed, 90 insertions(+), 12 deletions(-)

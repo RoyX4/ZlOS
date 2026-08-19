@@ -388,6 +388,10 @@ class Machine:
             os.environ["ZLOS_GFXMODE"] = f"{self.want[0]}x{self.want[1]},auto"
             print(f"booting a variant source: kernel.zl with its modeset ladder "
                   f"replaced by set_res({self.want[0]}, {self.want[1]})")
+            if not self.do_build:
+                print("  NOTE: --no-build, so this boots whatever zlOS.iso "
+                      "already contains. If the last build was not this "
+                      "variant, the size check below will catch it.")
         if self.do_build:
             build(False)
         self.tmp = tempfile.mkdtemp(prefix="zlos-oracle-")

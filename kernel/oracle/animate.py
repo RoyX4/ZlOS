@@ -46,8 +46,8 @@ import argparse, json, os, sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from zlosboot import (Machine, OUT, at, click, catalog_apps,   # noqa: E402
-                      grab, guest_ui, open_app, type_line, DOCK_H)
+from zlosboot import (Machine, OUT, at, click, grab, guest_ui,  # noqa: E402
+                      open_app, DOCK_H, TITLE_H)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GRID_W, GRID_H = 32, 20        # the ASCII change map: 40x40 px cells at 1280x800
@@ -66,28 +66,54 @@ def do_idle(m, frames):
         yield
 
 
-def do_drag(m, frames):
-    """Grab the topmost window's title bar and walk it across the desktop.
+def title_bar(m):
+    """Where a window's title bar is, from the guest's own report.
 
-    The grab point is the compositor's OWN reported title rect, never a
-    constant: the literal 2110,120 default in probe-drag.py was off the right
-    edge of a 1920-wide screen, so the press landed on nothing and the gate
-    reported "dragging is a no-op" for a drag that worked perfectly.
+    NEVER a constant. probe-drag.py's literal 2110,120 default was off the
+    right edge of a 1920-wide screen, so the press landed on nothing and the
+    gate reported "dragging is a no-op" for a drag that worked perfectly.
+
+    Two sources, and the order matters, because the obvious one is not on the
+    boot path. `wm_report()` prints `wm: win N title x,y WxH` and MEASURED on
+    this branch it is called from open_app(), the catalog, and wm_session() -
+    and wm_session() is the dead 'w' command ("the only two machines that can
+    reach this are one with no framebuffer, and a mistake"). wm_boot_start()
+    prints no per-window rect at all. So on a plain boot there are none, which
+    is exactly what this hit: "the compositor reported no window title rects"
+    on a desktop with three windows on it.
+
+    What the boot path DOES print is the shell window's client rect, on the
+    `compositor:` line. The title bar sits directly above it, TITLE_H design
+    units tall - which is a rect the guest measured, not one recomputed here.
     """
     import re
     m.ser.drain(1.0)
-    # ser.all, not ser.buf - see LoggedSerial. The boot-time window reports are
-    # printed BEFORE "ready.", so the wait that proved the machine booted has
-    # already consumed them out of the buffer.
-    bars = re.findall(r"wm: win (\d+) title (\d+),(\d+) (\d+)x(\d+)", m.ser.all)
-    if not bars:
-        raise SystemExit("the compositor reported no window title rects, so "
-                         "there is nothing to aim at - refusing to press at a "
-                         "guess")
-    _, bx, by, bw, bh = (int(v) for v in bars[-1])
+    # ser.all, not ser.buf - see LoggedSerial. These lines are printed BEFORE
+    # "ready.", so the wait that proved the machine booted has already consumed
+    # them out of the buffer.
+    log = m.ser.all
+    bars = re.findall(r"wm: win (\d+) title (\d+),(\d+) (\d+)x(\d+)", log)
+    if bars:
+        _, bx, by, bw, bh = (int(v) for v in bars[-1])
+        return f"window {bars[-1][0]}", bx, by, bw, bh
+    shell = re.search(r"compositor: (\d+) windows, shell client "
+                      r"(\d+),(\d+) (\d+)x(\d+)", log)
+    if shell:
+        _, cx, cy, cw, _ = (int(v) for v in shell.groups())
+        th = TITLE_H * guest_ui(m.w)
+        return "the shell window", cx, cy - th, cw, th
+    raise SystemExit(
+        "neither a `wm: win N title` rect nor the `compositor:` line is in the "
+        "serial transcript, so there is nothing to aim at and this refuses to "
+        "press at a guess. Last of the transcript:\n" + log[-1200:])
+
+
+def do_drag(m, frames):
+    """Grab a window's title bar and walk it across the desktop."""
+    who, bx, by, bw, bh = title_bar(m)
     gx, gy = bx + bw // 3, by + bh // 2
     dx, dy = min(m.w - 60, gx + 260), min(m.h - 80, gy + 180)
-    print(f"  dragging window {bars[-1][0]} from {gx},{gy} to {dx},{dy}")
+    print(f"  dragging {who} from {gx},{gy} to {dx},{dy}")
 
     at(m.qmp, gx, gy, m.w, m.h)
     m.ser.drain(0.5)
@@ -223,6 +249,13 @@ def main():
     ap.add_argument("--height", type=int, default=800)
     ap.add_argument("--how", choices=("src", "toggle"), default="src")
     ap.add_argument("--regions", default=os.path.join(HERE, "regions.json"))
+    ap.add_argument("--all-regions", action="store_true",
+                    help="attribute change to every region in the map, not just "
+                         "the ones the default view shows. Off by default "
+                         "because 50 of the 62 regions are windows on "
+                         "workspaces 2 and 3 - naming them for a drag on "
+                         "workspace 1 is a coordinate coincidence reported as "
+                         "a fact.")
     ap.add_argument("--save", action="store_true", help="write every frame as a PNG")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--no-build", action="store_true")
@@ -236,7 +269,8 @@ def main():
     if os.path.exists(args.regions):
         doc = json.load(open(args.regions))
         if (doc["screen"]["w"], doc["screen"]["h"]) == (args.width, args.height):
-            regions = doc["regions"]
+            regions = [r for r in doc["regions"]
+                       if args.all_regions or r.get("visible", True)]
 
     os.makedirs(OUT, exist_ok=True)
     with Machine(args.width, args.height, do_build=not args.no_build,
