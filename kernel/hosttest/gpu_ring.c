@@ -346,8 +346,20 @@ static int ring_test(void)
 int main(int argc, char **argv)
 {
     const char *mode = argc > 1 ? argv[1] : "--survey";
-    if (geteuid() != 0) { fprintf(stderr, "run me with sudo\n"); return 2; }
-    if (!map_bar0()) return 1;
+    /* 77 is SKIP, not failure - the autotools convention gates/land-gate.sh
+     * adopted after gpu_blt tripped over it. This binary lives in hosttest/,
+     * and that gate GLOBS every executable there and runs it as an ordinary
+     * user. Returning 2 for "not root" made the whole land gate red, blaming a
+     * harness that had correctly declined to run. Same for a box with no Intel
+     * GPU: absent hardware is a skip, not a defect. */
+    if (geteuid() != 0) {
+        fprintf(stderr, "gpu_ring needs root (it maps BAR0) - skipping.\n");
+        return 77;
+    }
+    if (!map_bar0()) {
+        fprintf(stderr, "no Intel BAR0 here - skipping.\n");
+        return 77;
+    }
 
     printf("gpu_ring: can a sole owner drive the Gen9 blitter ring?\n");
     printf("  BAR0 mapped            %u MiB of " PCI_DEV "\n\n", BAR0_MAP_BYTES >> 20);
