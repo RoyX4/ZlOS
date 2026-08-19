@@ -14,7 +14,7 @@ file. Five other worktrees were live in sibling directories during the run
 
 ## Read these first — hand-verified, highest consequence
 
-Every claim in the ten files below was re-derived directly from the tree by hand, not
+Every claim in the eleven files below was re-derived directly from the tree by hand, not
 taken from an agent's report. Where an agent's evidence was wrong but its conclusion
 right, both are recorded — see `VERIFIED-WM-SNAP.md` for the reference case.
 
@@ -24,6 +24,7 @@ unlabelled claim as verified and a labelled one as a hypothesis.
 
 | file | what it settles |
 |---|---|
+| [`UNBLOCKED-render-engine.md`](UNBLOCKED-render-engine.md) | **Read this one first.** `.ultra/STATE.md` and four other docs call `RENDER_SURFACE_STATE` the blocker on the render engine and say it *"needs Intel's public Gen9 PRM, which is not on this box."* It landed at commit **`793763a` — three commits before `HEAD`** — as `kernel/gpu_surface.inc`, lifted out of Mesa's decoder DB inside libgallium. The 48×/96× win is unblocked and the project does not know it. Nothing consumes the header yet, so it **exists** and is not **reachable** — which is ordinary work, not an external blocker. |
 | [`CRITICAL-gpuring-bar-truncation.md`](CRITICAL-gpuring-bar-truncation.md) | `intel_mmio()` returns `u32`, so **every GPU ring register access truncates a 64-bit BAR**. `intel.c` builds the >4 GiB address correctly and the accessor throws the top half away. The harness stubs it to `0`, which is why 116 checks stayed green. **Blocks arming the ring.** |
 | [`PANEL-POWER-IS-REACHABLE.md`](PANEL-POWER-IS-REACHABLE.md) | `lt_armed` **is** armed by the shipping tree — `kernel.zl:1489` `P` → `panel_up` → `intel.c:4323`. Five doc sites in three files say nothing outside `hosttest/` arms it. The T12 and AUX discipline on that path is sound; the documented safety boundary is not. |
 | [`CRITICAL-ci-truncation-gate-is-blind.md`](CRITICAL-ci-truncation-gate-is-blind.md) | `tools/hazard-scan.sh` scrapes its file list out of `buildefi.sh` **as text**, so `$CORE` never expands. It scans **6 of ~50** translation units — and 2 of the 6 by accident — while CI prints *"no new truncation sites."* The gate for this repo's #1 bug class never opens `fb.c`, `intel.c`, `xhci.c`, `http.c` or 37 others. |
@@ -79,7 +80,7 @@ dominant failure mode:
 
 ## Standing caveat
 
-Findings in the wave boards are **agent output**. The ten files at the top of this page
+Findings in the wave boards are **agent output**. The eleven files at the top of this page
 are hand-verified; the boards are not, and at least one agent finding has already been
 shown to have a correct conclusion resting on false evidence. Reproduce before acting —
 which is this repo's existing rule for cross-model review, applied to its own fleet.
