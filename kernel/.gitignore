@@ -34,3 +34,7 @@ hosttest/xhcitest
 # four binaries in the index on every run. A tracked file is never ignored, so
 # adding them here fixes nothing; they need `git rm --cached`. Left for the
 # phase 2 sweep rather than smuggled into a pointer fix.
+hosttest/gpu-ring-*.log
+hosttest/gpu_ring
+hosttest/gputest
+hosttest/gpu_blt

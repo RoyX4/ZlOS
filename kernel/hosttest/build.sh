@@ -360,3 +360,9 @@ fi
 # it before it was committed.
 gcc -O2 -g -Wall -Wextra -o gputest gputest.c
 echo "built ./gputest       (run: ./gputest)"
+
+# The ring experiment. Builds anywhere; needs root AND i915 unbound to do
+# anything, so it is not part of any gate - gpu-ring-run.sh drives it and always
+# gives the display back. --survey is read-only and safe with i915 loaded.
+gcc -O2 -g -Wall -Wextra -o gpu_ring gpu_ring.c
+echo "built ./gpu_ring      (run: sudo ./gpu-ring-run.sh --survey)"
