@@ -1,5 +1,9 @@
 # zlOS — where things stand
 
+Persistent named files and the Files app are documented in
+[`docs/storage-and-files.md`](docs/storage-and-files.md). The old numbered RAM
+slots remain only as a compatibility path; new app work should use `zlfs`.
+
 Read this first in a new session. Everything below is verified, not remembered.
 
 > **What is still OPEN is not in this file — it is in
