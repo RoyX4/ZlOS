@@ -872,10 +872,56 @@ kernel image end measured, the arithmetic for where a new buffer may go, and one
 collision `fb.c`'s map does not list (the SMP AP stacks at 168 MiB, inside
 `sp_buf`'s declared span) — is `kernel/docs/memory-map.md`.
 
+## Two silent faults hid five sixths of the desktop (2026-08-20)
+
+"All Applications" is the only route to 47 of the 53 apps. It did not open, and
+once it did it drew twelve tiles and then killed the machine. Neither failure
+produced a single line of diagnostic anywhere, and both are the same shape: a
+call that succeeded at doing the wrong thing.
+
+**1. `APP_CATALOG` was 13. So is `APP_FILES`.** The catalog's id was chosen at
+what was then one past `APP_EDIT`; `APP_FILES` was added later and took it.
+`reg_open()` asks wm which app each open window is showing, and the desktop
+opens a Files window at boot — so `apps`, the dock's grid button and the start
+menu all reached `reg_open(13)`, matched the Files window already on screen,
+raised it, and **returned 1**. Success, no new window, nothing printed. It
+misrouted the other way too: `app_event()` tested `id >= APP_CATALOG` above its
+`id == APP_FILES` arm, so every key and click aimed at the Files window went to
+`cat_event()`.
+
+**2. `sys2_mono()` and `sys3_mono()` never existed.** `reg_mono()` has
+forwarded to them since the slice files were written. **zl resolves a call by
+NAME AT RUNTIME**, so an undefined function is not a link error — `build.sh`'s
+"undefined symbols: 0" is `nm` counting C symbols, and a zl call site is a
+string. It falls through the builtin table in `freestanding/runtime_kernel.c`
+to `kfatal("builtin not available in the kernel subset")`, which **halts the
+machine**. sys2's six apps are the ones with no icon, so the catalog asks them
+for a monogram: scrolling to Kernel Log drew that tile's background and its
+category stripe and then froze zlOS. From outside, an empty window.
+
+The same class was sitting on the ThinkPad panel path: `key()`, called one
+statement before `panel_console()` moves the console onto the panel our own
+driver has just lit. Nothing defines `key()` either.
+
+**Two static checks now cover both, each validated in both directions:**
+
+```
+cd kernel
+./check-appids.py --selftest   # replants APP_CATALOG = 13, requires a failure
+./check-zlcalls.py             # every call site vs. the fn set and the builtins
+```
+
+`check-zlcalls.py` reads the builtin names out of `runtime_kernel.c`'s own
+`streq(name, "...")` table rather than transcribing them, and it found `key()`
+on its first run. **A `_Static_assert` nobody has watched fail is a decoration**
+— that rule applies to these too, which is what `--selftest` is for.
+
 ## Verify before believing anything
 
 ```
 cd kernel
+./check-appids.py  # no two apps share an id (static, instant)
+./check-zlcalls.py # every zl call resolves - an undefined one HALTS the kernel
 ./check-memmap.sh  # hand-placed buffers do not overlap (static, instant)
 ./verify.sh        # BIOS golden transcript
 ./verify-raw.sh    # our own bootloader
