@@ -22,6 +22,7 @@
  */
 
 #include "ui.h"
+#include "design.h"
 
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
@@ -46,69 +47,56 @@ void ui_theme_init_q8(int scale_q8)
 {
     if (scale_q8 < 192) scale_q8 = 192;
     if (scale_q8 > 768) scale_q8 = 768;
-    /* ---- ONE PALETTE, and kernel.zl's is the one -- DECISIONS.md item E -----
-     * "Do not introduce a second visual system" is what this comment used to
-     * say, and a second visual system is exactly what these eleven values were.
-     * kernel.zl's rgb() constants painted the header bar, the dock and the two
-     * legacy app bodies; this struct painted EVERY WINDOW FRAME ON SCREEN, and
-     * the two agreed on 2 of 10 roles. Two cyans and two panel colours were up
-     * at the same time. visual-speed-northstar.md names "duplicated palette
-     * roles" as a thing that must not ship.
+    /* ---- ONE PALETTE, and design.h is the one -------------------------------
+     * This block used to carry twenty-one hex literals of a navy/cyan theme
+     * transcribed from docs/design/zlOS-design-northstar.html, which was itself
+     * transcribed from kernel.zl. That chain is now cut in one place: every
+     * value below names a token in kernel/design.h, and design.h's values were
+     * measured out of docs/design/ds-reference.html - the artifact this desktop
+     * is being cloned from - with the frequency count that justifies each one.
      *
-     * WHICH ONE IS THE SOURCE OF TRUTH IS NOT A TASTE CALL, which is why this
-     * could be closed rather than escalated. docs/design/zlOS-design-northstar.
-     * html:13 says, in its own words, what it is:
+     * THE PALETTE IS NOW LIME-ON-GREY, not blue-slate. That is a deliberate,
+     * reversible call: the reference wins on colour. Reversing it is editing
+     * design.h and nothing else, because no call site anywhere names a colour -
+     * kernel.zl carries semantic role numbers and calls ui_color().
      *
-     *     -- the zlOS palette, straight from kernel.zl's rgb() theme --
+     * Mapping notes, where a role is not a straight one-to-one:
      *
-     * The reference was transcribed FROM kernel.zl. So "agree with the
-     * reference" and "agree with kernel.zl" are the same instruction, and this
-     * file was the only one of the three that had drifted - DECISIONS #33
-     * counted it at 11 of 21 roles for kernel.zl against 2 of 10 here.
-     *
-     * Every value below is now a named token of that reference, and the token
-     * is in the comment so the next drift is a diff and not an argument.
-     * REVERSING IS THIS BLOCK, nothing else - no call site names a colour. */
-    theme.bg        = 0x1A1E32;   /* --wall-top   the desktop behind it all  */
-    theme.panel     = 0x05060A;   /* --panel      .win body. WAS 0x1E2A44,   */
-                                  /*              a mid-navy against the     */
-                                  /*              reference's near-black.    */
-                                  /*              visual-speed-northstar.md  */
-                                  /*              §identity 3 asks for       */
-                                  /*              "near-black content" too.  */
-    /* THE ONE ROLE THE REFERENCE DOES NOT DEFINE, flagged rather than faked.
-     * It is a static mockup: its own step list has "Widget toolkit - clickable
-     * buttons, scrollbars" as QUEUED, so there is no button face in it to copy.
-     * --panel-2 (#0b0e18) is its nearest "raised surface", and it is a ~3%
-     * luminance step off --panel - which would make every button, slider track
-     * and toggle in ui.c effectively invisible. So this takes --line-soft,
-     * which IS a reference token, sits clearly above the panel, and stays below
-     * --line so a hairline still reads on top of a control. */
-    theme.panel_hi  = 0x1A2136;   /* --line-soft  raised: control faces      */
-    theme.text      = 0xD2E4FF;   /* --txt-hi                                */
-    theme.text_dim  = 0x96A5C3;   /* --txt-dim                               */
-    theme.accent    = 0x60D2EB;   /* --accent     was 0x55D6FF - THE SECOND  */
-                                  /*              CYAN, next to kernel.zl's  */
-                                  /*              ACCENT on the same screen. */
-    theme.border    = 0x26304A;   /* --line       .win border                */
-    theme.danger    = 0xE05A5A;   /* --crit                                  */
-    theme.title     = 0x182238;   /* focused chrome: quiet, not a blue slab  */
-    theme.title_bot = 0x0B0E18;   /* focus belongs to border/shadow, not fill */
-    /* The unfocused title bar is a GRADIENT in the reference and in kernel.zl
-     * (:794, tbt/tbb) and was a flat slab here, because the struct had one
-     * field for it. Both ends now, and they are the reference's own two stops:
-     * .win:not(.focus) .titlebar{linear-gradient(180deg,#2a3550,#182238)}. */
-    theme.title_off = 0x121722;   /* unfocused chrome, top                   */
-    theme.title_off_bot = 0x080A10; /* ...and bottom                         */
-    theme.wallpaper_top = 0x1A1E32;
-    theme.wallpaper_bot = 0x0A0C16;
-    theme.bar_top   = 0x161B29;
-    theme.bar_bot   = 0x090B12;
-    theme.bar_hi    = 0x26304A;
-    theme.chrome    = 0x0B0E18;
-    theme.chrome_line = 0x05060A;
-    theme.text_hi   = 0xD2E4FF;
-    theme.ok        = 0x5BD66E;
+     *  - panel is SURF_3, the reference's window interior (#101215), not its
+     *    darkest surface. Terminal and editor bodies are darker (SURF_2) and
+     *    ask for it themselves; making the default panel that dark would leave
+     *    every non-terminal app on the wrong step of the ladder.
+     *  - panel_hi is SURF_4. Under the old reference this role had no honest
+     *    source and took a border colour as a stand-in. ds-reference.html has
+     *    a real one: #14171a is what every toolbar, sidebar, status bar and
+     *    stat card in it is made of, 32 occurrences.
+     *  - title/title_bot are flat, both SURF_4. The reference's title bar is
+     *    not a gradient; keeping two fields lets a gradient come back without
+     *    another struct change.
+     *  - ok is ZD_OK and danger is ZD_BAD, both straight from the reference's
+     *    own `const OK = '#a9e34b', BAD = '#ff6a50'` at line 3046. They are
+     *    wired to state, never to the accent setting. */
+    theme.bg        = ZD_SURF_0;      /* the canvas behind everything        */
+    theme.panel     = ZD_SURF_3;      /* window interior                     */
+    theme.panel_hi  = ZD_SURF_4;      /* raised: control faces, toolbars     */
+    theme.text      = ZD_TEXT_1;      /* the desktop's root ink              */
+    theme.text_dim  = ZD_TEXT_4;      /* secondary                           */
+    theme.accent    = ZD_ACCENT;      /* the lime                            */
+    theme.border    = ZD_SURF_6;      /* borders and hairlines               */
+    theme.danger    = ZD_BAD;         /* failure only, and the close hover   */
+    theme.title     = ZD_SURF_TABS;   /* focused chrome   #171a1e            */
+    theme.title_bot = ZD_SURF_TABS;   /* flat in the reference               */
+    theme.title_off = ZD_SURF_BAR_OFF;/* unfocused chrome #131518            */
+    theme.title_off_bot = ZD_SURF_BAR_OFF;
+    theme.wallpaper_top = ZD_SURF_0;
+    theme.wallpaper_bot = ZD_SURF_BODY;
+    theme.bar_top   = ZD_SURF_4;
+    theme.bar_bot   = ZD_SURF_3;
+    theme.bar_hi    = ZD_SURF_6;
+    theme.chrome    = ZD_SURF_4;
+    theme.chrome_line = ZD_SURF_2;    /* the 47-use hairline                 */
+    theme.text_hi   = ZD_TEXT_0;      /* emphasis, above body                */
+    theme.ok        = ZD_OK;
 
     /* ---- metrics, v10 SS6.10 -----------------------------------------------
      * Counted out of the prototype's stylesheet rather than picked by eye, and

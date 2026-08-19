@@ -7,6 +7,31 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-20 — merge: desktop/storage-recovered, and port every app onto the theme roles (57ee9e9)
+
+`claude/compassionate-curie-a0599c` · 16 files changed, 677 insertions(+), 134 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>9 file(s)</summary>
+
+- `freestanding/runtime_kernel.c`
+- `kernel/HANDOFF.md`
+- `kernel/apps_games1.zl`
+- `kernel/apps_games2.zl`
+- `kernel/apps_registry.zl`
+- `kernel/apps_system.zl`
+- `kernel/apps_utils.zl`
+- `kernel/hosttest/wmshot.c`
+- `kernel/kernel.zl`
+
+</details>
+
 ## 2026-08-19 — feat(apps): 3 system apps, RNG seeding, and a proven interactive probe (94cd4c8)
 
 `desktop/app-suite` · 8 files changed, 435 insertions(+), 10 deletions(-)
