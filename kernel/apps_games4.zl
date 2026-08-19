@@ -1,0 +1,29 @@
+# apps_games4.zl - 15 Puzzle, Reversi, Simon, Sokoban, Flappy, Missile Command, Blackjack, Frogger
+#
+# ONE SLICE, ONE FILE. apps_registry.zl's seven dispatch chains each call into
+# this file exactly once, so a slice can be written without touching the shared
+# registry at all. That is not tidiness: five agents editing seven if-chains in
+# one working tree clobber each other, and a duplicate app id compiles clean and
+# misroutes at RUNTIME - APP_CATALOG is a dispatch FLOOR, so `id >= APP_CATALOG`
+# routes into the registry and a collision is invisible until you open the app.
+#
+# THIS SLICE OWNS IDS 61..69 AND NO OTHERS.
+#
+# Fill in the six functions below. Each is a plain if-chain on `id`; returning
+# the fallback value at the end means "not mine" and lets the next slice answer.
+# Draw with the ui_*/uikit widgets - see kernel/ui.h and
+# kernel/docs/reference-widgets.md. Do not draw a colour literal: design.h is
+# the only place one may appear, and hosttest/palette.c enforces it.
+
+games4_LO = 61
+games4_HI = 69
+fn games4_has(id) { if id < games4_LO { return 0 }  if id > games4_HI { return 0 }  return 1 }
+
+fn games4_name(id) { return "" }
+fn games4_cat(id) { return 0 }
+fn games4_w(id) { return 480 }
+fn games4_h(id) { return 340 }
+fn games4_icon(id) { return 0 }
+fn games4_draw(id, ax, ay, aw, ah) { return 0 }
+fn games4_event(id, win, ety, ecode, ex, ey) { return 0 }
+fn games4_tick(id, win) { return 0 }

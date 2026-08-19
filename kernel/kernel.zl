@@ -65,6 +65,14 @@ import apps_utils
 import apps_games1
 import apps_games2
 import apps_system
+# The four id-disjoint slices. Each owns one file and one range so that four
+# agents can write apps in parallel without editing a shared dispatch chain -
+# see apps_sys2.zl for why, and for the runtime-misroute trap that makes a
+# duplicate id worse than a compile error.
+import apps_sys2
+import apps_sys3
+import apps_games3
+import apps_games4
 
 # ---- serial input -----------------------------------------------------------
 # It used to be read HERE, with band(inb(COM1 + 5), 1) as the ready test. Two

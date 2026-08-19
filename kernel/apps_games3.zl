@@ -1,0 +1,29 @@
+# apps_games3.zl - Tetris, Pong, Breakout, Minesweeper, 2048, Life, Asteroids, Invaders
+#
+# ONE SLICE, ONE FILE. apps_registry.zl's seven dispatch chains each call into
+# this file exactly once, so a slice can be written without touching the shared
+# registry at all. That is not tidiness: five agents editing seven if-chains in
+# one working tree clobber each other, and a duplicate app id compiles clean and
+# misroutes at RUNTIME - APP_CATALOG is a dispatch FLOOR, so `id >= APP_CATALOG`
+# routes into the registry and a collision is invisible until you open the app.
+#
+# THIS SLICE OWNS IDS 52..60 AND NO OTHERS.
+#
+# Fill in the six functions below. Each is a plain if-chain on `id`; returning
+# the fallback value at the end means "not mine" and lets the next slice answer.
+# Draw with the ui_*/uikit widgets - see kernel/ui.h and
+# kernel/docs/reference-widgets.md. Do not draw a colour literal: design.h is
+# the only place one may appear, and hosttest/palette.c enforces it.
+
+games3_LO = 52
+games3_HI = 60
+fn games3_has(id) { if id < games3_LO { return 0 }  if id > games3_HI { return 0 }  return 1 }
+
+fn games3_name(id) { return "" }
+fn games3_cat(id) { return 0 }
+fn games3_w(id) { return 480 }
+fn games3_h(id) { return 340 }
+fn games3_icon(id) { return 0 }
+fn games3_draw(id, ax, ay, aw, ah) { return 0 }
+fn games3_event(id, win, ety, ecode, ex, ey) { return 0 }
+fn games3_tick(id, win) { return 0 }
