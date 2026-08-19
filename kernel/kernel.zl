@@ -3988,10 +3988,24 @@ fn draw_wallpaper() {
     glow(ww * 88 / 100, wh * 92 / 100, ww * 58 / 100, wh * 48 / 100, wall_glow_b(), 158, 0, 68)
     # radial-gradient(46% 34% at 76% 18%, rgba(24,32,38,.7), transparent 70%)
     glow(ww * 76 / 100, wh * 18 / 100, ww * 46 / 100, wh * 34 / 100, wall_glow_c(), 179, 0, 70)
-    # conic sweeps: two faint accent wedges, the reference's 214 and 32 degrees,
-    # at .075 and .045 rather than the .078/.047 this was rounded to before
-    wedge(ww / 2, wh / 2, theme(TH_ACCENT), 19, 214, 34, 82)
-    wedge(ww / 2, wh / 2, theme(TH_ACCENT), 11, 32, 44, 98)
+    # THE TWO CONIC WEDGES ARE BOXED, and that box is not decoration.
+    #
+    # ds-reference.html:41-42 puts each wedge in its own absolutely positioned
+    # element - `left:-14% top:-22% width:78% height:96%` and a mirrored one at
+    # `right:-16% bottom:-24% width:70% height:88%` - so each sweep is confined
+    # to a rectangle that hangs off one corner of the screen. Drawn unclipped,
+    # as they were, a wedge sweeping from the screen CENTRE covers everything:
+    # measured, the left edge of the wallpaper came out 36-60 green against the
+    # reference's 5-29, which was the largest colour error left after the
+    # palette landed. The alphas were already right; the extent was not.
+    #
+    # The centre of each sweep is the centre of its own box, not of the screen.
+    clip(0 - ww * 14 / 100, 0 - wh * 22 / 100, ww * 78 / 100, wh * 96 / 100)
+    wedge(ww * 25 / 100, wh * 26 / 100, theme(TH_ACCENT), 19, 214, 34, 82)
+    clipoff()
+    clip(ww * 46 / 100, wh * 28 / 100, ww * 70 / 100, wh * 88 / 100)
+    wedge(ww * 81 / 100, wh * 72 / 100, theme(TH_ACCENT), 11, 32, 44, 98)
+    clipoff()
     # The prototype's two-scale technical grid gives the broad glows a crisp
     # spatial rhythm. Both grids are almost invisible and baked once; they
     # should be felt as structure, not read as graph paper.

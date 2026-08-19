@@ -187,6 +187,8 @@ extern int  console_wall_save(void);
 extern void console_wall_paint(int x, int y, int w, int h);
 extern int  console_wall_ok(void);
 extern void console_wedge(int cx, int cy, unsigned int rgb, int a0, int f, int m, int e);
+void console_clip(int x, int y, int w, int h);
+void console_clip_off(void);
 extern int  console_blur(int x, int y, int w, int h, int r);
 extern void console_blur_paint(int slot, int x, int y);
 extern void console_blur_free(void);
@@ -444,6 +446,98 @@ extern int  ui_scroll_end_value(void);
 extern int  ui_scroll_content(void);
 extern void ui_row(void);
 extern void ui_endrow(void);
+
+/* ---- uikit.c, the shared widget catalogue ---------------------------------
+ * uikit.c has been in kernel/SOURCES since 5f0c1fc, so every target already
+ * LINKS it - and nothing could CALL it, because the whole catalogue stopped at
+ * the C boundary and every app past the original 13 is written in zl. The
+ * declarations and the bindings below are that boundary and nothing more: no
+ * new widget, no new geometry, no colour. Two shapes need a wrapper and both
+ * are noted at their binding.
+ *
+ * NAMING follows the ui_* bindings above (ui_toggle -> ui_toggle_value, not
+ * the pointer form), so a zl app sees one prefix for the whole toolkit. */
+extern int  ui_text_w(const char *s, int size, int flags);
+extern int  ui_text_h(int size);
+extern void ui_text(int x, int y, const char *s, unsigned rgb, int size, int flags);
+extern int  ui_pill_w(const char *s, int size, int flags);
+extern int  ui_pill_h(int size);
+extern int  ui_pill(int x, int y, int w, int h, const char *s,
+                    int size, int kind, int flags);
+extern int  ui_icon_button(int x, int y, int px, const char *glyph, int active);
+extern int  ui_seg_h(int size);
+extern int  ui_seg_w(const char *items, int size);
+extern int  ui_segmented(int x, int y, int w, int h, const char *items,
+                         int sel, int size);
+extern int  ui_toolbar_h(void);
+extern void ui_toolbar(int x, int y, int w, int h, int at_bottom);
+extern int  ui_status_h(void);
+extern void ui_statusbar(int x, int y, int w, int h);
+extern void ui_stat_begin(int x, int y, int w, int minw);
+extern void ui_stat_cell(const char *key, const char *val, unsigned val_rgb);
+extern int  ui_stat_end(void);
+extern void ui_mono_panel(int x, int y, int w, int h, int kind);
+extern int  ui_mono_line_h(int kind);
+extern void ui_mono_line(int x, int y, int w, const char *s, unsigned rgb,
+                         int kind, int highlight);
+extern void ui_card(int x, int y, int w, int h);
+extern int  ui_chip_w(const char *s);
+extern int  ui_chip_h(void);
+extern int  ui_chip(int x, int y, const char *s, int active);
+extern int  ui_badge_w(const char *s);
+extern int  ui_badge_h(void);
+extern void ui_badge(int x, int y, const char *s, unsigned rgb);
+extern int  ui_dot_size(void);
+extern void ui_dot(int x, int y, unsigned rgb, int glow);
+extern int  ui_meter_h(void);
+extern void ui_meter(int x, int y, int w, int pct, unsigned rgb);
+extern unsigned ui_ink_on(unsigned bg);
+extern int  ui_items_count(const char *items);
+
+/* design.h is the ONE file a colour literal may appear in (see its header and
+ * hosttest/palette.c). ui_color() publishes the ten theme ROLES; it does not
+ * publish WARN, the two dimmest inks, or the hex-byte lime, and those are
+ * named by reference-widgets.md S14.2/S14.3 for widgets a zl app draws. This
+ * table is a window onto design.h, not a second palette - it adds no value of
+ * its own, which is what keeps the single-source rule true. */
+#include "../kernel/design.h"
+static unsigned zl_design_ink(int i)
+{
+    switch (i) {
+    case 0:  return ZD_WARN;          /* amber: warning, wired to state     */
+    case 1:  return ZD_OK;            /* green: healthy/pass                */
+    case 2:  return ZD_BAD;           /* red: failure only                  */
+    case 3:  return ZD_TEXT_0;        /* emphasis, above body               */
+    case 4:  return ZD_TEXT_3;        /* the kernel-log info message ink    */
+    case 5:  return ZD_TEXT_5;        /* tertiary: labels, column heads     */
+    case 6:  return ZD_TEXT_6;        /* quaternary: hints, timestamps      */
+    case 7:  return ZD_SURF_7;        /* the dimmest ink: hex offsets       */
+    case 8:  return ZD_ACCENT_LINK;   /* hex bytes                          */
+    case 9:  return ZD_ACCENT_BR;     /* live values                        */
+    case 10: return ZD_SURF_0;        /* the canvas behind everything       */
+    case 11: return ZD_SURF_1;        /* sunken wells                       */
+    case 12: return ZD_SURF_2;        /* hairline / terminal ground         */
+    case 13: return ZD_SURF_5;        /* menu + input borders               */
+    default: return ZD_TEXT_1;        /* body */
+    }
+}
+
+/* zl has no runtime strings, so a stat cell whose value is a live counter
+ * cannot be built on the zl side at all - ui_stat_cell takes a const char *.
+ * This is the ONE wrapper: format the integer here and hand the catalogue the
+ * string it already wanted. Not a new widget; the same cell, reached with a
+ * number. */
+static const char *zl_itoa(long long v)
+{
+    static char buf[24];
+    int i = (int)sizeof buf - 1;
+    int neg = v < 0;
+    unsigned long long u = neg ? (unsigned long long)(-v) : (unsigned long long)v;
+    buf[i] = 0;
+    do { buf[--i] = (char)('0' + (int)(u % 10ULL)); u /= 10ULL; } while (u && i > 1);
+    if (neg && i > 0) buf[--i] = '-';
+    return &buf[i];
+}
 
 /* ---- the browser (browser.c / html.c / layout.c) ------------------------
  * kernel.zl owns the browser app's policy - which window, which keys - and
@@ -1020,6 +1114,8 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wall_ok"))    return zl_num((double)console_wall_ok());
     if (streq(name, "wall_paint")) { console_wall_paint((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "wedge"))      { console_wedge((int)a[0].num,(int)a[1].num,(unsigned int)(unsigned long long)a[2].num,(int)a[3].num,(int)a[4].num,(int)a[5].num,(int)a[6].num); return zl_nil(); }
+    if (streq(name, "clip"))       { console_clip((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "clipoff"))    { console_clip_off(); return zl_nil(); }
     if (streq(name, "blur"))       return zl_num((double)console_blur((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num));
     if (streq(name, "blurdraw"))   { console_blur_paint((int)a[0].num,(int)a[1].num,(int)a[2].num); return zl_nil(); }
     if (streq(name, "blurfree"))   { console_blur_free(); return zl_nil(); }
@@ -1263,6 +1359,45 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ui_scroll_content")) return zl_num((double)ui_scroll_content());
     if (streq(name, "ui_row"))     { ui_row(); return zl_nil(); }
     if (streq(name, "ui_endrow"))  { ui_endrow(); return zl_nil(); }
+    /* ---- uikit.c. Every one of these is rect-in / fired-out, so an app runs
+     * the SAME sequence twice: once under ui_begin(..., 0, ...) to draw and
+     * once under ui_begin(..., 1, ex, ey, 1) to find out what was clicked.
+     * That is the idiom menu_draw/menu_event in kernel.zl already use. */
+    if (streq(name, "ui_ink"))     return zl_num((double)zl_design_ink((int)a[0].num));
+    if (streq(name, "ui_ink_on"))  return zl_num((double)ui_ink_on((unsigned)(unsigned long long)a[0].num));
+    if (streq(name, "ui_items"))   { if (a[0].type==V_STR) return zl_num((double)ui_items_count(a[0].str)); return zl_num(0.0); }
+    if (streq(name, "ui_tw"))      { if (a[0].type==V_STR) return zl_num((double)ui_text_w(a[0].str,(int)a[1].num,(int)a[2].num)); return zl_num(0.0); }
+    if (streq(name, "ui_th"))      return zl_num((double)ui_text_h((int)a[0].num));
+    if (streq(name, "ui_txt"))     { if (a[2].type==V_STR) ui_text((int)a[0].num,(int)a[1].num,a[2].str,(unsigned)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
+    if (streq(name, "ui_pill_w"))  { if (a[0].type==V_STR) return zl_num((double)ui_pill_w(a[0].str,(int)a[1].num,(int)a[2].num)); return zl_num(0.0); }
+    if (streq(name, "ui_pill_h"))  return zl_num((double)ui_pill_h((int)a[0].num));
+    if (streq(name, "ui_pill"))    { if (a[4].type==V_STR) return zl_num((double)ui_pill((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,a[4].str,(int)a[5].num,(int)a[6].num,(int)a[7].num)); return zl_num(0.0); }
+    if (streq(name, "ui_iconbtn")) { if (a[3].type==V_STR) return zl_num((double)ui_icon_button((int)a[0].num,(int)a[1].num,(int)a[2].num,a[3].str,(int)a[4].num)); return zl_num(0.0); }
+    if (streq(name, "ui_seg_h"))   return zl_num((double)ui_seg_h((int)a[0].num));
+    if (streq(name, "ui_seg_w"))   { if (a[0].type==V_STR) return zl_num((double)ui_seg_w(a[0].str,(int)a[1].num)); return zl_num(0.0); }
+    if (streq(name, "ui_seg"))     { if (a[4].type==V_STR) return zl_num((double)ui_segmented((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,a[4].str,(int)a[5].num,(int)a[6].num)); return zl_num(-1.0); }
+    if (streq(name, "ui_tb_h"))    return zl_num((double)ui_toolbar_h());
+    if (streq(name, "ui_tb"))      { ui_toolbar((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num); return zl_nil(); }
+    if (streq(name, "ui_sb_h"))    return zl_num((double)ui_status_h());
+    if (streq(name, "ui_sb"))      { ui_statusbar((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "ui_stat"))    { ui_stat_begin((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "ui_statc"))   { if (a[0].type==V_STR && a[1].type==V_STR) ui_stat_cell(a[0].str,a[1].str,(unsigned)(unsigned long long)a[2].num); return zl_nil(); }
+    if (streq(name, "ui_statn"))   { if (a[0].type==V_STR) ui_stat_cell(a[0].str, zl_itoa((long long)a[1].num),(unsigned)(unsigned long long)a[2].num); return zl_nil(); }
+    if (streq(name, "ui_stat_end"))return zl_num((double)ui_stat_end());
+    if (streq(name, "ui_mono"))    { ui_mono_panel((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num); return zl_nil(); }
+    if (streq(name, "ui_mono_h"))  return zl_num((double)ui_mono_line_h((int)a[0].num));
+    if (streq(name, "ui_monoln"))  { if (a[3].type==V_STR) ui_mono_line((int)a[0].num,(int)a[1].num,(int)a[2].num,a[3].str,(unsigned)(unsigned long long)a[4].num,(int)a[5].num,(int)a[6].num); return zl_nil(); }
+    if (streq(name, "ui_card"))    { ui_card((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "ui_chip_w"))  { if (a[0].type==V_STR) return zl_num((double)ui_chip_w(a[0].str)); return zl_num(0.0); }
+    if (streq(name, "ui_chip_h"))  return zl_num((double)ui_chip_h());
+    if (streq(name, "ui_chip"))    { if (a[2].type==V_STR) return zl_num((double)ui_chip((int)a[0].num,(int)a[1].num,a[2].str,(int)a[3].num)); return zl_num(0.0); }
+    if (streq(name, "ui_badge_w")) { if (a[0].type==V_STR) return zl_num((double)ui_badge_w(a[0].str)); return zl_num(0.0); }
+    if (streq(name, "ui_badge_h")) return zl_num((double)ui_badge_h());
+    if (streq(name, "ui_badge"))   { if (a[2].type==V_STR) ui_badge((int)a[0].num,(int)a[1].num,a[2].str,(unsigned)(unsigned long long)a[3].num); return zl_nil(); }
+    if (streq(name, "ui_dot_sz"))  return zl_num((double)ui_dot_size());
+    if (streq(name, "ui_dot"))     { ui_dot((int)a[0].num,(int)a[1].num,(unsigned)(unsigned long long)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "ui_meter_h")) return zl_num((double)ui_meter_h());
+    if (streq(name, "ui_meter"))   { ui_meter((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned)(unsigned long long)a[4].num); return zl_nil(); }
     /* ---- the browser. Everything below is one app's policy surface. */
     /* ---- virtio-net. net_up() is the one that does the work; everything
      * else reports what happened, because a driver that fails silently is
