@@ -2979,6 +2979,38 @@ fn nav_to_char(ecode) {
 fn app_event(id, win, ety, ecode, ex, ey) {
     if id == APP_SNAKE { return sn_event(ety, ecode) }
     if id == APP_MENU  { return menu_event(ety, ecode, ex, ey, win) }
+
+    # THE BROWSER USED TO BE HANDLED HERE, ABOVE THE TRANSLATION, AND THAT WAS
+    # TWO BUGS. It took `if ety == 1 { br_key(ecode) }` with the RAW code and
+    # returned, so it never reached the four lines below - and nav_to_char has
+    # exactly one call site, which is those four lines.
+    #
+    #   1. EVERY CHARACTER WENT IN TWICE. input.c pushes both EV_KEY_DOWN and
+    #      EV_CHAR for one printable keypress, carrying the SAME value
+    #      ("printable: code IS the char", input.c:345). The generic path drops
+    #      the EV_KEY_DOWN at `if ac == 0 { return 0 }` - that return IS the
+    #      deduplication. The browser skipped it and appended on both, so
+    #      typing "ab" produced "aabb". Select-all-on-focus hid the first
+    #      duplicate, which is why it looked like a rendering glitch.
+    #
+    #   2. ENTER, ESC AND BACKSPACE WERE DEAD ON THE THINKPAD'S OWN KEYBOARD.
+    #      The comment above nav_to_char says exactly why: PS/2 pushes those as
+    #      EV_KEY_DOWN with a navigation code and NO EV_CHAR, so browser_key -
+    #      which tests 13, 27 and 8 - matched none of them. "Typed into but
+    #      never submitted to", verbatim, on the machine the browser is for.
+    #      No gate could see it: every probe boots -device usb-kbd.
+    #
+    # APP_SNAKE and APP_MENU stay above: snake filters to EV_CHAR and drives on
+    # WASD, menu is mouse-only, so neither wants the translation and neither has
+    # either bug. The browser is the only app that handled both event types.
+    ac = ecode
+    if ety == 1 {
+        ac = nav_to_char(ecode)
+        if ac == 0 { return 0 }
+        ety = 3
+    }
+    ecode = ac
+
     if id == APP_BROWSER {
         # '[' and ']' RESIZE THE WINDOW, and that is the gate rather than a
         # convenience: reflow is only observable if the width can change while
@@ -2990,19 +3022,18 @@ fn app_event(id, win, ety, ecode, ex, ey) {
             if br_key(ecode) == 1 { wm_dmg(win) }
             return 1
         }
-        if ety == 1 { if br_key(ecode) == 1 { wm_dmg(win) }  return 1 }
-        if ety == 4 { if br_click(ex, ey) == 1 { wm_dmg(win) }  return 1 }
+        # THE BUTTON MASK, which was not checked. EV_MOUSE carries it in ecode
+        # (input.c:620 pushes `(u32)b`), and it is pushed for MOTION too - the
+        # coalescer above it only suppresses events where position AND buttons
+        # are both unchanged. So calling br_click on every EV_MOUSE meant moving
+        # the pointer across a link fired a full fetch. menu_event gets this
+        # right with the same test.
+        if ety == 4 {
+            if band(ecode, 1) != 0 { if br_click(ex, ey) == 1 { wm_dmg(win) } }
+            return 1
+        }
         return 1
     }
-    # EV_KEY_DOWN (1) carrying a navigation code becomes the character the apps
-    # below already handle. EV_CHAR (3) passes straight through.
-    ac = ecode
-    if ety == 1 {
-        ac = nav_to_char(ecode)
-        if ac == 0 { return 0 }
-        ety = 3
-    }
-    ecode = ac
     if id == APP_SHELL {
         # ONE CHARACTER PER CALL. No loop - that is the whole inversion.
         # read_line used to block, which is exactly why the shell had to be the
