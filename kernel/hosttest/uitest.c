@@ -946,6 +946,70 @@ int main(void)
         ui_theme_init_q8(256);
     }
 
+    /* ========================================== EVERY ENTRY POINT IS REACHED
+     * The groups above assert the widgets that carry geometry. This one exists
+     * because docs/GUARDS-THAT-DID-NOT-GUARD.md's recurring shape is code that
+     * is written and never executed - "the code exists is not the code works".
+     * So every remaining exported function is CALLED, in both passes, and must
+     * put something on the draw list or return a sane measurement. It is the
+     * cheapest assertion in the file and it is the one that catches a widget
+     * that faults the first time an app touches it. */
+    printf("\n  coverage - every exported widget is called at least once\n");
+    {
+        int uncovered = 0, silent = 0;
+
+        ui_theme_init_q8(512);            /* and at a scale nothing else used */
+        if (ui_text_w("x", UI_SM, 0) <= 0) uncovered++;
+        if (ui_text_h(UI_LG) <= 0) uncovered++;
+        if (ui_seg_w("a|bb|ccc", UI_MD) <= 0) uncovered++;
+        if (ui_menu_w("a|bb") <= 0) uncovered++;
+        if (ui_toast_h() <= 0) uncovered++;
+        if (ui_heading_h() <= 0) uncovered++;
+        if (ui_chip_w("x") <= 0 || ui_chip_h() <= 0) uncovered++;
+        if (ui_badge_w("x") <= 0) uncovered++;
+        if (ui_pill_w("x", UI_LG, UI_F_BOLD) <= 0) uncovered++;
+        oknum(uncovered == 0, "every measuring function returns a positive size",
+              uncovered, 0);
+
+        /* the drawing ones, each on its own pass so "did IT draw" is answerable */
+        begin_draw(); ui_text(0, 0, "hello", ZD_TEXT_1, UI_LG, UI_F_BOLD);
+        if (!nops) silent++;
+        begin_draw(); ui_popover(0, 0, 200, 100);       if (!nops) silent++;
+        begin_draw(); ui_progress(0, 0, 100, 50, ZD_ACCENT); if (!nops) silent++;
+        begin_draw(); ui_search(0, 0, 128, "", "Search"); if (!nops) silent++;
+        begin_draw(); ui_icon_button(0, 0, ZD_WINCTL, "x", 0); if (!nops) silent++;
+        begin_draw(); ui_icon_button(0, 0, ZD_WINCTL, "x", 1); if (!nops) silent++;
+        begin_draw(); ui_statusbar(0, 0, 300, ui_status_h()); if (!nops) silent++;
+        begin_draw(); ui_sidebar(0, 0, 150, 300);       if (!nops) silent++;
+        begin_draw(); ui_card_head(0, 0, 200, "T", 0, ZD_OK); if (!nops) silent++;
+        begin_draw();
+        ui_begin(0, 0, 400, 200, UI_DRAW, -1, -1, 0);
+        reset();
+        ui_button_sz("Go", UI_LG, UI_BTN_PRIMARY, UI_F_BOLD);
+        if (!nops) silent++;
+        oknum(silent == 0, "every drawing widget puts something on the list",
+              silent, 0);
+
+        /* the two _value bridges that the groups above did not exercise */
+        begin_click(9999, 9999);
+        int a = ui_tabstrip_value(0, 0, 300, "a|b|c", 2);
+        int b = ui_utabs_value(0, 0, 300, "a|b|c", 1);
+        oknum(a == 2 && b == 1,
+              "control: both untouched _value bridges return the old selection",
+              a * 10 + b, 21);
+
+        /* AND THE OUT-OF-ORDER CALL, which on this target is a fault in ring 0
+         * rather than a wrong picture: zl can call any of these directly, so a
+         * begin/item/end widget driven without its begin must decline. */
+        begin_draw();
+        ui_stat_cell("K", "V", ZD_TEXT_1);       /* no ui_stat_begin */
+        ui_segbar_item(50, ZD_ACCENT);           /* no ui_segbar_begin */
+        ui_spark_point(50);                      /* no ui_spark_begin */
+        ok(1, "control: cell/item/point called with no begin did not fault");
+
+        ui_theme_init_q8(256);
+    }
+
     printf("\n%s   %d checks, %d failure%s\n",
            fails ? "FAILED" : "all passed", checks, fails,
            fails == 1 ? "" : "s");

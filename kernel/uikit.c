@@ -628,12 +628,13 @@ int ui_colhead(int x, int y, int w, const char *labels, int sortcol, int sortdir
             /* the sort arrow: icon('sortU'|'sortD', 8) in the reference, a
              * 4px triangle of hairlines here - there is no icon atlas in the
              * toolkit layer and one glyph is not worth a dependency on it */
-            int a = DP(4), ax = tx + tw + DP(4), ay = y + h / 2;
+            int a = DP(4), ax = tx + tw + DP(4), ay = y + h / 2 - DP(2);
             for (int k = 0; k < a; k++) {
+                /* the DIRECTION is the width ramp, not the y - a triangle that
+                 * narrows downward points down and one that widens points up */
                 int ww = sortdir >= 0 ? a - k : k + 1;
-                fb_fill_px(ax + (a - ww) / 2,
-                           sortdir >= 0 ? ay - a / 2 + k : ay - a / 2 + k,
-                           ww, 1, (unsigned)ZD_ACCENT_BR);
+                fb_fill_px(ax + (a - ww) / 2, ay + k, ww, 1,
+                           (unsigned)ZD_ACCENT_BR);
             }
         }
     }
@@ -692,6 +693,13 @@ void ui_stat_begin(int x, int y, int w, int minw)
 
 void ui_stat_cell(const char *key, const char *val, unsigned val_rgb)
 {
+    /* CALLED OUT OF ORDER IS A DIVIDE BY ZERO, and zl can call this directly.
+     * SC is static, so a program that calls ui_stat_cell without ever calling
+     * ui_stat_begin arrives here with cols == 0 - which on this target is not
+     * a wrong picture, it is a fault in ring 0. Every begin/item/end widget in
+     * this file is guarded the same way, because "the app will call them in
+     * order" is exactly the assumption an app written by somebody else breaks. */
+    if (SC.cols < 1) return;
     int gap = DP(ZD_STAT_GAP);
     if (gap < 1) gap = 1;
     int r = SC.i / SC.cols, c = SC.i % SC.cols;
@@ -710,6 +718,7 @@ void ui_stat_cell(const char *key, const char *val, unsigned val_rgb)
 int ui_stat_end(void)
 {
     int gap = DP(ZD_STAT_GAP) < 1 ? 1 : DP(ZD_STAT_GAP);
+    if (SC.cols < 1) return 0;
     int rows = SC.i ? (SC.i + SC.cols - 1) / SC.cols : 0;
     return rows * (SC.ch + gap);
 }
@@ -815,6 +824,7 @@ void ui_segbar_begin(int x, int y, int w, int total)
 
 void ui_segbar_item(int amount, unsigned rgb)
 {
+    if (SB.total < 1) return;              /* see ui_stat_cell - same hazard */
     int pad = imax(1, DP(1)), h = ui_segbar_h();
     int inner = SB.w - 2 * pad;
     if (amount < 0) amount = 0;
