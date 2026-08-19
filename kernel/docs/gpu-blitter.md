@@ -180,9 +180,38 @@ The destination is also poisoned with `0xDEADBEEF` before every run, so "filled
 with the right colour" can never be confused with "never ran", and pixels
 outside the rectangle are checked to still hold the poison.
 
+## The kernel emits it now — `kernel/gpu.c`
+
+The command builder lives in `kernel/gpu.c` and is compiled into all four
+targets (`nm kernel.elf | grep gpu_fill_rect` confirms it links, rather than
+assuming the build implies it). **`hosttest/gpu_blt.c` `#include`s it**, so the
+thing proven on silicon and the thing that ships are one implementation, not two
+that agree by inspection.
+
+`gpu.c` builds commands and does not submit them. It touches no MMIO, no ring
+register, nothing gated behind `lt_armed`. That is what makes it testable
+everywhere and safe to land before the ring exists.
+
+`hosttest/gputest.c` pins its output to the dwords that really drew — 35 checks,
+including a `0xC0FFEE00` canary past the batch capacity. Both halves were
+watched failing before it was committed:
+
+| planted defect | caught by |
+|---|---|
+| drop `BLT_WRITE_RGB` (the silent hardware no-op) | golden DW0 + an explicit bit check — 2 failures |
+| bounds-check per dword instead of per command | **the canary alone** — a partial command left in the tail |
+
+The second is the one worth noticing: a test that only checked the return value
+of `gpu_fill_rect` would have passed a version that writes a truncated command
+into the batch. In the kernel that is a DMA engine parsing whatever followed it.
+
 ## What zlOS needs next, in order
 
-1. **A ring buffer and a way to submit to it.** This is the real work. `intel.c`
+0. ~~A command emitter~~ — done, `kernel/gpu.c`, verified on silicon and pinned
+   by `gputest`.
+1. **A ring buffer and a way to submit to it.** This is the real work, and it is
+   the part that genuinely needs the hardware with i915 detached — which blanks
+   the screen, so it is its own session. `intel.c`
    already has `intel_ggtt_map()` and `intel_ggtt_size()`, so mapping our own
    pages where the engine can reach them is built; what is missing is the BCS
    ring (RING_TAIL/HEAD/START/CTL at the engine's MMIO base), and something to

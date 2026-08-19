@@ -74,6 +74,12 @@ exec.c
 # desktop/feel-and-control
 settings.c
 
+# The blitter command stream. Nothing calls it yet - zlOS has no ring to submit
+# through - but it is compiled into all four targets so it cannot rot, and
+# hosttest/gputest.c pins its output to the dwords that drew on real Gen9.5
+# silicon. See kernel/docs/gpu-blitter.md.
+gpu.c
+
 # desktop/browser
 virtio_net.c
 net.c

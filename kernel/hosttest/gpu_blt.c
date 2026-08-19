@@ -59,6 +59,12 @@
 #include <drm/drm.h>
 #include <drm/i915_drm.h>
 
+/* THE KERNEL'S OWN COMMAND EMITTER, compiled straight into this harness.
+ * Not a copy - the same text. Whatever this file proves on silicon is proved
+ * about the code zlOS will ship, and a later edit to gpu.c cannot drift away
+ * from the encoding verified here. */
+#include "../gpu.c"
+
 /* ---- the command we are trying to get the hardware to run ----------------
  *
  * XY_COLOR_BLT: fill a rectangle in a destination surface with a constant
@@ -311,20 +317,16 @@ static unsigned build_blit_batch(unsigned *b, int x1, int y1, int x2, int y2,
                                  unsigned pitch, unsigned long long dst_addr,
                                  unsigned color, int drop_rgb)
 {
-    unsigned i = 0;
-    b[i++] = drop_rgb ? (XY_COLOR_BLT_DW0 & ~BLT_WRITE_RGB) : XY_COLOR_BLT_DW0;
-    b[i++] = BR13_ROP_PATCOPY | BR13_DEPTH_32BPP | (pitch & 0xFFFFu);
-    b[i++] = ((unsigned)y1 << 16) | ((unsigned)x1 & 0xFFFFu);
-    b[i++] = ((unsigned)y2 << 16) | ((unsigned)x2 & 0xFFFFu);
-    b[i++] = (unsigned)(dst_addr & 0xFFFFFFFFull);
-    b[i++] = (unsigned)(dst_addr >> 32);
-    b[i++] = color;
-    b[i++] = MI_BATCH_BUFFER_END;
-    /* The batch length handed to execbuffer must be a multiple of 8 bytes;
-     * pad with a second END rather than a NOOP so a runaway parser still
-     * stops. */
-    if (i & 1) b[i++] = MI_BATCH_BUFFER_END;
-    return i * 4u;
+    struct gpu_batch batch;
+    gpu_batch_init(&batch, b, BATCH_BYTES / 4);
+    if (!gpu_fill_rect(&batch, dst_addr, pitch, x1, y1, x2, y2, color))
+        fprintf(stderr, "  warn  gpu_fill_rect refused the rectangle\n");
+    /* --negative clears BLT_WRITE_RGB AFTER the fact. gpu.c will not emit a
+     * command it believes is broken, and should not - so the harness breaks it
+     * here, outside the kernel code, which is the honest place for it. */
+    if (drop_rgb && batch.at >= 1) b[0] &= ~GPU_BLT_WRITE_RGB;
+    gpu_batch_end(&batch);
+    return gpu_batch_bytes(&batch);
 }
 
 /* K back-to-back XY_COLOR_BLTs in ONE batch, then END.
@@ -338,19 +340,12 @@ static unsigned build_blit_batch_n(unsigned *b, int k, int x1, int y1, int x2, i
                                    unsigned pitch, unsigned long long dst_addr,
                                    unsigned color)
 {
-    unsigned i = 0;
-    for (int n = 0; n < k; n++) {
-        b[i++] = XY_COLOR_BLT_DW0;
-        b[i++] = BR13_ROP_PATCOPY | BR13_DEPTH_32BPP | (pitch & 0xFFFFu);
-        b[i++] = ((unsigned)y1 << 16) | ((unsigned)x1 & 0xFFFFu);
-        b[i++] = ((unsigned)y2 << 16) | ((unsigned)x2 & 0xFFFFu);
-        b[i++] = (unsigned)(dst_addr & 0xFFFFFFFFull);
-        b[i++] = (unsigned)(dst_addr >> 32);
-        b[i++] = color;
-    }
-    b[i++] = MI_BATCH_BUFFER_END;
-    if (i & 1) b[i++] = MI_BATCH_BUFFER_END;
-    return i * 4u;
+    struct gpu_batch batch;
+    gpu_batch_init(&batch, b, BATCH_BYTES / 4);
+    for (int n = 0; n < k; n++)
+        if (!gpu_fill_rect(&batch, dst_addr, pitch, x1, y1, x2, y2, color)) break;
+    gpu_batch_end(&batch);
+    return gpu_batch_bytes(&batch);
 }
 
 /* Submit and wait. Returns 1 on success. */
