@@ -7,6 +7,25 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-19 — docs(fleet): the buffer-full deadlock, and why neither function is wrong (dea6d4d)
+
+`fleet/audit-2026-08-19` · 3 files changed, 78 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>3 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/fleet/FLEET-SYNTHESIS.md`
+- `docs/fleet/VERIFICATION-LOG.md`
+
+</details>
+
 ## 2026-08-19 — docs(fleet): record the measured run stats, including the one agent that failed (6dbec20)
 
 `fleet/audit-2026-08-19` · 2 files changed, 34 insertions(+), 9 deletions(-)
