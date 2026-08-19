@@ -25,8 +25,11 @@
 #include <sys/mman.h>
 
 #include "../ui.h"
+#include "../ease.h"
 
-#define ANIM_SETTLE 20  /* longest wall-clock animation is 18 PIT ticks */
+/* Derived, not transcribed - see the same constant in wmtest.c. The literal
+ * 20 went stale when wm.c adopted the reference's durations. */
+#define ANIM_SETTLE (EASE_MS_PULSE / 10 + 4)   /* 10 ms per PIT tick */
 #define MOD_SUPER   (1 << 5)
 
 /* ---- fb.c ---------------------------------------------------------------- */
@@ -439,8 +442,12 @@ int main(void)
      * Settle FIRST. Everything above left damage pending - closing `under`
      * damages a region window `d` overlaps - and this asserts that nothing
      * repaints, so it has to start from a clean frame or it measures the
-     * previous test instead of this one. */
-    frame();
+     * previous test instead of this one.
+     *
+     * ONE frame() used to be enough and is not any more - see the same block
+     * in wmtest.c. The reference's zwin runs 200 ms where zlOS's old open ran
+     * 160, so a window was still animating here and repainting itself. */
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
     draw_calls[4] = 0;
     tick_returns = 0;
     frame(); frame();
