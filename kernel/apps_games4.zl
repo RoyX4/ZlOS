@@ -303,6 +303,290 @@ fn fi_event(win, ety, ecode, ex, ey) {
 }
 
 # ==============================================================================
+# 62 - REVERSI. 8x8, you are black and move first, the machine is white.
+# RV_BOARD holds one byte per square: 0 empty, 1 black, 2 white.
+#
+# THE TWO RULES THIS GAME IS ALWAYS GOT WRONG, both implemented below in full:
+#
+#   1. A MOVE IS LEGAL ONLY IF IT FLIPS. From the square you play, along each
+#      of the eight rays, there must be an UNBROKEN run of at least one enemy
+#      disc ENDING on one of yours. A run that runs off the board, or into an
+#      empty square, flips nothing - and a move that flips nothing in any
+#      direction is not a move at all, it is an illegal placement. Counting
+#      "is there one of mine somewhere along this ray" is the classic wrong
+#      version, and it flips through gaps.
+#   2. PASSING IS PART OF THE GAME. A side with no legal move forfeits its
+#      turn and the other side plays again; the game ends when NEITHER side
+#      can move, which is usually before the board is full. Ending on "board
+#      full" hangs on any position where both sides are stuck.
+# ==============================================================================
+RV_N = 8
+rv_over = 0
+rv_pass = 0                         # 0 nobody passed, 1 you passed, 2 white did
+
+# d: 0 N, 1 NE, 2 E, 3 SE, 4 S, 5 SW, 6 W, 7 NW
+fn rv_dr(dd) {
+    if dd == 0 { return 0 - 1 }
+    if dd == 1 { return 0 - 1 }
+    if dd == 2 { return 0 }
+    if dd == 3 { return 1 }
+    if dd == 4 { return 1 }
+    if dd == 5 { return 1 }
+    if dd == 6 { return 0 }
+    return 0 - 1
+}
+fn rv_dc(dd) {
+    if dd == 0 { return 0 }
+    if dd == 1 { return 1 }
+    if dd == 2 { return 1 }
+    if dd == 3 { return 1 }
+    if dd == 4 { return 0 }
+    if dd == 5 { return 0 - 1 }
+    if dd == 6 { return 0 - 1 }
+    return 0 - 1
+}
+fn rv_other(pp) { if pp == 1 { return 2 }  return 1 }
+
+# -1 for "off the board", which is what makes the ray walk below terminate
+# without a separate bounds test on every step.
+fn rv_at(ri, ci) {
+    if ri < 0 { return 0 - 1 }
+    if ri >= RV_N { return 0 - 1 }
+    if ci < 0 { return 0 - 1 }
+    if ci >= RV_N { return 0 - 1 }
+    return peek8(RV_BOARD + ri * RV_N + ci)
+}
+fn rv_set(ri, ci, vv) { poke8(RV_BOARD + ri * RV_N + ci, vv)  return 0 }
+
+# Rule 1, one ray: how many discs playing `pp` at (ri,ci) turns over in
+# direction dd. 0 means this ray gives nothing.
+fn rv_ray(pp, ri, ci, dd) {
+    nn = 0
+    yy = ri + rv_dr(dd)
+    xx = ci + rv_dc(dd)
+    op = rv_other(pp)
+    while rv_at(yy, xx) == op { nn = nn + 1  yy = yy + rv_dr(dd)  xx = xx + rv_dc(dd) }
+    if nn == 0 { return 0 }
+    if rv_at(yy, xx) != pp { return 0 }
+    return nn
+}
+
+# ...and all eight. Also the legality test: gain > 0 IS "legal".
+fn rv_gain(pp, ri, ci) {
+    if rv_at(ri, ci) != 0 { return 0 }
+    tot = 0
+    dd = 0
+    while dd < 8 { tot = tot + rv_ray(pp, ri, ci, dd)  dd = dd + 1 }
+    return tot
+}
+
+fn rv_play(pp, ri, ci) {
+    if rv_gain(pp, ri, ci) == 0 { return 0 }
+    rv_set(ri, ci, pp)
+    dd = 0
+    while dd < 8 {
+        nn = rv_ray(pp, ri, ci, dd)
+        kk = 1
+        while kk <= nn {
+            rv_set(ri + rv_dr(dd) * kk, ci + rv_dc(dd) * kk, pp)
+            kk = kk + 1
+        }
+        dd = dd + 1
+    }
+    return 1
+}
+
+fn rv_can(pp) {
+    ix = 0
+    while ix < RV_N * RV_N {
+        if rv_gain(pp, ix / RV_N, ix % RV_N) > 0 { return 1 }
+        ix = ix + 1
+    }
+    return 0
+}
+fn rv_count(pp) {
+    nn = 0
+    ix = 0
+    while ix < RV_N * RV_N { if peek8(RV_BOARD + ix) == pp { nn = nn + 1 }  ix = ix + 1 }
+    return nn
+}
+
+fn rv_reset() {
+    fill_mem(RV_BOARD, 0, RV_N * RV_N)
+    rv_set(3, 3, 2)
+    rv_set(3, 4, 1)
+    rv_set(4, 3, 1)
+    rv_set(4, 4, 2)
+    rv_over = 0
+    rv_pass = 0
+    return 0
+}
+
+fn rv_corner(vv) {
+    if vv == 0 { return 1 }
+    if vv == RV_N - 1 { return 1 }
+    return 0
+}
+fn rv_inner(vv) {
+    if vv == 1 { return 1 }
+    if vv == RV_N - 2 { return 1 }
+    return 0
+}
+# The sixteen squares of the four 2x2 corner blocks, minus the corners
+# themselves - the X and C squares. Giving one of these up is normally how you
+# hand over the corner beside it.
+fn rv_xsquare(ri, ci) {
+    rn = 0
+    cn = 0
+    if rv_corner(ri) == 1 { rn = 1 }
+    if rv_inner(ri) == 1 { rn = 1 }
+    if rv_corner(ci) == 1 { cn = 1 }
+    if rv_inner(ci) == 1 { cn = 1 }
+    if rn == 0 { return 0 }
+    if cn == 0 { return 0 }
+    if rv_corner(ri) == 1 { if rv_corner(ci) == 1 { return 0 } }
+    return 1
+}
+# A CORNER CAN NEVER BE FLIPPED - no ray can reach past it - so it is worth
+# more than any number of discs. This is the smallest weighting that stops the
+# machine playing an X-square on move three and losing the corner next to it,
+# and it is deliberately not a search: a one-ply greedy player with the right
+# square values beats a two-ply one with none.
+fn rv_weight(ri, ci) {
+    ed = 0
+    if ri == 0 { ed = ed + 1 }
+    if ri == RV_N - 1 { ed = ed + 1 }
+    if ci == 0 { ed = ed + 1 }
+    if ci == RV_N - 1 { ed = ed + 1 }
+    if ed == 2 { return 45 }
+    if rv_xsquare(ri, ci) == 1 { return 0 - 15 }
+    if ed == 1 { return 8 }
+    return 1
+}
+
+fn rv_ai() {
+    best = 0 - 1
+    bs = 0 - 9999
+    ix = 0
+    while ix < RV_N * RV_N {
+        gn = rv_gain(2, ix / RV_N, ix % RV_N)
+        if gn > 0 {
+            sc = gn + rv_weight(ix / RV_N, ix % RV_N) * 4
+            if sc > bs { bs = sc  best = ix }
+        }
+        ix = ix + 1
+    }
+    if best < 0 { return 0 }
+    rv_play(2, best / RV_N, best % RV_N)
+    return 1
+}
+
+# Rule 2. Hand the turn back and forth after your disc is down, passing a side
+# that cannot move, until it is your turn WITH a legal move - or neither side
+# has one, which is the end. Bounded because every iteration either plays a
+# disc (there are 60 to play) or ends the game.
+fn rv_step() {
+    rv_pass = 0
+    tn = 2
+    gd = 0
+    while gd < 130 {
+        gd = gd + 1
+        if rv_over == 1 { gd = 200 }
+        if gd < 200 {
+            if tn == 2 {
+                if rv_can(2) == 1 {
+                    rv_ai()
+                    tn = 1
+                } else {
+                    if rv_can(1) == 1 { rv_pass = 2  tn = 1 } else { rv_over = 1 }
+                }
+            } else {
+                if rv_can(1) == 1 {
+                    gd = 200
+                } else {
+                    if rv_can(2) == 1 { rv_pass = 1  tn = 2 } else { rv_over = 1 }
+                }
+            }
+        }
+    }
+    return 0
+}
+
+fn rv_cell(aw, ah) {
+    u = ui()
+    cw = (aw - 24 * u) / RV_N
+    chh = (g4_ph(ah) - 48 * u) / RV_N
+    if chh < cw { cw = chh }
+    if cw < 8 { cw = 8 }
+    return cw
+}
+fn rv_gx(aw, ah) { return (aw - RV_N * rv_cell(aw, ah)) / 2 }
+fn rv_gy(aw, ah) { return 34 * ui() }
+
+fn rv_msg() {
+    if rv_over == 1 {
+        if rv_count(1) > rv_count(2) { return "you win - r for a new game" }
+        if rv_count(1) < rv_count(2) { return "white wins - r for a new game" }
+        return "a draw - r for a new game"
+    }
+    if rv_pass == 1 { return "you had no move - white played again" }
+    if rv_pass == 2 { return "white had no move - it passed" }
+    return "black to place"
+}
+
+fn rv_draw(ax, ay, aw, ah) {
+    u = ui()
+    cell = rv_cell(aw, ah)
+    gx = ax + rv_gx(aw, ah)
+    gy = ay + rv_gy(aw, ah)
+    # the score, as two discs with their counts - the board's own vocabulary
+    rrect(ax + 12 * u, ay + 8 * u, 12 * u, 12 * u, 6 * u, theme(TH_BG))
+    label_num(ax + 28 * u, ay + 7 * u, rv_count(1), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    rrect(ax + 56 * u, ay + 8 * u, 12 * u, 12 * u, 6 * u, theme(TH_TEXT_HI))
+    label_num(ax + 72 * u, ay + 7 * u, rv_count(2), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    ac_board_bg(gx, gy, cell, RV_N, RV_N, theme(TH_BORDER), theme(TH_CHROME_LINE))
+    ix = 0
+    while ix < RV_N * RV_N {
+        cx = gx + (ix % RV_N) * cell
+        cy = gy + (ix / RV_N) * cell
+        vv = peek8(RV_BOARD + ix)
+        if vv == 1 { rrect(cx + 3 * u, cy + 3 * u, cell - 6 * u, cell - 6 * u, cell / 2, theme(TH_BG)) }
+        if vv == 2 { rrect(cx + 3 * u, cy + 3 * u, cell - 6 * u, cell - 6 * u, cell / 2, theme(TH_TEXT_HI)) }
+        # every square you may legally play, marked. This is not a hint
+        # feature bolted on - it is the legality test itself, drawn, and it is
+        # the only honest way to show that rule 1 is implemented.
+        if vv == 0 {
+            if rv_over == 0 {
+                if rv_gain(1, ix / RV_N, ix % RV_N) > 0 {
+                    rrect(cx + cell / 2 - 3 * u, cy + cell / 2 - 3 * u, 6 * u, 6 * u, 3 * u, theme(TH_ACCENT))
+                }
+            }
+        }
+        ix = ix + 1
+    }
+    label(gx, gy + RV_N * cell + 8 * u, rv_msg(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    return 0
+}
+
+fn rv_event(win, ety, ecode, ex, ey) {
+    if ety == 3 { if ecode == 114 { rv_reset()  wm_dmg(win)  return 1 }  return 0 }
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    if rv_over == 1 { return 0 }
+    aw = wm_cw(win)
+    ah = wm_ch(win)
+    cell = rv_cell(aw, ah)
+    gx = wm_cx(win) + rv_gx(aw, ah)
+    gy = wm_cy(win) + rv_gy(aw, ah)
+    ix = ac_cell_idx(gx, gy, cell, RV_N, RV_N, ex, ey)
+    if ix < 0 { return 0 }
+    if rv_play(1, ix / RV_N, ix % RV_N) == 0 { return 1 }
+    rv_step()
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
 # the per-slice tables. Each is a plain if-chain on `id`; the fallback at the
 # end means "not mine" and lets the next slice answer.
 # ==============================================================================
@@ -355,12 +639,14 @@ fn games4_draw(id, ax, ay, aw, ah) {
     if games4_has(id) == 0 { return 0 }
     g4_canvas(ax, ay, aw, ah)
     if id == G4_FIFTEEN { fi_draw(ax, ay, aw, ah) }
+    if id == G4_REVERSI { rv_draw(ax, ay, aw, ah) }
     g4_bar(ax, ay, aw, ah, id)
     return 0
 }
 
 fn games4_event(id, win, ety, ecode, ex, ey) {
     if id == G4_FIFTEEN { return fi_event(win, ety, ecode, ex, ey) }
+    if id == G4_REVERSI { return rv_event(win, ety, ecode, ex, ey) }
     return 0
 }
 
