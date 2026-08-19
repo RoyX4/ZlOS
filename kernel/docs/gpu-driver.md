@@ -11,12 +11,65 @@ Read `gpu-next.md` first for *why* the driver is aimed where it is. This is
 | file | what it does | proven how |
 |---|---|---|
 | `gpu.c` | builds `XY_COLOR_BLT` and `XY_SRC_COPY_BLT` | **on real 8086:9B41 silicon**, pixel-for-pixel, via i915's render node |
-| `gpuring.c` | the BCS ring: buffer, GGTT, forcewake, `RING_START/CTL/HEAD/TAIL`, submit and wait | arithmetic tested and mutation-checked; **MMIO has never executed** |
+| `gpuring.c` | the BCS ring: buffer, GGTT, forcewake, `RING_START/CTL/HEAD/TAIL`, submit and wait | arithmetic tested and mutation-checked; **the same submission model is now PROVEN on silicon** — see below |
 | `gpucursor.c` | the 64x64 ARGB cursor image the display plane wants | compositing tested and mutation-checked; **MMIO has never executed** |
 
 `hosttest/gputest.c` holds **109 checks** across all three. `hosttest/gpu_blt.c`
 is the silicon witness. `hosttest/gpu_ring.c` + `gpu-ring-run.sh` are the
 hardware bring-up, written and waiting.
+
+## PROVEN ON SILICON, 2026-08-19: zlOS can drive the ring itself
+
+The question the whole driver rested on — can a sole owner run the Gen9.5
+blitter's *legacy* ring, or does this silicon require i915's execlist machinery?
+— is answered. With i915 unbound and nothing else touching the GPU:
+
+```
+ring   phys 0x32211b000 -> gfx 0x400000
+dest   phys 0x150786000 -> gfx 0x500000
+before  TAIL=0x00000000 HEAD=0x00000000 START=0x00000000 CTL=0x00000000
+armed   TAIL=0x00000000 HEAD=0x00000000 START=0x00400000 CTL=0x00000001
+after   TAIL=0x00000030 HEAD=0x00000030 START=0x00400000 CTL=0x00000001
+HEAD chased TAIL   YES in 0.00 ms
+destination        16384/16384 filled, 0 still poison
+```
+
+**Every pixel.** Our own GGTT entries, our own ring, our own command stream,
+verified by reading the destination back rather than by the absence of a hang.
+
+`gpuring.c` implements exactly this sequence, so its MMIO half is no longer a
+guess — the model is confirmed. It still has not itself executed inside zlOS,
+which is a different claim and stays gated behind `gpu_ring_arm()`.
+
+### The bug that hid it for three runs
+
+The first three attempts reported `HEAD chased TAIL` and drew nothing, and the
+harness blamed addressing. It was addressing — but not one GGTT entry had been
+written *to the GGTT*.
+
+BAR0 is 16 MiB: 8 of registers, then 8 of page table (`MGGC0` reads `GGMS=3`).
+A 16 MiB `mmap` of `resource0` is refused with `EINVAL`. Mapping 8 MiB and
+indexing at `0x800000` anyway does **not** fault — it lands in whatever the
+process mapped next:
+
+```
+GGTT[0x042C0] = 6F635F73 65725F5F   ->  "__re" "s_co"
+GGTT[0x042C1] = 6F685F74 7865746E   ->  "ntex" "t_ho"
+```
+
+`__res_context_hostalias` — glibc's symbol table. Every PTE went into the
+harness's heap; the engine saw no mapping, read zeros, parsed them as `MI_NOOP`
+and advanced HEAD through them. A clean submission of nothing that looked
+exactly like success.
+
+**The PTE format was correct throughout.** Live entries under the running
+desktop read `low = addr | present`, `high = addr bits 39:32` — precisely what
+`ggtt_map` writes. Only the destination was wrong, and the fix is a second
+`mmap` at file offset `0x800000`.
+
+**This was a harness bug, not a driver bug.** `kernel/gpuring.c` reaches the
+same table as `intel_mmio() + 0x800000` with no `mmap` in the way, which is
+correct for a kernel addressing physical memory directly.
 
 ## The boundary, stated plainly
 
