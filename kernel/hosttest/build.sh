@@ -119,6 +119,18 @@ echo "built ./cryptotest    (run: ./cryptotest)"
 gcc -O2 -g -Wall -Wextra -D_GNU_SOURCE -o tlscryptotest tlscryptotest.c
 echo "built ./tlscryptotest (run: ./tlscryptotest)"
 
+# The TLS 1.3 handshake, against OpenSSL. Every primitive underneath is already
+# checked against published constants by tlscryptotest; what that cannot check
+# is the hundred small ways a handshake goes wrong - a length written
+# little-endian, an extension out of order, a transcript hash taken one message
+# too late, a nonce that does not advance, the record header left out of the
+# additional data. None of those produce a wrong constant anywhere; all of them
+# produce a handshake that fails. So this talks to `openssl s_server` and
+# asserts interoperability, which is the only property a client actually needs.
+# Skips rather than fails when openssl is absent.
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o tlstest tlstest.c ../tls.c ../crypto.c
+echo "built ./tlstest       (run: ./tlstest)"
+
 # The browser's parser and box model, asserted. html.c and layout.c reach for
 # exactly one thing outside themselves - a function that measures a string - so
 # injecting a synthetic one turns both into ordinary programs. Malformed markup

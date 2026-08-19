@@ -1,0 +1,211 @@
+/* tlstest.c - complete a real TLS 1.3 handshake against OpenSSL.
+ *
+ * WHY AGAINST A SERVER AND NOT A VECTOR. Every primitive underneath this is
+ * already checked against published constants by tlscryptotest.c. What that
+ * cannot check is the hundred small ways a handshake goes wrong: a length
+ * written little-endian, an extension in the wrong order, a transcript hash
+ * taken one message too late, a nonce that does not advance, the record header
+ * omitted from the additional data. Each of those produces a handshake that
+ * fails, and none of them produce a wrong constant anywhere.
+ *
+ * So this speaks to `openssl s_server`. If OpenSSL completes the handshake,
+ * decrypts what we send and we decrypt its reply, then every one of those
+ * details is right - and interoperability is the only property that actually
+ * matters for a client whose job is to reach somebody else's server.
+ *
+ * NO KERNEL AND NO NETWORK STACK. tls.c holds no socket - bytes go in through
+ * tls_feed and out through tls_take - so the whole protocol runs here over an
+ * ordinary TCP socket to a local process.
+ *
+ * Skips (rather than fails) when openssl is not installed, because a gate that
+ * fails for a missing tool teaches people to ignore it.
+ *
+ *   cd kernel/hosttest && ./build.sh && ./tlstest
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <errno.h>
+#include <time.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#include "../tls.h"
+
+static int passed, failed;
+static void ok(const char *what, int cond)
+{
+    if (cond) { passed++; printf("  ok   %s\n", what); }
+    else { failed++; printf("  FAIL %s\n", what); }
+}
+
+static int have(const char *cmd)
+{
+    char buf[256];
+    snprintf(buf, sizeof buf, "command -v %s >/dev/null 2>&1", cmd);
+    return system(buf) == 0;
+}
+
+/* a self-signed cert, made once into /tmp - we do not verify it (tls.c says so
+ * out loud), but a server will not start without one */
+static int make_cert(const char *dir)
+{
+    char cmd[512];
+    snprintf(cmd, sizeof cmd,
+             "openssl req -x509 -newkey rsa:2048 -keyout %s/k.pem -out %s/c.pem "
+             "-days 1 -nodes -subj /CN=localhost >/dev/null 2>&1", dir, dir);
+    return system(cmd) == 0;
+}
+
+int main(void)
+{
+    printf("tlstest: a real TLS 1.3 handshake\n\n");
+
+    if (!have("openssl")) {
+        printf("  skip  openssl is not installed - nothing to talk to\n");
+        printf("\n0 passed, 0 failed (skipped)\n");
+        return 0;
+    }
+
+    char dir[] = "/tmp/zlos-tls-XXXXXX";
+    if (!mkdtemp(dir)) { printf("  FAIL mkdtemp\n"); return 1; }
+    if (!make_cert(dir)) { printf("  FAIL could not make a test certificate\n"); return 1; }
+
+    /* an ephemeral port, chosen by the kernel then handed to s_server */
+    int port = 0;
+    {
+        int probe = socket(AF_INET, SOCK_STREAM, 0);
+        struct sockaddr_in a;
+        memset(&a, 0, sizeof a);
+        a.sin_family = AF_INET;
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        a.sin_port = 0;
+        bind(probe, (struct sockaddr *)&a, sizeof a);
+        socklen_t sl = sizeof a;
+        getsockname(probe, (struct sockaddr *)&a, &sl);
+        port = ntohs(a.sin_port);
+        close(probe);
+    }
+
+    char cmd[768];
+    snprintf(cmd, sizeof cmd,
+             "openssl s_server -accept %d -cert %s/c.pem -key %s/k.pem "
+             "-tls1_3 -ciphersuites TLS_AES_128_GCM_SHA256 -groups X25519 "
+             "-www -quiet >/dev/null 2>&1 & echo $!",
+             port, dir, dir);
+    FILE *f = popen(cmd, "r");
+    int pid = 0;
+    if (f) { if (fscanf(f, "%d", &pid) != 1) pid = 0; pclose(f); }
+    if (pid <= 0) { printf("  FAIL could not start s_server\n"); return 1; }
+
+    /* wait for the port, by connecting - never a fixed sleep */
+    int s = -1;
+    for (int tries = 0; tries < 200; tries++) {
+        s = socket(AF_INET, SOCK_STREAM, 0);
+        struct sockaddr_in a;
+        memset(&a, 0, sizeof a);
+        a.sin_family = AF_INET;
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        a.sin_port = htons((unsigned short)port);
+        if (connect(s, (struct sockaddr *)&a, sizeof a) == 0) break;
+        close(s); s = -1;
+        struct timespec ts = { 0, 20 * 1000 * 1000 };
+        nanosleep(&ts, 0);
+    }
+    if (s < 0) { printf("  FAIL s_server never accepted\n"); kill(pid, SIGKILL); return 1; }
+
+    static struct tls_conn c;
+    /* The ephemeral private key. tls.c does not generate one - there is no RNG
+     * in the kernel - so the caller supplies it, and the harness reads real
+     * entropy so this is a genuine ephemeral exchange rather than a fixed key. */
+    {
+        int u = open("/dev/urandom", O_RDONLY);
+        if (u >= 0) { if (read(u, c.priv, 32) != 32) {} close(u); }
+    }
+    tls_start(&c, "localhost");
+    ok("ClientHello was produced", c.outn > 0);
+
+    unsigned char rx[8192];
+    int guard = 0;
+    while (tls_state(&c) != TLS_READY && tls_state(&c) != TLS_ERROR && guard++ < 400) {
+        const unsigned char *p;
+        int n = tls_take(&c, &p);
+        if (n > 0) {
+            int w = (int)write(s, p, (size_t)n);
+            if (w > 0) tls_sent(&c, w);
+        }
+        if (tls_state(&c) == TLS_READY) break;
+        struct timeval tv = { 2, 0 };
+        fd_set r;
+        FD_ZERO(&r); FD_SET(s, &r);
+        if (select(s + 1, &r, 0, 0, &tv) <= 0) break;
+        int got = (int)read(s, rx, sizeof rx);
+        if (got <= 0) break;
+        if (tls_feed(&c, rx, got) < 0) break;
+    }
+
+    ok("the ServerHello was parsed and a shared secret derived", c.saw_sh);
+    ok("the server's Finished verified", c.saw_fin);
+    ok("the handshake completed", tls_state(&c) == TLS_READY);
+    if (tls_state(&c) != TLS_READY)
+        printf("       state=%d err=%d\n", tls_state(&c), tls_error(&c));
+
+    /* ...and application data flows both ways. -www makes s_server answer any
+     * request with an HTTP page, so a real GET proves encrypt AND decrypt. */
+    if (tls_state(&c) == TLS_READY) {
+        const char *req = "GET / HTTP/1.0\r\n\r\n";
+        tls_write(&c, (const unsigned char *)req, (int)strlen(req));
+        const unsigned char *p;
+        int n = tls_take(&c, &p);
+        if (n > 0) { int w = (int)write(s, p, (size_t)n); if (w > 0) tls_sent(&c, w); }
+
+        int total = 0;
+        char body[16384];
+        for (int i = 0; i < 200 && total < (int)sizeof body - 1; i++) {
+            struct timeval tv = { 2, 0 };
+            fd_set r;
+            FD_ZERO(&r); FD_SET(s, &r);
+            if (select(s + 1, &r, 0, 0, &tv) <= 0) break;
+            int got = (int)read(s, rx, sizeof rx);
+            if (got <= 0) break;
+            if (tls_feed(&c, rx, got) < 0) break;
+            unsigned char tmp[4096];
+            int m;
+            while ((m = tls_read(&c, tmp, sizeof tmp)) > 0 && total < (int)sizeof body - 1) {
+                int room = (int)sizeof body - 1 - total;
+                if (m > room) m = room;
+                memcpy(body + total, tmp, (size_t)m);
+                total += m;
+            }
+        }
+        body[total > 0 ? total : 0] = 0;
+        ok("the server decrypted our request and replied", total > 0);
+        ok("the reply decrypts to an HTTP response",
+           total > 0 && !memcmp(body, "HTTP/", 5));
+        if (total > 0) {
+            char first[80];
+            int k = 0;
+            while (k < 70 && body[k] && body[k] != '\r' && body[k] != '\n') { first[k] = body[k]; k++; }
+            first[k] = 0;
+            printf("       server said: %s\n", first);
+        }
+    }
+
+    close(s);
+    kill(pid, SIGKILL);
+    waitpid(pid, 0, 0);
+    {
+        char rm[256];
+        snprintf(rm, sizeof rm, "rm -rf %s", dir);
+        if (system(rm) != 0) {}
+    }
+
+    printf("\n%d passed, %d failed\n", passed, failed);
+    return failed ? 1 : 0;
+}
