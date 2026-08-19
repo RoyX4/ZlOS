@@ -154,12 +154,12 @@ ones that changed a decision:
 | path | what |
 |---|---|
 | `kernel/design.h` | every design token, with the evidence for each |
-| `kernel/ease.c/.h` | the motion curves |
+| `kernel/ease.c` + `kernel/ease.h` | the motion curves |
 | `kernel/ui.c`, `kernel/uikit.c` | the widget toolkit, ~82 functions |
 | `kernel/docs/reference-widgets.md` | 68 widget records, 178 line citations |
 | `kernel/refrender/` | the `x-dc` shim + reference renderer |
 | `kernel/oracle/` | the fidelity measurement |
-| `kernel/apps_sys2/sys3/games3/games4.zl` | id-disjoint app slices |
+| `kernel/apps_sys2.zl`, `kernel/apps_sys3.zl`, `kernel/apps_games3.zl`, `kernel/apps_games4.zl` | id-disjoint app slices |
 
 **The slice rule matters.** The registry dispatches through seven if-chains on
 `id`. Several agents editing all seven in one working tree clobber each other,
