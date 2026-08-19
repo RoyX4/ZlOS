@@ -43,19 +43,25 @@ unlabelled claim as verified and a labelled one as a hypothesis.
 
 ---
 
-## The four waves
+## The four waves — measured
 
-| wave | agents | front | board |
-|---|---|---|---|
-| 1 | 25 | the OS look — compositor, framebuffer, fonts, icons, theme, motion | `LOOK-BOARD.md` |
-| 2 | 25 | Intel Gen9 GPU accel, every other driver, new driver design | `DRIVER-BOARD.md` |
-| 3 | 10 + verifiers | bugs, swept by **class** rather than by file, each finding adversarially refuted | `BUG-BOARD.md` |
-| 4 | 25 | the browser — parser, layout, CSS, net stack, robustness, bounded scope | `BROWSER-BOARD.md` |
+| wave | agents | done | errors | findings | subagent tokens | tool calls | wall clock |
+|---|---|---|---|---|---|---|---|
+| 1 · the look | 26 | 26 | 0 | 183 | 4.43 M | 1,120 | 56 min |
+| 2 · the drivers | 26 | 26 | 0 | 198 | 4.06 M | 959 | 58 min |
+| 3 · the bugs | 45+ | — | 0 | 67+ | — | — | — |
+| 4 · the browser | 26 | 25 | **1** | 191 | 3.79 M | 725 | 50 min |
+
+**123 agents spawned**, ~640 findings. Wave 4 lost one lens — `web:trust-boundary` — to
+an API server error mid-response; that lens is simply missing from the browser board and
+is worth re-running.
+
+Wave 3 ran a different shape: 10 class sweeps, then an independent refuter per candidate
+finding, told to default to *refuted* when uncertain. Its agent count is higher because
+of the refuters.
 
 Each wave ran as one workflow with a hard concurrency cap of **6** — `min(16, cores−2)`
 on this 8-logical-core box. A hundred agents is a queue, not a hundred lanes.
-
----
 
 ## How the run was constrained, and why
 
