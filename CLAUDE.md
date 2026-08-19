@@ -8,6 +8,13 @@ against the merged tree on 2026-08-19 and every open item, with its evidence,
 lives there ranked by leverage. The twenty-one now carry banners pointing at it.
 Read it before picking up any task list.
 
+**`docs/ROAD-TO-TEN.md`** is the leverage ranking for the project as a whole —
+what it scores today against a real external rubric, what is already excellent
+and invisible, and the ordered list of what moves it. Read it when deciding
+*what to work on*, as opposed to `STATE-OF-THE-PROJECT.md`, which tells you what
+is broken. It also records the first measured run of the self-hosting fixpoint on
+Linux (it holds), and the fact that no gate runs it.
+
 `docs/CODE-MAP.md` says where the code actually lives. The layout is not what
 the directory names imply: the desktop and all eight apps are one zl file
 (`kernel/kernel.zl`), and `kernel/out.c` is generated output that must never be
@@ -20,6 +27,14 @@ the merge. `STATE-OF-THE-PROJECT.md` §11 has the corrections.
 tracks: the real shared base (`d61a481`, not `44346d6`), the landmines that
 merge clean and then fail, and the landing order. Read it before merging
 anything or starting a ninth track.
+
+**`docs/MERGE-ROUND-2.md` is round 2** — the twelve worktrees standing on
+2026-08-20, measured: 165 commits, 219 files, 129 uncommitted, **0 pushed**, and
+`kernel/kernel.zl` contested by nine branches. It also records why opening a PR
+per branch is the wrong shape here (local `main` is 45 ahead of `origin/main`,
+so every PR would diff against a stale base), the landing order, and two places
+`MERGE-EVIDENCE.md` is now stale in the pessimistic direction. Read it before
+touching any `zl-linux-*` worktree.
 
 `docs/DOCS-RECONCILE-PROMPT.md` is the brief that produced
 `STATE-OF-THE-PROJECT.md`. Done 2026-08-19; kept for method, not for work.

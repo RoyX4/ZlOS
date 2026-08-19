@@ -601,6 +601,16 @@ extern unsigned int intel_backlight_max(void);
 extern unsigned int intel_backlight_get(void);
 extern int  intel_backlight_set(int percent);
 extern int  intel_panel_on(void);
+/* gpuring.c - the GPU self-test. There is no serial port on the ThinkPad, so
+ * every number this exposes exists so kernel.zl can put it on the SCREEN. */
+extern int      gpu_selftest(void);
+extern unsigned gpu_st_filled(void);
+extern unsigned gpu_st_want(void);
+extern unsigned gpu_st_poison(void);
+extern unsigned gpu_st_ctl(void);
+extern unsigned gpu_st_head(void);
+extern unsigned gpu_st_tail(void);
+
 extern int  intel_cursor_enable(unsigned gfx, int size64);
 extern int  intel_cursor_move(int x, int y);
 extern int  intel_cursor_disable(void);
@@ -1107,6 +1117,13 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "bl_get"))     return zl_num((double)intel_backlight_get());
     if (streq(name, "bl_set"))     return zl_num((double)intel_backlight_set((int)a[0].num));
     if (streq(name, "panel_on"))   return zl_num((double)intel_panel_on());
+    if (streq(name, "gpu_test"))    return zl_num((double)gpu_selftest());
+    if (streq(name, "gpu_filled"))  return zl_num((double)gpu_st_filled());
+    if (streq(name, "gpu_want"))    return zl_num((double)gpu_st_want());
+    if (streq(name, "gpu_poison"))  return zl_num((double)gpu_st_poison());
+    if (streq(name, "gpu_ctl"))     return zl_num((double)gpu_st_ctl());
+    if (streq(name, "gpu_head"))    return zl_num((double)gpu_st_head());
+    if (streq(name, "gpu_tail"))    return zl_num((double)gpu_st_tail());
     if (streq(name, "cur_on"))     return zl_num((double)intel_cursor_enable((unsigned)a[0].num,(int)a[1].num));
     if (streq(name, "cur_move"))   return zl_num((double)intel_cursor_move((int)a[0].num,(int)a[1].num));
     if (streq(name, "cur_off"))    return zl_num((double)intel_cursor_disable());

@@ -1871,6 +1871,42 @@ fn run_command(cmd, arg) {
         }
         return 0
     }
+    if cmd == 71 {                        # G - drive the GPU ring ourselves
+        # THIS IS WHAT A USB BOOT IS FOR. The sequence below is proven on this
+        # exact silicon from Linux (docs/gpu-driver.md: 16384/16384 pixels), but
+        # never from inside zlOS - and there is no serial port on the ThinkPad,
+        # so every number has to land on the SCREEN or the boot proves nothing.
+        #
+        # A COMMAND, not a boot step. If it wedges the GPU, a desktop that
+        # already came up is worth more than one that never did.
+        color(C_CYAN)  print("  GPU - our own ring on the blitter")
+        color(C_GREY)
+        print("    arming, mapping the GGTT, submitting one XY_COLOR_BLT...")
+        gst = gpu_test()
+        put("    RING_CTL 0x")   hex(gpu_ctl(), 8)
+        put("   HEAD 0x")        hex(gpu_head(), 8)
+        put("   TAIL 0x")        hex(gpu_tail(), 8)
+        print("")
+        put("    filled ")  put(gpu_filled())
+        put(" of ")         put(gpu_want())
+        put(" px, still poison ")  print(gpu_poison())
+        if gst == 0 {
+            color(C_GREEN)
+            print("    THE GPU DREW IT. zlOS drove the ring itself.")
+            color(C_GREY)
+            return 0
+        }
+        color(C_RED)
+        if gst == 1 { print("    step 1: no supported Intel GPU found") }
+        if gst == 2 { print("    step 2: the ring would not enable (RING_CTL above)") }
+        if gst == 3 { print("    step 3: GGTT mapping refused") }
+        if gst == 4 { print("    step 4: the command would not encode") }
+        if gst == 5 { print("    step 5: submitted, engine never caught up") }
+        if gst == 6 { print("    step 6: engine ran but the pixels did not land") }
+        color(C_GREY)
+        print("    (the number IS the step - nothing else is needed to place it)")
+        return 0
+    }
     if cmd == 42 {                        # * - wake the other CPU cores
         color(C_CYAN)  print("  SMP - the other cores")
         color(C_GREY)

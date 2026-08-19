@@ -71,12 +71,11 @@ Both work. They assert different things, and that is the only reason to choose.
   PS/2 and USB HID decoders. Use it when the *input stack* is under test, which
   is the only input a laptop has and the one path with no wire to fall back on.
 
-`qtype()` and its `QCODE` table live in **`exercise.py`**, which is the one
-module every probe already imports. `probe-term.py` and `probe-net.py` each
-carry a local copy because a module name with a hyphen in it is not importable
-and neither could import the other; both import `exercise.py` already, so when
-either lands on this line its copy should be deleted in favour of the shared
-one.
+`qtype()` and its `QCODE` table live in **`exercise.py`**, and there is now one
+copy. They used to be duplicated in `probe-term.py` and `probe-net.py`, on the
+reasoning that a module name with a hyphen in it is not importable — true, but
+both of those already import `exercise.py`, so that was never the obstacle.
+`probe-shot.py` would have been a third copy. All three import the shared one.
 
 Note that `input-send-event` is required and `send-key` is not a substitute:
 under `-display none` there is no active console handler and `send-key` is
@@ -108,17 +107,54 @@ wm_run() == 1 { wm_frame() } ... running = 0 }`). Both of those facts are true
 at once, and reading the second as "so serial is dead" is the mistake this page
 exists for.
 
-## Stale claims still in the tree
+## Three more things found by fixing this, all the same shape
 
-`probe-term.py` (on `desktop/browser-next` and elsewhere) and `probe-net.py`
-(added on `desktop/browser-next`, df77bcd) both state in their docstrings that
-serial keystrokes cannot reach the compositor and that `wm_frame()` reads PS/2
-and USB HID only. **`desktop/browser-next` has the `SERIAL, the third source`
-block in its own `input.c`.** The claim is stale on the very branch that makes
-it; the measurement it cites (`'N'` produced no output) is the buffered-line
-silence described above, not a dropped key.
+Every one of these is an assertion written when a command was one character,
+left alone when the desktop made it a word. None of them failed loudly.
 
-Their *choice* of QMP is still fine — it is the right wire for a probe whose
-subject is the keyboard. Only the stated reason is wrong, and a wrong "this is
-not supported" is the expensive kind: nobody re-tests what they have been told
-is absent.
+**1. `desktop-v10-plan.md` §8.1 row 1 claimed a green gate that could not be
+run.** The row cites "`probe-shot.py` types `help` then a bad word", and the
+picture it points at is real — the capability was genuinely proved. But no
+invocation of `-k` as shipped could have produced it, because `-k` never
+pressed Enter. The evidence was made some other way and the row went
+unchallenged. It is reproducible now:
+`./probe-shot.py -k help -k unknownthing -o v10-typed`.
+
+**2. `probe-term.py` was dead at step zero on merged `main`, and had been.**
+Its "is the compositor already the boot state?" check waited for
+`compositor:` to arrive *next* — but the compositor announces itself **before**
+`ready.`, so the wait for `ready.` had already eaten that line. The gate took
+the else branch on a machine that had booted straight into the desktop, typed a
+stray `w` into the terminal, and failed with *"the compositor never started"*
+while its own printed transcript contained
+`compositor: 4 windows, shell client 82,160 1236x834`. Verified pre-existing by
+running the unmodified `HEAD` copy: identical failure, exit 1. It now looks in
+the whole transcript, and the same fix was needed for the shell-rect regex.
+
+**3. `probe-term.py` asserted on the old help format.** It looked for
+`h        this help`; `help_typed()` prints `help              this help`. The
+single-letter table is the *text* shell's help and is only reached with no
+framebuffer. With defect 2 fixed the gate reached this step and failed on it
+honestly. `exercise.py` already asserted the new string, which is why the sweep
+had not noticed.
+
+Gate now green end to end: five commands typed, five results asserted.
+
+## The stale claims, and why they were corrected in place
+
+`probe-term.py` and `probe-net.py` (the latter added on `desktop/browser-next`,
+df77bcd) both stated in their docstrings that serial keystrokes cannot reach the
+compositor and that `wm_frame()` reads PS/2 and USB HID only. **Both branches
+had the `SERIAL, the third source` block in their own `input.c` at the time.**
+The claim was stale on the very branch that made it, and the measurement it
+cited — `'N'` produced no output — is the buffered-line silence above, not a
+dropped key.
+
+Their *choice* of QMP was always fine: it is the right wire for a probe whose
+subject is the input stack. Only the stated reason was wrong.
+
+Both docstrings now carry the correction rather than a deletion, deliberately.
+A wrong "this is not supported" is the expensive kind of stale — nobody
+re-tests what they have been told is absent, so the claim never gets falsified
+by ordinary use. Quietly removing it would leave the next reader free to
+re-derive it from the same silence.

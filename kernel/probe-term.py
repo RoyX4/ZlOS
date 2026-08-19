@@ -19,13 +19,30 @@ five whose failure looks exactly like success from a distance.
 
 TWO THINGS THIS HAD TO WORK AROUND, both measured rather than guessed:
 
-1. SERIAL KEYSTROKES CANNOT REACH THE COMPOSITOR. The text shell reads the
-   UART in key_get() (kernel.zl), so `probe-shot.py -k` works there. wm_frame()
-   does not: its only input is input_poll() -> idt_scan() (PS/2) and xhci_key()
-   (USB HID), and nothing in the compositor path ever looks at COM1. Bytes sent
-   down the serial socket after 'w' sit in the FIFO and are eventually eaten by
-   the text shell as single-key commands, which is worse than nothing. So keys
-   go through QMP input-send-event, and only the initial 'w' goes over serial.
+1. THE KEYS GO THROUGH QMP, WHICH TYPES ON THE EMULATED KEYBOARD.
+
+   **The reason originally given here was wrong and is corrected below**, since
+   a false "that is not supported" is the expensive kind of stale: nobody
+   re-tests what they have been told is absent. What it said was that serial
+   keystrokes cannot reach the compositor, because wm_frame()'s only input is
+   PS/2 and USB HID and nothing in that path looks at COM1.
+
+   Serial reaches the compositor perfectly well. input.c drains COM1 into the
+   same event queue as PS/2 and USB - the block commented `SERIAL, the third
+   source` - precisely so every gate in this repo kept working when the desktop
+   became the boot state. Measured 2026-08-19: `exercise.py` types `help`,
+   `fib 20` and `windows` as words over serial and scores 4/4.
+
+   What misled the original note is that a single character produces NO SERIAL
+   OUTPUT AT ALL. term.c buffers printable characters and echoes only in its
+   Enter branch, so a delivered keystroke and a dropped one are the same
+   silence. Sending 'w' and seeing nothing is not evidence it did not arrive -
+   photograph the prompt line and the 'w' is sitting in it.
+
+   Using the keyboard here is still right: this gate's subject includes the
+   input stack, and QMP exercises the PS/2 and USB HID decoders, which are the
+   only input a laptop has. It is a better assertion, not a workaround.
+   `docs/typing-into-the-compositor.md` has the full measurement.
 
 2. THE TERMINAL'S OWN OUTPUT DID NOT REACH THE SERIAL LOG. term_putc writes the
    scrollback ring and nothing else, so the unknown-command message and the
@@ -57,7 +74,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from exercise import Serial, Qmp, qemu_argv, build, PROMPT  # noqa: E402
+from exercise import Serial, Qmp, qemu_argv, build, qtype, PROMPT  # noqa: E402
 
 SHOTS = os.path.join(HERE, "shots")
 
@@ -67,18 +84,10 @@ SHOTS = os.path.join(HERE, "shots")
 # waiting longer is exactly the timing-sensitive gate this project banned.
 COMPOSITOR = "compositor:"
 
-# QEMU qcodes. A character with no qcode is a hard error, never a silent skip:
-# a probe that quietly drops a keystroke asserts against a command nobody typed
-# and passes for the wrong reason. probe-mouse.py already cost this project one
-# of those.
-QCODE = {
-    " ": "spc", "\n": "ret", "-": "minus", "=": "equal",
-    ".": "dot", ",": "comma", "/": "slash", ";": "semicolon", "'": "apostrophe",
-}
-for _c in "abcdefghijklmnopqrstuvwxyz":
-    QCODE[_c] = _c
-for _c in "0123456789":
-    QCODE[_c] = _c
+# QCODE and qtype() are imported from exercise.py, which is where the one copy
+# lives. They used to be duplicated here and in probe-net.py, on the reasoning
+# that a module name with a hyphen in it is not importable - true, but both of
+# these already import exercise.py, so that was never the obstacle.
 
 
 class Transcript:
@@ -106,23 +115,6 @@ class Transcript:
             return got
         self.ser.buf = got + self.ser.buf
         return None
-
-
-def qtype(qmp, text, settle=0.12):
-    """Type `text` on the emulated keyboard, one key at a time.
-
-    input-send-event, not send-key: under -display none there is no active
-    console handler and send-key is silently dropped. Both the PS/2 and the USB
-    path turn a key into an EV_CHAR (input.c:252 and input.c:312), so either
-    keyboard QEMU routes this to will do.
-    """
-    import time
-    for ch in text:
-        code = QCODE.get(ch)
-        if code is None:
-            raise RuntimeError(f"no qcode for {ch!r} - add one rather than skipping it")
-        qmp.sendkey(code)
-        time.sleep(settle)
 
 
 def ppm_crop(path, box, step=2):
@@ -262,7 +254,16 @@ def main():
         # prompt to send 'w' to and sending one would type a stray character
         # into the terminal. Ask which world we are in rather than assuming,
         # so this gate keeps working across that change unaltered.
-        booted_into_wm = t.expect(COMPOSITOR, 8)
+        #
+        # LOOK IN THE WHOLE TRANSCRIPT, not only at what arrives next. The
+        # compositor announces itself BEFORE "ready.", so the wait above has
+        # already consumed that line and waiting for it a second time finds
+        # nothing. Measured 2026-08-19 on merged main: this gate took the else
+        # branch on a machine that had booted straight into the desktop, typed
+        # a stray 'w' into the terminal, and then failed with "the compositor
+        # never started" while its own printed transcript contained
+        # "compositor: 4 windows, shell client 82,160 1236x834".
+        booted_into_wm = COMPOSITOR in t.log or t.expect(COMPOSITOR, 8)
         if booted_into_wm:
             print("  note  the compositor is the boot state - no 'w' needed")
         else:
@@ -277,11 +278,17 @@ def main():
 
         # The rest of that line carries the shell's client rectangle. Crop to
         # what the kernel says rather than recomputing the layout here.
-        rest = t.seen("\n", args.step_timeout) or ""
-        m = re.search(r"shell client (\d+),(\d+) (\d+)x(\d+)", rest)
+        #
+        # Two places to look, for the same reason as above: when the desktop
+        # was the boot state the whole line is already in t.log, and when 'w'
+        # started it the tail of the line is still unread on the wire.
+        m = re.search(r"shell client (\d+),(\d+) (\d+)x(\d+)", t.log)
         if not m:
-            print("the compositor did not report the shell rect: " + repr(rest))
-            return 1
+            rest = t.seen("\n", args.step_timeout) or ""
+            m = re.search(r"shell client (\d+),(\d+) (\d+)x(\d+)", rest)
+            if not m:
+                print("the compositor did not report the shell rect: " + repr(rest))
+                return 1
         box = tuple(int(g) for g in m.groups())
         print(f"  ok    shell client rect {box[0]},{box[1]} {box[2]}x{box[3]}")
 
@@ -293,7 +300,13 @@ def main():
         # command that produces no output (clear) is indistinguishable from a
         # key that never landed.
         for cmd, marker, what in (
-            ("help",     "h        this help",         "help lists the apps"),
+            # "help              this help", not "h        this help". The
+            # compositor calls help_typed(), which lists the WORDS term.c
+            # accepts; the single-letter table is the old text shell's help and
+            # is only reached with no framebuffer. Same staleness as `-k w`:
+            # written when a command was one character, never revisited when
+            # the desktop made it a word. exercise.py asserts the new string.
+            ("help",     "help              this help", "help lists the apps"),
             ("uptime",   "ticks at 100 Hz",            "uptime reports a live figure"),
             ("fib 20",   "6765",                       "fib 20 = 6765 - the ARGUMENT parser works"),
             ("nonsense", "unknown command: nonsense",  "an unknown command SAYS SO"),

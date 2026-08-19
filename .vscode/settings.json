@@ -12,6 +12,19 @@
         "editor.tabSize": 4,
         "editor.insertSpaces": true
     },
+    "[zl]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "zl.zl-lang",
+        "editor.quickSuggestions": {
+            "other": true,
+            "comments": false,
+            "strings": false
+        },
+        "editor.tabCompletion": "on",
+        "editor.suggest.snippetsPreventQuickSuggestions": false
+    },
     "search.exclude": {
         "**/out.c": true,
         "**/out.ll": true,

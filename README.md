@@ -17,6 +17,14 @@ NVMe, a filesystem, and a windowed compositor.
 > file:line that establishes it. Read that before picking up any task list — the
 > older planning docs predate the eleven-track merge and are stale by construction.
 
+> **Where the project stands against "is this a 10":**
+> [`docs/ROAD-TO-TEN.md`](docs/ROAD-TO-TEN.md). Scores the tree discriminator by
+> discriminator against an external assessment, corrects the two places that
+> assessment guessed wrong, and ranks what actually moves the number. Short
+> version: nothing in the hard parts is ported, and the two things holding the
+> score down are a bare-metal boot that has never happened and a finished branch
+> that has never landed.
+
 Two more orientation docs worth knowing about:
 
 - [`docs/CODE-MAP.md`](docs/CODE-MAP.md) — where the code really is, and which of

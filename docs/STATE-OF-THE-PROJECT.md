@@ -3,6 +3,17 @@
 **2026-08-19 · `06ced13` (audit baseline) · `ff27d57` (tree at writing) ·
 `faac0f4` (tree at repair; both commits ahead are docs-only)**
 
+> **Evening re-check, 2026-08-19 (HEAD `3f00366`, plus a dirty tree).** §1's
+> ranking is stale against this checkout. Closed: land-gate now runs the host
+> harnesses *and* `check-zl-calls.sh` / `check-memmap.sh` (§2.1–2.2);
+> `fix/pointer-drain` is in the tree as a single `xhci_poll()` (§3.1);
+> `mkdisk.sh`'s kernel-size guard is back (§2.4); CI is tracked (8 files under
+> `.github/`); the self-hosting fixpoint is in `run_tests.sh` and
+> `gates.yml`; `DISK_SCRATCH` is at `0x02040000` (the checker still does not
+> name it). Still first: `key()` at `kernel.zl:1517` (§5.1), boot the ThinkPad,
+> land `desktop/browser-next` (21 commits), Ring 3. Ranked plan for score, not
+> bugs: [`docs/ROAD-TO-TEN.md`](ROAD-TO-TEN.md).
+
 > **Repair pass, 2026-08-19.** Four adversarial reviewers attacked the first
 > draft and raised 44 defects. Every one was re-verified against the tree by a
 > fifth pass before being applied; 39 were confirmed, 5 were rejected or settled

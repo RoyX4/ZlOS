@@ -250,10 +250,60 @@ async function runCompiled() {
                   shellQuote(exe));
 }
 
+/* Static completions. Not an LSP: the parser exits on the first error and
+ * Node has no line number, so there is nothing to query. The lists match the
+ * TextMate grammar in syntaxes/zl.tmLanguage.json — if you add a builtin,
+ * add it in both places. VS Code filters by prefix; we always return the
+ * full set. */
+const ZL_KEYWORDS = [
+    'fn', 'if', 'elif', 'else', 'while', 'for', 'in',
+    'return', 'break', 'continue', 'import', 'and', 'or', 'not',
+];
+
+const ZL_CONSTANTS = ['true', 'false'];
+
+const ZL_BUILTINS = (
+    'abs acos alloc asin assert at atan band bnot bool bor bxor ceil chr ' +
+    'clamp code concat contains copy copy_mem cos count dir drop e ends env ' +
+    'exit exp fill fill_mem find first flat floor fmod free gcd has hex hypot ' +
+    'index_at index_of input insert int join kill last len lines log log10 ' +
+    'log2 lower ltrim max min move nil now num pad pi pow print procs push ' +
+    'randint random range read remove repeat replace reverse rm round rtrim ' +
+    'run seed sext shl shr sign sin slice sort split sqrt start starts str ' +
+    'sum swapcase take tan title trim trunc type upper write write_bytes'
+).split(' ');
+
+function zlCompletions() {
+    const items = [];
+    for (const name of ZL_KEYWORDS) {
+        const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Keyword);
+        item.detail = 'keyword';
+        items.push(item);
+    }
+    for (const name of ZL_CONSTANTS) {
+        const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Constant);
+        item.detail = 'constant';
+        items.push(item);
+    }
+    for (const name of ZL_BUILTINS) {
+        const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Function);
+        item.detail = 'builtin';
+        item.insertText = new vscode.SnippetString(name + '($0)');
+        items.push(item);
+    }
+    return items;
+}
+
 function activate(context) {
     context.subscriptions.push(
         vscode.languages.registerDocumentFormattingEditProvider('zl', {
             provideDocumentFormattingEdits: provideEdits,
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.languages.registerCompletionItemProvider('zl', {
+            provideCompletionItems: () => zlCompletions(),
         })
     );
 
