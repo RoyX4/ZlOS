@@ -557,7 +557,17 @@ int html_parse(const char *src, int len)
             nodes[n].alen = cnt;
         }
 
-        if (t == HT_TITLE) {
+        if (t == HT_TITLE && title_len == 0) {
+            /* THE FIRST <title> WINS, and that is not a style choice. This
+             * took the LAST one, and www.wikipedia.org carries two: the
+             * document's own, and `<title id="banner__close-icon">Close` inside
+             * an SVG icon further down. An SVG <title> is an accessibility
+             * label for a graphic, not a document title - so the browser
+             * reported the real page as "Close".
+             *
+             * Only checking for a title inside <head> would be more correct
+             * still; first-wins gets the same answer on every real page and is
+             * one comparison. */
             /* the title's text is wanted as a string, not as a rendered node */
             int te = i;
             while (te < len && !(src[te] == '<' && te + 1 < len && src[te+1] == '/')) te++;

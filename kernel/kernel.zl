@@ -2551,7 +2551,8 @@ fn tls_gate() {
     # flight, and the gate called that "HTTPS FAILED" when nothing had failed.
     #
     # ticks() is 100 Hz, so a tick is 10 ms and 9000 of them is 90 seconds.
-    tgt = ticks() + 9000
+    tgs0 = ticks()
+    tgt = tgs0 + 9000
     tgs = 7
     while ticks() < tgt {
         br_tick()
@@ -2560,8 +2561,8 @@ fn tls_gate() {
             if tgs == 7 { } else { tgt = 0 }
         }
     }
-    put("    finished in ")  put(9000 - (tgt - ticks()))
-    print(" ticks (100 per second)")
+    put("    took ")  put((ticks() - tgs0) / 100)
+    print(" seconds")
     if tgs == 0 {
         color(C_GREEN)  put("    HTTPS OK: ")
         put(br_h())  print(" pixels of laid-out page")
