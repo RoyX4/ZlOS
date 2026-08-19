@@ -110,6 +110,11 @@ int xhci_poll(int max)   { (void)max; return 0; }  /* the one ring drainer */
  * longer infers "absolute" from "a USB pointer exists", because that is
  * exactly what sent every relative usb-mouse down the tablet branch. */
 int xhci_ptr_abs(void)   { return 1; }
+/* input.c reads the USB wheel through this; without a stub wmtest does not
+ * LINK, and a stale binary from a previous build reports "all good" - which
+ * is exactly what it did until the link error was read rather than the
+ * program's own exit status. */
+int xhci_ptr_take_wheel(void) { return 0; }
 int xhci_ptr_take_dx(void) { return 0; }
 int xhci_ptr_take_dy(void) { return 0; }
 int xhci_ptr_x(void)     { return fake_ux; }
@@ -674,6 +679,64 @@ int main(void)
        wm_at(300 + 4, 300 + 4) == aw);
     for (int i = 0; i < ANIM_SETTLE; i++) frame();
     ok("...and it ends too", wm_anim_running(aw) == 0);
+
+    /* ---- DO THE PIXELS ACTUALLY MOVE? -------------------------------------
+     * Everything above asserts on wm.c's MODEL - is an animation running, has
+     * it freed its slot, what alpha does it report. None of that is evidence
+     * that anything reaches the screen. This repo has already shipped 9 of 14
+     * event handlers that updated their state and never called wm_dmg(win):
+     * the code compiled, every gate was green, and nothing repainted. From
+     * outside, "the model changed and the screen did not" and "nothing
+     * happened" are the same picture.
+     *
+     * So this measures the FRAMEBUFFER. It finds the drawn left edge of a
+     * window by scanning a row for the first pixel that differs from the
+     * background, once per frame, and asserts the edge is in a different place
+     * on consecutive frames while zwin runs - and in the same place once it
+     * settles. A scale animation that never repaints gives a constant edge and
+     * fails here while passing every assertion above. */
+    {
+        int probe_y = 0, edges[10], n = 0;
+        for (int i = 0; i < WM_MAX; i++) wm_close(i);
+        for (int i = 0; i < ANIM_SETTLE; i++) frame();
+        int pw = wm_open(1, "px", 300, 200, 400, 300);
+        probe_y = 200 + 150;                 /* through the window's middle */
+        unsigned bg = fb_get_px(5, probe_y);
+        for (n = 0; n < 10; n++) {
+            frame();
+            int e = -1;
+            for (int x = 0; x < W; x++)
+                if (fb_get_px(x, probe_y) != bg) { e = x; break; }
+            edges[n] = e;
+        }
+        int moved = 0;
+        for (int i = 1; i < n; i++) if (edges[i] != edges[i - 1]) moved++;
+        printf("    zwin drawn left edge, frames 1..10: ");
+        for (int i = 0; i < n; i++) printf("%d ", edges[i]);
+        printf("\n");
+        ok("the window is actually on the framebuffer", edges[0] >= 0);
+        ok("zwin MOVES PIXELS - the drawn edge changes between frames", moved >= 2);
+
+        for (int i = 0; i < ANIM_SETTLE; i++) frame();
+        int settled = -1;
+        for (int x = 0; x < W; x++)
+            if (fb_get_px(x, probe_y) != bg) { settled = x; break; }
+        ok("...and settles at the window's real x, not mid-animation", settled == 300);
+
+        /* the NEGATIVE CONTROL: with no animation running, the same probe must
+         * report the same edge every frame. Without this, "moved >= 2" would
+         * also pass on a compositor that jittered at random. */
+        int still = 0, prev = settled;
+        for (int i = 0; i < 6; i++) {
+            frame();
+            int e = -1;
+            for (int x = 0; x < W; x++)
+                if (fb_get_px(x, probe_y) != bg) { e = x; break; }
+            if (e != prev) still++;
+            prev = e;
+        }
+        ok("control: a settled window's edge does NOT move", still == 0);
+    }
 
     /* ANIM_MAX IS A REFUSAL, not a silent drop - the same discipline as
      * wm_open's WM_MAX.
