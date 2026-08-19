@@ -92,9 +92,39 @@ ignition, not the wiring.**
 
 ## What is left, and what blocks it
 
-### Blocked on a human, not on code
+### DONE — the ring runs on the real GPU
 
-**Hardware bring-up of the ring and the cursor.** Both need i915 unbound, which
+**2026-08-19. A sole owner CAN drive the Gen9.5 blitter's legacy ring.** This
+was the question the whole driver was gated on, and it is answered on the
+target machine with i915 unbound:
+
+```
+forcewake     acked
+ring   phys 0x32211b000 -> gfx 0x400000
+dest   phys 0x150786000 -> gfx 0x500000
+before        TAIL=0 HEAD=0 START=0        CTL=0
+armed         TAIL=0 HEAD=0 START=0x400000 CTL=1
+after         TAIL=0x30 HEAD=0x30
+destination   16384/16384 filled, 0 still poison
+```
+
+**zlOS's path is `RING_START`/`CTL`/`TAIL`. No execlists needed.** i915 drives
+this hardware through execlists and a context scheduler; none of that has to be
+built. Program four registers, put commands in a page, move the tail.
+
+Every piece `gpuring.c` assumes is now confirmed on silicon: forcewake acks,
+the GGTT entry format (address | present, high bits in the second dword), the
+ring enables from a cold `CTL=0`, and the engine executes what we wrote.
+
+It took four runs. Three of them drew nothing and blamed addressing — correctly,
+but the message pointed at the wrong layer. See `gpu-blitter.md`; the short
+version is that the harness was writing its page-table entries into its own
+heap and "HEAD chased TAIL" was a clean submission of nothing.
+
+### Still blocked on a human
+
+**The hardware cursor.** `gpu_cursor_arm(1)` has still never run — the ring run
+above did not exercise a single display register. It needs i915 unbound, which
 blanks the screen — and this machine runs a Wayland session with many agent
 sessions inside it, all of which die with the display manager.
 

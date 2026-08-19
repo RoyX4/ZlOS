@@ -12,9 +12,11 @@
  * wants what i915 itself used on Gen8 before it switched: write RING_START,
  * RING_CTL, put commands in the ring, advance RING_TAIL, wait for RING_HEAD.
  *
- * Whether that still works on Gen9.5 with nothing else touching the GPU is
- * unknown, and it decides whether the kernel-side ring code is worth writing at
- * all. One experiment settles it. This is that experiment.
+ * ANSWERED, 2026-08-19, on 8086:9B41: YES. It works. RING_START, RING_CTL,
+ * commands in a page, advance RING_TAIL, and the engine runs them -
+ * 16384/16384 destination pixels filled, 0 still poison. No execlists, no
+ * context scheduler. This file is now a regression test rather than an open
+ * question.
  *
  * IT REQUIRES i915 TO BE UNBOUND. Two owners of one ring is the exact bug class
  * that broke the pointer for a week (docs/POINTER-EVIDENCE.md - two things
