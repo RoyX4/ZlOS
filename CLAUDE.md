@@ -23,11 +23,28 @@ working - it fetches http://example.com/ by name and renders it. It records
 the two things the merge cost it (italic, and continuous text sizes) and the
 catalogue correction that was explicitly deferred until this branch merged.
 
-`kernel/docs/BROWSER-RENDER-PROMPT.md` is the CURRENT BROWSER WORK: make pages
-LOOK right. It opens by correcting two things a fresh session is likely to be
-told to do that are already done - Google works, and AES-256 is not needed -
-then orders the rendering work by visual win per line, and records the one open
-URL-bar bug with what is known and what is not.
+`kernel/docs/BROWSER-STORAGE-PROMPT.md` is the NEXT BROWSER WORK, and it is
+one change that every remaining rendering improvement is behind: the parser's
+node array, its text arena, layout's runs and css's selectors are all static
+and all full on a real page, and none can grow - the browser is 1.95 MB of a
+3.34 MB BSS with 128 KB of headroom. The fix is the one `png.c` proved: the
+caller supplies the storage. It carries the measurements, the two
+fixed-address maps that must both be checked, and the traps that cost this
+session an hour each (chief among them: `build.sh` makes `kernel.elf` but the
+QEMU harness boots `zlOS.iso`).
+
+`kernel/docs/browser-render-run.md` is the record of the run that produced the
+current state - images, flexbox, grid, `@media`, search, the network at boot -
+with every number and the command that measured it, including the four gates
+that turned out to be testing something other than what they claimed.
+
+`kernel/docs/BROWSER-RENDER-PROMPT.md` is the brief that run worked from, and
+both its items are now marked done. Worth reading anyway for two reasons: it
+opens by correcting two things a fresh session is likely to be told to do that
+are already done (Google works, and AES-256 is not needed), and its §1 records
+a diagnosis that was precise, plausible and WRONG - the URL-bar bug it blames
+on the keyboard was in the mouse path, and the symptom it reasoned from was a
+coincidence of one URL. The shape of that mistake is kept deliberately.
 
 `kernel/docs/POINTER-PROMPT.md` is the CURRENT WORK: the pointer is
 visibly broken after the eleven-track merge, the lead suspect is measured
