@@ -7,27 +7,9 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
-## 2026-08-19 — fix(wm): the window fade blended its saved backdrop at the wrong origin (6e63bf8)
+## 2026-08-19 — feat(desktop): the Files app, and the editor's disk-backed save-through (e4e8cce)
 
-`desktop/v10-look` · 2 files changed, 136 insertions(+), 11 deletions(-)
-
-| | |
-|---|---|
-| EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
-| baselined doc rot | 19 |
-| docs vs tree | STALE |
-
-<details><summary>2 file(s)</summary>
-
-- `kernel/docs/DECISIONS.md`
-- `kernel/wm.c`
-
-</details>
-
-## 2026-08-19 — docs: the grip before/after evidence referenced by 580aabe (6e48337)
-
-`desktop/v10-look` · 3 files changed, 19 insertions(+)
+`desktop/files-app` · 5 files changed, 691 insertions(+), 6 deletions(-)
 
 | | |
 |---|---|
@@ -36,47 +18,13 @@ the part that makes a change legible later, and the part nobody writes down.
 | baselined doc rot | 19 |
 | docs vs tree | STALE |
 
-<details><summary>3 file(s)</summary>
+<details><summary>5 file(s)</summary>
 
-- `docs/JOURNAL.md`
-- `docs/shots/grip-after-one-renderer.png`
-- `docs/shots/grip-before-two-renderers.png`
-
-</details>
-
-## 2026-08-19 — fix(wm): one resize-grip renderer, not two (580aabe)
-
-`desktop/v10-look` · 3 files changed, 26 insertions(+), 12 deletions(-)
-
-| | |
-|---|---|
-| EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
-| baselined doc rot | 19 |
-| docs vs tree | STALE |
-
-<details><summary>3 file(s)</summary>
-
-- `TODO.md`
-- `docs/JOURNAL.md`
-- `kernel/wm.c`
-
-</details>
-
-## 2026-08-19 — fix(fb): icons24/icons48 externs said 10, icons.c has 20 (76d15aa)
-
-`desktop/v10-look` · 1 file changed, 10 insertions(+), 4 deletions(-)
-
-| | |
-|---|---|
-| EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
-| baselined doc rot | 19 |
-| docs vs tree | STALE |
-
-<details><summary>1 file(s)</summary>
-
-- `kernel/fb.c`
+- `kernel/check-memmap.sh`
+- `kernel/docs/files-app-handoff.md`
+- `kernel/kernel.zl`
+- `kernel/probe-files.py`
+- `kernel/term.c`
 
 </details>
 
