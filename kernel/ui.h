@@ -266,4 +266,213 @@ void ui_end_activate(void);     /* ...consumed after the app re-runs its UI  */
 void ui_row(void);              /* put the next widget beside this one       */
 void ui_endrow(void);
 
+/* The selection treatment, picked once for the whole toolkit. See ui.c for
+ * WHICH of the reference's three it is and why. `zebra` stripes odd rows. */
+void ui_row_select(int x, int y, int w, int h, int selected, int zebra);
+
+/* INK ON THE ACCENT, computed the way the reference computes it - a WCAG
+ * relative luminance and one threshold, no floating point. Any widget painting
+ * text on a saturated fill must route through this instead of naming a colour;
+ * three widgets in the reference itself hard-code #fff and fail contrast. */
+unsigned ui_ink_on(unsigned bg);
+unsigned ui_luminance_q16(unsigned rgb);   /* 0..65535; exposed for the gate */
+
+/* ---- uikit.c - the shared widget catalogue ---------------------------------
+ * Everything the 53 apps draw with. Two conventions run through all of it:
+ *
+ * 1. RECT IN, FIRED OUT. These take explicit device-pixel geometry rather than
+ *    flowing from ui.c's layout cursor, because an app draws into a client
+ *    rectangle it was handed and every reference widget is positioned against
+ *    an edge of it. A `*_w()` / `*_h()` measuring function exists wherever the
+ *    natural size is not obvious, so a row can be laid out before it is drawn.
+ *    Nothing here allocates, and nothing here holds widget state.
+ *
+ * 2. NO POINTERS IN THE zl-FACING FORM. zl has no address-of, so anything
+ *    stateful comes in two shapes, exactly as ui_toggle/ui_toggle_value do:
+ *    the C form returns "which index was clicked, or -1", and the `_value`
+ *    form takes the current selection by value and returns the new one.
+ *
+ * Multi-item widgets (segmented control, tab strips, menus) take their items
+ * as ONE '|'-separated string - "CPU|Memory|Disk" - because an array of char*
+ * cannot cross the zl boundary and a callback cannot either. Empty string is
+ * zero items; a trailing '|' is an empty item, not a terminator.
+ */
+
+/* sizes - these ARE fb.c's text roles, so a widget's size and its type size
+ * cannot drift apart */
+#define UI_SM 0
+#define UI_MD 1
+#define UI_LG 2
+
+/* flags, OR-ed */
+#define UI_F_MONO (1 << 0)   /* Roboto Mono in the reference: numbers, paths */
+#define UI_F_BOLD (1 << 1)   /* the reference's fontWeight:700              */
+
+/* button kinds */
+#define UI_BTN_NEUTRAL 0     /* rgba(255,255,255,.07) / body text           */
+#define UI_BTN_PRIMARY 1     /* accent fill + COMPUTED ink                  */
+#define UI_BTN_DANGER  2     /* BAD at 16% + 40% border + soft red text     */
+#define UI_BTN_GHOST   3     /* no fill until active                        */
+
+/* cell alignment */
+#define UI_ALIGN_L 0
+#define UI_ALIGN_C 1
+#define UI_ALIGN_R 2
+
+/* monospace panel grounds - reference-widgets.md S14 */
+#define UI_PANEL_TERM 0      /* #0b0d0f, 12px/1.5   terminal + editor       */
+#define UI_PANEL_LOG  1      /* #0b0d0f, 11px/1.55  kernel log              */
+#define UI_PANEL_HEX  2      /* #090a0c, 11.5px/1.5 hex + syscall trace     */
+
+/* ---- text ---------------------------------------------------------------- */
+int  ui_text_w(const char *s, int size, int flags);
+int  ui_text_h(int size);
+void ui_text(int x, int y, const char *s, unsigned rgb, int size, int flags);
+
+/* ---- buttons - reference-widgets.md S13 ---------------------------------- */
+int  ui_pill_w(const char *s, int size, int flags);
+int  ui_pill_h(int size);
+int  ui_pill(int x, int y, int w, int h, const char *s,
+             int size, int kind, int flags);
+int  ui_button_sz(const char *s, int size, int kind, int flags);  /* cursor  */
+int  ui_icon_button(int x, int y, int px, const char *glyph, int active);
+
+/* ---- segmented control - S3 ----------------------------------------------- */
+int  ui_seg_h(int size);
+int  ui_seg_w(const char *items, int size);
+int  ui_segmented(int x, int y, int w, int h, const char *items,
+                  int sel, int size);                /* clicked index, or -1 */
+int  ui_segmented_value(int x, int y, int w, int h, const char *items,
+                        int sel, int size);          /* the new selection    */
+
+/* ---- tab strips - S4.1 closeable, S4.2 underline -------------------------- */
+int  ui_tabs_h(void);
+int  ui_tabstrip(int x, int y, int w, const char *items, int sel);
+int  ui_tabstrip_closed(void);      /* whose x was hit in the last strip, -1 */
+int  ui_tabstrip_value(int x, int y, int w, const char *items, int sel);
+int  ui_utabs_h(void);
+int  ui_utabs(int x, int y, int w, const char *items, int sel);
+int  ui_utabs_value(int x, int y, int w, const char *items, int sel);
+
+/* ---- toolbar and status bar - S5, S6 -------------------------------------- */
+int  ui_toolbar_h(void);
+void ui_toolbar(int x, int y, int w, int h, int at_bottom);
+int  ui_status_h(void);
+void ui_statusbar(int x, int y, int w, int h);
+
+/* ---- column header + list row - S7 ----------------------------------------
+ * Tracks are the reference's own grid strings, transliterated: a number is a
+ * fixed track in design px, '*' is the `minmax(0,1fr)` that takes the rest.
+ * The three verbatim ones are below so an app does not retype them. */
+#define UI_GRID_PROC  "48,52,28,48,52,*"      /* PGRID,  ds-reference 3055   */
+#define UI_GRID_FILES "*,58,84,78,62"         /* FGRID,  3057                */
+#define UI_GRID_ARCH  "*,66,62,62,54,58"      /* archive, 4160               */
+
+void ui_grid(const char *tracks);
+int  ui_grid_cols(void);
+void ui_grid_span(int x, int w, int col, int *cx, int *cw);
+int  ui_colhead_h(void);
+int  ui_colhead(int x, int y, int w, const char *labels, int sortcol, int sortdir);
+int  ui_grid_row_h(void);
+int  ui_grid_row(int x, int y, int w, int idx, int selected);
+void ui_grid_cell(int x, int w, int y, int h, int col, const char *s,
+                  int align, unsigned rgb, int size, int flags);
+
+/* ---- stat card strip - S8 -------------------------------------------------
+ * `repeat(auto-fit, minmax(minw, 1fr))`: as many columns as fit at >= minw,
+ * cells wrapping into as many rows as they need. Pass 0 for the reference's
+ * own 88px. ui_stat_end returns the height the strip turned out to be. */
+void ui_stat_begin(int x, int y, int w, int minw);
+void ui_stat_cell(const char *key, const char *val, unsigned val_rgb);
+int  ui_stat_end(void);
+
+/* ---- sidebar - S9 --------------------------------------------------------- */
+int  ui_sidebar_w(void);
+void ui_sidebar(int x, int y, int w, int h);
+int  ui_heading_h(void);
+void ui_heading(int x, int y, int w, const char *s);
+int  ui_nav_h(void);
+int  ui_nav_row(int x, int y, int w, const char *s, int selected);
+
+/* ---- bars - S10 ----------------------------------------------------------- */
+int  ui_meter_h(void);
+void ui_meter(int x, int y, int w, int pct, unsigned rgb);
+int  ui_progress_h(void);
+void ui_progress(int x, int y, int w, int pct, unsigned rgb);
+int  ui_minibar_h(void);
+void ui_minibar(int x, int y, int w, int pct, unsigned rgb);
+int  ui_segbar_h(void);
+void ui_segbar_begin(int x, int y, int w, int total);
+void ui_segbar_item(int amount, unsigned rgb);
+void ui_segbar_end(void);
+
+/* ---- monospace panel - S14 ------------------------------------------------ */
+void ui_mono_panel(int x, int y, int w, int h, int kind);
+int  ui_mono_line_h(int kind);
+void ui_mono_line(int x, int y, int w, const char *s, unsigned rgb, int kind,
+                  int highlight);
+
+/* ---- cards and key/value - S15 -------------------------------------------- */
+void ui_card(int x, int y, int w, int h);
+int  ui_card_head_h(void);
+void ui_card_head(int x, int y, int w, const char *title,
+                  const char *badge, unsigned badge_rgb);
+int  ui_kv_h(void);
+void ui_kv(int x, int y, int w, const char *k, const char *v,
+           unsigned v_rgb, int first);
+
+/* ---- overlays - S16 -------------------------------------------------------
+ * ONE menu widget. The reference's window menu and context menu differ only in
+ * width (224/218), shadow, animation and item gap (16/14) - S20.8 - so they
+ * are collapsed here at the midpoint. */
+void ui_popover(int x, int y, int w, int h);
+int  ui_menu_w(const char *items);
+int  ui_menu_h(const char *items);
+int  ui_menu(int x, int y, const char *items, int sel);
+int  ui_modal_head_h(void);
+void ui_modal(int x, int y, int w, int h, const char *title);
+int  ui_toast_h(void);
+void ui_toast_draw(int x, int y, int w, const char *title, const char *body,
+                   unsigned kind_rgb);
+
+/* ---- chart - S17 ----------------------------------------------------------
+ * The reference's CPU sparkline multiplies by 1.9 into a viewBox that cannot
+ * hold it, so everything above 52.63% renders flat against the top (S20.18).
+ * This does NOT reproduce that: the gain is 1 and the value is clamped. */
+void ui_spark_begin(int x, int y, int w, int h);
+void ui_spark_point(int pct);
+void ui_spark_end(void);
+
+/* ---- indicators and inputs - S18 ------------------------------------------ */
+int  ui_dot_size(void);
+void ui_dot(int x, int y, unsigned rgb, int glow);
+int  ui_badge_w(const char *s);
+int  ui_badge_h(void);
+void ui_badge(int x, int y, const char *s, unsigned rgb);
+int  ui_input_h(void);
+int  ui_input(int x, int y, int w, const char *text, const char *placeholder,
+              int focused);
+int  ui_search_h(void);
+int  ui_search(int x, int y, int w, const char *text, const char *placeholder);
+int  ui_chip_w(const char *s);
+int  ui_chip_h(void);
+int  ui_chip(int x, int y, const char *s, int active);
+
+/* ---- item lists ----------------------------------------------------------- */
+int  ui_items_count(const char *items);
+
+/* ---- ui.c internals, published for uikit.c only ----------------------------
+ * "Did it fire" is decided in exactly ONE place (ui.c's fire()), and the only
+ * way for a second file to hold widgets is for that funnel to be reachable.
+ * These are that funnel and nothing more: no access to the layout cursor, no
+ * way to set L.fired directly, no second focus index. */
+int  ui_mode_get(void);
+int  ui_click_get(void);
+int  ui_ptr_x(void);
+int  ui_ptr_y(void);
+int  ui_hit(int x, int y, int w, int h);
+int  ui_fire(int x, int y, int w, int h);
+void ui_place(int w, int h, int *x, int *y);  /* the layout cursor, one step */
+void ui_ring(int x, int y, int w, int h);
+
 #endif

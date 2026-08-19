@@ -25,7 +25,9 @@
 #include "design.h"
 
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
+void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
+void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a);
 void fb_text_prop(int px, int py, const char *s, unsigned int fg);
 void fb_text_prop(int px, int py, const char *s, unsigned int fg);
 int  fb_text_prop_w(const char *s);
@@ -277,6 +279,75 @@ static void focus_ring(int x, int y, int w, int h)
     fb_fill_px(x1 - 1, y0, 1, y1 - y0, c);
 }
 
+/* ---- what uikit.c is allowed to see ----------------------------------------
+ * The second half of the toolkit (uikit.c: pills, tabs, grids, overlays) is a
+ * separate file because this one is the LAYOUT CURSOR and that one is a
+ * catalogue - but it must not get its own copy of "did it fire". So the funnel
+ * above is published, and nothing else is: no access to L, no way to set
+ * L.fired, no second focus index.
+ *
+ * These are deliberately thin. If a future widget needs more of L than this,
+ * the widget belongs in this file, not behind a wider window into it. */
+int  ui_mode_get(void)  { return L.mode; }
+int  ui_click_get(void) { return L.click; }
+int  ui_ptr_x(void)     { return L.px; }
+int  ui_ptr_y(void)     { return L.py; }
+int  ui_hit(int x, int y, int w, int h)  { return hit(x, y, w, h); }
+void ui_place(int w, int h, int *x, int *y) { place(w, h, x, y); }
+int  ui_fire(int x, int y, int w, int h) { return fire(x, y, w, h); }
+void ui_ring(int x, int y, int w, int h) { focus_ring(x, y, w, h); }
+
+/* ---- INK ON THE ACCENT, COMPUTED --------------------------------------------
+ * reference-widgets.md S21.8: "INK must be computed, not stored. Four widgets
+ * already got this wrong in the reference (S20.1)." The reference's own
+ * derivation is at ds-reference.html 3039-3045: WCAG relative luminance of the
+ * background, contrast-compared against black-ish 0.0034 and against white 1,
+ * and the winner becomes the ink.
+ *
+ * That comparison reduces to a single threshold. With contrast defined as
+ * (L1+.05)/(L2+.05), dark ink wins when
+ *
+ *     (L+.05)/(0.0034+.05)  >  1.05/(L+.05)
+ *     (L+.05)^2             >  1.05 * 0.0534 = 0.05607
+ *      L                    >  0.18679
+ *
+ * which is the standard sRGB "is this a light colour" line. So the whole
+ * decision is one luminance and one compare - no per-widget opinion, and no
+ * way for a widget to write #fff on the lime the way three reference widgets
+ * do.
+ *
+ * NO FLOATING POINT. sRGB de-gamma is a 2.4 power, so it is a 17-entry table
+ * of the curve at every 16th code value, linearly interpolated, in Q16. The
+ * interpolation overestimates on the convex low end (lin(56) reads 2648 where
+ * the true value is 1514) and that error is weighted 0.0722, so it moves the
+ * final luminance by well under a percent - nowhere near the threshold for any
+ * colour a palette would use. Asserted both directions in hosttest/uitest.c. */
+static const unsigned short srgb_lin[17] = {
+        0,   340,   947,  1937,  3360,  5256,  7666, 10618, 14151,
+    18286, 23042, 28448, 34537, 41333, 48853, 57104, 65535
+};
+
+static unsigned lin_q16(unsigned c)
+{
+    unsigned i = (c >> 4) & 15u, f = c & 15u;
+    unsigned a = srgb_lin[i], b = srgb_lin[i + 1];
+    return a + (b - a) * f / 16u;
+}
+
+unsigned ui_luminance_q16(unsigned rgb)
+{
+    unsigned r = lin_q16((rgb >> 16) & 0xFFu);
+    unsigned g = lin_q16((rgb >>  8) & 0xFFu);
+    unsigned b = lin_q16( rgb        & 0xFFu);
+    return (2126u * r + 7152u * g + 722u * b) / 10000u;
+}
+
+unsigned ui_ink_on(unsigned bg)
+{
+    return ui_luminance_q16(bg) > 12242u ? (unsigned)ZD_INK_DARK
+                                         : (unsigned)ZD_INK_LIGHT;
+}
+
 /* A proportional layout cannot ask "length times cell" any more - it has to
  * MEASURE. That is the part of item 4 that touches every widget, and the
  * reason a toolkit needs one function for it rather than a multiply spread
@@ -354,20 +425,27 @@ int ui_toggle(const char *s, int *on)
      * at a rendered frame; every assertion about it passed while it was wrong,
      * because "does it toggle" and "does it look like a toggle" are different
      * questions and only one of them has a test. */
-    int kh = theme.row_h * 2 / 3;             /* shorter than a full row      */
-    int kw = kh * 2;                          /* ...and twice as wide as tall */
+    /* THE GEOMETRY IS THE REFERENCE'S, NOT A RATIO. reference-widgets.md S11:
+     * track 40x22 r14, knob 16 at inset 3, so the knob's right edge lands
+     * flush on the track when on (3 + 16 + 21 == 40) and the travel is
+     * asymmetric by 3px. That asymmetry is in the reference and is kept -
+     * a symmetric version reads as a different control. */
+    int kw = UI_DP(&theme, ZD_SW_W), kh = UI_DP(&theme, ZD_SW_H);
+    int pad = UI_DP(&theme, ZD_SW_INSET), d = UI_DP(&theme, ZD_SW_KNOB);
     int w = kw + theme.gap + text_w(s), h = theme.row_h;
     int x, y;
+    if (kh > h) h = kh;
     place(w, h, &x, &y);
     int fired = fire(x, y, w, h);
     if (fired) *on = !*on;
     if (L.mode == UI_DRAW) {
         int ty = y + (h - kh) / 2;            /* centre the track in the row  */
-        int pad = UI_S1(&theme) / 2;
-        int d = kh - 2 * pad;                 /* the knob                     */
-        fb_rrect(x, ty, kw, kh, kh / 2, *on ? theme.accent : theme.panel_hi);
-        fb_rrect(*on ? x + kw - d - pad : x + pad, ty + pad, d, d, d / 2,
-                 *on ? theme.border : theme.text_dim);
+        fb_rrect(x, ty, kw, kh, UI_DP(&theme, ZD_SW_R),
+                 *on ? theme.accent : theme.border);
+        /* the knob is #fff in the reference and stays white on BOTH states -
+         * it is a physical object, not a state colour */
+        fb_rrect(*on ? x + kw - pad - d : x + pad, ty + pad, d, d, d / 2,
+                 (unsigned)ZD_INK_LIGHT);
         fb_text_prop(x + kw + theme.gap, y + (h - text_h()) / 2, s, theme.text);
         focus_ring(x, y, w, h);
     }
@@ -415,16 +493,22 @@ int ui_slider(int *v, int lo, int hi)
         *v = t;
     }
     if (L.mode == UI_DRAW) {
-        int track = UI_S2(&theme);
+        /* reference-widgets.md S12: track 4px r7 on #22262b (== theme.border),
+         * thumb 15x15 r12 in the accent. The FILLED portion of the track is a
+         * zlOS extension - the reference's <input type=range> has no fill at
+         * all - kept because a bare track gives no readout at a glance. */
+        int track = UI_DP(&theme, ZD_SLIDER_H);
+        if (track < 2) track = 2;
         int ty = y + (h - track) / 2;
-        fb_rrect(x, ty, w, track, track / 2, theme.panel_hi);
+        fb_rrect(x, ty, w, track, UI_DP(&theme, ZD_SLIDER_R), theme.border);
         int pos = (*v - lo) * w / (hi - lo);
-        fb_rrect(x, ty, pos, track, track / 2, theme.accent);
-        int knob = theme.row_h - UI_S1(&theme);
+        fb_rrect(x, ty, pos, track, UI_DP(&theme, ZD_SLIDER_R), theme.accent);
+        int knob = UI_DP(&theme, ZD_SLIDER_THUMB);
         int kx = x + pos - knob / 2;
         if (kx < x) kx = x;
         if (kx > x + w - knob) kx = x + w - knob;
-        fb_rrect(kx, y + UI_S1(&theme) / 2, knob, knob, knob / 2, theme.text);
+        fb_rrect(kx, y + (h - knob) / 2, knob, knob,
+                 UI_DP(&theme, ZD_SLIDER_THUMB_R), theme.accent);
         focus_ring(x, y, w, h);
     }
     return fired;
@@ -483,6 +567,49 @@ static struct {
     int cx0, cy0, cx1, cy1;  /* the scissor to put back                     */
 } S;
 
+/* ---- THE SELECTION TREATMENT, PICKED ONCE ----------------------------------
+ * reference-widgets.md S20.2 and S20.3: the reference paints a selected row
+ * three different ways and never settled on one.
+ *
+ *   A  tint rgba(184,232,56,.15) + inset 2px 0 0 ACC left bar + #eef0f2 text
+ *        Files list, System Monitor process table, Files tree, Settings nav
+ *   B  solid ACC fill + INK text, no bar
+ *        Archive Manager rows, Network interface rows
+ *   C  tint + inset 0 0 0 1px ACC full ring
+ *        Files icon view
+ *
+ * THE TOOLKIT USES A, EVERYWHERE, and the reason is not a coin toss:
+ *
+ *  1. It is the majority - four widgets to B's two and C's one.
+ *  2. It composes. A row under treatment A keeps its per-cell colours (a
+ *     directory stays #c7ce9a, a failed process stays BAD); B replaces the
+ *     whole row with a flat accent and every cell colour underneath it has to
+ *     be recomputed against a light background or become unreadable. With
+ *     53 apps and one shared list row, B means 53 chances to get that wrong.
+ *  3. It survives multi-selection. Two adjacent B rows merge into one lime
+ *     block; two adjacent A rows still show two left bars.
+ *
+ * B is not gone - it is what ui_pill(UI_BTN_PRIMARY) and the segmented
+ * control's active item are, where the element IS the selection and has no
+ * cells inside it. C had one user and buys nothing A does not.
+ *
+ * `zebra` is the odd-row stripe: reference-widgets.md records .014 in Monitor
+ * and .012 in Archive, one thousandth apart, "almost certainly a typo". Both
+ * round to 1% and 1% is what this draws. */
+void ui_row_select(int x, int y, int w, int h, int selected, int zebra)
+{
+    if (L.mode != UI_DRAW) return;
+    int r = UI_DP(&theme, ZD_LISTROW_R);
+    if (selected) {
+        fb_rrect_blend(x, y, w, h, r, theme.accent, ZD_SEL_TINT_A * 255 / 100);
+        int bw = UI_DP(&theme, ZD_SEL_BAR_W);
+        if (bw < 1) bw = 1;
+        fb_fill_px(x, y, bw, h, theme.accent);
+    } else if (zebra) {
+        fb_fill_blend(x, y, w, h, (unsigned)ZD_INK_LIGHT, ZD_ZEBRA_A * 255 / 100);
+    }
+}
+
 /* A selectable row: full width, one row high, highlighted when the pointer is
  * over it. `selected` marks the current one - passed in rather than stored,
  * because the app already knows which of its things is selected and a second
@@ -504,10 +631,16 @@ int ui_list_row(const char *s, int selected)
     int over = hit(x, y, w, h);
     int fired = fire(x, y, w, h);
     if (L.mode == UI_DRAW) {
-        if (selected)  fb_rrect(x, y, w, h, UI_S1(&theme), theme.accent);
-        else if (over) fb_rrect(x, y, w, h, UI_S1(&theme), theme.panel_hi);
+        ui_row_select(x, y, w, h, selected, 0);
+        /* hover is NEW DESIGN, not a port. reference-widgets.md S21.1: five
+         * hover rules exist in the whole 4338-line reference and none of them
+         * is on a list row. Kept because zlOS has a pointer and a row that
+         * does not acknowledge it reads as dead - but kept SUBTLE, one surface
+         * step, and never where it could be confused with selection. */
+        if (!selected && over)
+            fb_rrect(x, y, w, h, UI_DP(&theme, ZD_LISTROW_R), theme.panel_hi);
         fb_text_prop(x + UI_S2(&theme), y + (h - text_h()) / 2, s,
-                     selected ? theme.border : theme.text);
+                     selected ? theme.text_hi : theme.text);
         focus_ring(x, y, w, h);
     }
     return fired;

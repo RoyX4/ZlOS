@@ -42,8 +42,12 @@
  * reached by ui_theme_init/ui_theme, they only have to resolve. ---- */
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
 { (void)x;(void)y;(void)w;(void)h;(void)rgb; }
+void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a)
+{ (void)x;(void)y;(void)w;(void)h;(void)rgb;(void)a; }
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb)
 { (void)x;(void)y;(void)w;(void)h;(void)r;(void)rgb; }
+void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a)
+{ (void)x;(void)y;(void)w;(void)h;(void)r;(void)rgb;(void)a; }
 void fb_text_prop(int px, int py, const char *s, unsigned int fg)
 { (void)px;(void)py;(void)s;(void)fg; }
 int  fb_text_prop_w(const char *s) { (void)s; return 0; }
@@ -170,6 +174,7 @@ static const struct token TOKENS[] = {
     { "ZD_ACCENT_LINK", ZD_ACCENT_LINK }, { "ZD_ACCENT_PALE", ZD_ACCENT_PALE },
     { "ZD_OK",          ZD_OK          }, { "ZD_BAD",         ZD_BAD         },
     { "ZD_WARN",        ZD_WARN        }, { "ZD_BAD_SOFT",    ZD_BAD_SOFT    },
+    { "ZD_INK_DARK",    ZD_INK_DARK    }, { "ZD_INK_LIGHT",   ZD_INK_LIGHT   },
     { "ZD_TITLE_INK_OFF", ZD_TITLE_INK_OFF },
     { "ZD_CLOSE_HOVER_INK", ZD_CLOSE_HOVER_INK },
     { "ZD_ACCENT_ALT_1", ZD_ACCENT_ALT_1 }, { "ZD_ACCENT_ALT_2", ZD_ACCENT_ALT_2 },

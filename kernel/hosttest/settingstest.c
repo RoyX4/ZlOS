@@ -85,6 +85,8 @@ unsigned int fb_pxw(void){ return 1280; }
 unsigned int fb_pxh(void){ return 800; }
 void fb_fill_px(int x,int y,int w,int h,unsigned c){(void)x;(void)y;(void)w;(void)h;(void)c;}
 void fb_rrect(int x,int y,int w,int h,int r,unsigned c){(void)x;(void)y;(void)w;(void)h;(void)r;(void)c;}
+void fb_fill_blend(int x,int y,int w,int h,unsigned c,int a){(void)x;(void)y;(void)w;(void)h;(void)c;(void)a;}
+void fb_rrect_blend(int x,int y,int w,int h,int r,unsigned c,int a){(void)x;(void)y;(void)w;(void)h;(void)r;(void)c;(void)a;}
 void fb_text_prop(int x,int y,const char*s,unsigned c){(void)x;(void)y;(void)s;(void)c;}
 int  fb_text_prop_w(const char*s){ int n=0; while(s[n])n++; return n*8; }
 int  fb_text_prop_h(void){ return 16; }

@@ -404,3 +404,13 @@ echo "built ./gpu_planes    (run: sudo ./gpu_planes)"
 # while i915 is driving. Read-only, 77 without root or without an Intel BAR2.
 gcc -O2 -g -Wall -Wextra -o gpu_aperture gpu_aperture.c
 echo "built ./gpu_aperture  (run: sudo ./gpu_aperture)"
+
+# THE SHARED WIDGET TOOLKIT, against a recording canvas. ui.c and uikit.c are
+# linked for real and every fb_* call they make is captured, so the assertions
+# are about the DRAW LIST rather than about pixels. That is the only place the
+# bugs this file exists for are visible as numbers: an active segment one slot
+# off its label, a grid cell drawn at the right x for the wrong track, an
+# accent button whose ink is white on lime. All three look deliberate in a
+# screenshot. No -w: it builds clean under -Wall -Wextra.
+gcc -O2 -g -Wall -Wextra -o uitest uitest.c ../ui.c ../uikit.c
+echo "built ./uitest        (run: ./uitest)"

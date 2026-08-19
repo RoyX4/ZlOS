@@ -55,3 +55,4 @@ hosttest/palette
 hosttest/termwrap
 hosttest/walltest
 hosttest/wmtest_feel
+hosttest/uitest
