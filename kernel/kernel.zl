@@ -3786,7 +3786,7 @@ fn open_app(cmd, arg) {
         if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
             wm_setfocus(edit_win)  wm_raise(edit_win)  return 1
         }}
-        edit_win = wm_open(APP_EDIT, "zlEDIT", 480 * oa_u, 230 * oa_u, 160 * oa_u, 160 * oa_u)
+        edit_win = wm_open(APP_EDIT, "Text Editor", 322 * oa_u, 140 * oa_u, 522 * oa_u, 360 * oa_u)
         if edit_win < 0 { return 0 }
         # THE ARGUMENT WAS BEING DROPPED. term.c parses a trailing number into
         # pending_arg, so `edit 7` really does reach here as arg 7 - and
@@ -3838,7 +3838,7 @@ fn open_disk_editor(slot) {
         return 0
     }
     ode_u = ui()
-    edit_win = wm_open(APP_EDIT, "zlEDIT - disk", 420 * ode_u, 150 * ode_u, 560 * ode_u, 390 * ode_u)
+    edit_win = wm_open(APP_EDIT, "Text Editor", 322 * ode_u, 140 * ode_u, 522 * ode_u, 360 * ode_u)
     if edit_win < 0 { return 0 }
     wm_setfocus(edit_win)
     wm_report(edit_win)
@@ -4186,7 +4186,7 @@ fn task_label(app) {
     if app == APP_BROWSER { return "Browser" }
     if app == APP_SETTINGS { return "Settings" }
     if app == APP_FILES   { return "Files" }
-    if app == APP_EDIT    { return "Editor" }
+    if app == APP_EDIT    { return "Text Editor" }
     # Every app-suite window falls through to the same registry the catalog
     # reads, so a new app's taskbar chip needs no entry here at all.
     if app >= APP_CATALOG { return reg_name(app) }
