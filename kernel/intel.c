@@ -43,6 +43,13 @@ typedef unsigned long long uptr;
 typedef unsigned int       uptr;
 #endif
 
+/* The ONLY header this file includes, and it earns it: gpu.h carries the one
+ * declaration of the MMIO base that both this file and gpuring.c must agree
+ * on. Everything else intel.c needs it declares itself, which is the style
+ * here - but a prototype that differs between two .c files is precisely the
+ * defect this include exists to make impossible. */
+#include "gpu.h"
+
 u32 idt_ticks(void);
 
 /* Real timing, from cpu.c's PIT-calibrated TSC. idt_ticks() resolves 10 ms and
@@ -432,10 +439,27 @@ int intel_find(void)
 int intel_present(void)   { return gpu_idx >= 0 && mmio != 0; }
 int intel_devid(void)     { return gpu_devid; }
 int intel_supported(void) { return intel_present() && is_gen9(gpu_devid); }
+/* THESE TWO TRUNCATE, DELIBERATELY, AND ARE FOR REPORTING ONLY.
+ *
+ * freestanding/runtime_kernel.c binds both as zl builtins and zl numbers are
+ * doubles, so they hand back a u32 on purpose. That is fine for printing an
+ * address and wrong for reaching one: above 4 GiB the low dword is a different,
+ * unrelated physical address - the exact wording used at the refusal in
+ * intel_find() above. Anything that DEREFERENCES the base must use
+ * intel_mmio_ptr() / intel_aperture_ptr() below, which gpu.h declares so the
+ * two sides cannot disagree again. */
 u32 intel_mmio(void)      { return (u32)mmio; }
 u32 intel_mmio_size(void) { return mmio_size; }
 u32 intel_aperture(void)  { return (u32)aperture; }
 u32 intel_aper_size(void) { return aper_size; }
+
+/* The full-width pair. `uptr` here and `gpu_uptr` in gpu.h are the same width
+ * by construction on every target this builds for; the assert says so out loud
+ * rather than leaving it to be discovered. */
+_Static_assert(sizeof(uptr) == sizeof(gpu_uptr),
+               "intel.c's uptr and gpu.h's gpu_uptr have drifted apart");
+gpu_uptr intel_mmio_ptr(void)     { return (gpu_uptr)mmio; }
+gpu_uptr intel_aperture_ptr(void) { return (gpu_uptr)aperture; }
 
 /* ---- stolen memory: the RAM the firmware reserved for graphics ----------
  * GMS is bits 15:8 of MGGC0. On Gen9 the size is 32 MiB per step below 0xF0,

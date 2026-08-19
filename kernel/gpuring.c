@@ -50,10 +50,13 @@ typedef unsigned long long gr_uptr;
 typedef unsigned int       gr_uptr;
 #endif
 
-/* from intel.c - the BAR0 mapping and the GGTT it already knows how to program */
+/* from intel.c - the BAR0 mapping and the GGTT it already knows how to program.
+ * intel_mmio_ptr() is NOT declared here on purpose: it lives in gpu.h, which
+ * this file already includes, so this file and intel.c cannot disagree about
+ * its width. A private `gr_u32 intel_mmio(void);` here is what truncated every
+ * ring register on a >4 GiB BAR. */
 int  intel_present(void);
 int  intel_supported(void);
-gr_u32 intel_mmio(void);
 gr_u32 intel_ggtt_size(void);
 int  intel_ggtt_map(gr_u32 gfx_page, gr_u32 phys_addr);
 int  intel_ggtt_map_range(gr_u32 gfx_page, gr_u32 phys_addr, int pages);
@@ -244,15 +247,18 @@ static gr_u32 ring_tail = 0;
 void gpu_ring_arm(int on) { ring_armed = on ? 1 : 0; }
 int  gpu_ring_is_live(void) { return ring_live; }
 
+/* intel_mmio_ptr(), never intel_mmio(). The latter returns u32 for the zl
+ * builtin and truncates a >4 GiB BAR; casting its result back to a pointer
+ * width here would look correct and reach a different physical address. */
 static gr_u32 mmio_r(gr_u32 off)
 {
-    return *(volatile gr_u32 *)((gr_uptr)intel_mmio() + (gr_uptr)off);
+    return *(volatile gr_u32 *)(intel_mmio_ptr() + (gpu_uptr)off);
 }
 static void mmio_w(gr_u32 off, gr_u32 val)
 {
     if (!ring_armed) return;                 /* the gate, checked at the ONE
                                               * place every write goes through */
-    *(volatile gr_u32 *)((gr_uptr)intel_mmio() + (gr_uptr)off) = val;
+    *(volatile gr_u32 *)(intel_mmio_ptr() + (gpu_uptr)off) = val;
 }
 
 /* Release the well. Holding forcewake permanently keeps the GT awake and burns
