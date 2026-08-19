@@ -80,6 +80,12 @@ settings.c
 # silicon. See kernel/docs/gpu-blitter.md.
 gpu.c
 
+# The ring those commands are submitted through. Its ARITHMETIC is tested by
+# gputest; its MMIO has never executed on hardware and is gated behind
+# gpu_ring_arm(), which defaults to off - the same shape as intel.c's lt_armed
+# and for the same reason.
+gpuring.c
+
 # desktop/browser
 virtio_net.c
 net.c

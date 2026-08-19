@@ -22,6 +22,19 @@
 
 #include "../gpu.c"
 
+/* The ring arithmetic. gpuring.c's MMIO half needs intel.c, and deliberately
+ * does NOT get it: these stubs report no GPU, so gpu_ring_init() refuses and
+ * not one register write is reachable from this harness. That is the honest
+ * arrangement - the arithmetic below is tested, the MMIO is not, and pretending
+ * otherwise by stubbing a fake register file would be a test that proves the
+ * code runs against a model of the hardware rather than the hardware. */
+static int    intel_present(void)   { return 0; }
+static int    intel_supported(void) { return 0; }
+static unsigned intel_mmio(void)    { return 0; }
+__attribute__((unused)) static unsigned intel_ggtt_size(void) { return 0; }
+static int    intel_ggtt_map(unsigned p, unsigned a) { (void)p; (void)a; return 0; }
+#include "../gpuring.c"
+
 static int failures = 0;
 static int checks = 0;
 
@@ -220,6 +233,73 @@ static void test_padding(void)
     eq32(buf[15], 0x05000000u, "pad is a second END, not a NOOP");
 }
 
+/* ---- 5. the ring bookkeeping ----------------------------------------------
+ *
+ * gpuring.c's MMIO has never run on hardware and cannot be tested here. Its
+ * ARITHMETIC can, and that is the half which fails quietly: an off-by-one in
+ * the space calculation overwrites commands the engine has not read yet, and
+ * the symptom is a GPU executing garbage rather than an error.
+ */
+#define RING 64u          /* a tiny ring, so the wrap is reached in a few writes */
+
+static void test_ring_space(void)
+{
+    /* Empty ring: everything free except the reserved qword that keeps
+     * "full" and "empty" distinguishable. */
+    ok(gpu_ring_space(0, 0, RING) == RING - 8u, "empty ring: size minus the reserved qword");
+
+    /* Engine at 0, we have written 16 bytes. */
+    ok(gpu_ring_space(0, 16, RING) == RING - 16u - 8u, "16 bytes written");
+
+    /* Wrapped: tail behind head. */
+    ok(gpu_ring_space(32, 16, RING) == 32u - 16u - 8u, "tail behind head (wrapped)");
+
+    /* Nearly full must NOT report unlimited. This is the unsigned-underflow
+     * trap: `free - 8` with free < 8 wraps to about four billion, and every
+     * subsequent submission then believes it fits. */
+    for (gpu_u32 t = 0; t < RING; t += 4) {
+        gpu_u32 sp = gpu_ring_space((t + 4u) % RING, t, RING);
+        checks++;
+        if (sp > RING) { printf("  FAIL  space %u > ring %u at tail %u\n", sp, RING, t); failures++; }
+    }
+    ok(gpu_ring_space(8, 4, RING) == 0, "a gap smaller than the reserved qword reports 0, not 4 billion");
+    ok(gpu_ring_space(0, 0, 0) == 0, "zero-sized ring reports no space");
+}
+
+static void test_ring_write_wraps(void)
+{
+    gpu_u32 ring[RING / 4];
+    for (unsigned i = 0; i < RING / 4; i++) ring[i] = 0xEEEEEEEEu;
+
+    /* Start near the end so the copy has to wrap. */
+    gpu_u32 dw[6] = { 1, 2, 3, 4, 5, 6 };
+    gpu_u32 tail = gpu_ring_write(ring, RING, RING - 8u, dw, 6);
+
+    ok(tail == 16u, "wrapped write leaves the tail past the start");
+    eq32(ring[(RING - 8u) / 4u], 1u, "first dword at the old tail");
+    eq32(ring[(RING - 4u) / 4u], 2u, "second dword in the last slot");
+    eq32(ring[0], 3u, "third dword wrapped to the start");
+    eq32(ring[3], 6u, "sixth dword in order after the wrap");
+}
+
+static void test_ring_pad(void)
+{
+    gpu_u32 ring[RING / 4];
+    for (unsigned i = 0; i < RING / 4; i++) ring[i] = 0xEEEEEEEEu;
+
+    /* An odd dword count leaves the tail 4-byte aligned; the hardware needs 8. */
+    gpu_u32 t = gpu_ring_pad(ring, RING, 4u);
+    ok(t == 8u, "pad advances a 4-aligned tail to 8");
+    eq32(ring[1], 0u, "the pad is MI_NOOP (0), not left as stale data");
+
+    ok(gpu_ring_pad(ring, RING, 8u) == 8u, "an already-aligned tail is not moved");
+
+    /* Padding at the very end must wrap rather than write off the end. */
+    gpu_u32 w = gpu_ring_pad(ring, RING, RING - 4u);
+    ok(w == 0u, "a pad at the last dword wraps to 0");
+    eq32(ring[(RING - 4u) / 4u], 0u, "and wrote its NOOP in the last slot");
+}
+
 int main(void)
 {
     printf("gputest: gpu.c emits the stream the GPU accepted\n\n");
@@ -230,6 +310,9 @@ int main(void)
     test_refusals();
     test_overflow();
     test_padding();
+    test_ring_space();
+    test_ring_write_wraps();
+    test_ring_pad();
 
     printf("\n  %d checks, %d failures\n", checks, failures);
     if (failures == 0)

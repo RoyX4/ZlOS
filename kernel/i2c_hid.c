@@ -266,7 +266,7 @@ _Static_assert(HID_BUF == (unsigned int)HI_HID,
                "i2c_hid: report buffer is not at the base of its region");
 _Static_assert(HID_BUF + HID_BUF_MAX <= HID_DESC_BUF,
                "i2c_hid: report buffer overruns the descriptor buffer");
-_Static_assert((unsigned long)HID_DESC_BUF + HID_DESC_LEN <= HI_BLUR,
+_Static_assert((unsigned long)HID_DESC_BUF + HID_DESC_LEN <= HI_GPU,
                "i2c_hid: buffers escape their region into the blur arena");
 
 static int read_hid_descriptor(int addr, int reg)

@@ -28,7 +28,8 @@
  *   base        MiB   owner         what lives there              span
  *   0x08000000  128   fb.c          back, the back buffer         48 MiB
  *   0x0B000000  176   sched.c       task stacks + demo counters    8 MiB
- *   0x0B800000  184   i2c_hid.c     HID report + descriptor bufs   8 MiB
+ *   0x0B800000  184   i2c_hid.c     HID report + descriptor bufs   4 MiB
+ *   0x0BC00000  188   gpuring.c     the GPU command ring           4 MiB
  *   0x0C000000  192   fb.c          the cached-blur arena         16 MiB
  *   0x0D000000  208   nvme.c        admin + I/O queues            16 MiB
  *   0x0E000000  224   xhci.c        the USB DMA arena             16 MiB
@@ -72,6 +73,7 @@
 #define AP_STACK_SPAN (17UL * AP_STACK_SIZE)  /* cpu_apic_ids[] holds 16    */
 #define HI_SCHED  0x0B000000UL   /* sched.c      - stacks, counters         */
 #define HI_HID    0x0B800000UL   /* i2c_hid.c    - HID over I2C buffers     */
+#define HI_GPU    0x0BC00000UL   /* gpuring.c    - the GPU command ring      */
 #define HI_BLUR   0x0C000000UL   /* fb.c         - the cached-blur arena    */
 #define HI_NVME   0x0D000000UL   /* nvme.c       - admin + I/O queues       */
 #define HI_XHCI   0x0E000000UL   /* xhci.c       - the USB DMA arena        */
@@ -89,7 +91,8 @@
  * making sense. A comment claiming the order would not have. */
 _Static_assert(HI_BACK  < HI_SCHED, "high-RAM map out of order: back >= sched");
 _Static_assert(HI_SCHED < HI_HID,   "high-RAM map out of order: sched >= hid");
-_Static_assert(HI_HID   < HI_BLUR,  "high-RAM map out of order: hid >= blur");
+_Static_assert(HI_HID   < HI_GPU,   "high-RAM map out of order: hid >= gpu");
+_Static_assert(HI_GPU   < HI_BLUR,  "high-RAM map out of order: gpu >= blur");
 _Static_assert(HI_BLUR  < HI_NVME,  "high-RAM map out of order: blur >= nvme");
 _Static_assert(HI_NVME  < HI_XHCI,  "high-RAM map out of order: nvme >= xhci");
 _Static_assert(HI_XHCI  < HI_VGPU,  "high-RAM map out of order: xhci >= vgpu");
