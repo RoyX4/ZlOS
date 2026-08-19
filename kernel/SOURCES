@@ -71,6 +71,7 @@ rtc.c
 arena.c
 heap.c
 paging.c
+usermode.c
 exec.c
 
 # desktop/feel-and-control

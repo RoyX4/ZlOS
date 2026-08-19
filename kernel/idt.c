@@ -67,6 +67,25 @@ struct idt_ptr   { u16 limit; u32 base; } __attribute__((packed));
 static struct idt_entry idt[256];
 static struct idt_ptr   idtp;
 
+/* Same as set_gate but with DPL 3, for the ONE vector ring 3 is allowed to
+ * invoke. The two-bit difference (0x8E -> 0xEE) is the whole reason a user
+ * program can make a syscall and cannot fake a page fault: the CPU refuses an
+ * `int n` from ring 3 when gate n's DPL is lower than the caller's CPL, so
+ * every other vector in this table is unreachable from user mode.
+ *
+ * 32-bit only. usermode.c explains why ring 3 is not on the 64-bit builds. */
+#ifndef ZL_64
+static void set_gate_user(int n, void *handler)
+{
+    u32 a = (u32)handler;
+    idt[n].lo    = a & 0xFFFF;
+    idt[n].hi    = (a >> 16) & 0xFFFF;
+    idt[n].sel   = 0x08;
+    idt[n].zero  = 0;
+    idt[n].flags = 0xEE;    /* present, DPL 3, 32-bit interrupt gate */
+}
+#endif
+
 static void set_gate(int n, void *handler)
 {
 #ifdef ZL_64
@@ -324,6 +343,13 @@ static void fault_isr(struct interrupt_frame *f)
     for (;;) __asm__ volatile("hlt");
 }
 
+#ifndef ZL_64
+/* usermode.c, in assembly. Declared as a function taking no arguments purely so
+ * its address can be taken - it is never called from C and never returns
+ * normally; it iret's, or it abandons ring 3 entirely on SYS_EXIT. */
+void syscall_isr(void);
+#endif
+
 /* ---- PIC: move the 16 IRQs off the CPU exception vectors ------------- */
 static void pic_remap(void)
 {
@@ -457,6 +483,15 @@ void idt_init(void)
 {
     for (int i = 0;  i < 32;  i++) set_gate(i, fault_isr);    /* CPU exceptions: halt */
     for (int i = 32; i < 256; i++) set_gate(i, ignore_isr);   /* stray IRQs: ack     */
+#ifndef ZL_64
+    /* THE SYSCALL DOOR. Installed before the IRQs so the ordering is visible:
+     * this is the only DPL-3 entry in the whole table, and it is the only way
+     * back into the kernel that ring 3 has. syscall_isr is hand-written
+     * assembly in usermode.c - it has to save the user's registers before any
+     * compiler prologue could run. */
+    set_gate_user(0x80, syscall_isr);
+#endif
+
     set_gate(0x20, timer_isr);      /* IRQ0  timer            */
     set_gate(0x21, keyboard_isr);   /* IRQ1  keyboard         */
     set_gate(0x2C, mouse_isr);      /* IRQ12 mouse (on slave) */

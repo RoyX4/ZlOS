@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-20 — feat(mem): kernel virtual memory - one window, and a DMA seam at all 51 sites (07c079f)
+
+`claude/recursing-ellis-82c8e8` · 21 files changed, 1450 insertions(+), 90 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>21 file(s)</summary>
+
+- `.gitignore`
+- `docs/JOURNAL.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/.gitignore`
+- `kernel/SOURCES`
+- `kernel/check-dma.sh`
+- `kernel/dma.h`
+- `kernel/docs/dma-sites.md`
+- `kernel/docs/memory-model.md`
+- `kernel/golden.txt`
+- `kernel/heap.c`
+- `kernel/hosttest/build.sh`
+- _…and 9 more_
+
+</details>
+
 ## 2026-08-20 — feat(mem): a real allocator - free, reuse, coalesce, bounded worst case (6f28a22)
 
 `claude/recursing-ellis-82c8e8` · 10 files changed, 1440 insertions(+), 14 deletions(-)

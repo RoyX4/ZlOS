@@ -380,9 +380,53 @@ and both break on the identical commit. `dma_kaddr()` is that inverse.
 ## Stage 5 in detail: what ring 3 does and does not buy
 
 `usermode.c` runs a program at ring 3 that talks to the kernel only through
-`int 0x80`, and comes back. `verify.sh`'s golden transcript pins the result, so
-the bytes in the boot log were produced by syscalls made from the far side of
-the privilege boundary and can be produced no other way.
+`int 0x80`, and comes back. Measured, and pinned by `verify.sh`'s golden
+transcript:
+
+```
+  ring 3: u31 <- from ring 3 via int 0x80, 5 syscalls, returned to ring 0
+```
+
+The `u` and the `3` were written by `SYS_WRITE` calls made **from ring 3**; the
+`1` is what `SYS_GETPID` returned to ring 3 and ring 3 then handed back. Those
+bytes can reach the serial port no other way.
+
+### Two bugs it took to get there, both worth keeping
+
+**1. The syscall ABI, caught by a branch nobody expected to need.** The payload
+originally declared `eax` as an input only:
+
+```c
+__asm__ volatile("int $0x80" :: "a"(SYS_WRITE), "b"('u'));
+```
+
+The handler returns its value in `eax` — that is the ABI — so after the first
+call `eax` held 0, and gcc, told only that `eax` was an input it had already set
+up, did not reload it. The second syscall arrived as call number 0. The boot log
+said so exactly:
+
+```
+  ring 3: u  syscall: ring 3 asked for unknown call 0
+```
+
+Had the unknown-call branch been silent — the tempting choice for an unused
+number — the log would have read `u1` and looked like a dropped character rather
+than a broken calling convention.
+
+**2. Interrupts stayed off, and this one had no visible symptom at all.** The
+syscall vector is an *interrupt* gate, which clears IF on entry — correct, since
+a trap gate would let a timer tick re-enter the handler. But `SYS_EXIT` does not
+`iret`; it restores ESP and jumps, because it is abandoning ring 3 rather than
+returning from an interrupt, and **a jump restores no EFLAGS**. So interrupts
+were off for the whole rest of the boot. The kernel came up, printed `ready.`,
+and then ignored every keystroke and every timer tick forever.
+
+The boot log looked completely healthy up to the prompt. The only evidence was
+three boot gates reporting *"kernel never halted - it hung"*, and a bisect
+showing that even `.q` — press q, halt — hung. `user_enter()` now saves EFLAGS
+before the transition and restores them after. `sti` alone would have been
+wrong: it would enable interrupts for a caller that had deliberately disabled
+them.
 
 **Three things must all be true or ring 3 triple-faults** (a silent reboot loop
 with no message):

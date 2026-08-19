@@ -4118,6 +4118,12 @@ heap_up()
 # there is nothing to report until it has. Printing "no window" before the only
 # caller has run would be true and useless.
 vmm_up()
+# RING 3. Runs a tiny program at ring 3 that talks to the kernel only through
+# int 0x80, then comes back. The "u3" in the line below is written by syscalls
+# made from the far side of the privilege boundary - there is no other way for
+# those bytes to reach the serial port - so this line failing to appear is a
+# real regression rather than a cosmetic one, and golden.txt pins it.
+user_up()
 ok_line("zl runtime, kernel subset")
 # THIS LINE USED TO SAY "no heap", and the comment under it said the line would
 # stop being honest "the day the interpreter boxes lists and strings, and that
@@ -4127,7 +4133,7 @@ ok_line("zl runtime, kernel subset")
 # free with thousands of free blocks outstanding (hosttest/heaptest.c).
 #
 # The filesystem and the scheduler claims are unchanged and still true.
-info_line("no filesystem, no scheduler")
+info_line("no filesystem, no scheduler, no per-process address space")
 
 print("")
 color(C_GREEN)  print("  ready.")

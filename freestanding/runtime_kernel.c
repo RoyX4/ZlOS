@@ -143,6 +143,10 @@ extern int xhci_ptr_ep(void) ZL_WEAK;
  * NOT alternatives - the arena hands memory to zl programs and reclaims it
  * wholesale on reset, the heap is for memory the kernel keeps and frees one
  * object at a time. Both exist on purpose. */
+extern void user_selftest(void);
+extern int  user_has_exited(void);
+extern unsigned int user_call_count(void);
+
 extern void vmm_report(void);
 extern int  vmm_active(void);
 extern unsigned long long vmm_window_virt(void);
@@ -1587,6 +1591,12 @@ Value zl_calln(const char *name, int n, ...)
     /* vmm_up prints one line with ADDRESSES in it - "64 MiB mapped: virtual
      * 4096 MiB -> physical 256 MiB" is a fact somebody can check against
      * memmap.h; "virtual memory is on" would not be. */
+    /* ring 3. user_up runs the self-test, which prints from BOTH sides of the
+     * privilege boundary - the "u3" in the boot log is produced by syscalls
+     * made from ring 3 and can be produced no other way. */
+    if (streq(name, "user_up"))       { user_selftest(); return zl_num((double)user_call_count()); }
+    if (streq(name, "user_calls"))    return zl_num((double)user_call_count());
+
     if (streq(name, "vmm_up"))        { vmm_report(); return zl_num((double)vmm_active()); }
     if (streq(name, "vmm_on"))        return zl_num((double)vmm_active());
 
