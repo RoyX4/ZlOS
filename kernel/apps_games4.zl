@@ -9,21 +9,361 @@
 #
 # THIS SLICE OWNS IDS 61..69 AND NO OTHERS.
 #
-# Fill in the six functions below. Each is a plain if-chain on `id`; returning
-# the fallback value at the end means "not mine" and lets the next slice answer.
-# Draw with the ui_*/uikit widgets - see kernel/ui.h and
-# kernel/docs/reference-widgets.md. Do not draw a colour literal: design.h is
-# the only place one may appear, and hosttest/palette.c enforces it.
+# EIGHT STATE MACHINES, NOT EIGHT RESKINS. Every one of these is written from
+# its own rules: Reversi's eight-ray legal-move test and its flip, Sokoban's
+# push rule (and the two things that rule is always got wrong - see sk_move),
+# blackjack's soft-ace demotion, Frogger's "a log carries you and the river
+# does not". Where two games look similar on screen they share NOTHING but
+# apps_common.zl's grid arithmetic.
+#
+# WHAT THE REFERENCE ACTUALLY GIVES US. ds-reference.html's game window is a
+# canvas over a 30px status bar carrying a PID chip and a keys hint
+# (lines 569-581), and the canvas itself is EMPTY: the page references
+# ./support.js and seven sibling modules that were never delivered, so there is
+# no gameplay art in the artifact to copy. The shell below is transliterated
+# from those lines; the games inside it are invented, drawn in the reference's
+# own palette.
 
 games4_LO = 61
 games4_HI = 69
 fn games4_has(id) { if id < games4_LO { return 0 }  if id > games4_HI { return 0 }  return 1 }
 
-fn games4_name(id) { return "" }
-fn games4_cat(id) { return 0 }
-fn games4_w(id) { return 480 }
-fn games4_h(id) { return 340 }
-fn games4_icon(id) { return 0 }
-fn games4_draw(id, ax, ay, aw, ah) { return 0 }
-fn games4_event(id, win, ety, ecode, ex, ey) { return 0 }
-fn games4_tick(id, win) { return 0 }
+G4_FIFTEEN = 61
+G4_REVERSI = 62
+G4_SIMON   = 63
+G4_SOKOBAN = 64
+G4_FLAPPY  = 65
+G4_MISSILE = 66
+G4_BLACKJK = 67
+G4_FROGGER = 68
+# 69 is deliberately unused - the brief reserves it as a spare.
+
+# ==============================================================================
+# THIS SLICE'S FIXED BUFFERS, AND WHY THEY ARE DECLARED HERE
+#
+# kernel.zl carries the app suite's buffer block (TT_BOARD .. MAZE_STACK) and
+# check-memmap.sh's duplicate sweep reads kernel.zl, so that is where a new
+# region would normally go. It cannot go there for these three: this file is
+# the only file this job may commit, and a constant added to kernel.zl but not
+# committed would leave apps_games4.zl referencing a name that does not exist
+# in anyone else's tree. A slice that owns its own state owns its own
+# addresses.
+#
+# THREE of the eight games need one, and no more:
+#   - 15 Puzzle, Reversi and Simon reuse FIFTEEN_BOARD / RV_BOARD / SIMON_SEQ,
+#     which kernel.zl already declares and NOTHING has ever read or written
+#     (grep: they appear in kernel.zl and nowhere else). Reusing them is the
+#     ladder's second rung, and it keeps three pages out of the map.
+#   - Flappy and Frogger hold their whole world in scalars, so they get no
+#     buffer at all.
+#
+# THE BASE IS 0x02280000, NOT 0x02215000, on purpose. Another agent is
+# allocating regions in kernel.zl at the same time as this one, and the
+# obvious next address up there is exactly what they will take. Leaving a
+# 428 KiB moat means the two allocations cannot meet even if both grow. The
+# ceiling is virtio_net.c's NET_FLOOR at 0x03000000, 13.5 MiB above the
+# highest byte used here.
+SK_BOARD = 0x02280000   # Sokoban:  14 x 9 = 126 crate flags
+SK_UNDO  = 0x02281000   # Sokoban:  512 undo records, one byte each
+MC_BUF   = 0x02282000   # Missile Command: incoming, interceptors, blasts
+BJ_BUF   = 0x02283000   # Blackjack: the 52-card shoe and the two hands
+
+# ==============================================================================
+# The shell: the reference's game window, which is a canvas over a 30px bar.
+# Every game below draws into g4_ph(ah) pixels of height and lets g4_bar draw
+# the rest, so the chrome is identical across all eight and exists in ONE
+# place - the same argument tray_x() makes in kernel.zl.
+# ==============================================================================
+G4_BAR = 30                         # ds-reference.html:576, height:30px
+
+fn g4_ph(ah) { return ah - G4_BAR * ui() }
+
+# The canvas ground. ds-reference.html:571 sets it to #0b0d10, which is not a
+# design.h token; TH_CHROME_LINE is ZD_SURF_2 #0b0d0f, one point of blue away
+# and already in the palette. Naming the role instead of inventing a 21st
+# colour is the whole reason ui_color() exists.
+fn g4_canvas(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, g4_ph(ah), theme(TH_CHROME_LINE))
+    return 0
+}
+
+# The status bar: background #14171a (ZD_SURF_4 = TH_CHROME), a 1px top border
+# of #0b0d0f (ZD_SURF_2 = TH_CHROME_LINE), a PID chip and a keys hint.
+fn g4_bar(ax, ay, aw, ah, id) {
+    u = ui()
+    by = ay + g4_ph(ah)
+    fill_rgb(ax, by, aw, G4_BAR * u, theme(TH_CHROME))
+    fill_rgb(ax, by, aw, 1, theme(TH_CHROME_LINE))
+    chw = 30 * u
+    rrect(ax + 11 * u, by + 8 * u, chw, 15 * u, 4 * u, theme(TH_BORDER))
+    label_num(ax + 19 * u, by + 7 * u, id, theme(TH_ACCENT), T_CAPTION, W_BOLD)
+    label(ax + 11 * u + chw + 8 * u, by + 7 * u, g4_keys(id), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    return 0
+}
+
+fn g4_keys(id) {
+    if id == G4_FIFTEEN { return "click a tile / arrows slide  -  r reshuffles" }
+    if id == G4_REVERSI { return "click a lime dot to place  -  r new game" }
+    if id == G4_SIMON   { return "click a pad or 1-4  -  r restarts" }
+    if id == G4_SOKOBAN { return "arrows push  -  u undo  -  r reset level" }
+    if id == G4_FLAPPY  { return "space / click flaps  -  r restarts" }
+    if id == G4_MISSILE { return "click to intercept  -  r restarts" }
+    if id == G4_BLACKJK { return "h hit  -  s stand  -  d deal" }
+    if id == G4_FROGGER { return "arrows hop  -  r restarts" }
+    return ""
+}
+
+# ------------------------------------------------------------------------------
+# The game palette. EVERY value here is a token from kernel/design.h, and
+# hosttest/palette.c has already proved each of those occurs literally in
+# docs/design/ds-reference.html - so these are the reference's own colours, not
+# colours picked by eye. They are restated as rgb() triples because design.h is
+# C and zl cannot include it, and they are NOT theme roles because a role means
+# "window chrome" and a crate is not chrome.
+#
+# ui_color() carries 20 roles and none of them is "a second saturated hue";
+# ZD_ACCENT_ALT_1..4 exist in the reference for exactly this, as the accents
+# the settings panel offers.
+fn g4_col(i) {
+    if i == 0 { return rgb(0x4C, 0xE0, 0xB3) }      # ZD_ACCENT_ALT_1  teal
+    if i == 1 { return rgb(0x57, 0xB6, 0xFF) }      # ZD_ACCENT_ALT_2  blue
+    if i == 2 { return rgb(0x8F, 0x7B, 0xFF) }      # ZD_ACCENT_ALT_3  violet
+    if i == 3 { return rgb(0xE8, 0x6E, 0xC4) }      # ZD_ACCENT_ALT_4  pink
+    if i == 4 { return rgb(0xF5, 0xB9, 0x3C) }      # ZD_WARN          amber
+    if i == 5 { return rgb(0xFF, 0x9C, 0x88) }      # ZD_BAD_SOFT      soft red
+    if i == 6 { return rgb(0xCD, 0xF2, 0x5A) }      # ZD_ACCENT_BR     bright lime
+    return rgb(0x09, 0x0A, 0x0C)                     # ZD_SURF_1        sunken well
+}
+
+# A heading line, drawn identically by all eight so the games read as one suite.
+fn g4_head(ax, ay, s) {
+    u = ui()
+    label(ax + 12 * u, ay + 8 * u, s, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    return 0
+}
+
+# key, then value, laid out from the RIGHT edge - scores and counters, one row.
+fn g4_stat(ax, ay, aw, s, v) {
+    u = ui()
+    vx = ax + aw - 34 * u
+    label(vx - label_w(s, T_CAPTION, W_REG) - 6 * u, ay + 8 * u, s, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(vx, ay + 8 * u, v, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    return 0
+}
+
+fn g4_abs(v) { if v < 0 { return 0 - v }  return v }
+
+# ==============================================================================
+# 61 - 15 PUZZLE. 4x4, fifteen numbered tiles and one hole; slide a tile into
+# the hole until 1..15 read in order. FIFTEEN_BOARD holds one byte per square,
+# 0 = the hole.
+# ==============================================================================
+FI_N = 4
+fi_blank = 15
+fi_moves = 0
+fi_won = 0
+
+fn fi_at(ix) { return peek8(FIFTEEN_BOARD + ix) }
+fn fi_put(ix, v) { poke8(FIFTEEN_BOARD + ix, v)  return 0 }
+
+fn fi_solved() {
+    ix = 0
+    while ix < 15 { if fi_at(ix) != ix + 1 { return 0 }  ix = ix + 1 }
+    if fi_at(15) != 0 { return 0 }
+    return 1
+}
+
+# Slide the tile at `ix` into the hole, if the two are orthogonally adjacent.
+# Returns 1 if the board moved.
+fn fi_slide(ix) {
+    if ix < 0 { return 0 }
+    if ix > 15 { return 0 }
+    dr = g4_abs(ix / FI_N - fi_blank / FI_N)
+    dc = g4_abs(ix % FI_N - fi_blank % FI_N)
+    if dr + dc != 1 { return 0 }
+    fi_put(fi_blank, fi_at(ix))
+    fi_put(ix, 0)
+    fi_blank = ix
+    return 1
+}
+
+# HALF OF ALL 16! ARRANGEMENTS OF THIS BOARD CANNOT BE SOLVED. The invariant is
+# permutation parity plus the hole's row distance from home, and shuffling the
+# bytes gets it wrong half the time - a puzzle nobody can finish, which looks
+# exactly like a puzzle that is merely hard.
+#
+# So this never shuffles the bytes. It walks the HOLE through 240 random legal
+# slides from the solved board: every position it can reach is a position it
+# came from, so every position it can reach is solvable. Same argument
+# lo_reset() makes for Lights Out, and it needs no solver and no parity
+# arithmetic to be true.
+fn fi_reset() {
+    ix = 0
+    while ix < 15 { fi_put(ix, ix + 1)  ix = ix + 1 }
+    fi_put(15, 0)
+    fi_blank = 15
+    fi_won = 0
+    ac_seed_from(ticks() + 61)
+    kk = 0
+    while kk < 240 {
+        dd = ac_rand(4)
+        nb = 0 - 1
+        if dd == 0 { if fi_blank / FI_N > 0 { nb = fi_blank - FI_N } }
+        if dd == 1 { if fi_blank / FI_N < FI_N - 1 { nb = fi_blank + FI_N } }
+        if dd == 2 { if fi_blank % FI_N > 0 { nb = fi_blank - 1 } }
+        if dd == 3 { if fi_blank % FI_N < FI_N - 1 { nb = fi_blank + 1 } }
+        if nb >= 0 { fi_slide(nb) }
+        kk = kk + 1
+    }
+    # A random walk CAN land back on the solved board. Rare, and a game that
+    # opens already won is still a bug.
+    if fi_solved() == 1 { fi_slide(14) }
+    fi_moves = 0
+    return 0
+}
+
+# Geometry, derived from the client rect rather than baked in, and shared by
+# the drawing and the hit test so a click always lands on the tile it looks
+# like it landed on.
+fn fi_cell(aw, ah) {
+    u = ui()
+    cw = (aw - 24 * u) / FI_N
+    chh = (g4_ph(ah) - 44 * u) / FI_N
+    if chh < cw { cw = chh }
+    if cw < 8 { cw = 8 }
+    return cw
+}
+fn fi_gx(aw, ah) { return (aw - FI_N * fi_cell(aw, ah)) / 2 }
+fn fi_gy(aw, ah) { return 30 * ui() }
+
+fn fi_draw(ax, ay, aw, ah) {
+    u = ui()
+    cell = fi_cell(aw, ah)
+    gx = ax + fi_gx(aw, ah)
+    gy = ay + fi_gy(aw, ah)
+    g4_head(ax, ay, "slide the tiles into order")
+    g4_stat(ax, ay, aw, "moves", fi_moves)
+    fill_rgb(gx, gy, FI_N * cell, FI_N * cell, g4_col(7))
+    ix = 0
+    while ix < FI_N * FI_N {
+        vv = fi_at(ix)
+        cx = gx + (ix % FI_N) * cell
+        cy = gy + (ix / FI_N) * cell
+        if vv > 0 {
+            # A tile already standing on its home square is lime. That is the
+            # only decoration in this app and it is information: it turns
+            # "am I getting closer" from a question into a glance.
+            face = theme(TH_PANEL_HI)
+            ink = theme(TH_TEXT_HI)
+            if vv == ix + 1 { face = theme(TH_ACCENT)  ink = theme(TH_BG) }
+            rrect(cx + 2 * u, cy + 2 * u, cell - 4 * u, cell - 4 * u, 6 * u, face)
+            nx = cx + cell / 2 - 5 * u
+            if vv > 9 { nx = cx + cell / 2 - 10 * u }
+            label_num(nx, cy + cell / 2 - 9 * u, vv, ink, T_BODY, W_BOLD)
+        }
+        ix = ix + 1
+    }
+    if fi_won == 1 {
+        label(gx, gy + FI_N * cell + 8 * u, "solved - r reshuffles", theme(TH_ACCENT), T_CAPTION, W_BOLD)
+    }
+    return 0
+}
+
+fn fi_try(win, ix) {
+    if fi_won == 1 { return 0 }
+    if fi_slide(ix) == 0 { return 0 }
+    fi_moves = fi_moves + 1
+    if fi_solved() == 1 { fi_won = 1 }
+    wm_dmg(win)
+    return 1
+}
+
+fn fi_event(win, ety, ecode, ex, ey) {
+    if ety == 3 { if ecode == 114 { fi_reset()  wm_dmg(win)  return 1 }  return 0 }
+    if ety == 1 {
+        # An arrow names the DIRECTION THE TILE TRAVELS, which is the standard
+        # for this puzzle and the opposite of the hole's movement: press left
+        # and the tile on the hole's right slides left into it.
+        if ecode == K_LEFT  { if fi_blank % FI_N < FI_N - 1 { return fi_try(win, fi_blank + 1) }  return 1 }
+        if ecode == K_RIGHT { if fi_blank % FI_N > 0 { return fi_try(win, fi_blank - 1) }  return 1 }
+        if ecode == K_UP    { if fi_blank / FI_N < FI_N - 1 { return fi_try(win, fi_blank + FI_N) }  return 1 }
+        if ecode == K_DOWN  { if fi_blank / FI_N > 0 { return fi_try(win, fi_blank - FI_N) }  return 1 }
+        return 0
+    }
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    aw = wm_cw(win)
+    ah = wm_ch(win)
+    cell = fi_cell(aw, ah)
+    gx = wm_cx(win) + fi_gx(aw, ah)
+    gy = wm_cy(win) + fi_gy(aw, ah)
+    ix = ac_cell_idx(gx, gy, cell, FI_N, FI_N, ex, ey)
+    if ix < 0 { return 0 }
+    return fi_try(win, ix)
+}
+
+# ==============================================================================
+# the per-slice tables. Each is a plain if-chain on `id`; the fallback at the
+# end means "not mine" and lets the next slice answer.
+# ==============================================================================
+fn games4_name(id) {
+    if id == G4_FIFTEEN { return "15 Puzzle" }
+    if id == G4_REVERSI { return "Reversi" }
+    if id == G4_SIMON   { return "Simon" }
+    if id == G4_SOKOBAN { return "Sokoban" }
+    if id == G4_FLAPPY  { return "Flappy" }
+    if id == G4_MISSILE { return "Missile Command" }
+    if id == G4_BLACKJK { return "Blackjack" }
+    if id == G4_FROGGER { return "Frogger" }
+    return ""
+}
+
+# 2 = game, for every one of them - reg_cat()'s only consumer is the catalog
+# swatch and these are all games.
+fn games4_cat(id) { if games4_has(id) == 1 { return 2 }  return 0 }
+
+# The reference's own window sizes, in design units.
+fn games4_w(id) {
+    if id == G4_FIFTEEN { return 360 }
+    if id == G4_REVERSI { return 400 }
+    if id == G4_SIMON   { return 360 }
+    if id == G4_SOKOBAN { return 430 }
+    if id == G4_FLAPPY  { return 430 }
+    if id == G4_MISSILE { return 470 }
+    if id == G4_BLACKJK { return 400 }
+    if id == G4_FROGGER { return 430 }
+    return 480
+}
+fn games4_h(id) {
+    if id == G4_FIFTEEN { return 400 }
+    if id == G4_REVERSI { return 420 }
+    if id == G4_SIMON   { return 390 }
+    if id == G4_SOKOBAN { return 340 }
+    if id == G4_FLAPPY  { return 360 }
+    if id == G4_MISSILE { return 370 }
+    if id == G4_BLACKJK { return 340 }
+    if id == G4_FROGGER { return 380 }
+    return 340
+}
+
+# No icon in the 20-icon atlas depicts any of these, and reg_icon()'s own
+# comment says an honest monogram beats a stretched icon that does not depict
+# the thing. -1 is that answer.
+fn games4_icon(id) { return 0 - 1 }
+
+fn games4_draw(id, ax, ay, aw, ah) {
+    if games4_has(id) == 0 { return 0 }
+    g4_canvas(ax, ay, aw, ah)
+    if id == G4_FIFTEEN { fi_draw(ax, ay, aw, ah) }
+    g4_bar(ax, ay, aw, ah, id)
+    return 0
+}
+
+fn games4_event(id, win, ety, ecode, ex, ey) {
+    if id == G4_FIFTEEN { return fi_event(win, ety, ecode, ex, ey) }
+    return 0
+}
+
+fn games4_tick(id, win) {
+    return 0
+}
