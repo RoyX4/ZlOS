@@ -6,15 +6,21 @@
  * a ring buffer in memory the GPU can reach, the four registers that arm it,
  * and a bounded wait for the engine to catch up.
  *
- * HONEST STATUS, AND DO NOT LET THIS PARAGRAPH GO STALE. The command streams
- * this submits are verified pixel-for-pixel on real 8086:9B41 silicon, through
- * i915's render node (`hosttest/gpu_blt.c`). **The submission path below has
- * never executed on hardware.** Every MMIO write in `ring_arm()` and
- * `gpu_ring_kick()` is written from the register documentation and the register
- * dumps in `docs/gpu-blitter.md`, and nothing has run them. That is the whole
- * reason `gpu_ring_arm()` exists and defaults to off - the same discipline
- * `intel.c` uses with `lt_armed`, and for the same reason: this file can hang a
- * GPU, and "the code exists" is not "the code works".
+ * HONEST STATUS, AND DO NOT LET THIS PARAGRAPH GO STALE. Two different claims
+ * here, and they must not be blurred:
+ *
+ *   THE MODEL IS PROVEN. On 2026-08-19 hosttest/gpu_ring.c performed exactly
+ *   this sequence on real 8086:9B41 silicon with i915 unbound - forcewake, GGTT
+ *   map, RING_CTL=0 / HEAD=0 / TAIL=0 / START / CTL=VALID, commands, MI_FLUSH_DW,
+ *   advance TAIL, poll HEAD - and filled 16384 of 16384 pixels, verified by
+ *   reading the destination back. A sole owner CAN drive the Gen9.5 legacy ring;
+ *   no execlists are required. docs/gpu-driver.md has the register dump.
+ *
+ *   THIS FILE HAS STILL NOT RUN. The code below is the same sequence, but it
+ *   has never executed inside zlOS, which needs a USB boot rather than a two
+ *   minute detach. So `gpu_ring_arm()` stays and defaults to off - the same
+ *   discipline `intel.c` uses with `lt_armed`. "The model works" is not "this
+ *   implementation of it works".
  *
  * What IS tested, on any machine and in milliseconds, is every piece of
  * bookkeeping: ring space, the wrap, qword alignment of the tail, and refusing
@@ -154,7 +160,8 @@ gr_u32 gpu_ring_pad(gr_u32 *ring, gr_u32 size, gr_u32 tail)
 }
 
 /* ---- the hardware half ---------------------------------------------------
- * NONE OF THIS HAS EVER RUN. See the header. */
+ * The SEQUENCE below is proven on silicon; THIS CODE has not run. See the
+ * header for why those are different claims. */
 
 static int   ring_armed = 0;      /* nothing writes a ring register until this
                                    * is set, deliberately, by a caller that
@@ -174,6 +181,19 @@ static void mmio_w(gr_u32 off, gr_u32 val)
     if (!ring_armed) return;                 /* the gate, checked at the ONE
                                               * place every write goes through */
     *(volatile gr_u32 *)((gr_uptr)intel_mmio() + (gr_uptr)off) = val;
+}
+
+/* Release the well. Holding forcewake permanently keeps the GT awake and burns
+ * power on a laptop for no reason, so every early-return path that took it has
+ * to give it back - the leak is otherwise silent.
+ *
+ * IT WAS CALLED AND NEVER DEFINED. gcc accepted the implicit declaration and
+ * built kernel.elf and kernel64.elf clean; clang under buildefi.sh rejected it,
+ * because C99 dropped implicit declarations. That asymmetry is the whole reason
+ * this repo builds all four targets rather than the one being worked on. */
+static void forcewake_put(void)
+{
+    mmio_w(FORCEWAKE_BLITTER_GEN9, (FW_KERNEL_BIT << 16) | 0u);
 }
 
 static int forcewake_get(void)
@@ -196,11 +216,15 @@ int gpu_ring_init(void)
     if (!intel_present() || !intel_supported()) return 0;
     if (!ring_armed) return 0;               /* refuse rather than half-arm */
 
-    /* the ring's physical page, into the graphics address the engine will use */
-    if (!intel_ggtt_map(GPU_RING_GFX >> 12, (gr_u32)HI_GPU)) return 0;
-    (void)mmio_r(0x800000u);                 /* posting read: flush the PTE */
-
+    /* FORCEWAKE FIRST, matching the order the silicon run used. Nothing here is
+     * known to depend on it - the GGTT window is not in the GT well - but the
+     * sequence that has actually filled pixels is the one to copy, and any
+     * difference from it should be deliberate rather than left over. */
     if (!forcewake_get()) return 0;
+
+    /* the ring's physical page, into the graphics address the engine will use */
+    if (!intel_ggtt_map(GPU_RING_GFX >> 12, (gr_u32)HI_GPU)) { forcewake_put(); return 0; }
+    (void)mmio_r(0x800000u);                 /* posting read: flush the PTE */
 
     mmio_w(BCS_BASE + REG_CTL,   0);
     mmio_w(BCS_BASE + REG_HEAD,  0);
@@ -209,7 +233,12 @@ int gpu_ring_init(void)
     (void)mmio_r(BCS_BASE + REG_START);
     mmio_w(BCS_BASE + REG_CTL,   RING_VALID);   /* one page, enabled */
 
-    if (!(mmio_r(BCS_BASE + REG_CTL) & RING_VALID)) return 0;
+    /* Release the well on THIS path too. It is the one failure that happens
+     * after forcewake_get succeeds and is easy to miss, because it looks like
+     * a simple "the ring refused" rather than a resource path - which is
+     * precisely how a silent leak gets written. Found by auditing every return
+     * between the get and the end of the function, not by reading it once. */
+    if (!(mmio_r(BCS_BASE + REG_CTL) & RING_VALID)) { forcewake_put(); return 0; }
     ring_live = 1;
     return 1;
 }
@@ -226,10 +255,34 @@ int gpu_ring_submit(const gr_u32 *dw, gr_u32 n)
     gr_u32 *ring = (gr_u32 *)(gr_uptr)HI_GPU;
     gr_u32 head = mmio_r(BCS_BASE + REG_HEAD) & (GPU_RING_BYTES - 1u);
 
-    /* +8 for the qword pad the tail may need */
-    if (gpu_ring_space(head, ring_tail, GPU_RING_BYTES) < n * 4u + 8u) return 0;
+    /* n dwords + the 5-dword flush + up to 8 bytes of qword pad */
+    if (gpu_ring_space(head, ring_tail, GPU_RING_BYTES) < n * 4u + 5u * 4u + 8u) return 0;
 
     gr_u32 t = gpu_ring_write(ring, GPU_RING_BYTES, ring_tail, dw, n);
+
+    /* MI_FLUSH_DW, because the sequence PROVEN on silicon has one and this
+     * function did not.
+     *
+     * hosttest/gpu_ring.c filled 16384/16384 pixels on 8086:9B41 with a flush
+     * after the blit; this driver emitted the blit alone. Whether the flush is
+     * load-bearing was never isolated - the successful run changed two things
+     * at once, the flush and a GGTT mapping fix - so the honest position is
+     * that one sequence is known to work and the other is a guess that differs
+     * from it. Matching the proven one costs five dwords.
+     *
+     * There is no GEM here to do domain management, so if the blitter's writes
+     * sit in a cache nothing else will push them out. Gen8+ MI_FLUSH_DW is five
+     * dwords: opcode 0x26 in the MI client, length (5-2), no post-sync write. */
+    /* UNCONDITIONAL. The space check above already reserved these five dwords,
+     * so a second test here can only ever do one thing: silently drop the flush
+     * and submit a sequence that differs from the proven one with nothing to
+     * say so. That is the shape this tree keeps getting caught by - a guard that
+     * reads as caution and acts as a silent skip. If the reservation is ever
+     * wrong, the right outcome is refusing the submission at the top, not
+     * emitting most of it. */
+    const gr_u32 flush[5] = { (0x26u << 23) | 3u, 0, 0, 0, 0 };
+    t = gpu_ring_write(ring, GPU_RING_BYTES, t, flush, 5);
+
     t = gpu_ring_pad(ring, GPU_RING_BYTES, t);
     ring_tail = t;
 
