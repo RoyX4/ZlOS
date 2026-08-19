@@ -159,12 +159,19 @@ fn g4_abs(v) { if v < 0 { return 0 - v }  return v }
 # 0 = the hole.
 # ==============================================================================
 FI_N = 4
-fi_blank = 15
+# THE HOLE IS A ROW AND A COLUMN, not a flat index divided back apart. Deriving
+# `ix / FI_N` costs nothing in the kernel, where runtime_kernel.c truncates,
+# and gives 1.25 in the host interpreter, where zl numbers are doubles - so the
+# rules of this puzzle would be two different rules in the project's two
+# runtimes. Multiplying back up (fi_blankix) is exact in both.
+fi_br = 3
+fi_bc = 3
 fi_moves = 0
 fi_won = 0
 
 fn fi_at(ix) { return peek8(FIFTEEN_BOARD + ix) }
 fn fi_put(ix, v) { poke8(FIFTEEN_BOARD + ix, v)  return 0 }
+fn fi_blankix() { return fi_br * FI_N + fi_bc }
 
 fn fi_solved() {
     ix = 0
@@ -173,17 +180,20 @@ fn fi_solved() {
     return 1
 }
 
-# Slide the tile at `ix` into the hole, if the two are orthogonally adjacent.
-# Returns 1 if the board moved.
-fn fi_slide(ix) {
-    if ix < 0 { return 0 }
-    if ix > 15 { return 0 }
-    dr = g4_abs(ix / FI_N - fi_blank / FI_N)
-    dc = g4_abs(ix % FI_N - fi_blank % FI_N)
-    if dr + dc != 1 { return 0 }
-    fi_put(fi_blank, fi_at(ix))
-    fi_put(ix, 0)
-    fi_blank = ix
+# Slide the tile at (rr,cc) into the hole, if the two are orthogonally
+# adjacent. Returns 1 if the board moved. Off-board coordinates are refused
+# here rather than by every caller, which is what lets fi_event steer with
+# fi_br +/- 1 and not test the edges itself.
+fn fi_slide(rr, cc) {
+    if rr < 0 { return 0 }
+    if rr >= FI_N { return 0 }
+    if cc < 0 { return 0 }
+    if cc >= FI_N { return 0 }
+    if g4_abs(rr - fi_br) + g4_abs(cc - fi_bc) != 1 { return 0 }
+    fi_put(fi_blankix(), fi_at(rr * FI_N + cc))
+    fi_put(rr * FI_N + cc, 0)
+    fi_br = rr
+    fi_bc = cc
     return 1
 }
 
@@ -201,23 +211,25 @@ fn fi_reset() {
     ix = 0
     while ix < 15 { fi_put(ix, ix + 1)  ix = ix + 1 }
     fi_put(15, 0)
-    fi_blank = 15
+    fi_br = FI_N - 1
+    fi_bc = FI_N - 1
     fi_won = 0
     ac_seed_from(ticks() + 61)
     kk = 0
     while kk < 240 {
         dd = ac_rand(4)
-        nb = 0 - 1
-        if dd == 0 { if fi_blank / FI_N > 0 { nb = fi_blank - FI_N } }
-        if dd == 1 { if fi_blank / FI_N < FI_N - 1 { nb = fi_blank + FI_N } }
-        if dd == 2 { if fi_blank % FI_N > 0 { nb = fi_blank - 1 } }
-        if dd == 3 { if fi_blank % FI_N < FI_N - 1 { nb = fi_blank + 1 } }
-        if nb >= 0 { fi_slide(nb) }
+        # fi_slide refuses anything off the board, so a direction that would
+        # leave the grid simply does not move - and the walk stays 240 tries
+        # rather than 240 moves, which changes nothing about solvability.
+        if dd == 0 { fi_slide(fi_br - 1, fi_bc) }
+        if dd == 1 { fi_slide(fi_br + 1, fi_bc) }
+        if dd == 2 { fi_slide(fi_br, fi_bc - 1) }
+        if dd == 3 { fi_slide(fi_br, fi_bc + 1) }
         kk = kk + 1
     }
     # A random walk CAN land back on the solved board. Rare, and a game that
     # opens already won is still a bug.
-    if fi_solved() == 1 { fi_slide(14) }
+    if fi_solved() == 1 { fi_slide(FI_N - 1, FI_N - 2) }
     fi_moves = 0
     return 0
 }
@@ -269,9 +281,9 @@ fn fi_draw(ax, ay, aw, ah) {
     return 0
 }
 
-fn fi_try(win, ix) {
+fn fi_try(win, rr, cc) {
     if fi_won == 1 { return 0 }
-    if fi_slide(ix) == 0 { return 0 }
+    if fi_slide(rr, cc) == 0 { return 0 }
     fi_moves = fi_moves + 1
     if fi_solved() == 1 { fi_won = 1 }
     wm_dmg(win)
@@ -284,10 +296,10 @@ fn fi_event(win, ety, ecode, ex, ey) {
         # An arrow names the DIRECTION THE TILE TRAVELS, which is the standard
         # for this puzzle and the opposite of the hole's movement: press left
         # and the tile on the hole's right slides left into it.
-        if ecode == K_LEFT  { if fi_blank % FI_N < FI_N - 1 { return fi_try(win, fi_blank + 1) }  return 1 }
-        if ecode == K_RIGHT { if fi_blank % FI_N > 0 { return fi_try(win, fi_blank - 1) }  return 1 }
-        if ecode == K_UP    { if fi_blank / FI_N < FI_N - 1 { return fi_try(win, fi_blank + FI_N) }  return 1 }
-        if ecode == K_DOWN  { if fi_blank / FI_N > 0 { return fi_try(win, fi_blank - FI_N) }  return 1 }
+        if ecode == K_LEFT  { fi_try(win, fi_br, fi_bc + 1)  return 1 }
+        if ecode == K_RIGHT { fi_try(win, fi_br, fi_bc - 1)  return 1 }
+        if ecode == K_UP    { fi_try(win, fi_br + 1, fi_bc)  return 1 }
+        if ecode == K_DOWN  { fi_try(win, fi_br - 1, fi_bc)  return 1 }
         return 0
     }
     if ety != 4 { return 0 }
@@ -299,7 +311,7 @@ fn fi_event(win, ety, ecode, ex, ey) {
     gy = wm_cy(win) + fi_gy(aw, ah)
     ix = ac_cell_idx(gx, gy, cell, FI_N, FI_N, ex, ey)
     if ix < 0 { return 0 }
-    return fi_try(win, ix)
+    return fi_try(win, ix / FI_N, ix % FI_N)
 }
 
 # ==============================================================================
@@ -396,11 +408,18 @@ fn rv_play(pp, ri, ci) {
     return 1
 }
 
+# Two loops, not one over a flat index divided back into row and column: the
+# division would be exact in the kernel and fractional in the host
+# interpreter, and this is the function the rules harness leans on hardest.
 fn rv_can(pp) {
-    ix = 0
-    while ix < RV_N * RV_N {
-        if rv_gain(pp, ix / RV_N, ix % RV_N) > 0 { return 1 }
-        ix = ix + 1
+    ri = 0
+    while ri < RV_N {
+        ci = 0
+        while ci < RV_N {
+            if rv_gain(pp, ri, ci) > 0 { return 1 }
+            ci = ci + 1
+        }
+        ri = ri + 1
     }
     return 0
 }
@@ -465,19 +484,24 @@ fn rv_weight(ri, ci) {
 }
 
 fn rv_ai() {
-    best = 0 - 1
+    br = 0 - 1
+    bc = 0 - 1
     bs = 0 - 9999
-    ix = 0
-    while ix < RV_N * RV_N {
-        gn = rv_gain(2, ix / RV_N, ix % RV_N)
-        if gn > 0 {
-            sc = gn + rv_weight(ix / RV_N, ix % RV_N) * 4
-            if sc > bs { bs = sc  best = ix }
+    ri = 0
+    while ri < RV_N {
+        ci = 0
+        while ci < RV_N {
+            gn = rv_gain(2, ri, ci)
+            if gn > 0 {
+                sc = gn + rv_weight(ri, ci) * 4
+                if sc > bs { bs = sc  br = ri  bc = ci }
+            }
+            ci = ci + 1
         }
-        ix = ix + 1
+        ri = ri + 1
     }
-    if best < 0 { return 0 }
-    rv_play(2, best / RV_N, best % RV_N)
+    if br < 0 { return 0 }
+    rv_play(2, br, bc)
     return 1
 }
 
@@ -952,7 +976,7 @@ fn sk_move(dd) {
     # That is everything needed to walk it backwards, because the crate a push
     # moved is always exactly one square beyond where the player ended up.
     if sk_undo_n < SK_UNDO_MAX {
-        poke8(SK_UNDO + sk_undo_n, dd + pushed * 4)
+        poke8(SK_UNDO + sk_undo_n, bor(dd, shl(pushed, 2)))
         sk_undo_n = sk_undo_n + 1
     }
     if sk_solved() == 1 { sk_win = 1 }
@@ -963,8 +987,15 @@ fn sk_undo() {
     if sk_undo_n == 0 { return 0 }
     sk_undo_n = sk_undo_n - 1
     vv = peek8(SK_UNDO + sk_undo_n)
-    dd = vv % 4
-    pushed = vv / 4
+    # band/shr, NOT `% 4` and `/ 4`. zl numbers are doubles and only the KERNEL
+    # runtime casts them to long long before dividing (runtime_kernel.c
+    # zl_binop; apps_games1.zl's nim_event names the same fact) - the host
+    # interpreter gives 5 / 4 = 1.25. Unpacking a bitfield with arithmetic
+    # therefore means this record decodes differently in the two runtimes the
+    # project ships, which is a difference nothing would have reported. Bit
+    # operations are identical in both.
+    dd = band(vv, 3)
+    pushed = shr(vv, 2)
     if pushed == 1 {
         # the crate sits one step beyond the player, in the direction pushed.
         # Clear it there FIRST, then put it back where the player is standing,
@@ -1660,8 +1691,11 @@ bj_state = 0                        # 0 between hands, 1 your turn, 2 settled
 bj_result = 0                       # 0 none, 1 you, 2 dealer, 3 push, 4 blackjack
 bj_chips = 100
 
-fn bj_rank(cd) { return cd / 4 }
-fn bj_suit(cd) { return cd % 4 }
+# shr/band rather than / 4 and % 4 - see the note in sk_undo for why unpacking
+# a packed value with division is a difference between the two runtimes and
+# unpacking it with bit operations is not.
+fn bj_rank(cd) { return shr(cd, 2) }
+fn bj_suit(cd) { return band(cd, 3) }
 fn bj_cardval(cd) {
     rk = bj_rank(cd)
     if rk == 0 { return 11 }
