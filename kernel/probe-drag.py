@@ -117,8 +117,14 @@ def main():
         # for a drag that worked perfectly. The compositor prints every
         # window's title bar on the serial log; aim at one of those instead of
         # at a number that was true for one resolution on one day.
-        ok, more = ser.wait("compositor:", args.boot_timeout)
-        log += more
+        # `compositor:` is normally printed before `ready.`. The first wait
+        # already consumed it, so waiting for it a second time burns the whole
+        # timeout and then falsely reports that no rectangles were printed.
+        ok = "compositor:" in log
+        more = ""
+        if not ok:
+            ok, more = ser.wait("compositor:", args.boot_timeout)
+            log += more
         if ok:
             ser.drain(1.0)
             log += ser.buf; ser.buf = ""

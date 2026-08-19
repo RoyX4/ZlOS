@@ -41,6 +41,7 @@ void fb_stash_blend(int slot, int x, int y, int a);
 void fb_blur_free(int slot);
 void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a);
 void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
+void fb_icon24(int px, int py, int n, unsigned int fg);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
 /* Titles are LABELS, not console text, so they take the proportional path.
  * That is the single change desktop-look.md item 4 asks for at this layer. */
@@ -63,6 +64,11 @@ int gpu_cursor_move(int x, int y);
 int gpu_cursor_is_live(void);
 int  fb_cell_w(void);
 int  fb_cell_h(void);
+
+/* Optional real-panel pacing. Host harnesses and non-Intel backends leave
+ * these weak symbols absent and use the TSC deadline below. */
+int intel_supported(void) __attribute__((weak));
+int intel_wait_vblank(void) __attribute__((weak));
 
 /* ---- notify.c -------------------------------------------------------------
  * The notification surface, which SYSTEM-PROMPT.md §2 permits adding here and
@@ -97,12 +103,63 @@ void        notify_rect(int sw, int sh, int reserve_bot, int scale,
 #define SK_UP     3
 #define SK_DOWN   4
 int  snap_zone_for_point(int px, int py, int sw, int sh);
+void snap_rect(int z, int sw, int sh, int reserve_top, int reserve_bot,
+               int *x, int *y, int *w, int *h);
 int  snap_apply(int win, int z, int cx, int cy, int cw, int ch,
                 int sw, int sh, int rt, int rb, int *x, int *y, int *w, int *h);
 int  snap_release(int win, int *x, int *y, int *w, int *h);
 int  snap_key_zone(int win, int dir);
+int  snap_state(int win);
 void snap_note_moved(int win);
 void snap_note_closed(int win);
+void snap_reset(void);
+static int isect(int ax0, int ay0, int ax1, int ay1,
+                 int bx0, int by0, int bx1, int by1,
+                 int *x, int *y, int *w, int *h);
+
+static int snap_preview_zone;
+static int snap_preview_x, snap_preview_y, snap_preview_w, snap_preview_h;
+
+static void snap_preview_damage(void)
+{
+    if (!snap_preview_zone) return;
+    const struct ui_theme *t = ui_theme();
+    int halo = UI_S1(t);
+    wm_damage(snap_preview_x - halo, snap_preview_y - halo,
+              snap_preview_w + 2 * halo, snap_preview_h + 2 * halo);
+}
+
+static void snap_preview_set(int zone)
+{
+    if (zone == snap_preview_zone) return;
+    snap_preview_damage();
+    snap_preview_zone = zone;
+    if (zone) {
+        const struct ui_theme *t = ui_theme();
+        snap_rect(zone, (int)fb_pxw(), (int)fb_pxh(),
+                  UI_DP(t, 32), UI_DP(t, 64),
+                  &snap_preview_x, &snap_preview_y,
+                  &snap_preview_w, &snap_preview_h);
+    }
+    snap_preview_damage();
+}
+
+static void snap_preview_draw(int rx0, int ry0, int rx1, int ry1)
+{
+    if (!snap_preview_zone) return;
+    int x, y, w, h;
+    if (!isect(snap_preview_x, snap_preview_y,
+               snap_preview_x + snap_preview_w, snap_preview_y + snap_preview_h,
+               rx0, ry0, rx1, ry1, &x, &y, &w, &h)) return;
+    const struct ui_theme *t = ui_theme();
+    fb_clip(x, y, w, h);
+    fb_rrect_blend(snap_preview_x + UI_S1(t), snap_preview_y + UI_S1(t),
+                   snap_preview_w - 2 * UI_S1(t), snap_preview_h - 2 * UI_S1(t),
+                   t->radius, t->accent, 34);
+    fb_rrect_blend(snap_preview_x, snap_preview_y,
+                   snap_preview_w, snap_preview_h, t->radius,
+                   t->accent, 82);
+}
 
 /* ---- input.c ------------------------------------------------------------- */
 void input_poll(void);
@@ -174,6 +231,8 @@ static int focus_win = -1;
  * framebuffer, where the compositor had never been near the screen: the text
  * shell printed the compositor's help and verify.sh caught it. */
 static int running = 0;
+static unsigned int last_tick, next_frame_tsc;
+static int paced;
 
 static app_draw_fn  hook_draw;
 static app_event_fn hook_event;
@@ -294,10 +353,10 @@ void wm_damage_win(int win)
  * appears over several frames is composited several times, which is only
  * affordable once that costs a rectangle instead of the screen.
  *
- * FOUR FRAMES. Not an easing curve, not a timeline system, not 60fps. A window
- * that grows into place over four frames already feels different from one that
- * teleports, and four frames at 100 Hz is 40 ms - under the ~100 ms where a
- * person starts calling it slow.
+ * DURATION-BASED. The first version advanced through four tables once per
+ * compositor call, so changing the frame cadence changed both the speed and
+ * the shape. Each motion now has a wall-clock duration and a fixed-point
+ * smoothstep. A late frame skips ahead instead of making the animation slow.
  *
  * It is a SCALE, not a fade, and that is not a compromise. A fade needs the
  * window composited against the background at a fraction of opacity, which
@@ -312,8 +371,6 @@ void wm_damage_win(int win)
  * misses a target because the target was still growing is worse than no
  * animation.
  */
-#define ANIM_FRAMES 4
-
 /* ---- the timeline ---------------------------------------------------------
  * What was here was ONE animation, hardcoded into the window struct as a frame
  * counter, and it could only ever be the open-scale. The prototype names seven
@@ -321,15 +378,12 @@ void wm_damage_win(int win)
  * seven times as much code, it is the same code with the kind as a parameter
  * and the steps in a table.
  *
- * A FIXED ARRAY, ticked once per frame, each entry marking its target damaged.
+ * A FIXED ARRAY, sampled once per frame, each entry marking its target damaged.
  * No allocation, no list, no callbacks. An animation that finishes frees its
  * slot; a slot that cannot be found is a refusal, not a silent drop.
  *
- * STILL NO EASING CURVES, deliberately. Each kind is 4-8 integer steps in a
- * table. A table cannot produce a wrong in-between value, cannot overshoot
- * into a negative size, and cannot be got wrong by a cubic evaluated in
- * fixed point - and at 4-8 frames nobody can see the difference between a
- * table and a curve anyway.
+ * The interpolation is a bounded fixed-point smoothstep: no float, no
+ * overshoot, no frame-count dependency and no allocation.
  *
  * WHAT EACH KIND IS, and which are drawn rather than merely stored:
  *
@@ -352,24 +406,16 @@ void wm_damage_win(int win)
 #define ANIM_PULSE  4
 #define ANIM_FADE   5
 
-/* Each row is read from the LAST element backwards as the counter runs down,
- * so index 0 is where the animation starts and the settled value is what the
- * window has when no animation is running at all. */
-static const unsigned char anim_scale[][8] = {
-    /* OPEN  */ { 82, 90, 95, 98, 100, 100, 100, 100 },
-    /* CLOSE */ { 98, 95, 90, 82,  70,  70,  70,  70 },
-    /* PRESS */ { 96, 97, 98, 99, 100, 100, 100, 100 },
-};
-static const unsigned char anim_len[] = {
-    /* NONE */ 0, /* OPEN */ 4, /* CLOSE */ 4, /* PRESS */ 4,
-    /* PULSE */ 6, /* FADE */ 5,
-};
-static const unsigned char anim_alpha[][8] = {
-    /* PULSE */ {  0, 24, 40, 40, 24,  0, 0, 0 },
-    /* FADE  */ { 60, 90, 120, 170, 220, 255, 255, 255 },
+/* Durations are wall-clock ticks, not frame counts. The old four-step tables
+ * changed speed whenever the compositor cadence changed and visibly stair-
+ * stepped on a 60 Hz panel. These correspond to 80-180 ms at the measured
+ * 100 Hz PIT while frame sampling is independently paced below. */
+static const unsigned char anim_ticks[] = {
+    /* NONE */ 0, /* OPEN */ 16, /* CLOSE */ 14, /* PRESS */ 8,
+    /* PULSE */ 18, /* FADE */ 14,
 };
 
-struct anim { int win; int kind; int frame; int len; };
+struct anim { int win; int kind; unsigned start; unsigned duration; };
 static struct anim anims[ANIM_MAX];
 
 /* Start one. Returns 0 and says so if every slot is busy - the same refusal
@@ -377,21 +423,21 @@ static struct anim anims[ANIM_MAX];
  * animation is a UI that is intermittently unresponsive for no visible cause. */
 int wm_anim(int win, int kind)
 {
-    if (kind <= ANIM_NONE || kind >= (int)(sizeof anim_len / sizeof anim_len[0]))
+    if (kind <= ANIM_NONE || kind >= (int)(sizeof anim_ticks / sizeof anim_ticks[0]))
         return 0;
     /* One animation per window per kind. Re-triggering restarts it, which is
      * what a button pressed twice in quick succession should look like. */
     for (int i = 0; i < ANIM_MAX; i++)
         if (anims[i].kind && anims[i].win == win && anims[i].kind == kind) {
-            anims[i].frame = 0;
+            anims[i].start = idt_ticks();
             return 1;
         }
     for (int i = 0; i < ANIM_MAX; i++) {
         if (anims[i].kind) continue;
         anims[i].win = win;
         anims[i].kind = kind;
-        anims[i].frame = 0;
-        anims[i].len = anim_len[kind];
+        anims[i].start = idt_ticks();
+        anims[i].duration = anim_ticks[kind];
         wm_damage_win(win);
         return 1;
     }
@@ -399,11 +445,18 @@ int wm_anim(int win, int kind)
     return 0;
 }
 
-/* Which frame of `kind` is window `win` on, or -1 for "not animating". */
-static int anim_frame_of(int win, int kind)
+/* Progress in thousandths. Smoothstep gives a short ease-out without floats,
+ * a cubic library, overshoot, or table steps. */
+static int anim_progress(int win, int kind)
 {
     for (int i = 0; i < ANIM_MAX; i++)
-        if (anims[i].kind == kind && anims[i].win == win) return anims[i].frame;
+        if (anims[i].kind == kind && anims[i].win == win) {
+            unsigned elapsed = idt_ticks() - anims[i].start;
+            unsigned d = anims[i].duration ? anims[i].duration : 1u;
+            if (elapsed >= d) return 1000;
+            int p = (int)(elapsed * 1000u / d);
+            return p * p / 1000 * (3000 - 2 * p) / 1000;
+        }
     return -1;
 }
 
@@ -418,14 +471,17 @@ int wm_anim_running(int win)
  * Read by the repaint; exposed so a test can assert on it without a screenshot. */
 int wm_anim_alpha(int win)
 {
-    int f = anim_frame_of(win, ANIM_FADE);
-    if (f >= 0) return anim_alpha[1][f];
-    f = anim_frame_of(win, ANIM_PULSE);
-    if (f >= 0) return anim_alpha[0][f];
+    int p = anim_progress(win, ANIM_FADE);
+    if (p >= 0) return 48 + 207 * p / 1000;
+    p = anim_progress(win, ANIM_PULSE);
+    if (p >= 0) {
+        int tri = p <= 500 ? p * 2 : (1000 - p) * 2;
+        return 48 * tri / 1000;
+    }
     return 255;
 }
 
-/* Advance every running animation by one frame and damage what moved.
+/* Sample every running animation and damage what moved.
  * Damaging the SETTLED rect - which is the largest - is what erases the
  * smaller frame drawn a moment ago. */
 static void anim_tick(void)
@@ -440,7 +496,8 @@ static void anim_tick(void)
          * sometimes does not close when every slot is busy is a far worse bug
          * than a window that closes without a flourish. The timeline draws;
          * the caller decides what exists. */
-        if (++anims[i].frame >= anims[i].len) anims[i].kind = ANIM_NONE;
+        if (idt_ticks() - anims[i].start >= anims[i].duration)
+            anims[i].kind = ANIM_NONE;
     }
 }
 
@@ -462,12 +519,15 @@ static int anim_pct(int win)
      * starts an ANIM_OPEN now and this reads it, which means the open scale
      * and every other kind share a code path and a bug in one is a bug you can
      * actually see. */
-    int f = anim_frame_of(win, ANIM_OPEN);
-    if (f >= 0) return anim_scale[0][f];
-    f = anim_frame_of(win, ANIM_CLOSE);
-    if (f >= 0) return anim_scale[1][f];
-    f = anim_frame_of(win, ANIM_PRESS);
-    if (f >= 0) return anim_scale[2][f];
+    int p = anim_progress(win, ANIM_OPEN);
+    if (p >= 0) return 82 + 18 * p / 1000;
+    p = anim_progress(win, ANIM_CLOSE);
+    if (p >= 0) return 100 - 30 * p / 1000;
+    p = anim_progress(win, ANIM_PRESS);
+    if (p >= 0) {
+        int tri = p <= 500 ? p * 2 : (1000 - p) * 2;
+        return 100 - 4 * tri / 1000;
+    }
     return 100;
 }
 
@@ -514,6 +574,18 @@ int wm_is_open(int win)
     return win >= 0 && win < WM_MAX && (wins[win].flags & WF_OPEN);
 }
 
+int wm_is_minimized(int win)
+{
+    return wm_is_open(win) && (wins[win].flags & WF_MINIMIZED);
+}
+
+static int top_visible(void)
+{
+    for (int i = nz - 1; i >= 0; i--)
+        if (!(wins[zorder[i]].flags & WF_MINIMIZED)) return zorder[i];
+    return -1;
+}
+
 void wm_geometry(int win, int *x, int *y, int *w, int *h)
 {
     if (!wm_is_open(win)) { *x = *y = *w = *h = 0; return; }
@@ -556,6 +628,10 @@ void wm_init(void)
     nz = 0;
     nwd = 0;
     focus_win = -1;
+    snap_reset();
+    snap_preview_zone = 0;
+    last_tick = next_frame_tsc = 0;
+    paced = 0;
     running = 1;
     if (fb_active()) wm_damage(0, 0, (int)fb_pxw(), (int)fb_pxh());
 }
@@ -661,7 +737,7 @@ void wm_close(int win)
      * belonged to something else entirely. */
     snap_note_closed(win);
     /* focus the new top, so closing never leaves keys going nowhere */
-    focus_win = nz ? zorder[nz - 1] : -1;
+    focus_win = top_visible();
     /* ...and the POINTER, for the same reason. A press hands the window the
      * pointer until button-up, and a window can close mid-press - Ctrl+W is a
      * key event and arrives between the down and the up. Left alone, the app
@@ -677,6 +753,10 @@ void wm_close(int win)
 void wm_raise(int win)
 {
     if (!wm_is_open(win)) return;
+    if (wins[win].flags & WF_MINIMIZED) {
+        wins[win].flags &= ~WF_MINIMIZED;
+        wm_damage_win(win);
+    }
     if (nz && zorder[nz - 1] == win) return;       /* already on top */
     z_append(win);
     wm_damage_win(win);
@@ -687,6 +767,10 @@ void wm_raise(int win)
  * impossible to express. */
 void wm_focus(int win)
 {
+    if (wm_is_minimized(win)) {
+        wins[win].flags &= ~WF_MINIMIZED;
+        wm_damage_win(win);
+    }
     if (focus_win == win) return;
     int old = focus_win;
     focus_win = win;
@@ -694,6 +778,15 @@ void wm_focus(int win)
      * gains them. Two damages, not one. */
     if (wm_is_open(old)) wm_damage_win(old);
     if (wm_is_open(win)) wm_damage_win(win);
+}
+
+void wm_minimize(int win)
+{
+    if (!wm_is_open(win) || (wins[win].flags & (WF_MODAL | WF_NOCHROME))) return;
+    wm_damage_win(win);
+    wins[win].flags |= WF_MINIMIZED;
+    if (focus_win == win) focus_win = top_visible();
+    wm_drop_grab(win);
 }
 
 /* WF_MODAL had no setter, so the modal branch in route_mouse was code that
@@ -744,14 +837,16 @@ static int win_contains(int win, int x, int y)
 int wm_at(int x, int y)
 {
     for (int i = nz - 1; i >= 0; i--)          /* BACKWARDS: topmost first */
-        if (win_contains(zorder[i], x, y)) return zorder[i];
+        if (!(wins[zorder[i]].flags & WF_MINIMIZED) &&
+            win_contains(zorder[i], x, y)) return zorder[i];
     return -1;
 }
 
 static int modal_win(void)
 {
     for (int i = nz - 1; i >= 0; i--)
-        if (wins[zorder[i]].flags & WF_MODAL) return zorder[i];
+        if (!(wins[zorder[i]].flags & WF_MINIMIZED) &&
+            (wins[zorder[i]].flags & WF_MODAL)) return zorder[i];
     return -1;
 }
 
@@ -793,6 +888,18 @@ static void tab_rect(int win, int i, int *x, int *y, int *w, int *h);
 static int last_btn;
 static int ptr_x, ptr_y;
 
+enum title_control { TITLE_CLOSE = 0, TITLE_MAXIMIZE = 1, TITLE_MINIMIZE = 2 };
+
+static void title_control_rect(const struct win *W, int which,
+                               int *x, int *y, int *w, int *h)
+{
+    const struct ui_theme *t = ui_theme();
+    int cs = UI_DP(t, 26), gap = UI_DP(t, 6);
+    *w = *h = cs;
+    *x = W->x + W->w - UI_S2(t) - cs - which * (cs + gap);
+    *y = W->y + (t->title_h - cs) / 2;
+}
+
 /* ELEVATION. Every window used to get the identical shadow, focused or not.
  * Real desktops encode a hierarchy - a menu above a window above the desktop -
  * and `off` and `soft` were ALREADY parameters of fb_shadow, so three levels
@@ -809,21 +916,11 @@ static void chrome(int win, int focused)
 
     fb_shadow(W->x, W->y, W->w, W->h, off, soft);
     fb_rrect(W->x, W->y, W->w, W->h, t->radius, t->border);
+    if (focused)
+        fb_rrect_blend(W->x, W->y, W->w, W->h, t->radius, t->accent, 44);
     fb_rrect(W->x + 1, W->y + 1, W->w - 2, W->h - 2, t->radius - 1, t->panel);
 
     if (W->flags & WF_NOCHROME) return;
-
-    /* THE GRIP HAS TO BE VISIBLE or it is a secret. Three short diagonals in
-     * the bottom-right corner - the convention every desktop uses, and cheap
-     * enough to draw on every window every repaint. */
-    {
-        int gx = W->x + W->w - UI_S1(t) - 1, gy = W->y + W->h - UI_S1(t) - 1;
-        int step = UI_S1(t) / 2 + 1;
-        for (int i = 1; i <= 3; i++) {
-            int d = i * step * 2;
-            fb_line(gx - d, gy, gx, gy - d, t->border);
-        }
-    }
 
     int tx = W->x + 2, tw = W->w - 4, th = t->title_h - 3;
     if (focused) {
@@ -831,9 +928,6 @@ static void chrome(int win, int focused)
          * outside it - see fb_rrect_grad_top */
         fb_rrect_grad_top(tx, W->y + 2, tw, th, t->radius - 2,
                           t->title, t->title_bot);
-        /* focus is title-bar hue PLUS the accent underline. Both already
-         * existed; a third signal would be one too many. */
-        fb_fill_px(tx, W->y + t->title_h - 2, tw, 2, t->accent);
     } else {
         /* a GRADIENT, same as the focused bar and same as kernel.zl:794 - it
          * was two copies of one colour because the theme struct had one field
@@ -860,21 +954,36 @@ static void chrome(int win, int focused)
                        on ? (focused ? t->text : t->text_dim) : t->text_dim);
         }
     } else {
-        fb_text_prop(W->x + UI_S3(t), W->y + (t->title_h - fb_text_prop_h()) / 2,
+        int title_w = fb_text_prop_w(W->title);
+        int title_x = W->x + (W->w - title_w) / 2;
+        int safe_l = W->x + UI_S6(t);
+        int safe_r = W->x + W->w - UI_DP(t, 112);
+        if (title_x < safe_l) title_x = safe_l;
+        if (title_x + title_w > safe_r) title_x = safe_r - title_w;
+        fb_text_prop(title_x, W->y + (t->title_h - fb_text_prop_h()) / 2,
                      W->title, focused ? t->text : t->text_dim);
     }
 
-    /* THE CLOSE BOX. It used to be a hardcoded red square, always, in every
-     * state. One button with three states is the difference between "drawn"
-     * and "designed", and it costs one compare: quiet by default, accent on
-     * hover, and danger red ONLY while it is actually being pressed - so the
-     * one destructive control on a window is not shouting the whole time. */
-    int cs = UI_S3(t);
-    int bx = W->x + W->w - cs - UI_S2(t), by = W->y + (t->title_h - cs) / 2;
-    int over = ptr_x >= bx && ptr_x < bx + cs && ptr_y >= by && ptr_y < by + cs;
-    unsigned face = !over ? (focused ? t->text_dim : t->title_off)
-                          : ((last_btn & 1) ? t->danger : t->accent);
-    fb_rrect(bx, by, cs, cs, UI_S1(t) / 2, face);
+    /* One window-control component, three actions. Shared geometry keeps the
+     * painted buttons and their hit targets identical; atlas icons keep them
+     * crisp at every UI scale. */
+    for (int b = TITLE_CLOSE; b <= TITLE_MINIMIZE; b++) {
+        int bx, by, bw, bh;
+        title_control_rect(W, b, &bx, &by, &bw, &bh);
+        int over = ptr_x >= bx && ptr_x < bx + bw && ptr_y >= by && ptr_y < by + bh;
+        unsigned face = t->panel_hi, ink = t->text_dim;
+        if (over) {
+            face = (b == TITLE_CLOSE) ? t->danger : t->accent;
+            ink = t->panel;
+        }
+        fb_rrect(bx, by, bw, bh, bw / 2, face);
+        if (over && (last_btn & 1))
+            fb_rrect_blend(bx, by, bw, bh, bw / 2, t->bg, 48);
+        int glyph = b == TITLE_CLOSE ? 13 :
+                    (b == TITLE_MINIMIZE ? 22 : (wins[win].maxed ? 24 : 23));
+        fb_icon24(bx + (bw - UI_DP(t, 24)) / 2,
+                  by + (bh - UI_DP(t, 24)) / 2, glyph, ink);
+    }
 
     /* THE RESIZE GRIP, drawn. A corner you cannot see is a corner nobody finds,
      * and the pointer shape only helps once you are already on it.
@@ -903,12 +1012,12 @@ static void chrome(int win, int focused)
 
 /* Where the toast sits. The dock is desktop furniture drawn by hook_desk and
  * wm.c does not know how tall it is, so this asks for the same reserve the
- * policy layer uses - 64 * scale, matching kernel.zl's dock_y(). A toast that
+ * policy layer uses - 72 * scale, matching kernel.zl's dock_y(). A toast that
  * lands under the dock is a toast you cannot read or click. */
 static void toast_rect(int *x, int *y, int *w, int *h)
 {
     const struct ui_theme *t = ui_theme();
-    notify_rect((int)fb_pxw(), (int)fb_pxh(), 64 * t->scale, t->scale, x, y, w, h);
+    notify_rect((int)fb_pxw(), (int)fb_pxh(), 72 * t->scale, t->scale, x, y, w, h);
 }
 
 /* Drawn LAST in each damage rectangle, so it is on top of every window without
@@ -954,10 +1063,12 @@ void wm_repaint(void)
         /* the wallpaper pass: furniture first, always at the bottom, never in
          * the z-order and never overlapped by anything but a window */
         if (hook_desk) hook_desk(rx0, ry0, rx1 - rx0, ry1 - ry0);
+        snap_preview_draw(rx0, ry0, rx1, ry1);
 
         for (int i = 0; i < nz; i++) {          /* BACK TO FRONT = paint order */
             int win = zorder[i];
             struct win *W = &wins[win];
+            if (W->flags & WF_MINIMIZED) continue;
             int cx, cy, cw, ch;
             /* THE FRAME PLUS ITS SHADOW REACH, always - not the frame with the
              * reach as a fallback.
@@ -997,6 +1108,7 @@ void wm_repaint(void)
              * A refusal from fb_stash (every slot busy) degrades to drawing
              * the window opaque, which is the right way for an effect to fail. */
             int fade = 255, stash = -1;
+            int stash_x = cx, stash_y = cy, stash_w = cw, stash_h = ch;
             if (wm_anim_running(win) == ANIM_FADE) {
                 fade = wm_anim_alpha(win);
                 if (fade < 255) stash = fb_stash(cx, cy, cw, ch);
@@ -1028,8 +1140,11 @@ void wm_repaint(void)
              * fade - they look different and only one of them is the effect
              * the prototype asks for. */
             if (stash >= 0) {
-                fb_clip(cx, cy, cw, ch);
-                fb_stash_blend(stash, cx, cy, 255 - fade);
+                /* cx/cy are reused by the narrower client intersection above.
+                 * Restoring at that later origin shifted the saved backdrop
+                 * into the app body. Keep the capture rectangle immutable. */
+                fb_clip(stash_x, stash_y, stash_w, stash_h);
+                fb_stash_blend(stash, stash_x, stash_y, 255 - fade);
                 fb_blur_free(stash);
             }
 
@@ -1102,62 +1217,16 @@ static int is_double(int win, int x, int y)
     return 0;
 }
 
-/* ---- snapping -------------------------------------------------------------
- * Maximise, the two halves, and back again. wm_move and wm_resize each damage
- * the old rect and the new one, so none of this needs damage of its own.
- *
- * ONE saved rect serves all of them. `maxed` means "this window is snapped
- * somewhere and sav_* holds where it came from", not specifically "maximised" -
- * so snapping left and then right does NOT overwrite the original geometry with
- * the left half, and one restore always gets you back to where you started.
- * That is the bug every naive version of this has: the saved rect is captured
- * on every snap instead of only on the first. */
-#define SNAP_NONE   0
-#define SNAP_MAX    1
-#define SNAP_LEFT   2
-#define SNAP_RIGHT  3
-
-static void wm_snap(int win, int how)
-{
-    if (!wm_is_open(win)) return;
-
-    if (how == SNAP_NONE) {
-        if (!wins[win].maxed) return;          /* nothing to go back to */
-        wins[win].maxed = 0;
-        wm_move(win, wins[win].sav_x, wins[win].sav_y);
-        wm_resize(win, wins[win].sav_w, wins[win].sav_h);
-        return;
-    }
-
-    if (!wins[win].maxed) {                    /* remember, ONCE */
-        wins[win].sav_x = wins[win].x; wins[win].sav_y = wins[win].y;
-        wins[win].sav_w = wins[win].w; wins[win].sav_h = wins[win].h;
-    }
-    wins[win].maxed = how;
-
-    int sw = (int)fb_pxw(), sh = (int)fb_pxh();
-    /* Move BEFORE resize when going left, resize before move when going right?
-     * No - wm_resize clamps to min_w/min_h and wm_move does not care, so the
-     * order cannot produce a rect neither call asked for. Move first, always,
-     * for one less thing to reason about. */
-    if (how == SNAP_MAX)   { wm_move(win, 0, 0);       wm_resize(win, sw, sh); }
-    if (how == SNAP_LEFT)  { wm_move(win, 0, 0);       wm_resize(win, sw / 2, sh); }
-    if (how == SNAP_RIGHT) { wm_move(win, sw / 2, 0);  wm_resize(win, sw - sw / 2, sh); }
-}
-
-/* the double-click gesture: maximise, or put it back */
-static void wm_toggle_max(int win)
-{
-    wm_snap(win, wins[win].maxed ? SNAP_NONE : SNAP_MAX);
-}
-
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
 
 /* wm_close calls this. Defined here, beside the state it clears, so the grab
  * and its lifetime stay in one place. */
 static void wm_drop_grab(int win)
 {
-    if (pgrab == win) pgrab = -1;
+    if (pgrab == win) {
+        pgrab = -1;
+        snap_preview_set(SNAP_NONE);
+    }
 }
 /* What the pointer grab is FOR. It used to be a bare 0/1 meaning "the app has
  * it" or "we are moving it"; resize is a third answer, and three states with
@@ -1207,7 +1276,7 @@ static int in_resize_grip(int win, int x, int y)
 static void tab_rect(int win, int i, int *x, int *y, int *w, int *h)
 {
     const struct ui_theme *t = ui_theme();
-    int avail = wins[win].w - 2 * UI_S3(t) - UI_S6(t);   /* leave the close box */
+    int avail = wins[win].w - UI_DP(t, 128);  /* three controls + both margins */
     int tw = avail / wins[win].ntab;
     int max = UI_S6(t) * 5;
     if (tw > max) tw = max;
@@ -1252,22 +1321,23 @@ static int in_titlebar(int win, int x, int y)
  * It sits INSIDE the frame rather than straddling the border, so it cannot
  * overlap the shadow - which is drawn outside the frame and is not part of the
  * window for hit-testing purposes. */
-static int in_closebox(int win, int x, int y)
+static int in_title_control(int win, int which, int x, int y)
 {
-    const struct ui_theme *t = ui_theme();
     if (wins[win].flags & WF_NOCHROME) return 0;
-    int cs = UI_S3(t);
-    int bx = wins[win].x + wins[win].w - cs - UI_S2(t);
-    int by = wins[win].y + (t->title_h - cs) / 2;
-    return x >= bx && x < bx + cs && y >= by && y < by + cs;
+    int bx, by, bw, bh;
+    title_control_rect(&wins[win], which, &bx, &by, &bw, &bh);
+    return x >= bx && x < bx + bw && y >= by && y < by + bh;
 }
+
+static int in_closebox(int win, int x, int y)
+{ return in_title_control(win, TITLE_CLOSE, x, y); }
 
 /* The desktop's furniture, in the only two numbers wm.c needs from it: the
  * header bar at the top and the dock at the bottom. kernel.zl's TOPBAR_H and
- * dock_y() are 32 and 64, times ui(). A "maximised" window that reaches under
+ * dock_y() are 48 and 72, times ui(). A "maximised" window that reaches under
  * the dock cannot reach its own status bar. */
-#define RESERVE_TOP(t)  (32 * (t)->scale)
-#define RESERVE_BOT(t)  (64 * (t)->scale)
+#define RESERVE_TOP(t)  UI_DP((t), 48)
+#define RESERVE_BOT(t)  UI_DP((t), 72)
 
 /* Snap `win` to `z` (or un-snap it if z is SNAP_NONE), applying whatever
  * geometry snap.c hands back. The two triggers below both end here, so there
@@ -1311,6 +1381,14 @@ void wm_snap_key(int win, int dir)
     snap_to(win, snap_key_zone(win, dir));
 }
 
+/* Double-click and Super+Arrow deliberately meet in the same snap state.
+ * Keeping a second maximise/restore slot here made a drag snap impossible to
+ * restore with the keyboard after the two branches were merged. */
+static void wm_toggle_max(int win)
+{
+    wm_snap_key(win, snap_state(win) == SNAP_NONE ? SK_UP : SK_DOWN);
+}
+
 static void route_mouse(int x, int y, int btn)
 {
     int down = (btn & 1) && !(last_btn & 1);
@@ -1335,6 +1413,8 @@ static void route_mouse(int x, int y, int btn)
     if (pgrab >= 0) {
         if (grab_drag == GRAB_MOVE) {
             wm_move(pgrab, x - grab_dx, y - grab_dy);
+            snap_preview_set(snap_zone_for_point(x, y,
+                                                 (int)fb_pxw(), (int)fb_pxh()));
         } else if (grab_drag == GRAB_RESIZE) {
             /* grab_dx/dy hold the offset from the pointer to the corner, so
              * the corner stays under the cursor instead of snapping to it. */
@@ -1355,8 +1435,17 @@ static void route_mouse(int x, int y, int btn)
              * it currently has, which is half the screen. */
             if (grab_drag == GRAB_MOVE) {
                 int z = snap_zone_for_point(x, y, (int)fb_pxw(), (int)fb_pxh());
-                if (z != SNAP_NONE) snap_to_rect(pgrab, z, grab_ox, grab_oy, grab_ow, grab_oh);
-                else                snap_note_moved(pgrab);
+                snap_preview_set(SNAP_NONE);
+                if (z != SNAP_NONE) {
+                    snap_to_rect(pgrab, z, grab_ox, grab_oy, grab_ow, grab_oh);
+                } else if (wins[pgrab].x != grab_ox || wins[pgrab].y != grab_oy ||
+                           wins[pgrab].w != grab_ow || wins[pgrab].h != grab_oh) {
+                    /* A click in the title bar takes the grab path too. Do not
+                     * erase snap state unless the pointer actually moved or
+                     * resized the window; otherwise the second click of a
+                     * double-click cannot restore a maximised window. */
+                    snap_note_moved(pgrab);
+                }
             }
             pgrab = -1;
         }
@@ -1387,6 +1476,8 @@ static void route_mouse(int x, int y, int btn)
         wm_raise(hit);
         int dbl = is_double(hit, x, y);
         if (in_closebox(hit, x, y)) { wm_close(hit); return; }
+        if (in_title_control(hit, TITLE_MAXIMIZE, x, y)) { wm_toggle_max(hit); return; }
+        if (in_title_control(hit, TITLE_MINIMIZE, x, y)) { wm_minimize(hit); return; }
         /* DOUBLE-CLICK THE TITLE BAR TO MAXIMISE, again to restore. Checked
          * before the drag, or the second press starts a drag instead - and a
          * maximise that also moves the window by however far the hand drifted
@@ -1398,6 +1489,7 @@ static void route_mouse(int x, int y, int btn)
         if (tb >= 0) { wm_set_tab(hit, tb); return; }
         if (in_titlebar(hit, x, y)) {
             pgrab = hit; grab_drag = GRAB_MOVE;
+            snap_preview_set(SNAP_NONE);
             grab_dx = x - wins[hit].x;
             grab_dy = y - wins[hit].y;
             wm_geometry(hit, &grab_ox, &grab_oy, &grab_ow, &grab_oh);
@@ -1461,10 +1553,10 @@ static void route_key(int type, int code, int mods)
      * only wm_move and wm_resize, which the grip and the double-click already
      * gave callers. */
     if (type == EV_KEY_DOWN && (mods & MOD_SUPER) && focus_win >= 0) {
-        if (code == KEY_LEFT)  { wm_snap(focus_win, SNAP_LEFT);  return; }
-        if (code == KEY_RIGHT) { wm_snap(focus_win, SNAP_RIGHT); return; }
-        if (code == KEY_UP)    { wm_snap(focus_win, SNAP_MAX);   return; }
-        if (code == KEY_DOWN)  { wm_snap(focus_win, SNAP_NONE);  return; }
+        if (code == KEY_LEFT)  { wm_snap_key(focus_win, SK_LEFT);  return; }
+        if (code == KEY_RIGHT) { wm_snap_key(focus_win, SK_RIGHT); return; }
+        if (code == KEY_UP)    { wm_snap_key(focus_win, SK_UP);    return; }
+        if (code == KEY_DOWN)  { wm_snap_key(focus_win, SK_DOWN);  return; }
     }
 
     /* Super, TAPPED, belongs to the desktop and not to the focused window -
@@ -1508,12 +1600,11 @@ static void wm_route(int type)
 }
 
 /* ---- the frame loop -------------------------------------------------------
- * This is the top of the system. It must NOT spin at 100% CPU, so it is gated
- * on the 100 Hz tick: at most one pass per tick, and the rest of the time it
- * returns immediately so the caller can idle.
+ * This is the top of the system. A calibrated TSC gives a 16.667 ms deadline;
+ * the 100 Hz PIT remains only as the fallback clock. The caller executes HLT
+ * after every attempt, so both the early-return and idle paths sleep for an
+ * interrupt instead of burning a core.
  */
-static unsigned int last_tick;
-
 /* ---- what a frame actually costs -------------------------------------------
  * idt_ticks() is 100 Hz, which is 10 ms of resolution against a 16.67 ms
  * budget - useless. The TSC is a cycle counter and cpu.c has calibrated it
@@ -1536,18 +1627,13 @@ static unsigned int frame_us, frame_peak_us;
  *
  *   frame_late  a frame that was TIMED and came in over FRAME_BUDGET_US. This
  *               is the compositor's own fault - it drew too much.
- *   frame_lost  a 100 Hz tick that no frame ran in at all. wm_frame() is called
- *               from the idle loop and returns immediately unless the tick
- *               changed, so `now - last_tick > 1` means the previous pass
- *               overran its 10 ms slot and the ticks in between are simply
- *               gone. Nothing counted them before; a dropped frame was silent.
+ *   frame_lost  a 16.667 ms presentation deadline skipped before wm_frame()
+ *               sampled it. This is cadence loss, separate from draw cost.
  *
- * THE BUDGET IS 16667 us AND NOT 10000 us, deliberately. The PIT gives a 10 ms
- * slot, but the thing being missed is a panel refresh, and the ThinkPad's panel
+ * THE BUDGET IS 16667 us, deliberately. The thing being missed is a panel
+ * refresh, and the ThinkPad's panel
  * was measured at 59.998 Hz (kernel/HANDOFF.md, from PIPE_LINK_M1/N1). A frame
- * between 10 and 16.6 ms loses a tick without ever being visible as a dropped
- * refresh, so charging it as stutter would report a smooth desktop as broken.
- * frame_lost catches those; frame_late is what a person can actually see.
+ * refresh, so a faster 10 ms software tick was never the correct budget.
  *
  * Neither is a rate. They are totals since the last reset, because a rate needs
  * a denominator and the honest denominator - painted frames - is not the same
@@ -1555,7 +1641,6 @@ static unsigned int frame_us, frame_peak_us;
  * frame count so a probe can divide if it wants to. */
 #define FRAME_BUDGET_US 16667u
 static unsigned int frame_late, frame_lost, frame_painted;
-static int          paced;      /* has a first frame set last_tick yet? */
 
 int wm_frame_us(void)  { return (int)frame_us; }
 int wm_peak_us(void)   { return (int)frame_peak_us; }
@@ -1568,14 +1653,29 @@ void wm_peak_reset(void) { frame_peak_us = 0; frame_late = 0; frame_lost = 0;
 
 void wm_frame(void)
 {
+    unsigned int clock_khz = cpu_tsc_khz();
+    unsigned int now_tsc = cpu_tsc_lo();
+    if (clock_khz) {
+        unsigned int cyc_us = clock_khz / 1000u;
+        if (!cyc_us) cyc_us = 1;
+        unsigned int interval = cyc_us * FRAME_BUDGET_US;
+        if (!paced) {
+            paced = 1;
+            next_frame_tsc = now_tsc;
+        }
+        if ((int)(now_tsc - next_frame_tsc) < 0) return;
+        unsigned int behind = now_tsc - next_frame_tsc;
+        unsigned int missed = interval ? behind / interval : 0;
+        if (missed) frame_lost += missed;
+        next_frame_tsc += (missed + 1u) * interval;
+    } else {
+        /* A calibrated TSC is expected on every graphical target. Keep the
+         * old PIT gate as an honest fallback instead of busy-spinning. */
+        unsigned int tick = idt_ticks();
+        if (tick == last_tick) return;
+        last_tick = tick;
+    }
     unsigned int now = idt_ticks();
-    if (now == last_tick) return;
-    /* Ticks between this pass and the last one that nothing ran in. Skipped on
-     * the very first frame: last_tick is 0 until then and boot takes hundreds
-     * of ticks, which would otherwise be charged to the compositor as one
-     * enormous stall before it had drawn anything. */
-    if (paced && now - last_tick > 1) frame_lost += now - last_tick - 1;
-    paced = 1;
     last_tick = now;
     /* apps-in-windows timed the frame with the 64-bit cpu_tsc(); this tree
      * uses the 32-bit cpu_tsc_lo(). Both declarations survived the merge and
@@ -1599,7 +1699,8 @@ void wm_frame(void)
 
     if (hook_tick)
         for (int i = 0; i < nz; i++)
-            if (hook_tick(win_app(zorder[i]), zorder[i])) wm_damage_win(zorder[i]);
+            if (!(wins[zorder[i]].flags & WF_MINIMIZED) &&
+                hook_tick(win_app(zorder[i]), zorder[i])) wm_damage_win(zorder[i]);
 
     /* The toast appears and retires on a tick count of its own. This damages
      * ONLY its own rectangle and only when what is on screen actually changed
@@ -1626,10 +1727,15 @@ void wm_frame(void)
     /* The plane first; the sprite only if it did not take. */
     if (!gpu_cursor_move(ptr_x, ptr_y))
         fb_pointer_show(ptr_x, ptr_y);
+    /* Firmware or our modeset may already have an Intel pipe scanning out.
+     * Wait only on that proven source; QEMU/BGA takes the deadline path and
+     * never touches an absent MMIO block. */
+    if (did_paint && intel_supported && intel_wait_vblank && intel_supported())
+        intel_wait_vblank();
     fb_present();
 
     if (did_paint) {
-        unsigned int khz = cpu_tsc_khz();
+        unsigned int khz = clock_khz;
         if (khz) {
             /* 32-bit throughout: a 64-bit divide would pull in libgcc's
              * __udivdi3 and this kernel links no libgcc at all. At 2.3 GHz a

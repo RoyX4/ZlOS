@@ -69,8 +69,11 @@ int fb_cell_h(void) { return cell_h; }
  * blend_cov_scaled already make possible.
  */
 static int ui_scale = 1;
+static int ui_scale_q8 = 256;
+void fb_cache_reset(void);
 
 int fb_ui_scale(void) { return ui_scale; }
+int fb_ui_scale_q8(void) { return ui_scale_q8; }
 
 unsigned int fb_get_px(int x, int y);   /* defined below; used by the AA text path */
 void idt_set_pointer_bounds(int w, int h);   /* the mouse clamp, pushed not pulled */
@@ -711,15 +714,19 @@ void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
     fb_w     = width;
     fb_h     = height;
     fb_bpp   = bpp;
-    cell_w   = (width >= 1400) ? GLYPH_W * 2 : GLYPH_W;
-    cell_h   = (width >= 1400) ? GLYPH_H * 2 : GLYPH_H;
-    /* Rounded, not truncated: 1200 wide is much closer to 1.5 designs than to
-     * 1, and truncation would leave it at 1 with half the screen empty. Capped
-     * at 4 because beyond that a 24px title becomes 96px and the layout runs
-     * out of design units before it runs out of screen. */
-    ui_scale = (int)((width + 400u) / 800u);
-    if (ui_scale < 1) ui_scale = 1;
-    if (ui_scale > 4) ui_scale = 4;
+    /* Pixel width is not UI zoom. The old 1400px cliff switched 1920x1200 to
+     * a 16x32 terminal and almost 2.5x layout: the whole desktop looked like
+     * a browser at 200% zoom. Keep 8x16 through ordinary desktop modes and
+     * reserve the doubled atlas for 4K-class output. */
+    cell_w   = (width >= 3000) ? GLYPH_W * 2 : GLYPH_W;
+    cell_h   = (width >= 3000) ? GLYPH_H * 2 : GLYPH_H;
+    /* 1920px is the 1x reference canvas, 2560 is 1.33x and 3840 is 2x.
+     * Fractional q8 keeps the middle mode smooth without making a common
+     * 1080/1200p desktop comically oversized. */
+    ui_scale_q8 = (int)((width * 256u + 960u) / 1920u);
+    if (ui_scale_q8 < 256) ui_scale_q8 = 256;
+    if (ui_scale_q8 > 768) ui_scale_q8 = 768;
+    ui_scale = (ui_scale_q8 + 128) / 256;
     fb_cols  = (int)(width  / cell_w);
     fb_rows  = (int)(height / cell_h);
     fb_col   = 0;
@@ -728,6 +735,7 @@ void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
     tx1      = fb_cols - 1;      /* full width until zl opens a text box */
     fb_clip_none();              /* the scissor follows the new geometry */
     fb_pointer_forget();         /* ...and the cursor sprite does not survive it */
+    fb_cache_reset();            /* mode-sized caches cannot survive geometry */
 
     /* Draw into RAM and blit, rather than drawing straight into the card.
      * Refused only when the mode does not fit between `back` and its
@@ -2384,10 +2392,9 @@ static unsigned int *arena_take(unsigned int px)
     return p;
 }
 
-static unsigned int arena_free_px(void)
+static unsigned int arena_free_bytes(void)
 {
-    return (unsigned int)(((fb_uptr)HI_BLUR + BLUR_LIMIT
-                           - (fb_uptr)arena_next) / 4u);
+    return (unsigned int)((fb_uptr)HI_BLUR + BLUR_LIMIT - (fb_uptr)arena_next);
 }
 
 /* fb_cache_reset() is defined below the blur slots, not here, because rewinding
@@ -2396,7 +2403,7 @@ static unsigned int arena_free_px(void)
  * is why it could never safely be called. */
 
 /* ---- the wallpaper cache -------------------------------------------------- */
-static unsigned int *wall_buf;
+static unsigned short *wall_buf;
 static int wall_w, wall_h;
 
 int fb_wall_ok(void) { return wall_buf != 0 && wall_w == (int)fb_w && wall_h == (int)fb_h; }
@@ -2408,21 +2415,44 @@ int fb_wall_save(void)
 {
     if (!fb_active()) return 0;
     if (!wall_buf || wall_w != (int)fb_w || wall_h != (int)fb_h) {
-        wall_buf = arena_take(fb_w * fb_h);
+        unsigned int pixels = fb_w * fb_h;
+        wall_buf = (unsigned short *)arena_take((pixels + 1u) / 2u);
         if (!wall_buf) {
             fb_puts("  fb: wallpaper cache refused - wants ");
-            fb_putu(fb_w * fb_h * 4u >> 10);
-            fb_puts(" KiB, "); fb_putu(arena_free_px() * 4u >> 10);
+            fb_putu(fb_w * fb_h * 2u >> 10);
+            fb_puts(" KiB RGB565, "); fb_putu(arena_free_bytes() >> 10);
             fb_puts(" KiB left in the arena. Plain gradient instead.\n");
             return 0;
         }
         wall_w = (int)fb_w; wall_h = (int)fb_h;
     }
-    for (unsigned int y = 0; y < fb_h; y++)
-        for (unsigned int x = 0; x < fb_w; x++)
-            wall_buf[(unsigned long)y * fb_w + x] = fb_get_px((int)x, (int)y);
-    fb_puts("  fb: wallpaper cached, "); fb_putu(fb_w * fb_h * 4u >> 10);
-    fb_puts(" KiB; "); fb_putu(arena_free_px() * 4u >> 10);
+    /* RGB565 halves the cache without lowering its resolution. An ordered
+     * 4x4 dither before quantisation keeps broad gradients from banding; the
+     * cache now fits 3840x2160 inside the existing asserted 16 MiB arena. */
+    static const signed char dither[16] = {
+        -8, 0, -6, 2, 4, -4, 6, -2, -5, 3, -7, 1, 7, -1, 5, -3
+    };
+    for (unsigned int y = 0; y < fb_h; y++) {
+        for (unsigned int x = 0; x < fb_w; x++) {
+            unsigned c = fb_get_px((int)x, (int)y);
+            int d = dither[((y & 3u) << 2) | (x & 3u)];
+            int r = (int)((c >> 16) & 255u) + d;
+            int g = (int)((c >> 8) & 255u) + d / 2;
+            int b = (int)(c & 255u) + d;
+            if (r < 0) r = 0;
+            if (r > 255) r = 255;
+            if (g < 0) g = 0;
+            if (g > 255) g = 255;
+            if (b < 0) b = 0;
+            if (b > 255) b = 255;
+            wall_buf[(unsigned long)y * fb_w + x] =
+                (unsigned short)(((unsigned)r >> 3) << 11 |
+                                 ((unsigned)g >> 2) << 5  |
+                                  (unsigned)b >> 3);
+        }
+    }
+    fb_puts("  fb: wallpaper cached RGB565, "); fb_putu(fb_w * fb_h * 2u >> 10);
+    fb_puts(" KiB; "); fb_putu(arena_free_bytes() >> 10);
     fb_puts(" KiB left in the arena\n");   /* same words as the refusal above:
                                             * the arena is not the blur's, it
                                             * is shared and first-come, which is
@@ -2438,17 +2468,28 @@ void fb_wall_paint(int x, int y, int w, int h)
     if (!clip_rect(&x0, &y0, &x1, &y1)) return;
     if (back_on) {
         for (int yy = y0; yy < y1; yy++) {
-            const unsigned int *s = wall_buf + (unsigned long)yy * wall_w + x0;
+            const unsigned short *s = wall_buf + (unsigned long)yy * wall_w + x0;
             unsigned int *o = back + (unsigned long)yy * fb_w + x0;
-            for (int xx = x0; xx < x1; xx++) *o++ = *s++;
+            for (int xx = x0; xx < x1; xx++) {
+                unsigned v = *s++;
+                unsigned r = (v >> 11) & 31u, g = (v >> 5) & 63u, b = v & 31u;
+                *o++ = ((r << 3 | r >> 2) << 16) |
+                       ((g << 2 | g >> 4) << 8)  |
+                        (b << 3 | b >> 2);
+            }
         }
         fb_damage(x0, y0, x1 - x0, y1 - y0);
         return;
     }
     for (int yy = y0; yy < y1; yy++)
-        for (int xx = x0; xx < x1; xx++)
+        for (int xx = x0; xx < x1; xx++) {
+            unsigned v = wall_buf[(unsigned long)yy * wall_w + xx];
+            unsigned r = (v >> 11) & 31u, g = (v >> 5) & 63u, b = v & 31u;
             put_pixel((unsigned)xx, (unsigned)yy,
-                      wall_buf[(unsigned long)yy * wall_w + xx]);
+                      ((r << 3 | r >> 2) << 16) |
+                      ((g << 2 | g >> 4) << 8) |
+                       (b << 3 | b >> 2));
+        }
 }
 
 /* ---- blur slots ------------------------------------------------------------ */
@@ -2582,7 +2623,7 @@ static int slot_capture(int x, int y, int w, int h)
         unsigned int *p = arena_take(need);
         if (!p) {
             fb_puts("  fb: blur refused - wants "); fb_putu(need * 4u >> 10);
-            fb_puts(" KiB, arena has "); fb_putu(arena_free_px() * 4u >> 10);
+            fb_puts(" KiB, arena has "); fb_putu(arena_free_bytes() >> 10);
             fb_puts(" KiB\n");
             return -1;
         }
@@ -2881,7 +2922,7 @@ static int prop_cell(int role)
 {
     if (role < 0) role = 0;
     if (role > TEXT_TITLE) role = TEXT_TITLE;
-    int h = role_base[role] * ui_scale;
+    int h = (role_base[role] * ui_scale_q8 + 128) / 256;
     if (h < 12) h = 12;                /* below this nothing is legible */
     return h;
 }
@@ -2947,7 +2988,11 @@ static int prop_adv(const unsigned char *adv, int i, int want, int cell, int ita
     int a = adv[i] * want / cell;
     /* the lean needs somewhere to land, or the top of an `f` sits on the
      * glyph after it. Browser's own figure, kept. */
-    if (ital) a += want / 16;
+    if (ital) {
+        int room = want / 16;
+        if (room < 1) room = 1;
+        a += room;
+    }
     return a;
 }
 
@@ -3112,12 +3157,12 @@ void fb_text_rich(int px, int py, const char *s, int len, unsigned int fg,
  * picture, and the caller picks the colour. Same read-back blend as
  * fb_glyph_aa: transparent where coverage is zero, so an icon sits on the
  * wallpaper or a titlebar gradient with no box around it. */
-extern const unsigned char icons24[10][24][24];
+extern const unsigned char icons24[44][24][24];
 /* the same ten icons RE-RASTERIZED at 48x48, not the 24x24 set scaled up.
  * gen_icons.py draws each size from the geometry at its own 4x supersample,
  * so this carries real anti-aliased edges. See the comment in fb_icon24. */
-extern const unsigned char icons48[10][48][48];
-#define ICON_N  10
+extern const unsigned char icons48[44][48][48];
+#define ICON_N  44
 #define ICON_W  24
 #define ICON_H  24
 #define ICON2_W 48
@@ -3139,12 +3184,16 @@ extern const unsigned char icons48[10][48][48];
 void fb_icon24(int px, int py, int n, unsigned int fg)
 {
     if ((unsigned)n >= ICON_N) return;
-    int sc = cell_w / GLYPH_W;
-    if (sc < 1) sc = 1;
+    int dst = (ICON_W * ui_scale_q8 + 128) / 256;
+    if (dst < ICON_W) dst = ICON_W;
 
-    if (sc == 1) { blend_cov(px, py, &icons24[n][0][0], ICON_W,  ICON_H,  fg); return; }
-    if (sc == 2) { blend_cov(px, py, &icons48[n][0][0], ICON2_W, ICON2_H, fg); return; }
+    if (dst == ICON_W)  { blend_cov(px, py, &icons24[n][0][0], ICON_W,  ICON_H,  fg); return; }
+    if (dst == ICON2_W) { blend_cov(px, py, &icons48[n][0][0], ICON2_W, ICON2_H, fg); return; }
 
-    blend_cov_scaled(px, py, &icons48[n][0][0], ICON2_W, ICON2_H,
-                     ICON_W * sc, ICON_H * sc, fg);
+    /* Pick the nearest native atlas, then bilinear-resample once. Fractional
+     * desktop scaling must not fall back to nearest-neighbour blocks. */
+    if (dst < 36)
+        blend_cov_scaled(px, py, &icons24[n][0][0], ICON_W, ICON_H, dst, dst, fg);
+    else
+        blend_cov_scaled(px, py, &icons48[n][0][0], ICON2_W, ICON2_H, dst, dst, fg);
 }

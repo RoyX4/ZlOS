@@ -310,6 +310,135 @@ def icon_grid(d):
                                 radius=5, outline=INK, width=W_MAIN)
 
 
+# ---- navigation, window and application controls -------------------------
+
+def icon_browser(d):
+    ring(d, 48, 48, 34, width=W_MAIN)
+    path(d, [(14, 48), (82, 48)], width=W_THIN)
+    d.ellipse([31, 12, 65, 84], outline=INK, width=W_THIN)
+
+
+def icon_home(d):
+    path(d, [(16, 45), (48, 17), (80, 45)], width=W_MAIN)
+    poly(d, [(23, 42), (23, 80), (73, 80), (73, 42)], width=W_MAIN)
+    path(d, [(42, 80), (42, 59), (55, 59), (55, 80)], width=W_THIN, caps=False)
+
+
+def icon_minimize(d):
+    path(d, [(28, 64), (68, 64)], width=W_BOLD)
+
+
+def icon_maximize(d):
+    d.rounded_rectangle([23, 23, 73, 73], radius=5, outline=INK, width=W_MAIN)
+
+
+def icon_restore(d):
+    d.rounded_rectangle([31, 20, 75, 64], radius=4, outline=INK, width=W_MAIN)
+    d.rounded_rectangle([20, 31, 64, 75], radius=4, outline=INK, width=W_MAIN)
+
+
+def icon_menu(d):
+    for y in (28, 48, 68): path(d, [(23, y), (73, y)], width=W_BOLD)
+
+
+def icon_refresh(d):
+    d.arc([17, 17, 79, 79], start=35, end=330, fill=INK, width=W_MAIN)
+    d.polygon([(71, 15), (84, 31), (63, 32)], fill=INK)
+
+
+def icon_plus(d):
+    path(d, [(48, 22), (48, 74)], width=W_BOLD)
+    path(d, [(22, 48), (74, 48)], width=W_BOLD)
+
+
+def icon_folder_add(d):
+    icon_files(d)
+    path(d, [(60, 45), (60, 66)], width=W_MAIN)
+    path(d, [(49, 55), (71, 55)], width=W_MAIN)
+
+
+def icon_trash(d):
+    d.rounded_rectangle([27, 31, 69, 80], radius=5, outline=INK, width=W_MAIN)
+    path(d, [(20, 27), (76, 27)], width=W_MAIN)
+    path(d, [(38, 18), (58, 18)], width=W_MAIN)
+    for x in (40, 56): path(d, [(x, 42), (x, 68)], width=W_THIN)
+
+
+def icon_download(d):
+    path(d, [(48, 17), (48, 62)], width=W_BOLD)
+    path(d, [(30, 46), (48, 64), (66, 46)], width=W_BOLD)
+    path(d, [(22, 78), (74, 78)], width=W_MAIN)
+
+
+def icon_upload(d):
+    path(d, [(48, 65), (48, 20)], width=W_BOLD)
+    path(d, [(30, 36), (48, 18), (66, 36)], width=W_BOLD)
+    path(d, [(22, 78), (74, 78)], width=W_MAIN)
+
+
+def icon_copy(d):
+    d.rounded_rectangle([31, 20, 76, 68], radius=4, outline=INK, width=W_MAIN)
+    d.rounded_rectangle([20, 31, 65, 79], radius=4, outline=INK, width=W_MAIN)
+
+
+def icon_paste(d):
+    d.rounded_rectangle([24, 24, 72, 80], radius=5, outline=INK, width=W_MAIN)
+    d.rounded_rectangle([35, 15, 61, 32], radius=5, fill=ERASE, outline=INK, width=W_MAIN)
+    for y in (48, 62): path(d, [(36, y), (61, y)], width=W_THIN)
+
+
+def icon_warning(d):
+    poly(d, [(48, 14), (84, 78), (12, 78)], width=W_MAIN)
+    path(d, [(48, 36), (48, 57)], width=W_BOLD)
+    dot(d, 48, 68, 4)
+
+
+def icon_bell(d):
+    d.arc([25, 19, 71, 66], start=180, end=360, fill=INK, width=W_MAIN)
+    path(d, [(25, 43), (25, 65), (18, 73), (78, 73), (71, 65), (71, 43)], width=W_MAIN)
+    d.arc([39, 68, 57, 84], start=0, end=180, fill=INK, width=W_MAIN)
+
+
+def icon_back(d):
+    path(d, [(61, 20), (32, 48), (61, 76)], width=W_BOLD)
+
+
+def icon_forward(d):
+    path(d, [(35, 20), (64, 48), (35, 76)], width=W_BOLD)
+
+
+def icon_external(d):
+    d.rounded_rectangle([18, 30, 66, 79], radius=5, outline=INK, width=W_MAIN)
+    path(d, [(46, 18), (78, 18), (78, 50)], width=W_MAIN)
+    path(d, [(77, 19), (46, 50)], width=W_BOLD)
+
+
+def icon_user(d):
+    ring(d, 48, 34, 14, width=W_MAIN)
+    d.arc([19, 43, 77, 88], start=180, end=360, fill=INK, width=W_MAIN)
+
+
+def icon_calendar(d):
+    d.rounded_rectangle([18, 22, 78, 80], radius=6, outline=INK, width=W_MAIN)
+    path(d, [(18, 39), (78, 39)], width=W_MAIN)
+    for x in (34, 62): path(d, [(x, 15), (x, 30)], width=W_BOLD)
+
+
+def icon_camera(d):
+    d.rounded_rectangle([14, 30, 82, 76], radius=8, outline=INK, width=W_MAIN)
+    poly(d, [(31, 30), (37, 20), (59, 20), (65, 30)], width=W_MAIN)
+    ring(d, 48, 53, 13, width=W_MAIN)
+
+
+def icon_play(d):
+    d.polygon([(31, 20), (76, 48), (31, 76)], fill=INK)
+
+
+def icon_pause(d):
+    d.rounded_rectangle([27, 20, 42, 76], radius=4, fill=INK)
+    d.rounded_rectangle([54, 20, 69, 76], radius=4, fill=INK)
+
+
 ICONS = [
     ("terminal", icon_terminal),
     ("snake",    icon_snake),
@@ -332,6 +461,30 @@ ICONS = [
     ("network",  icon_network),
     ("volume",   icon_volume),
     ("grid",     icon_grid),
+    ("browser",  icon_browser),
+    ("home",     icon_home),
+    ("minimize", icon_minimize),
+    ("maximize", icon_maximize),
+    ("restore",  icon_restore),
+    ("menu",     icon_menu),
+    ("refresh",  icon_refresh),
+    ("plus",     icon_plus),
+    ("folder_add", icon_folder_add),
+    ("trash",    icon_trash),
+    ("download", icon_download),
+    ("upload",   icon_upload),
+    ("copy",     icon_copy),
+    ("paste",    icon_paste),
+    ("warning",  icon_warning),
+    ("bell",     icon_bell),
+    ("back",     icon_back),
+    ("forward",  icon_forward),
+    ("external", icon_external),
+    ("user",     icon_user),
+    ("calendar", icon_calendar),
+    ("camera",   icon_camera),
+    ("play",     icon_play),
+    ("pause",    icon_pause),
 ]
 
 

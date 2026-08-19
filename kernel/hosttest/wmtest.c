@@ -20,7 +20,7 @@
 
 #include "../ui.h"
 
-#define ANIM_SETTLE 5   /* four animation frames plus one to settle */
+#define ANIM_SETTLE 20  /* longest wall-clock animation is 18 PIT ticks */
 
 /* ---- fb.c ---------------------------------------------------------------- */
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
@@ -71,7 +71,7 @@ unsigned int idt_ticks(void) { return fake_ticks; }
  * advances by a plausible frame's worth per call keeps wm_frame_us() in range
  * without making any assertion depend on it. */
 static unsigned long long fake_tsc = 0;
-unsigned long long cpu_tsc(void) { fake_tsc += 2000000; return fake_tsc; }
+unsigned long long cpu_tsc(void) { fake_tsc += 20000000; return fake_tsc; }
 unsigned int cpu_tsc_khz(void) { return 2000000; }
 int idt_scan(void)      { return 0; }
 int xhci_key(void)      { return 0; }
@@ -613,7 +613,7 @@ int main(void)
     frame();
     pointer(1500, 1000, 0);
     int aw = wm_open(1, "anim", 300, 300, 400, 300);
-    for (int i = 0; i < 8; i++) frame();          /* let the open scale settle */
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
 
     ok("a fresh window is not animating", wm_anim_running(aw) == 0);
     ok("...and is fully opaque", wm_anim_alpha(aw) == 255);
@@ -633,7 +633,7 @@ int main(void)
     /* IT ENDS. A timeline entry that never frees its slot exhausts ANIM_MAX
      * and every later animation is refused - which shows up as "the UI stopped
      * animating after a while", the worst kind of bug to chase. */
-    for (int i = 0; i < 12; i++) frame();
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
     ok("an animation ends and frees its slot", wm_anim_running(aw) == 0);
     ok("...and leaves the window settled", wm_anim_alpha(aw) == 255);
 
@@ -644,7 +644,7 @@ int main(void)
     frame();
     ok("...and an edge point still hits the settled rect",
        wm_at(300 + 4, 300 + 4) == aw);
-    for (int i = 0; i < 8; i++) frame();
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
     ok("...and it ends too", wm_anim_running(aw) == 0);
 
     /* ANIM_MAX IS A REFUSAL, not a silent drop - the same discipline as
@@ -662,7 +662,7 @@ int main(void)
         int w2 = wm_open(1, "x", 10 + i * 30, 10, 60, 40);
         if (w2 >= 0) wins2[nw2++] = w2;
     }
-    for (int i = 0; i < 10; i++) frame();          /* every open scale settles */
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
     int still = 0;
     for (int i = 0; i < nw2; i++) if (wm_anim_running(wins2[i])) still++;
     ok("every open animation has finished before this", still == 0);
@@ -706,7 +706,7 @@ int main(void)
     ok("...and the alpha is genuinely partial",
        wm_anim_alpha(fdhi) > 0 && wm_anim_alpha(fdhi) < 255);
 
-    for (int i = 0; i < 10; i++) frame();
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
     frame();
     ok("when it settles it is the window again", fb_get_px(400, 400) == px_over);
 

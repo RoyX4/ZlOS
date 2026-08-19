@@ -74,7 +74,7 @@ int xhci_ptr_x(void)     { return 0; }
 int xhci_ptr_y(void)     { return 0; }
 int xhci_ptr_btn(void)   { return 0; }
 static unsigned int fake_tsc;
-unsigned int cpu_tsc_lo(void)  { return (fake_tsc += 1000); }
+unsigned int cpu_tsc_lo(void)  { return (fake_tsc += 20000000); }
 unsigned int cpu_tsc_khz(void) { return 2300000u; }
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
 void zl_putc_pub(char c) { term_putc(c); }
