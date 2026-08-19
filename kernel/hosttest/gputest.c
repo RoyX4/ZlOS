@@ -461,6 +461,35 @@ static void test_fill_try_refuses(void)
        "and after a refused attach, a fill still declines");
 }
 
+/* ---- 8. engine selection --------------------------------------------------
+ * The four engines share a ring shape, so a second one costs a parameter. What
+ * must NOT happen is RCS quietly running with the blitter's forcewake domain
+ * held - forcewake failing is silent, and every register write after it is
+ * discarded while the sequence reports success. So RCS is refused until its
+ * domain is verified on hardware, and that refusal is a test, not a comment. */
+int gpu_ring_engine(void);
+
+static void test_engine_select(void)
+{
+    /* Point it at BCS first so the check below cannot pass by luck. */
+    gpu_ring_init_engine(GPU_ENGINE_BCS);
+    ok(gpu_ring_init_engine(GPU_ENGINE_RCS) == 0,
+       "RCS is refused - its forcewake domain is unverified");
+    /* THE CHECK THAT MATTERS. The return value cannot distinguish the RCS guard
+     * from "no GPU here" - both are 0. But the guard returns BEFORE assigning
+     * the engine, so if RCS was really refused the ring is still pointed at the
+     * blitter. Without this, deleting the guard leaves the suite green. */
+    ok(gpu_ring_engine() == GPU_ENGINE_BCS,
+       "...and refused BEFORE switching the engine, so the ring still means BCS");
+    ok(gpu_ring_init_engine(GPU_ENGINE_BCS) == 0,
+       "BCS also refuses here (no GPU in this harness) - but for a different reason");
+    ok(gpu_ring_init_engine(2) == 0,  "an unknown engine id is refused");
+    ok(gpu_ring_init_engine(-1) == 0, "a negative engine id is refused");
+    /* The default entry point must still mean the blitter, so no existing
+     * caller has to learn about engines. */
+    ok(gpu_ring_init() == 0, "gpu_ring_init() still works and means BCS");
+}
+
 int main(void)
 {
     printf("gputest: gpu.c emits the stream the GPU accepted\n\n");
@@ -478,6 +507,7 @@ int main(void)
     test_cursor_alpha();
     test_cursor_combine();
     test_fill_try_refuses();
+    test_engine_select();
 
     printf("\n  %d checks, %d failures\n", checks, failures);
     if (failures == 0)

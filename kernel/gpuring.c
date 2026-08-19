@@ -95,6 +95,32 @@ _Static_assert((gr_u64)HI_GPU + GPU_RING_BYTES <= (gr_u64)HI_BLUR,
 #define REG_CTL   0x3Cu
 #define RING_VALID 1u
 
+/* WHICH ENGINE. The four engines are identical in ring shape - TAIL/HEAD/START/
+ * CTL at +0x30/34/38/3C from the engine's own base - which is why supporting a
+ * second one costs a parameter rather than a rewrite. Read off this machine,
+ * read-only, all four idle because i915 drives them through execlists:
+ *
+ *   RCS0 render    base 0x02000
+ *   VCS0 video     base 0x12000
+ *   VECS0 enhance  base 0x1A000
+ *   BCS0 blitter   base 0x22000
+ *
+ * BCS is what has actually run: 16384/16384 pixels on this silicon. RCS is the
+ * one the MEASUREMENTS want - blending is 48x there and a plain fill is a tie on
+ * the blitter - and its ring is this same sequence at a different base.
+ *
+ * WHAT IS NOT YET KNOWN ABOUT RCS, and must not be guessed: its FORCEWAKE
+ * domain. The blitter's pair (0x0A188 / ack 0x130044) is confirmed acking on
+ * this part; the render domain has different registers and none of them have
+ * been verified here. gpu_ring_init refuses RCS until they are, rather than
+ * writing a register nobody has checked - forcewake failing is silent, and a
+ * dropped write looks exactly like hardware that ignored you. */
+#define GPU_ENGINE_BCS 0
+#define GPU_ENGINE_RCS 1
+
+int gpu_ring_init(void);
+int gpu_ring_init_engine(int engine);
+
 /* FORCEWAKE. On Gen9 the GT power wells sleep, and a register read of a
  * sleeping well returns 0 while a WRITE IS DISCARDED - silently. Every ring
  * register below is inside that well, so it must be held first or the whole
@@ -164,6 +190,26 @@ gr_u32 gpu_ring_pad(gr_u32 *ring, gr_u32 size, gr_u32 tail)
  * The SEQUENCE below is proven on silicon; THIS CODE has not run. See the
  * header for why those are different claims. */
 
+static int   ring_engine = GPU_ENGINE_BCS;
+
+static gr_u32 engine_base(void)
+{
+    return ring_engine == GPU_ENGINE_RCS ? RCS_BASE : BCS_BASE;
+}
+
+/* Which engine the ring is pointed at. Exposed for two reasons, and the second
+ * is the one that made it necessary.
+ *
+ * It is a useful diagnostic: on hardware with no serial port, "which engine did
+ * it actually select" is a question the screen has to be able to answer.
+ *
+ * And a test cannot otherwise tell WHY an init refused. In a harness with no GPU
+ * every path returns 0 - the RCS guard, the intel_present check, the arm gate -
+ * so asserting the return value proves nothing about which one fired. Deleting
+ * the RCS guard entirely left a 121-check suite green. Reading the engine back
+ * distinguishes them, because the guard returns BEFORE the assignment. */
+int gpu_ring_engine(void) { return ring_engine; }
+
 static int   ring_armed = 0;      /* nothing writes a ring register until this
                                    * is set, deliberately, by a caller that
                                    * knows the display is not in use */
@@ -210,10 +256,16 @@ static int forcewake_get(void)
  * ORDER MATTERS. Disable first, then point START at our page, then enable,
  * and only then move TAIL. Writing TAIL into a ring that still points at
  * whatever the firmware or i915 left behind tells the engine to execute that. */
-int gpu_ring_init(void)
+int gpu_ring_init_engine(int engine)
 {
     ring_live = 0;
     ring_tail = 0;
+    if (engine != GPU_ENGINE_BCS && engine != GPU_ENGINE_RCS) return 0;
+    /* RCS is refused until its forcewake domain is verified on hardware. See
+     * the note by GPU_ENGINE_RCS: holding the wrong well is a silent no-op, and
+     * every register write after it would be discarded while reporting success. */
+    if (engine == GPU_ENGINE_RCS) return 0;
+    ring_engine = engine;
     if (!intel_present() || !intel_supported()) return 0;
     if (!ring_armed) return 0;               /* refuse rather than half-arm */
 
@@ -227,19 +279,19 @@ int gpu_ring_init(void)
     if (!intel_ggtt_map(GPU_RING_GFX >> 12, (gr_u32)HI_GPU)) { forcewake_put(); return 0; }
     (void)mmio_r(0x800000u);                 /* posting read: flush the PTE */
 
-    mmio_w(BCS_BASE + REG_CTL,   0);
-    mmio_w(BCS_BASE + REG_HEAD,  0);
-    mmio_w(BCS_BASE + REG_TAIL,  0);
-    mmio_w(BCS_BASE + REG_START, GPU_RING_GFX);
-    (void)mmio_r(BCS_BASE + REG_START);
-    mmio_w(BCS_BASE + REG_CTL,   RING_VALID);   /* one page, enabled */
+    mmio_w(engine_base() + REG_CTL,   0);
+    mmio_w(engine_base() + REG_HEAD,  0);
+    mmio_w(engine_base() + REG_TAIL,  0);
+    mmio_w(engine_base() + REG_START, GPU_RING_GFX);
+    (void)mmio_r(engine_base() + REG_START);
+    mmio_w(engine_base() + REG_CTL,   RING_VALID);   /* one page, enabled */
 
     /* Release the well on THIS path too. It is the one failure that happens
      * after forcewake_get succeeds and is easy to miss, because it looks like
      * a simple "the ring refused" rather than a resource path - which is
      * precisely how a silent leak gets written. Found by auditing every return
      * between the get and the end of the function, not by reading it once. */
-    if (!(mmio_r(BCS_BASE + REG_CTL) & RING_VALID)) { forcewake_put(); return 0; }
+    if (!(mmio_r(engine_base() + REG_CTL) & RING_VALID)) { forcewake_put(); return 0; }
     ring_live = 1;
     return 1;
 }
@@ -254,7 +306,7 @@ int gpu_ring_submit(const gr_u32 *dw, gr_u32 n)
     if (n == 0) return 0;
 
     gr_u32 *ring = (gr_u32 *)(gr_uptr)HI_GPU;
-    gr_u32 head = mmio_r(BCS_BASE + REG_HEAD) & (GPU_RING_BYTES - 1u);
+    gr_u32 head = mmio_r(engine_base() + REG_HEAD) & (GPU_RING_BYTES - 1u);
 
     /* n dwords + the 5-dword flush + up to 8 bytes of qword pad */
     if (gpu_ring_space(head, ring_tail, GPU_RING_BYTES) < n * 4u + 5u * 4u + 8u) return 0;
@@ -287,10 +339,10 @@ int gpu_ring_submit(const gr_u32 *dw, gr_u32 n)
     t = gpu_ring_pad(ring, GPU_RING_BYTES, t);
     ring_tail = t;
 
-    mmio_w(BCS_BASE + REG_TAIL, ring_tail);
+    mmio_w(engine_base() + REG_TAIL, ring_tail);
 
     for (int spin = 0; spin < 2000000; spin++) {
-        gr_u32 h = mmio_r(BCS_BASE + REG_HEAD) & (GPU_RING_BYTES - 1u);
+        gr_u32 h = mmio_r(engine_base() + REG_HEAD) & (GPU_RING_BYTES - 1u);
         if (h == ring_tail) return 1;
     }
     return 0;                                 /* engine never caught up */
@@ -434,7 +486,7 @@ int gpu_selftest(void)
 
     gpu_ring_arm(1);                      /* the caller asked for this */
     if (!gpu_ring_init()) { gpu_ring_arm(0); return 2; }
-    st_ctl = mmio_r(BCS_BASE + REG_CTL);
+    st_ctl = mmio_r(engine_base() + REG_CTL);
 
     if (!intel_ggtt_map_range(GPU_ST_GFX >> 12, (gr_u32)GPU_ST_PHYS,
                               (int)(GPU_ST_BYTES / 4096u))) { gpu_ring_arm(0); return 3; }
@@ -454,8 +506,8 @@ int gpu_selftest(void)
     /* No MI_BATCH_BUFFER_END: these go into the RING, and gpu_ring_submit
      * appends the flush itself. */
     int ok = gpu_ring_submit(dw, b.at);
-    st_head = mmio_r(BCS_BASE + REG_HEAD);
-    st_tail = mmio_r(BCS_BASE + REG_TAIL);
+    st_head = mmio_r(engine_base() + REG_HEAD);
+    st_tail = mmio_r(engine_base() + REG_TAIL);
 
     for (gr_u32 i = 0; i < GPU_ST_BYTES / 4u; i++) {
         if ((dst[i] & 0xFFFFFFu) == GPU_ST_COLOR) st_filled++;
@@ -467,3 +519,7 @@ int gpu_selftest(void)
     if (st_filled != GPU_ST_W * GPU_ST_H) return 6;   /* ran, drew nothing/partial */
     return 0;
 }
+
+/* The original entry point, unchanged in behaviour: the blitter. Kept so no
+ * existing caller has to learn about engines to keep working. */
+int gpu_ring_init(void) { return gpu_ring_init_engine(GPU_ENGINE_BCS); }
