@@ -58,7 +58,53 @@ APP_CALC    = 32
 APP_MAZE = 33
 
 REG_FIRST = 14                      # first id this table actually lists
-REG_COUNT = 20                      # bumped as each batch of apps is wired in
+REG_LAST  = 69                      # highest id any slice owns
+
+# WHICH IDS ARE REAL. The catalog used to walk REG_FIRST..REG_FIRST+REG_COUNT
+# and assume every id in that span was an app. That held while the ids were
+# contiguous, and stopped holding the moment the id space was carved into
+# reserved per-slice ranges: 34..39 was never allocated, and each slice was
+# given one spare id at the end of its range that it deliberately did not use.
+# Walking the span blind would put four empty tiles in "All Applications",
+# each of which opens a window titled "App" that draws nothing.
+#
+# The gaps are listed rather than derived because there is nothing to derive
+# them from: a slice's <slice>_has() answers for its whole RANGE, and its
+# _name() returns "" for an id inside that range it did not implement - which
+# zl cannot test for, having no string comparison.
+fn reg_exists(id) {
+    if id < REG_FIRST { return 0 }
+    if id > REG_LAST { return 0 }
+    if id >= 34 { if id <= 39 { return 0 } }   # never allocated
+    if id == 51 { return 0 }                   # apps_sys3.zl   spare
+    if id == 60 { return 0 }                   # apps_games3.zl spare
+    if id == 69 { return 0 }                   # apps_games4.zl spare
+    return 1
+}
+
+# The catalog indexes a DENSE list, so a gap never becomes a blank tile.
+fn reg_count() {
+    rc = 0
+    rid = REG_FIRST
+    while rid <= REG_LAST {
+        if reg_exists(rid) == 1 { rc = rc + 1 }
+        rid = rid + 1
+    }
+    return rc
+}
+
+fn reg_id_at(idx) {
+    ri = 0
+    rid = REG_FIRST
+    while rid <= REG_LAST {
+        if reg_exists(rid) == 1 {
+            if ri == idx { return rid }
+            ri = ri + 1
+        }
+        rid = rid + 1
+    }
+    return 0 - 1
+}
 
 # kernel.elf is measured against raw_boot.asm's CHUNKS ceiling (1,966,080
 # bytes - the 32 KiB-chunk BIOS raw-boot loader silently truncates anything
@@ -390,13 +436,13 @@ fn cat_hit(win, ex, ey) {
     row = cy / (CAT_TILE_H * u) + cat_scroll
     idx = row * cols + col
     if idx < 0 { return 0 - 1 }
-    if idx >= REG_COUNT { return 0 - 1 }
+    if idx >= reg_count() { return 0 - 1 }
     return idx
 }
 
 fn cat_max_scroll(win) {
     cols = cat_cols(win)
-    rows = (REG_COUNT + cols - 1) / cols
+    rows = (reg_count() + cols - 1) / cols
     vis  = (wm_ch(win) - CAT_HEADER * ui()) / (CAT_TILE_H * ui())
     if vis < 1 { vis = 1 }
     ms = rows - vis
@@ -418,7 +464,7 @@ fn cat_draw(ax, ay, aw, ah) {
         lx = lx + label_w(reg_cat_label(li), T_CAPTION, W_REG) + 32 * u
         li = li + 1
     }
-    if REG_COUNT == 0 {
+    if reg_count() == 0 {
         label(ax + 8 * u, ay + CAT_HEADER * u + 8 * u, "no applications registered yet", theme(TH_TEXT_DIM), T_BODY, W_REG)
         return 0
     }
@@ -429,8 +475,8 @@ fn cat_draw(ax, ay, aw, ah) {
     gy = ay + CAT_HEADER * u
 
     i = 0
-    while i < REG_COUNT {
-        id = REG_FIRST + i
+    while i < reg_count() {
+        id = reg_id_at(i)
         crow = i / cols - cat_scroll
         ccol = i % cols
         ty = gy + crow * CAT_TILE_H * u
