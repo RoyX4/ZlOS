@@ -53,8 +53,16 @@ unlabelled claim as verified and a labelled one as a hypothesis.
 | 4 · the browser | 26 | 25 | **1** | 191 | 3.79 M | 725 | 50 min |
 
 **123 agents spawned**, ~640 findings. Wave 4 lost one lens — `web:trust-boundary` — to
-an API server error mid-response; that lens is simply missing from the browser board and
-is worth re-running.
+an API server error mid-response.
+
+**That gap is now closed: [`LENS-web-trust-boundary.md`](LENS-web-trust-boundary.md).**
+It was re-run by hand rather than by a replacement agent — one lens over four files is
+work sized for one context, and the box was at load 17 with five sibling sessions live.
+Its finding is a *coupling* neither owning document could see: `build_request`'s 9-byte
+overflow is local-only **because** the redirect path is dead, so fixing the redirect
+first turns a local overflow into a remotely triggerable one. Fix order matters. It also
+records the four places the trust boundary is already properly defended, so hardening
+effort does not get spent there.
 
 Wave 3 ran a different shape: 10 class sweeps, then an independent refuter per candidate
 finding, told to default to *refuted* when uncertain. Its agent count is higher because
