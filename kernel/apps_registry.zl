@@ -247,6 +247,12 @@ fn reg_mono(id) {
     if id == APP_SYSINFO { return "SI" }
     if id == APP_CALC    { return "CA" }
     if id == APP_MAZE    { return "MZ" }
+
+    # ---- the per-slice marks, same rule as reg_name.
+    if sys2_has(id) == 1 { return sys2_mono(id) }
+    if sys3_has(id) == 1 { return sys3_mono(id) }
+    if games3_has(id) == 1 { return games3_mono(id) }
+    if games4_has(id) == 1 { return games4_mono(id) }
     return "??"
 }
 

@@ -2369,3 +2369,18 @@ fn games4_tick(id, win) {
     if id == G4_FROGGER { return fr_tick(win) }
     return 0
 }
+
+
+# The catalog tile's two-letter mark. Without one, reg_mono() falls through
+# to its "??" placeholder and every game in this slice draws the same tile.
+fn games4_mono(id) {
+    if id == 61 { return "15" }
+    if id == 62 { return "RV" }
+    if id == 63 { return "SI" }
+    if id == 64 { return "SK" }
+    if id == 65 { return "FL" }
+    if id == 66 { return "MC" }
+    if id == 67 { return "BJ" }
+    if id == 68 { return "FR" }
+    return "??"
+}

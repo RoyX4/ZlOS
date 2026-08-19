@@ -2239,3 +2239,18 @@ fn games3_tick(id, win) {
     if id == G3_INVAD  { return iv_tick(win) }
     return 0
 }
+
+
+# The catalog tile's two-letter mark. Without one, reg_mono() falls through
+# to its "??" placeholder and every game in this slice draws the same tile.
+fn games3_mono(id) {
+    if id == 52 { return "TE" }
+    if id == 53 { return "PO" }
+    if id == 54 { return "BR" }
+    if id == 55 { return "MS" }
+    if id == 56 { return "20" }
+    if id == 57 { return "LF" }
+    if id == 58 { return "AS" }
+    if id == 59 { return "IV" }
+    return "??"
+}
