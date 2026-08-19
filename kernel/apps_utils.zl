@@ -48,6 +48,7 @@ fn cb_event(win, ety, ecode, ex, ey) {
     ah = wm_ch(win)
     if cx >= 8 * u { if cx < 78 * u { if cy >= ah - 30 * u { if cy < ah - 8 * u {
         clip_wipe()
+        wm_dmg(win)
         return 1
     }}}}
     return 0
@@ -215,18 +216,20 @@ fn pt_draw(ax, ay, aw, ah) {
     return 0
 }
 
-fn pt_event(ety, ecode) {
+fn pt_event(win, ety, ecode) {
     if ety != 3 { return 0 }
-    if ecode == 9 { pt_field = 1 - pt_field  return 1 }
+    if ecode == 9 { pt_field = 1 - pt_field  wm_dmg(win)  return 1 }
     if ecode == 8 {
         if pt_field == 0 { if pt_plen > 0 { pt_plen = pt_plen - 1 } }
         if pt_field == 1 { if pt_tlen > 0 { pt_tlen = pt_tlen - 1 } }
+        wm_dmg(win)
         return 1
     }
     if ecode < 32 { return 0 }
     if ecode > 126 { return 0 }
     if pt_field == 0 { if pt_plen < PT_MAX { poke8(PT_PATTERN + pt_plen, ecode)  pt_plen = pt_plen + 1 } }
     if pt_field == 1 { if pt_tlen < PT_MAX { poke8(PT_TEXT + pt_tlen, ecode)  pt_tlen = pt_tlen + 1 } }
+    wm_dmg(win)
     return 1
 }
 
@@ -249,13 +252,14 @@ fn bc_draw(ax, ay, aw, ah) {
     return 0
 }
 
-fn bc_event(ety, ecode) {
+fn bc_event(win, ety, ecode) {
     if ety != 3 { return 0 }
-    if ecode == 8 { bc_val = bc_val / 10  return 1 }
+    if ecode == 8 { bc_val = bc_val / 10  wm_dmg(win)  return 1 }
     if ecode < 48 { return 0 }
     if ecode > 57 { return 0 }
     nv = bc_val * 10 + (ecode - 48)
     if nv < 16777216 { bc_val = nv }
+    wm_dmg(win)
     return 1
 }
 
@@ -316,18 +320,20 @@ fn ld_draw(ax, ay, aw, ah) {
     return 0
 }
 
-fn ld_event(ety, ecode) {
+fn ld_event(win, ety, ecode) {
     if ety != 3 { return 0 }
-    if ecode == 9 { ld_field = 1 - ld_field  return 1 }
+    if ecode == 9 { ld_field = 1 - ld_field  wm_dmg(win)  return 1 }
     if ecode == 8 {
         if ld_field == 0 { if ld_alen > 0 { ld_alen = ld_alen - 1 } }
         if ld_field == 1 { if ld_blen > 0 { ld_blen = ld_blen - 1 } }
+        wm_dmg(win)
         return 1
     }
     if ecode < 32 { return 0 }
     if ecode > 126 { return 0 }
     if ld_field == 0 { if ld_alen < LD_MAX { poke8(DIFF_A + ld_alen, ecode)  ld_alen = ld_alen + 1 } }
     if ld_field == 1 { if ld_blen < LD_MAX { poke8(DIFF_B + ld_blen, ecode)  ld_blen = ld_blen + 1 } }
+    wm_dmg(win)
     return 1
 }
 
@@ -372,12 +378,13 @@ fn ck_draw(ax, ay, aw, ah) {
     return 0
 }
 
-fn ck_event(ety, ecode) {
+fn ck_event(win, ety, ecode) {
     if ety != 3 { return 0 }
-    if ecode == 8 { if ck_len > 0 { ck_len = ck_len - 1 }  return 1 }
+    if ecode == 8 { if ck_len > 0 { ck_len = ck_len - 1 }  wm_dmg(win)  return 1 }
     if ecode < 32 { return 0 }
     if ecode > 126 { return 0 }
     if ck_len < CK_MAX { poke8(HASH_BUF + ck_len, ecode)  ck_len = ck_len + 1 }
+    wm_dmg(win)
     return 1
 }
 
@@ -460,13 +467,18 @@ fn nt_draw(ax, ay, aw, ah) {
     return 0
 }
 
-fn nt_event(ety, ecode) {
+fn nt_event(win, ety, ecode) {
     if ety != 3 { return 0 }
-    if ecode == 8 { if nt_len > 0 { nt_len = nt_len - 1 }  return 1 }
-    if ecode == 13 { if nt_len < NOTES_MAX { poke8(NOTES_BUF + nt_len, 10)  nt_len = nt_len + 1 }  return 1 }
+    if ecode == 8 { if nt_len > 0 { nt_len = nt_len - 1 }  wm_dmg(win)  return 1 }
+    if ecode == 13 {
+        if nt_len < NOTES_MAX { poke8(NOTES_BUF + nt_len, 10)  nt_len = nt_len + 1 }
+        wm_dmg(win)
+        return 1
+    }
     if ecode < 32 { return 0 }
     if ecode > 126 { return 0 }
     if nt_len < NOTES_MAX { poke8(NOTES_BUF + nt_len, ecode)  nt_len = nt_len + 1 }
+    wm_dmg(win)
     return 1
 }
 
@@ -503,10 +515,11 @@ fn kt_draw(ax, ay, aw, ah) {
     return 0
 }
 
-fn kt_event(ety, ecode) {
+fn kt_event(win, ety, ecode) {
     if ety == 4 { return 0 }            # mouse motion would repaint every pixel
     kt_ety = ety
     kt_ecode = ecode
+    wm_dmg(win)
     return 1
 }
 

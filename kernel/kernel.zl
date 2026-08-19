@@ -1388,7 +1388,7 @@ DISK_SCRATCH = 0x02040000
 # .c and .zl file in the tree, not just kernel.zl - see the comment at
 # DISK_SCRATCH above for why that matters): PAINT_BUF ends near 0x02102000,
 # virtio_net.c's own arena doc puts its NET_FLOOR at 0x03000000, so this
-# block (0x02200000..0x02214000, 80 KiB) sits in the middle of the same
+# block (0x02200000..0x02215000, 84 KiB) sits in the middle of the same
 # "80 MiB hole" with well over 0xDE0000 bytes of headroom on either side.
 # check-memmap.sh's dupe sweep covers every constant below because they are
 # declared here, in kernel.zl, rather than in the modules that use them.
@@ -1413,6 +1413,17 @@ DIFF_B        = 0x0220F000   # apps_utils.zl:  Line Diff, side B
 HASH_BUF      = 0x02210000   # apps_utils.zl:  Checksum, the input bytes
 NOTES_BUF     = 0x02211000   # apps_utils.zl:  Sticky Notes (2 pages)
 FILES_BUF     = 0x02213000   # apps_system.zl: Files, one entry's bytes
+MAZE_STACK    = 0x02214000   # apps_games2.zl: Maze generation's OWN stack -
+                              # an iterative backtracker, not a 273-deep zl
+                              # recursion. boot.S:36 documents this kernel's
+                              # 256 KiB compositor stack as already having
+                              # overflowed once at 16 KiB because "the zl
+                              # compositor nests deep... each zl frame is
+                              # large"; carving a maze from inside a click
+                              # handler (itself several frames into the
+                              # frame loop) is exactly that nesting, so the
+                              # DFS stack is 273 u16 cell indices in RAM
+                              # instead, same idea as the board itself.
 
 fn fs_init()      { fill_mem(FS_META, 0, 64) }
 fn fs_len(slot)   { return peek32(FS_META + slot * 4) }

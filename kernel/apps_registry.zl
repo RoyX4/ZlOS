@@ -54,8 +54,11 @@ APP_CLOCK   = 30
 APP_SYSINFO = 31
 APP_CALC    = 32
 
+# ---- more games (apps_games2.zl) ---------------------------------------------
+APP_MAZE = 33
+
 REG_FIRST = 14                      # first id this table actually lists
-REG_COUNT = 19                      # bumped as each batch of apps is wired in
+REG_COUNT = 20                      # bumped as each batch of apps is wired in
 
 # kernel.elf is measured against raw_boot.asm's CHUNKS ceiling (1,966,080
 # bytes - the 32 KiB-chunk BIOS raw-boot loader silently truncates anything
@@ -88,6 +91,7 @@ fn reg_name(id) {
     if id == APP_CLOCK   { return "Clocks & Timers" }
     if id == APP_SYSINFO { return "System Info" }
     if id == APP_CALC    { return "Calculator" }
+    if id == APP_MAZE    { return "Maze" }
     return "App"
 }
 
@@ -96,6 +100,7 @@ fn reg_name(id) {
 fn reg_cat(id) {
     if id >= APP_CLIP { if id <= APP_BENCH { return 1 } }
     if id >= APP_WORDLE { if id <= APP_CONNECT4 { return 2 } }
+    if id == APP_MAZE { return 2 }
     return 0
 }
 
@@ -110,6 +115,7 @@ fn reg_w(id) {
     if id == APP_CLOCK   { return 220 }
     if id == APP_SYSINFO { return 260 }
     if id == APP_CALC    { return 200 }
+    if id == APP_MAZE    { return 380 }
     return 300
 }
 fn reg_h(id) {
@@ -131,6 +137,7 @@ fn reg_h(id) {
     if id == APP_CLOCK   { return 160 }
     if id == APP_SYSINFO { return 200 }
     if id == APP_CALC    { return 240 }
+    if id == APP_MAZE    { return 260 }
     return 160
 }
 
@@ -163,6 +170,7 @@ fn reg_mono(id) {
     if id == APP_CONNECT4  { return "C4" }
     if id == APP_SYSINFO { return "SI" }
     if id == APP_CALC    { return "CA" }
+    if id == APP_MAZE    { return "MZ" }
     return "??"
 }
 
@@ -194,6 +202,7 @@ fn reg_new(id, u) {
     if id == APP_LIGHTS    { lo_reset() }
     if id == APP_CONNECT4  { c4_reset() }
     if id == APP_CALC      { ca_clear() }
+    if id == APP_MAZE      { mz_reset() }
     if id >= APP_CLIP { if id <= APP_BENCH {
         return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
     }}
@@ -203,23 +212,34 @@ fn reg_new(id, u) {
     if id >= APP_CLOCK { if id <= APP_CALC {
         return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
     }}
+    if id == APP_MAZE {
+        return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
+    }
     return 0 - 1
 }
 
-# raise-if-open, else open; either way focus stays where it was, the same
-# rule open_app() already follows for the original 13.
+# raise-and-focus if already open; otherwise open it, and it gets focus too
+# (see the comment below - this is where it differs from open_app()).
 fn reg_open(id) {
     ru = ui()
-    rf = wm_focus()
     rw = reg_find_win(id)
     if rw >= 0 {
         wm_setfocus(rw)
         wm_raise(rw)
         return 1
     }
+    # UNLIKE open_app() (the original 13), this does NOT restore whichever
+    # window had focus before. open_app() exists because the SHELL calls it
+    # mid command-line - you typed "snake" and want to keep typing, so
+    # focus must stay put. Every caller here is a deliberate CLICK (a
+    # catalog tile, a menu row): wm_open() already focuses the window it
+    # just opened, and restoring focus to the catalog behind it silently
+    # sent every subsequent keystroke to the wrong window. Caught by
+    # probe-catalog.py's Maze case: the click-to-place games worked (a
+    # mouse event routes by SCREEN POSITION, not focus) while arrow keys
+    # went nowhere (a key event has no position - it needs focus).
     rw = reg_new(id, ru)
     if rw < 0 { return 0 }
-    if rf >= 0 { wm_setfocus(rf) }
     wm_report(rw)
     return 1
 }
@@ -248,27 +268,29 @@ fn reg_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_CLOCK   { return clk_draw(ax, ay, aw, ah) }
     if id == APP_SYSINFO { return si_draw(ax, ay, aw, ah) }
     if id == APP_CALC    { return ca_draw(ax, ay, aw, ah) }
+    if id == APP_MAZE    { return mz_draw(ax, ay, aw, ah) }
     return 0
 }
 fn reg_event(id, win, ety, ecode, ex, ey) {
     if id == APP_CATALOG { return cat_event(win, ety, ecode, ex, ey) }
     if id == APP_CLIP  { return cb_event(win, ety, ecode, ex, ey) }
     if id == APP_COLOR { return cp_event(win, ety, ecode, ex, ey) }
-    if id == APP_REGEX { return pt_event(ety, ecode) }
-    if id == APP_BASE  { return bc_event(ety, ecode) }
-    if id == APP_DIFF  { return ld_event(ety, ecode) }
-    if id == APP_HASH  { return ck_event(ety, ecode) }
+    if id == APP_REGEX { return pt_event(win, ety, ecode) }
+    if id == APP_BASE  { return bc_event(win, ety, ecode) }
+    if id == APP_DIFF  { return ld_event(win, ety, ecode) }
+    if id == APP_HASH  { return ck_event(win, ety, ecode) }
     if id == APP_UNIT  { return uc_event(win, ety, ecode, ex, ey) }
-    if id == APP_NOTES { return nt_event(ety, ecode) }
-    if id == APP_KEYS  { return kt_event(ety, ecode) }
+    if id == APP_NOTES { return nt_event(win, ety, ecode) }
+    if id == APP_KEYS  { return kt_event(win, ety, ecode) }
     if id == APP_BENCH { return bm_event(win, ety, ecode, ex, ey) }
-    if id == APP_WORDLE    { return wg_event(ety, ecode) }
+    if id == APP_WORDLE    { return wg_event(win, ety, ecode) }
     if id == APP_TICTACTOE { return tt_event(win, ety, ecode, ex, ey) }
     if id == APP_NIM       { return nim_event(win, ety, ecode, ex, ey) }
     if id == APP_HANOI     { return ho_event(win, ety, ecode, ex, ey) }
     if id == APP_LIGHTS    { return lo_event(win, ety, ecode, ex, ey) }
     if id == APP_CONNECT4  { return c4_event(win, ety, ecode, ex, ey) }
     if id == APP_CALC { return ca_event(win, ety, ecode, ex, ey) }
+    if id == APP_MAZE { return mz_event(win, ety, ecode) }
     return 0
 }
 fn reg_tick(id, win) {

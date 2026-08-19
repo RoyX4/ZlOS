@@ -104,16 +104,177 @@ fn wg_draw(ax, ay, aw, ah) {
     return 0
 }
 
-fn wg_event(ety, ecode) {
+# A press updates state, but the compositor only repaints a window it was
+# TOLD is damaged (ui.h: app_draw "called only when the window is damaged,
+# not every frame") - app_event's return value is discarded at every one of
+# wm.c's three call sites (see reg_open's own comment on the same fact for
+# focus). Every branch that changes anything therefore ends in wm_dmg(win).
+fn wg_event(win, ety, ecode) {
     if ety != 3 { return 0 }
-    if ecode == 114 { wg_reset()  return 1 }
+    if ecode == 114 { wg_reset()  wm_dmg(win)  return 1 }
     if wg_done != 0 { return 1 }
-    if ecode == 13 { wg_submit()  return 1 }
-    if ecode == 8 { if wg_col > 0 { wg_col = wg_col - 1  poke8(WG_BOARD + wg_row * WG_COLS + wg_col, 0) }  return 1 }
+    if ecode == 13 { wg_submit()  wm_dmg(win)  return 1 }
+    if ecode == 8 {
+        if wg_col > 0 { wg_col = wg_col - 1  poke8(WG_BOARD + wg_row * WG_COLS + wg_col, 0) }
+        wm_dmg(win)
+        return 1
+    }
     lc = ecode
     if lc >= 65 { if lc <= 90 { lc = lc + 32 } }
     if lc < 97 { return 0 }
     if lc > 122 { return 0 }
     if wg_col < WG_COLS { poke8(WG_BOARD + wg_row * WG_COLS + wg_col, lc - 97)  wg_col = wg_col + 1 }
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# Maze - 21x13 = 273 cells, exactly the count named in the brief. Generated
+# by a randomised backtracker, carved ITERATIVELY: boot.S documents this
+# kernel's 256 KiB compositor stack as having already overflowed once
+# ("the zl compositor nests deep... each zl frame is large"), and a maze
+# opens from inside a click handler that is already several frames into
+# the compositor's own call chain. A 273-deep zl recursion there is
+# exactly the risk that comment warns about, so the DFS stack is data
+# (MAZE_STACK, 273 u16 cell indices) instead of the C call stack.
+#
+# MAZE_BOARD: one byte per cell. Bits 0-3 = passage open to N/E/S/W (a
+# passage is carved in both cells it joins, so movement only ever checks
+# the CURRENT cell's own bit). Bit 4 = visited, generation-only.
+# ==============================================================================
+MAZE_W = 21
+MAZE_H = 13
+mz_px = 0
+mz_py = 0
+mz_won = 0
+
+fn mz_visited(x, y) { return band(peek8(MAZE_BOARD + y * MAZE_W + x), 16) != 0 }
+fn mz_mark(x, y) {
+    a = MAZE_BOARD + y * MAZE_W + x
+    poke8(a, bor(peek8(a), 16))
+    return 0
+}
+# d: 0 north(y-1) 1 east(x+1) 2 south(y+1) 3 west(x-1). Opens the passage
+# in BOTH cells it joins (opposite bit = (d+2)%4), so mz_move only ever
+# has to look at the cell the player is standing in.
+fn mz_open(cx, cy, d) {
+    a1 = MAZE_BOARD + cy * MAZE_W + cx
+    poke8(a1, bor(peek8(a1), shl(1, d)))
+    nx = cx
+    ny = cy
+    if d == 0 { ny = cy - 1 }
+    if d == 1 { nx = cx + 1 }
+    if d == 2 { ny = cy + 1 }
+    if d == 3 { nx = cx - 1 }
+    a2 = MAZE_BOARD + ny * MAZE_W + nx
+    poke8(a2, bor(peek8(a2), shl(1, (d + 2) % 4)))
+    return 0
+}
+
+fn mz_reset() {
+    fill_mem(MAZE_BOARD, 0, MAZE_W * MAZE_H)
+    ac_seed_from(ticks() + 29)          # see the note in wg_reset
+    poke16(MAZE_STACK, 0)
+    sp = 1
+    mz_mark(0, 0)
+    while sp > 0 {
+        idx = peek16(MAZE_STACK + (sp - 1) * 2)
+        cx = idx % MAZE_W
+        cy = idx / MAZE_W
+        rot = ac_rand(4)
+        found = 0 - 1
+        k = 0
+        while k < 4 {
+            if found < 0 {
+                d = (rot + k) % 4
+                nx = cx
+                ny = cy
+                if d == 0 { ny = cy - 1 }
+                if d == 1 { nx = cx + 1 }
+                if d == 2 { ny = cy + 1 }
+                if d == 3 { nx = cx - 1 }
+                if nx >= 0 { if nx < MAZE_W { if ny >= 0 { if ny < MAZE_H {
+                    if mz_visited(nx, ny) == 0 { found = d }
+                }}}}
+            }
+            k = k + 1
+        }
+        if found >= 0 {
+            mz_open(cx, cy, found)
+            nx = cx
+            ny = cy
+            if found == 0 { ny = cy - 1 }
+            if found == 1 { nx = cx + 1 }
+            if found == 2 { ny = cy + 1 }
+            if found == 3 { nx = cx - 1 }
+            mz_mark(nx, ny)
+            poke16(MAZE_STACK + sp * 2, ny * MAZE_W + nx)
+            sp = sp + 1
+        } else {
+            sp = sp - 1
+        }
+    }
+    mz_px = 0
+    mz_py = 0
+    mz_won = 0
+    return 0
+}
+
+MZ_CELL = 15
+fn mz_draw(ax, ay, aw, ah) {
+    u = ui()
+    cell = MZ_CELL * u
+    gx = ax + (aw - MAZE_W * cell) / 2
+    gy = ay + 4 * u
+    wallcol = TXT_DIM
+    fill_rgb(gx, gy, MAZE_W * cell, MAZE_H * cell, rgb(10, 12, 20))
+    ri = 0
+    while ri < MAZE_H {
+        ci = 0
+        while ci < MAZE_W {
+            v = peek8(MAZE_BOARD + ri * MAZE_W + ci)
+            cxp = gx + ci * cell
+            cyp = gy + ri * cell
+            if band(v, 1) == 0 { fill_rgb(cxp, cyp, cell + 1, 1, wallcol) }
+            if band(v, 2) == 0 { fill_rgb(cxp + cell, cyp, 1, cell + 1, wallcol) }
+            if band(v, 4) == 0 { fill_rgb(cxp, cyp + cell, cell + 1, 1, wallcol) }
+            if band(v, 8) == 0 { fill_rgb(cxp, cyp, 1, cell + 1, wallcol) }
+            ci = ci + 1
+        }
+        ri = ri + 1
+    }
+    fill_rgb(gx + (MAZE_W - 1) * cell + 3 * u, gy + (MAZE_H - 1) * cell + 3 * u, cell - 6 * u, cell - 6 * u, ac_cat_color(1))
+    fill_rgb(gx + mz_px * cell + 3 * u, gy + mz_py * cell + 3 * u, cell - 6 * u, cell - 6 * u, ac_cat_color(2))
+    msg_y = gy + MAZE_H * cell + 8 * u
+    if mz_won == 1 { label(gx, msg_y, "found the exit - r generates a new maze", ac_cat_color(1), T_CAPTION, W_BOLD) }
+    if mz_won == 0 { label(gx, msg_y, "arrow keys to the teal exit", TXT_DIM, T_CAPTION, W_REG) }
+    return 0
+}
+
+fn mz_move(d) {
+    v = peek8(MAZE_BOARD + mz_py * MAZE_W + mz_px)
+    if band(v, shl(1, d)) == 0 { return 0 }
+    if d == 0 { mz_py = mz_py - 1 }
+    if d == 1 { mz_px = mz_px + 1 }
+    if d == 2 { mz_py = mz_py + 1 }
+    if d == 3 { mz_px = mz_px - 1 }
+    if mz_px == MAZE_W - 1 { if mz_py == MAZE_H - 1 { mz_won = 1 } }
+    return 1
+}
+
+fn mz_event(win, ety, ecode) {
+    if ety == 3 { if ecode == 114 { mz_reset()  wm_dmg(win)  return 1 }  return 0 }
+    if ety != 1 { return 0 }
+    if mz_won == 1 { return 1 }
+    d = 0 - 1
+    if ecode == K_UP    { d = 0 }
+    if ecode == K_RIGHT { d = 1 }
+    if ecode == K_DOWN  { d = 2 }
+    if ecode == K_LEFT  { d = 3 }
+    if d < 0 { return 0 }
+    # only the moves that actually open a passage repaint - a press into a
+    # wall changes nothing, and see the note on wg_event for why a change
+    # that never calls wm_dmg is a change nobody ever sees.
+    if mz_move(d) == 1 { wm_dmg(win) }
     return 1
 }
