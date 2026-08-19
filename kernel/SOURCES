@@ -86,6 +86,14 @@ gpu.c
 # and for the same reason.
 gpuring.c
 
+# The hardware cursor image. intel.c has had the three cursor registers and
+# runtime_kernel.c has published cur_on/cur_move/cur_off to zl for as long as
+# either has existed, and NOTHING called them - there was no image and no GGTT
+# mapping, so cur_on would have pointed the display engine at nothing. This is
+# the missing middle. Its arithmetic is tested; its install path is gated behind
+# gpu_cursor_arm() and has never executed.
+gpucursor.c
+
 # desktop/browser
 virtio_net.c
 net.c

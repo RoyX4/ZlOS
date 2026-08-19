@@ -35,6 +35,14 @@ __attribute__((unused)) static unsigned intel_ggtt_size(void) { return 0; }
 static int    intel_ggtt_map(unsigned p, unsigned a) { (void)p; (void)a; return 0; }
 #include "../gpuring.c"
 
+/* The cursor image builder. Its install path needs intel.c's cursor registers;
+ * the stubs above already report no GPU, and these three keep the link honest
+ * without letting a single display register be reachable from here. */
+static int intel_cursor_enable(unsigned g, int s) { (void)g; (void)s; return 0; }
+static int intel_cursor_move(int x, int y) { (void)x; (void)y; return 0; }
+static int intel_cursor_disable(void) { return 0; }
+#include "../gpucursor.c"
+
 static int failures = 0;
 static int checks = 0;
 
@@ -300,6 +308,129 @@ static void test_ring_pad(void)
     eq32(ring[(RING - 4u) / 4u], 0u, "and wrote its NOOP in the last slot");
 }
 
+/* ---- 6. the hardware cursor image ----------------------------------------
+ *
+ * fb.c composites the pointer as two coverage planes over the background:
+ *   bg' = bg(1-b) + edge*b   then   bg'' = bg'(1-f) + fill*f
+ * The display engine gets ONE source-over layer instead, so the two have to
+ * collapse to the same result. These pin the three cases where they could
+ * disagree, and the premultiplied/straight distinction that produces a dark
+ * fringe when it is wrong.
+ */
+static void test_cursor_image(void)
+{
+    static gpu_u32 img[64 * 64];
+    const gpu_u32 FILL = 0xFFFFFFu, EDGE = 0x101010u;
+
+    gpu_u32 n = gpu_cursor_build(img, CUR_ARROW, FILL, EDGE, 1, 1);
+    ok(n > 0,  "arrow produced a non-empty cursor");
+    ok(n < 64 * 64, "and it is not a solid 64x64 block");
+
+    /* The far corner is outside a 32x32 arrow: must be fully transparent, and
+     * ZERO, not merely alpha 0 - a plane reading premultiplied colour from a
+     * transparent pixel still shows it. */
+    eq32(img[63 * 64 + 63], 0u, "outside the glyph is entirely zero");
+
+    /* Refusals. */
+    ok(gpu_cursor_build(img, CUR_N, FILL, EDGE, 1, 1) == 0, "unknown kind refused");
+    ok(gpu_cursor_build(img, 0, FILL, EDGE, 3, 1) == 0, "scale 3 refused (32*3 > 64)");
+    ok(gpu_cursor_build(0, 0, FILL, EDGE, 1, 1) == 0, "null buffer refused");
+
+    /* Scale 2 must cover four times the pixels of scale 1. */
+    gpu_u32 n1 = gpu_cursor_build(img, CUR_ARROW, FILL, EDGE, 1, 1);
+    gpu_u32 n2 = gpu_cursor_build(img, CUR_ARROW, FILL, EDGE, 2, 1);
+    ok(n2 > n1 * 3, "scale 2 covers roughly four times the pixels");
+
+    /* The install path must stay unreachable from this harness. */
+    ok(gpu_cursor_install(CUR_ARROW, FILL, EDGE, 1, 1) == 0,
+       "install refuses while unarmed - no display register is reachable here");
+    gpu_cursor_arm(1);
+    ok(gpu_cursor_install(CUR_ARROW, FILL, EDGE, 1, 1) == 0,
+       "and still refuses with no GPU present");
+    gpu_cursor_arm(0);
+}
+
+/* The alpha maths itself, at the three points it can be wrong. */
+static void test_cursor_alpha(void)
+{
+    static gpu_u32 img[64 * 64];
+    const gpu_u32 FILL = 0xFFFFFFu, EDGE = 0x000000u;
+
+    gpu_cursor_build(img, CUR_ARROW, FILL, EDGE, 1, 1);
+    /* Find a fully-covered interior pixel: fill coverage 255 means the result
+     * must be opaque white regardless of the edge colour under it. */
+    int found_opaque = 0;
+    for (int y = 0; y < 32 && !found_opaque; y++)
+        for (int x = 0; x < 32; x++)
+            if (cur_fill32[CUR_ARROW][y][x] == 255) {
+                gpu_u32 px = img[y * 64 + x];
+                eq32(px >> 24, 255u, "a fully-filled pixel is opaque");
+                eq32(px & 0xFFu, 255u, "and is the FILL colour, not the edge under it");
+                found_opaque = 1; break;
+            }
+    ok(found_opaque, "the arrow has at least one fully-filled pixel");
+
+    /* A pixel with body coverage but no fill is pure edge. */
+    int found_edge = 0;
+    const gpu_u32 RED = 0xFF0000u;
+    gpu_cursor_build(img, CUR_ARROW, 0x00FF00u, RED, 1, 1);
+    for (int y = 0; y < 32 && !found_edge; y++)
+        for (int x = 0; x < 32; x++)
+            if (cur_body32[CUR_ARROW][y][x] == 255 && cur_fill32[CUR_ARROW][y][x] == 0) {
+                gpu_u32 px = img[y * 64 + x];
+                eq32(px >> 24, 255u, "an edge-only pixel is opaque");
+                eq32((px >> 16) & 0xFFu, 0xFFu, "and carries the EDGE colour");
+                eq32(px & 0xFFu, 0u, "with none of the fill colour in it");
+                found_edge = 1; break;
+            }
+    ok(found_edge, "the arrow has an edge-only pixel");
+
+    /* Straight alpha must differ from premultiplied wherever alpha is partial -
+     * if these ever agree everywhere, one of the two modes is not implemented
+     * and a cursor will get a dark fringe on hardware. */
+    static gpu_u32 a[64 * 64], b[64 * 64];
+    gpu_cursor_build(a, CUR_ARROW, FILL, RED, 1, 1);
+    gpu_cursor_build(b, CUR_ARROW, FILL, RED, 1, 0);
+    int differ = 0;
+    for (int i = 0; i < 64 * 64; i++) if (a[i] != b[i]) { differ = 1; break; }
+    ok(differ, "premultiplied and straight alpha really do differ");
+}
+
+/* The combine itself, on coverage values the shipped assets never produce.
+ * The assets all have fill <= body, so an alpha taken from body alone is
+ * identical for them - and that exact mutation survived this suite until these
+ * checks existed. Test the formula, not the artwork. */
+static void test_cursor_combine(void)
+{
+    const gpu_u32 FILL = 0x00FF00u, EDGE = 0xFF0000u;
+
+    /* Fill with NO body under it. The assets never do this; a cursor drawn
+     * without an outline would. alpha=body would report fully transparent. */
+    gpu_u32 px = gpu_cursor_pixel(0, 255, FILL, EDGE, 1);
+    eq32(px >> 24, 255u, "fill with no body is still OPAQUE (alpha != body)");
+    eq32((px >> 8) & 0xFFu, 255u, "and carries the fill colour");
+
+    /* Partial fill, no body: alpha must follow the fill. */
+    eq32(gpu_cursor_pixel(0, 128, FILL, EDGE, 1) >> 24, 128u,
+         "partial fill with no body gives partial alpha");
+
+    /* Body only. */
+    eq32(gpu_cursor_pixel(255, 0, FILL, EDGE, 1) >> 24, 255u, "body only is opaque");
+    eq32(gpu_cursor_pixel(128, 0, FILL, EDGE, 1) >> 24, 128u, "half body is half alpha");
+
+    /* Nothing at all must be exactly zero, not just alpha zero. */
+    eq32(gpu_cursor_pixel(0, 0, FILL, EDGE, 1), 0u, "no coverage is entirely zero");
+
+    /* Both partial: alpha combines, it does not simply take the larger.
+     * 1-(1-.5)(1-.5) = .75 -> 191, whereas max(b,f) would give 128. */
+    gpu_u32 both = gpu_cursor_pixel(128, 128, FILL, EDGE, 1) >> 24;
+    checks++;
+    if (both < 185u || both > 196u) {
+        printf("  FAIL  b=f=128 should combine to ~191 alpha, got %u\n", both);
+        failures++;
+    }
+}
+
 int main(void)
 {
     printf("gputest: gpu.c emits the stream the GPU accepted\n\n");
@@ -313,6 +444,9 @@ int main(void)
     test_ring_space();
     test_ring_write_wraps();
     test_ring_pad();
+    test_cursor_image();
+    test_cursor_alpha();
+    test_cursor_combine();
 
     printf("\n  %d checks, %d failures\n", checks, failures);
     if (failures == 0)
