@@ -7,6 +7,25 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-20 — docs: correct the superseded-branch reasoning - git diff A..B is not a merge (c25c7ea)
+
+`main` · 3 files changed, 30 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>3 file(s)</summary>
+
+- `.gitignore`
+- `docs/MERGE-ROUND-2.md`
+- `examples/Zaccoding.zl`
+
+</details>
+
 ## 2026-08-20 — merge: main into compassionate-curie - round-2 catch-up (52d6dc9)
 
 `claude/compassionate-curie-a0599c` · 305 files changed, 31489 insertions(+), 2009 deletions(-)
