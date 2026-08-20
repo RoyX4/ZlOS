@@ -292,3 +292,60 @@ does **not** catch this — it covers `kernel.zl` only, by its own closing note.
   `a998a6c`); confirm it is idle first. Rollback: `prelanding2/claude-compassionate-curie-a0599c`.
 - **Nothing is pushed.** `prelanding2/*` tags exist locally only.
 - `kernel/hosttest/cryptotest` is still a tracked ELF with no build script.
+
+
+---
+
+## Round 2 CLOSED (2026-08-20)
+
+**All twelve branches are resolved. `main` builds and every gate passes,
+including the two that boot.**
+
+| Gate | Result |
+|---|---|
+| `./build.sh` (toolchain) | exit 0 |
+| `kernel/build.sh` | exit 0 |
+| `kernel/check-memmap.sh` | exit 0 |
+| `kernel/check-zl-calls.sh` | exit 0 |
+| `kernel/verify-iso.sh` | **exit 0 — BIOS and UEFI, compositor 3 windows** |
+| `kernel/verify-disk.sh` | **exit 0 — BOOTCOUNT 1 -> 2 -> 3, file survives by name** |
+
+`compassionate-curie` landed after all. It was caught up in its own worktree
+(94 behind), and the C the zl compiler emits caught **three duplicate
+implementations git did not consider conflicts**, because each side's copy sat
+in a region the other did not touch:
+
+1. **`files_draw`/`files_event` defined twice, with different argument orders** —
+   `files_event(ety,ecode,ex,ey,win)` vs `files_event(win,ety,ecode,ex,ey)`.
+   Both were called, from two `if id == APP_FILES` arms of the **same**
+   `app_event`, so the second was unreachable. That is `MERGE-EVIDENCE.md`'s
+   app-id collision class, exactly.
+2. **`snap_preview_set` defined twice.** Kept the branch's: its
+   `snap_preview_*` state is read by the paint path (`fb_rrect_blend`), while
+   main's `sp_*` is only written inside its own setter and never drawn.
+3. **`ANIM_FRAMES`** was main's constant, dropped when the branch won the
+   animation hunk while main's `anim_tick` came through unconflicted still
+   reading it.
+
+And one that would **not** have been a build error at all:
+`ACCENT`/`TXT_DIM`/`TXT_HI` had **11 uses and zero definitions** — the branch
+replaced them with `theme(TH_*)` and main's Files UI arrived unconflicted still
+using the old names. In zl that is a silent runtime failure. Converted.
+
+### The lesson round 2 adds to round 1
+
+Round 1 said the damage is silent. Round 2 says **where** it hides: not in the
+conflicted hunks, which get read, but in the regions git merges cleanly *around*
+them. Every one of the four faults above was in text neither side flagged. The
+only reason they surfaced is that zl compiles to C and C refuses to define a
+function twice — the one fault C could not catch (the undefined colour
+constants) is the one that had to be found by grep.
+
+### Weakest link, unprompted
+
+`wm.c` carries two animation engines' worth of history. The branch's side won
+because only it defines `wm_anim_at/progress/scale`, which the branch's own
+`wmtest.c` requires — but `anim_tick` came through from main. It builds, boots
+and passes both visual gates; it has not been proven that every one of the
+seven animations still moves pixels on the merged tree. `hosttest/wmtest` is
+the thing that would say.
