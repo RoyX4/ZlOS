@@ -298,8 +298,8 @@ does **not** catch this — it covers `kernel.zl` only, by its own closing note.
 
 ## Round 2 CLOSED (2026-08-20)
 
-**All twelve branches are resolved. `main` builds and every gate passes,
-including the two that boot.**
+**All twelve branches are resolved and PUSHED. `main` builds and every gate
+passes, including the two that boot.**
 
 | Gate | Result |
 |---|---|
@@ -378,3 +378,29 @@ of a diff, and a right answer from a wrong measurement is a coin flip.
 
 **Rule this earns:** to see what a merge would actually do, use
 `git merge-tree` or a throwaway merge — never `git diff A..B`.
+
+
+### Pushed (2026-08-20)
+
+`origin/main` is `67ce0fd`; local and remote agree, 0 ahead. All 13
+`prelanding2/*` rollback tags are on the remote, and every branch tip is an
+ancestor of `origin/main` — nothing lives only on this disk any more.
+
+The pre-push hook (`tools/preflight.sh`) blocked the first attempt and was
+right to. Three things had to be fixed before it would pass:
+
+1. **`examples/Zaccoding.zl` did not lex.** 8 bytes beginning with U+FFFD and
+   no newline — not source. Round 2's own step 0 committed it untracked and
+   uninspected; that was this landing's mistake, now reverted.
+2. **The formatter.** Measured against `origin/main` before changing anything:
+   the baseline was already **26 of 161** `.zl` files re-indentable, and the
+   merged tree is **59 of 336** — the same rate on twice the files. Pre-existing,
+   not caused by the landing. The hard failure was only the lex error above.
+3. **`golden.txt`.** Three lines changed and each was reviewed rather than
+   accepted wholesale: the settings app now probes NVMe (absent in this gate,
+   so it skips), and two help lines follow the `kernel.zl` help text that won.
+
+Eleven worktrees were removed after confirming every branch was `ahead=0`.
+`~/.cursor/worktrees/zl-linux/files-app` was left in place: its 621 lines of
+uncommitted work were checked function by function and **every one already
+exists in `main`**, so it is redundant rather than at risk.

@@ -7,6 +7,25 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-20 — test: update golden.txt for the round-2 boot output (67ce0fd)
+
+`main` · 3 files changed, 21 insertions(+), 3 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>3 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+- `kernel/golden.txt`
+
+</details>
+
 ## 2026-08-20 — chore: move the corrupt examples/Zaccoding.zl out of the tree (4dbc5c8)
 
 `main` · 2 files changed, 22 insertions(+)
