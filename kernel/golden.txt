@@ -1,3 +1,4 @@
+  settings: no NVMe, load skipped
   zlOS starting
 
   [  OK  ] multiboot handoff, 32-bit protected mode
@@ -32,8 +33,8 @@
     x        mouse demo - a cursor driven by the PS/2 mouse
     g        play SNAKE (w a s d to steer)
     d        paint with the mouse
-    <n> i    edit RAM file n (0-9) - ESC saves it
-    l        list the RAM files
+    <n> i    edit legacy RAM slot n (0-9)
+    l        Files app (graphical mode) / RAM slots (text mode)
     run F    run a program from a file (type it - needs a name)
     .        zlfs on the NVMe disk - mount, and count the boots
     ,        list the files ON DISK, by name
