@@ -22,7 +22,9 @@
  * An immediate-mode toolkit identifies a widget by its ORDER, so a draw pass
  * and a hit-test pass that emit different sequences hit-test the wrong control
  * - and they drift the moment someone edits one and not the other. One
- * function is the only version of this that cannot rot.
+ * function is the only version of this that cannot rot. run_ui() now owns
+ * ui_begin() as well, so the CURSOR ORIGIN cannot drift from the sequence
+ * either: the two used to be set in three different places.
  *
  * THE HIT-TEST PASS IS THE ONLY ONE WITH click SET. ui.c's fire() is level
  * triggered on L.click, and ui_toggle flips its variable inside fire(), so a
@@ -32,6 +34,7 @@
  */
 
 #include "ui.h"
+#include "design.h"
 
 /* ---- what this file drives ------------------------------------------------
  * Six sinks, all of which already existed. Only wm_set_anim is new, because
@@ -39,6 +42,9 @@
 void fb_set_subpixel(int on);
 unsigned int fb_pxw(void);
 unsigned int fb_pxh(void);
+/* the console cell. uikit.c draws every mono run from it, so the slider card's
+ * value column is this tall and not ui_text_h() tall - see card_slider(). */
+int  fb_cell_h(void);
 void input_set_speed(int pct);
 void input_set_accel(int on);
 void wm_set_anim(int on);
@@ -55,18 +61,27 @@ void wm_set_anim(int on);
  * switching accent never changes how readable anything is - which is the
  * property a palette has to have and a free colour picker cannot promise. */
 static const struct { const char *name; unsigned rgb; } ACCENTS[] = {
-    /* Ice MUST equal ui_theme_init's accent, or the default is a colour you
-     * cannot get back to: settings_apply() rebuilds the theme and then writes
-     * ACCENTS[S.accent] over it, so a mismatch means opening Settings and
-     * choosing the entry marked "the default" silently repaints the desktop in
-     * a different cyan. That is how the second cyan would come back after
-     * DECISIONS item E removed it - through the panel rather than through the
-     * palette. --accent #60d2eb. */
-    { "Ice",     0x60D2EB },     /* == ui_theme_init's accent. Keep them equal. */
-    { "Mint",    0x4FE0B0 },
-    { "Amber",   0xFFB454 },
-    { "Rose",    0xFF7A9C },
-    { "Violet",  0xB08CFF },
+    /* THE FIVE ARE THE REFERENCE'S OWN, not a set invented here.
+     * docs/design/ds-reference.html line 1212, verbatim:
+     *
+     *     const ACCENTS = ['#b8e838','#4ce0b3','#57b6ff','#8f7bff','#e86ec4'];
+     *
+     * It names none of them, so the names are ours; the values are not.
+     *
+     * ENTRY 0 MUST EQUAL ui_theme_init's accent, or the default is a colour
+     * you cannot get back to: settings_apply() rebuilds the theme and then
+     * writes ACCENTS[S.accent] over it, so a mismatch means opening Settings,
+     * choosing the entry marked "the default", and silently repainting the
+     * desktop in a different colour. hosttest/palette.c asserts the equality
+     * rather than trusting this comment.
+     *
+     * This table previously led with "Ice" #60D2EB, the blue-slate accent.
+     * That colour is retired along with the rest of the old palette. */
+    { "Lime",    ZD_ACCENT },    /* == ui_theme_init's accent. Keep them equal. */
+    { "Mint",    ZD_ACCENT_ALT_1 },
+    { "Azure",   ZD_ACCENT_ALT_2 },
+    { "Violet",  ZD_ACCENT_ALT_3 },
+    { "Magenta", ZD_ACCENT_ALT_4 },
 };
 #define N_ACCENT ((int)(sizeof ACCENTS / sizeof ACCENTS[0]))
 
@@ -185,44 +200,469 @@ static void settings_flush(void)
     settings_save();
 }
 
-/* ---- the one widget sequence ----------------------------------------------
+/* ============================================================================
+ * THE LAYOUT - ds-reference.html lines 700-740
+ *
+ * The reference's Settings app is TWO PANES, not a list:
+ *
+ *   158px sidebar   #14171a, 1px #0b0d0f right border, padding 7px 6px,
+ *                   holding the nav rows (`setNav`, 3854-3859)
+ *   content pane    padding 14px 16px, opening with a 15px/700 title
+ *                   (`setTitle`, 706) and a 14px bottom margin
+ *   cards           #14171a, 1px #1c2024, radius 13, margin-bottom 14, in four
+ *                   shapes: slider (707-711), accent swatches (713-721),
+ *                   toggle rows (722-731), about key/value (732-736)
+ *   a closing note  11px #74797f (737)
+ *
+ * WIDGET GEOMETRY IS NOT RE-DERIVED HERE. kernel/docs/reference-widgets.md S11
+ * and S12 are the specification and uikit.c is the implementation; every
+ * number below is either a ZD_* token from design.h or one of the six pane and
+ * card measurements the reference states inline, named once immediately below.
+ *
  * IT HAS TO FIT. ui.c's place() advances a cursor and never reports running
  * out of room: a widget past the bottom of the client area is still laid out,
- * still counted for widget identity, and simply drawn outside the scissor -
- * so it is invisible AND unclickable, with nothing anywhere saying so.
+ * still counted for widget identity, and simply drawn outside the scissor - so
+ * it is invisible AND unclickable, with nothing anywhere saying so. The first
+ * draft of this file put roughly 995 px of content in a 642 px client and
+ * everything from "Interface scale" down could not be reached at all.
  *
- * The first draft used a full-width ui_list_row per accent and a ui_num beside
- * every slider. At ui scale 2 that came to roughly 995 px of content in a
- * 642 px client, so everything from "Interface scale" down was off the bottom
- * and could not be reached at all. It looked like a Settings window with two
- * controls.
+ * That is why the six controls are spread across FIVE PAGES rather than
+ * stacked, and why settings_probe_fit() exists: layout() computes the slack at
+ * the bottom of every page and hosttest/settingstest.c asserts it is never
+ * negative, at every scale the app can be set to. A silent overflow is the one
+ * failure mode this app has already shipped once.
+ * ========================================================================= */
+
+/* The reference's own inline measurements. Everything else is a ZD_* token. */
+#define SET_PANE_PY     14   /* content pane padding, ds-reference.html 705 */
+#define SET_PANE_PX     16
+#define SET_TITLE_MB    14   /* title margin-bottom, 706                    */
+#define SET_CARD_MB     14   /* every card's margin-bottom, 708/714/723/733 */
+#define SET_ACC_PY      12   /* the accent card pads 12/13, sliders 11/13   */
+#define SET_ACC_GAP      9   /* its column gap AND its swatch row gap, 714  */
+#define SET_SLIDER_GAP   8   /* label row -> input, 708                     */
+
+#define DP(n) UI_DP(ui_theme(), (n))
+
+/* ---- the pages -------------------------------------------------------------
+ * ONE TABLE, WALKED TWICE - once by layout() for geometry and once by
+ * build_ui() to emit. That is the whole anti-drift argument: a card cannot be
+ * given a height in one walk and different contents in the other, because
+ * neither walk owns the list.
  *
- * So the accents are a ROW of buttons rather than five stacked rows - 112 px
- * instead of 368 - and only the reading that is not obvious from the slider
- * position keeps its ui_num. See docs/desktop-feel.md; the silent overflow
- * itself is logged as a finding against ui.c.
- */
+ * The names are the reference's own (3854), minus the five panes that would
+ * have nothing behind them - this kernel has no Sound, Kernel, Network, Games
+ * or Shortcuts to configure. Every page here drives a real sink. */
+enum { PG_APPEARANCE = 0, PG_WINDOWS, PG_DISPLAYS, PG_DEVICES, PG_ABOUT,
+       N_PAGE };
+
+#define CARD_ACCENT 0
+#define CARD_TOGGLE 1
+#define CARD_SLIDER 2
+#define CARD_ABOUT  3
+#define MAX_CARD    2
+
+/* which sink a slider or toggle card drives */
+#define CTL_SCALE   0
+#define CTL_SPEED   1
+#define CTL_ACCEL   2
+#define CTL_SUBPX   3
+#define CTL_ANIM    4
+/* ...or which about table an about card shows */
+#define ABOUT_DISPLAY 0
+#define ABOUT_SYSTEM  1
+
+struct card_def { unsigned char kind, rows, data; };
+struct page_def {
+    const char *name;
+    unsigned char ncard;
+    struct card_def card[MAX_CARD];
+    const char *note;
+};
+
+static const struct page_def PAGES[N_PAGE] = {
+    { "Appearance", 2, { { CARD_ACCENT, 0, 0          },
+                         { CARD_TOGGLE, 1, CTL_SUBPX  } },
+      "Applied on the click; written to disk when you let go." },
+    { "Windows",    1, { { CARD_TOGGLE, 1, CTL_ANIM   },
+                         { 0, 0, 0 } },
+      "The animation is the window open and close transition." },
+    { "Displays",   2, { { CARD_SLIDER, 1, CTL_SCALE  },
+                         { CARD_ABOUT,  3, ABOUT_DISPLAY } },
+      "Scale redraws the whole desktop, not just this window." },
+    { "Devices",    2, { { CARD_SLIDER, 1, CTL_SPEED  },
+                         { CARD_TOGGLE, 1, CTL_ACCEL  } },
+      "Pointer speed and acceleration take effect immediately." },
+    { "About",      1, { { CARD_ABOUT,  6, ABOUT_SYSTEM },
+                         { 0, 0, 0 } },
+      "Settings live in one 512-byte block at LBA 64." },
+};
+
+/* The about card's static rows. The row COUNT is in two places - here and in
+ * PAGES above - so the two are asserted equal rather than trusted. */
+static const struct { const char *k, *v; } ABOUT_SYS[] = {
+    { "OS",             "zl 0.1"         },
+    { "Window manager", "wm.c"           },
+    { "Kernel",         "i386 - ring 0"  },
+    { "Toolkit",        "ui.c + uikit.c" },
+    { "Settings block", "LBA 64"         },
+    { "Store",          "nvme, 512 B"    },
+};
+_Static_assert(sizeof ABOUT_SYS / sizeof ABOUT_SYS[0] == 6,
+               "PAGES[PG_ABOUT] declares 6 about rows");
+
+/* Which page the sidebar is on. NOT PERSISTED, deliberately: the on-disk
+ * record is six fields at version 1 and adding a seventh would invalidate
+ * every block already written. Where the user last was is not a setting. */
+static int S_page;
+
+int settings_page(void)  { return S_page; }
+int settings_page_count(void) { return N_PAGE; }
+const char *settings_page_name(int i)
+{
+    return (i >= 0 && i < N_PAGE) ? PAGES[i].name : "";
+}
+
+/* ---- the computed layout ---------------------------------------------------
+ * Pure arithmetic over (client rect, page, theme). It fires nothing and draws
+ * nothing, so it is safe to run before ui_begin - which it has to be, because
+ * ui_begin needs the cursor origin this computes. */
+static struct lay {
+    int page;
+    int sb_x, sb_y, sb_w, sb_h;            /* the sidebar panel        */
+    int nav_x, nav_y, nav_w, nav_step;     /* the nav rows inside it   */
+    int cx, cw;                            /* the card column          */
+    int ix, iw;                            /* a card's interior        */
+    int title_y;
+    int cy[MAX_CARD], ch[MAX_CARD];
+    int ncard;
+    int chip_rows;
+    int note_y;
+    int cur_x, cur_y, cur_w;               /* where ui.c's cursor starts */
+    int fits;                              /* client bottom - content bottom */
+} LO;
+
+/* Walk the accent chips. draw == 0 counts the rows they wrap onto and emits
+ * NOTHING - one wrap rule, used by the measure and by the draw, because two
+ * copies of a wrap rule is how a card ends up one row too short. */
+static int chip_walk(int x0, int y0, int iw, int draw)
+{
+    int x = x0, y = y0, rows = 1;
+    for (int i = 0; i < N_ACCENT; i++) {
+        int w = ui_chip_w(ACCENTS[i].name);
+        if (x > x0 && x + w > x0 + iw) {
+            x = x0;
+            y += ui_chip_h() + DP(SET_ACC_GAP);
+            rows++;
+        }
+        if (draw && ui_chip(x, y, ACCENTS[i].name, i == S.accent)) S.accent = i;
+        x += w + DP(SET_ACC_GAP);
+    }
+    return rows;
+}
+
+/* The slider card's label row is as tall as the taller of its two runs: the
+ * name is proportional and the value is mono, and uikit.c's mono is ONE size
+ * that does not follow UI_SM/MD/LG. Measuring the shorter of the two would
+ * clip the value. */
+static int label_row_h(void)
+{
+    int a = ui_text_h(UI_MD), b = fb_cell_h();
+    return a > b ? a : b;
+}
+
+static int card_height(int kind, int rows)
+{
+    const struct ui_theme *t = ui_theme();
+    switch (kind) {
+    case CARD_SLIDER:
+        return 2 * DP(ZD_CARD_PY) + label_row_h() + DP(SET_SLIDER_GAP)
+             + t->row_h;
+    case CARD_ACCENT:
+        return 2 * DP(SET_ACC_PY) + ui_text_h(UI_MD) + DP(SET_ACC_GAP)
+             + LO.chip_rows * ui_chip_h()
+             + (LO.chip_rows - 1) * DP(SET_ACC_GAP)
+             + DP(SET_ACC_GAP) + 2 * ui_text_h(UI_SM);
+    case CARD_TOGGLE:
+        /* ui.c's cursor puts theme.gap between consecutive widgets, so the
+         * reference's borderTop separator between rows 2..n is a gap here.
+         * Recorded in the report rather than faked with a hairline. */
+        return 2 * DP(ZD_CARD_PY) + rows * t->row_h + (rows - 1) * t->gap;
+    default:
+        /* ui_kv already carries the reference's row padding and its borderTop,
+         * so the about card is exactly its rows - no card padding on top. */
+        return rows * ui_kv_h();
+    }
+}
+
+static void layout(int x, int y, int w, int h, int page)
+{
+    const struct page_def *pg;
+    int sbw, pw, cy, i;
+
+    if (page < 0 || page >= N_PAGE) page = 0;
+    pg = &PAGES[page];
+    LO.page = page;
+
+    sbw = ui_sidebar_w();
+    if (sbw > w / 2) sbw = w / 2;       /* never let it eat the content pane */
+    if (sbw < 0) sbw = 0;
+    LO.sb_x = x; LO.sb_y = y; LO.sb_w = sbw; LO.sb_h = h;
+    LO.nav_x    = x + DP(ZD_SIDEBAR_PX);
+    LO.nav_y    = y + DP(ZD_SIDEBAR_PY);
+    LO.nav_w    = sbw - 2 * DP(ZD_SIDEBAR_PX);
+    LO.nav_step = ui_nav_h();
+    if (LO.nav_w < 1) LO.nav_w = 1;
+
+    pw = w - sbw;
+    LO.cx = x + sbw + DP(SET_PANE_PX);
+    LO.cw = pw - 2 * DP(SET_PANE_PX);
+    if (LO.cw < DP(48)) LO.cw = DP(48);
+    LO.ix = LO.cx + DP(ZD_CARD_PX);
+    LO.iw = LO.cw - 2 * DP(ZD_CARD_PX);
+    if (LO.iw < DP(24)) LO.iw = DP(24);
+
+    LO.title_y  = y + DP(SET_PANE_PY);
+    LO.chip_rows = chip_walk(0, 0, LO.iw, 0);
+
+    cy = LO.title_y + ui_text_h(UI_LG) + DP(SET_TITLE_MB);
+    LO.ncard = pg->ncard;
+    for (i = 0; i < LO.ncard; i++) {
+        LO.cy[i] = cy;
+        LO.ch[i] = card_height(pg->card[i].kind, pg->card[i].rows);
+        cy += LO.ch[i] + DP(SET_CARD_MB);
+    }
+    LO.note_y = cy;
+    LO.fits   = (y + h) - (cy + ui_text_h(UI_SM) + DP(SET_PANE_PY));
+
+    /* Where ui.c's layout cursor has to start: the y of the FIRST widget on
+     * this page that takes its position from the cursor rather than from a
+     * rectangle. ui_slider and ui_toggle are the only two - see build_ui. */
+    LO.cur_x = LO.ix;
+    LO.cur_w = LO.iw;
+    LO.cur_y = y;
+    for (i = 0; i < LO.ncard; i++) {
+        if (pg->card[i].kind == CARD_SLIDER) {
+            LO.cur_y = LO.cy[i] + DP(ZD_CARD_PY) + label_row_h()
+                     + DP(SET_SLIDER_GAP);
+            break;
+        }
+        if (pg->card[i].kind == CARD_TOGGLE) {
+            LO.cur_y = LO.cy[i] + DP(ZD_CARD_PY);
+            break;
+        }
+    }
+}
+
+/* Lay a page out into a client rectangle and report the slack at its bottom,
+ * without emitting anything and without disturbing the pass in progress.
+ * NEGATIVE MEANS CONTENT FELL OFF THE BOTTOM - which is invisible on screen
+ * and unclickable, and which nothing in ui.c reports. The gate is
+ * hosttest/settingstest.c. */
+int settings_probe_fit(int page, int w, int h)
+{
+    struct lay save = LO;
+    int slack;
+    layout(0, 0, w, h, page);
+    slack = LO.fits;
+    LO = save;
+    return slack;
+}
+
+/* ---- the cursor shadow -----------------------------------------------------
+ * ui_slider and ui_toggle take NO RECTANGLE - they are ui.c's layout-cursor
+ * widgets, and the cursor is the only thing that positions them. So the
+ * content pane is laid out THROUGH the cursor rather than beside it, and
+ * `flow` is this file's copy of where the cursor is.
+ *
+ * Every vertical step goes through flow_to() or through a widget whose height
+ * is added straight afterwards, so the two cannot disagree. flow_to() can only
+ * move FORWARD and can only move by more than one theme.gap - ui_space() has
+ * no other shape - so a step it cannot take is counted rather than silently
+ * dropped, and settingstest asserts the count stays zero. Every real gap in
+ * the page table is at least a card's padding plus its margin (36 design px)
+ * against a gap of 8, so the counter is a guard against a future edit, not
+ * against today's layout. */
+static int flow;
+static int flow_fault;
+
+int settings_flow_fault(void) { return flow_fault; }
+
+static void flow_to(int target)
+{
+    int gap = ui_metric(UI_METRIC_GAP);
+    int d = target - flow;
+    if (d == 0) return;
+    if (d < 0 || d <= gap) { flow_fault++; return; }
+    ui_space(d - gap);              /* ui_space(n) advances n + gap */
+    flow = target;
+}
+
+/* ---- the four cards --------------------------------------------------------
+ * ds-reference.html 707-736. Each one draws its own background with ui_card
+ * FIRST, because a card is a surface and its contents sit on it. */
+struct sbuf { char b[40]; int n; };
+static void sb_reset(struct sbuf *s) { s->n = 0; s->b[0] = 0; }
+static void sb_c(struct sbuf *s, char c)
+{
+    if (s->n < (int)sizeof s->b - 1) { s->b[s->n++] = c; s->b[s->n] = 0; }
+}
+static void sb_s(struct sbuf *s, const char *p) { while (*p) sb_c(s, *p++); }
+static void sb_u(struct sbuf *s, unsigned v)
+{
+    char t[12];
+    int n = 0;
+    if (!v) t[n++] = '0';
+    while (v && n < 11) { t[n++] = (char)('0' + v % 10u); v /= 10u; }
+    while (n) sb_c(s, t[--n]);
+}
+
+/* 708-711: a label row - name left, mono value right - above a full-width
+ * range input. */
+static void card_slider(int cy, int ctl)
+{
+    const struct ui_theme *t = ui_theme();
+    int ly = cy + DP(ZD_CARD_PY);
+    int lh = label_row_h();
+    struct sbuf v;
+    const char *name = ctl == CTL_SCALE ? "Interface scale" : "Pointer speed";
+    int vw, my;
+
+    sb_reset(&v);
+    sb_u(&v, (unsigned)(ctl == CTL_SCALE ? S.scale : S.speed));
+    sb_s(&v, ctl == CTL_SCALE ? "x" : " %");
+
+    ui_text(LO.ix, ly + (lh - ui_text_h(UI_MD)) / 2, name,
+            ui_color(UI_COLOR_TEXT), UI_MD, 0);
+    vw = ui_text_w(v.b, UI_SM, UI_F_MONO);
+    my = ly + (lh - fb_cell_h()) / 2;
+    if (my < ly) my = ly;
+    ui_text(LO.ix + LO.iw - vw, my, v.b, ui_color(UI_COLOR_TEXT_DIM),
+            UI_SM, UI_F_MONO);
+
+    flow_to(ly + lh + DP(SET_SLIDER_GAP));
+    if (ctl == CTL_SCALE) ui_slider(&S.scale, SCALE_MIN, SCALE_MAX);
+    else                  ui_slider(&S.speed, SPD_MIN_PCT, SPD_MAX_PCT);
+    flow += t->row_h + t->gap;
+}
+
+/* 713-721: a 12px label, a row of accent swatches, and an 11px explanatory
+ * line - the reference's own two sentences, verbatim.
+ *
+ * THE SWATCHES ARE CHIPS, NOT COLOUR SQUARES. ui.h has no colour-swatch
+ * widget, and drawing five rounded rectangles in each accent here would be
+ * hand-rolling one. So each accent is a ui_chip carrying its name, and the
+ * SELECTED chip fills with the live accent - which is the colour it names,
+ * because settings_apply has already pushed it into the theme. The four
+ * unselected colours are therefore not previewed; that is the largest single
+ * thing on this page the toolkit cannot currently say. */
+static void card_accent(int cy)
+{
+    int ly = cy + DP(SET_ACC_PY);
+    int sy = ly + ui_text_h(UI_MD) + DP(SET_ACC_GAP);
+    int hy;
+
+    ui_text(LO.ix, ly, "Accent colour", ui_color(UI_COLOR_TEXT), UI_MD, 0);
+    chip_walk(LO.ix, sy, LO.iw, 1);
+
+    hy = sy + LO.chip_rows * ui_chip_h()
+       + (LO.chip_rows - 1) * DP(SET_ACC_GAP) + DP(SET_ACC_GAP);
+    ui_text(LO.ix, hy, "Amber means warning and red means failure.",
+            ui_color(UI_COLOR_TEXT_5), UI_SM, 0);
+    ui_text(LO.ix, hy + ui_text_h(UI_SM),
+            "Those two are wired to state, not to this setting.",
+            ui_color(UI_COLOR_TEXT_5), UI_SM, 0);
+}
+
+/* 722-731: rows of label + track, one ui_toggle each. */
+static void card_toggle(int cy, const struct card_def *cd)
+{
+    const struct ui_theme *t = ui_theme();
+    flow_to(cy + DP(ZD_CARD_PY));
+    for (int r = 0; r < cd->rows; r++) {
+        switch (cd->data) {
+        case CTL_SUBPX: ui_toggle("Subpixel text",       &S.subpixel); break;
+        case CTL_ANIM:  ui_toggle("Window animations",   &S.anim);     break;
+        default:        ui_toggle("Pointer acceleration", &S.accel);   break;
+        }
+        flow += t->row_h + t->gap;
+    }
+}
+
+/* 732-736: key/value rows, borderTop on rows 2..n. */
+static void card_about(int cy, int which)
+{
+    int kh = ui_kv_h(), y = cy;
+    struct sbuf v;
+
+    if (which == ABOUT_DISPLAY) {
+        sb_reset(&v);
+        sb_u(&v, fb_pxw()); sb_c(&v, 'x'); sb_u(&v, fb_pxh());
+        ui_kv(LO.cx, y, LO.cw, "Framebuffer", v.b,
+              ui_color(UI_COLOR_TEXT), 1);
+        y += kh;
+        sb_reset(&v); sb_u(&v, (unsigned)S.scale); sb_c(&v, 'x');
+        ui_kv(LO.cx, y, LO.cw, "UI scale", v.b, ui_color(UI_COLOR_TEXT), 0);
+        y += kh;
+        sb_reset(&v);
+        sb_u(&v, (unsigned)ui_metric(UI_METRIC_ROW_H)); sb_s(&v, " px");
+        ui_kv(LO.cx, y, LO.cw, "Row height", v.b, ui_color(UI_COLOR_TEXT), 0);
+        return;
+    }
+    for (int i = 0; i < (int)(sizeof ABOUT_SYS / sizeof ABOUT_SYS[0]); i++) {
+        ui_kv(LO.cx, y, LO.cw, ABOUT_SYS[i].k, ABOUT_SYS[i].v,
+              ui_color(UI_COLOR_TEXT), i == 0);
+        y += kh;
+    }
+}
+
+/* ---- the one widget sequence ---------------------------------------------- */
 static void build_ui(void)
 {
-    ui_label("Accent");
-    ui_row();
-    for (int i = 0; i < N_ACCENT; i++)
-        if (ui_button(ACCENTS[i].name)) S.accent = i;
-    ui_endrow();
+    const struct page_def *pg = &PAGES[LO.page];
+    int i;
 
-    ui_sep();
-    ui_label("Interface scale");
-    ui_slider(&S.scale, SCALE_MIN, SCALE_MAX);
+    /* The sidebar, 701-704. It is read from LO.page rather than from S_page,
+     * so a nav row firing mid-pass cannot leave the rest of this sequence
+     * emitting one page's widgets at another page's coordinates. */
+    ui_sidebar(LO.sb_x, LO.sb_y, LO.sb_w, LO.sb_h);
+    for (i = 0; i < N_PAGE; i++)
+        if (ui_nav_row(LO.nav_x, LO.nav_y + i * LO.nav_step, LO.nav_w,
+                       PAGES[i].name, i == LO.page))
+            S_page = i;
 
-    ui_sep();
-    ui_label("Pointer speed");
-    ui_slider(&S.speed, SPD_MIN_PCT, SPD_MAX_PCT);
-    ui_num("percent", S.speed);
-    ui_toggle("Pointer acceleration", &S.accel);
+    /* The content pane, 705-737. */
+    ui_text(LO.cx, LO.title_y, pg->name, ui_color(UI_COLOR_TEXT_HI),
+            UI_LG, UI_F_BOLD);
 
-    ui_sep();
-    ui_toggle("Subpixel text", &S.subpixel);
-    ui_toggle("Window animations", &S.anim);
+    flow = LO.cur_y;
+    for (i = 0; i < LO.ncard; i++) {
+        const struct card_def *cd = &pg->card[i];
+        ui_card(LO.cx, LO.cy[i], LO.cw, LO.ch[i]);
+        switch (cd->kind) {
+        case CARD_SLIDER: card_slider(LO.cy[i], cd->data);      break;
+        case CARD_ACCENT: card_accent(LO.cy[i]);                break;
+        case CARD_TOGGLE: card_toggle(LO.cy[i], cd);            break;
+        default:          card_about(LO.cy[i], cd->data);       break;
+        }
+    }
+
+    ui_text(LO.cx, LO.note_y, pg->note, ui_color(UI_COLOR_TEXT_5), UI_SM, 0);
+}
+
+/* THE ONLY WAY THIS APP IS EVER RUN. It computes the layout, sets the cursor
+ * origin from it and emits the sequence - three things that used to be spread
+ * over settings_draw and two branches of settings_event, which is exactly how
+ * a draw pass and a hit-test pass drift apart. */
+static void run_ui(int x, int y, int w, int h,
+                   int mode, int px, int py, int click)
+{
+    int pad = ui_metric(UI_METRIC_PAD);
+    flow_fault = 0;
+    layout(x, y, w, h, S_page);
+    ui_begin(LO.cur_x - pad, LO.cur_y - pad, LO.cur_w + 2 * pad, h,
+             mode, px, py, click);
+    build_ui();
 }
 
 /* ---- persistence ----------------------------------------------------------
@@ -543,8 +983,7 @@ void settings_draw(int app, int x, int y, int w, int h, int focused)
 {
     (void)app; (void)focused;
     /* click = 0: a draw pass must never fire a widget. See the header. */
-    ui_begin(x, y, w, h, UI_DRAW, -1, -1, 0);
-    build_ui();
+    run_ui(x, y, w, h, UI_DRAW, -1, -1, 0);
 }
 
 /* Which control the keyboard is on. The app owns it, like every other piece of
@@ -578,15 +1017,20 @@ int settings_event(int app, int win, int type, int code, int x, int y)
         /* Enter: re-run the SAME sequence with the activation flag set, so the
          * focused widget fires through fire() exactly as a click would. */
         struct settings before = S;
+        int page_before = S_page;
         ui_activate_focus();
-        ui_begin(cx, cy, cw, ch, UI_HITTEST, -1, -1, 0);
-        build_ui();
+        run_ui(cx, cy, cw, ch, UI_HITTEST, -1, -1, 0);
         ui_end_activate();
         if (before.accent   != S.accent   || before.scale != S.scale ||
             before.speed    != S.speed    || before.accel != S.accel ||
             before.subpixel != S.subpixel || before.anim  != S.anim) {
             settings_commit();
             settings_flush();       /* a key press is a whole gesture on its own */
+        } else if (S_page != page_before) {
+            /* A page change repaints and NOTHING ELSE. It touches no sink and
+             * it is not persisted, so applying or dirtying here would write a
+             * disk block because someone looked at another pane. */
+            wm_damage(0, 0, (int)fb_pxw(), (int)fb_pxh());
         }
         return 1;
     }
@@ -609,8 +1053,8 @@ int settings_event(int app, int win, int type, int code, int x, int y)
      * entire screen on every click that landed on a label or on empty space,
      * which at 2560x1440 is a full frame thrown away per stray click. */
     struct settings before = S;
-    ui_begin(cx, cy, cw, ch, UI_HITTEST, x, y, 1);
-    build_ui();
+    int page_before = S_page;
+    run_ui(cx, cy, cw, ch, UI_HITTEST, x, y, 1);
 
     int changed = before.accent   != S.accent
                || before.scale    != S.scale
@@ -619,6 +1063,9 @@ int settings_event(int app, int win, int type, int code, int x, int y)
                || before.subpixel != S.subpixel
                || before.anim     != S.anim;
     if (changed) settings_commit();
+    /* A nav row moved the sidebar selection: repaint, but do NOT apply and do
+     * NOT mark the block dirty. Which pane is open is not a setting. */
+    else if (S_page != page_before) wm_damage(0, 0, (int)fb_pxw(), (int)fb_pxh());
     /* Clicking a control moves the keyboard focus onto it. Leaving the ring
      * behind on whatever was last Tabbed to makes the next Enter press a
      * different control than the one the user is looking at. */

@@ -1,0 +1,2259 @@
+# apps_games3.zl - Tetris, Pong, Breakout, Minesweeper, 2048, Life, Asteroids, Invaders
+#
+# ONE SLICE, ONE FILE. apps_registry.zl's seven dispatch chains each call into
+# this file exactly once, so a slice can be written without touching the shared
+# registry at all. That is not tidiness: five agents editing seven if-chains in
+# one working tree clobber each other, and a duplicate app id compiles clean and
+# misroutes at RUNTIME - REG_FIRST is a dispatch FLOOR, so `id >= REG_FIRST`
+# routes into the registry and a collision is invisible until you open the app.
+# That floor used to be APP_CATALOG, which is exactly how it went wrong: the
+# catalog was given id 13 and so was APP_FILES, and for months `apps` raised
+# the Files window instead of opening the catalog.
+#
+# THIS SLICE OWNS IDS 52..60 AND NO OTHERS. 60 is spare and unused.
+#
+# EIGHT STATE MACHINES, NOT EIGHT RESKINS. Each game below has its own board
+# representation, its own update rule and its own input grammar; nothing here
+# is another game with the colours changed. The three that share a shape (a
+# ball with a velocity: Pong, Breakout, Asteroids) still differ in what a
+# collision MEANS, which is the part that is the game.
+#
+# THE SHELL IS THE PART THAT IS COPIED. ds-reference.html:569-581 gives every
+# game window the same body: a canvas over a 30px status bar carrying a pid
+# chip and a keys hint. g3_bar() below is that bar, once, and games3_draw()
+# calls it after every game's canvas. The reference's own canvases are BLANK -
+# ds.html references ./support.js and seven sibling modules that were never
+# delivered - so there is no gameplay art to copy and the playfields below are
+# invented, drawn only from design.h's tokens by way of theme()/ac_cat_color().
+
+games3_LO = 52
+games3_HI = 60
+fn games3_has(id) { if id < games3_LO { return 0 }  if id > games3_HI { return 0 }  return 1 }
+
+G3_TETRIS = 52
+G3_PONG   = 53
+G3_BREAK  = 54
+G3_MINES  = 55
+G3_2048   = 56
+G3_LIFE   = 57
+G3_ROIDS  = 58
+G3_INVAD  = 59
+
+# ---- fixed buffers -----------------------------------------------------------
+# FOUR OF THE SIX BOARDS THIS SLICE NEEDS ALREADY EXIST. kernel.zl's app-suite
+# block reserved MINE_BOARD, G2048_BOARD, LIFE_BOARD and LIFE_NEXT for exactly
+# these three games and then nobody wrote them - grep says the four constants
+# are declared there and referenced nowhere. They are used here rather than
+# duplicated, and nothing else in the tree can want them: Minesweeper, 2048 and
+# Life are ids 55/56/57, which are this slice's and no other's.
+#
+# The remaining six are declared HERE rather than in kernel.zl, and that is a
+# deliberate trade with one known cost. kernel.zl is being edited by three
+# other agents in this same working tree right now and this slice may only
+# commit apps_games3.zl, so a constant added there would either be left
+# uncommitted (a build that works for me and nobody else) or would sweep up
+# somebody's half-finished work. The cost: check-memmap.sh's duplicate-address
+# sweep reads kernel.zl ONLY, so these six are outside it. The equivalent sweep
+# across every .zl file was run by hand instead and is in the report.
+#
+# The base is 0x02240000, not 0x02215000 (the next page after MAZE_STACK).
+# "Carry on upward from the highest one used" is what every parallel slice is
+# being told, so the next free page is precisely the address three other agents
+# are about to pick. A distinct block cannot collide with a neighbour that
+# followed the obvious rule. Everything here is far below virtio_net.c's
+# NET_FLOOR at 0x03000000 and far above PAINT_BUF's end near 0x02102000.
+G3_TETB   = 0x02240000   # Tetris well,      10 x 20 = 200 cells
+G3_BRICKB = 0x02241000   # Breakout bricks,  10 x  6 =  60 cells
+G3_ROCKB  = 0x02242000   # Asteroids rocks,  14 records x 8 bytes
+G3_SHOTB  = 0x02243000   # Asteroids shots,   6 records x 8 bytes
+G3_ALIENB = 0x02244000   # Invaders aliens,  11 x  5 = 55, bombs at +64
+G3_SHLDB  = 0x02245000   # Invaders shields,  4 x 4 x 3 = 48 blocks
+
+# ---- shared helpers ----------------------------------------------------------
+# zl has no unary minus in the corpus idiom, no abs and no clamp; these three
+# are the arithmetic every game below repeats. `/` truncates toward zero (see
+# the note in apps_games1.zl's nim_event) so every bounds check is written
+# BEFORE its division, never after.
+fn g3_abs(v) { if v < 0 { return 0 - v }  return v }
+fn g3_clamp(v, lo, hi) { if v < lo { return lo }  if v > hi { return hi }  return v }
+
+# A logical playfield coordinate mapped into the client rectangle it was handed.
+# Motion state is kept in a FIXED field (PG_FW x PG_FH and friends) and scaled
+# only at draw time, which is what keeps app_draw position-pure while leaving
+# the physics independent of the window size.
+fn g3_mx(a0, span, v, fw) { return a0 + v * span / fw }
+
+# The one drawn primitive the builtin set does not provide. There is no line in
+# runtime_kernel.c's framebuffer builtins - fill_rgb/rrect/blend and nothing
+# between - so Asteroids' ship is three DDA runs of small squares. It is used
+# for the ship ONLY: every fill_rgb goes through zl_calln's name dispatch, so a
+# per-pixel loop is affordable for three short edges a frame and not for
+# fourteen rock outlines.
+fn g3_line(x0, y0, x1, y1, w, col) {
+    dx = x1 - x0
+    dy = y1 - y0
+    n = g3_abs(dx)
+    if g3_abs(dy) > n { n = g3_abs(dy) }
+    if n == 0 { fill_rgb(x0, y0, w, w, col)  return 0 }
+    s = 0
+    while s <= n {
+        fill_rgb(x0 + dx * s / n, y0 + dy * s / n, w, w, col)
+        s = s + 1
+    }
+    return 0
+}
+
+# ---- the game-window shell - ds-reference.html:569-581 -----------------------
+# height:30px, flex:0 0 30px, padding 0 11px, gap 8px, background #14171a
+# (ZD_SURF_4 = TH_CHROME), border-top 1px #0b0d0f (ZD_SURF_2 = TH_CHROME_LINE),
+# then the pid chip and the keys hint. The canvas above it is #0b0d10, which is
+# that same ZD_SURF_2 token to within one unit of blue, so the ground every
+# game fills is TH_CHROME_LINE too.
+G3_BAR = 30
+
+# THE PID IS DERIVED, NOT READ. The reference reads a real kernel process
+# table (`st.kern.procs.find(...)`); this kernel has one - sched.c - but no zl
+# builtin exposes a per-app pid, so the chip shows a stable number derived from
+# the app id instead of inventing a fake table. Said out loud rather than
+# hidden, because a made-up number that looks measured is the worse failure.
+fn g3_pid(id) { return 400 + (id - games3_LO) * 3 }
+
+fn g3_keys(id) {
+    if id == G3_TETRIS { return "left/right move   up rotate   down soft drop   space hard drop   p pause   r new" }
+    if id == G3_PONG   { return "up/down or mouse moves the paddle   first to 11   r new game" }
+    if id == G3_BREAK  { return "left/right or mouse   space launches   r new game" }
+    if id == G3_MINES  { return "left click reveals   right click flags   r new field" }
+    if id == G3_2048   { return "arrow keys slide and merge   r new game" }
+    if id == G3_LIFE   { return "space run/pause   s step   c clear   1 gliders  2 pulsar  3 acorn  4 soup   click toggles" }
+    if id == G3_ROIDS  { return "left/right turn   up thrust   space fires   r new game" }
+    if id == G3_INVAD  { return "left/right move   space fires   p pause   r new game" }
+    return ""
+}
+
+fn g3_bar(id, ax, ay, aw, ah) {
+    u = ui()
+    bh = G3_BAR * u
+    by = ay + ah - bh
+    fill_rgb(ax, by, aw, bh, theme(TH_CHROME))
+    fill_rgb(ax, by, aw, 1, theme(TH_CHROME_LINE))
+    th = label_h(T_CAPTION)
+    ty = by + (bh - th) / 2
+    pw = label_w("pid", T_CAPTION, W_REG)
+    cw = pw + 40 * u
+    rrect(ax + 11 * u, by + (bh - 18 * u) / 2, cw, 18 * u, 8 * u, theme(TH_PANEL_HI))
+    label(ax + 19 * u, ty, "pid", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 19 * u + pw + 6 * u, ty, g3_pid(id), theme(TH_TEXT), T_CAPTION, W_REG)
+    label(ax + 19 * u + cw + 8 * u, ty, g3_keys(id), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    return 0
+}
+
+# ==============================================================================
+# Tetris - 52 - 360 x 440
+#
+# Seven tetrominoes, four rotations each, as 4x4 BIT MASKS rather than twelve
+# dozen coordinate returns: bit (y * 4 + x) is a filled block, so one integer
+# is one rotation and the whole piece set is 28 numbers. Collision, locking and
+# the next-piece preview all walk the same mask, which is why rotation needs no
+# special case anywhere - a rotation is a different number, not different code.
+#
+# G3_TETB is one byte per cell: 0 empty, else the piece index + 1 so the colour
+# survives locking.
+# ==============================================================================
+TET_W = 10
+TET_H = 20
+TET_CELL = 17
+
+tet_ready = 0
+tet_p = 0
+tet_r = 0
+tet_x = 3
+tet_y = 0
+tet_next = 0
+tet_score = 0
+tet_lines = 0
+tet_over = 0
+tet_pause = 0
+tet_when = 0
+
+fn tet_mask(p, r) {
+    if p == 0 { if r == 0 { return 0x00F0 }  if r == 1 { return 0x4444 }  if r == 2 { return 0x00F0 }  return 0x4444 }
+    if p == 1 { if r == 0 { return 0x0071 }  if r == 1 { return 0x0226 }  if r == 2 { return 0x0470 }  return 0x0322 }
+    if p == 2 { if r == 0 { return 0x0074 }  if r == 1 { return 0x0622 }  if r == 2 { return 0x0170 }  return 0x0223 }
+    if p == 3 { return 0x0033 }
+    if p == 4 { if r == 0 { return 0x0036 }  if r == 1 { return 0x0462 }  if r == 2 { return 0x0036 }  return 0x0462 }
+    if p == 5 { if r == 0 { return 0x0072 }  if r == 1 { return 0x0262 }  if r == 2 { return 0x0270 }  return 0x0232 }
+    if r == 0 { return 0x0063 }  if r == 1 { return 0x0264 }  if r == 2 { return 0x0063 }  return 0x0264
+}
+
+# The seven piece colours are seven DESIGN TOKENS, not seven invented RGBs -
+# design.h is the only file allowed a colour literal and hosttest/palette.c is
+# the gate on it. TH_ACCENT / TH_OK / TH_DANGER / TH_TEXT_HI plus the three
+# category hues ac_cat_color() already publishes give exactly seven distinct
+# values with no new colour entering the system.
+fn tet_col(v) {
+    if v == 1 { return theme(TH_ACCENT) }
+    if v == 2 { return ac_cat_color(0) }
+    if v == 3 { return ac_cat_color(1) }
+    if v == 4 { return theme(TH_OK) }
+    if v == 5 { return ac_cat_color(2) }
+    if v == 6 { return theme(TH_TEXT_HI) }
+    return theme(TH_DANGER)
+}
+
+fn tet_at(x, y) { return peek8(G3_TETB + y * TET_W + x) }
+fn tet_put(x, y, v) { poke8(G3_TETB + y * TET_W + x, v)  return 0 }
+
+fn tet_fits(p, r, px, py) {
+    m = tet_mask(p, r)
+    by = 0
+    while by < 4 {
+        bx = 0
+        while bx < 4 {
+            if band(m, shl(1, by * 4 + bx)) != 0 {
+                cx = px + bx
+                cy = py + by
+                if cx < 0 { return 0 }
+                if cx >= TET_W { return 0 }
+                if cy >= TET_H { return 0 }
+                if cy >= 0 { if tet_at(cx, cy) != 0 { return 0 } }
+            }
+            bx = bx + 1
+        }
+        by = by + 1
+    }
+    return 1
+}
+
+fn tet_lock() {
+    m = tet_mask(tet_p, tet_r)
+    by = 0
+    while by < 4 {
+        bx = 0
+        while bx < 4 {
+            if band(m, shl(1, by * 4 + bx)) != 0 {
+                cy = tet_y + by
+                if cy >= 0 { tet_put(tet_x + bx, cy, tet_p + 1) }
+            }
+            bx = bx + 1
+        }
+        by = by + 1
+    }
+    return 0
+}
+
+# THE CURSOR DOES NOT ADVANCE ON A CLEARED ROW. Everything above shifts down
+# into it, so the row index that was just emptied now holds what used to be
+# above it and has to be tested again - decrementing here is how a stack of two
+# full rows loses exactly one of them.
+fn tet_clear() {
+    n = 0
+    ry = TET_H - 1
+    while ry >= 0 {
+        full = 1
+        cx = 0
+        while cx < TET_W { if tet_at(cx, ry) == 0 { full = 0 }  cx = cx + 1 }
+        if full == 1 {
+            sy = ry
+            while sy > 0 {
+                cx = 0
+                while cx < TET_W { tet_put(cx, sy, tet_at(cx, sy - 1))  cx = cx + 1 }
+                sy = sy - 1
+            }
+            cx = 0
+            while cx < TET_W { tet_put(cx, 0, 0)  cx = cx + 1 }
+            n = n + 1
+        } else {
+            ry = ry - 1
+        }
+    }
+    return n
+}
+
+fn tet_award(n) { if n == 1 { return 100 }  if n == 2 { return 300 }  if n == 3 { return 500 }  if n == 4 { return 800 }  return 0 }
+
+fn tet_spawn() {
+    tet_p = tet_next
+    tet_next = ac_rand(7)
+    tet_r = 0
+    tet_x = 3
+    tet_y = 0
+    if tet_fits(tet_p, tet_r, tet_x, tet_y) == 0 { tet_over = 1 }
+    return 0
+}
+
+fn tet_reset() {
+    fill_mem(G3_TETB, 0, TET_W * TET_H)
+    ac_seed_from(ticks() + 52)          # see the note in wg_reset
+    tet_next = ac_rand(7)
+    tet_score = 0
+    tet_lines = 0
+    tet_over = 0
+    tet_pause = 0
+    tet_when = ticks() + 40
+    tet_ready = 1
+    tet_spawn()
+    return 0
+}
+
+fn tet_delay() {
+    d = 40 - (tet_lines / 10) * 5
+    if d < 8 { d = 8 }
+    return d
+}
+
+fn tet_fall() {
+    if tet_fits(tet_p, tet_r, tet_x, tet_y + 1) == 1 { tet_y = tet_y + 1  return 0 }
+    tet_lock()
+    n = tet_clear()
+    tet_lines = tet_lines + n
+    tet_score = tet_score + tet_award(n)
+    tet_spawn()
+    return 1
+}
+
+# Five kick offsets, tried in order, so a rotation against the wall or against
+# the stack slides clear instead of being silently refused. The I piece needs
+# the two-cell kicks; the others never use them.
+fn tet_rotate() {
+    nr = (tet_r + 1) % 4
+    if tet_fits(tet_p, nr, tet_x, tet_y) == 1 { tet_r = nr  return 1 }
+    if tet_fits(tet_p, nr, tet_x - 1, tet_y) == 1 { tet_r = nr  tet_x = tet_x - 1  return 1 }
+    if tet_fits(tet_p, nr, tet_x + 1, tet_y) == 1 { tet_r = nr  tet_x = tet_x + 1  return 1 }
+    if tet_fits(tet_p, nr, tet_x - 2, tet_y) == 1 { tet_r = nr  tet_x = tet_x - 2  return 1 }
+    if tet_fits(tet_p, nr, tet_x + 2, tet_y) == 1 { tet_r = nr  tet_x = tet_x + 2  return 1 }
+    return 0
+}
+
+fn tet_block(bx, by, cell, v) {
+    rrect(bx + 1, by + 1, cell - 2, cell - 2, 2, tet_col(v))
+    return 0
+}
+
+fn tet_draw(ax, ay, aw, ah) {
+    u = ui()
+    fill_rgb(ax, ay, aw, ah, theme(TH_CHROME_LINE))
+    cell = TET_CELL * u
+    gx = ax + 14 * u
+    gy = ay + 12 * u
+    fill_rgb(gx - 2 * u, gy - 2 * u, TET_W * cell + 4 * u, TET_H * cell + 4 * u, theme(TH_BG))
+    ry = 0
+    while ry < TET_H {
+        cx = 0
+        while cx < TET_W {
+            v = tet_at(cx, ry)
+            if v != 0 { tet_block(gx + cx * cell, gy + ry * cell, cell, v) }
+            cx = cx + 1
+        }
+        ry = ry + 1
+    }
+    if tet_over == 0 {
+        m = tet_mask(tet_p, tet_r)
+        by = 0
+        while by < 4 {
+            bx = 0
+            while bx < 4 {
+                if band(m, shl(1, by * 4 + bx)) != 0 {
+                    cy = tet_y + by
+                    if cy >= 0 { tet_block(gx + (tet_x + bx) * cell, gy + cy * cell, cell, tet_p + 1) }
+                }
+                bx = bx + 1
+            }
+            by = by + 1
+        }
+    }
+    px = gx + TET_W * cell + 16 * u
+    label(px, gy, "next", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    ncell = 13 * u
+    nm = tet_mask(tet_next, 0)
+    by = 0
+    while by < 4 {
+        bx = 0
+        while bx < 4 {
+            if band(nm, shl(1, by * 4 + bx)) != 0 { tet_block(px + bx * ncell, gy + 20 * u + by * ncell, ncell, tet_next + 1) }
+            bx = bx + 1
+        }
+        by = by + 1
+    }
+    label(px, gy + 86 * u, "score", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(px, gy + 102 * u, tet_score, theme(TH_TEXT_HI), T_BODY, W_BOLD)
+    label(px, gy + 132 * u, "lines", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(px, gy + 148 * u, tet_lines, theme(TH_TEXT_HI), T_BODY, W_BOLD)
+    label(px, gy + 178 * u, "level", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(px, gy + 194 * u, tet_lines / 10 + 1, theme(TH_TEXT_HI), T_BODY, W_BOLD)
+    if tet_over == 1 { label(px, gy + 232 * u, "game over", theme(TH_DANGER), T_CAPTION, W_BOLD) }
+    if tet_pause == 1 { label(px, gy + 232 * u, "paused", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
+    return 0
+}
+
+# A press updates state, but the compositor only repaints a window it was TOLD
+# is damaged - see the note on wg_event in apps_games2.zl. Every branch below
+# that changes anything ends in wm_dmg(win); the ones that change nothing (a
+# move into a wall, a rotation with no kick) deliberately do not.
+fn tet_event(win, ety, ecode) {
+    if ety == 3 {
+        if ecode == 114 { tet_reset()  wm_dmg(win)  return 1 }
+        if tet_over == 1 { return 1 }
+        if ecode == 112 { if tet_pause == 0 { tet_pause = 1 } else { tet_pause = 0 }  wm_dmg(win)  return 1 }
+        if ecode == 32 {
+            if tet_pause == 1 { return 1 }
+            n = 0
+            while tet_fits(tet_p, tet_r, tet_x, tet_y + 1) == 1 { tet_y = tet_y + 1  n = n + 1 }
+            tet_score = tet_score + n * 2
+            tet_fall()
+            tet_when = ticks() + tet_delay()
+            wm_dmg(win)
+            return 1
+        }
+        return 0
+    }
+    if ety != 1 { return 0 }
+    if tet_over == 1 { return 1 }
+    if tet_pause == 1 { return 1 }
+    if ecode == K_LEFT  { if tet_fits(tet_p, tet_r, tet_x - 1, tet_y) == 1 { tet_x = tet_x - 1  wm_dmg(win) }  return 1 }
+    if ecode == K_RIGHT { if tet_fits(tet_p, tet_r, tet_x + 1, tet_y) == 1 { tet_x = tet_x + 1  wm_dmg(win) }  return 1 }
+    if ecode == K_UP    { if tet_rotate() == 1 { wm_dmg(win) }  return 1 }
+    if ecode == K_DOWN  { tet_fall()  tet_score = tet_score + 1  tet_when = ticks() + tet_delay()  wm_dmg(win)  return 1 }
+    return 0
+}
+
+# app_tick MUST NOT DRAW and returns 1 to mean "my state changed, repaint me" -
+# wm.c:1758 turns that 1 into wm_damage_win() for us, which is the same
+# contract sn_step() has used since the compositor landed. That return IS the
+# damage call for every _tick below; calling wm_dmg as well would only queue
+# the same rectangle twice.
+fn tet_tick(win) {
+    if tet_ready == 0 { return 0 }
+    if tet_over == 1 { return 0 }
+    if tet_pause == 1 { return 0 }
+    if ticks() < tet_when { return 0 }
+    tet_when = ticks() + tet_delay()
+    tet_fall()
+    return 1
+}
+
+# ==============================================================================
+# Pong - 53 - 480 x 330
+#
+# Two paddles, the right one driven by a capped tracker so it can be beaten,
+# and a ball whose OUTGOING ANGLE IS THE CONTACT POINT: the distance from the
+# paddle's centre becomes the new vertical velocity, which is the whole game -
+# a ball reflected flat would make every rally identical. First to 11.
+#
+# The ball lives in a fixed 480 x 300 field in QUARTER UNITS and is scaled into
+# the client rect at draw time, so a resized window changes nothing about the
+# physics. Everything else here is scalar state; there is no board.
+# ==============================================================================
+PG_FW = 480
+PG_FH = 300
+PG_PH = 56
+PG_PW = 9
+PG_BS = 9
+PG_LX = 18
+PG_RX = 453
+PG_TO = 11
+
+pg_ready = 0
+pg_bx = 0
+pg_by = 0
+pg_vx = 0
+pg_vy = 0
+pg_ly = 0
+pg_ry = 0
+pg_ls = 0
+pg_rs = 0
+pg_over = 0
+pg_wait = 0
+pg_when = 0
+
+fn pg_serve(dir) {
+    pg_bx = (PG_FW / 2) * 4
+    pg_by = (PG_FH / 2) * 4
+    pg_vx = dir * 10
+    pg_vy = 6 - ac_rand(13)
+    pg_wait = ticks() + 70
+    return 0
+}
+
+fn pg_reset() {
+    ac_seed_from(ticks() + 53)
+    pg_ls = 0
+    pg_rs = 0
+    pg_over = 0
+    pg_ly = (PG_FH - PG_PH) / 2
+    pg_ry = pg_ly
+    pg_ready = 1
+    if ac_rand(2) == 0 { pg_serve(1) } else { pg_serve(0 - 1) }
+    return 0
+}
+
+fn pg_on(py, cy) { if cy < py { return 0 }  if cy > py + PG_PH { return 0 }  return 1 }
+
+fn pg_step() {
+    tgt = pg_by / 4 + PG_BS / 2 - PG_PH / 2
+    if pg_ry < tgt { pg_ry = pg_ry + 4 }
+    if pg_ry > tgt { pg_ry = pg_ry - 4 }
+    pg_ry = g3_clamp(pg_ry, 0, PG_FH - PG_PH)
+    if ticks() < pg_wait { return 1 }
+    pg_bx = pg_bx + pg_vx
+    pg_by = pg_by + pg_vy
+    if pg_by < 0 { pg_by = 0 - pg_by  pg_vy = 0 - pg_vy }
+    lim = (PG_FH - PG_BS) * 4
+    if pg_by > lim { pg_by = lim - (pg_by - lim)  pg_vy = 0 - pg_vy }
+    cy = pg_by / 4 + PG_BS / 2
+    if pg_vx < 0 {
+        if pg_bx <= (PG_LX + PG_PW) * 4 {
+            if pg_bx > (PG_LX - 10) * 4 {
+                if pg_on(pg_ly, cy) == 1 {
+                    pg_bx = (PG_LX + PG_PW) * 4
+                    pg_vx = 0 - pg_vx
+                    if pg_vx < 20 { pg_vx = pg_vx + 1 }
+                    pg_vy = (cy - (pg_ly + PG_PH / 2)) * 14 / (PG_PH / 2)
+                }
+            }
+        }
+    }
+    if pg_vx > 0 {
+        if pg_bx + PG_BS * 4 >= PG_RX * 4 {
+            if pg_bx < (PG_RX + PG_PW + 10) * 4 {
+                if pg_on(pg_ry, cy) == 1 {
+                    pg_bx = (PG_RX - PG_BS) * 4
+                    pg_vx = 0 - pg_vx
+                    if pg_vx > 0 - 20 { pg_vx = pg_vx - 1 }
+                    pg_vy = (cy - (pg_ry + PG_PH / 2)) * 14 / (PG_PH / 2)
+                }
+            }
+        }
+    }
+    if pg_bx < 0 - 40 {
+        pg_rs = pg_rs + 1
+        if pg_rs >= PG_TO { pg_over = 2 } else { pg_serve(0 - 1) }
+    }
+    if pg_bx > (PG_FW + 10) * 4 {
+        pg_ls = pg_ls + 1
+        if pg_ls >= PG_TO { pg_over = 1 } else { pg_serve(1) }
+    }
+    return 1
+}
+
+fn pg_draw(ax, ay, aw, ah) {
+    u = ui()
+    fill_rgb(ax, ay, aw, ah, theme(TH_CHROME_LINE))
+    ny = 0
+    while ny < 12 {
+        fill_rgb(ax + aw / 2 - u, ay + ny * ah / 12 + ah / 48, 2 * u, ah / 24, theme(TH_BORDER))
+        ny = ny + 1
+    }
+    pw = PG_PW * aw / PG_FW
+    ph = PG_PH * ah / PG_FH
+    rrect(g3_mx(ax, aw, PG_LX, PG_FW), g3_mx(ay, ah, pg_ly, PG_FH), pw, ph, 3 * u, theme(TH_ACCENT))
+    rrect(g3_mx(ax, aw, PG_RX, PG_FW), g3_mx(ay, ah, pg_ry, PG_FH), pw, ph, 3 * u, theme(TH_TEXT_HI))
+    fill_rgb(g3_mx(ax, aw, pg_bx / 4, PG_FW), g3_mx(ay, ah, pg_by / 4, PG_FH), PG_BS * aw / PG_FW, PG_BS * ah / PG_FH, theme(TH_TEXT_HI))
+    label_num(ax + aw / 2 - 44 * u, ay + 12 * u, pg_ls, theme(TH_ACCENT), T_TITLE, W_BOLD)
+    label_num(ax + aw / 2 + 26 * u, ay + 12 * u, pg_rs, theme(TH_TEXT_HI), T_TITLE, W_BOLD)
+    if pg_over == 1 { label(ax + 16 * u, ay + ah - 28 * u, "you win 11 - r starts a new game", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
+    if pg_over == 2 { label(ax + 16 * u, ay + ah - 28 * u, "cpu wins 11 - r starts a new game", theme(TH_DANGER), T_CAPTION, W_BOLD) }
+    return 0
+}
+
+fn pg_event(win, ety, ecode, ex, ey) {
+    if ety == 3 { if ecode == 114 { pg_reset()  wm_dmg(win)  return 1 }  return 0 }
+    if ety == 1 {
+        if pg_over != 0 { return 1 }
+        if ecode == K_UP   { pg_ly = g3_clamp(pg_ly - 14, 0, PG_FH - PG_PH)  wm_dmg(win)  return 1 }
+        if ecode == K_DOWN { pg_ly = g3_clamp(pg_ly + 14, 0, PG_FH - PG_PH)  wm_dmg(win)  return 1 }
+        return 0
+    }
+    if ety != 4 { return 0 }
+    if pg_over != 0 { return 1 }
+    ch = wm_ch(win) - G3_BAR * ui()
+    if ch < 1 { return 1 }
+    cy = ey - wm_cy(win)
+    if cy < 0 { return 1 }
+    # ONLY A MOVE THAT MOVED THE PADDLE REPAINTS. Pointer motion arrives as a
+    # stream of EV_MOUSE events with an empty button mask, so an unconditional
+    # wm_dmg here would repaint the whole window for every pixel the cursor
+    # crossed - and the paddle is clamped, so most of those change nothing.
+    ny = g3_clamp(cy * PG_FH / ch - PG_PH / 2, 0, PG_FH - PG_PH)
+    if ny != pg_ly { pg_ly = ny  wm_dmg(win) }
+    return 1
+}
+
+fn pg_tick(win) {
+    if pg_ready == 0 { return 0 }
+    if pg_over != 0 { return 0 }
+    if ticks() < pg_when { return 0 }
+    pg_when = ticks() + 2
+    return pg_step()
+}
+
+# ==============================================================================
+# Breakout - 54 - 460 x 360
+#
+# Six rows of ten bricks, a paddle, three lives, and a ball that is PARKED ON
+# THE PADDLE until it is launched - which is what makes losing a life a state
+# change rather than an instant respawn into a moving ball. Clearing the field
+# does not end the game: it refills at the next level with a faster serve, so
+# the win condition is survival rather than a screen.
+#
+# The brick lookup is arithmetic on the ball's centre (which cell is it in),
+# not a scan of sixty bricks - the same shape ac_cell_idx already uses for a
+# click, applied to a moving point.
+# ==============================================================================
+BO_FW = 460
+BO_FH = 330
+BO_COLS = 10
+BO_ROWS = 6
+BO_BW = 44
+BO_BH = 15
+BO_BX0 = 10
+BO_BY0 = 40
+BO_PW = 66
+BO_PH = 10
+BO_PY = 306
+BO_BS = 8
+
+bo_ready = 0
+bo_bx = 0
+bo_by = 0
+bo_vx = 0
+bo_vy = 0
+bo_px = 0
+bo_lives = 3
+bo_score = 0
+bo_state = 0
+bo_level = 1
+bo_when = 0
+
+fn bo_brick(c, r) { return peek8(G3_BRICKB + r * BO_COLS + c) }
+fn bo_setbrick(c, r, v) { poke8(G3_BRICKB + r * BO_COLS + c, v)  return 0 }
+
+fn bo_rowcol(r) {
+    if r == 0 { return theme(TH_DANGER) }
+    if r == 1 { return ac_cat_color(2) }
+    if r == 2 { return theme(TH_ACCENT) }
+    if r == 3 { return ac_cat_color(1) }
+    if r == 4 { return theme(TH_OK) }
+    return ac_cat_color(0)
+}
+
+fn bo_fill() {
+    r = 0
+    while r < BO_ROWS {
+        c = 0
+        while c < BO_COLS { bo_setbrick(c, r, 1)  c = c + 1 }
+        r = r + 1
+    }
+    return 0
+}
+
+fn bo_park() {
+    bo_bx = (bo_px + BO_PW / 2 - BO_BS / 2) * 4
+    bo_by = (BO_PY - BO_BS - 1) * 4
+    bo_vx = 0
+    bo_vy = 0
+    bo_state = 0
+    return 0
+}
+
+fn bo_reset() {
+    ac_seed_from(ticks() + 54)
+    bo_fill()
+    bo_px = (BO_FW - BO_PW) / 2
+    bo_lives = 3
+    bo_score = 0
+    bo_level = 1
+    bo_ready = 1
+    bo_park()
+    return 0
+}
+
+fn bo_launch() {
+    bo_vx = 5 - ac_rand(11)
+    if bo_vx == 0 { bo_vx = 4 }
+    bo_vy = 0 - (8 + bo_level)
+    bo_state = 1
+    return 0
+}
+
+fn bo_left() {
+    n = 0
+    r = 0
+    while r < BO_ROWS {
+        c = 0
+        while c < BO_COLS { if bo_brick(c, r) != 0 { n = n + 1 }  c = c + 1 }
+        r = r + 1
+    }
+    return n
+}
+
+fn bo_hit(cx, cy) {
+    if cx < BO_BX0 { return 0 }
+    if cy < BO_BY0 { return 0 }
+    c = (cx - BO_BX0) / BO_BW
+    r = (cy - BO_BY0) / BO_BH
+    if c >= BO_COLS { return 0 }
+    if r >= BO_ROWS { return 0 }
+    if bo_brick(c, r) == 0 { return 0 }
+    bo_setbrick(c, r, 0)
+    bo_score = bo_score + (BO_ROWS - r) * 10
+    return 1
+}
+
+fn bo_step() {
+    if bo_state != 1 { return 0 }
+    bo_bx = bo_bx + bo_vx
+    bo_by = bo_by + bo_vy
+    if bo_bx < 0 { bo_bx = 0 - bo_bx  bo_vx = 0 - bo_vx }
+    lim = (BO_FW - BO_BS) * 4
+    if bo_bx > lim { bo_bx = lim - (bo_bx - lim)  bo_vx = 0 - bo_vx }
+    if bo_by < 0 { bo_by = 0 - bo_by  bo_vy = 0 - bo_vy }
+    cx = bo_bx / 4 + BO_BS / 2
+    cy = bo_by / 4 + BO_BS / 2
+    if bo_hit(cx, cy) == 1 {
+        bo_vy = 0 - bo_vy
+        if bo_left() == 0 { bo_level = bo_level + 1  bo_fill()  bo_park()  return 1 }
+    }
+    if bo_vy > 0 {
+        if cy >= BO_PY {
+            if cy <= BO_PY + BO_PH + 6 {
+                if cx >= bo_px { if cx <= bo_px + BO_PW {
+                    bo_by = (BO_PY - BO_BS) * 4
+                    bo_vy = 0 - bo_vy
+                    bo_vx = (cx - (bo_px + BO_PW / 2)) * 11 / (BO_PW / 2)
+                    if bo_vx == 0 { bo_vx = 2 }
+                }}
+            }
+        }
+    }
+    if bo_by > BO_FH * 4 {
+        bo_lives = bo_lives - 1
+        if bo_lives <= 0 { bo_state = 2 } else { bo_park() }
+    }
+    return 1
+}
+
+fn bo_draw(ax, ay, aw, ah) {
+    u = ui()
+    fill_rgb(ax, ay, aw, ah, theme(TH_CHROME_LINE))
+    bw = BO_BW * aw / BO_FW
+    bh = BO_BH * ah / BO_FH
+    r = 0
+    while r < BO_ROWS {
+        c = 0
+        while c < BO_COLS {
+            if bo_brick(c, r) != 0 { rrect(g3_mx(ax, aw, BO_BX0 + c * BO_BW, BO_FW) + u, g3_mx(ay, ah, BO_BY0 + r * BO_BH, BO_FH) + u, bw - 2 * u, bh - 2 * u, 3 * u, bo_rowcol(r)) }
+            c = c + 1
+        }
+        r = r + 1
+    }
+    rrect(g3_mx(ax, aw, bo_px, BO_FW), g3_mx(ay, ah, BO_PY, BO_FH), BO_PW * aw / BO_FW, BO_PH * ah / BO_FH, 4 * u, theme(TH_TEXT_HI))
+    fill_rgb(g3_mx(ax, aw, bo_bx / 4, BO_FW), g3_mx(ay, ah, bo_by / 4, BO_FH), BO_BS * aw / BO_FW, BO_BS * ah / BO_FH, theme(TH_ACCENT))
+    label(ax + 10 * u, ay + 10 * u, "score", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 50 * u, ay + 10 * u, bo_score, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 118 * u, ay + 10 * u, "lives", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 156 * u, ay + 10 * u, bo_lives, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 200 * u, ay + 10 * u, "level", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 238 * u, ay + 10 * u, bo_level, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    if bo_state == 0 { label(ax + 286 * u, ay + 10 * u, "space to launch", theme(TH_ACCENT), T_CAPTION, W_REG) }
+    if bo_state == 2 { label(ax + 286 * u, ay + 10 * u, "game over - r restarts", theme(TH_DANGER), T_CAPTION, W_BOLD) }
+    return 0
+}
+
+fn bo_event(win, ety, ecode, ex, ey) {
+    if ety == 3 {
+        if ecode == 114 { bo_reset()  wm_dmg(win)  return 1 }
+        if bo_state == 2 { return 1 }
+        if ecode == 32 { if bo_state == 0 { bo_launch()  wm_dmg(win) }  return 1 }
+        return 0
+    }
+    if bo_state == 2 { return 0 }
+    if ety == 1 {
+        if ecode == K_LEFT  { bo_px = g3_clamp(bo_px - 18, 0, BO_FW - BO_PW)  if bo_state == 0 { bo_park() }  wm_dmg(win)  return 1 }
+        if ecode == K_RIGHT { bo_px = g3_clamp(bo_px + 18, 0, BO_FW - BO_PW)  if bo_state == 0 { bo_park() }  wm_dmg(win)  return 1 }
+        return 0
+    }
+    if ety != 4 { return 0 }
+    cw = wm_cw(win)
+    if cw < 1 { return 1 }
+    cx = ex - wm_cx(win)
+    if cx < 0 { return 1 }
+    nx = g3_clamp(cx * BO_FW / cw - BO_PW / 2, 0, BO_FW - BO_PW)
+    if nx == bo_px { return 1 }             # see the note in pg_event
+    bo_px = nx
+    if bo_state == 0 { bo_park() }
+    wm_dmg(win)
+    return 1
+}
+
+fn bo_tick(win) {
+    if bo_ready == 0 { return 0 }
+    if bo_state != 1 { return 0 }
+    if ticks() < bo_when { return 0 }
+    bo_when = ticks() + 2
+    return bo_step()
+}
+
+# ==============================================================================
+# Minesweeper - 55 - 430 x 380
+#
+# 12 x 10, 18 mines, on MINE_BOARD - the page kernel.zl reserved for exactly
+# this and never used. One byte per cell, four fields packed:
+#
+#   bits 0-3   adjacent mine count, 0..8
+#   bit  4     is a mine          (16)
+#   bit  5     revealed           (32)
+#   bit  6     flagged            (64)
+#
+# THE FIRST CLICK IS ALWAYS SAFE, and that is not a nicety: a first click that
+# can be a mine makes the opening move pure luck, so the field is generated
+# AFTER it, with the clicked cell and its eight neighbours excluded. That is
+# why ms_first exists and why ms_reveal re-reads the cell after ms_place.
+#
+# The empty-region reveal is a FIXED-POINT SWEEP, not recursion. boot.S records
+# this kernel's compositor stack overflowing once because "the zl compositor
+# nests deep"; a flood fill opens from inside a click handler already several
+# frames down that chain, so it is repeated passes over 120 cells until nothing
+# changes - the same reasoning that made the maze carver iterative.
+# ==============================================================================
+MS_W = 12
+MS_H = 10
+MS_MINES = 18
+MS_CELL = 27
+
+ms_ready = 0
+ms_state = 0
+ms_first = 1
+ms_flags = 0
+
+fn ms_at(x, y) { return peek8(MINE_BOARD + y * MS_W + x) }
+fn ms_put(x, y, v) { poke8(MINE_BOARD + y * MS_W + x, v)  return 0 }
+
+fn ms_ismine(x, y) {
+    if x < 0 { return 0 }
+    if x >= MS_W { return 0 }
+    if y < 0 { return 0 }
+    if y >= MS_H { return 0 }
+    if band(ms_at(x, y), 16) != 0 { return 1 }
+    return 0
+}
+
+fn ms_counts() {
+    y = 0
+    while y < MS_H {
+        x = 0
+        while x < MS_W {
+            keep = band(ms_at(x, y), 240)
+            n = 0
+            dy = 0 - 1
+            while dy <= 1 {
+                dx = 0 - 1
+                while dx <= 1 {
+                    if ms_ismine(x + dx, y + dy) == 1 { n = n + 1 }
+                    dx = dx + 1
+                }
+                dy = dy + 1
+            }
+            if band(ms_at(x, y), 16) != 0 { n = n - 1 }
+            ms_put(x, y, bor(keep, n))
+            x = x + 1
+        }
+        y = y + 1
+    }
+    return 0
+}
+
+fn ms_place(sx, sy) {
+    placed = 0
+    guard = 0
+    while placed < MS_MINES {
+        if guard < 6000 {
+            guard = guard + 1
+            c = ac_rand(MS_W * MS_H)
+            mx = c % MS_W
+            my = c / MS_W
+            ok = 1
+            if band(ms_at(mx, my), 16) != 0 { ok = 0 }
+            if g3_abs(mx - sx) <= 1 { if g3_abs(my - sy) <= 1 { ok = 0 } }
+            if ok == 1 { ms_put(mx, my, bor(ms_at(mx, my), 16))  placed = placed + 1 }
+        } else {
+            placed = MS_MINES
+        }
+    }
+    ms_counts()
+    return 0
+}
+
+# A revealed cell with count 0 has no adjacent mine BY DEFINITION, so its
+# neighbours never need a mine test here - only a flag test, because a flag the
+# player placed is left alone rather than opened out from under them.
+fn ms_flood() {
+    changed = 1
+    while changed == 1 {
+        changed = 0
+        y = 0
+        while y < MS_H {
+            x = 0
+            while x < MS_W {
+                v = ms_at(x, y)
+                if band(v, 32) != 0 { if band(v, 16) == 0 { if band(v, 15) == 0 {
+                    dy = 0 - 1
+                    while dy <= 1 {
+                        dx = 0 - 1
+                        while dx <= 1 {
+                            nx = x + dx
+                            ny = y + dy
+                            if nx >= 0 { if nx < MS_W { if ny >= 0 { if ny < MS_H {
+                                nv = ms_at(nx, ny)
+                                if band(nv, 32) == 0 { if band(nv, 64) == 0 { ms_put(nx, ny, bor(nv, 32))  changed = 1 } }
+                            }}}}
+                            dx = dx + 1
+                        }
+                        dy = dy + 1
+                    }
+                }}}
+                x = x + 1
+            }
+            y = y + 1
+        }
+    }
+    return 0
+}
+
+fn ms_win() {
+    y = 0
+    while y < MS_H {
+        x = 0
+        while x < MS_W {
+            v = ms_at(x, y)
+            if band(v, 16) == 0 { if band(v, 32) == 0 { return 0 } }
+            x = x + 1
+        }
+        y = y + 1
+    }
+    return 1
+}
+
+fn ms_reveal(x, y) {
+    v = ms_at(x, y)
+    if band(v, 32) != 0 { return 0 }
+    if band(v, 64) != 0 { return 0 }
+    if ms_first == 1 { ms_first = 0  ms_place(x, y)  v = ms_at(x, y) }
+    ms_put(x, y, bor(v, 32))
+    if band(v, 16) != 0 { ms_state = 2  return 1 }
+    ms_flood()
+    if ms_win() == 1 { ms_state = 1 }
+    return 1
+}
+
+fn ms_reset() {
+    fill_mem(MINE_BOARD, 0, MS_W * MS_H)
+    ac_seed_from(ticks() + 55)
+    ms_state = 0
+    ms_first = 1
+    ms_flags = 0
+    ms_ready = 1
+    return 0
+}
+
+fn ms_numcol(n) {
+    if n == 1 { return ac_cat_color(0) }
+    if n == 2 { return theme(TH_OK) }
+    if n == 3 { return theme(TH_DANGER) }
+    if n == 4 { return ac_cat_color(2) }
+    if n == 5 { return theme(TH_ACCENT) }
+    if n == 6 { return ac_cat_color(1) }
+    if n == 7 { return theme(TH_TEXT_HI) }
+    return theme(TH_TEXT_DIM)
+}
+
+# Shared by the draw and the hit test, exactly as cat_hit/cat_draw share their
+# geometry - a click lands on the tile it looks like it landed on because both
+# sides compute the origin the same way, from whichever rectangle they hold.
+fn ms_ox(a0, span) { return a0 + (span - MS_W * MS_CELL * ui()) / 2 }
+fn ms_oy(a0) { return a0 + 36 * ui() }
+
+fn ms_draw(ax, ay, aw, ah) {
+    u = ui()
+    fill_rgb(ax, ay, aw, ah, theme(TH_CHROME_LINE))
+    cell = MS_CELL * u
+    gx = ms_ox(ax, aw)
+    gy = ms_oy(ay)
+    y = 0
+    while y < MS_H {
+        x = 0
+        while x < MS_W {
+            v = ms_at(x, y)
+            cx = gx + x * cell
+            cy = gy + y * cell
+            if band(v, 32) == 0 {
+                rrect(cx + u, cy + u, cell - 2 * u, cell - 2 * u, 3 * u, theme(TH_PANEL_HI))
+                if band(v, 64) != 0 {
+                    fill_rgb(cx + cell / 2 - 4 * u, cy + 6 * u, 2 * u, cell - 12 * u, theme(TH_TEXT_DIM))
+                    fill_rgb(cx + cell / 2 - 2 * u, cy + 6 * u, 8 * u, 6 * u, theme(TH_DANGER))
+                }
+            } else {
+                fill_rgb(cx + u, cy + u, cell - 2 * u, cell - 2 * u, theme(TH_BG))
+                if band(v, 16) != 0 {
+                    rrect(cx + cell / 2 - 5 * u, cy + cell / 2 - 5 * u, 10 * u, 10 * u, 5 * u, theme(TH_DANGER))
+                } else {
+                    n = band(v, 15)
+                    if n > 0 { label_num(cx + cell / 2 - 3 * u, cy + (cell - label_h(T_CAPTION)) / 2, n, ms_numcol(n), T_CAPTION, W_BOLD) }
+                }
+            }
+            x = x + 1
+        }
+        y = y + 1
+    }
+    label(ax + 14 * u, ay + 12 * u, "mines", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 56 * u, ay + 12 * u, MS_MINES - ms_flags, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    if ms_state == 1 { label(ax + 110 * u, ay + 12 * u, "field cleared - r for a new one", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
+    if ms_state == 2 { label(ax + 110 * u, ay + 12 * u, "boom - r for a new field", theme(TH_DANGER), T_CAPTION, W_BOLD) }
+    return 0
+}
+
+fn ms_event(win, ety, ecode, ex, ey) {
+    if ety == 3 { if ecode == 114 { ms_reset()  wm_dmg(win)  return 1 }  return 0 }
+    if ety != 4 { return 0 }
+    if ms_state != 0 { return 0 }
+    cell = MS_CELL * ui()
+    gx = ms_ox(wm_cx(win), wm_cw(win))
+    gy = ms_oy(wm_cy(win))
+    idx = ac_cell_idx(gx, gy, cell, MS_W, MS_H, ex, ey)
+    if idx < 0 { return 0 }
+    x = idx % MS_W
+    y = idx / MS_W
+    if band(ecode, 2) != 0 {
+        v = ms_at(x, y)
+        if band(v, 32) != 0 { return 1 }
+        if band(v, 64) != 0 { ms_put(x, y, band(v, 191))  ms_flags = ms_flags - 1 } else { ms_put(x, y, bor(v, 64))  ms_flags = ms_flags + 1 }
+        wm_dmg(win)
+        return 1
+    }
+    if band(ecode, 1) == 0 { return 0 }
+    if ms_reveal(x, y) == 1 { wm_dmg(win) }
+    return 1
+}
+
+# ==============================================================================
+# 2048 - 56 - 360 x 400
+#
+# 4 x 4 on G2048_BOARD, storing the EXPONENT rather than the value: 0 empty,
+# 1 is 2, 11 is 2048. That is what keeps a tile in one byte and makes a merge
+# `a + 1` instead of `a * 2`, and it is what the tile shading reads.
+#
+# ONE SLIDE ROUTINE, FOUR DIRECTIONS. g48_idx maps (direction, line, position
+# along the direction of travel) to a flat cell, so compaction and the
+# single-merge-per-move rule are written once and every direction is that same
+# code with a different index function. Four copies of it would be four places
+# for the "a tile merges twice in one move" bug to live.
+# ==============================================================================
+G48_TMP = G2048_BOARD + 64
+G48_CELL = 78
+
+g48_ready = 0
+g48_score = 0
+g48_won = 0
+g48_over = 0
+
+fn g48_get(i) { return peek8(G2048_BOARD + i) }
+fn g48_put(i, v) { poke8(G2048_BOARD + i, v)  return 0 }
+
+fn g48_idx(dir, li, k) {
+    if dir == 0 { return li * 4 + k }
+    if dir == 1 { return li * 4 + 3 - k }
+    if dir == 2 { return k * 4 + li }
+    return (3 - k) * 4 + li
+}
+
+fn g48_spawn() {
+    n = 0
+    i = 0
+    while i < 16 { if g48_get(i) == 0 { n = n + 1 }  i = i + 1 }
+    if n == 0 { return 0 }
+    pick = ac_rand(n)
+    seen = 0
+    done = 0
+    i = 0
+    while i < 16 {
+        if g48_get(i) == 0 {
+            if done == 0 {
+                if seen == pick {
+                    g48_put(i, 1)
+                    if ac_rand(10) == 0 { g48_put(i, 2) }
+                    done = 1
+                } else {
+                    seen = seen + 1
+                }
+            }
+        }
+        i = i + 1
+    }
+    return 0
+}
+
+fn g48_can() {
+    i = 0
+    while i < 16 { if g48_get(i) == 0 { return 1 }  i = i + 1 }
+    r = 0
+    while r < 4 {
+        c = 0
+        while c < 3 {
+            if g48_get(r * 4 + c) == g48_get(r * 4 + c + 1) { return 1 }
+            if g48_get(c * 4 + r) == g48_get((c + 1) * 4 + r) { return 1 }
+            c = c + 1
+        }
+        r = r + 1
+    }
+    return 0
+}
+
+fn g48_move(dir) {
+    moved = 0
+    li = 0
+    while li < 4 {
+        n = 0
+        k = 0
+        while k < 4 {
+            v = g48_get(g48_idx(dir, li, k))
+            if v != 0 { poke8(G48_TMP + n, v)  n = n + 1 }
+            k = k + 1
+        }
+        while n < 4 { poke8(G48_TMP + n, 0)  n = n + 1 }
+        k = 0
+        while k < 3 {
+            a = peek8(G48_TMP + k)
+            if a != 0 { if a == peek8(G48_TMP + k + 1) {
+                poke8(G48_TMP + k, a + 1)
+                g48_score = g48_score + shl(1, a + 1)
+                if a + 1 >= 11 { g48_won = 1 }
+                j = k + 1
+                while j < 3 { poke8(G48_TMP + j, peek8(G48_TMP + j + 1))  j = j + 1 }
+                poke8(G48_TMP + 3, 0)
+            }}
+            k = k + 1
+        }
+        k = 0
+        while k < 4 {
+            nv = peek8(G48_TMP + k)
+            ai = g48_idx(dir, li, k)
+            if g48_get(ai) != nv { moved = 1 }
+            g48_put(ai, nv)
+            k = k + 1
+        }
+        li = li + 1
+    }
+    if moved == 1 { g48_spawn()  if g48_can() == 0 { g48_over = 1 } }
+    return moved
+}
+
+fn g48_reset() {
+    fill_mem(G2048_BOARD, 0, 80)
+    ac_seed_from(ticks() + 56)
+    g48_score = 0
+    g48_won = 0
+    g48_over = 0
+    g48_ready = 1
+    g48_spawn()
+    g48_spawn()
+    return 0
+}
+
+# ELEVEN TILE VALUES, ONE COLOUR. The reference's own rule (ui.h: "saturation
+# is spent on the accent") rules out eleven invented hues, and design.h has no
+# eleven-step ramp to borrow. So a tile is the accent at an ALPHA that rises
+# with the exponent: the board reads as a heat map, every pixel of it is
+# ZD_ACCENT, and nothing new enters the palette. The ink flips to the dark
+# surface once the fill is opaque enough to need it.
+fn g48_alpha(e) { a = 26 + e * 21  if a > 236 { a = 236 }  return a }
+fn g48_ink(e) { if e >= 5 { return theme(TH_BG) }  return theme(TH_TEXT_HI) }
+fn g48_ox(a0, span) { return a0 + (span - 4 * G48_CELL * ui()) / 2 }
+fn g48_oy(a0) { return a0 + 42 * ui() }
+
+fn g48_draw(ax, ay, aw, ah) {
+    u = ui()
+    fill_rgb(ax, ay, aw, ah, theme(TH_CHROME_LINE))
+    cell = G48_CELL * u
+    gx = g48_ox(ax, aw)
+    gy = g48_oy(ay)
+    rrect(gx - 5 * u, gy - 5 * u, 4 * cell + 10 * u, 4 * cell + 10 * u, 8 * u, theme(TH_PANEL))
+    i = 0
+    while i < 16 {
+        cx = gx + (i % 4) * cell
+        cy = gy + (i / 4) * cell
+        rrect(cx + 4 * u, cy + 4 * u, cell - 8 * u, cell - 8 * u, 6 * u, theme(TH_BG))
+        e = g48_get(i)
+        if e > 0 {
+            rrblend(cx + 4 * u, cy + 4 * u, cell - 8 * u, cell - 8 * u, 6 * u, theme(TH_ACCENT), g48_alpha(e))
+            label_num(cx + cell / 2 - 14 * u, cy + cell / 2 - 9 * u, shl(1, e), g48_ink(e), T_BODY, W_BOLD)
+        }
+        i = i + 1
+    }
+    label(ax + 18 * u, ay + 14 * u, "score", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 60 * u, ay + 14 * u, g48_score, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    if g48_won == 1 { label(ax + 148 * u, ay + 14 * u, "2048 reached", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
+    if g48_over == 1 { label(ax + 148 * u, ay + 14 * u, "no moves left - r", theme(TH_DANGER), T_CAPTION, W_BOLD) }
+    return 0
+}
+
+fn g48_event(win, ety, ecode) {
+    if ety == 3 { if ecode == 114 { g48_reset()  wm_dmg(win)  return 1 }  return 0 }
+    if ety != 1 { return 0 }
+    if g48_over == 1 { return 1 }
+    d = 0 - 1
+    if ecode == K_LEFT  { d = 0 }
+    if ecode == K_RIGHT { d = 1 }
+    if ecode == K_UP    { d = 2 }
+    if ecode == K_DOWN  { d = 3 }
+    if d < 0 { return 0 }
+    if g48_move(d) == 1 { wm_dmg(win) }
+    return 1
+}
+
+# ==============================================================================
+# Conway's Life - 57 - 520 x 400
+#
+# 36 x 24 TOROIDAL, B3/S23, on the LIFE_BOARD / LIFE_NEXT pair kernel.zl
+# already reserved. Double-buffered because it has to be: computing a
+# generation in place feeds half-updated neighbours back into the rule and
+# gives something that is not Life. LIFE_NEXT is written, then copied over
+# LIFE_BOARD in one copy_mem.
+#
+# Toroidal means the neighbour walk wraps with (n + LF_W) % LF_W rather than
+# clamping, so a glider leaving the right edge arrives at the left instead of
+# dying against a wall - which is the difference between a torus and a box, and
+# is visible within about forty generations of seeding pattern 1.
+#
+# Run/pause, single step, clear, and four seeds: three gliders, a pulsar
+# (period 3), an acorn (a 7-cell methuselah that runs for thousands of
+# generations on an unbounded grid and does something quite different on a
+# torus), and a random soup.
+# ==============================================================================
+LF_W = 36
+LF_H = 24
+LF_CELL = 14
+
+lf_ready = 0
+lf_run = 0
+lf_gen = 0
+lf_when = 0
+
+fn lf_get(x, y) { return peek8(LIFE_BOARD + y * LF_W + x) }
+fn lf_set(x, y, v) {
+    if x < 0 { return 0 }
+    if x >= LF_W { return 0 }
+    if y < 0 { return 0 }
+    if y >= LF_H { return 0 }
+    poke8(LIFE_BOARD + y * LF_W + x, v)
+    return 0
+}
+
+fn lf_n(x, y) {
+    n = 0
+    dy = 0 - 1
+    while dy <= 1 {
+        ny = (y + dy + LF_H) % LF_H
+        dx = 0 - 1
+        while dx <= 1 {
+            if dx != 0 { n = n + lf_get((x + dx + LF_W) % LF_W, ny) }
+            if dx == 0 { if dy != 0 { n = n + lf_get(x, ny) } }
+            dx = dx + 1
+        }
+        dy = dy + 1
+    }
+    return n
+}
+
+fn lf_step() {
+    y = 0
+    while y < LF_H {
+        x = 0
+        while x < LF_W {
+            n = lf_n(x, y)
+            a = lf_get(x, y)
+            nv = 0
+            if a != 0 { if n == 2 { nv = 1 } }
+            if a != 0 { if n == 3 { nv = 1 } }
+            if a == 0 { if n == 3 { nv = 1 } }
+            poke8(LIFE_NEXT + y * LF_W + x, nv)
+            x = x + 1
+        }
+        y = y + 1
+    }
+    copy_mem(LIFE_BOARD, LIFE_NEXT, LF_W * LF_H)
+    lf_gen = lf_gen + 1
+    return 0
+}
+
+fn lf_pop() {
+    n = 0
+    i = 0
+    while i < LF_W * LF_H { if peek8(LIFE_BOARD + i) != 0 { n = n + 1 }  i = i + 1 }
+    return n
+}
+
+fn lf_clear() { fill_mem(LIFE_BOARD, 0, LF_W * LF_H)  lf_gen = 0  return 0 }
+
+fn lf_glider(ox, oy) {
+    lf_set(ox + 1, oy, 1)
+    lf_set(ox + 2, oy + 1, 1)
+    lf_set(ox, oy + 2, 1)
+    lf_set(ox + 1, oy + 2, 1)
+    lf_set(ox + 2, oy + 2, 1)
+    return 0
+}
+
+# The pulsar is 48 cells and it is NOT written out as 48 coordinates: it is
+# symmetric under reflection in both axes AND under swapping x with y, so the
+# whole thing is the cross product of {0,5,7,12} with {2,3,4,8,9,10}, placed
+# once each way round.
+fn lf_p13(k) { if k == 0 { return 0 }  if k == 1 { return 5 }  if k == 2 { return 7 }  return 12 }
+fn lf_p6(j) { if j == 0 { return 2 }  if j == 1 { return 3 }  if j == 2 { return 4 }  if j == 3 { return 8 }  if j == 4 { return 9 }  return 10 }
+fn lf_pulsar(ox, oy) {
+    k = 0
+    while k < 4 {
+        r = lf_p13(k)
+        j = 0
+        while j < 6 {
+            c = lf_p6(j)
+            lf_set(ox + c, oy + r, 1)
+            lf_set(ox + r, oy + c, 1)
+            j = j + 1
+        }
+        k = k + 1
+    }
+    return 0
+}
+
+fn lf_acorn(ox, oy) {
+    lf_set(ox + 1, oy, 1)
+    lf_set(ox + 3, oy + 1, 1)
+    lf_set(ox, oy + 2, 1)
+    lf_set(ox + 1, oy + 2, 1)
+    lf_set(ox + 4, oy + 2, 1)
+    lf_set(ox + 5, oy + 2, 1)
+    lf_set(ox + 6, oy + 2, 1)
+    return 0
+}
+
+fn lf_soup() {
+    ac_seed_from(ticks() + 57)
+    y = 0
+    while y < LF_H {
+        x = 0
+        while x < LF_W {
+            v = 0
+            if ac_rand(100) < 32 { v = 1 }
+            poke8(LIFE_BOARD + y * LF_W + x, v)
+            x = x + 1
+        }
+        y = y + 1
+    }
+    lf_gen = 0
+    return 0
+}
+
+fn lf_seed(n) {
+    lf_clear()
+    if n == 1 { lf_glider(1, 1)  lf_glider(12, 5)  lf_glider(24, 2) }
+    if n == 2 { lf_pulsar(11, 5) }
+    if n == 3 { lf_acorn(14, 10) }
+    if n == 4 { lf_soup() }
+    return 0
+}
+
+fn lf_reset() {
+    lf_seed(2)
+    lf_run = 0
+    lf_when = 0
+    lf_ready = 1
+    return 0
+}
+
+# 30, NOT 36. The canvas is 400 - 30 = 370 design units tall and the grid is
+# 24 * 14 = 336, so a 36-unit header put the last two units of the bottom row
+# underneath the status bar - g3_bar paints after the game body and would have
+# quietly eaten it. 30 + 336 = 366 clears it with four to spare.
+fn lf_ox(a0, span) { return a0 + (span - LF_W * LF_CELL * ui()) / 2 }
+fn lf_oy(a0) { return a0 + 30 * ui() }
+
+fn lf_draw(ax, ay, aw, ah) {
+    u = ui()
+    fill_rgb(ax, ay, aw, ah, theme(TH_CHROME_LINE))
+    cell = LF_CELL * u
+    gx = lf_ox(ax, aw)
+    gy = lf_oy(ay)
+    ac_board_bg(gx, gy, cell, LF_W, LF_H, theme(TH_BG), theme(TH_PANEL))
+    y = 0
+    while y < LF_H {
+        x = 0
+        while x < LF_W {
+            if lf_get(x, y) != 0 { rrect(gx + x * cell + u, gy + y * cell + u, cell - 2 * u, cell - 2 * u, 2 * u, theme(TH_ACCENT)) }
+            x = x + 1
+        }
+        y = y + 1
+    }
+    label(ax + 16 * u, ay + 8 * u, "gen", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 48 * u, ay + 8 * u, lf_gen, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 116 * u, ay + 8 * u, "pop", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 148 * u, ay + 8 * u, lf_pop(), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    if lf_run == 1 { label(ax + 216 * u, ay + 8 * u, "running", theme(TH_ACCENT), T_CAPTION, W_BOLD) } else { label(ax + 216 * u, ay + 8 * u, "paused", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD) }
+    return 0
+}
+
+fn lf_event(win, ety, ecode, ex, ey) {
+    if ety == 3 {
+        if ecode == 114 { lf_reset()  wm_dmg(win)  return 1 }
+        if ecode == 32 { if lf_run == 0 { lf_run = 1 } else { lf_run = 0 }  wm_dmg(win)  return 1 }
+        if ecode == 115 { lf_step()  wm_dmg(win)  return 1 }
+        if ecode == 99 { lf_clear()  lf_run = 0  wm_dmg(win)  return 1 }
+        if ecode == 49 { lf_seed(1)  wm_dmg(win)  return 1 }
+        if ecode == 50 { lf_seed(2)  wm_dmg(win)  return 1 }
+        if ecode == 51 { lf_seed(3)  wm_dmg(win)  return 1 }
+        if ecode == 52 { lf_seed(4)  wm_dmg(win)  return 1 }
+        return 0
+    }
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    cell = LF_CELL * ui()
+    gx = lf_ox(wm_cx(win), wm_cw(win))
+    gy = lf_oy(wm_cy(win))
+    idx = ac_cell_idx(gx, gy, cell, LF_W, LF_H, ex, ey)
+    if idx < 0 { return 0 }
+    x = idx % LF_W
+    y = idx / LF_W
+    lf_set(x, y, 1 - lf_get(x, y))
+    wm_dmg(win)
+    return 1
+}
+
+fn lf_tick(win) {
+    if lf_ready == 0 { return 0 }
+    if lf_run == 0 { return 0 }
+    if ticks() < lf_when { return 0 }
+    lf_when = ticks() + 10
+    lf_step()
+    return 1
+}
+
+# ==============================================================================
+# Asteroids - 58 - 470 x 380
+#
+# Thrust, rotation, inertia, screen wrap, bullets, and rocks that SPLIT IN TWO.
+# The ship carries a velocity that thrust adds to and nothing removes except a
+# weak drag, so steering is the game rather than the movement being the game.
+#
+# NO TRIGONOMETRY AND NO FLOATING POINT. zl_binop is exact int64 on purpose
+# ("a kernel doing floating-point div on a descriptor is how you get a wrong
+# GDT entry"), so the heading is one of SIXTEEN directions and as_cos() is that
+# cosine table scaled by 64. as_sin is the same table read a quarter turn
+# along, which is why there is only one of them.
+#
+# Positions are in SIXTEENTHS of a field unit so that a thrust impulse of
+# 4/64 of a unit is not rounded to nothing by integer division - the whole
+# reason inertia works here at all. 470 * 16 = 7520, comfortably inside the u16
+# that G3_ROCKB stores.
+#
+# Record layout, both tables, stride 8: +0 size or life, +2 x, +4 y as u16,
+# +6 vx, +7 vy as bytes biased by 128.
+# ==============================================================================
+AS_FW = 470
+AS_FH = 350
+AS_ROCKS = 14
+AS_SHOTS = 6
+AS_U = 16
+
+as_ready = 0
+as_x = 0
+as_y = 0
+as_vx = 0
+as_vy = 0
+as_a = 12
+as_thr = 0
+as_lives = 3
+as_score = 0
+as_over = 0
+as_wave = 1
+as_cool = 0
+as_inv = 0
+as_when = 0
+
+fn as_cos(a) {
+    if a == 0 { return 64 }
+    if a == 1 { return 59 }
+    if a == 2 { return 45 }
+    if a == 3 { return 24 }
+    if a == 4 { return 0 }
+    if a == 5 { return 0 - 24 }
+    if a == 6 { return 0 - 45 }
+    if a == 7 { return 0 - 59 }
+    if a == 8 { return 0 - 64 }
+    if a == 9 { return 0 - 59 }
+    if a == 10 { return 0 - 45 }
+    if a == 11 { return 0 - 24 }
+    if a == 12 { return 0 }
+    if a == 13 { return 24 }
+    if a == 14 { return 45 }
+    return 59
+}
+fn as_sin(a) { return as_cos((a + 12) % 16) }
+
+fn as_rsize(i) { return peek8(G3_ROCKB + i * 8) }
+fn as_rx(i) { return peek16(G3_ROCKB + i * 8 + 2) }
+fn as_ry(i) { return peek16(G3_ROCKB + i * 8 + 4) }
+fn as_rvx(i) { return peek8(G3_ROCKB + i * 8 + 6) - 128 }
+fn as_rvy(i) { return peek8(G3_ROCKB + i * 8 + 7) - 128 }
+fn as_rset(i, sz, x, y, vx, vy) {
+    poke8(G3_ROCKB + i * 8, sz)
+    poke16(G3_ROCKB + i * 8 + 2, x)
+    poke16(G3_ROCKB + i * 8 + 4, y)
+    poke8(G3_ROCKB + i * 8 + 6, vx + 128)
+    poke8(G3_ROCKB + i * 8 + 7, vy + 128)
+    return 0
+}
+fn as_rmove(i, x, y) { poke16(G3_ROCKB + i * 8 + 2, x)  poke16(G3_ROCKB + i * 8 + 4, y)  return 0 }
+fn as_rrad(sz) { if sz == 1 { return 8 }  if sz == 2 { return 15 }  return 24 }
+
+fn as_slife(i) { return peek8(G3_SHOTB + i * 8) }
+fn as_sx(i) { return peek16(G3_SHOTB + i * 8 + 2) }
+fn as_sy(i) { return peek16(G3_SHOTB + i * 8 + 4) }
+fn as_svx(i) { return peek8(G3_SHOTB + i * 8 + 6) - 128 }
+fn as_svy(i) { return peek8(G3_SHOTB + i * 8 + 7) - 128 }
+fn as_sset(i, life, x, y, vx, vy) {
+    poke8(G3_SHOTB + i * 8, life)
+    poke16(G3_SHOTB + i * 8 + 2, x)
+    poke16(G3_SHOTB + i * 8 + 4, y)
+    poke8(G3_SHOTB + i * 8 + 6, vx + 128)
+    poke8(G3_SHOTB + i * 8 + 7, vy + 128)
+    return 0
+}
+
+fn as_free() {
+    i = 0
+    while i < AS_ROCKS { if as_rsize(i) == 0 { return i }  i = i + 1 }
+    return 0 - 1
+}
+
+fn as_spawn(sz, x, y) {
+    i = as_free()
+    if i < 0 { return 0 }
+    vx = 18 - ac_rand(37)
+    vy = 18 - ac_rand(37)
+    if vx == 0 { if vy == 0 { vx = 12 } }
+    as_rset(i, sz, x, y, vx, vy)
+    return 0
+}
+
+fn as_wave_start() {
+    fill_mem(G3_ROCKB, 0, AS_ROCKS * 8)
+    n = 3 + as_wave
+    if n > 6 { n = 6 }
+    k = 0
+    while k < n {
+        as_spawn(3, ac_rand(AS_FW) * AS_U, ac_rand(110) * AS_U)
+        k = k + 1
+    }
+    return 0
+}
+
+fn as_capv() {
+    sp = g3_abs(as_vx) + g3_abs(as_vy)
+    if sp > 60 { as_vx = as_vx * 60 / sp  as_vy = as_vy * 60 / sp }
+    return 0
+}
+
+fn as_kill(i) {
+    sz = as_rsize(i)
+    if sz == 3 { as_score = as_score + 20 }
+    if sz == 2 { as_score = as_score + 50 }
+    if sz == 1 { as_score = as_score + 100 }
+    x = as_rx(i)
+    y = as_ry(i)
+    poke8(G3_ROCKB + i * 8, 0)
+    if sz > 1 { as_spawn(sz - 1, x, y)  as_spawn(sz - 1, x, y) }
+    return 0
+}
+
+fn as_die() {
+    as_lives = as_lives - 1
+    as_inv = 70
+    as_x = (AS_FW / 2) * AS_U
+    as_y = (AS_FH / 2) * AS_U
+    as_vx = 0
+    as_vy = 0
+    as_a = 12
+    if as_lives <= 0 { as_over = 1 }
+    return 0
+}
+
+fn as_fire() {
+    if as_cool > 0 { return 0 }
+    slot = 0 - 1
+    i = 0
+    while i < AS_SHOTS { if as_slife(i) == 0 { if slot < 0 { slot = i } }  i = i + 1 }
+    if slot < 0 { return 0 }
+    bx = (as_x + as_cos(as_a) * 11 * AS_U / 64 + AS_FW * AS_U) % (AS_FW * AS_U)
+    by = (as_y + as_sin(as_a) * 11 * AS_U / 64 + AS_FH * AS_U) % (AS_FH * AS_U)
+    as_sset(slot, 40, bx, by, as_cos(as_a) * 70 / 64, as_sin(as_a) * 70 / 64)
+    as_cool = 9
+    return 1
+}
+
+fn as_reset() {
+    ac_seed_from(ticks() + 58)
+    fill_mem(G3_SHOTB, 0, AS_SHOTS * 8)
+    as_x = (AS_FW / 2) * AS_U
+    as_y = (AS_FH / 2) * AS_U
+    as_vx = 0
+    as_vy = 0
+    as_a = 12
+    as_thr = 0
+    as_lives = 3
+    as_score = 0
+    as_over = 0
+    as_wave = 1
+    as_cool = 0
+    as_inv = 50
+    as_when = 0
+    as_ready = 1
+    as_wave_start()
+    return 0
+}
+
+fn as_step() {
+    if as_over == 1 { return 0 }
+    if as_thr > 0 {
+        as_vx = as_vx + as_cos(as_a) * 4 / 64
+        as_vy = as_vy + as_sin(as_a) * 4 / 64
+        as_capv()
+        as_thr = as_thr - 1
+    }
+    as_x = (as_x + as_vx + AS_FW * AS_U) % (AS_FW * AS_U)
+    as_y = (as_y + as_vy + AS_FH * AS_U) % (AS_FH * AS_U)
+    if as_cool > 0 { as_cool = as_cool - 1 }
+    if as_inv > 0 { as_inv = as_inv - 1 }
+    i = 0
+    while i < AS_SHOTS {
+        lifev = as_slife(i)
+        if lifev > 0 {
+            nx = (as_sx(i) + as_svx(i) + AS_FW * AS_U) % (AS_FW * AS_U)
+            ny = (as_sy(i) + as_svy(i) + AS_FH * AS_U) % (AS_FH * AS_U)
+            poke16(G3_SHOTB + i * 8 + 2, nx)
+            poke16(G3_SHOTB + i * 8 + 4, ny)
+            poke8(G3_SHOTB + i * 8, lifev - 1)
+            k = 0
+            while k < AS_ROCKS {
+                if as_slife(i) > 0 { if as_rsize(k) != 0 {
+                    dx = (nx - as_rx(k)) / AS_U
+                    dy = (ny - as_ry(k)) / AS_U
+                    rr = as_rrad(as_rsize(k))
+                    if dx * dx + dy * dy < rr * rr { poke8(G3_SHOTB + i * 8, 0)  as_kill(k) }
+                }}
+                k = k + 1
+            }
+        }
+        i = i + 1
+    }
+    i = 0
+    while i < AS_ROCKS {
+        if as_rsize(i) != 0 {
+            nx = (as_rx(i) + as_rvx(i) + AS_FW * AS_U) % (AS_FW * AS_U)
+            ny = (as_ry(i) + as_rvy(i) + AS_FH * AS_U) % (AS_FH * AS_U)
+            as_rmove(i, nx, ny)
+            if as_inv == 0 {
+                dx = (as_x - nx) / AS_U
+                dy = (as_y - ny) / AS_U
+                rr = as_rrad(as_rsize(i)) + 7
+                if dx * dx + dy * dy < rr * rr { as_die() }
+            }
+        }
+        i = i + 1
+    }
+    n = 0
+    i = 0
+    while i < AS_ROCKS { if as_rsize(i) != 0 { n = n + 1 }  i = i + 1 }
+    if n == 0 { if as_over == 0 { as_wave = as_wave + 1  as_wave_start() } }
+    return 1
+}
+
+fn as_px(a0, span, v) { return a0 + (v / AS_U) * span / AS_FW }
+fn as_py(a0, span, v) { return a0 + (v / AS_U) * span / AS_FH }
+
+fn as_draw(ax, ay, aw, ah) {
+    u = ui()
+    fill_rgb(ax, ay, aw, ah, theme(TH_CHROME_LINE))
+    i = 0
+    while i < AS_ROCKS {
+        sz = as_rsize(i)
+        if sz != 0 {
+            d = as_rrad(sz) * aw / AS_FW
+            cx = as_px(ax, aw, as_rx(i))
+            cy = as_py(ay, ah, as_ry(i))
+            rrect(cx - d, cy - d, d * 2, d * 2, d / 2, theme(TH_TEXT_DIM))
+            rrect(cx - d + 2 * u, cy - d + 2 * u, d * 2 - 4 * u, d * 2 - 4 * u, d / 2, theme(TH_BG))
+        }
+        i = i + 1
+    }
+    i = 0
+    while i < AS_SHOTS {
+        if as_slife(i) > 0 { fill_rgb(as_px(ax, aw, as_sx(i)) - u, as_py(ay, ah, as_sy(i)) - u, 3 * u, 3 * u, theme(TH_ACCENT)) }
+        i = i + 1
+    }
+    if as_over == 0 {
+        sx = as_px(ax, aw, as_x)
+        sy = as_py(ay, ah, as_y)
+        col = theme(TH_TEXT_HI)
+        if as_inv > 0 { col = theme(TH_TEXT_DIM) }
+        nx = sx + as_cos(as_a) * 13 * u / 64
+        ny = sy + as_sin(as_a) * 13 * u / 64
+        lx = sx + as_cos((as_a + 6) % 16) * 10 * u / 64
+        ly = sy + as_sin((as_a + 6) % 16) * 10 * u / 64
+        rx = sx + as_cos((as_a + 10) % 16) * 10 * u / 64
+        ry = sy + as_sin((as_a + 10) % 16) * 10 * u / 64
+        g3_line(nx, ny, lx, ly, u, col)
+        g3_line(nx, ny, rx, ry, u, col)
+        g3_line(lx, ly, rx, ry, u, col)
+        if as_thr > 0 {
+            tx = sx - as_cos(as_a) * 13 * u / 64
+            ty = sy - as_sin(as_a) * 13 * u / 64
+            fill_rgb(tx - 2 * u, ty - 2 * u, 4 * u, 4 * u, theme(TH_DANGER))
+        }
+    }
+    label(ax + 14 * u, ay + 12 * u, "score", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 54 * u, ay + 12 * u, as_score, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 128 * u, ay + 12 * u, "ships", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 168 * u, ay + 12 * u, as_lives, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 210 * u, ay + 12 * u, "wave", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 248 * u, ay + 12 * u, as_wave, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    if as_over == 1 { label(ax + 296 * u, ay + 12 * u, "game over - r restarts", theme(TH_DANGER), T_CAPTION, W_BOLD) }
+    return 0
+}
+
+fn as_event(win, ety, ecode) {
+    if ety == 3 {
+        if ecode == 114 { as_reset()  wm_dmg(win)  return 1 }
+        if as_over == 1 { return 1 }
+        if ecode == 32 { if as_fire() == 1 { wm_dmg(win) }  return 1 }
+        return 0
+    }
+    if ety != 1 { return 0 }
+    if as_over == 1 { return 1 }
+    if ecode == K_LEFT  { as_a = (as_a + 15) % 16  wm_dmg(win)  return 1 }
+    if ecode == K_RIGHT { as_a = (as_a + 1) % 16  wm_dmg(win)  return 1 }
+    # A KEY REPEAT IS THE THROTTLE. There is no key-up event in this input
+    # stack (input.c queues EV_KEY_DOWN and EV_CHAR), so "thrust while held"
+    # cannot be read directly - each press instead buys a fixed number of
+    # thrusting updates, which the tick counts down. Holding the key refreshes
+    # it; letting go lets it lapse.
+    if ecode == K_UP { as_thr = 12  wm_dmg(win)  return 1 }
+    return 0
+}
+
+fn as_tick(win) {
+    if as_ready == 0 { return 0 }
+    if as_over == 1 { return 0 }
+    if ticks() < as_when { return 0 }
+    as_when = ticks() + 3
+    return as_step()
+}
+
+# ==============================================================================
+# Invaders - 59 - 450 x 390
+#
+# An 11 x 5 grid that marches sideways as a BLOCK and drops a row whenever the
+# block's live edge reaches a wall - the edge is recomputed from which columns
+# still contain anything, so shooting out the left column immediately buys the
+# whole formation more room, which is the tactic the original game is about.
+#
+# The march rate is a function of how many aliens are left (rate = 1 + n / 6),
+# so the formation speeds up as it is destroyed. Four shields erode BLOCK BY
+# BLOCK, from both directions: alien bombs come down through them and the
+# player's own laser goes up through them.
+#
+# G3_ALIENB holds the 55 alien cells; the bomb table starts at +64 in the same
+# page, four records of stride 8, which is why iv_reset clears 128 bytes.
+# ==============================================================================
+IV_FW = 450
+IV_FH = 360
+IV_COLS = 11
+IV_ROWS = 5
+IV_SX = 30
+IV_SY = 24
+IV_AW = 22
+IV_AH = 14
+IV_PW = 32
+IV_PH = 10
+IV_PY = 330
+IV_SHIELDS = 4
+IV_SCOLS = 4
+IV_SROWS = 3
+IV_SBW = 9
+IV_SBH = 8
+IV_SHY = 268
+IV_BOMBS = 4
+G3_BOMB = G3_ALIENB + 64
+
+iv_ready = 0
+iv_ox = 0
+iv_oy = 0
+iv_dir = 1
+iv_lx = 0
+iv_ly = 0
+iv_px = 0
+iv_lives = 3
+iv_score = 0
+iv_state = 0
+iv_pause = 0
+iv_wave = 1
+iv_mstep = 0
+iv_when = 0
+
+fn iv_alien(c, r) { return peek8(G3_ALIENB + r * IV_COLS + c) }
+fn iv_setalien(c, r, v) { poke8(G3_ALIENB + r * IV_COLS + c, v)  return 0 }
+fn iv_bomb(i) { return peek8(G3_BOMB + i * 8) }
+fn iv_bx(i) { return peek16(G3_BOMB + i * 8 + 2) }
+fn iv_by(i) { return peek16(G3_BOMB + i * 8 + 4) }
+fn iv_setbomb(i, a, x, y) { poke8(G3_BOMB + i * 8, a)  poke16(G3_BOMB + i * 8 + 2, x)  poke16(G3_BOMB + i * 8 + 4, y)  return 0 }
+fn iv_sh(s, c, r) { return peek8(G3_SHLDB + (s * IV_SROWS + r) * IV_SCOLS + c) }
+fn iv_setsh(s, c, r, v) { poke8(G3_SHLDB + (s * IV_SROWS + r) * IV_SCOLS + c, v)  return 0 }
+fn iv_shx(s) { return 42 + s * 96 }
+
+fn iv_acol(t) {
+    if t == 3 { return theme(TH_ACCENT) }
+    if t == 2 { return ac_cat_color(2) }
+    return ac_cat_color(1)
+}
+
+fn iv_alive() {
+    n = 0
+    r = 0
+    while r < IV_ROWS {
+        c = 0
+        while c < IV_COLS { if iv_alien(c, r) != 0 { n = n + 1 }  c = c + 1 }
+        r = r + 1
+    }
+    return n
+}
+
+fn iv_fill() {
+    r = 0
+    while r < IV_ROWS {
+        c = 0
+        while c < IV_COLS { iv_setalien(c, r, 3 - r / 2)  c = c + 1 }
+        r = r + 1
+    }
+    return 0
+}
+
+fn iv_shfill() {
+    s = 0
+    while s < IV_SHIELDS {
+        r = 0
+        while r < IV_SROWS {
+            c = 0
+            while c < IV_SCOLS { iv_setsh(s, c, r, 3)  c = c + 1 }
+            r = r + 1
+        }
+        s = s + 1
+    }
+    return 0
+}
+
+fn iv_shield_hit(x, y) {
+    if y <= 0 { return 0 }
+    if y < IV_SHY { return 0 }
+    if y >= IV_SHY + IV_SROWS * IV_SBH { return 0 }
+    r = (y - IV_SHY) / IV_SBH
+    s = 0
+    while s < IV_SHIELDS {
+        sx = iv_shx(s)
+        if x >= sx { if x < sx + IV_SCOLS * IV_SBW {
+            c = (x - sx) / IV_SBW
+            hp = iv_sh(s, c, r)
+            if hp > 0 { iv_setsh(s, c, r, hp - 1)  return 1 }
+        }}
+        s = s + 1
+    }
+    return 0
+}
+
+fn iv_laser_hit() {
+    r = 0
+    while r < IV_ROWS {
+        c = 0
+        while c < IV_COLS {
+            t = iv_alien(c, r)
+            if t != 0 { if iv_ly > 0 {
+                axp = iv_ox + c * IV_SX
+                ayp = iv_oy + r * IV_SY
+                if iv_lx >= axp { if iv_lx <= axp + IV_AW { if iv_ly >= ayp { if iv_ly <= ayp + IV_AH {
+                    iv_setalien(c, r, 0)
+                    iv_score = iv_score + t * 10
+                    iv_ly = 0
+                }}}}
+            }}
+            c = c + 1
+        }
+        r = r + 1
+    }
+    if iv_ly > 0 { if iv_shield_hit(iv_lx, iv_ly) == 1 { iv_ly = 0 } }
+    return 0
+}
+
+# The bomb comes from the BOTTOM-most survivor of a random column, so a column
+# that has been shot away from below still fires and one that is empty does
+# not. Scanning upward and keeping the first hit is what makes that true.
+fn iv_drop() {
+    slot = 0 - 1
+    i = 0
+    while i < IV_BOMBS { if iv_bomb(i) == 0 { if slot < 0 { slot = i } }  i = i + 1 }
+    if slot < 0 { return 0 }
+    c = ac_rand(IV_COLS)
+    found = 0 - 1
+    r = IV_ROWS - 1
+    while r >= 0 {
+        if iv_alien(c, r) != 0 { if found < 0 { found = r } }
+        r = r - 1
+    }
+    if found < 0 { return 0 }
+    iv_setbomb(slot, 1, iv_ox + c * IV_SX + IV_AW / 2, iv_oy + found * IV_SY + IV_AH)
+    return 1
+}
+
+fn iv_march() {
+    lo = IV_COLS
+    hi = 0 - 1
+    c = 0
+    while c < IV_COLS {
+        any = 0
+        r = 0
+        while r < IV_ROWS { if iv_alien(c, r) != 0 { any = 1 }  r = r + 1 }
+        if any == 1 { if c < lo { lo = c }  if c > hi { hi = c } }
+        c = c + 1
+    }
+    if hi < 0 { return 0 }
+    if iv_dir > 0 {
+        if iv_ox + hi * IV_SX + IV_AW + 10 >= IV_FW { iv_dir = 0 - 1  iv_oy = iv_oy + 14  return 0 }
+    } else {
+        if iv_ox + lo * IV_SX - 10 <= 0 { iv_dir = 1  iv_oy = iv_oy + 14  return 0 }
+    }
+    iv_ox = iv_ox + iv_dir * 8
+    return 0
+}
+
+fn iv_landed() {
+    r = IV_ROWS - 1
+    while r >= 0 {
+        c = 0
+        while c < IV_COLS {
+            if iv_alien(c, r) != 0 { if iv_oy + r * IV_SY + IV_AH >= IV_PY { return 1 } }
+            c = c + 1
+        }
+        r = r - 1
+    }
+    return 0
+}
+
+fn iv_reset() {
+    ac_seed_from(ticks() + 59)
+    fill_mem(G3_ALIENB, 0, 128)
+    iv_fill()
+    iv_shfill()
+    iv_ox = 10
+    iv_oy = 24
+    iv_dir = 1
+    iv_px = (IV_FW - IV_PW) / 2
+    iv_lx = 0
+    iv_ly = 0
+    iv_lives = 3
+    iv_score = 0
+    iv_state = 0
+    iv_pause = 0
+    iv_wave = 1
+    iv_mstep = 0
+    iv_when = 0
+    iv_ready = 1
+    return 0
+}
+
+fn iv_step() {
+    if iv_state != 0 { return 0 }
+    if iv_pause == 1 { return 0 }
+    if iv_ly > 0 {
+        iv_ly = iv_ly - 14
+        if iv_ly < 0 { iv_ly = 0 }
+        if iv_ly > 0 { iv_laser_hit() }
+    }
+    i = 0
+    while i < IV_BOMBS {
+        if iv_bomb(i) != 0 {
+            bx = iv_bx(i)
+            by = iv_by(i) + 7
+            if by > IV_FH {
+                iv_setbomb(i, 0, 0, 0)
+            } else {
+                iv_setbomb(i, 1, bx, by)
+                if iv_shield_hit(bx, by) == 1 { iv_setbomb(i, 0, 0, 0) }
+                if by >= IV_PY { if bx >= iv_px { if bx <= iv_px + IV_PW {
+                    iv_setbomb(i, 0, 0, 0)
+                    iv_lives = iv_lives - 1
+                    if iv_lives <= 0 { iv_state = 1 }
+                }}}
+            }
+        }
+        i = i + 1
+    }
+    sp = iv_alive()
+    iv_mstep = iv_mstep + 1
+    rate = 1 + sp / 6
+    if iv_mstep >= rate { iv_mstep = 0  iv_march() }
+    if ac_rand(30) == 0 { iv_drop() }
+    if iv_landed() == 1 { iv_state = 1 }
+    if sp == 0 {
+        iv_wave = iv_wave + 1
+        iv_fill()
+        iv_shfill()
+        iv_ox = 10
+        iv_oy = 24
+        iv_dir = 1
+        iv_ly = 0
+    }
+    return 1
+}
+
+fn iv_draw(ax, ay, aw, ah) {
+    u = ui()
+    fill_rgb(ax, ay, aw, ah, theme(TH_CHROME_LINE))
+    w = IV_AW * aw / IV_FW
+    h = IV_AH * ah / IV_FH
+    r = 0
+    while r < IV_ROWS {
+        c = 0
+        while c < IV_COLS {
+            t = iv_alien(c, r)
+            if t != 0 {
+                sx = g3_mx(ax, aw, iv_ox + c * IV_SX, IV_FW)
+                sy = g3_mx(ay, ah, iv_oy + r * IV_SY, IV_FH)
+                fill_rgb(sx, sy + h / 3, w, h / 2, iv_acol(t))
+                fill_rgb(sx + w / 4, sy, w / 2, h / 2, iv_acol(t))
+                fill_rgb(sx, sy + h - h / 4, w / 4, h / 4, iv_acol(t))
+                fill_rgb(sx + w - w / 4, sy + h - h / 4, w / 4, h / 4, iv_acol(t))
+            }
+            c = c + 1
+        }
+        r = r + 1
+    }
+    s = 0
+    while s < IV_SHIELDS {
+        sr = 0
+        while sr < IV_SROWS {
+            sc = 0
+            while sc < IV_SCOLS {
+                hp = iv_sh(s, sc, sr)
+                if hp > 0 { blend(g3_mx(ax, aw, iv_shx(s) + sc * IV_SBW, IV_FW), g3_mx(ay, ah, IV_SHY + sr * IV_SBH, IV_FH), IV_SBW * aw / IV_FW - u, IV_SBH * ah / IV_FH - u, theme(TH_OK), 60 + hp * 65) }
+                sc = sc + 1
+            }
+            sr = sr + 1
+        }
+        s = s + 1
+    }
+    if iv_state == 0 {
+        pxs = g3_mx(ax, aw, iv_px, IV_FW)
+        pys = g3_mx(ay, ah, IV_PY, IV_FH)
+        pws = IV_PW * aw / IV_FW
+        phs = IV_PH * ah / IV_FH
+        fill_rgb(pxs, pys + phs / 2, pws, phs / 2, theme(TH_TEXT_HI))
+        fill_rgb(pxs + pws / 2 - 2 * u, pys, 4 * u, phs, theme(TH_TEXT_HI))
+    }
+    if iv_ly > 0 { fill_rgb(g3_mx(ax, aw, iv_lx, IV_FW), g3_mx(ay, ah, iv_ly, IV_FH), 2 * u, 10 * ah / IV_FH, theme(TH_ACCENT)) }
+    i = 0
+    while i < IV_BOMBS {
+        if iv_bomb(i) != 0 { fill_rgb(g3_mx(ax, aw, iv_bx(i), IV_FW), g3_mx(ay, ah, iv_by(i), IV_FH), 2 * u, 9 * ah / IV_FH, theme(TH_DANGER)) }
+        i = i + 1
+    }
+    label(ax + 14 * u, ay + 8 * u, "score", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 54 * u, ay + 8 * u, iv_score, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 128 * u, ay + 8 * u, "lives", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 166 * u, ay + 8 * u, iv_lives, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 210 * u, ay + 8 * u, "wave", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 248 * u, ay + 8 * u, iv_wave, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    if iv_pause == 1 { label(ax + 292 * u, ay + 8 * u, "paused", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
+    if iv_state == 1 { label(ax + 292 * u, ay + 8 * u, "game over - r restarts", theme(TH_DANGER), T_CAPTION, W_BOLD) }
+    return 0
+}
+
+fn iv_event(win, ety, ecode) {
+    if ety == 3 {
+        if ecode == 114 { iv_reset()  wm_dmg(win)  return 1 }
+        if iv_state != 0 { return 1 }
+        if ecode == 112 { if iv_pause == 0 { iv_pause = 1 } else { iv_pause = 0 }  wm_dmg(win)  return 1 }
+        if ecode == 32 {
+            if iv_pause == 1 { return 1 }
+            if iv_ly == 0 { iv_lx = iv_px + IV_PW / 2  iv_ly = IV_PY - 2  wm_dmg(win) }
+            return 1
+        }
+        return 0
+    }
+    if ety != 1 { return 0 }
+    if iv_state != 0 { return 1 }
+    if iv_pause == 1 { return 1 }
+    if ecode == K_LEFT  { iv_px = g3_clamp(iv_px - 14, 0, IV_FW - IV_PW)  wm_dmg(win)  return 1 }
+    if ecode == K_RIGHT { iv_px = g3_clamp(iv_px + 14, 0, IV_FW - IV_PW)  wm_dmg(win)  return 1 }
+    return 0
+}
+
+fn iv_tick(win) {
+    if iv_ready == 0 { return 0 }
+    if iv_state != 0 { return 0 }
+    if iv_pause == 1 { return 0 }
+    if ticks() < iv_when { return 0 }
+    iv_when = ticks() + 3
+    return iv_step()
+}
+
+# ==============================================================================
+# the slice's six answers
+# ==============================================================================
+# EVERY ENTRY POINT ENSURES ITS GAME FIRST. reg_new() in apps_registry.zl calls
+# a per-app reset for the games it knows about and knows nothing about these,
+# so a slice that relied on being reset when its window opened would draw an
+# all-zero board and tick forever on uninitialised state. Initialising on first
+# touch instead makes the slice correct whether or not the registry ever learns
+# to call into it - and it is also what makes each _tick's `_ready == 0` guard
+# a real check rather than a formality.
+fn games3_reset(id) {
+    if id == G3_TETRIS { tet_reset() }
+    if id == G3_PONG   { pg_reset() }
+    if id == G3_BREAK  { bo_reset() }
+    if id == G3_MINES  { ms_reset() }
+    if id == G3_2048   { g48_reset() }
+    if id == G3_LIFE   { lf_reset() }
+    if id == G3_ROIDS  { as_reset() }
+    if id == G3_INVAD  { iv_reset() }
+    return 0
+}
+
+fn games3_ensure(id) {
+    if id == G3_TETRIS { if tet_ready == 0 { tet_reset() } }
+    if id == G3_PONG   { if pg_ready == 0 { pg_reset() } }
+    if id == G3_BREAK  { if bo_ready == 0 { bo_reset() } }
+    if id == G3_MINES  { if ms_ready == 0 { ms_reset() } }
+    if id == G3_2048   { if g48_ready == 0 { g48_reset() } }
+    if id == G3_LIFE   { if lf_ready == 0 { lf_reset() } }
+    if id == G3_ROIDS  { if as_ready == 0 { as_reset() } }
+    if id == G3_INVAD  { if iv_ready == 0 { iv_reset() } }
+    return 0
+}
+
+# HOW THIS SLICE'S WINDOWS OPEN, and the only entry point that did not exist
+# when the slice was written. reg_new() gates on explicit id ranges and none of
+# them covered 52..60, so every app here was unopenable - reg_open() found no
+# window and returned having done nothing, silently. reg_new now has a
+# per-slice arm calling this.
+#
+# A fresh game every time the window is opened is the rule reg_new already
+# follows for Wordle, Tic-Tac-Toe, Hanoi and the rest. games3_ensure above is
+# the SECOND line of defence, for a draw or an event that reaches this slice
+# without having come through here.
+fn games3_new(id, u) {
+    games3_reset(id)
+    return wm_open(id, games3_name(id), 150 * u, 70 * u, games3_w(id) * u, games3_h(id) * u)
+}
+
+fn games3_name(id) {
+    if id == G3_TETRIS { return "Tetris" }
+    if id == G3_PONG   { return "Pong" }
+    if id == G3_BREAK  { return "Breakout" }
+    if id == G3_MINES  { return "Minesweeper" }
+    if id == G3_2048   { return "2048" }
+    if id == G3_LIFE   { return "Conway's Life" }
+    if id == G3_ROIDS  { return "Asteroids" }
+    if id == G3_INVAD  { return "Invaders" }
+    return ""
+}
+
+fn games3_cat(id) { if games3_has(id) == 1 { return 2 }  return 0 }
+
+# ds-reference.html:976-978's own figures, verbatim. reg_w/reg_h are in DESIGN
+# UNITS - the * ui() happens in reg_new - so these are the reference's numbers
+# unscaled, not pixels.
+fn games3_w(id) {
+    if id == G3_TETRIS { return 360 }
+    if id == G3_PONG   { return 480 }
+    if id == G3_BREAK  { return 460 }
+    if id == G3_MINES  { return 430 }
+    if id == G3_2048   { return 360 }
+    if id == G3_LIFE   { return 520 }
+    if id == G3_ROIDS  { return 470 }
+    if id == G3_INVAD  { return 450 }
+    return 480
+}
+fn games3_h(id) {
+    if id == G3_TETRIS { return 440 }
+    if id == G3_PONG   { return 330 }
+    if id == G3_BREAK  { return 360 }
+    if id == G3_MINES  { return 380 }
+    if id == G3_2048   { return 400 }
+    if id == G3_LIFE   { return 400 }
+    if id == G3_ROIDS  { return 380 }
+    if id == G3_INVAD  { return 390 }
+    return 340
+}
+
+# -1, not 0. reg_icon()'s contract is "the icon24 index, or -1 for draw the
+# two-letter monogram instead" - 0 is a real icon in icons.c and returning it
+# would put the same wrong picture on all eight catalog tiles.
+fn games3_icon(id) { return 0 - 1 }
+
+fn games3_draw(id, ax, ay, aw, ah) {
+    games3_ensure(id)
+    ch = ah - G3_BAR * ui()
+    if ch < 1 { return 0 }
+    if id == G3_TETRIS { tet_draw(ax, ay, aw, ch) }
+    if id == G3_PONG   { pg_draw(ax, ay, aw, ch) }
+    if id == G3_BREAK  { bo_draw(ax, ay, aw, ch) }
+    if id == G3_MINES  { ms_draw(ax, ay, aw, ch) }
+    if id == G3_2048   { g48_draw(ax, ay, aw, ch) }
+    if id == G3_LIFE   { lf_draw(ax, ay, aw, ch) }
+    if id == G3_ROIDS  { as_draw(ax, ay, aw, ch) }
+    if id == G3_INVAD  { iv_draw(ax, ay, aw, ch) }
+    g3_bar(id, ax, ay, aw, ah)
+    return 0
+}
+
+fn games3_event(id, win, ety, ecode, ex, ey) {
+    games3_ensure(id)
+    if id == G3_TETRIS { return tet_event(win, ety, ecode) }
+    if id == G3_PONG   { return pg_event(win, ety, ecode, ex, ey) }
+    if id == G3_BREAK  { return bo_event(win, ety, ecode, ex, ey) }
+    if id == G3_MINES  { return ms_event(win, ety, ecode, ex, ey) }
+    if id == G3_2048   { return g48_event(win, ety, ecode) }
+    if id == G3_LIFE   { return lf_event(win, ety, ecode, ex, ey) }
+    if id == G3_ROIDS  { return as_event(win, ety, ecode) }
+    if id == G3_INVAD  { return iv_event(win, ety, ecode) }
+    return 0
+}
+
+fn games3_tick(id, win) {
+    if id == G3_TETRIS { return tet_tick(win) }
+    if id == G3_PONG   { return pg_tick(win) }
+    if id == G3_BREAK  { return bo_tick(win) }
+    if id == G3_LIFE   { return lf_tick(win) }
+    if id == G3_ROIDS  { return as_tick(win) }
+    if id == G3_INVAD  { return iv_tick(win) }
+    return 0
+}
+
+
+# The catalog tile's two-letter mark. Without one, reg_mono() falls through
+# to its "??" placeholder and every game in this slice draws the same tile.
+fn games3_mono(id) {
+    if id == 52 { return "TE" }
+    if id == 53 { return "PO" }
+    if id == 54 { return "BR" }
+    if id == 55 { return "MS" }
+    if id == 56 { return "20" }
+    if id == 57 { return "LF" }
+    if id == 58 { return "AS" }
+    if id == 59 { return "IV" }
+    return "??"
+}

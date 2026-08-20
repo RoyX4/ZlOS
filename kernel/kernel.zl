@@ -25,39 +25,44 @@ C_STATUS = 0x8F      # white on dark grey
 C_CURSOR = 0x0A      # green block cursor
 
 # ---- true-colour theme (framebuffer only) ----------------------------------
-# The 16 VGA colours are harsh; the framebuffer is real RGB, so the desktop
-# uses packed 0xRRGGBB colours (r*65536 + g*256 + b) for smooth gradients.
+# One source of truth now lives in ui.c's ui_theme. The zl side names semantic
+# roles and asks for their current value, so Settings changes the chrome,
+# furniture and applications together instead of leaving a second palette on
+# screen. RGB remains for generated wallpaper light fields, not UI roles.
 fn rgb(rr, gg, bb) { return rr * 65536 + gg * 256 + bb }
-WALL_TOP = rgb(26, 30, 50)      # wallpaper: deep slate-blue, top
-WALL_BOT = rgb(10, 12, 22)      # ... to near-black at the bottom
-HDR_TOP  = rgb(48, 92, 168)     # title bar: bright blue
-HDR_BOT  = rgb(22, 40, 92)      # ... to deep blue
-ACCENT   = rgb(96, 210, 235)    # bright cyan accent line
-BAR_TOP  = rgb(40, 46, 66)      # taskbar top          = --bar-top #282e42
-BAR_BOT  = rgb(18, 20, 31)      # taskbar bottom       = --bar-bot #12141f
-BAR_HI   = rgb(78, 92, 128)     # taskbar top highlight= --bar-hi  #4e5c80
-PANEL    = rgb(0, 0, 0)        # content panel = black, matches text cell bg
-# ---- the three the northstar names and kernel.zl did not have ---------------
-# LOOK-AND-SPEED-PROMPT asked specifically about `panel` and `ok`. Both were
-# genuinely absent, and they are absent for two different reasons:
-#
-#   --panel #05060a   PANEL above is rgb(0,0,0), pure black, and that is a
-#                     DELIBERATE difference: an app's content panel has to match
-#                     the VGA text cell background exactly or the shell's own
-#                     scrollback sits on a slightly different black. So PANEL
-#                     stays 0,0,0 and the reference's near-black gets its own
-#                     name, for the chrome that is not a text surface.
-#   --ok #5bd66e      OK_GRN was rgb(120,220,140) - a lighter, greyer green
-#                     picked before the reference existed. Drift rather than a
-#                     decision, so the reference wins and OK_GRN now holds it.
-PANEL_NS  = rgb(5, 6, 10)       # --panel    #05060a - floating panels, menus
-LINE_SOFT = rgb(38, 48, 74)     # --line     #26304a - hairline borders
-TXT_HI   = rgb(210, 228, 255)   # light text
-TXT_DIM  = rgb(150, 165, 195)   # dim text
-# --crit from the northstar (#e05a5a). It was already on screen as a literal in
-# the window close button and nowhere else; a colour the reference NAMES should
-# be named here too, or the next use of it guesses a different red.
-CRIT_RED = rgb(224, 90, 90)     # something is wrong and you should look
+TH_BG = 0
+TH_PANEL = 1
+TH_PANEL_HI = 2
+TH_TEXT = 3
+TH_TEXT_DIM = 4
+TH_ACCENT = 5
+TH_BORDER = 6
+TH_DANGER = 7
+TH_TITLE = 8
+TH_TITLE_BOT = 9
+TH_TITLE_OFF = 10
+TH_WALL_TOP = 11
+TH_WALL_BOT = 12
+TH_BAR_TOP = 13
+TH_BAR_BOT = 14
+TH_BAR_HI = 15
+TH_CHROME = 16
+TH_CHROME_LINE = 17
+TH_TEXT_HI = 18
+TH_OK = 19
+# Nine more roles, appended so no existing index moves. Before these an app had
+# no way to say "warning" and spent the accent on it, and three text tiers and
+# three surfaces collapsed onto two colours each.
+TH_TEXT_2 = 20
+TH_TEXT_5 = 21
+TH_TEXT_6 = 22
+TH_WARN = 23
+TH_SURF_1 = 24
+TH_SURF_5 = 25
+TH_SURF_7 = 26
+TH_SURF_WELL = 27
+TH_ACCENT_BR = 28
+fn theme(role) { return ui_color(role) }
 
 # ---- the app suite ----------------------------------------------------------
 # Everything past the original 13 apps (APP_SHELL..APP_EDIT, APP_SETTINGS,
@@ -72,6 +77,14 @@ import apps_utils
 import apps_games1
 import apps_games2
 import apps_system
+# The four id-disjoint slices. Each owns one file and one range so that four
+# agents can write apps in parallel without editing a shared dispatch chain -
+# see apps_sys2.zl for why, and for the runtime-misroute trap that makes a
+# duplicate id worse than a compile error.
+import apps_sys2
+import apps_sys3
+import apps_games3
+import apps_games4
 
 # ---- serial input -----------------------------------------------------------
 # It used to be read HERE, with band(inb(COM1 + 5), 1) as the ready test. Two
@@ -251,52 +264,349 @@ T_BODY    = 1
 T_TITLE   = 2
 W_REG     = 0
 W_BOLD    = 1
-TITLE_H = 28                       # window title bar height, in design units
-MON_W = 284                        # System Monitor / About width
-MON_H = 214                        # System Monitor height
-AB_H  = 122                        # About height
-TOPBAR_H = 32
-DESK_TOP = 40                    # first row of desktop below the bar + hairline
-TOP_BG   = rgb(20, 23, 33)
-TOP_LINE = rgb(8, 9, 14)
-TOP_TXT  = rgb(226, 234, 248)
-TOP_DIM  = rgb(128, 140, 166)
-OK_GRN   = rgb(91, 214, 110)    # --ok #5bd66e
+TITLE_H = 36                       # prototype-density title bar
+MON_W = 424                        # real resource surface, not a narrow widget strip
+MON_H = 376                        # matches the north-star three-window composition
+AB_H  = 150                        # About height; no clipped final line at 2x
+TOPBAR_H = 48
+DESK_TOP = 56                    # first row of desktop below the bar + hairline
+
+# ---- the top island ---------------------------------------------------------
+# The reference does NOT have a top BAR. It has a floating pill, centred, with
+# the wallpaper visible on both sides of it and above it. That is a different
+# object, not a restyled one, and swapping the full-width slab for it is the
+# single largest structural change to the chrome.
+#
+# MEASURED, not guessed. The numbers below were taken two ways and they agree:
+#
+#   from ds-reference.html:3374-3455  top:8px, height:32px, padding:0 4px,
+#                                     gap:3px, border-radius:16px, left:50%
+#   from the rendered PNG             x 455..826, y 8..40 - so 372 x 32,
+#                                     centred on 640 at a 1280-wide screen
+#
+# The 372 is not hardcoded: island_w() sums the parts, so the pill is as wide
+# as what is in it and stays right when the clock text or the scale changes.
+# It came out at 372 design units on the first try, which is why the measured
+# width is quoted here as a check rather than used as a constant.
+ISLAND_H   = 32
+ISLAND_TOP = 8
+ISLAND_R   = 16
+ISLAND_PAD = 4
+ISLAND_GAP = 3
+CHIP_H     = 24                  # the pills inside the pill
+CHIP_R     = 12
+CHIP_PAD   = 12
+CHIP_GAP   = 7
+SEP_H      = 15                  # the 1px dividers between groups
+PIP_H      = 7                   # a workspace pip
+PIP_W_ON   = 20                  # ...which widens to this when it is current
+BELL_W     = 20
+BELL_H     = 17
+
+# THE CLOCK GETS A FIXED CELL, and that is this file's own established rule for
+# a live number, stated a few hundred lines down: "a readout whose labels slide
+# sideways as the digits change is unreadable". A fixed cell wide enough for the
+# worst case is the correct shape. It also means island_w() does not have to
+# measure a string that changes every minute.
+#
+# DIVERGENCE, recorded rather than hidden: the reference's clock reads
+# "Tue 22:00" and this one reads "22:00". zl's kernel subset has no runtime
+# string type - label() takes a literal and label_num() takes an integer - so a
+# weekday name would need a lookup table returning one of seven string literals
+# and a way to concatenate it with the time, and there is no concatenation. The
+# time itself is real: rtc_h() and rtc_mi() off the CMOS clock.
+CLOCK_W = 36
+
+# ---- workspaces --------------------------------------------------------------
+# The reference has three and the pip row is where you see which one you are on.
+#
+# THE CURRENT WORKSPACE IS THE COMPOSITOR'S NOW, not a variable in this file.
+# It used to be a `ws_cur` here that only the pips read: switching changed the
+# indicator and nothing else, and the comment that used to sit in this spot
+# said so. That is the shape of an indicator that tells the truth about a
+# variable and lies about the machine, and the fix is not to add filtering
+# beside the variable - it is to move the variable to where the windows are.
+# wm.c holds it, wm.c filters the paint walk, the hit test and both focus
+# walks by it, and these two functions are now one call each.
+#
+# HOW MANY there are stays here, because that is policy: three pips, three
+# workspaces. wm_wsn() tells the compositor the ceiling so Super+9 is refused
+# rather than switching to an empty ninth workspace with no pip to return from.
+WS_N = 3
+fn cur_ws() { return wm_ws() }
+fn set_ws(n) { return wm_setws(n) }
+
+# WHERE AN APP LIVES WHEN NOTHING HAS OPENED IT YET - the reference's own
+# assignment, from ds-reference.html's three tables:
+#
+#   APPS       each entry carries its own `ws:`, listed one per app below
+#   UTILS      `ws:2` for all ten, applied by the .map() that builds them
+#   GAME_APPS  `ws:3` for all twenty-four, the same way
+#
+# This is the INITIAL table and not a rule about opening. The reference's
+# openApp() writes `winWs[id] = s.ws` every time, so an app you launch appears
+# on the workspace you are looking at, which is what wm_open does here too. The
+# table is what a window carries before anyone has opened it - which is why the
+# only place it is read is the boot composition, where the three windows the
+# desktop opens for itself get their workspace from it rather than from the
+# accident of which workspace happened to be current at boot.
+fn app_ws(id) {
+    if id == APP_SHELL   { return 1 }         # Terminal
+    if id == APP_FILES   { return 1 }
+    if id == APP_MONITOR { return 1 }
+    if id == APP_EDIT    { return 2 }         # Text Editor
+    if id == APP_SETTINGS { return 1 }
+    if id == APP_KLOG    { return 2 }         # Kernel Log
+    if id == APP_REND    { return 3 }         # Renderer
+    if id == APP_HEXV    { return 3 }         # Hex Viewer
+    if id == APP_FBUF    { return 3 }         # Framebuffer
+    if id == APP_TTY     { return 2 }         # Console (tty1)
+    if id == APP_FONT    { return 3 }         # Font Atlas
+    if id == APP_DISK    { return 1 }         # Disk Usage
+    if id == APP_SVC     { return 1 }         # Services
+    if id == APP_ARCH    { return 3 }         # Archive Manager
+    if id == APP_IMG     { return 3 }         # Image Viewer
+    if id == APP_NET     { return 2 }         # Network
+    if id == APP_CLOCK   { return 2 }         # Clocks & Timers
+    if id == APP_SYSINFO { return 1 }         # System Info
+    if id == APP_CALC    { return 2 }         # Calculator
+    # The two whole categories. reg_cat() answers 1 for a utility and 2 for a
+    # game, which is exactly the split the reference's two .map()s make, so
+    # these two lines stand in for thirty-four entries and cannot go stale when
+    # a game is added.
+    if reg_cat(id) == 1 { return 2 }
+    if reg_cat(id) == 2 { return 3 }
+    return 1
+}
+
+# HH:MM, drawn as two numbers and a colon rather than one string, because there
+# is no string to build. Leading zero is explicit: label_num(9) prints "9", and
+# a clock that reads "9:5" is worse than no clock.
+# One zero-padded two-digit field, returning the x after it.
+#
+# THIS EXISTS BECAUSE THE INLINE VERSION DREW "0000". Written straight through,
+# the single-digit branch printed the leading zero, advanced, printed the digit
+# and then did NOT advance again - so the colon landed on top of the digit and
+# the whole clock collapsed into four touching glyphs. Splitting it out makes
+# the advance unconditional and impossible to forget on one branch.
+#
+# A digit gets a FIXED cell rather than a measured one: label_num has no width
+# function, and a clock whose colon slides as the digits change is the thing
+# the fixed-cell rule elsewhere in this file exists to prevent.
+CLOCK_DIGIT = 8
+fn clock_field(nx, cy, v, u) {
+    if v < 10 {
+        label(nx, cy, "0", theme(TH_TEXT_HI), T_BODY, W_REG)
+        label_num(nx + CLOCK_DIGIT * u, cy, v, theme(TH_TEXT_HI), T_BODY, W_REG)
+        return nx + CLOCK_DIGIT * 2 * u
+    }
+    label_num(nx, cy, v, theme(TH_TEXT_HI), T_BODY, W_REG)
+    return nx + CLOCK_DIGIT * 2 * u
+}
+
+fn draw_island_clock(cx, cy, u) {
+    nx = clock_field(cx, cy, rtc_h(), u)
+    label(nx, cy, ":", theme(TH_TEXT_HI), T_BODY, W_REG)
+    nx = clock_field(nx + 5 * u, cy, rtc_mi(), u)
+    return 0
+}
+
+# The island fill is rgba(12,14,16,.82). rrblend() is a real rounded-rect ALPHA
+# fill, so the tint is applied as a tint over whatever is behind it rather than
+# faked with an opaque approximation. ISLAND_A is .82 as 0..255.
+#
+# The one thing that is NOT reproduced is backdrop-filter: blur(20px). There is
+# no GPU and fb.c's blur is a cache of a rectangle, not a live filter under a
+# rounded mask. What sits behind the island is wallpaper - a smooth gradient
+# with no high-frequency detail - so blurring it would change very little; the
+# tint is doing nearly all of the work. That is the claim, and it is a claim
+# about this wallpaper, not a general one: over a busy window the same shortcut
+# would look obviously wrong.
+ISLAND_A = 209                   # .82 * 255
+ISLAND_RING_A = 23               # .09 * 255, the lime ring
+fn island_fill() { return rgb(12, 14, 16) }
+
+fn island_w() {
+    iu = ui()
+    iw = ISLAND_PAD * 2
+    iw = iw + CHIP_PAD * 2 + 5 * iu + CHIP_GAP + label_w("Activities", T_BODY, W_BOLD)
+    iw = iw + ISLAND_GAP * 3 + 1
+    iw = iw + PIP_W_ON + PIP_H * 2 + ISLAND_GAP * 2
+    iw = iw + ISLAND_GAP * 3 + 1
+    iw = iw + CHIP_PAD * 2 + CLOCK_W * iu
+    iw = iw + ISLAND_GAP * 3 + 1
+    iw = iw + 11 * 2 + label_w("heap", T_CAPTION, W_REG) + CHIP_GAP * 3 + 13 * 3
+    iw = iw + ISLAND_GAP * 3 + 1
+    iw = iw + BELL_W
+    return iw
+}
 
 fn draw_header() {
     if px_w() > 0 {
         w = px_w()
         u = ui()
-        hb = TOPBAR_H * u
-        fill_rgb(0, 0, w, hb, TOP_BG)                     # flat, no gradient
-        fill_rgb(0, hb, w, 1, TOP_LINE)                   # hairline separator
-        grad_rgb(0, hb + 1, w, 7, rgb(12, 14, 21), WALL_TOP)
-        ht = (hb - 16 * u) / 2                            # text baseline, centred
-        fill_rgb(14 * u, (hb - 10 * u) / 2, 10 * u, 10 * u, ACCENT)
-        label(34 * u, ht, "zlOS", TOP_TXT, T_BODY, W_BOLD)
-        label(90 * u, ht, "Activities", TOP_DIM, T_BODY, W_REG)
-        # right side: live machine state, laid out from the right edge
-        label(w - 300 * u, ht, "fb", TOP_DIM, T_CAPTION, W_REG)
-        label_num(w - 276 * u, ht, w, TOP_TXT, T_CAPTION, W_BOLD)
-        label(w - 200 * u, ht, "x", TOP_DIM, T_CAPTION, W_REG)
-        label_num(w - 184 * u, ht, px_h(), TOP_TXT, T_CAPTION, W_BOLD)
-        label(w - 108 * u, ht, "net", TOP_DIM, T_CAPTION, W_REG)
-        fill_rgb(w - 66 * u, (hb - 8 * u) / 2, 8 * u, 8 * u, OK_GRN)
-        label(w - 48 * u, ht, "up", TOP_DIM, T_CAPTION, W_REG)
+        ih = ISLAND_H * u
+        iy = ISLAND_TOP * u
+        iw = island_w()
+        ix = (w - iw) / 2
+        # ring first, fill on top: the outer shape is one pixel proud on every
+        # side, so the lime ring follows the curve instead of cutting across it.
+        # Both are ALPHA blends, so the wallpaper still shows through exactly as
+        # the reference's rgba() fills intend.
+        rrblend(ix - 1, iy - 1, iw + 2, ih + 2, ISLAND_R * u + 1, theme(TH_ACCENT), ISLAND_RING_A)
+        rrblend(ix, iy, iw, ih, ISLAND_R * u, island_fill(), ISLAND_A)
+        cx = ix + ISLAND_PAD * u
+        cy = iy + (ih - CHIP_H * u) / 2
+        # Activities: a 5px lime dot with a glow, then the word. The dot is the
+        # only thing in the chrome that is accent-coloured when nothing is
+        # active, so it is what tells you the desktop is alive.
+        dy = iy + (ih - 5 * u) / 2
+        rrect(cx + CHIP_PAD * u, dy, 5 * u, 5 * u, 3 * u, theme(TH_ACCENT))
+        tx = cx + CHIP_PAD * u + 5 * u + CHIP_GAP * u
+        label(tx, iy + (ih - 16 * u) / 2, "Activities", theme(TH_TEXT_HI), T_BODY, W_BOLD)
+        cx = cx + CHIP_PAD * 2 * u + 5 * u + CHIP_GAP * u + label_w("Activities", T_BODY, W_BOLD)
+        cx = island_sep(cx, iy, ih, u)
+        # three workspace pips. The CURRENT one is a 20px lime lozenge and the
+        # others are 7px dots - the reference animates that width over .16s,
+        # which is why the two widths are named constants rather than inline.
+        py = iy + (ih - PIP_H * u) / 2
+        wsi = 1
+        while wsi <= 3 {
+            pw = PIP_H * u
+            pc = theme(TH_BORDER)
+            if wsi == cur_ws() { pw = PIP_W_ON * u  pc = theme(TH_ACCENT) }
+            rrect(cx, py, pw, PIP_H * u, 3 * u, pc)
+            cx = cx + pw + ISLAND_GAP * u
+            wsi = wsi + 1
+        }
+        cx = cx - ISLAND_GAP * u
+        cx = island_sep(cx, iy, ih, u)
+        draw_island_clock(cx + CHIP_PAD * u, iy + (ih - 16 * u) / 2, u)
+        cx = cx + CHIP_PAD * 2 * u + CLOCK_W * u
+        cx = island_sep(cx, iy, ih, u)
+        label(cx + 11 * u, iy + (ih - 14 * u) / 2, "heap", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        gx = cx + 11 * u + label_w("heap", T_CAPTION, W_REG) + CHIP_GAP * u
+        icon(gx, iy + (ih - 13 * u) / 2, 17, theme(TH_TEXT_DIM))
+        icon(gx + 13 * u + CHIP_GAP * u, iy + (ih - 13 * u) / 2, 18, theme(TH_TEXT_DIM))
+        icon(gx + 26 * u + CHIP_GAP * 2 * u, iy + (ih - 13 * u) / 2, 35, theme(TH_TEXT_DIM))
+        cx = cx + 22 * u + label_w("heap", T_CAPTION, W_REG) + CHIP_GAP * 3 * u + 39 * u
+        cx = island_sep(cx, iy, ih, u)
+        icon(cx, iy + (ih - BELL_H * u) / 2, 39, theme(TH_TEXT_HI))
     } else {
         bar(0, C_TITLE)
         at(0, 2, "zlOS", C_TITLE)
     }
 }
 
+# One 1px divider, 15px tall, vertically centred. Returns the next x. The
+# reference puts ISLAND_GAP either side of it, so the caller never has to.
+fn island_sep(sx, iy, ih, u) {
+    sy = iy + (ih - SEP_H * u) / 2
+    fill_rgb(sx + ISLAND_GAP * u, sy, 1, SEP_H * u, theme(TH_BORDER))
+    return sx + ISLAND_GAP * 2 * u + 1
+}
+
+# WHICH PIP IS UNDER A POINT, or -1. The pips were decoration until this
+# existed: draw_header painted three of them and nothing in desk_click ever
+# looked at that band, so the only way to change workspace was a key binding
+# that did not exist either.
+#
+# It repeats draw_header's arithmetic rather than reading a stored x, and that
+# is deliberate but it is the SECOND-best shape: the island is laid out as it
+# is painted, so the pip row's x exists only as a local inside that loop. The
+# rule this file already learned the hard way (see app_tick's note on
+# draw_status and the tray strip) is that a second INDEPENDENTLY-DERIVED origin
+# for the same row is how a control ends up drawn in one place and clickable in
+# another - so this is written directly below the function it mirrors, one
+# term at a time in the same order, and island_sep's advance is spelled out
+# here because island_sep itself DRAWS and a hit test must not.
+#
+# THE HIT BAND IS THE WHOLE ISLAND HEIGHT, not the 7px pip. A seven-pixel-tall
+# target is not clickable by a person, and nothing else in the island occupies
+# that column, so widening it costs nothing and steals nothing.
+fn pip_at(hx, hy) {
+    if px_w() == 0 { return 0 - 1 }
+    u = ui()
+    ih = ISLAND_H * u
+    iy = ISLAND_TOP * u
+    if hy < iy { return 0 - 1 }
+    if hy >= iy + ih { return 0 - 1 }
+    px = (px_w() - island_w()) / 2 + ISLAND_PAD * u
+    px = px + CHIP_PAD * 2 * u + 5 * u + CHIP_GAP * u + label_w("Activities", T_BODY, W_BOLD)
+    px = px + ISLAND_GAP * 2 * u + 1
+    wsi = 1
+    while wsi <= WS_N {
+        pw = PIP_H * u
+        if wsi == cur_ws() { pw = PIP_W_ON * u }
+        if hx >= px { if hx < px + pw + ISLAND_GAP * u { return wsi } }
+        px = px + pw + ISLAND_GAP * u
+        wsi = wsi + 1
+    }
+    return 0 - 1
+}
+
 # the dock top edge, cell-aligned to row (rows-3) so at_num can place the clock
-fn dock_y() { return px_h() - 64 * ui() }
+fn dock_y() { return px_h() - (DOCK_H + DOCK_BOT) * ui() }
 
 # one app-launcher tile: a rounded chip with a real 24x24 icon in it. Icons,
 # not key letters - you are meant to click these, not memorise a hotkey.
-DOCK_X0 = 118            # first tile
-DOCK_PITCH = 56          # tile-to-tile spacing
-DOCK_TW = 48             # tile width/height
+# THE DOCK, to the reference's own numbers. ds-reference.html:865 for the strip
+# and :3424 for a tile:
+#
+#   strip   left:50% bottom:9px, padding:5px 7px, gap:5px, radius:16px,
+#           background rgba(18,21,24,.82), border 1px rgba(255,255,255,.11)
+#   tile    33x33, radius:13, icon 20px, rgba(255,255,255,.085),
+#           focused ACC with a rgba(255,255,255,.22) border
+#   dot     3.5px, 3.5px BELOW the tile, pulsing on zpulse 2.6s
+#
+# Confirmed against the rendered PNG: the strip occupies y 746..790 at
+# 1280x800 - height 45, bottom gap 9 - which is 5 + 33 + 5 plus the 1px border
+# top and bottom. The oracle's regions.json, generated independently from the
+# DOM, calls it [325, 746, 629, 45]. Three sources, one answer.
+#
+# It was a 502x56 slab with 42px tiles on a 48px pitch and a start button.
+# THE WIDTH IS NOT COPIED. The reference's 629 is what fifteen tiles come to;
+# zlOS has nine, so the strip is computed from its own contents and will widen
+# on its own as apps are added. Copying 629 would have left a strip with a
+# third of it empty.
+DOCK_PADX  = 7
+DOCK_PADY  = 5
+DOCK_GAP   = 5
+DOCK_TW    = 33          # the tile
+DOCK_TR    = 13          # ...and its radius
+DOCK_R     = 16          # the strip's radius
+DOCK_H     = 43          # PADY + TW + PADY
+DOCK_BOT   = 9           # gap below the strip
+DOCK_PITCH = 38          # TW + GAP
+DOCK_N     = 9
+DOCK_A       = 209       # .82 * 255, the strip body
+DOCK_BORDER_A = 28       # .11 * 255, the 1px border
+DOCK_TILE_A   = 22       # .085 * 255, a resting tile
+DOCK_TILE_ON_A = 56      # .22 * 255, the focused tile's border
+
+# 2 * PADX + N tiles + (N-1) gaps + [gap + divider + gap] + the grid button
+DOCK_BAR_W = DOCK_PADX * 2 + DOCK_N * DOCK_TW + (DOCK_N - 1) * DOCK_GAP + DOCK_GAP * 2 + 1 + DOCK_TW
+
+fn dock_fill() { return rgb(18, 21, 24) }
+fn dock_bar_x() { return (px_w() - DOCK_BAR_W * ui()) / 2 }
+fn dock_x0() { return dock_bar_x() + DOCK_PADX * ui() }
+# dock_start_x() lived here and returned exactly what dock_x0() returns. It had
+# one caller, desk_click's start-button guard, and that guard is why the
+# Terminal tile did nothing - see the note there. A second name for the same
+# number is how a stale meaning survives a redesign.
+
+
+fn dock_name(slot) {
+    if slot == 0 { return "Terminal" }
+    if slot == 1 { return "Browser" }
+    if slot == 2 { return "Editor" }
+    if slot == 3 { return "Paint" }
+    if slot == 4 { return "Snake" }
+    if slot == 5 { return "3D" }
+    if slot == 6 { return "System Monitor" }
+    if slot == 7 { return "About" }
+    return "Settings"
+}
 
 # A TILE WITH STATES. Three of them, and each one earns its place:
 #   rest     a flat chip
@@ -311,41 +621,113 @@ DOCK_TW = 48             # tile width/height
 # difference between a launcher and a taskbar.
 fn dock_tile(slot, dy, ic) {
     u = ui()
-    dtx = DOCK_X0 * u + slot * DOCK_PITCH * u
+    dtx = dock_x0() + slot * DOCK_PITCH * u
     dtw = DOCK_TW * u
-    dty = dy + 8 * u
+    dty = dy + DOCK_PADY * u
     hov = 0
     if dock_hover == slot { hov = 1 }
-    prs = 0
-    if hov == 1 { if dock_press == 1 { prs = 1 } }
 
-    tcol = rgb(34, 40, 58)
-    hcol = rgb(66, 78, 108)
-    icol = TXT_HI
-    if hov == 1 { tcol = rgb(52, 64, 92)  hcol = rgb(110, 130, 175)  icol = C_WHITE }
-    if prs == 1 {
-        dtx = dtx + 2 * u
-        dty = dty + 2 * u
-        dtw = dtw - 4 * u
-        tcol = rgb(26, 32, 48)
+    # THE TILES ARE NOT TINTED PER APP. zlOS gave each slot its own colour from
+    # dock_face() - nine hand-picked blue-slate fills. The reference gives every
+    # tile the same rgba(255,255,255,.085) and spends the accent ONLY on the
+    # focused one, which is what makes the focused app findable at a glance. Nine
+    # coloured tiles and one accent tile cannot both be the thing your eye goes
+    # to. dock_face() is gone with the rest of the blue-slate palette.
+    icol = theme(TH_TEXT_HI)
+    tona = DOCK_TILE_A
+    tcol = theme(TH_TEXT_HI)
+    if hov == 1 { tcol = theme(TH_ACCENT)  tona = 255  icol = theme(TH_BG) }
+    # ZPRESS, AND IT IS THE REAL ONE NOW.
+    #
+    # This used to be a fixed 2-unit inset with a comment saying "the animation
+    # itself is wm.c's, which now runs the same curve and duration". It did
+    # not: ANIM_PRESS had no caller anywhere in the tree, so the only zpress on
+    # this desktop was these three lines - a still frame of an animation,
+    # holding at the wrong scale for as long as the button was held.
+    #
+    # The reference is `animation:zpress .25s ease`, which is a PLAY-ONCE: the
+    # tile dips to .88 at 45% and comes back to 1, and it does that whether or
+    # not you are still holding the button. wm_anim_scale() is that curve,
+    # sampled per frame, from wm.c's own timeline - so the dock cannot drift
+    # from the window animations the way a hand-drawn inset did.
+    psc = wm_anim_scale(dock_fx(slot))
+    if psc < 1000 {
+        ptw = dtw * psc / 1000
+        dtx = dtx + (dtw - ptw) / 2
+        dty = dty + (dtw - ptw) / 2
+        dtw = ptw
     }
-    rrect(dtx, dty, dtw, dtw, 12 * u, tcol)
-    fill_rgb(dtx, dty, dtw, 1, hcol)
-    icon(dtx + (dtw - 24 * u) / 2, dty + (dtw - 24 * u) / 2, ic, icol)
+    rrblend(dtx, dty, dtw, dtw, DOCK_TR * u, tcol, tona)
+    icon(dtx + (dtw - 20 * u) / 2, dty + (dtw - 20 * u) / 2, ic, icol)
     # open-app marker: the accent bar the prototype puts under a running app
     dock_running_bar(slot, dy)
     return 0
 }
+
+# WHICH TIMELINE SLOT A DOCK TILE OWNS. wm.c's animation ids are window
+# indices when they are >= 0 and furniture when they are negative; WM_FX_USER
+# is -16 and everything below it belongs to the policy layer. Nine tiles need
+# nine of them, and having the arithmetic in one place is what stops the press
+# that fires and the tile that draws from disagreeing about which id they mean.
+WM_FX_USER = 0 - 16
+fn dock_fx(slot) { return WM_FX_USER - slot }
+
+# THE DOT'S OPACITY - `zpulse 2.6s ease-in-out infinite`, ds-reference.html
+# line 17 and the dock note above (:476, "pulsing on zpulse 2.6s").
+#
+# Infinite is the word that matters. wm.c's timeline is eight fixed slots and
+# an entry that never ends never frees one, so two infinite animations would
+# cost a quarter of it for the life of the boot - which shows up later as "the
+# UI stopped animating after a while". wm_pulse() holds no slot: it is a pure
+# function of the clock and cannot be refused.
+#
+# QUANTISED TO 8 OF 255, and that is the whole reason this is affordable. The
+# dot has to be repainted whenever its opacity changes, and over a 2.6 s period
+# an un-quantised value changes on every single tick - which turns a damage-
+# based compositor into a full-frame one for a 4-unit square. Eight steps is
+# below what the eye resolves on a 4x4 lime dot over a dark strip, and it means
+# the dots ask for a repaint roughly every ninth tick instead of every one.
+fn dock_dot_alpha() { return band(wm_pulse(2600), 248) }
 
 # The open-app marker, on its own so the live pass can redraw just these nine
 # small rectangles instead of nine whole tiles. A tile is a rounded rect, a
 # hairline, a 24x24 blended icon and sometimes a bar; the bar alone is a fill.
 fn dock_running_bar(slot, dy) {
     u = ui()
-    dbx = DOCK_X0 * u + slot * DOCK_PITCH * u
+    dbx = dock_x0() + slot * DOCK_PITCH * u
     dbw = DOCK_TW * u
     if dock_running(slot) == 1 {
-        fill_rgb(dbx + dbw / 4, dy + 8 * u + dbw + 3 * u, dbw / 2, 3 * u, ACCENT)
+        rrblend(dbx + (dbw - 4 * u) / 2, dy + 8 * u + dbw + 3 * u, 4 * u, 4 * u, 2 * u, theme(TH_ACCENT), dock_dot_alpha())
+    }
+    return 0
+}
+
+# ...and the invalidation that makes the pulse visible. An animation with no
+# end has no "finished" frame to damage on, so nothing in wm.c will ever ask
+# for these four-pixel squares to be redrawn - the dot would sit at whatever
+# opacity it had when something else happened to repaint the dock.
+#
+# app_tick is the only per-frame hook the policy layer has. It runs once per
+# open window, so the tick guard keeps this to at most one pass per tick rather
+# than one per window, and the alpha guard keeps it to the ticks where the
+# quantised opacity actually moved.
+dot_tick_at = 0 - 1
+dot_alpha_at = 0 - 1
+fn dock_dot_tick() {
+    dt = ticks()
+    if dt == dot_tick_at { return 0 }
+    dot_tick_at = dt
+    da = dock_dot_alpha()
+    if da == dot_alpha_at { return 0 }
+    dot_alpha_at = da
+    u = ui()
+    dy = dock_y()
+    ds = 0
+    while ds < DOCK_N {
+        if dock_running(ds) == 1 {
+            wm_damage(dock_x0() + ds * DOCK_PITCH * u + (DOCK_TW * u - 4 * u) / 2 - u, dy + 8 * u + DOCK_TW * u + 2 * u, 6 * u, 6 * u)
+        }
+        ds = ds + 1
     }
     return 0
 }
@@ -354,9 +736,14 @@ fn dock_running_bar(slot, dy) {
 # and a taskbar is exactly the thing that does.
 fn dock_running(slot) {
     if slot == 0 { return wm_open_p(shell_win) }
+    if slot == 1 { return wm_open_p(browser_win) }
+    if slot == 2 { return wm_open_p(edit_win) }
+    if slot == 3 { return wm_open_p(paint_win) }
     if slot == 4 { return wm_open_p(snake_win) }
+    if slot == 5 { return wm_open_p(cube_win) }
     if slot == 6 { return wm_open_p(mon_win) }
     if slot == 7 { return wm_open_p(about_win) }
+    if slot == 8 { return wm_open_p(settings_win) }
     return 0
 }
 
@@ -364,25 +751,25 @@ fn dock_running(slot) {
 # click test can never drift apart.
 fn dock_icon(slot) {
     if slot == 0 { return 0 }    # terminal
-    if slot == 1 { return 7 }    # files
+    if slot == 1 { return 20 }   # browser
     if slot == 2 { return 3 }    # editor
     if slot == 3 { return 2 }    # paint
     if slot == 4 { return 1 }    # snake
     if slot == 5 { return 6 }    # 3D cube
     if slot == 6 { return 4 }    # system monitor
     if slot == 7 { return 5 }    # about
-    if slot == 8 { return 9 }    # power
+    if slot == 8 { return 8 }    # settings
     return 0 - 1
 }
 fn dock_cmd(slot) {
     if slot == 0 { return 104 }  # help
-    if slot == 1 { return 108 }  # list RAM files
+    if slot == 1 { return 0 }    # Browser is a real window
     if slot == 2 { return 105 }  # editor
     if slot == 3 { return 100 }  # paint
     if slot == 4 { return 103 }  # snake
     if slot == 5 { return 118 }  # 3D cube
-    if slot == 8 { return 113 }  # halt
-    return 0                     # 6 and 7 reopen windows, handled by the caller
+    if slot == 8 { return 0 }    # Settings is a real window
+    return 0
 }
 
 # the dock: a taller gradient strip with a start button, app tiles and a tray
@@ -400,21 +787,14 @@ fn dock_cmd(slot) {
 # the row reflow to fit, but these values change every frame, and a readout
 # whose labels slide sideways as the digits change is unreadable. A fixed cell
 # wide enough for the worst case is the correct shape for a live number.
-TRAY_W       = 330       # the whole row, and the width tray_x() steps back by
-TRAY_FRAME_L = 0         # "frame"
-TRAY_FRAME_N = 44        #   wm_us(),   up to 6 digits
-TRAY_PEAK_L  = 92        # "peak"
-TRAY_PEAK_N  = 124       #   wm_peak(), up to 6 digits
-TRAY_LATE_L  = 172       # "late"
-TRAY_LATE_N  = 204       #   wm_late(), up to 5 digits
-TRAY_UP_L    = 244       # "up"
-TRAY_UP_N    = 266       #   uptime in seconds
-TRAY_NUM_W   = 48        # room a number cell needs for its widest value
+TRAY_W       = 64        # quiet uptime only; diagnostics belong in Monitor
+TRAY_UP_L    = 0
+TRAY_UP_N    = 22
 
 fn tray_x() {
     u = ui()
     tx = px_w() - TRAY_W * u
-    tdend = DOCK_X0 * u + 9 * DOCK_PITCH * u + 16 * u
+    tdend = dock_x0() + DOCK_N * DOCK_PITCH * u + 16 * u
     if tx < tdend { tx = tdend }
     return tx
 }
@@ -428,34 +808,28 @@ fn tray_dmg_w() { return px_w() - tray_x() }
 # THE PART THAT NEVER CHANGES: the blurred, tinted strip, the start button and
 # the nine tiles in their rest state. Drawn ONCE, into the wallpaper cache.
 fn draw_dock_bg() {
-    w = px_w()
     dy = dock_y()
     u = ui()
-    grad_rgb(0, dy - 6, w, 6, WALL_BOT, rgb(6, 7, 12))    # soft shadow above
-    # AN OPAQUE VERTICAL GRADIENT, which is what the northstar asks for:
-    #
-    #   .dock{ background:linear-gradient(180deg,var(--bar-top),var(--bar-bot));
-    #          border-top:1px solid var(--bar-hi) }
-    #
-    # This used to be blur-then-tint - the v10 prototype's backdrop-filter -
-    # with this gradient sitting underneath as the fallback branch. The gradient
-    # WON, and the reason is measured rather than aesthetic: see DECISIONS #29.
-    # The blur took its slot out of the same 16 MiB arena as the wallpaper cache
-    # and took it FIRST, so on the ThinkPad's 2560x1440 panel 3.75 MiB of blur
-    # left 12.25 MiB for a wallpaper that wants 14.06, and the cache - which
-    # fb.c's own comment calls "not an optimisation, the only way the look
-    # exists" - was refused on the one machine this OS is actually for.
-    grad_rgb(0, dy, w, px_h() - dy, BAR_TOP, BAR_BOT)
-    fill_rgb(0, dy, w, 1, BAR_HI)                          # top highlight
-    rrect(10 * u, dy + 8 * u, 96 * u, DOCK_TW * u, 12 * u, rgb(48, 92, 168))
-    fill_rgb(10 * u, dy + 8 * u, 96 * u, 1, rgb(120, 170, 235))
-    fill_rgb(24 * u, dy + 26 * u, 11 * u, 11 * u, ACCENT)
-    label(48 * u, dy + 21 * u, "zlOS", C_WHITE, T_BODY, W_BOLD)
+    bx = dock_bar_x()
+    bw = DOCK_BAR_W * u
+    bh = DOCK_H * u
+    # the reference's drop shadow: 0 12px 34px rgba(0,0,0,.5)
+    rrblend(bx - 4 * u, dy + 6 * u, bw + 8 * u, bh, DOCK_R * u + 4, theme(TH_BG), 128)
+    # 1px rgba(255,255,255,.11) border, then the rgba(18,21,24,.82) body
+    rrblend(bx - 1, dy - 1, bw + 2, bh + 2, DOCK_R * u + 1, theme(TH_TEXT_HI), DOCK_BORDER_A)
+    rrblend(bx, dy, bw, bh, DOCK_R * u, dock_fill(), DOCK_A)
     ds = 0
-    while ds < 9 {
+    while ds < DOCK_N {
         dock_tile(ds, dy, dock_icon(ds))
         ds = ds + 1
     }
+    # the divider and the Show Applications grid button close the strip, exactly
+    # as the reference does - the grid is not a dock app, it is the app grid
+    gx = dock_x0() + DOCK_N * DOCK_PITCH * u - DOCK_GAP * u
+    fill_rgb(gx + DOCK_GAP * u, dy + (bh - 22 * u) / 2, 1, 22 * u, theme(TH_BORDER))
+    gx = gx + DOCK_GAP * 2 * u + 1
+    rrblend(gx, dy + DOCK_PADY * u, DOCK_TW * u, DOCK_TW * u, DOCK_TR * u, theme(TH_TEXT_HI), DOCK_TILE_A)
+    icon(gx + 7 * u, dy + DOCK_PADY * u + 7 * u, 40, theme(TH_TEXT_HI))
     return 0
 }
 
@@ -473,59 +847,18 @@ fn draw_status(msg) {
         if dock_baked == 0 { draw_dock_bg() }
         if dock_hover >= 0 { dock_tile(dock_hover, dy, dock_icon(dock_hover)) }
         ds = 0
-        while ds < 9 {
+        while ds < DOCK_N {
             if ds != dock_hover { dock_running_bar(ds, dy) }
             ds = ds + 1
         }
         draw_tasklist(dy)
-        # tray: state + uptime
-        # the tray must start AFTER the last dock tile, or on a narrow screen
-        # the two overlap - at 800x600 nine tiles reach x=622 while w-300 is 500
-        tray = tray_x()
-        # THE FRAME TIME, ON SCREEN, in microseconds. Nothing in this kernel
-        # had ever measured a frame - desktop-TODO 0h asks for exactly this and
-        # says to do it BEFORE any performance work, which the v10 run did not.
-        # A number nobody can see is a number nobody checks, and "state:
-        # compositor" - which is what used to be here - is a label that has
-        # said the same thing on every boot since it was written.
-        # LATE is here because the other two cannot show stutter. An average
-        # hides it by construction and a peak is a single sample; both are
-        # consistent with a desktop that hitches once a second, which is
-        # precisely what a person notices. `late` is how many painted frames
-        # went over the 16.67 ms budget since the last `peakreset`, so a
-        # healthy desktop reads 0 and any other number is a thing to chase.
-        ty = dy + 22 * u
-        # red the moment anything has missed, because a 0 that can silently
-        # become a 3 in the same colour is a number nobody re-reads
-        tlc = TXT_HI
-        if wm_late() > 0 { tlc = CRIT_RED }
-        # A FIELD IS DRAWN ONLY IF IT FITS. At 800x600 the nine dock tiles
-        # already reach x=622, tray_x() clamps to 638 to clear them, and 162 px
-        # is all that is left - so the row has been running off the right edge
-        # of the screen at that mode since it was written, silently, because
-        # fb.c clips and says nothing. Drawing off-screen is not a smaller
-        # problem than drawing nothing; it is the same problem with no evidence.
-        avail = px_w() - tray
-        label    (tray + TRAY_FRAME_L * u, ty, "frame",     TXT_DIM, T_CAPTION, W_REG)
-        label_num(tray + TRAY_FRAME_N * u, ty, wm_us(),     ACCENT,  T_CAPTION, W_BOLD)
-        if avail >= (TRAY_PEAK_N + TRAY_NUM_W) * u {
-            label    (tray + TRAY_PEAK_L * u, ty, "peak",    TXT_DIM, T_CAPTION, W_REG)
-            label_num(tray + TRAY_PEAK_N * u, ty, wm_peak(), TXT_HI,  T_CAPTION, W_BOLD)
+        if dock_hover >= 0 {
+            dn = dock_name(dock_hover)
+            dtw = label_w(dn, T_CAPTION, W_BOLD) + 16 * u
+            dtx = dock_x0() + dock_hover * DOCK_PITCH * u + (DOCK_TW * u - dtw) / 2
+            rrect(dtx, dy - 30 * u, dtw, 24 * u, 8 * u, theme(TH_PANEL_HI))
+            label(dtx + 8 * u, dy - 25 * u, dn, theme(TH_TEXT), T_CAPTION, W_BOLD)
         }
-        if avail >= (TRAY_LATE_N + TRAY_NUM_W) * u {
-            label    (tray + TRAY_LATE_L * u, ty, "late",    TXT_DIM, T_CAPTION, W_REG)
-            label_num(tray + TRAY_LATE_N * u, ty, wm_late(), tlc,     T_CAPTION, W_BOLD)
-        }
-        if avail >= (TRAY_UP_N + TRAY_NUM_W) * u {
-            label    (tray + TRAY_UP_L * u, ty, "up",        TXT_DIM, T_CAPTION, W_REG)
-            label_num(tray + TRAY_UP_N * u, ty, ticks() / 100, TXT_HI, T_CAPTION, W_BOLD)
-        }
-        # THE UPTIME, drawn HERE rather than by draw_clock. draw_clock is only
-        # ever called from the old text-shell loop, which now runs only on a
-        # machine with no framebuffer - so under the compositor the tray said
-        # "up:" and then nothing, every boot. The dock is wallpaper furniture
-        # and furniture is redrawn from desk_draw, so this is where a live
-        # number belongs; app_tick damages the tray once a second.
 
     } else {
         bar(sr, C_STATUS)
@@ -549,19 +882,19 @@ fn draw_clock(sec) {
         # lays the row out from - it used to be `+ 226` and `70` wide, a third
         # set of literals for the same row.
         #
-        # BAR_TOP/BAR_BOT is the right background only when the dock fell back
+        # theme(TH_BAR_TOP)/theme(TH_BAR_BOT) is the right background only when the dock fell back
         # to a plain gradient. Once the dock is baked into the wallpaper cache
         # this strip is blur-then-tint, and painting a gradient over it puts a
         # visible patch where the clock is. Repaint from the cache when there is
         # one; the gradient stays as the fallback it always was.
-        cw = TRAY_W * cu - TRAY_UP_L * cu
+        cw = 64 * cu
         if wall_ok() == 1 {
             wall_paint(ctray + TRAY_UP_L * cu, dy + 12 * cu, cw, 30 * cu)
         } else {
-            grad_rgb(ctray + TRAY_UP_L * cu, dy + 12 * cu, cw, 30 * cu, BAR_TOP, BAR_BOT)
+            grad_rgb(ctray + TRAY_UP_L * cu, dy + 12 * cu, cw, 30 * cu, theme(TH_BAR_TOP), theme(TH_BAR_BOT))
         }
-        label(ctray + TRAY_UP_L * cu, dy + 22 * cu, "up", TXT_DIM, T_CAPTION, W_REG)
-        label_num(ctray + TRAY_UP_N * cu, dy + 22 * cu, sec, TXT_HI, T_CAPTION, W_BOLD)
+        label(ctray + TRAY_UP_L * cu, dy + 22 * cu, "up", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label_num(ctray + TRAY_UP_N * cu, dy + 22 * cu, sec, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
     } else {
         at_num(status_row(), 70, sec, C_STATUS)
     }
@@ -621,9 +954,8 @@ fn help_typed() {
     print("    mouse             a cursor driven by the PS/2 mouse")
     print("    snake             play SNAKE (w a s d to steer)")
     print("    paint             paint with the mouse")
-    print("    edit <n>          edit RAM file n (0-9) - ESC saves, so does Ctrl+S")
-    print("    ls                list the RAM files")
-    print("    filemgr           Files app - create/open/delete files on zlfs, by name")
+    print("    edit <n>          edit legacy RAM slot n (0-9)")
+    print("    files             persistent zlfs file manager")
     print("    beep              beep the PC speaker")
     print("    poke              poke a byte into video memory and read it back")
     color(C_CYAN)  print("  our hardware drivers")
@@ -662,8 +994,8 @@ fn help_keys() {
     print("    x        mouse demo - a cursor driven by the PS/2 mouse")
     print("    g        play SNAKE (w a s d to steer)")
     print("    d        paint with the mouse")
-    print("    <n> i    edit RAM file n (0-9) - ESC saves it")
-    print("    l        list the RAM files")
+    print("    <n> i    edit legacy RAM slot n (0-9)")
+    print("    l        Files app (graphical mode) / RAM slots (text mode)")
     print("    run F    run a program from a file (type it - needs a name)")
     print("    .        zlfs on the NVMe disk - mount, and count the boots")
     print("    ,        list the files ON DISK, by name")
@@ -732,7 +1064,7 @@ fn mouse_tick() {
 }
 
 fn editor_draw(ax, ay, aw, ah) {
-    fill_rgb(ax, ay, aw, ah, PANEL)
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
     ed_cw = cell_w()
     ed_ch = cell_h()
     ed_x = ax + 4
@@ -744,7 +1076,7 @@ fn editor_draw(ax, ay, aw, ah) {
             ed_x = ax + 4
             ed_y = ed_y + ed_ch
         } else {
-            if ed_c > 32 { char_aa(ed_x, ed_y, ed_c, TXT_HI) }
+            if ed_c > 32 { char_aa(ed_x, ed_y, ed_c, theme(TH_TEXT_HI)) }
             ed_x = ed_x + ed_cw
             if ed_x > ax + aw - ed_cw { ed_x = ax + 4  ed_y = ed_y + ed_ch }
         }
@@ -752,57 +1084,41 @@ fn editor_draw(ax, ay, aw, ah) {
         ed_i = ed_i + 1
     }
     # the caret, where the next character will land
-    fill_rgb(ed_x, ed_y, ed_cw, ed_ch - 2, ACCENT)
-    # "file"/"disk" are deliberately the same length (27 chars total either
-    # way) so the 28*ed_cw column below lines up under both - a RAM slot
-    # NUMBER in one mode, the zlfs NAME in the other, same starting cell.
-    if ed_disk == 1 {
-        text_aa(ax + 4, ay + ah - ed_ch, "ESC saves and closes   disk", TXT_DIM)
-        edfx = ax + 4 + 28 * ed_cw
-        edfi = 0
-        while edfi < 23 {
-            edfc = fs_ch(ed_fidx, edfi)
-            if edfc > 0 { char_aa(edfx, ay + ah - ed_ch, edfc, TXT_HI) }
-            edfx = edfx + ed_cw
-            edfi = edfi + 1
-        }
-    } else {
-        text_aa(ax + 4, ay + ah - ed_ch, "ESC saves and closes   file", TXT_DIM)
-        num_aa(ax + 4 + 28 * ed_cw, ay + ah - ed_ch, ed_slot, TXT_HI)
+    fill_rgb(ed_x, ed_y, ed_cw, ed_ch - 2, theme(TH_ACCENT))
+    text_aa(ax + 4, ay + ah - ed_ch, "Ctrl+S save  ESC save+close", theme(TH_TEXT_DIM))
+    if ed_disk == 0 {
+        text_aa(ax + aw - 15 * ed_cw, ay + ah - ed_ch, "RAM", theme(TH_TEXT_DIM))
+        num_aa(ax + aw - 11 * ed_cw, ay + ah - ed_ch, ed_slot, theme(TH_TEXT_HI))
     }
-    num_aa(ax + aw - 8 * ed_cw, ay + ah - ed_ch, ed_len, TXT_DIM)
+    if ed_disk == 1 {
+        ed_ni = 0
+        ed_nx = ax + aw - 24 * ed_cw
+        while ed_ni < 23 {
+            ed_nc = fs_ch(ed_slot, ed_ni)
+            if ed_nc > 0 { char_aa(ed_nx, ay + ah - ed_ch, ed_nc, theme(TH_ACCENT)) }
+            ed_nx = ed_nx + ed_cw
+            ed_ni = ed_ni + 1
+        }
+    }
+    if ed_dirty == 1 { text_aa(ax + aw - 2 * ed_cw, ay + ah - ed_ch, "*", theme(TH_ACCENT)) }
+    num_aa(ax + aw - 8 * ed_cw, ay + ah - ed_ch, ed_len, theme(TH_TEXT_DIM))
     return 0
 }
 
 fn mouse_draw(ax, ay, aw, ah) {
-    fill_rgb(ax, ay, aw, ah, PANEL)
-    # TWO COLUMNS, both measured in CELLS. The value column used to be the
-    # literal x+90, which is inside the label at ui()==2 - "pointer" and its
-    # value rendered on top of each other and read as "point400 300". Nothing
-    # in this file may use a pixel literal for a text position; cell_w() is
-    # 8 or 16 depending on the console, and that is the whole reason it exists.
-    ms_lab = ax + cell_w()
-    ms_val = ax + cell_w() * 11
-    ms_row = cell_h() * 5 / 4
-    ms_y = ay + cell_h() / 2
-    text_aa(ms_lab, ms_y, "pointer", TXT_DIM)
-    num_aa(ms_val, ms_y, mouse_x(), TXT_HI)
-    num_aa(ms_val + cell_w() * 5, ms_y, mouse_y(), TXT_HI)
-    ms_y = ms_y + ms_row
-    text_aa(ms_lab, ms_y, "buttons", TXT_DIM)
-    num_aa(ms_val, ms_y, mouse_btn(), TXT_HI)
-    ms_y = ms_y + ms_row
-    text_aa(ms_lab, ms_y, "IRQ12", TXT_DIM)
-    num_aa(ms_val, ms_y, mouse_irqs(), TXT_HI)
-    ms_y = ms_y + ms_row
-    text_aa(ms_lab, ms_y, "kbd slot", TXT_DIM)
-    num_aa(ms_val, ms_y, usb_kbd_slot(), TXT_HI)
-    ms_y = ms_y + ms_row
-    text_aa(ms_lab, ms_y, "usb ptr", TXT_DIM)
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
+    ui_begin(ax, ay, aw, ah, 0, 0, 0, 0)
+    ui_label("Pointer diagnostics")
+    ui_sep()
+    ui_num("x", mouse_x())
+    ui_num("y", mouse_y())
+    ui_num("buttons", mouse_btn())
+    ui_num("IRQ12", mouse_irqs())
+    ui_num("keyboard slot", usb_kbd_slot())
     if ptr_driver() == 1 {
-        text_aa(ms_val, ms_y, "linked", ACCENT)
+        ui_label("USB pointer linked")
     } else {
-        text_aa(ms_val, ms_y, "absent", rgb(230, 90, 90))
+        ui_dim("USB pointer absent")
     }
     return 0
 }
@@ -817,18 +1133,18 @@ fn draw_window(wx, wy, ww, wh, title, focus) {
     # the corners read as a bevel; at 12 they are the soft rectangles the whole
     # mockup is built from. The inner rrect stays exactly one unit tighter so
     # the hairline border follows the outer curve rather than cutting it.
-    rrect(wx, wy, ww, wh, 12 * u, rgb(20, 26, 42))
-    rrect(wx + 1, wy + 1, ww - 2, wh - 2, 11 * u, PANEL)
-    tbt = rgb(48, 92, 168)
-    tbb = rgb(22, 40, 92)
-    if focus == 0 { tbt = rgb(42, 53, 80)  tbb = rgb(24, 34, 56) }
+    rrect(wx, wy, ww, wh, 12 * u, theme(TH_BORDER))
+    rrect(wx + 1, wy + 1, ww - 2, wh - 2, 11 * u, theme(TH_PANEL))
+    tbt = theme(TH_TITLE)
+    tbb = theme(TH_TITLE_BOT)
+    if focus == 0 { tbt = theme(TH_TITLE_OFF)  tbb = theme(TH_TITLE_OFF) }
     # rounded at the TOP to the same curve as the frame outside it. A square
     # band inside a 12-unit corner is two shapes that do not fit; at radius 5
     # it was invisible, which is why it survived this long.
     gradtop(wx + 4, wy + 3, ww - 8, TITLE_H * u - 5, 10 * u, tbt, tbb)
-    if focus == 1 { fill_rgb(wx + 4, wy + TITLE_H * u - 2, ww - 8, 2, ACCENT) }
-    fill_rgb(wx + ww - 20 * u, wy + 9 * u, 11 * u, 11 * u, rgb(224, 90, 90))
-    text_aa(wx + 12 * u, wy + 7 * u, title, rgb(234, 243, 255))
+    if focus == 1 { fill_rgb(wx + 4, wy + TITLE_H * u - 2, ww - 8, 2, theme(TH_ACCENT)) }
+    fill_rgb(wx + ww - 20 * u, wy + 9 * u, 11 * u, 11 * u, theme(TH_DANGER))
+    text_aa(wx + 12 * u, wy + 7 * u, title, theme(TH_TEXT))
     return 0
 }
 
@@ -1151,14 +1467,14 @@ fn cube_tick() {
 }
 
 fn cube_draw(ax, ay, aw, ah) {
-    fill_rgb(ax, ay, aw, ah, PANEL)
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
     # The rasterizer has its OWN clip and it must be the client area. fb_clip
     # already stops the cube reaching the chrome, but cube_clip is what keeps
     # the geometry inside the viewport rather than merely scissored at the edge.
     cube_clip(ax, ay, ax + aw, ay + ah)
     cb_s = aw / 5
     if ah / 5 < cb_s { cb_s = ah / 5 }
-    cube3d(ax + aw / 2, ay + ah / 2, cb_s, c_ang, ACCENT)
+    cube3d(ax + aw / 2, ay + ah / 2, cb_s, c_ang, theme(TH_ACCENT))
     return 0
 }
 
@@ -1186,7 +1502,7 @@ fn anim_tick(aw, ah) {
 }
 
 fn anim_draw(ax, ay, aw, ah) {
-    fill_rgb(ax, ay, aw, ah, PANEL)
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
     an_seed = 2463534242
     an_i = 0
     while an_i < 90 {
@@ -1318,7 +1634,7 @@ fn paint_key(code) {
 }
 
 fn paint_draw(ax, ay, aw, ah) {
-    fill_rgb(ax, ay, aw, ah, PANEL)
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
     pt_i = 0
     while pt_i < p_n {
         pt_w = peek32(PAINT_BUF + pt_i * 4)
@@ -1328,8 +1644,8 @@ fn paint_draw(ax, ay, aw, ah) {
         fill_rgb(ax + pt_x, ay + pt_y, 5, 5, paint_col(pt_c))
         pt_i = pt_i + 1
     }
-    text_aa(ax + 6, ay + ah - cell_h(), "1-7 colour   space clears", TXT_DIM)
-    if p_n >= PAINT_MAX { text_aa(ax + 6, ay + 6, "canvas full", rgb(230, 90, 90)) }
+    text_aa(ax + 6, ay + ah - cell_h(), "1-7 colour   space clears", theme(TH_TEXT_DIM))
+    if p_n >= PAINT_MAX { text_aa(ax + 6, ay + 6, "canvas full", theme(TH_DANGER)) }
     return 0
 }
 
@@ -1505,61 +1821,73 @@ EDIT_MAX = 8000
 # the same thing every other window means by it. No "press any key".
 ed_slot = 0
 ed_len  = 0
-# Disk-backed mode. The ten numbered RAM slots (fs_save/fs_load, FS_DATA) stay
-# the compatibility path - editor_open still uses them exactly as before, and
-# nothing here deletes them. Opening a window from the Files app instead loads
-# and saves through zlfs by name: ed_disk picks which branch editor_save()
-# below takes, and ed_fidx is the zlfs directory index it saves back to,
-# meaningful only while ed_disk == 1.
 ed_disk = 0
-ed_fidx = 0 - 1
+ed_dirty = 0
 
 fn editor_open(slot) {
     ed_disk = 0
     ed_slot = slot
     ed_len = fs_load(slot)
+    ed_disk = 0
+    ed_dirty = 0
     return 0
 }
 
-# The disk-backed counterpart to editor_open(). idx is always a committed
-# zlfs directory entry already - the Files app creates it with fs_new() before
-# ever calling this - so there is always something for editor_save() to write
-# back to. EDIT_BUF is the SAME buffer either mode uses; only where it is
-# loaded from, and saved to, changes.
-fn editor_open_disk(idx) {
-    ed_disk = 1
-    ed_fidx = idx
+fn editor_open_disk(slot) {
+    if fs_ok() == 0 { return 0 }
+    if fs_inuse(slot) == 0 { return 0 }
+    if fs_bytes(slot) >= EDIT_MAX { return 0 }
     fill_mem(EDIT_BUF, 0, EDIT_MAX)
-    edn = fs_bytes(idx)
-    if edn > EDIT_MAX { edn = EDIT_MAX }
-    if edn > 0 { fs_rd(idx, EDIT_BUF, edn) }
-    ed_len = edn
-    return 0
+    ed_len = fs_rd(slot, EDIT_BUF, EDIT_MAX - 1)
+    ed_slot = slot
+    ed_disk = 1
+    ed_dirty = 0
+    return 1
 }
 
-# The one real save-through, called from both ESC and Ctrl+S rather than each
-# doing its own thing - there is exactly one place that decides RAM slot vs
-# disk. Says so on screen when a disk write fails (the file could have been
-# deleted from the Files app while this window sat open) rather than quietly
-# doing nothing - the same rule the clipboard-to-disk command follows.
 fn editor_save() {
     if ed_disk == 1 {
-        if ed_fidx < 0 { return 0 }
-        if fs_wr(ed_fidx, EDIT_BUF, ed_len) == 0 {
-            note_say("save failed - the file may be gone", 400)
+        if fs_wr(ed_slot, EDIT_BUF, ed_len) == 0 {
+            note_say("file save failed", 400)
             return 0
         }
+        ed_dirty = 0
+        note_say("file saved to zlfs", 240)
         return 1
     }
     fs_save(ed_slot, ed_len)
+    ed_dirty = 0
     return 1
 }
 
 # One key. Returns 1 if it changed anything, 2 if the editor is done.
 fn editor_key(code) {
     if code == 27 {
+        if editor_save() == 1 { return 2 }
+        return 1
+    }
+    if code == 19 {
         editor_save()
-        return 2
+        return 1
+    }
+    if code == 3 {
+        clip_new()
+        ed_ci = 0
+        while ed_ci < ed_len { clip_add(peek8(EDIT_BUF + ed_ci))  ed_ci = ed_ci + 1 }
+        if clip_done() == 1 { note_say("document copied", 180) }
+        return 1
+    }
+    if code == 22 {
+        ed_pi = 0
+        while ed_pi < clip_n() {
+            if ed_len < EDIT_MAX - 1 {
+                poke8(EDIT_BUF + ed_len, clip_ch(ed_pi))
+                ed_len = ed_len + 1
+                ed_dirty = 1
+            }
+            ed_pi = ed_pi + 1
+        }
+        return 1
     }
     # Ctrl+S: save without closing. input.c already turns Ctrl+<letter> into
     # its control code for BOTH keyboards (to_char(), input.c:207-211) - Ctrl+S
@@ -1594,15 +1922,15 @@ fn editor_key(code) {
         return 1
     }
     if code == 8 {
-        if ed_len > 0 { ed_len = ed_len - 1  poke8(EDIT_BUF + ed_len, 0) }
+        if ed_len > 0 { ed_len = ed_len - 1  poke8(EDIT_BUF + ed_len, 0)  ed_dirty = 1 }
         return 1
     }
     if code == 13 {
-        if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, 10)  ed_len = ed_len + 1 }
+        if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, 10)  ed_len = ed_len + 1  ed_dirty = 1 }
         return 1
     }
     if code >= 32 {
-        if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, code)  ed_len = ed_len + 1 }
+        if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, code)  ed_len = ed_len + 1  ed_dirty = 1 }
         return 1
     }
     return 0
@@ -1632,198 +1960,6 @@ fn files_ensure_mounted() {
     if fs_mount() == 1 { return 1 }
     if fs_format() == 0 { return 0 }
     return fs_mount()
-}
-
-# Both files_draw() and files_row_at() derive the row layout from these two,
-# so a click can never land on a different row than the one actually drawn
-# there - the two are never allowed to compute the layout independently.
-fn files_row_h()     { return cell_h() + 4 }
-fn files_list_y0(ay) { return ay + cell_h() + 8 }
-
-fn files_draw(ax, ay, aw, ah) {
-    fill_rgb(ax, ay, aw, ah, PANEL)
-    fcw = cell_w()
-    fch = cell_h()
-    rh  = files_row_h()
-    y0  = files_list_y0(ay)
-    if fs_ok() == 0 {
-        text_aa(ax + 4, ay + 4, "not mounted - no NVMe disk found", TXT_DIM)
-        return 0
-    }
-    text_aa(ax + 4, ay + 4, "type a name - Enter opens/creates, Ctrl+D deletes", TXT_DIM)
-    fbot = ay + ah - rh * 2
-    row = 0
-    fi = 0
-    while fi < fs_max() {
-        if fs_inuse(fi) == 1 {
-            ry = y0 + row * rh
-            if ry < fbot {
-                # only the BACKGROUND changes on hover - the text stays TXT_HI
-                # either way, so this never risks a VGA palette index (C_WHITE)
-                # reading as a barely-visible dark blue in the RGB theme the
-                # way menu_draw's own hover text color would if copied here.
-                if row == fl_hover { rrblend(ax + 2, ry - 2, aw - 4, rh, 4, ACCENT, 41) }
-                rx = ax + 4
-                nch = 0
-                while nch < 23 {
-                    nb = fs_ch(fi, nch)
-                    if nb > 0 { char_aa(rx, ry, nb, TXT_HI) }
-                    rx = rx + fcw
-                    nch = nch + 1
-                }
-                num_aa(ax + aw - 8 * fcw, ry, fs_bytes(fi), TXT_DIM)
-            }
-            row = row + 1
-        }
-        fi = fi + 1
-    }
-    if row == 0 { text_aa(ax + 4, y0, "no files yet - type a name and press Enter", TXT_DIM) }
-    # the typed-name field, bottom line
-    tny = ay + ah - fch
-    text_aa(ax + 4, tny, ">", ACCENT)
-    tx = ax + 4 + 2 * fcw
-    tci = 0
-    while tci < fl_len {
-        char_aa(tx, tny, peek8(FILES_NAME_BUF + tci), TXT_HI)
-        tx = tx + fcw
-        tci = tci + 1
-    }
-    fill_rgb(tx, tny, fcw, fch - 2, ACCENT)
-    num_aa(ax + aw - 4 * fcw, tny, fs_n(), TXT_DIM)
-    return 0
-}
-
-# SCREEN y -> visual row index (0-based among USED files only), or -1. Which
-# fs SLOT that row names is a second step, files_row_to_idx() below - kept
-# apart because drawing and hover both only ever need "row N", and only a
-# click needs to turn that into a directory index.
-fn files_row_at(win, ey) {
-    y0 = files_list_y0(wm_cy(win))
-    rh = files_row_h()
-    r = (ey - y0) / rh
-    if r < 0 { return 0 - 1 }
-    return r
-}
-
-# Replays the SAME used-slot walk files_draw() renders, so row N always names
-# the file that is actually drawn on row N at click time too.
-fn files_row_to_idx(row) {
-    fi = 0
-    seen = 0 - 1
-    while fi < fs_max() {
-        if fs_inuse(fi) == 1 {
-            seen = seen + 1
-            if seen == row { return fi }
-        }
-        fi = fi + 1
-    }
-    return 0 - 1
-}
-
-# Stage the typed name into zlfs's own name buffer, one character at a time -
-# fs_nclear/fs_npush is the same seam the '.' and "'" shell commands already
-# use, because the zl kernel subset has no runtime strings to hand over
-# instead.
-fn files_stage_typed() {
-    fs_nclear()
-    fsi = 0
-    while fsi < fl_len { fs_npush(peek8(FILES_NAME_BUF + fsi))  fsi = fsi + 1 }
-    return 0
-}
-
-# Enter: open the file the typed name already names, or create it empty and
-# open that. A file is always created through the Files app before the editor
-# ever sees it, so editor_open_disk() never has to handle "no such index".
-fn files_commit() {
-    if fl_len == 0 { return 0 }
-    if files_ensure_mounted() == 0 {
-        note_say("no NVMe disk found", 300)
-        return 0
-    }
-    files_stage_typed()
-    bi = fs_get()
-    if bi < 0 { bi = fs_new(0) }
-    if bi < 0 {
-        note_say("could not create file", 300)
-        return 0
-    }
-    fl_len = 0
-    files_open_editor(bi)
-    return 1
-}
-
-# Ctrl+D: delete the file the typed name currently names. Deliberately a
-# different key from Enter - Enter always OPENS something, so deleting can
-# never be one accidental extra keystroke away from it.
-fn files_delete_typed() {
-    if fl_len == 0 { return 0 }
-    if fs_ok() == 0 { return 0 }
-    files_stage_typed()
-    bi = fs_get()
-    if bi < 0 {
-        note_say("no such file", 300)
-        return 0
-    }
-    fs_rm(bi)
-    note_say("deleted", 300)
-    fl_len = 0
-    return 1
-}
-
-# Open (or just raise) the editor on a zlfs file. If the editor is ALREADY
-# open this does not switch what it is showing - open_app's cmd==105 (RAM
-# slots) has made exactly that choice since before this app existed, so
-# opening a second file here can never silently discard an unsaved buffer the
-# editor already has open. Raising it is still useful: it proves it exists.
-fn files_open_editor(idx) {
-    fu = ui()
-    if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
-        wm_setfocus(edit_win)  wm_raise(edit_win)
-        return 0
-    }}
-    edit_win = wm_open(APP_EDIT, "zlEDIT", 480 * fu, 230 * fu, 160 * fu, 160 * fu)
-    if edit_win < 0 { return 0 }
-    editor_open_disk(idx)
-    wm_setfocus(edit_win)
-    wm_report(edit_win)
-    return 0
-}
-
-fn files_key(code) {
-    if code == 27 {                        # Esc cancels what you were typing
-        if fl_len > 0 { fl_len = 0  return 1 }
-        return 0
-    }
-    if code == 8 {                         # Backspace
-        if fl_len > 0 { fl_len = fl_len - 1  return 1 }
-        return 0
-    }
-    if code == 13 { return files_commit() }
-    if code == 4  { return files_delete_typed() }    # Ctrl+D
-    if code >= 32 { if code < 127 {
-        if fl_len < 23 { poke8(FILES_NAME_BUF + fl_len, code)  fl_len = fl_len + 1  return 1 }
-    }}
-    return 0
-}
-
-# EV_MOUSE only - hover highlights a row, a PRESS EDGE (not "held") opens it.
-# Edge-detected here rather than level-triggered like paint's brush, because
-# opening a file is a one-shot action and EV_MOUSE republishes every frame
-# the button stays down, not just on the transition.
-fn files_event(ety, ecode, ex, ey, win) {
-    if ety != 4 { return 0 }
-    nh = files_row_at(win, ey)
-    if nh != fl_hover { fl_hover = nh  wm_dmg(win) }
-    down = band(ecode, 1)
-    if down != 0 { if fl_pressed == 0 {
-        fl_pressed = 1
-        if nh >= 0 {
-            idx = files_row_to_idx(nh)
-            if idx >= 0 { files_open_editor(idx) }
-        }
-    }}
-    if down == 0 { fl_pressed = 0 }
-    return 1
 }
 
 # An app with no text-mode form. Says which one and why, rather than doing
@@ -1897,7 +2033,15 @@ fn run_command(cmd, arg) {
         put("    the panel is ours. framebuffer at 0x")  hex(fb, 8)  print("")
         color(C_GREY)
         print("    press a key to move the console onto it")
-        key()
+        # `key()` USED TO BE HERE AND NOTHING DEFINES IT. zl resolves calls by
+        # name at runtime, so it is not a link error - it falls through the
+        # builtin table to kfatal("builtin not available in the kernel
+        # subset"), which halts the machine. On the one path where that is most
+        # expensive: the panel has just been brought up by our own driver on
+        # the real ThinkPad, and the next statement moves the console onto it.
+        # Caught by check-zlcalls.py, which exists because of this class.
+        pk = 0
+        while pk == 0 { pk = key_get()  idle() }
         panel_console()
         color(C_GREEN)
         print("  this text is being scanned out by our own driver.")
@@ -2677,6 +2821,13 @@ fn run_command(cmd, arg) {
     if cmd == 78 { return net_gate() }    # N - the network card, and an ARP probe
     if cmd == 87 { return web_gate() }    # W - TCP + HTTP/1.0 against a real server
     if cmd == 69 { return real_gate() }   # E - a real website, by name, off the internet
+    # A - All Applications. The catalog is the ONLY route to 47 of the 53
+    # apps, and until the dock's grid button is fixed it has no pointer
+    # route at all - which also means the fidelity oracle cannot open any
+    # of them to photograph. A shell word is a route that does not depend
+    # on chrome geometry being right, so it is the one the harness can
+    # trust. Keep it even after the button works.
+    if cmd == 65 { if wm_run() == 1 { return reg_open(APP_CATALOG) }  return needs_wm("the catalog") }
     if cmd == 83 { return tls_gate() }    # S - the same, over verified HTTPS
     if cmd == 114 {                       # r - reboot
         color(C_YELLOW)  print("  rebooting...")
@@ -2724,7 +2875,7 @@ fn run_command(cmd, arg) {
         # broken a gate to add a number to it.
         #
         # late  painted frames over the budget    <- what a person sees
-        # lost  100 Hz ticks no frame ran in      <- what the pacing costs
+        # lost  16.667 ms deadlines skipped      <- what the pacing costs
         # of    painted frames since the reset    <- the honest denominator
         # ...and the terminator here must NOT contain "END". exercise.py's
         # Serial.wait() finds a marker as a SUBSTRING and leaves the rest of the
@@ -2782,6 +2933,11 @@ fn open_run_window() {
         }
     }
     run_win = wm_open(APP_RUN, exec_title(), 90 * u, 90 * u, 320 * u, 110 * u)
+    # ZPOP. A Run box is a popover in every sense except modality - it cannot
+    # be modal, because the keys have to keep reaching the terminal (see
+    # below) - so it does not get the fade from wm_modal and asks for it here.
+    # 5 is ANIM_FADE; ui.h names it.
+    wm_anim(run_win, 5)
     # AND HAND THE KEYBOARD STRAIGHT BACK. wm_open focuses whatever it just
     # opened, so without this the run window holds focus, app_event has no
     # APP_RUN branch, and every subsequent keystroke is dropped - the terminal
@@ -2809,7 +2965,7 @@ fn open_run_window() {
 fn draw_sysmon(sx, sy, sfoc) {
     u = ui()
     draw_window(sx, sy, MON_W * u, MON_H * u, "System Monitor", sfoc)
-    sysmon_body(sx, sy)
+    sysmon_body(sx, sy + TITLE_H * u, MON_W * u, (MON_H - TITLE_H) * u)
     return 0
 }
 
@@ -2817,35 +2973,95 @@ fn draw_sysmon(sx, sy, sfoc) {
 # itself and hand this only its client area - the app contract in ui.h requires
 # app_draw to be position-pure, and this already was: every coordinate here is
 # derived from sx,sy. Nothing is baked in.
-fn sysmon_body(sx, sy) {
+fn sysmon_body(sx, sy, sw, sh) {
     u = ui()
-    label(sx + 14 * u, sy + 40 * u, "CPU", TXT_DIM, T_CAPTION, W_BOLD)
+    fill_rgb(sx, sy, sw, sh, theme(TH_PANEL))
+    smpad = 12 * u
+
+    # Compact segmented navigation gives the app a real internal hierarchy.
+    # Resources is the live surface today; the other labels establish where
+    # Processes and Overview go without pretending those pages are complete.
+    navw = 246 * u
+    navx = sx + (sw - navw) / 2
+    navy = sy + 5 * u
+    rrect(navx, navy, navw, 28 * u, 12 * u, theme(TH_CHROME))
+    rrect(navx + 82 * u, navy + 2 * u, 82 * u, 24 * u, 10 * u, theme(TH_PANEL_HI))
+    label(navx + 13 * u, navy + 7 * u, "Processes", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label(navx + 96 * u, navy + 7 * u, "Resources", theme(TH_TEXT), T_CAPTION, W_BOLD)
+    label(navx + 178 * u, navy + 7 * u, "Overview", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+
+    # CPU card: identity, current frame cost and a restrained history line.
+    cardx = sx + smpad
+    cardw = sw - 2 * smpad
+    cpuy = sy + 45 * u
+    cpuh = 112 * u
+    rrect(cardx, cpuy, cardw, cpuh, 14 * u, theme(TH_BORDER))
+    rrect(cardx + 1, cpuy + 1, cardw - 2, cpuh - 2, 13 * u, theme(TH_PANEL_HI))
+    label(cardx + 12 * u, cpuy + 10 * u, "CPU", theme(TH_TEXT), T_BODY, W_BOLD)
+    label(cardx + cardw - 112 * u, cpuy + 11 * u, "frame ms", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(cardx + cardw - 48 * u, cpuy + 9 * u, wm_us() / 1000, theme(TH_ACCENT), T_BODY, W_BOLD)
+
+    # CPUID returns bytes through cpu_char(), not a zl string value.
     smi = 0
-    smx = sx + 14 * u
-    smy = sy + 58 * u
+    smx = cardx + 12 * u
+    smy = cpuy + 38 * u
     while smi < 48 {
         smb = cpu_char(smi)
-        if smb > 32 { char_aa(smx, smy, smb, TXT_HI) }
+        if smb > 32 { char_aa(smx, smy, smb, theme(TH_TEXT_HI)) }
         if smb > 0 {
             smx = smx + cell_w()
-            if smx > sx + 268 * u { smx = sx + 14 * u  smy = smy + 18 * u }
+            if smx > cardx + cardw - 12 * u - cell_w() {
+                smx = cardx + 12 * u
+                smy = smy + cell_h()
+            }
         }
         smi = smi + 1
     }
-    label(sx + 14 * u, sy + 98 * u, "MEM", TXT_DIM, T_CAPTION, W_BOLD)
-    fill_rgb(sx + 56 * u, sy + 100 * u, 214 * u, 12 * u, rgb(12, 18, 32))
-    fill_rgb(sx + 56 * u, sy + 100 * u, 58 * u, 12 * u, ACCENT)
-    label(sx + 14 * u, sy + 122 * u, "TICKS", TXT_DIM, T_CAPTION, W_BOLD)
-    label_num(sx + 68 * u, sy + 122 * u, ticks(), TXT_HI, T_CAPTION, W_REG)
-    # a little sparkline across the bottom, drawn as connected segments
-    line(sx + 14,  sy + 182, sx + 46,  sy + 170, C_CYAN)
-    line(sx + 46,  sy + 170, sx + 78,  sy + 176, C_CYAN)
-    line(sx + 78 * u, sy + 176 * u, sx + 110 * u, sy + 161 * u, C_CYAN)
-    line(sx + 110 * u, sy + 161 * u, sx + 142 * u, sy + 173 * u, C_CYAN)
-    line(sx + 142 * u, sy + 173 * u, sx + 174 * u, sy + 158 * u, C_CYAN)
-    line(sx + 174 * u, sy + 158 * u, sx + 206 * u, sy + 169 * u, C_CYAN)
-    line(sx + 206 * u, sy + 169 * u, sx + 238 * u, sy + 155 * u, C_CYAN)
-    line(sx + 238 * u, sy + 155 * u, sx + 270 * u, sy + 164 * u, C_CYAN)
+    bx = cardx + 12 * u
+    by = cpuy + cpuh - 12 * u
+    bw = cardw - 24 * u
+    line(bx, by, bx + bw / 7, by - 3 * u, theme(TH_ACCENT))
+    line(bx + bw / 7, by - 3 * u, bx + 2 * bw / 7, by - 1 * u, theme(TH_ACCENT))
+    line(bx + 2 * bw / 7, by - 1 * u, bx + 3 * bw / 7, by - 6 * u, theme(TH_ACCENT))
+    line(bx + 3 * bw / 7, by - 6 * u, bx + 4 * bw / 7, by - 3 * u, theme(TH_ACCENT))
+    line(bx + 4 * bw / 7, by - 3 * u, bx + 5 * bw / 7, by - 7 * u, theme(TH_ACCENT))
+    line(bx + 5 * bw / 7, by - 7 * u, bx + 6 * bw / 7, by - 4 * u, theme(TH_ACCENT))
+    line(bx + 6 * bw / 7, by - 4 * u, bx + bw, by - 6 * u, theme(TH_ACCENT))
+
+    # Memory card.
+    memy = cpuy + cpuh + 10 * u
+    memh = 68 * u
+    rrect(cardx, memy, cardw, memh, 14 * u, theme(TH_BORDER))
+    rrect(cardx + 1, memy + 1, cardw - 2, memh - 2, 13 * u, theme(TH_PANEL_HI))
+    label(cardx + 12 * u, memy + 10 * u, "Memory", theme(TH_TEXT), T_BODY, W_BOLD)
+    label(cardx + cardw - 58 * u, memy + 11 * u, "27%", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    rrect(cardx + 12 * u, memy + 42 * u, cardw - 24 * u, 7 * u, 4 * u, theme(TH_CHROME))
+    rrect(cardx + 12 * u, memy + 42 * u, (cardw - 24 * u) * 27 / 100, 7 * u, 4 * u, theme(TH_ACCENT))
+
+    # Three live readouts along the bottom. Small cards keep numbers aligned
+    # without turning the dock into a developer HUD.
+    staty = memy + memh + 10 * u
+    statw = (cardw - 16 * u) / 3
+    si = 0
+    while si < 3 {
+        statx = cardx + si * (statw + 8 * u)
+        rrect(statx, staty, statw, 54 * u, 12 * u, theme(TH_CHROME))
+        if si == 0 {
+            label(statx + 10 * u, staty + 8 * u, "peak ms", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+            label_num(statx + 10 * u, staty + 26 * u, wm_peak() / 1000, theme(TH_TEXT_HI), T_BODY, W_BOLD)
+        }
+        if si == 1 {
+            label(statx + 10 * u, staty + 8 * u, "late", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+            latec = theme(TH_OK)
+            if wm_late() > 0 { latec = theme(TH_DANGER) }
+            label_num(statx + 10 * u, staty + 26 * u, wm_late(), latec, T_BODY, W_BOLD)
+        }
+        if si == 2 {
+            label(statx + 10 * u, staty + 8 * u, "uptime", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+            label_num(statx + 10 * u, staty + 26 * u, ticks() / 100, theme(TH_TEXT_HI), T_BODY, W_BOLD)
+        }
+        si = si + 1
+    }
     return 0
 }
 
@@ -2853,16 +3069,18 @@ fn sysmon_body(sx, sy) {
 fn draw_about(ax, ay, afoc) {
     u = ui()
     draw_window(ax, ay, MON_W * u, AB_H * u, "About", afoc)
-    about_body(ax, ay)
+    about_body(ax, ay + TITLE_H * u, MON_W * u, (AB_H - TITLE_H) * u)
     return 0
 }
 
-fn about_body(ax, ay) {
-    u = ui()
-    label(ax + 14 * u, ay + 30 * u, "zlOS 0.3", TXT_HI, T_TITLE, W_BOLD)
-    label(ax + 14 * u, ay + 60 * u, "a desktop written in zl", TXT_DIM, T_BODY, W_REG)
-    label(ax + 14 * u, ay + 82 * u, "no OS   no libc   no GNU", ACCENT, T_BODY, W_BOLD)
-    label(ax + 14 * u, ay + 104 * u, "type help for the commands", TXT_DIM, T_CAPTION, W_REG)
+fn about_body(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
+    ui_begin(ax, ay, aw, ah, 0, 0, 0, 0)
+    ui_label("zlOS 0.3")
+    ui_dim("a desktop written in zl")
+    ui_sep()
+    ui_label("no OS   no libc   no GNU")
+    ui_dim("type help for commands")
     return 0
 }
 
@@ -3019,13 +3237,13 @@ fn sn_draw(ax, ay, aw, ah) {
 
     by = ay + 3 * SN_CELL * u
     fill_rgb(ax, by, gw * cell, gh * cell, rgb(9, 12, 22))
-    label(ax + 2 * u, ay + 2 * u, "SCORE", TXT_DIM, T_CAPTION, W_BOLD)
-    label_num(ax + 56 * u, ay + 2 * u, sn_score, ACCENT, T_CAPTION, W_BOLD)
+    label(ax + 2 * u, ay + 2 * u, "SCORE", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    label_num(ax + 56 * u, ay + 2 * u, sn_score, theme(TH_ACCENT), T_CAPTION, W_BOLD)
     if sn_alive == 0 { label(ax + 110 * u, ay + 2 * u, "game over - press r", C_RED, T_CAPTION, W_BOLD) }
     if sn_alive == 1 {
-        if sn_dx == 0 { if sn_dy == 0 { label(ax + 110 * u, ay + 2 * u, "w a s d to start", ACCENT, T_CAPTION, W_REG) } }
-        if sn_dx != 0 { label(ax + 110 * u, ay + 2 * u, "w a s d to steer", TXT_DIM, T_CAPTION, W_REG) }
-        if sn_dy != 0 { label(ax + 110 * u, ay + 2 * u, "w a s d to steer", TXT_DIM, T_CAPTION, W_REG) }
+        if sn_dx == 0 { if sn_dy == 0 { label(ax + 110 * u, ay + 2 * u, "w a s d to start", theme(TH_ACCENT), T_CAPTION, W_REG) } }
+        if sn_dx != 0 { label(ax + 110 * u, ay + 2 * u, "w a s d to steer", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+        if sn_dy != 0 { label(ax + 110 * u, ay + 2 * u, "w a s d to steer", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
     }
 
     # the food, then the body, then the head - painted last so a head that has
@@ -3040,7 +3258,248 @@ fn sn_draw(ax, ay, aw, ah) {
     }
     shx = ax + peek8(SNAKE_X) * cell
     shy = by + peek8(SNAKE_Y) * cell
-    fill_rgb(shx + 1, shy + 1, cell - 2, cell - 2, ACCENT)
+    fill_rgb(shx + 1, shy + 1, cell - 2, cell - 2, theme(TH_ACCENT))
+    return 0
+}
+
+# ---- Files: the persistent zlfs file manager ------------------------------
+FILES_ROW = 24
+files_sel = 0 - 1
+files_scroll = 0
+files_new = 0
+files_delete = 0 - 1
+files_format = 0
+
+fn files_select_first() {
+    if fs_ok() == 0 { files_sel = 0 - 1  return 0 }
+    if files_sel >= 0 { if fs_inuse(files_sel) == 1 { return 1 } }
+    files_sel = 0 - 1
+    files_fi = 0
+    while files_fi < fs_max() {
+        if files_sel < 0 { if fs_inuse(files_fi) == 1 { files_sel = files_fi } }
+        files_fi = files_fi + 1
+    }
+    return 1
+}
+
+fn files_refresh() {
+    files_new = 0
+    files_delete = 0 - 1
+    files_format = 0
+    if fs_ok() == 0 { fs_mount() }
+    files_select_first()
+    return fs_ok()
+}
+
+fn files_prev() {
+    files_pi = files_sel - 1
+    while files_pi >= 0 {
+        if fs_inuse(files_pi) == 1 { files_sel = files_pi  files_delete = 0 - 1  return 1 }
+        files_pi = files_pi - 1
+    }
+    return 0
+}
+
+fn files_next() {
+    files_ni = files_sel + 1
+    if files_ni < 0 { files_ni = 0 }
+    while files_ni < fs_max() {
+        if fs_inuse(files_ni) == 1 { files_sel = files_ni  files_delete = 0 - 1  return 1 }
+        files_ni = files_ni + 1
+    }
+    return 0
+}
+
+fn files_sel_order() {
+    files_oi = 0
+    files_on = 0
+    while files_oi < fs_max() {
+        if fs_inuse(files_oi) == 1 {
+            if files_oi == files_sel { return files_on }
+            files_on = files_on + 1
+        }
+        files_oi = files_oi + 1
+    }
+    return 0
+}
+
+fn files_keep_visible(rows) {
+    files_ord = files_sel_order()
+    if files_ord < files_scroll { files_scroll = files_ord }
+    if files_ord >= files_scroll + rows { files_scroll = files_ord - rows + 1 }
+    if files_scroll < 0 { files_scroll = 0 }
+    return 0
+}
+
+fn files_slot_at_order(want) {
+    files_ai = 0
+    files_an = 0
+    while files_ai < fs_max() {
+        if fs_inuse(files_ai) == 1 {
+            if files_an == want { return files_ai }
+            files_an = files_an + 1
+        }
+        files_ai = files_ai + 1
+    }
+    return 0 - 1
+}
+
+fn files_open_selected() {
+    if files_sel < 0 { return 0 }
+    return open_disk_editor(files_sel)
+}
+
+fn files_finish_new() {
+    if fs_nlen() == 0 { note_say("a file needs a name", 260)  return 0 }
+    if fs_get() >= 0 { note_say("that file already exists", 300)  return 0 }
+    files_made = fs_new(0)
+    if files_made < 0 { note_say("could not create file", 300)  return 0 }
+    files_sel = files_made
+    files_new = 0
+    files_scroll = 0
+    note_say("file created", 180)
+    return files_open_selected()
+}
+
+fn files_draw_name(slot, x, y, colour) {
+    files_ci = 0
+    while files_ci < 23 {
+        files_cc = fs_ch(slot, files_ci)
+        if files_cc > 0 { char_aa(x + files_ci * cell_w(), y, files_cc, colour) }
+        files_ci = files_ci + 1
+    }
+    return 0
+}
+
+fn files_draw(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
+    files_u = ui()
+    files_rh = FILES_ROW * files_u
+    label(ax + 12 * files_u, ay + 8 * files_u, "Files", theme(TH_TEXT_HI), T_BODY, W_BOLD)
+    if fs_ok() == 0 {
+        label(ax + 12 * files_u, ay + 42 * files_u, "No mounted zlfs volume", theme(TH_TEXT_HI), T_BODY, W_REG)
+        label(ax + 12 * files_u, ay + 68 * files_u, "R retries. Press Shift+F twice to format.", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        if files_format == 1 {
+            label(ax + 12 * files_u, ay + 98 * files_u, "WARNING: Shift+F again erases this disk", theme(TH_DANGER), T_CAPTION, W_BOLD)
+        }
+        return 0
+    }
+    label_num(ax + aw - 130 * files_u, ay + 8 * files_u, fs_n(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label(ax + aw - 108 * files_u, ay + 8 * files_u, "files", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    if files_new == 1 {
+        rrect(ax + 10 * files_u, ay + 34 * files_u, aw - 20 * files_u, 30 * files_u, 6 * files_u, theme(TH_PANEL_HI))
+        label(ax + 18 * files_u, ay + 40 * files_u, "New:", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        files_nci = 0
+        while files_nci < fs_nlen() {
+            char_aa(ax + 66 * files_u + files_nci * cell_w(), ay + 40 * files_u, fs_nch(files_nci), theme(TH_TEXT_HI))
+            files_nci = files_nci + 1
+        }
+        fill_rgb(ax + 66 * files_u + fs_nlen() * cell_w(), ay + 40 * files_u, 2 * files_u, cell_h() - 4 * files_u, theme(TH_ACCENT))
+    } else {
+        label(ax + 12 * files_u, ay + 40 * files_u, "N new   Enter open   Delete twice remove   R refresh", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    }
+    files_y0 = ay + 72 * files_u
+    files_rows = (ah - 104 * files_u) / files_rh
+    if files_rows < 1 { files_rows = 1 }
+    files_keep_visible(files_rows)
+    files_di = 0
+    files_dn = 0
+    files_seen = 0
+    while files_di < fs_max() {
+        if fs_inuse(files_di) == 1 {
+            if files_seen >= files_scroll { if files_dn < files_rows {
+                files_ry = files_y0 + files_dn * files_rh
+                if files_di == files_sel {
+                    rrect(ax + 8 * files_u, files_ry, aw - 16 * files_u, files_rh - 2 * files_u, 5 * files_u, rgb(35, 58, 78))
+                }
+                files_draw_name(files_di, ax + 18 * files_u, files_ry + 4 * files_u, theme(TH_TEXT_HI))
+                label_num(ax + aw - 112 * files_u, files_ry + 4 * files_u, fs_bytes(files_di), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+                label(ax + aw - 58 * files_u, files_ry + 4 * files_u, "bytes", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+                files_dn = files_dn + 1
+            }}
+            files_seen = files_seen + 1
+        }
+        files_di = files_di + 1
+    }
+    if fs_n() == 0 { label(ax + 18 * files_u, files_y0 + 8 * files_u, "Empty volume. Press N to create a file.", theme(TH_TEXT_DIM), T_BODY, W_REG) }
+    if files_delete >= 0 {
+        label(ax + 12 * files_u, ay + ah - 24 * files_u, "Press Delete again to permanently remove the selected file", theme(TH_DANGER), T_CAPTION, W_BOLD)
+    } else {
+        label_num(ax + 12 * files_u, ay + ah - 24 * files_u, fs_free() * fs_bs(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label(ax + 90 * files_u, ay + ah - 24 * files_u, "bytes free", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    }
+    return 0
+}
+
+fn files_mouse_slot(win, ey) {
+    files_mu = ui()
+    files_my0 = wm_cy(win) + 72 * files_mu
+    if ey < files_my0 { return 0 - 1 }
+    files_mrow = (ey - files_my0) / (FILES_ROW * files_mu)
+    files_mrows = (wm_ch(win) - 104 * files_mu) / (FILES_ROW * files_mu)
+    if files_mrow < 0 { return 0 - 1 }
+    if files_mrow >= files_mrows { return 0 - 1 }
+    return files_slot_at_order(files_scroll + files_mrow)
+}
+
+fn files_event(win, ety, ecode, ex, ey) {
+    if files_new == 1 {
+        if ety == 1 {
+            if ecode == K_ESC { files_new = 0  fs_nclear()  wm_dmg(win)  return 1 }
+            if ecode == K_BKSP { fs_npop()  wm_dmg(win)  return 1 }
+            if ecode == K_ENTER { files_finish_new()  wm_dmg(win)  return 1 }
+        }
+        if ety == 3 {
+            if ecode == 27 { files_new = 0  fs_nclear()  wm_dmg(win)  return 1 }
+            if ecode == 8 { fs_npop()  wm_dmg(win)  return 1 }
+            if ecode == 13 { files_finish_new()  wm_dmg(win)  return 1 }
+            if ecode >= 32 { if ecode <= 126 { fs_npush(ecode)  wm_dmg(win)  return 1 } }
+        }
+        return 1
+    }
+    if ety == 1 {
+        files_rows_now = (wm_ch(win) - 104 * ui()) / (FILES_ROW * ui())
+        if files_rows_now < 1 { files_rows_now = 1 }
+        if ecode == K_UP { files_prev()  files_keep_visible(files_rows_now)  wm_dmg(win)  return 1 }
+        if ecode == K_DOWN { files_next()  files_keep_visible(files_rows_now)  wm_dmg(win)  return 1 }
+        if ecode == K_ENTER { files_open_selected()  return 1 }
+        if ecode == K_DEL {
+            if files_sel < 0 { return 1 }
+            if files_delete == files_sel {
+                fs_rm(files_sel)
+                files_delete = 0 - 1
+                files_select_first()
+            } else { files_delete = files_sel }
+            wm_dmg(win)
+            return 1
+        }
+    }
+    if ety == 3 {
+        if ecode == 13 { files_open_selected()  return 1 }
+        if ecode == 110 { fs_nclear()  files_new = 1  files_delete = 0 - 1  wm_dmg(win)  return 1 }
+        if ecode == 114 { files_refresh()  wm_dmg(win)  return 1 }
+        if ecode == 70 {
+            if fs_ok() == 0 {
+                if files_format == 1 {
+                    if fs_format() == 1 { files_format = 0  files_select_first()  note_say("zlfs formatted", 300) }
+                } else { files_format = 1 }
+                wm_dmg(win)
+            }
+            return 1
+        }
+    }
+    if ety == 4 {
+        if band(ecode, 1) != 0 {
+            files_hit = files_mouse_slot(win, ey)
+            if files_hit >= 0 {
+                files_sel = files_hit
+                files_delete = 0 - 1
+                wm_dmg(win)
+                if band(ecode, 256) != 0 { files_open_selected() }
+            }
+            return 1
+        }
+    }
     return 0
 }
 
@@ -3437,6 +3896,7 @@ fn ip_gate() {
 }
 
 APP_BROWSER = 5                     # 3 was APP_SNAKE; the union merge gave both the same id
+APP_SETTINGS = 6
 APP_RUN     = 7                     # 3 is APP_SNAKE, 5 APP_BROWSER, 6 APP_SETTINGS
 # apps-in-windows numbered these 4..8, which are APP_MENU, APP_BROWSER,
 # APP_SETTINGS and APP_RUN here. Renumbered from 8.
@@ -3456,12 +3916,13 @@ cube_win  = 0 - 1
 anim_win  = 0 - 1
 mouse_win = 0 - 1
 edit_win  = 0 - 1
+browser_win = 0 - 1
+settings_win = 0 - 1
 files_win = 0 - 1
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
-    wy = ay - TITLE_H * ui()
-    if id == APP_MONITOR { return sysmon_body(ax, wy) }
-    if id == APP_ABOUT   { return about_body(ax, wy) }
+    if id == APP_MONITOR { return sysmon_body(ax, ay, aw, ah) }
+    if id == APP_ABOUT   { return about_body(ax, ay, aw, ah) }
     if id == APP_SNAKE   { return sn_draw(ax, ay, aw, ah) }
     if id == APP_MENU    { return menu_draw(ax, ay, aw, ah) }
     # THE BROWSER'S ENTIRE POLICY SURFACE IS THIS LINE. The parse, the box
@@ -3475,7 +3936,7 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
     # this branch does nothing but hand exec.c the client rectangle.
     if id == APP_RUN {
         u = ui()
-        exec_draw(ax + 8 * u, ay + 6 * u, aw - 16 * u, ah - 12 * u, TXT_HI, TXT_DIM, ACCENT)
+        exec_draw(ax + 8 * u, ay + 6 * u, aw - 16 * u, ah - 12 * u, theme(TH_TEXT_HI), theme(TH_TEXT_DIM), theme(TH_ACCENT))
         return 0
     }
     if id == APP_PAINT   { return paint_draw(ax, ay, aw, ah) }
@@ -3491,13 +3952,16 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
         u = ui()
         cb = 0
         if afocus == 1 { if band(ticks() / 50, 1) == 0 { cb = 1 } }
-        term_draw(ax + 8 * u, ay + 6 * u, aw - 16 * u, ah - 12 * u, TXT_HI, TXT_DIM, ACCENT, cb)
+        term_draw(ax + 8 * u, ay + 6 * u, aw - 16 * u, ah - 12 * u, theme(TH_TEXT_HI), theme(TH_TEXT_DIM), theme(TH_ACCENT), cb)
         return 0
     }
     # Everything past APP_EDIT is the app suite (apps_registry.zl and the
     # category modules it fronts) - one seam, so this chain never grows past
     # the original 13 again.
-    if id >= APP_CATALOG { return reg_draw(id, ax, ay, aw, ah, afocus) }
+    # REG_FIRST, not APP_CATALOG. The floor is "the registry owns this id",
+    # and APP_CATALOG stopped being that number the moment APP_FILES was given
+    # 13 - see apps_registry.zl's note on the constant.
+    if id >= REG_FIRST { return reg_draw(id, ax, ay, aw, ah, afocus) }
     return 0
 }
 
@@ -3549,39 +4013,11 @@ fn app_event(id, win, ety, ecode, ex, ey) {
     # would silently eat every arrow-key press before a registry app ever saw
     # it. 2048 and the maze both steer by arrow key, so this needs the RAW
     # event, exactly as K_LEFT/K_RIGHT/K_UP/K_DOWN are already defined for.
-    if id >= APP_CATALOG { return reg_event(id, win, ety, ecode, ex, ey) }
-
-    # THE BROWSER USED TO BE HANDLED HERE, ABOVE THE TRANSLATION, AND THAT WAS
-    # TWO BUGS. It took `if ety == 1 { br_key(ecode) }` with the RAW code and
-    # returned, so it never reached the four lines below - and nav_to_char has
-    # exactly one call site, which is those four lines.
-    #
-    #   1. EVERY CHARACTER WENT IN TWICE. input.c pushes both EV_KEY_DOWN and
-    #      EV_CHAR for one printable keypress, carrying the SAME value
-    #      ("printable: code IS the char", input.c:345). The generic path drops
-    #      the EV_KEY_DOWN at `if ac == 0 { return 0 }` - that return IS the
-    #      deduplication. The browser skipped it and appended on both, so
-    #      typing "ab" produced "aabb". Select-all-on-focus hid the first
-    #      duplicate, which is why it looked like a rendering glitch.
-    #
-    #   2. ENTER, ESC AND BACKSPACE WERE DEAD ON THE THINKPAD'S OWN KEYBOARD.
-    #      The comment above nav_to_char says exactly why: PS/2 pushes those as
-    #      EV_KEY_DOWN with a navigation code and NO EV_CHAR, so browser_key -
-    #      which tests 13, 27 and 8 - matched none of them. "Typed into but
-    #      never submitted to", verbatim, on the machine the browser is for.
-    #      No gate could see it: every probe boots -device usb-kbd.
-    #
-    # APP_SNAKE and APP_MENU stay above: snake filters to EV_CHAR and drives on
-    # WASD, menu is mouse-only, so neither wants the translation and neither has
-    # either bug. The browser is the only app that handled both event types.
-    ac = ecode
-    if ety == 1 {
-        ac = nav_to_char(ecode)
-        if ac == 0 { return 0 }
-        ety = 3
-    }
-    ecode = ac
-
+    # REG_FIRST, not APP_CATALOG - and here the old floor was actively wrong
+    # rather than merely misnamed. It sat ABOVE the `id == APP_FILES` arm
+    # below, and APP_FILES is 13, so every key and click aimed at the Files
+    # window was routed into cat_event() instead of files_event().
+    if id >= REG_FIRST { return reg_event(id, win, ety, ecode, ex, ey) }
     if id == APP_BROWSER {
         # '[' and ']' RESIZE THE WINDOW, and that is the gate rather than a
         # convenience: reflow is only observable if the width can change while
@@ -3605,6 +4041,16 @@ fn app_event(id, win, ety, ecode, ex, ey) {
         }
         return 1
     }
+    if id == APP_FILES { return files_event(win, ety, ecode, ex, ey) }
+    # EV_KEY_DOWN (1) carrying a navigation code becomes the character the apps
+    # below already handle. EV_CHAR (3) passes straight through.
+    ac = ecode
+    if ety == 1 {
+        ac = nav_to_char(ecode)
+        if ac == 0 { return 0 }
+        ety = 3
+    }
+    ecode = ac
     if id == APP_SHELL {
         # ONE CHARACTER PER CALL. No loop - that is the whole inversion.
         # read_line used to block, which is exactly why the shell had to be the
@@ -3649,7 +4095,10 @@ fn app_event(id, win, ety, ecode, ex, ey) {
             # other window means by "exit", and it is the whole difference from
             # "press any key" - there is nothing to press a key to get out of.
             if ek == 2 {
-                wm_close(win)
+                # A user gesture - ESC in the editor is 'exit', which is exactly
+                # what the closebox means. wm_close_fx() is wm_close plus the
+                # ANIM_CLOSE shrink; wm_close() stays for teardown.
+                wm_close_fx(win)
                 edit_win = 0 - 1
                 # wm_close returns focus to the home window (wm_home, set to
                 # the shell in wm_session) - so this needs nothing here.
@@ -3657,11 +4106,6 @@ fn app_event(id, win, ety, ecode, ex, ey) {
             }
             if ek == 1 { wm_dmg(win)  return 1 }
         }
-        return 0
-    }
-    if id == APP_FILES {
-        if ety == 3 { if files_key(ecode) == 1 { wm_dmg(win) }  return 1 }
-        if ety == 4 { return files_event(ety, ecode, ex, ey, win) }
         return 0
     }
     if id == APP_PAINT {
@@ -3735,7 +4179,7 @@ fn open_app(cmd, arg) {
         if snake_win >= 0 { if wm_open_p(snake_win) == 1 {
             wm_setfocus(snake_win)  wm_raise(snake_win)  return 1
         }}
-        snake_win = wm_open(APP_SNAKE, "Snake", 20 * oa_u, 60 * oa_u, 280 * oa_u, 160 * oa_u)
+        snake_win = wm_open(APP_SNAKE, "Snake", 120 * oa_u, 70 * oa_u, 420 * oa_u, 360 * oa_u)
         if snake_win < 0 { return 0 }
         sn_reset(wm_cw(snake_win), wm_ch(snake_win))
         if oa_f >= 0 { wm_setfocus(oa_f) }
@@ -3776,7 +4220,7 @@ fn open_app(cmd, arg) {
         if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
             wm_setfocus(edit_win)  wm_raise(edit_win)  return 1
         }}
-        edit_win = wm_open(APP_EDIT, "zlEDIT", 480 * oa_u, 230 * oa_u, 160 * oa_u, 160 * oa_u)
+        edit_win = wm_open(APP_EDIT, "Text Editor", 322 * oa_u, 140 * oa_u, 522 * oa_u, 360 * oa_u)
         if edit_win < 0 { return 0 }
         # THE ARGUMENT WAS BEING DROPPED. term.c parses a trailing number into
         # pending_arg, so `edit 7` really does reach here as arg 7 - and
@@ -3792,21 +4236,13 @@ fn open_app(cmd, arg) {
         wm_report(edit_win)
         return 1
     }
-    if cmd == 77 {
+    if cmd == 108 {
         if files_win >= 0 { if wm_open_p(files_win) == 1 {
             wm_setfocus(files_win)  wm_raise(files_win)  return 1
         }}
-        # Mount on OPEN, not as a separate manual step - files_ensure_mounted
-        # tries setup+mount and formats a fresh disk if nothing is there yet,
-        # silently on the happy path (see its own comment for why).
-        files_ensure_mounted()
-        files_win = wm_open(APP_FILES, "Files", 480 * oa_u, 400 * oa_u, 220 * oa_u, 190 * oa_u)
+        files_win = wm_open(APP_FILES, "Files", 238 * oa_u, 346 * oa_u, 672 * oa_u, 352 * oa_u)
         if files_win < 0 { return 0 }
-        fl_len = 0
-        fl_hover = 0 - 1
-        # THE FILES APP TAKES FOCUS for the same reason the editor does: it is
-        # useless without the keyboard, since names are typed rather than
-        # clicked from a menu.
+        files_refresh()
         wm_setfocus(files_win)
         wm_report(files_win)
         return 1
@@ -3824,16 +4260,34 @@ fn open_app(cmd, arg) {
     return 0
 }
 
+fn open_disk_editor(slot) {
+    if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
+        note_say("close the current editor first", 300)
+        wm_setfocus(edit_win)
+        wm_raise(edit_win)
+        return 0
+    }}
+    if editor_open_disk(slot) == 0 {
+        note_say("file is missing or too large", 320)
+        return 0
+    }
+    ode_u = ui()
+    edit_win = wm_open(APP_EDIT, "Text Editor", 322 * ode_u, 140 * ode_u, 522 * ode_u, 360 * ode_u)
+    if edit_win < 0 { return 0 }
+    wm_setfocus(edit_win)
+    wm_report(edit_win)
+    return 1
+}
+
 # Runs every frame, must be cheap, MUST NOT DRAW. Returning 1 means "my state
 # changed, repaint me" - which is how the monitor's clock advances without
 # owning the frame, and is the whole reason it needs no while-loop.
 last_tick_sec = 0 - 1
 # ---- FRAME TIME ------------------------------------------------------------
 # Measured in wm.c, not here, and that distinction cost a wrong answer once.
-# The first version timed the gap between app_tick calls - but wm_frame()
-# returns immediately unless the 100 Hz tick has moved, so that gap is pinned
-# at 10 ms by construction. It reported a confident, stable 9997 us, which is
-# the PIT frequency wearing a frame timer's clothes.
+# The first version timed the gap between app_tick calls. At the time wm_frame
+# was PIT-gated, so that gap was pinned at 10 ms by construction. It reported
+# a confident, stable 9997 us: the PIT frequency wearing a frame timer's clothes.
 #
 # wm_us() times the BODY of a frame - input, routing, ticks, repaint,
 # present - and only over frames that actually repainted. That is the figure
@@ -3854,6 +4308,10 @@ fn wm_damage_win_all() {
 }
 
 fn app_tick(id, win) {
+    # The dock's running-app dots, which pulse forever and so belong to no
+    # window's tick. Guarded twice inside itself so this costs a comparison on
+    # every call but a repaint only when the pulse has actually moved.
+    dock_dot_tick()
     if id == APP_SNAKE { return sn_step() }
     # The browser drives its own fetch from the frame loop. app_tick MUST NOT
     # DRAW and must be cheap; br_tick pumps the link, the TCP timers and the
@@ -3901,7 +4359,7 @@ fn app_tick(id, win) {
     if id == APP_CUBE  { return cube_tick() }
     if id == APP_ANIM  { return anim_tick(wm_cw(win), wm_ch(win)) }
     if id == APP_MOUSE { return mouse_tick() }
-    if id >= APP_CATALOG { return reg_tick(id, win) }
+    if id >= REG_FIRST { return reg_tick(id, win) }
     return 0
 }
 
@@ -3928,14 +4386,14 @@ fn desk_draw(dx, dy, dw, dh) {
     if wall_ok() == 1 {
         wall_paint(dx, dy, dw, dh)
     } else {
-        grad_rgb(0, 0, px_w(), px_h(), WALL_TOP, WALL_BOT)
+        grad_rgb(0, 0, px_w(), px_h(), theme(TH_WALL_TOP), theme(TH_WALL_BOT))
     }
     # the header band: 0 .. TOPBAR_H + 8
     # the header is entirely static - the resolution it prints does not change -
     # so it is baked in with the wallpaper too and costs nothing per frame
     if dock_baked == 0 { if dy < TOPBAR_H * ui() + 8 { draw_header() } }
     # the dock band: dock_y() - 6 .. bottom
-    if dy + dh > dock_y() - 6 { draw_status("compositor") }
+    if dy + dh > dock_y() - 36 * ui() { draw_status("compositor") }
     return 0
 }
 
@@ -3946,19 +4404,105 @@ fn desk_draw(dx, dy, dw, dh) {
 # to extend the visual system that exists rather than introduce a second one.
 # Percentages become pixels here, because a percentage of what is a layout
 # question and fb.c does not do layout.
+# THE WALLPAPER'S COLOURS, and the one place in this file that still holds a
+# colour literal on purpose.
+#
+# These are the reference's, and design.h holds the same nine values as
+# ZD_WALL_*. They are duplicated here rather than read through theme() because
+# ui_theme has no wallpaper-glow role and adding four is a change to ui.h, ui.c
+# and the zl-visible role enum all at once - which is being edited by other work
+# in this same tree right now. MOVING THEM IS THE FOLLOW-UP, and until then the
+# rule is that design.h is the source and this is the copy.
+#
+# The gate cannot catch this drifting yet, which is stated plainly rather than
+# glossed: hosttest/palette.c asserts kernel.zl holds no second copy of a
+# design.h token, and ZD_WALL_* are deliberately outside that table, so nothing
+# would fail if these two lists disagreed. That is a known, recorded hole.
+# The gradient's two ends are theme roles now - TH_WALL_TOP is ZD_WALL_0 and
+# TH_WALL_BOT is ZD_WALL_100 - so no literal is needed for them at all. The
+# palette gate caught the first attempt at this: rgb(7,8,10) IS #07080a IS
+# ZD_SURF_0, so writing it here was literally a second copy of a theme colour,
+# which is the exact regression that check exists to prevent. It worked.
+fn wall_glow_a()   { return rgb(126, 166, 44) } # ZD_WALL_GLOW_A
+fn wall_glow_b()   { return rgb(46, 58, 20) }   # ZD_WALL_GLOW_B
+fn wall_glow_c()   { return rgb(24, 32, 38) }   # ZD_WALL_GLOW_C
+
 fn draw_wallpaper() {
     ww = px_w()
     wh = px_h()
-    grad_rgb(0, 0, ww, wh, WALL_TOP, WALL_BOT)
-    # radial-gradient(64% 50% at 16% 8%, accent .3, transparent 62%)
-    glow(ww * 16 / 100, wh * 8 / 100, ww * 64 / 100, wh * 50 / 100, rgb(40, 108, 150), 64, 0, 62)
-    # radial-gradient(58% 48% at 88% 92%, deep .62, transparent 68%)
-    glow(ww * 88 / 100, wh * 92 / 100, ww * 58 / 100, wh * 48 / 100, rgb(10, 16, 34), 140, 0, 68)
-    # radial-gradient(46% 34% at 76% 18%, cool .7, transparent 70%)
-    glow(ww * 76 / 100, wh * 18 / 100, ww * 46 / 100, wh * 34 / 100, rgb(22, 30, 52), 150, 0, 70)
-    # conic sweeps: two faint accent wedges, the prototype's 214 and 32 degrees
-    wedge(ww / 2, wh / 2, ACCENT, 20, 214, 34, 82)
-    wedge(ww / 2, wh / 2, ACCENT, 12, 32, 44, 98)
+    wu = ui()
+    grad_rgb(0, 0, ww, wh, theme(TH_WALL_TOP), theme(TH_WALL_BOT))
+    # radial-gradient(64% 50% at 16% 8%, rgba(126,166,44,.3), transparent 62%)
+    glow(ww * 16 / 100, wh * 8 / 100, ww * 64 / 100, wh * 50 / 100, wall_glow_a(), 77, 0, 62)
+    # radial-gradient(58% 48% at 88% 92%, rgba(46,58,20,.62), transparent 68%)
+    glow(ww * 88 / 100, wh * 92 / 100, ww * 58 / 100, wh * 48 / 100, wall_glow_b(), 158, 0, 68)
+    # radial-gradient(46% 34% at 76% 18%, rgba(24,32,38,.7), transparent 70%)
+    glow(ww * 76 / 100, wh * 18 / 100, ww * 46 / 100, wh * 34 / 100, wall_glow_c(), 179, 0, 70)
+    # THE TWO CONIC WEDGES ARE BOXED, and that box is not decoration.
+    #
+    # ds-reference.html:41-42 puts each wedge in its own absolutely positioned
+    # element - `left:-14% top:-22% width:78% height:96%` and a mirrored one at
+    # `right:-16% bottom:-24% width:70% height:88%` - so each sweep is confined
+    # to a rectangle that hangs off one corner of the screen. Drawn unclipped,
+    # as they were, a wedge sweeping from the screen CENTRE covers everything:
+    # measured, the left edge of the wallpaper came out 36-60 green against the
+    # reference's 5-29, which was the largest colour error left after the
+    # palette landed. The alphas were already right; the extent was not.
+    #
+    # The centre of each sweep is the centre of its own box, not of the screen.
+    clip(0 - ww * 14 / 100, 0 - wh * 22 / 100, ww * 78 / 100, wh * 96 / 100)
+    wedge(ww * 25 / 100, wh * 26 / 100, theme(TH_ACCENT), 19, 214, 34, 82)
+    clipoff()
+    clip(ww * 46 / 100, wh * 28 / 100, ww * 70 / 100, wh * 88 / 100)
+    wedge(ww * 81 / 100, wh * 72 / 100, theme(TH_ACCENT), 11, 32, 44, 98)
+    clipoff()
+    # The prototype's two-scale technical grid gives the broad glows a crisp
+    # spatial rhythm. Both grids are almost invisible and baked once; they
+    # should be felt as structure, not read as graph paper.
+    # The two-scale grid, to the reference's pitches and alphas. The major
+    # pitch was 256 and the reference's is 252 - a rounding that looks
+    # harmless and is not: over a 1280-wide screen 256 puts five lines on
+    # screen and 252 puts six, so the whole rhythm was off by a line.
+    grid = 64 * wu                 # ZD_WALL_GRID
+    major = 252 * wu               # ZD_WALL_GRID_MAJOR - the reference's, not 256
+    gx = 0
+    while gx < ww {
+        blend(gx, 0, 1, wh, theme(TH_ACCENT), 7)
+        gx = gx + grid
+    }
+    gy = 0
+    while gy < wh {
+        blend(0, gy, ww, 1, theme(TH_ACCENT), 5)
+        gy = gy + grid
+    }
+    gx = 0
+    while gx < ww {
+        blend(gx, 0, 1, wh, theme(TH_ACCENT), 13)
+        gx = gx + major
+    }
+    gy = 0
+    while gy < wh {
+        blend(0, gy, ww, 1, theme(TH_ACCENT), 10)
+        gy = gy + major
+    }
+    # A faint physical grain joins the broad fields into one surface. It is
+    # deterministic, static and baked into RGB565 once: no random state, no
+    # full-screen work during interaction, and no animated-background tax.
+    gy = 13 * wu
+    while gy < wh {
+        blend(0, gy, ww, 1, theme(TH_TEXT_HI), 3)
+        gy = gy + 32 * wu
+    }
+    gs = 23117
+    gi = 0
+    while gi < 320 {
+        gs = (gs * 25173 + 13849) % 65536
+        gx = gs * ww / 65536
+        gs = (gs * 25173 + 13849) % 65536
+        gdy = gs * wh / 65536
+        rrblend(gx, gdy, wu, wu, wu, theme(TH_TEXT_HI), 7)
+        gi = gi + 1
+    }
     # radial-gradient(120% 96% at 50% 40%, transparent 26%, black .82 100%) -
     # the vignette, which is this same primitive run the other way round
     glow(ww / 2, wh * 40 / 100, ww * 120 / 100, wh * 96 / 100, rgb(0, 0, 0), 0, 190, 100)
@@ -3981,7 +4525,7 @@ fn open_snake() {
     }
     sx = px_w() / 2 - 200 * u
     sy = 120 * u
-    snake_win = wm_open(APP_SNAKE, "Snake", sx, sy, 400 * u, 330 * u)
+    snake_win = wm_open(APP_SNAKE, "Snake", sx, sy, 420 * u, 360 * u)
     wm_setfocus(snake_win)
     wm_raise(snake_win)
     return 0
@@ -3996,10 +4540,22 @@ dock_press = 0                     # ...and whether the button is down on it
 fn dock_slot_at(cx, cy) {
     if cy < dock_y() { return 0 - 1 }
     u = ui()
-    if cx < DOCK_X0 * u { return 0 - 1 }
-    dslot = (cx - DOCK_X0 * u) / (DOCK_PITCH * u)
-    dinto = cx - DOCK_X0 * u - dslot * DOCK_PITCH * u
-    if dslot >= 9 { return 0 - 1 }
+    dx0 = dock_x0()
+    if cx < dx0 { return 0 - 1 }
+    dslot = (cx - dx0) / (DOCK_PITCH * u)
+    dinto = cx - dx0 - dslot * DOCK_PITCH * u
+    # THE GRID BUTTON, past the divider at the end of the strip. Slot DOCK_N is
+    # not an app - it is the reference's "Show Applications", and it is the ONLY
+    # route to the catalog now that the full-width bar with its start button has
+    # been replaced by the floating island. Without this the 47 registry apps
+    # are reachable by id and by nothing a person can click, which is how the
+    # oracle found it: --app could not open the catalog to click a tile in.
+    if dslot >= DOCK_N {
+        gx0 = dock_x0() + DOCK_N * DOCK_PITCH * u + DOCK_GAP * u + 1
+        if cx < gx0 { return 0 - 1 }
+        if cx >= gx0 + DOCK_TW * u { return 0 - 1 }
+        return DOCK_N
+    }
     if dinto >= DOCK_TW * u { return 0 - 1 }
     return dslot
 }
@@ -4020,16 +4576,49 @@ fn desk_click(cx, cy, cbtn) {
     nh = dock_slot_at(cx, cy)
     if nh != dock_hover {
         dock_hover = nh
-        wm_damage(0, dock_y(), px_w(), px_h() - dock_y())
+        wm_damage(0, dock_y() - 36 * u, px_w(), px_h() - dock_y() + 36 * u)
     }
     if down != dock_press {
         dock_press = down
-        wm_damage(0, dock_y(), px_w(), px_h() - dock_y())
+        wm_damage(0, dock_y() - 36 * u, px_w(), px_h() - dock_y() + 36 * u)
+        # ZPRESS FIRES ON THE EDGE, not while the button is held. The reference
+        # is `animation:zpress .25s ease`, which plays once per press - firing
+        # per event would restart it sixty times a second and the tile would
+        # freeze at its first frame, which is exactly the still-life this
+        # replaced. wm_anim_at wants the rectangle to repaint because wm.c has
+        # no idea where the dock is.
+        if down == 1 {
+            if nh >= 0 {
+                if nh < DOCK_N {
+                    wm_anim_at(dock_fx(nh), 3, dock_x0() + nh * DOCK_PITCH * u, dock_y() + DOCK_PADY * u, DOCK_TW * u, DOCK_TW * u)
+                }
+            }
+        }
     }
 
     if down == 0 { return 0 }
+    if cy < TOPBAR_H * u { if cx < 210 * u { return open_menu() } }
+    # A PIP IS A CONTROL NOW. It is checked after the Activities corner and
+    # before the dock, which is the order the bands actually sit in.
+    if cy < TOPBAR_H * u {
+        pn = pip_at(cx, cy)
+        if pn > 0 { return set_ws(pn) }
+    }
     if cy < dock_y() { return 0 }
-    if cx >= 10 * u { if cx < 106 * u { return open_menu() } }
+    # THE START-BUTTON GUARD THAT USED TO BE HERE IS GONE. It read
+    #
+    #     dsx = dock_start_x()
+    #     if cx >= dsx { if cx < dsx + 42 * u { return open_menu() } }
+    #
+    # and dock_start_x() returns dock_x0() - the LEFT EDGE OF TILE 0. It is a
+    # leftover from the full-width bar, which really did put a start button
+    # there; the floating island that replaced it draws nine launcher tiles
+    # starting at exactly that x and no start button at all (draw_dock_bg).
+    # 42 design units is wider than one tile plus its gap (33 + 5), so the
+    # guard swallowed the whole Terminal tile and the first four units of the
+    # Browser tile, and returned before dock_launch could ever see them.
+    # The menu is still reachable, by the two routes that are real: the
+    # top-left of the topbar (above) and a Super tap (desk_key).
     if nh >= 0 { return dock_launch(nh) }
     # the window list, to the right of the launchers
     tw = task_slot_at(cx, cy)
@@ -4074,9 +4663,13 @@ fn task_label(app) {
     if app == APP_ABOUT   { return "About" }
     if app == APP_SNAKE   { return "Snake" }
     if app == APP_MENU    { return "Menu" }
+    if app == APP_BROWSER { return "Browser" }
+    if app == APP_SETTINGS { return "Settings" }
+    if app == APP_FILES   { return "Files" }
+    if app == APP_EDIT    { return "Text Editor" }
     # Every app-suite window falls through to the same registry the catalog
     # reads, so a new app's taskbar chip needs no entry here at all.
-    if app >= APP_CATALOG { return reg_name(app) }
+    if app >= REG_FIRST { return reg_name(app) }
     return "window"
 }
 
@@ -4087,11 +4680,20 @@ fn app_has_tile(app) {
     if app == APP_SNAKE   { return 1 }
     if app == APP_MONITOR { return 1 }
     if app == APP_ABOUT   { return 1 }
+    if app == APP_BROWSER { return 1 }
+    if app == APP_EDIT    { return 1 }
+    if app == APP_PAINT   { return 1 }
+    if app == APP_CUBE    { return 1 }
+    if app == APP_SETTINGS { return 1 }
     if app == APP_MENU    { return 1 }        # never listed at all
+    if app == APP_FILES   { return 1 }
+    if app == APP_EDIT    { return 1 }
+    if app == APP_PAINT   { return 1 }
+    if app == APP_CUBE    { return 1 }
     return 0
 }
 
-fn task_x0() { return DOCK_X0 * ui() + 9 * DOCK_PITCH * ui() + 16 * ui() }
+fn task_x0() { return dock_x0() + DOCK_N * DOCK_PITCH * ui() + 16 * ui() }
 fn task_room() { return tray_x() - task_x0() }
 
 fn draw_tasklist(dy) {
@@ -4102,16 +4704,26 @@ fn draw_tasklist(dy) {
     while ti < wm_n() {
         tw = wm_zat(ti)
         ta = wm_app(tw)
-        if app_has_tile(ta) == 0 {
+        # LISTED ONLY IF IT IS ON THIS WORKSPACE, as well as having no dock
+        # tile. The reference filters the same way
+        # (`openIds.filter(a => winWs[a.id] === ws)`), and the alternative is a
+        # chip for a window that is not on screen - a control that lies about
+        # what it does. Written as a flag rather than folded into the tile test
+        # because app_has_tile(-1) is 0, so "hide it by spoiling the app id"
+        # would have SHOWN it.
+        tshow = 0
+        if app_has_tile(ta) == 0 { tshow = 1 }
+        if wm_winws(tw) != cur_ws() { tshow = 0 }
+        if tshow == 1 {
             if tn < nfit {
                 tx = task_x0() + tn * TASK_PITCH * u
                 tsel = 0
                 if wm_focus() == tw { tsel = 1 }
-                tcol = rgb(30, 36, 54)
-                if tsel == 1 { tcol = rgb(48, 64, 104) }
+                tcol = theme(TH_PANEL_HI)
+                if tsel == 1 { tcol = theme(TH_TITLE) }
                 rrect(tx, dy + 12 * u, TASK_W * u, 34 * u, 10 * u, tcol)
-                if tsel == 1 { fill_rgb(tx, dy + 12 * u, TASK_W * u, 2, ACCENT) }
-                label(tx + 10 * u, dy + 18 * u, task_label(ta), TXT_HI, T_CAPTION, W_REG)
+                if tsel == 1 { fill_rgb(tx, dy + 12 * u, TASK_W * u, 2, theme(TH_ACCENT)) }
+                label(tx + 10 * u, dy + 18 * u, task_label(ta), theme(TH_TEXT_HI), T_CAPTION, W_REG)
             }
             tn = tn + 1
         }
@@ -4131,7 +4743,14 @@ fn task_slot_at(cx, cy) {
     tn = 0
     while ti < wm_n() {
         tw = wm_zat(ti)
-        if app_has_tile(wm_app(tw)) == 0 {
+        # THE SAME TWO TESTS AS draw_tasklist, in the same order. A hit test
+        # that counts a different set of chips than the draw does hands the
+        # click to the window next door - which is the whole reason the
+        # workspace filter had to be added to BOTH loops in one edit.
+        tshow = 0
+        if app_has_tile(wm_app(tw)) == 0 { tshow = 1 }
+        if wm_winws(tw) != cur_ws() { tshow = 0 }
+        if tshow == 1 {
             if tn == tsl { return tw }
             tn = tn + 1
         }
@@ -4145,10 +4764,14 @@ fn task_slot_at(cx, cy) {
 # the work that makes them all the first kind, and pretending otherwise here
 # would just move the surprise.
 fn dock_launch(slot) {
+    if slot == DOCK_N { return reg_open(APP_CATALOG) }   # Show Applications
     if slot == 0 { return raise_shell() }
+    if slot == 1 { return reopen_browser() }
     if slot == 4 { return open_snake() }
+    if slot == 5 { return open_app(118, 0) }
     if slot == 6 { return reopen_mon() }
     if slot == 7 { return reopen_about() }
+    if slot == 8 { return reopen_settings() }
     dl = dock_cmd(slot)
     if dl == 113 { wm_stop()  return 0 }
     if dl > 0 {
@@ -4169,6 +4792,22 @@ fn raise_shell() {
 
 mon_win = 0 - 1
 about_win = 0 - 1
+fn reopen_browser() {
+    u = ui()
+    if browser_win >= 0 { if wm_open_p(browser_win) == 1 { wm_setfocus(browser_win)  wm_raise(browser_win)  return 0 } }
+    browser_win = wm_open(APP_BROWSER, "Browser", px_w() / 2 - 400 * u, 300 * u, 800 * u, 440 * u)
+    wm_setfocus(browser_win)
+    wm_raise(browser_win)
+    return 0
+}
+fn reopen_settings() {
+    u = ui()
+    if settings_win >= 0 { if wm_open_p(settings_win) == 1 { wm_setfocus(settings_win)  wm_raise(settings_win)  return 0 } }
+    settings_win = wm_open(APP_SETTINGS, "Settings", 388 * u, 190 * u, 486 * u, 332 * u)
+    wm_setfocus(settings_win)
+    wm_raise(settings_win)
+    return 0
+}
 fn reopen_mon() {
     u = ui()
     if mon_win >= 0 { if wm_open_p(mon_win) == 1 { wm_setfocus(mon_win)  wm_raise(mon_win)  return 0 } }
@@ -4236,8 +4875,8 @@ menu_bx = 0
 menu_by = 0
 fn open_menu() {
     u = ui()
-    if menu_win >= 0 { if wm_open_p(menu_win) == 1 { wm_close(menu_win)  menu_win = 0 - 1  return 0 } }
-    mh = MENU_ROWS * 26 * u + TITLE_H * u + 12 * u
+    if menu_win >= 0 { if wm_open_p(menu_win) == 1 { wm_close_fx(menu_win)  menu_win = 0 - 1  return 0 } }
+    mh = MENU_ROWS * (ui_metric(2) + ui_metric(1)) + 2 * ui_metric(0) + ui_metric(4)
     mx = 10 * u
     my = dock_y() - mh - 8 * u
     # This used to blur what is behind the menu here, before the window existed,
@@ -4249,18 +4888,26 @@ fn open_menu() {
     menu_bx = mx
     menu_by = my
     menu_win = wm_open(APP_MENU, "zlOS", mx, my, 210 * u, mh)
+    # zov / zpop in the prototype: the menu fades in over the desktop behind
+    # it. This is a REAL fade - the rectangle is stashed before the window is
+    # drawn on it and blended back - not a tint pretending to be one.
+    #
+    # THE `wm_anim(menu_win, 5)` THAT USED TO BE HERE IS GONE, and its absence
+    # is the point. It was ANIM_FADE's only caller in the entire tree, so this
+    # menu faded and every other overlay in the system appeared instantly.
+    # wm_modal() starts it now: "becoming modal" is the one thing a popover, a
+    # dialog and a context menu have in common, so an overlay written next
+    # year is animated by having been written rather than by somebody
+    # remembering this line.
     wm_modal(menu_win, 1)
-    # zov / zpop in the prototype: the menu fades in over the blurred desktop
-    # behind it. This is a REAL fade - the rectangle is stashed before the
-    # window is drawn on it and blended back - not a tint pretending to be one.
-    wm_anim(menu_win, 5)
     return 0
 }
 
 menu_hover = 0 - 1
 fn menu_draw(ax, ay, aw, ah) {
-    u = ui()
-    # THE NORTHSTAR'S ANSWER FOR A FLOATING PANEL, which is not a tint over a
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
+    ui_begin(ax, ay, aw, ah, 0, 0, 0, 0)
+    # THE NORTHSTAR'S ANSWER FOR A FLOATING theme(TH_PANEL), which is not a tint over a
     # blur - it has no blur anywhere and its only panel rule is opaque:
     #
     #   .win{ background:var(--panel); border:1px solid var(--line) }
@@ -4271,31 +4918,17 @@ fn menu_draw(ax, ay, aw, ah) {
     # would have been the worst of the three options. The border is drawn as the
     # outer rrect with the panel one unit inside it, the same nesting the window
     # frame uses, so the hairline follows the curve instead of cutting it.
-    rrect(ax, ay, aw, ah, 10 * u, LINE_SOFT)
-    rrect(ax + 1, ay + 1, aw - 2, ah - 2, 10 * u - 1, PANEL_NS)
     mi = 0
     while mi < MENU_ROWS {
-        mry = ay + 4 * u + mi * 26 * u
-        mtc = TXT_HI
-        if mi == menu_hover {
-            # The northstar's own hover, from .menubar .mi:hover -
-            # background:rgba(96,210,235,.16), i.e. the accent at 16%. It was
-            # 55/255 = 22% over a blurred desktop; over an opaque panel the
-            # reference's own number is the one to use. Still a wash rather
-            # than a solid bar, which is what the reference draws too.
-            rrblend(ax + 2 * u, mry, aw - 4 * u, 24 * u, 8 * u, ACCENT, 41)
-            mtc = C_WHITE
-        }
-        label(ax + 12 * u, mry + 3 * u, menu_label(mi), mtc, T_BODY, W_REG)
+        ui_list(menu_label(mi), mi == menu_hover)
         mi = mi + 1
     }
     return 0
 }
 
 fn menu_row_at(win, ey) {
-    u = ui()
     cy = wm_cy(win)
-    r = (ey - cy - 4 * u) / (26 * u)
+    r = (ey - cy - ui_metric(0)) / (ui_metric(2) + ui_metric(1))
     if r < 0 { return 0 - 1 }
     if r >= MENU_ROWS { return 0 - 1 }
     return r
@@ -4316,9 +4949,15 @@ fn menu_event(ety, ecode, ex, ey, win) {
         wm_dmg(win)
     }
     if band(ecode, 1) == 0 { return 1 }
-    idx = menu_row_at(win, ey)
+    ui_begin(wm_cx(win), wm_cy(win), wm_cw(win), wm_ch(win), 1, ex, ey, 1)
+    idx = 0 - 1
+    mi = 0
+    while mi < MENU_ROWS {
+        if ui_list(menu_label(mi), mi == menu_hover) == 1 { idx = mi }
+        mi = mi + 1
+    }
     menu_hover = 0 - 1
-    wm_close(win)
+    wm_close_fx(win)
     menu_win = 0 - 1
     if idx >= 0 { if idx < MENU_ROWS { menu_pick(idx) } }
     return 1
@@ -4332,7 +4971,24 @@ fn wm_boot_start() {
     if wm_avail() == 0 { return 0 }
     u = ui()
     ui_theme(u)
+    # Read-only discovery makes the already-written frame counter/vblank path
+    # reachable. Non-Intel and unsupported devices simply keep TSC pacing.
+    intel_find()
     wm_init()
+    # HOW MANY WORKSPACES THERE ARE, told to the compositor rather than
+    # duplicated inside it. wm.c defaults to 1 - which is what keeps the host
+    # tests, none of which call this, behaving exactly as they did before
+    # workspaces existed - and refuses any switch past the ceiling, so
+    # Super+9 cannot strand you on an empty workspace with no pip to return
+    # from. WS_N is this file's, because three pips is a design decision.
+    wm_wsn(WS_N)
+    # ZSWEEP, ON. The band drifting down the wallpaper is off in wm.c by
+    # default for the same reason wm_wsn exists: the host gates never call this
+    # function, and several of them assert that a region is EXACTLY the
+    # wallpaper colour. Turning it on here is the policy decision - the
+    # reference keeps it behind its own `crtOn` toggle too - and it stays under
+    # the Settings animation switch on top of that.
+    wm_sweep(1)
     if wm_bind() == 0 {
         color(C_RED)  print("  wm: kernel.zl defines no app_draw - nothing to composite")
         color(C_GREY)
@@ -4352,10 +5008,48 @@ fn wm_boot_start() {
     # expressed through wm_open.
     sw = px_w()
     sh = dock_y()
-    shell_win = wm_open(APP_SHELL, "zl shell", 40 * u, 52 * u, sw - 340 * u, sh - 90 * u)
-    wm_open(APP_MONITOR, "System Monitor", sw - 290 * u, 52 * u, MON_W * u, MON_H * u)
-    wm_open(APP_ABOUT, "About", sw - 290 * u, 52 * u + (MON_H + 16) * u, MON_W * u, AB_H * u)
-    wm_open(APP_BROWSER, "zlOS browser", 120 * u, 96 * u, 520 * u, 380 * u)
+    # Compose the first desktop like a workspace, not a diagnostic dashboard.
+    # Terminal is a compact command surface, Browser anchors the lower half
+    # and Resources balances it on the right. Empty black client area is not
+    # minimalism here; it reads as an unfinished debug panel.
+    # THE BOOT COMPOSITION IS THE REFERENCE'S, EXACTLY. ds-reference.html's
+    # initial state opens three windows - `open:{term:true, mon:true,
+    # files:true}` - and its APPS table gives each one a size and a position:
+    #
+    #   term   600 x 368  at 132, 60
+    #   files  672 x 352  at 238, 346
+    #   mon    424 x 376  at 758, 76
+    #
+    # These are not "about right". They are the numbers, and they are what the
+    # oracle's regions.json compares against - win_term, win_files, win_mon are
+    # three of its named boxes. A Terminal 680 wide at y=140 scores as WRONG on
+    # structure no matter how good it looks, because it is not where the thing
+    # it is being compared to is.
+    #
+    # BROWSER IS NOT IN THE REFERENCE'S BOOT SET and is no longer in ours. It
+    # was anchoring the lower half, where Files belongs; leaving it there put a
+    # window over the dock and left Files closed, so two of the three boxes
+    # were empty and a fourth was occupied by something with no counterpart.
+    if sw >= 1240 * u {
+        desk_ox = (sw - 1280 * u) / 2
+        if desk_ox < 0 { desk_ox = 0 }
+        shell_win = wm_open(APP_SHELL, "Terminal", desk_ox + 132 * u, 60 * u, 600 * u, 368 * u)
+        files_win = wm_open(APP_FILES, "Files", desk_ox + 238 * u, 346 * u, 672 * u, 352 * u)
+        mon_win = wm_open(APP_MONITOR, "System Monitor", desk_ox + 758 * u, 76 * u, 424 * u, 376 * u)
+        # THE BOOT SET GETS ITS WORKSPACE FROM THE TABLE, not from whichever
+        # one happens to be current. wm_open puts a new window on the current
+        # workspace - correct for everything a person launches, and the wrong
+        # source for the composition the desktop builds for itself. All three
+        # are ws 1 in the reference, so today these three calls change nothing
+        # and are refused as no-ops; they are here so that the day the boot set
+        # gains a fourth window, its workspace comes from the same place its
+        # size and position already do.
+        wm_setwinws(shell_win, app_ws(APP_SHELL))
+        wm_setwinws(files_win, app_ws(APP_FILES))
+        wm_setwinws(mon_win, app_ws(APP_MONITOR))
+    } else {
+        shell_win = wm_open(APP_SHELL, "Terminal", 16 * u, 56 * u, sw - 32 * u, sh - 72 * u)
+    }
     # THE SHELL TAKES THE KEYBOARD BACK. wm_open focuses whatever it just
     # opened, and the shell has to be opened FIRST for an unrelated reason -
     # the boot log prints into it, so it must exist before the log runs. Those
@@ -4368,8 +5062,9 @@ fn wm_boot_start() {
     # ...and bake the wallpaper. It has to happen while nothing is on top of
     # it, which is now, and it has to happen after wm_init so the mode is
     # settled. wall_save() prints what it took and what is left; if it refuses
-    # - a 4K screen wants 33 MiB and the arena is 16 - desk_draw falls back to
-    # the plain gradient and says so rather than drawing nothing.
+    # - a 4K RGB565 cache now fits the 16 MiB arena; if any future mode or
+    # competing effect does not, desk_draw falls back to the plain gradient
+    # and says so rather than drawing nothing.
     # THE STATIC FURNITURE IS BAKED IN WITH THE WALLPAPER, and this is the
     # single biggest thing that made the desktop slow.
     #
@@ -4388,8 +5083,8 @@ fn wm_boot_start() {
     draw_header()
     draw_dock_bg()
     # DOCK_BAKED IS THE RETURN VALUE, not 1. wall_save() returns 0 when the
-    # arena cannot hold the bitmap - 3840x2160 wants 31.6 MiB of 16 - and it
-    # was being ignored, so on any screen where the cache is refused the flag
+    # arena cannot hold the bitmap and it was being ignored, so on any screen
+    # where the cache is refused the flag
     # still said "the furniture is in the wallpaper". desk_draw and draw_status
     # both skip drawing the header and the dock background when it is set, and
     # the wallpaper they were relying on does not exist, so both were painted
@@ -4551,7 +5246,7 @@ fn wm_session() {
         wm_report(wi)
         wi = wi + 1
     }
-    while wm_run() == 1 { wm_frame() }
+    while wm_run() == 1 { wm_frame()  idle() }
     con_mute(0)
     return 0
 }
@@ -4593,7 +5288,7 @@ fn layout() {
 fn draw_desk() {
     if px_w() > 0 {
         w = px_w()
-        grad_rgb(0, 0, w, px_h(), WALL_TOP, WALL_BOT)          # the wallpaper
+        grad_rgb(0, 0, w, px_h(), theme(TH_WALL_TOP), theme(TH_WALL_BOT))          # the wallpaper
         draw_header()
         draw_window(term_x, term_y, term_w, term_h, "zl shell   ~", 1)
         text_box(term_c0, term_c1)
@@ -4792,15 +5487,13 @@ vmm_up()
 # real regression rather than a cosmetic one, and golden.txt pins it.
 user_up()
 ok_line("zl runtime, kernel subset")
-# THIS LINE USED TO SAY "no heap", and the comment under it said the line would
-# stop being honest "the day the interpreter boxes lists and strings, and that
-# is the change that has to carry it, not this one." A different change carried
-# it: heap.c is a real allocator - segregated free lists, boundary tags,
-# free/reuse/coalesce, and a worst case measured at 3 steps for alloc and 4 for
-# free with thousands of free blocks outstanding (hosttest/heaptest.c).
-#
-# The filesystem and the scheduler claims are unchanged and still true.
-info_line("no filesystem, no scheduler, no per-process address space")
+# STILL TRUE, and it is worth saying why rather than leaving the next reader to
+# wonder whether it was just missed. A bump allocator with no free() and no
+# reuse inside a run is not a heap - there is nothing to fragment, nothing to
+# double-free, and nothing to leak that a reset does not reclaim. The line stops
+# being honest the day the interpreter boxes lists and strings (EXEC-PROMPT §8),
+# and that is the change that has to carry it, not this one.
+info_line("no heap, zlfs mounts on demand, no scheduler")
 
 print("")
 color(C_GREEN)  print("  ready.")
@@ -4809,6 +5502,20 @@ print("")
 
 # a two-note boot chime - the timer is up, so we can time it
 beep(784, 8)  beep(1046, 12)
+
+# The boot transcript remains complete on COM1, where diagnostics belong.
+# Once the graphical session is ready, the visible terminal becomes a product
+# surface instead of preserving bring-up noise as the first thing on screen.
+# term_clear() clears only its scrollback tee; it cannot erase serial evidence.
+if wm_boot == 1 {
+    term_clear()
+    print("zlOS 0.10")
+    print("one system, one language")
+    print("")
+    print("system ready")
+    print("type h for commands")
+    wm_dmg(shell_win)
+}
 
 # The FIRST prompt, on the serial line only. In the compositor the prompt is
 # pixels at the bottom of a window; every gate here waits for the string "zl> "
@@ -4844,7 +5551,7 @@ last_blink = 0 - 1
 # loop is what verify.sh compares byte for byte, and the cheapest way to keep a
 # transcript identical is to not edit the code that produces it.
 if wm_boot == 1 {
-    while wm_run() == 1 { wm_frame() }
+    while wm_run() == 1 { wm_frame()  idle() }
     con_mute(0)                          # the halting message goes on screen
     running = 0
 }

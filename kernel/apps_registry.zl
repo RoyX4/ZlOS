@@ -27,7 +27,29 @@
 APP_SETTINGS = 6                    # settings.c; wmglue.c dispatches its
                                      # draw/event before zl ever sees them -
                                      # this only has to know how to OPEN one
-APP_CATALOG  = 14                   # "All Applications" - see cat_* below
+# "All Applications" - see cat_* below.
+#
+# 70 AND NOT 13, and that one digit is why the catalog never opened. 13 is
+# APP_FILES (kernel.zl:3499), added to the original suite AFTER this constant
+# was chosen at what was then one past APP_EDIT. Two apps sharing an id is not
+# a naming problem, it is a routing problem, and it broke in the worst
+# direction: reg_open() finds a window by ASKING wm which app each open window
+# is showing (reg_find_win), and the desktop opens a Files window at boot. So
+# `apps`, the dock's grid button and the start menu's "All Applications" all
+# reached reg_open(13), which matched the Files window already on screen,
+# raised and focused it, and returned 1 - success, no new window, no
+# diagnostic. 47 of 53 apps live behind that click and none of them could be
+# opened by a person or photographed by the oracle.
+#
+# It misrouted in the other direction too: app_event() tested `id >=
+# APP_CATALOG` BEFORE its `id == APP_FILES` arm, so every key and click aimed
+# at the Files window was handed to cat_event() instead of files_event().
+#
+# The seam those three dispatchers want is "is this id in the registry", which
+# is REG_FIRST, not "is this id the catalog". They say REG_FIRST now, and this
+# constant sits one past REG_LAST where reg_exists() already refuses it - the
+# catalog must not list itself as a tile.
+APP_CATALOG  = 70
 
 # ---- utilities (apps_utils.zl) ----------------------------------------------
 APP_CLIP  = 15
@@ -58,7 +80,55 @@ APP_CALC    = 33
 APP_MAZE = 34
 
 REG_FIRST = 14                      # first id this table actually lists
-REG_COUNT = 20                      # bumped as each batch of apps is wired in
+REG_LAST  = 69                      # highest id any slice owns
+
+# WHICH IDS ARE REAL. The catalog used to walk REG_FIRST..REG_FIRST+REG_COUNT
+# and assume every id in that span was an app. That held while the ids were
+# contiguous, and stopped holding the moment the id space was carved into
+# reserved per-slice ranges: 34..39 was never allocated, and each slice was
+# given one spare id at the end of its range that it deliberately did not use.
+# Walking the span blind would put four empty tiles in "All Applications",
+# each of which opens a window titled "App" that draws nothing.
+#
+# The gaps are listed rather than derived because there is nothing to derive
+# them from: a slice's <slice>_has() answers for its whole RANGE, and its
+# _name() returns "" for an id inside that range it did not implement - which
+# zl cannot test for, having no string comparison.
+fn reg_exists(id) {
+    if id < REG_FIRST { return 0 }
+    if id > REG_LAST { return 0 }             # incl. APP_CATALOG, which is
+                                              # REG_LAST + 1 and must never
+                                              # appear as a tile in itself
+    if id >= 34 { if id <= 39 { return 0 } }   # never allocated
+    if id == 51 { return 0 }                   # apps_sys3.zl   spare
+    if id == 60 { return 0 }                   # apps_games3.zl spare
+    if id == 69 { return 0 }                   # apps_games4.zl spare
+    return 1
+}
+
+# The catalog indexes a DENSE list, so a gap never becomes a blank tile.
+fn reg_count() {
+    rc = 0
+    rid = REG_FIRST
+    while rid <= REG_LAST {
+        if reg_exists(rid) == 1 { rc = rc + 1 }
+        rid = rid + 1
+    }
+    return rc
+}
+
+fn reg_id_at(idx) {
+    ri = 0
+    rid = REG_FIRST
+    while rid <= REG_LAST {
+        if reg_exists(rid) == 1 {
+            if ri == idx { return rid }
+            ri = ri + 1
+        }
+        rid = rid + 1
+    }
+    return 0 - 1
+}
 
 # kernel.elf is measured against raw_boot.asm's CHUNKS ceiling (1,966,080
 # bytes - the 32 KiB-chunk BIOS raw-boot loader silently truncates anything
@@ -72,11 +142,15 @@ REG_COUNT = 20                      # bumped as each batch of apps is wired in
 # ---- the table --------------------------------------------------------------
 # id -> display name (used by window titles, the catalog and the taskbar)
 fn reg_name(id) {
+    # The catalog is not a TILE (reg_exists refuses it) but it IS a window, so
+    # task_label() asks for its name like any other. Without this its taskbar
+    # chip read "App".
+    if id == APP_CATALOG { return "All Applications" }
     if id == APP_CLIP  { return "Clipboard" }
     if id == APP_COLOR { return "Colour Picker" }
-    if id == APP_REGEX { return "Pattern Tester" }
+    if id == APP_REGEX { return "Regex Tester" }      # the reference's own name
     if id == APP_BASE  { return "Base Converter" }
-    if id == APP_DIFF  { return "Line Diff" }
+    if id == APP_DIFF  { return "Text Diff" }         # the reference's own name
     if id == APP_HASH  { return "Checksum" }
     if id == APP_UNIT  { return "Unit Converter" }
     if id == APP_NOTES { return "Sticky Notes" }
@@ -92,6 +166,12 @@ fn reg_name(id) {
     if id == APP_SYSINFO { return "System Info" }
     if id == APP_CALC    { return "Calculator" }
     if id == APP_MAZE    { return "Maze" }
+    # ---- the per-slice tables. Each file owns a disjoint id range and answers
+    # ---- only for its own; see apps_sys2.zl for why they are separate files.
+    if sys2_has(id) == 1 { return sys2_name(id) }
+    if sys3_has(id) == 1 { return sys3_name(id) }
+    if games3_has(id) == 1 { return games3_name(id) }
+    if games4_has(id) == 1 { return games4_name(id) }
     return "App"
 }
 
@@ -101,52 +181,186 @@ fn reg_cat(id) {
     if id >= APP_CLIP { if id <= APP_BENCH { return 1 } }
     if id >= APP_WORDLE { if id <= APP_CONNECT4 { return 2 } }
     if id == APP_MAZE { return 2 }
+    # ---- the per-slice tables. Each file owns a disjoint id range and answers
+    # ---- only for its own; see apps_sys2.zl for why they are separate files.
+    if sys2_has(id) == 1 { return sys2_cat(id) }
+    if sys3_has(id) == 1 { return sys3_cat(id) }
+    if games3_has(id) == 1 { return games3_cat(id) }
+    if games4_has(id) == 1 { return games4_cat(id) }
     return 0
 }
 
 # id -> default window size, in DESIGN UNITS (still needs * ui()).
 fn reg_w(id) {
-    if id == APP_COLOR  { return 260 }
-    if id == APP_UNIT   { return 260 }
-    if id == APP_NOTES  { return 300 }
-    if id == APP_WORDLE  { return 200 }
-    if id == APP_HANOI   { return 320 }
-    if id == APP_LIGHTS  { return 220 }
-    if id == APP_CLOCK   { return 220 }
-    if id == APP_SYSINFO { return 260 }
-    if id == APP_CALC    { return 200 }
-    if id == APP_MAZE    { return 380 }
+    # EVERY SIZE IS THE REFERENCE'S OWN, from ds-reference.html's APPS,
+    # UTILS and GAME_APPS arrays. They were not before: twenty of these
+    # apps carried a size picked when the app was written, and the errors
+    # were not small - Clocks & Timers opened 220x160 against the
+    # reference's 520x352, a quarter of the area. The oracle compares by
+    # REGION, so a window at the wrong size scores wrong however well its
+    # contents are drawn. All ten utilities are 470x352; the rest differ.
+    if id == APP_CLIP       { return 470 }
+    if id == APP_COLOR      { return 470 }
+    if id == APP_REGEX      { return 470 }
+    if id == APP_BASE       { return 470 }
+    if id == APP_DIFF       { return 470 }
+    if id == APP_HASH       { return 470 }
+    if id == APP_UNIT       { return 470 }
+    if id == APP_NOTES      { return 470 }
+    if id == APP_KEYS       { return 470 }
+    if id == APP_BENCH      { return 470 }
+    if id == APP_WORDLE     { return 400 }
+    if id == APP_TICTACTOE  { return 350 }
+    if id == APP_NIM        { return 400 }
+    if id == APP_HANOI      { return 430 }
+    if id == APP_LIGHTS     { return 360 }
+    if id == APP_CONNECT4   { return 430 }
+    if id == APP_MAZE       { return 500 }
+    if id == APP_CLOCK      { return 520 }
+    if id == APP_SYSINFO    { return 544 }
+    if id == APP_CALC       { return 300 }
+    # ---- the per-slice tables. Each file owns a disjoint id range and answers
+    # ---- only for its own; see apps_sys2.zl for why they are separate files.
+    if sys2_has(id) == 1 { return sys2_w(id) }
+    if sys3_has(id) == 1 { return sys3_w(id) }
+    if games3_has(id) == 1 { return games3_w(id) }
+    if games4_has(id) == 1 { return games4_w(id) }
     return 300
 }
 fn reg_h(id) {
-    if id == APP_CLIP    { return 220 }
-    if id == APP_REGEX   { return 150 }
-    if id == APP_BASE    { return 140 }
-    if id == APP_DIFF    { return 140 }
-    if id == APP_HASH    { return 120 }
-    if id == APP_UNIT    { return 120 }
-    if id == APP_NOTES   { return 200 }
-    if id == APP_KEYS    { return 140 }
-    if id == APP_BENCH   { return 130 }
-    if id == APP_WORDLE  { return 230 }
-    if id == APP_TICTACTOE { return 220 }
-    if id == APP_NIM       { return 140 }
-    if id == APP_HANOI     { return 200 }
-    if id == APP_LIGHTS    { return 240 }
-    if id == APP_CONNECT4  { return 280 }
-    if id == APP_CLOCK   { return 160 }
-    if id == APP_SYSINFO { return 200 }
-    if id == APP_CALC    { return 240 }
-    if id == APP_MAZE    { return 260 }
+    # EVERY SIZE IS THE REFERENCE'S OWN, from ds-reference.html's APPS,
+    # UTILS and GAME_APPS arrays. They were not before: twenty of these
+    # apps carried a size picked when the app was written, and the errors
+    # were not small - Clocks & Timers opened 220x160 against the
+    # reference's 520x352, a quarter of the area. The oracle compares by
+    # REGION, so a window at the wrong size scores wrong however well its
+    # contents are drawn. All ten utilities are 470x352; the rest differ.
+    if id == APP_CLIP       { return 352 }
+    if id == APP_COLOR      { return 352 }
+    if id == APP_REGEX      { return 352 }
+    if id == APP_BASE       { return 352 }
+    if id == APP_DIFF       { return 352 }
+    if id == APP_HASH       { return 352 }
+    if id == APP_UNIT       { return 352 }
+    if id == APP_NOTES      { return 352 }
+    if id == APP_KEYS       { return 352 }
+    if id == APP_BENCH      { return 352 }
+    if id == APP_WORDLE     { return 380 }
+    if id == APP_TICTACTOE  { return 380 }
+    if id == APP_NIM        { return 330 }
+    if id == APP_HANOI      { return 320 }
+    if id == APP_LIGHTS     { return 390 }
+    if id == APP_CONNECT4   { return 400 }
+    if id == APP_MAZE       { return 390 }
+    if id == APP_CLOCK      { return 352 }
+    if id == APP_SYSINFO    { return 398 }
+    if id == APP_CALC       { return 404 }
+    # ---- the per-slice tables. Each file owns a disjoint id range and answers
+    # ---- only for its own; see apps_sys2.zl for why they are separate files.
+    if sys2_has(id) == 1 { return sys2_h(id) }
+    if sys3_has(id) == 1 { return sys3_h(id) }
+    if games3_has(id) == 1 { return games3_h(id) }
+    if games4_has(id) == 1 { return games4_h(id) }
     return 160
 }
 
-# id -> icon24 index (icons.c), or -1 for "no icon this small suite ships,
-# draw the two-letter monogram instead". Only reused where the shape is a
-# real match (files/network/disk/clock) - forcing a stretch icon onto
-# something it does not depict is worse than an honest monogram.
+# id -> icon24 index (icons.c), or -1 for "no icon, draw the two-letter
+# monogram instead" (reg_mono below).
+#
+# THIS TABLE USED TO BE ONE LINE LONG. Everything else fell through to the
+# slices, three of which answered -1 unconditionally, so 46 of the 47 registry
+# apps showed lettering in the app grid and the dock where ds-reference.html
+# shows a glyph. The reference assigns each of its 53 apps an icon id in its
+# APPS/UTILS/GAME_APPS arrays and DRAWS every one of them (its ICONS table,
+# ds-reference.html:1121); gen_icons.py now renders those paths into the atlas
+# at indices 44..88, so the answer for each app is the reference's own answer
+# rather than a stand-in.
+#
+# The numbers are icons.c atlas indices. That file's header block is the
+# authority on which index is which - it is generated, so it cannot drift from
+# the atlas - and REF_ORDER in gen_icons.py is append-only for exactly this
+# reason: reordering it would silently repoint every line below.
 fn reg_icon(id) {
-    if id == APP_CLOCK { return 16 }    # icons.c: 16 clock - an exact match
+    # ---- utilities (UTILS) --------------------------------------------------
+    if id == APP_CLIP  { return 56 }    # uClip
+    if id == APP_COLOR { return 57 }    # uColor
+    if id == APP_REGEX { return 58 }    # uRegex
+    if id == APP_BASE  { return 59 }    # uBase
+    if id == APP_DIFF  { return 60 }    # uDiff
+    if id == APP_HASH  { return 61 }    # uHash
+    if id == APP_UNIT  { return 62 }    # uUnit
+    if id == APP_NOTES { return 63 }    # uNote
+    if id == APP_KEYS  { return 64 }    # uKeys
+    if id == APP_BENCH { return 65 }    # uBench
+
+    # ---- games that live in this file's id range (GAME_APPS) ----------------
+    if id == APP_WORDLE    { return 88 }   # gWord
+    if id == APP_TICTACTOE { return 74 }   # gCross
+    if id == APP_NIM       { return 85 }   # gSticks
+    if id == APP_HANOI     { return 84 }   # gTower
+    if id == APP_LIGHTS    { return 78 }   # gBulb
+    if id == APP_CONNECT4  { return 76 }   # gDrop
+    if id == APP_MAZE      { return 80 }   # gMaze
+
+    # ---- system (APPS) ------------------------------------------------------
+    if id == APP_CLOCK   { return 16 }  # clock - the atlas glyph already IS the
+                                        # reference's, so it is not redrawn
+    if id == APP_SYSINFO { return 55 }  # chip
+    if id == APP_CALC    { return 49 }  # calcApp
+
+    # ---- apps_sys2.zl's range (40..45) --------------------------------------
+    # Answered here rather than in sys2_icon() because sys2_icon() is the
+    # -1 stub this whole table exists to replace; see the note below.
+    if id == APP_KLOG { return 44 }     # log
+    if id == APP_REND { return 45 }     # render
+    if id == APP_HEXV { return 46 }     # hex
+    if id == APP_FBUF { return 47 }     # snap
+    if id == APP_TTY  { return 48 }     # tty
+    if id == APP_FONT { return 50 }     # font
+
+    # ---- apps_sys3.zl's range (46..50) --------------------------------------
+    # sys3_icon() answers for all five, but with STAND-INS chosen before the
+    # reference's glyphs existed: Archive Manager got the folder, Image Viewer
+    # got the paint palette, Services got the bar chart. The reference draws a
+    # binary block, a photo and a service-row for those three, so they are
+    # repointed here. disk and wifi keep the same picture either way.
+    if id == APP_DISK { return 51 }     # disk
+    if id == APP_SVC  { return 52 }     # svc
+    if id == APP_ARCH { return 53 }     # binary
+    if id == APP_IMG  { return 54 }     # imgv
+    if id == APP_NET  { return 17 }     # network - the atlas's wifi fan
+
+    # ---- apps_games3.zl's range (52..59) ------------------------------------
+    if id == G3_TETRIS { return 66 }    # gTetris
+    if id == G3_PONG   { return 67 }    # gPong
+    if id == G3_BREAK  { return 68 }    # gBrick
+    if id == G3_MINES  { return 69 }    # gMine
+    if id == G3_2048   { return 70 }    # gNum
+    if id == G3_LIFE   { return 71 }    # gLife
+    if id == G3_ROIDS  { return 72 }    # gRock
+    if id == G3_INVAD  { return 73 }    # gAlien
+
+    # ---- apps_games4.zl's range (61..68) ------------------------------------
+    if id == G4_FIFTEEN { return 75 }   # gTiles
+    if id == G4_REVERSI { return 77 }   # gDisc
+    if id == G4_SIMON   { return 79 }   # gWave
+    if id == G4_SOKOBAN { return 81 }   # gCrate
+    if id == G4_FLAPPY  { return 82 }   # gBird
+    if id == G4_MISSILE { return 83 }   # gTarget
+    if id == G4_BLACKJK { return 86 }   # gCard
+    if id == G4_FROGGER { return 87 }   # gFrog
+
+    # ---- the per-slice tables. Each file owns a disjoint id range and answers
+    # ---- only for its own; see apps_sys2.zl for why they are separate files.
+    #
+    # Every registry app is now answered above, so these four are reached only
+    # by an id a slice claims but this table has not been told about - a newly
+    # added app, before someone gives it its icon. They stay as that fallback,
+    # and as the seam a slice would use if it ever wanted a per-instance icon.
+    if sys2_has(id) == 1 { return sys2_icon(id) }
+    if sys3_has(id) == 1 { return sys3_icon(id) }
+    if games3_has(id) == 1 { return games3_icon(id) }
+    if games4_has(id) == 1 { return games4_icon(id) }
     return 0 - 1
 }
 
@@ -171,6 +385,12 @@ fn reg_mono(id) {
     if id == APP_SYSINFO { return "SI" }
     if id == APP_CALC    { return "CA" }
     if id == APP_MAZE    { return "MZ" }
+
+    # ---- the per-slice marks, same rule as reg_name.
+    if sys2_has(id) == 1 { return sys2_mono(id) }
+    if sys3_has(id) == 1 { return sys3_mono(id) }
+    if games3_has(id) == 1 { return games3_mono(id) }
+    if games4_has(id) == 1 { return games4_mono(id) }
     return "??"
 }
 
@@ -192,7 +412,7 @@ fn reg_find_win(id) {
 # for anything that needs a fresh start each time it is opened - the same
 # rule open_app() already follows for Snake). Returns the new window, or -1.
 fn reg_new(id, u) {
-    if id == APP_SETTINGS { return wm_open(id, "Settings", 200 * u, 90 * u, 300 * u, 220 * u) }
+    if id == APP_SETTINGS { return wm_open(id, "Settings", 388 * u, 190 * u, 486 * u, 332 * u) }
     if id == APP_CATALOG  { return wm_open(id, "All Applications", 120 * u, 40 * u, CAT_W * u, CAT_H * u) }
     if id == APP_REGEX     { pt_reset() }
     if id == APP_WORDLE    { wg_reset() }
@@ -215,6 +435,13 @@ fn reg_new(id, u) {
     if id == APP_MAZE {
         return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
     }
+
+    # ---- the per-slice opens. Each file owns its own, so an app can pick its
+    # ---- start position and reset its state before the first frame.
+    if sys2_has(id) == 1 { return sys2_new(id, u) }
+    if sys3_has(id) == 1 { return sys3_new(id, u) }
+    if games3_has(id) == 1 { return games3_new(id, u) }
+    if games4_has(id) == 1 { return games4_new(id, u) }
     return 0 - 1
 }
 
@@ -239,14 +466,22 @@ fn reg_open(id) {
     # mouse event routes by SCREEN POSITION, not focus) while arrow keys
     # went nowhere (a key event has no position - it needs focus).
     rw = reg_new(id, ru)
-    if rw < 0 { return 0 }
+    # A REFUSAL HAS TO SAY SO, and say which id. wm_open already prints when
+    # WM_MAX is reached; this is the other half - reg_new returns -1 when no
+    # arm claims the id at all, which is what a wrong id looks like from here.
+    # It returned a bare 0 before, and a bare 0 is how "the catalog opens
+    # nothing" stayed a mystery for six QEMU boots.
+    if rw < 0 {
+        put("  reg: no window for app id ")  print(id)
+        return 0
+    }
     wm_report(rw)
     return 1
 }
 
 # app_draw / app_event / app_tick fallbacks. kernel.zl calls these for any id
-# its own explicit chain does not recognise (id >= APP_CATALOG); nothing
-# above APP_EDIT touches these except through this one seam.
+# the registry owns (id >= REG_FIRST); nothing above APP_FILES touches these
+# except through this one seam.
 fn reg_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_CATALOG { return cat_draw(ax, ay, aw, ah) }
     if id == APP_CLIP  { return cb_draw(ax, ay, aw, ah) }
@@ -269,6 +504,11 @@ fn reg_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_SYSINFO { return si_draw(ax, ay, aw, ah) }
     if id == APP_CALC    { return ca_draw(ax, ay, aw, ah) }
     if id == APP_MAZE    { return mz_draw(ax, ay, aw, ah) }
+    # ---- the per-slice tables, same rule as reg_name above.
+    if sys2_has(id) == 1 { return sys2_draw(id, ax, ay, aw, ah) }
+    if sys3_has(id) == 1 { return sys3_draw(id, ax, ay, aw, ah) }
+    if games3_has(id) == 1 { return games3_draw(id, ax, ay, aw, ah) }
+    if games4_has(id) == 1 { return games4_draw(id, ax, ay, aw, ah) }
     return 0
 }
 fn reg_event(id, win, ety, ecode, ex, ey) {
@@ -291,10 +531,21 @@ fn reg_event(id, win, ety, ecode, ex, ey) {
     if id == APP_CONNECT4  { return c4_event(win, ety, ecode, ex, ey) }
     if id == APP_CALC { return ca_event(win, ety, ecode, ex, ey) }
     if id == APP_MAZE { return mz_event(win, ety, ecode) }
+    # ---- the per-slice tables, same rule as reg_name above.
+    if sys2_has(id) == 1 { return sys2_event(id, win, ety, ecode, ex, ey) }
+    if sys3_has(id) == 1 { return sys3_event(id, win, ety, ecode, ex, ey) }
+    if games3_has(id) == 1 { return games3_event(id, win, ety, ecode, ex, ey) }
+    if games4_has(id) == 1 { return games4_event(id, win, ety, ecode, ex, ey) }
     return 0
 }
 fn reg_tick(id, win) {
     if id == APP_CLOCK { return clk_tick() }
+    # ---- the per-slice ticks. Without these an animated app never advances:
+    # ---- its draw is called, its events arrive, and nothing moves on its own.
+    if sys2_has(id) == 1 { return sys2_tick(id, win) }
+    if sys3_has(id) == 1 { return sys3_tick(id, win) }
+    if games3_has(id) == 1 { return games3_tick(id, win) }
+    if games4_has(id) == 1 { return games4_tick(id, win) }
     return 0
 }
 
@@ -337,13 +588,13 @@ fn cat_hit(win, ex, ey) {
     row = cy / (CAT_TILE_H * u) + cat_scroll
     idx = row * cols + col
     if idx < 0 { return 0 - 1 }
-    if idx >= REG_COUNT { return 0 - 1 }
+    if idx >= reg_count() { return 0 - 1 }
     return idx
 }
 
 fn cat_max_scroll(win) {
     cols = cat_cols(win)
-    rows = (REG_COUNT + cols - 1) / cols
+    rows = (reg_count() + cols - 1) / cols
     vis  = (wm_ch(win) - CAT_HEADER * ui()) / (CAT_TILE_H * ui())
     if vis < 1 { vis = 1 }
     ms = rows - vis
@@ -353,7 +604,7 @@ fn cat_max_scroll(win) {
 
 fn cat_draw(ax, ay, aw, ah) {
     u = ui()
-    fill_rgb(ax, ay, aw, ah, PANEL)
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
 
     # the legend: three swatches, so the colour on every tile MEANS something
     # rather than being decoration - the anti-slop reading of "colour work".
@@ -361,12 +612,12 @@ fn cat_draw(ax, ay, aw, ah) {
     li = 0
     while li < 3 {
         fill_rgb(lx, ay + 9 * u, 8 * u, 8 * u, ac_cat_color(li))
-        label(lx + 12 * u, ay + 6 * u, reg_cat_label(li), TXT_DIM, T_CAPTION, W_REG)
+        label(lx + 12 * u, ay + 6 * u, reg_cat_label(li), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         lx = lx + label_w(reg_cat_label(li), T_CAPTION, W_REG) + 32 * u
         li = li + 1
     }
-    if REG_COUNT == 0 {
-        label(ax + 8 * u, ay + CAT_HEADER * u + 8 * u, "no applications registered yet", TXT_DIM, T_BODY, W_REG)
+    if reg_count() == 0 {
+        label(ax + 8 * u, ay + CAT_HEADER * u + 8 * u, "no applications registered yet", theme(TH_TEXT_DIM), T_BODY, W_REG)
         return 0
     }
 
@@ -376,8 +627,8 @@ fn cat_draw(ax, ay, aw, ah) {
     gy = ay + CAT_HEADER * u
 
     i = 0
-    while i < REG_COUNT {
-        id = REG_FIRST + i
+    while i < reg_count() {
+        id = reg_id_at(i)
         crow = i / cols - cat_scroll
         ccol = i % cols
         ty = gy + crow * CAT_TILE_H * u
@@ -395,11 +646,11 @@ fn cat_draw(ax, ay, aw, ah) {
                 fill_rgb(tx + 6 * u, ty + 4 * u, CAT_TILE_W * u - 12 * u, 3 * u, ac_cat_color(reg_cat(id)))
                 ic = reg_icon(id)
                 if ic >= 0 {
-                    icon(tx + CAT_TILE_W * u / 2 - 12 * u, ty + 16 * u, ic, TXT_HI)
+                    icon(tx + CAT_TILE_W * u / 2 - 12 * u, ty + 16 * u, ic, theme(TH_TEXT_HI))
                 } else {
-                    label(tx + 16 * u, ty + 18 * u, reg_mono(id), TXT_HI, T_TITLE, W_BOLD)
+                    label(tx + 16 * u, ty + 18 * u, reg_mono(id), theme(TH_TEXT_HI), T_TITLE, W_BOLD)
                 }
-                label(tx + 10 * u, ty + CAT_TILE_H * u - 24 * u, reg_name(id), TXT_HI, T_CAPTION, W_REG)
+                label(tx + 10 * u, ty + CAT_TILE_H * u - 24 * u, reg_name(id), theme(TH_TEXT_HI), T_CAPTION, W_REG)
             }
         }
         i = i + 1
@@ -423,7 +674,13 @@ fn cat_event(win, ety, ecode, ex, ey) {
             wm_dmg(win)
         }
         if band(ecode, 1) != 0 {
-            if nh >= 0 { reg_open(REG_FIRST + nh) }
+            # reg_id_at(nh), NOT REG_FIRST + nh. nh is an index into the DENSE
+            # list; the id space has holes in it (34..39 unallocated, one spare
+            # at the end of each slice), so the two stopped being the same
+            # number at the first hole. Every tile from index 20 on - which is
+            # every app in every slice file, 27 of the 47 - opened the app six
+            # or more ids below the one whose name and icon were on the tile.
+            if nh >= 0 { reg_open(reg_id_at(nh)) }
             return 1
         }
         return 1

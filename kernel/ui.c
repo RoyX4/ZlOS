@@ -22,9 +22,12 @@
  */
 
 #include "ui.h"
+#include "design.h"
 
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
+void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
+void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a);
 void fb_text_prop(int px, int py, const char *s, unsigned int fg);
 void fb_text_prop(int px, int py, const char *s, unsigned int fg);
 int  fb_text_prop_w(const char *s);
@@ -40,63 +43,78 @@ static struct ui_theme theme;
 const struct ui_theme *ui_theme(void) { return &theme; }
 void ui_theme_set(const struct ui_theme *t) { theme = *t; }
 
-void ui_theme_init(int scale)
+static int dp(int n, int q8) { return (n * q8 + 128) >> 8; }
+
+void ui_theme_init_q8(int scale_q8)
 {
-    if (scale < 1) scale = 1;
-    /* ---- ONE PALETTE, and kernel.zl's is the one -- DECISIONS.md item E -----
-     * "Do not introduce a second visual system" is what this comment used to
-     * say, and a second visual system is exactly what these eleven values were.
-     * kernel.zl's rgb() constants painted the header bar, the dock and the two
-     * legacy app bodies; this struct painted EVERY WINDOW FRAME ON SCREEN, and
-     * the two agreed on 2 of 10 roles. Two cyans and two panel colours were up
-     * at the same time. visual-speed-northstar.md names "duplicated palette
-     * roles" as a thing that must not ship.
+    if (scale_q8 < 192) scale_q8 = 192;
+    if (scale_q8 > 768) scale_q8 = 768;
+    /* ---- ONE PALETTE, and design.h is the one -------------------------------
+     * This block used to carry twenty-one hex literals of a navy/cyan theme
+     * transcribed from docs/design/zlOS-design-northstar.html, which was itself
+     * transcribed from kernel.zl. That chain is now cut in one place: every
+     * value below names a token in kernel/design.h, and design.h's values were
+     * measured out of docs/design/ds-reference.html - the artifact this desktop
+     * is being cloned from - with the frequency count that justifies each one.
      *
-     * WHICH ONE IS THE SOURCE OF TRUTH IS NOT A TASTE CALL, which is why this
-     * could be closed rather than escalated. docs/design/zlOS-design-northstar.
-     * html:13 says, in its own words, what it is:
+     * THE PALETTE IS NOW LIME-ON-GREY, not blue-slate. That is a deliberate,
+     * reversible call: the reference wins on colour. Reversing it is editing
+     * design.h and nothing else, because no call site anywhere names a colour -
+     * kernel.zl carries semantic role numbers and calls ui_color().
      *
-     *     -- the zlOS palette, straight from kernel.zl's rgb() theme --
+     * Mapping notes, where a role is not a straight one-to-one:
      *
-     * The reference was transcribed FROM kernel.zl. So "agree with the
-     * reference" and "agree with kernel.zl" are the same instruction, and this
-     * file was the only one of the three that had drifted - DECISIONS #33
-     * counted it at 11 of 21 roles for kernel.zl against 2 of 10 here.
-     *
-     * Every value below is now a named token of that reference, and the token
-     * is in the comment so the next drift is a diff and not an argument.
-     * REVERSING IS THIS BLOCK, nothing else - no call site names a colour. */
-    theme.bg        = 0x1A1E32;   /* --wall-top   the desktop behind it all  */
-    theme.panel     = 0x05060A;   /* --panel      .win body. WAS 0x1E2A44,   */
-                                  /*              a mid-navy against the     */
-                                  /*              reference's near-black.    */
-                                  /*              visual-speed-northstar.md  */
-                                  /*              §identity 3 asks for       */
-                                  /*              "near-black content" too.  */
-    /* THE ONE ROLE THE REFERENCE DOES NOT DEFINE, flagged rather than faked.
-     * It is a static mockup: its own step list has "Widget toolkit - clickable
-     * buttons, scrollbars" as QUEUED, so there is no button face in it to copy.
-     * --panel-2 (#0b0e18) is its nearest "raised surface", and it is a ~3%
-     * luminance step off --panel - which would make every button, slider track
-     * and toggle in ui.c effectively invisible. So this takes --line-soft,
-     * which IS a reference token, sits clearly above the panel, and stays below
-     * --line so a hairline still reads on top of a control. */
-    theme.panel_hi  = 0x1A2136;   /* --line-soft  raised: control faces      */
-    theme.text      = 0xD2E4FF;   /* --txt-hi                                */
-    theme.text_dim  = 0x96A5C3;   /* --txt-dim                               */
-    theme.accent    = 0x60D2EB;   /* --accent     was 0x55D6FF - THE SECOND  */
-                                  /*              CYAN, next to kernel.zl's  */
-                                  /*              ACCENT on the same screen. */
-    theme.border    = 0x26304A;   /* --line       .win border                */
-    theme.danger    = 0xE05A5A;   /* --crit                                  */
-    theme.title     = 0x305CA8;   /* --hdr-top    already agreed             */
-    theme.title_bot = 0x16285C;   /* --hdr-bot    already agreed             */
-    /* The unfocused title bar is a GRADIENT in the reference and in kernel.zl
-     * (:794, tbt/tbb) and was a flat slab here, because the struct had one
-     * field for it. Both ends now, and they are the reference's own two stops:
-     * .win:not(.focus) .titlebar{linear-gradient(180deg,#2a3550,#182238)}. */
-    theme.title_off = 0x2A3550;   /* unfocused title, top                    */
-    theme.title_off_bot = 0x182238; /* ...and bottom                         */
+     *  - panel is SURF_3, the reference's window interior (#101215), not its
+     *    darkest surface. Terminal and editor bodies are darker (SURF_2) and
+     *    ask for it themselves; making the default panel that dark would leave
+     *    every non-terminal app on the wrong step of the ladder.
+     *  - panel_hi is SURF_4. Under the old reference this role had no honest
+     *    source and took a border colour as a stand-in. ds-reference.html has
+     *    a real one: #14171a is what every toolbar, sidebar, status bar and
+     *    stat card in it is made of, 32 occurrences.
+     *  - title/title_bot are flat, both SURF_4. The reference's title bar is
+     *    not a gradient; keeping two fields lets a gradient come back without
+     *    another struct change.
+     *  - ok is ZD_OK and danger is ZD_BAD, both straight from the reference's
+     *    own `const OK = '#a9e34b', BAD = '#ff6a50'` at line 3046. They are
+     *    wired to state, never to the accent setting. */
+    theme.bg        = ZD_SURF_0;      /* the canvas behind everything        */
+    theme.panel     = ZD_SURF_3;      /* window interior                     */
+    theme.panel_hi  = ZD_SURF_4;      /* raised: control faces, toolbars     */
+    theme.text      = ZD_TEXT_1;      /* the desktop's root ink              */
+    theme.text_dim  = ZD_TEXT_4;      /* secondary                           */
+    theme.accent    = ZD_ACCENT;      /* the lime                            */
+    theme.border    = ZD_SURF_6;      /* borders and hairlines               */
+    theme.danger    = ZD_BAD;         /* failure only, and the close hover   */
+    theme.title     = ZD_SURF_TABS;   /* focused chrome   #171a1e            */
+    theme.title_bot = ZD_SURF_TABS;   /* flat in the reference               */
+    theme.title_off = ZD_SURF_BAR_OFF;/* unfocused chrome #131518            */
+    theme.title_off_bot = ZD_SURF_BAR_OFF;
+    /* The wallpaper gradient's two ends, and they are NOT surface steps -
+     * ds-reference.html:37 is linear-gradient(168deg,#0a1005,#080a0b,#07080a),
+     * so it starts on a dark green and lands on SURF_0. Naming the ends as
+     * roles is what lets kernel.zl draw the gradient with no colour of its
+     * own; when they were SURF_0/SURF_BODY the top stop was simply missing
+     * and the wallpaper had no green in it at all. */
+    theme.wallpaper_top = ZD_WALL_0;
+    theme.wallpaper_bot = ZD_WALL_100;
+    theme.bar_top   = ZD_SURF_4;
+    theme.bar_bot   = ZD_SURF_3;
+    theme.bar_hi    = ZD_SURF_6;
+    theme.chrome    = ZD_SURF_4;
+    theme.chrome_line = ZD_SURF_2;    /* the 47-use hairline                 */
+    theme.text_hi   = ZD_TEXT_0;      /* emphasis, above body                */
+    theme.ok        = ZD_OK;
+    /* the nine that let an app say what it means - see ui.h */
+    theme.text_2    = ZD_TEXT_2;
+    theme.text_5    = ZD_TEXT_5;
+    theme.text_6    = ZD_TEXT_6;
+    theme.warn      = ZD_WARN;
+    theme.surf_1    = ZD_SURF_1;
+    theme.surf_5    = ZD_SURF_5;
+    theme.surf_7    = ZD_SURF_7;
+    theme.surf_well = ZD_SURF_WELL;
+    theme.accent_br = ZD_ACCENT_BR;
 
     /* ---- metrics, v10 SS6.10 -----------------------------------------------
      * Counted out of the prototype's stylesheet rather than picked by eye, and
@@ -114,18 +132,41 @@ void ui_theme_init(int scale)
      * nested inner rrect stays exactly one pixel tighter, so the hairline
      * border still follows the outer curve instead of cutting across it.
      *
-     * title_h stays 28. It is the one metric desktop-TODO's design rules name
-     * as part of the existing system ("the nested 5px/4px rrect and TITLE_H 28
-     * are the system") - and 28 is already inside the prototype's own 26..34
-     * band, so there is nothing to gain by moving it and a whole layout to
-     * re-check if it moves.
+     * The prototype's silhouette is a 16px outer radius and a 36px title bar.
+     * Those two measurements matter more than another colour tweak: together
+     * they stop a window reading as a square debug panel with a label nailed
+     * across its top.
      */
-    theme.scale   = scale;
-    theme.pad     = 12 * scale;
-    theme.gap     =  8 * scale;
-    theme.row_h   = 28 * scale;
-    theme.radius  = 12 * scale;
-    theme.title_h = 28 * scale;
+    theme.scale_q8 = scale_q8;
+    theme.scale   = (scale_q8 + 128) >> 8;
+    if (theme.scale < 1) theme.scale = 1;
+    theme.pad     = dp(12, scale_q8);
+    theme.gap     = dp( 8, scale_q8);
+    theme.row_h   = dp(28, scale_q8);
+    theme.radius  = dp(16, scale_q8);
+    theme.title_h = dp(36, scale_q8);
+}
+
+void ui_theme_init(int scale) { ui_theme_init_q8(scale * 256); }
+
+unsigned ui_color(int role)
+{
+    const unsigned *first = &theme.bg;
+    if ((unsigned)role >= UI_COLOR_COUNT) return theme.danger;
+    return first[role];
+}
+
+int ui_metric(int role)
+{
+    switch (role) {
+    case UI_METRIC_PAD: return theme.pad;
+    case UI_METRIC_GAP: return theme.gap;
+    case UI_METRIC_ROW_H: return theme.row_h;
+    case UI_METRIC_RADIUS: return theme.radius;
+    case UI_METRIC_TITLE_H: return theme.title_h;
+    case UI_METRIC_SCALE_Q8: return theme.scale_q8;
+    default: return 0;
+    }
 }
 
 /* ---- the layout cursor ---------------------------------------------------- */
@@ -254,6 +295,75 @@ static void focus_ring(int x, int y, int w, int h)
     fb_fill_px(x1 - 1, y0, 1, y1 - y0, c);
 }
 
+/* ---- what uikit.c is allowed to see ----------------------------------------
+ * The second half of the toolkit (uikit.c: pills, tabs, grids, overlays) is a
+ * separate file because this one is the LAYOUT CURSOR and that one is a
+ * catalogue - but it must not get its own copy of "did it fire". So the funnel
+ * above is published, and nothing else is: no access to L, no way to set
+ * L.fired, no second focus index.
+ *
+ * These are deliberately thin. If a future widget needs more of L than this,
+ * the widget belongs in this file, not behind a wider window into it. */
+int  ui_mode_get(void)  { return L.mode; }
+int  ui_click_get(void) { return L.click; }
+int  ui_ptr_x(void)     { return L.px; }
+int  ui_ptr_y(void)     { return L.py; }
+int  ui_hit(int x, int y, int w, int h)  { return hit(x, y, w, h); }
+void ui_place(int w, int h, int *x, int *y) { place(w, h, x, y); }
+int  ui_fire(int x, int y, int w, int h) { return fire(x, y, w, h); }
+void ui_ring(int x, int y, int w, int h) { focus_ring(x, y, w, h); }
+
+/* ---- INK ON THE ACCENT, COMPUTED --------------------------------------------
+ * reference-widgets.md S21.8: "INK must be computed, not stored. Four widgets
+ * already got this wrong in the reference (S20.1)." The reference's own
+ * derivation is at ds-reference.html 3039-3045: WCAG relative luminance of the
+ * background, contrast-compared against black-ish 0.0034 and against white 1,
+ * and the winner becomes the ink.
+ *
+ * That comparison reduces to a single threshold. With contrast defined as
+ * (L1+.05)/(L2+.05), dark ink wins when
+ *
+ *     (L+.05)/(0.0034+.05)  >  1.05/(L+.05)
+ *     (L+.05)^2             >  1.05 * 0.0534 = 0.05607
+ *      L                    >  0.18679
+ *
+ * which is the standard sRGB "is this a light colour" line. So the whole
+ * decision is one luminance and one compare - no per-widget opinion, and no
+ * way for a widget to write #fff on the lime the way three reference widgets
+ * do.
+ *
+ * NO FLOATING POINT. sRGB de-gamma is a 2.4 power, so it is a 17-entry table
+ * of the curve at every 16th code value, linearly interpolated, in Q16. The
+ * interpolation overestimates on the convex low end (lin(56) reads 2648 where
+ * the true value is 1514) and that error is weighted 0.0722, so it moves the
+ * final luminance by well under a percent - nowhere near the threshold for any
+ * colour a palette would use. Asserted both directions in hosttest/uitest.c. */
+static const unsigned short srgb_lin[17] = {
+        0,   340,   947,  1937,  3360,  5256,  7666, 10618, 14151,
+    18286, 23042, 28448, 34537, 41333, 48853, 57104, 65535
+};
+
+static unsigned lin_q16(unsigned c)
+{
+    unsigned i = (c >> 4) & 15u, f = c & 15u;
+    unsigned a = srgb_lin[i], b = srgb_lin[i + 1];
+    return a + (b - a) * f / 16u;
+}
+
+unsigned ui_luminance_q16(unsigned rgb)
+{
+    unsigned r = lin_q16((rgb >> 16) & 0xFFu);
+    unsigned g = lin_q16((rgb >>  8) & 0xFFu);
+    unsigned b = lin_q16( rgb        & 0xFFu);
+    return (2126u * r + 7152u * g + 722u * b) / 10000u;
+}
+
+unsigned ui_ink_on(unsigned bg)
+{
+    return ui_luminance_q16(bg) > 12242u ? (unsigned)ZD_INK_DARK
+                                         : (unsigned)ZD_INK_LIGHT;
+}
+
 /* A proportional layout cannot ask "length times cell" any more - it has to
  * MEASURE. That is the part of item 4 that touches every widget, and the
  * reason a toolkit needs one function for it rather than a multiply spread
@@ -331,24 +441,38 @@ int ui_toggle(const char *s, int *on)
      * at a rendered frame; every assertion about it passed while it was wrong,
      * because "does it toggle" and "does it look like a toggle" are different
      * questions and only one of them has a test. */
-    int kh = theme.row_h * 2 / 3;             /* shorter than a full row      */
-    int kw = kh * 2;                          /* ...and twice as wide as tall */
+    /* THE GEOMETRY IS THE REFERENCE'S, NOT A RATIO. reference-widgets.md S11:
+     * track 40x22 r14, knob 16 at inset 3, so the knob's right edge lands
+     * flush on the track when on (3 + 16 + 21 == 40) and the travel is
+     * asymmetric by 3px. That asymmetry is in the reference and is kept -
+     * a symmetric version reads as a different control. */
+    int kw = UI_DP(&theme, ZD_SW_W), kh = UI_DP(&theme, ZD_SW_H);
+    int pad = UI_DP(&theme, ZD_SW_INSET), d = UI_DP(&theme, ZD_SW_KNOB);
     int w = kw + theme.gap + text_w(s), h = theme.row_h;
     int x, y;
+    if (kh > h) h = kh;
     place(w, h, &x, &y);
     int fired = fire(x, y, w, h);
     if (fired) *on = !*on;
     if (L.mode == UI_DRAW) {
         int ty = y + (h - kh) / 2;            /* centre the track in the row  */
-        int pad = UI_S1(&theme) / 2;
-        int d = kh - 2 * pad;                 /* the knob                     */
-        fb_rrect(x, ty, kw, kh, kh / 2, *on ? theme.accent : theme.panel_hi);
-        fb_rrect(*on ? x + kw - d - pad : x + pad, ty + pad, d, d, d / 2,
-                 *on ? theme.border : theme.text_dim);
+        fb_rrect(x, ty, kw, kh, UI_DP(&theme, ZD_SW_R),
+                 *on ? theme.accent : theme.border);
+        /* the knob is #fff in the reference and stays white on BOTH states -
+         * it is a physical object, not a state colour */
+        fb_rrect(*on ? x + kw - pad - d : x + pad, ty + pad, d, d, d / 2,
+                 (unsigned)ZD_INK_LIGHT);
         fb_text_prop(x + kw + theme.gap, y + (h - text_h()) / 2, s, theme.text);
         focus_ring(x, y, w, h);
     }
     return fired;
+}
+
+int ui_toggle_value(const char *s, int on)
+{
+    int v = on ? 1 : 0;
+    ui_toggle(s, &v);
+    return v;
 }
 
 /* The slider is what PROVES wm.c's pointer grab: once pressed it must keep
@@ -385,19 +509,31 @@ int ui_slider(int *v, int lo, int hi)
         *v = t;
     }
     if (L.mode == UI_DRAW) {
-        int track = UI_S2(&theme);
+        /* reference-widgets.md S12: track 4px r7 on #22262b (== theme.border),
+         * thumb 15x15 r12 in the accent. The FILLED portion of the track is a
+         * zlOS extension - the reference's <input type=range> has no fill at
+         * all - kept because a bare track gives no readout at a glance. */
+        int track = UI_DP(&theme, ZD_SLIDER_H);
+        if (track < 2) track = 2;
         int ty = y + (h - track) / 2;
-        fb_rrect(x, ty, w, track, track / 2, theme.panel_hi);
+        fb_rrect(x, ty, w, track, UI_DP(&theme, ZD_SLIDER_R), theme.border);
         int pos = (*v - lo) * w / (hi - lo);
-        fb_rrect(x, ty, pos, track, track / 2, theme.accent);
-        int knob = theme.row_h - UI_S1(&theme);
+        fb_rrect(x, ty, pos, track, UI_DP(&theme, ZD_SLIDER_R), theme.accent);
+        int knob = UI_DP(&theme, ZD_SLIDER_THUMB);
         int kx = x + pos - knob / 2;
         if (kx < x) kx = x;
         if (kx > x + w - knob) kx = x + w - knob;
-        fb_rrect(kx, y + UI_S1(&theme) / 2, knob, knob, knob / 2, theme.text);
+        fb_rrect(kx, y + (h - knob) / 2, knob, knob,
+                 UI_DP(&theme, ZD_SLIDER_THUMB_R), theme.accent);
         focus_ring(x, y, w, h);
     }
     return fired;
+}
+
+int ui_slider_value(int v, int lo, int hi)
+{
+    ui_slider(&v, lo, hi);
+    return v;
 }
 
 /* A number with a label, right-aligned - the System Monitor's readouts. No
@@ -447,6 +583,49 @@ static struct {
     int cx0, cy0, cx1, cy1;  /* the scissor to put back                     */
 } S;
 
+/* ---- THE SELECTION TREATMENT, PICKED ONCE ----------------------------------
+ * reference-widgets.md S20.2 and S20.3: the reference paints a selected row
+ * three different ways and never settled on one.
+ *
+ *   A  tint rgba(184,232,56,.15) + inset 2px 0 0 ACC left bar + #eef0f2 text
+ *        Files list, System Monitor process table, Files tree, Settings nav
+ *   B  solid ACC fill + INK text, no bar
+ *        Archive Manager rows, Network interface rows
+ *   C  tint + inset 0 0 0 1px ACC full ring
+ *        Files icon view
+ *
+ * THE TOOLKIT USES A, EVERYWHERE, and the reason is not a coin toss:
+ *
+ *  1. It is the majority - four widgets to B's two and C's one.
+ *  2. It composes. A row under treatment A keeps its per-cell colours (a
+ *     directory stays #c7ce9a, a failed process stays BAD); B replaces the
+ *     whole row with a flat accent and every cell colour underneath it has to
+ *     be recomputed against a light background or become unreadable. With
+ *     53 apps and one shared list row, B means 53 chances to get that wrong.
+ *  3. It survives multi-selection. Two adjacent B rows merge into one lime
+ *     block; two adjacent A rows still show two left bars.
+ *
+ * B is not gone - it is what ui_pill(UI_BTN_PRIMARY) and the segmented
+ * control's active item are, where the element IS the selection and has no
+ * cells inside it. C had one user and buys nothing A does not.
+ *
+ * `zebra` is the odd-row stripe: reference-widgets.md records .014 in Monitor
+ * and .012 in Archive, one thousandth apart, "almost certainly a typo". Both
+ * round to 1% and 1% is what this draws. */
+void ui_row_select(int x, int y, int w, int h, int selected, int zebra)
+{
+    if (L.mode != UI_DRAW) return;
+    int r = UI_DP(&theme, ZD_LISTROW_R);
+    if (selected) {
+        fb_rrect_blend(x, y, w, h, r, theme.accent, ZD_SEL_TINT_A * 255 / 100);
+        int bw = UI_DP(&theme, ZD_SEL_BAR_W);
+        if (bw < 1) bw = 1;
+        fb_fill_px(x, y, bw, h, theme.accent);
+    } else if (zebra) {
+        fb_fill_blend(x, y, w, h, (unsigned)ZD_INK_LIGHT, ZD_ZEBRA_A * 255 / 100);
+    }
+}
+
 /* A selectable row: full width, one row high, highlighted when the pointer is
  * over it. `selected` marks the current one - passed in rather than stored,
  * because the app already knows which of its things is selected and a second
@@ -468,10 +647,16 @@ int ui_list_row(const char *s, int selected)
     int over = hit(x, y, w, h);
     int fired = fire(x, y, w, h);
     if (L.mode == UI_DRAW) {
-        if (selected)  fb_rrect(x, y, w, h, UI_S1(&theme), theme.accent);
-        else if (over) fb_rrect(x, y, w, h, UI_S1(&theme), theme.panel_hi);
+        ui_row_select(x, y, w, h, selected, 0);
+        /* hover is NEW DESIGN, not a port. reference-widgets.md S21.1: five
+         * hover rules exist in the whole 4338-line reference and none of them
+         * is on a list row. Kept because zlOS has a pointer and a row that
+         * does not acknowledge it reads as dead - but kept SUBTLE, one surface
+         * step, and never where it could be confused with selection. */
+        if (!selected && over)
+            fb_rrect(x, y, w, h, UI_DP(&theme, ZD_LISTROW_R), theme.panel_hi);
         fb_text_prop(x + UI_S2(&theme), y + (h - text_h()) / 2, s,
-                     selected ? theme.border : theme.text);
+                     selected ? theme.text_hi : theme.text);
         focus_ring(x, y, w, h);
     }
     return fired;
@@ -556,3 +741,19 @@ void ui_scroll_end(int *off)
 }
 
 int ui_scroll_content(void) { return S.content; }
+
+/* zl numbers cross the runtime boundary by value, while the C toolkit keeps a
+ * scroll offset through an out-parameter. App draws are sequential and scroll
+ * regions cannot nest, so one bridge slot preserves the exact C semantics
+ * without inventing a retained widget object. */
+static int zl_scroll_off;
+void ui_scroll_begin_value(int h, int off)
+{
+    zl_scroll_off = off;
+    ui_scroll_begin(h, &zl_scroll_off);
+}
+int ui_scroll_end_value(void)
+{
+    ui_scroll_end(&zl_scroll_off);
+    return zl_scroll_off;
+}

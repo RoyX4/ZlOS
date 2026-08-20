@@ -59,7 +59,7 @@ int ser_rx(void)        { return -1; }   /* no UART in the harness */
  * code on the same path it takes in the kernel - a stub that returned 0 would
  * make wm_frame() take the "TSC unavailable" branch and stop exercising it. */
 static unsigned int fake_tsc;
-unsigned int cpu_tsc_lo(void)  { return (fake_tsc += 1000); }
+unsigned int cpu_tsc_lo(void)  { return (fake_tsc += 20000000); }
 /* (duplicate cpu_tsc_khz stub removed - the merge gave this harness two) */
 static int fake_usb_ptr = 0, fake_ux = 0, fake_uy = 0, fake_ubtn = 0;
 
@@ -73,6 +73,11 @@ int xhci_poll(int max)   { (void)max; return 0; }  /* the one ring drainer */
  * longer infers "absolute" from "a USB pointer exists", because that is
  * exactly what sent every relative usb-mouse down the tablet branch. */
 int xhci_ptr_abs(void)   { return 1; }
+/* input.c reads the USB wheel through this. A target that does not stub it
+ * fails to LINK, build.sh stops, and every target after it keeps its
+ * binary from the previous run - so a change that does not compile can
+ * report "all good". */
+int xhci_ptr_take_wheel(void) { return 0; }
 int xhci_ptr_take_dx(void) { return 0; }
 int xhci_ptr_take_dy(void) { return 0; }
 int xhci_ptr_x(void)     { return fake_ux; }
@@ -107,7 +112,7 @@ static void app_draw(int app, int x, int y, int w, int h, int focused)
         ui_label("[  OK  ] framebuffer console, 120x37");
         ui_label("[  OK  ] APIC: IRQs via I/O APIC, 4 CPU(s)");
         ui_label("[  OK  ] zl runtime, kernel subset");
-        ui_label_dim("[ INFO ] no heap, no filesystem, no scheduler");
+        ui_label_dim("[ INFO ] no heap, zlfs mounts on demand, no scheduler");
         ui_space(t->gap);
         ui_label("ready.");
         ui_space(t->gap);

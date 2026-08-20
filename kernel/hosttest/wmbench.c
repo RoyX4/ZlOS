@@ -68,13 +68,18 @@ int xhci_ptr_ready(void) { return 0; }
 int xhci_ptr_poll(void)  { return 0; }
 int xhci_poll(int max)   { (void)max; return 0; }  /* the one ring drainer */
 int xhci_ptr_abs(void)   { return 0; }   /* no USB pointer here at all */
+/* input.c reads the USB wheel through this. A target that does not stub it
+ * fails to LINK, build.sh stops, and every target after it keeps its
+ * binary from the previous run - so a change that does not compile can
+ * report "all good". */
+int xhci_ptr_take_wheel(void) { return 0; }
 int xhci_ptr_take_dx(void) { return 0; }
 int xhci_ptr_take_dy(void) { return 0; }
 int xhci_ptr_x(void)     { return 0; }
 int xhci_ptr_y(void)     { return 0; }
 int xhci_ptr_btn(void)   { return 0; }
 static unsigned int fake_tsc;
-unsigned int cpu_tsc_lo(void)  { return (fake_tsc += 1000); }
+unsigned int cpu_tsc_lo(void)  { return (fake_tsc += 20000000); }
 unsigned int cpu_tsc_khz(void) { return 2300000u; }
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
 void zl_putc_pub(char c) { term_putc(c); }

@@ -25,8 +25,11 @@
 #include <sys/mman.h>
 
 #include "../ui.h"
+#include "../ease.h"
 
-#define ANIM_SETTLE 5   /* four animation frames plus one to settle */
+/* Derived, not transcribed - see the same constant in wmtest.c. The literal
+ * 20 went stale when wm.c adopted the reference's durations. */
+#define ANIM_SETTLE (EASE_MS_PULSE / 10 + 4)   /* 10 ms per PIT tick */
 #define MOD_SUPER   (1 << 5)
 
 /* ---- fb.c ---------------------------------------------------------------- */
@@ -230,6 +233,11 @@ int xhci_ptr_ready(void) { return 0; }
 int xhci_ptr_poll(void) { return 0; }
 int xhci_poll(int max)   { (void)max; return 0; }  /* the one ring drainer */
 int xhci_ptr_abs(void)   { return 0; }   /* no USB pointer here at all */
+/* input.c reads the USB wheel through this. A target that does not stub it
+ * fails to LINK, build.sh stops, and every target after it keeps its
+ * binary from the previous run - so a change that does not compile can
+ * report "all good". */
+int xhci_ptr_take_wheel(void) { return 0; }
 int xhci_ptr_take_dx(void) { return 0; }
 int xhci_ptr_take_dy(void) { return 0; }
 int xhci_ptr_x(void) { return 0; }
@@ -439,8 +447,12 @@ int main(void)
      * Settle FIRST. Everything above left damage pending - closing `under`
      * damages a region window `d` overlaps - and this asserts that nothing
      * repaints, so it has to start from a clean frame or it measures the
-     * previous test instead of this one. */
-    frame();
+     * previous test instead of this one.
+     *
+     * ONE frame() used to be enough and is not any more - see the same block
+     * in wmtest.c. The reference's zwin runs 200 ms where zlOS's old open ran
+     * 160, so a window was still animating here and repainting itself. */
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
     draw_calls[4] = 0;
     tick_returns = 0;
     frame(); frame();
@@ -776,15 +788,17 @@ int main(void)
     pointer(dx0 + 60, tby, 1);
     pointer(dx0 + 60, tby, 0);
     int mx, my, mw, mh;
+    int work_y = UI_DP(th, 48);
+    int work_h = H - work_y - UI_DP(th, 72);
     wm_geometry(dw, &mx, &my, &mw, &mh);
     ok("double-clicking the title bar MAXIMISES",
-       mx == 0 && my == 0 && mw == W && mh == H);
+       mx == 0 && my == work_y && mw == W && mh == work_h);
 
     /* ...and again restores the exact rect it had */
-    pointer(60, th->title_h / 2, 1);
-    pointer(60, th->title_h / 2, 0);
-    pointer(60, th->title_h / 2, 1);
-    pointer(60, th->title_h / 2, 0);
+    pointer(60, work_y + th->title_h / 2, 1);
+    pointer(60, work_y + th->title_h / 2, 0);
+    pointer(60, work_y + th->title_h / 2, 1);
+    pointer(60, work_y + th->title_h / 2, 0);
     wm_geometry(dw, &mx, &my, &mw, &mh);
     ok("...and doing it again RESTORES the exact rect",
        mx == dx0 && my == dy0 && mw == dw0 && mh == dh0);
@@ -818,9 +832,9 @@ int main(void)
     pointer(dx0 + 60, tby, 1); pointer(dx0 + 60, tby, 0);
     wm_geometry(dw, &mx, &my, &mw, &mh);
     ok("a TRIPLE click maximises once, it does not toggle twice",
-       mx == 0 && my == 0 && mw == W && mh == H);
-    pointer(60, th->title_h / 2, 1); pointer(60, th->title_h / 2, 0);
-    pointer(60, th->title_h / 2, 1); pointer(60, th->title_h / 2, 0);
+       mx == 0 && my == work_y && mw == W && mh == work_h);
+    pointer(60, work_y + th->title_h / 2, 1); pointer(60, work_y + th->title_h / 2, 0);
+    pointer(60, work_y + th->title_h / 2, 1); pointer(60, work_y + th->title_h / 2, 0);
 
     /* the app is told, as a bit in the button mask */
     wm_geometry(dw, &dx0, &dy0, &dw0, &dh0);
@@ -937,20 +951,39 @@ int main(void)
     int snx, sny, snw, snh;
     wm_geometry(sn, &snx, &sny, &snw, &snh);
 
+    /* Dragging to an edge must preview the destination BEFORE release. This
+     * is a pixel assertion: checking only snap state would pass if the overlay
+     * were calculated and never drawn, this repo's recurring mechanism-with-
+     * no-caller failure. The sample lies outside the moving window itself. */
+    unsigned preview_under = fb_get_px(W / 2 - 20, H - 150);
+    pointer(snx + 40, sny + 10, 1);
+    pointer(0, H / 2, 1);
+    unsigned preview_ink = fb_get_px(W / 2 - 20, H - 150);
+    ok("edge drag draws the snap destination preview", preview_ink != preview_under);
+    pointer(0, H / 2, 0);                       /* apply the left snap */
+    send_key(0x113, MOD_SUPER);                  /* restore original rect */
+    frame();
+    ok("releasing the drag clears the preview pixels",
+       fb_get_px(W / 2 - 20, H - 150) == preview_under);
+
     send_key(0x110, MOD_SUPER);                       /* Super+Left */
     int gx, gy, gw, gh;
     wm_geometry(sn, &gx, &gy, &gw, &gh);
     ok("Super+Left snaps to the left half",
-       gx == 0 && gy == 0 && gw == W / 2 && gh == H);
+       gx == 0 && gy == work_y && gw == W / 2 && gh == work_h);
 
     send_key(0x111, MOD_SUPER);                       /* Super+Right */
     wm_geometry(sn, &gx, &gy, &gw, &gh);
-    ok("Super+Right snaps to the right half",
-       gx == W / 2 && gy == 0 && gw == W - W / 2 && gh == H);
+    ok("Super+Right from the left half passes through maximised",
+       gx == 0 && gy == work_y && gw == W && gh == work_h);
+    send_key(0x111, MOD_SUPER);                       /* Super+Right again */
+    wm_geometry(sn, &gx, &gy, &gw, &gh);
+    ok("...and the next Right reaches the right half",
+       gx == W / 2 && gy == work_y && gw == W - W / 2 && gh == work_h);
 
     send_key(0x112, MOD_SUPER);                       /* Super+Up */
     wm_geometry(sn, &gx, &gy, &gw, &gh);
-    ok("Super+Up maximises", gx == 0 && gy == 0 && gw == W && gh == H);
+    ok("Super+Up maximises", gx == 0 && gy == work_y && gw == W && gh == work_h);
 
     /* THE SAVED RECT MUST SURVIVE THREE SNAPS. Capturing it on every snap
      * instead of only the first is the bug every naive version has: restore
@@ -1187,7 +1220,7 @@ int main(void)
      * the cell from the mode, so a wider mode must give a bigger pointer.
      * Last, because it changes the mode out from under everything above. */
     ok("at a 1x cell the pointer is 16px", ext == 16);
-    fb_setup((unsigned long)vram, 1600 * 4, 1600, 900, 32);
+    fb_setup((unsigned long)vram, 3840 * 4, 3840, 200, 32);
     ok("...and follows ui() to 32px at a 2x cell", fb_pointer_extent() == 32);
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);

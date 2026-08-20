@@ -210,6 +210,8 @@ extern int  console_wall_save(void);
 extern void console_wall_paint(int x, int y, int w, int h);
 extern int  console_wall_ok(void);
 extern void console_wedge(int cx, int cy, unsigned int rgb, int a0, int f, int m, int e);
+void console_clip(int x, int y, int w, int h);
+void console_clip_off(void);
 extern int  console_blur(int x, int y, int w, int h, int r);
 extern void console_blur_paint(int slot, int x, int y);
 extern void console_blur_free(void);
@@ -218,6 +220,7 @@ extern unsigned long long console_vram(void);
 extern int  console_cols(void);
 extern int  console_cell_w(void);
 extern int  console_ui_scale(void);
+extern int  console_ui_scale_q8(void);
 extern int  console_cell_h(void);
 extern void fb_set_subpixel(int on);
 extern int  fb_get_subpixel(void);
@@ -428,6 +431,11 @@ extern int  wm_focused(void);
 extern int  wm_is_open(int win);
 extern void wm_set_modal(int win, int on);
 extern int  wm_anim(int win, int kind);
+extern int  wm_anim_at(int id, int kind, int x, int y, int w, int h);
+extern int  wm_anim_scale(int id);
+extern int  wm_pulse(int period_ms);
+extern void wm_set_sweep(int on);
+extern void wm_close_fx(int win);
 extern int  wm_frame_us(void);
 extern int  wm_peak_us(void);
 extern void wm_peak_reset(void);
@@ -443,10 +451,136 @@ extern void wm_set_home(int win);
 extern int  wm_count(void);
 extern int  wm_zorder_at(int i);
 extern int  wm_win_app(int win);
+/* workspaces. The compositor owns which one is current because it owns the
+ * window table; kernel.zl owns how many there are and what the pips look
+ * like. cur_ws()/set_ws() in kernel.zl are these four. */
+extern int  wm_ws(void);
+extern int  wm_set_ws(int n);
+extern int  wm_win_ws(int win);
+extern int  wm_set_win_ws(int win, int n);
+extern int  wm_set_ws_n(int n);
 extern int  wm_add_tab(int win, int app, const char *title);
 extern void wm_damage(int x, int y, int w, int h);
 extern void wm_damage_win(int win);
 extern void ui_theme_init(int scale);
+extern void ui_theme_init_q8(int scale_q8);
+extern unsigned ui_color(int role);
+extern int ui_metric(int role);
+extern void ui_begin(int x, int y, int w, int h, int mode, int px, int py, int click);
+extern int  ui_fired(void);
+extern void ui_label(const char *s);
+extern void ui_label_dim(const char *s);
+extern void ui_bar(int pct);
+extern int  ui_button(const char *s);
+extern void ui_sep(void);
+extern void ui_space(int n);
+extern int  ui_toggle_value(const char *s, int on);
+extern int  ui_slider_value(int v, int lo, int hi);
+extern void ui_num(const char *s, int v);
+extern int  ui_list_row(const char *s, int selected);
+extern void ui_scroll_begin_value(int h, int off);
+extern int  ui_scroll_end_value(void);
+extern int  ui_scroll_content(void);
+extern void ui_row(void);
+extern void ui_endrow(void);
+
+/* ---- uikit.c, the shared widget catalogue ---------------------------------
+ * uikit.c has been in kernel/SOURCES since 5f0c1fc, so every target already
+ * LINKS it - and nothing could CALL it, because the whole catalogue stopped at
+ * the C boundary and every app past the original 13 is written in zl. The
+ * declarations and the bindings below are that boundary and nothing more: no
+ * new widget, no new geometry, no colour. Two shapes need a wrapper and both
+ * are noted at their binding.
+ *
+ * NAMING follows the ui_* bindings above (ui_toggle -> ui_toggle_value, not
+ * the pointer form), so a zl app sees one prefix for the whole toolkit. */
+extern int  ui_text_w(const char *s, int size, int flags);
+extern int  ui_text_h(int size);
+extern void ui_text(int x, int y, const char *s, unsigned rgb, int size, int flags);
+extern int  ui_pill_w(const char *s, int size, int flags);
+extern int  ui_pill_h(int size);
+extern int  ui_pill(int x, int y, int w, int h, const char *s,
+                    int size, int kind, int flags);
+extern int  ui_icon_button(int x, int y, int px, const char *glyph, int active);
+extern int  ui_seg_h(int size);
+extern int  ui_seg_w(const char *items, int size);
+extern int  ui_segmented(int x, int y, int w, int h, const char *items,
+                         int sel, int size);
+extern int  ui_toolbar_h(void);
+extern void ui_toolbar(int x, int y, int w, int h, int at_bottom);
+extern int  ui_status_h(void);
+extern void ui_statusbar(int x, int y, int w, int h);
+extern void ui_stat_begin(int x, int y, int w, int minw);
+extern void ui_stat_cell(const char *key, const char *val, unsigned val_rgb);
+extern int  ui_stat_end(void);
+extern void ui_mono_panel(int x, int y, int w, int h, int kind);
+extern int  ui_mono_line_h(int kind);
+extern void ui_mono_line(int x, int y, int w, const char *s, unsigned rgb,
+                         int kind, int highlight);
+extern void ui_card(int x, int y, int w, int h);
+extern int  ui_chip_w(const char *s);
+extern int  ui_chip_h(void);
+extern int  ui_chip(int x, int y, const char *s, int active);
+extern int  ui_badge_w(const char *s);
+extern int  ui_badge_h(void);
+extern void ui_badge(int x, int y, const char *s, unsigned rgb);
+extern int  ui_dot_size(void);
+extern void ui_dot(int x, int y, unsigned rgb, int glow);
+extern int  ui_meter_h(void);
+extern void ui_meter(int x, int y, int w, int pct, unsigned rgb);
+extern unsigned ui_ink_on(unsigned bg);
+extern int  ui_items_count(const char *items);
+
+/* design.h is the ONE file a colour literal may appear in (see its header and
+ * hosttest/palette.c). ui_color() publishes the ten theme ROLES; it does not
+ * publish WARN, the two dimmest inks, or the hex-byte lime, and those are
+ * named by reference-widgets.md S14.2/S14.3 for widgets a zl app draws. This
+ * table is a window onto design.h, not a second palette - it adds no value of
+ * its own, which is what keeps the single-source rule true. */
+#include "../kernel/design.h"
+static unsigned zl_design_ink(int i)
+{
+    switch (i) {
+    case 0:  return ZD_WARN;          /* amber: warning, wired to state     */
+    case 1:  return ZD_OK;            /* green: healthy/pass                */
+    case 2:  return ZD_BAD;           /* red: failure only                  */
+    case 3:  return ZD_TEXT_0;        /* emphasis, above body               */
+    case 4:  return ZD_TEXT_3;        /* the kernel-log info message ink    */
+    case 5:  return ZD_TEXT_5;        /* tertiary: labels, column heads     */
+    case 6:  return ZD_TEXT_6;        /* quaternary: hints, timestamps      */
+    case 7:  return ZD_SURF_7;        /* the dimmest ink: hex offsets       */
+    case 8:  return ZD_ACCENT_LINK;   /* hex bytes                          */
+    case 9:  return ZD_ACCENT_BR;     /* live values                        */
+    case 10: return ZD_SURF_0;        /* the canvas behind everything       */
+    case 11: return ZD_SURF_1;        /* sunken wells                       */
+    case 12: return ZD_SURF_2;        /* hairline / terminal ground         */
+    case 13: return ZD_SURF_5;        /* menu + input borders               */
+    default: return ZD_TEXT_1;        /* body */
+    }
+}
+
+/* zl has no runtime strings, so a stat cell whose value is a live counter
+ * cannot be built on the zl side at all - ui_stat_cell takes a const char *.
+ * This is the ONE wrapper: format the integer here and hand the catalogue the
+ * string it already wanted. Not a new widget; the same cell, reached with a
+ * number. */
+
+/* 32-BIT DIVISION, DELIBERATELY. The obvious `unsigned long long % 10` here
+ * links against __udivmoddi4, which divmod.c does not supply (it supplies
+ * __divdi3/__moddi3 only) - so the -m32 kernel failed to LINK, and it failed
+ * behind a `| tail` that reported exit 0. A counter that needs more than 32
+ * bits is saturated rather than given a libgcc dependency. */
+static const char *zl_itoa(int v)
+{
+    static char buf[16];
+    int i = (int)sizeof buf - 1;
+    int neg = v < 0;
+    unsigned u = neg ? (unsigned)(-v) : (unsigned)v;
+    buf[i] = 0;
+    do { buf[--i] = (char)('0' + (int)(u % 10u)); u /= 10u; } while (u && i > 1);
+    if (neg && i > 0) buf[--i] = '-';
+    return &buf[i];
+}
 
 /* ---- the browser (browser.c / html.c / layout.c) ------------------------
  * kernel.zl owns the browser app's policy - which window, which keys - and
@@ -724,6 +858,9 @@ extern unsigned fs_bsize(void);
 extern int  fs_name_byte(int idx, int i);
 extern void fs_name_clear(void);
 extern int  fs_name_push(int ch);
+extern int  fs_name_pop(void);
+extern int  fs_name_stage_len(void);
+extern int  fs_name_stage_byte(int i);
 extern int  fs_create_named(unsigned bytes);
 extern int  fs_find_named(void);
 extern int  fs_delete(int idx);
@@ -967,6 +1104,16 @@ Value zl_calln(const char *name, int n, ...)
         return zl_nil();
     }
 
+    /* The graphical session is an event loop, not a benchmark. `sti; hlt` is
+     * the race-free x86 idle pair: interrupts become visible immediately
+     * before the halt and the next timer/input interrupt resumes the loop. */
+    if (streq(name, "idle")) {
+#ifdef ZL_KERNEL_SERIAL
+        __asm__ volatile("sti; hlt" ::: "memory");
+#endif
+        return zl_nil();
+    }
+
     /* raw memory - the whole point of a kernel runtime */
     if (streq(name, "peek8"))  return zl_num((double)*(volatile unsigned char  *)(zl_uptr)a[0].num);
     if (streq(name, "peek16")) return zl_num((double)*(volatile unsigned short *)(zl_uptr)a[0].num);
@@ -1023,6 +1170,8 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wall_ok"))    return zl_num((double)console_wall_ok());
     if (streq(name, "wall_paint")) { console_wall_paint((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "wedge"))      { console_wedge((int)a[0].num,(int)a[1].num,(unsigned int)(unsigned long long)a[2].num,(int)a[3].num,(int)a[4].num,(int)a[5].num,(int)a[6].num); return zl_nil(); }
+    if (streq(name, "clip"))       { console_clip((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "clipoff"))    { console_clip_off(); return zl_nil(); }
     if (streq(name, "blur"))       return zl_num((double)console_blur((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num));
     if (streq(name, "blurdraw"))   { console_blur_paint((int)a[0].num,(int)a[1].num,(int)a[2].num); return zl_nil(); }
     if (streq(name, "blurfree"))   { console_blur_free(); return zl_nil(); }
@@ -1042,7 +1191,8 @@ Value zl_calln(const char *name, int n, ...)
     /* THE LAYOUT SCALE, which used to be cell_w()/8 in zl and therefore could
      * only ever be 1 or 2. See fb.c: the console cell has two atlases, the
      * layout does not have to. */
-    if (streq(name, "ui_scale"))   return zl_num((double)console_ui_scale());
+    if (streq(name, "ui_scale"))   return zl_num((double)console_ui_scale_q8() / 256.0);
+    if (streq(name, "ui_scale_q8"))return zl_num((double)console_ui_scale_q8());
     if (streq(name, "cell_h"))     return zl_num((double)console_cell_h());
     if (streq(name, "bits"))       return zl_num((double)(sizeof(void *) * 8));
     if (streq(name, "hex"))        { console_puthex((unsigned long)(long long)a[0].num, (int)a[1].num); return zl_nil(); }
@@ -1218,6 +1368,19 @@ Value zl_calln(const char *name, int n, ...)
     /* the animation timeline. wm.c had five kinds and no caller in zl at all -
      * built, asserted, and invisible. */
     if (streq(name, "wm_anim"))    return zl_num((double)wm_anim((int)a[0].num, (int)a[1].num));
+    /* ...and the four calls the DOCK needs, which is where four of the
+     * reference's seven animations live. A dock tile is not a window, so
+     * wm_anim_at carries the rectangle to repaint; wm_anim_scale is the press
+     * curve sampled per frame; wm_pulse is the infinite one and holds no slot;
+     * wm_sweep is the wallpaper band, off in wm.c until policy asks. */
+    if (streq(name, "wm_anim_at"))  return zl_num((double)wm_anim_at((int)a[0].num, (int)a[1].num, (int)a[2].num, (int)a[3].num, (int)a[4].num, (int)a[5].num));
+    if (streq(name, "wm_anim_scale")) return zl_num((double)wm_anim_scale((int)a[0].num));
+    if (streq(name, "wm_pulse"))   return zl_num((double)wm_pulse((int)a[0].num));
+    if (streq(name, "wm_sweep"))   { wm_set_sweep((int)a[0].num); return zl_nil(); }
+    /* Closing WITH the shrink. wm_close stays exactly as it was - teardown
+     * loops and policy reshuffles must not animate - so the gesture form is a
+     * separate name rather than a flag nobody would remember to pass. */
+    if (streq(name, "wm_close_fx")) { wm_close_fx((int)a[0].num); return zl_nil(); }
     /* THE FRAME TIMER. desktop-TODO 0h, and it should have come first: nothing
      * in this kernel had ever measured a frame, so every performance claim
      * about the compositor was arithmetic rather than measurement. */
@@ -1240,6 +1403,14 @@ Value zl_calln(const char *name, int n, ...)
      * which app is in it. A taskbar cannot exist without these. */
     if (streq(name, "wm_zat"))     return zl_num((double)wm_zorder_at((int)a[0].num));
     if (streq(name, "wm_app"))     return zl_num((double)wm_win_app((int)a[0].num));
+    /* workspaces. wm_ws/wm_setws are the desktop's current one; wm_winws/
+     * wm_setwinws are one window's. All four are the compositor's, so the
+     * pips, the taskbar and the filter cannot disagree about which is which. */
+    if (streq(name, "wm_ws"))      return zl_num((double)wm_ws());
+    if (streq(name, "wm_setws"))   return zl_num((double)wm_set_ws((int)a[0].num));
+    if (streq(name, "wm_winws"))   return zl_num((double)wm_win_ws((int)a[0].num));
+    if (streq(name, "wm_setwinws"))return zl_num((double)wm_set_win_ws((int)a[0].num,(int)a[1].num));
+    if (streq(name, "wm_wsn"))     return zl_num((double)wm_set_ws_n((int)a[0].num));
     /* ---- from desktop/exec-track ------------------------------------------
      * NAMING: exec-track had renamed wm_focus to be the SETTER and wm_focused
      * the getter. On this side wm_focus is the GETTER and wm_setfocus the
@@ -1255,7 +1426,74 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_ch"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)h); }
     if (streq(name, "wm_dmg"))     { wm_damage_win((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
-    if (streq(name, "ui_theme"))   { ui_theme_init((int)a[0].num); return zl_nil(); }
+    if (streq(name, "ui_theme"))   { ui_theme_init_q8((int)(a[0].num * 256.0)); return zl_nil(); }
+    if (streq(name, "ui_theme_q8")){ ui_theme_init_q8((int)a[0].num); return zl_nil(); }
+    if (streq(name, "ui_color"))   return zl_num((double)ui_color((int)a[0].num));
+    if (streq(name, "ui_metric"))  return zl_num((double)ui_metric((int)a[0].num));
+    if (streq(name, "ui_begin"))   { ui_begin((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,
+                                              (int)a[4].num,(int)a[5].num,(int)a[6].num,(int)a[7].num); return zl_nil(); }
+    if (streq(name, "ui_fired"))   return zl_num((double)ui_fired());
+    if (streq(name, "ui_label"))   { if (a[0].type==V_STR) ui_label(a[0].str); return zl_nil(); }
+    if (streq(name, "ui_dim"))     { if (a[0].type==V_STR) ui_label_dim(a[0].str); return zl_nil(); }
+    if (streq(name, "ui_bar"))     { ui_bar((int)a[0].num); return zl_nil(); }
+    if (streq(name, "ui_button"))  { if (a[0].type==V_STR) return zl_num((double)ui_button(a[0].str)); return zl_num(0); }
+    if (streq(name, "ui_sep"))     { ui_sep(); return zl_nil(); }
+    if (streq(name, "ui_space"))   { ui_space((int)a[0].num); return zl_nil(); }
+    if (streq(name, "ui_toggle"))  { if (a[0].type==V_STR) return zl_num((double)ui_toggle_value(a[0].str,(int)a[1].num)); return zl_num(a[1].num); }
+    if (streq(name, "ui_slider"))  return zl_num((double)ui_slider_value((int)a[0].num,(int)a[1].num,(int)a[2].num));
+    if (streq(name, "ui_num"))     { if (a[0].type==V_STR) ui_num(a[0].str,(int)a[1].num); return zl_nil(); }
+    if (streq(name, "ui_list"))    { if (a[0].type==V_STR) return zl_num((double)ui_list_row(a[0].str,(int)a[1].num)); return zl_num(0); }
+    if (streq(name, "ui_scroll"))  { ui_scroll_begin_value((int)a[0].num,(int)a[1].num); return zl_nil(); }
+    if (streq(name, "ui_scroll_end")) return zl_num((double)ui_scroll_end_value());
+    if (streq(name, "ui_scroll_content")) return zl_num((double)ui_scroll_content());
+    if (streq(name, "ui_row"))     { ui_row(); return zl_nil(); }
+    if (streq(name, "ui_endrow"))  { ui_endrow(); return zl_nil(); }
+    /* ---- uikit.c. Every one of these is rect-in / fired-out, so an app runs
+     * the SAME sequence twice: once under ui_begin(..., 0, ...) to draw and
+     * once under ui_begin(..., 1, ex, ey, 1) to find out what was clicked.
+     * That is the idiom menu_draw/menu_event in kernel.zl already use. */
+    if (streq(name, "ui_ink"))     return zl_num((double)zl_design_ink((int)a[0].num));
+    if (streq(name, "ui_ink_on"))  return zl_num((double)ui_ink_on((unsigned)(unsigned long long)a[0].num));
+    if (streq(name, "ui_items"))   { if (a[0].type==V_STR) return zl_num((double)ui_items_count(a[0].str)); return zl_num(0.0); }
+    if (streq(name, "ui_tw"))      { if (a[0].type==V_STR) return zl_num((double)ui_text_w(a[0].str,(int)a[1].num,(int)a[2].num)); return zl_num(0.0); }
+    if (streq(name, "ui_th"))      return zl_num((double)ui_text_h((int)a[0].num));
+    if (streq(name, "ui_txt"))     { if (a[2].type==V_STR) ui_text((int)a[0].num,(int)a[1].num,a[2].str,(unsigned)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
+    /* The number forms of ui_text/ui_text_w. zl cannot build "412" - there are
+     * no runtime strings - and label_num/num_aa draw unconditionally, which is
+     * wrong for an app that runs its widget sequence a second time to
+     * hit-test: the hit-test pass would repaint. These go through ui_text, so
+     * they honour ui_mode_get() like every other widget. */
+    if (streq(name, "ui_txtn"))    { ui_text((int)a[0].num,(int)a[1].num, zl_itoa((int)a[2].num),(unsigned)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
+    if (streq(name, "ui_tnw"))     return zl_num((double)ui_text_w(zl_itoa((int)a[0].num),(int)a[1].num,(int)a[2].num));
+    if (streq(name, "ui_pill_w"))  { if (a[0].type==V_STR) return zl_num((double)ui_pill_w(a[0].str,(int)a[1].num,(int)a[2].num)); return zl_num(0.0); }
+    if (streq(name, "ui_pill_h"))  return zl_num((double)ui_pill_h((int)a[0].num));
+    if (streq(name, "ui_pill"))    { if (a[4].type==V_STR) return zl_num((double)ui_pill((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,a[4].str,(int)a[5].num,(int)a[6].num,(int)a[7].num)); return zl_num(0.0); }
+    if (streq(name, "ui_iconbtn")) { if (a[3].type==V_STR) return zl_num((double)ui_icon_button((int)a[0].num,(int)a[1].num,(int)a[2].num,a[3].str,(int)a[4].num)); return zl_num(0.0); }
+    if (streq(name, "ui_seg_h"))   return zl_num((double)ui_seg_h((int)a[0].num));
+    if (streq(name, "ui_seg_w"))   { if (a[0].type==V_STR) return zl_num((double)ui_seg_w(a[0].str,(int)a[1].num)); return zl_num(0.0); }
+    if (streq(name, "ui_seg"))     { if (a[4].type==V_STR) return zl_num((double)ui_segmented((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,a[4].str,(int)a[5].num,(int)a[6].num)); return zl_num(-1.0); }
+    if (streq(name, "ui_tb_h"))    return zl_num((double)ui_toolbar_h());
+    if (streq(name, "ui_tb"))      { ui_toolbar((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num); return zl_nil(); }
+    if (streq(name, "ui_sb_h"))    return zl_num((double)ui_status_h());
+    if (streq(name, "ui_sb"))      { ui_statusbar((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "ui_stat"))    { ui_stat_begin((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "ui_statc"))   { if (a[0].type==V_STR && a[1].type==V_STR) ui_stat_cell(a[0].str,a[1].str,(unsigned)(unsigned long long)a[2].num); return zl_nil(); }
+    if (streq(name, "ui_statn"))   { if (a[0].type==V_STR) ui_stat_cell(a[0].str, zl_itoa((int)a[1].num),(unsigned)(unsigned long long)a[2].num); return zl_nil(); }
+    if (streq(name, "ui_stat_end"))return zl_num((double)ui_stat_end());
+    if (streq(name, "ui_mono"))    { ui_mono_panel((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num); return zl_nil(); }
+    if (streq(name, "ui_mono_h"))  return zl_num((double)ui_mono_line_h((int)a[0].num));
+    if (streq(name, "ui_monoln"))  { if (a[3].type==V_STR) ui_mono_line((int)a[0].num,(int)a[1].num,(int)a[2].num,a[3].str,(unsigned)(unsigned long long)a[4].num,(int)a[5].num,(int)a[6].num); return zl_nil(); }
+    if (streq(name, "ui_card"))    { ui_card((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "ui_chip_w"))  { if (a[0].type==V_STR) return zl_num((double)ui_chip_w(a[0].str)); return zl_num(0.0); }
+    if (streq(name, "ui_chip_h"))  return zl_num((double)ui_chip_h());
+    if (streq(name, "ui_chip"))    { if (a[2].type==V_STR) return zl_num((double)ui_chip((int)a[0].num,(int)a[1].num,a[2].str,(int)a[3].num)); return zl_num(0.0); }
+    if (streq(name, "ui_badge_w")) { if (a[0].type==V_STR) return zl_num((double)ui_badge_w(a[0].str)); return zl_num(0.0); }
+    if (streq(name, "ui_badge_h")) return zl_num((double)ui_badge_h());
+    if (streq(name, "ui_badge"))   { if (a[2].type==V_STR) ui_badge((int)a[0].num,(int)a[1].num,a[2].str,(unsigned)(unsigned long long)a[3].num); return zl_nil(); }
+    if (streq(name, "ui_dot_sz"))  return zl_num((double)ui_dot_size());
+    if (streq(name, "ui_dot"))     { ui_dot((int)a[0].num,(int)a[1].num,(unsigned)(unsigned long long)a[2].num,(int)a[3].num); return zl_nil(); }
+    if (streq(name, "ui_meter_h")) return zl_num((double)ui_meter_h());
+    if (streq(name, "ui_meter"))   { ui_meter((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned)(unsigned long long)a[4].num); return zl_nil(); }
     /* ---- the browser. Everything below is one app's policy surface. */
     /* ---- virtio-net. net_up() is the one that does the work; everything
      * else reports what happened, because a driver that fails silently is
@@ -1713,6 +1951,9 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "fs_bs"))      return zl_num((double)fs_bsize());
     if (streq(name, "fs_nclear"))  { fs_name_clear(); return zl_nil(); }
     if (streq(name, "fs_npush"))   return zl_num((double)fs_name_push((int)a[0].num));
+    if (streq(name, "fs_npop"))    return zl_num((double)fs_name_pop());
+    if (streq(name, "fs_nlen"))    return zl_num((double)fs_name_stage_len());
+    if (streq(name, "fs_nch"))     return zl_num((double)fs_name_stage_byte((int)a[0].num));
     if (streq(name, "fs_new"))     return zl_num((double)fs_create_named((unsigned)a[0].num));
     if (streq(name, "fs_get"))     return zl_num((double)fs_find_named());
     if (streq(name, "fs_rm"))      return zl_num((double)fs_delete((int)a[0].num));

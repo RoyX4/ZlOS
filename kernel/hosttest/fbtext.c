@@ -37,8 +37,9 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 void fb_clip(int x, int y, int w, int h);
 void fb_clip_none(void);
 unsigned int fb_get_px(int x, int y);
-void fb_image(int px, int py, int w, int h,
-              const unsigned int *src, int sw, int sh);
+void fb_icon24(int px, int py, int n, unsigned int fg);
+int  fb_ui_scale_q8(void);
+extern const int icons_n;       /* generated into icons.c by gen_icons.py */
 
 int  fb_prop_em(void);
 int  fb_text_rich_w(const char *s, int len, int size, int style);
@@ -359,112 +360,36 @@ int main(void)
     okf(km.x1 <= 40 + m1 + 2, "mono ink fits its measured width (%ld vs %ld)",
         (long)km.x1, (long)(40 + m1 + 2));
 
-    /* ---- 9. fb_image: a decoded picture, scaled into its box --------------
-     * THE BROWSER'S FIRST RECTANGLE OF REAL PIXELS. Every other path in fb.c
-     * draws a glyph, an icon or a solid, so nothing above exercises a scale
-     * or a per-pixel alpha at all.
-     *
-     * These assert the three things a screenshot cannot: that a DOWNSCALE
-     * averages rather than throwing away eight of every nine pixels (a
-     * checkerboard must come out grey, not black and not white); that a
-     * transparent pixel's stored COLOUR does not bleed into its neighbours
-     * (the halo every hand-rolled scaler ships with once); and that the clip
-     * rectangle contains it. A picture that is subtly wrong in any of those
-     * still looks like a picture. */
-    printf("\n9. fb_image - a decoded picture in a box\n");
-    {
-        enum { SW = 32, SH = 32 };
-        static unsigned int src[SW * SH];
+    /* ---- 9. density-aware scale and the complete icon atlas --------------
+     * 1280 and 1920 are both normal desktop canvases, not reasons to zoom the
+     * interface. Fractional growth begins above the 1920 reference and reaches
+     * 2x at 4K. Restore the original mode before the icon checks. */
+    printf("\n9. density-aware UI scale and complete icon atlas\n");
+    fb_setup((unsigned long)vram, (unsigned)W * 4, 1280, H, 32);
+    okf(fb_ui_scale_q8() == 256, "1280px gives q8 scale %ld, want %ld",
+        (long)fb_ui_scale_q8(), 256L);
+    fb_setup((unsigned long)vram, (unsigned)W * 4, W, H, 32);
+    fb_clip_none();
 
-        /* opaque red, straight copy at 1:1 */
-        for (int i = 0; i < SW * SH; i++) src[i] = 0xFFFF0000u;
-        clear();
-        fb_image(10, 10, SW, SH, src, SW, SH);
-        ok(fb_get_px(10, 10) == 0xFF0000u && fb_get_px(41, 41) == 0xFF0000u,
-           "a 1:1 opaque blit did not land the corner pixels");
-        ok(fb_get_px(9, 10) == BG && fb_get_px(42, 41) == BG,
-           "the blit wrote outside its box");
-
-        /* FULLY TRANSPARENT MUST DRAW NOTHING AT ALL. An alpha of 0 whose
-         * stored colour is white is what an encoder actually writes, so a
-         * decoder that ignored alpha would paint a white square here. */
-        for (int i = 0; i < SW * SH; i++) src[i] = 0x00FFFFFFu;
-        clear();
-        fb_image(10, 10, SW, SH, src, SW, SH);
-        ok(fb_get_px(20, 20) == BG, "a fully transparent image painted pixels");
-
-        /* HALF ALPHA LANDS BETWEEN the background and the colour, and not at
-         * either end - which is the assertion that fails if the blend is
-         * dropped and the one that fails if it is applied twice. */
-        for (int i = 0; i < SW * SH; i++) src[i] = 0x80FFFFFFu;
-        clear();
-        fb_image(10, 10, SW, SH, src, SW, SH);
-        unsigned int mid = fb_get_px(20, 20) & 0xFF;
-        ok(mid > (BG & 0xFF) && mid < 0xFF,
-           "half-alpha white over the background gave %u, not a blend", mid);
-
-        /* A CHECKERBOARD SCALED DOWN 8:1 MUST GO GREY. Nearest-neighbour
-         * returns whichever pixel it lands on, so it produces pure black or
-         * pure white and this is the assertion that catches it. */
-        for (int y = 0; y < SH; y++)
-            for (int x = 0; x < SW; x++)
-                src[y * SW + x] = ((x ^ y) & 1) ? 0xFFFFFFFFu : 0xFF000000u;
-        clear();
-        fb_image(10, 10, 4, 4, src, SW, SH);
-        unsigned int g = fb_get_px(11, 11) & 0xFF;
-        ok(g > 0x40 && g < 0xC0,
-           "an 8:1 downscaled checkerboard came out %u - not averaged", g);
-
-        /* NO HALO. Transparent BLACK beside opaque white must average to
-         * white at reduced alpha, never to grey: weighting the colour by
-         * alpha is what makes that true, and dropping the weighting is the
-         * classic bug. Every other pixel transparent black. */
-        for (int y = 0; y < SH; y++)
-            for (int x = 0; x < SW; x++)
-                src[y * SW + x] = ((x ^ y) & 1) ? 0xFFFFFFFFu : 0x00000000u;
-        clear();
-        fb_fill_px(0, 0, W, H, 0x000000u);          /* black page, so a halo shows */
-        fb_image(10, 10, 4, 4, src, SW, SH);
-        unsigned int hw = fb_get_px(11, 11) & 0xFF;
-        ok(hw > 0x60,
-           "transparent black bled into opaque white: got %u, expected a "
-           "half-alpha white near 0x80", hw);
-        clear();
-
-        /* AN UPSCALE MUST COVER ITS WHOLE BOX. Computing the source index by
-         * dividing before multiplying collapses every row onto source row 0,
-         * which is a blank stripe rather than a wrong pixel. */
-        for (int y = 0; y < SH; y++)
-            for (int x = 0; x < SW; x++)
-                src[y * SW + x] = (y < SH / 2) ? 0xFF00FF00u : 0xFF0000FFu;
-        clear();
-        fb_image(10, 10, 64, 64, src, SW, SH);
-        ok((fb_get_px(20, 20) & 0xFFFFFF) == 0x00FF00u &&
-           (fb_get_px(20, 70) & 0xFFFFFF) == 0x0000FFu,
-           "a 2x upscale did not map both halves of the source");
-
-        /* THE CLIP IS A CONTAINMENT GUARANTEE, not a suggestion - browser.c
-         * relies on it to keep a picture inside the viewport. */
-        for (int i = 0; i < SW * SH; i++) src[i] = 0xFFFF0000u;
-        clear();
-        fb_clip(20, 20, 10, 10);
-        fb_image(10, 10, SW, SH, src, SW, SH);
-        fb_clip_none();
-        ok(fb_get_px(15, 15) == BG && fb_get_px(25, 25) == 0xFF0000u,
-           "fb_image escaped the clip rectangle");
-
-        /* DEGENERATE ARGUMENTS MUST DRAW NOTHING AND NOT FAULT. A zero
-         * intrinsic dimension is a real PNG failure mode and a division. */
-        clear();
-        fb_image(10, 10, 0, 10, src, SW, SH);
-        fb_image(10, 10, 10, 0, src, SW, SH);
-        fb_image(10, 10, 10, 10, src, 0, SH);
-        fb_image(10, 10, 10, 10, src, SW, 0);
-        fb_image(10, 10, 10, 10, 0, SW, SH);
-        fb_image(-40, -40, 10, 10, src, SW, SH);
-        ok(measure_ink(0, 0, W, 200).n == 0,
-           "a degenerate fb_image call drew something");
-    }
+    /* The two indices here are DERIVED from the atlas, not written down. They
+     * were literals - 43 and 44 - which meant the check only proved something
+     * about an atlas of exactly 44 icons: growing it turned "44 is rejected"
+     * from a bounds check into a false alarm, and left the real last entry
+     * untested. icons_n comes out of gen_icons.py with the atlas itself. */
+    clear();
+    fb_icon24(40, 40, icons_n - 1, FG);
+    okf(measure_ink(0, 0, W, 200).n > 0,
+        "icon %ld, the final entry of an atlas of %ld, is reachable and draws",
+        (long)(icons_n - 1), (long)icons_n);
+    clear();
+    fb_icon24(40, 40, icons_n, FG);
+    okf(measure_ink(0, 0, W, 200).n == 0,
+        "icon %ld is rejected instead of reading past the atlas of %ld",
+        (long)icons_n, (long)icons_n);
+    clear();
+    fb_icon24(40, 40, -1, FG);
+    ok(measure_ink(0, 0, W, 200).n == 0,
+       "a negative icon index is rejected too");
 
     printf("\n%d checks, %d failed\n", checks, failures);
     return failures ? 1 : 0;

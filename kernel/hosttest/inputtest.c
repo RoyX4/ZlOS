@@ -89,6 +89,11 @@ int xhci_poll(int max)   { (void)max; return 0; }  /* the one ring drainer */
  * input.c infer it from "a USB pointer exists", which is the bug that made
  * every usb-mouse take the absolute branch. */
 int xhci_ptr_abs(void)   { return 1; }
+/* input.c reads the USB wheel through this. Six targets were missing the
+ * stub; build.sh stops at the first, and every target after it silently
+ * keeps its binary from the previous run - which is how wmtest reported
+ * "all good: 0 failures" for a source file that did not compile. */
+int xhci_ptr_take_wheel(void) { return 0; }
 int xhci_ptr_take_dx(void) { return 0; }
 int xhci_ptr_take_dy(void) { return 0; }
 int xhci_ptr_x(void)     { return fake_ux; }

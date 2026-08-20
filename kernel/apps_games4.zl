@@ -1,0 +1,2389 @@
+# apps_games4.zl - 15 Puzzle, Reversi, Simon, Sokoban, Flappy, Missile Command, Blackjack, Frogger
+#
+# ONE SLICE, ONE FILE. apps_registry.zl's seven dispatch chains each call into
+# this file exactly once, so a slice can be written without touching the shared
+# registry at all. That is not tidiness: five agents editing seven if-chains in
+# one working tree clobber each other, and a duplicate app id compiles clean and
+# misroutes at RUNTIME - REG_FIRST is a dispatch FLOOR, so `id >= REG_FIRST`
+# routes into the registry and a collision is invisible until you open the app.
+# That floor used to be APP_CATALOG, which is exactly how it went wrong: the
+# catalog was given id 13 and so was APP_FILES, and for months `apps` raised
+# the Files window instead of opening the catalog.
+#
+# THIS SLICE OWNS IDS 61..69 AND NO OTHERS.
+#
+# EIGHT STATE MACHINES, NOT EIGHT RESKINS. Every one of these is written from
+# its own rules: Reversi's eight-ray legal-move test and its flip, Sokoban's
+# push rule (and the two things that rule is always got wrong - see sk_move),
+# blackjack's soft-ace demotion, Frogger's "a log carries you and the river
+# does not". Where two games look similar on screen they share NOTHING but
+# apps_common.zl's grid arithmetic.
+#
+# WHAT THE REFERENCE ACTUALLY GIVES US. ds-reference.html's game window is a
+# canvas over a 30px status bar carrying a PID chip and a keys hint
+# (lines 569-581), and the canvas itself is EMPTY: the page references
+# ./support.js and seven sibling modules that were never delivered, so there is
+# no gameplay art in the artifact to copy. The shell below is transliterated
+# from those lines; the games inside it are invented, drawn in the reference's
+# own palette.
+
+games4_LO = 61
+games4_HI = 69
+fn games4_has(id) { if id < games4_LO { return 0 }  if id > games4_HI { return 0 }  return 1 }
+
+G4_FIFTEEN = 61
+G4_REVERSI = 62
+G4_SIMON   = 63
+G4_SOKOBAN = 64
+G4_FLAPPY  = 65
+G4_MISSILE = 66
+G4_BLACKJK = 67
+G4_FROGGER = 68
+G4_SPARE   = 69                     # deliberately not an app; games4_new refuses it
+
+# ==============================================================================
+# THIS SLICE'S FIXED BUFFERS, AND WHY THEY ARE DECLARED HERE
+#
+# kernel.zl carries the app suite's buffer block (TT_BOARD .. MAZE_STACK) and
+# check-memmap.sh's duplicate sweep reads kernel.zl, so that is where a new
+# region would normally go. It cannot go there for these three: this file is
+# the only file this job may commit, and a constant added to kernel.zl but not
+# committed would leave apps_games4.zl referencing a name that does not exist
+# in anyone else's tree. A slice that owns its own state owns its own
+# addresses.
+#
+# THREE of the eight games need one, and no more:
+#   - 15 Puzzle, Reversi and Simon reuse FIFTEEN_BOARD / RV_BOARD / SIMON_SEQ,
+#     which kernel.zl already declares and NOTHING has ever read or written
+#     (grep: they appear in kernel.zl and nowhere else). Reusing them is the
+#     ladder's second rung, and it keeps three pages out of the map.
+#   - Flappy and Frogger hold their whole world in scalars, so they get no
+#     buffer at all.
+#
+# THE BASE IS 0x02280000, NOT 0x02215000, on purpose. Another agent is
+# allocating regions in kernel.zl at the same time as this one, and the
+# obvious next address up there is exactly what they will take. Leaving a
+# 428 KiB moat means the two allocations cannot meet even if both grow. The
+# ceiling is virtio_net.c's NET_FLOOR at 0x03000000, 13.5 MiB above the
+# highest byte used here.
+SK_BOARD = 0x02280000   # Sokoban:  14 x 9 = 126 crate flags
+SK_UNDO  = 0x02281000   # Sokoban:  512 undo records, one byte each
+MC_BUF   = 0x02282000   # Missile Command: incoming, interceptors, blasts
+BJ_BUF   = 0x02283000   # Blackjack: the 52-card shoe and the two hands
+
+# ==============================================================================
+# The shell: the reference's game window, which is a canvas over a 30px bar.
+# Every game below draws into g4_ph(ah) pixels of height and lets g4_bar draw
+# the rest, so the chrome is identical across all eight and exists in ONE
+# place - the same argument tray_x() makes in kernel.zl.
+# ==============================================================================
+G4_BAR = 30                         # ds-reference.html:576, height:30px
+
+fn g4_ph(ah) { return ah - G4_BAR * ui() }
+
+# The canvas ground. ds-reference.html:571 sets it to #0b0d10, which is not a
+# design.h token; TH_CHROME_LINE is ZD_SURF_2 #0b0d0f, one point of blue away
+# and already in the palette. Naming the role instead of inventing a 21st
+# colour is the whole reason ui_color() exists.
+fn g4_canvas(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, g4_ph(ah), theme(TH_CHROME_LINE))
+    return 0
+}
+
+# The status bar: background #14171a (ZD_SURF_4 = TH_CHROME), a 1px top border
+# of #0b0d0f (ZD_SURF_2 = TH_CHROME_LINE), a PID chip and a keys hint.
+fn g4_bar(ax, ay, aw, ah, id) {
+    u = ui()
+    by = ay + g4_ph(ah)
+    fill_rgb(ax, by, aw, G4_BAR * u, theme(TH_CHROME))
+    fill_rgb(ax, by, aw, 1, theme(TH_CHROME_LINE))
+    chw = 30 * u
+    rrect(ax + 11 * u, by + 8 * u, chw, 15 * u, 4 * u, theme(TH_BORDER))
+    label_num(ax + 19 * u, by + 7 * u, id, theme(TH_ACCENT), T_CAPTION, W_BOLD)
+    label(ax + 11 * u + chw + 8 * u, by + 7 * u, g4_keys(id), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    return 0
+}
+
+fn g4_keys(id) {
+    if id == G4_FIFTEEN { return "click a tile / arrows slide  -  r reshuffles" }
+    if id == G4_REVERSI { return "click a lime dot to place  -  r new game" }
+    if id == G4_SIMON   { return "click a pad or 1-4  -  r restarts" }
+    if id == G4_SOKOBAN { return "arrows push  -  u undo  -  r reset level" }
+    if id == G4_FLAPPY  { return "space / click flaps  -  r restarts" }
+    if id == G4_MISSILE { return "click to intercept  -  r restarts" }
+    if id == G4_BLACKJK { return "h hit  -  s stand  -  d deal" }
+    if id == G4_FROGGER { return "arrows hop  -  r restarts" }
+    return ""
+}
+
+# ------------------------------------------------------------------------------
+# The game palette. EVERY value here is a token from kernel/design.h, and
+# hosttest/palette.c has already proved each of those occurs literally in
+# docs/design/ds-reference.html - so these are the reference's own colours, not
+# colours picked by eye.
+#
+# THE ROLE TABLE IS ALWAYS THE FIRST ANSWER. ui_color() grew from twenty roles
+# to twenty-nine while this file was being written, and three of the eight
+# below became nameable the moment it did - amber, bright lime and the sunken
+# well are TH_WARN, TH_ACCENT_BR and TH_SURF_1 now, so they are named rather
+# than repeated. If a future role covers one of the remaining five, it should
+# lose its literal the same way.
+#
+# The five that are left are the four ZD_ACCENT_ALT_* and ZD_BAD_SOFT. Those
+# are not chrome and have no role, which is correct: a role says what a colour
+# MEANS to a window, and "the second of four pads a player must tell apart" is
+# not a meaning a window frame has. They are restated as rgb() triples because
+# design.h is C and zl cannot include it.
+fn g4_col(i) {
+    if i == 0 { return rgb(0x4C, 0xE0, 0xB3) }      # ZD_ACCENT_ALT_1  teal
+    if i == 1 { return rgb(0x57, 0xB6, 0xFF) }      # ZD_ACCENT_ALT_2  blue
+    if i == 2 { return rgb(0x8F, 0x7B, 0xFF) }      # ZD_ACCENT_ALT_3  violet
+    if i == 3 { return rgb(0xE8, 0x6E, 0xC4) }      # ZD_ACCENT_ALT_4  pink
+    if i == 4 { return theme(TH_WARN) }             # ZD_WARN          amber
+    if i == 5 { return rgb(0xFF, 0x9C, 0x88) }      # ZD_BAD_SOFT      soft red
+    if i == 6 { return theme(TH_ACCENT_BR) }        # ZD_ACCENT_BR     bright lime
+    return theme(TH_SURF_1)                          # ZD_SURF_1        sunken well
+}
+
+# A heading line, drawn identically by all eight so the games read as one suite.
+fn g4_head(ax, ay, s) {
+    u = ui()
+    label(ax + 12 * u, ay + 8 * u, s, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    return 0
+}
+
+# key, then value, laid out from the RIGHT edge - scores and counters, one row.
+fn g4_stat(ax, ay, aw, s, v) {
+    u = ui()
+    vx = ax + aw - 34 * u
+    label(vx - label_w(s, T_CAPTION, W_REG) - 6 * u, ay + 8 * u, s, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(vx, ay + 8 * u, v, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    return 0
+}
+
+fn g4_abs(v) { if v < 0 { return 0 - v }  return v }
+
+# ==============================================================================
+# 61 - 15 PUZZLE. 4x4, fifteen numbered tiles and one hole; slide a tile into
+# the hole until 1..15 read in order. FIFTEEN_BOARD holds one byte per square,
+# 0 = the hole.
+# ==============================================================================
+FI_N = 4
+# THE HOLE IS A ROW AND A COLUMN, not a flat index divided back apart. Deriving
+# `ix / FI_N` costs nothing in the kernel, where runtime_kernel.c truncates,
+# and gives 1.25 in the host interpreter, where zl numbers are doubles - so the
+# rules of this puzzle would be two different rules in the project's two
+# runtimes. Multiplying back up (fi_blankix) is exact in both.
+fi_br = 3
+fi_bc = 3
+fi_moves = 0
+fi_won = 0
+
+fn fi_at(ix) { return peek8(FIFTEEN_BOARD + ix) }
+fn fi_put(ix, v) { poke8(FIFTEEN_BOARD + ix, v)  return 0 }
+fn fi_blankix() { return fi_br * FI_N + fi_bc }
+
+fn fi_solved() {
+    ix = 0
+    while ix < 15 { if fi_at(ix) != ix + 1 { return 0 }  ix = ix + 1 }
+    if fi_at(15) != 0 { return 0 }
+    return 1
+}
+
+# Slide the tile at (rr,cc) into the hole, if the two are orthogonally
+# adjacent. Returns 1 if the board moved. Off-board coordinates are refused
+# here rather than by every caller, which is what lets fi_event steer with
+# fi_br +/- 1 and not test the edges itself.
+fn fi_slide(rr, cc) {
+    if rr < 0 { return 0 }
+    if rr >= FI_N { return 0 }
+    if cc < 0 { return 0 }
+    if cc >= FI_N { return 0 }
+    if g4_abs(rr - fi_br) + g4_abs(cc - fi_bc) != 1 { return 0 }
+    fi_put(fi_blankix(), fi_at(rr * FI_N + cc))
+    fi_put(rr * FI_N + cc, 0)
+    fi_br = rr
+    fi_bc = cc
+    return 1
+}
+
+# HALF OF ALL 16! ARRANGEMENTS OF THIS BOARD CANNOT BE SOLVED. The invariant is
+# permutation parity plus the hole's row distance from home, and shuffling the
+# bytes gets it wrong half the time - a puzzle nobody can finish, which looks
+# exactly like a puzzle that is merely hard.
+#
+# So this never shuffles the bytes. It walks the HOLE through 240 random legal
+# slides from the solved board: every position it can reach is a position it
+# came from, so every position it can reach is solvable. Same argument
+# lo_reset() makes for Lights Out, and it needs no solver and no parity
+# arithmetic to be true.
+fn fi_reset() {
+    ix = 0
+    while ix < 15 { fi_put(ix, ix + 1)  ix = ix + 1 }
+    fi_put(15, 0)
+    fi_br = FI_N - 1
+    fi_bc = FI_N - 1
+    fi_won = 0
+    ac_seed_from(ticks() + 61)
+    kk = 0
+    while kk < 240 {
+        dd = ac_rand(4)
+        # fi_slide refuses anything off the board, so a direction that would
+        # leave the grid simply does not move - and the walk stays 240 tries
+        # rather than 240 moves, which changes nothing about solvability.
+        if dd == 0 { fi_slide(fi_br - 1, fi_bc) }
+        if dd == 1 { fi_slide(fi_br + 1, fi_bc) }
+        if dd == 2 { fi_slide(fi_br, fi_bc - 1) }
+        if dd == 3 { fi_slide(fi_br, fi_bc + 1) }
+        kk = kk + 1
+    }
+    # A random walk CAN land back on the solved board. Rare, and a game that
+    # opens already won is still a bug.
+    if fi_solved() == 1 { fi_slide(FI_N - 1, FI_N - 2) }
+    fi_moves = 0
+    return 0
+}
+
+# Geometry, derived from the client rect rather than baked in, and shared by
+# the drawing and the hit test so a click always lands on the tile it looks
+# like it landed on.
+fn fi_cell(aw, ah) {
+    u = ui()
+    cw = (aw - 24 * u) / FI_N
+    chh = (g4_ph(ah) - 44 * u) / FI_N
+    if chh < cw { cw = chh }
+    if cw < 8 { cw = 8 }
+    return cw
+}
+fn fi_gx(aw, ah) { return (aw - FI_N * fi_cell(aw, ah)) / 2 }
+fn fi_gy(aw, ah) { return 30 * ui() }
+
+fn fi_draw(ax, ay, aw, ah) {
+    u = ui()
+    cell = fi_cell(aw, ah)
+    gx = ax + fi_gx(aw, ah)
+    gy = ay + fi_gy(aw, ah)
+    g4_head(ax, ay, "slide the tiles into order")
+    g4_stat(ax, ay, aw, "moves", fi_moves)
+    fill_rgb(gx, gy, FI_N * cell, FI_N * cell, g4_col(7))
+    ix = 0
+    while ix < FI_N * FI_N {
+        vv = fi_at(ix)
+        cx = gx + (ix % FI_N) * cell
+        cy = gy + (ix / FI_N) * cell
+        if vv > 0 {
+            # A tile already standing on its home square is lime. That is the
+            # only decoration in this app and it is information: it turns
+            # "am I getting closer" from a question into a glance.
+            face = theme(TH_PANEL_HI)
+            ink = theme(TH_TEXT_HI)
+            if vv == ix + 1 { face = theme(TH_ACCENT)  ink = theme(TH_BG) }
+            rrect(cx + 2 * u, cy + 2 * u, cell - 4 * u, cell - 4 * u, 6 * u, face)
+            nx = cx + cell / 2 - 5 * u
+            if vv > 9 { nx = cx + cell / 2 - 10 * u }
+            label_num(nx, cy + cell / 2 - 9 * u, vv, ink, T_BODY, W_BOLD)
+        }
+        ix = ix + 1
+    }
+    if fi_won == 1 {
+        label(gx, gy + FI_N * cell + 8 * u, "solved - r reshuffles", theme(TH_ACCENT), T_CAPTION, W_BOLD)
+    }
+    return 0
+}
+
+fn fi_try(win, rr, cc) {
+    if fi_won == 1 { return 0 }
+    if fi_slide(rr, cc) == 0 { return 0 }
+    fi_moves = fi_moves + 1
+    if fi_solved() == 1 { fi_won = 1 }
+    wm_dmg(win)
+    return 1
+}
+
+fn fi_event(win, ety, ecode, ex, ey) {
+    if ety == 3 { if ecode == 114 { fi_reset()  wm_dmg(win)  return 1 }  return 0 }
+    if ety == 1 {
+        # An arrow names the DIRECTION THE TILE TRAVELS, which is the standard
+        # for this puzzle and the opposite of the hole's movement: press left
+        # and the tile on the hole's right slides left into it.
+        if ecode == K_LEFT  { fi_try(win, fi_br, fi_bc + 1)  return 1 }
+        if ecode == K_RIGHT { fi_try(win, fi_br, fi_bc - 1)  return 1 }
+        if ecode == K_UP    { fi_try(win, fi_br + 1, fi_bc)  return 1 }
+        if ecode == K_DOWN  { fi_try(win, fi_br - 1, fi_bc)  return 1 }
+        return 0
+    }
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    aw = wm_cw(win)
+    ah = wm_ch(win)
+    cell = fi_cell(aw, ah)
+    gx = wm_cx(win) + fi_gx(aw, ah)
+    gy = wm_cy(win) + fi_gy(aw, ah)
+    ix = ac_cell_idx(gx, gy, cell, FI_N, FI_N, ex, ey)
+    if ix < 0 { return 0 }
+    return fi_try(win, ix / FI_N, ix % FI_N)
+}
+
+# ==============================================================================
+# 62 - REVERSI. 8x8, you are black and move first, the machine is white.
+# RV_BOARD holds one byte per square: 0 empty, 1 black, 2 white.
+#
+# THE TWO RULES THIS GAME IS ALWAYS GOT WRONG, both implemented below in full:
+#
+#   1. A MOVE IS LEGAL ONLY IF IT FLIPS. From the square you play, along each
+#      of the eight rays, there must be an UNBROKEN run of at least one enemy
+#      disc ENDING on one of yours. A run that runs off the board, or into an
+#      empty square, flips nothing - and a move that flips nothing in any
+#      direction is not a move at all, it is an illegal placement. Counting
+#      "is there one of mine somewhere along this ray" is the classic wrong
+#      version, and it flips through gaps.
+#   2. PASSING IS PART OF THE GAME. A side with no legal move forfeits its
+#      turn and the other side plays again; the game ends when NEITHER side
+#      can move, which is usually before the board is full. Ending on "board
+#      full" hangs on any position where both sides are stuck.
+# ==============================================================================
+RV_N = 8
+rv_over = 0
+rv_pass = 0                         # 0 nobody passed, 1 you passed, 2 white did
+
+# d: 0 N, 1 NE, 2 E, 3 SE, 4 S, 5 SW, 6 W, 7 NW
+fn rv_dr(dd) {
+    if dd == 0 { return 0 - 1 }
+    if dd == 1 { return 0 - 1 }
+    if dd == 2 { return 0 }
+    if dd == 3 { return 1 }
+    if dd == 4 { return 1 }
+    if dd == 5 { return 1 }
+    if dd == 6 { return 0 }
+    return 0 - 1
+}
+fn rv_dc(dd) {
+    if dd == 0 { return 0 }
+    if dd == 1 { return 1 }
+    if dd == 2 { return 1 }
+    if dd == 3 { return 1 }
+    if dd == 4 { return 0 }
+    if dd == 5 { return 0 - 1 }
+    if dd == 6 { return 0 - 1 }
+    return 0 - 1
+}
+fn rv_other(pp) { if pp == 1 { return 2 }  return 1 }
+
+# -1 for "off the board", which is what makes the ray walk below terminate
+# without a separate bounds test on every step.
+fn rv_at(ri, ci) {
+    if ri < 0 { return 0 - 1 }
+    if ri >= RV_N { return 0 - 1 }
+    if ci < 0 { return 0 - 1 }
+    if ci >= RV_N { return 0 - 1 }
+    return peek8(RV_BOARD + ri * RV_N + ci)
+}
+fn rv_set(ri, ci, vv) { poke8(RV_BOARD + ri * RV_N + ci, vv)  return 0 }
+
+# Rule 1, one ray: how many discs playing `pp` at (ri,ci) turns over in
+# direction dd. 0 means this ray gives nothing.
+fn rv_ray(pp, ri, ci, dd) {
+    nn = 0
+    yy = ri + rv_dr(dd)
+    xx = ci + rv_dc(dd)
+    op = rv_other(pp)
+    while rv_at(yy, xx) == op { nn = nn + 1  yy = yy + rv_dr(dd)  xx = xx + rv_dc(dd) }
+    if nn == 0 { return 0 }
+    if rv_at(yy, xx) != pp { return 0 }
+    return nn
+}
+
+# ...and all eight. Also the legality test: gain > 0 IS "legal".
+fn rv_gain(pp, ri, ci) {
+    if rv_at(ri, ci) != 0 { return 0 }
+    tot = 0
+    dd = 0
+    while dd < 8 { tot = tot + rv_ray(pp, ri, ci, dd)  dd = dd + 1 }
+    return tot
+}
+
+fn rv_play(pp, ri, ci) {
+    if rv_gain(pp, ri, ci) == 0 { return 0 }
+    rv_set(ri, ci, pp)
+    dd = 0
+    while dd < 8 {
+        nn = rv_ray(pp, ri, ci, dd)
+        kk = 1
+        while kk <= nn {
+            rv_set(ri + rv_dr(dd) * kk, ci + rv_dc(dd) * kk, pp)
+            kk = kk + 1
+        }
+        dd = dd + 1
+    }
+    return 1
+}
+
+# Two loops, not one over a flat index divided back into row and column: the
+# division would be exact in the kernel and fractional in the host
+# interpreter, and this is the function the rules harness leans on hardest.
+fn rv_can(pp) {
+    ri = 0
+    while ri < RV_N {
+        ci = 0
+        while ci < RV_N {
+            if rv_gain(pp, ri, ci) > 0 { return 1 }
+            ci = ci + 1
+        }
+        ri = ri + 1
+    }
+    return 0
+}
+fn rv_count(pp) {
+    nn = 0
+    ix = 0
+    while ix < RV_N * RV_N { if peek8(RV_BOARD + ix) == pp { nn = nn + 1 }  ix = ix + 1 }
+    return nn
+}
+
+fn rv_reset() {
+    fill_mem(RV_BOARD, 0, RV_N * RV_N)
+    rv_set(3, 3, 2)
+    rv_set(3, 4, 1)
+    rv_set(4, 3, 1)
+    rv_set(4, 4, 2)
+    rv_over = 0
+    rv_pass = 0
+    return 0
+}
+
+fn rv_corner(vv) {
+    if vv == 0 { return 1 }
+    if vv == RV_N - 1 { return 1 }
+    return 0
+}
+fn rv_inner(vv) {
+    if vv == 1 { return 1 }
+    if vv == RV_N - 2 { return 1 }
+    return 0
+}
+# The sixteen squares of the four 2x2 corner blocks, minus the corners
+# themselves - the X and C squares. Giving one of these up is normally how you
+# hand over the corner beside it.
+fn rv_xsquare(ri, ci) {
+    rn = 0
+    cn = 0
+    if rv_corner(ri) == 1 { rn = 1 }
+    if rv_inner(ri) == 1 { rn = 1 }
+    if rv_corner(ci) == 1 { cn = 1 }
+    if rv_inner(ci) == 1 { cn = 1 }
+    if rn == 0 { return 0 }
+    if cn == 0 { return 0 }
+    if rv_corner(ri) == 1 { if rv_corner(ci) == 1 { return 0 } }
+    return 1
+}
+# A CORNER CAN NEVER BE FLIPPED - no ray can reach past it - so it is worth
+# more than any number of discs. This is the smallest weighting that stops the
+# machine playing an X-square on move three and losing the corner next to it,
+# and it is deliberately not a search: a one-ply greedy player with the right
+# square values beats a two-ply one with none.
+fn rv_weight(ri, ci) {
+    ed = 0
+    if ri == 0 { ed = ed + 1 }
+    if ri == RV_N - 1 { ed = ed + 1 }
+    if ci == 0 { ed = ed + 1 }
+    if ci == RV_N - 1 { ed = ed + 1 }
+    if ed == 2 { return 45 }
+    if rv_xsquare(ri, ci) == 1 { return 0 - 15 }
+    if ed == 1 { return 8 }
+    return 1
+}
+
+fn rv_ai() {
+    br = 0 - 1
+    bc = 0 - 1
+    bs = 0 - 9999
+    ri = 0
+    while ri < RV_N {
+        ci = 0
+        while ci < RV_N {
+            gn = rv_gain(2, ri, ci)
+            if gn > 0 {
+                sc = gn + rv_weight(ri, ci) * 4
+                if sc > bs { bs = sc  br = ri  bc = ci }
+            }
+            ci = ci + 1
+        }
+        ri = ri + 1
+    }
+    if br < 0 { return 0 }
+    rv_play(2, br, bc)
+    return 1
+}
+
+# Rule 2. Hand the turn back and forth after your disc is down, passing a side
+# that cannot move, until it is your turn WITH a legal move - or neither side
+# has one, which is the end. Bounded because every iteration either plays a
+# disc (there are 60 to play) or ends the game.
+fn rv_step() {
+    rv_pass = 0
+    tn = 2
+    gd = 0
+    while gd < 130 {
+        gd = gd + 1
+        if rv_over == 1 { gd = 200 }
+        if gd < 200 {
+            if tn == 2 {
+                if rv_can(2) == 1 {
+                    rv_ai()
+                    tn = 1
+                } else {
+                    if rv_can(1) == 1 { rv_pass = 2  tn = 1 } else { rv_over = 1 }
+                }
+            } else {
+                if rv_can(1) == 1 {
+                    gd = 200
+                } else {
+                    if rv_can(2) == 1 { rv_pass = 1  tn = 2 } else { rv_over = 1 }
+                }
+            }
+        }
+    }
+    return 0
+}
+
+fn rv_cell(aw, ah) {
+    u = ui()
+    cw = (aw - 24 * u) / RV_N
+    chh = (g4_ph(ah) - 48 * u) / RV_N
+    if chh < cw { cw = chh }
+    if cw < 8 { cw = 8 }
+    return cw
+}
+fn rv_gx(aw, ah) { return (aw - RV_N * rv_cell(aw, ah)) / 2 }
+fn rv_gy(aw, ah) { return 34 * ui() }
+
+fn rv_msg() {
+    if rv_over == 1 {
+        if rv_count(1) > rv_count(2) { return "you win - r for a new game" }
+        if rv_count(1) < rv_count(2) { return "white wins - r for a new game" }
+        return "a draw - r for a new game"
+    }
+    if rv_pass == 1 { return "you had no move - white played again" }
+    if rv_pass == 2 { return "white had no move - it passed" }
+    return "black to place"
+}
+
+fn rv_draw(ax, ay, aw, ah) {
+    u = ui()
+    cell = rv_cell(aw, ah)
+    gx = ax + rv_gx(aw, ah)
+    gy = ay + rv_gy(aw, ah)
+    # the score, as two discs with their counts - the board's own vocabulary
+    rrect(ax + 12 * u, ay + 8 * u, 12 * u, 12 * u, 6 * u, theme(TH_BG))
+    label_num(ax + 28 * u, ay + 7 * u, rv_count(1), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    rrect(ax + 56 * u, ay + 8 * u, 12 * u, 12 * u, 6 * u, theme(TH_TEXT_HI))
+    label_num(ax + 72 * u, ay + 7 * u, rv_count(2), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    ac_board_bg(gx, gy, cell, RV_N, RV_N, theme(TH_BORDER), theme(TH_CHROME_LINE))
+    ix = 0
+    while ix < RV_N * RV_N {
+        cx = gx + (ix % RV_N) * cell
+        cy = gy + (ix / RV_N) * cell
+        vv = peek8(RV_BOARD + ix)
+        if vv == 1 { rrect(cx + 3 * u, cy + 3 * u, cell - 6 * u, cell - 6 * u, cell / 2, theme(TH_BG)) }
+        if vv == 2 { rrect(cx + 3 * u, cy + 3 * u, cell - 6 * u, cell - 6 * u, cell / 2, theme(TH_TEXT_HI)) }
+        # every square you may legally play, marked. This is not a hint
+        # feature bolted on - it is the legality test itself, drawn, and it is
+        # the only honest way to show that rule 1 is implemented.
+        if vv == 0 {
+            if rv_over == 0 {
+                if rv_gain(1, ix / RV_N, ix % RV_N) > 0 {
+                    rrect(cx + cell / 2 - 3 * u, cy + cell / 2 - 3 * u, 6 * u, 6 * u, 3 * u, theme(TH_ACCENT))
+                }
+            }
+        }
+        ix = ix + 1
+    }
+    label(gx, gy + RV_N * cell + 8 * u, rv_msg(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    return 0
+}
+
+fn rv_event(win, ety, ecode, ex, ey) {
+    if ety == 3 { if ecode == 114 { rv_reset()  wm_dmg(win)  return 1 }  return 0 }
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    if rv_over == 1 { return 0 }
+    aw = wm_cw(win)
+    ah = wm_ch(win)
+    cell = rv_cell(aw, ah)
+    gx = wm_cx(win) + rv_gx(aw, ah)
+    gy = wm_cy(win) + rv_gy(aw, ah)
+    ix = ac_cell_idx(gx, gy, cell, RV_N, RV_N, ex, ey)
+    if ix < 0 { return 0 }
+    if rv_play(1, ix / RV_N, ix % RV_N) == 0 { return 1 }
+    rv_step()
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 63 - SIMON. The machine plays a colour sequence, you play it back, it adds
+# one and plays the whole thing again. SIMON_SEQ holds one pad index (0..3)
+# per byte.
+#
+# THE PLAYBACK IS A CLOCK, NOT A LOOP. ui.h: "If you are writing `while (...)`
+# inside an app you have made a mistake". A pad that lights for 300 ms and goes
+# dark 120 ms later is two state transitions on a deadline, and sim_tick is
+# where they happen - so the sequence keeps playing while another window is
+# being dragged over it, the same property probe-snake.py asserts for Snake.
+# ==============================================================================
+SIM_MAX  = 32
+SIM_ON   = 30                       # ticks a pad stays lit during playback
+SIM_OFF  = 12                       # ...and dark between two pads
+SIM_LEAD = 45                       # the pause before a sequence starts
+
+sim_len  = 0
+sim_pos  = 0
+sim_mode = 0                        # 0 ready, 1 playback, 2 your turn, 3 failed
+sim_lit  = 0 - 1
+sim_next = 0
+sim_best = 0
+
+fn sim_reset() {
+    ac_seed_from(ticks() + 63)
+    sim_len = 0
+    sim_pos = 0
+    sim_mode = 0
+    sim_lit = 0 - 1
+    sim_next = 0
+    return 0
+}
+
+fn sim_grow() {
+    if sim_len < SIM_MAX {
+        poke8(SIMON_SEQ + sim_len, ac_rand(4))
+        sim_len = sim_len + 1
+    }
+    sim_mode = 1
+    sim_pos = 0
+    sim_lit = 0 - 1
+    sim_next = ticks() + SIM_LEAD
+    return 0
+}
+
+fn sim_tick(win) {
+    # your turn: the only thing on a deadline is un-lighting the pad you just
+    # pressed, so the next press of the SAME pad is visibly a second press.
+    if sim_mode == 2 {
+        if sim_lit < 0 { return 0 }
+        if ticks() < sim_next { return 0 }
+        sim_lit = 0 - 1
+        wm_dmg(win)
+        return 1
+    }
+    if sim_mode != 1 { return 0 }
+    if ticks() < sim_next { return 0 }
+    if sim_lit >= 0 {
+        sim_lit = 0 - 1
+        sim_pos = sim_pos + 1
+        sim_next = ticks() + SIM_OFF
+        if sim_pos >= sim_len { sim_mode = 2  sim_pos = 0 }
+        wm_dmg(win)
+        return 1
+    }
+    sim_lit = peek8(SIMON_SEQ + sim_pos)
+    sim_next = ticks() + SIM_ON
+    wm_dmg(win)
+    return 1
+}
+
+fn sim_press(win, pad) {
+    if sim_mode == 0 { sim_grow()  wm_dmg(win)  return 1 }
+    if sim_mode == 3 { return 1 }
+    if sim_mode == 1 { return 1 }               # you cannot play over playback
+    if pad != peek8(SIMON_SEQ + sim_pos) {
+        sim_mode = 3
+        sim_lit = 0 - 1
+        wm_dmg(win)
+        return 1
+    }
+    sim_pos = sim_pos + 1
+    sim_lit = pad
+    sim_next = ticks() + SIM_OFF
+    if sim_pos >= sim_len {
+        if sim_len > sim_best { sim_best = sim_len }
+        sim_grow()
+    }
+    wm_dmg(win)
+    return 1
+}
+
+# The four pads, laid out 2x2 around a hub. Same derived geometry as the board
+# games so the hit test cannot drift from the drawing.
+fn sim_pad(aw, ah) {
+    u = ui()
+    pw = (aw - 40 * u) / 2
+    ph = (g4_ph(ah) - 60 * u) / 2
+    if ph < pw { pw = ph }
+    if pw < 8 { pw = 8 }
+    return pw
+}
+fn sim_px(aw, ah) { return (aw - 2 * sim_pad(aw, ah) - 8 * ui()) / 2 }
+fn sim_py(aw, ah) { return 34 * ui() }
+
+fn sim_padcol(ix) {
+    if ix == 0 { return g4_col(1) }             # blue
+    if ix == 1 { return g4_col(0) }             # teal
+    if ix == 2 { return g4_col(4) }             # amber
+    return g4_col(3)                             # pink
+}
+
+fn sim_msg() {
+    if sim_mode == 0 { return "click any pad to start" }
+    if sim_mode == 1 { return "watch" }
+    if sim_mode == 2 { return "your turn - repeat it" }
+    return "wrong pad - r restarts"
+}
+
+fn sim_draw(ax, ay, aw, ah) {
+    u = ui()
+    pw = sim_pad(aw, ah)
+    gx = ax + sim_px(aw, ah)
+    gy = ay + sim_py(aw, ah)
+    g4_head(ax, ay, "repeat the sequence")
+    g4_stat(ax, ay, aw, "best", sim_best)
+    ix = 0
+    while ix < 4 {
+        px = gx + (ix % 2) * (pw + 8 * u)
+        py = gy + (ix / 2) * (pw + 8 * u)
+        # A DARK PAD IS THE SAME HUE AT LOW ALPHA, not a different colour.
+        # There are twenty theme roles and none of them is "a dimmer teal", so
+        # the lit colour is blended onto the canvas instead of a second
+        # constant being invented for the unlit state.
+        if sim_lit == ix {
+            rrect(px, py, pw, pw, 12 * u, sim_padcol(ix))
+        } else {
+            rrect(px, py, pw, pw, 12 * u, theme(TH_CHROME_LINE))
+            rrblend(px, py, pw, pw, 12 * u, sim_padcol(ix), 58)
+        }
+        ix = ix + 1
+    }
+    # the hub: the level, which is what the whole game is a counter for
+    hx = gx + pw - 14 * u + 4 * u
+    hy = gy + pw - 14 * u + 4 * u
+    rrect(hx, hy, 28 * u, 28 * u, 14 * u, theme(TH_CHROME))
+    label_num(hx + 11 * u, hy + 6 * u, sim_len, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    mc = theme(TH_TEXT_DIM)
+    if sim_mode == 3 { mc = theme(TH_DANGER) }
+    label(gx, gy + 2 * pw + 16 * u, sim_msg(), mc, T_CAPTION, W_REG)
+    return 0
+}
+
+fn sim_hit(win, ex, ey) {
+    aw = wm_cw(win)
+    ah = wm_ch(win)
+    u = ui()
+    pw = sim_pad(aw, ah)
+    gx = wm_cx(win) + sim_px(aw, ah)
+    gy = wm_cy(win) + sim_py(aw, ah)
+    # the 8u gutter between pads is dead space, not the nearest pad: the
+    # index is only accepted if the point is inside the pad's own square.
+    ix = ac_cell_idx(gx, gy, pw + 8 * u, 2, 2, ex, ey)
+    if ix < 0 { return 0 - 1 }
+    inx = (ex - gx) % (pw + 8 * u)
+    iny = (ey - gy) % (pw + 8 * u)
+    if inx >= pw { return 0 - 1 }
+    if iny >= pw { return 0 - 1 }
+    return ix
+}
+
+fn sim_event(win, ety, ecode, ex, ey) {
+    if ety == 3 {
+        if ecode == 114 { sim_reset()  wm_dmg(win)  return 1 }
+        if ecode >= 49 { if ecode <= 52 { return sim_press(win, ecode - 49) } }
+        return 0
+    }
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    pad = sim_hit(win, ex, ey)
+    if pad < 0 { return 0 }
+    return sim_press(win, pad)
+}
+
+# ==============================================================================
+# 64 - SOKOBAN. Three levels on a 14x9 grid.
+#
+# THE LEVELS ARE BITMASKS, ONE INTEGER PER ROW, and that is not compression for
+# its own sake: zl has no lists and no strings-as-values in the kernel subset
+# (zl_binop hard-faults on any string operand), so a level cannot be a table of
+# characters. Fourteen columns fit in fourteen bits, `band(shr(m, c), 1)` is
+# the cell, and the walls, the goals and the STARTING crates are three
+# independent masks over the same grid.
+#
+# Only the crates move, so only the crates need RAM: SK_BOARD is one byte per
+# square, 1 = a crate is standing here. Walls and goals are read back out of
+# the level masks every time, which makes "restart" a fill_mem and nothing
+# else, and makes it impossible for a restart to leave a crate behind.
+# ==============================================================================
+SK_W = 14
+SK_H = 9
+SK_LEVELS = 3
+SK_UNDO_MAX = 512
+
+sk_lvl = 0
+sk_px = 0
+sk_py = 0
+sk_moves = 0
+sk_pushes = 0
+sk_undo_n = 0
+sk_win = 0
+sk_done = 0
+
+fn sk_wallrow(lv, ri) {
+    if ri == 0 { return 0x3FFF }
+    if ri == 8 { return 0x3FFF }
+    if lv == 0 { return 0x2001 }
+    if lv == 1 {
+        if ri == 2 { return 0x21C1 }
+        if ri == 3 { return 0x21C1 }
+        if ri == 4 { return 0x21C1 }
+        return 0x2001
+    }
+    if ri == 4 { return 0x3887 }
+    if ri == 7 { return 0x2001 }
+    return 0x2081
+}
+fn sk_goalrow(lv, ri) {
+    if lv == 0 {
+        if ri == 2 { return 0x0008 }
+        if ri == 6 { return 0x0400 }
+        return 0
+    }
+    if lv == 1 {
+        if ri == 4 { return 0x0808 }
+        if ri == 7 { return 0x0400 }
+        return 0
+    }
+    if ri == 6 { return 0x0408 }
+    if ri == 7 { return 0x0220 }
+    return 0
+}
+fn sk_craterow(lv, ri) {
+    if lv == 0 {
+        if ri == 2 { return 0x0400 }
+        if ri == 6 { return 0x0008 }
+        return 0
+    }
+    if lv == 1 {
+        if ri == 2 { return 0x0808 }
+        if ri == 7 { return 0x0040 }
+        return 0
+    }
+    if ri == 2 { return 0x0408 }
+    if ri == 5 { return 0x0220 }
+    return 0
+}
+fn sk_startx(lv) { if lv == 2 { return 7 }  return 6 }
+fn sk_starty(lv) { if lv == 0 { return 4 }  if lv == 1 { return 6 }  return 7 }
+
+fn sk_bit(mask, ci) { return band(shr(mask, ci), 1) }
+
+# Off the grid reads as WALL, not as empty. That single choice is what removes
+# the bounds test from sk_move and from the undo, and it is correct: a level's
+# outermost ring is solid in all three anyway.
+fn sk_iswall(ri, ci) {
+    if ri < 0 { return 1 }
+    if ri >= SK_H { return 1 }
+    if ci < 0 { return 1 }
+    if ci >= SK_W { return 1 }
+    return sk_bit(sk_wallrow(sk_lvl, ri), ci)
+}
+fn sk_isgoal(ri, ci) {
+    if ri < 0 { return 0 }
+    if ri >= SK_H { return 0 }
+    if ci < 0 { return 0 }
+    if ci >= SK_W { return 0 }
+    return sk_bit(sk_goalrow(sk_lvl, ri), ci)
+}
+fn sk_crate(ri, ci) {
+    if ri < 0 { return 0 }
+    if ri >= SK_H { return 0 }
+    if ci < 0 { return 0 }
+    if ci >= SK_W { return 0 }
+    return peek8(SK_BOARD + ri * SK_W + ci)
+}
+fn sk_setcrate(ri, ci, vv) { poke8(SK_BOARD + ri * SK_W + ci, vv)  return 0 }
+
+fn sk_load(lv) {
+    sk_lvl = lv
+    fill_mem(SK_BOARD, 0, SK_W * SK_H)
+    ri = 0
+    while ri < SK_H {
+        mk = sk_craterow(lv, ri)
+        ci = 0
+        while ci < SK_W {
+            if sk_bit(mk, ci) == 1 { sk_setcrate(ri, ci, 1) }
+            ci = ci + 1
+        }
+        ri = ri + 1
+    }
+    sk_px = sk_startx(lv)
+    sk_py = sk_starty(lv)
+    sk_moves = 0
+    sk_pushes = 0
+    sk_undo_n = 0
+    sk_win = 0
+    return 0
+}
+fn sk_reset() { sk_done = 0  sk_load(0)  return 0 }
+
+fn sk_solved() {
+    ri = 0
+    while ri < SK_H {
+        ci = 0
+        while ci < SK_W {
+            if sk_isgoal(ri, ci) == 1 { if sk_crate(ri, ci) == 0 { return 0 } }
+            ci = ci + 1
+        }
+        ri = ri + 1
+    }
+    return 1
+}
+
+fn sk_dx(dd) { if dd == 1 { return 1 }  if dd == 3 { return 0 - 1 }  return 0 }
+fn sk_dy(dd) { if dd == 2 { return 1 }  if dd == 0 { return 0 - 1 }  return 0 }
+
+# THE PUSH RULE, and the two things it is always got wrong.
+#
+#   NO PULLING. There is no move that drags a crate along behind you. Sokoban
+#   is hard precisely because a crate shoved into a corner stays there, and a
+#   "step back and it follows" move destroys the entire game. That is why undo
+#   is a separate operation replaying a recorded move backwards (sk_undo) and
+#   NOT a backwards move through this function.
+#
+#   NO DOUBLE PUSH. You may push exactly one crate. The square BEYOND the
+#   crate has to be free of walls AND free of crates - checking only the wall
+#   is the common version, and it lets a row of crates concertina through a
+#   wall one square at a time.
+#
+# Both refusals return 0 having changed nothing, so a blocked press repaints
+# nothing (see mz_event for the same rule).
+fn sk_move(dd) {
+    if sk_win == 1 { return 0 }
+    if sk_done == 1 { return 0 }
+    nx = sk_px + sk_dx(dd)
+    ny = sk_py + sk_dy(dd)
+    if sk_iswall(ny, nx) == 1 { return 0 }
+    pushed = 0
+    if sk_crate(ny, nx) == 1 {
+        bx = nx + sk_dx(dd)
+        by = ny + sk_dy(dd)
+        if sk_iswall(by, bx) == 1 { return 0 }
+        if sk_crate(by, bx) == 1 { return 0 }
+        sk_setcrate(ny, nx, 0)
+        sk_setcrate(by, bx, 1)
+        pushed = 1
+        sk_pushes = sk_pushes + 1
+    }
+    sk_px = nx
+    sk_py = ny
+    sk_moves = sk_moves + 1
+    # one byte per move: the direction in bits 0-1, "this one pushed" in bit 2.
+    # That is everything needed to walk it backwards, because the crate a push
+    # moved is always exactly one square beyond where the player ended up.
+    if sk_undo_n < SK_UNDO_MAX {
+        poke8(SK_UNDO + sk_undo_n, bor(dd, shl(pushed, 2)))
+        sk_undo_n = sk_undo_n + 1
+    }
+    if sk_solved() == 1 { sk_win = 1 }
+    return 1
+}
+
+fn sk_undo() {
+    if sk_undo_n == 0 { return 0 }
+    sk_undo_n = sk_undo_n - 1
+    vv = peek8(SK_UNDO + sk_undo_n)
+    # band/shr, NOT `% 4` and `/ 4`. zl numbers are doubles and only the KERNEL
+    # runtime casts them to long long before dividing (runtime_kernel.c
+    # zl_binop; apps_games1.zl's nim_event names the same fact) - the host
+    # interpreter gives 5 / 4 = 1.25. Unpacking a bitfield with arithmetic
+    # therefore means this record decodes differently in the two runtimes the
+    # project ships, which is a difference nothing would have reported. Bit
+    # operations are identical in both.
+    dd = band(vv, 3)
+    pushed = shr(vv, 2)
+    if pushed == 1 {
+        # the crate sits one step beyond the player, in the direction pushed.
+        # Clear it there FIRST, then put it back where the player is standing,
+        # then step the player back - in any other order the two writes land
+        # on the same square when the crate only moved one square.
+        sk_setcrate(sk_py + sk_dy(dd), sk_px + sk_dx(dd), 0)
+        sk_setcrate(sk_py, sk_px, 1)
+        sk_pushes = sk_pushes - 1
+    }
+    sk_px = sk_px - sk_dx(dd)
+    sk_py = sk_py - sk_dy(dd)
+    sk_moves = sk_moves - 1
+    sk_win = 0
+    return 1
+}
+
+fn sk_next() {
+    if sk_lvl + 1 >= SK_LEVELS { sk_done = 1  return 0 }
+    sk_load(sk_lvl + 1)
+    return 0
+}
+
+fn sk_cell(aw, ah) {
+    u = ui()
+    cw = (aw - 20 * u) / SK_W
+    chh = (g4_ph(ah) - 46 * u) / SK_H
+    if chh < cw { cw = chh }
+    if cw < 6 { cw = 6 }
+    return cw
+}
+fn sk_gx(aw, ah) { return (aw - SK_W * sk_cell(aw, ah)) / 2 }
+fn sk_gy(aw, ah) { return 26 * ui() }
+
+fn sk_msg() {
+    if sk_done == 1 { return "every level cleared - r starts over" }
+    if sk_win == 1 { return "level clear - space for the next one" }
+    return "u undoes, r resets the level"
+}
+
+fn sk_draw(ax, ay, aw, ah) {
+    u = ui()
+    cell = sk_cell(aw, ah)
+    gx = ax + sk_gx(aw, ah)
+    gy = ay + sk_gy(aw, ah)
+    # NOT g4_head here: the level readout below already occupies that line, and
+    # the two were drawn one on top of the other.
+    g4_stat(ax, ay, aw, "pushes", sk_pushes)
+    ri = 0
+    while ri < SK_H {
+        ci = 0
+        while ci < SK_W {
+            cx = gx + ci * cell
+            cy = gy + ri * cell
+            if sk_iswall(ri, ci) == 1 {
+                fill_rgb(cx, cy, cell, cell, theme(TH_BORDER))
+            } else {
+                fill_rgb(cx, cy, cell, cell, theme(TH_BG))
+                if sk_isgoal(ri, ci) == 1 {
+                    rrect(cx + cell / 2 - 3 * u, cy + cell / 2 - 3 * u, 6 * u, 6 * u, 3 * u, theme(TH_ACCENT))
+                }
+            }
+            if sk_crate(ri, ci) == 1 {
+                # a crate ON its goal is lime; anywhere else it is amber. The
+                # colour is the answer to "how many left", read at a glance.
+                fc = g4_col(4)
+                if sk_isgoal(ri, ci) == 1 { fc = theme(TH_ACCENT) }
+                rrect(cx + 2 * u, cy + 2 * u, cell - 4 * u, cell - 4 * u, 3 * u, fc)
+                fill_rgb(cx + cell / 2 - 1 * u, cy + 4 * u, 2 * u, cell - 8 * u, theme(TH_BG))
+            }
+            ci = ci + 1
+        }
+        ri = ri + 1
+    }
+    px = gx + sk_px * cell
+    py = gy + sk_py * cell
+    rrect(px + 3 * u, py + 3 * u, cell - 6 * u, cell - 6 * u, cell / 2, g4_col(1))
+    label(ax + 12 * u, gy + SK_H * cell + 6 * u, sk_msg(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label(ax + 12 * u, ay + 8 * u, "level", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 46 * u, ay + 8 * u, sk_lvl + 1, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 70 * u, ay + 8 * u, "of 3", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    return 0
+}
+
+fn sk_event(win, ety, ecode, ex, ey) {
+    if ety == 3 {
+        if ecode == 114 { sk_load(sk_lvl)  wm_dmg(win)  return 1 }
+        if ecode == 117 { if sk_undo() == 1 { wm_dmg(win) }  return 1 }
+        if ecode == 32 {
+            if sk_win == 1 { sk_next()  wm_dmg(win) }
+            if sk_done == 1 { sk_reset()  wm_dmg(win) }
+            return 1
+        }
+        return 0
+    }
+    if ety != 1 { return 0 }
+    dd = 0 - 1
+    if ecode == K_UP    { dd = 0 }
+    if ecode == K_RIGHT { dd = 1 }
+    if ecode == K_DOWN  { dd = 2 }
+    if ecode == K_LEFT  { dd = 3 }
+    if dd < 0 { return 0 }
+    if sk_move(dd) == 1 { wm_dmg(win) }
+    return 1
+}
+
+# ==============================================================================
+# 65 - FLAPPY. Gravity, one impulse, three pipes recycling leftwards.
+#
+# THE WHOLE WORLD IS SCALARS - three pipes need nine numbers, and nine numbers
+# do not need a page of RAM. ho_peg/ho_set in apps_games1.zl set the precedent
+# for indexing a handful of globals through a function in a language with no
+# arrays; this is the same shape.
+#
+# POSITION AND VELOCITY ARE BOTH IN EIGHTHS OF A PIXEL. An integer pixel per
+# frame is either far too fast or a bird that does not move at all, and this
+# kernel has no floats in the parts that matter (idt.c is built
+# -mgeneral-regs-only).
+#
+# The obvious version - keep y in whole pixels and add `v / 8` each step -
+# looks equivalent and is not. This kernel's `/` truncates TOWARD ZERO, so
+# every step throws its remainder away and the loss is signed: rising at -30
+# eighths adds -3 pixels a step instead of -3.75, falling at +30 adds +3
+# instead of +3.75. The bird loses about a fifth of every impulse to rounding,
+# in both directions, and the flap feels weaker the smaller it is. Keeping the
+# POSITION in eighths makes fl_y8 the actual integral of fl_v8 and the
+# truncation happens once, at the pixel it is drawn at.
+# ==============================================================================
+FL_GRAV = 1                         # eighths of a pixel, per step, per step
+FL_FLAP = 0 - 30                    # the impulse, same units
+FL_TERM = 44                        # terminal velocity
+FL_SCROLL = 2                       # pixels per step the world moves left
+FL_PIPEW = 26                       # design units
+FL_GAP = 84                         # the hole, design units
+FL_BIRD = 13                        # the bird's box, design units
+
+fl_state = 0                        # 0 ready, 1 flying, 2 dead
+fl_y8 = 0                           # eighths of a pixel from the top
+fl_v8 = 0
+fl_score = 0
+fl_best = 0
+fl_next = 0
+fl_p0x = 0
+fl_p0g = 0
+fl_p0s = 1
+fl_p1x = 0
+fl_p1g = 0
+fl_p1s = 1
+fl_p2x = 0
+fl_p2g = 0
+fl_p2s = 1
+
+fn fl_px(ix) { if ix == 0 { return fl_p0x }  if ix == 1 { return fl_p1x }  return fl_p2x }
+fn fl_pg(ix) { if ix == 0 { return fl_p0g }  if ix == 1 { return fl_p1g }  return fl_p2g }
+fn fl_ps(ix) { if ix == 0 { return fl_p0s }  if ix == 1 { return fl_p1s }  return fl_p2s }
+fn fl_setx(ix, vv) {
+    if ix == 0 { fl_p0x = vv }
+    if ix == 1 { fl_p1x = vv }
+    if ix == 2 { fl_p2x = vv }
+    return 0
+}
+fn fl_setg(ix, vv) {
+    if ix == 0 { fl_p0g = vv }
+    if ix == 1 { fl_p1g = vv }
+    if ix == 2 { fl_p2g = vv }
+    return 0
+}
+fn fl_sets(ix, vv) {
+    if ix == 0 { fl_p0s = vv }
+    if ix == 1 { fl_p1s = vv }
+    if ix == 2 { fl_p2s = vv }
+    return 0
+}
+
+fn fl_birdx(aw) { return aw / 4 }
+fn fl_pitch(aw) { return (aw + FL_PIPEW * ui()) / 2 }
+
+# A random gap centre that always leaves the hole fully on screen.
+fn fl_gapy(ph) {
+    u = ui()
+    lo = FL_GAP * u / 2 + 12 * u
+    hi = ph - FL_GAP * u / 2 - 20 * u
+    if hi <= lo { return ph / 2 }
+    return lo + ac_rand(hi - lo)
+}
+
+fn fl_reset() {
+    fl_state = 0
+    fl_score = 0
+    fl_v8 = 0
+    fl_y8 = 0
+    fl_next = 0
+    # OFF TO THE RIGHT AND ALREADY SCORED, so a window opened but not started
+    # draws no pipes and cannot bank a point. The layout needs the client
+    # width, which reg_new does not have, so it happens in fl_start instead.
+    ix = 0
+    while ix < 3 { fl_setx(ix, 30000)  fl_setg(ix, 0)  fl_sets(ix, 1)  ix = ix + 1 }
+    return 0
+}
+
+fn fl_start(win) {
+    aw = wm_cw(win)
+    ph = g4_ph(wm_ch(win))
+    ac_seed_from(ticks() + 65)
+    fl_y8 = ph * 8 / 2
+    fl_v8 = FL_FLAP * ui()
+    fl_score = 0
+    fl_state = 1
+    fl_next = ticks()
+    ix = 0
+    while ix < 3 {
+        fl_setx(ix, aw + ix * fl_pitch(aw))
+        fl_setg(ix, fl_gapy(ph))
+        fl_sets(ix, 0)
+        ix = ix + 1
+    }
+    return 0
+}
+
+fn fl_y_px() { return fl_y8 / 8 }
+
+fn fl_dead(bx, ph) {
+    u = ui()
+    bw = FL_BIRD * u
+    fy = fl_y_px()
+    if fy < 0 { return 1 }
+    if fy + bw > ph { return 1 }
+    pw = FL_PIPEW * u
+    hg = FL_GAP * u / 2
+    ix = 0
+    while ix < 3 {
+        pxx = fl_px(ix)
+        if pxx < bx + bw {
+            if pxx + pw > bx {
+                gy = fl_pg(ix)
+                if fy < gy - hg { return 1 }
+                if fy + bw > gy + hg { return 1 }
+            }
+        }
+        ix = ix + 1
+    }
+    return 0
+}
+
+fn fl_tick(win) {
+    if fl_state != 1 { return 0 }
+    if ticks() < fl_next { return 0 }
+    fl_next = ticks() + 2
+    u = ui()
+    aw = wm_cw(win)
+    ph = g4_ph(wm_ch(win))
+    fl_v8 = fl_v8 + FL_GRAV * u
+    if fl_v8 > FL_TERM * u { fl_v8 = FL_TERM * u }
+    fl_y8 = fl_y8 + fl_v8
+    bx = fl_birdx(aw)
+    pw = FL_PIPEW * u
+    ix = 0
+    while ix < 3 {
+        fl_setx(ix, fl_px(ix) - FL_SCROLL * u)
+        # RECYCLE FROM THE RIGHTMOST PIPE, not from the client width, so the
+        # spacing survives a resize and two pipes can never land on top of
+        # each other.
+        if fl_px(ix) + pw < 0 {
+            mx = fl_px(0)
+            if fl_px(1) > mx { mx = fl_px(1) }
+            if fl_px(2) > mx { mx = fl_px(2) }
+            fl_setx(ix, mx + fl_pitch(aw))
+            fl_setg(ix, fl_gapy(ph))
+            fl_sets(ix, 0)
+        }
+        if fl_ps(ix) == 0 {
+            if fl_px(ix) + pw < bx {
+                fl_sets(ix, 1)
+                fl_score = fl_score + 1
+                if fl_score > fl_best { fl_best = fl_score }
+            }
+        }
+        ix = ix + 1
+    }
+    if fl_dead(bx, ph) == 1 { fl_state = 2 }
+    wm_dmg(win)
+    return 1
+}
+
+fn fl_flap(win) {
+    if fl_state == 0 { fl_start(win)  wm_dmg(win)  return 1 }
+    if fl_state == 2 { return 1 }
+    fl_v8 = FL_FLAP * ui()
+    wm_dmg(win)
+    return 1
+}
+
+fn fl_msg() {
+    if fl_state == 0 { return "space or click to fly" }
+    if fl_state == 2 { return "down - r restarts" }
+    return ""
+}
+
+fn fl_draw(ax, ay, aw, ah) {
+    u = ui()
+    ph = g4_ph(ah)
+    # the sky: the reference's blue at low alpha over the canvas ground, which
+    # is how this palette makes a dark tint of a hue without a new constant.
+    blend(ax, ay, aw, ph, g4_col(1), 26)
+    pw = FL_PIPEW * u
+    hg = FL_GAP * u / 2
+    ix = 0
+    while ix < 3 {
+        pxx = ax + fl_px(ix)
+        gy = ay + fl_pg(ix)
+        if fl_px(ix) < aw {
+            if fl_px(ix) + pw > 0 {
+                fill_rgb(pxx, ay, pw, gy - hg - ay, g4_col(6))
+                fill_rgb(pxx - 3 * u, gy - hg - 10 * u, pw + 6 * u, 10 * u, g4_col(6))
+                fill_rgb(pxx, gy + hg, pw, ay + ph - gy - hg, g4_col(6))
+                fill_rgb(pxx - 3 * u, gy + hg, pw + 6 * u, 10 * u, g4_col(6))
+            }
+        }
+        ix = ix + 1
+    }
+    bw = FL_BIRD * u
+    bx = ax + fl_birdx(aw)
+    by = ay + fl_y_px()
+    rrect(bx, by, bw, bw, bw / 2, g4_col(4))
+    fill_rgb(bx + bw - 4 * u, by + 3 * u, 3 * u, 3 * u, theme(TH_BG))
+    label_num(ax + aw / 2 - 6 * u, ay + 12 * u, fl_score, theme(TH_TEXT_HI), T_TITLE, W_BOLD)
+    g4_stat(ax, ay, aw, "best", fl_best)
+    mc = theme(TH_TEXT_DIM)
+    if fl_state == 2 { mc = theme(TH_DANGER) }
+    label(ax + 12 * u, ay + ph - 20 * u, fl_msg(), mc, T_CAPTION, W_BOLD)
+    return 0
+}
+
+fn fl_event(win, ety, ecode, ex, ey) {
+    if ety == 3 {
+        if ecode == 114 { fl_reset()  wm_dmg(win)  return 1 }
+        if ecode == 32 { return fl_flap(win) }
+        return 0
+    }
+    if ety == 1 { if ecode == K_UP { return fl_flap(win) }  return 0 }
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    if fl_state == 2 { fl_reset()  wm_dmg(win)  return 1 }
+    return fl_flap(win)
+}
+
+# ==============================================================================
+# 66 - MISSILE COMMAND. Six cities, warheads falling on them, and one battery
+# that fires at a POINT rather than at a target: you place the blast, the blast
+# kills whatever flies into it, and what it kills explodes in turn.
+#
+# THE CHAIN IS THE GAME. A blast that destroys a missile spawns a blast at the
+# spot where that missile died (mc_kill), so one well-placed shot into a
+# converging group takes the whole group. Without that this is a shooting
+# gallery with a delay; with it, aiming ahead of the pack is the skill.
+#
+# MC_BUF, at 12/12/8 bytes per record:
+#     +0    10 incoming     sx, tx, prog, spd, alive, tcity
+#     +128   8 interceptors sx, tx, ty,   prog, spd,  alive
+#     +256   8 blasts       x,  y,  rad,  phase
+#     +384   6 cities       one byte each, 1 = standing
+# Everything is u16 and never negative, which is what lets peek16 be used raw.
+# ==============================================================================
+MC_NIN = 10
+MC_NIC = 8
+MC_NBL = 8
+MC_CITIES = 6
+MC_RAD = 30                         # a blast's full radius, design units
+
+mc_wave = 1
+mc_score = 0
+mc_ammo = 0
+mc_left = 0
+mc_over = 0
+mc_next = 0
+mc_spawn = 0
+
+fn mc_in(ix, fd) { return peek16(MC_BUF + ix * 12 + fd * 2) }
+fn mc_sin(ix, fd, vv) { poke16(MC_BUF + ix * 12 + fd * 2, vv)  return 0 }
+fn mc_ic(ix, fd) { return peek16(MC_BUF + 128 + ix * 12 + fd * 2) }
+fn mc_sic(ix, fd, vv) { poke16(MC_BUF + 128 + ix * 12 + fd * 2, vv)  return 0 }
+fn mc_bl(ix, fd) { return peek16(MC_BUF + 256 + ix * 8 + fd * 2) }
+fn mc_sbl(ix, fd, vv) { poke16(MC_BUF + 256 + ix * 8 + fd * 2, vv)  return 0 }
+fn mc_city(ix) { return peek8(MC_BUF + 384 + ix) }
+fn mc_scity(ix, vv) { poke8(MC_BUF + 384 + ix, vv)  return 0 }
+
+fn mc_ground(ph) { return ph - 22 * ui() }
+fn mc_cityx(ix, aw) { return (2 * ix + 1) * aw / 12 }
+fn mc_basex(aw) { return aw / 2 }
+
+fn mc_alive_cities() {
+    nn = 0
+    ix = 0
+    while ix < MC_CITIES { nn = nn + mc_city(ix)  ix = ix + 1 }
+    return nn
+}
+
+fn mc_wave_start() {
+    mc_left = 3 + mc_wave * 2
+    if mc_left > 14 { mc_left = 14 }
+    mc_ammo = 10 + mc_wave
+    mc_spawn = ticks() + 60
+    return 0
+}
+
+fn mc_reset() {
+    fill_mem(MC_BUF, 0, 512)
+    ix = 0
+    while ix < MC_CITIES { mc_scity(ix, 1)  ix = ix + 1 }
+    ac_seed_from(ticks() + 66)
+    mc_wave = 1
+    mc_score = 0
+    mc_over = 0
+    mc_next = 0
+    mc_wave_start()
+    return 0
+}
+
+# A blast, wherever one is asked for. Silently does nothing when all eight
+# slots are busy - which is a real refusal, not a dropped write: eight
+# simultaneous blasts already cover most of the sky.
+fn mc_boom(bx, by) {
+    ix = 0
+    while ix < MC_NBL {
+        if mc_bl(ix, 3) == 0 {
+            mc_sbl(ix, 0, bx)
+            mc_sbl(ix, 1, by)
+            mc_sbl(ix, 2, 1)
+            mc_sbl(ix, 3, 1)
+            return 1
+        }
+        ix = ix + 1
+    }
+    return 0
+}
+
+fn mc_inx(ix, aw) { return mc_in(ix, 0) + (mc_in(ix, 1) - mc_in(ix, 0)) * mc_in(ix, 2) / 1000 }
+fn mc_iny(ix, ph) { return mc_ground(ph) * mc_in(ix, 2) / 1000 }
+fn mc_icx(ix) { return mc_ic(ix, 0) + (mc_ic(ix, 1) - mc_ic(ix, 0)) * mc_ic(ix, 3) / 1000 }
+fn mc_icy(ix, ph) {
+    gy = mc_ground(ph)
+    return gy - (gy - mc_ic(ix, 2)) * mc_ic(ix, 3) / 1000
+}
+
+fn mc_launch(aw, ph) {
+    ix = 0
+    while ix < MC_NIN {
+        if mc_in(ix, 4) == 0 {
+            tc = ac_rand(MC_CITIES)
+            kk = 0
+            # aim at a city that is still standing; if the walk finds none the
+            # game is already over and the shot lands harmlessly.
+            while kk < MC_CITIES {
+                if mc_city(tc) == 0 { tc = (tc + 1) % MC_CITIES }
+                kk = kk + 1
+            }
+            mc_sin(ix, 0, ac_rand(aw))
+            mc_sin(ix, 1, mc_cityx(tc, aw))
+            mc_sin(ix, 2, 0)
+            mc_sin(ix, 3, 4 + ac_rand(3) + mc_wave)
+            mc_sin(ix, 4, 1)
+            mc_sin(ix, 5, tc)
+            mc_left = mc_left - 1
+            return 1
+        }
+        ix = ix + 1
+    }
+    return 0
+}
+
+fn mc_fire(aw, ph, tx, ty) {
+    if mc_ammo <= 0 { return 0 }
+    if ty >= mc_ground(ph) { return 0 }
+    ix = 0
+    while ix < MC_NIC {
+        if mc_ic(ix, 5) == 0 {
+            mc_sic(ix, 0, mc_basex(aw))
+            mc_sic(ix, 1, tx)
+            mc_sic(ix, 2, ty)
+            mc_sic(ix, 3, 0)
+            mc_sic(ix, 4, 55)
+            mc_sic(ix, 5, 1)
+            mc_ammo = mc_ammo - 1
+            return 1
+        }
+        ix = ix + 1
+    }
+    return 0
+}
+
+# Everything a live blast touches, this frame. Squared distance, no sqrt: the
+# only comparison wanted is "inside", and sqrt would need a float unit the
+# interrupt-safe half of this kernel is compiled without.
+fn mc_kill(aw, ph) {
+    bi = 0
+    while bi < MC_NBL {
+        if mc_bl(bi, 3) != 0 {
+            bx = mc_bl(bi, 0)
+            by = mc_bl(bi, 1)
+            rr2 = mc_bl(bi, 2) * mc_bl(bi, 2)
+            mi = 0
+            while mi < MC_NIN {
+                if mc_in(mi, 4) == 1 {
+                    ddx = mc_inx(mi, aw) - bx
+                    ddy = mc_iny(mi, ph) - by
+                    if ddx * ddx + ddy * ddy <= rr2 {
+                        mc_sin(mi, 4, 0)
+                        mc_score = mc_score + 25
+                        mc_boom(mc_inx(mi, aw), mc_iny(mi, ph))
+                    }
+                }
+                mi = mi + 1
+            }
+        }
+        bi = bi + 1
+    }
+    return 0
+}
+
+fn mc_tick(win) {
+    if mc_over == 1 { return 0 }
+    if ticks() < mc_next { return 0 }
+    mc_next = ticks() + 2
+    u = ui()
+    aw = wm_cw(win)
+    ph = g4_ph(wm_ch(win))
+    if mc_left > 0 {
+        if ticks() >= mc_spawn {
+            mc_launch(aw, ph)
+            mc_spawn = ticks() + 70 - mc_wave * 4
+        }
+    }
+    ix = 0
+    while ix < MC_NIN {
+        if mc_in(ix, 4) == 1 {
+            mc_sin(ix, 2, mc_in(ix, 2) + mc_in(ix, 3))
+            if mc_in(ix, 2) >= 1000 {
+                mc_sin(ix, 2, 1000)
+                mc_sin(ix, 4, 0)
+                mc_scity(mc_in(ix, 5), 0)
+                mc_boom(mc_in(ix, 1), mc_ground(ph))
+            }
+        }
+        ix = ix + 1
+    }
+    ix = 0
+    while ix < MC_NIC {
+        if mc_ic(ix, 5) == 1 {
+            mc_sic(ix, 3, mc_ic(ix, 3) + mc_ic(ix, 4))
+            if mc_ic(ix, 3) >= 1000 {
+                mc_sic(ix, 5, 0)
+                mc_boom(mc_ic(ix, 1), mc_ic(ix, 2))
+            }
+        }
+        ix = ix + 1
+    }
+    ix = 0
+    while ix < MC_NBL {
+        if mc_bl(ix, 3) == 1 {
+            mc_sbl(ix, 2, mc_bl(ix, 2) + 3 * u)
+            if mc_bl(ix, 2) >= MC_RAD * u { mc_sbl(ix, 3, 2) }
+        } else {
+            if mc_bl(ix, 3) == 2 {
+                if mc_bl(ix, 2) <= 2 * u { mc_sbl(ix, 2, 0)  mc_sbl(ix, 3, 0) } else { mc_sbl(ix, 2, mc_bl(ix, 2) - 2 * u) }
+            }
+        }
+        ix = ix + 1
+    }
+    mc_kill(aw, ph)
+    if mc_alive_cities() == 0 { mc_over = 1 }
+    # the wave is over only when the sky is EMPTY: nothing left to launch, no
+    # warhead still falling, and no blast still open (a blast can still take
+    # one, so ending on "no missiles" would cut a chain short).
+    if mc_over == 0 {
+        if mc_left == 0 {
+            if mc_flying() == 0 {
+                if mc_blasting() == 0 {
+                    mc_score = mc_score + 100 * mc_alive_cities()
+                    mc_wave = mc_wave + 1
+                    mc_wave_start()
+                }
+            }
+        }
+    }
+    wm_dmg(win)
+    return 1
+}
+
+fn mc_flying() {
+    ix = 0
+    while ix < MC_NIN { if mc_in(ix, 4) == 1 { return 1 }  ix = ix + 1 }
+    ix = 0
+    while ix < MC_NIC { if mc_ic(ix, 5) == 1 { return 1 }  ix = ix + 1 }
+    return 0
+}
+fn mc_blasting() {
+    ix = 0
+    while ix < MC_NBL { if mc_bl(ix, 3) != 0 { return 1 }  ix = ix + 1 }
+    return 0
+}
+
+# A trail as six dots rather than a rasterised line: console_line() takes a VGA
+# attribute byte, not an RGB, so it belongs to the text console and not to a
+# window - and six dots along the flown fraction reads as a trail anyway.
+fn mc_trail(ax, ay, sx, sy, ex2, ey2, col) {
+    u = ui()
+    kk = 1
+    while kk <= 6 {
+        fill_rgb(ax + sx + (ex2 - sx) * kk / 6, ay + sy + (ey2 - sy) * kk / 6, 2 * u, 2 * u, col)
+        kk = kk + 1
+    }
+    return 0
+}
+
+fn mc_draw(ax, ay, aw, ah) {
+    u = ui()
+    ph = g4_ph(ah)
+    gy = mc_ground(ph)
+    fill_rgb(ax, ay + gy, aw, ph - gy, theme(TH_BORDER))
+    ix = 0
+    while ix < MC_CITIES {
+        cx = ax + mc_cityx(ix, aw) - 11 * u
+        if mc_city(ix) == 1 {
+            fill_rgb(cx, ay + gy - 13 * u, 22 * u, 13 * u, g4_col(0))
+            fill_rgb(cx + 6 * u, ay + gy - 19 * u, 5 * u, 6 * u, g4_col(0))
+        } else {
+            fill_rgb(cx + 2 * u, ay + gy - 4 * u, 18 * u, 4 * u, theme(TH_CHROME))
+        }
+        ix = ix + 1
+    }
+    bx = ax + mc_basex(aw)
+    fill_rgb(bx - 9 * u, ay + gy - 8 * u, 18 * u, 8 * u, theme(TH_ACCENT))
+    fill_rgb(bx - 2 * u, ay + gy - 14 * u, 4 * u, 6 * u, theme(TH_ACCENT))
+    ix = 0
+    while ix < MC_NIN {
+        if mc_in(ix, 4) == 1 {
+            mc_trail(ax, ay, mc_in(ix, 0), 0, mc_inx(ix, aw), mc_iny(ix, ph), g4_col(5))
+            fill_rgb(ax + mc_inx(ix, aw) - 2 * u, ay + mc_iny(ix, ph) - 2 * u, 4 * u, 4 * u, theme(TH_DANGER))
+        }
+        ix = ix + 1
+    }
+    ix = 0
+    while ix < MC_NIC {
+        if mc_ic(ix, 5) == 1 {
+            mc_trail(ax, ay, mc_ic(ix, 0), gy, mc_icx(ix), mc_icy(ix, ph), theme(TH_ACCENT))
+            fill_rgb(ax + mc_icx(ix) - 1 * u, ay + mc_icy(ix, ph) - 1 * u, 3 * u, 3 * u, g4_col(6))
+        }
+        ix = ix + 1
+    }
+    ix = 0
+    while ix < MC_NBL {
+        if mc_bl(ix, 3) != 0 {
+            rd = mc_bl(ix, 2)
+            rrblend(ax + mc_bl(ix, 0) - rd, ay + mc_bl(ix, 1) - rd, rd * 2, rd * 2, rd, g4_col(4), 150)
+            rrect(ax + mc_bl(ix, 0) - rd / 2, ay + mc_bl(ix, 1) - rd / 2, rd, rd, rd / 2, theme(TH_TEXT_HI))
+        }
+        ix = ix + 1
+    }
+    label(ax + 12 * u, ay + 8 * u, "wave", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 44 * u, ay + 8 * u, mc_wave, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 70 * u, ay + 8 * u, "ammo", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 104 * u, ay + 8 * u, mc_ammo, theme(TH_ACCENT), T_CAPTION, W_BOLD)
+    g4_stat(ax, ay, aw, "score", mc_score)
+    if mc_over == 1 {
+        label(ax + 12 * u, ay + gy - 40 * u, "every city gone - r restarts", theme(TH_DANGER), T_CAPTION, W_BOLD)
+    }
+    return 0
+}
+
+fn mc_event(win, ety, ecode, ex, ey) {
+    if ety == 3 { if ecode == 114 { mc_reset()  wm_dmg(win)  return 1 }  return 0 }
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    if mc_over == 1 { return 0 }
+    tx = ex - wm_cx(win)
+    ty = ey - wm_cy(win)
+    if tx < 0 { return 0 }
+    if ty < 0 { return 0 }
+    if mc_fire(wm_cw(win), g4_ph(wm_ch(win)), tx, ty) == 1 { wm_dmg(win) }
+    return 1
+}
+
+# ==============================================================================
+# 67 - BLACKJACK. One deck, dealt from a shuffled shoe.
+#
+# BJ_BUF: +0 the 52-card shoe (one byte per card, 0..51), +64 your hand,
+# +96 the dealer's. A card's rank is card/4 (0 = ace .. 12 = king) and its
+# suit is card%4, so the shoe is a permutation of 0..51 and NOTHING has to
+# track which cards are gone - bj_top is the cut card.
+#
+# THE ACE. It is worth 11 until that busts the hand and 1 after. Counting every
+# ace as 11 first and demoting one at a time is the whole rule, and it is the
+# only version that gets two aces right (11 + 1 = 12, not 22 and not 2). The
+# common shortcut - "an ace is 11 unless the hand already has one" - scores
+# A-A-9 as 21 when it is 21, and A-A-K as 12 when it should be 12, and then
+# gets A-A-A-8 wrong. Demotion in a loop cannot.
+# ==============================================================================
+BJ_HAND = 64
+BJ_DEAL = 96
+BJ_BET  = 10
+
+bj_top = 0
+bj_pn = 0
+bj_dn = 0
+bj_state = 0                        # 0 between hands, 1 your turn, 2 settled
+bj_result = 0                       # 0 none, 1 you, 2 dealer, 3 push, 4 blackjack
+bj_chips = 100
+
+# shr/band rather than / 4 and % 4 - see the note in sk_undo for why unpacking
+# a packed value with division is a difference between the two runtimes and
+# unpacking it with bit operations is not.
+fn bj_rank(cd) { return shr(cd, 2) }
+fn bj_suit(cd) { return band(cd, 3) }
+fn bj_cardval(cd) {
+    rk = bj_rank(cd)
+    if rk == 0 { return 11 }
+    if rk > 9 { return 10 }
+    return rk + 1
+}
+
+fn bj_total(base, nn) {
+    tot = 0
+    aces = 0
+    ix = 0
+    while ix < nn {
+        cd = peek8(base + ix)
+        tot = tot + bj_cardval(cd)
+        if bj_rank(cd) == 0 { aces = aces + 1 }
+        ix = ix + 1
+    }
+    while tot > 21 {
+        if aces == 0 { return tot }
+        tot = tot - 10
+        aces = aces - 1
+    }
+    return tot
+}
+
+fn bj_shuffle() {
+    ix = 0
+    while ix < 52 { poke8(BJ_BUF + ix, ix)  ix = ix + 1 }
+    ac_seed_from(ticks() + 67)
+    # Fisher-Yates downwards, which is the version that is uniform. Walking
+    # UPWARDS with `ac_rand(52)` at every step is the famous broken one - it
+    # produces 52^52 equally likely swap sequences over 52! orderings, and
+    # those do not divide.
+    ix = 51
+    while ix > 0 {
+        jx = ac_rand(ix + 1)
+        tmpc = peek8(BJ_BUF + ix)
+        poke8(BJ_BUF + ix, peek8(BJ_BUF + jx))
+        poke8(BJ_BUF + jx, tmpc)
+        ix = ix - 1
+    }
+    bj_top = 0
+    return 0
+}
+
+fn bj_take(base, nn) {
+    poke8(base + nn, peek8(BJ_BUF + bj_top))
+    bj_top = bj_top + 1
+    return nn + 1
+}
+
+fn bj_settle() {
+    pt = bj_total(BJ_BUF + BJ_HAND, bj_pn)
+    dt = bj_total(BJ_BUF + BJ_DEAL, bj_dn)
+    pbj = 0
+    if pt == 21 { if bj_pn == 2 { pbj = 1 } }
+    dbj = 0
+    if dt == 21 { if bj_dn == 2 { dbj = 1 } }
+    if pbj == 1 {
+        if dbj == 1 { bj_result = 3  bj_chips = bj_chips + BJ_BET  return 0 }
+        # a natural pays 3:2, which is the one payout that is not even money
+        bj_result = 4
+        bj_chips = bj_chips + BJ_BET + BJ_BET * 3 / 2
+        return 0
+    }
+    if dbj == 1 { bj_result = 2  return 0 }
+    if dt > 21 { bj_result = 1  bj_chips = bj_chips + BJ_BET * 2  return 0 }
+    if pt > dt { bj_result = 1  bj_chips = bj_chips + BJ_BET * 2  return 0 }
+    if pt < dt { bj_result = 2  return 0 }
+    bj_result = 3
+    bj_chips = bj_chips + BJ_BET
+    return 0
+}
+
+fn bj_stand() {
+    if bj_state != 1 { return 0 }
+    # THE DEALER DRAWS TO 17 AND STANDS ON EVERY 17, soft or hard - one rule,
+    # no discretion, which is exactly what makes the house edge computable.
+    while bj_total(BJ_BUF + BJ_DEAL, bj_dn) < 17 { bj_dn = bj_take(BJ_BUF + BJ_DEAL, bj_dn) }
+    bj_state = 2
+    bj_settle()
+    return 0
+}
+
+fn bj_hit() {
+    if bj_state != 1 { return 0 }
+    bj_pn = bj_take(BJ_BUF + BJ_HAND, bj_pn)
+    if bj_total(BJ_BUF + BJ_HAND, bj_pn) > 21 { bj_state = 2  bj_result = 2 }
+    return 0
+}
+
+fn bj_deal() {
+    if bj_state == 1 { return 0 }
+    if bj_chips < BJ_BET { bj_chips = 100 }     # the house stakes you again
+    if bj_top > 40 { bj_shuffle() }             # never deal past the cut card
+    bj_chips = bj_chips - BJ_BET
+    bj_pn = 0
+    bj_dn = 0
+    bj_pn = bj_take(BJ_BUF + BJ_HAND, bj_pn)
+    bj_dn = bj_take(BJ_BUF + BJ_DEAL, bj_dn)
+    bj_pn = bj_take(BJ_BUF + BJ_HAND, bj_pn)
+    bj_dn = bj_take(BJ_BUF + BJ_DEAL, bj_dn)
+    bj_state = 1
+    bj_result = 0
+    # a natural resolves immediately - there is nothing to decide
+    if bj_total(BJ_BUF + BJ_HAND, bj_pn) == 21 { bj_stand() }
+    return 0
+}
+
+fn bj_reset() {
+    bj_shuffle()
+    bj_state = 0
+    bj_result = 0
+    bj_pn = 0
+    bj_dn = 0
+    bj_chips = 100
+    return 0
+}
+
+fn bj_rankch(rk) {
+    if rk == 0 { return 65 }                    # A
+    if rk == 9 { return 84 }                    # T - "10" will not fit a corner
+    if rk == 10 { return 74 }                   # J
+    if rk == 11 { return 81 }                   # Q
+    if rk == 12 { return 75 }                   # K
+    return 50 + rk - 1                          # '2'..'9'
+}
+# Hearts and diamonds are red, spades and clubs are not - and the two within
+# each colour are told apart by SHAPE, round against square, because this
+# kernel's font has no suit glyphs and inventing four is not this job.
+fn bj_suitred(st) { if st == 1 { return 1 }  if st == 2 { return 1 }  return 0 }
+fn bj_suitround(st) { if st == 1 { return 1 }  if st == 3 { return 1 }  return 0 }
+
+fn bj_card(cx, cy, cw, chh, cd, hidden) {
+    u = ui()
+    if hidden == 1 {
+        rrect(cx, cy, cw, chh, 5 * u, theme(TH_BORDER))
+        rrect(cx + 4 * u, cy + 4 * u, cw - 8 * u, chh - 8 * u, 3 * u, theme(TH_CHROME))
+        return 0
+    }
+    rrect(cx, cy, cw, chh, 5 * u, theme(TH_TEXT_HI))
+    ink = theme(TH_BG)
+    if bj_suitred(bj_suit(cd)) == 1 { ink = theme(TH_DANGER) }
+    char_aa(cx + 5 * u, cy + 4 * u, bj_rankch(bj_rank(cd)), ink)
+    px = cx + cw / 2 - 4 * u
+    py = cy + chh / 2 - 1 * u
+    if bj_suitround(bj_suit(cd)) == 1 {
+        rrect(px, py, 8 * u, 8 * u, 4 * u, ink)
+    } else {
+        rrect(px, py, 8 * u, 8 * u, 1 * u, ink)
+    }
+    return 0
+}
+
+fn bj_msg() {
+    if bj_state == 0 { return "d deals - 10 chips a hand" }
+    if bj_state == 1 { return "h to hit, s to stand" }
+    if bj_result == 4 { return "blackjack - pays 3:2 - d deals again" }
+    if bj_result == 1 { return "you win - d deals again" }
+    if bj_result == 2 { return "dealer takes it - d deals again" }
+    return "push - d deals again"
+}
+fn bj_msgcol() {
+    if bj_result == 4 { return theme(TH_ACCENT) }
+    if bj_result == 1 { return theme(TH_ACCENT) }
+    if bj_result == 2 { return theme(TH_DANGER) }
+    return theme(TH_TEXT_DIM)
+}
+
+fn bj_row(ax, ay, aw, base, nn, rowy, hide) {
+    u = ui()
+    cw = 34 * u
+    chh = 48 * u
+    ix = 0
+    while ix < nn {
+        hd = 0
+        if hide == 1 { if ix == 1 { hd = 1 } }
+        bj_card(ax + 14 * u + ix * (cw + 6 * u), ay + rowy, cw, chh, peek8(base + ix), hd)
+        ix = ix + 1
+    }
+    return 0
+}
+
+fn bj_draw(ax, ay, aw, ah) {
+    u = ui()
+    ph = g4_ph(ah)
+    hide = 0
+    if bj_state == 1 { hide = 1 }
+    label(ax + 14 * u, ay + 8 * u, "dealer", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    if hide == 0 {
+        label_num(ax + 62 * u, ay + 8 * u, bj_total(BJ_BUF + BJ_DEAL, bj_dn), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    }
+    bj_row(ax, ay, aw, BJ_BUF + BJ_DEAL, bj_dn, 24 * u, hide)
+    label(ax + 14 * u, ay + 84 * u, "you", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 44 * u, ay + 84 * u, bj_total(BJ_BUF + BJ_HAND, bj_pn), theme(TH_ACCENT), T_CAPTION, W_BOLD)
+    bj_row(ax, ay, aw, BJ_BUF + BJ_HAND, bj_pn, 100 * u, 0)
+    g4_stat(ax, ay, aw, "chips", bj_chips)
+    label(ax + 14 * u, ay + ph - 22 * u, bj_msg(), bj_msgcol(), T_CAPTION, W_BOLD)
+    return 0
+}
+
+fn bj_event(win, ety, ecode, ex, ey) {
+    if ety != 3 { return 0 }
+    if ecode == 114 { bj_reset()  wm_dmg(win)  return 1 }
+    if ecode == 100 { bj_deal()  wm_dmg(win)  return 1 }
+    if ecode == 104 { bj_hit()   wm_dmg(win)  return 1 }
+    if ecode == 115 { bj_stand() wm_dmg(win)  return 1 }
+    return 0
+}
+
+# ==============================================================================
+# 68 - FROGGER. Five lanes of traffic, five lanes of river, and five bays.
+#
+#   row 0        the home bank, five bays cut into it
+#   rows 1..5    the river. NO LOG UNDER YOU IS A DROWNING, and a log carries
+#                you sideways - the river is not "traffic you must dodge", it
+#                is the exact inverse of the road, and getting that backwards
+#                is the single thing that makes a Frogger clone not Frogger.
+#   row 6        the median, always safe
+#   rows 7..11   the road. Anything under you is a squashing.
+#   row 12       the start bank
+#
+# THE LANES HOLD NO STATE. A lane is a period, a length, a direction and a
+# speed; where its objects are at time t is `(t * speed) mod (period)`, so
+# thirteen lanes cost thirteen functions of `t` and not one byte of RAM. The
+# frog's x is in EIGHTHS OF A CELL so that being carried by a log is smooth
+# rather than a cell-per-tick jump, and so that "half on the log" is a state
+# the collision test can even express.
+# ==============================================================================
+FR_COLS = 13
+FR_ROWS = 13
+FR_SUB  = 8
+
+fr_x8 = 48
+fr_row = 12
+fr_t = 0
+fr_lives = 3
+fr_score = 0
+fr_level = 1
+fr_home = 0                         # five bits, one per filled bay
+fr_state = 0                        # 0 ready, 1 hopping, 2 dying, 3 over
+fr_next = 0
+fr_why = 0                          # 1 squashed, 2 drowned, 3 bad bay
+
+# even rows run right, odd rows run left - so no two adjacent lanes ever move
+# the same way, which is what makes the crossing readable
+fn fr_dir(ri) { if ri % 2 == 0 { return 1 }  return 0 - 1 }
+fn fr_base(ri) {
+    if ri == 1 { return 2 }
+    if ri == 2 { return 3 }
+    if ri == 3 { return 1 }
+    if ri == 4 { return 4 }
+    if ri == 5 { return 2 }
+    if ri == 7 { return 3 }
+    if ri == 8 { return 2 }
+    if ri == 9 { return 5 }
+    if ri == 10 { return 2 }
+    return 3
+}
+fn fr_spd(ri) { return fr_base(ri) + fr_level - 1 }
+fn fr_len(ri) {
+    if ri < 6 { if ri == 3 { return 2 }  return 3 }
+    if ri == 9 { return 1 }
+    return 2
+}
+fn fr_gap(ri) {
+    if ri < 6 { if ri == 3 { return 5 }  return 6 }
+    if ri == 9 { return 4 }
+    return 5
+}
+fn fr_lane(ri) {
+    if ri < 1 { return 0 }
+    if ri == 6 { return 0 }
+    if ri > 11 { return 0 }
+    return 1
+}
+fn fr_river(ri) {
+    if ri < 1 { return 0 }
+    if ri > 5 { return 0 }
+    return 1
+}
+
+# Where lane ri's objects start, in eighths of a cell, at the current time.
+fn fr_off(ri) {
+    pd = fr_gap(ri) * FR_SUB
+    ov = (fr_t * fr_spd(ri)) % pd
+    if fr_dir(ri) < 0 { ov = pd - ov }
+    if ov >= pd { ov = 0 }
+    return ov
+}
+
+# Does the frog's own 1-cell footprint at x8 overlap an object in lane ri?
+# In the lane's modular frame an object occupies [0, len) and the NEXT one
+# starts at [period), so a footprint straddling the wrap has to be tested
+# against both - checking only `rel < len` loses every object the frog is
+# hanging off the back of, which on the river reads as drowning while
+# standing on a log.
+fn fr_hit(ri, x8) {
+    if fr_lane(ri) == 0 { return 0 }
+    pd = fr_gap(ri) * FR_SUB
+    ln = fr_len(ri) * FR_SUB
+    rel = (x8 - fr_off(ri)) % pd
+    if rel < 0 { rel = rel + pd }
+    if rel < ln { return 1 }
+    if rel + FR_SUB > pd { return 1 }
+    return 0
+}
+
+fn fr_spawn() {
+    fr_x8 = 6 * FR_SUB
+    fr_row = 12
+    fr_state = 1
+    fr_why = 0
+    return 0
+}
+
+fn fr_reset() {
+    ac_seed_from(ticks() + 68)
+    fr_t = 0
+    fr_lives = 3
+    fr_score = 0
+    fr_level = 1
+    fr_home = 0
+    fr_next = 0
+    fr_spawn()
+    fr_state = 0
+    return 0
+}
+
+fn fr_die(why) {
+    fr_why = why
+    fr_lives = fr_lives - 1
+    fr_next = ticks() + 90
+    if fr_lives <= 0 { fr_state = 3 } else { fr_state = 2 }
+    return 0
+}
+
+# bays sit at columns 0, 3, 6, 9 and 12 - five of them across thirteen columns,
+# with a cell of bank between each pair.
+fn fr_bay(x8) {
+    bi = 0
+    while bi < 5 {
+        dv = x8 - bi * 3 * FR_SUB
+        if dv < 0 { dv = 0 - dv }
+        if dv <= 3 { return bi }
+        bi = bi + 1
+    }
+    return 0 - 1
+}
+
+fn fr_home_in() {
+    bi = fr_bay(fr_x8)
+    if bi < 0 { fr_die(3)  return 0 }
+    if band(fr_home, shl(1, bi)) != 0 { fr_die(3)  return 0 }
+    fr_home = bor(fr_home, shl(1, bi))
+    fr_score = fr_score + 50
+    if fr_home == 31 {
+        fr_level = fr_level + 1
+        fr_home = 0
+        fr_score = fr_score + 200
+        fr_lives = fr_lives + 1
+    }
+    fr_spawn()
+    return 0
+}
+
+fn fr_hop(win, dd) {
+    if fr_state == 0 { fr_state = 1  fr_next = ticks() }
+    if fr_state != 1 { return 0 }
+    if dd == 0 {
+        if fr_row == 1 { fr_home_in()  wm_dmg(win)  return 1 }
+        fr_row = fr_row - 1
+        fr_score = fr_score + 1
+        # LEAVING THE RIVER SNAPS BACK TO THE GRID. A log leaves the frog on a
+        # fraction of a cell, and a fractional frog on the road would sit
+        # between two lanes' worth of car and be hit by neither.
+        if fr_river(fr_row) == 0 { fr_x8 = (fr_x8 + FR_SUB / 2) / FR_SUB * FR_SUB }
+    }
+    if dd == 2 { if fr_row < FR_ROWS - 1 { fr_row = fr_row + 1 } }
+    if dd == 3 { fr_x8 = fr_x8 - FR_SUB }
+    if dd == 1 { fr_x8 = fr_x8 + FR_SUB }
+    if fr_x8 < 0 { fr_x8 = 0 }
+    if fr_x8 > (FR_COLS - 1) * FR_SUB { fr_x8 = (FR_COLS - 1) * FR_SUB }
+    fr_check()
+    wm_dmg(win)
+    return 1
+}
+
+# The whole of "did that kill me", in one place so a hop and a tick cannot
+# disagree about it.
+fn fr_check() {
+    if fr_state != 1 { return 0 }
+    if fr_river(fr_row) == 1 {
+        if fr_hit(fr_row, fr_x8) == 0 { fr_die(2)  return 0 }
+        return 0
+    }
+    if fr_lane(fr_row) == 1 { if fr_hit(fr_row, fr_x8) == 1 { fr_die(1)  return 0 } }
+    return 0
+}
+
+fn fr_tick(win) {
+    if fr_state == 2 {
+        if ticks() < fr_next { return 0 }
+        fr_spawn()
+        wm_dmg(win)
+        return 1
+    }
+    if fr_state != 1 { return 0 }
+    if ticks() < fr_next { return 0 }
+    fr_next = ticks() + 3
+    fr_t = fr_t + 1
+    if fr_river(fr_row) == 1 {
+        if fr_hit(fr_row, fr_x8) == 1 {
+            # carried. The log moves and so does the frog, which is the only
+            # place in this game where the world changes the player's position.
+            fr_x8 = fr_x8 + fr_dir(fr_row) * fr_spd(fr_row)
+            if fr_x8 < 0 { fr_die(2) }
+            if fr_x8 > (FR_COLS - 1) * FR_SUB { fr_die(2) }
+        } else {
+            fr_die(2)
+        }
+    } else {
+        fr_check()
+    }
+    wm_dmg(win)
+    return 1
+}
+
+fn fr_cell(aw, ah) {
+    u = ui()
+    cw = (aw - 12 * u) / FR_COLS
+    chh = (g4_ph(ah) - 28 * u) / FR_ROWS
+    if chh < cw { cw = chh }
+    if cw < 6 { cw = 6 }
+    return cw
+}
+fn fr_gx(aw, ah) { return (aw - FR_COLS * fr_cell(aw, ah)) / 2 }
+fn fr_gy(aw, ah) { return 24 * ui() }
+
+fn fr_rowcol(ri) {
+    if ri == 0 { return g4_col(0) }
+    if fr_river(ri) == 1 { return g4_col(1) }
+    if ri == 6 { return g4_col(0) }
+    if ri == 12 { return g4_col(0) }
+    return theme(TH_TEXT_DIM)
+}
+
+fn fr_msg() {
+    if fr_state == 0 { return "arrows to hop - reach the five bays" }
+    if fr_state == 3 { return "out of lives - r restarts" }
+    if fr_why == 1 { return "squashed" }
+    if fr_why == 2 { return "drowned" }
+    if fr_why == 3 { return "that bay is taken" }
+    return ""
+}
+
+fn fr_draw(ax, ay, aw, ah) {
+    u = ui()
+    cell = fr_cell(aw, ah)
+    gx = ax + fr_gx(aw, ah)
+    gy = ay + fr_gy(aw, ah)
+    ri = 0
+    while ri < FR_ROWS {
+        ry = gy + ri * cell
+        # every band is one reference hue laid over the canvas at low alpha,
+        # so the field is dark enough for the pieces on it to read
+        blend(gx, ry, FR_COLS * cell, cell, fr_rowcol(ri), 34)
+        ri = ri + 1
+    }
+    # the home bank: five bays cut out of it
+    bi = 0
+    while bi < 5 {
+        bx = gx + bi * 3 * cell
+        fc = theme(TH_CHROME_LINE)
+        if band(fr_home, shl(1, bi)) != 0 { fc = theme(TH_ACCENT) }
+        rrect(bx + 1 * u, gy + 1 * u, cell - 2 * u, cell - 2 * u, 3 * u, fc)
+        bi = bi + 1
+    }
+    ri = 1
+    while ri < FR_ROWS - 1 {
+        if fr_lane(ri) == 1 {
+            pd = fr_gap(ri) * FR_SUB
+            ln = fr_len(ri) * FR_SUB
+            oc = g4_col(4)
+            if fr_river(ri) == 1 { oc = g4_col(2) }
+            ox = fr_off(ri) - pd
+            while ox < FR_COLS * FR_SUB {
+                x0 = ox
+                x1 = ox + ln
+                if x0 < 0 { x0 = 0 }
+                if x1 > FR_COLS * FR_SUB { x1 = FR_COLS * FR_SUB }
+                if x1 > x0 {
+                    rrect(gx + x0 * cell / FR_SUB, gy + ri * cell + 2 * u, (x1 - x0) * cell / FR_SUB, cell - 4 * u, 3 * u, oc)
+                }
+                ox = ox + pd
+            }
+        }
+        ri = ri + 1
+    }
+    if fr_state != 3 {
+        fx = gx + fr_x8 * cell / FR_SUB
+        fy = gy + fr_row * cell
+        fc = theme(TH_ACCENT)
+        if fr_state == 2 { fc = theme(TH_DANGER) }
+        rrect(fx + 2 * u, fy + 2 * u, cell - 4 * u, cell - 4 * u, 4 * u, fc)
+        fill_rgb(fx + 4 * u, fy + 4 * u, 2 * u, 2 * u, theme(TH_BG))
+        fill_rgb(fx + cell - 6 * u, fy + 4 * u, 2 * u, 2 * u, theme(TH_BG))
+    }
+    label(ax + 12 * u, ay + 6 * u, "lives", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 46 * u, ay + 6 * u, fr_lives, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 68 * u, ay + 6 * u, "level", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 102 * u, ay + 6 * u, fr_level, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    g4_stat(ax, ay - 2 * u, aw, "score", fr_score)
+    mc2 = theme(TH_TEXT_DIM)
+    if fr_why > 0 { mc2 = theme(TH_DANGER) }
+    label(gx, gy + FR_ROWS * cell + 4 * u, fr_msg(), mc2, T_CAPTION, W_BOLD)
+    return 0
+}
+
+fn fr_event(win, ety, ecode, ex, ey) {
+    if ety == 3 { if ecode == 114 { fr_reset()  wm_dmg(win)  return 1 }  return 0 }
+    if ety != 1 { return 0 }
+    if fr_state == 3 { return 1 }
+    if ecode == K_UP    { return fr_hop(win, 0) }
+    if ecode == K_RIGHT { return fr_hop(win, 1) }
+    if ecode == K_DOWN  { return fr_hop(win, 2) }
+    if ecode == K_LEFT  { return fr_hop(win, 3) }
+    return 0
+}
+
+# ==============================================================================
+# the per-slice tables. Each is a plain if-chain on `id`; the fallback at the
+# end means "not mine" and lets the next slice answer.
+# ==============================================================================
+# Every one of these opens FRESH. That is reg_new()'s existing rule for
+# Wordle, Tic-Tac-Toe, Hanoi and the rest, and it is what makes "close it and
+# open it again" a restart rather than a resume of a game you already lost.
+#
+# It is also the ONLY place the fixed buffers are initialised: fi_reset writes
+# FIFTEEN_BOARD, sk_reset writes SK_BOARD, mc_reset writes MC_BUF, bj_reset
+# writes the shoe. A draw that reached this slice without an open would
+# otherwise read whatever the last app to use that page left behind - which is
+# exactly the class of bug a kernel with no allocator invites.
+fn games4_reset(id) {
+    if id == G4_FIFTEEN { return fi_reset() }
+    if id == G4_REVERSI { return rv_reset() }
+    if id == G4_SIMON   { return sim_reset() }
+    if id == G4_SOKOBAN { return sk_reset() }
+    if id == G4_FLAPPY  { return fl_reset() }
+    if id == G4_MISSILE { return mc_reset() }
+    if id == G4_BLACKJK { return bj_reset() }
+    if id == G4_FROGGER { return fr_reset() }
+    return 0
+}
+
+# reg_new()'s per-slice arm. WITHOUT ONE, EVERY APP HERE IS UNOPENABLE and
+# says nothing about it: reg_new() gates on explicit id ranges, none of which
+# covers 61..69, so it would return -1 and reg_open() would quietly do nothing.
+#
+# Id 69 is inside games4_has's range and is deliberately not an app, so it is
+# refused here too rather than opening an untitled window.
+fn games4_new(id, u) {
+    if games4_has(id) == 0 { return 0 - 1 }
+    if id == G4_SPARE { return 0 - 1 }
+    games4_reset(id)
+    return wm_open(id, games4_name(id), 150 * u, 70 * u, games4_w(id) * u, games4_h(id) * u)
+}
+
+fn games4_name(id) {
+    if id == G4_FIFTEEN { return "15 Puzzle" }
+    if id == G4_REVERSI { return "Reversi" }
+    if id == G4_SIMON   { return "Simon" }
+    if id == G4_SOKOBAN { return "Sokoban" }
+    if id == G4_FLAPPY  { return "Flappy" }
+    if id == G4_MISSILE { return "Missile Command" }
+    if id == G4_BLACKJK { return "Blackjack" }
+    if id == G4_FROGGER { return "Frogger" }
+    return ""
+}
+
+# 2 = game, for every one of them - reg_cat()'s only consumer is the catalog
+# swatch and these are all games.
+fn games4_cat(id) { if games4_has(id) == 1 { return 2 }  return 0 }
+
+# The reference's own window sizes, in design units.
+fn games4_w(id) {
+    if id == G4_FIFTEEN { return 360 }
+    if id == G4_REVERSI { return 400 }
+    if id == G4_SIMON   { return 360 }
+    if id == G4_SOKOBAN { return 430 }
+    if id == G4_FLAPPY  { return 430 }
+    if id == G4_MISSILE { return 470 }
+    if id == G4_BLACKJK { return 400 }
+    if id == G4_FROGGER { return 430 }
+    return 480
+}
+fn games4_h(id) {
+    if id == G4_FIFTEEN { return 400 }
+    if id == G4_REVERSI { return 420 }
+    if id == G4_SIMON   { return 390 }
+    if id == G4_SOKOBAN { return 340 }
+    if id == G4_FLAPPY  { return 360 }
+    if id == G4_MISSILE { return 370 }
+    if id == G4_BLACKJK { return 340 }
+    if id == G4_FROGGER { return 380 }
+    return 340
+}
+
+# No icon in the 20-icon atlas depicts any of these, and reg_icon()'s own
+# comment says an honest monogram beats a stretched icon that does not depict
+# the thing. -1 is that answer.
+fn games4_icon(id) { return 0 - 1 }
+
+fn games4_draw(id, ax, ay, aw, ah) {
+    if games4_has(id) == 0 { return 0 }
+    g4_canvas(ax, ay, aw, ah)
+    if id == G4_FIFTEEN { fi_draw(ax, ay, aw, ah) }
+    if id == G4_REVERSI { rv_draw(ax, ay, aw, ah) }
+    if id == G4_SIMON   { sim_draw(ax, ay, aw, ah) }
+    if id == G4_SOKOBAN { sk_draw(ax, ay, aw, ah) }
+    if id == G4_FLAPPY  { fl_draw(ax, ay, aw, ah) }
+    if id == G4_MISSILE { mc_draw(ax, ay, aw, ah) }
+    if id == G4_BLACKJK { bj_draw(ax, ay, aw, ah) }
+    if id == G4_FROGGER { fr_draw(ax, ay, aw, ah) }
+    g4_bar(ax, ay, aw, ah, id)
+    return 0
+}
+
+fn games4_event(id, win, ety, ecode, ex, ey) {
+    if id == G4_FIFTEEN { return fi_event(win, ety, ecode, ex, ey) }
+    if id == G4_REVERSI { return rv_event(win, ety, ecode, ex, ey) }
+    if id == G4_SIMON   { return sim_event(win, ety, ecode, ex, ey) }
+    if id == G4_SOKOBAN { return sk_event(win, ety, ecode, ex, ey) }
+    if id == G4_FLAPPY  { return fl_event(win, ety, ecode, ex, ey) }
+    if id == G4_MISSILE { return mc_event(win, ety, ecode, ex, ey) }
+    if id == G4_BLACKJK { return bj_event(win, ety, ecode, ex, ey) }
+    if id == G4_FROGGER { return fr_event(win, ety, ecode, ex, ey) }
+    return 0
+}
+
+# EVERY MOVING GAME IN THIS SLICE ADVANCES HERE AND DRAWS NOTHING. wm.c calls
+# this once per frame per window and damages the window when it returns 1
+# (wm.c:1756-1759), so a game keeps playing while another window is dragged
+# over it. The wm_dmg(win) inside each of these is belt and braces: reg_event's
+# return value IS discarded at all three of wm.c's hook_event call sites, and
+# an app that relies on a return value being read is one refactor away from
+# repainting nothing.
+fn games4_tick(id, win) {
+    if id == G4_SIMON  { return sim_tick(win) }
+    if id == G4_FLAPPY { return fl_tick(win) }
+    if id == G4_MISSILE { return mc_tick(win) }
+    if id == G4_FROGGER { return fr_tick(win) }
+    return 0
+}
+
+
+# The catalog tile's two-letter mark. Without one, reg_mono() falls through
+# to its "??" placeholder and every game in this slice draws the same tile.
+fn games4_mono(id) {
+    if id == 61 { return "15" }
+    if id == 62 { return "RV" }
+    if id == 63 { return "SI" }
+    if id == 64 { return "SK" }
+    if id == 65 { return "FL" }
+    if id == 66 { return "MC" }
+    if id == 67 { return "BJ" }
+    if id == 68 { return "FR" }
+    return "??"
+}

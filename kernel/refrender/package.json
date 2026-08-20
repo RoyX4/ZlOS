@@ -1,0 +1,13 @@
+{
+  "name": "zlos-refrender",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Renders ds.html — the zlOS desktop reference — to PNG, via the support.js shim.",
+  "type": "module",
+  "scripts": {
+    "shot": "node render-ref.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.62.1"
+  }
+}

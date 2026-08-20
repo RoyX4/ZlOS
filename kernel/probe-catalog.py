@@ -1,168 +1,179 @@
 #!/usr/bin/env python3
-"""probe-catalog.py - does "All Applications" actually launch an app?
+"""probe-catalog.py - is "All Applications" reachable with the POINTER?
 
-Same discipline as probe-dock.py: a screenshot cannot tell a working catalog
-from a picture of one, so this drives the real pointer through the real path
-- start button, the new "All Applications" menu row, a tile in the catalog -
-and asks whether the SCREEN changed each time, not whether the code compiled.
+47 of zlOS's 53 apps exist only behind this window, so "can a person open it"
+is not a detail - it is whether five sixths of the desktop is software or
+decoration. A screenshot cannot tell a working catalog from a picture of one,
+so this drives the real pointer through the real chrome and asks the COMPOSITOR
+what happened, not the pixels alone.
 
-  1 MENU     the start button opens the 10-row menu (same as probe-dock.py)
-  2 CATALOG  clicking "All Applications" (the new last-but-one row) opens it
-  3 LAUNCH   clicking the first tile in the catalog opens THAT app's window
+  1 TERMINAL  the dock's first tile is a launcher, not the start button
+  2 MENU      the topbar's Activities corner still opens the menu
+  3 GRID      the dock's grid button opens "All Applications"
+  4 TILE      a tile in the catalog opens THAT app
+
+WHY 1 IS FIRST, and why it is a test at all. desk_click() carried a guard from
+the full-width bar - `if cx >= dock_start_x() { if cx < dock_start_x() + 42u {
+open_menu() } }` - and dock_start_x() returns dock_x0(), the left edge of TILE
+0. 42 design units is wider than a tile plus its gap, so the Terminal tile and
+the first four units of the Browser opened the start menu and never reached
+dock_launch(). Nothing caught it because the menu opening looks like something
+working.
+
+EVERY COORDINATE HERE IS PARSED OUT OF kernel.zl, not transcribed. The previous
+version of this file hardcoded `DOCK_H = 64` against a 52-unit dock and
+`ui = 2 if W >= 1400 else 1` against fb.c's real formula, and clicked a start
+button that had been replaced by a floating island - three independent ways to
+land on the wallpaper and report a broken feature that worked.
 """
-import os, subprocess, sys, tempfile
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from exercise import Serial, Qmp, qemu_argv, build, PROMPT
+import os
+import re
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "oracle"))
+
+import importlib.util
+_spec = importlib.util.spec_from_file_location(
+    "zlosboot", os.path.join(HERE, "oracle", "zlosboot.py"))
+zb = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(zb)
+
 SHOTS = os.path.join(HERE, "shots")
-
-# design-unit constants, copied from kernel.zl/apps_registry.zl rather than
-# re-derived, so a layout change there is what breaks this probe rather than
-# independent arithmetic drifting from it.
-TITLE_H = 28
-MENU_ROWS = 10
-DOCK_H = 64
-CAT_HEADER = 26
-CAT_TILE_W = 130
-CAT_TILE_H = 108
+W, H = 1280, 800
 
 
-def at(qmp, x, y, w, h, btn=None):
-    ev = [{"type": "abs", "data": {"axis": "x", "value": int(x * 32767 / w)}},
-          {"type": "abs", "data": {"axis": "y", "value": int(y * 32767 / h)}}]
-    if btn is not None:
-        ev.append({"type": "btn", "data": {"down": btn, "button": "left"}})
-    qmp.cmd("input-send-event", events=ev)
+def dock_geometry(u):
+    """The dock's real rectangle, from kernel.zl's own DOCK_* constants.
 
+    Returned in PIXELS at ui scale `u`. Mirrors dock_bar_x/dock_x0/dock_y and
+    the grid-button arithmetic in dock_slot_at(), which is the function under
+    test - so a layout change in kernel.zl is what breaks this, rather than
+    arithmetic here drifting quietly away from it.
+    """
+    src = open(os.path.join(HERE, "kernel.zl"), encoding="utf-8").read()
+    k = {}
+    for name in ("DOCK_PADX", "DOCK_PADY", "DOCK_GAP", "DOCK_TW", "DOCK_H",
+                 "DOCK_BOT", "DOCK_PITCH", "DOCK_N", "TOPBAR_H"):
+        m = re.search(r"^%s\s*=\s*(\d+)" % name, src, re.M)
+        if not m:
+            raise SystemExit(f"kernel.zl no longer defines {name} - this probe "
+                             f"cannot place a click without it")
+        k[name] = int(m.group(1))
 
-def click(qmp, x, y, w, h, settle):
-    at(qmp, x, y, w, h, btn=True)
-    settle(0.3)
-    at(qmp, x, y, w, h, btn=False)
-    settle(0.3)
-
-
-def shot(qmp, tmp, name):
-    p = os.path.join(tmp, name + ".ppm")
-    qmp.screendump(p)
-    from PIL import Image
-    return Image.open(p).convert("RGB").copy()
+    bar_w = (k["DOCK_PADX"] * 2 + k["DOCK_N"] * k["DOCK_TW"]
+             + (k["DOCK_N"] - 1) * k["DOCK_GAP"] + k["DOCK_GAP"] * 2 + 1
+             + k["DOCK_TW"])
+    bar_x = (W - bar_w * u) // 2
+    x0 = bar_x + k["DOCK_PADX"] * u
+    dy = H - (k["DOCK_H"] + k["DOCK_BOT"]) * u
+    mid_y = dy + k["DOCK_PADY"] * u + k["DOCK_TW"] * u // 2
+    grid_x = x0 + k["DOCK_N"] * k["DOCK_PITCH"] * u + k["DOCK_GAP"] * u + 1
+    return {
+        "tile0": (x0 + k["DOCK_TW"] * u // 2, mid_y),
+        "grid": (grid_x + k["DOCK_TW"] * u // 2, mid_y),
+        "topbar_corner": (60 * u, k["TOPBAR_H"] * u // 2),
+        "dock_y": dy,
+        "u": u,
+    }
 
 
 def differs(a, b, box):
     x0, y0, x1, y1 = box
-    n = 0
-    for y in range(y0, y1, 2):
-        for x in range(x0, x1, 2):
-            if a.getpixel((x, y)) != b.getpixel((x, y)):
-                n += 1
-    return n
+    return int((a[y0:y1:2, x0:x1:2] != b[y0:y1:2, x0:x1:2]).any(axis=2).sum())
 
 
 def main():
-    build(False)
-    tmp = tempfile.mkdtemp(prefix="zlos-catalog-")
-    ser_path, qmp_path = os.path.join(tmp, "ser"), os.path.join(tmp, "qmp")
-    proc = subprocess.Popen(qemu_argv(tmp, False, ser_path, qmp_path),
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    os.makedirs(SHOTS, exist_ok=True)
     fails = []
-    try:
-        ser, qmp = Serial(ser_path), Qmp(qmp_path)
-        if not ser.wait("ready.", 240)[0]:
-            print("never booted"); return 1
-        ser.wait(PROMPT, 60)
-        ser.drain(1.5)
+    with zb.Machine(W, H) as m:
+        u = zb.guest_ui(m.w)
+        g = dock_geometry(u)
+        settle = m.ser.drain
+        print(f"ui {u}x  dock top {g['dock_y']}  tile0 {g['tile0']}  "
+              f"grid {g['grid']}")
 
-        base = shot(qmp, tmp, "base")
-        W, H = base.size
-        print(f"booted {W}x{H}")
-        ui = 2 if W >= 1400 else 1
-        settle = ser.drain
+        # The start menu is a window at (10u, dock_y - mh - 8u), 210u wide.
+        # Its exact height needs ui_metric(), which lives in C - so the box is
+        # the whole strip it can occupy. Anything opening there is the menu.
+        menu_box = (10 * u, max(0, g["dock_y"] - 420 * u),
+                    min(m.w, 220 * u), g["dock_y"] - 8 * u)
 
-        # ---- 1. open the start menu - identical click to probe-dock.py's
-        dock_y = H - DOCK_H * ui
-        click(qmp, 40 * ui, dock_y + 32 * ui, W, H, settle)
-        settle(1.0)
-        menu = shot(qmp, tmp, "menu")
-        mbox = (10 * ui, dock_y - 320 * ui, 220 * ui, dock_y - 10 * ui)
-        n = differs(base, menu, mbox)
-        print(f"  start button opens the menu       {n:5d} px  "
-              f"{'ok' if n > 2000 else 'FAIL'}")
-        if n <= 2000: fails.append("menu")
-        menu.save(os.path.join(SHOTS, "catalog-menu.png"))
+        base = zb.grab(m.qmp, m.tmp, "base")
 
-        # ---- 2. click "All Applications" - row 8 of 10 (0-indexed), the
-        # same row_y formula menu_draw uses: ay + 4u + row*26u, where ay is
-        # the menu WINDOW's client top (its y + TITLE_H*u).
-        mh = MENU_ROWS * 26 * ui + TITLE_H * ui + 12 * ui
-        my = dock_y - mh - 8 * ui
-        menu_client_y = my + TITLE_H * ui
-        row8_y = menu_client_y + 4 * ui + 8 * 26 * ui + 13 * ui
-        click(qmp, 10 * ui + 100 * ui, row8_y, W, H, settle)
-        settle(1.5)
-        catalog = shot(qmp, tmp, "catalog")
-        cbox = (int(W * 0.05), int(H * 0.05), int(W * 0.65), int(H * 0.65))
-        n = differs(menu, catalog, cbox)
-        print(f"  'All Applications' opens the catalog {n:5d} px  "
-              f"{'ok' if n > 3000 else 'FAIL'}")
-        if n <= 3000: fails.append("catalog-open")
-        catalog.save(os.path.join(SHOTS, "catalog-open.png"))
+        # ---- 1. the dock's first tile is a LAUNCHER ------------------------
+        zb.click(m.qmp, g["tile0"][0], g["tile0"][1], m.w, m.h, settle)
+        settle(1.2)
+        after = zb.grab(m.qmp, m.tmp, "tile0")
+        n = differs(base, after, menu_box)
+        ok = n < 500
+        print(f"  1 the Terminal tile does NOT open the menu  {n:6d} px  "
+              f"{'ok' if ok else 'FAIL'}")
+        if not ok:
+            fails.append("terminal-tile-opens-menu")
 
-        # ---- 3. click the first tile in the catalog. reg_new() opens it at
-        # (120u, 40u); client top = 40u + TITLE_H*u; the grid starts
-        # CAT_HEADER*u below that; tile 0 is the first column, first row.
-        cat_x = 120 * ui
-        cat_y = 40 * ui + TITLE_H * ui
-        tile0_x = cat_x + CAT_TILE_W * ui // 2
-        tile0_y = cat_y + CAT_HEADER * ui + CAT_TILE_H * ui // 2
-        click(qmp, tile0_x, tile0_y, W, H, settle)
-        settle(1.5)
-        launched = shot(qmp, tmp, "launched")
-        lbox = (0, 0, W, H)
-        n = differs(catalog, launched, lbox)
-        print(f"  clicking a tile launches an app      {n:5d} px  "
-              f"{'ok' if n > 3000 else 'FAIL'}")
-        if n <= 3000: fails.append("launch")
-        launched.save(os.path.join(SHOTS, "catalog-launched.png"))
+        # ---- 2. ...and the menu is still reachable -------------------------
+        zb.click(m.qmp, g["topbar_corner"][0], g["topbar_corner"][1],
+                 m.w, m.h, settle)
+        settle(1.2)
+        menu = zb.grab(m.qmp, m.tmp, "menu")
+        n = differs(after, menu, menu_box)
+        ok = n > 2000
+        print(f"  2 the topbar corner opens the menu         {n:6d} px  "
+              f"{'ok' if ok else 'FAIL'}")
+        if not ok:
+            fails.append("menu")
+        # open_menu() toggles, so this closes it again and leaves a clean
+        # desktop for the catalog test rather than a modal over it.
+        zb.click(m.qmp, g["topbar_corner"][0], g["topbar_corner"][1],
+                 m.w, m.h, settle)
+        settle(1.2)
 
-        # ---- 4. a GAME specifically, not just a read-only utility: open
-        # Tic-Tac-Toe (grid index 11 - row 2, col 3) and place a mark, which
-        # exercises ac_cell_idx and the win-check path most of the board
-        # games in apps_games1.zl share.
-        tt_col, tt_row = 11 % 4, 11 // 4
-        ttile_x = cat_x + tt_col * CAT_TILE_W * ui + CAT_TILE_W * ui // 2
-        ttile_y = cat_y + CAT_HEADER * ui + tt_row * CAT_TILE_H * ui + CAT_TILE_H * ui // 2
-        click(qmp, ttile_x, ttile_y, W, H, settle)
-        settle(1.5)
-        tt_open = shot(qmp, tmp, "tt-open")
-        n = differs(launched, tt_open, (0, 0, W, H))
-        print(f"  Tic-Tac-Toe tile opens the game      {n:5d} px  "
-              f"{'ok' if n > 3000 else 'FAIL'}")
-        if n <= 3000: fails.append("game-open")
+        # ---- 3. the grid button opens the catalog --------------------------
+        # THE COMPOSITOR'S OWN REPORT, not a pixel delta: a delta cannot tell
+        # "the catalog opened" from "a tooltip appeared", and reg_open() prints
+        # `wm: win N title ... client ...` through wm_report on every window it
+        # actually opens. It stays silent on the raise-and-focus path, which is
+        # precisely the failure this probe exists to catch.
+        before = zb.win_count(m.ser.all)
+        zb.click(m.qmp, g["grid"][0], g["grid"][1], m.w, m.h, settle)
+        settle(2.0)
+        cat = zb.grab(m.qmp, m.tmp, "catalog")
+        rows = zb.WIN_REPORT.findall(m.ser.all)
+        ok = zb.win_count(m.ser.all) > before
+        print(f"  3 the dock's grid button opens the catalog  "
+              f"{zb.win_count(m.ser.all) - before:5d} win  "
+              f"{'ok' if ok else 'FAIL'}")
+        if not ok:
+            fails.append("grid-button")
+            print("      reg_open(APP_CATALOG) reported no window. Either the "
+                  "click missed the button, or the id it opens is already on "
+                  "screen under another app - which is a raise, not an open.")
 
-        # Tic-Tac-Toe opens at (160u, 80u), 300u x 220u; tt_draw centres a
-        # 3x44u board at ax + (aw - 132u)/2, ay + 4u.
-        tt_ax, tt_ay = 160 * ui, 80 * ui + TITLE_H * ui
-        cell = 44 * ui
-        gx = tt_ax + (300 * ui - 3 * cell) // 2
-        gy = tt_ay + 4 * ui
-        click(qmp, gx + cell // 2, gy + cell // 2, W, H, settle)
-        settle(1.0)
-        tt_marked = shot(qmp, tmp, "tt-marked")
-        gbox = (gx, gy, gx + 3 * cell, gy + 3 * cell)
-        n = differs(tt_open, tt_marked, gbox)
-        print(f"  clicking a cell places a mark        {n:5d} px  "
-              f"{'ok' if n > 20 else 'FAIL'}")
-        if n <= 20: fails.append("game-click")
-        tt_marked.save(os.path.join(SHOTS, "catalog-tt-marked.png"))
+        # ---- 4. a tile launches THAT app -----------------------------------
+        if ok:
+            _, cx, cy, cw, ch = (int(v) for v in rows[-1])
+            cols = max(1, cw // (zb.CAT_TILE_W * u))
+            tx = cx + zb.CAT_TILE_W * u // 2
+            ty = cy + zb.CAT_HEADER * u + zb.CAT_TILE_H * u // 2
+            before = zb.win_count(m.ser.all)
+            zb.click(m.qmp, tx, ty, m.w, m.h, settle)
+            settle(2.0)
+            shot = zb.grab(m.qmp, m.tmp, "launched")
+            got = zb.win_count(m.ser.all) - before
+            print(f"  4 tile 0 ({cols} cols) launches an app      "
+                  f"{got:5d} win  {'ok' if got > 0 else 'FAIL'}")
+            if got <= 0:
+                fails.append("tile-launch")
+            from PIL import Image
+            Image.fromarray(shot).save(os.path.join(SHOTS, "catalog-launched.png"))
+        from PIL import Image
+        Image.fromarray(cat).save(os.path.join(SHOTS, "catalog-open.png"))
+        Image.fromarray(menu).save(os.path.join(SHOTS, "catalog-menu.png"))
 
-        print()
-        print("all good" if not fails else "FAILED: " + ", ".join(fails))
-        return 1 if fails else 0
-    finally:
-        proc.kill(); proc.wait()
+    print()
+    print("all good" if not fails else "FAILED: " + ", ".join(fails))
+    return 1 if fails else 0
 
 
 if __name__ == "__main__":

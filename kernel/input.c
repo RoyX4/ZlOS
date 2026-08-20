@@ -39,6 +39,7 @@ extern int ser_rx(void);          /* one byte from COM1, or -1 (support.c) */
  * preferred over the PS/2 mouse's relative deltas whenever it is present. */
 extern int xhci_ptr_ready(void);
 extern int xhci_ptr_abs(void);    /* 1 = tablet (a position), 0 = mouse (a delta) */
+extern int xhci_ptr_take_wheel(void);/* read-and-clear wheel notches */
 extern int xhci_ptr_take_dx(void);   /* read-and-clear raw relative motion */
 extern int xhci_ptr_take_dy(void);
 extern int xhci_poll(int max);    /* the ONE drainer of the USB event ring */
@@ -609,7 +610,13 @@ static void pump_mouse(void)
     /* THE WHEEL, before the coalesce test - it is a separate event and must not
      * be swallowed by "the pointer did not move", which is the normal case
      * while scrolling: a hand on a wheel is a hand holding the mouse still. */
-    int wz = idt_mouse_wheel();
+    /* BOTH sources, summed. idt_mouse_wheel() is the PS/2 one and was the only
+     * one; xhci.c decodes the USB wheel byte now, and every probe in this repo
+     * (and a real laptop) drives a USB pointer, so on those the wheel used to
+     * be a control that existed and never fired. Read both unconditionally -
+     * take_wheel() is read-and-clear, so skipping it when the PS/2 mouse
+     * answered first would let notches pile up and arrive in a burst. */
+    int wz = idt_mouse_wheel() + (usb ? xhci_ptr_take_wheel() : 0);
     if (wz) evq_push(EV_WHEEL, (u32)wz, mods, px_x, px_y);
 
     /* Coalesce on the REPORTED position, not the raw one: below 1x a raw move

@@ -3,6 +3,74 @@
 Recorded 2026-08-19 from Roy's clarification. This is the intent behind pointing
 at `~/zl OS v10.dc.html`.
 
+## Implementation status — 2026-08-19 isolated visual pass
+
+The concrete shared-system work in this document is implemented on the isolated
+`codex/visual-northstar-v2` branch. It was deliberately built outside the shared
+checkout so it cannot overwrite another agent's in-progress files.
+
+Implemented and verified:
+
+- one live navy/cyan theme owns semantic colours, chrome, wallpaper roles and
+  design metrics; `kernel.zl` consumes roles instead of carrying a second UI
+  palette;
+- continuous q8 UI scale and resampled text/icons replace whole-number layout
+  jumps; the final icon-atlas entry is reachable and the next index is refused;
+- the wallpaper keeps the glows, sweeps and vignette and adds deterministic
+  fine grain without adding per-frame work;
+- zl now has bindings for the existing immediate-mode widgets, rows, lists,
+  scrolling and theme metrics; Start, Pointer, System Monitor and About use the
+  shared layout path, while Settings and Browser retain their existing toolkit
+  paths;
+- open, close, press, pulse and fade motion is elapsed-time based with bounded
+  fixed-point easing, so late frames skip forward instead of slowing motion;
+- the incorrect fade-backdrop origin is fixed;
+- edge dragging draws a real destination preview, and drag, double-click and
+  Super+Arrow now share one work-area-aware snap/restore state;
+- the wallpaper cache is full-resolution dithered RGB565. 3840x2160 uses
+  16,200 KiB and fits the existing 16 MiB graphics arena without changing the
+  fixed memory map; an obsolete competing blur still refuses loudly;
+- calibrated-TSC deadlines replace PIT cadence when available, the Intel path
+  waits on the existing vblank source when it is actually supported, and the
+  compositor loop executes `sti; hlt` instead of busy-spinning at rest;
+- QEMU probes fall back to TCG when `/dev/kvm` is unavailable, so boot and
+  screenshot evidence remains reachable in sandboxes.
+- the boot workspace is now a deliberate three-app composition rather than a
+  full-screen shell plus debug cards: quiet 36 px chrome, 16 px radii, a compact
+  dock, centered titles and circular close controls;
+- 1920x1200 is a true 1x desktop instead of crossing the old 1400 px cliff into
+  a 16x32 terminal and oversized controls;
+- boot diagnostics remain complete on COM1, while the visible Terminal clears
+  to a concise ready state once the graphical session starts;
+- System Monitor has real Resources hierarchy and owns the frame/peak/late
+  diagnostics that previously polluted permanent dock chrome.
+
+Evidence from this branch:
+
+- kernel link: zero undefined symbols, 1,718,100 bytes;
+- `fbtext`: 48 checks, 0 failed, including density-aware q8 scale and icon
+  19/20 bounds;
+- `wmtest` and `wmtest_feel`: 0 failures, including preview pixels, unified
+  restore state, duration-based motion and work-area snapping;
+- `walltest`: 0 failures at 1920x1200, 2560x1440 and 3840x2160;
+- BIOS/QEMU boot reaches `ready.` at 1920x1200 and produces a visually inspected
+  screenshot with the final Terminal, Browser and Resources composition;
+- the native compositor benchmark measures a 4.319 ms dragged frame at
+  1920x1200, inside the 16.67 ms 60 Hz budget;
+- the resize probe passes resize (6,084 changed samples), move (29,159) and
+  no-ghost (25 residual samples) checks.
+
+Not honestly proven yet:
+
+- TCG timing is not target timing. The final `late = 0` / peak-under-16.67 ms
+  claim still requires the ThinkPad or KVM, and the Intel vblank path requires
+  the real Gen9 pipe;
+- this pass does not turn every simulated HTML application into a complete
+  real application. Application completeness remains the separate track this
+  document defines below;
+- there is still no runtime vector-font rasteriser. Continuous intermediate
+  sizes are resampled from the built-in raster atlases.
+
 ## The point
 
 The prototype is primarily a reference for **how good the desktop looks and how
@@ -101,16 +169,15 @@ already have the important machinery:
 - a cached wallpaper and a back buffer through 3840x2160;
 - the desktop as the normal framebuffer boot state.
 
-The remaining visual work is refinement, consistency, reachability and real app
-surfaces. Do not describe it as blocked by the language. The recurring
+Further visual work is now iteration and real app surfaces, not missing shared
+machinery. Do not describe it as blocked by the language. The recurring
 distinction is:
 
 - **the language cannot express it** — a real language/runtime constraint;
 - **nobody has wired or written it yet** — ordinary engineering work.
 
-Most of the remaining desktop gap is the second kind. The clearest example is
-`ui.c`: the widget toolkit exists in C, but zl applications cannot call its
-widgets yet.
+Most remaining application work is the second kind. `ui.c` is no longer the
+counterexample: its widget and layout surface is callable from zl.
 
 ## Capability map — what exists, what needs finishing, and the real limits
 
@@ -130,29 +197,17 @@ widgets yet.
 These are not future renderer research. They are composition and finishing work
 over primitives that exist now.
 
-### Possible, with unfinished machinery
+### Implemented here, with one remaining hardware proof
 
-- **Smoother animation.** The timeline exists, but motion is still a small set
-  of discrete frames and pacing is not synchronised to the 59.998 Hz panel.
-- **More flexible UI scaling.** Layout currently changes in whole-number scale
-  steps, which contributes to the coarse/blocky feeling between modes.
-- **Arbitrary text sizes.** Font shapes are rasterised at build time into a few
-  fixed atlases; there is no runtime vector font rasteriser.
-- **Correct opacity fades.** The fade path exists, but the current compositor
-  restores its saved backdrop at the wrong origin in one path.
-- **Consistent application controls.** `ui.c` has the widgets; zl applications
-  do not yet have the widget builtins that expose them.
-- **One coherent theme.** `kernel.zl` and `ui.c` currently carry overlapping
-  palettes and roles that must become one source of truth.
-- **Even 60 Hz motion.** A TSC deadline or real vblank-informed pacer must
-  replace the current uneven 100 Hz PIT cadence.
-- **Subtle wallpaper texture.** The gradient/glow/sweep/vignette structure is
-  present; no texture/noise layer is drawn by `draw_wallpaper()` today.
-- **Snap preview.** Edge snapping works on drop and through Super+Arrow, but no
-  overlay currently previews the destination rectangle while dragging.
+- **Smoother animation:** elapsed-time sampling and fixed-point easing.
+- **Flexible UI scaling:** continuous q8 metrics, type and icon output.
+- **Correct opacity fades:** immutable backdrop origin through the fade.
+- **Consistent application controls:** zl bindings plus initial app migrations.
+- **One coherent theme:** semantic colours and metrics in `ui_theme`.
+- **Even 60 Hz intent:** calibrated-TSC deadlines plus guarded Intel vblank.
 
-All of these are possible. "Unfinished" means code and integration work, not a
-known hardware or language impossibility.
+The last item is code-complete but not hardware-proven by this pass. The real
+panel measurement remains a gate; a TCG screenshot cannot settle it.
 
 ### Possible, but only with the right implementation
 
@@ -160,8 +215,8 @@ known hardware or language impossibility.
   continuously behind a moving window is too expensive on the current CPU path.
 - A detailed animated background can move small cached layers. Rebuilding all
   full-screen glows and gradients every frame is over budget.
-- A detailed 4K wallpaper can be cached after changing its memory budget. The
-  current 16 MiB wallpaper/effect arena cannot hold a 3840x2160x4 image.
+- A detailed 4K wallpaper is cached as full-resolution dithered RGB565. This
+  keeps the existing memory map and avoids a 32-bit cache that cannot fit.
 - GPU acceleration could make live full-screen effects cheaper, but is not
   required to reach the prototype's visible quality.
 
@@ -256,19 +311,19 @@ zlOS currently reserves fixed memory regions for major graphics jobs instead
 of asking a general heap for any size at runtime. Think of it as labelled
 drawers rather than one open warehouse.
 
-The wallpaper/effect drawer is 16 MiB:
+The wallpaper/effect drawer is 16 MiB. The cache now stores RGB565:
 
-- 1920x1200x4 = about 8.8 MiB — fits;
-- 2560x1440x4 = about 14.1 MiB — fits after the unused dock blur stopped taking
-  space first;
-- 3840x2160x4 = about 31.6 MiB — does not fit in that 16 MiB drawer.
+- 1920x1200x2 = 4,500 KiB — fits;
+- 2560x1440x2 = 7,200 KiB — fits, even after the obsolete dock-blur allocation;
+- 3840x2160x2 = 16,200 KiB — fits with 184 KiB left.
 
-This does **not** mean the machine lacks RAM and it does not make a detailed 4K
-background impossible. It means the current fixed memory map assigned too
-small a compartment to that cache. The back buffer already has a separate
-large region and supports 4K.
+The renderer dithers on save and expands to RGB888 on paint. The visual cache
+therefore remains full resolution without stealing another fixed region. If a
+competing cached effect consumes the arena first, the existing honest gradient
+fallback and refusal log remain in force.
 
-Valid ways to handle the wallpaper are:
+Other valid long-term ways to handle larger future modes or more cached effects
+remain:
 
 1. reserve a larger wallpaper cache region and prove it does not overlap any
    other fixed region;
@@ -278,10 +333,9 @@ Valid ways to handle the wallpaper are:
 5. retain the current honest fallback to a cheap plain gradient when caching
    is refused.
 
-The clean long-term answer is a boot-sized graphics cache with central memory
-map assertions. This repo has already suffered silent fixed-region collisions,
-so changing the map must be gated rather than treated as a casual constant
-increase.
+The clean long-term answer is still a boot-sized graphics cache with central
+memory-map assertions. RGB565 solves the current 4K case without casually
+moving a fixed boundary.
 
 ## What "fast like this" means
 
@@ -311,10 +365,10 @@ renderer:
 
 | work | measured cost | meaning |
 |---|---:|---|
-| one complete window | about 0.8 ms | window chrome is not the problem |
-| whole desktop redraw | about 4.7 ms | comfortably inside 16.67 ms at 1920x1200 |
-| 40 lines of AA monospace text | about 5.1 ms | terminal redraw is the largest ordinary visible cost |
-| full-screen present/blit | about 2 ms | unavoidable floor; larger at 4K |
+| dragged compositor frame, current composition | 4.319 ms | inside 16.67 ms at 1920x1200 |
+| Terminal scrollback share of that frame | 1.166 ms | 27% of the dragged frame |
+| System Monitor contents share | 0.111 ms | the structured app body is not the bottleneck |
+| chrome and wallpaper share | 2.792 ms | 65%; the clearest remaining optimisation target |
 | menu-sized blur, cold | about 7.5 ms | too expensive to recompute while moving |
 | the same cached blur | about 0.19 ms | cached effects are affordable |
 | one 900x700 radial glow | about 12.2 ms | the wallpaper cannot be rebuilt per frame |
@@ -329,15 +383,13 @@ That explains the current design:
   rendering reached 1.76x, two bands were slower than serial, and the current
   implementation keeps the extra cores spinning.
 
-The next speed work should follow perception, not theoretical throughput:
+The remaining speed proof should follow perception, not theoretical throughput:
 
-1. remeasure terminal drag cost now that `term_draw()` skips rows outside the
-   active clip; the source fix exists, but this note does not claim a fresh boot
-   measurement for it;
-2. fix cache lifecycle on mode changes;
-3. stop the compositor's idle busy-spin with the intended `hlt` path;
-4. replace uneven 100 Hz PIT pacing with a measured deadline/vblank design;
-5. keep measuring `late`, not just average and peak.
+1. remeasure the exact composition on the target machine; the native host
+   harness is green, while QEMU TCG is intentionally not treated as target
+   timing;
+2. measure the new deadline/vblank path on the 59.998 Hz ThinkPad panel;
+3. keep measuring `late`, not just average and peak.
 
 Full evidence and the pacing analysis are in `look-and-speed.md`.
 
@@ -356,9 +408,9 @@ Full evidence and the pacing analysis are in `look-and-speed.md`.
 ## The durable verdict
 
 zlOS can reach this level of visual quality and responsiveness with the system
-that exists now. The hard renderer/compositor foundation is already present.
-What remains is a focused visual pass, performance work on the paths people
-actually feel, toolkit-to-zl wiring, and then applications built on top.
+that exists now. This branch completes the shared visual pass and the software
+side of the pacing pass. What remains is target-hardware timing proof and then
+applications built on top, not another renderer rewrite.
 
 Do not answer this question with one completeness percentage. Say which layer
 is being judged: **look, feel, machinery, or applications**.

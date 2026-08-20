@@ -42,8 +42,16 @@ echo "built ./termwrap      (run: ./termwrap)"
 # because a test that hardcoded the numbers would be a FOURTH copy of the
 # palette. ui.c is linked for real. Run from this directory: it opens
 # ../kernel.zl, ../settings.c and ../../docs/design/.
-gcc -O2 -w -o palette palette.c ../ui.c
+# No -w. CLAUDE.md documents -w silencing four warnings that name a real bug
+# class in this tree for the whole life of the guard; this file builds clean
+# with -Wall -Wextra, so there is nothing to buy by hiding them.
+gcc -O2 -Wall -Wextra -o palette palette.c ../ui.c
 echo "built ./palette       (run: ./palette)"
+
+# The reference's motion curves. Pure math, no framebuffer, no window table -
+# so this runs in milliseconds and is the cheapest gate in the tree.
+gcc -O2 -Wall -Wextra -o easetest easetest.c ../ease.c -lm
+echo "built ./easetest      (run: ./easetest)"
 
 # The proportional text engine, asserted. fbbench times fb.c and browsershot
 # photographs it; neither NOTICES when a style flag stops changing the pixels.
@@ -68,10 +76,10 @@ echo "built ./inputtest_hid (run: ./inputtest_hid)"
 # sliver of an old window left on the wallpaper, a click landing on the window
 # underneath, a drag that stops when the pointer outruns the frame. None of
 # those show in a screenshot taken a frame later.
-gcc -O2 -w -o wmtest wmtest.c ../wm.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest wmtest.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../uikit.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest        (run: ./wmtest)"
-gcc -O2 -w -o wmtest_feel wmtest_feel.c ../wm.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmtest_feel wmtest_feel.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../uikit.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmtest_feel"
 
@@ -79,7 +87,7 @@ echo "built ./wmtest_feel"
 # wrong window; eyes catch a title bar four pixels too tall, or a toggle that
 # renders as a circle instead of a pill. Both were real, and only the second
 # kind is found by looking.
-gcc -O2 -w -o wmshot wmshot.c ../wm.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmshot wmshot.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../uikit.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmshot        (run: ./wmshot out.ppm)"
 
@@ -89,13 +97,13 @@ echo "built ./wmshot        (run: ./wmshot out.ppm)"
 # 2.25 and 16,000 us at load 7.43, which is not an A/B. Cycles counted here are
 # perturbed by cache pressure, not by an order of magnitude, and it attributes
 # the cost per app instead of reporting one number.
-gcc -O2 -w -o wmbench wmbench.c ../wm.c ../notify.c ../snap.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
+gcc -O2 -w -o wmbench wmbench.c ../wm.c ../ease.c ../notify.c ../snap.c ../ui.c ../uikit.c ../wmglue.c ../settings.c hoststubs.c ../fb.c ../input.c \
     ../term.c ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./wmbench       (run: ./wmbench)"
 # The settings block, against a fake disk. This is the first code in the project
 # that WRITES to a disk, and its stated gate needs a booting kernel - so the
 # record gets a fake NVMe instead, and every single-bit flip of it is walked.
-gcc -O2 -w -o settingstest settingstest.c ../settings.c ../ui.c
+gcc -O2 -w -o settingstest settingstest.c ../settings.c ../ui.c ../uikit.c
 echo "built ./settingstest  (run: ./settingstest)"
 
 # The tiled rasterizer against the scanline one it does NOT replace. Two ways
@@ -423,7 +431,7 @@ echo "built ./rtctest       (run: ./rtctest)"
 # expiry; this asserts the part that only exists once wm.c is involved - that
 # it paints ON TOP of a window, that it leaves no ghost when it retires, and
 # that focus never moves, because a toast is not a window and cannot be one.
-gcc -O2 -w -o toasttest toasttest.c ../wm.c ../ui.c ../wmglue.c ../settings.c hoststubs.c ../fb.c \
+gcc -O2 -w -o toasttest toasttest.c ../wm.c ../ease.c ../ui.c ../uikit.c ../wmglue.c ../settings.c hoststubs.c ../fb.c \
     ../input.c ../notify.c ../snap.c \
     ../font8x16.c ../font_aa.c ../font_sub.c ../icons.c
 echo "built ./toasttest     (run: ./toasttest)"
@@ -478,3 +486,13 @@ echo "built ./gpu_planes    (run: sudo ./gpu_planes)"
 # while i915 is driving. Read-only, 77 without root or without an Intel BAR2.
 gcc -O2 -g -Wall -Wextra -o gpu_aperture gpu_aperture.c
 echo "built ./gpu_aperture  (run: sudo ./gpu_aperture)"
+
+# THE SHARED WIDGET TOOLKIT, against a recording canvas. ui.c and uikit.c are
+# linked for real and every fb_* call they make is captured, so the assertions
+# are about the DRAW LIST rather than about pixels. That is the only place the
+# bugs this file exists for are visible as numbers: an active segment one slot
+# off its label, a grid cell drawn at the right x for the wrong track, an
+# accent button whose ink is white on lime. All three look deliberate in a
+# screenshot. No -w: it builds clean under -Wall -Wextra.
+gcc -O2 -g -Wall -Wextra -o uitest uitest.c ../ui.c ../uikit.c
+echo "built ./uitest        (run: ./uitest)"

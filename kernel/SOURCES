@@ -52,6 +52,7 @@ input.c
 term.c
 wm.c
 ui.c
+ease.c
 wmglue.c
 
 # ---- added when the parallel tracks landed ---------------------------------
@@ -120,3 +121,8 @@ layout.c
 png.c
 js.c
 browser.c
+
+# The shared widget catalogue - reference-widgets.md S3-S18. Separate from
+# ui.c because that file is the layout cursor and this one is a catalogue of
+# ~55 shapes; see the header of uikit.c.
+uikit.c

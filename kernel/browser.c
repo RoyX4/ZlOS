@@ -317,11 +317,9 @@ static int measure(const char *s, int len, int size, int style)
  */
 static const char home_page[] =
 "<html><head><title>zlOS</title></head><body>\n"
-"<h1>A browser, in zlOS</h1>\n"
-"<p>This document was <strong>parsed</strong> and <em>laid out</em> by "
-"<code>html.c</code> and <code>layout.c</code>, and drawn by the same "
-"text renderer the rest of the desktop uses. There is no heap under any "
-"of it: the tree is an array and the edges are indices.</p>\n"
+"<h1>Welcome to zlOS</h1>\n"
+"<p><strong>The machine is ready.</strong> This page is parsed, laid out and "
+"drawn inside the kernel by zlOS itself.</p>\n"
 "<hr>\n"
 /* ---- THE NEW BOX MODEL, ON THE PAGE THAT IS THE GATE ------------------
  * Everything above this point was renderable before flex, grid, borders,

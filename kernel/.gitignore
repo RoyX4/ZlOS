@@ -53,6 +53,13 @@ hosttest/gpu_blt
 hosttest/gpu_planes
 hosttest/gpu_aperture
 
+# Host-test binaries. These were TRACKED and rewritten by every ./build.sh run,
+# which is the hazard CLAUDE.md describes: a hand-maintained allowlist, one
+# line per binary, that nobody remembers to extend. Nine were in the index.
+# `git ls-files kernel/hosttest/ | grep -v '\.c$'` is the check that finds the
+# next one; a pattern is what stops there being a next one.
+hosttest/cryptotest
+hosttest/easetest
 # Derived from kernel/hosttest/build.sh's own `-o` targets, 2026-08-20.
 # The list above was a hand-maintained allowlist and it drifted: these seven
 # were tracked-or-untracked build outputs rewritten by every ./build.sh run,
@@ -66,3 +73,4 @@ hosttest/palette
 hosttest/termwrap
 hosttest/walltest
 hosttest/wmtest_feel
+hosttest/uitest

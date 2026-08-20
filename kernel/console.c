@@ -50,6 +50,7 @@ int  fb_get_row(void);
 int  fb_get_cols(void);
 int  fb_get_rows(void);
 int  fb_get_col(void);
+void fb_clip(int x, int y, int w, int h);
 unsigned int fb_pxw(void);
 unsigned int fb_pxh(void);
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
@@ -111,6 +112,8 @@ int console_cell_w(void) { return fb_active() ? fb_cell_w() : 8; }
  * text path there are no pixels to scale, so it is 1. */
 int fb_ui_scale(void);
 int console_ui_scale(void) { return fb_active() ? fb_ui_scale() : 1; }
+int fb_ui_scale_q8(void);
+int console_ui_scale_q8(void) { return fb_active() ? fb_ui_scale_q8() : 256; }
 int console_cell_h(void) { return fb_active() ? fb_cell_h() : 16; }
 int console_rows(void) { return fb_active() ? fb_get_rows() : 25; }
 
@@ -383,6 +386,24 @@ int  console_wall_save(void);
 void console_wall_paint(int x, int y, int w, int h);
 void console_wedge(int cx, int cy, unsigned int rgb, int a0, int f, int m, int e)
 { if (fb_active()) fb_wedge(cx, cy, rgb, a0, f, m, e); }
+
+/* THE SCISSOR, exposed to zl.
+ *
+ * fb_wedge() sweeps the WHOLE SCREEN from a centre point, and the reference's
+ * two conic wedges do not: each lives in its own absolutely-positioned box
+ * (left:-14% top:-22% width:78% height:96%, and its mirror). Drawing them
+ * unclipped lit the entire left edge of the wallpaper - measured at 36-60 green
+ * against the reference's 5-29, the single largest remaining colour error after
+ * the palette landed.
+ *
+ * A box-taking wedge would need eleven arguments and zl's builtin dispatch
+ * holds eight, so the box is applied as a scissor around the call instead.
+ * That is the more useful primitive anyway: every app that wants to keep a
+ * child inside its own rectangle needs exactly this. */
+void console_clip(int x, int y, int w, int h)
+{ if (fb_active()) fb_clip(x, y, w, h); }
+void console_clip_off(void)
+{ if (fb_active()) fb_clip(0, 0, (int)fb_pxw(), (int)fb_pxh()); }
 int  console_blur(int x, int y, int w, int h, int r)
 { return fb_active() ? fb_blur_cache(x, y, w, h, r) : -1; }
 void console_blur_paint(int slot, int x, int y)

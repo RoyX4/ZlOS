@@ -341,6 +341,12 @@ int xhci_ptr_ready(void) { return 0; }
 int xhci_ptr_poll(void) { return 0; }
 int xhci_poll(int max)   { (void)max; return 0; }  /* the one ring drainer */
 int xhci_ptr_abs(void)   { return 0; }   /* no USB pointer here at all */
+/* input.c reads the USB wheel through this. Without the stub this target
+ * does not LINK, build.sh stops here, and every target after it - wmtest,
+ * wmtest_feel, uitest, toasttest - silently keeps whatever binary it had
+ * from the previous run. A stale wmtest reporting "all good" is how a
+ * change that does not even compile looks green. */
+int xhci_ptr_take_wheel(void) { return 0; }
 int xhci_ptr_take_dx(void) { return 0; }
 int xhci_ptr_take_dy(void) { return 0; }
 int xhci_ptr_x(void) { return 0; }

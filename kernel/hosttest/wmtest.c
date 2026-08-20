@@ -19,8 +19,22 @@
 #include <sys/mman.h>
 
 #include "../ui.h"
+#include "../ease.h"
 
-#define ANIM_SETTLE 5   /* four animation frames plus one to settle */
+/* How many frames to let EVERY animation finish.
+ *
+ * This was `20`, with a comment saying "longest wall-clock animation is 18 PIT
+ * ticks". Both numbers went stale the moment wm.c adopted the reference's
+ * durations - the longest is now zpulse at 1000 ms, five times what the
+ * constant allowed - and six assertions started failing for a reason that had
+ * nothing to do with what they were testing.
+ *
+ * A hand-maintained copy of a duration that lives somewhere else is the same
+ * defect as a gate that waits a fixed wall-clock time: correct until the thing
+ * it mirrors changes, and then confusing. It is DERIVED now, so the next
+ * duration change cannot silently invalidate the test. */
+#define ANIM_MS_LONGEST  EASE_MS_PULSE
+#define ANIM_SETTLE      (ANIM_MS_LONGEST / 10 + 4)   /* 10 ms per PIT tick */
 
 /* ---- fb.c ---------------------------------------------------------------- */
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
@@ -35,6 +49,14 @@ unsigned int fb_pxh(void);
 
 /* ---- input.c ------------------------------------------------------------- */
 int input_next(void);
+
+/* ---- notify.c ------------------------------------------------------------
+ * ztoast is the toast's entry, and wm.c is where a toast is drawn - so the
+ * assertion has to be able to post one. */
+void notify_reset(void);
+int  notify_post(const char *text, unsigned int ticks);
+void notify_rect(int sw, int sh, int reserve_bot, int scale,
+                 int *x, int *y, int *w, int *h);
 
 /* ---- wmglue.c ------------------------------------------------------------ */
 int wm_bind_zl(void);
@@ -71,7 +93,7 @@ unsigned int idt_ticks(void) { return fake_ticks; }
  * advances by a plausible frame's worth per call keeps wm_frame_us() in range
  * without making any assertion depend on it. */
 static unsigned long long fake_tsc = 0;
-unsigned long long cpu_tsc(void) { fake_tsc += 2000000; return fake_tsc; }
+unsigned long long cpu_tsc(void) { fake_tsc += 20000000; return fake_tsc; }
 unsigned int cpu_tsc_khz(void) { return 2000000; }
 /* A SCANCODE QUEUE THE TEST CAN FILL. It was a constant 0, which meant every
  * keyboard path through wm.c was unreachable from this harness - and that is
@@ -109,6 +131,11 @@ int xhci_poll(int max)   { (void)max; return 0; }  /* the one ring drainer */
  * longer infers "absolute" from "a USB pointer exists", because that is
  * exactly what sent every relative usb-mouse down the tablet branch. */
 int xhci_ptr_abs(void)   { return 1; }
+/* input.c reads the USB wheel through this; without a stub wmtest does not
+ * LINK, and a stale binary from a previous build reports "all good" - which
+ * is exactly what it did until the link error was read rather than the
+ * program's own exit status. */
+int xhci_ptr_take_wheel(void) { return 0; }
 int xhci_ptr_take_dx(void) { return 0; }
 int xhci_ptr_take_dy(void) { return 0; }
 int xhci_ptr_x(void)     { return fake_ux; }
@@ -162,7 +189,48 @@ static int t_event(int app, int win, int type, int code, int x, int y)
 static int t_tick(int app, int win) { (void)app; (void)win; return tick_returns; }
 
 #define WALL 0x00203040u
-static void t_desk(int x, int y, int w, int h) { fb_fill_px(x, y, w, h, WALL); }
+
+/* ---- a stand-in for the dock ----------------------------------------------
+ * Two of the reference's seven animations belong to the dock - zpress on a
+ * tile and zpulse on the dot under a running app - and the dock is drawn by
+ * kernel.zl, which this harness cannot run. What it CAN do is make the same
+ * two calls kernel.zl's dock_tile() and dock_running_bar() make, from the same
+ * place in the frame (the desk hook), and photograph the result.
+ *
+ * So this is not a mock of the animation. The scale and the opacity come from
+ * wm.c through the exact functions the dock reads; only the chip and the dot
+ * are the harness's, and they are a fill each. If wm_anim_scale stops moving,
+ * these assertions fail and so does the dock.
+ *
+ * OFF BY DEFAULT. Every other test in this file asserts that a region is
+ * nothing but wallpaper, and furniture that appeared uninvited would turn all
+ * of them into nuisances. */
+#define TILE_X   900
+#define TILE_Y    60
+#define TILE_W    64
+#define TILE_MID (TILE_Y + TILE_W / 2)
+#define DOT_X    (TILE_X + TILE_W / 2 - 4)
+#define DOT_Y    (TILE_Y + TILE_W + 6)
+#define DOT_W     8
+#define TILE_COL 0x00C8C8C8u
+#define DOT_COL  0x0000FF00u
+static int desk_fx;
+
+void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
+
+static void t_desk(int x, int y, int w, int h)
+{
+    fb_fill_px(x, y, w, h, WALL);
+    if (!desk_fx) return;
+    /* the tile, at zpress's scale - kernel.zl's dock_tile() reads exactly this */
+    int s  = wm_anim_scale(WM_FX_USER);
+    int tw = TILE_W * s / 1000;
+    fb_fill_px(TILE_X + (TILE_W - tw) / 2, TILE_Y + (TILE_W - tw) / 2,
+               tw, tw, TILE_COL);
+    /* ...and the running-app dot, at zpulse's opacity - dock_running_bar()'s */
+    fb_fill_blend(DOT_X, DOT_Y, DOT_W, DOT_W, DOT_COL,
+                  wm_pulse(EASE_MS_PULSE_SLOW));
+}
 
 /* ---- assertions ----------------------------------------------------------- */
 static int fails;
@@ -202,6 +270,22 @@ static int has_magenta(int x0, int y0, int x1, int y1)
         for (int x = x0; x < x1; x++)
             if (fb_get_px(x, y) == 0x00FF00FF) return 1;
     return 0;
+}
+
+/* The first pixel in a row that is not the background, scanning left to right.
+ * wmtest's oldest pixel probe, lifted out of the zwin block so five more
+ * assertions can use the same measurement rather than five copies of it. */
+static int row_ink(int y, unsigned int bg)
+{
+    for (int x = 0; x < W; x++) if (fb_get_px(x, y) != bg) return x;
+    return -1;
+}
+
+/* ...and the same downward, for the animations that move vertically. */
+static int col_ink(int x, int y0, int y1, unsigned int bg)
+{
+    for (int y = y0; y < y1; y++) if (fb_get_px(x, y) != bg) return y;
+    return -1;
 }
 
 static int all_wallpaper(int x0, int y0, int x1, int y1)
@@ -401,8 +485,15 @@ int main(void)
      * Settle FIRST. Everything above left damage pending - closing `under`
      * damages a region window `d` overlaps - and this asserts that nothing
      * repaints, so it has to start from a clean frame or it measures the
-     * previous test instead of this one. */
-    frame();
+     * previous test instead of this one.
+     *
+     * ONE frame() used to be enough and is not any more. Every wm_open above
+     * starts an ANIM_OPEN, and the reference's zwin runs 200 ms where zlOS's
+     * old open ran 160 - so a window was still animating here, repainting
+     * itself, and this assertion failed for a reason that had nothing to do
+     * with app_tick. Settle for the full duration instead of a frame, which
+     * is what "start from a clean frame" meant in the first place. */
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
     draw_calls[4] = 0;
     tick_returns = 0;
     frame(); frame();
@@ -626,7 +717,7 @@ int main(void)
     frame();
     pointer(1500, 1000, 0);
     int aw = wm_open(1, "anim", 300, 300, 400, 300);
-    for (int i = 0; i < 8; i++) frame();          /* let the open scale settle */
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
 
     ok("a fresh window is not animating", wm_anim_running(aw) == 0);
     ok("...and is fully opaque", wm_anim_alpha(aw) == 255);
@@ -636,8 +727,15 @@ int main(void)
 
     /* HIT TESTING IS UNAFFECTED, checked at the animation's most distorted
      * frame rather than at the end - checking after it settles proves nothing
-     * at all, which is exactly how this class of bug survives. */
-    frame(); frame();
+     * at all, which is exactly how this class of bug survives.
+     *
+     * "Two frames in" WAS the most distorted frame when a pulse lasted 18
+     * ticks. Against the reference's 1000 ms pulse two frames is 2% of the
+     * way in, where the eased value rounds to zero and the alpha assertion
+     * below fails on a perfectly healthy animation. Advance to the MIDPOINT,
+     * computed from the duration, which is where a pulse is by definition at
+     * its most distorted. */
+    for (int i = 0; i < ANIM_SETTLE / 2; i++) frame();
     ok("...and hit testing still finds it mid-animation",
        wm_at(300 + 200, 300 + 150) == aw);
     ok("...and the alpha really is partial", wm_anim_alpha(aw) < 255
@@ -646,7 +744,7 @@ int main(void)
     /* IT ENDS. A timeline entry that never frees its slot exhausts ANIM_MAX
      * and every later animation is refused - which shows up as "the UI stopped
      * animating after a while", the worst kind of bug to chase. */
-    for (int i = 0; i < 12; i++) frame();
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
     ok("an animation ends and frees its slot", wm_anim_running(aw) == 0);
     ok("...and leaves the window settled", wm_anim_alpha(aw) == 255);
 
@@ -657,8 +755,66 @@ int main(void)
     frame();
     ok("...and an edge point still hits the settled rect",
        wm_at(300 + 4, 300 + 4) == aw);
-    for (int i = 0; i < 8; i++) frame();
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
     ok("...and it ends too", wm_anim_running(aw) == 0);
+
+    /* ---- DO THE PIXELS ACTUALLY MOVE? -------------------------------------
+     * Everything above asserts on wm.c's MODEL - is an animation running, has
+     * it freed its slot, what alpha does it report. None of that is evidence
+     * that anything reaches the screen. This repo has already shipped 9 of 14
+     * event handlers that updated their state and never called wm_dmg(win):
+     * the code compiled, every gate was green, and nothing repainted. From
+     * outside, "the model changed and the screen did not" and "nothing
+     * happened" are the same picture.
+     *
+     * So this measures the FRAMEBUFFER. It finds the drawn left edge of a
+     * window by scanning a row for the first pixel that differs from the
+     * background, once per frame, and asserts the edge is in a different place
+     * on consecutive frames while zwin runs - and in the same place once it
+     * settles. A scale animation that never repaints gives a constant edge and
+     * fails here while passing every assertion above. */
+    {
+        int probe_y = 0, edges[10], n = 0;
+        for (int i = 0; i < WM_MAX; i++) wm_close(i);
+        for (int i = 0; i < ANIM_SETTLE; i++) frame();
+        int pw = wm_open(1, "px", 300, 200, 400, 300);
+        probe_y = 200 + 150;                 /* through the window's middle */
+        unsigned bg = fb_get_px(5, probe_y);
+        for (n = 0; n < 10; n++) {
+            frame();
+            int e = -1;
+            for (int x = 0; x < W; x++)
+                if (fb_get_px(x, probe_y) != bg) { e = x; break; }
+            edges[n] = e;
+        }
+        int moved = 0;
+        for (int i = 1; i < n; i++) if (edges[i] != edges[i - 1]) moved++;
+        printf("    zwin drawn left edge, frames 1..10: ");
+        for (int i = 0; i < n; i++) printf("%d ", edges[i]);
+        printf("\n");
+        ok("the window is actually on the framebuffer", edges[0] >= 0);
+        ok("zwin MOVES PIXELS - the drawn edge changes between frames", moved >= 2);
+
+        for (int i = 0; i < ANIM_SETTLE; i++) frame();
+        int settled = -1;
+        for (int x = 0; x < W; x++)
+            if (fb_get_px(x, probe_y) != bg) { settled = x; break; }
+        ok("...and settles at the window's real x, not mid-animation", settled == 300);
+
+        /* the NEGATIVE CONTROL: with no animation running, the same probe must
+         * report the same edge every frame. Without this, "moved >= 2" would
+         * also pass on a compositor that jittered at random. */
+        int still = 0, prev = settled;
+        for (int i = 0; i < 6; i++) {
+            frame();
+            int e = -1;
+            for (int x = 0; x < W; x++)
+                if (fb_get_px(x, probe_y) != bg) { e = x; break; }
+            if (e != prev) still++;
+            prev = e;
+        }
+        ok("control: a settled window's edge does NOT move", still == 0);
+    }
 
     /* ANIM_MAX IS A REFUSAL, not a silent drop - the same discipline as
      * wm_open's WM_MAX.
@@ -675,7 +831,7 @@ int main(void)
         int w2 = wm_open(1, "x", 10 + i * 30, 10, 60, 40);
         if (w2 >= 0) wins2[nw2++] = w2;
     }
-    for (int i = 0; i < 10; i++) frame();          /* every open scale settles */
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
     int still = 0;
     for (int i = 0; i < nw2; i++) if (wm_anim_running(wins2[i])) still++;
     ok("every open animation has finished before this", still == 0);
@@ -719,7 +875,7 @@ int main(void)
     ok("...and the alpha is genuinely partial",
        wm_anim_alpha(fdhi) > 0 && wm_anim_alpha(fdhi) < 255);
 
-    for (int i = 0; i < 10; i++) frame();
+    for (int i = 0; i < ANIM_SETTLE; i++) frame();
     frame();
     ok("when it settles it is the window again", fb_get_px(400, 400) == px_over);
 
@@ -766,42 +922,370 @@ int main(void)
     ok("the title bar still MOVES a very short window", grx != 500 || gry != 500);
     pointer(660, 600, 0);
 
-    /* ---- Alt+Tab, from a scancode ------------------------------------
-     * THE BUG THIS EXISTS FOR: wm.c carried its own copy of the keycode
-     * numbers, that copy did not include KEY_TAB, and the handler was written
-     * `code == '\t'` - comparing against 9 while every producer sends
-     * KEY_TAB = 0x103. Alt+Tab had therefore never worked on any keyboard,
-     * and it read as implemented: a handler, a comment, and a correct
-     * cycle_focus() underneath.
+    /* =====================================================================
+     * THE OTHER SIX ANIMATIONS, EACH PHOTOGRAPHED
+     * =====================================================================
+     * ease.c implemented all seven of the reference's curves correctly and
+     * easetest asserted twenty things about them, which made them look
+     * finished. They were not: grepping the whole tree for callers of
+     * wm_anim() found FOUR, one of which was a window open. zpress, ztoast
+     * and ANIM_CLOSE had no caller anywhere, zpulse had one on a shell error,
+     * and zsweep did not exist.
      *
-     * Driven as SCANCODES through the real input.c, because the bug was in the
-     * translation between the two layers and a test that called cycle_focus()
-     * directly would have passed throughout. */
+     * "A green build proves nothing" is the standard the zwin block above
+     * sets, so every one of these does what it does: sample the framebuffer
+     * once per frame, assert the sampled value CHANGES while the animation
+     * runs, assert it SETTLES, and carry a NEGATIVE CONTROL that would catch
+     * a compositor which merely jittered. The sampled values are printed, so
+     * a reader can see the motion rather than take "ok" for it.
+     */
+    for (int i = 0; i < WM_MAX; i++) wm_close(i);
+    wm_damage(0, 0, W, H);
+    frame();
+    pointer(1200, 760, 0);
+
+    /* ---------------------------------------------------- zpress, on a TILE
+     * ANIM_PRESS had NO CALLER. It also could not have had one that mattered:
+     * the timeline was keyed on a window index and the things the reference
+     * presses - dock tiles, buttons - are not windows. wm_anim_at gives them
+     * the same slots and the same curve, and this is the proof it reaches
+     * pixels. */
     {
-        printf("\nAlt+Tab\n");
-        int w1 = wm_open(0, "one", 40, 40, 200, 150);
-        int w2 = wm_open(0, "two", 80, 80, 200, 150);
-        wm_focus(w2);
-        int before = wm_focused();
-        ok("two windows, the second focused", before == w2);
+        desk_fx = 1;
+        wm_damage(0, 0, W, H);
+        frame();
+        int settled = row_ink(TILE_MID, WALL);
+        ok("the dock stand-in is on the framebuffer", settled >= 0);
 
-        scan_push(0x38);        /* left alt down */
-        scan_push(0x0F);        /* tab down      */
-        scan_push(0x8F);        /* tab up        */
-        scan_push(0xB8);        /* left alt up   */
-        for (int i = 0; i < 8; i++) frame();
+        /* THE CONTROL FIRST, and it repaints the tile every frame rather than
+         * leaving it alone - "it did not move" is worth nothing if nothing
+         * redrew it. */
+        int jitter = 0, prev = settled;
+        for (int i = 0; i < 6; i++) {
+            wm_damage(TILE_X - 8, TILE_Y - 8, TILE_W + 16, TILE_W + 16);
+            frame();
+            int e = row_ink(TILE_MID, WALL);
+            if (e != prev) jitter++;
+            prev = e;
+        }
+        ok("control: an unpressed tile's edge does NOT move", jitter == 0);
 
-        ok("Alt+Tab moved the focus", wm_focused() != before);
-        ok("...and it moved it to the other window", wm_focused() == w1);
+        ok("zpress starts on something that is not a window",
+           wm_anim_at(WM_FX_USER, ANIM_PRESS, TILE_X - 8, TILE_Y - 8,
+                      TILE_W + 16, TILE_W + 16) == 1);
+        ok("...and a window index is refused, because it would collide",
+           wm_anim_at(0, ANIM_PRESS, TILE_X, TILE_Y, TILE_W, TILE_W) == 0);
 
-        /* and Tab WITHOUT alt must not switch windows - otherwise the fix is
-         * "any tab cycles", which breaks typing a tab into anything */
-        int mid = wm_focused();
-        scan_push(0x0F); scan_push(0x8F);
-        for (int i = 0; i < 8; i++) frame();
-        ok("Tab alone does not switch windows", wm_focused() == mid);
+        int edges[14], n, moved = 0, inward = 0;
+        for (n = 0; n < 14; n++) {
+            frame();
+            edges[n] = row_ink(TILE_MID, WALL);
+        }
+        printf("    zpress tile left edge, settled %d, frames 1..14: ", settled);
+        for (int i = 0; i < n; i++) printf("%d ", edges[i]);
+        printf("\n");
+        for (int i = 1; i < n; i++) if (edges[i] != edges[i - 1]) moved++;
+        for (int i = 0; i < n; i++) if (edges[i] > settled) inward++;
+        ok("zpress MOVES PIXELS - the tile's edge changes between frames",
+           moved >= 2);
+        ok("...and it moves INWARD, because a press SHRINKS the chip",
+           inward >= 2);
 
-        wm_close(w1); wm_close(w2);
+        for (int i = 0; i < ANIM_SETTLE; i++) frame();
+        wm_damage(TILE_X - 8, TILE_Y - 8, TILE_W + 16, TILE_W + 16);
+        frame();
+        ok("...and returns to exactly where it started",
+           row_ink(TILE_MID, WALL) == settled);
+        desk_fx = 0;
+    }
+
+    /* ------------------------------------------------ zpulse, on the DOT
+     * zpulse's one caller was term_bad() - the shell flashing a window red on
+     * a bad command. The reference pulses the dot under a RUNNING dock app,
+     * `zpulse 2.6s ease-in-out infinite`, and infinite is the word that
+     * matters: an entry in a fixed array of eight that never ends is a
+     * quarter of the timeline gone for the life of the boot. wm_pulse holds
+     * no slot at all. */
+    {
+        desk_fx = 1;
+        unsigned int cols[10];
+        int n, changed = 0;
+        /* A 2.6 s period is 260 ticks, so sample a tenth of it at a time -
+         * consecutive ticks differ by fractions of an alpha step and would
+         * make this a test of rounding rather than of motion. */
+        for (n = 0; n < 10; n++) {
+            fake_ticks += 25;
+            wm_damage(DOT_X - 2, DOT_Y - 2, DOT_W + 4, DOT_W + 4);
+            frame();
+            cols[n] = fb_get_px(DOT_X + DOT_W / 2, DOT_Y + DOT_W / 2);
+        }
+        printf("    zpulse dot colour, 1/10 period apart: ");
+        for (int i = 0; i < n; i++) printf("%06x ", cols[i] & 0xFFFFFFu);
+        printf("\n");
+        for (int i = 1; i < n; i++) if (cols[i] != cols[i - 1]) changed++;
+        ok("zpulse MOVES PIXELS - the dot's colour changes between frames",
+           changed >= 4);
+        ok("...and it never blinks out - the reference's floor is .55, not 0",
+           wm_pulse(EASE_MS_PULSE_SLOW) >= 255 * EASE_PULSE_FLOOR / 1000);
+
+        /* the control: the SAME loop with animation off. Without it, "the
+         * colour changed" would also pass on a dot drawn at a random alpha. */
+        wm_set_anim(0);
+        unsigned int fixed[6];
+        int still = 0;
+        for (int i = 0; i < 6; i++) {
+            fake_ticks += 25;
+            wm_damage(DOT_X - 2, DOT_Y - 2, DOT_W + 4, DOT_W + 4);
+            frame();
+            fixed[i] = fb_get_px(DOT_X + DOT_W / 2, DOT_Y + DOT_W / 2);
+            if (i && fixed[i] != fixed[i - 1]) still++;
+        }
+        printf("    control, animation off: %06x, %d change(s) in 6 frames\n",
+               fixed[0] & 0xFFFFFFu, still);
+        ok("control: with animation off the dot is one constant colour",
+           still == 0);
+        wm_set_anim(1);
+        desk_fx = 0;
+    }
+
+    /* --------------------------------------------------- zov / zpop, MODALS
+     * ANIM_FADE's only caller in the tree was kernel.zl's open_menu(), so the
+     * start menu faded and every other overlay appeared instantly. It is
+     * wm_set_modal's job now - "becoming modal" is the one thing a popover, a
+     * dialog and a context menu have in common - so an overlay written later
+     * is animated by having been written. */
+    {
+        for (int i = 0; i < WM_MAX; i++) wm_close(i);
+        wm_damage(0, 0, W, H);
+        frame();
+        int lo = wm_open(1, "under", 200, 200, 600, 400);
+        for (int i = 0; i < ANIM_SETTLE; i++) frame();
+        unsigned int px_under = fb_get_px(400, 400);
+
+        int ov = wm_open(2, "popover", 200, 200, 600, 400);
+        for (int i = 0; i < ANIM_SETTLE; i++) frame();
+        unsigned int px_over = fb_get_px(400, 400);
+        ok("the popover covers the window under it", px_under != px_over);
+
+        wm_set_modal(ov, 1);
+        ok("becoming modal starts zov, with no wm_anim call at the call site",
+           wm_anim_progress(ov, ANIM_FADE) >= 0);
+        /* THE EDGE, not the level. A caller that re-asserts modality every
+         * frame must not restart the fade every frame, or the overlay never
+         * finishes appearing. */
+        unsigned int before = (unsigned int)wm_anim_progress(ov, ANIM_FADE);
+        frame(); frame(); frame();
+        unsigned int during = (unsigned int)wm_anim_progress(ov, ANIM_FADE);
+        wm_set_modal(ov, 1);
+        ok("control: re-asserting modality does NOT restart the fade",
+           (unsigned int)wm_anim_progress(ov, ANIM_FADE) >= during &&
+           during > before);
+
+        unsigned int px_mid = fb_get_px(400, 400);
+        printf("    zov overlap pixel: under %06x  mid %06x  settled %06x\n",
+               px_under & 0xFFFFFFu, px_mid & 0xFFFFFFu, px_over & 0xFFFFFFu);
+        ok("zov MOVES PIXELS - mid-fade the overlap is NEITHER window",
+           px_mid != px_over && px_mid != px_under);
+
+        for (int i = 0; i < ANIM_SETTLE; i++) frame();
+        ok("...and settles to the popover's own pixels",
+           fb_get_px(400, 400) == px_over);
+        int drift = 0;
+        unsigned int prev = px_over;
+        for (int i = 0; i < 6; i++) {
+            wm_damage(200, 200, 600, 400);
+            frame();
+            if (fb_get_px(400, 400) != prev) drift++;
+        }
+        ok("control: a settled popover's pixels do NOT move", drift == 0);
+        (void)lo;
+    }
+
+    /* ------------------------------------------------------------- ztoast
+     * notify.c has had no animation call in it since it was written. The
+     * entry is a rise and a fade over .16 s, and the rise is what makes it
+     * measurable: the toast's drawn TOP EDGE is ten design pixels low on the
+     * first frame and climbs. */
+    {
+        for (int i = 0; i < WM_MAX; i++) wm_close(i);
+        notify_reset();
+        wm_damage(0, 0, W, H);
+        frame(); frame();
+
+        int tx, ty, tw, thh;
+        notify_rect(W, H, 72 * th->scale, th->scale, &tx, &ty, &tw, &thh);
+        int probe_x = tx + tw / 2;
+        int scan0 = ty - 40, scan1 = ty + thh;
+
+        /* THE REFERENCE VALUE, measured rather than assumed: where the toast
+         * settles when there is no animation at all. The animated run has to
+         * arrive at exactly this number, which is a far stronger claim than
+         * "it stopped changing". */
+        wm_set_anim(0);
+        notify_post("no animation", 100000u);
+        for (int i = 0; i < ANIM_SETTLE; i++) frame();
+        int flat_top = col_ink(probe_x, scan0, scan1, WALL);
+        unsigned int flat_body = fb_get_px(probe_x, ty + thh / 2);
+        notify_reset();
+        wm_damage(0, 0, W, H);
+        frame();
+        wm_set_anim(1);
+        ok("control: with animation off the toast lands settled at once",
+           flat_top >= 0);
+
+        notify_post("ztoast", 100000u);
+        int tops[10], n, rose = 0, moved = 0;
+        unsigned int body_mid = 0;
+        for (n = 0; n < 10; n++) {
+            frame();
+            tops[n] = col_ink(probe_x, scan0, scan1, WALL);
+            if (n == 2) body_mid = fb_get_px(probe_x, ty + thh / 2);
+        }
+        printf("    ztoast drawn top edge, frames 1..10: ");
+        for (int i = 0; i < n; i++) printf("%d ", tops[i]);
+        printf("   (settled, unanimated: %d)\n", flat_top);
+        for (int i = 1; i < n; i++) {
+            if (tops[i] != tops[i - 1]) moved++;
+            if (tops[i] >= 0 && tops[i - 1] >= 0 && tops[i] < tops[i - 1]) rose++;
+        }
+        ok("ztoast MOVES PIXELS - the toast's top edge changes between frames",
+           moved >= 2);
+        ok("...and it RISES: translateY(10px) -> 0, never the other way",
+           rose >= 2 && moved == rose);
+        printf("    ztoast body pixel: fading %06x  settled %06x\n",
+               body_mid & 0xFFFFFFu, flat_body & 0xFFFFFFu);
+        ok("...and it FADES: mid-entry the body is not the settled colour",
+           body_mid != flat_body && body_mid != WALL);
+
+        for (int i = 0; i < ANIM_SETTLE; i++) frame();
+        int settled_top = col_ink(probe_x, scan0, scan1, WALL);
+        ok("...and settles exactly where the unanimated toast sat",
+           settled_top == flat_top);
+        int drift = 0, prev = settled_top;
+        for (int i = 0; i < 6; i++) {
+            wm_damage(tx - 40, ty - 40, tw + 80, thh + 80);
+            frame();
+            int e = col_ink(probe_x, scan0, scan1, WALL);
+            if (e != prev) drift++;
+            prev = e;
+        }
+        ok("control: a settled toast's top edge does NOT move", drift == 0);
+        notify_reset();
+        wm_damage(0, 0, W, H);
+        frame();
+    }
+
+    /* -------------------------------------------------------- ANIM_CLOSE
+     * The mirror of zwin, and the one animation whose absence had a REASON:
+     * a closing window leaves the z-order immediately, so the repaint's walk
+     * has nothing to draw. wm.c keeps a ghost instead - a rectangle, not a
+     * window - so that closing never depends on a free animation slot. */
+    {
+        for (int i = 0; i < WM_MAX; i++) wm_close(i);
+        wm_damage(0, 0, W, H);
+        frame();
+        int gw = wm_open(1, "ghost", 300, 200, 400, 300);
+        for (int i = 0; i < ANIM_SETTLE; i++) frame();
+        int probe_y = 200 + 150;
+        int settled = row_ink(probe_y, WALL);
+        ok("the window to be closed is on the framebuffer", settled == 300);
+
+        wm_close_fx(gw);
+        ok("...and closing it removes it from the model IMMEDIATELY",
+           !wm_is_open(gw));
+        int edges[10], n, moved = 0, inward = 0;
+        for (n = 0; n < 10; n++) {
+            frame();
+            edges[n] = row_ink(probe_y, WALL);
+        }
+        printf("    ANIM_CLOSE ghost left edge, frames 1..10: ");
+        for (int i = 0; i < n; i++) printf("%d ", edges[i]);
+        printf("   (settled window edge was %d)\n", settled);
+        for (int i = 1; i < n; i++) if (edges[i] != edges[i - 1]) moved++;
+        for (int i = 0; i < n; i++) if (edges[i] > settled) inward++;
+        ok("ANIM_CLOSE MOVES PIXELS - the ghost's edge changes between frames",
+           moved >= 2);
+        ok("...and it shrinks INWARD, the mirror of zwin", inward >= 2);
+
+        for (int i = 0; i < ANIM_SETTLE; i++) frame();
+        ok("...and the ghost is gone, leaving nothing but wallpaper",
+           row_ink(probe_y, WALL) == -1 &&
+           all_wallpaper(300 - 60, 200 - 60, 300 + 400 + 60, 200 + 300 + 60));
+
+        /* THE CONTROL, and it is the one that matters here: with animation
+         * off there must be no ghost at all, because a ghost is a rectangle
+         * drawn where a window no longer is. */
+        wm_set_anim(0);
+        int gw2 = wm_open(1, "no ghost", 300, 200, 400, 300);
+        frame();
+        ok("a second window is drawn in the same place", row_ink(probe_y, WALL) == 300);
+        wm_close_fx(gw2);
+        frame();
+        ok("control: animations off, a closed window leaves NO ghost",
+           row_ink(probe_y, WALL) == -1);
+        wm_set_anim(1);
+    }
+
+    /* -------------------------------------------------------------- zsweep
+     * The one that did not exist. A band 34% of the screen tall drifting down
+     * the wallpaper on a 7 s linear loop, at 4.5% of the accent - subtle by
+     * design, which is exactly why it needs measuring rather than looking at.
+     *
+     * It is OFF until asked, as it is in the reference (its `crtOn` gate), so
+     * the first assertion here is the control. */
+    {
+        for (int i = 0; i < WM_MAX; i++) wm_close(i);
+        wm_set_sweep(0);
+        wm_damage(0, 0, W, H);
+        frame();
+        int py = H / 4;
+        ok("control: with the sweep off, the wallpaper is exactly wallpaper",
+           fb_get_px(40, py) == WALL && all_wallpaper(0, py, W, py + 1));
+
+        wm_set_sweep(1);
+        ok("...and asking for it is what turns it on", wm_sweep_enabled());
+        unsigned int cols[12];
+        int n, changed = 0, tinted = 0;
+        for (n = 0; n < 12; n++) {
+            fake_ticks += 30;              /* 7 s is 700 ticks; 12 x 30 = half */
+            frame();
+            cols[n] = fb_get_px(40, py);
+            if (cols[n] != WALL) tinted++;
+        }
+        printf("    zsweep wallpaper pixel at y=%d, 0.3 s apart: ", py);
+        for (int i = 0; i < n; i++) printf("%06x ", cols[i] & 0xFFFFFFu);
+        printf("\n");
+        for (int i = 1; i < n; i++) if (cols[i] != cols[i - 1]) changed++;
+        ok("zsweep MOVES PIXELS - the wallpaper tint changes as it passes",
+           changed >= 3);
+        ok("...and it is a TINT: the band is never opaque accent",
+           tinted > 0 && cols[0] != ui_theme()->accent);
+
+        /* HOW OFTEN IT COSTS A REPAINT, over one whole 7 s loop, measured
+         * rather than guessed. The band is a third of the screen and every
+         * row of it changes colour when it moves, so an un-quantised sweep
+         * would damage a third of the panel on every single frame - which is
+         * the entire performance question this animation raises, and the
+         * reason sweep_top() snaps to a step. Counting the ticks on which the
+         * quantised position actually moves is that number exactly. */
+        int damaging = 0, prev_top = wm_sweep_y();
+        for (int i = 0; i < 700; i++) {     /* 700 ticks = one full period */
+            fake_ticks++;
+            frame();
+            int t = wm_sweep_y();
+            if (t != prev_top) damaging++;
+            prev_top = t;
+        }
+        printf("    zsweep moved (and so repainted) on %d of 700 ticks"
+               " - one full 7 s loop\n", damaging);
+        ok("...and it does NOT repaint every frame - the band is quantised",
+           damaging > 0 && damaging < 140);
+
+        wm_set_sweep(0);
+        wm_damage(0, 0, W, H);
+        frame();
+        ok("control: turning it off restores the plain wallpaper",
+           all_wallpaper(0, py, W, py + 1));
     }
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);

@@ -15,7 +15,7 @@
   vmm: paging is off on this build - identity, by construction
   ring 3: u31 <- from ring 3 via int 0x80, 5 syscalls, returned to ring 0
   [  OK  ] zl runtime, kernel subset
-  [ INFO ] no filesystem, no scheduler, no per-process address space
+  [ INFO ] no heap, zlfs mounts on demand, no scheduler
 
   ready.
   press h for help, q to halt

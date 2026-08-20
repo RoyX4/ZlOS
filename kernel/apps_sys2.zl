@@ -1,0 +1,817 @@
+# apps_sys2.zl - Kernel Log, Renderer, Hex Viewer, Framebuffer, Console (tty1), Font Atlas
+#
+# ONE SLICE, ONE FILE. apps_registry.zl's seven dispatch chains each call into
+# this file exactly once, so a slice can be written without touching the shared
+# registry at all. That is not tidiness: five agents editing seven if-chains in
+# one working tree clobber each other, and a duplicate app id compiles clean and
+# misroutes at RUNTIME - REG_FIRST is a dispatch FLOOR, so `id >= REG_FIRST`
+# routes into the registry and a collision is invisible until you open the app.
+# That floor used to be APP_CATALOG, which is exactly how it went wrong: the
+# catalog was given id 13 and so was APP_FILES, and for months `apps` raised
+# the Files window instead of opening the catalog.
+#
+# THIS SLICE OWNS IDS 40..45 AND NO OTHERS.
+#
+# Every window here is drawn out of the shared widget catalogue (kernel/uikit.c,
+# specified by kernel/docs/reference-widgets.md) rather than out of rectangles:
+# ui_tb/ui_sb are S5/S6, ui_seg is S3, ui_stat* is S8, ui_mono* is S14, ui_pill
+# is S13 and ui_chip is S18.3. Not one colour literal - theme(TH_*) for the ten
+# published roles and ui_ink() for the design.h inks that are not roles.
+#
+# THE TWO-PASS IDIOM, and why every app below is written as one `*_ui` function
+# rather than a draw and a separate hit-test. Every catalogue widget is
+# rect-in/fired-out: it calls ui_fire() with its own rectangle, and ui_fire only
+# reports a hit when ui_begin was given click mode. So the SAME sequence is run
+# twice - once from *_draw under ui_begin(..., 0, 0, 0, 0) to paint, once from
+# sys2_event under ui_begin(..., 1, ex, ey, 1) to find out what was pressed -
+# and a control can never respond somewhere other than where it is drawn,
+# because there is only one description of where it is. menu_draw/menu_event in
+# kernel.zl already work this way.
+#
+# The `dm` parameter is the one thing that idiom does not give for free: the
+# catalogue widgets check ui_mode_get() themselves and stay silent during the
+# hit-test pass, but the raw builtins (fill_rgb, rrect, ac_draw_base, char_aa)
+# do not. Anything drawn with those is guarded by `if dm == 1`, or a click
+# would repaint the window from inside the event handler.
+#
+# WHAT THE REFERENCE ACTUALLY RENDERS. ds.html fails to load seven sibling
+# modules, so in the reference the canvases of Renderer, Framebuffer, Console
+# and Font Atlas are BLANK - only their shells (toolbars, stat strips, status
+# bars, the DOM overlay text) draw. Those four are built to that, so their
+# canvas is the reference's own ground colour and nothing else. Kernel Log and
+# Hex Viewer render fully in the reference and are built to match.
+
+sys2_LO = 40
+sys2_HI = 45
+fn sys2_has(id) { if id < sys2_LO { return 0 }  if id > sys2_HI { return 0 }  return 1 }
+
+APP_KLOG = 40
+APP_REND = 41
+APP_HEXV = 42
+APP_FBUF = 43
+APP_TTY  = 44
+APP_FONT = 45
+
+# ---- the catalogue's own vocabulary, named once ------------------------------
+# ui.h's UI_SM/UI_MD/UI_LG, UI_F_*, UI_BTN_* and UI_PANEL_*. Prefixed because
+# every module in this program shares one top-level namespace.
+S2_SM = 0
+S2_MD = 1
+S2_MONO = 1
+S2_BOLD = 2
+S2_BTN_N = 0                        # neutral: white at 7%, body ink
+S2_BTN_P = 1                        # primary: accent fill, COMPUTED ink
+S2_PANEL_TERM = 0
+S2_PANEL_LOG  = 1
+S2_PANEL_HEX  = 2
+
+# ui_ink() indices. ui_color() publishes the ten theme ROLES; these are the
+# design.h inks reference-widgets.md names that are not roles - amber WARN, the
+# two dimmest inks a hex offset and a timestamp are drawn in, and the paler lime
+# S14.3 gives hex bytes. The values live in design.h and nowhere else.
+S2_IK_WARN  = 0
+S2_IK_OK    = 1
+S2_IK_BAD   = 2
+S2_IK_HI    = 3
+S2_IK_INFO  = 4
+S2_IK_T5    = 5
+S2_IK_T6    = 6
+S2_IK_DIM   = 7
+S2_IK_HEXB  = 8
+S2_IK_SURF0 = 10
+S2_IK_SURF1 = 11
+S2_IK_SURF5 = 13
+
+# ---- small shared helpers ----------------------------------------------------
+# Vertical centring, for proportional and for mono. The catalogue keeps its own
+# copy of this (text_cy in uikit.c) and does not publish it; these two are the
+# same arithmetic over the two heights zl can ask for.
+fn s2_cy(y, h, size) { return y + (h - ui_th(size)) / 2 }
+fn s2_mcy(y, h) { return y + (h - cell_h()) / 2 }
+
+# A flat ground. fill_rgb is a raw builtin and draws in either pass, so it is
+# gated on the draw pass by hand - see the header.
+fn s2_ground(dm, x, y, w, h, col) { if dm == 1 { fill_rgb(x, y, w, h, col) }  return 0 }
+
+# The reference's own threshold colouring: `f.ms > 16 ? WARN : OK` (S8, and
+# ds-reference.html 3722). One function so five counters cannot disagree.
+fn s2_thresh(v, lim) { if v > lim { return ui_ink(S2_IK_WARN) }  return ui_ink(S2_IK_OK) }
+
+# The height ui_stat_end() is going to report, BEFORE the cells are drawn. A
+# stat strip sits between a flex:1 canvas and a bottom toolbar, so its height is
+# needed to place the canvas - and ui_stat_end only answers afterwards. This is
+# ui_stat_begin's own arithmetic (uikit.c: cols = w / DP(minw), ch = 2*DP(7) +
+# text_h(SM) + DP(2) + text_h(MD), gap = DP(1)) read back through the published
+# metrics rather than guessed.
+fn s2_strip_h(aw, n, minw) {
+    u = ui()
+    sch = 14 * u + ui_th(S2_SM) + 2 * u + ui_th(S2_MD)
+    cols = aw / (minw * u)
+    if cols < 1 { cols = 1 }
+    rows = (n + cols - 1) / cols
+    # the gap is DP(1), not 1: it is 1 px at ui 1 and 2 px at ui 2, and hard-
+    # coding the 1 would have drifted this strip a row-count of pixels away
+    # from where ui_stat_end() says it ends on a 4K panel.
+    return rows * (sch + 1 * u)
+}
+
+# ==============================================================================
+# 40  KERNEL LOG - 544 x 320
+#
+# ds-reference.html 256-266: a 36px bar holding a CENTRED three-item segmented
+# filter, a #0b0d0f mono log body whose rows are `timestamp(56px, right) gap 9
+# message`, and a 25px status bar carrying "N of M messages".
+#
+# THE KINDS ARE LIVE. The reference's KLOG0 is a static array; seven of the
+# fourteen lines below take their severity from an actual probe (apic_on,
+# smp_n, pci_count, usb_ok, nv_ok, net_ok, rtc_ok), so the Warnings and Errors
+# filters select on what this machine really did at boot. The timestamps are
+# fixed, as the reference's are - nothing records a per-subsystem boot time.
+# ==============================================================================
+KL_N = 14
+kl_filter = 0                       # 0 all, 1 warnings, 2 errors
+
+fn kl_time(i) {
+    if i == 0 { return 2 }
+    if i == 1 { return 11 }
+    if i == 2 { return 17 }
+    if i == 3 { return 34 }
+    if i == 4 { return 48 }
+    if i == 5 { return 63 }
+    if i == 6 { return 95 }
+    if i == 7 { return 140 }
+    if i == 8 { return 182 }
+    if i == 9 { return 214 }
+    if i == 10 { return 260 }
+    if i == 11 { return 298 }
+    if i == 12 { return 331 }
+    return 372
+}
+
+fn kl_msg(i) {
+    if i == 0 { return "multiboot: entry, 32-bit protected mode" }
+    if i == 1 { return "gdt: flat 4 GiB code and data segments" }
+    if i == 2 { return "idt: 256 gates, PIC remapped to 0x20" }
+    if i == 3 { return "cpu: cpuid leaves read, features latched" }
+    if i == 4 { return "apic: local APIC enabled" }
+    if i == 5 { return "smp: application processors started" }
+    if i == 6 { return "pci: configuration space enumerated" }
+    if i == 7 { return "fb: linear framebuffer mapped, 32 bpp" }
+    if i == 8 { return "xhci: usb host controller claimed" }
+    if i == 9 { return "input: keyboard and pointer attached" }
+    if i == 10 { return "nvme: namespace 1 identified" }
+    if i == 11 { return "virtio-net: link negotiated" }
+    if i == 12 { return "rtc: cmos clock read" }
+    return "wm: compositor up, desktop composed"
+}
+
+# 0 info, 1 warning, 2 error - the reference's 'i' / 'w' / 'e'.
+fn kl_kind(i) {
+    if i == 4 { if apic_on() != 0 { return 0 }  return 1 }
+    if i == 5 { if smp_n() > 1 { return 0 }  return 1 }
+    if i == 6 { if pci_count() > 0 { return 0 }  return 2 }
+    if i == 8 { if usb_ok() != 0 { return 0 }  return 1 }
+    if i == 10 { if nv_ok() != 0 { return 0 }  return 1 }
+    if i == 11 { if net_ok() != 0 { return 0 }  return 1 }
+    if i == 12 { if rtc_ok() != 0 { return 0 }  return 1 }
+    return 0
+}
+
+fn kl_kindcol(k) {
+    if k == 2 { return ui_ink(S2_IK_BAD) }
+    if k == 1 { return ui_ink(S2_IK_WARN) }
+    return ui_ink(S2_IK_INFO)
+}
+
+# The reference's filter, verbatim: all, or k !== 'i', or k === 'e'.
+fn kl_shown(i) {
+    if kl_filter == 0 { return 1 }
+    k = kl_kind(i)
+    if kl_filter == 1 { if k != 0 { return 1 }  return 0 }
+    if k == 2 { return 1 }
+    return 0
+}
+
+fn kl_count() {
+    n = 0
+    i = 0
+    while i < KL_N { n = n + kl_shown(i)  i = i + 1 }
+    return n
+}
+
+fn kl_ui(ax, ay, aw, ah, dm) {
+    u = ui()
+    tbh = ui_tb_h()
+    sbh = ui_sb_h()
+
+    # the segmented filter, centred in a top toolbar (S3's container bar)
+    ui_tb(ax, ay, aw, tbh, 0)
+    sw = ui_seg_w("All|Warnings|Errors", S2_MD)
+    sh = ui_seg_h(S2_MD)
+    if sw > aw - 16 * u { sw = aw - 16 * u }
+    got = ui_seg(ax + (aw - sw) / 2, ay + (tbh - sh) / 2, sw, sh, "All|Warnings|Errors", kl_filter, S2_MD)
+
+    # the log body - S14.2. Timestamp column is 56 design px wide and RIGHT
+    # aligned, which is why it is drawn from its right edge back.
+    py = ay + tbh
+    ph = ah - tbh - sbh
+    ui_mono(ax, py, aw, ph, S2_PANEL_LOG)
+    lh = ui_mono_h(S2_PANEL_LOG)
+    tsr = ax + 10 * u + 56 * u
+    mx = ax + 10 * u + 65 * u
+    cy = py + 6 * u
+    i = 0
+    while i < KL_N {
+        if kl_shown(i) == 1 {
+            if cy + lh <= py + ph {
+                ui_txtn(tsr - ui_tnw(kl_time(i), S2_MD, S2_MONO), cy, kl_time(i), ui_ink(S2_IK_T6), S2_MD, S2_MONO)
+                ui_txt(mx, cy, kl_msg(i), kl_kindcol(kl_kind(i)), S2_MD, S2_MONO)
+                cy = cy + lh
+            }
+        }
+        i = i + 1
+    }
+
+    # the status bar - S6. "N of M messages", assembled from measured pieces
+    # because zl has no runtime strings to concatenate.
+    sy = ay + ah - sbh
+    ui_sb(ax, sy, aw, sbh)
+    ty = s2_cy(sy, sbh, S2_SM)
+    tx = ax + 11 * u
+    n = kl_count()
+    ui_txtn(tx, ty, n, theme(TH_TEXT_DIM), S2_SM, 0)
+    tx = tx + ui_tnw(n, S2_SM, 0)
+    ui_txt(tx, ty, " of ", theme(TH_TEXT_DIM), S2_SM, 0)
+    tx = tx + ui_tw(" of ", S2_SM, 0)
+    ui_txtn(tx, ty, KL_N, theme(TH_TEXT_DIM), S2_SM, 0)
+    tx = tx + ui_tnw(KL_N, S2_SM, 0)
+    ui_txt(tx, ty, " messages", theme(TH_TEXT_DIM), S2_SM, 0)
+    return got
+}
+
+fn kl_apply(g) { kl_filter = g  return 0 }
+
+# ==============================================================================
+# 41  RENDERER - 352 x 326
+#
+# ds-reference.html 291-310. The canvas is a WebGL context that never
+# initialises in the vendored reference, so what actually renders is the ground
+# plus the absolutely-positioned mono overlay (mesh / timing / gl info) and the
+# 38px bottom toolbar. That is what this draws.
+#
+# The reference's mesh list has six entries; four are carried here, which is
+# also what its own placeholder count says. At 352 px the toolbar cannot hold
+# spin + four segments + wireframe + the camera readout at their natural
+# widths, so the segmented control takes the leftover and the readout is drawn
+# only if what is left after it is wider than the readout.
+# ==============================================================================
+rd_spin = 1
+rd_mesh = 0
+rd_wire = 1
+rd_yaw = 0
+rd_last = 0 - 1
+
+fn rd_meshline(m) {
+    if m == 0 { return "mesh cube - 12 tris - 8 verts" }
+    if m == 1 { return "mesh pyramid - 6 tris - 5 verts" }
+    if m == 2 { return "mesh octa - 8 tris - 6 verts" }
+    return "mesh cylinder - 44 tris - 24 verts"
+}
+
+# glInfoText, and it is a real probe rather than a caption.
+fn rd_gpuline() {
+    if intel_ok() != 0 { return "gpu - intel display, no 3d engine" }
+    if gpu_present() != 0 { return "gpu - virtio-gpu, 2d only" }
+    return "gpu - none, software raster"
+}
+
+fn rd_spinlabel() { if rd_spin == 1 { return "Stop" }  return "Spin" }
+fn rd_wirelabel() { if rd_wire == 1 { return "Shaded" }  return "Wireframe" }
+
+fn rd_ui(ax, ay, aw, ah, dm) {
+    u = ui()
+    tbh = ui_tb_h()
+    ch = ah - tbh
+    hit = 0 - 1
+
+    s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF1))
+    lh = ui_mono_h(S2_PANEL_TERM)
+    ox = ax + 10 * u
+    oy = ay + 9 * u
+    ui_txt(ox, oy, rd_meshline(rd_mesh), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+    ui_txt(ox, oy + lh, "-- us/draw - software pipeline", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+    ui_txt(ox, oy + 2 * lh, rd_gpuline(), ui_ink(S2_IK_DIM), S2_SM, S2_MONO)
+
+    ty = ay + ah - tbh
+    ui_tb(ax, ty, aw, tbh, 1)
+    ph = ui_pill_h(S2_MD)
+    py = ty + (tbh - ph) / 2
+
+    # S13: the accent fill is the INVITATION, so Spin is primary while stopped
+    # and neutral while running - the reference's own inversion (3707).
+    pw = ui_pill_w(rd_spinlabel(), S2_MD, 0)
+    pk = S2_BTN_P
+    if rd_spin == 1 { pk = S2_BTN_N }
+    if ui_pill(ax + 10 * u, py, pw, ph, rd_spinlabel(), S2_MD, pk, 0) == 1 { hit = 0 }
+
+    ww = ui_pill_w(rd_wirelabel(), S2_MD, 0)
+    gx = ax + 10 * u + pw + 6 * u
+    gh = ui_seg_h(S2_SM)
+    gw = ui_seg_w("cube|pyramid|octa|cylinder", S2_SM)
+    gmax = ax + aw - 10 * u - ww - 6 * u - gx
+    if gw > gmax { gw = gmax }
+    if gw >= 16 * u {
+        gg = ui_seg(gx, ty + (tbh - gh) / 2, gw, gh, "cube|pyramid|octa|cylinder", rd_mesh, S2_SM)
+        if gg >= 0 { hit = 10 + gg }
+    }
+
+    wx = gx + gw + 6 * u
+    wk = S2_BTN_N
+    if rd_wire == 1 { wk = S2_BTN_P }
+    if ui_pill(wx, py, ww, ph, rd_wirelabel(), S2_MD, wk, 0) == 1 { hit = 1 }
+
+    # camText, right-aligned behind the reference's flex:1 spacer, and only
+    # when there is room for it - the reference's toolbar is overflow:hidden.
+    camw = ui_tw("yaw ", S2_SM, S2_MONO) + ui_tnw(rd_yaw, S2_SM, S2_MONO) + ui_tw(" deg", S2_SM, S2_MONO)
+    cx0 = ax + aw - 10 * u - camw
+    if cx0 > wx + ww + 8 * u {
+        ui_txt(cx0, s2_mcy(ty, tbh), "yaw ", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
+        ui_txtn(cx0 + ui_tw("yaw ", S2_SM, S2_MONO), s2_mcy(ty, tbh), rd_yaw, ui_ink(S2_IK_T5), S2_SM, S2_MONO)
+        ui_txt(cx0 + camw - ui_tw(" deg", S2_SM, S2_MONO), s2_mcy(ty, tbh), " deg", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
+    }
+    return hit
+}
+
+fn rd_apply(g) {
+    if g == 0 { rd_spin = 1 - rd_spin  return 0 }
+    if g == 1 { rd_wire = 1 - rd_wire  return 0 }
+    rd_mesh = g - 10
+    return 0
+}
+
+# The only thing that moves in this window, because the canvas is the
+# reference's blank one. Divided down so a spinning renderer costs six frames
+# per step rather than a full repaint every frame.
+fn rd_tick(win) {
+    if rd_spin == 0 { return 0 }
+    t = ticks() / 6
+    if t == rd_last { return 0 }
+    rd_last = t
+    rd_yaw = (rd_yaw + 3) % 360
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 42  HEX VIEWER - 566 x 340
+#
+# ds-reference.html 268-289 and reference-widgets.md S14.3. Real memory: the
+# rows below are peek8() of the address the multiboot kernel is loaded at, so
+# the page chips move a window over live RAM rather than over a fixture.
+#
+# THE BYTES ARE GROUPED IN FOURS, and that is a measured divergence rather than
+# a preference. The reference joins its 16 bytes with single spaces - 47
+# characters - and its mono advance at 11.5px is under 7 px, so offset(62) +
+# gap(13) + 47 chars + gap(13) + ascii(132) fits its 566 px window. This kernel
+# has ONE mono size and its cell is 8 px wide, which makes the same row 594 px
+# and pushes the ASCII column off the end. Four-byte groups are 35 characters,
+# and the row comes to 514 px inside a 548 px content box.
+# ==============================================================================
+HX_BASE = 0x100000                  # where boot.S is loaded; always mapped
+hx_page = 0
+
+fn hx_ui(ax, ay, aw, ah, dm) {
+    u = ui()
+    cw = cell_w()
+    tbh = ui_tb_h()
+    sbh = ui_sb_h()
+    hit = 0 - 1
+
+    # ---- the header row: label, path/size well, three page chips ----------
+    ui_tb(ax, ay, aw, tbh, 0)
+    lx = ax + 8 * u
+    ui_txt(lx, s2_mcy(ay, tbh), "offset", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
+    lx = lx + ui_tw("offset", S2_SM, S2_MONO) + 6 * u
+
+    w0 = ui_chip_w("+0")
+    w1 = ui_chip_w("+256")
+    w2 = ui_chip_w("+512")
+    chh = ui_chip_h()
+    chy = ay + (tbh - chh) / 2
+    cx2 = ax + aw - 8 * u - w2
+    cx1 = cx2 - 6 * u - w1
+    cx0 = cx1 - 6 * u - w0
+
+    ww = cx0 - 6 * u - lx
+    if ww > 40 * u {
+        wh = 22 * u
+        wy = ay + (tbh - wh) / 2
+        # the border is the OUTER rrect with the fill one pixel inside it, so
+        # the hairline follows the curve instead of cutting it - ui.c's rule.
+        if dm == 1 { rrect(lx, wy, ww, wh, 11 * u, ui_ink(S2_IK_SURF5)) }
+        if dm == 1 { rrect(lx + 1, wy + 1, ww - 2, wh - 2, 11 * u - 1, ui_ink(S2_IK_SURF1)) }
+        ui_txt(lx + 9 * u, s2_mcy(wy, wh), "/dev/kmem", ui_ink(S2_IK_HI), S2_MD, S2_MONO)
+        ui_txt(lx + ww - 9 * u - ui_tw("256 B/page", S2_MD, S2_MONO), s2_mcy(wy, wh), "256 B/page", ui_ink(S2_IK_T5), S2_MD, S2_MONO)
+    }
+    if ui_chip(cx0, chy, "+0", hx_page == 0) == 1 { hit = 0 }
+    if ui_chip(cx1, chy, "+256", hx_page == 1) == 1 { hit = 1 }
+    if ui_chip(cx2, chy, "+512", hx_page == 2) == 1 { hit = 2 }
+
+    # ---- the rows ---------------------------------------------------------
+    py = ay + tbh
+    ph = ah - tbh - sbh
+    ui_mono(ax, py, aw, ph, S2_PANEL_HEX)
+    lh = ui_mono_h(S2_PANEL_HEX)
+    bx = ax + 9 * u
+    hx0 = bx + 8 * cw + 13 * u
+    as0 = hx0 + 35 * cw + 13 * u
+    by = py + 7 * u
+    r = 0
+    while r < 16 {
+        if by + lh <= py + ph {
+            addr = HX_BASE + hx_page * 256 + r * 16
+            if dm == 1 { ac_draw_base(bx, by, addr, 8, 16, ui_ink(S2_IK_DIM)) }
+            if dm == 1 { char_aa(as0, by, 124, ui_ink(S2_IK_DIM)) }
+            if dm == 1 { char_aa(as0 + 17 * cw, by, 124, ui_ink(S2_IK_DIM)) }
+            b = 0
+            while b < 16 {
+                v = peek8(addr + b)
+                if dm == 1 { ac_draw_base(hx0 + (b * 2 + b / 4) * cw, by, v, 2, 16, ui_ink(S2_IK_HEXB)) }
+                pc = v
+                if pc < 32 { pc = 46 }
+                if pc > 126 { pc = 46 }
+                if dm == 1 { char_aa(as0 + (b + 1) * cw, by, pc, theme(TH_TEXT_DIM)) }
+                b = b + 1
+            }
+            by = by + lh
+        }
+        r = r + 1
+    }
+
+    # ---- the status bar. S6 records this one as the outlier on all three of
+    # background, font family and colour; the toolkit collapsed the background
+    # to one status bar, and the mono 10px / #74797f of the type is kept.
+    sy = ay + ah - sbh
+    ui_sb(ax, sy, aw, sbh)
+    ty = s2_mcy(sy, sbh)
+    tx = ax + 9 * u
+    ui_txt(tx, ty, "kernel image - live memory - offset 0x", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
+    tx = tx + ui_tw("kernel image - live memory - offset 0x", S2_SM, S2_MONO)
+    if dm == 1 { ac_draw_base(tx, ty, hx_page * 256, 4, 16, ui_ink(S2_IK_T5)) }
+    ui_txt(ax + aw - 9 * u - ui_tw("16 bytes/row - read only", S2_SM, S2_MONO), ty, "16 bytes/row - read only", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
+    return hit
+}
+
+fn hx_apply(g) { hx_page = g  return 0 }
+
+# ==============================================================================
+# 43  FRAMEBUFFER - 600 x 420
+#
+# ds-reference.html 312-333: a blank canvas over #07080a, an auto-fit stat card
+# strip at minmax(88px,1fr) (S8), and a 34px bottom toolbar holding one pill
+# and a mono note.
+#
+# THE SIX COUNTERS ARE REAL. The reference's are a worker's raster statistics
+# and this kernel has no rasteriser worker, so they are wm.c's own frame
+# accounting instead - which is the same class of number and is measured rather
+# than mocked. The threshold colouring is the reference's (`> 16 ms -> WARN`).
+# ==============================================================================
+fbv_on = 1
+fbv_last = 0 - 1
+
+fn fbv_label() { if fbv_on == 1 { return "Halt raster" }  return "Resume raster" }
+
+fn fbv_ui(ax, ay, aw, ah, dm) {
+    u = ui()
+    tbh = ui_tb_h()
+    sh = s2_strip_h(aw, 6, 88)
+    ch = ah - tbh - sh
+    hit = 0 - 1
+
+    s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF0))
+
+    ui_stat(ax, ay + ch, aw, 88)
+    ui_statn("PIXELS / FRAME", px_w() * px_h(), theme(TH_TEXT))
+    ui_statn("FRAME US", wm_us(), s2_thresh(wm_us(), 16000))
+    ui_statn("PEAK US", wm_peak(), theme(TH_TEXT))
+    ui_statn("LATE FRAMES", wm_late(), s2_thresh(wm_late(), 0))
+    ui_statn("WINDOWS", wm_n(), theme(TH_TEXT_DIM))
+    ui_statn("TICKS", ticks(), theme(TH_TEXT_DIM))
+    ui_stat_end()
+
+    ty = ay + ah - tbh
+    ui_tb(ax, ty, aw, tbh, 1)
+    ph = ui_pill_h(S2_MD)
+    py = ty + (tbh - ph) / 2
+    pw = ui_pill_w(fbv_label(), S2_MD, 0)
+    pk = S2_BTN_P
+    if fbv_on == 1 { pk = S2_BTN_N }
+    if ui_pill(ax + 10 * u, py, pw, ph, fbv_label(), S2_MD, pk, 0) == 1 { hit = 0 }
+    ui_txt(ax + 10 * u + pw + 8 * u, s2_mcy(ty, tbh), "32 bpp - software raster - no gpu blitter", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+    return hit
+}
+
+fn fbv_apply(g) { fbv_on = 1 - fbv_on  return 0 }
+
+# Halting the raster FREEZES THE COUNTERS, which is the honest meaning of that
+# button in a window whose canvas the reference leaves blank - the label says
+# something stops, and something does. 4 Hz: a 600x420 repaint every frame
+# under TCG costs more than the numbers are worth.
+fn fbv_tick(win) {
+    if fbv_on == 0 { return 0 }
+    t = ticks() / 25
+    if t == fbv_last { return 0 }
+    fbv_last = t
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 44  CONSOLE (tty1) - 616 x 396
+#
+# ds-reference.html 335-358: blank VT canvas, a minmax(84px,1fr) stat strip,
+# and a 34px toolbar of three pills plus a geometry readout. Reset is wired to
+# term.c's real term_clear(), so one of the three does what it says.
+# ==============================================================================
+cn_run = 1
+cn_scan = 0
+cn_last = 0 - 1
+
+fn cn_runlabel() { if cn_run == 1 { return "Pause tty" }  return "Resume tty" }
+
+fn cn_ui(ax, ay, aw, ah, dm) {
+    u = ui()
+    tbh = ui_tb_h()
+    sh = s2_strip_h(aw, 5, 84)
+    ch = ah - tbh - sh
+    hit = 0 - 1
+
+    s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF0))
+
+    ui_stat(ax, ay + ch, aw, 84)
+    ui_statn("CELLS WRITTEN", con_cols() * con_rows(), theme(TH_TEXT))
+    ui_statn("COMMANDS PARSED", term_cmd(), theme(TH_TEXT))
+    ui_statn("UNSUPPORTED", term_bad(), s2_thresh(term_bad(), 0))
+    ui_statn("SCROLLBACK", con_rows(), theme(TH_TEXT_DIM))
+    ui_statn("BLIT US", wm_us(), s2_thresh(wm_us(), 16000))
+    ui_stat_end()
+
+    ty = ay + ah - tbh
+    ui_tb(ax, ty, aw, tbh, 1)
+    ph = ui_pill_h(S2_MD)
+    py = ty + (tbh - ph) / 2
+    bx = ax + 10 * u
+
+    rw = ui_pill_w(cn_runlabel(), S2_MD, 0)
+    rk = S2_BTN_P
+    if cn_run == 1 { rk = S2_BTN_N }
+    if ui_pill(bx, py, rw, ph, cn_runlabel(), S2_MD, rk, 0) == 1 { hit = 0 }
+    bx = bx + rw + 7 * u
+
+    sw = ui_pill_w("Scanlines", S2_MD, 0)
+    sk = S2_BTN_N
+    if cn_scan == 1 { sk = S2_BTN_P }
+    if ui_pill(bx, py, sw, ph, "Scanlines", S2_MD, sk, 0) == 1 { hit = 1 }
+    bx = bx + sw + 7 * u
+
+    xw = ui_pill_w("Reset (ESC c)", S2_MD, 0)
+    if ui_pill(bx, py, xw, ph, "Reset (ESC c)", S2_MD, S2_BTN_N, 0) == 1 { hit = 2 }
+    bx = bx + xw
+
+    gw = ui_tnw(con_cols(), S2_SM, S2_MONO) + ui_tw("x", S2_SM, S2_MONO) + ui_tnw(con_rows(), S2_SM, S2_MONO) + ui_tw(" - vt100 - sgr, cup, ed, el", S2_SM, S2_MONO)
+    gx = ax + aw - 10 * u - gw
+    if gx > bx + 8 * u {
+        gy = s2_mcy(ty, tbh)
+        ui_txtn(gx, gy, con_cols(), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+        gx = gx + ui_tnw(con_cols(), S2_SM, S2_MONO)
+        ui_txt(gx, gy, "x", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+        gx = gx + ui_tw("x", S2_SM, S2_MONO)
+        ui_txtn(gx, gy, con_rows(), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+        gx = gx + ui_tnw(con_rows(), S2_SM, S2_MONO)
+        ui_txt(gx, gy, " - vt100 - sgr, cup, ed, el", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+    }
+    return hit
+}
+
+fn cn_apply(g) {
+    if g == 0 { cn_run = 1 - cn_run  return 0 }
+    if g == 1 { cn_scan = 1 - cn_scan  return 0 }
+    term_clear()
+    return 0
+}
+
+fn cn_tick(win) {
+    if cn_run == 0 { return 0 }
+    t = ticks() / 25
+    if t == cn_last { return 0 }
+    cn_last = t
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 45  FONT ATLAS - 564 x 396
+#
+# ds-reference.html 384-400: blank atlas canvas over #07080a, then a 36px
+# toolbar of a "zoom" label, a four-item segmented zoom control and a note.
+# The note's numbers are the live font cell, read from fb.c rather than typed.
+# ==============================================================================
+ft_zoom = 1                         # index into 2x|3x|4x|6x
+
+fn ft_ui(ax, ay, aw, ah, dm) {
+    u = ui()
+    tbh = ui_tb_h()
+    ch = ah - tbh
+    hit = 0 - 1
+
+    s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF0))
+
+    ty = ay + ah - tbh
+    ui_tb(ax, ty, aw, tbh, 1)
+    lx = ax + 11 * u
+    ui_txt(lx, s2_mcy(ty, tbh), "zoom", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
+    lx = lx + ui_tw("zoom", S2_SM, S2_MONO) + 7 * u
+
+    gh = ui_seg_h(S2_SM)
+    gw = ui_seg_w("2x|3x|4x|6x", S2_SM)
+    gg = ui_seg(lx, ty + (tbh - gh) / 2, gw, gh, "2x|3x|4x|6x", ft_zoom, S2_SM)
+    if gg >= 0 { hit = gg }
+
+    nw = ui_tw("95 glyphs - ", S2_SM, S2_MONO) + ui_tnw(cell_w(), S2_SM, S2_MONO) + ui_tw("x", S2_SM, S2_MONO) + ui_tnw(cell_h(), S2_SM, S2_MONO) + ui_tw(" cell - bitmap atlas", S2_SM, S2_MONO)
+    nx = ax + aw - 11 * u - nw
+    if nx > lx + gw + 8 * u {
+        ny = s2_mcy(ty, tbh)
+        ui_txt(nx, ny, "95 glyphs - ", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+        nx = nx + ui_tw("95 glyphs - ", S2_SM, S2_MONO)
+        ui_txtn(nx, ny, cell_w(), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+        nx = nx + ui_tnw(cell_w(), S2_SM, S2_MONO)
+        ui_txt(nx, ny, "x", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+        nx = nx + ui_tw("x", S2_SM, S2_MONO)
+        ui_txtn(nx, ny, cell_h(), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+        nx = nx + ui_tnw(cell_h(), S2_SM, S2_MONO)
+        ui_txt(nx, ny, " cell - bitmap atlas", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+    }
+    return hit
+}
+
+fn ft_apply(g) { ft_zoom = g  return 0 }
+
+# ==============================================================================
+# the slice's seven answers to apps_registry.zl
+# ==============================================================================
+fn sys2_name(id) {
+    if id == APP_KLOG { return "Kernel Log" }
+    if id == APP_REND { return "Renderer" }
+    if id == APP_HEXV { return "Hex Viewer" }
+    if id == APP_FBUF { return "Framebuffer" }
+    if id == APP_TTY  { return "Console (tty1)" }
+    if id == APP_FONT { return "Font Atlas" }
+    return ""
+}
+
+fn sys2_cat(id) { return 0 }        # all six are system apps
+
+# THE MONOGRAM, and it was MISSING. reg_mono() has forwarded here since this
+# slice was written - `if sys2_has(id) == 1 { return sys2_mono(id) }` - and
+# nothing defined it. zl resolves a call by name at RUNTIME, so an undefined
+# function is not a link error (`build.sh` reports "undefined symbols: 0"
+# because that counts C symbols); it is a fault raised the moment the call is
+# reached. In the catalog it was reached on the FIRST sys2 tile, and the fault
+# unwound the rest of cat_draw - so id 40 drew its background and its category
+# stripe and nothing else, and every tile after it in the grid, all 27 of them,
+# was never drawn at all. That is what made "All Applications" look empty.
+#
+# sys2_icon() returns -1 for all six, which is exactly why this path is the one
+# that runs: a tile with an icon never asks for a monogram. sys3's apps all
+# have icons, which is why the same missing function there was invisible.
+fn sys2_mono(id) {
+    if id == APP_KLOG { return "KL" }
+    if id == APP_REND { return "RN" }
+    if id == APP_HEXV { return "HX" }
+    if id == APP_FBUF { return "FB" }
+    if id == APP_TTY  { return "TY" }
+    if id == APP_FONT { return "FA" }
+    return "??"
+}
+
+# The reference's own window sizes, in design units - ds-reference.html's APPS
+# table. These are also what the oracle's region map compares against, so a
+# window that is the right shape in the wrong box scores wrong however it
+# looks.
+fn sys2_w(id) {
+    if id == APP_KLOG { return 544 }
+    if id == APP_REND { return 352 }
+    if id == APP_HEXV { return 566 }
+    if id == APP_FBUF { return 600 }
+    if id == APP_TTY  { return 616 }
+    if id == APP_FONT { return 564 }
+    return 480
+}
+fn sys2_h(id) {
+    if id == APP_KLOG { return 320 }
+    if id == APP_REND { return 326 }
+    if id == APP_HEXV { return 340 }
+    if id == APP_FBUF { return 420 }
+    if id == APP_TTY  { return 396 }
+    if id == APP_FONT { return 396 }
+    return 340
+}
+
+# -1 is reg_icon's "no icon in the 20-icon atlas depicts this, draw the
+# monogram instead". 0 is a REAL icon index, so returning it would have put an
+# arbitrary picture on all six.
+fn sys2_icon(id) { return 0 - 1 }
+
+# WHERE, not just how big. ds-reference.html's APPS table (lines 1000-1006)
+# gives every window an x and a y as well as a w and an h, and the oracle
+# compares NAMED REGIONS of the screen - so a window that is the right size in
+# the wrong place scores wrong on structure however well it is drawn. These are
+# those coordinates.
+fn sys2_x(id) {
+    if id == APP_KLOG { return 200 }
+    if id == APP_REND { return 800 }
+    if id == APP_HEXV { return 264 }
+    if id == APP_FBUF { return 150 }
+    if id == APP_TTY  { return 186 }
+    if id == APP_FONT { return 210 }
+    return 160
+}
+fn sys2_y(id) {
+    if id == APP_KLOG { return 250 }
+    if id == APP_REND { return 340 }
+    if id == APP_HEXV { return 196 }
+    if id == APP_FBUF { return 70 }
+    if id == APP_TTY  { return 96 }
+    if id == APP_FONT { return 112 }
+    return 80
+}
+
+# The reference composes for a 1280-wide screen and this panel may be wider, so
+# every reference x is offset by the same centring term the boot composition
+# uses (kernel.zl 4503). RECOMPUTED here rather than read from `desk_ox`: that
+# name is assigned inside wm_boot_open and never declared at top level, so it
+# is that function's local and reading it from another module would silently
+# get nothing. One expression, and it cannot go stale in only one of the two
+# places, because it is derived from the panel rather than stored.
+fn sys2_ox() {
+    dox = (px_w() - 1280 * ui()) / 2
+    if dox < 0 { dox = 0 }
+    return dox
+}
+
+# HOW THIS SLICE'S WINDOWS OPEN. reg_new() gates on explicit id ranges and none
+# of them covered this slice, so without this every app here would have been
+# unopenable - reg_open() would find no window, get -1 back and return without
+# doing anything, silently. Owning the open here is also what lets an app pick
+# its own start position, which for these six is not a preference: it is the
+# oracle's region map.
+fn sys2_new(id, u) {
+    return wm_open(id, reg_name(id), sys2_ox() + sys2_x(id) * u, sys2_y(id) * u, sys2_w(id) * u, sys2_h(id) * u)
+}
+
+fn sys2_draw(id, ax, ay, aw, ah) {
+    ui_begin(ax, ay, aw, ah, 0, 0, 0, 0)
+    if id == APP_KLOG { kl_ui(ax, ay, aw, ah, 1)  return 0 }
+    if id == APP_REND { rd_ui(ax, ay, aw, ah, 1)  return 0 }
+    if id == APP_HEXV { hx_ui(ax, ay, aw, ah, 1)  return 0 }
+    if id == APP_FBUF { fbv_ui(ax, ay, aw, ah, 1)  return 0 }
+    if id == APP_TTY  { cn_ui(ax, ay, aw, ah, 1)  return 0 }
+    if id == APP_FONT { ft_ui(ax, ay, aw, ah, 1)  return 0 }
+    return 0
+}
+
+# The second pass. ui_begin's click mode is what makes ui_fire report, and the
+# rectangle handed in is the CLIENT rect in screen coordinates - the same one
+# app_draw was given - so the widget sequence lays out identically and a
+# control is hit exactly where it was drawn.
+fn sys2_event(id, win, ety, ecode, ex, ey) {
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    ui_begin(wm_cx(win), wm_cy(win), wm_cw(win), wm_ch(win), 1, ex, ey, 1)
+    g = 0 - 1
+    if id == APP_KLOG { g = kl_ui(wm_cx(win), wm_cy(win), wm_cw(win), wm_ch(win), 0) }
+    if id == APP_REND { g = rd_ui(wm_cx(win), wm_cy(win), wm_cw(win), wm_ch(win), 0) }
+    if id == APP_HEXV { g = hx_ui(wm_cx(win), wm_cy(win), wm_cw(win), wm_ch(win), 0) }
+    if id == APP_FBUF { g = fbv_ui(wm_cx(win), wm_cy(win), wm_cw(win), wm_ch(win), 0) }
+    if id == APP_TTY  { g = cn_ui(wm_cx(win), wm_cy(win), wm_cw(win), wm_ch(win), 0) }
+    if id == APP_FONT { g = ft_ui(wm_cx(win), wm_cy(win), wm_cw(win), wm_ch(win), 0) }
+    if g < 0 { return 0 }
+    if id == APP_KLOG { kl_apply(g) }
+    if id == APP_REND { rd_apply(g) }
+    if id == APP_HEXV { hx_apply(g) }
+    if id == APP_FBUF { fbv_apply(g) }
+    if id == APP_TTY  { cn_apply(g) }
+    if id == APP_FONT { ft_apply(g) }
+    # EVERY state change repaints. A handler that updates state and does not
+    # damage its window compiles, passes every gate, and changes nothing on
+    # screen - which has already happened here nine times in fourteen handlers.
+    wm_dmg(win)
+    return 1
+}
+
+fn sys2_tick(id, win) {
+    if id == APP_REND { return rd_tick(win) }
+    if id == APP_FBUF { return fbv_tick(win) }
+    if id == APP_TTY  { return cn_tick(win) }
+    return 0
+}
