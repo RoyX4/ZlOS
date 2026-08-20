@@ -349,3 +349,32 @@ because only it defines `wm_anim_at/progress/scale`, which the branch's own
 and passes both visual gates; it has not been proven that every one of the
 seven animations still moves pixels on the merged tree. `hosttest/wmtest` is
 the thing that would say.
+
+
+---
+
+## CORRECTION (2026-08-20, same day)
+
+**The "1278 insertions / 14207 deletions" reasoning above is wrong, and the
+number should not be repeated.** `git diff main..branch` is a two-tree
+comparison: against a branch that is 75 commits behind, everything `main`
+gained since the fork shows up as a "deletion". A three-way merge does not
+work that way — it applies only what the branch changed *since the merge base*,
+so it would never have removed `usermode.c`, `verify_selfhost.sh`, or any of
+`wm.c`/`xhci.c`/`virtio_gpu.c`.
+
+Verified after the fact: both "superseded" commits (`0520974`, `df205f1`) ARE
+ancestors of `main` now — they arrived inside `compassionate-curie`, which had
+merged `storage-recovered` at `57ee9e9` ("merge: desktop/storage-recovered, and
+port every app onto the theme roles"). `kernel/usermode.c` is still 420 lines,
+`verify_selfhost.sh` still 67, `filemgr`/`fs_ch` still present.
+
+The **conclusion** (do not merge those two branches directly into `main`) was
+still right, for a reason the wrong number obscured: they carry an older
+implementation of a feature `main` already had in richer form, and merging them
+at that point would have reintroduced the two-implementations problem that cost
+this landing four separate faults. But the argument that got there was a misread
+of a diff, and a right answer from a wrong measurement is a coin flip.
+
+**Rule this earns:** to see what a merge would actually do, use
+`git merge-tree` or a throwaway merge — never `git diff A..B`.
