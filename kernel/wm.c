@@ -657,6 +657,11 @@ int wm_anim_alpha(int win)
  * should end the animation, not wrap its index. */
 static unsigned anim_last = 0;
 
+/* 4 frames at 100 Hz = 40 ms. Restored from main: the branch's side of the
+ * animation hunk won, but main's anim_tick came through unconflicted and
+ * still reads this. */
+#define ANIM_FRAMES 4
+
 static void anim_tick(void)
 {
     unsigned now  = idt_ticks();
@@ -1652,8 +1657,6 @@ static void sweep_draw(int rx0, int ry0, int rx1, int ry1)
  * and pgrab/RESERVE_TOP are declared further down the file. Only the cached
  * rectangle is read during paint; snap_preview_set() below does the geometry,
  * because RESERVE_TOP/RESERVE_BOT are not defined until line ~1280. */
-static int sp_zone = SNAP_NONE;      /* SNAP_NONE when nothing is previewing */
-static int sp_x, sp_y, sp_w, sp_h;   /* where the window would land          */
 
 void wm_repaint(void)
 {
@@ -1720,7 +1723,7 @@ void wm_repaint(void)
             int stash_x = cx, stash_y = cy, stash_w = cw, stash_h = ch;
             if (anim_is(win, ANIM_FADE)) {
                 fade = wm_anim_alpha(win);
-                if (fade < 255) stash = fb_stash(sx, sy, sw, sh);
+                if (fade < 255) stash = fb_stash(stash_x, stash_y, stash_w, stash_h);
             }
 
             fb_clip(cx, cy, cw, ch);            /* clip 1: the frame + shadow */
@@ -1832,8 +1835,6 @@ static int is_double(int win, int x, int y)
 
 static int pgrab = -1;          /* which window owns the pointer, or -1     */
 
-/* defined below, after RESERVE_TOP/BOT, which its geometry needs */
-static void snap_preview_set(int z);
 
 /* wm_close calls this. Defined here, beside the state it clears, so the grab
  * and its lifetime stay in one place. */
@@ -1965,21 +1966,6 @@ static int in_closebox(int win, int x, int y)
  * knows those pixels changed, and a preview that only damages where it is
  * going leaves its previous outline painted on the wallpaper. That is the same
  * mistake snap_to_rect just below documents having made with wm_move. */
-static void snap_preview_set(int z)
-{
-    if (z == sp_zone) return;
-
-    if (sp_zone != SNAP_NONE) wm_damage(sp_x, sp_y, sp_w, sp_h);
-
-    sp_zone = z;
-
-    if (z != SNAP_NONE) {
-        const struct ui_theme *t = ui_theme();
-        snap_rect(z, (int)fb_pxw(), (int)fb_pxh(),
-                  RESERVE_TOP(t), RESERVE_BOT(t), &sp_x, &sp_y, &sp_w, &sp_h);
-        wm_damage(sp_x, sp_y, sp_w, sp_h);
-    }
-}
 
 /* Snap `win` to `z` (or un-snap it if z is SNAP_NONE), applying whatever
  * geometry snap.c hands back. The two triggers below both end here, so there
