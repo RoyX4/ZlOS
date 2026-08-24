@@ -1,0 +1,1239 @@
+{
+  "schema": "zlos.partial-closure.v1",
+  "result": "PASS_WITH_EXTERNAL_GATES",
+  "feature_status_sha256": "ff8ed3ecb743e7bcd4df07f346bf86a76c10c057466bff83ce00ab536e35d994",
+  "counts": {
+    "total": 23,
+    "proved_current": 1,
+    "still_partial": 22,
+    "locally_finishable_now": 3,
+    "external_authority_required": 9,
+    "by_wave": {
+      "H1_HOST_TRUTH": 2,
+      "H2_HOST_ADVERSARIAL": 0,
+      "Q1_CONTAINED_RUNTIME": 5,
+      "B1_CROSS_PHASE_FOUNDATION": 8,
+      "X1_EXTERNAL_AUTHORITY": 3,
+      "X2_PHYSICAL": 2,
+      "X3_INDEPENDENT": 2,
+      "X4_RELEASE": 1
+    }
+  },
+  "partials": [
+    {
+      "id": "EV-002",
+      "feature": "exact source snapshot",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
+          "sha256": "4e7c5aeed8be8c11182dd2f0e7686233efba97367501df992f3ac551e844de21",
+          "schema": "zlos.source-snapshot-receipt.v1",
+          "result": "PASS_WITH_OPEN_CUSTODY_GAP"
+        }
+      ],
+      "current_tests": [
+        "missing input",
+        "archive hash drift",
+        "archive byte corruption",
+        "invented custody"
+      ],
+      "current_known_gaps": [
+        "0 off-host copies",
+        "unsigned receipt",
+        "not a whole-repository snapshot"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "X1_EXTERNAL_AUTHORITY",
+      "dependencies": [
+        "EV-001",
+        "EV-004",
+        "EV-005"
+      ],
+      "deliverables": [
+        "whole-repository deterministic archive including submodules, dirty patch and generated inputs",
+        "signed snapshot manifest and restore procedure"
+      ],
+      "deterministic_proof": [
+        "two clean restores reproduce every tracked and active dirty byte",
+        "mutations to archive, manifest, submodule and patch fail closed"
+      ],
+      "qemu_proof": [
+        "restored tree rebuilds the exact registered artifacts"
+      ],
+      "physical_or_external_proof": [
+        "off-host restore drill from an independently retained copy",
+        "signature verification against a trusted public key"
+      ],
+      "external_authority": [
+        "trusted signing key",
+        "off-host storage/custodian"
+      ],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote only when the whole repository is signed, independently retained off-host, restored, rebuilt and byte-matched.",
+      "next_action": "Extend the current build-input snapshot into a whole-tree snapshot and define the signing/restore envelope."
+    },
+    {
+      "id": "EV-003",
+      "feature": "license ledger",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/license-registry.json",
+          "sha256": "1f36d1d3630970ebf6711b30b4c13d192ad03e658e0dea9b025b4d44f0559395",
+          "schema": "zlos.license-provenance-registry.v1",
+          "result": "PASS_WITH_RELEASE_BLOCK"
+        }
+      ],
+      "current_tests": [
+        "invented grant",
+        "false release green"
+      ],
+      "current_known_gaps": [
+        "0 license files",
+        "123 inputs lack an established redistribution grant"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "X1_EXTERNAL_AUTHORITY",
+      "dependencies": [
+        "EV-002",
+        "EV-004"
+      ],
+      "deliverables": [
+        "SPDX inventory for every first- and third-party file",
+        "repository license decision",
+        "redistribution notices and incompatible-license rejection"
+      ],
+      "deterministic_proof": [
+        "every shipped byte resolves to a license and provenance record",
+        "missing, conflicting and unknown licenses block release"
+      ],
+      "qemu_proof": [],
+      "physical_or_external_proof": [
+        "owner-approved license and required third-party permissions/notices"
+      ],
+      "external_authority": [
+        "repository owner legal/license choice",
+        "third-party permission where required"
+      ],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote only after actual redistribution authority covers every shipped byte; an inventory alone is insufficient.",
+      "next_action": "Generate file-level SPDX candidates without inventing a grant, then request the owner license decision."
+    },
+    {
+      "id": "EV-004",
+      "feature": "dependency lock",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/dependency-lock.json",
+          "sha256": "25cf47fb8ba38f757db5912f06c8c4895f826663f66e24526f0b389921384f20",
+          "schema": "zlos.host-dependency-lock.v2",
+          "result": "PASS_WITH_OPEN_SUPPLY_GAPS"
+        }
+      ],
+      "current_tests": [
+        "binary drift",
+        "missing firmware identity",
+        "missing package",
+        "unresolved package dependency",
+        "invented source-archive custody"
+      ],
+      "current_known_gaps": [
+        "156 package source archives absent",
+        "offline rebuild not proved"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "H1_HOST_TRUTH",
+      "dependencies": [
+        "EV-002",
+        "EV-003",
+        "EV-005"
+      ],
+      "deliverables": [
+        "transitive source and binary SBOM",
+        "locked package/source/archive identities",
+        "offline dependency verification"
+      ],
+      "deterministic_proof": [
+        "offline resolution succeeds from the lock and fails on any dependency mutation",
+        "SBOM covers every build-graph input and artifact"
+      ],
+      "qemu_proof": [],
+      "physical_or_external_proof": [
+        "external source archives are retained under the snapshot custody contract"
+      ],
+      "external_authority": [],
+      "can_finish_in_current_environment": true,
+      "promotion_rule": "Promote when the current build resolves offline from a complete transitive SBOM with exact hashes and no undeclared dependency.",
+      "next_action": "Add transitive package, source-archive, firmware and binary relationships to the dependency lock."
+    },
+    {
+      "id": "EV-005",
+      "feature": "reproducible toolchain manifest",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/toolchain-manifest.json",
+          "sha256": "2a0a0481c50a81eef7a1e179ff4f306527a7fd5792ea4b766f4659e51ffa9f22",
+          "schema": "zlos.toolchain-manifest.v1",
+          "result": "PASS_WITH_OPEN_PORTABILITY_GAPS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/dependency-lock.json",
+          "sha256": "25cf47fb8ba38f757db5912f06c8c4895f826663f66e24526f0b389921384f20",
+          "schema": "zlos.host-dependency-lock.v2",
+          "result": "PASS_WITH_OPEN_SUPPLY_GAPS"
+        }
+      ],
+      "current_tests": [
+        "missing target lane",
+        "wrong LLP64",
+        "missing warning policy",
+        "external header drift",
+        "environment injection"
+      ],
+      "current_known_gaps": [
+        "0 hermetic builds",
+        "unsigned toolchain",
+        "compiler/sysroot sources unarchived"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "X1_EXTERNAL_AUTHORITY",
+      "dependencies": [
+        "EV-002",
+        "EV-004"
+      ],
+      "deliverables": [
+        "hermetic build environment",
+        "compiler/sysroot source archive",
+        "signed toolchain attestation"
+      ],
+      "deterministic_proof": [
+        "two clean hermetic builds produce identical registered artifacts",
+        "environment/path/time/network injection cannot affect output"
+      ],
+      "qemu_proof": [
+        "hermetic artifacts pass the contained boot matrix"
+      ],
+      "physical_or_external_proof": [
+        "signature verification and independent source-archive restore"
+      ],
+      "external_authority": [
+        "trusted signing key",
+        "off-host source custody"
+      ],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote only after the whole toolchain is source-custodied, hermetic, reproducible and signed.",
+      "next_action": "Define a network-disabled hermetic recipe around the existing seven-tool/four-ABI manifest."
+    },
+    {
+      "id": "EV-007",
+      "feature": "build graph truth",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/build-graph.json",
+          "sha256": "184110f6c8d281caa7c71b292765ed42987aed56590ce22ced11619f35c55194",
+          "schema": "zlos.build-graph.v1",
+          "result": "PASS_WITH_DECLARED_SUPERSET"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/artifact-registry.json",
+          "sha256": "8378d40d2f0a0f5cc5dff9a334be31911fe1d5a8f257845cc8d30870865d96c1",
+          "schema": "zlos.artifact-boot-registry.v1",
+          "result": "PASS"
+        }
+      ],
+      "current_tests": [
+        "missing source",
+        "missing lane",
+        "orphan source",
+        "missing artifact"
+      ],
+      "current_known_gaps": [
+        "1 conservative scope-only header",
+        "no per-object binary receipts",
+        "future package/service outputs absent"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "B1_CROSS_PHASE_FOUNDATION",
+      "dependencies": [
+        "EV-004",
+        "EV-005",
+        "EV-006"
+      ],
+      "deliverables": [
+        "per-object and generated-output receipts",
+        "complete package/service/image output graph",
+        "scope-only input elimination"
+      ],
+      "deterministic_proof": [
+        "every output traces to exact inputs, command, environment and toolchain",
+        "orphan input/output mutations fail"
+      ],
+      "qemu_proof": [
+        "booted image identity joins to the same graph root"
+      ],
+      "physical_or_external_proof": [
+        "release artifacts join to signed provenance"
+      ],
+      "external_authority": [],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote when every current build intermediate and shipped output has a reconstructable binary receipt; future phases extend the graph before landing.",
+      "next_action": "Emit per-object command/input/output hashes for the current four build lanes."
+    },
+    {
+      "id": "EV-008",
+      "feature": "strict exit propagation",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/wrapper-registry.json",
+          "sha256": "971594596a876be208ab27d3f6013027a084222f58c3b1560c8cd046ae939314",
+          "schema": "zlos.wrapper-registry.v1",
+          "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/adversarial-registry.json",
+          "sha256": "18e1217ccdb668b7421a737d9a84b14ff8defce2481bb9ca28605e065338cdc1",
+          "schema": "zlos.adversarial-registry.v1",
+          "result": "PASS_WITH_OPEN_GAPS"
+        }
+      ],
+      "current_tests": [
+        "missing wrapper",
+        "duplicate wrapper",
+        "missing policy",
+        "hidden authority boundary",
+        "deleted verifier",
+        "optional verifier",
+        "missing route",
+        "masked final exit",
+        "masked child failure"
+      ],
+      "current_known_gaps": [],
+      "current_maturity": "PROVED_CURRENT",
+      "wave": "H1_HOST_TRUTH",
+      "dependencies": [
+        "EV-012",
+        "EV-013"
+      ],
+      "deliverables": [
+        "repository-wide executable/wrapper inventory",
+        "strict exit propagation contract for every gate entry point"
+      ],
+      "deterministic_proof": [
+        "each wrapper is forced to fail at every child command and returns nonzero",
+        "deleted, optional and masked verifiers fail"
+      ],
+      "qemu_proof": [],
+      "physical_or_external_proof": [],
+      "external_authority": [],
+      "can_finish_in_current_environment": true,
+      "promotion_rule": "Promote when every current executable verification/build wrapper is inventoried and every mandatory child failure propagates nonzero.",
+      "next_action": "Enumerate all executable and CI entry points, then mutation-test their child exit propagation."
+    },
+    {
+      "id": "EV-013",
+      "feature": "canary/mutation gate",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/adversarial-registry.json",
+          "sha256": "18e1217ccdb668b7421a737d9a84b14ff8defce2481bb9ca28605e065338cdc1",
+          "schema": "zlos.adversarial-registry.v1",
+          "result": "PASS_WITH_OPEN_GAPS"
+        }
+      ],
+      "current_tests": [
+        "19 planted verifier mutations"
+      ],
+      "current_known_gaps": [
+        "one mutation per every future required field is not yet possible"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "B1_CROSS_PHASE_FOUNDATION",
+      "dependencies": [
+        "EV-008",
+        "EV-012",
+        "EV-019",
+        "EV-020"
+      ],
+      "deliverables": [
+        "one planted defect per required field of every verifier",
+        "mutation inventory generated from live schemas"
+      ],
+      "deterministic_proof": [
+        "every planted defect independently turns the owning gate red",
+        "removed fields and new verifiers cannot escape inventory"
+      ],
+      "qemu_proof": [
+        "target-only fields have boot-path mutations"
+      ],
+      "physical_or_external_proof": [
+        "release and physical receipt mutations are rejected by their custodians"
+      ],
+      "external_authority": [],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote for a release only when every required field in every then-current authority has a demonstrated red mutation.",
+      "next_action": "Generate mutation obligations from the current JSON schemas and land-gate registry."
+    },
+    {
+      "id": "EV-014",
+      "feature": "benchmark receipt",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
+          "sha256": "a7b5fc3572008d536bfa67b6f5d24a93bc14bfe44fea1791455f60542d9c3738",
+          "schema": "zlos.host-benchmark-receipt.v1",
+          "result": "PASS_WITH_OPEN_REGRESSIONS"
+        }
+      ],
+      "current_tests": [
+        "hidden regression",
+        "invented percentile",
+        "target overclaim"
+      ],
+      "current_known_gaps": [
+        "4 frame metrics over budget",
+        "no percentiles/peaks/native-target distribution"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "X2_PHYSICAL",
+      "dependencies": [
+        "EV-005",
+        "EV-009",
+        "EV-021"
+      ],
+      "deliverables": [
+        "percentile, peak, distribution and machine/backend metadata",
+        "budget and regression comparison receipt"
+      ],
+      "deterministic_proof": [
+        "host measurements are repeatable and raw samples reconstruct summaries",
+        "over-budget results remain red"
+      ],
+      "qemu_proof": [
+        "contained target collects frame/input/I/O/launch/memory samples"
+      ],
+      "physical_or_external_proof": [
+        "native physical distribution on identified hardware with exact artifact hash"
+      ],
+      "external_authority": [
+        "physical target and controlled reboot access"
+      ],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote only when all registered budgets pass statistically useful target distributions, including required physical lanes.",
+      "next_action": "Upgrade the host benchmark receipt to retain raw samples, percentiles, peaks and machine identity."
+    },
+    {
+      "id": "EV-015",
+      "feature": "hardware receipt",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/artifact-registry.json",
+          "sha256": "8378d40d2f0a0f5cc5dff9a334be31911fe1d5a8f257845cc8d30870865d96c1",
+          "schema": "zlos.artifact-boot-registry.v1",
+          "result": "PASS"
+        }
+      ],
+      "current_tests": [
+        "physical overclaim"
+      ],
+      "current_known_gaps": [
+        "0 of 9 exact artifact hashes have native physical proof"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "X2_PHYSICAL",
+      "dependencies": [
+        "EV-009",
+        "EV-014"
+      ],
+      "deliverables": [
+        "per-device hardware receipt schema",
+        "first-use/reuse/reset/teardown/recovery evidence"
+      ],
+      "deterministic_proof": [
+        "receipt rejects wrong artifact, firmware, topology, device, lane or missing raw evidence"
+      ],
+      "qemu_proof": [
+        "QEMU remains a separate non-physical comparison lane"
+      ],
+      "physical_or_external_proof": [
+        "all required devices boot the exact artifact and pass behavior/recovery probes"
+      ],
+      "external_authority": [
+        "physical machines/devices",
+        "controlled cold/warm reboot and failure injection"
+      ],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote only when every required physical lane is bound to the exact artifact and raw device/firmware/topology evidence.",
+      "next_action": "Prepare the hardware receipt runner and device matrix without claiming a physical run."
+    },
+    {
+      "id": "EV-016",
+      "feature": "screenshot/video receipt",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/visual-registry.json",
+          "sha256": "f7c6171e66ad750f918803c3a24c3bba57890cfc596e79abe61ab0217bce9b0b",
+          "schema": "zlos.visual-evidence-registry.v1",
+          "result": "INVENTORY_WITH_OPEN_GAPS"
+        }
+      ],
+      "current_tests": [
+        "invented build binding",
+        "hidden variant gap"
+      ],
+      "current_known_gaps": [
+        "46 visual assets are unbound to the current build",
+        "6 variant dimensions are open"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "Q1_CONTAINED_RUNTIME",
+      "dependencies": [
+        "EV-009",
+        "EV-022",
+        "EV-023"
+      ],
+      "deliverables": [
+        "current-build screenshot/video capture runner",
+        "variant and interaction metadata"
+      ],
+      "deterministic_proof": [
+        "asset hash, dimensions, build identity and capture metadata are internally consistent"
+      ],
+      "qemu_proof": [
+        "capture the current BIOS/UEFI UI across required states and variants"
+      ],
+      "physical_or_external_proof": [
+        "required native display captures bind to physical receipts"
+      ],
+      "external_authority": [],
+      "can_finish_in_current_environment": true,
+      "promotion_rule": "Promote when current-build captures cover every required variant/state and bind byte-for-byte to the artifact and visual registry.",
+      "next_action": "Add deterministic QEMU capture and bind new goldens to the current artifact identity."
+    },
+    {
+      "id": "EV-017",
+      "feature": "crash/panic receipt",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/observability-registry.json",
+          "sha256": "b7dd0e1a365b0b5ba3048baea2723890cdc50c00983ce83bea5e1fb62d74992a",
+          "schema": "zlos.observability-registry.v1",
+          "result": "PASS_WITH_OPEN_GAPS"
+        }
+      ],
+      "current_tests": [
+        "overpromoted fault frame",
+        "invented general registers",
+        "invented raw log",
+        "hidden crash gap"
+      ],
+      "current_known_gaps": [
+        "0 durable crash receipts",
+        "no general-register frame, symbols, persistence or recovery"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "Q1_CONTAINED_RUNTIME",
+      "dependencies": [
+        "EV-009",
+        "EV-018",
+        "EV-024",
+        "KR-032"
+      ],
+      "deliverables": [
+        "bounded crash bundle with full registers, symbols, input/state identity and checksum",
+        "durable persistence and recovery workflow"
+      ],
+      "deterministic_proof": [
+        "truncation/corruption/stale-symbol/wrong-build mutations fail",
+        "nested crash cannot overwrite the first cause"
+      ],
+      "qemu_proof": [
+        "kernel and user faults persist a bundle and recover according to policy"
+      ],
+      "physical_or_external_proof": [
+        "physical power-loss persistence/recovery where required"
+      ],
+      "external_authority": [],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote when kernel and user crash paths create durable exact-build bundles and recovery succeeds without corrupting prior evidence.",
+      "next_action": "Extend the typed exception frame to all general registers and define a double-fault-safe crash store."
+    },
+    {
+      "id": "EV-018",
+      "feature": "structured event trace",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/hosttest/trace_event.c",
+          "sha256": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/hosttest/trace_event.h",
+          "sha256": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/event-schema.json",
+          "sha256": "23c89a049d50e4e19314d45a483404c206fc05e11f9f6fbfc0e994f5633fd86a",
+          "schema": "zlos.event-schema-registry.v1",
+          "result": "PASS_HOST_SCHEMA_TARGET_UNINTEGRATED"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/observability-registry.json",
+          "sha256": "b7dd0e1a365b0b5ba3048baea2723890cdc50c00983ce83bea5e1fb62d74992a",
+          "schema": "zlos.observability-registry.v1",
+          "result": "PASS_WITH_OPEN_GAPS"
+        }
+      ],
+      "current_tests": [
+        "missing event field",
+        "overlapping event field",
+        "hidden overwrite",
+        "invented concurrency",
+        "invented target emitter",
+        "hidden observability gap"
+      ],
+      "current_known_gaps": [
+        "0 target emitters",
+        "single-owner core only",
+        "no QEMU/native route",
+        "no durable tamper-evident anchor or service export policy"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "B1_CROSS_PHASE_FOUNDATION",
+      "dependencies": [
+        "EV-017",
+        "EV-024",
+        "AU-028"
+      ],
+      "deliverables": [
+        "target event emitters",
+        "SMP/IRQ ownership and sequence contract",
+        "service export/redaction policy",
+        "durable tamper-evident anchor"
+      ],
+      "deterministic_proof": [
+        "concurrency, wrap, quota, redaction and corruption tests preserve ordering and bounds"
+      ],
+      "qemu_proof": [
+        "kernel, driver and service events traverse the booted target route"
+      ],
+      "physical_or_external_proof": [
+        "signed/exported audit anchor verified by an authorized custodian"
+      ],
+      "external_authority": [],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote when pointer-free bounded events are emitted on target, safely exported/redacted and durably anchored under explicit authority.",
+      "next_action": "Compile the current event core into the kernel and emit boot, interrupt, fault and lifecycle events."
+    },
+    {
+      "id": "EV-019",
+      "feature": "failure-injection registry",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/adversarial-registry.json",
+          "sha256": "18e1217ccdb668b7421a737d9a84b14ff8defce2481bb9ca28605e065338cdc1",
+          "schema": "zlos.adversarial-registry.v1",
+          "result": "PASS_WITH_OPEN_GAPS"
+        }
+      ],
+      "current_tests": [
+        "hidden failure gap"
+      ],
+      "current_known_gaps": [
+        "all 7 failure families remain non-exhaustive"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "B1_CROSS_PHASE_FOUNDATION",
+      "dependencies": [
+        "EV-013",
+        "EV-020",
+        "EV-024"
+      ],
+      "deliverables": [
+        "exhaustive allocation/queue/I/O/provider/service/package/lifecycle injection map",
+        "rollback-state equivalence receipts"
+      ],
+      "deterministic_proof": [
+        "every injectable step fails before/during/after commit with no leak, stale authority or partial publication"
+      ],
+      "qemu_proof": [
+        "target-only device/service failure paths are exercised"
+      ],
+      "physical_or_external_proof": [
+        "physical detach/reset/power-loss injections cover required hardware"
+      ],
+      "external_authority": [],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote for a release only when every then-current transactional seam has nth-step failure proof and exact rollback receipts.",
+      "next_action": "Generate injection points for current allocation, queue and I/O commit paths, then compare pre/post state."
+    },
+    {
+      "id": "EV-020",
+      "feature": "hostile corpus registry",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/adversarial-registry.json",
+          "sha256": "18e1217ccdb668b7421a737d9a84b14ff8defce2481bb9ca28605e065338cdc1",
+          "schema": "zlos.adversarial-registry.v1",
+          "result": "PASS_WITH_OPEN_GAPS"
+        }
+      ],
+      "current_tests": [
+        "unearned ELF promotion",
+        "hidden hostile gap"
+      ],
+      "current_known_gaps": [
+        "ELF/archive/font/IPC absent"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "B1_CROSS_PHASE_FOUNDATION",
+      "dependencies": [
+        "EV-013",
+        "EV-019",
+        "EV-024"
+      ],
+      "deliverables": [
+        "ELF, archive, font and typed-IPC hostile corpora",
+        "minimized regression cases and sanitizer lanes"
+      ],
+      "deterministic_proof": [
+        "truncation, overflow, overlap, recursion, malformed schema and quota cases fail safely"
+      ],
+      "qemu_proof": [
+        "target parsers reject the same corpus without kernel compromise"
+      ],
+      "physical_or_external_proof": [],
+      "external_authority": [],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote when every parser/decoder boundary in the release has a versioned hostile corpus, sanitizer proof and target rejection path.",
+      "next_action": "Add ELF, archive and font host corpora now; add IPC cases when the typed transport lands."
+    },
+    {
+      "id": "EV-021",
+      "feature": "performance regression registry",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
+          "sha256": "a7b5fc3572008d536bfa67b6f5d24a93bc14bfe44fea1791455f60542d9c3738",
+          "schema": "zlos.host-benchmark-receipt.v1",
+          "result": "PASS_WITH_OPEN_REGRESSIONS"
+        }
+      ],
+      "current_tests": [
+        "hidden performance regression"
+      ],
+      "current_known_gaps": [
+        "input/I/O/network/launch/memory/build budgets are not joined"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "Q1_CONTAINED_RUNTIME",
+      "dependencies": [
+        "EV-014",
+        "EV-016",
+        "EV-019",
+        "EV-022"
+      ],
+      "deliverables": [
+        "joined frame/input/I/O/network/launch/memory/build budget registry",
+        "raw samples and regression baselines"
+      ],
+      "deterministic_proof": [
+        "every budget can be forced over and blocks promotion",
+        "measurement overhead and environment are recorded"
+      ],
+      "qemu_proof": [
+        "contained target collects every current runtime metric"
+      ],
+      "physical_or_external_proof": [
+        "required hardware lanes meet their budgets"
+      ],
+      "external_authority": [],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote when every current performance budget has deterministic collection, a red regression mutation and required target evidence.",
+      "next_action": "Register current input, block I/O, network, launch, memory and build metrics beside frame timings."
+    },
+    {
+      "id": "EV-022",
+      "feature": "visual regression registry",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/visual-registry.json",
+          "sha256": "f7c6171e66ad750f918803c3a24c3bba57890cfc596e79abe61ab0217bce9b0b",
+          "schema": "zlos.visual-evidence-registry.v1",
+          "result": "INVENTORY_WITH_OPEN_GAPS"
+        }
+      ],
+      "current_tests": [
+        "missing asset",
+        "unearned variant promotion"
+      ],
+      "current_known_gaps": [
+        "no current build-bound golden",
+        "scale/theme/locale/a11y/state/backend matrix incomplete"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "Q1_CONTAINED_RUNTIME",
+      "dependencies": [
+        "EV-016",
+        "EV-023",
+        "EV-028"
+      ],
+      "deliverables": [
+        "current-build visual goldens",
+        "scale/theme/locale/accessibility/state/backend matrix",
+        "perceptual and structural diff policy"
+      ],
+      "deterministic_proof": [
+        "one planted defect per required visual field or region turns the gate red"
+      ],
+      "qemu_proof": [
+        "capture and compare all required booted variants"
+      ],
+      "physical_or_external_proof": [
+        "native display lane confirms required hardware-specific output"
+      ],
+      "external_authority": [],
+      "can_finish_in_current_environment": true,
+      "promotion_rule": "Promote when every required UI route/state/variant has a current artifact-bound golden and rejecting visual/structural comparison.",
+      "next_action": "Establish current QEMU goldens only after the build-bound capture runner exists."
+    },
+    {
+      "id": "EV-023",
+      "feature": "accessibility proof registry",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/accessibility-registry.json",
+          "sha256": "86fb47133c8017ef22740c64cca408dff3119a924a93173ec08b8d507a0008ba",
+          "schema": "zlos.accessibility-proof-registry.v1",
+          "result": "PASS_WITH_OPEN_GAPS"
+        }
+      ],
+      "current_tests": [
+        "invented semantic tree",
+        "hidden assistive gap",
+        "target overclaim"
+      ],
+      "current_known_gaps": [
+        "9 capabilities missing",
+        "0 complete target workflows"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "B1_CROSS_PHASE_FOUNDATION",
+      "dependencies": [
+        "AX-001",
+        "AX-003",
+        "AP-001",
+        "EV-022"
+      ],
+      "deliverables": [
+        "semantic tree and assistive-provider protocols",
+        "keyboard/focus/screen-reader/magnifier/caption/switch workflows",
+        "component/app coverage inventory"
+      ],
+      "deterministic_proof": [
+        "every component exposes correct role/name/state/action and focus order",
+        "privacy, disconnect and provider failure are bounded"
+      ],
+      "qemu_proof": [
+        "complete workflows run on the target with real providers"
+      ],
+      "physical_or_external_proof": [
+        "physical assistive input/output lanes where required"
+      ],
+      "external_authority": [],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote when every shipped component/app passes target keyboard, semantic and required assistive workflows; missing support stays red.",
+      "next_action": "Implement the semantic-tree transport and require every current primitive to expose a deterministic snapshot."
+    },
+    {
+      "id": "EV-024",
+      "feature": "security claim registry",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/security-registry.json",
+          "sha256": "8c6b73406fd6b617a10c00f8a2540397782a0197d18ae265b4204aa0e32261ae",
+          "schema": "zlos.security-claim-registry.v1",
+          "result": "PASS_WITH_OPEN_GAPS"
+        }
+      ],
+      "current_tests": [
+        "production overclaim",
+        "hidden DMA risk",
+        "invented DMA proof"
+      ],
+      "current_known_gaps": [
+        "17 residual-risk claims open",
+        "0 production-complete security claims"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "B1_CROSS_PHASE_FOUNDATION",
+      "dependencies": [
+        "AU-001",
+        "AU-006",
+        "AU-012",
+        "AU-024",
+        "AU-028"
+      ],
+      "deliverables": [
+        "capability, credential, typed IPC, DMA, secrets, sandbox, package and audit foundations",
+        "complete privileged-operation mediation matrix"
+      ],
+      "deterministic_proof": [
+        "ordinary processes are denied every privileged operation without the exact live right",
+        "revocation/stale-generation/peer-death/failure tests"
+      ],
+      "qemu_proof": [
+        "booted hostile processes cannot escape authority or crash the system"
+      ],
+      "physical_or_external_proof": [
+        "IOMMU/DMA and hardware privilege lanes where required",
+        "independent security refutation"
+      ],
+      "external_authority": [
+        "independent security reviewer for final promotion"
+      ],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote only when all production claims are independently refuted, residual risks are resolved/accepted, and complete mediation passes on target.",
+      "next_action": "Implement capability handles and bounded typed IPC before migrating privileged policy out of the kernel."
+    },
+    {
+      "id": "EV-025",
+      "feature": "independent refutation",
+      "current_evidence": [
+        {
+          "root": "plan",
+          "path": "docs/program/VALIDATION-RECEIPT.md",
+          "sha256": "d64842aef7044b6f81f22d7f675fdf78512af5c2a6c42768b05326f1daa6a39f",
+          "schema": null,
+          "result": "SOURCE"
+        }
+      ],
+      "current_tests": [
+        "missing feature",
+        "unknown contract"
+      ],
+      "current_known_gaps": [
+        "no independent reviewer receipt exists for the active implementation batch"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "X3_INDEPENDENT",
+      "dependencies": [
+        "EV-001",
+        "EV-009",
+        "EV-013",
+        "EV-024"
+      ],
+      "deliverables": [
+        "independent review packet",
+        "reviewer rejection/acceptance receipt",
+        "immutable response and remediation links"
+      ],
+      "deterministic_proof": [
+        "packet is exact-build complete and cannot omit failed evidence"
+      ],
+      "qemu_proof": [
+        "reviewer can reproduce the contained target gates"
+      ],
+      "physical_or_external_proof": [
+        "review is executed by a genuinely independent principal with rejection authority"
+      ],
+      "external_authority": [
+        "independent reviewer/custodian"
+      ],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote only after an independent reviewer reproduces/refutes the exact batch and signs a receipt with genuine rejection authority.",
+      "next_action": "Generate the exact review packet and keep status partial until an independent reviewer acts."
+    },
+    {
+      "id": "EV-026",
+      "feature": "historical decision log",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/decision-ledger.json",
+          "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+          "schema": "zlos.decision-ledger.v1",
+          "result": "PASS_WITH_OPEN_GAPS"
+        },
+        {
+          "root": "plan",
+          "path": "docs/program/VALIDATION-RECEIPT.md",
+          "sha256": "d64842aef7044b6f81f22d7f675fdf78512af5c2a6c42768b05326f1daa6a39f",
+          "schema": null,
+          "result": "SOURCE"
+        }
+      ],
+      "current_tests": [
+        "missing decision",
+        "unknown status",
+        "invented source",
+        "lost replacement",
+        "deleted obsolete evidence",
+        "hidden history gap"
+      ],
+      "current_known_gaps": [
+        "system-wide decision inventory is incomplete",
+        "no signed or independent approval",
+        "no history viewer"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "X3_INDEPENDENT",
+      "dependencies": [
+        "EV-001",
+        "EV-025",
+        "EV-027",
+        "EV-028"
+      ],
+      "deliverables": [
+        "system-wide decision/reversal/deprecation inventory",
+        "normalized meanings for all legacy labels",
+        "history viewer and approval chain"
+      ],
+      "deterministic_proof": [
+        "deleted/superseded decisions remain traceable and contradictions fail"
+      ],
+      "qemu_proof": [
+        "booted provenance viewer exposes the decision history read-only"
+      ],
+      "physical_or_external_proof": [
+        "signed or independent approval for release-affecting decisions"
+      ],
+      "external_authority": [
+        "independent approver or trusted signing key"
+      ],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote when all system decisions are attributable, historically preserved, normalized and independently approved where release-affecting.",
+      "next_action": "Expand discovery beyond the now-normalized 47-label legacy source into system-wide decisions and approval history."
+    },
+    {
+      "id": "EV-027",
+      "feature": "release notes/changelog",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/release-notes.json",
+          "sha256": "fd2af9b6aa18a5538d2c57faa9758fd5c43bba552a454fdad7334318321dda4f",
+          "schema": "zlos.release-notes.v1",
+          "result": "PASS_UNRELEASED_WITH_BLOCKERS"
+        },
+        {
+          "root": "plan",
+          "path": "docs/program/VALIDATION-RECEIPT.md",
+          "sha256": "d64842aef7044b6f81f22d7f675fdf78512af5c2a6c42768b05326f1daa6a39f",
+          "schema": null,
+          "result": "SOURCE"
+        }
+      ],
+      "current_tests": [
+        "missing change",
+        "invented release",
+        "hidden release block",
+        "missing known issue",
+        "missing migration recovery",
+        "deleted superseded history",
+        "unknown release feature"
+      ],
+      "current_known_gaps": [
+        "0 published entries",
+        "no version/channel/signature",
+        "public redistribution blocked",
+        "migration inventory incomplete",
+        "no previous signed rollback generation"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "X4_RELEASE",
+      "dependencies": [
+        "EV-002",
+        "EV-003",
+        "EV-005",
+        "EV-025",
+        "OP-001",
+        "OP-002",
+        "OP-004"
+      ],
+      "deliverables": [
+        "authorized version/channel manifest",
+        "signed release notes",
+        "complete migrations and rollback generation",
+        "publication receipt"
+      ],
+      "deterministic_proof": [
+        "release generation fails on license, signature, evidence, migration, rollback or known-issue omissions"
+      ],
+      "qemu_proof": [
+        "candidate installs/upgrades/rolls back in contained targets"
+      ],
+      "physical_or_external_proof": [
+        "authorized public/internal channel publication and signature verification"
+      ],
+      "external_authority": [
+        "release authority",
+        "trusted signing key",
+        "legal redistribution authority"
+      ],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote only for a real authorized release with signed notes, passing migrations, a previous signed rollback generation and publication receipt.",
+      "next_action": "Keep generating UNRELEASED changes; do not fabricate a version or publication before the release authorities exist."
+    },
+    {
+      "id": "EV-028",
+      "feature": "provenance viewer",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/provenance-viewer.json",
+          "sha256": "8ba4c6e41b479c7de50ba1e2c64bddde1e3f06fe55ed34bf7f230be2fdb66205",
+          "schema": "zlos.provenance-viewer.v1",
+          "result": "PASS_STATIC_VIEWER_WITH_OPEN_GAPS"
+        },
+        {
+          "root": "plan",
+          "path": "docs/program/VALIDATION-RECEIPT.md",
+          "sha256": "d64842aef7044b6f81f22d7f675fdf78512af5c2a6c42768b05326f1daa6a39f",
+          "schema": null,
+          "result": "SOURCE"
+        }
+      ],
+      "current_tests": [
+        "missing artifact",
+        "invented signature",
+        "hidden license block",
+        "invented app permission",
+        "invented runtime route",
+        "missing focus style",
+        "external request",
+        "missing HTML artifact"
+      ],
+      "current_known_gaps": [
+        "no booted zlOS app route",
+        "0 signatures",
+        "0 per-app permission grants",
+        "no live health stream",
+        "no current screenshot or target accessibility receipt"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "B1_CROSS_PHASE_FOUNDATION",
+      "dependencies": [
+        "EV-003",
+        "EV-009",
+        "EV-023",
+        "EV-024",
+        "EV-027",
+        "AP-001",
+        "AP-006"
+      ],
+      "deliverables": [
+        "booted read-only provenance application",
+        "live health and per-app permission views",
+        "signature verification and authenticated remote portal",
+        "current screenshot/a11y receipt"
+      ],
+      "deterministic_proof": [
+        "viewer cannot mutate authority or hide stale/failed/untrusted state",
+        "permission/signature/health gaps display explicitly"
+      ],
+      "qemu_proof": [
+        "target app joins live evidence and survives provider failure"
+      ],
+      "physical_or_external_proof": [
+        "remote access is authenticated and release signatures verify"
+      ],
+      "external_authority": [],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote when the booted target viewer presents live exact-build provenance, permissions, health and signatures with accessibility and authenticated remote proof.",
+      "next_action": "Define the read-only target data protocol; retain the static host viewer as a projection only."
+    },
+    {
+      "id": "KR-032",
+      "feature": "interrupt/exception architecture",
+      "current_evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/crash.c",
+          "sha256": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/idt.c",
+          "sha256": "e98cbb7b86d37250268b0be84f6068af4017c2cd5cb870c14dfb09ecca40c810",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json",
+          "sha256": "bd144c4cde0217f87d8549655039cbcc55fe049515621c9eec698c078f674c8d",
+          "schema": "zlos.cpu-fault-qemu-receipt.v1",
+          "result": "PASS"
+        }
+      ],
+      "current_tests": [
+        "wrong vector",
+        "wrong checksum",
+        "wrong symbol",
+        "stale artifact",
+        "guest not halted"
+      ],
+      "current_known_gaps": [
+        "no general-register capture",
+        "no nested-fault recovery",
+        "no user-fault offender-only containment"
+      ],
+      "current_maturity": "PARTIAL_CURRENT",
+      "wave": "Q1_CONTAINED_RUNTIME",
+      "dependencies": [
+        "KR-006",
+        "KR-007",
+        "KR-009",
+        "EV-017",
+        "EV-024"
+      ],
+      "deliverables": [
+        "full general-register exception frame",
+        "nested/double-fault emergency path",
+        "spurious IRQ accounting",
+        "user-fault offender-only termination"
+      ],
+      "deterministic_proof": [
+        "all vectors preserve frame invariants and malformed/nested paths cannot recurse unboundedly"
+      ],
+      "qemu_proof": [
+        "kernel fault halts safely; user fault kills only the offender; desktop/system continue; spurious IRQs are acknowledged/accounted"
+      ],
+      "physical_or_external_proof": [
+        "required physical interrupt-controller and fault lanes"
+      ],
+      "external_authority": [],
+      "can_finish_in_current_environment": false,
+      "promotion_rule": "Promote when kernel, nested, spurious and user-fault paths preserve full state and containment on QEMU plus required physical interrupt hardware.",
+      "next_action": "Capture every general register in the typed frame, then add offender-only Ring-3 fault recovery in contained QEMU."
+    }
+  ]
+}
