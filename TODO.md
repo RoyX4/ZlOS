@@ -7,6 +7,18 @@ Every item below was measured by a command, not remembered. Regenerate with:
 tools/todo.sh
 ```
 
+## EFI pointer truncation — 1 sites
+
+The four `-Werror=` flags in `kernel/buildefi.sh` are inert: `-w` is a
+blanket suppression a later `-Werror=` does not survive. Harmless below
+4 GiB, which is why no emulator shows them, and why this class shipped twice.
+
+- [ ] replace `-w` with `-Wno-everything` in `kernel/buildefi.sh` (verified fix)
+- [ ] repair the sites it then reports, per file:
+
+  - [ ] `freestanding/runtime_kernel.c` — 1 site(s)
+- [ ] then run `kernel/verify-efi.sh` before believing the boot path
+
 ## Engine divergence — 2 pinned
 
 `./interp` is ground truth. These engines disagree with it today:
@@ -20,9 +32,6 @@ Both unboxed backends sit on the far side of the scoping decision in
 
 ## Documented but not in git
 
-- [ ] `examples/Zaccoding.zl`
-- [ ] `kernel/_gen64.c`
-- [ ] `kernel/_genefi.c`
 - [ ] `kernel/out.c`
 
 ## Stale doc references — 19 baselined
