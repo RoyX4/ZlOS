@@ -101,22 +101,6 @@ static void dns_set_state(int next, unsigned reason)
     }
 }
 
-enum {
-    DNS_R_CACHE = 1, DNS_R_START, DNS_R_SEND_FAIL, DNS_R_NXDOMAIN,
-    DNS_R_BAD_REPLY, DNS_R_ANSWER, DNS_R_TIMEOUT, DNS_R_RESET
-};
-
-static void dns_set_state(int next, unsigned reason)
-{
-    int old = state;
-    if (old == next) return;
-    state = next;
-    zlt_event(ZLLOG_SUB_NET, ZLLOG_EV_NET_STATE,
-              (next == DNS_REFUSED || next == DNS_TIMEOUT)
-                  ? ZLLOG_WARN : ZLLOG_INFO,
-              DNS_PORT, ((unsigned)old << 16) | (unsigned)next, reason);
-}
-
 void dns_server(net_u32 ip) { server_ip = ip; }
 net_u32 dns_get_server(void) { return server_ip; }
 

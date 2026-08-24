@@ -1,9 +1,10 @@
 {
-  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "build_identity": "83eff5589138e25908fd41fd111a4b4296fc214c4d1ef7bfddf93f6c296ef356",
   "derivation": "SHA-256 labels over build identity; UUID version/variant bits normalized",
   "schema": "zlos.boot-media-ids.v1",
-  "source_date_epoch": 1787194240,
-  "usb_disk_guid": "6f5b8487-9936-5c64-8909-3148333b6748",
-  "usb_fat_volume_id": "BF70BF9F",
-  "usb_partition_guid": "3d806cfb-2beb-562a-9d81-dea805f5770d"
+  "source_date_epoch": 1787548542,
+  "usb_disk_guid": "9a2b4d3b-7e9b-52d4-b468-c9ac11cedea4",
+  "usb_fat_volume_id": "4BF70341",
+  "usb_partition_guid": "559c8ebe-8d97-5a18-86be-0b89b50d6d3e",
+  "usb_zllog_partition_guid": "4a558014-18ac-59e3-8c88-d19990e6e7dd"
 }

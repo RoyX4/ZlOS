@@ -85,7 +85,7 @@ OBJS="$OBJS _efi_smptr.o"
 # guest, so this is firmware compatibility hardening, not a claimed root cause.
 # 4 KiB file alignment and no IMAGE_FILE_DLL match common shim/GRUB images.
 PEFLAGS="-subsystem:efi_application,0.0 -nodefaultlib -base:0 -filealign:4096 \
-    -Brepro -lldignoreenv"
+    /Brepro /lldignoreenv"
 
 # shellcheck disable=SC2086
 lld-link $PEFLAGS -entry:efi_main -out:ZLOS.EFI $OBJS
