@@ -13,7 +13,7 @@ reported a clean short status.
 
 ## GitHub branch receipts
 
-| Project | Branch | Head | Purpose |
+| Project | Branch | Preservation commit | Purpose |
 |---|---|---:|---|
 | `zl` | `codex/local-zl-snapshot-2026-08-24` | `c3f2535` | Linux host layer, design work, and repository research |
 | `zl` | `codex/github-repo-patterns` | `769306d` | GitHub repository-pattern research |
@@ -26,8 +26,10 @@ reported a clean short status.
 | `zl-linux` | `codex/performance-architecture` | `e0782d8` | Performance architecture implementation and archived QEMU evidence |
 | `zl-linux` | `codex/product-wave1` | `187a25e` | Typed boot handover and product-wave snapshot |
 
-Every head above was compared directly with the same GitHub branch using
-`git ls-remote`; all ten comparisons matched exactly.
+Every preservation commit above was compared with the same GitHub branch using
+`git ls-remote` and was present there. The audit branch additionally carries
+this report and its README link, so its live branch head advances past the
+implementation/evidence commit shown in the table.
 
 ## Worktrees checked
 
