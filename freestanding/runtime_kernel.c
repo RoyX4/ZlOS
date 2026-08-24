@@ -69,6 +69,7 @@ extern void gdt_init(void);
 extern void idt_init(void);
 extern unsigned int idt_ticks(void);
 extern int  idt_scan(void);
+extern void crash_test_ud2(void);
 extern void console_at_num(int row, int col, long n, unsigned char attr);
 extern void console_fill_rgb(int x, int y, int w, int h, unsigned int rgb);
 extern void console_gradient_rgb(int x, int y, int w, int h, unsigned int top, unsigned int bot);
@@ -1863,6 +1864,10 @@ Value zl_calln(const char *name, int n, ...)
      * made from ring 3 and can be produced no other way. */
     if (streq(name, "user_up"))       { user_selftest(); return zl_num((double)user_call_count()); }
     if (streq(name, "user_calls"))    return zl_num((double)user_call_count());
+    /* Dedicated destructive diagnostic. The ordinary shell never invokes it;
+     * term.c accepts only the exact word `crashtest`, and the QEMU gate uses
+     * that route to prove vector 6 reaches the bounded crash recorder. */
+    if (streq(name, "crash_test"))    { crash_test_ud2(); return zl_nil(); }
 
     if (streq(name, "vmm_up"))        { vmm_report(); return zl_num((double)vmm_active()); }
     if (streq(name, "vmm_on"))        return zl_num((double)vmm_active());

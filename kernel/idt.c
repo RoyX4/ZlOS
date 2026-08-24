@@ -23,9 +23,18 @@ typedef unsigned char  u8;
  * the EFI build's clang target (x86_64-unknown-windows, LLP64) and 8 with gcc.
  * Anything holding an address must use this, never `long`. */
 typedef unsigned long long u64;
+#ifdef ZL_64
+typedef u64 uptr;
+#else
+typedef u32 uptr;
+#endif
 
 void          zl_outb(u16 port, u8 val);
 unsigned char zl_inb(u16 port);
+int  crash_capture(u32 vector, u32 has_error, u64 error_code,
+                   u64 ip, u64 cs, u64 flags, u64 sp, u64 ss,
+                   u64 cr2, u32 word_bits);
+void crash_report(void);
 
 /* The live screen size, so the pointer can be clamped to pixels that exist.
  * CACHED here rather than fetched by calling console_pxw() from the handler.
@@ -159,14 +168,6 @@ static volatile int mouse_x = 400, mouse_y = 300, mouse_btn = 0;
 static volatile u8  mpkt[4];
 static volatile int mphase = 0;
 static volatile int mouse_irqs = 0;
-
-/* The clamp the ISR applies. It used to be the literals 2000 and 1500, chosen
- * to be "generous" because this file has no idea how big the screen is - and
- * the cost of that was a pointer that could be driven a long way off a
- * 1280x800 panel and then take a long drag back to reappear. fb_setup knows
- * the real mode, so it tells us; until it does, the old literals stand and
- * behave exactly as before. */
-static volatile int mouse_max_x = 2000, mouse_max_y = 1500;
 
 int idt_mouse_x(void)   { return mouse_x; }
 int idt_mouse_y(void)   { return mouse_y; }
@@ -331,17 +332,65 @@ static void ignore_isr(struct interrupt_frame *f)
     irq_done(8);                 /* acknowledge whichever controller is live */
 }
 
-/* a CPU exception (divide error, page fault, GP...) must NOT iret - that just
- * re-runs the faulting instruction and faults again forever, ending in a
- * triple fault and a reboot. Stop the machine instead, which at least leaves
- * the screen readable. (A real dump comes with design_kernel.md §6.2 later.) */
-__attribute__((interrupt))
-static void fault_isr(struct interrupt_frame *f)
+/* A CPU exception must not iret to the faulting instruction. The old handler
+ * stopped correctly but threw the frame away and used one no-error signature
+ * for all 32 vectors, including the ten whose CPU frame starts with an error
+ * code. The compiler needs the right signature so it can find IP/CS/FLAGS and
+ * discard the architectural error slot correctly.
+ *
+ * General registers are intentionally NOT claimed here. GCC/clang have already
+ * made an interrupt prologue before C sees the frame; truthful GPR capture needs
+ * assembly entry stubs. What is exact now is the architectural control frame,
+ * vector, error code and CR2 for #PF. crash.c commits a bounded checksum record
+ * and emits one parseable serial line before this path halts. */
+__attribute__((noreturn, noinline))
+static void fault_stop(u32 vector, u32 has_error, uptr error,
+                       struct interrupt_frame *f)
 {
-    (void)f;
+    uptr sp;
+    uptr ss = 0;
+    uptr cr2 = 0;
+
     __asm__ volatile("cli");
+    if ((f->cs & 3u) != 0) {
+        /* A privilege transition pushes the interrupted SP and SS. */
+        sp = (uptr)f->sp;
+        ss = (uptr)f->ss;
+    } else {
+        /* Same-ring exceptions push only IP, CS and FLAGS. The interrupted SP
+         * is therefore the address immediately above those three words; f->sp
+         * would read unrelated pre-fault stack contents. */
+        sp = (uptr)f + 3u * (uptr)sizeof(uptr);
+    }
+    if (vector == 14u) __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+
+    (void)crash_capture(vector, has_error, (u64)error,
+                        (u64)f->ip, (u64)f->cs, (u64)f->flags,
+                        (u64)sp, (u64)ss, (u64)cr2,
+                        (u32)(sizeof(uptr) * 8u));
+    crash_report();
     for (;;) __asm__ volatile("hlt");
 }
+
+#define FAULT_NOERR(n) \
+    __attribute__((interrupt)) static void fault_##n(struct interrupt_frame *f) \
+    { fault_stop((n), 0, 0, f); }
+#define FAULT_ERR(n) \
+    __attribute__((interrupt)) static void fault_##n(struct interrupt_frame *f, uptr error) \
+    { fault_stop((n), 1, error, f); }
+
+FAULT_NOERR(0)   FAULT_NOERR(1)   FAULT_NOERR(2)   FAULT_NOERR(3)
+FAULT_NOERR(4)   FAULT_NOERR(5)   FAULT_NOERR(6)   FAULT_NOERR(7)
+FAULT_ERR(8)     FAULT_NOERR(9)   FAULT_ERR(10)    FAULT_ERR(11)
+FAULT_ERR(12)    FAULT_ERR(13)    FAULT_ERR(14)    FAULT_NOERR(15)
+FAULT_NOERR(16)  FAULT_ERR(17)    FAULT_NOERR(18)  FAULT_NOERR(19)
+FAULT_NOERR(20)  FAULT_ERR(21)    FAULT_NOERR(22)  FAULT_NOERR(23)
+FAULT_NOERR(24)  FAULT_NOERR(25)  FAULT_NOERR(26)  FAULT_NOERR(27)
+FAULT_NOERR(28)  FAULT_ERR(29)    FAULT_ERR(30)    FAULT_NOERR(31)
+
+/* Deliberate invalid-opcode trigger for the dedicated QEMU crash receipt.
+ * It is reachable only through the explicit `crashtest` diagnostic command. */
+void crash_test_ud2(void) { __asm__ volatile("ud2"); }
 
 #ifndef ZL_64
 /* usermode.c, in assembly. Declared as a function taking no arguments purely so
@@ -481,7 +530,22 @@ static void mouse_init(void)
 
 void idt_init(void)
 {
-    for (int i = 0;  i < 32;  i++) set_gate(i, fault_isr);    /* CPU exceptions: halt */
+    set_gate(0, fault_0);    set_gate(1, fault_1);
+    set_gate(2, fault_2);    set_gate(3, fault_3);
+    set_gate(4, fault_4);    set_gate(5, fault_5);
+    set_gate(6, fault_6);    set_gate(7, fault_7);
+    set_gate(8, fault_8);    set_gate(9, fault_9);
+    set_gate(10, fault_10);  set_gate(11, fault_11);
+    set_gate(12, fault_12);  set_gate(13, fault_13);
+    set_gate(14, fault_14);  set_gate(15, fault_15);
+    set_gate(16, fault_16);  set_gate(17, fault_17);
+    set_gate(18, fault_18);  set_gate(19, fault_19);
+    set_gate(20, fault_20);  set_gate(21, fault_21);
+    set_gate(22, fault_22);  set_gate(23, fault_23);
+    set_gate(24, fault_24);  set_gate(25, fault_25);
+    set_gate(26, fault_26);  set_gate(27, fault_27);
+    set_gate(28, fault_28);  set_gate(29, fault_29);
+    set_gate(30, fault_30);  set_gate(31, fault_31);
     for (int i = 32; i < 256; i++) set_gate(i, ignore_isr);   /* stray IRQs: ack     */
 #ifndef ZL_64
     /* THE SYSCALL DOOR. Installed before the IRQs so the ordering is visible:
@@ -497,7 +561,11 @@ void idt_init(void)
     set_gate(0x2C, mouse_isr);      /* IRQ12 mouse (on slave) */
 
     idtp.limit = sizeof(idt) - 1;
+#ifdef ZL_64
     idtp.base  = (u64)&idt;      /* NOT `unsigned long` - see the typedef */
+#else
+    idtp.base  = (u32)&idt;
+#endif
     __asm__ volatile("lidt %0" :: "m"(idtp));
 
     pic_remap();

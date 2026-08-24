@@ -10,14 +10,20 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+python3 ./gen-app-manifest.py --check
+python3 ./gen-build-identity.py --check
+
 SRC=${1:-kernel.zl}
 [ -x ../compile ] || { echo "build the toolchain first: ../build.sh"; exit 1; }
+if [ "$SRC" != "kernel.zl" ]; then
+    echo "variant source: do not promote canonical runtime identity receipts; zlosboot variants strip their report calls" >&2
+fi
 
 ../compile "$SRC" >/dev/null
 cp out.c _gen.c            # compile writes out.c into the CWD, not ..
 
 CFLAGS="-m32 -O2 -ffreestanding -nostdlib -fno-stack-protector -fno-pic
-        -fno-builtin -Wall -Wextra -Wno-unused-parameter -I.."
+        -fno-builtin -Wall -Wextra -Werror -Wno-unused-parameter -I.."
 
 # shellcheck disable=SC2086
 gcc $CFLAGS -DZL_KERNEL_SERIAL -c ../freestanding/runtime_kernel.c -o _rt.o

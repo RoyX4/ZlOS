@@ -1,0 +1,66 @@
+{
+  "schema": "zlos.event-trace-host-receipt.v1",
+  "result": "PASS_HOST_CORE_TARGET_UNINTEGRATED",
+  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "source_identities": {
+    "hosttest/trace_event.h": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
+    "hosttest/trace_event.c": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
+    "hosttest/eventtracetest.c": "f19f3ad5f584d9b2563b5ab545583b72fdaa2df3304f0940d1d34f6549dfbc62"
+  },
+  "tools": {
+    "gcc": {
+      "invoked": "gcc",
+      "resolved": "/usr/bin/x86_64-linux-gnu-gcc-15",
+      "binary_sha256": "6af941599045237c267fafdc9e41ff8ed2031d94da7809943c21b0ae758400d4",
+      "version_first_line": "gcc (Debian 15.3.0-2) 15.3.0"
+    },
+    "clang": {
+      "invoked": "clang",
+      "resolved": "/usr/lib/llvm-21/bin/clang",
+      "binary_sha256": "3a0f9481c3c29fce75adcb7f6c989e0db14b422c431659cf346bb9efdfcb1f04",
+      "version_first_line": "Debian clang version 21.1.8 (7+b3)"
+    }
+  },
+  "proof": {
+    "host_execution": {
+      "exit_code": 0,
+      "checks": 37,
+      "failures": 0,
+      "output_bytes": 2127,
+      "output_sha256": "d4b8561c00a26782ac1e6e1e5c9b334fc94d16918992882e6aa84929351f9ff7"
+    },
+    "compile_lanes": [
+      {
+        "id": "host-asan-ubsan",
+        "exit_code": 0,
+        "artifact_sha256": "5e8ed0f7cb292fadb933931f14307a8e160bcb61778248491556417a105f4a94"
+      },
+      {
+        "id": "bios-raw-ilp32",
+        "exit_code": 0,
+        "artifact_sha256": "eedb7b7bd19397e41e196f88f7eb85ccd8e4dc058b2dd0624011d861eb7b9013"
+      },
+      {
+        "id": "uefi-llp64",
+        "exit_code": 0,
+        "artifact_sha256": "8b17964b94a33f1ca7ccb6bc981b266f0378b3a2687945a9c0df95a4390a547f"
+      }
+    ]
+  },
+  "target_integration": {
+    "compiled_into_shipped_kernel": false,
+    "target_emitters": 0,
+    "qemu_routes": 0,
+    "native_hardware_routes": 0
+  },
+  "open_gaps": [
+    "single-owner-only",
+    "not-compiled-into-shipped-kernel",
+    "no-target-emitter",
+    "no-QEMU-receipt",
+    "no-native-hardware-receipt",
+    "no-durable-anchor",
+    "no-service-export-policy"
+  ],
+  "evidence_ceiling": "real core host execution plus ILP32/LLP64 compile; no shipped target route"
+}

@@ -1,0 +1,124 @@
+{
+  "schema": "zlos.host-benchmark-receipt.v1",
+  "result": "PASS_WITH_OPEN_REGRESSIONS",
+  "recorded_utc": "2026-08-22T19:12:34.660289+00:00",
+  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "host": {
+    "node": "Roy",
+    "system": "Linux",
+    "release": "7.0.12+kali-amd64",
+    "machine": "x86_64",
+    "cpu_model": "Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz",
+    "logical_cpu_count": 8,
+    "load_average_at_start": [
+      5.67041015625,
+      4.484375,
+      4.3349609375
+    ]
+  },
+  "method": {
+    "clock": "benchmark-reported TSC",
+    "sampling": "wmbench best of 7 interleaved; fbbench minimum of 7",
+    "percentiles": "NOT_RECORDED",
+    "peak": "NOT_RECORDED",
+    "budget": "each measured frame <= 16667 us for 60 Hz"
+  },
+  "executables": [
+    {
+      "name": "wmbench",
+      "path": "kernel/hosttest/wmbench",
+      "sha256": "5503a798f1dc19fdac9c73dddbd84d5a9e0c797968ddcdebd2a712f61acec818",
+      "source_path": "kernel/hosttest/wmbench.c",
+      "source_sha256": "cb485bfb8d38082a9f6964bad01da2518bacc2e36ac74b354caa98bf89f51fec",
+      "raw_output_sha256": "2e94287e64047ff0149ebd2cf16743796ef11988a34b13dec9b799c914eb8d89"
+    },
+    {
+      "name": "fbbench",
+      "path": "kernel/hosttest/fbbench",
+      "sha256": "51c2e1f98b53f3f128258b33632c7f3d4945a2571a1ac4e40765a2b27ecc4844",
+      "source_path": "kernel/hosttest/fbbench.c",
+      "source_sha256": "d345fa3cef05a1da3c4ba3503774ec7d17c2cc606bb6187770c199ba1c4cfe2d",
+      "raw_output_sha256": "494a0cdd8ab460af35867f057a090df0862b7bd4df8ff06bab2e76a7b0ee2789"
+    }
+  ],
+  "metrics": [
+    {
+      "name": "wm-drag-full",
+      "route": "host shipping compositor logic",
+      "frame_us": 10602.96,
+      "budget_us": 16667.0,
+      "within_60hz_budget": true,
+      "evidence": "T-host"
+    },
+    {
+      "name": "fb-desktop-1920x1200-serial",
+      "route": "host shipping serial framebuffer path",
+      "frame_us": 16867.0,
+      "budget_us": 16667.0,
+      "within_60hz_budget": false,
+      "evidence": "T-host"
+    },
+    {
+      "name": "fb-desktop-1920x1200-four-band",
+      "route": "host parallel-band experiment; not the native zlOS route",
+      "frame_us": 9283.0,
+      "budget_us": 16667.0,
+      "within_60hz_budget": true,
+      "evidence": "T-host-experimental"
+    },
+    {
+      "name": "fb-desktop-2560x1440-serial",
+      "route": "host shipping serial framebuffer path",
+      "frame_us": 27820.0,
+      "budget_us": 16667.0,
+      "within_60hz_budget": false,
+      "evidence": "T-host"
+    },
+    {
+      "name": "fb-desktop-2560x1440-four-band",
+      "route": "host parallel-band experiment; not the native zlOS route",
+      "frame_us": 9945.0,
+      "budget_us": 16667.0,
+      "within_60hz_budget": true,
+      "evidence": "T-host-experimental"
+    },
+    {
+      "name": "fb-desktop-3840x2160-serial",
+      "route": "host shipping serial framebuffer path",
+      "frame_us": 47278.0,
+      "budget_us": 16667.0,
+      "within_60hz_budget": false,
+      "evidence": "T-host"
+    },
+    {
+      "name": "fb-desktop-3840x2160-four-band",
+      "route": "host parallel-band experiment; not the native zlOS route",
+      "frame_us": 18901.0,
+      "budget_us": 16667.0,
+      "within_60hz_budget": false,
+      "evidence": "T-host-experimental"
+    }
+  ],
+  "counts": {
+    "measurements": 7,
+    "within_budget": 3,
+    "over_budget": 4,
+    "native_target_measurements": 0
+  },
+  "open_regressions": [
+    "fb-desktop-1920x1200-serial",
+    "fb-desktop-2560x1440-serial",
+    "fb-desktop-3840x2160-serial",
+    "fb-desktop-3840x2160-four-band"
+  ],
+  "raw_output": {
+    "wmbench": "wmbench - a compositor FRAME, timed on this CPU, no QEMU\nTSC 2.304 GHz   1920x1200   best of 7\n\nDRAGGING THE SYSTEM MONITOR ACROSS THE SHELL (12 steps)\n  everything                                   24428082 cyc/frame  10602.96 us/frame\n  ...without the shell's scrollback            17200438 cyc/frame  7465.82 us/frame\n  ...without the monitor's contents            24466853 cyc/frame  10619.79 us/frame\n  ...chrome and wallpaper only                 17329038 cyc/frame  7521.64 us/frame\n\n  attributed, per frame:\n    the shell's scrollback   3137.15 us   (30%)\n    the monitor's contents   below the noise floor - drawing it measured no slower\n    chrome + wallpaper       7521.64 us   (71%)\n\n  budget 16667 us/frame at 60 fps.\n  The PERCENTAGES are the trustworthy part: the four scenarios are\n  interleaved, so the machine treats them alike even as its load\n  drifts. Absolutes move with whatever else is running.\n",
+    "fbbench": "fbbench - the shipping fb.c, timed on this CPU\nTSC 2.304 GHz   (min of 7 runs; cycles are the real number)\n\n=== 1920x1200  (2304000 px)   back buffer: ON ===\n  fb: 1920x1200x32 cell 8x16 ui 1x, back ON  (9000 KiB/mode)\n      back at 128 MiB, ends at 136 MiB, ceiling 168 MiB (the AP stacks)\n  subpixel flag: 1   cell: 8px\n  fill whole screen                      1.714 ms       1.71 cyc/px   (2304000 px)\n  gradient whole screen                  6.116 ms       6.12 cyc/px   (2304000 px)\n  fill + present (blit)                  4.899 ms       4.90 cyc/px   (2304000 px)\n\n  shadow 600x460 soft=12                 2.504 ms      19.10 cyc/px   (302016 px)\n  rrect 600x460 r=10                     0.189 ms       1.58 cyc/px   (276000 px)\n  10 dock icons                          0.143 ms      14.25 cyc/px   (23040 px)\n  40 lines of AA text (mono)             5.048 ms\n  40 lines of PROPORTIONAL              12.789 ms\n  40 rows console text                   3.996 ms\n  200 diagonal lines                    15.931 ms\n\n  fill_blend 600x460 (a=160)             8.535 ms      71.25 cyc/px   (276000 px)\n  rrect_blend 600x460 r=10              10.320 ms      86.15 cyc/px   (276000 px)\n  radial glow 900x700                   45.626 ms     166.86 cyc/px   (630000 px)\n  conic wedge 900x700                   25.060 ms      91.65 cyc/px   (630000 px)\n  BLUR 600x460 r=20 (cold)              22.903 ms     191.19 cyc/px   (276000 px)\n  ...cached, painted                     0.558 ms       4.66 cyc/px   (276000 px)\n\n  ONE WINDOW (full chrome)               2.595 ms\n  WHOLE DESKTOP redraw                  16.867 ms      16.87 cyc/px   (2304000 px)\n  bands tile exactly (1..8, odd ranges) ok\n  SMP bands                            desktop  gradient    shadow   present speedup  scene hash\n    1 (serial, today)                  16.991ms    7.160ms    2.153ms    5.238ms   1.00x  db403d2fddddc5d8\n    2 bands                            13.393ms    3.651ms    1.496ms    3.165ms   1.27x  db403d2fddddc5d8\n    3 bands                             8.084ms    2.834ms    1.415ms    3.494ms   2.10x  db403d2fddddc5d8\n    4 bands                             9.283ms    3.143ms    1.295ms    2.648ms   1.83x  db403d2fddddc5d8\n\n  back buffer: covers this mode      ok\n  back buffer: pixel reads back      ok\n  blur: flat stays flat, corners too ok\n  blur: a checkerboard averages to grey ok\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  blur: slots are a ceiling, full refuses ok (4 granted, 5 refused)\n  clip: scissor holds                ok  (every primitive, all four edges)\n  two corners (clock + monitor)      2 rects, 33000 px   (one box: 2180800 px, 66.1x more)\n    ...and present blits them all    ok\n  four corners                       4 rects, 48000 px   (one box: 2304000 px, 48.0x more)\n    ...and present blits them all    ok\n  scene hash (VRAM)                  FNV db403d2fddddc5d8   (1 rects, 2304000 px presented)\n\n=== 2560x1440  (3686400 px)   back buffer: ON ===\n  fb: 2560x1440x32 cell 8x16 ui 1x, back ON  (14400 KiB/mode)\n      back at 128 MiB, ends at 142 MiB, ceiling 168 MiB (the AP stacks)\n  subpixel flag: 1   cell: 8px\n  fill whole screen                      3.218 ms       2.01 cyc/px   (3686400 px)\n  gradient whole screen                 13.177 ms       8.24 cyc/px   (3686400 px)\n  fill + present (blit)                  9.275 ms       5.80 cyc/px   (3686400 px)\n\n  shadow 600x460 soft=12                 2.114 ms      16.13 cyc/px   (302016 px)\n  rrect 600x460 r=10                     0.239 ms       1.99 cyc/px   (276000 px)\n  10 dock icons                          0.916 ms      91.64 cyc/px   (23040 px)\n  40 lines of AA text (mono)             6.539 ms\n  40 lines of PROPORTIONAL               7.767 ms\n  40 rows console text                   7.802 ms\n  200 diagonal lines                    30.089 ms\n\n  fill_blend 600x460 (a=160)            14.171 ms     118.30 cyc/px   (276000 px)\n  rrect_blend 600x460 r=10              12.778 ms     106.67 cyc/px   (276000 px)\n  radial glow 900x700                   47.695 ms     174.43 cyc/px   (630000 px)\n  conic wedge 900x700                   26.595 ms      97.26 cyc/px   (630000 px)\n  BLUR 600x460 r=20 (cold)              27.202 ms     227.07 cyc/px   (276000 px)\n  ...cached, painted                     0.633 ms       5.28 cyc/px   (276000 px)\n\n  ONE WINDOW (full chrome)               2.844 ms\n  WHOLE DESKTOP redraw                  27.820 ms      17.39 cyc/px   (3686400 px)\n  bands tile exactly (1..8, odd ranges) ok\n  SMP bands                            desktop  gradient    shadow   present speedup  scene hash\n    1 (serial, today)                  24.981ms   12.191ms    2.686ms    9.058ms   1.00x  4fa70a7a36a3d3ab\n    2 bands                            13.027ms    6.235ms    1.384ms    5.278ms   1.92x  4fa70a7a36a3d3ab\n    3 bands                            11.851ms    5.481ms    1.408ms    5.271ms   2.11x  4fa70a7a36a3d3ab\n    4 bands                             9.945ms    3.961ms    1.103ms    4.700ms   2.51x  4fa70a7a36a3d3ab\n\n  back buffer: covers this mode      ok\n  back buffer: pixel reads back      ok\n  blur: flat stays flat, corners too ok\n  blur: a checkerboard averages to grey ok\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  blur: slots are a ceiling, full refuses ok (4 granted, 5 refused)\n  clip: scissor holds                ok  (every primitive, all four edges)\n  two corners (clock + monitor)      2 rects, 33000 px   (one box: 3528000 px, 106.9x more)\n    ...and present blits them all    ok\n  four corners                       4 rects, 48000 px   (one box: 3686400 px, 76.8x more)\n    ...and present blits them all    ok\n  scene hash (VRAM)                  FNV 4fa70a7a36a3d3ab   (1 rects, 3686400 px presented)\n\n=== 3840x2160  (8294400 px)   back buffer: ON ===\n  fb: 3840x2160x32 cell 16x32 ui 2x, back ON  (32400 KiB/mode)\n      back at 128 MiB, ends at 159 MiB, ceiling 168 MiB (the AP stacks)\n  subpixel flag: 1   cell: 16px\n  fill whole screen                      7.220 ms       2.01 cyc/px   (8294400 px)\n  gradient whole screen                 26.709 ms       7.42 cyc/px   (8294400 px)\n  fill + present (blit)                 19.864 ms       5.52 cyc/px   (8294400 px)\n\n  shadow 600x460 soft=12                 2.224 ms      16.97 cyc/px   (302016 px)\n  rrect 600x460 r=10                     0.211 ms       1.76 cyc/px   (276000 px)\n  10 dock icons                          0.642 ms      64.25 cyc/px   (23040 px)\n  40 lines of AA text (mono)            18.715 ms\n  40 lines of PROPORTIONAL              13.160 ms\n  40 rows console text                  17.249 ms\n  200 diagonal lines                    19.869 ms\n\n  fill_blend 600x460 (a=160)             9.694 ms      80.92 cyc/px   (276000 px)\n  rrect_blend 600x460 r=10              10.097 ms      84.29 cyc/px   (276000 px)\n  radial glow 900x700                   49.485 ms     180.97 cyc/px   (630000 px)\n  conic wedge 900x700                   28.030 ms     102.51 cyc/px   (630000 px)\n  BLUR 600x460 r=20 (cold)              26.590 ms     221.97 cyc/px   (276000 px)\n  ...cached, painted                     0.633 ms       5.29 cyc/px   (276000 px)\n\n  ONE WINDOW (full chrome)               2.892 ms\n  WHOLE DESKTOP redraw                  47.278 ms      13.13 cyc/px   (8294400 px)\n  bands tile exactly (1..8, odd ranges) ok\n  SMP bands                            desktop  gradient    shadow   present speedup  scene hash\n    1 (serial, today)                  39.544ms   26.976ms    2.097ms   19.357ms   1.00x  e735d8737eeff842\n    2 bands                            24.186ms   15.375ms    2.048ms   13.933ms   1.63x  e735d8737eeff842\n    3 bands                            25.138ms   19.065ms    2.040ms   14.755ms   1.57x  e735d8737eeff842\n    4 bands                            18.901ms   12.328ms    1.307ms   13.938ms   2.09x  e735d8737eeff842\n\n  back buffer: covers this mode      ok\n  back buffer: pixel reads back      ok\n  blur: flat stays flat, corners too ok\n  blur: a checkerboard averages to grey ok\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  blur: slots are a ceiling, full refuses ok (4 granted, 5 refused)\n  clip: scissor holds                ok  (every primitive, all four edges)\n  two corners (clock + monitor)      2 rects, 33000 px   (one box: 8056000 px, 244.1x more)\n    ...and present blits them all    ok\n  four corners                       4 rects, 48000 px   (one box: 8294400 px, 172.8x more)\n    ...and present blits them all    ok\n  scene hash (VRAM)                  FNV e735d8737eeff842   (1 rects, 8294400 px presented)\n\nnote: 'present' writes to ordinary RAM here. On the real machine\nit crosses PCIe into write-combining VRAM, so it is a FLOOR.\n"
+  },
+  "evidence_ceiling": "host measurements on one contended desktop; no percentile, QEMU or native-hardware promotion",
+  "weakest_link": "fb-desktop-1920x1200-serial, fb-desktop-2560x1440-serial, fb-desktop-3840x2160-serial, fb-desktop-3840x2160-four-band exceed 16.667 ms; target frame-time distribution is unmeasured",
+  "runner": {
+    "path": "kernel/run-benchmarks.py",
+    "sha256": "f2149e243cc5564d8e51cc86477bac5d9554a83cb5fdd3dfe58c3adb7de4133c"
+  }
+}

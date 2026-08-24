@@ -213,11 +213,49 @@ unsigned int cpu_tsc_khz(void);
  * an unattended gate can read it. */
 void zl_putc_pub(char c);
 static void wm_puts(const char *s) { while (*s) zl_putc_pub(*s++); }
+/* support.c. Lifecycle receipts belong on the unattended evidence channel,
+ * not in the user's Terminal scrollback. */
+void ser_puts(const char *s) __attribute__((weak));
+
+static void wm_ser_putu(unsigned int value)
+{
+    char digits[11];
+    int n = 0;
+    if (!value) { ser_puts("0"); return; }
+    while (value && n < (int)sizeof(digits)) {
+        digits[n++] = (char)('0' + value % 10U);
+        value /= 10U;
+    }
+    char out[12];
+    int i = 0;
+    while (n) out[i++] = digits[--n];
+    out[i] = 0;
+    ser_puts(out);
+}
+
+static void wm_lifecycle(const char *event, int win, int app,
+                         unsigned int generation, int live)
+{
+    /* Host compositor harnesses intentionally do not link support.c. The
+     * production kernel does; a missing evidence sink must never change window
+     * behavior or make a mechanism-only host test grow a fake serial device. */
+    if (!ser_puts) return;
+    ser_puts("wm:lifecycle v=1 event="); ser_puts(event);
+    ser_puts(" slot="); wm_ser_putu((unsigned int)win);
+    ser_puts(" app="); wm_ser_putu((unsigned int)app);
+    ser_puts(" generation="); wm_ser_putu(generation);
+    ser_puts(" live="); wm_ser_putu((unsigned int)live);
+    ser_puts("\n");
+}
 
 /* ---- the table ----------------------------------------------------------- */
 struct win {
     int x, y, w, h;
     int app;
+    /* A slot is reusable; an observation is not. Generation distinguishes a
+     * new occupant from the window that previously used the same integer. */
+    unsigned int generation;
+    int ready_app;              /* app whose first client draw was receipted */
     int flags;
     int min_w, min_h;
     char title[32];
@@ -1120,6 +1158,9 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         if (wins[i].flags & WF_OPEN) continue;
         wins[i].x = x; wins[i].y = y; wins[i].w = w; wins[i].h = h;
         wins[i].app = app;
+        wins[i].generation++;
+        if (!wins[i].generation) wins[i].generation = 1;
+        wins[i].ready_app = -1;
         wins[i].flags = WF_OPEN;
         /* A NEW WINDOW LANDS ON THE WORKSPACE YOU ARE LOOKING AT. That is the
          * reference's rule too - ds.html's openApp() writes `winWs[id] = s.ws`
@@ -1137,6 +1178,7 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         title_copy(wins[i].title, title);
         z_append(i);
         focus_win = i;
+        wm_lifecycle("open", i, app, wins[i].generation, nz);
         /* A refusal here degrades gracefully: every slot busy means the window
          * opens without a flourish, which is the right way for an animation to
          * fail. */
@@ -1185,6 +1227,8 @@ void wm_close_fx(int win)
 void wm_close(int win)
 {
     if (!wm_is_open(win)) return;
+    int app = win_app(win);
+    unsigned int generation = wins[win].generation;
     wm_damage_win(win);
     /* A slot is about to become reusable, and wm_open takes the FIRST FREE ONE
      * - so an animation still running on this index would be inherited by
@@ -1192,6 +1236,7 @@ void wm_close(int win)
     anim_cancel(win);
     wins[win].flags = 0;
     z_remove(win);
+    wm_lifecycle("close", win, app, generation, nz);
     /* A closed window must not leave its snap state behind for whatever opens
      * into the same slot next, or the new window un-snaps to a rectangle that
      * belonged to something else entirely. */
@@ -1735,7 +1780,12 @@ void wm_repaint(void)
             if (hook_draw && isect(ax, ay, ax + aw, ay + ah,
                                    rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
                 fb_clip(cx, cy, cw, ch);        /* clip 2: NARROWER - client   */
-                hook_draw(win_app(win), ax, ay, aw, ah, win == focus_win);
+                int app = win_app(win);
+                hook_draw(app, ax, ay, aw, ah, win == focus_win);
+                if (W->ready_app != app) {
+                    W->ready_app = app;
+                    wm_lifecycle("ready", win, app, W->generation, nz);
+                }
             }
 
             /* ANIM_PULSE, composited. A tint laid over the finished window at
@@ -2176,8 +2226,8 @@ static void route_key(int type, int code, int mods)
 {
     /* KEY_TAB, not '\t'. Both keyboards deliver the KEY code here, never the
      * character: input.c:155 and :227 map the PS/2 scancodes straight to
-     * KEY_TAB, and the USB HID path goes through key_of_char (input.c:633)
-     * which does the same. input_code() returns last.code, the key. So
+     * KEY_TAB, and the USB HID path maps the HID usage directly to the same
+     * key code. input_code() returns last.code, the key. So
      * `code == '\t'` compared 0x103 against 9 and this branch had never once
      * been taken. */
     if (type == EV_KEY_DOWN && code == KEY_TAB && (mods & MOD_ALT)) {

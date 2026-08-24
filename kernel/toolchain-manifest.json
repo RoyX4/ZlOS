@@ -1,0 +1,966 @@
+{
+  "schema": "zlos.toolchain-manifest.v1",
+  "result": "PASS_WITH_OPEN_PORTABILITY_GAPS",
+  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "dependency_lock_sha256": "25cf47fb8ba38f757db5912f06c8c4895f826663f66e24526f0b389921384f20",
+  "environment": {
+    "CC": "UNSET_EFFECTIVE_GCC",
+    "forbidden_variables": [
+      "CPATH",
+      "C_INCLUDE_PATH",
+      "CPLUS_INCLUDE_PATH",
+      "LIBRARY_PATH",
+      "GCC_EXEC_PREFIX",
+      "COMPILER_PATH",
+      "LD_PRELOAD"
+    ],
+    "forbidden_present": [],
+    "path_resolution_bound_by_dependency_lock": true
+  },
+  "tools": [
+    {
+      "name": "zl-compiler",
+      "invoked_path": "/home/roy/Documents/repos/zl-linux-master-program-foundation/compile",
+      "resolved_path": "/home/roy/Documents/repos/zl-linux-master-program-foundation/compile",
+      "bytes": 51920,
+      "sha256": "d0c1484e237f88414e3389ca35e2894c6c9cba424d8b8d8f504417135309861b",
+      "version": "repository-built archived zl-to-C compiler; byte identity is authoritative"
+    },
+    {
+      "name": "gcc",
+      "invoked_path": "/usr/bin/gcc",
+      "resolved_path": "/usr/bin/x86_64-linux-gnu-gcc-15",
+      "bytes": 1280624,
+      "sha256": "6af941599045237c267fafdc9e41ff8ed2031d94da7809943c21b0ae758400d4",
+      "version": "gcc (Debian 15.3.0-2) 15.3.0"
+    },
+    {
+      "name": "clang",
+      "invoked_path": "/usr/bin/clang",
+      "resolved_path": "/usr/lib/llvm-21/bin/clang",
+      "bytes": 133960,
+      "sha256": "3a0f9481c3c29fce75adcb7f6c989e0db14b422c431659cf346bb9efdfcb1f04",
+      "version": "Debian clang version 21.1.8 (7+b3)"
+    },
+    {
+      "name": "ld",
+      "invoked_path": "/usr/bin/ld",
+      "resolved_path": "/usr/bin/x86_64-linux-gnu-ld.bfd",
+      "bytes": 1564648,
+      "sha256": "2a1b7757aed136b266f6f53cdf88718a7dd8b1b329b8394751a99ac2f27ea970",
+      "version": "GNU ld (GNU Binutils for Debian) 2.47"
+    },
+    {
+      "name": "lld-link",
+      "invoked_path": "/usr/bin/lld-link",
+      "resolved_path": "/usr/lib/llvm-21/bin/lld",
+      "bytes": 5962912,
+      "sha256": "6d4782d096e907aed6d2b1f0708889f99729e51f2256d1a938801976342b7689",
+      "version": "Debian LLD 21.1.8"
+    },
+    {
+      "name": "objcopy",
+      "invoked_path": "/usr/bin/objcopy",
+      "resolved_path": "/usr/bin/x86_64-linux-gnu-objcopy",
+      "bytes": 158544,
+      "sha256": "ebb0adc73a9b24978db1fbfda363ff34f0378d6083c4e5ff98941fe1f165f7d6",
+      "version": "GNU objcopy (GNU Binutils for Debian) 2.47"
+    },
+    {
+      "name": "nasm",
+      "invoked_path": "/usr/bin/nasm",
+      "resolved_path": "/usr/bin/nasm",
+      "bytes": 2349672,
+      "sha256": "2264b28f6aa2e1b89ecaf8e3c999c22185d581ef48732b3c32a32e54aeda86a5",
+      "version": "NASM version 3.01"
+    }
+  ],
+  "target_lanes": [
+    {
+      "id": "bios-multiboot32",
+      "script": "kernel/build.sh",
+      "script_sha256": "475be3dc2204235f8b73499d6568a4e57a46076fb58f93f7525c0f59fbec5aab",
+      "compiler": "gcc",
+      "compiler_flags": [
+        "-m32",
+        "-O2",
+        "-ffreestanding",
+        "-nostdlib",
+        "-fno-stack-protector",
+        "-fno-pic",
+        "-fno-builtin",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-parameter",
+        "-I.."
+      ],
+      "linker": "ld",
+      "linker_flags": [
+        "-m",
+        "elf_i386",
+        "-T",
+        "link.ld"
+      ],
+      "format": "ELF32-i386",
+      "abi": "ILP32 SysV freestanding",
+      "macros": {
+        "__i386__": "1",
+        "__SIZEOF_POINTER__": "4",
+        "__SIZEOF_LONG__": "4",
+        "__SIZEOF_WCHAR_T__": "4",
+        "__STDC_HOSTED__": "0",
+        "__BYTE_ORDER__": "__ORDER_LITTLE_ENDIAN__",
+        "__ORDER_LITTLE_ENDIAN__": "1234"
+      }
+    },
+    {
+      "id": "multiboot64",
+      "script": "kernel/build64.sh",
+      "script_sha256": "937d07d85e3afdccf47e77ad78ccc06092f6c13adef2ed527b61b812ad5cafe1",
+      "compiler": "gcc",
+      "compiler_flags": [
+        "-m64",
+        "-O2",
+        "-ffreestanding",
+        "-nostdlib",
+        "-fno-stack-protector",
+        "-fno-pic",
+        "-fno-builtin",
+        "-mno-red-zone",
+        "-mcmodel=large",
+        "-DZL_64",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-parameter",
+        "-I.."
+      ],
+      "linker": "ld",
+      "linker_flags": [
+        "-m",
+        "elf_x86_64",
+        "-T",
+        "link64.ld"
+      ],
+      "format": "ELF64-x86-64",
+      "abi": "LP64 SysV freestanding, no red zone, large code model",
+      "macros": {
+        "__x86_64__": "1",
+        "__SIZEOF_POINTER__": "8",
+        "__SIZEOF_LONG__": "8",
+        "__SIZEOF_WCHAR_T__": "4",
+        "__STDC_HOSTED__": "0",
+        "__BYTE_ORDER__": "__ORDER_LITTLE_ENDIAN__",
+        "__ORDER_LITTLE_ENDIAN__": "1234"
+      }
+    },
+    {
+      "id": "native-uefi64",
+      "script": "kernel/buildefi.sh",
+      "script_sha256": "1139e0b86b325eda471c0d2d24bc834108b7d9e1578a0ce6887454d509b9fbc8",
+      "compiler": "clang",
+      "compiler_flags": [
+        "-target",
+        "x86_64-unknown-windows",
+        "-ffreestanding",
+        "-fno-stack-protector",
+        "-fshort-wchar",
+        "-mno-red-zone",
+        "-O2",
+        "-DZL_64",
+        "-DZL_EFI",
+        "-I..",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-parameter",
+        "-Wno-excessive-regsave",
+        "-Werror=shift-count-overflow",
+        "-Werror=void-pointer-to-int-cast",
+        "-Werror=pointer-to-int-cast",
+        "-Werror=int-to-pointer-cast"
+      ],
+      "linker": "lld-link",
+      "linker_flags": [
+        "-subsystem:efi_application",
+        "-nodefaultlib",
+        "-dll",
+        "/Brepro",
+        "/lldignoreenv",
+        "-entry:efi_main"
+      ],
+      "format": "PE32+ EFI application",
+      "abi": "LLP64 Microsoft x86-64, UTF-16 wchar, no red zone",
+      "macros": {
+        "__x86_64__": "1",
+        "_WIN64": "1",
+        "__SIZEOF_POINTER__": "8",
+        "__SIZEOF_LONG__": "4",
+        "__SIZEOF_WCHAR_T__": "2",
+        "__STDC_HOSTED__": "0",
+        "__BYTE_ORDER__": "__ORDER_LITTLE_ENDIAN__",
+        "__ORDER_LITTLE_ENDIAN__": "1234"
+      }
+    },
+    {
+      "id": "raw-bios-loader32",
+      "script": "kernel/mkdisk.sh",
+      "script_sha256": "dd13db52ebae2325d6e7a30347e7ea3bac42dc6070cc9c6f2d457884d6c717e5",
+      "compiler": "gcc",
+      "compiler_flags": [
+        "-m32",
+        "-O2",
+        "-ffreestanding",
+        "-nostdlib",
+        "-fno-stack-protector",
+        "-fno-pic",
+        "-fno-builtin",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-parameter",
+        "-I.."
+      ],
+      "linker": "ld+objcopy+nasm",
+      "linker_flags": [
+        "-m",
+        "elf_i386",
+        "-T",
+        "link-raw.ld",
+        "-O",
+        "binary"
+      ],
+      "format": "ELF32 intermediate plus flat kernel and 512-byte boot sector",
+      "abi": "ILP32 SysV freestanding",
+      "macros": {
+        "__i386__": "1",
+        "__SIZEOF_POINTER__": "4",
+        "__SIZEOF_LONG__": "4",
+        "__SIZEOF_WCHAR_T__": "4",
+        "__STDC_HOSTED__": "0",
+        "__BYTE_ORDER__": "__ORDER_LITTLE_ENDIAN__",
+        "__ORDER_LITTLE_ENDIAN__": "1234"
+      }
+    }
+  ],
+  "external_headers": [
+    {
+      "path": "/usr/include/alloca.h",
+      "bytes": 1203,
+      "sha256": "8655ed58a5aedda99207d636aba00cbbf9842cfed6722593876a083700b4d138",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/asm-generic/errno-base.h",
+      "bytes": 1612,
+      "sha256": "2c148e92b8318deeb767fabd60822113e575ee664ff09a1873aed8f7a495793c",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/asm-generic/errno.h",
+      "bytes": 5756,
+      "sha256": "651dbafba40d561d5ba2d6dc43263238e3894e91942d30af925971dc92230daf",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/endian.h",
+      "bytes": 2299,
+      "sha256": "537adf5fc94e17547d825a375723b666e89ff1f0a3c29fb7a78e223d22e0e210",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/errno.h",
+      "bytes": 1679,
+      "sha256": "2b170be13aeb5a0ec9443803cea7fc4ce31ceae6708e0405b1afdae9300ac278",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/features-time64.h",
+      "bytes": 1532,
+      "sha256": "89036fa88ac19881ddfb07d4e65beb620a083d770cbf1c925f148c9ea1ce5a63",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/features.h",
+      "bytes": 19214,
+      "sha256": "8825ba3d9a02f0698618f503a0f569844bb2912bbc8b10de95f403d8f66ca82e",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/limits.h",
+      "bytes": 5706,
+      "sha256": "59dccd0e0f84037a0be75a01efe840b7b1ebe8502cdfb49742697c49290ce18f",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/linux/errno.h",
+      "bytes": 23,
+      "sha256": "a47fb2f49bce0546a1e88805cec954338abb1b2ac87de042166e8e3a74b23261",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/linux/limits.h",
+      "bytes": 937,
+      "sha256": "567dbb4893d20bb986996f0a8b8f774b02ca6cb7df8e4b642895eade7e7ffcd9",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/stdc-predef.h",
+      "bytes": 2462,
+      "sha256": "82975831ea2d1f95b60225f37ddd6130225f0c3de2318674cb178fea661ad87b",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/stdint.h",
+      "bytes": 8155,
+      "sha256": "38751c3803361248b73bba3d8b48aa7015ccb94c2c31f247f587b157c4ee344a",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/stdlib.h",
+      "bytes": 41357,
+      "sha256": "f81e8fb1ca6e5f541ef99961d0cf6334ca7972e5a81e2caff09b548d4f093b3b",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/time.h",
+      "bytes": 15115,
+      "sha256": "502077dfa1b92bb9d166d69ab07ba536afbc5188ff0ed4e55308845e7ef9752a",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/atomic_wide_counter.h",
+      "bytes": 1283,
+      "sha256": "05531d0ae2a64ce741fe96a6c992190ef77eff1dc72e9e8f9bd0ff3b6bd7ff57",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/byteswap.h",
+      "bytes": 2450,
+      "sha256": "07044d37a88f3a088ecf65df86a5d4a2c03e2966747b680ae8e0a01753cf97a1",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/endian.h",
+      "bytes": 1905,
+      "sha256": "f559fd70d8a24202805d1d8a3546e28c427f6ce7808296002687cb6c636fd21f",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/endianness.h",
+      "bytes": 273,
+      "sha256": "659a7060004eda113671a38852c4d1e9cb97a35932bcd1d8540f98c09c180747",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/errno.h",
+      "bytes": 1426,
+      "sha256": "d6875c7a15ed169ab16e706bf2af52bd8d48ea067f02adbdb34e8bb9198fb014",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/floatn-common.h",
+      "bytes": 10325,
+      "sha256": "a8a1a20b3e3c9811b348f9f7c4a3825d0eae6b27615991d1ca50dd1338e32a00",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/floatn.h",
+      "bytes": 4929,
+      "sha256": "959a6fafb663ca665daa89066124c126291603e14d727d8a1d59823e9fd92451",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/libc-header-start.h",
+      "bytes": 4286,
+      "sha256": "06256b79e2535489e5dce8c21854d3b0bd72d5479a3d013170f09261defc0a4f",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/local_lim.h",
+      "bytes": 3175,
+      "sha256": "b38fad51045d65239da3868ea94c4f31850901ec1f7e56349452fca45f70717e",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/long-double.h",
+      "bytes": 970,
+      "sha256": "30f74e9207fbbbe7fafb7b5e3e54124997abc44549506c514f2adae054ee3d56",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/posix1_lim.h",
+      "bytes": 5198,
+      "sha256": "ea4252c4bb02abfad2e734c657d9f323e98f406b35be6377f43c7eb78699b8d6",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/posix2_lim.h",
+      "bytes": 2867,
+      "sha256": "53647564016cc8ecba361bd9cb7c706b9755ef604213ece31a1307ebc4cd08d1",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/pthread_stack_min-dynamic.h",
+      "bytes": 1214,
+      "sha256": "aa07727cdcd5a7d9e2159e03b2db63f0e9ab75efd5332b565b5c8623ab9b714f",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/pthreadtypes-arch.h",
+      "bytes": 1838,
+      "sha256": "c838de98779156e73b927940c1db8d3e385624980d2c4ca37c352ad69955074b",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/pthreadtypes.h",
+      "bytes": 3072,
+      "sha256": "acad99a6a3ef489327e806c8d29b25797ca2126cd5489233837e5c9c01516cd1",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/select.h",
+      "bytes": 1505,
+      "sha256": "576acd13d6fba6206bdf24b1f9b6567e46da81bcf20fb2f5529434c59cfb9c3e",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/stdint-intn.h",
+      "bytes": 1037,
+      "sha256": "88f639a4e588077b6edfad36b3bb045f0cc052b5f9d194f8e706ee27cd846f67",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/stdint-least.h",
+      "bytes": 1305,
+      "sha256": "f2f6cc431ef00e9182f7367cd06fb1130740c41a1f4dd1c61f146a1e761a4474",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/stdint-uintn.h",
+      "bytes": 1049,
+      "sha256": "8ce3858074e8073db1eed4d25d69b3c14d41e826fa2351c5fc5246bb546161f8",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/stdlib-bsearch.h",
+      "bytes": 1516,
+      "sha256": "231afa57a5d88ab4ede48d5d0808f7343986405ee89f85505dd06e1d31971a88",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/stdlib-float.h",
+      "bytes": 1115,
+      "sha256": "fdd6c94e471e2aa2e03bae449f993392a6593044490fc82601b77d7116381201",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/struct_mutex.h",
+      "bytes": 1816,
+      "sha256": "700e77ca8b5d27b19649358abe229e64b238cb4ce79474fc1194d7831dc3a34f",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/struct_rwlock.h",
+      "bytes": 2027,
+      "sha256": "7d1b998c8def8d264af5114e869bcb37c484daa23ec8ac54a2110dbdd9c05a95",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/thread-shared-types.h",
+      "bytes": 3962,
+      "sha256": "f16fd912b0b1e8a222af4acb11dbbc9c68ba485c381a0dcf49be60b38e581c37",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/time.h",
+      "bytes": 3331,
+      "sha256": "9b34f004f183bea846379580cb3d2f19588d96b4c7faafb3ebb7c9ffd9bafd59",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/time64.h",
+      "bytes": 1340,
+      "sha256": "b0c5f25ce84037dda2c42408543a4616e129d70d6ebf10bd3ecc8b756466582a",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/timesize.h",
+      "bytes": 1109,
+      "sha256": "d949eed9646ca5916b338e1f02ffaf31a4c62907738805aba4ffa329a365f8f2",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/timex.h",
+      "bytes": 6203,
+      "sha256": "feb7e3f78aadcf5aa89233175df74e74366b0a7e79bf70f29edd24b45e817a4b",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types.h",
+      "bytes": 8806,
+      "sha256": "74d92766725404961cc2908de587aeaf24a5a8ef49a0103c5d3fb9f9fe9dead0",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/__locale_t.h",
+      "bytes": 1661,
+      "sha256": "d2513e510029ea0f2fc3868e9f1c990173b2df593d40bb8957b63c8035a1eb35",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/__sigset_t.h",
+      "bytes": 206,
+      "sha256": "05291a7d38bb1d0da1ed01c09fe85fa2b1f4d5bc708e06bb930efec672db08d5",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/clock_t.h",
+      "bytes": 143,
+      "sha256": "81e60e8a8d99b28bc723c14b156d7f7fc8ff663d98a857a3f5aea90431f577e3",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/clockid_t.h",
+      "bytes": 174,
+      "sha256": "dcd64d184855b245e5c7acf21910a0aaca590f1faf094e400da5d30551d11eb0",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/error_t.h",
+      "bytes": 894,
+      "sha256": "221c2f8eea5726f2ce51c8f7207c417584b2f49601793a13ca5d1f2200ab60b9",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/locale_t.h",
+      "bytes": 983,
+      "sha256": "aee0f473e9900ae9c3f9845cfabce44fb4d60ddf2706a30f802ea89bc6411d4c",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/sigset_t.h",
+      "bytes": 195,
+      "sha256": "3db5ded9d98a694e8c7196a06690b2e816ec6bb82689940d281f6504533f37e1",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/struct_itimerspec.h",
+      "bytes": 288,
+      "sha256": "d6299fbc46fc57e7d14635cd5cf69125710ed021ab7305586c84644a03a39f8e",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/struct_timespec.h",
+      "bytes": 877,
+      "sha256": "798e773d0c7f3796033c043910db2b093d1e43116c4b3d2cf3be85f8c4304cf1",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/struct_timeval.h",
+      "bytes": 416,
+      "sha256": "6585bf0dcd3d5a780d6246da841031f9b314ceb7400a3210f34815f5da93b1fa",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/struct_tm.h",
+      "bytes": 760,
+      "sha256": "e7bdda3f42eb0633850ed150fef0a0cf6193cbba8fa740e7505925424a595566",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/time_t.h",
+      "bytes": 208,
+      "sha256": "d1cc45e24a80009117f61ee4ae9cae5d12f69f38d691e0a933f989f7a1d27bb0",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/types/timer_t.h",
+      "bytes": 159,
+      "sha256": "d96a2452da0d933941273d11d1048ea525f033306892835b0a7a0999b13853aa",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/typesizes.h",
+      "bytes": 3737,
+      "sha256": "49656ffcee2a7091ae16f8ad737c63c1d3e06ecdb84c3fa1c6f65b0b6784262a",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/uintn-identity.h",
+      "bytes": 1542,
+      "sha256": "f2854176fc9476ed0d2f52241b4911861bdc41a133f4bd2a3e9fd1073278086f",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/uio_lim.h",
+      "bytes": 1385,
+      "sha256": "f3f33ea936a58c89d0a45601ec3ad6d75bf0442599500bd3506ece333fa6b0e1",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/waitflags.h",
+      "bytes": 1697,
+      "sha256": "fe55139021b16f8d4a2b00309ce9818b679626ba2d685a63ea527414d852d7b3",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/waitstatus.h",
+      "bytes": 2287,
+      "sha256": "af2b2a279b806c772f9dafe54473029d42a06d3c9547a76718745a29565fdbbb",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/wchar.h",
+      "bytes": 1906,
+      "sha256": "169453a3eb0c5e504b513fb3bad0bda7780bb84c7139c501e3deeb75ac731f35",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/wordsize.h",
+      "bytes": 398,
+      "sha256": "948177c0fc84c4746588f62252029880ec4c6f88b743ba55d952f980303ebfbb",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/bits/xopen_lim.h",
+      "bytes": 3858,
+      "sha256": "189ecbb0ca3df67cd58ee5160845c074af56c9ccc28467048576c492b2fac559",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/gnu/stubs-64.h",
+      "bytes": 481,
+      "sha256": "0b6ab3e2ed3ba79b30fe6ba81a68fc41f57965b8d56662763633431b703c9289",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/gnu/stubs.h",
+      "bytes": 384,
+      "sha256": "ef444295a0a9e8f5c40918399a00cc91ba0bd79774110cdf6e652baa6cfadb2e",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/sys/cdefs.h",
+      "bytes": 34638,
+      "sha256": "69a3c3625bac01b58ab781d02c7800592b5082c4ea962a456260dcf288216f68",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/sys/select.h",
+      "bytes": 5049,
+      "sha256": "0e36149f12e27b0d38e28e25dd392c4a3c75c06a3cf85c3d906bc9fef4a45e4b",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/sys/time.h",
+      "bytes": 9164,
+      "sha256": "e1a8a0f3c2b3824f537f691dafbd3be9fabf3a5c82bb4577df7e32157d96e18c",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/include/x86_64-linux-gnu/sys/types.h",
+      "bytes": 5713,
+      "sha256": "3134ee1a8359f7d4d69e40db42b70f94c10f1e9e40b9925454bccbf7608d5ced",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/lib/gcc/x86_64-linux-gnu/15/include/emmintrin.h",
+      "bytes": 53273,
+      "sha256": "f7f86d2d29050ac026250e6501dcd86b9d44759c3e5a84faa807652e88acf7c3",
+      "consumers": [
+        "bios64-fb"
+      ]
+    },
+    {
+      "path": "/usr/lib/gcc/x86_64-linux-gnu/15/include/limits.h",
+      "bytes": 6551,
+      "sha256": "39b2166cef2e5353b6068bd0fd38c9b5113f46ad916a6fb804d60768494fc0b8",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/lib/gcc/x86_64-linux-gnu/15/include/mm_malloc.h",
+      "bytes": 1783,
+      "sha256": "9cd3c588fae0625d64bc73371b1a080db254979de006c586e748a98504a2ff6b",
+      "consumers": [
+        "bios64-fb"
+      ]
+    },
+    {
+      "path": "/usr/lib/gcc/x86_64-linux-gnu/15/include/mmintrin.h",
+      "bytes": 31892,
+      "sha256": "14fe1f0d4c68382c32730f238683dde4f4d0da7c1b0e8f9a0f9842085dba8d1e",
+      "consumers": [
+        "bios64-fb"
+      ]
+    },
+    {
+      "path": "/usr/lib/gcc/x86_64-linux-gnu/15/include/stddef.h",
+      "bytes": 14134,
+      "sha256": "472a84e536689fc48e861b2415b229742e133d09bbf1c8fd8e0fe89ab5712f04",
+      "consumers": [
+        "bios64-fb",
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/lib/gcc/x86_64-linux-gnu/15/include/stdint.h",
+      "bytes": 443,
+      "sha256": "64ab730bb09eba38f01a62174fb8371ef281778ac33f141a6fa4217a9b39466a",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/lib/gcc/x86_64-linux-gnu/15/include/syslimits.h",
+      "bytes": 445,
+      "sha256": "9409a59233daef9339a757c58b3dd1cee980a65f1ef2590040fe5e106222a4bc",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/lib/gcc/x86_64-linux-gnu/15/include/xmmintrin.h",
+      "bytes": 46103,
+      "sha256": "dc4074672de9e6f14124819cb264b62e542c9c3e8eee37532878da55966e692a",
+      "consumers": [
+        "bios64-fb"
+      ]
+    },
+    {
+      "path": "/usr/lib/linux/uapi/x86/asm/errno.h",
+      "bytes": 31,
+      "sha256": "4ee384515a4325315992e61dd957f0fa91f3858fe7c079de59f56edded51de86",
+      "consumers": [
+        "reproducible-media-helper"
+      ]
+    },
+    {
+      "path": "/usr/lib/llvm-21/lib/clang/21/include/emmintrin.h",
+      "bytes": 201616,
+      "sha256": "48ec3b11cc4a7c5f7af2f23229b1402440b2d89d53cf4ee023211fe957d466d4",
+      "consumers": [
+        "uefi64-fb"
+      ]
+    },
+    {
+      "path": "/usr/lib/llvm-21/lib/clang/21/include/mmintrin.h",
+      "bytes": 60004,
+      "sha256": "b3a59c5b4bd653d0ea3b96b82fadc4a7adb97ae9dc7bb2abd8872e9348238a3b",
+      "consumers": [
+        "uefi64-fb"
+      ]
+    },
+    {
+      "path": "/usr/lib/llvm-21/lib/clang/21/include/xmmintrin.h",
+      "bytes": 120340,
+      "sha256": "ec3c096ef84470e34198986ea4fc90ad328b197e2f43693f654656c69051fa8f",
+      "consumers": [
+        "uefi64-fb"
+      ]
+    }
+  ],
+  "counts": {
+    "tools": 7,
+    "target_lanes": 4,
+    "external_headers": 82
+  },
+  "open_gaps": [
+    "tool binaries and external headers are local distribution bytes without publisher attestation",
+    "compiler/sysroot source packages are not archived",
+    "no portable hermetic build image exists",
+    "the top-level host-tool build still permits an explicit CC=gcc alias"
+  ],
+  "generator": {
+    "path": "kernel/gen-toolchain-manifest.py",
+    "sha256": "b5dcb43587306c6d2bb9d3fc99df74ca3d82b38b1b7d9bfbad07649a28815a11"
+  },
+  "evidence_ceiling": "exact current compiler/linker/header bytes and ABI policy for four kernel routes; not a hermetic, signed, source-reproducible or cross-host toolchain"
+}

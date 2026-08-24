@@ -627,23 +627,6 @@ static void pump_mouse(void)
     evq_push(EV_MOUSE, (u32)b, mods, px_x, px_y);
 }
 
-/* The key a character came from. Printable keys ARE their unshifted ASCII by
- * the convention in keycodes.h, so this only has to name the four control
- * characters that have a key code, and fold shifted letters back to the
- * unshifted key - 'A' and 'a' are one key, and a consumer watching for
- * KEY_DOWN 'a' should see it whichever was typed. */
-static u32 key_of_char(int c)
-{
-    switch (c) {
-        case 27: return KEY_ESC;
-        case  8: return KEY_BACKSPACE;
-        case  9: return KEY_TAB;
-        case 13: return KEY_ENTER;
-    }
-    if (c >= 'A' && c <= 'Z') return (u32)(c + 32);
-    return (u32)c;
-}
-
 /* The USB counterpart of handle_scancode, and deliberately the same shape: the
  * two keyboards must produce identical events for the same key, or a bug will
  * appear on one of them and not the other.

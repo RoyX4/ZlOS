@@ -243,6 +243,15 @@ static const struct cmd table[] = {
     /* 82 is 'R'. Lower-case 'r' (114) is already reboot, and the exec track
      * needs a code run_command dispatches on that nothing else claims. */
     { "run",      82 },
+    /* Destructive by design and deliberately absent from ordinary help. The
+     * exact word is the target proof route for the CPU-fault recorder; code
+     * 127 cannot be produced by the printable single-key text shell. */
+    { "crashtest", 127 },
+    /* Persistent zlfs. The kernel documents and dispatches single-key '.' as
+     * code 46, but the compositor owns input after graphical boot, so leaving
+     * it out here made the documented mount path unreachable. Keep the exact
+     * spelling and a discoverable word alias. */
+    { ".",         46 }, { "mount",    46 },
     { "clear",     1 },                       /* handled here, not by zl */
     { 0, 0 }
 };

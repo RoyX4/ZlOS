@@ -497,17 +497,21 @@ int heap_init(void)
     hp(" MiB at ");
     /* GiB once the window puts us above 4 GiB - see paging.c's vmm_report for
      * why an eight-digit MiB figure is not checkable by a reader. */
+#if __SIZEOF_POINTER__ > 4
     if ((unsigned long long)heap_win >= (1ULL << 32)) {
         hpu((unsigned long)(heap_win >> 30));
         hp(" GiB [VIRTUAL, physical ");
         hpu((unsigned long)(HEAP_BASE >> 20));
         hp(" MiB]");
     } else {
+#endif
         hpu((unsigned long)(heap_win >> 20));
         hp(" MiB, ends at ");
         hpu((unsigned long)((heap_win + (uptr)HEAP_BYTES) >> 20));
         hp(" MiB");
+#if __SIZEOF_POINTER__ > 4
     }
+#endif
     if (!live) hp("  *** NOT BACKED BY RAM - heap allocation refused ***");
     hp("\n");
 

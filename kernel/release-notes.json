@@ -1,0 +1,754 @@
+{
+  "schema": "zlos.release-notes.v1",
+  "result": "PASS_UNRELEASED_WITH_BLOCKERS",
+  "feature_id": "EV-027",
+  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "release": {
+    "state": "UNRELEASED_DEVELOPMENT",
+    "version": null,
+    "release_date": null,
+    "channel": "NONE",
+    "published_entries": 0,
+    "signed": false,
+    "public_release_blocked": true
+  },
+  "inputs": [
+    {
+      "path": "kernel/build-identity.json",
+      "sha256": "22414d9ea92b9d48bc68fc2160fe6f950e39bffcb723adb29923f4ad05da524f",
+      "schema": "zlos.build-input-identity.v1"
+    },
+    {
+      "path": "kernel/decision-ledger.json",
+      "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+      "schema": "zlos.decision-ledger.v1"
+    },
+    {
+      "path": "kernel/artifact-registry.json",
+      "sha256": "8378d40d2f0a0f5cc5dff9a334be31911fe1d5a8f257845cc8d30870865d96c1",
+      "schema": "zlos.artifact-boot-registry.v1"
+    },
+    {
+      "path": "kernel/app-evidence.json",
+      "sha256": "8e27cbee3a8107f9a2e3f76758939821fa5898dc0189d7ac975171437ca6b38d",
+      "schema": "zlos.application-evidence-registry.v1"
+    },
+    {
+      "path": "kernel/license-registry.json",
+      "sha256": "1f36d1d3630970ebf6711b30b4c13d192ad03e658e0dea9b025b4d44f0559395",
+      "schema": "zlos.license-provenance-registry.v1"
+    },
+    {
+      "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
+      "sha256": "4e7c5aeed8be8c11182dd2f0e7686233efba97367501df992f3ac551e844de21",
+      "schema": "zlos.source-snapshot-receipt.v1"
+    },
+    {
+      "path": "kernel/toolchain-manifest.json",
+      "sha256": "2a0a0481c50a81eef7a1e179ff4f306527a7fd5792ea4b766f4659e51ffa9f22",
+      "schema": "zlos.toolchain-manifest.v1"
+    },
+    {
+      "path": "kernel/build-graph.json",
+      "sha256": "184110f6c8d281caa7c71b292765ed42987aed56590ce22ced11619f35c55194",
+      "schema": "zlos.build-graph.v1"
+    },
+    {
+      "path": "kernel/hosttest/test-run-receipt.json",
+      "sha256": "9f091d6276630a0087bfe7cc03b481fea1d1cefb29b43730e4db80a91dceca2f",
+      "schema": "zlos.host-test-run-receipt.v1"
+    },
+    {
+      "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
+      "sha256": "a7b5fc3572008d536bfa67b6f5d24a93bc14bfe44fea1791455f60542d9c3738",
+      "schema": "zlos.host-benchmark-receipt.v1"
+    },
+    {
+      "path": "kernel/visual-registry.json",
+      "sha256": "f7c6171e66ad750f918803c3a24c3bba57890cfc596e79abe61ab0217bce9b0b",
+      "schema": "zlos.visual-evidence-registry.v1"
+    },
+    {
+      "path": "kernel/accessibility-registry.json",
+      "sha256": "86fb47133c8017ef22740c64cca408dff3119a924a93173ec08b8d507a0008ba",
+      "schema": "zlos.accessibility-proof-registry.v1"
+    },
+    {
+      "path": "kernel/security-registry.json",
+      "sha256": "8c6b73406fd6b617a10c00f8a2540397782a0197d18ae265b4204aa0e32261ae",
+      "schema": "zlos.security-claim-registry.v1"
+    },
+    {
+      "path": "kernel/observability-registry.json",
+      "sha256": "b7dd0e1a365b0b5ba3048baea2723890cdc50c00983ce83bea5e1fb62d74992a",
+      "schema": "zlos.observability-registry.v1"
+    }
+  ],
+  "operational_sources": [
+    {
+      "path": "gates/run-land-gate-contained.sh",
+      "sha256": "d4f3fec2b635c80310a431e52bb691b93d6d357aecb864b15408d6c297604005"
+    },
+    {
+      "path": "kernel/verify-sources.sh",
+      "sha256": "5ffdff9df321ccedf7db747b5648480ee2a5e4c524ac00bf617753b876a3f1a6"
+    }
+  ],
+  "changes": [
+    {
+      "decision_id": "DEC-0001",
+      "date": "2026-08-17",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "ZL-043",
+        "GR-007"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Keep low-level window mechanisms in C and desktop policy in zl until the language/runtime can own the required structures safely.",
+      "rationale": "The current kernel zl subset cannot express the required window list and mechanism boundary.",
+      "compatibility": "No public ABI change; preserve the current C/zl boundary until the replacement language/runtime contract is proved.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0001"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0003",
+      "date": "2026-08-18",
+      "change_type": "REVERSAL",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "GR-015",
+        "GR-020"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Enforce clipping in all five back-buffer write paths by folding the scissor into loop bounds.",
+      "rationale": "Measured escape pixels refuted the two-function boundary without adding a per-pixel hot-path branch.",
+      "compatibility": "Rendering output must retain the five-path clipping oracle at every supported mode.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0003"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0004",
+      "date": "2026-08-17",
+      "change_type": "DEPRECATION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "GR-037",
+        "GR-012"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Retire snapshot-and-sticker window dragging after damage repaint is authoritative; retain only cursor save-under.",
+      "rationale": "The old path imposed a window-size ceiling, artifacts and fixed memory cost.",
+      "compatibility": "Keep the existing drag fallback until retained damage repaint passes equivalent host and target gates.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0004"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0005",
+      "date": "2026-08-17",
+      "change_type": "DECISION",
+      "decision_status": "QUALIFIED",
+      "feature_ids": [
+        "DV-045",
+        "DV-047",
+        "GR-025"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Do not port a Linux-scale GPU stack; implement bounded native mechanisms while borrowing public hardware knowledge, not donor code.",
+      "rationale": "A complete i915/Mesa stack assumes kernel facilities outside zlOS, but bounded display/blitter providers remain valid product work.",
+      "compatibility": "Intel display/blitter work remains bounded native-provider work; Linux i915/Mesa ABI compatibility is not promised.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0005"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0006",
+      "date": "2026-08-18",
+      "change_type": "MIGRATION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-007",
+        "EV-008"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "All four kernel compiler routes consume one ordered kernel/SOURCES manifest.",
+      "rationale": "Four hand-maintained lists repeatedly produced route-specific source drift.",
+      "compatibility": "Every kernel compile route must consume kernel/SOURCES; route-local source lists are unsupported.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0006"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0008",
+      "date": "2026-08-19",
+      "change_type": "REVERSAL",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "WB-001",
+        "WB-048"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Build the bounded document-browser capability while explicitly refusing moving-target Chrome parity.",
+      "rationale": "Fetcher, parser, box model and bounded scripting have finite contracts and current implementation evidence.",
+      "compatibility": "The supported browser contract is the explicit bounded compatibility ledger, not Chrome pixel/API parity.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0008"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0009",
+      "date": "2026-08-22",
+      "change_type": "CORRECTION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-011",
+        "AP-002"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Replace the false-green aggregate application check with exact manifest, route and lifecycle evidence.",
+      "rationale": "The old aggregate printed Maze missing while still returning success.",
+      "compatibility": "Application identities and routes must match the generated manifest; blank or dead catalogue IDs are invalid.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0009"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0010",
+      "date": "2026-08-22",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-009",
+        "EV-010",
+        "EV-015"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Never promote one artifact or route from another route's runtime or physical evidence.",
+      "rationale": "Similar names and parent/payload relationships do not prove the exact bytes executed on another route.",
+      "compatibility": "A receipt applies only to the exact artifact and route it names.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0010"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0011",
+      "date": "2026-08-22",
+      "change_type": "CORRECTION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "DV-045"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Label Intel modeset writes as host-harness proved and boot-unreachable until a native kernel caller and receipt exist.",
+      "rationale": "The real driver can light the panel from the harness, but no kernel path arms it.",
+      "compatibility": "Intel host-harness modesetting is not native-boot display compatibility.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0011"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0012",
+      "date": "2026-08-22",
+      "change_type": "CORRECTION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "DV-031"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Classify I2C-HID as a raw transport, not an input provider, until report decoding and session routing exist.",
+      "rationale": "Raw bytes are exposed but no x/y/button decoder exists.",
+      "compatibility": "I2C-HID raw transport diagnostics are not input-event compatibility.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0012"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0013",
+      "date": "2026-08-23",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-003",
+        "OP-001"
+      ],
+      "audience": "DISTRIBUTORS",
+      "user_visible_candidate": false,
+      "summary": "Block public release while build inputs lack an established repository redistribution grant.",
+      "rationale": "Source possession and successful builds do not create a distribution license.",
+      "compatibility": "No public redistribution channel is supported until licensing authority exists.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0013"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0014",
+      "date": "2026-08-24",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-002"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Call the deterministic archive exact build-input recovery, not signed/off-host/whole-repository custody.",
+      "rationale": "The archive remains unsigned and in the same uncommitted worktree with zero off-host copies.",
+      "compatibility": "The local source archive is recovery material, not a signed/off-host repository release.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0014"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0015",
+      "date": "2026-08-23",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-004",
+        "EV-005"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Dependency verification checks exact invoked/resolved bytes and never silently refreshes the lock.",
+      "rationale": "PATH aliases, package upgrades and firmware drift must make the gate red until inspected.",
+      "compatibility": "Tool or firmware byte drift requires an inspected lock refresh; silent compatibility is rejected.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0015"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0016",
+      "date": "2026-08-24",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-007"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Represent conservative build-identity inputs without active edges as scope-only, never compiled.",
+      "rationale": "Dropping them hides identity scope; calling them compiled invents reachability.",
+      "compatibility": "Scope-only inputs affect identity but are not claimed as compiled objects.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0016"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0017",
+      "date": "2026-08-24",
+      "change_type": "OPERATIONS",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-008",
+        "OP-023"
+      ],
+      "audience": "OPERATORS",
+      "user_visible_candidate": false,
+      "summary": "Forbid unrestricted full landing gates and require the resource-contained launcher and idle-host doctor.",
+      "rationale": "Overlapping build/editor/graphics pressure preceded a host freeze and forced shutdown.",
+      "compatibility": "Uncontained full landing-gate invocation is unsupported on this host.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0017"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0018",
+      "date": "2026-08-24",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-018",
+        "AU-028"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Prove the event envelope as a host-only single-owner core before changing shipped build identity or claiming an audit service.",
+      "rationale": "Target integration requires an idle contained rebuild and later per-CPU/IRQ/service ownership.",
+      "compatibility": "The structured-event core is host-only and provides no shipped event-service ABI yet.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0018"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0019",
+      "date": "2026-08-24",
+      "change_type": "CORRECTION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-008"
+      ],
+      "audience": "OPERATORS",
+      "user_visible_candidate": false,
+      "summary": "Keep the complete landing gate red/unverified until a contained run finishes and its final receipt is captured.",
+      "rationale": "The last attempt stopped during EFI build and cannot support an aggregate green claim.",
+      "compatibility": "The interrupted complete gate provides no green compatibility or release claim.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0019"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    }
+  ],
+  "superseded_history": [
+    {
+      "decision_id": "DEC-0002",
+      "replaced_by": "DEC-0003",
+      "obsolete_evidence": [
+        "The old two-function source claim",
+        "The old 4K-fallback assumption"
+      ]
+    },
+    {
+      "decision_id": "DEC-0007",
+      "replaced_by": "DEC-0008",
+      "obsolete_evidence": [
+        "The original browser rejection",
+        "The original 2,900-line optimistic count"
+      ]
+    }
+  ],
+  "migrations": [
+    {
+      "id": "MIG-001",
+      "decision_id": "DEC-0006",
+      "scope": "developer-build-routes",
+      "required_now": true,
+      "instruction": "Use kernel/SOURCES as the only ordered kernel source manifest for every compiler route.",
+      "verification": "kernel/verify-sources.sh",
+      "recovery": "kernel/verify-sources.sh --recover-only"
+    },
+    {
+      "id": "MIG-002",
+      "decision_id": "DEC-0004",
+      "scope": "window-drag-rendering",
+      "required_now": false,
+      "instruction": "Retire snapshot-and-sticker dragging only after retained damage repaint passes equivalent gates.",
+      "verification": "kernel/hosttest/fbbench",
+      "recovery": "Keep the proven fallback until replacement evidence exists; do not delete first."
+    },
+    {
+      "id": "MIG-003",
+      "decision_id": "DEC-0017",
+      "scope": "operator-full-gate",
+      "required_now": true,
+      "instruction": "Start a complete landing gate only through gates/run-land-gate-contained.sh on an idle host.",
+      "verification": "gates/run-land-gate-contained.sh doctor",
+      "recovery": "gates/run-land-gate-contained.sh stop"
+    }
+  ],
+  "known_issues": [
+    {
+      "id": "ISSUE-001",
+      "severity": "RELEASE_BLOCKER",
+      "feature_ids": [
+        "EV-003",
+        "OP-001"
+      ],
+      "summary": "Public redistribution authority is absent.",
+      "facts": {
+        "public_release_blocked": true,
+        "inputs_without_established_grant": 123
+      },
+      "source": "kernel/license-registry.json"
+    },
+    {
+      "id": "ISSUE-002",
+      "severity": "RELEASE_BLOCKER",
+      "feature_ids": [
+        "EV-009",
+        "EV-015"
+      ],
+      "summary": "No current artifact hash has exact physical-hardware proof.",
+      "facts": {
+        "artifacts_without_physical_exact_hash_proof": 9
+      },
+      "source": "kernel/artifact-registry.json"
+    },
+    {
+      "id": "ISSUE-003",
+      "severity": "OPEN_GAP",
+      "feature_ids": [
+        "EV-012",
+        "EV-015"
+      ],
+      "summary": "Host inventory retains hardware skips and non-runs.",
+      "facts": {
+        "hardware_skips": 3,
+        "not_run": 11
+      },
+      "source": "kernel/hosttest/test-run-receipt.json"
+    },
+    {
+      "id": "ISSUE-004",
+      "severity": "OPEN_REGRESSION",
+      "feature_ids": [
+        "EV-014",
+        "EV-021",
+        "GR-020"
+      ],
+      "summary": "Some frame metrics exceed budget and no native-target distribution exists.",
+      "facts": {
+        "over_budget": 4,
+        "native_target_measurements": 0
+      },
+      "source": "kernel/docs/receipts/benchmark-host-2026-08-23.json"
+    },
+    {
+      "id": "ISSUE-005",
+      "severity": "OPEN_GAP",
+      "feature_ids": [
+        "EV-016",
+        "EV-022"
+      ],
+      "summary": "Visual assets are not bound to the current build.",
+      "facts": {
+        "assets": 46,
+        "current_build_bound": 0,
+        "variant_dimensions_open": 6
+      },
+      "source": "kernel/visual-registry.json"
+    },
+    {
+      "id": "ISSUE-006",
+      "severity": "OPEN_GAP",
+      "feature_ids": [
+        "EV-023"
+      ],
+      "summary": "Accessibility capabilities and complete target workflows remain missing.",
+      "facts": {
+        "missing_capabilities": 9,
+        "complete_target_workflows": 0
+      },
+      "source": "kernel/accessibility-registry.json"
+    },
+    {
+      "id": "ISSUE-007",
+      "severity": "SECURITY_BLOCKER",
+      "feature_ids": [
+        "EV-024"
+      ],
+      "summary": "Security evidence is incomplete and no claim is production-complete.",
+      "facts": {
+        "missing_claims": 11,
+        "production_complete": 0
+      },
+      "source": "kernel/security-registry.json"
+    },
+    {
+      "id": "ISSUE-008",
+      "severity": "OPEN_GAP",
+      "feature_ids": [
+        "EV-017",
+        "EV-018"
+      ],
+      "summary": "Durable crash/audit records and booted structured-event emitters are absent.",
+      "facts": {
+        "missing_observability_capabilities": 5,
+        "durable_crash_receipts": 0,
+        "target_event_emitters": 0
+      },
+      "source": "kernel/observability-registry.json"
+    },
+    {
+      "id": "ISSUE-009",
+      "severity": "OPEN_GAP",
+      "feature_ids": [
+        "EV-026",
+        "EV-027"
+      ],
+      "summary": "Historical decision and release-note coverage is incomplete.",
+      "facts": {
+        "legacy_decision_semantics_open": 0,
+        "released_generations": 0
+      },
+      "source": "kernel/decision-ledger.json"
+    },
+    {
+      "id": "ISSUE-010",
+      "severity": "RELEASE_BLOCKER",
+      "feature_ids": [
+        "EV-008",
+        "OP-001"
+      ],
+      "summary": "The latest complete landing gate is unverified after interruption.",
+      "facts": {
+        "complete_gate_green": false,
+        "interrupted_decision": "DEC-0019"
+      },
+      "source": "kernel/decision-ledger.json"
+    },
+    {
+      "id": "ISSUE-011",
+      "severity": "RECOVERY_BLOCKER",
+      "feature_ids": [
+        "EV-002"
+      ],
+      "summary": "Source custody has no off-host copy or signature.",
+      "facts": {
+        "off_host_copies": 0,
+        "signed_attestation": false
+      },
+      "source": "kernel/docs/receipts/source-snapshot-2026-08-24.json"
+    },
+    {
+      "id": "ISSUE-012",
+      "severity": "PORTABILITY_BLOCKER",
+      "feature_ids": [
+        "EV-005"
+      ],
+      "summary": "The toolchain is exact locally but not hermetic or signed.",
+      "facts": {
+        "target_lanes": 4,
+        "hermetic_builds": 0,
+        "signed_attestations": 0
+      },
+      "source": "kernel/toolchain-manifest.json"
+    }
+  ],
+  "recovery": [
+    {
+      "id": "REC-001",
+      "scope": "interrupted-sources-transaction",
+      "available": true,
+      "detect": "kernel/verify-sources.sh --recover-only",
+      "recover": "kernel/verify-sources.sh --recover-only",
+      "proof": "The command must report a clean transaction before any build."
+    },
+    {
+      "id": "REC-002",
+      "scope": "contained-landing-gate",
+      "available": true,
+      "detect": "gates/run-land-gate-contained.sh status",
+      "recover": "gates/run-land-gate-contained.sh stop",
+      "proof": "Then run doctor; do not bypass load, memory, compiler or QEMU refusal."
+    },
+    {
+      "id": "REC-003",
+      "scope": "previous-public-release-generation",
+      "available": false,
+      "detect": "No public release generation is recorded.",
+      "recover": "Unavailable until a signed previous-generation artifact and selection receipt exist.",
+      "proof": "This unavailable path remains a release blocker."
+    }
+  ],
+  "compatibility": {
+    "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+    "dirty_development_build": true,
+    "artifact_names": [
+      "BOOTX64.EFI",
+      "boot-media-ids.json",
+      "kernel.elf",
+      "kernel64.elf",
+      "kernel_raw.elf",
+      "zlOS-usb.img",
+      "zlOS.img",
+      "zlOS.iso",
+      "zlOS64.iso"
+    ],
+    "qemu_boot_routes": [
+      "grub-bios32",
+      "grub-bios64",
+      "grub-uefi32",
+      "grub-uefi64",
+      "native-uefi64",
+      "raw-bios"
+    ],
+    "toolchain_lanes": [
+      "bios-multiboot32",
+      "multiboot64",
+      "native-uefi64",
+      "raw-bios-loader32"
+    ],
+    "application_identities": 62,
+    "application_lifecycle_qemu_proved": 62,
+    "physical_exact_hash_proofs": 0,
+    "public_distribution_supported": false
+  },
+  "counts": {
+    "unreleased_change_candidates": 17,
+    "user_visible_candidates": 6,
+    "published_entries": 0,
+    "superseded_records_retained": 2,
+    "migrations": 3,
+    "known_issues": 12,
+    "recovery_paths": 3,
+    "available_recovery_paths": 2
+  },
+  "open_gaps": {
+    "released_generation_exists": false,
+    "public_release_authorized": false,
+    "signed_release_notes": false,
+    "published_user_visible_entries": 0,
+    "automatic_change_classification_complete": false,
+    "user_data_migration_inventory_complete": false,
+    "previous_release_rollback_artifact_available": false,
+    "historical_release_series_complete": false
+  },
+  "generator": {
+    "path": "kernel/gen-release-notes.py",
+    "sha256": "610126d25ed20c10b01150259a1bd10c51fc5214c43168ac7dcc853936be5891"
+  },
+  "evidence_ceiling": "generated unreleased development changelog; not a versioned, signed, distributed or runtime-complete release",
+  "weakest_link": "there is no public release generation, redistribution authority, signed note, complete migration inventory or previous-generation rollback artifact"
+}

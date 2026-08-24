@@ -1,0 +1,1232 @@
+{
+  "schema": "zlos.decision-ledger.v1",
+  "result": "PASS_WITH_OPEN_GAPS",
+  "feature_id": "EV-026",
+  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "records": [
+    {
+      "id": "DEC-0001",
+      "date": "2026-08-17",
+      "action": "DECISION",
+      "status": "ACTIVE",
+      "features": [
+        "ZL-043",
+        "GR-007"
+      ],
+      "decision": "Keep low-level window mechanisms in C and desktop policy in zl until the language/runtime can own the required structures safely.",
+      "rationale": "The current kernel zl subset cannot express the required window list and mechanism boundary.",
+      "source": {
+        "path": "kernel/docs/DECISIONS.md",
+        "sha256": "5298a0a5e8ec2ca949db8242cb5947921b5f8f2c40db6fb30b7e49265354efbc",
+        "needle": "**1. Mechanism in C, policy in zl.**"
+      },
+      "needle": "**1. Mechanism in C, policy in zl.**",
+      "legacy_labels": [
+        "1"
+      ],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0002",
+      "date": "2026-08-17",
+      "action": "DECISION",
+      "status": "SUPERSEDED",
+      "features": [
+        "GR-015",
+        "GR-020"
+      ],
+      "decision": "Treat two framebuffer functions as the complete clipping boundary.",
+      "rationale": "The original source inspection missed three direct back-buffer writers.",
+      "source": {
+        "path": "kernel/docs/DECISIONS.md",
+        "sha256": "5298a0a5e8ec2ca949db8242cb5947921b5f8f2c40db6fb30b7e49265354efbc",
+        "needle": "**6. The clip rectangle is the keystone, and it is ~~two functions~~ FIVE.**"
+      },
+      "needle": "**6. The clip rectangle is the keystone, and it is ~~two functions~~ FIVE.**",
+      "legacy_labels": [
+        "6"
+      ],
+      "supersedes": [],
+      "replaced_by": "DEC-0003",
+      "obsolete_evidence": [
+        "The old two-function source claim",
+        "The old 4K-fallback assumption"
+      ],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0003",
+      "date": "2026-08-18",
+      "action": "REVERSAL",
+      "status": "ACTIVE",
+      "features": [
+        "GR-015",
+        "GR-020"
+      ],
+      "decision": "Enforce clipping in all five back-buffer write paths by folding the scissor into loop bounds.",
+      "rationale": "Measured escape pixels refuted the two-function boundary without adding a per-pixel hot-path branch.",
+      "source": {
+        "path": "kernel/docs/DECISIONS.md",
+        "sha256": "5298a0a5e8ec2ca949db8242cb5947921b5f8f2c40db6fb30b7e49265354efbc",
+        "needle": "**Three more functions write the back buffer"
+      },
+      "needle": "**Three more functions write the back buffer",
+      "legacy_labels": [
+        "6"
+      ],
+      "supersedes": [
+        "DEC-0002"
+      ],
+      "replaced_by": null,
+      "obsolete_evidence": [],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0004",
+      "date": "2026-08-17",
+      "action": "DEPRECATION",
+      "status": "ACTIVE",
+      "features": [
+        "GR-037",
+        "GR-012"
+      ],
+      "decision": "Retire snapshot-and-sticker window dragging after damage repaint is authoritative; retain only cursor save-under.",
+      "rationale": "The old path imposed a window-size ceiling, artifacts and fixed memory cost.",
+      "source": {
+        "path": "kernel/docs/DECISIONS.md",
+        "sha256": "5298a0a5e8ec2ca949db8242cb5947921b5f8f2c40db6fb30b7e49265354efbc",
+        "needle": "**7. Delete the snapshot-and-sticker drag machinery**"
+      },
+      "needle": "**7. Delete the snapshot-and-sticker drag machinery**",
+      "legacy_labels": [
+        "7"
+      ],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [
+        "Snapshot/sticker drag screenshots do not prove the retained compositor path"
+      ],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0005",
+      "date": "2026-08-17",
+      "action": "DECISION",
+      "status": "QUALIFIED",
+      "features": [
+        "DV-045",
+        "DV-047",
+        "GR-025"
+      ],
+      "decision": "Do not port a Linux-scale GPU stack; implement bounded native mechanisms while borrowing public hardware knowledge, not donor code.",
+      "rationale": "A complete i915/Mesa stack assumes kernel facilities outside zlOS, but bounded display/blitter providers remain valid product work.",
+      "source": {
+        "path": "kernel/docs/DECISIONS.md",
+        "sha256": "5298a0a5e8ec2ca949db8242cb5947921b5f8f2c40db6fb30b7e49265354efbc",
+        "needle": "**20. `intel.c` already has the correct relationship: borrow Linux's knowledge,"
+      },
+      "needle": "**20. `intel.c` already has the correct relationship: borrow Linux's knowledge,",
+      "legacy_labels": [
+        "17",
+        "20"
+      ],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [
+        "The phrase do not write a GPU driver cannot be used to reject bounded native providers"
+      ],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0006",
+      "date": "2026-08-18",
+      "action": "MIGRATION",
+      "status": "ACTIVE",
+      "features": [
+        "EV-007",
+        "EV-008"
+      ],
+      "decision": "All four kernel compiler routes consume one ordered kernel/SOURCES manifest.",
+      "rationale": "Four hand-maintained lists repeatedly produced route-specific source drift.",
+      "source": {
+        "path": "kernel/SOURCES",
+        "sha256": "e2c4a415fadfe01dafd9de3fa0ed4bb49a3bd2b0abba546066b149dae8851102",
+        "needle": "# SOURCES - the kernel sources that EVERY target compiles."
+      },
+      "needle": "# SOURCES - the kernel sources that EVERY target compiles.",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [
+        "A green single-route build no longer proves source-list parity"
+      ],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0007",
+      "date": "2026-08-18",
+      "action": "DECISION",
+      "status": "SUPERSEDED",
+      "features": [
+        "WB-001",
+        "WB-048"
+      ],
+      "decision": "Classify a zlOS browser as unbounded by comparing only maximal Chromium/Ladybird implementations.",
+      "rationale": "The comparison measured the maximal implementation rather than the bounded capability.",
+      "source": {
+        "path": "kernel/docs/browser-status.md",
+        "sha256": "8f73456f653d23c16a3492232237649afce7b89aa36648fb9a573d43bbbfa072",
+        "needle": "> **A browser** | Unbounded. Chromium is 6.38M lines"
+      },
+      "needle": "> **A browser** | Unbounded. Chromium is 6.38M lines",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": "DEC-0008",
+      "obsolete_evidence": [
+        "The original browser rejection",
+        "The original 2,900-line optimistic count"
+      ],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0008",
+      "date": "2026-08-19",
+      "action": "REVERSAL",
+      "status": "ACTIVE",
+      "features": [
+        "WB-001",
+        "WB-048"
+      ],
+      "decision": "Build the bounded document-browser capability while explicitly refusing moving-target Chrome parity.",
+      "rationale": "Fetcher, parser, box model and bounded scripting have finite contracts and current implementation evidence.",
+      "source": {
+        "path": "kernel/docs/browser-status.md",
+        "sha256": "8f73456f653d23c16a3492232237649afce7b89aa36648fb9a573d43bbbfa072",
+        "needle": "**Every number there is correct and the conclusion does not follow.**"
+      },
+      "needle": "**Every number there is correct and the conclusion does not follow.**",
+      "legacy_labels": [],
+      "supersedes": [
+        "DEC-0007"
+      ],
+      "replaced_by": null,
+      "obsolete_evidence": [],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0009",
+      "date": "2026-08-22",
+      "action": "CORRECTION",
+      "status": "ACTIVE",
+      "features": [
+        "EV-011",
+        "AP-002"
+      ],
+      "decision": "Replace the false-green aggregate application check with exact manifest, route and lifecycle evidence.",
+      "rationale": "The old aggregate printed Maze missing while still returning success.",
+      "source": {
+        "path": "kernel/HANDOFF.md",
+        "sha256": "3b54b13d163d042f8e4cca35f3bbc9b5057264f52ddbd43d0dbc4cbe46c1f71f",
+        "needle": "It replaces the old aggregate `apps53.py` green that printed `Maze exists NO`"
+      },
+      "needle": "It replaces the old aggregate `apps53.py` green that printed `Maze exists NO`",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [
+        "The old apps53.py aggregate green"
+      ],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0010",
+      "date": "2026-08-22",
+      "action": "DECISION",
+      "status": "ACTIVE",
+      "features": [
+        "EV-009",
+        "EV-010",
+        "EV-015"
+      ],
+      "decision": "Never promote one artifact or route from another route's runtime or physical evidence.",
+      "rationale": "Similar names and parent/payload relationships do not prove the exact bytes executed on another route.",
+      "source": {
+        "path": "kernel/docs/artifact-and-boot-route-registry-2026-08-22.md",
+        "sha256": "effcb4faa5c09fdf63ee298577acecafaf429bfcad295b4a4022222211feac15",
+        "needle": "runtime or hardware claim merely because a similarly named artifact passed."
+      },
+      "needle": "runtime or hardware claim merely because a similarly named artifact passed.",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [
+        "Route-family or controller-family evidence propagation"
+      ],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0011",
+      "date": "2026-08-22",
+      "action": "CORRECTION",
+      "status": "ACTIVE",
+      "features": [
+        "DV-045"
+      ],
+      "decision": "Label Intel modeset writes as host-harness proved and boot-unreachable until a native kernel caller and receipt exist.",
+      "rationale": "The real driver can light the panel from the harness, but no kernel path arms it.",
+      "source": {
+        "path": "kernel/HANDOFF.md",
+        "sha256": "3b54b13d163d042f8e4cca35f3bbc9b5057264f52ddbd43d0dbc4cbe46c1f71f",
+        "needle": "**Nothing in the kernel arms `lt_armed`.** This runs from the host harness only."
+      },
+      "needle": "**Nothing in the kernel arms `lt_armed`.** This runs from the host harness only.",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [
+        "Any claim that the current zlOS boot can light the Intel panel itself"
+      ],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0012",
+      "date": "2026-08-22",
+      "action": "CORRECTION",
+      "status": "ACTIVE",
+      "features": [
+        "DV-031"
+      ],
+      "decision": "Classify I2C-HID as a raw transport, not an input provider, until report decoding and session routing exist.",
+      "rationale": "Raw bytes are exposed but no x/y/button decoder exists.",
+      "source": {
+        "path": "kernel/HANDOFF.md",
+        "sha256": "3b54b13d163d042f8e4cca35f3bbc9b5057264f52ddbd43d0dbc4cbe46c1f71f",
+        "needle": "it is a **transport with no decoder**."
+      },
+      "needle": "it is a **transport with no decoder**.",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [
+        "Any I2C-HID input-provider completion claim based on raw-byte diagnostics"
+      ],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0013",
+      "date": "2026-08-23",
+      "action": "DECISION",
+      "status": "ACTIVE",
+      "features": [
+        "EV-003",
+        "OP-001"
+      ],
+      "decision": "Block public release while build inputs lack an established repository redistribution grant.",
+      "rationale": "Source possession and successful builds do not create a distribution license.",
+      "source": {
+        "path": "kernel/HANDOFF.md",
+        "sha256": "3b54b13d163d042f8e4cca35f3bbc9b5057264f52ddbd43d0dbc4cbe46c1f71f",
+        "needle": "There is currently no repository license file, so public release is explicitly"
+      },
+      "needle": "There is currently no repository license file, so public release is explicitly",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0014",
+      "date": "2026-08-24",
+      "action": "DECISION",
+      "status": "ACTIVE",
+      "features": [
+        "EV-002"
+      ],
+      "decision": "Call the deterministic archive exact build-input recovery, not signed/off-host/whole-repository custody.",
+      "rationale": "The archive remains unsigned and in the same uncommitted worktree with zero off-host copies.",
+      "source": {
+        "path": "kernel/docs/mp00-source-snapshot-2026-08-24.md",
+        "sha256": "2a51b2df6a37ab16dd3acc2c2d31d12e55a27fbd336aa63a9873273433ab8781",
+        "needle": "This is `PARTIAL_CURRENT`, not complete source custody."
+      },
+      "needle": "This is `PARTIAL_CURRENT`, not complete source custody.",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0015",
+      "date": "2026-08-23",
+      "action": "DECISION",
+      "status": "ACTIVE",
+      "features": [
+        "EV-004",
+        "EV-005"
+      ],
+      "decision": "Dependency verification checks exact invoked/resolved bytes and never silently refreshes the lock.",
+      "rationale": "PATH aliases, package upgrades and firmware drift must make the gate red until inspected.",
+      "source": {
+        "path": "kernel/docs/dependency-lock-truth-2026-08-23.md",
+        "sha256": "62d5c819b69c712731d5c694e4b8da72255492e900305dbfac67093aa0c0ef7d",
+        "needle": "The landing gate checks but never rewrites this file."
+      },
+      "needle": "The landing gate checks but never rewrites this file.",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0016",
+      "date": "2026-08-24",
+      "action": "DECISION",
+      "status": "ACTIVE",
+      "features": [
+        "EV-007"
+      ],
+      "decision": "Represent conservative build-identity inputs without active edges as scope-only, never compiled.",
+      "rationale": "Dropping them hides identity scope; calling them compiled invents reachability.",
+      "source": {
+        "path": "kernel/docs/mp00-build-graph-2026-08-24.md",
+        "sha256": "4fedd657c7a1575073578a5c9baec9259edd8c6939510be6dabb6e07ce950fa6",
+        "needle": "`declared-scope-only`; it does not call it compiled"
+      },
+      "needle": "`declared-scope-only`; it does not call it compiled",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0017",
+      "date": "2026-08-24",
+      "action": "OPERATIONS",
+      "status": "ACTIVE",
+      "features": [
+        "EV-008",
+        "OP-023"
+      ],
+      "decision": "Forbid unrestricted full landing gates and require the resource-contained launcher and idle-host doctor.",
+      "rationale": "Overlapping build/editor/graphics pressure preceded a host freeze and forced shutdown.",
+      "source": {
+        "path": "kernel/docs/host-freeze-and-gate-containment-2026-08-24.md",
+        "sha256": "995f8d49152cf2927759edc554cf24a7b7c804893b1f3aa93705ccd20a31dfd5",
+        "needle": "The complete gate is no longer allowed to run unrestricted."
+      },
+      "needle": "The complete gate is no longer allowed to run unrestricted.",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [
+        "The interrupted 09:11 landing-gate attempt is not green"
+      ],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0018",
+      "date": "2026-08-24",
+      "action": "DECISION",
+      "status": "ACTIVE",
+      "features": [
+        "EV-018",
+        "AU-028"
+      ],
+      "decision": "Prove the event envelope as a host-only single-owner core before changing shipped build identity or claiming an audit service.",
+      "rationale": "Target integration requires an idle contained rebuild and later per-CPU/IRQ/service ownership.",
+      "source": {
+        "path": "kernel/docs/mp00-structured-event-trace-2026-08-24.md",
+        "sha256": "885b035a747e43e6089481f2f403b46f6b1c034d7512e10ba7de3426c9eb2e31",
+        "needle": "This is `PARTIAL_CURRENT`. It is not in `kernel/SOURCES`"
+      },
+      "needle": "This is `PARTIAL_CURRENT`. It is not in `kernel/SOURCES`",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0019",
+      "date": "2026-08-24",
+      "action": "CORRECTION",
+      "status": "ACTIVE",
+      "features": [
+        "EV-008"
+      ],
+      "decision": "Keep the complete landing gate red/unverified until a contained run finishes and its final receipt is captured.",
+      "rationale": "The last attempt stopped during EFI build and cannot support an aggregate green claim.",
+      "source": {
+        "path": "kernel/docs/host-freeze-and-gate-containment-2026-08-24.md",
+        "sha256": "995f8d49152cf2927759edc554cf24a7b7c804893b1f3aa93705ccd20a31dfd5",
+        "needle": "There is no completed full landing-gate receipt after this incident."
+      },
+      "needle": "There is no completed full landing-gate receipt after this incident.",
+      "legacy_labels": [],
+      "supersedes": [],
+      "replaced_by": null,
+      "obsolete_evidence": [
+        "Partial pre-freeze gate output"
+      ],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    }
+  ],
+  "legacy_source_inventory": {
+    "path": "kernel/docs/DECISIONS.md",
+    "sha256": "5298a0a5e8ec2ca949db8242cb5947921b5f8f2c40db6fb30b7e49265354efbc",
+    "labels": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "30",
+      "31",
+      "32",
+      "33",
+      "34",
+      "35",
+      "36",
+      "37",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42",
+      "43",
+      "E1",
+      "E2",
+      "E3",
+      "E4"
+    ],
+    "labels_count": 47
+  },
+  "legacy_semantics": [
+    {
+      "label": "1",
+      "title": "Mechanism in C, policy in zl",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 11,
+      "source_heading": "**1. Mechanism in C, policy in zl.**",
+      "section_sha256": "74e454baf7e2a6d39cc4c232bed6f7bbe0665f14969065dd8533254290bb9494",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "2",
+      "title": "z-order is an index array. Nothing else",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 20,
+      "source_heading": "**2. z-order is an index array. Nothing else.**",
+      "section_sha256": "627e914b1a3fd001e656c8b7813822ad2f30757bb4de1e4fc891303fabc6a1fa",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "3",
+      "title": "Event routing has exactly three modes, checked in order:",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 24,
+      "source_heading": "**3. Event routing has exactly three modes, checked in order:**",
+      "section_sha256": "6122d838c1cd03f04f774651916468e830ccdf4ede868f0d3f9b851e2ac86f05",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "4",
+      "title": "An app is an integer ID plus three callbacks, and no loop of its own",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 29,
+      "source_heading": "**4. An app is an integer ID plus three callbacks, and no loop of its own.**",
+      "section_sha256": "723f0ace1a778d52ea8a0efcaab04369939d0feb56b19ddddd03195c7e5b9562",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "5",
+      "title": "Do NOT wire sched.c into the desktop",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 35,
+      "source_heading": "**5. Do NOT wire `sched.c` into the desktop.**",
+      "section_sha256": "da406ecf7c277685b8d83f6ff4fcd9d43e99f32f8d8dce627bba758423cd6361",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "6",
+      "title": "The clip rectangle is the keystone, and it is two functions FIVE",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 39,
+      "source_heading": "**6. The clip rectangle is the keystone, and it is ~~two functions~~ FIVE.**",
+      "section_sha256": "60909921a03aad743ab956f36f76c960ac8eb7de32d680c4e445cf2ea5196007",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "7",
+      "title": "Delete the snapshot-and-sticker drag machinery",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 70,
+      "source_heading": "**7. Delete the snapshot-and-sticker drag machinery**",
+      "section_sha256": "456d77b87dacbd5555f8134a4d739ad247e8f1539cb58e86421e576205f8fe0c",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "8",
+      "title": "The shell becomes app 0",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 75,
+      "source_heading": "**8. The shell becomes app 0.**",
+      "section_sha256": "19bd97b6e36f3d1a2bcf563a91178f1ccc7f09f94de678eaad8803a14c79262e",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "9",
+      "title": "Build order is forced:",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 79,
+      "source_heading": "**9. Build order is forced:**",
+      "section_sha256": "11ff870325e3520c01a96ab5a1fc1fc1c2f71e59e7b8cba07d2744a1b1ff349b",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "10",
+      "title": "The renderer is not the problem",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 87,
+      "source_heading": "**10. The renderer is not the problem.**",
+      "section_sha256": "cac8135e5e024a18977fd7132c19b88ef94e7409f55ed6714857b2bdecb00cad",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "11",
+      "title": "Three resampling bugs, not a bad renderer",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 92,
+      "source_heading": "**11. Three resampling bugs, not a bad renderer.**",
+      "section_sha256": "643889e738783f151a0cfdc0fc2cfd1dbf4de0920f372914da3724c418f63af7",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "12",
+      "title": "fbshadow fixed and SHIPPED",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 96,
+      "source_heading": "**12. `fb_shadow` fixed and SHIPPED.**",
+      "section_sha256": "0b76f58aa7f63269f2c5f04d9ade824888e5f62d0544c366c363e59df89d9304",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "13",
+      "title": "Measurement is a build artifact now",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 118,
+      "source_heading": "**13. Measurement is a build artifact now.**",
+      "section_sha256": "04cbfc2d0bdc8cb674fc000f0440c3847bca83db92d1fd0b26e261c7f6f088e0",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "14",
+      "title": "Speed is not the problem either",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 122,
+      "source_heading": "**14. Speed is not the problem either.**",
+      "section_sha256": "0ceae7edb9c2b1a83ac28ae37e5b53522fa3515cc8b8a6bad87549b114460733",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "15",
+      "title": "Blur once when a panel opens, never per frame",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 127,
+      "source_heading": "**15. Blur once when a panel opens, never per frame.**",
+      "section_sha256": "ee0f53074be121d65c1c8325d196f844b76004767b9ac1d52b7dc528f4f776be",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "16",
+      "title": "Motion is the biggest visual gap, and it is gated on damage tracking",
+      "feature_scope": [
+        "GR-015",
+        "DS-001"
+      ],
+      "source_line": 131,
+      "source_heading": "**16. Motion is the biggest visual gap, and it is gated on damage tracking.**",
+      "section_sha256": "1349db3de43d695e090521d9e59509136c7125f98f750d6e40935aa0a0e35831",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "17",
+      "title": "Do not write a GPU driver",
+      "feature_scope": [
+        "GR-025",
+        "DV-045"
+      ],
+      "source_line": 139,
+      "source_heading": "**17. Do not write a GPU driver.**",
+      "section_sha256": "08cdd39a3e3dd8052cb5ce872d2ed55cda18bdaaec5e83ae070a9764d686b1a3",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "18",
+      "title": "Porting one is closed too",
+      "feature_scope": [
+        "GR-025",
+        "DV-045"
+      ],
+      "source_line": 143,
+      "source_heading": "**18. Porting one is closed too.**",
+      "section_sha256": "a8eb83415174f3a4ea9a0eeaaea6853327641a4b7815849538768524a4ed4a7b",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "19",
+      "title": "Everyone with GPU acceleration got it by porting Mesa",
+      "feature_scope": [
+        "GR-025",
+        "DV-045"
+      ],
+      "source_line": 148,
+      "source_heading": "**19. Everyone with GPU acceleration got it by porting Mesa**",
+      "section_sha256": "fd6376913577e1d810eca143f27644849159a7a06d7c71df5c503877a7dc6ec4",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "20",
+      "title": "intel.c already has the correct relationship: borrow Linux's knowledge, not its code",
+      "feature_scope": [
+        "GR-025",
+        "DV-045"
+      ],
+      "source_line": 151,
+      "source_heading": "**20. `intel.c` already has the correct relationship: borrow Linux's knowledge,\nnot its code.**",
+      "section_sha256": "47e5f1c1e7c334193a5a671070d4abc44a3fd32c601dfc33af3c346490449f4b",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "21",
+      "title": "3D goes through a software rasterizer",
+      "feature_scope": [
+        "GR-025",
+        "DV-045"
+      ],
+      "source_line": 154,
+      "source_heading": "**21. 3D goes through a software rasterizer.**",
+      "section_sha256": "76ec6413f4e06fdc7f203e0fcfd130d65a7f25525f2e8f197b38f917e3f5d24f",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "22",
+      "title": "SSE is on and nothing uses it",
+      "feature_scope": [
+        "GR-025",
+        "DV-045"
+      ],
+      "source_line": 158,
+      "source_heading": "**22. SSE is on and nothing uses it.**",
+      "section_sha256": "1db22a420b95430ba34d6bb5fd02df492bba666588c2ffa121ac21899656273a",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "23",
+      "title": "Three of four cores are parked",
+      "feature_scope": [
+        "GR-025",
+        "DV-045"
+      ],
+      "source_line": 161,
+      "source_heading": "**23. Three of four cores are parked**",
+      "section_sha256": "2a4b9e52630fe1633d627d807faad7860a65b46120b3676586627f2c2b8c07e0",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "24",
+      "title": "virtiogpu.c:314 disables virgl on purpose",
+      "feature_scope": [
+        "GR-025",
+        "DV-045"
+      ],
+      "source_line": 173,
+      "source_heading": "**24. `virtio_gpu.c:314` disables virgl on purpose.**",
+      "section_sha256": "815fb5a1ae6e6cf0afb2edf2008d53e9f5cf66161f79a76a32c02082069c7115",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "25",
+      "title": "\"Table the shadow divide\" \u2014 WRONG",
+      "feature_scope": [
+        "EV-011",
+        "DS-001"
+      ],
+      "source_line": 206,
+      "source_heading": "**25. \"Table the shadow divide\" \u2014 WRONG.**",
+      "section_sha256": "7dcf75913b8de5dbaa6aa5610e1e8dab0170553a62652c9d925319a17424be1c",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "26",
+      "title": "\"The v10 mockup is 95% achievable\" \u2014 WRONG",
+      "feature_scope": [
+        "EV-011",
+        "DS-001"
+      ],
+      "source_line": 211,
+      "source_heading": "**26. \"The v10 mockup is ~95% achievable\" \u2014 WRONG.**",
+      "section_sha256": "1937faf6c5af6c253538fd0fd3a8bc5fab1e9e6b264380d437c056f200b28c0a",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "27",
+      "title": "GRAPHICSPLAN.md is stale for zlOS",
+      "feature_scope": [
+        "EV-011",
+        "DS-001"
+      ],
+      "source_line": 217,
+      "source_heading": "**27. `GRAPHICS_PLAN.md` is stale for zlOS**",
+      "section_sha256": "77442d7f0c898ec76afe5af7a1120e6bb9763b433c65de190f7246831b7500a6",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "28",
+      "title": "The toolkit is immediate mode, and the constraints chose it",
+      "feature_scope": [
+        "EV-011",
+        "DS-001"
+      ],
+      "source_line": 179,
+      "source_heading": "**28. The toolkit is immediate mode, and the constraints chose it.**",
+      "section_sha256": "e380d59c74ebe044e8e07c97b1ed6d3a8926d3156cf1dc1ea4b8b0696a42a115",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "29",
+      "title": "Blur \u2014 the northstar wins. Removed, and the reason is not aesthetic",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 289,
+      "source_heading": "### #29 | Blur \u2014 **the northstar wins.** Removed, and the reason is not aesthetic",
+      "section_sha256": "0fa063e461234b39357de5c02e68ed5a1e8d712936401f5d5dfa6aaaabde42b0",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "30",
+      "title": "Radial and conic gradients in the wallpaper \u2014 the code wins",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 372,
+      "source_heading": "### #30 | Radial and conic gradients in the wallpaper \u2014 **the code wins**",
+      "section_sha256": "f57816d8bdb5b922df8ea458942d20e9dee4166be2e332803188401d975e903b",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "31",
+      "title": "Radius 5 \u2192 12 \u2014 the code wins",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 396,
+      "source_heading": "### #31 | Radius 5 \u2192 12 \u2014 **the code wins**",
+      "section_sha256": "b166e37731efbe3ef40419698fc4ff72f8aeaabf74dba16e63abe48d3e02a101",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "32",
+      "title": "desktop-v10-plan.md \u00a74 was not written from memory",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 417,
+      "source_heading": "### #32 | `desktop-v10-plan.md` \u00a74 was **not** written from memory",
+      "section_sha256": "1c446fec413d18b95d03d53d223b41deaff1592be0e07aed6aa2654adf66e2d7",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "33",
+      "title": "The two missing palette entries, and why they are missing differently",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 438,
+      "source_heading": "### #33 | The two missing palette entries, and why they are missing differently",
+      "section_sha256": "7606f75b55bff670ab185e6239782f08a7434ee8e8a796778ca522cb07727390",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "34",
+      "title": "The two palettes \u2014 kernel.zl wins, and the reference says so itself. Closes E",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 471,
+      "source_heading": "### #34 | The two palettes \u2014 **`kernel.zl` wins, and the reference says so itself.** Closes E",
+      "section_sha256": "cabe35d06f506e0931b6a9546628db1cd68e52ab8623b5c0ea4c5e45523cd845",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "35",
+      "title": "The clipped shell \u2014 it wraps. Closes G",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 555,
+      "source_heading": "### #35 | The clipped shell \u2014 **it wraps.** Closes G",
+      "section_sha256": "50002a52b9c2dcd42d66884969885b3935b7778477e92521993129936aec33bf",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "36",
+      "title": "fbcachereset() had no caller because it was incomplete, not because nobody thought of it",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 591,
+      "source_heading": "### #36 | `fb_cache_reset()` had no caller because it was **incomplete**, not because nobody thought of it",
+      "section_sha256": "8be06ef8059657a60a43a055a4808ca010fbfe3833b4a08b6921d3aee9d2e769",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "37",
+      "title": "intelfind() runs at boot, and gpuframes exists so the result is visible",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 633,
+      "source_heading": "### #37 | `intel_find()` runs at boot, and `gpu_frames` exists so the result is visible",
+      "section_sha256": "03d2c6e112655bd70d0113e58c4ff8f14c61708dee79f04cdeb2cbd4f3251b88",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "38",
+      "title": "What a different model family found in #34\u2013#37, and one of the four was a P1",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 709,
+      "source_heading": "### #38 | What a different model family found in #34\u2013#37, and one of the four was a P1",
+      "section_sha256": "c5da81d44c9a72ac77dbfe55f2f4f73c361e097fa455bd4739cedb746b8ed4f5",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "39",
+      "title": "SMP bands: two docs written the same day disagree, and the code settles it \u2014 do not turn them on",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 775,
+      "source_heading": "### #39 | SMP bands: two docs written the same day disagree, and the code settles it \u2014 **do not turn them on**",
+      "section_sha256": "0ce66b60d3974fc4eec046a1bf358679404fe168b476f1cbbc505caafe395432",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "40",
+      "title": "icons24/icons48 externs said 10, icons.c has always had 20",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 837,
+      "source_heading": "### #40 | `icons24`/`icons48` externs said 10, `icons.c` has always had 20",
+      "section_sha256": "e2066b6ca3e9c98966b3e2d96a15a379112ad2162d7b89563c9bc81c70bf15ed",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "41",
+      "title": "The resize grip was drawn twice; deleted the earlier, dimmer, wrongly-scaled one",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 855,
+      "source_heading": "### #41 | The resize grip was drawn twice; deleted the earlier, dimmer, wrongly-scaled one",
+      "section_sha256": "f6ff850f535f1f799aebc6592d08ecca3bf6069ccd57a848c262c7e0a3673504",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "42",
+      "title": "The window fade blended its saved backdrop at the wrong origin, and I widened its scissor too",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 876,
+      "source_heading": "### #42 | The window fade blended its saved backdrop at the wrong origin, and I widened its scissor too",
+      "section_sha256": "557815866e687d3330f7003f42bd58d48628bf4ac1b882745adb6847f8c93503",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "43",
+      "title": "The snap preview: snapping worked, but you could not see where it would land",
+      "feature_scope": [
+        "DS-001",
+        "GR-015"
+      ],
+      "source_line": 972,
+      "source_heading": "### #43 | The snap preview: snapping worked, but you could not see where it would land",
+      "section_sha256": "848b655771cfc0a38b3cfd963223f9e7813f14a06a9551d5763e1ea365b3043f",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "E1",
+      "title": "The execution level: ASSUMED Level 1 (zlOS runs zl)",
+      "feature_scope": [
+        "ZL-043",
+        "KR-010"
+      ],
+      "source_line": 225,
+      "source_heading": "### #E1 | The execution level: **ASSUMED Level 1** (zlOS runs zl)",
+      "section_sha256": "1b58f9977b361c2ab042e651dd8f153ff3cc2e08c7e6cc85ebc99fb58d930a84",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "E2",
+      "title": "The program arena goes at 8 MiB, below the high-RAM map, not above it",
+      "feature_scope": [
+        "ZL-043",
+        "KR-010"
+      ],
+      "source_line": 241,
+      "source_heading": "### #E2 | The program arena goes at 8 MiB, below the high-RAM map, not above it",
+      "section_sha256": "2eef17633b3d7d32caf02d8c2d63f3074138f312930a63d89748f3872a98985f",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "E3",
+      "title": "An arena with a reset is not a heap, and the boot log still says so",
+      "feature_scope": [
+        "ZL-043",
+        "KR-010"
+      ],
+      "source_line": 250,
+      "source_heading": "### #E3 | An arena with a reset is not a heap, and the boot log still says so",
+      "section_sha256": "a52dff5979fdedf4eb8b1996820cc2fab82437f38fdf7ac90edae994b765a513",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    },
+    {
+      "label": "E4",
+      "title": "Refusals print, but the volume is bounded",
+      "feature_scope": [
+        "ZL-043",
+        "KR-010"
+      ],
+      "source_line": 261,
+      "source_heading": "### #E4 | Refusals print, but the volume is bounded",
+      "section_sha256": "77d6b659ad98bc0758f447d2b2ad4a5daa95fdc95a716c1477eb72c2d2a97328",
+      "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
+      "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
+    }
+  ],
+  "coverage": {
+    "normalized_records": 19,
+    "legacy_labels_indexed": 47,
+    "legacy_labels_semantically_normalized": 47,
+    "legacy_labels_remaining": 0,
+    "normalized_legacy_labels": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "30",
+      "31",
+      "32",
+      "33",
+      "34",
+      "35",
+      "36",
+      "37",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42",
+      "43",
+      "E1",
+      "E2",
+      "E3",
+      "E4"
+    ]
+  },
+  "counts": {
+    "records": 19,
+    "status": {
+      "ACTIVE": 16,
+      "QUALIFIED": 1,
+      "SUPERSEDED": 2
+    },
+    "action": {
+      "CORRECTION": 4,
+      "DECISION": 10,
+      "DEPRECATION": 1,
+      "MIGRATION": 1,
+      "OPERATIONS": 1,
+      "REVERSAL": 2
+    }
+  },
+  "open_gaps": {
+    "legacy_labels_without_normalized_semantics": 0,
+    "system_wide_source_inventory_complete": false,
+    "signed_or_independently_approved": false,
+    "automatic_migration_from_changed_source": false,
+    "user_visible_history_viewer": false
+  },
+  "evidence_ceiling": "19 high-impact records plus source-normalized semantics for all 47 legacy labels; not complete system history or independent approval",
+  "weakest_link": "system-wide non-DECISIONS.md sources, independent approval, automatic migration and target history UI remain open",
+  "generator": {
+    "path": "kernel/gen-decision-ledger.py",
+    "sha256": "b3033b01e6c14d4688e6cb1e5481633ffa0edfa62d71d9e2a002af1cafcc6d5d"
+  }
+}

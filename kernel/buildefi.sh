@@ -7,6 +7,9 @@
 set -e
 cd "$(dirname "$0")"
 
+python3 ./gen-app-manifest.py --check
+python3 ./gen-build-identity.py --check
+
 ../compile kernel.zl >/dev/null
 cp out.c _genefi.c
 
@@ -39,7 +42,7 @@ cp out.c _genefi.c
 # swallowed with it.
 CF="-target x86_64-unknown-windows -ffreestanding -fno-stack-protector \
     -fshort-wchar -mno-red-zone -O2 -DZL_64 -DZL_EFI -I.. \
-    -Wno-excessive-regsave \
+    -Wall -Wextra -Werror -Wno-unused-parameter -Wno-excessive-regsave \
     -Werror=shift-count-overflow -Werror=void-pointer-to-int-cast \
     -Werror=pointer-to-int-cast -Werror=int-to-pointer-cast"
 
@@ -76,7 +79,7 @@ done
 clang $CF -c smp_trampoline64.S -o _efi_smptr.o
 OBJS="$OBJS _efi_smptr.o"
 
-lld-link -subsystem:efi_application -nodefaultlib -dll \
+lld-link -subsystem:efi_application -nodefaultlib -dll /Brepro /lldignoreenv \
          -entry:efi_main -out:BOOTX64.EFI $OBJS
 
 echo "built BOOTX64.EFI ($(stat -c%s BOOTX64.EFI) bytes)"

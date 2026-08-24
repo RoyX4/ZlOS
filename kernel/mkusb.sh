@@ -20,6 +20,31 @@ SIZE_MB=64
 ./buildefi.sh >/dev/null
 [ -s BOOTX64.EFI ] || { echo "FAIL: BOOTX64.EFI was not built"; exit 1; }
 
+# Every generated identity is content-derived from build-identity.json. A
+# random GPT GUID, FAT serial or wall-clock directory entry makes byte-identical
+# source produce a different USB image and defeats exact artifact receipts.
+python3 ./gen-boot-media-ids.py --write >/dev/null
+media_field() {
+    python3 -c 'import json,sys; print(json.load(open("boot-media-ids.json"))[sys.argv[1]])' "$1"
+}
+SOURCE_DATE_EPOCH=$(media_field source_date_epoch)
+DISK_GUID=$(media_field usb_disk_guid)
+PART_GUID=$(media_field usb_partition_guid)
+FAT_ID=$(media_field usb_fat_volume_id)
+export SOURCE_DATE_EPOCH TZ=UTC
+
+REPRO_TIME_SO=$(mktemp "${TMPDIR:-/tmp}/zlos-usb-time.XXXXXX.so")
+PART=$(mktemp "${TMPDIR:-/tmp}/zlos-usb-esp.XXXXXX.img")
+STAGED_EFI=$(mktemp "${TMPDIR:-/tmp}/zlos-bootx64.XXXXXX.EFI")
+cleanup() {
+    rm -f "$REPRO_TIME_SO" "$PART" "$STAGED_EFI"
+}
+trap cleanup EXIT
+gcc -shared -fPIC -O2 -Wall -Wextra -Werror \
+    -o "$REPRO_TIME_SO" tools/reproducible_time.c
+cp BOOTX64.EFI "$STAGED_EFI"
+touch -d "@$SOURCE_DATE_EPOCH" "$STAGED_EFI"
+
 rm -f "$IMG"
 truncate -s "${SIZE_MB}M" "$IMG"
 
@@ -28,20 +53,24 @@ truncate -s "${SIZE_MB}M" "$IMG"
 sgdisk --clear \
        --new=1:2048:0 \
        --typecode=1:ef00 \
-       --change-name=1:"zlOS EFI" "$IMG" >/dev/null
+       --change-name=1:"zlOS EFI" \
+       --disk-guid="$DISK_GUID" \
+       --partition-guid=1:"$PART_GUID" "$IMG" >/dev/null
 
 # The partition starts at LBA 2048 = 1 MiB. Build the FAT filesystem separately
 # and dd it into place, which avoids needing loop devices or root.
-PART=_esp.img
-rm -f "$PART"
 truncate -s "$((SIZE_MB - 2))M" "$PART"
-mkfs.vfat -F 32 -n ZLOS "$PART" >/dev/null
+LD_PRELOAD="${REPRO_TIME_SO}${LD_PRELOAD:+:${LD_PRELOAD}}" \
+    mkfs.vfat --invariant -F 32 -n ZLOS -i "$FAT_ID" "$PART" >/dev/null
 
-mmd   -i "$PART" ::/EFI ::/EFI/BOOT
-mcopy -i "$PART" BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
+LD_PRELOAD="${REPRO_TIME_SO}${LD_PRELOAD:+:${LD_PRELOAD}}" \
+    mmd -i "$PART" ::/EFI ::/EFI/BOOT
+LD_PRELOAD="${REPRO_TIME_SO}${LD_PRELOAD:+:${LD_PRELOAD}}" \
+    mcopy -m -i "$PART" "$STAGED_EFI" ::/EFI/BOOT/BOOTX64.EFI
 
 dd if="$PART" of="$IMG" bs=1M seek=1 conv=notrunc status=none
-rm -f "$PART"
+cleanup
+trap - EXIT
 
 echo "built $IMG ($(stat -c%s "$IMG") bytes)"
 mdir -i "$IMG@@1M" ::/EFI/BOOT | sed 's/^/  /'

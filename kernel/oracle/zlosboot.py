@@ -33,7 +33,7 @@ DOCK_H = 52
 CAT_HEADER = 26
 CAT_TILE_W = 130
 CAT_TILE_H = 108
-REG_FIRST = 14                 # apps_registry.zl:59 - catalog index i is id 14+i
+REG_FIRST = 15                 # apps_registry.zl: first real registry app id
 
 # word -> the open_app() code it dispatches to. These seven are every code
 # kernel.zl's open_app() handles; everything else in the suite exists only
@@ -83,6 +83,40 @@ def guest_ui(width):
     q8 = (width * 256 + 960) // 1920
     q8 = max(256, min(768, q8))
     return (q8 + 128) // 256
+
+
+def dock_geometry(width, height):
+    """The dock/app-grid/topbar pointer targets derived from kernel.zl."""
+    src = open(os.path.join(KERNEL, "kernel.zl"), encoding="utf-8").read()
+    values = {}
+    for name in ("DOCK_PADX", "DOCK_PADY", "DOCK_GAP", "DOCK_TW", "DOCK_H",
+                 "DOCK_BOT", "DOCK_PITCH", "DOCK_N", "TOPBAR_H"):
+        match = re.search(r"^%s\s*=\s*(\d+)" % name, src, re.M)
+        if not match:
+            raise SystemExit(f"kernel.zl no longer defines {name}; pointer "
+                             "routes cannot be derived safely")
+        values[name] = int(match.group(1))
+    u = guest_ui(width)
+    bar_w = (values["DOCK_PADX"] * 2 + values["DOCK_N"] * values["DOCK_TW"]
+             + (values["DOCK_N"] - 1) * values["DOCK_GAP"]
+             + values["DOCK_GAP"] * 2 + 1 + values["DOCK_TW"])
+    bar_x = (width - bar_w * u) // 2
+    x0 = bar_x + values["DOCK_PADX"] * u
+    y = height - (values["DOCK_H"] + values["DOCK_BOT"]) * u
+    middle_y = y + values["DOCK_PADY"] * u + values["DOCK_TW"] * u // 2
+    grid_x = (x0 + values["DOCK_N"] * values["DOCK_PITCH"] * u
+              + values["DOCK_GAP"] * u + 1)
+    return {
+        "slots": [
+            (x0 + slot * values["DOCK_PITCH"] * u
+             + values["DOCK_TW"] * u // 2, middle_y)
+            for slot in range(values["DOCK_N"])
+        ],
+        "grid": (grid_x + values["DOCK_TW"] * u // 2, middle_y),
+        "topbar_corner": (60 * u, values["TOPBAR_H"] * u // 2),
+        "dock_y": y,
+        "u": u,
+    }
 
 
 def catalog_apps():
@@ -135,7 +169,7 @@ def catalog_apps():
     # THE CATALOG INDEX IS DENSE NOW, not id - REG_FIRST.
     #
     # REG_COUNT is gone: the id space was carved into reserved per-slice ranges
-    # with holes in it (34..39 unallocated, and one spare id at the end of each
+    # with holes in it (35..39 unallocated, and one spare id at the end of each
     # slice), so the catalog walks a dense list built by reg_exists() and a tile
     # index no longer equals an id offset. Reading REG_COUNT and assuming
     # contiguity would click the wrong tile - silently, and for every app past
@@ -317,6 +351,13 @@ def variant_source(want_w, want_h, dest):
             f"booting a kernel this has silently failed to patch.")
     patched = LADDER.sub(f"if px_w() > 0 {{\n        set_res({want_w}, {want_h})\n    }}",
                          src)
+    # A source variant is not the tracked build represented by the generated
+    # app/build identity files. Silence both runtime receipts rather than let a
+    # visual-test artifact falsely identify itself as the canonical image.
+    patched = re.sub(r"^\s*app_manifest_report\(\)\s*$", "", patched,
+                     flags=re.M)
+    patched = re.sub(r"^\s*build_identity_report\(\)\s*$", "", patched,
+                     flags=re.M)
     if patched == src:
         raise SystemExit("the ladder substitution changed nothing")
     os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -466,12 +507,19 @@ class Machine:
         self.boot_timeout = boot_timeout
         self.cmd_timeout = cmd_timeout
         self.tablet = tablet
-        if how not in ("src", "toggle"):
-            raise SystemExit("how must be 'src' or 'toggle'")
+        if how not in ("src", "toggle", "native"):
+            raise SystemExit("how must be 'src', 'toggle' or 'native'")
         self.how = how
         self.proc = None
 
     def __enter__(self):
+        if self.how == "native":
+            # Build the tracked source exactly as it stands. This is the only
+            # admissible mode for provenance receipts: a variant source is
+            # useful for visual comparisons, but its artifact must never be
+            # attributed to the restored kernel.zl after the build.
+            os.environ.pop("ZLOS_SRC", None)
+            os.environ.pop("ZLOS_GFXMODE", None)
         if self.how == "src":
             # Boot AT the size. See variant_source() for the measured reason
             # the `toggle` route produces a desktop that is laid out for
@@ -505,7 +553,9 @@ class Machine:
             raise SystemExit("booted but no shell prompt")
         self.boot_size = size_of(self.qmp, self.tmp)
         print(f"booted at {self.boot_size[0]}x{self.boot_size[1]}")
-        if self.how == "src":
+        if self.how == "native":
+            self.w, self.h = self.boot_size
+        elif self.how == "src":
             if self.boot_size != self.want:
                 raise SystemExit(
                     f"the variant kernel was told to set_res{self.want} and "
@@ -527,4 +577,7 @@ class Machine:
         if self.proc is not None:
             self.proc.kill()
             self.proc.wait()
+        if self.how == "src":
+            os.environ.pop("ZLOS_SRC", None)
+            os.environ.pop("ZLOS_GFXMODE", None)
         return False

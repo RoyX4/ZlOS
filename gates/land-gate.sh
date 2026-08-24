@@ -4,10 +4,18 @@
 # `tail`, so every step reported the exit status of `tail` (always 0) and a
 # tree that did not link gated green.
 #
-# usage: bash gates/land-gate.sh [worktree]   (default: this worktree)
-# Run it backgrounded:  nohup bash gates/land-gate.sh > ~/gate.log 2>&1 &
+# Do not invoke this file directly. `run-land-gate-contained.sh start` is the
+# only supported entry point on the four-core development machine. It gives
+# the gate its own resource-bounded cgroup and preserves the desktop.
 
 set -u
+cgroup_path=$(awk -F: '$1 == "0" { print $3 }' /proc/$$/cgroup)
+if [ "${ZLOS_CONTAINED_GATE:-}" != "1" ] || \
+   [[ "$cgroup_path" != *"/zlos-master-land-gate.service" ]]; then
+  echo "land-gate: refusing unrestricted execution" >&2
+  echo "use: gates/run-land-gate-contained.sh start" >&2
+  exit 2
+fi
 WT="${1:-$(git rev-parse --show-toplevel)}"
 cd "$WT" || exit 2
 
@@ -32,8 +40,8 @@ guard() {
   local la mem
   la=$(cut -d' ' -f1 /proc/loadavg)
   mem=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
-  # the documented prior kill on this box was an OOM, not CPU starvation,
-  # so memory is guarded as well as load
+  # The 2026-08-24 desktop freeze had no surviving OOM or panic record. Guard
+  # both load and memory without pretending either was the sole cause.
   if awk "BEGIN{exit !($la > 4.0)}"; then echo "load $la > 4.0 — waiting"; return 1; fi
   if [ "$mem" -lt 3000 ]; then echo "available memory ${mem}MB < 3000 — waiting"; return 1; fi
   if pgrep '^qemu-system' >/dev/null; then echo "a qemu is already running — waiting"; return 1; fi
@@ -43,64 +51,73 @@ guard() {
 echo "gate: $WT @ $(git rev-parse --short HEAD)"
 echo "load: $(cut -d' ' -f1-3 /proc/loadavg)   avail: $(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)MB"
 
+# Individual boot scripts remain useful on reduced developer machines and may
+# report a skip when QEMU or firmware is unavailable. The complete landing gate
+# is not optional: prove all of its prerequisites up front so a skip can never
+# be promoted to a green landing.
+run "mandatory boot prerequisites" "$WT/kernel" \
+    python3 check-boot-prereqs.py --selftest
+run "contained gate launcher contract" "$WT/gates" \
+    python3 check-contained-gate.py --selftest
+run "landing authority closure" "$WT/kernel" \
+    python3 check-land-gate.py --selftest
+run "wrapper inventory write" "$WT/kernel" \
+    python3 gen-wrapper-registry.py --write --selftest
+run "wrapper inventory check" "$WT/kernel" \
+    python3 gen-wrapper-registry.py --check --selftest
+run "warning-strict build contract" "$WT/kernel" \
+    python3 check-build-contract.py --selftest
+run "host dependency lock" "$WT/kernel" \
+    python3 gen-dependency-lock.py --check --selftest
+run "license/provenance truth" "$WT/kernel" \
+    python3 gen-license-registry.py --check --selftest
+
 # --- toolchain and compile-only steps (cheap, no QEMU)
 run "zl toolchain"     "$WT"               ./build.sh
+run "build input identity" "$WT/kernel" python3 gen-build-identity.py --check --selftest
+run "toolchain manifest write" "$WT/kernel" python3 gen-toolchain-manifest.py --write --selftest
+run "toolchain manifest check" "$WT/kernel" python3 gen-toolchain-manifest.py --check --selftest
+run "build graph write" "$WT/kernel" python3 gen-build-graph.py --write --selftest
+run "build graph check" "$WT/kernel" python3 gen-build-graph.py --check --selftest
+run "source snapshot write" "$WT/kernel" python3 gen-source-snapshot.py --write --selftest
+run "source snapshot check" "$WT/kernel" python3 gen-source-snapshot.py --check --selftest
 run "kernel 32-bit"    "$WT/kernel"        ./build.sh
 run "kernel 64-bit"    "$WT/kernel"        ./build64.sh
 run "kernel EFI"       "$WT/kernel"        ./buildefi.sh
-[ -x "$WT/kernel/verify-sources.sh" ] && run "SOURCES coverage" "$WT/kernel" ./verify-sources.sh
+run "kernel ELF permissions" "$WT/kernel" python3 check-elf-permissions.py --selftest
+run "SOURCES recovery selftest" "$WT/kernel" ./verify-sources.sh --selftest-recovery
+run "SOURCES coverage" "$WT/kernel" ./verify-sources.sh
 run "hosttest build"   "$WT/kernel/hosttest" ./build.sh
 
-# --- RUN them. Building a test proves it compiles; it proves nothing else.
-# This gate built ~26 harnesses and executed none of them for its whole life -
-# roughly 276 assertions, including a 2.7-million-check fuzz, sitting as
-# decoration while the gate reported green. They were run by hand instead, which
-# is exactly the habit a gate exists to remove.
-#
-# EXIT 77 MEANS SKIPPED, NOT FAILED, and this loop has to know that or the
-# convention is decoration. gpu_blt.c:624 returns 77 when there is no
-# /dev/dri/renderD128 - it is a harness for the Intel blitter and there is
-# nothing for it to talk to on a machine without an Intel GPU. Its comment says
-# "77 = skip, not fail"; this loop treated every non-zero as FAIL, so that
-# contract was honoured by nobody and the gate would have gone red on every
-# box without the hardware. Same class as everything in
-# docs/GUARDS-THAT-DID-NOT-GUARD.md: a stated guarantee whose only consumer
-# never implemented it.
-#
-# A skip is COUNTED AND PRINTED rather than folded into the pass count. "27
-# passed" when three of them did nothing is the false green this gate exists to
-# stop, and a hardware harness that silently stops running is exactly how GPU
-# work would rot.
-echo; echo "=== hosttest run ==="
-hf=0; hp=0; hs=0
-for t in "$WT"/kernel/hosttest/*; do
-  [ -x "$t" ] && [ ! -d "$t" ] || continue
-  case "$(basename "$t")" in
-    *.*|intel_probe|modeset_test|dpll_test|gpu_fillrate|gpu-dev.sh|modeset-run.sh|jmptest32) continue;;
-  esac
-  ( cd "$WT/kernel/hosttest" && timeout 180 "./$(basename "$t")" >/dev/null 2>&1 )
-  case $? in
-    0)  hp=$((hp+1));;
-    77) echo "SKIP: $(basename "$t") (77 - hardware or device not present here)"
-        hs=$((hs+1));;
-    *)  echo "FAIL: $(basename "$t")"; hf=$((hf+1));;
-  esac
-done
-if [ $hf -gt 0 ]; then FAIL=$((FAIL+1)); echo ">>> FAIL (hosttest run: $hf of $((hp+hf)))"
-else echo ">>> ok (hosttest run: $hp passed, $hs skipped)"; fi
+# --- RUN every declared gate through the generated inventory. The old loop
+# guessed semantics from filenames. It therefore ran parsestat even though its
+# own build comment says "NOT A GATE", skipped jmptest32, and skipped every
+# executable shell test because `*.*` was its blanket exclusion. Instruments,
+# manual hardware actions, optional builds, real gates and exit-77 hardware
+# absences are now distinct machine-checked states. No non-run is counted as a
+# pass and every compiled output plus executable script must be classified.
+run "host test inventory" "$WT/kernel" python3 gen-test-inventory.py --check --selftest
+run "host tests execute" "$WT/kernel" python3 run-host-tests.py --run --selftest
+until guard; do sleep 30; done
+run "host benchmark receipt" "$WT/kernel" python3 run-benchmarks.py --run --selftest
 
 # --- the two static checkers. Neither builds anything or boots anything, so
 # there is no excuse for them not being in the gate: check-zl-calls proves every
 # kernel.zl call site resolves (zl has no compile-time check for that at all),
 # and check-memmap proves no two fixed addresses overlap - which is how
 # LINE_BUF and DISK_SCRATCH sat on 0x02030000 through a whole integration.
-[ -x "$WT/kernel/check-zl-calls.sh" ] && run "zl call sites" "$WT/kernel" ./check-zl-calls.sh
-[ -x "$WT/kernel/check-memmap.sh" ]   && run "memory map"    "$WT/kernel" ./check-memmap.sh
+run "zl call sites" "$WT/kernel" ./check-zl-calls.sh
+run "memory map" "$WT/kernel" ./check-memmap.sh
+run "unique app ids" "$WT/kernel" ./check-appids.py --selftest
+run "app registry coverage" "$WT" python3 kernel/hosttest/apps53.py --selftest
+run "61-app manifest" "$WT/kernel" python3 gen-app-manifest.py --check --selftest
+run "app lifecycle verifier" "$WT/kernel" python3 probe-app-lifecycle.py --selftest
+run "reproducible artifact verifier" "$WT/kernel" python3 check-reproducible-build.py --selftest
 # check-memmap.sh reads kernel.zl and no C at all, which is why intel.c's
 # edid_buf sat inside fb.c's blur arena while it printed a clean map. This is
 # the other half: every page-aligned hex literal in a .c or .h that lands
 # strictly inside a declared HI_* region without being its base.
-[ -x "$WT/kernel/check-himap.sh" ]    && run "high-RAM map"  "$WT/kernel" ./check-himap.sh
+run "high-RAM map" "$WT/kernel" ./check-himap.sh
 
 # --- the reverse SOURCES check: a .c present but not listed is silently not compiled
 if [ -f "$WT/kernel/SOURCES" ]; then
@@ -132,14 +149,94 @@ if [ -f "$WT/kernel/SOURCES" ]; then
   else
     echo ">>> ok (reverse SOURCES; $hostonly host-only, $dead dead)"
   fi
+else
+  FAIL=$((FAIL+1)); echo ">>> FAIL (reverse SOURCES: kernel/SOURCES is missing)"
 fi
 
 # --- boot gates: QEMU under TCG, one at a time, guarded
-for g in mkiso.sh verify.sh verify-iso.sh verify-efi.sh verify-raw.sh verify-disk.sh verify-clock.sh; do
-  [ -x "$WT/kernel/$g" ] || continue
+run "reproducible kernel and ISO" "$WT/kernel" python3 check-reproducible-build.py --check
+for g in mkiso.sh verify.sh verify-iso.sh verify-64.sh verify-efi.sh verify-raw.sh verify-disk.sh verify-clock.sh; do
   until guard; do sleep 30; done
   run "boot: $g" "$WT/kernel" "./$g"
 done
+
+# --- Evidence joins must run AFTER the recipes and boot gates that create the
+# artifacts and receipts they claim. The old order checked app-evidence.json
+# before refreshing any receipt, then rebuilt the ISO several times and never
+# checked the join again. Finish on one canonical ISO, exercise its graphical
+# routes without rebuilding between probes, regenerate the join, and only then
+# promote the exact artifact/route registry.
+run "final canonical ISO" "$WT/kernel" ./mkiso.sh
+until guard; do sleep 30; done
+run "CPU fault capture QEMU" "$WT/kernel" python3 verify-crash.py --run \
+    --no-build --selftest
+until guard; do sleep 30; done
+run "app routes QEMU" "$WT/kernel" python3 probe-app-routes.py --no-build \
+    --receipt docs/receipts/app-routes-qemu-2026-08-22.json
+until guard; do sleep 30; done
+run "47-app lifecycle QEMU" "$WT/kernel" python3 probe-app-lifecycle.py --no-build \
+    --receipt docs/receipts/app-lifecycle-qemu-2026-08-22.json
+until guard; do sleep 30; done
+run "Run route QEMU" "$WT/kernel" python3 probe-run.py --no-build \
+    --receipt docs/receipts/run-qemu-2026-08-22.json
+run "62-surface evidence registry write" "$WT/kernel" \
+    python3 gen-app-evidence.py --write --verify-artifact
+run "62-surface evidence registry check" "$WT/kernel" \
+    python3 gen-app-evidence.py --check --selftest --verify-artifact
+run "artifact and boot-route registry write" "$WT/kernel" \
+    python3 gen-artifact-registry.py --write --selftest
+run "artifact and boot-route registry check" "$WT/kernel" \
+    python3 gen-artifact-registry.py --check --selftest
+run "initialization registry write" "$WT/kernel" \
+    python3 gen-init-registry.py --write --selftest
+run "initialization registry check" "$WT/kernel" \
+    python3 gen-init-registry.py --check --selftest
+run "adversarial registry write" "$WT/kernel" \
+    python3 gen-adversarial-registry.py --write --selftest
+run "adversarial registry check" "$WT/kernel" \
+    python3 gen-adversarial-registry.py --check --selftest
+run "host benchmark receipt check" "$WT/kernel" \
+    python3 run-benchmarks.py --check --selftest
+run "visual evidence registry write" "$WT/kernel" \
+    python3 gen-visual-registry.py --write --selftest
+run "visual evidence registry check" "$WT/kernel" \
+    python3 gen-visual-registry.py --check --selftest
+run "accessibility proof registry write" "$WT/kernel" \
+    python3 gen-accessibility-registry.py --write --selftest
+run "accessibility proof registry check" "$WT/kernel" \
+    python3 gen-accessibility-registry.py --check --selftest
+run "security claim registry write" "$WT/kernel" \
+    python3 gen-security-registry.py --write --selftest
+run "security claim registry check" "$WT/kernel" \
+    python3 gen-security-registry.py --check --selftest
+run "decision ledger write" "$WT/kernel" \
+    python3 gen-decision-ledger.py --write --selftest
+run "decision ledger check" "$WT/kernel" \
+    python3 gen-decision-ledger.py --check --selftest
+run "event trace host receipt write" "$WT/kernel" \
+    python3 verify-event-trace.py --write --selftest
+run "event trace host receipt check" "$WT/kernel" \
+    python3 verify-event-trace.py --check --selftest
+run "event schema registry write" "$WT/kernel" \
+    python3 gen-event-schema.py --write --selftest
+run "event schema registry check" "$WT/kernel" \
+    python3 gen-event-schema.py --check --selftest
+run "observability registry write" "$WT/kernel" \
+    python3 gen-observability-registry.py --write --selftest
+run "observability registry check" "$WT/kernel" \
+    python3 gen-observability-registry.py --check --selftest
+run "release notes write" "$WT/kernel" \
+    python3 gen-release-notes.py --write --selftest
+run "release notes check" "$WT/kernel" \
+    python3 gen-release-notes.py --check --selftest
+run "provenance viewer write" "$WT/kernel" \
+    python3 gen-provenance-viewer.py --write --selftest
+run "provenance viewer check" "$WT/kernel" \
+    python3 gen-provenance-viewer.py --check --selftest
+run "joined evidence registry write" "$WT/kernel" \
+    python3 gen-evidence-registry.py --write --selftest
+run "joined evidence registry check" "$WT/kernel" \
+    python3 gen-evidence-registry.py --check --selftest
 
 echo
 echo "================================"

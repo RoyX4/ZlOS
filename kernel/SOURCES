@@ -27,6 +27,7 @@
 # linker; it is kept as it was so a diff against the old scripts is readable.
 
 support.c
+crash.c
 vga.c
 fb.c
 fb3d.c

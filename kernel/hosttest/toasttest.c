@@ -28,6 +28,7 @@
 #include <string.h>
 #include <sys/mman.h>
 
+#include "../ease.h"
 #include "../ui.h"
 
 /* ---- fb.c ---------------------------------------------------------------- */
@@ -83,7 +84,7 @@ void zl_putc_pub(char c) { (void)c; }
 #define BG_ADDR   0x08000000UL
 #define SP_ADDR   0x0A000000UL
 #define BACK_ADDR 0x0C000000UL
-#define DOCK_H    (64 * 2)          /* kernel.zl's dock_y(), at scale 2 */
+#define DOCK_H    (72 * 2)          /* kernel.zl's dock_y(), at scale 2 */
 
 /* the app paints its whole client area one flat colour, so anything that is
  * NOT that colour inside a window is something else drawing on top */
@@ -202,8 +203,14 @@ int main(void)
      * appears on top of a window" and not "it appears on empty wallpaper" */
     int tx, ty, tw, th;
     notify_rect(W, H, DOCK_H, 2, &tx, &ty, &tw, &th);
-    int win = wm_open(1, "cover", tx - 60, ty - 60, tw + 120, th + 120);
-    for (int i = 0; i < 8; i++) frame();          /* let the open animation settle */
+    const struct ui_theme *cover_theme = ui_theme();
+    int cover_top = cover_theme->title_h + 16;
+    int win = wm_open(1, "cover", tx - 60, ty - cover_top,
+                      tw + 120, th + cover_top + 16);
+    /* zwin is 200 ms at the compositor's 100 Hz clock. This used to wait
+     * eight ticks, so it sampled a half-open window after the motion duration
+     * was corrected from 160 ms to the design system's 200 ms. */
+    for (int i = 0; i < EASE_MS_WIN / 10 + 2; i++) frame();
 
     ok("the covering window has focus to start with", wm_focused() == win);
     ok("...and nothing foreign is drawn where the toast will go",
@@ -274,7 +281,7 @@ int main(void)
     wm_close(win);
     for (int i = 0; i < 4; i++) frame();
 
-    const int RT = 32 * 2, RB = 64 * 2;      /* TOPBAR_H and dock, at scale 2 */
+    const int RT = 48 * 2, RB = 72 * 2;      /* TOPBAR_H and dock, at scale 2 */
     int s0 = wm_open(1, "snap", 300, 300, 420, 260);
     for (int i = 0; i < 8; i++) frame();
     int gx, gy, gw, gh;

@@ -1,0 +1,1900 @@
+{
+  "schema": "zlos.provenance-viewer.v1",
+  "result": "PASS_STATIC_VIEWER_WITH_OPEN_GAPS",
+  "feature_id": "EV-028",
+  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "viewer": {
+    "format": "SELF_CONTAINED_HTML",
+    "read_only": true,
+    "locale": "en",
+    "visual_direction": "flight-recorder evidence room",
+    "external_requests": 0,
+    "search": true,
+    "status_filters": [
+      "ALL",
+      "PASS",
+      "PARTIAL",
+      "GAP",
+      "BLOCKED",
+      "UNVERIFIED",
+      "REGRESSION"
+    ],
+    "keyboard_navigation": true,
+    "reduced_motion": true,
+    "color_is_not_sole_status_signal": true
+  },
+  "tokens": {
+    "canvas": "#111210",
+    "panel": "#1a1c18",
+    "raised": "#23261f",
+    "line": "#3a3f33",
+    "text": "#f0eee6",
+    "muted": "#adb0a4",
+    "pass": "#7bc47f",
+    "warn": "#e3b341",
+    "fail": "#ff6b5f",
+    "info": "#6bb6c9",
+    "focus": "#f4cf67",
+    "space_1": "0.375rem",
+    "space_2": "0.75rem",
+    "space_3": "1.125rem",
+    "space_4": "1.75rem",
+    "radius": "0.375rem"
+  },
+  "inputs": [
+    {
+      "path": "kernel/build-identity.json",
+      "sha256": "22414d9ea92b9d48bc68fc2160fe6f950e39bffcb723adb29923f4ad05da524f",
+      "schema": "zlos.build-input-identity.v1"
+    },
+    {
+      "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
+      "sha256": "4e7c5aeed8be8c11182dd2f0e7686233efba97367501df992f3ac551e844de21",
+      "schema": "zlos.source-snapshot-receipt.v1"
+    },
+    {
+      "path": "kernel/license-registry.json",
+      "sha256": "1f36d1d3630970ebf6711b30b4c13d192ad03e658e0dea9b025b4d44f0559395",
+      "schema": "zlos.license-provenance-registry.v1"
+    },
+    {
+      "path": "kernel/dependency-lock.json",
+      "sha256": "25cf47fb8ba38f757db5912f06c8c4895f826663f66e24526f0b389921384f20",
+      "schema": "zlos.host-dependency-lock.v2"
+    },
+    {
+      "path": "kernel/toolchain-manifest.json",
+      "sha256": "2a0a0481c50a81eef7a1e179ff4f306527a7fd5792ea4b766f4659e51ffa9f22",
+      "schema": "zlos.toolchain-manifest.v1"
+    },
+    {
+      "path": "kernel/artifact-registry.json",
+      "sha256": "8378d40d2f0a0f5cc5dff9a334be31911fe1d5a8f257845cc8d30870865d96c1",
+      "schema": "zlos.artifact-boot-registry.v1"
+    },
+    {
+      "path": "kernel/app-manifest.json",
+      "sha256": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7",
+      "schema": "zlos.application-identity-manifest.v1"
+    },
+    {
+      "path": "kernel/app-evidence.json",
+      "sha256": "8e27cbee3a8107f9a2e3f76758939821fa5898dc0189d7ac975171437ca6b38d",
+      "schema": "zlos.application-evidence-registry.v1"
+    },
+    {
+      "path": "kernel/hosttest/test-inventory.json",
+      "sha256": "ee7812d65ac0124342761b9d5ecaa954bbabcebdf4dcfe2f5e707fc905aac865",
+      "schema": "zlos.host-test-inventory.v1"
+    },
+    {
+      "path": "kernel/hosttest/test-run-receipt.json",
+      "sha256": "9f091d6276630a0087bfe7cc03b481fea1d1cefb29b43730e4db80a91dceca2f",
+      "schema": "zlos.host-test-run-receipt.v1"
+    },
+    {
+      "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
+      "sha256": "a7b5fc3572008d536bfa67b6f5d24a93bc14bfe44fea1791455f60542d9c3738",
+      "schema": "zlos.host-benchmark-receipt.v1"
+    },
+    {
+      "path": "kernel/visual-registry.json",
+      "sha256": "f7c6171e66ad750f918803c3a24c3bba57890cfc596e79abe61ab0217bce9b0b",
+      "schema": "zlos.visual-evidence-registry.v1"
+    },
+    {
+      "path": "kernel/accessibility-registry.json",
+      "sha256": "86fb47133c8017ef22740c64cca408dff3119a924a93173ec08b8d507a0008ba",
+      "schema": "zlos.accessibility-proof-registry.v1"
+    },
+    {
+      "path": "kernel/security-registry.json",
+      "sha256": "8c6b73406fd6b617a10c00f8a2540397782a0197d18ae265b4204aa0e32261ae",
+      "schema": "zlos.security-claim-registry.v1"
+    },
+    {
+      "path": "kernel/observability-registry.json",
+      "sha256": "b7dd0e1a365b0b5ba3048baea2723890cdc50c00983ce83bea5e1fb62d74992a",
+      "schema": "zlos.observability-registry.v1"
+    },
+    {
+      "path": "kernel/decision-ledger.json",
+      "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+      "schema": "zlos.decision-ledger.v1"
+    },
+    {
+      "path": "kernel/release-notes.json",
+      "sha256": "fd2af9b6aa18a5538d2c57faa9758fd5c43bba552a454fdad7334318321dda4f",
+      "schema": "zlos.release-notes.v1"
+    }
+  ],
+  "identity": {
+    "head": "b8a00ec45ac1f9f955ba79ed63f0072540067d4e",
+    "branch": "codex/master-program-foundation",
+    "dirty": true,
+    "release_state": "UNRELEASED_DEVELOPMENT",
+    "release_version": null,
+    "release_channel": "NONE"
+  },
+  "origin": {
+    "build_input_count": 123,
+    "archive_bytes": 5294080,
+    "archive_sha256": "cb17bcd596060f72169288807375816d7c7653852eb213261247c72ea95697b2",
+    "off_host_copies": 0,
+    "whole_repository_snapshot": false,
+    "dependency_commands": 15,
+    "firmware_blobs": 2,
+    "toolchain_lanes": [
+      "bios-multiboot32",
+      "multiboot64",
+      "native-uefi64",
+      "raw-bios-loader32"
+    ]
+  },
+  "licensing": {
+    "build_inputs": 123,
+    "declared_license_files": 0,
+    "inputs_with_established_redistribution_grant": 0,
+    "public_release_blocked": true
+  },
+  "signatures": {
+    "release_notes_signed": false,
+    "source_snapshot_signed": false,
+    "artifact_signatures": 0,
+    "toolchain_attestations": 0,
+    "package_signatures": 0
+  },
+  "tests": {
+    "commands_executed": 53,
+    "failed": 0,
+    "not-run": 11,
+    "passed": 48,
+    "skipped-hardware": 3,
+    "targets": 62,
+    "unavailable": 0,
+    "qemu_boot_routes": 6,
+    "app_lifecycle_qemu_proved": 62
+  },
+  "health": [
+    {
+      "area": "Build identity",
+      "status": "PASS",
+      "detail": "123 declared inputs bind one exact dirty development identity."
+    },
+    {
+      "area": "Source custody",
+      "status": "BLOCKED",
+      "detail": "Exact local archive exists; off-host copies and signatures are zero."
+    },
+    {
+      "area": "Licensing",
+      "status": "BLOCKED",
+      "detail": "123 build inputs lack an established redistribution grant."
+    },
+    {
+      "area": "Host tests",
+      "status": "PARTIAL",
+      "detail": "48 pass, 3 hardware skip, 11 not run."
+    },
+    {
+      "area": "Performance",
+      "status": "REGRESSION",
+      "detail": "4 of 7 host frame metrics exceed budget; no native distribution."
+    },
+    {
+      "area": "Visual proof",
+      "status": "GAP",
+      "detail": "46 assets inventoried; 0 current-build screenshot receipts."
+    },
+    {
+      "area": "Accessibility",
+      "status": "GAP",
+      "detail": "9 capabilities missing; 0 complete target workflows."
+    },
+    {
+      "area": "Security",
+      "status": "BLOCKED",
+      "detail": "11 claims missing; 0 production-complete."
+    },
+    {
+      "area": "Observability",
+      "status": "GAP",
+      "detail": "5 capabilities missing; 0 durable crash receipts."
+    },
+    {
+      "area": "Release",
+      "status": "BLOCKED",
+      "detail": "Unreleased development batch: no version, channel, signature or publication."
+    },
+    {
+      "area": "Complete landing gate",
+      "status": "UNVERIFIED",
+      "detail": "The latest attempt was interrupted; no post-incident aggregate green exists."
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "BOOTX64.EFI",
+      "bytes": 2716672,
+      "path": "kernel/BOOTX64.EFI",
+      "sha256": "63b6c7053839294e8dccfc55b98c0dfa78d59889e3c27e83b503b51e94e607c1",
+      "description": "PE32+ native UEFI application",
+      "producer": "buildefi.sh",
+      "proof_state": "PARENT_BYTE_EXACT",
+      "boot_routes": [
+        "native-uefi64"
+      ],
+      "reproducibility": "TWO_INDEPENDENT_RUNS_BYTE_IDENTICAL",
+      "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH"
+    },
+    {
+      "name": "boot-media-ids.json",
+      "bytes": 414,
+      "path": "kernel/boot-media-ids.json",
+      "sha256": "52d6cdf60cf45be671e522216af4cecee444a3895592fb197a7a3df38e7f7cbb",
+      "description": "deterministic disk/FAT identity metadata",
+      "producer": "gen-boot-media-ids.py",
+      "proof_state": "METADATA_ONLY",
+      "boot_routes": [],
+      "reproducibility": "TWO_INDEPENDENT_RUNS_BYTE_IDENTICAL",
+      "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH"
+    },
+    {
+      "name": "kernel.elf",
+      "bytes": 4592648,
+      "path": "kernel/kernel.elf",
+      "sha256": "63669c18afb3ed2454be1155cd4381a1dc370105aefad07461e536d2e121e286",
+      "description": "ELF32 multiboot kernel",
+      "producer": "build.sh",
+      "proof_state": "PARENT_BYTE_EXACT",
+      "boot_routes": [
+        "grub-bios32",
+        "grub-uefi32"
+      ],
+      "reproducibility": "TWO_INDEPENDENT_RUNS_BYTE_IDENTICAL",
+      "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH",
+      "memory_permissions": "NO_RWX_LOAD"
+    },
+    {
+      "name": "kernel64.elf",
+      "bytes": 2702592,
+      "path": "kernel/kernel64.elf",
+      "sha256": "686affb711ab6a7a1d2f5836eefb98b550e0cdf6398e97938651ff84dbef29df",
+      "description": "ELF64 freestanding kernel",
+      "producer": "build64.sh",
+      "proof_state": "PARENT_BYTE_EXACT",
+      "boot_routes": [
+        "grub-bios64",
+        "grub-uefi64"
+      ],
+      "reproducibility": "TWO_INDEPENDENT_RUNS_BYTE_IDENTICAL",
+      "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH",
+      "memory_permissions": "NO_RWX_LOAD"
+    },
+    {
+      "name": "kernel_raw.elf",
+      "bytes": 4592492,
+      "path": "kernel/kernel_raw.elf",
+      "sha256": "3b695cdc24fc059f97342bc0e5bcd2f389004a56b1e62b725824e1faa84f32ee",
+      "description": "ELF32 raw-loader kernel",
+      "producer": "mkdisk.sh",
+      "proof_state": "PARENT_DERIVED_PAYLOAD",
+      "boot_routes": [
+        "raw-bios"
+      ],
+      "reproducibility": "TWO_INDEPENDENT_RUNS_BYTE_IDENTICAL",
+      "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH",
+      "memory_permissions": "NO_RWX_LOAD"
+    },
+    {
+      "name": "zlOS-usb.img",
+      "bytes": 67108864,
+      "path": "kernel/zlOS-usb.img",
+      "sha256": "16f239108c9d68502b1d8b97d1275baa8efe278380dbbd2c5646d8d423a615ef",
+      "description": "GPT/FAT UEFI USB disk image",
+      "producer": "mkusb.sh",
+      "proof_state": "QEMU_DIRECT_ARTIFACT",
+      "boot_routes": [
+        "native-uefi64"
+      ],
+      "reproducibility": "TWO_INDEPENDENT_RUNS_BYTE_IDENTICAL",
+      "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH"
+    },
+    {
+      "name": "zlOS.img",
+      "bytes": 6291968,
+      "path": "kernel/zlOS.img",
+      "sha256": "f97a0ec1b439a41dfa954a76052b08c285a0562aaa6331a8f03cfa85c71c3c42",
+      "description": "raw BIOS disk image",
+      "producer": "mkdisk.sh",
+      "proof_state": "QEMU_DIRECT_ARTIFACT",
+      "boot_routes": [
+        "raw-bios"
+      ],
+      "reproducibility": "TWO_INDEPENDENT_RUNS_BYTE_IDENTICAL",
+      "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH"
+    },
+    {
+      "name": "zlOS.iso",
+      "bytes": 29734912,
+      "path": "kernel/zlOS.iso",
+      "sha256": "ca67eacab5d0c4913a40f12307b7998ac7f0fcd743773544d0a1552838550f46",
+      "description": "hybrid ISO with GRUB",
+      "producer": "mkiso.sh",
+      "proof_state": "QEMU_DIRECT_ARTIFACT",
+      "boot_routes": [
+        "grub-bios32",
+        "grub-uefi32"
+      ],
+      "reproducibility": "TWO_INDEPENDENT_RUNS_BYTE_IDENTICAL",
+      "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH"
+    },
+    {
+      "name": "zlOS64.iso",
+      "bytes": 27844608,
+      "path": "kernel/zlOS64.iso",
+      "sha256": "3ea3ea875fdfaa60f0754f5e782111b9a04acf32d8188a92ed8ffdf3a5d16ab7",
+      "description": "hybrid GRUB ISO with 64-bit multiboot payload",
+      "producer": "mkiso64.sh",
+      "proof_state": "QEMU_DIRECT_ARTIFACT",
+      "boot_routes": [
+        "grub-bios64",
+        "grub-uefi64"
+      ],
+      "reproducibility": "TWO_INDEPENDENT_RUNS_BYTE_IDENTICAL",
+      "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH"
+    }
+  ],
+  "applications": [
+    {
+      "id": 0,
+      "name": "Terminal",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 1,
+      "name": "System Monitor",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 2,
+      "name": "About",
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 3,
+      "name": "Snake",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 4,
+      "name": "Menu",
+      "kind": "shell",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 5,
+      "name": "Browser",
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 6,
+      "name": "Settings",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 7,
+      "name": "Run",
+      "kind": "shell",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 8,
+      "name": "Paint",
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 9,
+      "name": "3D",
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 10,
+      "name": "zlOS animation",
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 11,
+      "name": "Pointer",
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 12,
+      "name": "Text Editor",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 13,
+      "name": "Files",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 15,
+      "name": "Clipboard",
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 16,
+      "name": "Colour Picker",
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 17,
+      "name": "Regex Tester",
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 18,
+      "name": "Base Converter",
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 19,
+      "name": "Text Diff",
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 20,
+      "name": "Checksum",
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 21,
+      "name": "Unit Converter",
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 22,
+      "name": "Sticky Notes",
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 23,
+      "name": "Keyboard Tester",
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 24,
+      "name": "Benchmark",
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 25,
+      "name": "Word Guess",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 26,
+      "name": "Tic-Tac-Toe",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 27,
+      "name": "Nim",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 28,
+      "name": "Tower of Hanoi",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 29,
+      "name": "Lights Out",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 30,
+      "name": "Connect Four",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 31,
+      "name": "Clocks & Timers",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 32,
+      "name": "System Info",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 33,
+      "name": "Calculator",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 34,
+      "name": "Maze",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 40,
+      "name": "Kernel Log",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 41,
+      "name": "Renderer",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 42,
+      "name": "Hex Viewer",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 43,
+      "name": "Framebuffer",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 44,
+      "name": "Console (tty1)",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 45,
+      "name": "Font Atlas",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 46,
+      "name": "Disk Usage",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 47,
+      "name": "Services",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 48,
+      "name": "Archive Manager",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 49,
+      "name": "Image Viewer",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 50,
+      "name": "Network",
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 52,
+      "name": "Tetris",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 53,
+      "name": "Pong",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 54,
+      "name": "Breakout",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 55,
+      "name": "Minesweeper",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 56,
+      "name": "2048",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 57,
+      "name": "Conway's Life",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 58,
+      "name": "Asteroids",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 59,
+      "name": "Invaders",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 61,
+      "name": "15 Puzzle",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 62,
+      "name": "Reversi",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 63,
+      "name": "Simon",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 64,
+      "name": "Sokoban",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 65,
+      "name": "Flappy",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 66,
+      "name": "Missile Command",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 67,
+      "name": "Blackjack",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 68,
+      "name": "Frogger",
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    },
+    {
+      "id": 70,
+      "name": "All Applications",
+      "kind": "shell",
+      "migration_phase": "MP-12",
+      "source_evidence": [
+        "S",
+        "R-build"
+      ],
+      "shipped_manifest_member": true,
+      "qemu_open": true,
+      "qemu_first_draw": true,
+      "qemu_close_no_window_leak": true,
+      "workflow_complete": false,
+      "declared_permission_grants": []
+    }
+  ],
+  "security_and_permissions": [
+    {
+      "id": "non-rwx-kernel-images",
+      "status": "STATIC_PROVED",
+      "protected_asset": "kernel code/data pages",
+      "threat": "writable executable LOAD segment",
+      "enforcement_point": "linker PHDR flags + ELF verifier",
+      "residual_risk": "page-table enforcement after boot is not separately proved",
+      "evidence_ceiling": "static artifact structure only"
+    },
+    {
+      "id": "filesystem-integrity",
+      "status": "HOST_PROVED_LIMITED",
+      "protected_asset": "zlfs metadata and file contents",
+      "threat": "corrupt media, arithmetic wrap, transient write",
+      "enforcement_point": "zlfs mount validation and transactional metadata update",
+      "residual_risk": "no power-cut target receipt, permissions or multi-process adversary",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "network-parser-bounds",
+      "status": "HOST_PROVED_LIMITED",
+      "protected_asset": "kernel memory and network state",
+      "threat": "malformed/truncated/looping packets",
+      "enforcement_point": "bounded packet parsers and protocol state machines",
+      "residual_risk": "host parsers are not process-isolated and not every protocol is covered",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "tls-x509-authenticity",
+      "status": "HOST_PROVED_LIMITED",
+      "protected_asset": "peer identity and transport plaintext",
+      "threat": "forged chain, wrong host/time, malformed certificate",
+      "enforcement_point": "TLS record/handshake and X.509 chain/hostname validation",
+      "residual_risk": "root distribution, revocation, persistent secrets and production policy remain incomplete",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "interpreter-resource-bounds",
+      "status": "HOST_PROVED_LIMITED",
+      "protected_asset": "kernel responsiveness and interpreter memory",
+      "threat": "runaway steps/depth/memory access",
+      "enforcement_point": "interpreter step/depth/confine checks",
+      "residual_risk": "this is an interpreter harness, not general process containment",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "ring3-address-space-isolation",
+      "status": "QEMU_BOOT_REACHABLE_PARTIAL",
+      "protected_asset": "kernel and sibling process memory",
+      "threat": "user process reads/writes privileged memory",
+      "enforcement_point": "paging privilege bits and Ring-3 transition",
+      "residual_risk": "no general preemptive process/usercopy hostile matrix or physical proof",
+      "evidence_ceiling": "QEMU boot reachability only"
+    },
+    {
+      "id": "syscall-usercopy-boundary",
+      "status": "MISSING",
+      "protected_asset": "kernel memory and caller buffers",
+      "threat": "negative syscall index, invalid input/output pointer, copy fault",
+      "enforcement_point": "not implemented",
+      "residual_risk": "no exhaustive syscall/usercopy hostile receipt",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "capability-handles-revocation",
+      "status": "MISSING",
+      "protected_asset": "kernel objects and delegated authority",
+      "threat": "forged/stale handle, over-delegation, incomplete revoke",
+      "enforcement_point": "not implemented",
+      "residual_risk": "capability handle table and derivation/revoke graph do not exist",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "credential-transitions",
+      "status": "MISSING",
+      "protected_asset": "user/group identity and process control",
+      "threat": "UID/GID escalation or corrupted fork credentials",
+      "enforcement_point": "not implemented",
+      "residual_risk": "credential model and transition matrix do not exist",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "typed-ipc-authorization",
+      "status": "MISSING",
+      "protected_asset": "service endpoints, messages and transferred handles",
+      "threat": "unauthorized sender, pointer smuggling, queue exhaustion",
+      "enforcement_point": "not implemented",
+      "residual_risk": "current PID IPC is not the bounded typed capability transport",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "dma-iommu-isolation",
+      "status": "MISSING",
+      "protected_asset": "physical memory outside a device grant",
+      "threat": "device DMA escapes granted pages",
+      "enforcement_point": "not implemented",
+      "residual_risk": "no enforced IOMMU domain; passthrough cannot be called isolated",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "secret-storage-redaction",
+      "status": "MISSING",
+      "protected_asset": "passwords, keys, tokens and logs",
+      "threat": "secret disclosure at rest/in memory/logs",
+      "enforcement_point": "not implemented",
+      "residual_risk": "no secrets service, zeroization or redaction receipt",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "boot-authenticity-rollback",
+      "status": "MISSING",
+      "protected_asset": "selected kernel/configuration and boot policy",
+      "threat": "tampered or rolled-back boot artifact",
+      "enforcement_point": "not implemented",
+      "residual_risk": "byte identity is not signature, measured boot or anti-rollback",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "application-sandbox",
+      "status": "MISSING",
+      "protected_asset": "user files, services, devices and sibling apps",
+      "threat": "compromised app exercises ambient authority",
+      "enforcement_point": "not implemented",
+      "residual_risk": "manifest/portal sandbox and complete mediation do not exist",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "package-signature-install-atomicity",
+      "status": "MISSING",
+      "protected_asset": "installed files, services, grants and live processes",
+      "threat": "malicious or partially installed package",
+      "enforcement_point": "not implemented",
+      "residual_risk": "no publisher trust, staged atomic install or uninstall revocation",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "audit-integrity",
+      "status": "MISSING",
+      "protected_asset": "security event history and attribution",
+      "threat": "event deletion, truncation, forgery or secret leak",
+      "enforcement_point": "not implemented",
+      "residual_risk": "no durable append/anchor/drop/redaction security audit service",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "privileged-operation-mediation",
+      "status": "MISSING",
+      "protected_asset": "MMIO, mount, scanout/input, kill/debug and power",
+      "threat": "ordinary process invokes privileged operation",
+      "enforcement_point": "not implemented",
+      "residual_risk": "no complete operation-rights matrix and denial suite",
+      "evidence_ceiling": "no current proof"
+    }
+  ],
+  "changes": [
+    {
+      "decision_id": "DEC-0001",
+      "date": "2026-08-17",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "ZL-043",
+        "GR-007"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Keep low-level window mechanisms in C and desktop policy in zl until the language/runtime can own the required structures safely.",
+      "rationale": "The current kernel zl subset cannot express the required window list and mechanism boundary.",
+      "compatibility": "No public ABI change; preserve the current C/zl boundary until the replacement language/runtime contract is proved.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0001"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0003",
+      "date": "2026-08-18",
+      "change_type": "REVERSAL",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "GR-015",
+        "GR-020"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Enforce clipping in all five back-buffer write paths by folding the scissor into loop bounds.",
+      "rationale": "Measured escape pixels refuted the two-function boundary without adding a per-pixel hot-path branch.",
+      "compatibility": "Rendering output must retain the five-path clipping oracle at every supported mode.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0003"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0004",
+      "date": "2026-08-17",
+      "change_type": "DEPRECATION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "GR-037",
+        "GR-012"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Retire snapshot-and-sticker window dragging after damage repaint is authoritative; retain only cursor save-under.",
+      "rationale": "The old path imposed a window-size ceiling, artifacts and fixed memory cost.",
+      "compatibility": "Keep the existing drag fallback until retained damage repaint passes equivalent host and target gates.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0004"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0005",
+      "date": "2026-08-17",
+      "change_type": "DECISION",
+      "decision_status": "QUALIFIED",
+      "feature_ids": [
+        "DV-045",
+        "DV-047",
+        "GR-025"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Do not port a Linux-scale GPU stack; implement bounded native mechanisms while borrowing public hardware knowledge, not donor code.",
+      "rationale": "A complete i915/Mesa stack assumes kernel facilities outside zlOS, but bounded display/blitter providers remain valid product work.",
+      "compatibility": "Intel display/blitter work remains bounded native-provider work; Linux i915/Mesa ABI compatibility is not promised.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0005"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0006",
+      "date": "2026-08-18",
+      "change_type": "MIGRATION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-007",
+        "EV-008"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "All four kernel compiler routes consume one ordered kernel/SOURCES manifest.",
+      "rationale": "Four hand-maintained lists repeatedly produced route-specific source drift.",
+      "compatibility": "Every kernel compile route must consume kernel/SOURCES; route-local source lists are unsupported.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0006"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0008",
+      "date": "2026-08-19",
+      "change_type": "REVERSAL",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "WB-001",
+        "WB-048"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Build the bounded document-browser capability while explicitly refusing moving-target Chrome parity.",
+      "rationale": "Fetcher, parser, box model and bounded scripting have finite contracts and current implementation evidence.",
+      "compatibility": "The supported browser contract is the explicit bounded compatibility ledger, not Chrome pixel/API parity.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0008"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0009",
+      "date": "2026-08-22",
+      "change_type": "CORRECTION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-011",
+        "AP-002"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Replace the false-green aggregate application check with exact manifest, route and lifecycle evidence.",
+      "rationale": "The old aggregate printed Maze missing while still returning success.",
+      "compatibility": "Application identities and routes must match the generated manifest; blank or dead catalogue IDs are invalid.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0009"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0010",
+      "date": "2026-08-22",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-009",
+        "EV-010",
+        "EV-015"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Never promote one artifact or route from another route's runtime or physical evidence.",
+      "rationale": "Similar names and parent/payload relationships do not prove the exact bytes executed on another route.",
+      "compatibility": "A receipt applies only to the exact artifact and route it names.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0010"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0011",
+      "date": "2026-08-22",
+      "change_type": "CORRECTION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "DV-045"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Label Intel modeset writes as host-harness proved and boot-unreachable until a native kernel caller and receipt exist.",
+      "rationale": "The real driver can light the panel from the harness, but no kernel path arms it.",
+      "compatibility": "Intel host-harness modesetting is not native-boot display compatibility.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0011"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0012",
+      "date": "2026-08-22",
+      "change_type": "CORRECTION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "DV-031"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Classify I2C-HID as a raw transport, not an input provider, until report decoding and session routing exist.",
+      "rationale": "Raw bytes are exposed but no x/y/button decoder exists.",
+      "compatibility": "I2C-HID raw transport diagnostics are not input-event compatibility.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0012"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0013",
+      "date": "2026-08-23",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-003",
+        "OP-001"
+      ],
+      "audience": "DISTRIBUTORS",
+      "user_visible_candidate": false,
+      "summary": "Block public release while build inputs lack an established repository redistribution grant.",
+      "rationale": "Source possession and successful builds do not create a distribution license.",
+      "compatibility": "No public redistribution channel is supported until licensing authority exists.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0013"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0014",
+      "date": "2026-08-24",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-002"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Call the deterministic archive exact build-input recovery, not signed/off-host/whole-repository custody.",
+      "rationale": "The archive remains unsigned and in the same uncommitted worktree with zero off-host copies.",
+      "compatibility": "The local source archive is recovery material, not a signed/off-host repository release.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0014"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0015",
+      "date": "2026-08-23",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-004",
+        "EV-005"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Dependency verification checks exact invoked/resolved bytes and never silently refreshes the lock.",
+      "rationale": "PATH aliases, package upgrades and firmware drift must make the gate red until inspected.",
+      "compatibility": "Tool or firmware byte drift requires an inspected lock refresh; silent compatibility is rejected.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0015"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0016",
+      "date": "2026-08-24",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-007"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Represent conservative build-identity inputs without active edges as scope-only, never compiled.",
+      "rationale": "Dropping them hides identity scope; calling them compiled invents reachability.",
+      "compatibility": "Scope-only inputs affect identity but are not claimed as compiled objects.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0016"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0017",
+      "date": "2026-08-24",
+      "change_type": "OPERATIONS",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-008",
+        "OP-023"
+      ],
+      "audience": "OPERATORS",
+      "user_visible_candidate": false,
+      "summary": "Forbid unrestricted full landing gates and require the resource-contained launcher and idle-host doctor.",
+      "rationale": "Overlapping build/editor/graphics pressure preceded a host freeze and forced shutdown.",
+      "compatibility": "Uncontained full landing-gate invocation is unsupported on this host.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0017"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0018",
+      "date": "2026-08-24",
+      "change_type": "DECISION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-018",
+        "AU-028"
+      ],
+      "audience": "DEVELOPERS",
+      "user_visible_candidate": false,
+      "summary": "Prove the event envelope as a host-only single-owner core before changing shipped build identity or claiming an audit service.",
+      "rationale": "Target integration requires an idle contained rebuild and later per-CPU/IRQ/service ownership.",
+      "compatibility": "The structured-event core is host-only and provides no shipped event-service ABI yet.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0018"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0019",
+      "date": "2026-08-24",
+      "change_type": "CORRECTION",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "EV-008"
+      ],
+      "audience": "OPERATORS",
+      "user_visible_candidate": false,
+      "summary": "Keep the complete landing gate red/unverified until a contained run finishes and its final receipt is captured.",
+      "rationale": "The last attempt stopped during EFI build and cannot support an aggregate green claim.",
+      "compatibility": "The interrupted complete gate provides no green compatibility or release claim.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "record_id": "DEC-0019"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    }
+  ],
+  "counts": {
+    "inputs": 17,
+    "health_areas": 11,
+    "artifacts": 9,
+    "applications": 62,
+    "applications_with_declared_permission_grants": 0,
+    "security_claims": 17,
+    "change_candidates": 17,
+    "current_decisions": 17,
+    "cryptographic_signatures": 0
+  },
+  "open_gaps": {
+    "runtime_zlos_app_route_missing": true,
+    "current_screenshot_receipt_missing": true,
+    "per_app_permission_grants_missing": true,
+    "cryptographic_signatures_missing": true,
+    "live_health_updates_missing": true,
+    "target_accessibility_workflow_missing": true,
+    "authenticated_remote_serving_missing": true,
+    "public_release_missing": true
+  },
+  "generator": {
+    "path": "kernel/gen-provenance-viewer.py",
+    "sha256": "33e6c764481ac7dcae13cf8be826a771df54d6fa6178f0467a795c0cefa5b83f"
+  },
+  "evidence_ceiling": "static host-viewable provenance projection; not a booted zlOS app, live monitor, authenticated remote service or signed release portal",
+  "weakest_link": "permissions are security claim state rather than admitted per-app grants, signatures are absent, and the viewer has no current visual or target accessibility receipt"
+}

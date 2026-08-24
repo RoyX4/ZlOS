@@ -79,14 +79,15 @@ APP_CALC    = 33
 # ---- more games (apps_games2.zl) ---------------------------------------------
 APP_MAZE = 34
 
-REG_FIRST = 14                      # first id this table actually lists
+REG_FIRST = 15                      # APP_CLIP: first real registry app id
 REG_LAST  = 69                      # highest id any slice owns
 
 # WHICH IDS ARE REAL. The catalog used to walk REG_FIRST..REG_FIRST+REG_COUNT
 # and assume every id in that span was an app. That held while the ids were
 # contiguous, and stopped holding the moment the id space was carved into
-# reserved per-slice ranges: 34..39 was never allocated, and each slice was
-# given one spare id at the end of its range that it deliberately did not use.
+# reserved per-slice ranges: APP_MAZE owns 34, 35..39 were never allocated,
+# and each slice was given one spare id at the end of its range that it
+# deliberately did not use.
 # Walking the span blind would put four empty tiles in "All Applications",
 # each of which opens a window titled "App" that draws nothing.
 #
@@ -99,7 +100,7 @@ fn reg_exists(id) {
     if id > REG_LAST { return 0 }             # incl. APP_CATALOG, which is
                                               # REG_LAST + 1 and must never
                                               # appear as a tile in itself
-    if id >= 34 { if id <= 39 { return 0 } }   # never allocated
+    if id >= 35 { if id <= 39 { return 0 } }   # never allocated; 34 is Maze
     if id == 51 { return 0 }                   # apps_sys3.zl   spare
     if id == 60 { return 0 }                   # apps_games3.zl spare
     if id == 69 { return 0 }                   # apps_games4.zl spare
@@ -675,7 +676,7 @@ fn cat_event(win, ety, ecode, ex, ey) {
         }
         if band(ecode, 1) != 0 {
             # reg_id_at(nh), NOT REG_FIRST + nh. nh is an index into the DENSE
-            # list; the id space has holes in it (34..39 unallocated, one spare
+            # list; the id space has holes in it (35..39 unallocated, one spare
             # at the end of each slice), so the two stopped being the same
             # number at the first hole. Every tile from index 20 on - which is
             # every app in every slice file, 27 of the 47 - opened the app six

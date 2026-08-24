@@ -1,0 +1,247 @@
+{
+  "schema": "zlos.security-claim-registry.v1",
+  "result": "PASS_WITH_OPEN_GAPS",
+  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "input_receipts": {
+    "kernel/artifact-registry.json": "1c7afeadaa94899e8cdfa5be799384885d3ee7a7b265dc38b49c7199a2efaec4",
+    "kernel/init-registry.json": "06f16d1c040559cb151d72dcf090857e5dde142ce520180048093ba9328bf5d1",
+    "kernel/hosttest/test-run-receipt.json": "5d4444a31be9a83dbb4213dd754e2dad23d7a862e76b90a9b09e0d8875c1b8b1"
+  },
+  "claims": [
+    {
+      "id": "non-rwx-kernel-images",
+      "status": "STATIC_PROVED",
+      "protected_asset": "kernel code/data pages",
+      "threat": "writable executable LOAD segment",
+      "enforcement_point": "linker PHDR flags + ELF verifier",
+      "passed_host_targets": [],
+      "adversarial_proof": "planted RWX mutation",
+      "residual_risk": "page-table enforcement after boot is not separately proved",
+      "evidence_ceiling": "static artifact structure only"
+    },
+    {
+      "id": "filesystem-integrity",
+      "status": "HOST_PROVED_LIMITED",
+      "protected_asset": "zlfs metadata and file contents",
+      "threat": "corrupt media, arithmetic wrap, transient write",
+      "enforcement_point": "zlfs mount validation and transactional metadata update",
+      "passed_host_targets": [
+        "fstest"
+      ],
+      "adversarial_proof": "corrupt superblock/geometry/write rollback cases",
+      "residual_risk": "no power-cut target receipt, permissions or multi-process adversary",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "network-parser-bounds",
+      "status": "HOST_PROVED_LIMITED",
+      "protected_asset": "kernel memory and network state",
+      "threat": "malformed/truncated/looping packets",
+      "enforcement_point": "bounded packet parsers and protocol state machines",
+      "passed_host_targets": [
+        "fuzz",
+        "dnstest",
+        "nettest",
+        "tcptest",
+        "httptest"
+      ],
+      "adversarial_proof": "deterministic fuzz and scripted hostile packets",
+      "residual_risk": "host parsers are not process-isolated and not every protocol is covered",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "tls-x509-authenticity",
+      "status": "HOST_PROVED_LIMITED",
+      "protected_asset": "peer identity and transport plaintext",
+      "threat": "forged chain, wrong host/time, malformed certificate",
+      "enforcement_point": "TLS record/handshake and X.509 chain/hostname validation",
+      "passed_host_targets": [
+        "x509test",
+        "tlstest",
+        "tlscryptotest"
+      ],
+      "adversarial_proof": "forged root, truncation, hostname/time refusal",
+      "residual_risk": "root distribution, revocation, persistent secrets and production policy remain incomplete",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "interpreter-resource-bounds",
+      "status": "HOST_PROVED_LIMITED",
+      "protected_asset": "kernel responsiveness and interpreter memory",
+      "threat": "runaway steps/depth/memory access",
+      "enforcement_point": "interpreter step/depth/confine checks",
+      "passed_host_targets": [
+        "killtest.sh"
+      ],
+      "adversarial_proof": "budget/confine hostile programs",
+      "residual_risk": "this is an interpreter harness, not general process containment",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "ring3-address-space-isolation",
+      "status": "QEMU_BOOT_REACHABLE_PARTIAL",
+      "protected_asset": "kernel and sibling process memory",
+      "threat": "user process reads/writes privileged memory",
+      "enforcement_point": "paging privilege bits and Ring-3 transition",
+      "passed_host_targets": [],
+      "adversarial_proof": "boot reaches the cooperative Ring-3 smoke stage",
+      "residual_risk": "no general preemptive process/usercopy hostile matrix or physical proof",
+      "evidence_ceiling": "QEMU boot reachability only"
+    },
+    {
+      "id": "syscall-usercopy-boundary",
+      "status": "MISSING",
+      "protected_asset": "kernel memory and caller buffers",
+      "threat": "negative syscall index, invalid input/output pointer, copy fault",
+      "enforcement_point": "not implemented",
+      "passed_host_targets": [],
+      "adversarial_proof": "none",
+      "residual_risk": "no exhaustive syscall/usercopy hostile receipt",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "capability-handles-revocation",
+      "status": "MISSING",
+      "protected_asset": "kernel objects and delegated authority",
+      "threat": "forged/stale handle, over-delegation, incomplete revoke",
+      "enforcement_point": "not implemented",
+      "passed_host_targets": [],
+      "adversarial_proof": "none",
+      "residual_risk": "capability handle table and derivation/revoke graph do not exist",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "credential-transitions",
+      "status": "MISSING",
+      "protected_asset": "user/group identity and process control",
+      "threat": "UID/GID escalation or corrupted fork credentials",
+      "enforcement_point": "not implemented",
+      "passed_host_targets": [],
+      "adversarial_proof": "none",
+      "residual_risk": "credential model and transition matrix do not exist",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "typed-ipc-authorization",
+      "status": "MISSING",
+      "protected_asset": "service endpoints, messages and transferred handles",
+      "threat": "unauthorized sender, pointer smuggling, queue exhaustion",
+      "enforcement_point": "not implemented",
+      "passed_host_targets": [],
+      "adversarial_proof": "none",
+      "residual_risk": "current PID IPC is not the bounded typed capability transport",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "dma-iommu-isolation",
+      "status": "MISSING",
+      "protected_asset": "physical memory outside a device grant",
+      "threat": "device DMA escapes granted pages",
+      "enforcement_point": "not implemented",
+      "passed_host_targets": [],
+      "adversarial_proof": "none",
+      "residual_risk": "no enforced IOMMU domain; passthrough cannot be called isolated",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "secret-storage-redaction",
+      "status": "MISSING",
+      "protected_asset": "passwords, keys, tokens and logs",
+      "threat": "secret disclosure at rest/in memory/logs",
+      "enforcement_point": "not implemented",
+      "passed_host_targets": [],
+      "adversarial_proof": "none",
+      "residual_risk": "no secrets service, zeroization or redaction receipt",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "boot-authenticity-rollback",
+      "status": "MISSING",
+      "protected_asset": "selected kernel/configuration and boot policy",
+      "threat": "tampered or rolled-back boot artifact",
+      "enforcement_point": "not implemented",
+      "passed_host_targets": [],
+      "adversarial_proof": "none",
+      "residual_risk": "byte identity is not signature, measured boot or anti-rollback",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "application-sandbox",
+      "status": "MISSING",
+      "protected_asset": "user files, services, devices and sibling apps",
+      "threat": "compromised app exercises ambient authority",
+      "enforcement_point": "not implemented",
+      "passed_host_targets": [],
+      "adversarial_proof": "none",
+      "residual_risk": "manifest/portal sandbox and complete mediation do not exist",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "package-signature-install-atomicity",
+      "status": "MISSING",
+      "protected_asset": "installed files, services, grants and live processes",
+      "threat": "malicious or partially installed package",
+      "enforcement_point": "not implemented",
+      "passed_host_targets": [],
+      "adversarial_proof": "none",
+      "residual_risk": "no publisher trust, staged atomic install or uninstall revocation",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "audit-integrity",
+      "status": "MISSING",
+      "protected_asset": "security event history and attribution",
+      "threat": "event deletion, truncation, forgery or secret leak",
+      "enforcement_point": "not implemented",
+      "passed_host_targets": [],
+      "adversarial_proof": "none",
+      "residual_risk": "no durable append/anchor/drop/redaction security audit service",
+      "evidence_ceiling": "no current proof"
+    },
+    {
+      "id": "privileged-operation-mediation",
+      "status": "MISSING",
+      "protected_asset": "MMIO, mount, scanout/input, kill/debug and power",
+      "threat": "ordinary process invokes privileged operation",
+      "enforcement_point": "not implemented",
+      "passed_host_targets": [],
+      "adversarial_proof": "none",
+      "residual_risk": "no complete operation-rights matrix and denial suite",
+      "evidence_ceiling": "no current proof"
+    }
+  ],
+  "counts": {
+    "claims": 17,
+    "static_proved": 1,
+    "host_proved_limited": 4,
+    "qemu_boot_reachable_partial": 1,
+    "missing": 11,
+    "production_complete": 0,
+    "native_hardware_complete": 0
+  },
+  "open_claims": [
+    "non-rwx-kernel-images",
+    "filesystem-integrity",
+    "network-parser-bounds",
+    "tls-x509-authenticity",
+    "interpreter-resource-bounds",
+    "ring3-address-space-isolation",
+    "syscall-usercopy-boundary",
+    "capability-handles-revocation",
+    "credential-transitions",
+    "typed-ipc-authorization",
+    "dma-iommu-isolation",
+    "secret-storage-redaction",
+    "boot-authenticity-rollback",
+    "application-sandbox",
+    "package-signature-install-atomicity",
+    "audit-integrity",
+    "privileged-operation-mediation"
+  ],
+  "evidence_ceiling": "claim registry, static checks, host adversarial tests and QEMU boot reachability only",
+  "weakest_link": "no claim is production-complete; capability/usercopy/DMA/credential/IPC/sandbox/boot/package/audit mediation is absent",
+  "generator": {
+    "path": "kernel/gen-security-registry.py",
+    "sha256": "445781a6a65a855762f22c38a852bc8b9f395fc4012881b7064dbb4f547eb8b4"
+  }
+}

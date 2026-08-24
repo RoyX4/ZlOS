@@ -10,9 +10,18 @@ zl sources:
     name      reg_name(id) or a slice's <slice>_name(id)
     size      reg_w/reg_h, or the slice's, or a wm_open() literal
     icon      reg_icon or the slice's
-    route     catalog | dock | shell | boot - how a person reaches it
+    route     catalog-static | legacy-static - which source route owns it
 
-Run:  python3 kernel/hosttest/apps53.py   (exit 1 if any of the 53 is missing)
+This checker also rejects a dense catalog id that has no reference app. That is
+the inverse half the old gate missed: ID 14 produced a blank tile while Maze was
+excluded, so the total stayed 47 and the script printed success.
+
+Run:  python3 kernel/hosttest/apps53.py
+      python3 kernel/hosttest/apps53.py --selftest
+
+Exit 1 if any app lacks identity, existence, size, icon or a static route, or if
+the catalog contains an extra/blank id. Runtime launch/readiness/teardown remain
+separate QEMU evidence and are not inferred here.
 """
 import re, sys, os, glob
 
@@ -76,27 +85,68 @@ dense = [i for i in range(FIRST, LAST + 1) if i not in holes]
 
 def route(i):
     if i is None: return "-"
-    if FIRST <= i <= LAST and i in dense: return "catalog"
-    return "dock/shell/boot"
+    if FIRST <= i <= LAST and i in dense: return "catalog-static"
+    return "legacy-static"
+
+def coverage_issues(dense_ids, names, sizes, icons):
+    """Return exact failed fields plus inverse blank/extra catalog ids."""
+    issues = []
+    expected_catalog = set()
+    for _, name, _ in W:
+        got = names.get(name)
+        if not got:
+            issues.append((name, "identity"))
+            continue
+        app_id = got[0]
+        in_registry_range = FIRST <= app_id <= LAST
+        if in_registry_range:
+            expected_catalog.add(app_id)
+            if app_id not in dense_ids:
+                issues.append((name, "exists"))
+        if app_id not in sizes and got[1] != "kernel.zl":
+            issues.append((name, "size"))
+        if app_id not in icons and got[1] != "kernel.zl":
+            issues.append((name, "icon"))
+        if route(app_id) == "-":
+            issues.append((name, "route"))
+    for app_id in sorted(dense_ids - expected_catalog):
+        issues.append(("id %d" % app_id, "blank/extra catalog id"))
+    return issues
 
 print("reference apps: %d      REG_FIRST=%s REG_LAST=%s   reg_count()=%d\n"
       % (len(W), FIRST, LAST, len(dense)))
 print("  %-3s %-22s %-8s %-5s %-6s %-5s %-5s %s"
       % ("#", "name", "kind", "id", "exists", "size", "icon", "route"))
-missing = []
+issues = coverage_issues(set(dense), byname, has_size, has_icon)
 for k, (rid, name, kind) in enumerate(W, 1):
     got = byname.get(name)
     i = got[0] if got else None
     ok_ex = "yes" if (i is not None and (i not in range(FIRST, LAST + 1) or i in dense)) else "NO"
     ok_sz = "yes" if (i in has_size or (got and got[1] == "kernel.zl")) else "no"
     ok_ic = "yes" if (i in has_icon or (got and got[1] == "kernel.zl")) else "no"
-    mark = " " if got else "*"
-    if not got: missing.append(name)
+    mark = " " if got and not any(item[0] == name for item in issues) else "*"
     print("%s %-3d %-22s %-8s %-5s %-6s %-5s %-5s %s"
           % (mark, k, name, kind, i if i is not None else "-", ok_ex, ok_sz, ok_ic, route(i)))
 print()
-if missing:
-    print("MISSING (%d):" % len(missing))
-    for m in missing: print("   ", m)
+if "--selftest" in sys.argv[1:]:
+    maze = byname["Maze"][0]
+    clip = byname["Clipboard"][0]
+    mutations = {
+        "missing-existence": coverage_issues(set(dense) - {maze}, byname, has_size, has_icon),
+        "blank-extra-id": coverage_issues(set(dense) | {14}, byname, has_size, has_icon),
+        "missing-size": coverage_issues(set(dense), byname, has_size - {clip}, has_icon),
+        "missing-icon": coverage_issues(set(dense), byname, has_size, has_icon - {clip}),
+        "missing-identity": coverage_issues(set(dense), {k: v for k, v in byname.items() if k != "Clipboard"}, has_size, has_icon),
+    }
+    escaped = [name for name, found in mutations.items() if not found]
+    if escaped:
+        print("SELFTEST FAILED: mutations escaped: " + ", ".join(escaped), file=sys.stderr)
+        sys.exit(2)
+    print("selftest: caught " + ", ".join(mutations))
+
+if issues:
+    print("INCOMPLETE (%d fields):" % len(issues))
+    for name, field in issues:
+        print("   %-24s %s" % (name, field))
     sys.exit(1)
-print("all %d reference apps resolve to an id in the tree" % len(W))
+print("all %d reference apps have complete static registry fields; catalog has no blank ids" % len(W))

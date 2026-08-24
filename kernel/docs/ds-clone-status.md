@@ -1,5 +1,12 @@
 # ds-clone status — measured, not remembered
 
+> **Correction 2026-08-22:** section 1 below is a historical snapshot and its
+> aggregate success was false. It printed `Maze exists NO` but still exited
+> zero, while blank catalogue ID 14 kept the total plausible. The corrected
+> source, mutation gate, all-four-build receipt and Maze QEMU pointer route are
+> [`app-registry-truth-2026-08-22.md`](app-registry-truth-2026-08-22.md). Do not
+> use the old `REG_FIRST=14` table below as current evidence.
+
 Generated 2026-08-20 from the tree at this commit. Every line below is derived
 by a script or quoted from a gate's own output. Where something is NOT DONE it
 says so; where it is done but unproven it says that too, because "implemented"

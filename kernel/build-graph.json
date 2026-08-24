@@ -1,0 +1,6052 @@
+{
+  "schema": "zlos.build-graph.v1",
+  "result": "PASS_WITH_DECLARED_SUPERSET",
+  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "artifact_registry_sha256": "8378d40d2f0a0f5cc5dff9a334be31911fe1d5a8f257845cc8d30870865d96c1",
+  "toolchain_manifest_sha256": "2a0a0481c50a81eef7a1e179ff4f306527a7fd5792ea4b766f4659e51ffa9f22",
+  "source_inputs": [
+    "freestanding/runtime_kernel.c",
+    "freestanding/zl_freestanding.h",
+    "kernel/SOURCES",
+    "kernel/apic.c",
+    "kernel/app-manifest.json",
+    "kernel/app_manifest_embed.zl",
+    "kernel/apps_common.zl",
+    "kernel/apps_games1.zl",
+    "kernel/apps_games2.zl",
+    "kernel/apps_games3.zl",
+    "kernel/apps_games4.zl",
+    "kernel/apps_registry.zl",
+    "kernel/apps_sys2.zl",
+    "kernel/apps_sys3.zl",
+    "kernel/apps_system.zl",
+    "kernel/apps_utils.zl",
+    "kernel/arena.c",
+    "kernel/bga.c",
+    "kernel/boot.S",
+    "kernel/boot64.S",
+    "kernel/browser.c",
+    "kernel/build.sh",
+    "kernel/build64.sh",
+    "kernel/buildefi.sh",
+    "kernel/clip.c",
+    "kernel/console.c",
+    "kernel/cpu.c",
+    "kernel/crash.c",
+    "kernel/crash.h",
+    "kernel/crypto.c",
+    "kernel/crypto.h",
+    "kernel/css.c",
+    "kernel/css.h",
+    "kernel/design.h",
+    "kernel/divmod.c",
+    "kernel/dma.h",
+    "kernel/dns.c",
+    "kernel/dns.h",
+    "kernel/ease.c",
+    "kernel/ease.h",
+    "kernel/ecdsa.c",
+    "kernel/efi.c",
+    "kernel/entropy.c",
+    "kernel/exec.c",
+    "kernel/fb.c",
+    "kernel/fb3d.c",
+    "kernel/font8x16.c",
+    "kernel/font_aa.c",
+    "kernel/font_prop.h",
+    "kernel/font_sub.c",
+    "kernel/fs.c",
+    "kernel/gdt.c",
+    "kernel/gdt64.c",
+    "kernel/gen-app-manifest.py",
+    "kernel/gen-boot-media-ids.py",
+    "kernel/gen-build-identity.py",
+    "kernel/ggttmap.h",
+    "kernel/gpu.c",
+    "kernel/gpu.h",
+    "kernel/gpucursor.c",
+    "kernel/gpuring.c",
+    "kernel/heap.c",
+    "kernel/html.c",
+    "kernel/html.h",
+    "kernel/http.c",
+    "kernel/http.h",
+    "kernel/i2c_hid.c",
+    "kernel/icons.c",
+    "kernel/idt.c",
+    "kernel/input.c",
+    "kernel/intel.c",
+    "kernel/js.c",
+    "kernel/js.h",
+    "kernel/kernel.zl",
+    "kernel/keycodes.h",
+    "kernel/layout.c",
+    "kernel/layout.h",
+    "kernel/link-raw.ld",
+    "kernel/link.ld",
+    "kernel/link64.ld",
+    "kernel/memmap.h",
+    "kernel/mkdisk.sh",
+    "kernel/mkiso.sh",
+    "kernel/mkiso64.sh",
+    "kernel/mkusb.sh",
+    "kernel/net.c",
+    "kernel/net.h",
+    "kernel/notify.c",
+    "kernel/nvme.c",
+    "kernel/paging.c",
+    "kernel/pci.c",
+    "kernel/png.c",
+    "kernel/png.h",
+    "kernel/raw_boot.asm",
+    "kernel/raw_entry.S",
+    "kernel/roots.c",
+    "kernel/rsa.c",
+    "kernel/rtc.c",
+    "kernel/sched.c",
+    "kernel/settings.c",
+    "kernel/smp.c",
+    "kernel/smp_trampoline.S",
+    "kernel/smp_trampoline64.S",
+    "kernel/snap.c",
+    "kernel/support.c",
+    "kernel/tcp.c",
+    "kernel/tcp.h",
+    "kernel/term.c",
+    "kernel/tls.c",
+    "kernel/tls.h",
+    "kernel/tools/reproducible_time.c",
+    "kernel/ui.c",
+    "kernel/ui.h",
+    "kernel/uikit.c",
+    "kernel/usermode.c",
+    "kernel/vga.c",
+    "kernel/virtio_gpu.c",
+    "kernel/virtio_net.c",
+    "kernel/wm.c",
+    "kernel/wmglue.c",
+    "kernel/x509.c",
+    "kernel/x509.h",
+    "kernel/xhci.c"
+  ],
+  "lanes": [
+    {
+      "id": "bios-multiboot32",
+      "primary_artifact": "kernel.elf",
+      "logical_objects": 67,
+      "declared_c_units": 62
+    },
+    {
+      "id": "multiboot64",
+      "primary_artifact": "kernel64.elf",
+      "logical_objects": 67,
+      "declared_c_units": 62
+    },
+    {
+      "id": "native-uefi64",
+      "primary_artifact": "BOOTX64.EFI",
+      "logical_objects": 67,
+      "declared_c_units": 62
+    },
+    {
+      "id": "raw-bios-loader32",
+      "primary_artifact": "kernel_raw.elf",
+      "logical_objects": 67,
+      "declared_c_units": 62
+    }
+  ],
+  "nodes": [
+    {
+      "id": "artifact:BOOTX64.EFI",
+      "kind": "artifact",
+      "path": "kernel/BOOTX64.EFI",
+      "sha256": "63b6c7053839294e8dccfc55b98c0dfa78d59889e3c27e83b503b51e94e607c1",
+      "bytes": 2716672
+    },
+    {
+      "id": "artifact:boot-media-ids.json",
+      "kind": "artifact",
+      "path": "kernel/boot-media-ids.json",
+      "sha256": "52d6cdf60cf45be671e522216af4cecee444a3895592fb197a7a3df38e7f7cbb",
+      "bytes": 414
+    },
+    {
+      "id": "artifact:kernel.elf",
+      "kind": "artifact",
+      "path": "kernel/kernel.elf",
+      "sha256": "63669c18afb3ed2454be1155cd4381a1dc370105aefad07461e536d2e121e286",
+      "bytes": 4592648
+    },
+    {
+      "id": "artifact:kernel64.elf",
+      "kind": "artifact",
+      "path": "kernel/kernel64.elf",
+      "sha256": "686affb711ab6a7a1d2f5836eefb98b550e0cdf6398e97938651ff84dbef29df",
+      "bytes": 2702592
+    },
+    {
+      "id": "artifact:kernel_raw.elf",
+      "kind": "artifact",
+      "path": "kernel/kernel_raw.elf",
+      "sha256": "3b695cdc24fc059f97342bc0e5bcd2f389004a56b1e62b725824e1faa84f32ee",
+      "bytes": 4592492
+    },
+    {
+      "id": "artifact:zlOS-usb.img",
+      "kind": "artifact",
+      "path": "kernel/zlOS-usb.img",
+      "sha256": "16f239108c9d68502b1d8b97d1275baa8efe278380dbbd2c5646d8d423a615ef",
+      "bytes": 67108864
+    },
+    {
+      "id": "artifact:zlOS.img",
+      "kind": "artifact",
+      "path": "kernel/zlOS.img",
+      "sha256": "f97a0ec1b439a41dfa954a76052b08c285a0562aaa6331a8f03cfa85c71c3c42",
+      "bytes": 6291968
+    },
+    {
+      "id": "artifact:zlOS.iso",
+      "kind": "artifact",
+      "path": "kernel/zlOS.iso",
+      "sha256": "ca67eacab5d0c4913a40f12307b7998ac7f0fcd743773544d0a1552838550f46",
+      "bytes": 29734912
+    },
+    {
+      "id": "artifact:zlOS64.iso",
+      "kind": "artifact",
+      "path": "kernel/zlOS64.iso",
+      "sha256": "3ea3ea875fdfaa60f0754f5e782111b9a04acf32d8188a92ed8ffdf3a5d16ab7",
+      "bytes": 27844608
+    },
+    {
+      "id": "generated:zl-c",
+      "kind": "generated-source",
+      "path": "kernel/out.c"
+    },
+    {
+      "id": "meta:app-manifest",
+      "kind": "generated-metadata",
+      "path": "kernel/app-manifest.json"
+    },
+    {
+      "id": "meta:build-identity",
+      "kind": "generated-metadata",
+      "path": "kernel/build-identity.json"
+    },
+    {
+      "id": "object:bios-multiboot32:apic.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_apic.o"
+    },
+    {
+      "id": "object:bios-multiboot32:arena.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_arena.o"
+    },
+    {
+      "id": "object:bios-multiboot32:bga.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_bga.o"
+    },
+    {
+      "id": "object:bios-multiboot32:browser.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_browser.o"
+    },
+    {
+      "id": "object:bios-multiboot32:clip.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_clip.o"
+    },
+    {
+      "id": "object:bios-multiboot32:console.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_console.o"
+    },
+    {
+      "id": "object:bios-multiboot32:cpu.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_cpu.o"
+    },
+    {
+      "id": "object:bios-multiboot32:crash.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_crash.o"
+    },
+    {
+      "id": "object:bios-multiboot32:crypto.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_crypto.o"
+    },
+    {
+      "id": "object:bios-multiboot32:css.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_css.o"
+    },
+    {
+      "id": "object:bios-multiboot32:divmod.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_divmod.o"
+    },
+    {
+      "id": "object:bios-multiboot32:dns.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_dns.o"
+    },
+    {
+      "id": "object:bios-multiboot32:ease.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_ease.o"
+    },
+    {
+      "id": "object:bios-multiboot32:ecdsa.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_ecdsa.o"
+    },
+    {
+      "id": "object:bios-multiboot32:entropy.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_entropy.o"
+    },
+    {
+      "id": "object:bios-multiboot32:exec.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_exec.o"
+    },
+    {
+      "id": "object:bios-multiboot32:fb.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_fb.o"
+    },
+    {
+      "id": "object:bios-multiboot32:fb3d.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_fb3d.o"
+    },
+    {
+      "id": "object:bios-multiboot32:font8x16.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_font8x16.o"
+    },
+    {
+      "id": "object:bios-multiboot32:font_aa.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_font_aa.o"
+    },
+    {
+      "id": "object:bios-multiboot32:font_sub.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_font_sub.o"
+    },
+    {
+      "id": "object:bios-multiboot32:fs.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_fs.o"
+    },
+    {
+      "id": "object:bios-multiboot32:generated-zl.o",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_gen.o"
+    },
+    {
+      "id": "object:bios-multiboot32:gpu.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_gpu.o"
+    },
+    {
+      "id": "object:bios-multiboot32:gpucursor.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_gpucursor.o"
+    },
+    {
+      "id": "object:bios-multiboot32:gpuring.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_gpuring.o"
+    },
+    {
+      "id": "object:bios-multiboot32:heap.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_heap.o"
+    },
+    {
+      "id": "object:bios-multiboot32:html.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_html.o"
+    },
+    {
+      "id": "object:bios-multiboot32:http.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_http.o"
+    },
+    {
+      "id": "object:bios-multiboot32:i2c_hid.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_i2c_hid.o"
+    },
+    {
+      "id": "object:bios-multiboot32:icons.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_icons.o"
+    },
+    {
+      "id": "object:bios-multiboot32:idt.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_idt.o"
+    },
+    {
+      "id": "object:bios-multiboot32:input.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_input.o"
+    },
+    {
+      "id": "object:bios-multiboot32:intel.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_intel.o"
+    },
+    {
+      "id": "object:bios-multiboot32:js.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_js.o"
+    },
+    {
+      "id": "object:bios-multiboot32:layout.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_layout.o"
+    },
+    {
+      "id": "object:bios-multiboot32:net.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_net.o"
+    },
+    {
+      "id": "object:bios-multiboot32:notify.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_notify.o"
+    },
+    {
+      "id": "object:bios-multiboot32:nvme.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_nvme.o"
+    },
+    {
+      "id": "object:bios-multiboot32:paging.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_paging.o"
+    },
+    {
+      "id": "object:bios-multiboot32:pci.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_pci.o"
+    },
+    {
+      "id": "object:bios-multiboot32:png.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_png.o"
+    },
+    {
+      "id": "object:bios-multiboot32:roots.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_roots.o"
+    },
+    {
+      "id": "object:bios-multiboot32:rsa.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_rsa.o"
+    },
+    {
+      "id": "object:bios-multiboot32:rtc.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_rtc.o"
+    },
+    {
+      "id": "object:bios-multiboot32:sched.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_sched.o"
+    },
+    {
+      "id": "object:bios-multiboot32:settings.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_settings.o"
+    },
+    {
+      "id": "object:bios-multiboot32:smp.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_smp.o"
+    },
+    {
+      "id": "object:bios-multiboot32:snap.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_snap.o"
+    },
+    {
+      "id": "object:bios-multiboot32:special:boot.S",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_boot.o"
+    },
+    {
+      "id": "object:bios-multiboot32:special:gdt.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_gdt.o"
+    },
+    {
+      "id": "object:bios-multiboot32:special:runtime_kernel.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_rt.o"
+    },
+    {
+      "id": "object:bios-multiboot32:special:smp_trampoline.S",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_smptr.o"
+    },
+    {
+      "id": "object:bios-multiboot32:support.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_support.o"
+    },
+    {
+      "id": "object:bios-multiboot32:tcp.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_tcp.o"
+    },
+    {
+      "id": "object:bios-multiboot32:term.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_term.o"
+    },
+    {
+      "id": "object:bios-multiboot32:tls.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_tls.o"
+    },
+    {
+      "id": "object:bios-multiboot32:ui.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_ui.o"
+    },
+    {
+      "id": "object:bios-multiboot32:uikit.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_uikit.o"
+    },
+    {
+      "id": "object:bios-multiboot32:usermode.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_usermode.o"
+    },
+    {
+      "id": "object:bios-multiboot32:vga.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_vga.o"
+    },
+    {
+      "id": "object:bios-multiboot32:virtio_gpu.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_virtio_gpu.o"
+    },
+    {
+      "id": "object:bios-multiboot32:virtio_net.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_virtio_net.o"
+    },
+    {
+      "id": "object:bios-multiboot32:wm.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_wm.o"
+    },
+    {
+      "id": "object:bios-multiboot32:wmglue.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_wmglue.o"
+    },
+    {
+      "id": "object:bios-multiboot32:x509.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_x509.o"
+    },
+    {
+      "id": "object:bios-multiboot32:xhci.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_xhci.o"
+    },
+    {
+      "id": "object:multiboot64:apic.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_apic64.o"
+    },
+    {
+      "id": "object:multiboot64:arena.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_arena64.o"
+    },
+    {
+      "id": "object:multiboot64:bga.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_bga64.o"
+    },
+    {
+      "id": "object:multiboot64:browser.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_browser64.o"
+    },
+    {
+      "id": "object:multiboot64:clip.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_clip64.o"
+    },
+    {
+      "id": "object:multiboot64:console.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_console64.o"
+    },
+    {
+      "id": "object:multiboot64:cpu.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_cpu64.o"
+    },
+    {
+      "id": "object:multiboot64:crash.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_crash64.o"
+    },
+    {
+      "id": "object:multiboot64:crypto.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_crypto64.o"
+    },
+    {
+      "id": "object:multiboot64:css.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_css64.o"
+    },
+    {
+      "id": "object:multiboot64:divmod.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_divmod64.o"
+    },
+    {
+      "id": "object:multiboot64:dns.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_dns64.o"
+    },
+    {
+      "id": "object:multiboot64:ease.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_ease64.o"
+    },
+    {
+      "id": "object:multiboot64:ecdsa.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_ecdsa64.o"
+    },
+    {
+      "id": "object:multiboot64:entropy.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_entropy64.o"
+    },
+    {
+      "id": "object:multiboot64:exec.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_exec64.o"
+    },
+    {
+      "id": "object:multiboot64:fb.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_fb64.o"
+    },
+    {
+      "id": "object:multiboot64:fb3d.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_fb3d64.o"
+    },
+    {
+      "id": "object:multiboot64:font8x16.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_font8x1664.o"
+    },
+    {
+      "id": "object:multiboot64:font_aa.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_font_aa64.o"
+    },
+    {
+      "id": "object:multiboot64:font_sub.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_font_sub64.o"
+    },
+    {
+      "id": "object:multiboot64:fs.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_fs64.o"
+    },
+    {
+      "id": "object:multiboot64:generated-zl.o",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_gen64.o"
+    },
+    {
+      "id": "object:multiboot64:gpu.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_gpu64.o"
+    },
+    {
+      "id": "object:multiboot64:gpucursor.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_gpucursor64.o"
+    },
+    {
+      "id": "object:multiboot64:gpuring.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_gpuring64.o"
+    },
+    {
+      "id": "object:multiboot64:heap.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_heap64.o"
+    },
+    {
+      "id": "object:multiboot64:html.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_html64.o"
+    },
+    {
+      "id": "object:multiboot64:http.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_http64.o"
+    },
+    {
+      "id": "object:multiboot64:i2c_hid.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_i2c_hid64.o"
+    },
+    {
+      "id": "object:multiboot64:icons.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_icons64.o"
+    },
+    {
+      "id": "object:multiboot64:idt.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_idt64.o"
+    },
+    {
+      "id": "object:multiboot64:input.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_input64.o"
+    },
+    {
+      "id": "object:multiboot64:intel.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_intel64.o"
+    },
+    {
+      "id": "object:multiboot64:js.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_js64.o"
+    },
+    {
+      "id": "object:multiboot64:layout.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_layout64.o"
+    },
+    {
+      "id": "object:multiboot64:net.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_net64.o"
+    },
+    {
+      "id": "object:multiboot64:notify.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_notify64.o"
+    },
+    {
+      "id": "object:multiboot64:nvme.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_nvme64.o"
+    },
+    {
+      "id": "object:multiboot64:paging.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_paging64.o"
+    },
+    {
+      "id": "object:multiboot64:pci.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_pci64.o"
+    },
+    {
+      "id": "object:multiboot64:png.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_png64.o"
+    },
+    {
+      "id": "object:multiboot64:roots.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_roots64.o"
+    },
+    {
+      "id": "object:multiboot64:rsa.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_rsa64.o"
+    },
+    {
+      "id": "object:multiboot64:rtc.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_rtc64.o"
+    },
+    {
+      "id": "object:multiboot64:sched.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_sched64.o"
+    },
+    {
+      "id": "object:multiboot64:settings.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_settings64.o"
+    },
+    {
+      "id": "object:multiboot64:smp.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_smp64.o"
+    },
+    {
+      "id": "object:multiboot64:snap.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_snap64.o"
+    },
+    {
+      "id": "object:multiboot64:special:boot64.S",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_boot64.o"
+    },
+    {
+      "id": "object:multiboot64:special:gdt64.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_gdt64.o"
+    },
+    {
+      "id": "object:multiboot64:special:runtime_kernel.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_rt64.o"
+    },
+    {
+      "id": "object:multiboot64:special:smp_trampoline64.S",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_smptr64.o"
+    },
+    {
+      "id": "object:multiboot64:support.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_support64.o"
+    },
+    {
+      "id": "object:multiboot64:tcp.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_tcp64.o"
+    },
+    {
+      "id": "object:multiboot64:term.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_term64.o"
+    },
+    {
+      "id": "object:multiboot64:tls.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_tls64.o"
+    },
+    {
+      "id": "object:multiboot64:ui.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_ui64.o"
+    },
+    {
+      "id": "object:multiboot64:uikit.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_uikit64.o"
+    },
+    {
+      "id": "object:multiboot64:usermode.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_usermode64.o"
+    },
+    {
+      "id": "object:multiboot64:vga.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_vga64.o"
+    },
+    {
+      "id": "object:multiboot64:virtio_gpu.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_virtio_gpu64.o"
+    },
+    {
+      "id": "object:multiboot64:virtio_net.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_virtio_net64.o"
+    },
+    {
+      "id": "object:multiboot64:wm.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_wm64.o"
+    },
+    {
+      "id": "object:multiboot64:wmglue.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_wmglue64.o"
+    },
+    {
+      "id": "object:multiboot64:x509.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_x50964.o"
+    },
+    {
+      "id": "object:multiboot64:xhci.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_xhci64.o"
+    },
+    {
+      "id": "object:native-uefi64:apic.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_apic.o"
+    },
+    {
+      "id": "object:native-uefi64:arena.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_arena.o"
+    },
+    {
+      "id": "object:native-uefi64:bga.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_bga.o"
+    },
+    {
+      "id": "object:native-uefi64:browser.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_browser.o"
+    },
+    {
+      "id": "object:native-uefi64:clip.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_clip.o"
+    },
+    {
+      "id": "object:native-uefi64:console.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_console.o"
+    },
+    {
+      "id": "object:native-uefi64:cpu.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_cpu.o"
+    },
+    {
+      "id": "object:native-uefi64:crash.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_crash.o"
+    },
+    {
+      "id": "object:native-uefi64:crypto.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_crypto.o"
+    },
+    {
+      "id": "object:native-uefi64:css.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_css.o"
+    },
+    {
+      "id": "object:native-uefi64:divmod.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_divmod.o"
+    },
+    {
+      "id": "object:native-uefi64:dns.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_dns.o"
+    },
+    {
+      "id": "object:native-uefi64:ease.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_ease.o"
+    },
+    {
+      "id": "object:native-uefi64:ecdsa.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_ecdsa.o"
+    },
+    {
+      "id": "object:native-uefi64:entropy.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_entropy.o"
+    },
+    {
+      "id": "object:native-uefi64:exec.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_exec.o"
+    },
+    {
+      "id": "object:native-uefi64:fb.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_fb.o"
+    },
+    {
+      "id": "object:native-uefi64:fb3d.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_fb3d.o"
+    },
+    {
+      "id": "object:native-uefi64:font8x16.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_font8x16.o"
+    },
+    {
+      "id": "object:native-uefi64:font_aa.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_font_aa.o"
+    },
+    {
+      "id": "object:native-uefi64:font_sub.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_font_sub.o"
+    },
+    {
+      "id": "object:native-uefi64:fs.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_fs.o"
+    },
+    {
+      "id": "object:native-uefi64:generated-zl.o",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi__genefi.o"
+    },
+    {
+      "id": "object:native-uefi64:gpu.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_gpu.o"
+    },
+    {
+      "id": "object:native-uefi64:gpucursor.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_gpucursor.o"
+    },
+    {
+      "id": "object:native-uefi64:gpuring.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_gpuring.o"
+    },
+    {
+      "id": "object:native-uefi64:heap.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_heap.o"
+    },
+    {
+      "id": "object:native-uefi64:html.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_html.o"
+    },
+    {
+      "id": "object:native-uefi64:http.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_http.o"
+    },
+    {
+      "id": "object:native-uefi64:i2c_hid.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_i2c_hid.o"
+    },
+    {
+      "id": "object:native-uefi64:icons.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_icons.o"
+    },
+    {
+      "id": "object:native-uefi64:idt.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_idt.o"
+    },
+    {
+      "id": "object:native-uefi64:input.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_input.o"
+    },
+    {
+      "id": "object:native-uefi64:intel.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_intel.o"
+    },
+    {
+      "id": "object:native-uefi64:js.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_js.o"
+    },
+    {
+      "id": "object:native-uefi64:layout.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_layout.o"
+    },
+    {
+      "id": "object:native-uefi64:net.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_net.o"
+    },
+    {
+      "id": "object:native-uefi64:notify.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_notify.o"
+    },
+    {
+      "id": "object:native-uefi64:nvme.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_nvme.o"
+    },
+    {
+      "id": "object:native-uefi64:paging.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_paging.o"
+    },
+    {
+      "id": "object:native-uefi64:pci.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_pci.o"
+    },
+    {
+      "id": "object:native-uefi64:png.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_png.o"
+    },
+    {
+      "id": "object:native-uefi64:roots.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_roots.o"
+    },
+    {
+      "id": "object:native-uefi64:rsa.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_rsa.o"
+    },
+    {
+      "id": "object:native-uefi64:rtc.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_rtc.o"
+    },
+    {
+      "id": "object:native-uefi64:sched.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_sched.o"
+    },
+    {
+      "id": "object:native-uefi64:settings.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_settings.o"
+    },
+    {
+      "id": "object:native-uefi64:smp.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_smp.o"
+    },
+    {
+      "id": "object:native-uefi64:snap.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_snap.o"
+    },
+    {
+      "id": "object:native-uefi64:special:efi.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_efi.o"
+    },
+    {
+      "id": "object:native-uefi64:special:gdt64.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_gdt64.o"
+    },
+    {
+      "id": "object:native-uefi64:special:runtime_kernel.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_runtime_kernel.o"
+    },
+    {
+      "id": "object:native-uefi64:special:smp_trampoline64.S",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_smptr.o"
+    },
+    {
+      "id": "object:native-uefi64:support.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_support.o"
+    },
+    {
+      "id": "object:native-uefi64:tcp.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_tcp.o"
+    },
+    {
+      "id": "object:native-uefi64:term.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_term.o"
+    },
+    {
+      "id": "object:native-uefi64:tls.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_tls.o"
+    },
+    {
+      "id": "object:native-uefi64:ui.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_ui.o"
+    },
+    {
+      "id": "object:native-uefi64:uikit.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_uikit.o"
+    },
+    {
+      "id": "object:native-uefi64:usermode.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_usermode.o"
+    },
+    {
+      "id": "object:native-uefi64:vga.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_vga.o"
+    },
+    {
+      "id": "object:native-uefi64:virtio_gpu.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_virtio_gpu.o"
+    },
+    {
+      "id": "object:native-uefi64:virtio_net.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_virtio_net.o"
+    },
+    {
+      "id": "object:native-uefi64:wm.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_wm.o"
+    },
+    {
+      "id": "object:native-uefi64:wmglue.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_wmglue.o"
+    },
+    {
+      "id": "object:native-uefi64:x509.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_x509.o"
+    },
+    {
+      "id": "object:native-uefi64:xhci.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_xhci.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:apic.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_apic.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:arena.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_arena.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:bga.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_bga.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:browser.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_browser.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:clip.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_clip.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:console.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_console.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:cpu.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_cpu.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:crash.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_crash.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:crypto.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_crypto.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:css.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_css.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:divmod.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_divmod.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:dns.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_dns.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:ease.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_ease.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:ecdsa.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_ecdsa.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:entropy.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_entropy.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:exec.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_exec.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:fb.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_fb.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:fb3d.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_fb3d.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:font8x16.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_font8x16.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:font_aa.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_font_aa.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:font_sub.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_font_sub.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:fs.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_fs.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:generated-zl.o",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_gen.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:gpu.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_gpu.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:gpucursor.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_gpucursor.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:gpuring.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_gpuring.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:heap.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_heap.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:html.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_html.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:http.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_http.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:i2c_hid.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_i2c_hid.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:icons.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_icons.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:idt.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_idt.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:input.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_input.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:intel.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_intel.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:js.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_js.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:layout.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_layout.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:net.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_net.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:notify.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_notify.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:nvme.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_nvme.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:paging.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_paging.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:pci.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_pci.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:png.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_png.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:roots.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_roots.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:rsa.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_rsa.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:rtc.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_rtc.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:sched.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_sched.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:settings.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_settings.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:smp.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_smp.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:snap.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_snap.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:special:gdt.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_gdt.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:special:raw_entry.S",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_rawentry.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:special:runtime_kernel.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_rt.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:special:smp_trampoline.S",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_smptr.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:support.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_support.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:tcp.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_tcp.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:term.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_term.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:tls.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_tls.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:ui.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_ui.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:uikit.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_uikit.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:usermode.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_usermode.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:vga.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_vga.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:virtio_gpu.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_virtio_gpu.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:virtio_net.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_virtio_net.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:wm.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_wm.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:wmglue.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_wmglue.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:x509.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_x509.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:xhci.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_xhci.o"
+    },
+    {
+      "id": "scope:declared-build-input",
+      "kind": "scope",
+      "claim": "declared input without a more precise consumer edge"
+    },
+    {
+      "id": "source:freestanding/runtime_kernel.c",
+      "kind": "source-input",
+      "path": "freestanding/runtime_kernel.c",
+      "sha256": "87ca34a407c826169d5a3222f2681ef4d7899733432a1e5384447712b46c13f7",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:freestanding/zl_freestanding.h",
+      "kind": "source-input",
+      "path": "freestanding/zl_freestanding.h",
+      "sha256": "f1b29e59640f861eb24f7460c2c26957694b7f1e0983f06796a6e7080ccf7377",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/SOURCES",
+      "kind": "source-input",
+      "path": "kernel/SOURCES",
+      "sha256": "e2c4a415fadfe01dafd9de3fa0ed4bb49a3bd2b0abba546066b149dae8851102",
+      "suffix": ""
+    },
+    {
+      "id": "source:kernel/apic.c",
+      "kind": "source-input",
+      "path": "kernel/apic.c",
+      "sha256": "2b944a413e274ebf5710a2a07e0165078db7a3f46c8d616cd0171876a1d2837e",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/app-manifest.json",
+      "kind": "source-input",
+      "path": "kernel/app-manifest.json",
+      "sha256": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7",
+      "suffix": ".json"
+    },
+    {
+      "id": "source:kernel/app_manifest_embed.zl",
+      "kind": "source-input",
+      "path": "kernel/app_manifest_embed.zl",
+      "sha256": "4c76f3792385aaf0e811cce9cd256c8519af15244181a6881500f88ce608f5fe",
+      "suffix": ".zl"
+    },
+    {
+      "id": "source:kernel/apps_common.zl",
+      "kind": "source-input",
+      "path": "kernel/apps_common.zl",
+      "sha256": "dc15b6174f21e45a4c51aaa055fa61e56a27f8245e0c4ea99b0a545214bc5df2",
+      "suffix": ".zl"
+    },
+    {
+      "id": "source:kernel/apps_games1.zl",
+      "kind": "source-input",
+      "path": "kernel/apps_games1.zl",
+      "sha256": "8191e44e016041b755e29a7f189a8fb6446aea7c6a5ad09f636cb9c7b63cd40c",
+      "suffix": ".zl"
+    },
+    {
+      "id": "source:kernel/apps_games2.zl",
+      "kind": "source-input",
+      "path": "kernel/apps_games2.zl",
+      "sha256": "ceea12a3d4f21c9dfcdb9a55a8624181ef2220ef94480fa3e8f2be828ead2cd1",
+      "suffix": ".zl"
+    },
+    {
+      "id": "source:kernel/apps_games3.zl",
+      "kind": "source-input",
+      "path": "kernel/apps_games3.zl",
+      "sha256": "59a233ba8016c9cca4ff84472bf729ac7fa7a469ad46bfa26b2e06d54f9ef1ee",
+      "suffix": ".zl"
+    },
+    {
+      "id": "source:kernel/apps_games4.zl",
+      "kind": "source-input",
+      "path": "kernel/apps_games4.zl",
+      "sha256": "825d7a316c2260bbc633e3edaa0b1bcefccb930a5994fd83c74f38ed02fb18d4",
+      "suffix": ".zl"
+    },
+    {
+      "id": "source:kernel/apps_registry.zl",
+      "kind": "source-input",
+      "path": "kernel/apps_registry.zl",
+      "sha256": "d9df7132a84c6eb0e1daf4d71c50dbc789f82a54ef8b59865f1b49f3008d204a",
+      "suffix": ".zl"
+    },
+    {
+      "id": "source:kernel/apps_sys2.zl",
+      "kind": "source-input",
+      "path": "kernel/apps_sys2.zl",
+      "sha256": "12368e065b385f31380f390f1efd752e505f3b56d865cc8fa2126cba2c6c2287",
+      "suffix": ".zl"
+    },
+    {
+      "id": "source:kernel/apps_sys3.zl",
+      "kind": "source-input",
+      "path": "kernel/apps_sys3.zl",
+      "sha256": "26ffc50b93823346e62de6065a0e4755bf016d6b9138896e0a404bcb4b7debd2",
+      "suffix": ".zl"
+    },
+    {
+      "id": "source:kernel/apps_system.zl",
+      "kind": "source-input",
+      "path": "kernel/apps_system.zl",
+      "sha256": "4dd056c2b46e332e57794f62baac2b90f21873a020c013af50d74c183a3ed4f3",
+      "suffix": ".zl"
+    },
+    {
+      "id": "source:kernel/apps_utils.zl",
+      "kind": "source-input",
+      "path": "kernel/apps_utils.zl",
+      "sha256": "429d201fe9b692174b4286c11562546591dc815f84828e4df2dd61f57a09cb6e",
+      "suffix": ".zl"
+    },
+    {
+      "id": "source:kernel/arena.c",
+      "kind": "source-input",
+      "path": "kernel/arena.c",
+      "sha256": "cf01029e7ff7865a72bd99b47a8463fc1a379944ed17486b182f0c1978343032",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/bga.c",
+      "kind": "source-input",
+      "path": "kernel/bga.c",
+      "sha256": "c93051fbfa31247ba498cb7f67e571d0b97b7b2a4d8a7d32c3763c26368410a4",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/boot.S",
+      "kind": "source-input",
+      "path": "kernel/boot.S",
+      "sha256": "08e24912635c119a5defebcffca3cee941355c660801c7d1841d0eee30222f2e",
+      "suffix": ".S"
+    },
+    {
+      "id": "source:kernel/boot64.S",
+      "kind": "source-input",
+      "path": "kernel/boot64.S",
+      "sha256": "c4638b97c24d91d856bbfb779451d500a65cce55f05df06be724c654f427a784",
+      "suffix": ".S"
+    },
+    {
+      "id": "source:kernel/browser.c",
+      "kind": "source-input",
+      "path": "kernel/browser.c",
+      "sha256": "425b096de3e034f37305e04509576737ad3a1e0b28fbfc2d2e5dc6f59f8347bd",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/build.sh",
+      "kind": "source-input",
+      "path": "kernel/build.sh",
+      "sha256": "475be3dc2204235f8b73499d6568a4e57a46076fb58f93f7525c0f59fbec5aab",
+      "suffix": ".sh"
+    },
+    {
+      "id": "source:kernel/build64.sh",
+      "kind": "source-input",
+      "path": "kernel/build64.sh",
+      "sha256": "937d07d85e3afdccf47e77ad78ccc06092f6c13adef2ed527b61b812ad5cafe1",
+      "suffix": ".sh"
+    },
+    {
+      "id": "source:kernel/buildefi.sh",
+      "kind": "source-input",
+      "path": "kernel/buildefi.sh",
+      "sha256": "1139e0b86b325eda471c0d2d24bc834108b7d9e1578a0ce6887454d509b9fbc8",
+      "suffix": ".sh"
+    },
+    {
+      "id": "source:kernel/clip.c",
+      "kind": "source-input",
+      "path": "kernel/clip.c",
+      "sha256": "33361f8fa6d5cda2c277f68b4ed03761966b8f5a088e6c52fe918ed5badc3886",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/console.c",
+      "kind": "source-input",
+      "path": "kernel/console.c",
+      "sha256": "dd86cad040fa7c90417591de1ce03b0620c3fe8a1917890a84c0c4d9293ea40b",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/cpu.c",
+      "kind": "source-input",
+      "path": "kernel/cpu.c",
+      "sha256": "c48501db5327a4be8d1c4714d75917008e734ad1ac9bacc45790b054eb4cf0b9",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/crash.c",
+      "kind": "source-input",
+      "path": "kernel/crash.c",
+      "sha256": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/crash.h",
+      "kind": "source-input",
+      "path": "kernel/crash.h",
+      "sha256": "2d4fbb5bcb6523418f8caaed8e8e64b12e09e585f3bf37955a927b52dfa5d2d6",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/crypto.c",
+      "kind": "source-input",
+      "path": "kernel/crypto.c",
+      "sha256": "1dbf246046ae36e6fda25225e5bc6df1138f4fea2a8314458aaa64d5af5bbcb2",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/crypto.h",
+      "kind": "source-input",
+      "path": "kernel/crypto.h",
+      "sha256": "48e7b2e3020c9edccebd7be063646dcbebc753d36c99c1cfef2408cfe34eddaa",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/css.c",
+      "kind": "source-input",
+      "path": "kernel/css.c",
+      "sha256": "160c5cef524d51ec1fbefa3d338d90517f0787ea7d65c9ef64c863836db3385b",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/css.h",
+      "kind": "source-input",
+      "path": "kernel/css.h",
+      "sha256": "3d22d8ee088aa98d5b00d8939ddb61b4042472e36c77c541f8c2f57d0c3e06ab",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/design.h",
+      "kind": "source-input",
+      "path": "kernel/design.h",
+      "sha256": "cc964fac8490348035ec5a7e6e7bb0f658e5f4bf7ce1045745d0b5dc710f4f52",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/divmod.c",
+      "kind": "source-input",
+      "path": "kernel/divmod.c",
+      "sha256": "1aa5a5097ab42c0b66eae19481037790e83a43b318f6101473d84ee5a54e1141",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/dma.h",
+      "kind": "source-input",
+      "path": "kernel/dma.h",
+      "sha256": "c3a9813dc03c9c59c84bc53550b44b6750610ee4e17912bedaacc22f8ccc3b54",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/dns.c",
+      "kind": "source-input",
+      "path": "kernel/dns.c",
+      "sha256": "c6c11f1c8fe28b4a144dae4ff4cece13f277e1c0828ac5cc2fc156cfac25abe3",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/dns.h",
+      "kind": "source-input",
+      "path": "kernel/dns.h",
+      "sha256": "b6bcbed6f04e19bcb045fb074e524ee3d141585a1c1004692d970a8c4e9c4ca1",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/ease.c",
+      "kind": "source-input",
+      "path": "kernel/ease.c",
+      "sha256": "e26757324e1ea7387eef66d5125dbb39fca059ba03d63d20e253be95e802dc50",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/ease.h",
+      "kind": "source-input",
+      "path": "kernel/ease.h",
+      "sha256": "10b7e842a94feca628dfdfa09b307df51505bc419c616519f0bc8c136f9f9e2c",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/ecdsa.c",
+      "kind": "source-input",
+      "path": "kernel/ecdsa.c",
+      "sha256": "3112557f003aef228dc64be32473026aa3fc783b25f395bb9d8b347ac3b3d850",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/efi.c",
+      "kind": "source-input",
+      "path": "kernel/efi.c",
+      "sha256": "d548c075ccde097567eb240b2d3f62f0cb0378e4cfbcea3b2dd974d08657a8be",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/entropy.c",
+      "kind": "source-input",
+      "path": "kernel/entropy.c",
+      "sha256": "a65f4ca6258c63733ac8320f51323af2e22e25df557a486f79dce3314b389597",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/exec.c",
+      "kind": "source-input",
+      "path": "kernel/exec.c",
+      "sha256": "abdc9ce722046190e9208c2829ae98ad0d2756df57fdc947572b5cd4ce12fbb2",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/fb.c",
+      "kind": "source-input",
+      "path": "kernel/fb.c",
+      "sha256": "7abfc2dbb9886ff4d4a2434a29ba299afba450c5c6fdb3894fb86acc8810053a",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/fb3d.c",
+      "kind": "source-input",
+      "path": "kernel/fb3d.c",
+      "sha256": "b6259dc2c67fcdb0189678ce5667517cdbc6b934d14ef6ef4df436099fc47d56",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/font8x16.c",
+      "kind": "source-input",
+      "path": "kernel/font8x16.c",
+      "sha256": "e0760da784d60454da095f1f9def88f5cac57b9bd7628b9695846046bb8596f4",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/font_aa.c",
+      "kind": "source-input",
+      "path": "kernel/font_aa.c",
+      "sha256": "7e432066b616f01c9c84351b72031e84c54ecf3855f25e097e5b7bea92f2351d",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/font_prop.h",
+      "kind": "source-input",
+      "path": "kernel/font_prop.h",
+      "sha256": "db9195ea42a855de5ad4945b6e1c4dd45009772814aaa12efdf6e7b026d1faa1",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/font_sub.c",
+      "kind": "source-input",
+      "path": "kernel/font_sub.c",
+      "sha256": "7c290296512ea687acb4d5dce30908d55950bb662375e6af4218896abe00439f",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/fs.c",
+      "kind": "source-input",
+      "path": "kernel/fs.c",
+      "sha256": "c8c072a394a0c536761714f8647f8739ab1d77499009809e8cd3b265600b628f",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/gdt.c",
+      "kind": "source-input",
+      "path": "kernel/gdt.c",
+      "sha256": "ed6735e61cb49c163a271038543f8ba17b36f58cfb44f36710d0d8765130f8d4",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/gdt64.c",
+      "kind": "source-input",
+      "path": "kernel/gdt64.c",
+      "sha256": "b7bdada832c4d40fa6052ee9cbd47981436494b7fce21762249b04b55d9c3cd4",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/gen-app-manifest.py",
+      "kind": "source-input",
+      "path": "kernel/gen-app-manifest.py",
+      "sha256": "a7aea6916625f469c6b1b0fc4662655b3e57e34b32aaea715454506de428b671",
+      "suffix": ".py"
+    },
+    {
+      "id": "source:kernel/gen-boot-media-ids.py",
+      "kind": "source-input",
+      "path": "kernel/gen-boot-media-ids.py",
+      "sha256": "aa8aea3717babbce52e4b9033a5ccf427bd23a16aedb8344a51e0487e2ab04b7",
+      "suffix": ".py"
+    },
+    {
+      "id": "source:kernel/gen-build-identity.py",
+      "kind": "source-input",
+      "path": "kernel/gen-build-identity.py",
+      "sha256": "156a60035cbe803d144af049a898d101dd69a38fa82c54fb6a097becab526462",
+      "suffix": ".py"
+    },
+    {
+      "id": "source:kernel/ggttmap.h",
+      "kind": "source-input",
+      "path": "kernel/ggttmap.h",
+      "sha256": "e2f80136aeb6a75c2c73b4afbf3c376f9b1e4f6cc8c5c7619581a2726e5e5567",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/gpu.c",
+      "kind": "source-input",
+      "path": "kernel/gpu.c",
+      "sha256": "05e297ed6ada70626389dd1f92912752bcf12900ed7933c0639cf7204e72da37",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/gpu.h",
+      "kind": "source-input",
+      "path": "kernel/gpu.h",
+      "sha256": "38eafef56c5f32e36eaa74312faf8da89639120bbff6ae0f8829de066f90175f",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/gpucursor.c",
+      "kind": "source-input",
+      "path": "kernel/gpucursor.c",
+      "sha256": "de437b74c41f872f5a781f173114f0409306ffdaca8bfb4efd949ac380a7b822",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/gpuring.c",
+      "kind": "source-input",
+      "path": "kernel/gpuring.c",
+      "sha256": "1f7c57efe1308a147259c63260a65aa74183f5e31572c75e01e23d6ba9635acb",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/heap.c",
+      "kind": "source-input",
+      "path": "kernel/heap.c",
+      "sha256": "d7a8a817f19568106db8af368e179cebc2f2f1dd14fd9c9de100aff108cbafb8",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/html.c",
+      "kind": "source-input",
+      "path": "kernel/html.c",
+      "sha256": "82edd0e36dad42ba1b9b74c151e81474f6ccca89c057f9aaf227a12ecf10b2d2",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/html.h",
+      "kind": "source-input",
+      "path": "kernel/html.h",
+      "sha256": "3f95a8698f0fba60e5dddf3afd3e94362fee15438bd60fdfb4f9df711d36b65d",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/http.c",
+      "kind": "source-input",
+      "path": "kernel/http.c",
+      "sha256": "72401f2aeeba2d9cae3fab8a7c27b2f9d349036a09682761b7c9a20ad8e402ee",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/http.h",
+      "kind": "source-input",
+      "path": "kernel/http.h",
+      "sha256": "ef44424562107837af4ef9eac9886ed8f6f3b1a4f2443758a512e843ec40adec",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/i2c_hid.c",
+      "kind": "source-input",
+      "path": "kernel/i2c_hid.c",
+      "sha256": "c624b32b9586504942dc046ec3068c7e2c3230803c6ffc16ee6a67bc909e354b",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/icons.c",
+      "kind": "source-input",
+      "path": "kernel/icons.c",
+      "sha256": "24904a0a81026a7a96573dbea07f8cfd2811c92f9f63371f5aa69cd1586ad0a5",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/idt.c",
+      "kind": "source-input",
+      "path": "kernel/idt.c",
+      "sha256": "e98cbb7b86d37250268b0be84f6068af4017c2cd5cb870c14dfb09ecca40c810",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/input.c",
+      "kind": "source-input",
+      "path": "kernel/input.c",
+      "sha256": "1dab29b3f825b7f1def05e3bba7868568dfcb9a062e8424fe8989b2db3c6775d",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/intel.c",
+      "kind": "source-input",
+      "path": "kernel/intel.c",
+      "sha256": "467073ae0a8a58ef6eba1979626cab1a79b94edb53e3996ef98aa021309a5fee",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/js.c",
+      "kind": "source-input",
+      "path": "kernel/js.c",
+      "sha256": "b904895c9ec08765945de30acd8d9bca3c49c5303b87ed42f60beeca4dc0290e",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/js.h",
+      "kind": "source-input",
+      "path": "kernel/js.h",
+      "sha256": "5b3a36e468b4381345996ee3e369c6444189bd91426455decb1ddd3642d90026",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/kernel.zl",
+      "kind": "source-input",
+      "path": "kernel/kernel.zl",
+      "sha256": "e953981eff624423b9d751f972a031591d46e9595ddbc24911f606178442e643",
+      "suffix": ".zl"
+    },
+    {
+      "id": "source:kernel/keycodes.h",
+      "kind": "source-input",
+      "path": "kernel/keycodes.h",
+      "sha256": "e0ecb92e323475d21a4558f1dece6329dd4f7b17f6fac69b940daa560954e620",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/layout.c",
+      "kind": "source-input",
+      "path": "kernel/layout.c",
+      "sha256": "2f53f72060bd232a5d2223bc9f5430e6d0dd2159723ccde28db7030c4581f402",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/layout.h",
+      "kind": "source-input",
+      "path": "kernel/layout.h",
+      "sha256": "e47c0405a97d13b57418c004e18e9c8d6518d8437ba29ba2e7f0735096b27718",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/link-raw.ld",
+      "kind": "source-input",
+      "path": "kernel/link-raw.ld",
+      "sha256": "3f2743872e2f6f87f583ea236285d9b8176e9a4e25d883ac02bbe9fd1cc77e0b",
+      "suffix": ".ld"
+    },
+    {
+      "id": "source:kernel/link.ld",
+      "kind": "source-input",
+      "path": "kernel/link.ld",
+      "sha256": "f34f6150836ed57409cd6449a53fa5d20cd5bc146fdd215f154555c4f3ccfdf2",
+      "suffix": ".ld"
+    },
+    {
+      "id": "source:kernel/link64.ld",
+      "kind": "source-input",
+      "path": "kernel/link64.ld",
+      "sha256": "a4e5260c9f7ee0d540b12ee74cf8ec80c3f7abc35b4b15a4eafcb88cd55626c1",
+      "suffix": ".ld"
+    },
+    {
+      "id": "source:kernel/memmap.h",
+      "kind": "source-input",
+      "path": "kernel/memmap.h",
+      "sha256": "af9281ea4b7075b45b18b0d1ef85d8b0399c8c78721ae25d743b132dcd4fede1",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/mkdisk.sh",
+      "kind": "source-input",
+      "path": "kernel/mkdisk.sh",
+      "sha256": "dd13db52ebae2325d6e7a30347e7ea3bac42dc6070cc9c6f2d457884d6c717e5",
+      "suffix": ".sh"
+    },
+    {
+      "id": "source:kernel/mkiso.sh",
+      "kind": "source-input",
+      "path": "kernel/mkiso.sh",
+      "sha256": "69bcc5f6b3e3b3489c3551db05cf84d147e3650887121dc1d21d844da07dcee0",
+      "suffix": ".sh"
+    },
+    {
+      "id": "source:kernel/mkiso64.sh",
+      "kind": "source-input",
+      "path": "kernel/mkiso64.sh",
+      "sha256": "46f1717534f6690c26d430d0b57a99708c3e23ae66e63d7285a06e963f69d8f7",
+      "suffix": ".sh"
+    },
+    {
+      "id": "source:kernel/mkusb.sh",
+      "kind": "source-input",
+      "path": "kernel/mkusb.sh",
+      "sha256": "6ceea3691ed4ef1e5d04889e6da4fe66782767372ce1fd1051740d2b4203c8a8",
+      "suffix": ".sh"
+    },
+    {
+      "id": "source:kernel/net.c",
+      "kind": "source-input",
+      "path": "kernel/net.c",
+      "sha256": "6b3494710a4b61cbcacff94d33cf12e34b4371ccd0e5d8c85c0f65aaeaf71cfc",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/net.h",
+      "kind": "source-input",
+      "path": "kernel/net.h",
+      "sha256": "56116f1bb4e86d65e7180b8096199edb220d59f6baf72806ac77748f4d29a72f",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/notify.c",
+      "kind": "source-input",
+      "path": "kernel/notify.c",
+      "sha256": "6c06dbc9d2fa70ca82bf2b8a97fedb50c9aec7ef3b1e65842dfa657ac086311b",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/nvme.c",
+      "kind": "source-input",
+      "path": "kernel/nvme.c",
+      "sha256": "843c21ac76627735b29ce87dd2fdd8f79812f2efd71a84e6a93ab22be9eaa376",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/paging.c",
+      "kind": "source-input",
+      "path": "kernel/paging.c",
+      "sha256": "5fa0f5c48306d643fe63ed9c8beb1b5312a58fa41e4b22a19a62863085f50d59",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/pci.c",
+      "kind": "source-input",
+      "path": "kernel/pci.c",
+      "sha256": "3edf9a875df14e3169d2b1aadb1e0c8c33abf3bd4c668777bcec535b21064983",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/png.c",
+      "kind": "source-input",
+      "path": "kernel/png.c",
+      "sha256": "c273ddcb4e751fd4e999a6fa7c40d7706f499ad57d36da9683bb621e334964cd",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/png.h",
+      "kind": "source-input",
+      "path": "kernel/png.h",
+      "sha256": "c91befe500618549405b7ba2ef93ddd55c1998614df35a53a855c9e38eeea09a",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/raw_boot.asm",
+      "kind": "source-input",
+      "path": "kernel/raw_boot.asm",
+      "sha256": "c37c4ecb83f30cd89988fec09fb77c94d56ca33814b360dc2f2899db6c6217ea",
+      "suffix": ".asm"
+    },
+    {
+      "id": "source:kernel/raw_entry.S",
+      "kind": "source-input",
+      "path": "kernel/raw_entry.S",
+      "sha256": "067fe3b50476359286d60eeefd4068e92f398e612a25b10792cbdf722bf44a6c",
+      "suffix": ".S"
+    },
+    {
+      "id": "source:kernel/roots.c",
+      "kind": "source-input",
+      "path": "kernel/roots.c",
+      "sha256": "383cc193de6c8badec3275a5b67d3f2ebbe0670e5894cd9458cb2a542be2f277",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/rsa.c",
+      "kind": "source-input",
+      "path": "kernel/rsa.c",
+      "sha256": "c7af65d440990a54a19540539bc4e79dace8bd32047a0ca76d73d9a00e6bba1e",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/rtc.c",
+      "kind": "source-input",
+      "path": "kernel/rtc.c",
+      "sha256": "d5a79b23bfdb0f9803d941e9f2b04ae36d23a06e44e64ec1a3c0c2e94596df8d",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/sched.c",
+      "kind": "source-input",
+      "path": "kernel/sched.c",
+      "sha256": "8a9d963eebb479e80ce631bc7eeff98868f89ecdbee3aeeae6f2bfcd4dfbdb19",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/settings.c",
+      "kind": "source-input",
+      "path": "kernel/settings.c",
+      "sha256": "b1c6eb93c2b76260d7d0a000677433a8229a1e19e937e1966814e0527102311c",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/smp.c",
+      "kind": "source-input",
+      "path": "kernel/smp.c",
+      "sha256": "8432ac59ccbee30e24b60cc6a7eadd136a219d5f0ffb726b3ec61de5dc5b03d6",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/smp_trampoline.S",
+      "kind": "source-input",
+      "path": "kernel/smp_trampoline.S",
+      "sha256": "b0d55183c02cbb87423083f780c717580d567e96ce98d44fffcad1cca3b1a302",
+      "suffix": ".S"
+    },
+    {
+      "id": "source:kernel/smp_trampoline64.S",
+      "kind": "source-input",
+      "path": "kernel/smp_trampoline64.S",
+      "sha256": "747ceed78e4cff461426ff5f33ae81036dd43b533f1e1c1032091c9b2664e921",
+      "suffix": ".S"
+    },
+    {
+      "id": "source:kernel/snap.c",
+      "kind": "source-input",
+      "path": "kernel/snap.c",
+      "sha256": "77bb9397c504b1a59ae35d67befb96586ec2b7ff33705241ac2b0ac6531ecc9c",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/support.c",
+      "kind": "source-input",
+      "path": "kernel/support.c",
+      "sha256": "4ce2cecf76a4da5547fbf9749fa817dc879cf6b5b0d05958e38c672fa022378a",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/tcp.c",
+      "kind": "source-input",
+      "path": "kernel/tcp.c",
+      "sha256": "2773beb38f0452917478d5d86ccbef4051a13ff2abbb3b6eaec727aed162be4c",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/tcp.h",
+      "kind": "source-input",
+      "path": "kernel/tcp.h",
+      "sha256": "7c7c6f935875c7f1149a09be6d8c8c26eead569961faa70b770b28100bc77382",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/term.c",
+      "kind": "source-input",
+      "path": "kernel/term.c",
+      "sha256": "bdcbf0c5f6dd9bd382b45d575da780966eda499938519ca5f1ef507f52921c3c",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/tls.c",
+      "kind": "source-input",
+      "path": "kernel/tls.c",
+      "sha256": "7c67a36a111fcb04052f7fd5bb147f7160266d91455e2727757d3e9121f9ed30",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/tls.h",
+      "kind": "source-input",
+      "path": "kernel/tls.h",
+      "sha256": "761f10741020c810429f8f93053050e8e605809e3631f4afb9a07f02dfde5391",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/tools/reproducible_time.c",
+      "kind": "source-input",
+      "path": "kernel/tools/reproducible_time.c",
+      "sha256": "8283a864a02f5ebc6cfc88f629ef124b686aa06bbf2efbe71ac869c51bb1545a",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/ui.c",
+      "kind": "source-input",
+      "path": "kernel/ui.c",
+      "sha256": "7329f63c4afb060ca64223251a8808f0f1c154dda0c71e823bfd6bc354495a90",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/ui.h",
+      "kind": "source-input",
+      "path": "kernel/ui.h",
+      "sha256": "ad422e3bff02248e2bb108f23750f393adae8c37098b85544fd348479bfc27e0",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/uikit.c",
+      "kind": "source-input",
+      "path": "kernel/uikit.c",
+      "sha256": "f408e05fcc73c1df8d4b7e1b990c0cdbb3f55528f17d4278b23ca76ad974b8f2",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/usermode.c",
+      "kind": "source-input",
+      "path": "kernel/usermode.c",
+      "sha256": "705cdee66176e73235cf287203fa58f43711837a77976c9ba72253ac78f766b1",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/vga.c",
+      "kind": "source-input",
+      "path": "kernel/vga.c",
+      "sha256": "b0422a37198078d02e8539003412bea7fc7bd5cf7529acc247fcc261d86ff662",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/virtio_gpu.c",
+      "kind": "source-input",
+      "path": "kernel/virtio_gpu.c",
+      "sha256": "39b634236e53158bc7c601531f8e83b7ac95dc2f3be879781ce1f37338b5f7c7",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/virtio_net.c",
+      "kind": "source-input",
+      "path": "kernel/virtio_net.c",
+      "sha256": "658a5a78f9d946c8c18bcb70be75116007ae8884e9c2645b128a7a830935ab9a",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/wm.c",
+      "kind": "source-input",
+      "path": "kernel/wm.c",
+      "sha256": "c3aa3282c28a3ee35b836a353fc0da9c555c4c04cd2f735b057b1a834d07f86c",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/wmglue.c",
+      "kind": "source-input",
+      "path": "kernel/wmglue.c",
+      "sha256": "b0ab805463effa741ee1f00e1943a27ac4f98244cd81caec12ca7616393d50f5",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/x509.c",
+      "kind": "source-input",
+      "path": "kernel/x509.c",
+      "sha256": "ac566189332b3f7705f7502f4d590de6ddf1266f79d0e4884ad6a5240b95a212",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/x509.h",
+      "kind": "source-input",
+      "path": "kernel/x509.h",
+      "sha256": "4c761b5157d315b949371b8a36c87a606c4b77383f87459079adf25b7cda5cf1",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/xhci.c",
+      "kind": "source-input",
+      "path": "kernel/xhci.c",
+      "sha256": "e01caf8cd44c40d9ff4d04596baf20c1bdab635fc0a4805be41b057f1670a53c",
+      "suffix": ".c"
+    }
+  ],
+  "edges": [
+    {
+      "from": "artifact:BOOTX64.EFI",
+      "to": "artifact:zlOS-usb.img",
+      "relation": "efi-system-partition-payload"
+    },
+    {
+      "from": "artifact:boot-media-ids.json",
+      "to": "artifact:zlOS-usb.img",
+      "relation": "media-identity-input"
+    },
+    {
+      "from": "artifact:kernel.elf",
+      "to": "artifact:zlOS.iso",
+      "relation": "embedded-payload"
+    },
+    {
+      "from": "artifact:kernel64.elf",
+      "to": "artifact:zlOS64.iso",
+      "relation": "embedded-payload"
+    },
+    {
+      "from": "artifact:kernel_raw.elf",
+      "to": "artifact:zlOS.img",
+      "relation": "flattened-and-boot-wrapped"
+    },
+    {
+      "from": "generated:zl-c",
+      "to": "object:bios-multiboot32:generated-zl.o",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "generated:zl-c",
+      "to": "object:multiboot64:generated-zl.o",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "generated:zl-c",
+      "to": "object:native-uefi64:generated-zl.o",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "generated:zl-c",
+      "to": "object:raw-bios-loader32:generated-zl.o",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "object:bios-multiboot32:apic.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:arena.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:bga.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:browser.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:clip.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:console.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:cpu.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:crash.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:crypto.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:css.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:divmod.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:dns.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:ease.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:ecdsa.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:entropy.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:exec.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:fb.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:fb3d.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:font8x16.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:font_aa.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:font_sub.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:fs.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:generated-zl.o",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:gpu.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:gpucursor.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:gpuring.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:heap.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:html.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:http.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:i2c_hid.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:icons.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:idt.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:input.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:intel.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:js.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:layout.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:net.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:notify.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:nvme.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:paging.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:pci.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:png.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:roots.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:rsa.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:rtc.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:sched.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:settings.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:smp.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:snap.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:special:boot.S",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:special:gdt.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:special:runtime_kernel.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:special:smp_trampoline.S",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:support.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:tcp.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:term.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:tls.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:ui.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:uikit.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:usermode.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:vga.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:virtio_gpu.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:virtio_net.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:wm.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:wmglue.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:x509.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:xhci.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:apic.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:arena.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:bga.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:browser.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:clip.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:console.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:cpu.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:crash.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:crypto.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:css.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:divmod.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:dns.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:ease.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:ecdsa.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:entropy.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:exec.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:fb.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:fb3d.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:font8x16.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:font_aa.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:font_sub.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:fs.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:generated-zl.o",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:gpu.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:gpucursor.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:gpuring.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:heap.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:html.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:http.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:i2c_hid.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:icons.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:idt.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:input.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:intel.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:js.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:layout.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:net.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:notify.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:nvme.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:paging.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:pci.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:png.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:roots.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:rsa.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:rtc.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:sched.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:settings.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:smp.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:snap.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:special:boot64.S",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:special:gdt64.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:special:runtime_kernel.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:special:smp_trampoline64.S",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:support.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:tcp.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:term.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:tls.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:ui.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:uikit.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:usermode.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:vga.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:virtio_gpu.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:virtio_net.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:wm.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:wmglue.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:x509.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:xhci.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:apic.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:arena.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:bga.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:browser.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:clip.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:console.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:cpu.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:crash.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:crypto.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:css.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:divmod.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:dns.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:ease.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:ecdsa.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:entropy.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:exec.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:fb.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:fb3d.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:font8x16.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:font_aa.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:font_sub.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:fs.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:generated-zl.o",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:gpu.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:gpucursor.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:gpuring.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:heap.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:html.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:http.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:i2c_hid.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:icons.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:idt.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:input.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:intel.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:js.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:layout.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:net.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:notify.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:nvme.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:paging.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:pci.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:png.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:roots.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:rsa.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:rtc.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:sched.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:settings.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:smp.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:snap.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:special:efi.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:special:gdt64.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:special:runtime_kernel.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:special:smp_trampoline64.S",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:support.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:tcp.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:term.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:tls.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:ui.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:uikit.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:usermode.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:vga.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:virtio_gpu.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:virtio_net.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:wm.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:wmglue.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:x509.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:xhci.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:apic.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:arena.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:bga.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:browser.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:clip.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:console.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:cpu.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:crash.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:crypto.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:css.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:divmod.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:dns.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:ease.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:ecdsa.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:entropy.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:exec.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:fb.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:fb3d.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:font8x16.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:font_aa.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:font_sub.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:fs.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:generated-zl.o",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:gpu.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:gpucursor.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:gpuring.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:heap.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:html.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:http.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:i2c_hid.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:icons.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:idt.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:input.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:intel.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:js.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:layout.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:net.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:notify.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:nvme.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:paging.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:pci.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:png.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:roots.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:rsa.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:rtc.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:sched.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:settings.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:smp.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:snap.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:special:gdt.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:special:raw_entry.S",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:special:runtime_kernel.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:special:smp_trampoline.S",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:support.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:tcp.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:term.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:tls.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:ui.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:uikit.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:usermode.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:vga.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:virtio_gpu.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:virtio_net.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:wm.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:wmglue.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:x509.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:xhci.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "source:freestanding/runtime_kernel.c",
+      "to": "object:bios-multiboot32:special:runtime_kernel.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:freestanding/runtime_kernel.c",
+      "to": "object:multiboot64:special:runtime_kernel.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:freestanding/runtime_kernel.c",
+      "to": "object:native-uefi64:special:runtime_kernel.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:freestanding/runtime_kernel.c",
+      "to": "object:raw-bios-loader32:special:runtime_kernel.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:freestanding/zl_freestanding.h",
+      "to": "scope:declared-build-input",
+      "relation": "declared-scope-only"
+    },
+    {
+      "from": "source:kernel/SOURCES",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "declares-compiled-units"
+    },
+    {
+      "from": "source:kernel/SOURCES",
+      "to": "artifact:kernel.elf",
+      "relation": "declares-compiled-units"
+    },
+    {
+      "from": "source:kernel/SOURCES",
+      "to": "artifact:kernel64.elf",
+      "relation": "declares-compiled-units"
+    },
+    {
+      "from": "source:kernel/SOURCES",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "declares-compiled-units"
+    },
+    {
+      "from": "source:kernel/apic.c",
+      "to": "object:bios-multiboot32:apic.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/apic.c",
+      "to": "object:multiboot64:apic.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/apic.c",
+      "to": "object:native-uefi64:apic.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/apic.c",
+      "to": "object:raw-bios-loader32:apic.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/app-manifest.json",
+      "to": "meta:app-manifest",
+      "relation": "manifest-payload"
+    },
+    {
+      "from": "source:kernel/app_manifest_embed.zl",
+      "to": "generated:zl-c",
+      "relation": "zl-frontend-input"
+    },
+    {
+      "from": "source:kernel/app_manifest_embed.zl",
+      "to": "source:kernel/kernel.zl",
+      "relation": "zl-imported-by"
+    },
+    {
+      "from": "source:kernel/apps_common.zl",
+      "to": "generated:zl-c",
+      "relation": "zl-frontend-input"
+    },
+    {
+      "from": "source:kernel/apps_common.zl",
+      "to": "source:kernel/kernel.zl",
+      "relation": "zl-imported-by"
+    },
+    {
+      "from": "source:kernel/apps_games1.zl",
+      "to": "generated:zl-c",
+      "relation": "zl-frontend-input"
+    },
+    {
+      "from": "source:kernel/apps_games1.zl",
+      "to": "source:kernel/kernel.zl",
+      "relation": "zl-imported-by"
+    },
+    {
+      "from": "source:kernel/apps_games2.zl",
+      "to": "generated:zl-c",
+      "relation": "zl-frontend-input"
+    },
+    {
+      "from": "source:kernel/apps_games2.zl",
+      "to": "source:kernel/kernel.zl",
+      "relation": "zl-imported-by"
+    },
+    {
+      "from": "source:kernel/apps_games3.zl",
+      "to": "generated:zl-c",
+      "relation": "zl-frontend-input"
+    },
+    {
+      "from": "source:kernel/apps_games3.zl",
+      "to": "source:kernel/kernel.zl",
+      "relation": "zl-imported-by"
+    },
+    {
+      "from": "source:kernel/apps_games4.zl",
+      "to": "generated:zl-c",
+      "relation": "zl-frontend-input"
+    },
+    {
+      "from": "source:kernel/apps_games4.zl",
+      "to": "source:kernel/kernel.zl",
+      "relation": "zl-imported-by"
+    },
+    {
+      "from": "source:kernel/apps_registry.zl",
+      "to": "generated:zl-c",
+      "relation": "zl-frontend-input"
+    },
+    {
+      "from": "source:kernel/apps_registry.zl",
+      "to": "source:kernel/kernel.zl",
+      "relation": "zl-imported-by"
+    },
+    {
+      "from": "source:kernel/apps_sys2.zl",
+      "to": "generated:zl-c",
+      "relation": "zl-frontend-input"
+    },
+    {
+      "from": "source:kernel/apps_sys2.zl",
+      "to": "source:kernel/kernel.zl",
+      "relation": "zl-imported-by"
+    },
+    {
+      "from": "source:kernel/apps_sys3.zl",
+      "to": "generated:zl-c",
+      "relation": "zl-frontend-input"
+    },
+    {
+      "from": "source:kernel/apps_sys3.zl",
+      "to": "source:kernel/kernel.zl",
+      "relation": "zl-imported-by"
+    },
+    {
+      "from": "source:kernel/apps_system.zl",
+      "to": "generated:zl-c",
+      "relation": "zl-frontend-input"
+    },
+    {
+      "from": "source:kernel/apps_system.zl",
+      "to": "source:kernel/kernel.zl",
+      "relation": "zl-imported-by"
+    },
+    {
+      "from": "source:kernel/apps_utils.zl",
+      "to": "generated:zl-c",
+      "relation": "zl-frontend-input"
+    },
+    {
+      "from": "source:kernel/apps_utils.zl",
+      "to": "source:kernel/kernel.zl",
+      "relation": "zl-imported-by"
+    },
+    {
+      "from": "source:kernel/arena.c",
+      "to": "object:bios-multiboot32:arena.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/arena.c",
+      "to": "object:multiboot64:arena.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/arena.c",
+      "to": "object:native-uefi64:arena.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/arena.c",
+      "to": "object:raw-bios-loader32:arena.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/bga.c",
+      "to": "object:bios-multiboot32:bga.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/bga.c",
+      "to": "object:multiboot64:bga.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/bga.c",
+      "to": "object:native-uefi64:bga.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/bga.c",
+      "to": "object:raw-bios-loader32:bga.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/boot.S",
+      "to": "object:bios-multiboot32:special:boot.S",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/boot64.S",
+      "to": "object:multiboot64:special:boot64.S",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/browser.c",
+      "to": "object:bios-multiboot32:browser.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/browser.c",
+      "to": "object:multiboot64:browser.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/browser.c",
+      "to": "object:native-uefi64:browser.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/browser.c",
+      "to": "object:raw-bios-loader32:browser.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/build.sh",
+      "to": "artifact:kernel.elf",
+      "relation": "build-script-produces"
+    },
+    {
+      "from": "source:kernel/build.sh",
+      "to": "artifact:kernel.elf",
+      "relation": "producer-script"
+    },
+    {
+      "from": "source:kernel/build64.sh",
+      "to": "artifact:kernel64.elf",
+      "relation": "build-script-produces"
+    },
+    {
+      "from": "source:kernel/build64.sh",
+      "to": "artifact:kernel64.elf",
+      "relation": "producer-script"
+    },
+    {
+      "from": "source:kernel/buildefi.sh",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "build-script-produces"
+    },
+    {
+      "from": "source:kernel/buildefi.sh",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "producer-script"
+    },
+    {
+      "from": "source:kernel/clip.c",
+      "to": "object:bios-multiboot32:clip.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/clip.c",
+      "to": "object:multiboot64:clip.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/clip.c",
+      "to": "object:native-uefi64:clip.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/clip.c",
+      "to": "object:raw-bios-loader32:clip.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/console.c",
+      "to": "object:bios-multiboot32:console.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/console.c",
+      "to": "object:multiboot64:console.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/console.c",
+      "to": "object:native-uefi64:console.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/console.c",
+      "to": "object:raw-bios-loader32:console.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/cpu.c",
+      "to": "object:bios-multiboot32:cpu.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/cpu.c",
+      "to": "object:multiboot64:cpu.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/cpu.c",
+      "to": "object:native-uefi64:cpu.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/cpu.c",
+      "to": "object:raw-bios-loader32:cpu.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/crash.c",
+      "to": "object:bios-multiboot32:crash.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/crash.c",
+      "to": "object:multiboot64:crash.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/crash.c",
+      "to": "object:native-uefi64:crash.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/crash.c",
+      "to": "object:raw-bios-loader32:crash.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/crash.h",
+      "to": "source:kernel/crash.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/crypto.c",
+      "to": "object:bios-multiboot32:crypto.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/crypto.c",
+      "to": "object:multiboot64:crypto.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/crypto.c",
+      "to": "object:native-uefi64:crypto.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/crypto.c",
+      "to": "object:raw-bios-loader32:crypto.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/crypto.h",
+      "to": "source:kernel/tls.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/css.c",
+      "to": "object:bios-multiboot32:css.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/css.c",
+      "to": "object:multiboot64:css.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/css.c",
+      "to": "object:native-uefi64:css.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/css.c",
+      "to": "object:raw-bios-loader32:css.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/css.h",
+      "to": "source:kernel/browser.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/css.h",
+      "to": "source:kernel/css.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/css.h",
+      "to": "source:kernel/layout.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/design.h",
+      "to": "source:freestanding/runtime_kernel.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/design.h",
+      "to": "source:kernel/settings.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/design.h",
+      "to": "source:kernel/ui.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/design.h",
+      "to": "source:kernel/uikit.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/divmod.c",
+      "to": "object:bios-multiboot32:divmod.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/divmod.c",
+      "to": "object:multiboot64:divmod.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/divmod.c",
+      "to": "object:native-uefi64:divmod.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/divmod.c",
+      "to": "object:raw-bios-loader32:divmod.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/dma.h",
+      "to": "source:kernel/nvme.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/dma.h",
+      "to": "source:kernel/virtio_gpu.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/dma.h",
+      "to": "source:kernel/virtio_net.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/dma.h",
+      "to": "source:kernel/xhci.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/dns.c",
+      "to": "object:bios-multiboot32:dns.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/dns.c",
+      "to": "object:multiboot64:dns.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/dns.c",
+      "to": "object:native-uefi64:dns.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/dns.c",
+      "to": "object:raw-bios-loader32:dns.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/dns.h",
+      "to": "source:kernel/browser.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/dns.h",
+      "to": "source:kernel/dns.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/ease.c",
+      "to": "object:bios-multiboot32:ease.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/ease.c",
+      "to": "object:multiboot64:ease.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/ease.c",
+      "to": "object:native-uefi64:ease.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/ease.c",
+      "to": "object:raw-bios-loader32:ease.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/ease.h",
+      "to": "source:kernel/ease.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/ease.h",
+      "to": "source:kernel/wm.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/ecdsa.c",
+      "to": "object:bios-multiboot32:ecdsa.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/ecdsa.c",
+      "to": "object:multiboot64:ecdsa.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/ecdsa.c",
+      "to": "object:native-uefi64:ecdsa.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/ecdsa.c",
+      "to": "object:raw-bios-loader32:ecdsa.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/efi.c",
+      "to": "object:native-uefi64:special:efi.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/entropy.c",
+      "to": "object:bios-multiboot32:entropy.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/entropy.c",
+      "to": "object:multiboot64:entropy.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/entropy.c",
+      "to": "object:native-uefi64:entropy.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/entropy.c",
+      "to": "object:raw-bios-loader32:entropy.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/exec.c",
+      "to": "object:bios-multiboot32:exec.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/exec.c",
+      "to": "object:multiboot64:exec.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/exec.c",
+      "to": "object:native-uefi64:exec.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/exec.c",
+      "to": "object:raw-bios-loader32:exec.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/fb.c",
+      "to": "object:bios-multiboot32:fb.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/fb.c",
+      "to": "object:multiboot64:fb.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/fb.c",
+      "to": "object:native-uefi64:fb.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/fb.c",
+      "to": "object:raw-bios-loader32:fb.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/fb3d.c",
+      "to": "object:bios-multiboot32:fb3d.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/fb3d.c",
+      "to": "object:multiboot64:fb3d.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/fb3d.c",
+      "to": "object:native-uefi64:fb3d.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/fb3d.c",
+      "to": "object:raw-bios-loader32:fb3d.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/font8x16.c",
+      "to": "object:bios-multiboot32:font8x16.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/font8x16.c",
+      "to": "object:multiboot64:font8x16.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/font8x16.c",
+      "to": "object:native-uefi64:font8x16.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/font8x16.c",
+      "to": "object:raw-bios-loader32:font8x16.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/font_aa.c",
+      "to": "object:bios-multiboot32:font_aa.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/font_aa.c",
+      "to": "object:multiboot64:font_aa.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/font_aa.c",
+      "to": "object:native-uefi64:font_aa.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/font_aa.c",
+      "to": "object:raw-bios-loader32:font_aa.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/font_prop.h",
+      "to": "source:kernel/fb.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/font_sub.c",
+      "to": "object:bios-multiboot32:font_sub.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/font_sub.c",
+      "to": "object:multiboot64:font_sub.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/font_sub.c",
+      "to": "object:native-uefi64:font_sub.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/font_sub.c",
+      "to": "object:raw-bios-loader32:font_sub.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/fs.c",
+      "to": "object:bios-multiboot32:fs.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/fs.c",
+      "to": "object:multiboot64:fs.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/fs.c",
+      "to": "object:native-uefi64:fs.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/fs.c",
+      "to": "object:raw-bios-loader32:fs.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gdt.c",
+      "to": "object:bios-multiboot32:special:gdt.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gdt.c",
+      "to": "object:raw-bios-loader32:special:gdt.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gdt64.c",
+      "to": "object:multiboot64:special:gdt64.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gdt64.c",
+      "to": "object:native-uefi64:special:gdt64.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gen-app-manifest.py",
+      "to": "meta:app-manifest",
+      "relation": "generates"
+    },
+    {
+      "from": "source:kernel/gen-boot-media-ids.py",
+      "to": "artifact:boot-media-ids.json",
+      "relation": "producer-script"
+    },
+    {
+      "from": "source:kernel/gen-build-identity.py",
+      "to": "meta:build-identity",
+      "relation": "generates"
+    },
+    {
+      "from": "source:kernel/ggttmap.h",
+      "to": "source:kernel/gpucursor.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/ggttmap.h",
+      "to": "source:kernel/gpuring.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/gpu.c",
+      "to": "object:bios-multiboot32:gpu.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gpu.c",
+      "to": "object:multiboot64:gpu.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gpu.c",
+      "to": "object:native-uefi64:gpu.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gpu.c",
+      "to": "object:raw-bios-loader32:gpu.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gpu.h",
+      "to": "source:kernel/gpu.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/gpu.h",
+      "to": "source:kernel/gpuring.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/gpu.h",
+      "to": "source:kernel/intel.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/gpucursor.c",
+      "to": "object:bios-multiboot32:gpucursor.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gpucursor.c",
+      "to": "object:multiboot64:gpucursor.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gpucursor.c",
+      "to": "object:native-uefi64:gpucursor.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gpucursor.c",
+      "to": "object:raw-bios-loader32:gpucursor.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gpuring.c",
+      "to": "object:bios-multiboot32:gpuring.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gpuring.c",
+      "to": "object:multiboot64:gpuring.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gpuring.c",
+      "to": "object:native-uefi64:gpuring.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/gpuring.c",
+      "to": "object:raw-bios-loader32:gpuring.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/heap.c",
+      "to": "object:bios-multiboot32:heap.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/heap.c",
+      "to": "object:multiboot64:heap.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/heap.c",
+      "to": "object:native-uefi64:heap.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/heap.c",
+      "to": "object:raw-bios-loader32:heap.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/html.c",
+      "to": "object:bios-multiboot32:html.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/html.c",
+      "to": "object:multiboot64:html.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/html.c",
+      "to": "object:native-uefi64:html.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/html.c",
+      "to": "object:raw-bios-loader32:html.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/html.h",
+      "to": "source:kernel/browser.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/html.h",
+      "to": "source:kernel/html.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/html.h",
+      "to": "source:kernel/layout.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/http.c",
+      "to": "object:bios-multiboot32:http.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/http.c",
+      "to": "object:multiboot64:http.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/http.c",
+      "to": "object:native-uefi64:http.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/http.c",
+      "to": "object:raw-bios-loader32:http.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/http.h",
+      "to": "source:kernel/browser.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/http.h",
+      "to": "source:kernel/http.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/i2c_hid.c",
+      "to": "object:bios-multiboot32:i2c_hid.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/i2c_hid.c",
+      "to": "object:multiboot64:i2c_hid.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/i2c_hid.c",
+      "to": "object:native-uefi64:i2c_hid.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/i2c_hid.c",
+      "to": "object:raw-bios-loader32:i2c_hid.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/icons.c",
+      "to": "object:bios-multiboot32:icons.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/icons.c",
+      "to": "object:multiboot64:icons.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/icons.c",
+      "to": "object:native-uefi64:icons.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/icons.c",
+      "to": "object:raw-bios-loader32:icons.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/idt.c",
+      "to": "object:bios-multiboot32:idt.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/idt.c",
+      "to": "object:multiboot64:idt.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/idt.c",
+      "to": "object:native-uefi64:idt.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/idt.c",
+      "to": "object:raw-bios-loader32:idt.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/input.c",
+      "to": "object:bios-multiboot32:input.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/input.c",
+      "to": "object:multiboot64:input.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/input.c",
+      "to": "object:native-uefi64:input.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/input.c",
+      "to": "object:raw-bios-loader32:input.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/intel.c",
+      "to": "object:bios-multiboot32:intel.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/intel.c",
+      "to": "object:multiboot64:intel.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/intel.c",
+      "to": "object:native-uefi64:intel.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/intel.c",
+      "to": "object:raw-bios-loader32:intel.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/js.c",
+      "to": "object:bios-multiboot32:js.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/js.c",
+      "to": "object:multiboot64:js.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/js.c",
+      "to": "object:native-uefi64:js.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/js.c",
+      "to": "object:raw-bios-loader32:js.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/js.h",
+      "to": "source:kernel/browser.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/js.h",
+      "to": "source:kernel/js.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/kernel.zl",
+      "to": "generated:zl-c",
+      "relation": "zl-frontend-input"
+    },
+    {
+      "from": "source:kernel/keycodes.h",
+      "to": "source:kernel/input.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/keycodes.h",
+      "to": "source:kernel/wm.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/keycodes.h",
+      "to": "source:kernel/xhci.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/layout.c",
+      "to": "object:bios-multiboot32:layout.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/layout.c",
+      "to": "object:multiboot64:layout.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/layout.c",
+      "to": "object:native-uefi64:layout.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/layout.c",
+      "to": "object:raw-bios-loader32:layout.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/layout.h",
+      "to": "source:kernel/browser.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/layout.h",
+      "to": "source:kernel/layout.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/link-raw.ld",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linker-script-produces"
+    },
+    {
+      "from": "source:kernel/link.ld",
+      "to": "artifact:kernel.elf",
+      "relation": "linker-script-produces"
+    },
+    {
+      "from": "source:kernel/link64.ld",
+      "to": "artifact:kernel64.elf",
+      "relation": "linker-script-produces"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/arena.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/browser.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/fb.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/gpucursor.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/gpuring.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/heap.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/i2c_hid.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/intel.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/nvme.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/paging.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/sched.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/virtio_gpu.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/virtio_net.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/memmap.h",
+      "to": "source:kernel/xhci.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/mkdisk.sh",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "build-script-produces"
+    },
+    {
+      "from": "source:kernel/mkdisk.sh",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "producer-script"
+    },
+    {
+      "from": "source:kernel/mkdisk.sh",
+      "to": "artifact:zlOS.img",
+      "relation": "producer-script"
+    },
+    {
+      "from": "source:kernel/mkiso.sh",
+      "to": "artifact:zlOS.iso",
+      "relation": "producer-script"
+    },
+    {
+      "from": "source:kernel/mkiso64.sh",
+      "to": "artifact:zlOS64.iso",
+      "relation": "producer-script"
+    },
+    {
+      "from": "source:kernel/mkusb.sh",
+      "to": "artifact:zlOS-usb.img",
+      "relation": "producer-script"
+    },
+    {
+      "from": "source:kernel/net.c",
+      "to": "object:bios-multiboot32:net.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/net.c",
+      "to": "object:multiboot64:net.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/net.c",
+      "to": "object:native-uefi64:net.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/net.c",
+      "to": "object:raw-bios-loader32:net.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/net.h",
+      "to": "source:kernel/dns.h",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/net.h",
+      "to": "source:kernel/http.h",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/net.h",
+      "to": "source:kernel/net.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/net.h",
+      "to": "source:kernel/tcp.h",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/notify.c",
+      "to": "object:bios-multiboot32:notify.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/notify.c",
+      "to": "object:multiboot64:notify.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/notify.c",
+      "to": "object:native-uefi64:notify.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/notify.c",
+      "to": "object:raw-bios-loader32:notify.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/nvme.c",
+      "to": "object:bios-multiboot32:nvme.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/nvme.c",
+      "to": "object:multiboot64:nvme.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/nvme.c",
+      "to": "object:native-uefi64:nvme.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/nvme.c",
+      "to": "object:raw-bios-loader32:nvme.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/paging.c",
+      "to": "object:bios-multiboot32:paging.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/paging.c",
+      "to": "object:multiboot64:paging.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/paging.c",
+      "to": "object:native-uefi64:paging.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/paging.c",
+      "to": "object:raw-bios-loader32:paging.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/pci.c",
+      "to": "object:bios-multiboot32:pci.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/pci.c",
+      "to": "object:multiboot64:pci.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/pci.c",
+      "to": "object:native-uefi64:pci.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/pci.c",
+      "to": "object:raw-bios-loader32:pci.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/png.c",
+      "to": "object:bios-multiboot32:png.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/png.c",
+      "to": "object:multiboot64:png.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/png.c",
+      "to": "object:native-uefi64:png.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/png.c",
+      "to": "object:raw-bios-loader32:png.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/png.h",
+      "to": "source:kernel/browser.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/png.h",
+      "to": "source:kernel/png.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/raw_boot.asm",
+      "to": "artifact:zlOS.img",
+      "relation": "boot-sector-input"
+    },
+    {
+      "from": "source:kernel/raw_entry.S",
+      "to": "object:raw-bios-loader32:special:raw_entry.S",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/roots.c",
+      "to": "object:bios-multiboot32:roots.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/roots.c",
+      "to": "object:multiboot64:roots.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/roots.c",
+      "to": "object:native-uefi64:roots.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/roots.c",
+      "to": "object:raw-bios-loader32:roots.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/rsa.c",
+      "to": "object:bios-multiboot32:rsa.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/rsa.c",
+      "to": "object:multiboot64:rsa.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/rsa.c",
+      "to": "object:native-uefi64:rsa.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/rsa.c",
+      "to": "object:raw-bios-loader32:rsa.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/rtc.c",
+      "to": "object:bios-multiboot32:rtc.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/rtc.c",
+      "to": "object:multiboot64:rtc.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/rtc.c",
+      "to": "object:native-uefi64:rtc.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/rtc.c",
+      "to": "object:raw-bios-loader32:rtc.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/sched.c",
+      "to": "object:bios-multiboot32:sched.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/sched.c",
+      "to": "object:multiboot64:sched.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/sched.c",
+      "to": "object:native-uefi64:sched.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/sched.c",
+      "to": "object:raw-bios-loader32:sched.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/settings.c",
+      "to": "object:bios-multiboot32:settings.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/settings.c",
+      "to": "object:multiboot64:settings.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/settings.c",
+      "to": "object:native-uefi64:settings.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/settings.c",
+      "to": "object:raw-bios-loader32:settings.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/smp.c",
+      "to": "object:bios-multiboot32:smp.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/smp.c",
+      "to": "object:multiboot64:smp.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/smp.c",
+      "to": "object:native-uefi64:smp.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/smp.c",
+      "to": "object:raw-bios-loader32:smp.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/smp_trampoline.S",
+      "to": "object:bios-multiboot32:special:smp_trampoline.S",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/smp_trampoline.S",
+      "to": "object:raw-bios-loader32:special:smp_trampoline.S",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/smp_trampoline64.S",
+      "to": "object:multiboot64:special:smp_trampoline64.S",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/smp_trampoline64.S",
+      "to": "object:native-uefi64:special:smp_trampoline64.S",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/snap.c",
+      "to": "object:bios-multiboot32:snap.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/snap.c",
+      "to": "object:multiboot64:snap.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/snap.c",
+      "to": "object:native-uefi64:snap.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/snap.c",
+      "to": "object:raw-bios-loader32:snap.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/support.c",
+      "to": "object:bios-multiboot32:support.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/support.c",
+      "to": "object:multiboot64:support.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/support.c",
+      "to": "object:native-uefi64:support.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/support.c",
+      "to": "object:raw-bios-loader32:support.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/tcp.c",
+      "to": "object:bios-multiboot32:tcp.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/tcp.c",
+      "to": "object:multiboot64:tcp.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/tcp.c",
+      "to": "object:native-uefi64:tcp.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/tcp.c",
+      "to": "object:raw-bios-loader32:tcp.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/tcp.h",
+      "to": "source:kernel/browser.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/tcp.h",
+      "to": "source:kernel/http.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/tcp.h",
+      "to": "source:kernel/tcp.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/term.c",
+      "to": "object:bios-multiboot32:term.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/term.c",
+      "to": "object:multiboot64:term.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/term.c",
+      "to": "object:native-uefi64:term.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/term.c",
+      "to": "object:raw-bios-loader32:term.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/tls.c",
+      "to": "object:bios-multiboot32:tls.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/tls.c",
+      "to": "object:multiboot64:tls.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/tls.c",
+      "to": "object:native-uefi64:tls.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/tls.c",
+      "to": "object:raw-bios-loader32:tls.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/tls.h",
+      "to": "source:kernel/browser.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/tls.h",
+      "to": "source:kernel/http.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/tls.h",
+      "to": "source:kernel/tls.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/tools/reproducible_time.c",
+      "to": "artifact:zlOS-usb.img",
+      "relation": "reproducible-metadata-helper"
+    },
+    {
+      "from": "source:kernel/tools/reproducible_time.c",
+      "to": "artifact:zlOS.iso",
+      "relation": "reproducible-metadata-helper"
+    },
+    {
+      "from": "source:kernel/tools/reproducible_time.c",
+      "to": "artifact:zlOS64.iso",
+      "relation": "reproducible-metadata-helper"
+    },
+    {
+      "from": "source:kernel/ui.c",
+      "to": "object:bios-multiboot32:ui.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/ui.c",
+      "to": "object:multiboot64:ui.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/ui.c",
+      "to": "object:native-uefi64:ui.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/ui.c",
+      "to": "object:raw-bios-loader32:ui.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/ui.h",
+      "to": "source:kernel/browser.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/ui.h",
+      "to": "source:kernel/settings.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/ui.h",
+      "to": "source:kernel/ui.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/ui.h",
+      "to": "source:kernel/uikit.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/ui.h",
+      "to": "source:kernel/wm.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/ui.h",
+      "to": "source:kernel/wmglue.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/uikit.c",
+      "to": "object:bios-multiboot32:uikit.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/uikit.c",
+      "to": "object:multiboot64:uikit.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/uikit.c",
+      "to": "object:native-uefi64:uikit.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/uikit.c",
+      "to": "object:raw-bios-loader32:uikit.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/usermode.c",
+      "to": "object:bios-multiboot32:usermode.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/usermode.c",
+      "to": "object:multiboot64:usermode.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/usermode.c",
+      "to": "object:native-uefi64:usermode.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/usermode.c",
+      "to": "object:raw-bios-loader32:usermode.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/vga.c",
+      "to": "object:bios-multiboot32:vga.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/vga.c",
+      "to": "object:multiboot64:vga.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/vga.c",
+      "to": "object:native-uefi64:vga.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/vga.c",
+      "to": "object:raw-bios-loader32:vga.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/virtio_gpu.c",
+      "to": "object:bios-multiboot32:virtio_gpu.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/virtio_gpu.c",
+      "to": "object:multiboot64:virtio_gpu.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/virtio_gpu.c",
+      "to": "object:native-uefi64:virtio_gpu.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/virtio_gpu.c",
+      "to": "object:raw-bios-loader32:virtio_gpu.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/virtio_net.c",
+      "to": "object:bios-multiboot32:virtio_net.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/virtio_net.c",
+      "to": "object:multiboot64:virtio_net.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/virtio_net.c",
+      "to": "object:native-uefi64:virtio_net.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/virtio_net.c",
+      "to": "object:raw-bios-loader32:virtio_net.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/wm.c",
+      "to": "object:bios-multiboot32:wm.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/wm.c",
+      "to": "object:multiboot64:wm.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/wm.c",
+      "to": "object:native-uefi64:wm.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/wm.c",
+      "to": "object:raw-bios-loader32:wm.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/wmglue.c",
+      "to": "object:bios-multiboot32:wmglue.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/wmglue.c",
+      "to": "object:multiboot64:wmglue.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/wmglue.c",
+      "to": "object:native-uefi64:wmglue.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/wmglue.c",
+      "to": "object:raw-bios-loader32:wmglue.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/x509.c",
+      "to": "object:bios-multiboot32:x509.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/x509.c",
+      "to": "object:multiboot64:x509.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/x509.c",
+      "to": "object:native-uefi64:x509.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/x509.c",
+      "to": "object:raw-bios-loader32:x509.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/x509.h",
+      "to": "source:kernel/http.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/x509.h",
+      "to": "source:kernel/roots.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/x509.h",
+      "to": "source:kernel/tls.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/x509.h",
+      "to": "source:kernel/x509.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/xhci.c",
+      "to": "object:bios-multiboot32:xhci.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/xhci.c",
+      "to": "object:multiboot64:xhci.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/xhci.c",
+      "to": "object:native-uefi64:xhci.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/xhci.c",
+      "to": "object:raw-bios-loader32:xhci.c",
+      "relation": "compiled-to"
+    }
+  ],
+  "counts": {
+    "source_inputs": 123,
+    "declared_c_units": 62,
+    "target_lanes": 4,
+    "artifacts": 9,
+    "nodes": 404,
+    "edges": 663,
+    "orphan_source_inputs": 0,
+    "scope_only_inputs": 1
+  },
+  "scope_only_inputs": [
+    "freestanding/zl_freestanding.h"
+  ],
+  "open_gaps": [
+    "logical object graph is source-derived; object hashes are represented by final reproducibility receipts, not per-object receipts",
+    "conservative header-superset inputs may be scope-only rather than active includes",
+    "archive/package/service outputs beyond the current nine-artifact registry are not yet graph nodes"
+  ],
+  "generator": {
+    "path": "kernel/gen-build-graph.py",
+    "sha256": "150ba0ad0e35ec76b07c236c0a164aa349afc0687882a3d357e1c33ce4cb2e21"
+  },
+  "evidence_ceiling": "complete declared-input and current nine-artifact reachability graph for four build lanes; source-derived logical object edges, not a compiler-emitted per-object provenance attestation"
+}

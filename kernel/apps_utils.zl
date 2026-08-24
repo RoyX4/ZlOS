@@ -538,7 +538,6 @@ fn cp_565() { return shl(shr(cp_rr(), 3), 11) + shl(shr(cp_gg(), 2), 5) + shr(cp
 fn cp_rgb() { return rgb(cp_rr(), cp_gg(), cp_bb()) }
 
 fn cp_draw(ax, ay, aw, ah) {
-    u = ui()
     au_shell(ax, ay, aw, ah)
     bh = au_inblock_h(1, 1)
     au_inblock(ax, ay, aw, bh)

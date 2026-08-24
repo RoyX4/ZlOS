@@ -14,18 +14,23 @@ cd "$(dirname "$0")"
 OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
 OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
 fail=0
+CEILING=${ZLOS_BOOT_CEILING:-360}
 
 command -v qemu-system-x86_64 >/dev/null || { echo "skip: no qemu-system-x86_64"; exit 0; }
 
-./mkiso.sh >/dev/null 2>&1 || { echo "FAIL: ISO did not build"; exit 1; }
+if [ "${ZLOS_SKIP_BUILD:-0}" = 1 ]; then
+    [ -s zlOS.iso ] || { echo "FAIL: ZLOS_SKIP_BUILD=1 but zlOS.iso is missing"; exit 1; }
+else
+    ./mkiso.sh >/dev/null 2>&1 || { echo "FAIL: ISO did not build"; exit 1; }
+fi
 
 check() {
     local label=$1 log=$2
     if ! grep -q "zlOS starting" "$log" 2>/dev/null; then
-        echo "  FAIL  $label - kernel never started"; fail=1; return
+        echo "  FAIL  $label - kernel never started"; return 1
     fi
     if ! grep -q "ready\." "$log" 2>/dev/null; then
-        echo "  FAIL  $label - booted but never reached the prompt"; fail=1; return
+        echo "  FAIL  $label - booted but never reached the prompt"; return 1
     fi
     # THE COMPOSITOR IS THE BOOT STATE. Both legs here boot through GRUB, which
     # supplies a multiboot framebuffer tag, so wm_avail() is true and kernel.zl
@@ -34,9 +39,24 @@ check() {
     # silently fell back to text - and on the UEFI leg falling back to text
     # means a blank screen, which is the exact failure this script exists for.
     if ! grep -q "compositor: [1-9]" "$log" 2>/dev/null; then
-        echo "  FAIL  $label - reached the prompt but the compositor never opened a window"; fail=1; return
+        echo "  FAIL  $label - reached the prompt but the compositor never opened a window"; return 1
     fi
+    local manifest_sha build_id build_head build_dirty
+    manifest_sha=$(sha256sum app-manifest.json | awk '{print $1}')
+    build_id=$(python3 -c 'import json; print(json.load(open("build-identity.json"))["identity_sha256"])')
+    build_head=$(python3 -c 'import json; print(json.load(open("build-identity.json"))["git"]["head"])')
+    build_dirty=$(python3 -c 'import json; print(1 if json.load(open("build-identity.json"))["git"]["dirty"] else 0)')
+    grep -q "app-manifest: schema=1 entries=62 sha256=$manifest_sha" "$log" || {
+        echo "  FAIL  $label - running image reported the wrong app manifest"; return 1;
+    }
+    grep -q "build-identity: schema=1 id=$build_id" "$log" || {
+        echo "  FAIL  $label - running image reported the wrong build identity"; return 1;
+    }
+    grep -q "build-source: head=$build_head dirty=$build_dirty" "$log" || {
+        echo "  FAIL  $label - running image reported the wrong source state"; return 1;
+    }
     echo "  ok    $label - $(grep -oE '(framebuffer|VGA text) console, [0-9]+x[0-9]+' "$log" | head -1), $(grep -oE 'compositor: [0-9]+ windows' "$log" | head -1)"
+    return 0
 }
 
 # Boot and wait for the console line, rather than for a fixed number of seconds.
@@ -44,20 +64,21 @@ check() {
 # makes the gate a function of host load instead of of the kernel.
 boot_until() {           # $1 = log file, rest = qemu argv
     local log="$1"; shift
-    local ceiling=180
+    local ceiling="$CEILING"
     timeout "$ceiling" "$@" >/dev/null 2>&1 &
     local pid=$!
-    # Wait for the LAST thing check() requires, which is now the compositor
-    # line - not the console line and no longer "ready." either. The console
+    # Wait for every late marker check() requires. The console
     # line is printed early in boot, so waiting on it kills QEMU before
     # "ready." is ever emitted and the gate then reports "booted but never
-    # reached the prompt" on a perfectly healthy kernel. "ready." has the same
-    # problem one step later: the boot chime and wm_session's three wm_open
-    # calls come after it, so waiting on it and then sleeping a fixed second
-    # made the compositor assertion a race against host load. Wait for the
-    # thing you are going to assert on.
+    # reached the prompt" on a perfectly healthy kernel. Do not assume the
+    # compositor and ready markers have a fixed order: serial buffering and
+    # the BIOS/UEFI paths have demonstrated both orders. Stopping after either
+    # one alone manufactures a false failure under host load.
     for _ in $(seq $((ceiling * 2))); do
-        grep -q "compositor:" "$log" 2>/dev/null && break
+        if grep -q "compositor:" "$log" 2>/dev/null \
+                && grep -q "ready\." "$log" 2>/dev/null; then
+            break
+        fi
         kill -0 "$pid" 2>/dev/null || break
         sleep 0.5
     done
@@ -72,7 +93,19 @@ BLOG=$(mktemp)
 boot_until "$BLOG" qemu-system-i386 -cdrom zlOS.iso -m 1G -display none \
     -serial "file:$BLOG" -no-reboot
 tr -d '\r' < "$BLOG" > "$BLOG.c" && mv "$BLOG.c" "$BLOG"
-check "BIOS" "$BLOG"
+if check "BIOS" "$BLOG"; then
+    python3 ./write-app-manifest-boot-receipt.py \
+        --route grub-bios32 --artifact zlOS.iso --log "$BLOG" \
+        --harness verify-iso.sh \
+        --boot-origin "multiboot handoff, 32-bit protected mode" \
+        --output docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json \
+        || fail=1
+else
+    fail=1
+    echo "        last successful boot markers:"
+    grep -E 'zlOS starting|\[OK  \]|ready\.|compositor:|PANIC|FAULT' "$BLOG" \
+        | tail -5 | sed 's/^/          /'
+fi
 
 echo "== ISO: UEFI boot =="
 if [ ! -f "$OVMF_CODE" ]; then
@@ -86,7 +119,19 @@ else
         -cdrom zlOS.iso -m 1G -display none \
         -serial "file:$ULOG" -no-reboot
     tr -d '\r' < "$ULOG" > "$ULOG.c" && mv "$ULOG.c" "$ULOG"
-    check "UEFI" "$ULOG"
+    if check "UEFI" "$ULOG"; then
+        python3 ./write-app-manifest-boot-receipt.py \
+            --route grub-uefi32 --artifact zlOS.iso --log "$ULOG" \
+            --harness verify-iso.sh \
+            --boot-origin "multiboot handoff, 32-bit protected mode" \
+            --output docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json \
+            || fail=1
+    else
+        fail=1
+        echo "        last successful boot markers:"
+        grep -E 'zlOS starting|\[OK  \]|ready\.|compositor:|PANIC|FAULT' "$ULOG" \
+            | tail -5 | sed 's/^/          /'
+    fi
     # Under UEFI there is no VGA text mode, so a framebuffer is the ONLY way
     # anything reaches the screen. If it fell back to VGA the user sees black.
     if grep -q "VGA text console" "$ULOG" 2>/dev/null; then
