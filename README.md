@@ -269,3 +269,9 @@ Linux equivalent here.
 [`docs/COMPARE-BOREDOS.md`](docs/COMPARE-BOREDOS.md) measures zlOS against
 [BoredOS](https://boredos.dev) — same target, opposite strategy — and is blunt
 about where BoredOS is ahead.
+
+## Repository preservation audit
+
+[`docs/GIT-WORKTREE-AUDIT-2026-08-24.md`](docs/GIT-WORKTREE-AUDIT-2026-08-24.md)
+records the exhaustive ZL-only worktree audit, the preservation branches pushed
+to GitHub, the evidence archives, and the verification boundary for each branch.
