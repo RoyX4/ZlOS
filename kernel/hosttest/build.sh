@@ -393,6 +393,20 @@ echo "built ./libctest      (run: ./libctest)"
 gcc -O2 -w -o arenatest arenatest.c ../arena.c
 echo "built ./arenatest     (run: ./arenatest)"
 
+# The one versioned record every boot route must seal before kernel.zl starts.
+# This is mostly hostile input: every byte is mutated, unknown flags are
+# rechecksummed, and impossible framebuffer/recovery claims must fail closed.
+gcc -O2 -g -Wall -Wextra -o boot_handover_test \
+    boot_handover_test.c ../boot_handover.c
+echo "built ./boot_handover_test (run: ./boot_handover_test)"
+
+# Recovery selection is a pure state machine before it becomes firmware I/O.
+# Two unready resets move current -> previous -> recovery, a ready mark clears
+# only the successful generation, and absent optional images cannot brick boot.
+gcc -O2 -g -Wall -Wextra -o boot_state_test \
+    boot_state_test.c ../boot_state.c ../boot_handover.c
+echo "built ./boot_state_test (run: ./boot_state_test)"
+
 # The general allocator, and this one is built with the WARNINGS ON rather than
 # -w. arena.c is a bump pointer and an addition; heap.c has boundary tags, two
 # levels of size class and three bitmaps, so it is the file in this tree where

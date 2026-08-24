@@ -150,3 +150,11 @@ lower risk.
 5. Add verified recovery and rollback.
 6. Add optional network acquisition only behind authentication and bounds.
 7. Revisit a zl-written UEFI boundary after compiler/ABI prerequisites land.
+
+## Implementation status
+
+The first typed-handover slice is now implemented. See
+[`typed-boot-handover.md`](typed-boot-handover.md) for the exact carried facts,
+fail-closed entry gates, current evidence ceiling and the recovery/identity
+work that remains. This does not change the accepted acquisition architecture
+or promote exact-origin/authentication claims prematurely.

@@ -22,6 +22,7 @@
  * declared __attribute__((ms_abi)) so the compiler emits the right call for
  * each side. Getting this wrong corrupts arguments in a way that looks random.
  */
+#include "boot_handover.h"
 
 typedef unsigned long long u64;
 typedef unsigned int       u32;
@@ -254,6 +255,7 @@ typedef struct {
 static u16 WITNESS_PATH[] =
     { '\\','E','F','I','\\','Z','L','O','S','\\','W','I','T','N','E','S','S','.','L','O','G',0 };
 static efi_file *witness_root;
+static u64 boot_image_base;
 static u64 witness_info_words[64];
 static u16 ZL_DIAG_NAME[] =
     { 'Z','l','B','o','o','t','D','i','a','g',0 };
@@ -543,6 +545,7 @@ static void witness_init(efi_handle image, efi_system_table *st)
     if (bs->handle_protocol(image, &LOADED_IMAGE_GUID, (void **)&loaded) !=
             EFI_SUCCESS || !loaded)
         return;
+    boot_image_base = (u64)loaded->image_base;
     if (bs->handle_protocol(loaded->device_handle, &SIMPLE_FS_GUID,
                             (void **)&fs) != EFI_SUCCESS || !fs)
         return;
@@ -717,6 +720,12 @@ MS efi_status efi_main(efi_handle image, efi_system_table *st)
     /* This must be the first observable action in the real kernel image. */
     witness_init(image, st);
     if (!st || !st->boot_services) return 2;
+    int boot_status = zlos_boot_begin(
+        ZLOS_BOOT_ORIGIN_NATIVE_UEFI, 64,
+        ZLOS_BOOT_GENERATION_CURRENT, 1, 3);
+    if (boot_status != ZLOS_BOOT_OK) return EFI_ABORTED;
+    if (boot_image_base)
+        boot_status = zlos_boot_set_source(boot_image_base);
     efi_boot_services *bs = st->boot_services;
     runtime_services = st->runtime_services;
     {
@@ -737,6 +746,8 @@ MS efi_status efi_main(efi_handle image, efi_system_table *st)
         witness_append_line(&line);
     }
     u64 rsdp = capture_acpi(st);
+    if (boot_status == ZLOS_BOOT_OK && rsdp)
+        boot_status = zlos_boot_set_firmware_root(rsdp);
     {
         witness_line line = witness_begin("ACPI_RESULT rsdp=");
         witness_hex(&line, rsdp);
@@ -778,6 +789,16 @@ MS efi_status efi_main(efi_handle image, efi_system_table *st)
         fb_h           = mi->vertical_resolution;
         /* the stride is given in pixels; our renderer wants bytes */
         fb_pitch_bytes = mi->pixels_per_scan_line * 4;
+        if (boot_status == ZLOS_BOOT_OK) {
+            unsigned int pixel_format = mi->pixel_format == 0
+                ? ZLOS_BOOT_PIXEL_RGBX8888
+                : (mi->pixel_format == 1
+                    ? ZLOS_BOOT_PIXEL_BGRX8888
+                    : ZLOS_BOOT_PIXEL_UNKNOWN);
+            boot_status = zlos_boot_set_framebuffer(
+                fb_addr, framebuffer_need, fb_pitch_bytes, fb_w, fb_h, 32,
+                pixel_format);
+        }
         witness_line line = witness_begin("GOP_DETAILS width=");
         witness_dec(&line, fb_w);
         witness_text(&line, " height=");
@@ -942,6 +963,16 @@ MS efi_status efi_main(efi_handle image, efi_system_table *st)
      * mapped, so our physical addresses stay valid), and nothing else is
      * running on this machine. */
 
+    if (boot_status == ZLOS_BOOT_OK && desc_size > 0xffffffffULL)
+        boot_status = ZLOS_BOOT_E_RANGE;
+    if (boot_status == ZLOS_BOOT_OK)
+        boot_status = zlos_boot_set_memory_map(
+            (u64)map, map_size, (unsigned int)desc_size, desc_ver, 0);
+    if (boot_status == ZLOS_BOOT_OK)
+        boot_status = zlos_boot_mark_firmware_retired();
+    if (boot_status == ZLOS_BOOT_OK)
+        boot_status = zlos_boot_seal();
+
     serial_init();
     if (fb_addr) {
         console_init_efi(fb_addr, fb_pitch_bytes, fb_w, fb_h, 32);
@@ -954,6 +985,13 @@ MS efi_status efi_main(efi_handle image, efi_system_table *st)
         efi_say("\n  zlOS: firmware gave us NO GOP framebuffer.\n"
                 "  UEFI has no text mode, so the screen stays black - "
                 "everything below is serial only.\n");
+    }
+
+    if (boot_status != ZLOS_BOOT_OK ||
+        zlos_boot_validate(zlos_boot_record()) != ZLOS_BOOT_OK) {
+        efi_say("\n  zlOS: typed boot handover REFUSED; kernel not started.\n");
+        kernel_done();
+        for (;;) __asm__ volatile("hlt");
     }
 
     main();

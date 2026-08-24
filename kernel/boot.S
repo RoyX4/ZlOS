@@ -44,9 +44,16 @@ stack_top:
 _start:
     mov $stack_top, %esp               /* nobody sets up a stack for you */
     call serial_init                   /* serial BEFORE anything else (§7) */
+    push $32                           /* one typed record before kernel code */
+    push %ebx
+    call zlos_boot_from_multiboot
+    add $8, %esp
     push %ebx                          /* the multiboot info GRUB handed us */
     call console_init                  /* picks framebuffer or VGA text */
     add $4, %esp
+    call zlos_boot_is_valid
+    test %eax, %eax
+    jz .hang                           /* never run zl against a torn record */
     call main                          /* main() is the zl program */
     call kernel_done
 .hang:

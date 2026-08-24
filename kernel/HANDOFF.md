@@ -201,6 +201,11 @@ An OS written in `zl` (Roy's own language) at `~/Documents/repos/zl-linux/kernel
 Boots three ways with no GRUB: BIOS multiboot, our own 512-byte bootloader
 (`raw_boot.asm`), and as a native UEFI application (`efi.c`).
 
+All three entry families now converge on the versioned, sealed record described
+in [`docs/typed-boot-handover.md`](docs/typed-boot-handover.md) before the ZL
+kernel starts. Exact artifact/origin identity and automatic recovery selection
+remain explicitly unclaimed until the next loader slice supplies them.
+
 **The point of the project is the Intel display driver — the DPLL and a
 cold-start modeset.** The laptop is a test PC. Optimise for that.
 

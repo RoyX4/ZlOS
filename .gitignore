@@ -61,6 +61,8 @@ kernel/hosttest/jmptest
 kernel/hosttest/jmptest32
 kernel/hosttest/modeset_test
 kernel/hosttest/blocktest
+kernel/hosttest/boot_handover_test
+kernel/hosttest/boot_state_test
 kernel/hosttest/dhcptest
 kernel/hosttest/e1000test
 kernel/hosttest/i2ctest
@@ -129,6 +131,9 @@ kernel/exercise-out/uefi-network-boot-fix/
 kernel/exercise-out/uefi-terminal-input-double-check/
 kernel/exercise-out/uefi-terminal-input-final/
 kernel/exercise-out/uefi-terminal-input-fix/
+
+# Interrupted compiler temporary, never project source.
+kernel/*.o.tmp
 
 # hosttest binary: the arena gate (source is arenatest.c)
 kernel/hosttest/arenatest
