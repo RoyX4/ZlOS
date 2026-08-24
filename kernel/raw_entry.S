@@ -67,15 +67,27 @@ _rawstart:
     xor %edx, %edx
     push %edx                   /* addr, high dword */
     push %eax                   /* addr, low dword  */
+    call zlos_boot_from_raw
     call console_init_fb
     add $24, %esp
     jmp 2f
-1:  xor %ebx, %ebx              /* no framebuffer -> VGA text console */
+1:  xor %ebx, %ebx              /* no framebuffer -> a sealed empty-FB record */
+    push %ebx                   /* bpp */
+    push %ebx                   /* height */
+    push %ebx                   /* width */
+    push %ebx                   /* pitch */
+    push %ebx                   /* address high */
+    push %ebx                   /* address low */
+    call zlos_boot_from_raw
+    add $24, %esp
     push %ebx
     call console_init
     add $4, %esp
 2:
 
+    call zlos_boot_is_valid
+    test %eax, %eax
+    jz 1f                       /* a malformed loader record is not advisory */
     call main                   /* main() is the zl program */
     call kernel_done
 1:  hlt
