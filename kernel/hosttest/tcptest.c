@@ -24,6 +24,7 @@
 #include <stdlib.h>
 
 #include "../tcp.h"
+#include "../zllog.h"
 
 static int fails, checks;
 #define CHECK(cond, ...) do {                                    \
@@ -42,6 +43,18 @@ unsigned int idt_ticks(void) { return v_ticks; }
 /* net.c wants these too; it is linked for net_checksum alone */
 unsigned long long cpu_tsc(void) { return 0; }
 unsigned int cpu_tsc_khz(void)   { return 0; }
+
+/* The shipping timeout path must retain before/trigger/after raw state, not
+ * merely call a recorder-shaped function that no harness ever observes. */
+static unsigned snap_meta[64];
+static int snap_n;
+void zllog_event(unsigned subsystem, unsigned event, unsigned severity,
+                 unsigned a, unsigned b, unsigned c)
+{
+    (void)subsystem; (void)severity; (void)b; (void)c;
+    if (event == ZLLOG_EV_SNAPSHOT && snap_n < (int)(sizeof snap_meta / sizeof snap_meta[0]))
+        snap_meta[snap_n++] = a;
+}
 
 /* ---- captured segments ------------------------------------------------------ */
 #define CAP 64
@@ -455,6 +468,7 @@ static void t_rejects(void)
 static void t_retransmit(void)
 {
     printf("retransmission on timeout\n");
+    snap_n = 0;
     establish(0xCCCC0000u);
     tcp_send((const unsigned char *)"payload", 7);
     int sent = ncap;
@@ -483,6 +497,18 @@ static void t_retransmit(void)
     CHECK(tcp_rto() > r1, "the retransmit timeout did not back off");
     for (int i = 0; i < 40; i++) { v_ticks += 100000; tcp_tick(); }
     CHECK(tcp_rto() <= 400, "the backoff is uncapped: %d", tcp_rto());
+    CHECK(snap_n >= 3, "terminal data timeout retained %d raw snapshots, wanted 3", snap_n);
+    if (snap_n >= 3) {
+        CHECK((snap_meta[snap_n - 3] >> 8) == ZLLOG_SNAP_TCP_TIMEOUT &&
+              (snap_meta[snap_n - 3] & 0xffu) == 0,
+              "first timeout snapshot is not the pre-timeout state");
+        CHECK((snap_meta[snap_n - 2] >> 8) == ZLLOG_SNAP_TCP_TIMEOUT &&
+              (snap_meta[snap_n - 2] & 0xffu) == 1,
+              "second timeout snapshot is not the trigger state");
+        CHECK((snap_meta[snap_n - 1] >> 8) == ZLLOG_SNAP_TCP_TIMEOUT &&
+              (snap_meta[snap_n - 1] & 0xffu) == 2,
+              "third timeout snapshot is not the post-recovery state");
+    }
 
     /* and once acknowledged, the timer stops */
     establish(0xCDCD0000u);

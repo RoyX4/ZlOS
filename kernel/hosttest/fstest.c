@@ -39,6 +39,7 @@ int  fs_find(const char *name);
 int  fs_write(int idx, const void *src, u32 bytes);
 int  fs_read(int idx, void *dst, u32 max);
 int  fs_delete(int idx);
+int  fs_rename(int idx, const char *name);
 int  fs_count(void);
 int  fs_used(int idx);
 u32  fs_size(int idx);
@@ -318,6 +319,10 @@ int main(int argc, char **argv)
     int b = fs_create_named(20);
     ok("a name pushed one character at a time creates a file", b >= 0);
     ok("...and find_named locates it", fs_find_named() == b);
+    ok("rename publishes a new named-file identity", fs_rename(b, "/user/notes.md") == 1 &&
+       fs_find("notes.md") < 0 && fs_find("/user/notes.md") == b);
+    ok("rename refuses to replace an existing file", fs_rename(b, "hello.txt") == 0 &&
+       fs_find("/user/notes.md") == b);
     fs_name_clear();
     for (int i = 0; i < 100; i++) fs_name_push('x');
     ok("a name longer than the field stops at 23 characters", fs_find_named() < 0);

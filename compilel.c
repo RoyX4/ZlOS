@@ -953,7 +953,7 @@ static void need_pr(Ty t) {
 
 /* Call a builtin b(a0, a1, ...) IN AN EXPRESSION through the runtime.c
  * bridge (see runtime.c's zlx_ block). The Value struct never crosses the
- * IR boundary: the arguments are boxed into stack-allocated 48-byte slots,
+ * IR boundary: the arguments are boxed into stack-allocated VALSZ-byte slots,
  * @zlx_call runs the boxed builtin() on them, and the result is unboxed by
  * `rt` (from builtin_bridge_ty). The interpreter builds its whole args
  * array before dispatch, so every argument is evaluated first here too. */
@@ -992,7 +992,7 @@ static void emit_builtin_call(Node *n, char *ref, Ty rt) {
     int sp = newtmp();
     fprintf(out, "  %%t%d = call ptr @llvm.stacksave.p0()\n", sp);
 
-    /* the args array: nargs contiguous 48-byte Value slots, 8-aligned */
+    /* the args array: nargs contiguous VALSZ-byte Value slots, 8-aligned */
     int A = newtmp();
     fprintf(out, "  %%t%d = alloca [%d x i8], align 8\n", A, nargs*VALSZ);
     for (int i=0;i<nargs;i++) {

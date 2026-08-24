@@ -25,7 +25,7 @@
 # console that does not exist under UEFI. The screen stays black while the
 # serial log looks healthy. kernel/probe-uefi.py measures which devices work.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
 OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
@@ -35,6 +35,8 @@ command -v qemu-system-x86_64 >/dev/null || { echo "skip: no qemu-system-x86_64"
 [ -f "$OVMF_CODE" ] || { echo "skip: no OVMF firmware (apt install ovmf)"; exit 0; }
 
 ./mkusb.sh >/dev/null 2>&1 || { echo "FAIL: the UEFI image did not build"; exit 1; }
+./hosttest/efi_stage0_test.py || exit 1
+python3 ./hosttest/efi_kernel_witness_test.py || exit 1
 
 VARS=$(mktemp); cp "$OVMF_VARS" "$VARS"
 LOG=$(mktemp)
@@ -66,6 +68,8 @@ timeout "$CEILING" qemu-system-x86_64 \
     -device qemu-xhci,id=xhci \
     -drive format=raw,file=zlOS-usb.img,if=none,id=boot \
     -device usb-storage,bus=xhci.0,drive=boot \
+    -device usb-kbd,bus=xhci.0 \
+    -device usb-mouse,bus=xhci.0 \
     -vga std -display none -no-reboot \
     -serial "file:$LOG" >/dev/null 2>&1 &
 QPID=$!
@@ -104,8 +108,69 @@ else
     else
         echo "  ok    $(grep -oE 'framebuffer console, [0-9]+x[0-9]+' "$LOG" | head -1)"
     fi
+    if grep -q "ring 3 64: u1 <- iretq/int80/iretq, 6 syscalls, process exited, kernel alive" "$LOG"; then
+        echo "  ok    protected 64-bit Ring 3 entered, made syscalls, and exited"
+    else
+        echo "  FAIL  64-bit Ring 3 proof missing or incomplete"
+        grep -E "ring 3 64:|FAULT|fault" "$LOG" | tail -5 | sed 's/^/          /'
+        fail=1
+    fi
+    if grep -q "ring 3 hostile: cli GP, kernel/device PF, crossing pointer refused; kernel alive" "$LOG"; then
+        echo "  ok    hostile Ring-3 faults/refusals leave the kernel alive"
+    else
+        echo "  FAIL  hostile Ring-3 isolation proof missing or failed"
+        grep -E "ring 3 hostile:" "$LOG" | tail -2 | sed 's/^/          /'
+        fail=1
+    fi
 fi
 
-rm -f "$VARS" "$LOG"
+# The serial transcript proves the child kernel ran.  The ESP witness proves
+# the removable-media BOOTX64 entry itself ran and that LoadImage accepted the
+# separate kernel before StartImage transferred control.  It is flushed before
+# the child starts, so killing QEMU after the prompt cannot lose this evidence.
+TRACE=$(mktemp)
+if ! mtype -i zlOS-usb.img@@1M ::/EFI/ZLOS/WITNESS.LOG >"$TRACE" 2>/dev/null; then
+    echo "  FAIL  stage 0 left no ESP witness"; fail=1
+elif ! grep -q "STAGE0 ENTER" "$TRACE"; then
+    echo "  FAIL  ESP witness has no entry marker"; fail=1
+elif ! grep -q "LOAD_IMAGE 0x0000000000000000" "$TRACE"; then
+    echo "  FAIL  stage 0 did not record a successful LoadImage"
+    sed 's/^/          /' "$TRACE" | tail -12
+    fail=1
+elif ! grep -q "START_IMAGE CALL" "$TRACE"; then
+    echo "  FAIL  stage 0 never called StartImage"; fail=1
+elif ! grep -q "KERNEL_ENTRY" "$TRACE"; then
+    echo "  FAIL  ZLOS.EFI never reached its EFI entry"; fail=1
+elif ! grep -q "KERNEL_IMAGE base=" "$TRACE"; then
+    echo "  FAIL  kernel image placement was not recorded"; fail=1
+elif ! grep -q "EFI_DIAG_ARM status=0x0000000000000000" "$TRACE"; then
+    echo "  FAIL  kernel could not arm the firmware fallback diagnostic"; fail=1
+elif ! grep -q "ACPI_RESULT rsdp=" "$TRACE"; then
+    echo "  FAIL  kernel stopped before ACPI discovery completed"; fail=1
+elif ! grep -q "GOP_RESULT status=" "$TRACE" ||
+     ! grep -q "GOP_DETAILS " "$TRACE"; then
+    echo "  FAIL  kernel stopped before GOP discovery completed"; fail=1
+elif ! grep -q "MEMORY_MAP_RESULT status=0x0000000000000000" "$TRACE"; then
+    echo "  FAIL  kernel did not record a successful memory map"; fail=1
+elif ! grep -q "FIXED_MEMORY .*hi_back_overlap=yes" "$TRACE"; then
+    echo "  FAIL  kernel did not classify the 128..168 MiB backbuffer span"; fail=1
+elif ! grep -q "BEFORE_EXIT_BOOT_SERVICES" "$TRACE"; then
+    echo "  FAIL  kernel never reached the final firmware-exit boundary"; fail=1
+else
+    echo "  ok    stage 0 and kernel persisted every boundary through ExitBootServices"
+fi
+
+JOURNAL=$(mktemp)
+if ! python3 ../tools/zllog.py read zlOS-usb.img --latest >"$JOURNAL" 2>/dev/null; then
+    echo "  FAIL  could not read the QEMU journal after boot"; fail=1
+elif ! grep -q "cache=write-combining" "$JOURNAL"; then
+    echo "  FAIL  framebuffer stayed uncacheable after the WC transition"; fail=1
+else
+    echo "  ok    live framebuffer mapping changed to write-combining"
+fi
+
+python3 ./hosttest/efi_runtime_diag_test.py || fail=1
+
+rm -f "$VARS" "$LOG" "$TRACE" "$JOURNAL"
 [ "$fail" -eq 0 ] && echo "EFI gate green" || echo "EFI gate FAILED"
 exit $fail

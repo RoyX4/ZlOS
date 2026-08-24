@@ -30,6 +30,8 @@ typedef net_u8  u8;
 typedef net_u16 u16;
 typedef net_u32 u32;
 
+#include "telemetry.h"
+
 /* the clock. cpu.c calibrates the TSC against the PIT once and caches it, so
  * this is real microseconds rather than a spin count. Weakly referenced
  * through a wrapper below so the host harness can supply its own. */
@@ -64,6 +66,13 @@ static int c_echo_stale;
  * no counter is a bug that cannot be located from the outside. */
 static int c_short, c_ver, c_ihl, c_frag;
 
+static void net_drop(unsigned reason, unsigned detail, unsigned bytes)
+{
+    zlt_count(ZLLOG_C_NET_DROP, 1);
+    zlt_event(ZLLOG_SUB_NET, ZLLOG_EV_DROP, ZLLOG_WARN,
+              reason, detail, bytes);
+}
+
 /* the one outstanding echo, matched on id AND sequence - matching on "the next
  * ICMP reply" is the same trap xhci.c's cmd_wait documents for command
  * completions: a reply to a request that already timed out arrives later, the
@@ -89,6 +98,8 @@ void net_link(net_send_fn send, net_poll_fn poll, const u8 mac[6])
      * time. Without it, none. The same rule as xhci.c's "match on the address
      * of the TRB that produced the completion, and nothing else". */
     echo_got = 0;
+    zlt_event(ZLLOG_SUB_NET, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              1u, send != 0, poll != 0);
 }
 
 static int arp_send(u32 target, int reply, const u8 *to_mac);
@@ -105,6 +116,7 @@ void net_config(u32 ip, u32 mask, u32 gw)
 }
 
 u32 net_ip(void) { return my_ip; }
+int net_mac_byte(int i) { return (i >= 0 && i < 6) ? my_mac[i] : 0; }
 
 /* Has the stack been given the link? ONE LAYER MAY OWN A RECEIVE QUEUE.
  * virtio_net_arp_probe drains the queue itself and discards anything that is
@@ -170,13 +182,18 @@ static u8 paybuf[FRAME_MAX];
 
 static int eth_send(const u8 dst[6], u16 type, int payload_len)
 {
-    if (!link_send) return 0;
-    if (payload_len < 0 || payload_len > FRAME_MAX - ETH_HDR) return 0;
+    if (!link_send) { net_drop(1u, type, (unsigned)payload_len); return 0; }
+    if (payload_len < 0 || payload_len > FRAME_MAX - ETH_HDR) {
+        net_drop(2u, type, (unsigned)payload_len); return 0;
+    }
     for (int i = 0; i < 6; i++) txbuf[i] = dst[i];
     for (int i = 0; i < 6; i++) txbuf[6 + i] = my_mac[i];
     put16(txbuf + 12, type);
-    if (!link_send(txbuf, ETH_HDR + payload_len)) return 0;
+    if (!link_send(txbuf, ETH_HDR + payload_len)) {
+        net_drop(3u, type, (unsigned)payload_len); return 0;
+    }
     c_tx++;
+    zlt_count(ZLLOG_C_NET_TX, 1);
     return 1;
 }
 
@@ -209,7 +226,9 @@ static u16 ip_id = 1;
 
 int net_send_ip(u32 dst, int proto, const u8 *payload, int len)
 {
-    if (len < 0 || len > FRAME_MAX - ETH_HDR - 20) return 0;
+    if (len < 0 || len > FRAME_MAX - ETH_HDR - 20) {
+        net_drop(4u, (unsigned)proto, (unsigned)len); return 0;
+    }
     u32 hop = next_hop(dst);
     int ai = arp_find(hop);
     if (ai < 0) {
@@ -220,6 +239,7 @@ int net_send_ip(u32 dst, int proto, const u8 *payload, int len)
          * first packet to any address we have not already talked to is a
          * permanent failure rather than a one-off one. */
         arp_send(hop, 0, 0);
+        net_drop(5u, hop, (unsigned)proto);
         return 0;
     }
 
@@ -238,6 +258,26 @@ int net_send_ip(u32 dst, int proto, const u8 *payload, int len)
     put16(h + 10, net_checksum(h, 20, 0));
 
     return eth_send(arp_tab[ai].mac, 0x0800, 20 + len);
+}
+
+int net_send_ip_broadcast(u32 src, u32 dst, int proto,
+                          const u8 *payload, int len)
+{
+    if (len < 0 || len > FRAME_MAX - ETH_HDR - 20) {
+        net_drop(6u, (unsigned)proto, (unsigned)len); return 0;
+    }
+    u8 *h = txbuf + ETH_HDR;
+    h[0] = 0x45; h[1] = 0;
+    put16(h + 2, (u16)(20 + len));
+    put16(h + 4, ip_id++);
+    put16(h + 6, 0x4000);
+    h[8] = 64; h[9] = (u8)proto;
+    put16(h + 10, 0);
+    put32(h + 12, src);
+    put32(h + 16, dst);
+    for (int i = 0; i < len; i++) h[20 + i] = payload[i];
+    put16(h + 10, net_checksum(h, 20, 0));
+    return eth_send(bcast, 0x0800, 20 + len);
 }
 
 /* ---- frames in ------------------------------------------------------------ */
@@ -284,9 +324,11 @@ static net_ip_sink_fn sink_for(int proto)
 
 static void handle_arp(const u8 *a, int len)
 {
-    if (len < 28) return;
-    if (be16(a + 0) != 1 || be16(a + 2) != 0x0800) return;
-    if (a[4] != 6 || a[5] != 4) return;
+    if (len < 28) { net_drop(10u, 0, (unsigned)len); return; }
+    if (be16(a + 0) != 1 || be16(a + 2) != 0x0800) {
+        net_drop(11u, be16(a + 0), be16(a + 2)); return;
+    }
+    if (a[4] != 6 || a[5] != 4) { net_drop(12u, a[4], a[5]); return; }
     c_arp++;
 
     u16 op  = be16(a + 6);
@@ -302,8 +344,10 @@ static void handle_arp(const u8 *a, int len)
 
 static void handle_icmp(u32 src, const u8 *p, int len)
 {
-    if (len < 8) return;
-    if (net_checksum(p, len, 0) != 0) { c_badsum++; return; }
+    if (len < 8) { net_drop(20u, src, (unsigned)len); return; }
+    if (net_checksum(p, len, 0) != 0) {
+        c_badsum++; net_drop(21u, src, (unsigned)len); return;
+    }
     c_icmp++;
 
     if (p[0] == 8) {                          /* echo request -> reply */
@@ -324,6 +368,7 @@ static void handle_icmp(u32 src, const u8 *p, int len)
             echo_from = src;
         } else {
             c_echo_stale++;
+            net_drop(22u, be16(p + 4), be16(p + 6));
         }
     }
 }
@@ -343,23 +388,29 @@ static void handle_icmp(u32 src, const u8 *p, int len)
  * matters the day this runs anywhere but a QEMU user-mode network. */
 static void handle_ip(const u8 *h, int len, const u8 *from_mac)
 {
-    if (len < 20)           { c_short++; return; }
-    if ((h[0] >> 4) != 4)   { c_ver++;   return; }
+    if (len < 20)           { c_short++; net_drop(30u, 0, (unsigned)len); return; }
+    if ((h[0] >> 4) != 4)   { c_ver++; net_drop(31u, h[0] >> 4, (unsigned)len); return; }
     int ihl = (h[0] & 0x0F) * 4;
-    if (ihl < 20 || ihl > len) { c_ihl++; return; }
+    if (ihl < 20 || ihl > len) { c_ihl++; net_drop(32u, (unsigned)ihl, (unsigned)len); return; }
 
     int total = (int)be16(h + 2);
     if (total < ihl || total > len) total = len;   /* trailing padding is
                                                       normal on short frames */
-    if (net_checksum(h, ihl, 0) != 0) { c_badsum++; return; }
+    if (net_checksum(h, ihl, 0) != 0) {
+        c_badsum++; net_drop(33u, (unsigned)ihl, (unsigned)len); return;
+    }
     c_ip++;
 
     /* A fragment is not an error, it is a case this stack does not handle.
      * Dropping it silently would be indistinguishable from losing it. */
-    if (be16(h + 6) & 0x3FFF) { c_frag++; return; }
+    if (be16(h + 6) & 0x3FFF) {
+        c_frag++; net_drop(34u, be16(h + 6), (unsigned)len); return;
+    }
 
     u32 dst = be32(h + 16);
-    if (my_ip && dst != my_ip && dst != 0xFFFFFFFFu) { c_notours++; return; }
+    if (my_ip && dst != my_ip && dst != 0xFFFFFFFFu) {
+        c_notours++; net_drop(35u, dst, my_ip); return;
+    }
 
     u32 src = be32(h + 12);
     int proto = h[9];
@@ -376,8 +427,10 @@ int net_poll_once(void)
 {
     if (!link_poll) return 0;
     int n = link_poll(rxbuf, (int)sizeof rxbuf);
-    if (n < ETH_HDR) return 0;
+    if (n <= 0) return 0;
+    if (n < ETH_HDR) { net_drop(40u, 0, (unsigned)n); return 0; }
     c_rx++;
+    zlt_count(ZLLOG_C_NET_RX, 1);
 
     u16 type = be16(rxbuf + 12);
     if (type == 0x0806)      handle_arp(rxbuf + ETH_HDR, n - ETH_HDR);
@@ -393,6 +446,7 @@ int net_poll_once(void)
 static int pump_until(int *flag, int ms)
 {
     u32 t0 = idt_ticks();
+    int first_flag = *flag;
     u32 ticks = (u32)(ms / 10) + 1;
     long spins = (long)ms * 20000;
     while (spins-- > 0) {
@@ -400,12 +454,19 @@ static int pump_until(int *flag, int ms)
         if (*flag) return 1;
         if (idt_ticks() - t0 >= ticks) break;
     }
+    zlt_snapshot(ZLLOG_SUB_NET, ZLLOG_SNAP_NET_WAIT, 0,
+                 (unsigned)first_flag, t0);
+    zlt_snapshot(ZLLOG_SUB_NET, ZLLOG_SNAP_NET_WAIT, 1,
+                 (unsigned)*flag, idt_ticks());
+    zlt_trigger(ZLLOG_SUB_NET, ZLLOG_EV_TIMEOUT, ZLLOG_WARN,
+                1u, (unsigned)ms, (unsigned)spins);
     return 0;
 }
 
 int net_arp_resolve(u32 ip, u8 mac_out[6], int ms)
 {
     u32 hop = next_hop(ip);
+    u32 wait_started = idt_ticks();
     int i = arp_find(hop);
     if (i < 0) {
         arp_send(hop, 0, 0);
@@ -419,7 +480,15 @@ int net_arp_resolve(u32 ip, u8 mac_out[6], int ms)
             if (idt_ticks() - t0 >= ticks) break;
         }
     }
-    if (i < 0) return 0;
+    if (i < 0) {
+        zlt_snapshot(ZLLOG_SUB_NET, ZLLOG_SNAP_NET_WAIT, 0,
+                     hop, wait_started);
+        zlt_snapshot(ZLLOG_SUB_NET, ZLLOG_SNAP_NET_WAIT, 1,
+                     hop, idt_ticks());
+        zlt_trigger(ZLLOG_SUB_NET, ZLLOG_EV_TIMEOUT, ZLLOG_WARN,
+                    2u, hop, (unsigned)ms);
+        return 0;
+    }
     if (mac_out) for (int k = 0; k < 6; k++) mac_out[k] = arp_tab[i].mac[k];
     return 1;
 }

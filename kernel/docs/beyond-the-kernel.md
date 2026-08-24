@@ -337,15 +337,16 @@ Almost everything here is the first kind.
 
 What "boxed" costs, measured:
 
-- `sizeof(Value)` is **40 bytes** at `-m32`, **64 bytes** at `-m64`. Every number
-  the kernel touches from zl is a struct containing a type tag, a `double`, four
-  pointers and three ints.
+- `sizeof(Value)` is now **16 bytes** at `-m32` and `-m64`, enforced by the
+  current runtime guard. Value16 removed substantial copying, but every number
+  the kernel touches from zl is still a tagged box passed through generic
+  helpers rather than a native integer register.
 - Every builtin call goes through
-  `zl_calln(const char *name, ...)` — a **linear chain of 309 string
-  comparisons** (`grep -c 'streq(name,' freestanding/runtime_kernel.c`).
-- The driver primitives are at the **end** of that chain: `line` is entry 297,
-  `band` is **300**, `shl` is **304**. Every bitwise AND in zl driver code walks
-  ~300 string compares first.
+  `zl_calln(const char *name, ...)` — a **linear chain of 644 string
+  comparisons** in the current `freestanding/runtime_kernel.c`.
+- Common drawing primitives are late in that chain: `fill_rgb` is entry 509,
+  `rrect` 515 and `text_aa` 516. The exact positions change when builtins are
+  added, but name search is still the structural cost.
 
 Think of it as posting a letter to yourself to remember a number. The number
 arrives, correctly, every time — but you are running a postal service inside a
@@ -496,7 +497,9 @@ Keeping the two kinds of problem apart, because they need different fixes:
 | No function values (`zl_callv` is a hard fault) | No IDT vectors, no dispatch tables — `idt.c`/`apic.c`/`input.c` are unwritable |
 
 **Estimated ~1,500 lines total.** That figure is an estimate, not a measurement
-— the 999 ms, the 309-entry chain and the 2^53 ceiling are measured.
+— the 999 ms historical benchmark, the current 644-entry chain and the 2^53
+ceiling are measured. The benchmark predates Value16 and must be rerun before
+being used as a current end-to-end speed figure.
 
 **"Nobody has written it yet"** — ordinary work in `kernel/`:
 

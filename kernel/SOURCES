@@ -27,6 +27,7 @@
 # linker; it is kept as it was so a diff against the old scripts is readable.
 
 support.c
+zllog.c
 vga.c
 fb.c
 fb3d.c
@@ -45,6 +46,7 @@ apic.c
 virtio_gpu.c
 cpu.c
 nvme.c
+block.c
 sched.c
 smp.c
 i2c_hid.c
@@ -100,6 +102,8 @@ gpucursor.c
 
 # desktop/browser
 virtio_net.c
+e1000.c
+netdev.c
 # --- HTTPS: the crypto, the certificate check, and the handshake ---
 crypto.c
 ecdsa.c
@@ -109,6 +113,7 @@ roots.c
 entropy.c
 tls.c
 net.c
+dhcp.c
 dns.c
 tcp.c
 http.c

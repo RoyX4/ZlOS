@@ -30,6 +30,7 @@
  */
 
 #include "dns.h"
+#include "telemetry.h"
 
 typedef net_u8  u8;
 typedef net_u16 u16;
@@ -60,6 +61,22 @@ static struct {
 static int cache_next;
 
 static int c_queries, c_replies, c_rejected, c_hits;
+
+enum {
+    DNS_R_CACHE = 1, DNS_R_START, DNS_R_SEND_FAIL, DNS_R_NXDOMAIN,
+    DNS_R_BAD_REPLY, DNS_R_ANSWER, DNS_R_TIMEOUT, DNS_R_RESET
+};
+
+static void dns_set_state(int next, unsigned reason)
+{
+    int old = state;
+    if (old == next) return;
+    state = next;
+    zlt_event(ZLLOG_SUB_NET, ZLLOG_EV_NET_STATE,
+              (next == DNS_REFUSED || next == DNS_TIMEOUT)
+                  ? ZLLOG_WARN : ZLLOG_INFO,
+              DNS_PORT, ((unsigned)old << 16) | (unsigned)next, reason);
+}
 
 void dns_server(net_u32 ip) { server_ip = ip; }
 net_u32 dns_get_server(void) { return server_ip; }
@@ -280,7 +297,7 @@ int dns_start(const char *name, int len)
     int ci = cache_find(name, len);
     if (ci >= 0) {
         answer = cache[ci].ip;
-        state = DNS_DONE;
+        dns_set_state(DNS_DONE, DNS_R_CACHE);
         c_hits++;
         return 1;
     }
@@ -293,9 +310,9 @@ int dns_start(const char *name, int len)
     for (int i = 0; i < len; i++) asking[i] = name[i];
     asking_len = len;
     answer = 0;
-    state = DNS_ASKING;
+    dns_set_state(DNS_ASKING, DNS_R_START);
     deadline = idt_ticks() + 300;              /* three seconds */
-    if (!send_query()) { state = DNS_REFUSED; return 0; }
+    if (!send_query()) { dns_set_state(DNS_REFUSED, DNS_R_SEND_FAIL); return 0; }
     return 1;
 }
 
@@ -325,26 +342,26 @@ void dns_input(u32 src, const u8 *p, int len)
 
     c_replies++;
     int rcode = flags & 0x000F;
-    if (rcode == 3) { state = DNS_NXDOMAIN; return; }
-    if (rcode != 0) { state = DNS_REFUSED; return; }
+    if (rcode == 3) { dns_set_state(DNS_NXDOMAIN, DNS_R_NXDOMAIN); return; }
+    if (rcode != 0) { dns_set_state(DNS_REFUSED, DNS_R_BAD_REPLY); return; }
 
     int qd = (int)be16(d + 4);
     int an = (int)be16(d + 6);
-    if (qd != 1 || an < 1)             { state = DNS_REFUSED; c_rejected++; return; }
+    if (qd != 1 || an < 1)             { dns_set_state(DNS_REFUSED, DNS_R_BAD_REPLY); c_rejected++; return; }
 
     /* THE ANSWER MUST BE TO THE QUESTION WE ASKED. Without this a server can
      * answer any query with a record for any name and have it cached. */
     char echoed[DNS_MAX_NAME];
     if (read_name(d, dlen, 12, echoed, (int)sizeof echoed) < 0) {
-        state = DNS_REFUSED; c_rejected++; return;
+        dns_set_state(DNS_REFUSED, DNS_R_BAD_REPLY); c_rejected++; return;
     }
     int el = 0; while (echoed[el]) el++;
     if (!name_eq(echoed, el, asking, asking_len)) {
-        state = DNS_REFUSED; c_rejected++; return;
+        dns_set_state(DNS_REFUSED, DNS_R_BAD_REPLY); c_rejected++; return;
     }
 
     int off = skip_name(d, dlen, 12);
-    if (off < 0 || off + 4 > dlen)     { state = DNS_REFUSED; c_rejected++; return; }
+    if (off < 0 || off + 4 > dlen)     { dns_set_state(DNS_REFUSED, DNS_R_BAD_REPLY); c_rejected++; return; }
     off += 4;                                   /* the question's type + class */
 
     for (int i = 0; i < an && i < 32; i++) {
@@ -367,17 +384,17 @@ void dns_input(u32 src, const u8 *p, int len)
              * outbound request into a local one. */
             if (answer == 0 || (answer >> 24) == 127) {
                 answer = 0;
-                state = DNS_REFUSED;
+                dns_set_state(DNS_REFUSED, DNS_R_BAD_REPLY);
                 c_rejected++;
                 return;
             }
             cache_put(asking, asking_len, answer, ttl);
-            state = DNS_DONE;
+            dns_set_state(DNS_DONE, DNS_R_ANSWER);
             return;
         }
         off += rdlen;                           /* a CNAME, or something else */
     }
-    state = DNS_REFUSED;
+    dns_set_state(DNS_REFUSED, DNS_R_BAD_REPLY);
     c_rejected++;
 }
 
@@ -392,8 +409,11 @@ void dns_ip_sink(net_u32 src, int proto, const net_u8 *p, int len)
 
 int dns_poll(void)
 {
-    if (state == DNS_ASKING && (int)(idt_ticks() - deadline) >= 0)
-        state = DNS_TIMEOUT;
+    if (state == DNS_ASKING && (int)(idt_ticks() - deadline) >= 0) {
+        zlt_trigger(ZLLOG_SUB_NET, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                    DNS_PORT, txid, 300u);
+        dns_set_state(DNS_TIMEOUT, DNS_R_TIMEOUT);
+    }
     return state;
 }
 
@@ -404,7 +424,7 @@ int dns_poll(void)
  * answers that already arrived. */
 void dns_reset(void)
 {
-    state = DNS_IDLE;
+    dns_set_state(DNS_IDLE, DNS_R_RESET);
     answer = 0;
     asking_len = 0;
 }

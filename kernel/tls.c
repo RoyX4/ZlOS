@@ -27,6 +27,7 @@
 #include "tls.h"
 #include "crypto.h"
 #include "x509.h"
+#include "telemetry.h"
 
 typedef unsigned char u8;
 typedef unsigned int  u32;
@@ -259,6 +260,10 @@ void tls_start(struct tls_conn *c, const char *host)
     int i = 0;
     while (host && host[i] && i < TLS_HOST_MAX - 1) { c->host[i] = host[i]; i++; }
     c->host[i] = 0;
+    u32 host_hash = 2166136261u;
+    for (int j = 0; j < i; j++) host_hash = (host_hash ^ (u8)c->host[j]) * 16777619u;
+    zlt_event(ZLLOG_SUB_NET, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              20u /* TLS */, TLS_WAIT_SH, host_hash);
 
     /* THE EPHEMERAL KEY. There is no entropy source in this kernel, and that
      * is a REAL limitation rather than an oversight: a predictable private key
@@ -583,7 +588,7 @@ static int handle_record(struct tls_conn *c, const u8 *rec, int len)
     return 0;
 }
 
-int tls_feed(struct tls_conn *c, const tu8 *data, int len)
+static int tls_feed_inner(struct tls_conn *c, const tu8 *data, int len)
 {
     int used = 0;
     while (used < len) {
@@ -609,6 +614,20 @@ int tls_feed(struct tls_conn *c, const tu8 *data, int len)
         }
     }
     return used;
+}
+
+int tls_feed(struct tls_conn *c, const tu8 *data, int len)
+{
+    int before = c->state;
+    int result = tls_feed_inner(c, data, len);
+    if (c->state != before)
+        zlt_event(ZLLOG_SUB_NET, ZLLOG_EV_DRIVER_STATE,
+                  c->state == TLS_ERROR ? ZLLOG_ERROR : ZLLOG_INFO,
+                  20u /* TLS */, (unsigned)c->state, (unsigned)c->err);
+    if (result < 0 || c->state == TLS_ERROR)
+        zlt_trigger(ZLLOG_SUB_NET, ZLLOG_EV_DROP, ZLLOG_ERROR,
+                    20u /* TLS */, (unsigned)c->err, (unsigned)before);
+    return result;
 }
 
 int tls_take(struct tls_conn *c, const tu8 **p) { *p = c->out; return c->outn; }

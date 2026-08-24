@@ -13,6 +13,8 @@
  * both ways: legacy BIOS and modern UEFI.
  */
 
+#include "telemetry.h"
+
 extern const unsigned char font8x16[95][16];
 /* the anti-aliased twin of the same font: a coverage (alpha 0..255) per pixel,
  * generated from font8x16 by gen_aa_font.py. Blended over the background so
@@ -96,9 +98,20 @@ typedef unsigned int fb_uptr;
 #endif
 
 static unsigned char *fb_base;
+static unsigned long long fb_phys_base;
 static unsigned int   fb_pitch;      /* bytes per scanline, NOT pixels */
 static unsigned int   fb_w, fb_h;
 static unsigned int   fb_bpp;        /* bits per pixel */
+static unsigned int   fb_cache_type; /* 0 unknown, 1 UC, 2 WC, 3 WB */
+extern unsigned int cpu_effective_memory_type(unsigned long long)
+    __attribute__((weak));
+extern int vmm_framebuffer_write_combining(unsigned long long,
+                                            unsigned long long)
+    __attribute__((weak));
+extern int vmm_framebuffer_wc_index(void) __attribute__((weak));
+extern unsigned long long vmm_framebuffer_pat(void) __attribute__((weak));
+extern unsigned long long vmm_framebuffer_leaf_before(void) __attribute__((weak));
+extern unsigned long long vmm_framebuffer_leaf_after(void) __attribute__((weak));
 static int fb_cols, fb_rows;
 static int fb_col, fb_row;
 static unsigned int fb_fg = 0xAAAAAA, fb_bg = 0x000000;
@@ -120,6 +133,10 @@ void fb_set_text_box(int c0, int c1)
 }
 
 int fb_active(void) { return fb_base != 0; }
+unsigned int fb_pitch_bytes(void) { return fb_pitch; }
+unsigned int fb_bits_per_pixel(void) { return fb_bpp; }
+unsigned int fb_effective_cache_type(void) { return fb_cache_type; }
+void fb_set_effective_cache_type(unsigned int type) { fb_cache_type = type; }
 
 /* Where the card actually scans out of. NOT the back buffer below: this is
  * real video memory, which is what a poke/peek proof has to write to.
@@ -132,7 +149,9 @@ int fb_active(void) { return fb_base != 0; }
  * target that is 32 bits, so on firmware that places the framebuffer high,
  * fb_phys() -> console_vram() -> zl's `vram()` handed back a truncated
  * address - and `vram()` exists precisely so zl can poke at it. */
-unsigned long long fb_phys(void) { return (unsigned long long)(fb_uptr)fb_base; }
+unsigned long long fb_phys(void) { return fb_phys_base; }
+
+int fb_enable_write_combining(void);
 
 int fb_get_cols(void) { return fb_cols; }
 int fb_get_rows(void) { return fb_rows; }
@@ -327,7 +346,35 @@ static void fb_par_run(fb_band_fn fn, void *ctx, int y0, int y1)
 }
 
 static unsigned int *back = (unsigned int *)HI_BACK;
+/* A retained client surface is drawn with the same screen-coordinate API as
+ * the compositor, but its pixels live in ordinary heap RAM.  Keeping the
+ * origin here means app code does not learn a second coordinate system and no
+ * caller retains a framebuffer target pointer.  Only one target may be bound:
+ * wm.c owns the bind/draw/unbind transaction and every exit restores the
+ * previous scissor. */
+static unsigned int *surface_px;
+/* Optional straight-alpha plane for retained translucent layers. */
+static unsigned char *surface_alpha;
+static int surface_w, surface_h, surface_x, surface_y;
+static int surface_on;
+static int surface_saved_x0, surface_saved_y0, surface_saved_x1, surface_saved_y1;
 static int back_on = 0;
+static unsigned int *loader_back;
+static unsigned int loader_back_bytes;
+static unsigned int back_capacity = BACK_LIMIT;
+static int back_is_loader_reserved;
+
+/* UEFI owns the physical memory map until ExitBootServices. Its entry path
+ * supplies pages allocated through Boot Services so the compositor never
+ * guesses that HI_BACK happens to be free. BIOS/raw paths retain the fixed
+ * fallback until their loaders can provide the same handoff. */
+void fb_set_back_buffer(unsigned long long addr, unsigned int bytes)
+{
+    _Static_assert(sizeof(addr) >= sizeof(void *),
+                   "loader back-buffer address must hold a pointer");
+    loader_back = (unsigned int *)(fb_uptr)addr;
+    loader_back_bytes = bytes;
+}
 
 /* ---- SIMD, and exactly where it is allowed --------------------------------
  * cpu.c has detected SSE/SSE2/SSE3/SSSE3 since it was written and NOTHING has
@@ -434,12 +481,29 @@ static void mark(int x, int y)
     if (y + 1 > py1) py1 = y + 1;
 }
 
-/* Touching counts as overlapping. Two rectangles sharing an edge are cheaper
- * to blit as one than as two, and merging them cannot cover a pixel that was
- * not already going to be covered by one of them. */
-static int dmg_touches(const struct dmg_rect *a, int x0, int y0, int x1, int y1)
+/* True overlap always coalesces. Mere contact coalesces only when its bounding
+ * box adds at most 25% waste over the two input areas. The previous statement
+ * that touching "cannot cover a pixel" was false for an L shape and was a
+ * direct amplifier on window-move damage. */
+#define DMG_TOUCH_WASTE_PCT 25ULL
+static int dmg_mergeable(const struct dmg_rect *a, int x0, int y0, int x1, int y1)
 {
-    return !(x0 > a->x1 || x1 < a->x0 || y0 > a->y1 || y1 < a->y0);
+    int touches = !(x0 > a->x1 || x1 < a->x0 ||
+                    y0 > a->y1 || y1 < a->y0);
+    if (!touches) return 0;
+    int overlaps = x0 < a->x1 && x1 > a->x0 &&
+                   y0 < a->y1 && y1 > a->y0;
+    if (overlaps) return 1;
+    int ux0 = x0 < a->x0 ? x0 : a->x0;
+    int uy0 = y0 < a->y0 ? y0 : a->y0;
+    int ux1 = x1 > a->x1 ? x1 : a->x1;
+    int uy1 = y1 > a->y1 ? y1 : a->y1;
+    unsigned long long sum =
+        (unsigned long long)(unsigned)(x1 - x0) * (unsigned)(y1 - y0) +
+        (unsigned long long)(unsigned)(a->x1 - a->x0) * (unsigned)(a->y1 - a->y0);
+    unsigned long long box =
+        (unsigned long long)(unsigned)(ux1 - ux0) * (unsigned)(uy1 - uy0);
+    return box <= sum || (box - sum) * 100ULL <= sum * DMG_TOUCH_WASTE_PCT;
 }
 
 static void dmg_add(int x0, int y0, int x1, int y1)
@@ -450,7 +514,7 @@ static void dmg_add(int x0, int y0, int x1, int y1)
      * union makes the rectangle bigger, which can bring it into contact with
      * something it did not touch a moment ago. Bounded by DMG_MAX either way. */
     for (int i = 0; i < ndmg; ) {
-        if (dmg_touches(&dmg[i], x0, y0, x1, y1)) {
+        if (dmg_mergeable(&dmg[i], x0, y0, x1, y1)) {
             if (dmg[i].x0 < x0) x0 = dmg[i].x0;
             if (dmg[i].y0 < y0) y0 = dmg[i].y0;
             if (dmg[i].x1 > x1) x1 = dmg[i].x1;
@@ -487,6 +551,9 @@ static void dmg_flush_pixels(void)
  * every pixel it wrote. That is what keeps two far-apart updates apart. */
 void fb_damage(int x, int y, int w, int h)
 {
+    /* Offscreen rendering changes no scanout/back-buffer pixel.  The later
+     * surface blit reports the exact visible intersection once. */
+    if (surface_on) return;
     dmg_flush_pixels();
     dmg_add(x, y, x + w, y + h);
 }
@@ -496,12 +563,25 @@ void fb_damage(int x, int y, int w, int h)
  * measurably smaller", and that needs a number - see hosttest/fbbench.c. */
 int fb_damage_count(void) { dmg_flush_pixels(); return ndmg; }
 
+unsigned long long fb_back_phys(void) { return back_on ? (unsigned long long)(fb_uptr)back : 0; }
+unsigned int fb_back_bytes(void) { return back_on ? fb_w * fb_h * 4u : 0; }
+unsigned int fb_back_pitch(void) { return fb_w * 4u; }
+unsigned int fb_bits(void) { return fb_bpp; }
+
 unsigned int fb_damage_area(void)
 {
     dmg_flush_pixels();
     unsigned int a = 0;
-    for (int i = 0; i < ndmg; i++)
-        a += (unsigned)(dmg[i].x1 - dmg[i].x0) * (unsigned)(dmg[i].y1 - dmg[i].y0);
+    for (int i = 0; i < ndmg; i++) {
+        int x0 = dmg[i].x0, y0 = dmg[i].y0;
+        int x1 = dmg[i].x1, y1 = dmg[i].y1;
+        if (x0 < 0) x0 = 0;
+        if (y0 < 0) y0 = 0;
+        if (x1 > (int)fb_w) x1 = (int)fb_w;
+        if (y1 > (int)fb_h) y1 = (int)fb_h;
+        if (x0 < x1 && y0 < y1)
+            a += (unsigned)(x1 - x0) * (unsigned)(y1 - y0);
+    }
     return a;
 }
 
@@ -531,6 +611,12 @@ static void blit_band(void *ctx, int y0, int y1)
             }
         }
     }
+#if FB_SIMD
+    /* Each AP owns its own WC buffers.  The AP must drain them before it
+     * publishes band completion; an sfence on the BSP cannot order another
+     * logical CPU's writes. */
+    _mm_sfence();
+#endif
 }
 
 /* Below this many rows a rectangle is blitted on the calling core. Waking
@@ -553,12 +639,18 @@ void fb_present(void)
         if (x1 > (int)fb_w) x1 = (int)fb_w;
         if (y1 > (int)fb_h) y1 = (int)fb_h;
         if (x0 >= x1 || y0 >= y1) continue;
+        extern int gpu_present_try(int, int, int, int);
+        if (bpx == 4 && gpu_present_try(x0, y0, x1 - x0, y1 - y0)) continue;
         struct blit_job job = { x0, x1, bpx };
         if (y1 - y0 >= BLIT_BAND_MIN) fb_par_run(blit_band, &job, y0, y1);
         else                          blit_band(&job, y0, y1);
     }
     ndmg = 0;
 }
+
+__attribute__((weak))
+int gpu_present_try(int x, int y, int w, int h)
+{ (void)x; (void)y; (void)w; (void)h; return 0; }
 
 /* ---- saying so out loud --------------------------------------------------
  * The degradation above is legitimate. The SILENCE was the bug: four features
@@ -607,8 +699,10 @@ static void fb_report_mode(unsigned int need)
 
     if (!back_on) {
         fb_puts("      back OFF: wants "); fb_putu(need >> 10);
-        fb_puts(" KiB, "); fb_putu(BACK_LIMIT >> 10);
-        fb_puts(" KiB free below the AP stacks - no subpixel text, read-back hits VRAM\n");
+        fb_puts(" KiB, "); fb_putu(back_capacity >> 10);
+        fb_puts(back_is_loader_reserved
+            ? " KiB reserved by the loader - no subpixel text, read-back hits VRAM\n"
+            : " KiB free below the AP stacks - no subpixel text, read-back hits VRAM\n");
     }
     /* Say where it ends, not just that it fits. "back ON" is a claim; an
      * address is a fact somebody can check against the map in this file. */
@@ -616,9 +710,14 @@ static void fb_report_mode(unsigned int need)
         fb_uptr top = (fb_uptr)back + need;
         fb_puts("      back at ");   fb_putu((unsigned)((fb_uptr)back >> 20));
         fb_puts(" MiB, ends at ");   fb_putu((unsigned)(top >> 20));
-        fb_puts(" MiB, ceiling ");   fb_putu((unsigned)(HI_APSTK >> 20));
-        fb_puts(" MiB (the AP stacks)");
-        if (top > HI_APSTK) fb_puts("  *** OVERRUN - THIS WILL CORRUPT THE AP STACKS ***");
+        if (back_is_loader_reserved) {
+            fb_puts(" MiB (UEFI-reserved pages)");
+        } else {
+            fb_puts(" MiB, ceiling ");   fb_putu((unsigned)(HI_APSTK >> 20));
+            fb_puts(" MiB (the AP stacks)");
+            if (top > HI_APSTK)
+                fb_puts("  *** OVERRUN - THIS WILL CORRUPT THE AP STACKS ***");
+        }
         fb_puts("\n");
     }
 }
@@ -663,6 +762,7 @@ static void fb_report_mode(unsigned int need)
  * whatever lives at the truncated address. T-11, closed. */
 
 void fb_cache_reset(void);   /* defined with the blur slots, ~1700 lines down */
+void wm_surface_mode_changed(void) __attribute__((weak));
 
 void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp)
@@ -687,6 +787,8 @@ void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
         fb_puts("  fb: REFUSED the mode - ");
         if (!addr) fb_puts("no framebuffer address\n");
         else { fb_puts("bpp "); fb_putu(bpp); fb_puts(", only 24 and 32 are handled\n"); }
+        zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DISPLAY_STATE, ZLLOG_ERROR,
+                  (unsigned)addr, (unsigned)(addr >> 32), bpp);
         return;
     }
 
@@ -707,13 +809,19 @@ void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
      * for a framebuffer that changed address at the same size (a GOP re-init),
      * and the cache is a copy in RAM - it does not care where VRAM went, and
      * re-rendering the wallpaper costs ~12 ms per glow. */
-    if (width != fb_w || height != fb_h) fb_cache_reset();
+    if (width != fb_w || height != fb_h) {
+        fb_cache_reset();
+        if (wm_surface_mode_changed) wm_surface_mode_changed();
+    }
 
+    fb_phys_base = addr;
     fb_base  = (unsigned char *)(fb_uptr)addr;
     fb_pitch = pitch;
     fb_w     = width;
     fb_h     = height;
     fb_bpp   = bpp;
+    fb_cache_type = cpu_effective_memory_type
+        ? cpu_effective_memory_type(addr) : 0u;
     /* Pixel width is not UI zoom. The old 1400px cliff switched 1920x1200 to
      * a 16x32 terminal and almost 2.5x layout: the whole desktop looked like
      * a browser at 200% zoom. Keep 8x16 through ordinary desktop modes and
@@ -752,11 +860,25 @@ void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
      * made from it is: a mode arrives at run time and `need` is computed from
      * it, so the one thing a compile-time check cannot cover is whether this
      * particular mode's buffer stays inside the span picked for it. */
-    back = (unsigned int *)HI_BACK;
-    back_on = (need <= BACK_LIMIT);
+    if (loader_back && loader_back_bytes) {
+        back = loader_back;
+        back_capacity = loader_back_bytes;
+        back_is_loader_reserved = 1;
+    } else {
+        back = (unsigned int *)HI_BACK;
+        back_capacity = BACK_LIMIT;
+        back_is_loader_reserved = 0;
+    }
+    back_on = (need <= back_capacity);
     ndmg    = 0;                 /* the mode changed; old damage means nothing */
     pdirty  = 0;
     fb_report_mode(need);
+    zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DISPLAY_STATE, ZLLOG_INFO,
+              width, height,
+              ((unsigned)bpp & 0xffu) | ((unsigned)back_on << 8) |
+              ((fb_cache_type & 3u) << 9) | ((pitch & 0xffffu) << 16));
+    zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              (unsigned)addr, (unsigned)(addr >> 32), need);
 
     /* Tell the mouse ISR how big the screen is. It cannot ask: idt.c is built
      * -mgeneral-regs-only so that an interrupt never touches SSE, and calling
@@ -771,6 +893,50 @@ void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
                                                     pointer needs its own clamp
                                                     or 2x speed walks it off
                                                     the right-hand edge */
+}
+
+/* Called once after zlOS owns an IDT and before it starts APs or constructs the
+ * desktop.  EFI's initial clear may be UC; every actual compositor present
+ * after this point uses the retyped identity mapping. */
+int fb_enable_write_combining(void)
+{
+    if (!fb_base || !fb_pitch || !fb_h) return 0;
+    unsigned long long bytes = (unsigned long long)fb_pitch * fb_h;
+    unsigned int before = cpu_effective_memory_type
+        ? cpu_effective_memory_type(fb_phys_base) : 0u;
+    int changed = before == 2u;
+    if (!changed && vmm_framebuffer_write_combining)
+        changed = vmm_framebuffer_write_combining(fb_phys_base, bytes);
+    fb_cache_type = cpu_effective_memory_type
+        ? cpu_effective_memory_type(fb_phys_base) : 0u;
+
+    unsigned long long pat = vmm_framebuffer_pat
+        ? vmm_framebuffer_pat() : 0ULL;
+    int index = vmm_framebuffer_wc_index ? vmm_framebuffer_wc_index() : -1;
+    zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE,
+              fb_cache_type == 2u ? ZLLOG_INFO : ZLLOG_WARN,
+              5u /* framebuffer cache transition */,
+              (before & 0xffu) | ((fb_cache_type & 0xffu) << 8) |
+              ((unsigned)(index & 0xff) << 16) | ((unsigned)(changed != 0) << 24),
+              (unsigned)pat);
+    unsigned long long leaf_before = vmm_framebuffer_leaf_before
+        ? vmm_framebuffer_leaf_before() : 0ULL;
+    unsigned long long leaf_after = vmm_framebuffer_leaf_after
+        ? vmm_framebuffer_leaf_after() : 0ULL;
+    zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              6u /* raw PAT */, (unsigned)pat, (unsigned)(pat >> 32));
+    zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              7u /* leaf before */, (unsigned)leaf_before,
+              (unsigned)(leaf_before >> 32));
+    zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              8u /* leaf after */, (unsigned)leaf_after,
+              (unsigned)(leaf_after >> 32));
+    zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DISPLAY_STATE,
+              fb_cache_type == 2u ? ZLLOG_INFO : ZLLOG_WARN,
+              fb_w, fb_h,
+              (fb_bpp & 0xffu) | ((unsigned)back_on << 8) |
+              ((fb_cache_type & 3u) << 9) | ((fb_pitch & 0xffffu) << 16));
+    return fb_cache_type == 2u;
 }
 
 /* ---- the scissor ---------------------------------------------------------
@@ -809,10 +975,14 @@ int fb_clip_right(void) { return clip_x1; }
 void fb_clip(int x, int y, int w, int h)
 {
     int x1 = x + w, y1 = y + h;
-    if (x < 0) x = 0;
-    if (y < 0) y = 0;
-    if (x1 > (int)fb_w) x1 = (int)fb_w;
-    if (y1 > (int)fb_h) y1 = (int)fb_h;
+    int bx0 = surface_on ? surface_x : 0;
+    int by0 = surface_on ? surface_y : 0;
+    int bx1 = surface_on ? surface_x + surface_w : (int)fb_w;
+    int by1 = surface_on ? surface_y + surface_h : (int)fb_h;
+    if (x < bx0) x = bx0;
+    if (y < by0) y = by0;
+    if (x1 > bx1) x1 = bx1;
+    if (y1 > by1) y1 = by1;
     if (x1 < x) x1 = x;              /* an empty rect clips everything away */
     if (y1 < y) y1 = y;
     clip_x0 = x; clip_y0 = y; clip_x1 = x1; clip_y1 = y1;
@@ -820,8 +990,10 @@ void fb_clip(int x, int y, int w, int h)
 
 void fb_clip_none(void)
 {
-    clip_x0 = 0; clip_y0 = 0;
-    clip_x1 = (int)fb_w; clip_y1 = (int)fb_h;
+    clip_x0 = surface_on ? surface_x : 0;
+    clip_y0 = surface_on ? surface_y : 0;
+    clip_x1 = surface_on ? surface_x + surface_w : (int)fb_w;
+    clip_y1 = surface_on ? surface_y + surface_h : (int)fb_h;
 }
 
 /* Read the scissor back. Anything that narrows the clip TEMPORARILY has to put
@@ -847,11 +1019,84 @@ static void put_pixel(unsigned int x, unsigned int y, unsigned int rgb)
      * it is caught by the upper bound, so both halves still reject it. */
     if ((int)x < clip_x0 || (int)x >= clip_x1 ||
         (int)y < clip_y0 || (int)y >= clip_y1) return;
+    if (surface_on) {
+        unsigned long at = (unsigned long)((int)y - surface_y) *
+                           (unsigned)surface_w +
+                           (unsigned)((int)x - surface_x);
+        surface_px[at] = rgb;
+        if (surface_alpha) surface_alpha[at] = 255;
+        return;
+    }
     if (back_on) { back[(unsigned long)y * fb_w + x] = rgb; mark((int)x, (int)y); return; }
     unsigned char *p = fb_base + (unsigned long)y * fb_pitch + (unsigned long)x * (fb_bpp / 8);
     p[0] = (unsigned char)(rgb & 0xFF);           /* B */
     p[1] = (unsigned char)((rgb >> 8) & 0xFF);    /* G */
     p[2] = (unsigned char)((rgb >> 16) & 0xFF);   /* R */
+}
+
+/* Bind/unbind are deliberately a transaction rather than a persistent target
+ * setter.  A failed begin changes nothing; end restores the exact clip the
+ * compositor supplied before the app narrowed it through ui_scroll_begin. */
+int fb_surface_begin(unsigned int *pixels, int width, int height,
+                     int origin_x, int origin_y)
+{
+    if (surface_on || !back_on || !pixels || width <= 0 || height <= 0) return 0;
+    surface_saved_x0 = clip_x0; surface_saved_y0 = clip_y0;
+    surface_saved_x1 = clip_x1; surface_saved_y1 = clip_y1;
+    surface_px = pixels;
+    surface_alpha = 0;
+    surface_w = width; surface_h = height;
+    surface_x = origin_x; surface_y = origin_y;
+    surface_on = 1;
+    fb_clip_none();
+    return 1;
+}
+
+int fb_surface_begin_alpha(unsigned int *pixels, unsigned char *alpha,
+                           int width, int height, int origin_x, int origin_y)
+{
+    if (!alpha) return 0;
+    if (!fb_surface_begin(pixels, width, height, origin_x, origin_y)) return 0;
+    surface_alpha = alpha;
+    return 1;
+}
+
+void fb_surface_end(void)
+{
+    if (!surface_on) return;
+    surface_on = 0;
+    surface_px = 0;
+    surface_alpha = 0;
+    clip_x0 = surface_saved_x0; clip_y0 = surface_saved_y0;
+    clip_x1 = surface_saved_x1; clip_y1 = surface_saved_y1;
+}
+
+/* Copy a retained RGB32 surface into the compositor back buffer.  Source
+ * offsets are derived after clipping, so a partly off-screen window and a
+ * small damage rectangle both copy only their visible intersection. */
+int fb_surface_blit(const unsigned int *pixels, int width, int height,
+                    int origin_x, int origin_y)
+{
+    if (surface_on || !back_on || !pixels || width <= 0 || height <= 0) return 0;
+    int x0 = origin_x, y0 = origin_y;
+    int x1 = origin_x + width, y1 = origin_y + height;
+    if (x0 < clip_x0) x0 = clip_x0;
+    if (y0 < clip_y0) y0 = clip_y0;
+    if (x1 > clip_x1) x1 = clip_x1;
+    if (y1 > clip_y1) y1 = clip_y1;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > (int)fb_w) x1 = (int)fb_w;
+    if (y1 > (int)fb_h) y1 = (int)fb_h;
+    if (x0 >= x1 || y0 >= y1) return 1;
+    for (int y = y0; y < y1; y++) {
+        const unsigned int *src = pixels +
+            (unsigned long)(y - origin_y) * (unsigned)width + (unsigned)(x0 - origin_x);
+        unsigned int *dst = back + (unsigned long)y * fb_w + (unsigned)x0;
+        copy32(dst, src, x1 - x0);
+    }
+    fb_damage(x0, y0, x1 - x0, y1 - y0);
+    return 1;
 }
 
 /* Map a VGA attribute byte to RGB, so the same zl code colours both
@@ -959,6 +1204,72 @@ static unsigned int blend_rgb(unsigned int bg, unsigned int fg, int a)
          |  (unsigned)lin_to_srgb[lb];
 }
 
+/* Accumulate a translucent primitive into a transparent retained layer.
+ * Colour stays straight (not premultiplied), but combination happens in the
+ * same linear-light space as blend_rgb(). */
+static void surface_blend_px(int x, int y, unsigned int rgb, int a)
+{
+    if ((unsigned)(x - surface_x) >= (unsigned)surface_w ||
+        (unsigned)(y - surface_y) >= (unsigned)surface_h ||
+        x < clip_x0 || x >= clip_x1 || y < clip_y0 || y >= clip_y1) return;
+    unsigned long at = (unsigned long)(y - surface_y) * (unsigned)surface_w +
+                       (unsigned)(x - surface_x);
+    int oa = surface_alpha[at];
+    if (a >= 255 || oa <= 0) {
+        surface_px[at] = rgb;
+        surface_alpha[at] = (unsigned char)(a >= 255 ? 255 : a);
+        return;
+    }
+    int old_weight = (oa * (255 - a) + 127) / 255;
+    int na = a + old_weight;
+    if (!gamma_ready) gamma_init();
+    unsigned int old = surface_px[at];
+    int lr = (srgb_to_lin[(rgb >> 16) & 255] * a +
+              srgb_to_lin[(old >> 16) & 255] * old_weight) / na;
+    int lg = (srgb_to_lin[(rgb >> 8) & 255] * a +
+              srgb_to_lin[(old >> 8) & 255] * old_weight) / na;
+    int lb = (srgb_to_lin[rgb & 255] * a +
+              srgb_to_lin[old & 255] * old_weight) / na;
+    if (lr > LIN_MAX) lr = LIN_MAX;
+    if (lg > LIN_MAX) lg = LIN_MAX;
+    if (lb > LIN_MAX) lb = LIN_MAX;
+    surface_px[at] = ((unsigned)lin_to_srgb[lr] << 16) |
+                     ((unsigned)lin_to_srgb[lg] << 8) |
+                     (unsigned)lin_to_srgb[lb];
+    surface_alpha[at] = (unsigned char)na;
+}
+
+int fb_surface_blit_alpha(const unsigned int *pixels,
+                          const unsigned char *alpha,
+                          int width, int height, int origin_x, int origin_y)
+{
+    if (surface_on || !back_on || !pixels || !alpha ||
+        width <= 0 || height <= 0) return 0;
+    int x0 = origin_x, y0 = origin_y;
+    int x1 = origin_x + width, y1 = origin_y + height;
+    if (x0 < clip_x0) x0 = clip_x0;
+    if (y0 < clip_y0) y0 = clip_y0;
+    if (x1 > clip_x1) x1 = clip_x1;
+    if (y1 > clip_y1) y1 = clip_y1;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > (int)fb_w) x1 = (int)fb_w;
+    if (y1 > (int)fb_h) y1 = (int)fb_h;
+    if (x0 >= x1 || y0 >= y1) return 1;
+    for (int y = y0; y < y1; y++) {
+        unsigned long at = (unsigned long)(y - origin_y) * (unsigned)width +
+                           (unsigned)(x0 - origin_x);
+        unsigned int *dst = back + (unsigned long)y * fb_w + (unsigned)x0;
+        for (int x = x0; x < x1; x++, at++, dst++) {
+            int a = alpha[at];
+            if (a >= 255) *dst = pixels[at];
+            else if (a > 0) *dst = blend_rgb(*dst, pixels[at], a);
+        }
+    }
+    fb_damage(x0, y0, x1 - x0, y1 - y0);
+    return 1;
+}
+
 /* ---- coverage blitting ---------------------------------------------------
  * A coverage bitmap is one byte of alpha per pixel: the icons and every font
  * atlas in this kernel are exactly that, and so is a resampled version of one.
@@ -970,6 +1281,10 @@ static unsigned int blend_rgb(unsigned int bg, unsigned int fg, int a)
 static void blend_px(int x, int y, unsigned int rgb, int a)
 {
     if (a <= 0) return;
+    if (surface_on && surface_alpha) {
+        surface_blend_px(x, y, rgb, a > 255 ? 255 : a);
+        return;
+    }
     if (a >= 255) { put_pixel((unsigned)x, (unsigned)y, rgb); return; }
     put_pixel((unsigned)x, (unsigned)y, blend_rgb(fb_get_px(x, y), rgb, a));
 }
@@ -1077,7 +1392,7 @@ static void draw_glyph(int cx, int cy, char c, unsigned int fg, unsigned int bg)
         : &font16x32_aa[(int)c - FONT_FIRST][0][0];
 
     /* subpixel path: three alphas per pixel instead of one */
-    if (subpixel_on && back_on && ox >= 0 && oy >= 0 &&
+    if (subpixel_on && back_on && !surface_on && ox >= 0 && oy >= 0 &&
         ox + cw <= (int)fb_w && oy + ch <= (int)fb_h) {
         const unsigned char *sub = (cw == GLYPH_W)
             ? &font8x16_sub[(int)c - FONT_FIRST][0][0][0]
@@ -1102,7 +1417,7 @@ static void draw_glyph(int cx, int cy, char c, unsigned int fg, unsigned int bg)
         return;
     }
 
-    if (back_on && ox >= 0 && oy >= 0 &&
+    if (back_on && !surface_on && ox >= 0 && oy >= 0 &&
         ox + cw <= (int)fb_w && oy + ch <= (int)fb_h) {
         int gx0 = ox > clip_x0 ? ox : clip_x0, gx1 = ox + cw < clip_x1 ? ox + cw : clip_x1;
         int gy0 = oy > clip_y0 ? oy : clip_y0, gy1 = oy + ch < clip_y1 ? oy + ch : clip_y1;
@@ -1258,7 +1573,7 @@ void fb_fill_px(int x, int y, int w, int h, unsigned int rgb)
     if (y1 > clip_y1) y1 = clip_y1;
     if (x0 >= x1 || y0 >= y1) return;
 
-    if (back_on) {
+    if (back_on && !surface_on) {
         /* Ask the blitter first. It declines unless armed and unless the
          * rectangle is large enough that a submission is cheaper than the
          * fill, so today this is always a no and the band job below runs
@@ -1315,7 +1630,7 @@ void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a)
     if (y1 > clip_y1) y1 = clip_y1;
     if (x0 >= x1 || y0 >= y1) return;
 
-    if (back_on) {
+    if (back_on && !surface_on) {
         /* straight at the back buffer: the read-back IS the destination, so
          * there is no reason to go through fb_get_px/put_pixel and pay their
          * bounds test and address multiply twice per pixel */
@@ -1331,8 +1646,7 @@ void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a)
      * just slow, and the boot log has already said the back buffer is off. */
     for (int yy = y0; yy < y1; yy++)
         for (int xx = x0; xx < x1; xx++)
-            put_pixel((unsigned)xx, (unsigned)yy,
-                      blend_rgb(fb_get_px(xx, yy), rgb, a));
+            blend_px(xx, yy, rgb, a);
 }
 
 /* a vertical gradient band - top colour fading to bottom colour. A flat bar
@@ -1398,7 +1712,7 @@ void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
     if (x + j0 < clip_x0) j0 = clip_x0 - x;
     if (x + j1 > clip_x1) j1 = clip_x1 - x;
 
-    if (back_on && j0 < j1) {
+    if (back_on && !surface_on && j0 < j1) {
         struct grad_job job = { x, y, w, h, tr, tg, tb, br, bg, bb, j0, j1 };
         fb_par_run(grad_band, &job, 0, h);
         /* THE DAMAGE, COMPUTED not accumulated. It used to be the union grown
@@ -1477,6 +1791,12 @@ unsigned int fb_attr_rgb(unsigned char attr) { return vga_rgb[attr & 0x0F]; }
  * shadow and blended glyph comes back with red and blue swapped. */
 unsigned int fb_get_px(int x, int y)
 {
+    if (surface_on) {
+        if (x < surface_x || y < surface_y ||
+            x >= surface_x + surface_w || y >= surface_y + surface_h) return 0;
+        return surface_px[(unsigned long)(y - surface_y) * (unsigned)surface_w +
+                          (unsigned)(x - surface_x)];
+    }
     if ((unsigned)x >= fb_w || (unsigned)y >= fb_h) return 0;
     /* out of RAM, not out of the card - this is the read that used to cost
      * 30-50x more than it should, and it runs once per blended pixel */
@@ -1611,7 +1931,7 @@ void fb_shadow(int x, int y, int w, int h, int off, int soft)
     job.skx0 = x + SHADOW_SKIP_INSET; job.skx1 = x + w - SHADOW_SKIP_INSET;
     job.sky0 = y + SHADOW_SKIP_INSET; job.sky1 = y + h - SHADOW_SKIP_INSET;
 
-    if (back_on) {
+    if (back_on && !surface_on) {
         fb_par_run(shadow_band, &job, y0, y1);
         /* Same rectangle the per-pixel accumulator used to grow to: the ring
          * around the skipped strip is always written, so the union IS the
@@ -1624,13 +1944,11 @@ void fb_shadow(int x, int y, int w, int h, int off, int soft)
         return;
     }
 
-    /* No back buffer: read-back and write both go to VRAM through put_pixel,
-     * which owns the accumulator - serial by necessity. */
+    /* No direct back-buffer path: VRAM stays serial, while a retained-alpha
+     * target records black plus coverage for later composition. */
     for (int yy = y0; yy < y1; yy++) {
-        if ((unsigned)yy >= fb_h) continue;
         int skip_row = job.sk_on && yy >= job.sky0 && yy < job.sky1;
         for (int xx = x0; xx < x1; xx++) {
-            if ((unsigned)xx >= fb_w) continue;
             if (skip_row && xx >= job.skx0 && xx < job.skx1) { xx = job.skx1 - 1; continue; }
             int dx = 0, dy = 0;
             if (xx < job.ix0) dx = job.ix0 - xx; else if (xx >= job.ix1) dx = xx - job.ix1 + 1;
@@ -1639,13 +1957,17 @@ void fb_shadow(int x, int y, int w, int h, int off, int soft)
             if (d > job.soft) continue;
             int amount = 62 - (62 * d) / (job.soft + 1);
             if (amount <= 0) continue;
-            unsigned int c = fb_get_px(xx, yy);
-            int k = 100 - amount;
-            int r = (int)((c >> 16) & 0xFF) * k / 100;
-            int g = (int)((c >>  8) & 0xFF) * k / 100;
-            int b = (int)( c        & 0xFF) * k / 100;
-            put_pixel((unsigned)xx, (unsigned)yy,
-                      ((unsigned)r << 16) | ((unsigned)g << 8) | (unsigned)b);
+            if (surface_on && surface_alpha)
+                blend_px(xx, yy, 0, amount * 255 / 100);
+            else {
+                unsigned int c = fb_get_px(xx, yy);
+                int k = 100 - amount;
+                int r = (int)((c >> 16) & 0xFF) * k / 100;
+                int g = (int)((c >> 8) & 0xFF) * k / 100;
+                int b = (int)(c & 0xFF) * k / 100;
+                put_pixel((unsigned)xx, (unsigned)yy,
+                          ((unsigned)r << 16) | ((unsigned)g << 8) | (unsigned)b);
+            }
         }
     }
 }
@@ -1825,12 +2147,12 @@ static void glow_px(int xx, int yy, unsigned int rgb, int a)
 {
     if (a <= 0) return;
     if (a > 255) a = 255;
-    if (back_on) {
+    if (back_on && !surface_on) {
         unsigned int *p = back + (unsigned long)yy * fb_w + xx;
         *p = blend_rgb(*p, rgb, a);
         return;
     }
-    put_pixel((unsigned)xx, (unsigned)yy, blend_rgb(fb_get_px(xx, yy), rgb, a));
+    blend_px(xx, yy, rgb, a);
 }
 
 /* Clip a rectangle to the scissor. Returns 0 if nothing is left. */
@@ -1933,7 +2255,7 @@ void fb_image(int px, int py, int w, int h,
             }
             if (a == 0) continue;
             unsigned int col = (r << 16) | (g << 8) | b;
-            if (back_on) {
+            if (back_on && !surface_on) {
                 unsigned int *o = back + (unsigned long)yy * fb_w + xx;
                 *o = (a >= 255) ? col : blend_rgb(*o, col, (int)a);
             } else {
@@ -2344,41 +2666,57 @@ void fb_cursor_arrow(int x, int y, unsigned int fill, unsigned int edge)
 #define CUR_BUF_DIM (CUR_SZ16 * CUR_MAX_SC)
 static unsigned int cur_buf[CUR_BUF_DIM * CUR_BUF_DIM];
 static int cur_x = 0, cur_y = 0, cur_up = 0, cur_saved = 0;
+static int cur_draw_kind = -1;
 
 /* put the saved patch back, removing the cursor from the screen */
 void fb_pointer_hide(void)
 {
     if (!cur_up) return;
+    /* The old and new cursor patches are two small changed regions, not one
+     * bounding rectangle spanning the distance the pointer moved.  Closing
+     * the accumulator on both sides prevents a coalesced USB move from
+     * turning two 16x16 restores into a multi-megabyte present. */
+    dmg_flush_pixels();
     for (int j = 0; j < cur_saved; j++)
         for (int i = 0; i < cur_saved; i++)
             put_pixel((unsigned)(cur_x + i), (unsigned)(cur_y + j),
                       cur_buf[j * CUR_BUF_DIM + i]);
+    dmg_flush_pixels();
     cur_up = 0;
 }
 
 /* move/redraw the cursor so its hotspot lands on (x,y) */
 void fb_pointer_show(int x, int y)
 {
-    fb_pointer_hide();
-
     int sc = cur_scale();
     const short *hot = (sc == 1) ? cur_hot16[cur_kind] : cur_hot32[cur_kind];
     int hx = (sc <= 2) ? hot[0] : hot[0] * sc / 2;
     int hy = (sc <= 2) ? hot[1] : hot[1] * sc / 2;
+    int n = cur_dim();
+    int next_x = x - hx, next_y = y - hy;
+
+    /* wm_frame asks the software cursor to show on every pass.  When neither
+     * position, scale nor shape changed, restoring and redrawing the same
+     * pixels is pure latency and must leave no present work behind. */
+    if (cur_up && cur_x == next_x && cur_y == next_y && cur_saved == n &&
+        cur_draw_kind == cur_kind) return;
+
+    fb_pointer_hide();
 
     /* SAVE AT THE DRAW ORIGIN, not at the hotspot. They differ by the hotspot
      * offset, and saving the wrong one restores a patch that is offset from
      * the one the cursor was drawn into - which is the same trail, just moved. */
-    int n = cur_dim();
-    cur_x = x - hx;
-    cur_y = y - hy;
+    cur_x = next_x;
+    cur_y = next_y;
     cur_saved = n;
     for (int j = 0; j < n; j++)
         for (int i = 0; i < n; i++)
             cur_buf[j * CUR_BUF_DIM + i] = fb_get_px(cur_x + i, cur_y + j);
     cur_up = 1;
+    cur_draw_kind = cur_kind;
 
     fb_cursor_arrow(x, y, 0xEEF4FF, 0x0A0E18);   /* light body, dark outline */
+    dmg_flush_pixels();
 }
 
 /* How big the cursor is at the current scale - what the size SHOULD be. */

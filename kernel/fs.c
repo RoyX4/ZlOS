@@ -40,11 +40,7 @@ typedef unsigned int       u32;
 typedef unsigned short     u16;
 typedef unsigned char      u8;
 
-#if defined(ZL_64)
-typedef unsigned long long uptr;
-#else
-typedef unsigned int       uptr;
-#endif
+#include "telemetry.h"
 
 /* the one character sink - runtime_kernel.c in the kernel, the harness on the
  * host. A driver that cannot say why it refused is a driver that gets blamed
@@ -133,6 +129,13 @@ static int nameeq(const char *a, const char *b)
     return 1;
 }
 
+static u32 name_hash(const char *s)
+{
+    u32 h = 2166136261u;
+    for (int i = 0; s[i] && i < FS_NAME_MAX; i++) h = (h ^ (u8)s[i]) * 16777619u;
+    return h;
+}
+
 static u32 rd32(const u8 *p) { return (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24); }
 static void wr32b(u8 *p, u32 v) { p[0] = (u8)v; p[1] = (u8)(v >> 8); p[2] = (u8)(v >> 16); p[3] = (u8)(v >> 24); }
 
@@ -169,42 +172,24 @@ u32  fsdev_blocks(void);
 #else
 extern int nvme_ready(void);
 extern int nvme_setup(void);
-extern int nvme_read_to(u32 dst, u32 lba_lo, u32 lba_hi);
-extern int nvme_write_from(u32 src, u32 lba_lo, u32 lba_hi);
 extern u32 nvme_blocksize(void);
 extern u32 nvme_blocks_lo(void);
-
-/* An address truncated to 32 bits is this project's recurring bug, five times
- * so far, and it reads as a protocol bug every time. On the 64-bit and EFI
- * builds these buffers are BSS in a kernel linked low, so this never fires -
- * but "never fires" is a thing to ASSERT, not to assume. */
-static int ptr32(const void *p, u32 *out)
-{
-    uptr a = (uptr)p;
-#if defined(ZL_64)
-    /* guarded by #if rather than `sizeof(uptr) > 4 &&` because on the 32-bit
-     * target that comparison is always false and -Wextra says so, and a new
-     * warning in a build that has none is how a real one gets missed */
-    if ((u64)a > 0xFFFFFFFFull) {
-        p_str("  zlfs: buffer above 4 GiB, refusing DMA\n");
-        return 0;
-    }
-#endif
-    *out = (u32)a;
-    return 1;
-}
+extern int block_read(u32 lba, void *buf);
+extern int block_write(u32 lba, const void *buf);
 
 int fsdev_read(u32 lba, void *buf)
 {
-    u32 a;
-    if (!nvme_ready() || !ptr32(buf, &a)) return 0;
-    return nvme_read_to(a, lba, 0);
+    int ok = block_read(lba, buf);
+    zlt_count(ZLLOG_C_FS_READ, 1);
+    if (!ok) zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_DROP, ZLLOG_ERROR, 4u, lba, 0);
+    return ok;
 }
 int fsdev_write(u32 lba, const void *buf)
 {
-    u32 a;
-    if (!nvme_ready() || !ptr32(buf, &a)) return 0;
-    return nvme_write_from(a, lba, 0);
+    int ok = block_write(lba, buf);
+    zlt_count(ZLLOG_C_FS_WRITE, 1);
+    if (!ok) zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_DROP, ZLLOG_ERROR, 5u, lba, 0);
+    return ok;
 }
 u32 fsdev_bsize(void)  { return nvme_blocksize(); }
 u32 fsdev_blocks(void) { return nvme_blocks_lo(); }
@@ -615,7 +600,14 @@ int fs_create(const char *name, u32 bytes)
     wr32b(e + FE_BLOCKS, need);
     wr32b(e + FE_FLAGS,  FE_USED);
     wr32b(e + FE_MTIME,  now_secs);
-    if (!dir_commit(slot, prev)) return -1;
+    if (!dir_commit(slot, prev)) {
+        zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_DROP, ZLLOG_ERROR,
+                  1u, (unsigned)slot, name_hash(name));
+        return -1;
+    }
+    zlt_count(ZLLOG_C_FS_MUTATION, 1);
+    zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_FS_MUTATION, ZLLOG_INFO,
+              1u | ((unsigned)slot << 8), bytes, name_hash(name));
     return slot;
 }
 
@@ -700,7 +692,17 @@ int fs_write(int idx, const void *src, u32 bytes)
     wr32b(e + FE_BLOCKS, pub_blocks);
     wr32b(e + FE_LEN,    bytes);
     wr32b(e + FE_MTIME,  now_secs);
-    return dir_commit(idx, prev);
+    int committed = dir_commit(idx, prev);
+    if (committed) {
+        zlt_count(ZLLOG_C_FS_MUTATION, 1);
+        zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_FS_MUTATION, ZLLOG_INFO,
+                  2u | ((unsigned)idx << 8), bytes,
+                  name_hash((const char *)(e + FE_NAME)));
+    } else {
+        zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_DROP, ZLLOG_ERROR,
+                  2u, (unsigned)idx, bytes);
+    }
+    return committed;
 }
 
 int fs_read(int idx, void *dst, u32 max)
@@ -747,9 +749,48 @@ int fs_delete(int idx)
         p_str("  zlfs: no such file\n"); return 0;
     }
     u8 prev[FS_ENT_BYTES];
+    u32 old_len = ent_len(idx);
+    u32 old_hash = name_hash((const char *)(ent(idx) + FE_NAME));
     bcopy_n(prev, ent(idx), FS_ENT_BYTES);
     bzero_n(ent(idx), FS_ENT_BYTES);
-    return dir_commit(idx, prev);
+    int committed = dir_commit(idx, prev);
+    if (committed) {
+        zlt_count(ZLLOG_C_FS_MUTATION, 1);
+        zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_FS_MUTATION, ZLLOG_INFO,
+                  3u | ((unsigned)idx << 8), old_len, old_hash);
+    } else {
+        zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_DROP, ZLLOG_ERROR,
+                  3u, (unsigned)idx, old_len);
+    }
+    return committed;
+}
+
+int fs_rename(int idx, const char *name)
+{
+    if (!mounted) { p_str("  zlfs: not mounted\n"); return 0; }
+    if (idx < 0 || idx >= FS_MAXFILES || !ent_used(idx)) {
+        p_str("  zlfs: no such file\n"); return 0;
+    }
+    int n = 0;
+    while (n < FS_NAME_MAX && name && name[n]) n++;
+    if (!name || n == 0 || n >= FS_NAME_MAX) {
+        p_str("  zlfs: invalid rename target\n"); return 0;
+    }
+    int other = fs_find(name);
+    if (other >= 0 && other != idx) {
+        p_str("  zlfs: rename target already exists\n"); return 0;
+    }
+    u8 prev[FS_ENT_BYTES];
+    u8 *e = ent(idx);
+    bcopy_n(prev, e, FS_ENT_BYTES);
+    bzero_n(e + FE_NAME, FS_NAME_MAX);
+    for (int i = 0; i < n; i++) e[FE_NAME + i] = (u8)name[i];
+    wr32b(e + FE_MTIME, now_secs);
+    if (!dir_commit(idx, prev)) return 0;
+    zlt_count(ZLLOG_C_FS_MUTATION, 1);
+    zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_FS_MUTATION, ZLLOG_INFO,
+              4u | ((unsigned)idx << 8), ent_len(idx), name_hash(name));
+    return 1;
 }
 
 /* ---- what the shell needs to draw a listing ------------------------------ */
@@ -820,3 +861,18 @@ int fs_name_stage_byte(int i)
 int fs_name_len(void)            { return stage_len; }
 int fs_create_named(u32 bytes)   { return fs_create(stage, bytes); }
 int fs_find_named(void)          { return fs_find(stage); }
+int fs_rename_named(int idx)     { return fs_rename(idx, stage); }
+
+/* Normal filesystem writes are accepted into block.c's bounded write-back
+ * cache.  Durability is a separate operation on purpose: callers such as an
+ * editor's explicit Save, metadata confirmation, and safe removal can wait
+ * for stable media, while autosave/history traffic stays off the UI path. */
+int fs_sync(void)
+{
+#ifdef FS_HOSTTEST
+    return 1;
+#else
+    extern int block_flush(void);
+    return block_flush();
+#endif
+}

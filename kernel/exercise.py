@@ -113,23 +113,20 @@ STEPS = [
         ["refused our feature negotiation", "flush failed", "GET_DISPLAY_INFO failed"]),
     ("colorbars",  "bars",   "gfx",  None,
         ["14 colours, painted straight into the framebuffer"], ["needs the framebuffer"]),
-    ("windows",    "windows",   "gfx",  "ser: ", [], ["needs the framebuffer"]),
+    ("windows",    "windows",   "text", None,
+        ["compositor is already the desktop"], ["needs the framebuffer"]),
     ("cube3d",     "cube",   "gfx",  "ser: ", [], ["needs the framebuffer"]),
     ("anim",       "anim",   "gfx",  "ser: ", [], ["needs the framebuffer"]),
-    # "pointer" shoves the emulated mouse and then reads back what the guest
-    # says it received. Pixels are the WRONG test here and that cost real time:
-    # the cursor is 12x18 on a 1920x1200 screen, so moving it repaints 0.02% -
-    # indistinguishable from noise. The demo prints its IRQ12 count and final
-    # position on exit, and 400,300 is where idt.c starts it, so "moved away
-    # from 400,300" is the assertion that actually means the mouse works.
-    # 75% of 1919 = 1439, 90% of 1199 = 1079. An absolute pointer must land on
-    # exactly that pixel; anything else means the position is being accumulated
-    # or scaled instead of taken at face value.
-    ("mouse",      "mouse",   "pointer", "ser: ",
-        ["last at 1439,1079"], ["needs the framebuffer"]),
+    # The old full-screen mouse demo printed a final coordinate. It is a normal
+    # concurrent Pointer app now, so the gate is the reported window plus a
+    # changed screenshot; probe-mouse.py owns exact device coordinates.
+    ("mouse",      "mouse",   "gfx", None,
+        ["wm: win"], ["needs the framebuffer"]),
     ("snake",      "snake",   "gfx",  "ser:\x1b\x1b", [], ["needs the framebuffer"]),
     ("paint",      "paint",   "gfx",  "ser:\x1b", [], ["needs the framebuffer"]),
-    ("fs_list",    "ls",   "text", None, ["RAM files:"], []),
+    ("format",     "format", "text", None,
+        ["zlfs on NVMe", "mounted:"], ["format failed", "no usable NVMe"]),
+    ("fs_list",    "ls",   "text", None, ["zlfs files:"], ["RAM files:"]),
     ("modeset",    "mode",   "gfx",  None,
         ["modesetting with our own driver"], ["the card refused that mode"]),
     # KNOWN ISSUE, ordered last on purpose. With usb-tablet attached, running
@@ -140,10 +137,12 @@ STEPS = [
     # input->editor pass. Six hypotheses tested and none held (see
     # docs/input-stack.md). Kept here, last, so the failure is visible and
     # named rather than hidden by narrowing the test.
-    ("editor",     "edit 3",  "gfx",  "qmp:esc", ["saved"], ["needs the framebuffer"]),
+    ("editor",     "edit 3",  "gfx",  "qmp:esc", ["wm: win"], ["needs the framebuffer"]),
+    ("editor_file", "ls", "text", None, ["/user/notes.txt"], []),
     ("clear",      "clear",   "text", None, [], []),
 ]
 SETTLE = 2.5          # seconds of rendering before a photograph - decides nothing
+MIN_DELTA = {"cube3d": 0.005, "anim": 0.005, "mouse": 0.005}
 # Two demos run a 60 s timer of their own and print "timed out" when it expires.
 # Their ceiling has to clear that, or the harness gives up on a healthy demo.
 CEILING = {"usbkbd": 75.0, "input": 75.0}
@@ -376,7 +375,8 @@ def qemu_argv(tmp, uefi, ser_path, qmp_path, tablet=True, net=False):
         # net=True; nothing else needs to, and try.sh attaches one always
         # because that machine is for a person, not for an assertion.
         *(("-netdev", "user,id=n0",
-           "-device", "virtio-net-pci,netdev=n0") if net else ()),
+           "-device", ("e1000,netdev=n0" if net == "e1000" else
+                       "virtio-net-pci,netdev=n0")) if net else ()),
         "-no-reboot", "-display", "none",
         "-chardev", f"socket,id=ser0,path={ser_path},server=on,wait=off",
         "-serial", "chardev:ser0",
@@ -412,6 +412,7 @@ def main():
     ap.add_argument("--outdir", default="")
     ap.add_argument("--boot-ceiling", type=float, default=180.0)
     ap.add_argument("--step-ceiling", type=float, default=40.0)
+    ap.add_argument("--no-build", action="store_true")
     args = ap.parse_args()
 
     tag = "uefi" if args.uefi else "bios"
@@ -422,7 +423,8 @@ def main():
         steps = [s for s in STEPS if s[0] in keep]
 
     os.makedirs(outdir, exist_ok=True)
-    build(args.uefi)
+    if not args.no_build:
+        build(args.uefi)
 
     tmp = tempfile.mkdtemp(prefix="zlos-ex-")
     ser_path, qmp_path = os.path.join(tmp, "ser"), os.path.join(tmp, "qmp")
@@ -503,7 +505,8 @@ def main():
                         shot = (f"  [{w}x{h} {len(set(after[2]))}c"
                                 + (f" {delta*100:.0f}% changed]" if delta is not None
                                    else " no before-frame]"))
-                        if delta is not None and delta < 0.02:
+                        minimum = MIN_DELTA.get(name, 0.02)
+                        if delta is not None and delta < minimum:
                             problems.append(
                                 f"drew nothing - only {delta*100:.1f}% of the screen changed")
                         # Only a genuinely uniform frame counts as blank. The

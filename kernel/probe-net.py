@@ -5,15 +5,15 @@ WHY THIS EXISTS. `net_gate()` in kernel.zl is a complete bring-up test - it
 finds the card, checks the DMA arena is backed by RAM, negotiates features,
 reads the link, ARPs the gateway and then pings it twenty times reporting loss
 and jitter. It is bound to `N` at kernel.zl:2124. **And nothing had ever run
-it**, because no QEMU invocation in this repo attached a network card:
+it**, because no QEMU invocation in the original gate attached a network card:
 
     $ git grep -ln 'netdev\\|-nic\\|virtio-net' -- '*.sh' '*.py'
-    (empty)
+    (empty at the time; exercise.py now attaches the selected device)
 
 try.sh attached nvme, xhci, usb-storage, usb-kbd and usb-mouse. QEMU's default
-NIC for the i386 `pc` machine is e1000, and virtio_net_find() matches PCI
-1af4:1041 and 1af4:1000 only - so even a default machine handed the driver
-nothing it would take. The entire network path below the browser (virtio_net.c
+NIC for the i386 `pc` machine is e1000, while the only driver then present was
+virtio-net. The generic netdev layer now gates both paths. The entire network
+path below the browser (virtio_net.c
 763 lines, net.c 540, tcp.c 812, dns.c 433, http.c 290) was covered by host
 tests against scripted packets and by NO test against emulated hardware.
 
@@ -113,13 +113,22 @@ def main():
                          "it, so this is generous on purpose - it is a "
                          "backstop against a hang, not a measurement.")
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--driver", choices=("virtio", "e1000"), default="virtio")
+    ap.add_argument("--pcap", action="store_true",
+                    help="retain a QEMU filter-dump packet capture in /tmp")
     args = ap.parse_args()
 
     build(False)
     tmp = tempfile.mkdtemp(prefix="zlos-net-")
     ser_path, qmp_path = os.path.join(tmp, "ser"), os.path.join(tmp, "qmp")
+    argv = qemu_argv(tmp, False, ser_path, qmp_path,
+                     net=("e1000" if args.driver == "e1000" else True))
+    pcap = os.path.join(tmp, f"{args.driver}.pcap")
+    if args.pcap:
+        argv += ["-object", f"filter-dump,id=netdump,netdev=n0,file={pcap}"]
+        print("packet capture:", pcap)
     proc = subprocess.Popen(
-        qemu_argv(tmp, False, ser_path, qmp_path, net=True),
+        argv,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     checks, failures = [], 0
@@ -155,9 +164,9 @@ def main():
         # timeout on every real failure. A gate that takes 90s to say "no card"
         # is a gate people stop running. So poll for whichever terminal marker
         # lands first, success or otherwise.
-        terminal = ("no virtio-net device", "is NOT backed by RAM",
+        terminal = ("no supported Ethernet device", "is NOT backed by RAM",
                     "refused the feature handshake", "no ARP reply",
-                    "loss ", "LINK UP")
+                    "no loss", "LINK UP")
         hit, deadline = None, time.time() + args.net_timeout
         while hit is None and time.time() < deadline:
             for m in terminal:
@@ -180,10 +189,21 @@ def main():
         if args.verbose:
             print(t)
 
-        check("virtio-net card found on the PCI bus",
-              "no virtio-net device" not in t,
-              "" if "no virtio-net device" not in t
+        check(f"{args.driver} card found on the PCI bus",
+              "no supported Ethernet device" not in t,
+              "" if "no supported Ethernet device" not in t
               else "the -netdev/-device flags did not reach QEMU")
+
+        if args.driver == "e1000":
+            check("generic NIC selection chose Intel e1000e",
+                  "Intel device:" in t or "Intel e1000e/I219" in t)
+        else:
+            check("generic NIC selection chose virtio-net",
+                  "Intel device:" not in t and "Intel e1000e/I219" not in t)
+
+        lease = "DHCP lease acquired" in t
+        check("DHCP acquired a lease", lease,
+              "" if lease else "automatic address configuration did not complete")
 
         check("the DMA arena is backed by RAM",
               "is NOT backed by RAM" not in t)
@@ -199,13 +219,16 @@ def main():
         check("the driver read its own MAC", bool(mac),
               mac.group(1) if mac else "")
 
-        arp = "no ARP reply" not in t and "gateway MAC" in t
+        arp = "no ARP reply" not in t and ("gateway MAC" in t or
+                                            "DHCP lease acquired" in t)
         gw = re.search(r"gateway MAC:\s+([0-9a-fA-F:]{17})", t)
         check("ARP: a frame we composed was answered by the gateway", arp,
               gw.group(1) if gw else "")
 
         # tx/rx counters prove frames really moved rather than a cached answer
         cnt = re.search(r"frames out (\d+), in (\d+)", t)
+        if not cnt:
+            cnt = re.search(r"driver: tx (\d+)\s+rx (\d+)", t)
         check("frames actually moved in both directions",
               bool(cnt) and int(cnt.group(1)) > 0 and int(cnt.group(2)) > 0,
               f"tx={cnt.group(1)} rx={cnt.group(2)}" if cnt else "no counters")

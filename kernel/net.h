@@ -77,6 +77,13 @@ void net_set_proto_sink(int proto, net_ip_sink_fn f);
 /* Build and send an IPv4 packet. tcp.c's only way out. */
 int net_send_ip(net_u32 dst, int proto, const net_u8 *payload, int len);
 
+/* DHCP must send before an address or ARP cache exists.  This is the one
+ * deliberate L2-broadcast escape hatch; ordinary traffic still goes through
+ * net_send_ip() and ARP. */
+int net_send_ip_broadcast(net_u32 src, net_u32 dst, int proto,
+                          const net_u8 *payload, int len);
+int net_mac_byte(int i);
+
 net_u16 net_checksum(const net_u8 *p, int len, net_u32 seed);
 
 #endif

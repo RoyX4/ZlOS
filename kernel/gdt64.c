@@ -20,12 +20,35 @@
 
 /* Long mode ignores base and limit for code and data. What matters is bit 53
  * (L, "this is 64-bit code"), bit 44 (S, not a system descriptor), bit 47
- * (present) and the type bits. */
-static unsigned long long gdt[3] __attribute__((aligned(16))) = {
+ * (present) and the type bits. L is reserved and must be zero on the data
+ * descriptor; setting it there is invalid even when a permissive VM accepts
+ * the descriptor. */
+static unsigned long long gdt[7] __attribute__((aligned(16))) = {
     0x0000000000000000ULL,      /* null                                  */
     0x00AF9A000000FFFFULL,      /* 0x08: code, L=1, present, ring 0      */
-    0x00AF92000000FFFFULL       /* 0x10: data, present, writable, ring 0 */
+    0x00CF92000000FFFFULL,      /* 0x10: data, present, writable, L=0    */
+    0x00CFF2000000FFFFULL,      /* 0x18: ring-3 data (selector 0x1b)     */
+    0x00AFFA000000FFFFULL,      /* 0x20: ring-3 64-bit code (0x23)       */
+    0, 0                       /* 0x28: 16-byte long-mode TSS descriptor */
 };
+
+struct tss64 {
+    unsigned int reserved0;
+    unsigned long long rsp0, rsp1, rsp2;
+    unsigned long long reserved1;
+    unsigned long long ist1, ist2, ist3, ist4, ist5, ist6, ist7;
+    unsigned long long reserved2;
+    unsigned short reserved3, iomap;
+} __attribute__((packed));
+_Static_assert(sizeof(struct tss64) == 104, "long-mode TSS must be 104 bytes");
+
+static struct tss64 tss;
+static unsigned char tss_stack[16384] __attribute__((aligned(16)));
+
+unsigned long long gdt64_kernel_stack_top(void)
+{
+    return (unsigned long long)(tss_stack + sizeof tss_stack);
+}
 
 /* Same trap as idt.c: LGDT wants 2 bytes of limit and EIGHT of base, but
  * `unsigned long` is only 4 bytes on the EFI build's clang target, making this
@@ -41,6 +64,16 @@ static struct gdt_ptr gp;
 
 void gdt_init(void)
 {
+    unsigned long long base = (unsigned long long)&tss;
+    unsigned long long limit = sizeof(tss) - 1;
+    tss.rsp0 = gdt64_kernel_stack_top();
+    tss.iomap = sizeof(tss);       /* no I/O bitmap: all ports denied at CPL3 */
+    gdt[5] = (limit & 0xffffULL) |
+             ((base & 0xffffffULL) << 16) |
+             (0x89ULL << 40) |
+             ((limit & 0xf0000ULL) << 32) |
+             ((base & 0xff000000ULL) << 32);
+    gdt[6] = base >> 32;
     gp.limit = sizeof(gdt) - 1;
     /* The cast matters as much as the struct field did: `unsigned long` is 4
      * bytes here, so this truncated the GDT base to 32 bits before widening it
@@ -64,6 +97,8 @@ void gdt_init(void)
         "mov %%ax, %%ss\n\t"
         "mov %%ax, %%fs\n\t"
         "mov %%ax, %%gs\n\t"
+        "mov $0x28, %%ax\n\t"
+        "ltr %%ax\n\t"
         :
         : "m"(gp)
         : "rax", "memory");

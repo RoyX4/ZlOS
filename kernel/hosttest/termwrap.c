@@ -81,6 +81,8 @@ void term_clear(void);
 void term_say(const char *s);
 int  term_key(int code);
 int  term_input_len(void);
+int  term_cmd(void);
+int  term_unknown(void);
 void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
                unsigned int accent, int cursor_on);
 
@@ -89,6 +91,13 @@ static void ok(int cond, const char *what)
 {
     printf("  %s %s\n", cond ? "ok  " : "FAIL", what);
     if (!cond) fails++;
+}
+
+static int submit(const char *line)
+{
+    term_clear();
+    while (*line) term_key((unsigned char)*line++);
+    return term_key('\n');
 }
 
 /* kernel.zl:627 verbatim - the longest line the shell can print */
@@ -136,6 +145,17 @@ int main(void)
            TERM_W, TERM_H, TERM_X, TERM_Y, UI);
     printf("  cell %dx%d  ->  %d columns\n", CELL_W, CELL_H, COLS);
     printf("  longest help line: %d characters\n\n", (int)strlen(LONGEST));
+
+    /* Assert the shipping matcher, not a parser-shaped copy. Codes 200/201
+     * are the corresponding run_command arms in kernel.zl. */
+    ok(submit("diag") == 1 && term_cmd() == 200,
+       "typed `diag` reaches the flight-recorder status command");
+    ok(submit("diag save") == 1 && term_cmd() == 201,
+       "typed `diag save` reaches the explicit durable-flush command");
+    ok(submit("diagsave") == 1 && term_cmd() == 201,
+       "typed `diagsave` remains a no-space recovery alias");
+    ok(submit("nonsense") == 0 && term_unknown() == 1,
+       "an unknown typed command is reported, not silently accepted");
 
     /* term_say does not append one - it is a character sink, and zl_putc's own
      * convention is a bare LF (see the comment on term_say) */

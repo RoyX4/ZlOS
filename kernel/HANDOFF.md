@@ -3,8 +3,40 @@
 Persistent named files and the Files app are documented in
 [`docs/storage-and-files.md`](docs/storage-and-files.md). The old numbered RAM
 slots remain only as a compatibility path; new app work should use `zlfs`.
+The implemented 64-bit Ring-3 image/syscall contract and its remaining process
+gates are [`docs/user-process-abi.md`](docs/user-process-abi.md).
 
 Read this first in a new session. Everything below is verified, not remembered.
+
+> **Current physical speed finding and fix (2026-08-21):** the latest complete
+> ThinkPad journal measured the 2560x1440 framebuffer present at about 111.59
+> MB/s with an effectively uncacheable mapping; full-screen copies took roughly
+> 131-137 ms and dominated input/app work. The current tree retypes the existing
+> identity mapping to write-combining after IDT setup and before AP startup, and
+> keeps old/new software-cursor patches separate instead of copying their giant
+> bounding box. Host tests and the UEFI QEMU cache-transition gate pass. The
+> physical rerun is now complete: the live mapping reports write-combining,
+> regression measures about 7,089 MB/s (63.5 times the old slope), and seven
+> full-screen presents have a 2.070 ms median. Cursor-only input-to-present has
+> a 7.827 ms median. Present is no longer the late-frame owner; repeated large
+> compositor/draw work is now the measured target. Full
+> evidence and limits: [`docs/current-speed-and-quality-diagnosis.md`](docs/current-speed-and-quality-diagnosis.md).
+> The Imation stick serial `07B70D07914C6D7E` is already flashed with this
+> build and a 512 MiB ZLLOG partition. Its GPT and FAT filesystem verify clean,
+> both journal superblocks validate, and both EFI files match the build by
+> SHA-256. The completed physical boot is retained in slot 0 with 6,503 valid
+> records and zero drops.
+> The physical phase build has now completed too: 5,967 valid records, 1,043
+> phase samples and zero drops. Large 3.2-3.5 Mpixel damage regions that visit
+> 12-13 windows spend about 130 ms in C chrome, 23-28 ms in zl app drawing,
+> 9-13 ms restoring the cached desktop, and about 3 ms presenting. The actual
+> next optimisation is therefore retained client surfaces, not USB, input
+> polling or a framebuffer micro-tweak. The implementation contract and gates
+> are [`docs/retained-window-surfaces.md`](docs/retained-window-surfaces.md).
+> The broader, evidence-ranked execution order -- retained client **and** shell
+> surfaces, damage/occlusion, deadline pacing, async storage, processes, real
+> networking, then GPU composition -- is
+> [`docs/performance-architecture-roadmap.md`](docs/performance-architecture-roadmap.md).
 
 > **Cloning the desktop mockup:**
 > [`../docs/design/ds-clone.md`](../docs/design/ds-clone.md) is the one page for
@@ -61,6 +93,357 @@ cold-start modeset.** The laptop is a test PC. Optimise for that.
 Where the firmware boundary actually sits, what a BIOS does that this kernel
 already does for itself, and the two walls (an Intel DRAM-training blob, and
 Boot Guard fused *on* on this laptop — measured): [`docs/what-is-a-bios.md`](docs/what-is-a-bios.md).
+
+## The USB boot flight recorder works on the physical ThinkPad
+
+The implementation and safety contract are in
+[`docs/persistent-boot-observer.md`](docs/persistent-boot-observer.md); the
+whole-runtime event/counter/sampling/burst/laboratory design is in
+[`docs/always-on-telemetry.md`](docs/always-on-telemetry.md); the
+priority order around it is in
+[`../docs/EXECUTION-ROADMAP.md`](../docs/EXECUTION-ROADMAP.md). This is the
+verified current state:
+
+- `mkusb.sh` builds a 132 MiB image by default: a 62 MiB FAT32 `zlOS EFI`
+  partition, a gap, then a bounded 64 MiB raw `ZLLOG` partition. `--log-mb`
+  selects 64, 128, 256 or 512 MiB when more retained history is wanted. Journal
+  initialization hashes the ESP before and after and fails if it changed. On a
+  larger real device the same script first clears the final 1 MiB so a stale
+  backup GPT from an older image cannot disagree with the new primary, moves
+  the new backup GPT to the physical end, reinitializes only `ZLLOG` with the
+  real device capacity, verifies the GPT and inspects the result; otherwise the
+  image-sized superblock would be correctly refused.
+- Firmware no longer jumps straight into the 2.7 MiB kernel. A canonical 20 KiB
+  `EFI/BOOT/BOOTX64.EFI` witness prints immediately, replaces a bounded
+  `EFI/ZLOS/WITNESS.LOG`, and chainloads the real `EFI/ZLOS/ZLOS.EFI`. This
+  records exact pre-kernel UEFI status without any zlOS command. Both images
+  are base-zero, 4 KiB-aligned EFI applications with relocations and no DLL
+  flag; FAT now records the real LBA-2048 partition offset.
+- xHCI mass storage has bounded caller-buffer `READ(10)` and `WRITE(10)`, CSW
+  tag/status/residue validation, fixed- and descriptor-format `REQUEST SENSE`,
+  `SYNCHRONIZE CACHE(10)` and one bounded Bulk-Only reset recovery. The fixed
+  4 KiB staging window and discovered device capacity bound every request.
+- `zllog.c` retains 4,096 fixed 64-byte records before storage exists, plus a
+  separate reusable 64-cell interrupt/fault emergency lane. It tees the boot
+  transcript only through `system ready`, redacts printable key identity, keeps
+  button/wheel edges exact, samples ordinary pointer events/batches one in sixteen, records
+  representative late painted frames and one healthy painted frame in sixty,
+  and splits a frame into input, app tick, compositor, vblank-wait and present
+  time. It also correlates input sequence/time, damage pixels, presented bytes,
+  queue depth and missed deadlines.
+- The recorder writes only after one GPT entry passes the custom type GUID,
+  exact `ZLLOG` label, GPT CRCs, a supported 64..512 MiB range, partition unique GUID and
+  CRC-valid journal-superblock checks. Every write is checked against the
+  selected range again. The image hash is recorded for identification; the
+  running kernel does not recompute `ZLOS.EFI`'s hash.
+- Two CRC-protected 4 KiB superblocks publish 31, 63, 127 or 255 fixed 2 MiB
+  journal slots according to the selected partition size. Records, slot
+  checkpoints and alternate-superblock publication are
+  ordered with explicit cache synchronization. Incomplete slots are recoverable
+  after a torn metadata write; a clean exit marks the slot complete. A full
+  segment is sealed and capture continues in the next one instead of stopping.
+- `diag` reports active versus RAM-only mode, buffered/dropped records and the
+  last error. `diag save` explicitly checkpoints and refuses cleanly if no
+  exact target was mounted. A failed initial mount now retries automatically
+  with bounded backoff, and a successful retry drains the RAM records without
+  a command. The normal idle path checkpoints at most once per ten seconds,
+  from normal context rather than an IRQ.
+- `tools/zllog.py` accepts a whole GPT image/device or a raw journal partition,
+  validates it without mounting, and reads or exports text, JSON and CSV. A
+  storage refusal is decoded into the reason, MSC stage/name, port, slot and
+  xHCI completion code instead of leaving only packed integers. A paired
+  bounded record retains PORTSC, USBSTS and USBCMD, so a transient failure
+  which later recovers still leaves the controller state that caused it.
+  Sampled/late frames also retain damage-rectangle count and exact pixel area
+  alongside the existing five phase timings.
+
+Current host evidence, rerun 2026-08-21: `tools/test_zllog.py` is **14/14**;
+`hosttest/zllog_e2e_test.py` is **5/5** across real shipping-writer containment,
+rotation, mismatched identity, torn super/slot metadata and automatic recovery
+from a transient MSC initialization failure; a fresh standalone
+`msctest.c` build reports **0 failures** across command encoding, range bounds,
+CSW/sense decoding and the complete 4 KiB staging copy. This proves the format,
+writer state machine and xHCI command boundary.
+
+The expanded always-on telemetry also has a current writable disposable
+OVMF/xHCI proof: one COMPLETE boot, 351/351 valid records, global sequence
+1..351, no extractor warnings and zero drops. It contains 46 command submits
+and 46 completions; the final shell `quit` is records 335/336. USB pointer
+press/release records 301/307 retain buttons 1/0 and input sequences 1/4.
+Five frame-extension records carry nonzero input sequence and
+input-to-present time. Display records decode both QEMU modes as uncacheable;
+printable key identity is redacted and desktop command text is absent. Three
+xHCI MMIO timeouts retain six decoded before/trigger snapshots. Exact
+region comparisons kept the first MiB, the 63..64 MiB gap and the 128..132 MiB
+tail byte-identical, while extracted BOOTX64.EFI and ZLOS.EFI also stayed
+identical. This is QEMU/KVM evidence, not a ThinkPad latency measurement.
+
+Physical v6 proof, 2026-08-21: the exact Imation stick mounted itself without
+any zlOS command and retained a power-cut boot. Superblock B advanced to
+generation 2 and points at slot 0; the extractor recovered **1,036/1,036
+CRC-valid records, sequence 1..1036, zero recorder drops, zero input drops and
+zero error/fatal records**. Record 214 is `STORAGE_READY` for LBA 131072 +
+131072 at 512-byte blocks. The slot is correctly `WRITING`, not `COMPLETE`,
+because the laptop was turned off rather than halted through zlOS. This is the
+first physical proof of the whole chain: native UEFI kernel -> Intel xHCI ->
+USB BOT/SCSI -> exact GPT/GUID/superblock validation -> durable ZLLOG writes.
+
+The same run exposed one presentation defect in the diagnostics, not in the
+journal. The first early scan refused before the later bounded retry mounted;
+the boot line and `ZlBootDiag` NVRAM variable kept that first answer and said
+RAM-only even while the raw journal was receiving records. The current tree
+retries once after the final USB reporting pass and publishes a new
+`storage-ready` NVRAM state only after the first durable checkpoint succeeds.
+The original refusal remains in the journal, which preserves the useful
+history without presenting it as the final state.
+
+An earlier physical ThinkPad run left ZLLOG pristine even though the EFI
+witness reached the native desktop handoff, but the separate firmware-variable
+fallback worked on hardware. Its checksum-valid v1 record reported
+`storage-refused / msc-init` while xHCI was running. The retained device was
+port 10 `8087:0026` (Intel Bluetooth), not the Imation on Linux root port 4;
+this proved the old global deepest-stage field was overwritten by a later
+non-storage scan. Result 2 is `not-ready` and completion `0xffffffff` is the
+not-attempted sentinel, so no Bulk-Only command had run.
+
+The physical diagnostic image recorded a bounded v2 table for every attempted root port,
+including separate enumeration and MSC stages/completions, USB identity,
+candidate flag and raw PORTSC. A host regression models Imation port 4 and
+Bluetooth port 10 and proves their boundaries cannot overwrite one another.
+`tools/zlbootdiag.py` reads v1 through the current v4 format;
+its suite is **5/5**. OVMF records `EFI_DIAG_ARM status=0` before exit.
+`hosttest/efi_runtime_diag_test.py` additionally forces a wrong GPT label and
+proves the post-exit current-format replacement and per-port table survive in OVMF's
+variable store.
+
+That v2 table has now isolated the physical root cause one layer further.
+Imation `0718:067d` is port 4, high-speed ID 3, slot 1 and its attempted
+configuration-header request completed with xHCI code 4 (`USB Transaction
+Error`). Camera, fingerprint and Bluetooth independently failed at the same
+EP0 boundary/code. Their first device-descriptor requests had succeeded, so
+the disk-specific MSC/SCSI/GPT paths were never reached.
+
+The publication order was one real defect, but the next physical run proved it
+was not the whole root cause. `xhci_control_in()` now builds Setup with the
+opposite cycle, writes the complete transfer, then flips only Setup's ownership
+bit before the doorbell. The host regression proves normal and Link-TRB wraps
+remain hidden until that commit. The first replacement image still stopped at
+the configuration header: Imation timed out, while camera, fingerprint and
+Bluetooth returned code 4 on their Setup TRBs. ZLLOG remained pristine. Do not
+claim that atomic publication alone fixed physical enumeration.
+
+Additional pre-rerun hardening is complete: EP0 and bulk completions match the
+exact current TRB rather than any event on the same endpoint; PCIe doorbells
+are flushed with a BAR readback; and the native EFI gate now enumerates xHCI
+storage, keyboard and mouse together. `ZLDIAG3` retains the last bulk completion,
+SCSI opcode, CSW status/residue, reset-recovery result, sense triplet and exact
+EP0 Setup/Data/Status failure stage. The reader still accepts the physical v1
+and v2 records. The three-device normal boot and forced-GPT fallback both pass.
+
+The physical v3 result exposed three more concrete gaps. The driver used cached
+spin counts as timeouts, while five million polls can expire in milliseconds;
+it used only a compiler barrier where Linux uses a DMA write barrier; and it
+made one descriptor attempt where Linux deliberately makes three. Control and
+bulk waits now use PIT-backed real-time deadlines, EP0 publication and Event
+TRB consumption use `sfence`/`lfence`, descriptors get three bounded attempts,
+transaction errors use Reset Endpoint, and a true timeout uses Stop Endpoint
+before replacing the dequeue ring. The stable v3 port entry now also carries
+attempt count and recovery outcome. A host controller regression proves error
+on the first Setup, reset + dequeue replacement, and success on attempt two.
+All 32/64/EFI, exact-console, multi-device OVMF, xHCI, MSC and sanitizer gates
+are green. Physical ZLLOG mount remains the required proof.
+
+The resulting physical rerun did not mount ZLLOG, but it decisively narrowed
+the failure. All four devices reached their successful Device descriptor, then
+made all three Configuration-header attempts; every final event was cc4 on
+Setup and every Reset Endpoint plus Set TR Dequeue recovery completed. The
+Imation still reached no SCSI/BOT operation. Therefore retry count, endpoint
+recovery and the old spin timeout are not the complete cause. The common EP0
+ring/dequeue transition is now the highest-value boundary.
+
+`ZLDIAG4` is built and host-verified for the next run. Its 104-byte per-port
+entry preserves the raw three-TRB control TD, all four Transfer Event dwords,
+pre-recovery output EP0 state/dequeue/DCS, software producer state, context
+size, attempt number and first destination dword. The first failed port also
+runs a bounded four-case request matrix whose byte completion codes distinguish
+repeat-Device, alternate buffer/length, Configuration and 100 ms delayed
+Configuration requests. The failure snapshot is copied before ring recovery
+can erase it and before a later port can overwrite it. The reader remains
+backward compatible with the real v1-v3 records; its suite is now **5/5**.
+
+The adversarial host case now models Device on entries 0-2 followed by Config
+Setup cc4 on entry 3 with EP0 Halted, then proves the trace survives Reset
+Endpoint/ring replacement. Fresh evidence: `xhcitest` and `msctest` zero
+failures, xHCI ASan/UBSan clean, parser 5/5, ZLLOG 9/9 plus E2E 3/3, all
+32/64/EFI builds, exact BIOS transcript, kernel witness structure and native
+multi-device OVMF/forced-refusal EFI gate green. The weakest link remains the
+unrun physical v4 image; none of those host results says which request in the
+matrix the Intel controller will accept.
+
+The v4 image is now on the exact stable Imation by-id device and armed as
+`BootNext=0002`. Independent post-write checks report a clean device-sized GPT,
+clean FAT, unmounted partitions, pristine journal generations 1/0 and no boot
+slots. Built and USB `ZLOS.EFI` both hash to
+`053ac557706116a4419657977331848243b7f006bdb6162ebc135ff8cc3ce729`; the
+entire 62 MiB ESP hashes identically in the image and on USB. ZLLOG unique GUID
+is `a50b6779-e312-4f0e-8399-a3504b2b51a5` and the firmware entry names current
+ESP PARTUUID `012ee330-58d4-448a-8f0a-c1014986dc56`. This proves prepared
+media, not execution on Intel; the next ordinary restart is the physical gate.
+
+That physical v4 gate has now run. The EFI variable is checksum-valid and the
+USB journal is still pristine at superblock generations 1/0, so no SCSI/BOT
+command was reached. Imation, camera, fingerprint and Bluetooth all completed
+their Device descriptor and then failed all three Configuration-header
+attempts with cc4 on the exact Setup TRB, residual 8 and output EP0 Halted at
+that same dequeue pointer. Imation's post-failure matrix is `4/4/4/4`: repeat
+Device, alternate buffer/length, Configuration, and delayed Configuration all
+fail after the first Config error. This proves Reset Endpoint plus Set TR
+Dequeue did not restore usable EP0; it does **not** prove those requests fail
+on a pristine endpoint. Full-speed devices completed Device8 and Device18
+before Config failed, so this is not simply “the second TD on the ring.”
+
+`ZLDIAG5` closes that ambiguity and fixes the strongest standards gaps before
+another physical run. `Address Device` now gets the 10 ms SET_ADDRESS recovery
+interval used by Linux. Intel reset now waits for initial CNR, requires
+HCHalted, clears RS/INTE/HSEE and performs the required 1 ms no-register-access
+period after HCRST. IN Data TRBs set ISP, and an intermediate short Data event
+can no longer complete a control request: only the matching Status success can.
+The bounded global probe records the literal first successful Device request
+and one immediate identical request before Config, including both full TDs,
+events, EP0 state/dequeue, slot address/state and recovery result. The header
+also records the firmware legacy-ownership registers and controller reset
+states. Per-port v4 traces remain intact, and the reader accepts v1 through v5.
+
+Host proof now includes an exact first-success/second-Setup-failure sequence,
+a short-Data-then-Status sequence, trace survival across destructive recovery,
+and a latch proving later ports cannot replace the first pair. Parser coverage
+is **7/7**; `xhcitest`, its ASan/UBSan build and `msctest` report zero failures;
+32-bit, 64-bit, EFI, exact-console, native multi-device OVMF and forced-runtime-
+refusal gates are green. Physical v5 execution is still the remaining proof.
+
+The verified v5 image is now flashed to the exact stable Imation by-id target
+and armed as `BootNext=0002`. Independent read-back—not the flash script—shows
+a clean device-sized GPT, no mounted USB partitions, valid pristine ZLLOG
+superblocks at generations 1/0, and exact image/USB ESP SHA-256
+`a5c0bcb6df9863b67bd57561617a46c9fc83b57643574b43290662820c01bec2`.
+Built and USB `ZLOS.EFI` both hash to
+`95bc371ae529dc13988caa51a29c0f9b99e22a38c8243139c26778f1d0e62531`.
+ZLLOG's unique GUID is `6f8be994-dd1b-4912-9216-96204b904a99`; firmware
+entry `Boot0002` names current ESP PARTUUID
+`a9ef9679-e22c-4f1b-8e4e-0dd41b7a4d0a`. This is prepared-media proof only;
+the next ordinary restart is the physical v5 execution gate.
+
+That physical v5 gate has now run. ZLLOG remained pristine, but the
+checksum-valid fallback closed the generic-ring hypotheses: Imation's first
+Device18 request and its immediate identical twin both completed through their
+Status TRBs on one live EP0 ring, with software enqueue advancing 3 -> 6.
+The output Slot context remained Addressed at USB address 1. Camera,
+fingerprint and Bluetooth also completed Device descriptors, then every device
+failed Configuration-header Setup with cc4/residual 8. Firmware ownership was
+cooperative and the controller reset states were valid. Therefore this is not
+"the second TD", a fixed ring index, a lost address, malformed Config bytes,
+or legacy SMM ownership. The v5 port trace retained attempt three after two
+ring replacements, so it did not preserve the first clean Config attempt.
+
+`ZLDIAG6` now preserves that missing first attempt before descriptor retries or
+Reset Endpoint can overwrite it: the complete three-TRB TD, Transfer Event,
+pre-recovery EP0 context, Slot address/state, individual Reset Endpoint and Set
+TR Dequeue completion codes, and post-recovery EP0 context. The bounded
+firmware header is 440 bytes and the worst-case variable is 3,668 bytes, kept
+under a compile-time 4 KiB ceiling; the reader remains compatible with v1-v5.
+The storage scan no longer calls a cached failed slot a retry. It explicitly
+disables and forgets the slot, resets the port, allocates/addresses a fresh
+device and retries Config. If that fails, one final bounded compatibility path
+does an Address Device BSR=1 Device-descriptor preflight at USB address zero,
+then resets and performs normal enumeration. Configured keyboard and pointer
+ports are never reset by the storage rescan. Control waits are now one second,
+and PCIe doorbells are flushed through readable USBSTS rather than reading the
+write-only doorbell register.
+
+Host regressions reproduce Device success followed by three Config failures,
+prove the first event at the live-ring transition survives every destructive
+recovery, retain both clean whole-enumeration outcomes, verify old-slot
+invalidation and the BSR command bit, and reject later overwrites. Parser v6 is
+8/8; `xhcitest`, its ASan/UBSan build, `msctest`, `inputtest` and `wmtest` are
+green. The 32-bit, 64-bit and EFI builds, exact BIOS transcript, native
+multi-device OVMF boot, forced-runtime-refusal EFI gate, journal 9/9 and torn-
+write E2E 3/3 are also green.
+
+The verified v6 image is now on the exact stable Imation by-id device and
+`BootNext=0002` is armed. `sgdisk --verify` reports no problems; neither USB
+partition is mounted; both journal superblocks are pristine and record the
+real 7,570,752-block capacity. Built and USB `ZLOS.EFI` both hash to
+`ea3bf7ea2b57788f26556da798dcd73aaaafa4d4fde1e3e7e4e58d6331341ada`;
+stage zero hashes match at
+`419278d402a8735dd9303fed3a3da5641d99fa7a7f12ab2521e661b7c21b4c35`,
+and the complete ESP hashes match at
+`a7abe4bd6ef8dd6a0c33b6508f576c7a7ba975932bc1767a59de03b5e1bda245`.
+ZLLOG unique GUID is `fdd4994b-eb60-4755-ae47-2e745a698e11`; firmware entry
+`Boot0002` names current ESP PARTUUID
+`bac50c60-fb6a-403c-86d7-01dd31b52ef3`. This proves prepared media and
+one-shot firmware routing. Only the ordinary restart can prove which clean
+enumeration scheme the physical Intel controller accepts.
+
+The preceding v3 replacement was flashed to the exact Imation stick and independently
+read back on 2026-08-20. The device-sized GPT verifies clean, both pristine
+ZLLOG superblocks validate, and the USB `ZLOS.EFI` SHA-256 is
+`22ce18af7f6e61e58a7f52a6beb0fcda71ec8b4d010c422b5f4cfd77ff4044fd`,
+identical to the build. `BootNext=0002` is bound to regenerated ESP GUID
+`8be82f3d-3b75-4965-a72c-036f787f11b1`; the device is synced and unmounted.
+This is prepared-media proof, not the still-pending Intel rerun.
+
+The integration proof is real too: a fresh native OVMF UEFI64 image booted
+twice over xHCI storage with `ZLLOG` active. After two clean boots the host
+extractor found **407 globally contiguous CRC-valid records (`1..407`)**, zero
+drops and zero warnings, including USB-tablet/button input, typed input and the
+five frame phases. Exact region hashes showed bytes `0..64 MiB` and
+`128..132 MiB` identical; only the `64..128 MiB` `ZLLOG` partition changed.
+`verify-efi.sh` stayed green. This still does **not** prove that a physical USB
+controller/stick accepts and flushes the writes, or that the ThinkPad boot is
+now fast.
+
+Exact image and extraction loop, from the repository root:
+
+```sh
+cd kernel
+./mkusb.sh
+./verify-efi.sh
+cd ..
+./tools/zllog.py inspect kernel/zlOS-usb.img
+./tools/zllog.py read kernel/zlOS-usb.img --latest
+./tools/zllog.py export kernel/zlOS-usb.img --all \
+  --json /tmp/zllog.json --csv /tmp/zllog.csv --text /tmp/zllog.txt
+python3 tools/test_zllog.py
+python3 kernel/hosttest/zllog_e2e_test.py
+```
+
+The next manual step is the evidence that cannot be manufactured on the host:
+
+```sh
+cd kernel
+./mkusb.sh --boot-next /dev/sdX        # destructive; inspect the prompt's target
+```
+
+`mkusb.sh` automatically relocates the backup GPT, stamps the journal with the
+physical device's actual capacity and prints the final `zllog.py inspect`
+result. `--boot-next` also removes only stale exact-label `zlOS USB` firmware
+entries, creates one bound to the newly generated partition GUID, verifies that
+GUID, and sets a one-shot BootNext. Do not boot unless those checks succeed.
+Then restart normally with the stick attached; no F12 choice or zlOS command is
+required. Leave the desktop up for at least twenty seconds so automatic retry
+and checkpointing can run, then shut down. Back in Linux, do not mount or
+initialize the journal again:
+
+```sh
+cd /home/roy/Documents/repos/zl-linux
+sudo ./tools/zllog.py inspect /dev/sdX
+sudo ./tools/zllog.py read /dev/sdX --latest
+sudo ./tools/zllog.py export /dev/sdX --latest \
+  --json /tmp/thinkpad-zllog.json --text /tmp/thinkpad-zllog.txt
+```
+
+Until that transcript exists, physical ThinkPad/USB persistence and bare-metal
+latency remain explicitly unverified.
 
 ## The development loop that matters
 
@@ -457,13 +840,15 @@ measured 2026-08-17. Short version:
   (8×16, 16×32, 24×48, monospace, from DejaVu Sans Mono via `gen_hd_font.py`).
   There is **no runtime rasterizer** — see the correction below.
 - **C → zl** — the blocker is the compiler, not the kernel. The kernel builds
-  with `compile`, the backend the root README marks **ARCHIVED**. Measured:
-  `sizeof(Value)` 40 B, builtins dispatched through a **309-entry strcmp chain**
-  with `band` at #300, and every number a `double` so **64-bit BARs and DMA
-  addresses are not representable** — the project's own recurring bug class.
+  with `compile`, the backend the root README marks **ARCHIVED**. Current tree:
+  `sizeof(Value)` is now 16 B, but builtins still dispatch through a
+  **644-entry strcmp chain**, and every number is a `double` so **64-bit BARs
+  and DMA addresses are not representable** — the project's own recurring bug class.
   `compilel` emits real `i64`… until you use a bitwise operator, at which point
   the return type degrades to `double` and every operand is boxed and dispatched
-  by name. 10M iterations: **C 7 ms, zl arithmetic 4 ms, zl bitwise 999 ms.**
+  by name. Historical pre-Value16 result for 10M iterations: **C 7 ms, zl
+  arithmetic 4 ms, zl bitwise 999 ms**; rerun it before using those as current
+  timings.
 
 **The actionable part:** making `band/bor/bxor/shl/shr` native `i64` instructions
 in `compilel.c` is ~1,500 lines of compiler work total with the other three
@@ -501,8 +886,9 @@ of that run, including four things it found that no task list predicted, is
 `virtio_gpu` `cpu` `nvme` `sched` `smp` `i2c_hid` `input` + two SMP trampolines.
 
 64-bit, 4 cores woken via INIT/SIPI, multitasking scheduler, NVMe persistence,
-USB mass storage, USB HID keyboard, event-based input with modifiers and repeat,
-a line editor with history.
+bounded read/write USB mass storage, a persistent USB boot journal, USB HID
+keyboard, event-based input with modifiers and repeat, and a line editor with
+history.
 
 **Unproven:** `i2c_hid.c` (QEMU has no Intel LPSS I2C) and the cold-start modeset.
 

@@ -52,6 +52,22 @@ int  fb_text_prop_h(void);
 void fb_present(void);
 void fb_pointer_show(int x, int y);
 void fb_pointer_hide(void);
+int  fb_surface_begin(unsigned int *pixels, int width, int height,
+                      int origin_x, int origin_y);
+int  fb_surface_begin_alpha(unsigned int *pixels, unsigned char *alpha,
+                            int width, int height, int origin_x, int origin_y);
+void fb_surface_end(void);
+int  fb_surface_blit(const unsigned int *pixels, int width, int height,
+                     int origin_x, int origin_y);
+int  fb_surface_blit_alpha(const unsigned int *pixels,
+                           const unsigned char *alpha,
+                           int width, int height, int origin_x, int origin_y);
+
+/* heap.c is present in every shipping kernel build. The weak boundary keeps
+ * focused host harnesses linkable and makes absence a direct-render fallback
+ * rather than an unresolved symbol. */
+void *heap_alloc(unsigned long bytes) __attribute__((weak));
+void  heap_free(void *p) __attribute__((weak));
 
 /* gpucursor.c - the pointer as a display PLANE instead of a sprite.
  *
@@ -65,11 +81,45 @@ int gpu_cursor_move(int x, int y);
 int gpu_cursor_is_live(void);
 int  fb_cell_w(void);
 int  fb_cell_h(void);
+int  fb_damage_count(void);
+unsigned int fb_damage_area(void);
+unsigned int fb_bits_per_pixel(void);
 
 /* Optional real-panel pacing. Host harnesses and non-Intel backends leave
  * these weak symbols absent and use the TSC deadline below. */
 int intel_supported(void) __attribute__((weak));
 int intel_wait_vblank(void) __attribute__((weak));
+
+/* zllog.c's frame seam is deliberately optional.  Host renderers link wm.c
+ * without the flight recorder, and a missing weak symbol must cost them no
+ * timer reads.  The implementation is RAM-only: persistence is scheduled
+ * elsewhere, never from this latency-sensitive path.
+ *
+ * One record carries the whole attribution so the reader never has to join
+ * half a frame after a torn write.  flags: bit 0 late, bit 1 periodic sample,
+ * bit 2 an Intel vblank wait actually ran. */
+void zllog_frame(unsigned input_us, unsigned tick_us,
+                 unsigned compositor_us, unsigned vblank_us,
+                 unsigned present_us, unsigned total_us,
+                 unsigned flags, unsigned damage_count,
+                 unsigned damage_area) __attribute__((weak));
+void zllog_frame_observe(unsigned input_us, unsigned tick_us,
+                         unsigned compositor_us, unsigned vblank_us,
+                         unsigned present_us, unsigned total_us,
+                         unsigned flags, unsigned damage_count,
+                         unsigned damage_area, unsigned input_to_present_us,
+                         unsigned input_sequence, unsigned missed_deadlines,
+                         unsigned queue_depth, unsigned present_bytes,
+                         unsigned desk_us, unsigned chrome_us,
+                         unsigned app_us, unsigned effects_us,
+                         unsigned repaint_rects, unsigned repaint_pixels,
+                         unsigned window_visits, unsigned app_calls)
+                         __attribute__((weak));
+#define FRAMELOG_LATE    (1u << 0)
+#define FRAMELOG_SAMPLE  (1u << 1)
+#define FRAMELOG_VBLANK  (1u << 2)
+#define FRAMELOG_CURSOR_ONLY (1u << 4)
+#define FRAMELOG_SAMPLE_N 60u
 
 /* ---- notify.c -------------------------------------------------------------
  * The notification surface, which SYSTEM-PROMPT.md §2 permits adding here and
@@ -175,6 +225,9 @@ int  input_code(void);
 int  input_mods(void);
 int  input_x(void);
 int  input_y(void);
+int  input_queued(void);
+unsigned int input_event_tsc(void);
+unsigned int input_event_seq(void);
 
 #define EV_NONE      0
 #define EV_KEY_DOWN  1
@@ -238,6 +291,21 @@ struct win {
      * means switching workspaces cannot reorder anything, so coming back to a
      * workspace shows the stack exactly as it was left. */
     int  ws;
+    /* Retained CLIENT pixels. Shell/chrome gets its own surface after this
+     * seam is proved; combining them would make focus/hover/shadow lifetime
+     * impossible to audit. */
+    unsigned int *client_px;
+    unsigned long client_bytes;
+    int client_w, client_h;
+    unsigned client_generation;
+    int client_valid;
+    unsigned int *shell_px;
+    unsigned char *shell_alpha;
+    unsigned long shell_bytes;
+    int shell_w, shell_h;
+    unsigned shell_generation;
+    unsigned shell_key;
+    int shell_valid;
 };
 
 static struct win wins[WM_MAX];
@@ -273,6 +341,16 @@ static int ws_n   = 1;
 static int running = 0;
 static unsigned int last_tick, next_frame_tsc;
 static int paced;
+static unsigned int frame_log_seq;
+
+/* The allocator owns 64 MiB; client surfaces may consume at most 48 MiB so
+ * files, browser state and other kernel objects retain a hard 16 MiB floor. */
+#define CLIENT_SURFACE_BUDGET (48UL * 1024UL * 1024UL)
+static unsigned long retained_surface_used;
+static unsigned client_surface_generation = 1;
+static unsigned client_surface_refusals;
+static unsigned retained_shell_builds;
+static void window_surfaces_prepare(int win);
 
 static app_draw_fn  hook_draw;
 static app_event_fn hook_event;
@@ -286,6 +364,247 @@ static desk_draw_fn hook_desk;
  * and never will be. */
 static desk_click_fn hook_desk_click;
 static desk_key_fn   hook_desk_key;
+
+static void client_surface_free(int win)
+{
+    if (win < 0 || win >= WM_MAX) return;
+    if (wins[win].client_px && heap_free) heap_free(wins[win].client_px);
+    if (wins[win].client_bytes <= retained_surface_used)
+        retained_surface_used -= wins[win].client_bytes;
+    else
+        retained_surface_used = 0; /* metadata damage must not wrap the budget */
+    wins[win].client_px = 0;
+    wins[win].client_bytes = 0;
+    wins[win].client_w = wins[win].client_h = 0;
+    wins[win].client_valid = 0;
+}
+
+static void shell_surface_free(int win)
+{
+    if (win < 0 || win >= WM_MAX) return;
+    if (wins[win].shell_px && heap_free) heap_free(wins[win].shell_px);
+    if (wins[win].shell_bytes <= retained_surface_used)
+        retained_surface_used -= wins[win].shell_bytes;
+    else
+        retained_surface_used = 0;
+    wins[win].shell_px = 0;
+    wins[win].shell_alpha = 0;
+    wins[win].shell_bytes = 0;
+    wins[win].shell_w = wins[win].shell_h = 0;
+    wins[win].shell_valid = 0;
+}
+
+static void window_surfaces_free(int win)
+{
+    client_surface_free(win);
+    shell_surface_free(win);
+}
+
+static int client_surface_ensure(int win, int width, int height)
+{
+    if (width <= 0 || height <= 0 || !heap_alloc || !heap_free) return 0;
+    unsigned long long bytes64 = (unsigned long long)(unsigned)width *
+                                 (unsigned long long)(unsigned)height * 4ULL;
+    if (!bytes64 || bytes64 > CLIENT_SURFACE_BUDGET) {
+        client_surface_refusals++;
+        return 0;
+    }
+    unsigned long bytes = (unsigned long)bytes64;
+    if (wins[win].client_px &&
+        (wins[win].client_w != width || wins[win].client_h != height ||
+         wins[win].client_generation != client_surface_generation))
+        client_surface_free(win);
+    if (wins[win].client_px) return 1;
+    if (bytes > CLIENT_SURFACE_BUDGET - retained_surface_used) {
+        client_surface_refusals++;
+        return 0;
+    }
+    unsigned int *pixels = (unsigned int *)heap_alloc(bytes);
+    if (!pixels) {
+        client_surface_refusals++;
+        return 0;
+    }
+    /* Never expose old heap contents when an app accidentally leaves a pixel
+     * unpainted on its first full redraw. */
+    for (unsigned long i = 0; i < bytes / 4UL; i++) pixels[i] = 0;
+    wins[win].client_px = pixels;
+    wins[win].client_bytes = bytes;
+    wins[win].client_w = width;
+    wins[win].client_h = height;
+    wins[win].client_generation = client_surface_generation;
+    wins[win].client_valid = 0;
+    retained_surface_used += bytes;
+    return 1;
+}
+
+/* A bounded, disjoint region used during one compose pass.  Subtracting an
+ * opaque rectangle can produce at most four pieces.  If fragmentation would
+ * exceed the bound, the caller paints the original damage rectangle: slower,
+ * but never missing a changed pixel. */
+#define WM_VIS_REGION_MAX 16
+struct wm_region { int x0, y0, x1, y1; };
+static unsigned int region_fallbacks;
+static unsigned long long region_occluded_pixels;
+static int win_visible(int win);
+
+static unsigned long long region_area(const struct wm_region *r)
+{
+    return (unsigned long long)(unsigned)(r->x1 - r->x0) *
+           (unsigned long long)(unsigned)(r->y1 - r->y0);
+}
+
+static int region_push(struct wm_region *out, int *n,
+                       int x0, int y0, int x1, int y1)
+{
+    if (x0 >= x1 || y0 >= y1) return 1;
+    if (*n >= WM_VIS_REGION_MAX) return 0;
+    out[*n].x0 = x0; out[*n].y0 = y0;
+    out[*n].x1 = x1; out[*n].y1 = y1;
+    (*n)++;
+    return 1;
+}
+
+static int region_subtract(struct wm_region *list, int *count,
+                           int ox0, int oy0, int ox1, int oy1)
+{
+    struct wm_region next[WM_VIS_REGION_MAX];
+    int nn = 0;
+    for (int i = 0; i < *count; i++) {
+        struct wm_region r = list[i];
+        int ix0 = r.x0 > ox0 ? r.x0 : ox0;
+        int iy0 = r.y0 > oy0 ? r.y0 : oy0;
+        int ix1 = r.x1 < ox1 ? r.x1 : ox1;
+        int iy1 = r.y1 < oy1 ? r.y1 : oy1;
+        if (ix0 >= ix1 || iy0 >= iy1) {
+            if (!region_push(next, &nn, r.x0, r.y0, r.x1, r.y1)) return 0;
+            continue;
+        }
+        /* Four non-overlapping strips around the intersection. */
+        if (!region_push(next, &nn, r.x0, r.y0, r.x1, iy0) ||
+            !region_push(next, &nn, r.x0, iy1, r.x1, r.y1) ||
+            !region_push(next, &nn, r.x0, iy0, ix0, iy1) ||
+            !region_push(next, &nn, ix1, iy0, r.x1, iy1)) return 0;
+    }
+    for (int i = 0; i < nn; i++) list[i] = next[i];
+    *count = nn;
+    return 1;
+}
+
+static int window_opaque_rect(int win, int *x0, int *y0, int *x1, int *y1)
+{
+    if (!win_visible(win) || wm_anim_running(win)) return 0;
+    int r = ui_theme()->radius;
+    if (r < 1) r = 1;
+    *x0 = wins[win].x + r; *y0 = wins[win].y + r;
+    *x1 = wins[win].x + wins[win].w - r;
+    *y1 = wins[win].y + wins[win].h - r;
+    return *x0 < *x1 && *y0 < *y1;
+}
+
+static int visible_damage_regions(int zpos, int x0, int y0, int x1, int y1,
+                                  struct wm_region *out)
+{
+    out[0].x0 = x0; out[0].y0 = y0; out[0].x1 = x1; out[0].y1 = y1;
+    int n = 1;
+    unsigned long long before = region_area(&out[0]);
+    for (int j = zpos + 1; j < nz; j++) {
+        int ox0, oy0, ox1, oy1;
+        if (!window_opaque_rect(zorder[j], &ox0, &oy0, &ox1, &oy1)) continue;
+        if (!region_subtract(out, &n, ox0, oy0, ox1, oy1)) {
+            region_fallbacks++;
+            out[0].x0 = x0; out[0].y0 = y0; out[0].x1 = x1; out[0].y1 = y1;
+            return 1;
+        }
+        if (!n) break;
+    }
+    unsigned long long after = 0;
+    for (int i = 0; i < n; i++) after += region_area(&out[i]);
+    if (after < before) region_occluded_pixels += before - after;
+    return n;
+}
+
+unsigned int wm_region_fallbacks(void) { return region_fallbacks; }
+unsigned long long wm_region_occluded_pixels(void) { return region_occluded_pixels; }
+
+int wm_region_fragmentation_probe(void)
+{
+    struct wm_region r[WM_VIS_REGION_MAX] = {{ 0, 0, 1000, 1000 }};
+    int n = 1;
+    for (int i = 0; i < 8; i++)
+        if (!region_subtract(r, &n, 495, 100 + i * 100,
+                            505, 110 + i * 100)) return 1;
+    return 0;
+}
+
+static int shell_surface_ensure(int win, int width, int height)
+{
+    if (width <= 0 || height <= 0 || !heap_alloc || !heap_free) return 0;
+    unsigned long long bytes64 = (unsigned long long)(unsigned)width *
+                                 (unsigned long long)(unsigned)height * 5ULL;
+    if (!bytes64 || bytes64 > CLIENT_SURFACE_BUDGET) {
+        client_surface_refusals++;
+        return 0;
+    }
+    unsigned long bytes = (unsigned long)bytes64;
+    if (wins[win].shell_px &&
+        (wins[win].shell_w != width || wins[win].shell_h != height ||
+         wins[win].shell_generation != client_surface_generation))
+        shell_surface_free(win);
+    if (wins[win].shell_px) return 1;
+    if (bytes > CLIENT_SURFACE_BUDGET - retained_surface_used) {
+        client_surface_refusals++;
+        return 0;
+    }
+    unsigned int *pixels = (unsigned int *)heap_alloc(bytes);
+    if (!pixels) {
+        client_surface_refusals++;
+        return 0;
+    }
+    unsigned long pixels_bytes = (unsigned long)(unsigned)width *
+                                 (unsigned long)(unsigned)height * 4UL;
+    unsigned char *alpha = (unsigned char *)pixels + pixels_bytes;
+    for (unsigned long i = 0; i < pixels_bytes / 4UL; i++) pixels[i] = 0;
+    for (unsigned long i = 0; i < bytes - pixels_bytes; i++) alpha[i] = 0;
+    wins[win].shell_px = pixels;
+    wins[win].shell_alpha = alpha;
+    wins[win].shell_bytes = bytes;
+    wins[win].shell_w = width;
+    wins[win].shell_h = height;
+    wins[win].shell_generation = client_surface_generation;
+    wins[win].shell_valid = 0;
+    retained_surface_used += bytes;
+    return 1;
+}
+
+static void wm_invalidate_shell(int win)
+{
+    if (win < 0 || win >= WM_MAX || !(wins[win].flags & WF_OPEN)) return;
+    wins[win].shell_valid = 0;
+    wm_damage_win(win);
+}
+
+void wm_invalidate_client(int win)
+{
+    if (win < 0 || win >= WM_MAX || !(wins[win].flags & WF_OPEN)) return;
+    wins[win].client_valid = 0;
+    wm_damage_win(win);
+}
+
+unsigned long wm_client_surface_bytes(void) { return retained_surface_used; }
+unsigned int wm_client_surface_refusals(void) { return client_surface_refusals; }
+unsigned int wm_retained_shell_builds(void) { return retained_shell_builds; }
+
+void wm_surface_mode_changed(void)
+{
+    client_surface_generation++;
+    if (!client_surface_generation) client_surface_generation = 1;
+    for (int i = 0; i < WM_MAX; i++) {
+        if (wins[i].client_px || wins[i].shell_px) window_surfaces_free(i);
+        if (wins[i].flags & WF_OPEN) wins[i].client_valid = 0;
+    }
+    for (int i = 0; i < WM_MAX; i++)
+        if (wins[i].flags & WF_OPEN) window_surfaces_prepare(i);
+}
 
 /* ---- the damage list ------------------------------------------------------
  * NOT fb.c's. They are different questions and conflating them is a bug
@@ -306,9 +625,60 @@ static desk_key_fn   hook_desk_key;
 static struct { int x0, y0, x1, y1; } wd[WD_MAX];
 static int nwd;
 
-static int wd_touches(int i, int x0, int y0, int x1, int y1)
+/* RAM-only attribution for one compositor pass. Enabled only when a recorder
+ * hook is linked, so standalone renderers pay no extra TSC reads. The final
+ * compositor bucket minus these four owners remains loop/intersection/cursor
+ * overhead and is intentionally recoverable by the host extractor. */
+static int paint_trace;
+static unsigned int paint_desk_cycles, paint_chrome_cycles;
+static unsigned int paint_app_cycles, paint_effect_cycles;
+static unsigned int paint_repaint_rects, paint_repaint_pixels;
+static unsigned int paint_window_visits, paint_app_calls;
+
+static unsigned int paint_begin(void)
 {
-    return !(x0 > wd[i].x1 || x1 < wd[i].x0 || y0 > wd[i].y1 || y1 < wd[i].y0);
+    return paint_trace ? cpu_tsc_lo() : 0u;
+}
+
+static void paint_end(unsigned int *bucket, unsigned int began)
+{
+    if (paint_trace) *bucket += cpu_tsc_lo() - began;
+}
+
+static void paint_reset(int enabled)
+{
+    paint_trace = enabled;
+    paint_desk_cycles = paint_chrome_cycles = 0;
+    paint_app_cycles = paint_effect_cycles = 0;
+    paint_repaint_rects = enabled ? (unsigned int)nwd : 0u;
+    paint_repaint_pixels = paint_window_visits = paint_app_calls = 0u;
+    if (!enabled) return;
+    unsigned long long pixels = 0;
+    for (int i = 0; i < nwd; i++)
+        pixels += (unsigned)(wd[i].x1 - wd[i].x0) *
+                  (unsigned)(wd[i].y1 - wd[i].y0);
+    paint_repaint_pixels = pixels > 0xffffffffULL ? 0xffffffffu : (unsigned)pixels;
+}
+
+static int wd_mergeable(int i, int x0, int y0, int x1, int y1)
+{
+    int touches = !(x0 > wd[i].x1 || x1 < wd[i].x0 ||
+                    y0 > wd[i].y1 || y1 < wd[i].y0);
+    if (!touches) return 0;
+    int overlaps = x0 < wd[i].x1 && x1 > wd[i].x0 &&
+                   y0 < wd[i].y1 && y1 > wd[i].y0;
+    if (overlaps) return 1;
+    int ux0 = x0 < wd[i].x0 ? x0 : wd[i].x0;
+    int uy0 = y0 < wd[i].y0 ? y0 : wd[i].y0;
+    int ux1 = x1 > wd[i].x1 ? x1 : wd[i].x1;
+    int uy1 = y1 > wd[i].y1 ? y1 : wd[i].y1;
+    unsigned long long sum =
+        (unsigned long long)(unsigned)(x1 - x0) * (unsigned)(y1 - y0) +
+        (unsigned long long)(unsigned)(wd[i].x1 - wd[i].x0) *
+        (unsigned)(wd[i].y1 - wd[i].y0);
+    unsigned long long box =
+        (unsigned long long)(unsigned)(ux1 - ux0) * (unsigned)(uy1 - uy0);
+    return box <= sum || (box - sum) * 100ULL <= sum * 25ULL;
 }
 
 void wm_damage(int x, int y, int w, int h)
@@ -321,7 +691,7 @@ void wm_damage(int x, int y, int w, int h)
     if (x0 >= x1 || y0 >= y1) return;
 
     for (int i = 0; i < nwd; ) {
-        if (wd_touches(i, x0, y0, x1, y1)) {
+        if (wd_mergeable(i, x0, y0, x1, y1)) {
             if (wd[i].x0 < x0) x0 = wd[i].x0;
             if (wd[i].y0 < y0) y0 = wd[i].y0;
             if (wd[i].x1 > x1) x1 = wd[i].x1;
@@ -1025,6 +1395,22 @@ static void client_of(int fx, int fy, int fw, int fh, int flags,
     if (*h < 0) *h = 0;
 }
 
+/* Allocation is lifecycle work, never frame work. Open/resize/restore and a
+ * mode-generation change prepare settled-size surfaces. A refusal keeps the
+ * direct renderer as fallback without retrying heap work on every frame. */
+static void window_surfaces_prepare(int win)
+{
+    if (win < 0 || win >= WM_MAX || !(wins[win].flags & WF_OPEN)) return;
+    int ax, ay, aw, ah;
+    client_of(wins[win].x, wins[win].y, wins[win].w, wins[win].h,
+              wins[win].flags, &ax, &ay, &aw, &ah);
+    (void)ax; (void)ay;
+    (void)client_surface_ensure(win, aw, ah);
+    int reach = shadow_reach(win);
+    (void)shell_surface_ensure(win, wins[win].w + 2 * reach,
+                              wins[win].h + 2 * reach);
+}
+
 /* The SETTLED client area - where the window will be, not where it may
  * momentarily be drawn mid-animation. Hit testing and app coordinates outside
  * the repaint both want this one. */
@@ -1040,6 +1426,13 @@ void wm_client(int win, int *x, int *y, int *w, int *h)
  * not a crash, it is a smear that only shows on some backgrounds. */
 void wm_init(void)
 {
+    for (int i = 0; i < WM_MAX; i++) window_surfaces_free(i);
+    client_surface_generation++;
+    if (!client_surface_generation) client_surface_generation = 1;
+    client_surface_refusals = 0;
+    retained_shell_builds = 0;
+    region_fallbacks = 0;
+    region_occluded_pixels = 0;
     for (int i = 0; i < WM_MAX; i++) { wins[i].flags = 0; wins[i].ws = 1; }
     nz = 0;
     nwd = 0;
@@ -1055,6 +1448,7 @@ void wm_init(void)
     snap_preview_zone = 0;
     last_tick = next_frame_tsc = 0;
     paced = 0;
+    frame_log_seq = 0;
     running = 1;
     if (fb_active()) wm_damage(0, 0, (int)fb_pxw(), (int)fb_pxh());
 }
@@ -1093,7 +1487,7 @@ int wm_add_tab(int win, int app, const char *title)
     int i = wins[win].ntab++;
     wins[win].tab_app[i] = app;
     title_copy16(wins[win].tab_title[i], title);
-    wm_damage_win(win);
+    wm_invalidate_shell(win);
     return i;
 }
 
@@ -1105,7 +1499,8 @@ void wm_set_tab(int win, int tab)
     if (!wm_is_open(win) || tab < 0 || tab >= wins[win].ntab) return;
     if (wins[win].tab == tab) return;
     wins[win].tab = tab;
-    wm_damage_win(win);
+    wins[win].shell_valid = 0;
+    wm_invalidate_client(win);
 }
 
 /* Which app this window is SHOWING. Everything downstream asks this rather
@@ -1121,6 +1516,18 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         wins[i].x = x; wins[i].y = y; wins[i].w = w; wins[i].h = h;
         wins[i].app = app;
         wins[i].flags = WF_OPEN;
+        wins[i].client_px = 0;
+        wins[i].client_bytes = 0;
+        wins[i].client_w = wins[i].client_h = 0;
+        wins[i].client_generation = client_surface_generation;
+        wins[i].client_valid = 0;
+        wins[i].shell_px = 0;
+        wins[i].shell_alpha = 0;
+        wins[i].shell_bytes = 0;
+        wins[i].shell_w = wins[i].shell_h = 0;
+        wins[i].shell_generation = client_surface_generation;
+        wins[i].shell_key = 0;
+        wins[i].shell_valid = 0;
         /* A NEW WINDOW LANDS ON THE WORKSPACE YOU ARE LOOKING AT. That is the
          * reference's rule too - ds.html's openApp() writes `winWs[id] = s.ws`
          * every time, and the per-app `ws:` field in its APPS table is only
@@ -1137,6 +1544,7 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         title_copy(wins[i].title, title);
         z_append(i);
         focus_win = i;
+        window_surfaces_prepare(i);
         /* A refusal here degrades gracefully: every slot busy means the window
          * opens without a flourish, which is the right way for an animation to
          * fail. */
@@ -1190,6 +1598,7 @@ void wm_close(int win)
      * - so an animation still running on this index would be inherited by
      * whatever opens next and read as its open-scale. */
     anim_cancel(win);
+    window_surfaces_free(win);
     wins[win].flags = 0;
     z_remove(win);
     /* A closed window must not leave its snap state behind for whatever opens
@@ -1215,6 +1624,7 @@ void wm_raise(int win)
     if (!wm_is_open(win)) return;
     if (wins[win].flags & WF_MINIMIZED) {
         wins[win].flags &= ~WF_MINIMIZED;
+        window_surfaces_prepare(win);
         wm_damage_win(win);
     }
     /* RAISE MEANS "PUT IT WHERE I CAN SEE IT", and on another workspace that
@@ -1240,6 +1650,7 @@ void wm_focus(int win)
 {
     if (wm_is_minimized(win)) {
         wins[win].flags &= ~WF_MINIMIZED;
+        window_surfaces_prepare(win);
         wm_damage_win(win);
     }
     /* ...and off another workspace, for the same reason it un-minimises. Focus
@@ -1262,14 +1673,18 @@ void wm_focus(int win)
     focus_win = win;
     /* both title bars change: the old loses its hue and underline, the new
      * gains them. Two damages, not one. */
-    if (wm_is_open(old)) wm_damage_win(old);
-    if (wm_is_open(win)) wm_damage_win(win);
+    /* app_draw receives `focused`, and Terminal uses it for its caret.  Until
+     * that state becomes a tiny overlay, both clients must be invalidated for
+     * correctness. Move/raise still retain content, which is the hot path. */
+    if (wm_is_open(old)) { wm_invalidate_shell(old); wm_invalidate_client(old); }
+    if (wm_is_open(win)) { wm_invalidate_shell(win); wm_invalidate_client(win); }
 }
 
 void wm_minimize(int win)
 {
     if (!wm_is_open(win) || (wins[win].flags & (WF_MODAL | WF_NOCHROME))) return;
     wm_damage_win(win);
+    window_surfaces_free(win);
     wins[win].flags |= WF_MINIMIZED;
     if (focus_win == win) focus_win = top_visible();
     wm_drop_grab(win);
@@ -1289,6 +1704,8 @@ void wm_set_modal(int win, int on)
     wm_damage_win(win);
     if (on) wins[win].flags |= WF_MODAL;
     else    wins[win].flags &= ~WF_MODAL;
+    shell_surface_free(win);
+    window_surfaces_prepare(win);
     wm_damage_win(win);
 
     /* zov / zpop - THE ONE PLACE, rather than at every popover's call site.
@@ -1333,8 +1750,10 @@ void wm_resize(int win, int w, int h)
     if (h < wins[win].min_h) h = wins[win].min_h;
     if (wins[win].w == w && wins[win].h == h) return;
     wm_damage_win(win);
+    window_surfaces_free(win);
     wins[win].w = w;
     wins[win].h = h;
+    window_surfaces_prepare(win);
     wm_damage_win(win);
 }
 
@@ -1415,7 +1834,7 @@ static void title_control_rect(const struct win *W, int which,
  * Real desktops encode a hierarchy - a menu above a window above the desktop -
  * and `off` and `soft` were ALREADY parameters of fb_shadow, so three levels
  * cost nothing but deciding. */
-static void chrome(int win, int focused)
+static void chrome_shadow(int win, int focused)
 {
     const struct ui_theme *t = ui_theme();
     struct win Wa = wins[win];
@@ -1426,6 +1845,14 @@ static void chrome(int win, int focused)
     else if (!focused)       { off = off / 2;     soft = soft * 2 / 3; }
 
     fb_shadow(W->x, W->y, W->w, W->h, off, soft);
+}
+
+static void chrome_shell(int win, int focused)
+{
+    const struct ui_theme *t = ui_theme();
+    struct win Wa = wins[win];
+    struct win *W = &Wa;
+    anim_rect(win, &W->x, &W->y, &W->w, &W->h);
     fb_rrect(W->x, W->y, W->w, W->h, t->radius, t->border);
     if (focused)
         fb_rrect_blend(W->x, W->y, W->w, W->h, t->radius, t->accent, 44);
@@ -1519,6 +1946,63 @@ static void chrome(int win, int focused)
                 fb_line(gx + gs - d, gy + gs - 1, gx + gs - 1, gy + gs - d, ink);
             }
     }
+}
+
+static unsigned int shell_state_key(int win, int focused)
+{
+    unsigned int key = (unsigned int)(focused ? 1 : 0);
+    key |= (unsigned int)(wins[win].flags & (WF_MODAL | WF_NOCHROME)) << 1;
+    key ^= (unsigned int)(wins[win].tab & 0x0f) << 8;
+    key ^= (unsigned int)(wins[win].ntab & 0x0f) << 12;
+    key ^= (unsigned int)(wins[win].maxed ? 1 : 0) << 16;
+    int over_any = 0;
+    for (int b = TITLE_CLOSE; b <= TITLE_MINIMIZE; b++) {
+        int x, y, w, h;
+        title_control_rect(&wins[win], b, &x, &y, &w, &h);
+        if (ptr_x >= x && ptr_x < x + w && ptr_y >= y && ptr_y < y + h) {
+            key ^= 1u << (20 + b);
+            over_any = 1;
+        }
+    }
+    if (over_any && (last_btn & 1)) key ^= 1u << 24;
+    return key;
+}
+
+/* Shell AND shadow are one retained straight-alpha layer. Rounded corners and
+ * the soft shadow stay translucent, so moving a window only composites the
+ * cached layer over its new backdrop; it never reruns chrome primitives. */
+static int shell_compose(int win, int focused,
+                         int dx0, int dy0, int dx1, int dy1)
+{
+    struct win *W = &wins[win];
+    int reach = shadow_reach(win);
+    int sx = W->x - reach, sy = W->y - reach;
+    int sw = W->w + 2 * reach, sh = W->h + 2 * reach;
+    if (wm_anim_running(win) || !W->shell_px || W->shell_w != sw ||
+        W->shell_h != sh ||
+        W->shell_generation != client_surface_generation) return 0;
+    unsigned int key = shell_state_key(win, focused);
+    if (!W->shell_valid || W->shell_key != key) {
+        unsigned long npx = (unsigned long)(unsigned)sw * (unsigned long)(unsigned)sh;
+        for (unsigned long i = 0; i < npx; i++) {
+            W->shell_px[i] = 0;
+            W->shell_alpha[i] = 0;
+        }
+        if (!fb_surface_begin_alpha(W->shell_px, W->shell_alpha,
+                                    sw, sh, sx, sy)) return 0;
+        chrome_shadow(win, focused);
+        chrome_shell(win, focused);
+        fb_surface_end();
+        retained_shell_builds++;
+        W->shell_key = key;
+        W->shell_valid = 1;
+    }
+    int cx, cy, cw, ch;
+    if (!isect(sx, sy, sx + sw, sy + sh,
+               dx0, dy0, dx1, dy1, &cx, &cy, &cw, &ch)) return 1;
+    fb_clip(cx, cy, cw, ch);
+    return fb_surface_blit_alpha(W->shell_px, W->shell_alpha,
+                                 sw, sh, sx, sy);
 }
 
 /* Where the toast sits. The dock is desktop furniture drawn by hook_desk and
@@ -1667,12 +2151,14 @@ void wm_repaint(void)
 
         /* the wallpaper pass: furniture first, always at the bottom, never in
          * the z-order and never overlapped by anything but a window */
+        unsigned int phase_started = paint_begin();
         if (hook_desk) hook_desk(rx0, ry0, rx1 - rx0, ry1 - ry0);
         /* zsweep sits ON the wallpaper and UNDER everything else, so it goes
          * between the furniture pass and the first window. */
         sweep_draw(rx0, ry0, rx1, ry1);
         fb_clip(rx0, ry0, rx1 - rx0, ry1 - ry0);   /* sweep_draw narrowed it */
         snap_preview_draw(rx0, ry0, rx1, ry1);
+        paint_end(&paint_desk_cycles, phase_started);
 
         for (int i = 0; i < nz; i++) {          /* BACK TO FRONT = paint order */
             int win = zorder[i];
@@ -1681,6 +2167,11 @@ void wm_repaint(void)
              * this frame"; neither means "leaves the z-order", which is what
              * keeps a workspace switch from reshuffling anything. */
             if (!win_visible(win)) continue;
+            struct wm_region vis[WM_VIS_REGION_MAX];
+            int nvis = visible_damage_regions(i, rx0, ry0, rx1, ry1, vis);
+            for (int vi = 0; vi < nvis; vi++) {
+            int rx0 = vis[vi].x0, ry0 = vis[vi].y0;
+            int rx1 = vis[vi].x1, ry1 = vis[vi].y1;
             int cx, cy, cw, ch;
             /* THE FRAME PLUS ITS SHADOW REACH, always - not the frame with the
              * reach as a fallback.
@@ -1710,6 +2201,7 @@ void wm_repaint(void)
             if (!isect(W->x - reach, W->y - reach,
                        W->x + W->w + reach, W->y + W->h + reach,
                        rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) continue;
+            if (paint_trace) paint_window_visits++;
             /* A REAL FADE, and it needs the rectangle taken BEFORE anything
              * is drawn on it. window * a + behind * (1 - a) is not something
              * that can be reconstructed afterwards: once the window is drawn,
@@ -1721,21 +2213,61 @@ void wm_repaint(void)
              * the window opaque, which is the right way for an effect to fail. */
             int fade = 255, stash = -1;
             int stash_x = cx, stash_y = cy, stash_w = cw, stash_h = ch;
+            phase_started = paint_begin();
             if (anim_is(win, ANIM_FADE)) {
                 fade = wm_anim_alpha(win);
                 if (fade < 255) stash = fb_stash(stash_x, stash_y, stash_w, stash_h);
             }
+            paint_end(&paint_effect_cycles, phase_started);
 
             fb_clip(cx, cy, cw, ch);            /* clip 1: the frame + shadow */
-            chrome(win, win == focus_win);
+            phase_started = paint_begin();
+            if (!shell_compose(win, win == focus_win, rx0, ry0, rx1, ry1)) {
+                fb_clip(cx, cy, cw, ch);
+                chrome_shadow(win, win == focus_win);
+                chrome_shell(win, win == focus_win);
+            }
+            paint_end(&paint_chrome_cycles, phase_started);
 
             int fx, fy, fw, fh, ax, ay, aw, ah;
             anim_rect(win, &fx, &fy, &fw, &fh);
             client_of(fx, fy, fw, fh, W->flags, &ax, &ay, &aw, &ah);
             if (hook_draw && isect(ax, ay, ax + aw, ay + ah,
                                    rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
-                fb_clip(cx, cy, cw, ch);        /* clip 2: NARROWER - client   */
-                hook_draw(win_app(win), ax, ay, aw, ah, win == focus_win);
+                int retained = !wm_anim_running(win) && W->client_px &&
+                               W->client_w == aw && W->client_h == ah &&
+                               W->client_generation == client_surface_generation;
+                if (retained && !W->client_valid) {
+                    /* Render the WHOLE client offscreen once. Rendering only
+                     * this damage intersection would cache untouched heap
+                     * bytes and expose them when the window later moves. */
+                    phase_started = paint_begin();
+                    if (fb_surface_begin(W->client_px, aw, ah, ax, ay)) {
+                        hook_draw(win_app(win), ax, ay, aw, ah,
+                                  win == focus_win);
+                        fb_surface_end();
+                        W->client_valid = 1;
+                        if (paint_trace) paint_app_calls++;
+                    } else {
+                        retained = 0;
+                    }
+                    paint_end(&paint_app_cycles, phase_started);
+                }
+                fb_clip(cx, cy, cw, ch);        /* clip 2: NARROWER - client */
+                if (retained && W->client_valid) {
+                    if (!fb_surface_blit(W->client_px, aw, ah, ax, ay))
+                        retained = 0;
+                }
+                if (!retained) {
+                    /* Allocation, target binding, or compositor-back-buffer
+                     * refusal: today's direct path remains the correctness
+                     * fallback and never leaves a blank/stale client. */
+                    phase_started = paint_begin();
+                    hook_draw(win_app(win), ax, ay, aw, ah,
+                              win == focus_win);
+                    paint_end(&paint_app_cycles, phase_started);
+                    if (paint_trace) paint_app_calls++;
+                }
             }
 
             /* ANIM_PULSE, composited. A tint laid over the finished window at
@@ -1749,6 +2281,7 @@ void wm_repaint(void)
              * was drawn on it. Blended at (sx, sy) - where it was TAKEN
              * FROM - never at (cx, cy), which by this point is whatever the
              * client isect above left behind. */
+            phase_started = paint_begin();
             if (stash >= 0) {
                 /* cx/cy are reused by the narrower client intersection above.
                  * Restoring at that later origin shifted the saved backdrop
@@ -1766,17 +2299,21 @@ void wm_repaint(void)
                                    ui_theme()->accent, pa);
                 }
             }
+            paint_end(&paint_effect_cycles, phase_started);
+            }
         }
 
         /* The closing window's ghost goes where the window would have been in
          * the walk above - on top of everything behind it. It is drawn after
          * the loop rather than inside it because it is not IN the loop's list:
          * it left the z-order the instant it was closed. */
+        phase_started = paint_begin();
         ghost_draw(rx0, ry0, rx1, ry1);
 
         /* ...and the toast on top of all of them, still inside this damage
          * rectangle. Added, not woven in: the loop above is unchanged. */
         toast_draw(rx0, ry0, rx1, ry1);
+        paint_end(&paint_effect_cycles, phase_started);
     }
     fb_clip_none();
     nwd = 0;
@@ -1922,6 +2459,14 @@ static int in_titlebar(int win, int x, int y)
            x >= wins[win].x && x < wins[win].x + wins[win].w;
 }
 
+static int dispatch_app_event(int win, int type, int code, int x, int y)
+{
+    if (!hook_event || !wm_is_open(win)) return 0;
+    int changed = hook_event(win_app(win), win, type, code, x, y);
+    if (changed) wm_invalidate_client(win);
+    return changed;
+}
+
 /* THE RESIZE GRIP.
  *
  * wm_resize has existed since the window table did - with min_w/min_h clamping
@@ -2049,7 +2594,7 @@ static void route_mouse(int x, int y, int btn)
             wm_resize(pgrab, x + grab_dx - wins[pgrab].x,
                              y + grab_dy - wins[pgrab].y);
         } else if (hook_event) {
-            hook_event(win_app(pgrab), pgrab, EV_MOUSE, btn, x, y);
+            dispatch_app_event(pgrab, EV_MOUSE, btn, x, y);
         }
         if (up) {
             /* DROPPING A DRAGGED WINDOW AT AN EDGE SNAPS IT. This wiring is
@@ -2144,7 +2689,7 @@ static void route_mouse(int x, int y, int btn)
          * app that does not care masks for button 1 and never sees it. */
         if (dbl) btn |= MOUSE_DOUBLE;
     }
-    if (hook_event) hook_event(win_app(hit), hit, EV_MOUSE, btn, x, y);
+    dispatch_app_event(hit, EV_MOUSE, btn, x, y);
 }
 
 /* Alt+Tab walks the z-order BACKWARDS - the window below the top one is the
@@ -2234,7 +2779,7 @@ static void route_key(int type, int code, int mods)
     int m = modal_win();
     int target = (m >= 0) ? m : focus_win;
     if (target < 0) return;
-    if (hook_event) hook_event(win_app(target), target, type, code, 0, 0);
+    dispatch_app_event(target, type, code, 0, 0);
 }
 
 /* A wheel notch goes to the window UNDER THE POINTER, not to the focused one.
@@ -2247,7 +2792,7 @@ static void route_wheel(int x, int y, int notches)
     int hit = wm_at(x, y);
     if (m >= 0 && hit != m) return;          /* a modal owns everything */
     if (hit < 0) return;
-    if (hook_event) hook_event(win_app(hit), hit, EV_WHEEL, notches, x, y);
+    dispatch_app_event(hit, EV_WHEEL, notches, x, y);
 }
 
 static void wm_route(int type)
@@ -2255,6 +2800,26 @@ static void wm_route(int type)
     if (type == EV_WHEEL) { route_wheel(input_x(), input_y(), input_code()); return; }
     if (type == EV_MOUSE) route_mouse(input_x(), input_y(), input_code());
     else                  route_key(type, input_code(), input_mods());
+}
+
+static unsigned int pending_input_tsc, pending_input_seq;
+
+/* Route input whenever an interrupt wakes the main loop, even if the next
+ * visual commit deadline has not arrived.  Then drain once more immediately
+ * before the commit so a just-arrived event is never left behind an older
+ * frame.  pending_input_* keeps the oldest causal edge until pixels present. */
+static void wm_input_drain(void)
+{
+    input_poll();
+    for (int guard = 0; guard < 64; guard++) {
+        int t = input_next();
+        if (!t) break;
+        if (!pending_input_seq) {
+            pending_input_tsc = input_event_tsc();
+            pending_input_seq = input_event_seq();
+        }
+        wm_route(t);
+    }
 }
 
 /* ---- the frame loop -------------------------------------------------------
@@ -2273,7 +2838,10 @@ static void wm_route(int type)
  * REPAINT are timed - a frame that finds no damage returns almost immediately
  * and averaging those in would report a desktop at rest as infinitely fast. */
 static unsigned int frame_us, frame_peak_us;
-
+/* An input may be consumed in a frame which needs no repaint (focus was
+ * already correct, a button was released over inert chrome, etc.). Keep the
+ * oldest unpresented input until the next painted frame instead of losing the
+ * correlation at the end of that CPU iteration. */
 /* ---- the number that describes SMOOTHNESS, which neither of the two above does
  *
  * An average hides stutter by construction and a peak is one sample: both are
@@ -2299,6 +2867,20 @@ static unsigned int frame_us, frame_peak_us;
  * frame count so a probe can divide if it wants to. */
 #define FRAME_BUDGET_US 16667u
 static unsigned int frame_late, frame_lost, frame_painted;
+#define WM_SAMPLE_N 256
+static unsigned int sample_frame[WM_SAMPLE_N], sample_input[WM_SAMPLE_N];
+static unsigned int sample_head, sample_n;
+
+static unsigned int frame_delta_us(unsigned int start, unsigned int end,
+                                   unsigned int cycles_per_us)
+{
+    unsigned int delta = end - start;
+    /* Same guard as the total-frame counter below.  It rejects a duration
+     * large enough to be a stale/wrapped sample instead of persisting a fake
+     * multi-second phase. */
+    if (!cycles_per_us || delta >= 0x40000000u) return 0;
+    return delta / cycles_per_us;
+}
 
 int wm_frame_us(void)  { return (int)frame_us; }
 int wm_peak_us(void)   { return (int)frame_peak_us; }
@@ -2306,13 +2888,25 @@ int wm_late(void)      { return (int)frame_late; }
 int wm_lost(void)      { return (int)frame_lost; }
 int wm_painted(void)   { return (int)frame_painted; }
 int wm_budget_us(void) { return (int)FRAME_BUDGET_US; }
+int wm_sample_count(void) { return (int)sample_n; }
+static unsigned int sample_slot(int i)
+{
+    if (i < 0 || (unsigned)i >= sample_n) return WM_SAMPLE_N;
+    return (sample_head + WM_SAMPLE_N - sample_n + (unsigned)i) % WM_SAMPLE_N;
+}
+int wm_sample_frame(int i) { unsigned s = sample_slot(i); return s < WM_SAMPLE_N ? (int)sample_frame[s] : -1; }
+int wm_sample_input(int i) { unsigned s = sample_slot(i); return s < WM_SAMPLE_N ? (int)sample_input[s] : -1; }
 void wm_peak_reset(void) { frame_peak_us = 0; frame_late = 0; frame_lost = 0;
-                           frame_painted = 0; }
+                           frame_painted = 0; sample_head = sample_n = 0; }
 
 void wm_frame(void)
 {
+    /* This executes before the pacing early-return.  HID->route latency is
+     * therefore interrupt/main-loop latency, not one 60 Hz frame interval. */
+    wm_input_drain();
     unsigned int clock_khz = cpu_tsc_khz();
     unsigned int now_tsc = cpu_tsc_lo();
+    unsigned int missed_deadlines = 0;
     if (clock_khz) {
         unsigned int cyc_us = clock_khz / 1000u;
         if (!cyc_us) cyc_us = 1;
@@ -2324,6 +2918,7 @@ void wm_frame(void)
         if ((int)(now_tsc - next_frame_tsc) < 0) return;
         unsigned int behind = now_tsc - next_frame_tsc;
         unsigned int missed = interval ? behind / interval : 0;
+        missed_deadlines = missed;
         if (missed) frame_lost += missed;
         next_frame_tsc += (missed + 1u) * interval;
     } else {
@@ -2334,19 +2929,18 @@ void wm_frame(void)
         last_tick = tick;
     }
     unsigned int now = idt_ticks();
+    unsigned int frame_started_tick = now;
     last_tick = now;
     /* apps-in-windows timed the frame with the 64-bit cpu_tsc(); this tree
      * uses the 32-bit cpu_tsc_lo(). Both declarations survived the merge and
      * shadowed each other on the same name. One timer. */
     unsigned int t0 = cpu_tsc_lo();
+    int trace_frame = zllog_frame != 0 || zllog_frame_observe != 0;
+    unsigned int t_input = t0, t_tick = t0, t_compositor = t0, t_vblank = t0;
     int did_paint = 0;
-
-    input_poll();
-    for (int guard = 0; guard < 64; guard++) {
-        int t = input_next();
-        if (!t) break;
-        wm_route(t);
-    }
+    /* Close the race between the early drain and the atomic visual commit. */
+    wm_input_drain();
+    if (trace_frame) t_input = cpu_tsc_lo();
 
     /* app_tick runs every frame, is cheap, and MUST NOT DRAW. Returning 1 is
      * how a clock or a snake says "my state changed" without owning the frame
@@ -2358,7 +2952,8 @@ void wm_frame(void)
     if (hook_tick)
         for (int i = 0; i < nz; i++)
             if (!(wins[zorder[i]].flags & WF_MINIMIZED) &&
-                hook_tick(win_app(zorder[i]), zorder[i])) wm_damage_win(zorder[i]);
+                hook_tick(win_app(zorder[i]), zorder[i]))
+                wm_invalidate_client(zorder[i]);
 
     /* The toast appears and retires on a tick count of its own. This damages
      * ONLY its own rectangle and only when what is on screen actually changed
@@ -2399,8 +2994,10 @@ void wm_frame(void)
             sweep_last_top = top;
         }
     }
+    if (trace_frame) t_tick = cpu_tsc_lo();
 
     if (nwd) {
+        paint_reset(trace_frame && zllog_frame_observe != 0);
         /* Only the SPRITE has a save-under to go stale. A cursor on its own
          * plane is not in the back buffer at all, so a repaint cannot smear
          * it and hiding it would be a visible flicker for no reason. */
@@ -2408,36 +3005,96 @@ void wm_frame(void)
             fb_pointer_hide();  /* the sprite's save-under is stale once the
                                    pixels under it are about to be redrawn */
         wm_repaint();
+        paint_trace = 0;
         did_paint = 1;
-    }
+    } else paint_reset(0);
     /* The plane first; the sprite only if it did not take. */
     if (!gpu_cursor_move(ptr_x, ptr_y))
         fb_pointer_show(ptr_x, ptr_y);
+    /* fb damage is broader than WM repaint: the software cursor restores and
+     * draws two patches without adding WM damage.  Measuring only did_paint
+     * hid the path the user reported as the laggiest. */
+    unsigned int damage_count = (unsigned int)fb_damage_count();
+    unsigned int damage_area = fb_damage_area();
+    int did_present = damage_count != 0u;
+    if (trace_frame) t_compositor = cpu_tsc_lo();
     /* Firmware or our modeset may already have an Intel pipe scanning out.
      * Wait only on that proven source; QEMU/BGA takes the deadline path and
      * never touches an absent MMIO block. */
-    if (did_paint && intel_supported && intel_wait_vblank && intel_supported())
-        intel_wait_vblank();
+    int waited_vblank = 0;
+    if (did_paint && intel_supported && intel_wait_vblank && intel_supported()) {
+        waited_vblank = intel_wait_vblank() != 0;
+    }
+    if (trace_frame) t_vblank = cpu_tsc_lo();
     fb_present();
 
-    if (did_paint) {
+    if (did_present) {
         unsigned int khz = clock_khz;
         if (khz) {
-            /* 32-bit throughout: a 64-bit divide would pull in libgcc's
-             * __udivdi3 and this kernel links no libgcc at all. At 2.3 GHz a
-             * 32-bit TSC wraps every ~1.8 s, so a wrapped delta is discarded
-             * rather than reported as a colossal frame. */
-            unsigned int dt = cpu_tsc_lo() - t0;
-            if (dt < 0x40000000u) {
-                frame_us = dt / (khz / 1000u ? khz / 1000u : 1u);
-                if (frame_us > frame_peak_us) frame_peak_us = frame_us;
-                /* counted only where the frame was actually TIMED - a wrapped
-                 * TSC delta is discarded above, and charging a discarded
-                 * measurement as a miss would invent stutter out of a 1.8 s
-                 * counter wrap. */
-                frame_painted++;
-                if (frame_us > FRAME_BUDGET_US) frame_late++;
+            /* The phase clock is intentionally 32-bit to avoid libgcc in the
+             * freestanding kernel. A physical freeze can outlive that TSC
+             * window, though, and silently dropping the worst frame defeated
+             * the recorder. Preserve it with the 10 ms PIT clock and saturate
+             * only if even that duration exceeds the record field. */
+            unsigned int t_present = cpu_tsc_lo();
+            unsigned int dt = t_present - t0;
+            unsigned int cycles_per_us = khz / 1000u ? khz / 1000u : 1u;
+            if (dt < 0x40000000u) frame_us = dt / cycles_per_us;
+            else {
+                unsigned int ticks = idt_ticks() - frame_started_tick;
+                frame_us = ticks > 429496u ? 0xffffffffu : ticks * 10000u;
+            }
+            if (frame_us > frame_peak_us) frame_peak_us = frame_us;
+            frame_painted++;
+            int late = frame_us > FRAME_BUDGET_US;
+            if (late) frame_late++;
+            unsigned int input_latency = pending_input_tsc
+                ? frame_delta_us(pending_input_tsc, t_present, cycles_per_us)
+                : 0u;
+            sample_frame[sample_head] = frame_us;
+            sample_input[sample_head] = input_latency;
+            sample_head = (sample_head + 1u) % WM_SAMPLE_N;
+            if (sample_n < WM_SAMPLE_N) sample_n++;
+
+            unsigned int seq = frame_log_seq++;
+            int sample = (seq % FRAMELOG_SAMPLE_N) == 0;
+            if (trace_frame && zllog_frame_observe) {
+                unsigned int flags = (late ? FRAMELOG_LATE : 0u) |
+                                     (waited_vblank ? FRAMELOG_VBLANK : 0u) |
+                                     (!did_paint ? FRAMELOG_CURSOR_ONLY : 0u);
+                unsigned int bpp = fb_bits_per_pixel() / 8u;
+                unsigned int present_bytes = damage_area * (bpp ? bpp : 4u);
+                zllog_frame_observe(
+                    frame_delta_us(t0, t_input, cycles_per_us),
+                    frame_delta_us(t_input, t_tick, cycles_per_us),
+                    frame_delta_us(t_tick, t_compositor, cycles_per_us),
+                    frame_delta_us(t_compositor, t_vblank, cycles_per_us),
+                    frame_delta_us(t_vblank, t_present, cycles_per_us),
+                    frame_us, flags, damage_count, damage_area,
+                    input_latency, pending_input_seq, missed_deadlines,
+                    (unsigned)input_queued(), present_bytes,
+                    paint_desk_cycles / cycles_per_us,
+                    paint_chrome_cycles / cycles_per_us,
+                    paint_app_cycles / cycles_per_us,
+                    paint_effect_cycles / cycles_per_us,
+                    paint_repaint_rects, paint_repaint_pixels,
+                    paint_window_visits, paint_app_calls);
+            } else if (trace_frame && (late || sample)) {
+                unsigned int flags = (late ? FRAMELOG_LATE : 0u) |
+                                     (sample ? FRAMELOG_SAMPLE : 0u) |
+                                     (waited_vblank ? FRAMELOG_VBLANK : 0u) |
+                                     (!did_paint ? FRAMELOG_CURSOR_ONLY : 0u);
+                zllog_frame(frame_delta_us(t0, t_input, cycles_per_us),
+                            frame_delta_us(t_input, t_tick, cycles_per_us),
+                            frame_delta_us(t_tick, t_compositor, cycles_per_us),
+                            frame_delta_us(t_compositor, t_vblank, cycles_per_us),
+                            frame_delta_us(t_vblank, t_present, cycles_per_us),
+                            frame_us, flags, damage_count, damage_area);
             }
         }
+        /* This is the first visible presentation after the retained input.
+         * Clear only after its correlation has been handed to the recorder. */
+        pending_input_tsc = 0;
+        pending_input_seq = 0;
     }
 }
