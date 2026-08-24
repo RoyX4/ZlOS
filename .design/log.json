@@ -1,0 +1,9 @@
+[
+  {
+    "date": "2026-08-20",
+    "surface": "web",
+    "skeleton": "workstation-island-floating-dock",
+    "accent": "#c4844a",
+    "files": ["docs/design/foundry-desktop.html"]
+  }
+]

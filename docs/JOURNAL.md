@@ -24,6 +24,42 @@ the part that makes a change legible later, and the part nobody writes down.
 
 </details>
 
+## 2026-08-24 — chore: journal ride-along for e8faa50 (72630cc)
+
+`secret/desktop-foundry` · 2 files changed, 19 insertions(+), 3 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>2 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+
+</details>
+
+## 2026-08-24 — design: preserve Foundry desktop mock (e8faa50)
+
+`secret/desktop-foundry` · 2 files changed, 781 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | STALE |
+
+<details><summary>2 file(s)</summary>
+
+- `.design/log.json`
+- `docs/design/foundry-desktop.html`
+
+</details>
+
 ## 2026-08-20 — docs: round 2 pushed - origin/main is 67ce0fd (75c8997)
 
 `main` · 2 files changed, 47 insertions(+), 2 deletions(-)
@@ -714,4 +750,3 @@ the part that makes a change legible later, and the part nobody writes down.
 - `tools/preflight.sh`
 
 </details>
-
