@@ -37,6 +37,17 @@ while read -r f; do
     OBJS="$OBJS $o"
 done < SOURCES
 
+# Freestanding interpreter: repo-root lexer/parser/interp + ksetjmp.
+# shellcheck disable=SC2086
+gcc $CFLAGS -DZL_FREESTANDING -DBUILD_PARSER -c ../lexer.c -o _lexer64.o
+# shellcheck disable=SC2086
+gcc $CFLAGS -DZL_FREESTANDING -DBUILD_INTERP -c ../parser.c -o _parser64.o
+# shellcheck disable=SC2086
+gcc $CFLAGS -DZL_FREESTANDING -c ../interp.c -o _interp64.o
+# shellcheck disable=SC2086
+gcc $CFLAGS -c ksetjmp.S -o _ksetjmp64.o
+OBJS="$OBJS _lexer64.o _parser64.o _interp64.o _ksetjmp64.o"
+
 gcc $CFLAGS -c smp_trampoline64.S -o _smptr64.o
 gcc -m64 -c boot64.S -o _boot64.o
 

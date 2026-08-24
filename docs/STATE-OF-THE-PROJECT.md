@@ -27,6 +27,10 @@
 > §7.3, §10.3, and the §5.8 link-training pair) — dropped by the first synthesis,
 > not by the audit that fed it.
 
+The sequence those open items run in is
+[`docs/REMAINING-WORK.md`](REMAINING-WORK.md): H0 stop lying, H1 a desktop you
+can use, H2 the ThinkPad lights its own panel, H3 write zl on zlOS.
+
 This file replaces twenty-one planning documents totalling ~392 KB. Nineteen of
 them were audited item by item against the merged tree (870 items), plus three
 cross-check lenses; two more — `kernel/docs/POINTER-PROMPT.md`, which is live

@@ -310,6 +310,8 @@ extern int  xhci_key(void);
 extern int  xhci_kbd_report(int i);
 extern int  xhci_ram_ok(void);
 extern int  settings_load(void);
+extern int  fs_try_boot(void);
+extern void fs_seed_hello(void);
 extern int  xhci_bringup(void);
 extern int  xhci_owned(void);
 extern unsigned int xhci_portsc(int p);
@@ -1411,6 +1413,8 @@ Value zl_calln(const char *name, int n, ...)
      * settings_load() has never had one, so every setting was persisted to NVMe
      * and then ignored at boot. It applies on success and never writes. */
     if (streq(name, "set_load"))   return zl_num((double)settings_load());
+    if (streq(name, "fs_try"))     return zl_num((double)fs_try_boot());
+    if (streq(name, "fs_seed"))    { fs_seed_hello(); return zl_nil(); }
     if (streq(name, "usb_up"))     return zl_num((double)xhci_bringup());
     if (streq(name, "usb_ours"))   return zl_num((double)xhci_owned());
     if (streq(name, "usb_portsc")) return zl_num((double)xhci_portsc((int)a[0].num));

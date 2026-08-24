@@ -2439,6 +2439,7 @@ int zl_run_program(Node *program, long long steps, int max_depth)
     return ZI_OK;
 }
 
+#ifndef ZL_FREESTANDING
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -2482,3 +2483,4 @@ int main(int argc, char **argv)
     }
     return 0;
 }
+#endif /* ZL_FREESTANDING */

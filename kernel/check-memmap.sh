@@ -50,7 +50,7 @@ fi
 # ...and say which constants the sized checks below do NOT cover, so the gap is
 # visible rather than silent. Not a failure: a new address is not automatically
 # wrong, it is automatically unexamined.
-known=" SNAKE_X SNAKE_Y LINE_BUF LINE_MAX HIST_BUF HIST_N DISK_SCRATCH FILES_NAME_BUF EDIT_BUF EDIT_MAX "
+known=" SNAKE_X SNAKE_Y LINE_BUF LINE_MAX HIST_BUF HIST_N DISK_SCRATCH DISK_SCRATCH_SIZE PAINT_BUF PAINT_MAX FILES_NAME_BUF EDIT_BUF EDIT_MAX "
 unsized=""
 for n in $(grep -oP '^\K[A-Z_]+(?=\s*=\s*0x0[0-9A-Fa-f]{5,})' "$SRC" | sort -u); do
     case "$known" in *" $n "*) ;; *) unsized="$unsized $n";; esac
@@ -59,7 +59,8 @@ done
 
 declare -A K
 for name in SNAKE_X SNAKE_Y \
-            LINE_BUF LINE_MAX HIST_BUF HIST_N DISK_SCRATCH FILES_NAME_BUF \
+            LINE_BUF LINE_MAX HIST_BUF HIST_N DISK_SCRATCH DISK_SCRATCH_SIZE \
+            PAINT_BUF PAINT_MAX FILES_NAME_BUF \
             EDIT_BUF EDIT_MAX; do
     v=$(grep -oP "^$name\s*=\s*\K(0x[0-9A-Fa-f]+|[0-9]+)" "$SRC" | head -1)
     [ -n "$v" ] || { echo "FAIL: constant $name not found in $SRC"; exit 1; }
@@ -76,7 +77,8 @@ HIST_STRIDE=$(grep -oP 'HIST_BUF \+ hslot \* \K[0-9]+' "$SRC" | sort -u)
 SNAKE_X=${K[SNAKE_X]}; SNAKE_Y=${K[SNAKE_Y]}
 LINE_BUF=${K[LINE_BUF]}; LINE_MAX=${K[LINE_MAX]}
 HIST_BUF=${K[HIST_BUF]}; HIST_N=${K[HIST_N]}
-DISK_SCRATCH=${K[DISK_SCRATCH]}
+DISK_SCRATCH=${K[DISK_SCRATCH]}; DISK_SCRATCH_SIZE=${K[DISK_SCRATCH_SIZE]}
+PAINT_BUF=${K[PAINT_BUF]}; PAINT_MAX=${K[PAINT_MAX]}
 FILES_NAME_BUF=${K[FILES_NAME_BUF]}
 EDIT_BUF=${K[EDIT_BUF]}; EDIT_MAX=${K[EDIT_MAX]}
 
@@ -125,7 +127,8 @@ REGIONS=(
     "SNAKE_Y:$SNAKE_Y:$SNAKE_CELLS"
     "LINE_BUF:$LINE_BUF:$LINE_MAX"
     "HIST_BUF:$HIST_BUF:$((HIST_N * HIST_STRIDE))"
-    "DISK_SCRATCH:$DISK_SCRATCH:4096"
+    "DISK_SCRATCH:$DISK_SCRATCH:$DISK_SCRATCH_SIZE"
+    "PAINT_BUF:$PAINT_BUF:$((PAINT_MAX * 4))"
     # 24, not a named constant here: it is fs.c's FS_NAME_MAX, which this
     # script has no visibility into (it parses kernel.zl only).
     "FILES_NAME_BUF:$FILES_NAME_BUF:24"

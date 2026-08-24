@@ -561,3 +561,12 @@ echo "built ./gpu_aperture  (run: sudo ./gpu_aperture)"
 # screenshot. No -w: it builds clean under -Wall -Wextra.
 gcc -O2 -g -Wall -Wextra -o uitest uitest.c ../ui.c ../uikit.c
 echo "built ./uitest        (run: ./uitest)"
+
+# The real freestanding interpreter route used by `run hello.zl`.
+gcc -O2 -w -I../.. -DZL_FREESTANDING -DBUILD_PARSER -c ../../lexer.c -o _run_lex.o
+gcc -O2 -w -I../.. -DZL_FREESTANDING -DBUILD_INTERP -c ../../parser.c -o _run_par.o
+gcc -O2 -w -I../.. -DZL_FREESTANDING -c ../../interp.c -o _run_int.o
+gcc -O2 -w -I../.. -o runtest runtest.c ../exec.c ../interp_kernel.c ../ksetjmp.S \
+    _run_lex.o _run_par.o _run_int.o -lm
+rm -f _run_lex.o _run_par.o _run_int.o
+echo "built ./runtest       (run: ./runtest)"

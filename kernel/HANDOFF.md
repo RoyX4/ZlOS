@@ -273,10 +273,13 @@ Read this first in a new session. Everything below is verified, not remembered.
 > **What is still OPEN is not in this file — it is in
 > [`docs/STATE-OF-THE-PROJECT.md`](../docs/STATE-OF-THE-PROJECT.md),** which
 > audited twenty-one planning documents against the merged tree on 2026-08-19.
+> The **sequence** those open items run in is
+> [`docs/REMAINING-WORK.md`](../docs/REMAINING-WORK.md).
 > This file remains the authority on what the hardware has *proven*. It is
 > **stale on five checkable points**, each corrected there with a command: it
 > says nothing in the kernel arms `lt_armed` (`intel.c:4232` does, reachable
-> from `kernel.zl:1395`); it says there is no VBT parser (there is, unwired);
+> from `kernel.zl:1395`); it says there is no VBT parser (there is, and
+> `intel_bringup_panel` calls `intel_vbt_find()`);
 > it says `fb.c` has no clipping (`fb.c:763-798` is the scissor, with four
 > callers); it describes a boot fork `kernel.zl` no longer has; and it carries a
 > northstar percentage its own source retracted.

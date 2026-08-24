@@ -108,6 +108,7 @@ run "host benchmark receipt" "$WT/kernel" python3 run-benchmarks.py --run --self
 # LINE_BUF and DISK_SCRATCH sat on 0x02030000 through a whole integration.
 run "zl call sites" "$WT/kernel" ./check-zl-calls.sh
 run "memory map" "$WT/kernel" ./check-memmap.sh
+run "memmap guards" "$WT/kernel/hosttest" ./memmap-guard-test.sh
 run "unique app ids" "$WT/kernel" ./check-appids.py --selftest
 run "app registry coverage" "$WT" python3 kernel/hosttest/apps53.py --selftest
 run "61-app manifest" "$WT/kernel" python3 gen-app-manifest.py --check --selftest
@@ -155,7 +156,7 @@ fi
 
 # --- boot gates: QEMU under TCG, one at a time, guarded
 run "reproducible kernel and ISO" "$WT/kernel" python3 check-reproducible-build.py --check
-for g in mkiso.sh verify.sh verify-iso.sh verify-64.sh verify-efi.sh verify-raw.sh verify-disk.sh verify-clock.sh; do
+for g in mkiso.sh verify.sh verify-iso.sh verify-64.sh verify-efi.sh verify-raw.sh verify-disk.sh verify-clock.sh verify-net.sh; do
   until guard; do sleep 30; done
   run "boot: $g" "$WT/kernel" "./$g"
 done

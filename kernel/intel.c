@@ -2770,12 +2770,29 @@ int intel_pp_sequencing(void)
  * does, and it is the reason this function exists rather than being folded
  * into the power-on path - it has to happen before power is asserted, not with
  * it. */
+int intel_vbt_find(void);
+int intel_vbt_present(void);
+int intel_vbt_t1_t3(void);
+int intel_vbt_t8(void);
+int intel_vbt_t9(void);
+int intel_vbt_t10(void);
+int intel_vbt_t11_t12(void);
+int intel_vbt_low_vswing(void);
+
 int intel_pp_delays_program(void)
 {
     if (!intel_present() || !lt_armed) return 0;
 
     /* eDP-spec ceilings, used only where the register reads lower */
     u32 want_t3 = 2000, want_bl_on = 10, want_t10 = 500, want_bl_off = 500;
+
+    if (intel_vbt_present()) {
+        u32 value;
+        value = (u32)intel_vbt_t1_t3() * 10u; if (value > want_t3) want_t3 = value;
+        value = (u32)intel_vbt_t8() * 10u; if (value > want_bl_on) want_bl_on = value;
+        value = (u32)intel_vbt_t10() * 10u; if (value > want_t10) want_t10 = value;
+        value = (u32)intel_vbt_t9() * 10u; if (value > want_bl_off) want_bl_off = value;
+    }
 
     u32 on  = mmio_r(PP_ON_DELAYS);
     u32 off = mmio_r(PP_OFF_DELAYS);
@@ -2796,6 +2813,13 @@ int intel_pp_delays_program(void)
     u32 ctl = mmio_r(PP_CONTROL) & 0xFFFF;
     u32 cyc = (ctl >> 4) & 0x1F;
     if (cyc < 6) cyc = 6;                       /* >= 500 ms */
+    if (intel_vbt_present()) {
+        int t12ms = intel_vbt_t11_t12();
+        if (t12ms > 0) {
+            u32 need = (u32)t12ms / 100u + 1u;
+            if (need > cyc) cyc = need;
+        }
+    }
     ctl = (ctl & ~(0x1Fu << 4)) | (cyc << 4);
     ctl |= PP_PWR_DOWN_ON_RESET;                /* H4 - i915 leaves this clear */
 
@@ -4101,7 +4125,12 @@ int intel_modeset_run_ex(int port, int dry)
     /* Step 31 before 34, always: the hardware latches the buffer translation
      * at DDI_BUF_CTL enable, so programming it afterwards does nothing. */
     MS_STEP(31, "buf-trans entry 0",    intel_ddi_program_buf_trans(port, 0, 0));
-    MS_STEP(32, "I_boost / balance leg", intel_iboost_set(port, 0, lanes == 4));
+    {
+        int iboost = 0;
+        if (intel_vbt_present() && intel_vbt_low_vswing() == 0) iboost = 1;
+        MS_STEP(32, "I_boost / balance leg",
+                intel_iboost_set(port, iboost, lanes == 4));
+    }
     MS_STEP(34, "port enable + 600us",  intel_port_enable(port, lanes, enhanced));
 
     /* -- Phase G: link training ------------------------------------------
@@ -4378,6 +4407,9 @@ u32 intel_bringup_panel(void)
                   4u, 2u /* unsupported/absent */, (unsigned)gpu_devid);
         return 0;
     }
+
+    /* Consult the board's VBT policy before the first panel write. */
+    intel_vbt_find();
 
     u32 stolen = intel_stolen_base();
     u32 ssize  = intel_stolen_size();

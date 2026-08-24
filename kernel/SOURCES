@@ -79,6 +79,7 @@ heap.c
 paging.c
 usermode.c
 exec.c
+interp_kernel.c
 
 # desktop/feel-and-control
 settings.c

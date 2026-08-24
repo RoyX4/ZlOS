@@ -5686,6 +5686,9 @@ kbd_init()
 # every boot. It applies what it finds, prints why when it finds nothing, and
 # never writes - so a read-only boot stays read-only.
 set_load()
+# Mount an existing zlfs volume without formatting unknown media. A successful
+# mount seeds hello.zl once for the persistent user-mode interpreter route.
+fs_try()
 
 # THE COMPOSITOR ALLOCATES RETAINED CLIENT AND SHELL SURFACES. The physical
 # 2560x1440 boot exposed that wm_boot_start() used to run before heap_up(): six

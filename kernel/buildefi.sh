@@ -79,6 +79,13 @@ done
 clang $CF -c smp_trampoline64.S -o _efi_smptr.o
 OBJS="$OBJS _efi_smptr.o"
 
+# Freestanding interpreter. ksetjmp.S sees -DZL_EFI and uses the Win64 ABI.
+clang $CF -DZL_FREESTANDING -DBUILD_PARSER -c ../lexer.c -o _efi_lexer.o
+clang $CF -DZL_FREESTANDING -DBUILD_INTERP -c ../parser.c -o _efi_parser.o
+clang $CF -DZL_FREESTANDING -c ../interp.c -o _efi_interp.o
+clang $CF -c ksetjmp.S -o _efi_ksetjmp.o
+OBJS="$OBJS _efi_lexer.o _efi_parser.o _efi_interp.o _efi_ksetjmp.o"
+
 # UEFI images are relocated by firmware.  A zero preferred base, subsystem
 # version 0.0 and a present .reloc directory are the conventional removable-
 # media shape.  The old 6 GiB DLL-style image also boots a measured 7 GiB OVMF

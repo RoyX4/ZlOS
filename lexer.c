@@ -13,10 +13,14 @@
  * Its only job is chopping. The parser judges.
  */
 
+#ifdef ZL_FREESTANDING
+#include "freestanding/zl_freestanding.h"
+#else
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#endif
 
 #include "lexer.h"        /* Token, TokenType and MAX_TEXT now live here */
 
@@ -355,6 +359,15 @@ const char *type_name(TokenType t)
     return "???";
 }
 
+#ifdef ZL_FREESTANDING
+char *read_whole_file(const char *path) { (void)path; return 0; }
+Token *lex_file(const char *path, int *out_count)
+{
+    (void)path;
+    if (out_count) *out_count = 0;
+    return 0;
+}
+#else
 char *read_whole_file(const char *path)
 {
     FILE *f = fopen(path, "rb");
@@ -393,6 +406,7 @@ Token *lex_file(const char *path, int *out_count)
     free(source);
     return tokens;
 }
+#endif /* ZL_FREESTANDING */
 
 /* lex_text - the same chopping, on text already in memory.
  *
