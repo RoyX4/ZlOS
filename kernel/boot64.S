@@ -142,11 +142,16 @@ long_entry:
     mov %rax, %cr4
 
     mov $stack_top, %rsp            /* 16-byte aligned, as the ABI requires */
+    call serial_init
     movl mb_ptr(%rip), %edi         /* multiboot pointer -> first argument;
                                        a 32-bit move zero-extends into RDI   */
-
-    call serial_init
+    mov $64, %esi
+    call zlos_boot_from_multiboot
+    movl mb_ptr(%rip), %edi
     call console_init               /* takes the multiboot pointer in RDI   */
+    call zlos_boot_is_valid
+    test %eax, %eax
+    jz 1f
     call main
     call kernel_done
 1:  hlt

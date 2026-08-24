@@ -55,9 +55,10 @@ unsigned int cpu_tsc_khz(void)   { return 0; }
  * Captures what the stack sends and hands back whatever the test scripts.
  */
 static unsigned char sent[64][2048];
-static int sent_len[64], nsent;
+static int sent_len[64], sent_flags[64], nsent;
+static unsigned sent_seq[64];
 static int lport;
-static unsigned our_isn, peer_isn, peer_next;
+static unsigned our_isn, peer_isn, peer_next, peer_ack;
 
 static int capture(net_u32 dst, int proto, const net_u8 *p, int len)
 {
@@ -69,8 +70,13 @@ static int capture(net_u32 dst, int proto, const net_u8 *p, int len)
     if (nsent < 64) {
         int doff = (p[12] >> 4) * 4;
         int dl = len - doff;
+        sent_seq[nsent] = ((unsigned)p[4] << 24) |
+                          ((unsigned)p[5] << 16) |
+                          ((unsigned)p[6] << 8) | p[7];
+        sent_flags[nsent] = p[13];
         if (dl > 0 && dl < 2048) { memcpy(sent[nsent], p + doff, dl); sent_len[nsent] = dl; }
         else sent_len[nsent] = 0;
+        if (dl > 0) peer_ack = sent_seq[nsent] + (unsigned)dl;
         nsent++;
     }
     return 1;
@@ -103,7 +109,7 @@ static void begin(const char *path)
     tcp_attach(capture, LOCAL_IP);
     tcp_abort();
     http_reset();
-    nsent = 0; lport = 0; our_isn = 0;
+    nsent = 0; lport = 0; our_isn = 0; peer_ack = 0;
     v_ticks = 1000;
     peer_isn = 0x30300000u;
     http_start(PEER_IP, PORT, "10.0.2.2", path);
@@ -116,14 +122,14 @@ static void begin(const char *path)
 static void feed(const char *s, int n)
 {
     if (n < 0) n = (int)strlen(s);
-    inject(peer_next, our_isn + 1, F_ACK, s, n);
+    inject(peer_next, peer_ack, F_ACK, s, n);
     peer_next += (unsigned)n;
     http_poll();
 }
 
 static void feed_fin(void)
 {
-    inject(peer_next, our_isn + 1, F_ACK | F_FIN, 0, 0);
+    inject(peer_next, peer_ack, F_ACK | F_FIN, 0, 0);
     peer_next++;
     http_poll();
     http_poll();
@@ -162,6 +168,44 @@ static void t_request(void)
      * cannot read - assert we do NOT ask */
     CHECK(strstr(req, "Accept-Encoding") == 0, "asked for a content encoding");
     CHECK(strstr(req, "HTTP/1.1") == 0, "claimed HTTP/1.1");
+    CHECK(strstr(req, "Connection: keep-alive\r\n") != 0,
+          "plain HTTP/1.0 did not offer bounded keep-alive reuse");
+}
+
+static void t_connection_reuse(void)
+{
+    printf("HTTP/1.0 connection reuse\n");
+    begin("/one");
+    feed("HTTP/1.0 200 OK\r\nContent-Length: 3\r\n"
+         "Connection: keep-alive\r\n\r\none", -1);
+    CHECK(http_state() == HTTP_DONE, "first response state %d", http_state());
+    CHECK(tcp_state() == TCP_ESTABLISHED, "keep-alive socket state %s",
+          tcp_state_name(tcp_state()));
+
+    int before = nsent;
+    int reused = http_connection_reuses();
+    CHECK(http_start(PEER_IP, PORT, "10.0.2.2", "/two") == 1,
+          "second request refused the idle matching socket");
+    http_poll();
+    CHECK(http_connection_reuses() == reused + 1,
+          "reuse counter did not advance");
+    CHECK(http_state() == HTTP_RECEIVING, "reused request state %d", http_state());
+    int syns = 0, request = -1;
+    for (int i = before; i < nsent; i++) {
+        if (sent_flags[i] & F_SYN) syns++;
+        if (sent_len[i] > 0) request = i;
+    }
+    CHECK(syns == 0, "reuse emitted %d new SYNs", syns);
+    CHECK(request >= 0 && sent_len[request] >= 8 &&
+          !memcmp(sent[request], "GET /two", 8),
+          "the reused socket did not carry GET /two");
+
+    feed("HTTP/1.0 200 OK\r\nContent-Length: 3\r\n"
+         "Connection: close\r\n\r\ntwo", -1);
+    CHECK(http_state() == HTTP_DONE && !strcmp(body_str(), "two"),
+          "second response state/body %d '%s'", http_state(), body_str());
+    CHECK(tcp_state() != TCP_ESTABLISHED,
+          "Connection: close left a reusable socket open");
 }
 
 static void t_content_length(void)
@@ -409,6 +453,7 @@ int main(void)
 {
     printf("http.c over the real tcp.c, no machine\n\n");
     t_request();
+    t_connection_reuse();
     t_content_length();
     t_close_delimited();
     t_split_headers();

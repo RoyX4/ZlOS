@@ -56,6 +56,7 @@ int http_total(void);
 int http_truncated(void);
 int http_refused(void);
 int http_redirects(void);
+int http_connection_reuses(void); /* completed plain HTTP/1.0 socket reuses */
 const char *http_content_type(void);
 const char *http_location(void);
 

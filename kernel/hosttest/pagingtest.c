@@ -32,6 +32,8 @@ unsigned long long vmm_window_virt(void);
 unsigned long long vmm_window_phys(void);
 unsigned long long vmm_window_bytes(void);
 void vmm_report(void);
+int vmm_pat_wc_index(unsigned long long pat);
+unsigned long long vmm_pat_leaf_bits(int index, int huge);
 
 void zl_putc_pub(char c) { fputc(c, stdout); }
 
@@ -59,6 +61,18 @@ static void ok(int cond, const char *what)
 int main(void)
 {
     printf("pagingtest - paging.c's translation arithmetic, unmodified\n\n");
+
+    /* PAT index bits differ by leaf size.  Index 4 is the trap: bit 7 means
+     * PAT in a 4 KiB PTE but page-size in a huge leaf, whose PAT bit is 12. */
+    eq((unsigned long long)vmm_pat_wc_index(0x0000000000000106ULL), 1,
+       "find the existing WC PAT entry");
+    eq((unsigned long long)vmm_pat_wc_index(0x0606060606060606ULL),
+       0xffffffffffffffffULL, "refuse a PAT with no WC entry");
+    eq(vmm_pat_leaf_bits(1, 1), 1ULL << 3, "huge PAT index 1 uses PWT");
+    eq(vmm_pat_leaf_bits(4, 1), 1ULL << 12, "huge PAT index 4 uses bit 12");
+    eq(vmm_pat_leaf_bits(4, 0), 1ULL << 7, "4 KiB PAT index 4 uses bit 7");
+    eq(vmm_pat_leaf_bits(7, 1), (1ULL << 3) | (1ULL << 4) | (1ULL << 12),
+       "huge PAT index 7 encodes all three selector bits");
 
     /* ---- with NO window, everything is the identity ---------------------
      * This is the 32-bit build, and it is also what every failure path inside

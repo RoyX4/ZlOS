@@ -33,6 +33,7 @@
  */
 
 #include "memmap.h"
+#include "telemetry.h"
 
 typedef unsigned int   u32;
 typedef unsigned short u16;
@@ -386,6 +387,8 @@ int intel_bar_too_high(void) { return bar_too_high; }
 /* Find the Intel integrated GPU and map its register block. */
 int intel_find(void)
 {
+    zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              1u /* Intel discovery */, 0u /* start */, 0u);
     bar_too_high = 0;
     pci_scan();
     for (int i = 0; i < pci_count(); i++) {
@@ -416,6 +419,8 @@ int intel_find(void)
              * are different facts and the boot log prints them differently. */
             bar_too_high = 1;
             gpu_idx = -1;
+            zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_ERROR,
+                      1u, 2u /* BAR above addressable range */, gpu_devid);
             return -1;
         }
         pci_enable(i);                            /* memory + bus master */
@@ -432,9 +437,13 @@ int intel_find(void)
             mmio     |= ((uptr)mmio_hi << 16) << 16;
             aperture |= ((uptr)aper_hi << 16) << 16;
         }
+        zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+                  1u, is_gen9(gpu_devid) ? 1u : 3u, gpu_devid);
         return i;
     }
     gpu_idx = -1;
+    zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_WARN,
+              1u, 4u /* no Intel display */, 0u);
     return -1;
 }
 
@@ -1071,8 +1080,20 @@ int intel_wait_vblank(void)
 {
     if (!intel_pipe_enabled()) return 0;
     int before = intel_frame_count();
-    for (int spin = 0; spin < 20000000; spin++)
-        if (intel_frame_count() != before) return 1;
+    u32 before_pipe = mmio_r(TRANS_CONF_A);
+    for (int spin = 0; spin < 20000000; spin++) {
+        if (intel_frame_count() != before) {
+            zlt_count(ZLLOG_C_MMIO_POLL, (unsigned)spin + 1u);
+            return 1;
+        }
+    }
+    zlt_count(ZLLOG_C_MMIO_POLL, 20000000u);
+    zlt_snapshot(ZLLOG_SUB_DISPLAY, ZLLOG_SNAP_INTEL_VBLANK, 0,
+                 (unsigned)before, before_pipe);
+    zlt_snapshot(ZLLOG_SUB_DISPLAY, ZLLOG_SNAP_INTEL_VBLANK, 1,
+                 (unsigned)intel_frame_count(), mmio_r(TRANS_CONF_A));
+    zlt_trigger(ZLLOG_SUB_DISPLAY, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                2u /* vblank wait */, (unsigned)before, 20000000u);
     return 0;
 }
 
@@ -3936,6 +3957,10 @@ static int ms_do(int plan_step, const char *name, int result, int soft)
         ms_count++;
     }
     if (!result && !soft && !ms_failed_at) ms_failed_at = plan_step;
+    zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE,
+              result ? ZLLOG_INFO : (soft ? ZLLOG_WARN : ZLLOG_ERROR),
+              3u /* modeset step */, (unsigned)plan_step,
+              (result ? 1u : 0u) | (soft ? 2u : 0u) | (ms_dry ? 4u : 0u));
     return result;
 }
 
@@ -4346,12 +4371,22 @@ int intel_modeset_teardown(int port)
  */
 u32 intel_bringup_panel(void)
 {
-    if (!intel_present() || !intel_supported()) return 0;
+    zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              4u /* panel bringup */, 0u /* start */, (unsigned)gpu_devid);
+    if (!intel_present() || !intel_supported()) {
+        zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_WARN,
+                  4u, 2u /* unsupported/absent */, (unsigned)gpu_devid);
+        return 0;
+    }
 
     u32 stolen = intel_stolen_base();
     u32 ssize  = intel_stolen_size();
     u32 aper   = (u32)aperture;
-    if (!stolen || !ssize || !aper) return 0;
+    if (!stolen || !ssize || !aper) {
+        zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_ERROR,
+                  4u, 3u /* memory geometry */, ssize);
+        return 0;
+    }
 
     /* The mode comes from what firmware is already running. On this machine
      * that is always available: the system firmware lights the panel during
@@ -4382,8 +4417,14 @@ u32 intel_bringup_panel(void)
     intel_link_train_arm(1);
     int ok = intel_modeset_run(0);
     intel_link_train_arm(0);
-    if (!ok) return 0;
+    if (!ok) {
+        zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_ERROR,
+                  4u, 4u /* modeset */, (unsigned)intel_modeset_failed_at());
+        return 0;
+    }
 
+    zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              4u, 1u /* ready */, aper + gfx);
     return aper + gfx;
 }
 

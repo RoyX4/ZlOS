@@ -64,6 +64,8 @@ typedef unsigned int   u32;
 typedef unsigned short u16;
 typedef unsigned char  u8;
 
+#include "telemetry.h"
+
 void zl_putc_pub(char c);
 
 /* THIS FILE IS 32-BIT ONLY, and that is a scope decision rather than a
@@ -117,6 +119,17 @@ u32 user_return_esp = 0;   /* kernel ESP to resume on SYS_EXIT */
 u32 user_return_eip = 0;   /* and where                         */
 u32 user_saved_flags = 0;  /* EFLAGS from before the excursion   */
 
+static u32 syscall_finish(u32 nr, unsigned operation_id, u32 result)
+{
+    int signed_result = (int)result;
+    unsigned error = signed_result < 0 ? (unsigned)-signed_result : 0u;
+    zlt_event(ZLLOG_SUB_SYSCALL, ZLLOG_EV_SYSCALL_EXIT,
+              error ? ZLLOG_WARN : ZLLOG_INFO, nr, result, user_calls);
+    zlt_operation_result(ZLLOG_SUB_SYSCALL, operation_id,
+                         ZLLOG_OP_SYSCALL_BASE + nr, signed_result, error, 0u);
+    return result;
+}
+
 /* ---- the syscall handler, called from the ISR stub in idt.c ---------------
  * Runs in RING 0, on the kernel stack the TSS named, with the user's registers
  * in the frame below. Everything a user program can influence arrives in
@@ -128,6 +141,12 @@ u32 syscall_dispatch(u32 nr, u32 arg1, u32 arg2, u32 arg3)
     (void)arg2; (void)arg3;
     user_calls++;
     user_last = nr;
+    zlt_count(ZLLOG_C_SYSCALL, 1);
+    zlt_event(ZLLOG_SUB_SYSCALL, ZLLOG_EV_SYSCALL_ENTER, ZLLOG_INFO,
+              nr, arg1, user_calls);
+    unsigned operation_id = zlt_operation_begin(
+        ZLLOG_SUB_SYSCALL, ZLLOG_OBJ_PROCESS, 1u,
+        ZLLOG_OP_SYSCALL_BASE + nr, nr);
 
     switch (nr) {
     case SYS_WRITE:
@@ -139,14 +158,19 @@ u32 syscall_dispatch(u32 nr, u32 arg1, u32 arg2, u32 arg3)
          * pointer argument would need range-checking against an address space
          * this build does not have yet. */
         zl_putc_pub((char)(arg1 & 0x7F));
-        return 0;
+        return syscall_finish(nr, operation_id, 0u);
 
     case SYS_GETPID:
-        return 1;                       /* one process, and it is honest */
+        return syscall_finish(nr, operation_id, 1u); /* one process */
 
     case SYS_EXIT:
         user_exited = 1;
-        return 0;
+        {
+        u32 result = syscall_finish(nr, operation_id, 0u);
+        zlt_lifecycle(ZLLOG_SUB_SCHED, ZLLOG_OBJ_PROCESS, 1u,
+                      ZLLOG_LIFE_EXIT, 0u, user_calls);
+        return result;
+        }
 
     default:
         /* An unknown call is NOT a fault and NOT silent. Silence here is how a
@@ -154,7 +178,7 @@ u32 syscall_dispatch(u32 nr, u32 arg1, u32 arg2, u32 arg3)
         up("  syscall: ring 3 asked for unknown call ");
         upu(nr);
         up("\n");
-        return (u32)-1;
+        return syscall_finish(nr, operation_id, (u32)-1);
     }
 }
 
@@ -320,6 +344,8 @@ void user_enter(void)
 {
     user_exited = 0;
     user_calls  = 0;
+    zlt_lifecycle(ZLLOG_SUB_SCHED, ZLLOG_OBJ_PROCESS, 1u,
+                  ZLLOG_LIFE_START, 0u, U_STACK_BYTES);
 
     __asm__ volatile(
         /* SAVE EFLAGS, AND THIS IS NOT BOOKKEEPING - IT IS THE BUG THAT COST
@@ -406,15 +432,798 @@ void user_selftest(void)
 
 #else  /* ZL_64 */
 
-/* The 64-bit builds get an honest refusal rather than a version of this that
- * has never run. See the note at the top of the file. */
+typedef unsigned long long u64;
+typedef signed long long s64;
+typedef unsigned char u8_64;
+
+#define U64_P  1ULL
+#define U64_W  2ULL
+#define U64_U  4ULL
+#define U64_NX (1ULL << 63)
+#define U64_ADDR 0x000ffffffffff000ULL
+#define U64_CODE_SEL 0x23
+#define U64_DATA_SEL 0x1b
+#define U64_SYS_WRITE  1
+#define U64_SYS_GETPID 2
+#define U64_SYS_EXIT   3
+#define U64_SYS_COPY   4
+#define U64_SYS_TIME   5
+#define U64_SYS_YIELD  6
+#define U64_SYS_OPEN   7
+#define U64_SYS_READ   8
+#define U64_SYS_WRITEF 9
+#define U64_SYS_CLOSE  10
+#define U64_SYS_INFO   11
+#define U64_SYS_REMOVE 12
+#define U64_SYS_RENAME 13
+#define U64_SYS_SYNC   14
+#define U64_SYS_SEND   15
+#define U64_SYS_RECV   16
+#define U64_SYS_FROM   17
+#define U64_SYS_WIN_OPEN    18
+#define U64_SYS_WIN_PRESENT 19
+#define U64_SYS_WIN_POLL    20
+#define U64_SYS_WIN_CLOSE   21
+
+#define U64_HANDLES 8
+#define U64_PROCS 2
+#define U64_SAVED_QWORDS 20
+#define U64_IPC_SLOTS 4
+#define U64_IPC_BYTES 64
+#define U64_IO_MAX 4096
+#define U64_NAME_MAX 24
+#define U64_EINVAL ((u64)-22)
+#define U64_ENOENT ((u64)-2)
+#define U64_ENOSPC ((u64)-28)
+#define U64_EBADF  ((u64)-9)
+#define U64_EAGAIN ((u64)-11)
+#define U64_EIO    ((u64)-5)
+
+struct ipc64_message {
+    u32 from, bytes;
+    u8_64 data[U64_IPC_BYTES];
+};
+
+struct process64 {
+    u32 pid;
+    u32 state;                 /* 0 empty, 1 runnable/running, 2 exited, 3 fault */
+    u64 cr3, user_base, user_stack_top;
+    u32 calls, fault_vector;
+    u32 bad_pointer_refused;
+    u32 started, has_frame;
+    u64 saved_frame[U64_SAVED_QWORDS];
+    int handles[U64_HANDLES];       /* zlfs index + 1; zero means closed */
+    struct ipc64_message inbox[U64_IPC_SLOTS];
+    u32 inbox_head, inbox_tail, inbox_count, ipc_last_from;
+};
+
+static struct process64 procs64[U64_PROCS];
+static struct process64 *proc64;
+static int proc64_index;
+static u64 proc_pml4[U64_PROCS][512] __attribute__((aligned(4096)));
+static u64 proc_pdpt[U64_PROCS][512] __attribute__((aligned(4096)));
+static u64 proc_pd[U64_PROCS][512]   __attribute__((aligned(4096)));
+static u64 proc_pt[U64_PROCS][512]   __attribute__((aligned(4096)));
+static u8_64 proc_code[U64_PROCS][4096]  __attribute__((aligned(4096)));
+static u8_64 proc_stack[U64_PROCS][4096] __attribute__((aligned(4096)));
+static u8_64 proc_kstack[U64_PROCS][8192] __attribute__((aligned(16)));
+static u8_64 proc_io[U64_PROCS][U64_IO_MAX];
+
+u64 user64_kernel_cr3, user64_process_cr3;
+u64 user64_return_rsp, user64_return_rip, user64_return_rflags;
+static volatile int user64_exited, user64_running, user64_faulted, user64_yielded;
+static volatile int user64_preempt_on;
+static u32 user64_preemptions;
+static char user64_sched_trace[8];
+static int user64_sched_trace_n, user64_sched_trace_on;
+
+extern unsigned char user64_blob[], user64_blob_end[];
+void __attribute__((sysv_abi)) user64_enter_asm(u64 rip, u64 rsp);
+void __attribute__((sysv_abi)) user64_resume_asm(u64 *frame);
+void user64_abort(void) __attribute__((noreturn));
+extern void gdt64_set_kernel_stack(u64 top);
+extern u32 idt_ticks(void);
+extern void idt_timer_tick(void);
+extern void yield(void);
+extern int fs_mounted(void);
+extern int fs_find(const char *name);
+extern int fs_create(const char *name, u32 bytes);
+extern int fs_read(int idx, void *dst, u32 max);
+extern int fs_write(int idx, const void *src, u32 bytes);
+extern int fs_delete(int idx);
+extern int fs_rename(int idx, const char *name);
+extern int fs_sync(void);
+extern int fs_used(int idx);
+extern u32 fs_size(int idx);
+extern int fs_maxfiles(void);
+extern int fs_name_byte(int idx, int i);
+struct userwin_event64 { u32 type, code, x, y; };
+extern int userwin_open(int owner, const char *title);
+extern int userwin_present(int owner, int handle, const char *text, u32 bytes);
+extern int userwin_poll(int owner, int handle, struct userwin_event64 *out);
+extern int userwin_close(int owner, int handle);
+extern void userwin_close_owner(int owner);
+extern int userwin_test_inject(int owner, int handle, u32 type, u32 code, u32 x, u32 y);
+extern int userwin_count(void);
+extern int userwin_text_byte(int owner, int handle, int index);
+extern int userwin_has_wm_window(int owner, int handle);
+
+static u64 cr3_read64(void)
+{
+    u64 v; __asm__ volatile("mov %%cr3,%0" : "=r"(v)); return v;
+}
+
+static void zero_page(u64 *p) { for (int i = 0; i < 512; i++) p[i] = 0; }
+
+static int process64_prepare(int index, u32 pid)
+{
+    if (index < 0 || index >= U64_PROCS) return 0;
+    if (procs64[index].state && procs64[index].pid)
+        userwin_close_owner((int)procs64[index].pid);
+    u64 old = cr3_read64();
+    u64 *live = (u64 *)(old & U64_ADDR);
+    if (!live) return 0;
+    int slot = -1;
+    for (int i = 1; i < 255; i++) if (!(live[i] & U64_P)) { slot = i; break; }
+    if (slot < 0) return 0;
+    for (int i = 0; i < 512; i++) proc_pml4[index][i] = live[i];
+    zero_page(proc_pdpt[index]); zero_page(proc_pd[index]); zero_page(proc_pt[index]);
+    u64 base = (u64)(unsigned)slot << 39;
+    proc_pml4[index][slot] = ((u64)proc_pdpt[index] & U64_ADDR) | U64_P | U64_W | U64_U;
+    proc_pdpt[index][0] = ((u64)proc_pd[index] & U64_ADDR) | U64_P | U64_W | U64_U;
+    proc_pd[index][0] = ((u64)proc_pt[index] & U64_ADDR) | U64_P | U64_W | U64_U;
+    proc_pt[index][0] = ((u64)proc_code[index] & U64_ADDR) | U64_P | U64_U;
+    /* PTE 1 is intentionally absent: the stack's lower guard page. */
+    proc_pt[index][2] = ((u64)proc_stack[index] & U64_ADDR) | U64_P | U64_W | U64_U | U64_NX;
+
+    u64 bytes = (u64)(user64_blob_end - user64_blob);
+    if (!bytes || bytes > sizeof proc_code[index]) return 0;
+    for (u64 i = 0; i < bytes; i++) proc_code[index][i] = user64_blob[i];
+    for (u64 i = bytes; i < sizeof proc_code[index]; i++) proc_code[index][i] = 0xcc;
+    for (int i = 0; i < (int)sizeof proc_stack[index]; i++) proc_stack[index][i] = 0;
+
+    proc64_index = index;
+    proc64 = &procs64[index];
+    proc64->pid = pid; proc64->state = 1;
+    proc64->cr3 = (u64)proc_pml4[index] & U64_ADDR;
+    proc64->user_base = base;
+    proc64->user_stack_top = base + 3 * 4096ULL;
+    proc64->calls = 0; proc64->fault_vector = 0; proc64->bad_pointer_refused = 0;
+    proc64->started = proc64->has_frame = 0;
+    for (int i = 0; i < U64_HANDLES; i++) proc64->handles[i] = 0;
+    proc64->inbox_head = proc64->inbox_tail = proc64->inbox_count = 0;
+    proc64->ipc_last_from = 0;
+    user64_kernel_cr3 = old;
+    user64_process_cr3 = proc64->cr3;
+    return 1;
+}
+
+static void process64_select(int index)
+{
+    proc64_index = index;
+    proc64 = &procs64[index];
+    user64_process_cr3 = proc64->cr3;
+    gdt64_set_kernel_stack((u64)(proc_kstack[index] + sizeof proc_kstack[index]));
+}
+
+/* Complete-range validation happens before the first byte is touched. */
+static int user64_range(u64 addr, u64 bytes, int writing)
+{
+    if (!bytes || addr + bytes < addr) return 0;
+    u64 b = proc64->user_base;
+    if (!writing && addr >= b && addr + bytes <= b + 4096) return 1;
+    if (addr >= b + 8192 && addr + bytes <= b + 12288) return 1;
+    return 0;
+}
+
+int copy_from_user(void *dst, u64 src, u32 bytes)
+{
+    if (!dst || !user64_range(src, bytes, 0)) return 0;
+    u8_64 *d = (u8_64 *)dst; const u8_64 *s = (const u8_64 *)src;
+    for (u32 i = 0; i < bytes; i++) d[i] = s[i];
+    return 1;
+}
+
+int copy_to_user(u64 dst, const void *src, u32 bytes)
+{
+    if (!src || !user64_range(dst, bytes, 1)) return 0;
+    u8_64 *d = (u8_64 *)dst; const u8_64 *s = (const u8_64 *)src;
+    for (u32 i = 0; i < bytes; i++) d[i] = s[i];
+    return 1;
+}
+
+static int user64_name(char out[U64_NAME_MAX], u64 ptr, u64 len)
+{
+    if (!ptr || !len || len >= U64_NAME_MAX) return 0;
+    if (!copy_from_user(out, ptr, (u32)len)) return 0;
+    for (u64 i = 0; i < len; i++) if (!out[i]) return 0;
+    out[len] = 0;
+    return 1;
+}
+
+static int user64_handle(int h)
+{
+    if (h <= 0 || h > U64_HANDLES || !proc64->handles[h - 1]) return -1;
+    return proc64->handles[h - 1] - 1;
+}
+
+static int user64_open_handle(int idx)
+{
+    for (int i = 0; i < U64_HANDLES; i++) if (!proc64->handles[i]) {
+        proc64->handles[i] = idx + 1;
+        return i + 1;
+    }
+    return -1;
+}
+
+static struct process64 *process64_pid(u32 pid)
+{
+    for (int i = 0; i < U64_PROCS; i++)
+        if (procs64[i].state == 1 && procs64[i].pid == pid) return &procs64[i];
+    return 0;
+}
+
+static u64 user64_finish(u64 nr, unsigned operation_id, u64 value)
+{
+    s64 signed_value = (s64)value;
+    unsigned error = signed_value < 0 ? (unsigned)-signed_value : 0u;
+    zlt_event(ZLLOG_SUB_SYSCALL, ZLLOG_EV_SYSCALL_EXIT,
+              error ? ZLLOG_WARN : ZLLOG_INFO,
+              (u32)nr, (u32)value, proc64->calls);
+    zlt_operation_result(ZLLOG_SUB_SYSCALL, operation_id,
+                         ZLLOG_OP_SYSCALL_BASE + (u32)nr,
+                         (int)signed_value, error, 0u);
+    return value;
+}
+
+u64 __attribute__((sysv_abi)) user64_dispatch(u64 nr, u64 arg1,
+                                              u64 arg2, u64 arg3)
+{
+    proc64->calls++;
+    zlt_count(ZLLOG_C_SYSCALL, 1);
+    zlt_event(ZLLOG_SUB_SYSCALL, ZLLOG_EV_SYSCALL_ENTER, ZLLOG_INFO,
+              (u32)nr, (u32)arg1, proc64->calls);
+    unsigned operation_id = zlt_operation_begin(
+        ZLLOG_SUB_SYSCALL, ZLLOG_OBJ_PROCESS, proc64->pid,
+        ZLLOG_OP_SYSCALL_BASE + (u32)nr, (u32)nr);
+#define U64_RETURN(value) return user64_finish(nr, operation_id, (value))
+    if (nr == U64_SYS_WRITE) {
+        char c = (char)(arg1 & 0x7f);
+        if (user64_sched_trace_on && user64_sched_trace_n < (int)sizeof user64_sched_trace)
+            user64_sched_trace[user64_sched_trace_n++] = c;
+        zl_putc_pub(c);
+        U64_RETURN(0);
+    }
+    if (nr == U64_SYS_GETPID) U64_RETURN(proc64->pid);
+    if (nr == U64_SYS_EXIT) {
+        userwin_close_owner((int)proc64->pid);
+        user64_exited = 1; proc64->state = 2;
+        u64 result = user64_finish(nr, operation_id, 0);
+        zlt_lifecycle(ZLLOG_SUB_SCHED, ZLLOG_OBJ_PROCESS, proc64->pid,
+                      ZLLOG_LIFE_EXIT, 0u, proc64->calls);
+        return result;
+    }
+    if (nr == U64_SYS_COPY) {
+        if (!user64_range(arg1, arg2, 0)) {
+            proc64->bad_pointer_refused++;
+            U64_RETURN((u64)-1);
+        }
+        U64_RETURN(0);
+    }
+    if (nr == U64_SYS_TIME) U64_RETURN(idt_ticks());
+    if (nr == U64_SYS_YIELD) {
+        user64_yielded = 1;
+        proc64->state = 1;
+        U64_RETURN(0);
+    }
+
+    /* The file ABI is intentionally whole-file and bounded. READ copies at
+     * most 4 KiB from the beginning; WRITE atomically replaces the whole
+     * file through zlfs's data-before-metadata path. This is a stable useful
+     * contract without pretending the current flat filesystem is POSIX. */
+    if (nr == U64_SYS_OPEN) {
+        char name[U64_NAME_MAX];
+        if (!fs_mounted() || !user64_name(name, arg1, arg2)) U64_RETURN(U64_EINVAL);
+        int idx = fs_find(name);
+        if (idx < 0 && (arg3 & 1ULL)) idx = fs_create(name, 0);
+        if (idx < 0) U64_RETURN(U64_ENOENT);
+        int h = user64_open_handle(idx);
+        U64_RETURN(h < 0 ? U64_ENOSPC : (u64)h);
+    }
+    if (nr == U64_SYS_READ) {
+        int idx = user64_handle((int)arg1);
+        if (idx < 0) U64_RETURN(U64_EBADF);
+        if (!arg3 || arg3 > U64_IO_MAX || fs_size(idx) > arg3) U64_RETURN(U64_EINVAL);
+        int n = fs_read(idx, proc_io[proc64_index], (u32)arg3);
+        if (n < 0 || !copy_to_user(arg2, proc_io[proc64_index], (u32)n)) U64_RETURN(U64_EIO);
+        U64_RETURN((u64)n);
+    }
+    if (nr == U64_SYS_WRITEF) {
+        int idx = user64_handle((int)arg1);
+        if (idx < 0) U64_RETURN(U64_EBADF);
+        if (arg3 > U64_IO_MAX ||
+            (arg3 && !copy_from_user(proc_io[proc64_index], arg2, (u32)arg3)))
+            U64_RETURN(U64_EINVAL);
+        U64_RETURN(fs_write(idx, proc_io[proc64_index], (u32)arg3) ? arg3 : U64_EIO);
+    }
+    if (nr == U64_SYS_CLOSE) {
+        if (arg1 == 0 || arg1 > U64_HANDLES || !proc64->handles[arg1 - 1])
+            U64_RETURN(U64_EBADF);
+        proc64->handles[arg1 - 1] = 0;
+        U64_RETURN(0);
+    }
+    if (nr == U64_SYS_INFO) {
+        if (arg1 >= (u64)fs_maxfiles() || !fs_used((int)arg1) ||
+            !arg2 || !arg3 || arg3 > U64_NAME_MAX) U64_RETURN(U64_ENOENT);
+        u32 n = 0;
+        while (n + 1 < (u32)arg3) {
+            int c = fs_name_byte((int)arg1, (int)n);
+            proc_io[proc64_index][n++] = (u8_64)c;
+            if (!c) break;
+        }
+        if (!n || proc_io[proc64_index][n - 1]) proc_io[proc64_index][n++] = 0;
+        if (!copy_to_user(arg2, proc_io[proc64_index], n)) U64_RETURN(U64_EINVAL);
+        U64_RETURN(fs_size((int)arg1));
+    }
+    if (nr == U64_SYS_REMOVE) {
+        char name[U64_NAME_MAX];
+        if (!user64_name(name, arg1, arg2)) U64_RETURN(U64_EINVAL);
+        int idx = fs_find(name);
+        U64_RETURN(idx >= 0 && fs_delete(idx) ? 0 : U64_ENOENT);
+    }
+    if (nr == U64_SYS_RENAME) {
+        int idx = user64_handle((int)arg1);
+        char name[U64_NAME_MAX];
+        if (idx < 0) U64_RETURN(U64_EBADF);
+        if (!user64_name(name, arg2, arg3)) U64_RETURN(U64_EINVAL);
+        U64_RETURN(fs_rename(idx, name) ? 0 : U64_EIO);
+    }
+    if (nr == U64_SYS_SYNC) U64_RETURN(fs_sync() ? 0 : U64_EIO);
+    if (nr == U64_SYS_SEND) {
+        struct process64 *to = process64_pid((u32)arg1);
+        if (!to) U64_RETURN(U64_ENOENT);
+        if (!arg3 || arg3 > U64_IPC_BYTES || !user64_range(arg2, arg3, 0))
+            U64_RETURN(U64_EINVAL);
+        if (to->inbox_count >= U64_IPC_SLOTS) U64_RETURN(U64_ENOSPC);
+        struct ipc64_message *m = &to->inbox[to->inbox_tail];
+        if (!copy_from_user(m->data, arg2, (u32)arg3)) U64_RETURN(U64_EINVAL);
+        m->from = proc64->pid; m->bytes = (u32)arg3;
+        to->inbox_tail = (to->inbox_tail + 1u) % U64_IPC_SLOTS;
+        to->inbox_count++;
+        U64_RETURN(arg3);
+    }
+    if (nr == U64_SYS_RECV) {
+        if (!proc64->inbox_count) U64_RETURN(U64_EAGAIN);
+        struct ipc64_message *m = &proc64->inbox[proc64->inbox_head];
+        if (!arg1 || arg2 < m->bytes || !copy_to_user(arg1, m->data, m->bytes))
+            U64_RETURN(U64_EINVAL);
+        proc64->ipc_last_from = m->from;
+        u32 bytes = m->bytes;
+        proc64->inbox_head = (proc64->inbox_head + 1u) % U64_IPC_SLOTS;
+        proc64->inbox_count--;
+        U64_RETURN(bytes);
+    }
+    if (nr == U64_SYS_FROM) U64_RETURN(proc64->ipc_last_from);
+    if (nr == U64_SYS_WIN_OPEN) {
+        char title[U64_NAME_MAX];
+        if (!user64_name(title, arg1, arg2)) U64_RETURN(U64_EINVAL);
+        int handle = userwin_open((int)proc64->pid, title);
+        U64_RETURN(handle > 0 ? (u64)handle : U64_ENOSPC);
+    }
+    if (nr == U64_SYS_WIN_PRESENT) {
+        if (!arg3 || arg3 >= 256 ||
+            !copy_from_user(proc_io[proc64_index], arg2, (u32)arg3)) U64_RETURN(U64_EINVAL);
+        proc_io[proc64_index][arg3] = 0;
+        U64_RETURN(userwin_present((int)proc64->pid, (int)arg1,
+                               (const char *)proc_io[proc64_index], (u32)arg3)
+                   ? 0 : U64_EBADF);
+    }
+    if (nr == U64_SYS_WIN_POLL) {
+        struct userwin_event64 event;
+        if (arg3 < sizeof event) U64_RETURN(U64_EINVAL);
+        if (!userwin_poll((int)proc64->pid, (int)arg1, &event)) U64_RETURN(U64_EAGAIN);
+        U64_RETURN(copy_to_user(arg2, &event, sizeof event) ? sizeof event : U64_EINVAL);
+    }
+    if (nr == U64_SYS_WIN_CLOSE)
+        U64_RETURN(userwin_close((int)proc64->pid, (int)arg1) ? 0 : U64_EBADF);
+    U64_RETURN((u64)-1);
+#undef U64_RETURN
+}
+
+int user64_is_running(void) { return user64_running; }
+void user64_mark_fault(u32 vector)
+{
+    user64_faulted = 1; user64_running = 0;
+    userwin_close_owner((int)proc64->pid);
+    proc64->state = 3; proc64->fault_vector = vector;
+}
+
+int user_has_exited(void) { return user64_exited; }
+u32 user_call_count(void) { return proc64 ? proc64->calls : 0; }
+int user64_faulted_out(void) { return user64_faulted; }
+
+/* Called with RSP at the first saved register in syscall_isr. A cooperative
+ * yield snapshots every register plus the five-qword privilege-return frame;
+ * the inactive process cannot borrow this stack because each process owns its
+ * own saved frame and TSS ring-0 stack. */
+int __attribute__((sysv_abi)) user64_after_syscall(u64 *frame)
+{
+    if (user64_yielded) {
+        for (int i = 0; i < U64_SAVED_QWORDS; i++) proc64->saved_frame[i] = frame[i];
+        proc64->has_frame = 1;
+    }
+    return user64_exited || user64_yielded;
+}
+
+int __attribute__((sysv_abi)) user64_timer_dispatch(u64 *frame)
+{
+    idt_timer_tick();
+    /* saved[15..19] are RIP, CS, RFLAGS, RSP, SS after the 15 general
+     * registers. Kernel-mode ticks have no process return stack to schedule. */
+    if (!user64_preempt_on || !user64_running || !proc64 ||
+        (frame[16] & 3u) != 3u) return 0;
+    for (int i = 0; i < U64_SAVED_QWORDS; i++) proc64->saved_frame[i] = frame[i];
+    proc64->has_frame = 1;
+    proc64->state = 1;
+    user64_preemptions++;
+    return 1;
+}
+
+static int user64_load_process(int index, u32 pid, const u8_64 *code, u32 bytes)
+{
+    if (!process64_prepare(index, pid) || !code || !bytes ||
+        bytes > sizeof proc_code[index]) return 0;
+    for (u32 i = 0; i < bytes; i++) proc_code[index][i] = code[i];
+    for (u32 i = bytes; i < sizeof proc_code[index]; i++) proc_code[index][i] = 0xcc;
+    zlt_lifecycle(ZLLOG_SUB_SCHED, ZLLOG_OBJ_PROCESS, pid,
+                  ZLLOG_LIFE_START, 0u, bytes);
+    return 1;
+}
+
+/* Run until one syscall boundary, exit, or fault. Yielded register/iret state
+ * lives in the process object and is resumed under that process's CR3. */
+static int user64_step(int index)
+{
+    process64_select(index);
+    if (proc64->state != 1) return 0;
+    user64_exited = user64_faulted = user64_yielded = 0;
+    user64_running = 1;
+    if (!proc64->started) {
+        proc64->started = 1;
+        zlt_lifecycle(ZLLOG_SUB_SCHED, ZLLOG_OBJ_PROCESS, proc64->pid,
+                      ZLLOG_LIFE_READY, 0u, proc64->calls);
+        user64_enter_asm(proc64->user_base, proc64->user_stack_top);
+    } else if (proc64->has_frame) {
+        proc64->has_frame = 0;
+        user64_resume_asm(proc64->saved_frame);
+    }
+    user64_running = 0;
+    /* user64_mark_fault runs inside an exception and therefore may not append
+     * to the normal recorder ring. user64_abort returns here in ordinary
+     * kernel context; publish the typed lifecycle boundary only now. */
+    if (proc64->state == 3)
+        zlt_lifecycle(ZLLOG_SUB_SCHED, ZLLOG_OBJ_PROCESS, proc64->pid,
+                      ZLLOG_LIFE_FAULT, 0u, proc64->fault_vector);
+    return proc64->state == 3 ? -(int)proc64->fault_vector : (int)proc64->state;
+}
+
+static int user64_run_probe(const u8_64 *code, u32 bytes)
+{
+    if (!user64_load_process(0, 1, code, bytes)) return -1;
+    for (int turns = 0; turns < 16 && procs64[0].state == 1; turns++)
+        user64_step(0);
+    process64_select(0);
+    return proc64->state == 3 ? (int)proc64->fault_vector : 0;
+}
+
+/* Load an ordinary raw x86-64 user image from zlfs. The format is deliberately
+ * one RX page with entry at byte zero: relocations/shared libraries wait until
+ * there is more than one real program asking for them. The important fact is
+ * that these bytes were not linked into the kernel and still execute behind
+ * the exact same page-table/syscall/fault boundary as the built-in probe. */
+int user64_run_default_file(void)
+{
+    static const char name[] = "/system/user.bin";
+    if (!fs_mounted()) return -1;
+    int idx = fs_find(name);
+    if (idx < 0) return -2;
+    u32 n = fs_size(idx);
+    if (!n || n > sizeof proc_io[0] || fs_read(idx, proc_io[0], n) != (int)n) return -3;
+    return user64_run_probe(proc_io[0], n);
+}
+
 void user_selftest(void)
 {
-    up("  ring 3: not on this build - the entry stub is 32-bit assembly, and a\n"
-       "          64-bit one would need syscall/sysret and three MSRs, with no\n"
-       "          boot gate that could prove it works.\n");
+    up("  ring 3 64: ");
+    u32 blob_bytes = (u32)(user64_blob_end - user64_blob);
+    if (user64_run_probe(user64_blob, blob_bytes) < 0) {
+        up("page-table setup refused\n"); return;
+    }
+    if (proc64->state == 3) {
+        up("process faulted alone, vector "); upu(proc64->fault_vector); up("\n");
+        return;
+    }
+    up(" <- iretq/int80/iretq, "); upu(proc64->calls);
+    up(" syscalls, process exited, kernel alive\n");
+
+    /* Two independent process objects alternate at cooperative yield
+     * boundaries. Each owns its PML4, code, user/kernel stack, saved frame and
+     * handles; the trace proves resume continues after the syscall rather than
+     * restarting either image. */
+    static const u8_64 p1[] = {
+        0xb8,1,0,0,0, 0xbb,'A',0,0,0, 0xcd,0x80,
+        0xb8,6,0,0,0, 0xcd,0x80,
+        0xb8,2,0,0,0, 0xcd,0x80, 0x83,0xc0,'0', 0x89,0xc3,
+        0xb8,1,0,0,0, 0xcd,0x80,
+        0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
+    };
+    static const u8_64 p2[] = {
+        0xb8,1,0,0,0, 0xbb,'B',0,0,0, 0xcd,0x80,
+        0xb8,6,0,0,0, 0xcd,0x80,
+        0xb8,2,0,0,0, 0xcd,0x80, 0x83,0xc0,'0', 0x89,0xc3,
+        0xb8,1,0,0,0, 0xcd,0x80,
+        0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
+    };
+    int p1ok = user64_load_process(0, 1, p1, sizeof p1);
+    int p2ok = user64_load_process(1, 2, p2, sizeof p2);
+    user64_sched_trace_n = 0; user64_sched_trace_on = 1;
+    if (p1ok && p2ok) {
+        user64_step(0); user64_step(1);
+        user64_step(0); user64_step(1);
+    }
+    user64_sched_trace_on = 0;
+    int separate = procs64[0].cr3 != procs64[1].cr3 &&
+                   (u64)proc_code[0] != (u64)proc_code[1] &&
+                   (u64)proc_kstack[0] != (u64)proc_kstack[1];
+    int interleaved = user64_sched_trace_n == 4 &&
+                      user64_sched_trace[0] == 'A' && user64_sched_trace[1] == 'B' &&
+                      user64_sched_trace[2] == '1' && user64_sched_trace[3] == '2';
+    if (p1ok && p2ok && separate && interleaved &&
+        procs64[0].state == 2 && procs64[1].state == 2)
+        up(" <- two PML4 processes yielded/resumed AB12 and exited independently\n");
+    else
+        up(" <- multi-process yield/resume FAILED\n");
+
+    /* Neither image yields or exits. The PIT must interrupt its busy loop,
+     * save the complete user frame, return to this scheduler, and let the
+     * sibling enter under another CR3/TSS stack. */
+    static const u8_64 busy1[] = {
+        0xb8,1,0,0,0, 0xbb,'P',0,0,0, 0xcd,0x80, 0xeb,0xfe
+    };
+    static const u8_64 busy2[] = {
+        0xb8,1,0,0,0, 0xbb,'Q',0,0,0, 0xcd,0x80, 0xeb,0xfe
+    };
+    int b1 = user64_load_process(0, 1, busy1, sizeof busy1);
+    int b2 = user64_load_process(1, 2, busy2, sizeof busy2);
+    user64_sched_trace_n = 0; user64_sched_trace_on = 1;
+    user64_preemptions = 0; user64_preempt_on = 1;
+    if (b1 && b2) { user64_step(0); user64_step(1); }
+    user64_preempt_on = 0; user64_sched_trace_on = 0;
+    int preempt_trace = user64_sched_trace_n == 2 &&
+                        user64_sched_trace[0] == 'P' && user64_sched_trace[1] == 'Q';
+    if (b1 && b2 && preempt_trace && user64_preemptions >= 2 &&
+        procs64[0].has_frame && procs64[1].has_frame)
+        up(" <- PIT preempted two non-yielding Ring-3 loops PQ\n");
+    else
+        up(" <- timer process preemption FAILED\n");
+    procs64[0].state = procs64[1].state = 2;
+
+    static const u8_64 sibling_fault[] = { 0xfa, 0x0f, 0x0b };
+    static const u8_64 sibling_alive[] = {
+        0xb8,1,0,0,0, 0xbb,'K',0,0,0, 0xcd,0x80,
+        0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
+    };
+    int f_ok = user64_load_process(0, 3, sibling_fault, sizeof sibling_fault);
+    int s_ok = user64_load_process(1, 4, sibling_alive, sizeof sibling_alive);
+    user64_sched_trace_n = 0; user64_sched_trace_on = 1;
+    if (f_ok && s_ok) { user64_step(0); user64_step(1); }
+    user64_sched_trace_on = 0;
+    if (f_ok && s_ok && procs64[0].state == 3 &&
+        procs64[0].fault_vector == 13 && procs64[1].state == 2 &&
+        user64_sched_trace_n == 1 && user64_sched_trace[0] == 'K')
+        up(" <- one process GP-faulted; its sibling ran and exited\n");
+    else
+        up(" <- sibling fault isolation FAILED\n");
+
+    /* PID 1 sends "hi", yields, PID 2 receives it and reports sender 1, then
+     * replies "ok". PID 1 resumes, receives it and reports sender 2. Buffers
+     * live in separate user mappings; the kernel queue is the only bridge. */
+    u8_64 ipc1[] = {
+        0xb8,15,0,0,0, 0xbb,2,0,0,0, 0x48,0xb9, 0,0,0,0,0,0,0,0,
+        0xba,2,0,0,0, 0xcd,0x80, 0xb8,6,0,0,0, 0xcd,0x80,
+        0x48,0xbb, 0,0,0,0,0,0,0,0, 0xb9,8,0,0,0,
+        0xb8,16,0,0,0, 0xcd,0x80, 0x0f,0xb6,0x1b,
+        0xb8,1,0,0,0, 0xcd,0x80, 0xb8,17,0,0,0, 0xcd,0x80,
+        0x83,0xc0,'0', 0x89,0xc3, 0xb8,1,0,0,0, 0xcd,0x80,
+        0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b, 'h','i'
+    };
+    u8_64 ipc2[] = {
+        0x48,0xbb, 0,0,0,0,0,0,0,0, 0xb9,8,0,0,0,
+        0xb8,16,0,0,0, 0xcd,0x80, 0x0f,0xb6,0x1b,
+        0xb8,1,0,0,0, 0xcd,0x80, 0xb8,17,0,0,0, 0xcd,0x80,
+        0x83,0xc0,'0', 0x89,0xc3, 0xb8,1,0,0,0, 0xcd,0x80,
+        0xb8,15,0,0,0, 0xbb,1,0,0,0, 0x48,0xb9, 0,0,0,0,0,0,0,0,
+        0xba,2,0,0,0, 0xcd,0x80, 0xb8,3,0,0,0, 0xcd,0x80,
+        0x0f,0x0b, 'o','k'
+    };
+    int i1 = user64_load_process(0, 1, ipc1, sizeof ipc1);
+    int i2 = user64_load_process(1, 2, ipc2, sizeof ipc2);
+    if (i1 && i2) {
+        u64 p1data = procs64[0].user_base + 94u;
+        u64 p1stack = procs64[0].user_stack_top - 8u;
+        u64 p2stack = procs64[1].user_stack_top - 8u;
+        u64 p2data = procs64[1].user_base + 87u;
+        for (int i = 0; i < 8; i++) {
+            proc_code[0][12 + i] = (u8_64)(p1data >> (i * 8));
+            proc_code[0][36 + i] = (u8_64)(p1stack >> (i * 8));
+            proc_code[1][2 + i] = (u8_64)(p2stack >> (i * 8));
+            proc_code[1][63 + i] = (u8_64)(p2data >> (i * 8));
+        }
+    }
+    user64_sched_trace_n = 0; user64_sched_trace_on = 1;
+    if (i1 && i2) { user64_step(0); user64_step(1); user64_step(0); }
+    user64_sched_trace_on = 0;
+    int ipc_trace = user64_sched_trace_n == 4 &&
+                    user64_sched_trace[0] == 'h' && user64_sched_trace[1] == '1' &&
+                    user64_sched_trace[2] == 'o' && user64_sched_trace[3] == '2';
+    if (i1 && i2 && ipc_trace && procs64[0].state == 2 &&
+        procs64[1].state == 2 && !procs64[0].inbox_count &&
+        !procs64[1].inbox_count)
+        up(" <- bounded IPC crossed PML4s hi/ok with sender IDs h1o2\n");
+    else
+        up(" <- bounded IPC FAILED\n");
+
+    /* Open a real WM-owned client, publish bounded text, yield to the kernel,
+     * receive one queued input record into the guarded user stack, print its
+     * key code, then close. Marker immediates are patched to this process's
+     * virtual code/stack addresses after its PML4 exists. */
+    u8_64 winprog[] = {
+        0xb8,18,0,0,0, 0x48,0xbb, 0x11,0x11,0x11,0x11,0x11,0x11,0x11,0x11,
+        0xb9,11,0,0,0, 0xba,0,0,0,0, 0xcd,0x80, 0x41,0x89,0xc4,
+        0xb8,19,0,0,0, 0x44,0x89,0xe3,
+        0x48,0xb9, 0x22,0x22,0x22,0x22,0x22,0x22,0x22,0x22,
+        0xba,12,0,0,0, 0xcd,0x80, 0xb8,6,0,0,0, 0xcd,0x80,
+        0xb8,20,0,0,0, 0x44,0x89,0xe3,
+        0x48,0xb9, 0x33,0x33,0x33,0x33,0x33,0x33,0x33,0x33,
+        0xba,16,0,0,0, 0xcd,0x80, 0x8b,0x59,0x04,
+        0xb8,1,0,0,0, 0xcd,0x80, 0xb8,21,0,0,0, 0x44,0x89,0xe3, 0xcd,0x80,
+        0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b,
+        'U','s','e','r',' ','w','i','n','d','o','w',
+        'R','i','n','g','3',' ','w','i','n','d','o','w'
+    };
+    int wok = user64_load_process(0, 1, winprog, sizeof winprog);
+    if (wok) {
+        u64 values[3] = {
+            procs64[0].user_base + sizeof winprog - 23u,
+            procs64[0].user_base + sizeof winprog - 12u,
+            procs64[0].user_stack_top - 16u
+        };
+        for (int marker = 1; marker <= 3; marker++) {
+            for (u32 at = 0; at + 8 <= sizeof winprog; at++) {
+                int match = 1;
+                for (int j = 0; j < 8; j++)
+                    if (proc_code[0][at + (u32)j] != (u8_64)(marker * 0x11)) match = 0;
+                if (!match) continue;
+                for (int j = 0; j < 8; j++)
+                    proc_code[0][at + (u32)j] = (u8_64)(values[marker - 1] >> (j * 8));
+                break;
+            }
+        }
+    }
+    user64_sched_trace_n = 0; user64_sched_trace_on = 1;
+    if (wok) user64_step(0);
+    int shown = userwin_count() == 1 && userwin_has_wm_window(1, 1) &&
+                userwin_text_byte(1, 1, 0) == 'R' &&
+                userwin_text_byte(1, 1, 4) == '3';
+    int injected = userwin_test_inject(1, 1, 1, 'W', 23, 47);
+    if (wok) user64_step(0);
+    user64_sched_trace_on = 0;
+    if (wok && shown && injected && procs64[0].state == 2 &&
+        user64_sched_trace_n == 1 && user64_sched_trace[0] == 'W' &&
+        userwin_count() == 0)
+        up(" <- Ring-3 window presented text, polled input W, and closed\n");
+    else
+        up(" <- Ring-3 window/input ABI FAILED\n");
+
+    /* Hostile-process gate: privileged instruction and supervisor mappings
+     * fault only this process; a pointer crossing the stack guard is refused
+     * before the kernel dereferences it. */
+    static const u8_64 cli_probe[] = { 0xfa, 0x0f, 0x0b };
+    u8_64 read_kernel[] = { 0x48,0xa1, 0,0,0,0,0,0,0,0, 0x0f,0x0b };
+    u64 ka = (u64)proc64;
+    for (int i = 0; i < 8; i++) read_kernel[2 + i] = (u8_64)(ka >> (i * 8));
+    u8_64 write_device[] = {
+        0x48,0xb8, 0x00,0x80,0x0b,0,0,0,0,0, 0xc6,0x00,0x01, 0x0f,0x0b
+    };
+    int gp = user64_run_probe(cli_probe, sizeof cli_probe);
+    int kr = user64_run_probe(read_kernel, sizeof read_kernel);
+    int dw = user64_run_probe(write_device, sizeof write_device);
+
+    /* mov rbx, stack_top-4; mov rcx,8; SYS_COPY; SYS_EXIT */
+    if (!process64_prepare(0, 1)) { up("  ring 3 hostile probes: setup refused\n"); return; }
+    u8_64 cross[] = {
+        0x48,0xbb, 0,0,0,0,0,0,0,0,
+        0x48,0xc7,0xc1, 8,0,0,0,
+        0xb8,4,0,0,0, 0xcd,0x80,
+        0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
+    };
+    u64 cp = proc64->user_stack_top - 4;
+    for (int i = 0; i < 8; i++) cross[2 + i] = (u8_64)(cp >> (i * 8));
+    int cr = user64_run_probe(cross, sizeof cross);
+    if (gp == 13 && kr == 14 && dw == 14 && cr == 0 &&
+        proc64->bad_pointer_refused == 1)
+        up("  ring 3 hostile: cli GP, kernel/device PF, crossing pointer refused; kernel alive\n");
+    else {
+        up("  ring 3 hostile: FAILED vectors "); upu(gp); up("/"); upu(kr);
+        up("/"); upu(dw); up("/"); upu(cr); up(" ptr ");
+        upu(proc64->bad_pointer_refused); up("\n");
+    }
 }
-int user_has_exited(void) { return 1; }
-u32 user_call_count(void) { return 0; }
+
+__asm__(
+    ".section .rodata\n"
+    ".globl user64_blob\n"
+    "user64_blob:\n"
+    "  .byte 0xb8,1,0,0,0, 0xbb,'u',0,0,0, 0xcd,0x80\n"
+    "  .byte 0xb8,2,0,0,0, 0xcd,0x80, 0x83,0xc0,'0', 0x89,0xc3\n"
+    "  .byte 0xb8,1,0,0,0, 0xcd,0x80\n"
+    "  .byte 0xb8,5,0,0,0, 0xcd,0x80\n"
+    "  .byte 0xb8,6,0,0,0, 0xcd,0x80\n"
+    "  .byte 0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b\n"
+    ".globl user64_blob_end\n"
+    "user64_blob_end:\n"
+    ".text\n"
+    ".globl user64_enter_asm\n"
+    "user64_enter_asm:\n"
+    "  push %rbx\n  push %rbp\n  push %r12\n  push %r13\n  push %r14\n  push %r15\n"
+    "  mov %rsp,user64_return_rsp(%rip)\n"
+    "  lea 9f(%rip),%rax\n  mov %rax,user64_return_rip(%rip)\n"
+    "  pushfq\n  pop %rax\n  mov %rax,user64_return_rflags(%rip)\n"
+    "  mov user64_process_cr3(%rip),%rax\n  mov %rax,%cr3\n"
+    "  pushq $0x1b\n  push %rsi\n  pushfq\n  orq $0x200,(%rsp)\n"
+    "  pushq $0x23\n  push %rdi\n  iretq\n"
+    "9:\n"
+    "  push user64_return_rflags(%rip)\n  popfq\n"
+    "  pop %r15\n  pop %r14\n  pop %r13\n  pop %r12\n  pop %rbp\n  pop %rbx\n  ret\n"
+    ".globl user64_resume_asm\n"
+    "user64_resume_asm:\n"
+    "  push %rbx\n  push %rbp\n  push %r12\n  push %r13\n  push %r14\n  push %r15\n"
+    "  mov %rsp,user64_return_rsp(%rip)\n"
+    "  lea 7f(%rip),%rax\n  mov %rax,user64_return_rip(%rip)\n"
+    "  pushfq\n  pop %rax\n  mov %rax,user64_return_rflags(%rip)\n"
+    "  mov user64_process_cr3(%rip),%rax\n  mov %rax,%cr3\n"
+    "  mov %rdi,%rsp\n  jmp 6f\n"
+    "7:\n"
+    "  push user64_return_rflags(%rip)\n  popfq\n"
+    "  pop %r15\n  pop %r14\n  pop %r13\n  pop %r12\n  pop %rbp\n  pop %rbx\n  ret\n"
+    ".globl syscall_isr\n"
+    "syscall_isr:\n"
+    "  push %rax\n  push %rbx\n  push %rcx\n  push %rdx\n  push %rsi\n"
+    "  push %rdi\n  push %r8\n  push %r9\n  push %r10\n  push %r11\n"
+    "  push %r12\n  push %r13\n  push %r14\n  push %r15\n  push %rbp\n"
+    "  mov 112(%rsp),%rdi\n  mov 104(%rsp),%rsi\n"
+    "  mov 96(%rsp),%rdx\n  mov 88(%rsp),%rcx\n  call user64_dispatch\n"
+    "  mov %rax,112(%rsp)\n  mov %rsp,%rdi\n  call user64_after_syscall\n"
+    "  test %eax,%eax\n  jnz 8f\n"
+    "6:\n"
+    "  pop %rbp\n  pop %r15\n  pop %r14\n  pop %r13\n  pop %r12\n"
+    "  pop %r11\n  pop %r10\n  pop %r9\n  pop %r8\n  pop %rdi\n"
+    "  pop %rsi\n  pop %rdx\n  pop %rcx\n  pop %rbx\n  pop %rax\n  iretq\n"
+    "8:\n"
+    ".globl user64_abort\n"
+    "user64_abort:\n"
+    "  mov user64_kernel_cr3(%rip),%rax\n  mov %rax,%cr3\n"
+    "  mov user64_return_rsp(%rip),%rsp\n  jmp *user64_return_rip(%rip)\n"
+    ".globl user64_timer_isr\n"
+    "user64_timer_isr:\n"
+    "  push %rax\n  push %rbx\n  push %rcx\n  push %rdx\n  push %rsi\n"
+    "  push %rdi\n  push %r8\n  push %r9\n  push %r10\n  push %r11\n"
+    "  push %r12\n  push %r13\n  push %r14\n  push %r15\n  push %rbp\n"
+    "  mov %rsp,%rdi\n  call user64_timer_dispatch\n"
+    "  test %eax,%eax\n  jnz 8b\n"
+    "  pop %rbp\n  pop %r15\n  pop %r14\n  pop %r13\n  pop %r12\n"
+    "  pop %r11\n  pop %r10\n  pop %r9\n  pop %r8\n  pop %rdi\n"
+    "  pop %rsi\n  pop %rdx\n  pop %rcx\n  pop %rbx\n  pop %rax\n  iretq\n"
+);
 
 #endif /* ZL_64 */

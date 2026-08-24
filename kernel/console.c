@@ -8,6 +8,7 @@
  * Everything above this - runtime_kernel.c, and therefore kernel.zl -
  * talks only to these functions and never learns which one it is on.
  */
+#include "boot_handover.h"
 
 /* Pointer-sized. NOT `unsigned long`, which is 4 bytes under buildefi.sh's
  * LLP64 target and 8 everywhere else - the whole hazard class this file's
@@ -129,7 +130,11 @@ int console_rows(void) { return fb_active() ? fb_get_rows() : 25; }
  * means we came up on our own bootloader, and the boot log should say so
  * instead of claiming a multiboot handoff that did not happen. */
 static int loaded_by_multiboot = 0;
-int console_loader(void) { return loaded_by_multiboot; }    /* 1 = GRUB/multiboot, 0 = ours */
+int console_loader(void)
+{
+    int typed = zlos_boot_loader_code();
+    return typed >= 0 ? typed : loaded_by_multiboot;
+}
 
 /* The multiboot info structure GRUB fills in. Only the fields this kernel
  * reads are named; the offsets are fixed by the multiboot 1 spec. */

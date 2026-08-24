@@ -41,6 +41,8 @@
 
 typedef unsigned int u32;
 
+#include "telemetry.h"
+
 void zl_putc_pub(char c);
 
 #define NOTE_SLOTS  4
@@ -93,6 +95,8 @@ int notify_post(const char *text, u32 ticks)
     /* Full. Drop the oldest WAITING entry - index 1, because index 0 is either
      * on screen or about to be. */
     dropped++;
+    zlt_event(ZLLOG_SUB_KERNEL, ZLLOG_EV_DROP, ZLLOG_WARN,
+              30u /* notification queue */, dropped, NOTE_SLOTS);
     p_str("  notify: queue full, dropped an older message\n");
     for (int i = 1; i < NOTE_SLOTS - 1; i++) q[i] = q[i + 1];
     copy_text(q[NOTE_SLOTS - 1].text, text);

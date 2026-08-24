@@ -1,0 +1,185 @@
+# zlOS complete implementation program
+
+Date: 2026-08-22
+
+This directory is the execution authority for turning the starred-repository
+research into zlOS. It preserves the full destination rather than redefining it
+as a small MVP. Delivery is staged only because later capabilities depend on
+earlier ones.
+
+The program covers:
+
+- all 906 stable product feature atoms in the canonical research catalogue;
+- every normalized firmware, platform, driver, filesystem and device target;
+- every system service and cross-process protocol;
+- all 61 current named zlOS implementations, the All Applications surface and
+  all 24 current games;
+- the selected browser, productivity, creative, communication, administration,
+  development, compatibility and learning application families;
+- zl language/compiler/runtime/self-hosting work;
+- agent, automation, public-demo, release, recovery and support work;
+- host, image, QEMU, physical-hardware, security, accessibility, visual and
+  performance proof.
+
+This is a clean-room behavior and architecture plan. External source is not
+copied. A donor implementation can suggest a contract, failure case or test,
+but zlOS owns its design and code.
+
+## Read this suite
+
+1. [`PRODUCT-IMPLEMENTATION-ORDER.md`](PRODUCT-IMPLEMENTATION-ORDER.md) — the
+   product-first execution view: useful behavior first, evidence as its finish
+   condition rather than a substitute milestone.
+2. [`PHASES.md`](PHASES.md) — the dependency graph, delivery waves and exit
+   gates.
+3. [`FEATURE-MAP.md`](FEATURE-MAP.md) — generated row-for-row mapping of all 906
+   feature IDs to workstream and delivery phase.
+4. [`RESEARCH-CONTRACT-CROSSWALK.md`](RESEARCH-CONTRACT-CROSSWALK.md) — all
+   174 implementation contracts from the three earlier backlogs mapped into the
+   master phase DAG.
+5. [`DRIVERS.md`](DRIVERS.md) — every normalized platform and device provider.
+6. [`SERVICES.md`](SERVICES.md) — every system service and protocol boundary.
+7. [`APPLICATIONS.md`](APPLICATIONS.md) — every current and destination app,
+   game and user-facing workflow.
+8. [`LANGUAGE-AGENTS-OPERATIONS.md`](LANGUAGE-AGENTS-OPERATIONS.md) — zl,
+   developer platform, compatibility, agents, deployment and self-hosting.
+9. [`PROOF-GATES.md`](PROOF-GATES.md) — the evidence contract that prevents
+   source-only, false-green, QEMU-only or host-harness claims from becoming
+   product completion.
+10. [`PARTIAL-CLOSURE.md`](PARTIAL-CLOSURE.md) — exact closure contracts,
+   dependencies and external-authority gates for all 23 current partial rows.
+11. [`VALIDATION-RECEIPT.md`](VALIDATION-RECEIPT.md) — exact coverage output,
+   refutations incorporated, evidence ceiling and weakest links.
+12. [`FEATURE-STATUS.json`](FEATURE-STATUS.json) — generated 906-row current
+    maturity ledger joined to the exact isolated implementation worktree and
+    receipts. Planned/unproved is the default; only named evidence promotes it.
+
+Run `python3 tools/gen_feature_status.py --check --selftest`,
+`python3 tools/gen_partial_closure.py --check --selftest` and then
+`python3 tools/validate_master_program.py --self-test` from the zl-linux root
+after any program or implementation-evidence change. They must report exactly
+906 unique feature atoms, no missing
+phase/workstream, no unknown dependencies, all named current apps and games,
+and all required registry sections.
+
+## Authority order
+
+When documents disagree, use this order:
+
+1. current source, generated artifacts and fresh reproducible receipts;
+2. [`kernel/docs/performance-architecture-implementation-2026-08-22.md`](../../kernel/docs/performance-architecture-implementation-2026-08-22.md)
+   for the live locally verified implementation batch;
+3. this program for destination and ordering;
+4. [`docs/EXECUTION-ROADMAP.md`](../EXECUTION-ROADMAP.md) for the current
+   near-term physical/performance queue;
+5. the research suite and its adversarial corrections;
+6. older handoffs, plans, screenshots and prose claims.
+
+The program was first frozen against committed HEAD
+`b8a00ec45ac1f9f955ba79ed63f0072540067d4e` plus a large shared uncommitted
+implementation batch. Revalidate the live tree before every implementation
+slice. Do not assume this date-stamped baseline remains current.
+
+## Current baseline to preserve
+
+The locally verified batch already includes retained client and shell surfaces,
+bounded damage/occlusion, deadline-aware pacing, a bounded block cache, named
+crash-consistent zlfs files, two isolated cooperative Ring-3 processes, bounded
+PID IPC, virtio-net and e1000 with DHCP/DNS/TCP/TLS, persistent browser state,
+and opt-in Intel blitter fallback. BIOS and native UEFI application exercises
+were 32/32 in the cited receipt.
+
+Those are migration assets, not excuses to mark the complete contracts done.
+Notably still open are timer preemption, a general user window/input ABI,
+capability handles and typed IPC, service/process migration, physical I219 and
+Intel promotion, broad driver coverage, browser process isolation, audio,
+package/app process boundaries and the in-zlOS toolchain.
+
+## End-state architecture
+
+```text
+firmware / boot acquisition providers
+                 |
+                 v
+bounded zlOS boot manager -> typed immutable handover -> mechanism kernel
+                                                          |
+                                      +-------------------+------------------+
+                                      |                   |                  |
+                                memory/process       capability/IPC     interrupts/time
+                                      |                   |                  |
+                                      +--------- supervised services --------+
+                                                        |
+          +--------------------+------------------------+---------------------+
+          |                    |                        |                     |
+     driver providers     storage/network         display/input/audio   identity/policy
+          |                    |                        |                     |
+          +--------------------+---------- typed portals/services -----------+
+                                               |
+                         +---------------------+----------------------+
+                         |                     |                      |
+                    shell/session       isolated applications   split browser/web
+                         |                     |                      |
+                         +---------- packages, SDK and zl -----------+
+                                               |
+                                  agents / operations / self-hosting
+```
+
+The kernel keeps mechanisms that require privilege: address spaces, scheduling,
+interrupts, low-level time, handle tables, IPC transport, fault containment and
+minimal device mediation. Policy, parsing, files, networking, display, input,
+audio, packages, sessions and applications move to supervised processes as the
+required process/IPC foundations become ready. Proven in-kernel fallbacks are
+kept until replacement providers pass equivalent target gates.
+
+## One implementation per real contract
+
+“Every driver they have” does not mean cloning 33 versions of an AHCI driver.
+It means:
+
+- every distinct hardware or protocol family stays in the driver registry;
+- one common block, network, display, input, audio, camera and sensor contract
+  serves many providers;
+- PCI IDs and revisions are data entries when behavior is genuinely shared;
+- materially different controller generations remain separate providers;
+- third-party breadth is retained as compatibility/port evidence, not falsely
+  relabelled first-party zlOS support;
+- source-only, stub, disabled, unreachable and mock features become negative
+  tests or deferred targets, never completion evidence.
+
+## Completion semantics
+
+A feature is complete only when the outcome, owner, protocol, authority,
+resource limits, lifecycle, failure behavior, persistence, accessibility,
+performance and evidence agree. Each implementation slice follows:
+
+```text
+intent -> versioned contract -> bounded implementation -> deterministic checks
+       -> image/QEMU gate -> required physical gate -> independent refutation
+       -> receipt and rollback path
+```
+
+No phase may delete a proven fallback before its replacement passes the same or
+stronger evidence lane. No later phase can be called complete merely because a
+source file, package recipe, menu entry, screenshot or build target exists.
+
+## Relationship to the research shelf
+
+The complete evidence shelf remains in
+[`../../zl/docs/research/starred-repositories/`](../../../zl/docs/research/starred-repositories/)
+when the two repositories are checked out as siblings. The front doors are:
+
+- `CANONICAL_COMPLETE_PRODUCT_FEATURE_CATALOG_2026-08-22.md` — 906 product
+  atoms and exact current-app/game crosswalk;
+- `CLEAN_ROOM_ZL_ZLOS_INTEGRATION_PLAN_2026-08-21.md` — architecture;
+- `IMPLEMENTATION_CONTRACT_BACKLOG_2026-08-21.md` — 64 core contracts;
+- `DRIVER_AND_APP_IMPLEMENTATION_CONTRACT_BACKLOG_2026-08-21.md` — 56
+  driver/service/app contracts;
+- `VISUAL_BROWSER_AND_APP_EXPERIENCE_CONTRACT_BACKLOG_2026-08-21.md` — 54
+  visual/browser/app contracts;
+- the three driver/app and three visual/browser deep dives plus all refutation
+  reports — exact source evidence and rejected claims;
+- `RESPONSIVENESS_RENDERING_AND_VISUAL_POLISH_DEEP_DIVE_2026-08-22.md` —
+  fast-path and visual-coherence mechanics.
+
+This directory is the implementation projection of that shelf. It does not
+erase the source trails or their evidence ceilings.

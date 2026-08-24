@@ -60,6 +60,12 @@ kernel/hosttest/tlscryptotest
 kernel/hosttest/jmptest
 kernel/hosttest/jmptest32
 kernel/hosttest/modeset_test
+kernel/hosttest/blocktest
+kernel/hosttest/boot_handover_test
+kernel/hosttest/dhcptest
+kernel/hosttest/e1000test
+kernel/hosttest/memtypetest
+kernel/hosttest/msctest
 # NOT *.ppm here: kernel/.gitignore:25 already says hosttest/*.ppm, and
 # browsershot.ppm and wmshot.ppm are TRACKED - so that rule does nothing for
 # them (a tracked file is never ignored) while looking like it does. Adding a
@@ -72,12 +78,14 @@ kernel/hosttest/modeset_test
 #   kernel/build.sh      kernel.elf        (BIOS multiboot)
 #   kernel/mkdisk.sh     zlOS.img          (our own bootloader)
 #   kernel/mkiso.sh      zlOS.iso          (hybrid BIOS/UEFI)
-#   kernel/buildefi.sh   BOOTX64.EFI       (native UEFI application)
+#   kernel/buildefi.sh   BOOTX64.EFI       (stage-0 UEFI witness)
+#                        ZLOS.EFI          (native UEFI kernel)
 #   kernel/mkusb.sh      zlOS-usb.img      (bootable USB image)
 kernel/*.elf
 kernel/*.img
 kernel/*.iso
 kernel/BOOTX64.EFI
+kernel/ZLOS.EFI
 kernel/BOOTX64.lib
 kernel/_gen*.c
 kernel/hosttest/intel_probe
@@ -107,6 +115,10 @@ kernel/hosttest/tritest
 kernel/hosttest/settingstest
 
 kernel/__pycache__/
+**/__pycache__/
+
+# Interrupted compiler temporary, never project source.
+kernel/*.o.tmp
 
 # hosttest binary: the arena gate (source is arenatest.c)
 kernel/hosttest/arenatest

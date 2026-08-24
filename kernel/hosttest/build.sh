@@ -232,6 +232,11 @@ echo "built ./browsershot   (run: ./browsershot out.ppm)"
 # afternoon, and the clock is virtual so the jitter assertion cannot be flaky.
 gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o nettest nettest.c ../net.c
 echo "built ./nettest       (run: ./nettest)"
+gcc -O1 -g -Wall -Wextra -D_GNU_SOURCE -o dhcptest dhcptest.c ../dhcp.c ../net.c
+echo "built ./dhcptest      (run: ./dhcptest)"
+gcc -O1 -g -Wall -Wextra -Wno-unused-parameter -DE1000_HOSTTEST -no-pie \
+    -o e1000test e1000test.c ../e1000.c
+echo "built ./e1000test     (run: ./e1000test)"
 
 # The TCP state machine against scripted packet sequences. Every case here is
 # one that either cannot be produced from a real peer on demand (a segment
@@ -333,6 +338,14 @@ echo "built ./inputtest     (run: ./inputtest)"
 # address it puts in a ring stays 32-bit, exactly as in the kernel.
 gcc -O1 -g -w -D_GNU_SOURCE -DZL_64 -o xhcitest xhcitest.c ../input.c
 echo "built ./xhcitest      (run: ./xhcitest)"
+
+# USB mass-storage's destructive edge, without a device: prove no READ/WRITE
+# command can escape the fixed 4 KiB staging window or discovered capacity,
+# and that stale CSWs plus both REQUEST SENSE formats stay distinguishable.
+gcc -O1 -g -Wall -Wextra -Wno-unused-function -DZL_64 \
+    -o msctest msctest.c
+echo "built ./msctest       (run: ./msctest)"
+
 gcc -O1 -g -Wall -Wextra -Wno-unused-function -o inputtest_feel \
     inputtest_feel.c ../input.c
 echo "built ./inputtest_feel"
@@ -366,6 +379,20 @@ echo "built ./libctest      (run: ./libctest)"
 gcc -O2 -w -o arenatest arenatest.c ../arena.c
 echo "built ./arenatest     (run: ./arenatest)"
 
+# The one versioned record every boot route must seal before kernel.zl starts.
+# This is mostly hostile input: every byte is mutated, unknown flags are
+# rechecksummed, and impossible framebuffer/recovery claims must fail closed.
+gcc -O2 -g -Wall -Wextra -o boot_handover_test \
+    boot_handover_test.c ../boot_handover.c
+echo "built ./boot_handover_test (run: ./boot_handover_test)"
+
+# Recovery selection is a pure state machine before it becomes firmware I/O.
+# Two unready resets move current -> previous -> recovery, a ready mark clears
+# only the successful generation, and absent optional images cannot brick boot.
+gcc -O2 -g -Wall -Wextra -o boot_state_test \
+    boot_state_test.c ../boot_state.c ../boot_handover.c
+echo "built ./boot_state_test (run: ./boot_state_test)"
+
 # The general allocator, and this one is built with the WARNINGS ON rather than
 # -w. arena.c is a bump pointer and an addition; heap.c has boundary tags, two
 # levels of size class and three bitmaps, so it is the file in this tree where
@@ -385,6 +412,10 @@ echo "built ./heaptest      (run: ./heaptest)"
 # off-by-one hands a device an address one page out.
 gcc -O2 -g -Wall -Wextra -o pagingtest pagingtest.c ../paging.c
 echo "built ./pagingtest    (run: ./pagingtest)"
+
+gcc -O2 -g -Wall -Wextra -ffunction-sections -fdata-sections \
+    -Wl,--gc-sections -o memtypetest memtypetest.c ../cpu.c
+echo "built ./memtypetest   (run: ./memtypetest)"
 
 # `run`, and every way it declines. TWO binaries from one source, which is the
 # point of exec.c's weak fs_* references: with a filesystem linked it reaches
@@ -406,6 +437,8 @@ echo "built ./exectest      (run: ./exectest)"
 gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
     -o fstest fstest.c ../fs.c
 echo "built ./fstest        (run: ./fstest)"
+gcc -O2 -no-pie -w -o blocktest blocktest.c
+echo "built ./blocktest     (run: ./blocktest)"
 
 # The clipboard, window snapping and notifications. All three are integer logic
 # with no framebuffer, and all three have bugs that a screenshot cannot show: a
