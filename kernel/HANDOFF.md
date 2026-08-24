@@ -1331,10 +1331,16 @@ instead of uptime — and the header has stopped drawing "net up", which claimed
 a network driver this tree does not contain. `clip.c`, `snap.c` and `notify.c`
 are the clipboard, window snapping and toasts.
 
-**`verify-disk.sh` is the only gate here that power-cycles the machine.** Three
-boots against one image, asserting a counter in a file goes 1 → 2 → 3. Two
-boots cannot tell "reformats every mount" (1,1,1) from "the second write never
-landed" (1,2,2).
+The desktop path is documented in
+[`docs/storage-and-files.md`](docs/storage-and-files.md). Files mounts zlfs on
+open and creates, opens and deletes entries by name. zlEDIT has a disk-backed
+mode with Ctrl+S, ESC save-and-close and clipboard copy/paste; `edit <n>` keeps
+the old RAM slots only as a compatibility path.
+
+There are now two power-cycle checks. `verify-disk.sh` boots three times against
+one image and requires its counter to go 1 → 2 → 3. `probe-files.py` drives the
+real Files/editor UI, kills QEMU, boots a new process on the same NVMe image and
+requires the named file's exact editor pixels and byte count to survive.
 
 The write path was reviewed adversarially — a fresh agent told to lose a file,
 proving each claim by running it — and it found **six data-loss defects** in
@@ -1590,6 +1596,7 @@ The desktop has its own probes, all of which boot the real thing:
 ./probe-smp.py     band rendering on 4 real cores draws identical pixels
 ./probe-frame.py   the frame timer is a measurement, not a number
 ./probe-edit.py    the editor: a window, typing, ESC saves and closes
+python3 ./probe-files.py  Files + zlEDIT survive a killed QEMU and cold boot
 ./probe-drag.py --no-tablet     a window really moves
 ```
 

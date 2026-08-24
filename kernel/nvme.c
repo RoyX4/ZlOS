@@ -141,6 +141,7 @@ static u32  nv_nsid  = 1;
 static u64  nv_blocks = 0;
 static u32  nv_blocksize = 512;
 static u32  nv_maxlba_lo = 0;
+static int  nv_setup_done = 0;
 
 /* A doorbell lives at 0x1000 + (2*qid + is_completion) * (4 << DSTRD).
  * DSTRD exists so a controller can spread doorbells across cache lines; on
@@ -526,6 +527,13 @@ int nvme_ready(void) { return nv_ready; }
 /* Bring the whole thing up: enable, identify, create I/O queues. */
 int nvme_setup(void)
 {
+    /* More than one subsystem mounts storage on demand. Re-running setup on
+     * a live controller is not harmless: Create I/O Completion/Submission
+     * Queue rejects queue IDs that already exist. Files used to set the
+     * controller up while probing a blank volume, then call setup again before
+     * formatting and report "no NVMe" for a controller it had just used.
+     * Once the full sequence succeeds, it is already the requested state. */
+    if (nv_setup_done) return 1;
     nv_fault = NVF_NONE;
     /* Discovery is a service boundary, not a one-shot demo. Files, Settings,
      * the editor and explicit diagnostics may all ask for the same mounted
@@ -543,5 +551,6 @@ int nvme_setup(void)
         return 0;
     }
     if (!nvme_create_io_queues())           { nv_fault = NVF_QUEUES;    return 0; }
+    nv_setup_done = 1;
     return 1;
 }
