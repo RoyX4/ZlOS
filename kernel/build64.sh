@@ -9,10 +9,13 @@
 set -e
 cd "$(dirname "$0")"
 
+python3 ./gen-app-manifest.py --check
+python3 ./gen-build-identity.py --check
+
 ../compile kernel.zl >/dev/null
 cp out.c _gen64.c
 
-CFLAGS="-m64 -O2 -ffreestanding -nostdlib -fno-stack-protector -fno-pic -fno-builtin -mno-red-zone -mcmodel=large -DZL_64 -Wall -Wextra -Wno-unused-parameter -I.."
+CFLAGS="-m64 -O2 -ffreestanding -nostdlib -fno-stack-protector -fno-pic -fno-builtin -mno-red-zone -mcmodel=large -DZL_64 -Wall -Wextra -Werror -Wno-unused-parameter -I.."
 
 # shellcheck disable=SC2086
 gcc $CFLAGS -DZL_KERNEL_SERIAL -c ../freestanding/runtime_kernel.c -o _rt64.o

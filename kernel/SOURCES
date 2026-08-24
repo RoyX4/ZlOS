@@ -29,6 +29,7 @@
 support.c
 boot_handover.c
 zllog.c
+crash.c
 vga.c
 fb.c
 fb3d.c

@@ -1,0 +1,411 @@
+{
+  "schema": "zlos.adversarial-registry.v1",
+  "result": "PASS_WITH_OPEN_GAPS",
+  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "host_test_inventory_sha256": "ee7812d65ac0124342761b9d5ecaa954bbabcebdf4dcfe2f5e707fc905aac865",
+  "host_test_receipt_sha256": "9f091d6276630a0087bfe7cc03b481fea1d1cefb29b43730e4db80a91dceca2f",
+  "verifier_canaries": [
+    {
+      "id": "CAN-001",
+      "command": [
+        "python3",
+        "gen-build-identity.py",
+        "--check",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "e6e687e9967613edd3a3e9da834c2e6d3f0b9ed3f154cf4f768170f0336db99c",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-002",
+      "command": [
+        "python3",
+        "gen-app-manifest.py",
+        "--check",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "d13232e243cf4e76860f87b83b735f7806f4c7d794367a47304957d150a033ff",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-003",
+      "command": [
+        "python3",
+        "check-build-contract.py",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "5f5b163f275ff0338814c76f12be5053c60e07b8bc2e6720648a5931774a6d5d",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-004",
+      "command": [
+        "python3",
+        "check-land-gate.py",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "cd05df59df919977aaadf6981b0502add19c1b5a92c8a7b0b3770c5694bd03a8",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-005",
+      "command": [
+        "python3",
+        "check-boot-prereqs.py",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "5077bd1a9c93aa208a0712c841c569661cb8b2e257f38b0f04d11c6186be77f5",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-006",
+      "command": [
+        "python3",
+        "check-elf-permissions.py",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "9e6e7e8ec3a286b987d21316c1f13c2ee830f851090dbfdd1881108785b496a5",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-007",
+      "command": [
+        "python3",
+        "gen-dependency-lock.py",
+        "--check",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "b3c42b5a5fddc880b7ba038c6cd2bef9e133f1baf1dfa811cda923603bc70e97",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-008",
+      "command": [
+        "python3",
+        "gen-license-registry.py",
+        "--check",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "5bed86acb45c80d3196ac11d1edf17fe1556d4729b2d725420634906700e30ab",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-009",
+      "command": [
+        "python3",
+        "gen-init-registry.py",
+        "--check",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "49eb09f1bc118b3f7287627afa04ac75f5ce88882d0b101dd801f6a8afd371f5",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-010",
+      "command": [
+        "python3",
+        "gen-app-evidence.py",
+        "--check",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "fc157504f6e77ba6e46313d1119c0e6dcf8bccb16c9e962f5b0e39fd67f38575",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-011",
+      "command": [
+        "python3",
+        "gen-artifact-registry.py",
+        "--check",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "c118da94b81e1abc7c6c8cf66084eb6466b8e98c44d59e7a4c1e43da8c92c8a3",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-012",
+      "command": [
+        "python3",
+        "gen-test-inventory.py",
+        "--check",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "78b5ac8eb0b3151c917b59afc19a39195ab98e3d00e51efb9fc1f34f88ba0973",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-013",
+      "command": [
+        "python3",
+        "run-host-tests.py",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "9eae33eb327322305d86f253fbcecde9e564da949257674c94460c7d3736030c",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-014",
+      "command": [
+        "python3",
+        "check-reproducible-build.py",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "35e83f21d102ca615d9fddd3e6e5201c8200e7ab9b03043ecdac7d50f9e16600",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-015",
+      "command": [
+        "python3",
+        "check-appids.py",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: planted",
+      "output_sha256": "e2ed9b3c4d2fc698be622b79da6f76a3b089bc77019a61e8533b7554e507f331",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-016",
+      "command": [
+        "python3",
+        "hosttest/apps53.py",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "b85cf3504ade004da100829b64e663ac3fcd610a7ddba9445339671dcc52fcbf",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-017",
+      "command": [
+        "python3",
+        "gen-boot-media-ids.py",
+        "--check",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "mutations change IDs",
+      "output_sha256": "f3e59896b90af6bb2335c0b79eaf22b30344df57cb1f4b4220b2db15a4d8f7f7",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-018",
+      "command": [
+        "python3",
+        "verify-crash.py",
+        "--check",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "888bfb4efd808739628d3ddb889074ca6efee6b26fe99bed3b9adc77058cee41",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-019",
+      "command": [
+        "python3",
+        "gen-wrapper-registry.py",
+        "--check",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "d84caeeb0b0aab02fdd3209b1d9f63cbcefafaaac25d1014a61e1eaf8880cfdf",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    }
+  ],
+  "failure_injection": [
+    {
+      "family": "allocation",
+      "status": "PARTIAL",
+      "passed_host_targets": [
+        "arenatest",
+        "heaptest"
+      ],
+      "open_gap": "no deterministic every-nth-allocation failure sweep"
+    },
+    {
+      "family": "queue",
+      "status": "PARTIAL",
+      "passed_host_targets": [
+        "systest",
+        "tcptest"
+      ],
+      "open_gap": "notification and TCP pressure only; not every queue"
+    },
+    {
+      "family": "io",
+      "status": "PARTIAL",
+      "passed_host_targets": [
+        "fstest",
+        "nettest",
+        "tcptest"
+      ],
+      "open_gap": "zlfs transient write and packet-loss paths only"
+    },
+    {
+      "family": "provider",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "open_gap": "no start/admit/resource-reservation rollback injector"
+    },
+    {
+      "family": "service",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "open_gap": "no service dependency-loss/crash/reconnect injector"
+    },
+    {
+      "family": "package",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "open_gap": "no staged install/uninstall failure-at-every-step injector"
+    },
+    {
+      "family": "lifecycle",
+      "status": "PARTIAL",
+      "passed_host_targets": [],
+      "open_gap": "62 app open-ready-close routes pass, but lifecycle failure is not injected"
+    }
+  ],
+  "hostile_corpus": [
+    {
+      "family": "elf",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no malformed ELF loader corpus"
+    },
+    {
+      "family": "archive",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no malformed archive/initramfs/package corpus"
+    },
+    {
+      "family": "filesystem",
+      "status": "HOST_PASSED",
+      "passed_host_targets": [
+        "fstest"
+      ],
+      "detail": "corrupt zlfs metadata, overflow and transient write rollback"
+    },
+    {
+      "family": "network",
+      "status": "HOST_PASSED",
+      "passed_host_targets": [
+        "fuzz",
+        "dnstest",
+        "nettest",
+        "tcptest",
+        "httptest"
+      ],
+      "detail": "scripted malformed packets and deterministic fuzz seed"
+    },
+    {
+      "family": "font",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no font parser exists and no hostile font corpus"
+    },
+    {
+      "family": "image",
+      "status": "HOST_PASSED",
+      "passed_host_targets": [
+        "pngtest"
+      ],
+      "detail": "146 sanitizer-backed accept/refuse checks over constructed PNG/DEFLATE inputs"
+    },
+    {
+      "family": "web",
+      "status": "HOST_PASSED",
+      "passed_host_targets": [
+        "fuzz",
+        "htmltest",
+        "csstest",
+        "jstest",
+        "httptest"
+      ],
+      "detail": "malformed HTML/CSS/JS/HTTP and bounded fuzz"
+    },
+    {
+      "family": "ipc",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no typed IPC envelope parser or hostile IPC corpus"
+    },
+    {
+      "family": "certificate",
+      "status": "HOST_PASSED",
+      "passed_host_targets": [
+        "x509test"
+      ],
+      "detail": "truncations, random bytes, forged root and time/host refusal"
+    }
+  ],
+  "counts": {
+    "verifier_canaries": 19,
+    "verifier_canaries_caught": 19,
+    "failure_seam_families": 7,
+    "failure_seam_complete": 0,
+    "failure_seam_partial": 4,
+    "failure_seam_missing": 3,
+    "hostile_families": 9,
+    "hostile_host_passed": 5,
+    "hostile_source_only": 0,
+    "hostile_missing": 4
+  },
+  "open_gaps": {
+    "failure_injection": [
+      "allocation",
+      "queue",
+      "io",
+      "provider",
+      "service",
+      "package",
+      "lifecycle"
+    ],
+    "hostile_corpus": [
+      "elf",
+      "archive",
+      "font",
+      "ipc"
+    ]
+  },
+  "evidence_ceiling": "host canary and hostile-input evidence only; no completeness or target-hardware promotion",
+  "weakest_link": "no failure family is exhaustive; ELF/archive/font/IPC corpora are absent",
+  "generator": {
+    "path": "kernel/gen-adversarial-registry.py",
+    "sha256": "50669cdbdf70f9325730ae18aaac106e26b43d6df65e45a8513d5af0740b22a4"
+  }
+}

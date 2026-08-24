@@ -8,7 +8,11 @@ cd "$(dirname "$0")"
 command -v qemu-system-i386 >/dev/null || { echo "skip: no qemu"; exit 0; }
 command -v nasm >/dev/null || { echo "skip: no nasm"; exit 0; }
 
-./mkdisk.sh >/dev/null 2>&1 || { echo "FAIL: disk image did not build"; exit 1; }
+if [ "${ZLOS_SKIP_BUILD:-0}" = 1 ]; then
+    [ -s zlOS.img ] || { echo "FAIL: ZLOS_SKIP_BUILD=1 but zlOS.img is missing"; exit 1; }
+else
+    ./mkdisk.sh >/dev/null 2>&1 || { echo "FAIL: disk image did not build"; exit 1; }
+fi
 
 OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT
 
@@ -47,11 +51,21 @@ kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null
 tr -d '\r' < "$OUT" > "$OUT.c" && mv "$OUT.c" "$OUT"
 
 fail=0
+MANIFEST_SHA=$(sha256sum app-manifest.json | awk '{print $1}')
 grep -q "our bootloader (raw_boot), no GRUB" "$OUT" || { echo "  FAIL  did not boot via our loader"; fail=1; }
 grep -q "ready\." "$OUT"  || { echo "  FAIL  never reached the prompt"; fail=1; }
 grep -q "6765" "$OUT"   || { echo "  FAIL  fib(20) wrong or shell unresponsive"; fail=1; }
+grep -q "app-manifest: schema=1 entries=62 sha256=$MANIFEST_SHA" "$OUT" || {
+    echo "  FAIL  running raw image did not report the current 62-app manifest"; fail=1;
+}
 
 if [ "$fail" -eq 0 ]; then
+    python3 ./write-app-manifest-boot-receipt.py \
+        --route raw-bios --artifact zlOS.img --log "$OUT" \
+        --harness verify-raw.sh \
+        --boot-origin "our bootloader (raw_boot), no GRUB" \
+        --output docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json \
+        || fail=1
     echo "ok    kernel boots via our own bootloader (no GRUB), shell responds"
 fi
 exit $fail

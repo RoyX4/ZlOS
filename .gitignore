@@ -70,6 +70,8 @@ kernel/hosttest/i2c_touchtest
 kernel/hosttest/iwlwifitest
 kernel/hosttest/memtypetest
 kernel/hosttest/msctest
+kernel/hosttest/crashtest
+kernel/hosttest/eventtracetest
 # NOT *.ppm here: kernel/.gitignore:25 already says hosttest/*.ppm, and
 # browsershot.ppm and wmshot.ppm are TRACKED - so that rule does nothing for
 # them (a tracked file is never ignored) while looking like it does. Adding a

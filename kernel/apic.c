@@ -50,6 +50,19 @@ extern unsigned char zl_inb(unsigned short port);
 static u32 mmio_r(uptr a)          { return *(volatile u32 *)a; }
 static void mmio_w(uptr a, u32 v)  { *(volatile u32 *)a = v; }
 
+/* Keep legacy physical-memory reads behind an address-taking seam. GCC 15
+ * otherwise applies hosted null-object bounds reasoning to the constant BIOS
+ * Data Area address 0x40e, even though this is a freestanding kernel mapping. */
+static u16 phys_r16(uptr a)
+{
+#if defined(__GNUC__) && !defined(__clang__)
+    /* An empty value barrier prevents GCC's hosted-object constant
+     * propagation without emitting an instruction or changing the address. */
+    __asm__ volatile("" : "+r"(a));
+#endif
+    return *(volatile u16 *)a;
+}
+
 /* ---- CPU instructions we need ------------------------------------------ */
 static void do_cpuid(u32 leaf, u32 *a, u32 *b, u32 *c, u32 *d)
 {
@@ -155,7 +168,7 @@ u64 acpi_find_rsdp(void)
     if (rsdp_addr) return rsdp_addr;            /* UEFI already told us */
 
     /* the Extended BIOS Data Area, whose segment is parked at 0x40E */
-    u32 ebda = (u32)(*(volatile u16 *)(uptr)0x40E) << 4;
+    u32 ebda = (u32)phys_r16((uptr)0x40E) << 4;
     if (ebda >= 0x400 && ebda < 0xA0000) {
         u64 r = scan_for_rsdp((uptr)ebda, (uptr)(ebda + 1024));
         if (r) { rsdp_addr = r; return r; }

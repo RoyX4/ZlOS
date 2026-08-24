@@ -34,7 +34,13 @@ fail=0
 command -v qemu-system-x86_64 >/dev/null || { echo "skip: no qemu-system-x86_64"; exit 0; }
 [ -f "$OVMF_CODE" ] || { echo "skip: no OVMF firmware (apt install ovmf)"; exit 0; }
 
-./mkusb.sh >/dev/null 2>&1 || { echo "FAIL: the UEFI image did not build"; exit 1; }
+if [ "${ZLOS_SKIP_BUILD:-0}" = 1 ]; then
+    [ -s zlOS-usb.img ] || {
+        echo "FAIL: ZLOS_SKIP_BUILD=1 but zlOS-usb.img is missing"; exit 1;
+    }
+else
+    ./mkusb.sh >/dev/null 2>&1 || { echo "FAIL: the UEFI image did not build"; exit 1; }
+fi
 ./hosttest/efi_stage0_test.py || exit 1
 python3 ./hosttest/efi_kernel_witness_test.py || exit 1
 
@@ -157,6 +163,13 @@ else
         grep -E "Ring-3 window|window/input ABI" "$LOG" | tail -3 | sed 's/^/          /'
         fail=1
     fi
+    MANIFEST_SHA=$(sha256sum app-manifest.json | awk '{print $1}')
+    if grep -q "app-manifest: schema=1 entries=62 sha256=$MANIFEST_SHA" "$LOG"; then
+        echo "  ok    running UEFI image reports the current 62-app manifest"
+    else
+        echo "  FAIL  running UEFI image did not report the current 62-app manifest"
+        fail=1
+    fi
 fi
 
 # The serial transcript proves the child kernel ran.  The ESP witness proves
@@ -193,6 +206,15 @@ elif ! grep -q "BEFORE_EXIT_BOOT_SERVICES" "$TRACE"; then
     echo "  FAIL  kernel never reached the final firmware-exit boundary"; fail=1
 else
     echo "  ok    stage 0 and kernel persisted every boundary through ExitBootServices"
+fi
+
+if [ "$fail" -eq 0 ]; then
+    python3 ./write-app-manifest-boot-receipt.py \
+        --route native-uefi64 --artifact zlOS-usb.img --log "$LOG" \
+        --harness verify-efi.sh \
+        --boot-origin "UEFI application - no GRUB, no bootloader" \
+        --output docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json \
+        || fail=1
 fi
 
 JOURNAL=$(mktemp)

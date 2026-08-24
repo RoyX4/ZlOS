@@ -15,6 +15,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+python3 ./gen-app-manifest.py --check
+python3 ./gen-build-identity.py --check
+
 SRC=${1:-kernel.zl}
 [ -x ../compile ] || { echo "build the toolchain first: ../build.sh"; exit 1; }
 
@@ -22,7 +25,7 @@ SRC=${1:-kernel.zl}
 cp out.c _gen.c
 
 CFLAGS="-m32 -O2 -ffreestanding -nostdlib -fno-stack-protector -fno-pic
-        -fno-builtin -Wall -Wextra -Wno-unused-parameter -I.."
+        -fno-builtin -Wall -Wextra -Werror -Wno-unused-parameter -I.."
 
 # the kernel objects (same as build.sh, but our raw entry instead of boot.S)
 # shellcheck disable=SC2086

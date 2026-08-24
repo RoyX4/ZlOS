@@ -1,0 +1,70 @@
+{
+  "artifacts": {
+    "BOOTX64.EFI": {
+      "bytes": 2716672,
+      "path": "kernel/BOOTX64.EFI",
+      "sha256": "63b6c7053839294e8dccfc55b98c0dfa78d59889e3c27e83b503b51e94e607c1"
+    },
+    "boot-media-ids.json": {
+      "bytes": 414,
+      "path": "kernel/boot-media-ids.json",
+      "sha256": "52d6cdf60cf45be671e522216af4cecee444a3895592fb197a7a3df38e7f7cbb"
+    },
+    "kernel.elf": {
+      "bytes": 4592648,
+      "path": "kernel/kernel.elf",
+      "sha256": "63669c18afb3ed2454be1155cd4381a1dc370105aefad07461e536d2e121e286"
+    },
+    "kernel64.elf": {
+      "bytes": 2702592,
+      "path": "kernel/kernel64.elf",
+      "sha256": "686affb711ab6a7a1d2f5836eefb98b550e0cdf6398e97938651ff84dbef29df"
+    },
+    "kernel_raw.elf": {
+      "bytes": 4592492,
+      "path": "kernel/kernel_raw.elf",
+      "sha256": "3b695cdc24fc059f97342bc0e5bcd2f389004a56b1e62b725824e1faa84f32ee"
+    },
+    "zlOS-usb.img": {
+      "bytes": 67108864,
+      "path": "kernel/zlOS-usb.img",
+      "sha256": "16f239108c9d68502b1d8b97d1275baa8efe278380dbbd2c5646d8d423a615ef"
+    },
+    "zlOS.img": {
+      "bytes": 6291968,
+      "path": "kernel/zlOS.img",
+      "sha256": "f97a0ec1b439a41dfa954a76052b08c285a0562aaa6331a8f03cfa85c71c3c42"
+    },
+    "zlOS.iso": {
+      "bytes": 29734912,
+      "path": "kernel/zlOS.iso",
+      "sha256": "ca67eacab5d0c4913a40f12307b7998ac7f0fcd743773544d0a1552838550f46"
+    },
+    "zlOS64.iso": {
+      "bytes": 27844608,
+      "path": "kernel/zlOS64.iso",
+      "sha256": "3ea3ea875fdfaa60f0754f5e782111b9a04acf32d8188a92ed8ffdf3a5d16ab7"
+    }
+  },
+  "build_identity": {
+    "dirty": true,
+    "head": "b8a00ec45ac1f9f955ba79ed63f0072540067d4e",
+    "id": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+    "schema": "zlos.build-input-identity.v1"
+  },
+  "evidence": "two independent executions of every listed build recipe produced byte-identical artifacts",
+  "independent_runs": 2,
+  "recipes": [
+    "./mkiso.sh",
+    "./mkiso64.sh",
+    "./mkdisk.sh",
+    "./mkusb.sh"
+  ],
+  "result": "PASS",
+  "schema": "zlos.reproducible-build-receipt.v1",
+  "source_files_sha256": {
+    "build-identity.json": "22414d9ea92b9d48bc68fc2160fe6f950e39bffcb723adb29923f4ad05da524f",
+    "check-reproducible-build.py": "9efe30107c2fa589754256fd3176c22c633ce5062a96ec1514376b4b64b73702"
+  },
+  "weakest_link": "byte reproducibility does not by itself prove bootability, runtime behavior, compiler diversity, or physical-hardware behavior"
+}

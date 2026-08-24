@@ -23,11 +23,20 @@ typedef unsigned char  u8;
  * the EFI build's clang target (x86_64-unknown-windows, LLP64) and 8 with gcc.
  * Anything holding an address must use this, never `long`. */
 typedef unsigned long long u64;
+#ifdef ZL_64
+typedef u64 uptr;
+#else
+typedef u32 uptr;
+#endif
 
 #include "telemetry.h"
 
 void          zl_outb(u16 port, u8 val);
 unsigned char zl_inb(u16 port);
+int  crash_capture(u32 vector, u32 has_error, u64 error_code,
+                   u64 ip, u64 cs, u64 flags, u64 sp, u64 ss,
+                   u64 cr2, u32 word_bits);
+void crash_report(void);
 
 /* The live screen size, so the pointer can be clamped to pixels that exist.
  * CACHED here rather than fetched by calling console_pxw() from the handler.
@@ -181,14 +190,6 @@ static volatile u8  mpkt[4];
 static volatile int mphase = 0;
 static volatile int mouse_irqs = 0;
 static volatile u32 mouse_packet_tsc;
-
-/* The clamp the ISR applies. It used to be the literals 2000 and 1500, chosen
- * to be "generous" because this file has no idea how big the screen is - and
- * the cost of that was a pointer that could be driven a long way off a
- * 1280x800 panel and then take a long drag back to reappear. fb_setup knows
- * the real mode, so it tells us; until it does, the old literals stand and
- * behave exactly as before. */
-static volatile int mouse_max_x = 2000, mouse_max_y = 1500;
 
 int idt_mouse_x(void)   { return mouse_x; }
 int idt_mouse_y(void)   { return mouse_y; }
@@ -397,18 +398,22 @@ static void smp_wake_isr(struct interrupt_frame *f)
  * as a no-error handler shifted RIP/CS/RFLAGS and made the old "fault record"
  * fiction. Each gate below now uses the ABI-matching signature and supplies
  * its vector explicitly. */
-#ifdef ZL_64
-typedef u64 fault_word;
-#else
-typedef u32 fault_word;
-#endif
-
-static __attribute__((noreturn)) void fault_stop(u32 vector, fault_word error,
-                                                 struct interrupt_frame *f)
+__attribute__((noreturn, noinline))
+static void fault_stop(u32 vector, u32 has_error, uptr error,
+                       struct interrupt_frame *f)
 {
+    uptr sp;
+    uptr ss = 0;
+    uptr cr2 = 0;
+
     __asm__ volatile("cli");
-    fault_word cr2 = 0;
-    if (vector == 14u) __asm__ volatile("mov %%cr2,%0" : "=r"(cr2));
+    if ((f->cs & 3u) != 0) {
+        sp = (uptr)f->sp;
+        ss = (uptr)f->ss;
+    } else {
+        sp = (uptr)f + 3u * (uptr)sizeof(uptr);
+    }
+    if (vector == 14u) __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
 #ifdef ZL_64
     extern int user64_is_running(void);
     extern void user64_mark_fault(u32 vector);
@@ -429,30 +434,29 @@ static __attribute__((noreturn)) void fault_stop(u32 vector, fault_word error,
     zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_FATAL,
                   f->ip, f->cs, f->flags);
 #endif
+    (void)crash_capture(vector, has_error, (u64)error,
+                        (u64)f->ip, (u64)f->cs, (u64)f->flags,
+                        (u64)sp, (u64)ss, (u64)cr2,
+                        (u32)(sizeof(uptr) * 8u));
+    crash_report();
     for (;;) __asm__ volatile("hlt");
 }
 
 #define FAULT_NOERR(n) \
     __attribute__((interrupt)) static void fault_##n(struct interrupt_frame *f) \
-    { fault_stop((n), 0, f); }
-#ifdef ZL_64
+    { fault_stop((n), 0, 0, f); }
 #define FAULT_ERR(n) \
-    __attribute__((interrupt)) static void fault_##n(struct interrupt_frame *f, u64 e) \
-    { fault_stop((n), e, f); }
-#else
-#define FAULT_ERR(n) \
-    __attribute__((interrupt)) static void fault_##n(struct interrupt_frame *f, u32 e) \
-    { fault_stop((n), e, f); }
-#endif
+    __attribute__((interrupt)) static void fault_##n(struct interrupt_frame *f, uptr error) \
+    { fault_stop((n), 1, error, f); }
 
-FAULT_NOERR(0)  FAULT_NOERR(1)  FAULT_NOERR(2)  FAULT_NOERR(3)
-FAULT_NOERR(4)  FAULT_NOERR(5)  FAULT_NOERR(6)  FAULT_NOERR(7)
-FAULT_ERR(8)    FAULT_NOERR(9)  FAULT_ERR(10)   FAULT_ERR(11)
-FAULT_ERR(12)   FAULT_ERR(13)   FAULT_ERR(14)   FAULT_NOERR(15)
-FAULT_NOERR(16) FAULT_ERR(17)   FAULT_NOERR(18) FAULT_NOERR(19)
-FAULT_NOERR(20) FAULT_ERR(21)   FAULT_NOERR(22) FAULT_NOERR(23)
-FAULT_NOERR(24) FAULT_NOERR(25) FAULT_NOERR(26) FAULT_NOERR(27)
-FAULT_NOERR(28) FAULT_ERR(29)   FAULT_ERR(30)   FAULT_NOERR(31)
+FAULT_NOERR(0)   FAULT_NOERR(1)   FAULT_NOERR(2)   FAULT_NOERR(3)
+FAULT_NOERR(4)   FAULT_NOERR(5)   FAULT_NOERR(6)   FAULT_NOERR(7)
+FAULT_ERR(8)     FAULT_NOERR(9)   FAULT_ERR(10)    FAULT_ERR(11)
+FAULT_ERR(12)    FAULT_ERR(13)    FAULT_ERR(14)    FAULT_NOERR(15)
+FAULT_NOERR(16)  FAULT_ERR(17)    FAULT_NOERR(18)  FAULT_NOERR(19)
+FAULT_NOERR(20)  FAULT_ERR(21)    FAULT_NOERR(22)  FAULT_NOERR(23)
+FAULT_NOERR(24)  FAULT_NOERR(25)  FAULT_NOERR(26)  FAULT_NOERR(27)
+FAULT_NOERR(28)  FAULT_ERR(29)    FAULT_ERR(30)    FAULT_NOERR(31)
 
 static void *const fault_handlers[32] = {
     fault_0, fault_1, fault_2, fault_3, fault_4, fault_5, fault_6, fault_7,
@@ -460,6 +464,10 @@ static void *const fault_handlers[32] = {
     fault_16, fault_17, fault_18, fault_19, fault_20, fault_21, fault_22, fault_23,
     fault_24, fault_25, fault_26, fault_27, fault_28, fault_29, fault_30, fault_31
 };
+
+/* Deliberate invalid-opcode trigger for the dedicated QEMU crash receipt.
+ * It is reachable only through the explicit `crashtest` diagnostic command. */
+void crash_test_ud2(void) { __asm__ volatile("ud2"); }
 
 /* usermode.c, in assembly. Declared as a function taking no arguments purely so
  * its address can be taken - it is never called from C and never returns
@@ -616,7 +624,11 @@ void idt_init(void)
     set_gate(0xF1, smp_wake_isr);   /* bounded AP band-work wake */
 
     idtp.limit = sizeof(idt) - 1;
+#ifdef ZL_64
     idtp.base  = (u64)&idt;      /* NOT `unsigned long` - see the typedef */
+#else
+    idtp.base  = (u32)&idt;
+#endif
     __asm__ volatile("lidt %0" :: "m"(idtp));
 
     pic_remap();

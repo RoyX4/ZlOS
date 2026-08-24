@@ -46,16 +46,21 @@ Nothing waits a fixed wall-clock time for anything the guest decides.
 """
 
 import argparse
+import hashlib
+import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from exercise import Serial, Qmp, qemu_argv, build, PROMPT  # noqa: E402
+sys.path.insert(0, os.path.join(HERE, "oracle"))
+import zlosboot as zb  # noqa: E402
 
 # Transcript and qtype are probe-term.py's, and they are borrowed rather than
 # copied. Both encode findings that were expensive to make - Serial.wait()
@@ -72,8 +77,74 @@ _pt = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(_pt)
 Transcript, qtype = _pt.Transcript, _pt.qtype
 
+_lc_spec = _ilu.spec_from_file_location(
+    "app_lifecycle", os.path.join(HERE, "probe-app-lifecycle.py"))
+_lc = _ilu.module_from_spec(_lc_spec)
+_lc_spec.loader.exec_module(_lc)
+
 SHOTS = os.path.join(HERE, "shots")
 COMPOSITOR = "compositor:"
+DEFAULT_RECEIPT = os.path.join(HERE, "oracle", "out", "run-qemu.json")
+
+
+def stream(transcript):
+    transcript.ser.pump()
+    return transcript.log + transcript.ser.buf
+
+
+def await_lifecycle(transcript, start, event, app, ceiling):
+    deadline = time.monotonic() + ceiling
+    while time.monotonic() < deadline:
+        current = stream(transcript)
+        found = [item for item in _lc.events(current[start:])
+                 if item["event"] == event and item["app"] == app]
+        if found:
+            return found[-1]
+        time.sleep(0.01)
+    raise RuntimeError(f"timed out waiting for lifecycle {event} app {app}")
+
+
+def qcommand(transcript, qmp, command, ceiling, prompt_ready=False):
+    """Submit one emulated-keyboard command at an exact prompt boundary."""
+    if not prompt_ready and not transcript.expect(PROMPT, ceiling):
+        return False
+    qtype(qmp, command + "\n")
+    # term_key writes the prompt before inviting a line and only the submitted
+    # characters here. Looking for `zl> command` after the prompt was already
+    # consumed made the very first command fail and the second inherit its
+    # delayed echo.
+    return transcript.expect(command + "\n", ceiling)
+
+
+def sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def ppm_size(path):
+    with open(path, "rb") as handle:
+        tokens = []
+        while len(tokens) < 4:
+            line = handle.readline()
+            if not line:
+                raise RuntimeError("truncated PPM header")
+            line = line.split(b"#", 1)[0]
+            tokens.extend(line.split())
+    if tokens[0] != b"P6":
+        raise RuntimeError(f"unexpected screendump format {tokens[0]!r}")
+    return int(tokens[1]), int(tokens[2])
+
+
+def write_receipt(path, value):
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    temp = path + ".tmp"
+    with open(temp, "w", encoding="utf-8") as handle:
+        json.dump(value, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+    os.replace(temp, path)
 
 
 def main():
@@ -83,9 +154,8 @@ def main():
     ap.add_argument("--settle", type=float, default=1.5)
     ap.add_argument("--keep-shots", action="store_true")
     ap.add_argument("--no-build", action="store_true")
+    ap.add_argument("--receipt", default=DEFAULT_RECEIPT)
     args = ap.parse_args()
-
-    import time
 
     if not args.no_build:
         build(False)
@@ -117,12 +187,16 @@ def main():
         # duplication: golden.txt proves the text has not changed, this proves
         # the arena came up RAM-backed on a machine that is about to be asked
         # to use it. They fail for different reasons.
-        check("the arena is up and says where it is",
-              "arena: 16 MiB at 8 MiB" in t.log)
+        arena = re.search(
+            r"arena: 16 MiB at (\d+) MiB, ends at (\d+) MiB, ceiling (\d+) MiB",
+            t.log)
+        check("the arena is up and reports a bounded RAM range",
+              arena is not None and int(arena.group(2)) <= int(arena.group(3)),
+              arena.group(0) if arena else "missing arena receipt")
         check("the arena did NOT report missing RAM",
               "NOT BACKED BY RAM" not in t.log)
 
-        if t.expect(COMPOSITOR, 8):
+        if COMPOSITOR in t.log or t.expect(COMPOSITOR, 8):
             print("  note  the compositor is the boot state - no 'w' needed")
         else:
             if not t.expect(PROMPT, args.step_timeout):
@@ -134,27 +208,40 @@ def main():
                 return 1
             print("  ok    'w' started the compositor")
 
-        rest = t.seen("\n", args.step_timeout) or ""
-        m = re.search(r"shell client (\d+),(\d+) (\d+)x(\d+)", rest)
+        # Synchronize at the actual interactive prompt before injecting the
+        # first command. Consuming one arbitrary newline here used to leave
+        # boot prose in front of the prompt; the first command then timed out,
+        # and its delayed echo was falsely accepted as the second command.
+        if not t.expect(PROMPT, args.step_timeout):
+            print("the compositor started but the shell never became interactive")
+            return 1
+        m = re.search(r"shell client (\d+),(\d+) (\d+)x(\d+)", t.log)
         if not m:
-            print("the compositor did not report the shell rect: " + repr(rest))
+            print("the compositor did not report the shell rect")
             return 1
         box = tuple(int(g) for g in m.groups())
         print(f"  ok    shell client rect {box[0]},{box[1]} {box[2]}x{box[3]}")
 
         time.sleep(args.settle)
+        lifecycle_before_run = _lc.events(stream(t))
+        if not lifecycle_before_run:
+            print("the compositor emitted no lifecycle telemetry")
+            return 1
+        lifecycle_baseline = lifecycle_before_run[-1]["live"]
+        run_open_start = len(stream(t))
 
         # ---- `run` with no filename --------------------------------------
-        qtype(qmp, "run\n")
-        if not t.expect("zl> run", args.step_timeout):
+        first_response_start = len(stream(t))
+        if not qcommand(t, qmp, "run", args.step_timeout, prompt_ready=True):
             check("`run` was typed", False, "the keystrokes never arrived")
         else:
             check("`run` was typed and echoed", True)
-            got = t.seen("\n", args.step_timeout) or ""
-            got += t.seen("\n", args.step_timeout) or ""
+            has_no_filename = t.expect("no filename", args.step_timeout)
+            has_usage = t.expect("run hello.zl", args.step_timeout)
+            got = stream(t)[first_response_start:]
             check("`run` alone says it wants a filename",
-                  "no filename" in got, repr(got.strip()[:70]))
-            check("...and shows how to use it", "run hello.zl" in got)
+                  has_no_filename, repr(got.strip()[:70]))
+            check("...and shows how to use it", has_usage)
             check("it did NOT claim to have run anything",
                   "found" not in got.lower())
 
@@ -162,14 +249,14 @@ def main():
         # The first typed argument in this shell's history that is neither a
         # bare word nor a number. If match_cmd's digit scan had been left to
         # decide where the text starts, this is the case that exposes it.
-        qtype(qmp, "run nothing.zl\n")
-        if not t.expect("zl> run nothing.zl", args.step_timeout):
+        disk_response_start = len(stream(t))
+        if not qcommand(t, qmp, "run nothing.zl", args.step_timeout):
             check("`run nothing.zl` was typed", False, "keystrokes never arrived")
         else:
             check("`run nothing.zl` was typed and echoed", True)
-            blob = ""
-            for _ in range(4):
-                blob += t.seen("\n", args.step_timeout) or ""
+            has_no_filesystem = t.expect("no filesystem on the disk",
+                                         args.step_timeout)
+            blob = stream(t)[disk_response_start:]
             # THE DRIVER IS PRESENT NOW, and the message has to change with it.
             # Before fs.c was merged from desktop/system-track, exec.c's weak
             # fs_* symbols were NULL and this said "no fs driver". They now bind
@@ -178,33 +265,39 @@ def main():
             # changed by itself, with no edit to exec.c, is the weak-symbol seam
             # working exactly as it was designed to.
             check("it says there is no filesystem",
-                  "no filesystem" in blob, repr(blob.strip()[:70]))
+                  has_no_filesystem, repr(blob.strip()[:70]))
             check("it blames the DISK, not the driver - the driver is linked now",
                   "on the disk" in blob and "no fs driver" not in blob)
             check("the two refusals are DIFFERENT sentences",
                   "no filename" not in blob)
+
+        run_opened = await_lifecycle(t, run_open_start, "open", 7,
+                                     args.step_timeout)
+        run_ready = await_lifecycle(t, run_open_start, "ready", 7,
+                                    args.step_timeout)
+        check("the Run surface opened as APP_RUN id 7",
+              run_opened["app"] == 7)
+        check("the Run surface reached its first compositor draw",
+              run_ready["slot"] == run_opened["slot"] and
+              run_ready["generation"] == run_opened["generation"])
 
         # ---- and once a filesystem EXISTS, a third distinct answer ---------
         # `.` mounts zlfs, formatting the NVMe disk if it is blank. That moves
         # `run` from "there is nowhere to look" to "I looked and it is not
         # there" - which is the whole error ladder, and the assertion that the
         # weak symbols really did bind rather than merely link.
-        qtype(qmp, ".\n")
-        if t.expect("zl> .", args.step_timeout):
-            mounted = ""
-            for _ in range(6):
-                mounted += t.seen("\n", args.step_timeout) or ""
-            check("`.` mounted a filesystem", "mounted:" in mounted,
-                  repr(mounted.strip()[-60:]))
+        if qcommand(t, qmp, ".", args.step_timeout):
+            has_mount = t.expect("mounted:", args.step_timeout)
+            check("`.` mounted a filesystem", has_mount)
 
-            qtype(qmp, "run nothing.zl\n")
-            if t.expect("zl> run nothing.zl", args.step_timeout):
-                blob2 = ""
-                for _ in range(3):
-                    blob2 += t.seen("\n", args.step_timeout) or ""
+            if qcommand(t, qmp, "run nothing.zl", args.step_timeout):
+                missing_start = len(stream(t))
+                has_missing_file = t.expect("no such file", args.step_timeout)
+                has_missing_name = t.expect("nothing.zl", args.step_timeout)
+                blob2 = stream(t)[missing_start:]
                 check("with a filesystem mounted, run says NO SUCH FILE",
-                      "no such file" in blob2, repr(blob2.strip()[:70]))
-                check("...and names it", "nothing.zl" in blob2)
+                      has_missing_file, repr(blob2.strip()[:70]))
+                check("...and names it", has_missing_name)
                 check("...and no longer claims there is no filesystem",
                       "no filesystem" not in blob2)
         else:
@@ -216,8 +309,7 @@ def main():
         # to still work. This is the assertion that catches a compositor that
         # died the moment a fourth window appeared.
         time.sleep(args.settle)
-        qtype(qmp, "fib 20\n")
-        if t.expect("zl> fib 20", args.step_timeout):
+        if qcommand(t, qmp, "fib 20", args.step_timeout):
             check("the terminal still works after run opened a window",
                   t.expect("6765", args.step_timeout))
         else:
@@ -225,11 +317,23 @@ def main():
                   "no echo - the compositor may have stopped")
 
         # ---- run twice must not open a second window ----------------------
-        qtype(qmp, "run nothing.zl\n")
-        t.expect("zl> run nothing.zl", args.step_timeout)
+        opens_before_duplicate = len([
+            event for event in _lc.events(stream(t))
+            if event["event"] == "open" and event["app"] == 7
+        ])
+        duplicate_typed = qcommand(t, qmp, "run nothing.zl", args.step_timeout)
+        duplicate_answered = (t.expect("no such file", args.step_timeout)
+                              if duplicate_typed else False)
         time.sleep(args.settle)
-        qtype(qmp, "fib 20\n")
-        if t.expect("zl> fib 20", args.step_timeout):
+        opens_after_duplicate = len([
+            event for event in _lc.events(stream(t))
+            if event["event"] == "open" and event["app"] == 7
+        ])
+        check("a second `run` reused the existing Run surface",
+              duplicate_typed and duplicate_answered and
+              opens_after_duplicate == opens_before_duplicate,
+              f"open events {opens_before_duplicate}->{opens_after_duplicate}")
+        if qcommand(t, qmp, "fib 20", args.step_timeout):
             check("a second `run` left the machine responsive",
                   t.expect("6765", args.step_timeout))
         else:
@@ -245,6 +349,35 @@ def main():
                     subprocess.run(["cp", ppm, os.path.join(SHOTS, "run-window.ppm")])
                 print(f"  note  screenshot in {SHOTS}")
 
+        # Focus the Run title bar through the real pointer route, then close it
+        # through the unified Ctrl+W route. The Run surface deliberately hands
+        # focus back to Terminal after opening, so closing without the click
+        # would prove teardown of the wrong window.
+        t.ser.drain(0.1)
+        reports = re.findall(
+            r"wm: win (\d+) title (\d+),(\d+) (\d+)x(\d+)", stream(t))
+        if not reports:
+            check("Run emitted a pointer-addressable window rectangle", False)
+            run_closed = None
+        else:
+            win, tx, ty, tw, th = (int(value) for value in reports[-1])
+            frame = os.path.join(tmp, "run-close.ppm")
+            if not qmp.screendump(frame):
+                check("Run teardown frame could be captured", False)
+                run_closed = None
+            else:
+                width, height = ppm_size(frame)
+                close_start = len(stream(t))
+                zb.click(qmp, tx + max(8, tw // 3), ty + max(4, th // 2),
+                         width, height, t.ser.drain)
+                t.ser.send("\x17")
+                run_closed = await_lifecycle(t, close_start, "close", 7,
+                                             args.step_timeout)
+                lifecycle_errors = _lc.validate_cycle(
+                    run_opened, run_ready, run_closed, 7, lifecycle_baseline)
+                check("Run completed open-ready-close without a live-window leak",
+                      not lifecycle_errors, "; ".join(lifecycle_errors))
+
     finally:
         proc.terminate()
         try:
@@ -258,7 +391,45 @@ def main():
         for f in failures:
             print(f"        {f}")
         return 1
+    receipt = {
+        "schema": "zlos.run-route-qemu-receipt.v1",
+        "evidence": "QEMU keyboard, filesystem error ladder, window lifecycle; not successful executable loading or physical proof",
+        "source_head": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=os.path.dirname(HERE), text=True).strip(),
+        "source_files_sha256": {
+            name: sha256(os.path.join(HERE, name))
+            for name in ("kernel.zl", "wm.c", "exec.c", "term.c",
+                         "app-manifest.json", "build-identity.json",
+                         "build_identity_embed.zl", "probe-run.py",
+                         "probe-app-lifecycle.py", "probe-term.py",
+                         "exercise.py", "oracle/zlosboot.py")
+        },
+        "artifact": {
+            "path": "kernel/zlOS.iso",
+            "sha256": sha256(os.path.join(HERE, "zlOS.iso")),
+        },
+        "shipped_manifest": _lc.shipped_manifest(stream(t)),
+        "shipped_build_identity": _lc.shipped_build_identity(stream(t)),
+        "result": {
+            "app": {"id": 7, "name": "Run"},
+            "lifecycle": {
+                "open": run_opened,
+                "ready": run_ready,
+                "close": run_closed,
+            },
+            "duplicate_open_events": {
+                "before": opens_before_duplicate,
+                "after": opens_after_duplicate,
+            },
+            "failure_ladder": ["no filename", "no filesystem on the disk",
+                               "no such file"],
+            "assertions_failed": 0,
+        },
+        "weakest_link": "the loader's successful execution path is outside this receipt; physical keyboard and display are unproven here",
+    }
+    write_receipt(args.receipt, receipt)
     print("ok    `run` declines clearly, and differently for different reasons")
+    print(f"ok    Run identity/lifecycle receipt -> {args.receipt}")
     return 0
 
 

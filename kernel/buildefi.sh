@@ -7,6 +7,9 @@
 set -e
 cd "$(dirname "$0")"
 
+python3 ./gen-app-manifest.py --check
+python3 ./gen-build-identity.py --check
+
 ../compile kernel.zl >/dev/null
 cp out.c _genefi.c
 
@@ -39,7 +42,7 @@ cp out.c _genefi.c
 # swallowed with it.
 CF="-target x86_64-unknown-windows -ffreestanding -fno-stack-protector \
     -fshort-wchar -mno-red-zone -O2 -DZL_64 -DZL_EFI -I.. \
-    -Wno-excessive-regsave \
+    -Wall -Wextra -Werror -Wno-unused-parameter -Wno-excessive-regsave \
     -Werror=shift-count-overflow -Werror=void-pointer-to-int-cast \
     -Werror=pointer-to-int-cast -Werror=int-to-pointer-cast"
 
@@ -81,7 +84,8 @@ OBJS="$OBJS _efi_smptr.o"
 # media shape.  The old 6 GiB DLL-style image also boots a measured 7 GiB OVMF
 # guest, so this is firmware compatibility hardening, not a claimed root cause.
 # 4 KiB file alignment and no IMAGE_FILE_DLL match common shim/GRUB images.
-PEFLAGS="-subsystem:efi_application,0.0 -nodefaultlib -base:0 -filealign:4096"
+PEFLAGS="-subsystem:efi_application,0.0 -nodefaultlib -base:0 -filealign:4096 \
+    -Brepro -lldignoreenv"
 
 # shellcheck disable=SC2086
 lld-link $PEFLAGS -entry:efi_main -out:ZLOS.EFI $OBJS

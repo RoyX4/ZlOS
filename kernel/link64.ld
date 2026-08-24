@@ -2,15 +2,21 @@
  * Loaded at 1 MiB like the 32-bit one; the multiboot header must sit in the
  * first 8 KiB of the image or GRUB will not recognise it. */
 ENTRY(_start)
+PHDRS
+{
+    text PT_LOAD FLAGS(5);   /* read + execute */
+    ro   PT_LOAD FLAGS(4);   /* read only      */
+    data PT_LOAD FLAGS(6);   /* read + write   */
+}
 SECTIONS
 {
     . = 1M;
-    .text : { *(.multiboot) *(.text*) }
-    .rodata : { *(.rodata*) }
-    .data   : { *(.data*) }
+    .text : { *(.multiboot) *(.text*) } :text
+    .rodata : { *(.rodata*) } :ro
+    .data   : { *(.data*) } :data
     . = ALIGN(16);
     __bss_start = .;
-    .bss    : { *(COMMON) *(.bss*) }
+    .bss    : { *(COMMON) *(.bss*) } :data
     . = ALIGN(16);
     __bss_end = .;
 

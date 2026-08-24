@@ -85,6 +85,14 @@ import apps_sys2
 import apps_sys3
 import apps_games3
 import apps_games4
+# Generated from app-manifest.json. It prints the exact manifest digest from
+# inside the running image, so host-side registry truth and shipped bytes can
+# no longer drift silently.
+import app_manifest_embed
+# Generated route-neutral source/toolchain identity. Unlike the app manifest,
+# this covers the active kernel build inputs; exact target and final artifact
+# hashes are joined by boot receipts after linking.
+import build_identity_embed
 
 # ---- serial input -----------------------------------------------------------
 # It used to be read HERE, with band(inb(COM1 + 5), 1) as the ready test. Two
@@ -456,7 +464,6 @@ fn draw_header() {
         rrblend(ix - 1, iy - 1, iw + 2, ih + 2, ISLAND_R * u + 1, theme(TH_ACCENT), ISLAND_RING_A)
         rrblend(ix, iy, iw, ih, ISLAND_R * u, island_fill(), ISLAND_A)
         cx = ix + ISLAND_PAD * u
-        cy = iy + (ih - CHIP_H * u) / 2
         # Activities: a 5px lime dot with a glow, then the word. The dot is the
         # only thing in the chrome that is accent-coloured when nothing is
         # active, so it is what tells you the desktop is alive.
@@ -734,6 +741,19 @@ fn dock_dot_tick() {
 
 # Which dock slots have a window open right now. A launcher does not know this
 # and a taskbar is exactly the thing that does.
+fn dock_app(slot) {
+    if slot == 0 { return APP_SHELL }
+    if slot == 1 { return APP_BROWSER }
+    if slot == 2 { return APP_EDIT }
+    if slot == 3 { return APP_PAINT }
+    if slot == 4 { return APP_SNAKE }
+    if slot == 5 { return APP_CUBE }
+    if slot == 6 { return APP_MONITOR }
+    if slot == 7 { return APP_ABOUT }
+    if slot == 8 { return APP_SETTINGS }
+    return 0 - 1
+}
+
 fn dock_running(slot) {
     if slot == 0 { return wm_open_p(shell_win) }
     if slot == 1 { return wm_open_p(browser_win) }
@@ -837,7 +857,6 @@ dock_baked = 0
 fn draw_status(msg) {
     sr = status_row()
     if px_w() > 0 {
-        w = px_w()
         dy = dock_y()
         u = ui()
         # THE LIVE PART ONLY. Everything above came out of the wallpaper blit
@@ -874,7 +893,6 @@ fn draw_status(msg) {
 # in true colour over the taskbar; on VGA it uses the text cell.
 fn draw_clock(sec) {
     if px_w() > 0 {
-        w = px_w()
         dy = dock_y()
         cu = ui()
         ctray = tray_x()
@@ -2992,6 +3010,11 @@ fn run_command(cmd, arg) {
         if exec_window() == 1 { open_run_window() }
         return 0
     }
+    # Dedicated destructive diagnostic, intentionally absent from help. The
+    # typed word `crashtest` is mapped to a non-printable command code by
+    # term.c, so the old single-key shell cannot trigger it accidentally. It
+    # never returns: vector 6 must produce a ZLCRASH record and halt.
+    if cmd == 127 { crash_test()  return 0 }
     if cmd == 113 { return 1 }
     color(C_RED)  print("  unknown command - press h for help")
     color(C_GREY) return 0
@@ -3015,6 +3038,7 @@ fn open_run_window() {
         }
     }
     run_win = wm_open(APP_RUN, exec_title(), 90 * u, 90 * u, 320 * u, 110 * u)
+    wm_report(run_win)
     # ZPOP. A Run box is a popover in every sense except modality - it cannot
     # be modal, because the keys have to keep reaching the terminal (see
     # below) - so it does not get the fade from wm_modal and asks for it here.
@@ -4896,21 +4920,34 @@ fn desk_key(kcode, kmods) {
 TASK_W = 92                        # design units
 TASK_PITCH = 100
 
-fn task_label(app) {
-    if app == APP_SHELL   { return "zl shell" }
-    if app == APP_MONITOR { return "Monitor" }
+# Canonical product identity for every window/application id. This is separate
+# from task_label(): a task chip may eventually abbreviate a name, but the
+# manifest, launcher, diagnostics and provenance must all start from one exact
+# identity. Everything in the registry delegates to reg_name(), whose slice
+# tables own the remaining 47 current apps.
+fn app_name(app) {
+    if app == APP_SHELL   { return "Terminal" }
+    if app == APP_MONITOR { return "System Monitor" }
     if app == APP_ABOUT   { return "About" }
     if app == APP_SNAKE   { return "Snake" }
     if app == APP_MENU    { return "Menu" }
     if app == APP_BROWSER { return "Browser" }
     if app == APP_SETTINGS { return "Settings" }
+    if app == APP_RUN     { return "Run" }
+    if app == APP_PAINT   { return "Paint" }
+    if app == APP_CUBE    { return "3D" }
+    if app == APP_ANIM    { return "zlOS animation" }
+    if app == APP_MOUSE   { return "Pointer" }
     if app == APP_FILES   { return "Files" }
     if app == APP_EDIT    { return "Text Editor" }
+    if app == APP_CATALOG { return "All Applications" }
     # Every app-suite window falls through to the same registry the catalog
     # reads, so a new app's taskbar chip needs no entry here at all.
     if app >= REG_FIRST { return reg_name(app) }
     return "window"
 }
+
+fn task_label(app) { return app_name(app) }
 
 # Does this app already have a dock tile? If it does, the tile IS its taskbar
 # entry and a second one beside it would be the same window listed twice.
@@ -5004,13 +5041,14 @@ fn task_slot_at(cx, cy) {
 # would just move the surprise.
 fn dock_launch(slot) {
     if slot == DOCK_N { return reg_open(APP_CATALOG) }   # Show Applications
-    if slot == 0 { return raise_shell() }
-    if slot == 1 { return reopen_browser() }
-    if slot == 4 { return open_snake() }
-    if slot == 5 { return open_app(118, 0) }
-    if slot == 6 { return reopen_mon() }
-    if slot == 7 { return reopen_about() }
-    if slot == 8 { return reopen_settings() }
+    da = dock_app(slot)
+    if da == APP_SHELL { return raise_shell() }
+    if da == APP_BROWSER { return reopen_browser() }
+    if da == APP_SNAKE { return open_snake() }
+    if da == APP_CUBE { return open_app(118, 0) }
+    if da == APP_MONITOR { return reopen_mon() }
+    if da == APP_ABOUT { return reopen_about() }
+    if da == APP_SETTINGS { return reopen_settings() }
     dl = dock_cmd(slot)
     if dl == 113 { wm_stop()  return 0 }
     if dl > 0 {
@@ -5021,10 +5059,34 @@ fn dock_launch(slot) {
     return 0
 }
 
+# One Terminal geometry authority for both boot and reopening. The terminal
+# state lives in term.c; closing its window removes only the view. The old
+# raise_shell() checked a stale window slot and did nothing after Ctrl+W, so the
+# first dock tile could close Terminal but could never bring it back.
+fn create_shell_window() {
+    csu = ui()
+    csw = px_w()
+    if csw >= 1240 * csu {
+        csox = (csw - 1280 * csu) / 2
+        if csox < 0 { csox = 0 }
+        return wm_open(APP_SHELL, "Terminal", csox + 132 * csu, 60 * csu, 600 * csu, 368 * csu)
+    }
+    return wm_open(APP_SHELL, "Terminal", 16 * csu, 56 * csu, csw - 32 * csu, dock_y() - 72 * csu)
+}
+
 fn raise_shell() {
+    if shell_win >= 0 {
+        if wm_open_p(shell_win) == 1 {
+            wm_setfocus(shell_win)
+            wm_raise(shell_win)
+            return 0
+        }
+    }
+    shell_win = create_shell_window()
     if shell_win >= 0 {
         wm_setfocus(shell_win)
         wm_raise(shell_win)
+        wm_report(shell_win)
     }
     return 0
 }
@@ -5251,7 +5313,6 @@ fn wm_boot_start() {
     # follows lands inside it - the same ordering draw_desk relied on, now
     # expressed through wm_open.
     sw = px_w()
-    sh = dock_y()
     # Compose the first desktop like a workspace, not a diagnostic dashboard.
     # Terminal is a compact command surface, Browser anchors the lower half
     # and Resources balances it on the right. Empty black client area is not
@@ -5277,7 +5338,7 @@ fn wm_boot_start() {
     if sw >= 1240 * u {
         desk_ox = (sw - 1280 * u) / 2
         if desk_ox < 0 { desk_ox = 0 }
-        shell_win = wm_open(APP_SHELL, "Terminal", desk_ox + 132 * u, 60 * u, 600 * u, 368 * u)
+        shell_win = create_shell_window()
         files_win = wm_open(APP_FILES, "Files", desk_ox + 238 * u, 346 * u, 672 * u, 352 * u)
         mon_win = wm_open(APP_MONITOR, "System Monitor", desk_ox + 758 * u, 76 * u, 424 * u, 376 * u)
         # THE BOOT SET GETS ITS WORKSPACE FROM THE TABLE, not from whichever
@@ -5292,7 +5353,7 @@ fn wm_boot_start() {
         wm_setwinws(files_win, app_ws(APP_FILES))
         wm_setwinws(mon_win, app_ws(APP_MONITOR))
     } else {
-        shell_win = wm_open(APP_SHELL, "Terminal", 16 * u, 56 * u, sw - 32 * u, sh - 72 * u)
+        shell_win = create_shell_window()
     }
     # THE SHELL TAKES THE KEYBOARD BACK. wm_open focuses whatever it just
     # opened, and the shell has to be opened FIRST for an unrelated reason -
@@ -5790,6 +5851,8 @@ ok_line("zl runtime, kernel subset")
 # being honest the day the interpreter boxes lists and strings (EXEC-PROMPT §8),
 # and that is the change that has to carry it, not this one.
 info_line("no heap, zlfs mounts on demand, no scheduler")
+app_manifest_report()
+build_identity_report()
 
 print("")
 color(C_GREEN)  print("  ready.")

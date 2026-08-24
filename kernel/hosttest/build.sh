@@ -325,6 +325,16 @@ gcc -O1 -g -w -D_GNU_SOURCE -fsanitize=address,undefined -o fuzz fuzz.c \
     hostmachine.c
 echo "built ./fuzz          (run: ./fuzz 3000 1)"
 
+# The standalone hostile PNG corpus. This used to exist as 1,400 lines of
+# source and was cited in browser-render-run.md, but it was absent from this
+# build graph and therefore absent from the generated test inventory and every
+# current receipt. Build the production decoder with sanitizers and make all
+# warnings fatal so 146 accept/refuse checks actually execute on every gate.
+gcc -O1 -g -Wall -Wextra -Werror -D_GNU_SOURCE \
+    -fsanitize=address,undefined -fno-sanitize-recover=all \
+    -o pngtest pngtest.c ../png.c
+echo "built ./pngtest       (run: ./pngtest)"
+
 # The resolver, mostly fed answers it should refuse. A DNS response is
 # unauthenticated data from a machine we did not choose, parsed by a walk over
 # length-prefixed labels with BACKWARD POINTERS in them - nothing in the format
@@ -418,6 +428,14 @@ echo "built ./boot_state_test (run: ./boot_state_test)"
 # putc, exactly as arenatest does for the arena.
 gcc -O2 -g -Wall -Wextra -Wno-unused-parameter -o heaptest heaptest.c ../heap.c
 echo "built ./heaptest      (run: ./heaptest)"
+
+# The CPU-fault record, before the interrupt entry. This links crash.c itself,
+# not a model, and ASan/UBSan guard the one formatter that runs after the kernel
+# has already failed and therefore cannot safely fail a second time.
+gcc -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+    -fno-sanitize-recover=all -DCRASH_HOSTTEST \
+    -o crashtest crashtest.c ../crash.c
+echo "built ./crashtest     (run: ./crashtest)"
 
 # The virtual-memory arithmetic. NOT the mapping - installing a PDPT entry needs
 # CR3 and ring 0, and the only proof of that is verify-efi.sh booting green. But

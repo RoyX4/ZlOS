@@ -1,0 +1,2852 @@
+{
+  "artifact": {
+    "path": "kernel/zlOS.iso",
+    "sha256": "ca67eacab5d0c4913a40f12307b7998ac7f0fcd743773544d0a1552838550f46"
+  },
+  "counts": {
+    "catalogue_surfaces": 1,
+    "games": 24,
+    "identities": 62,
+    "named_implementations": 61,
+    "runtime_manifest_boot_routes": 6,
+    "with_qemu_open_ready_close": 62
+  },
+  "entries": [
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 0,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Terminal",
+      "routes": [
+        {
+          "close": null,
+          "open": {
+            "app": 0,
+            "event": "open",
+            "generation": 1,
+            "live": 1,
+            "slot": 0
+          },
+          "ready": {
+            "app": 0,
+            "event": "ready",
+            "generation": 1,
+            "live": 3,
+            "slot": 0
+          },
+          "route": "boot"
+        },
+        {
+          "close": {
+            "app": 0,
+            "event": "close",
+            "generation": 2,
+            "live": 2,
+            "slot": 0
+          },
+          "open": {
+            "app": 0,
+            "event": "open",
+            "generation": 2,
+            "live": 3,
+            "slot": 0
+          },
+          "ready": {
+            "app": 0,
+            "event": "ready",
+            "generation": 2,
+            "live": 3,
+            "slot": 0
+          },
+          "route": "dock:0"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 1,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "System Monitor",
+      "routes": [
+        {
+          "close": null,
+          "open": {
+            "app": 1,
+            "event": "open",
+            "generation": 1,
+            "live": 3,
+            "slot": 2
+          },
+          "ready": {
+            "app": 1,
+            "event": "ready",
+            "generation": 1,
+            "live": 3,
+            "slot": 2
+          },
+          "route": "boot"
+        },
+        {
+          "close": {
+            "app": 1,
+            "event": "close",
+            "generation": 2,
+            "live": 2,
+            "slot": 2
+          },
+          "open": {
+            "app": 1,
+            "event": "open",
+            "generation": 2,
+            "live": 3,
+            "slot": 2
+          },
+          "ready": {
+            "app": 1,
+            "event": "ready",
+            "generation": 2,
+            "live": 3,
+            "slot": 2
+          },
+          "route": "dock:6"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 2,
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "name": "About",
+      "routes": [
+        {
+          "close": {
+            "app": 2,
+            "event": "close",
+            "generation": 3,
+            "live": 2,
+            "slot": 2
+          },
+          "open": {
+            "app": 2,
+            "event": "open",
+            "generation": 3,
+            "live": 3,
+            "slot": 2
+          },
+          "ready": {
+            "app": 2,
+            "event": "ready",
+            "generation": 3,
+            "live": 3,
+            "slot": 2
+          },
+          "route": "dock:7"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 3,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Snake",
+      "routes": [
+        {
+          "close": {
+            "app": 3,
+            "event": "close",
+            "generation": 4,
+            "live": 3,
+            "slot": 3
+          },
+          "open": {
+            "app": 3,
+            "event": "open",
+            "generation": 4,
+            "live": 4,
+            "slot": 3
+          },
+          "ready": {
+            "app": 3,
+            "event": "ready",
+            "generation": 4,
+            "live": 4,
+            "slot": 3
+          },
+          "route": "dock:4"
+        },
+        {
+          "close": {
+            "app": 3,
+            "event": "close",
+            "generation": 5,
+            "live": 2,
+            "slot": 2
+          },
+          "open": {
+            "app": 3,
+            "event": "open",
+            "generation": 5,
+            "live": 3,
+            "slot": 2
+          },
+          "ready": {
+            "app": 3,
+            "event": "ready",
+            "generation": 5,
+            "live": 3,
+            "slot": 2
+          },
+          "route": "shell:snake"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 4,
+      "kind": "shell",
+      "migration_phase": "MP-12",
+      "name": "Menu",
+      "routes": [
+        {
+          "close": {
+            "app": 4,
+            "event": "close",
+            "generation": 3,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 4,
+            "event": "open",
+            "generation": 3,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 4,
+            "event": "ready",
+            "generation": 3,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "surface:topbar"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 5,
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "name": "Browser",
+      "routes": [
+        {
+          "close": {
+            "app": 5,
+            "event": "close",
+            "generation": 1,
+            "live": 3,
+            "slot": 3
+          },
+          "open": {
+            "app": 5,
+            "event": "open",
+            "generation": 1,
+            "live": 4,
+            "slot": 3
+          },
+          "ready": {
+            "app": 5,
+            "event": "ready",
+            "generation": 1,
+            "live": 4,
+            "slot": 3
+          },
+          "route": "dock:1"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 6,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Settings",
+      "routes": [
+        {
+          "close": {
+            "app": 6,
+            "event": "close",
+            "generation": 4,
+            "live": 2,
+            "slot": 2
+          },
+          "open": {
+            "app": 6,
+            "event": "open",
+            "generation": 4,
+            "live": 3,
+            "slot": 2
+          },
+          "ready": {
+            "app": 6,
+            "event": "ready",
+            "generation": 4,
+            "live": 3,
+            "slot": 2
+          },
+          "route": "dock:8"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 7,
+      "kind": "shell",
+      "migration_phase": "MP-12",
+      "name": "Run",
+      "routes": [
+        {
+          "close": {
+            "app": 7,
+            "event": "close",
+            "generation": 1,
+            "live": 3,
+            "slot": 3
+          },
+          "open": {
+            "app": 7,
+            "event": "open",
+            "generation": 1,
+            "live": 4,
+            "slot": 3
+          },
+          "ready": {
+            "app": 7,
+            "event": "ready",
+            "generation": 1,
+            "live": 4,
+            "slot": 3
+          },
+          "route": "shell:run"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 8,
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "name": "Paint",
+      "routes": [
+        {
+          "close": {
+            "app": 8,
+            "event": "close",
+            "generation": 3,
+            "live": 3,
+            "slot": 3
+          },
+          "open": {
+            "app": 8,
+            "event": "open",
+            "generation": 3,
+            "live": 4,
+            "slot": 3
+          },
+          "ready": {
+            "app": 8,
+            "event": "ready",
+            "generation": 3,
+            "live": 4,
+            "slot": 3
+          },
+          "route": "dock:3"
+        },
+        {
+          "close": {
+            "app": 8,
+            "event": "close",
+            "generation": 6,
+            "live": 2,
+            "slot": 2
+          },
+          "open": {
+            "app": 8,
+            "event": "open",
+            "generation": 6,
+            "live": 3,
+            "slot": 2
+          },
+          "ready": {
+            "app": 8,
+            "event": "ready",
+            "generation": 6,
+            "live": 3,
+            "slot": 2
+          },
+          "route": "shell:paint"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 9,
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "name": "3D",
+      "routes": [
+        {
+          "close": {
+            "app": 9,
+            "event": "close",
+            "generation": 5,
+            "live": 3,
+            "slot": 3
+          },
+          "open": {
+            "app": 9,
+            "event": "open",
+            "generation": 5,
+            "live": 4,
+            "slot": 3
+          },
+          "ready": {
+            "app": 9,
+            "event": "ready",
+            "generation": 5,
+            "live": 4,
+            "slot": 3
+          },
+          "route": "dock:5"
+        },
+        {
+          "close": {
+            "app": 9,
+            "event": "close",
+            "generation": 7,
+            "live": 2,
+            "slot": 2
+          },
+          "open": {
+            "app": 9,
+            "event": "open",
+            "generation": 7,
+            "live": 3,
+            "slot": 2
+          },
+          "ready": {
+            "app": 9,
+            "event": "ready",
+            "generation": 7,
+            "live": 3,
+            "slot": 2
+          },
+          "route": "shell:cube"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 10,
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "name": "zlOS animation",
+      "routes": [
+        {
+          "close": {
+            "app": 10,
+            "event": "close",
+            "generation": 8,
+            "live": 2,
+            "slot": 2
+          },
+          "open": {
+            "app": 10,
+            "event": "open",
+            "generation": 8,
+            "live": 3,
+            "slot": 2
+          },
+          "ready": {
+            "app": 10,
+            "event": "ready",
+            "generation": 8,
+            "live": 3,
+            "slot": 2
+          },
+          "route": "shell:anim"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 11,
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "name": "Pointer",
+      "routes": [
+        {
+          "close": {
+            "app": 11,
+            "event": "close",
+            "generation": 9,
+            "live": 2,
+            "slot": 2
+          },
+          "open": {
+            "app": 11,
+            "event": "open",
+            "generation": 9,
+            "live": 3,
+            "slot": 2
+          },
+          "ready": {
+            "app": 11,
+            "event": "ready",
+            "generation": 9,
+            "live": 3,
+            "slot": 2
+          },
+          "route": "shell:mouse"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 12,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Text Editor",
+      "routes": [
+        {
+          "close": {
+            "app": 12,
+            "event": "close",
+            "generation": 2,
+            "live": 3,
+            "slot": 3
+          },
+          "open": {
+            "app": 12,
+            "event": "open",
+            "generation": 2,
+            "live": 4,
+            "slot": 3
+          },
+          "ready": {
+            "app": 12,
+            "event": "ready",
+            "generation": 2,
+            "live": 4,
+            "slot": 3
+          },
+          "route": "dock:2"
+        },
+        {
+          "close": {
+            "app": 12,
+            "event": "close",
+            "generation": 10,
+            "live": 2,
+            "slot": 2
+          },
+          "open": {
+            "app": 12,
+            "event": "open",
+            "generation": 10,
+            "live": 3,
+            "slot": 2
+          },
+          "ready": {
+            "app": 12,
+            "event": "ready",
+            "generation": 10,
+            "live": 3,
+            "slot": 2
+          },
+          "route": "shell:edit"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 13,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Files",
+      "routes": [
+        {
+          "close": null,
+          "open": {
+            "app": 13,
+            "event": "open",
+            "generation": 1,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 13,
+            "event": "ready",
+            "generation": 1,
+            "live": 3,
+            "slot": 1
+          },
+          "route": "boot"
+        },
+        {
+          "close": {
+            "app": 13,
+            "event": "close",
+            "generation": 2,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 13,
+            "event": "open",
+            "generation": 2,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 13,
+            "event": "ready",
+            "generation": 2,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "shell:files"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 15,
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "name": "Clipboard",
+      "routes": [
+        {
+          "close": {
+            "app": 15,
+            "event": "close",
+            "generation": 1,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 15,
+            "event": "open",
+            "generation": 1,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 15,
+            "event": "ready",
+            "generation": 1,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:0"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 16,
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "name": "Colour Picker",
+      "routes": [
+        {
+          "close": {
+            "app": 16,
+            "event": "close",
+            "generation": 2,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 16,
+            "event": "open",
+            "generation": 2,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 16,
+            "event": "ready",
+            "generation": 2,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:1"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 17,
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "name": "Regex Tester",
+      "routes": [
+        {
+          "close": {
+            "app": 17,
+            "event": "close",
+            "generation": 3,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 17,
+            "event": "open",
+            "generation": 3,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 17,
+            "event": "ready",
+            "generation": 3,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:2"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 18,
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "name": "Base Converter",
+      "routes": [
+        {
+          "close": {
+            "app": 18,
+            "event": "close",
+            "generation": 4,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 18,
+            "event": "open",
+            "generation": 4,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 18,
+            "event": "ready",
+            "generation": 4,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:3"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 19,
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "name": "Text Diff",
+      "routes": [
+        {
+          "close": {
+            "app": 19,
+            "event": "close",
+            "generation": 5,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 19,
+            "event": "open",
+            "generation": 5,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 19,
+            "event": "ready",
+            "generation": 5,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:4"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 20,
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "name": "Checksum",
+      "routes": [
+        {
+          "close": {
+            "app": 20,
+            "event": "close",
+            "generation": 6,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 20,
+            "event": "open",
+            "generation": 6,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 20,
+            "event": "ready",
+            "generation": 6,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:5"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 21,
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "name": "Unit Converter",
+      "routes": [
+        {
+          "close": {
+            "app": 21,
+            "event": "close",
+            "generation": 7,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 21,
+            "event": "open",
+            "generation": 7,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 21,
+            "event": "ready",
+            "generation": 7,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:6"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 22,
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "name": "Sticky Notes",
+      "routes": [
+        {
+          "close": {
+            "app": 22,
+            "event": "close",
+            "generation": 8,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 22,
+            "event": "open",
+            "generation": 8,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 22,
+            "event": "ready",
+            "generation": 8,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:7"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 23,
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "name": "Keyboard Tester",
+      "routes": [
+        {
+          "close": {
+            "app": 23,
+            "event": "close",
+            "generation": 9,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 23,
+            "event": "open",
+            "generation": 9,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 23,
+            "event": "ready",
+            "generation": 9,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:8"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 24,
+      "kind": "utility",
+      "migration_phase": "MP-12",
+      "name": "Benchmark",
+      "routes": [
+        {
+          "close": {
+            "app": 24,
+            "event": "close",
+            "generation": 10,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 24,
+            "event": "open",
+            "generation": 10,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 24,
+            "event": "ready",
+            "generation": 10,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:9"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 25,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Word Guess",
+      "routes": [
+        {
+          "close": {
+            "app": 25,
+            "event": "close",
+            "generation": 11,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 25,
+            "event": "open",
+            "generation": 11,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 25,
+            "event": "ready",
+            "generation": 11,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:10"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 26,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Tic-Tac-Toe",
+      "routes": [
+        {
+          "close": {
+            "app": 26,
+            "event": "close",
+            "generation": 12,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 26,
+            "event": "open",
+            "generation": 12,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 26,
+            "event": "ready",
+            "generation": 12,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:11"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 27,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Nim",
+      "routes": [
+        {
+          "close": {
+            "app": 27,
+            "event": "close",
+            "generation": 13,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 27,
+            "event": "open",
+            "generation": 13,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 27,
+            "event": "ready",
+            "generation": 13,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:12"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 28,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Tower of Hanoi",
+      "routes": [
+        {
+          "close": {
+            "app": 28,
+            "event": "close",
+            "generation": 14,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 28,
+            "event": "open",
+            "generation": 14,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 28,
+            "event": "ready",
+            "generation": 14,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:13"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 29,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Lights Out",
+      "routes": [
+        {
+          "close": {
+            "app": 29,
+            "event": "close",
+            "generation": 15,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 29,
+            "event": "open",
+            "generation": 15,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 29,
+            "event": "ready",
+            "generation": 15,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:14"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 30,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Connect Four",
+      "routes": [
+        {
+          "close": {
+            "app": 30,
+            "event": "close",
+            "generation": 16,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 30,
+            "event": "open",
+            "generation": 16,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 30,
+            "event": "ready",
+            "generation": 16,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:15"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 31,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Clocks & Timers",
+      "routes": [
+        {
+          "close": {
+            "app": 31,
+            "event": "close",
+            "generation": 17,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 31,
+            "event": "open",
+            "generation": 17,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 31,
+            "event": "ready",
+            "generation": 17,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:16"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 32,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "System Info",
+      "routes": [
+        {
+          "close": {
+            "app": 32,
+            "event": "close",
+            "generation": 18,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 32,
+            "event": "open",
+            "generation": 18,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 32,
+            "event": "ready",
+            "generation": 18,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:17"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 33,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Calculator",
+      "routes": [
+        {
+          "close": {
+            "app": 33,
+            "event": "close",
+            "generation": 19,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 33,
+            "event": "open",
+            "generation": 19,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 33,
+            "event": "ready",
+            "generation": 19,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:18"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 34,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Maze",
+      "routes": [
+        {
+          "close": {
+            "app": 34,
+            "event": "close",
+            "generation": 20,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 34,
+            "event": "open",
+            "generation": 20,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 34,
+            "event": "ready",
+            "generation": 20,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:19"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 40,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Kernel Log",
+      "routes": [
+        {
+          "close": {
+            "app": 40,
+            "event": "close",
+            "generation": 21,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 40,
+            "event": "open",
+            "generation": 21,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 40,
+            "event": "ready",
+            "generation": 21,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:20"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 41,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Renderer",
+      "routes": [
+        {
+          "close": {
+            "app": 41,
+            "event": "close",
+            "generation": 22,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 41,
+            "event": "open",
+            "generation": 22,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 41,
+            "event": "ready",
+            "generation": 22,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:21"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 42,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Hex Viewer",
+      "routes": [
+        {
+          "close": {
+            "app": 42,
+            "event": "close",
+            "generation": 23,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 42,
+            "event": "open",
+            "generation": 23,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 42,
+            "event": "ready",
+            "generation": 23,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:22"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 43,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Framebuffer",
+      "routes": [
+        {
+          "close": {
+            "app": 43,
+            "event": "close",
+            "generation": 24,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 43,
+            "event": "open",
+            "generation": 24,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 43,
+            "event": "ready",
+            "generation": 24,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:23"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 44,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Console (tty1)",
+      "routes": [
+        {
+          "close": {
+            "app": 44,
+            "event": "close",
+            "generation": 25,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 44,
+            "event": "open",
+            "generation": 25,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 44,
+            "event": "ready",
+            "generation": 25,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:24"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 45,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Font Atlas",
+      "routes": [
+        {
+          "close": {
+            "app": 45,
+            "event": "close",
+            "generation": 26,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 45,
+            "event": "open",
+            "generation": 26,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 45,
+            "event": "ready",
+            "generation": 26,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:25"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 46,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Disk Usage",
+      "routes": [
+        {
+          "close": {
+            "app": 46,
+            "event": "close",
+            "generation": 27,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 46,
+            "event": "open",
+            "generation": 27,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 46,
+            "event": "ready",
+            "generation": 27,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:26"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 47,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Services",
+      "routes": [
+        {
+          "close": {
+            "app": 47,
+            "event": "close",
+            "generation": 28,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 47,
+            "event": "open",
+            "generation": 28,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 47,
+            "event": "ready",
+            "generation": 28,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:27"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 48,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Archive Manager",
+      "routes": [
+        {
+          "close": {
+            "app": 48,
+            "event": "close",
+            "generation": 29,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 48,
+            "event": "open",
+            "generation": 29,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 48,
+            "event": "ready",
+            "generation": 29,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:28"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 49,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Image Viewer",
+      "routes": [
+        {
+          "close": {
+            "app": 49,
+            "event": "close",
+            "generation": 30,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 49,
+            "event": "open",
+            "generation": 30,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 49,
+            "event": "ready",
+            "generation": 30,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:29"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 50,
+      "kind": "system",
+      "migration_phase": "MP-12",
+      "name": "Network",
+      "routes": [
+        {
+          "close": {
+            "app": 50,
+            "event": "close",
+            "generation": 31,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 50,
+            "event": "open",
+            "generation": 31,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 50,
+            "event": "ready",
+            "generation": 31,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:30"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 52,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Tetris",
+      "routes": [
+        {
+          "close": {
+            "app": 52,
+            "event": "close",
+            "generation": 32,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 52,
+            "event": "open",
+            "generation": 32,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 52,
+            "event": "ready",
+            "generation": 32,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:31"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 53,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Pong",
+      "routes": [
+        {
+          "close": {
+            "app": 53,
+            "event": "close",
+            "generation": 33,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 53,
+            "event": "open",
+            "generation": 33,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 53,
+            "event": "ready",
+            "generation": 33,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:32"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 54,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Breakout",
+      "routes": [
+        {
+          "close": {
+            "app": 54,
+            "event": "close",
+            "generation": 34,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 54,
+            "event": "open",
+            "generation": 34,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 54,
+            "event": "ready",
+            "generation": 34,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:33"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 55,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Minesweeper",
+      "routes": [
+        {
+          "close": {
+            "app": 55,
+            "event": "close",
+            "generation": 35,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 55,
+            "event": "open",
+            "generation": 35,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 55,
+            "event": "ready",
+            "generation": 35,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:34"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 56,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "2048",
+      "routes": [
+        {
+          "close": {
+            "app": 56,
+            "event": "close",
+            "generation": 36,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 56,
+            "event": "open",
+            "generation": 36,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 56,
+            "event": "ready",
+            "generation": 36,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:35"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 57,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Conway's Life",
+      "routes": [
+        {
+          "close": {
+            "app": 57,
+            "event": "close",
+            "generation": 37,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 57,
+            "event": "open",
+            "generation": 37,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 57,
+            "event": "ready",
+            "generation": 37,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:36"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 58,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Asteroids",
+      "routes": [
+        {
+          "close": {
+            "app": 58,
+            "event": "close",
+            "generation": 38,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 58,
+            "event": "open",
+            "generation": 38,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 58,
+            "event": "ready",
+            "generation": 38,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:37"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 59,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Invaders",
+      "routes": [
+        {
+          "close": {
+            "app": 59,
+            "event": "close",
+            "generation": 39,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 59,
+            "event": "open",
+            "generation": 39,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 59,
+            "event": "ready",
+            "generation": 39,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:38"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 61,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "15 Puzzle",
+      "routes": [
+        {
+          "close": {
+            "app": 61,
+            "event": "close",
+            "generation": 40,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 61,
+            "event": "open",
+            "generation": 40,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 61,
+            "event": "ready",
+            "generation": 40,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:39"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 62,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Reversi",
+      "routes": [
+        {
+          "close": {
+            "app": 62,
+            "event": "close",
+            "generation": 41,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 62,
+            "event": "open",
+            "generation": 41,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 62,
+            "event": "ready",
+            "generation": 41,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:40"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 63,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Simon",
+      "routes": [
+        {
+          "close": {
+            "app": 63,
+            "event": "close",
+            "generation": 42,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 63,
+            "event": "open",
+            "generation": 42,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 63,
+            "event": "ready",
+            "generation": 42,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:41"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 64,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Sokoban",
+      "routes": [
+        {
+          "close": {
+            "app": 64,
+            "event": "close",
+            "generation": 43,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 64,
+            "event": "open",
+            "generation": 43,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 64,
+            "event": "ready",
+            "generation": 43,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:42"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 65,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Flappy",
+      "routes": [
+        {
+          "close": {
+            "app": 65,
+            "event": "close",
+            "generation": 44,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 65,
+            "event": "open",
+            "generation": 44,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 65,
+            "event": "ready",
+            "generation": 44,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:43"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 66,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Missile Command",
+      "routes": [
+        {
+          "close": {
+            "app": 66,
+            "event": "close",
+            "generation": 45,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 66,
+            "event": "open",
+            "generation": 45,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 66,
+            "event": "ready",
+            "generation": 45,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:44"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 67,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Blackjack",
+      "routes": [
+        {
+          "close": {
+            "app": 67,
+            "event": "close",
+            "generation": 46,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 67,
+            "event": "open",
+            "generation": 46,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 67,
+            "event": "ready",
+            "generation": 46,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:45"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 68,
+      "kind": "game",
+      "migration_phase": "MP-12",
+      "name": "Frogger",
+      "routes": [
+        {
+          "close": {
+            "app": 68,
+            "event": "close",
+            "generation": 47,
+            "live": 4,
+            "slot": 4
+          },
+          "open": {
+            "app": 68,
+            "event": "open",
+            "generation": 47,
+            "live": 5,
+            "slot": 4
+          },
+          "ready": {
+            "app": 68,
+            "event": "ready",
+            "generation": 47,
+            "live": 5,
+            "slot": 4
+          },
+          "route": "catalogue:46"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 70,
+      "kind": "shell",
+      "migration_phase": "MP-12",
+      "name": "All Applications",
+      "routes": [
+        {
+          "close": {
+            "app": 70,
+            "event": "close",
+            "generation": 4,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 70,
+            "event": "open",
+            "generation": 4,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 70,
+            "event": "ready",
+            "generation": 4,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "surface:grid"
+        }
+      ]
+    }
+  ],
+  "evidence_ceiling": "source/build plus boot-embedded manifest and QEMU route, first draw and teardown; no complete-workflow or physical proof",
+  "runtime_manifest_boot_routes": [
+    {
+      "artifact": {
+        "bytes": 6291968,
+        "path": "kernel/zlOS.img",
+        "sha256": "f97a0ec1b439a41dfa954a76052b08c285a0562aaa6331a8f03cfa85c71c3c42"
+      },
+      "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
+      "route": "raw-bios",
+      "shipped_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+      "shipped_manifest_sha256": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7"
+    },
+    {
+      "artifact": {
+        "bytes": 67108864,
+        "path": "kernel/zlOS-usb.img",
+        "sha256": "16f239108c9d68502b1d8b97d1275baa8efe278380dbbd2c5646d8d423a615ef"
+      },
+      "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
+      "route": "native-uefi64",
+      "shipped_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+      "shipped_manifest_sha256": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7"
+    },
+    {
+      "artifact": {
+        "bytes": 29734912,
+        "path": "kernel/zlOS.iso",
+        "sha256": "ca67eacab5d0c4913a40f12307b7998ac7f0fcd743773544d0a1552838550f46"
+      },
+      "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
+      "route": "grub-bios32",
+      "shipped_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+      "shipped_manifest_sha256": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7"
+    },
+    {
+      "artifact": {
+        "bytes": 29734912,
+        "path": "kernel/zlOS.iso",
+        "sha256": "ca67eacab5d0c4913a40f12307b7998ac7f0fcd743773544d0a1552838550f46"
+      },
+      "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
+      "route": "grub-uefi32",
+      "shipped_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+      "shipped_manifest_sha256": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7"
+    },
+    {
+      "artifact": {
+        "bytes": 27844608,
+        "path": "kernel/zlOS64.iso",
+        "sha256": "3ea3ea875fdfaa60f0754f5e782111b9a04acf32d8188a92ed8ffdf3a5d16ab7"
+      },
+      "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
+      "route": "grub-bios64",
+      "shipped_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+      "shipped_manifest_sha256": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7"
+    },
+    {
+      "artifact": {
+        "bytes": 27844608,
+        "path": "kernel/zlOS64.iso",
+        "sha256": "3ea3ea875fdfaa60f0754f5e782111b9a04acf32d8188a92ed8ffdf3a5d16ab7"
+      },
+      "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
+      "route": "grub-uefi64",
+      "shipped_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+      "shipped_manifest_sha256": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7"
+    }
+  ],
+  "schema": "zlos.application-evidence-registry.v1",
+  "shipped_build_identity": {
+    "dirty": true,
+    "head": "b8a00ec45ac1f9f955ba79ed63f0072540067d4e",
+    "id": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+    "schema": 1
+  },
+  "shipped_manifest": {
+    "entries": 62,
+    "schema": 1,
+    "sha256": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7"
+  },
+  "source_head": "b8a00ec45ac1f9f955ba79ed63f0072540067d4e"
+}

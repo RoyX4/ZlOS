@@ -1,0 +1,1291 @@
+{
+  "artifact": {
+    "path": "kernel/zlOS.iso",
+    "sha256": "ca67eacab5d0c4913a40f12307b7998ac7f0fcd743773544d0a1552838550f46"
+  },
+  "catalogue": {
+    "baseline_live": 4,
+    "open": {
+      "app": 70,
+      "event": "open",
+      "generation": 1,
+      "live": 4,
+      "slot": 3
+    },
+    "ready": {
+      "app": 70,
+      "event": "ready",
+      "generation": 1,
+      "live": 4,
+      "slot": 3
+    }
+  },
+  "environment": {
+    "display": [
+      1920,
+      1200
+    ],
+    "pointer": "QEMU absolute usb-tablet through zlOS input routing",
+    "qemu": "QEMU emulator version 11.0.1 (Debian 1:11.0.1+ds-1)"
+  },
+  "evidence": "QEMU pointer/compositor lifecycle; not workflow or physical proof",
+  "excluded_routes": [
+    "boot-open",
+    "dock",
+    "menu",
+    "Run",
+    "shell-word"
+  ],
+  "result": {
+    "cycles": [
+      {
+        "catalog_index": 0,
+        "close": {
+          "app": 15,
+          "event": "close",
+          "generation": 1,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 15,
+        "name": "Clipboard",
+        "open": {
+          "app": 15,
+          "event": "open",
+          "generation": 1,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 15,
+          "event": "ready",
+          "generation": 1,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 1,
+        "close": {
+          "app": 16,
+          "event": "close",
+          "generation": 2,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 16,
+        "name": "Colour Picker",
+        "open": {
+          "app": 16,
+          "event": "open",
+          "generation": 2,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 16,
+          "event": "ready",
+          "generation": 2,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 2,
+        "close": {
+          "app": 17,
+          "event": "close",
+          "generation": 3,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 17,
+        "name": "Regex Tester",
+        "open": {
+          "app": 17,
+          "event": "open",
+          "generation": 3,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 17,
+          "event": "ready",
+          "generation": 3,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 3,
+        "close": {
+          "app": 18,
+          "event": "close",
+          "generation": 4,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 18,
+        "name": "Base Converter",
+        "open": {
+          "app": 18,
+          "event": "open",
+          "generation": 4,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 18,
+          "event": "ready",
+          "generation": 4,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 4,
+        "close": {
+          "app": 19,
+          "event": "close",
+          "generation": 5,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 19,
+        "name": "Text Diff",
+        "open": {
+          "app": 19,
+          "event": "open",
+          "generation": 5,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 19,
+          "event": "ready",
+          "generation": 5,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 5,
+        "close": {
+          "app": 20,
+          "event": "close",
+          "generation": 6,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 20,
+        "name": "Checksum",
+        "open": {
+          "app": 20,
+          "event": "open",
+          "generation": 6,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 20,
+          "event": "ready",
+          "generation": 6,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 6,
+        "close": {
+          "app": 21,
+          "event": "close",
+          "generation": 7,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 21,
+        "name": "Unit Converter",
+        "open": {
+          "app": 21,
+          "event": "open",
+          "generation": 7,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 21,
+          "event": "ready",
+          "generation": 7,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 7,
+        "close": {
+          "app": 22,
+          "event": "close",
+          "generation": 8,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 22,
+        "name": "Sticky Notes",
+        "open": {
+          "app": 22,
+          "event": "open",
+          "generation": 8,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 22,
+          "event": "ready",
+          "generation": 8,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 8,
+        "close": {
+          "app": 23,
+          "event": "close",
+          "generation": 9,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 23,
+        "name": "Keyboard Tester",
+        "open": {
+          "app": 23,
+          "event": "open",
+          "generation": 9,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 23,
+          "event": "ready",
+          "generation": 9,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 9,
+        "close": {
+          "app": 24,
+          "event": "close",
+          "generation": 10,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 24,
+        "name": "Benchmark",
+        "open": {
+          "app": 24,
+          "event": "open",
+          "generation": 10,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 24,
+          "event": "ready",
+          "generation": 10,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 10,
+        "close": {
+          "app": 25,
+          "event": "close",
+          "generation": 11,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 25,
+        "name": "Word Guess",
+        "open": {
+          "app": 25,
+          "event": "open",
+          "generation": 11,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 25,
+          "event": "ready",
+          "generation": 11,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 11,
+        "close": {
+          "app": 26,
+          "event": "close",
+          "generation": 12,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 26,
+        "name": "Tic-Tac-Toe",
+        "open": {
+          "app": 26,
+          "event": "open",
+          "generation": 12,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 26,
+          "event": "ready",
+          "generation": 12,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 12,
+        "close": {
+          "app": 27,
+          "event": "close",
+          "generation": 13,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 27,
+        "name": "Nim",
+        "open": {
+          "app": 27,
+          "event": "open",
+          "generation": 13,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 27,
+          "event": "ready",
+          "generation": 13,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 13,
+        "close": {
+          "app": 28,
+          "event": "close",
+          "generation": 14,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 28,
+        "name": "Tower of Hanoi",
+        "open": {
+          "app": 28,
+          "event": "open",
+          "generation": 14,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 28,
+          "event": "ready",
+          "generation": 14,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 14,
+        "close": {
+          "app": 29,
+          "event": "close",
+          "generation": 15,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 29,
+        "name": "Lights Out",
+        "open": {
+          "app": 29,
+          "event": "open",
+          "generation": 15,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 29,
+          "event": "ready",
+          "generation": 15,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 15,
+        "close": {
+          "app": 30,
+          "event": "close",
+          "generation": 16,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 30,
+        "name": "Connect Four",
+        "open": {
+          "app": 30,
+          "event": "open",
+          "generation": 16,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 30,
+          "event": "ready",
+          "generation": 16,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 16,
+        "close": {
+          "app": 31,
+          "event": "close",
+          "generation": 17,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 31,
+        "name": "Clocks & Timers",
+        "open": {
+          "app": 31,
+          "event": "open",
+          "generation": 17,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 31,
+          "event": "ready",
+          "generation": 17,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 17,
+        "close": {
+          "app": 32,
+          "event": "close",
+          "generation": 18,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 32,
+        "name": "System Info",
+        "open": {
+          "app": 32,
+          "event": "open",
+          "generation": 18,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 32,
+          "event": "ready",
+          "generation": 18,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 18,
+        "close": {
+          "app": 33,
+          "event": "close",
+          "generation": 19,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 33,
+        "name": "Calculator",
+        "open": {
+          "app": 33,
+          "event": "open",
+          "generation": 19,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 33,
+          "event": "ready",
+          "generation": 19,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 19,
+        "close": {
+          "app": 34,
+          "event": "close",
+          "generation": 20,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 34,
+        "name": "Maze",
+        "open": {
+          "app": 34,
+          "event": "open",
+          "generation": 20,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 34,
+          "event": "ready",
+          "generation": 20,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 20,
+        "close": {
+          "app": 40,
+          "event": "close",
+          "generation": 21,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 40,
+        "name": "Kernel Log",
+        "open": {
+          "app": 40,
+          "event": "open",
+          "generation": 21,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 40,
+          "event": "ready",
+          "generation": 21,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 21,
+        "close": {
+          "app": 41,
+          "event": "close",
+          "generation": 22,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 41,
+        "name": "Renderer",
+        "open": {
+          "app": 41,
+          "event": "open",
+          "generation": 22,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 41,
+          "event": "ready",
+          "generation": 22,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 22,
+        "close": {
+          "app": 42,
+          "event": "close",
+          "generation": 23,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 42,
+        "name": "Hex Viewer",
+        "open": {
+          "app": 42,
+          "event": "open",
+          "generation": 23,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 42,
+          "event": "ready",
+          "generation": 23,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 23,
+        "close": {
+          "app": 43,
+          "event": "close",
+          "generation": 24,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 43,
+        "name": "Framebuffer",
+        "open": {
+          "app": 43,
+          "event": "open",
+          "generation": 24,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 43,
+          "event": "ready",
+          "generation": 24,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 24,
+        "close": {
+          "app": 44,
+          "event": "close",
+          "generation": 25,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 44,
+        "name": "Console (tty1)",
+        "open": {
+          "app": 44,
+          "event": "open",
+          "generation": 25,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 44,
+          "event": "ready",
+          "generation": 25,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 25,
+        "close": {
+          "app": 45,
+          "event": "close",
+          "generation": 26,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 45,
+        "name": "Font Atlas",
+        "open": {
+          "app": 45,
+          "event": "open",
+          "generation": 26,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 45,
+          "event": "ready",
+          "generation": 26,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 26,
+        "close": {
+          "app": 46,
+          "event": "close",
+          "generation": 27,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 46,
+        "name": "Disk Usage",
+        "open": {
+          "app": 46,
+          "event": "open",
+          "generation": 27,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 46,
+          "event": "ready",
+          "generation": 27,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 27,
+        "close": {
+          "app": 47,
+          "event": "close",
+          "generation": 28,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 47,
+        "name": "Services",
+        "open": {
+          "app": 47,
+          "event": "open",
+          "generation": 28,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 47,
+          "event": "ready",
+          "generation": 28,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 28,
+        "close": {
+          "app": 48,
+          "event": "close",
+          "generation": 29,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 48,
+        "name": "Archive Manager",
+        "open": {
+          "app": 48,
+          "event": "open",
+          "generation": 29,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 48,
+          "event": "ready",
+          "generation": 29,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 29,
+        "close": {
+          "app": 49,
+          "event": "close",
+          "generation": 30,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 49,
+        "name": "Image Viewer",
+        "open": {
+          "app": 49,
+          "event": "open",
+          "generation": 30,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 49,
+          "event": "ready",
+          "generation": 30,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 30,
+        "close": {
+          "app": 50,
+          "event": "close",
+          "generation": 31,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 50,
+        "name": "Network",
+        "open": {
+          "app": 50,
+          "event": "open",
+          "generation": 31,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 50,
+          "event": "ready",
+          "generation": 31,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 31,
+        "close": {
+          "app": 52,
+          "event": "close",
+          "generation": 32,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 52,
+        "name": "Tetris",
+        "open": {
+          "app": 52,
+          "event": "open",
+          "generation": 32,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 52,
+          "event": "ready",
+          "generation": 32,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 32,
+        "close": {
+          "app": 53,
+          "event": "close",
+          "generation": 33,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 53,
+        "name": "Pong",
+        "open": {
+          "app": 53,
+          "event": "open",
+          "generation": 33,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 53,
+          "event": "ready",
+          "generation": 33,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 33,
+        "close": {
+          "app": 54,
+          "event": "close",
+          "generation": 34,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 54,
+        "name": "Breakout",
+        "open": {
+          "app": 54,
+          "event": "open",
+          "generation": 34,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 54,
+          "event": "ready",
+          "generation": 34,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 34,
+        "close": {
+          "app": 55,
+          "event": "close",
+          "generation": 35,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 55,
+        "name": "Minesweeper",
+        "open": {
+          "app": 55,
+          "event": "open",
+          "generation": 35,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 55,
+          "event": "ready",
+          "generation": 35,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 35,
+        "close": {
+          "app": 56,
+          "event": "close",
+          "generation": 36,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 56,
+        "name": "2048",
+        "open": {
+          "app": 56,
+          "event": "open",
+          "generation": 36,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 56,
+          "event": "ready",
+          "generation": 36,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 36,
+        "close": {
+          "app": 57,
+          "event": "close",
+          "generation": 37,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 57,
+        "name": "Conway's Life",
+        "open": {
+          "app": 57,
+          "event": "open",
+          "generation": 37,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 57,
+          "event": "ready",
+          "generation": 37,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 37,
+        "close": {
+          "app": 58,
+          "event": "close",
+          "generation": 38,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 58,
+        "name": "Asteroids",
+        "open": {
+          "app": 58,
+          "event": "open",
+          "generation": 38,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 58,
+          "event": "ready",
+          "generation": 38,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 38,
+        "close": {
+          "app": 59,
+          "event": "close",
+          "generation": 39,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 59,
+        "name": "Invaders",
+        "open": {
+          "app": 59,
+          "event": "open",
+          "generation": 39,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 59,
+          "event": "ready",
+          "generation": 39,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 39,
+        "close": {
+          "app": 61,
+          "event": "close",
+          "generation": 40,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 61,
+        "name": "15 Puzzle",
+        "open": {
+          "app": 61,
+          "event": "open",
+          "generation": 40,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 61,
+          "event": "ready",
+          "generation": 40,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 40,
+        "close": {
+          "app": 62,
+          "event": "close",
+          "generation": 41,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 62,
+        "name": "Reversi",
+        "open": {
+          "app": 62,
+          "event": "open",
+          "generation": 41,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 62,
+          "event": "ready",
+          "generation": 41,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 41,
+        "close": {
+          "app": 63,
+          "event": "close",
+          "generation": 42,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 63,
+        "name": "Simon",
+        "open": {
+          "app": 63,
+          "event": "open",
+          "generation": 42,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 63,
+          "event": "ready",
+          "generation": 42,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 42,
+        "close": {
+          "app": 64,
+          "event": "close",
+          "generation": 43,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 64,
+        "name": "Sokoban",
+        "open": {
+          "app": 64,
+          "event": "open",
+          "generation": 43,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 64,
+          "event": "ready",
+          "generation": 43,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 43,
+        "close": {
+          "app": 65,
+          "event": "close",
+          "generation": 44,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 65,
+        "name": "Flappy",
+        "open": {
+          "app": 65,
+          "event": "open",
+          "generation": 44,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 65,
+          "event": "ready",
+          "generation": 44,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 44,
+        "close": {
+          "app": 66,
+          "event": "close",
+          "generation": 45,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 66,
+        "name": "Missile Command",
+        "open": {
+          "app": 66,
+          "event": "open",
+          "generation": 45,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 66,
+          "event": "ready",
+          "generation": 45,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 45,
+        "close": {
+          "app": 67,
+          "event": "close",
+          "generation": 46,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 67,
+        "name": "Blackjack",
+        "open": {
+          "app": 67,
+          "event": "open",
+          "generation": 46,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 67,
+          "event": "ready",
+          "generation": 46,
+          "live": 5,
+          "slot": 4
+        }
+      },
+      {
+        "catalog_index": 46,
+        "close": {
+          "app": 68,
+          "event": "close",
+          "generation": 47,
+          "live": 4,
+          "slot": 4
+        },
+        "id": 68,
+        "name": "Frogger",
+        "open": {
+          "app": 68,
+          "event": "open",
+          "generation": 47,
+          "live": 5,
+          "slot": 4
+        },
+        "ready": {
+          "app": 68,
+          "event": "ready",
+          "generation": 47,
+          "live": 5,
+          "slot": 4
+        }
+      }
+    ],
+    "failed": 0,
+    "passed": 47
+  },
+  "schema": "zlos.application-lifecycle-qemu-receipt.v1",
+  "scope": "47 All Applications registry entries only",
+  "shipped_build_identity": {
+    "dirty": true,
+    "head": "b8a00ec45ac1f9f955ba79ed63f0072540067d4e",
+    "id": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+    "schema": 1
+  },
+  "shipped_manifest": {
+    "entries": 62,
+    "schema": 1,
+    "sha256": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7"
+  },
+  "source_files_sha256": {
+    "app-manifest.json": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7",
+    "apps_registry.zl": "d9df7132a84c6eb0e1daf4d71c50dbc789f82a54ef8b59865f1b49f3008d204a",
+    "build-identity.json": "22414d9ea92b9d48bc68fc2160fe6f950e39bffcb723adb29923f4ad05da524f",
+    "build_identity_embed.zl": "d92ab13aa0a550c701809b85ff01e2d006a8976f90bebbfd9fc4da914bf4ac90",
+    "kernel.zl": "e953981eff624423b9d751f972a031591d46e9595ddbc24911f606178442e643",
+    "probe-app-lifecycle.py": "a2b264f15e16f2094d27a0aba26cffd657ac11e1d020b829ede67e0839ef057d",
+    "wm.c": "c3aa3282c28a3ee35b836a353fc0da9c555c4c04cd2f735b057b1a834d07f86c"
+  },
+  "source_head": "b8a00ec45ac1f9f955ba79ed63f0072540067d4e",
+  "weakest_link": "first compositor draw is readiness, not a successful user workflow; non-catalog routes remain unproven here"
+}

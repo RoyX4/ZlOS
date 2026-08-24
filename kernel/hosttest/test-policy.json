@@ -1,0 +1,104 @@
+{
+  "schema": "zlos.host-test-policy.v1",
+  "compiled": {
+    "gate": [
+      "arenatest",
+      "browsertest",
+      "browsertest_san",
+      "cryptotest",
+      "crashtest",
+      "csstest",
+      "dnstest",
+      "easetest",
+      "ecdsatest",
+      "exectest",
+      "fbbench",
+      "fbtext",
+      "fstest",
+      "fuzz",
+      "gputest",
+      "heaptest",
+      "htmltest",
+      "httptest",
+      "inputtest",
+      "inputtest_feel",
+      "inputtest_hid",
+      "jmptest",
+      "jmptest32",
+      "jstest",
+      "libctest",
+      "nettest",
+      "pagingtest",
+      "palette",
+      "pngtest",
+      "rtctest",
+      "settingstest",
+      "systest",
+      "tcptest",
+      "termwrap",
+      "tlscryptotest",
+      "tlstest",
+      "toasttest",
+      "tritest",
+      "uitest",
+      "walltest",
+      "wmtest",
+      "wmtest_feel",
+      "x509test",
+      "xhcitest"
+    ],
+    "hardware-gate": [
+      "gpu_aperture",
+      "gpu_blt",
+      "gpu_planes",
+      "gpu_ring"
+    ],
+    "instrument": [
+      "browsershot",
+      "parsestat",
+      "wmbench",
+      "wmshot"
+    ],
+    "manual-hardware": [
+      "intel_probe",
+      "modeset_test"
+    ],
+    "optional-instrument": [
+      "gpu_fillrate"
+    ]
+  },
+  "scripts": {
+    "gate": [
+      "killtest.sh",
+      "memmap-guard-test.sh",
+      "zladdrs.sh"
+    ],
+    "manual-hardware": [
+      "gpu-dev.sh",
+      "gpu-ring-run.sh",
+      "modeset-run.sh"
+    ],
+    "builder": [
+      "build.sh"
+    ]
+  },
+  "commands": {
+    "gpu_blt": [
+      ["./gpu_blt"],
+      ["./gpu_blt", "--negative"]
+    ],
+    "zladdrs.sh": [
+      ["./zladdrs.sh"],
+      ["./zladdrs.sh", "--selftest"]
+    ]
+  },
+  "source_overrides": {
+    "browsertest_san": "browsertest.c",
+    "jmptest32": "jmptest.c"
+  },
+  "optional_build": [
+    "gpu_blt",
+    "gpu_fillrate"
+  ],
+  "default_timeout_seconds": 180
+}

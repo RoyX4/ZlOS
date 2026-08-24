@@ -27,7 +27,6 @@ WHAT IT CHECKS. Every `name(` call site in every kernel .zl file, against:
 
 Run it with the build; it costs half a second.
 """
-import glob
 import os
 import re
 import sys
@@ -46,12 +45,27 @@ BUILTIN = re.compile(r'streq\(name,\s*"([A-Za-z_]\w*)"\)')
 # lexer.c:272 drops comments, so a call inside one is not a call.
 COMMENT = re.compile(r"#.*$", re.M)
 STRING = re.compile(r'"[^"\n]*"')
+IMPORT = re.compile(r"^\s*import\s+([A-Za-z_]\w*)\s*(?:#.*)?$", re.M)
 
 
 def sources():
-    paths = [os.path.join(HERE, "kernel.zl")]
-    paths += sorted(glob.glob(os.path.join(HERE, "apps_*.zl")))
-    return {p: open(p, encoding="utf-8", errors="replace").read() for p in paths}
+    root = os.path.join(HERE, "kernel.zl")
+    pending = [root]
+    result = {}
+    while pending:
+        path = pending.pop()
+        if path in result:
+            continue
+        try:
+            text = open(path, encoding="utf-8", errors="replace").read()
+        except OSError as error:
+            raise SystemExit(f"imported zl source is missing: {path}: {error}")
+        result[path] = text
+        for module in IMPORT.findall(text):
+            imported = os.path.join(HERE, module + ".zl")
+            if imported not in result:
+                pending.append(imported)
+    return result
 
 
 def main():

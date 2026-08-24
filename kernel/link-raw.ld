@@ -9,18 +9,24 @@
  * the load address. __bss_start/__bss_end let the entry zero the BSS by hand.
  */
 ENTRY(_rawstart)
+PHDRS
+{
+    text PT_LOAD FLAGS(5);   /* read + execute */
+    ro   PT_LOAD FLAGS(4);   /* read only      */
+    data PT_LOAD FLAGS(6);   /* read + write   */
+}
 SECTIONS
 {
     . = 0x100000;
     .text : {
         *(.text.rawentry)     /* _rawstart at exactly 0x100000 */
         *(.text*)
-    }
-    .rodata : { *(.rodata*) }
-    .data   : { *(.data*)   }
+    } :text
+    .rodata : { *(.rodata*) } :ro
+    .data   : { *(.data*)   } :data
     . = ALIGN(16);
     __bss_start = .;
-    .bss    : { *(COMMON) *(.bss*) }
+    .bss    : { *(COMMON) *(.bss*) } :data
     . = ALIGN(16);
     __bss_end = .;
 

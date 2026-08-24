@@ -3348,10 +3348,6 @@ int fb_get_col(void) { return fb_col; }
 #define TEXT_REGULAR 0
 #define TEXT_BOLD    1
 
-/* Follow the console's cell, the way fb_glyph_aa does, so UI text scales with
- * everything else rather than staying 8px tall on a 1920-wide desktop. */
-static int prop_big(void) { return cell_w != GLYPH_W; }
-
 /* role -> cell height IN PIXELS, following the UI scale rather than the font
  * cell. At ui 2 these land exactly on the three generated atlases (16/24/32);
  * at ui 1, 3 and 4 they land between them and the glyph is resampled, which is

@@ -28,6 +28,7 @@
 #include <string.h>
 #include <sys/mman.h>
 
+#include "../ease.h"
 #include "../ui.h"
 
 /* ---- fb.c ---------------------------------------------------------------- */
@@ -204,10 +205,13 @@ int main(void)
     int tx, ty, tw, th;
     notify_rect(W, H, DOCK_H, 2, &tx, &ty, &tw, &th);
     const struct ui_theme *cover_theme = ui_theme();
-    int cover_top = cover_theme->title_h + 20;
+    int cover_top = cover_theme->title_h + 16;
     int win = wm_open(1, "cover", tx - 60, ty - cover_top,
-                      tw + 120, th + cover_top + 60);
-    for (int i = 0; i < 8; i++) frame();          /* let the open animation settle */
+                      tw + 120, th + cover_top + 16);
+    /* zwin is 200 ms at the compositor's 100 Hz clock. This used to wait
+     * eight ticks, so it sampled a half-open window after the motion duration
+     * was corrected from 160 ms to the design system's 200 ms. */
+    for (int i = 0; i < EASE_MS_WIN / 10 + 2; i++) frame();
 
     ok("the covering window has focus to start with", wm_focused() == win);
     ok("...and nothing foreign is drawn where the toast will go",

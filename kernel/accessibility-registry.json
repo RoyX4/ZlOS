@@ -1,0 +1,168 @@
+{
+  "schema": "zlos.accessibility-proof-registry.v1",
+  "result": "PASS_WITH_OPEN_GAPS",
+  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "host_test_receipt_sha256": "5d4444a31be9a83dbb4213dd754e2dad23d7a862e76b90a9b09e0d8875c1b8b1",
+  "source_identities": {
+    "input.c": "1dab29b3f825b7f1def05e3bba7868568dfcb9a062e8424fe8989b2db3c6775d",
+    "ui.c": "7329f63c4afb060ca64223251a8808f0f1c154dda0c71e823bfd6bc354495a90",
+    "wm.c": "c3aa3282c28a3ee35b836a353fc0da9c555c4c04cd2f735b057b1a834d07f86c",
+    "hosttest/inputtest_hid.c": "8d60e94dda8a9f9a18e58f7d9268c73e6edd2c3fa79d2d4f8e1d4b7115f3804e",
+    "hosttest/uitest.c": "ebe267d57124d83da3fa6b5d0bcaeac200d74040e527c0b646ecc32b9045f747",
+    "hosttest/wmtest.c": "f3c6d7b3f95f4e33233654bccbcca1647cc6718a21e98c3e57c107c91320cd29",
+    "hosttest/toasttest.c": "7d5d6d1b30294910b7da8cf6d8f06538d9e255acd2dcd59ba334c903d3c4136a"
+  },
+  "visual_registry": {
+    "path": "kernel/visual-registry.json",
+    "sha256": "f7c6171e66ad750f918803c3a24c3bba57890cfc596e79abe61ab0217bce9b0b",
+    "current_build_bound": 0
+  },
+  "capabilities": [
+    {
+      "id": "keyboard-input-parity",
+      "status": "HOST_PASSED",
+      "passed_host_targets": [
+        "inputtest",
+        "inputtest_hid"
+      ],
+      "detail": "PS/2 and USB key/modifier agreement; not an app workflow",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "focus-lifecycle",
+      "status": "HOST_PASSED",
+      "passed_host_targets": [
+        "wmtest"
+      ],
+      "detail": "focus, Alt+Tab chain and close-to-next-focus in host compositor",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "visible-focus",
+      "status": "HOST_PASSED",
+      "passed_host_targets": [
+        "uitest"
+      ],
+      "detail": "widget focus treatment asserted in host renderer",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "non-stealing-notifications",
+      "status": "HOST_PASSED",
+      "passed_host_targets": [
+        "toasttest"
+      ],
+      "detail": "toast structurally cannot take window focus",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "density-scaling",
+      "status": "PARTIAL_HOST_PASSED",
+      "passed_host_targets": [
+        "uitest",
+        "fbtext"
+      ],
+      "detail": "1x/2x metrics and glyph density only; no user a11y workflow",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "keyboard-only-app-workflows",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no all-62 keyboard-only open/use/close receipt",
+      "evidence_ceiling": "no current evidence"
+    },
+    {
+      "id": "semantic-tree",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no roles/names/states/relations tree transport",
+      "evidence_ceiling": "no current evidence"
+    },
+    {
+      "id": "screen-reader-speech-braille",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no assistive provider or privacy/lifecycle proof",
+      "evidence_ceiling": "no current evidence"
+    },
+    {
+      "id": "magnifier-large-text-cursor",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no magnifier provider or user settings route",
+      "evidence_ceiling": "no current evidence"
+    },
+    {
+      "id": "high-contrast-color-filters",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no high-contrast theme/filter qualification",
+      "evidence_ceiling": "no current evidence"
+    },
+    {
+      "id": "captions-transcripts",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no caption provider or media workflow",
+      "evidence_ceiling": "no current evidence"
+    },
+    {
+      "id": "switch-dwell-control",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no switch scanning or dwell input workflow",
+      "evidence_ceiling": "no current evidence"
+    },
+    {
+      "id": "sticky-filter-slow-remap-keys",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no accessibility keyboard policy layer",
+      "evidence_ceiling": "no current evidence"
+    },
+    {
+      "id": "reduced-motion",
+      "status": "PARTIAL_HOST_PASSED",
+      "passed_host_targets": [
+        "wmtest"
+      ],
+      "detail": "animations-off control is tested; no user policy or complete motion audit",
+      "evidence_ceiling": "host behavior only"
+    },
+    {
+      "id": "localization-rtl",
+      "status": "MISSING",
+      "passed_host_targets": [],
+      "detail": "no locale/RTL/non-Latin app workflow proof",
+      "evidence_ceiling": "no current evidence"
+    }
+  ],
+  "counts": {
+    "capabilities": 15,
+    "host_passed": 4,
+    "partial_host_passed": 2,
+    "missing": 9,
+    "complete_target_workflows": 0,
+    "current_build_bound_qemu_workflows": 0
+  },
+  "open_gaps": [
+    "density-scaling",
+    "keyboard-only-app-workflows",
+    "semantic-tree",
+    "screen-reader-speech-braille",
+    "magnifier-large-text-cursor",
+    "high-contrast-color-filters",
+    "captions-transcripts",
+    "switch-dwell-control",
+    "sticky-filter-slow-remap-keys",
+    "reduced-motion",
+    "localization-rtl"
+  ],
+  "evidence_ceiling": "host input/focus/scale primitives only; no complete assistive or target workflow promotion",
+  "weakest_link": "semantic tree and assistive providers do not exist; no all-app keyboard, QEMU or native a11y workflow receipt",
+  "generator": {
+    "path": "kernel/gen-accessibility-registry.py",
+    "sha256": "6fcb58e20a86848a932f13e88b0c4a7afc35bcde49af70409f664746f61de603"
+  }
+}

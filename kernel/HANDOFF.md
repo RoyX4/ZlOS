@@ -1,5 +1,91 @@
 # zlOS — where things stand
 
+The 2026-08-24 host freeze, the evidence that survived it, and the mandatory
+resource-contained landing-gate procedure are recorded in
+[`docs/host-freeze-and-gate-containment-2026-08-24.md`](docs/host-freeze-and-gate-containment-2026-08-24.md).
+Do not run `gates/land-gate.sh` directly; it now refuses unrestricted starts.
+
+The EV-018 structured-event envelope, bounded queue, wire contract, 37-check
+host receipt and explicit target-integration gap are recorded in
+[`docs/mp00-structured-event-trace-2026-08-24.md`](docs/mp00-structured-event-trace-2026-08-24.md).
+It is host-proved core code, not yet a booted zlOS audit service.
+
+The generated EV-026 decision/reversal/deprecation ledger and its exact
+historical coverage gap are recorded in
+[`docs/mp00-decision-ledger-2026-08-24.md`](docs/mp00-decision-ledger-2026-08-24.md).
+It normalizes 19 high-impact records and indexes all 47 legacy labels without
+pretending the remaining 42 labels already have normalized semantics.
+
+The generated EV-027 unreleased changelog, compatibility facts, migrations,
+known defects and recovery paths are recorded in
+[`docs/mp00-release-notes-2026-08-24.md`](docs/mp00-release-notes-2026-08-24.md).
+It has 17 change candidates and 12 current blockers, but deliberately zero
+published entries: there is still no versioned, signed or authorized release.
+
+The generated EV-028 read-only provenance model and self-contained evidence-room
+HTML are recorded in
+[`docs/mp00-provenance-viewer-2026-08-24.md`](docs/mp00-provenance-viewer-2026-08-24.md).
+They expose exact origin, licenses, signatures, tests, health, 9 artifacts, 62
+apps, 17 security claims and 17 changes. This is host-static, not a booted zlOS
+app or signed/live portal.
+
+The corrected reference-app registry and Maze pointer-route receipt is
+[`docs/app-registry-truth-2026-08-22.md`](docs/app-registry-truth-2026-08-22.md).
+It replaces the old aggregate `apps53.py` green that printed `Maze exists NO`
+and hid the missing route behind blank catalogue ID 14.
+
+The MP-00 host-test inventory and fresh 62-target execution receipt is
+[`docs/mp00-test-inventory-2026-08-22.md`](docs/mp00-test-inventory-2026-08-22.md).
+It replaces filename-guessed execution with exact pass, hardware-skip,
+instrument and manual-action states.
+
+The exact nine-artifact build and six-route boot evidence is
+[`docs/artifact-and-boot-route-registry-2026-08-22.md`](docs/artifact-and-boot-route-registry-2026-08-22.md).
+Its generated registry separates build-only, parent-payload, QEMU-direct and
+physical-unverified claims so one route can never promote another by name.
+
+The exact top-level boot order is generated into
+[`docs/init-registry-truth-2026-08-23.md`](docs/init-registry-truth-2026-08-23.md).
+It binds 16 initialization stages and their dependencies/fallbacks to all six
+promoted QEMU routes without pretending that route readiness is physical or
+stage-specific provider proof.
+
+The exact host tools and OVMF bytes behind those artifacts are locked in
+[`docs/dependency-lock-truth-2026-08-23.md`](docs/dependency-lock-truth-2026-08-23.md).
+The landing gate checks this lock and never silently refreshes it.
+The four kernel ABI/link lanes and their 82 external compiler/sysroot headers
+are bound separately in
+[`docs/mp00-toolchain-manifest-2026-08-24.md`](docs/mp00-toolchain-manifest-2026-08-24.md).
+The exact declared-input to logical-object to artifact reachability graph is
+[`docs/mp00-build-graph-2026-08-24.md`](docs/mp00-build-graph-2026-08-24.md).
+
+The exact current 123-file build-input closure is reconstructable from the
+deterministic archive described in
+[`docs/mp00-source-snapshot-2026-08-24.md`](docs/mp00-source-snapshot-2026-08-24.md).
+It is local and unsigned; it is not an off-host or whole-repository backup.
+
+License/provenance truth is recorded in
+[`docs/license-provenance-truth-2026-08-23.md`](docs/license-provenance-truth-2026-08-23.md).
+There is currently no repository license file, so public release is explicitly
+blocked rather than silently treating local files as permission to redistribute.
+
+The joined front door for all current MP-00 receipts is
+[`docs/mp00-evidence-registry-2026-08-23.md`](docs/mp00-evidence-registry-2026-08-23.md).
+The current verifier-canary, failure-injection and hostile-corpus boundary is
+[`docs/mp00-adversarial-registry-2026-08-23.md`](docs/mp00-adversarial-registry-2026-08-23.md).
+The current frame-performance receipt and its open regressions are
+[`docs/mp00-benchmark-registry-2026-08-23.md`](docs/mp00-benchmark-registry-2026-08-23.md).
+The current screenshot/visual asset boundary is
+[`docs/mp00-visual-registry-2026-08-23.md`](docs/mp00-visual-registry-2026-08-23.md).
+The current accessibility proof boundary is
+[`docs/mp00-accessibility-registry-2026-08-23.md`](docs/mp00-accessibility-registry-2026-08-23.md).
+The current security claim boundary is
+[`docs/mp00-security-registry-2026-08-23.md`](docs/mp00-security-registry-2026-08-23.md).
+The current crash/log/event boundary is
+[`docs/mp00-observability-registry-2026-08-23.md`](docs/mp00-observability-registry-2026-08-23.md).
+Its `PASS_WITH_OPEN_GAPS` result preserves physical, hardware-skip, non-run and
+license blockers instead of flattening them into one green count.
+
 Persistent named files and the Files app are documented in
 [`docs/storage-and-files.md`](docs/storage-and-files.md). The old numbered RAM
 file implementation and its callers are retired; Settings, editor, Files and
@@ -1611,3 +1697,42 @@ keeps its own device.
 
 **If you need `-kernel` for a fast text-only loop, that path is fine** — it boots,
 the shell responds, and `verify.sh` gates it. It just cannot do graphics.
+## MP-00 dependency/SBOM closure slice — 2026-08-24
+
+`kernel/dependency-lock.json` is now `zlos.host-dependency-lock.v2`. It retains
+the original 15 invoked command and two firmware identities, and joins 91 exact
+runtime files to 156 recursively installed binary packages. Each package records
+binary version/architecture, source package/version, raw and resolved dependency
+edges, and local archive custody. The generator batches package ownership and
+installed metadata discovery and rejects missing commands, binary drift, wrong
+aliases, missing firmware, missing packages, unresolved dependencies, invented
+source custody and missing build identity.
+
+Evidence ceiling: `PASS_WITH_OPEN_SUPPLY_GAPS`. No package source archive is
+retained and no offline rebuild has been run. This materially advances EV-004
+but does not complete it or EV-005. The dependent toolchain manifest, build graph
+and joined evidence registry were regenerated after the lock changed.
+
+EV-008 is closed for the current batch. `kernel/wrapper-registry.json` hashes
+and classifies all 141 current shebang wrappers, including 17 legacy/action/
+probe policy gaps that are explicitly not landing authority. The only supported
+entry remains `gates/run-land-gate-contained.sh start`; `check-land-gate.py`
+proves 66 mandatory seams and rejects masked child-failure and masked final-exit
+mutations. The adversarial registry is 19/19 canaries caught. A stale zero-byte
+`kernel64.elf` was discovered by CAN-006 and rebuilt under a two-core,
+low-priority limit; its final 2,702,592-byte output matches the registered hash.
+
+EV-026's largest local gap is also closed. The decision generator now derives
+normalized semantics for all 47 legacy labels directly from their numbered
+source sections, retaining the exact heading, line, section hash, feature scope
+and evidence ceiling. Zero legacy semantics remain open. EV-026 stays partial
+because repository-wide history outside `kernel/docs/DECISIONS.md`, independent
+approval, automatic migration and a booted history viewer are still absent.
+
+EV-014 distribution work is implemented but not promoted. `run-benchmarks.py`
+can now produce a v2 receipt with seven independent raw samples and p50/p95/
+peak summaries. The first low-priority, two-core run was terminated after the
+host load rose above the containment tolerance; it never replaced the receipt.
+The exact historical v1 receipt remains valid through its frozen runner hash
+and still states `NOT_RECORDED` percentiles/peak, four over-budget metrics and
+zero native-target measurements. Run v2 only on an actually idle host.

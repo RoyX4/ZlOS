@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+  <title>zlOS provenance room — unreleased</title>
+  <style>
+    :root {
+      --canvas: #111210;
+      --panel: #1a1c18;
+      --raised: #23261f;
+      --line: #3a3f33;
+      --text: #f0eee6;
+      --muted: #adb0a4;
+      --pass: #7bc47f;
+      --warn: #e3b341;
+      --fail: #ff6b5f;
+      --info: #6bb6c9;
+      --focus: #f4cf67;
+      --space-1: 0.375rem;
+      --space-2: 0.75rem;
+      --space-3: 1.125rem;
+      --space-4: 1.75rem;
+      --radius: 0.375rem;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--canvas); color: var(--text); font: 15px/1.55 system-ui, sans-serif; }
+    a { color: var(--info); }
+    a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .skip { position: fixed; left: var(--space-2); top: -5rem; z-index: 20; background: var(--focus); color: #111; padding: var(--space-2); }
+    .skip:focus { top: var(--space-2); }
+    .shell { display: grid; grid-template-columns: 17rem minmax(0, 1fr); min-height: 100vh; }
+    .rail { position: sticky; top: 0; height: 100vh; border-right: 1px solid var(--line); padding: var(--space-4); background: #151713; }
+    .kicker, .eyebrow { color: var(--warn); font: 700 0.72rem/1.2 ui-monospace, monospace; letter-spacing: 0.13em; text-transform: uppercase; }
+    .rail h1 { font: 600 1.55rem/1.1 Georgia, serif; margin: var(--space-2) 0 var(--space-4); }
+    .rail nav a { display: block; padding: var(--space-2) 0; border-bottom: 1px solid #292c25; text-decoration: none; color: var(--muted); }
+    .rail nav a:hover { color: var(--text); }
+    .identity { margin-top: var(--space-4); font: 0.72rem/1.5 ui-monospace, monospace; color: var(--muted); overflow-wrap: anywhere; }
+    main { min-width: 0; padding: clamp(1rem, 3vw, 3rem); }
+    .warning { border: 1px solid var(--fail); border-left-width: 0.5rem; padding: var(--space-3); background: #261917; font-weight: 700; }
+    .hero { display: grid; grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr); gap: var(--space-4); margin: var(--space-4) 0; }
+    .hero h2 { font: 600 clamp(2rem, 5vw, 4.8rem)/0.95 Georgia, serif; letter-spacing: -0.035em; margin: 0 0 var(--space-3); max-width: 13ch; }
+    .lede { color: var(--muted); max-width: 65ch; font-size: 1.05rem; }
+    .status-stack { border-top: 1px solid var(--line); }
+    .status-stack div { display: flex; justify-content: space-between; gap: 1rem; padding: var(--space-2) 0; border-bottom: 1px solid var(--line); }
+    section { margin: 4.5rem 0; scroll-margin-top: 1rem; }
+    section h2 { font: 600 2rem/1.1 Georgia, serif; margin: 0 0 var(--space-2); }
+    .section-note { color: var(--muted); max-width: 72ch; }
+    .controls { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; padding: var(--space-2); margin: var(--space-4) 0; border: 1px solid var(--line); background: rgba(17,18,16,0.96); }
+    .controls label { font-weight: 700; }
+    .controls input { min-width: min(26rem, 100%); flex: 1; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.65rem 0.8rem; }
+    button { color: var(--text); background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.55rem 0.75rem; cursor: pointer; }
+    button[aria-pressed="true"] { border-color: var(--focus); color: var(--focus); }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); }
+    caption { text-align: left; color: var(--muted); padding: var(--space-2); }
+    th, td { padding: 0.7rem 0.8rem; border-bottom: 1px solid #30342b; text-align: left; vertical-align: top; }
+    thead th { color: var(--warn); font: 700 0.72rem/1.2 ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.08em; background: #20231d; }
+    tbody th { font-family: ui-monospace, monospace; }
+    tbody tr:hover { background: #24271f; }
+    code { font-family: ui-monospace, monospace; color: #d8ddd0; }
+    .badge { display: inline-block; border: 1px solid currentColor; border-radius: 99rem; padding: 0.12rem 0.45rem; font: 700 0.68rem/1.3 ui-monospace, monospace; white-space: nowrap; }
+    .badge.pass { color: var(--pass); } .badge.partial, .badge.gap, .badge.unverified { color: var(--warn); }
+    .badge.blocked, .badge.regression { color: var(--fail); }
+    .facts { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr); border-top: 1px solid var(--line); }
+    .facts dt, .facts dd { margin: 0; padding: var(--space-2); border-bottom: 1px solid var(--line); }
+    .facts dt { color: var(--muted); font-family: ui-monospace, monospace; }
+    .empty { padding: var(--space-4); color: var(--muted); text-align: center; }
+    [hidden] { display: none !important; }
+    @media (max-width: 850px) {
+      .shell { display: block; } .rail { position: relative; width: auto; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .rail nav { display: flex; flex-wrap: wrap; gap: 0 var(--space-3); } .hero { grid-template-columns: 1fr; } .facts { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; } }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to provenance content</a>
+  <div class="shell">
+    <aside class="rail">
+      <div class="kicker">zlOS / evidence room</div>
+      <h1>Provenance, without promotion</h1>
+      <nav aria-label="Provenance sections">
+        <a href="#overview">Overview</a><a href="#health">Current health</a>
+        <a href="#artifacts">Artifacts</a><a href="#applications">Applications</a>
+        <a href="#security">Permissions &amp; security</a><a href="#changes">Changes</a>
+      </nav>
+      <div class="identity">BUILD<br>85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13</div>
+    </aside>
+    <main id="main">
+      <div class="warning" role="status">UNRELEASED DEVELOPMENT BUILD · DIRTY TREE · PUBLIC RELEASE BLOCKED</div>
+      <section id="overview" class="hero" aria-labelledby="overview-title">
+        <div><div class="eyebrow">Exact identity / explicit gaps</div>
+          <h2 id="overview-title">What these bytes actually prove.</h2>
+          <p class="lede">A read-only projection of the current manifests. It shows version and origin, licensing and signatures, tests, security authority gaps, artifacts, applications and unreleased changes. It never converts host, QEMU or source evidence into physical completion.</p>
+        </div>
+        <div class="status-stack" aria-label="Release status">
+          <div><span>State</span><span class="badge gap">UNRELEASED_DEVELOPMENT</span></div>
+          <div><span>License</span><span class="badge blocked">BLOCKED</span></div>
+          <div><span>Signatures</span><span class="badge gap">0 PRESENT</span></div>
+          <div><span>Physical hashes</span><span class="badge pass">0 PROVED</span></div>
+        </div>
+      </section>
+      <dl class="facts">
+        <dt>Commit</dt><dd><code>b8a00ec45ac1f9f955ba79ed63f0072540067d4e</code></dd>
+        <dt>Branch / dirty</dt><dd>codex/master-program-foundation / true</dd>
+        <dt>Source archive</dt><dd>123 inputs · 5,294,080 bytes · <code>cb17bcd596060f72169288807375816d7c7653852eb213261247c72ea95697b2</code></dd>
+        <dt>Custody</dt><dd>0 off-host copies · signed=false</dd>
+        <dt>Licensing</dt><dd>0 / 123 inputs have an established redistribution grant</dd>
+        <dt>Tests</dt><dd>48 host pass · 3 hardware skip · 11 not run · 6 QEMU boot routes</dd>
+      </dl>
+      <div class="controls" aria-label="Table filters">
+        <label for="search">Search evidence</label><input id="search" type="search" autocomplete="off" placeholder="artifact, app, claim, change…">
+        <button type="button" data-filter="all" aria-pressed="true" aria-controls="evidence-tables">ALL</button><button type="button" data-filter="pass" aria-pressed="false" aria-controls="evidence-tables">PASS</button><button type="button" data-filter="partial" aria-pressed="false" aria-controls="evidence-tables">PARTIAL</button><button type="button" data-filter="gap" aria-pressed="false" aria-controls="evidence-tables">GAP</button><button type="button" data-filter="blocked" aria-pressed="false" aria-controls="evidence-tables">BLOCKED</button><button type="button" data-filter="unverified" aria-pressed="false" aria-controls="evidence-tables">UNVERIFIED</button><button type="button" data-filter="regression" aria-pressed="false" aria-controls="evidence-tables">REGRESSION</button>
+        <span id="result-count" aria-live="polite"></span>
+      </div>
+      <div id="evidence-tables">
+        <section id="health" aria-labelledby="health-title"><h2 id="health-title">Current health</h2><p class="section-note">Status words remain visible; color is only reinforcement.</p>
+          <div class="table-wrap"><table><caption>Eleven evidence areas for this exact build</caption><thead><tr><th>Area</th><th>Status</th><th>Evidence boundary</th></tr></thead><tbody><tr class="filterable" data-status="pass" data-search="build identity 123 declared inputs bind one exact dirty development identity."><th scope="row">Build identity</th><td><span class="badge pass">PASS</span></td><td>123 declared inputs bind one exact dirty development identity.</td></tr>
+<tr class="filterable" data-status="blocked" data-search="source custody exact local archive exists; off-host copies and signatures are zero."><th scope="row">Source custody</th><td><span class="badge blocked">BLOCKED</span></td><td>Exact local archive exists; off-host copies and signatures are zero.</td></tr>
+<tr class="filterable" data-status="blocked" data-search="licensing 123 build inputs lack an established redistribution grant."><th scope="row">Licensing</th><td><span class="badge blocked">BLOCKED</span></td><td>123 build inputs lack an established redistribution grant.</td></tr>
+<tr class="filterable" data-status="partial" data-search="host tests 48 pass, 3 hardware skip, 11 not run."><th scope="row">Host tests</th><td><span class="badge partial">PARTIAL</span></td><td>48 pass, 3 hardware skip, 11 not run.</td></tr>
+<tr class="filterable" data-status="regression" data-search="performance 4 of 7 host frame metrics exceed budget; no native distribution."><th scope="row">Performance</th><td><span class="badge regression">REGRESSION</span></td><td>4 of 7 host frame metrics exceed budget; no native distribution.</td></tr>
+<tr class="filterable" data-status="gap" data-search="visual proof 46 assets inventoried; 0 current-build screenshot receipts."><th scope="row">Visual proof</th><td><span class="badge gap">GAP</span></td><td>46 assets inventoried; 0 current-build screenshot receipts.</td></tr>
+<tr class="filterable" data-status="gap" data-search="accessibility 9 capabilities missing; 0 complete target workflows."><th scope="row">Accessibility</th><td><span class="badge gap">GAP</span></td><td>9 capabilities missing; 0 complete target workflows.</td></tr>
+<tr class="filterable" data-status="blocked" data-search="security 11 claims missing; 0 production-complete."><th scope="row">Security</th><td><span class="badge blocked">BLOCKED</span></td><td>11 claims missing; 0 production-complete.</td></tr>
+<tr class="filterable" data-status="gap" data-search="observability 5 capabilities missing; 0 durable crash receipts."><th scope="row">Observability</th><td><span class="badge gap">GAP</span></td><td>5 capabilities missing; 0 durable crash receipts.</td></tr>
+<tr class="filterable" data-status="blocked" data-search="release unreleased development batch: no version, channel, signature or publication."><th scope="row">Release</th><td><span class="badge blocked">BLOCKED</span></td><td>Unreleased development batch: no version, channel, signature or publication.</td></tr>
+<tr class="filterable" data-status="unverified" data-search="complete landing gate the latest attempt was interrupted; no post-incident aggregate green exists."><th scope="row">Complete landing gate</th><td><span class="badge unverified">UNVERIFIED</span></td><td>The latest attempt was interrupted; no post-incident aggregate green exists.</td></tr></tbody></table></div>
+        </section>
+        <section id="artifacts" aria-labelledby="artifacts-title"><h2 id="artifacts-title">Artifacts</h2><p class="section-note">Byte identity and QEMU routes do not imply exact physical-hardware execution.</p>
+          <div class="table-wrap"><table><caption>Nine current reproducible artifacts</caption><thead><tr><th>Name</th><th>SHA-256</th><th>Bytes</th><th>Proof</th><th>Physical</th></tr></thead><tbody><tr class="filterable" data-status="unverified" data-search="bootx64.efi pe32+ native uefi application"><th scope="row">BOOTX64.EFI</th><td><code>63b6c7053839294e…</code></td><td>2,716,672</td><td>PARENT_BYTE_EXACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="boot-media-ids.json deterministic disk/fat identity metadata"><th scope="row">boot-media-ids.json</th><td><code>52d6cdf60cf45be6…</code></td><td>414</td><td>METADATA_ONLY</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="kernel.elf elf32 multiboot kernel"><th scope="row">kernel.elf</th><td><code>63669c18afb3ed24…</code></td><td>4,592,648</td><td>PARENT_BYTE_EXACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="kernel64.elf elf64 freestanding kernel"><th scope="row">kernel64.elf</th><td><code>686affb711ab6a7a…</code></td><td>2,702,592</td><td>PARENT_BYTE_EXACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="kernel_raw.elf elf32 raw-loader kernel"><th scope="row">kernel_raw.elf</th><td><code>3b695cdc24fc059f…</code></td><td>4,592,492</td><td>PARENT_DERIVED_PAYLOAD</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="zlos-usb.img gpt/fat uefi usb disk image"><th scope="row">zlOS-usb.img</th><td><code>16f239108c9d6850…</code></td><td>67,108,864</td><td>QEMU_DIRECT_ARTIFACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="zlos.img raw bios disk image"><th scope="row">zlOS.img</th><td><code>f97a0ec1b439a41d…</code></td><td>6,291,968</td><td>QEMU_DIRECT_ARTIFACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="zlos.iso hybrid iso with grub"><th scope="row">zlOS.iso</th><td><code>ca67eacab5d0c491…</code></td><td>29,734,912</td><td>QEMU_DIRECT_ARTIFACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="zlos64.iso hybrid grub iso with 64-bit multiboot payload"><th scope="row">zlOS64.iso</th><td><code>3ea3ea875fdfaa60…</code></td><td>27,844,608</td><td>QEMU_DIRECT_ARTIFACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr></tbody></table></div>
+        </section>
+        <section id="applications" aria-labelledby="apps-title"><h2 id="apps-title">Applications</h2><p class="section-note">All 62 identities have QEMU lifecycle evidence. Per-app permission grants are still absent and shown as missing.</p>
+          <div class="table-wrap"><table><caption>Application identity, route and permission state</caption><thead><tr><th>ID</th><th>Name</th><th>Kind</th><th>Migration</th><th>Route proof</th><th>Permissions</th></tr></thead><tbody><tr class="filterable" data-status="pass" data-search="0 terminal system"><th scope="row">0</th><td>Terminal</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="1 system monitor system"><th scope="row">1</th><td>System Monitor</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="2 about application"><th scope="row">2</th><td>About</td><td>application</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="3 snake game"><th scope="row">3</th><td>Snake</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="4 menu shell"><th scope="row">4</th><td>Menu</td><td>shell</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="5 browser application"><th scope="row">5</th><td>Browser</td><td>application</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="6 settings system"><th scope="row">6</th><td>Settings</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="7 run shell"><th scope="row">7</th><td>Run</td><td>shell</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="8 paint application"><th scope="row">8</th><td>Paint</td><td>application</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="9 3d application"><th scope="row">9</th><td>3D</td><td>application</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="10 zlos animation application"><th scope="row">10</th><td>zlOS animation</td><td>application</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="11 pointer application"><th scope="row">11</th><td>Pointer</td><td>application</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="12 text editor system"><th scope="row">12</th><td>Text Editor</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="13 files system"><th scope="row">13</th><td>Files</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="15 clipboard utility"><th scope="row">15</th><td>Clipboard</td><td>utility</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="16 colour picker utility"><th scope="row">16</th><td>Colour Picker</td><td>utility</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="17 regex tester utility"><th scope="row">17</th><td>Regex Tester</td><td>utility</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="18 base converter utility"><th scope="row">18</th><td>Base Converter</td><td>utility</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="19 text diff utility"><th scope="row">19</th><td>Text Diff</td><td>utility</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="20 checksum utility"><th scope="row">20</th><td>Checksum</td><td>utility</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="21 unit converter utility"><th scope="row">21</th><td>Unit Converter</td><td>utility</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="22 sticky notes utility"><th scope="row">22</th><td>Sticky Notes</td><td>utility</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="23 keyboard tester utility"><th scope="row">23</th><td>Keyboard Tester</td><td>utility</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="24 benchmark utility"><th scope="row">24</th><td>Benchmark</td><td>utility</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="25 word guess game"><th scope="row">25</th><td>Word Guess</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="26 tic-tac-toe game"><th scope="row">26</th><td>Tic-Tac-Toe</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="27 nim game"><th scope="row">27</th><td>Nim</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="28 tower of hanoi game"><th scope="row">28</th><td>Tower of Hanoi</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="29 lights out game"><th scope="row">29</th><td>Lights Out</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="30 connect four game"><th scope="row">30</th><td>Connect Four</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="31 clocks &amp; timers system"><th scope="row">31</th><td>Clocks &amp; Timers</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="32 system info system"><th scope="row">32</th><td>System Info</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="33 calculator system"><th scope="row">33</th><td>Calculator</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="34 maze game"><th scope="row">34</th><td>Maze</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="40 kernel log system"><th scope="row">40</th><td>Kernel Log</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="41 renderer system"><th scope="row">41</th><td>Renderer</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="42 hex viewer system"><th scope="row">42</th><td>Hex Viewer</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="43 framebuffer system"><th scope="row">43</th><td>Framebuffer</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="44 console (tty1) system"><th scope="row">44</th><td>Console (tty1)</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="45 font atlas system"><th scope="row">45</th><td>Font Atlas</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="46 disk usage system"><th scope="row">46</th><td>Disk Usage</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="47 services system"><th scope="row">47</th><td>Services</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="48 archive manager system"><th scope="row">48</th><td>Archive Manager</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="49 image viewer system"><th scope="row">49</th><td>Image Viewer</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="50 network system"><th scope="row">50</th><td>Network</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="52 tetris game"><th scope="row">52</th><td>Tetris</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="53 pong game"><th scope="row">53</th><td>Pong</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="54 breakout game"><th scope="row">54</th><td>Breakout</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="55 minesweeper game"><th scope="row">55</th><td>Minesweeper</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="56 2048 game"><th scope="row">56</th><td>2048</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="57 conway&#x27;s life game"><th scope="row">57</th><td>Conway&#x27;s Life</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="58 asteroids game"><th scope="row">58</th><td>Asteroids</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="59 invaders game"><th scope="row">59</th><td>Invaders</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="61 15 puzzle game"><th scope="row">61</th><td>15 Puzzle</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="62 reversi game"><th scope="row">62</th><td>Reversi</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="63 simon game"><th scope="row">63</th><td>Simon</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="64 sokoban game"><th scope="row">64</th><td>Sokoban</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="65 flappy game"><th scope="row">65</th><td>Flappy</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="66 missile command game"><th scope="row">66</th><td>Missile Command</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="67 blackjack game"><th scope="row">67</th><td>Blackjack</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="68 frogger game"><th scope="row">68</th><td>Frogger</td><td>game</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>
+<tr class="filterable" data-status="pass" data-search="70 all applications shell"><th scope="row">70</th><td>All Applications</td><td>shell</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr></tbody></table></div>
+        </section>
+        <section id="security" aria-labelledby="security-title"><h2 id="security-title">Permissions &amp; security</h2><p class="section-note">This is claim and residual-risk state, not an invented permissions dashboard.</p>
+          <div class="table-wrap"><table><caption>Seventeen security claims and their enforcement ceilings</caption><thead><tr><th>Claim</th><th>Status</th><th>Protected asset</th><th>Enforcement</th><th>Residual risk</th></tr></thead><tbody><tr class="filterable" data-status="pass" data-search="non-rwx-kernel-images kernel code/data pages page-table enforcement after boot is not separately proved"><th scope="row">non-rwx-kernel-images</th><td><span class="badge pass">STATIC_PROVED</span></td><td>kernel code/data pages</td><td>linker PHDR flags + ELF verifier</td><td>page-table enforcement after boot is not separately proved</td></tr>
+<tr class="filterable" data-status="pass" data-search="filesystem-integrity zlfs metadata and file contents no power-cut target receipt, permissions or multi-process adversary"><th scope="row">filesystem-integrity</th><td><span class="badge pass">HOST_PROVED_LIMITED</span></td><td>zlfs metadata and file contents</td><td>zlfs mount validation and transactional metadata update</td><td>no power-cut target receipt, permissions or multi-process adversary</td></tr>
+<tr class="filterable" data-status="pass" data-search="network-parser-bounds kernel memory and network state host parsers are not process-isolated and not every protocol is covered"><th scope="row">network-parser-bounds</th><td><span class="badge pass">HOST_PROVED_LIMITED</span></td><td>kernel memory and network state</td><td>bounded packet parsers and protocol state machines</td><td>host parsers are not process-isolated and not every protocol is covered</td></tr>
+<tr class="filterable" data-status="pass" data-search="tls-x509-authenticity peer identity and transport plaintext root distribution, revocation, persistent secrets and production policy remain incomplete"><th scope="row">tls-x509-authenticity</th><td><span class="badge pass">HOST_PROVED_LIMITED</span></td><td>peer identity and transport plaintext</td><td>TLS record/handshake and X.509 chain/hostname validation</td><td>root distribution, revocation, persistent secrets and production policy remain incomplete</td></tr>
+<tr class="filterable" data-status="pass" data-search="interpreter-resource-bounds kernel responsiveness and interpreter memory this is an interpreter harness, not general process containment"><th scope="row">interpreter-resource-bounds</th><td><span class="badge pass">HOST_PROVED_LIMITED</span></td><td>kernel responsiveness and interpreter memory</td><td>interpreter step/depth/confine checks</td><td>this is an interpreter harness, not general process containment</td></tr>
+<tr class="filterable" data-status="partial" data-search="ring3-address-space-isolation kernel and sibling process memory no general preemptive process/usercopy hostile matrix or physical proof"><th scope="row">ring3-address-space-isolation</th><td><span class="badge partial">QEMU_BOOT_REACHABLE_PARTIAL</span></td><td>kernel and sibling process memory</td><td>paging privilege bits and Ring-3 transition</td><td>no general preemptive process/usercopy hostile matrix or physical proof</td></tr>
+<tr class="filterable" data-status="blocked" data-search="syscall-usercopy-boundary kernel memory and caller buffers no exhaustive syscall/usercopy hostile receipt"><th scope="row">syscall-usercopy-boundary</th><td><span class="badge blocked">MISSING</span></td><td>kernel memory and caller buffers</td><td>not implemented</td><td>no exhaustive syscall/usercopy hostile receipt</td></tr>
+<tr class="filterable" data-status="blocked" data-search="capability-handles-revocation kernel objects and delegated authority capability handle table and derivation/revoke graph do not exist"><th scope="row">capability-handles-revocation</th><td><span class="badge blocked">MISSING</span></td><td>kernel objects and delegated authority</td><td>not implemented</td><td>capability handle table and derivation/revoke graph do not exist</td></tr>
+<tr class="filterable" data-status="blocked" data-search="credential-transitions user/group identity and process control credential model and transition matrix do not exist"><th scope="row">credential-transitions</th><td><span class="badge blocked">MISSING</span></td><td>user/group identity and process control</td><td>not implemented</td><td>credential model and transition matrix do not exist</td></tr>
+<tr class="filterable" data-status="blocked" data-search="typed-ipc-authorization service endpoints, messages and transferred handles current pid ipc is not the bounded typed capability transport"><th scope="row">typed-ipc-authorization</th><td><span class="badge blocked">MISSING</span></td><td>service endpoints, messages and transferred handles</td><td>not implemented</td><td>current PID IPC is not the bounded typed capability transport</td></tr>
+<tr class="filterable" data-status="blocked" data-search="dma-iommu-isolation physical memory outside a device grant no enforced iommu domain; passthrough cannot be called isolated"><th scope="row">dma-iommu-isolation</th><td><span class="badge blocked">MISSING</span></td><td>physical memory outside a device grant</td><td>not implemented</td><td>no enforced IOMMU domain; passthrough cannot be called isolated</td></tr>
+<tr class="filterable" data-status="blocked" data-search="secret-storage-redaction passwords, keys, tokens and logs no secrets service, zeroization or redaction receipt"><th scope="row">secret-storage-redaction</th><td><span class="badge blocked">MISSING</span></td><td>passwords, keys, tokens and logs</td><td>not implemented</td><td>no secrets service, zeroization or redaction receipt</td></tr>
+<tr class="filterable" data-status="blocked" data-search="boot-authenticity-rollback selected kernel/configuration and boot policy byte identity is not signature, measured boot or anti-rollback"><th scope="row">boot-authenticity-rollback</th><td><span class="badge blocked">MISSING</span></td><td>selected kernel/configuration and boot policy</td><td>not implemented</td><td>byte identity is not signature, measured boot or anti-rollback</td></tr>
+<tr class="filterable" data-status="blocked" data-search="application-sandbox user files, services, devices and sibling apps manifest/portal sandbox and complete mediation do not exist"><th scope="row">application-sandbox</th><td><span class="badge blocked">MISSING</span></td><td>user files, services, devices and sibling apps</td><td>not implemented</td><td>manifest/portal sandbox and complete mediation do not exist</td></tr>
+<tr class="filterable" data-status="blocked" data-search="package-signature-install-atomicity installed files, services, grants and live processes no publisher trust, staged atomic install or uninstall revocation"><th scope="row">package-signature-install-atomicity</th><td><span class="badge blocked">MISSING</span></td><td>installed files, services, grants and live processes</td><td>not implemented</td><td>no publisher trust, staged atomic install or uninstall revocation</td></tr>
+<tr class="filterable" data-status="blocked" data-search="audit-integrity security event history and attribution no durable append/anchor/drop/redaction security audit service"><th scope="row">audit-integrity</th><td><span class="badge blocked">MISSING</span></td><td>security event history and attribution</td><td>not implemented</td><td>no durable append/anchor/drop/redaction security audit service</td></tr>
+<tr class="filterable" data-status="blocked" data-search="privileged-operation-mediation mmio, mount, scanout/input, kill/debug and power no complete operation-rights matrix and denial suite"><th scope="row">privileged-operation-mediation</th><td><span class="badge blocked">MISSING</span></td><td>MMIO, mount, scanout/input, kill/debug and power</td><td>not implemented</td><td>no complete operation-rights matrix and denial suite</td></tr></tbody></table></div>
+        </section>
+        <section id="changes" aria-labelledby="changes-title"><h2 id="changes-title">Unreleased changes</h2><p class="section-note">Source-bound candidates only. Published entries: zero.</p>
+          <div class="table-wrap"><table><caption>Current decisions projected as unreleased change candidates</caption><thead><tr><th>Decision</th><th>Audience</th><th>Features</th><th>Change</th><th>Compatibility</th></tr></thead><tbody><tr class="filterable" data-status="partial" data-search="dec-0001 keep low-level window mechanisms in c and desktop policy in zl until the language/runtime can own the required structures safely. zl-043 gr-007"><th scope="row">DEC-0001</th><td>DEVELOPERS</td><td>ZL-043, GR-007</td><td>Keep low-level window mechanisms in C and desktop policy in zl until the language/runtime can own the required structures safely.</td><td>No public ABI change; preserve the current C/zl boundary until the replacement language/runtime contract is proved.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0003 enforce clipping in all five back-buffer write paths by folding the scissor into loop bounds. gr-015 gr-020"><th scope="row">DEC-0003</th><td>USERS_AND_DEVELOPERS</td><td>GR-015, GR-020</td><td>Enforce clipping in all five back-buffer write paths by folding the scissor into loop bounds.</td><td>Rendering output must retain the five-path clipping oracle at every supported mode.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0004 retire snapshot-and-sticker window dragging after damage repaint is authoritative; retain only cursor save-under. gr-037 gr-012"><th scope="row">DEC-0004</th><td>USERS_AND_DEVELOPERS</td><td>GR-037, GR-012</td><td>Retire snapshot-and-sticker window dragging after damage repaint is authoritative; retain only cursor save-under.</td><td>Keep the existing drag fallback until retained damage repaint passes equivalent host and target gates.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0005 do not port a linux-scale gpu stack; implement bounded native mechanisms while borrowing public hardware knowledge, not donor code. dv-045 dv-047 gr-025"><th scope="row">DEC-0005</th><td>DEVELOPERS</td><td>DV-045, DV-047, GR-025</td><td>Do not port a Linux-scale GPU stack; implement bounded native mechanisms while borrowing public hardware knowledge, not donor code.</td><td>Intel display/blitter work remains bounded native-provider work; Linux i915/Mesa ABI compatibility is not promised.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0006 all four kernel compiler routes consume one ordered kernel/sources manifest. ev-007 ev-008"><th scope="row">DEC-0006</th><td>DEVELOPERS</td><td>EV-007, EV-008</td><td>All four kernel compiler routes consume one ordered kernel/SOURCES manifest.</td><td>Every kernel compile route must consume kernel/SOURCES; route-local source lists are unsupported.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0008 build the bounded document-browser capability while explicitly refusing moving-target chrome parity. wb-001 wb-048"><th scope="row">DEC-0008</th><td>USERS_AND_DEVELOPERS</td><td>WB-001, WB-048</td><td>Build the bounded document-browser capability while explicitly refusing moving-target Chrome parity.</td><td>The supported browser contract is the explicit bounded compatibility ledger, not Chrome pixel/API parity.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0009 replace the false-green aggregate application check with exact manifest, route and lifecycle evidence. ev-011 ap-002"><th scope="row">DEC-0009</th><td>USERS_AND_DEVELOPERS</td><td>EV-011, AP-002</td><td>Replace the false-green aggregate application check with exact manifest, route and lifecycle evidence.</td><td>Application identities and routes must match the generated manifest; blank or dead catalogue IDs are invalid.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0010 never promote one artifact or route from another route&#x27;s runtime or physical evidence. ev-009 ev-010 ev-015"><th scope="row">DEC-0010</th><td>DEVELOPERS</td><td>EV-009, EV-010, EV-015</td><td>Never promote one artifact or route from another route&#x27;s runtime or physical evidence.</td><td>A receipt applies only to the exact artifact and route it names.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0011 label intel modeset writes as host-harness proved and boot-unreachable until a native kernel caller and receipt exist. dv-045"><th scope="row">DEC-0011</th><td>USERS_AND_DEVELOPERS</td><td>DV-045</td><td>Label Intel modeset writes as host-harness proved and boot-unreachable until a native kernel caller and receipt exist.</td><td>Intel host-harness modesetting is not native-boot display compatibility.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0012 classify i2c-hid as a raw transport, not an input provider, until report decoding and session routing exist. dv-031"><th scope="row">DEC-0012</th><td>USERS_AND_DEVELOPERS</td><td>DV-031</td><td>Classify I2C-HID as a raw transport, not an input provider, until report decoding and session routing exist.</td><td>I2C-HID raw transport diagnostics are not input-event compatibility.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0013 block public release while build inputs lack an established repository redistribution grant. ev-003 op-001"><th scope="row">DEC-0013</th><td>DISTRIBUTORS</td><td>EV-003, OP-001</td><td>Block public release while build inputs lack an established repository redistribution grant.</td><td>No public redistribution channel is supported until licensing authority exists.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0014 call the deterministic archive exact build-input recovery, not signed/off-host/whole-repository custody. ev-002"><th scope="row">DEC-0014</th><td>DEVELOPERS</td><td>EV-002</td><td>Call the deterministic archive exact build-input recovery, not signed/off-host/whole-repository custody.</td><td>The local source archive is recovery material, not a signed/off-host repository release.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0015 dependency verification checks exact invoked/resolved bytes and never silently refreshes the lock. ev-004 ev-005"><th scope="row">DEC-0015</th><td>DEVELOPERS</td><td>EV-004, EV-005</td><td>Dependency verification checks exact invoked/resolved bytes and never silently refreshes the lock.</td><td>Tool or firmware byte drift requires an inspected lock refresh; silent compatibility is rejected.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0016 represent conservative build-identity inputs without active edges as scope-only, never compiled. ev-007"><th scope="row">DEC-0016</th><td>DEVELOPERS</td><td>EV-007</td><td>Represent conservative build-identity inputs without active edges as scope-only, never compiled.</td><td>Scope-only inputs affect identity but are not claimed as compiled objects.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0017 forbid unrestricted full landing gates and require the resource-contained launcher and idle-host doctor. ev-008 op-023"><th scope="row">DEC-0017</th><td>OPERATORS</td><td>EV-008, OP-023</td><td>Forbid unrestricted full landing gates and require the resource-contained launcher and idle-host doctor.</td><td>Uncontained full landing-gate invocation is unsupported on this host.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0018 prove the event envelope as a host-only single-owner core before changing shipped build identity or claiming an audit service. ev-018 au-028"><th scope="row">DEC-0018</th><td>DEVELOPERS</td><td>EV-018, AU-028</td><td>Prove the event envelope as a host-only single-owner core before changing shipped build identity or claiming an audit service.</td><td>The structured-event core is host-only and provides no shipped event-service ABI yet.</td></tr>
+<tr class="filterable" data-status="partial" data-search="dec-0019 keep the complete landing gate red/unverified until a contained run finishes and its final receipt is captured. ev-008"><th scope="row">DEC-0019</th><td>OPERATORS</td><td>EV-008</td><td>Keep the complete landing gate red/unverified until a contained run finishes and its final receipt is captured.</td><td>The interrupted complete gate provides no green compatibility or release claim.</td></tr></tbody></table></div>
+        </section>
+      </div>
+      <p id="no-results" class="empty" hidden>No evidence rows match this search and status filter.</p>
+    </main>
+  </div>
+  <script>
+    (() => {
+      const input = document.querySelector('#search');
+      const buttons = [...document.querySelectorAll('[data-filter]')];
+      const rows = [...document.querySelectorAll('.filterable')];
+      const count = document.querySelector('#result-count');
+      const empty = document.querySelector('#no-results');
+      let filter = 'all';
+      const apply = () => {
+        const query = input.value.trim().toLowerCase();
+        let visible = 0;
+        rows.forEach((row) => {
+          const matchesText = !query || row.dataset.search.includes(query);
+          const matchesState = filter === 'all' || row.dataset.status === filter;
+          row.hidden = !(matchesText && matchesState);
+          if (!row.hidden) visible += 1;
+        });
+        count.textContent = `${visible} of ${rows.length} rows visible`;
+        empty.hidden = visible !== 0;
+      };
+      input.addEventListener('input', apply);
+      buttons.forEach((button) => button.addEventListener('click', () => {
+        filter = button.dataset.filter;
+        buttons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+        apply();
+      }));
+      apply();
+    })();
+  </script>
+</body>
+</html>
