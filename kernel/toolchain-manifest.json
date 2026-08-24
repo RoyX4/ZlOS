@@ -1,8 +1,8 @@
 {
   "schema": "zlos.toolchain-manifest.v1",
   "result": "PASS_WITH_OPEN_PORTABILITY_GAPS",
-  "build_identity": "83eff5589138e25908fd41fd111a4b4296fc214c4d1ef7bfddf93f6c296ef356",
-  "dependency_lock_sha256": "cc0d41b2e20973ad1644415f51a7c777541be10fdb7dfda6bbdea588bea84177",
+  "build_identity": "f0a762674bd63216b59218e9f6e907d4c65e36a0e1c5e69237c46ca5fa9db689",
+  "dependency_lock_sha256": "9ce4777422fc54a20a0a2bf8555193e2d92a93ff3ce1238310ae13d989eb0d84",
   "environment": {
     "CC": "UNSET_EFFECTIVE_GCC",
     "forbidden_variables": [
@@ -79,7 +79,7 @@
     {
       "id": "bios-multiboot32",
       "script": "kernel/build.sh",
-      "script_sha256": "475be3dc2204235f8b73499d6568a4e57a46076fb58f93f7525c0f59fbec5aab",
+      "script_sha256": "87bd445f42546a83217bc7a184accd626c98b28431d51a8944a3b30bcc6a17ef",
       "compiler": "gcc",
       "compiler_flags": [
         "-m32",
@@ -117,7 +117,7 @@
     {
       "id": "multiboot64",
       "script": "kernel/build64.sh",
-      "script_sha256": "937d07d85e3afdccf47e77ad78ccc06092f6c13adef2ed527b61b812ad5cafe1",
+      "script_sha256": "7e2ba4afb7f73d323f7f6db0832e99c36d2f5aee43cabeb88fe61d43bd25389d",
       "compiler": "gcc",
       "compiler_flags": [
         "-m64",
@@ -158,7 +158,7 @@
     {
       "id": "native-uefi64",
       "script": "kernel/buildefi.sh",
-      "script_sha256": "fdc010221d33a714a94233fbd498994e4b7bba77885a7412b48485b89ca020e9",
+      "script_sha256": "7c11445471fca2ef9cfe7064ef42e87e664ab569a20a4fc71254f5846d6e8a53",
       "compiler": "clang",
       "compiler_flags": [
         "-target",
@@ -206,7 +206,7 @@
     {
       "id": "raw-bios-loader32",
       "script": "kernel/mkdisk.sh",
-      "script_sha256": "dd13db52ebae2325d6e7a30347e7ea3bac42dc6070cc9c6f2d457884d6c717e5",
+      "script_sha256": "abdb13c043cd8f71c808ec61d599236d0f1ba17ff0ca5794c3acf95ddf6f31fd",
       "compiler": "gcc",
       "compiler_flags": [
         "-m32",

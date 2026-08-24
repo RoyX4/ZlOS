@@ -1514,7 +1514,10 @@ static Value call_builtin(const char *name, Value *args, int nargs)
         if (L > 0 && (size_t)n > 100000000u / L) runtime_error("repeat result is too large to build");
         char*b=zi_alloc(L*(size_t)n+1);
         if (!b) runtime_error("out of memory in repeat");
-        for (int i=0;i<n;i++) memcpy(b+(size_t)i*L, args[0].str, L); b[L*(size_t)n]='\0';
+        for (int i=0;i<n;i++) {
+            memcpy(b+(size_t)i*L, args[0].str, L);
+        }
+        b[L*(size_t)n]='\0';
         Value v = make_nil(); v.type=V_STR; v.str=b; return v;
     }
     if (strcmp(name, "trim") == 0) {
@@ -2170,6 +2173,7 @@ static Value eval_inner(Node *n, Env *env)
             }
             if (strcmp(n->text, "not") == 0) return make_bool(!is_truthy(x));
             runtime_error("unknown unary operator");
+            return make_nil();
         }
 
         case N_TERNARY:
@@ -2198,6 +2202,7 @@ static Value eval_inner(Node *n, Env *env)
 
         case N_MEMBER:
             runtime_error("member access (.) isn't supported yet");
+            return make_nil();
 
         default:
             runtime_error("cannot evaluate this");

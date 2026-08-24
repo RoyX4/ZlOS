@@ -2,6 +2,11 @@
 
 Two things live here.
 
+> **Complete 2026-08-24 branch integration:**
+> [`docs/MERGE-ALL-2026-08-24.md`](docs/MERGE-ALL-2026-08-24.md) records the
+> exact remote-branch closure, conflict policy, verification, and physical
+> evidence ceiling for the all-zl-linux merge.
+
 **`zl`** is a self-hosting systems language with five independent ways to run a
 program, fully ported from Windows to Linux. No Wine, no emulation, and no C
 compiler at all on the hand-assembled path.

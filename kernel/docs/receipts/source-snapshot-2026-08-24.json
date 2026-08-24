@@ -1,44 +1,44 @@
 {
   "schema": "zlos.source-snapshot-receipt.v1",
   "result": "PASS_WITH_OPEN_CUSTODY_GAP",
-  "build_identity": "83eff5589138e25908fd41fd111a4b4296fc214c4d1ef7bfddf93f6c296ef356",
+  "build_identity": "f0a762674bd63216b59218e9f6e907d4c65e36a0e1c5e69237c46ca5fa9db689",
   "git": {
-    "head": "83e7afc578ae01e85109f00985d5b97a0c5da04b",
+    "head": "a2ee80fd099c956aa6c44b25158c7648d7ea7b01",
     "branch": "codex/merge-all-2026-08-24",
     "dirty": true,
-    "canonical_status_sha256": "ced8abc5360e85eaf637a4b498f2594f9314b17b79769a14c676490505e06639",
+    "canonical_status_sha256": "fde95c5ea97049654cc886bbb1e894481d58a4695d603b54d005f4fccc362d27",
     "submodule_status": []
   },
   "scope": "active zl import closure, declared C SOURCES, kernel/freestanding headers and all route scripts/entries/linkers/packaging helpers; conservative header superset",
   "archive": {
     "path": "kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar",
     "format": "deterministic POSIX ustar; sorted paths; uid/gid/mtime zero",
-    "bytes": 5765120,
-    "sha256": "0cfe2eb46f751af57e21ff27e1ae9c82d17546aca7be18cb62de1ddb747791f1",
-    "members": 141
+    "bytes": 5795840,
+    "sha256": "57b6df8f01e9ce48c57cb34576eb2baaec89aaf8b4ffe57001a9db6dbb3ab78c",
+    "members": 142
   },
   "counts": {
-    "build_inputs": 141,
-    "archived_inputs": 141
+    "build_inputs": 142,
+    "archived_inputs": 142
   },
   "source_files": [
     {
       "path": "freestanding/runtime_kernel.c",
-      "bytes": 138055,
+      "bytes": 138265,
       "mode": 436,
-      "sha256": "79782490dfdfe34ee312547323f388cfbecaa390f4fbdab928ea019f7edd6eb8"
+      "sha256": "86280a35f50b8b43cc3c457e2d4302836367955eaaa97ff0d8173a543c1316ac"
     },
     {
       "path": "freestanding/zl_freestanding.h",
-      "bytes": 5589,
+      "bytes": 6765,
       "mode": 436,
-      "sha256": "f1b29e59640f861eb24f7460c2c26957694b7f1e0983f06796a6e7080ccf7377"
+      "sha256": "20366eb778f689059ea4fb982dd56af2c6cf5cf42caf4ac46139557a99ccb504"
     },
     {
       "path": "kernel/SOURCES",
-      "bytes": 4006,
+      "bytes": 4022,
       "mode": 436,
-      "sha256": "1684d060e8e1fbfeb7a6c89f683b5186d7c06bfe6fba1f4258f440b704cac051"
+      "sha256": "1185a07d17f4e2ff53176fc7b3ecc0b9887906304170b62748a189ea5c703e35"
     },
     {
       "path": "kernel/apic.c",
@@ -50,13 +50,13 @@
       "path": "kernel/app-manifest.json",
       "bytes": 21280,
       "mode": 436,
-      "sha256": "ad2d676da4b225ab45755a501c6b4552cc45ace25599b69cf3f09c4f3ba90ac2"
+      "sha256": "a995f1e25c2f7b16ff1b6c7d94fd5e2ae45a26150fb8fa67f2297a6e99cb8bb5"
     },
     {
       "path": "kernel/app_manifest_embed.zl",
       "bytes": 270,
       "mode": 436,
-      "sha256": "0939a07b5fee8589527825ae15786a0cfde71a9aff41edb98e6009854be653ae"
+      "sha256": "50f0ae9b482808af38697597d013c2ba63e7f557a26650121841b897e8e60a6c"
     },
     {
       "path": "kernel/apps_common.zl",
@@ -174,21 +174,21 @@
     },
     {
       "path": "kernel/build.sh",
-      "bytes": 2696,
+      "bytes": 3223,
       "mode": 509,
-      "sha256": "475be3dc2204235f8b73499d6568a4e57a46076fb58f93f7525c0f59fbec5aab"
+      "sha256": "87bd445f42546a83217bc7a184accd626c98b28431d51a8944a3b30bcc6a17ef"
     },
     {
       "path": "kernel/build64.sh",
-      "bytes": 2016,
+      "bytes": 2508,
       "mode": 509,
-      "sha256": "937d07d85e3afdccf47e77ad78ccc06092f6c13adef2ed527b61b812ad5cafe1"
+      "sha256": "7e2ba4afb7f73d323f7f6db0832e99c36d2f5aee43cabeb88fe61d43bd25389d"
     },
     {
       "path": "kernel/buildefi.sh",
-      "bytes": 5096,
+      "bytes": 5491,
       "mode": 509,
-      "sha256": "fdc010221d33a714a94233fbd498994e4b7bba77885a7412b48485b89ca020e9"
+      "sha256": "7c11445471fca2ef9cfe7064ef42e87e664ab569a20a4fc71254f5846d6e8a53"
     },
     {
       "path": "kernel/clip.c",
@@ -264,9 +264,9 @@
     },
     {
       "path": "kernel/divmod.c",
-      "bytes": 2898,
+      "bytes": 3168,
       "mode": 436,
-      "sha256": "1aa5a5097ab42c0b66eae19481037790e83a43b318f6101473d84ee5a54e1141"
+      "sha256": "761ead808c0e59c5cf27be64d242f1c65c440ce3a19470482ed3d83378282fb7"
     },
     {
       "path": "kernel/dma.h",
@@ -318,9 +318,9 @@
     },
     {
       "path": "kernel/efi.c",
-      "bytes": 42130,
+      "bytes": 41795,
       "mode": 436,
-      "sha256": "010f7ead476c5128e6a4215face512dd35ff0584b8addc33f0b38887198e302e"
+      "sha256": "08b4a15453543f69a90b370ee067d5b2b1918bd6542d9c9461b84955d4b929d2"
     },
     {
       "path": "kernel/entropy.c",
@@ -330,9 +330,9 @@
     },
     {
       "path": "kernel/exec.c",
-      "bytes": 12257,
+      "bytes": 14415,
       "mode": 436,
-      "sha256": "abdc9ce722046190e9208c2829ae98ad0d2756df57fdc947572b5cd4ce12fbb2"
+      "sha256": "3a5ee6373afaa20ba3d3564f84e15eac80673d5f3e8928a2184e2ae707d07b51"
     },
     {
       "path": "kernel/fb.c",
@@ -372,9 +372,9 @@
     },
     {
       "path": "kernel/fs.c",
-      "bytes": 41529,
+      "bytes": 42224,
       "mode": 436,
-      "sha256": "b55fe8d2301596afd3900df9f9231459a66067c13c74a4d8ec0d5862d24338be"
+      "sha256": "5943915491e1ca7f35bbfb46068f9e658ba8eab7f59e14d5903897fcde74b1dd"
     },
     {
       "path": "kernel/gdt.c",
@@ -504,9 +504,15 @@
     },
     {
       "path": "kernel/intel.c",
-      "bytes": 232308,
+      "bytes": 233357,
       "mode": 436,
-      "sha256": "ee5afcd2aeafb8ad52e3b69e4784060b59ae98c9453e0347b7d42cf253926f0e"
+      "sha256": "a9e3aba74b75f65c80e187cfd5f66f1bca995f0977c35064ef05c256895b8d79"
+    },
+    {
+      "path": "kernel/interp_kernel.c",
+      "bytes": 27349,
+      "mode": 436,
+      "sha256": "3025360324482b5a2d6129ff5186dbba8128fd5ece6794a1bf1bd0e386d2d096"
     },
     {
       "path": "kernel/iwlwifi.c",
@@ -534,9 +540,9 @@
     },
     {
       "path": "kernel/kernel.zl",
-      "bytes": 267858,
+      "bytes": 268022,
       "mode": 436,
-      "sha256": "1bbc56c11194a5f79b7c695669cffd675946cb914e3348d5d760b0d7b01a1294"
+      "sha256": "2c77d6ae43d46ae21fa28dcf1a3b0f40e9c416b9950f9fac89a91c970897fb86"
     },
     {
       "path": "kernel/keycodes.h",
@@ -582,9 +588,9 @@
     },
     {
       "path": "kernel/mkdisk.sh",
-      "bytes": 4422,
+      "bytes": 4898,
       "mode": 509,
-      "sha256": "dd13db52ebae2325d6e7a30347e7ea3bac42dc6070cc9c6f2d457884d6c717e5"
+      "sha256": "abdb13c043cd8f71c808ec61d599236d0f1ba17ff0ca5794c3acf95ddf6f31fd"
     },
     {
       "path": "kernel/mkiso.sh",

@@ -1,9 +1,9 @@
 {
   "schema": "zlos.build-graph.v1",
   "result": "PASS_WITH_DECLARED_SUPERSET",
-  "build_identity": "83eff5589138e25908fd41fd111a4b4296fc214c4d1ef7bfddf93f6c296ef356",
-  "artifact_registry_sha256": "d08bd96748b11314ff4720da3afba76345a8d2db24b0484833cfabec06cf04e5",
-  "toolchain_manifest_sha256": "4217590e27e1a3325ea6c843d9d6196aba257f50a7c0b49f5171c0d6ac764513",
+  "build_identity": "f0a762674bd63216b59218e9f6e907d4c65e36a0e1c5e69237c46ca5fa9db689",
+  "artifact_registry_sha256": "7c2e170fad79eca428c8a518cf72db0be2dd2528aadf07ab9ae6bab526595dc8",
+  "toolchain_manifest_sha256": "e0cd0bbe1003ee67cf78d506f2fb8a79e64e073a71a5508ec3a20ddc1c8d330d",
   "source_inputs": [
     "freestanding/runtime_kernel.c",
     "freestanding/zl_freestanding.h",
@@ -86,6 +86,7 @@
     "kernel/idt.c",
     "kernel/input.c",
     "kernel/intel.c",
+    "kernel/interp_kernel.c",
     "kernel/iwlwifi.c",
     "kernel/iwlwifi.h",
     "kernel/js.c",
@@ -151,26 +152,26 @@
     {
       "id": "bios-multiboot32",
       "primary_artifact": "kernel.elf",
-      "logical_objects": 76,
-      "declared_c_units": 71
+      "logical_objects": 77,
+      "declared_c_units": 72
     },
     {
       "id": "multiboot64",
       "primary_artifact": "kernel64.elf",
-      "logical_objects": 76,
-      "declared_c_units": 71
+      "logical_objects": 77,
+      "declared_c_units": 72
     },
     {
       "id": "native-uefi64",
       "primary_artifact": "BOOTX64.EFI",
-      "logical_objects": 76,
-      "declared_c_units": 71
+      "logical_objects": 77,
+      "declared_c_units": 72
     },
     {
       "id": "raw-bios-loader32",
       "primary_artifact": "kernel_raw.elf",
-      "logical_objects": 76,
-      "declared_c_units": 71
+      "logical_objects": 77,
+      "declared_c_units": 72
     }
   ],
   "nodes": [
@@ -485,6 +486,12 @@
       "kind": "logical-object",
       "lane": "bios-multiboot32",
       "physical_path": "kernel/_intel.o"
+    },
+    {
+      "id": "object:bios-multiboot32:interp_kernel.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_interp_kernel.o"
     },
     {
       "id": "object:bios-multiboot32:iwlwifi.c",
@@ -943,6 +950,12 @@
       "physical_path": "kernel/_intel64.o"
     },
     {
+      "id": "object:multiboot64:interp_kernel.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_interp_kernel64.o"
+    },
+    {
       "id": "object:multiboot64:iwlwifi.c",
       "kind": "logical-object",
       "lane": "multiboot64",
@@ -1397,6 +1410,12 @@
       "kind": "logical-object",
       "lane": "native-uefi64",
       "physical_path": "kernel/_efi_intel.o"
+    },
+    {
+      "id": "object:native-uefi64:interp_kernel.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_interp_kernel.o"
     },
     {
       "id": "object:native-uefi64:iwlwifi.c",
@@ -1855,6 +1874,12 @@
       "physical_path": "kernel/_intel.o"
     },
     {
+      "id": "object:raw-bios-loader32:interp_kernel.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_interp_kernel.o"
+    },
+    {
       "id": "object:raw-bios-loader32:iwlwifi.c",
       "kind": "logical-object",
       "lane": "raw-bios-loader32",
@@ -2085,21 +2110,21 @@
       "id": "source:freestanding/runtime_kernel.c",
       "kind": "source-input",
       "path": "freestanding/runtime_kernel.c",
-      "sha256": "79782490dfdfe34ee312547323f388cfbecaa390f4fbdab928ea019f7edd6eb8",
+      "sha256": "86280a35f50b8b43cc3c457e2d4302836367955eaaa97ff0d8173a543c1316ac",
       "suffix": ".c"
     },
     {
       "id": "source:freestanding/zl_freestanding.h",
       "kind": "source-input",
       "path": "freestanding/zl_freestanding.h",
-      "sha256": "f1b29e59640f861eb24f7460c2c26957694b7f1e0983f06796a6e7080ccf7377",
+      "sha256": "20366eb778f689059ea4fb982dd56af2c6cf5cf42caf4ac46139557a99ccb504",
       "suffix": ".h"
     },
     {
       "id": "source:kernel/SOURCES",
       "kind": "source-input",
       "path": "kernel/SOURCES",
-      "sha256": "1684d060e8e1fbfeb7a6c89f683b5186d7c06bfe6fba1f4258f440b704cac051",
+      "sha256": "1185a07d17f4e2ff53176fc7b3ecc0b9887906304170b62748a189ea5c703e35",
       "suffix": ""
     },
     {
@@ -2113,14 +2138,14 @@
       "id": "source:kernel/app-manifest.json",
       "kind": "source-input",
       "path": "kernel/app-manifest.json",
-      "sha256": "ad2d676da4b225ab45755a501c6b4552cc45ace25599b69cf3f09c4f3ba90ac2",
+      "sha256": "a995f1e25c2f7b16ff1b6c7d94fd5e2ae45a26150fb8fa67f2297a6e99cb8bb5",
       "suffix": ".json"
     },
     {
       "id": "source:kernel/app_manifest_embed.zl",
       "kind": "source-input",
       "path": "kernel/app_manifest_embed.zl",
-      "sha256": "0939a07b5fee8589527825ae15786a0cfde71a9aff41edb98e6009854be653ae",
+      "sha256": "50f0ae9b482808af38697597d013c2ba63e7f557a26650121841b897e8e60a6c",
       "suffix": ".zl"
     },
     {
@@ -2260,21 +2285,21 @@
       "id": "source:kernel/build.sh",
       "kind": "source-input",
       "path": "kernel/build.sh",
-      "sha256": "475be3dc2204235f8b73499d6568a4e57a46076fb58f93f7525c0f59fbec5aab",
+      "sha256": "87bd445f42546a83217bc7a184accd626c98b28431d51a8944a3b30bcc6a17ef",
       "suffix": ".sh"
     },
     {
       "id": "source:kernel/build64.sh",
       "kind": "source-input",
       "path": "kernel/build64.sh",
-      "sha256": "937d07d85e3afdccf47e77ad78ccc06092f6c13adef2ed527b61b812ad5cafe1",
+      "sha256": "7e2ba4afb7f73d323f7f6db0832e99c36d2f5aee43cabeb88fe61d43bd25389d",
       "suffix": ".sh"
     },
     {
       "id": "source:kernel/buildefi.sh",
       "kind": "source-input",
       "path": "kernel/buildefi.sh",
-      "sha256": "fdc010221d33a714a94233fbd498994e4b7bba77885a7412b48485b89ca020e9",
+      "sha256": "7c11445471fca2ef9cfe7064ef42e87e664ab569a20a4fc71254f5846d6e8a53",
       "suffix": ".sh"
     },
     {
@@ -2365,7 +2390,7 @@
       "id": "source:kernel/divmod.c",
       "kind": "source-input",
       "path": "kernel/divmod.c",
-      "sha256": "1aa5a5097ab42c0b66eae19481037790e83a43b318f6101473d84ee5a54e1141",
+      "sha256": "761ead808c0e59c5cf27be64d242f1c65c440ce3a19470482ed3d83378282fb7",
       "suffix": ".c"
     },
     {
@@ -2428,7 +2453,7 @@
       "id": "source:kernel/efi.c",
       "kind": "source-input",
       "path": "kernel/efi.c",
-      "sha256": "010f7ead476c5128e6a4215face512dd35ff0584b8addc33f0b38887198e302e",
+      "sha256": "08b4a15453543f69a90b370ee067d5b2b1918bd6542d9c9461b84955d4b929d2",
       "suffix": ".c"
     },
     {
@@ -2442,7 +2467,7 @@
       "id": "source:kernel/exec.c",
       "kind": "source-input",
       "path": "kernel/exec.c",
-      "sha256": "abdc9ce722046190e9208c2829ae98ad0d2756df57fdc947572b5cd4ce12fbb2",
+      "sha256": "3a5ee6373afaa20ba3d3564f84e15eac80673d5f3e8928a2184e2ae707d07b51",
       "suffix": ".c"
     },
     {
@@ -2491,7 +2516,7 @@
       "id": "source:kernel/fs.c",
       "kind": "source-input",
       "path": "kernel/fs.c",
-      "sha256": "b55fe8d2301596afd3900df9f9231459a66067c13c74a4d8ec0d5862d24338be",
+      "sha256": "5943915491e1ca7f35bbfb46068f9e658ba8eab7f59e14d5903897fcde74b1dd",
       "suffix": ".c"
     },
     {
@@ -2645,7 +2670,14 @@
       "id": "source:kernel/intel.c",
       "kind": "source-input",
       "path": "kernel/intel.c",
-      "sha256": "ee5afcd2aeafb8ad52e3b69e4784060b59ae98c9453e0347b7d42cf253926f0e",
+      "sha256": "a9e3aba74b75f65c80e187cfd5f66f1bca995f0977c35064ef05c256895b8d79",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/interp_kernel.c",
+      "kind": "source-input",
+      "path": "kernel/interp_kernel.c",
+      "sha256": "3025360324482b5a2d6129ff5186dbba8128fd5ece6794a1bf1bd0e386d2d096",
       "suffix": ".c"
     },
     {
@@ -2680,7 +2712,7 @@
       "id": "source:kernel/kernel.zl",
       "kind": "source-input",
       "path": "kernel/kernel.zl",
-      "sha256": "1bbc56c11194a5f79b7c695669cffd675946cb914e3348d5d760b0d7b01a1294",
+      "sha256": "2c77d6ae43d46ae21fa28dcf1a3b0f40e9c416b9950f9fac89a91c970897fb86",
       "suffix": ".zl"
     },
     {
@@ -2736,7 +2768,7 @@
       "id": "source:kernel/mkdisk.sh",
       "kind": "source-input",
       "path": "kernel/mkdisk.sh",
-      "sha256": "dd13db52ebae2325d6e7a30347e7ea3bac42dc6070cc9c6f2d457884d6c717e5",
+      "sha256": "abdb13c043cd8f71c808ec61d599236d0f1ba17ff0ca5794c3acf95ddf6f31fd",
       "suffix": ".sh"
     },
     {
@@ -3311,6 +3343,11 @@
       "relation": "linked-into"
     },
     {
+      "from": "object:bios-multiboot32:interp_kernel.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
       "from": "object:bios-multiboot32:iwlwifi.c",
       "to": "artifact:kernel.elf",
       "relation": "linked-into"
@@ -3687,6 +3724,11 @@
     },
     {
       "from": "object:multiboot64:intel.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:interp_kernel.c",
       "to": "artifact:kernel64.elf",
       "relation": "linked-into"
     },
@@ -4071,6 +4113,11 @@
       "relation": "linked-into"
     },
     {
+      "from": "object:native-uefi64:interp_kernel.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
       "from": "object:native-uefi64:iwlwifi.c",
       "to": "artifact:BOOTX64.EFI",
       "relation": "linked-into"
@@ -4447,6 +4494,11 @@
     },
     {
       "from": "object:raw-bios-loader32:intel.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:interp_kernel.c",
       "to": "artifact:kernel_raw.elf",
       "relation": "linked-into"
     },
@@ -5831,6 +5883,26 @@
       "relation": "compiled-to"
     },
     {
+      "from": "source:kernel/interp_kernel.c",
+      "to": "object:bios-multiboot32:interp_kernel.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/interp_kernel.c",
+      "to": "object:multiboot64:interp_kernel.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/interp_kernel.c",
+      "to": "object:native-uefi64:interp_kernel.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/interp_kernel.c",
+      "to": "object:raw-bios-loader32:interp_kernel.c",
+      "relation": "compiled-to"
+    },
+    {
       "from": "source:kernel/iwlwifi.c",
       "to": "object:bios-multiboot32:iwlwifi.c",
       "relation": "compiled-to"
@@ -6947,12 +7019,12 @@
     }
   ],
   "counts": {
-    "source_inputs": 141,
-    "declared_c_units": 71,
+    "source_inputs": 142,
+    "declared_c_units": 72,
     "target_lanes": 4,
     "artifacts": 9,
-    "nodes": 458,
-    "edges": 775,
+    "nodes": 463,
+    "edges": 783,
     "orphan_source_inputs": 0,
     "scope_only_inputs": 2
   },

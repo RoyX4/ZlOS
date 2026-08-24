@@ -141,6 +141,7 @@ kernel/*.o.tmp
 kernel/hosttest/arenatest
 kernel/hosttest/exectest
 kernel/hosttest/exectest-nofs
+kernel/hosttest/runtest
 kernel/hosttest/jmptest
 kernel/hosttest/jmptest32
 kernel/hosttest/libctest

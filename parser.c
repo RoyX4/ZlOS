@@ -1212,6 +1212,12 @@ void print_node(Node *n, int depth)
             print_node(n->a, depth + 1);
             print_node(n->b, depth + 1);
             break;
+        case N_BREAK:
+            printf("BREAK\n");
+            break;
+        case N_CONTINUE:
+            printf("CONTINUE\n");
+            break;
         case N_FN:
             printf("FN %s\n", n->text);
             for (int i = 0; i < n->nkids; i++) {

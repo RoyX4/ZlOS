@@ -692,14 +692,6 @@ void kernel_done(void);
  * of the boot log. */
 void zl_putc_pub(char c);
 static void efi_say(const char *s) { while (*s) zl_putc_pub(*s++); }
-static void efi_say_u64(unsigned long long v)
-{
-    char b[24];
-    int n = 0;
-    if (!v) { zl_putc_pub('0'); return; }
-    while (v) { b[n++] = (char)('0' + (v % 10)); v /= 10; }
-    while (n) zl_putc_pub(b[--n]);
-}
 
 /* Remember the mode across ExitBootServices. Everything the firmware owns
  * becomes invalid the moment that call returns, so anything we still need has
@@ -878,7 +870,7 @@ MS efi_status efi_main(efi_handle image, efi_system_table *st)
      * fit there is no way to take the machine at all. At 48 bytes a descriptor
      * this holds ~680 entries, against the 60-150 real firmware reports. */
     static u8 map[32768];
-    u64 map_size, map_key = 0, desc_size = 0, want = 0;
+    u64 map_size, map_key = 0, desc_size = 0;
     u32 desc_ver;
     int exited = 0;
     int fixed_memory_recorded = 0;
@@ -902,7 +894,6 @@ MS efi_status efi_main(efi_handle image, efi_system_table *st)
             witness_append_line(&line);
         }
         if (map_status != EFI_SUCCESS) {
-            want = map_size;         /* the firmware reports what it needs */
             continue;
         }
         if (!fixed_memory_recorded) {
@@ -929,7 +920,6 @@ MS efi_status efi_main(efi_handle image, efi_system_table *st)
             witness_text(&line, " bytes=");
             witness_dec(&line, map_size);
             witness_append_line(&line);
-            want = map_size;
             continue;
         }
 
