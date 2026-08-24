@@ -1,9 +1,9 @@
 #!/bin/sh
 # buildefi.sh - zlOS as a native UEFI application. No GRUB, no bootloader.
 #
-# The firmware loads EFI/BOOT/BOOTX64.EFI directly, so the kernel IS the boot
-# image. Built with clang targeting PE32+ and linked by lld-link as an EFI
-# application - no gnu-efi, no edk2, no external dependency at all.
+# The firmware loads the tiny EFI/BOOT/BOOTX64.EFI witness first.  It writes an
+# ESP trace and immediately chainloads EFI/ZLOS/ZLOS.EFI, the real kernel.
+# Both are PE32+ EFI applications built without gnu-efi or edk2.
 set -e
 cd "$(dirname "$0")"
 
@@ -76,7 +76,22 @@ done
 clang $CF -c smp_trampoline64.S -o _efi_smptr.o
 OBJS="$OBJS _efi_smptr.o"
 
-lld-link -subsystem:efi_application -nodefaultlib -dll \
-         -entry:efi_main -out:BOOTX64.EFI $OBJS
+# UEFI images are relocated by firmware.  A zero preferred base, subsystem
+# version 0.0 and a present .reloc directory are the conventional removable-
+# media shape.  The old 6 GiB DLL-style image also boots a measured 7 GiB OVMF
+# guest, so this is firmware compatibility hardening, not a claimed root cause.
+# 4 KiB file alignment and no IMAGE_FILE_DLL match common shim/GRUB images.
+PEFLAGS="-subsystem:efi_application,0.0 -nodefaultlib -base:0 -filealign:4096"
 
-echo "built BOOTX64.EFI ($(stat -c%s BOOTX64.EFI) bytes)"
+# shellcheck disable=SC2086
+lld-link $PEFLAGS -entry:efi_main -out:ZLOS.EFI $OBJS
+
+# Keep stage 0 independent of the kernel object graph.  If the large image is
+# malformed or faults, this small application can still say so and persist the
+# exact LoadImage/StartImage status before returning to firmware.
+clang $CF -c efi_stage0.c -o _efi_stage0.o
+# shellcheck disable=SC2086
+lld-link $PEFLAGS -entry:efi_stage0_main -out:BOOTX64.EFI _efi_stage0.o
+
+echo "built BOOTX64.EFI stage 0 ($(stat -c%s BOOTX64.EFI) bytes)"
+echo "built ZLOS.EFI kernel ($(stat -c%s ZLOS.EFI) bytes)"

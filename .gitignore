@@ -60,6 +60,14 @@ kernel/hosttest/tlscryptotest
 kernel/hosttest/jmptest
 kernel/hosttest/jmptest32
 kernel/hosttest/modeset_test
+kernel/hosttest/blocktest
+kernel/hosttest/dhcptest
+kernel/hosttest/e1000test
+kernel/hosttest/i2ctest
+kernel/hosttest/i2c_touchtest
+kernel/hosttest/iwlwifitest
+kernel/hosttest/memtypetest
+kernel/hosttest/msctest
 # NOT *.ppm here: kernel/.gitignore:25 already says hosttest/*.ppm, and
 # browsershot.ppm and wmshot.ppm are TRACKED - so that rule does nothing for
 # them (a tracked file is never ignored) while looking like it does. Adding a
@@ -72,12 +80,14 @@ kernel/hosttest/modeset_test
 #   kernel/build.sh      kernel.elf        (BIOS multiboot)
 #   kernel/mkdisk.sh     zlOS.img          (our own bootloader)
 #   kernel/mkiso.sh      zlOS.iso          (hybrid BIOS/UEFI)
-#   kernel/buildefi.sh   BOOTX64.EFI       (native UEFI application)
+#   kernel/buildefi.sh   BOOTX64.EFI       (stage-0 UEFI witness)
+#                        ZLOS.EFI          (native UEFI kernel)
 #   kernel/mkusb.sh      zlOS-usb.img      (bootable USB image)
 kernel/*.elf
 kernel/*.img
 kernel/*.iso
 kernel/BOOTX64.EFI
+kernel/ZLOS.EFI
 kernel/BOOTX64.lib
 kernel/_gen*.c
 kernel/hosttest/intel_probe
@@ -107,6 +117,18 @@ kernel/hosttest/tritest
 kernel/hosttest/settingstest
 
 kernel/__pycache__/
+**/__pycache__/
+
+# Machine-local agent worktrees are not project source.
+.claude/
+
+# Raw QEMU exercise captures are preserved in a compressed evidence archive.
+kernel/exercise-out/uefi-boot-order-fix/
+kernel/exercise-out/uefi-i219-quarantine/
+kernel/exercise-out/uefi-network-boot-fix/
+kernel/exercise-out/uefi-terminal-input-double-check/
+kernel/exercise-out/uefi-terminal-input-final/
+kernel/exercise-out/uefi-terminal-input-fix/
 
 # hosttest binary: the arena gate (source is arenatest.c)
 kernel/hosttest/arenatest

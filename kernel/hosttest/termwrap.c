@@ -34,6 +34,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../keycodes.h"
+
 #define CELL_W 16       /* fb.c: GLYPH_W * 2 at width >= 1400 */
 #define CELL_H 32       /* fb.c: GLYPH_H * 2                   */
 
@@ -81,6 +83,9 @@ void term_clear(void);
 void term_say(const char *s);
 int  term_key(int code);
 int  term_input_len(void);
+int  term_input_cursor(void);
+int  term_cmd(void);
+int  term_unknown(void);
 void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
                unsigned int accent, int cursor_on);
 
@@ -89,6 +94,13 @@ static void ok(int cond, const char *what)
 {
     printf("  %s %s\n", cond ? "ok  " : "FAIL", what);
     if (!cond) fails++;
+}
+
+static int submit(const char *line)
+{
+    term_clear();
+    while (*line) term_key((unsigned char)*line++);
+    return term_key('\n');
 }
 
 /* kernel.zl:627 verbatim - the longest line the shell can print */
@@ -136,6 +148,57 @@ int main(void)
            TERM_W, TERM_H, TERM_X, TERM_Y, UI);
     printf("  cell %dx%d  ->  %d columns\n", CELL_W, CELL_H, COLS);
     printf("  longest help line: %d characters\n\n", (int)strlen(LONGEST));
+
+    /* Assert the shipping matcher, not a parser-shaped copy. Codes 200/201
+     * are the corresponding run_command arms in kernel.zl. */
+    ok(submit("diag") == 1 && term_cmd() == 200,
+       "typed `diag` reaches the flight-recorder status command");
+    ok(submit("diag save") == 1 && term_cmd() == 201,
+       "typed `diag save` reaches the explicit durable-flush command");
+    ok(submit("diagsave") == 1 && term_cmd() == 201,
+       "typed `diagsave` remains a no-space recovery alias");
+    ok(submit("format") == 1 && term_cmd() == 46,
+       "typed `format` reaches the explicit destructive zlfs route");
+    ok(submit("ls") == 1 && term_cmd() == 108,
+       "typed `ls` reaches the textual zlfs listing");
+    ok(submit("files") == 1 && term_cmd() == 77,
+       "typed `files` remains distinct and opens the graphical manager");
+    ok(submit("nonsense") == 0 && term_unknown() == 1,
+       "an unknown typed command is reported, not silently accepted");
+
+    /* Physical-trace regression: the ThinkPad delivered arrow keys cleanly,
+     * but app_event discarded them before this file.  Exercise the shipping
+     * editor itself: insertion in the middle, Delete, Home/End and history. */
+    term_clear();
+    term_key('d'); term_key('i'); term_key('g');
+    term_key(KEY_LEFT); term_key('a');
+    ok(term_input_len() == 4 && term_input_cursor() == 3,
+       "Left moves the insertion point and typing inserts in the middle");
+    term_key(KEY_END);
+    ok(term_key('\n') == 1 && term_cmd() == 200,
+       "the physically observed `dig` + Left + `a` correction submits `diag`");
+
+    term_clear();
+    for (const char *p = "dixag"; *p; p++) term_key((unsigned char)*p);
+    term_key(KEY_HOME); term_key(KEY_RIGHT); term_key(KEY_RIGHT);
+    term_key(KEY_DELETE);
+    ok(term_input_len() == 4 && term_input_cursor() == 2,
+       "Home, Right and Delete edit at the cursor instead of the line end");
+    term_key(KEY_END);
+    ok(term_key('\n') == 1 && term_cmd() == 200,
+       "Delete-corrected `diag` reaches the command matcher");
+
+    term_clear();
+    term_key(KEY_UP);
+    ok(term_input_len() == 4 && term_input_cursor() == 4,
+       "Up restores the newest submitted command with the cursor at its end");
+    ok(term_key('\n') == 1 && term_cmd() == 200,
+       "a recalled command submits without being retyped");
+
+    term_clear();
+    term_key('x'); term_key(KEY_UP); term_key(KEY_DOWN);
+    ok(term_input_len() == 1 && term_input_cursor() == 1,
+       "Down returns from history to the draft that was being edited");
 
     /* term_say does not append one - it is a character sink, and zl_putc's own
      * convention is a bare LF (see the comment on term_say) */

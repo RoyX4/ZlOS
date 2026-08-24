@@ -24,6 +24,8 @@ typedef unsigned char  u8;
  * Anything holding an address must use this, never `long`. */
 typedef unsigned long long u64;
 
+#include "telemetry.h"
+
 void          zl_outb(u16 port, u8 val);
 unsigned char zl_inb(u16 port);
 
@@ -71,20 +73,27 @@ static struct idt_ptr   idtp;
  * invoke. The two-bit difference (0x8E -> 0xEE) is the whole reason a user
  * program can make a syscall and cannot fake a page fault: the CPU refuses an
  * `int n` from ring 3 when gate n's DPL is lower than the caller's CPL, so
- * every other vector in this table is unreachable from user mode.
- *
- * 32-bit only. usermode.c explains why ring 3 is not on the 64-bit builds. */
-#ifndef ZL_64
+ * every other vector in this table is unreachable from user mode. */
 static void set_gate_user(int n, void *handler)
 {
+#ifdef ZL_64
+    u64 a = (u64)handler;
+    idt[n].lo = a & 0xffff;
+    idt[n].mid = (a >> 16) & 0xffff;
+    idt[n].hi = (u32)(a >> 32);
+    idt[n].sel = 0x08;
+    idt[n].ist = 0;
+    idt[n].flags = 0xEE;
+    idt[n].zero = 0;
+#else
     u32 a = (u32)handler;
     idt[n].lo    = a & 0xFFFF;
     idt[n].hi    = (a >> 16) & 0xFFFF;
     idt[n].sel   = 0x08;
     idt[n].zero  = 0;
     idt[n].flags = 0xEE;    /* present, DPL 3, 32-bit interrupt gate */
-}
 #endif
+}
 
 static void set_gate(int n, void *handler)
 {
@@ -117,8 +126,18 @@ static volatile u32 tick_count = 0;
 
 #define KBUF_SIZE 256
 static volatile u8  kbuf[KBUF_SIZE];
+static volatile u32 kbuf_tsc[KBUF_SIZE];
 static volatile int kbuf_head = 0;   /* ISR writes here */
 static volatile int kbuf_tail = 0;   /* zl reads here   */
+static u32 last_scan_tsc;
+
+static u32 irq_tsc_lo(void)
+{
+    u32 lo, hi;
+    __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
+    (void)hi;
+    return lo;
+}
 
 u32 idt_ticks(void) { return tick_count; }
 
@@ -127,9 +146,11 @@ int idt_scan(void)
 {
     if (kbuf_tail == kbuf_head) return 0;
     u8 c = kbuf[kbuf_tail];
+    last_scan_tsc = kbuf_tsc[kbuf_tail];
     kbuf_tail = (kbuf_tail + 1) & (KBUF_SIZE - 1);
     return c;
 }
+u32 idt_scan_tsc(void) { return last_scan_tsc; }
 
 /* End of interrupt.
  *
@@ -159,6 +180,7 @@ static volatile int mouse_x = 400, mouse_y = 300, mouse_btn = 0;
 static volatile u8  mpkt[4];
 static volatile int mphase = 0;
 static volatile int mouse_irqs = 0;
+static volatile u32 mouse_packet_tsc;
 
 /* The clamp the ISR applies. It used to be the literals 2000 and 1500, chosen
  * to be "generous" because this file has no idea how big the screen is - and
@@ -171,6 +193,12 @@ static volatile int mouse_max_x = 2000, mouse_max_y = 1500;
 int idt_mouse_x(void)   { return mouse_x; }
 int idt_mouse_y(void)   { return mouse_y; }
 int idt_mouse_btn(void) { return mouse_btn; }
+u32 idt_mouse_take_tsc(void)
+{
+    u32 tsc = mouse_packet_tsc;
+    mouse_packet_tsc = 0;
+    return tsc;
+}
 
 /* ---- the scroll wheel ------------------------------------------------------
  * The PS/2 protocol has one and this driver never asked for it: a plain mouse
@@ -247,6 +275,7 @@ static void mouse_byte(u8 b)
     if (mouse_x > lim_x - 1) mouse_x = lim_x - 1;
     if (mouse_y > lim_y - 1) mouse_y = lim_y - 1;
     mouse_btn = flags & 0x07;
+    mouse_packet_tsc = irq_tsc_lo();
 
     /* THE WHEEL FIELD IS 4-BIT SIGNED, not a byte. Bits 3:0 are the notch
      * count in two's complement; 4..7 are buttons 4 and 5 on the mice that
@@ -260,19 +289,33 @@ static void mouse_byte(u8 b)
 }
 /* ---- the handlers ---------------------------------------------------- */
 #ifdef ZL_64
-struct interrupt_frame { unsigned long ip, cs, flags, sp, ss; };
+/* EFI clang is LLP64: unsigned long is only 32 bits there. The CPU always
+ * builds this long-mode frame from 64-bit words, so every field must be u64. */
+struct interrupt_frame { u64 ip, cs, flags, sp, ss; };
 #else
 struct interrupt_frame { u32 ip, cs, flags, sp, ss; };
 #endif
 
-/* IRQ0: the PIT ticks ~100 times a second. Just count. */
+/* IRQ0: the PIT ticks ~100 times a second. Long mode uses a hand-written full
+ * register stub in usermode.c so an interrupted Ring-3 frame can become a
+ * resumable process context; 32-bit keeps the compiler interrupt wrapper. */
+void idt_timer_tick(void)
+{
+    tick_count++;
+    zlt_count(ZLLOG_C_IRQ_TIMER, 1);
+    irq_done(0);
+}
+
+#ifdef ZL_64
+void user64_timer_isr(void);
+#else
 __attribute__((interrupt))
 static void timer_isr(struct interrupt_frame *f)
 {
     (void)f;
-    tick_count++;
-    irq_done(0);
+    idt_timer_tick();
 }
+#endif
 
 /* IRQ1: a key changed. Grab the scancode before the controller moves on
  * and drop it in the ring for zl to translate at its leisure. */
@@ -280,6 +323,7 @@ __attribute__((interrupt))
 static void keyboard_isr(struct interrupt_frame *f)
 {
     (void)f;
+    zlt_count(ZLLOG_C_IRQ_KEYBOARD, 1);
     /* Read the status BEFORE the data: bit 5 says this byte came from the
      * mouse, not the keyboard. Taking it regardless is what desynced the
      * pointer whenever a key overlapped a mouse packet. */
@@ -294,7 +338,12 @@ static void keyboard_isr(struct interrupt_frame *f)
     int next = (kbuf_head + 1) & (KBUF_SIZE - 1);
     if (next != kbuf_tail) {     /* drop it rather than overwrite unread input */
         kbuf[kbuf_head] = b;
+        kbuf_tsc[kbuf_head] = irq_tsc_lo();
         kbuf_head = next;
+    } else {
+        zlt_count(ZLLOG_C_INPUT_DROP, 1);
+        zlt_irq_event(ZLLOG_SUB_INPUT, ZLLOG_EV_DROP, ZLLOG_ERROR,
+                      1u, b, KBUF_SIZE);
     }
     irq_done(1);
 }
@@ -308,6 +357,7 @@ __attribute__((interrupt))
 static void mouse_isr(struct interrupt_frame *f)
 {
     (void)f;
+    zlt_count(ZLLOG_C_IRQ_MOUSE, 1);
     /* Drain every mouse byte the controller has, not just one. A single
      * interrupt can cover more than one byte when packets arrive faster than
      * we are scheduled, and leaving them queued lets the 16-byte buffer
@@ -328,27 +378,93 @@ __attribute__((interrupt))
 static void ignore_isr(struct interrupt_frame *f)
 {
     (void)f;
+    zlt_count(ZLLOG_C_IRQ_STRAY, 1);
     irq_done(8);                 /* acknowledge whichever controller is live */
 }
 
-/* a CPU exception (divide error, page fault, GP...) must NOT iret - that just
- * re-runs the faulting instruction and faults again forever, ending in a
- * triple fault and a reboot. Stop the machine instead, which at least leaves
- * the screen readable. (A real dump comes with design_kernel.md §6.2 later.) */
+/* Fixed IPI used only to wake an AP parked in smp.c. It carries no payload;
+ * the per-core cache-line slot was published before the IPI. Keeping it out of
+ * ignore_isr also keeps ordinary compositor work out of the stray-IRQ count. */
 __attribute__((interrupt))
-static void fault_isr(struct interrupt_frame *f)
+static void smp_wake_isr(struct interrupt_frame *f)
 {
     (void)f;
+    apic_eoi();
+}
+
+/* Exception stack shapes are not interchangeable. #PF/#GP and the other
+ * error-code exceptions push one extra machine word; treating all 32 vectors
+ * as a no-error handler shifted RIP/CS/RFLAGS and made the old "fault record"
+ * fiction. Each gate below now uses the ABI-matching signature and supplies
+ * its vector explicitly. */
+#ifdef ZL_64
+typedef u64 fault_word;
+#else
+typedef u32 fault_word;
+#endif
+
+static __attribute__((noreturn)) void fault_stop(u32 vector, fault_word error,
+                                                 struct interrupt_frame *f)
+{
     __asm__ volatile("cli");
+    fault_word cr2 = 0;
+    if (vector == 14u) __asm__ volatile("mov %%cr2,%0" : "=r"(cr2));
+#ifdef ZL_64
+    extern int user64_is_running(void);
+    extern void user64_mark_fault(u32 vector);
+    extern void user64_abort(void) __attribute__((noreturn));
+    if ((f->cs & 3u) == 3u && user64_is_running()) {
+        zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_ERROR,
+                      vector, (u32)error, (u32)cr2);
+        user64_mark_fault(vector);
+        user64_abort();
+    }
+#endif
+    zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_FATAL,
+                  vector, (u32)error, (u32)cr2);
+#ifdef ZL_64
+    zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_FATAL,
+                  (u32)f->ip, (u32)(f->ip >> 32), (u32)f->flags);
+#else
+    zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_FATAL,
+                  f->ip, f->cs, f->flags);
+#endif
     for (;;) __asm__ volatile("hlt");
 }
 
-#ifndef ZL_64
+#define FAULT_NOERR(n) \
+    __attribute__((interrupt)) static void fault_##n(struct interrupt_frame *f) \
+    { fault_stop((n), 0, f); }
+#ifdef ZL_64
+#define FAULT_ERR(n) \
+    __attribute__((interrupt)) static void fault_##n(struct interrupt_frame *f, u64 e) \
+    { fault_stop((n), e, f); }
+#else
+#define FAULT_ERR(n) \
+    __attribute__((interrupt)) static void fault_##n(struct interrupt_frame *f, u32 e) \
+    { fault_stop((n), e, f); }
+#endif
+
+FAULT_NOERR(0)  FAULT_NOERR(1)  FAULT_NOERR(2)  FAULT_NOERR(3)
+FAULT_NOERR(4)  FAULT_NOERR(5)  FAULT_NOERR(6)  FAULT_NOERR(7)
+FAULT_ERR(8)    FAULT_NOERR(9)  FAULT_ERR(10)   FAULT_ERR(11)
+FAULT_ERR(12)   FAULT_ERR(13)   FAULT_ERR(14)   FAULT_NOERR(15)
+FAULT_NOERR(16) FAULT_ERR(17)   FAULT_NOERR(18) FAULT_NOERR(19)
+FAULT_NOERR(20) FAULT_ERR(21)   FAULT_NOERR(22) FAULT_NOERR(23)
+FAULT_NOERR(24) FAULT_NOERR(25) FAULT_NOERR(26) FAULT_NOERR(27)
+FAULT_NOERR(28) FAULT_ERR(29)   FAULT_ERR(30)   FAULT_NOERR(31)
+
+static void *const fault_handlers[32] = {
+    fault_0, fault_1, fault_2, fault_3, fault_4, fault_5, fault_6, fault_7,
+    fault_8, fault_9, fault_10, fault_11, fault_12, fault_13, fault_14, fault_15,
+    fault_16, fault_17, fault_18, fault_19, fault_20, fault_21, fault_22, fault_23,
+    fault_24, fault_25, fault_26, fault_27, fault_28, fault_29, fault_30, fault_31
+};
+
 /* usermode.c, in assembly. Declared as a function taking no arguments purely so
  * its address can be taken - it is never called from C and never returns
  * normally; it iret's, or it abandons ring 3 entirely on SYS_EXIT. */
 void syscall_isr(void);
-#endif
 
 /* ---- PIC: move the 16 IRQs off the CPU exception vectors ------------- */
 static void pic_remap(void)
@@ -481,20 +597,23 @@ static void mouse_init(void)
 
 void idt_init(void)
 {
-    for (int i = 0;  i < 32;  i++) set_gate(i, fault_isr);    /* CPU exceptions: halt */
+    for (int i = 0;  i < 32;  i++) set_gate(i, fault_handlers[i]);
     for (int i = 32; i < 256; i++) set_gate(i, ignore_isr);   /* stray IRQs: ack     */
-#ifndef ZL_64
     /* THE SYSCALL DOOR. Installed before the IRQs so the ordering is visible:
      * this is the only DPL-3 entry in the whole table, and it is the only way
      * back into the kernel that ring 3 has. syscall_isr is hand-written
      * assembly in usermode.c - it has to save the user's registers before any
      * compiler prologue could run. */
     set_gate_user(0x80, syscall_isr);
-#endif
 
+#ifdef ZL_64
+    set_gate(0x20, user64_timer_isr); /* IRQ0 full context/preemption */
+#else
     set_gate(0x20, timer_isr);      /* IRQ0  timer            */
+#endif
     set_gate(0x21, keyboard_isr);   /* IRQ1  keyboard         */
     set_gate(0x2C, mouse_isr);      /* IRQ12 mouse (on slave) */
+    set_gate(0xF1, smp_wake_isr);   /* bounded AP band-work wake */
 
     idtp.limit = sizeof(idt) - 1;
     idtp.base  = (u64)&idt;      /* NOT `unsigned long` - see the typedef */

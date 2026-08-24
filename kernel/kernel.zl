@@ -954,8 +954,9 @@ fn help_typed() {
     print("    mouse             a cursor driven by the PS/2 mouse")
     print("    snake             play SNAKE (w a s d to steer)")
     print("    paint             paint with the mouse")
-    print("    edit <n>          edit legacy RAM slot n (0-9)")
+    print("    edit              edit persistent /user/notes.txt")
     print("    files             persistent zlfs file manager")
+    print("    format            explicitly initialise/mount zlfs on NVMe")
     print("    beep              beep the PC speaker")
     print("    poke              poke a byte into video memory and read it back")
     color(C_CYAN)  print("  our hardware drivers")
@@ -969,8 +970,12 @@ fn help_typed() {
     print("    cpu               the processor: CPUID, topology, caches, TSC clock")
     print("    nvme              NVMe disk - identify, then write and read a block back")
     print("    sched             multitasking - three tasks running beside the shell")
+    print("    userexec          run /system/user.bin isolated in 64-bit Ring 3")
     print("    smp               wake the other CPU cores with INIT/STARTUP IPIs")
     print("    usbstor           USB mass storage - SCSI over USB, read a sector")
+    print("    diag              flight recorder status (USB or RAM-only)")
+    print("    diag save         flush buffered evidence to the prepared USB")
+    print("    wifi              read-only Intel AX201 PCI/CSR inventory")
     print("    i2c               I2C-HID touchpad (real hardware only - QEMU has no LPSS I2C)")
     print("    input             input events - keys, modifiers, repeat, live")
     print("    clear             clear the scrollback")
@@ -994,8 +999,8 @@ fn help_keys() {
     print("    x        mouse demo - a cursor driven by the PS/2 mouse")
     print("    g        play SNAKE (w a s d to steer)")
     print("    d        paint with the mouse")
-    print("    <n> i    edit legacy RAM slot n (0-9)")
-    print("    l        Files app (graphical mode) / RAM slots (text mode)")
+    print("    i        edit persistent /user/notes.txt (graphical mode)")
+    print("    l        list persistent zlfs files")
     print("    run F    run a program from a file (type it - needs a name)")
     print("    .        zlfs on the NVMe disk - mount, and count the boots")
     print("    ,        list the files ON DISK, by name")
@@ -1086,19 +1091,13 @@ fn editor_draw(ax, ay, aw, ah) {
     # the caret, where the next character will land
     fill_rgb(ed_x, ed_y, ed_cw, ed_ch - 2, theme(TH_ACCENT))
     text_aa(ax + 4, ay + ah - ed_ch, "Ctrl+S save  ESC save+close", theme(TH_TEXT_DIM))
-    if ed_disk == 0 {
-        text_aa(ax + aw - 15 * ed_cw, ay + ah - ed_ch, "RAM", theme(TH_TEXT_DIM))
-        num_aa(ax + aw - 11 * ed_cw, ay + ah - ed_ch, ed_slot, theme(TH_TEXT_HI))
-    }
-    if ed_disk == 1 {
-        ed_ni = 0
-        ed_nx = ax + aw - 24 * ed_cw
-        while ed_ni < 23 {
-            ed_nc = fs_ch(ed_slot, ed_ni)
-            if ed_nc > 0 { char_aa(ed_nx, ay + ah - ed_ch, ed_nc, theme(TH_ACCENT)) }
-            ed_nx = ed_nx + ed_cw
-            ed_ni = ed_ni + 1
-        }
+    ed_ni = 0
+    ed_nx = ax + aw - 24 * ed_cw
+    while ed_ni < 23 {
+        ed_nc = fs_ch(ed_slot, ed_ni)
+        if ed_nc > 0 { char_aa(ed_nx, ay + ah - ed_ch, ed_nc, theme(TH_ACCENT)) }
+        ed_nx = ed_nx + ed_cw
+        ed_ni = ed_ni + 1
     }
     if ed_dirty == 1 { text_aa(ax + aw - 2 * ed_cw, ay + ah - ed_ch, "*", theme(TH_ACCENT)) }
     num_aa(ax + aw - 8 * ed_cw, ay + ah - ed_ch, ed_len, theme(TH_TEXT_DIM))
@@ -1267,17 +1266,9 @@ fn usbkey_demo() {
 # The line lives in memory at LINE_BUF, the history is a ring of HIST_N slots
 # above it, and both are plain bytes - there is no allocator to ask.
 #
-# With no allocator, the neighbour has to be checked by hand rather than
-# assumed. The neighbour here is the RAM filesystem below: FS_DATA holds 10
-# slots of FS_SLOT bytes, so it runs 0x02011000 .. 0x02025000 (see fs_init).
-# These used to sit at 0x02020000 and 0x02021000, which was *inside* it -
-# LINE_BUF landed in FS_DATA's slot 7 and HIST_BUF started exactly on slot 8.
-# So `7i` or `8i` in the editor overwrote the line being typed and the history
-# ring, and every keystroke at the prompt corrupted RAM files 7 and 8. Both
-# ends of that were reachable from the shell.
-#
-# Starting at 0x02030000 clears FS_DATA's end by 44 KiB, which is also room
-# for FS_SLOT or the file count to grow before this has to move again:
+# The retired numbered RAM-file area below 0x02025000 is now free. These two
+# buffers remain deliberately page-separated and are registered in the memory
+# map gate:
 #
 #   LINE_BUF  0x02030000 + LINE_MAX 200          -> 0x020300C8
 #   HIST_BUF  0x02031000 + HIST_N 16 * 256       -> 0x02032000
@@ -1649,62 +1640,15 @@ fn paint_draw(ax, ay, aw, ah) {
     return 0
 }
 
-# ---- a RAM filesystem ------------------------------------------------------
-# Ten numbered files, held in memory. Each file's length lives in a small
-# metadata table and its bytes in a fixed 8 KiB slot. The whole thing is
-# written in zl using copy_mem/poke32/peek32 - no new C. It is a RAM disk,
-# so it is wiped on reboot, but within a session the editor can save and
-# reload files by number.
-# These MUST live above the kernel image and its stack. The original address
-# was 0x50000, which back when our own bootloader ran the kernel from 0x10000
-# landed inside the kernel's own code - fs_init() overwrote it and the machine
-# died on an invalid opcode the moment that code was reached. GRUB loads at
-# 1 MiB, which is why only the raw path ever showed it.
-#
-# Both loaders put the kernel at 1 MiB now (raw_boot.asm's KERNEL_DEST), and
-# it reaches __bss_end ~0x20E000 with the stack at 6 MiB growing down. So
-# everything above 6 MiB is clear, and 32 MiB has room to spare.
-#
-# What actually lives in the 32 MiB region, so the next buffer added here can
-# check its neighbours instead of guessing. Everything below is byte arrays
-# addressed by hand; nothing hands out these addresses at runtime:
-#
-#   0x02000000  SNAKE_X   512                    -> 0x02000200
-#   0x02000200  SNAKE_Y   512                    -> 0x02000400
-#   0x02010000  FS_META   10 * 4, zeroed as 64   -> 0x02010040
-#   0x02011000  FS_DATA   10 * FS_SLOT = 80 KiB  -> 0x02025000
-#   0x02030000  LINE_BUF  LINE_MAX 200           -> 0x020300C8
-#   0x02031000  HIST_BUF  HIST_N 16 * 256        -> 0x02032000
-#
-# FS_DATA is the big one and it grows with both FS_SLOT and the file count:
-# 10 * 8192 = 80 KiB, so it reaches 0x02025000. LINE_BUF/HIST_BUF were once
-# at 0x02020000/0x02021000, i.e. inside slots 7 and 8 - see the note above
-# them. The other drivers keep well clear of all this: the NVMe and xHCI DMA
-# arenas start at 208 and 224 MiB.
-FS_META = 0x02010000    # 10 lengths, 4 bytes each
-FS_DATA = 0x02011000    # 10 slots of FS_SLOT bytes -> ends 0x02025000
-FS_SLOT = 8192
-
-# A page of scratch for the DISK filesystem's small reads and writes. It sits
-# above the RAM disk (FS_DATA + 10 * 8192 ends at 0x02025000) and far below the
+# ---- persistent storage scratch -------------------------------------------
+# A page of scratch for zlfs's small reads and writes. It sits far below the
 # DMA arena map at the top of fb.c - bg 128 MiB, sp 160, sched 176, back 192,
 # nvme 208, xhci 224, virtio-gpu 240. 32 MiB + 192 KiB collides with none of
 # them, which is the check this project's recurring bug says to do every time.
 # 0x02040000, NOT 0x02030000, which is LINE_BUF.
 #
-# claude/quirky-pare-05454c moved LINE_BUF out of FS_DATA's slot 7 to
-# 0x02030000; desktop/system-track independently put DISK_SCRATCH at the address
-# quirky-pare had just moved TO, reasoning correctly against the layout its own
-# branch could see - where LINE_BUF was still at 0x02020000. The two hunks are
-# ~400 lines apart on branches with different bases, so the merge took both with
-# no conflict, and zl has no static asserts to catch it.
-#
-# It has been inert only because read_line() currently has no caller. The moment
-# anything types at the shell while the clipboard or the boot counter is in use,
-# the shell's input line and the disk scratch are the same memory.
-#
-# Free space here: FS_DATA ends at 0x02025000, HIST_BUF ends at 0x02032000, and
-# PAINT_BUF starts at 0x02100000. This sits clear of all three, and the largest
+# HIST_BUF ends at 0x02032000 and PAINT_BUF starts at 0x02100000. This sits
+# clear of both, and the largest
 # use below is a clipboard write of cbn bytes.
 DISK_SCRATCH = 0x02040000
 
@@ -1716,8 +1660,8 @@ DISK_SCRATCH = 0x02040000
 # starts at DISK_SCRATCH + 0x2000, not DISK_SCRATCH + 0x1000, on purpose.
 # FS_NAME_MAX bytes (fs.c) is enough for the longest name fs_create will
 # ever accept - check-memmap.sh's discovery sweep covers the dupe check, and
-# it is registered in that script's sized list too, generously clear of
-# PAINT_BUF at 0x02100000.
+# it is registered in that script's sized list too. EDIT_BUF follows on the
+# next page and is also generously clear of PAINT_BUF at 0x02100000.
 FILES_NAME_BUF = 0x02042000
 # ---- app suite: fixed buffers -----------------------------------------------
 # One page (0x1000 = 4096 bytes) PER CONSUMER, deliberately generous rather
@@ -1768,40 +1712,18 @@ MAZE_STACK    = 0x02214000   # apps_games2.zl: Maze generation's OWN stack -
                               # DFS stack is 273 u16 cell indices in RAM
                               # instead, same idea as the board itself.
 
-fn fs_init()      { fill_mem(FS_META, 0, 64) }
-fn fs_len(slot)   { return peek32(FS_META + slot * 4) }
-fn fs_save(slot, len) {
-    if len > FS_SLOT { len = FS_SLOT }
-    poke32(FS_META + slot * 4, len)
-    if len > 0 { copy_mem(FS_DATA + slot * FS_SLOT, EDIT_BUF, len) }
-}
-fn fs_load(slot) {
-    len = fs_len(slot)
-    fill_mem(EDIT_BUF, 0, EDIT_MAX)
-    if len > 0 { copy_mem(EDIT_BUF, FS_DATA + slot * FS_SLOT, len) }
-    return len
-}
-
-fn fs_list() {
-    color(C_CYAN)  print("  RAM files:")
-    i = 0
-    while i < 10 {
-        color(C_GREY)   put("    file ")  color(C_WHITE)  put(i)  color(C_GREY)  put(":  ")
-        n = fs_len(i)
-        if n > 0 { color(C_WHITE)  put(n)  color(C_GREY)  print(" bytes") }
-        if n == 0 { color(C_DGREY)  print("empty") }
-        i = i + 1
-    }
-    color(C_GREY)
-    return 0
-}
-
 # ---- a text editor --------------------------------------------------------
 # The text lives in a raw memory buffer, one byte per character. Typing
 # appends, backspace removes, enter inserts a newline; the whole buffer is
 # re-rendered each keystroke (buffers are small). This is a TempleOS-style
 # "the OS edits text" feature, written entirely in zl.
-EDIT_BUF = 0x40000
+# This used to be 0x00040000: unreserved low memory below every loader's kernel
+# placement. Nothing in the memory map protected it, so firmware/loader data or
+# a growing raw image could overwrite the editor (and editor typing could
+# overwrite them) without check-memmap.sh seeing either side. Keep it in the
+# declared 32..33 MiB ZL_LOW block, after DISK_SCRATCH's exact one-page extent
+# and FILES_NAME_BUF. Its 8000 bytes end at 0x02044F40, before PAINT_BUF.
+EDIT_BUF = 0x02043000
 EDIT_MAX = 8000
 
 # redraw_editor was here - it cleared the screen with fill_rect(0, 34, px_w(),
@@ -1821,17 +1743,7 @@ EDIT_MAX = 8000
 # the same thing every other window means by it. No "press any key".
 ed_slot = 0
 ed_len  = 0
-ed_disk = 0
 ed_dirty = 0
-
-fn editor_open(slot) {
-    ed_disk = 0
-    ed_slot = slot
-    ed_len = fs_load(slot)
-    ed_disk = 0
-    ed_dirty = 0
-    return 0
-}
 
 fn editor_open_disk(slot) {
     if fs_ok() == 0 { return 0 }
@@ -1840,23 +1752,34 @@ fn editor_open_disk(slot) {
     fill_mem(EDIT_BUF, 0, EDIT_MAX)
     ed_len = fs_rd(slot, EDIT_BUF, EDIT_MAX - 1)
     ed_slot = slot
-    ed_disk = 1
     ed_dirty = 0
     return 1
 }
 
+fn editor_open_default() {
+    if files_ensure_mounted() == 0 { return 0 }
+    fs_nclear()
+    fs_npush(47)   fs_npush(117)  fs_npush(115)  fs_npush(101)
+    fs_npush(114)  fs_npush(47)   fs_npush(110)  fs_npush(111)
+    fs_npush(116)  fs_npush(101)  fs_npush(115)  fs_npush(46)
+    fs_npush(116)  fs_npush(120)  fs_npush(116)
+    edi = fs_get()
+    if edi < 0 { edi = fs_new(EDIT_MAX) }
+    if edi < 0 { return 0 }
+    return editor_open_disk(edi)
+}
+
 fn editor_save() {
-    if ed_disk == 1 {
-        if fs_wr(ed_slot, EDIT_BUF, ed_len) == 0 {
-            note_say("file save failed", 400)
-            return 0
-        }
-        ed_dirty = 0
-        note_say("file saved to zlfs", 240)
-        return 1
+    if fs_wr(ed_slot, EDIT_BUF, ed_len) == 0 {
+        note_say("file save failed", 400)
+        return 0
     }
-    fs_save(ed_slot, ed_len)
+    if fs_sync() == 0 {
+        note_say("file flush failed - not durable", 500)
+        return 0
+    }
     ed_dirty = 0
+    note_say("file saved to zlfs", 240)
     return 1
 }
 
@@ -1893,7 +1816,7 @@ fn editor_key(code) {
     # its control code for BOTH keyboards (to_char(), input.c:207-211) - Ctrl+S
     # is 19 - so nothing below this file has to change for the key to arrive.
     if code == 19 {
-        if editor_save() == 1 { if ed_disk == 1 { note_say("saved", 200) } }
+        editor_save()
         return 0
     }
     # Ctrl+C copies the whole buffer; Ctrl+V pastes the clipboard at the end.
@@ -1953,13 +1876,38 @@ fl_pressed = 0            # edge-detect for click-to-open - see files_event
 # diagnostic and should not spam the shell scrollback every time it is
 # opened - contrast the '.' command, which is a deliberate request to be told
 # what happened and is untouched by this. Mirrors '.'s own
-# setup-then-mount-or-format sequence (run_command cmd==46).
+# setup-then-mount sequence. Formatting is an explicit destructive action.
 fn files_ensure_mounted() {
     if fs_ok() == 1 { return 1 }
     if nv_setup() == 0 { return 0 }
-    if fs_mount() == 1 { return 1 }
-    if fs_format() == 0 { return 0 }
     return fs_mount()
+}
+
+fn disk_list() {
+    color(C_CYAN)  print("  zlfs files:")
+    color(C_GREY)
+    if files_ensure_mounted() == 0 {
+        color(C_RED)  print("    no positively identified zlfs volume")
+        color(C_GREY) return 0
+    }
+    di = 0
+    dn = 0
+    while di < fs_max() {
+        if fs_inuse(di) == 1 {
+            put("    ")
+            dj = 0
+            while dj < 24 {
+                dc = fs_ch(di, dj)
+                if dc > 0 { emit(dc) }
+                dj = dj + 1
+            }
+            put("  ")  put(fs_bytes(di))  print(" bytes")
+            dn = dn + 1
+        }
+        di = di + 1
+    }
+    if dn == 0 { print("    empty") }
+    return dn
 }
 
 # An app with no text-mode form. Says which one and why, rather than doing
@@ -1975,6 +1923,140 @@ fn needs_wm(what) {
 
 fn run_command(cmd, arg) {
     if cmd == 104 { help()  return 0 }
+    if cmd == 14 {
+        color(C_CYAN)  print("  64-bit user process")
+        color(C_GREY)
+        if files_ensure_mounted() == 0 {
+            color(C_RED)  print("    no positively identified zlfs volume")
+            color(C_GREY) return 0
+        }
+        ur = user_file()
+        if ur == 0 {
+            color(C_GREEN) print("    /system/user.bin exited; desktop alive")
+        } else {
+            color(C_RED)
+            if ur == 0 - 2 { print("    /system/user.bin does not exist") } else {
+                if ur == 0 - 3 { print("    image must be 1..4096 raw x86-64 bytes") } else {
+                    put("    process refused/faulted: ")  print(ur)
+                }
+            }
+        }
+        color(C_GREY)
+        return 0
+    }
+    if cmd == 202 {                       # wifi - safe AX201 transport inventory
+        color(C_CYAN)  print("  Intel AX201 Wi-Fi transport")
+        color(C_GREY)
+        print("    read-only probe: no reset, no firmware, no association")
+        diag_mark(220)
+        wf_probe = wifi_probe()
+        diag_mark(221)
+        if wf_probe == 0 {
+            color(C_RED)
+            print("    exact 8086:02f0 QuZ device/CSR snapshot not available")
+            color(C_YELLOW)
+            print("    this is a safe refusal; no Wi-Fi device register was written")
+            color(C_GREY)
+            return 0
+        }
+        color(C_GREEN)
+        put("    device:       8086:")  hex(wifi_dev(), 4)  print(" AX201 / QuZ")
+        color(C_GREY)
+        put("    BAR0:         0x")  hex(wifi_bar_hi(), 8)
+        hex(wifi_bar_lo(), 8)  print("")
+        put("    HW revision:  0x")  hex(wifi_hwrev(), 8)
+        put("  type 0x")  hex(wifi_hwtype(), 3)  print("")
+        put("    RF ID:        0x")  hex(wifi_rfid(), 8)  print("")
+        put("    HW interface: 0x")  hex(wifi_hwif(), 8)  print("")
+        put("    GP control:   0x")  hex(wifi_gp(), 8)  print("")
+        put("    GPIO/reset:   0x")  hex(wifi_gpio(), 8)
+        put(" / 0x")  hex(wifi_reset(), 8)  print("")
+        put("    INT/mask:     0x")  hex(wifi_int(), 8)
+        put(" / 0x")  hex(wifi_imask(), 8)  print("")
+        put("    MAC CSR raw:  0x")  hex(wifi_mac0(), 8)
+        put(" / 0x")  hex(wifi_mac1(), 8)  print("")
+        color(C_YELLOW)
+        print("    transport identified; Wi-Fi is NOT connected yet")
+        color(C_GREY)
+        print("    next gate: API-77 firmware boot and ALIVE, still bounded/manual")
+        return 0
+    }
+    if cmd == 200 {                       # diag - persistent observer status
+        # The physical boot stick reappears a couple of seconds after xHCI is
+        # reset. Do one bounded mount attempt before reporting RAM-only so the
+        # status command describes the state now, not the transient first
+        # scan from the start of boot.
+        if diag_on() == 0 { diag_up() }
+        color(C_CYAN)  print("  flight recorder")
+        color(C_GREY)
+        ds_active = diag_on()
+        if ds_active == 1 {
+            color(C_GREEN)  print("    mode:       ACTIVE - validated ZLLOG USB journal")
+        } else {
+            color(C_YELLOW) print("    mode:       RAM-ONLY - no validated ZLLOG USB target")
+        }
+        color(C_GREY)
+        put("    buffered:   ")  print(diag_buf())
+        put("    dropped:    ")  print(diag_drop())
+        put("    last error: ")  print(diag_err())
+        if diag_err() == 1 {
+            put("    MSC init:   stage ")  put(msc_istage())
+            put(" port ")  put(msc_iport())
+            put(" slot ")  put(msc_islot())
+            put(" xHCI cc ")  print(msc_icc())
+            put("    USB id:     ")  hex(msc_ivid(), 4)
+            put(":")  hex(msc_ipid(), 4)  print("")
+            if msc_iport() > 0 {
+                put("    PORTSC:     0x")  hex(usb_portsc(msc_iport()), 8)  print("")
+            }
+            put("    USBSTS/CMD: 0x")  hex(usb_sts(), 8)
+            put(" / 0x")  hex(usb_cmd(), 8)  print("")
+        }
+        return 0
+    }
+    if cmd == 201 {                       # diagsave - explicit durable flush
+        # A failed early enumeration is not permanent. Retry the complete,
+        # read-only validation once here before refusing; the normal frame loop
+        # also retries with bounded backoff, so no command is required.
+        if diag_on() == 0 { diag_up() }
+        if diag_on() == 0 {
+            color(C_RED)
+            print("  save REFUSED - no validated ZLLOG USB target")
+            color(C_YELLOW)
+            print("    evidence remains buffered in RAM; nothing else was written")
+            color(C_GREY)
+            put("    buffered: ")  put(diag_buf())
+            put("  dropped: ")    put(diag_drop())
+            put("  error: ")      print(diag_err())
+            if diag_err() == 1 {
+                put("    MSC init stage ")  put(msc_istage())
+                put(" port ")  put(msc_iport())
+                put(" slot ")  put(msc_islot())
+                put(" xHCI cc ")  print(msc_icc())
+                if msc_iport() > 0 {
+                    put("    PORTSC 0x")  hex(usb_portsc(msc_iport()), 8)
+                }
+                put(" USBSTS 0x")  hex(usb_sts(), 8)
+                put(" USBCMD 0x")  hex(usb_cmd(), 8)  print("")
+            }
+            return 0
+        }
+        ds_before = diag_buf()
+        if diag_save() == 1 {
+            color(C_GREEN)
+            put("  saved flight-recorder evidence to ZLLOG USB; buffered ")
+            put(ds_before)  put(" -> ")  print(diag_buf())
+        } else {
+            color(C_RED)
+            print("  save FAILED - evidence remains buffered in RAM")
+            color(C_GREY)
+            put("    buffered: ")  put(diag_buf())
+            put("  dropped: ")    put(diag_drop())
+            put("  error: ")      print(diag_err())
+        }
+        color(C_GREY)
+        return 0
+    }
     if cmd == 102 { color(C_WHITE)  put("  ")  print(fib(arg))  color(C_GREY)  return 0 }
     if cmd == 115 { color(C_WHITE)  put("  ")  print(sum_squares(arg))  color(C_GREY)  return 0 }
     if cmd == 116 {                      # t - uptime from the timer IRQ
@@ -2295,57 +2377,40 @@ fn run_command(cmd, arg) {
     if cmd == 63 {                        # ? - the I2C touchpad
         color(C_CYAN)  print("  I2C-HID touchpad")
         color(C_GREY)
-        tpi = 0
-        tpfound = 0
-        while tpi < 2 {
-            if i2c_find(tpi) >= 0 {
-                put("    I2C controller ")  put(tpi)
-                put(" at 0x")  hex(i2c_mmio(), 8)
-                put("  COMP_TYPE 0x")  hex(i2c_ct(), 8)
-                if i2c_dw() == 1 {
-                    print("  (DesignWare)")
-                    tpfound = 1
-                } else {
-                    print("  (not a DesignWare core)")
-                }
-            }
-            tpi = tpi + 1
-        }
-        if tpfound == 0 {
-            print("    no Intel LPSS I2C controller here.")
-            print("    QEMU does not emulate one - this needs the real laptop.")
+        # This command used to enumerate both controllers, reset the live bus,
+        # probe 112 addresses and then spin for five seconds. During that loop
+        # the compositor could not repaint or consume input, so the physical
+        # laptop looked crashed. Automatic startup already owns the device;
+        # diagnostics must observe that owner rather than compete with it.
+        tp_service()
+        if tp_devid() == 0 {
+            print("    automatic startup has not found this laptop's LPSS I2C.")
+            print("    QEMU has no LPSS I2C; on hardware, wait one second and retry.")
             return 0
         }
-        print("    probing the bus for a HID device...")
-        tpa = tp_probe()
-        if tpa < 0 {
-            color(C_RED)  print("    nothing on the bus answered as HID")
-            color(C_GREY)  return 0
+        put("    controller PCI 8086:")  hex(tp_devid(), 4)
+        put(" at 0x")  hex(i2c_mmio(), 8)
+        put("  COMP_TYPE 0x")  hex(i2c_ct(), 8)  print("")
+        if tp_ptr() == 0 {
+            color(C_RED)  print("    touchpad is not active")
+            color(C_GREY)
+            put("    TX_ABRT_SOURCE 0x")  hex(tp_abort(), 8)  print("")
+            print("    this status command returned immediately; it did not re-probe.")
+            return 0
         }
-        color(C_GREEN)
-        put("    HID device at I2C address 0x")  hex(tpa, 2)  print("")
-        color(C_GREY)
+        color(C_GREEN)  print("    precision touchpad ACTIVE")  color(C_GREY)
+        put("    HID device at I2C address 0x")  hex(tp_addr(), 2)  print("")
         put("    vendor ")  hex(tp_vid(), 4)
         put(":")            hex(tp_pid(), 4)
         put("  version ")   hex(tp_ver(), 4)  print("")
         put("    max input report ")  put(tp_maxin())
         put(" bytes, report descriptor ")  put(tp_rdlen())  print(" bytes")
-        print("    touch the pad - reading reports for a few seconds")
-        tpstop = ticks() + 500
-        tpn = 0
-        while ticks() < tpstop {
-            tplen = tp_read()
-            if tplen > 2 {
-                tpn = tpn + 1
-                if tpn < 6 {
-                    put("      report ")  put(tplen)  put(" bytes: ")
-                    tpj = 2
-                    while tpj < 10 { hex(tp_b(tpj), 2)  put(" ")  tpj = tpj + 1 }
-                    print("")
-                }
-            }
-        }
-        put("    reports received: ")  print(tpn)
+        put("    LPSS reset 0x")  hex(tp_reset(), 8)
+        put("  HCNT ")  put(tp_hcnt())
+        put("  LCNT ")  print(tp_lcnt())
+        put("    decoded reports: ")  put(tp_reports())
+        put("  malformed: ")  print(tp_bad())
+        print("    move the pad, then run i2c again to see the count increase.")
         return 0
     }
     if cmd == 47 {                        # / - USB mass storage
@@ -2420,6 +2485,12 @@ fn run_command(cmd, arg) {
         if gst == 0 {
             color(C_GREEN)
             print("    THE GPU DREW IT. zlOS drove the ring itself.")
+            if gpu_comp(1) == 1 {
+                print("    compositor copy enabled; first 3 scenes will be hash-checked")
+            } else {
+                color(C_YELLOW)
+                print("    compositor copy stayed off; mode/mapping was not safe")
+            }
             color(C_GREY)
             return 0
         }
@@ -2455,7 +2526,8 @@ fn run_command(cmd, arg) {
             print("")
             print("    the machine is running on more than one core")
             color(C_GREY)
-            print("    (they park immediately: nothing is lock-protected yet)")
+            put("    APs park in HLT; disjoint framebuffer bands wake by IPI (")
+            put(smp_jobs())  print(" completed so far)")
         } else {
             color(C_RED)  print("    no application processor answered")
             color(C_GREY)
@@ -2816,7 +2888,7 @@ fn run_command(cmd, arg) {
     # M - the Files app: zlfs by name, in a window. Same shape as every other
     # windowed app above - text mode has no windows to put it in at all.
     if cmd == 77  { if wm_run() == 1 { return open_app(77, 0) }    return needs_wm("the Files app") }
-    if cmd == 108 { return fs_list() }    # l - list RAM files
+    if cmd == 108 { return disk_list() }
     # 'N', not 'n': every lowercase code from a to z is already a command.
     if cmd == 78 { return net_gate() }    # N - the network card, and an ARP probe
     if cmd == 87 { return web_gate() }    # W - TCP + HTTP/1.0 against a real server
@@ -2889,6 +2961,16 @@ fn run_command(cmd, arg) {
         color(C_GREY)  return 0
     }
     if cmd == 12 { wm_peak0()  print("  peak reset")  return 0 }
+    if cmd == 13 {
+        put("  PERF ")  print(wm_sn())
+        pfi = 0
+        while pfi < wm_sn() {
+            put("  P ")  put(pfi)  put(" ")  put(wm_sf(pfi))  put(" ")  print(wm_si(pfi))
+            pfi = pfi + 1
+        }
+        print("  PERFEND")
+        return 0
+    }
     # R - run a program the kernel was NOT built with. Typed only: `run` needs a
     # FILENAME, and the single-key path folds everything after the letter into a
     # decimal accumulator, so there is no character buffer on it to hold a word.
@@ -3034,9 +3116,16 @@ fn sysmon_body(sx, sy, sw, sh) {
     rrect(cardx, memy, cardw, memh, 14 * u, theme(TH_BORDER))
     rrect(cardx + 1, memy + 1, cardw - 2, memh - 2, 13 * u, theme(TH_PANEL_HI))
     label(cardx + 12 * u, memy + 10 * u, "Memory", theme(TH_TEXT), T_BODY, W_BOLD)
-    label(cardx + cardw - 58 * u, memy + 11 * u, "27%", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    mempct = 0
+    if heap_cap() > 0 { mempct = heap_used() * 100 / heap_cap() }
+    label_num(cardx + cardw - 58 * u, memy + 11 * u, mempct, theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    label(cardx + cardw - 28 * u, memy + 11 * u, "%", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    label(cardx + 12 * u, memy + 27 * u, "surfaces MiB", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(cardx + 104 * u, memy + 26 * u, wm_sbytes() / 1048576, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(cardx + cardw - 116 * u, memy + 27 * u, "dirty blocks", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(cardx + cardw - 28 * u, memy + 26 * u, blk_dirty(), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
     rrect(cardx + 12 * u, memy + 42 * u, cardw - 24 * u, 7 * u, 4 * u, theme(TH_CHROME))
-    rrect(cardx + 12 * u, memy + 42 * u, (cardw - 24 * u) * 27 / 100, 7 * u, 4 * u, theme(TH_ACCENT))
+    rrect(cardx + 12 * u, memy + 42 * u, (cardw - 24 * u) * mempct / 100, 7 * u, 4 * u, theme(TH_ACCENT))
 
     # Three live readouts along the bottom. Small cards keep numbers aligned
     # without turning the dock into a developer HUD.
@@ -3354,6 +3443,7 @@ fn files_finish_new() {
     if fs_get() >= 0 { note_say("that file already exists", 300)  return 0 }
     files_made = fs_new(0)
     if files_made < 0 { note_say("could not create file", 300)  return 0 }
+    if fs_sync() == 0 { note_say("file create is not durable", 400)  return 0 }
     files_sel = files_made
     files_new = 0
     files_scroll = 0
@@ -3467,6 +3557,7 @@ fn files_event(win, ety, ecode, ex, ey) {
             if files_sel < 0 { return 1 }
             if files_delete == files_sel {
                 fs_rm(files_sel)
+                if fs_sync() == 0 { note_say("delete is not durable", 400) }
                 files_delete = 0 - 1
                 files_select_first()
             } else { files_delete = files_sel }
@@ -3516,12 +3607,16 @@ fn dns_show(dnm) {
         color(C_RED)  put("    could not ask about ")  print(dnm)
         color(C_GREY) return 0
     }
-    dgi = 0
+    # Do not use an iteration count as a timeout. On KVM the old 400000-spin
+    # ceiling expired in about 430 ms on CDC-ECM; the resolver's valid reply
+    # then arrived after the next query had replaced its transaction ID. The
+    # PIT is already live here and dns_poll() owns a real three-second bound.
+    dstop = ticks() + 310
     dgs = 1
-    while dgi < 400000 {
+    while ticks() < dstop {
         ip_poll()
         dgs = dns_poll()
-        if dgs != 1 { dgi = 400000 } else { dgi = dgi + 1 }
+        if dgs != 1 { dstop = ticks() }
     }
     if dgs == 2 {
         color(C_GREEN)  put("    ")  put(dnm)  put("  ->  ")
@@ -3541,8 +3636,16 @@ fn dns_show(dnm) {
 fn dns_gate() {
     color(C_CYAN)  print("  DNS")
     color(C_GREY)
-    dns_up(NET_DNS)
-    print("    asking 10.0.2.3 (asserted, not leased - still no DHCP)")
+    dns_server_now = NET_DNS
+    if dhcp_state() == 3 { dns_server_now = dhcp_dns() }
+    dns_up(dns_server_now)
+    if dhcp_state() == 3 {
+        put("    asking leased resolver ")
+        put(band(dns_server_now / 16777216, 255))  put(".")
+        put(band(dns_server_now / 65536, 255))  put(".")
+        put(band(dns_server_now / 256, 255))  put(".")
+        print(band(dns_server_now, 255))
+    } else { print("    asking 10.0.2.3 (diagnostic fallback)") }
     dns_show("example.com")
     dns_show("github.com")
     dns_show("no-such-host-anywhere.invalid")
@@ -3562,7 +3665,9 @@ fn tls_gate() {
         print("    the network is not up - run net first")
         return 0
     }
-    dns_up(NET_DNS)
+    tls_dns = NET_DNS
+    if dhcp_state() == 3 { tls_dns = dhcp_dns() }
+    dns_up(tls_dns)
     # www.wikipedia.org is ~120 KB and chains to ISRG Root X2, which is the
     # root roots.c carries. A page that does not chain to it MUST be refused,
     # and that refusal is the point of this gate as much as the success is.
@@ -3640,7 +3745,9 @@ fn real_gate() {
         print("    the network is not up - press N first")
         return 0
     }
-    dns_up(NET_DNS)
+    real_dns = NET_DNS
+    if dhcp_state() == 3 { real_dns = dhcp_dns() }
+    dns_up(real_dns)
     print("    GET http://example.com/   (a name, not an address)")
     br_go("http://example.com/")
     # Keep pumping while the browser is RESOLVING (7) or FETCHING (4).
@@ -3774,45 +3881,110 @@ fn net_boot() {
     # card that IS present and does not come up is a fault, and a boot that
     # says nothing about it is how "the browser cannot reach the network"
     # becomes a mystery later.
-    if net_find() < 0 { return 0 }
+    diag_mark(210)                       # automatic network discovery entered
+    nf = net_find()
+    diag_mark(211)                       # discovery returned
+    if nf <= 0 { return 0 }
     if net_ram() == 0 {
         color(C_RED)  print("  network: the DMA arena is not backed by RAM (needs -m 256)")
         color(C_GREY) return 0
     }
-    if net_up() == 0 {
+    diag_mark(212)                       # selected driver initialization entered
+    nu = net_up()
+    diag_mark(213)                       # selected driver initialization returned
+    if nu == 0 {
+        if net_kind() == 2 {
+            if net_devid() == 3407 {     # 0x0d4f: PCH I219, not legacy e1000
+                diag_mark(216)           # I219 safely quarantined before MMIO
+                color(C_YELLOW) print("  network: Intel I219 detected; PCH driver not ready, skipped safely")
+                color(C_GREY) return 0
+            }
+        }
         color(C_RED)  print("  network: the card refused the feature handshake")
         color(C_GREY) return 0
     }
-    if ip_up(NET_ME, NET_MASK, NET_GW) == 0 {
-        color(C_RED)  print("  network: the IP stack would not come up")
+    if net_kind() == 2 {
+        color(C_GREEN) put("  network driver: ")
+        color(C_GREY) put("Intel e1000e/I219 device 0x")  hex(net_devid(), 4)  print("")
+    } else if net_kind() == 3 {
+        color(C_GREEN) put("  network driver: ")
+        color(C_GREY) print("USB CDC-ECM")
+    } else {
+        color(C_GREEN) put("  network driver: ")
+        color(C_GREY) print("virtio-net")
+    }
+    diag_mark(214)                       # link attach and DHCP start entered
+    ia = ip_auto()
+    diag_mark(215)                       # link attach and DHCP start returned
+    if ia == 0 {
+        color(C_RED)  print("  network: DHCP could not start")
         color(C_GREY) return 0
     }
-    dns_up(NET_DNS)
     color(C_GREEN)  put("  network: ")
-    color(C_GREY)   put("10.0.2.15/24 via 10.0.2.2, resolver 10.0.2.3")
-    print("")
+    color(C_GREY)   print("link ready, DHCP started")
     return 1
 }
 
 fn net_gate() {
-    color(C_CYAN)  print("  network (virtio-net)")
+    color(C_CYAN)  print("  network")
     color(C_GREY)
-    if net_find() < 0 {
-        print("    no virtio-net device on the PCI bus")
-        print("    QEMU needs: -device virtio-net-pci,netdev=n0 -netdev user,id=n0")
-        return 0
-    }
-    put("    DMA arena at  0x")  hex(net_arena(), 8)  print("")
-    if net_ram() == 0 {
-        color(C_RED)  print("    the arena is NOT backed by RAM - needs -m 1G or more")
-        color(C_GREY) return 0
-    }
-    if net_up() == 0 {
-        color(C_RED)  print("    the device refused the feature handshake")
-        color(C_GREY) return 0
+    # Never reset a live descriptor ring to run a diagnostic. DHCP may still
+    # be selecting while net_ip is zero, so net_attached (the injected link),
+    # not ip_live (configured address), owns this choice.
+    if net_attached() == 0 {
+        if net_find() <= 0 {
+            print("    no supported Ethernet device")
+            print("    automatic: USB CDC-ECM, virtio-net, Intel 82540/82574")
+            print("    Intel I217/I218/I219 are detected but quarantined until the PCH driver exists")
+            put("    CDC-ECM stage ")  put(usb_ecm_stage())
+            put(" config-index ")      put(usb_ecm_cfg())
+            put(" parse 0x")           hex(usb_ecm_bits(), 2)
+            put(" completion ")        print(usb_ecm_cc())
+            ecdi = 0
+            while ecdi < usb_ecm_len() {
+                if ecdi % 16 == 0 { put("    CDC cfg: ") }
+                hex(usb_ecm_byte(ecdi), 2)  put(" ")
+                ecdi = ecdi + 1
+                if ecdi % 16 == 0 { print("") }
+            }
+            if ecdi % 16 != 0 { print("") }
+            return 0
+        }
+        if net_kind() == 1 { put("    DMA arena at  0x")  hex(net_arena(), 8)  print("") }
+        if net_kind() == 2 { put("    Intel device:  0x")  hex(net_devid(), 4)  print("") }
+        if net_ram() == 0 {
+            color(C_RED)  print("    the arena is NOT backed by RAM - needs -m 1G or more")
+            color(C_GREY) return 0
+        }
+        if net_up() == 0 {
+            if net_kind() == 2 {
+                if net_devid() == 3407 {
+                    color(C_YELLOW) print("    Intel I219 PCH initialization is quarantined; no unsafe MMIO was attempted")
+                    color(C_GREY) return 0
+                }
+            }
+            color(C_RED)  print("    the device refused the feature handshake")
+            color(C_GREY) return 0
+        }
+    } else {
+        if net_kind() == 1 { put("    driver:       virtio-net")  print("") }
+        if net_kind() == 2 { put("    Intel device:  0x")  hex(net_devid(), 4)  print("") }
+        if net_kind() == 3 { put("    driver:       USB CDC-ECM")  print("") }
     }
     put("    link:         ")   print(net_link())
     put("    our MAC:      ")   mac_print(0)  print("")
+    # A diagnostic may wait, but on real time rather than an iteration count:
+    # QEMU answered the first Intel DISCOVER in 71 us, still later than 2,048
+    # tight MMIO polls. PIT wakeups keep this bounded and let DMA make progress.
+    ng_deadline = ticks() + 300
+    while ticks() < ng_deadline {
+        if dhcp_state() == 1 { dhcp_work() }
+        if dhcp_state() == 2 { dhcp_work() }
+        if dhcp_state() == 3 { ng_deadline = ticks() }
+        if dhcp_state() == 4 { ng_deadline = ticks() }
+        if dhcp_state() == 1 { idle() }
+        if dhcp_state() == 2 { idle() }
+    }
     # ONE LAYER MAY OWN THE RECEIVE QUEUE. The raw ARP probe below drains the
     # card directly and throws away every frame that is not its own reply, so
     # running it once net.c is also draining that queue eats exactly the frames
@@ -3821,6 +3993,14 @@ fn net_gate() {
     if ip_live() == 1 {
         color(C_GREY)  print("    (link already proven; the IP stack owns the queue now)")
         return ip_gate()
+    }
+    if net_kind() == 2 {
+        color(C_YELLOW) put("    Intel link is up but DHCP state is ")  print(dhcp_state())
+        color(C_GREY) put("    DHCP retries ")  put(dhcp_retry())
+        put(" bad packets ")  put(dhcp_bad())
+        put("; driver tx ")  put(net_tx())  put(" rx ")  put(net_rx())
+        put(" drops ")  print(net_drop())
+        color(C_GREY) return 0
     }
     color(C_GREY)  print("    sending an ARP request for 10.0.2.2 ...")
     if net_arp(NET_ME, NET_GW, 2000) == 0 {
@@ -3839,28 +4019,40 @@ fn net_gate() {
 # stack that drops every fourth packet looks identical on a single ping, which
 # is why this runs twenty and reports loss and jitter as well as a time.
 #
-# The address is ASSERTED, not leased - there is no DHCP here. On QEMU's
-# user-mode network 10.0.2.15/24 via 10.0.2.2 is what the built-in server would
-# have handed out anyway, and saying that out loud is the point.
+# The constants below are only the explicit diagnostic fallback. Normal boot
+# uses the DHCP lease and its router/resolver on either virtio or Intel links.
 NET_MASK = 4294967040        # 255.255.255.0
 NET_DNS  = 167772675         # 10.0.2.3 - QEMU's built-in resolver
 
 fn ip_gate() {
     color(C_CYAN)  print("  IPv4 / ICMP")
     color(C_GREY)
-    if ip_up(NET_ME, NET_MASK, NET_GW) == 0 {
-        color(C_RED)  print("    the stack could not be brought up")
-        color(C_GREY) return 0
+    if ip_live() == 0 {
+        if ip_up(NET_ME, NET_MASK, NET_GW) == 0 {
+            color(C_RED)  print("    the stack could not be brought up")
+            color(C_GREY) return 0
+        }
+        print("    10.0.2.15/24 via 10.0.2.2  (diagnostic fallback)")
+    } else {
+        if dhcp_state() == 3 {
+            color(C_GREEN) put("    DHCP lease acquired, ")  put(dhcp_lease())  print(" seconds")
+            color(C_GREY)
+        }
     }
-    print("    10.0.2.15/24 via 10.0.2.2  (asserted, not leased - no DHCP)")
-    pg = ip_ping(NET_GW, 1000)
+    gate_gw = NET_GW
+    if dhcp_state() == 3 { gate_gw = dhcp_gw() }
+    pg = ip_ping(gate_gw, 1000)
     if pg < 0 {
         color(C_RED)  print("    no echo reply from the gateway")
         color(C_GREY) return 0
     }
-    put("    ping 10.0.2.2:  ")  put(pg)  print(" us")
+    put("    ping gateway ")
+    put(band(gate_gw / 16777216, 255))  put(".")
+    put(band(gate_gw / 65536, 255))  put(".")
+    put(band(gate_gw / 256, 255))  put(".")
+    put(band(gate_gw, 255))  put(":  ")  put(pg)  print(" us")
     color(C_GREY)  print("    ...and 20 more, because one proves nothing:")
-    ip_run(NET_GW, 20, 1000)
+    ip_run(gate_gw, 20, 1000)
     put("      sent ")  put(ip_sent())  put("   received ")  put(ip_recv())
     put("   lost ")     print(ip_lost())
     put("      min ")   put(ip_min())   put(" us   avg ")  put(ip_avg())
@@ -3916,6 +4108,7 @@ cube_win  = 0 - 1
 anim_win  = 0 - 1
 mouse_win = 0 - 1
 edit_win  = 0 - 1
+edit_prev_focus = 0 - 1
 browser_win = 0 - 1
 settings_win = 0 - 1
 files_win = 0 - 1
@@ -3949,6 +4142,17 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the
         # shell's output existed only as pixels and could not be repainted.
+        #
+        # CLEAR THE TARGET FIRST. A retained client surface is reused, not
+        # freshly allocated on every invalidation. term_draw paints glyphs but
+        # no background, so `clear` changed the scrollback model and then drew
+        # nothing over the old glyph pixels; Backspace likewise left the last
+        # character visible. The physical trace contains three successful
+        # `clear` submissions, and the PS/2-only pixel gate reproduced an
+        # exactly unchanged client. The current clip is already the full
+        # client or the one-row prompt dirty rect, so this clears no more than
+        # the invalidation asked for and keeps the partial-update fast path.
+        fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
         u = ui()
         cb = 0
         if afocus == 1 { if band(ticks() / 50, 1) == 0 { cb = 1 } }
@@ -4042,6 +4246,54 @@ fn app_event(id, win, ety, ecode, ex, ey) {
         return 1
     }
     if id == APP_FILES { return files_event(win, ety, ecode, ex, ey) }
+    # Terminal navigation is a KEY, not a character.  The physical ThinkPad
+    # trace retained Left/Right/Up/Down events here and then watched this block
+    # discard them because nav_to_char only translates Enter/Backspace/Esc.
+    # Let term.c's cursor/history editor own those keys before the generic
+    # character-only translation used by the append-only editor below.
+    if id == APP_SHELL {
+        ac = ecode
+        if ety == 1 {
+            ac = nav_to_char(ecode)
+            if ac == 0 {
+                if ecode == K_LEFT  { ac = ecode }
+                if ecode == K_RIGHT { ac = ecode }
+                if ecode == K_UP    { ac = ecode }
+                if ecode == K_DOWN  { ac = ecode }
+                if ecode == K_HOME  { ac = ecode }
+                if ecode == K_END   { ac = ecode }
+                if ecode == K_DEL   { ac = ecode }
+            }
+            if ac == 0 { return 0 }
+            ety = 3
+        }
+        ecode = ac
+        # ONE CHARACTER OR NAVIGATION KEY PER CALL. No loop - that is the
+        # whole inversion. term_key owns cursor movement and history.
+        if ety == 3 {
+            if term_key(ecode) == 1 {
+                tc = term_cmd()
+                if tc > 0 {
+                    if tc == 113 { term_complete(tc, 0)  wm_stop()  return 1 }
+                    ta = term_arg()
+                    td_open = open_app(tc, ta)
+                    if td_open == 0 {
+                        td_result = run_command(tc, ta)
+                        term_complete(tc, td_result)
+                    } else { term_complete(tc, 0) }
+                }
+            }
+            if term_bad() == 1 { wm_anim(shell_win, 4) }
+            if ecode == 13 { ser_out("zl> ") }
+            if ecode == 10 { ser_out("zl> ") }
+            if ecode == 13 {
+                wm_damage_win_all()
+            } else {
+                if ecode == 10 { wm_damage_win_all() } else { wm_damage_shell_input() }
+            }
+        }
+        return 1
+    }
     # EV_KEY_DOWN (1) carrying a navigation code becomes the character the apps
     # below already handle. EV_CHAR (3) passes straight through.
     ac = ecode
@@ -4051,41 +4303,6 @@ fn app_event(id, win, ety, ecode, ex, ey) {
         ety = 3
     }
     ecode = ac
-    if id == APP_SHELL {
-        # ONE CHARACTER PER CALL. No loop - that is the whole inversion.
-        # read_line used to block, which is exactly why the shell had to be the
-        # top of the system and why every demo needed "press any key to exit".
-        if ety == 3 {
-            if term_key(ecode) == 1 {
-                tc = term_cmd()
-                if tc > 0 {
-                    if tc == 113 { wm_stop()  return 1 }
-                    # AN APP OPENS A WINDOW; everything else still prints into
-                    # the shell. That is the difference desktop-TODO calls "the
-                    # dock launches INTO a window, not over the whole screen",
-                    # and it is why these commands no longer end with "press
-                    # any key" - there is nothing to press a key to get out of.
-                    ta = term_arg()
-                    if open_app(tc, ta) == 0 { run_command(tc, ta) }
-                }
-            }
-            # A REFUSAL YOU CAN SEE. term.c prints "unknown command" into the
-            # scrollback, and in a window that scrolls away while you are
-            # still looking at where you typed. ANIM_PULSE was one of five
-            # kinds in wm.c with no caller anywhere - built, asserted, and
-            # invisible. This is a caller.
-            if term_bad() == 1 { wm_anim(shell_win, 4) }
-            # A NEW PROMPT ON THE SERIAL LINE AFTER EVERY LINE ENTERED, whether
-            # it named a command, named nothing, or was empty. Every gate here
-            # types, then waits for "zl> " before typing again; a prompt that
-            # only appeared after a RECOGNISED command would hang the harness
-            # on exactly the case worth testing.
-            if ecode == 13 { ser_out("zl> ") }
-            if ecode == 10 { ser_out("zl> ") }
-            wm_damage_win_all()
-        }
-        return 1
-    }
     # (apps-in-windows had a second APP_SNAKE arm here, calling its own
     #  snake_key(); the sn_event arm above returns first.)
     if id == APP_EDIT {
@@ -4100,8 +4317,17 @@ fn app_event(id, win, ety, ecode, ex, ey) {
                 # ANIM_CLOSE shrink; wm_close() stays for teardown.
                 wm_close_fx(win)
                 edit_win = 0 - 1
-                # wm_close returns focus to the home window (wm_home, set to
-                # the shell in wm_session) - so this needs nothing here.
+                # Return to the window that launched the editor. Generic close
+                # chooses the next z-order entry, which can be Paint or another
+                # app; serial commands would then be routed into that app and
+                # disappear even though the shell prompt is still visible.
+                if edit_prev_focus >= 0 {
+                    if wm_open_p(edit_prev_focus) == 1 {
+                        wm_setfocus(edit_prev_focus)
+                        wm_raise(edit_prev_focus)
+                    }
+                }
+                edit_prev_focus = 0 - 1
                 return 1
             }
             if ek == 1 { wm_dmg(win)  return 1 }
@@ -4218,25 +4444,25 @@ fn open_app(cmd, arg) {
     }
     if cmd == 105 {
         if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
+            edit_prev_focus = oa_f
             wm_setfocus(edit_win)  wm_raise(edit_win)  return 1
         }}
+        if editor_open_default() == 0 {
+            note_say("no zlfs volume for /user/notes.txt", 400)
+            return 0
+        }
         edit_win = wm_open(APP_EDIT, "Text Editor", 322 * oa_u, 140 * oa_u, 522 * oa_u, 360 * oa_u)
         if edit_win < 0 { return 0 }
-        # THE ARGUMENT WAS BEING DROPPED. term.c parses a trailing number into
-        # pending_arg, so `edit 7` really does reach here as arg 7 - and
-        # open_app took no argument at all, so every one of the ten RAM files
-        # except slot 0 was unreachable, silently, from the only shell there
-        # is. Same shape as a silent refusal: the command appeared to work.
-        editor_open(arg)
         # THE EDITOR TAKES FOCUS, unlike every other app here, because it is the
         # only one that is useless without the keyboard. Opening Snake and
         # carrying on typing commands is reasonable; opening an editor and
         # having your typing go to the shell is not.
+        edit_prev_focus = oa_f
         wm_setfocus(edit_win)
         wm_report(edit_win)
         return 1
     }
-    if cmd == 108 {
+    if cmd == 77 {
         if files_win >= 0 { if wm_open_p(files_win) == 1 {
             wm_setfocus(files_win)  wm_raise(files_win)  return 1
         }}
@@ -4272,6 +4498,7 @@ fn open_disk_editor(slot) {
         return 0
     }
     ode_u = ui()
+    edit_prev_focus = wm_focus()
     edit_win = wm_open(APP_EDIT, "Text Editor", 322 * ode_u, 140 * ode_u, 522 * ode_u, 360 * ode_u)
     if edit_win < 0 { return 0 }
     wm_setfocus(edit_win)
@@ -4304,6 +4531,18 @@ shell_win = 0 - 1
 wm_live = 0
 fn wm_damage_win_all() {
     if shell_win >= 0 { wm_dmg(shell_win) }
+    return 0
+}
+
+# Printable input changes only the live prompt row. Keep the rest of the
+# terminal's retained surface intact instead of rasterising every visible
+# scrollback glyph for every key press.
+fn wm_damage_shell_input() {
+    if shell_win < 0 { return 0 }
+    u = ui()
+    py = wm_ch(shell_win) - 6 * u - cell_h()
+    if py < 0 { py = 0 }
+    wm_cdmg(shell_win, 0, py, wm_cw(shell_win), cell_h())
     return 0
 }
 
@@ -4988,7 +5227,12 @@ fn wm_boot_start() {
     # wallpaper colour. Turning it on here is the policy decision - the
     # reference keeps it behind its own `crtOn` toggle too - and it stays under
     # the Settings animation switch on top of that.
-    wm_sweep(1)
+    # The reference treats this as an optional CRT overlay. At 2560x1440 its
+    # moving band damages roughly a third of the panel about fourteen times a
+    # second forever, so making it a boot default turns decoration into steady
+    # compositor load. Keep the effect available, but start the real desktop
+    # quiet and repaint only for actual state changes.
+    wm_sweep(0)
     if wm_bind() == 0 {
         color(C_RED)  print("  wm: kernel.zl defines no app_draw - nothing to composite")
         color(C_GREY)
@@ -5246,7 +5490,7 @@ fn wm_session() {
         wm_report(wi)
         wi = wi + 1
     }
-    while wm_run() == 1 { wm_frame()  idle() }
+    while wm_run() == 1 { wm_frame()  blk_work()  dhcp_work()  idle() }
     con_mute(0)
     return 0
 }
@@ -5346,14 +5590,56 @@ fn draw_screen() {
 # map a menu row (0..7) to the command it launches
 
 # ---- boot ------------------------------------------------------------------
+# TAKE THE MACHINE BEFORE USING THE MACHINE.  On UEFI, efi.c deliberately
+# enters main() with interrupts disabled: the firmware's IDT stopped being a
+# service at ExitBootServices, and only setup_idt() may turn interrupts back
+# on.  The old order did settings/NVMe discovery, resolution selection,
+# intel_find(), window construction and a full desktop paint before installing
+# our GDT, IDT and timer.  Besides making every timed wait fall back to a spin,
+# that left all of the hardware most likely to fail in front of the USB flight
+# recorder.
+#
+# Keep these calls silent here and keep their status lines in the established
+# boot transcript below.  That preserves the byte-for-byte headless gate while
+# making the actual ownership order match the dependency order:
+#
+#     GDT -> IDT/PIT -> APIC -> xHCI -> ZLLOG -> storage/display/desktop
+#
+# The first physical audit run proved that controller ownership alone is not
+# enough. The Intel scan had not classified the mass-storage interface yet, so
+# diag_up() refused, settings and the compositor ran without a durable witness,
+# and only the later reporting pass finished enumeration. Complete that pass
+# here. It is idempotent, and it puts the real dependency order on the machine:
+# xHCI enumeration -> ZLLOG mount -> allocators -> compositor.
+setup_gdt()
+setup_idt()
+fb_wc()
+boot_apic = apic_up()
+boot_usb = usb_boot()
+diag_boot = diag_up()
+
 kbd_init()
-fs_init()
 # READ THE SAVED SETTINGS BACK. settings.c writes one record per gesture and
 # settings_load() had no caller anywhere, so accent, scale, pointer speed,
 # subpixel and animation were all persisted to NVMe and then thrown away on
 # every boot. It applies what it finds, prints why when it finds nothing, and
 # never writes - so a read-only boot stays read-only.
 set_load()
+
+# THE COMPOSITOR ALLOCATES RETAINED CLIENT AND SHELL SURFACES. The physical
+# 2560x1440 boot exposed that wm_boot_start() used to run before heap_up(): six
+# allocations were loudly refused because the heap had never been initialised.
+# QEMU's smaller GOP mode hid the ordering defect behind cheaper fallbacks.
+# Initialise both allocators and the heap's virtual window before the first
+# window exists. Each mark is synchronously durable when ZLLOG is active, so a
+# physical stop identifies the exact call that did not return.
+diag_mark(200)                           # allocator sequence entered
+arena_up()
+diag_mark(201)                           # program arena returned
+heap_up()
+diag_mark(202)                           # kernel heap returned
+vmm_up()
+diag_mark(203)                           # virtual-window report returned
 mon_x = 0                                # window positions - layout() fills these in
 mon_y = 0                                # from the real screen size, and dragging
 ab_x = 0                                 # updates them from there
@@ -5400,6 +5686,7 @@ if px_w() > 0 { layout() }
 # byte-identical transcript, which is the single most likely thing here to go
 # red.
 wm_boot = wm_boot_start()
+diag_mark(204)                           # compositor construction returned
 if wm_boot == 0 { draw_desk() }          # static desktop; the boot log fills the terminal
 
 color(C_WHITE)  print("  zlOS starting")
@@ -5434,19 +5721,17 @@ if con_kind() == 1 {
 } else {
     ok_line("VGA text console, 80x25")
 }
-setup_gdt()
 if bits() == 64 {
     ok_line("GDT loaded - 64-bit flat segments, 4-level paging, SSE on")
 } else {
     ok_line("GDT loaded - flat 4 GiB code and data segments")
 }
-setup_idt()
 ok_line("IDT installed, PIC remapped, interrupts ON")
 # Move off the 8259 if this machine has an APIC. On a UEFI laptop the legacy
 # PIC may not be wired to anything at all - the keyboard raises IRQ1 and the
 # interrupt is simply never delivered. The I/O APIC is how a modern machine
 # routes it, and ACPI is the only thing that knows where that chip lives.
-if apic_up() == 1 {
+if boot_apic == 1 {
     put("  [  OK  ] APIC: IRQs via I/O APIC at 0x")  hex(apic_ib(), 8)
     put(", ")  put(apic_cpus())  print(" CPU(s)")
 } else {
@@ -5454,38 +5739,49 @@ if apic_up() == 1 {
 }
 ok_line("PIT timer running at 100 Hz on IRQ0")
 ok_line("keyboard on IRQ1 - no more polling the port")
-# USB comes up HERE, not earlier: the driver's timeouts are measured with the
-# PIT, and before setup_idt() that timer is not ticking - every wait would
-# silently fall back to a spin count instead of a real millisecond. On a UEFI
-# machine the firmware's PS/2 emulation dies with ExitBootServices, so this is
-# the only keyboard there will be.
-usb_boot()
-# The program arena. It prints its own line with an ADDRESS in it, the way fb.c
-# does, because "the arena is up" is a claim and "16 MiB at 8 MiB, ends at
-# 24 MiB, ceiling 128 MiB" is a fact somebody can check against the map.
-#
-# It is called HERE, at boot, rather than lazily on the first `run`: an arena
-# that is not backed by RAM is something you want to be told about while you
-# are still reading the boot log, not three keystrokes into a program.
-arena_up()
-# The general heap, and it is a DIFFERENT thing from the arena above rather than
-# a better one. The arena hands memory to zl programs and takes it all back in
-# one move between runs; this hands out memory the kernel keeps, and takes it
-# back one object at a time. Neither replaces the other and both are called at
-# boot, for the same reason arena_up is: an allocator that is not backed by RAM
-# is something you want to read in the boot log, not discover three keystrokes
-# into a program.
-heap_up()
-# AFTER heap_up, not before: heap_init() is what ASKS paging.c for the window, so
-# there is nothing to report until it has. Printing "no window" before the only
-# caller has run would be true and useless.
-vmm_up()
+# Enumeration and its detailed report now happen before the recorder and
+# desktop by construction. Retain one idempotent retry for genuinely late
+# devices, but the physical boot no longer relies on reaching this line before
+# it can persist the allocator/compositor boundary.
+if boot_usb == 0 { boot_usb = usb_boot() }
+if diag_boot == 0 { diag_boot = diag_up() }
+# THE BOOT STICK BECOMES A FLIGHT RECORDER only after xHCI is live. diag_up
+# refuses every disk except an exact GPT type+label+GUID+superblock match and
+# writes only inside that partition. Until this point the same records have
+# been accumulating in RAM, so PCI/USB setup is not missing from the log.
+if diag_boot == 1 {
+    ok_line("persistent boot observer - ZLLOG journal active")
+} else {
+    # The headless BIOS transcript has never advertised optional hardware that
+    # is absent; keep that byte-for-byte gate quiet.  A graphical machine is
+    # exactly where RAM-only mode must be visible because there may be no
+    # serial console to explain why a later crash left no USB record.
+    if px_w() > 0 {
+        info_line("persistent boot observer - RAM only; no exact ZLLOG target")
+        if diag_err() == 1 {
+            put("         MSC init stage ")  put(msc_istage())
+            put(", port ")  put(msc_iport())
+            put(", slot ")  put(msc_islot())
+            put(", xHCI cc ")  put(msc_icc())
+            put(", USB ")  hex(msc_ivid(), 4)
+            put(":")  hex(msc_ipid(), 4)  print("")
+            if msc_iport() > 0 {
+                put("         PORTSC 0x")  hex(usb_portsc(msc_iport()), 8)
+            }
+            put(", USBSTS 0x")  hex(usb_sts(), 8)
+            put(", USBCMD 0x")  hex(usb_cmd(), 8)  print("")
+        }
+    }
+}
 # RING 3. Runs a tiny program at ring 3 that talks to the kernel only through
 # int 0x80, then comes back. The "u3" in the line below is written by syscalls
 # made from the far side of the privilege boundary - there is no other way for
 # those bytes to reach the serial port - so this line failing to appear is a
 # real regression rather than a cosmetic one, and golden.txt pins it.
 user_up()
+diag_mark(205)                           # Ring-3 self-test returned
+net_boot()
+diag_mark(206)                           # network boot returned
 ok_line("zl runtime, kernel subset")
 # STILL TRUE, and it is worth saying why rather than leaving the next reader to
 # wonder whether it was just missed. A bump allocator with no free() and no
@@ -5530,6 +5826,7 @@ if wm_boot == 1 { ser_out("zl> ") }
 # second and would otherwise sit in the peak for ever, hiding every real
 # regression underneath it.
 if wm_boot == 1 { wm_peak0() }
+diag_mark(207)                           # ready to enter the graphical loop
 
 
 # ---- the shell -------------------------------------------------------------
@@ -5551,7 +5848,9 @@ last_blink = 0 - 1
 # loop is what verify.sh compares byte for byte, and the cheapest way to keep a
 # transcript identical is to not edit the code that produces it.
 if wm_boot == 1 {
-    while wm_run() == 1 { wm_frame()  idle() }
+    # One block of writeback per wake, outside wm_frame: filesystem mutations
+    # in an input callback only dirty WB RAM and never wait on NVMe there.
+    while wm_run() == 1 { wm_frame()  blk_work()  dhcp_work()  idle() }
     con_mute(0)                          # the halting message goes on screen
     running = 0
 }
@@ -5566,6 +5865,7 @@ while running == 1 {
 
     got = 0
     while got == 0 {
+        dhcp_work()
         tk = ticks()
 
         # clock + text-cursor blink
@@ -5620,7 +5920,9 @@ while running == 1 {
                     cursor(crow, ccol, 0, C_CURSOR)
                     print("")
                     draw_status("working")
+                    term_submit(ch, pending, 1)
                     r = run_command(ch, pending)
+                    term_complete(ch, r)
                     pending = 0
                     got = 1
                     last_sec = 0 - 1                # clock lost to the redraw
@@ -5645,3 +5947,4 @@ print("")
 color(C_YELLOW)  print("  halting.")
 color(C_GREY)
 draw_status("halted")
+diag_done()                              # durable COMPLETE slot on clean exit

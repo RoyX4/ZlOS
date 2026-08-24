@@ -116,6 +116,8 @@
 typedef unsigned int   u32;
 typedef unsigned char  u8;
 
+#include "telemetry.h"
+
 /* Same reasoning as arena.c:95 - __UINTPTR_TYPE__ is a predefined macro,
  * available freestanding, and it is right on the 32-bit kernel, the 64-bit
  * kernel, the EFI target and the 64-bit Linux host that runs heaptest.c. The
@@ -292,6 +294,8 @@ static void heap_panic(const char *why, u32 off)
     if (panicked) return;              /* one message, not a cascade */
     panicked = 1;
     live = 0;                          /* refuse everything from here on */
+    zlt_event(ZLLOG_SUB_MEMORY, ZLLOG_EV_PANIC, ZLLOG_FATAL,
+              off, (unsigned)used, (unsigned)live_blocks);
     hp("\n  *** HEAP CORRUPT: ");
     hp(why);
     hp(" at offset ");
@@ -532,6 +536,9 @@ unsigned long heap_worst_free(void)  { return worst_free_steps; }
 static void refuse(const char *why, unsigned long want)
 {
     refusals++;
+    zlt_count(ZLLOG_C_HEAP_REFUSE, 1);
+    zlt_event(ZLLOG_SUB_MEMORY, ZLLOG_EV_DROP, ZLLOG_ERROR,
+              (unsigned)want, (unsigned)used, (unsigned)refusals);
     if (refusals > REFUSE_LOUD + 1) return;
     if (refusals == REFUSE_LOUD + 1) {
         hp("  heap: further refusals suppressed - heap_refusals() has the count\n");
@@ -717,6 +724,9 @@ void *heap_alloc(unsigned long bytes)
     if (used > high_water) high_water = used;
     if (steps > worst_alloc_steps) worst_alloc_steps = steps;
 
+    zlt_count(ZLLOG_C_ALLOC, 1);
+    zlt_count(ZLLOG_C_ALLOC_BYTES, (unsigned)b->size);
+
     return (void *)((u8 *)b + HDR_BYTES);
 }
 
@@ -751,6 +761,7 @@ void heap_free(void *p)
 
     used -= b->size;
     live_blocks--;
+    zlt_count(ZLLOG_C_FREE, 1);
     b->flags |= F_FREE;
 
     /* FORWARD: absorb the next block if it is free. */

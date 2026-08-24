@@ -5,12 +5,17 @@ term.c was written, wired, linked and committed, and nobody had ever typed a
 command into it. Everything in the platform queue sits on top of that
 assumption, so it gets a gate rather than a hand test.
 
-It types five things and asserts on each:
+It types ten lines and asserts on each:
 
     help        the app list reaches the shell
     uptime      a live figure, so the command really ran
     fib 20      -> 6765, which proves the ARGUMENT parser, not just dispatch
     nonsense    -> "unknown command: nonsense"     <- THE IMPORTANT ONE
+    i2c         bounded status; never stalls the compositor to probe hardware
+    dig<Left>a  -> diag                              cursor insertion
+    dixag<Home><Right><Right><Delete><End> -> diag   cursor deletion
+    <Up>        -> diag                              command history
+    x<Up><Down> -> x                                 draft restoration
     clear       the scrollback empties
 
 The unknown-command case matters most. A shell that silently ignores what you
@@ -196,6 +201,8 @@ def main():
                     help="seconds to let a frame render before photographing it")
     ap.add_argument("--keep-shots", action="store_true")
     ap.add_argument("--no-build", action="store_true")
+    ap.add_argument("--uefi", action="store_true",
+                    help="boot the native UEFI/GOP image used by the ThinkPad")
     ap.add_argument("--ps2-only", action="store_true",
                     help="drop the USB keyboard - the ThinkPad's own keyboard "
                          "is PS/2, and Enter/Backspace/ESC arrive there as "
@@ -205,12 +212,12 @@ def main():
     import time
 
     if not args.no_build:
-        build(False)
+        build(args.uefi)
 
     tmp = tempfile.mkdtemp(prefix="probeterm-")
     ser_path = os.path.join(tmp, "ser.sock")
     qmp_path = os.path.join(tmp, "qmp.sock")
-    argv = qemu_argv(tmp, False, ser_path, qmp_path)
+    argv = qemu_argv(tmp, args.uefi, ser_path, qmp_path)
     if args.ps2_only:
         # Every probe in this tree boots with -device usb-kbd, which is why
         # nothing could see that the PS/2 path never produces a character for
@@ -294,7 +301,7 @@ def main():
 
         time.sleep(args.settle)
 
-        # ---- the five commands ------------------------------------------
+        # ---- the five ordinary commands ---------------------------------
         # Each is asserted twice: the ECHO proves the keystrokes arrived at
         # all, and the RESULT proves the command ran. Without the echo a
         # command that produces no output (clear) is indistinguishable from a
@@ -310,12 +317,47 @@ def main():
             ("uptime",   "ticks at 100 Hz",            "uptime reports a live figure"),
             ("fib 20",   "6765",                       "fib 20 = 6765 - the ARGUMENT parser works"),
             ("nonsense", "unknown command: nonsense",  "an unknown command SAYS SO"),
+            # QEMU has no LPSS I2C. That makes it the exact bounded check for
+            # the status path: it must answer rather than re-probe the bus or
+            # monopolise the compositor for the old five-second loop.
+            ("i2c",      "automatic startup has not found", "i2c status returns without freezing the desktop"),
         ):
             qtype(qmp, cmd + "\n")
             if not t.expect("zl> " + cmd, args.step_timeout):
                 check(what, False, "the keystrokes never arrived")
                 continue
             check(what, t.expect(marker, args.step_timeout))
+
+        # ---- the physical 2026-08-24 failure pattern --------------------
+        # The ThinkPad trace showed Right/Down/Delete reaching app_event and
+        # being silently discarded before term.c.  These are keyboard events,
+        # not serial bytes, and deliberately edit malformed commands so a
+        # matcher that merely accepts `diag` cannot make this pass.
+        qtype(qmp, "dig")
+        qmp.sendkey("left")
+        qtype(qmp, "a\n")
+        corrected = t.expect("zl> diag", args.step_timeout)
+        check("Left + insertion corrects `dig` to `diag`", corrected and
+              t.expect("flight recorder", args.step_timeout))
+
+        qtype(qmp, "dixag")
+        for key in ("home", "right", "right", "delete", "end", "ret"):
+            qmp.sendkey(key)
+            time.sleep(0.12)
+        corrected = t.expect("zl> diag", args.step_timeout)
+        check("Home/Right/Delete/End correct `dixag` to `diag`", corrected and
+              t.expect("flight recorder", args.step_timeout))
+
+        qmp.sendkey("up"); qmp.sendkey("ret")
+        recalled = t.expect("zl> diag", args.step_timeout)
+        check("Up recalls the newest command", recalled and
+              t.expect("flight recorder", args.step_timeout))
+
+        qtype(qmp, "x")
+        qmp.sendkey("up"); qmp.sendkey("down"); qmp.sendkey("ret")
+        restored = t.expect("zl> x", args.step_timeout)
+        check("Down returns from history to the in-progress draft", restored and
+              t.expect("unknown command: x", args.step_timeout))
 
         # ---- clear, which prints nothing anywhere by design --------------
         before = shot(qmp, tmp, "before-clear", box, args.keep_shots)
@@ -342,9 +384,9 @@ def main():
         # live - and predicts item 2 removes it. It does, and this is the
         # measurement rather than the assumption: with the compositor as the
         # BOOT STATE no text shell ever runs, so the only prompts on the wire
-        # are term.c's own echo of each line typed. Five commands, five
-        # prompts. Under 'w' it is six, and the extra one IS the bug.
-        typed = 5
+        # are term.c's own echo of each line typed. Ten commands, ten prompts.
+        # Under 'w' it is eleven, and the extra one IS the bug.
+        typed = 10
         prompts = t.log.count(PROMPT)
         if booted_into_wm:
             check("no captured prompt - one per line typed", prompts == typed,
@@ -358,7 +400,7 @@ def main():
             print(f"terminal gate FAILED: {len(failures)} - " + ", ".join(failures))
             print("\n--- serial transcript (tail) ---\n" + t.log[-3000:])
             return 1
-        print("terminal gate green: five commands typed, five results asserted")
+        print("terminal gate green: ten lines typed, cursor/history/results asserted")
         return 0
     finally:
         proc.kill()

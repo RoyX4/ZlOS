@@ -22,6 +22,9 @@
  * is 32 KB and belongs in BSS like any ordinary array.
  */
 
+#include "telemetry.h"
+#include "keycodes.h"
+
 #define TERM_COLS 200
 #define TERM_ROWS 160
 
@@ -32,6 +35,22 @@ static int  s_col;                  /* chars in the row being built       */
 
 static char input[TERM_COLS];       /* the line being typed               */
 static int  in_len;
+static int  in_cursor;              /* insertion point, 0..in_len          */
+
+/* A terminal that accepts text but silently discards Left/Right/Up/Down is
+ * not a line editor.  The physical 2026-08-24 trace showed exactly that: the
+ * ThinkPad delivered the navigation keys cleanly while the Terminal threw
+ * them away above this file.  Keep a small bounded history here, beside the
+ * line it edits.  No allocation and no filesystem dependency are involved. */
+#define TERM_HISTORY 16
+static char history[TERM_HISTORY][TERM_COLS];
+static int  history_len[TERM_HISTORY];
+static int  history_head;           /* next slot to replace                */
+static int  history_count;
+static int  history_view = -1;      /* age: 0 newest, -1 current draft     */
+static char history_draft[TERM_COLS];
+static int  history_draft_len;
+static int  history_draft_cursor;
 
 static int  pending_cmd = -1;       /* set by Enter, taken by zl          */
 static int  pending_arg;
@@ -88,7 +107,8 @@ void term_putc(char c)
 
 void term_clear(void)
 {
-    s_head = 0; s_live = 0; s_col = 0; in_len = 0;
+    s_head = 0; s_live = 0; s_col = 0; in_len = 0; in_cursor = 0;
+    history_view = -1;
     for (int i = 0; i < TERM_ROWS; i++) scroll[i][0] = 0;
 }
 
@@ -120,6 +140,79 @@ void term_say(const char *s)
  * system. Returns 1 if this key completed a command. */
 static int match_cmd(void);
 
+static void line_load(const char *src, int len, int cursor)
+{
+    if (len < 0) len = 0;
+    if (len > TERM_COLS - 2) len = TERM_COLS - 2;
+    for (int i = 0; i < len; i++) input[i] = src[i];
+    input[len] = 0;
+    in_len = len;
+    in_cursor = cursor < 0 ? 0 : cursor > len ? len : cursor;
+}
+
+static void history_remember(void)
+{
+    if (in_len <= 0) return;
+    if (history_count > 0) {
+        int newest = (history_head + TERM_HISTORY - 1) % TERM_HISTORY;
+        if (history_len[newest] == in_len) {
+            int same = 1;
+            for (int i = 0; i < in_len; i++)
+                if (history[newest][i] != input[i]) { same = 0; break; }
+            if (same) return;                 /* consecutive duplicate */
+        }
+    }
+    for (int i = 0; i < in_len; i++) history[history_head][i] = input[i];
+    history[history_head][in_len] = 0;
+    history_len[history_head] = in_len;
+    history_head = (history_head + 1) % TERM_HISTORY;
+    if (history_count < TERM_HISTORY) history_count++;
+}
+
+static void history_up(void)
+{
+    if (history_count <= 0) return;
+    if (history_view < 0) {
+        for (int i = 0; i < in_len; i++) history_draft[i] = input[i];
+        history_draft[in_len] = 0;
+        history_draft_len = in_len;
+        history_draft_cursor = in_cursor;
+        history_view = 0;
+    } else if (history_view + 1 < history_count) {
+        history_view++;
+    }
+    int slot = (history_head + TERM_HISTORY - 1 - history_view) % TERM_HISTORY;
+    line_load(history[slot], history_len[slot], history_len[slot]);
+}
+
+static void history_down(void)
+{
+    if (history_view < 0) return;
+    if (history_view > 0) {
+        history_view--;
+        int slot = (history_head + TERM_HISTORY - 1 - history_view) % TERM_HISTORY;
+        line_load(history[slot], history_len[slot], history_len[slot]);
+    } else {
+        line_load(history_draft, history_draft_len, history_draft_cursor);
+        history_view = -1;
+    }
+}
+
+static void history_leave(void) { history_view = -1; }
+
+void term_submit(int command, int argument, int word_len)
+{
+    zlt_event(ZLLOG_SUB_KERNEL, ZLLOG_EV_COMMAND_SUBMIT, ZLLOG_INFO,
+              (unsigned)command, (unsigned)argument, (unsigned)word_len);
+}
+
+void term_complete(int command, int result)
+{
+    zlt_event(ZLLOG_SUB_KERNEL, ZLLOG_EV_COMMAND_COMPLETE,
+              result ? ZLLOG_WARN : ZLLOG_INFO,
+              (unsigned)command, (unsigned)result, 0u);
+}
+
 /* The kernel's one character sink: console (muted while the compositor owns
  * the screen), this file's scrollback, and COM1. The echo below goes through
  * it rather than through term_putc so that the SERIAL LOG still reads like a
@@ -141,22 +234,49 @@ int term_key(int code)
         term_putc('z'); term_putc('l'); term_putc('>'); term_putc(' ');
         for (int i = 0; i < in_len; i++) zl_putc_pub(input[i]);
         zl_putc_pub('\n');
+        history_remember();
         int got = match_cmd();
         in_len = 0;
+        in_cursor = 0;
+        history_view = -1;
         input[0] = 0;
         return got;
     }
     if (code == 8 || code == 127) {          /* Backspace */
-        if (in_len > 0) in_len--;
+        history_leave();
+        if (in_cursor > 0) {
+            for (int i = in_cursor - 1; i < in_len; i++) input[i] = input[i + 1];
+            in_cursor--;
+            in_len--;
+        }
         return 0;
     }
+    if (code == KEY_DELETE) {
+        history_leave();
+        if (in_cursor < in_len) {
+            for (int i = in_cursor; i < in_len; i++) input[i] = input[i + 1];
+            in_len--;
+        }
+        return 0;
+    }
+    if (code == KEY_LEFT)  { if (in_cursor > 0) in_cursor--; return 0; }
+    if (code == KEY_RIGHT) { if (in_cursor < in_len) in_cursor++; return 0; }
+    if (code == KEY_HOME)  { in_cursor = 0; return 0; }
+    if (code == KEY_END)   { in_cursor = in_len; return 0; }
+    if (code == KEY_UP)    { history_up(); return 0; }
+    if (code == KEY_DOWN)  { history_down(); return 0; }
     if (code >= 32 && code < 127 && in_len < TERM_COLS - 2) {
-        input[in_len++] = (char)code;
+        history_leave();
+        for (int i = in_len; i > in_cursor; i--) input[i] = input[i - 1];
+        input[in_cursor++] = (char)code;
+        in_len++;
+        input[in_len] = 0;
     }
     return 0;
 }
 
 int term_input_len(void) { return in_len; }
+int term_input_cursor(void) { return in_cursor; }
 
 /* ---- the word table --------------------------------------------------------
  * Typed word -> the character code run_command already dispatches on. This is
@@ -186,9 +306,14 @@ static const struct cmd table[] = {
     { "poke",    109 }, { "peek",    109 },
     { "usbkbd",  106 }, { "kbd",     106 },
     { "nvme",    111 }, { "disk",    111 },
+    { "format",   46 }, { "mkfs",     46 }, /* explicit destructive zlfs init */
     { "sched",    43 }, { "tasks",    43 },
     { "smp",      42 }, { "cores",    42 },
     { "usbstor",  47 }, { "stor",     47 },
+    /* Flight-recorder controls dispatch into zl. This file never touches the
+     * USB device or persistent journal itself. */
+    { "diag",     200 }, { "diagsave", 201 },
+    { "wifi",     202 }, { "ax201",    202 },
     { "i2c",      63 }, { "touchpad", 63 },
     { "input",    61 }, { "events",   61 },
     { "panel",    80 },                       /* lights the real panel - laptop */
@@ -217,10 +342,9 @@ static const struct cmd table[] = {
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },
     { "anim",     97 }, { "demo",     97 },
-    { "ls",      108 }, { "files",   108 },
-    /* NOT "files" - that word already means "ls" above, the ten numbered RAM
-     * slots. This is the OTHER one: the zlfs Files window, by name. */
-    { "filemgr",  77 }, { "explorer", 77 },
+    { "ls",      108 },
+    /* `ls` is the textual zlfs listing; `files` opens the graphical manager. */
+    { "files",    77 }, { "filemgr",  77 }, { "explorer", 77 },
     /* THE SAME REGRESSION THIS TABLE'S HEADER DESCRIBES, HAPPENING AGAIN.
      * 78/87/69 are 'N', 'W' and 'E' - the network card + ARP probe, TCP +
      * HTTP/1.0 against a real server, and a real website by name off the
@@ -239,6 +363,8 @@ static const struct cmd table[] = {
     { "https",    83 }, { "tls",      83 },   /* the same fetch, verified */
     { "redraw",   99 },
     { "peak",     11 }, { "peakreset", 12 },   /* the frame timer */
+    { "perf",     13 },                         /* raw percentile samples */
+    { "userexec", 14 }, { "ring3", 14 },       /* /system/user.bin */
     { "reboot",  114 }, { "halt",    113 }, { "quit",  113 }, { "exit", 113 },
     /* 82 is 'R'. Lower-case 'r' (114) is already reboot, and the exec track
      * needs a code run_command dispatches on that nothing else claims. */
@@ -284,9 +410,25 @@ static int match_cmd(void)
 
     for (int k = 0; table[k].word; k++) {
         if (streq_n(input + start, table[k].word, wlen)) {
-            if (table[k].code == 1) { term_clear(); return 0; }
+            if (table[k].code == 1) {
+                term_submit(1, arg, wlen);
+                term_clear();
+                term_complete(1, 0);
+                return 0;
+            }
             pending_cmd = table[k].code;
+            /* `diag save` is the readable form. The raw argument already
+             * lives here in C, where strings are real values; zl deliberately
+             * receives only the resulting command code. `diagsave` remains a
+             * no-argument recovery alias if a damaged line editor ever loses
+             * the space. */
+            if (pending_cmd == 200 &&
+                input[astart + 0] == 's' && input[astart + 1] == 'a' &&
+                input[astart + 2] == 'v' && input[astart + 3] == 'e' &&
+                input[astart + 4] == 0)
+                pending_cmd = 201;
             pending_arg = arg;
+            term_submit(pending_cmd, pending_arg, wlen);
             /* ...and the same argument as TEXT, read from the SAME offset the
              * digit scan started at, not from where it stopped. That ordering
              * is the whole correctness of it: `run 2048.zl` would otherwise
@@ -307,10 +449,12 @@ static int match_cmd(void)
     }
 
     /* An unknown command must SAY SO. A shell that silently ignores what you
-    last_unknown = 1;
      * typed is worse than one that has no commands at all - which is why this
      * is the assertion probe-term.py cares about most, and why it goes to the
      * serial log rather than only into the scrollback. */
+    last_unknown = 1;
+    zlt_event(ZLLOG_SUB_KERNEL, ZLLOG_EV_DROP, ZLLOG_WARN,
+              40u /* unknown shell command */, (unsigned)wlen, 0u);
     term_say("  unknown command: ");
     {
         char word[TERM_COLS];
@@ -464,8 +608,15 @@ void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
                                               * not cols - see the note above */
     if (avail < 1) avail = 1;
     int from = 0;
-    if (in_len >= avail) from = in_len - avail + 1;
+    if (in_cursor >= avail) from = in_cursor - avail + 1;
     input[in_len] = 0;
-    if (in_len > from) fb_text_aa(px, py, input + from, fg);
-    if (cursor_on) fb_fill_px(px + (in_len - from) * cw, py, cw, lh, accent);
+    if (in_len > from) {
+        char shown[TERM_COLS];
+        int n = in_len - from;
+        if (n > avail) n = avail;
+        for (int i = 0; i < n; i++) shown[i] = input[from + i];
+        shown[n] = 0;
+        fb_text_aa(px, py, shown, fg);
+    }
+    if (cursor_on) fb_fill_px(px + (in_cursor - from) * cw, py, cw, lh, accent);
 }

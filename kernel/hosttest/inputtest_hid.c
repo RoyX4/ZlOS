@@ -46,10 +46,17 @@ int  input_shift(void);
 int  input_ctrl(void);
 int  input_key_held(int code);
 int  input_queued(void);
+int  input_x(void);
+int  input_y(void);
+int  input_ptr_x(void);
+int  input_ptr_y(void);
+void input_set_accel(int on);
 
 #define EV_KEY_DOWN 1
 #define EV_KEY_UP   2
 #define EV_CHAR     3
+#define EV_MOUSE    4
+#define EV_WHEEL    5
 
 #define KEY_ESC       0x101
 #define KEY_BACKSPACE 0x102
@@ -360,12 +367,76 @@ int idt_mouse_btn(void) { return 0; }
 int idt_mouse_wheel(void) { return 0; }
 int ser_rx(void) { return -1; }
 
+/* The I2C-HID pad contributes to the same pointer queue without replacing the
+ * PS/2 TrackPoint. This fake is already-decoded driver state; i2c_touchtest
+ * separately proves the physical SYNA8006 byte layout. */
+static int tp_ready, tp_dx, tp_dy, tp_wheel, tp_buttons;
+static int tp_edges[8], tp_edge_head, tp_edge_tail;
+int i2c_hid_service(void) { return 0; }
+int i2c_hid_pointer_ready(void) { return tp_ready; }
+int i2c_hid_ptr_take_dx(void) { int v = tp_dx; tp_dx = 0; return v; }
+int i2c_hid_ptr_take_dy(void) { int v = tp_dy; tp_dy = 0; return v; }
+int i2c_hid_ptr_take_wheel(void) { int v = tp_wheel; tp_wheel = 0; return v; }
+int i2c_hid_ptr_buttons(void) { return tp_buttons; }
+int i2c_hid_ptr_take_button(void)
+{
+    if (tp_edge_tail == tp_edge_head) return -1;
+    int v = tp_edges[tp_edge_tail];
+    tp_edge_tail = (tp_edge_tail + 1) & 7;
+    return v;
+}
+static void tp_edge(int buttons)
+{
+    tp_edges[tp_edge_head] = buttons;
+    tp_edge_head = (tp_edge_head + 1) & 7;
+    tp_buttons = buttons;
+}
+
 /* Hardware this harness does not fake. The merge gave input.c and wm.c
  * callers into the USB tablet, the USB keyboard, the scroll wheel, the
  * serial port and the TSC. ser_rx returns -1 ("no UART"), not 0, which
  * would be a NUL byte and a keystroke. */
 int cpu_tsc_lo(void) { return 0; }
 int cpu_tsc_khz(void) { return 0; }
+
+static void test_i2c_touch_bridge(void)
+{
+    printf("I2C-HID touchpad joins the pointer queue\n");
+    drain();
+    tp_ready = 1;
+    int before_x = input_ptr_x(), before_y = input_ptr_y();
+    tp_dx = 2; tp_dy = 1;                  /* below acceleration threshold */
+    input_poll();
+    ok("touchpad delta moves the shared logical pointer",
+       input_ptr_x() == before_x + 2 && input_ptr_y() == before_y + 1);
+    ok("touchpad motion emits EV_MOUSE at the resulting position",
+       input_next() == EV_MOUSE && input_x() == input_ptr_x() &&
+       input_y() == input_ptr_y());
+    drain();
+
+    before_x = input_ptr_x(); before_y = input_ptr_y();
+    input_set_accel(1);
+    tp_dx = 20; tp_dy = 0;                  /* mouse curve would turn this into 58 */
+    input_poll();
+    ok("touchpad motion does not inherit mouse acceleration",
+       input_ptr_x() == before_x + 20 && input_ptr_y() == before_y);
+    drain();
+
+    tp_edge(1); tp_edge(0);                /* tap press and release */
+    input_poll();
+    ok("touchpad tap press survives as an ordered EV_MOUSE",
+       input_next() == EV_MOUSE && input_code() == 1);
+    ok("touchpad tap release survives the same slow frame",
+       input_next() == EV_MOUSE && input_code() == 0);
+    drain();
+
+    tp_wheel = 1;
+    input_poll();
+    ok("two-finger scroll becomes EV_WHEEL",
+       input_next() == EV_WHEEL && input_code() == 1);
+    drain();
+    tp_ready = 0;
+}
 
 int main(void)
 {
@@ -374,6 +445,7 @@ int main(void)
     test_parity();
     test_usb_chars();
     test_held_and_repeat();
+    test_i2c_touch_bridge();
 
     printf("\n%s\n", fails ? "FAILED" : "all passed");
     return fails ? 1 : 0;

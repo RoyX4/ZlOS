@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 # kernel/check-memmap.sh - assert the hand-placed buffers do not overlap.
 #
-# zlOS has no heap (pci.c says so out loud), so every buffer in the 32 MiB
-# region is a fixed address picked by hand. Nothing checks them at runtime:
-# two that overlap simply corrupt each other, and the symptom shows up far
-# from the cause. That already happened once - LINE_BUF and HIST_BUF were
-# placed inside FS_DATA's slots 7 and 8, so editing a RAM file overwrote the
-# shell's input line and its history ring, and typing at the prompt overwrote
-# the files.
+# Several zl-language buffers still live at fixed addresses below the heap and
+# DMA arenas. Nothing checks these low buffers at runtime: two that overlap
+# simply corrupt each other, and the symptom shows up far from the cause. The
+# retired numbered RAM filesystem once overlapped LINE_BUF/HIST_BUF here; keep
+# that incident as the reason this discovery gate still exists.
 #
 # The sizes are DERIVED from the constants in kernel.zl rather than repeated
 # here, so bumping FS_SLOT or HIST_N re-runs the arithmetic instead of
@@ -52,7 +50,7 @@ fi
 # ...and say which constants the sized checks below do NOT cover, so the gap is
 # visible rather than silent. Not a failure: a new address is not automatically
 # wrong, it is automatically unexamined.
-known=" SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT LINE_BUF LINE_MAX HIST_BUF HIST_N FILES_NAME_BUF "
+known=" SNAKE_X SNAKE_Y LINE_BUF LINE_MAX HIST_BUF HIST_N DISK_SCRATCH FILES_NAME_BUF EDIT_BUF EDIT_MAX "
 unsized=""
 for n in $(grep -oP '^\K[A-Z_]+(?=\s*=\s*0x0[0-9A-Fa-f]{5,})' "$SRC" | sort -u); do
     case "$known" in *" $n "*) ;; *) unsized="$unsized $n";; esac
@@ -60,8 +58,9 @@ done
 [ -n "$unsized" ] && echo "note: fixed addresses with no size check here:$unsized"
 
 declare -A K
-for name in SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT \
-            LINE_BUF LINE_MAX HIST_BUF HIST_N FILES_NAME_BUF; do
+for name in SNAKE_X SNAKE_Y \
+            LINE_BUF LINE_MAX HIST_BUF HIST_N DISK_SCRATCH FILES_NAME_BUF \
+            EDIT_BUF EDIT_MAX; do
     v=$(grep -oP "^$name\s*=\s*\K(0x[0-9A-Fa-f]+|[0-9]+)" "$SRC" | head -1)
     [ -n "$v" ] || { echo "FAIL: constant $name not found in $SRC"; exit 1; }
     K[$name]=$((v))
@@ -75,10 +74,11 @@ HIST_STRIDE=$(grep -oP 'HIST_BUF \+ hslot \* \K[0-9]+' "$SRC" | sort -u)
     echo "FAIL: hist_save/hist_load disagree on the history stride"; exit 1; }
 
 SNAKE_X=${K[SNAKE_X]}; SNAKE_Y=${K[SNAKE_Y]}
-FS_META=${K[FS_META]}; FS_DATA=${K[FS_DATA]}; FS_SLOT=${K[FS_SLOT]}
 LINE_BUF=${K[LINE_BUF]}; LINE_MAX=${K[LINE_MAX]}
 HIST_BUF=${K[HIST_BUF]}; HIST_N=${K[HIST_N]}
+DISK_SCRATCH=${K[DISK_SCRATCH]}
 FILES_NAME_BUF=${K[FILES_NAME_BUF]}
+EDIT_BUF=${K[EDIT_BUF]}; EDIT_MAX=${K[EDIT_MAX]}
 
 # SNAKE_X/SNAKE_Y are one byte per body cell and the code bounds neither by a
 # named constant; the gap between them is what each actually gets.
@@ -123,14 +123,13 @@ REGIONS=(
     "ARENA:$((AB)):$((AZ))"
     "SNAKE_X:$SNAKE_X:$SNAKE_CELLS"
     "SNAKE_Y:$SNAKE_Y:$SNAKE_CELLS"
-    "FS_META:$FS_META:64"
-    "FS_DATA:$FS_DATA:$((10 * FS_SLOT))"
     "LINE_BUF:$LINE_BUF:$LINE_MAX"
     "HIST_BUF:$HIST_BUF:$((HIST_N * HIST_STRIDE))"
+    "DISK_SCRATCH:$DISK_SCRATCH:4096"
     # 24, not a named constant here: it is fs.c's FS_NAME_MAX, which this
-    # script has no visibility into (it parses kernel.zl only). FS_META just
-    # above does the same thing for its own C-side size.
+    # script has no visibility into (it parses kernel.zl only).
     "FILES_NAME_BUF:$FILES_NAME_BUF:24"
+    "EDIT_BUF:$EDIT_BUF:$EDIT_MAX"
 )
 
 mapfile -t SORTED < <(printf '%s\n' "${REGIONS[@]}" | sort -t: -k2 -n)

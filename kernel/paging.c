@@ -148,12 +148,37 @@ void vmm_set_window(unsigned long long v, unsigned long long p, unsigned long lo
     win_virt = v; win_phys = p; win_bytes = b;
 }
 
+/* PAT lookup and leaf-bit encoding are pure arithmetic so the host gate can
+ * test the part that is easiest to get subtly wrong: PAT is bit 7 in a 4 KiB
+ * PTE but bit 12 in a 2 MiB/1 GiB leaf. */
+int vmm_pat_wc_index(unsigned long long pat)
+{
+    for (int i = 0; i < 8; i++)
+        if (((pat >> (i * 8)) & 0xffu) == 1u) return i;
+    return -1;
+}
+
+unsigned long long vmm_pat_leaf_bits(int index, int huge)
+{
+    if (index < 0 || index > 7) return ~0ULL;
+    u64 bits = (index & 1) ? (1ULL << 3) : 0;
+    if (index & 2) bits |= 1ULL << 4;
+    if (index & 4) bits |= 1ULL << (huge ? 12 : 7);
+    return bits;
+}
+
 #if defined(ZL_64)
 
 /* ---- x86-64 paging constants ---------------------------------------------*/
 #define PTE_P     (1ULL << 0)      /* present                                */
 #define PTE_W     (1ULL << 1)      /* writable                               */
+#define PTE_U     (1ULL << 2)      /* user                                    */
+#define PTE_PWT   (1ULL << 3)
+#define PTE_PCD   (1ULL << 4)
+#define PTE_A     (1ULL << 5)
 #define PTE_PS    (1ULL << 7)      /* page size: this entry IS the page      */
+#define PTE_PAT_H (1ULL << 12)     /* PAT on a 1 GiB/2 MiB leaf              */
+#define PTE_NX    (1ULL << 63)
 #define ADDR_MASK 0x000FFFFFFFFFF000ULL
 
 /* THE SLOT IS SEARCHED FOR, NOT HARDCODED, and that is a correction rather than
@@ -204,12 +229,256 @@ void vmm_set_window(unsigned long long v, unsigned long long p, unsigned long lo
 static u64 win_pd[PD_ENTRIES]   __attribute__((aligned(4096)));
 static u64 win_pdpt[PD_ENTRIES] __attribute__((aligned(4096)));
 
+/* A 40 MiB framebuffer can cross at most two 1 GiB leaves.  Firmware such as
+ * OVMF commonly identity-maps MMIO with 1 GiB leaves, so changing one cache
+ * type requires replacing that leaf with 512 equivalent 2 MiB leaves.  These
+ * tables live forever; freeing one while CR3 still names it would be fatal. */
+static u64 fb_wc_pd[2][PD_ENTRIES] __attribute__((aligned(4096)));
+static int fb_wc_live;
+static int fb_wc_index = -1;
+static u64 fb_wc_pat;
+static u64 fb_wc_leaf_before, fb_wc_leaf_after;
+
 static u64 rd_cr3(void) { u64 v; __asm__ volatile("mov %%cr3, %0" : "=r"(v)); return v; }
 static void wr_cr3(u64 v) { __asm__ volatile("mov %0, %%cr3" :: "r"(v) : "memory"); }
 static u64 rd_cr0(void) { u64 v; __asm__ volatile("mov %%cr0, %0" : "=r"(v)); return v; }
 static void wr_cr0(u64 v) { __asm__ volatile("mov %0, %%cr0" :: "r"(v) : "memory"); }
+static u64 rd_cr4(void) { u64 v; __asm__ volatile("mov %%cr4, %0" : "=r"(v)); return v; }
+static void wr_cr4(u64 v) { __asm__ volatile("mov %0, %%cr4" :: "r"(v) : "memory"); }
+static u64 rd_flags(void) { u64 v; __asm__ volatile("pushfq; popq %0" : "=r"(v)); return v; }
+static u64 rd_msr(u32 msr)
+{
+    u32 lo, hi;
+    __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(msr));
+    return ((u64)hi << 32) | lo;
+}
+static void wr_msr(u32 msr, u64 value)
+{
+    __asm__ volatile("wrmsr" :: "c"(msr), "a"((u32)value),
+                     "d"((u32)(value >> 32)) : "memory");
+}
 
 #define CR0_WP (1ULL << 16)
+#define CR0_NW (1ULL << 29)
+#define CR0_CD (1ULL << 30)
+
+/* Which PAT selectors are already named by a live leaf?  An unused high
+ * selector can be given WC without changing the meaning of any existing
+ * mapping.  The budget turns a pathological all-4K firmware map into a loud
+ * refusal rather than an unbounded pre-desktop walk. */
+static u32 pat_used_mask(u64 *pml4)
+{
+    u32 used = 0, budget = 4000000u;
+    for (int a = 0; a < 512; a++) {
+        u64 e4 = pml4[a];
+        if (!(e4 & PTE_P)) continue;
+        u64 *pdpt = (u64 *)(uptr)(e4 & ADDR_MASK);
+        for (int b = 0; b < 512; b++) {
+            u64 e3 = pdpt[b];
+            if (!(e3 & PTE_P)) continue;
+            if (!budget--) return 0xffu;
+            if (e3 & PTE_PS) {
+                u32 i = ((e3 >> 10) & 4u) | ((e3 >> 3) & 1u) |
+                        ((e3 >> 3) & 2u);
+                used |= 1u << i;
+                continue;
+            }
+            u64 *pd = (u64 *)(uptr)(e3 & ADDR_MASK);
+            for (int c = 0; c < 512; c++) {
+                u64 e2 = pd[c];
+                if (!(e2 & PTE_P)) continue;
+                if (!budget--) return 0xffu;
+                if (e2 & PTE_PS) {
+                    u32 i = ((e2 >> 10) & 4u) | ((e2 >> 3) & 1u) |
+                            ((e2 >> 3) & 2u);
+                    used |= 1u << i;
+                    continue;
+                }
+                u64 *pt = (u64 *)(uptr)(e2 & ADDR_MASK);
+                for (int d = 0; d < 512; d++) {
+                    u64 e1 = pt[d];
+                    if (!(e1 & PTE_P)) continue;
+                    if (!budget--) return 0xffu;
+                    u32 i = ((e1 >> 5) & 4u) | ((e1 >> 3) & 1u) |
+                            ((e1 >> 3) & 2u);
+                    used |= 1u << i;
+                }
+            }
+        }
+    }
+    return used;
+}
+
+/* SDM cache-disable sequence for changing IA32_PAT on one logical CPU.  The
+ * chosen entry is proven unused before this runs, but PAT is per logical CPU,
+ * so AP startup calls the same helper before publishing itself online. */
+static void install_pat(u64 value)
+{
+    u64 flags = rd_flags();
+    __asm__ volatile("cli" ::: "memory");
+    u64 cr0 = rd_cr0();
+    wr_cr0((cr0 | CR0_CD) & ~CR0_NW);
+    __asm__ volatile("wbinvd" ::: "memory");
+    wr_msr(0x277u, value);
+    __asm__ volatile("wbinvd" ::: "memory");
+    wr_cr0(cr0);
+    wr_cr3(rd_cr3());
+    if (flags & (1ULL << 9)) __asm__ volatile("sti" ::: "memory");
+}
+
+/* Retype the existing identity mapping of one framebuffer to WC.
+ *
+ * A second virtual alias is deliberately not used: Intel forbids accessing
+ * one physical range through aliases with different memory types.  This walk
+ * changes the leaf already used by fb.c.  It refuses before mutation unless
+ * every page is present and the live PAT already owns a WC entry; it never
+ * repurposes a PAT slot whose other users we cannot prove absent. */
+int vmm_framebuffer_write_combining(unsigned long long phys,
+                                    unsigned long long bytes)
+{
+    const u64 one_gib = 1ULL << 30, two_mib = 1ULL << 21;
+    const u64 addr_1g = 0x000fffffc0000000ULL;
+    const u64 cache_h = PTE_PWT | PTE_PCD | PTE_PAT_H;
+    const u64 cache_4k = PTE_PWT | PTE_PCD | PTE_PS;
+    u64 start, end, cr3, *pml4, pat, cur;
+    u64 *split_entry[2] = { 0, 0 };
+    u64 split_old[2] = { 0, 0 };
+    u64 first_before = 0, first_after = 0;
+    int have_before = 0, have_after = 0;
+    int split_count = 0;
+
+    if (fb_wc_live) return 1;
+    if (!bytes || phys + bytes < phys) return 0;
+    start = phys & ~0xfffULL;
+    end = (phys + bytes + 0xfffULL) & ~0xfffULL;
+    if (end <= start) return 0;
+
+    cr3 = rd_cr3();
+    if (!(cr3 & ADDR_MASK)) return 0;
+    pml4 = (u64 *)(uptr)(cr3 & ADDR_MASK);
+
+    pat = rd_msr(0x277u);
+    int index = vmm_pat_wc_index(pat);
+    int write_pat = 0;
+    if (index < 0) {
+        u32 used = pat_used_mask(pml4);
+        for (int i = 4; i < 8; i++) {
+            if (!(used & (1u << i))) { index = i; break; }
+        }
+        if (index < 0) return 0;
+        pat = (pat & ~(0xffULL << (index * 8))) | (1ULL << (index * 8));
+        write_pat = 1;
+    }
+
+    /* Pass one: validate every live leaf and remember at most two 1 GiB
+     * leaves that need splitting.  Nothing is written in this pass. */
+    for (cur = start; cur < end; ) {
+        u64 pml4e = pml4[(cur >> 39) & 511u];
+        if (!(pml4e & PTE_P)) return 0;
+        u64 *pdpt = (u64 *)(uptr)(pml4e & ADDR_MASK);
+        u64 *pep = &pdpt[(cur >> 30) & 511u];
+        u64 pe = *pep;
+        if (!(pe & PTE_P)) return 0;
+        if (pe & PTE_PS) {
+            if (!have_before) { first_before = pe; have_before = 1; }
+            int known = 0;
+            for (int i = 0; i < split_count; i++) if (split_entry[i] == pep) known = 1;
+            if (!known) {
+                if (split_count >= 2) return 0;
+                split_entry[split_count] = pep;
+                split_old[split_count++] = pe;
+            }
+            u64 next = (cur & ~(one_gib - 1)) + one_gib;
+            cur = next < end ? next : end;
+            continue;
+        }
+        u64 *pd = (u64 *)(uptr)(pe & ADDR_MASK);
+        u64 de = pd[(cur >> 21) & 511u];
+        if (!(de & PTE_P)) return 0;
+        if (de & PTE_PS) {
+            if (!have_before) { first_before = de; have_before = 1; }
+            u64 next = (cur & ~(two_mib - 1)) + two_mib;
+            cur = next < end ? next : end;
+            continue;
+        }
+        u64 *pt = (u64 *)(uptr)(de & ADDR_MASK);
+        u64 te = pt[(cur >> 12) & 511u];
+        if (!(te & PTE_P)) return 0;
+        if (!have_before) { first_before = te; have_before = 1; }
+        cur += 4096;
+    }
+
+    /* Build replacement tables while the live mapping is untouched. */
+    for (int s = 0; s < split_count; s++) {
+        u64 old = split_old[s];
+        u64 base = old & addr_1g;
+        u64 flags = old & ~addr_1g;
+        for (u64 i = 0; i < PD_ENTRIES; i++)
+            fb_wc_pd[s][i] = (base + i * two_mib) | flags;
+    }
+
+    if (write_pat) install_pat(pat);
+
+    u64 flags = rd_flags();
+    __asm__ volatile("cli; wbinvd" ::: "memory");
+    u64 cr0 = rd_cr0();
+    wr_cr0(cr0 & ~CR0_WP);
+
+    for (int s = 0; s < split_count; s++) {
+        u64 old = split_old[s];
+        u64 table_flags = old & (PTE_P | PTE_W | PTE_U | PTE_NX);
+        *split_entry[s] = ((u64)(uptr)fb_wc_pd[s] & ADDR_MASK) | table_flags;
+    }
+
+    u64 wc_h = vmm_pat_leaf_bits(index, 1);
+    u64 wc_4k = vmm_pat_leaf_bits(index, 0);
+    for (cur = start; cur < end; ) {
+        u64 *pdpt = (u64 *)(uptr)(pml4[(cur >> 39) & 511u] & ADDR_MASK);
+        u64 pe = pdpt[(cur >> 30) & 511u];
+        u64 *pd = (u64 *)(uptr)(pe & ADDR_MASK);
+        u64 *dep = &pd[(cur >> 21) & 511u];
+        u64 de = *dep;
+        if (de & PTE_PS) {
+            *dep = (de & ~cache_h) | wc_h;
+            if (!have_after) { first_after = *dep; have_after = 1; }
+            u64 next = (cur & ~(two_mib - 1)) + two_mib;
+            cur = next < end ? next : end;
+        } else {
+            u64 *pt = (u64 *)(uptr)(de & ADDR_MASK);
+            u64 *tep = &pt[(cur >> 12) & 511u];
+            *tep = (*tep & ~cache_4k) | wc_4k;
+            if (!have_after) { first_after = *tep; have_after = 1; }
+            cur += 4096;
+        }
+    }
+
+    wr_cr0(cr0);
+    /* Reload CR3 for ordinary entries and toggle PGE so a firmware global
+     * identity leaf cannot survive with its old cache type in the TLB. */
+    u64 cr4 = rd_cr4();
+    if (cr4 & (1ULL << 7)) wr_cr4(cr4 & ~(1ULL << 7));
+    wr_cr3(cr3);
+    if (cr4 & (1ULL << 7)) wr_cr4(cr4);
+    __asm__ volatile("wbinvd" ::: "memory");
+    if (flags & (1ULL << 9)) __asm__ volatile("sti" ::: "memory");
+
+    fb_wc_pat = pat;
+    fb_wc_index = index;
+    fb_wc_leaf_before = first_before;
+    fb_wc_leaf_after = first_after;
+    fb_wc_live = 1;
+    return 1;
+}
+
+int vmm_framebuffer_wc_index(void) { return fb_wc_index; }
+unsigned long long vmm_framebuffer_pat(void) { return fb_wc_pat; }
+unsigned long long vmm_framebuffer_leaf_before(void) { return fb_wc_leaf_before; }
+unsigned long long vmm_framebuffer_leaf_after(void) { return fb_wc_leaf_after; }
+
+void vmm_sync_framebuffer_pat(void)
+{
+    if (fb_wc_live && rd_msr(0x277u) != fb_wc_pat) install_pat(fb_wc_pat);
+}
 
 /* ---- the probe ------------------------------------------------------------
  * Write through VIRTUAL, read back at PHYSICAL. This is the only check that
@@ -356,6 +625,18 @@ unsigned long long vmm_map_window(unsigned long long phys, unsigned long long by
     (void)phys; (void)bytes;
     return 0;
 }
+
+int vmm_framebuffer_write_combining(unsigned long long phys,
+                                    unsigned long long bytes)
+{
+    (void)phys; (void)bytes;
+    return 0;
+}
+int vmm_framebuffer_wc_index(void) { return -1; }
+unsigned long long vmm_framebuffer_pat(void) { return 0; }
+unsigned long long vmm_framebuffer_leaf_before(void) { return 0; }
+unsigned long long vmm_framebuffer_leaf_after(void) { return 0; }
+void vmm_sync_framebuffer_pat(void) { }
 
 #endif /* ZL_64 */
 

@@ -83,7 +83,8 @@ void zl_putc_pub(char c) { (void)c; }
 #define BG_ADDR   0x08000000UL
 #define SP_ADDR   0x0A000000UL
 #define BACK_ADDR 0x0C000000UL
-#define DOCK_H    (64 * 2)          /* kernel.zl's dock_y(), at scale 2 */
+#define TOP_H     (48 * 2)          /* wm.c RESERVE_TOP, at scale 2 */
+#define DOCK_H    (72 * 2)          /* wm.c RESERVE_BOT, at scale 2 */
 
 /* the app paints its whole client area one flat colour, so anything that is
  * NOT that colour inside a window is something else drawing on top */
@@ -202,7 +203,10 @@ int main(void)
      * appears on top of a window" and not "it appears on empty wallpaper" */
     int tx, ty, tw, th;
     notify_rect(W, H, DOCK_H, 2, &tx, &ty, &tw, &th);
-    int win = wm_open(1, "cover", tx - 60, ty - 60, tw + 120, th + 120);
+    const struct ui_theme *cover_theme = ui_theme();
+    int cover_top = cover_theme->title_h + 20;
+    int win = wm_open(1, "cover", tx - 60, ty - cover_top,
+                      tw + 120, th + cover_top + 60);
     for (int i = 0; i < 8; i++) frame();          /* let the open animation settle */
 
     ok("the covering window has focus to start with", wm_focused() == win);
@@ -274,7 +278,7 @@ int main(void)
     wm_close(win);
     for (int i = 0; i < 4; i++) frame();
 
-    const int RT = 32 * 2, RB = 64 * 2;      /* TOPBAR_H and dock, at scale 2 */
+    const int RT = TOP_H, RB = DOCK_H;
     int s0 = wm_open(1, "snap", 300, 300, 420, 260);
     for (int i = 0; i < 8; i++) frame();
     int gx, gy, gw, gh;

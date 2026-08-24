@@ -49,6 +49,14 @@ extern unsigned char zl_inb(unsigned short port);
 /* console.c chooses VGA text or a UEFI framebuffer at run time, so the
  * runtime - and therefore kernel.zl - never learns which screen it is on */
 extern void console_putc(char c);
+extern void zllog_putc(char c);
+extern void zllog_event(unsigned, unsigned, unsigned,
+                        unsigned, unsigned, unsigned) __attribute__((weak));
+extern void zllog_event_irq(unsigned, unsigned, unsigned,
+                            unsigned, unsigned, unsigned) __attribute__((weak));
+extern int zllog_ready(void) __attribute__((weak));
+extern int zllog_io_active(void) __attribute__((weak));
+extern int zllog_flush(void) __attribute__((weak));
 extern void console_clear(void);
 extern void console_setcolor(unsigned char attr);
 extern void console_bar(int row, unsigned char attr);
@@ -146,6 +154,9 @@ extern int xhci_ptr_ep(void) ZL_WEAK;
 extern void user_selftest(void);
 extern int  user_has_exited(void);
 extern unsigned int user_call_count(void);
+#if defined(ZL_64)
+extern int user64_run_default_file(void);
+#endif
 
 extern void vmm_report(void);
 extern int  vmm_active(void);
@@ -224,6 +235,7 @@ extern int  console_ui_scale_q8(void);
 extern int  console_cell_h(void);
 extern void fb_set_subpixel(int on);
 extern int  fb_get_subpixel(void);
+extern int  fb_enable_write_combining(void);
 /* the PCI bus driver and our own modesetting driver */
 extern void pci_scan(void);
 extern int  pci_count(void);
@@ -232,6 +244,23 @@ extern int  pci_device(int i);
 extern int  pci_class(int i);
 extern int  pci_find_class(int cls, int sub);
 extern unsigned int pci_bar(int i, int which);
+/* AX201 transport probe: read-only PCI identity and direct CSR snapshot. */
+extern int  iwlwifi_probe(void);
+extern int  iwlwifi_present(void);
+extern int  iwlwifi_device(void);
+extern unsigned int iwlwifi_bar_lo(void);
+extern unsigned int iwlwifi_bar_hi(void);
+extern unsigned int iwlwifi_hw_if_config(void);
+extern unsigned int iwlwifi_int_status(void);
+extern unsigned int iwlwifi_int_mask(void);
+extern unsigned int iwlwifi_gpio(void);
+extern unsigned int iwlwifi_reset(void);
+extern unsigned int iwlwifi_gp_cntrl(void);
+extern unsigned int iwlwifi_hw_rev(void);
+extern unsigned int iwlwifi_hw_type(void);
+extern unsigned int iwlwifi_rf_id(void);
+extern unsigned int iwlwifi_mac_csr0(void);
+extern unsigned int iwlwifi_mac_csr1(void);
 extern int  bga_present(void);
 extern int  bga_version(void);
 extern int  bga_find(void);
@@ -253,6 +282,8 @@ extern int  xhci_ctx_size(void);
 extern unsigned int xhci_mmio(void);
 extern int  xhci_reset(void);
 extern int  xhci_halted(void);
+extern unsigned int xhci_usbsts(void);
+extern unsigned int xhci_usbcmd(void);
 extern int  xhci_port_connected(int p);
 extern int  xhci_port_speed(int p);
 extern int  xhci_devices_attached(void);
@@ -283,6 +314,12 @@ extern int  xhci_owned(void);
 extern unsigned int xhci_portsc(int p);
 extern int  xhci_scratchpads(void);
 extern int  xhci_bar_high(void);
+extern int  xhci_ecm_init_stage(void);
+extern int  xhci_ecm_config_index(void);
+extern int  xhci_ecm_last_cc(void);
+extern unsigned int xhci_ecm_parse_bits(void);
+extern int  xhci_ecm_diag_len(void);
+extern int  xhci_ecm_diag_byte(int);
 /* the APIC: the interrupt controller that replaces the 1981 PIC */
 extern int  apic_init(void);
 extern int  apic_active(void);
@@ -367,6 +404,7 @@ extern unsigned int sched_ticks(int i);
 extern unsigned int sched_counter(int i);
 extern void yield(void);
 extern void task_sleep(unsigned ticks);
+extern unsigned int smp_band_wakes(void);
 /* SMP: the other cores */
 extern int  smp_start(void);
 extern int  smp_online(void);
@@ -386,6 +424,23 @@ extern int  xhci_msc_byte(int i);
 extern unsigned int xhci_msc_blocks(void);
 extern unsigned int xhci_msc_blocksize(void);
 extern unsigned int xhci_msc_capacity_mb(void);
+extern int  xhci_msc_init_stage(void);
+extern int  xhci_msc_init_port(void);
+extern int  xhci_msc_init_slot(void);
+extern int  xhci_msc_init_cc(void);
+extern int  xhci_msc_init_vid(void);
+extern int  xhci_msc_init_pid(void);
+/* Persistent boot observer. Its hot path is RAM-only; diag_up is the one
+ * place that may discover and validate the dedicated ZLLOG partition. */
+extern int zllog_mount(void);
+extern int zllog_ready(void);
+extern int zllog_flush(void);
+extern int zllog_complete(void);
+extern void zllog_flush_if_due(void);
+extern void zllog_milestone(unsigned int id, unsigned int value);
+extern unsigned int zllog_buffered(void);
+extern unsigned int zllog_dropped(void);
+extern unsigned int zllog_last_error(void);
 /* I2C-HID: the touchpad */
 extern int  i2c_find(int which);
 extern int  i2c_present(void);
@@ -402,6 +457,15 @@ extern int  i2c_hid_max_input(void);
 extern int  i2c_hid_rdesc_len(void);
 extern int  i2c_hid_read_report(void);
 extern int  i2c_hid_byte(int i);
+extern int  i2c_hid_device_id(void);
+extern unsigned int i2c_hid_abort_source(void);
+extern unsigned int i2c_hid_fs_hcnt(void);
+extern unsigned int i2c_hid_fs_lcnt(void);
+extern unsigned int i2c_hid_lpss_reset(void);
+extern int  i2c_hid_service(void);
+extern int  i2c_hid_pointer_ready(void);
+extern unsigned int i2c_hid_ptr_reports(void);
+extern unsigned int i2c_hid_ptr_malformed(void);
 /* the input stack: events, modifiers, repeat */
 /* ---- the compositor (wm.c / ui.c / wmglue.c) ---------------------------
  * Mechanism only. kernel.zl supplies the policy through the app_* functions
@@ -415,6 +479,8 @@ extern int  term_key(int code);
 extern int  term_cmd(void);
 extern int  term_unknown(void);
 extern int  term_arg(void);
+extern void term_submit(int command, int argument, int word_len);
+extern void term_complete(int command, int result);
 extern void term_clear(void);
 extern void term_draw(int x, int y, int w, int h, unsigned int fg,
                       unsigned int dim, unsigned int accent, int cursor_on);
@@ -444,6 +510,13 @@ extern int  wm_late(void);
 extern int  wm_lost(void);
 extern int  wm_painted(void);
 extern int  wm_budget_us(void);
+extern int  wm_sample_count(void);
+extern int  wm_sample_frame(int);
+extern int  wm_sample_input(int);
+extern unsigned long wm_client_surface_bytes(void);
+extern unsigned int wm_client_surface_refusals(void);
+extern unsigned int wm_region_fallbacks(void);
+extern unsigned long long wm_region_occluded_pixels(void);
 extern void wm_client(int win, int *x, int *y, int *w, int *h);
 extern void wm_focus(int win);
 extern void wm_raise(int win);
@@ -462,6 +535,8 @@ extern int  wm_set_ws_n(int n);
 extern int  wm_add_tab(int win, int app, const char *title);
 extern void wm_damage(int x, int y, int w, int h);
 extern void wm_damage_win(int win);
+extern void wm_invalidate_client(int win);
+extern void wm_invalidate_client_rect(int win, int x, int y, int w, int h);
 extern void ui_theme_init(int scale);
 extern void ui_theme_init_q8(int scale_q8);
 extern unsigned ui_color(int role);
@@ -619,6 +694,19 @@ extern unsigned int virtio_net_arena(void);
 extern int  virtio_net_arp_probe(unsigned int my_ip, unsigned int target_ip, int ms);
 extern int  virtio_net_peer_known(void);
 extern int  virtio_net_peer_mac(int i);
+extern int  netdev_find(void);
+extern int  netdev_init(void);
+extern int  netdev_send(const unsigned char *, int);
+extern int  netdev_poll(unsigned char *, int);
+extern int  netdev_mac(int);
+extern int  netdev_link_up(void);
+extern int  netdev_kind(void);
+extern int  netdev_device(void);
+extern int  netdev_tx_count(void);
+extern int  netdev_rx_count(void);
+extern int  netdev_rx_drops(void);
+extern int  netdev_tx_full(void);
+extern int  netdev_ram_ok(void);
 
 /* ---- the IP stack (net.c) ----------------------------------------------
  * net.c holds no link driver: the link is two function pointers, so the
@@ -632,6 +720,7 @@ extern void net_link(int (*send)(const unsigned char *, int),
 extern void net_config(unsigned int ip, unsigned int mask, unsigned int gw);
 extern int  net_poll_once(void);
 extern int  net_live(void);
+extern unsigned int net_ip(void);
 extern int  net_ping(unsigned int ip, int ms);
 extern int  net_ping_run(unsigned int ip, int n, int ms);
 extern int  net_ping_sent(void);
@@ -656,6 +745,16 @@ extern int  net_rx_badihl(void);
 extern int  net_rx_frag(void);
 extern int  virtio_net_send(const unsigned char *frame, int len);
 extern int  virtio_net_poll(unsigned char *out, int max);
+extern int  dhcp_start(void);
+extern int  dhcp_poll(void);
+extern int  dhcp_state(void);
+extern unsigned int dhcp_address(void);
+extern unsigned int dhcp_mask(void);
+extern unsigned int dhcp_gateway(void);
+extern unsigned int dhcp_dns(void);
+extern unsigned int dhcp_lease_seconds(void);
+extern int  dhcp_retries(void);
+extern int  dhcp_bad_packets(void);
 
 /* ---- TCP and HTTP (tcp.c / http.c) -------------------------------------
  * Both take their transport by injection so both run in a host harness with
@@ -771,6 +870,11 @@ extern unsigned gpu_st_poison(void);
 extern unsigned gpu_st_ctl(void);
 extern unsigned gpu_st_head(void);
 extern unsigned gpu_st_tail(void);
+extern int      gpu_compositor_enable(int);
+extern int      gpu_compositor_live(void);
+extern unsigned gpu_present_successes(void);
+extern unsigned gpu_present_failures(void);
+extern unsigned gpu_present_mismatches(void);
 
 extern int  intel_cursor_enable(unsigned gfx, int size64);
 extern int  intel_cursor_move(int x, int y);
@@ -831,6 +935,10 @@ extern int  console_rows(void);
  * 115200, so a real UART is never cut short. */
 void zl_serial_putc(char c)
 {
+    /* The persistent observer mirrors the serial transcript into RAM from the
+     * first byte.  It never performs storage I/O here: this path is also used
+     * while xHCI is down and while a storage command is in flight. */
+    zllog_putc(c);
     for (int i = 0; i < 200000; i++)
         if (zl_inb(COM1 + 5) & 0x20) break;
     zl_outb(COM1, (unsigned char)c);
@@ -841,6 +949,16 @@ extern int  nvme_read_to(unsigned dst, unsigned lba_lo, unsigned lba_hi);
 extern int  nvme_write_from(unsigned src, unsigned lba_lo, unsigned lba_hi);
 extern int  nvme_ram_ok(void);
 extern int  nvme_fault(void);
+extern int  block_service(void);
+extern int  block_flush(void);
+extern unsigned block_cache_hits(void);
+extern unsigned block_cache_misses(void);
+extern unsigned block_dirty_blocks(void);
+extern unsigned block_dirty_peak(void);
+extern unsigned block_refusals(void);
+extern unsigned block_completion_us_max(void);
+extern unsigned block_writeback_us(void);
+extern unsigned block_forced_syncs(void);
 
 extern int  fs_mkfs(void);
 extern int  fs_mount(void);
@@ -863,6 +981,8 @@ extern int  fs_name_stage_len(void);
 extern int  fs_name_stage_byte(int i);
 extern int  fs_create_named(unsigned bytes);
 extern int  fs_find_named(void);
+extern int  fs_rename_named(int idx);
+extern int  fs_sync(void);
 extern int  fs_delete(int idx);
 extern int  fs_read(int idx, void *dst, unsigned max);
 extern int  fs_write(int idx, const void *src, unsigned bytes);
@@ -944,6 +1064,22 @@ static void zl_put_i64(long long v)
 /* A kernel has no way to report a fault except to say so and stop. */
 static void kfatal(const char *msg)
 {
+    static int recording_panic;
+    if (!recording_panic) {
+        recording_panic = 1;
+        unsigned hash = 2166136261u;
+        for (const unsigned char *p = (const unsigned char *)msg; *p; p++)
+            hash = (hash ^ *p) * 16777619u;
+        /* Stable wire IDs: kernel subsystem 6, panic event 45, fatal 3.
+         * Never recurse through USB if the panic came from the recorder. */
+        if (zllog_io_active && zllog_io_active()) {
+            if (zllog_event_irq) zllog_event_irq(6u, 45u, 3u, hash, 0u, 0u);
+        } else if (zllog_event) {
+            zllog_event(6u, 45u, 3u, hash, 0u, 0u);
+            if (zllog_ready && zllog_ready() && zllog_flush)
+                (void)zllog_flush();
+        }
+    }
     /* ...and it must actually reach a SCREEN. The compositor mutes the
      * console's pixels for the duration of a session (console_mute), so
      * without this the machine would halt having drawn nothing, with the
@@ -1109,6 +1245,10 @@ Value zl_calln(const char *name, int n, ...)
      * before the halt and the next timer/input interrupt resumes the loop. */
     if (streq(name, "idle")) {
 #ifdef ZL_KERNEL_SERIAL
+        /* The observer checkpoints from normal context before sleeping. Its
+         * own rate limiter keeps storage completely out of the frame/input
+         * hot path and makes any resulting cadence miss visible next frame. */
+        zllog_flush_if_due();
         __asm__ volatile("sti; hlt" ::: "memory");
 #endif
         return zl_nil();
@@ -1198,11 +1338,28 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "hex"))        { console_puthex((unsigned long)(long long)a[0].num, (int)a[1].num); return zl_nil(); }
     if (streq(name, "subpix"))     { fb_set_subpixel((int)a[0].num); return zl_nil(); }
     if (streq(name, "subpix_on"))  return zl_num((double)fb_get_subpixel());
+    if (streq(name, "fb_wc"))      return zl_num((double)fb_enable_write_combining());
     if (streq(name, "pci_scan"))   { pci_scan(); return zl_nil(); }
     if (streq(name, "pci_count"))  return zl_num((double)pci_count());
     if (streq(name, "pci_vendor")) return zl_num((double)pci_vendor((int)a[0].num));
     if (streq(name, "pci_device")) return zl_num((double)pci_device((int)a[0].num));
     if (streq(name, "pci_class"))  return zl_num((double)pci_class((int)a[0].num));
+    if (streq(name, "wifi_probe")) return zl_num((double)iwlwifi_probe());
+    if (streq(name, "wifi_ok"))    return zl_num((double)iwlwifi_present());
+    if (streq(name, "wifi_dev"))   return zl_num((double)iwlwifi_device());
+    if (streq(name, "wifi_bar_lo"))return zl_num((double)iwlwifi_bar_lo());
+    if (streq(name, "wifi_bar_hi"))return zl_num((double)iwlwifi_bar_hi());
+    if (streq(name, "wifi_hwif"))  return zl_num((double)iwlwifi_hw_if_config());
+    if (streq(name, "wifi_int"))   return zl_num((double)iwlwifi_int_status());
+    if (streq(name, "wifi_imask")) return zl_num((double)iwlwifi_int_mask());
+    if (streq(name, "wifi_gpio"))  return zl_num((double)iwlwifi_gpio());
+    if (streq(name, "wifi_reset")) return zl_num((double)iwlwifi_reset());
+    if (streq(name, "wifi_gp"))    return zl_num((double)iwlwifi_gp_cntrl());
+    if (streq(name, "wifi_hwrev")) return zl_num((double)iwlwifi_hw_rev());
+    if (streq(name, "wifi_hwtype"))return zl_num((double)iwlwifi_hw_type());
+    if (streq(name, "wifi_rfid"))  return zl_num((double)iwlwifi_rf_id());
+    if (streq(name, "wifi_mac0"))  return zl_num((double)iwlwifi_mac_csr0());
+    if (streq(name, "wifi_mac1"))  return zl_num((double)iwlwifi_mac_csr1());
     if (streq(name, "gpu_find"))   return zl_num((double)bga_find());
     if (streq(name, "gpu_present"))return zl_num((double)bga_present());
     if (streq(name, "gpu_version"))return zl_num((double)bga_version());
@@ -1222,6 +1379,8 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "usb_ctxsz"))  return zl_num((double)xhci_ctx_size());
     if (streq(name, "usb_mmio"))   return zl_num((double)xhci_mmio());
     if (streq(name, "usb_reset"))  return zl_num((double)xhci_reset());
+    if (streq(name, "usb_sts"))    return zl_num((double)xhci_usbsts());
+    if (streq(name, "usb_cmd"))    return zl_num((double)xhci_usbcmd());
     if (streq(name, "usb_conn"))   return zl_num((double)xhci_port_connected((int)a[0].num));
     if (streq(name, "usb_speed"))  return zl_num((double)xhci_port_speed((int)a[0].num));
     if (streq(name, "usb_count"))  return zl_num((double)xhci_devices_attached());
@@ -1256,6 +1415,12 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "usb_portsc")) return zl_num((double)xhci_portsc((int)a[0].num));
     if (streq(name, "usb_scratch"))return zl_num((double)xhci_scratchpads());
     if (streq(name, "usb_barhi"))  return zl_num((double)xhci_bar_high());
+    if (streq(name, "usb_ecm_stage")) return zl_num((double)xhci_ecm_init_stage());
+    if (streq(name, "usb_ecm_cfg")) return zl_num((double)xhci_ecm_config_index());
+    if (streq(name, "usb_ecm_cc")) return zl_num((double)xhci_ecm_last_cc());
+    if (streq(name, "usb_ecm_bits")) return zl_num((double)xhci_ecm_parse_bits());
+    if (streq(name, "usb_ecm_len")) return zl_num((double)xhci_ecm_diag_len());
+    if (streq(name, "usb_ecm_byte")) return zl_num((double)xhci_ecm_diag_byte((int)a[0].num));
     if (streq(name, "apic_up"))    return zl_num((double)apic_init());
     if (streq(name, "apic_on"))    return zl_num((double)apic_active());
     if (streq(name, "apic_cap"))   return zl_num((double)apic_supported());
@@ -1306,6 +1471,11 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "gpu_ctl"))     return zl_num((double)gpu_st_ctl());
     if (streq(name, "gpu_head"))    return zl_num((double)gpu_st_head());
     if (streq(name, "gpu_tail"))    return zl_num((double)gpu_st_tail());
+    if (streq(name, "gpu_comp"))    return zl_num((double)gpu_compositor_enable((int)a[0].num));
+    if (streq(name, "gpu_comp_on")) return zl_num((double)gpu_compositor_live());
+    if (streq(name, "gpu_copies"))  return zl_num((double)gpu_present_successes());
+    if (streq(name, "gpu_cfails"))  return zl_num((double)gpu_present_failures());
+    if (streq(name, "gpu_cbad"))    return zl_num((double)gpu_present_mismatches());
     if (streq(name, "cur_on"))     return zl_num((double)intel_cursor_enable((unsigned)a[0].num,(int)a[1].num));
     if (streq(name, "cur_move"))   return zl_num((double)intel_cursor_move((int)a[0].num,(int)a[1].num));
     if (streq(name, "cur_off"))    return zl_num((double)intel_cursor_disable());
@@ -1335,6 +1505,12 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "term_cmd"))   return zl_num((double)term_cmd());
     if (streq(name, "term_bad"))   return zl_num((double)term_unknown());
     if (streq(name, "term_arg"))   return zl_num((double)term_arg());
+    if (streq(name, "term_submit")) {
+        term_submit((int)a[0].num, (int)a[1].num, (int)a[2].num); return zl_nil();
+    }
+    if (streq(name, "term_complete")) {
+        term_complete((int)a[0].num, (int)a[1].num); return zl_nil();
+    }
     if (streq(name, "term_clear")) { term_clear(); return zl_nil(); }
     if (streq(name, "term_draw"))  { term_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,
                                                (unsigned int)(unsigned long long)a[4].num,
@@ -1394,6 +1570,13 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_lost"))    return zl_num((double)wm_lost());
     if (streq(name, "wm_painted")) return zl_num((double)wm_painted());
     if (streq(name, "wm_budget"))  return zl_num((double)wm_budget_us());
+    if (streq(name, "wm_sn"))      return zl_num((double)wm_sample_count());
+    if (streq(name, "wm_sf"))      return zl_num((double)wm_sample_frame((int)a[0].num));
+    if (streq(name, "wm_si"))      return zl_num((double)wm_sample_input((int)a[0].num));
+    if (streq(name, "wm_sbytes"))  return zl_num((double)wm_client_surface_bytes());
+    if (streq(name, "wm_srefuse")) return zl_num((double)wm_client_surface_refusals());
+    if (streq(name, "wm_rfall"))   return zl_num((double)wm_region_fallbacks());
+    if (streq(name, "wm_occpx"))   return zl_num((double)wm_region_occluded_pixels());
     /* the client rect, so an app can turn a screen-space pointer into a row */
     if (streq(name, "wm_cx"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)x); }
     if (streq(name, "wm_cy"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)y); }
@@ -1424,7 +1607,10 @@ Value zl_calln(const char *name, int n, ...)
      * Python, which goes stale the first time a window moves. */
     if (streq(name, "wm_cw"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)w); }
     if (streq(name, "wm_ch"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)h); }
-    if (streq(name, "wm_dmg"))     { wm_damage_win((int)a[0].num); return zl_nil(); }
+    if (streq(name, "wm_dmg"))     { wm_invalidate_client((int)a[0].num); return zl_nil(); }
+    if (streq(name, "wm_cdmg"))    { wm_invalidate_client_rect((int)a[0].num,
+                                            (int)a[1].num,(int)a[2].num,
+                                            (int)a[3].num,(int)a[4].num); return zl_nil(); }
     if (streq(name, "wm_damage"))  { wm_damage((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "ui_theme"))   { ui_theme_init_q8((int)(a[0].num * 256.0)); return zl_nil(); }
     if (streq(name, "ui_theme_q8")){ ui_theme_init_q8((int)a[0].num); return zl_nil(); }
@@ -1498,19 +1684,48 @@ Value zl_calln(const char *name, int n, ...)
     /* ---- virtio-net. net_up() is the one that does the work; everything
      * else reports what happened, because a driver that fails silently is
      * indistinguishable from one that is not there. */
-    if (streq(name, "net_find"))   return zl_num((double)virtio_net_find());
+    if (streq(name, "net_find"))   return zl_num((double)netdev_find());
     /* ip_up(ip, mask, gw): bring the card up, then hand net.c the link. Two
      * steps rather than one because a card that works and a stack that is
      * misconfigured are different failures and should report separately. */
     if (streq(name, "ip_up")) {
-        if (!virtio_net_init()) return zl_num(0.0);
+        if (!netdev_init()) return zl_num(0.0);
         unsigned char m[6];
-        for (int k = 0; k < 6; k++) m[k] = (unsigned char)virtio_net_mac(k);
-        net_link(virtio_net_send, virtio_net_poll, m);
+        for (int k = 0; k < 6; k++) m[k] = (unsigned char)netdev_mac(k);
+        net_link(netdev_send, netdev_poll, m);
         net_config((unsigned)a[0].num, (unsigned)a[1].num, (unsigned)a[2].num);
         return zl_num(1.0);
     }
-    if (streq(name, "ip_live"))    return zl_num((double)net_live());
+    if (streq(name, "ip_auto")) {
+        if (!netdev_init()) return zl_num(0.0);
+        unsigned char m[6];
+        for (int k = 0; k < 6; k++) m[k] = (unsigned char)netdev_mac(k);
+        net_link(netdev_send, netdev_poll, m);
+        return zl_num((double)dhcp_start());
+    }
+    if (streq(name, "dhcp_work")) {
+        int before = dhcp_state();
+        int changed = dhcp_poll();
+        if (before != 3 && dhcp_state() == 3) {
+            unsigned int ip = dhcp_address();
+            tcp_attach(net_send_ip, ip);
+            net_set_proto_sink(6, tcp_input);
+            net_set_proto_sink(17, dns_ip_sink);
+            dns_server(dhcp_dns());
+            dns_cache_clear();
+        }
+        return zl_num((double)changed);
+    }
+    if (streq(name, "dhcp_state")) return zl_num((double)dhcp_state());
+    if (streq(name, "dhcp_ip"))    return zl_num((double)dhcp_address());
+    if (streq(name, "dhcp_mask"))  return zl_num((double)dhcp_mask());
+    if (streq(name, "dhcp_gw"))    return zl_num((double)dhcp_gateway());
+    if (streq(name, "dhcp_dns"))   return zl_num((double)dhcp_dns());
+    if (streq(name, "dhcp_lease")) return zl_num((double)dhcp_lease_seconds());
+    if (streq(name, "dhcp_retry")) return zl_num((double)dhcp_retries());
+    if (streq(name, "dhcp_bad"))   return zl_num((double)dhcp_bad_packets());
+    if (streq(name, "net_attached")) return zl_num((double)net_live());
+    if (streq(name, "ip_live"))    return zl_num((double)(net_live() && net_ip() != 0));
     /* tcp_up(): hand tcp.c the IP layer and register it as net.c's sink for
      * everything that is not ICMP. Two calls, one place, once. */
     if (streq(name, "tcp_up")) {
@@ -1590,17 +1805,19 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ip_badver"))  return zl_num((double)net_rx_badver());
     if (streq(name, "ip_badihl"))  return zl_num((double)net_rx_badihl());
     if (streq(name, "ip_frag"))    return zl_num((double)net_rx_frag());
-    if (streq(name, "net_up"))     return zl_num((double)virtio_net_init());
+    if (streq(name, "net_up"))     return zl_num((double)netdev_init());
     if (streq(name, "net_there"))  return zl_num((double)virtio_net_present());
     if (streq(name, "net_ok"))     return zl_num((double)virtio_net_ready());
-    if (streq(name, "net_ram"))    return zl_num((double)virtio_net_ram_ok());
+    if (streq(name, "net_ram"))    return zl_num((double)netdev_ram_ok());
     if (streq(name, "net_hasmac")) return zl_num((double)virtio_net_has_mac());
-    if (streq(name, "net_mac"))    return zl_num((double)virtio_net_mac((int)a[0].num));
-    if (streq(name, "net_link"))   return zl_num((double)virtio_net_link_up());
-    if (streq(name, "net_tx"))     return zl_num((double)virtio_net_tx_count());
-    if (streq(name, "net_rx"))     return zl_num((double)virtio_net_rx_count());
-    if (streq(name, "net_drop"))   return zl_num((double)virtio_net_rx_drops());
-    if (streq(name, "net_txfull")) return zl_num((double)virtio_net_tx_full());
+    if (streq(name, "net_mac"))    return zl_num((double)netdev_mac((int)a[0].num));
+    if (streq(name, "net_link"))   return zl_num((double)netdev_link_up());
+    if (streq(name, "net_kind"))   return zl_num((double)netdev_kind());
+    if (streq(name, "net_devid"))  return zl_num((double)netdev_device());
+    if (streq(name, "net_tx"))     return zl_num((double)netdev_tx_count());
+    if (streq(name, "net_rx"))     return zl_num((double)netdev_rx_count());
+    if (streq(name, "net_drop"))   return zl_num((double)netdev_rx_drops());
+    if (streq(name, "net_txfull")) return zl_num((double)netdev_tx_full());
     if (streq(name, "net_runt"))   return zl_num((double)virtio_net_runts());
     if (streq(name, "net_unwrit")) return zl_num((double)virtio_net_unwritten());
     if (streq(name, "net_seenarp")) return zl_num((double)virtio_net_arp_seen());
@@ -1679,6 +1896,15 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "tp_rdlen"))   return zl_num((double)i2c_hid_rdesc_len());
     if (streq(name, "tp_read"))    return zl_num((double)i2c_hid_read_report());
     if (streq(name, "tp_b"))       return zl_num((double)i2c_hid_byte((int)a[0].num));
+    if (streq(name, "tp_devid"))   return zl_num((double)i2c_hid_device_id());
+    if (streq(name, "tp_abort"))   return zl_num((double)i2c_hid_abort_source());
+    if (streq(name, "tp_hcnt"))    return zl_num((double)i2c_hid_fs_hcnt());
+    if (streq(name, "tp_lcnt"))    return zl_num((double)i2c_hid_fs_lcnt());
+    if (streq(name, "tp_reset"))   return zl_num((double)i2c_hid_lpss_reset());
+    if (streq(name, "tp_service")) return zl_num((double)i2c_hid_service());
+    if (streq(name, "tp_ptr"))     return zl_num((double)i2c_hid_pointer_ready());
+    if (streq(name, "tp_reports")) return zl_num((double)i2c_hid_ptr_reports());
+    if (streq(name, "tp_bad"))     return zl_num((double)i2c_hid_ptr_malformed());
     if (streq(name, "msc_up"))     return zl_num((double)xhci_msc_init());
     if (streq(name, "msc_ok"))     return zl_num((double)xhci_msc_ready());
     if (streq(name, "msc_slot"))   return zl_num((double)xhci_msc_slot());
@@ -1689,6 +1915,23 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "msc_blocks")) return zl_num((double)xhci_msc_blocks());
     if (streq(name, "msc_bsize"))  return zl_num((double)xhci_msc_blocksize());
     if (streq(name, "msc_mb"))     return zl_num((double)xhci_msc_capacity_mb());
+    if (streq(name, "msc_istage")) return zl_num((double)xhci_msc_init_stage());
+    if (streq(name, "msc_iport"))  return zl_num((double)xhci_msc_init_port());
+    if (streq(name, "msc_islot"))  return zl_num((double)xhci_msc_init_slot());
+    if (streq(name, "msc_icc"))    return zl_num((double)xhci_msc_init_cc());
+    if (streq(name, "msc_ivid"))   return zl_num((double)xhci_msc_init_vid());
+    if (streq(name, "msc_ipid"))   return zl_num((double)xhci_msc_init_pid());
+    if (streq(name, "diag_up"))    return zl_num((double)zllog_mount());
+    if (streq(name, "diag_on"))    return zl_num((double)zllog_ready());
+    if (streq(name, "diag_save"))  return zl_num((double)zllog_flush());
+    if (streq(name, "diag_done"))  return zl_num((double)zllog_complete());
+    if (streq(name, "diag_mark")) {
+        zllog_milestone((unsigned int)a[0].num, 0u);
+        return zl_num((double)zllog_flush());
+    }
+    if (streq(name, "diag_buf"))   return zl_num((double)zllog_buffered());
+    if (streq(name, "diag_drop"))  return zl_num((double)zllog_dropped());
+    if (streq(name, "diag_err"))   return zl_num((double)zllog_last_error());
     if (streq(name, "smp_go"))     return zl_num((double)smp_start());
     if (streq(name, "smp_n"))      return zl_num((double)smp_online());
     if (streq(name, "smp_total"))  return zl_num((double)smp_cpu_count());
@@ -1701,6 +1944,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "sched_n"))    return zl_num((double)sched_count());
     if (streq(name, "sched_cur"))  return zl_num((double)sched_current());
     if (streq(name, "sched_sw"))   return zl_num((double)sched_switches());
+    if (streq(name, "smp_jobs"))   return zl_num((double)smp_band_wakes());
     if (streq(name, "sched_st"))   return zl_num((double)sched_state((int)a[0].num));
     if (streq(name, "sched_tk"))   return zl_num((double)sched_ticks((int)a[0].num));
     if (streq(name, "counter"))    return zl_num((double)sched_counter((int)a[0].num));
@@ -1863,6 +2107,11 @@ Value zl_calln(const char *name, int n, ...)
      * made from ring 3 and can be produced no other way. */
     if (streq(name, "user_up"))       { user_selftest(); return zl_num((double)user_call_count()); }
     if (streq(name, "user_calls"))    return zl_num((double)user_call_count());
+#if defined(ZL_64)
+    if (streq(name, "user_file"))     return zl_num((double)user64_run_default_file());
+#else
+    if (streq(name, "user_file"))     return zl_num(-64.0);
+#endif
 
     if (streq(name, "vmm_up"))        { vmm_report(); return zl_num((double)vmm_active()); }
     if (streq(name, "vmm_on"))        return zl_num((double)vmm_active());
@@ -1956,9 +2205,21 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "fs_nch"))     return zl_num((double)fs_name_stage_byte((int)a[0].num));
     if (streq(name, "fs_new"))     return zl_num((double)fs_create_named((unsigned)a[0].num));
     if (streq(name, "fs_get"))     return zl_num((double)fs_find_named());
+    if (streq(name, "fs_rename"))  return zl_num((double)fs_rename_named((int)a[0].num));
     if (streq(name, "fs_rm"))      return zl_num((double)fs_delete((int)a[0].num));
     if (streq(name, "fs_rd"))      return zl_num((double)fs_read((int)a[0].num,(void *)(zl_uptr)a[1].num,(unsigned)a[2].num));
     if (streq(name, "fs_wr"))      return zl_num((double)fs_write((int)a[0].num,(const void *)(zl_uptr)a[1].num,(unsigned)a[2].num));
+    if (streq(name, "fs_sync"))    return zl_num((double)fs_sync());
+    if (streq(name, "blk_work"))   return zl_num((double)block_service());
+    if (streq(name, "blk_flush"))  return zl_num((double)block_flush());
+    if (streq(name, "blk_hit"))    return zl_num((double)block_cache_hits());
+    if (streq(name, "blk_miss"))   return zl_num((double)block_cache_misses());
+    if (streq(name, "blk_dirty"))  return zl_num((double)block_dirty_blocks());
+    if (streq(name, "blk_dpeak"))  return zl_num((double)block_dirty_peak());
+    if (streq(name, "blk_refuse")) return zl_num((double)block_refusals());
+    if (streq(name, "blk_latmax")) return zl_num((double)block_completion_us_max());
+    if (streq(name, "blk_wbus"))   return zl_num((double)block_writeback_us());
+    if (streq(name, "blk_syncs"))  return zl_num((double)block_forced_syncs());
     if (streq(name, "fs_stamp"))   { fs_set_time((unsigned)a[0].num); return zl_nil(); }
 
     /* the clock */

@@ -29,6 +29,7 @@
  */
 
 .equ TRAMP,      0x9000
+.equ IDT_PTR,    0x8FC0
 .equ CR3_PTR,    0x8FE0
 .equ ENTRY_PTR,  0x8FF0
 .equ STACK_BASE, 0x0A800000
@@ -83,6 +84,7 @@ lm_entry:
     movw    %ax, %ss
     movw    %ax, %fs
     movw    %ax, %gs
+    lidt    IDT_PTR
 
     /* SSE on, or the first double the compiler touches is an invalid opcode */
     movq    %cr0, %rax

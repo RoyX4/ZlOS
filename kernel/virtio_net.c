@@ -68,6 +68,8 @@ typedef unsigned int       u32;
 typedef unsigned short     u16;
 typedef unsigned char      u8;
 
+#include "telemetry.h"
+
 #if defined(ZL_64)
 typedef unsigned long long uptr;
 #else
@@ -470,6 +472,8 @@ int virtio_net_init(void)
     rx_fill();
 
     vn_ready = 1;
+    zlt_event(ZLLOG_SUB_NET, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              0x1af4u, (unsigned)pci_device(vn_idx), vn_features);
     return 1;
 }
 
@@ -508,6 +512,8 @@ int virtio_net_send(const u8 *frame, int len)
         }
         if ((u16)(avail_idx[VQ_TX] - tused[1]) >= QSZ) {
             n_tx_full++;                              /* say so, do not lie */
+            zlt_event(ZLLOG_SUB_NET, ZLLOG_EV_DROP, ZLLOG_ERROR,
+                      50u, (unsigned)avail_idx[VQ_TX], n_tx_full);
             return 0;
         }
     }
@@ -622,7 +628,9 @@ int virtio_net_poll(u8 *out, int max)
         n = (int)(blen - (u32)HDR_LEN);
         if (n > FRAME_MAX) n = FRAME_MAX;           /* the device said more
                                                        than the buffer holds */
-        if (n > max) { n = max; n_rx_drop++; }      /* caller's buffer is
+        if (n > max) { n = max; n_rx_drop++;
+            zlt_event(ZLLOG_SUB_NET, ZLLOG_EV_DROP, ZLLOG_WARN,
+                      51u, blen, (unsigned)max); }   /* caller's buffer is
                                                        smaller: truncate and
                                                        COUNT it */
         volatile u8 *b = (volatile u8 *)(uptr)(RX_BUF(id) + HDR_LEN);
