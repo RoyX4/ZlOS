@@ -2,10 +2,15 @@
 
 Two things live here.
 
-> **Complete 2026-08-24 branch integration:**
+> **Complete 2026-08-24 zl-linux integration:**
 > [`docs/MERGE-ALL-2026-08-24.md`](docs/MERGE-ALL-2026-08-24.md) records the
-> exact remote-branch closure, conflict policy, verification, and physical
-> evidence ceiling for the all-zl-linux merge.
+> exact remote branch, local branch, registered-worktree and standalone-clone
+> closure. The post-push audit found one extra divergent local Product Wave
+> branch and merged it too. After that pass, every audited zl-linux branch and
+> worktree head is an ancestor of the integration head and every audited
+> worktree/clone is clean. The old directories and branch names still exist;
+> they contain no unique unmerged work. The separate `RoyX4/zl` repository is
+> deliberately out of scope.
 
 **`zl`** is a self-hosting systems language with five independent ways to run a
 program, fully ported from Windows to Linux. No Wine, no emulation, and no C
@@ -32,10 +37,9 @@ NVMe, a filesystem, and a windowed compositor.
 > **Where the project stands against "is this a 10":**
 > [`docs/ROAD-TO-TEN.md`](docs/ROAD-TO-TEN.md). Scores the tree discriminator by
 > discriminator against an external assessment, corrects the two places that
-> assessment guessed wrong, and ranks what actually moves the number. Short
-> version: nothing in the hard parts is ported, and the two things holding the
-> score down are a bare-metal boot that has never happened and a finished branch
-> that has never landed.
+> assessment guessed wrong, and ranks what actually moves the number. Its old
+> branch-landing warning is now superseded by the complete integration receipt;
+> physical bare-metal proof remains a separate open evidence boundary.
 
 Two more orientation docs worth knowing about:
 
