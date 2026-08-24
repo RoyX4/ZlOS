@@ -42,6 +42,8 @@
 typedef unsigned int   u32;
 typedef unsigned char  u8;
 
+#include "telemetry.h"
+
 /* A saved stack pointer is pointer-width, not always 32 bits. The UEFI build -
  * the one that boots the real laptop - is 64-bit, and this file has to work
  * there too. */
@@ -164,7 +166,11 @@ static uptr stack_top_of(int i)
  * pushal's order puts EDI lowest, so eight zeroes is all we need. */
 int task_create(uptr entry)
 {
-    if (ntasks >= MAX_TASKS) return -1;
+    if (ntasks >= MAX_TASKS) {
+        zlt_event(ZLLOG_SUB_SCHED, ZLLOG_EV_DROP, ZLLOG_ERROR,
+                  1u, ntasks, MAX_TASKS);
+        return -1;
+    }
     int i = ntasks++;
 
     uptr top = stack_top_of(i);
@@ -180,6 +186,8 @@ int task_create(uptr entry)
     tasks[i].ticks   = 0;
     tasks[i].wake_at = 0;
     tasks[i].entry   = entry;
+    zlt_event(ZLLOG_SUB_SCHED, ZLLOG_EV_PROCESS, ZLLOG_INFO,
+              1u, (unsigned)i, (unsigned)entry);
     return i;
 }
 
@@ -196,6 +204,8 @@ int sched_init(void)
     tasks[i].entry = 0;
     current = 0;
     sched_on = 1;
+    zlt_event(ZLLOG_SUB_SCHED, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              1u, ntasks, current);
     return 1;
 }
 
@@ -217,6 +227,7 @@ static int pick_next(void)
 /* Give up the CPU. Everything above exists to make this one call safe. */
 void yield(void)
 {
+    zlt_count(ZLLOG_C_SCHED_YIELD, 1);
     if (!sched_on || ntasks < 2) return;
 
     int prev = current;
@@ -228,6 +239,7 @@ void yield(void)
     tasks[next].ticks++;
     current = next;
     switches++;
+    zlt_count(ZLLOG_C_SCHED_SWITCH, 1);
 
     switch_to(&tasks[prev].sp, tasks[next].sp);
     /* control returns here whenever this task is scheduled again */
@@ -245,6 +257,8 @@ void task_sleep(u32 ticks)
  * reaping and no stack reuse yet - it simply stops being scheduled. */
 void task_exit(void)
 {
+    zlt_event(ZLLOG_SUB_SCHED, ZLLOG_EV_PROCESS, ZLLOG_INFO,
+              2u, (unsigned)current, tasks[current].ticks);
     tasks[current].state = TASK_DONE;
     for (;;) yield();
 }

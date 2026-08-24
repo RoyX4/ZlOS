@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# verify-sources.sh - does adding one source file really reach ALL FOUR builds?
+# verify-sources.sh - does adding one source file reach every kernel build?
 #
 # There used to be four copies of the source list, and adding a .c to the build
 # you were testing with silently missed the other three. It broke the UEFI and
@@ -8,7 +8,9 @@
 #
 # ./SOURCES is now the single list. This proves that rather than asserting it,
 # the way the task asked for: drop a throwaway .c in, build all four, and look
-# for it INSIDE each of the four outputs. Not "the build succeeded" - a build
+# for it INSIDE each kernel output. The UEFI kernel is ZLOS.EFI; BOOTX64.EFI is
+# intentionally the independent stage-zero witness and must not contain the
+# kernel source list. Not "the build succeeded" - a build
 # that ignored the file succeeds too. The marker string has to actually be in
 # the binary.
 #
@@ -20,6 +22,10 @@ cd "$(dirname "$0")"
 
 PROBE=_srcprobe.c
 MARKER=ZL_SOURCES_PROBE_9c3f1a
+if [ -e "$PROBE" ] || grep -qxF "$PROBE" SOURCES; then
+    echo "refusing: stale $PROBE state exists; clean it before running this gate" >&2
+    exit 1
+fi
 SOURCES_BAK=$(mktemp)
 cp SOURCES "$SOURCES_BAK"
 
@@ -67,7 +73,7 @@ build_and_look() {          # build_and_look <label> <script> <output file>
 echo "== added $PROBE to SOURCES, building all four =="
 build_and_look "32-bit BIOS " build.sh    kernel.elf
 build_and_look "64-bit      " build64.sh  kernel64.elf
-build_and_look "UEFI app    " buildefi.sh BOOTX64.EFI
+build_and_look "UEFI kernel " buildefi.sh ZLOS.EFI
 build_and_look "raw disk    " mkdisk.sh   kernel_raw.bin
 
 # ...and the other half of the claim: with the probe gone, it is gone from all
@@ -77,7 +83,7 @@ cleanup
 trap - EXIT
 echo "== removed it again =="
 for pair in "build.sh kernel.elf" "build64.sh kernel64.elf" \
-            "buildefi.sh BOOTX64.EFI" "mkdisk.sh kernel_raw.bin"; do
+            "buildefi.sh ZLOS.EFI" "mkdisk.sh kernel_raw.bin"; do
     set -- $pair
     "./$1" >/dev/null 2>&1
     if grep -qa "$MARKER" "$2"; then

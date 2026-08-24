@@ -1,10 +1,9 @@
 /* browser.c - the app: a document, a viewport, and the paint.
  *
- * WHAT THIS IS, HONESTLY. It renders HTML. It does not run JavaScript and it
- * will not fetch https - see docs/BROWSER-PROMPT.md §5 for why a half-TLS is
- * worse than none. What is here is a fetcher's worth of plumbing short of a
- * browser, and the parts that ARE here - the parse, the box model, the type -
- * are the parts the rest of this kernel had already almost built.
+ * WHAT THIS IS, HONESTLY. It renders bounded HTML/CSS/JavaScript and fetches
+ * HTTP or certificate-verified TLS 1.3. It is a document browser, not a modern
+ * web-application runtime: there is no DOM/event/promise engine. The limits
+ * are stated on the built-in page instead of hidden behind a generic failure.
  *
  * THE SPLIT THAT MATTERS: html.c and layout.c contain no pixels and no theme,
  * so both run in a host harness with no framebuffer. This file is where they
@@ -28,6 +27,7 @@
 int http_rnd_quality(void);
 #include "tcp.h"
 #include "dns.h"
+#include "telemetry.h"
 
 /* Load from anywhere in memory - the RAM filesystem lives at a fixed address
  * and hands out (address, length), so this is all the coupling needed.
@@ -157,6 +157,9 @@ static int  status;          /* BR_* below                              */
  * One place computes them; everything else reads them back. */
 static int bar_x, bar_y, bar_w, bar_h;      /* the URL bar     */
 static int back_x, back_y, back_w, back_h;  /* the Back button */
+static int mark_x, mark_y, mark_w, mark_h;  /* save bookmark    */
+static int marks_x, marks_y, marks_w, marks_h; /* open bookmark  */
+static int save_x, save_y, save_w, save_h;  /* save page        */
 
 #define BR_OK        0
 #define BR_NO_NET    1       /* an http:// URL with no network driver    */
@@ -167,6 +170,10 @@ static int back_x, back_y, back_w, back_h;  /* the Back button */
 #define BR_BAD_TYPE  6
 #define BR_RESOLVING 7
 #define BR_IMAGES    8       /* the page is up; its pictures are arriving */
+#define BR_BOOKMARKED 9
+#define BR_SAVED      10
+#define BR_STORAGE    11
+#define BR_NO_MARKS   12
 
 /* ---- searching from the URL bar --------------------------------------------
  * TYPING WORDS INSTEAD OF AN ADDRESS SEARCHES, which is what every browser
@@ -223,6 +230,7 @@ static int back_x, back_y, back_w, back_h;  /* the Back button */
  * the server's fault. Twelve buffers at 1 KB is ~12 KB of BSS. */
 #define URL_MAX  1024
 #define HIST_N   8
+#define MARK_N   16
 
 static char url[URL_MAX];
 static int  url_len;
@@ -230,8 +238,27 @@ static int  url_focus;
 static int  url_sel_all;   /* focus selects the lot, as a browser does */
 static char hist[HIST_N][URL_MAX];
 static int  hist_n;
+static int  hist_loaded;
 static int  fetching;
 static int  last_status_code;
+static char marks[MARK_N][URL_MAX];
+static int  marks_n;
+static int  marks_loaded;
+static int  mark_cursor;
+
+extern int fs_mounted(void) __attribute__((weak));
+extern int fs_find(const char *name) __attribute__((weak));
+extern int fs_create(const char *name, unsigned bytes) __attribute__((weak));
+extern int fs_write(int idx, const void *src, unsigned bytes) __attribute__((weak));
+extern int fs_read(int idx, void *dst, unsigned max) __attribute__((weak));
+extern int fs_delete(int idx) __attribute__((weak));
+extern int fs_sync(void) __attribute__((weak));
+#define BROWSER_HISTORY_FILE "/user/browser.history"
+#define HIST_DISK_BYTES (12 + HIST_N * URL_MAX)
+static unsigned char hist_disk[HIST_DISK_BYTES];
+#define BROWSER_MARKS_FILE "/user/browser.marks"
+#define MARK_DISK_BYTES (12 + MARK_N * URL_MAX)
+static unsigned char marks_disk[MARK_DISK_BYTES];
 /* Declared here rather than beside the rest of the picture state below,
  * because navigate() has to be able to abandon a fetch in flight and sits
  * above it. See the block headed "pictures". */
@@ -245,12 +272,181 @@ static int  css_cur = -1;   /* html_css_links() index in flight, or -1 */
 static int  sub_is_css;     /* what the response in flight actually is  */
 static void img_next(void);
 static void img_arrived(const unsigned char *body, int len);
+static int navigate(const char *u, int len, int record);
 
 static void sset(char *d, const char *s, int max)
 {
     int i = 0;
     while (s[i] && i < max - 1) { d[i] = s[i]; i++; }
     d[i] = 0;
+}
+
+static unsigned hist_hash(const unsigned char *p, int n)
+{
+    unsigned h = 2166136261u;
+    for (int i = 0; i < n; i++) { h ^= p[i]; h *= 16777619u; }
+    return h;
+}
+
+static void hist_put32(unsigned char *p, unsigned v)
+{
+    p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8);
+    p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24);
+}
+
+static unsigned hist_get32(const unsigned char *p)
+{
+    return (unsigned)p[0] | ((unsigned)p[1] << 8) |
+           ((unsigned)p[2] << 16) | ((unsigned)p[3] << 24);
+}
+
+static void history_save(void)
+{
+    if (!fs_mounted || !fs_find || !fs_create || !fs_write || !fs_mounted()) return;
+    for (int i = 0; i < HIST_DISK_BYTES; i++) hist_disk[i] = 0;
+    hist_disk[0] = 'Z'; hist_disk[1] = 'L'; hist_disk[2] = 'B'; hist_disk[3] = 'H';
+    hist_put32(hist_disk + 4, (unsigned)hist_n);
+    for (int i = 0; i < hist_n; i++)
+        for (int j = 0; j < URL_MAX && hist[i][j]; j++)
+            hist_disk[12 + i * URL_MAX + j] = (unsigned char)hist[i][j];
+    hist_put32(hist_disk + 8, 0);
+    hist_put32(hist_disk + 8, hist_hash(hist_disk, HIST_DISK_BYTES));
+    int idx = fs_find(BROWSER_HISTORY_FILE);
+    if (idx < 0) idx = fs_create(BROWSER_HISTORY_FILE, HIST_DISK_BYTES);
+    if (idx >= 0) (void)fs_write(idx, hist_disk, HIST_DISK_BYTES);
+}
+
+static void history_load(void)
+{
+    if (hist_loaded) return;
+    hist_loaded = 1;
+    if (!fs_mounted || !fs_find || !fs_read || !fs_mounted()) return;
+    int idx = fs_find(BROWSER_HISTORY_FILE);
+    if (idx < 0 || fs_read(idx, hist_disk, HIST_DISK_BYTES) != HIST_DISK_BYTES) return;
+    if (hist_disk[0] != 'Z' || hist_disk[1] != 'L' ||
+        hist_disk[2] != 'B' || hist_disk[3] != 'H') return;
+    unsigned stored = hist_get32(hist_disk + 8);
+    hist_put32(hist_disk + 8, 0);
+    if (hist_hash(hist_disk, HIST_DISK_BYTES) != stored) return;
+    unsigned n = hist_get32(hist_disk + 4);
+    if (n > HIST_N) return;
+    hist_n = 0;
+    for (unsigned i = 0; i < n; i++) {
+        char *src = (char *)hist_disk + 12 + i * URL_MAX;
+        src[URL_MAX - 1] = 0;
+        if (src[0]) sset(hist[hist_n++], src, URL_MAX);
+    }
+}
+
+/* Bookmarks are a user-owned object, unlike history. History is deliberately
+ * lazy and may lag a sudden power loss; pressing Mark is an explicit save and
+ * therefore does not report success until the filesystem's ordered writeback
+ * boundary has completed. The fixed format is bounded and checksum-protected
+ * for the same reason as history: damaged metadata is ignored, never trusted. */
+static int marks_save(void)
+{
+    if (!fs_mounted || !fs_find || !fs_create || !fs_write ||
+        !fs_mounted()) return 0;
+    for (int i = 0; i < MARK_DISK_BYTES; i++) marks_disk[i] = 0;
+    marks_disk[0] = 'Z'; marks_disk[1] = 'L';
+    marks_disk[2] = 'B'; marks_disk[3] = 'M';
+    hist_put32(marks_disk + 4, (unsigned)marks_n);
+    for (int i = 0; i < marks_n; i++)
+        for (int j = 0; j < URL_MAX && marks[i][j]; j++)
+            marks_disk[12 + i * URL_MAX + j] = (unsigned char)marks[i][j];
+    hist_put32(marks_disk + 8, 0);
+    hist_put32(marks_disk + 8, hist_hash(marks_disk, MARK_DISK_BYTES));
+    int idx = fs_find(BROWSER_MARKS_FILE);
+    if (idx < 0) idx = fs_create(BROWSER_MARKS_FILE, MARK_DISK_BYTES);
+    if (idx < 0 || !fs_write(idx, marks_disk, MARK_DISK_BYTES))
+        return 0;
+    return !fs_sync || fs_sync();
+}
+
+static void marks_load(void)
+{
+    if (marks_loaded) return;
+    marks_loaded = 1;
+    if (!fs_mounted || !fs_find || !fs_read || !fs_mounted()) return;
+    int idx = fs_find(BROWSER_MARKS_FILE);
+    if (idx < 0 || fs_read(idx, marks_disk, MARK_DISK_BYTES) != MARK_DISK_BYTES)
+        return;
+    if (marks_disk[0] != 'Z' || marks_disk[1] != 'L' ||
+        marks_disk[2] != 'B' || marks_disk[3] != 'M') return;
+    unsigned stored = hist_get32(marks_disk + 8);
+    hist_put32(marks_disk + 8, 0);
+    if (hist_hash(marks_disk, MARK_DISK_BYTES) != stored) return;
+    unsigned n = hist_get32(marks_disk + 4);
+    if (n > MARK_N) return;
+    marks_n = 0;
+    for (unsigned i = 0; i < n; i++) {
+        char *src = (char *)marks_disk + 12 + i * URL_MAX;
+        src[URL_MAX - 1] = 0;
+        if (src[0]) sset(marks[marks_n++], src, URL_MAX);
+    }
+}
+
+int browser_bookmark_count(void) { marks_load(); return marks_n; }
+
+const char *browser_bookmark_url(int idx)
+{
+    marks_load();
+    return idx >= 0 && idx < marks_n ? marks[idx] : 0;
+}
+
+int browser_bookmark_add(void)
+{
+    marks_load();
+    if (!url[0]) { status = BR_STORAGE; return 0; }
+    for (int i = 0; i < marks_n; i++) {
+        int j = 0;
+        while (marks[i][j] && marks[i][j] == url[j]) j++;
+        if (!marks[i][j] && !url[j]) { status = BR_BOOKMARKED; return 1; }
+    }
+    if (marks_n >= MARK_N) { status = BR_STORAGE; return 0; }
+    sset(marks[marks_n++], url, URL_MAX);
+    if (!marks_save()) {
+        marks_n--;
+        status = BR_STORAGE;
+        return 0;
+    }
+    status = BR_BOOKMARKED;
+    return 1;
+}
+
+int browser_bookmark_open(int idx)
+{
+    marks_load();
+    if (idx < 0 || idx >= marks_n) { status = BR_NO_MARKS; return 0; }
+    int n = 0; while (marks[idx][n]) n++;
+    navigate(marks[idx], n, 1);
+    return 1;
+}
+
+/* Save the document that is actually on screen, not http.c's current body:
+ * that buffer may already contain a stylesheet or image. Eight explicit,
+ * never-overwritten slots make the capacity visible instead of silently
+ * destroying an older page. */
+int browser_save_page(void)
+{
+    if (doc_len <= 0 || !fs_mounted || !fs_find || !fs_create || !fs_write ||
+        !fs_mounted()) { status = BR_STORAGE; return 0; }
+    char name[] = "/user/page-0.html";
+    int idx = -1;
+    for (int slot = 0; slot < 8; slot++) {
+        name[11] = (char)('0' + slot);
+        if (fs_find(name) >= 0) continue;
+        idx = fs_create(name, (unsigned)doc_len);
+        if (idx >= 0) break;
+    }
+    if (idx < 0 || !fs_write(idx, doc, (unsigned)doc_len) ||
+        (fs_sync && !fs_sync())) {
+        if (idx >= 0 && fs_delete) (void)fs_delete(idx);
+        status = BR_STORAGE;
+        return 0;
+    }
+    status = BR_SAVED;
+    return 1;
 }
 
 /* ---- the measure ----------------------------------------------------------
@@ -406,11 +602,11 @@ static const char home_page[] =
 "<li><strong>Certificate revocation.</strong> Not checked at all. A "
 "certificate withdrawn by its authority is still accepted until it "
 "expires.</li>\n"
-"<li><strong>Any card but virtio-net.</strong> The network comes up "
-"automatically at boot when one is present. The driver matches PCI "
-"<code>1af4:1041</code> and <code>1af4:1000</code> and nothing else, so QEMU "
-"needs <code>-device virtio-net-pci</code>, and the ThinkPad's Intel part is "
-"not supported.</li>\n"
+"<li><strong>Most network cards.</strong> The network comes up "
+"automatically through DHCP. Drivers exist for virtio-net and Intel e1000 "
+"parts including the target I219 device; other vendors are not matched. "
+"The Intel path is QEMU-gated but still needs the named ThinkPad/dongle "
+"hardware gate before it is called physically proven.</li>\n"
 "<li><strong>JavaScript for the modern web.</strong> There is an "
 "interpreter - functions, recursion, arrays, strings, loops, "
 "<code>document.write</code> - and it runs the kind of script a document "
@@ -437,6 +633,10 @@ static const char home_page[] =
 "address and is fetched; anything else is a <strong>search</strong>. That is "
 "the same rule every browser uses, and it is the whole of the difference "
 "between a fetcher and something you can actually use.</p>\n"
+"<p><strong>Mark</strong> saves the current address, <strong>Marks</strong> "
+"cycles through saved addresses, and <strong>Save</strong> writes the page on "
+"screen to <code>/user/page-N.html</code>. Those explicit saves are flushed "
+"before success is shown.</p>\n"
 "<p><strong>On Google specifically</strong>, since it is the obvious thing to "
 "try: <code>google.com</code> is fetched over verified TLS 1.3 and it does "
 "return HTTP 200. But <code>/search</code> serves a JavaScript bootstrap and "
@@ -682,6 +882,8 @@ static int img_for_node(int node, int *w, int *h)
 /* ---- loading --------------------------------------------------------------- */
 static void doc_set(const char *src, int len)
 {
+    unsigned doc_span = zlt_span_begin(ZLLOG_SUB_PERF, 90u /* document load */,
+                                       len > 0 ? (unsigned)len : 0u);
     /* FIRST, BEFORE THE COPY INTO `doc`. `doc` is itself part of the region
      * this hands out, and html_parse two lines below wants the tree array. */
     storage_init();
@@ -690,7 +892,14 @@ static void doc_set(const char *src, int len)
     for (int i = 0; i < len; i++) doc[i] = src[i];
     doc[len] = 0;
     doc_len = len;
+    unsigned html_span = zlt_span_begin(ZLLOG_SUB_PERF, 91u /* HTML parse */,
+                                        (unsigned)doc_len);
     html_parse(doc, doc_len);
+    int html_drop_count = html_dropped();
+    zlt_span_end(ZLLOG_SUB_PERF, html_span, html_drop_count ? 1u : 0u);
+    if (html_drop_count)
+        zlt_event(ZLLOG_SUB_PERF, ZLLOG_EV_DROP, ZLLOG_WARN,
+                  91u /* HTML nodes */, (unsigned)html_drop_count, (unsigned)doc_len);
 
     /* THE DOCUMENT'S OWN STYLESHEETS, in document order, which is also their
      * cascade order. Reset first: a stylesheet from the PREVIOUS page styling
@@ -698,6 +907,8 @@ static void doc_set(const char *src, int len)
      * exactly the kind nobody looks for. The sheets are spans of `doc`, so
      * they stay valid as long as this document is loaded - and doc_set is the
      * only thing that replaces it. */
+    unsigned css_span = zlt_span_begin(ZLLOG_SUB_PERF, 92u /* CSS parse */,
+                                       (unsigned)html_sheets());
     css_reset();
     /* THE WIDTH @media IS JUDGED AGAINST, set before any sheet is added
      * because css.c evaluates the queries at PARSE time. `laid_w` is the last
@@ -711,6 +922,10 @@ static void doc_set(const char *src, int len)
         const char *s = html_sheet(k, &slen);
         css_add_sheet(s, slen);
     }
+    zlt_span_end(ZLLOG_SUB_PERF, css_span, css_overflowed() ? 1u : 0u);
+    if (css_overflowed())
+        zlt_event(ZLLOG_SUB_PERF, ZLLOG_EV_DROP, ZLLOG_WARN,
+                  92u /* CSS rules */, (unsigned)html_sheets(), 0u);
 
     /* ---- the scripts -----------------------------------------------------
      * RUN AFTER THE PARSE, NOT DURING IT. A real browser executes a <script>
@@ -728,6 +943,9 @@ static void doc_set(const char *src, int len)
      * script is a fixed point nobody needs, and bounding it here is cheaper
      * than discovering the loop in a kernel. */
     js_out_len = 0;
+    js_err[0] = 0;
+    unsigned js_span = zlt_span_begin(ZLLOG_SUB_PERF, 93u /* JavaScript */,
+                                      (unsigned)html_scripts());
     if (html_scripts() > 0) {
         int wrote = 0;
         for (int k = 0; k < html_scripts(); k++) {
@@ -760,6 +978,10 @@ static void doc_set(const char *src, int len)
             }
         }
     }
+    zlt_span_end(ZLLOG_SUB_PERF, js_span, js_err[0] ? 1u : 0u);
+    if (js_err[0])
+        zlt_event(ZLLOG_SUB_PERF, ZLLOG_EV_DROP, ZLLOG_WARN,
+                  93u /* JavaScript */, (unsigned)html_scripts(), 0u);
 
     lay_set_measure(measure);
     /* THE HOOK IS INSTALLED HERE AND NOWHERE ELSE, beside lay_set_measure and
@@ -773,6 +995,7 @@ static void doc_set(const char *src, int len)
     lay_dirty = 1;
     scroll = 0;
     status = BR_OK;
+    zlt_span_end(ZLLOG_SUB_PERF, doc_span, doc_truncated ? 1u : 0u);
 }
 
 /* about:home is a REAL history entry, not a special case bolted on. Without
@@ -783,6 +1006,8 @@ static const char HOME_URL[] = "about:home";
 
 void browser_home(void)
 {
+    history_load();
+    marks_load();
     doc_set(home_page, (int)(sizeof home_page - 1));
     if (hist_n == 0) hist_push(HOME_URL);
     sset(url, HOME_URL, URL_MAX);
@@ -918,6 +1143,7 @@ static void hist_push(const char *u)
         hist_n = HIST_N - 1;
     }
     sset(hist[hist_n++], u, URL_MAX);
+    history_save();
 }
 
 /* Navigate. Every refusal SAYS WHICH ONE it is - "https is refused", "no
@@ -1332,11 +1558,17 @@ int browser_can_back(void) { return hist_n >= 2; }
 static void relayout(int w)
 {
     if (w == laid_w && !lay_dirty) return;
+    unsigned span = zlt_span_begin(ZLLOG_SUB_PERF, 95u /* layout */,
+                                   w > 0 ? (unsigned)w : 0u);
     laid_w = w;
     lay_dirty = 0;
     content_h = lay_run_doc(w, fb_prop_em());
     if (scroll > content_h - view_h) scroll = content_h - view_h;
     if (scroll < 0) scroll = 0;
+    zlt_span_end(ZLLOG_SUB_PERF, span, lay_overflowed() ? 1u : 0u);
+    if (lay_overflowed())
+        zlt_event(ZLLOG_SUB_PERF, ZLLOG_EV_DROP, ZLLOG_WARN,
+                  95u /* layout runs */, (unsigned)lay_count(), (unsigned)w);
 }
 
 int browser_height(void) { return content_h; }
@@ -1379,6 +1611,10 @@ const char *status_text(void)
     case BR_FAILED:   return "the fetch failed - is anything listening there?";
     case BR_BAD_TYPE: return "refused: not text/html or text/plain";
     case BR_IMAGES:   return "loading pictures...";
+    case BR_BOOKMARKED: return "bookmark saved";
+    case BR_SAVED:      return "page saved in /user/page-N.html";
+    case BR_STORAGE:    return "storage is full or the save did not reach disk";
+    case BR_NO_MARKS:   return "no bookmarks saved yet";
     default:          return 0;
     }
 }
@@ -1413,8 +1649,26 @@ void browser_draw(int x, int y, int w, int h, int focused)
     fb_text_prop(x + em / 4 + em / 4, y + em / 4 + em / 8, " Back ", bfg);
     back_x = x + em / 4; back_y = y + em / 4; back_w = backw; back_h = rowh;
 
-    int ux = x + em / 4 + backw + em / 4;
+    int markw = fb_text_prop_w(" Mark ") + em / 2;
+    int marksw = fb_text_prop_w(" Marks ") + em / 2;
+    int savew = fb_text_prop_w(" Save ") + em / 2;
+    int bx0 = x + em / 4 + backw + em / 4;
+    mark_x = bx0; mark_y = y + em / 4; mark_w = markw; mark_h = rowh;
+    fb_rrect(mark_x, mark_y, mark_w, mark_h, UI_S1(t), t->panel_hi);
+    fb_text_prop(mark_x + em / 4, mark_y + em / 8, " Mark ", t->text);
+    marks_x = mark_x + mark_w + em / 4; marks_y = mark_y;
+    marks_w = marksw; marks_h = rowh;
+    fb_rrect(marks_x, marks_y, marks_w, marks_h, UI_S1(t), t->panel_hi);
+    fb_text_prop(marks_x + em / 4, marks_y + em / 8, " Marks ",
+                 marks_n ? t->text : t->text_dim);
+    save_x = marks_x + marks_w + em / 4; save_y = mark_y;
+    save_w = savew; save_h = rowh;
+    fb_rrect(save_x, save_y, save_w, save_h, UI_S1(t), t->panel_hi);
+    fb_text_prop(save_x + em / 4, save_y + em / 8, " Save ", t->text);
+
+    int ux = save_x + save_w + em / 4;
     int uw = w - (ux - x) - em / 4;
+    if (uw < em * 4) uw = em * 4;
     bar_x = ux; bar_y = y + em / 4; bar_w = uw; bar_h = rowh;
     fb_rrect(ux, y + em / 4, uw, rowh, UI_S1(t),
              url_focus ? t->panel_hi : t->bg);
@@ -1441,7 +1695,9 @@ void browser_draw(int x, int y, int w, int h, int focused)
     const char *msg = status_text();
     if (msg) {
         int b2 = fb_text_prop_h() + em / 2;
-        unsigned col = (status == BR_FETCHING) ? t->accent : t->danger;
+        unsigned col = (status == BR_FETCHING || status == BR_IMAGES ||
+                        status == BR_BOOKMARKED || status == BR_SAVED)
+                       ? t->accent : t->danger;
         fb_fill_px(x, y + bar, w, b2, t->panel_hi);
         fb_fill_px(x, y + bar + b2 - 1, w, 1, t->border);
         fb_text_prop(x + pad, y + bar + em / 4, msg, col);
@@ -1612,6 +1868,25 @@ int browser_click(int cx, int cy, int btn)
         return 1;              /* repaint regardless: the focus ring moved */
     }
 
+    if (in_box(cx, cy, mark_x, mark_y, mark_w, mark_h)) {
+        url_focus = 0; url_sel_all = 0;
+        (void)browser_bookmark_add();
+        return 1;
+    }
+    if (in_box(cx, cy, marks_x, marks_y, marks_w, marks_h)) {
+        url_focus = 0; url_sel_all = 0;
+        marks_load();
+        if (!marks_n) { status = BR_NO_MARKS; return 1; }
+        if (mark_cursor >= marks_n) mark_cursor = 0;
+        (void)browser_bookmark_open(mark_cursor++);
+        return 1;
+    }
+    if (in_box(cx, cy, save_x, save_y, save_w, save_h)) {
+        url_focus = 0; url_sel_all = 0;
+        (void)browser_save_page();
+        return 1;
+    }
+
     /* A click in the bar focuses it AND selects all, which is what every
      * browser does and what the keyboard shortcut already did. */
     if (in_box(cx, cy, bar_x, bar_y, bar_w, bar_h)) {
@@ -1691,6 +1966,14 @@ int browser_key(int code)
     case KEY_END:  return browser_scroll_by(content_h);
     case ' ':      return browser_scroll_by(view_h - line);
     case 'l': case 'L': url_focus = 1; url_sel_all = 1; return 1;
+    case 'm': case 'M': (void)browser_bookmark_add(); return 1;
+    case 'b': case 'B':
+        marks_load();
+        if (!marks_n) { status = BR_NO_MARKS; return 1; }
+        if (mark_cursor >= marks_n) mark_cursor = 0;
+        (void)browser_bookmark_open(mark_cursor++);
+        return 1;
+    case 's': case 'S': (void)browser_save_page(); return 1;
     case 8:   case 127: return browser_back();
     default:  return 0;
     }

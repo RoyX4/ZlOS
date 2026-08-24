@@ -40,11 +40,7 @@ typedef unsigned int       u32;
 typedef unsigned short     u16;
 typedef unsigned char      u8;
 
-#if defined(ZL_64)
-typedef unsigned long long uptr;
-#else
-typedef unsigned int       uptr;
-#endif
+#include "telemetry.h"
 
 /* the one character sink - runtime_kernel.c in the kernel, the harness on the
  * host. A driver that cannot say why it refused is a driver that gets blamed
@@ -58,7 +54,8 @@ void zl_putc_pub(char c);
  * only honest answer. */
 #define FS_BLK_MAX     4096
 #define FS_MAGIC       0x5A4C4653u        /* 'ZLFS', little end first        */
-#define FS_VERSION     1
+#define FS_VERSION     2
+#define FS_VERSION_V1  1
 #define FS_MAXFILES    32
 #define FS_ENT_BYTES   64                 /* power of two: index is a shift  */
 #define FS_NAME_MAX    24                 /* including the terminating NUL   */
@@ -101,6 +98,7 @@ void zl_putc_pub(char c);
  * A few KB in BSS, which is fine - the fixed-high-RAM rule is about the
  * multi-megabyte buffers that collide with the DMA arena, not about this. */
 static u8  dirbuf[FS_DIR_BYTES];          /* the whole directory, in memory  */
+static u8  diralt[FS_DIR_BYTES];          /* alternate generation at mount   */
 static u8  blkbuf[FS_BLK_MAX];            /* one block, for I/O staging      */
 static u8  sbbuf[FS_BLK_MAX];             /* the superblock block            */
 
@@ -110,6 +108,9 @@ static u32  dev_nblocks;
 static u32  sb_dir_lba, sb_dir_blocks;
 static u32  sb_data_lba, sb_data_blocks;
 static u32  now_secs;                     /* set by fs_set_time()            */
+static u32  disk_version;
+static u32  dir_generation;
+static int  dir_active;
 
 /* the name being staged one character at a time, because the zl kernel subset
  * has no string VALUES - the same seam term.c uses for typed commands */
@@ -131,6 +132,13 @@ static int nameeq(const char *a, const char *b)
         if (a[i] == 0)    return 1;
     }
     return 1;
+}
+
+static u32 name_hash(const char *s)
+{
+    u32 h = 2166136261u;
+    for (int i = 0; s[i] && i < FS_NAME_MAX; i++) h = (h ^ (u8)s[i]) * 16777619u;
+    return h;
 }
 
 static u32 rd32(const u8 *p) { return (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24); }
@@ -164,48 +172,33 @@ static void p_name(const char *n)
 #ifdef FS_HOSTTEST
 int  fsdev_read (u32 lba, void *buf);
 int  fsdev_write(u32 lba, const void *buf);
+int  fsdev_sync(void);
 u32  fsdev_bsize(void);
 u32  fsdev_blocks(void);
 #else
 extern int nvme_ready(void);
 extern int nvme_setup(void);
-extern int nvme_read_to(u32 dst, u32 lba_lo, u32 lba_hi);
-extern int nvme_write_from(u32 src, u32 lba_lo, u32 lba_hi);
 extern u32 nvme_blocksize(void);
 extern u32 nvme_blocks_lo(void);
-
-/* An address truncated to 32 bits is this project's recurring bug, five times
- * so far, and it reads as a protocol bug every time. On the 64-bit and EFI
- * builds these buffers are BSS in a kernel linked low, so this never fires -
- * but "never fires" is a thing to ASSERT, not to assume. */
-static int ptr32(const void *p, u32 *out)
-{
-    uptr a = (uptr)p;
-#if defined(ZL_64)
-    /* guarded by #if rather than `sizeof(uptr) > 4 &&` because on the 32-bit
-     * target that comparison is always false and -Wextra says so, and a new
-     * warning in a build that has none is how a real one gets missed */
-    if ((u64)a > 0xFFFFFFFFull) {
-        p_str("  zlfs: buffer above 4 GiB, refusing DMA\n");
-        return 0;
-    }
-#endif
-    *out = (u32)a;
-    return 1;
-}
+extern int block_read(u32 lba, void *buf);
+extern int block_write(u32 lba, const void *buf);
+extern int block_flush(void);
 
 int fsdev_read(u32 lba, void *buf)
 {
-    u32 a;
-    if (!nvme_ready() || !ptr32(buf, &a)) return 0;
-    return nvme_read_to(a, lba, 0);
+    int ok = block_read(lba, buf);
+    zlt_count(ZLLOG_C_FS_READ, 1);
+    if (!ok) zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_DROP, ZLLOG_ERROR, 4u, lba, 0);
+    return ok;
 }
 int fsdev_write(u32 lba, const void *buf)
 {
-    u32 a;
-    if (!nvme_ready() || !ptr32(buf, &a)) return 0;
-    return nvme_write_from(a, lba, 0);
+    int ok = block_write(lba, buf);
+    zlt_count(ZLLOG_C_FS_WRITE, 1);
+    if (!ok) zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_DROP, ZLLOG_ERROR, 5u, lba, 0);
+    return ok;
 }
+int fsdev_sync(void) { return block_flush(); }
 u32 fsdev_bsize(void)  { return nvme_blocksize(); }
 u32 fsdev_blocks(void) { return nvme_blocks_lo(); }
 #endif
@@ -230,6 +223,12 @@ u32 fsdev_blocks(void) { return nvme_blocks_lo(); }
 #define SB_MAXFILES 32
 #define SB_CSUM     36
 
+#define DH_MAGIC    0
+#define DH_GEN      4
+#define DH_DIRSUM   8
+#define DH_CSUM     12
+#define DIR_MAGIC   0x5A4C4447u        /* 'ZLDG' */
+
 static u32 sb_sum(const u8 *b, u32 bsize)
 {
     u32 s = 0;
@@ -240,6 +239,23 @@ static u32 sb_sum(const u8 *b, u32 bsize)
 static u32 dir_blocks_for(u32 bsize)
 {
     return (FS_DIR_BYTES + bsize - 1) / bsize;
+}
+
+static u32 dir_sum(const u8 *b)
+{
+    u32 s = 0;
+    for (u32 i = 0; i < FS_DIR_BYTES; i += 4) s += rd32(b + i);
+    return s;
+}
+
+static u32 dir_slot_lba(int slot)
+{
+    return sb_dir_lba + (u32)slot * (sb_dir_blocks + 1u);
+}
+
+static int generation_newer(u32 a, u32 b)
+{
+    return a != b && (u32)(a - b) < 0x80000000u;
 }
 
 /* where the volume begins, in blocks. Derived, never stored: a superblock
@@ -268,7 +284,7 @@ static u32 blocks_for(u32 bytes)
     return n;
 }
 
-static int dir_flush(void)
+static int dir_flush_v1(void)
 {
     for (u32 b = 0; b < sb_dir_blocks; b++) {
         bzero_n(blkbuf, dev_bsize);
@@ -283,6 +299,64 @@ static int dir_flush(void)
         }
     }
     return 1;
+}
+
+/* v2 never overwrites the active directory. Data blocks for the inactive
+ * generation land first, are flushed, and only then receive their checksummed
+ * header. Mount selects the newest fully valid generation. */
+static int dir_write_slot(int slot, u32 generation)
+{
+    u32 base = dir_slot_lba(slot);
+    for (u32 b = 0; b < sb_dir_blocks; b++) {
+        bzero_n(blkbuf, dev_bsize);
+        u32 off = b * dev_bsize;
+        u32 n = off < FS_DIR_BYTES ? FS_DIR_BYTES - off : 0;
+        if (n > dev_bsize) n = dev_bsize;
+        if (n) bcopy_n(blkbuf, dirbuf + off, n);
+        if (!fsdev_write(base + 1u + b, blkbuf)) {
+            p_str("  zlfs: directory generation data write failed at LBA ");
+            p_u32(base + 1u + b); zl_putc_pub('\n');
+            return 0;
+        }
+    }
+    if (!fsdev_sync()) {
+        p_str("  zlfs: directory generation data flush failed\n");
+        return 0;
+    }
+
+    bzero_n(blkbuf, dev_bsize);
+    wr32b(blkbuf + DH_MAGIC, DIR_MAGIC);
+    wr32b(blkbuf + DH_GEN, generation);
+    wr32b(blkbuf + DH_DIRSUM, dir_sum(dirbuf));
+    wr32b(blkbuf + DH_CSUM, 0);
+    wr32b(blkbuf + DH_CSUM, (u32)(0u - sb_sum(blkbuf, dev_bsize)));
+    if (!fsdev_write(base, blkbuf)) {
+        p_str("  zlfs: directory generation header write failed at LBA ");
+        p_u32(base); zl_putc_pub('\n');
+        return 0;
+    }
+    if (!fsdev_sync()) {
+        p_str("  zlfs: directory generation header flush failed\n");
+        return 0;
+    }
+    return 1;
+}
+
+static int dir_read_slot(int slot, u8 *out, u32 *generation)
+{
+    u32 base = dir_slot_lba(slot);
+    if (!fsdev_read(base, blkbuf) || rd32(blkbuf + DH_MAGIC) != DIR_MAGIC ||
+        sb_sum(blkbuf, dev_bsize) != 0) return 0;
+    u32 want = rd32(blkbuf + DH_DIRSUM);
+    *generation = rd32(blkbuf + DH_GEN);
+    for (u32 b = 0; b < sb_dir_blocks; b++) {
+        if (!fsdev_read(base + 1u + b, blkbuf)) return 0;
+        u32 off = b * dev_bsize;
+        u32 n = off < FS_DIR_BYTES ? FS_DIR_BYTES - off : 0;
+        if (n > dev_bsize) n = dev_bsize;
+        if (n) bcopy_n(out + off, blkbuf, n);
+    }
+    return dir_sum(out) == want;
 }
 
 static u8 *ent(int i);
@@ -305,12 +379,23 @@ static u8 *ent(int i);
  * (An adversarial reviewer named this as the gap its own testing had not
  * covered. It was right.)
  */
-static int dir_flush(void);
 static int dir_commit(int idx, const u8 *prev)
 {
-    if (dir_flush()) return 1;
+    if (disk_version == FS_VERSION) {
+        int next = dir_active ^ 1;
+        u32 generation = dir_generation + 1u;
+        if (dir_write_slot(next, generation)) {
+            dir_active = next;
+            dir_generation = generation;
+            return 1;
+        }
+        bcopy_n(ent(idx), prev, FS_ENT_BYTES);
+        p_str("  zlfs: change not published; previous directory generation remains active\n");
+        return 0;
+    }
+    if (dir_flush_v1()) return 1;
     bcopy_n(ent(idx), prev, FS_ENT_BYTES);
-    if (dir_flush()) {
+    if (dir_flush_v1()) {
         p_str("  zlfs: the change was rolled back - the volume is unharmed\n");
         return 0;
     }
@@ -322,6 +407,24 @@ static int dir_commit(int idx, const u8 *prev)
 
 static int dir_load(void)
 {
+    if (disk_version == FS_VERSION) {
+        u32 ga = 0, gb = 0;
+        int va = dir_read_slot(0, dirbuf, &ga);
+        int vb = dir_read_slot(1, diralt, &gb);
+        if (!va && !vb) {
+            p_str("  zlfs: neither directory generation is valid - refusing\n");
+            return 0;
+        }
+        if (vb && (!va || generation_newer(gb, ga))) {
+            bcopy_n(dirbuf, diralt, FS_DIR_BYTES);
+            dir_active = 1;
+            dir_generation = gb;
+        } else {
+            dir_active = 0;
+            dir_generation = ga;
+        }
+        return 1;
+    }
     for (u32 b = 0; b < sb_dir_blocks; b++) {
         if (!fsdev_read(sb_dir_lba + b, blkbuf)) {
             p_str("  zlfs: directory read failed at LBA ");
@@ -362,7 +465,7 @@ static int probe_device(void)
     }
     sb_dir_blocks = dir_blocks_for(dev_bsize);
     sb_dir_lba    = start_lba() + 1;
-    sb_data_lba   = sb_dir_lba + sb_dir_blocks;
+    sb_data_lba   = sb_dir_lba + 2u * (sb_dir_blocks + 1u);
 
     if (dev_nblocks <= sb_data_lba + 1) {
         p_str("  zlfs: disk has only "); p_u32(dev_nblocks);
@@ -375,12 +478,15 @@ static int probe_device(void)
 }
 
 /* ---- format -------------------------------------------------------------- */
-int fs_mkfs(void)
+static int fs_mkfs_impl(void)
 {
     mounted = 0;
     if (!probe_device()) return 0;
 
     bzero_n(dirbuf, FS_DIR_BYTES);
+    disk_version = FS_VERSION;
+    dir_active = 0;
+    dir_generation = 1;
     bzero_n(sbbuf, dev_bsize);
     wr32b(sbbuf + SB_MAGIC,    FS_MAGIC);
     wr32b(sbbuf + SB_VERSION,  FS_VERSION);
@@ -408,7 +514,7 @@ int fs_mkfs(void)
         p_str("  zlfs: cannot write the superblock - disk is read-only or absent\n");
         return 0;
     }
-    if (!dir_flush()) return 0;
+    if (!dir_write_slot(1, 0) || !dir_write_slot(0, 1)) return 0;
     if (!fsdev_write(start_lba(), sbbuf)) {
         p_str("  zlfs: superblock write failed\n");
         return 0;
@@ -417,9 +523,19 @@ int fs_mkfs(void)
     return 1;
 }
 
+int fs_mkfs(void)
+{
+    unsigned id = zlt_operation_begin(ZLLOG_SUB_FS, ZLLOG_OBJ_KERNEL, 0u,
+                                      ZLLOG_OP_FILE_FORMAT, 0u);
+    int result = fs_mkfs_impl();
+    zlt_operation_result(ZLLOG_SUB_FS, id, ZLLOG_OP_FILE_FORMAT,
+                         result, result ? 0u : 5u, 0u);
+    return result;
+}
+
 /* ---- mount ---------------------------------------------------------------
  * Every refusal below prints the value that caused it. */
-int fs_mount(void)
+static int fs_mount_impl(void)
 {
     mounted = 0;
     if (!probe_device()) return 0;
@@ -438,7 +554,7 @@ int fs_mount(void)
         return 0;
     }
     u32 ver = rd32(sbbuf + SB_VERSION);
-    if (ver != FS_VERSION) {
+    if (ver != FS_VERSION && ver != FS_VERSION_V1) {
         p_str("  zlfs: on-disk version "); p_u32(ver);
         p_str(", this kernel speaks "); p_u32(FS_VERSION);
         p_str(" - refusing\n");
@@ -464,6 +580,7 @@ int fs_mount(void)
         return 0;
     }
 
+    disk_version   = ver;
     sb_dir_lba     = rd32(sbbuf + SB_DIRLBA);
     sb_dir_blocks  = rd32(sbbuf + SB_DIRBLK);
     sb_data_lba    = rd32(sbbuf + SB_DATALBA);
@@ -476,9 +593,12 @@ int fs_mount(void)
      * a superblock claiming 4.29 billion data blocks made the sum come out
      * small and passed. Subtract instead - dev_nblocks - sb_data_lba cannot
      * underflow once sb_data_lba <= dev_nblocks has been established. */
+    u32 expected_data_lba = sb_dir_lba + sb_dir_blocks;
+    if (ver == FS_VERSION)
+        expected_data_lba = sb_dir_lba + 2u * (sb_dir_blocks + 1u);
     if (sb_dir_blocks != dir_blocks_for(dev_bsize) ||
         sb_dir_lba    != start_lba() + 1 ||
-        sb_data_lba   != sb_dir_lba + sb_dir_blocks ||
+        sb_data_lba   != expected_data_lba ||
         sb_data_lba   >  dev_nblocks ||
         sb_data_blocks > dev_nblocks - sb_data_lba) {
         p_str("  zlfs: superblock geometry does not fit this disk - refusing\n");
@@ -510,6 +630,16 @@ int fs_mount(void)
 
     mounted = 1;
     return 1;
+}
+
+int fs_mount(void)
+{
+    unsigned id = zlt_operation_begin(ZLLOG_SUB_FS, ZLLOG_OBJ_KERNEL, 0u,
+                                      ZLLOG_OP_FILE_MOUNT, 0u);
+    int result = fs_mount_impl();
+    zlt_operation_result(ZLLOG_SUB_FS, id, ZLLOG_OP_FILE_MOUNT,
+                         result, result ? 0u : 5u, 0u);
+    return result;
 }
 
 int fs_mounted(void) { return mounted; }
@@ -554,7 +684,7 @@ static int alloc_run(u32 need, u32 *out)
 }
 
 /* ---- the file operations ------------------------------------------------- */
-int fs_find(const char *name)
+static int fs_find_impl(const char *name)
 {
     if (!mounted) return -1;
     for (int i = 0; i < FS_MAXFILES; i++)
@@ -562,7 +692,18 @@ int fs_find(const char *name)
     return -1;
 }
 
-int fs_create(const char *name, u32 bytes)
+int fs_find(const char *name)
+{
+    u32 hash = name ? name_hash(name) : 0u;
+    unsigned id = zlt_operation_begin(ZLLOG_SUB_FS, ZLLOG_OBJ_KERNEL, 0u,
+                                      ZLLOG_OP_FILE_FIND, hash);
+    int result = name ? fs_find_impl(name) : -1;
+    zlt_operation_result(ZLLOG_SUB_FS, id, ZLLOG_OP_FILE_FIND,
+                         result, result >= 0 ? 0u : 2u, hash);
+    return result;
+}
+
+static int fs_create_impl(const char *name, u32 bytes)
 {
     if (!mounted) { p_str("  zlfs: not mounted\n"); return -1; }
     if (name[0] == 0) { p_str("  zlfs: a file needs a name\n"); return -1; }
@@ -615,11 +756,29 @@ int fs_create(const char *name, u32 bytes)
     wr32b(e + FE_BLOCKS, need);
     wr32b(e + FE_FLAGS,  FE_USED);
     wr32b(e + FE_MTIME,  now_secs);
-    if (!dir_commit(slot, prev)) return -1;
+    if (!dir_commit(slot, prev)) {
+        zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_DROP, ZLLOG_ERROR,
+                  1u, (unsigned)slot, name_hash(name));
+        return -1;
+    }
+    zlt_count(ZLLOG_C_FS_MUTATION, 1);
+    zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_FS_MUTATION, ZLLOG_INFO,
+              1u | ((unsigned)slot << 8), bytes, name_hash(name));
     return slot;
 }
 
-int fs_write(int idx, const void *src, u32 bytes)
+int fs_create(const char *name, u32 bytes)
+{
+    u32 hash = name ? name_hash(name) : 0u;
+    unsigned id = zlt_operation_begin(ZLLOG_SUB_FS, ZLLOG_OBJ_KERNEL, 0u,
+                                      ZLLOG_OP_FILE_CREATE, hash);
+    int result = name ? fs_create_impl(name, bytes) : -1;
+    zlt_operation_result(ZLLOG_SUB_FS, id, ZLLOG_OP_FILE_CREATE,
+                         result, result >= 0 ? 0u : 5u, bytes);
+    return result;
+}
+
+static int fs_write_impl(int idx, const void *src, u32 bytes)
 {
     if (!mounted) { p_str("  zlfs: not mounted\n"); return 0; }
     if (idx < 0 || idx >= FS_MAXFILES || !ent_used(idx)) {
@@ -628,11 +787,9 @@ int fs_write(int idx, const void *src, u32 bytes)
 
     u32 need       = blocks_for(bytes);
     u32 old_start  = ent_start(idx);
-    u32 old_blocks = ent_blocks(idx);
     u32 old_len    = ent_len(idx);
     u32 old_mtime  = rd32(ent(idx) + FE_MTIME);
-    u32 base       = old_start;
-    int moving     = 0;
+    u32 base;
 
     /* Outgrown its run: find another one. NOTHING is written into the
      * directory entry here.
@@ -651,14 +808,15 @@ int fs_write(int idx, const void *src, u32 bytes)
      * every block has landed. Until that moment the entry is untouched and the
      * old run is intact, which is what "a failure leaves the file exactly as
      * it was" actually requires. */
-    if (need > ent_blocks(idx)) {
-        if (!alloc_run(need, &base)) {
-            p_str("  zlfs: '"); p_name((const char *)(ent(idx) + FE_NAME));
-            p_str("' needs "); p_u32(need);
-            p_str(" blocks and there is no run that long free - refusing\n");
-            return 0;
-        }
-        moving = 1;
+    /* Every replacement is copy-on-write, even when it fits the old run. An
+     * in-place overwrite can leave old metadata pointing at half-new bytes
+     * after power loss; a second run keeps the published file untouched until
+     * the new data and its directory generation are both durable. */
+    if (!alloc_run(need, &base)) {
+        p_str("  zlfs: '"); p_name((const char *)(ent(idx) + FE_NAME));
+        p_str("' needs a separate "); p_u32(need);
+        p_str("-block replacement run - refusing rather than overwriting live data\n");
+        return 0;
     }
 
     const u8 *s = (const u8 *)src;
@@ -670,27 +828,23 @@ int fs_write(int idx, const void *src, u32 bytes)
         if (n) bcopy_n(blkbuf, s + off, n);
         if (!fsdev_write(base + b, blkbuf)) {
             p_str("  zlfs: write failed at LBA "); p_u32(base + b);
-            if (moving) {
-                /* alloc_run never overlaps a live run, including this file's
-                 * own, so the old copy is untouched and still published. */
-                p_str(" - the file is unchanged, still at LBA ");
-                p_u32(old_start); zl_putc_pub('\n');
-            } else {
-                p_str(" - the file is now partial\n");
-            }
+            /* alloc_run never overlaps a live run, including this file's own,
+             * so the old copy is untouched and still published. */
+            p_str(" - the file is unchanged, still at LBA ");
+            p_u32(old_start); zl_putc_pub('\n');
             return 0;
         }
     }
 
-    /* Publish. Start, blocks and length go in together, then one flush.
-     *
-     * The run never SHRINKS in place. Writing 2000 bytes into a file that owns
-     * eight blocks leaves it owning eight: giving them back would mean the
-     * next write past 2000 bytes relocates, and a file that is written short
-     * and then long again is the common case, not the rare one. The space is
-     * reclaimed by deleting the file, which is the only place this design
-     * reclaims anything. */
-    u32 pub_blocks = (need > old_blocks) ? need : old_blocks;
+    if (!fsdev_sync()) {
+        p_str("  zlfs: replacement data flush failed - the old file remains published\n");
+        return 0;
+    }
+
+    /* Publish start, blocks and length together. The copy-on-write run owns
+     * exactly the blocks allocated above; retaining the old run length here
+     * would claim adjacent blocks that were never reserved. */
+    u32 pub_blocks = need;
     u8 *e = ent(idx);
     u8 prev[FS_ENT_BYTES];
     bcopy_n(prev, e, FS_ENT_BYTES);
@@ -700,10 +854,30 @@ int fs_write(int idx, const void *src, u32 bytes)
     wr32b(e + FE_BLOCKS, pub_blocks);
     wr32b(e + FE_LEN,    bytes);
     wr32b(e + FE_MTIME,  now_secs);
-    return dir_commit(idx, prev);
+    int committed = dir_commit(idx, prev);
+    if (committed) {
+        zlt_count(ZLLOG_C_FS_MUTATION, 1);
+        zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_FS_MUTATION, ZLLOG_INFO,
+                  2u | ((unsigned)idx << 8), bytes,
+                  name_hash((const char *)(e + FE_NAME)));
+    } else {
+        zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_DROP, ZLLOG_ERROR,
+                  2u, (unsigned)idx, bytes);
+    }
+    return committed;
 }
 
-int fs_read(int idx, void *dst, u32 max)
+int fs_write(int idx, const void *src, u32 bytes)
+{
+    unsigned id = zlt_operation_begin(ZLLOG_SUB_FS, ZLLOG_OBJ_KERNEL, 0u,
+                                      ZLLOG_OP_FILE_WRITE, (unsigned)idx);
+    int result = fs_write_impl(idx, src, bytes);
+    zlt_operation_result(ZLLOG_SUB_FS, id, ZLLOG_OP_FILE_WRITE,
+                         result ? (int)bytes : -5, result ? 0u : 5u, bytes);
+    return result;
+}
+
+static int fs_read_impl(int idx, void *dst, u32 max)
 {
     if (!mounted) { p_str("  zlfs: not mounted\n"); return 0; }
     if (idx < 0 || idx >= FS_MAXFILES || !ent_used(idx)) {
@@ -740,16 +914,88 @@ int fs_read(int idx, void *dst, u32 max)
     return (int)done;
 }
 
-int fs_delete(int idx)
+int fs_read(int idx, void *dst, u32 max)
+{
+    unsigned id = zlt_operation_begin(ZLLOG_SUB_FS, ZLLOG_OBJ_KERNEL, 0u,
+                                      ZLLOG_OP_FILE_READ, (unsigned)idx);
+    int valid = mounted && idx >= 0 && idx < FS_MAXFILES && ent_used(idx) && dst;
+    int result = valid ? fs_read_impl(idx, dst, max) : 0;
+    unsigned error = valid ? 0u : (!mounted ? 19u : (dst ? 2u : 22u));
+    zlt_operation_result(ZLLOG_SUB_FS, id, ZLLOG_OP_FILE_READ,
+                         error ? -(int)error : result, error, max);
+    return result;
+}
+
+static int fs_delete_impl(int idx)
 {
     if (!mounted) { p_str("  zlfs: not mounted\n"); return 0; }
     if (idx < 0 || idx >= FS_MAXFILES || !ent_used(idx)) {
         p_str("  zlfs: no such file\n"); return 0;
     }
     u8 prev[FS_ENT_BYTES];
+    u32 old_len = ent_len(idx);
+    u32 old_hash = name_hash((const char *)(ent(idx) + FE_NAME));
     bcopy_n(prev, ent(idx), FS_ENT_BYTES);
     bzero_n(ent(idx), FS_ENT_BYTES);
-    return dir_commit(idx, prev);
+    int committed = dir_commit(idx, prev);
+    if (committed) {
+        zlt_count(ZLLOG_C_FS_MUTATION, 1);
+        zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_FS_MUTATION, ZLLOG_INFO,
+                  3u | ((unsigned)idx << 8), old_len, old_hash);
+    } else {
+        zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_DROP, ZLLOG_ERROR,
+                  3u, (unsigned)idx, old_len);
+    }
+    return committed;
+}
+
+int fs_delete(int idx)
+{
+    unsigned id = zlt_operation_begin(ZLLOG_SUB_FS, ZLLOG_OBJ_KERNEL, 0u,
+                                      ZLLOG_OP_FILE_DELETE, (unsigned)idx);
+    int result = fs_delete_impl(idx);
+    zlt_operation_result(ZLLOG_SUB_FS, id, ZLLOG_OP_FILE_DELETE,
+                         result ? 0 : -5, result ? 0u : 5u, (unsigned)idx);
+    return result;
+}
+
+static int fs_rename_impl(int idx, const char *name)
+{
+    if (!mounted) { p_str("  zlfs: not mounted\n"); return 0; }
+    if (idx < 0 || idx >= FS_MAXFILES || !ent_used(idx)) {
+        p_str("  zlfs: no such file\n"); return 0;
+    }
+    int n = 0;
+    while (n < FS_NAME_MAX && name && name[n]) n++;
+    if (!name || n == 0 || n >= FS_NAME_MAX) {
+        p_str("  zlfs: invalid rename target\n"); return 0;
+    }
+    int other = fs_find(name);
+    if (other >= 0 && other != idx) {
+        p_str("  zlfs: rename target already exists\n"); return 0;
+    }
+    u8 prev[FS_ENT_BYTES];
+    u8 *e = ent(idx);
+    bcopy_n(prev, e, FS_ENT_BYTES);
+    bzero_n(e + FE_NAME, FS_NAME_MAX);
+    for (int i = 0; i < n; i++) e[FE_NAME + i] = (u8)name[i];
+    wr32b(e + FE_MTIME, now_secs);
+    if (!dir_commit(idx, prev)) return 0;
+    zlt_count(ZLLOG_C_FS_MUTATION, 1);
+    zlt_event(ZLLOG_SUB_FS, ZLLOG_EV_FS_MUTATION, ZLLOG_INFO,
+              4u | ((unsigned)idx << 8), ent_len(idx), name_hash(name));
+    return 1;
+}
+
+int fs_rename(int idx, const char *name)
+{
+    u32 hash = name ? name_hash(name) : 0u;
+    unsigned id = zlt_operation_begin(ZLLOG_SUB_FS, ZLLOG_OBJ_KERNEL, 0u,
+                                      ZLLOG_OP_FILE_RENAME, (unsigned)idx);
+    int result = fs_rename_impl(idx, name);
+    zlt_operation_result(ZLLOG_SUB_FS, id, ZLLOG_OP_FILE_RENAME,
+                         result ? 0 : -5, result ? 0u : 5u, hash);
+    return result;
 }
 
 /* ---- what the shell needs to draw a listing ------------------------------ */
@@ -820,3 +1066,23 @@ int fs_name_stage_byte(int i)
 int fs_name_len(void)            { return stage_len; }
 int fs_create_named(u32 bytes)   { return fs_create(stage, bytes); }
 int fs_find_named(void)          { return fs_find(stage); }
+int fs_rename_named(int idx)     { return fs_rename(idx, stage); }
+
+/* Normal filesystem writes are accepted into block.c's bounded write-back
+ * cache.  Durability is a separate operation on purpose: callers such as an
+ * editor's explicit Save, metadata confirmation, and safe removal can wait
+ * for stable media, while autosave/history traffic stays off the UI path. */
+static int fs_sync_impl(void)
+{
+    return fsdev_sync();
+}
+
+int fs_sync(void)
+{
+    unsigned id = zlt_operation_begin(ZLLOG_SUB_FS, ZLLOG_OBJ_KERNEL, 0u,
+                                      ZLLOG_OP_FILE_SYNC, 0u);
+    int result = fs_sync_impl();
+    zlt_operation_result(ZLLOG_SUB_FS, id, ZLLOG_OP_FILE_SYNC,
+                         result ? 0 : -5, result ? 0u : 5u, 0u);
+    return result;
+}

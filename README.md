@@ -16,6 +16,13 @@ NVMe, a filesystem, and a windowed compositor.
 > item against the merged tree, and every claim in it carries the command or the
 > file:line that establishes it. Read that before picking up any task list — the
 > older planning docs predate the eleven-track merge and are stale by construction.
+> Its open-item list now also predates merge round 2: the heap, Files app,
+> browser-next landing and first 32-bit Ring-3 boundary are in `main`.
+
+> **Current execution order:** [`docs/EXECUTION-ROADMAP.md`](docs/EXECUTION-ROADMAP.md).
+> Speed is the primary product goal. The dependency spine is bare-metal proof,
+> persistent USB boot evidence, measured latency work, durable files, 64-bit
+> processes, real networking and driver depth, then application/visual polish.
 
 > **Where the project stands against "is this a 10":**
 > [`docs/ROAD-TO-TEN.md`](docs/ROAD-TO-TEN.md). Scores the tree discriminator by
@@ -262,3 +269,9 @@ Linux equivalent here.
 [`docs/COMPARE-BOREDOS.md`](docs/COMPARE-BOREDOS.md) measures zlOS against
 [BoredOS](https://boredos.dev) — same target, opposite strategy — and is blunt
 about where BoredOS is ahead.
+
+## Repository preservation audit
+
+[`docs/GIT-WORKTREE-AUDIT-2026-08-24.md`](docs/GIT-WORKTREE-AUDIT-2026-08-24.md)
+records the exhaustive ZL-only worktree audit, the preservation branches pushed
+to GitHub, the evidence archives, and the verification boundary for each branch.

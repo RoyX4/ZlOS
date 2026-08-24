@@ -44,6 +44,8 @@ typedef unsigned int       u32;
 typedef unsigned short     u16;
 typedef unsigned char      u8;
 
+#include "telemetry.h"
+
 #if defined(ZL_64)
 typedef unsigned long long uptr;
 #else
@@ -200,12 +202,30 @@ static int wait_csts(u32 mask, int want_set, int ms)
     u32  t0 = idt_ticks();
     u32  ticks = (u32)(ms / 10) + 1;
     long spins = (long)ms * 50000;
+    u32 polls = 0, first = 0, last = 0;
     while (spins-- > 0) {
         u32 v = rd32(nv_base + NVME_CSTS);
-        if (v & CSTS_CFS) return 0;                /* controller gave up */
-        if (want_set ? (v & mask) : !(v & mask)) return 1;
-        if (idt_ticks() - t0 >= ticks) return 0;
+        if (polls == 0) first = v;
+        last = v; polls++;
+        if (v & CSTS_CFS) {
+            zlt_count(ZLLOG_C_NVME_POLL, polls);
+            zlt_event(ZLLOG_SUB_STORAGE, ZLLOG_EV_DRIVER_STATE, ZLLOG_ERROR,
+                      0x4e564d45u, v, mask);
+            return 0;
+        }
+        if (want_set ? (v & mask) : !(v & mask)) {
+            zlt_count(ZLLOG_C_NVME_POLL, polls);
+            return 1;
+        }
+        if (idt_ticks() - t0 >= ticks) break;
     }
+    zlt_count(ZLLOG_C_NVME_POLL, polls);
+    zlt_snapshot(ZLLOG_SUB_STORAGE, ZLLOG_SNAP_NVME_CSTS, 0,
+                 rd32(nv_base + NVME_CC), first);
+    zlt_snapshot(ZLLOG_SUB_STORAGE, ZLLOG_SNAP_NVME_CSTS, 1,
+                 last, mask | (want_set ? 0x80000000u : 0u));
+    zlt_trigger(ZLLOG_SUB_STORAGE, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                0x4e564d45u, last, polls);
     return 0;
 }
 
@@ -235,9 +255,13 @@ static void sqe(u32 base, u16 slot, u8 opcode, u16 cid, u32 nsid, u64 prp1,
 static int cq_wait(u32 cq_base, u16 *head, u16 *phase, int qid, u16 want_cid)
 {
     u32 t0 = idt_ticks();
+    u32 polls = 0, first_dw3 = 0, last_dw3 = 0;
     for (long spin = 0; spin < 500000000L; spin++) {
+        polls++;
         volatile u32 *e = (volatile u32 *)(uptr)(cq_base + (u32)(*head) * 16);
         u32 dw3 = e[3];
+        if (polls == 1) first_dw3 = dw3;
+        last_dw3 = dw3;
         if (((dw3 >> 16) & 1) == (u32)(*phase)) {
             u16 cid    = (u16)(dw3 & 0xFFFF);
             int status = (int)((dw3 >> 17) & 0x7FF);
@@ -247,20 +271,35 @@ static int cq_wait(u32 cq_base, u16 *head, u16 *phase, int qid, u16 want_cid)
             wr32(doorbell(qid, 1), (u32)(*head));
 
             if (cid != want_cid) continue;      /* someone else's - keep going */
+            zlt_count(ZLLOG_C_NVME_POLL, polls);
             return status;
         }
         if (idt_ticks() - t0 > 300) break;      /* three seconds */
     }
+    zlt_count(ZLLOG_C_NVME_POLL, polls);
+    zlt_snapshot(ZLLOG_SUB_STORAGE, ZLLOG_SNAP_NVME_COMPLETION, 0,
+                 ((unsigned)qid << 16) | want_cid, first_dw3);
+    zlt_snapshot(ZLLOG_SUB_STORAGE, ZLLOG_SNAP_NVME_COMPLETION, 1,
+                 ((unsigned)(*head) << 16) | (unsigned)(*phase), last_dw3);
+    zlt_trigger(ZLLOG_SUB_STORAGE, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                (unsigned)qid, want_cid, polls);
     return -1;
 }
 
 static int admin_cmd(u8 opcode, u32 nsid, u64 prp1, u32 cdw10, u32 cdw11)
 {
     u16 cid = next_cid++;
+    zlt_count(ZLLOG_C_NVME_COMMAND, 1);
+    zlt_event(ZLLOG_SUB_STORAGE, ZLLOG_EV_COMMAND_SUBMIT, ZLLOG_INFO,
+              ((unsigned)opcode << 16) | cid, nsid, cdw10);
     sqe(NMEM_ASQ, asq_tail, opcode, cid, nsid, prp1, cdw10, cdw11, 0);
     asq_tail = (u16)((asq_tail + 1) % QDEPTH);
     wr32(doorbell(0, 0), (u32)asq_tail);
-    return cq_wait(NMEM_ACQ, &acq_head, &acq_phase, 0, cid);
+    int status = cq_wait(NMEM_ACQ, &acq_head, &acq_phase, 0, cid);
+    zlt_event(ZLLOG_SUB_STORAGE, ZLLOG_EV_COMMAND_COMPLETE,
+              status ? ZLLOG_ERROR : ZLLOG_INFO,
+              ((unsigned)opcode << 16) | cid, (unsigned)status, cdw11);
+    return status;
 }
 
 /* ---- bring-up ---------------------------------------------------------- */
@@ -297,6 +336,8 @@ int nvme_init(void)
     if (!wait_csts(CSTS_RDY, 1, 2000)) return 0;
 
     nv_ready = 1;
+    zlt_event(ZLLOG_SUB_STORAGE, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              0x4e564d45u, 1u, nvme_version());
     return 1;
 }
 
@@ -419,11 +460,18 @@ static int io_one(u8 opcode, u32 lba_lo, u32 lba_hi)
 {
     if (!nv_ready) return 0;
     u16 cid = next_cid++;
+    zlt_count(ZLLOG_C_NVME_COMMAND, 1);
+    zlt_event(ZLLOG_SUB_STORAGE, ZLLOG_EV_COMMAND_SUBMIT, ZLLOG_INFO,
+              ((unsigned)opcode << 16) | cid, lba_lo, lba_hi);
     sqe(NMEM_IOSQ, iosq_tail, opcode, cid, nv_nsid, dma_addr(NMEM_DATA),
         lba_lo, lba_hi, 0 /* NLB is zero-based: 0 means one block */);
     iosq_tail = (u16)((iosq_tail + 1) % QDEPTH);
     wr32(doorbell(1, 0), (u32)iosq_tail);
-    return cq_wait(NMEM_IOCQ, &iocq_head, &iocq_phase, 1, cid) == 0;
+    int status = cq_wait(NMEM_IOCQ, &iocq_head, &iocq_phase, 1, cid);
+    zlt_event(ZLLOG_SUB_STORAGE, ZLLOG_EV_COMMAND_COMPLETE,
+              status ? ZLLOG_ERROR : ZLLOG_INFO,
+              ((unsigned)opcode << 16) | cid, (unsigned)status, lba_lo);
+    return status == 0;
 }
 
 int nvme_read_block(u32 lba_lo, u32 lba_hi)  { return io_one(IO_READ,  lba_lo, lba_hi); }
@@ -479,6 +527,12 @@ int nvme_ready(void) { return nv_ready; }
 int nvme_setup(void)
 {
     nv_fault = NVF_NONE;
+    /* Discovery is a service boundary, not a one-shot demo. Files, Settings,
+     * the editor and explicit diagnostics may all ask for the same mounted
+     * controller. Reissuing CREATE_IO_CQ/SQ against live queue IDs is rejected
+     * by real hardware and QEMU (fault 5), so a ready controller must make
+     * setup idempotent. */
+    if (nv_ready) return 1;
     if (!nvme_present() && nvme_find() < 0) { nv_fault = NVF_NO_DEV;    return 0; }
     if (!nvme_ram_ok())                     { nv_fault = NVF_RAM;       return 0; }
     if (!nvme_init())                       { nv_fault = NVF_NOT_READY; return 0; }

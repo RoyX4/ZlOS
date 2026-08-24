@@ -202,7 +202,7 @@ See [`browser-render-run.md`](browser-render-run.md) for the measurements.
 |---|---|
 | **JavaScript** | a JS engine is its own multi-year project. Not "hard" — a different project. |
 | ~~**HTTPS**~~ | **BUILT.** TLS 1.3 with AES-128-GCM, ECDHE, and a real X.509 chain check to a carried root — the padlock is earned. The refusal below stood only while `crypto.c` was 543 lines of hashing with no cipher. What is still refused is a chain to a CA not in the trust store, by name, via `x509_why()`. |
-| **HTTP/1.1** | chunked transfer encoding, keep-alive and pipelining are requirements there, not options. 1.0 ends a body by closing the connection, which the TCP layer already handles. A decision, not a gap. |
+| **HTTP/1.1** | chunked transfer encoding and the rest of the 1.1 framing contract are not implemented. The 1.0 client now offers optional keep-alive, but reuses only a length-delimited response whose peer explicitly returned `Connection: keep-alive`; close-delimited bodies still end at FIN and there is no pipelining. |
 | ~~**Full CSS**~~ | **MOSTLY BUILT, and the sentence below was wrong in the way this file exists to catch.** The cascade and specificity were already there; float, flex, grid, positioning and a real box landed 2026-08-19. "Two box types is enough for a document and not enough for a web app" was true about the CODE and wrong about the BOUNDARY — it named an *absence* as a limit. Flex and grid have specifications; they are finite and they are built. |
 | **Pixel parity with another browser** | **This** is the genuinely unbounded one, and it is refused on purpose. A specification is finite; matching Chrome exactly is not a specification, it is a moving target. |
 

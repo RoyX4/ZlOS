@@ -166,6 +166,9 @@ void fb_icon24(int px, int py, int n, unsigned int fg);
 void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
 void fb_box(int x, int y, int w, int h, unsigned int rgb);
 void fb_present(void);
+void fb_pointer_show(int x, int y);
+void fb_pointer_forget(void);
+int  fb_pointer_extent(void);
 int  fb_blur_cache(int x, int y, int w, int h, int radius);
 void fb_blur_paint(int slot, int x, int y);
 void fb_blur_free_all(void);
@@ -276,6 +279,7 @@ static uint64_t fnv1a(const void *p, size_t n)
 /* ---- the scenarios ----------------------------------------------------- */
 static int W, H;
 static unsigned char *vram_p;
+static int regression_failures;
 
 static void b_fill(void)     { fb_fill_px(0, 0, W, H, 0x1B2340); }
 static void b_gradient(void) { fb_gradient(0, 0, W, H, 0x141A2E, 0x2A3350); }
@@ -411,6 +415,9 @@ static int back_check(void)
     return want && reads_back;
 }
 
+/* The shadow fast path is allowed to remove divisions, not to change a
+ * single channel value.  This probes a point outside the window's skipped
+ * interior, where the old per-channel formula is unambiguous. */
 /* Is the blur CORRECT, not merely fast?
  *
  * A box blur has three failure modes that a stopwatch cannot see, and two of
@@ -619,6 +626,64 @@ static void damage_check(void)
                               : "ok");
     }
     fb_present();
+
+    /* Contact is not the same as an area-preserving union. These two bars
+     * meet at one corner; the old "touching always merges" rule turned their
+     * 2,880 pixels into a 17,424-pixel bounding box. */
+    fb_fill_px(20, 20, 120, 12, 0x00557799);
+    fb_fill_px(140, 32, 12, 120, 0x00557799);
+    {
+        int n = fb_damage_count();
+        unsigned area = fb_damage_area();
+        int good = n == 2 && area == 2880u;
+        printf("  %-34s %s (%d rects, %u px)\n",
+               "L-shape contact stays disjoint", good ? "ok" : "FAIL", n, area);
+        if (!good) regression_failures++;
+    }
+    fb_present();
+
+    /* Full-edge neighbours have zero waste and should still coalesce; keeping
+     * every scanline as a separate rectangle would hit the bounded fallback. */
+    fb_fill_px(20, 20, 40, 20, 0x00557799);
+    fb_fill_px(60, 20, 40, 20, 0x00557799);
+    fb_fill_px(100, 20, 40, 20, 0x00557799);
+    {
+        int n = fb_damage_count();
+        unsigned area = fb_damage_area();
+        int good = n == 1 && area == 2400u;
+        printf("  %-34s %s (%d rects, %u px)\n",
+               "full-edge chain coalesces", good ? "ok" : "FAIL", n, area);
+        if (!good) regression_failures++;
+    }
+    fb_present();
+
+    /* A software-cursor move changes two tiny patches.  Before the production
+     * fix, both went through one pixel accumulator and became the bounding box
+     * between the old and new positions - nearly a full-screen copy for a
+     * coalesced USB move. */
+    fb_pointer_forget();
+    fb_pointer_show(40, 40);
+    fb_present();
+    fb_pointer_show(W - 80, H - 80);
+    {
+        int n = fb_damage_count();
+        unsigned area = fb_damage_area();
+        unsigned extent = (unsigned)fb_pointer_extent();
+        int good = n == 2 && area <= extent * extent * 2u;
+        printf("  %-34s %s (%d rects, %u px)\n",
+               "far cursor move stays two patches", good ? "ok" : "FAIL",
+               n, area);
+        if (!good) regression_failures++;
+    }
+    fb_present();
+    fb_pointer_show(W - 80, H - 80);
+    {
+        int good = fb_damage_count() == 0 && fb_damage_area() == 0;
+        printf("  %-34s %s\n", "unchanged cursor has zero damage",
+               good ? "ok" : "FAIL");
+        if (!good) regression_failures++;
+    }
+    fb_pointer_forget();
 }
 
 static void hash_report(void)
@@ -800,5 +865,5 @@ int main(void)
 
     printf("\nnote: 'present' writes to ordinary RAM here. On the real machine\n");
     printf("it crosses PCIe into write-combining VRAM, so it is a FLOOR.\n");
-    return 0;
+    return regression_failures ? 1 : 0;
 }

@@ -28,8 +28,13 @@ typedef unsigned int   u32;
 typedef unsigned short u16;
 typedef unsigned char  u8;
 
+#include "telemetry.h"
+
 extern u32 idt_ticks(void);
+extern u32 cpu_tsc_lo(void) __attribute__((weak));
 extern int idt_scan(void);        /* raw PS/2 scancode from the IRQ buffer */
+extern u32 idt_scan_tsc(void) __attribute__((weak));
+extern u32 idt_mouse_take_tsc(void) __attribute__((weak));
 extern int xhci_key(void);        /* a decoded character from USB HID      */
 extern int idt_mouse_x(void);     /* the PS/2 pointer, published by IRQ12  */
 extern int idt_mouse_y(void);
@@ -46,10 +51,42 @@ extern int xhci_poll(int max);    /* the ONE drainer of the USB event ring */
 extern int xhci_ptr_x(void);
 extern int xhci_ptr_y(void);
 extern int xhci_ptr_btn(void);
+/* Ordered USB button states. Optional so input.c's standalone host harnesses
+ * do not need the xHCI implementation. */
+extern int xhci_ptr_take_button(void) __attribute__((weak));
+extern u32 xhci_ptr_take_tsc(void) __attribute__((weak));
+
+/* The internal Synaptics pad is I2C-HID, not PS/2. These are optional so the
+ * same input.c remains independently host-testable and QEMU does not need an
+ * LPSS controller. The pad contributes relative deltas beside the TrackPoint;
+ * it does not replace it. */
+extern int i2c_hid_service(void) __attribute__((weak));
+extern int i2c_hid_pointer_ready(void) __attribute__((weak));
+extern int i2c_hid_ptr_take_dx(void) __attribute__((weak));
+extern int i2c_hid_ptr_take_dy(void) __attribute__((weak));
+extern int i2c_hid_ptr_take_wheel(void) __attribute__((weak));
+extern int i2c_hid_ptr_buttons(void) __attribute__((weak));
+extern int i2c_hid_ptr_take_button(void) __attribute__((weak));
 
 extern int xhci_key_event(void);  /* a raw USB HID key event               */
+extern u32 xhci_key_event_tsc(void) __attribute__((weak));
 extern int xhci_kbd_mods(void);   /* live USB modifier bitmap              */
 extern int idt_mouse_wheel(void);  /* read-and-clear notch accumulator */
+
+/* Optional persistent-flight-recorder seam. Host harnesses deliberately link
+ * input.c without the recorder, so these stay weak and every call is guarded.
+ * The event hook sees LOGICAL queue events, not raw HID completions: mouse
+ * motion has already coalesced to one position per poll by the time it gets
+ * here. The batch hook is emitted only for an active poll, so an idle desktop
+ * cannot fill the journal with 100 identical zero-work records per second. */
+extern void zllog_input_batch(unsigned processed, unsigned depth,
+                              unsigned drops)
+    __attribute__((weak));
+extern void zllog_input_event(unsigned type, unsigned code, unsigned depth)
+    __attribute__((weak));
+extern void zllog_pointer_event(unsigned x, unsigned y, unsigned buttons,
+                                unsigned depth, unsigned source_tsc,
+                                unsigned sequence) __attribute__((weak));
 
 /* ---- event model ------------------------------------------------------- */
 #define EV_NONE      0
@@ -73,11 +110,22 @@ struct event {
     u16 mods;
     u32 code;      /* a KEY_* value, or the character for EV_CHAR */
     int x, y;      /* mouse only */
+    u32 tsc;       /* logical enqueue time, for input-to-present latency */
+    u32 seq;
 };
 
 #define EVQ_SIZE 64
 static struct event evq[EVQ_SIZE];
 static int evq_head = 0, evq_tail = 0;
+static u32 evq_pushed = 0, evq_dropped = 0;
+static u32 evq_sequence = 0;
+static u32 evq_source_tsc;
+
+static int evq_depth(void)
+{
+    int n = evq_tail - evq_head;
+    return n < 0 ? n + EVQ_SIZE : n;
+}
 
 static int mods = 0;          /* PS/2 modifiers, plus the shared caps/num latch */
 static int usb_mods = 0;      /* USB modifiers, which arrive as their own snapshot */
@@ -116,13 +164,31 @@ static int repeat_mods = 0;
 static void evq_push(int type, u32 code, int m, int x, int y)
 {
     int next = (evq_tail + 1) % EVQ_SIZE;
-    if (next == evq_head) return;          /* full: drop, never overwrite */
+    if (next == evq_head) {
+        evq_dropped++;                     /* full: drop, never overwrite */
+        zlt_count(ZLLOG_C_INPUT_DROP, 1);
+        zlt_event(ZLLOG_SUB_INPUT, ZLLOG_EV_DROP, ZLLOG_ERROR,
+                  (unsigned)type, code, (unsigned)evq_depth());
+        return;
+    }
     evq[evq_tail].type = (u16)type;
     evq[evq_tail].mods = (u16)m;
     evq[evq_tail].code = code;
     evq[evq_tail].x = x;
     evq[evq_tail].y = y;
+    evq[evq_tail].tsc = evq_source_tsc ? evq_source_tsc :
+                         (cpu_tsc_lo ? cpu_tsc_lo() : 0u);
+    evq[evq_tail].seq = ++evq_sequence;
     evq_tail = next;
+    evq_pushed++;
+    if (type == EV_MOUSE && zllog_pointer_event)
+    {
+        int at = (evq_tail + EVQ_SIZE - 1) % EVQ_SIZE;
+        zllog_pointer_event((unsigned)x, (unsigned)y, code,
+                            (unsigned)evq_depth(), evq[at].tsc, evq[at].seq);
+    }
+    else if (zllog_input_event)
+        zllog_input_event((unsigned)type, code, (unsigned)evq_depth());
 }
 
 /* ---- scancode set 1, unshifted and shifted ----------------------------
@@ -496,6 +562,13 @@ static int accel_pct(int m)
  * Truncation toward zero is symmetric in C, so a negative delta accumulates
  * the same way a positive one does and the pointer does not drift. */
 static int rem_x, rem_y;
+/* A touchpad reports finger displacement, not mouse velocity. It gets the
+ * user's speed setting but not the mouse/TrackPoint acceleration curve. The
+ * physical first run fed a polled legacy relative report into the shared
+ * curve: one stale delta was both repeated and accelerated, which felt like a
+ * cursor sliding on ice. Separate remainders also stop sub-pixel movement from
+ * one device leaking into the other. */
+static int touch_rem_x, touch_rem_y;
 
 static int scale_axis(int d, int gain, int *rem)
 {
@@ -538,6 +611,10 @@ static void pump_mouse(void)
      * xhci_ptr_abs() is the question that was meant. */
     int usb    = xhci_ptr_ready();
     int tablet = usb && xhci_ptr_abs();
+    int touch  = i2c_hid_pointer_ready && i2c_hid_pointer_ready();
+    int tdx = touch && i2c_hid_ptr_take_dx ? i2c_hid_ptr_take_dx() : 0;
+    int tdy = touch && i2c_hid_ptr_take_dy ? i2c_hid_ptr_take_dy() : 0;
+    int tbtn = touch && i2c_hid_ptr_buttons ? i2c_hid_ptr_buttons() : 0;
     int b, dx, dy;
 
     /* NO POLL IN HERE. input_poll() has already drained the ring, once, for
@@ -553,7 +630,7 @@ static void pump_mouse(void)
         b = xhci_ptr_btn();
         if (!ms_seen) {
             ms_x = xhci_ptr_x(); ms_y = xhci_ptr_y();
-            ms_btn = b; ms_seen = 1;
+            ms_btn = b | tbtn; ms_seen = 1;
             px_x = ms_x; px_y = ms_y;
             ms_pub_x = px_x; ms_pub_y = px_y;
             (void)xhci_ptr_take_dx(); (void)xhci_ptr_take_dy();  /* discard */
@@ -567,7 +644,7 @@ static void pump_mouse(void)
         if (tablet) { x = xhci_ptr_x();  y = xhci_ptr_y();  b = xhci_ptr_btn();  }
         else        { x = idt_mouse_x(); y = idt_mouse_y(); b = idt_mouse_btn(); }
         if (!ms_seen) {
-            ms_x = x; ms_y = y; ms_btn = b; ms_seen = 1;
+            ms_x = x; ms_y = y; ms_btn = b | tbtn; ms_seen = 1;
             px_x = x; px_y = y;                 /* adopt, do not announce */
             ms_pub_x = px_x; ms_pub_y = px_y;   /* ...and seed what "announced"
                                                    means, or the NEXT poll
@@ -588,18 +665,24 @@ static void pump_mouse(void)
        a USB mouse is a mouse, which is the whole point of the split above. */
     if (tablet) {
         px_x = ms_x; px_y = ms_y;
-    } else if (dx | dy) {
+    } else if (dx | dy | tdx | tdy) {
         /* ONE gain for both axes, from the magnitude of the move. Deriving it
          * per-axis would give a fast-horizontal, slow-vertical move two
          * different gains and bend the direction the hand actually moved.
          * max + min/2 approximates the hypotenuse to about 12% with no sqrt. */
-        int a = dx < 0 ? -dx : dx;
-        int c = dy < 0 ? -dy : dy;
-        int m = (a > c) ? (a + c / 2) : (c + a / 2);
-        int gain = spd_pct * accel_pct(m);
-
-        px_x += scale_axis(dx, gain, &rem_x);
-        px_y += scale_axis(dy, gain, &rem_y);
+        if (dx | dy) {
+            int a = dx < 0 ? -dx : dx;
+            int c = dy < 0 ? -dy : dy;
+            int m = (a > c) ? (a + c / 2) : (c + a / 2);
+            int gain = spd_pct * accel_pct(m);
+            px_x += scale_axis(dx, gain, &rem_x);
+            px_y += scale_axis(dy, gain, &rem_y);
+        }
+        if (tdx | tdy) {
+            int touch_gain = spd_pct * SPD_UNIT; /* 1:1 at default speed */
+            px_x += scale_axis(tdx, touch_gain, &touch_rem_x);
+            px_y += scale_axis(tdy, touch_gain, &touch_rem_y);
+        }
 
         if (px_x < 0) px_x = 0;
         if (px_y < 0) px_y = 0;
@@ -616,8 +699,31 @@ static void pump_mouse(void)
      * be a control that existed and never fired. Read both unconditionally -
      * take_wheel() is read-and-clear, so skipping it when the PS/2 mouse
      * answered first would let notches pile up and arrive in a burst. */
-    int wz = idt_mouse_wheel() + (usb ? xhci_ptr_take_wheel() : 0);
+    int wz = idt_mouse_wheel() + (usb ? xhci_ptr_take_wheel() : 0) +
+             (touch && i2c_hid_ptr_take_wheel ? i2c_hid_ptr_take_wheel() : 0);
     if (wz) evq_push(EV_WHEEL, (u32)wz, mods, px_x, px_y);
+
+    /* Motion is state and may coalesce. Button transitions are history and
+     * may not: a press+release can both arrive during one slow frame. xHCI
+     * retains the ordered masks per HID report so both edges survive here. */
+    if (usb && xhci_ptr_take_button) {
+        int edge;
+        while ((edge = xhci_ptr_take_button()) >= 0) {
+            ms_btn = edge | tbtn;
+            ms_pub_x = px_x; ms_pub_y = px_y;
+            evq_push(EV_MOUSE, (u32)ms_btn, mods, px_x, px_y);
+        }
+    }
+    if (touch && i2c_hid_ptr_take_button) {
+        int edge;
+        while ((edge = i2c_hid_ptr_take_button()) >= 0) {
+            ms_btn = b | edge;
+            ms_pub_x = px_x; ms_pub_y = px_y;
+            evq_push(EV_MOUSE, (u32)ms_btn, mods, px_x, px_y);
+        }
+    }
+
+    b |= tbtn;
 
     /* Coalesce on the REPORTED position, not the raw one: below 1x a raw move
      * can scale to nothing at all, and an event that says the pointer is where
@@ -697,6 +803,12 @@ static void handle_hid_event(int ev)
  * where the timing lives. */
 void input_poll(void)
 {
+    /* Unsigned subtraction deliberately handles a years-long counter wrap.
+     * `processed` below means logical events successfully queued this poll;
+     * drops is the number refused because the queue was full. */
+    u32 pushed_before = evq_pushed;
+    u32 dropped_before = evq_dropped;
+
     /* THE USB EVENT RING, DRAINED ONCE, FIRST, BY ONE CALLER.
      *
      * Both HID devices post completions to a single xHCI event ring. This used
@@ -717,10 +829,20 @@ void input_poll(void)
     for (int i = 0; i < 16; i++) {
         int sc = idt_scan();
         if (!sc) break;
+        evq_source_tsc = idt_scan_tsc ? idt_scan_tsc() : 0u;
         handle_scancode(sc);
+        evq_source_tsc = 0;
     }
 
+    /* Automatic internal-pad startup is delayed and state-driven inside the
+     * driver. On QEMU/other hardware the weak/exact probe is a quick no-op. */
+    if (i2c_hid_service) (void)i2c_hid_service();
+
+    evq_source_tsc = xhci_ptr_take_tsc && xhci_ptr_ready()
+        ? xhci_ptr_take_tsc()
+        : (idt_mouse_take_tsc ? idt_mouse_take_tsc() : 0u);
     pump_mouse();
+    evq_source_tsc = 0;
 
     /* USB HID. It used to hand over decoded characters, which is why arrow
      * keys never reached an application from a USB keyboard: there is no
@@ -729,7 +851,9 @@ void input_poll(void)
     for (int i = 0; i < 16; i++) {
         int ev = xhci_key_event();
         if (!ev) break;
+        evq_source_tsc = xhci_key_event_tsc ? xhci_key_event_tsc() : 0u;
         handle_hid_event(ev);
+        evq_source_tsc = 0;
     }
 
 
@@ -757,6 +881,7 @@ void input_poll(void)
         int c = ser_rx();
         if (c < 0) break;
         if (c == 0) continue;                    /* a NUL is not a keystroke */
+        evq_source_tsc = 0;
         evq_push(EV_CHAR, (u32)c, mods, 0, 0);
     }
     /* The modifier bitmap is whatever the last report decoded, and the drain
@@ -774,6 +899,15 @@ void input_poll(void)
                 evq_push(EV_CHAR, repeat_code, repeat_mods, 0, 0);
             repeat_at = now + REPEAT_RATE;
         }
+    }
+
+    {
+        u32 processed = evq_pushed - pushed_before;
+        u32 drops = evq_dropped - dropped_before;
+        if ((processed || drops) && zllog_input_batch)
+            zllog_input_batch(processed, (unsigned)evq_depth(), drops);
+        if (processed || drops) zlt_observe(ZLLOG_C_INPUT_QUEUE,
+                                             (unsigned)evq_depth());
     }
 }
 
@@ -798,6 +932,8 @@ int input_code(void)  { return (int)last.code; }
 int input_x(void)     { return last.x; }
 int input_y(void)     { return last.y; }
 int input_mods(void)  { return last.mods; }
+u32 input_event_tsc(void) { return last.tsc; }
+u32 input_event_seq(void) { return last.seq; }
 /* Either keyboard holding shift means shift is down - they are one logical
  * keyboard, and the caller has no business knowing which one you reached for. */
 int input_shift(void) { return ((mods | usb_mods) & MOD_SHIFT) ? 1 : 0; }
@@ -845,6 +981,5 @@ int input_key(void)
 
 int input_queued(void)
 {
-    int n = evq_tail - evq_head;
-    return n < 0 ? n + EVQ_SIZE : n;
+    return evq_depth();
 }

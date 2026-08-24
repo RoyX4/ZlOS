@@ -26,6 +26,8 @@
  */
 
 #include "memmap.h"
+#include "i2c_touch.h"
+#include "zllog.h"
 
 typedef unsigned long long u64;
 typedef unsigned int       u32;
@@ -76,6 +78,29 @@ static void wr32(uptr a, u32 v)  { *(volatile u32 *)a = v; }
 
 #define IC_COMP_TYPE_VALUE 0x44570140u   /* "DW" + version - the ID check */
 
+/* Intel CML-LP LPSS wrapper.  The DesignWare block occupies BAR+0x000..1ff;
+ * the wrapper private registers start at +0x200.  Linux performs this reset
+ * and remap setup before it exposes the DesignWare child.  Reading COMP_TYPE
+ * before it leaves reset only proves that an asleep wrapper returns rubbish. */
+#define LPSS_PRIV_OFFSET       0x200u
+#define LPSS_PRIV_RESETS       (LPSS_PRIV_OFFSET + 0x04u)
+#define LPSS_PRIV_REMAP_LO     (LPSS_PRIV_OFFSET + 0x40u)
+#define LPSS_PRIV_REMAP_HI     (LPSS_PRIV_OFFSET + 0x44u)
+#define LPSS_RESETS_FUNC_IDMA  0x07u
+
+/* Exact devices present in this ThinkPad.  00:1f.5 is also Intel class
+ * 0c/80, but it is the 02a4 SPI flash controller.  Selecting by class and
+ * calling pci_enable() on it was not a probe; it was programming the wrong
+ * device by scan-order luck. */
+#define CML_LPSS_I2C0 0x02e8u
+#define CML_LPSS_I2C1 0x02e9u
+
+/* CML-LP uses the 216 MHz CNL LPSS clock.  These conservative fast-mode
+ * counts yield the firmware-declared 400 kHz bus; 0x3c/0x82 drove it at about
+ * 1.09 MHz, outside the touchpad's declared timing. */
+#define CML_FS_SCL_HCNT 191u
+#define CML_FS_SCL_LCNT 345u
+
 #define CON_MASTER      (1u << 0)
 #define CON_SPEED_FAST  (2u << 1)
 #define CON_SLAVE_DIS   (1u << 6)
@@ -96,12 +121,21 @@ static int  i2c_found  = 0;
 static int  hid_addr   = -1;      /* the touchpad's 7-bit I2C address       */
 static int  hid_desc_reg = -1;    /* which register held its HID descriptor */
 static int  hid_ready  = 0;
+static u32  i2c_device = 0;
+static u32  i2c_last_abort = 0;
 
 /* HID descriptor fields we care about, as read off the device */
 static u16 hid_input_reg = 0, hid_max_input = 0;
 static u16 hid_cmd_reg = 0, hid_data_reg = 0;
 static u16 hid_vid = 0, hid_pid = 0, hid_version = 0;
-static u16 hid_report_desc_len = 0;
+static u16 hid_report_desc_len = 0, hid_report_desc_reg = 0;
+static u32 hid_report_logged = 0;
+static struct zltouch_state touch;
+static int touch_state = 0;       /* 0 idle, 1 power wait, 2 reset, 3 live,
+                                   * 4 final power wait, 5 mode-set failed */
+static int touch_auto_attempted = 0;
+static u32 touch_deadline = 0;
+static u32 touch_poll_at = 0;
 
 /* ---- where the buffers live -------------------------------------------
  * These were at 0x0C900000 and 0x0C900100, which is 9 MiB into fb.c's
@@ -121,18 +155,36 @@ static u16 hid_report_desc_len = 0;
 #define HID_BUF     ((unsigned int)HI_HID)          /* input reports land here */
 #define HID_BUF_MAX 64u
 
-/* ---- finding the controller -------------------------------------------
- * Intel's LPSS I2C blocks appear as PCI class 0x0C (serial bus) subclass 0x80
- * (other). There are usually two; the right one is whichever has a DesignWare
- * core behind it AND a device that answers as HID. */
+/* ---- finding the controller ------------------------------------------- */
+static int is_cml_i2c_device(int device)
+{
+    return device == (int)CML_LPSS_I2C0 || device == (int)CML_LPSS_I2C1;
+}
+
+static void lpss_prepare(void)
+{
+    /* Linux's intel-lpss core asserts both function/iDMA resets, releases
+     * them, then publishes the DesignWare child's remap address.  The upper
+     * write is required even on this laptop, where firmware placed BAR0 below
+     * 4 GiB: leaving stale high bits is another scan-order dependency. */
+    wr32(i2c_base + LPSS_PRIV_RESETS, 0);
+    wr32(i2c_base + LPSS_PRIV_RESETS, LPSS_RESETS_FUNC_IDMA);
+    wr32(i2c_base + LPSS_PRIV_REMAP_LO, (u32)i2c_base);
+    wr32(i2c_base + LPSS_PRIV_REMAP_HI,
+         sizeof(uptr) >= 8 ? (u32)(i2c_base >> 16 >> 16) : 0u);
+}
+
+/* There are two CML-LP I2C functions.  `which` counts only those exact PCI
+ * IDs, never every 0c/80 function: the third class match is the SPI flash
+ * controller and must not even reach pci_enable(). */
 int i2c_find(int which)
 {
+    if (which < 0) return -1;
     pci_scan();
     int seen = 0;
     for (int i = 0; i < pci_count(); i++) {
         if (pci_vendor(i)   != 0x8086) continue;
-        if (pci_class(i)    != 0x0C)   continue;
-        if (pci_subclass(i) != 0x80)   continue;
+        if (!is_cml_i2c_device(pci_device(i))) continue;
         if (seen++ != which) continue;
 
         pci_enable(i);
@@ -147,7 +199,11 @@ int i2c_find(int which)
 
         i2c_idx  = i;
         i2c_base = b;
+        i2c_device = (u32)pci_device(i);
         i2c_found = 1;
+        lpss_prepare();
+        zllog_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+                    0x49324301u, i2c_device, rd32(i2c_base + IC_COMP_TYPE));
         return i;
     }
     return -1;
@@ -166,6 +222,18 @@ int i2c_is_designware(void)
     return rd32(i2c_base + IC_COMP_TYPE) == IC_COMP_TYPE_VALUE;
 }
 
+static int select_designware(void)
+{
+    if (i2c_found && i2c_is_designware()) return 1;
+
+    /* The touchpad is on the second LPSS I2C function on this ThinkPad.  Fall
+     * back to #0 rather than letting one asleep/absent function poison the
+     * static `i2c_found` state forever. */
+    if (i2c_find(1) >= 0 && i2c_is_designware()) return 1;
+    if (i2c_find(0) >= 0 && i2c_is_designware()) return 1;
+    return 0;
+}
+
 static void i2c_disable(void)
 {
     wr32(i2c_base + IC_ENABLE, 0);
@@ -178,16 +246,23 @@ static void i2c_disable(void)
  * and they are conservative enough to work if the source differs somewhat. */
 int i2c_init(void)
 {
-    if (!i2c_found && i2c_find(1) < 0 && i2c_find(0) < 0) return 0;
-    if (!i2c_is_designware()) return 0;
+    if (!select_designware()) {
+        zllog_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_ERROR,
+                    0x49324302u, i2c_device,
+                    i2c_found ? rd32(i2c_base + IC_COMP_TYPE) : 0u);
+        return 0;
+    }
 
     i2c_disable();
     wr32(i2c_base + IC_CON, CON_MASTER | CON_SLAVE_DIS | CON_RESTART_EN | CON_SPEED_FAST);
-    wr32(i2c_base + IC_FS_SCL_HCNT, 0x3C);
-    wr32(i2c_base + IC_FS_SCL_LCNT, 0x82);
+    wr32(i2c_base + IC_FS_SCL_HCNT, CML_FS_SCL_HCNT);
+    wr32(i2c_base + IC_FS_SCL_LCNT, CML_FS_SCL_LCNT);
     wr32(i2c_base + IC_TX_TL, 0);
     wr32(i2c_base + IC_RX_TL, 0);
     wr32(i2c_base + IC_INTR_MASK, 0);        /* we poll; no interrupts */
+    zllog_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+                0x49324303u, i2c_device,
+                (CML_FS_SCL_HCNT << 16) | CML_FS_SCL_LCNT);
     return 1;
 }
 
@@ -216,8 +291,10 @@ static int wait_rx_byte(void)
     return 0;
 }
 
-static void clear_abort(void)
+static void clear_abort(int preserve)
 {
+    u32 source = rd32(i2c_base + IC_TX_ABRT_SOURCE);
+    if (preserve && source) i2c_last_abort = source;
     (void)rd32(i2c_base + IC_CLR_TX_ABRT);
 }
 
@@ -226,28 +303,35 @@ static void clear_abort(void)
 static int i2c_write_read(int addr, const u8 *out, int nout, u32 inbuf, int nin)
 {
     if (!i2c_found) return 0;
-    clear_abort();
+    i2c_last_abort = 0;
+    clear_abort(0);
     i2c_set_target(addr);
 
     for (int i = 0; i < nout; i++) {
-        if (!wait_tx_room()) { clear_abort(); return 0; }
+        if (!wait_tx_room()) { clear_abort(1); return 0; }
         u32 cmd = out[i];
         if (nin == 0 && i == nout - 1) cmd |= CMD_STOP;
         wr32(i2c_base + IC_DATA_CMD, cmd);
     }
 
     for (int i = 0; i < nin; i++) {
-        if (!wait_tx_room()) { clear_abort(); return 0; }
+        if (!wait_tx_room()) { clear_abort(1); return 0; }
         u32 cmd = CMD_READ;
-        if (i == 0)        cmd |= CMD_RESTART;
+        /* A live HID input report is a direct i2c_master_recv(), with no
+         * preceding register write. RESTART belongs only to the combined
+         * write+read transactions used for descriptors. */
+        if (i == 0 && nout > 0) cmd |= CMD_RESTART;
         if (i == nin - 1)  cmd |= CMD_STOP;
         wr32(i2c_base + IC_DATA_CMD, cmd);
 
-        if (!wait_rx_byte()) { clear_abort(); return 0; }
+        if (!wait_rx_byte()) { clear_abort(1); return 0; }
         *(volatile u8 *)(uptr)(inbuf + (u32)i) = (u8)(rd32(i2c_base + IC_DATA_CMD) & 0xFF);
     }
 
-    if (rd32(i2c_base + IC_RAW_INTR_STAT) & (1u << 6)) { clear_abort(); return 0; }
+    if (rd32(i2c_base + IC_RAW_INTR_STAT) & (1u << 6)) {
+        clear_abort(1);
+        return 0;
+    }
     return 1;
 }
 
@@ -258,6 +342,8 @@ static int i2c_write_read(int addr, const u8 *out, int nout, u32 inbuf, int nin)
  * what makes probing safe. */
 #define HID_DESC_BUF (HID_BUF + 0x100u)
 #define HID_DESC_LEN 30u
+#define HID_RDESC_BUF (HID_BUF + 0x200u)
+#define HID_RDESC_MAX 2048u
 
 /* Both buffers inside this driver's own region, and the report buffer clear of
  * the descriptor buffer that follows it. HID_BUF_MAX is 64 and the gap is 256,
@@ -268,6 +354,14 @@ _Static_assert(HID_BUF + HID_BUF_MAX <= HID_DESC_BUF,
                "i2c_hid: report buffer overruns the descriptor buffer");
 _Static_assert((unsigned long)HID_DESC_BUF + HID_DESC_LEN <= HI_GPU,
                "i2c_hid: buffers escape their region into the blur arena");
+_Static_assert((unsigned long)HID_RDESC_BUF + HID_RDESC_MAX <= HI_GPU,
+               "i2c_hid: report descriptor escapes its region");
+
+static u32 pack4(volatile u8 *p)
+{
+    return (u32)p[0] | ((u32)p[1] << 8) |
+           ((u32)p[2] << 16) | ((u32)p[3] << 24);
+}
 
 static int read_hid_descriptor(int addr, int reg)
 {
@@ -281,6 +375,7 @@ static int read_hid_descriptor(int addr, int reg)
     if (ver != 0x0100) return 0;
 
     hid_report_desc_len = (u16)(d[4]  | (d[5]  << 8));
+    hid_report_desc_reg = (u16)(d[6]  | (d[7]  << 8));
     hid_input_reg       = (u16)(d[8]  | (d[9]  << 8));
     hid_max_input       = (u16)(d[10] | (d[11] << 8));
     hid_cmd_reg         = (u16)(d[16] | (d[17] << 8));
@@ -291,6 +386,63 @@ static int read_hid_descriptor(int addr, int reg)
     return 1;
 }
 
+/* Capture the descriptor that defines the touchpad report layout.  This is
+ * the missing physical evidence needed to write a decoder without guessing.
+ * It is intentionally bounded and recorded in eight-byte chunks; the host
+ * extractor reconstructs them after `diagsave`/`halt`. */
+static int read_report_descriptor(int addr)
+{
+    u32 n = hid_report_desc_len;
+    if (!n || n > HID_RDESC_MAX || !hid_report_desc_reg) return 0;
+    u8 out[2] = {
+        (u8)(hid_report_desc_reg & 0xff),
+        (u8)(hid_report_desc_reg >> 8)
+    };
+    if (!i2c_write_read(addr, out, 2, HID_RDESC_BUF, (int)n)) return 0;
+
+    zllog_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+                0x49324400u, n, hid_report_desc_reg);
+    volatile u8 *d = (volatile u8 *)(uptr)HID_RDESC_BUF;
+    for (u32 at = 0; at < n; at += 8u) {
+        u8 tail[8] = {0,0,0,0,0,0,0,0};
+        u32 take = n - at;
+        if (take > 8u) take = 8u;
+        for (u32 i = 0; i < take; i++) tail[i] = d[at + i];
+        zllog_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+                    0x49324500u | (at / 8u),
+                    (u32)tail[0] | ((u32)tail[1] << 8) |
+                    ((u32)tail[2] << 16) | ((u32)tail[3] << 24),
+                    (u32)tail[4] | ((u32)tail[5] << 8) |
+                    ((u32)tail[6] << 16) | ((u32)tail[7] << 24));
+    }
+    return 1;
+}
+
+static int accept_hid(int addr, int reg)
+{
+    if (!read_hid_descriptor(addr, reg)) return 0;
+    if (!read_report_descriptor(addr)) return 0;
+    hid_addr     = addr;
+    hid_desc_reg = reg;
+    hid_ready    = 1;
+    zllog_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+                0x49324304u, ((u32)addr << 16) | (u32)reg,
+                ((u32)hid_vid << 16) | hid_pid);
+    return 1;
+}
+
+/* This is the physical machine's ACPI-resolved route, independently observed
+ * from Linux: PCI 8086:02e9, bus address 0x2c, descriptor register 0x20.
+ * Trying it first turns automatic startup from a multi-second blind scan into
+ * one self-validating transaction. A different machine can still use the
+ * exhaustive diagnostic probe below. */
+static int probe_x1c8(void)
+{
+    if (hid_ready) return hid_addr;
+    if (!i2c_init()) return -1;
+    return accept_hid(0x2c, 0x0020) ? hid_addr : -1;
+}
+
 /* Walk the bus. Addresses below 0x08 and above 0x77 are reserved by the I2C
  * specification and are never devices. The two candidate descriptor registers
  * cover essentially every shipping I2C-HID device. */
@@ -299,34 +451,172 @@ int i2c_hid_probe(void)
     if (hid_ready) return hid_addr;
     if (!i2c_init()) return -1;
 
+    if (accept_hid(0x2c, 0x0020)) return hid_addr;
+
     static const int regs[2] = { 0x0020, 0x0001 };
     for (int a = 0x08; a <= 0x77; a++) {
         for (int r = 0; r < 2; r++) {
-            if (!read_hid_descriptor(a, regs[r])) continue;
-            hid_addr     = a;
-            hid_desc_reg = regs[r];
-            hid_ready    = 1;
-            return a;
+            if (a == 0x2c && regs[r] == 0x0020) continue;
+            if (accept_hid(a, regs[r])) return a;
         }
     }
+    zllog_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_ERROR,
+                0x49324305u, i2c_device, i2c_last_abort);
     return -1;
 }
 
-/* Read one input report. The first two bytes are the report's own length, so a
- * length of zero means "nothing happened" rather than an error - which is the
- * normal case when the pad is not being touched. */
-int i2c_hid_read_report(void)
+static int send_hid_command(int report_id, int opcode)
+{
+    u8 out[4] = {
+        (u8)(hid_cmd_reg & 0xff), (u8)(hid_cmd_reg >> 8),
+        (u8)(report_id & 0x0f), (u8)opcode
+    };
+    return hid_ready && hid_cmd_reg &&
+           i2c_write_read(hid_addr, out, 4, 0, 0);
+}
+
+/* A Windows Precision Touchpad powers up in its compatibility mouse mode.
+ * Report 2 is relative and has no scan counter; blindly polling it without
+ * the ACPI GPIO interrupt can therefore replay one non-zero delta and make the
+ * pointer coast after the finger stopped.  The physical SYNA8006 descriptor
+ * declares Digitizer/Input Mode as feature report 4. Linux's multitouch driver
+ * selects value 3 for a touchpad, which switches this device to the absolute
+ * contact report 3 that zltouch_decode() already understands.
+ *
+ * Keep packet construction separate so the exact on-wire command is a host
+ * test, not another physical-hardware guess. HID-over-I2C SET_REPORT is:
+ * command register, feature/report-id nibble, opcode, data register, then a
+ * length-prefixed numbered report. */
+int i2c_hid_touchpad_mode_packet(u8 *out, int cap, int command_reg,
+                                  int data_reg)
+{
+    if (!out || cap < 10) return 0;
+    out[0] = (u8)command_reg;
+    out[1] = (u8)(command_reg >> 8);
+    out[2] = 0x34;                         /* feature report, ID 4 */
+    out[3] = 0x03;                         /* SET_REPORT */
+    out[4] = (u8)data_reg;
+    out[5] = (u8)(data_reg >> 8);
+    out[6] = 0x04;                         /* report bytes incl. size + ID */
+    out[7] = 0x00;
+    out[8] = 0x04;                         /* report ID */
+    out[9] = 0x03;                         /* precision touchpad mode */
+    return 10;
+}
+
+static int set_touchpad_mode(void)
+{
+    u8 out[10];
+    int n = i2c_hid_touchpad_mode_packet(out, (int)sizeof out,
+                                         hid_cmd_reg, hid_data_reg);
+    return n && i2c_write_read(hid_addr, out, n, 0, 0);
+}
+
+static void log_input_report(volatile u8 *b, int length)
+{
+    if (length <= 2 || hid_report_logged >= 8u) return;
+    u32 report = hid_report_logged++;
+    zllog_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+                0x49325000u | (report << 4), pack4(b), pack4(b + 4));
+    zllog_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+                0x49325001u | (report << 4), pack4(b + 8), pack4(b + 12));
+}
+
+/* Linux's upstream i2c-hid core services an input interrupt with
+ * i2c_master_recv(): no input-register prefix. The old zlOS transaction wrote
+ * hid_input_reg first, which is the descriptor-read shape and not the live
+ * input shape. That could discover the pad and still never receive motion. */
+static int read_input_direct(void)
 {
     if (!hid_ready) return 0;
-    u8 out[2] = { (u8)(hid_input_reg & 0xFF), (u8)((hid_input_reg >> 8) & 0xFF) };
     int want = (int)hid_max_input;
     if (want <= 0 || want > (int)HID_BUF_MAX) want = (int)HID_BUF_MAX;
 
     for (u32 i = 0; i < HID_BUF_MAX; i++) *(volatile u8 *)(uptr)(HID_BUF + i) = 0;
-    if (!i2c_write_read(hid_addr, out, 2, HID_BUF, want)) return 0;
+    if (!i2c_write_read(hid_addr, 0, 0, HID_BUF, want)) return -1;
 
     volatile u8 *b = (volatile u8 *)(uptr)HID_BUF;
-    return (int)(b[0] | (b[1] << 8));
+    int length = (int)(b[0] | (b[1] << 8));
+    if (length > want || length < 0) return -1;
+    log_input_report(b, length);
+    return length;
+}
+
+/* Public diagnostic read. Automatic pointer operation uses service() below. */
+int i2c_hid_read_report(void)
+{
+    int n = read_input_direct();
+    return n < 0 ? 0 : n;
+}
+
+static int time_reached(u32 now, u32 at)
+{
+    return (int)(now - at) >= 0;
+}
+
+/* Bounded polling stands in for the ACPI GPIO interrupt zlOS does not yet
+ * route. It starts only on the exact self-validating X1C8 address and runs at
+ * at most 100 Hz. Power/reset are a state machine so input_poll never sleeps. */
+int i2c_hid_service(void)
+{
+    u32 now = idt_ticks();
+    if (touch_state == 0) {
+        if (touch_auto_attempted || now < 50u) return 0;
+        touch_auto_attempted = 1;
+        if (probe_x1c8() < 0) return 0;
+        zltouch_init(&touch);
+        if (!send_hid_command(0, 0x08)) return 0;       /* SET_POWER(ON) */
+        touch_state = 1;
+        touch_deadline = now + 6u;                     /* upstream waits 60 ms */
+        return 0;
+    }
+    if (touch_state == 1) {
+        if (!time_reached(now, touch_deadline)) return 0;
+        if (!send_hid_command(0, 0x01)) { touch_state = 0; return 0; } /* RESET */
+        touch_state = 2;
+        touch_deadline = now + 100u;
+        touch_poll_at = now;
+        return 0;
+    }
+    if (touch_state == 2) {
+        if (!time_reached(now, touch_poll_at)) return 0;
+        touch_poll_at = now + 1u;
+        int n = read_input_direct();
+        if (n == 0 || time_reached(now, touch_deadline)) {
+            if (!send_hid_command(0, 0x08)) { touch_state = 0; return 0; }
+            touch_state = 4;
+            touch_deadline = now + 6u;
+        }
+        return 0;
+    }
+    if (touch_state == 4) {
+        if (!time_reached(now, touch_deadline)) return 0;
+        if (!set_touchpad_mode()) {
+            /* Never expose legacy relative report 2 as a live pointer. With
+             * no routed GPIO interrupt, replaying it is exactly the physical
+             * multi-second glide recorded on the first X1C8 run. */
+            touch_state = 5;
+            zllog_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_ERROR,
+                        0x49324307u, (u32)hid_addr, i2c_last_abort);
+            return 0;
+        }
+        zllog_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+                    0x49324308u, 4u, 3u);
+        touch_state = 3;
+        /* A write-only DesignWare transaction is queued before it is fully
+         * on the wire. Give SET_REPORT one 100 Hz service interval before a
+         * direct read disables/re-targets the controller. */
+        touch_poll_at = now + 1u;
+        zllog_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+                    0x49324306u, (u32)hid_addr, hid_max_input);
+        return 0;
+    }
+    if (touch_state != 3) return 0;
+    if (!time_reached(now, touch_poll_at)) return 0;
+    touch_poll_at = now + 1u;
+    int n = read_input_direct();
+    if (n <= 2) return 0;
+    return zltouch_decode(&touch, (const u8 *)(uptr)HID_BUF, n, now);
 }
 
 int i2c_hid_byte(int i)
@@ -344,3 +634,16 @@ int i2c_hid_version(void)   { return (int)hid_version; }
 int i2c_hid_input_reg(void) { return (int)hid_input_reg; }
 int i2c_hid_max_input(void) { return (int)hid_max_input; }
 int i2c_hid_rdesc_len(void) { return (int)hid_report_desc_len; }
+int i2c_hid_device_id(void) { return (int)i2c_device; }
+u32 i2c_hid_abort_source(void) { return i2c_last_abort; }
+u32 i2c_hid_fs_hcnt(void) { return i2c_found ? rd32(i2c_base + IC_FS_SCL_HCNT) : 0u; }
+u32 i2c_hid_fs_lcnt(void) { return i2c_found ? rd32(i2c_base + IC_FS_SCL_LCNT) : 0u; }
+u32 i2c_hid_lpss_reset(void) { return i2c_found ? rd32(i2c_base + LPSS_PRIV_RESETS) : 0u; }
+int i2c_hid_pointer_ready(void) { return touch_state == 3; }
+int i2c_hid_ptr_take_dx(void) { return zltouch_take_dx(&touch); }
+int i2c_hid_ptr_take_dy(void) { return zltouch_take_dy(&touch); }
+int i2c_hid_ptr_take_wheel(void) { return zltouch_take_wheel(&touch); }
+int i2c_hid_ptr_buttons(void) { return touch.buttons; }
+int i2c_hid_ptr_take_button(void) { return zltouch_take_button(&touch); }
+u32 i2c_hid_ptr_reports(void) { return touch.reports; }
+u32 i2c_hid_ptr_malformed(void) { return touch.malformed; }

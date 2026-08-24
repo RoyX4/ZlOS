@@ -59,6 +59,11 @@ int  browser_link_at(int cx, int cy);
 int  browser_click(int cx, int cy, int btn);
 void browser_draw(int x, int y, int w, int h, int focused);
 const char *browser_title(void);
+int  browser_bookmark_count(void);
+const char *browser_bookmark_url(int idx);
+int  browser_bookmark_add(void);
+int  browser_bookmark_open(int idx);
+int  browser_save_page(void);
 
 /* browser.c's private status codes, restated. They are not exported, and a
  * test that only checked "did it fail" would not distinguish "https refused"
@@ -72,6 +77,56 @@ const char *browser_title(void);
 #define BR_BAD_TYPE  6
 #define BR_RESOLVING 7
 #define BR_IMAGES    8
+#define BR_BOOKMARKED 9
+#define BR_SAVED      10
+
+/* ---- a bounded in-memory zlfs seam -----------------------------------------
+ * Persistence used to be absent from this harness because browser.c's weak
+ * filesystem symbols simply resolved to zero. That made every history write,
+ * bookmark flush and page save compile while executing no code at all. */
+#define TFILES 24
+struct tfile { char name[24]; unsigned char *data; unsigned cap; int used; };
+static struct tfile tf[TFILES];
+static int sync_calls;
+
+int fs_mounted(void) { return 1; }
+int fs_find(const char *name)
+{
+    for (int i = 0; i < TFILES; i++)
+        if (tf[i].used && !strcmp(tf[i].name, name)) return i;
+    return -1;
+}
+int fs_create(const char *name, unsigned bytes)
+{
+    if (!name || strlen(name) >= sizeof tf[0].name) return -1;
+    for (int i = 0; i < TFILES; i++) if (!tf[i].used) {
+        tf[i].data = calloc(bytes ? bytes : 1, 1);
+        if (!tf[i].data) return -1;
+        strcpy(tf[i].name, name); tf[i].cap = bytes; tf[i].used = 1;
+        return i;
+    }
+    return -1;
+}
+int fs_write(int idx, const void *src, unsigned bytes)
+{
+    if (idx < 0 || idx >= TFILES || !tf[idx].used || bytes > tf[idx].cap)
+        return 0;
+    memcpy(tf[idx].data, src, bytes);
+    return 1;                       /* zlfs fs_write is success/failure */
+}
+int fs_read(int idx, void *dst, unsigned max)
+{
+    if (idx < 0 || idx >= TFILES || !tf[idx].used) return 0;
+    unsigned n = tf[idx].cap < max ? tf[idx].cap : max;
+    memcpy(dst, tf[idx].data, n);
+    return (int)n;
+}
+int fs_delete(int idx)
+{
+    if (idx < 0 || idx >= TFILES || !tf[idx].used) return 0;
+    free(tf[idx].data); memset(&tf[idx], 0, sizeof tf[idx]); return 1;
+}
+int fs_sync(void) { sync_calls++; return 1; }
 
 /* ---- the clock and the drawing, stubbed ------------------------------------- */
 static unsigned v_ticks;
@@ -429,6 +484,41 @@ static void t_history(void)
     CHECK(!browser_can_back(), "the stack never emptied");
 }
 
+static void t_persistence(void)
+{
+    printf("bookmarks and explicit page saves\n");
+    reset(); net_up();
+    go("http://10.0.2.2:8000/kept");
+    int before = sync_calls;
+    CHECK(browser_bookmark_add(), "bookmark save failed");
+    CHECK(browser_status() == BR_BOOKMARKED, "bookmark status is %d",
+          browser_status());
+    CHECK(browser_bookmark_count() == 1, "bookmark count is %d",
+          browser_bookmark_count());
+    CHECK(browser_bookmark_url(0) &&
+          !strcmp(browser_bookmark_url(0), "http://10.0.2.2:8000/kept"),
+          "bookmark stored the wrong URL");
+    CHECK(fs_find("/user/browser.marks") >= 0,
+          "bookmark file was not created");
+    CHECK(sync_calls == before + 1, "bookmark did not cross one sync boundary");
+    CHECK(browser_bookmark_add(), "duplicate bookmark was rejected");
+    CHECK(browser_bookmark_count() == 1, "duplicate bookmark was stored");
+
+    static const char page[] = "<html><body>saved bytes</body></html>";
+    browser_load(page, (int)sizeof page - 1);
+    before = sync_calls;
+    CHECK(browser_save_page(), "page save failed");
+    CHECK(browser_status() == BR_SAVED, "page-save status is %d", browser_status());
+    int idx = fs_find("/user/page-0.html");
+    CHECK(idx >= 0, "page file was not created");
+    CHECK(idx >= 0 && tf[idx].cap == sizeof page - 1,
+          "page length is %u, wanted %zu", idx >= 0 ? tf[idx].cap : 0,
+          sizeof page - 1);
+    CHECK(idx >= 0 && !memcmp(tf[idx].data, page, sizeof page - 1),
+          "page bytes differ from the document on screen");
+    CHECK(sync_calls == before + 1, "page save did not cross one sync boundary");
+}
+
 /* ---- the URL bar's key machine ------------------------------------------------ */
 static void t_urlbar(void)
 {
@@ -523,8 +613,8 @@ static void t_urlbar(void)
  * The geometry is the stubs at the top of this file, written out rather than
  * hidden so that changing them breaks this loudly: em is 16, so rowh is
  * 16 + 8 = 24 and the chrome row spans y 4..28; Back is
- * strlen(" Back ") * 8 + 8 = 56 wide at x 4; the bar starts at 4+56+4 = 64
- * and runs to w - 4.
+ * strlen(" Back ") * 8 + 8 = 56 wide at x 4. Mark, Marks and Save follow;
+ * at 400 pixels the URL field begins near x=256 and runs to w - 4.
  */
 static void t_chrome_click(void)
 {
@@ -541,17 +631,17 @@ static void t_chrome_click(void)
     CHECK(!browser_url_focus(), "Esc did not leave the URL bar unfocused");
 
     /* a press in the bar focuses it and selects all, as 'l' already did */
-    CHECK(browser_click(200, 10, 1), "a press in the URL bar was not handled");
+    CHECK(browser_click(330, 10, 1), "a press in the URL bar was not handled");
     CHECK(browser_url_focus(), "clicking the URL bar did not focus it");
 
     /* THE RELEASE MUST CHANGE NOTHING. wm.c delivers EV_MOUSE again with an
      * empty button mask, and once more for every motion sample in between; an
      * app that treats each of those as a click re-arms select-all after the
      * first keystroke has already cleared it, and navigates a link twice. */
-    CHECK(!browser_click(200, 10, 0), "the release counted as a second click");
-    CHECK(browser_click(200, 10, 1) == 1, "a second press was not handled");
-    CHECK(!browser_click(200, 10, 1), "the button being HELD counted as a click");
-    browser_click(200, 10, 0);
+    CHECK(!browser_click(330, 10, 0), "the release counted as a second click");
+    CHECK(browser_click(330, 10, 1) == 1, "a second press was not handled");
+    CHECK(!browser_click(330, 10, 1), "the button being HELD counted as a click");
+    browser_click(330, 10, 0);
     CHECK(browser_url_focus(), "the release unfocused the bar");
 
     /* THE REPRO ITSELF. An address with an `l` in the middle, typed after a
@@ -573,7 +663,7 @@ static void t_chrome_click(void)
      * document leaves PgDn and the arrow keys dead with nothing saying why. */
     reset();
     browser_draw(0, 0, 400, 300, 1);
-    browser_click(200, 10, 1); browser_click(200, 10, 0);
+    browser_click(330, 10, 1); browser_click(330, 10, 0);
     CHECK(browser_url_focus(), "the URL bar did not focus");
     browser_click(200, 200, 1); browser_click(200, 200, 0);
     CHECK(!browser_url_focus(), "clicking the page left the URL bar focused");
@@ -971,6 +1061,7 @@ int main(void)
     t_scripts();
     t_url_targets();
     t_history();
+    t_persistence();
     t_urlbar();
     t_chrome_click();
     t_images();
