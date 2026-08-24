@@ -802,6 +802,19 @@ int fs_name_push(int ch)
     return 1;
 }
 
+int fs_name_pop(void)
+{
+    if (stage_len <= 0) return 0;
+    stage[--stage_len] = 0;
+    return 1;
+}
+
+int fs_name_stage_byte(int i)
+{
+    if (i < 0 || i >= stage_len) return 0;
+    return (unsigned char)stage[i];
+}
+
 int fs_name_len(void)            { return stage_len; }
 int fs_create_named(u32 bytes)   { return fs_create(stage, bytes); }
 int fs_find_named(void)          { return fs_find(stage); }

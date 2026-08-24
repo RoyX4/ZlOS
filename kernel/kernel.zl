@@ -340,7 +340,11 @@ fn dock_running_bar(slot, dy) {
 # and a taskbar is exactly the thing that does.
 fn dock_running(slot) {
     if slot == 0 { return wm_open_p(shell_win) }
+    if slot == 1 { return wm_open_p(files_win) }
+    if slot == 2 { return wm_open_p(edit_win) }
+    if slot == 3 { return wm_open_p(paint_win) }
     if slot == 4 { return wm_open_p(snake_win) }
+    if slot == 5 { return wm_open_p(cube_win) }
     if slot == 6 { return wm_open_p(mon_win) }
     if slot == 7 { return wm_open_p(about_win) }
     return 0
@@ -362,7 +366,7 @@ fn dock_icon(slot) {
 }
 fn dock_cmd(slot) {
     if slot == 0 { return 104 }  # help
-    if slot == 1 { return 108 }  # list RAM files
+    if slot == 1 { return 108 }  # persistent Files app
     if slot == 2 { return 105 }  # editor
     if slot == 3 { return 100 }  # paint
     if slot == 4 { return 103 }  # snake
@@ -608,7 +612,7 @@ fn help_typed() {
     print("    snake             play SNAKE (w a s d to steer)")
     print("    paint             paint with the mouse")
     print("    edit <n>          edit RAM file n (0-9) - ESC saves it")
-    print("    ls                list the RAM files")
+    print("    files             persistent named files on zlfs / NVMe")
     print("    beep              beep the PC speaker")
     print("    poke              poke a byte into video memory and read it back")
     color(C_CYAN)  print("  our hardware drivers")
@@ -724,22 +728,39 @@ fn editor_draw(ax, ay, aw, ah) {
     ed_y = ay + 4
     ed_i = 0
     while ed_i < ed_len {
-        ed_c = peek8(EDIT_BUF + ed_i)
-        if ed_c == 10 {
-            ed_x = ax + 4
-            ed_y = ed_y + ed_ch
+        if ed_y >= ay + ah - ed_ch * 2 {
+            ed_i = ed_len
         } else {
-            if ed_c > 32 { char_aa(ed_x, ed_y, ed_c, TXT_HI) }
-            ed_x = ed_x + ed_cw
-            if ed_x > ax + aw - ed_cw { ed_x = ax + 4  ed_y = ed_y + ed_ch }
+            ed_c = peek8(EDIT_BUF + ed_i)
+            if ed_c == 10 {
+                ed_x = ax + 4
+                ed_y = ed_y + ed_ch
+            } else {
+                if ed_c > 32 { char_aa(ed_x, ed_y, ed_c, TXT_HI) }
+                ed_x = ed_x + ed_cw
+                if ed_x > ax + aw - ed_cw { ed_x = ax + 4  ed_y = ed_y + ed_ch }
+            }
+            ed_i = ed_i + 1
         }
-        if ed_y > ay + ah - ed_ch * 2 { ed_i = ed_len }
-        ed_i = ed_i + 1
     }
     # the caret, where the next character will land
-    fill_rgb(ed_x, ed_y, ed_cw, ed_ch - 2, ACCENT)
-    text_aa(ax + 4, ay + ah - ed_ch, "ESC saves and closes   file", TXT_DIM)
-    num_aa(ax + 4 + 28 * ed_cw, ay + ah - ed_ch, ed_slot, TXT_HI)
+    if ed_y < ay + ah - ed_ch * 2 { fill_rgb(ed_x, ed_y, ed_cw, ed_ch - 2, ACCENT) }
+    text_aa(ax + 4, ay + ah - ed_ch * 2, "Ctrl+S save  ESC save+close", TXT_DIM)
+    if ed_disk == 0 {
+        text_aa(ax + 4, ay + ah - ed_ch, "RAM file", TXT_DIM)
+        num_aa(ax + 13 * ed_cw, ay + ah - ed_ch, ed_slot, TXT_HI)
+    }
+    if ed_disk == 1 {
+        ed_ni = 0
+        ed_nx = ax + 4
+        while ed_ni < 23 {
+            ed_nc = fs_ch(ed_slot, ed_ni)
+            if ed_nc > 0 { char_aa(ed_nx, ay + ah - ed_ch, ed_nc, ACCENT) }
+            ed_nx = ed_nx + ed_cw
+            ed_ni = ed_ni + 1
+        }
+    }
+    if ed_dirty == 1 { text_aa(ax + aw - ed_cw, ay + ah - ed_ch, "*", ACCENT) }
     num_aa(ax + aw - 8 * ed_cw, ay + ah - ed_ch, ed_len, TXT_DIM)
     return 0
 }
@@ -1359,7 +1380,8 @@ FS_SLOT = 8192
 #
 # Free space here: FS_DATA ends at 0x02025000, HIST_BUF ends at 0x02032000, and
 # PAINT_BUF starts at 0x02100000. This sits clear of all three, and the largest
-# use below is a clipboard write of cbn bytes.
+# use below is an 8,000-byte editor read staged before replacing the live
+# document.
 DISK_SCRATCH = 0x02040000
 
 fn fs_init()      { fill_mem(FS_META, 0, 64) }
@@ -1415,32 +1437,445 @@ EDIT_MAX = 8000
 # the same thing every other window means by it. No "press any key".
 ed_slot = 0
 ed_len  = 0
+ed_disk = 0
+ed_dirty = 0
 
 fn editor_open(slot) {
     ed_slot = slot
     ed_len = fs_load(slot)
+    ed_disk = 0
+    ed_dirty = 0
     return 0
+}
+
+fn editor_open_disk(slot) {
+    if fs_ok() == 0 { return 0 }
+    if fs_inuse(slot) == 0 { return 0 }
+    if fs_bytes(slot) >= EDIT_MAX { return 0 }
+    ed_expect = fs_bytes(slot)
+    fill_mem(DISK_SCRATCH, 0, EDIT_MAX)
+    ed_got = fs_rd(slot, DISK_SCRATCH, EDIT_MAX - 1)
+    if ed_got != ed_expect {
+        note_say("file read failed", 400)
+        return 0
+    }
+    fill_mem(EDIT_BUF, 0, EDIT_MAX)
+    if ed_got > 0 { copy_mem(EDIT_BUF, DISK_SCRATCH, ed_got) }
+    ed_len = ed_got
+    ed_slot = slot
+    ed_disk = 1
+    ed_dirty = 0
+    return 1
+}
+
+fn editor_save() {
+    if ed_disk == 1 {
+        if fs_wr(ed_slot, EDIT_BUF, ed_len) == 0 {
+            note_say("file save failed", 400)
+            return 0
+        }
+        ed_dirty = 0
+        note_say("file saved to zlfs", 240)
+        return 1
+    }
+    fs_save(ed_slot, ed_len)
+    ed_dirty = 0
+    return 1
 }
 
 # One key. Returns 1 if it changed anything, 2 if the editor is done.
 fn editor_key(code) {
     if code == 27 {
-        fs_save(ed_slot, ed_len)
-        return 2
+        if editor_save() == 1 { return 2 }
+        return 1
+    }
+    if code == 19 {
+        editor_save()
+        return 1
+    }
+    if code == 3 {
+        clip_new()
+        ed_ci = 0
+        while ed_ci < ed_len {
+            clip_add(peek8(EDIT_BUF + ed_ci))
+            ed_ci = ed_ci + 1
+        }
+        if clip_done() == 1 {
+            note_say("document copied", 180)
+        } else {
+            note_say("document is too large to copy", 400)
+        }
+        return 1
+    }
+    if code == 22 {
+        if ed_len + clip_n() >= EDIT_MAX {
+            note_say("clipboard does not fit", 400)
+            return 1
+        }
+        ed_pi = 0
+        while ed_pi < clip_n() {
+            poke8(EDIT_BUF + ed_len, clip_ch(ed_pi))
+            ed_len = ed_len + 1
+            ed_pi = ed_pi + 1
+        }
+        if clip_n() > 0 { ed_dirty = 1 }
+        return 1
     }
     if code == 8 {
-        if ed_len > 0 { ed_len = ed_len - 1  poke8(EDIT_BUF + ed_len, 0) }
+        if ed_len > 0 { ed_len = ed_len - 1  poke8(EDIT_BUF + ed_len, 0)  ed_dirty = 1 }
         return 1
     }
     if code == 13 {
-        if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, 10)  ed_len = ed_len + 1 }
+        if ed_len < EDIT_MAX - 1 {
+            poke8(EDIT_BUF + ed_len, 10)
+            ed_len = ed_len + 1
+            ed_dirty = 1
+        }
         return 1
     }
     if code >= 32 {
-        if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, code)  ed_len = ed_len + 1 }
+        if ed_len < EDIT_MAX - 1 {
+            poke8(EDIT_BUF + ed_len, code)
+            ed_len = ed_len + 1
+            ed_dirty = 1
+        }
         return 1
     }
     return 0
+}
+
+# ---- persistent named files ------------------------------------------------
+# zl has string literals but no runtime string values. The filename field is
+# therefore staged in fs.c one byte at a time; fs_nch() is also how it is
+# painted back into this window.
+files_sel = 0 - 1
+files_scroll = 0
+files_naming = 0
+files_status = 0
+
+fn files_select_first() {
+    files_sel = 0 - 1
+    files_si = 0
+    while files_si < fs_max() {
+        if files_sel < 0 {
+            if fs_inuse(files_si) == 1 { files_sel = files_si }
+        }
+        files_si = files_si + 1
+    }
+    return 0
+}
+
+fn files_refresh() {
+    if fs_ok() == 0 {
+        if nv_setup() == 0 {
+            files_status = 0 - 3
+            files_sel = 0 - 1
+            return 0
+        }
+        if fs_mount() == 0 {
+            files_status = 0 - 1
+            files_sel = 0 - 1
+            return 0
+        }
+    }
+    files_status = 0
+    if files_sel < 0 { files_select_first() }
+    if files_sel >= 0 {
+        if fs_inuse(files_sel) == 0 { files_select_first() }
+    }
+    return 1
+}
+
+fn files_prev() {
+    if files_sel < 0 { return 0 }
+    files_pi = files_sel - 1
+    while files_pi >= 0 {
+        if fs_inuse(files_pi) == 1 { files_sel = files_pi  return 1 }
+        files_pi = files_pi - 1
+    }
+    return 0
+}
+
+fn files_next() {
+    if files_sel < 0 { files_select_first()  return 1 }
+    files_ni = files_sel + 1
+    while files_ni < fs_max() {
+        if fs_inuse(files_ni) == 1 { files_sel = files_ni  return 1 }
+        files_ni = files_ni + 1
+    }
+    return 0
+}
+
+fn files_sel_order() {
+    if files_sel < 0 { return 0 }
+    files_oi = 0
+    files_on = 0
+    while files_oi < files_sel {
+        if fs_inuse(files_oi) == 1 { files_on = files_on + 1 }
+        files_oi = files_oi + 1
+    }
+    return files_on
+}
+
+fn files_keep_visible(rows) {
+    files_ord = files_sel_order()
+    if files_ord < files_scroll { files_scroll = files_ord }
+    if files_ord >= files_scroll + rows { files_scroll = files_ord - rows + 1 }
+    if files_scroll < 0 { files_scroll = 0 }
+    return 0
+}
+
+fn files_slot_at_order(order) {
+    files_ai = 0
+    files_an = 0
+    while files_ai < fs_max() {
+        if fs_inuse(files_ai) == 1 {
+            if files_an == order { return files_ai }
+            files_an = files_an + 1
+        }
+        files_ai = files_ai + 1
+    }
+    return 0 - 1
+}
+
+fn files_open_selected() {
+    if files_sel < 0 { return 0 }
+    if fs_bytes(files_sel) >= EDIT_MAX {
+        note_say("file is too large for zlEDIT", 360)
+        return 0
+    }
+    return open_disk_editor(files_sel)
+}
+
+fn files_finish_new() {
+    if fs_nlen() == 0 {
+        files_naming = 0
+        files_status = 0
+        return 0
+    }
+    files_new_slot = fs_new(0)
+    files_naming = 0
+    if files_new_slot < 0 {
+        files_status = 0 - 2
+        note_say("could not create file", 300)
+        return 0
+    }
+    files_refresh()
+    files_sel = files_new_slot
+    files_keep_visible(12)
+    files_status = 1
+    ser_out("files: created\n")
+    note_say("file created on zlfs", 240)
+    return 1
+}
+
+fn files_draw_name(slot, x, y, col) {
+    files_ci = 0
+    files_cx = x
+    while files_ci < 24 {
+        files_cc = fs_ch(slot, files_ci)
+        if files_cc > 0 { char_aa(files_cx, y, files_cc, col) }
+        files_cx = files_cx + cell_w()
+        files_ci = files_ci + 1
+    }
+    return 0
+}
+
+fn files_draw(ax, ay, aw, ah) {
+    files_u = ui()
+    files_cw = cell_w()
+    files_chh = cell_h()
+    fill_rgb(ax, ay, aw, ah, PANEL)
+    label(ax + 14 * files_u, ay + 10 * files_u, "Persistent files", TXT_HI, T_BODY, W_BOLD)
+    label(ax + aw - 170 * files_u, ay + 10 * files_u, "zlfs / NVMe", ACCENT, T_CAPTION, W_REG)
+    fill_rgb(ax + 14 * files_u, ay + 34 * files_u, aw - 28 * files_u, files_u, LINE_SOFT)
+
+    files_ry = ay + 45 * files_u
+    files_rowh = 22 * files_u
+    files_rows = (ah - 102 * files_u) / files_rowh
+    if files_rows < 1 { files_rows = 1 }
+    files_keep_visible(files_rows)
+
+    if fs_ok() == 0 {
+        label(ax + 18 * files_u, files_ry, "No zlfs volume mounted.", TXT_HI, T_BODY, W_REG)
+        label(ax + 18 * files_u, files_ry + 24 * files_u, "Shift+F formats this NVMe volume.", rgb(240, 210, 110), T_CAPTION, W_REG)
+        if files_status == 0 - 3 {
+            label(ax + 18 * files_u, files_ry + 46 * files_u, "No usable NVMe controller.", CRIT_RED, T_CAPTION, W_REG)
+        }
+    }
+    if fs_ok() == 1 {
+        files_di = files_scroll
+        files_dr = 0
+        while files_dr < files_rows {
+            files_ds = files_slot_at_order(files_di)
+            if files_ds >= 0 {
+                files_y = files_ry + files_dr * files_rowh
+                if files_ds == files_sel {
+                    rrect(ax + 10 * files_u, files_y - 2 * files_u, aw - 20 * files_u, 20 * files_u, 5 * files_u, rgb(48, 64, 104))
+                    fill_rgb(ax + 10 * files_u, files_y - 2 * files_u, 3 * files_u, 20 * files_u, ACCENT)
+                }
+                files_col = TXT_HI
+                if files_ds != files_sel { files_col = TXT_DIM }
+                files_draw_name(files_ds, ax + 20 * files_u, files_y, files_col)
+                num_aa(ax + aw - 92 * files_u, files_y, fs_bytes(files_ds), TXT_DIM)
+                label(ax + aw - 48 * files_u, files_y, "bytes", TXT_DIM, T_CAPTION, W_REG)
+            }
+            files_di = files_di + 1
+            files_dr = files_dr + 1
+        }
+        if fs_n() == 0 {
+            label(ax + 18 * files_u, files_ry, "This volume is empty. Press N to create a file.", TXT_DIM, T_BODY, W_REG)
+        }
+    }
+
+    files_by = ay + ah - 47 * files_u
+    fill_rgb(ax + 14 * files_u, files_by - 8 * files_u, aw - 28 * files_u, files_u, LINE_SOFT)
+    if files_naming == 1 {
+        label(ax + 14 * files_u, files_by, "New name:", TXT_DIM, T_CAPTION, W_REG)
+        fill_rgb(ax + 82 * files_u, files_by - 3 * files_u, aw - 96 * files_u, 21 * files_u, PANEL_NS)
+        files_ti = 0
+        files_tx = ax + 88 * files_u
+        while files_ti < fs_nlen() {
+            char_aa(files_tx, files_by, fs_nch(files_ti), TXT_HI)
+            files_tx = files_tx + files_cw
+            files_ti = files_ti + 1
+        }
+        fill_rgb(files_tx, files_by, 2 * files_u, files_chh, ACCENT)
+    }
+    if files_naming == 0 {
+        label(ax + 14 * files_u, files_by, "N new   Enter open   D delete   R refresh", TXT_DIM, T_CAPTION, W_REG)
+    }
+    label(ax + 14 * files_u, files_by + 22 * files_u, "Arrow keys select  |  files persist across power-off", TXT_DIM, T_CAPTION, W_REG)
+    if files_status == 1 { label(ax + aw - 92 * files_u, files_by + 22 * files_u, "created", OK_GRN, T_CAPTION, W_REG) }
+    if files_status == 2 { label(ax + aw - 120 * files_u, files_by + 22 * files_u, "volume formatted", OK_GRN, T_CAPTION, W_REG) }
+    if files_status == 0 - 2 { label(ax + aw - 80 * files_u, files_by + 22 * files_u, "failed", CRIT_RED, T_CAPTION, W_REG) }
+    return 0
+}
+
+fn files_mouse_slot(win, mx, my) {
+    files_mu = ui()
+    files_my = my - wm_cy(win)
+    if files_my < 45 * files_mu { return 0 - 1 }
+    files_mrow = (files_my - 45 * files_mu) / (22 * files_mu)
+    files_mrows = (wm_ch(win) - 102 * files_mu) / (22 * files_mu)
+    if files_mrow < 0 { return 0 - 1 }
+    if files_mrow >= files_mrows { return 0 - 1 }
+    return files_slot_at_order(files_scroll + files_mrow)
+}
+
+fn files_event(win, ety, ecode, ex, ey) {
+    if ety == 4 {
+        if band(ecode, 1) != 0 {
+            files_ms = files_mouse_slot(win, ex, ey)
+            if files_ms >= 0 { files_sel = files_ms  wm_dmg(win) }
+            return 1
+        }
+        return 0
+    }
+    if files_naming == 1 {
+        files_tc = ecode
+        if ety == 1 {
+            if ecode == KEY_ENTER_NAV { files_tc = 13 }
+            if ecode == KEY_BACK_NAV  { files_tc = 8 }
+            if ecode == KEY_ESC_NAV   { files_tc = 27 }
+        }
+        if ety == 3 {
+            if files_tc == 13 { files_finish_new()  wm_dmg(win)  return 1 }
+            if files_tc == 8  { fs_npop()  wm_dmg(win)  return 1 }
+            if files_tc == 27 { files_naming = 0  fs_nclear()  wm_dmg(win)  return 1 }
+            if files_tc >= 32 {
+                if files_tc <= 126 { fs_npush(files_tc)  wm_dmg(win)  return 1 }
+            }
+        }
+        if ety == 1 {
+            if files_tc == 13 { files_finish_new()  wm_dmg(win)  return 1 }
+            if files_tc == 8  { fs_npop()  wm_dmg(win)  return 1 }
+            if files_tc == 27 { files_naming = 0  fs_nclear()  wm_dmg(win)  return 1 }
+        }
+        return 1
+    }
+    if ety == 1 {
+        if ecode == K_UP   { files_prev()  wm_dmg(win)  return 1 }
+        if ecode == K_DOWN { files_next()  wm_dmg(win)  return 1 }
+        if ecode == KEY_ENTER_NAV { files_open_selected()  return 1 }
+        if ecode == K_DEL {
+            if files_sel >= 0 {
+                if fs_rm(files_sel) == 1 { files_sel = 0 - 1  files_refresh()  wm_dmg(win) }
+            }
+            return 1
+        }
+    }
+    if ety == 3 {
+        if ecode == 13 { files_open_selected()  return 1 }
+        if ecode == 78 { ecode = 110 }
+        if ecode == 110 {
+            if fs_ok() == 1 {
+                fs_nclear()
+                files_naming = 1
+                files_status = 0
+                ser_out("files: new name\n")
+                wm_dmg(win)
+            }
+            return 1
+        }
+        if ecode == 68 { ecode = 100 }
+        if ecode == 100 {
+            if files_sel >= 0 {
+                if fs_rm(files_sel) == 1 {
+                    files_sel = 0 - 1
+                    files_refresh()
+                    ser_out("files: deleted\n")
+                    note_say("file deleted from zlfs", 240)
+                    wm_dmg(win)
+                }
+            }
+            return 1
+        }
+        if ecode == 82 { ecode = 114 }
+        if ecode == 114 {
+            if nv_setup() == 0 {
+                files_status = 0 - 3
+                files_sel = 0 - 1
+            } else {
+                if fs_mount() == 0 {
+                    files_status = 0 - 1
+                    files_sel = 0 - 1
+                } else {
+                    files_sel = 0 - 1
+                    files_refresh()
+                }
+            }
+            wm_dmg(win)
+            return 1
+        }
+        if ecode == 70 { ecode = 102 }
+        if ecode == 102 {
+            if fs_ok() == 0 {
+                ser_out("files: format requested\n")
+                if nv_setup() == 0 {
+                    files_status = 0 - 3
+                    ser_out("files: NVMe setup failed\n")
+                } else {
+                    if fs_format() == 1 {
+                        if fs_mount() == 1 {
+                            files_status = 2
+                            files_sel = 0 - 1
+                            files_scroll = 0
+                            ser_out("files: formatted\n")
+                            note_say("zlfs volume formatted", 300)
+                        } else {
+                            ser_out("files: mount after format failed\n")
+                        }
+                    } else {
+                        ser_out("files: format failed\n")
+                    }
+                }
+                wm_dmg(win)
+            }
+            return 1
+        }
+    }
+    return 1
 }
 
 # An app with no text-mode form. Says which one and why, rather than doing
@@ -2888,6 +3323,7 @@ APP_CUBE    = 9
 APP_ANIM    = 10
 APP_MOUSE   = 11
 APP_EDIT    = 12
+APP_FILES   = 13
 
 # Which window each app is in, or -1. An app that is already open is FOCUSED
 # rather than opened twice - wm.c would happily give you a second Snake, and
@@ -2898,6 +3334,7 @@ cube_win  = 0 - 1
 anim_win  = 0 - 1
 mouse_win = 0 - 1
 edit_win  = 0 - 1
+files_win = 0 - 1
 
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     wy = ay - TITLE_H * ui()
@@ -2924,6 +3361,7 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_ANIM    { return anim_draw(ax, ay, aw, ah) }
     if id == APP_MOUSE   { return mouse_draw(ax, ay, aw, ah) }
     if id == APP_EDIT    { return editor_draw(ax, ay, aw, ah) }
+    if id == APP_FILES   { return files_draw(ax, ay, aw, ah) }
     if id == APP_SHELL {
         # The terminal redraws itself from its OWN scrollback, which is what
         # makes it survive a window being dragged across it. Before term.c the
@@ -2979,6 +3417,7 @@ fn nav_to_char(ecode) {
 fn app_event(id, win, ety, ecode, ex, ey) {
     if id == APP_SNAKE { return sn_event(ety, ecode) }
     if id == APP_MENU  { return menu_event(ety, ecode, ex, ey, win) }
+    if id == APP_FILES { return files_event(win, ety, ecode, ex, ey) }
     if id == APP_BROWSER {
         # '[' and ']' RESIZE THE WINDOW, and that is the gate rather than a
         # convenience: reflow is only observable if the width can change while
@@ -3165,11 +3604,22 @@ fn open_app(cmd, arg) {
         wm_report(anim_win)
         return 1
     }
+    if cmd == 108 {
+        if files_win >= 0 { if wm_open_p(files_win) == 1 {
+            wm_setfocus(files_win)  wm_raise(files_win)  files_refresh()  wm_dmg(files_win)  return 1
+        }}
+        files_win = wm_open(APP_FILES, "Files", 310 * oa_u, 230 * oa_u, 320 * oa_u, 260 * oa_u)
+        if files_win < 0 { return 0 }
+        files_refresh()
+        wm_setfocus(files_win)
+        wm_report(files_win)
+        return 1
+    }
     if cmd == 105 {
         if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
             wm_setfocus(edit_win)  wm_raise(edit_win)  return 1
         }}
-        edit_win = wm_open(APP_EDIT, "zlEDIT", 480 * oa_u, 230 * oa_u, 160 * oa_u, 160 * oa_u)
+        edit_win = wm_open(APP_EDIT, "zlEDIT", 240 * oa_u, 170 * oa_u, 400 * oa_u, 300 * oa_u)
         if edit_win < 0 { return 0 }
         # THE ARGUMENT WAS BEING DROPPED. term.c parses a trailing number into
         # pending_arg, so `edit 7` really does reach here as arg 7 - and
@@ -3196,6 +3646,33 @@ fn open_app(cmd, arg) {
         return 1
     }
     return 0
+}
+
+fn open_disk_editor(slot) {
+    if fs_ok() == 0 { return 0 }
+    if fs_inuse(slot) == 0 { return 0 }
+    if fs_bytes(slot) >= EDIT_MAX { return 0 }
+    ode_u = ui()
+    if edit_win >= 0 {
+        if wm_open_p(edit_win) == 1 {
+            if editor_save() == 0 { return 0 }
+            if editor_open_disk(slot) == 0 { return 0 }
+            wm_setfocus(edit_win)
+            wm_raise(edit_win)
+            wm_dmg(edit_win)
+            return 1
+        }
+    }
+    edit_win = wm_open(APP_EDIT, "zlEDIT", 240 * ode_u, 170 * ode_u, 400 * ode_u, 300 * ode_u)
+    if edit_win < 0 { return 0 }
+    if editor_open_disk(slot) == 0 {
+        wm_close(edit_win)
+        edit_win = 0 - 1
+        return 0
+    }
+    wm_setfocus(edit_win)
+    wm_report(edit_win)
+    return 1
 }
 
 # Runs every frame, must be cheap, MUST NOT DRAW. Returning 1 means "my state
@@ -3447,6 +3924,8 @@ fn task_label(app) {
     if app == APP_ABOUT   { return "About" }
     if app == APP_SNAKE   { return "Snake" }
     if app == APP_MENU    { return "Menu" }
+    if app == APP_FILES   { return "Files" }
+    if app == APP_EDIT    { return "zlEDIT" }
     return "window"
 }
 
@@ -3458,6 +3937,8 @@ fn app_has_tile(app) {
     if app == APP_MONITOR { return 1 }
     if app == APP_ABOUT   { return 1 }
     if app == APP_MENU    { return 1 }        # never listed at all
+    if app == APP_FILES   { return 1 }
+    if app == APP_EDIT    { return 1 }
     return 0
 }
 
@@ -3516,6 +3997,8 @@ fn task_slot_at(cx, cy) {
 # would just move the surprise.
 fn dock_launch(slot) {
     if slot == 0 { return raise_shell() }
+    if slot == 1 { open_app(108, 0)  return 0 }
+    if slot == 2 { open_app(105, 0)  return 0 }
     if slot == 4 { return open_snake() }
     if slot == 6 { return reopen_mon() }
     if slot == 7 { return reopen_about() }
@@ -3564,30 +4047,32 @@ fn reopen_about() {
 # A modal takes every event and a click outside dismisses it - both already in
 # route_mouse. Restoring what was underneath is a repaint of the damage it
 # leaves, which needs no saved bitmap at all.
-MENU_ROWS = 8
+MENU_ROWS = 9
 menu_win = 0 - 1
 
 fn menu_label(idx) {
     if idx == 0 { return "Terminal" }
-    if idx == 1 { return "Snake" }
-    if idx == 2 { return "System Monitor" }
-    if idx == 3 { return "About" }
-    if idx == 4 { return "3D Cube" }
-    if idx == 5 { return "Paint" }
-    if idx == 6 { return "Editor" }
+    if idx == 1 { return "Files" }
+    if idx == 2 { return "Snake" }
+    if idx == 3 { return "System Monitor" }
+    if idx == 4 { return "About" }
+    if idx == 5 { return "3D Cube" }
+    if idx == 6 { return "Paint" }
+    if idx == 7 { return "Editor" }
     return "Halt"
 }
 
 fn menu_pick(idx) {
     if idx == 0 { return raise_shell() }
-    if idx == 1 { return open_snake() }
-    if idx == 2 { return reopen_mon() }
-    if idx == 3 { return reopen_about() }
-    if idx == 7 { wm_stop()  return 0 }
+    if idx == 1 { open_app(108, 0)  return 0 }
+    if idx == 2 { return open_snake() }
+    if idx == 3 { return reopen_mon() }
+    if idx == 4 { return reopen_about() }
+    if idx == 8 { wm_stop()  return 0 }
     raise_shell()
-    if idx == 4 { run_command(118, 0) }
-    if idx == 5 { run_command(100, 0) }
-    if idx == 6 { run_command(105, 0) }
+    if idx == 5 { run_command(118, 0) }
+    if idx == 6 { run_command(100, 0) }
+    if idx == 7 { run_command(105, 0) }
     wm_damage_win_all()
     return 0
 }
@@ -4113,7 +4598,7 @@ ok_line("zl runtime, kernel subset")
 # double-free, and nothing to leak that a reset does not reclaim. The line stops
 # being honest the day the interpreter boxes lists and strings (EXEC-PROMPT §8),
 # and that is the change that has to carry it, not this one.
-info_line("no heap, no filesystem, no scheduler")
+info_line("no heap, zlfs mounts on demand, no scheduler")
 
 print("")
 color(C_GREEN)  print("  ready.")

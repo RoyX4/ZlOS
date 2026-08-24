@@ -8,7 +8,7 @@
  [  OK  ] VGA text console, 80x25
  [  OK  ] zl runtime, kernel subset
  [ INFO ] no interrupts - the shell polls
- [ INFO ] no heap, no filesystem, no scheduler
+ [ INFO ] no heap, zlfs mounts on demand, no scheduler
 
  ready.
  zl> 20f
@@ -27,6 +27,8 @@ VGA text memory at `0xB8000` and the characters appear on screen.
 ./mkiso.sh          # -> zlOS.iso, boots BIOS *and* UEFI
 ./verify.sh         # fast gate: headless boot, drive the shell, diff golden.txt
 ./verify-iso.sh     # slow gate: boot the real ISO on BIOS and on UEFI
+./verify-disk.sh    # three cold boots against one persistent NVMe image
+python3 probe-files.py  # Files + editor, kill QEMU, reopen exact contents
 ```
 
 ## Running it on real hardware
@@ -167,9 +169,20 @@ the kernel. A human at a terminal cannot type before the machine boots, so
 this never shows up interactively. `verify.sh` sends a throwaway `.` first
 for exactly this reason.
 
+## Persistent named files
+
+The desktop's **Files** app mounts `zlfs` from NVMe on open. `N` creates a
+named file, Enter opens it in zlEDIT, `D` deletes it, and `R` remounts/refreshes
+the list. On a blank volume, Shift+F explicitly formats it.
+
+zlEDIT has two modes: `edit <n>` keeps the old ten RAM slots for compatibility;
+opening from Files reads and writes the selected `zlfs` entry. Ctrl+S saves,
+ESC saves and closes, Ctrl+C copies the document, and Ctrl+V pastes it.
+See [`docs/storage-and-files.md`](docs/storage-and-files.md) for the boundaries
+and cold-boot acceptance gate.
+
 ## What this is not
 
-It owns the machine, prints, and takes input. It has no interrupts (the
-shell polls), no timer, no memory manager, no scheduler, no filesystem, and
-cannot load a program from disk. `design_kernel.md` draws the line:
-**W6 owns the machine and can print; W7 does something with it.**
+It owns the machine, prints, takes event-driven input, schedules work and keeps
+named files on NVMe. It still has no heap, process isolation, POSIX API or
+general-purpose userspace.

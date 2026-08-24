@@ -51,6 +51,9 @@ int  fs_maxfiles(void);
 int  fs_name_byte(int idx, int i);
 void fs_name_clear(void);
 int  fs_name_push(int ch);
+int  fs_name_pop(void);
+int  fs_name_len(void);
+int  fs_name_stage_byte(int i);
 int  fs_create_named(u32 bytes);
 int  fs_find_named(void);
 
@@ -305,6 +308,17 @@ int main(int argc, char **argv)
     /* ---- the staged-name seam zl uses ------------------------------------ */
     fs_name_clear();
     const char *pn = "notes.md";
+    for (const char *p = pn; *p; p++) fs_name_push(*p);
+    ok("the staged filename length is visible to a zl app", fs_name_len() == 8);
+    ok("...and its bytes can be painted without a string value", fs_name_stage_byte(0) == 'n' &&
+       fs_name_stage_byte(7) == 'd');
+    ok("backspace removes one staged filename byte", fs_name_pop() == 1 &&
+       fs_name_len() == 7 && fs_name_stage_byte(7) == 0);
+    ok("a second backspace removes the next staged byte",
+       fs_name_pop() == 1 && fs_name_len() == 6);
+    while (fs_name_pop()) {}
+    ok("backspace on an empty staged filename is harmless",
+       fs_name_pop() == 0 && fs_name_len() == 0);
     for (const char *p = pn; *p; p++) fs_name_push(*p);
     int b = fs_create_named(20);
     ok("a name pushed one character at a time creates a file", b >= 0);

@@ -648,11 +648,18 @@ it depends on §4.2 to be worth anything.
 
 *Source: FEEL-19.*
 
-### 4.4 The clipboard's entire write path has no caller — "copy" does not exist
+### 4.4 RESOLVED: the editor owns the clipboard write path
+
+**Files-app increment, 2026-08-19.** `editor_key()` now handles Ctrl+C by
+calling `clip_new()`, `clip_add()` for every document byte, then `clip_done()`;
+Ctrl+V reads `clip_n()`/`clip_ch()` back into the editor. `probe-files.py`
+drives both shortcuts before its cold-boot persistence check. The evidence
+below describes the audit baseline and is kept because it identifies the merge
+deletion that caused the gap.
 
 `clip.c` is 138 lines, compiled (`SOURCES:65`), and covered by
 `hosttest/systest.c` (104 assertions, including a two-app copy/paste round-trip).
-Nothing calls it.
+At the audit baseline, nothing called it.
 
 ```
 $ grep -oE '\bclip_[a-z_]+' kernel/kernel.zl | sort -u
@@ -664,7 +671,7 @@ freestanding/runtime_kernel.c:692-695   (externs)
 freestanding/runtime_kernel.c:1620-1623 (registrations)
 ```
 
-`kernel.zl` calls only the read side.
+At the audit baseline, `kernel.zl` called only the read side.
 
 **The producer is not missing from `wm.c`, `term.c` or `input.c` — it belongs in
 `kernel.zl`, it was written, and the merge deleted it.** The first draft of this
@@ -1432,7 +1439,12 @@ the `;` shell command (`:1920-1938`). The fix is one cherry-picked hunk, not a n
 greps the serial output of the `;` command, never the header. A gate that reads
 as clock coverage without being it.
 
-### 7.3 The boot log says "no filesystem", and §12 of this document says otherwise
+### 7.3 RESOLVED: the boot log says zlfs mounts on demand
+
+**Files-app increment, 2026-08-19.** The line is now
+`no heap, zlfs mounts on demand, no scheduler`, and opening Files calls
+`nv_setup()` plus `fs_mount()`. The audit evidence below records the stale
+state that prompted the correction.
 
 **Added by the repair pass** — third instance of the same class as §7.1 and §7.2,
 and the only one that contradicts this document's own §12 row for zlfs.
@@ -1583,7 +1595,13 @@ same contract, same reviewer should see all three region owners at once.
 
 *Source: xcheck-unowned lens — no planning document owns this.*
 
-### 8.3 The old RAM-slot filesystem survives alongside zlfs
+### 8.3 DECIDED: RAM slots are the compatibility path; zlfs is primary
+
+**Files-app increment, 2026-08-19.** The ambiguity is gone. Files exposes zlfs
+by name and zlEDIT opened from Files saves through to NVMe. `edit <n>` retains
+the ten RAM slots so existing shell workflows do not break; they are explicitly
+not the primary store. The boundary and cold-boot gate are in
+`kernel/docs/storage-and-files.md`.
 
 zlfs is real, backed by NVMe, with 22 builtins and covered by a gate that
 power-cycles the machine (`verify-disk.sh`, which *is* in `land-gate.sh`'s boot
