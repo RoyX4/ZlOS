@@ -1,12 +1,12 @@
 {
   "schema": "zlos.source-snapshot-receipt.v1",
   "result": "PASS_WITH_OPEN_CUSTODY_GAP",
-  "build_identity": "f0a762674bd63216b59218e9f6e907d4c65e36a0e1c5e69237c46ca5fa9db689",
+  "build_identity": "1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04",
   "git": {
-    "head": "a2ee80fd099c956aa6c44b25158c7648d7ea7b01",
+    "head": "d19313a98b3ff1776448e06efc0a0b4dc40e92b3",
     "branch": "codex/merge-all-2026-08-24",
     "dirty": true,
-    "canonical_status_sha256": "fde95c5ea97049654cc886bbb1e894481d58a4695d603b54d005f4fccc362d27",
+    "canonical_status_sha256": "7c1525ceb1fd39f59fb73358c49bd7f37cfac51b3f978729adf84d1f92cb5f9c",
     "submodule_status": []
   },
   "scope": "active zl import closure, declared C SOURCES, kernel/freestanding headers and all route scripts/entries/linkers/packaging helpers; conservative header superset",

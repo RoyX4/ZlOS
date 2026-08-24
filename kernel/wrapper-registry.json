@@ -1,8 +1,8 @@
 {
   "schema": "zlos.wrapper-registry.v1",
   "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS",
-  "build_identity": "341cea099a7c779afd97c8a1e80efa347767f344d15daf797d8836eef6fb6622",
-  "landing_gate_sha256": "197747dee2735075ff58eea1b1692ae2f984f834c381fa9d2f01fb1fa8d2bf54",
+  "build_identity": "1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04",
+  "landing_gate_sha256": "a9c450e0672b15f992a3c0e9c09864fa07a56efc7e8fd2c8302fb5d39744fc4b",
   "wrappers": [
     {
       "path": ".github/scripts/render-desktop.sh",
@@ -94,8 +94,8 @@
     },
     {
       "path": "gates/land-gate.sh",
-      "sha256": "197747dee2735075ff58eea1b1692ae2f984f834c381fa9d2f01fb1fa8d2bf54",
-      "bytes": 12586,
+      "sha256": "a9c450e0672b15f992a3c0e9c09864fa07a56efc7e8fd2c8302fb5d39744fc4b",
+      "bytes": 12665,
       "executable": true,
       "interpreter": "/bin/bash",
       "language": "shell",
@@ -116,8 +116,8 @@
     },
     {
       "path": "kernel/build.sh",
-      "sha256": "475be3dc2204235f8b73499d6568a4e57a46076fb58f93f7525c0f59fbec5aab",
-      "bytes": 2696,
+      "sha256": "87bd445f42546a83217bc7a184accd626c98b28431d51a8944a3b30bcc6a17ef",
+      "bytes": 3223,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -127,8 +127,8 @@
     },
     {
       "path": "kernel/build64.sh",
-      "sha256": "937d07d85e3afdccf47e77ad78ccc06092f6c13adef2ed527b61b812ad5cafe1",
-      "bytes": 2016,
+      "sha256": "7e2ba4afb7f73d323f7f6db0832e99c36d2f5aee43cabeb88fe61d43bd25389d",
+      "bytes": 2508,
       "executable": true,
       "interpreter": "/bin/sh",
       "language": "shell",
@@ -138,8 +138,8 @@
     },
     {
       "path": "kernel/buildefi.sh",
-      "sha256": "b3331e7ee488de6f21fa22e96cd4b2a478e07dcec7e9aec0cd3e164999e9c0d4",
-      "bytes": 5096,
+      "sha256": "7c11445471fca2ef9cfe7064ef42e87e664ab569a20a4fc71254f5846d6e8a53",
+      "bytes": 5491,
       "executable": true,
       "interpreter": "/bin/sh",
       "language": "shell",
@@ -226,8 +226,8 @@
     },
     {
       "path": "kernel/check-memmap.sh",
-      "sha256": "a0b76ced28a488992a12c59eff60e8fb977f45ac61e314d7311a346a58d62a55",
-      "bytes": 8830,
+      "sha256": "d956bdd270b75040bfe1f18211d83ac005880309e1a47ab0b3dc14f96311a5f9",
+      "bytes": 9076,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -259,8 +259,8 @@
     },
     {
       "path": "kernel/check-zl-calls.sh",
-      "sha256": "24ed7c7b96112fca0c5a7ad4f95c1db80820f5ab5e72e8debed5ffeb0e20fabc",
-      "bytes": 4213,
+      "sha256": "63d014747436d3276da2a0abcd0f10ad636e5c07a11dbdd4f78e7a3dc8add76b",
+      "bytes": 3819,
       "executable": true,
       "interpreter": "/bin/bash",
       "language": "shell",
@@ -677,8 +677,8 @@
     },
     {
       "path": "kernel/hosttest/build.sh",
-      "sha256": "0157cd5a3d557013fdf90a2f306922c4c6cd37045736ea9c126cf22e7c5021f5",
-      "bytes": 33462,
+      "sha256": "68d79c05978f48e5b95af1b713fe7edb064a19600f40db33f92048fa1004f5e3",
+      "bytes": 33975,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -761,7 +761,7 @@
       "language": "shell",
       "role": "UTILITY_OR_LEGACY",
       "exit_policy": "MANUAL_EXPLICIT_FAILURES",
-      "named_by_landing_gate": false
+      "named_by_landing_gate": true
     },
     {
       "path": "kernel/hosttest/modeset-run.sh",
@@ -809,8 +809,8 @@
     },
     {
       "path": "kernel/mkdisk.sh",
-      "sha256": "dd13db52ebae2325d6e7a30347e7ea3bac42dc6070cc9c6f2d457884d6c717e5",
-      "bytes": 4422,
+      "sha256": "abdb13c043cd8f71c808ec61d599236d0f1ba17ff0ca5794c3acf95ddf6f31fd",
+      "bytes": 4898,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -1127,6 +1127,17 @@
       "named_by_landing_gate": false
     },
     {
+      "path": "kernel/probe-pointer-usb.py",
+      "sha256": "a6e1f17f8d5e6580cbc1330a6fb932cbaf9677f3de3cbebb97ec300916f78529",
+      "bytes": 3129,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
       "path": "kernel/probe-resize.py",
       "sha256": "a6440f2f9ac890309438e154953eb549206c232a0b0494a0ce904a03c6101912",
       "bytes": 5837,
@@ -1435,6 +1446,17 @@
       "named_by_landing_gate": true
     },
     {
+      "path": "kernel/verify-net.sh",
+      "sha256": "64ae0e1226d51bcbc00ae9a49f799c2137159d97013a556c74b12c680547d14b",
+      "bytes": 1304,
+      "executable": true,
+      "interpreter": "/usr/bin/env bash",
+      "language": "shell",
+      "role": "VERIFIER",
+      "exit_policy": "MANUAL_EXPLICIT_FAILURES",
+      "named_by_landing_gate": true
+    },
+    {
       "path": "kernel/verify-raw.sh",
       "sha256": "fe326aac1a906599149280dd184f0a9dd0ae6df614f4df4b43b463e865271dd6",
       "bytes": 3545,
@@ -1689,9 +1711,9 @@
     }
   ],
   "counts": {
-    "wrappers": 153,
-    "executable": 113,
-    "named_by_landing_gate": 56,
+    "wrappers": 155,
+    "executable": 115,
+    "named_by_landing_gate": 58,
     "no_static_failure_policy": 20
   },
   "authority_contract": {

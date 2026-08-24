@@ -1,8 +1,8 @@
 {
   "schema": "zlos.toolchain-manifest.v1",
   "result": "PASS_WITH_OPEN_PORTABILITY_GAPS",
-  "build_identity": "f0a762674bd63216b59218e9f6e907d4c65e36a0e1c5e69237c46ca5fa9db689",
-  "dependency_lock_sha256": "9ce4777422fc54a20a0a2bf8555193e2d92a93ff3ce1238310ae13d989eb0d84",
+  "build_identity": "1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04",
+  "dependency_lock_sha256": "97b6856574aaad4308a5d2154db4e27255d51433872d26c6dd3a45ada9842a16",
   "environment": {
     "CC": "UNSET_EFFECTIVE_GCC",
     "forbidden_variables": [
@@ -23,7 +23,7 @@
       "invoked_path": "/home/roy/Documents/repos/zl-linux-merge-all/compile",
       "resolved_path": "/home/roy/Documents/repos/zl-linux-merge-all/compile",
       "bytes": 51920,
-      "sha256": "d0c1484e237f88414e3389ca35e2894c6c9cba424d8b8d8f504417135309861b",
+      "sha256": "25410ced86a4e6c9a12b5786c8ef1facd5ec13d177a2aa9c9a128f7a18264ddc",
       "version": "repository-built archived zl-to-C compiler; byte identity is authoritative"
     },
     {

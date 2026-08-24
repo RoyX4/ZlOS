@@ -1,47 +1,47 @@
 {
   "schema": "zlos.license-provenance-registry.v1",
   "result": "PASS_WITH_RELEASE_BLOCK",
-  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "build_identity": "1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04",
   "license_files": [],
   "inputs": [
     {
       "path": "freestanding/runtime_kernel.c",
-      "sha256": "87ca34a407c826169d5a3222f2681ef4d7899733432a1e5384447712b46c13f7",
+      "sha256": "86280a35f50b8b43cc3c457e2d4302836367955eaaa97ff0d8173a543c1316ac",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "freestanding/zl_freestanding.h",
-      "sha256": "f1b29e59640f861eb24f7460c2c26957694b7f1e0983f06796a6e7080ccf7377",
+      "sha256": "20366eb778f689059ea4fb982dd56af2c6cf5cf42caf4ac46139557a99ccb504",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/SOURCES",
-      "sha256": "e2c4a415fadfe01dafd9de3fa0ed4bb49a3bd2b0abba546066b149dae8851102",
+      "sha256": "1185a07d17f4e2ff53176fc7b3ecc0b9887906304170b62748a189ea5c703e35",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/apic.c",
-      "sha256": "2b944a413e274ebf5710a2a07e0165078db7a3f46c8d616cd0171876a1d2837e",
+      "sha256": "708dae2c5007c0c3b2f0bd3a8fba29f1db022185cfa12c19119fe8ea5e85eb8d",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/app-manifest.json",
-      "sha256": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7",
+      "sha256": "a995f1e25c2f7b16ff1b6c7d94fd5e2ae45a26150fb8fa67f2297a6e99cb8bb5",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/app_manifest_embed.zl",
-      "sha256": "4c76f3792385aaf0e811cce9cd256c8519af15244181a6881500f88ce608f5fe",
+      "sha256": "50f0ae9b482808af38697597d013c2ba63e7f557a26650121841b897e8e60a6c",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -131,43 +131,71 @@
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
+      "path": "kernel/block.c",
+      "sha256": "729654179304583a89a7dafccfc395b3e8a8fb2532f0bc5ce0da9209ad072fd7",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
       "path": "kernel/boot.S",
-      "sha256": "08e24912635c119a5defebcffca3cee941355c660801c7d1841d0eee30222f2e",
+      "sha256": "0949e1171f666158091663c701296a49da6a73db49c916bda1e3b5af756df4bc",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/boot64.S",
-      "sha256": "c4638b97c24d91d856bbfb779451d500a65cce55f05df06be724c654f427a784",
+      "sha256": "5dd28b445937cb093bbce36572497114a4643eddaf89270f5c055cd8259d1221",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/boot_handover.c",
+      "sha256": "a47127daa8a60037bf4b2bdb6ea9103c44058e81e1ac0462d5a3738824081a10",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/boot_handover.h",
+      "sha256": "1e4cba660387285a5f48be493b839c4f1aa5c2769f0d5be49a5b05a2b39ae61d",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/boot_state.h",
+      "sha256": "b67d827be6baddd92a40d87e79822ada9e46f19c9bb7a478cadc55e57acf9f0c",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/browser.c",
-      "sha256": "425b096de3e034f37305e04509576737ad3a1e0b28fbfc2d2e5dc6f59f8347bd",
+      "sha256": "85f42693d6d45380473405bf9570724f3bcf262546efcac4ea16147bce4a659c",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/build.sh",
-      "sha256": "475be3dc2204235f8b73499d6568a4e57a46076fb58f93f7525c0f59fbec5aab",
+      "sha256": "87bd445f42546a83217bc7a184accd626c98b28431d51a8944a3b30bcc6a17ef",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/build64.sh",
-      "sha256": "937d07d85e3afdccf47e77ad78ccc06092f6c13adef2ed527b61b812ad5cafe1",
+      "sha256": "7e2ba4afb7f73d323f7f6db0832e99c36d2f5aee43cabeb88fe61d43bd25389d",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/buildefi.sh",
-      "sha256": "1139e0b86b325eda471c0d2d24bc834108b7d9e1578a0ce6887454d509b9fbc8",
+      "sha256": "7c11445471fca2ef9cfe7064ef42e87e664ab569a20a4fc71254f5846d6e8a53",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -181,14 +209,14 @@
     },
     {
       "path": "kernel/console.c",
-      "sha256": "dd86cad040fa7c90417591de1ce03b0620c3fe8a1917890a84c0c4d9293ea40b",
+      "sha256": "72c48db5020dbd19164927ff166c0f9dec1d0954a87fd2cc6b51fb2338779262",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/cpu.c",
-      "sha256": "c48501db5327a4be8d1c4714d75917008e734ad1ac9bacc45790b054eb4cf0b9",
+      "sha256": "961db5bf741cf1c60a3f5099a4d6610fbffbcf7878211427339be7ed8799b9aa",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -243,8 +271,22 @@
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
+      "path": "kernel/dhcp.c",
+      "sha256": "7e3115d9b3334ab7520556c15ec8427fafd488e51238f91f0ecf26798ce33fbb",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/dhcp.h",
+      "sha256": "f197fdfd4c4b4f9dd5a5cf03db7d771006dc49823c34f4b151d3598c4331ee27",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
       "path": "kernel/divmod.c",
-      "sha256": "1aa5a5097ab42c0b66eae19481037790e83a43b318f6101473d84ee5a54e1141",
+      "sha256": "761ead808c0e59c5cf27be64d242f1c65c440ce3a19470482ed3d83378282fb7",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -258,7 +300,7 @@
     },
     {
       "path": "kernel/dns.c",
-      "sha256": "c6c11f1c8fe28b4a144dae4ff4cece13f277e1c0828ac5cc2fc156cfac25abe3",
+      "sha256": "4d93eea0c4b0ad1bc1f73b8469aad96279bceacfa3076f3adbb40dec673bfb8f",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -266,6 +308,20 @@
     {
       "path": "kernel/dns.h",
       "sha256": "b6bcbed6f04e19bcb045fb074e524ee3d141585a1c1004692d970a8c4e9c4ca1",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/e1000.c",
+      "sha256": "e2ffaaf912deff3f4e96c590d9b4e030cbcff5ea90f23009d2692c7ddcfa180e",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/e1000.h",
+      "sha256": "2494d5ea9be18739f42903e04f69c5f0c56972da515b33cb0f67d1831b2b93ec",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -293,7 +349,7 @@
     },
     {
       "path": "kernel/efi.c",
-      "sha256": "d548c075ccde097567eb240b2d3f62f0cb0378e4cfbcea3b2dd974d08657a8be",
+      "sha256": "08b4a15453543f69a90b370ee067d5b2b1918bd6542d9c9461b84955d4b929d2",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -307,14 +363,14 @@
     },
     {
       "path": "kernel/exec.c",
-      "sha256": "abdc9ce722046190e9208c2829ae98ad0d2756df57fdc947572b5cd4ce12fbb2",
+      "sha256": "3a5ee6373afaa20ba3d3564f84e15eac80673d5f3e8928a2184e2ae707d07b51",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/fb.c",
-      "sha256": "7abfc2dbb9886ff4d4a2434a29ba299afba450c5c6fdb3894fb86acc8810053a",
+      "sha256": "07bd3b0473cda36acf5bd8bdf2b061eb45d34cec0bbb95937aa5dd00aadd4805",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -356,7 +412,7 @@
     },
     {
       "path": "kernel/fs.c",
-      "sha256": "c8c072a394a0c536761714f8647f8739ab1d77499009809e8cd3b265600b628f",
+      "sha256": "5943915491e1ca7f35bbfb46068f9e658ba8eab7f59e14d5903897fcde74b1dd",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -370,7 +426,7 @@
     },
     {
       "path": "kernel/gdt64.c",
-      "sha256": "b7bdada832c4d40fa6052ee9cbd47981436494b7fce21762249b04b55d9c3cd4",
+      "sha256": "c4ddaa41af011ab47f81e3c308bc99dd26f2f99de93406a1bcbd493f86450db8",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -384,7 +440,7 @@
     },
     {
       "path": "kernel/gen-boot-media-ids.py",
-      "sha256": "aa8aea3717babbce52e4b9033a5ccf427bd23a16aedb8344a51e0487e2ab04b7",
+      "sha256": "938d6bb44bd73061f047d6f6884c4612064f158006f95f6672b74fbbaeb3c464",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -398,7 +454,7 @@
     },
     {
       "path": "kernel/ggttmap.h",
-      "sha256": "e2f80136aeb6a75c2c73b4afbf3c376f9b1e4f6cc8c5c7619581a2726e5e5567",
+      "sha256": "76f574a8eaff9b2e03cac3307a17836b59668fb93c8d67a6b6f0e7d102bc2a90",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -426,14 +482,14 @@
     },
     {
       "path": "kernel/gpuring.c",
-      "sha256": "1f7c57efe1308a147259c63260a65aa74183f5e31572c75e01e23d6ba9635acb",
+      "sha256": "57ccac3bdf467ad630bae52912d59235f200390a121124f8b68c879ebceea2cf",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/heap.c",
-      "sha256": "d7a8a817f19568106db8af368e179cebc2f2f1dd14fd9c9de100aff108cbafb8",
+      "sha256": "44d508960e59c064f2442c276cb803edba411f6a78f5bb773e4ad314baa9d885",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -454,21 +510,35 @@
     },
     {
       "path": "kernel/http.c",
-      "sha256": "72401f2aeeba2d9cae3fab8a7c27b2f9d349036a09682761b7c9a20ad8e402ee",
+      "sha256": "fed75c2f188f02480229f90e680d2d00e0f3b46c5611d31bbc3a3a78a2155376",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/http.h",
-      "sha256": "ef44424562107837af4ef9eac9886ed8f6f3b1a4f2443758a512e843ec40adec",
+      "sha256": "e6db2ca624641a3a03e993f839c3bc18aca58a744533514b696590d56c974782",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/i2c_hid.c",
-      "sha256": "c624b32b9586504942dc046ec3068c7e2c3230803c6ffc16ee6a67bc909e354b",
+      "sha256": "9ff7f55015320d09b0ef38c6d48ee4c1697451e493b87e9eebfa773a0fde1f06",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/i2c_touch.c",
+      "sha256": "f73fd66da160191563610e43bc37e7b87f299faf3bc7bd5c24dc30ed7f6f53b5",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/i2c_touch.h",
+      "sha256": "c5fe14df2d9d9c050e03cc86469f50d515b6664866238bf773f27ec64664e52d",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -482,21 +552,42 @@
     },
     {
       "path": "kernel/idt.c",
-      "sha256": "e98cbb7b86d37250268b0be84f6068af4017c2cd5cb870c14dfb09ecca40c810",
+      "sha256": "2919c40097d401ecde8905bbb24249769a16888cc42355f4020d0f8477472560",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/input.c",
-      "sha256": "1dab29b3f825b7f1def05e3bba7868568dfcb9a062e8424fe8989b2db3c6775d",
+      "sha256": "0fa8a4edaf2e9887968857f9e7e7aefcfc4b82d95e240b809dadfcf50715a8ce",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/intel.c",
-      "sha256": "467073ae0a8a58ef6eba1979626cab1a79b94edb53e3996ef98aa021309a5fee",
+      "sha256": "a9e3aba74b75f65c80e187cfd5f66f1bca995f0977c35064ef05c256895b8d79",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/interp_kernel.c",
+      "sha256": "3025360324482b5a2d6129ff5186dbba8128fd5ece6794a1bf1bd0e386d2d096",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/iwlwifi.c",
+      "sha256": "4369558ad415d29a82386535e00aaf35f6138808297b021cf48e1b76ab537e45",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/iwlwifi.h",
+      "sha256": "7bf632b32de7cf09daf96c8c09d6bc37d71c5693148610c7b7c984ae4224c32e",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -517,7 +608,7 @@
     },
     {
       "path": "kernel/kernel.zl",
-      "sha256": "e953981eff624423b9d751f972a031591d46e9595ddbc24911f606178442e643",
+      "sha256": "2c77d6ae43d46ae21fa28dcf1a3b0f40e9c416b9950f9fac89a91c970897fb86",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -573,7 +664,7 @@
     },
     {
       "path": "kernel/mkdisk.sh",
-      "sha256": "dd13db52ebae2325d6e7a30347e7ea3bac42dc6070cc9c6f2d457884d6c717e5",
+      "sha256": "abdb13c043cd8f71c808ec61d599236d0f1ba17ff0ca5794c3acf95ddf6f31fd",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -594,42 +685,56 @@
     },
     {
       "path": "kernel/mkusb.sh",
-      "sha256": "6ceea3691ed4ef1e5d04889e6da4fe66782767372ce1fd1051740d2b4203c8a8",
+      "sha256": "f0a95f13bd8b96be3c2ef91b4580aaf7d87db7349d4bcdede52f79f723455b33",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/net.c",
-      "sha256": "6b3494710a4b61cbcacff94d33cf12e34b4371ccd0e5d8c85c0f65aaeaf71cfc",
+      "sha256": "ba50715aad6697c2084e3754c24d2f5750199e0c458700ee672038c8517c75e6",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/net.h",
-      "sha256": "56116f1bb4e86d65e7180b8096199edb220d59f6baf72806ac77748f4d29a72f",
+      "sha256": "2653c76f4ed46d7d814951533397f2e30f18c5b9c6adde246e9785d117d654b8",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/netdev.c",
+      "sha256": "7910d054884996eb86f86c56d52b0728de50e3ba6a23da04da28f48e063670e3",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/netdev.h",
+      "sha256": "f9a90c1c705e761f1ae89bc0748b816d33c1ed5de03a2707651af2f077a44e25",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/notify.c",
-      "sha256": "6c06dbc9d2fa70ca82bf2b8a97fedb50c9aec7ef3b1e65842dfa657ac086311b",
+      "sha256": "56d6e7b3ad1401c378f70dd3f2104bb8f71acff7bc331ba762c7c4553d0fa7f7",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/nvme.c",
-      "sha256": "843c21ac76627735b29ce87dd2fdd8f79812f2efd71a84e6a93ab22be9eaa376",
+      "sha256": "1fa574bddb7515d19825147dbfc45e959a52c20b357c9cccc5ceff47cd6451ac",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/paging.c",
-      "sha256": "5fa0f5c48306d643fe63ed9c8beb1b5312a58fa41e4b22a19a62863085f50d59",
+      "sha256": "81473ea5b42353e2b4b3f6fa012edd287119da88b89e40993abbe51650cef7f4",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -664,7 +769,7 @@
     },
     {
       "path": "kernel/raw_entry.S",
-      "sha256": "067fe3b50476359286d60eeefd4068e92f398e612a25b10792cbdf722bf44a6c",
+      "sha256": "0ea086961cf4be6068164cd83ffffee5c4eb0a36a5640d97d8d4ea6089a1e4b7",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -692,35 +797,35 @@
     },
     {
       "path": "kernel/sched.c",
-      "sha256": "8a9d963eebb479e80ce631bc7eeff98868f89ecdbee3aeeae6f2bfcd4dfbdb19",
+      "sha256": "2ffe51d069ccdfa18afeb29cc5509c6eca0711d3ad16ddcd551b0a62e81667e2",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/settings.c",
-      "sha256": "b1c6eb93c2b76260d7d0a000677433a8229a1e19e937e1966814e0527102311c",
+      "sha256": "0ceb7c27da715020b0ef6fd9c1239c80b801cd49494e44dba43a3f12abf89c4e",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/smp.c",
-      "sha256": "8432ac59ccbee30e24b60cc6a7eadd136a219d5f0ffb726b3ec61de5dc5b03d6",
+      "sha256": "0b7765b99179270fb5e3753257a0795455b05bb077aae4e14b69f4b8f1b12ed0",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/smp_trampoline.S",
-      "sha256": "b0d55183c02cbb87423083f780c717580d567e96ce98d44fffcad1cca3b1a302",
+      "sha256": "59344904f38aad37625cd5bc83a220f72771627555cc137a22734d023c3cf8c7",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/smp_trampoline64.S",
-      "sha256": "747ceed78e4cff461426ff5f33ae81036dd43b533f1e1c1032091c9b2664e921",
+      "sha256": "f3443d9976cad1ef7c1f1c483dbc25fcc2888ec6fd264de2b590862017d7cef8",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -741,28 +846,35 @@
     },
     {
       "path": "kernel/tcp.c",
-      "sha256": "2773beb38f0452917478d5d86ccbef4051a13ff2abbb3b6eaec727aed162be4c",
+      "sha256": "7d75ced18a5dc13e9754aef6ecd152bc00c1bdd67c269b8152ed0fb56835ead8",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/tcp.h",
-      "sha256": "7c7c6f935875c7f1149a09be6d8c8c26eead569961faa70b770b28100bc77382",
+      "sha256": "0be68423a134942df89bc380a2fbf42933148b1bd805d84a600d57bfd9652555",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/telemetry.h",
+      "sha256": "e0d88ab2a45944681a0ed13625980d753496329966e875561d5b072bf3930e90",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/term.c",
-      "sha256": "bdcbf0c5f6dd9bd382b45d575da780966eda499938519ca5f1ef507f52921c3c",
+      "sha256": "bec8bc45e6a38644de93946a6022d29f714636cf68322811e505fc485906965e",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/tls.c",
-      "sha256": "7c67a36a111fcb04052f7fd5bb147f7160266d91455e2727757d3e9121f9ed30",
+      "sha256": "2554ff1e961be07a92d09b5a271b42558bdef392a9668309538eac62bbffc33f",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -790,7 +902,7 @@
     },
     {
       "path": "kernel/ui.h",
-      "sha256": "ad422e3bff02248e2bb108f23750f393adae8c37098b85544fd348479bfc27e0",
+      "sha256": "b17667f85cac506bbe8eaa9f9d607ef2d9f4a1902182e4b08c0c5d5e5fd05b5c",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -804,7 +916,14 @@
     },
     {
       "path": "kernel/usermode.c",
-      "sha256": "705cdee66176e73235cf287203fa58f43711837a77976c9ba72253ac78f766b1",
+      "sha256": "a06c1b84bdc6f86cc73a07832744b15691e4ac43c22d3836d92822177c258c39",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/userwin.c",
+      "sha256": "f61152649895c2bf5a9916a32f41cc5cec5a79d51c8c6b63eada58f9fa61aece",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -825,14 +944,14 @@
     },
     {
       "path": "kernel/virtio_net.c",
-      "sha256": "658a5a78f9d946c8c18bcb70be75116007ae8884e9c2645b128a7a830935ab9a",
+      "sha256": "e603eec80b0b8acfeb426059aa24199b9d677f75b474896e4b984194dafbead5",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/wm.c",
-      "sha256": "c3aa3282c28a3ee35b836a353fc0da9c555c4c04cd2f735b057b1a834d07f86c",
+      "sha256": "8d8c4d578095377709148fab17cdbf27dbf57f3cb351e8eeb33dbf4f78a12101",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -860,14 +979,28 @@
     },
     {
       "path": "kernel/xhci.c",
-      "sha256": "e01caf8cd44c40d9ff4d04596baf20c1bdab635fc0a4805be41b057f1670a53c",
+      "sha256": "6c1985ca01d6c2b12c9ddfcc8017c940ee600a10a780f4fc15f65451d0ef4e7e",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/zllog.c",
+      "sha256": "dba5ebc9ef8fe249a1dc2c35e120a27431ebf4982172edadc29b63099fd7804e",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/zllog.h",
+      "sha256": "67c99338a70f04c3a73c550e1680e1a220edab1081e8aae5bb2dbf9115a1bfa3",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     }
   ],
   "counts": {
-    "build_inputs": 123,
+    "build_inputs": 142,
     "declared_license_files": 0,
     "inputs_with_established_redistribution_grant": 0
   },
