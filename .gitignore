@@ -62,6 +62,7 @@ kernel/hosttest/jmptest32
 kernel/hosttest/modeset_test
 kernel/hosttest/blocktest
 kernel/hosttest/boot_handover_test
+kernel/hosttest/boot_state_test
 kernel/hosttest/dhcptest
 kernel/hosttest/e1000test
 kernel/hosttest/memtypetest
