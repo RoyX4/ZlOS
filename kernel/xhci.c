@@ -44,6 +44,8 @@ typedef unsigned int       u32;
 typedef unsigned short     u16;
 typedef unsigned char      u8;
 
+#include "telemetry.h"
+
 /* An MMIO address is not always 32 bits wide.
  *
  * UEFI firmware puts 64-bit BARs above 4 GiB as a matter of routine - OVMF
@@ -94,6 +96,7 @@ u32  idt_ticks(void);           /* the 100 Hz PIT counter, for real timeouts */
 #define USBCMD_RS        (1u << 0)
 #define USBCMD_HCRST     (1u << 1)
 #define USBCMD_INTE      (1u << 2)
+#define USBCMD_HSEE      (1u << 3)
 #define USBSTS_HCH       (1u << 0)
 #define USBSTS_CNR       (1u << 11)
 
@@ -107,11 +110,33 @@ static int  xslots   = 0;
 static int  xports   = 0;
 static int  xver     = 0;
 static int  xctxsize = 32;      /* 32 or 64 bytes, from HCCPARAMS1.CSZ      */
+static int  enable_slot_last_cc = -1;
+/* ZLDIAG5 controller-lifecycle words: USBLEGSUP before/after,
+ * USBLEGCTLSTS before/after, handoff flags, xECP, USBSTS before reset, and
+ * USBSTS after reset/CNR completion. */
+static u32 xhci_lifecycle[8] = {
+    0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu,
+    0, 0, 0xFFFFFFFFu, 0xFFFFFFFFu
+};
 
 /* MMIO. volatile because these are registers - the compiler must not cache
  * a value the hardware changes underneath it, nor reorder the accesses. */
 static u32  rd32(uptr addr)         { return *(volatile u32 *)addr; }
 static void wr32(uptr addr, u32 v)  { *(volatile u32 *)addr = v; }
+
+/* Ownership bits are DMA protocol, not ordinary C state. Linux uses wmb()
+ * before exposing the first TRB and dma_rmb() after observing an event cycle
+ * bit. On x86 those are real fences: a compiler barrier alone does not order
+ * weakly ordered/WC writes against a bus-mastering device. */
+static void dma_write_barrier(void)
+{
+    __asm__ volatile("sfence" ::: "memory");
+}
+
+static void dma_read_barrier(void)
+{
+    __asm__ volatile("lfence" ::: "memory");
+}
 static u8   rd8 (uptr addr)         { return *(volatile u8  *)addr; }
 
 /* A 64-bit register is written as two 32-bit halves; the low half must go
@@ -142,12 +167,37 @@ static int wait_bit(uptr addr, u32 mask, int want_set, int ms)
     u32  ticks = (u32)(ms / 10) + 1;          /* 10 ms per tick at 100 Hz */
     long spins = (long)ms * 50000;            /* fallback if the PIT is dead */
 
+    u32 polls = 0, first = 0, last = 0;
     while (spins-- > 0) {
-        u32 v = rd32(addr) & mask;
-        if (want_set ? (v == mask) : (v == 0)) return 1;
-        if (idt_ticks() - t0 >= ticks) return 0;
+        u32 raw = rd32(addr);
+        if (polls == 0) first = raw;
+        u32 v = raw & mask;
+        last = raw; polls++;
+        if (want_set ? (v == mask) : (v == 0)) {
+            zlt_count(ZLLOG_C_MMIO_POLL, polls);
+            return 1;
+        }
+        if (idt_ticks() - t0 >= ticks) break;
     }
+    zlt_count(ZLLOG_C_MMIO_POLL, polls);
+    zlt_snapshot(ZLLOG_SUB_USB, ZLLOG_SNAP_XHCI_WAIT, 0,
+                 (unsigned)addr, first);
+    zlt_snapshot(ZLLOG_SUB_USB, ZLLOG_SNAP_XHCI_WAIT, 1,
+                 last, mask | (want_set ? 0x80000000u : 0u));
+    zlt_trigger(ZLLOG_SUB_USB, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                (unsigned)addr, last, mask | (want_set ? 0x80000000u : 0u));
     return 0;
+}
+
+static void delay_ms(int ms)
+{
+    u32 t0 = idt_ticks();
+    u32 ticks = (u32)(ms / 10) + 1u;
+    long spins = (long)ms * 50000L;
+    while (spins-- > 0) {
+        __asm__ volatile("pause");
+        if (idt_ticks() - t0 >= ticks) break;
+    }
 }
 
 static int  xscratch  = 0;      /* scratchpad buffers the controller wants   */
@@ -255,12 +305,18 @@ int xhci_take_from_firmware(void)
         u32 nx = (v >> 8) & 0xFF;
 
         if (id == ECAP_ID_LEGACY) {
+            xhci_lifecycle[0] = v;
+            xhci_lifecycle[2] = rd32(cap + 4);
+            xhci_lifecycle[4] |= 1u;            /* legacy capability found */
+            xhci_lifecycle[5] = xecp;
             /* claim it */
             wr32(cap, rd32(cap) | LEGACY_OS_OWNED);
 
             /* give the firmware up to a second to let go - it is doing real
              * work inside SMM, and a spin count is not a unit of time */
-            wait_bit(cap, LEGACY_BIOS_OWNED, 0, 1000);
+            int cooperative = wait_bit(cap, LEGACY_BIOS_OWNED, 0, 1000);
+            if (cooperative) xhci_lifecycle[4] |= 2u;
+            else xhci_lifecycle[4] |= 4u;       /* firmware had to be forced */
 
             /* Whether or not it cooperated, force the issue: clear the BIOS
              * bit, then disable every SMI source in USBLEGCTLSTS (the next
@@ -269,6 +325,8 @@ int xhci_take_from_firmware(void)
              * enables - the same one Linux uses in pci-quirks.c. */
             wr32(cap, (rd32(cap) & ~LEGACY_BIOS_OWNED) | LEGACY_OS_OWNED);
             wr32(cap + 4, (rd32(cap + 4) & 0x000E1FEEu) | 0xE0000000u);
+            xhci_lifecycle[1] = rd32(cap);
+            xhci_lifecycle[3] = rd32(cap + 4);
             return 1;
         }
 
@@ -295,21 +353,32 @@ int xhci_reset(void)
 {
     if (!xhci_present()) return 0;
 
+    /* Linux waits for CNR before touching operational state. Firmware usually
+     * leaves it clear, but register accesses while it is set are undefined. */
+    if (!wait_bit(xop + XOP_USBSTS, USBSTS_CNR, 0, 5000)) return 0;
+    xhci_lifecycle[6] = rd32(xop + XOP_USBSTS);
+
     /* Ownership BEFORE reset. Resetting a controller that SMM still owns is
      * the one ordering mistake that makes everything after it unreliable. */
     xhci_take_from_firmware();
 
     /* stop it first - resetting a running controller is undefined */
-    wr32(xop + XOP_USBCMD, rd32(xop + XOP_USBCMD) & ~USBCMD_RS);
-    wait_bit(xop + XOP_USBSTS, USBSTS_HCH, 1, 100);     /* halted */
+    wr32(xop + XOP_USBCMD,
+         rd32(xop + XOP_USBCMD) & ~(USBCMD_RS | USBCMD_INTE | USBCMD_HSEE));
+    if (!wait_bit(xop + XOP_USBSTS, USBSTS_HCH, 1, 100)) return 0;
 
     /* host controller reset */
     wr32(xop + XOP_USBCMD, USBCMD_HCRST);
+    /* Intel's xHCI reset erratum requires a real delay after asserting HCRST
+     * before the first register read. Immediate polling is accepted by QEMU
+     * but is not a safe hardware sequence. */
+    delay_ms(1);
     if (!wait_bit(xop + XOP_USBCMD, USBCMD_HCRST, 0, 1000)) return 0;
 
     /* CNR - "controller not ready" - stays set while it reinitialises. Every
      * register read before this clears is meaningless. */
     if (!wait_bit(xop + XOP_USBSTS, USBSTS_CNR, 0, 1000)) return 0;
+    xhci_lifecycle[7] = rd32(xop + XOP_USBSTS);
 
     /* tell it how many device slots we intend to use */
     wr32(xop + XOP_CONFIG, (u32)xslots);
@@ -317,6 +386,10 @@ int xhci_reset(void)
 }
 
 int xhci_halted(void)  { return xhci_present() ? ((rd32(xop + XOP_USBSTS) & USBSTS_HCH) ? 1 : 0) : 1; }
+u32 xhci_lifecycle_diag(int word)
+{
+    return word >= 0 && word < 8 ? xhci_lifecycle[word] : 0xFFFFFFFFu;
+}
 u32 xhci_usbsts(void)  { return xhci_present() ? rd32(xop + XOP_USBSTS) : 0; }
 u32 xhci_usbcmd(void)  { return xhci_present() ? rd32(xop + XOP_USBCMD) : 0; }
 
@@ -387,6 +460,7 @@ int xhci_devices_attached(void)
 #define TRB_CONFIGURE_EP     12
 #define TRB_EVALUATE_CTX     13
 #define TRB_RESET_ENDPOINT   14
+#define TRB_STOP_ENDPOINT    15
 #define TRB_DISABLE_SLOT     10
 #define TRB_NOOP_CMD         23
 #define TRB_TRANSFER_EVENT   32
@@ -533,7 +607,12 @@ int xhci_running(void)
  * controller "there is new work on a ring you own". */
 static void doorbell(u32 slot, u32 target)
 {
-    wr32(xdb + slot * 4, target);
+    uptr reg = xdb + slot * 4;
+    wr32(reg, target);
+    /* Doorbells are write-only PCIe posted registers. Flush through a safe
+     * readable register on the same BAR; reading the doorbell itself is not a
+     * defined operation on strict controllers. */
+    (void)rd32(xop + XOP_USBSTS);
 }
 
 /* Put a command on the ring and ring the bell. Returns the ADDRESS of the TRB
@@ -543,6 +622,9 @@ static u32 cmd_submit(u64 param, u32 status, u32 type, u32 extra)
 {
     u32 at = cmd_enqueue;
     u32 trb_addr = XMEM_CMDRING + at * TRB_BYTES;
+    zlt_count(ZLLOG_C_XHCI_COMMAND, 1);
+    zlt_event(ZLLOG_SUB_USB, ZLLOG_EV_COMMAND_SUBMIT, ZLLOG_INFO,
+              type, trb_addr, extra);
     trb_write(XMEM_CMDRING, at, param, status, (type << 10) | extra | cmd_cycle);
     cmd_enqueue++;
     if (cmd_enqueue >= RING_TRBS - 1) {     /* the link TRB is not usable */
@@ -559,12 +641,24 @@ static u32 cmd_submit(u64 param, u32 status, u32 type, u32 extra)
 
 /* Wait for the controller to post an event whose cycle bit matches ours.
  * Returns the TRB type, or 0 if nothing arrived in time. */
+static u32 event_last_words[4];
+
 static int event_poll(u32 *out_param_lo, u32 *out_status, u32 *out_ctrl, int spins)
 {
+    u32 polls = 0;
     while (spins--) {
+        polls++;
         volatile u32 *e = (volatile u32 *)(uptr)(XMEM_EVTRING + evt_dequeue * TRB_BYTES);
         u32 ctrl = e[3];
         if ((ctrl & 1u) != evt_cycle) continue;      /* not ours yet */
+        /* The controller commits an Event TRB by writing its cycle bit. Do
+         * not let the CPU satisfy the payload loads before that ownership
+         * observation. */
+        dma_read_barrier();
+        event_last_words[0] = e[0];
+        event_last_words[1] = e[1];
+        event_last_words[2] = e[2];
+        event_last_words[3] = ctrl;
         if (out_param_lo) *out_param_lo = e[0];
         if (out_status)   *out_status   = e[2];
         if (out_ctrl)     *out_ctrl     = ctrl;
@@ -575,8 +669,11 @@ static int event_poll(u32 *out_param_lo, u32 *out_status, u32 *out_ctrl, int spi
         /* tell the controller how far we have consumed, and clear the
          * event handler busy bit (bit 3) while we are there */
         wr64(xrt + XRT_ERDP, dma_addr(XMEM_EVTRING + evt_dequeue * TRB_BYTES) | (1u << 3));
+        zlt_count(ZLLOG_C_MMIO_POLL, polls);
+        zlt_count(ZLLOG_C_XHCI_EVENT, 1);
         return type;
     }
+    zlt_count(ZLLOG_C_MMIO_POLL, polls);
     return 0;
 }
 
@@ -590,6 +687,8 @@ static int event_poll(u32 *out_param_lo, u32 *out_status, u32 *out_ctrl, int spi
  * an empty bus and fails the instant a keyboard exists, which is exactly the
  * case we care about. */
 static void kbd_event(u32 param, u32 status, u32 ctrl);  /* stage 5, below */
+static int ecm_event(u32 param, u32 status, u32 ctrl);   /* CDC-ECM, below */
+static int ecm_ready;
 
 /* Wait for the completion of ONE SPECIFIC command.
  *
@@ -603,7 +702,16 @@ static int cmd_wait(u32 trb_addr, u32 *status, u32 *ctrl, int spins)
     for (int i = 0; i < 32; i++) {
         u32 p = 0, s = 0, c = 0;
         int t = event_poll(&p, &s, &c, spins);
-        if (t == 0) return 0;
+        if (t == 0) {
+            zlt_snapshot(ZLLOG_SUB_USB, ZLLOG_SNAP_XHCI_COMMAND, 0,
+                         trb_addr, (unsigned)spins);
+            zlt_snapshot(ZLLOG_SUB_USB, ZLLOG_SNAP_XHCI_COMMAND, 1,
+                         ((unsigned)evt_dequeue << 1) | evt_cycle,
+                         event_last_words[2]);
+            zlt_trigger(ZLLOG_SUB_USB, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                        1u, trb_addr, (unsigned)spins);
+            return 0;
+        }
         if (t == TRB_TRANSFER_EVENT) { kbd_event(p, s, c); continue; }
         if (t != TRB_CMD_COMPLETION) continue;      /* port change etc */
         /* p is a DEVICE address - the controller reports the address of the
@@ -613,8 +721,18 @@ static int cmd_wait(u32 trb_addr, u32 *status, u32 *ctrl, int spins)
         if (dma_kaddr(p) != trb_addr) continue;     /* a stale completion */
         if (status) *status = s;
         if (ctrl)   *ctrl   = c;
+        zlt_event(ZLLOG_SUB_USB, ZLLOG_EV_COMMAND_COMPLETE,
+                  ((s >> 24) == 1u) ? ZLLOG_INFO : ZLLOG_ERROR,
+                  trb_addr, s, c);
         return 1;
     }
+    zlt_snapshot(ZLLOG_SUB_USB, ZLLOG_SNAP_XHCI_COMMAND, 0,
+                 trb_addr, 32u);
+    zlt_snapshot(ZLLOG_SUB_USB, ZLLOG_SNAP_XHCI_COMMAND, 1,
+                 ((unsigned)evt_dequeue << 1) | evt_cycle,
+                 event_last_words[2]);
+    zlt_trigger(ZLLOG_SUB_USB, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                2u, trb_addr, 32u);
     return 0;
 }
 
@@ -639,8 +757,13 @@ static int cmd_wait(u32 trb_addr, u32 *status, u32 *ctrl, int spins)
  *
  * A Transfer Event names its slot and endpoint in the control dword, so match
  * on those and hand everything else to the dispatcher that owns it. */
-static int xfer_wait(int slot, int dci, u32 *status, u32 *ctrl, int spins)
+static u32 xfer_last_param;
+static u32 xfer_last_event[4];
+
+static int xfer_wait_trbs(int slot, int dci, const u32 *trbs, int ntrbs,
+                          u32 *status, u32 *ctrl, int spins)
 {
+    xfer_last_param = 0;
     /* Bounded well above the number of foreign events that can plausibly
      * interleave - the pointer alone can have PTR_NBUF in flight. */
     for (int i = 0; i < 64; i++) {
@@ -652,13 +775,57 @@ static int xfer_wait(int slot, int dci, u32 *status, u32 *ctrl, int spins)
         int es = (int)((c >> 24) & 0xFF);
         int ee = (int)((c >> 16) & 0x1F);
         if (es == slot && ee == dci) {
+            if (trbs && ntrbs > 0) {
+                u32 event_trb = (u32)dma_kaddr(p);
+                int ours = 0;
+                for (int j = 0; j < ntrbs; j++)
+                    if (event_trb == trbs[j]) { ours = 1; break; }
+                if (!ours) continue;          /* stale EP0 completion */
+            }
+            xfer_last_param = (u32)dma_kaddr(p);
+            for (int j = 0; j < 4; j++) xfer_last_event[j] = event_last_words[j];
             if (status) *status = s;
             if (ctrl)   *ctrl   = c;
+            zlt_count(ZLLOG_C_XHCI_TRANSFER, 1);
+            if ((s >> 24) != 1u && (s >> 24) != 13u)
+                zlt_event(ZLLOG_SUB_USB, ZLLOG_EV_COMMAND_COMPLETE,
+                          ZLLOG_ERROR,
+                          (unsigned)slot | ((unsigned)dci << 16), s, p);
             return t;
         }
         /* Somebody else's, and it carries an obligation to re-arm them. */
         kbd_event(p, s, c);
     }
+    return 0;
+}
+
+/* A spin count is not a USB timeout. Five million cached reads can finish in
+ * only a few milliseconds on the ThinkPad, while a real control transfer is
+ * allowed to take much longer. Poll in bounded chunks until either the PIT's
+ * real-time deadline or a conservative no-timer fallback budget expires. */
+static int xfer_wait_trbs_ms(int slot, int dci, const u32 *trbs, int ntrbs,
+                             u32 *status, u32 *ctrl, int ms)
+{
+    u32 t0 = idt_ticks();
+    u32 start_event = ((u32)evt_dequeue << 1) | evt_cycle;
+    u32 ticks = (u32)(ms / 10) + 1u;
+    long budget = (long)ms * 50000L;
+    const int chunk = 50000;
+
+    while (budget > 0) {
+        if (xfer_wait_trbs(slot, dci, trbs, ntrbs,
+                           status, ctrl, chunk)) return 1;
+        budget -= chunk;
+        if (idt_ticks() - t0 >= ticks) break;
+    }
+    zlt_snapshot(ZLLOG_SUB_USB, ZLLOG_SNAP_XHCI_TRANSFER, 0,
+                 (unsigned)slot | ((unsigned)dci << 16),
+                 (trbs && ntrbs > 0) ? trbs[0] : start_event);
+    zlt_snapshot(ZLLOG_SUB_USB, ZLLOG_SNAP_XHCI_TRANSFER, 1,
+                 ((unsigned)evt_dequeue << 1) | evt_cycle,
+                 event_last_words[2]);
+    zlt_trigger(ZLLOG_SUB_USB, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                3u, (unsigned)slot | ((unsigned)dci << 16), (unsigned)ms);
     return 0;
 }
 
@@ -750,11 +917,16 @@ int xhci_port_reset(int port)
  * the top byte of the completion event's control dword. */
 int xhci_enable_slot(void)
 {
+    enable_slot_last_cc = -1;
     if (!xhci_running()) return 0;
     u32 trb = cmd_submit(0, 0, TRB_ENABLE_SLOT, 0);
     u32 status = 0, ctrl = 0;
-    if (!cmd_wait(trb, &status, &ctrl, 5000000)) return 0;
-    if (((status >> 24) & 0xFF) != 1) return 0;
+    if (!cmd_wait(trb, &status, &ctrl, 5000000)) {
+        enable_slot_last_cc = 0;
+        return 0;
+    }
+    enable_slot_last_cc = (int)((status >> 24) & 0xFF);
+    if (enable_slot_last_cc != 1) return 0;
     return (int)((ctrl >> 24) & 0xFF);
 }
 
@@ -814,6 +986,42 @@ static int ep0_mps(int speed)
 
 static u32 ep0_enqueue[MAX_SLOTS];
 static u32 ep0_cycle[MAX_SLOTS];
+static int ep0_last_cc = -1;
+static int ep0_last_event_stage = -1; /* 1 setup, 2 data, 3 status */
+static int ep0_last_attempts = 1;
+static int ep0_last_recovery = -1;    /* -1 none, 0 failed, 1 completed */
+/* ZLDIAG4 snapshots the exact failed control TD before endpoint recovery
+ * destroys its ring.  The 22 explicit little-endian words are:
+ *   0..3 Setup, 4..7 Data, 8..11 Status, 12..15 Transfer Event,
+ *   16 output-EP0 DW0, 17 DW2, 18 DW3, 19 metadata,
+ *   20 four one-byte probe completion codes, 21 first destination dword.
+ * Metadata: enqueue[7:0], producer cycle bit8, valid bit9, data-present bit10,
+ * event-valid bit11, context-valid bit12, timeout bit13, context size[23:16],
+ * descriptor attempt[31:24]. */
+#define EP0_TRACE_WORDS 22
+static u32 ep0_last_trace[EP0_TRACE_WORDS];
+static u32 ep0_first_device_probe[2][EP0_TRACE_WORDS];
+static u32 ep0_first_device_slot_dw3[2];
+static int ep0_first_device_probe_done;
+/* ZLDIAG6 retains the first Configuration request before descriptor retries
+ * and endpoint recovery can replace it.  Words 0..21 are the ordinary raw
+ * EP0 trace.  The remaining explicit LE words are:
+ *  22 metadata (port/slot/cc/recovery), 23 slot-context DW3,
+ *  24 recovery kind (0 none, 1 Reset Endpoint, 2 Stop Endpoint),
+ *  25 recovery command CC, 26 Set TR Dequeue CC,
+ *  27..29 post-recovery EP0 DW0/DW2/DW3,
+ *  30 whole-enumeration results (old-scheme cc, pre-address cc, winner),
+ *  31 reserved. */
+#define EP0_CONFIG_DIAG_WORDS 32
+static u32 ep0_first_config_diag[EP0_CONFIG_DIAG_WORDS];
+static int ep0_first_config_done;
+static int ep0_first_config_port;
+static int ep0_last_recovery_kind;
+static int ep0_last_recovery_cmd_cc;
+static int ep0_last_set_deq_cc;
+static u32 ep0_last_post_ctx[3];
+static int address_last_cc = -1;
+static int fix_ep0_last_cc = -1;
 static int cur_slot    = 0;
 static int cur_port    = 0;
 static int cur_speed   = 0;
@@ -830,8 +1038,9 @@ static void ring_init(u32 ring)
 /* Build the input context and issue Address Device. After this the device has
  * a USB address and answers control transfers - it is a real, addressed device
  * on the bus. */
-int xhci_address_device(int slot, int port, int speed)
+static int xhci_address_device_mode(int slot, int port, int speed, int bsr)
 {
+    address_last_cc = -1;
     if (!xhci_running() || slot <= 0 || slot > xslots) return 0;
     if (slot >= MAX_SLOTS) return 0;         /* more devices than we track */
 
@@ -866,13 +1075,30 @@ int xhci_address_device(int slot, int port, int speed)
     ctx_set(CTX_INPUT, 2, 3, (u32)(dma_addr(EP0_RING(slot)) >> 32));
     ctx_set(CTX_INPUT, 2, 4, 8);            /* average TRB length */
 
-    u32 trb = cmd_submit(dma_addr(CTX_INPUT), 0, TRB_ADDRESS_DEVICE, (u32)slot << 24);
+    u32 trb = cmd_submit(dma_addr(CTX_INPUT), 0, TRB_ADDRESS_DEVICE,
+                         ((u32)slot << 24) | (bsr ? (1u << 9) : 0u));
     u32 status = 0, ctrl = 0;
-    if (!cmd_wait(trb, &status, &ctrl, 5000000)) return 0;
-    if (((status >> 24) & 0xFF) != 1) return 0;
+    if (!cmd_wait(trb, &status, &ctrl, 5000000)) {
+        address_last_cc = 0;
+        return 0;
+    }
+    address_last_cc = (int)((status >> 24) & 0xFF);
+    if (address_last_cc != 1) return 0;
+
+    /* Address Device performs the USB SET_ADDRESS transaction on our behalf,
+     * but xHCI deliberately leaves its recovery interval to software. Linux
+     * waits 10 ms here before the first descriptor request; without it the
+     * physical Intel controller can accept Device and then lose the following
+     * Configuration Setup while the new address is still settling. */
+    if (!bsr) delay_ms(10);
 
     cur_slot = slot; cur_port = port; cur_speed = speed;
     return 1;
+}
+
+int xhci_address_device(int slot, int port, int speed)
+{
+    return xhci_address_device_mode(slot, port, speed, 0);
 }
 
 /* the USB address the controller assigned, read back out of ITS context */
@@ -891,13 +1117,17 @@ int xhci_device_address(void)
 #define TRB_SETUP   2
 #define TRB_DATA    3
 #define TRB_STATUS  4
+#define CONTROL_TIMEOUT_MS 1000
 
 static int reset_endpoint(int slot, int dci);   /* defined with the commands */
+static int stop_endpoint_ring(int slot, int dci, u32 ring,
+                              u32 *producer_enq, u32 *producer_cycle);
 
-static void ep0_push(int slot, u64 param, u32 status, u32 control)
+static u32 ep0_push(int slot, u64 param, u32 status, u32 control)
 {
     u32 ring = EP0_RING(slot);
-    trb_write(ring, ep0_enqueue[slot], param, status, control | ep0_cycle[slot]);
+    u32 index = ep0_enqueue[slot];
+    trb_write(ring, index, param, status, control | ep0_cycle[slot]);
     ep0_enqueue[slot]++;
     if (ep0_enqueue[slot] >= RING_TRBS - 1) {
         /* hand the link TRB over with the CURRENT cycle, then flip ours - that
@@ -907,42 +1137,288 @@ static void ep0_push(int slot, u64 param, u32 status, u32 control)
         ep0_enqueue[slot] = 0;
         ep0_cycle[slot] ^= 1;
     }
+    return ring + index * TRB_BYTES;
+}
+
+/* An endpoint ring stays live after its first doorbell. Publishing the Setup
+ * TRB with the producer cycle before its Data and Status TRBs exist lets a
+ * fast controller consume a half-built control transfer. QEMU happened not
+ * to race us; Intel did, and every device's second EP0 request completed with
+ * USB Transaction Error. Build the first TRB with the OPPOSITE cycle, fill the
+ * whole transfer, then flip only that ownership bit as the atomic commit. */
+static u32 ep0_begin_unpublished(int slot, u64 param, u32 status, u32 control,
+                                 u32 *publish_cycle)
+{
+    u32 ring = EP0_RING(slot);
+    u32 index = ep0_enqueue[slot];
+    u32 cycle = ep0_cycle[slot];
+    trb_write(ring, index, param, status, control | (cycle ^ 1u));
+    ep0_enqueue[slot]++;
+    if (ep0_enqueue[slot] >= RING_TRBS - 1) {
+        trb_write(ring, RING_TRBS - 1, dma_addr(ring), 0,
+                  (TRB_LINK << 10) | (1u << 1) | cycle);
+        ep0_enqueue[slot] = 0;
+        ep0_cycle[slot] ^= 1;
+    }
+    *publish_cycle = cycle;
+    return ring + index * TRB_BYTES;
+}
+
+static void ep0_publish(u32 trb_addr, u32 cycle)
+{
+    /* Match Linux's giveback_first_trb(): all payload TRBs must be globally
+     * visible to the controller before the first cycle bit changes owner. */
+    dma_write_barrier();
+    volatile u32 *control = (volatile u32 *)(uptr)(trb_addr + 12u);
+    *control = (*control & ~1u) | (cycle & 1u);
+    dma_write_barrier();
+}
+
+static void ep0_trace_trb(int word, u32 trb_addr)
+{
+    if (!trb_addr) return;
+    volatile u32 *trb = (volatile u32 *)(uptr)trb_addr;
+    for (int i = 0; i < 4; i++) ep0_last_trace[word + i] = trb[i];
+}
+
+static void ep0_trace_finish(int slot, u32 buf, int len, int timeout,
+                             int event_valid)
+{
+    dma_read_barrier();
+    ep0_last_trace[16] = ctx_get(CTX_DEVICE(slot), 1, 0);
+    ep0_last_trace[17] = ctx_get(CTX_DEVICE(slot), 1, 2);
+    ep0_last_trace[18] = ctx_get(CTX_DEVICE(slot), 1, 3);
+    ep0_last_trace[19] = (ep0_enqueue[slot] & 0xFFU) |
+                         ((ep0_cycle[slot] & 1U) << 8) | (1U << 9) |
+                         (len > 0 ? (1U << 10) : 0U) |
+                         (event_valid ? (1U << 11) : 0U) | (1U << 12) |
+                         (timeout ? (1U << 13) : 0U) |
+                         (((u32)xctxsize & 0xFFU) << 16);
+    if (len > 0) ep0_last_trace[21] = *(volatile u32 *)(uptr)buf;
 }
 
 int xhci_control_in(int slot, u32 setup_lo, u32 setup_hi, u32 buf, int len)
 {
+    ep0_last_cc = -1;
+    ep0_last_event_stage = -1;
+    ep0_last_attempts = 1;
+    ep0_last_recovery = -1;
+    ep0_last_recovery_kind = 0;
+    ep0_last_recovery_cmd_cc = -1;
+    ep0_last_set_deq_cc = -1;
+    for (int i = 0; i < 3; i++) ep0_last_post_ctx[i] = 0;
+    for (int i = 0; i < EP0_TRACE_WORDS; i++) ep0_last_trace[i] = 0;
     if (!xhci_running() || slot <= 0 || slot >= MAX_SLOTS) return 0;
     if (len > 0) zero_mem(buf, (u32)((len + 3) & ~3));
 
     /* Setup stage. IDT (immediate data) means the eight request bytes ARE the
      * parameter field, not a pointer to them. TRT=3 declares an IN data stage. */
-    ep0_push(slot, ((u64)setup_hi << 32) | (u64)setup_lo, 8,
-             (TRB_SETUP << 10) | (1u << 6) | (len > 0 ? (3u << 16) : 0u));
+    u32 publish_cycle = 0;
+    u32 setup_trb = ep0_begin_unpublished(
+        slot, ((u64)setup_hi << 32) | (u64)setup_lo, 8,
+        (TRB_SETUP << 10) | (1u << 6) | (len > 0 ? (3u << 16) : 0u),
+        &publish_cycle);
 
-    /* Data stage, DIR=1 for IN. Deliberately WITHOUT interrupt-on-short-packet:
-     * one interrupt for the whole transfer means one event to match, and a
-     * short descriptor is not an error we need to hear about separately. */
+    /* Data stage, DIR=1 for IN. Match Linux's ISP bit: if a device returns a
+     * genuinely short descriptor we may receive a Data-stage cc13 before the
+     * Status event. The waiter below deliberately continues through that
+     * intermediate event; only Status-stage success completes the request. */
+    u32 transfer_trbs[3];
+    int transfer_count = 0;
+    transfer_trbs[transfer_count++] = setup_trb;
     if (len > 0)
-        ep0_push(slot, dma_addr(buf), (u32)len, (TRB_DATA << 10) | (1u << 16));
+        transfer_trbs[transfer_count++] = ep0_push(
+            slot, dma_addr(buf), (u32)len,
+            (TRB_DATA << 10) | (1u << 16) | (1u << 2));
 
     /* Status stage, in the OPPOSITE direction to the data, with IOC set so the
      * controller tells us the whole thing landed. */
-    ep0_push(slot, 0, 0, (TRB_STATUS << 10) | (1u << 5) | (len > 0 ? 0u : (1u << 16)));
+    transfer_trbs[transfer_count++] = ep0_push(
+        slot, 0, 0,
+        (TRB_STATUS << 10) | (1u << 5) | (len > 0 ? 0u : (1u << 16)));
 
+    ep0_publish(setup_trb, publish_cycle);
+    ep0_trace_trb(0, setup_trb);
+    if (len > 0) ep0_trace_trb(4, transfer_trbs[1]);
+    ep0_trace_trb(8, transfer_trbs[transfer_count - 1]);
     doorbell((u32)slot, 1);           /* EP0 is doorbell target 1 */
 
     u32 status = 0, ctrl = 0;
-    /* EP0 of THIS slot, not "the next transfer event on the ring" - a HID
-     * completion landing mid-enumeration used to be taken for this one. */
-    if (!xfer_wait(slot, 1, &status, &ctrl, 5000000)) return 0;
-    int cc = (int)((status >> 24) & 0xFF);
-    if (cc == 1 || cc == 13) return 1;      /* success, or a short packet */
+    u32 status_trb = transfer_trbs[transfer_count - 1];
+    int status_only = 0;
+    for (;;) {
+        /* EP0 of THIS slot, not "the next transfer event on the ring" - a HID
+         * completion landing mid-enumeration used to be taken for this one. */
+        const u32 *wanted = status_only ? &status_trb : transfer_trbs;
+        int nwanted = status_only ? 1 : transfer_count;
+        if (!xfer_wait_trbs_ms(slot, 1, wanted, nwanted,
+                               &status, &ctrl, CONTROL_TIMEOUT_MS)) {
+            ep0_last_cc = 0;                   /* bounded timeout */
+            ep0_trace_finish(slot, buf, len, 1, 0);
+            /* A timed-out endpoint may still be Running. The xHCI specification
+             * requires Stop Endpoint before replacing its dequeue pointer; Reset
+             * Endpoint is valid only after a transfer error has Halted it. */
+            ep0_last_recovery = stop_endpoint_ring(
+                slot, 1, EP0_RING(slot), &ep0_enqueue[slot], &ep0_cycle[slot]);
+            return 0;
+        }
+        for (int i = 0; i < transfer_count; i++)
+            if (transfer_trbs[i] == xfer_last_param) {
+                if (i == 0) ep0_last_event_stage = 1;
+                else if (len > 0 && i == 1) ep0_last_event_stage = 2;
+                else ep0_last_event_stage = 3;
+            }
+        for (int i = 0; i < 4; i++) ep0_last_trace[12 + i] = xfer_last_event[i];
+        int cc = (int)((status >> 24) & 0xFF);
 
-    /* Stall (6) or transfer error (4) leaves the endpoint halted. Clear it
-     * here so the NEXT request works - a device is allowed to refuse an
-     * optional request, and that must not be fatal. */
-    if (cc == 6 || cc == 4) reset_endpoint(slot, 1);
+        /* ISP can report a short Data stage before the IOC Status event. A
+         * control request is not complete until Status succeeds. The same
+         * rule rejects any other surprising intermediate success event. */
+        if ((cc == 1 || cc == 13) && xfer_last_param != status_trb) {
+            status_only = 1;
+            continue;
+        }
+
+        ep0_trace_finish(slot, buf, len, 0, 1);
+        ep0_last_cc = cc;
+        if (cc == 1 && xfer_last_param == status_trb) return 1;
+
+        /* Stall (6) or transfer error (4) leaves the endpoint halted. Clear it
+         * here so the NEXT request works - a device is allowed to refuse an
+         * optional request, and that must not be fatal. */
+        if (cc == 6 || cc == 4)
+            ep0_last_recovery = reset_endpoint(slot, 1);
+        return 0;
+    }
+}
+
+static u32 ep0_probe_meta(int slot, int cc, int recovery)
+{
+    u32 recovery_code = recovery < 0 ? 0U : (recovery ? 2U : 1U);
+    return 0x80000000U | ((u32)cur_port & 0xFFU) |
+           (((u32)slot & 0xFFU) << 8) | (((u32)cc & 0xFFU) << 16) |
+           ((recovery_code & 3U) << 24);
+}
+
+static void ep0_capture_first_config(int slot)
+{
+    if (ep0_first_config_done) return;
+    ep0_first_config_done = 1;
+    ep0_first_config_port = cur_port;
+    for (int i = 0; i < EP0_TRACE_WORDS; i++)
+        ep0_first_config_diag[i] = ep0_last_trace[i];
+    ep0_first_config_diag[22] = ep0_probe_meta(
+        slot, ep0_last_cc, ep0_last_recovery);
+    ep0_first_config_diag[23] = ctx_get(CTX_DEVICE(slot), 0, 3);
+    ep0_first_config_diag[24] = (u32)ep0_last_recovery_kind;
+    ep0_first_config_diag[25] = (u32)ep0_last_recovery_cmd_cc;
+    ep0_first_config_diag[26] = (u32)ep0_last_set_deq_cc;
+    ep0_first_config_diag[27] = ep0_last_post_ctx[0];
+    ep0_first_config_diag[28] = ep0_last_post_ctx[1];
+    ep0_first_config_diag[29] = ep0_last_post_ctx[2];
+    ep0_first_config_diag[30] = 0x0000FFFFu; /* both clean retries unattempted */
+}
+
+static void ep0_note_config_reenumeration(int port, int scheme, int cc,
+                                           int winner)
+{
+    if (!ep0_first_config_done || port != ep0_first_config_port) return;
+    u32 value = ep0_first_config_diag[30];
+    u32 shift = scheme == 2 ? 8u : 0u;
+    value &= ~(0xFFu << shift);
+    value |= ((u32)cc & 0xFFu) << shift;
+    if (winner) {
+        value &= ~(3u << 16);
+        value |= ((u32)scheme & 3u) << 16;
+    }
+    ep0_first_config_diag[30] = value;
+}
+
+/* Capture the literal first successful Device request and issue one immediate
+ * identical request before Configuration or any class scan can fail.  v4's
+ * post-failure matrix proved recovery did not revive EP0, but could not tell
+ * whether Config caused the first failure. This pair answers that in one boot.
+ * Restore the first result so enumeration observes the request it made. */
+static void ep0_probe_first_device(int slot, u32 setup_lo, u32 setup_hi,
+                                   u32 buf, int len)
+{
+    if (ep0_first_device_probe_done || len <= 0 || len > 20) return;
+    ep0_first_device_probe_done = 1;       /* latch before issuing the repeat */
+
+    u8 saved_bytes[20];
+    u32 saved_trace[EP0_TRACE_WORDS];
+    for (int i = 0; i < len; i++) saved_bytes[i] = *(volatile u8 *)(uptr)(buf + (u32)i);
+    for (int i = 0; i < EP0_TRACE_WORDS; i++) {
+        saved_trace[i] = ep0_last_trace[i];
+        ep0_first_device_probe[0][i] = ep0_last_trace[i];
+    }
+    int saved_cc = ep0_last_cc;
+    int saved_stage = ep0_last_event_stage;
+    int saved_attempts = ep0_last_attempts;
+    int saved_recovery = ep0_last_recovery;
+    ep0_first_device_probe[0][20] =
+        ep0_probe_meta(slot, saved_cc, saved_recovery);
+    ep0_first_device_slot_dw3[0] = ctx_get(CTX_DEVICE(slot), 0, 3);
+
+    (void)xhci_control_in(slot, setup_lo, setup_hi, buf, len);
+    ep0_last_trace[19] |= 1U << 24;
+    for (int i = 0; i < EP0_TRACE_WORDS; i++)
+        ep0_first_device_probe[1][i] = ep0_last_trace[i];
+    ep0_first_device_probe[1][20] =
+        ep0_probe_meta(slot, ep0_last_cc, ep0_last_recovery);
+    ep0_first_device_slot_dw3[1] = ctx_get(CTX_DEVICE(slot), 0, 3);
+
+    for (int i = 0; i < len; i++) *(volatile u8 *)(uptr)(buf + (u32)i) = saved_bytes[i];
+    for (int i = 0; i < EP0_TRACE_WORDS; i++) ep0_last_trace[i] = saved_trace[i];
+    ep0_last_cc = saved_cc;
+    ep0_last_event_stage = saved_stage;
+    ep0_last_attempts = saved_attempts;
+    ep0_last_recovery = saved_recovery;
+}
+
+u32 xhci_ep0_first_device_probe(int which, int word)
+{
+    if (which < 0 || which > 1 || word < 0 || word >= EP0_TRACE_WORDS) return 0;
+    return ep0_first_device_probe[which][word];
+}
+
+u32 xhci_ep0_first_device_slot_context(int which)
+{
+    return which >= 0 && which < 2 ? ep0_first_device_slot_dw3[which] : 0;
+}
+
+/* Linux's usb_get_descriptor() deliberately tries up to three times because
+ * real devices occasionally NAK or otherwise fail a descriptor request even
+ * though the same request succeeds immediately afterwards. QEMU never needs
+ * that tolerance. Preserve the deepest recovery result across the successful
+ * retry so the firmware diagnostic can prove that this path was exercised. */
+static int descriptor_in(int slot, u32 setup_lo, u32 setup_hi, u32 buf, int len)
+{
+    int recovery = -1;
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        int ok = xhci_control_in(slot, setup_lo, setup_hi, buf, len);
+        ep0_last_trace[19] |= (u32)attempt << 24;
+        if (!ep0_first_config_done && setup_lo == 0x02000680u)
+            ep0_capture_first_config(slot);
+        if (ok) {
+            ep0_last_attempts = attempt;
+            ep0_last_recovery = recovery;
+            if (!ep0_first_device_probe_done && setup_lo == 0x01000680u)
+                ep0_probe_first_device(slot, setup_lo, setup_hi, buf, len);
+            return 1;
+        }
+        if (ep0_last_recovery >= 0) recovery = ep0_last_recovery;
+        ep0_last_attempts = attempt;
+        if (attempt < 3) delay_ms(10);
+    }
+    ep0_last_recovery = recovery;
     return 0;
+}
+
+u32 xhci_ep0_first_config_diag(int word)
+{
+    if (word < 0 || word >= EP0_CONFIG_DIAG_WORDS) return 0;
+    return ep0_first_config_diag[word];
 }
 
 /* ---- the actual identity of the device ---------------------------------- */
@@ -950,7 +1426,7 @@ int xhci_control_in(int slot, u32 setup_lo, u32 setup_hi, u32 buf, int len)
  * bRequest 6, wValue 0x0100 (descriptor type 1, index 0), wLength 18. */
 int xhci_get_device_descriptor(int slot)
 {
-    return xhci_control_in(slot, 0x01000680u, 0x00120000u, XMEM_DATA, 18);
+    return descriptor_in(slot, 0x01000680u, 0x00120000u, XMEM_DATA, 18);
 }
 
 int xhci_desc_byte(int i)
@@ -989,27 +1465,75 @@ int xhci_disable_slot(int slot)
  * ignores every doorbell. Without this, one refused optional request - and
  * SET_IDLE is explicitly optional - takes the control endpoint down for good,
  * and every later transfer burns its whole timeout before failing. */
-static int reset_endpoint(int slot, int dci)
+static int set_endpoint_ring_head(int slot, int dci, u32 ring,
+                                  u32 *producer_enq, u32 *producer_cycle)
+{
+    /* The endpoint is Stopped now. Replace the ring only after the command
+     * has quiesced all DMA from the old one, then point hardware and software
+     * at the same fresh producer cycle. */
+    ring_init(ring);
+    *producer_enq = 0;
+    *producer_cycle = 1;
+    dma_write_barrier();
+
+    u32 trb = cmd_submit(dma_addr(ring) | 1u, 0,
+                         16 /* Set TR Dequeue Pointer */,
+                         ((u32)slot << 24) | ((u32)dci << 16));
+    u32 status = 0;
+    int waited = cmd_wait(trb, &status, 0, 2000000);
+    if (dci == 1) {
+        ep0_last_set_deq_cc = waited ? (int)((status >> 24) & 0xFF) : 0;
+        dma_read_barrier();
+        ep0_last_post_ctx[0] = ctx_get(CTX_DEVICE(slot), 1, 0);
+        ep0_last_post_ctx[1] = ctx_get(CTX_DEVICE(slot), 1, 2);
+        ep0_last_post_ctx[2] = ctx_get(CTX_DEVICE(slot), 1, 3);
+    }
+    if (!waited) return 0;
+    return ((status >> 24) & 0xFF) == 1;
+}
+
+static int reset_endpoint_ring(int slot, int dci, u32 ring,
+                               u32 *producer_enq, u32 *producer_cycle)
 {
     if (!xhci_running() || slot <= 0) return 0;
+    if (dci == 1) ep0_last_recovery_kind = 1;
     u32 trb = cmd_submit(0, 0, TRB_RESET_ENDPOINT,
                          ((u32)slot << 24) | ((u32)dci << 16));
     u32 status = 0;
-    if (!cmd_wait(trb, &status, 0, 2000000)) return 0;
+    if (!cmd_wait(trb, &status, 0, 2000000)) {
+        if (dci == 1) ep0_last_recovery_cmd_cc = 0;
+        return 0;
+    }
+    if (dci == 1) ep0_last_recovery_cmd_cc = (int)((status >> 24) & 0xFF);
     if (((status >> 24) & 0xFF) != 1) return 0;
 
-    /* The endpoint restarts at whatever we tell it, so point it back at the
-     * head of its ring and re-sync our own producer state with it. */
-    u32 ring = EP0_RING(slot);
-    ring_init(ring);
-    ep0_enqueue[slot] = 0;
-    ep0_cycle[slot]   = 1;
+    return set_endpoint_ring_head(slot, dci, ring,
+                                  producer_enq, producer_cycle);
+}
 
-    u32 trb2 = cmd_submit(dma_addr(ring) | 1u, 0, 16 /* Set TR Dequeue Ptr */,
-                          ((u32)slot << 24) | ((u32)dci << 16));
-    u32 st2 = 0;
-    if (!cmd_wait(trb2, &st2, 0, 2000000)) return 0;
-    return ((st2 >> 24) & 0xFF) == 1;
+static int stop_endpoint_ring(int slot, int dci, u32 ring,
+                              u32 *producer_enq, u32 *producer_cycle)
+{
+    if (!xhci_running() || slot <= 0) return 0;
+    if (dci == 1) ep0_last_recovery_kind = 2;
+    u32 trb = cmd_submit(0, 0, TRB_STOP_ENDPOINT,
+                         ((u32)slot << 24) | ((u32)dci << 16));
+    u32 status = 0;
+    if (!cmd_wait(trb, &status, 0, 5000000)) {
+        if (dci == 1) ep0_last_recovery_cmd_cc = 0;
+        return 0;
+    }
+    if (dci == 1) ep0_last_recovery_cmd_cc = (int)((status >> 24) & 0xFF);
+    if (((status >> 24) & 0xFF) != 1) return 0;
+    return set_endpoint_ring_head(slot, dci, ring,
+                                  producer_enq, producer_cycle);
+}
+
+static int reset_endpoint(int slot, int dci)
+{
+    if (slot <= 0 || slot >= MAX_SLOTS) return 0;
+    return reset_endpoint_ring(slot, dci, EP0_RING(slot),
+                               &ep0_enqueue[slot], &ep0_cycle[slot]);
 }
 
 /* ---- H4: correct EP0's max packet size for low and full speed -----------
@@ -1024,10 +1548,15 @@ static int reset_endpoint(int slot, int dci)
  * emulation and would have failed on real hardware. */
 static int fix_ep0_packet_size(int slot, int speed)
 {
+    fix_ep0_last_cc = -1;
     if (speed >= 3) return 1;                 /* high speed and up are fixed */
 
     /* eight bytes is all we are allowed to assume we can read */
-    if (!xhci_control_in(slot, 0x01000680u, 0x00080000u, XMEM_DATA, 8)) return 0;
+    if (!descriptor_in(slot, 0x01000680u, 0x00080000u, XMEM_DATA, 8)) {
+        fix_ep0_last_cc = ep0_last_cc;
+        return 0;
+    }
+    fix_ep0_last_cc = ep0_last_cc;
     int real_mps = (int)*(volatile u8 *)(XMEM_DATA + 7);
     if (real_mps <= 0) return 0;
     if (real_mps == ep0_mps(speed)) return 1;  /* already right */
@@ -1039,8 +1568,12 @@ static int fix_ep0_packet_size(int slot, int speed)
 
     u32 trb = cmd_submit(dma_addr(CTX_INPUT), 0, TRB_EVALUATE_CTX, (u32)slot << 24);
     u32 status = 0;
-    if (!cmd_wait(trb, &status, 0, 2000000)) return 0;
-    return ((status >> 24) & 0xFF) == 1;
+    if (!cmd_wait(trb, &status, 0, 2000000)) {
+        fix_ep0_last_cc = 0;
+        return 0;
+    }
+    fix_ep0_last_cc = (int)((status >> 24) & 0xFF);
+    return fix_ep0_last_cc == 1;
 }
 
 /* ---- one call that does the whole dance for a port ----------------------
@@ -1048,15 +1581,47 @@ static int fix_ep0_packet_size(int slot, int speed)
  * calls: it is the difference between "a controller exists" and "zlOS knows
  * what is plugged into port 5". */
 static int port_slot[32];       /* remembers what we already brought up */
+static u16 slot_vid[MAX_SLOTS];
+static u16 slot_pid[MAX_SLOTS];
+static u8  slot_class[MAX_SLOTS];
+
+/* Enumeration happens before any class driver knows whether a device is a
+ * keyboard, camera, Bluetooth radio or the boot stick. Keep each root port's
+ * own boundary so a later device cannot erase the failure that matters. */
+enum {
+    ENUM_IDLE = 0,
+    ENUM_CONNECTED = 1,
+    ENUM_PORT_READY = 2,
+    ENUM_SLOT_ENABLED = 3,
+    ENUM_ADDRESSED = 4,
+    ENUM_EP0_READY = 5,
+    ENUM_DESCRIPTOR = 6
+};
+static u8 enum_stage[32];
+static signed char enum_cc[32];
+
+static void enum_note(int port, int stage, int cc)
+{
+    if (port <= 0 || port >= 32) return;
+    if (stage < enum_stage[port]) return;
+    enum_stage[port] = (u8)stage;
+    enum_cc[port] = (signed char)cc;
+}
 
 int xhci_enumerate(int port)
 {
     if (!xhci_port_connected(port)) return 0;
+    enum_note(port, ENUM_CONNECTED, -1);
 
     /* Enumeration is not idempotent at the hardware level - asking twice
      * allocates a second slot for the same physical device and leaks the
      * first. Remember the answer instead. */
-    if (port > 0 && port < 32 && port_slot[port]) return port_slot[port];
+    if (port > 0 && port < 32 && port_slot[port]) {
+        cur_slot = port_slot[port];
+        cur_port = port;
+        cur_speed = xhci_port_speed(port);
+        return port_slot[port];
+    }
 
     /* USB3 ports self-enable; USB2 ports need the reset. Either way we need
      * PED set before the device will answer. */
@@ -1065,17 +1630,89 @@ int xhci_enumerate(int port)
     } else {
         xhci_port_reset(port);          /* harmless, and clears stale changes */
     }
+    enum_note(port, ENUM_PORT_READY, -1);
 
     int speed = xhci_port_speed(port);
     int slot  = xhci_enable_slot();
-    if (!slot) return 0;
+    if (!slot) { enum_note(port, ENUM_SLOT_ENABLED, enable_slot_last_cc); return 0; }
+    enum_note(port, ENUM_SLOT_ENABLED, enable_slot_last_cc);
 
-    if (!xhci_address_device(slot, port, speed)) { xhci_disable_slot(slot); return 0; }
-    if (!fix_ep0_packet_size(slot, speed))       { xhci_disable_slot(slot); return 0; }
-    if (!xhci_get_device_descriptor(slot))       { xhci_disable_slot(slot); return 0; }
+    if (!xhci_address_device(slot, port, speed)) {
+        enum_note(port, ENUM_ADDRESSED, address_last_cc);
+        xhci_disable_slot(slot);
+        return 0;
+    }
+    enum_note(port, ENUM_ADDRESSED, address_last_cc);
+    if (!fix_ep0_packet_size(slot, speed)) {
+        enum_note(port, ENUM_EP0_READY, fix_ep0_last_cc);
+        xhci_disable_slot(slot);
+        return 0;
+    }
+    enum_note(port, ENUM_EP0_READY, fix_ep0_last_cc);
+    if (!xhci_get_device_descriptor(slot)) {
+        enum_note(port, ENUM_DESCRIPTOR, ep0_last_cc);
+        xhci_disable_slot(slot);
+        return 0;
+    }
+    enum_note(port, ENUM_DESCRIPTOR, ep0_last_cc);
+
+    /* XMEM_DATA is shared scratch and the next descriptor request overwrites
+     * it. Keep identity with the slot so later class drivers do not report the
+     * last device scanned as the device they are actually configuring. */
+    slot_vid[slot] = (u16)xhci_desc_vendor();
+    slot_pid[slot] = (u16)xhci_desc_product();
+    slot_class[slot] = (u8)xhci_desc_byte(4); /* bDeviceClass */
 
     if (port > 0 && port < 32) port_slot[port] = slot;
     return slot;
+}
+
+/* A descriptor failure leaves a cached addressed slot behind. Reusing it is
+ * not a retry: it reuses the same failed device state and the same EP0. Give
+ * the finite slot back and force the next attempt through port reset, slot
+ * allocation, Address Device and Device descriptor again. Callers must never
+ * use this on a port already claimed by a live class driver. */
+static int xhci_forget_port(int port)
+{
+    if (port <= 0 || port >= 32) return 0;
+    int slot = port_slot[port];
+    port_slot[port] = 0;
+    if (slot > 0 && slot < MAX_SLOTS) {
+        slot_vid[slot] = 0;
+        slot_pid[slot] = 0;
+        slot_class[slot] = 0;
+        if (!xhci_disable_slot(slot)) return 0;
+    }
+    return 1;
+}
+
+/* Linux's default USB2 compatibility sequence first asks for a Device
+ * descriptor at address zero (Address Device BSR=1), resets the physical
+ * device, then performs ordinary addressing. Keep the pre-address slot
+ * temporary so we never rewrite a live output context in place. */
+static int xhci_enumerate_preaddress(int port)
+{
+    if (!xhci_port_connected(port)) return 0;
+    if (!xhci_port_reset(port)) return 0;
+    int speed = xhci_port_speed(port);
+    int probe_slot = xhci_enable_slot();
+    if (!probe_slot || probe_slot >= MAX_SLOTS) return 0;
+    if (!xhci_address_device_mode(probe_slot, port, speed, 1)) {
+        xhci_disable_slot(probe_slot);
+        return 0;
+    }
+    int probed = descriptor_in(probe_slot, 0x01000680u, 0x00400000u,
+                               XMEM_DATA, 64);
+    int released = xhci_disable_slot(probe_slot);
+    if (!probed || !released) return 0;
+    /* xhci_enumerate() performs the second port reset before normal address. */
+    return xhci_enumerate(port);
+}
+
+static int xhci_reenumerate_port(int port, int preaddress)
+{
+    if (!xhci_forget_port(port)) return 0;
+    return preaddress ? xhci_enumerate_preaddress(port) : xhci_enumerate(port);
 }
 
 
@@ -1202,10 +1839,14 @@ extern int console_pxw(void);
 extern int console_pxh(void);
 
 static int ptr_slot = 0, ptr_dci = 0, ptr_mps = 8, ptr_ready = 0;
+static int ptr_port = 0;       /* a configured class driver owns this port */
 static int ptr_abs  = 0;       /* 1 = absolute tablet, 0 = relative mouse     */
 static u32 ptr_enq  = 0, ptr_cyc = 1;
 static int ptr_x = 0, ptr_y = 0, ptr_btn = 0;
 static int ptr_dx_acc = 0, ptr_dy_acc = 0;  /* raw relative motion, unclamped */
+#define PTR_EDGE_N 16
+static u8 ptr_edge_state[PTR_EDGE_N];
+static u32 ptr_edge_head, ptr_edge_tail;
 /* THE WHEEL, which this driver decoded in a comment and nowhere else. Both
  * report layouts documented above end in a wheel byte and both were dropped on
  * the floor, so idt_mouse_wheel() (PS/2) was the only source of a notch in the
@@ -1215,6 +1856,7 @@ static int ptr_dx_acc = 0, ptr_dy_acc = 0;  /* raw relative motion, unclamped */
  * them could not be reached by any pointer at all. */
 static int ptr_wz_acc = 0;                  /* wheel notches, read-and-cleared */
 static unsigned ptr_reports = 0;
+static u32 ptr_batch_oldest_tsc;
 static unsigned ptr_events  = 0;   /* EVERY dispatch, any cc */
 static unsigned kbd_events  = 0;   /* keyboard dispatches, any cc */
 static unsigned kbd_requeues= 0;   /* how many times it was re-armed */
@@ -1271,6 +1913,7 @@ static int keyq_pop(void)
 #define KEV(press, mods, usage) (((press) << 16) | ((mods) << 8) | (usage))
 
 static int kevq[32];
+static u32 kevq_tsc[32], kevq_current_tsc, kevq_last_tsc;
 static int kevq_head = 0, kevq_tail = 0;
 
 static void kevq_push(int ev)
@@ -1278,6 +1921,7 @@ static void kevq_push(int ev)
     int next = (kevq_tail + 1) & 31;
     if (next == kevq_head) return;
     kevq[kevq_tail] = ev;
+    kevq_tsc[kevq_tail] = kevq_current_tsc;
     kevq_tail = next;
 }
 
@@ -1285,8 +1929,17 @@ static int kevq_pop(void)
 {
     if (kevq_head == kevq_tail) return 0;
     int ev = kevq[kevq_head];
+    kevq_last_tsc = kevq_tsc[kevq_head];
     kevq_head = (kevq_head + 1) & 31;
     return ev;
+}
+
+static u32 xhci_tsc_lo(void)
+{
+    u32 lo, hi;
+    __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
+    (void)hi;
+    return lo;
 }
 
 static u8 cfg_byte(int i)
@@ -1301,7 +1954,7 @@ static u8 cfg_byte(int i)
 static int get_config(int slot, int len)
 {
     if (len > CFG_MAX) len = CFG_MAX;
-    return xhci_control_in(slot, 0x02000680u, ((u32)len << 16), CFG_BUF, len);
+    return descriptor_in(slot, 0x02000680u, ((u32)len << 16), CFG_BUF, len);
 }
 
 /* SET_CONFIGURATION: host-to-device, standard, no data stage. Until this runs
@@ -1345,6 +1998,22 @@ static int interval_encode(int speed, int binterval)
     return iv;
 }
 
+/* Configure Endpoint carries an INPUT slot context as well as the endpoint
+ * contexts being added.  It is not a fresh slot: every dword must start from
+ * the controller-owned OUTPUT slot context.  The old code copied only DW0/1
+ * and silently zeroed DW2/3 (TT routing, interrupter target, device address
+ * and slot state). QEMU ignores those zeros; real Intel xHCI is allowed to
+ * reject the command with Parameter/Context State Error. */
+static void copy_slot_context_for_endpoints(int slot, int top_dci)
+{
+    for (int dword = 0; dword < 4; dword++)
+        ctx_set(CTX_INPUT, 1, dword,
+                ctx_get(CTX_DEVICE(slot), 0, dword));
+    u32 slot_dw0 = ctx_get(CTX_INPUT, 1, 0);
+    slot_dw0 = (slot_dw0 & 0x07FFFFFFu) | ((u32)top_dci << 27);
+    ctx_set(CTX_INPUT, 1, 0, slot_dw0);
+}
+
 /* Add the keyboard's interrupt IN endpoint to the device the controller
  * already knows about. Configure Endpoint is an incremental edit: the add
  * flags say which contexts in the input block are meaningful, and everything
@@ -1368,10 +2037,7 @@ static int configure_endpoint(int slot, int dci, int mps, int speed, int binterv
 
     /* copy the slot context forward, but raise Context Entries to cover the
      * new endpoint - the controller uses it as "how many contexts are valid" */
-    u32 slot_dw0 = ctx_get(CTX_DEVICE(slot), 0, 0);
-    slot_dw0 = (slot_dw0 & 0x07FFFFFFu) | ((u32)dci << 27);
-    ctx_set(CTX_INPUT, 1, 0, slot_dw0);
-    ctx_set(CTX_INPUT, 1, 1, ctx_get(CTX_DEVICE(slot), 0, 1));
+    copy_slot_context_for_endpoints(slot, dci);
 
     /* the endpoint itself. Input context index is device context index + 1,
      * because index 0 of the input block is the input control context. */
@@ -1461,6 +2127,7 @@ static void ptr_decode(u32 buf)
     if (w <= 0) w = 1920;
     if (h <= 0) h = 1200;
 
+    int old_btn = ptr_btn;
     ptr_btn = (int)r[0] & 0x07;
     /* The wheel byte sits at the END of whichever layout this device uses:
      * index 3 on a 4-byte boot mouse, index 5 on a 6-byte tablet. It is
@@ -1508,6 +2175,17 @@ static void ptr_decode(u32 buf)
     if (ptr_y < 0) ptr_y = 0;
     if (ptr_x > w - 1) ptr_x = w - 1;
     if (ptr_y > h - 1) ptr_y = h - 1;
+    if (ptr_btn != old_btn) {
+        u32 next = (ptr_edge_head + 1u) % PTR_EDGE_N;
+        if (next == ptr_edge_tail) {
+            zlt_count(ZLLOG_C_INPUT_DROP, 1u);
+            zlt_event(ZLLOG_SUB_INPUT, ZLLOG_EV_DROP, ZLLOG_ERROR,
+                      2u /* USB button edge */, (unsigned)ptr_btn, PTR_EDGE_N);
+        } else {
+            ptr_edge_state[ptr_edge_head] = (u8)ptr_btn;
+            ptr_edge_head = next;
+        }
+    }
     ptr_reports++;
 }
 
@@ -1732,6 +2410,7 @@ int xhci_kbd_init(void)
         for (int i = 0; i < 6; i++) prev_keys[i] = 0;
         keyq_head  = keyq_tail  = 0;
         kevq_head  = kevq_tail  = 0;
+        kevq_current_tsc = kevq_last_tsc = 0;
         kbd_mods   = 0;
 
         kbd_requeue();                        /* arm the first read */
@@ -1832,7 +2511,12 @@ int xhci_ptr_init(void)
 
         ptr_enq   = 0;              /* our ring, our producer state */
         ptr_cyc   = 1;
+        ptr_edge_head = ptr_edge_tail = 0;
+        ptr_batch_oldest_tsc = 0;
+        ptr_btn = 0;
+        ptr_dx_acc = ptr_dy_acc = ptr_wz_acc = 0;
         ptr_slot  = slot;
+        ptr_port  = port;
         ptr_dci   = dci;
         ptr_mps   = ep_mps;
         /* the tablet's report is 6 bytes and carries a position; the boot
@@ -1860,6 +2544,19 @@ int xhci_ptr_take_dy(void) { int v = ptr_dy_acc; ptr_dy_acc = 0; return v; }
 int xhci_ptr_x(void)       { return ptr_x; }
 int xhci_ptr_y(void)       { return ptr_y; }
 int xhci_ptr_btn(void)     { return ptr_btn; }
+int xhci_ptr_take_button(void)
+{
+    if (ptr_edge_tail == ptr_edge_head) return -1;
+    int state = ptr_edge_state[ptr_edge_tail];
+    ptr_edge_tail = (ptr_edge_tail + 1u) % PTR_EDGE_N;
+    return state;
+}
+u32 xhci_ptr_take_tsc(void)
+{
+    u32 tsc = ptr_batch_oldest_tsc;
+    ptr_batch_oldest_tsc = 0;
+    return tsc;
+}
 unsigned xhci_ptr_reports(void) { return ptr_reports; }
 unsigned xhci_ptr_events(void)  { return ptr_events; }
 int      xhci_ptr_lastcc(void)  { return ptr_lastcc; }
@@ -1914,6 +2611,8 @@ static void kbd_event(u32 param, u32 status, u32 ctrl)
     int epid = (int)((ctrl >> 16) & 0x1F);
     int cc   = (int)((status >> 24) & 0xFF);
 
+    if (ecm_event(param, status, ctrl)) return;
+
     /* ONE event ring carries both HID devices, so whichever poll runs first
      * sees the other's completions too. Dispatch on slot+endpoint rather than
      * assuming; dropping a transfer event also drops the requeue, and that
@@ -1922,6 +2621,7 @@ static void kbd_event(u32 param, u32 status, u32 ctrl)
         ptr_events++;              /* counted BEFORE any cc filter */
         ptr_lastcc = cc;
         if (cc == 1 || cc == 13) {
+            if (!ptr_batch_oldest_tsc) ptr_batch_oldest_tsc = xhci_tsc_lo();
             /* WHICH buffer. A Transfer Event's parameter is the address of the
              * TRB that produced it, and that TRB's index is the buffer index -
              * so the report is read from the bytes this completion is actually
@@ -1945,7 +2645,10 @@ static void kbd_event(u32 param, u32 status, u32 ctrl)
     if (slot != kbd_slot || epid != kbd_dci) return;
     kbd_events++;
     kbd_lastcc = cc;
-    if (cc == 1 || cc == 13) hid_decode();    /* success or short packet */
+    if (cc == 1 || cc == 13) {
+        kevq_current_tsc = xhci_tsc_lo();
+        hid_decode();                         /* success or short packet */
+    }
     kbd_requeue();
     kbd_requeues++;
 }
@@ -1972,7 +2675,7 @@ static void kbd_event(u32 param, u32 status, u32 ctrl)
  * port-status changes cannot hold the caller either. */
 int xhci_poll(int max)
 {
-    if (!ptr_ready && !kbd_ready) return 0;
+    if (!ptr_ready && !kbd_ready && !ecm_ready) return 0;
 
     int got = 0;
     for (int i = 0; i < max; i++) {
@@ -2029,6 +2732,7 @@ int xhci_key_event(void)
 {
     return kevq_pop();
 }
+u32 xhci_key_event_tsc(void) { return kevq_last_tsc; }
 
 /* The live modifier bitmap, for a shift that is held with nothing else. */
 int xhci_kbd_mods(void)
@@ -2096,6 +2800,154 @@ static u32 msc_tag = 1;
 static int msc_ready = 0;
 static u32 msc_blocks = 0, msc_blocksize = 512;
 
+/* Persistent-observer bring-up must distinguish "no stick" from "Intel
+ * rejected the endpoint context". These are RAM-only and allocation-free.
+ * The scalar fields are a compact first-on-tie summary; the per-port table
+ * below is authoritative and prevents unrelated devices hiding the disk. */
+enum {
+    MSC_INIT_IDLE = 0,
+    MSC_INIT_CONTROLLER = 1,
+    MSC_INIT_PORT = 2,
+    MSC_INIT_ENUMERATED = 3,
+    MSC_INIT_CONFIG_HEAD = 4,
+    MSC_INIT_CONFIG_FULL = 5,
+    MSC_INIT_INTERFACE = 6,
+    MSC_INIT_SET_CONFIG = 7,
+    MSC_INIT_ENDPOINTS = 8,
+    MSC_INIT_READY = 9
+};
+static int msc_init_stage;
+static int msc_init_port;
+static int msc_init_slot;
+static int msc_init_cc = -1;
+static int msc_init_vid;
+static int msc_init_pid;
+static u8 msc_port_stage[32];
+static u8 msc_port_slot[32];
+static signed char msc_port_cc[32];
+static u16 msc_port_vid[32];
+static u16 msc_port_pid[32];
+static u8 msc_port_candidate[32];
+static u8 msc_port_ep0_event[32];
+static u8 msc_port_ep0_attempts[32];
+static signed char msc_port_ep0_recovery[32];
+static u32 msc_port_ep0_trace[32][EP0_TRACE_WORDS];
+
+static void msc_note_init(int stage, int port, int slot, int cc)
+{
+    if (port > 0 && port < 32) {
+        msc_port_stage[port] = (u8)stage;
+        msc_port_slot[port] = (u8)slot;
+        msc_port_cc[port] = (signed char)cc;
+        if (slot > 0 && slot < MAX_SLOTS) {
+            msc_port_vid[port] = slot_vid[slot];
+            msc_port_pid[port] = slot_pid[slot];
+        }
+        if (cc >= 0 && ep0_last_event_stage >= 0)
+            msc_port_ep0_event[port] = (u8)ep0_last_event_stage;
+        if (cc >= 0) {
+            msc_port_ep0_attempts[port] = (u8)ep0_last_attempts;
+            msc_port_ep0_recovery[port] = (signed char)ep0_last_recovery;
+            for (int i = 0; i < EP0_TRACE_WORDS; i++)
+                msc_port_ep0_trace[port][i] = ep0_last_trace[i];
+        }
+    }
+    /* Keep the deepest first port as the compact legacy summary. Equal-stage
+     * attempts on Bluetooth/camera ports must not overwrite an earlier disk.
+     * The v2 firmware record below retains every port, so this is only a
+     * screen-sized summary rather than the sole source of truth. */
+    if (stage < msc_init_stage ||
+        (stage == msc_init_stage && port != msc_init_port)) return;
+    msc_init_stage = stage;
+    msc_init_port = port;
+    msc_init_slot = slot;
+    msc_init_cc = cc;
+    if (slot > 0 && slot < MAX_SLOTS) {
+        msc_init_vid = slot_vid[slot];
+        msc_init_pid = slot_pid[slot];
+    }
+}
+
+struct msc_config {
+    int cfgval, iface;
+    int in_ep, out_ep;
+    int in_mps, out_mps;
+};
+
+/* Parse independently from transport so the exact physical Imation
+ * descriptor can live in the host regression suite. Descriptor bytes are
+ * still read from the driver's bounded CFG_BUF; no device-controlled pointer
+ * ever enters the kernel. */
+static int msc_parse_config_descriptor(int total, struct msc_config *out)
+{
+    if (!out || total < 9 || total > CFG_MAX) return 0;
+    out->cfgval = (int)cfg_byte(5);
+    out->iface = -1;
+    out->in_ep = out->out_ep = 0;
+    out->in_mps = out->out_mps = 0;
+
+    int off = (int)cfg_byte(0);
+    while (off + 1 < total) {
+        int dlen  = (int)cfg_byte(off);
+        int dtype = (int)cfg_byte(off + 1);
+        if (dlen < 2 || off + dlen > total) break;
+
+        if (dtype == DESC_INTERFACE && dlen >= 9) {
+            int cls  = (int)cfg_byte(off + 5);
+            int sub  = (int)cfg_byte(off + 6);
+            int prot = (int)cfg_byte(off + 7);
+            if (cls == 0x08 && sub == 0x06 && prot == 0x50) {
+                out->iface = (int)cfg_byte(off + 2);
+                out->in_ep = out->out_ep = 0;
+            } else if (out->iface >= 0 && (!out->in_ep || !out->out_ep)) {
+                out->iface = -1;
+            }
+        } else if (dtype == DESC_ENDPOINT && dlen >= 7 && out->iface >= 0) {
+            int addr = (int)cfg_byte(off + 2);
+            int attr = (int)cfg_byte(off + 3);
+            int mps  = (int)cfg_byte(off + 4) |
+                       (((int)cfg_byte(off + 5) & 0x07) << 8);
+            if ((attr & 0x03) == 2) {
+                if ((addr & 0x80) && !out->in_ep) {
+                    out->in_ep = addr; out->in_mps = mps;
+                }
+                if (!(addr & 0x80) && !out->out_ep) {
+                    out->out_ep = addr; out->out_mps = mps;
+                }
+            }
+        }
+        off += dlen;
+    }
+    return out->iface >= 0 && out->in_ep && out->out_ep;
+}
+
+/* The journal writer needs more than a yes/no when a stick rejects a write.
+ * Keep the complete outcome of the last command in fixed state: xHCI's
+ * completion code, the Bulk-Only CSW status/residue, and (when the target
+ * reports command failure) the decoded REQUEST SENSE triplet.  No allocation,
+ * and no pointer to MSC_DATA escapes -- the next command reuses that buffer. */
+enum {
+    MSC_RESULT_OK = 0,
+    MSC_RESULT_BAD_ARGUMENT,
+    MSC_RESULT_NOT_READY,
+    MSC_RESULT_CBW_TRANSFER,
+    MSC_RESULT_DATA_TRANSFER,
+    MSC_RESULT_CSW_TRANSFER,
+    MSC_RESULT_CSW_SIGNATURE,
+    MSC_RESULT_CSW_TAG,
+    MSC_RESULT_CSW_FAILED,
+    MSC_RESULT_CSW_PHASE,
+    MSC_RESULT_CAPACITY_UNSUPPORTED
+};
+static int msc_last_result = MSC_RESULT_NOT_READY;
+static int msc_last_xhci_cc = 0;
+static int msc_last_csw_status = -1;
+static u32 msc_last_residue = 0;
+static int msc_last_recovery = -1;       /* -1 not attempted, 0 failed, 1 ok */
+static int msc_sense_valid = 0;
+static int msc_sense_key = 0, msc_sense_asc = 0, msc_sense_ascq = 0;
+static int msc_last_opcode = 0;
+
 /* Add both bulk endpoints to a configured device in one Configure Endpoint.
  * Doing it as one command matters: each one changes Context Entries, and two
  * separate commands would have the second overwrite the first's idea of how
@@ -2112,10 +2964,7 @@ static int configure_bulk(int slot)
     zero_mem(CTX_INPUT, 33u * (u32)xctxsize);
     ctx_set(CTX_INPUT, 0, 1, (1u << 0) | (1u << msc_in_dci) | (1u << msc_out_dci));
 
-    u32 slot_dw0 = ctx_get(CTX_DEVICE(slot), 0, 0);
-    slot_dw0 = (slot_dw0 & 0x07FFFFFFu) | ((u32)top << 27);
-    ctx_set(CTX_INPUT, 1, 0, slot_dw0);
-    ctx_set(CTX_INPUT, 1, 1, ctx_get(CTX_DEVICE(slot), 0, 1));
+    copy_slot_context_for_endpoints(slot, top);
 
     int ic_in = msc_in_dci + 1;
     ctx_set(CTX_INPUT, ic_in, 0, 0);                  /* bulk has no interval */
@@ -2133,8 +2982,34 @@ static int configure_bulk(int slot)
 
     u32 trb = cmd_submit(dma_addr(CTX_INPUT), 0, TRB_CONFIGURE_EP, (u32)slot << 24);
     u32 status = 0;
-    if (!cmd_wait(trb, &status, 0, 5000000)) return 0;
-    return ((status >> 24) & 0xFF) == 1;
+    if (!cmd_wait(trb, &status, 0, 5000000)) {
+        msc_init_cc = 0;
+        return 0;
+    }
+    msc_init_cc = (int)((status >> 24) & 0xFF);
+    return msc_init_cc == 1;
+}
+
+/* Bulk-Only Reset Recovery, exactly once and never as an unbounded retry:
+ * class reset, clear both USB endpoint halts, then replace both xHCI transfer
+ * rings and their dequeue pointers. reset_endpoint() cannot be used here --
+ * it deliberately points EP0 at EP0_RING, while these endpoints own MSC rings. */
+static int msc_reset_recovery(void)
+{
+    if (!msc_slot || !msc_in_dci || !msc_out_dci) return 0;
+    int in_ep = 0x80 | ((msc_in_dci - 1) / 2);
+    int out_ep = msc_out_dci / 2;
+    int ok = xhci_control_in(msc_slot, 0x0000FF21u,
+                             (u32)msc_iface, 0, 0); /* BOT class reset */
+    ok &= xhci_control_in(msc_slot, 0x00000102u,
+                          (u32)in_ep, 0, 0);        /* CLEAR_FEATURE(HALT) */
+    ok &= xhci_control_in(msc_slot, 0x00000102u,
+                          (u32)out_ep, 0, 0);
+    ok &= reset_endpoint_ring(msc_slot, msc_in_dci, MSC_IN_RING(msc_slot),
+                              &msc_in_enq, &msc_in_cyc);
+    ok &= reset_endpoint_ring(msc_slot, msc_out_dci, MSC_OUT_RING(msc_slot),
+                              &msc_out_enq, &msc_out_cyc);
+    return ok ? 1 : 0;
 }
 
 /* One bulk transfer: a single Normal TRB with interrupt-on-completion. Bulk
@@ -2145,7 +3020,9 @@ static int bulk_xfer(int slot, int dci, u32 buf, u32 len, int is_in)
     u32 *enq = is_in ? &msc_in_enq : &msc_out_enq;
     u32 *cyc = is_in ? &msc_in_cyc : &msc_out_cyc;
 
-    trb_write(ring, *enq, dma_addr(buf), len, (TRB_NORMAL << 10) | (1u << 5) | *cyc);
+    u32 trb_addr = ring + *enq * TRB_BYTES;
+    trb_write(ring, *enq, dma_addr(buf), len,
+              (TRB_NORMAL << 10) | (1u << 5) | *cyc);
     (*enq)++;
     if (*enq >= RING_TRBS - 1) {
         trb_write(ring, RING_TRBS - 1, dma_addr(ring), 0,
@@ -2158,51 +3035,181 @@ static int bulk_xfer(int slot, int dci, u32 buf, u32 len, int is_in)
     u32 status = 0, ctrl = 0;
     /* This bulk endpoint, not whatever completes first: the pointer shares
      * this ring and a disk read must not be able to kill it. */
-    if (!xfer_wait(slot, dci, &status, &ctrl, 20000000)) return 0;
+    if (!xfer_wait_trbs_ms(slot, dci, &trb_addr, 1,
+                           &status, &ctrl, 2000)) {
+        msc_last_xhci_cc = 0;
+        return 0;
+    }
     int cc = (int)((status >> 24) & 0xFF);
+    msc_last_xhci_cc = cc;
     if (cc == 1 || cc == 13) return 1;
-    if (cc == 6 || cc == 4) reset_endpoint(slot, dci);   /* stall - recover */
+    if (cc == 6 || cc == 4) {
+        /* The failed command may have stopped between CBW, data and CSW. A
+         * single-endpoint reset cannot re-synchronise those three phases. */
+        msc_last_recovery = msc_reset_recovery();
+    }
     return 0;
 }
 
 /* Build a Command Block Wrapper. The signature and the tag are how the device
  * tells our commands apart from noise, and the tag comes back in the status
  * wrapper so a reply can be matched to its request. */
-static void build_cbw(u32 data_len, int is_in, const u8 *cdb, int cdb_len)
+static u32 build_cbw(u32 data_len, int is_in, const u8 *cdb, int cdb_len)
 {
     volatile u8 *w = (volatile u8 *)MSC_CBW;
     for (int i = 0; i < 31; i++) w[i] = 0;
     volatile u32 *d = (volatile u32 *)MSC_CBW;
     d[0] = 0x43425355u;               /* 'USBC'                       */
-    d[1] = msc_tag++;                 /* our tag                      */
+    u32 tag = msc_tag++;
+    d[1] = tag;                       /* our tag                      */
     d[2] = data_len;
     w[12] = is_in ? 0x80 : 0x00;      /* direction                    */
     w[13] = 0;                        /* LUN 0                        */
     w[14] = (u8)cdb_len;
     for (int i = 0; i < cdb_len && i < 16; i++) w[15 + i] = cdb[i];
+    return tag;
 }
 
-/* Run one SCSI command through the transport. */
-static int scsi_cmd(const u8 *cdb, int cdb_len, u32 data_len, int is_in)
+static void msc_clear_sense(void)
 {
-    if (!msc_slot) return 0;
-    build_cbw(data_len, is_in, cdb, cdb_len);
+    msc_sense_valid = 0;
+    msc_sense_key = msc_sense_asc = msc_sense_ascq = 0;
+}
 
-    if (!bulk_xfer(msc_slot, msc_out_dci, MSC_CBW, 31, 0)) return 0;
+/* Decode fixed-format (70h/71h) and descriptor-format (72h/73h) sense. */
+static int msc_parse_sense(u32 len)
+{
+    volatile u8 *d = (volatile u8 *)MSC_DATA;
+    int response = len ? (d[0] & 0x7F) : 0;
+    if ((response == 0x70 || response == 0x71) && len >= 14) {
+        msc_sense_key = d[2] & 0x0F;
+        msc_sense_asc = d[12];
+        msc_sense_ascq = d[13];
+    } else if ((response == 0x72 || response == 0x73) && len >= 4) {
+        msc_sense_key = d[1] & 0x0F;
+        msc_sense_asc = d[2];
+        msc_sense_ascq = d[3];
+    } else {
+        return 0;
+    }
+    msc_sense_valid = 1;
+    return 1;
+}
+
+static int msc_parse_csw(u32 expected_tag)
+{
+    volatile u32 *c = (volatile u32 *)MSC_CSW;
+    if (c[0] != 0x53425355u) {                 /* 'USBS' */
+        msc_last_result = MSC_RESULT_CSW_SIGNATURE;
+        return 0;
+    }
+    if (c[1] != expected_tag) {
+        msc_last_result = MSC_RESULT_CSW_TAG;
+        return 0;
+    }
+    msc_last_residue = c[2];
+    msc_last_csw_status = *(volatile u8 *)(MSC_CSW + 12);
+    if (msc_last_csw_status == 0) {
+        msc_last_result = MSC_RESULT_OK;
+        return 1;
+    }
+    msc_last_result = (msc_last_csw_status == 1)
+                    ? MSC_RESULT_CSW_FAILED : MSC_RESULT_CSW_PHASE;
+    return 0;
+}
+
+static int msc_trace_done(int ok, u32 tag)
+{
+    zlt_event(ZLLOG_SUB_STORAGE, ZLLOG_EV_COMMAND_COMPLETE,
+              ok ? ZLLOG_INFO : ZLLOG_ERROR,
+              ((unsigned)msc_last_opcode << 24) | (tag & 0x00ffffffu),
+              (unsigned)msc_last_result,
+              ((unsigned)(msc_last_csw_status & 0xff) << 24) |
+              (msc_last_residue & 0x00ffffffu));
+    return ok;
+}
+
+/* Run one SCSI command through the transport, without automatic recovery. */
+static int scsi_cmd_raw(const u8 *cdb, int cdb_len, u32 data_len, int is_in)
+{
+    msc_last_csw_status = -1;
+    msc_last_residue = 0;
+    msc_last_xhci_cc = 0;
+    msc_last_recovery = -1;
+    msc_last_opcode = (cdb && cdb_len > 0) ? cdb[0] : 0;
+
+    /* Validate BEFORE sending a CBW. Sending a promise of a data phase and
+     * only then discovering the staging buffer is too small desynchronises
+     * the Bulk-Only state machine for the next command. */
+    if (!cdb || cdb_len < 1 || cdb_len > 16 || data_len > MSC_DATA_MAX) {
+        msc_last_result = MSC_RESULT_BAD_ARGUMENT;
+        return 0;
+    }
+    if (!msc_slot) {
+        msc_last_result = MSC_RESULT_NOT_READY;
+        return 0;
+    }
+    u32 tag = build_cbw(data_len, is_in, cdb, cdb_len);
+    zlt_event(ZLLOG_SUB_STORAGE, ZLLOG_EV_COMMAND_SUBMIT, ZLLOG_INFO,
+              ((unsigned)cdb[0] << 24) | (tag & 0x00ffffffu),
+              data_len, (unsigned)is_in);
+
+    if (!bulk_xfer(msc_slot, msc_out_dci, MSC_CBW, 31, 0)) {
+        msc_last_result = MSC_RESULT_CBW_TRANSFER;
+        return msc_trace_done(0, tag);
+    }
 
     if (data_len) {
-        if (data_len > MSC_DATA_MAX) return 0;
         if (is_in) zero_mem(MSC_DATA, data_len);
         if (!bulk_xfer(msc_slot, is_in ? msc_in_dci : msc_out_dci,
-                       MSC_DATA, data_len, is_in)) return 0;
+                       MSC_DATA, data_len, is_in)) {
+            msc_last_result = MSC_RESULT_DATA_TRANSFER;
+            return msc_trace_done(0, tag);
+        }
     }
 
     zero_mem(MSC_CSW, 16);
-    if (!bulk_xfer(msc_slot, msc_in_dci, MSC_CSW, 13, 1)) return 0;
+    if (!bulk_xfer(msc_slot, msc_in_dci, MSC_CSW, 13, 1)) {
+        msc_last_result = MSC_RESULT_CSW_TRANSFER;
+        return msc_trace_done(0, tag);
+    }
 
-    volatile u32 *c = (volatile u32 *)MSC_CSW;
-    if (c[0] != 0x53425355u) return 0;         /* 'USBS' */
-    return (*(volatile u8 *)(MSC_CSW + 12)) == 0;   /* status 0 = good */
+    int ok = msc_parse_csw(tag);
+    if (!ok && (msc_last_result == MSC_RESULT_CSW_SIGNATURE
+             || msc_last_result == MSC_RESULT_CSW_TAG
+             || msc_last_result == MSC_RESULT_CSW_PHASE))
+        msc_last_recovery = msc_reset_recovery();
+    return msc_trace_done(ok, tag);
+}
+
+static int msc_request_sense_raw(void)
+{
+    u8 cdb[6] = { 0x03, 0, 0, 0, 18, 0 };
+    if (!scsi_cmd_raw(cdb, 6, 18, 1)) return 0;
+    return msc_parse_sense(18);
+}
+
+/* Command failure is followed once by REQUEST SENSE. Preserve the failed
+ * command's status while retaining the decoded sense from the recovery
+ * command, so diagnostics describe the operation the caller actually made. */
+static int scsi_cmd(const u8 *cdb, int cdb_len, u32 data_len, int is_in)
+{
+    msc_clear_sense();
+    if (scsi_cmd_raw(cdb, cdb_len, data_len, is_in)) return 1;
+    if (msc_last_result != MSC_RESULT_CSW_FAILED) return 0;
+
+    int saved_result = msc_last_result;
+    int saved_xhci = msc_last_xhci_cc;
+    int saved_csw = msc_last_csw_status;
+    int saved_opcode = msc_last_opcode;
+    u32 saved_residue = msc_last_residue;
+    (void)msc_request_sense_raw();
+    msc_last_result = saved_result;
+    msc_last_xhci_cc = saved_xhci;
+    msc_last_csw_status = saved_csw;
+    msc_last_residue = saved_residue;
+    msc_last_opcode = saved_opcode;
+    return 0;
 }
 
 int xhci_msc_inquiry(void)
@@ -2215,24 +3222,128 @@ int xhci_msc_read_capacity(void)
 {
     u8 cdb[10] = { 0x25, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     if (!scsi_cmd(cdb, 10, 8, 1)) return 0;
+    if (msc_last_residue) {
+        msc_last_result = MSC_RESULT_DATA_TRANSFER;
+        return 0;
+    }
     /* both fields are BIG endian - SCSI predates the x86 monoculture */
     volatile u8 *d = (volatile u8 *)MSC_DATA;
     u32 last = ((u32)d[0] << 24) | ((u32)d[1] << 16) | ((u32)d[2] << 8) | d[3];
     u32 blen = ((u32)d[4] << 24) | ((u32)d[5] << 16) | ((u32)d[6] << 8) | d[7];
+    /* READ CAPACITY(10)'s all-ones sentinel means the device needs the 16-byte
+     * command and its block count cannot fit this driver's u32 API. Refuse
+     * instead of wrapping last + 1 to zero. */
+    if (last == 0xFFFFFFFFu || !blen || blen > MSC_DATA_MAX) {
+        msc_blocks = 0;
+        msc_last_result = MSC_RESULT_CAPACITY_UNSUPPORTED;
+        return 0;
+    }
     msc_blocks    = last + 1;
-    msc_blocksize = blen ? blen : 512;
+    msc_blocksize = blen;
     return 1;
 }
 
-int xhci_msc_read_block(u32 lba)
+static int msc_range_ok(u32 lba, u32 count)
 {
-    u8 cdb[10];
+    if (!msc_ready || !msc_slot || !msc_blocks || !msc_blocksize) return 0;
+    if (!count || count > 0xFFFFu) return 0;
+    if (msc_blocksize > MSC_DATA_MAX) return 0;
+    if (count > MSC_DATA_MAX / msc_blocksize) return 0;
+    /* Subtraction makes the bound overflow-proof even at UINT32_MAX. */
+    if (lba >= msc_blocks || count > msc_blocks - lba) return 0;
+    return 1;
+}
+
+static void msc_build_rw10(u8 *cdb, int opcode, u32 lba, u32 count)
+{
     for (int i = 0; i < 10; i++) cdb[i] = 0;
-    cdb[0] = 0x28;                              /* READ(10) */
+    cdb[0] = (u8)opcode;
     cdb[2] = (u8)(lba >> 24); cdb[3] = (u8)(lba >> 16);
     cdb[4] = (u8)(lba >> 8);  cdb[5] = (u8)lba;
-    cdb[7] = 0; cdb[8] = 1;                     /* one block */
-    return scsi_cmd(cdb, 10, msc_blocksize, 1);
+    cdb[7] = (u8)(count >> 8); cdb[8] = (u8)count;
+}
+
+static void msc_copy_from_data(void *dst, u32 bytes)
+{
+    u8 *out = (u8 *)dst;
+    volatile u8 *in = (volatile u8 *)MSC_DATA;
+    for (u32 i = 0; i < bytes; i++) out[i] = in[i];
+}
+
+static void msc_copy_to_data(const void *src, u32 bytes)
+{
+    const u8 *in = (const u8 *)src;
+    volatile u8 *out = (volatile u8 *)MSC_DATA;
+    for (u32 i = 0; i < bytes; i++) out[i] = in[i];
+}
+
+static int msc_rw10(int opcode, u32 lba, u32 count)
+{
+    if (!msc_range_ok(lba, count)) {
+        msc_last_result = (!msc_ready || !msc_slot || !msc_blocks)
+                        ? MSC_RESULT_NOT_READY : MSC_RESULT_BAD_ARGUMENT;
+        return 0;
+    }
+    u8 cdb[10];
+    msc_build_rw10(cdb, opcode, lba, count);
+    if (!scsi_cmd(cdb, 10, msc_blocksize * count, opcode == 0x28)) return 0;
+    /* A short block read/write is not success even if the target marked the
+     * command passed. Never copy or commit a partially transferred sector. */
+    if (msc_last_residue) {
+        msc_last_result = MSC_RESULT_DATA_TRANSFER;
+        return 0;
+    }
+    return 1;
+}
+
+/* Compatibility API: leave one block in MSC_DATA for msc_byte(). */
+int xhci_msc_read_block(u32 lba)
+{
+    return msc_rw10(0x28, lba, 1);              /* READ(10) */
+}
+
+/* Bounded block-buffer APIs for native C drivers. One command can move at
+ * most the fixed 4 KiB staging window; callers split larger I/O explicitly. */
+int xhci_msc_read_blocks(u32 lba, void *dst, u32 count)
+{
+    if (!dst) {
+        msc_last_result = MSC_RESULT_BAD_ARGUMENT;
+        return 0;
+    }
+    if (!msc_rw10(0x28, lba, count)) return 0;   /* READ(10) */
+    msc_copy_from_data(dst, msc_blocksize * count);
+    return 1;
+}
+
+int xhci_msc_write_blocks(u32 lba, const void *src, u32 count)
+{
+    if (!src || !msc_range_ok(lba, count)) {
+        msc_last_result = (!msc_ready || !msc_slot || !msc_blocks)
+                        ? MSC_RESULT_NOT_READY : MSC_RESULT_BAD_ARGUMENT;
+        return 0;
+    }
+    msc_copy_to_data(src, msc_blocksize * count);
+    return msc_rw10(0x2A, lba, count);           /* WRITE(10) */
+}
+
+int xhci_msc_sync_cache(void)
+{
+    if (!msc_ready || !msc_slot || !msc_blocks) {
+        msc_last_result = MSC_RESULT_NOT_READY;
+        return 0;
+    }
+    u8 cdb[10] = { 0x35, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    return scsi_cmd(cdb, 10, 0, 0);             /* SYNCHRONIZE CACHE(10) */
+}
+
+int xhci_msc_request_sense(void)
+{
+    if (!msc_ready || !msc_slot) {
+        msc_last_result = MSC_RESULT_NOT_READY;
+        return 0;
+    }
+    msc_clear_sense();
+    return msc_request_sense_raw();
 }
 
 int xhci_msc_byte(int i)
@@ -2250,6 +3361,105 @@ u32 xhci_msc_capacity_mb(void)
 }
 int xhci_msc_ready(void) { return msc_ready; }
 int xhci_msc_slot(void)  { return msc_slot; }
+int xhci_msc_max_blocks_per_io(void)
+{
+    if (!msc_blocksize || msc_blocksize > MSC_DATA_MAX) return 0;
+    return (int)(MSC_DATA_MAX / msc_blocksize);
+}
+int xhci_msc_last_result(void)     { return msc_last_result; }
+int xhci_msc_last_xhci_cc(void)    { return msc_last_xhci_cc; }
+int xhci_msc_last_csw_status(void) { return msc_last_csw_status; }
+u32 xhci_msc_last_residue(void)    { return msc_last_residue; }
+int xhci_msc_last_recovery(void)   { return msc_last_recovery; }
+int xhci_msc_last_opcode(void)     { return msc_last_opcode; }
+int xhci_msc_sense_valid(void)     { return msc_sense_valid; }
+int xhci_msc_sense_key(void)       { return msc_sense_key; }
+int xhci_msc_sense_asc(void)       { return msc_sense_asc; }
+int xhci_msc_sense_ascq(void)      { return msc_sense_ascq; }
+int xhci_msc_init_stage(void)      { return msc_init_stage; }
+int xhci_msc_init_port(void)       { return msc_init_port; }
+int xhci_msc_init_slot(void)       { return msc_init_slot; }
+int xhci_msc_init_cc(void)         { return msc_init_cc; }
+int xhci_msc_init_vid(void)        { return msc_init_vid; }
+int xhci_msc_init_pid(void)        { return msc_init_pid; }
+int xhci_enum_stage(int port)
+{
+    return port > 0 && port < 32 ? enum_stage[port] : 0;
+}
+int xhci_enum_cc(int port)
+{
+    return port > 0 && port < 32 ? enum_cc[port] : -1;
+}
+int xhci_msc_port_stage(int port)
+{
+    return port > 0 && port < 32 ? msc_port_stage[port] : 0;
+}
+int xhci_msc_port_slot(int port)
+{
+    return port > 0 && port < 32 ? msc_port_slot[port] : 0;
+}
+int xhci_msc_port_cc(int port)
+{
+    return port > 0 && port < 32 ? msc_port_cc[port] : -1;
+}
+int xhci_msc_port_vid(int port)
+{
+    return port > 0 && port < 32 ? msc_port_vid[port] : 0;
+}
+int xhci_msc_port_pid(int port)
+{
+    return port > 0 && port < 32 ? msc_port_pid[port] : 0;
+}
+int xhci_msc_port_candidate(int port)
+{
+    return port > 0 && port < 32 ? msc_port_candidate[port] : 0;
+}
+int xhci_msc_port_ep0_event(int port)
+{
+    return port > 0 && port < 32 ? msc_port_ep0_event[port] : 0;
+}
+int xhci_msc_port_ep0_attempts(int port)
+{
+    return port > 0 && port < 32 ? msc_port_ep0_attempts[port] : 0;
+}
+int xhci_msc_port_ep0_recovery(int port)
+{
+    return port > 0 && port < 32 ? msc_port_ep0_recovery[port] : -1;
+}
+u32 xhci_msc_port_ep0_trace(int port, int word)
+{
+    if (port <= 0 || port >= 32 || word < 0 || word >= EP0_TRACE_WORDS) return 0;
+    return msc_port_ep0_trace[port][word];
+}
+
+/* Try the cached addressed device once, then perform at most two genuine
+ * whole-device retries. The first uses the ordinary reset/address sequence;
+ * the second adds Linux's address-zero Device-descriptor compatibility
+ * preflight. Every retry gets a fresh slot and EP0 ring. */
+static int msc_get_config_head(int port, int *slot_io)
+{
+    if (!slot_io || *slot_io <= 0) return 0;
+    for (int scheme = 0; scheme <= 2; scheme++) {
+        int slot = *slot_io;
+        if (scheme > 0) {
+            slot = xhci_reenumerate_port(port, scheme == 2);
+            if (!slot || slot >= MAX_SLOTS) {
+                ep0_note_config_reenumeration(port, scheme, 0xFF, 0);
+                continue;
+            }
+            *slot_io = slot;
+            msc_note_init(MSC_INIT_ENUMERATED, port, slot, -1);
+        }
+
+        msc_note_init(MSC_INIT_CONFIG_HEAD, port, slot, -1);
+        int ok = get_config(slot, 9);
+        msc_note_init(MSC_INIT_CONFIG_HEAD, port, slot, ep0_last_cc);
+        if (scheme > 0)
+            ep0_note_config_reenumeration(port, scheme, ep0_last_cc, ok);
+        if (ok) return 1;
+    }
+    return 0;
+}
 
 /* Find a bulk-only mass storage device and bring it up. The interface triple
  * is class 8 (mass storage), subclass 6 (SCSI transparent), protocol 0x50
@@ -2257,69 +3467,518 @@ int xhci_msc_slot(void)  { return msc_slot; }
 int xhci_msc_init(void)
 {
     if (msc_ready) return msc_slot;
+    msc_init_stage = MSC_INIT_CONTROLLER;
+    msc_init_port = msc_init_slot = 0;
+    msc_init_cc = -1;
+    msc_init_vid = msc_init_pid = 0;
+    for (int port = 0; port < 32; port++) {
+        msc_port_stage[port] = 0;
+        msc_port_slot[port] = 0;
+        msc_port_cc[port] = -1;
+        msc_port_vid[port] = 0;
+        msc_port_pid[port] = 0;
+        msc_port_candidate[port] = 0;
+        msc_port_ep0_event[port] = 0;
+        msc_port_ep0_attempts[port] = 0;
+        msc_port_ep0_recovery[port] = -1;
+        for (int i = 0; i < EP0_TRACE_WORDS; i++)
+            msc_port_ep0_trace[port][i] = 0;
+    }
     if (!xhci_running()) return 0;
 
     for (int port = 1; port <= xports; port++) {
         if (!xhci_port_connected(port)) continue;
+        /* Never reset a configured HID device merely because storage is being
+         * rescanned. Its class driver owns the live slot and endpoint rings. */
+        if ((kbd_ready && port == kbd_port) || (ptr_ready && port == ptr_port))
+            continue;
+        msc_note_init(MSC_INIT_PORT, port, 0, -1);
         int slot = xhci_enumerate(port);
         if (!slot || slot >= MAX_SLOTS) continue;
+        msc_note_init(MSC_INIT_ENUMERATED, port, slot, -1);
 
-        if (!get_config(slot, 9)) continue;
+        if (!msc_get_config_head(port, &slot)) continue;
         int total = (int)cfg_byte(2) | ((int)cfg_byte(3) << 8);
         if (total < 9) continue;
         if (total > CFG_MAX) total = CFG_MAX;
-        if (!get_config(slot, total)) continue;
-
-        int cfgval = (int)cfg_byte(5);
-        int iface = -1, in_ep = 0, out_ep = 0, in_mps = 0, out_mps = 0;
-
-        int off = (int)cfg_byte(0);
-        while (off + 1 < total) {
-            int dlen  = (int)cfg_byte(off);
-            int dtype = (int)cfg_byte(off + 1);
-            if (dlen < 2) break;
-            if (off + dlen > total) break;
-
-            if (dtype == DESC_INTERFACE && dlen >= 9) {
-                int cls  = (int)cfg_byte(off + 5);
-                int sub  = (int)cfg_byte(off + 6);
-                int prot = (int)cfg_byte(off + 7);
-                if (cls == 0x08 && sub == 0x06 && prot == 0x50) {
-                    iface = (int)cfg_byte(off + 2);
-                    in_ep = out_ep = 0;
-                } else if (iface >= 0 && (!in_ep || !out_ep)) {
-                    iface = -1;                 /* a different interface began */
-                }
-            } else if (dtype == DESC_ENDPOINT && dlen >= 7 && iface >= 0) {
-                int addr = (int)cfg_byte(off + 2);
-                int attr = (int)cfg_byte(off + 3);
-                int mps  = (int)cfg_byte(off + 4) |
-                           (((int)cfg_byte(off + 5) & 0x07) << 8);
-                if ((attr & 0x03) == 2) {       /* bulk */
-                    if ((addr & 0x80) && !in_ep)  { in_ep  = addr; in_mps  = mps; }
-                    if (!(addr & 0x80) && !out_ep){ out_ep = addr; out_mps = mps; }
-                }
-            }
-            off += dlen;
+        msc_note_init(MSC_INIT_CONFIG_FULL, port, slot, -1);
+        if (!get_config(slot, total)) {
+            msc_note_init(MSC_INIT_CONFIG_FULL, port, slot, ep0_last_cc);
+            continue;
         }
+        msc_note_init(MSC_INIT_CONFIG_FULL, port, slot, ep0_last_cc);
 
-        if (iface < 0 || !in_ep || !out_ep) continue;
+        struct msc_config cfg;
+        if (!msc_parse_config_descriptor(total, &cfg)) continue;
+        if (port > 0 && port < 32) msc_port_candidate[port] = 1;
+        msc_note_init(MSC_INIT_INTERFACE, port, slot, ep0_last_cc);
 
-        msc_in_dci  = ((in_ep  & 0x0F) * 2) + 1;
-        msc_out_dci = ((out_ep & 0x0F) * 2);
+        msc_in_dci  = ((cfg.in_ep  & 0x0F) * 2) + 1;
+        msc_out_dci = ((cfg.out_ep & 0x0F) * 2);
         if (msc_in_dci < 2 || msc_in_dci > 31)  continue;
         if (msc_out_dci < 2 || msc_out_dci > 31) continue;
-        if (in_mps  <= 0 || in_mps  > 1024) in_mps  = 512;
-        if (out_mps <= 0 || out_mps > 1024) out_mps = 512;
-        msc_in_mps = in_mps; msc_out_mps = out_mps;
-        msc_slot = slot; msc_iface = iface;
+        if (cfg.in_mps  <= 0 || cfg.in_mps  > 1024) cfg.in_mps  = 512;
+        if (cfg.out_mps <= 0 || cfg.out_mps > 1024) cfg.out_mps = 512;
+        msc_in_mps = cfg.in_mps; msc_out_mps = cfg.out_mps;
+        msc_slot = slot; msc_iface = cfg.iface;
 
-        if (!set_configuration(slot, cfgval)) { msc_slot = 0; continue; }
-        if (!configure_bulk(slot))            { msc_slot = 0; continue; }
+        msc_note_init(MSC_INIT_SET_CONFIG, port, slot, -1);
+        if (!set_configuration(slot, cfg.cfgval)) {
+            msc_note_init(MSC_INIT_SET_CONFIG, port, slot, ep0_last_cc);
+            msc_slot = 0;
+            continue;
+        }
+        msc_note_init(MSC_INIT_SET_CONFIG, port, slot, ep0_last_cc);
+        msc_note_init(MSC_INIT_ENDPOINTS, port, slot, -1);
+        if (!configure_bulk(slot)) {
+            msc_note_init(MSC_INIT_ENDPOINTS, port, slot, msc_init_cc);
+            msc_slot = 0;
+            continue;
+        }
+        msc_note_init(MSC_INIT_ENDPOINTS, port, slot, msc_init_cc);
 
         msc_ready = 1;
+        msc_note_init(MSC_INIT_READY, port, slot, msc_init_cc);
         return slot;
     }
     return 0;
 }
 
+/* ==== CDC-ECM Ethernet ====================================================
+ * A standards-based USB Ethernet/tethering device is the shortest physical
+ * network path on machines whose built-in NIC is hidden behind a proprietary
+ * dongle. CDC-ECM uses one communications interface for descriptors/control
+ * and one alternate data interface carrying ordinary Ethernet frames over a
+ * bulk IN/OUT pair. No RNDIS framing and no private device protocol is
+ * accepted here.
+ *
+ * Four receive buffers stay posted. Transfer completions share xHCI's one
+ * event ring with HID and mass storage, so ecm_event() is called by the common
+ * dispatcher and queues the exact buffer named by the completed TRB. A buffer
+ * is not re-posted until netdev_poll has copied it out; DMA can therefore never
+ * overwrite a frame waiting in the software queue. */
+
+#define ECM_IN_RING(s)  (XMEM_DCBAA + 0x600000u + (u32)(s) * RING_STRIDE)
+#define ECM_OUT_RING(s) (XMEM_DCBAA + 0x608000u + (u32)(s) * RING_STRIDE)
+#define ECM_RX_BUF0     (XMEM_DCBAA + 0x610000u)
+#define ECM_RX_N        4
+#define ECM_FRAME_MAX   2048u
+#define ECM_RX_BUF(i)   (ECM_RX_BUF0 + (u32)(i) * ECM_FRAME_MAX)
+#define ECM_TX_BUF      (ECM_RX_BUF0 + ECM_RX_N * ECM_FRAME_MAX)
+#define ECM_MAC_DESC    (ECM_TX_BUF + ECM_FRAME_MAX)
+
+_Static_assert(ECM_IN_RING(MAX_SLOTS) <= ECM_OUT_RING(0),
+               "xhci: CDC-ECM IN rings alias OUT rings");
+_Static_assert(ECM_OUT_RING(MAX_SLOTS) <= ECM_RX_BUF0,
+               "xhci: CDC-ECM OUT rings alias frame buffers");
+_Static_assert(ECM_MAC_DESC + 256u <= HI_VGPU,
+               "xhci: CDC-ECM DMA buffers escape the USB arena");
+
+struct ecm_config {
+    int cfgval, comm_iface, data_iface, data_alt;
+    int in_ep, out_ep, in_mps, out_mps;
+    int mac_index, max_segment;
+};
+
+static int ecm_slot, ecm_port, ecm_comm_iface, ecm_data_iface;
+static int ecm_in_dci, ecm_out_dci, ecm_in_mps, ecm_out_mps;
+static u32 ecm_in_enq, ecm_in_cyc = 1, ecm_out_enq, ecm_out_cyc = 1;
+static signed char ecm_rx_map[RING_TRBS];
+static u16 ecm_rx_len[ECM_RX_N];
+static u8 ecm_rx_q[8];
+static int ecm_rx_qh, ecm_rx_qt;
+static u8 ecm_mac_addr[6];
+static int ecm_n_tx, ecm_n_rx, ecm_n_drop, ecm_n_full;
+static int ecm_last_cc;
+static int ecm_init_stage, ecm_config_index = -1;
+static u32 ecm_parse_bits;
+static u8 ecm_diag_config[128];
+static int ecm_diag_len;
+
+static void ecm_note(int stage)
+{
+    if (stage > ecm_init_stage) ecm_init_stage = stage;
+}
+
+static int ecm_parse_config_descriptor(int total, struct ecm_config *out)
+{
+    if (!out || total < 9 || total > CFG_MAX) return 0;
+    out->cfgval = (int)cfg_byte(5);
+    out->comm_iface = out->data_iface = -1;
+    out->data_alt = -1;
+    out->in_ep = out->out_ep = 0;
+    out->in_mps = out->out_mps = 0;
+    out->mac_index = 0;
+    out->max_segment = 1514;
+
+    int current_iface = -1, current_alt = 0, current_class = -1;
+    int off = (int)cfg_byte(0);
+    while (off + 1 < total) {
+        int dlen = (int)cfg_byte(off);
+        int type = (int)cfg_byte(off + 1);
+        if (dlen < 2 || off + dlen > total) return 0;
+
+        if (type == DESC_INTERFACE && dlen >= 9) {
+            current_iface = (int)cfg_byte(off + 2);
+            current_alt = (int)cfg_byte(off + 3);
+            current_class = (int)cfg_byte(off + 5);
+            int sub = (int)cfg_byte(off + 6);
+            if (current_class == 0x02 && sub == 0x06 &&
+                out->comm_iface < 0)
+                out->comm_iface = current_iface;
+            if (current_class == 0x0A && current_alt > 0) {
+                out->data_iface = current_iface;
+                out->data_alt = current_alt;
+                out->in_ep = out->out_ep = 0;
+            }
+        } else if (type == 0x24 && dlen >= 4 &&
+                   current_iface == out->comm_iface) {
+            int subtype = (int)cfg_byte(off + 2);
+            if (subtype == 0x0F && dlen >= 13) {
+                out->mac_index = (int)cfg_byte(off + 3);
+                out->max_segment = (int)cfg_byte(off + 8) |
+                                   ((int)cfg_byte(off + 9) << 8);
+            } else if (subtype == 0x06 && dlen >= 5) {
+                /* Union descriptor names the slave data interface. Retain it
+                 * even when its alternate setting appears later. */
+                if (out->data_iface < 0) out->data_iface = (int)cfg_byte(off + 4);
+            }
+        } else if (type == DESC_ENDPOINT && dlen >= 7 &&
+                   current_class == 0x0A && current_iface == out->data_iface &&
+                   current_alt == out->data_alt) {
+            int addr = (int)cfg_byte(off + 2);
+            int attr = (int)cfg_byte(off + 3);
+            int mps = (int)cfg_byte(off + 4) |
+                      (((int)cfg_byte(off + 5) & 0x07) << 8);
+            if ((attr & 3) == 2) {
+                if ((addr & 0x80) && !out->in_ep) {
+                    out->in_ep = addr; out->in_mps = mps;
+                } else if (!(addr & 0x80) && !out->out_ep) {
+                    out->out_ep = addr; out->out_mps = mps;
+                }
+            }
+        }
+        off += dlen;
+    }
+    ecm_parse_bits = (out->cfgval > 0 ? 1u : 0u) |
+        (out->comm_iface >= 0 ? 2u : 0u) |
+        (out->data_iface >= 0 ? 4u : 0u) |
+        (out->data_alt > 0 ? 8u : 0u) |
+        (out->in_ep ? 16u : 0u) | (out->out_ep ? 32u : 0u) |
+        (out->mac_index > 0 ? 64u : 0u) |
+        (out->max_segment >= 64 && out->max_segment <= (int)ECM_FRAME_MAX
+             ? 128u : 0u);
+    return out->cfgval > 0 && out->comm_iface >= 0 &&
+           out->data_iface >= 0 && out->data_alt > 0 &&
+           out->in_ep && out->out_ep && out->mac_index > 0 &&
+           out->max_segment >= 64 && out->max_segment <= (int)ECM_FRAME_MAX;
+}
+
+static int ecm_hex(int c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static int ecm_get_mac(int slot, int index)
+{
+    if (index <= 0 || index > 255) return 0;
+    u32 base = 0x03000680u | ((u32)index << 16);
+    if (!descriptor_in(slot, base, (64u << 16) | 0x0409u,
+                       ECM_MAC_DESC, 64)) return 0;
+    int len = *(volatile u8 *)(uptr)ECM_MAC_DESC;
+    if (len < 26 || len > 64 ||
+        *(volatile u8 *)(uptr)(ECM_MAC_DESC + 1) != 3) return 0;
+    for (int i = 0; i < 6; i++) {
+        int hi = ecm_hex(*(volatile u8 *)(uptr)(ECM_MAC_DESC + 2u + (u32)i * 4u));
+        int lo = ecm_hex(*(volatile u8 *)(uptr)(ECM_MAC_DESC + 4u + (u32)i * 4u));
+        if (hi < 0 || lo < 0) return 0;
+        ecm_mac_addr[i] = (u8)((hi << 4) | lo);
+    }
+    return 1;
+}
+
+static int ecm_get_config(int slot, int index, int len)
+{
+    if (index < 0 || index > 255 || len <= 0 || len > CFG_MAX) return 0;
+    return descriptor_in(slot, 0x02000680u | ((u32)index << 16),
+                         (u32)len << 16, CFG_BUF, len);
+}
+
+static int ecm_configure_bulk(int slot)
+{
+    ring_init(ECM_IN_RING(slot));
+    ring_init(ECM_OUT_RING(slot));
+    ecm_in_enq = ecm_out_enq = 0;
+    ecm_in_cyc = ecm_out_cyc = 1;
+    for (int i = 0; i < RING_TRBS; i++) ecm_rx_map[i] = -1;
+
+    int top = ecm_in_dci > ecm_out_dci ? ecm_in_dci : ecm_out_dci;
+    zero_mem(CTX_INPUT, 33u * (u32)xctxsize);
+    ctx_set(CTX_INPUT, 0, 1,
+            (1u << 0) | (1u << ecm_in_dci) | (1u << ecm_out_dci));
+    copy_slot_context_for_endpoints(slot, top);
+
+    int ci = ecm_in_dci + 1;
+    ctx_set(CTX_INPUT, ci, 0, 0);
+    ctx_set(CTX_INPUT, ci, 1, (3u << 1) |
+            ((u32)EPTYPE_BULK_IN << 3) | ((u32)ecm_in_mps << 16));
+    ctx_set(CTX_INPUT, ci, 2, (u32)dma_addr(ECM_IN_RING(slot)) | 1u);
+    ctx_set(CTX_INPUT, ci, 3, (u32)(dma_addr(ECM_IN_RING(slot)) >> 32));
+    ctx_set(CTX_INPUT, ci, 4, (u32)ecm_in_mps);
+
+    int co = ecm_out_dci + 1;
+    ctx_set(CTX_INPUT, co, 0, 0);
+    ctx_set(CTX_INPUT, co, 1, (3u << 1) |
+            ((u32)EPTYPE_BULK_OUT << 3) | ((u32)ecm_out_mps << 16));
+    ctx_set(CTX_INPUT, co, 2, (u32)dma_addr(ECM_OUT_RING(slot)) | 1u);
+    ctx_set(CTX_INPUT, co, 3, (u32)(dma_addr(ECM_OUT_RING(slot)) >> 32));
+    ctx_set(CTX_INPUT, co, 4, (u32)ecm_out_mps);
+
+    u32 trb = cmd_submit(dma_addr(CTX_INPUT), 0, TRB_CONFIGURE_EP,
+                         (u32)slot << 24);
+    u32 status = 0;
+    if (!cmd_wait(trb, &status, 0, 5000000)) return 0;
+    ecm_last_cc = (int)((status >> 24) & 0xFF);
+    return ecm_last_cc == 1;
+}
+
+static void ecm_rx_post(int bi)
+{
+    if (!ecm_ready || bi < 0 || bi >= ECM_RX_N) return;
+    u32 ring = ECM_IN_RING(ecm_slot);
+    u32 idx = ecm_in_enq;
+    zero_mem(ECM_RX_BUF(bi), ECM_FRAME_MAX);
+    ecm_rx_map[idx] = (signed char)bi;
+    trb_write(ring, idx, dma_addr(ECM_RX_BUF(bi)), ECM_FRAME_MAX,
+              (TRB_NORMAL << 10) | (1u << 5) | ecm_in_cyc);
+    ecm_in_enq++;
+    if (ecm_in_enq >= RING_TRBS - 1) {
+        trb_write(ring, RING_TRBS - 1, dma_addr(ring), 0,
+                  (TRB_LINK << 10) | (1u << 1) | ecm_in_cyc);
+        ecm_in_enq = 0;
+        ecm_in_cyc ^= 1;
+    }
+    doorbell((u32)ecm_slot, (u32)ecm_in_dci);
+}
+
+static int ecm_event(u32 param, u32 status, u32 ctrl)
+{
+    if (!ecm_ready) return 0;
+    int slot = (int)((ctrl >> 24) & 0xFF);
+    int dci = (int)((ctrl >> 16) & 0x1F);
+    if (slot != ecm_slot) return 0;
+    if (dci == ecm_out_dci) return 1; /* stale completion after a TX timeout */
+    if (dci != ecm_in_dci) return 0;
+
+    u32 pk = (u32)dma_kaddr(param);
+    u32 ring = ECM_IN_RING(ecm_slot);
+    if (pk < ring || pk >= ring + (RING_TRBS - 1) * TRB_BYTES) {
+        ecm_n_drop++;
+        return 1;
+    }
+    int idx = (int)((pk - ring) / TRB_BYTES);
+    int bi = ecm_rx_map[idx];
+    ecm_rx_map[idx] = -1;
+    if (bi < 0 || bi >= ECM_RX_N) { ecm_n_drop++; return 1; }
+
+    int cc = (int)((status >> 24) & 0xFF);
+    int residual = (int)(status & 0x00FFFFFFu);
+    int len = (int)ECM_FRAME_MAX - residual;
+    int next = (ecm_rx_qt + 1) & 7;
+    /* A frame whose length is an exact multiple of the endpoint max packet
+     * may be followed by a zero-length packet. That terminates the USB
+     * transfer; it is not a truncated Ethernet frame and must not poison the
+     * drop counter. */
+    if ((cc == 1 || cc == 13) && len == 0) {
+        ecm_rx_post(bi);
+        return 1;
+    }
+    if ((cc != 1 && cc != 13) || len < 14 || len > (int)ECM_FRAME_MAX ||
+        next == ecm_rx_qh) {
+        ecm_n_drop++;
+        ecm_rx_post(bi);
+        return 1;
+    }
+    ecm_rx_len[bi] = (u16)len;
+    ecm_rx_q[ecm_rx_qt] = (u8)bi;
+    ecm_rx_qt = next;
+    return 1;
+}
+
+/* A class reported in the device descriptor is a cheap, authoritative
+ * negative filter. CDC functions may be declared on the device itself (02),
+ * behind an interface association (EF), or only in interface descriptors
+ * (00). Everything else is definitely not CDC-ECM and must not be reset just
+ * to rediscover that fact. This matters on the ThinkPad: its AX201 Bluetooth
+ * device reports E0 on several companion root ports, and probing each of
+ * those as Ethernet kept the graphical boot behind minutes of bounded USB
+ * recovery. Unknown class zero remains probeable, so composite tethering
+ * devices continue to work. */
+int xhci_ecm_device_class_candidate(int cls)
+{
+    return cls == 0x00 || cls == 0x02 || cls == 0xEF;
+}
+
+int xhci_ecm_init(void)
+{
+    if (ecm_ready) return 1;
+    ecm_init_stage = 1;
+    ecm_config_index = -1;
+    ecm_parse_bits = 0;
+    ecm_diag_len = 0;
+    if (!owned) (void)xhci_bringup();
+    if (!xhci_running()) return 0;
+
+    for (int port = 1; port <= xports; port++) {
+        if (!xhci_port_connected(port)) continue;
+        if ((kbd_ready && port == kbd_port) || (ptr_ready && port == ptr_port))
+            continue;
+        if (msc_ready && port == msc_init_port) continue;
+        int known_slot = port > 0 && port < 32 ? port_slot[port] : 0;
+        if (known_slot > 0 && known_slot < MAX_SLOTS &&
+            !xhci_ecm_device_class_candidate(slot_class[known_slot]))
+            continue;
+        ecm_note(2);
+        /* HID/storage discovery may already have asked this unclaimed device
+         * for configuration zero. Re-enumerate only a port no live class
+         * driver owns, then ask for the CDC configuration first. */
+        int slot = xhci_reenumerate_port(port, 0);
+        if (!slot || slot >= MAX_SLOTS) continue;
+        ecm_note(3);
+        struct ecm_config cfg;
+        int matched = 0;
+        /* Composite USB networking devices commonly expose RNDIS as their
+         * first configuration and standards-based CDC-ECM as their second.
+         * Configuration descriptor index is not bConfigurationValue: inspect
+         * each bounded index and later select the value carried by the match. */
+        static const u8 config_order[4] = { 1, 0, 2, 3 };
+        for (int oi = 0; oi < 4 && !matched; oi++) {
+            int ci = config_order[oi];
+            if (!ecm_get_config(slot, ci, 9)) continue;
+            ecm_note(4);
+            int total = (int)cfg_byte(2) | ((int)cfg_byte(3) << 8);
+            if (total < 9) continue;
+            if (total > CFG_MAX) total = CFG_MAX;
+            if (!ecm_get_config(slot, ci, total)) continue;
+            ecm_note(5);
+            ecm_diag_len = total < (int)sizeof ecm_diag_config
+                         ? total : (int)sizeof ecm_diag_config;
+            for (int di = 0; di < ecm_diag_len; di++)
+                ecm_diag_config[di] = (u8)cfg_byte(di);
+            matched = ecm_parse_config_descriptor(total, &cfg);
+            if (matched) ecm_config_index = ci;
+        }
+        if (!matched) continue;
+        ecm_note(6);
+        ecm_slot = slot; ecm_port = port;
+        ecm_comm_iface = cfg.comm_iface; ecm_data_iface = cfg.data_iface;
+        ecm_in_dci = ((cfg.in_ep & 0x0F) * 2) + 1;
+        ecm_out_dci = (cfg.out_ep & 0x0F) * 2;
+        ecm_in_mps = cfg.in_mps; ecm_out_mps = cfg.out_mps;
+        if (ecm_in_dci < 2 || ecm_in_dci > 31 ||
+            ecm_out_dci < 2 || ecm_out_dci > 31 ||
+            ecm_in_mps <= 0 || ecm_in_mps > 1024 ||
+            ecm_out_mps <= 0 || ecm_out_mps > 1024 ||
+            !ecm_get_mac(slot, cfg.mac_index)) {
+            ecm_slot = 0;
+            continue;
+        }
+        ecm_note(7);
+        if (!set_configuration(slot, cfg.cfgval)) {
+            ecm_last_cc = ep0_last_cc; ecm_slot = 0; continue;
+        }
+        ecm_note(8);
+        if (!xhci_control_in(slot, 0x00000B01u | ((u32)cfg.data_alt << 16),
+                             (u32)cfg.data_iface, 0, 0)) {
+            ecm_last_cc = ep0_last_cc; ecm_slot = 0; continue;
+        }
+        ecm_note(9);
+        if (!ecm_configure_bulk(slot)) {
+            ecm_slot = 0; continue;
+        }
+        ecm_note(10);
+        if (!xhci_control_in(slot, 0x000C4321u,
+                             (u32)cfg.comm_iface, 0, 0)) {
+            ecm_last_cc = ep0_last_cc;
+            ecm_slot = 0;
+            continue;
+        }
+        ecm_note(11);
+        ecm_rx_qh = ecm_rx_qt = 0;
+        ecm_n_tx = ecm_n_rx = ecm_n_drop = ecm_n_full = 0;
+        ecm_ready = 1;
+        ecm_note(12);
+        for (int i = 0; i < ECM_RX_N; i++) ecm_rx_post(i);
+        return 1;
+    }
+    return 0;
+}
+
+int xhci_ecm_send(const u8 *frame, int len)
+{
+    if (!ecm_ready || !frame || len < 14 || len > (int)ECM_FRAME_MAX) return 0;
+    for (int i = 0; i < len; i++)
+        *(volatile u8 *)(uptr)(ECM_TX_BUF + (u32)i) = frame[i];
+    u32 ring = ECM_OUT_RING(ecm_slot);
+    u32 idx = ecm_out_enq;
+    u32 trb_addr = ring + idx * TRB_BYTES;
+    trb_write(ring, idx, dma_addr(ECM_TX_BUF), (u32)len,
+              (TRB_NORMAL << 10) | (1u << 5) | ecm_out_cyc);
+    ecm_out_enq++;
+    if (ecm_out_enq >= RING_TRBS - 1) {
+        trb_write(ring, RING_TRBS - 1, dma_addr(ring), 0,
+                  (TRB_LINK << 10) | (1u << 1) | ecm_out_cyc);
+        ecm_out_enq = 0;
+        ecm_out_cyc ^= 1;
+    }
+    doorbell((u32)ecm_slot, (u32)ecm_out_dci);
+    u32 status = 0, ctrl = 0;
+    if (!xfer_wait_trbs_ms(ecm_slot, ecm_out_dci, &trb_addr, 1,
+                           &status, &ctrl, 250)) {
+        ecm_n_full++;
+        return 0;
+    }
+    ecm_last_cc = (int)((status >> 24) & 0xFF);
+    if (ecm_last_cc != 1 && ecm_last_cc != 13) return 0;
+    ecm_n_tx++;
+    return 1;
+}
+
+int xhci_ecm_poll(u8 *out, int max)
+{
+    if (!ecm_ready || !out || max <= 0) return 0;
+    if (ecm_rx_qh == ecm_rx_qt) (void)xhci_poll(16);
+    if (ecm_rx_qh == ecm_rx_qt) return 0;
+    int bi = ecm_rx_q[ecm_rx_qh];
+    ecm_rx_qh = (ecm_rx_qh + 1) & 7;
+    int n = ecm_rx_len[bi];
+    int copy = n < max ? n : max;
+    for (int i = 0; i < copy; i++)
+        out[i] = *(volatile u8 *)(uptr)(ECM_RX_BUF(bi) + (u32)i);
+    if (copy < n) ecm_n_drop++;
+    else ecm_n_rx++;
+    ecm_rx_post(bi);
+    return copy;
+}
+
+int xhci_ecm_mac(int i) { return i >= 0 && i < 6 ? ecm_mac_addr[i] : 0; }
+int xhci_ecm_link_up(void) { return ecm_ready; }
+int xhci_ecm_ready(void) { return ecm_ready; }
+int xhci_ecm_slot(void) { return ecm_slot; }
+int xhci_ecm_port(void) { return ecm_port; }
+int xhci_ecm_tx_count(void) { return ecm_n_tx; }
+int xhci_ecm_rx_count(void) { return ecm_n_rx; }
+int xhci_ecm_rx_drops(void) { return ecm_n_drop; }
+int xhci_ecm_tx_full(void) { return ecm_n_full; }
+int xhci_ecm_last_cc(void) { return ecm_last_cc; }
+int xhci_ecm_init_stage(void) { return ecm_init_stage; }
+int xhci_ecm_config_index(void) { return ecm_config_index; }
+u32 xhci_ecm_parse_bits(void) { return ecm_parse_bits; }
+int xhci_ecm_diag_len(void) { return ecm_diag_len; }
+int xhci_ecm_diag_byte(int i)
+{
+    return i >= 0 && i < ecm_diag_len ? ecm_diag_config[i] : 0;
+}

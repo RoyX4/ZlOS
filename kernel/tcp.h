@@ -12,8 +12,8 @@
  *   - CLIENT ONLY. There is no listen, no accept, no passive open, and
  *     SYN_RCVD does not exist.
  *   - a fixed receive buffer, in-order plus ONE out-of-order hole
- *   - retransmit on timeout. No fast retransmit, no SACK, no window scaling,
- *     no timestamps.
+ *   - timeout retransmission plus triple-duplicate-ACK fast retransmit. No
+ *     SACK, window scaling, or timestamps.
  *   - congestion control: slow start only. No AIMD, no congestion avoidance.
  *
  * Everything on that list is a decision. A window-scaled, SACK-capable stack
@@ -56,6 +56,9 @@ const char *tcp_state_name(int s);
 /* Queue data for transmission. Returns how many bytes were accepted - the send
  * buffer is fixed and a short write is normal, not an error. */
 int  tcp_send(const net_u8 *data, int len);
+/* True only for an idle, fully acknowledged established connection to this
+ * exact peer tuple. */
+int  tcp_can_reuse(net_u32 ip, int port);
 
 /* Take delivered bytes out of the receive buffer. */
 int  tcp_recv(net_u8 *out, int max);

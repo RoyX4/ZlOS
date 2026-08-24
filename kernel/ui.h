@@ -175,6 +175,15 @@ int  wm_ntabs(int win);
 void wm_move(int win, int x, int y);
 /* wm_resize had no caller at all until the resize grip; see wm.c. */
 void wm_resize(int win, int w, int h);
+/* App content changed. This is deliberately distinct from screen damage:
+ * moving/raising a valid retained client must not redraw the app. */
+void wm_invalidate_client(int win);
+unsigned long wm_client_surface_bytes(void);
+unsigned int wm_client_surface_refusals(void);
+unsigned int wm_retained_shell_builds(void);
+unsigned int wm_region_fallbacks(void);
+unsigned long long wm_region_occluded_pixels(void);
+int wm_region_fragmentation_probe(void);
 
 /* ---- the animation timeline -----------------------------------------------
  * A fixed array of running animations, ticked once per frame by wm_frame().

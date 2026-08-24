@@ -1390,9 +1390,10 @@ Value zl_callv(Value f, int n, ...)
  * THE zlx_ BRIDGE - for the LLVM backend (compilel.c) ONLY.
  *
  * compilel emits UNBOXED values (i64, double, ptr). runtime.c's builtins
- * take and return a BOXED 48-byte Value. These helpers cross that boundary
+ * take and return a BOXED sizeof(Value) value (16 bytes today). These helpers cross that boundary
  * WITHOUT the Value struct ever appearing in the emitted IR: the compiled
- * code stack-allocates raw 48-byte slots and hands over only POINTERS to
+ * code stack-allocates raw slots sized by compilel.c's VALSZ and hands over
+ * only POINTERS to
  * them, so the Win64 struct-return ABI never comes into play.
  *
  * zlx_call can reach the static builtin() because it lives in this file.

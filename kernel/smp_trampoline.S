@@ -21,6 +21,7 @@
  */
 
 .equ TRAMP,      0x9000        /* where this code is copied to           */
+.equ IDT_PTR,    0x8FC0        /* the BSP's 6-byte IDT descriptor        */
 .equ ENTRY_PTR,  0x8FF0        /* the BSP leaves the C entry address here */
 .equ STACK_BASE, 0x0A800000    /* 168 MiB: 16 KiB of stack per core       */
 .equ STACK_SIZE, 0x4000
@@ -61,6 +62,7 @@ pm_entry:
     movw    %ax, %ss
     movw    %ax, %fs
     movw    %ax, %gs
+    lidtl   IDT_PTR
 
     /* Which core am I? CPUID leaf 1 EBX[31:24] is the initial APIC id, and it
      * is readable before the local APIC has been touched - which is the point,

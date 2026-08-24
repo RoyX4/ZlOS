@@ -17,10 +17,11 @@
  * holes and the second is dropped and counted. That is the brief's scope, and
  * it is enough for a stack whose peer is one HTTP server on a local link.
  *
- * SLOW START ONLY. cwnd opens by one segment per ACK and collapses to one on a
- * retransmit. There is no congestion avoidance, no fast retransmit and no
- * SACK. On a link whose round trip is measured in microseconds that is not a
- * meaningful loss; on the open internet it would be.
+ * SLOW START PLUS FAST RETRANSMIT. cwnd opens by one segment per ACK and
+ * collapses to one on timeout or three qualifying duplicate ACKs. There is no
+ * congestion avoidance or SACK. The fast path repairs one missing segment
+ * without waiting for the RTO; bounded buffers and cumulative ACKs remain the
+ * deliberately small contract.
  *
  * NOTHING BLOCKS. tcp_connect returns immediately and the caller polls
  * tcp_state(); tcp_tick() drives the retransmit timer from the frame loop.
@@ -28,6 +29,7 @@
  */
 
 #include "tcp.h"
+#include "telemetry.h"
 
 typedef net_u8  u8;
 typedef net_u16 u16;
@@ -79,6 +81,7 @@ static int  ooo_fin_ready;  /* ...and its hole has now been filled  */
 static int  fin_sent, fin_acked, fin_seen;
 static int  fin_wanted;   /* close() was called; the FIN follows the data */
 static int  seg_has_fin;  /* does the segment being handled carry a FIN? */
+static int  seg_dupack_candidate; /* pure ACK, unchanged advertised window */
 static int  fin_tries;
 static int  rexmit_tries;   /* total retransmissions on this connection */
 static u32  fin_seq;              /* the sequence number our FIN occupies   */
@@ -92,6 +95,71 @@ static u32  last_ack;
 static int  dup_ack_run;
 
 static int c_rx, c_tx, c_rexmit, c_badsum, c_oow, c_dup, c_ooo, c_dupack, c_rst;
+static unsigned socket_id, connect_operation;
+
+static unsigned endpoint_token(u32 ip, u16 port)
+{
+    /* A stable per-endpoint token without persisting the literal peer address. */
+    u32 h = 2166136261u;
+    for (int i = 0; i < 4; i++) { h ^= (ip >> (i * 8)) & 0xffu; h *= 16777619u; }
+    h ^= port & 0xffu; h *= 16777619u;
+    h ^= port >> 8; h *= 16777619u;
+    return h;
+}
+
+enum {
+    TCP_R_CONNECT = 1, TCP_R_ABORT, TCP_R_CLOSE, TCP_R_HANDSHAKE,
+    TCP_R_PEER_FIN, TCP_R_PEER_RST, TCP_R_ACK, TCP_R_TIME_WAIT,
+    TCP_R_SYN_TIMEOUT, TCP_R_DATA_TIMEOUT, TCP_R_FIN_TIMEOUT
+};
+
+static void tcp_set_state(int next, unsigned reason)
+{
+    int old = st;
+    if (old == next) return;
+    st = next;
+    zlt_event(ZLLOG_SUB_NET, ZLLOG_EV_NET_STATE,
+              (next == TCP_CLOSED && reason >= TCP_R_SYN_TIMEOUT)
+                  ? ZLLOG_WARN : ZLLOG_INFO,
+              TCP_PROTO, ((unsigned)old << 16) | (unsigned)next, reason);
+    if (next == TCP_ESTABLISHED) {
+        zlt_lifecycle(ZLLOG_SUB_NET, ZLLOG_OBJ_SOCKET, socket_id,
+                      ZLLOG_LIFE_READY, 0u,
+                      endpoint_token(peer_ip, remote_port));
+        zlt_operation_result(ZLLOG_SUB_NET, connect_operation,
+                             ZLLOG_OP_NET_CONNECT, 0, 0u,
+                             endpoint_token(peer_ip, remote_port));
+        connect_operation = 0;
+    } else if (next == TCP_CLOSED) {
+        unsigned error = reason >= TCP_R_SYN_TIMEOUT ? 110u :
+                         reason == TCP_R_PEER_RST ? 104u :
+                         reason == TCP_R_ABORT ? 125u : 0u;
+        if (connect_operation) {
+            zlt_operation_result(ZLLOG_SUB_NET, connect_operation,
+                                 ZLLOG_OP_NET_CONNECT,
+                                 error ? -(int)error : 0, error, reason);
+            connect_operation = 0;
+        }
+        if (socket_id)
+            zlt_lifecycle(ZLLOG_SUB_NET, ZLLOG_OBJ_SOCKET, socket_id,
+                          error ? ZLLOG_LIFE_FAULT : ZLLOG_LIFE_EXIT,
+                          0u, reason);
+    }
+}
+
+static void tcp_timeout_snapshot(unsigned reason, unsigned phase)
+{
+    if (phase == 0) {
+        zlt_snapshot(ZLLOG_SUB_NET, ZLLOG_SNAP_TCP_TIMEOUT, 0,
+                     ((unsigned)st << 16) | reason, snd_una);
+    } else if (phase == 1) {
+        zlt_snapshot(ZLLOG_SUB_NET, ZLLOG_SNAP_TCP_TIMEOUT, 1,
+                     snd_nxt, ((unsigned)snd_wnd << 16) | (unsigned)rto);
+    } else {
+        zlt_snapshot(ZLLOG_SUB_NET, ZLLOG_SNAP_TCP_TIMEOUT, 2,
+                     ((unsigned)st << 16) | reason, rt_deadline);
+    }
+}
 
 /* ---- modular sequence comparison ------------------------------------------
  * The whole reason TCP works across a wrap. `(int)(a - b) < 0` is well defined
@@ -159,12 +227,22 @@ int tcp_available(void) { return rcv_tail - rcv_head; }
 
 int tcp_recv(u8 *out, int max)
 {
-    if (max <= 0) return 0;              /* a trust boundary, so it is checked */
+    unsigned operation = zlt_operation_begin(
+        ZLLOG_SUB_NET, ZLLOG_OBJ_SOCKET, socket_id,
+        ZLLOG_OP_NET_RECEIVE, socket_id);
+    if (!out || max <= 0) {
+        zlt_operation_result(ZLLOG_SUB_NET, operation,
+                             ZLLOG_OP_NET_RECEIVE, -22, 22u,
+                             max > 0 ? (unsigned)max : 0u);
+        return 0;
+    }
     int n = tcp_available();
     if (n > max) n = max;
     for (int i = 0; i < n; i++) out[i] = rcvbuf[rcv_head + i];
     rcv_head += n;
     if (rcv_head == rcv_tail) rcv_head = rcv_tail = 0;   /* the compaction */
+    zlt_operation_result(ZLLOG_SUB_NET, operation,
+                         ZLLOG_OP_NET_RECEIVE, n, 0u, (unsigned)max);
     return n;
 }
 
@@ -291,20 +369,57 @@ static void pump_send(void)
 
 int tcp_send(const u8 *data, int len)
 {
-    if (st != TCP_ESTABLISHED && st != TCP_CLOSE_WAIT) return 0;
-    if (len < 0) return 0;
+    unsigned operation = zlt_operation_begin(
+        ZLLOG_SUB_NET, ZLLOG_OBJ_SOCKET, socket_id,
+        ZLLOG_OP_NET_SEND, socket_id);
+    if (st != TCP_ESTABLISHED && st != TCP_CLOSE_WAIT) {
+        zlt_operation_result(ZLLOG_SUB_NET, operation, ZLLOG_OP_NET_SEND,
+                             -107, 107u, len > 0 ? (unsigned)len : 0u);
+        return 0;
+    }
+    if (!data || len < 0) {
+        zlt_operation_result(ZLLOG_SUB_NET, operation, ZLLOG_OP_NET_SEND,
+                             -22, 22u, len > 0 ? (unsigned)len : 0u);
+        return 0;
+    }
     int room = SND_BUF - snd_len;
     if (len > room) len = room;
     for (int i = 0; i < len; i++) sndbuf[snd_len + i] = data[i];
     snd_len += len;
     pump_send();
+    zlt_operation_result(ZLLOG_SUB_NET, operation, ZLLOG_OP_NET_SEND,
+                         len, 0u, (unsigned)room);
     return len;
+}
+
+/* Reuse is deliberately narrower than "the state says ESTABLISHED". The
+ * previous request must be completely acknowledged, no close may be pending,
+ * and the peer tuple must match. Otherwise an HTTP caller could append a new
+ * request behind bytes the old server has not accepted, or send it to the
+ * wrong endpoint through the single global connection slot. */
+int tcp_can_reuse(u32 ip, int port)
+{
+    return st == TCP_ESTABLISHED && peer_ip == ip &&
+           remote_port == (u16)port && snd_len == 0 &&
+           snd_una == snd_nxt && !fin_wanted && !fin_sent && !fin_seen;
 }
 
 /* ---- the active open ------------------------------------------------------- */
 int tcp_connect(u32 ip, int port)
 {
-    if (st != TCP_CLOSED) return 0;
+    unsigned operation = zlt_operation_begin(
+        ZLLOG_SUB_NET, ZLLOG_OBJ_KERNEL, 0u, ZLLOG_OP_NET_CONNECT,
+        endpoint_token(ip, (u16)port));
+    if (st != TCP_CLOSED || !ip || port <= 0 || port > 65535) {
+        unsigned error = st != TCP_CLOSED ? 16u : 22u;
+        zlt_operation_result(ZLLOG_SUB_NET, operation,
+                             ZLLOG_OP_NET_CONNECT, -(int)error, error,
+                             endpoint_token(ip, (u16)port));
+        return 0;
+    }
+    connect_operation = operation;
+    socket_id++;
+    if (!socket_id) socket_id++;
     peer_ip = ip;
     remote_port = (u16)port;
     local_port++;
@@ -336,7 +451,10 @@ int tcp_connect(u32 ip, int port)
     last_ack = 0;
     snd_wnd = MSS;
 
-    st = TCP_SYN_SENT;
+    tcp_set_state(TCP_SYN_SENT, TCP_R_CONNECT);
+    zlt_lifecycle(ZLLOG_SUB_NET, ZLLOG_OBJ_SOCKET, socket_id,
+                  ZLLOG_LIFE_START, 0u,
+                  endpoint_token(peer_ip, remote_port));
     send_seg(iss, F_SYN, 0, 0);
     arm_timer();
     return 1;
@@ -344,32 +462,44 @@ int tcp_connect(u32 ip, int port)
 
 void tcp_abort(void)
 {
+    unsigned operation = zlt_operation_begin(
+        ZLLOG_SUB_NET, ZLLOG_OBJ_SOCKET, socket_id,
+        ZLLOG_OP_NET_ABORT, socket_id);
     if (st != TCP_CLOSED) {
         send_seg(snd_nxt, F_RST | F_ACK, 0, 0);
         c_rst++;
     }
-    st = TCP_CLOSED;
+    tcp_set_state(TCP_CLOSED, TCP_R_ABORT);
     rt_deadline = 0;
     snd_len = 0;
     ooo_len = 0;
+    zlt_operation_result(ZLLOG_SUB_NET, operation, ZLLOG_OP_NET_ABORT,
+                         0, 0u, (unsigned)st);
 }
 
 void tcp_close(void)
 {
+    unsigned operation = zlt_operation_begin(
+        ZLLOG_SUB_NET, ZLLOG_OBJ_SOCKET, socket_id,
+        ZLLOG_OP_NET_CLOSE, socket_id);
+    int accepted = 1;
     if (st == TCP_ESTABLISHED) {
         fin_wanted = 1;
-        st = TCP_FIN_WAIT_1;
+        tcp_set_state(TCP_FIN_WAIT_1, TCP_R_CLOSE);
         pump_send();                        /* drains the buffer, then FINs */
         arm_timer();
     } else if (st == TCP_CLOSE_WAIT) {
         fin_wanted = 1;
-        st = TCP_LAST_ACK;
+        tcp_set_state(TCP_LAST_ACK, TCP_R_CLOSE);
         pump_send();
         arm_timer();
     } else if (st == TCP_SYN_SENT) {
-        st = TCP_CLOSED;                    /* nothing was ever established */
+        tcp_set_state(TCP_CLOSED, TCP_R_CLOSE); /* nothing was established */
         rt_deadline = 0;
-    }
+    } else accepted = 0;
+    zlt_operation_result(ZLLOG_SUB_NET, operation, ZLLOG_OP_NET_CLOSE,
+                         accepted ? 0 : -107, accepted ? 0u : 107u,
+                         (unsigned)st);
 }
 
 /* ---- delivering received data ---------------------------------------------- */
@@ -425,13 +555,37 @@ static int deliver(const u8 *p, int n)
 static void on_ack(u32 ack)
 {
     if (seq_le(ack, snd_una)) {
-        /* not new. A DUPLICATE ACK is information - it means the peer got
-         * something out of order - but with no fast retransmit there is
-         * nothing to do with it but count it. Counting is not nothing: it is
-         * how "the link is lossy" becomes visible instead of inferred. */
+        /* Only a pure ACK with an unchanged advertised window contributes to
+         * fast retransmit. Data-bearing ACKs and window updates are progress,
+         * not evidence of a missing outbound segment. Keep the broader
+         * counter observable, but reset the consecutive qualifying run. */
         if (ack == snd_una && snd_nxt != snd_una) {
             c_dupack++;
-            if (++dup_ack_run > 100) dup_ack_run = 100;
+            if (seg_dupack_candidate) {
+                if (++dup_ack_run > 100) dup_ack_run = 100;
+            } else {
+                dup_ack_run = 0;
+            }
+
+            /* Three duplicate ACKs mean at least three later segments reached
+             * the peer while the segment at snd_una did not. Retransmit that
+             * first unacknowledged segment immediately, once per ACK run. Do
+             * not rewind snd_nxt: later bytes are still in flight and their
+             * cumulative ACK remains valid. */
+            if (dup_ack_run == 3 && snd_len > 0) {
+                int outstanding = (int)(snd_nxt - snd_una);
+                if (fin_sent) outstanding--;
+                if (outstanding > snd_len) outstanding = snd_len;
+                if (outstanding > 0) {
+                    int n = outstanding > MSS ? MSS : outstanding;
+                    send_seg(snd_una, F_ACK | F_PSH, sndbuf, n);
+                    c_rexmit++;
+                    rexmit_tries++;
+                    cwnd = 1;
+                    rto = RTO_MIN;
+                    arm_timer();
+                }
+            }
         }
         return;
     }
@@ -473,7 +627,7 @@ static void st_syn_sent(u32 seqno, u32 ack, u8 flags, const u8 *data, int dlen)
         /* A RST is only acceptable here if it acknowledges our SYN - otherwise
          * anyone who can guess the port can tear the connection down. */
         if ((flags & F_ACK) && ack == iss + 1) {
-            st = TCP_CLOSED; c_rst++; rt_deadline = 0;
+            tcp_set_state(TCP_CLOSED, TCP_R_PEER_RST); c_rst++; rt_deadline = 0;
         }
         return;
     }
@@ -487,7 +641,7 @@ static void st_syn_sent(u32 seqno, u32 ack, u8 flags, const u8 *data, int dlen)
         irs = seqno;
         rcv_nxt = seqno + 1;                /* their SYN consumes one */
         snd_una = ack;
-        st = TCP_ESTABLISHED;
+        tcp_set_state(TCP_ESTABLISHED, TCP_R_HANDSHAKE);
         rt_deadline = 0;
         rto = RTO_MIN;
         send_seg(snd_nxt, F_ACK, 0, 0);
@@ -587,7 +741,9 @@ static void st_established(u32 seqno, u32 ack, u8 flags, const u8 *data, int dle
 {
     if (flags & F_ACK) on_ack(ack);
     int in_seq = take_data(seqno, data, dlen);
-    if ((flags & F_FIN) && take_fin(seqno, dlen, in_seq)) { st = TCP_CLOSE_WAIT; return; }
+    if ((flags & F_FIN) && take_fin(seqno, dlen, in_seq)) {
+        tcp_set_state(TCP_CLOSE_WAIT, TCP_R_PEER_FIN); return;
+    }
     /* ...or a FIN that arrived on an out-of-order segment, whose hole the
      * segment just delivered has now filled. Without this the last segment of
      * an HTTP/1.0 response - data and FIN together - is silently stripped of
@@ -597,7 +753,7 @@ static void st_established(u32 seqno, u32 ack, u8 flags, const u8 *data, int dle
         fin_seen = 1;
         rcv_nxt++;
         send_seg(snd_nxt, F_ACK, 0, 0);
-        st = TCP_CLOSE_WAIT;
+        tcp_set_state(TCP_CLOSE_WAIT, TCP_R_PEER_FIN);
     }
 }
 
@@ -615,11 +771,11 @@ static void st_fin_wait_1(u32 seqno, u32 ack, u8 flags, const u8 *data, int dlen
          * been acknowledged yet - that is the whole difference between CLOSING
          * and TIME_WAIT, and collapsing them closes early and leaves the peer
          * retransmitting into nothing. */
-        if (fin_acked) { st = TCP_TIME_WAIT; tw_deadline = idt_ticks() + TIME_WAIT_TICKS; }
-        else             st = TCP_CLOSING;
+        if (fin_acked) { tcp_set_state(TCP_TIME_WAIT, TCP_R_PEER_FIN); tw_deadline = idt_ticks() + TIME_WAIT_TICKS; }
+        else             tcp_set_state(TCP_CLOSING, TCP_R_PEER_FIN);
         return;
     }
-    if (fin_acked) st = TCP_FIN_WAIT_2;
+    if (fin_acked) tcp_set_state(TCP_FIN_WAIT_2, TCP_R_ACK);
 }
 
 static void st_fin_wait_2(u32 seqno, u32 ack, u8 flags, const u8 *data, int dlen)
@@ -627,7 +783,7 @@ static void st_fin_wait_2(u32 seqno, u32 ack, u8 flags, const u8 *data, int dlen
     if (flags & F_ACK) on_ack(ack);
     int in_seq = take_data(seqno, data, dlen);
     if ((flags & F_FIN) && take_fin(seqno, dlen, in_seq)) {
-        st = TCP_TIME_WAIT;
+        tcp_set_state(TCP_TIME_WAIT, TCP_R_PEER_FIN);
         tw_deadline = idt_ticks() + TIME_WAIT_TICKS;
     }
 }
@@ -659,7 +815,12 @@ void tcp_input(u32 src, int proto, const u8 *p, int len)
     /* A ZERO WINDOW MEANS STOP. Rewriting it to MSS pushed another segment
      * into a receiver that had just said it had no room. The persist probe
      * in tcp_tick is what stops that being a deadlock. */
-    if (flags & F_ACK) snd_wnd = win;
+    seg_dupack_candidate = 0;
+    if (flags & F_ACK) {
+        seg_dupack_candidate = dlen == 0 &&
+            !(flags & (F_SYN | F_FIN | F_RST)) && win == snd_wnd;
+        snd_wnd = win;
+    }
 
     /* A RST tears the connection down from any state except SYN_SENT, where it
      * has to be validated first - see st_syn_sent. */
@@ -674,7 +835,7 @@ void tcp_input(u32 src, int proto, const u8 *p, int len)
         u32 w = (u32)rcv_space();
         if (seq_ge(seqno, rcv_nxt) && seq_lt(seqno, rcv_nxt + (w ? w : 1))) {
             c_rst++;
-            st = TCP_CLOSED;
+            tcp_set_state(TCP_CLOSED, TCP_R_PEER_RST);
             rt_deadline = 0;
         } else {
             c_oow++;
@@ -697,7 +858,7 @@ void tcp_input(u32 src, int proto, const u8 *p, int len)
         break;
     case TCP_CLOSING:
         if (flags & F_ACK) on_ack(ack);
-        if (fin_acked) { st = TCP_TIME_WAIT; tw_deadline = idt_ticks() + TIME_WAIT_TICKS; }
+        if (fin_acked) { tcp_set_state(TCP_TIME_WAIT, TCP_R_ACK); tw_deadline = idt_ticks() + TIME_WAIT_TICKS; }
         break;
     case TCP_CLOSE_WAIT:
         if (flags & F_ACK) on_ack(ack);
@@ -709,7 +870,7 @@ void tcp_input(u32 src, int proto, const u8 *p, int len)
         break;
     case TCP_LAST_ACK:
         if (flags & F_ACK) on_ack(ack);
-        if (fin_acked) { st = TCP_CLOSED; rt_deadline = 0; }
+        if (fin_acked) { tcp_set_state(TCP_CLOSED, TCP_R_ACK); rt_deadline = 0; }
         break;
     case TCP_TIME_WAIT:
         /* A retransmitted FIN is re-ACKed and the wait restarts - that is what
@@ -729,16 +890,16 @@ void tcp_input(u32 src, int proto, const u8 *p, int len)
 }
 
 /* ---- the timers -------------------------------------------------------------
- * Retransmission is the ONLY recovery mechanism here - no fast retransmit, no
- * SACK - so this is the whole of it. The backoff doubles and is capped; an
- * uncapped doubling reaches minutes and looks like a hang.
+ * The timeout path complements fast retransmit and remains the only recovery
+ * when fewer than three later segments reach the peer. The backoff doubles
+ * and is capped; an uncapped doubling reaches minutes and looks like a hang.
  */
 void tcp_tick(void)
 {
     u32 now = idt_ticks();
 
     if (st == TCP_TIME_WAIT) {
-        if ((int)(now - tw_deadline) >= 0) { st = TCP_CLOSED; rt_deadline = 0; }
+        if ((int)(now - tw_deadline) >= 0) { tcp_set_state(TCP_CLOSED, TCP_R_TIME_WAIT); rt_deadline = 0; }
         return;
     }
     if (!rt_deadline || (int)(now - rt_deadline) < 0) return;
@@ -748,8 +909,13 @@ void tcp_tick(void)
             /* THE SYN-ACK THAT NEVER COMES. Give up and say so, rather than
              * retrying forever - a connect that never returns is the failure
              * mode a browser cannot recover from. */
-            st = TCP_CLOSED;
+            tcp_timeout_snapshot(TCP_R_SYN_TIMEOUT, 0);
+            tcp_timeout_snapshot(TCP_R_SYN_TIMEOUT, 1);
+            zlt_trigger(ZLLOG_SUB_NET, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                        TCP_PROTO, TCP_R_SYN_TIMEOUT, syn_tries);
+            tcp_set_state(TCP_CLOSED, TCP_R_SYN_TIMEOUT);
             rt_deadline = 0;
+            tcp_timeout_snapshot(TCP_R_SYN_TIMEOUT, 2);
             return;
         }
         send_seg(iss, F_SYN, 0, 0);
@@ -786,7 +952,18 @@ void tcp_tick(void)
              * to hold the single connection slot open for good - the peer is
              * gone and nothing above ever finds out. Twelve attempts at a
              * backoff capped at four seconds is about half a minute. */
-            if (++rexmit_tries > 12) { tcp_abort(); return; }
+            if (++rexmit_tries > 12) {
+                tcp_timeout_snapshot(TCP_R_DATA_TIMEOUT, 0);
+                tcp_timeout_snapshot(TCP_R_DATA_TIMEOUT, 1);
+                zlt_trigger(ZLLOG_SUB_NET, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                            TCP_PROTO, TCP_R_DATA_TIMEOUT, rexmit_tries);
+                send_seg(snd_nxt, F_RST | F_ACK, 0, 0);
+                c_rst++;
+                tcp_set_state(TCP_CLOSED, TCP_R_DATA_TIMEOUT);
+                rt_deadline = 0; snd_len = 0; ooo_len = 0;
+                tcp_timeout_snapshot(TCP_R_DATA_TIMEOUT, 2);
+                return;
+            }
             int n = outstanding > MSS ? MSS : outstanding;
             send_seg(snd_una, F_ACK | F_PSH, sndbuf, n);
             c_rexmit++;
@@ -805,8 +982,13 @@ void tcp_tick(void)
     if (fin_sent && !fin_acked &&
         (st == TCP_FIN_WAIT_1 || st == TCP_LAST_ACK || st == TCP_CLOSING)) {
         if (++fin_tries > SYN_TRIES) {      /* give up rather than hold the slot */
-            st = TCP_CLOSED;
+            tcp_timeout_snapshot(TCP_R_FIN_TIMEOUT, 0);
+            tcp_timeout_snapshot(TCP_R_FIN_TIMEOUT, 1);
+            zlt_trigger(ZLLOG_SUB_NET, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                        TCP_PROTO, TCP_R_FIN_TIMEOUT, fin_tries);
+            tcp_set_state(TCP_CLOSED, TCP_R_FIN_TIMEOUT);
             rt_deadline = 0;
+            tcp_timeout_snapshot(TCP_R_FIN_TIMEOUT, 2);
             return;
         }
         send_seg(fin_seq, F_FIN | F_ACK, 0, 0);

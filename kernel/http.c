@@ -1,11 +1,10 @@
 /* http.c - HTTP/1.0, and the four things that removes.
  *
  * HTTP/1.0, NOT 1.1, and that is a decision rather than a limitation. 1.1
- * brings chunked transfer encoding, persistent connections, pipelining and
- * Host-based virtual hosting as REQUIREMENTS rather than options. Chunked
- * alone is a second parser with its own framing bugs. 1.0 ends a body by
- * closing the connection, which this stack already handles because a FIN
- * mid-transfer is one of the cases tcptest asserts.
+ * brings chunked transfer encoding and Host-based virtual hosting as
+ * requirements. This client uses optional HTTP/1.0 keep-alive only when a
+ * response supplies both Content-Length and `Connection: keep-alive`; every
+ * close-delimited response still ends at FIN. There is no pipelining.
  *
  * We still send `Host:` - 1.0 does not require it and every real server wants
  * it - and we still handle `Content-Length` when it is offered, because a
@@ -24,6 +23,7 @@
 #include "http.h"
 #include "tls.h"
 #include "x509.h"
+#include "telemetry.h"
 
 static int use_tls;
 static struct tls_conn tls;
@@ -74,6 +74,8 @@ static int  hdr_done;
 static int  content_len = -1;
 static int  truncated;
 static int  refused_type;
+static int  connection_keep_alive;
+static int  connection_reuses;
 static char location[URL_MAX];
 
 /* The response, headers and all. The body is a slice of it rather than a
@@ -82,6 +84,90 @@ static char location[URL_MAX];
 static u8   resp[HTTP_BUF];
 static int  resp_len;
 static int  body_at;
+static unsigned request_span;
+static unsigned request_operation, request_id, request_next;
+
+enum {
+    HTTP_R_START = 1, HTTP_R_CONNECT_FAIL, HTTP_R_CONNECTED,
+    HTTP_R_TLS_FAIL, HTTP_R_BUFFER_FULL, HTTP_R_TYPE_REFUSED,
+    HTTP_R_LENGTH_DONE, HTTP_R_PEER_CLOSE, HTTP_R_BAD_RESPONSE,
+    HTTP_R_REDIRECT, HTTP_R_RESET
+};
+
+static void http_set_state(int next, unsigned reason)
+{
+    int old = state;
+    if (old == next) {
+        if (request_span && (next == HTTP_DONE || next == HTTP_ERROR ||
+                             next == HTTP_TLS_FAIL || next == HTTP_REFUSED ||
+                             next == HTTP_IDLE)) {
+            zlt_span_end(ZLLOG_SUB_NET, request_span,
+                         (next == HTTP_DONE || next == HTTP_IDLE) ? 0u : reason);
+            request_span = 0;
+        }
+        if (request_operation && next == HTTP_DONE) {
+            zlt_operation_result(ZLLOG_SUB_NET, request_operation,
+                                 ZLLOG_OP_HTTP_REQUEST, status_code, 0u,
+                                 (unsigned)resp_len);
+            request_operation = 0;
+            zlt_lifecycle(ZLLOG_SUB_NET, ZLLOG_OBJ_HTTP, request_id,
+                          ZLLOG_LIFE_READY, 0u, (unsigned)status_code);
+        } else if (request_operation &&
+                   (next == HTTP_ERROR || next == HTTP_TLS_FAIL ||
+                    next == HTTP_REFUSED || next == HTTP_IDLE)) {
+            unsigned error = next == HTTP_TLS_FAIL ? 71u :
+                             next == HTTP_REFUSED ? 95u :
+                             next == HTTP_IDLE ? 125u : 5u;
+            zlt_operation_result(ZLLOG_SUB_NET, request_operation,
+                                 ZLLOG_OP_HTTP_REQUEST, -(int)error,
+                                 error, reason);
+            request_operation = 0;
+            zlt_lifecycle(ZLLOG_SUB_NET, ZLLOG_OBJ_HTTP, request_id,
+                          next == HTTP_IDLE ? ZLLOG_LIFE_EXIT : ZLLOG_LIFE_FAULT,
+                          0u, reason);
+            if (next == HTTP_IDLE) request_id = 0;
+        }
+        return;
+    }
+    state = next;
+    zlt_event(ZLLOG_SUB_NET, ZLLOG_EV_NET_STATE,
+              (next == HTTP_ERROR || next == HTTP_TLS_FAIL ||
+               next == HTTP_REFUSED) ? ZLLOG_WARN : ZLLOG_INFO,
+              80u, ((unsigned)old << 16) | (unsigned)next, reason);
+    if (request_span && (next == HTTP_DONE || next == HTTP_ERROR ||
+                         next == HTTP_TLS_FAIL || next == HTTP_REFUSED ||
+                         next == HTTP_IDLE)) {
+        zlt_span_end(ZLLOG_SUB_NET, request_span,
+                     (next == HTTP_DONE || next == HTTP_IDLE) ? 0u : reason);
+        request_span = 0;
+    }
+    if (next == HTTP_DONE) {
+        zlt_lifecycle(ZLLOG_SUB_NET, ZLLOG_OBJ_HTTP, request_id,
+                      ZLLOG_LIFE_READY, 0u, (unsigned)status_code);
+        zlt_operation_result(ZLLOG_SUB_NET, request_operation,
+                             ZLLOG_OP_HTTP_REQUEST, status_code, 0u,
+                             (unsigned)resp_len);
+        request_operation = 0;
+    } else if (next == HTTP_ERROR || next == HTTP_TLS_FAIL ||
+               next == HTTP_REFUSED) {
+        unsigned error = next == HTTP_TLS_FAIL ? 71u :
+                         next == HTTP_REFUSED ? 95u : 5u;
+        zlt_operation_result(ZLLOG_SUB_NET, request_operation,
+                             ZLLOG_OP_HTTP_REQUEST, -(int)error, error, reason);
+        request_operation = 0;
+        zlt_lifecycle(ZLLOG_SUB_NET, ZLLOG_OBJ_HTTP, request_id,
+                      ZLLOG_LIFE_FAULT, 0u, reason);
+    } else if (next == HTTP_IDLE && request_id) {
+        if (request_operation) {
+            zlt_operation_result(ZLLOG_SUB_NET, request_operation,
+                                 ZLLOG_OP_HTTP_REQUEST, -125, 125u, reason);
+            request_operation = 0;
+        }
+        zlt_lifecycle(ZLLOG_SUB_NET, ZLLOG_OBJ_HTTP, request_id,
+                      ZLLOG_LIFE_EXIT, 0u, reason);
+        request_id = 0;
+    }
+}
 
 
 static void scopy(char *d, const char *s, int max)
@@ -92,6 +178,27 @@ static void scopy(char *d, const char *s, int max)
 }
 
 static int lower(int c) { return (c >= 'A' && c <= 'Z') ? c + 32 : c; }
+
+static unsigned http_endpoint_token(u32 ip, int port)
+{
+    u32 h = 2166136261u;
+    for (int i = 0; i < 4; i++) { h ^= (ip >> (i * 8)) & 0xffu; h *= 16777619u; }
+    h ^= (u32)port & 0xffu; h *= 16777619u;
+    h ^= ((u32)port >> 8) & 0xffu; h *= 16777619u;
+    return h;
+}
+
+static int line_has(const u8 *p, int len, const char *word)
+{
+    int wlen = 0;
+    while (word[wlen]) wlen++;
+    for (int i = 0; i + wlen <= len && p[i] != '\r' && p[i] != '\n'; i++) {
+        int j = 0;
+        while (j < wlen && lower(p[i + j]) == word[j]) j++;
+        if (j == wlen) return 1;
+    }
+    return 0;
+}
 
 /* case-insensitive prefix match, which is what a header name needs */
 static int hdr_is(const u8 *p, int len, const char *name)
@@ -118,11 +225,14 @@ static int hdr_is(const u8 *p, int len, const char *name)
  * into whatever static the linker placed next, with no fault and no MMU to
  * catch it. A hand-counted reserve drifting from a string literal someone later
  * edited is exactly what a _Static_assert removes permanently. */
-static const char req_tail[] = "\r\nUser-Agent: zlOS\r\nConnection: close\r\n\r\n";
-#define REQ_TAIL_LEN (sizeof(req_tail) - 1)
-#define REQ_HOST_RESERVE ((int)REQ_TAIL_LEN + 8)   /* the tail, plus slack */
+static const char req_tail_close[] =
+    "\r\nUser-Agent: zlOS\r\nConnection: close\r\n\r\n";
+static const char req_tail_keep[] =
+    "\r\nUser-Agent: zlOS\r\nConnection: keep-alive\r\n\r\n";
+#define REQ_TAIL_MAX (sizeof(req_tail_keep) - 1)
+#define REQ_HOST_RESERVE ((int)REQ_TAIL_MAX + 8)   /* the largest tail, plus slack */
 
-_Static_assert(REQ_MAX - REQ_HOST_RESERVE + (int)REQ_TAIL_LEN <= REQ_MAX,
+_Static_assert(REQ_MAX - REQ_HOST_RESERVE + (int)REQ_TAIL_MAX <= REQ_MAX,
                "build_request's host reserve no longer covers the request tail");
 
 static int build_request(void)
@@ -137,22 +247,47 @@ static int build_request(void)
     /* Belt as well as braces: the assert above proves the reserve is big
      * enough, this proves the write cannot leave the buffer even if someone
      * changes one without the other. */
-    for (const char *t = req_tail; *t; t++) {
+    const char *tail = use_tls ? req_tail_close : req_tail_keep;
+    for (const char *t = tail; *t; t++) {
         if (n >= REQ_MAX) return 0;
         req[n++] = (u8)*t;
     }
     return n;
 }
 
-int http_start(u32 ip, int port, const char *hostname, const char *p)
+static int http_begin(u32 ip, int port, const char *hostname, const char *p,
+                      int want_tls)
 {
-    if (state == HTTP_CONNECTING || state == HTTP_RECEIVING) return 0;
+    int actual_port = port ? port : (want_tls ? 443 : 80);
+    unsigned token = http_endpoint_token(ip, actual_port);
+    unsigned operation = zlt_operation_begin(
+        ZLLOG_SUB_NET, ZLLOG_OBJ_KERNEL, 0u,
+        ZLLOG_OP_HTTP_REQUEST, token);
+    if (state == HTTP_CONNECTING || state == HTTP_RECEIVING || !ip ||
+        actual_port <= 0 || actual_port > 65535) {
+        unsigned error = state == HTTP_CONNECTING || state == HTTP_RECEIVING
+                             ? 16u : 22u;
+        zlt_operation_result(ZLLOG_SUB_NET, operation,
+                             ZLLOG_OP_HTTP_REQUEST, -(int)error, error, token);
+        return 0;
+    }
+    if (request_id) {
+        zlt_lifecycle(ZLLOG_SUB_NET, ZLLOG_OBJ_HTTP, request_id,
+                      ZLLOG_LIFE_EXIT, 0u, HTTP_R_START);
+        request_id = 0;
+    }
+    request_operation = operation;
+    request_id = ++request_next;
+    if (!request_id) request_id = ++request_next;
+    zlt_lifecycle(ZLLOG_SUB_NET, ZLLOG_OBJ_HTTP, request_id,
+                  ZLLOG_LIFE_START, 0u, token);
     target_ip = ip;
-    target_port = port ? port : 80;
+    target_port = actual_port;
     scopy(host, hostname ? hostname : "", URL_MAX);
     scopy(path, (p && *p) ? p : "/", URL_MAX);
 
-    use_tls = 0;
+    int was_tls = use_tls;
+    use_tls = want_tls;
     tls_failed = 0;
     resp_len = 0;
     body_at = 0;
@@ -161,19 +296,32 @@ int http_start(u32 ip, int port, const char *hostname, const char *p)
     content_len = -1;
     truncated = 0;
     refused_type = 0;
+    connection_keep_alive = 0;
     ctype[0] = 0;
     location[0] = 0;
+    request_span = zlt_span_begin(ZLLOG_SUB_NET, 80u /* HTTP request */,
+                                  (unsigned)target_port);
 
-    tcp_abort();
-    if (!tcp_connect(ip, target_port)) { state = HTTP_ERROR; return 0; }
-    state = HTTP_CONNECTING;
+    if (!want_tls && !was_tls && tcp_can_reuse(ip, target_port)) {
+        connection_reuses++;
+    } else {
+        tcp_abort();
+        if (!tcp_connect(ip, target_port)) {
+            http_set_state(HTTP_ERROR, HTTP_R_CONNECT_FAIL); return 0;
+        }
+    }
+    http_set_state(HTTP_CONNECTING, HTTP_R_START);
     return 1;
+}
+
+int http_start(u32 ip, int port, const char *hostname, const char *p)
+{
+    return http_begin(ip, port, hostname, p, 0);
 }
 
 int http_start_tls(net_u32 ip, int port, const char *hostname, const char *path)
 {
-    if (!http_start(ip, port ? port : 443, hostname, path)) return 0;
-    use_tls = 1;
+    if (!http_begin(ip, port ? port : 443, hostname, path, 1)) return 0;
     tls_failed = 0;
     tls_err = 0;
     for (int i = 0; i < (int)sizeof tls; i++) ((unsigned char *)&tls)[i] = 0;
@@ -184,7 +332,10 @@ int http_start_tls(net_u32 ip, int port, const char *hostname, const char *path)
      * readable while every other check still passes. */
     int q = rnd_bytes(tls.priv, 32);
     tls_rnd_quality = q;
-    if (q == 0) { state = HTTP_TLS_FAIL; tls_err = TLS_E_PROTOCOL; return 0; }
+    if (q == 0) {
+        http_set_state(HTTP_TLS_FAIL, HTTP_R_TLS_FAIL);
+        tls_err = TLS_E_PROTOCOL; return 0;
+    }
 
     int nroots = 0;
     const struct x509_cert *roots = zl_roots(&nroots);
@@ -249,6 +400,9 @@ static void parse_headers(void)
                    k < URL_MAX - 1)
                 location[k++] = (char)h[j++];
             location[k] = 0;
+        } else if (hdr_is(h, avail, "connection:")) {
+            connection_keep_alive = line_has(h + 11, avail - 11,
+                                             "keep-alive");
         }
     }
 }
@@ -377,7 +531,7 @@ int http_poll(void)
     if (use_tls && (tls_failed || tls_state(&tls) == TLS_ERROR)) {
         tls_err = tls_error(&tls);
         tcp_abort();
-        state = HTTP_TLS_FAIL;
+        http_set_state(HTTP_TLS_FAIL, HTTP_R_TLS_FAIL);
         return state;
     }
 
@@ -393,9 +547,9 @@ int http_poll(void)
         if (s == TCP_ESTABLISHED && (!use_tls || tls_state(&tls) == TLS_READY)) {
             int n = build_request();
             xport_send(req, n);
-            state = HTTP_RECEIVING;
+            http_set_state(HTTP_RECEIVING, HTTP_R_CONNECTED);
         } else if (s == TCP_CLOSED) {
-            state = HTTP_ERROR;                    /* refused, or never answered */
+            http_set_state(HTTP_ERROR, HTTP_R_CONNECT_FAIL);
         }
         return state;
     }
@@ -421,7 +575,7 @@ int http_poll(void)
     if (hdr_done && resp_len >= HTTP_BUF) {
         truncated = 1;
         tcp_abort();
-        state = HTTP_DONE;
+        http_set_state(HTTP_DONE, HTTP_R_BUFFER_FULL);
         return state;
     }
 
@@ -436,7 +590,7 @@ int http_poll(void)
                  * fill the buffer before anyone noticed it was not a page. */
                 refused_type = 1;
                 tcp_abort();
-                state = HTTP_REFUSED;
+                http_set_state(HTTP_REFUSED, HTTP_R_TYPE_REFUSED);
                 return state;
             }
         }
@@ -446,12 +600,16 @@ int http_poll(void)
      * HTTP/1.0 ends a body and why no chunked decoder is needed. */
     if (hdr_done && content_len >= 0 && resp_len - body_at >= content_len) {
         resp_len = body_at + content_len;
-        tcp_close();
-        state = HTTP_DONE;
+        if (use_tls || !connection_keep_alive ||
+            tcp_state() != TCP_ESTABLISHED)
+            tcp_close();
+        http_set_state(HTTP_DONE, HTTP_R_LENGTH_DONE);
     } else if (xport_closing()) {
         if (xport_available() == 0) {
-            if (!hdr_done) { state = HTTP_ERROR; return state; }
-            state = HTTP_DONE;
+            if (!hdr_done) {
+                http_set_state(HTTP_ERROR, HTTP_R_BAD_RESPONSE); return state;
+            }
+            http_set_state(HTTP_DONE, HTTP_R_PEER_CLOSE);
             if (tcp_state() == TCP_CLOSE_WAIT) tcp_close();
         }
     }
@@ -459,7 +617,7 @@ int http_poll(void)
     if (state == HTTP_DONE && status_code >= 300 && status_code < 400 &&
         location[0] && redirects < HTTP_MAX_REDIRECTS) {
         redirects++;
-        state = HTTP_REDIRECT;
+        http_set_state(HTTP_REDIRECT, HTTP_R_REDIRECT);
     }
     return state;
 }
@@ -469,6 +627,7 @@ int http_status(void)     { return status_code; }
 int http_truncated(void)  { return truncated; }
 int http_refused(void)    { return refused_type; }
 int http_redirects(void)  { return redirects; }
+int http_connection_reuses(void) { return connection_reuses; }
 int http_body_len(void)   { return hdr_done ? resp_len - body_at : 0; }
 u32 http_body_addr(void)  { return (u32)(uptr)(resp + body_at); }
 int http_total(void)      { return resp_len; }
@@ -484,7 +643,7 @@ int http_body_byte(int i)
 
 void http_reset(void)
 {
-    state = HTTP_IDLE;
+    http_set_state(HTTP_IDLE, HTTP_R_RESET);
     redirects = 0;
     resp_len = 0;
     body_at = 0;
@@ -492,5 +651,6 @@ void http_reset(void)
     hdr_done = 0;
     truncated = 0;
     refused_type = 0;
+    connection_keep_alive = 0;
     accept_mask = HTTP_ACC_TEXT;   /* strict by default - see http_accept */
 }
