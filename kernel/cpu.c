@@ -165,6 +165,10 @@ int cpu_has_hypervisor(void) { return (cpu_feat_ecx() & (1u << 31)) ? 1 : 0; }
 int cpu_has_avx2(void)  { return (cpu_feat7_ebx() & (1u << 5))  ? 1 : 0; }
 int cpu_has_bmi1(void)  { return (cpu_feat7_ebx() & (1u << 3))  ? 1 : 0; }
 int cpu_has_bmi2(void)  { return (cpu_feat7_ebx() & (1u << 8))  ? 1 : 0; }
+/* CPUID.7.0:EBX[25]. Presence only: enabling Intel PT needs ToPA buffers,
+ * privilege filtering, overflow handling and a deliberately narrow trigger.
+ * Normal boots never write the tracing MSRs. */
+int cpu_has_intel_pt(void) { return (cpu_feat7_ebx() & (1u << 25)) ? 1 : 0; }
 
 /* ---- topology ----------------------------------------------------------
  * Leaf 0x0B is the modern, authoritative answer: it enumerates levels, and
@@ -248,6 +252,112 @@ int cpu_tsc_invariant(void)
 
 u64 cpu_tsc(void) { return read_tsc(); }
 u32 cpu_tsc_lo(void) { return (u32)(read_tsc() & 0xFFFFFFFFu); }
+
+/* Intel SDM Vol. 3A table 14-7, reduced to the recorder's stable types.
+ * Unknown includes WT/WP results because the recorder intentionally exposes
+ * only unknown, UC, WC and WB.  The easy-to-miss row is MTRR UC + PAT WC:
+ * Intel defines that as WC, not UC.  The old decoder got that row wrong and
+ * would have reported a successful framebuffer retype as still uncacheable. */
+u32 cpu_combine_memory_type(u32 pat, u32 mtrr)
+{
+    if (pat == 1u) return 2u;                    /* PAT WC strengthens every valid MTRR */
+    if (pat == 0u) return 1u;                    /* strict UC */
+    if (mtrr == 0u) return 1u;                   /* UC with every non-WC PAT */
+    if (mtrr == 1u)                              /* WC */
+        return (pat == 6u || pat == 7u) ? 2u : 1u;
+    if (mtrr == 6u)                              /* WB */
+        return pat == 6u ? 3u : (pat == 7u ? 1u : 0u);
+    if (mtrr == 4u) return pat == 7u ? 1u : 0u; /* WT + WB/WT are not stable */
+    if (mtrr == 5u) return pat == 7u ? 2u : 0u; /* WP + UC- is defined WC */
+    return 0u;
+}
+
+/* Effective cache type for one currently mapped address.
+ *
+ * This is read-only evidence, not a cache-policy change. It combines the PAT
+ * selection in the live page-table entry with the CPU's variable/default
+ * MTRRs. That distinction matters for a GOP/PCI framebuffer: a PTE requesting
+ * WB can still be effectively UC because the physical range is UC, which is
+ * exactly the performance question the frame recorder needs to answer.
+ * Returns the recorder's stable encoding: 0 unknown, 1 UC/UC-, 2 WC, 3 WB. */
+u32 cpu_effective_memory_type(u64 addr)
+{
+#if !defined(ZL_64) && !defined(__x86_64__)
+    (void)addr;
+    return 0;
+#else
+    u32 a, b, c, d;
+    do_cpuid(1, 0, &a, &b, &c, &d);
+    if (!(d & (1u << 12)) || !(d & (1u << 16))) return 0; /* MTRR + PAT */
+
+    u64 cr0, cr3;
+    __asm__ volatile("mov %%cr0,%0" : "=r"(cr0));
+    __asm__ volatile("mov %%cr3,%0" : "=r"(cr3));
+    if (!(cr0 & (1ULL << 31)) || !(cr3 & ~0xfffULL)) return 0;
+
+    const u64 present = 1u, huge = 1u << 7;
+    const u64 table_mask = 0x000ffffffffff000ULL;
+    u64 *pml4 = (u64 *)(__UINTPTR_TYPE__)(cr3 & table_mask);
+    u64 e = pml4[(addr >> 39) & 511u];
+    if (!(e & present)) return 0;
+    u64 *pdpt = (u64 *)(__UINTPTR_TYPE__)(e & table_mask);
+    e = pdpt[(addr >> 30) & 511u];
+    if (!(e & present)) return 0;
+    int pat_bit;
+    u64 phys;
+    if (e & huge) {
+        pat_bit = (int)((e >> 12) & 1u);
+        phys = (e & 0x000fffffc0000000ULL) | (addr & 0x3fffffffULL);
+    }
+    else {
+        u64 *pd = (u64 *)(__UINTPTR_TYPE__)(e & table_mask);
+        e = pd[(addr >> 21) & 511u];
+        if (!(e & present)) return 0;
+        if (e & huge) {
+            pat_bit = (int)((e >> 12) & 1u);
+            phys = (e & 0x000fffffffe00000ULL) | (addr & 0x1fffffULL);
+        }
+        else {
+            u64 *pt = (u64 *)(__UINTPTR_TYPE__)(e & table_mask);
+            e = pt[(addr >> 12) & 511u];
+            if (!(e & present)) return 0;
+            pat_bit = (int)((e >> 7) & 1u);
+            phys = (e & table_mask) | (addr & 0xfffULL);
+        }
+    }
+    u32 pat_index = (u32)pat_bit * 4u + (u32)((e >> 4) & 1u) * 2u +
+                    (u32)((e >> 3) & 1u);
+    u32 pat_type = (u32)((read_msr(0x277u) >> (pat_index * 8u)) & 0xffu);
+
+    u64 def = read_msr(0x2ffu);
+    u32 mtrr_type = (u32)(def & 0xffu);
+    if (!(def & (1u << 11))) mtrr_type = 0u; /* disabled means UC */
+    else {
+        do_cpuid(0x80000000u, 0, &a, &b, &c, &d);
+        u32 phys_bits = 36u;
+        if (a >= 0x80000008u) {
+            do_cpuid(0x80000008u, 0, &a, &b, &c, &d);
+            if ((a & 0xffu) >= 32u && (a & 0xffu) <= 52u) phys_bits = a & 0xffu;
+        }
+        u64 phys_mask = ((1ULL << phys_bits) - 1u) & ~0xfffULL;
+        u32 count = (u32)(read_msr(0xfeu) & 0xffu);
+        int matched = 0;
+        for (u32 i = 0; i < count; i++) {
+            u64 base = read_msr(0x200u + i * 2u);
+            u64 mask = read_msr(0x201u + i * 2u);
+            if (!(mask & (1u << 11))) continue;
+            u64 range_mask = mask & phys_mask;
+            if ((phys & range_mask) != (base & range_mask)) continue;
+            u32 type = (u32)(base & 0xffu);
+            if (!matched) { mtrr_type = type; matched = 1; }
+            else if (type == 0u || mtrr_type == 0u) mtrr_type = 0u;
+            else if (type != mtrr_type) return 0; /* undefined/unsupported mix */
+        }
+    }
+
+    return cpu_combine_memory_type(pat_type, mtrr_type);
+#endif
+}
 
 static u32 tsc_khz_cached = 0;
 

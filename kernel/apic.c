@@ -326,6 +326,22 @@ void apic_eoi(void)
     if (apic_on) mmio_w(lapic_base + LAPIC_EOI, 0);
 }
 
+/* INIT/SIPI starts a different logical CPU with per-core LAPIC state.  The
+ * BSP's `apic_on` flag and MMIO base are shared memory, but the IA32_APIC_BASE
+ * enable and SVR software-enable state are not a substitute for programming
+ * the arriving AP itself.  SMP workers use a fixed IPI as their HLT wake
+ * source, so each AP must be able to accept that IPI before it publishes its
+ * work slot. */
+void apic_enable_local(void)
+{
+    u64 base_msr = rdmsr(IA32_APIC_BASE);
+    if (!(base_msr & APIC_BASE_ENABLE))
+        wrmsr(IA32_APIC_BASE, base_msr | APIC_BASE_ENABLE);
+    mmio_w(lapic_base + LAPIC_SVR, 0x1FF);
+    mmio_w(lapic_base + LAPIC_TPR, 0);
+    mmio_w(lapic_base + LAPIC_EOI, 0);
+}
+
 int apic_init(void)
 {
     if (apic_on) return 1;

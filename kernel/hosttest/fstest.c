@@ -39,6 +39,7 @@ int  fs_find(const char *name);
 int  fs_write(int idx, const void *src, u32 bytes);
 int  fs_read(int idx, void *dst, u32 max);
 int  fs_delete(int idx);
+int  fs_rename(int idx, const char *name);
 int  fs_count(void);
 int  fs_used(int idx);
 u32  fs_size(int idx);
@@ -85,6 +86,8 @@ static u32 dev_blocks = DEV_BYTES / DEV_BSIZE_DEFAULT;
 static long fail_lba   = -1;        /* writes to this LBA fail               */
 static int  fail_times = 1 << 30;   /* ...this many times. 1 = a transient
                                        glitch the retry can recover from    */
+static long fail_after = -1;        /* fail after this total successful write */
+static int  fail_after_times = 1 << 30;
 static u32  writes_done;
 
 int fsdev_read(u32 lba, void *buf)
@@ -100,10 +103,15 @@ int fsdev_write(u32 lba, const void *buf)
         fail_times--;
         return 0;
     }
+    if (fail_after >= 0 && (long)writes_done >= fail_after && fail_after_times > 0) {
+        fail_after_times--;
+        return 0;
+    }
     memcpy(disk + (size_t)lba * dev_bsize, buf, dev_bsize);
     writes_done++;
     return 1;
 }
+int fsdev_sync(void) { return 1; }
 u32 fsdev_bsize(void)  { return dev_bsize; }
 u32 fsdev_blocks(void) { return dev_blocks; }
 
@@ -115,7 +123,60 @@ static void dev_new(u32 bsize)
     disk = calloc(DEV_BYTES, 1);
     fail_lba = -1;
     fail_times = 1 << 30;
+    fail_after = -1;
+    fail_after_times = 1 << 30;
     writes_done = 0;
+}
+
+static void fail_in(u32 successful_writes, int times)
+{
+    fail_after = (long)writes_done + (long)successful_writes;
+    fail_after_times = times;
+}
+
+static u32 get32(const unsigned char *p)
+{
+    return (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
+}
+
+static void put32(unsigned char *p, u32 v)
+{
+    p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8);
+    p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24);
+}
+
+static int active_dir_slot(void)
+{
+    u32 blocks = (2048u + dev_bsize - 1u) / dev_bsize;
+    u32 base = FS_START_OFF / dev_bsize + 1u;
+    unsigned char *a = disk + (size_t)base * dev_bsize;
+    unsigned char *b = disk + (size_t)(base + blocks + 1u) * dev_bsize;
+    u32 ga = get32(a + 4), gb = get32(b + 4);
+    return ga != gb && (u32)(gb - ga) < 0x80000000u ? 1 : 0;
+}
+
+static unsigned char *active_dir_data(void)
+{
+    u32 blocks = (2048u + dev_bsize - 1u) / dev_bsize;
+    u32 base = FS_START_OFF / dev_bsize + 1u;
+    base += (u32)active_dir_slot() * (blocks + 1u);
+    return disk + (size_t)(base + 1u) * dev_bsize;
+}
+
+static void active_dir_refix(void)
+{
+    u32 blocks = (2048u + dev_bsize - 1u) / dev_bsize;
+    u32 base = FS_START_OFF / dev_bsize + 1u;
+    base += (u32)active_dir_slot() * (blocks + 1u);
+    unsigned char *h = disk + (size_t)base * dev_bsize;
+    unsigned char *d = h + dev_bsize;
+    u32 sum = 0;
+    for (u32 i = 0; i < 2048u; i += 4) sum += get32(d + i);
+    put32(h + 8, sum);
+    put32(h + 12, 0);
+    sum = 0;
+    for (u32 i = 0; i < dev_bsize; i += 4) sum += get32(h + i);
+    put32(h + 12, 0u - sum);
 }
 
 /* ---- assertions ----------------------------------------------------------- */
@@ -259,7 +320,7 @@ int main(int argc, char **argv)
     said_reset();
     disk[FS_START_OFF + 4] = 99;           /* version 99         */
     ok("a future on-disk version is refused", fs_mount() == 0);
-    ok("...naming both versions", said("version 99") && said("speaks 1"));
+    ok("...naming both versions", said("version 99") && said("speaks 2"));
     memcpy(disk + FS_START_OFF, sb_good, dev_bsize);
 
     said_reset();
@@ -318,6 +379,10 @@ int main(int argc, char **argv)
     int b = fs_create_named(20);
     ok("a name pushed one character at a time creates a file", b >= 0);
     ok("...and find_named locates it", fs_find_named() == b);
+    ok("rename publishes a new named-file identity", fs_rename(b, "/user/notes.md") == 1 &&
+       fs_find("notes.md") < 0 && fs_find("/user/notes.md") == b);
+    ok("rename refuses to replace an existing file", fs_rename(b, "hello.txt") == 0 &&
+       fs_find("/user/notes.md") == b);
     fs_name_clear();
     for (int i = 0; i < 100; i++) fs_name_push('x');
     ok("a name longer than the field stops at 23 characters", fs_find_named() < 0);
@@ -423,28 +488,30 @@ int main(int argc, char **argv)
     fs_write(t, buf, 2000);
     u32 len_before = fs_size(t);
     said_reset();
-    fail_lba = (long)fs_start(t) + 3;          /* fail the 4th block */
+    fail_in(3, 1 << 30);                       /* fail the 4th COW block */
     for (int i = 0; i < 4000; i++) buf[i] = 'T';
     ok("a write whose 4th block fails reports failure", fs_write(t, buf, 4000) == 0);
-    ok("...and says the file is now partial", said("the file is now partial"));
+    ok("...and says the old file remains published", said("file is unchanged"));
     ok("...and the LENGTH still reads the OLD value, not the new claim",
        fs_size(t) == len_before);
-    fail_lba = -1;
+    fail_after = -1;
     fs_delete(t);
 
     /* ---- a directory entry pointing outside the volume ------------------ */
     said_reset();
     {
         /* reach into the on-disk directory and push a run off the end */
-        unsigned char *d = disk + FS_START_OFF + dev_bsize;
+        unsigned char *d = active_dir_data();
         /* entry 0 is hello.txt; FE_START is at byte 24 of a 64-byte entry */
         unsigned char save[64];
         memcpy(save, d, 64);
         d[24] = 0xFF; d[25] = 0xFF; d[26] = 0xFF; d[27] = 0x7F;
+        active_dir_refix();
         ok("a directory entry pointing off the disk refuses the MOUNT",
            fs_mount() == 0);
         ok("...naming the entry", said("is out of range"));
         memcpy(d, save, 64);
+        active_dir_refix();
     }
     ok("and it mounts again once the entry is sane", fs_mount() == 1);
 
@@ -517,7 +584,8 @@ int main(int argc, char **argv)
 
     u32 a_start_before = fs_start(A);
     said_reset();
-    fail_lba = (long)ghost_lba + 2;
+    (void)ghost_lba;
+    fail_in(2, 1 << 30);
     for (int i = 0; i < 5000; i++) buf[i] = 'N';
     ok("D2 a relocation whose copy fails reports failure",
        fs_write(A, buf, 5000) == 0);
@@ -526,7 +594,7 @@ int main(int argc, char **argv)
     ok("D2 ...and the entry still points at the ORIGINAL run",
        fs_start(A) == a_start_before);
     ok("D2 ...with the original length", fs_size(A) == 13);
-    fail_lba = -1;
+    fail_after = -1;
     memset(buf, 0, sizeof buf);
     fs_read(A, buf, sizeof buf);
     ok("D2 ...and A still reads back its OWN bytes, not the ghost's",
@@ -546,9 +614,10 @@ int main(int argc, char **argv)
     fs_create("one.txt", 100);
     said_reset();
     {
-        unsigned char *d = disk + FS_START_OFF + dev_bsize;   /* directory */
+        unsigned char *d = active_dir_data();
         d[24] = 0xB8; d[25] = 0x0B; d[26] = 0; d[27] = 0;     /* start  = 3000 */
         d[32] = 0x6C; d[33] = 0xD3; d[34] = 0xFF; d[35] = 0xFF; /* blocks wraps */
+        active_dir_refix();
         ok("D3 an entry whose start+blocks WRAPS is refused at mount",
            fs_mount() == 0);
         ok("D3 ...naming the entry as out of range", said("is out of range"));
@@ -609,16 +678,14 @@ int main(int argc, char **argv)
     fs_mkfs(); fs_mount();
     int survivor = fs_create("survivor.txt", 20);
     fs_write(survivor, "STILL-HERE", 10);
-    u32 dirlba = FS_START_OFF / dev_bsize + 1;
-
-    /* --- transient: one block write glitches, the rollback lands ---------- */
+    /* --- one inactive-generation block glitches; old generation stays live */
     said_reset();
-    fail_lba = (long)dirlba + 2; fail_times = 1;
+    fail_in(2, 1);
     ok("D7 a create whose directory write glitches returns failure",
        fs_create("phantom.bin", 100) < 0);
-    fail_lba = -1; fail_times = 1 << 30;
-    ok("D7 ...saying the change was rolled back, volume unharmed",
-       said("rolled back"));
+    fail_after = -1; fail_after_times = 1 << 30;
+    ok("D7 ...saying the previous generation remains active",
+       said("previous directory generation remains active"));
     ok("D7 ...and the volume is STILL MOUNTED", fs_mounted() == 1);
     ok("D7 ...the phantom is not in the live directory", fs_find("phantom.bin") < 0);
     ok("D7 ...NOR on the disk after a remount",
@@ -632,10 +699,10 @@ int main(int argc, char **argv)
     said_reset();
     int doomed = fs_create("doomed.bin", 100);
     fs_write(doomed, "PRESENT", 7);
-    fail_lba = (long)dirlba + 2; fail_times = 1;
+    fail_in(2, 1);
     ok("D7 a delete whose directory write glitches returns failure",
        fs_delete(doomed) == 0);
-    fail_lba = -1; fail_times = 1 << 30;
+    fail_after = -1; fail_after_times = 1 << 30;
     ok("D7 ...and the file is still there, not half-removed",
        fs_find("doomed.bin") >= 0);
     ok("D7 ...on disk too", fs_mount() == 1 && fs_find("doomed.bin") >= 0);
@@ -643,19 +710,69 @@ int main(int argc, char **argv)
     fs_read(fs_find("doomed.bin"), buf, sizeof buf);
     ok("D7 ...with its bytes", memcmp(buf, "PRESENT", 7) == 0);
 
-    /* --- permanent: the disk is gone. Stop writing to it. ----------------- */
+    /* --- permanent failure still cannot damage the active generation ------ */
     said_reset();
-    fail_lba = (long)dirlba + 2;                 /* fails for ever */
+    fail_in(2, 1 << 30);
     ok("D7 a create against a disk that will not take writes AT ALL fails",
        fs_create("hopeless.bin", 100) < 0);
-    ok("D7 ...and says the directory cannot be repaired",
-       said("cannot be repaired"));
-    ok("D7 ...and UNMOUNTS rather than writing to it again", fs_mounted() == 0);
-    fail_lba = -1;
+    ok("D7 ...and says the previous generation remains authoritative",
+       said("previous directory generation remains active"));
+    ok("D7 ...and stays mounted on that known-good generation", fs_mounted() == 1);
+    fail_after = -1;
     ok("D7 ...and once the disk is back, no phantom is on it",
        fs_mount() == 1 && fs_find("hopeless.bin") < 0);
     ok("D7 ...and everything that was there still is",
        fs_find("survivor.txt") >= 0 && fs_find("doomed.bin") >= 0);
+
+    /* ---- power cut after every sector of a durable replacement ----------- */
+    printf("\n  -- power cut after every replacement write --\n");
+    dev_new(DEV_BSIZE_DEFAULT);
+    fs_mkfs(); fs_mount();
+    int atomic = fs_create("atomic.txt", 16);
+    fs_write(atomic, "OLD-CONTENT", 11);
+    unsigned char *snapshot = malloc(DEV_BYTES);
+    if (!snapshot) { perror("malloc"); return 2; }
+    memcpy(snapshot, disk, DEV_BYTES);
+
+    for (u32 cut = 0; cut <= 6; cut++) {
+        memcpy(disk, snapshot, DEV_BYTES);
+        fail_after = -1; writes_done = 0;
+        fs_mount();
+        atomic = fs_find("atomic.txt");
+        fail_in(cut, 1 << 30);
+        int published = fs_write(atomic, "NEW-CONTENT", 11);
+        fail_after = -1;
+        int remounted = fs_mount();
+        atomic = fs_find("atomic.txt");
+        memset(buf, 0, sizeof buf);
+        int got = atomic >= 0 ? fs_read(atomic, buf, sizeof buf) : -1;
+        int old_ok = got == 11 && memcmp(buf, "OLD-CONTENT", 11) == 0;
+        int new_ok = got == 11 && memcmp(buf, "NEW-CONTENT", 11) == 0;
+        char label[80];
+        snprintf(label, sizeof label, "cut after %u writes cold-mounts exactly old or new", cut);
+        ok(label, remounted && (old_ok || new_ok) && (published ? new_ok : old_ok));
+    }
+
+    /* A torn/newest header must select the older complete generation. */
+    memcpy(disk, snapshot, DEV_BYTES);
+    fail_after = -1; writes_done = 0;
+    fs_mount();
+    atomic = fs_find("atomic.txt");
+    ok("a complete replacement publishes before header-corruption test",
+       fs_write(atomic, "NEW-CONTENT", 11) == 1);
+    {
+        u32 blocks = (2048u + dev_bsize - 1u) / dev_bsize;
+        u32 base = FS_START_OFF / dev_bsize + 1u;
+        base += (u32)active_dir_slot() * (blocks + 1u);
+        disk[(size_t)base * dev_bsize + 12] ^= 0x80;
+    }
+    ok("a corrupt newest generation falls back to the older one", fs_mount() == 1);
+    atomic = fs_find("atomic.txt");
+    memset(buf, 0, sizeof buf);
+    ok("...and the fallback file contains the complete old bytes",
+       atomic >= 0 && fs_read(atomic, buf, sizeof buf) == 11 &&
+       memcmp(buf, "OLD-CONTENT", 11) == 0);
+    free(snapshot);
 
     /* ---- leave a disk behind for the separate-process reboot ------------- */
     printf("\n  -- building the disk phase 2 will cold-start from --\n");

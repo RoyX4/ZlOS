@@ -41,6 +41,7 @@
 #include "memmap.h"
 #include "ggttmap.h"
 #include "gpu.h"
+#include "telemetry.h"
 
 typedef unsigned int       gr_u32;
 typedef unsigned long long gr_u64;
@@ -78,10 +79,7 @@ int  intel_ggtt_map_range(gr_u32 gfx_page, gr_u32 phys_addr, int pages);
 #define GPU_RING_BYTES 4096u                 /* one page, and RING_CTL's length
                                               * field counts pages minus one   */
 #define GPU_RING_GFX   GGTT_RING_GFX          /* ggttmap.h owns it */
-#define GPU_FB_GFX     0x08000000u           /* 128 MiB: the back buffer, mapped
-                                              * for gpu_fill_try. Clear of the
-                                              * ring above and of intel.c's
-                                              * scanout at graphics 1 MiB. */
+#define GPU_FB_GFX     GGTT_BACK_GFX
 
 _Static_assert(GPU_RING_BYTES == 4096u, "the RING_CTL length field below assumes one page");
 _Static_assert((gr_u64)HI_GPU + GPU_RING_BYTES <= (gr_u64)HI_BLUR,
@@ -279,11 +277,22 @@ static int forcewake_get(void)
 {
     gr_u32 req = engine_fw_req(ring_engine), ack = engine_fw_ack(ring_engine);
     mmio_w(req, (FW_KERNEL_BIT << 16) | FW_KERNEL_BIT);
+    gr_u32 first_ack = mmio_r(ack);
     /* Poll. The render well needed 312 iterations on this part where the blitter
      * answers on the first read; a fixed settle makes a correct register look
      * wrong. The ceiling is generous rather than tuned. */
     for (int i = 0; i < 2000000; i++)
-        if (mmio_r(ack) & FW_KERNEL_BIT) return 1;
+        if (mmio_r(ack) & FW_KERNEL_BIT) {
+            zlt_count(ZLLOG_C_MMIO_POLL, (unsigned)i + 1u);
+            return 1;
+        }
+    zlt_count(ZLLOG_C_MMIO_POLL, 2000000u);
+    zlt_snapshot(ZLLOG_SUB_DRIVER, ZLLOG_SNAP_GPU_FORCEWAKE, 0,
+                 ack, first_ack);
+    zlt_snapshot(ZLLOG_SUB_DRIVER, ZLLOG_SNAP_GPU_FORCEWAKE, 1,
+                 mmio_r(ack), mmio_r(req));
+    zlt_trigger(ZLLOG_SUB_DRIVER, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                10u /* GPU forcewake */, (unsigned)ring_engine, 2000000u);
     return 0;
 }
 
@@ -294,6 +303,8 @@ static int forcewake_get(void)
  * whatever the firmware or i915 left behind tells the engine to execute that. */
 int gpu_ring_init_engine(int engine)
 {
+    zlt_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              10u /* GPU ring */, 0u /* init */, (unsigned)engine);
     ring_live = 0;
     ring_tail = 0;
     if (engine != GPU_ENGINE_BCS && engine != GPU_ENGINE_RCS) return 0;
@@ -330,6 +341,8 @@ int gpu_ring_init_engine(int engine)
      * between the get and the end of the function, not by reading it once. */
     if (!(mmio_r(engine_base() + REG_CTL) & RING_VALID)) { forcewake_put(); return 0; }
     ring_live = 1;
+    zlt_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
+              10u, 1u /* ready */, (unsigned)engine);
     return 1;
 }
 
@@ -339,14 +352,23 @@ int gpu_ring_init_engine(int engine)
  * hang the compositor, and this kernel has no timer it can block on here. */
 int gpu_ring_submit(const gr_u32 *dw, gr_u32 n)
 {
-    if (!ring_live || !ring_armed) return 0;
+    if (!ring_live || !ring_armed) {
+        zlt_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DROP, ZLLOG_WARN,
+                  11u /* GPU submit */, 1u /* not live */, n);
+        return 0;
+    }
     if (n == 0) return 0;
 
     gr_u32 *ring = (gr_u32 *)(gr_uptr)HI_GPU;
     gr_u32 head = mmio_r(engine_base() + REG_HEAD) & (GPU_RING_BYTES - 1u);
+    gr_u32 before_tail = ring_tail;
 
     /* n dwords + the 5-dword flush + up to 8 bytes of qword pad */
-    if (gpu_ring_space(head, ring_tail, GPU_RING_BYTES) < n * 4u + 5u * 4u + 8u) return 0;
+    if (gpu_ring_space(head, ring_tail, GPU_RING_BYTES) < n * 4u + 5u * 4u + 8u) {
+        zlt_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_DROP, ZLLOG_WARN,
+                  11u, 2u /* ring space */, n);
+        return 0;
+    }
 
     gr_u32 t = gpu_ring_write(ring, GPU_RING_BYTES, ring_tail, dw, n);
 
@@ -376,12 +398,28 @@ int gpu_ring_submit(const gr_u32 *dw, gr_u32 n)
     t = gpu_ring_pad(ring, GPU_RING_BYTES, t);
     ring_tail = t;
 
+    zlt_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_COMMAND_SUBMIT, ZLLOG_INFO,
+              11u, n, ring_tail);
     mmio_w(engine_base() + REG_TAIL, ring_tail);
 
     for (int spin = 0; spin < 2000000; spin++) {
         gr_u32 h = mmio_r(engine_base() + REG_HEAD) & (GPU_RING_BYTES - 1u);
-        if (h == ring_tail) return 1;
+        if (h == ring_tail) {
+            zlt_count(ZLLOG_C_MMIO_POLL, (unsigned)spin + 1u);
+            zlt_event(ZLLOG_SUB_DRIVER, ZLLOG_EV_COMMAND_COMPLETE, ZLLOG_INFO,
+                      11u, n, (unsigned)spin + 1u);
+            return 1;
+        }
     }
+    zlt_count(ZLLOG_C_MMIO_POLL, 2000000u);
+    zlt_snapshot(ZLLOG_SUB_DRIVER, ZLLOG_SNAP_GPU_RING, 0,
+                 ((unsigned)ring_engine << 24) | head, before_tail);
+    zlt_snapshot(ZLLOG_SUB_DRIVER, ZLLOG_SNAP_GPU_RING, 1,
+                 ((unsigned)ring_engine << 24) |
+                    (mmio_r(engine_base() + REG_HEAD) & (GPU_RING_BYTES - 1u)),
+                 mmio_r(engine_base() + REG_CTL));
+    zlt_trigger(ZLLOG_SUB_DRIVER, ZLLOG_EV_TIMEOUT, ZLLOG_ERROR,
+                11u, n, ring_tail);
     return 0;                                 /* engine never caught up */
 }
 
@@ -477,6 +515,90 @@ int gpu_fill_try(int x, int y, int w, int h, gr_u32 rgb)
      * engine executes up to TAIL. An END here would stop the ring, not a batch. */
     return gpu_ring_submit(dw, b.at);
 }
+
+/* ---- compositor present -------------------------------------------------
+ * Copy damage from the byte-correct software back buffer to scanout. The GPU
+ * never becomes the renderer or the only path: one timeout or hash mismatch
+ * disables this path and fb.c immediately performs the same CPU copy. */
+unsigned long long fb_phys(void);
+unsigned long long fb_back_phys(void);
+unsigned int fb_back_bytes(void);
+unsigned int fb_pitch_bytes(void);
+unsigned int fb_back_pitch(void);
+unsigned int fb_bits(void);
+unsigned int fb_pxh(void);
+
+static int present_on, present_validate;
+static gr_u32 present_ok, present_fail, present_mismatch;
+static gr_u32 scan_pitch;
+static gr_u64 back_phys_addr, scan_phys_addr;
+
+static gr_u32 scene_hash(gr_u64 base, gr_u32 pitch, int x, int y, int w, int h)
+{
+    volatile gr_u32 *p;
+    gr_u32 hash = 2166136261u;
+    for (int yy = 0; yy < h; yy++) {
+        p = (volatile gr_u32 *)(gr_uptr)(base + (gr_u64)(y + yy) * pitch +
+                                        (gr_u64)x * 4u);
+        for (int xx = 0; xx < w; xx++) { hash ^= p[xx]; hash *= 16777619u; }
+    }
+    return hash;
+}
+
+int gpu_compositor_enable(int on)
+{
+    present_on = 0;
+    if (!on) { gpu_ring_arm(0); return 1; }
+    if (fb_bits() != 32u) return 0;
+    back_phys_addr = fb_back_phys(); scan_phys_addr = fb_phys();
+    gr_u32 back_bytes = fb_back_bytes();
+    gr_u32 scan_bytes = fb_pitch_bytes() * fb_pxh();
+    if (!back_phys_addr || !scan_phys_addr || !back_bytes || !scan_bytes ||
+        back_phys_addr > 0xffffffffULL || scan_phys_addr > 0xffffffffULL ||
+        back_bytes > GGTT_BACK_SPAN || scan_bytes > GGTT_SCAN_SPAN) return 0;
+    gpu_ring_arm(1);
+    if (!gpu_ring_init()) { gpu_ring_arm(0); return 0; }
+    if (!intel_ggtt_map_range(GGTT_BACK_GFX >> 12, (gr_u32)back_phys_addr,
+                              (int)((back_bytes + 4095u) / 4096u)) ||
+        !intel_ggtt_map_range(GGTT_SCAN_GFX >> 12, (gr_u32)scan_phys_addr,
+                              (int)((scan_bytes + 4095u) / 4096u))) {
+        gpu_ring_arm(0); return 0;
+    }
+    fb_gfx = GGTT_BACK_GFX; fb_pitch = fb_back_pitch(); fb_mapped = 1;
+    scan_pitch = fb_pitch_bytes();
+    present_validate = 3;                 /* compare the first three scenes */
+    present_on = 1;
+    return 1;
+}
+
+int gpu_present_try(int x, int y, int w, int h)
+{
+    if (!present_on || w <= 0 || h <= 0) return 0;
+    gr_u32 dw[16]; struct gpu_batch b;
+    gpu_batch_init(&b, dw, 16);
+    if (!gpu_copy_rect(&b, GGTT_SCAN_GFX, scan_pitch,
+                       x, y, x + w, y + h,
+                       GGTT_BACK_GFX, fb_pitch, x, y)) return 0;
+    __asm__ volatile("mfence" ::: "memory");
+    if (!gpu_ring_submit(dw, b.at)) {
+        present_fail++; present_on = 0; gpu_ring_arm(0); return 0;
+    }
+    if (present_validate > 0) {
+        gr_u32 a = scene_hash(back_phys_addr, fb_pitch, x, y, w, h);
+        gr_u32 b_hash = scene_hash(scan_phys_addr, scan_pitch, x, y, w, h);
+        if (a != b_hash) {
+            present_mismatch++; present_on = 0; gpu_ring_arm(0); return 0;
+        }
+        present_validate--;
+    }
+    present_ok++;
+    return 1;
+}
+
+int gpu_compositor_live(void) { return present_on; }
+gr_u32 gpu_present_successes(void) { return present_ok; }
+gr_u32 gpu_present_failures(void) { return present_fail; }
+gr_u32 gpu_present_mismatches(void) { return present_mismatch; }
 
 /* ---- the self-test: what a USB boot is FOR ---------------------------------
  *

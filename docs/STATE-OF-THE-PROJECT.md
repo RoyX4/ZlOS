@@ -1694,10 +1694,12 @@ lists `band/bor/bxor/bnot/shl/shr` in the `NUMS[]` bridge table, so
 is no `and i64` / `shl i64` emission anywhere in `compilel.c`.
 
 The dispatch it lands in got *worse* since HANDOFF measured it:
-`grep -c 'streq(name,' freestanding/runtime_kernel.c` → **540** (HANDOFF says
-309), with `band` at source position 531 of 540 (`runtime_kernel.c:1643`).
+`grep -c 'streq(name,' freestanding/runtime_kernel.c` → **644** (HANDOFF
+originally said 309), with `band` at dispatch position 635 of 644
+(`runtime_kernel.c:2005`).
 HANDOFF's measured 10M-iteration figures — C 7 ms, zl arithmetic 4 ms, zl bitwise
-999 ms — were taken against the 309-entry chain and have not been re-taken.
+999 ms — were taken against the old chain and before Value16; they have not
+been re-taken.
 
 `tests/test_bitwise.zl` (356 lines) exists as the parity oracle, but
 `run_tests.sh` cross-checks `tests/*.zl` against the C backend only, never against

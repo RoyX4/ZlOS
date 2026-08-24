@@ -72,12 +72,14 @@ kernel/hosttest/modeset_test
 #   kernel/build.sh      kernel.elf        (BIOS multiboot)
 #   kernel/mkdisk.sh     zlOS.img          (our own bootloader)
 #   kernel/mkiso.sh      zlOS.iso          (hybrid BIOS/UEFI)
-#   kernel/buildefi.sh   BOOTX64.EFI       (native UEFI application)
+#   kernel/buildefi.sh   BOOTX64.EFI       (stage-0 UEFI witness)
+#                        ZLOS.EFI          (native UEFI kernel)
 #   kernel/mkusb.sh      zlOS-usb.img      (bootable USB image)
 kernel/*.elf
 kernel/*.img
 kernel/*.iso
 kernel/BOOTX64.EFI
+kernel/ZLOS.EFI
 kernel/BOOTX64.lib
 kernel/_gen*.c
 kernel/hosttest/intel_probe

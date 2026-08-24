@@ -248,7 +248,7 @@ static int ctl_service_ep(struct fake_ep *e, const unsigned char *report, int le
 /* ==== the fake device: QEMU's usb-mouse =================================== */
 
 static int dev_acc_x, dev_acc_y;     /* undelivered motion, as hid.c keeps it */
-static int dev_buttons;
+static int dev_buttons, dev_sent_buttons;
 static int dev_starved;              /* service intervals with nothing posted */
 
 static void mouse_move(int dx, int dy) { dev_acc_x += dx; dev_acc_y += dy; }
@@ -259,7 +259,8 @@ static int clamp127(int v) { return v > 127 ? 127 : (v < -127 ? -127 : v); }
  * nothing to say, so a still hand costs no transfer at all. */
 static int usb_tick_mouse(void)
 {
-    if (!dev_acc_x && !dev_acc_y) return 0;      /* NAK - nothing to report */
+    if (!dev_acc_x && !dev_acc_y && dev_buttons == dev_sent_buttons)
+        return 0;                                /* NAK - nothing changed */
 
     int dx = clamp127(dev_acc_x), dy = clamp127(dev_acc_y);
     unsigned char rep[4];
@@ -273,6 +274,7 @@ static int usb_tick_mouse(void)
     /* only subtract what actually went out on the wire */
     dev_acc_x -= dx;
     dev_acc_y -= dy;
+    dev_sent_buttons = dev_buttons;
     return 1;
 }
 
@@ -329,6 +331,7 @@ static void driver_reset(void)
     ptr_ready = 1;
     ptr_x = HOME_X; ptr_y = HOME_Y;
     ptr_btn = 0; ptr_reports = 0; ptr_events = 0;
+    ptr_edge_head = ptr_edge_tail = 0;
 
     kbd_slot = KBD_SLOT; kbd_dci = KBD_DCI; kbd_mps = 8;
     kbd_enq = 0; kbd_cyc = 1;
@@ -341,7 +344,7 @@ static void driver_reset(void)
     ep_ptr = (struct fake_ep){ PTR_SLOT, PTR_DCI, 0, 1, 0 };
     ep_kbd = (struct fake_ep){ KBD_SLOT, KBD_DCI, 0, 1, 0 };
 
-    dev_acc_x = dev_acc_y = dev_buttons = 0;
+    dev_acc_x = dev_acc_y = dev_buttons = dev_sent_buttons = 0;
     dev_starved = 0;
 
     /* Arm each endpoint exactly the way bring-up does. ptr_arm_all() is the
@@ -394,9 +397,525 @@ static void driver_reset(void)
     dev_starved = 0;
     ptr_reports = 0;
     ep_ptr.completed = 0;
+    ep0_first_config_done = 0;
+    ep0_first_config_port = 0;
+    memset(ep0_first_config_diag, 0, sizeof ep0_first_config_diag);
+    ptr_port = 0;
+    kbd_port = 0;
 }
 
 /* ==== the tests =========================================================== */
+
+static void test_configure_endpoint_preserves_slot_context(void)
+{
+    printf("\nCONFIGURE ENDPOINT MUST PRESERVE THE LIVE SLOT CONTEXT\n\n");
+
+    for (int size = 32; size <= 64; size += 32) {
+        xctxsize = size;
+        zero_mem(CTX_INPUT, 33u * (u32)xctxsize);
+        zero_mem(CTX_DEVICE(7), 2048);
+        ctx_set(CTX_DEVICE(7), 0, 0, 0x02ABCDEFu);
+        ctx_set(CTX_DEVICE(7), 0, 1, 0x12345678u);
+        ctx_set(CTX_DEVICE(7), 0, 2, 0x89ABCDEFu);
+        ctx_set(CTX_DEVICE(7), 0, 3, 0x76543210u);
+
+        copy_slot_context_for_endpoints(7, 4);
+
+        char label[96];
+        snprintf(label, sizeof label, "%d-byte context keeps slot DW1", size);
+        okv(label, (int)ctx_get(CTX_INPUT, 1, 1), (int)0x12345678u);
+        snprintf(label, sizeof label, "%d-byte context keeps TT/interrupter DW2", size);
+        okv(label, (int)ctx_get(CTX_INPUT, 1, 2), (int)0x89ABCDEFu);
+        snprintf(label, sizeof label, "%d-byte context keeps address/state DW3", size);
+        okv(label, (int)ctx_get(CTX_INPUT, 1, 3), (int)0x76543210u);
+        snprintf(label, sizeof label, "%d-byte context changes only Context Entries", size);
+        okv(label, (int)ctx_get(CTX_INPUT, 1, 0),
+            (int)((0x02ABCDEFu & 0x07FFFFFFu) | (4u << 27)));
+    }
+}
+
+static void test_ecm_device_class_filter(void)
+{
+    printf("\nCDC-ECM DISCOVERY MUST NOT RESET KNOWN NON-NETWORK DEVICES\n\n");
+
+    okv("class 00 composite/per-interface device remains probeable",
+        xhci_ecm_device_class_candidate(0x00), 1);
+    okv("class 02 communications device remains probeable",
+        xhci_ecm_device_class_candidate(0x02), 1);
+    okv("class EF interface-association device remains probeable",
+        xhci_ecm_device_class_candidate(0xEF), 1);
+    okv("class E0 Bluetooth device is rejected before re-enumeration",
+        xhci_ecm_device_class_candidate(0xE0), 0);
+    okv("class 08 mass-storage device is not an ECM candidate",
+        xhci_ecm_device_class_candidate(0x08), 0);
+    okv("class 03 HID device is not an ECM candidate",
+        xhci_ecm_device_class_candidate(0x03), 0);
+}
+
+static void test_physical_imation_mass_storage_descriptor(void)
+{
+    printf("\nTHE PHYSICAL IMATION STICK DESCRIPTOR MUST MATCH BOT\n\n");
+    static const unsigned char descriptor[32] = {
+        9, DESC_CONFIG, 32, 0, 1, 1, 0, 0x80, 100,
+        9, DESC_INTERFACE, 0, 0, 2, 0x08, 0x06, 0x50, 0,
+        7, DESC_ENDPOINT, 0x81, 2, 0x00, 0x02, 0,
+        7, DESC_ENDPOINT, 0x02, 2, 0x00, 0x02, 0
+    };
+    zero_mem(CFG_BUF, CFG_MAX);
+    memcpy((void *)(uintptr_t)CFG_BUF, descriptor, sizeof descriptor);
+
+    struct msc_config cfg;
+    ok("0718:067d config matches SCSI transparent Bulk-Only",
+       msc_parse_config_descriptor(sizeof descriptor, &cfg));
+    okv("configuration value", cfg.cfgval, 1);
+    okv("mass-storage interface", cfg.iface, 0);
+    okv("bulk IN endpoint", cfg.in_ep, 0x81);
+    okv("bulk OUT endpoint", cfg.out_ep, 0x02);
+    okv("bulk IN max packet", cfg.in_mps, 512);
+    okv("bulk OUT max packet", cfg.out_mps, 512);
+}
+
+static void test_cdc_ecm_descriptor_and_receive_identity(void)
+{
+    printf("\nCDC-ECM DESCRIPTORS AND RX COMPLETIONS ARE BOUNDED\n\n");
+    static const unsigned char descriptor[] = {
+        9, 2, 88, 0, 2, 1, 0, 0x80, 50,
+        8, 11, 0, 2, 2, 6, 0, 0,
+        9, 4, 0, 0, 1, 2, 6, 0, 0,
+        5, 0x24, 0, 0x10, 0x01,
+        5, 0x24, 6, 0, 1,
+        13, 0x24, 0x0f, 4, 0, 0, 0, 0, 0xea, 0x05, 0, 0, 0,
+        7, 5, 0x85, 3, 16, 0, 9,
+        9, 4, 1, 0, 0, 0x0a, 0, 0, 0,
+        9, 4, 1, 1, 2, 0x0a, 0, 0, 0,
+        7, 5, 0x01, 2, 0, 2, 0,
+        7, 5, 0x82, 2, 0, 2, 0
+    };
+    memcpy((void *)(uintptr_t)CFG_BUF, descriptor, sizeof descriptor);
+    struct ecm_config cfg;
+    ok("standards-based CDC-ECM composite descriptor matches",
+       ecm_parse_config_descriptor((int)sizeof descriptor, &cfg));
+    okv("communications interface", cfg.comm_iface, 0);
+    okv("data interface", cfg.data_iface, 1);
+    okv("active data alternate setting", cfg.data_alt, 1);
+    okv("bulk OUT endpoint", cfg.out_ep, 0x01);
+    okv("bulk IN endpoint", cfg.in_ep, 0x82);
+    okv("Ethernet MAC string index", cfg.mac_index, 4);
+    okv("bounded Ethernet segment size", cfg.max_segment, 1514);
+
+    /* Completion identity comes from the TRB pointer, not from a rotating
+     * guess. With several posted buffers, guessing replays or skips frames. */
+    ecm_ready = 1;
+    ecm_slot = 7; ecm_in_dci = 5;
+    ecm_rx_qh = ecm_rx_qt = 0;
+    for (int i = 0; i < RING_TRBS; i++) ecm_rx_map[i] = -1;
+    ecm_rx_map[3] = 2;
+    u32 status = (1u << 24) | (ECM_FRAME_MAX - 60u);
+    u32 ctrl = (7u << 24) | (5u << 16);
+    ok("the ECM dispatcher claims its exact slot/endpoint event",
+       ecm_event(ECM_IN_RING(7) + 3u * TRB_BYTES, status, ctrl));
+    okv("the completed TRB selects receive buffer two", ecm_rx_q[0], 2);
+    okv("residual length becomes a 60-byte Ethernet frame", ecm_rx_len[2], 60);
+    ecm_ready = 0;
+}
+
+static void test_multi_port_diagnostics_do_not_overwrite(void)
+{
+    printf("\nEVERY USB PORT MUST KEEP ITS OWN FAILURE BOUNDARY\n\n");
+    memset(msc_port_stage, 0, sizeof msc_port_stage);
+    memset(msc_port_slot, 0, sizeof msc_port_slot);
+    memset(msc_port_vid, 0, sizeof msc_port_vid);
+    memset(msc_port_pid, 0, sizeof msc_port_pid);
+    memset(msc_port_cc, -1, sizeof msc_port_cc);
+    msc_init_stage = MSC_INIT_CONTROLLER;
+    msc_init_port = 0;
+    msc_init_slot = 0;
+    msc_init_cc = -1;
+
+    slot_vid[2] = 0x0718; slot_pid[2] = 0x067d;
+    msc_note_init(MSC_INIT_CONFIG_HEAD, 4, 2, 4);
+    slot_vid[4] = 0x8087; slot_pid[4] = 0x0026;
+    msc_note_init(MSC_INIT_CONFIG_HEAD, 10, 4, 6);
+
+    okv("equal-depth Bluetooth scan cannot replace the earlier summary port",
+        xhci_msc_init_port(), 4);
+    okv("Imation port retains its own completion", xhci_msc_port_cc(4), 4);
+    okv("Imation identity remains attached to port 4", xhci_msc_port_vid(4), 0x0718);
+    okv("Bluetooth port retains its separate completion", xhci_msc_port_cc(10), 6);
+    okv("Bluetooth identity remains attached to port 10", xhci_msc_port_vid(10), 0x8087);
+
+    enum_note(4, ENUM_DESCRIPTOR, 4);
+    enum_note(10, ENUM_DESCRIPTOR, 1);
+    okv("enumeration failure remains on Imation port", xhci_enum_cc(4), 4);
+    okv("successful Bluetooth enumeration remains separate", xhci_enum_cc(10), 1);
+}
+
+static void test_ep0_transfer_is_published_atomically(void)
+{
+    printf("\nEP0 MUST NEVER EXPOSE A HALF-BUILT CONTROL TRANSFER\n\n");
+    const int slot = 5;
+    u32 ring = EP0_RING(slot);
+    ring_init(ring);
+    ep0_enqueue[slot] = 0;
+    ep0_cycle[slot] = 1;
+
+    u32 publish_cycle = 0;
+    u32 setup = ep0_begin_unpublished(
+        slot, 0x0009000001000680ULL, 8,
+        (TRB_SETUP << 10) | (1u << 6) | (3u << 16), &publish_cycle);
+    volatile u32 *setup_words = (volatile u32 *)(uintptr_t)setup;
+    okv("setup starts with the opposite cycle and is invisible", setup_words[3] & 1u, 0);
+    ep0_push(slot, dma_addr(XMEM_DATA), 9, (TRB_DATA << 10) | (1u << 16));
+    ep0_push(slot, 0, 0, (TRB_STATUS << 10) | (1u << 5));
+    okv("building data/status still leaves setup invisible", setup_words[3] & 1u, 0);
+    ep0_publish(setup, publish_cycle);
+    okv("one final cycle-bit commit publishes the complete transfer", setup_words[3] & 1u, 1);
+
+    /* The same invariant must survive crossing the Link TRB. */
+    ring_init(ring);
+    ep0_enqueue[slot] = RING_TRBS - 2;
+    ep0_cycle[slot] = 1;
+    setup = ep0_begin_unpublished(
+        slot, 0x0009000001000680ULL, 8,
+        (TRB_SETUP << 10) | (1u << 6) | (3u << 16), &publish_cycle);
+    setup_words = (volatile u32 *)(uintptr_t)setup;
+    ep0_push(slot, dma_addr(XMEM_DATA), 9, (TRB_DATA << 10) | (1u << 16));
+    ep0_push(slot, 0, 0, (TRB_STATUS << 10) | (1u << 5));
+    okv("wrapped transfer remains hidden until its setup commits", setup_words[3] & 1u, 0);
+    okv("wrapped producer continues with the toggled cycle", ep0_cycle[slot], 0);
+    ep0_publish(setup, publish_cycle);
+    okv("wrapped complete transfer publishes with the old cycle", setup_words[3] & 1u, 1);
+}
+
+static void test_descriptor_retry_recovers_halted_ep0(void)
+{
+    printf("\nA FLAKY DESCRIPTOR MUST RECOVER AND RETRY, NOT LOSE THE DEVICE\n\n");
+    driver_reset();
+    const int slot = 6;
+    xhci_idx = 0;
+    xslots = MAX_SLOTS - 1;
+
+    ring_init(XMEM_CMDRING);
+    cmd_enqueue = 0;
+    cmd_cycle = 1;
+    ring_init(EP0_RING(slot));
+    ep0_enqueue[slot] = 0;
+    ep0_cycle[slot] = 1;
+
+    /* Attempt one fails on Setup. The driver must Reset Endpoint, replace its
+     * dequeue ring, and then attempt the same descriptor again. Queue the
+     * exact controller events in that causal order. */
+    ctl_post_event(EP0_RING(slot), 4u << 24,
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) |
+                   ((u32)slot << 24));
+    ctl_post_event(XMEM_CMDRING, 1u << 24,
+                   TRB_CMD_COMPLETION << 10);
+    ctl_post_event(XMEM_CMDRING + TRB_BYTES, 1u << 24,
+                   TRB_CMD_COMPLETION << 10);
+    ctl_post_event(EP0_RING(slot) + 2u * TRB_BYTES, 1u << 24,
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) |
+                   ((u32)slot << 24));
+
+    int got = descriptor_in(slot, 0x02000680u, 0x00090000u, CFG_BUF, 9);
+    ok("second descriptor attempt succeeds", got);
+    okv("the retained attempt count proves the retry happened",
+        ep0_last_attempts, 2);
+    okv("halt recovery completed before retry", ep0_last_recovery, 1);
+    okv("the successful Status event is retained", ep0_last_event_stage, 3);
+    okv("software and hardware restart from one fresh three-TRB TD",
+        (int)ep0_enqueue[slot], 3);
+}
+
+static void test_first_device_probe_is_the_immediate_next_td(void)
+{
+    printf("\nTHE FIRST DEVICE REQUEST MUST BE COMPARED WITH ITS IMMEDIATE TWIN\n\n");
+    driver_reset();
+    const int slot = 6;
+    const u32 ring = EP0_RING(slot);
+    xhci_idx = 0;
+    xslots = MAX_SLOTS - 1;
+    xctxsize = 32;
+    cur_port = 4;
+
+    ring_init(XMEM_CMDRING);
+    cmd_enqueue = 0;
+    cmd_cycle = 1;
+    ring_init(ring);
+    ep0_enqueue[slot] = 0;
+    ep0_cycle[slot] = 1;
+    ep0_first_device_probe_done = 0;
+    memset(ep0_first_device_probe, 0, sizeof ep0_first_device_probe);
+
+    /* descriptor_in() consumes the successful Status event at index two,
+     * then the shipping probe must issue the same Device request beginning at
+     * index three. Model the physical second-Setup cc4 and its two recovery
+     * command completions in that exact order. */
+    ctx_set(CTX_DEVICE(slot), 1, 0, 2);
+    ctx_set(CTX_DEVICE(slot), 1, 2, dma_addr(ring + 3u * TRB_BYTES) | 1u);
+    ctx_set(CTX_DEVICE(slot), 1, 3, 0);
+    ctl_post_event(ring + 2u * TRB_BYTES, 1u << 24,
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) |
+                   ((u32)slot << 24));
+    ctl_post_event(ring + 3u * TRB_BYTES, (4u << 24) | 8u,
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) |
+                   ((u32)slot << 24));
+    ctl_post_event(XMEM_CMDRING, 1u << 24, TRB_CMD_COMPLETION << 10);
+    ctl_post_event(XMEM_CMDRING + TRB_BYTES, 1u << 24,
+                   TRB_CMD_COMPLETION << 10);
+
+    ok("the real Device descriptor remains a public success",
+       descriptor_in(slot, 0x01000680u, 0x00120000u, XMEM_DATA, 18));
+    okv("public completion is restored to the first success", ep0_last_cc, 1);
+    okv("public event stage is restored to Status", ep0_last_event_stage, 3);
+    okv("public attempt count is restored", ep0_last_attempts, 1);
+
+    okv("first probe is the Device request",
+        (int)ep0_first_device_probe[0][0], (int)0x01000680u);
+    okv("second probe is the identical Device request",
+        (int)ep0_first_device_probe[1][0], (int)0x01000680u);
+    okv("neither probe was polluted by Config",
+        (int)ep0_first_device_probe[1][1], (int)0x00120000u);
+    okv("first event points at Status index two",
+        (int)ep0_first_device_probe[0][12], (int)(ring + 2u * TRB_BYTES));
+    okv("first event completed successfully",
+        (int)(ep0_first_device_probe[0][14] >> 24), 1);
+    okv("second event points at Setup index three",
+        (int)ep0_first_device_probe[1][12], (int)(ring + 3u * TRB_BYTES));
+    okv("second event retains cc4",
+        (int)(ep0_first_device_probe[1][14] >> 24), 4);
+    okv("second event retains all eight Setup bytes as residual",
+        (int)(ep0_first_device_probe[1][14] & 0xFFFFFFu), 8);
+    okv("first producer snapshot is after one complete TD",
+        (int)(ep0_first_device_probe[0][19] & 0xFFu), 3);
+    okv("second producer snapshot is after two complete TDs",
+        (int)(ep0_first_device_probe[1][19] & 0xFFu), 6);
+    okv("probe metadata identifies physical port four",
+        (int)(ep0_first_device_probe[1][20] & 0xFFu), 4);
+    okv("probe metadata identifies the same slot",
+        (int)((ep0_first_device_probe[1][20] >> 8) & 0xFFu), slot);
+    okv("probe metadata retains completed recovery",
+        (int)((ep0_first_device_probe[1][20] >> 24) & 3u), 2);
+    okv("recovery replaced the live producer at ring index zero",
+        (int)ep0_enqueue[slot], 0);
+
+    u32 retained = ep0_first_device_probe[0][12];
+    ctl_post_event(ring + 2u * TRB_BYTES, 1u << 24,
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) |
+                   ((u32)slot << 24));
+    ok("a later Device request still succeeds",
+       descriptor_in(slot, 0x01000680u, 0x00120000u, XMEM_DATA, 18));
+    okv("the done latch prevents replacing the first pair",
+        (int)ep0_first_device_probe[0][12], (int)retained);
+}
+
+static void test_device_then_config_trace_survives_recovery(void)
+{
+    printf("\nTHE PHYSICAL DEVICE->CONFIG FAILURE MUST SURVIVE RING RESET\n\n");
+    driver_reset();
+    const int slot = 6;
+    const u32 ring = EP0_RING(slot);
+    xhci_idx = 0;
+    xslots = MAX_SLOTS - 1;
+    xctxsize = 32;
+
+    ring_init(XMEM_CMDRING);
+    cmd_enqueue = 0;
+    cmd_cycle = 1;
+    ring_init(ring);
+    ep0_enqueue[slot] = 0;
+    ep0_cycle[slot] = 1;
+
+    ctl_post_event(ring + 2u * TRB_BYTES, 1u << 24,
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) |
+                   ((u32)slot << 24));
+    ok("Device descriptor succeeds before the physical boundary",
+       xhci_control_in(slot, 0x01000680u, 0x00120000u, XMEM_DATA, 18));
+    okv("Device TD leaves Config starting at ring index three",
+        (int)ep0_enqueue[slot], 3);
+
+    /* Model the Intel failure exactly: Config's Setup at index three gets cc4
+     * and the output EP0 context is Halted at that same dequeue pointer. */
+    ctx_set(CTX_DEVICE(slot), 1, 0, 2);
+    ctx_set(CTX_DEVICE(slot), 1, 2, dma_addr(ring + 3u * TRB_BYTES) | 1u);
+    ctx_set(CTX_DEVICE(slot), 1, 3, 0);
+    ctl_post_event(ring + 3u * TRB_BYTES, 4u << 24,
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) |
+                   ((u32)slot << 24));
+    ctl_post_event(XMEM_CMDRING, 1u << 24, TRB_CMD_COMPLETION << 10);
+    ctl_post_event(XMEM_CMDRING + TRB_BYTES, 1u << 24,
+                   TRB_CMD_COMPLETION << 10);
+
+    okv("Config Setup returns the injected USB Transaction Error",
+        xhci_control_in(slot, 0x02000680u, 0x00090000u, CFG_BUF, 9), 0);
+    okv("failure was matched to Config Setup at ring index three",
+        (int)ep0_last_trace[12], (int)(ring + 3u * TRB_BYTES));
+    okv("trace retains the exact Configuration request after ring_init",
+        (int)ep0_last_trace[0], (int)0x02000680u);
+    okv("trace retains wLength nine", (int)ep0_last_trace[1],
+        (int)0x00090000u);
+    okv("trace retains cc4 before recovery", (int)(ep0_last_trace[14] >> 24), 4);
+    okv("trace retains pre-recovery Halted endpoint state",
+        (int)(ep0_last_trace[16] & 7u), 2);
+    okv("trace retains pre-recovery hardware dequeue",
+        (int)(ep0_last_trace[17] & ~0xFu),
+        (int)(dma_addr(ring + 3u * TRB_BYTES) & ~0xFu));
+    okv("recovery replaced the live software ring at index zero",
+        (int)ep0_enqueue[slot], 0);
+
+    msc_note_init(MSC_INIT_CONFIG_HEAD, 4, slot, ep0_last_cc);
+    u32 retained = xhci_msc_port_ep0_trace(4, 0);
+    ep0_last_trace[0] = 0xDEADBEEFu;
+    okv("port 4 keeps its trace when a later transfer overwrites globals",
+        (int)xhci_msc_port_ep0_trace(4, 0), (int)retained);
+}
+
+static void test_first_config_attempt_survives_all_retries(void)
+{
+    printf("\nTHE FIRST CLEAN CONFIG FAILURE MUST OUTLIVE EVERY RECOVERY\n\n");
+    driver_reset();
+    const int slot = 6;
+    const u32 ring = EP0_RING(slot);
+    xhci_idx = 0;
+    xslots = MAX_SLOTS - 1;
+    xctxsize = 32;
+    cur_port = 4;
+    ring_init(XMEM_CMDRING);
+    cmd_enqueue = 0;
+    cmd_cycle = 1;
+    ring_init(ring);
+    ep0_enqueue[slot] = 0;
+    ep0_cycle[slot] = 1;
+
+    ctl_post_event(ring + 2u * TRB_BYTES, 1u << 24,
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) |
+                   ((u32)slot << 24));
+    ok("Device descriptor establishes the clean predecessor",
+       xhci_control_in(slot, 0x01000680u, 0x00120000u, XMEM_DATA, 18));
+
+    ctx_set(CTX_DEVICE(slot), 1, 0, 2);
+    ctx_set(CTX_DEVICE(slot), 1, 2, dma_addr(ring + 3u * TRB_BYTES) | 1u);
+    ctx_set(CTX_DEVICE(slot), 1, 3, 0);
+    /* First Config starts at index 3. The two hard retries start at index 0
+     * after their successful Reset Endpoint + Set TR Dequeue commands. */
+    ctl_post_event(ring + 3u * TRB_BYTES, (4u << 24) | 8u,
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) |
+                   ((u32)slot << 24));
+    for (int attempt = 0; attempt < 3; attempt++) {
+        ctl_post_event(XMEM_CMDRING + (u32)(attempt * 2) * TRB_BYTES,
+                       1u << 24, TRB_CMD_COMPLETION << 10);
+        ctl_post_event(XMEM_CMDRING + (u32)(attempt * 2 + 1) * TRB_BYTES,
+                       1u << 24, TRB_CMD_COMPLETION << 10);
+        if (attempt < 2)
+            ctl_post_event(ring, (4u << 24) | 8u,
+                           (TRB_TRANSFER_EVENT << 10) | (1u << 16) |
+                           ((u32)slot << 24));
+    }
+
+    okv("all three same-slot Configuration attempts fail", descriptor_in(
+        slot, 0x02000680u, 0x00090000u, CFG_BUF, 9), 0);
+    okv("public trace is the final replacement-ring attempt",
+        (int)ep0_last_trace[12], (int)ring);
+    okv("v6 retained the first clean Config Setup at index three",
+        (int)ep0_first_config_diag[12], (int)(ring + 3u * TRB_BYTES));
+    okv("v6 retained first-attempt metadata",
+        (int)(ep0_first_config_diag[19] >> 24), 1);
+    okv("v6 retained pre-recovery cc4",
+        (int)(ep0_first_config_diag[14] >> 24), 4);
+    okv("v6 identifies Reset Endpoint recovery",
+        (int)ep0_first_config_diag[24], 1);
+    okv("Reset Endpoint command completed",
+        (int)ep0_first_config_diag[25], 1);
+    okv("Set TR Dequeue command completed",
+        (int)ep0_first_config_diag[26], 1);
+
+    ep0_note_config_reenumeration(4, 1, 4, 0);
+    ep0_note_config_reenumeration(4, 2, 1, 1);
+    okv("fresh old-scheme result is retained",
+        (int)(ep0_first_config_diag[30] & 0xFFu), 4);
+    okv("pre-address scheme result is retained",
+        (int)((ep0_first_config_diag[30] >> 8) & 0xFFu), 1);
+    okv("winning whole-enumeration scheme is retained",
+        (int)((ep0_first_config_diag[30] >> 16) & 3u), 2);
+}
+
+static void test_forget_port_disables_and_invalidates_cached_slot(void)
+{
+    printf("\nA WHOLE-DEVICE RETRY MUST NOT REUSE THE BROKEN SLOT\n\n");
+    driver_reset();
+    const int slot = 6;
+    xhci_idx = 0;
+    xslots = MAX_SLOTS - 1;
+    ring_init(XMEM_CMDRING);
+    cmd_enqueue = 0;
+    cmd_cycle = 1;
+    port_slot[4] = slot;
+    slot_vid[slot] = 0x0718;
+    slot_pid[slot] = 0x067d;
+    slot_class[slot] = 0x08;
+    ctl_post_event(XMEM_CMDRING, 1u << 24, TRB_CMD_COMPLETION << 10);
+
+    ok("old slot is explicitly disabled", xhci_forget_port(4));
+    okv("port cache is cleared before re-enumeration", port_slot[4], 0);
+    okv("old slot vendor identity is cleared", slot_vid[slot], 0);
+    okv("old slot product identity is cleared", slot_pid[slot], 0);
+    okv("old slot device class is cleared", slot_class[slot], 0);
+}
+
+static void test_preaddress_uses_bsr_without_set_address_delay(void)
+{
+    printf("\nTHE COMPATIBILITY PREFLIGHT MUST STAY AT USB ADDRESS ZERO\n\n");
+    driver_reset();
+    const int slot = 6;
+    xhci_idx = 0;
+    xslots = MAX_SLOTS - 1;
+    xctxsize = 32;
+    ring_init(XMEM_CMDRING);
+    cmd_enqueue = 0;
+    cmd_cycle = 1;
+    ctl_post_event(XMEM_CMDRING, 1u << 24, TRB_CMD_COMPLETION << 10);
+
+    ok("BSR Address Device command completes",
+       xhci_address_device_mode(slot, 4, 3, 1));
+    volatile u32 *command = (volatile u32 *)(uintptr_t)XMEM_CMDRING;
+    okv("Address Device command carries Block Set Address Request",
+        (int)((command[3] >> 9) & 1u), 1);
+    okv("preflight still targets the requested slot",
+        (int)(command[3] >> 24), slot);
+    okv("preflight records the physical root port", cur_port, 4);
+}
+
+static void test_ep0_short_data_waits_for_status(void)
+{
+    printf("\nA SHORT DATA EVENT IS NOT THE END OF A CONTROL REQUEST\n\n");
+    driver_reset();
+    const int slot = 6;
+    const u32 ring = EP0_RING(slot);
+    xhci_idx = 0;
+    xslots = MAX_SLOTS - 1;
+    xctxsize = 32;
+    ring_init(ring);
+    ep0_enqueue[slot] = 0;
+    ep0_cycle[slot] = 1;
+
+    /* ISP makes a genuinely short IN stage observable as cc13 on Data. The
+     * Status IOC still follows and is the only event that completes control. */
+    ctl_post_event(ring + TRB_BYTES, (13u << 24) | 9u,
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) |
+                   ((u32)slot << 24));
+    ctl_post_event(ring + 2u * TRB_BYTES, 1u << 24,
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) |
+                   ((u32)slot << 24));
+
+    ok("control succeeds only after the queued Status event",
+       xhci_control_in(slot, 0x01000680u, 0x00120000u, XMEM_DATA, 18));
+    okv("the retained event is Status, not the short Data event",
+        ep0_last_event_stage, 3);
+    okv("the retained completion is final success", ep0_last_cc, 1);
+    okv("the retained event pointer is the Status TRB",
+        (int)ep0_last_trace[12], (int)(ring + 2u * TRB_BYTES));
+    okv("the IN Data TRB requests interrupt on short packet",
+        (int)((ep0_last_trace[7] >> 2) & 1u), 1);
+}
 
 /* How much motion reaches the pointer in ONE frame, when the hand produced
  * `intervals` service intervals' worth of it since the last frame. */
@@ -409,6 +928,31 @@ static int one_frame_travel(int intervals, int px_per_interval)
     }
     input_poll();
     return input_ptr_x() - before;
+}
+
+static void test_button_edges_survive_one_slow_frame(void)
+{
+    printf("\nBUTTON EDGES ARE HISTORY, NOT FINAL POINTER STATE\n\n");
+    driver_reset();
+
+    /* Both reports arrive before input_poll(), exactly what happens when the
+     * compositor stalls longer than a short click. Final state is released;
+     * retaining only ptr_btn would erase the click completely. */
+    dev_buttons = 1;
+    ok("button-down report reaches the controller", usb_tick_mouse() == 1);
+    dev_buttons = 0;
+    ok("button-up report reaches the controller", usb_tick_mouse() == 1);
+    input_poll();
+
+    int states[4], n = 0;
+    while (n < 4) {
+        int type = input_next();
+        if (!type) break;
+        if (type == EV_MOUSE) states[n++] = (int)input_code();
+    }
+    okv("press and release both survive one input poll", n, 2);
+    okv("first retained edge is button down", n > 0 ? states[0] : -1, 1);
+    okv("second retained edge is button up", n > 1 ? states[1] : -1, 0);
 }
 
 static void test_drain_rate(void)
@@ -611,7 +1155,7 @@ static void test_transfer_wait_is_addressed(void)
      * will ever complete for slot 7, so this drains the ring and gives up -
      * which is the whole question: what did it do with what it drained? */
     u32 st = 0, ct = 0;
-    int got = xfer_wait(7, 5, &st, &ct, 1);
+    int got = xfer_wait_trbs(7, 5, 0, 0, &st, &ct, 1);
     okv("it does not mistake the pointer's completion for its own", got, 0);
 
     /* The pointer's report must have been decoded, not swallowed... */
@@ -631,6 +1175,26 @@ static void test_transfer_wait_is_addressed(void)
      * with the event ring. The accel arithmetic has its own cases above. */
     okv("both reports were decoded, neither swallowed", (int)ptr_reports, 2);
     ok("...and the pointer actually moved", input_ptr_x() > HOME_X + 45);
+}
+
+static void test_ep0_wait_rejects_stale_same_endpoint_event(void)
+{
+    printf("\nA LATE EP0 EVENT MUST NOT COMPLETE THE NEXT REQUEST\n\n");
+    driver_reset();
+    const int slot = 7;
+    u32 current[3] = { EP0_RING(slot), EP0_RING(slot) + 16u, EP0_RING(slot) + 32u };
+
+    ctl_post_event(EP0_RING(slot) + 48u, (1u << 24),
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) | ((u32)slot << 24));
+    ctl_post_event(current[2], (1u << 24),
+                   (TRB_TRANSFER_EVENT << 10) | (1u << 16) | ((u32)slot << 24));
+
+    u32 status = 0, ctrl = 0;
+    int got = xfer_wait_trbs(slot, 1, current, 3, &status, &ctrl, 1);
+    okv("same-slot EP0 completion from the previous TD is ignored", got,
+        TRB_TRANSFER_EVENT);
+    okv("the current status TRB is the completion retained",
+        (int)xfer_last_param, (int)current[2]);
 }
 
 /* The number the whole bug reduces to. Not an assertion - a measurement,
@@ -657,11 +1221,26 @@ int main(void)
 
     arena_map();
 
+    test_configure_endpoint_preserves_slot_context();
+    test_ecm_device_class_filter();
+    test_physical_imation_mass_storage_descriptor();
+    test_cdc_ecm_descriptor_and_receive_identity();
+    test_multi_port_diagnostics_do_not_overwrite();
+    test_ep0_transfer_is_published_atomically();
+    test_first_device_probe_is_the_immediate_next_td();
+    test_descriptor_retry_recovers_halted_ep0();
+    test_device_then_config_trace_survives_recovery();
+    test_first_config_attempt_survives_all_retries();
+    test_forget_port_disables_and_invalidates_cached_slot();
+    test_preaddress_uses_bsr_without_set_address_delay();
+    test_ep0_short_data_waits_for_status();
+    test_button_edges_survive_one_slow_frame();
     test_drain_rate();
     test_ring_ownership();
     test_endpoint_liveness();
     test_relative_is_relative();
     test_transfer_wait_is_addressed();
+    test_ep0_wait_rejects_stale_same_endpoint_event();
     report_ceiling();
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);

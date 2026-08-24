@@ -15,6 +15,7 @@
  */
 #define _GNU_SOURCE
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 
@@ -40,12 +41,17 @@
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
               unsigned int height, unsigned char bpp);
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
+void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
+void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
+void fb_text_aa(int x, int y, const char *s, unsigned int rgb);
 unsigned int fb_get_px(int x, int y);
 void fb_present(void);
 void fb_clip_none(void);
 void fb_clip(int x, int y, int w, int h);
 unsigned int fb_pxw(void);
 unsigned int fb_pxh(void);
+int fb_surface_begin(unsigned int *pixels, int width, int height, int x, int y);
+void fb_surface_end(void);
 
 /* ---- input.c ------------------------------------------------------------- */
 int input_next(void);
@@ -75,6 +81,30 @@ Value zl_num(double n)
     return v;
 }
 
+/* wm.c's retained-client allocator boundary. Shipping builds bind heap.c;
+ * this focused compositor harness uses libc so it can force allocation
+ * refusal without mapping the kernel's physical heap window. */
+static int surface_alloc_fail;
+static unsigned long surface_host_live;
+static unsigned surface_alloc_calls;
+void *heap_alloc(unsigned long bytes)
+{
+    surface_alloc_calls++;
+    if (surface_alloc_fail) return NULL;
+    unsigned long *raw = (unsigned long *)malloc(sizeof(*raw) + bytes);
+    if (!raw) return NULL;
+    *raw = bytes;
+    surface_host_live += bytes;
+    return raw + 1;
+}
+void heap_free(void *p)
+{
+    if (!p) return;
+    unsigned long *raw = (unsigned long *)p - 1;
+    surface_host_live -= *raw;
+    free(raw);
+}
+
 /* ---- fake hardware ------------------------------------------------------- */
 static int fake_x = 10, fake_y = 10, fake_btn = 0;
 static unsigned fake_ticks = 1;
@@ -93,7 +123,11 @@ unsigned int idt_ticks(void) { return fake_ticks; }
  * advances by a plausible frame's worth per call keeps wm_frame_us() in range
  * without making any assertion depend on it. */
 static unsigned long long fake_tsc = 0;
-unsigned long long cpu_tsc(void) { fake_tsc += 20000000; return fake_tsc; }
+static unsigned int fake_tsc_read_step = 2000;
+/* Advancing by one microsecond per read models the timer-read overhead without
+ * making instrumentation itself turn every synthetic frame into a 60 ms late
+ * frame.  frame() below advances the actual 16.667 ms cadence. */
+unsigned long long cpu_tsc(void) { fake_tsc += fake_tsc_read_step; return fake_tsc; }
 unsigned int cpu_tsc_khz(void) { return 2000000; }
 /* A SCANCODE QUEUE THE TEST CAN FILL. It was a constant 0, which meant every
  * keyboard path through wm.c was unreachable from this harness - and that is
@@ -242,7 +276,65 @@ static void ok(const char *what, int cond)
 
 /* run one frame. The frame loop is gated on the tick so it cannot spin at
  * 100% CPU, so the clock has to move for anything to happen. */
-static void frame(void) { fake_ticks++; wm_frame(); }
+static void frame(void)
+{
+    fake_ticks++;
+    fake_tsc += 33334000;       /* 16,667 us at the fake 2 GHz TSC */
+    wm_frame();
+}
+
+/* wm.c's recorder hook is weak in production.  Defining it here proves the
+ * call policy without linking storage: the compositor may append RAM records,
+ * but it must never turn an idle frame into a log or flood healthy paints. */
+static unsigned int frame_log_calls, frame_log_late, frame_log_samples;
+static unsigned int frame_log_damage_count, frame_log_damage_area;
+static unsigned int frame_log_input_sequence, frame_log_input_latency;
+static unsigned int frame_log_observe_flags;
+static unsigned int frame_observe_sequence;
+void zllog_frame(unsigned input_us, unsigned tick_us,
+                 unsigned compositor_us, unsigned vblank_us,
+                 unsigned present_us, unsigned total_us,
+                 unsigned flags, unsigned damage_count,
+                 unsigned damage_area)
+{
+    (void)input_us; (void)tick_us; (void)compositor_us;
+    (void)vblank_us; (void)present_us; (void)total_us;
+    frame_log_damage_count = damage_count;
+    frame_log_damage_area = damage_area;
+    frame_log_calls++;
+    if (flags & 1u) frame_log_late++;
+    if (flags & 2u) frame_log_samples++;
+}
+
+/* The shipping recorder owns retention policy, while wm.c must hand it the
+ * input correlation for every painted frame. Mirror only the recorder's
+ * healthy 1/60 and exact-late policy here so the existing flood assertions
+ * still test the public retained stream. */
+void zllog_frame_observe(unsigned input_us, unsigned tick_us,
+                         unsigned compositor_us, unsigned vblank_us,
+                         unsigned present_us, unsigned total_us,
+                         unsigned flags, unsigned damage_count,
+                         unsigned damage_area, unsigned input_to_present_us,
+                         unsigned input_sequence, unsigned missed_deadlines,
+                         unsigned queue_depth, unsigned present_bytes,
+                         unsigned desk_us, unsigned chrome_us,
+                         unsigned app_us, unsigned effects_us,
+                         unsigned repaint_rects, unsigned repaint_pixels,
+                         unsigned window_visits, unsigned app_calls)
+{
+    (void)missed_deadlines; (void)queue_depth; (void)present_bytes;
+    (void)desk_us; (void)chrome_us; (void)app_us; (void)effects_us;
+    (void)repaint_rects; (void)repaint_pixels;
+    (void)window_visits; (void)app_calls;
+    frame_log_observe_flags = flags;
+    frame_log_input_sequence = input_sequence;
+    frame_log_input_latency = input_to_present_us;
+    unsigned int seq = frame_observe_sequence++;
+    if ((flags & 1u) || (seq % 60u) == 0u)
+        zllog_frame(input_us, tick_us, compositor_us, vblank_us, present_us,
+                    total_us, flags | ((seq % 60u) == 0u ? 2u : 0u),
+                    damage_count, damage_area);
+}
 
 static void pointer(int x, int y, int btn)
 {
@@ -332,6 +424,36 @@ int main(void)
     fb_setup((unsigned long)vram, W * 4, W, H, 32);
 
     printf("wmtest - fb.c + input.c + ui.c + wm.c, against fake hardware\n\n");
+
+    /* The offscreen target must be the same renderer, not an approximation.
+     * Compare a deterministic mix of opaque, blended, rounded and text pixels
+     * byte-for-byte before the compositor starts using the seam. */
+    {
+        enum { SW = 180, SH = 110 };
+        unsigned int *expected = malloc((size_t)SW * SH * 4u);
+        unsigned int *surface = malloc((size_t)SW * SH * 4u);
+        memset(surface, 0, (size_t)SW * SH * 4u);
+        fb_clip(20, 20, SW, SH);
+        fb_fill_px(20, 20, SW, SH, 0x00112233u);
+        fb_fill_blend(28, 28, 120, 50, 0x00CC8844u, 91);
+        fb_rrect(44, 46, 90, 48, 9, 0x003366AAu);
+        fb_text_aa(52, 58, "surface", 0x00F1F4F7u);
+        for (int y = 0; y < SH; y++)
+            for (int x = 0; x < SW; x++)
+                expected[(size_t)y * SW + x] = fb_get_px(20 + x, 20 + y);
+
+        int bound = fb_surface_begin(surface, SW, SH, 240, 20);
+        fb_fill_px(240, 20, SW, SH, 0x00112233u);
+        fb_fill_blend(248, 28, 120, 50, 0x00CC8844u, 91);
+        fb_rrect(264, 46, 90, 48, 9, 0x003366AAu);
+        fb_text_aa(272, 58, "surface", 0x00F1F4F7u);
+        fb_surface_end();
+        ok("offscreen and direct app rendering are byte-identical",
+           bound && memcmp(expected, surface, (size_t)SW * SH * 4u) == 0);
+        free(expected);
+        free(surface);
+        fb_clip_none();
+    }
 
     ui_theme_init(2);
     wm_init();
@@ -1286,6 +1408,136 @@ int main(void)
         frame();
         ok("control: turning it off restores the plain wallpaper",
            all_wallpaper(0, py, W, py + 1));
+    }
+
+    /* ------------------------------------------------ retained clients
+     * This is the performance contract, not just an allocator test: moving a
+     * top window must compose cached pixels for every exposed window and call
+     * no app draw routine. */
+    {
+        for (int i = 0; i < WM_MAX; i++) wm_close(i);
+        wm_set_anim(0);
+        surface_alloc_fail = 0;
+        int under = wm_open(1, "retained-under", 120, 140, 360, 260);
+        int over  = wm_open(2, "retained-over",  240, 220, 360, 260);
+        unsigned allocs_before_frame = surface_alloc_calls;
+        frame();
+        ok("composition performs no frame-time allocations",
+           surface_alloc_calls == allocs_before_frame);
+        ok("retained clients allocate from the bounded surface budget",
+           wm_client_surface_bytes() > 0 && surface_host_live > 0);
+        unsigned long long occluded_before = wm_region_occluded_pixels();
+        wm_damage(0, 0, W, H);
+        frame();
+        ok("partially obscured windows subtract opaque covered regions",
+           wm_region_occluded_pixels() > occluded_before);
+        ok("fragmented visibility hits the bounded full-damage fallback",
+           wm_region_fragmentation_probe());
+
+        unsigned int shell_builds = wm_retained_shell_builds();
+        draw_calls[1] = draw_calls[2] = 0;
+        wm_move(over, 620, 300);
+        frame();
+        ok("moving an unchanged window causes zero app redraws",
+           draw_calls[1] == 0 && draw_calls[2] == 0);
+        ok("moving unchanged windows causes zero shell/shadow rebuilds",
+           wm_retained_shell_builds() == shell_builds);
+        int ux, uy, uw, uh;
+        wm_client(under, &ux, &uy, &uw, &uh);
+        ok("the exposed retained client remains pixel-correct",
+           fb_get_px(ux + 8, uy + 8) == APP_COLOUR(1));
+        wm_client(over, &ux, &uy, &uw, &uh);
+        ok("the moved retained client remains pixel-correct",
+           fb_get_px(ux + 8, uy + 8) == APP_COLOUR(2));
+
+        draw_calls[1] = 0;
+        wm_resize(under, 420, 300);
+        frame();
+        ok("resize invalidates and redraws exactly that client",
+           draw_calls[1] == 1);
+        unsigned long before_minimize = wm_client_surface_bytes();
+        wm_minimize(over);
+        ok("minimize releases its retained allocation",
+           wm_client_surface_bytes() < before_minimize);
+        wm_close(under);
+        wm_close(over);
+        ok("close releases every retained allocation",
+           wm_client_surface_bytes() == 0 && surface_host_live == 0);
+
+        unsigned int refused_before = wm_client_surface_refusals();
+        surface_alloc_fail = 1;
+        int fallback = wm_open(3, "direct-fallback", 100, 120, 360, 260);
+        allocs_before_frame = surface_alloc_calls;
+        draw_calls[3] = 0;
+        frame();
+        ok("allocation refusal is not retried inside the frame",
+           surface_alloc_calls == allocs_before_frame);
+        wm_client(fallback, &ux, &uy, &uw, &uh);
+        ok("allocation refusal uses the direct renderer, never a blank",
+           draw_calls[3] == 1 &&
+           fb_get_px(ux + 8, uy + 8) == APP_COLOUR(3));
+        ok("allocation refusal is counted and consumes no surface budget",
+           wm_client_surface_refusals() > refused_before &&
+           wm_client_surface_bytes() == 0 && surface_host_live == 0);
+        surface_alloc_fail = 0;
+        wm_close(fallback);
+    }
+
+    /* ----------------------------------------------------- flight recorder
+     * A quiet desktop must be genuinely quiet in the journal.  Healthy paint
+     * frames are sampled at 1/60; late frames are the only unsampled detail. */
+    {
+        for (int i = 0; i < WM_MAX; i++) wm_close(i);
+        wm_set_sweep(0);
+        wm_damage(0, 0, W, H);
+        frame();                    /* consume close/full-screen damage */
+        unsigned int before = frame_log_calls;
+        frame();                    /* no damage, therefore no paint */
+        ok("an idle frame emits no flight-recorder record",
+           frame_log_calls == before);
+
+        before = frame_log_calls;
+        unsigned int late_before = frame_log_late;
+        unsigned int sample_before = frame_log_samples;
+        for (int i = 0; i < 180; i++) {
+            wm_damage(0, 0, 1, 1);
+            frame();
+        }
+        ok("healthy painted-frame logging is bounded to one in sixty",
+           frame_log_calls - before == 3);
+        ok("the bounded records are periodic samples, not fake late frames",
+           frame_log_samples - sample_before == 3 &&
+           frame_log_late == late_before);
+        ok("a frame sample carries bounded non-fullscreen damage evidence",
+           frame_log_damage_count > 0 && frame_log_damage_count <= 8 &&
+           frame_log_damage_area > 0 && frame_log_damage_area < W * H);
+
+        before = frame_log_calls;
+        late_before = frame_log_late;
+        fake_tsc_read_step = 10000000;  /* five ms per phase boundary */
+        wm_damage(0, 0, 1, 1);
+        frame();
+        fake_tsc_read_step = 2000;
+        ok("a late painted frame is always recorded, between samples",
+           frame_log_calls == before + 1 &&
+           frame_log_late == late_before + 1);
+
+        /* The hardware-boundary timestamp/sequence must survive queueing and
+         * reach the exact frame which consumes that input. */
+        frame_log_input_sequence = 0;
+        frame_log_input_latency = 0;
+        fake_ux += 7; fake_uy += 3;
+        frame();                         /* cursor itself is the visible present */
+        ok("a cursor-only present retains its input sequence",
+           frame_log_input_sequence != 0);
+        ok("a cursor-only present retains hardware-to-present time",
+           frame_log_input_latency != 0);
+        ok("the recorder identifies the cursor-only present",
+           (frame_log_observe_flags & (1u << 4)) != 0);
+        wm_damage(0, 0, 1, 1);
+        frame();
+        ok("the following repaint does not claim the old input again",
+           frame_log_input_sequence == 0);
     }
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);

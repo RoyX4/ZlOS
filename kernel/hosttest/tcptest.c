@@ -24,6 +24,7 @@
 #include <stdlib.h>
 
 #include "../tcp.h"
+#include "../zllog.h"
 
 static int fails, checks;
 #define CHECK(cond, ...) do {                                    \
@@ -43,6 +44,18 @@ unsigned int idt_ticks(void) { return v_ticks; }
 unsigned long long cpu_tsc(void) { return 0; }
 unsigned int cpu_tsc_khz(void)   { return 0; }
 
+/* The shipping timeout path must retain before/trigger/after raw state, not
+ * merely call a recorder-shaped function that no harness ever observes. */
+static unsigned snap_meta[64];
+static int snap_n;
+void zllog_event(unsigned subsystem, unsigned event, unsigned severity,
+                 unsigned a, unsigned b, unsigned c)
+{
+    (void)subsystem; (void)severity; (void)b; (void)c;
+    if (event == ZLLOG_EV_SNAPSHOT && snap_n < (int)(sizeof snap_meta / sizeof snap_meta[0]))
+        snap_meta[snap_n++] = a;
+}
+
 /* ---- captured segments ------------------------------------------------------ */
 #define CAP 64
 struct cap {
@@ -57,6 +70,7 @@ static int ncap;
 #define LOCAL_IP 0x0A00020Fu
 #define PEER_IP  0x0A000202u
 #define PORT     80
+static unsigned short peer_window = 0xFFFF;
 
 static int capture(net_u32 dst, int proto, const net_u8 *p, int len)
 {
@@ -105,7 +119,8 @@ static void inject_bad(unsigned seq, unsigned ack, unsigned char flags,
     s[10] = (unsigned char)(ack >> 8); s[11] = (unsigned char)ack;
     s[12] = 5 << 4;
     s[13] = flags;
-    s[14] = 0xFF; s[15] = 0xFF;              /* a wide window */
+    s[14] = (unsigned char)(peer_window >> 8);
+    s[15] = (unsigned char)peer_window;
     if (dlen > 0) memcpy(s + 20, data, dlen);
 
     unsigned sum = 0;
@@ -155,6 +170,7 @@ static unsigned start(unsigned their_isn)
     tcp_abort();                          /* release the single slot */
     ncap = 0;                             /* ...and do not capture its RST */
     v_ticks = 1000;
+    peer_window = 0xFFFF;
     int ok = tcp_connect(PEER_IP, PORT);
     if (!ok) { printf("  FATAL: tcp_connect refused (state %s)\n",
                       tcp_state_name(tcp_state())); exit(2); }
@@ -293,7 +309,7 @@ static void t_out_of_order(void)
 
 static void t_duplicate_ack(void)
 {
-    printf("a duplicate ACK\n");
+    printf("triple duplicate ACK fast retransmit\n");
     establish(0x66660000u);
     tcp_send((const unsigned char *)"0123456789", 10);
     int sent = ncap;
@@ -303,12 +319,53 @@ static void t_duplicate_ack(void)
     inject(peer_isn + 1, una, F_ACK, 0, 0);
     inject(peer_isn + 1, una, F_ACK, 0, 0);
     CHECK(tcp_dup_acks() >= 3, "%d duplicate ACKs counted, wanted 3", tcp_dup_acks());
-    /* NO fast retransmit: the brief scopes it out, so three duplicate ACKs
-     * must NOT trigger one. Asserting the absence is how the scope stays real
-     * rather than aspirational. */
-    CHECK(ncap == sent, "%d extra segments - something retransmitted on dup ACKs",
+    CHECK(ncap == sent + 1, "%d extra segments, wanted one fast retransmit",
           ncap - sent);
+    CHECK(last()->seq == una, "fast retransmit started at %08X, wanted %08X",
+          last()->seq, una);
+    CHECK(last()->dlen == 10 && !memcmp(last()->data, "0123456789", 10),
+          "fast retransmit carried %d wrong bytes", last()->dlen);
+    int after_fast = ncap;
+    inject(peer_isn + 1, una, F_ACK, 0, 0);
+    CHECK(ncap == after_fast, "a fourth duplicate ACK retransmitted again");
+    CHECK(tcp_retransmits() >= 1, "fast retransmission was not counted");
+    CHECK(tcp_cwnd() == 1, "cwnd %d, wanted loss response of one segment", tcp_cwnd());
     CHECK(tcp_state() == TCP_ESTABLISHED, "state %s", tcp_state_name(tcp_state()));
+
+    /* Same cumulative ACK with a changed advertised window is a window
+     * update, not proof that a data segment arrived out of order. Three such
+     * updates must not manufacture a loss. */
+    establish(0x67670000u);
+    tcp_send((const unsigned char *)"abcdefghij", 10);
+    una = our_isn() + 1;
+    int rexmits = tcp_retransmits();
+    peer_window = 60000; inject(peer_isn + 1, una, F_ACK, 0, 0);
+    peer_window = 59000; inject(peer_isn + 1, una, F_ACK, 0, 0);
+    peer_window = 58000; inject(peer_isn + 1, una, F_ACK, 0, 0);
+    CHECK(tcp_retransmits() == rexmits,
+          "window updates caused %d false fast retransmissions",
+          tcp_retransmits() - rexmits);
+}
+
+static void t_connection_reuse_guard(void)
+{
+    printf("the idle connection reuse guard\n");
+    establish(0x68680000u);
+    CHECK(tcp_can_reuse(PEER_IP, PORT) == 1,
+          "fresh established connection was not reusable");
+    CHECK(tcp_can_reuse(PEER_IP + 1, PORT) == 0,
+          "a different peer IP reused the socket");
+    CHECK(tcp_can_reuse(PEER_IP, PORT + 1) == 0,
+          "a different peer port reused the socket");
+    tcp_send((const unsigned char *)"pending", 7);
+    CHECK(tcp_can_reuse(PEER_IP, PORT) == 0,
+          "unacknowledged request bytes were reusable");
+    inject(peer_isn + 1, our_isn() + 8, F_ACK, 0, 0);
+    CHECK(tcp_can_reuse(PEER_IP, PORT) == 1,
+          "fully acknowledged idle socket did not become reusable");
+    tcp_close();
+    CHECK(tcp_can_reuse(PEER_IP, PORT) == 0,
+          "a closing socket remained reusable");
 }
 
 static void t_fin_mid_transfer(void)
@@ -455,6 +512,7 @@ static void t_rejects(void)
 static void t_retransmit(void)
 {
     printf("retransmission on timeout\n");
+    snap_n = 0;
     establish(0xCCCC0000u);
     tcp_send((const unsigned char *)"payload", 7);
     int sent = ncap;
@@ -483,6 +541,18 @@ static void t_retransmit(void)
     CHECK(tcp_rto() > r1, "the retransmit timeout did not back off");
     for (int i = 0; i < 40; i++) { v_ticks += 100000; tcp_tick(); }
     CHECK(tcp_rto() <= 400, "the backoff is uncapped: %d", tcp_rto());
+    CHECK(snap_n >= 3, "terminal data timeout retained %d raw snapshots, wanted 3", snap_n);
+    if (snap_n >= 3) {
+        CHECK((snap_meta[snap_n - 3] >> 8) == ZLLOG_SNAP_TCP_TIMEOUT &&
+              (snap_meta[snap_n - 3] & 0xffu) == 0,
+              "first timeout snapshot is not the pre-timeout state");
+        CHECK((snap_meta[snap_n - 2] >> 8) == ZLLOG_SNAP_TCP_TIMEOUT &&
+              (snap_meta[snap_n - 2] & 0xffu) == 1,
+              "second timeout snapshot is not the trigger state");
+        CHECK((snap_meta[snap_n - 1] >> 8) == ZLLOG_SNAP_TCP_TIMEOUT &&
+              (snap_meta[snap_n - 1] & 0xffu) == 2,
+              "third timeout snapshot is not the post-recovery state");
+    }
 
     /* and once acknowledged, the timer stops */
     establish(0xCDCD0000u);
@@ -744,6 +814,7 @@ int main(void)
     t_segment_twice();
     t_out_of_order();
     t_duplicate_ack();
+    t_connection_reuse_guard();
     t_fin_mid_transfer();
     t_close_sequence();
     t_reset();

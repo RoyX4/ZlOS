@@ -47,6 +47,14 @@
 #define GGTT_ST_GFX      (GGTT_CURSOR_GFX + GGTT_CURSOR_SPAN)
 #define GGTT_ST_SPAN          16384u
 
+/* Compositor source (ordinary WB RAM) and destination (scanout). Each gets
+ * the full maximum framebuffer span so a mode change cannot make their GGTT
+ * ranges collide. */
+#define GGTT_BACK_GFX    0x08000000u
+#define GGTT_BACK_SPAN     0x02800000u   /* 40 MiB */
+#define GGTT_SCAN_GFX    0x0C000000u
+#define GGTT_SCAN_SPAN     0x02800000u
+
 /* Every pair, disjoint. These are the checks whose absence let the cursor and
  * the self-test share three pages. Written as explicit pairs rather than a
  * chain so that adding a fourth object forces you to add its two lines - a
@@ -57,11 +65,17 @@ _Static_assert(GGTT_ST_GFX >= GGTT_CURSOR_GFX + GGTT_CURSOR_SPAN,
                "the self-test surface overlaps the cursor image in GGTT space");
 _Static_assert(GGTT_ST_GFX >= GGTT_RING_GFX + GGTT_RING_SPAN,
                "the self-test surface overlaps the command ring in GGTT space");
+_Static_assert(GGTT_BACK_GFX >= GGTT_ST_GFX + GGTT_ST_SPAN,
+               "the compositor back buffer overlaps GPU fixed objects");
+_Static_assert(GGTT_SCAN_GFX >= GGTT_BACK_GFX + GGTT_BACK_SPAN,
+               "the compositor scanout overlaps its back buffer");
 
 /* Every base is a page boundary, because intel_ggtt_map() takes a page number
  * and silently discards anything below bit 12. */
 _Static_assert((GGTT_RING_GFX   & 0xFFFu) == 0, "GGTT_RING_GFX is not page aligned");
 _Static_assert((GGTT_CURSOR_GFX & 0xFFFu) == 0, "GGTT_CURSOR_GFX is not page aligned");
 _Static_assert((GGTT_ST_GFX     & 0xFFFu) == 0, "GGTT_ST_GFX is not page aligned");
+_Static_assert((GGTT_BACK_GFX   & 0xFFFu) == 0, "GGTT_BACK_GFX is not page aligned");
+_Static_assert((GGTT_SCAN_GFX   & 0xFFFu) == 0, "GGTT_SCAN_GFX is not page aligned");
 
 #endif /* ZL_GGTTMAP_H */

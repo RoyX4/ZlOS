@@ -704,6 +704,17 @@ unsigned nvme_blocksize(void);
 unsigned nvme_blocks_lo(void);
 unsigned nvme_blocks_hi(void);
 
+/* zlfs is the ordinary persistence contract.  Weak keeps the standalone
+ * settings harness and early builds usable; the raw scratch-sector format is
+ * migration fallback only when no mounted zlfs exists. */
+extern int fs_mounted(void) __attribute__((weak));
+extern int fs_find(const char *name) __attribute__((weak));
+extern int fs_create(const char *name, unsigned bytes) __attribute__((weak));
+extern int fs_write(int idx, const void *src, unsigned bytes) __attribute__((weak));
+extern int fs_read(int idx, void *dst, unsigned max) __attribute__((weak));
+extern int fs_sync(void) __attribute__((weak));
+#define SETTINGS_FILE "/system/settings"
+
 static void s_puts(const char *s) { while (*s) zl_putc_pub(*s++); }
 
 static void s_putu(unsigned v)
@@ -880,8 +891,6 @@ static int set_device_ok(const char *what)
  * boot, never on load. */
 int settings_save(void)
 {
-    if (!set_device_ok("save")) return 0;
-
     unsigned char rec[SET_BYTES];
     rec[0] = SET_MAGIC0; rec[1] = SET_MAGIC1;
     rec[2] = SET_MAGIC2; rec[3] = SET_MAGIC3;
@@ -897,6 +906,22 @@ int settings_save(void)
     put32(rec + 28, (unsigned)S.subpixel);
     put32(rec + 32, (unsigned)S.anim);
     put32(rec + 8, set_hash(rec, SET_BYTES));
+
+    if (fs_mounted && fs_find && fs_create && fs_write && fs_mounted()) {
+        int idx = fs_find(SETTINGS_FILE);
+        if (idx < 0) idx = fs_create(SETTINGS_FILE, SET_BYTES);
+        if (idx < 0 || !fs_write(idx, rec, SET_BYTES)) {
+            s_puts("  settings: zlfs write FAILED, not saved\n");
+            return 0;
+        }
+        if (!fs_sync || !fs_sync()) {
+            s_puts("  settings: zlfs flush FAILED, not durable\n");
+            return 0;
+        }
+        return 1;
+    }
+
+    if (!set_device_ok("save")) return 0;
 
     /* ZERO THE WHOLE TRANSFER PAGE FIRST. nvme_data is shared with every other
      * user of the driver, so whatever the last read left there would otherwise
@@ -922,16 +947,30 @@ int settings_save(void)
  * a write, which is exactly what "never write on boot" forbids. */
 int settings_load(void)
 {
-    if (!set_device_ok("load")) return 0;
-
-    if (!nvme_read_block(SET_LBA, 0)) {
-        s_puts("  settings: NVMe read failed, using defaults\n");
-        return 0;
+    unsigned char rec[SET_BYTES];
+    int from_zlfs = 0;
+    if (fs_mounted && fs_find && fs_read && fs_mounted()) {
+        int idx = fs_find(SETTINGS_FILE);
+        if (idx >= 0) {
+            if (fs_read(idx, rec, SET_BYTES) != SET_BYTES) {
+                s_puts("  settings: short zlfs settings file, using defaults\n");
+                return 0;
+            }
+            from_zlfs = 1;
+        }
     }
 
-    unsigned char rec[SET_BYTES];
-    for (unsigned i = 0; i < SET_BYTES; i++)
-        rec[i] = (unsigned char)nvme_data_byte((int)i);
+    if (!from_zlfs) {
+        if (!set_device_ok("load")) return 0;
+
+        if (!nvme_read_block(SET_LBA, 0)) {
+            s_puts("  settings: NVMe read failed, using defaults\n");
+            return 0;
+        }
+
+        for (unsigned i = 0; i < SET_BYTES; i++)
+            rec[i] = (unsigned char)nvme_data_byte((int)i);
+    }
 
     if (rec[0] != SET_MAGIC0 || rec[1] != SET_MAGIC1 ||
         rec[2] != SET_MAGIC2 || rec[3] != SET_MAGIC3) {

@@ -52,6 +52,16 @@ static int    intel_ggtt_map(unsigned p, unsigned a) { (void)p; (void)a; return 
  * at all and a commit message claiming "116 checks pass" sailed through on it. */
 static int    intel_ggtt_map_range(unsigned p, unsigned a, int n)
 { (void)p; (void)a; (void)n; return 0; }
+/* Compositor-present attachment is unreachable while intel_present() is 0,
+ * but gpuring.c still owns the symbols and this harness includes that source
+ * directly, so provide inert geometry just like the MMIO/GGTT stubs above. */
+unsigned long long fb_phys(void) { return 0; }
+unsigned long long fb_back_phys(void) { return 0; }
+unsigned fb_back_bytes(void) { return 0; }
+unsigned fb_pitch_bytes(void) { return 0; }
+unsigned fb_back_pitch(void) { return 0; }
+unsigned fb_bits(void) { return 0; }
+unsigned fb_pxh(void) { return 0; }
 #include "../gpuring.c"
 
 /* The cursor image builder. Its install path needs intel.c's cursor registers;
