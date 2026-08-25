@@ -17,4 +17,4 @@ so the compressed copy was independently read back before the stick was
 reflashed.
 
 The evidence interpretation and exact limits are in
-[`physical-input-and-recorder-diagnosis-2026-08-23.md`](../../../../physical-input-and-recorder-diagnosis-2026-08-23.md).
+[`physical-input-and-recorder-diagnosis-2026-08-23.md`](../../../physical-input-and-recorder-diagnosis-2026-08-23.md).

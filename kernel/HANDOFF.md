@@ -40,7 +40,7 @@ apps, 17 security claims and 17 changes. This is host-static, not a booted zlOS
 app or signed/live portal.
 
 The corrected reference-app registry and Maze pointer-route receipt is
-[`docs/app-registry-truth-2026-08-22.md`](docs/app-registry-truth-2026-08-22.md).
+[`docs/evidence/app-registry-truth-2026-08-22.md`](docs/evidence/app-registry-truth-2026-08-22.md).
 It replaces the old aggregate `apps53.py` green that printed `Maze exists NO`
 and hid the missing route behind blank catalogue ID 14.
 
@@ -135,7 +135,7 @@ the ThinkPad, do not upload firmware, and are not a connection claim.
 > matching local/physical EFI hashes and pristine dual-valid 512 MiB ZLLOG GUID
 > `d129026f-37b4-4c76-bf83-2468383689a8`. This is locally/VM verified and ready
 > for the physical retest; it is not yet a claim about the new image on the
-> ThinkPad. Full evidence: [`docs/physical-input-and-recorder-diagnosis-2026-08-23.md`](docs/physical-input-and-recorder-diagnosis-2026-08-23.md).
+> ThinkPad. Full evidence: [`docs/evidence/physical-input-and-recorder-diagnosis-2026-08-23.md`](docs/evidence/physical-input-and-recorder-diagnosis-2026-08-23.md).
 
 > **Latest physical touchpad result/fix (2026-08-24):** the ThinkPad ZLLOG now
 > proves the exact `8086:02e9`/`SYNA8006 06CB:CD8B` I2C stack reached live input,
@@ -161,7 +161,7 @@ the ThinkPad, do not upload firmware, and are not a connection claim.
 > pristine dual-valid ZLLOG GUID
 > `346a00c9-3ee0-4534-8174-6b816427057a`. The remaining gate is physical feel,
 > tap, scroll and non-blocking `i2c` confirmation. Full evidence and retest:
-> [`docs/physical-input-and-recorder-diagnosis-2026-08-23.md`](docs/physical-input-and-recorder-diagnosis-2026-08-23.md).
+> [`docs/evidence/physical-input-and-recorder-diagnosis-2026-08-23.md`](docs/evidence/physical-input-and-recorder-diagnosis-2026-08-23.md).
 
 > **Latest physical input/recorder fix (2026-08-23):** the visible desktop boot
 > retained 860/860 USB records with zero drops. The first ZLLOG mount was a
@@ -173,7 +173,7 @@ the ThinkPad, do not upload firmware, and are not a connection claim.
 > all local/EFI/graphical gates pass, and the fixed 512 MiB-history image is on
 > Imation serial `07B70D07914C6D7E`. Exact evidence, hashes and the physical
 > retest are in
-> [`docs/physical-input-and-recorder-diagnosis-2026-08-23.md`](docs/physical-input-and-recorder-diagnosis-2026-08-23.md).
+> [`docs/evidence/physical-input-and-recorder-diagnosis-2026-08-23.md`](docs/evidence/physical-input-and-recorder-diagnosis-2026-08-23.md).
 
 > **Latest physical boot boundary (2026-08-22):** USB ZLLOG recovered 719/719
 > valid records with zero drops. Network discovery returned (210 -> 211), then

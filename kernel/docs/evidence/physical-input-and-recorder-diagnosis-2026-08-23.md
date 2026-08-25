@@ -404,7 +404,7 @@ and requires the prompt to return within the ordinary command timeout.
 
 Before reinitializing the stick, the full 512 MiB journal partition and decoded
 JSON for every valid slot were archived under
-[`evidence/exercises/2026-08-24/physical-touchpad-2026-08-24/`](evidence/exercises/2026-08-24/physical-touchpad-2026-08-24/).
+[`exercises/2026-08-24/physical-touchpad-2026-08-24/`](exercises/2026-08-24/physical-touchpad-2026-08-24/).
 The decompressed archive and live `/dev/sda2` both SHA-256 to
 `4583cf257b32fb0e9ac8afad7dda45d1ffe0d6087b93bcf126823906ac2430c8`.
 

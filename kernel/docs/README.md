@@ -22,11 +22,13 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 |---|---|
 | `evidence/browser-storage-run.md` | Browser storage/BSS work receipt. |
 | `evidence/browser-render-run.md` | Browser rendering work receipt. |
+| `evidence/app-registry-truth-2026-08-22.md` | Application-registry false-green repair and exact route receipt. |
 | `browser-status.md` | Browser state and measured capability boundary. |
 | `evidence/desktop-platform-run.md` | Platform-track run record. |
 | `evidence/desktop-overnight-run.md` | Overnight compositor run record. |
 | `evidence/desktop-feel.md` | Completed feel/control track with measured gates and remaining physical boundary. |
 | `evidence/desktop-smp-bands.md` | Measured SMP band-rendering result and its explicit speed ceiling. |
+| `evidence/physical-input-and-recorder-diagnosis-2026-08-23.md` | Physical ThinkPad input and persistent-recorder diagnosis with explicit limits. |
 | `evidence/performance-architecture-implementation-2026-08-22.md` | Performance architecture implementation batch. |
 | `evidence/exercises/` | Retained exercise images, transcripts and physical/QEMU bundles; disposable new runs still go to ignored `kernel/exercise-out/`. |
 
