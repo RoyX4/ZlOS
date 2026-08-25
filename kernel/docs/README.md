@@ -66,6 +66,16 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 | `concepts/what-is-actually-impossible.md` | Audited feasibility wall map with corrected assumptions. |
 | `concepts/beyond-the-kernel.md` | Language, browser, network, and C-to-zl boundary analysis. |
 
+## Driver Notes
+
+| File | Purpose |
+|---|---|
+| `drivers/display/gpu-driver.md` | Intel GPU driver state, proof, and remaining boundary. |
+| `drivers/display/gpu-blitter.md` | Blitter bring-up order and measured silicon result. |
+| `drivers/display/gen9-shader-source.md` | Gen9 shader provenance and captured program. |
+| `drivers/display/gen9-blend-pipeline.md` | Fixed blend-pipeline packet recipe. |
+| `drivers/network/ax201-wifi.md` | AX201 implementation and evidence boundary. |
+
 ## Archived Prompt Files
 
 These old execution briefs live in `archive/prompts/`. Their unresolved work was

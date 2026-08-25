@@ -73,7 +73,7 @@ e09dc3f  perf(gpu): the present path measured - and it refutes the last commit
 ```
 
 touching `kernel/gpu.c`, `hosttest/gpu_ring.c`, `hosttest/gpu-ring-run.sh`,
-`gpu_blt.c`, `gputest.c` and [`gpu-blitter.md`](../../gpu-blitter.md). **Read
+`gpu_blt.c`, `gputest.c` and [`gpu-blitter.md`](../../drivers/display/gpu-blitter.md). **Read
 `gpu-blitter.md` for the current state rather than this paragraph** — this is a
 pointer, not a summary, and the last of those four commit messages says it
 refutes the one before it, so a summary written here would be stale by
@@ -135,7 +135,7 @@ $ ./gpu_ring >/dev/null 2>&1; echo $?
 gate is currently **RED with two failures and neither is a code defect** — this,
 and the known `crypto.c`/`css.c` SOURCES gap from
 `STATE-OF-THE-PROJECT.md` §2.3. Commit `e1eb44a` established `exit 77 = SKIP`
-and [`gpu-blitter.md`](../../gpu-blitter.md) says in as many words: "the convention now
+and [`gpu-blitter.md`](../../drivers/display/gpu-blitter.md) says in as many words: "the convention now
 exists — use it for the next hardware harness." `gpu_ring` is the next hardware
 harness. **Left alone deliberately** — it was another session's file and in
 flight while this was written. Whoever owns that track: it is a one-line change

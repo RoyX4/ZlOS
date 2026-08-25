@@ -23,7 +23,7 @@
  * the BCS ring running (RING_TAIL/HEAD/START/CTL at engine base 0x22000, and
  * the execlist-vs-legacy-ringbuffer question Gen8+ raises) needs the hardware
  * with i915 detached, which blanks the screen and is a separate piece of work.
- * `kernel/docs/gpu-blitter.md` has the order.
+ * `kernel/docs/drivers/display/gpu-blitter.md` has the order.
  *
  * FREESTANDING. No libc, no headers, integer only - the same rules as every
  * other .c in this directory, so the host harness and the kernel compile the
@@ -36,7 +36,7 @@
  *
  * Verified on 8086:9B41 (CometLake-U GT2, Gen9.5) on 2026-08-19: this exact
  * encoding filled 270000/270000 pixels of a rectangle and clobbered nothing
- * outside it. See kernel/docs/gpu-blitter.md.
+ * outside it. See kernel/docs/drivers/display/gpu-blitter.md.
  *
  *   DW0  client | opcode | write-alpha | write-rgb | (dwords - 2)
  *   DW1  BR13:  raster op | colour depth | destination pitch IN BYTES

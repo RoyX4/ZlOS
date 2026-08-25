@@ -7,7 +7,7 @@
  *
  * THE GOLDEN DWORDS BELOW ARE NOT A GUESS. They were read out of the batch
  * that filled 270000/270000 pixels of a rectangle on 8086:9B41 on 2026-08-19
- * (kernel/docs/gpu-blitter.md). If a change to gpu.c makes this file fail, the
+ * (kernel/docs/drivers/display/gpu-blitter.md). If a change to gpu.c makes this file fail, the
  * change altered a command stream that is known to work on silicon - so the
  * burden is on the change, not on this test.
  *

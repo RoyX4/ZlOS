@@ -319,7 +319,7 @@ static const struct cmd table[] = {
     { "panel",    80 },                       /* lights the real panel - laptop */
     /* OUR OWN ring on the blitter, not virtio's. "gpu" was already taken by
      * virtio_gpu (121) - this is the Intel one, and it is the whole reason to
-     * boot this from a USB stick. See kernel/docs/gpu-driver.md. */
+     * boot this from a USB stick. See kernel/docs/drivers/display/gpu-driver.md. */
     { "blit",     71 }, { "ring",     71 },
     { "gpu",     121 }, { "virtio",  121 },
     { "cube",    118 }, { "3d",      118 },

@@ -11,7 +11,7 @@
  * cursor block, and decodes the fields. It writes nothing.
  *
  * WHAT IT ESTABLISHED on 8086:9B41, 2026-08-19, against a live 2560x1440
- * desktop - all of it in kernel/docs/gpu-driver.md:
+ * desktop - all of it in kernel/docs/drivers/display/gpu-driver.md:
  *
  *   CUR_CTL mode bits = 0x27, which is exactly intel.c's CUR_MODE_64_ARGB.
  *     That constant is what gpucursor.c hands the display engine, and it had

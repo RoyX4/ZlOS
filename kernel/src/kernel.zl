@@ -2483,7 +2483,7 @@ fn run_command(cmd, arg) {
     }
     if cmd == 71 {                        # G - drive the GPU ring ourselves
         # THIS IS WHAT A USB BOOT IS FOR. The sequence below is proven on this
-        # exact silicon from Linux (docs/gpu-driver.md: 16384/16384 pixels), but
+        # exact silicon from Linux (docs/drivers/display/gpu-driver.md: 16384/16384 pixels), but
         # never from inside zlOS - and there is no serial port on the ThinkPad,
         # so every number has to land on the SCREEN or the boot proves nothing.
         #

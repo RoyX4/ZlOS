@@ -14,7 +14,7 @@
  *   map, RING_CTL=0 / HEAD=0 / TAIL=0 / START / CTL=VALID, commands, MI_FLUSH_DW,
  *   advance TAIL, poll HEAD - and filled 16384 of 16384 pixels, verified by
  *   reading the destination back. A sole owner CAN drive the Gen9.5 legacy ring;
- *   no execlists are required. docs/gpu-driver.md has the register dump.
+ *   no execlists are required. docs/drivers/display/gpu-driver.md has the register dump.
  *
  *   THIS FILE HAS STILL NOT RUN. The code below is the same sequence, but it
  *   has never executed inside zlOS, which needs a USB boot rather than a two
@@ -87,7 +87,7 @@ _Static_assert((gr_u64)HI_GPU + GPU_RING_BYTES <= (gr_u64)HI_BLUR,
 
 /* ---- the engine's registers ---------------------------------------------
  * Bases read off this machine's own i915_engine_info rather than a datasheet;
- * see docs/gpu-blitter.md. RCS is here too because this file is the stepping
+ * see docs/drivers/display/gpu-blitter.md. RCS is here too because this file is the stepping
  * stone to it and the offsets are identical. */
 #define BCS_BASE  0x22000u
 #define RCS_BASE  0x02000u
@@ -429,7 +429,7 @@ int gpu_ring_submit(const gr_u32 *dw, gr_u32 n)
  * this returns 0 - which is every build until the ring is armed on hardware.
  *
  * THE THRESHOLD IS NOT A GUESS, AND ITS STATED REASON WAS WRONG. Measured on
- * this exact part against fb.c's real fill32 (docs/gpu-blitter.md), with ONE
+ * this exact part against fb.c's real fill32 (docs/drivers/display/gpu-blitter.md), with ONE
  * submission per rectangle, which is what a call from fb_fill_px is:
  *
  *     64x64        CPU wins 8.39x   - submission cost dwarfs the fill
@@ -443,7 +443,7 @@ int gpu_ring_submit(const gr_u32 *dw, gr_u32 n)
  * would move the threshold.
  *
  * Those figures were taken through i915's ioctl path, which costs 0.652 ms per
- * submit+wait (docs/gpu-blitter.md). zlOS pays nothing like that: it owns the
+ * submit+wait (docs/drivers/display/gpu-blitter.md). zlOS pays nothing like that: it owns the
  * ring, so a submission is a register write and a poll, and the --ring run on
  * real silicon reported submit-to-complete as 0.00 ms - below the timer's
  * resolution. So if submission cost were the binding constraint, zlOS's
@@ -611,7 +611,7 @@ gr_u32 gpu_present_mismatches(void) { return present_mismatch; }
  * desktop that already came up is worth far more than one that never did - and
  * the person running it chose the moment.
  *
- * The sequence is the one proven on 8086:9B41 (docs/gpu-driver.md). What is NOT
+ * The sequence is the one proven on 8086:9B41 (docs/drivers/display/gpu-driver.md). What is NOT
  * proven is this implementation of it, which is the entire point of running it.
  */
 #define GPU_ST_W     64u

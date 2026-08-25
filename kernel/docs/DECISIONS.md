@@ -767,14 +767,14 @@ only somebody who had not just written the code looking at it.
 belongs to the GPU-track session rather than to these four: `hosttest/gpu_ring`
 exits **2** when run without root, so `gates/land-gate.sh` counts it a FAIL and
 the whole gate goes red on a box that simply is not root. Commit `e1eb44a`
-established `exit 77 = SKIP` five commits earlier and `gpu-blitter.md` says "the
+established `exit 77 = SKIP` five commits earlier and `drivers/display/gpu-blitter.md` says "the
 convention now exists — use it for the next hardware harness". `gpu_ring` is the
 next hardware harness. Not fixed here — it is another session's file and it was
 in flight.
 
 ### #39 | SMP bands: two docs written the same day disagree, and the code settles it — **do not turn them on**
 
-`gpu-driver.md`'s "the order that follows from all of it" ranks SMP bands **#1**:
+`drivers/display/gpu-driver.md`'s "the order that follows from all of it" ranks SMP bands **#1**:
 *"1.78x on the desktop redraw, already written, switched off, no hardware
 risk."* `NEXT-PROMPT.md` and `look-and-speed.md` §2 say the opposite: *"it is one
 call and it should not be made."* Same measurement, same day, opposite advice,
@@ -808,7 +808,7 @@ settled here rather than picked by whoever reads which file first.
    framebuffer."*
 
 **So: 1.88 ms on a rare path, nothing on the expensive path, three cores
-permanently.** `NEXT-PROMPT.md` is right and `gpu-driver.md`'s #1 should not be
+permanently.** `NEXT-PROMPT.md` is right and `drivers/display/gpu-driver.md`'s #1 should not be
 taken. Corrected there in place.
 
 **The proposal neither doc makes, stated but NOT built.** The wallpaper bake is

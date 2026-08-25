@@ -393,7 +393,7 @@ Priority:
    TLV parser and exact SHA-256 artifact allowlist. The focused suite passes
    54/54 with no device writes. Firmware boot, scan, association and packets
    remain separate gates; see
-   [`../kernel/docs/ax201-wifi.md`](../kernel/docs/ax201-wifi.md).
+   [`../kernel/docs/drivers/network/ax201-wifi.md`](../kernel/docs/drivers/network/ax201-wifi.md).
 
 The browser work after a real link is reliability and usefulness: heap-backed
 bounded storage, larger documents, persistent history/bookmarks/downloads,

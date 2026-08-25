@@ -1,7 +1,7 @@
 # What to do about the GPU — the decision, with the numbers behind it
 
 2026-08-19. Written after taking the blitter all the way to working silicon and
-finding out it was the wrong engine. `kernel/docs/gpu-blitter.md` is the full
+finding out it was the wrong engine. `kernel/docs/drivers/display/gpu-blitter.md` is the full
 account; this is the part someone has to decide.
 
 Every number here was measured on this machine, which **is** the target: a

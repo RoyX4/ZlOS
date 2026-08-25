@@ -78,7 +78,7 @@
 #define BAR0_MAP_BYTES (8u << 20)
 
 /* Engine MMIO bases, read off this machine's i915_engine_info rather than a
- * datasheet - see kernel/docs/gpu-blitter.md. */
+ * datasheet - see kernel/docs/drivers/display/gpu-blitter.md. */
 #define BCS_BASE   0x22000u
 #define RING_TAIL  (BCS_BASE + 0x30u)
 #define RING_HEAD  (BCS_BASE + 0x34u)

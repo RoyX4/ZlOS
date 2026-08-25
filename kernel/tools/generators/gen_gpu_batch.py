@@ -8,7 +8,7 @@ instead of deriving 77 packet encodings from a PRM this tree does not have.
 
     ./tools/generators/gen_gpu_batch.py > src/drivers/display/assets/gpu_batch.inc
 
-WHAT THIS DOES NOT GIVE YOU, and it matters - see gen9-blend-pipeline.md:
+WHAT THIS DOES NOT GIVE YOU, and it matters - see docs/drivers/display/gen9-blend-pipeline.md:
 RENDER_SURFACE_STATE and BINDING_TABLE_STATE do NOT appear in the dump. The
 batch only points at them. zlOS has to build both itself, and the render target
 surface state is the one that describes the destination - format, pitch, base

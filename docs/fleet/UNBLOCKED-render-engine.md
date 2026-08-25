@@ -27,10 +27,10 @@ Four other documents agree:
 
 | file:line | says |
 |---|---|
-| `kernel/docs/gen9-blend-pipeline.md:41` | **`RENDER_SURFACE_STATE`** — *"NO — zlOS must build it"* |
-| `kernel/docs/gen9-blend-pipeline.md:94` | *"Searched for, and not present"* |
+| `kernel/docs/drivers/display/gen9-blend-pipeline.md:41` | **`RENDER_SURFACE_STATE`** — *"NO — zlOS must build it"* |
+| `kernel/docs/drivers/display/gen9-blend-pipeline.md:94` | *"Searched for, and not present"* |
 | `kernel/docs/research/intel-graphics-stack.md:319` | *"The one outstanding piece is `RENDER_SURFACE_STATE`'s bit layout"* |
-| `kernel/docs/gpu-driver.md:267` | lists it among what is still needed |
+| `kernel/docs/drivers/display/gpu-driver.md:267` | lists it among what is still needed |
 
 This matters because the render engine is the **only** path to the measured win. From
 `kernel/docs/plans/gpu-next.md`: `fill_blend` is **48×** faster on RCS, radial glow **96×**.

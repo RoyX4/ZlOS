@@ -114,7 +114,7 @@ The complete performance/storage/process/network implementation receipt,
 including every local gate and every still-open physical gate, is
 [`docs/evidence/performance-architecture-implementation-2026-08-22.md`](docs/evidence/performance-architecture-implementation-2026-08-22.md).
 The internal Intel AX201 Wi-Fi implementation/evidence ladder is
-[`docs/ax201-wifi.md`](docs/ax201-wifi.md). Its read-only stage 0 and bounded
+[`docs/drivers/network/ax201-wifi.md`](docs/drivers/network/ax201-wifi.md). Its read-only stage 0 and bounded
 API-77 TLV/SHA-256 stage 1 pass 54/54 locally in the isolated checkout. They are
 compiled into the current USB image but remain bounded/manual, have not run on
 the ThinkPad, do not upload firmware, and are not a connection claim.

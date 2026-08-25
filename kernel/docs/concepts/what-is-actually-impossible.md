@@ -70,7 +70,7 @@ legally controls the thing you would have to write.**
 | **Widevine / DRM video** | Cryptographically gated by design, forever. Not hard — *forbidden* | Don't. Nothing to build |
 | **Cellular modem** | Signed firmware + carrier certification | USB tether |
 | **Shipping a Secure-Boot-signed image** | Needs Microsoft's signature to boot on other people's machines | **Soft no** — you can enrol your own key (MOK/setup mode) and boot your own hardware. Only *distribution* is gated |
-| **GPU 3D acceleration** | i915 is **11.2 MB**, Mesa's Vulkan **24.3 MB**; newer parts need signed GuC/HuC | **Split the row — 2026-08-19.** For a COMPOSITOR: the ring is proven on this silicon (`gpu-driver.md`, 16384/16384 px) and a fixed shader is 80 bytes lifted from Mesa, so it is weeks, not megabytes. For ARBITRARY programs: the compiler is the cost, and that is the 24 MB. Also still true: a software rasterizer needs no GPU at all — SerenityOS runs Quake III on one, `fb3d.c` is step one |
+| **GPU 3D acceleration** | i915 is **11.2 MB**, Mesa's Vulkan **24.3 MB**; newer parts need signed GuC/HuC | **Split the row — 2026-08-19.** For a COMPOSITOR: the ring is proven on this silicon (`kernel/docs/drivers/display/gpu-driver.md`, 16384/16384 px) and a fixed shader is 80 bytes lifted from Mesa, so it is weeks, not megabytes. For ARBITRARY programs: the compiler is the cost, and that is the 24 MB. Also still true: a software rasterizer needs no GPU at all — SerenityOS runs Quake III on one, `fb3d.c` is step one |
 
 **The genuine list is four, not six.** And the lesson generalises: *"a vendor
 holds a key" is a claim about a specific part, not about a capability.* Check
