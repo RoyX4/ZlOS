@@ -100,7 +100,7 @@ tr -d '\r' < "$BLOG" > "$BLOG.c" && mv "$BLOG.c" "$BLOG"
 if check "BIOS" "$BLOG"; then
     python3 ./tools/generators/write-app-manifest-boot-receipt.py \
         --route grub-bios32 --artifact zlOS.iso --log "$BLOG" \
-        --harness verify-iso.sh \
+        --harness tools/checks/verify-iso.sh \
         --boot-origin "multiboot handoff, 32-bit protected mode" \
         --output docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json \
         || fail=1
@@ -126,7 +126,7 @@ else
     if check "UEFI" "$ULOG"; then
         python3 ./tools/generators/write-app-manifest-boot-receipt.py \
             --route grub-uefi32 --artifact zlOS.iso --log "$ULOG" \
-            --harness verify-iso.sh \
+            --harness tools/checks/verify-iso.sh \
             --boot-origin "multiboot handoff, 32-bit protected mode" \
             --output docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json \
             || fail=1

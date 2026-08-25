@@ -215,7 +215,7 @@ fi
 if [ "$fail" -eq 0 ]; then
     python3 ./tools/generators/write-app-manifest-boot-receipt.py \
         --route native-uefi64 --artifact zlOS-usb.img --log "$LOG" \
-        --harness verify-efi.sh \
+        --harness tools/checks/verify-efi.sh \
         --boot-origin "UEFI application - no GRUB, no bootloader" \
         --output docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json \
         || fail=1

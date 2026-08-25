@@ -66,7 +66,7 @@ grep -q "app-manifest: schema=1 entries=62 sha256=$MANIFEST_SHA" "$OUT" || {
 if [ "$fail" -eq 0 ]; then
     python3 ./tools/generators/write-app-manifest-boot-receipt.py \
         --route raw-bios --artifact zlOS.img --log "$OUT" \
-        --harness verify-raw.sh \
+        --harness tools/checks/verify-raw.sh \
         --boot-origin "our bootloader (raw_boot), no GRUB" \
         --output docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json \
         || fail=1

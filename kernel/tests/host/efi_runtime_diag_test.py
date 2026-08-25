@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -42,7 +43,10 @@ def main() -> int:
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         )
 
-        accel = ["-cpu", "host", "-accel", "kvm"] if Path("/dev/kvm").exists() else [
+        kvm = Path("/dev/kvm")
+        accel = ["-cpu", "host", "-accel", "kvm"] if (
+            os.access(kvm, os.R_OK | os.W_OK)
+        ) else [
             "-cpu", "max", "-accel", "tcg"
         ]
         command = [

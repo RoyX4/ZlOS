@@ -85,7 +85,7 @@ boot_until "$BLOG" qemu-system-x86_64 -m 1G -smp 2 "${ACCEL[@]}" \
 if check "BIOS" "$BLOG"; then
     python3 ./tools/generators/write-app-manifest-boot-receipt.py \
         --route grub-bios64 --artifact zlOS64.iso --log "$BLOG" \
-        --harness verify-64.sh --boot-origin "$ORIGIN" \
+        --harness tools/checks/verify-64.sh --boot-origin "$ORIGIN" \
         --source-file tools/serial_command.py \
         --output docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json \
         || fail=1
@@ -107,7 +107,7 @@ else
     if check "UEFI" "$ULOG"; then
         python3 ./tools/generators/write-app-manifest-boot-receipt.py \
             --route grub-uefi64 --artifact zlOS64.iso --log "$ULOG" \
-            --harness verify-64.sh --boot-origin "$ORIGIN" \
+            --harness tools/checks/verify-64.sh --boot-origin "$ORIGIN" \
             --source-file tools/serial_command.py \
             --output docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json \
             || fail=1
