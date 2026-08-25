@@ -7,7 +7,7 @@
 
 # The feel & control track — the pointer, settings, customisation, bugs
 
-The third track. `desktop-v10-plan.md` is the **look**, `PLATFORM-PROMPT.md` is
+The third track. `evidence/desktop-v10-plan.md` is the **look**, `PLATFORM-PROMPT.md` is
 **apps and speed**, and this is **how it feels to use and how much of it you
 can change**.
 
@@ -315,6 +315,6 @@ Authorised. Best used here for:
 **What came back: [`desktop-feel.md`](../../evidence/desktop-feel.md)** — this track's running
 record, gate output and measured numbers per item.
 
-Look: [`desktop-v10-plan.md`](../../desktop-v10-plan.md) · Platform:
+Look: [`desktop-v10-plan.md`](../../evidence/desktop-v10-plan.md) · Platform:
 [`PLATFORM-PROMPT.md`](PLATFORM-PROMPT.md) · Contract: [`../ui.h`](../../../src/graphics/ui/ui.h) ·
 History: [`desktop-overnight-run.md`](../../evidence/desktop-overnight-run.md)

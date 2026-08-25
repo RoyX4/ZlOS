@@ -1172,7 +1172,7 @@ so it was 1 or 2 and never more, while the layout is written in 800 design
 units - at 3840 wide that is 1920 units of space for an 800-unit design. It is
 derived from the screen now (1..4) and the console cell is a separate question.
 
-What the v10 pass added, with the numbers, is `docs/desktop-v10-plan.md` §8.
+What the v10 pass added, with the numbers, is `docs/evidence/desktop-v10-plan.md` §8.
 The five that matter most to somebody touching this next:
 
 1. **Serial is an input source now**, not a thing the shell polls. `wm_frame()`

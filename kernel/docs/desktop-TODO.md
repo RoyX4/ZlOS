@@ -45,7 +45,7 @@ Never run a QEMU boot alongside a multi-agent fan-out.
 ### [x] -1a. Free `kernel.zl` and `runtime_kernel.c`, then wire the compositor in — **DONE**
 
 **Shipped, and it took five defects with it that nothing had noticed.** The
-full account with numbers is `desktop-v10-plan.md` §8. In brief:
+full account with numbers is `evidence/desktop-v10-plan.md` §8. In brief:
 
 - the compositor is what boots. `wm_available() == 0` keeps the plain text
   shell, and `verify.sh`'s transcript is byte-identical.
@@ -752,7 +752,7 @@ look like a toggle* are different questions and only one of them had a test.
 
 ## What the v10 pass added, 2026-08-18
 
-All ten items of `desktop-v10-plan.md` §6. Full account and numbers there; the
+All ten items of `evidence/desktop-v10-plan.md` §6. Full account and numbers there; the
 new surface, so it can be found:
 
 **fb.c**

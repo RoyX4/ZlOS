@@ -353,7 +353,7 @@ and binding tables, a vertex buffer, and a pixel shader compiled to Gen9 ISA —
 the last of which has no assembler in this tree. It is a project measured in
 weeks, not the afternoon the blitter took.
 
-But the prize is the right shape. `desktop-v10-plan.md` measured the cached blur
+But the prize is the right shape. `evidence/desktop-v10-plan.md` measured the cached blur
 at 7.37 ms cold, and the northstar's whole visual language is **alpha blends,
 gradients and soft shadows** — precisely the operations where the CPU is 48–96x
 behind. The look Zac wants is the look the GPU is for.

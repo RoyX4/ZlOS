@@ -7,7 +7,7 @@
 
 # The platform track — apps, speed, and the things that bite
 
-Companion to `desktop-v10-plan.md`, which is the **look**. This is everything
+Companion to `evidence/desktop-v10-plan.md`, which is the **look**. This is everything
 else, and the two are deliberately separable so they can run at the same time
 in two sessions without touching each other.
 
@@ -373,7 +373,7 @@ An instruction count is not a measurement. "It works" is not a report.
 
 ---
 
-Look track: [`desktop-v10-plan.md`](../../desktop-v10-plan.md) · Contract:
+Look track: [`desktop-v10-plan.md`](../../evidence/desktop-v10-plan.md) · Contract:
 [`../ui.h`](../../../src/graphics/ui/ui.h) · Wiring: [`desktop-wiring.md`](../../desktop-wiring.md) ·
 History: [`desktop-overnight-run.md`](../../evidence/desktop-overnight-run.md) · Blocks:
 `../../.ultra/TENSIONS.md`

@@ -223,4 +223,4 @@ cheap, because the layer underneath each thing exists.
 
 Rendering bugs: `desktop-look.md` · Speed baseline:
 `desktop-polish-and-speed.md` · Task list: `desktop-TODO.md` · The v10 plan
-this rewrite came from: `desktop-v10-plan.md`
+this rewrite came from: `evidence/desktop-v10-plan.md`

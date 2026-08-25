@@ -252,7 +252,7 @@ build error — it is silently truncated and jumped into
 (`HANDOFF.md` v10 item 3). This is the highest-severity item in the whole audit
 that is a pure code regression rather than a documentation error, and it is
 `MERGE-EVIDENCE.md`'s own under-weighted class — a deletion that kept nothing.
-One cherry-pick of ~10 lines. Then `desktop-v10-plan.md §8.2.5`,
+One cherry-pick of ~10 lines. Then `kernel/docs/evidence/desktop-v10-plan.md §8.2.5`,
 `desktop-TODO.md` and `HANDOFF.md` become true.
 
 *Source: xcheck-contradiction XC-08; V10-29, DTODO-39.*

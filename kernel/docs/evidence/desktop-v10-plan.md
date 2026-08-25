@@ -2,7 +2,7 @@
 > after the eleven-track merge. All ten §6 items landed and §8 is the most accurate account of a run in this repo — keep §8.1's measured numbers and §8.4's arithmetic. But §8.2.5's `mkdisk.sh` kernel-size guard was silently dropped by the final merge, and §§3, 4 and 7 are corrected by the tree.
 >
 > **What is still open from this document is in
-> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 # Making zlOS look like the v10 prototype — the plan
@@ -264,11 +264,11 @@ and everything wants the compositor to be the thing that boots.
 
 ---
 
-Prototype: `~/zl OS v10.dc.html` · Contract: [`../src/graphics/ui/ui.h`](../src/graphics/ui/ui.h) · Wiring:
-[`desktop-wiring.md`](desktop-wiring.md) · Task list:
-[`desktop-TODO.md`](desktop-TODO.md) · Numbers:
-[`desktop-polish-and-speed.md`](desktop-polish-and-speed.md) · Last night:
-[`desktop-overnight-run.md`](evidence/desktop-overnight-run.md)
+Prototype: `~/zl OS v10.dc.html` · Contract: [`../../src/graphics/ui/ui.h`](../../src/graphics/ui/ui.h) · Wiring:
+[`desktop-wiring.md`](../desktop-wiring.md) · Task list:
+[`desktop-TODO.md`](../desktop-TODO.md) · Numbers:
+[`desktop-polish-and-speed.md`](../desktop-polish-and-speed.md) · Last night:
+[`desktop-overnight-run.md`](desktop-overnight-run.md)
 
 
 ---

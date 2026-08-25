@@ -300,7 +300,7 @@ Authorised. Best used here for:
 
 ---
 
-Look: [`desktop-v10-plan.md`](../../desktop-v10-plan.md) · Platform:
+Look: [`desktop-v10-plan.md`](../../evidence/desktop-v10-plan.md) · Platform:
 [`PLATFORM-PROMPT.md`](PLATFORM-PROMPT.md) · Feel:
 [`FEEL-PROMPT.md`](FEEL-PROMPT.md) · Contract: [`../ui.h`](../../../src/graphics/ui/ui.h) · History:
 [`desktop-overnight-run.md`](../../evidence/desktop-overnight-run.md)

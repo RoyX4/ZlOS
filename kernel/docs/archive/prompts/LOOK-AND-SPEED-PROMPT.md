@@ -54,7 +54,7 @@ for each: the northstar as written, or the code as shipped. Then make the tree
 and the docs agree.
 
 There is direct evidence they diverged by accident rather than by choice:
-`desktop-v10-plan.md` §4 says *"The prototype wants `backdrop-filter:blur(10..22px)`
+`evidence/desktop-v10-plan.md` §4 says *"The prototype wants `backdrop-filter:blur(10..22px)`
 in 6 places and `filter:blur(30..34px)` in 2"* and calls blur "the only genuine
 wall". **The prototype in this repo contains zero `backdrop-filter` and zero
 `blur()`** — its only two uses of the word "blur" are the two sentences above
@@ -136,7 +136,7 @@ Consequences, none of them yet addressed:
 
 ### The numbers that already exist — start from these, do not re-measure
 
-From `desktop-v10-plan.md` §8, all gated:
+From `evidence/desktop-v10-plan.md` §8, all gated:
 
 ```
 cached blur          7.37 ms cold, 0.18 ms cached

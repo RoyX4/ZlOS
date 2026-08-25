@@ -415,6 +415,6 @@ applications built on top, not another renderer rewrite.
 Do not answer this question with one completeness percentage. Say which layer
 is being judged: **look, feel, machinery, or applications**.
 
-Related evidence: `look-and-speed.md` · `desktop-v10-plan.md` §8 ·
+Related evidence: `look-and-speed.md` · `evidence/desktop-v10-plan.md` §8 ·
 `desktop-northstar-feasibility.md` · `DECISIONS.md` #29–#33 ·
 `../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`

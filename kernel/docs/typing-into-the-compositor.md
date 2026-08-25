@@ -112,7 +112,7 @@ exists for.
 Every one of these is an assertion written when a command was one character,
 left alone when the desktop made it a word. None of them failed loudly.
 
-**1. `desktop-v10-plan.md` §8.1 row 1 claimed a green gate that could not be
+**1. `evidence/desktop-v10-plan.md` §8.1 row 1 claimed a green gate that could not be
 run.** The row cites "`probe-shot.py` types `help` then a bad word", and the
 picture it points at is real — the capability was genuinely proved. But no
 invocation of `-k` as shipped could have produced it, because `-k` never

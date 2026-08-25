@@ -29,6 +29,7 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 | `evidence/desktop-feel.md` | Completed feel/control track with measured gates and remaining physical boundary. |
 | `evidence/desktop-scale-and-effects.md` | Implemented scale/effects diagnosis and measured visual result. |
 | `evidence/desktop-smp-bands.md` | Measured SMP band-rendering result and its explicit speed ceiling. |
+| `evidence/desktop-v10-plan.md` | Completed ten-item v10 plan retained with its measured run and corrections. |
 | `evidence/system-track.md` | Completed system-track implementation record and measured costs. |
 | `evidence/physical-input-and-recorder-diagnosis-2026-08-23.md` | Physical ThinkPad input and persistent-recorder diagnosis with explicit limits. |
 | `evidence/performance-architecture-implementation-2026-08-22.md` | Performance architecture implementation batch. |
