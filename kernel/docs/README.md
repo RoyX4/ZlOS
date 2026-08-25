@@ -1,7 +1,27 @@
 # Kernel Docs Map
 
-This folder mixes prompts, run receipts, decisions, plans, and hardware notes.
-Read the top banner of each file before treating it as current.
+This map separates current authority, architecture, plans, research, retained
+evidence, and superseded material. Read a document's truth-state note before
+treating it as current.
+
+## Root Authorities And Generated Views
+
+The docs root is intentionally reserved for front doors and path-bound outputs:
+
+| File or family | Why it remains at the root |
+|---|---|
+| `README.md` | This map. |
+| `DECISIONS.md` | Human decision source indexed by the generated decision ledger. |
+| `current-speed-and-quality-diagnosis.md` | Current measured performance/quality authority. |
+| `visual-speed-northstar.md` | Current visual intent; its path is retained because `docs/JOURNAL.md` points to it and journals are not edited without explicit approval. |
+| `browser-status.md` | Current browser boundary and a hashed decision-ledger source. |
+| `UNRELEASED-CHANGELOG.md`, `provenance-viewer.html` | Generated views. |
+| `artifact-and-boot-route-registry-*`, `dependency-lock-truth-*`, `init-registry-truth-*`, `license-provenance-truth-*`, `host-freeze-and-gate-containment-*` | Dated evidence inputs whose paths participate in metadata or decision provenance. |
+| `mp00-*` | Generated or generator-coupled MP-00 summaries. Move them only with their generators, metadata, hashes, and dependent views. |
+
+The generator-coupled files are deliberately not reorganized one at a time.
+Their current manifests disagree on build identity; `.ultra/TENSIONS.md` T-8
+records the coordinated regeneration gate.
 
 ## Live Or Current
 
