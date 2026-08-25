@@ -1,3 +1,9 @@
+> **DATED CONVERGENCE PLAN — STATUS MUST BE RECHECKED.** This 2026-08-19 plan
+> remains useful for its visual-oracle method, but later application and visual
+> receipts changed the baseline. Do not infer that a wave is complete or
+> unstarted from this file; use [`docs/PROJECT-STATUS.md`](../../../docs/PROJECT-STATUS.md)
+> and [`docs/REMAINING-WORK.md`](../../../docs/REMAINING-WORK.md).
+
 # Cloning ds.html into zlOS — how this is actually done
 
 The ask: reproduce `/home/roy/Downloads/ds.html` inside zlOS **exactly** — every

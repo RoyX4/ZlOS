@@ -196,7 +196,7 @@ internet is not a stale row, it is a contradiction.
 | Email / IMAP | SerenityOS | ❌ |
 | Servers (ftp/http) | KolibriOS | ❌ |
 | Network-transparent filesystem | Plan 9 (9P), `drawterm` | ❌ |
-| WiFi | 9front, Haiku | ❌ — `wireless-plan.md` is a plan, not a driver |
+| WiFi | 9front, Haiku | ❌ — `../../plans/wireless-plan.md` is a plan, not a driver |
 | Feature | Who | zlOS |
 |---|---|---|
 | TCP/IP stack | SerenityOS, Haiku, Essence, KolibriOS, Managarm | ❌ |

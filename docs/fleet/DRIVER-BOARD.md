@@ -70,7 +70,7 @@ otherwise.
 
 ## What the briefs got wrong, corrected by agents
 
-This wave's briefs were built from `kernel/docs/driver-build-order.md`, which is
+This wave's briefs were built from `kernel/docs/plans/driver-build-order.md`, which is
 excellent and **systematically stale**. Every correction below came from an agent
 reading code instead of accepting the brief.
 
@@ -85,7 +85,7 @@ reading code instead of accepting the brief.
 | forcewake lives in `intel.c`; three domains implemented | `intel.c` has **zero** forcewake code. Two domains in `gpuring.c` (RENDER, BLITTER) — and that is a design choice, not a defect ([why](VERIFICATION-LOG.md)) |
 | `gpu_planes.c` is the plane driver | that file exists only as a **host witness** under `hosttest/`; the driver is `intel.c:4702-4804`. And "nothing uses a blended plane" is contradicted by the tool's own output — `CUR_CTL` reads `0x04000027`, bit 5 = ARGB. **The cursor plane is a hardware-blended plane** |
 
-`driver-build-order.md` needs the audit banner the other twenty-one planning documents
+`kernel/docs/plans/driver-build-order.md` needs the audit banner the other twenty-one planning documents
 carry. Details in [`GROUND-TRUTH-CORRECTIONS.md`](GROUND-TRUTH-CORRECTIONS.md).
 
 ---

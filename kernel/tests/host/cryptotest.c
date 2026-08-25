@@ -226,7 +226,7 @@ int main(void)
         else    { failed++; printf("  FAIL crypto_equal\n"); }
     }
 
-    /* How slow is the PMK really? The claim in wireless-plan.md is that this
+    /* How slow is the PMK really? The claim in docs/plans/wireless-plan.md is that this
      * must be cached, so measure it rather than assert it. */
     printf("\n=== cost of one PMK (4096 iterations) ===\n");
     {

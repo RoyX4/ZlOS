@@ -84,9 +84,13 @@ Current plans are grouped under `plans/`. The first pair is:
 |---|---|
 | `plans/performance-architecture-roadmap.md` | Current physical-desktop performance architecture and test contract. |
 | `plans/retained-window-surfaces.md` | Immediate retained-surface implementation contract. |
+| `plans/driver-build-order.md` | Dated dependency-first driver sequencing; current queue is authoritative. |
+| `plans/ds-clone-plan.md` | Dated visual-convergence method; wave status must be rechecked. |
+| `plans/gpu-next.md` | Measured GPU direction and engine decision. |
+| `plans/wireless-plan.md` | Audited, mostly-open WiFi and Bluetooth implementation plan. |
 
-The remaining top-level plans are being moved only after their status and path
-coupling are audited.
+Plan status is stated inside each file; placement under `plans/` does not imply
+that every listed item is open.
 
 Comparative and source-heavy studies live in `research/`:
 

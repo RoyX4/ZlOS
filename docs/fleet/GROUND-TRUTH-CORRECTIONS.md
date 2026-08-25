@@ -9,7 +9,7 @@ it.
 
 ---
 
-## The headline: `kernel/docs/driver-build-order.md` Wave 0 is **already landed**
+## The headline: `kernel/docs/plans/driver-build-order.md` Wave 0 is **already landed**
 
 That document is the output of a 34-agent hardware survey and it is excellent. It is
 also **stale in the pessimistic direction** — it describes a pre-Wave-0 tree, and Wave 0
@@ -66,7 +66,7 @@ kernel/src/arch/x86/pci.c:313:  /* Power BEFORE command bits. Enabling memory de
 
 ## The blur/HID collision is fixed, and the fix is better than the one proposed
 
-`driver-build-order.md` cites a live collision:
+`kernel/docs/plans/driver-build-order.md` cites a live collision:
 
 > `fb.c:135 HI_BLUR 0x0C000000` … `i2c_hid.c:104 HID_BUF 0x0C900000` — the touchpad's
 > report buffer sits 9 MiB inside the blur arena.
@@ -121,9 +121,9 @@ something is broken when it has been fixed.**
 
 It is the more expensive direction, because a wrong "not supported" never gets tested —
 nobody tries what they are told is absent. Wave 0 is three landed commits that a reader
-of `driver-build-order.md` would spend a day re-implementing.
+of `kernel/docs/plans/driver-build-order.md` would spend a day re-implementing.
 
-**`kernel/docs/driver-build-order.md` needs the same audit banner the other twenty-one
+**`kernel/docs/plans/driver-build-order.md` needs the same audit banner the other twenty-one
 planning documents already carry**, pointing at `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`. It is
 currently the most actionable-looking document in the repo and the top of its queue is
 done.

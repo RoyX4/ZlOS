@@ -1033,8 +1033,8 @@ One of the nineteen readers (`wireless-plan.json`) asserted the unqualified
 version was still true and mistook the setter's definition for its call sites.
 **That bullet must not be carried forward.** Stale asserters to correct:
 `HANDOFF.md:198,302,354`; `kernel/docs/archive/superseded/display-roadmap.md:14,30`;
-`what-is-actually-impossible.md:156`; `wireless-plan.md:171`;
-`driver-build-order.md:67`. **`CLAUDE.md:84-86` is not on this list** — it tells
+`what-is-actually-impossible.md:156`; `kernel/docs/plans/wireless-plan.md:171`;
+`kernel/docs/plans/driver-build-order.md:73`. **`CLAUDE.md:84-86` is not on this list** — it tells
 the reader to *check* whether anything arms `lt_armed` rather than asserting that
 nothing does, and that instruction is the one piece of guidance in the repo that
 would have caught this class. Leave it alone.
@@ -1163,7 +1163,7 @@ the previously-committed binary was `git rm --cached`'d. **`HANDOFF.md:29` — a
 only it — instructs you to run `sudo ./dpll_test 2 148500`**; following that
 instruction as written fails at the shell, because nothing builds the binary.
 (`grep -rn '\./dpll_test' --include='*.md' .` returns one site outside this file.
-The first draft also cited `HANDOFF.md:198` and `driver-build-order.md:67`; both
+The first draft also cited `HANDOFF.md:198` and `kernel/docs/plans/driver-build-order.md:73`; both
 say something different — that `dpll_test.c` is the only thing that arms
 `intel_link_train_arm`, a claim about the source that §5.2 separately shows is
 false, and neither tells you to run anything.) One `gcc` line, modelled on the
@@ -1519,7 +1519,7 @@ anything about the filesystem clause. One line.
 
 ### 7.4 There is no WiFi and no Bluetooth code, and the plan's ladder is correct
 
-Zero lines of either. `wireless-plan.md` remains the reference and its measured
+Zero lines of either. `kernel/docs/plans/wireless-plan.md` remains the reference and its measured
 corrections stand: Bluetooth is not a wall (`8087:0026` on USB, class 224/1/1,
 HCI is a published SIG standard, and `xhci.c` already implements all three
 endpoint types — ~2,000 lines to "zlOS lists nearby devices"); the iwlwifi blob is

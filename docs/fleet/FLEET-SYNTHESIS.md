@@ -103,7 +103,7 @@ and a largish page — both end in a permanent silent hang.
 ### ✓ The APs run with no IDT [→](CRITICAL-smp-bands-have-no-idt.md)
 
 `.ultra/STATE.md` §4 ranks this change "the best win-to-risk on the board" and
-`gpu-next.md` calls its risk "real but bounded." The 1.78× is real. The risk is that any
+`kernel/docs/plans/gpu-next.md` calls its risk "real but bounded." The 1.78× is real. The risk is that any
 fault inside a band job triple-faults the laptop — instant reset, no output, on the
 machine with no serial port. The barrier at `smp.c:177` is also unbounded.
 
@@ -128,7 +128,7 @@ told is absent.
 |---|---|
 | 23 | ✓ `.ultra/STATE.md` §Open 2 and its `Blocked:` line — `RENDER_SURFACE_STATE` |
 | 24 | ✓ five sites in three files claiming nothing arms `lt_armed` [→](PANEL-POWER-IS-REACHABLE.md). `HANDOFF.md:10` already carries the correction while `:209`, `:313` and `:365` still assert the falsehood |
-| 25 | ✓ `kernel/docs/driver-build-order.md` needs the audit banner the other twenty-one planning docs carry. **Its Wave 0 is fully landed** [→](GROUND-TRUTH-CORRECTIONS.md) |
+| 25 | ✓ `kernel/docs/plans/driver-build-order.md` needs the audit banner the other twenty-one planning docs carry. **Its Wave 0 is fully landed** [→](GROUND-TRUTH-CORRECTIONS.md) |
 | 26 | ✓ `STATE-OF-THE-PROJECT.md` §2.1 — `hosttest/palette.c` **is** covered now |
 | 27 | `browser-status.md` — the "every drop path is counted" claim is half true, and the `tcp.c` line count is 752 against an actual 900 |
 

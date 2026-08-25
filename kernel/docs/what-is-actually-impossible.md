@@ -54,7 +54,7 @@ only correct move.
 These fail for the same reason every time: **a vendor cryptographically or
 legally controls the thing you would have to write.**
 
-> **Corrected the same day — see [`wireless-plan.md`](wireless-plan.md).** This
+> **Corrected the same day — see [`wireless-plan.md`](plans/wireless-plan.md).** This
 > table originally listed **Bluetooth** as a wall and put the iwlwifi blob at
 > 2–3 MB. Both wrong. BT on this laptop is a **standard USB device speaking a
 > published open standard** (`8087:0026`, class 224/1/1, and `xhci.c` already
@@ -65,7 +65,7 @@ legally controls the thing you would have to write.**
 
 | | Why it is a wall | Route around it |
 |---|---|---|
-| ~~**Bluetooth**~~ | **STRUCK — not a wall.** HCI is a published Bluetooth SIG standard; the device is ordinary USB | Build it. ~6,800 lines to a working BT keyboard — `wireless-plan.md` |
+| ~~**Bluetooth**~~ | **STRUCK — not a wall.** HCI is a published Bluetooth SIG standard; the device is ordinary USB | Build it. ~6,800 lines to a working BT keyboard — `plans/wireless-plan.md` |
 | **WiFi — AX201 only** | *Downgraded to Kind-1.* The 1.3 MB blob is redistributable, so it is not *gated* — it is ~40k lines of undocumented host↔firmware protocol | **AR9271 USB dongle: 50 KB open-source firmware**, ~8,000 lines. Or an ESP32 over UART, ~400 |
 | **Widevine / DRM video** | Cryptographically gated by design, forever. Not hard — *forbidden* | Don't. Nothing to build |
 | **Cellular modem** | Signed firmware + carrier certification | USB tether |

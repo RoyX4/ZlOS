@@ -1031,7 +1031,7 @@ measured 2026-08-17. Short version:
 - **Internet** — zero network code today, but `lspci` says the ThinkPad has a
   real wired NIC (`8086:0d4f`, `Kernel driver in use: e1000e`). Wired is
   bounded: ~10k lines to HTTPS, of which TLS is 5–8k.
-- **WiFi and Bluetooth** — Roy wants both. Plan: **`docs/wireless-plan.md`**.
+- **WiFi and Bluetooth** — Roy wants both. Plan: **`docs/plans/wireless-plan.md`**.
   That doc also **corrects two wrong claims** made earlier the same day in
   `what-is-actually-impossible.md` and `beyond-the-kernel.md`:
   - **Bluetooth is NOT a wall.** `lsusb` → `8087:0026 Intel AX201 Bluetooth`,

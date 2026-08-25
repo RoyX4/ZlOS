@@ -33,7 +33,7 @@ Four other documents agree:
 | `kernel/docs/gpu-driver.md:267` | lists it among what is still needed |
 
 This matters because the render engine is the **only** path to the measured win. From
-`kernel/docs/gpu-next.md`: `fill_blend` is **48×** faster on RCS, radial glow **96×**.
+`kernel/docs/plans/gpu-next.md`: `fill_blend` is **48×** faster on RCS, radial glow **96×**.
 The blitter — which is what the current "Next action" exercises — measures **~1×** for
 fill and **0.85×** for copy. The CPU wins on the blitter.
 

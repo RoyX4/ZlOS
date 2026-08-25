@@ -2,7 +2,7 @@
 > after the eleven-track merge. Every externally checkable hardware fact here reproduces exactly, and not one line of WiFi or Bluetooth code exists in the tree — so this is unstarted rather than stale. Follow it, but fix three premises first: the network stack it budgets at ~10,000 lines is already landed, its xhci.c estimate assumes a bulk path that is hardcoded single-instance mass-storage, and its shared-crypto discount is unbanked — the tree has no crypto at all.
 >
 > **What is still open from this document is in
-> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 
@@ -10,8 +10,8 @@
 
 Roy asked for both. This is the build plan, not a feasibility argument.
 
-**It also corrects two things I got wrong in `what-is-actually-impossible.md`
-and `beyond-the-kernel.md`, both written the same day.** Those documents listed
+**It also corrects two things I got wrong in `kernel/docs/what-is-actually-impossible.md`
+and `kernel/docs/beyond-the-kernel.md`, both written the same day.** Those documents listed
 Bluetooth as a vendor-gated wall and put the iwlwifi blob at 2–3 MB. Measured on
 this machine:
 

@@ -30,7 +30,7 @@
  *
  * WHY BCS AND NOT RCS. The blitter is the smaller target and the stepping
  * stone: same GGTT, same forcewake, same four ring registers, at a different
- * base. `docs/gpu-next.md` has the measurement saying the *performance* case is
+ * base. `docs/plans/gpu-next.md` has the measurement saying the *performance* case is
  * on the render engine instead - this exists to make that reachable, not
  * because a blitter fill beats fb.c. It does not.
  *

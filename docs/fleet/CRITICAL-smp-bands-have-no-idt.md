@@ -6,7 +6,7 @@ Found by fleet driver agent `smp-bands`. Re-derived here. **Confirmed.**
 
 This is the most decision-relevant finding of the run, because
 `.ultra/STATE.md` §4 in that 2026-08-19 worktree ranked turning SMP bands on as
-**"the best win-to-risk on the board"** and `kernel/docs/gpu-next.md` calls its risk
+**"the best win-to-risk on the board"** and `kernel/docs/plans/gpu-next.md` calls its risk
 *"real but bounded."*
 
 The win is real — a measured **1.78×** on the whole desktop redraw, from code already
@@ -78,7 +78,7 @@ It is currently assumed.
 
 ## Correction to the reachability claim, which cuts the other way
 
-`.ultra/STATE.md` §4 and `gpu-next.md` both state that `smp_go()` is *"reachable solely
+`.ultra/STATE.md` §4 and `kernel/docs/plans/gpu-next.md` both state that `smp_go()` is *"reachable solely
 from the old text shell's `*` key, so `smp_start()` never runs on a desktop boot."*
 
 **That is false.** Measured:

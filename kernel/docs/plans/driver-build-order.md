@@ -1,3 +1,9 @@
+> **DATED SEQUENCING ANALYSIS — NOT THE CURRENT QUEUE.** This was written
+> against `desktop/overnight-compositor` on 2026-08-18. Fleet revalidation later
+> established that Wave 0 had already landed. Keep the dependency reasoning, but
+> use [`docs/PROJECT-STATUS.md`](../../../docs/PROJECT-STATUS.md) and
+> [`docs/REMAINING-WORK.md`](../../../docs/REMAINING-WORK.md) for current state.
+
 Verified the load-bearing claims against the source before ordering anything. Here's the plan.
 
 ---
@@ -64,7 +70,7 @@ Everything here is an edit to a file that already exists. None of it is a new dr
 
 ### 0.0 — Display Phase 0.1 comes first, and it is not on this list
 
-`grep` confirms: nothing outside `hosttest/dpll_test.c` calls `intel_link_train_arm`. The cold-start modeset works on hardware and zlOS still cannot light its own panel. `HANDOFF.md` and `archive/superseded/display-roadmap.md` both name this as the point of the project, and at least six specs in this survey independently say "do not let this jump the queue." **Finish 0.1 before anything below.** Wave 0's items are small enough to land in the gaps around it; Waves 1+ are not.
+`grep` confirms: nothing outside `hosttest/dpll_test.c` calls `intel_link_train_arm`. The cold-start modeset works on hardware and zlOS still cannot light its own panel. `kernel/HANDOFF.md` and `kernel/docs/archive/superseded/display-roadmap.md` both name this as the point of the project, and at least six specs in this survey independently say "do not let this jump the queue." **Finish 0.1 before anything below.** Wave 0's items are small enough to land in the gaps around it; Waves 1+ are not.
 
 ### 0.1 — `acpi_find_table()` external linkage
 - **Why now:** six downstream items are gated on one keyword.
@@ -198,7 +204,7 @@ Sequential. Each depends on the previous.
 - **Unblocks:** persistence, loading `.zl` source at runtime, eventually self-update.
 - **Size:** ~800 read-only (BPB, FAT chain, LFN directory entries).
 - **Biggest risk:** the EOC test. `/boot/efi`'s live FAT has `FAT[2] = 0x0FFFFFF8` and `FAT[3] = 0x0FFFFFFF` — **two different end-of-chain values in one FAT.** `if (ent == 0x0FFFFFFF)` walks off the end of the root directory into free space. The test is `(ent & 0x0FFFFFFF) >= 0x0FFFFFF8`. Fails silently, looks like directory corruption.
-- **Also worth correcting in the repo:** `archive/superseded/feature-catalogue-2026-08-17.md:301-303` lists filesystems as "not worth taking" because they "need a heap." FAT32 read is a counterexample — one sector buffer, one cluster buffer, one FAT window, all static. Amend that line when this lands.
+- **Also worth correcting in the repo:** `kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md:301-303` lists filesystems as "not worth taking" because they "need a heap." FAT32 read is a counterexample — one sector buffer, one cluster buffer, one FAT window, all static. Amend that line when this lands.
 
 ### 3.3 — FAT32 write, then `cache.c`
 - **Why now:** write-back is 15× faster than write-through at 4 KiB on this drive (40.9 µs vs 625.7 µs; a FLUSH costs ~585 µs). And `IO_FLUSH` is defined at `nvme.c:97` and **grep finds exactly one occurrence — the definition.** The drive's `write_cache = "write back"`, so every write zlOS makes today can already vanish on power loss. It reads back fine because the read is served from the same cache.
@@ -242,7 +248,7 @@ These have no device, no cable, or no safe development loop. This project's meth
 | **net stack (ARP/IP/ICMP/UDP)** | Pure software, fully testable — but only against a link layer, and there is none. | virtio-net under QEMU (~400 lines) is the honest first target. It makes the ~1700-line protocol work provable on the desk today. Reasonable to do out of order if hardware is unavailable. |
 | **USB hub** | No external hub attached; every real device is at `Lev=01` on a root port. | Buy a hub before writing the port-reset path. Also fix `configure_endpoint()`'s dropped slot dword 2 (`tt_info`) — a latent bug that silently erases TT routing the moment anything sits behind a HS hub. |
 | **USB mouse** | Driver exists (~200 lines in `xhci.c`) and works against QEMU `usb-tablet`. No real mouse attached; the boot-mouse relative branch has never met one. | Plug a mouse in. `ptr_abs` is inferred from `wMaxPacketSize >= 6`, which is not a protocol discriminator — a gaming mouse gets decoded by the absolute-tablet branch and the cursor teleports to garbage. |
-| **USB mass storage** | Driver exists (~250 lines) and was verified against **QEMU's emulated `usb-storage` only**. `docs/wireless-plan.md:54` calls bulk "written and proven for mass storage" — that claim is overstated and should be corrected in the repo. | Needs Wave 0.3 first. Then a real stick. Expect the first-command CHECK CONDITION to break it (QEMU never stalls). |
+| **USB mass storage** | Driver exists (~250 lines) and was verified against **QEMU's emulated `usb-storage` only**. `kernel/docs/plans/wireless-plan.md:54` calls bulk "written and proven for mass storage" — that claim is overstated and should be corrected in the repo. | Needs Wave 0.3 first. Then a real stick. Expect the first-command CHECK CONDITION to break it (QEMU never stalls). |
 | **Bluetooth (AX201)** | Present and real, but gated on pushing 801,412 bytes of signed Intel firmware (`ibt-19-0-4.sfi`) through ~3,300 commands at ~493 µs each. And zlOS has no filesystem to source it from. | Prove the transport against an £8 CSR ROM dongle **first** — it answers HCI immediately with no upload, which stops transport bugs and firmware bugs hiding behind each other. Also: `wireless-plan.md` names the wrong file (`ibt-0040-0041.sfi`, 704 KB); correct it. |
 | **WiFi (AX201)** | The radio is soldered on and works, but above ALIVE there are no registers — scan/auth/assoc are host commands into a firmware whose API (77) has `min == max` and no compatibility window. | ~15,000 lines for managed-mode-only. The repo doc's "40,000+" figure is the maximal version; the bounded one is 15k. Both are too big for now. Build the read-only `hosttest/wifi-dev.sh` BAR0 probe if you want to make progress cheaply. |
 | **UVC camera** | Camera is present (13d3:5405) but `xhci.c` has **zero isochronous support** — TRB type 5 and EP type 5 appear nowhere — and no `SET_INTERFACE`. UVC alt 0 has no endpoints. | ~700 lines, and isoch is the bulk of it. Genuinely blocked on new xHCI work. |

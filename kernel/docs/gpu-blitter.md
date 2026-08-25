@@ -1,6 +1,6 @@
 # The Intel blitter — the first GPU work zlOS has ever done
 
-> **If you only read one thing, read `kernel/docs/gpu-next.md`.** This page is
+> **If you only read one thing, read `kernel/docs/plans/gpu-next.md`.** This page is
 > the full account of taking the blitter to working silicon; that one is the
 > decision it leads to, which is *not* "build the blitter ring".
 

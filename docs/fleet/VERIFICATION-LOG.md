@@ -39,7 +39,7 @@ static void b_rrblend(void) { fb_rrect_blend(200,200,600,460, 10, 0x0055D6FF, 16
 Neither is called from `scene()`. So the hash — the only *correctness* net over `fb.c`
 — never executes `fb_fill_blend` or `fb_rrect_blend` with any alpha value at all.
 
-**Why that is the expensive gap specifically.** `kernel/docs/gpu-next.md` measures
+**Why that is the expensive gap specifically.** `kernel/docs/plans/gpu-next.md` measures
 `fill_blend` at **122 Mpix/s against the GPU's 5930 — a 48× gap** — and identifies alpha
 blending as the operation the whole visual direction rests on. It is simultaneously the
 most performance-critical primitive in `fb.c` and the one with no correctness coverage.

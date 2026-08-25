@@ -3,7 +3,7 @@
 2026-08-19. Three files in `kernel/`, one boundary, and an honest account of
 which side of it each thing sits on.
 
-Read `gpu-next.md` first for *why* the driver is aimed where it is. This is
+Read `plans/gpu-next.md` first for *why* the driver is aimed where it is. This is
 *what is built*.
 
 ## The files
