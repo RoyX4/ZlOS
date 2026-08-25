@@ -556,7 +556,10 @@ div.r2 { height: calc(var(--zd-row) * 2); flex: none; display: flex; align-items
 @keyframes bl { 0%, 50% { opacity: 1 } 50.01%, 100% { opacity: 0 } }
 
 /* ========================================================== overview ==== */
-#ov { position: absolute; inset: 0; background: var(--zd-desk); z-index: 60; display: none;
+/* above the off-spread sheets. A detached window carries z 200 + its raise
+   counter, which climbs without bound, so the overview cannot sit at a fixed
+   60 and hope to win. */
+#ov { position: absolute; inset: 0; background: var(--zd-desk); z-index: 999; display: none;
       flex-direction: column; padding: var(--zd-marg); }
 #ov.on { display: flex; }
 .ovws { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -2205,10 +2208,15 @@ function renderLock() {
      held, and the fallback already had a way to say that. */
   let hh = '<div class="stock" style="position:absolute;top:0;bottom:2px;left:0;right:0;' +
     'background:var(--zd-band)"></div>';
+  /* the held head keeps the REAL column geometry, scaled to the locked page.
+     A lock screen that redistributed the segments evenly would be throwing
+     away the one thing the head is for. */
   const lw = $('#lock .lhead').clientWidth || 1;
-  const n = Math.max(1, onSpread(S.ws).length);
-  onSpread(S.ws).forEach((id, i) => {
-    const x = Math.round(lw * i / n), w = Math.round(lw / n) - 2;
+  const inner = Math.max(1, g.W - 2 * g.marg);
+  const k = lw / inner;
+  onSpread(S.ws).forEach(id => {
+    const w0 = S.wins[id], r = spanRect(w0.c, w0.cw);
+    const x = Math.round((r.x - g.marg) * k), w = Math.round(r.w * k);
     hh += '<div class="hseg struck" style="left:' + x + 'px;width:' + w + 'px;pointer-events:none">' +
       '<span class="t-d hn">' + APP[id].n + '</span>' +
       '<span class="t-l ht">' + APP[id].name + '</span>' +
