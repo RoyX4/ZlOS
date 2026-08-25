@@ -24,6 +24,7 @@ where things live, not what is complete.
 | `kernel/tools/` | active tooling | Static checks, generators, image builders, runtime probes, and VM launchers. |
 | `kernel/metadata/` | generated truth | Tracked machine-readable registries generated from source, policy, and receipts. |
 | `kernel/app_manifest_embed.zl`, `kernel/build_identity_embed.zl` | generated source exceptions | Build-owned imports kept at the product root until generator, importer, receipt, and build-identity paths move atomically. |
+| `kernel/boot_state.c`, `kernel/boot_state.h` | host-tested source exception | Recovery-policy source compiled by `kernel/tests/host/boot_state_test.c`; it is not in the shipped `kernel/SOURCES` manifest. Move it only with the host-test paths, metadata references, and a rerun of that compile gate. |
 | `freestanding/` | active proof lane | No-libc generated-zl proof for the kernel track. |
 | `bench/` | active tooling | Bench scripts and benchmark trees. |
 | `tools/` | active tooling | Repo maintenance: doc checks, hazard scan, parity helpers, preflight, journal helpers. |

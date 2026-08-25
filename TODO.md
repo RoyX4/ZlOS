@@ -25,6 +25,7 @@ _none — every file the docs describe is tracked._
 ## Open tensions (.ultra/TENSIONS.md)
 
 - [ ] **T-8** — Generated evidence manifests disagree on build identity.
+- [ ] **T-9** — Boot recovery policy remains at the kernel root.
 
 ## Open pull requests
 

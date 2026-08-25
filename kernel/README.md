@@ -40,6 +40,14 @@ identity, and `src/kernel.zl` import path all depend on that location. They are
 documented exceptions to the nested-source rule until those consumers move in
 one atomic change; do not hand-edit them or move either file alone.
 
+`boot_state.c` and `boot_state.h` are the separate live-source exception. The
+pure recovery policy is compiled by `tests/host/boot_state_test.c`, but it is not
+listed in `SOURCES` and is not wired into a shipped boot route. Its intended home
+is `src/core/boot/`; moving it requires updating the host harness and metadata,
+then rerunning the focused compile test. T-9 in
+[`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md) tracks that closure instead of
+treating the current root placement as finished.
+
 ## Running it on real hardware
 
 ```bash

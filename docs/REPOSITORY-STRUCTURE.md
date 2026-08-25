@@ -28,6 +28,7 @@ zl-linux/
 |-- learn/                    bounded teaching exercises
 |-- editors/                  editor and language integrations
 |-- kernel/                   zlOS product root
+|   |-- boot_state.c/.h       host-tested recovery-policy exception; not shipped
 |   |-- apps/                 zl applications and games
 |   |-- boot/                 entry code, EFI handoff, and linker layouts
 |   |-- src/                  kernel implementation by subsystem
@@ -64,7 +65,9 @@ The zlOS implementation follows the same ownership rule inside `kernel/`:
 architecture, core services, drivers, filesystems, graphics, networking,
 runtime, and web code have separate homes under `kernel/src/`. `kernel/SOURCES`
 is the authoritative shared build manifest; boot-specific entry code remains
-under `kernel/boot/`, and all build scripts consume the nested paths.
+under `kernel/boot/`. The unshipped, host-tested `boot_state.c/.h` pair remains
+the one live-source root exception until its test/build paths can move and be
+recompiled together.
 
 ## Placement Rules
 

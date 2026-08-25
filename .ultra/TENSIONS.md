@@ -191,3 +191,20 @@ input registry onto it from the same source/artifact snapshot, then regenerate
 release notes, provenance viewer, evidence registry and feature status in
 dependency order. All generator `--check --selftest` gates must pass before the
 viewer is described as current.
+
+---
+
+## T-9 — Boot recovery policy remains at the kernel root. OPEN.
+
+`kernel/boot_state.c` and `kernel/boot_state.h` are the only live implementation
+files left at the zlOS product root. The pure policy is compiled by
+`kernel/tests/host/boot_state_test.c`, but neither file appears in
+`kernel/SOURCES`; the typed boot handover document correctly treats target
+wiring as future work.
+
+The ownership destination is `kernel/src/core/boot/`. This structure-only pass
+does not move the pair because the host compile gate is deliberately deferred.
+
+**Close by:** move both files together, update the host harness include/source
+paths and every metadata/document reference, rerun `boot_state_test`, and prove
+the shared build/source registries agree before removing this exception.
