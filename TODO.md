@@ -7,6 +7,24 @@ Every item below was measured by a command, not remembered. Regenerate with:
 tools/todo.sh
 ```
 
+## EFI pointer truncation — 7 sites
+
+The four `-Werror=` flags in `kernel/buildefi.sh` are inert: `-w` is a
+blanket suppression a later `-Werror=` does not survive. Harmless below
+4 GiB, which is why no emulator shows them, and why this class shipped twice.
+
+- [ ] replace `-w` with `-Wno-everything` in `kernel/buildefi.sh` (verified fix)
+- [ ] repair the sites it then reports, per file:
+
+  - [ ] `kernel/boot/efi.c` — 1 site(s)
+  - [ ] `freestanding/runtime_kernel.c` — 1 site(s)
+  - [ ] `kernel/boot/gdt64.c` — 1 site(s)
+  - [ ] `src/frontend/lexer.c` — 1 site(s)
+  - [ ] `src/frontend/parser.c` — 1 site(s)
+  - [ ] `src/runtime/interp.c` — 1 site(s)
+  - [ ] `kernel/boot/efi_stage0.c` — 1 site(s)
+- [ ] then run `kernel/tools/checks/verify-efi.sh` before believing the boot path
+
 ## Engine divergence — 2 pinned
 
 `./interp` is ground truth. These engines disagree with it today:
@@ -52,7 +70,6 @@ _none open._
 
 ## Open pull requests
 
-- [ ] #5 feat: remaining-work H0–H3 — stop lying, then a desktop, then the panel, then zl on zlOS  `cursor/remaining-work-map-b8fe`
 - [ ] #2 fix(kernel): HID buffers sat inside fb.c's blur arena — the high-RAM map is now compiler-enforced  `fix/dma-map-hid-arena`
 
 ---
