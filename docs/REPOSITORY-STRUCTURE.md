@@ -10,6 +10,7 @@ and separate homes for tests, tools, current plans, evidence, and history.
 zl-linux/
 |-- README.md                 project front door
 |-- build.sh                  language build entry point
+|-- .gitattributes            LF, binary-asset, and generated-file policy
 |-- .github/                  GitHub automation and CI workflows
 |-- .vscode/                  shared editor tasks and language configuration
 |-- .design/                  machine-readable visual-direction log

@@ -32,6 +32,7 @@ where things live, not what is complete.
 | `learn/` | active teaching | Small learning exercises and solutions. |
 | `editors/` | active support | Editor integration, currently VS Code language support. |
 | `.github/` | active automation | GitHub docs, gates, boot and scheduled workflows. |
+| `.gitattributes` | repository policy | LF normalization, binary evidence handling, and generated-file classification. |
 | `.vscode/` | active support | Shared editor settings, launch tasks and C/C++ indexing. |
 | `.design/` | tracked metadata | Machine-readable record of the selected visual direction. |
 | `.ultra/` | tracked evidence | Integration tensions; OPEN/CLOSED states require explicit evidence. |

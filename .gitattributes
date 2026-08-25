@@ -1,0 +1,26 @@
+# Store text consistently and leave genuine binary files untouched.
+* text=auto eol=lf
+
+# Binary build products, assets, and retained evidence.
+*.bin binary
+*.bmp binary
+*.elf binary
+*.EFI binary
+*.gif binary
+*.ico binary
+*.img binary
+*.iso binary
+*.jpg binary
+*.otf binary
+*.png binary
+*.ppm binary
+*.tar binary
+*.ttf binary
+*.zst binary
+
+# Generated truth surfaces and embedded build inputs.
+/kernel/metadata/** linguist-generated=true
+/kernel/docs/provenance-viewer.html linguist-generated=true
+/kernel/docs/UNRELEASED-CHANGELOG.md linguist-generated=true
+/kernel/app_manifest_embed.zl linguist-generated=true
+/kernel/build_identity_embed.zl linguist-generated=true
