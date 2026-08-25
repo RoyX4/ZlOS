@@ -19,6 +19,26 @@ OUT=TODO.md
 BEGIN_HOLD="<!-- BEGIN HAND-WRITTEN -->"
 END_HOLD="<!-- END HAND-WRITTEN -->"
 
+open_tension_headings() {
+    grep -iE '^#{2,3} T-[0-9]+ .*OPEN\.?$' "$1" 2>/dev/null || true
+}
+
+if [ "${1:-}" = "--selftest-tensions" ]; then
+    fixture=$(mktemp)
+    trap 'rm -f "$fixture"' EXIT
+    printf '%s\n' \
+        '## T-1 — old problem. CLOSED.' \
+        '## T-2 — current problem. OPEN.' \
+        '### T-3 | 2026-08-25 | open' > "$fixture"
+    found=$(open_tension_headings "$fixture")
+    [ "$(printf '%s\n' "$found" | grep -c '^')" -eq 2 ] || {
+        echo "todo tension selftest: FAIL"
+        exit 1
+    }
+    echo "todo tension selftest: caught both supported OPEN heading formats"
+    exit 0
+fi
+
 # Preserve anything the human wrote between the markers.
 hold=""
 if [ -f "$OUT" ] && grep -qF "$BEGIN_HOLD" "$OUT"; then
@@ -112,13 +132,13 @@ fi
 if [ -f .ultra/TENSIONS.md ]; then
     echo "## Open tensions (.ultra/TENSIONS.md)"
     echo
-    open=$(grep -cE '^### T-[0-9]+ \|.*\| open' .ultra/TENSIONS.md 2>/dev/null || echo 0)
+    headings=$(open_tension_headings .ultra/TENSIONS.md)
+    open=$(printf '%s' "$headings" | grep -c '^' || true)
     if [ "$open" -gt 0 ]; then
-        grep -E '^### T-[0-9]+ \|.*\| open' .ultra/TENSIONS.md | while read -r l; do
+        printf '%s\n' "$headings" | while read -r l; do
             id=$(echo "$l" | grep -oE 'T-[0-9]+')
-            date=$(echo "$l" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}')
-            body=$(grep -A2 "^### $id " .ultra/TENSIONS.md | grep -m1 '\*\*Tension:\*\*' | sed 's/.*\*\*Tension:\*\* *//' | cut -c1-110)
-            echo "- [ ] **$id** ($date) — $body"
+            body=$(echo "$l" | sed -E 's/^#{2,3} T-[0-9]+ [—|-] *//; s/ *OPEN\.?$//' | cut -c1-110)
+            echo "- [ ] **$id** — $body"
         done
     else
         echo "_none open._"

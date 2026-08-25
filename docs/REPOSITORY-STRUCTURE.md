@@ -10,6 +10,10 @@ and separate homes for tests, tools, current plans, evidence, and history.
 zl-linux/
 |-- README.md                 project front door
 |-- build.sh                  language build entry point
+|-- .github/                  GitHub automation and CI workflows
+|-- .vscode/                  shared editor tasks and language configuration
+|-- .design/                  machine-readable visual-direction log
+|-- .ultra/                   integration tension ledger and closure evidence
 |-- src/
 |   |-- frontend/             shared C lexer, parser, and AST headers
 |   |-- runtime/              interpreter, boxed runtime, and Linux OS bridge
@@ -64,6 +68,9 @@ under `kernel/boot/`, and all build scripts consume the nested paths.
 - Superseded prompts, dated handoffs, and backup copies go in `archive/`.
 - Generated binaries, disk images, screenshots, caches, and compiler output are
   ignored. Curated proof belongs under `docs/`, with a short receipt.
+- `.design/` and `.ultra/` are small tracked metadata surfaces, not source or
+  scratch directories. Visual decisions go in the former; failed claims and
+  evidence-backed closure records go in the latter.
 - Feature maturity lives in program ledgers and receipts, not in source-folder
   names such as `done/` or `half-done/`.
 

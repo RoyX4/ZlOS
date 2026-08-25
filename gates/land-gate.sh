@@ -108,6 +108,9 @@ run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --
 # LINE_BUF and DISK_SCRATCH sat on 0x02030000 through a whole integration.
 run "zl call sites" "$WT/kernel" ./tools/checks/check-zl-calls.sh
 run "memory map" "$WT/kernel" ./tools/checks/check-memmap.sh
+run "memory map mutation" "$WT/kernel" ./tools/checks/check-memmap.sh --selftest
+run "UI scale contract" "$WT/kernel" bash -c \
+    'grep -Eq "^fn ui\(\) \{ return ui_scale\(\) \}$" src/kernel.zl'
 run "memmap guards" "$WT/kernel/tests/host" ./memmap-guard-test.sh
 run "unique app ids" "$WT/kernel" ./tools/checks/check-appids.py --selftest
 run "app registry coverage" "$WT" python3 kernel/tests/host/apps53.py --selftest

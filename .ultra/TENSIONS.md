@@ -54,7 +54,7 @@ shown failing on a case it is supposed to fail on before it is trusted.
 
 ---
 
-## T-3 — `kernel/tools/checks/check-memmap.sh` cannot catch the collision it exists for. OPEN.
+## T-3 — `kernel/tools/checks/check-memmap.sh` cannot catch the collision it exists for. CLOSED.
 
 It iterates a hardcoded list: `SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT LINE_BUF
 LINE_MAX HIST_BUF HIST_N`. No `DISK_SCRATCH`, no discovery of new constants.
@@ -75,9 +75,14 @@ has no static asserts, so nothing fails.
 regions as UNSIZED rather than skipping them. Then prove it fails on a synthetic
 tree with both constants at `0x02030000`.
 
+**Closure:** the checker discovers every fixed-address zl constant, derives
+cross-owner sizes from the clipboard and filesystem sources, and its
+`--selftest` plants `CODEX_DUPLICATE = 0x02030000`. The current map passes and
+the mutation is rejected before any build or boot.
+
 ---
 
-## T-4 — Files that exist in no commit on any branch. OPEN.
+## T-4 — Files that exist in no commit on any branch. CLOSED.
 
 Found while gating: `kernel/tests/host/build.sh` is `set -e` and compiles
 `gpu_fillrate.c`, which is tracked on **no branch** — it lives only in
@@ -96,9 +101,14 @@ compositor's commits), `editors/vscode-zl/*`, `docs/LEARNING.md` + `learn/`,
 **Close by:** deciding each explicitly — land or defer in writing. Not by
 neglect.
 
+**Closure:** the structure publication tracked the listed host tests, crypto,
+formatter, editor support, learning material, probes, prompts and `.ultra`
+records. `git ls-files` now resolves the retained set in the clean publication
+tree; the original dirty checkout remains preserved separately.
+
 ---
 
-## T-5 — Two implementations of one thing, under different names. OPEN.
+## T-5 — Two implementations of one thing, under different names. CLOSED.
 
 Git cannot see this class at all; it unions both and nothing warns.
 
@@ -117,9 +127,14 @@ silently or ship twice.
 **Close by:** the symbol table in `docs/evidence/MERGE-EVIDENCE.md` §3, run before each
 landing, with a decision recorded per row.
 
+**Closure:** the current source has one snake implementation (`sn_*`), one
+resize-grip implementation, one `wm_frame_us`, one console-mute state, one snap
+classifier and one pointer-bound owner. The retired spellings survive only in
+comments that record the merge decision.
+
 ---
 
-## T-6 — `fn ui()` silently reverts a fixed regression. OPEN.
+## T-6 — `fn ui()` silently reverts a fixed regression. CLOSED.
 
 `kernel/src/kernel.zl`: `fn ui()` is `ui_scale()` on overnight and `cell_w() / 8` on apps.
 Both builtins exist after a `runtime_kernel.c` union, so taking apps's side of
@@ -128,3 +143,19 @@ regression overnight diagnosed and fixed.
 
 **Close by:** an explicit grep in the L3 gate — `grep -n 'fn ui()' kernel/src/kernel.zl`
 must show `ui_scale()`.
+
+**Closure:** `kernel/src/kernel.zl` contains exactly
+`fn ui() { return ui_scale() }`, and `gates/land-gate.sh` now rejects any other
+definition through its static UI-scale contract step.
+
+---
+
+## T-7 — The generated TODO hid every open tension. CLOSED.
+
+`tools/todo.sh` expected headings shaped like `### T-N | date | open`, while
+this file uses `## T-N — title. OPEN.`. The parser therefore emitted `_none
+open._` while T-3 through T-6 visibly remained open in the source document.
+
+**Fix:** accept both level-two/three OPEN heading forms, derive the TODO text
+from the actual heading, and keep `--selftest-tensions` as a two-format
+regression check.

@@ -14,12 +14,34 @@
 # Static: it parses source and does arithmetic. No build, no QEMU, no timing,
 # so it cannot fail because the host is busy.
 set -uo pipefail
+SELF=$(realpath "$0")
 cd "$(dirname "$0")/../.." || exit
+
+if [ "${1:-}" = "--selftest" ]; then
+    fixture=$(mktemp)
+    log=$(mktemp)
+    trap 'rm -f "$fixture" "$log"' EXIT
+    cp src/kernel.zl "$fixture"
+    printf '\nCODEX_DUPLICATE = 0x02030000\n' >> "$fixture"
+    if "$SELF" "$fixture" >"$log" 2>&1; then
+        echo "FAIL: duplicate-address mutation escaped"
+        exit 1
+    fi
+    grep -q "two fixed constants share an address" "$log" || {
+        echo "FAIL: mutation failed for the wrong reason"
+        tail -20 "$log"
+        exit 1
+    }
+    echo "check-memmap selftest: caught duplicate-address mutation"
+    exit 0
+fi
 
 SRC=${1:-src/kernel.zl}
 [ -f "$SRC" ] || { echo "FAIL: no $SRC"; exit 1; }
 ARENA_SRC=src/core/arena.c
 MEMMAP=src/arch/x86/memmap.h
+CLIP_SRC=src/graphics/windowing/clip.c
+FS_SRC=src/fs/fs.c
 
 # Pull `NAME = value` out of the source. A missing constant aborts: parsed in
 # the main shell, deliberately NOT via a helper called as `X=$(konst ...)`,
@@ -52,7 +74,7 @@ fi
 # ...and say which constants the sized checks below do NOT cover, so the gap is
 # visible rather than silent. Not a failure: a new address is not automatically
 # wrong, it is automatically unexamined.
-known=" SNAKE_X SNAKE_Y LINE_BUF LINE_MAX HIST_BUF HIST_N DISK_SCRATCH DISK_SCRATCH_SIZE PAINT_BUF PAINT_MAX FILES_NAME_BUF EDIT_BUF EDIT_MAX "
+known=" SNAKE_X SNAKE_Y LINE_BUF LINE_MAX HIST_BUF HIST_N DISK_SCRATCH PAINT_BUF PAINT_MAX FILES_NAME_BUF EDIT_BUF EDIT_MAX "
 unsized=""
 for n in $(grep -oP '^\K[A-Z_]+(?=\s*=\s*0x0[0-9A-Fa-f]{5,})' "$SRC" | sort -u); do
     case "$known" in *" $n "*) ;; *) unsized="$unsized $n";; esac
@@ -61,7 +83,7 @@ done
 
 declare -A K
 for name in SNAKE_X SNAKE_Y \
-            LINE_BUF LINE_MAX HIST_BUF HIST_N DISK_SCRATCH DISK_SCRATCH_SIZE \
+            LINE_BUF LINE_MAX HIST_BUF HIST_N DISK_SCRATCH \
             PAINT_BUF PAINT_MAX FILES_NAME_BUF \
             EDIT_BUF EDIT_MAX; do
     v=$(grep -oP "^$name\s*=\s*\K(0x[0-9A-Fa-f]+|[0-9]+)" "$SRC" | head -1)
@@ -79,10 +101,18 @@ HIST_STRIDE=$(grep -oP 'HIST_BUF \+ hslot \* \K[0-9]+' "$SRC" | sort -u)
 SNAKE_X=${K[SNAKE_X]}; SNAKE_Y=${K[SNAKE_Y]}
 LINE_BUF=${K[LINE_BUF]}; LINE_MAX=${K[LINE_MAX]}
 HIST_BUF=${K[HIST_BUF]}; HIST_N=${K[HIST_N]}
-DISK_SCRATCH=${K[DISK_SCRATCH]}; DISK_SCRATCH_SIZE=${K[DISK_SCRATCH_SIZE]}
+DISK_SCRATCH=${K[DISK_SCRATCH]}
 PAINT_BUF=${K[PAINT_BUF]}; PAINT_MAX=${K[PAINT_MAX]}
 FILES_NAME_BUF=${K[FILES_NAME_BUF]}
 EDIT_BUF=${K[EDIT_BUF]}; EDIT_MAX=${K[EDIT_MAX]}
+
+# The scratch buffer's largest caller is the clipboard, and the Files name
+# buffer is owned by zlfs. Read both public bounds from their implementation
+# owners instead of restating literals here or requiring duplicate zl globals.
+DISK_SCRATCH_SIZE=$(grep -oP '^#define\s+CLIP_MAX\s+\K[0-9]+' "$CLIP_SRC")
+FILES_NAME_SIZE=$(grep -oP '^#define\s+FS_NAME_MAX\s+\K[0-9]+' "$FS_SRC")
+[ -n "$DISK_SCRATCH_SIZE" ] || { echo "FAIL: CLIP_MAX not found in $CLIP_SRC"; exit 1; }
+[ -n "$FILES_NAME_SIZE" ] || { echo "FAIL: FS_NAME_MAX not found in $FS_SRC"; exit 1; }
 
 # SNAKE_X/SNAKE_Y are one byte per body cell and the code bounds neither by a
 # named constant; the gap between them is what each actually gets.
@@ -131,9 +161,7 @@ REGIONS=(
     "HIST_BUF:$HIST_BUF:$((HIST_N * HIST_STRIDE))"
     "DISK_SCRATCH:$DISK_SCRATCH:$DISK_SCRATCH_SIZE"
     "PAINT_BUF:$PAINT_BUF:$((PAINT_MAX * 4))"
-    # 24, not a named constant here: it is fs.c's FS_NAME_MAX, which this
-    # script has no visibility into (it parses kernel.zl only).
-    "FILES_NAME_BUF:$FILES_NAME_BUF:24"
+    "FILES_NAME_BUF:$FILES_NAME_BUF:$FILES_NAME_SIZE"
     "EDIT_BUF:$EDIT_BUF:$EDIT_MAX"
 )
 
