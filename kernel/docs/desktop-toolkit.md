@@ -2,7 +2,7 @@
 
 Planning document, 2026-08-17. Nothing implemented.
 
-`desktop-northstar-feasibility.md` named the real gap and then did not solve it:
+`archive/superseded/desktop-northstar-feasibility.md` named the real gap and then did not solve it:
 
 > **A layout engine.** 105 flex declarations mean the mockup never positions
 > anything by hand. zlOS positions *everything* by hand — `sx + 14 * u`,
@@ -256,5 +256,5 @@ path actually works.
 ---
 
 Architecture: `archive/superseded/desktop-plan.md` · Task list: `archive/superseded/desktop-TODO.md` · Why the gap
-existed: `desktop-northstar-feasibility.md` · Theme idea source:
+existed: `archive/superseded/desktop-northstar-feasibility.md` · Theme idea source:
 `os-landscape.md`

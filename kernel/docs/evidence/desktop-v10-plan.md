@@ -145,7 +145,7 @@ Counted from the source, not estimated:
 | `sc-if` | 84 | **done** — that is `if` |
 | **blur** | 9 (10–34 px) | **the one real limit** — §4 |
 
-**The old "20%" verdict in `desktop-northstar-feasibility.md` is stale.** It
+**The old "20%" verdict in `../archive/superseded/desktop-northstar-feasibility.md` is stale.** It
 counted two things as permanent: "no lists" and "no layout engine". `ui.c` is a
 layout engine, and `ui_list_row` expresses a list without a list *type*. Those
 were "nobody has written it yet", not "the language cannot". That document

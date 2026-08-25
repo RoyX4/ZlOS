@@ -55,6 +55,7 @@ carried into newer status and roadmap documents; the old task lists are history.
 | `archive/superseded/desktop-plan.md` | Audited inversion plan: useful decisions, superseded task/status body. |
 | `archive/superseded/desktop-TODO.md` | Audited 30-of-34-complete task list; never use as the current queue. |
 | `archive/superseded/desktop-wiring.md` | Historical copy-paste wiring handoff; current boot already calls the compositor. |
+| `archive/superseded/desktop-northstar-feasibility.md` | Retained layer analysis with explicitly superseded percentage estimates. |
 
 `archive/audits/` contains dated task/session audits. `archive/handoffs/`
 contains recovery notes for work that now has a newer receipt or status map.

@@ -622,7 +622,7 @@ applications — but a reader who budgets fifteen builtins will be wrong by an
 order of magnitude.
 
 Two documents call this their own highest-leverage item (`kernel/docs/archive/superseded/desktop-TODO.md` T-18,
-`desktop-northstar-feasibility.md`). They are right. Everything the mockup still
+`kernel/docs/archive/superseded/desktop-northstar-feasibility.md`). They are right. Everything the mockup still
 lacks is applications, and applications in this repo are zl.
 
 *Source: NSTAR-01, DTODO-25; xcheck-contradiction XC-14.*

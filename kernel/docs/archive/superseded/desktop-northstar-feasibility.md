@@ -2,7 +2,7 @@
 > after the eleven-track merge. Its one verified finding still holds exactly: `ui.c` is a complete widget toolkit with zero zl bindings, so every app in `kernel.zl` draws with raw primitives. Keep the gap list and the measurements; ignore the percentage — four successive numbers have each been wrong.
 >
 > **What is still open from this document is in
-> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 # Can zlOS run the v10 mockup?

@@ -59,7 +59,7 @@ Graphics Pipeline"* and Scratchapixel's rasterization series.
 Not the renderer. Three other things:
 
 1. **A real toolkit** — `LibGUI` knows what a button is, where it goes, how it
-   arranges. zlOS has no equivalent (`desktop-northstar-feasibility.md`).
+   arranges. zlOS has no equivalent (`archive/superseded/desktop-northstar-feasibility.md`).
 2. **A theme system** — `WindowManager` loads a theme object into a shared
    buffer; window frame painting lives in `LibGfx` with gradient support. Colours
    and metrics are **data**, not hardcoded numbers.

@@ -1324,7 +1324,7 @@ inverts that. Designed 2026-08-17:
   Linux's knowledge, not its code.** Also:
   `src/drivers/display/virtio_gpu.c:314` disables virgl on purpose — enabling
   it would give real 3D in QEMU only, never on the laptop.
-- `docs/desktop-northstar-feasibility.md` — can zlOS run the `~/zl OS v10.dc.html`
+- `docs/archive/superseded/desktop-northstar-feasibility.md` — can zlOS run the `~/zl OS v10.dc.html`
   mockup? Keep its layer breakdown and gap list; **ignore every percentage in
   it.** Successive 95%, 20%, 65% and 35% figures each collapsed different
   layers and each misled. `ui.c` is a layout engine and `ui_list_row` expresses

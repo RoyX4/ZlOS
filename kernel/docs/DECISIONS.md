@@ -211,7 +211,7 @@ arithmetic-bound. The real problem was algorithmic (see #12).
 **26. "The v10 mockup is ~95% achievable" — WRONG.** Counted visual effects and
 ignored the toolkit underneath. Real figure ~20%. The mockup has **106 `sc-for`
 list loops** (zl has no lists) and **105 flex declarations** (zlOS positions
-everything by hand). Corrected in `desktop-northstar-feasibility.md`.
+everything by hand). Corrected in `archive/superseded/desktop-northstar-feasibility.md`.
 *Lesson: judging a stack by its most finished layer.*
 
 **27. `docs/archive/superseded/GRAPHICS_PLAN.md` is stale for zlOS** — it is the **Windows-hosted** plan
@@ -966,7 +966,7 @@ offered afterwards.** Logged to `~/.claude/CLAUDE.md`, the vault's
 Docs: `look-and-speed.md` (the frame budget, the vsync survey, what is next) ·
 `desktop-build-guide.md` (start here) · `archive/superseded/desktop-TODO.md` (historical task list) ·
 `archive/superseded/desktop-plan.md` · `desktop-look.md` · `desktop-polish-and-speed.md` ·
-`desktop-northstar-feasibility.md` · `desktop-prior-art.md` ·
+`archive/superseded/desktop-northstar-feasibility.md` · `desktop-prior-art.md` ·
 `os-landscape.md` · `intel-graphics-stack.md`
 
 ### #43 | The snap preview: snapping worked, but you could not see where it would land

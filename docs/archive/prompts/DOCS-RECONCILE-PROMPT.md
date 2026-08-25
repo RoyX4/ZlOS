@@ -45,7 +45,7 @@ kernel/docs/gen9-modeset-plan.txt              59 KB   (JSON; text in .result.pl
 kernel/docs/archive/prompts/OVERNIGHT-PROMPT.md                35 KB   <- produced 19 compositor commits
 kernel/docs/evidence/desktop-v10-plan.md       16 KB
 kernel/docs/display-roadmap.md                 14 KB
-kernel/docs/desktop-northstar-feasibility.md   11 KB
+kernel/docs/archive/superseded/desktop-northstar-feasibility.md 11 KB
 kernel/docs/archive/superseded/desktop-plan.md 20 KB
 kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md  20 KB
 kernel/docs/os-landscape.md                    15 KB
