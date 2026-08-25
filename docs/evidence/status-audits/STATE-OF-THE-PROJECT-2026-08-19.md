@@ -1645,7 +1645,7 @@ same contract, same reviewer should see all three region owners at once.
 by name and zlEDIT opened from Files saves through to NVMe. `edit <n>` retains
 the ten RAM slots so existing shell workflows do not break; they are explicitly
 not the primary store. The boundary and cold-boot gate are in
-`kernel/docs/storage-and-files.md`.
+`kernel/docs/features/storage-and-files.md`.
 
 zlfs is real, backed by NVMe, with 22 builtins and covered by a gate that
 power-cycles the machine (`verify-disk.sh`, which *is* in `land-gate.sh`'s boot

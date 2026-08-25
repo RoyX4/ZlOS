@@ -23,7 +23,7 @@ VGA text memory at `0xB8000` and the characters appear on screen.
 On a graphical boot, the Files app mounts the NVMe-backed `zlfs`, creates and
 deletes named files, and opens them in the disk-backed editor. `Ctrl+S` writes
 through to disk; `Esc` saves and closes. See
-[`docs/storage-and-files.md`](docs/storage-and-files.md).
+[`docs/features/storage-and-files.md`](docs/features/storage-and-files.md).
 
 ```bash
 ./build.sh          # src/kernel.zl -> kernel.elf

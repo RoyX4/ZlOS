@@ -99,7 +99,7 @@ Its `PASS_WITH_OPEN_GAPS` result preserves physical, hardware-skip, non-run and
 license blockers instead of flattening them into one green count.
 
 Persistent named files and the Files app are documented in
-[`docs/storage-and-files.md`](docs/storage-and-files.md). The old numbered RAM
+[`docs/features/storage-and-files.md`](docs/features/storage-and-files.md). The old numbered RAM
 file implementation and its callers are retired; Settings, editor, Files and
 browser state use named `zlfs` files. Unknown disks are never auto-formatted by
 opening an app: `format`/`mkfs` is the explicit destructive route. New zlfs v2
@@ -1471,7 +1471,7 @@ which claimed a network driver this tree does not contain.
 `src/graphics/ui/notify.c` are the clipboard, window snapping and toasts.
 
 The desktop path is documented in
-[`docs/storage-and-files.md`](docs/storage-and-files.md). Files mounts zlfs on
+[`docs/features/storage-and-files.md`](docs/features/storage-and-files.md). Files mounts zlfs on
 open and creates, opens and deletes entries by name. zlEDIT has a disk-backed
 mode with Ctrl+S, ESC save-and-close and clipboard copy/paste; `edit <n>` keeps
 the old RAM slots only as a compatibility path.

@@ -248,7 +248,7 @@ would delete `kernel/src/arch/x86/usermode.c` (420 lines), `verify_selfhost.sh`,
 form — `main` has `filemgr`, `fs_ch`, 8 `ed_disk` sites and the 249-line
 `probe-files.py` gate; `storage-recovered` has none of the first three. This is
 `MERGE-EVIDENCE.md` §2.2's two-implementations class. Only one file was worth
-rescuing (`kernel/docs/storage-and-files.md`) and it was cherry-picked.
+rescuing (`kernel/docs/features/storage-and-files.md`) and it was cherry-picked.
 
 ### Conflicts that mattered
 

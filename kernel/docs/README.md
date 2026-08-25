@@ -76,6 +76,12 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 | `drivers/display/gen9-blend-pipeline.md` | Fixed blend-pipeline packet recipe. |
 | `drivers/network/ax201-wifi.md` | AX201 implementation and evidence boundary. |
 
+## Feature Contracts
+
+| File | Purpose |
+|---|---|
+| `features/storage-and-files.md` | Persistent storage, zlfs, and Files application contract. |
+
 ## Desktop
 
 | File | Purpose |
