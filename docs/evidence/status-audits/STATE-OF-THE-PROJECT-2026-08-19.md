@@ -33,7 +33,7 @@ can use, H2 the ThinkPad lights its own panel, H3 write zl on zlOS.
 
 This file replaces twenty-one planning documents totalling ~392 KB. Nineteen of
 them were audited item by item against the merged tree (870 items), plus three
-cross-check lenses; two more — `kernel/docs/POINTER-PROMPT.md`, which is live
+cross-check lenses; two more — `kernel/docs/archive/prompts/POINTER-PROMPT.md`, which is live
 work rather than history, and `docs/archive/superseded/INTEGRATION-PLAN.md`, which is superseded —
 are represented here without being re-audited. Almost every one of those
 documents predates the eleven-track merge of 2026-08-19 and is therefore stale
@@ -279,7 +279,7 @@ so this is a real merge, not a fast-forward. This converts every gate in this
 repo from "a human remembered" to "a push failed."
 
 Two documents say 9 commits (`docs/archive/prompts/DOCS-RECONCILE-PROMPT.md:131`,
-`kernel/docs/POINTER-PROMPT.md:208`). The number is 11.
+`kernel/docs/archive/prompts/POINTER-PROMPT.md:208`). The number is 11.
 
 *Source: xcheck-unowned lens.*
 
@@ -400,7 +400,7 @@ shape as §5.7's `dpll_test` line:
 
 ### 3.1 The pointer is visibly broken, and the fix is written and unlanded
 
-`kernel/docs/POINTER-PROMPT.md` is the live work, written the morning after the
+`kernel/docs/archive/prompts/POINTER-PROMPT.md` is the live work, written the morning after the
 merge. Its Phase 1 diagnosis is measured and is **not re-diagnosed here**: two
 independent drainers of one xHCI event ring, with `input.c` calling the pointer
 once per frame and the keyboard up to sixteen times, so the keyboard loop eats
@@ -408,7 +408,7 @@ pointer reports. Moving the mouse in `./try.sh` produces jumpy, laggy motion.
 
 **One correction to the names, made by the repair pass, because §3.3 depends on
 getting the ownership question right.** The two functions are printed against
-each other's line numbers in `POINTER-PROMPT.md:20-21`, and the first draft of
+each other's line numbers in `kernel/docs/archive/prompts/POINTER-PROMPT.md:20-21`, and the first draft of
 this document carried the swap:
 
 ```
@@ -420,7 +420,7 @@ $ grep -n '^int xhci_kbd_poll\|^int xhci_ptr_poll\|event_poll(0' kernel/src/driv
 ```
 
 `xhci_kbd_poll` is at `:1770` and drains at `:1775`; `xhci_ptr_poll` is at
-`:1784` and drains at `:1789`. Correct it in `POINTER-PROMPT.md` too — the tree
+`:1784` and drains at `:1789`. Correct it in `kernel/docs/archive/prompts/POINTER-PROMPT.md` too — the tree
 is the referee.
 
 The fix exists, on a branch nobody is landing:
@@ -440,17 +440,17 @@ It branches off `06ced13`, the exact commit the nineteen readers were pointed at
 so **no reader could see it and none did.** `git diff --stat main...fix/pointer-drain`
 is 17 files, 1,439 insertions, including a new 651-line `hosttest/xhcitest.c`.
 
-Landing it needs a gate run **and** the human check `POINTER-PROMPT.md:3-4`
+Landing it needs a gate run **and** the human check `kernel/docs/archive/prompts/POINTER-PROMPT.md:3-4`
 explicitly requires: *"Do not start phase 2 until phase 1 is confirmed by a human
 looking at a live VM, not by a gate going green."* Whether the 26 assertions pass
 against merged `main` is **unverifiable statically**; `git merge --no-commit
 --no-ff fix/pointer-drain` followed by building and running `xhcitest` settles it.
 
-*Source: `kernel/docs/POINTER-PROMPT.md` Phase 1; xcheck-unowned lens.*
+*Source: `kernel/docs/archive/prompts/POINTER-PROMPT.md` Phase 1; xcheck-unowned lens.*
 
 ### 3.2 The dock readout leaves digit debris — confirmed visual regression
 
-Carried from `kernel/docs/POINTER-PROMPT.md` Phase 1b, not re-diagnosed. The tray
+Carried from `kernel/docs/archive/prompts/POINTER-PROMPT.md` Phase 1b, not re-diagnosed. The tray
 reads `frame 0  us peak 0  )08  up 1`; the `)08` is the tail of a previous, wider
 number. `kernel.zl` draws the status numbers at fixed x-offsets with no
 background clear, and only `draw_clock()` clears, and only the `up` region. The
@@ -516,7 +516,7 @@ a machine whose pointer arrives through PS/2 rather than xHCI — the ThinkPad's
 TrackPoint, and the ThinkPad has never booted zlOS.
 
 **Do not record "pointer acceleration: done."** No gate in this repo can support
-that claim. `POINTER-PROMPT.md` item 1 raises the adjacent decision that also has
+that claim. `kernel/docs/archive/prompts/POINTER-PROMPT.md` item 1 raises the adjacent decision that also has
 no owner: `pump_mouse()` decides "tablet" from `xhci_ptr_ready()` rather than
 `xhci_ptr_abs()`, so Settings' pointer-speed slider does nothing for any USB
 mouse. Decide deliberately — accelerate the relative case, or say in a comment
@@ -561,7 +561,7 @@ already exists as the harness shape.
 > example: that session's deletion of §1c and its two PNGs was in-progress work,
 > not a resolution, and §1c was later restored byte-identical from `ff27d57`.
 
-`kernel/docs/POINTER-PROMPT.md` Phase 1c records this as an open question with
+`kernel/docs/archive/prompts/POINTER-PROMPT.md` Phase 1c records this as an open question with
 four things already ruled out by command — no visual function was lost,
 `fb_text_aa` and `fb_glyph_aa` are byte-identical to overnight's, `term.c` lost
 nothing relevant, and `prop_big()` being unused is pre-existing. It points at
@@ -1794,7 +1794,7 @@ them; they are listed here by pointer so the class is visible as a class. §10.1
 
 | Finding | Owned by | Entry |
 |---|---|---|
-| `fix/pointer-drain` unlanded | the *work* by POINTER-PROMPT.md; the *landing* by nothing | §3.1 |
+| `fix/pointer-drain` unlanded | the *work* by kernel/docs/archive/prompts/POINTER-PROMPT.md; the *landing* by nothing | §3.1 |
 | `ci/gates-and-agent-brief` unlanded; no CI on main | nothing | §2.5 |
 | `LINE_BUF`/`DISK_SCRATCH` live; ground truth records a fix never made | nothing (MERGE-EVIDENCE closes it) | §8.1 |
 | Clipboard write path has no caller | nothing | §4.4 |
@@ -2118,7 +2118,7 @@ find, and the classes it found are not exhausted:
 
 - **Inherited numbers are the recurring failure.** Every high-severity defect
   except §4.14 was a figure or a claim copied from `HANDOFF.md`,
-  `POINTER-PROMPT.md`, `MERGE-EVIDENCE.md` or an audit item, restated in this
+  `kernel/docs/archive/prompts/POINTER-PROMPT.md`, `MERGE-EVIDENCE.md` or an audit item, restated in this
   document's voice, and never re-run: `-m` (§2.8), the arena (§6.2), the swapped
   xHCI names (§3.1), `62` assertions (§6.2), `usb-tablet` (§3.4). **A quoted
   command is not a run command.** Where an entry says "carried from", assume it

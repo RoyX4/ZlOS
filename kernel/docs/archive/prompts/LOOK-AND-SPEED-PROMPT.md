@@ -86,7 +86,7 @@ rgb() theme", so agreement is expected and disagreement is the signal. Check
 - **The dock readout leaves digit debris** (`frame 0 us peak 0 )08 up 1`). The
   status numbers are drawn at fixed x-offsets with **no background clear**, so a
   shrinking value leaves the tail of the previous one. Full diagnosis in
-  `kernel/docs/POINTER-PROMPT.md` §1b. Small fix, visible every boot.
+  `kernel/docs/archive/prompts/POINTER-PROMPT.md` §1b. Small fix, visible every boot.
 - **The desktop reads coarser than the v10 screenshots and nobody knows why.**
   `POINTER-PROMPT.md` §1c has both PNGs under `docs/evidence/visual-diffs/` and the list of what
   has already been ruled out — no visual function was lost, `fb_text_aa` and

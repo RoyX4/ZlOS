@@ -67,7 +67,7 @@ a diagnosis that was precise, plausible and WRONG - the URL-bar bug it blames
 on the keyboard was in the mouse path, and the symptom it reasoned from was a
 coincidence of one URL. The shape of that mistake is kept deliberately.
 
-`kernel/docs/POINTER-PROMPT.md` is historical diagnosis, not current work. Its
+`kernel/docs/archive/prompts/POINTER-PROMPT.md` is historical diagnosis, not current work. Its
 pointer-drain fix is already in `origin/main`; use it for failure history and
 read `kernel/docs/input-stack.md` plus current source before changing input,
 xHCI, or the window manager.

@@ -44,7 +44,7 @@ COMMON=(
     # it was written and is not now (xhci.c ptr_decode handles boot-mouse
     # subclass 1 protocol 2 as well as the tablet). fix/pointer-drain was written
     # and tested against usb-mouse, so usb-mouse stays until someone measures the
-    # other. See kernel/docs/POINTER-PROMPT.md.
+    # other. See kernel/docs/archive/prompts/POINTER-PROMPT.md.
   -no-reboot
 )
 

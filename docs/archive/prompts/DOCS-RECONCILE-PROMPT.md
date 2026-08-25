@@ -56,7 +56,7 @@ kernel/docs/archive/prompts/EXEC-PROMPT.md                     12 KB
 kernel/docs/archive/prompts/FEEL-PROMPT.md                     13 KB
 kernel/docs/archive/prompts/PLATFORM-PROMPT.md                 15 KB
 kernel/docs/archive/prompts/SYSTEM-PROMPT.md                   12 KB
-kernel/docs/POINTER-PROMPT.md                   9 KB   <- CURRENT, do not audit, see below
+kernel/docs/archive/prompts/POINTER-PROMPT.md   9 KB   <- later audited and archived
 docs/archive/superseded/INTEGRATION-PLAN.md                       16 KB   <- superseded by MERGE-EVIDENCE.md
 docs/design/PLAN_unboxing.md                   31 KB
 docs/archive/superseded/GRAPHICS_PLAN.md                    8 KB
@@ -112,7 +112,7 @@ never alongside a fan-out - `CLAUDE.md` has the measured consequences.
 
 ## Do NOT audit these two
 
-- **`kernel/docs/POINTER-PROMPT.md`** is live work, not history. The pointer is
+- **`kernel/docs/archive/prompts/POINTER-PROMPT.md`** was live work at this prompt's snapshot; it is now archived after the repair landed. The pointer is
   visibly broken in `./try.sh` and the cause is measured (two drainers of one
   xHCI event ring, `xhci.c:1775` and `xhci.c:1789`). It also carries a confirmed
   visual regression, the dock readout leaving digit debris. Both are OPEN. Fold

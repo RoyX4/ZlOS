@@ -4604,7 +4604,7 @@ fn app_tick(id, win) {
             # desk_draw repaints the tray from the wallpaper cache, but only
             # inside the damage rect, so a number that SHRANK kept the head of
             # its previous value on screen forever - the `)08` debris in
-            # POINTER-PROMPT.md 1b. Only `up` looked right, because `up` is the
+            # docs/archive/prompts/POINTER-PROMPT.md 1b. Only `up` looked right, because `up` is the
             # one field that happened to fall inside the old rectangle.
             #
             # This is the same defect tray_x() was extracted to kill (see its

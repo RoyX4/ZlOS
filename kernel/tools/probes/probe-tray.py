@@ -3,7 +3,7 @@
 
 The tray reads `frame N us peak N up N`. Zac photographed it reading
 `frame 0  us peak 0  )08  up 1` - the `)08` is not a value, it is the head of a
-previous, wider peak that was never erased. POINTER-PROMPT.md 1b diagnosed it as
+previous, wider peak that was never erased. docs/archive/prompts/POINTER-PROMPT.md 1b diagnosed it as
 "the status numbers are drawn at fixed x-offsets with no background clear".
 
 THAT DIAGNOSIS IS WRONG, and the fix that follows from it would have been wrong
@@ -222,7 +222,7 @@ def main():
         # TWO BLANK CROPS ARE EQUAL. If the field ever stops being drawn - the
         # layout table moves, the fit rule tightens, the crop drifts off the
         # digits - this comparison starts passing for the wrong reason and keeps
-        # passing for ever. POINTER-PROMPT.md 2.4: a gate that has never gone red
+        # passing for ever. docs/archive/prompts/POINTER-PROMPT.md 2.4: a gate that has never gone red
         # has not been tested, and one that CANNOT go red is decoration.
         ink = len(set(yd))
         if ink < 3:

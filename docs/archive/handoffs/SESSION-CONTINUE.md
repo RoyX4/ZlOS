@@ -98,7 +98,7 @@ core", which was wrong - checked with `grep -o '\-smp [0-9]*' kernel/verify*.sh`
 
 - **The dock readout leaves digit debris** (`frame 0 us peak 0 )08 up 1`). Fixed
   x-offsets, no background clear, so a shrinking number leaves its tail.
-  `POINTER-PROMPT.md` §1b. Small, visible every boot.
+  `kernel/docs/archive/prompts/POINTER-PROMPT.md` §1b. Small, visible every boot.
 - **`key()`** is called in `kernel.zl` on the Intel panel-handover path and
   defined nowhere, on every branch since `b55f3f9` — the machine halts between a
   successful `panel_up()` and `panel_console()`. Needs someone who knows which

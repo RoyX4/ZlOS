@@ -40,10 +40,6 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 These old execution briefs live in `archive/prompts/`. Their unresolved work was
 carried into newer status and roadmap documents; the old task lists are history.
 
-`POINTER-PROMPT.md` is also historical by its own audited banner. It remains at
-the docs root only as a path-stable exception until its 26 textual references
-can move together; do not use it as the live queue.
-
 | File | Banner state |
 |---|---|
 | `archive/prompts/BROWSER-PROMPT.md` | Mostly done; use for costing/hazards, not as the queue. |
@@ -54,6 +50,7 @@ can move together; do not use it as the live queue.
 | `archive/prompts/SYSTEM-PROMPT.md` | Partly executed; open work is tracked elsewhere. |
 | `archive/prompts/LOOK-AND-SPEED-PROMPT.md` | Older brief; current intent is in `visual-speed-northstar.md`. |
 | `archive/prompts/NEXT-PROMPT.md` | Superseded dated ranking. |
+| `archive/prompts/POINTER-PROMPT.md` | Implemented pointer diagnosis; manual feel acceptance remains elsewhere. |
 | `archive/superseded/feature-catalogue-2026-08-17.md` | Stale pre-program feature/status survey; replaced by `docs/program/`. |
 | `archive/superseded/desktop-plan.md` | Audited inversion plan: useful decisions, superseded task/status body. |
 | `archive/superseded/desktop-TODO.md` | Audited 30-of-34-complete task list; never use as the current queue. |

@@ -299,7 +299,7 @@ Done today, each with the command that says so:
 | the tray row no longer draws off-screen at 800×600 | the fields it cannot fit are dropped, not clipped |
 | blur removed; wallpaper cache holds at 2560×1440 | `hosttest/walltest.c`, 6 assertions |
 | `dock_baked` no longer lies when the cache is refused | it is `wall_save()`'s return value now |
-| §1c — the coarseness, named and measured | `POINTER-PROMPT.md` §1c, answered |
+| §1c — the coarseness, named and measured | `archive/prompts/POINTER-PROMPT.md` §1c, answered |
 | `fb_shadow` re-timed after the scissor fix | `fbbench`, `DECISIONS.md` #12 |
 
 Next, in the order the measurements rank them:
