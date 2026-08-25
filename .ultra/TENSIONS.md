@@ -28,8 +28,9 @@ and its message says the tree "did not build from a clean checkout".
 **The plan was wrong.** `docs/archive/superseded/INTEGRATION-PLAN.md` and the
 synthesised runbook both asserted L1 would gate green on its own. It cannot.
 
-**Fix:** cherry-picked `da34635` onto `main` (411 lines, `kernel/xhci.c` +
-`kernel/idt.c`, clean). All 11 symbols verified defined.
+**Fix:** cherry-picked `da34635` onto `main` (411 lines, now under
+`kernel/src/drivers/input/xhci.c` and `kernel/src/arch/x86/idt.c`, clean). All
+11 symbols verified defined.
 
 **Rule this produces:** a landing whose payload is a *merge-base* is not a
 landing. Gate the spine only together with the first track that completes it, or
@@ -53,7 +54,7 @@ shown failing on a case it is supposed to fail on before it is trusted.
 
 ---
 
-## T-3 — `kernel/check-memmap.sh` cannot catch the collision it exists for. OPEN.
+## T-3 — `kernel/tools/checks/check-memmap.sh` cannot catch the collision it exists for. OPEN.
 
 It iterates a hardcoded list: `SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT LINE_BUF
 LINE_MAX HIST_BUF HIST_N`. No `DISK_SCRATCH`, no discovery of new constants.
@@ -61,16 +62,16 @@ LINE_MAX HIST_BUF HIST_N`. No `DISK_SCRATCH`, no discovery of new constants.
 The live collision it misses (both verified by reading the files):
 
 ```
-claude/quirky-pare-05454c  kernel.zl:581   LINE_BUF     = 0x02030000
-desktop/system-track       kernel.zl:1045  DISK_SCRATCH = 0x02030000
-desktop/system-track       kernel.zl:643   LINE_BUF     = 0x02020000  <- never saw the move
+claude/quirky-pare-05454c  kernel/src/kernel.zl:581   LINE_BUF     = 0x02030000
+desktop/system-track       kernel/src/kernel.zl:1045  DISK_SCRATCH = 0x02030000
+desktop/system-track       kernel/src/kernel.zl:643   LINE_BUF     = 0x02020000  <- never saw the move
 ```
 
 ~460 lines apart, different bases: a 3-way merge takes both with no conflict. zl
 has no static asserts, so nothing fails.
 
 **Close by:** replacing the list with a sweep of every `^[A-Z_]+ *= *0x` in
-`kernel.zl`, paired to a `*_MAX`/`*_N`/`*_SIZE` size lookup, printing unsized
+`kernel/src/kernel.zl`, paired to a `*_MAX`/`*_N`/`*_SIZE` size lookup, printing unsized
 regions as UNSIZED rather than skipping them. Then prove it fails on a synthetic
 tree with both constants at `0x02030000`.
 
@@ -78,15 +79,15 @@ tree with both constants at `0x02030000`.
 
 ## T-4 — Files that exist in no commit on any branch. OPEN.
 
-Found while gating: `kernel/hosttest/build.sh` is `set -e` and compiles
+Found while gating: `kernel/tests/host/build.sh` is `set -e` and compiles
 `gpu_fillrate.c`, which is tracked on **no branch** — it lives only in
 `zl-linux`'s working tree. Every clean checkout dies at that step.
 
 Copied into `zl-main` to unblock the gate; **not yet committed anywhere**.
 
 Others in the same class, from the session sweep, all preserved in `refs/wip/*`
-and the `~/zlos-freeze-*` tars but in no commit: `kernel/crypto.c` +
-`hosttest/cryptotest.c`, `zlfmt.c` + `verify_fmt.sh`,
+and the `~/zlos-freeze-*` tars but in no commit: `kernel/src/net/crypto.c` +
+`kernel/tests/host/cryptotest.c`, `src/tools/zlfmt.c` + `verify_fmt.sh`,
 `kernel/docs/archive/prompts/OVERNIGHT-PROMPT.md` (the brief that produced 19 of the
 compositor's commits), `editors/vscode-zl/*`, `docs/LEARNING.md` + `learn/`,
 ~12 `kernel/docs/*.md`, 7 `probe-*.py`, and the `.ultra/` files in `zl-system`,
@@ -120,10 +121,10 @@ landing, with a decision recorded per row.
 
 ## T-6 — `fn ui()` silently reverts a fixed regression. OPEN.
 
-`kernel.zl`: `fn ui()` is `ui_scale()` on overnight and `cell_w() / 8` on apps.
+`kernel/src/kernel.zl`: `fn ui()` is `ui_scale()` on overnight and `cell_w() / 8` on apps.
 Both builtins exist after a `runtime_kernel.c` union, so taking apps's side of
 that hunk compiles, links, boots — and restores the "everything is tiny at 4K"
 regression overnight diagnosed and fixed.
 
-**Close by:** an explicit grep in the L3 gate — `grep -n 'fn ui()' kernel/kernel.zl`
+**Close by:** an explicit grep in the L3 gate — `grep -n 'fn ui()' kernel/src/kernel.zl`
 must show `ui_scale()`.
