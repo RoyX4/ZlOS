@@ -1,6 +1,6 @@
 /* modeset_test.c - the cold-start modeset harness.
  *
- * gen9-modeset-plan.txt orders the work in 11 stages and puts the firmware-state
+ * docs/evidence/display/gen9-modeset-plan.json orders the work in 11 stages and puts the firmware-state
  * survey first, for a reason worth restating: three register offsets in the plan
  * are contested between sources (C1, C2, C7), and picking the wrong one of each
  * gives a black screen with no error anywhere. All three are settleable by

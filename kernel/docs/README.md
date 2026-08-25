@@ -32,6 +32,7 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 | `evidence/desktop-v10-plan.md` | Completed ten-item v10 plan retained with its measured run and corrections. |
 | `evidence/system-track.md` | Completed system-track implementation record and measured costs. |
 | `evidence/physical-input-and-recorder-diagnosis-2026-08-23.md` | Physical ThinkPad input and persistent-recorder diagnosis with explicit limits. |
+| `evidence/display/gen9-modeset-plan.json` | Audited Gen9 display research, resolved source conflicts, and retained hardware hazard register. |
 | `evidence/performance-architecture-implementation-2026-08-22.md` | Performance architecture implementation batch. |
 | `evidence/exercises/` | Retained exercise images, transcripts and physical/QEMU bundles; disposable new runs still go to ignored `kernel/exercise-out/`. |
 

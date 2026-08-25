@@ -157,7 +157,7 @@ is *verified* rather than what is intended. Read it before touching `kernel/`.
 `docs/archive/superseded/INTEGRATION-PLAN.md` is **superseded** and its figures are wrong — do not
 plan a merge from it.
 
-`kernel/docs/gen9-modeset-plan.txt` is the researched Intel display plan (JSON;
+`kernel/docs/evidence/display/gen9-modeset-plan.json` is the retained Intel display research record;
 the text is in `.result.plan`). It resolves 13 conflicts between sources and lists
 hazards that can damage hardware.
 

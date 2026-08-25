@@ -19,7 +19,7 @@
  *     draw_wallpaper();  dock_blur = blur(dock strip);  wall_save()
  *
  * which was fine at 1920x1200 and fatal at 2560x1440 - the ThinkPad X1 Carbon
- * Gen 8's panel, per kernel/docs/gen9-modeset-plan.txt ("2560x1440 active /
+ * Gen 8's panel, per kernel/docs/evidence/display/gen9-modeset-plan.json ("2560x1440 active /
  * 2720x1481 total"). This asserts that arithmetic against the SHIPPING fb.c
  * rather than restating it, because the numbers involved are exactly the kind
  * that get re-derived wrongly in a doc a month later.

@@ -361,7 +361,7 @@ The most useful comparison in this document, because it is like-for-like.
 **Jeremy Soller**, Redox's founder and lead developer, has merged the first
 changes for **a modesetting driver for Intel HD graphics**. He got there by
 *"a few nights of reading through thousands of pages of PRMs"* — the identical
-method that produced `kernel/docs/gen9-modeset-plan.txt`.
+method that produced `kernel/docs/evidence/display/gen9-modeset-plan.json`.
 
 His words: *"There is much more to do, but there is now a clear path to native
 hardware accelerated graphics!"*
@@ -430,7 +430,7 @@ Intel publishes real PRMs, which is why this project is possible at all.
 Caveat from the OSDev community, and consistent with this project's experience:
 Intel's *"functional descriptions are quite sparse"*. The registers are
 documented; the **sequences** often are not. That is why
-`kernel/docs/gen9-modeset-plan.txt` had to resolve **13 conflicts between
+`kernel/docs/evidence/display/gen9-modeset-plan.json` had to resolve **13 conflicts between
 sources**, and why the survey settling them by measurement on real silicon was
 worth building.
 

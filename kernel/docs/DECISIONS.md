@@ -307,7 +307,7 @@ the blur before `wall_save()`. Measured against the shipping `fb.c` by
 | **2560x1440** | **3840 KiB** | **REFUSED** — wants 14400, 12544 left |
 | **2560x1440** | none | **cached**, 1984 KiB spare |
 
-2560x1440 is the ThinkPad X1 Carbon Gen 8's panel (`gen9-modeset-plan.txt`:
+2560x1440 is the ThinkPad X1 Carbon Gen 8's panel (`evidence/display/gen9-modeset-plan.json`:
 "2560x1440 active / 2720x1481 total"). So **on the only real machine this OS
 targets, the blur was disabling the wallpaper cache** — and `fb.c`'s own comment
 on that cache is: *"There is no version of this that is affordable per frame;

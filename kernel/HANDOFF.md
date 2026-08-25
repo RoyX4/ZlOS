@@ -725,7 +725,8 @@ holds it. All display registers are under 1 MiB.
 | DPLL lock time | PRM says 5 ms; **measured ~80 ms** on a cold WRPLL |
 | DP intermediate rates | 2.16/3.24/4.32 Gbps are **eDP-only**, need a DPCD rate table |
 
-Full researched plan with 13 source conflicts: `kernel/docs/gen9-modeset-plan.txt`
+Retained research record with 13 resolved source conflicts:
+`kernel/docs/evidence/display/gen9-modeset-plan.json`
 
 ## Stage 1 of that plan is DONE — every conflict settled on the real panel
 

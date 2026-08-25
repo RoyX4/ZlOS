@@ -123,7 +123,7 @@ Sorting the 30 by what they actually are:
 
 The three real ones were all the same mistake — a reference under `docs/` to a
 file that lives under `kernel/docs/`: `what-is-a-bios.md`,
-`typing-into-the-compositor.md`, `gen9-modeset-plan.txt`.
+`typing-into-the-compositor.md`, `evidence/display/gen9-modeset-plan.json`.
 
 ### A false claim the doc-checker could never have caught
 

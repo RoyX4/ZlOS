@@ -41,7 +41,7 @@ any archaeology.
 
 ```
 kernel/docs/archive/superseded/desktop-TODO.md 44 KB
-kernel/docs/gen9-modeset-plan.txt              59 KB   (JSON; text in .result.plan)
+kernel/docs/evidence/display/gen9-modeset-plan.json 59 KB   (JSON; text in .result.plan)
 kernel/docs/archive/prompts/OVERNIGHT-PROMPT.md                35 KB   <- produced 19 compositor commits
 kernel/docs/evidence/desktop-v10-plan.md       16 KB
 kernel/docs/display-roadmap.md                 14 KB

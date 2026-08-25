@@ -138,4 +138,4 @@ Capture, in this order:
 The cold-start modeset and anything arming `lt_armed` in `intel.c` — that is a
 separate piece of work with a hardware-damage hazard list (violating the panel's
 500 ms T12 delay, or driving AUX into an unpowered panel). Section 4.1 of
-`kernel/docs/gen9-modeset-plan.txt`. Do not go there casually.
+`kernel/docs/evidence/display/gen9-modeset-plan.json`. Do not go there casually.
