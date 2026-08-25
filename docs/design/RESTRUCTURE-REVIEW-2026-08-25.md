@@ -138,8 +138,10 @@ Not implemented:
 
 ## Open Risks
 
-- `tools/hazard-scan.sh` still infers build configuration from shell scripts;
-  dynamic include/source variables make that parser unreliable.
+- `tools/hazard-scan.sh` still infers build configuration from shell scripts.
+  It now expands the build's dynamic include list, expands `kernel/SOURCES`,
+  inventories explicit EFI translation units, and has a parser-only guard.
+  Arbitrary future shell logic would still require extending that parser.
 - `kernel/SOURCES` checks inclusion but does not yet reject every unclassified
   implementation file.
 - C files still rely on basename includes and broad source-directory search

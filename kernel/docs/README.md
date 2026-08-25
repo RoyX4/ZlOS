@@ -13,7 +13,6 @@ Read the top banner of each file before treating it as current.
 | `thinkpad-first-boot.md` | Physical-boot runbook; does not by itself prove a successful boot happened. |
 | `current-speed-and-quality-diagnosis.md` | Current speed diagnosis from measured traces, with hardware/QEMU boundaries called out. |
 | `performance-architecture-roadmap.md` | Current performance architecture plan. |
-| `display-state-2026-08-25.md` | Concurrent display orientation audit; currently untracked, so it is not yet durable repository evidence. |
 
 ## Evidence And Run Receipts
 
@@ -47,6 +46,9 @@ carried into newer status and roadmap documents; the old task lists are history.
 
 `archive/audits/` contains dated task/session audits. `archive/handoffs/`
 contains recovery notes for work that now has a newer receipt or status map.
+The recovered `archive/audits/display-state-2026-08-25.md` is a historical
+read-only display audit from commit `85fcdf5` plus a dirty restructure; it is
+durable context now, not current implementation proof.
 
 ## Planning And Research
 
