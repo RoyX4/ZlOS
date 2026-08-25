@@ -187,7 +187,7 @@ Read in order of what that tells you:
    > rather than the intersection with the damage rect**". The second half is
    > false: `term.c:357` rejects every row outside `fb_clip_top()`/
    > `fb_clip_bot()` before laying out a glyph, and has since before the merge —
-   > `git log -- kernel/term.c` puts the last change at `df77bcd`. I took it
+   > `git log -- kernel/src/graphics/windowing/term.c` puts the last change at `df77bcd`. I took it
    > from a sub-agent's summary, and unlike the other figures in this document
    > it never went through the adversarial pass. A mechanism that is asserted
    > and not read is a guess; this one then got promoted to "the next target".

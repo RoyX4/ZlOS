@@ -100,7 +100,7 @@ exit audit contract and physical read-back procedure are
 [`docs/automatic-system-audit.md`](docs/automatic-system-audit.md).
 The complete performance/storage/process/network implementation receipt,
 including every local gate and every still-open physical gate, is
-[`docs/performance-architecture-implementation-2026-08-22.md`](docs/performance-architecture-implementation-2026-08-22.md).
+[`docs/evidence/performance-architecture-implementation-2026-08-22.md`](docs/evidence/performance-architecture-implementation-2026-08-22.md).
 The internal Intel AX201 Wi-Fi implementation/evidence ladder is
 [`docs/ax201-wifi.md`](docs/ax201-wifi.md). Its read-only stage 0 and bounded
 API-77 TLV/SHA-256 stage 1 pass 54/54 locally in the isolated checkout. They are
@@ -212,16 +212,19 @@ Read this first in a new session. Everything below is verified, not remembered.
 > [`docs/performance-architecture-roadmap.md`](docs/performance-architecture-roadmap.md).
 
 > **Final local execution evidence (2026-08-22):** BIOS/GRUB and native
-> UEFI/GOP exercises each pass 32/32 workflows. `verify-efi.sh` passes normal
+> UEFI/GOP exercises each pass 32/32 workflows. `tools/checks/verify-efi.sh`
+> passes normal
 > and hostile 64-bit Ring 3, stage-0 persistence, WC cache transition and the
-> forced fallback. `probe-smp.py` wakes 4/4 cores and finds 0 differences in
+> forced fallback. `tools/probes/probe-smp.py` wakes 4/4 cores and finds 0
+> differences in
 > 175,224 serial/banded pixels. Virtio and e1000 networking each pass 18/18
 > with DHCP, 20/20 ping, DNS and zero driver errors. These are VM/software
 > receipts, not ThinkPad panel, I219 carrier or physical USB proof.
 > `fstest` also cuts a v2 file replacement after every block write and
 > cold-mounts exactly the old or new bytes; corrupting the newest directory
 > generation falls back to the older complete generation.
-> `verify-efi.sh` now also switches two independent Ring-3 PML4/kernel-stack
+> `tools/checks/verify-efi.sh` now also switches two independent Ring-3
+> PML4/kernel-stack
 > contexts across cooperative yield (`AB12`). PIT interrupts also preempt two
 > non-yielding infinite-loop images and advance both (`PQ`), and a `#GP` in one
 > process does not stop its sibling. Bounded PID IPC exchanges `hi`/`ok` across
@@ -250,7 +253,7 @@ Read this first in a new session. Everything below is verified, not remembered.
 >
 > Two facts from it that change what is possible, and are easy to waste hours
 > rediscovering: the reference **cannot render without a shim** (its runtime was
-> never delivered — `kernel/refrender/` reimplements it), and **every game
+> never delivered — `kernel/tests/refrender/` reimplements it), and **every game
 > canvas in it is blank**, along with Renderer, Framebuffer, Console, Font Atlas
 > and Image Viewer, because seven more of its modules are missing too. For
 > those, only the shell can be cloned.
@@ -260,7 +263,8 @@ Read this first in a new session. Everything below is verified, not remembered.
 > `wm_at`, the modal and focus walks, both taskbar loops), what deliberately
 > does not (damage, the dock's running-accent), and why `wm_raise`/`wm_focus`
 > PULL a window to the current workspace instead of refusing. Read it before
-> touching `wm.c`'s z-order or `kernel.zl`'s island. It also records the trap
+> touching `src/graphics/windowing/wm.c`'s z-order or `src/kernel.zl`'s island.
+> It also records the trap
 > that shapes the per-app oracle: **serial bytes are routed to the focus
 > window**, so on a workspace with no windows the serial console is dead and
 > you cannot switch to an empty workspace and then type a command to fill it.
@@ -277,11 +281,13 @@ Read this first in a new session. Everything below is verified, not remembered.
 > [`docs/REMAINING-WORK.md`](../docs/REMAINING-WORK.md).
 > This file remains the authority on what the hardware has *proven*. It is
 > **stale on five checkable points**, each corrected there with a command: it
-> says nothing in the kernel arms `lt_armed` (`intel.c:4232` does, reachable
-> from `kernel.zl:1395`); it says there is no VBT parser (there is, and
+> says nothing in the kernel arms `lt_armed`
+> (`src/drivers/display/intel.c:4232` does, reachable from
+> `src/kernel.zl:1395`); it says there is no VBT parser (there is, and
 > `intel_bringup_panel` calls `intel_vbt_find()`);
-> it says `fb.c` has no clipping (`fb.c:763-798` is the scissor, with four
-> callers); it describes a boot fork `kernel.zl` no longer has; and it carries a
+> it says `src/graphics/framebuffer/fb.c` has no clipping (lines 763-798 are the
+> scissor, with four callers); it describes a boot fork `src/kernel.zl` no
+> longer has; and it carries a
 > northstar percentage its own source retracted.
 
 ## What this is
@@ -333,7 +339,8 @@ verified current state:
   tag/status/residue validation, fixed- and descriptor-format `REQUEST SENSE`,
   `SYNCHRONIZE CACHE(10)` and one bounded Bulk-Only reset recovery. The fixed
   4 KiB staging window and discovered device capacity bound every request.
-- `zllog.c` retains 4,096 fixed 64-byte records before storage exists, plus a
+- `src/core/zllog.c` retains 4,096 fixed 64-byte records before storage exists,
+  plus a
   separate reusable 64-cell interrupt/fault emergency lane. It tees the boot
   transcript only through `system ready`, redacts printable key identity, keeps
   button/wheel edges exact, samples ordinary pointer events/batches one in sixteen, records
@@ -368,7 +375,7 @@ verified current state:
   alongside the existing five phase timings.
 
 Current host evidence, rerun 2026-08-22: `tools/test_zllog.py` is **15/15**;
-`hosttest/zllog_e2e_test.py` is **5/5** across real shipping-writer containment,
+`tests/host/zllog_e2e_test.py` is **5/5** across real shipping-writer containment,
 rotation, mismatched identity, torn super/slot metadata and automatic recovery
 from a transient MSC initialization failure; a fresh standalone
 `msctest.c` build reports **0 failures** across command encoding, range bounds,
@@ -422,7 +429,7 @@ candidate flag and raw PORTSC. A host regression models Imation port 4 and
 Bluetooth port 10 and proves their boundaries cannot overwrite one another.
 `tools/zlbootdiag.py` reads v1 through the current v4 format;
 its suite is **5/5**. OVMF records `EFI_DIAG_ARM status=0` before exit.
-`hosttest/efi_runtime_diag_test.py` additionally forces a wrong GPT label and
+`tests/host/efi_runtime_diag_test.py` additionally forces a wrong GPT label and
 proves the post-exit current-format replacement and per-port table survive in OVMF's
 variable store.
 
@@ -608,7 +615,8 @@ extractor found **407 globally contiguous CRC-valid records (`1..407`)**, zero
 drops and zero warnings, including USB-tablet/button input, typed input and the
 five frame phases. Exact region hashes showed bytes `0..64 MiB` and
 `128..132 MiB` identical; only the `64..128 MiB` `ZLLOG` partition changed.
-`verify-efi.sh` stayed green. This still does **not** prove that a physical USB
+`tools/checks/verify-efi.sh` stayed green. This still does **not** prove that a
+physical USB
 controller/stick accepts and flushes the writes, or that the ThinkPad boot is
 now fast.
 
@@ -616,22 +624,22 @@ Exact image and extraction loop, from the repository root:
 
 ```sh
 cd kernel
-./mkusb.sh
-./verify-efi.sh
+./tools/images/mkusb.sh
+./tools/checks/verify-efi.sh
 cd ..
 ./tools/zllog.py inspect kernel/zlOS-usb.img
 ./tools/zllog.py read kernel/zlOS-usb.img --latest
 ./tools/zllog.py export kernel/zlOS-usb.img --all \
   --json /tmp/zllog.json --csv /tmp/zllog.csv --text /tmp/zllog.txt
 python3 tools/test_zllog.py
-python3 kernel/hosttest/zllog_e2e_test.py
+python3 kernel/tests/host/zllog_e2e_test.py
 ```
 
 The next manual step is the evidence that cannot be manufactured on the host:
 
 ```sh
 cd kernel
-./mkusb.sh --boot-next /dev/sdX        # destructive; inspect the prompt's target
+./tools/images/mkusb.sh --boot-next /dev/sdX        # destructive; inspect the prompt's target
 ```
 
 `mkusb.sh` automatically relocates the backup GPT, stamps the journal with the
@@ -657,12 +665,13 @@ latency remain explicitly unverified.
 
 ## The development loop that matters
 
-`kernel/hosttest/` compiles **the same `intel.c` that ships in the kernel** as a
+`kernel/tests/host/` compiles **the same `src/drivers/display/intel.c` that ships
+in the kernel** as a
 Linux program against the real GPU's PCI BAR. Seconds per iteration instead of
 write-USB → reboot → read-screen.
 
 ```
-cd kernel/hosttest
+cd kernel/tests/host
 ./gpu-dev.sh probe          # read everything (safe, i915 keeps running)
 ./gpu-dev.sh dump a.txt     # 300 registers
 ./gpu-dev.sh diff a.txt b.txt
@@ -706,7 +715,7 @@ Full researched plan with 13 source conflicts: `kernel/docs/gen9-modeset-plan.tx
 
 ## Stage 1 of that plan is DONE — every conflict settled on the real panel
 
-`hosttest/modeset_test.c --survey` is read-only and runs with i915 up. **21 passed,
+`tests/host/modeset_test.c --survey` is read-only and runs with i915 up. **21 passed,
 0 failed** (2026-08-17 — 18 for the four conflicts below, 3 more for the pixel
 clock). It settles by measurement what the sources disagreed on:
 
@@ -835,9 +844,9 @@ run for real.
 
 ## Still true, and the thing to fix next
 
-**Nothing in the kernel ever arms `lt_armed`.** Only `hosttest/dpll_test.c` and
-`hosttest/intel_probe.c` call `intel_link_train_arm()`. Every write path in
-`intel.c` is unreachable from zlOS itself — the driver reads the display
+**Nothing in the kernel ever arms `lt_armed`.** Only `tests/host/dpll_test.c` and
+`tests/host/intel_probe.c` call `intel_link_train_arm()`. Every write path in
+`src/drivers/display/intel.c` is unreachable from zlOS itself — the driver reads the display
 correctly and cannot yet touch it.
 
 ## The ordered modeset exists now — 35 steps, and it can be read before it runs
@@ -944,7 +953,7 @@ zlOS itself still cannot light the panel — the driver can, and is proven to, b
 the kernel has no caller. That is now the single thing between this and zlOS
 booting on the ThinkPad with its own display.
 
-## Finishing the display: `docs/display-roadmap.md`
+## Finishing the display: `kernel/docs/display-roadmap.md`
 
 The decision (2026-08-17): **complete the display subsystem entirely before any
 GPU work.** No ring buffers, no blitter, no execution engine until every item in
@@ -999,7 +1008,8 @@ Other languages on zlOS, the internet, and rewriting the C in zl. Asked and
 measured 2026-08-17. Short version:
 
 - **Other languages** — no heap, no ELF loader, no per-process address space
-  (all four cores share one CR3, `smp.c:129`), and `fs_save`/`fs_load` is a RAM
+  (all four cores share one CR3, `src/arch/x86/smp.c:129`), and
+  `fs_save`/`fs_load` is a RAM
   slot array, not a filesystem. Cheapest real win is hosting **zl's own
   interpreter** (1,900 lines) on zlOS; highest leverage is a **WASM interpreter**
   (~8k), which buys every language at once. POSIX ELF is a second project.
@@ -1013,7 +1023,8 @@ measured 2026-08-17. Short version:
     **on USB**, `Class=Wireless / RF / Bluetooth` (224/1/1) — the standard class
     every BT dongle implements, and **HCI is a published Bluetooth SIG
     standard**, not a vendor protocol. Its endpoints are control + interrupt IN
-    + bulk IN/OUT, and **`xhci.c` already implements all three**. ~6,800 lines
+    + bulk IN/OUT, and **`src/drivers/input/xhci.c` already implements all
+    three**. ~6,800 lines
     to a working BT keyboard; **~2,000 to "zlOS lists nearby devices"**. Build
     against a **CSR dongle** (ROM firmware, no upload) before touching Intel's
     704 KB `ibt-0040-0041.sfi`.
@@ -1026,7 +1037,7 @@ measured 2026-08-17. Short version:
     **~3,800 to "zlOS printed my SSID list"**. An ESP32 over UART is ~400 lines
     if you just want the network stack unblocked now.
   - Still true: **USB tethering or a USB NIC** is the shortest path to packets,
-    and `xhci.c:1709 configure_bulk()` is why.
+    and `src/drivers/input/xhci.c:1709 configure_bulk()` is why.
 - **A browser** — **BUILT, and the estimate below was wrong in both directions.**
   It fetches `http://example.com/` by name off the real internet and renders it.
   ~4,657 lines across `browser.c html.c layout.c http.c tcp.c net.c dns.c
@@ -1080,7 +1091,7 @@ Recovery: `sudo systemctl start lightdm`.
 
 ## The desktop is the boot state now (2026-08-18)
 
-`kernel.zl` ends in `if wm_avail() == 0 { ...text shell... } else { wm_session() }`.
+`src/kernel.zl` ends in `if wm_avail() == 0 { ...text shell... } else { wm_session() }`.
 With a framebuffer you get a compositor with the shell, System Monitor and
 About open; without one - which is what `verify.sh` boots - the old text shell
 runs unchanged and its transcript is still byte-identical to `golden.txt`.
@@ -1088,7 +1099,7 @@ runs unchanged and its transcript is still byte-identical to `golden.txt`.
 Every demo is an app in a window: no `while` loop, no "press any key". Typing
 `snake`, `paint`, `cube`, `anim`, `mouse` or `edit` opens one. The full account
 of that run, including four things it found that no task list predicted, is
-`docs/desktop-platform-run.md`.
+`kernel/docs/evidence/desktop-platform-run.md`.
 
 ## Everything else in the kernel
 
@@ -1100,9 +1111,11 @@ bounded read/write USB mass storage, a persistent USB boot journal, USB HID
 keyboard, event-based input with modifiers and repeat, and a line editor with
 history.
 
-**Unproven:** `i2c_hid.c` (QEMU has no Intel LPSS I2C) and the cold-start modeset.
+**Unproven:** `src/drivers/input/i2c_hid.c` (QEMU has no Intel LPSS I2C) and the
+cold-start modeset.
 
-Worse than unproven, on `i2c_hid.c`: it is a **transport with no decoder**.
+Worse than unproven, on `src/drivers/input/i2c_hid.c`: it is a **transport with
+no decoder**.
 `i2c_hid_byte(i)` returns raw undecoded bytes. Nothing turns a touchpad report
 into an x, a y and a button — that code does not exist yet.
 
@@ -1115,17 +1128,20 @@ exactly as it always did, and `verify.sh` still diffs it byte-for-byte against
 `golden.txt`.
 
 **Verified by boot, not by assertion:** `shots/v10-now.png`. All four boot
-paths green — `verify.sh`, `verify-raw.sh`, `verify-efi.sh`, and the ISO.
+paths green — `verify.sh`, `tools/checks/verify-raw.sh`,
+`tools/checks/verify-efi.sh`, and the ISO.
 `wmtest` 79 · `inputtest` 24 · `tritest` 9 · `fbbench` all green.
 
 **Two probes drive the POINTER rather than the keyboard**, and they exist
-because everything else in this repo types: `probe-dock.py` (hover, press,
-launch, the menu, dismiss) and `probe-resize.py` (the corner grows a window,
-the title bar still moves it). `probe-drag.py` confirms a drag moves 18% of the
+because everything else in this repo types: `tools/probes/probe-dock.py` (hover,
+press, launch, the menu, dismiss) and `tools/probes/probe-resize.py` (the corner
+grows a window, the title bar still moves it). `tools/probes/probe-drag.py`
+confirms a drag moves 18% of the
 screen.
 
 **A PATTERN WORTH KNOWING BEFORE YOU ADD ANYTHING HERE.** Five things in
-`wm.c`/`fb.c` were complete, correct, gated, and had **no caller at all**:
+`src/graphics/windowing/wm.c` and `src/graphics/framebuffer/fb.c` were complete,
+correct, gated, and had **no caller at all**:
 `WF_MODAL`, `wm_resize()`, `fb_blur_cache`, the whole animation timeline, and
 `MOD_SUPER`. This repo is written mechanism-first and gated hard, which is
 exactly what makes that easy to produce — a primitive arrives with tests, a
@@ -1146,7 +1162,8 @@ What the v10 pass added, with the numbers, is `docs/desktop-v10-plan.md` §8.
 The five that matter most to somebody touching this next:
 
 1. **Serial is an input source now**, not a thing the shell polls. `wm_frame()`
-   reads `input.c`'s queue and nothing else, so a byte only `key_get()` could
+   reads `src/drivers/input/input.c`'s queue and nothing else, so a byte only
+   `key_get()` could
    see was a byte the desktop could never see — every gate and probe in this
    repo would have gone blind the moment the compositor booted. `ser_rx()`
    probes the UART's scratch register first, because **an absent UART floats
@@ -1160,7 +1177,8 @@ The five that matter most to somebody touching this next:
    cyc/px. Scene hashes byte-identical at every mode.
 3. **`raw_boot.asm` loads a FIXED number of chunks.** It was 40 (1.25 MiB)
    against a 1.23 MiB kernel. A kernel over that limit is not a build error —
-   it is silently truncated and jumped into. `mkdisk.sh` refuses to build such
+   it is silently truncated and jumped into. `tools/images/mkdisk.sh` refuses
+   to build such
    an image now, and CHUNKS is 60.
 4. **The wallpaper is a cached bitmap**, and that is arithmetic rather than
    taste: a translucent full-screen pass is 22 cyc/px ≈ 22 ms at 1920×1200, the
@@ -1168,18 +1186,20 @@ The five that matter most to somebody touching this next:
    v10 background is six such passes. Cached it is 1.5 cyc/px. At 4K it does
    not fit the arena, refuses, says so, and falls back to the plain gradient.
 5. **THE COMPOSITOR COULD NOT SEE THE MOUSE, and no gate could have caught
-   it.** zlOS drives two pointers - an absolute usb-tablet through `xhci.c` and
-   a relative PS/2 mouse through `idt.c` - and the `mouse_x` builtin has
-   preferred the tablet since it was written. `input.c`'s `pump_mouse()` read
+   it.** zlOS drives two pointers - an absolute usb-tablet through
+   `src/drivers/input/xhci.c` and a relative PS/2 mouse through
+   `src/arch/x86/idt.c` - and the `mouse_x` builtin has preferred the tablet
+   since it was written. `src/drivers/input/input.c`'s `pump_mouse()` read
    `idt_mouse_x()` **and nothing else**. While the shell owned the screen that
    was invisible, because the shell called `mouse_x()` directly. The moment
    `wm_frame()` became the top of the system the queue was the compositor's
    only source of pointer events, so on any machine with a tablet attached -
-   which is what QEMU gives and what `try.sh` attaches - **no EV_MOUSE was
+   which is what QEMU gives and what `tools/run/try.sh` attaches - **no EV_MOUSE was
    pushed at all**. No dragging, no clicking, no dock, no menu.
 
    Every gate in this repo drives zlOS by TYPING, and a dock that does nothing
-   photographs identically to one that works. `probe-dock.py` exists because
+   photographs identically to one that works. `tools/probes/probe-dock.py`
+   exists because
    of this, and `inputtest` now asserts the preference directly.
 
 6. **`console_mute()`** stops the console painting while the compositor owns the
@@ -1201,15 +1221,17 @@ inverts that. Designed 2026-08-17:
   (2026-08-19) settle the kernel against `docs/design/zlOS-design-northstar.html`
   item by item** — the blur is gone and the reason is that it was disabling the
   wallpaper cache on the ThinkPad's 2560x1440 panel, not that it looked wrong.
-- **`docs/NEXT-PROMPT.md` — WHICH ONE TO DO NEXT, ranked, with the measurement
-  that ranks it.** Start a new session here. It also carries the standing
+- **`docs/archive/prompts/NEXT-PROMPT.md` — historical ranked queue, with the
+  measurement that produced its old order.** Do not use it as the current
+  queue. It also records the standing
   hazard nothing else states plainly: three to five agent sessions share this
   one checkout, and on 2026-08-19 that produced two simultaneous land gates,
   one session's commit sweeping another's in-progress edits, and load average
   15.
 - **`docs/look-and-speed.md` — what a frame costs, what paces it, what is
   next.** The frame target (every frame AND the peak under 16.67 ms), the
-  vsync survey per backend (one source exists, `intel.c`'s `PIPE_FRMCNT_A`, and
+  vsync survey per backend (one source exists,
+  `src/drivers/display/intel.c`'s `PIPE_FRMCNT_A`, and
   it has zero callers), the blast radius of raising the PIT, and why SMP band
   rendering is one call that should not be made yet — 1.76x measured, not 4x,
   and two bands is slower than serial. **Two of its entries carry correction
@@ -1232,11 +1254,12 @@ inverts that. Designed 2026-08-17:
   size**. Fine for a desktop, a hard blocker for a browser. It is three
   resampling bugs, the
   worst being `fb_icon24` nearest-neighbour upscaling every icon at 2×
-  (`fb.c:929`).
+  (`src/graphics/framebuffer/fb.c:929`).
 - `docs/desktop-polish-and-speed.md` — what makes a desktop look modern, and
   what it costs. Three facts up front: **three of four cores are parked** in
-  `cli; hlt` forever (`smp.c:79`) so all drawing is single-core; **nothing
-  measures a frame inside the kernel** (TSC exists in `cpu.c`, not exposed to
+  `cli; hlt` forever (`src/arch/x86/smp.c:79`) so all drawing is single-core;
+  **nothing measures a frame inside the kernel** (TSC exists in
+  `src/arch/x86/cpu.c`, not exposed to
   zl); and the renderer is now benchmarked — see below.
 
 - **`docs/feature-catalogue.md` — every feature found across ~15 hand-built OSes,
@@ -1246,8 +1269,8 @@ inverts that. Designed 2026-08-17:
   security, attribute-indexed filesystems).
   **That list used to name filesystems, network stacks and browsers too, on the
   grounds that "each needs a heap or processes". All three shipped, and none of
-  them needed either** — `fs.c`, `net.c`/`tcp.c`/`dns.c`/`http.c` and
-  `browser.c` use the same static arenas as the rest of the kernel. The
+  them needed either** — `src/fs/fs.c`, the files under `src/net/`, and
+  `src/web/browser.c` use the same static arenas as the rest of the kernel. The
   premise was never tested against an attempt. The rows are corrected in
   `docs/feature-catalogue.md` §12 and §"Why a browser is in a category of its
   own"; `kernel/docs/browser-status.md` is the measured account.
@@ -1255,10 +1278,12 @@ inverts that. Designed 2026-08-17:
   customers: compositor, toolkit, and the 3D rasterizer.
 - `docs/os-landscape.md` — survey of ~13 hobby OSes, written for the **3D goal**.
   Headline: **SerenityOS runs Quake III on a software rasterizer, no GPU** —
-  LibSoftGPU, 16×16 tiles, barycentric, SIMD. That is the path, and `fb3d.c` is
+  LibSoftGPU, 16×16 tiles, barycentric, SIMD. That is the path, and
+  `src/graphics/framebuffer/fb3d.c` is
   its first step. Also: **Essence OS is one person since 2017** (nine years) with
   an animated software *vector* renderer; **Haiku is 25 years old and its Intel
-  driver is modesetting only**, i.e. where `intel.c` is aiming; and **Redox has
+  driver is modesetting only**, i.e. where `src/drivers/display/intel.c` is
+  aiming; and **Redox has
   excellent systems engineering and a "sluggish, unpolished" UI** — a good
   desktop is not downstream of a good kernel.
 - `docs/desktop-prior-art.md` — how TempleOS, SerenityOS, Essence, Haiku, Redox,
@@ -1269,10 +1294,10 @@ inverts that. Designed 2026-08-17:
   choice as `desktop-plan.md`). TempleOS was 640×480/16 colours; **zlOS is
   already well past it**. Do not write a 3D driver — the *display* driver alone
   has cost a 13-conflict plan and an 86-defect audit.
-  **Note:** `docs/design/GRAPHICS_PLAN.md` (2026-08-03) says the GPU is reached
+  **Note:** `docs/archive/superseded/GRAPHICS_PLAN.md` (2026-08-03) says the GPU is reached
   via `opengl32.dll` FFI. That is the **Windows-hosted** plan and does not apply
   here — it has been annotated. On zlOS, 3D means a software rasterizer, and
-  `fb3d.c` is its first step.
+  `src/graphics/framebuffer/fb3d.c` is its first step.
 
   **On "can we just take Linux's driver":** no, and the doc measures why on this
   machine. `i915.ko` is **11.2 MB** uncompressed and ~100K lines; Mesa's Intel
@@ -1280,8 +1305,9 @@ inverts that. Designed 2026-08-17:
   hand-written lines. FreeBSD runs i915 only via **LinuxKPI** — it emulates the
   Linux kernel API rather than porting the driver, and i915 assumes GEM, TTM,
   dma-buf/dma_fence locking, workqueues and a heap, none of which zlOS has by
-  design. **`intel.c` already does the correct thing: borrow Linux's knowledge,
-  not its code.** Also: `virtio_gpu.c:314` disables virgl on purpose — enabling
+  design. **`src/drivers/display/intel.c` already does the correct thing: borrow
+  Linux's knowledge, not its code.** Also:
+  `src/drivers/display/virtio_gpu.c:314` disables virgl on purpose — enabling
   it would give real 3D in QEMU only, never on the laptop.
 - `docs/desktop-northstar-feasibility.md` — can zlOS run the `~/zl OS v10.dc.html`
   mockup? Keep its layer breakdown and gap list; **ignore every percentage in
@@ -1291,16 +1317,18 @@ inverts that. Designed 2026-08-17:
   has written it yet" is the whole lesson**, and getting it wrong costs the
   wrong fix.
 
-## The renderer is benchmarked: `hosttest/fbbench.c`
+## The renderer is benchmarked: `tests/host/fbbench.c`
 
 **This dev box IS the test laptop** — `i7-10510U`, Comet Lake-U, same chip family
-as the `8086:9B41` graphics. So `fb.c` timed here runs on the real target CPU.
+as the `8086:9B41` graphics. So `src/graphics/framebuffer/fb.c` timed here runs
+on the real target CPU.
 
-`fbbench` compiles the **shipping `fb.c` unmodified** at the kernel's own `-O2`
+`fbbench` compiles the **shipping `src/graphics/framebuffer/fb.c` unmodified**
+at the kernel's own `-O2`
 and `mmap`s the three fixed physical addresses fb.c hardcodes. No sudo.
 
 ```
-cd kernel/hosttest && ./build.sh && ./fbbench
+cd kernel/tests/host && ./build.sh && ./fbbench
 ```
 
 Baseline measured 2026-08-17, whole desktop with 3 windows:
@@ -1333,11 +1361,13 @@ arithmetic-bound. Measure, then optimise, then measure again.
 Two things found while planning that you need before believing anything about
 the desktop on real hardware:
 
-1. **At 2560×1440 the back buffer switches itself off** (`fb.c:155` —
+1. **At 2560×1440 the back buffer switches itself off**
+   (`src/graphics/framebuffer/fb.c:155` —
    `BACK_MAX` is `1920*1200`), and it takes subpixel text, fast pixel readback
    and **window dragging** with it, silently. The ThinkPad panel is 2560×1440.
    Verified by reading; **not yet observed** — zlOS has never booted on it.
-2. **`fb.c` has no clipping.** Every primitive clips to the screen and nothing
+2. **`src/graphics/framebuffer/fb.c` has no clipping.** Every primitive clips
+   to the screen and nothing
    else, so there is no way to repaint part of the screen. That, not the window
    code, is what blocks a real compositor.
 ## Arrow keys reached no application until 2026-08-18, and PS/2 was innocent
@@ -1346,10 +1376,10 @@ Reported as "arrows are not delivered to apps", with a correct measurement
 behind it: in the browser, injecting qcode `spc` scrolled and `down` did
 nothing, though `browser_key()` handles both. The suspected cause was the
 `0xE0` prefix in the PS/2 decode — which fits the evidence exactly, and is
-wrong. `hosttest/inputtest.c` drives the real `input.c` and the PS/2 path
+wrong. `tests/host/inputtest.c` drives the real `src/drivers/input/input.c` and the PS/2 path
 decodes all nine extended keys correctly, before any change.
 
-**The keyboard in the repro was the USB one.** `try.sh` attaches `-device
+**The keyboard in the repro was the USB one.** `tools/run/try.sh` attaches `-device
 usb-kbd` and QEMU routes typing to it once it exists.
 
 The USB path decoded keys to **characters**. There is no character for Up, so
@@ -1359,42 +1389,44 @@ fix it: there is nothing to return. The transport had to change shape.
 
 | Was | Is |
 |---|---|
-| `xhci_key()` → a character; `input_poll()` pushes `EV_CHAR` | `xhci_key_event()` → packed `press`/`mods`/HID usage; `input.c` translates |
-| a keymap in `xhci.c` and another in `input.c` | printable USB keys map to a set-1 scancode and go through the **existing** `to_char()` |
+| `xhci_key()` → a character; `input_poll()` pushes `EV_CHAR` | `xhci_key_event()` → packed `press`/`mods`/HID usage; `src/drivers/input/input.c` translates |
+| a keymap in `src/drivers/input/xhci.c` and another in `src/drivers/input/input.c` | printable USB keys map to a set-1 scancode and go through the **existing** `to_char()` |
 | USB sent presses only | releases too — without them `key_down[]` never clears and repeat never stops |
 | USB handled shift and nothing else | ctrl, caps and super, because it is the same `to_char()` — **Ctrl+W was dead on an external keyboard** |
 | a held shift alone was invisible | `xhci_kbd_mods()` publishes the live bitmap |
 
-`wm.c` was never involved; `route_key()` forwards every event type already.
+`src/graphics/windowing/wm.c` was never involved; `route_key()` forwards every
+event type already.
 
 `key_down[]` now has **three** regions — PS/2, PS/2-extended, and USB at
 `0x200 + usage`. A USB `'a'` is usage 0x04 and a PS/2 F9 is scancode 0x04, so a
 shared slot means releasing one un-holds the other.
 
 `xhci_key()` still exists, still returns a character, and reads its **own**
-queue: `kernel.zl` calls the `usb_key` builtin in two places and compares the
+queue: `src/kernel.zl` calls the `usb_key` builtin in two places and compares the
 result against 13 and 27. Two queues also stop the shell and the compositor
 stealing each other's keystrokes.
 
 Why it hid so long: **a test that asks "did a key work" passes on the broken
-code**, because most keys did. `hosttest/inputtest.c` asserts on event *type and
+code**, because most keys did. `tests/host/inputtest.c` asserts on event *type and
 code*, and asserts parity — the same key must produce the same event from either
 keyboard. No GPU, no root, no QEMU, milliseconds:
 
 ```
-cd kernel/hosttest && ./build.sh && ./inputtest
+cd kernel/tests/host && ./build.sh && ./inputtest
 ```
 
 Full write-up: `docs/input-stack.md`.
 
 ## How a harness types a command — `docs/typing-into-the-compositor.md`
 
-**Serial reaches the compositor.** `input.c` feeds COM1 into the same event
+**Serial reaches the compositor.** `src/drivers/input/input.c` feeds COM1 into
+the same event
 queue as PS/2 and USB (`SERIAL, the third source`), which is what kept every
 gate in this repo working when the desktop became the boot state.
 
 What does not work is sending a bare character. The shell is a window whose
-input is a **line**: `term.c` buffers printable characters and only on Enter
+input is a **line**: `src/graphics/windowing/term.c` buffers printable characters and only on Enter
 echoes the line and looks the first **word** up in its table. So `windows`,
 not `w` — `w` was a command in the old text shell and is now one character in
 a buffer.
@@ -1402,23 +1434,25 @@ a buffer.
 **A single character produces no serial output at all**, because the echo lives
 in the Enter branch. That silence is identical to a dropped key, and reading it
 as one is how two probes came to document "serial cannot reach the compositor"
-on branches whose own `input.c` says otherwise. Measured 2026-08-19: `-k w`
+on branches whose own `src/drivers/input/input.c` says otherwise. Measured 2026-08-19: `-k w`
 changes 1 225 pixels, all inside the prompt line, with the `w` visibly sitting
 in the buffer.
 
-`probe-shot.py -k` takes a command, submits it, and waits for term.c to echo
+`tools/probes/probe-shot.py -k` takes a command, submits it, and waits for
+`src/graphics/windowing/term.c` to echo
 the line back — the one marker that proves it was taken, on either wire. It
 exits non-zero when the echo never comes, instead of photographing a frame no
 command ran in, which is what it used to do.
 
 ## zlOS keeps things now — `docs/system-track.md`
 
-Files had no names and nothing survived a reboot. **zlfs** (`fs.c`) is a
+Files had no names and nothing survived a reboot. **zlfs** (`src/fs/fs.c`) is a
 superblock, a flat directory of 32 named entries, and files as contiguous runs
-on the NVMe disk. `rtc.c` reads the CMOS clock, so the header shows a real time
-instead of uptime — and the header has stopped drawing "net up", which claimed
-a network driver this tree does not contain. `clip.c`, `snap.c` and `notify.c`
-are the clipboard, window snapping and toasts.
+on the NVMe disk. `src/arch/x86/rtc.c` reads the CMOS clock, so the header shows
+a real time instead of uptime — and the header has stopped drawing "net up",
+which claimed a network driver this tree does not contain.
+`src/graphics/windowing/clip.c`, `src/graphics/ui/snap.c` and
+`src/graphics/ui/notify.c` are the clipboard, window snapping and toasts.
 
 The desktop path is documented in
 [`docs/storage-and-files.md`](docs/storage-and-files.md). Files mounts zlfs on
@@ -1426,8 +1460,9 @@ open and creates, opens and deletes entries by name. zlEDIT has a disk-backed
 mode with Ctrl+S, ESC save-and-close and clipboard copy/paste; `edit <n>` keeps
 the old RAM slots only as a compatibility path.
 
-There are now two power-cycle checks. `verify-disk.sh` boots three times against
-one image and requires its counter to go 1 → 2 → 3. `probe-files.py` drives the
+There are now two power-cycle checks. `tools/checks/verify-disk.sh` boots three
+times against one image and requires its counter to go 1 → 2 → 3.
+`tools/probes/probe-files.py` drives the
 real Files/editor UI, kills QEMU, boots a new process on the same NVMe image and
 requires the named file's exact editor pixels and byte count to survive.
 
@@ -1436,7 +1471,8 @@ proving each claim by running it — and it found **six data-loss defects** in
 code that already had 63 passing assertions, including one where the comment
 asserted an invariant the code did not hold. All six are fixed with regressions
 that fail on the old code. The full account, and what is deliberately left
-undone in `wm.c`, is in [`docs/system-track.md`](docs/system-track.md).
+undone in `src/graphics/windowing/wm.c`, is in
+[`docs/system-track.md`](docs/system-track.md).
 
 ## The recurring bug class — check this FIRST
 
@@ -1450,22 +1486,24 @@ address truncated to 32 bits.** Symptoms look like protocol bugs.
 - Every driver now ships a `*_ram_ok()` probe
 
 **The sixth was caught by reading, not by running, and that is the lesson.**
-`i2c_hid.c` had `HID_BUF` at `0x0C900000` — 9 MiB inside the 16 MiB arena
-`fb.c` hands out for cached blurs, and inside the span `back` occupied before
+`src/drivers/input/i2c_hid.c` had `HID_BUF` at `0x0C900000` — 9 MiB inside the
+16 MiB arena `src/graphics/framebuffer/fb.c` hands out for cached blurs, and
+inside the span `back` occupied before
 the compositor moved it. Two owners, one address range, neither aware of the
 other. It had never been *observed* because it could not be: QEMU has no Intel
 LPSS I2C controller, so the touchpad driver only runs on the laptop, which is
 also the only machine with a panel big enough to make the framebuffer reach.
 The two halves of the bug were never on the same machine as a working test.
 
-The map is now **[`kernel/memmap.h`](memmap.h)** — declared once, with every
+The map is now **[`kernel/src/arch/x86/memmap.h`](src/arch/x86/memmap.h)** — declared once, with every
 owner asserting its own extent against its neighbours at compile time. It
-replaced a comment in `fb.c` that carried the list *and told you not to trust
+replaced a comment in `src/graphics/framebuffer/fb.c` that carried the list and
+told you not to trust
 it* ("do not take this list on trust, re-grep it"). That instruction was the
 admission; the list was already wrong when it was written.
 
 ```
-cd kernel/hosttest && ./memmap-guard-test.sh    # seconds, no QEMU, no hardware
+cd kernel/tests/host && ./memmap-guard-test.sh    # seconds, no QEMU, no hardware
 ```
 
 **That paragraph said "12 checks" and the script was scoring 10 passed, 2
@@ -1485,7 +1523,8 @@ literals they replaced.
 **A `_Static_assert` nobody has watched fail is a decoration, not a guard** —
 that is what the negative half of that script is for.
 **And the corollary nobody had written down: NOT ONE GATE passes `-m`.**
-`verify.sh`, `verify-raw.sh` and `verify-iso.sh` all boot QEMU's default, which
+`verify.sh`, `tools/checks/verify-raw.sh` and `tools/checks/verify-iso.sh` all
+boot QEMU's default, which
 is **measured** at exactly 128 MiB (`query-memory-size-summary` says
 `base-memory: 134217728`). So on every gate this project runs, the whole
 high-RAM map is unbacked, and **a new fixed buffer placed above 128 MiB is dead
@@ -1507,12 +1546,13 @@ actually booted, and all three of these were simultaneously true:
 
 | what | `-m` it passed | against `HI_TOP` = 256 MiB |
 |---|---|---|
-| `verify.sh`, `verify-raw.sh`, `verify-iso.sh`, `run.sh` | **none** → 128 MiB | top **half** of the map unbacked |
-| `verify-disk.sh`, `verify-clock.sh` | 512 | fine |
-| `verify-efi.sh`, `exercise.py`, `try.sh` | 1G | 4× the asserted ceiling |
+| `verify.sh`, `tools/checks/verify-raw.sh`, `tools/checks/verify-iso.sh`, `run.sh` | **none** → 128 MiB | top **half** of the map unbacked |
+| `tools/checks/verify-disk.sh`, `tools/checks/verify-clock.sh` | 512 | fine |
+| `tools/checks/verify-efi.sh`, `tools/probes/exercise.py`, `tools/run/try.sh` | 1G | 4× the asserted ceiling |
 
 `HI_TOP` is now **`0x40000000`, 1 GiB**, and every QEMU in the tree passes
-`-m 1G`. `kernel/check-ram.sh` is the gate: it reads `HI_TOP` out of `memmap.h`,
+`-m 1G`. `kernel/tools/checks/check-ram.sh` is the gate: it reads `HI_TOP` out of
+`src/arch/x86/memmap.h`,
 finds every QEMU launch in every `.sh` and `.py` here, and fails if any of them
 passes less than that or passes no `-m` at all. Static — no build, no QEMU, so
 it cannot fail because the host is busy. Validated against three planted
@@ -1528,11 +1568,12 @@ started blocking work that has real use for the space above it.
 
 Two consequences worth knowing:
 
-- **The program arena's justification changed.** `arena.c` sits at 8 MiB
+- **The program arena's justification changed.** `src/core/arena.c` sits at 8 MiB
   *because* everything above 128 MiB used to be unbacked on every gate. It is
   still at 8 MiB — moving a live region buys nothing — but it is no longer
   forced there, and the space above the map is now genuinely allocatable.
-- **`check-himap.sh` needed widening in the same commit.** Its literal-scanner
+- **`tools/checks/check-himap.sh` needed widening in the same commit.** Its
+  literal-scanner
   matched `0x0` followed by seven hex digits, which cannot express any value at
   or above `0x10000000`. With `HI_TOP` at 1 GiB it would have gone on comparing
   against a ceiling of `0x40000000` while structurally unable to see two thirds
@@ -1542,7 +1583,8 @@ Two consequences worth knowing:
 
 The full map — every base and end re-grepped from the file that owns it, the
 kernel image end measured, the arithmetic for where a new buffer may go, and one
-collision `fb.c`'s map does not list (the SMP AP stacks at 168 MiB, inside
+collision `src/graphics/framebuffer/fb.c`'s map does not list (the SMP AP
+stacks at 168 MiB, inside
 `sp_buf`'s declared span) — is `kernel/docs/memory-map.md`.
 
 ## Two silent faults hid five sixths of the desktop (2026-08-20)
@@ -1580,11 +1622,12 @@ driver has just lit. Nothing defines `key()` either.
 
 ```
 cd kernel
-./check-appids.py --selftest   # replants APP_CATALOG = 13, requires a failure
-./check-zlcalls.py             # every call site vs. the fn set and the builtins
+./tools/checks/check-appids.py --selftest   # replants APP_CATALOG = 13, requires a failure
+./tools/checks/check-zlcalls.py             # every call site vs. the fn set and the builtins
 ```
 
-`check-zlcalls.py` reads the builtin names out of `runtime_kernel.c`'s own
+`tools/checks/check-zlcalls.py` reads the builtin names out of
+`src/runtime/interp_kernel.c`'s own
 `streq(name, "...")` table rather than transcribing them, and it found `key()`
 on its first run. **A `_Static_assert` nobody has watched fail is a decoration**
 — that rule applies to these too, which is what `--selftest` is for.
@@ -1593,18 +1636,18 @@ on its first run. **A `_Static_assert` nobody has watched fail is a decoration**
 
 ```
 cd kernel
-./check-appids.py  # no two apps share an id (static, instant)
-./check-zlcalls.py # every zl call resolves - an undefined one HALTS the kernel
-./check-memmap.sh  # hand-placed buffers do not overlap (static, instant)
+./tools/checks/check-appids.py  # no two apps share an id (static, instant)
+./tools/checks/check-zlcalls.py # every zl call resolves - an undefined one HALTS the kernel
+./tools/checks/check-memmap.sh  # hand-placed buffers do not overlap (static, instant)
 ./verify.sh        # BIOS golden transcript
-./verify-raw.sh    # our own bootloader
-./verify-efi.sh    # zlOS as its OWN UEFI application - the ThinkPad's path
-./verify-iso.sh    # BIOS and UEFI through GRUB
-./probe-dock.py    # the POINTER: hover, press, launch, the menu, dismiss
-./probe-resize.py  # the corner grows a window; the title bar still moves it
-./probe-drag.py --grab 1500,125 --drop 700,700
-./try.sh serial    # drive it from the terminal
-cd hosttest && ./build.sh && ./wmtest && ./inputtest && ./fbbench && ./tritest
+./tools/checks/verify-raw.sh    # our own bootloader
+./tools/checks/verify-efi.sh    # zlOS as its OWN UEFI application - the ThinkPad's path
+./tools/checks/verify-iso.sh    # BIOS and UEFI through GRUB
+./tools/probes/probe-dock.py    # the POINTER: hover, press, launch, the menu, dismiss
+./tools/probes/probe-resize.py  # the corner grows a window; the title bar still moves it
+./tools/probes/probe-drag.py --grab 1500,125 --drop 700,700
+./tools/run/try.sh serial       # drive it from the terminal
+cd tests/host && ./build.sh && ./wmtest && ./inputtest && ./fbbench && ./tritest
 ```
 
 **The `probe-*.py` scripts that drive the POINTER are not optional extras.**
@@ -1612,7 +1655,7 @@ Every other gate here types, and the compositor's entire pointer path - drag,
 click-to-focus, the close box, the dock, the menu - was dead for hours while
 all of them stayed green. See T-15.
 
-`check-memmap.sh` parses the fixed addresses out of `kernel.zl` and derives
+`tools/checks/check-memmap.sh` parses the fixed addresses out of `src/kernel.zl` and derives
 their sizes from the same constants, so bumping `FS_SLOT` or `HIST_N` re-runs
 the arithmetic. It exists because `LINE_BUF`/`HIST_BUF` had been placed inside
 `FS_DATA`'s slots 7 and 8: editing RAM file 7 or 8 overwrote the shell's input
@@ -1626,8 +1669,10 @@ hardcoded nine-name list and does not discover new constants, so `DISK_SCRATCH`
 `LINE_BUF` to — is invisible to it. Fix the sweep before trusting it.
 **`./build.sh` DOES NOT REBUILD WHAT THE PROBES BOOT, and this will cost you an
 afternoon.** `build.sh` produces `kernel.elf`. Every `probe-*.py` boots
-`zlOS.iso` (`exercise.py:280` `qemu_argv` → `-cdrom zlOS.iso`), which is made by
-`mkiso.sh` and only by `mkiso.sh`. `exercise.py:273` `build()` runs it for you —
+`zlOS.iso` (`tools/probes/exercise.py:280` `qemu_argv` → `-cdrom zlOS.iso`),
+which is made by
+`tools/images/mkiso.sh` and only by that script. `tools/probes/exercise.py:273`
+`build()` runs it for you —
 so a probe run WITHOUT `--no-build` is honest, and `./build.sh && ./probe-x.py
 --no-build` silently tests the kernel you had before your edit.
 
@@ -1647,7 +1692,7 @@ Three docs, all written from measurement rather than intent:
 - `kernel/docs/memory-map.md` — every fixed physical address, re-grepped from the
   file that owns it, the kernel image end measured, and **the fact that no gate
   passes `-m` so every address above 128 MiB is unbacked under all of them**.
-  Also two collisions `fb.c`'s map does not list.
+  Also two collisions `src/graphics/framebuffer/fb.c`'s map does not list.
 - `kernel/docs/exec-kill-path.md` — how a program that will not stop is stopped:
   a step budget and a depth cap at `eval`/`exec`, a `longjmp` boundary instead of
   `exit(1)`, and why it is deliberately not the timer interrupt.
@@ -1657,39 +1702,41 @@ Three docs, all written from measurement rather than intent:
 Gates the exec track added, cheapest first:
 
 ```
-cd kernel/hosttest && ./build.sh
+cd kernel/tests/host && ./build.sh
 ./arenatest        # the program arena's ceiling      62 checks, no QEMU
 ./exectest         # `run`, with a fake filesystem    44 checks, no QEMU
 ./exectest-nofs    # `run`, as it actually ships      32 checks, no QEMU
 ./killtest.sh      # adversarial: can a script wedge the machine?  14 cases
-cd .. && ./probe-run.py                # `run` in the real compositor
+cd ../.. && ./tools/probes/probe-run.py # `run` in the real compositor
 ./verify.sh          # BIOS golden transcript
-./verify-raw.sh      # our own bootloader - text leg AND framebuffer leg
-./verify-efi.sh      # the NATIVE UEFI application (buildefi.sh's output)
-./verify-iso.sh      # BIOS and UEFI through GRUB
-./verify-sources.sh  # one source list really does reach all four builds
-./try.sh serial      # drive it from the terminal
+./tools/checks/verify-raw.sh      # our own bootloader - text leg AND framebuffer leg
+./tools/checks/verify-efi.sh      # the NATIVE UEFI application (buildefi.sh's output)
+./tools/checks/verify-iso.sh      # BIOS and UEFI through GRUB
+./tools/checks/verify-sources.sh  # one source list really does reach all four builds
+./tools/run/try.sh serial         # drive it from the terminal
 ```
 
-**`verify-efi.sh` and `verify-sources.sh` are new (2026-08-18).** Before them,
+**`tools/checks/verify-efi.sh` and `tools/checks/verify-sources.sh` are new
+(2026-08-18).** Before them,
 `buildefi.sh` built `BOOTX64.EFI` and nothing ever booted it - which is how the
-address truncation in `efi.c` survived, since `verify-iso.sh`'s UEFI leg boots
-the *multiboot* kernel and `efi.c` is not in that binary.
+address truncation in `boot/efi.c` survived, since
+`tools/checks/verify-iso.sh`'s UEFI leg boots the *multiboot* kernel and
+`boot/efi.c` is not in that binary.
 
 The desktop has its own probes, all of which boot the real thing:
 
 ```
-./probe-term.py    type five commands into the shell, assert each result
-./probe-apps.py    five apps in five windows, running at once
-./probe-snake.py   snake keeps playing while another window is dragged
-./probe-smp.py     band rendering on 4 real cores draws identical pixels
-./probe-frame.py   the frame timer is a measurement, not a number
-./probe-edit.py    the editor: a window, typing, ESC saves and closes
-python3 ./probe-files.py  Files + zlEDIT survive a killed QEMU and cold boot
-./probe-drag.py --no-tablet     a window really moves
+./tools/probes/probe-term.py    type five commands into the shell, assert each result
+./tools/probes/probe-apps.py    five apps in five windows, running at once
+./tools/probes/probe-snake.py   snake keeps playing while another window is dragged
+./tools/probes/probe-smp.py     band rendering on 4 real cores draws identical pixels
+./tools/probes/probe-frame.py   the frame timer is a measurement, not a number
+./tools/probes/probe-edit.py    the editor: a window, typing, ESC saves and closes
+python3 ./tools/probes/probe-files.py  Files + zlEDIT survive a killed QEMU and cold boot
+./tools/probes/probe-drag.py --no-tablet     a window really moves
 ```
 
-`try.sh` GUI mode is **verified working** (2026-08-17). It was booting
+`tools/run/try.sh` GUI mode is **verified working** (2026-08-17). It was booting
 `-kernel kernel.elf`, and QEMU's own multiboot loader never supplies the
 framebuffer tag — it prints `multiboot knows VBE. we don't` — so `console_init()`
 never reached `fb_setup()` and every graphical demo answered "needs the
@@ -1702,7 +1749,7 @@ keeps its own device.
 the shell responds, and `verify.sh` gates it. It just cannot do graphics.
 ## MP-00 dependency/SBOM closure slice — 2026-08-24
 
-`kernel/dependency-lock.json` is now `zlos.host-dependency-lock.v2`. It retains
+`kernel/metadata/dependency-lock.json` is now `zlos.host-dependency-lock.v2`. It retains
 the original 15 invoked command and two firmware identities, and joins 91 exact
 runtime files to 156 recursively installed binary packages. Each package records
 binary version/architecture, source package/version, raw and resolved dependency
@@ -1716,7 +1763,7 @@ retained and no offline rebuild has been run. This materially advances EV-004
 but does not complete it or EV-005. The dependent toolchain manifest, build graph
 and joined evidence registry were regenerated after the lock changed.
 
-EV-008 is closed for the current batch. `kernel/wrapper-registry.json` hashes
+EV-008 is closed for the current batch. `kernel/metadata/wrapper-registry.json` hashes
 and classifies all 141 current shebang wrappers, including 17 legacy/action/
 probe policy gaps that are explicitly not landing authority. The only supported
 entry remains `gates/run-land-gate-contained.sh start`; `check-land-gate.py`

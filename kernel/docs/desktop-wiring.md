@@ -162,7 +162,7 @@ Most of it is already in `wm.c` and needs only policy:
 
 ```bash
 cd kernel && ./verify.sh          # the text path - MUST stay byte-identical
-./verify-efi.sh                   # the 64-bit UEFI path, the laptop's
+./tools/checks/verify-efi.sh      # the 64-bit UEFI path, the laptop's
 ./probe-shot.py -o wired          # look at it
 ./probe-drag.py                   # drag a window in the real device config
 cd hosttest && ./build.sh && ./wmtest && ./inputtest && ./fbbench

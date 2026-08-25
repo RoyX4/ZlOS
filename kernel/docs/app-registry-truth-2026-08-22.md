@@ -8,7 +8,7 @@ false green.
 On branch base `b8a00ec45ac1f9f955ba79ed63f0072540067d4e`, this command exited zero:
 
 ```sh
-python3 kernel/hosttest/apps53.py
+python3 kernel/tests/host/apps53.py
 ```
 
 Its own table said:
@@ -101,11 +101,11 @@ inverse question “does every dense catalogue ID name a real reference app?”
 ## Deterministic evidence
 
 ```text
-$ python3 kernel/check-appids.py --selftest
+$ python3 kernel/tools/checks/check-appids.py --selftest
 selftest: planted APP_CATALOG = 13, caught as APP_CATALOG (apps_registry.zl), APP_FILES (kernel.zl)
 check-appids: no duplicate app ids
 
-$ python3 kernel/hosttest/apps53.py --selftest
+$ python3 kernel/tests/host/apps53.py --selftest
 reference apps: 53      REG_FIRST=15 REG_LAST=69   reg_count()=47
 ...
 26  Maze ... id 34  exists yes  size yes  icon yes  catalog-static
@@ -113,7 +113,7 @@ reference apps: 53      REG_FIRST=15 REG_LAST=69   reg_count()=47
 selftest: caught missing-existence, blank-extra-id, missing-size, missing-icon, missing-identity
 all 53 reference apps have complete static registry fields; catalog has no blank ids
 
-$ ./kernel/check-zlcalls.py
+$ ./kernel/tools/checks/check-zlcalls.py
 check-zlcalls: 861 zl functions, 643 builtins, every call site resolves
 
 $ cd kernel && python3 gen-app-manifest.py --check --selftest

@@ -4,67 +4,67 @@
 
 # cons: prepend value onto a linked list -> new linked list
 fn cons(cValue, cRest) {
-  return [cValue, cRest]
+    return [cValue, cRest]
 }
 
 # head: first value of a linked list ("" for empty)
 fn head(hList) {
-  if len(hList) == 0 {
-    return ""
-  }
-  return hList[0]
+    if len(hList) == 0 {
+        return ""
+    }
+    return hList[0]
 }
 
 # tail: everything after the head ([] for empty)
 fn tail(tList) {
-  if len(tList) == 0 {
-    return []
-  }
-  return tList[1]
+    if len(tList) == 0 {
+        return []
+    }
+    return tList[1]
 }
 
 # list_length: count of nodes in a linked list
 fn list_length(llList) {
-  llCount = 0
-  llCur = llList
-  while len(llCur) != 0 {
-    llCount = llCount + 1
-    llCur = llCur[1]
-  }
-  return llCount
+    llCount = 0
+    llCur = llList
+    while len(llCur) != 0 {
+        llCount = llCount + 1
+        llCur = llCur[1]
+    }
+    return llCount
 }
 
 # from_list: build a linked list from a flat zl list (preserves order)
 fn from_list(flZlList) {
-  flLinked = []
-  flI = len(flZlList) - 1
-  while flI >= 0 {
-    flLinked = [flZlList[flI], flLinked]
-    flI = flI - 1
-  }
-  return flLinked
+    flLinked = []
+    flI = len(flZlList) - 1
+    while flI >= 0 {
+        flLinked = [flZlList[flI], flLinked]
+        flI = flI - 1
+    }
+    return flLinked
 }
 
 # to_list: flatten a linked list back into a flat zl list
 fn to_list(tlLinked) {
-  tlOut = []
-  tlCur = tlLinked
-  while len(tlCur) != 0 {
-    tlOut = push(tlOut, tlCur[0])
-    tlCur = tlCur[1]
-  }
-  return tlOut
+    tlOut = []
+    tlCur = tlLinked
+    while len(tlCur) != 0 {
+        tlOut = push(tlOut, tlCur[0])
+        tlCur = tlCur[1]
+    }
+    return tlOut
 }
 
 # reverse: reverse a linked list -> new linked list
 fn reverse(rvLinked) {
-  rvAcc = []
-  rvCur = rvLinked
-  while len(rvCur) != 0 {
-    rvAcc = [rvCur[0], rvAcc]
-    rvCur = rvCur[1]
-  }
-  return rvAcc
+    rvAcc = []
+    rvCur = rvLinked
+    while len(rvCur) != 0 {
+        rvAcc = [rvCur[0], rvAcc]
+        rvCur = rvCur[1]
+    }
+    return rvAcc
 }
 
 # ---------------- self-test ----------------

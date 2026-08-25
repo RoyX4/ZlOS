@@ -364,7 +364,7 @@ match the build byte-for-byte, its backup GPT is at the physical end, and both
 fresh ZLLOG superblocks validate against the device's real 7,570,752-block
 capacity. The explicit firmware entry names the new partition GUID and
 `BootNext` is set. Future releases can perform that NVRAM refresh safely with
-`./mkusb.sh --boot-next /dev/device`; this matters because every fresh GPT has a
+`./tools/images/mkusb.sh --boot-next /dev/device`; this matters because every fresh GPT has a
 new unique partition GUID and an older entry otherwise falls through to Linux.
 
 ### Second and third physical runs: MSC still fails, but the fallback worked
@@ -640,8 +640,8 @@ Run the proof suite with:
 
 ```text
 python3 tools/test_zllog.py
-python3 kernel/hosttest/zllog_e2e_test.py
-cd kernel && ./mkusb.sh && ./verify-efi.sh
+python3 kernel/tests/host/zllog_e2e_test.py
+cd kernel && ./tools/images/mkusb.sh && ./tools/checks/verify-efi.sh
 ../tools/zllog.py read zlOS-usb.img --latest
 ```
 

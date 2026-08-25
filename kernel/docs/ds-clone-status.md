@@ -12,7 +12,7 @@ by a script or quoted from a gate's own output. Where something is NOT DONE it
 says so; where it is done but unproven it says that too, because "implemented"
 and "visible on screen" have come apart repeatedly in this work.
 
-Regenerate section 1 with `python3 kernel/hosttest/apps53.py` (exit 1 if any of
+Regenerate section 1 with `python3 kernel/tests/host/apps53.py` (exit 1 if any of
 the 53 is missing). Regenerate section 3 with the command in that section.
 
 ---
@@ -106,9 +106,9 @@ mismatch (24 did before commit 96017a4).
 | **zpress** | **NOT DONE** | `ease_press_scale()` exists and is unit-tested; **nothing calls `wm_anim(w, ANIM_PRESS)`**. Not triggered anywhere. |
 | **zpulse** | **NOT DONE** | Wired to one rare state (`term_bad()`, kernel.zl:3671). Not on the dock's running-app dot, which is what the reference pulses. |
 | **ztoast** | **NOT DONE** | `notify.c` contains no animation call at all. |
-| **zsweep** | **NOT DONE** | Not implemented. `grep -c 'zsweep\|SWEEP' kernel/kernel.zl kernel/fb.c` → 0, 0. |
+| **zsweep** | **NOT DONE** | Not implemented. `grep -c 'zsweep\|SWEEP' kernel/src/kernel.zl kernel/src/graphics/framebuffer/fb.c` → 0, 0. |
 | Settings as a real app | **PARTIAL** | `settings.c` is 637 lines, drives 6 real sinks (accent, scale, pointer speed, accel, subpixel, animation), sized to the reference's 486x332. Its internal layout is NOT the reference's sidebar + cards. |
-| VFS tree | **NOT DONE** | `grep -c 'VFS0\|vfs_' kernel/kernel.zl` → 0. Files reads real zlfs instead; the reference's synthetic tree is absent. |
+| VFS tree | **NOT DONE** | `grep -c 'VFS0\|vfs_' kernel/src/kernel.zl` → 0. Files reads real zlfs instead; the reference's synthetic tree is absent. |
 | 3 workspaces | **PARTIAL** | `ws_cur` / `cur_ws()` / `set_ws()` exist and the island's pips render current-vs-other. Windows are **not** filtered by workspace, so switching changes the indicator and nothing else. |
 | per-app internal layouts | **PARTIAL** | The 27 apps written this session use the shared toolkit against `reference-widgets.md` (toolbars, tab strips, column grids, stat strips, sidebars, status bars, mono panels). The 20 older registry apps were not re-laid-out. **None has been seen on screen.** |
 
@@ -117,8 +117,8 @@ mismatch (24 did before commit 96017a4).
 ## 3. Fidelity oracle — current numbers
 
 ```
-kernel/oracle/shot-zlos.py --shot status
-kernel/oracle/diff-regions.py --zlos out/zlos-status.png \
+kernel/tests/oracle/shot-zlos.py --shot status
+kernel/tests/oracle/diff-regions.py --zlos out/zlos-status.png \
     --ref ../refrender/out/reference-1280x800.png
 ```
 

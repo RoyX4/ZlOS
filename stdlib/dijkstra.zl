@@ -22,111 +22,111 @@
 
 # Is this distance the "not reached" marker?
 fn dj_inf(di_d) {
-  return di_d == nil()
+    return di_d == nil()
 }
 
 # Return the neighbor list ([[nb, w], ...]) of `node`, or [] if not found.
 fn dj_neighbors(graph, node) {
-  for dn_pair in graph {
-    if dn_pair[0] == node {
-      return dn_pair[1]
+    for dn_pair in graph {
+        if dn_pair[0] == node {
+            return dn_pair[1]
+        }
     }
-  }
-  return []
+    return []
 }
 
 # Read the current best distance for `node` (nil if not reached yet).
 fn dj_get(dists, node) {
-  for dg_pair in dists {
-    if dg_pair[0] == node {
-      return dg_pair[1]
+    for dg_pair in dists {
+        if dg_pair[0] == node {
+            return dg_pair[1]
+        }
     }
-  }
-  return nil()
+    return nil()
 }
 
 # Return a NEW dists list with `node` set to `val` (lists are immutable).
 fn dj_set(dists, node, val) {
-  ds_out = []
-  ds_found = false
-  for ds_pair in dists {
-    if ds_pair[0] == node {
-      ds_out = push(ds_out, [node, val])
-      ds_found = true
-    } else {
-      ds_out = push(ds_out, ds_pair)
+    ds_out = []
+    ds_found = false
+    for ds_pair in dists {
+        if ds_pair[0] == node {
+            ds_out = push(ds_out, [node, val])
+            ds_found = true
+        } else {
+            ds_out = push(ds_out, ds_pair)
+        }
     }
-  }
-  if not ds_found {
-    ds_out = push(ds_out, [node, val])
-  }
-  return ds_out
+    if not ds_found {
+        ds_out = push(ds_out, [node, val])
+    }
+    return ds_out
 }
 
 # Core algorithm. Returns list of [node, distance] pairs.
 fn dijkstra(graph, start) {
-  # Initialise every node to "not reached", then the start to 0.
-  dk_dists = []
-  for dk_ipair in graph {
-    dk_dists = dj_set(dk_dists, dk_ipair[0], nil())
-  }
-  dk_dists = dj_set(dk_dists, start, 0)
+    # Initialise every node to "not reached", then the start to 0.
+    dk_dists = []
+    for dk_ipair in graph {
+        dk_dists = dj_set(dk_dists, dk_ipair[0], nil())
+    }
+    dk_dists = dj_set(dk_dists, start, 0)
 
-  dk_visited = []
-  dk_count = len(graph)
-  dk_i = 0
+    dk_visited = []
+    dk_count = len(graph)
+    dk_i = 0
 
-  while dk_i < dk_count {
-    # Pick the unvisited REACHED node with the smallest tentative
-    # distance. A node still at nil has no finite distance yet, so it
-    # cannot be the minimum and must not be settled or relaxed from.
-    dk_u = ""
-    dk_best = 0
-    dk_have = false
-    for dk_dp in dk_dists {
-      if not contains(dk_visited, dk_dp[0]) and not dj_inf(dk_dp[1]) {
-        if not dk_have or dk_dp[1] < dk_best {
-          dk_best = dk_dp[1]
-          dk_u = dk_dp[0]
-          dk_have = true
+    while dk_i < dk_count {
+        # Pick the unvisited REACHED node with the smallest tentative
+        # distance. A node still at nil has no finite distance yet, so it
+        # cannot be the minimum and must not be settled or relaxed from.
+        dk_u = ""
+        dk_best = 0
+        dk_have = false
+        for dk_dp in dk_dists {
+            if not contains(dk_visited, dk_dp[0]) and not dj_inf(dk_dp[1]) {
+                if not dk_have or dk_dp[1] < dk_best {
+                    dk_best = dk_dp[1]
+                    dk_u = dk_dp[0]
+                    dk_have = true
+                }
+            }
         }
-      }
+
+        if not dk_have {
+            # Everything reachable is settled; stop early.
+            dk_i = dk_count
+        } else {
+            dk_visited = push(dk_visited, dk_u)
+
+            # Relax each outgoing edge of the chosen node.
+            dk_nbrs = dj_neighbors(graph, dk_u)
+            for dk_nb in dk_nbrs {
+                dk_v = dk_nb[0]
+                dk_w = dk_nb[1]
+                dk_alt = dk_best + dk_w
+                dk_old = dj_get(dk_dists, dk_v)
+                if dj_inf(dk_old) or dk_alt < dk_old {
+                    dk_dists = dj_set(dk_dists, dk_v, dk_alt)
+                }
+            }
+            dk_i = dk_i + 1
+        }
     }
 
-    if not dk_have {
-      # Everything reachable is settled; stop early.
-      dk_i = dk_count
-    } else {
-      dk_visited = push(dk_visited, dk_u)
-
-      # Relax each outgoing edge of the chosen node.
-      dk_nbrs = dj_neighbors(graph, dk_u)
-      for dk_nb in dk_nbrs {
-        dk_v = dk_nb[0]
-        dk_w = dk_nb[1]
-        dk_alt = dk_best + dk_w
-        dk_old = dj_get(dk_dists, dk_v)
-        if dj_inf(dk_old) or dk_alt < dk_old {
-          dk_dists = dj_set(dk_dists, dk_v, dk_alt)
-        }
-      }
-      dk_i = dk_i + 1
-    }
-  }
-
-  return dk_dists
+    return dk_dists
 }
 
 # Pretty-print distances, showing "unreachable" for a nil distance.
 fn print_dists(label, dists) {
-  print(label)
-  for pd_pair in dists {
-    if dj_inf(pd_pair[1]) {
-      print("  " + pd_pair[0] + " -> unreachable")
-    } else {
-      print("  " + pd_pair[0] + " -> " + num(pd_pair[1]))
+    print(label)
+    for pd_pair in dists {
+        if dj_inf(pd_pair[1]) {
+            print("  " + pd_pair[0] + " -> unreachable")
+        } else {
+            print("  " + pd_pair[0] + " -> " + num(pd_pair[1]))
+        }
     }
-  }
 }
 
 # ---------------------------------------------------------------------------

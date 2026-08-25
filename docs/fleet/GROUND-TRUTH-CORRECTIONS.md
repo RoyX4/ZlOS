@@ -29,8 +29,8 @@ leverage-per-line item in the entire survey."* It is already deleted.
 
 ```
 $ grep -n "acpi_find_table" kernel/*.c kernel/*.h
-kernel/apic.c:177:uptr acpi_find_table(const char *sig)
-kernel/apic.c:219:    uptr madt = acpi_find_table("APIC");
+kernel/src/arch/x86/apic.c:177:uptr acpi_find_table(const char *sig)
+kernel/src/arch/x86/apic.c:219:    uptr madt = acpi_find_table("APIC");
 ```
 
 No `static`. Line 177, not 171. **Done.**
@@ -41,8 +41,8 @@ It exists.
 
 ```
 $ grep -rn "write_msr" kernel/*.c kernel/*.h
-kernel/cpu.c:65:void write_msr(u32 msr, u64 val)
-kernel/cpu.c:67:    __asm__ volatile("wrmsr" : : "c"(msr), "a"((u32)val), "d"((u32)(val >> 32)));
+kernel/src/arch/x86/cpu.c:65:void write_msr(u32 msr, u64 val)
+kernel/src/arch/x86/cpu.c:67:    __asm__ volatile("wrmsr" : : "c"(msr), "a"((u32)val), "d"((u32)(val >> 32)));
 ```
 
 (`apic.c:68` also has a private `static wrmsr`, which is a separate, older copy —
@@ -54,10 +54,10 @@ that duplication is real and is worth folding, but it is a tidy-up, not a blocke
 Landed, with the measurement in the commit message and the reasoning in the source.
 
 ```
-kernel/pci.c:249:  int pci_find_cap(int bus, int dev, int fn, int id)
-kernel/pci.c:283:  int pci_power_on(int bus, int dev, int fn)
-kernel/pci.c:301:  int pci_power_state(int bus, int dev, int fn)
-kernel/pci.c:313:  /* Power BEFORE command bits. Enabling memory decode on a device in D3 */
+kernel/src/arch/x86/pci.c:249:  int pci_find_cap(int bus, int dev, int fn, int id)
+kernel/src/arch/x86/pci.c:283:  int pci_power_on(int bus, int dev, int fn)
+kernel/src/arch/x86/pci.c:301:  int pci_power_state(int bus, int dev, int fn)
+kernel/src/arch/x86/pci.c:313:  /* Power BEFORE command bits. Enabling memory decode on a device in D3 */
 ```
 
 `pci_enable()` now wakes before it enables. **Done.**
@@ -72,20 +72,20 @@ kernel/pci.c:313:  /* Power BEFORE command bits. Enabling memory decode on a dev
 > report buffer sits 9 MiB inside the blur arena.
 
 Both line numbers are stale and the collision is gone. There is now a single
-`kernel/memmap.h` holding every high-memory base:
+`kernel/src/arch/x86/memmap.h` holding every high-memory base:
 
 ```
-kernel/memmap.h:74:#define HI_SCHED  0x0B000000UL   /* sched.c      - stacks, counters    */
-kernel/memmap.h:75:#define HI_HID    0x0B800000UL   /* i2c_hid.c    - HID over I2C buffers */
-kernel/memmap.h:76:#define HI_GPU    0x0BC00000UL   /* gpuring.c    - the GPU command ring  */
-kernel/memmap.h:77:#define HI_BLUR   0x0C000000UL   /* fb.c         - the cached-blur arena */
-kernel/memmap.h:78:#define HI_NVME   0x0D000000UL   /* nvme.c       - admin + I/O queues    */
+kernel/src/arch/x86/memmap.h:74:#define HI_SCHED  0x0B000000UL   /* sched.c      - stacks, counters    */
+kernel/src/arch/x86/memmap.h:75:#define HI_HID    0x0B800000UL   /* i2c_hid.c    - HID over I2C buffers */
+kernel/src/arch/x86/memmap.h:76:#define HI_GPU    0x0BC00000UL   /* gpuring.c    - the GPU command ring  */
+kernel/src/arch/x86/memmap.h:77:#define HI_BLUR   0x0C000000UL   /* fb.c         - the cached-blur arena */
+kernel/src/arch/x86/memmap.h:78:#define HI_NVME   0x0D000000UL   /* nvme.c       - admin + I/O queues    */
 ```
 
 `HI_HID` is `0x0B800000` — **below** the blur arena, which spans `0x0C000000`–`0x0D000000`.
 And `i2c_hid.c:121` now derives `HID_BUF` from `HI_HID` rather than hardcoding an address.
 
-The span asserts the document asked for also exist (`kernel/fb.c:203-215`), and one of
+The span asserts the document asked for also exist (`kernel/src/graphics/framebuffer/fb.c:203-215`), and one of
 them catches a *different* collision the document did not find — the back buffer growing
 into the AP stacks:
 
@@ -106,7 +106,7 @@ spanning 128–176 MiB with `STACK_BASE` at 168 MiB *inside it*, and that only t
 
 **What is still open here** is narrower than the document implies, and worth keeping:
 `memmap.h` is a table of bases, not a reservation table with runtime spans, and
-`kernel/check-memmap.sh` still iterates a hardcoded list rather than discovering
+`kernel/tools/checks/check-memmap.sh` still iterates a hardcoded list rather than discovering
 constants from the C. A new base added tomorrow is still uncovered.
 
 ---
@@ -132,14 +132,14 @@ done.
 
 ## `intel.c` orphans: the number is **101**, not 63 — and there is no encapsulation at all
 
-`docs/display-roadmap.md`'s audit banner says *"63 of 301 exported `intel_*` functions
+`kernel/docs/display-roadmap.md`'s audit banner says *"63 of 301 exported `intel_*` functions
 have no call site."* Re-measured by hand on the current tree, the figure is **101 of 303**.
 
 Method, so it can be re-run:
 
 ```bash
 # every non-static intel_* definition
-grep -nP '^(?!static)[A-Za-z_][\w \*]*\bintel_\w+\s*\(' kernel/intel.c \
+grep -nP '^(?!static)[A-Za-z_][\w \*]*\bintel_\w+\s*\(' kernel/src/drivers/display/intel.c \
   | grep -oP '\bintel_\w+(?=\s*\()' | sort -u > exported.txt
 
 # those with no reference anywhere outside intel.c and outside generated files
@@ -157,9 +157,9 @@ callers are *inside* `intel.c`, which for a driver this size is normal and corre
 ### The finding underneath the number
 
 ```
-$ grep -cP '^static\s+[\w \*]*\bintel_\w+\s*\(' kernel/intel.c
+$ grep -cP '^static\s+[\w \*]*\bintel_\w+\s*\(' kernel/src/drivers/display/intel.c
 0
-$ grep -cP '^(?!static)[A-Za-z_][\w \*]*\bintel_\w+\s*\(' kernel/intel.c
+$ grep -cP '^(?!static)[A-Za-z_][\w \*]*\bintel_\w+\s*\(' kernel/src/drivers/display/intel.c
 308
 ```
 

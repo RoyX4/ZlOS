@@ -82,12 +82,12 @@ whole toolchain is smaller than it looks:
 
 | | Lines |
 |---|---|
-| `lexer.c` | 457 |
-| `interp.c` | 1,900 |
-| `runtime.c` (full boxed, needs ~70 libc symbols) | 1,355 |
+| `src/frontend/lexer.c` | 457 |
+| `src/runtime/interp.c` | 1,900 |
+| `src/runtime/runtime.c` (full boxed, needs ~70 libc symbols) | 1,355 |
 
 The interpreter is 1,900 lines. What blocks it is not size — it is that
-`runtime.c` pulls in all of libm, stdio, `opendir`, `fork`. Hosting zl on zlOS
+`src/runtime/runtime.c` pulls in all of libm, stdio, `opendir`, `fork`. Hosting zl on zlOS
 means writing the ~30 libc functions the interpreter actually touches, plus a
 bump allocator. Call it **800–1,200 lines** and a real REPL on bare metal.
 This is the rung that pays: zlOS becomes self-hosting for its own language.
@@ -324,7 +324,7 @@ that is a fault in one file of the toolchain, not in the kernel.
 
 Keeping the two apart, because the fix is different for each:
 
-- **"the language can't do this"** → needs work in `compilel.c` / the runtime
+- **"the language can't do this"** → needs work in `src/backends/llvm/compilel.c` / the runtime
 - **"nobody has written it yet"** → needs work in `kernel/`
 
 Almost everything here is the first kind.
@@ -354,7 +354,7 @@ loop that has to finish before the next scanline.
 
 ### Numbers are doubles, so 64-bit registers are not representable
 
-`runtime.h:16` — a zl number is a `double`. Exact for every integer up to 2^53,
+`src/runtime/runtime.h:16` — a zl number is a `double`. Exact for every integer up to 2^53,
 and inexact above it. `runtime_kernel.c:882` is explicit that `peek64`/`poke64`
 are deliberately absent for this reason.
 
@@ -435,7 +435,7 @@ floor rather than the kernel's real number.
 
 ### So the order of work is the opposite of the obvious one
 
-Do not start translating drivers. Start in `compilel.c`.
+Do not start translating drivers. Start in `src/backends/llvm/compilel.c`.
 
 1. **Make `band`/`bor`/`bxor`/`bnot`/`shl`/`shr` native instructions** — LLVM
    `and`/`or`/`xor`/`shl`/`lshr` on `i64`, no boxing, no name dispatch. This is
@@ -487,7 +487,7 @@ survive the trip and **64-bit BARs and DMA addresses do not.**
 
 Keeping the two kinds of problem apart, because they need different fixes:
 
-**"The language genuinely cannot do this yet"** — needs work in `compilel.c`:
+**"The language genuinely cannot do this yet"** — needs work in `src/backends/llvm/compilel.c`:
 
 | | Why it blocks drivers |
 |---|---|

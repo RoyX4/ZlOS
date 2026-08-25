@@ -1,6 +1,6 @@
 # MP-00 accessibility proof registry
 
-`kernel/accessibility-registry.json` separates ordinary input/UI tests from
+`kernel/metadata/accessibility-registry.json` separates ordinary input/UI tests from
 complete accessibility workflows. Four host primitives pass: keyboard parity,
 focus lifecycle, visible focus and non-stealing notifications. Density scaling
 and animations-off behavior are partial host proof.

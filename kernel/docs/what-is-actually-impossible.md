@@ -108,7 +108,7 @@ The encouraging list, and the one to plan from:
 | **Document browser** | ~13,200 | Dillo/NetSurf/w3m proved the category |
 | **Sound (AC'97 or HDA)** | ~1,500 | Whole new subsystem, but small and documented |
 | **Software 3D rasterizer** | ~4,000 | SerenityOS runs *Half-Life* on one |
-| **Hosting zl on zlOS** | ~1,200 | `interp.c` is only 1,900 lines. Self-hosting |
+| **Hosting zl on zlOS** | ~1,200 | `src/runtime/interp.c` is only 1,900 lines. Self-hosting |
 | **Drivers written in zl** | ~1,500 compiler + grind | See `beyond-the-kernel.md` §3 |
 
 **Every row is a Kind-1 problem.** Schedule them; none is a wall.

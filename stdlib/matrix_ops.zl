@@ -5,123 +5,123 @@
 
 # ---- mat_rows / mat_cols: dimensions ----
 fn mat_rows(m) {
-  return len(m)
+    return len(m)
 }
 
 fn mat_cols(m) {
-  if len(m) == 0 {
-    return 0
-  }
-  return len(m[0])
+    if len(m) == 0 {
+        return 0
+    }
+    return len(m[0])
 }
 
 # ---- mat_add: element-wise sum of two matrices ----
 fn mat_add(a, b) {
-  ma_out = []
-  ma_i = 0
-  while ma_i < len(a) {
-    ma_rowA = a[ma_i]
-    ma_rowB = b[ma_i]
-    ma_newRow = []
-    ma_j = 0
-    while ma_j < len(ma_rowA) {
-      ma_newRow = push(ma_newRow, ma_rowA[ma_j] + ma_rowB[ma_j])
-      ma_j = ma_j + 1
+    ma_out = []
+    ma_i = 0
+    while ma_i < len(a) {
+        ma_rowA = a[ma_i]
+        ma_rowB = b[ma_i]
+        ma_newRow = []
+        ma_j = 0
+        while ma_j < len(ma_rowA) {
+            ma_newRow = push(ma_newRow, ma_rowA[ma_j] + ma_rowB[ma_j])
+            ma_j = ma_j + 1
+        }
+        ma_out = push(ma_out, ma_newRow)
+        ma_i = ma_i + 1
     }
-    ma_out = push(ma_out, ma_newRow)
-    ma_i = ma_i + 1
-  }
-  return ma_out
+    return ma_out
 }
 
 # ---- mat_transpose: swap rows and columns ----
 fn mat_transpose(m) {
-  mt_rows = len(m)
-  if mt_rows == 0 {
-    return []
-  }
-  mt_cols = len(m[0])
-  mt_out = []
-  mt_c = 0
-  while mt_c < mt_cols {
-    mt_newRow = []
-    mt_r = 0
-    while mt_r < mt_rows {
-      mt_curRow = m[mt_r]
-      mt_newRow = push(mt_newRow, mt_curRow[mt_c])
-      mt_r = mt_r + 1
+    mt_rows = len(m)
+    if mt_rows == 0 {
+        return []
     }
-    mt_out = push(mt_out, mt_newRow)
-    mt_c = mt_c + 1
-  }
-  return mt_out
+    mt_cols = len(m[0])
+    mt_out = []
+    mt_c = 0
+    while mt_c < mt_cols {
+        mt_newRow = []
+        mt_r = 0
+        while mt_r < mt_rows {
+            mt_curRow = m[mt_r]
+            mt_newRow = push(mt_newRow, mt_curRow[mt_c])
+            mt_r = mt_r + 1
+        }
+        mt_out = push(mt_out, mt_newRow)
+        mt_c = mt_c + 1
+    }
+    return mt_out
 }
 
 # ---- mat_mul: standard matrix multiply (a is p x q, b is q x r) ----
 fn mat_mul(a, b) {
-  mm_p = len(a)
-  mm_q = len(b)
-  mm_r = len(b[0])
-  mm_out = []
-  mm_i = 0
-  while mm_i < mm_p {
-    mm_rowA = a[mm_i]
-    mm_newRow = []
-    mm_j = 0
-    while mm_j < mm_r {
-      mm_sum = 0
-      mm_k = 0
-      while mm_k < mm_q {
-        mm_rowB = b[mm_k]
-        mm_sum = mm_sum + mm_rowA[mm_k] * mm_rowB[mm_j]
-        mm_k = mm_k + 1
-      }
-      mm_newRow = push(mm_newRow, mm_sum)
-      mm_j = mm_j + 1
+    mm_p = len(a)
+    mm_q = len(b)
+    mm_r = len(b[0])
+    mm_out = []
+    mm_i = 0
+    while mm_i < mm_p {
+        mm_rowA = a[mm_i]
+        mm_newRow = []
+        mm_j = 0
+        while mm_j < mm_r {
+            mm_sum = 0
+            mm_k = 0
+            while mm_k < mm_q {
+                mm_rowB = b[mm_k]
+                mm_sum = mm_sum + mm_rowA[mm_k] * mm_rowB[mm_j]
+                mm_k = mm_k + 1
+            }
+            mm_newRow = push(mm_newRow, mm_sum)
+            mm_j = mm_j + 1
+        }
+        mm_out = push(mm_out, mm_newRow)
+        mm_i = mm_i + 1
     }
-    mm_out = push(mm_out, mm_newRow)
-    mm_i = mm_i + 1
-  }
-  return mm_out
+    return mm_out
 }
 
 # ---- mat_identity: n x n identity matrix ----
 fn mat_identity(n) {
-  mi_out = []
-  mi_i = 0
-  while mi_i < n {
-    mi_newRow = []
-    mi_j = 0
-    while mi_j < n {
-      if mi_i == mi_j {
-        mi_newRow = push(mi_newRow, 1)
-      } else {
-        mi_newRow = push(mi_newRow, 0)
-      }
-      mi_j = mi_j + 1
+    mi_out = []
+    mi_i = 0
+    while mi_i < n {
+        mi_newRow = []
+        mi_j = 0
+        while mi_j < n {
+            if mi_i == mi_j {
+                mi_newRow = push(mi_newRow, 1)
+            } else {
+                mi_newRow = push(mi_newRow, 0)
+            }
+            mi_j = mi_j + 1
+        }
+        mi_out = push(mi_out, mi_newRow)
+        mi_i = mi_i + 1
     }
-    mi_out = push(mi_out, mi_newRow)
-    mi_i = mi_i + 1
-  }
-  return mi_out
+    return mi_out
 }
 
 # ---- mat_print: pretty-print a matrix with a label ----
 fn mat_print(label, m) {
-  print(label)
-  mp_i = 0
-  while mp_i < len(m) {
-    mp_row = m[mp_i]
-    mp_parts = []
-    mp_j = 0
-    while mp_j < len(mp_row) {
-      mp_parts = push(mp_parts, "" + mp_row[mp_j])
-      mp_j = mp_j + 1
+    print(label)
+    mp_i = 0
+    while mp_i < len(m) {
+        mp_row = m[mp_i]
+        mp_parts = []
+        mp_j = 0
+        while mp_j < len(mp_row) {
+            mp_parts = push(mp_parts, "" + mp_row[mp_j])
+            mp_j = mp_j + 1
+        }
+        print("  [ " + join(mp_parts, ", ") + " ]")
+        mp_i = mp_i + 1
     }
-    print("  [ " + join(mp_parts, ", ") + " ]")
-    mp_i = mp_i + 1
-  }
-  return 0
+    return 0
 }
 
 # ================= SELF-TEST =================

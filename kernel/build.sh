@@ -1,36 +1,38 @@
 #!/usr/bin/env bash
-# kernel/build.sh - compile kernel.zl into a bootable multiboot kernel.
+# kernel/build.sh - compile src/kernel.zl into a bootable multiboot kernel.
 #
-#   kernel.zl -> ../compile (C backend) -> out.c
+#   src/kernel.zl -> ../compile (C backend) -> out.c
 #             -> gcc -m32 -ffreestanding -nostdlib
 #             +  runtime_kernel.c (-DZL_KERNEL_SERIAL: print goes to COM1)
-#             +  boot.S (multiboot header, stack, entry)
-#             +  support.c (outb/inb, UART bring-up)
+#             +  boot/boot.S (multiboot header, stack, entry)
+#             +  src/arch/x86/support.c (outb/inb, UART bring-up)
 #             -> kernel.elf, bootable by QEMU -kernel
 set -euo pipefail
 cd "$(dirname "$0")"
 
-python3 ./gen-app-manifest.py --check
-python3 ./gen-build-identity.py --check
+python3 ./tools/generators/gen-app-manifest.py --check
+python3 ./tools/generators/gen-build-identity.py --check
 
-SRC=${1:-kernel.zl}
+SRC=${1:-src/kernel.zl}
 [ -x ../compile ] || { echo "build the toolchain first: ../build.sh"; exit 1; }
-if [ "$SRC" != "kernel.zl" ]; then
+if [ "$SRC" != "src/kernel.zl" ]; then
     echo "variant source: do not promote canonical runtime identity receipts; zlosboot variants strip their report calls" >&2
 fi
 
-../compile "$SRC" >/dev/null
+ZL_STDLIB="$PWD/apps" ../compile "$SRC" >/dev/null
 cp out.c _gen.c            # compile writes out.c into the CWD, not ..
 
+INCLUDES=$(find src boot -type d -printf ' -I%p' | sort)
 CFLAGS="-m32 -O2 -ffreestanding -nostdlib -fno-stack-protector -fno-pic
-        -fno-builtin -Wall -Wextra -Werror -Wno-unused-parameter -I.."
+        -fno-builtin -Wall -Wextra -Werror -Wno-unused-parameter
+        -I.. -I../src/runtime $INCLUDES"
 
 # shellcheck disable=SC2086
 gcc $CFLAGS -DZL_KERNEL_SERIAL -c ../freestanding/runtime_kernel.c -o _rt.o
 # shellcheck disable=SC2086
 gcc $CFLAGS -c _gen.c    -o _gen.o
 # shellcheck disable=SC2086
-gcc $CFLAGS -c gdt.c     -o _gdt.o
+gcc $CFLAGS -c boot/gdt.c -o _gdt.o
 
 # THE SHARED SOURCE LIST. See ./SOURCES - one file, read by all four build
 # scripts, so a new driver cannot be added to the build you happen to be
@@ -42,7 +44,7 @@ while read -r f; do
     # Interrupt handlers must not touch SSE - an ISR that clobbers XMM without
     # saving it lands on the zl interpreter, where every number is a double.
     EXTRA=""
-    case "$f" in idt.c|apic.c) EXTRA="-mgeneral-regs-only" ;; esac
+    case "$f" in */idt.c|*/apic.c) EXTRA="-mgeneral-regs-only" ;; esac
     # shellcheck disable=SC2086
     gcc $CFLAGS $EXTRA -c "$f" -o "$o"
     OBJS="$OBJS $o"
@@ -51,24 +53,24 @@ done < SOURCES
 # Freestanding interpreter: repo-root lexer/parser/interp + ksetjmp.
 # Not in SOURCES - those files live above kernel/.
 # shellcheck disable=SC2086
-gcc $CFLAGS -DZL_FREESTANDING -DBUILD_PARSER -c ../lexer.c -o _lexer.o
+gcc $CFLAGS -DZL_FREESTANDING -DBUILD_PARSER -c ../src/frontend/lexer.c -o _lexer.o
 # shellcheck disable=SC2086
-gcc $CFLAGS -DZL_FREESTANDING -DBUILD_INTERP -c ../parser.c -o _parser.o
+gcc $CFLAGS -DZL_FREESTANDING -DBUILD_INTERP -c ../src/frontend/parser.c -o _parser.o
 # shellcheck disable=SC2086
-gcc $CFLAGS -DZL_FREESTANDING -c ../interp.c -o _interp.o
+gcc $CFLAGS -DZL_FREESTANDING -c ../src/runtime/interp.c -o _interp.o
 # shellcheck disable=SC2086
-gcc $CFLAGS -c ksetjmp.S -o _ksetjmp.o
+gcc $CFLAGS -c src/arch/x86/ksetjmp.S -o _ksetjmp.o
 OBJS="$OBJS _lexer.o _parser.o _interp.o _ksetjmp.o"
 
-gcc $CFLAGS -c smp_trampoline.S -o _smptr.o
-gcc -m32 -c boot.S -o _boot.o
+gcc $CFLAGS -c boot/smp_trampoline.S -o _smptr.o
+gcc -m32 -c boot/boot.S -o _boot.o
 
 # No -lgcc. __divdi3/__moddi3 (64-bit division on a 32-bit target) are the
 # only things the kernel took from libgcc, and divmod.c now supplies them.
 # Nothing GNU is linked into the kernel any more - only gcc-the-tool that
 # compiled the C, which nativegen is on track to replace.
 # shellcheck disable=SC2086
-ld -m elf_i386 -T link.ld -o kernel.elf _boot.o _gen.o _rt.o _gdt.o _smptr.o $OBJS
+ld -m elf_i386 -T boot/link.ld -o kernel.elf _boot.o _gen.o _rt.o _gdt.o _smptr.o $OBJS
 
 echo "built kernel.elf"
 echo "  undefined symbols: $(nm -u kernel.elf 2>/dev/null | wc -l)   (0 = no libc, no OS)"

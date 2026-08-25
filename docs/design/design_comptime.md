@@ -5,8 +5,8 @@
 **Scope:** one new keyword (`comptime`), one new node type, one reification function,
 one fuel counter, one purity partition over the existing builtin table, and one
 on-disk cache format. No code is changed by this document.
-Line citations are against the tree as it stood on 2026-08-02. `lexer.c`,
-`parser.c` and the numeric backends were being edited concurrently (floats), so
+Line citations are against the tree as it stood on 2026-08-02. `src/frontend/lexer.c`,
+`src/frontend/parser.c` and the numeric backends were being edited concurrently (floats), so
 treat line numbers as pointers, not anchors.
 
 **Related:** `design_records.md`, `design_maps_v2.md`, `design_nullable.md`,
@@ -26,17 +26,17 @@ Six claims, and they are the whole design:
 
 1. **The "zl already has the interpreter in the same binary" argument is
    *nearly* true, and the gap is small but real.** `compile.exe` does **not**
-   link `interp.c` today (`build.bat:31`). Closing that gap is one `#ifndef`
+   link `src/runtime/interp.c` today (`build.bat:31`). Closing that gap is one `#ifndef`
    guard and a two-function header — the pattern already exists twice in the
-   tree (`lexer.c:412`, `parser.c:1109`). Cost: ~30 lines, not a new evaluator.
+   tree (`src/frontend/lexer.c:412`, `src/frontend/parser.c:1109`). Cost: ~30 lines, not a new evaluator.
    Zig wrote a second evaluator; zl genuinely does not have to. §1.
 2. **Comptime runs the *whole* language minus a deny-list**, not a hand-picked
    subset. The deny-list is 11 builtins, all of which are already identifiable
-   by name in one `strcmp` ladder (`interp.c:420`). §3.
+   by name in one `strcmp` ladder (`src/runtime/interp.c:420`). §3.
 3. **Values reach runtime code by *reification*: `Value` → `Node`.** Numbers,
    strings, bools and lists of those become `N_NUMBER`/`N_STRING`/`N_BOOL`/
    `N_LIST`. Functions do not reify. The splice mechanism is already in the
-   tree — `parse_slot_expr` (`parser.c:151`) does exactly this dance for
+   tree — `parse_slot_expr` (`src/frontend/parser.c:151`) does exactly this dance for
    f-strings. §4.
 4. **Constant folding is the degenerate case and comes free**, and it
    incidentally dissolves the `+` overloading blocker *for folded expressions
@@ -44,7 +44,7 @@ Six claims, and they are the whole design:
    §5.
 5. **Comptime does NOT subsume generics in zl, and should not try to in v1.**
    Zig's `fn f(comptime T: type)` needs types-as-values, `.` member access
-   (`interp.c:1521` still errors: `"member access (.) isn't supported yet"`),
+   (`src/runtime/interp.c:1521` still errors: `"member access (.) isn't supported yet"`),
    and sound per-function scoping (`design_scoping_decision.md`). zl has none of
    the three. §6 says so plainly rather than pretending.
 6. **Reproducibility is the whole risk, and an LLM call does not satisfy it.**
@@ -73,10 +73,10 @@ expecting a free lunch.
 `build.bat:31`:
 
 ```
-cl /nologo /W4 /DBUILD_PARSER /DBUILD_INTERP compile.c parser.c lexer.c /Fe:compile.exe
+cl /nologo /W4 /DBUILD_PARSER /DBUILD_INTERP src/backends/c/compile.c src/frontend/parser.c src/frontend/lexer.c /Fe:compile.exe
 ```
 
-`interp.c` is not on that line. `compile.exe` is lexer + parser + C emitter.
+`src/runtime/interp.c` is not on that line. `compile.exe` is lexer + parser + C emitter.
 Same for `nativegen.exe` (`build.bat:35`). The interpreter and the compiler share
 a **front end**, not an address space.
 
@@ -84,17 +84,17 @@ a **front end**, not an address space.
 
 Small, and the pattern is already established twice.
 
-`lexer.c:412` and `parser.c:1109` each wrap their demo `main()` in a build guard
+`src/frontend/lexer.c:412` and `src/frontend/parser.c:1109` each wrap their demo `main()` in a build guard
 so the file can be linked into a larger program:
 
 ```c
-#ifndef BUILD_PARSER      /* lexer.c:412  */
-#ifndef BUILD_INTERP      /* parser.c:1109 */
+#ifndef BUILD_PARSER      /* src/frontend/lexer.c:412  */
+#ifndef BUILD_INTERP      /* src/frontend/parser.c:1109 */
 ```
 
-`interp.c:1646`'s `main()` has **no such guard** — it is the last link in the
+`src/runtime/interp.c:1646`'s `main()` has **no such guard** — it is the last link in the
 chain, so it never needed one. Adding `#ifndef BUILD_COMPTIME` around it, plus a
-tiny `interp.h` exposing two entry points, makes `interp.c` linkable into
+tiny `interp.h` exposing two entry points, makes `src/runtime/interp.c` linkable into
 `compile.exe`, `compilel.exe` and `nativegen.exe`:
 
 ```c
@@ -103,7 +103,7 @@ void  zl_interp_init(void);              /* build g_global, define builtins */
 Value zl_interp_eval_node(Node *n);      /* eval one expression in g_global */
 ```
 
-Every other function in `interp.c` is `static` and stays that way.
+Every other function in `src/runtime/interp.c` is `static` and stays that way.
 
 **Two real costs, stated now rather than discovered later:**
 
@@ -113,10 +113,10 @@ Every other function in `interp.c` is `static` and stays that way.
   selling point is "no C compiler in the output", now contains a tree-walker it
   never runs at runtime. That is acceptable — it is *compile*-time bloat, not
   runtime bloat — but it is not free.
-- **`compiler.zl` cannot do this at all.** The self-hosted compiler
-  (`compiler.zl`, 716 lines) has no interpreter to call. It reads a file
-  (`compiler.zl:712`, `input = read("input.zl")`) and writes C
-  (`compiler.zl:715`, `write("out.c", result)`). For `compiler.zl` to support
+- **`src/selfhost/compiler.zl` cannot do this at all.** The self-hosted compiler
+  (`src/selfhost/compiler.zl`, 716 lines) has no interpreter to call. It reads a file
+  (`src/selfhost/compiler.zl:712`, `input = read("input.zl")`) and writes C
+  (`src/selfhost/compiler.zl:715`, `write("out.c", result)`). For `src/selfhost/compiler.zl` to support
   `comptime` it would have to **contain a zl interpreter written in zl** — which
   is a real and interesting project, and is exactly how a mature self-hosted
   language ends up, but it is not v1. §12 covers what this means for the gate.
@@ -146,7 +146,7 @@ z = (comptime a) + b          # explicit when you want the other one
 ```
 
 Precedence choice: **prefix, at the same level as `not`** (`parse_not`,
-`compiler.zl:269`, mirrored by `parse_unary` in `parser.c`). This makes
+`src/selfhost/compiler.zl:269`, mirrored by `parse_unary` in `src/frontend/parser.c`). This makes
 `comptime a + b` fold the whole expression, which is what people mean 95% of the
 time, and the parenthesised form is available for the other 5%.
 
@@ -182,12 +182,12 @@ writing it as `comptime { X = e }` every time is noise.
 
 | Alternative | Why not |
 |---|---|
-| `@compileTime(...)` (Zig-ish sigil) | `@` is not lexed today. `comptime` costs **one string in one array** — `lexer.c:48`, the `keywords[]` list, which currently holds 14 words. Adding a sigil costs a branch in `lex_symbol` and a new token class. |
+| `@compileTime(...)` (Zig-ish sigil) | `@` is not lexed today. `comptime` costs **one string in one array** — `src/frontend/lexer.c:48`, the `keywords[]` list, which currently holds 14 words. Adding a sigil costs a branch in `lex_symbol` and a new token class. |
 | `$expr` (Nim/Terra-ish) | Same lexer cost, worse readability, and `$` is wanted later for shell-adjacent things. |
 | `const` implying comptime (C++ `constexpr` drift) | zl has no `const`. Introducing one *and* overloading it with evaluation semantics is two features wearing one word. |
 | A separate meta-language | This is the thing zl specifically gets to avoid. Non-starter. |
 
-**Keyword cost, precisely.** `lexer.c:46-58`:
+**Keyword cost, precisely.** `src/frontend/lexer.c:46-58`:
 
 ```c
 static int is_keyword(const char *word)
@@ -202,10 +202,10 @@ static int is_keyword(const char *word)
 ```
 
 One line. And a corpus check is required before landing it, because a keyword is
-a word the language steals from you (`lexer.c:32-33` says exactly that): grep the
+a word the language steals from you (`src/frontend/lexer.c:32-33` says exactly that): grep the
 110 `.zl` files for `comptime` used as an identifier. I have not run that grep;
-whoever implements must, and must also check `compiler.zl`'s own `is_keyword`
-(`compiler.zl:36`), which is a **separate copy of the same list** and will
+whoever implements must, and must also check `src/selfhost/compiler.zl`'s own `is_keyword`
+(`src/selfhost/compiler.zl:36`), which is a **separate copy of the same list** and will
 silently disagree if only one is edited. That divergence is a live parity hazard
 (`design_selfhost_parity.md`).
 
@@ -230,10 +230,10 @@ at comptime for free. An allow-list throws that away.
 
 ### 3.2 The deny-list, with line numbers
 
-`call_builtin` (`interp.c:420`) dispatches by name through a `strcmp` ladder.
+`call_builtin` (`src/runtime/interp.c:420`) dispatches by name through a `strcmp` ladder.
 Eleven of those names are not functions of their arguments:
 
-| Builtin | `interp.c` | Why denied |
+| Builtin | `src/runtime/interp.c` | Why denied |
 |---|---|---|
 | `read` | 728 | Filesystem read — build depends on tree state. §9. |
 | `write` | 742 | Filesystem **write** — a compile that mutates the world. |
@@ -270,50 +270,50 @@ general optimisation strategy. Say so in the docs or people will be surprised.
 
 ### 4.1 Reification: `Value` → `Node`
 
-This is the one genuinely new function. `Value` (`interp.c:32-45`) is a runtime
+This is the one genuinely new function. `Value` (`src/runtime/interp.c:32-45`) is a runtime
 struct:
 
 ```c
 typedef enum { V_NIL, V_NUM, V_STR, V_BOOL, V_LIST, V_FN } ValueType;
 ```
 
-`Node` (`parser.h:33-42`) is the tree the backends consume. Reification maps one
+`Node` (`src/frontend/parser.h:33-42`) is the tree the backends consume. Reification maps one
 to the other:
 
 | `ValueType` | Reifies to | Notes |
 |---|---|---|
 | `V_NUM` | `N_NUMBER`, `n->text` = printed double | Must round-trip. §4.2. |
 | `V_STR` | `N_STRING` | Must fit `MAX_TEXT` (128). §4.2. |
-| `V_BOOL` | `N_BOOL`, text `"true"`/`"false"` | Matches `eval`'s `strcmp(n->text,"true")` at `interp.c:1440`. |
+| `V_BOOL` | `N_BOOL`, text `"true"`/`"false"` | Matches `eval`'s `strcmp(n->text,"true")` at `src/runtime/interp.c:1440`. |
 | `V_LIST` | `N_LIST` with reified kids | Recursive; cycle-checked. |
 | `V_NIL` | `N_CALL` to `nil` | zl has no nil literal; `nil` is a builtin. |
 | `V_FN` | **error** | §4.3. |
 
 ### 4.2 Three sharp edges, all real
 
-**(a) `MAX_TEXT` is 128** (`lexer.h:10`), and `Node.text` is a fixed
-`char text[MAX_TEXT]` (`parser.h:35`). A comptime expression that produces a
+**(a) `MAX_TEXT` is 128** (`src/frontend/lexer.h:10`), and `Node.text` is a fixed
+`char text[MAX_TEXT]` (`src/frontend/parser.h:35`). A comptime expression that produces a
 2 KB string — which is *exactly* what `ai_rule` produces — **cannot be reified
 into one `N_STRING` node** without either raising `MAX_TEXT` (touches every
-token, every node, both `.exe` sizes and `compiler.zl`'s parallel structures) or
+token, every node, both `.exe` sizes and `src/selfhost/compiler.zl`'s parallel structures) or
 splitting into a chain of `N_BINARY("+")` concatenations. I lean to the chain,
 because it changes no shared structure; but it makes `str()` of a generated rule
 ugly if anyone prints the tree. **This is unresolved and I am flagging it rather
 than guessing.**
 
 **(b) Doubles must round-trip.** `N_NUMBER` stores text and `eval` does
-`atof(n->text)` (`interp.c:1438`). Print with `%.17g`, and add a self-check in
+`atof(n->text)` (`src/runtime/interp.c:1438`). Print with `%.17g`, and add a self-check in
 the reifier: `atof(printed) == original`, else hard error. Without this, a
 comptime float silently loses a bit and the *fixpoint* is what discovers it.
 
 **(c) String escaping.** Reifying `V_STR` means writing a source-level string
 literal, so quotes, backslashes and newlines must be re-escaped to whatever the
-lexer accepts. `unescape` exists in `compiler.zl:39`; the inverse does not exist
+lexer accepts. `unescape` exists in `src/selfhost/compiler.zl:39`; the inverse does not exist
 anywhere and must be written, once, and shared.
 
 ### 4.3 Functions do not reify — and why that is fine
 
-`V_FN` holds `Node *fn` (`interp.c:34-44`). Reifying a closure would mean
+`V_FN` holds `Node *fn` (`src/runtime/interp.c:34-44`). Reifying a closure would mean
 emitting the function's whole body, which is a different feature (staging /
 quasiquotation) and pulls in the environment-capture problem that
 `design_scoping_decision.md` has not resolved. zl has no closures anyway. **A
@@ -323,7 +323,7 @@ blocks §6.
 
 ### 4.4 The splice mechanism already exists
 
-`parser.c:151`, `parse_slot_expr` — the f-string implementation:
+`src/frontend/parser.c:151`, `parse_slot_expr` — the f-string implementation:
 
 ```c
 static Node *parse_slot_expr(const char *src, int line)
@@ -341,7 +341,7 @@ static Node *parse_slot_expr(const char *src, int line)
 This is a compiler that **lexes a string produced during parsing, parses it into
 the same tree, and restores its cursor**. It was written for `f"hi {name}"`. It
 is, mechanically, the entire "generated source becomes real source" pathway, and
-`lex_text` is already exported for it (`lexer.h:43`). §11's `ai_rule` reuses this
+`lex_text` is already exported for it (`src/frontend/lexer.h:43`). §11's `ai_rule` reuses this
 function unchanged.
 
 That precedent matters more than it sounds: it means text-to-AST splicing is
@@ -356,7 +356,7 @@ source.zl
  lex  -->  parse  -->  TREE with N_COMPTIME nodes
                             |
                             v
-                     COMPTIME PASS  <-- links interp.c (§1.2)
+                     COMPTIME PASS  <-- links src/runtime/interp.c (§1.2)
                        - walk tree
                        - for each N_COMPTIME: eval() it, with fuel (§8)
                        - reify Value -> Node (§4.1)
@@ -367,7 +367,7 @@ source.zl
                             |
               +-------------+-------------+
               v             v             v
-          compile.c     compilel.c    nativegen.c
+          src/backends/c/compile.c     src/backends/llvm/compilel.c    src/backends/native/nativegen.c
 ```
 
 **The backends do not change.** That is the design's best property: a comptime
@@ -393,7 +393,7 @@ The stated language-level blocker is that `+` is overloaded and tested:
 `add(2,3) == 5` and `add("n=",5) == "n=5"`, so no integer add can be emitted
 without knowing both operand types.
 
-At comptime that problem does not exist, because `eval_plus` (`interp.c:1180`)
+At comptime that problem does not exist, because `eval_plus` (`src/runtime/interp.c:1180`)
 has the actual `Value`s in hand:
 
 ```c
@@ -411,7 +411,7 @@ back door around the annotation work.
 
 ### 5.3 What the backends get
 
-For `compilel.c` and `nativegen.c` — both integer-oriented — folded literals mean
+For `src/backends/llvm/compilel.c` and `src/backends/native/nativegen.c` — both integer-oriented — folded literals mean
 loop bounds, mask constants and lookup tables arrive as immediates. Given
 MASTER_PLAN §10's ruling that **LLVM is the optimiser and we never write our own
 passes**, note that LLVM would have folded most of this anyway. The value of
@@ -438,11 +438,11 @@ genuinely elegant and it is why this section exists.
 
 ### 6.2 Three things zl lacks, all load-bearing
 
-1. **Types are not values.** `ValueType` (`interp.c:32`) has six members and none
+1. **Types are not values.** `ValueType` (`src/runtime/interp.c:32`) has six members and none
    of them is "a type". There is no `V_TYPE`, no way to write `int` as an
-   expression, and `type(x)` (`interp.c`, in the builtin ladder) returns a
+   expression, and `type(x)` (`src/runtime/interp.c`, in the builtin ladder) returns a
    *string*. Making types first-class is a bigger change than `comptime` itself.
-2. **`.` does not work.** `interp.c:1521`:
+2. **`.` does not work.** `src/runtime/interp.c:1521`:
 
    ```c
    case N_MEMBER:
@@ -456,7 +456,7 @@ genuinely elegant and it is why this section exists.
 3. **Monomorphisation needs sound per-function scoping.** Specialising a function
    body means substituting into it and re-typing it. Today an assignment inside a
    function writes the **global** slot when a global of that name exists
-   (`interp.c:180`, `env_assign`) — `design_scoping_decision.md` establishes that
+   (`src/runtime/interp.c:180`, `env_assign`) — `design_scoping_decision.md` establishes that
    this makes per-function inference unsound and that the engines already
    disagree about it. You cannot soundly specialise a function whose body's
    meaning depends on which globals happen to exist at the call site.
@@ -500,7 +500,7 @@ feature.
 
 ### 7.2 Where the flag comes from — and where it must not
 
-`env()` is on the deny-list (§3.2, `interp.c:1165`) and this is exactly why. If
+`env()` is on the deny-list (§3.2, `src/runtime/interp.c:1165`) and this is exactly why. If
 `TARGET` came from the environment, two developers with different shells would
 compile different programs from identical source, and `verify.ps1` would still
 pass for both. That is a reproducibility hole disguised as a convenience.
@@ -540,14 +540,14 @@ it is reviewable.
 
 ### 8.2 The precedent is already there
 
-`interp.c:207` already does the analogous thing for recursion:
+`src/runtime/interp.c:207` already does the analogous thing for recursion:
 
 ```c
 #define MAX_CALL_DEPTH 2000
 static int   g_depth = 0;
 ```
 
-and the comment above it (`interp.c:200-206`) records exactly why: without the
+and the comment above it (`src/runtime/interp.c:200-206`) records exactly why: without the
 counter the process was "KILLED (STATUS_STACK_OVERFLOW) with no message and with
 every buffered line of output lost." A comptime infinite loop is the same failure
 wearing a different hat, and deserves the same fix.
@@ -563,7 +563,7 @@ nothing. Measure before assuming it is free; I have not.
 
 ## 9. The filesystem
 
-`read` (`interp.c:728`) is the denial that costs something real. Reading a data
+`read` (`src/runtime/interp.c:728`) is the denial that costs something real. Reading a data
 file at compile time and baking it into the binary is one of comptime's genuinely
 great uses — Zig's `@embedFile`, Rust's `include_str!`.
 
@@ -581,7 +581,7 @@ a sidecar `.deps` file. A rebuild that finds a changed hash **fails loudly**
 rather than silently producing a different binary. The build is a function of
 (source, flags, manifest), and all three are on disk and diffable.
 
-`write` (`interp.c:742`) and `write_bytes` are **denied unconditionally, no
+`write` (`src/runtime/interp.c:742`) and `write_bytes` are **denied unconditionally, no
 option C**. A compiler that mutates the filesystem as a side effect of
 compilation is not a compiler, and the failure modes (two parallel builds, a
 comptime block that overwrites its own source) are unbounded. §10's blessing
@@ -599,11 +599,11 @@ part that can quietly destroy the project's central invariant.
 `verify.ps1:6-10`:
 
 ```
-#   1. SELF-HOSTING FIXPOINT.  compiler.zl compiled by the interpreter
+#   1. SELF-HOSTING FIXPOINT.  src/selfhost/compiler.zl compiled by the interpreter
 #      (gen1.c) builds a compiler that reproduces its own source
 #      byte-identically (gen2.c). The property is  f(f(x)) == f(x)  --
 #      compare gen1 to gen2, NOT to a hash from last week. The hash
-#      legitimately changes whenever compiler.zl changes.
+#      legitimately changes whenever src/selfhost/compiler.zl changes.
 ```
 
 Two properties are bundled there and they must be separated:
@@ -611,7 +611,7 @@ Two properties are bundled there and they must be separated:
 - **Determinism:** compiling the same source twice gives byte-identical output.
 - **Closure:** the compiler compiled by itself reproduces itself.
 
-`verify.ps1` runs `interp.exe compiler.zl`, saves `out.c` as `_fx_gen1.c`, builds
+`verify.ps1` runs `interp.exe src/selfhost/compiler.zl`, saves `out.c` as `_fx_gen1.c`, builds
 it, runs the result, saves `out.c` as `_fx_gen2.c`, and compares SHA-256
 (`verify.ps1:22-35`). Both runs happen **in the same invocation, seconds apart**.
 
@@ -619,7 +619,7 @@ it, runs the result, saves `out.c` as `_fx_gen2.c`, and compares SHA-256
 
 An LLM call is nondeterministic across runs but *usually* stable within a few
 seconds at temperature 0 with a warm cache. So a `comptime ai_rule(...)` inside
-`compiler.zl` would:
+`src/selfhost/compiler.zl` would:
 
 - pass `verify.ps1` today,
 - pass it tomorrow,
@@ -707,8 +707,8 @@ detect "ransomware" { RANSOMWARE }
    question* and must miss the cache rather than silently reuse an old answer.
 4. Looks up `h` in `blessed.lock`.
    - **Miss:** compile fails: `ai_rule: no blessed output for <h>. Run: zl bless prog.zl`.
-   - **Hit:** reads `rules/<h>.zl`, feeds it to `lex_text` (`lexer.h:43`) and the
-     parser's slot machinery (`parser.c:151`) — the same path f-strings already
+   - **Hit:** reads `rules/<h>.zl`, feeds it to `lex_text` (`src/frontend/lexer.h:43`) and the
+     parser's slot machinery (`src/frontend/parser.c:151`) — the same path f-strings already
      use — and splices the resulting block in place of the `N_COMPTIME` node.
 5. From here it is ordinary zl. The backends see a rule they cannot distinguish
    from a hand-written one, because it *is* one.
@@ -758,7 +758,7 @@ That last one is the argument. Everything else is convenience.
 Honest list:
 
 - **Floor 3's rule language.** `it.parent`, `OFFICE_APPS`, `10s`, `block(it)!` —
-  none of that parses today. `.` is unimplemented (`interp.c:1521`) and duration
+  none of that parses today. `.` is unimplemented (`src/runtime/interp.c:1521`) and duration
   literals are an OPEN item in MASTER_PLAN §10. **`ai_rule` is unbuildable until
   Floor 3 lands**, which is exactly what MASTER_PLAN §6 says (*"Floor 2 now sits
   above floor 3"*). This document does not change that ordering; it specifies the
@@ -776,23 +776,23 @@ Honest list:
 
 **Stated as uncertainties rather than guessed at.**
 
-1. **`compiler.zl` cannot execute `comptime`** (§1.2). So the moment `comptime`
-   appears in `compiler.zl` itself, the fixpoint breaks — `interp.exe` would fold
+1. **`src/selfhost/compiler.zl` cannot execute `comptime`** (§1.2). So the moment `comptime`
+   appears in `src/selfhost/compiler.zl` itself, the fixpoint breaks — `interp.exe` would fold
    it and the self-hosted compiler would not. Two ways out: (a) forbid `comptime`
-   in `compiler.zl` by convention and add a grep to `verify.ps1`; (b) have
-   `compiler.zl` treat `comptime e` as `e` (ignore the keyword), which is
+   in `src/selfhost/compiler.zl` by convention and add a grep to `verify.ps1`; (b) have
+   `src/selfhost/compiler.zl` treat `comptime e` as `e` (ignore the keyword), which is
    semantically wrong the instant anything impure or fuel-bounded is involved. I
    lean to (a) and I am not confident. **This needs a decision before
    implementation, not during.**
 2. **The gate does not cover this feature.** `verify.ps1`'s only input is
-   `compiler.zl`, so it proves closure over one file — and `compiler.zl` already
+   `src/selfhost/compiler.zl`, so it proves closure over one file — and `src/selfhost/compiler.zl` already
    mishandles 63 of 110 `.zl` files while staying green. Comptime is tested by
    `run_tests.ps1` or it is untested. Budget a suite; the 8 existing suites and
    2,107 checks are the bar.
 3. **Order of evaluation between comptime blocks is unspecified above.** If two
    comptime blocks both assign `X`, which wins? Source order is the obvious
    answer and probably right, but it interacts with the global assignment rule
-   (`interp.c:180`) in ways I have not traced. Flagging, not deciding.
+   (`src/runtime/interp.c:180`) in ways I have not traced. Flagging, not deciding.
 4. **Comptime error messages will be bad at first.** An error inside a comptime
    evaluation is reported by `runtime_error`, which knows nothing about the
    compile-time context. A user will see `'x' doesn't exist yet` with no
@@ -815,17 +815,17 @@ the whole system, so these numbers are not small in relative terms).
 
 | Piece | Lines | Where | Confidence |
 |---|---|---|---|
-| `comptime` keyword | 1 | `lexer.c:48` | high |
-| `is_keyword` parity fix | 1 | `compiler.zl:36` | high |
-| `N_COMPTIME` node type | 1 | `parser.h:11-30` | high |
-| Parsing all three forms (§2.1–2.3) | ~60 | `parser.c` | high |
-| `#ifndef BUILD_COMPTIME` + `interp.h` | ~30 | `interp.c:1646`, new header | high |
-| Deny-list check in `call_builtin` | ~25 | `interp.c:420` | high |
-| Fuel counter | ~15 | `interp.c` `eval`/`exec` | medium |
+| `comptime` keyword | 1 | `src/frontend/lexer.c:48` | high |
+| `is_keyword` parity fix | 1 | `src/selfhost/compiler.zl:36` | high |
+| `N_COMPTIME` node type | 1 | `src/frontend/parser.h:11-30` | high |
+| Parsing all three forms (§2.1–2.3) | ~60 | `src/frontend/parser.c` | high |
+| `#ifndef BUILD_COMPTIME` + `interp.h` | ~30 | `src/runtime/interp.c:1646`, new header | high |
+| Deny-list check in `call_builtin` | ~25 | `src/runtime/interp.c:420` | high |
+| Fuel counter | ~15 | `src/runtime/interp.c` `eval`/`exec` | medium |
 | Reification `Value`→`Node` | ~140 | new `comptime.c` | medium — §4.2 unresolved |
 | The comptime pass (tree walk + replace) | ~150 | new `comptime.c` | medium |
 | `comptime if` branch deletion | ~40 | `comptime.c` | medium |
-| `-D` flag plumbing + manifest emission | ~60 | `compile.c` and friends | medium |
+| `-D` flag plumbing + manifest emission | ~60 | `src/backends/c/compile.c` and friends | medium |
 | Option-C read manifest (§9) | ~70 | `comptime.c` | medium |
 | Backend `default:` guards (×4) | ~12 | all backends | high |
 | Test suite | ~250 | `tests/` | high |
@@ -836,7 +836,7 @@ the whole system, so these numbers are not small in relative terms).
 | **Floor-2 subtotal** | **~430** | | |
 
 **Core: ~855 lines, of which ~600 is new code in one new file.** That is
-comparable to `compile.c` (496) or `nativegen.c` (509) — a real feature, not a
+comparable to `src/backends/c/compile.c` (496) or `src/backends/native/nativegen.c` (509) — a real feature, not a
 weekend.
 
 **Depends on:**

@@ -1,6 +1,6 @@
 # Design: Maps / Dictionaries for zl — revision 2
 
-**Status:** proposal, supersedes `docs/design/design_maps.md` · **Wave:** W2 (syntax
+**Status:** proposal, supersedes `docs/archive/superseded/design_maps.md` · **Wave:** W2 (syntax
 and surface) · **Date:** 2026-08-02
 **Scope:** one new value type, one literal form, six built-ins. No code is
 changed by this document.
@@ -42,12 +42,12 @@ The six decisions, each argued below:
 | # | `design_maps.md` said | Now | Cause |
 |---|---|---|---|
 | 1 | "ship the assoc-list first, hash table later when a profile shows it hot" | **Hash table in v1** | The profile exists. §2 quantifies it: the assoc-list *is* what the corpus already has, hand-written, in `dijkstra.zl` and `dict.zl`. Shipping it as a builtin buys nothing but syntax. |
-| 2 | "One lexer change is required: `:` is not in the allowed symbol set (`lexer.c:192`)" | **No lexer change at all** | The ternary landed. `:` is accepted at `lexer.c:256` and the comment above it (`lexer.c:252-255`) already reasons about the character. |
-| 3 | "indexed assignment is a semantics change in the two back-ends… interp: `can only assign to a name for now` (`interp.c:677`)" | **Indexed assignment already works for lists**, including the compound `op=` form | `interp.c:1563-1580`. The error text is now `"can only assign to a name or a list index"` (`interp.c:1582`). A map lvalue is one more arm in a `switch` that already has the shape. |
-| 4 | "`values_equal` … compares numbers and strings and refuses lists/maps — a good, simple key contract" | **False. Lists compare structurally** | `interp.c:1244-1252` recurses into list elements with a depth guard. Equality no longer excludes lists, so "lists can't be keys" has to be argued on mutability grounds instead — see §6. |
+| 2 | "One lexer change is required: `:` is not in the allowed symbol set (`src/frontend/lexer.c:192`)" | **No lexer change at all** | The ternary landed. `:` is accepted at `src/frontend/lexer.c:256` and the comment above it (`src/frontend/lexer.c:252-255`) already reasons about the character. |
+| 3 | "indexed assignment is a semantics change in the two back-ends… interp: `can only assign to a name for now` (`src/runtime/interp.c:677`)" | **Indexed assignment already works for lists**, including the compound `op=` form | `src/runtime/interp.c:1563-1580`. The error text is now `"can only assign to a name or a list index"` (`src/runtime/interp.c:1582`). A map lvalue is one more arm in a `switch` that already has the shape. |
+| 4 | "`values_equal` … compares numbers and strings and refuses lists/maps — a good, simple key contract" | **False. Lists compare structurally** | `src/runtime/interp.c:1244-1252` recurses into list elements with a depth guard. Equality no longer excludes lists, so "lists can't be keys" has to be argued on mutability grounds instead — see §6. |
 | 5 | "Ordering: … the spec is unordered" | **Insertion order is guaranteed** | The three-engine byte-identical gate makes unspecified order a liability, not freedom. §8. |
 | 6 | "Missing key reads `nil`; no crash" | **`m[k]` errors; `get` is the total form** | Two reasons that did not exist on 07-29: `nil()` is already the sentinel in 33 corpus functions, and a nullable/Option type is now on the roadmap, which makes `m[k] : T` versus `get(m,k) : T?` the difference between a usable typed map and one that needs a nil-check at every read. §9. |
-| 7 | Two engines to update (`interp.c`, `compile.c`) | **Five** | `compilef.c`, `compilel.c`, `nativegen.c` exist now. §11 states what each does — for three of them the answer is "refuse, loudly". |
+| 7 | Two engines to update (`src/runtime/interp.c`, `src/backends/c/compile.c`) | **Five** | `src/backends/c/compilef.c`, `src/backends/llvm/compilel.c`, `src/backends/native/nativegen.c` exist now. §11 states what each does — for three of them the answer is "refuse, loudly". |
 | 8 | "`values(m)` / `del(m,k)`? Omit until a real program needs them" | **`values` ships in v1**, `del` still deferred | `stdlib/dict.zl:38-44` already ships `dvalues`; the real program asked. |
 
 Unchanged and still endorsed from revision 1: the literal shape `[k: v]`, the
@@ -97,7 +97,7 @@ Let `n` = nodes, `m` = directed edges. Reading `stdlib/dijkstra.zl`:
   the algorithm starts.
 - **Min-scan** (`:82-92`), once per outer iteration: walks all `n` dists
   entries, and for each one calls `contains(dk_visited, dk_dp[0])`
-  (`:87`). `contains` is a linear scan (`interp.c:619-628`) over a list that
+  (`:87`). `contains` is a linear scan (`src/runtime/interp.c:619-628`) over a list that
   averages `n/2` entries. That is `n²/2` `values_equal` calls per outer
   iteration and, over `n` iterations, **n³/2**.
 - **Adjacency** (`:99`): `dj_neighbors` (`:29-36`) scans the whole graph list
@@ -130,7 +130,7 @@ per-relaxation list rebuild: ~6× fewer probes and ~2500× fewer allocations
 against a well-written map-less baseline, and ~500× / ~2700× against the code
 that is actually in the tree. Both numbers are worth having. The allocation
 column is the one I would lead with, given the measured cost of a boxed 48-byte
-`Value` and `zl_nil`'s per-value `memset` (`runtime.c:124`).
+`Value` and `zl_nil`'s per-value `memset` (`src/runtime/runtime.c:124`).
 
 At the size `dijkstra.zl`'s own self-test uses — `n = 5` — none of this is
 visible. That is the point: the linear-scan representation is not slow, it is
@@ -201,8 +201,8 @@ it. §10 defers `del` for exactly this reason, so v1 pays none of it.
 ### 3.3 Mutable in place — unchanged from revision 1
 
 `m[k] = v` and `set(m, k, v)` mutate. `push` returning a new list
-(`interp.c:550-574`) is not a precedent to follow here: `push` gets away with it
-because of the `tip` trick (`interp.c:556-563`) that lets an append reuse the
+(`src/runtime/interp.c:550-574`) is not a precedent to follow here: `push` gets away with it
+because of the `tip` trick (`src/runtime/interp.c:556-563`) that lets an append reuse the
 same array when nothing else has appended to it. There is no equivalent trick
 for a hash table that has to resize, and building a table in a loop with
 copy-on-write is quadratic — which is precisely the cost §2.2 measures in
@@ -220,13 +220,13 @@ answered.
 ### 4.1 `:` already lexes
 
 ```c
-lexer.c:252  /* '?' and ':' are only ever the two halves of a ternary. Neither
-lexer.c:256  if (strchr("(){}[],.+-*/%=!<>?:", c) == NULL) {
+src/frontend/lexer.c:252  /* '?' and ':' are only ever the two halves of a ternary. Neither
+src/frontend/lexer.c:256  if (strchr("(){}[],.+-*/%=!<>?:", c) == NULL) {
 ```
 
 No lexer edit. Revision 1's §3.5 ("One character: add `:` to the symbol set at
-`lexer.c:192`") is obsolete — that landed with the ternary. Note that
-`design_type_system.md:275-283` still describes adding `:` at `lexer.c:198`;
+`src/frontend/lexer.c:192`") is obsolete — that landed with the ternary. Note that
+`design_type_system.md:275-283` still describes adding `:` at `src/frontend/lexer.c:198`;
 that instruction is also stale, and for the same reason.
 
 ### 4.2 The slot is free — verified
@@ -249,9 +249,9 @@ the same reason.
 The worry: `[a ? b : c]` — does the list literal steal the ternary's `:`?
 
 No, and the direction of the nesting is why. `parse_primary`'s `[`-branch calls
-`parse_expr` for each element (`parser.c:315-316`), `parse_expr` is
-`parse_ternary` (`parser.c:551-554`), and `parse_ternary` consumes its own `:`
-with `expect_text(":")` at `parser.c:546` before it ever returns. The list
+`parse_expr` for each element (`src/frontend/parser.c:315-316`), `parse_expr` is
+`parse_ternary` (`src/frontend/parser.c:551-554`), and `parse_ternary` consumes its own `:`
+with `expect_text(":")` at `src/frontend/parser.c:546` before it ever returns. The list
 literal's loop therefore only ever sees a `:` that no ternary claimed.
 
 Verified:
@@ -268,7 +268,7 @@ $ ./interp.exe _mapprobe1.zl
 
 One element, a ternary, still a list. The reverse case — a map whose *key* is a
 ternary, `[c ? a : b : v]` — parses correctly by the same mechanism:
-`parse_ternary` takes `c ? a : b`, its else-branch recursion (`parser.c:547`)
+`parse_ternary` takes `c ? a : b`, its else-branch recursion (`src/frontend/parser.c:547`)
 parses `b` and returns at the second `:`, which the list literal then sees as
 the pair separator. **I could not run that one** — it needs the feature to
 exist — so treat it as reasoned, not measured, and make it a test in §12.
@@ -324,27 +324,27 @@ that.
 
 Plus extensions to things that already exist, all of which are one arm each:
 
-- `len(m)` → `nlive` (`interp.c:448`, `runtime.c`'s `len`).
+- `len(m)` → `nlive` (`src/runtime/interp.c:448`, `src/runtime/runtime.c`'s `len`).
 - `k in m` → `has_key(m, k)`. This is nearly free: `in` already dispatches on
-  the container's type (`interp.c:1340-1342`, *"'x in xs' IS contains(xs, x),
+  the container's type (`src/runtime/interp.c:1340-1342`, *"'x in xs' IS contains(xs, x),
   and 'sub in text' IS has(text, sub)"*). One more branch.
-- `is_truthy` (`interp.c:66-78`) → `V_MAP` is `nlive > 0`, mirroring `V_LIST`.
+- `is_truthy` (`src/runtime/interp.c:66-78`) → `V_MAP` is `nlive > 0`, mirroring `V_LIST`.
 - `value_to_string` → the `[k: v]` form of §4.5.
 - `==` → structural, and see §5.1.
 
 No name collisions: `get`, `set`, `keys`, `values`, `has_key` and `del` are not
-built-ins today (checked against the `strcmp(name, ...)` ladder in `interp.c`)
-and no file in `stdlib/`, `tests/`, `examples/` or `compiler.zl` defines a
+built-ins today (checked against the `strcmp(name, ...)` ladder in `src/runtime/interp.c`)
+and no file in `stdlib/`, `tests/`, `examples/` or `src/selfhost/compiler.zl` defines a
 function with any of those names. `has` and `at` are taken, which is why the
 membership test is `has_key` and not `has`. User functions win over built-ins
-anyway (`interp.c:1404-1425` tries the user function first), so a program that
+anyway (`src/runtime/interp.c:1404-1425` tries the user function first), so a program that
 later defines `fn set(...)` shadows the builtin rather than colliding with it.
 
 ### 5.1 Map equality is order-insensitive
 
 `values_equal_depth` currently returns 0 for anything it does not know
-(`interp.c:1253`). Maps should not stay in that bucket, because lists do not:
-`interp.c:1244-1252` compares lists structurally with a depth guard.
+(`src/runtime/interp.c:1253`). Maps should not stay in that bucket, because lists do not:
+`src/runtime/interp.c:1244-1252` compares lists structurally with a depth guard.
 
 Two maps are equal when they have the same live key set and every key maps to
 an equal value. **Order is deliberately not part of it**, even though §8 makes
@@ -356,7 +356,7 @@ entry — O(n), reusing the depth guard so a self-referential map cannot loop.
 
 ### 5.2 Iteration
 
-`for k in keys(m)` works with zero new machinery (`interp.c:1596-1608` loops
+`for k in keys(m)` works with zero new machinery (`src/runtime/interp.c:1596-1608` loops
 over a list). `for k in m` directly is proposed as optional sugar: one arm in
 `N_FOR`, and it saves materialising an O(n) keys list per loop.
 
@@ -371,14 +371,14 @@ elements; `k in m` tests keys, so `for k in m` yields keys. Deliberately no
 ## 6. Key types
 
 **Allowed: `str`, `num`, `bool`.** These are exactly the types `values_equal`
-compares by value rather than by structure (`interp.c:1240-1243`).
+compares by value rather than by structure (`src/runtime/interp.c:1240-1243`).
 
 **Rejected, with reasons:**
 
 - **Lists.** Revision 1 said `values_equal` "refuses lists" — it does not, it
-  compares them structurally (`interp.c:1244-1252`), so a list key is
+  compares them structurally (`src/runtime/interp.c:1244-1252`), so a list key is
   *definable*. It is still wrong, and the reason is mutation, not equality:
-  lists are mutable in place (`interp.c:1563-1580`), so `k[0] = 9` after
+  lists are mutable in place (`src/runtime/interp.c:1563-1580`), so `k[0] = 9` after
   `m[k] = 1` silently moves the key's hash out from under the table and the
   entry becomes unreachable. That is a corruption bug with no error message,
   which is a worse outcome than "you can't do that".
@@ -386,22 +386,22 @@ compares by value rather than by structure (`interp.c:1240-1243`).
   absence signal returned by `get`. A `nil` key would make `get(m, nil())`
   meaningless to read.
 - **Functions** (`V_FN`): no equality at all today
-  (`interp.c:1253`, *"V_FN: identity-free"*).
+  (`src/runtime/interp.c:1253`, *"V_FN: identity-free"*).
 - **Maps**: same mutation argument as lists.
 
 **Two number cases need explicit handling or the table breaks its own equality
 contract:**
 
-- **NaN.** `NaN != NaN` under `interp.c:1241`, so a NaN key could never be
+- **NaN.** `NaN != NaN` under `src/runtime/interp.c:1241`, so a NaN key could never be
   found again — an entry that consumes a slot and is unreachable forever.
   Reject it at insert with a runtime error rather than silently accepting it.
-- **`-0.0`.** `-0.0 == 0.0` is true under `interp.c:1241`, but the two have
+- **`-0.0`.** `-0.0 == 0.0` is true under `src/runtime/interp.c:1241`, but the two have
   different bit patterns, so hashing the raw bytes would put them in different
   buckets while equality insists they are the same key. Normalise `-0.0` to
   `0.0` before hashing. This is a two-line fix and a multi-hour bug if missed.
 
 Number and string keys are distinct: `values_equal_depth` returns 0 on a type
-mismatch at `interp.c:1238`, so `m[1]` and `m["1"]` are different keys. Worth
+mismatch at `src/runtime/interp.c:1238`, so `m[1]` and `m["1"]` are different keys. Worth
 stating in the manual because it is the first thing a JSON-shaped program hits.
 
 Once floats land as a distinct type from ints (in progress), `1` and `1.0` as
@@ -444,16 +444,16 @@ The candidates, against zl's actual constraints:
 Per-type input to the hash:
 
 - `V_STR`: the bytes up to the NUL. (Strings cannot contain a NUL —
-  `lexer.c:205-209` refuses it — so length is unambiguous.)
+  `src/frontend/lexer.c:205-209` refuses it — so length is unambiguous.)
 - `V_NUM`: the 8 bytes of the `double`, after the `-0.0` normalisation of §6.
 - `V_BOOL`: the 8 bytes of its `num` field (0 or 1), tagged so `true` and
   `1` land in different buckets — they are different keys under
-  `interp.c:1238`.
+  `src/runtime/interp.c:1238`.
 
-**Parity requirement.** The hash must be byte-identical between `interp.c` and
-`runtime.c` or a program's `keys(m)` differs between the interpreter and the
-compiled binary and the three-engine gate fails. `runtime.c` mirrors
-`interp.c`'s builtins by design and that parity is load-bearing. The safe way to
+**Parity requirement.** The hash must be byte-identical between `src/runtime/interp.c` and
+`src/runtime/runtime.c` or a program's `keys(m)` differs between the interpreter and the
+compiled binary and the three-engine gate fails. `src/runtime/runtime.c` mirrors
+`src/runtime/interp.c`'s builtins by design and that parity is load-bearing. The safe way to
 get it is one copy of the function in a header both include, not two copies that
 "look the same".
 
@@ -474,7 +474,7 @@ wrong for this language.
 `run_tests.ps1` assert byte-identical stdout across the interpreter and the
 compiled backend. Any test that prints a map, or loops over `keys(m)`, produces
 output whose order comes from the hash table's internals. Under "unordered",
-passing that test requires `interp.c` and `runtime.c` to agree on the hash
+passing that test requires `src/runtime/interp.c` and `src/runtime/runtime.c` to agree on the hash
 function, the initial slot count, the growth threshold, the probe sequence, and
 the resize trigger — five independent implementation details, in two files that
 are maintained separately, where a divergence shows up as a mysterious test
@@ -516,8 +516,8 @@ sharper than usual: any design that errors is a design that kills the program.
 Three arguments, in increasing order of weight:
 
 1. **Consistency with the operator's other meaning.** `xs[i]` out of range is
-   already a hard error — `"list index out of range"` at `interp.c:1517` for
-   reads and `"index-assign out of range"` at `interp.c:1570` for writes. If
+   already a hard error — `"list index out of range"` at `src/runtime/interp.c:1517` for
+   reads and `"index-assign out of range"` at `src/runtime/interp.c:1570` for writes. If
    `m[k]` silently returned `nil`, `[` would mean "must exist" on one container
    and "maybe" on the other. One operator, two contracts, is how people get
    surprised.
@@ -561,8 +561,8 @@ whose text does not tell you which lookup died is barely better than a nil.
 - **Nested-target assignment beyond one level** (`m[a][b] = v`). `dict.zl:8`
   already writes `d[i][1] = v`, so this shape exists for lists; whether it
   generalises cleanly to maps is an implementation question I have not checked
-  against `parser.c:929-935`.
-- **Maps in `nativegen.c` / `nativeval.c`.** Heap objects, out of scope — same
+  against `src/frontend/parser.c:929-935`.
+- **Maps in `src/backends/native/nativegen.c` / `src/backends/native/nativeval.c`.** Heap objects, out of scope — same
   boundary `design_memory_structs.md` draws.
 - **`sort(m)`, map comprehensions, default-dicts.** No.
 
@@ -572,16 +572,16 @@ whose text does not tell you which lookup died is barely better than a nil.
 
 | File | Change | Size |
 |---|---|---|
-| `lexer.c` | **none** (§4.1) | 0 |
-| `parser.h` | one `N_MAP` appended to the end of `NodeType` — appended, so no existing value shifts, which `compilel.c:105` and `compilef.c` depend on since they print raw `type %d` | 1 line |
-| `parser.c` | `parse_primary`'s `[`-branch (`:311-320`): after the first `parse_expr`, peek for `:`; plus the `[:]` case | ~20 lines |
-| `interp.c` | `V_MAP` + the four fields; `eval` `N_MAP`; `eval` `N_INDEX` map arm (`:1511-1519`); `exec` `N_ASSIGN` map lvalue arm (`:1563-1580`); the hash table itself; `get`/`set`/`has_key`/`keys`/`values`; extend `len`, `value_to_string`, `is_truthy` (`:66-78`), `values_equal_depth` (`:1236-1257`), `in` (`:1340-1342`) | ~220 lines |
-| `runtime.h` | `V_MAP` in the enum (`:12`) + fields in `Value` (`:14-22`); prototypes | ~10 lines |
-| `runtime.c` | the same hash table, sharing one hash header with `interp.c`; extend `zl_index` (`:357`), `zl_set` (`:349` — note the name is already taken and already means list index-set, so the map case is an arm inside it, not a new function), `to_string`, `zl_truthy`, `len`, `zl_calln` | ~220 lines |
-| `compile.c` | `emit_expr` `N_MAP` → `zl_map_n(...)` beside the existing `N_LIST` arm; nothing else, because built-ins already route through `zl_calln` | ~15 lines |
-| `compilef.c` | **refuse**: maps are boxed heap objects, this backend is the unboxed integer subset | 1 line |
-| `compilel.c` | **refuse**, same reason | 1 line |
-| `nativegen.c` | **refuse**, same reason | 1 line |
+| `src/frontend/lexer.c` | **none** (§4.1) | 0 |
+| `src/frontend/parser.h` | one `N_MAP` appended to the end of `NodeType` — appended, so no existing value shifts, which `src/backends/llvm/compilel.c:105` and `src/backends/c/compilef.c` depend on since they print raw `type %d` | 1 line |
+| `src/frontend/parser.c` | `parse_primary`'s `[`-branch (`:311-320`): after the first `parse_expr`, peek for `:`; plus the `[:]` case | ~20 lines |
+| `src/runtime/interp.c` | `V_MAP` + the four fields; `eval` `N_MAP`; `eval` `N_INDEX` map arm (`:1511-1519`); `exec` `N_ASSIGN` map lvalue arm (`:1563-1580`); the hash table itself; `get`/`set`/`has_key`/`keys`/`values`; extend `len`, `value_to_string`, `is_truthy` (`:66-78`), `values_equal_depth` (`:1236-1257`), `in` (`:1340-1342`) | ~220 lines |
+| `src/runtime/runtime.h` | `V_MAP` in the enum (`:12`) + fields in `Value` (`:14-22`); prototypes | ~10 lines |
+| `src/runtime/runtime.c` | the same hash table, sharing one hash header with `src/runtime/interp.c`; extend `zl_index` (`:357`), `zl_set` (`:349` — note the name is already taken and already means list index-set, so the map case is an arm inside it, not a new function), `to_string`, `zl_truthy`, `len`, `zl_calln` | ~220 lines |
+| `src/backends/c/compile.c` | `emit_expr` `N_MAP` → `zl_map_n(...)` beside the existing `N_LIST` arm; nothing else, because built-ins already route through `zl_calln` | ~15 lines |
+| `src/backends/c/compilef.c` | **refuse**: maps are boxed heap objects, this backend is the unboxed integer subset | 1 line |
+| `src/backends/llvm/compilel.c` | **refuse**, same reason | 1 line |
+| `src/backends/native/nativegen.c` | **refuse**, same reason | 1 line |
 
 The three refusals are the honest answer, not a gap. Those backends already
 refuse lists and strings; a map is one more thing on that list. Their error must
@@ -592,37 +592,37 @@ up — which is a small, separate improvement worth making at the same time.
 
 ## 12. The self-hosting problem
 
-`compiler.zl` is the zl-in-zl compiler, and `verify.ps1` gates the build on it
+`src/selfhost/compiler.zl` is the zl-in-zl compiler, and `verify.ps1` gates the build on it
 reaching a fixpoint. Two facts from `docs/design/design_selfhost_parity.md`:
 
-- `compiler.zl` **does not support the ternary at all** — the parity table at
+- `src/selfhost/compiler.zl` **does not support the ternary at all** — the parity table at
   `design_selfhost_parity.md:118` records it as **HANG**. So `:` is not a token
-  `compiler.zl` handles anywhere, and a map literal is not a small addition to
+  `src/selfhost/compiler.zl` handles anywhere, and a map literal is not a small addition to
   an existing colon path — there is no existing colon path.
-- `compiler.zl` **does not support index assignment** either
+- `src/selfhost/compiler.zl` **does not support index assignment** either
   (`design_selfhost_parity.md:126`, **BROKEN C**), so `m[k] = v` compounds the
   same gap.
 
 That sounds worse than it is, because of how the gate actually works:
 `verify.ps1` compares gen1 to gen2 within a single run and its only input is
-`compiler.zl` itself. It proves closure over one file, not coverage — the same
-document measures `compiler.zl` mishandling 63 of 110 `.zl` files while the gate
+`src/selfhost/compiler.zl` itself. It proves closure over one file, not coverage — the same
+document measures `src/selfhost/compiler.zl` mishandling 63 of 110 `.zl` files while the gate
 stays green. So:
 
-**Maps can land in the C toolchain without touching `compiler.zl`, and the gate
-stays green, as long as `compiler.zl` itself uses no map.** That is the same
+**Maps can land in the C toolchain without touching `src/selfhost/compiler.zl`, and the gate
+stays green, as long as `src/selfhost/compiler.zl` itself uses no map.** That is the same
 deal `elif`, f-strings, the ternary and index-assign already have.
 
 The rule that follows, and it should be written into the implementation task:
-**do not rewrite `compiler.zl`'s keyword lookup to use a map in the same change
+**do not rewrite `src/selfhost/compiler.zl`'s keyword lookup to use a map in the same change
 that adds maps.** Revision 1's §1 pitched exactly that ("makes the self-hosted
 compiler shorter") and it is a trap — it converts a feature addition into a
 bootstrap change, where a failure gives you a compiler that cannot compile the
-compiler that produces it. Land maps; land `compiler.zl` support for `:` and
+compiler that produces it. Land maps; land `src/selfhost/compiler.zl` support for `:` and
 map literals as a separate, separately-verified step; only then use maps inside
-`compiler.zl`.
+`src/selfhost/compiler.zl`.
 
-One live trap to check when that day comes: `compiler.zl` concatenates numbers
+One live trap to check when that day comes: `src/selfhost/compiler.zl` concatenates numbers
 onto strings to emit C, and anything that changes number formatting can make
 gen1 write `3` where gen2 writes `3.0` and flip the fixpoint. A map's `len` and
 `keys` feed such concatenations. Not a reason to avoid maps, a reason to run the
@@ -681,7 +681,7 @@ Stated as uncertainty rather than guessed at:
   the hash must be equal too, which means hashing an integral float by its
   integer value.
 - **`m[a][b] = v`.** `dict.zl:8` does this for lists today. I did not read
-  `parser.c:929-935` closely enough to say whether the map case falls out or
+  `src/frontend/parser.c:929-935` closely enough to say whether the map case falls out or
   needs work.
 - **`for k in m` as sugar** (§5.2). Recommended, but genuinely optional; the
   argument for it is one saved allocation per loop and the argument against is

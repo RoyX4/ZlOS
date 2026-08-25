@@ -1,173 +1,69 @@
-# Code map — where everything actually lives
+# Code Map
 
-Written because the top-level listing is misleading. There is no `apps/`
-directory, no `browser/` directory, and no `desktop/` directory. The
-desktop, the eight apps, and the web browser are all real and all
-checked in — they are just not where the directory names suggest.
+This map describes the current `zl-linux` checkout. It is intentionally about
+where things live, not what is complete.
 
-Read this before asking "where is X".
+## Source Areas
 
-## The one-line version
-
-`kernel/kernel.zl` **is** the desktop. Every app is a function in it,
-written in zl. The C files in `kernel/` are the platform underneath it —
-window manager, UI toolkit, drivers, network stack — that `kernel.zl`
-calls into.
-
-## Nine repos, one codebase
-
-`~/Documents/repos/` has nine `zl*` directories. Eight of them are the
-same repository:
-
-| Directory | Remote | Branch |
+| Path | Status | What belongs here |
 |---|---|---|
-| `zl-main` | `RoyX4/zl-linux` | `main` — integration branch |
-| `zl-linux` | `RoyX4/zl-linux` | `desktop/overnight-compositor` |
-| `zl-apps` | `RoyX4/zl-linux` | `desktop/apps-in-windows` |
-| `zl-browser` | `RoyX4/zl-linux` | `desktop/browser` |
-| `zl-exec` | `RoyX4/zl-linux` | `desktop/exec-track` |
-| `zl-feel` | `RoyX4/zl-linux` | `desktop/feel-and-control` |
-| `zl-system` | `RoyX4/zl-linux` | `desktop/system-track` |
-| `zl-value16` | `RoyX4/zl-linux` | `lang/value-16` |
-| `zl` | `RoyX4/zl` | the original Windows repo |
+| `src/frontend/` | active | Shared C lexer, parser, token definitions, and AST definitions. |
+| `src/runtime/` | active | Reference interpreter, compiled-program runtime, and Linux OS bridge. |
+| `src/backends/c/` | active and archived lanes | Boxed C backend plus the archived unboxed-C experiment. |
+| `src/backends/llvm/` | active speed lane | LLVM IR backend. |
+| `src/backends/native/` | active and experimental lanes | Direct executable generators and their native runtime experiments. |
+| `src/selfhost/` | bounded proof lane | Compiler, lexer, parser, and native work written in zl. This is not the full production toolchain. |
+| `src/tools/` | active tooling | Language-aware source tools, currently `zlfmt`. |
+| `stdlib/` | active | Tracked zl library modules and algorithm examples. Some are real library pieces; some are still demo-shaped. |
+| `tests/` | active | Tracked zl test programs. |
+| `examples/` | active | Tracked runnable examples. Generated output belongs in `examples_out/`. |
+| `kernel/apps/` | active | zlOS application and game modules written in zl. |
+| `kernel/boot/` | active | BIOS, raw, 64-bit, and UEFI entry code plus linker layouts. |
+| `kernel/src/` | active | zlOS implementation grouped by architecture and subsystem. |
+| `kernel/tests/` | active evidence | Host harnesses, visual oracle, reference renderer, and fixtures. |
+| `kernel/tools/` | active tooling | Static checks, generators, image builders, runtime probes, and VM launchers. |
+| `freestanding/` | active proof lane | No-libc generated-zl proof for the kernel track. |
+| `bench/` | active tooling | Bench scripts and benchmark trees. |
+| `tools/` | active tooling | Repo maintenance: doc checks, hazard scan, parity helpers, preflight, journal helpers. |
+| `gates/` | active tooling | Landing gate wrapper logic. |
+| `learn/` | active teaching | Small learning exercises and solutions. |
+| `editors/` | active support | Editor integration, currently VS Code language support. |
 
-They are **parallel track checkouts**, not separate projects. Summing
-their line counts inflates the total roughly 8×.
+## Documentation Areas
 
-The old Windows `zl` repo is effectively absorbed: 139 of its 147 shared
-paths are byte-identical to the Linux port. Only ~863 lines are genuinely
-Windows-only (`os_win.c` plus top-level scratch files like `t1.zl`).
+| Path | Status | What belongs here |
+|---|---|---|
+| `docs/README.md` | current index | Truth-state map for docs: current, partial, evidence, archived. |
+| `docs/PROJECT-STATUS.md` | current status | Cross-repo commit state and the boundary between plan, integration, and implementation. |
+| `docs/REPOSITORY-STRUCTURE.md` | current layout policy | Placement and source-ownership rules. |
+| `docs/STATE-OF-THE-PROJECT.md` | current but aging | Open-item audit. Keep hardware and QEMU claims separated. |
+| `docs/EXECUTION-ROADMAP.md` | current but aging | Priority order. Treat later implementation notes as updates, not proof of physical hardware. |
+| `docs/program/` | current program | Full feature/contract/phase program and partial-closure data. |
+| `docs/design/` | mixed proposals | Design notes and proposals. A file here is not implemented unless its own status says so and current code confirms it. |
+| `docs/fleet/` | audit boards | Review findings, boards, and verification logs. |
+| `docs/evidence/` | measured history | Merge, pointer, and comparison records retained as evidence. |
+| `docs/shots/` | curated evidence | Small visual evidence images that were intentionally kept. |
+| `docs/archive/` | stale/history | Superseded plans, old prompts, backups, and documents kept for context only. |
+| `kernel/docs/` | kernel records | Current kernel references and plans, with dated receipts in `evidence/` and old prompts/audits/handoffs in `archive/`. |
 
-## Where the desktop is
+## Generated Output
 
-### `kernel/kernel.zl` — the desktop and all its apps
+These are not source and should stay out of Git unless deliberately curated as
+evidence under `docs/`.
 
-One zl file, 2,121 nonblank lines on `main` and up to 2,823 on
-`desktop/overnight-compositor`. It declares and drives every app:
-
-| Constant | Window title |
+| Path | Source |
 |---|---|
-| `APP_SHELL` | zl shell |
-| `APP_MONITOR` | System Monitor |
-| `APP_ABOUT` | About |
-| `APP_SNAKE` | Snake |
-| `APP_MENU` | start menu (modal) |
-| `APP_BROWSER` | Browser |
-| `APP_SETTINGS` | Settings |
-| `APP_RUN` | run |
-| `APP_PAINT` | Paint |
-| `APP_CUBE` | 3D |
-| `APP_ANIM` | zlOS |
-| `APP_MOUSE` | Pointer |
-| `APP_EDIT` | Editor |
+| `interp`, `compile`, `compilef`, `compilel`, `nativegen`, `zlfmt` | Built by `./build.sh`. |
+| `out.c`, `outf.c`, `out.ll`, `native_out` | Compiler/backend output. |
+| `examples_out/` | Example program artifacts. |
+| `kernel/*.elf`, `kernel/*.img`, `kernel/*.iso`, `kernel/*.EFI` | zlOS boot/build artifacts. |
+| `kernel/_gen*.c`, `kernel/out.c` | Generated C from zl kernel sources. |
+| `kernel/shots/`, `kernel/exercise-out/`, `/shots/` | Visual/QEMU run output. |
+| `kernel/tests/host/*` binaries | Host harness build output; the `.c` files are source. |
 
-Each app is a branch in the dispatch on window id, plus a `wm_open()`
-call at startup. There is no per-app file and no per-app directory. If
-you are looking for Paint, it is a function in `kernel.zl`.
+## Structural Guardrail
 
-### `kernel/out.c` — generated, ignore it
-
-`out.c` is the C that `compilel`/`compile` emits from `kernel.zl`. It is
-**not tracked by git** and must never be counted as source or edited by
-hand. Searching the tree for app symbols hits `out.c` first and makes the
-apps look like C. They are not.
-
-### The C platform under the desktop
-
-These are hand-written and tracked. Sizes are nonblank lines, taken from
-the largest version across the tracks:
-
-| File | Lines | What |
-|---|---:|---|
-| `kernel/wm.c` | 1,017 | window manager — stacking, focus, drag, resize, snap |
-| `kernel/ui.c` | 457 | immediate-mode UI toolkit: buttons, sliders, toggles, lists, scroll |
-| `kernel/term.c` | 259 | terminal widget |
-| `kernel/wmglue.c` | 117 | the bridge exposing `wm_*` to zl code |
-
-`ui.c` is a real immediate-mode toolkit — `ui_begin`/`ui_button`/
-`ui_slider`/`ui_toggle`/`ui_list_row`/`ui_scroll_begin`. That is the
-whole reason `kernel.zl` can stay small.
-
-### The browser — `desktop/browser` branch only
-
-Not on `main`. Roughly 3,700 nonblank lines across:
-
-| File | Lines |
-|---|---:|
-| `kernel/tcp.c` | 740 |
-| `kernel/virtio_net.c` | 690 |
-| `kernel/browser.c` | 612 |
-| `kernel/html.c` | 518 |
-| `kernel/layout.c` | 443 |
-| `kernel/net.c` | 443 |
-| `kernel/http.c` | 260 |
-
-A TCP/IP stack, an HTML parser, a layout engine and a renderer. Checking
-out `main` and grepping for it finds nothing.
-
-## Why every track adds the same files
-
-`git merge-base` says `main` is the common ancestor of all seven tracks.
-Yet every track shows `kernel/wm.c`, `ui.c`, `ui.h`, `term.c`,
-`wmglue.c`, `font_prop.h` and the `hosttest/*` harnesses as **added**
-files.
-
-That means the desktop foundation exists on all seven tracks and on none
-of them is it merged back to `main`. Each track then evolved those shared
-files independently — `wm.c` is 741 lines on three tracks, 918 on
-system, 996 on feel, 1,017 on compositor. They will conflict at merge.
-That is expected; it is what `docs/INTEGRATION-PLAN.md` is for.
-
-Practical consequence: **`main` has no windowed desktop at all.** Its
-`kernel.zl` contains zero `wm_*` calls and zero `APP_` constants, and its
-`kernel/build.sh` never compiles `wm.c`, `ui.c` or `term.c`. `main`
-builds the pre-windowing kernel — framebuffer, drivers, console. Windows
-and apps exist only on the tracks. To see the desktop run, check out a
-track.
-
-## Size
-
-Union of all branches, cloc `code` (blanks and comments excluded):
-
-| | files | code |
-|---|---:|---:|
-| `.zl` — written in zl itself | 138 | 34,522 |
-| `.c` / `.h` / `.S` — bootstrap compiler, runtime, kernel | 104 | 53,005 |
-| **total** | **242** | **87,527** |
-
-By area:
-
-| | code |
-|---|---:|
-| `kernel/` — drivers, compositor, browser, fs, exec | 46,405 |
-| `stdlib/` | 17,770 |
-| root — lexer, parser, four backends | 10,421 |
-| `tests/` | 6,481 |
-| `examples/` | 5,326 |
-| `freestanding/` | 1,086 |
-
-`main` alone is 71,569. Add ~863 for the Windows-only remnant in `zl` and
-the honest grand total is **~88,400**.
-
-Two caveats on that number. It is a *projection*: for each path it takes
-the largest version across the branches, so where two tracks edited
-different regions of the same file a real merge lands higher. And it
-excludes `kernel/font_prop.inc`, ~14k lines of generated font bitmap
-data — that is data, not code.
-
-## How to count it yourself
-
-`cloc --vcs=git` alone is wrong here in two ways: it does not know the
-`.zl` extension, and run per-directory it counts the eight checkouts
-eight times. Count one checkout, force the language, and take the union
-across branches by path:
-
-```bash
-cd ~/Documents/repos/zl-main
-git ls-files '*.zl' | xargs cloc --quiet --force-lang=C
-git ls-files '*.c' '*.h' '*.S' | xargs cloc --quiet
-```
-
-Generated output (`out.c`, `outf.c`, `out.ll`, `examples_out/`,
-`native_out/`) is untracked, so `git ls-files` already excludes it. Never
-count it.
+Do not flatten `kernel/src/` again or add new implementation files directly to
+`kernel/`. New code belongs with its owning subsystem, must be added to
+`kernel/SOURCES` when shipped, and needs its consumers updated in the same
+change. Generated artifacts stay out of Git; curated proof belongs under docs.

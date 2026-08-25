@@ -2,7 +2,7 @@
 
 The running record for `desktop/feel-and-control`, the way
 [`desktop-look.md`](desktop-look.md) is for the look track. The brief is
-[`FEEL-PROMPT.md`](FEEL-PROMPT.md); this is what came back.
+[`FEEL-PROMPT.md`](archive/prompts/FEEL-PROMPT.md); this is what came back.
 
 Every entry states the gate **and its output**, or a number that was
 **measured**. "It looks right" is not in here.
@@ -24,7 +24,7 @@ The cause is in the message of the commit that produced it, `b19207d`:
 > as-is, unreviewed.
 
 It committed the **callers** and not the **definitions**. The definitions are
-sitting uncommitted in the LOOK track's worktree (`../zl-linux/kernel/xhci.c`,
+sitting uncommitted in the LOOK track's worktree (`../zl-linux/kernel/src/drivers/input/xhci.c`,
 `idt.c`, `console.c`) — confirmed read-only, no worktree touched. FEEL-PROMPT
 §1.1 forbids touching another worktree, and writing a second implementation of
 the same 17 symbols would collide on merge, which is a worse outcome than a red
@@ -81,7 +81,7 @@ are anti-aliased, and the partial coverage where `fill` fades lets the edge
 colour through as a soft rim.
 
 It rides in `cursor.inc` inside `fb.c` rather than becoming `cursor.c`.
-FEEL-PROMPT §2 offers `kernel/cursor.c`, but §1.4 is the stronger constraint:
+FEEL-PROMPT §2 offers a new cursor translation unit, but §1.4 is the stronger constraint:
 four build scripts carry four separate source lists and adding a `.c` to only
 some of them broke two builds twice in one day. §1.4 explicitly blesses the
 alternative — "ride inside an existing translation unit like `font_prop.inc`
@@ -740,8 +740,8 @@ and deliberately does not raise or focus it. Scrolling is not a click.
 
 ### The original deferral reasoning
 
-Not blocked by difficulty. A read-only diff of `kernel/idt.c` against
-`../zl-linux/kernel/idt.c` shows the LOOK track has **wholesale rewritten** the
+Not blocked by difficulty. A read-only diff of `kernel/src/arch/x86/idt.c` against
+`../zl-linux/kernel/src/arch/x86/idt.c` shows the LOOK track has **wholesale rewritten** the
 mouse packet path in its uncommitted work — packet assembly extracted into a new
 `mouse_byte()`, made callable from *both* IRQ1 and IRQ12 (the 8042 shares one
 output buffer, and a keystroke overlapping a mouse packet was swallowing a byte

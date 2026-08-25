@@ -6,7 +6,7 @@
 # forgetting the other three broke the UEFI and raw builds TWICE on 2026-08-18,
 # and verify.sh cannot see it because verify.sh only builds the first.
 #
-# Anything added here is compiled into all four. `./verify-sources.sh` proves
+# Anything added here is compiled into all four. `./tools/checks/verify-sources.sh` proves
 # that by adding a throwaway file and looking for it in all four outputs, so
 # the claim is checked rather than asserted.
 #
@@ -14,10 +14,10 @@
 # are structural rather than a list that drifts - a new driver is added here, a
 # new ENTRY POINT is a new port:
 #
-#   the generated C   _gen.c / _gen64.c / _genefi.c  (../compile kernel.zl)
-#   the GDT           gdt.c (32-bit) / gdt64.c (64-bit, and the EFI build)
-#   the AP trampoline smp_trampoline.S / smp_trampoline64.S
-#   the entry point   boot.S / boot64.S / raw_entry.S / efi.c
+#   the generated C   _gen.c / _gen64.c / _genefi.c  (../compile src/kernel.zl)
+#   the GDT           boot/gdt.c (32-bit) / boot/gdt64.c (64-bit and EFI)
+#   the AP trampoline boot/smp_trampoline.S / boot/smp_trampoline64.S
+#   the entry point   boot/boot.S / boot/boot64.S / boot/raw_entry.S / boot/efi.c
 #
 # freestanding/runtime_kernel.c is also per-target: three scripts compile it
 # with -DZL_KERNEL_SERIAL alone, while buildefi.sh applies that define to every
@@ -25,40 +25,39 @@
 #
 # Order is the order they are compiled and linked. It does not matter to the
 # linker; it is kept as it was so a diff against the old scripts is readable.
-
-support.c
-boot_handover.c
-zllog.c
-crash.c
-vga.c
-fb.c
-fb3d.c
-font8x16.c
-font_aa.c
-font_sub.c
-icons.c
-pci.c
-bga.c
-intel.c
-xhci.c
-console.c
-divmod.c
-idt.c
-apic.c
-virtio_gpu.c
-cpu.c
-nvme.c
-block.c
-sched.c
-smp.c
-i2c_touch.c
-i2c_hid.c
-input.c
-term.c
-wm.c
-ui.c
-ease.c
-wmglue.c
+src/arch/x86/support.c
+src/core/boot/boot_handover.c
+src/core/zllog.c
+src/core/crash.c
+src/drivers/display/vga.c
+src/graphics/framebuffer/fb.c
+src/graphics/framebuffer/fb3d.c
+src/graphics/fonts/font8x16.c
+src/graphics/fonts/font_aa.c
+src/graphics/fonts/font_sub.c
+src/graphics/icons/icons.c
+src/arch/x86/pci.c
+src/drivers/display/bga.c
+src/drivers/display/intel.c
+src/drivers/input/xhci.c
+src/core/console.c
+src/arch/x86/divmod.c
+src/arch/x86/idt.c
+src/arch/x86/apic.c
+src/drivers/display/virtio_gpu.c
+src/arch/x86/cpu.c
+src/drivers/storage/nvme.c
+src/drivers/storage/block.c
+src/core/sched.c
+src/arch/x86/smp.c
+src/drivers/input/i2c_touch.c
+src/drivers/input/i2c_hid.c
+src/drivers/input/input.c
+src/graphics/windowing/term.c
+src/graphics/windowing/wm.c
+src/graphics/ui/ui.c
+src/graphics/ui/ease.c
+src/graphics/windowing/wmglue.c
 
 # ---- added when the parallel tracks landed ---------------------------------
 # Every one of these was compiled by main's four hand-maintained object lists
@@ -67,34 +66,34 @@ wmglue.c
 # brought them so the provenance is readable, but the build does not care.
 
 # desktop/system-track (arrived inside desktop/exec-track)
-fs.c
-clip.c
-snap.c
-notify.c
-rtc.c
+src/fs/fs.c
+src/graphics/windowing/clip.c
+src/graphics/ui/snap.c
+src/graphics/ui/notify.c
+src/arch/x86/rtc.c
 
 # desktop/exec-track
-arena.c
-heap.c
-paging.c
-usermode.c
-exec.c
-interp_kernel.c
+src/core/arena.c
+src/core/heap.c
+src/arch/x86/paging.c
+src/arch/x86/usermode.c
+src/core/exec.c
+src/runtime/interp_kernel.c
 
 # desktop/feel-and-control
-settings.c
+src/graphics/ui/settings.c
 
 # The blitter command stream. Nothing calls it yet - zlOS has no ring to submit
 # through - but it is compiled into all four targets so it cannot rot, and
-# hosttest/gputest.c pins its output to the dwords that drew on real Gen9.5
+# tests/host/gputest.c pins its output to the dwords that drew on real Gen9.5
 # silicon. See kernel/docs/gpu-blitter.md.
-gpu.c
+src/drivers/display/gpu.c
 
 # The ring those commands are submitted through. Its ARITHMETIC is tested by
 # gputest; its MMIO has never executed on hardware and is gated behind
 # gpu_ring_arm(), which defaults to off - the same shape as intel.c's lt_armed
 # and for the same reason.
-gpuring.c
+src/drivers/display/gpuring.c
 
 # The hardware cursor image. intel.c has had the three cursor registers and
 # runtime_kernel.c has published cur_on/cur_move/cur_off to zl for as long as
@@ -102,38 +101,38 @@ gpuring.c
 # mapping, so cur_on would have pointed the display engine at nothing. This is
 # the missing middle. Its arithmetic is tested; its install path is gated behind
 # gpu_cursor_arm() and has never executed.
-gpucursor.c
+src/drivers/display/gpucursor.c
 
 # desktop/browser
-virtio_net.c
-e1000.c
-iwlwifi.c
-netdev.c
+src/drivers/network/virtio_net.c
+src/drivers/network/e1000.c
+src/drivers/network/iwlwifi.c
+src/drivers/network/netdev.c
 # --- HTTPS: the crypto, the certificate check, and the handshake ---
-crypto.c
-ecdsa.c
-rsa.c
-x509.c
-roots.c
-entropy.c
-tls.c
-net.c
-dhcp.c
-dns.c
-tcp.c
-http.c
-html.c
-css.c
-layout.c
+src/net/crypto.c
+src/net/ecdsa.c
+src/net/rsa.c
+src/net/x509.c
+src/net/roots.c
+src/net/entropy.c
+src/net/tls.c
+src/net/net.c
+src/net/dhcp.c
+src/net/dns.c
+src/net/tcp.c
+src/net/http.c
+src/web/html.c
+src/web/css.c
+src/web/layout.c
 # the picture decoder. Its pixel arena is NOT in this binary - it lives at
 # memmap.h's HI_IMG, because link.ld caps the image at 6 MiB and it already
 # reaches 5.573.
-png.c
-js.c
-browser.c
-userwin.c
+src/graphics/image/png.c
+src/web/js.c
+src/web/browser.c
+src/graphics/windowing/userwin.c
 
 # The shared widget catalogue - reference-widgets.md S3-S18. Separate from
 # ui.c because that file is the layout cursor and this one is a catalogue of
 # ~55 shapes; see the header of uikit.c.
-uikit.c
+src/graphics/ui/uikit.c

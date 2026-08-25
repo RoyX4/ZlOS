@@ -38,7 +38,7 @@ sections and symbols) already exists.
 
 **No.** This is the Lua question, and it is the single biggest missed reach opportunity, because
 **zl is architecturally almost perfect for it** — the interpreter is a small, self-contained C
-program (interp.c + parser.c + lexer.c, ~3,200 lines) with no runtime dependencies.
+program (src/runtime/interp.c + src/frontend/parser.c + src/frontend/lexer.c, ~3,200 lines) with no runtime dependencies.
 
 What is missing is a clean **embedding API** — a header a host program includes to:
 

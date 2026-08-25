@@ -20,7 +20,7 @@ the ordering principle `docs/STATE-OF-THE-PROJECT.md` already uses:
 
 `.ultra/STATE.md` and four other documents call `RENDER_SURFACE_STATE` the blocker on
 RCS and say it needs a Gen9 PRM this machine does not have. It landed at **`793763a`**,
-three commits before `HEAD`, as `kernel/gpu_surface.inc` — lifted out of Mesa's decoder
+three commits before `HEAD`, as `kernel/src/drivers/display/assets/gpu_surface.inc` — lifted out of Mesa's decoder
 database, which ships zlib-compressed inside libgallium, which is exactly why the
 original exhaustive search could not find it.
 

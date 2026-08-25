@@ -3,70 +3,70 @@
 # Uses classic DP over a list-of-lists table, then backtracks.
 
 fn lcs_max(la, lb) {
-  if la > lb { return la }
-  return lb
+    if la > lb { return la }
+    return lb
 }
 
 # Build the (m+1) x (n+1) DP table. table[i][j] = LCS length of
 # first i chars of a and first j chars of b.
 fn lcs_table(lt_a, lt_b) {
-  lt_m = len(lt_a)
-  lt_n = len(lt_b)
-  lt_table = []
-  lt_i = 0
-  while lt_i <= lt_m {
-    # start each row with the j=0 column (always 0)
-    lt_row = [0]
-    lt_j = 1
-    while lt_j <= lt_n {
-      if lt_i == 0 {
-        lt_row = push(lt_row, 0)
-      } else {
-        lt_prev = lt_table[lt_i - 1]
-        if at(lt_a, lt_i - 1) == at(lt_b, lt_j - 1) {
-          lt_row = push(lt_row, lt_prev[lt_j - 1] + 1)
-        } else {
-          lt_row = push(lt_row, lcs_max(lt_prev[lt_j], lt_row[lt_j - 1]))
+    lt_m = len(lt_a)
+    lt_n = len(lt_b)
+    lt_table = []
+    lt_i = 0
+    while lt_i <= lt_m {
+        # start each row with the j=0 column (always 0)
+        lt_row = [0]
+        lt_j = 1
+        while lt_j <= lt_n {
+            if lt_i == 0 {
+                lt_row = push(lt_row, 0)
+            } else {
+                lt_prev = lt_table[lt_i - 1]
+                if at(lt_a, lt_i - 1) == at(lt_b, lt_j - 1) {
+                    lt_row = push(lt_row, lt_prev[lt_j - 1] + 1)
+                } else {
+                    lt_row = push(lt_row, lcs_max(lt_prev[lt_j], lt_row[lt_j - 1]))
+                }
+            }
+            lt_j = lt_j + 1
         }
-      }
-      lt_j = lt_j + 1
+        lt_table = push(lt_table, lt_row)
+        lt_i = lt_i + 1
     }
-    lt_table = push(lt_table, lt_row)
-    lt_i = lt_i + 1
-  }
-  return lt_table
+    return lt_table
 }
 
 fn lcs_length(ll_a, ll_b) {
-  ll_table = lcs_table(ll_a, ll_b)
-  ll_m = len(ll_a)
-  ll_n = len(ll_b)
-  ll_lastrow = ll_table[ll_m]
-  return ll_lastrow[ll_n]
+    ll_table = lcs_table(ll_a, ll_b)
+    ll_m = len(ll_a)
+    ll_n = len(ll_b)
+    ll_lastrow = ll_table[ll_m]
+    return ll_lastrow[ll_n]
 }
 
 # Backtrack through the DP table to recover an actual subsequence string.
 fn lcs_string(ls_a, ls_b) {
-  ls_table = lcs_table(ls_a, ls_b)
-  ls_i = len(ls_a)
-  ls_j = len(ls_b)
-  ls_res = ""
-  while ls_i > 0 and ls_j > 0 {
-    if at(ls_a, ls_i - 1) == at(ls_b, ls_j - 1) {
-      ls_res = at(ls_a, ls_i - 1) + ls_res
-      ls_i = ls_i - 1
-      ls_j = ls_j - 1
-    } else {
-      ls_up = ls_table[ls_i - 1]
-      ls_cur = ls_table[ls_i]
-      if ls_up[ls_j] >= ls_cur[ls_j - 1] {
-        ls_i = ls_i - 1
-      } else {
-        ls_j = ls_j - 1
-      }
+    ls_table = lcs_table(ls_a, ls_b)
+    ls_i = len(ls_a)
+    ls_j = len(ls_b)
+    ls_res = ""
+    while ls_i > 0 and ls_j > 0 {
+        if at(ls_a, ls_i - 1) == at(ls_b, ls_j - 1) {
+            ls_res = at(ls_a, ls_i - 1) + ls_res
+            ls_i = ls_i - 1
+            ls_j = ls_j - 1
+        } else {
+            ls_up = ls_table[ls_i - 1]
+            ls_cur = ls_table[ls_i]
+            if ls_up[ls_j] >= ls_cur[ls_j - 1] {
+                ls_i = ls_i - 1
+            } else {
+                ls_j = ls_j - 1
+            }
+        }
     }
-  }
-  return ls_res
+    return ls_res
 }
 
 # ---------------- self-test ----------------

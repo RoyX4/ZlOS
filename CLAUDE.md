@@ -2,41 +2,32 @@
 
 ## Read first, before changing anything
 
-**`docs/STATE-OF-THE-PROJECT.md` is the one page that says where the project
-actually is.** Twenty-one planning documents (~392 KB) were audited item by item
-against the merged tree on 2026-08-19 and every open item, with its evidence,
-lives there ranked by leverage. The twenty-one now carry banners pointing at it.
-Read it before picking up any task list.
+**`docs/PROJECT-STATUS.md` is the current front door.** It separates repository
+integration, the complete implementation program, raw research, and actual
+implementation evidence. Read it before picking up any task list.
 
-**`docs/ROAD-TO-TEN.md`** is the leverage ranking for the project as a whole —
-what it scores today against a real external rubric, what is already excellent
-and invisible, and the ordered list of what moves it. Read it when deciding
-*what to work on*, as opposed to `STATE-OF-THE-PROJECT.md`, which tells you what
-is broken. It also records the first measured run of the self-hosting fixpoint on
-Linux (it holds), and the fact that no gate runs it.
+`docs/STATE-OF-THE-PROJECT.md` is the detailed 2026-08-19 audit. It remains
+valuable evidence but predates later integration. The archived
+`docs/archive/superseded/ROAD-TO-TEN.md` is also historical, not the queue.
 
-`docs/CODE-MAP.md` says where the code actually lives. The layout is not what
-the directory names imply: the desktop and all eight apps are one zl file
-(`kernel/kernel.zl`), and `kernel/out.c` is generated output that must never be
-edited or counted. Read it before searching for a subsystem — but note it is
-**stale from its "The browser" heading onward**: it says the browser is
-branch-only and that `main` has no windowed desktop, and both are false since
-the merge. `STATE-OF-THE-PROJECT.md` §11 has the corrections.
+`docs/CODE-MAP.md` says where source, generated output, evidence, partial docs
+and archived docs belong. Read it before searching for a subsystem or moving
+files around.
 
-`docs/MERGE-EVIDENCE.md` is the measured account of the eight parallel
+`docs/evidence/MERGE-EVIDENCE.md` is the measured account of the eight parallel
 tracks: the real shared base (`d61a481`, not `44346d6`), the landmines that
 merge clean and then fail, and the landing order. Read it before merging
 anything or starting a ninth track.
 
-**`docs/MERGE-ROUND-2.md` is round 2** — the twelve worktrees standing on
+**`docs/evidence/MERGE-ROUND-2.md` is round 2** — the twelve worktrees standing on
 2026-08-20, measured: 165 commits, 219 files, 129 uncommitted, **0 pushed**, and
-`kernel/kernel.zl` contested by nine branches. It also records why opening a PR
+`kernel/src/kernel.zl` contested by nine branches. It also records why opening a PR
 per branch is the wrong shape here (local `main` is 45 ahead of `origin/main`,
 so every PR would diff against a stale base), the landing order, and two places
 `MERGE-EVIDENCE.md` is now stale in the pessimistic direction. Read it before
 touching any `zl-linux-*` worktree.
 
-`docs/DOCS-RECONCILE-PROMPT.md` is the brief that produced
+`docs/archive/prompts/DOCS-RECONCILE-PROMPT.md` is the brief that produced
 `STATE-OF-THE-PROJECT.md`. Done 2026-08-19; kept for method, not for work.
 
 **`docs/GUARDS-THAT-DID-NOT-GUARD.md`** is five checks in this tree that
@@ -46,8 +37,8 @@ discovery sweep that reads no C at all, and why a gate in this shared checkout
 can fail for reasons that are not the code. Read it before trusting any green
 result here, and before writing a new gate.
 
-`kernel/docs/BROWSER-STORAGE-PROMPT.md` was the brief for that work and it is
-**DONE** - see `kernel/docs/browser-storage-run.md` for the run. The parser's
+`kernel/docs/archive/prompts/BROWSER-STORAGE-PROMPT.md` was the brief for that work and it is
+**DONE** - see `kernel/docs/evidence/browser-storage-run.md` for the run. The parser's
 node array, its text arena, layout's runs and css's selectors were all static
 and all full on a real page; they are the caller's now, in `memmap.h`'s new
 `HI_DOM` region, and a real article parses whole (`8192/8192 with 7,807
@@ -62,12 +53,12 @@ arena refused rules **without setting `css_overflowed()`**, invisible until
 stale when the AP stacks were inserted. `hosttest/parsestat.c` is the
 measuring instrument, committed this time.
 
-`kernel/docs/browser-render-run.md` is the record of the run that produced the
+`kernel/docs/evidence/browser-render-run.md` is the record of the run that produced the
 current state - images, flexbox, grid, `@media`, search, the network at boot -
 with every number and the command that measured it, including the four gates
 that turned out to be testing something other than what they claimed.
 
-`kernel/docs/BROWSER-RENDER-PROMPT.md` is the brief that run worked from, and
+`kernel/docs/archive/prompts/BROWSER-RENDER-PROMPT.md` is the brief that run worked from, and
 both its items are now marked done. Worth reading anyway for two reasons: it
 opens by correcting two things a fresh session is likely to be told to do that
 are already done (Google works, and AES-256 is not needed), and its §1 records
@@ -94,7 +85,7 @@ area:
   much RAM exists) are four different numbers with four different guards. Read
   it before placing any buffer, and before believing a `_Static_assert` covers
   what you think it covers.
-- `kernel/docs/overnight-2026-08-18.md` — one page covering the descriptor-pointer
+- `kernel/docs/evidence/overnight-2026-08-18.md` — one page covering the descriptor-pointer
   bug that made the 64-bit boot layout-sensitive, why three green gates missed it,
   and what is still open.
 - `docs/design/ci-and-agent-pipeline.md` — **design only, not built.** Why the
@@ -147,7 +138,7 @@ warning `-w` was legitimately buying, `-Wexcessive-regsave` (11 hits in
 `idt.c`, inherent to `__attribute__((interrupt))`), is suppressed by name so a
 *new* class surfaces instead of being swallowed.
 
-**`kernel/wguard.sh` is the check, and it runs all three directions** — the
+**`kernel/tools/checks/wguard.sh` is the check, and it runs all three directions** — the
 guard catches a planted defect, `-w` is shown to still silence it, and the real
 source set is clean under it. Two seconds, no QEMU. Run it before touching that
 flag line.
@@ -160,11 +151,11 @@ fixed form of the bug above. Do not "fix" it back.
 `kernel/HANDOFF.md` is the orientation doc and it is kept honest — it records what
 is *verified* rather than what is intended. Read it before touching `kernel/`.
 
-**All eleven tracks landed on `main` on 2026-08-19.** `docs/MERGE-EVIDENCE.md`
+**All eleven tracks landed on `main` on 2026-08-19.** `docs/evidence/MERGE-EVIDENCE.md`
 §Outcome is the record. Two branches are still out: `fix/pointer-drain` (3
 commits, the written fix for the broken pointer) and `ci/gates-and-agent-brief`
-(11 commits, the only CI and the only copy of `zlfmt.c` anywhere).
-`docs/INTEGRATION-PLAN.md` is **superseded** and its figures are wrong — do not
+(11 commits, the only CI and the only copy of `src/tools/zlfmt.c` anywhere).
+`docs/archive/superseded/INTEGRATION-PLAN.md` is **superseded** and its figures are wrong — do not
 plan a merge from it.
 
 `kernel/docs/gen9-modeset-plan.txt` is the researched Intel display plan (JSON;
@@ -173,11 +164,12 @@ hazards that can damage hardware.
 
 ## The formatter re-indents; it does not reformat
 
-`zlfmt` (built by `build.sh`, source `zlfmt.c`) rewrites leading whitespace and
+`zlfmt` (built by `build.sh`, source `src/tools/zlfmt.c`) rewrites leading whitespace and
 strips trailing whitespace. **Every other byte is copied from the original
 buffer.** Do not "improve" it into an AST pretty-printer without first reading
-`docs/design/design_tooling.md` §3: `lexer.c:272-273` throws comments away and
-`lexer.c:88` truncates token text at 128 bytes, so a formatter that rebuilds
+`docs/design/design_tooling.md` §3: `src/frontend/lexer.c:272-273` throws
+comments away and `src/frontend/lexer.c:88` truncates token text at 128 bytes,
+so a formatter that rebuilds
 source from tokens or the tree deletes every comment in the corpus and silently
 corrupts long string literals. Both hazards are impossible by construction
 today; a rewrite gives them back.
@@ -203,11 +195,11 @@ host load. Blocking on these wastes minutes per call. Start them with
 | Command | Roughly | Notes |
 |---|---|---|
 | `kernel/verify.sh` | ~1 min | BIOS boot vs a golden transcript |
-| `kernel/verify-raw.sh` | 1–3 min | our own bootloader; polls for its marker |
-| `kernel/verify-iso.sh` | ~1.5 min | BIOS **and** UEFI through GRUB, two full boots |
-| `kernel/verify-efi.sh` | ~1 min | zlOS as its OWN UEFI application - the ThinkPad's path |
-| `kernel/mkiso.sh` | under a minute | rebuilds the kernel first |
-| `./build.sh` (repo root) | ~1 min | the zl toolchain; needed before `kernel/mkdisk.sh` |
+| `kernel/tools/checks/verify-raw.sh` | 1–3 min | our own bootloader; polls for its marker |
+| `kernel/tools/checks/verify-iso.sh` | ~1.5 min | BIOS **and** UEFI through GRUB, two full boots |
+| `kernel/tools/checks/verify-efi.sh` | ~1 min | zlOS as its OWN UEFI application - the ThinkPad's path |
+| `kernel/tools/images/mkiso.sh` | under a minute | rebuilds the kernel first |
+| `./build.sh` (repo root) | ~1 min | the zl toolchain; needed before `kernel/tools/images/mkdisk.sh` |
 | `kernel/build{,64,efi}.sh` | seconds | just compiles |
 | any `qemu-system-*` boot | 15 s – 3 min | **entirely dependent on host load** |
 
@@ -231,7 +223,7 @@ anything heavy; if the 1-minute figure is already above ~4, wait.
 `verify.sh` and `verify-raw.sh` boot the **32-bit** kernel. `verify-iso.sh`'s
 "UEFI" case boots **GRUB's** `bootx64.efi`, which multiboot-loads that same
 32-bit kernel - the EFI binary inside `zlOS.iso` has 451 GRUB strings in it and
-zero zlOS ones. So nothing exercised `kernel/efi.c`, the 64-bit build, or the
+zero zlOS ones. So nothing exercised `kernel/boot/efi.c`, the 64-bit build, or the
 path a real laptop takes.
 
 That is not hypothetical: a change to the interrupt handlers killed the 64-bit
@@ -256,7 +248,7 @@ gate, wait for the expected output, never for a fixed wall-clock time.**
 
 ## The Intel display driver is different from every other driver here
 
-`kernel/intel.c` drives the real panel on the test laptop (ThinkPad X1 Carbon
+`kernel/src/drivers/display/intel.c` drives the real panel on the test laptop (ThinkPad X1 Carbon
 Gen 8, CML-U 8086:9B41). Two rules:
 
 1. **MOST write paths are gated behind `lt_armed`, and four are not.** Measured
@@ -287,11 +279,11 @@ Gen 8, CML-U 8086:9B41). Two rules:
    hazard list is section 4.1 of the plan. Treat panel power as the one area
    where "try it and see" is not acceptable.
 
-Develop it from Linux userspace against the live GPU via `kernel/hosttest/` —
+Develop it from Linux userspace against the live GPU via `kernel/tests/host/` —
 seconds per iteration, no reboots:
 
 ```
-cd kernel/hosttest
+cd kernel/tests/host
 ./gpu-dev.sh probe            # read everything, safe, i915 keeps running
 sudo ./modeset_test --survey   # firmware-state survey, read-only
 sudo ./modeset-run.sh --survey # same, with i915 detached; auto-recovers
@@ -312,8 +304,8 @@ server-side source (`gh api repos/RoyX4/zl-linux --jq .pushed_at`).
 ## Build outputs do not belong in git
 
 `.gitignore` covers them, but several were already tracked and had to be
-`git rm --cached`'d (`kernel/_gen64.c`, `kernel/hosttest/dpll_test`,
-`kernel/_genefi.c`, and `kernel/hosttest/{browsershot,wmshot}.ppm`). Before
+`git rm --cached`'d (`kernel/_gen64.c`, `kernel/tests/host/dpll_test`,
+`kernel/_genefi.c`, and `kernel/tests/host/{browsershot,wmshot}.ppm`). Before
 committing, check that a new binary or generated `.c` is not being added.
 
 **A tracked file is never ignored.** `.gitignore` only applies to files git is
@@ -342,7 +334,7 @@ A build output nobody ever wrote a pattern for is invisible to it. `kernel/.giti
 hosttest section is a hand-maintained allowlist, one line per binary, and it is
 still incomplete: `hosttest/inputtest_feel`, `hosttest/inputtest_hid`,
 `hosttest/wmbench` and `hosttest/wmtest_feel` are tracked, unlisted, and
-rewritten by `./build.sh` on every run. `git ls-files kernel/hosttest/ | grep -v '\.c$'`
+rewritten by `./build.sh` on every run. `git ls-files kernel/tests/host/ | grep -v '\.c$'`
 is the check that actually catches those.
 
 All four build scripts that emit generated C write under `kernel/_gen*.c`

@@ -314,7 +314,7 @@ gap, not a graphics one.
 
 ## Roy already wrote a graphics plan — and zlOS went the other way
 
-`docs/design/GRAPHICS_PLAN.md`, drafted **2026-08-03**, maps a five-layer ladder:
+`docs/archive/superseded/GRAPHICS_PLAN.md`, drafted **2026-08-03**, maps a five-layer ladder:
 
 ```
 5. GPU / 3D        OpenGL / DirectX / Vulkan
@@ -326,7 +326,7 @@ gap, not a graphics one.
 
 Its conclusion: *"the live window is behind FFI"*, layers 3–5 are **all gated on
 calling Windows DLLs**, and the ordered path is `bytes` type → canvas → PNG →
-terminal game → **FFI** → `stdlib/window.zl` → OpenGL.
+terminal game -> **FFI** -> future stdlib window module -> OpenGL.
 
 **Eight days later zlOS jumped to layer 3 without any of it.**
 
@@ -345,7 +345,7 @@ this document has just established that nobody does. So on zlOS, layer 5 is not
 "FFI to OpenGL", it is **"write a software rasterizer"**: the SerenityOS /
 Essence path, and `fb3d.c` is already the first step of it.
 
-`GRAPHICS_PLAN.md` has been annotated to say so.
+`docs/archive/superseded/GRAPHICS_PLAN.md` has been annotated to say so.
 
 ## Sources
 

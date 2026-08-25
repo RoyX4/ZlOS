@@ -66,7 +66,7 @@ no representation for a machine integer.**
 
 ### 3.1 Every value is a 64-byte struct
 
-`runtime.c:35` enforces it:
+`src/runtime/runtime.c:35` enforces it:
 
 ```c
 typedef char zl_value_is_64_bytes[(sizeof(Value) == 64) ? 1 : -1];
@@ -76,7 +76,7 @@ A C `long` is 8 bytes. A zl number is 64, and it is passed **by value**.
 
 ### 3.2 Every operator is a runtime string dispatch
 
-`runtime.c:333` is `Value zl_binop(const char *op, Value l, Value r)`, and its
+`src/runtime/runtime.c:333` is `Value zl_binop(const char *op, Value l, Value r)`, and its
 body is a `strcmp` ladder. The kernel's copy (`runtime_kernel.c:505`) is cheaper
 — it compares `op[0]`/`op[1]` directly — but it is still a call per operator,
 still on 64-byte structs, and still converts through `double` on every single
@@ -132,11 +132,11 @@ Its stages, and what each is for:
 | 2 | shrink `Value` 48 → 16 bytes | cheaper boxed path, no language change |
 | 3 | annotations lex and parse, nothing reads them | syntax lands, zero behaviour change |
 | 4 | the type pass, check-only | |
-| 5 | `compilel.c` consumes types — unboxed `int`/`bool` | **the actual speed** |
+| 5 | `src/backends/llvm/compilel.c` consumes types — unboxed `int`/`bool` | **the actual speed** |
 | 6 | the boundary: box/unbox shims and `any` | typed and untyped code interoperate |
 | 7 | records | the `struct` unlock — ~23 corpus files |
 | 8 | nullables and generics | |
-| 9 | annotate `compiler.zl` | optional, fixpoint risk, last |
+| 9 | annotate `src/selfhost/compiler.zl` | optional, fixpoint risk, last |
 
 Two design decisions in it are load-bearing and worth knowing before touching
 anything:
@@ -146,13 +146,13 @@ anything:
   stdlib modules cannot regress.
 - **Per-function type inference is unsound as the language stands**, because
   assigning a name inside a function writes the *global* of that name when one
-  exists (`interp.c:173-185`). Any inference pass must start with a
+  exists (`src/runtime/interp.c:173-185`). Any inference pass must start with a
   whole-program global collection. The plan calls this the single most likely
   way to get the feature subtly wrong, and it is right.
 
 ### 4.1 zl already has an unboxed backend
 
-`compilel.c` (2,465 lines) emits LLVM IR with a static `T_INT`(i64) /
+`src/backends/llvm/compilel.c` (2,465 lines) emits LLVM IR with a static `T_INT`(i64) /
 `T_NUM`(double) lattice and **no boxing**. `PLAN_unboxing.md` §0 records it at
 parity with C on four integer benchmarks — 67 ms vs 71, 58 vs 61, 33 vs 33,
 62 vs 62 — and `nativegen` with no optimiser at all matching `clang -O2` on the
@@ -165,7 +165,7 @@ fast backends buy their speed by refusing most of the language.
 
 ## 5. What the plan does NOT cover — the kernel gap
 
-**Stage 5 makes `compilel.c` consume types. The kernel uses `compile.c`.**
+**Stage 5 makes `src/backends/llvm/compilel.c` consume types. The kernel uses `src/backends/c/compile.c`.**
 
 `kernel/build.sh` runs `../compile` (the boxed C backend). Nothing in
 `PLAN_unboxing.md` makes *that* backend unboxed. So landing all nine stages
@@ -173,9 +173,9 @@ produces a fast zl and leaves the kernel exactly where it is.
 
 Closing that gap is one of two choices, and it has not been made:
 
-- **(a) Give `compile.c` the typed path too.** It is only 573 lines with 92 emit
+- **(a) Give `src/backends/c/compile.c` the typed path too.** It is only 573 lines with 92 emit
   sites, so this is smaller than it sounds — but it is duplicated work against
-  `compilel.c`.
+  `src/backends/llvm/compilel.c`.
 - **(b) Point the kernel build at `compilel` → LLVM IR → clang, freestanding.**
   Cheaper if it works, and the fit is better than it first appears: `compilel`
   supports no lists, and the kernel subset *also* has no lists
@@ -225,7 +225,7 @@ This is a normal floor. Every OS has one.
 | | difficulty | why |
 |---|---|---|
 | the changeover mechanics | **easy** | file-by-file, seam proven, four build scripts to update |
-| `PLAN_unboxing.md` stages 1–2 | **small** | `runtime.c`/`runtime.h` only, no language change, kernel benefits immediately |
+| `PLAN_unboxing.md` stages 1–2 | **small** | `src/runtime/runtime.c`/`src/runtime/runtime.h` only, no language change, kernel benefits immediately |
 | stages 3–6 (the typed subset) | **the real work** | a type pass and a typed backend path |
 | closing the §5 kernel gap | **unscoped** | decision (a) or (b) not yet taken |
 | stage 7 (records) | **the `wm.c` unlock** | window table, event queue, driver register layouts |
@@ -267,7 +267,7 @@ uses is stated as an open question because it *is* one — it was not checked.
 
 `zl_binop` and `zl_unop` now switch on `op[0]` instead of walking a ladder of
 15 `strcmp`s in source order. Signature unchanged, so no caller, no already
-generated `.c` and no line of `compiler.zl` moved.
+generated `.c` and no line of `src/selfhost/compiler.zl` moved.
 
 **Measured, interleaved A/B, best of 7:**
 
@@ -300,9 +300,9 @@ same failure `kernel/CLAUDE.md` records under "Gates must never be timing-
 sensitive", arriving from a different direction.
 
 **One correction to the plan's method.** It says the interpreter column is a
-free control because `interp` does not link `runtime.c`. That is a Windows
+free control because `interp` does not link `src/runtime/runtime.c`. That is a Windows
 fact and it is false here — `build.sh:11` links it. It is still a valid
-control, for a different reason: `interp.c` makes **zero** calls to `zl_binop`
+control, for a different reason: `src/runtime/interp.c` makes **zero** calls to `zl_binop`
 (it has its own `Value` and its own `eval`), so a `zl_binop` change cannot move
 that column.
 
@@ -313,18 +313,18 @@ file:
 
 | file | sites | consequence |
 |---|---|---|
-| `runtime.c` | ~160 | the work |
-| `interp.c` | ~150 | **none** — it does not include `runtime.h`, it has its own `Value` |
-| `compile.c` | **0** | **generated code is insulated** — it goes through `zl_len_list`/`zl_item`/`zl_index`/`zl_set`, never a field |
-| `compilel.c` | 3 | trivial |
+| `src/runtime/runtime.c` | ~160 | the work |
+| `src/runtime/interp.c` | ~150 | **none** — it does not include `src/runtime/runtime.h`, it has its own `Value` |
+| `src/backends/c/compile.c` | **0** | **generated code is insulated** — it goes through `zl_len_list`/`zl_item`/`zl_index`/`zl_set`, never a field |
+| `src/backends/llvm/compilel.c` | 3 | trivial |
 | `runtime_kernel.c` | 5 | all inside refusal stubs |
 
-**`compile.c` at zero is the important one.** It means the layout change cannot
+**`src/backends/c/compile.c` at zero is the important one.** It means the layout change cannot
 break a single line of already-generated output, which is what makes Stage 2 an
 afternoon rather than a week.
 
-**But `runtime.h` is shared with the kernel.** `kernel/build.sh` compiles with
-`-I..` and there is no second copy — verified, `kernel/runtime.h` does not
+**But `src/runtime/runtime.h` is shared with the kernel.** `kernel/build.sh` compiles with
+`-I..` and there is no second copy — verified, `src/runtime/runtime.h` does not
 exist. So Stage 2 changes the kernel's ABI directly and needs all four boot
 gates, not just `run_tests.sh`. That is the point rather than a cost: zlOS runs
 on fixed stacks, and a 4x smaller `Value` is a 4x smaller zl stack frame.
@@ -332,7 +332,7 @@ on fixed stacks, and a 4x smaller `Value` is a 4x smaller zl stack frame.
 ### 10.3 The constraint Stage 2 must not break
 
 `push()` is the one place in the runtime where two zl values **deliberately
-share mutable storage**, and `runtime.c` records that it has been wrong twice —
+share mutable storage**, and `src/runtime/runtime.c` records that it has been wrong twice —
 appending unconditionally was a use-after-free, copying every time was O(n²).
 Tip tracking is the version that is neither, and it splits a list's state:
 
@@ -352,7 +352,7 @@ an assumption about it.
 ### 10.4 Stage 2 belongs in a worktree
 
 Other sessions are editing this same checkout — a commit from another one
-landed between the two above. A half-applied `runtime.h` change breaks
+landed between the two above. A half-applied `src/runtime/runtime.h` change breaks
 everyone's build, so this one does not get done in place.
 
 ### 10.5 Stage 2 — done, on `lang/value-16`, **deliberately not merged**
@@ -411,8 +411,8 @@ not build a kernel at all.**
 
 | | |
 |---|---|
-| `kernel/keycodes.h` | **untracked** |
-| `kernel/crypto.c` | **untracked** — and it is in `build.sh`'s source list |
+| `kernel/src/drivers/input/keycodes.h` | **untracked** |
+| `kernel/src/net/crypto.c` | **untracked** — and it is in `build.sh`'s source list |
 | 12 kernel/freestanding sources | interdependent **uncommitted** changes |
 
 A fresh clone of this repo cannot build zlOS. The two untracked `.c`/`.h` files
@@ -424,8 +424,8 @@ re-applied on top, so it proves the layout is compatible with **the tree as it
 stands today**, not with the committed tree. That is why the branch stays
 unmerged: the gate has to be repeatable before the result means anything.
 
-**First action for whoever picks this up: commit `kernel/keycodes.h` and
-`kernel/crypto.c`.** Then re-run `kernel/verify.sh`, `verify-raw.sh`,
+**First action for whoever picks this up: commit `kernel/src/drivers/input/keycodes.h` and
+`kernel/src/net/crypto.c`.** Then re-run `kernel/verify.sh`, `verify-raw.sh`,
 `verify-efi.sh` and `verify-iso.sh` on `lang/value-16` and merge.
 
 ---

@@ -14,9 +14,9 @@
 # arms see the same contention, and report best-of-N for each.
 #
 # Usage:  ./ab.sh <runtime_A.c> <runtime_B.c> [runs]
-#         ./ab.sh /tmp/runtime-HEAD.c ../runtime.c 7
+#         ./ab.sh /tmp/runtime-HEAD.c ../src/runtime/runtime.c 7
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 ROOT=$(cd .. && pwd)
 
 A=${1:?usage: ab.sh <runtime_A.c> <runtime_B.c> [runs]}
@@ -44,8 +44,8 @@ for src in b*.zl; do
         printf '%-12s %10s\n' "$name" COMPILE-FAIL; fail=1; continue; }
     for arm in A B; do
         rt=$A; [ $arm = B ] && rt=$B
-        gcc -O2 -D_strdup=strdup -I"$ROOT" -o "$tmp/$name.$arm" \
-            "$tmp/out.c" "$rt" "$ROOT/os_linux.c" -lm 2>"$tmp/$name.$arm.err" || {
+        gcc -O2 -D_strdup=strdup -I"$ROOT/src/runtime" -o "$tmp/$name.$arm" \
+            "$tmp/out.c" "$rt" "$ROOT/src/runtime/os_linux.c" -lm 2>"$tmp/$name.$arm.err" || {
             printf '%-12s %10s   %s\n' "$name" "BUILD-FAIL-$arm" "$(head -2 "$tmp/$name.$arm.err")"
             fail=1; continue 2; }
     done

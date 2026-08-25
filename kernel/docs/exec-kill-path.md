@@ -132,7 +132,7 @@ special cases.
 
 **So the budget is charged per byte allocated, at a single allocation seam.**
 `zi_alloc` / `zi_strdup` / `zi_realloc` replaced all 60 `malloc`/`_strdup`/
-`realloc` sites in `interp.c`. A new builtin cannot escape the budget without
+`realloc` sites in `src/runtime/interp.c`. A new builtin cannot escape the budget without
 avoiding memory altogether, and nobody has to remember anything.
 
 The divisor is 64 bytes to a step, which is roughly the cost of a `Value`, so
@@ -245,7 +245,7 @@ Measured on this host's 8 MiB stack: 6000 brackets survives, 6500 crashes. **The
 kernel has 256 KiB, roughly 32× less — about 200 brackets, a source file under a
 quarter of a kilobyte, with no memory protection to contain where it lands.**
 
-Capping recursion inside `parser.c` would mean threading a counter through
+Capping recursion inside `src/frontend/parser.c` would mean threading a counter through
 eleven precedence levels in a file this track does not own. But parser recursion
 is bounded by bracket nesting, and bracket nesting is visible in the **token
 stream** before a single frame is pushed. One linear scan, no parser change, and

@@ -13,12 +13,12 @@ drove real silicon.
 ## The defect in three lines
 
 ```c
-/* kernel/intel.c:435 — the exported accessor */
+/* kernel/src/drivers/display/intel.c:435 — the exported accessor */
 u32 intel_mmio(void)      { return (u32)mmio; }
 ```
 
 ```c
-/* kernel/gpuring.c:248-256 — every ring register access */
+/* kernel/src/drivers/display/gpuring.c:248-256 — every ring register access */
 static gr_u32 mmio_r(gr_u32 off)
 {
     return *(volatile gr_u32 *)((gr_uptr)intel_mmio() + (gr_uptr)off);
@@ -39,7 +39,7 @@ that looks like it preserves them.**
 well-commented:
 
 ```c
-/* kernel/intel.c:414-425 */
+/* kernel/src/drivers/display/intel.c:414-425 */
 mmio      = (uptr)pci_bar(i, 0);          /* GTTMMADR */
 ...
 /* Written as two 16-bit shifts, never one 32-bit shift. On a 32-bit
@@ -66,8 +66,8 @@ out-of-bounds access that does not fault landed in the next mapping.*
 ```
 $ grep -rn "intel_mmio()" kernel/*.c freestanding/*.c | grep -v 'out.c\|_gen'
 freestanding/runtime_kernel.c:1476:  if (streq(name,"intel_mmio")) return zl_num((double)intel_mmio());
-kernel/gpuring.c:249:  return *(volatile gr_u32 *)((gr_uptr)intel_mmio() + (gr_uptr)off);
-kernel/gpuring.c:255:  *(volatile gr_u32 *)((gr_uptr)intel_mmio() + (gr_uptr)off) = val;
+kernel/src/drivers/display/gpuring.c:249:  return *(volatile gr_u32 *)((gr_uptr)intel_mmio() + (gr_uptr)off);
+kernel/src/drivers/display/gpuring.c:255:  *(volatile gr_u32 *)((gr_uptr)intel_mmio() + (gr_uptr)off) = val;
 ```
 
 `intel.c`'s own display path is **safe** — it uses the raw `uptr mmio` internally
@@ -81,7 +81,7 @@ diagnostic a human would use to check this **agrees with the bug.**
 ## Why 116 green checks never saw it
 
 ```c
-/* kernel/hosttest/gputest.c:33 */
+/* kernel/tests/host/gputest.c:33 */
 static unsigned intel_mmio(void)    { return 0; }
 ```
 
@@ -95,7 +95,7 @@ one. This is the repo's documented "green gate over a hole" pattern, and here th
 Change the accessor's type, not its callers:
 
 ```c
-/* kernel/intel.c:435 */
+/* kernel/src/drivers/display/intel.c:435 */
 uptr intel_mmio(void)      { return mmio; }
 ```
 
@@ -103,8 +103,8 @@ and update the three declarations to match:
 
 | file:line | current | should be |
 |---|---|---|
-| `kernel/gpuring.c:56` | `gr_u32 intel_mmio(void);` | `gr_uptr intel_mmio(void);` |
-| `kernel/hosttest/intel_probe.c:57` | `u32  intel_mmio(void);` | `uptr intel_mmio(void);` |
+| `kernel/src/drivers/display/gpuring.c:56` | `gr_u32 intel_mmio(void);` | `gr_uptr intel_mmio(void);` |
+| `kernel/tests/host/intel_probe.c:57` | `u32  intel_mmio(void);` | `uptr intel_mmio(void);` |
 | `freestanding/runtime_kernel.c:623` | `extern unsigned int intel_mmio(void);` | `extern unsigned long long intel_mmio(void);` |
 
 Then the harness stub at `hosttest/gputest.c:33` must return a **>4 GiB sentinel**

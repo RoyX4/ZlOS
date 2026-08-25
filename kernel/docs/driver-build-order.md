@@ -304,7 +304,7 @@ The `hosttest/gpu-dev.sh` method — map a BAR read-only from Linux userspace, i
 
 ### Two process notes that will otherwise cost a day
 
-Other Claude sessions edit this same checkout — the tree is dirty right now (`CLAUDE.md`, `build.sh`, `kernel/idt.c`, `kernel/efi.c`, `kernel/xhci.c` and 10 more modified, `crypto.c` untracked). Run `git status` before any gate or commit, and isolate with a worktree for anything multi-commit.
+Other Claude sessions edit this same checkout — the tree is dirty right now (`CLAUDE.md`, `build.sh`, `kernel/src/arch/x86/idt.c`, `kernel/boot/efi.c`, `kernel/src/drivers/input/xhci.c` and 10 more modified, `crypto.c` untracked). Run `git status` before any gate or commit, and isolate with a worktree for anything multi-commit.
 
 This box is 4 cores / 15 GB and has been OOM-killed before by agent fan-out plus QEMU. Check loadavg before pairing a QEMU gate with parallel agents.
 

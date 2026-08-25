@@ -2,8 +2,8 @@
 
 **Status:** proposal / nothing built
 **Author:** tooling design pass, 2026-08-02
-**Scope:** four things zl has none of. Touches `lexer.c`, `parser.c`/`parser.h`,
-`interp.c`, `compilel.c`, and adds up to three new tools. Changes no language
+**Scope:** four things zl has none of. Touches `src/frontend/lexer.c`, `src/frontend/parser.c`/`src/frontend/parser.h`,
+`src/runtime/interp.c`, `src/backends/llvm/compilel.c`, and adds up to three new tools. Changes no language
 semantics except where explicitly called out (§3.2). No code is changed by this
 document.
 
@@ -21,26 +21,26 @@ language somebody uses on a Tuesday".
 Three findings that change the obvious ordering:
 
 1. **The module system is not an ergonomics problem, it is a correctness
-   problem.** `include` does not exist — not in `lexer.c`, `parser.c`,
-   `interp.c`, or `compiler.zl`. The workaround already in the tree is *copying
+   problem.** `include` does not exist — not in `src/frontend/lexer.c`, `src/frontend/parser.c`,
+   `src/runtime/interp.c`, or `src/selfhost/compiler.zl`. The workaround already in the tree is *copying
    library source into the file that needs it*. `tests/test_algorithms.zl`
    states it in its own header: the modules under test are "inlined below,
    copied verbatim from stdlib/sortx.zl, stdlib/astar.zl and
    stdlib/dijkstra.zl". **The suite therefore proves nothing about the shipped
    module.** Ten `.zl` files define `fn check(label, got, want)` verbatim.
 
-2. **The AST has no source position.** `Token` carries a line (`lexer.h:23-27`);
-   `Node` does not (`parser.h:33-42`). Everything downstream inherits that:
-   `runtime_error` at `interp.c:219-226` prints `runtime error: %s` with no
+2. **The AST has no source position.** `Token` carries a line (`src/frontend/lexer.h:23-27`);
+   `Node` does not (`src/frontend/parser.h:33-42`). Everything downstream inherits that:
+   `runtime_error` at `src/runtime/interp.c:219-226` prints `runtime error: %s` with no
    file, no line, no function. Debug info, LSP diagnostics, and any error
    message from a running program all need the same ~60-line change, and none of
    them can be built before it.
 
 3. **The formatter is cheaper *and* more dangerous than it looks.** The AST
    pretty-printer everyone reaches for cannot be written safely, because
-   `lexer.c:88` silently truncates any token text at 127 characters
+   `src/frontend/lexer.c:88` silently truncates any token text at 127 characters
    (`if (len >= MAX_TEXT) len = MAX_TEXT - 1;   /* never overflow */`) and
-   `lexer.c:272-273` throws comments away entirely. A tool that rebuilds source
+   `src/frontend/lexer.c:272-273` throws comments away entirely. A tool that rebuilds source
    from tokens or from the tree deletes every comment in the corpus and silently
    corrupts any string literal ≥128 bytes. The right formatter is not a
    pretty-printer at all — see §3.
@@ -59,17 +59,17 @@ construction. **Highest-value item overall:** `include`, and it is blocked on
 
 | Capability | Status | Evidence |
 |---|---|---|
-| Full AST for the whole surface syntax | yes | `parser.h:11-31`, 22 node kinds |
-| Tree walker to copy for a printer | yes | `print_node`, `parser.c:981-1030` |
-| Line number on tokens | yes | `Token.line`, `lexer.h:26` |
+| Full AST for the whole surface syntax | yes | `src/frontend/parser.h:11-31`, 22 node kinds |
+| Tree walker to copy for a printer | yes | `print_node`, `src/frontend/parser.c:981-1030` |
+| Line number on tokens | yes | `Token.line`, `src/frontend/lexer.h:26` |
 | Column number on tokens | **no** | `Token` is `{type, text[128], line}` |
-| Line number on AST nodes | **no** | `parser.h:33-42` |
-| Comments in the token stream | **no** | `lexer.c:272-273` skips to EOL |
-| Parser error recovery | **no** | `parse_error` → `exit(1)`, `parser.c:67-72` |
-| Any include/import | **no** | zero hits in `lexer.c`, `parser.c`, `interp.c`, `compiler.zl` |
-| Runtime error location | **no** | `interp.c:219-226` |
-| Any `!dbg` metadata in LLVM output | **no** | zero hits in `compilel.c` |
-| Multi-line string literals | **no** (helpfully) | `lexer.c:160-165` hard-errors |
+| Line number on AST nodes | **no** | `src/frontend/parser.h:33-42` |
+| Comments in the token stream | **no** | `src/frontend/lexer.c:272-273` skips to EOL |
+| Parser error recovery | **no** | `parse_error` → `exit(1)`, `src/frontend/parser.c:67-72` |
+| Any include/import | **no** | zero hits in `src/frontend/lexer.c`, `src/frontend/parser.c`, `src/runtime/interp.c`, `src/selfhost/compiler.zl` |
+| Runtime error location | **no** | `src/runtime/interp.c:219-226` |
+| Any `!dbg` metadata in LLVM output | **no** | zero hits in `src/backends/llvm/compilel.c` |
+| Multi-line string literals | **no** (helpfully) | `src/frontend/lexer.c:160-165` hard-errors |
 
 Two of those "no"s are load-bearing in ways that are not obvious, and they are
 where the interesting design work is.
@@ -96,7 +96,7 @@ The consequence is precise: **fixing a bug in `stdlib/sortx.zl` does not make
 `tests/test_algorithms.zl` fail differently, because the test is not calling
 `stdlib/sortx.zl`.** The 2107 checks are green against copies. This is the same
 class of failure as the self-hosting gate described in the brief — `verify.ps1`
-proves closure over `compiler.zl`, not coverage — and it has the same shape:
+proves closure over `src/selfhost/compiler.zl`, not coverage — and it has the same shape:
 a green signal that does not mean what it looks like it means.
 
 That is why this is first on value. It is not "it would be nice to reuse code".
@@ -144,14 +144,14 @@ number one in the build order despite being number one in value.
 
 | Piece | Lines | Where |
 |---|---:|---|
-| `expand_includes()` text pass | 60 | `lexer.c`, called by `lex_file` |
-| `line_origin` map + `Token` origin fields | 60 | `lexer.c`, `lexer.h`, error printers |
-| Cycle / include-once guard | 20 | `lexer.c` |
-| Self-hosted `expand` in zl | 45 | `compiler.zl` (sketch exists, §5.4) |
+| `expand_includes()` text pass | 60 | `src/frontend/lexer.c`, called by `lex_file` |
+| `line_origin` map + `Token` origin fields | 60 | `src/frontend/lexer.c`, `src/frontend/lexer.h`, error printers |
+| Cycle / include-once guard | 20 | `src/frontend/lexer.c` |
+| Self-hosted `expand` in zl | 45 | `src/selfhost/compiler.zl` (sketch exists, §5.4) |
 | De-inlining the 8 suites | ~-1,500 | `tests/*.zl`, deletion |
 | **Total new code** | **~185** | |
 
-**Unlocks:** tests that test the shipped module; `compiler.zl` splittable into
+**Unlocks:** tests that test the shipped module; `src/selfhost/compiler.zl` splittable into
 lexer/parser/codegen; a stdlib that is a library instead of a snippet archive;
 prerequisite for any package manager later.
 
@@ -162,9 +162,9 @@ prerequisite for any package manager later.
 ### 3.1 The pretty-printer is a trap
 
 The obvious design — walk the AST, emit canonical source, ~300 lines, reuse
-`print_node`'s shape — does not survive contact with `lexer.c`.
+`print_node`'s shape — does not survive contact with `src/frontend/lexer.c`.
 
-**Comments are not in the tree.** `lexer.c:272-273`:
+**Comments are not in the tree.** `src/frontend/lexer.c:272-273`:
 
 ```c
 } else if (c == '#') {                        /* comment to end of line */
@@ -177,14 +177,14 @@ corpus that is catastrophic, not cosmetic: `examples/life.zl` opens with 25
 consecutive comment lines that are the entire explanation of the program, and
 the stdlib's contracts are documented in comments (`stdlib/dict.zl:1-2`).
 
-**Token text is silently truncated.** `lexer.c:88`:
+**Token text is silently truncated.** `src/frontend/lexer.c:88`:
 
 ```c
 if (len >= MAX_TEXT) len = MAX_TEXT - 1;   /* never overflow */
 ```
 
-with matching guards at `lexer.c:168`, `:200`, `:211`. `MAX_TEXT` is 128
-(`lexer.h:10`). A 200-character string literal lexes to its first 127 bytes with
+with matching guards at `src/frontend/lexer.c:168`, `:200`, `:211`. `MAX_TEXT` is 128
+(`src/frontend/lexer.h:10`). A 200-character string literal lexes to its first 127 bytes with
 no diagnostic. Nothing in the corpus currently hits this — I grepped `stdlib/`
 for string literals ≥110 characters and found none — so the bug is latent. But a
 tool whose entire job is *rewrite this file in place from the token stream*
@@ -195,7 +195,7 @@ Making the pretty-printer safe therefore means: teach the lexer to emit
 `T_COMMENT` tokens, decide an attachment rule (leading/trailing/dangling — the
 part of every formatter that is actually hard), give `Node` a comment list, and
 make token text heap-allocated or verify a re-lex round trip. That is a real
-project — call it **550-700 lines** — and it lands in `lexer.c` and `parser.c`,
+project — call it **550-700 lines** — and it lands in `src/frontend/lexer.c` and `src/frontend/parser.c`,
 the two files most likely to be in flight for other reasons.
 
 ### 3.2 The re-indenter is the version worth building
@@ -216,10 +216,10 @@ literal or inside a `#` comment does not move the indent — but never to
 *reconstruct* text. Truncation cannot bite, because truncated text is never
 emitted. Comments cannot be lost, because comment bytes are copied like any
 other bytes. F-string braces are already handled by the lexer as a single
-`T_FSTRING` token (`lexer.h:19`), so `f"{x}"` cannot corrupt the depth count.
+`T_FSTRING` token (`src/frontend/lexer.h:19`), so `f"{x}"` cannot corrupt the depth count.
 
 This works because of an accident of the language that is worth noting: zl has
-**no multi-line string literals**. `lexer.c:160-165` hard-errors on a newline
+**no multi-line string literals**. `src/frontend/lexer.c:160-165` hard-errors on a newline
 inside a string ("string never closed"). Every physical line is a complete
 lexical unit. That is what makes line-granular rewriting sound; in Python or C
 it would not be.
@@ -244,7 +244,7 @@ that it costs almost nothing and it makes the *next* 96 modules free.
 | Option | Lines | Comments safe? | Long strings safe? | Parser change? |
 |---|---:|---|---|---|
 | A — AST pretty-printer | 300 | **no, deletes all** | **no, truncates** | no |
-| B — comment-aware pretty-printer | 550-700 | yes | needs heap tokens | yes, `lexer.c` + `parser.c` |
+| B — comment-aware pretty-printer | 550-700 | yes | needs heap tokens | yes, `src/frontend/lexer.c` + `src/frontend/parser.c` |
 | **C — line-granular re-indenter** | **150** | **yes, by construction** | **yes, by construction** | **no** |
 
 **Recommend C.** Ship it as `fmt.exe <file>` writing to stdout, plus a
@@ -271,17 +271,17 @@ typedef struct Node {
     struct Node *a, *b, *c;
     struct Node **kids;
     int          nkids;
-} Node;                                  /* parser.h:33-42 — no line */
+} Node;                                  /* src/frontend/parser.h:33-42 — no line */
 ```
 
-`node_new` at `parser.c:35` is the single allocation point for every node, and
-the parser's cursor (`parser.c:59-62`) has `cur()->line` available at that
+`node_new` at `src/frontend/parser.c:35` is the single allocation point for every node, and
+the parser's cursor (`src/frontend/parser.c:59-62`) has `cur()->line` available at that
 moment. So the change is: add `int line;` to `Node`, set it in `node_new` from
 `cur()->line`, done. Roughly **60 lines** once you count the error printers that
 should start using it.
 
 The first payoff is not a debugger. It is that `runtime_error`
-(`interp.c:219-226`) currently prints:
+(`src/runtime/interp.c:219-226`) currently prints:
 
 ```
 runtime error: index out of range
@@ -291,13 +291,13 @@ and could print the line. For a language whose corpus includes a 974-line test
 file, that difference is worth more per day than a debugger will be. Do this
 first regardless of which tooling item ships.
 
-Add a column to `Token` at the same time (`lexer.h:23-27` has `line` only). It
-is a handful of lines in `lexer.c` and the LSP cannot exist without it; doing it
+Add a column to `Token` at the same time (`src/frontend/lexer.h:23-27` has `line` only). It
+is a handful of lines in `src/frontend/lexer.c` and the LSP cannot exist without it; doing it
 twice is silly.
 
 ### 4.2 Debug info splits into one cheap job and one expensive one
 
-**Cheap: LLVM metadata in `compilel.c`.** `compilel.c` emits LLVM IR as *text*
+**Cheap: LLVM metadata in `src/backends/llvm/compilel.c`.** `src/backends/llvm/compilel.c` emits LLVM IR as *text*
 and hands it to `clang` (per the brief, and there are currently zero `!dbg`
 references in the file). That means we never touch DWARF or CodeView bytes
 ourselves. Emit `!DIFile`, `!DICompileUnit`, one `!DISubprogram` per `N_FN`, a
@@ -308,13 +308,13 @@ implementation, both formats, both debuggers. Estimate **250-400 lines** of
 additional emission plus the `Node.line` prerequisite.
 
 There is a second accident working in our favour: zl has exactly one number type
-(a double — `interp.c:264` comment, "zl's only number type is a double"), so the
+(a double — `src/runtime/interp.c:264` comment, "zl's only number type is a double"), so the
 `!DIBasicType` table today is essentially one entry. That gets meaningfully
 harder the moment `design_records.md` and `design_maps_v2.md` land and there are
 aggregate types to describe. **If debug info is wanted at all, it is cheapest to
 prototype now and extend, rather than to retrofit onto records later.**
 
-**Expensive: `nativegen.c`.** We write the PE ourselves. CodeView means emitting
+**Expensive: `src/backends/native/nativegen.c`.** We write the PE ourselves. CodeView means emitting
 `.debug$S`/`.debug$T` sections and, for anything a modern debugger will load
 comfortably, a PDB — a format whose practical reference is Microsoft's
 `microsoft-pdb` repo rather than a specification. Realistically **1,500-3,000
@@ -339,7 +339,7 @@ than to `zl_binop`.
 ### 5.1 The blocker is real and it is `parse_error`
 
 The brief asked me to confirm that the parser exits on first error. Confirmed
-(`parser.c:67-72`):
+(`src/frontend/parser.c:67-72`):
 
 ```c
 static void parse_error(const char *msg)
@@ -350,7 +350,7 @@ static void parse_error(const char *msg)
 }
 ```
 
-Called from at least 15 sites (`parser.c:102, 322, 349, 732, 789, 799, 826, 863,
+Called from at least 15 sites (`src/frontend/parser.c:102, 322, 349, 732, 789, 799, 826, 863,
 871`, plus direct `exit(1)` for f-string errors at `:164, :170, :234, :251`). A
 language server whose only reaction to an in-progress edit is to terminate the
 process is not a language server. Half-typed code is the *normal* state of a
@@ -360,7 +360,7 @@ Converting this is mechanical but not small: `parse_error` records into a
 diagnostic list and returns; each call site needs a defined recovery — the usual
 choice is synchronise to the next `T_NEWLINE` or closing `}` — and every caller
 must tolerate a `NULL` or error node coming back. That is ~200 lines of careful
-surgery across `parser.c`, and it changes behaviour for every existing tool that
+surgery across `src/frontend/parser.c`, and it changes behaviour for every existing tool that
 links the parser. It should be gated behind a flag (`parse_recovering()`) so
 `interp.exe` and the backends keep exiting on first error and nothing about the
 self-hosting gate moves.
@@ -369,11 +369,11 @@ self-hosting gate moves.
 
 Incremental parsing. The brief flags it, and for a large language it is the hard
 part — but zl files are small. The largest in the tree is `tests/test_text.zl`
-at 974 lines; `compiler.zl` is 15,902 bytes. A full re-lex and re-parse on every
+at 974 lines; `src/selfhost/compiler.zl` is 15,902 bytes. A full re-lex and re-parse on every
 keystroke is microseconds. **Skip incremental parsing entirely.** Build it if
 and when a file gets big enough to notice, which on this corpus is never.
 
-One caveat: `node_new` (`parser.c:35`) mallocs and nothing frees. Re-parsing on
+One caveat: `node_new` (`src/frontend/parser.c:35`) mallocs and nothing frees. Re-parsing on
 every keystroke leaks a whole tree each time. At tree-per-parse sizes this is
 megabytes per session — survivable, but the honest fix is an arena per document
 version, freed wholesale on the next parse. ~40 lines.
@@ -440,11 +440,11 @@ say where it happened. If only one thing gets built, build that.
 ## 7. Honest total, and what I did not verify
 
 **Total new code for all four items: ~2,150 lines**, of which ~1,370 is the LSP.
-Everything except the LSP fits in ~780 lines — smaller than `nativegen.c`
-(509 lines) plus `compilel.c` (448). The four items depend on: `Node.line`
+Everything except the LSP fits in ~780 lines — smaller than `src/backends/native/nativegen.c`
+(509 lines) plus `src/backends/llvm/compilel.c` (448). The four items depend on: `Node.line`
 (items 3 and 4), `Token` columns (item 4), parser error recovery (item 4 only),
 `design_scoping_decision.md` resolving (item 2), and clang already being on the
-path (item 3 — it is, `compilel.c` shells out to it today).
+path (item 3 — it is, `src/backends/llvm/compilel.c` shells out to it today).
 
 Deliberately excluded: a **package manager**. `include` with relative paths is
 the whole module system this project needs at 111 files. Registries, version
@@ -453,8 +453,8 @@ not manufacture.
 
 What I did not verify, and would check before writing code:
 
-- **Column tracking.** `Token` has `line` and no column (`lexer.h:23-27`). I
-  assume adding one is a few lines in `lexer.c`'s advance path, but I did not
+- **Column tracking.** `Token` has `line` and no column (`src/frontend/lexer.h:23-27`). I
+  assume adding one is a few lines in `src/frontend/lexer.c`'s advance path, but I did not
   read that path closely enough to cost it precisely.
 - **Whether the 2107 checks actually run against inlined copies.** I established
   that copies exist (10 files defining `check`, `binary_search` in three files,
@@ -463,16 +463,16 @@ What I did not verify, and would check before writing code:
   module. That number matters — it is the size of the correctness hole — and it
   should be measured before §2 is used to justify anything.
 - **F-string interaction with the re-indenter.** I am relying on `T_FSTRING`
-  being one token (`lexer.h:19`) so braces inside it never reach the depth
-  counter. `parser.c:164-254` re-lexes f-string interiors via `lex_text`, which
+  being one token (`src/frontend/lexer.h:19`) so braces inside it never reach the depth
+  counter. `src/frontend/parser.c:164-254` re-lexes f-string interiors via `lex_text`, which
   suggests the outer token does hold the whole literal — but I did not confirm
   that the *lexer* keeps it whole rather than the parser reassembling it. If it
   does not, the re-indenter needs one extra guard.
-- **Whether `compilel.c`'s IR emission has a natural per-statement hook** to
+- **Whether `src/backends/llvm/compilel.c`'s IR emission has a natural per-statement hook** to
   hang `!DILocation` on. I confirmed there is no `!dbg` today; I did not read
   its emission structure to confirm the insertion point is one place rather than
   forty.
-- **PDB cost.** The 1,500-3,000 line estimate for CodeView in `nativegen.c` is
+- **PDB cost.** The 1,500-3,000 line estimate for CodeView in `src/backends/native/nativegen.c` is
   from general knowledge of the format, not from having written one. Treat it as
   "large and risky" rather than as a number. It is a recommendation to *not*
   build, so the imprecision is cheap.

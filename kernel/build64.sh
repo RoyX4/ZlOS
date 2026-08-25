@@ -9,19 +9,23 @@
 set -e
 cd "$(dirname "$0")"
 
-python3 ./gen-app-manifest.py --check
-python3 ./gen-build-identity.py --check
+python3 ./tools/generators/gen-app-manifest.py --check
+python3 ./tools/generators/gen-build-identity.py --check
 
-../compile kernel.zl >/dev/null
+ZL_STDLIB="$PWD/apps" ../compile src/kernel.zl >/dev/null
 cp out.c _gen64.c
 
-CFLAGS="-m64 -O2 -ffreestanding -nostdlib -fno-stack-protector -fno-pic -fno-builtin -mno-red-zone -mcmodel=large -DZL_64 -Wall -Wextra -Werror -Wno-unused-parameter -I.."
+INCLUDES=$(find src boot -type d -printf ' -I%p' | sort)
+CFLAGS="-m64 -O2 -ffreestanding -nostdlib -fno-stack-protector -fno-pic
+        -fno-builtin -mno-red-zone -mcmodel=large -DZL_64
+        -Wall -Wextra -Werror -Wno-unused-parameter
+        -I.. -I../src/runtime $INCLUDES"
 
 # shellcheck disable=SC2086
 gcc $CFLAGS -DZL_KERNEL_SERIAL -c ../freestanding/runtime_kernel.c -o _rt64.o
 # shellcheck disable=SC2086
 gcc $CFLAGS -c _gen64.c   -o _gen64.o
-gcc $CFLAGS -c gdt64.c    -o _gdt64.o
+gcc $CFLAGS -c boot/gdt64.c -o _gdt64.o
 
 # THE SHARED SOURCE LIST. See ./SOURCES. This is the build where fb.c's SIMD
 # path is live (__SSE2__ is baseline on x86-64 and boot64.S sets CR4.OSFXSR),
@@ -31,7 +35,7 @@ while read -r f; do
     case "$f" in ''|\#*) continue ;; esac
     o="_$(basename "$f" .c)64.o"
     EXTRA=""
-    case "$f" in idt.c|apic.c) EXTRA="-mgeneral-regs-only" ;; esac
+    case "$f" in */idt.c|*/apic.c) EXTRA="-mgeneral-regs-only" ;; esac
     # shellcheck disable=SC2086
     gcc $CFLAGS $EXTRA -c "$f" -o "$o"
     OBJS="$OBJS $o"
@@ -39,20 +43,20 @@ done < SOURCES
 
 # Freestanding interpreter: repo-root lexer/parser/interp + ksetjmp.
 # shellcheck disable=SC2086
-gcc $CFLAGS -DZL_FREESTANDING -DBUILD_PARSER -c ../lexer.c -o _lexer64.o
+gcc $CFLAGS -DZL_FREESTANDING -DBUILD_PARSER -c ../src/frontend/lexer.c -o _lexer64.o
 # shellcheck disable=SC2086
-gcc $CFLAGS -DZL_FREESTANDING -DBUILD_INTERP -c ../parser.c -o _parser64.o
+gcc $CFLAGS -DZL_FREESTANDING -DBUILD_INTERP -c ../src/frontend/parser.c -o _parser64.o
 # shellcheck disable=SC2086
-gcc $CFLAGS -DZL_FREESTANDING -c ../interp.c -o _interp64.o
+gcc $CFLAGS -DZL_FREESTANDING -c ../src/runtime/interp.c -o _interp64.o
 # shellcheck disable=SC2086
-gcc $CFLAGS -c ksetjmp.S -o _ksetjmp64.o
+gcc $CFLAGS -c src/arch/x86/ksetjmp.S -o _ksetjmp64.o
 OBJS="$OBJS _lexer64.o _parser64.o _interp64.o _ksetjmp64.o"
 
-gcc $CFLAGS -c smp_trampoline64.S -o _smptr64.o
-gcc -m64 -c boot64.S -o _boot64.o
+gcc $CFLAGS -c boot/smp_trampoline64.S -o _smptr64.o
+gcc -m64 -c boot/boot64.S -o _boot64.o
 
 # shellcheck disable=SC2086
-ld -m elf_x86_64 -T link64.ld -o kernel64.elf \
+ld -m elf_x86_64 -T boot/link64.ld -o kernel64.elf \
    _boot64.o _gen64.o _rt64.o _gdt64.o _smptr64.o $OBJS
 
 echo "built kernel64.elf"

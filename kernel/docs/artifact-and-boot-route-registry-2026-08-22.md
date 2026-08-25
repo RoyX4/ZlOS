@@ -24,7 +24,7 @@ registry, not a prose exception.
 | `zlOS.iso` | Hybrid GRUB ISO | `mkiso.sh` | Exact hash passed GRUB BIOS and GRUB UEFI in QEMU |
 | `zlOS64.iso` | Hybrid GRUB ISO with `kernel64.elf` | `mkiso64.sh` | Exact hash passed GRUB BIOS and GRUB UEFI, then zlOS's owned long-mode switch |
 | `zlOS.img` | Raw BIOS disk with zlOS's 512-byte loader | `mkdisk.sh` | Exact hash passed raw BIOS in QEMU and its shell responded |
-| `zlOS-usb.img` | GPT disk, FAT ESP and native EFI app | `mkusb.sh` | Exact hash passed native 64-bit UEFI in QEMU |
+| `zlOS-usb.img` | GPT disk, FAT ESP and native EFI app | `tools/images/mkusb.sh` | Exact hash passed native 64-bit UEFI in QEMU |
 | `boot-media-ids.json` | Content-derived GPT/FAT identity metadata | `gen-boot-media-ids.py` | Metadata only; reproducible, not executable |
 
 ## The six boot routes
@@ -113,10 +113,10 @@ registry:
 
 ```sh
 python3 check-reproducible-build.py --check --selftest
-./verify-raw.sh
-./verify-efi.sh
-./verify-iso.sh
-./verify-64.sh
+./tools/checks/verify-raw.sh
+./tools/checks/verify-efi.sh
+./tools/checks/verify-iso.sh
+./tools/checks/verify-64.sh
 python3 probe-app-routes.py --no-build \
   --receipt docs/receipts/app-routes-qemu-2026-08-22.json
 python3 probe-app-lifecycle.py --no-build \

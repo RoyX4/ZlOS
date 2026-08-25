@@ -13,7 +13,7 @@ design.
 
 **[The render engine is not blocked.](UNBLOCKED-render-engine.md) ✓**
 `RENDER_SURFACE_STATE` landed at `793763a`, three commits before `HEAD`, as
-`kernel/gpu_surface.inc`. `.ultra/STATE.md` and four other docs still call it the
+`kernel/src/drivers/display/assets/gpu_surface.inc`. `.ultra/STATE.md` and four other docs still call it the
 blocker and say it needs a PRM this machine does not have. The 48×/96× win is available
 and the project is routed away from it.
 
@@ -81,7 +81,7 @@ reading code instead of accepting the brief.
 | `pci.c` has no capability walk or D3→D0 | ✓ `pci_find_cap`, `pci_power_on`, `pci_power_state` all exist and `pci_enable` wakes before enabling. **Correct part:** `pci.c:118` is still a flat `bus 0..3` with no bridge recursion — measured, 8 of 26 functions on this laptop are invisible, **including a second xHCI** |
 | `event_wait()` matches on TYPE only, `xhci.c:604` | `event_wait` **does not exist** — replaced by `xfer_wait` in `f334a3a`, which *does* filter slot+dci at `:640-642`. Five hits repo-wide, all comments or docs |
 | `reset_endpoint` at `:940`, bulk call at `:1848` | substance **correct**, both line numbers stale — actually `:978` and `:2127`. The defect is live: `:989` hardcodes `EP0_RING(slot)` regardless of `dci` |
-| blur/HID physical collision is live | ✓ fixed by `kernel/memmap.h`; `HI_HID` is *below* the blur arena |
+| blur/HID physical collision is live | ✓ fixed by `kernel/src/arch/x86/memmap.h`; `HI_HID` is *below* the blur arena |
 | forcewake lives in `intel.c`; three domains implemented | `intel.c` has **zero** forcewake code. Two domains in `gpuring.c` (RENDER, BLITTER) — and that is a design choice, not a defect ([why](VERIFICATION-LOG.md)) |
 | `gpu_planes.c` is the plane driver | that file exists only as a **host witness** under `hosttest/`; the driver is `intel.c:4702-4804`. And "nothing uses a blended plane" is contradicted by the tool's own output — `CUR_CTL` reads `0x04000027`, bit 5 = ARGB. **The cursor plane is a hardware-blended plane** |
 
@@ -127,7 +127,7 @@ with no hardware) and `gpt.c` (CRC32 poly `0xEDB88320`, golden values already me
 > stranded.
 >
 > ```
-> $ git show desktop/browser-next:kernel/entropy.c | wc -l
+> $ git show desktop/browser-next:kernel/src/net/entropy.c | wc -l
 > 160
 > $ git show desktop/browser-next:kernel/SOURCES | grep -n entropy
 > 85:entropy.c

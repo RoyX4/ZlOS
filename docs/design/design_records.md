@@ -4,8 +4,8 @@
 **Scope:** adds one contextual keyword-shaped word (`rec`), one node type, and a
 lowering rule. Adds **zero** reserved words, **zero** lexer characters, and
 **zero** new construction syntax. No code is changed by this document.
-Line citations are against the tree as it stood on 2026-08-02; `lexer.c`,
-`parser.c` and the numeric backends were being edited concurrently (floats), so
+Line citations are against the tree as it stood on 2026-08-02; `src/frontend/lexer.c`,
+`src/frontend/parser.c` and the numeric backends were being edited concurrently (floats), so
 treat line numbers as pointers, not anchors.
 
 ---
@@ -31,7 +31,7 @@ Five consequences, and they are the whole design:
    that file's assertions on day one.
 4. **Records are nominal to the type checker and structural at runtime.** This
    is a real cost, stated in §5 rather than discovered later.
-5. **The unboxing win is the point.** In `compilel.c` a record whose fields are
+5. **The unboxing win is the point.** In `src/backends/llvm/compilel.c` a record whose fields are
    all scalars is a flat LLVM struct and `.w` is a constant-index
    `getelementptr` — no bounds check, no `Value`, no 48-byte copy. That is the
    only reason to build this rather than keep writing the field names in
@@ -153,7 +153,7 @@ complementary, not competing — `design_maps.md` handles the first.
 ### 1.4 What this is not
 
 It is not a fix for `stdlib/jsonw.zl`, `json_parse.zl`, `lisp_interp.zl`, or
-`compiler.zl`'s `["bin", "+", L, R]` AST. Those are the brief's Tier A —
+`src/selfhost/compiler.zl`'s `["bin", "+", L, R]` AST. Those are the brief's Tier A —
 irreducibly dynamic, eight files — and they should stay lists. A record type
 that tried to swallow them would be reinventing sum types, which is a much
 larger feature with a much worse cost/benefit ratio at this stage.
@@ -231,7 +231,7 @@ for `struct` and `design_ffi_syscalls.md` §2.5(a) chose for `extern`.
 if  else  for  in  fn  return  while  not  and  or  true  false  break  continue
 ```
 
-**The code has fifteen.** `lexer.c:48-54`:
+**The code has fifteen.** `src/frontend/lexer.c:48-54`:
 
 ```c
 static const char *keywords[] = {
@@ -243,7 +243,7 @@ static const char *keywords[] = {
 };
 ```
 
-`elif` is in the lexer and not in the plan. Separately, `compiler.zl:36-37`
+`elif` is in the lexer and not in the plan. Separately, `src/selfhost/compiler.zl:36-37`
 knows **twelve** — it omits `elif`, `break` and `continue` entirely, which is
 one more instance of the `design_selfhost_parity.md` subset gap and needs no
 action here.
@@ -271,7 +271,7 @@ in full; the naming decision follows from it.
 
 `name: type`, one per line, newline-terminated per `MASTER_PLAN.md:211`
 ("Statement end: **newline** — no semicolons"). `:` already lexes —
-`lexer.c:256` accepts it in the symbol set:
+`src/frontend/lexer.c:256` accepts it in the symbol set:
 
 ```c
 if (strchr("(){}[],.+-*/%=!<>?:", c) == NULL) {
@@ -301,7 +301,7 @@ matter — same rule as `design_memory_structs.md:487-489`.
 ### 3.5 Parser and node changes
 
 One new `NodeType`, **appended at the end of the enum** so no existing numeric
-value shifts (`compilel.c` and `compilef.c` print raw `type %d` in their
+value shifts (`src/backends/llvm/compilel.c` and `src/backends/c/compilef.c` print raw `type %d` in their
 unsupported-node errors):
 
 ```
@@ -318,7 +318,7 @@ so if that document lands first this costs one `parse_type()` call site.
 
 ### 4.1 `.` already parses, and is currently dead
 
-`parser.c:340-356` builds member access today:
+`src/frontend/parser.c:340-356` builds member access today:
 
 ```c
 else if (is_sym(".")) {                   /* member access */
@@ -332,15 +332,15 @@ else if (is_sym(".")) {                   /* member access */
 }
 ```
 
-and `interp.c:1521-1522` is the only consumer:
+and `src/runtime/interp.c:1521-1522` is the only consumer:
 
 ```c
 case N_MEMBER:
     runtime_error("member access (.) isn't supported yet");
 ```
 
-`grep -n "N_MEMBER" interp.c compile.c compilef.c compilel.c nativegen.c` returns
-exactly those two hits plus the enum declaration at `parser.h:18`. So **`.` is
+`grep -n "N_MEMBER" src/runtime/interp.c src/backends/c/compile.c src/backends/c/compilef.c src/backends/llvm/compilel.c src/backends/native/nativegen.c` returns
+exactly those two hits plus the enum declaration at `src/frontend/parser.h:18`. So **`.` is
 fully parsed, reserved by `MASTER_PLAN.md:215` ("Reaching into a thing: `.` —
 `f.age`, `w.text()`"), and evaluated by nobody.** There is no compatibility
 question to answer. That is unusual and worth exploiting.
@@ -368,30 +368,30 @@ type, it *rewrites the node in place* to `N_INDEX` with a literal subscript. An
 field `wdith`"), not at runtime, and not five times over.
 
 This keeps the promise that matters: after the pass, the tree handed to
-`interp.c`, `compile.c`, `nativegen.c` and `compiler.zl` contains no node they
+`src/runtime/interp.c`, `src/backends/c/compile.c`, `src/backends/native/nativegen.c` and `src/selfhost/compiler.zl` contains no node they
 do not already handle. **The boxed engines need zero changes.**
 
-`compilel.c` is the exception and the point — see §8.2.
+`src/backends/llvm/compilel.c` is the exception and the point — see §8.2.
 
 ### 4.3 Positional access (`t.0`) is impossible, and that is fine
 
 Rust-style `t.0` does not work, and I traced why rather than assuming.
 `lex_number` is only entered when the token's first character is a digit
-(`lexer.c:290`):
+(`src/frontend/lexer.c:290`):
 
 ```c
 if (isdigit((unsigned char)c))            return lex_number(lx);
 ```
 
-so the fractional-part check at `lexer.c:110` —
+so the fractional-part check at `src/frontend/lexer.c:110` —
 
 ```c
 if (peek(lx) == '.' && isdigit((unsigned char)peek_next(lx))) {
 ```
 
 — only ever fires *after* digits have been consumed. A leading `.` therefore
-falls through to `lex_symbol` (`lexer.c:312`), and `t.0` lexes as three tokens:
-`t`, `.`, `0`. `parse_postfix` then rejects it at `parser.c:349` — "expected a
+falls through to `lex_symbol` (`src/frontend/lexer.c:312`), and `t.0` lexes as three tokens:
+`t`, `.`, `0`. `parse_postfix` then rejects it at `src/frontend/parser.c:349` — "expected a
 name after `.`".
 
 So the failure is clean and in the parser, not a silent mis-lex. Making `t.0`
@@ -410,8 +410,8 @@ st_px[st_i] = int(clamp(st_r, 0, 255))
 ```
 
 after extracting `st_px = st_img[2]` on line 54. For `img.px[i] = v` to work,
-`N_MEMBER` must be legal in assignment-target position. `interp.c:1554-1583`
-handles exactly two target shapes today, ending at `interp.c:1582`:
+`N_MEMBER` must be legal in assignment-target position. `src/runtime/interp.c:1554-1583`
+handles exactly two target shapes today, ending at `src/runtime/interp.c:1582`:
 
 ```c
 } else {
@@ -420,9 +420,9 @@ handles exactly two target shapes today, ending at `interp.c:1582`:
 ```
 
 Because §4.2's resolve pass rewrites `N_MEMBER` to `N_INDEX` *before* execution,
-`img.w = 5` arrives at `interp.c:1563` as an index assignment and works with **no
+`img.w = 5` arrives at `src/runtime/interp.c:1563` as an index assignment and works with **no
 change to that switch at all**. The in-place mutation semantics of
-`interp.c:1580` (`*list.items[i] = val`) are inherited exactly — records mutate
+`src/runtime/interp.c:1580` (`*list.items[i] = val`) are inherited exactly — records mutate
 like the lists they are, including the aliasing that `astar.zl:76-77` warns
 about ("zl lists are shared by reference").
 
@@ -562,9 +562,9 @@ cited. It survives:
 
 ## 8. Memory layout, per engine
 
-### 8.1 `interp.c`, `compile.c` / `runtime.c`, `nativeval.c` — nothing changes
+### 8.1 `src/runtime/interp.c`, `src/backends/c/compile.c` / `src/runtime/runtime.c`, `src/backends/native/nativeval.c` — nothing changes
 
-A record is a `V_LIST`. `runtime.h:14-22`:
+A record is a `V_LIST`. `src/runtime/runtime.h:14-22`:
 
 ```c
 typedef struct Value {
@@ -580,7 +580,7 @@ typedef struct Value {
 
 An `Image` is a `Value` with `type = V_LIST`, `nitems = 3`, and three `Value*`.
 Field access after §4.2's rewrite is `zl_index(v, zl_num(0))`. Zero lines change
-in any of these three engines, and `runtime.c`/`interp.c` parity — which the
+in any of these three engines, and `src/runtime/runtime.c`/`src/runtime/interp.c` parity — which the
 brief calls load-bearing — is preserved trivially because neither moves.
 
 The boxing cost is untouched: a three-field record is four `Value`s (144 bytes
@@ -588,7 +588,7 @@ of payload plus the list header) and `.w` still walks a pointer. **Records do no
 make boxed code faster.** Anyone expecting a speedup from this feature alone is
 going to be disappointed, and it should be said out loud.
 
-### 8.2 `compilel.c` (LLVM) — this is the entire performance case
+### 8.2 `src/backends/llvm/compilel.c` (LLVM) — this is the entire performance case
 
 Given `rec Cell { row: int, col: int }`, the natural lowering is
 
@@ -614,13 +614,13 @@ a `list[int]` field, so it needs `design_type_system.md` §3.1's list
 representation to exist first. Until then `Image` compiles as `any` — correct,
 not fast. The rule is: **a record is as unboxed as its least-unboxed field.**
 
-### 8.3 `compilef.c` (unboxed C, numeric subset)
+### 8.3 `src/backends/c/compilef.c` (unboxed C, numeric subset)
 
 Same rule, stricter: all fields must be `int`/`float`/`bool`, in which case emit
 a C struct with no padding surprises. Any other field type is unsupported, which
-`compilef.c` already knows how to say. `Cell` qualifies; `Image` does not.
+`src/backends/c/compilef.c` already knows how to say. `Cell` qualifies; `Image` does not.
 
-### 8.4 `nativegen.c` (x86-64 PE)
+### 8.4 `src/backends/native/nativegen.c` (x86-64 PE)
 
 Base register plus a constant displacement — `mov rax, [rbx + 8]`. This is the
 one addressing mode the backend already emits everywhere. Field offsets are
@@ -632,17 +632,17 @@ its layout function verbatim rather than writing a second one** — see §11.
 The brief measured `nativegen` at ~4× off on tight loops for lack of loop
 optimisation. Records do not change that either way.
 
-### 8.5 `compiler.zl`
+### 8.5 `src/selfhost/compiler.zl`
 
-`compiler.zl` will not implement `rec`. Per `design_selfhost_parity.md`'s
-recommendation ("keep `compiler.zl` as a bounded-subset engine, but stop letting
+`src/selfhost/compiler.zl` will not implement `rec`. Per `design_selfhost_parity.md`'s
+recommendation ("keep `src/selfhost/compiler.zl` as a bounded-subset engine, but stop letting
 it guess"), it should print a message and produce no `out.c` when it meets one.
 This is one more entry on a list of 63 files it already mishandles; it does not
 change the policy and it does not threaten the fixpoint, because
-`compiler.zl` does not use records and the fixpoint's only input is
-`compiler.zl` itself.
+`src/selfhost/compiler.zl` does not use records and the fixpoint's only input is
+`src/selfhost/compiler.zl` itself.
 
-The specific fixpoint trap the brief identified — `compiler.zl` concatenating a
+The specific fixpoint trap the brief identified — `src/selfhost/compiler.zl` concatenating a
 number onto a string to emit C, so an unboxing change could make gen1 write `"3"`
 where gen2 writes `"3.0"` — is **not** on any path this feature touches. Records
 add no numeric formatting.
@@ -656,7 +656,7 @@ for the fixpoint: closure is not coverage.
 
 A record test suite therefore has to be written deliberately, and the assertion
 that matters is *cross-engine*: the same `.zl` file, run through `interp.exe` and
-through `compilel.c`, must print byte-identical output — because those two are
+through `src/backends/llvm/compilel.c`, must print byte-identical output — because those two are
 the engines where the record's *representation actually differs* (boxed list vs
 flat struct). A test that only runs on the interpreter is a test of the resolve
 pass, not of records.
@@ -692,7 +692,7 @@ mechanism by which "23 files collapse from opaque to statically typed."
 This is the argument for building records **before** inference.
 
 An assignment inside a function writes the *global* slot when a global of that
-name exists. `interp.c:1554-1561` routes every `N_IDENT` target through
+name exists. `src/runtime/interp.c:1554-1561` routes every `N_IDENT` target through
 `env_assign`, and the stdlib depends on the behaviour so thoroughly that it
 evolved a naming convention to defend against it. `bmp.zl:20-24`:
 
@@ -777,7 +777,7 @@ functions, per the brief. Records do not solve it and this document should not
 pretend otherwise.
 
 **Stage 5 — reap.** Once every function in the file is annotated, `Image` is a
-record whose `px` field is a `list[int]`, and `compilel.c` can lower the whole
+record whose `px` field is a `list[int]`, and `src/backends/llvm/compilel.c` can lower the whole
 module against `design_type_system.md` §3.1's representations. Not before.
 
 **Verification at every stage:** `bmp.zl` writes real files and asserts on the
@@ -868,19 +868,19 @@ and for the same reason — it decouples the grammar risk from the semantics ris
 **Stage 2 — the resolve pass, interpreter only.** Rewrite `N_MEMBER` → `N_INDEX`
 for objects with a known record type; error by name on unknown fields. Requires
 enough type knowledge to know `st_img` is an `Image`, so it needs annotations —
-hence Stage 0's ordering constraint. `interp.c:1521`'s "isn't supported yet"
+hence Stage 0's ordering constraint. `src/runtime/interp.c:1521`'s "isn't supported yet"
 error becomes unreachable for resolved members and stays as the error for
 unresolved ones.
 
 **Stage 3 — the boxed backends.** Should be a no-op by construction (§8.1). The
 deliverable is the *test* that proves it: a record-using `.zl` file whose output
-is byte-identical under `interp.exe`, `compile.c` and `nativegen.c`.
+is byte-identical under `interp.exe`, `src/backends/c/compile.c` and `src/backends/native/nativegen.c`.
 
 **Stage 4 — migrate `bmp.zl`.** §10, all five stages, with the `.bmp` byte-diff
 as the regression gate. Then `astar.zl` (`Cell` is the simplest possible record)
 and `argparse.zl`.
 
-**Stage 5 — `compilel.c` flat lowering.** Only for records whose fields are all
+**Stage 5 — `src/backends/llvm/compilel.c` flat lowering.** Only for records whose fields are all
 representable unboxed. Gated on `design_type_system.md` Stages 3-6. This is where
 the speed arrives, and it arrives last.
 
@@ -900,7 +900,7 @@ Listed as questions, not hidden as assumptions.
 3. **`==` on records — I checked, and it already works.** I nearly wrote the
    opposite here on the strength of `design_maps.md` §3.1, which says
    `values_equal` "compares numbers and strings and refuses lists/maps". That is
-   stale: `interp.c:1236-1256` compares lists element-wise and recursively,
+   stale: `src/runtime/interp.c:1236-1256` compares lists element-wise and recursively,
    with a depth guard —
 
    ```c
@@ -921,7 +921,7 @@ Listed as questions, not hidden as assumptions.
 
    — could already have been `first(pv_path) != pv_start`, and with `Cell` it
    reads that way naturally. One more site records improve. What I have *not*
-   checked is whether `runtime.c` and `nativeval.c` implement the same recursive
+   checked is whether `src/runtime/runtime.c` and `src/backends/native/nativeval.c` implement the same recursive
    comparison; the brief calls interp/runtime parity load-bearing, so that is
    worth confirming before relying on it in compiled code.
 4. **Records inside `str()`.** I asserted output is unchanged because the value
@@ -936,6 +936,6 @@ Listed as questions, not hidden as assumptions.
    and function return types, it may need the same fixpoint iteration
    `design_type_system.md` §5.2 found necessary for local inference. I would
    plan for iteration and be pleasantly surprised.
-7. **`nativeval.c`.** I did not read it. §8.1 assumes it inherits the boxed-list
+7. **`src/backends/native/nativeval.c`.** I did not read it. §8.1 assumes it inherits the boxed-list
    behaviour like the other boxed engines. Someone should check before Stage 3
    claims to be a no-op.

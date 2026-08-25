@@ -56,38 +56,38 @@ echo "load: $(cut -d' ' -f1-3 /proc/loadavg)   avail: $(awk '/MemAvailable/{prin
 # is not optional: prove all of its prerequisites up front so a skip can never
 # be promoted to a green landing.
 run "mandatory boot prerequisites" "$WT/kernel" \
-    python3 check-boot-prereqs.py --selftest
+    python3 tools/checks/check-boot-prereqs.py --selftest
 run "contained gate launcher contract" "$WT/gates" \
     python3 check-contained-gate.py --selftest
 run "landing authority closure" "$WT/kernel" \
-    python3 check-land-gate.py --selftest
+    python3 tools/checks/check-land-gate.py --selftest
 run "wrapper inventory write" "$WT/kernel" \
-    python3 gen-wrapper-registry.py --write --selftest
+    python3 tools/generators/gen-wrapper-registry.py --write --selftest
 run "wrapper inventory check" "$WT/kernel" \
-    python3 gen-wrapper-registry.py --check --selftest
+    python3 tools/generators/gen-wrapper-registry.py --check --selftest
 run "warning-strict build contract" "$WT/kernel" \
-    python3 check-build-contract.py --selftest
+    python3 tools/checks/check-build-contract.py --selftest
 run "host dependency lock" "$WT/kernel" \
-    python3 gen-dependency-lock.py --check --selftest
+    python3 tools/generators/gen-dependency-lock.py --check --selftest
 run "license/provenance truth" "$WT/kernel" \
-    python3 gen-license-registry.py --check --selftest
+    python3 tools/generators/gen-license-registry.py --check --selftest
 
 # --- toolchain and compile-only steps (cheap, no QEMU)
 run "zl toolchain"     "$WT"               ./build.sh
-run "build input identity" "$WT/kernel" python3 gen-build-identity.py --check --selftest
-run "toolchain manifest write" "$WT/kernel" python3 gen-toolchain-manifest.py --write --selftest
-run "toolchain manifest check" "$WT/kernel" python3 gen-toolchain-manifest.py --check --selftest
-run "build graph write" "$WT/kernel" python3 gen-build-graph.py --write --selftest
-run "build graph check" "$WT/kernel" python3 gen-build-graph.py --check --selftest
-run "source snapshot write" "$WT/kernel" python3 gen-source-snapshot.py --write --selftest
-run "source snapshot check" "$WT/kernel" python3 gen-source-snapshot.py --check --selftest
+run "build input identity" "$WT/kernel" python3 tools/generators/gen-build-identity.py --check --selftest
+run "toolchain manifest write" "$WT/kernel" python3 tools/generators/gen-toolchain-manifest.py --write --selftest
+run "toolchain manifest check" "$WT/kernel" python3 tools/generators/gen-toolchain-manifest.py --check --selftest
+run "build graph write" "$WT/kernel" python3 tools/generators/gen-build-graph.py --write --selftest
+run "build graph check" "$WT/kernel" python3 tools/generators/gen-build-graph.py --check --selftest
+run "source snapshot write" "$WT/kernel" python3 tools/generators/gen-source-snapshot.py --write --selftest
+run "source snapshot check" "$WT/kernel" python3 tools/generators/gen-source-snapshot.py --check --selftest
 run "kernel 32-bit"    "$WT/kernel"        ./build.sh
 run "kernel 64-bit"    "$WT/kernel"        ./build64.sh
 run "kernel EFI"       "$WT/kernel"        ./buildefi.sh
-run "kernel ELF permissions" "$WT/kernel" python3 check-elf-permissions.py --selftest
-run "SOURCES recovery selftest" "$WT/kernel" ./verify-sources.sh --selftest-recovery
-run "SOURCES coverage" "$WT/kernel" ./verify-sources.sh
-run "hosttest build"   "$WT/kernel/hosttest" ./build.sh
+run "kernel ELF permissions" "$WT/kernel" python3 tools/checks/check-elf-permissions.py --selftest
+run "SOURCES recovery selftest" "$WT/kernel" ./tools/checks/verify-sources.sh --selftest-recovery
+run "SOURCES coverage" "$WT/kernel" ./tools/checks/verify-sources.sh
+run "hosttest build"   "$WT/kernel/tests/host" ./build.sh
 
 # --- RUN every declared gate through the generated inventory. The old loop
 # guessed semantics from filenames. It therefore ran parsestat even though its
@@ -96,46 +96,47 @@ run "hosttest build"   "$WT/kernel/hosttest" ./build.sh
 # manual hardware actions, optional builds, real gates and exit-77 hardware
 # absences are now distinct machine-checked states. No non-run is counted as a
 # pass and every compiled output plus executable script must be classified.
-run "host test inventory" "$WT/kernel" python3 gen-test-inventory.py --check --selftest
-run "host tests execute" "$WT/kernel" python3 run-host-tests.py --run --selftest
+run "host test inventory" "$WT/kernel" python3 tools/generators/gen-test-inventory.py --check --selftest
+run "host tests execute" "$WT/kernel" python3 tools/run/run-host-tests.py --run --selftest
 until guard; do sleep 30; done
-run "host benchmark receipt" "$WT/kernel" python3 run-benchmarks.py --run --selftest
+run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --run --selftest
 
 # --- the two static checkers. Neither builds anything or boots anything, so
 # there is no excuse for them not being in the gate: check-zl-calls proves every
 # kernel.zl call site resolves (zl has no compile-time check for that at all),
 # and check-memmap proves no two fixed addresses overlap - which is how
 # LINE_BUF and DISK_SCRATCH sat on 0x02030000 through a whole integration.
-run "zl call sites" "$WT/kernel" ./check-zl-calls.sh
-run "memory map" "$WT/kernel" ./check-memmap.sh
-run "memmap guards" "$WT/kernel/hosttest" ./memmap-guard-test.sh
-run "unique app ids" "$WT/kernel" ./check-appids.py --selftest
-run "app registry coverage" "$WT" python3 kernel/hosttest/apps53.py --selftest
-run "61-app manifest" "$WT/kernel" python3 gen-app-manifest.py --check --selftest
-run "app lifecycle verifier" "$WT/kernel" python3 probe-app-lifecycle.py --selftest
-run "reproducible artifact verifier" "$WT/kernel" python3 check-reproducible-build.py --selftest
+run "zl call sites" "$WT/kernel" ./tools/checks/check-zl-calls.sh
+run "memory map" "$WT/kernel" ./tools/checks/check-memmap.sh
+run "memmap guards" "$WT/kernel/tests/host" ./memmap-guard-test.sh
+run "unique app ids" "$WT/kernel" ./tools/checks/check-appids.py --selftest
+run "app registry coverage" "$WT" python3 kernel/tests/host/apps53.py --selftest
+run "61-app manifest" "$WT/kernel" python3 tools/generators/gen-app-manifest.py --check --selftest
+run "app lifecycle verifier" "$WT/kernel" python3 tools/probes/probe-app-lifecycle.py --selftest
+run "reproducible artifact verifier" "$WT/kernel" python3 tools/checks/check-reproducible-build.py --selftest
 # check-memmap.sh reads kernel.zl and no C at all, which is why intel.c's
 # edid_buf sat inside fb.c's blur arena while it printed a clean map. This is
 # the other half: every page-aligned hex literal in a .c or .h that lands
 # strictly inside a declared HI_* region without being its base.
-run "high-RAM map" "$WT/kernel" ./check-himap.sh
+run "high-RAM map" "$WT/kernel" ./tools/checks/check-himap.sh
 
 # --- the reverse SOURCES check: a .c present but not listed is silently not compiled
 if [ -f "$WT/kernel/SOURCES" ]; then
   echo; echo "=== reverse SOURCES sweep ==="
   # SOURCES proves every listed file is compiled. This proves the reverse: that
-  # a .c sitting in kernel/ is not silently absent from the build. Three
+  # a .c sitting in kernel/src is not silently absent from the build. Three
   # outcomes, and only one of them is a failure.
   miss=0; hostonly=0; dead=0
-  for f in "$WT"/kernel/*.c; do
+  while IFS= read -r f; do
     b=$(basename "$f")
+    rel=${f#"$WT/kernel/"}
     # compiled outside the SOURCES loop by every target, deliberately
-    case "$b" in _gen*.c|gdt.c|gdt64.c|efi.c|out.c) continue;; esac
-    grep -qx "$b" "$WT/kernel/SOURCES" && continue
-    if grep -q "$b" "$WT/kernel/hosttest/build.sh" 2>/dev/null; then
+    case "$rel" in src/runtime/interp_kernel.c) continue;; esac
+    grep -qx "$rel" "$WT/kernel/SOURCES" && continue
+    if grep -q "$rel\|$b" "$WT/kernel/tests/host/build.sh" 2>/dev/null; then
       # host-only: a harness compiles it, the kernel does not. Correct.
       echo "host-only (not in the kernel): $b"; hostonly=$((hostonly+1))
-    elif grep -lsr -- "${b%.c}" "$WT"/kernel/*.c "$WT"/kernel/*.h 2>/dev/null \
+    elif grep -lsr -- "${b%.c}" "$WT"/kernel/src "$WT"/kernel/boot 2>/dev/null \
          | grep -qv "/$b\$"; then
       # something references it but SOURCES does not list it - this is the
       # silent-drop this whole check exists for
@@ -144,7 +145,7 @@ if [ -f "$WT/kernel/SOURCES" ]; then
       # referenced by nothing at all. Not a build failure; dead weight.
       echo "dead (referenced by nothing): $b"; dead=$((dead+1))
     fi
-  done
+  done < <(find "$WT/kernel/src" -type f -name '*.c' | sort)
   if [ $miss -gt 0 ]; then
     FAIL=$((FAIL+1)); echo ">>> FAIL (reverse SOURCES: $miss silently uncompiled)"
   else
@@ -155,8 +156,11 @@ else
 fi
 
 # --- boot gates: QEMU under TCG, one at a time, guarded
-run "reproducible kernel and ISO" "$WT/kernel" python3 check-reproducible-build.py --check
-for g in mkiso.sh verify.sh verify-iso.sh verify-64.sh verify-efi.sh verify-raw.sh verify-disk.sh verify-clock.sh verify-net.sh; do
+run "reproducible kernel and ISO" "$WT/kernel" python3 tools/checks/check-reproducible-build.py --check
+for g in tools/images/mkiso.sh verify.sh tools/checks/verify-iso.sh \
+         tools/checks/verify-64.sh tools/checks/verify-efi.sh \
+         tools/checks/verify-raw.sh tools/checks/verify-disk.sh \
+         tools/checks/verify-clock.sh tools/checks/verify-net.sh; do
   until guard; do sleep 30; done
   run "boot: $g" "$WT/kernel" "./$g"
 done
@@ -167,77 +171,77 @@ done
 # checked the join again. Finish on one canonical ISO, exercise its graphical
 # routes without rebuilding between probes, regenerate the join, and only then
 # promote the exact artifact/route registry.
-run "final canonical ISO" "$WT/kernel" ./mkiso.sh
+run "final canonical ISO" "$WT/kernel" ./tools/images/mkiso.sh
 until guard; do sleep 30; done
-run "CPU fault capture QEMU" "$WT/kernel" python3 verify-crash.py --run \
+run "CPU fault capture QEMU" "$WT/kernel" python3 tools/checks/verify-crash.py --run \
     --no-build --selftest
 until guard; do sleep 30; done
-run "app routes QEMU" "$WT/kernel" python3 probe-app-routes.py --no-build \
+run "app routes QEMU" "$WT/kernel" python3 tools/probes/probe-app-routes.py --no-build \
     --receipt docs/receipts/app-routes-qemu-2026-08-22.json
 until guard; do sleep 30; done
-run "47-app lifecycle QEMU" "$WT/kernel" python3 probe-app-lifecycle.py --no-build \
+run "47-app lifecycle QEMU" "$WT/kernel" python3 tools/probes/probe-app-lifecycle.py --no-build \
     --receipt docs/receipts/app-lifecycle-qemu-2026-08-22.json
 until guard; do sleep 30; done
 run "Run route QEMU" "$WT/kernel" python3 probe-run.py --no-build \
     --receipt docs/receipts/run-qemu-2026-08-22.json
 run "62-surface evidence registry write" "$WT/kernel" \
-    python3 gen-app-evidence.py --write --verify-artifact
+    python3 tools/generators/gen-app-evidence.py --write --verify-artifact
 run "62-surface evidence registry check" "$WT/kernel" \
-    python3 gen-app-evidence.py --check --selftest --verify-artifact
+    python3 tools/generators/gen-app-evidence.py --check --selftest --verify-artifact
 run "artifact and boot-route registry write" "$WT/kernel" \
-    python3 gen-artifact-registry.py --write --selftest
+    python3 tools/generators/gen-artifact-registry.py --write --selftest
 run "artifact and boot-route registry check" "$WT/kernel" \
-    python3 gen-artifact-registry.py --check --selftest
+    python3 tools/generators/gen-artifact-registry.py --check --selftest
 run "initialization registry write" "$WT/kernel" \
-    python3 gen-init-registry.py --write --selftest
+    python3 tools/generators/gen-init-registry.py --write --selftest
 run "initialization registry check" "$WT/kernel" \
-    python3 gen-init-registry.py --check --selftest
+    python3 tools/generators/gen-init-registry.py --check --selftest
 run "adversarial registry write" "$WT/kernel" \
-    python3 gen-adversarial-registry.py --write --selftest
+    python3 tools/generators/gen-adversarial-registry.py --write --selftest
 run "adversarial registry check" "$WT/kernel" \
-    python3 gen-adversarial-registry.py --check --selftest
+    python3 tools/generators/gen-adversarial-registry.py --check --selftest
 run "host benchmark receipt check" "$WT/kernel" \
-    python3 run-benchmarks.py --check --selftest
+    python3 tools/run/run-benchmarks.py --check --selftest
 run "visual evidence registry write" "$WT/kernel" \
-    python3 gen-visual-registry.py --write --selftest
+    python3 tools/generators/gen-visual-registry.py --write --selftest
 run "visual evidence registry check" "$WT/kernel" \
-    python3 gen-visual-registry.py --check --selftest
+    python3 tools/generators/gen-visual-registry.py --check --selftest
 run "accessibility proof registry write" "$WT/kernel" \
-    python3 gen-accessibility-registry.py --write --selftest
+    python3 tools/generators/gen-accessibility-registry.py --write --selftest
 run "accessibility proof registry check" "$WT/kernel" \
-    python3 gen-accessibility-registry.py --check --selftest
+    python3 tools/generators/gen-accessibility-registry.py --check --selftest
 run "security claim registry write" "$WT/kernel" \
-    python3 gen-security-registry.py --write --selftest
+    python3 tools/generators/gen-security-registry.py --write --selftest
 run "security claim registry check" "$WT/kernel" \
-    python3 gen-security-registry.py --check --selftest
+    python3 tools/generators/gen-security-registry.py --check --selftest
 run "decision ledger write" "$WT/kernel" \
-    python3 gen-decision-ledger.py --write --selftest
+    python3 tools/generators/gen-decision-ledger.py --write --selftest
 run "decision ledger check" "$WT/kernel" \
-    python3 gen-decision-ledger.py --check --selftest
+    python3 tools/generators/gen-decision-ledger.py --check --selftest
 run "event trace host receipt write" "$WT/kernel" \
-    python3 verify-event-trace.py --write --selftest
+    python3 tools/checks/verify-event-trace.py --write --selftest
 run "event trace host receipt check" "$WT/kernel" \
-    python3 verify-event-trace.py --check --selftest
+    python3 tools/checks/verify-event-trace.py --check --selftest
 run "event schema registry write" "$WT/kernel" \
-    python3 gen-event-schema.py --write --selftest
+    python3 tools/generators/gen-event-schema.py --write --selftest
 run "event schema registry check" "$WT/kernel" \
-    python3 gen-event-schema.py --check --selftest
+    python3 tools/generators/gen-event-schema.py --check --selftest
 run "observability registry write" "$WT/kernel" \
-    python3 gen-observability-registry.py --write --selftest
+    python3 tools/generators/gen-observability-registry.py --write --selftest
 run "observability registry check" "$WT/kernel" \
-    python3 gen-observability-registry.py --check --selftest
+    python3 tools/generators/gen-observability-registry.py --check --selftest
 run "release notes write" "$WT/kernel" \
-    python3 gen-release-notes.py --write --selftest
+    python3 tools/generators/gen-release-notes.py --write --selftest
 run "release notes check" "$WT/kernel" \
-    python3 gen-release-notes.py --check --selftest
+    python3 tools/generators/gen-release-notes.py --check --selftest
 run "provenance viewer write" "$WT/kernel" \
-    python3 gen-provenance-viewer.py --write --selftest
+    python3 tools/generators/gen-provenance-viewer.py --write --selftest
 run "provenance viewer check" "$WT/kernel" \
-    python3 gen-provenance-viewer.py --check --selftest
+    python3 tools/generators/gen-provenance-viewer.py --check --selftest
 run "joined evidence registry write" "$WT/kernel" \
-    python3 gen-evidence-registry.py --write --selftest
+    python3 tools/generators/gen-evidence-registry.py --write --selftest
 run "joined evidence registry check" "$WT/kernel" \
-    python3 gen-evidence-registry.py --check --selftest
+    python3 tools/generators/gen-evidence-registry.py --check --selftest
 
 echo
 echo "================================"

@@ -16,62 +16,62 @@ examples_out/
 compile_commands.json
 compilef
 outf.c
-kernel/hosttest/intel_probe
-kernel/hosttest/htmltest
-kernel/hosttest/browsershot
-kernel/hosttest/nettest
-kernel/hosttest/tcptest
-kernel/hosttest/httptest
-kernel/hosttest/browsertest
-kernel/hosttest/fuzz
-kernel/hosttest/dnstest
-kernel/hosttest/regs-*.txt
+kernel/tests/host/intel_probe
+kernel/tests/host/htmltest
+kernel/tests/host/browsershot
+kernel/tests/host/nettest
+kernel/tests/host/tcptest
+kernel/tests/host/httptest
+kernel/tests/host/browsertest
+kernel/tests/host/fuzz
+kernel/tests/host/dnstest
+kernel/tests/host/regs-*.txt
 # The harnesses whose binaries were never listed. csstest and fbtext have been
 # built by ./build.sh since they were written and have shown up as untracked
 # ever since; pngtest is new. A build output that is merely UNLISTED rather
 # than ignored is one `git add -A` away from being committed, which is how
 # _genefi.c got into this repo in the first place.
-kernel/hosttest/csstest
-kernel/hosttest/fbtext
-kernel/hosttest/pngtest
-kernel/hosttest/csstest_san
-kernel/hosttest/pngtest_san
-kernel/hosttest/browsertest_san
-kernel/hosttest/arenatest
-kernel/hosttest/settingstest
-kernel/hosttest/systest
+kernel/tests/host/csstest
+kernel/tests/host/fbtext
+kernel/tests/host/pngtest
+kernel/tests/host/csstest_san
+kernel/tests/host/pngtest_san
+kernel/tests/host/browsertest_san
+kernel/tests/host/arenatest
+kernel/tests/host/settingstest
+kernel/tests/host/systest
 # parsestat is the measuring instrument for the parser caps (browser-storage-run.md).
 # Listed the same day its .c was written, because four ELF binaries in this
 # directory ARE tracked and dirty ~5 MB on every gate run - and each of them got
 # there by being merely unlisted at the moment somebody ran `git add -A`.
-kernel/hosttest/parsestat
-kernel/hosttest/rtctest
-kernel/hosttest/fstest
-kernel/hosttest/exectest
-kernel/hosttest/libctest
-kernel/hosttest/toasttest
-kernel/hosttest/tritest
-kernel/hosttest/jstest
-kernel/hosttest/x509test
-kernel/hosttest/ecdsatest
-kernel/hosttest/tlstest
-kernel/hosttest/cryptotest
-kernel/hosttest/tlscryptotest
-kernel/hosttest/jmptest
-kernel/hosttest/jmptest32
-kernel/hosttest/modeset_test
-kernel/hosttest/blocktest
-kernel/hosttest/boot_handover_test
-kernel/hosttest/boot_state_test
-kernel/hosttest/dhcptest
-kernel/hosttest/e1000test
-kernel/hosttest/i2ctest
-kernel/hosttest/i2c_touchtest
-kernel/hosttest/iwlwifitest
-kernel/hosttest/memtypetest
-kernel/hosttest/msctest
-kernel/hosttest/crashtest
-kernel/hosttest/eventtracetest
+kernel/tests/host/parsestat
+kernel/tests/host/rtctest
+kernel/tests/host/fstest
+kernel/tests/host/exectest
+kernel/tests/host/libctest
+kernel/tests/host/toasttest
+kernel/tests/host/tritest
+kernel/tests/host/jstest
+kernel/tests/host/x509test
+kernel/tests/host/ecdsatest
+kernel/tests/host/tlstest
+kernel/tests/host/cryptotest
+kernel/tests/host/tlscryptotest
+kernel/tests/host/jmptest
+kernel/tests/host/jmptest32
+kernel/tests/host/modeset_test
+kernel/tests/host/blocktest
+kernel/tests/host/boot_handover_test
+kernel/tests/host/boot_state_test
+kernel/tests/host/dhcptest
+kernel/tests/host/e1000test
+kernel/tests/host/i2ctest
+kernel/tests/host/i2c_touchtest
+kernel/tests/host/iwlwifitest
+kernel/tests/host/memtypetest
+kernel/tests/host/msctest
+kernel/tests/host/crashtest
+kernel/tests/host/eventtracetest
 # NOT *.ppm here: kernel/.gitignore:25 already says hosttest/*.ppm, and
 # browsershot.ppm and wmshot.ppm are TRACKED - so that rule does nothing for
 # them (a tracked file is never ignored) while looking like it does. Adding a
@@ -82,11 +82,11 @@ kernel/hosttest/eventtracetest
 
 # build outputs - regenerable, and large. Build them with:
 #   kernel/build.sh      kernel.elf        (BIOS multiboot)
-#   kernel/mkdisk.sh     zlOS.img          (our own bootloader)
-#   kernel/mkiso.sh      zlOS.iso          (hybrid BIOS/UEFI)
+#   kernel/tools/images/mkdisk.sh     zlOS.img          (our own bootloader)
+#   kernel/tools/images/mkiso.sh      zlOS.iso          (hybrid BIOS/UEFI)
 #   kernel/buildefi.sh   BOOTX64.EFI       (stage-0 UEFI witness)
 #                        ZLOS.EFI          (native UEFI kernel)
-#   kernel/mkusb.sh      zlOS-usb.img      (bootable USB image)
+#   kernel/tools/images/mkusb.sh      zlOS-usb.img      (bootable USB image)
 kernel/*.elf
 kernel/*.img
 kernel/*.iso
@@ -94,31 +94,31 @@ kernel/BOOTX64.EFI
 kernel/ZLOS.EFI
 kernel/BOOTX64.lib
 kernel/_gen*.c
-kernel/hosttest/intel_probe
-kernel/hosttest/htmltest
-kernel/hosttest/browsershot
-kernel/hosttest/nettest
-kernel/hosttest/tcptest
-kernel/hosttest/httptest
-kernel/hosttest/browsertest
-kernel/hosttest/fuzz
-kernel/hosttest/dnstest
-kernel/hosttest/dpll_test
-kernel/hosttest/modeset_test
-kernel/hosttest/inputtest
-kernel/hosttest/regs-*.txt
-kernel/hosttest/modeset-*.log
+kernel/tests/host/intel_probe
+kernel/tests/host/htmltest
+kernel/tests/host/browsershot
+kernel/tests/host/nettest
+kernel/tests/host/tcptest
+kernel/tests/host/httptest
+kernel/tests/host/browsertest
+kernel/tests/host/fuzz
+kernel/tests/host/dnstest
+kernel/tests/host/dpll_test
+kernel/tests/host/modeset_test
+kernel/tests/host/inputtest
+kernel/tests/host/regs-*.txt
+kernel/tests/host/modeset-*.log
 
-# screenshots taken by kernel/probe-shot.py - evidence for a visual gate, but
+# screenshots taken by kernel/tools/probes/probe-shot.py - evidence for a visual gate, but
 # regenerable and large. The gate is "run it and look", not "diff a PNG".
 kernel/shots/
-kernel/hosttest/fbbench
-kernel/hosttest/gpu_fillrate
-kernel/hosttest/inputtest
-kernel/hosttest/wmtest
-kernel/hosttest/wmshot
-kernel/hosttest/tritest
-kernel/hosttest/settingstest
+kernel/tests/host/fbbench
+kernel/tests/host/gpu_fillrate
+kernel/tests/host/inputtest
+kernel/tests/host/wmtest
+kernel/tests/host/wmshot
+kernel/tests/host/tritest
+kernel/tests/host/settingstest
 
 kernel/__pycache__/
 **/__pycache__/
@@ -138,13 +138,13 @@ kernel/exercise-out/uefi-terminal-input-fix/
 kernel/*.o.tmp
 
 # hosttest binary: the arena gate (source is arenatest.c)
-kernel/hosttest/arenatest
-kernel/hosttest/exectest
-kernel/hosttest/exectest-nofs
-kernel/hosttest/runtest
-kernel/hosttest/jmptest
-kernel/hosttest/jmptest32
-kernel/hosttest/libctest
+kernel/tests/host/arenatest
+kernel/tests/host/exectest
+kernel/tests/host/exectest-nofs
+kernel/tests/host/runtest
+kernel/tests/host/jmptest
+kernel/tests/host/jmptest32
+kernel/tests/host/libctest
 scratch.zl
 
 # rendered compositor frames (.github/scripts/render-desktop.sh, which does
@@ -157,7 +157,7 @@ scratch.zl
 # cannot be regenerated at all, because the branch that drew it has never been
 # identified - so an ignore rule aimed at CI output must not reach them.
 /shots/
-kernel/hosttest/wmbench
+kernel/tests/host/wmbench
 
 # clangd's index and Cursor's per-worktree state. Machine-local, never shared.
 .cache/

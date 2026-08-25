@@ -95,7 +95,7 @@ guess it.
 ```sh
 cd kernel
 lsblk -o NAME,SIZE,TYPE,TRAN,MODEL,MOUNTPOINTS
-./mkusb.sh --log-mb 512 /dev/sdX
+./tools/images/mkusb.sh --log-mb 512 /dev/sdX
 ```
 
 The script asks you to type the exact device path again, flashes it, moves the

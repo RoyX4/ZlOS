@@ -2,9 +2,9 @@
 
 **Status:** proposal
 **Author:** language/compiler design pass, 2026-07-30
-**Scope:** new optional syntax in `lexer.c` / `parser.c` / `parser.h`, a new type
-inference + check pass, and the type consumer in `compilel.c` (the LLVM backend).
-Also a ~20-line additive change to `compiler.zl`. No existing program changes
+**Scope:** new optional syntax in `src/frontend/lexer.c` / `src/frontend/parser.c` / `src/frontend/parser.h`, a new type
+inference + check pass, and the type consumer in `src/backends/llvm/compilel.c` (the LLVM backend).
+Also a ~20-line additive change to `src/selfhost/compiler.zl`. No existing program changes
 meaning. No code is changed by this document.
 
 ---
@@ -14,7 +14,7 @@ meaning. No code is changed by this document.
 zl is slow for one structural reason: **every value is boxed.** `1 + 2` in a
 compiled program is `zl_binop("+", zl_num(1), zl_num(2))` — a runtime string
 compare, two `Value` structs, and (for anything with a payload) a `malloc`. The
-LLVM backend (`compilel.c`) already emits `add i64` for the numeric subset and
+LLVM backend (`src/backends/llvm/compilel.c`) already emits `add i64` for the numeric subset and
 proves the payoff, but it can only do that because it *assumes* everything is an
 `i64`. That assumption is a lie for the language as a whole.
 
@@ -55,7 +55,7 @@ wholesale. It supersedes it on three points, because the goal changed from
 |---|---|---|---|
 | Numeric type | one `num` | `int` **and** `float` | `num` pins no machine representation, so it cannot unbox. Splitting is the entire point. |
 | Return spelling | `fn f(x): num {` | `fn f(x) -> int {` | §2.3 — and the "`->` costs a token" objection is answered by the proof in §2.2. |
-| Consumer | a `check()` pass in zl | `compilel.c` codegen | the checker is now a *prerequisite*, not the deliverable. |
+| Consumer | a `check()` pass in zl | `src/backends/llvm/compilel.c` codegen | the checker is now a *prerequisite*, not the deliverable. |
 | `nil` type | present | **cut** | with no union types, a `nil`-typed slot holds exactly one value. Useless. `any` covers it. |
 
 ---
@@ -64,12 +64,12 @@ wholesale. It supersedes it on three points, because the goal changed from
 
 ### 1.1 The cost of boxing, measured against what exists
 
-`compilef.c` (unboxed `long long` C) already runs ~2x faster than `compile.c`
+`src/backends/c/compilef.c` (unboxed `long long` C) already runs ~2x faster than `src/backends/c/compile.c`
 (boxed) on `fib`, and it achieves that with **no type system at all** — it simply
 declares by fiat that the whole program is `long long`. It works only on the
 numeric subset and would silently corrupt any program touching a string.
 
-`compilel.c` has the same shape and the same fiat: `emit_expr` produces
+`src/backends/llvm/compilel.c` has the same shape and the same fiat: `emit_expr` produces
 `add i64` / `sdiv i64` / `icmp` and calls `exit(1)` on `N_STRING`, `N_LIST`,
 `N_CALL`, `N_FN`, `N_IF`, `N_WHILE` — literally everything else. Its header
 comment says "Values are unboxed i64."
@@ -102,7 +102,7 @@ must work, so `v`'s list case is a heterogeneous list. HM would demand
 
 `stdlib/json_parse.zl` (parse returns "whatever was in the file") and
 `stdlib/lisp_interp.zl` (an evaluator whose values are, definitionally, dynamic)
-have the same shape. So does `compiler.zl` itself, whose entire AST is
+have the same shape. So does `src/selfhost/compiler.zl` itself, whose entire AST is
 `["bin", "+", L, R]` — a tagged heterogeneous list.
 
 An inference algorithm that rejects the language's own standard library is not a
@@ -174,7 +174,7 @@ is not.
 
 Both claims below were checked by running `interp.exe`, not by reading code.
 
-**`:` is free.** `lexer.c:198` is
+**`:` is free.** `src/frontend/lexer.c:198` is
 
 ```c
 if (strchr("(){}[],.+-*/%=!<>", c) == NULL) {
@@ -213,9 +213,9 @@ So merging `-` `>` into one `->` token cannot break a valid program either.
 across 34 stdlib files — in comments (`# integer -> binary string`) and inside
 string literals (`stdlib/brainfuck.zl:151`'s Brainfuck program contains `->`).
 This is safe **only because `next_token` handles `#` comments and `"` strings
-before it ever reaches `lex_symbol`** (`lexer.c:207-236`). The two-char `->`
+before it ever reaches `lex_symbol`** (`src/frontend/lexer.c:207-236`). The two-char `->`
 check must go **inside `lex_symbol`**, alongside the existing `>=`/`+=` checks —
-never earlier in the pipeline. The same ordering holds in `compiler.zl`'s
+never earlier in the pipeline. The same ordering holds in `src/selfhost/compiler.zl`'s
 `next_token` (comments at l.66, strings at l.91, symbol fallback at l.108).
 An implementer who "optimizes" by scanning for `->` before the string path will
 corrupt `brainfuck.zl` and the failure will look like a Brainfuck bug.
@@ -255,7 +255,7 @@ decision reopens on merit alone:
    `grep '):'` finds nothing useful.
 
 Pick one and only one. **No alias.** Supporting both spellings would double the
-parser paths, the `compiler.zl` skip logic, and the test matrix for zero gain.
+parser paths, the `src/selfhost/compiler.zl` skip logic, and the test matrix for zero gain.
 
 ### 2.4 Type grammar
 
@@ -269,19 +269,19 @@ shorthand for `list[any]`. Anything else in type position — an unknown name, a
 missing `]` — is a parse error naming the offending token, not a silent `any`;
 a typo'd type must not degrade into "unchecked".
 
-### 2.5 `lexer.c` changes
+### 2.5 `src/frontend/lexer.c` changes
 
 Two edits, both inside `lex_symbol`, both additive:
 
 1. Add a two-char case for `-` followed by `>` producing `T_SYMBOL "->"`. It
-   goes with the existing two-char ladder at `lexer.c:188-196`, **after** the
+   goes with the existing two-char ladder at `src/frontend/lexer.c:188-196`, **after** the
    `-=` check (so `-=` still wins) and **before** the one-char fallback.
-2. Add `:` to the accepted-character set string at `lexer.c:198`.
+2. Add `:` to the accepted-character set string at `src/frontend/lexer.c:198`.
 
 Nothing else in the lexer moves. `T_SYMBOL` already carries arbitrary text, so
-no new `TokenType` is needed and `lexer.h` is untouched.
+no new `TokenType` is needed and `src/frontend/lexer.h` is untouched.
 
-### 2.6 `parser.h` / `parser.c` changes
+### 2.6 `src/frontend/parser.h` / `src/frontend/parser.c` changes
 
 **`struct Node` does not change.** This is worth stating loudly, because it is
 what keeps the diff small and the other backends unbroken. Every annotation
@@ -293,16 +293,16 @@ fits in an already-unused slot:
 | `N_FN` | `text` = name, `kids` = params, `a` = body | **`b`** = return type (or NULL) |
 | `N_IDENT` (as a param) | `text` = name | **`a`** = param type (or NULL) |
 
-The only `parser.h` edit is one new enum member, **appended at the end** of
-`NodeType` so no existing numeric value shifts (`compilel.c:105` and
-`compilef.c` print raw `type %d` in their "not supported" errors):
+The only `src/frontend/parser.h` edit is one new enum member, **appended at the end** of
+`NodeType` so no existing numeric value shifts (`src/backends/llvm/compilel.c:105` and
+`src/backends/c/compilef.c` print raw `type %d` in their "not supported" errors):
 
 ```
 N_TYPE      /* text = "int"/"float"/"bool"/"str"/"list"/"any";
                a = element type for list[T], else NULL          */
 ```
 
-`parser.c` gets one new ~12-line `parse_type()` and three call sites:
+`src/frontend/parser.c` gets one new ~12-line `parse_type()` and three call sites:
 
 - `parse_fn` (l.402-424): after each parameter's `advance()`, if the next token
   is `:`, consume it and hang `parse_type()` on that param's `a`. After
@@ -319,11 +319,11 @@ behavior:
 
 | Consumer | reaction to the new slots | verdict |
 |---|---|---|
-| `interp.c` `eval`/`exec` | `N_ASSIGN` reads `a`,`b`; `N_FN` reads `text`,`kids`,`a`. Never `c`/`b`. `N_TYPE` is never evaluated. | inert |
-| `compile.c` | same slot discipline | inert |
-| `nativegen.c` / `nativeval.c` | same | inert |
-| `compilel.c` `collect_vars` (l.26-31) | recurses into `a`,`b`,`c`,`kids`, so it *will* walk `N_TYPE` nodes — but it only reacts to `N_ASSIGN`-with-`N_IDENT`-target | inert |
-| `compilef.c` `collect_vars` | same | inert |
+| `src/runtime/interp.c` `eval`/`exec` | `N_ASSIGN` reads `a`,`b`; `N_FN` reads `text`,`kids`,`a`. Never `c`/`b`. `N_TYPE` is never evaluated. | inert |
+| `src/backends/c/compile.c` | same slot discipline | inert |
+| `src/backends/native/nativegen.c` / `src/backends/native/nativeval.c` | same | inert |
+| `src/backends/llvm/compilel.c` `collect_vars` (l.26-31) | recurses into `a`,`b`,`c`,`kids`, so it *will* walk `N_TYPE` nodes — but it only reacts to `N_ASSIGN`-with-`N_IDENT`-target | inert |
+| `src/backends/c/compilef.c` `collect_vars` | same | inert |
 
 ---
 
@@ -339,13 +339,13 @@ behavior:
 | `str` | `ptr` → `%zlstr = { i64 len, ptr bytes }` | `ptr` | immutable; the same bytes a boxed `Value.str` points at |
 | `list[T]` | `ptr` → `%zllist = { i64 len, i64 cap, ptr data }` | `ptr` | `data` is a **flat array of `repr(T)`** — this is the win |
 | `list[any]` | `ptr` → today's boxed list object | `ptr` | **bit-identical layout to a dynamic list** — see §4.4 |
-| `any` | `ptr` → `Value` (`runtime.h:14`) | `ptr` | today's boxed value, heap-allocated |
+| `any` | `ptr` → `Value` (`src/runtime/runtime.h:14`) | `ptr` | today's boxed value, heap-allocated |
 
-**Decision: `any` is `Value*`, not `Value`.** `runtime.h` passes and returns
+**Decision: `any` is `Value*`, not `Value`.** `src/runtime/runtime.h` passes and returns
 `Value` *by value* (a 32-byte struct). Reproducing the Win64 struct-by-value ABI
 in hand-written LLVM IR is fragile — a 32-byte aggregate is passed indirectly,
 and getting that subtly wrong produces silent corruption, not a link error. So
-Stage 5 adds a thin pointer-flavoured shim layer to `runtime.c`
+Stage 5 adds a thin pointer-flavoured shim layer to `src/runtime/runtime.c`
 (`zl_p_binop(ptr, ptr) -> ptr`, `zl_p_calln(ptr, i32, ...) -> ptr`, …) whose
 only job is to heap-allocate and dereference, and the IR only ever passes `ptr`.
 This costs one indirection on the already-slow boxed path and buys ABI safety on
@@ -370,7 +370,7 @@ The consequences follow directly:
 
 ### 3.3 Numeric semantics (the part that can break Neutrality)
 
-The interpreter stores every number as a C `double` (`interp.c:35`). An unboxed
+The interpreter stores every number as a C `double` (`src/runtime/interp.c:35`). An unboxed
 `int` is an `i64`. These agree exactly for `|n| < 2^53` and diverge above it,
 and on overflow.
 
@@ -623,7 +623,7 @@ inference at all. Top-level statements are inferred too, seeded by whatever
 `x: T` declarations exist.
 
 Rationale for the restriction: it makes "did my function get fast?" answerable by
-looking at one line, and it keeps the Stage 3 diff to `compilel.c` contained.
+looking at one line, and it keeps the Stage 3 diff to `src/backends/llvm/compilel.c` contained.
 Inferring inside untyped bodies is a real later win (§9), not a v1 obligation.
 
 ### 5.1 The algorithm
@@ -698,7 +698,7 @@ at each annotated binding point (`x: T = e`, typed parameter bind, `return` from
 a typed function) it performs a runtime tag check and errors on mismatch with
 the same message the LLVM backend's `zl_unbox_*` produces.
 
-The C backend (`compile.c`) does the same thing, by emitting a
+The C backend (`src/backends/c/compile.c`) does the same thing, by emitting a
 `zl_check_type(v, "int", "x")` call before the corresponding store.
 
 ### 6.1 Why this specific choice keeps the three-engine test honest
@@ -717,7 +717,7 @@ output for them.** The interpreter stays slow — that is fine, it is the refere
 implementation, not the product.
 
 It also means the annotation check is written twice at most (once over `Node*`
-for `interp.c`/`compile.c`, once in `compilel.c`'s type pass), not three times,
+for `src/runtime/interp.c`/`src/backends/c/compile.c`, once in `src/backends/llvm/compilel.c`'s type pass), not three times,
 and a discrepancy between them shows up as a `run_tests.ps1` failure rather than
 as a silent wrong answer.
 
@@ -742,11 +742,11 @@ someone's program six months later.
 
 ## 7. The self-hosting risk
 
-`compiler.zl` must still reach a byte-identical fixpoint (`verify.ps1` check
-1/2). Annotations are new syntax, so `compiler.zl`'s own lexer and parser must
+`src/selfhost/compiler.zl` must still reach a byte-identical fixpoint (`verify.ps1` check
+1/2). Annotations are new syntax, so `src/selfhost/compiler.zl`'s own lexer and parser must
 at minimum **skip** them.
 
-### 7.1 Exactly what `compiler.zl` needs (~20 lines, all additive)
+### 7.1 Exactly what `src/selfhost/compiler.zl` needs (~20 lines, all additive)
 
 1. **`:` needs nothing.** `next_token`'s final fallback is
    `spos = spos + 1; return ["SYM", c]` (l.113-114), so `:` already lexes as
@@ -770,15 +770,15 @@ The AST shape does not change — `["fn", name, params, body]` and
 ### 7.2 Why the fixpoint is safe
 
 `verify.ps1` compares **gen1 to gen2**, not to a stored hash, and says so in its
-header comment: *"The hash legitimately changes whenever compiler.zl changes."*
-So editing `compiler.zl` cannot break the fixpoint property by itself — it can
+header comment: *"The hash legitimately changes whenever src/selfhost/compiler.zl changes."*
+So editing `src/selfhost/compiler.zl` cannot break the fixpoint property by itself — it can
 only break it if the edit makes the compiler non-deterministic or wrong.
 
 A stronger, sharper gate is available and should be added for this change:
 
 > **Skip-neutrality gate.** For every unannotated `.zl` file in the tree (all 54
-> stdlib modules, all test programs, `compiler.zl` itself), the `out.c` produced
-> by `compiler.zl` **before** the §7.1 edit must be byte-identical to the `out.c`
+> stdlib modules, all test programs, `src/selfhost/compiler.zl` itself), the `out.c` produced
+> by `src/selfhost/compiler.zl` **before** the §7.1 edit must be byte-identical to the `out.c`
 > produced **after** it.
 
 This is provable in advance by inspection (`skip_type` is never called when no
@@ -788,12 +788,12 @@ guarantees the stdlib is untouched.
 
 ### 7.3 Rules for the build
 
-- **Do not annotate `compiler.zl` in Stages 1-6.** It stays fully dynamic. The
+- **Do not annotate `src/selfhost/compiler.zl` in Stages 1-6.** It stays fully dynamic. The
   skip logic exists so it can *read* annotated files, not so it can contain
   them.
-- Annotating `compiler.zl`'s hot paths is Stage 8, optional, and gated on the
+- Annotating `src/selfhost/compiler.zl`'s hot paths is Stage 8, optional, and gated on the
   fixpoint still holding afterward.
-- `compiler.zl` only ever needs to *skip* types, never to check or use them. A
+- `src/selfhost/compiler.zl` only ever needs to *skip* types, never to check or use them. A
   type checker written in zl is a separate project (`design_types.md` §5.3
   sketches it) and is not on this critical path.
 
@@ -814,7 +814,7 @@ Ratify §2 (spelling), §3 (type set + representation + operator table), §4.2/�
 
 ### Stage 1 — Syntax only, semantics nowhere
 
-`lexer.c` (§2.5), `parser.h` + `parser.c` (§2.6), `compiler.zl` (§7.1).
+`src/frontend/lexer.c` (§2.5), `src/frontend/parser.h` + `src/frontend/parser.c` (§2.6), `src/selfhost/compiler.zl` (§7.1).
 Annotations parse, attach to free slots, and **nothing reads them**. Programs
 with annotations run identically to their unannotated twins on all engines
 because every engine ignores the new slots.
@@ -828,17 +828,17 @@ across the whole toolchain while being provably inert.
 
 ### Stage 2 — The type pass + the interpreter's checks
 
-Build the inference/check pass (§3.4, §5) over `Node*`. Wire it into `interp.c`
-and `compile.c` as a *check only* (§6). Add `--no-check` to skip the pass and
+Build the inference/check pass (§3.4, §5) over `Node*`. Wire it into `src/runtime/interp.c`
+and `src/backends/c/compile.c` as a *check only* (§6). Add `--no-check` to skip the pass and
 `--warn` to downgrade errors, per `design_types.md` §4.
 
 **Verify:** `.\verify.ps1` green. Plus negative tests: each deliberately-violated
 annotation produces the same error text on `interp.exe` and the C backend. Plus
 the Neutrality harness passes for every valid program.
 
-### Stage 3 — `compilel.c`: unboxed `int` and `bool`
+### Stage 3 — `src/backends/llvm/compilel.c`: unboxed `int` and `bool`
 
-The first speed win. `compilel.c` consumes the type pass; typed functions become
+The first speed win. `src/backends/llvm/compilel.c` consumes the type pass; typed functions become
 `define i64 @zl_f(i64 %a)`; typed locals become `alloca` (so `mem2reg`/SROA
 promote them to registers) instead of the current globals. Everything outside
 the numeric subset still exits with "not supported yet", exactly as today.
@@ -860,9 +860,9 @@ for anything fractional.
 
 ### Stage 5 — `any`, the boundary, and the runtime shim
 
-Add the `zl_p_*` pointer shim layer to `runtime.c` (§3.1), the `zl_box_*` /
+Add the `zl_p_*` pointer shim layer to `src/runtime/runtime.c` (§3.1), the `zl_box_*` /
 `zl_unbox_*` helpers, `zl_type_error`, and every B/U site from §4.2 and §4.3.
-`compilel` output now links `runtime.c` + `os_win.c`, so mixed typed/untyped
+`compilel` output now links `src/runtime/runtime.c` + `os_win.c`, so mixed typed/untyped
 programs compile end to end.
 
 **Verify:** a program with a typed hot function called from untyped code
@@ -886,7 +886,7 @@ supports, and add the Neutrality harness to `verify.ps1`.
 
 **Verify:** `.\verify.ps1` green with four engines.
 
-### Stage 8 (optional) — Annotate `compiler.zl`
+### Stage 8 (optional) — Annotate `src/selfhost/compiler.zl`
 
 Annotate the hot paths (`next_token`, `parse_expr`, the emitter's string
 building) and measure the self-compile time.
@@ -904,7 +904,7 @@ oversight.
 
 | Not doing | Why |
 |---|---|
-| **Hindley-Milner / whole-program inference** | Rejects `jsonw.zl`, `json_parse.zl`, `lisp_interp.zl`, and `compiler.zl`'s own AST. §1.2. |
+| **Hindley-Milner / whole-program inference** | Rejects `jsonw.zl`, `json_parse.zl`, `lisp_interp.zl`, and `src/selfhost/compiler.zl`'s own AST. §1.2. |
 | **Inference across function boundaries** | Same reason, smaller scale. An unannotated parameter is `any`, full stop. |
 | **Inference inside untyped function bodies** | Would speed up unannotated code for free, but doubles the surface area of Stage 3 and makes "is my function fast?" unanswerable from the signature. Revisit after Stage 7. |
 | **Generics / type parameters** | `list[T]` is the only parametric type and `T` is always concrete at the use site. `fn map(xs: list[T], ...)` needs monomorphization or dictionaries — a whole compiler subsystem. |
@@ -928,12 +928,12 @@ oversight.
 |---|---|---|
 | R1 | **`int` is `i64` but the interpreter is `double`** — divergence above 2^53 and on overflow. | Documented in §3.3; the same posture `run_tests.ps1` already takes on division. Test programs stay in range. Revisit only with `design_floats.md` §2.1. |
 | R2 | **`int / int -> float` surprises people** who annotate an existing program and get a type error. | It is a *rejection with a message naming `int(...)`*, never a changed answer. The error text must literally suggest the fix. |
-| R3 | **Two implementations of the type rules** (the `Node*` pass for interp/C, the pass in `compilel.c`) drift apart. | Share one pass over `Node*`; `compilel.c` consumes its output rather than re-deriving. If they must be separate, the Neutrality harness (§6.2) is what catches drift. |
+| R3 | **Two implementations of the type rules** (the `Node*` pass for interp/C, the pass in `src/backends/llvm/compilel.c`) drift apart. | Share one pass over `Node*`; `src/backends/llvm/compilel.c` consumes its output rather than re-deriving. If they must be separate, the Neutrality harness (§6.2) is what catches drift. |
 | R4 | **The `->` token corrupts `brainfuck.zl`** and the 100+ other stdlib comments/strings containing `->`. | §2.2: the two-char check goes *inside `lex_symbol`*, which is only reached after the comment and string branches. Add a regression test that runs `brainfuck.zl` immediately after the lexer change. |
 | R5 | **Boxing a `list[int]` inside a loop** silently costs O(n) mallocs per iteration. | §4.4: warn at every `list[T] → any` site; make `list[T]`/`list[any]` non-assignable so it can never happen implicitly. |
 | R6 | **`Value`-by-value ABI** in hand-written IR is silently wrong on Win64. | §3.1: `any` is always `ptr`; add the `zl_p_*` shim rather than reproducing the struct ABI. |
-| R7 | **`compiler.zl` edits break the fixpoint.** | §7.2: `verify.ps1` compares gen1 to gen2, and the skip-neutrality gate proves the stdlib output is unchanged. Do not annotate `compiler.zl` before Stage 8. |
-| R8 | **Enum renumbering** — inserting `N_TYPE` mid-enum shifts values that `compilel.c`/`compilef.c` print in error messages. | §2.6: append at the end. |
+| R7 | **`src/selfhost/compiler.zl` edits break the fixpoint.** | §7.2: `verify.ps1` compares gen1 to gen2, and the skip-neutrality gate proves the stdlib output is unchanged. Do not annotate `src/selfhost/compiler.zl` before Stage 8. |
+| R8 | **Enum renumbering** — inserting `N_TYPE` mid-enum shifts values that `src/backends/llvm/compilel.c`/`src/backends/c/compilef.c` print in error messages. | §2.6: append at the end. |
 | R9 | **Scope creep into a full checker.** `design_types.md`'s arity checks, operator checks, and diagnostics are tempting. | They are welcome, but they are Stage 2's *optional* second half. The critical path is representation, not diagnostics. |
 
 ---
@@ -943,11 +943,11 @@ oversight.
 1. `x: int = 5` and `fn f(a: int, b: float) -> int { }` lex, parse, and run on
    all three existing engines, with `struct Node` unchanged.
 2. All 54 stdlib modules run **with zero edits** and, when compiled by
-   `compiler.zl`, produce byte-identical `out.c` to before the change.
-3. `compiler.zl` skips annotations and still reaches a byte-identical fixpoint.
+   `src/selfhost/compiler.zl`, produce byte-identical `out.c` to before the change.
+3. `src/selfhost/compiler.zl` skips annotations and still reaches a byte-identical fixpoint.
 4. The interpreter and the C backend **check** annotations and reject violations
    with the same message; neither changes its value representation.
-5. `compilel.c` emits unboxed `i64` / `double` / `i1` for annotated code and
+5. `src/backends/llvm/compilel.c` emits unboxed `i64` / `double` / `i1` for annotated code and
    boxed `ptr` for `any`, with every B/U site from §4.2 and §4.3 implemented.
 6. **Annotation Neutrality holds**: for every program in the golden file,
    stripping the annotations changes no output on any engine.

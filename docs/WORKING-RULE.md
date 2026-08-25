@@ -13,7 +13,7 @@ polished", not "when the track is complete" — the same day it is written.
 Eight tracks ran in parallel for about a week. Each forked from a `main` that
 had no compositor in it, so **each one built its own substrate**. The bill:
 
-- `kernel/wm.c` existed on eight branches and on `main` not at all
+- `kernel/src/graphics/windowing/wm.c` existed on eight branches and on `main` not at all
 - 55 files were touched by two or more tracks
 - **eight** app-id collisions, every one silent — two dispatch arms matching the
   same id, the second unreachable
@@ -27,7 +27,7 @@ collisions exists because two people solved the same problem a week apart withou
 seeing each other. Land the same day and the second person sees the first one's
 code and doesn't write it again.
 
-`docs/MERGE-EVIDENCE.md` is the full account.
+`docs/evidence/MERGE-EVIDENCE.md` is the full account.
 
 ## What this does NOT mean
 
@@ -80,7 +80,7 @@ that is fixed, and the lesson is the one below.
 ## The standard
 
 A thing is done when a command says so and you read the output. Not when the
-plan says it was going to be done. `docs/MERGE-EVIDENCE.md` had an entry claiming
+plan says it was going to be done. `docs/evidence/MERGE-EVIDENCE.md` had an entry claiming
 an address collision was fixed; the fix had been written into the plan and never
 applied to the code, and the document reported the intention as the outcome. The
 audit caught it. That is the failure this project keeps having, and it is the one

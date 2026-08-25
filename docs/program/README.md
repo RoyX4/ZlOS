@@ -7,6 +7,11 @@ research into zlOS. It preserves the full destination rather than redefining it
 as a small MVP. Delivery is staged only because later capabilities depend on
 earlier ones.
 
+It is a specification and status system, not 906 implemented features. The
+current checked-in status snapshot records 906 rows: 877 planned and unproved,
+22 partial, and 7 proved for their explicitly bounded contracts. Those labels
+must be refreshed from evidence before they are treated as current.
+
 The program covers:
 
 - all 906 stable product feature atoms in the canonical research catalogue;
@@ -45,6 +50,23 @@ but zlOS owns its design and code.
    product completion.
 9. [`VALIDATION-RECEIPT.md`](VALIDATION-RECEIPT.md) — exact coverage output,
    refutations incorporated, evidence ceiling and weakest links.
+10. [`research/README.md`](research/README.md) — the retained 33-repository
+    research shelf, canonical 906-row catalogue, matrices, deep dives,
+    refutations, the three 174-contract source backlogs, and read-only snapshots
+    of the zl language plans used by the clean-room program.
+
+## What each file proves
+
+| File | What it proves | What it does not prove |
+|---|---|---|
+| `FEATURE-MAP.md` | Every canonical feature ID has one phase and workstream. | Implementation or runtime behavior. |
+| `FEATURE-STATUS.json` | A dated evidence join for all 906 IDs. | That the join is fresh after later source or layout changes. |
+| `PHASES.md` | MP-00 through MP-20 exist with dependencies and exit contracts. | That any phase has exited. |
+| `DRIVERS.md`, `SERVICES.md`, `APPLICATIONS.md`, `LANGUAGE-AGENTS-OPERATIONS.md` | The normalized target registries are documented. | That listed targets are shipped. |
+| `RESEARCH-CONTRACT-CROSSWALK.md` | All 174 source contracts have destinations. | That their acceptance contracts pass. |
+| `PROOF-GATES.md` | The evidence vocabulary and promotion rules. | Fresh host, QEMU or physical evidence. |
+| `PARTIAL-CLOSURE.md` | The dated closure plan for the then-partial batch. | A live queue or completed work. |
+| `research/` | The complete source research and rejected-claim trail. | Permission to copy donor code or claim donor behavior. |
 
 Run `python3 tools/validate_master_program.py` from the zl-linux root after any
 program change. It must report exactly 906 unique feature atoms, no missing
@@ -56,7 +78,7 @@ and all required registry sections.
 When documents disagree, use this order:
 
 1. current source, generated artifacts and fresh reproducible receipts;
-2. [`kernel/docs/performance-architecture-implementation-2026-08-22.md`](../../kernel/docs/performance-architecture-implementation-2026-08-22.md)
+2. [`kernel/docs/evidence/performance-architecture-implementation-2026-08-22.md`](../../kernel/docs/evidence/performance-architecture-implementation-2026-08-22.md)
    for the live locally verified implementation batch;
 3. this program for destination and ordering;
 4. [`docs/EXECUTION-ROADMAP.md`](../EXECUTION-ROADMAP.md) for the current
@@ -153,21 +175,22 @@ source file, package recipe, menu entry, screenshot or build target exists.
 
 ## Relationship to the research shelf
 
-The complete evidence shelf remains in
-[`../../zl/docs/research/starred-repositories/`](../../../zl/docs/research/starred-repositories/)
-when the two repositories are checked out as siblings. The front doors are:
+The complete evidence shelf is retained locally under [`research/`](research/),
+so a contributor can audit the program without another checkout. The original
+working copy may also exist in `zl-merge-all`, but it is no longer required by
+the validator. The front doors are:
 
-- `CANONICAL_COMPLETE_PRODUCT_FEATURE_CATALOG_2026-08-22.md` — 906 product
+- [`CANONICAL_COMPLETE_PRODUCT_FEATURE_CATALOG_2026-08-22.md`](research/CANONICAL_COMPLETE_PRODUCT_FEATURE_CATALOG_2026-08-22.md) — 906 product
   atoms and exact current-app/game crosswalk;
-- `CLEAN_ROOM_ZL_ZLOS_INTEGRATION_PLAN_2026-08-21.md` — architecture;
-- `IMPLEMENTATION_CONTRACT_BACKLOG_2026-08-21.md` — 64 core contracts;
-- `DRIVER_AND_APP_IMPLEMENTATION_CONTRACT_BACKLOG_2026-08-21.md` — 56
+- [`CLEAN_ROOM_ZL_ZLOS_INTEGRATION_PLAN_2026-08-21.md`](research/CLEAN_ROOM_ZL_ZLOS_INTEGRATION_PLAN_2026-08-21.md) — architecture;
+- [`IMPLEMENTATION_CONTRACT_BACKLOG_2026-08-21.md`](research/IMPLEMENTATION_CONTRACT_BACKLOG_2026-08-21.md) — 64 core contracts;
+- [`DRIVER_AND_APP_IMPLEMENTATION_CONTRACT_BACKLOG_2026-08-21.md`](research/DRIVER_AND_APP_IMPLEMENTATION_CONTRACT_BACKLOG_2026-08-21.md) — 56
   driver/service/app contracts;
-- `VISUAL_BROWSER_AND_APP_EXPERIENCE_CONTRACT_BACKLOG_2026-08-21.md` — 54
+- [`VISUAL_BROWSER_AND_APP_EXPERIENCE_CONTRACT_BACKLOG_2026-08-21.md`](research/VISUAL_BROWSER_AND_APP_EXPERIENCE_CONTRACT_BACKLOG_2026-08-21.md) — 54
   visual/browser/app contracts;
 - the three driver/app and three visual/browser deep dives plus all refutation
   reports — exact source evidence and rejected claims;
-- `RESPONSIVENESS_RENDERING_AND_VISUAL_POLISH_DEEP_DIVE_2026-08-22.md` —
+- [`RESPONSIVENESS_RENDERING_AND_VISUAL_POLISH_DEEP_DIVE_2026-08-22.md`](research/RESPONSIVENESS_RENDERING_AND_VISUAL_POLISH_DEEP_DIVE_2026-08-22.md) —
   fast-path and visual-coherence mechanics.
 
 This directory is the implementation projection of that shelf. It does not

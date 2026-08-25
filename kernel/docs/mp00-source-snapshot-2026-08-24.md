@@ -43,7 +43,7 @@ self-identity cycle.
 Run from the isolated implementation root:
 
 ```sh
-python3 kernel/gen-source-snapshot.py --check --selftest
+python3 kernel/tools/generators/gen-source-snapshot.py --check --selftest
 ```
 
 The self-test proves nonzero rejection of:

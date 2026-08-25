@@ -1,76 +1,31 @@
-_gen.c
-_*.o
-kernel.elf
+# Generated kernel sources and objects
+_gen*.c
 out.c
-zlOS.iso
+_*.o
+
+# Boot and image outputs
+*.elf
+*.img
+*.iso
+*.EFI
+*.lib
+*.bin
 _iso/
-zlOS.img
-kernel_raw.bin
-kernel_raw.elf
-raw_boot.bin
 
-# host harness BINARIES. The .c files are the work; these are build outputs,
-# and CLAUDE.md's rule about them has already had to be applied by hand once
-# (kernel/hosttest/dpll_test). Listing them means it does not have to be again.
-hosttest/fstest
-hosttest/wmtest
-hosttest/wmshot
-hosttest/inputtest
-hosttest/tritest
-hosttest/fbbench
-hosttest/dpll_test
-hosttest/modeset_test
-hosttest/intel_probe
-hosttest/gpu_fillrate
-hosttest/*.ppm
+# Host harness outputs. Keep source, scripts, fixtures, and metadata; ignore
+# extensionless executables and generated captures without naming every target.
+tests/host/*
+!tests/host/*.c
+!tests/host/*.h
+!tests/host/*.sh
+!tests/host/*.py
+!tests/host/*.zl
+!tests/host/*.md
+!tests/host/*.json
 
-hosttest/systest
-hosttest/rtctest
-hosttest/toasttest
-hosttest/xhcitest
-# This list is a hand-maintained allowlist, one line per binary, and it is
-# ALREADY INCOMPLETE: inputtest_feel, inputtest_hid, wmbench and wmtest_feel
-# are missing from it and are consequently TRACKED - so `./build.sh` rewrites
-# four binaries in the index on every run. A tracked file is never ignored, so
-# adding them here fixes nothing; they need `git rm --cached`. Left for the
-# phase 2 sweep rather than smuggled into a pointer fix.
-# Five more that were untracked-and-unlisted, i.e. they showed up as `??` in
-# every status and were one `git add -A` away from being committed as binaries.
-# heaptest is new with the allocator; the other four predate it. This is the
-# cheap half of the sweep the note above defers - adding an unlisted, UNTRACKED
-# binary works immediately, unlike the four tracked ones, which still need
-# `git rm --cached` before a line here does anything.
-hosttest/heaptest
-hosttest/pagingtest
-hosttest/fbtext
-hosttest/palette
-hosttest/termwrap
-hosttest/walltest
-hosttest/gpu-ring-*.log
-hosttest/gpu_ring
-hosttest/gputest
-hosttest/gpu_blt
-hosttest/gpu_planes
-hosttest/gpu_aperture
+# Runtime probe output
+shots/
+exercise-out/
 
-# Host-test binaries. These were TRACKED and rewritten by every ./build.sh run,
-# which is the hazard CLAUDE.md describes: a hand-maintained allowlist, one
-# line per binary, that nobody remembers to extend. Nine were in the index.
-# `git ls-files kernel/hosttest/ | grep -v '\.c$'` is the check that finds the
-# next one; a pattern is what stops there being a next one.
-hosttest/cryptotest
-hosttest/easetest
-# Derived from kernel/hosttest/build.sh's own `-o` targets, 2026-08-20.
-# The list above was a hand-maintained allowlist and it drifted: these seven
-# were tracked-or-untracked build outputs rewritten by every ./build.sh run,
-# which is why six worktrees showed the same "dirty" files. Re-derive with:
-#   for t in $(grep -oE '\-o +[A-Za-z_]+' kernel/hosttest/build.sh | awk '{print $2}' | sort -u); do
-#     git check-ignore -q "kernel/hosttest/$t" || echo "$t"; done
-hosttest/fbtext
-hosttest/inputtest_feel
-hosttest/inputtest_hid
-hosttest/palette
-hosttest/termwrap
-hosttest/walltest
-hosttest/wmtest_feel
-hosttest/uitest
+# Local Python caches
+**/__pycache__/

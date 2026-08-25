@@ -86,8 +86,8 @@ canonical feature IDs.
 ## Commands
 
 ```sh
-python3 kernel/gen-provenance-viewer.py --write --selftest
-python3 kernel/gen-provenance-viewer.py --check --selftest
+python3 kernel/tools/generators/gen-provenance-viewer.py --write --selftest
+python3 kernel/tools/generators/gen-provenance-viewer.py --check --selftest
 ```
 
 ## Open completion gates

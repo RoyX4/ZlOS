@@ -103,12 +103,12 @@ result about files it never opened — which is exactly the class
 The agent found two other guards in the same family, both worth re-deriving before
 acting on:
 
-- **`kernel/wguard.sh:45`** — the guard *for this bug class* reportedly never reads the
+- **`kernel/tools/checks/wguard.sh:45`** — the guard *for this bug class* reportedly never reads the
   flag line it claims to guard, so it cannot detect any single `-Werror=` flag being
   removed. The agent notes `tools/hazard-scan.sh` check 1 (lines 51-75) does this
   correctly for one flag, by compiling a probe with the real parsed `CF` and failing if
   it is accepted — so a correct pattern already exists in the tree to copy.
-- **`kernel/idt.c:244`** — `struct interrupt_frame` is reportedly 20 bytes instead of 40
+- **`kernel/src/arch/x86/idt.c:244`** — `struct interrupt_frame` is reportedly 20 bytes instead of 40
   in the EFI build, the **third** instance of the documented struct-field bug, in the
   same file as the two that were fixed. Latent only because every handler discards its
   argument (`(void)f;`).

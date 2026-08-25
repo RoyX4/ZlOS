@@ -2,7 +2,7 @@ name: desktop
 
 # A picture of the operating system, on every pull request.
 #
-# kernel/hosttest/wmshot.c renders one frame of the compositor to a PPM from
+# kernel/tests/host/wmshot.c renders one frame of the compositor to a PPM from
 # Linux - no boot, no GPU, no display, milliseconds. That is only possible
 # because fb.c / wm.c / ui.c are freestanding C against memory.
 #
@@ -40,7 +40,7 @@ jobs:
         continue-on-error: true
         run: |
           git worktree add /tmp/base "${{ github.event.pull_request.base.sha }}"
-          cd /tmp/base && bash "$GITHUB_WORKSPACE/.github/scripts/render-desktop.sh" base
+          bash /tmp/base/.github/scripts/render-desktop.sh base /tmp/base
           cp -r /tmp/base/shots/. "$GITHUB_WORKSPACE/shots/" 2>/dev/null || true
 
       - name: diff the frames

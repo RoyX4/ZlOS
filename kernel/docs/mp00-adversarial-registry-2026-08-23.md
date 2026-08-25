@@ -1,6 +1,6 @@
 # MP-00 verifier canary, failure-injection and hostile-corpus registry
 
-`kernel/adversarial-registry.json` is the current machine-readable boundary for
+`kernel/metadata/adversarial-registry.json` is the current machine-readable boundary for
 EV-013, EV-019 and EV-020. It runs 18 verifier self-tests and refuses to call a
 verifier trusted unless its planted mutation is caught.
 

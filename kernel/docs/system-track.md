@@ -5,7 +5,7 @@ collection of programs behave like one machine. This is the account of what
 landed, what it refuses to do, and the six ways the filesystem was broken
 before it was any good.
 
-Companion to [`SYSTEM-PROMPT.md`](SYSTEM-PROMPT.md), which is the brief. This
+Companion to [`SYSTEM-PROMPT.md`](archive/prompts/SYSTEM-PROMPT.md), which is the brief. This
 is the result.
 
 ---
@@ -216,7 +216,7 @@ and every seam has a fake:
 This was not a preference. **The kernel did not link for the entire first half
 of this track** (`.ultra/TENSIONS.md` T-SYS-1: `b19207d` committed the call
 sites of the USB pointer with no definitions on any branch), so every QEMU gate
-in the project was unrunnable. `kernel/hosttest/` never links
+in the project was unrunnable. `kernel/tests/host/` never links
 `runtime_kernel.c`, so it was unaffected, and all of this was built and gated
 there while the tree was red.
 
@@ -229,13 +229,13 @@ file added none. Four new `.c` files went in that way.
 ## The gates
 
 ```
-kernel/hosttest/fstest      117 assertions  zlfs, incl. a cold start in a SEPARATE PROCESS
-kernel/hosttest/rtctest      46 assertions  the clock, against a misbehaving CMOS
-kernel/hosttest/systest      96 assertions  clipboard, snapping, notifications
-kernel/hosttest/toasttest    17 assertions  the toast INSIDE the compositor, by pixel
+kernel/tests/host/fstest      117 assertions  zlfs, incl. a cold start in a SEPARATE PROCESS
+kernel/tests/host/rtctest      46 assertions  the clock, against a misbehaving CMOS
+kernel/tests/host/systest      96 assertions  clipboard, snapping, notifications
+kernel/tests/host/toasttest    17 assertions  the toast INSIDE the compositor, by pixel
 kernel/verify.sh                            BIOS boot vs golden.txt
-kernel/verify-disk.sh                       THREE boots against one disk image
-kernel/verify-clock.sh                      three chosen -rtc base= values, exact output
+kernel/tools/checks/verify-disk.sh                       THREE boots against one disk image
+kernel/tools/checks/verify-clock.sh                      three chosen -rtc base= values, exact output
 ```
 
 `verify-disk.sh` is the only gate in the tree that power-cycles the machine. It

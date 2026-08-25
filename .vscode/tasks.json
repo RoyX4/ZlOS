@@ -28,7 +28,7 @@
         {
             "label": "compile current .zl file (C backend)",
             "type": "shell",
-            "command": "./compile '${file}' && gcc -O2 -D_strdup=strdup -I. -o '${fileBasenameNoExtension}' out.c runtime.c os_linux.c -lm && echo 'built ./${fileBasenameNoExtension}'",
+            "command": "./compile '${file}' && gcc -O2 -D_strdup=strdup -Isrc/runtime -o '${fileBasenameNoExtension}' out.c src/runtime/runtime.c src/runtime/os_linux.c -lm && echo 'built ./${fileBasenameNoExtension}'",
             "problemMatcher": ["$gcc"],
             "detail": "zl -> C -> gcc -> native ELF binary"
         },

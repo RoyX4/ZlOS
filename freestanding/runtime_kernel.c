@@ -23,7 +23,7 @@
  * Swapping targets is one function, which is what makes this backend
  * -agnostic in the way that matters.
  */
-#include "../runtime.h"
+#include "../src/runtime/runtime.h"
 
 /* Pointer-sized, for the raw-memory builtins below. NOT `unsigned long`: the
  * EFI target is LLP64, where it is 4 bytes, so peek/poke/fill_mem/copy_mem and
@@ -34,6 +34,19 @@
 typedef unsigned long long zl_uptr;
 #else
 typedef unsigned int       zl_uptr;
+#endif
+
+/* Panic logging is opportunistic in every freestanding target. The real kernel
+ * links zllog.c; the standalone libc-free proof does not, so these must remain
+ * weak and checked before use. */
+#ifndef ZL_KERNEL_SERIAL
+extern void zllog_event(unsigned, unsigned, unsigned,
+                        unsigned, unsigned, unsigned) __attribute__((weak));
+extern void zllog_event_irq(unsigned, unsigned, unsigned,
+                            unsigned, unsigned, unsigned) __attribute__((weak));
+extern int zllog_ready(void) __attribute__((weak));
+extern int zllog_io_active(void) __attribute__((weak));
+extern int zllog_flush(void) __attribute__((weak));
 #endif
 
 /* ---------------------------------------------------------------- seam */
@@ -615,7 +628,7 @@ extern int  ui_items_count(const char *items);
  * named by reference-widgets.md S14.2/S14.3 for widgets a zl app draws. This
  * table is a window onto design.h, not a second palette - it adds no value of
  * its own, which is what keeps the single-source rule true. */
-#include "../kernel/design.h"
+#include "../kernel/src/graphics/ui/design.h"
 static unsigned zl_design_ink(int i)
 {
     switch (i) {

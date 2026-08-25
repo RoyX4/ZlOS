@@ -12,7 +12,7 @@
 > `gates.yml`; `DISK_SCRATCH` is at `0x02040000` (the checker still does not
 > name it). Still first: `key()` at `kernel.zl:1517` (§5.1), boot the ThinkPad,
 > land `desktop/browser-next` (21 commits), Ring 3. Ranked plan for score, not
-> bugs: [`docs/ROAD-TO-TEN.md`](ROAD-TO-TEN.md).
+> bugs: [`docs/archive/superseded/ROAD-TO-TEN.md`](ROAD-TO-TEN.md).
 
 > **Repair pass, 2026-08-19.** Four adversarial reviewers attacked the first
 > draft and raised 44 defects. Every one was re-verified against the tree by a
@@ -34,7 +34,7 @@ can use, H2 the ThinkPad lights its own panel, H3 write zl on zlOS.
 This file replaces twenty-one planning documents totalling ~392 KB. Nineteen of
 them were audited item by item against the merged tree (870 items), plus three
 cross-check lenses; two more — `kernel/docs/POINTER-PROMPT.md`, which is live
-work rather than history, and `docs/INTEGRATION-PLAN.md`, which is superseded —
+work rather than history, and `docs/archive/superseded/INTEGRATION-PLAN.md`, which is superseded —
 are represented here without being re-audited. Almost every one of those
 documents predates the eleven-track merge of 2026-08-19 and is therefore stale
 by construction: reading one tells you what somebody wanted, never what is true.
@@ -114,13 +114,13 @@ $ grep -n 'run "' gates/land-gate.sh
 48:run "kernel 32-bit"    "$WT/kernel"        ./build.sh
 49:run "kernel 64-bit"    "$WT/kernel"        ./build64.sh
 50:run "kernel EFI"       "$WT/kernel"        ./buildefi.sh
-51:[ -x "$WT/kernel/verify-sources.sh" ] && run "SOURCES coverage" ...
-52:run "hosttest build"   "$WT/kernel/hosttest" ./build.sh
+51:[ -x "$WT/kernel/tools/checks/verify-sources.sh" ] && run "SOURCES coverage" ...
+52:run "hosttest build"   "$WT/kernel/tests/host" ./build.sh
 90:  run "boot: $g" "$WT/kernel" "./$g"
 
-$ grep -c gcc kernel/hosttest/build.sh
+$ grep -c gcc kernel/tests/host/build.sh
 30
-$ grep -n '^\s*\./' kernel/hosttest/build.sh
+$ grep -n '^\s*\./' kernel/tests/host/build.sh
 (no output — nothing is executed)
 ```
 
@@ -149,16 +149,16 @@ word "gated" to mean a host harness. The honest word is "asserted, unrun."**
 $ grep -n 'check-zl-calls\|check-memmap\|memmap-guard\|probe-' gates/land-gate.sh
 (no output)
 $ git ls-files | grep -E 'check-|memmap-guard'
-kernel/check-memmap.sh
-kernel/check-zl-calls.sh
-kernel/hosttest/memmap-guard-test.sh
+kernel/tools/checks/check-memmap.sh
+kernel/tools/checks/check-zl-calls.sh
+kernel/tests/host/memmap-guard-test.sh
 ```
 
 All three run in seconds with no QEMU and no hardware. Adding **three** lines to
 the cheap block before `land-gate.sh:55` is the single cheapest change in this
 document.
 
-**`kernel/hosttest/memmap-guard-test.sh` is the one the first draft of this
+**`kernel/tests/host/memmap-guard-test.sh` is the one the first draft of this
 document missed, and it is the strongest of the three.** It is `-fsyntax-only`
 against the same CFLAGS `build.sh` uses, so it needs no toolchain, no QEMU and no
 hardware. Twelve checks: one baseline compile of the six map owners
@@ -168,12 +168,12 @@ the real HID-buffer-inside-the-blur-arena bug — and six `same` blocks proving
 rebased address literals still equal the numbers they replaced.
 
 ```
-$ grep -cE '^(expect_pass|expect_break|same) ' kernel/hosttest/memmap-guard-test.sh
+$ grep -cE '^(expect_pass|expect_break|same) ' kernel/tests/host/memmap-guard-test.sh
 12
-$ grep -rn 'memmap-guard' gates/land-gate.sh kernel/hosttest/build.sh
+$ grep -rn 'memmap-guard' gates/land-gate.sh kernel/tests/host/build.sh
 (exit 1 — wired into neither)
 $ grep -n 'memmap-guard' kernel/HANDOFF.md
-756:cd kernel/hosttest && ./memmap-guard-test.sh    # seconds, no QEMU, no hardware
+756:cd kernel/tests/host && ./memmap-guard-test.sh    # seconds, no QEMU, no hardware
 ```
 
 `HANDOFF.md` documents it by name with its run command and nothing runs it. It
@@ -184,11 +184,11 @@ the `edid_buf` static assert gets *proven*, not merely written.
 collision, because it iterates a hardcoded list with no discovery step:
 
 ```
-$ sed -n '30,31p' kernel/check-memmap.sh
+$ sed -n '30,31p' kernel/tools/checks/check-memmap.sh
 for name in SNAKE_X SNAKE_Y FS_META FS_DATA FS_SLOT \
             LINE_BUF LINE_MAX HIST_BUF HIST_N; do
 
-$ bash kernel/check-memmap.sh | tail -3
+$ bash kernel/tools/checks/check-memmap.sh | tail -3
     0x02030000 .. 0x020300C8  LINE_BUF      200 bytes
     0x02031000 .. 0x02032000  HIST_BUF     4096 bytes
   OK: no overlaps, 56 bytes spare in each history slot
@@ -209,17 +209,17 @@ C owners, and covers neither `kernel.zl`'s `NAME = 0x…` constants nor `intel.c
 
 ### 2.3 The reverse-SOURCES sweep passes on the one file it was built to catch
 
-`kernel/interp_kernel.c` is 721 lines — the kernel-side zl interpreter, the thing
+`kernel/src/runtime/interp_kernel.c` is 721 lines — the kernel-side zl interpreter, the thing
 that would let the kernel run a `.zl` from disk. It is not in `kernel/SOURCES`,
 so no build compiles it. The sweep's three-way classification lets it through:
 
 ```
 $ grep -n 'interp' kernel/SOURCES
 (no output)
-$ grep -n 'interp_kernel.c' kernel/hosttest/build.sh
+$ grep -n 'interp_kernel.c' kernel/tests/host/build.sh
 199:gcc -O2 -w -o libctest libctest.c ../interp_kernel.c ../arena.c -lm
 $ sed -n '66,67p' gates/land-gate.sh
-    if grep -q "$b" "$WT/kernel/hosttest/build.sh" 2>/dev/null; then
+    if grep -q "$b" "$WT/kernel/tests/host/build.sh" 2>/dev/null; then
       echo "host-only (not in the kernel): $b"; hostonly=$((hostonly+1))
 ```
 
@@ -236,11 +236,11 @@ the same defect shape as `check-memmap.sh`'s name list.
 Three documents say it exists. It does not.
 
 ```
-$ grep -n 'CHUNKS\|LIMIT\|refus' kernel/mkdisk.sh
+$ grep -n 'CHUNKS\|LIMIT\|refus' kernel/tools/images/mkdisk.sh
 (no output)
-$ git log --oneline -S'CHUNKS' -- kernel/mkdisk.sh
+$ git log --oneline -S'CHUNKS' -- kernel/tools/images/mkdisk.sh
 (no output — never in this history)
-$ git show premerge/apps:kernel/mkdisk.sh | grep -n 'CHUNKS\|LIMIT\|FAIL'
+$ git show premerge/apps:kernel/tools/images/mkdisk.sh | grep -n 'CHUNKS\|LIMIT\|FAIL'
 120:CHUNKS=$(grep -oP 'CHUNKS\s+equ\s+\K[0-9]+' raw_boot.asm)
 121:LIMIT=$((CHUNKS * 64 * 512))
 123:if [ "$KSIZE" -gt "$LIMIT" ]; then
@@ -273,12 +273,12 @@ $ git ls-files | grep -ci zlfmt
 The branch carries six GitHub Actions workflows, a PR template, a `tools/` suite
 (`preflight.sh`, `hazard-scan.sh`, `doc-check.sh`, `engine-parity.sh`,
 `journal.sh`, `todo.sh`, `install-hooks.sh`), `AGENTS.md`, `TODO.md`,
-`docs/JOURNAL.md`, and **the only tracked copy of `zlfmt.c` and `verify_fmt.sh`
+`docs/JOURNAL.md`, and **the only tracked copy of `src/tools/zlfmt.c` and `verify_fmt.sh`
 anywhere in the repository**. It forks at `c064742`, ~98 commits behind `main`,
 so this is a real merge, not a fast-forward. This converts every gate in this
 repo from "a human remembered" to "a push failed."
 
-Two documents say 9 commits (`docs/DOCS-RECONCILE-PROMPT.md:131`,
+Two documents say 9 commits (`docs/archive/prompts/DOCS-RECONCILE-PROMPT.md:131`,
 `kernel/docs/POINTER-PROMPT.md:208`). The number is 11.
 
 *Source: xcheck-unowned lens.*
@@ -288,10 +288,10 @@ Two documents say 9 commits (`docs/DOCS-RECONCILE-PROMPT.md:131`,
 ```
 $ git ls-files | while read f; do [ -f "$f" ] && file -b "$f" | grep -q ELF \
     && echo "$f $(stat -c%s "$f")"; done
-kernel/hosttest/inputtest_feel 56016
-kernel/hosttest/inputtest_hid  31280
-kernel/hosttest/wmbench       779736
-kernel/hosttest/wmtest_feel   791432
+kernel/tests/host/inputtest_feel 56016
+kernel/tests/host/inputtest_hid  31280
+kernel/tests/host/wmbench       779736
+kernel/tests/host/wmtest_feel   791432
 ```
 
 They arrived with the feel and apps landings. `CLAUDE.md:128-131` gives a command
@@ -320,12 +320,12 @@ both counts.** Which scripts carry the flag is textual and settles with one grep
 
 ```
 $ for f in kernel/verify*.sh; do printf '%-24s %s\n' "$f" "$(grep -o '\-m [0-9]*' $f | head -1)"; done
-kernel/verify-clock.sh   -m 512
-kernel/verify-disk.sh    -m 512
-kernel/verify-efi.sh     -m 512
-kernel/verify-iso.sh
-kernel/verify-raw.sh
-kernel/verify-sources.sh
+kernel/tools/checks/verify-clock.sh   -m 512
+kernel/tools/checks/verify-disk.sh    -m 512
+kernel/tools/checks/verify-efi.sh     -m 512
+kernel/tools/checks/verify-iso.sh
+kernel/tools/checks/verify-raw.sh
+kernel/tools/checks/verify-sources.sh
 kernel/verify.sh
 $ grep -n 'for g in' gates/land-gate.sh
 87:for g in mkiso.sh verify.sh verify-iso.sh verify-efi.sh verify-raw.sh verify-disk.sh verify-clock.sh; do
@@ -360,7 +360,7 @@ $ git grep -ln 'netdev\|-nic\|virtio-net' -- '*.sh' '*.py'
 (empty)
 ```
 
-`kernel/try.sh` attaches nvme, xhci, usb-storage, usb-kbd and usb-mouse, and no
+`kernel/tools/run/try.sh` attaches nvme, xhci, usb-storage, usb-kbd and usb-mouse, and no
 network device. QEMU's default NIC for the i386 `pc` machine is e1000, which
 `virtio_net_find()` will not match. The `N` command's ARP gate is written and
 reachable (`kernel.zl:2634 fn net_gate()`, bound at `:2124`), and nothing runs
@@ -376,11 +376,11 @@ HANDOFF staleness points — i.e. as a documentation error. Its source graded it
 a coverage gap, and that is what it is:
 
 ```
-$ grep -n 'EXECTEST_NO_FS' kernel/hosttest/exectest.c
+$ grep -n 'EXECTEST_NO_FS' kernel/tests/host/exectest.c
 109  150  173      (three guarded blocks)
-$ grep -n 'exectest' kernel/hosttest/build.sh
+$ grep -n 'exectest' kernel/tests/host/build.sh
 213:gcc -O2 -w -o exectest exectest.c ../exec.c        (no -D)
-$ grep -rn 'nofs' kernel/hosttest/build.sh
+$ grep -rn 'nofs' kernel/tests/host/build.sh
 (no output)
 $ grep -n 'exectest-nofs' kernel/HANDOFF.md
 845:./exectest-nofs    # `run`, as it actually ships      32 checks, no QEMU
@@ -388,7 +388,7 @@ $ grep -n 'exectest-nofs' kernel/HANDOFF.md
 
 This is strictly worse than §2.1's ~26 harnesses, which at least compile:
 `exec.c`'s NULL-weak "no fs driver" branch — the one every fs-less build lands on
-— has no test binary at all. One line in `kernel/hosttest/build.sh`, the same
+— has no test binary at all. One line in `kernel/tests/host/build.sh`, the same
 shape as §5.7's `dpll_test` line:
 `gcc -O2 -w -DEXECTEST_NO_FS -o exectest-nofs exectest.c ../exec.c`.
 
@@ -412,7 +412,7 @@ each other's line numbers in `POINTER-PROMPT.md:20-21`, and the first draft of
 this document carried the swap:
 
 ```
-$ grep -n '^int xhci_kbd_poll\|^int xhci_ptr_poll\|event_poll(0' kernel/xhci.c
+$ grep -n '^int xhci_kbd_poll\|^int xhci_ptr_poll\|event_poll(0' kernel/src/drivers/input/xhci.c
 1770:int xhci_kbd_poll(void)
 1775:    int type = event_poll(0, &status, &ctrl, 1);
 1784:int xhci_ptr_poll(void)
@@ -465,8 +465,8 @@ gate has to photograph the strip.
 
 ```
 $ git grep -n 'input_ptr_x' -- kernel/ freestanding/
-kernel/input.c:476:int input_ptr_x(void) { return px_x; }
-kernel/hosttest/inputtest_feel.c: (harness only)
+kernel/src/drivers/input/input.c:476:int input_ptr_x(void) { return px_x; }
+kernel/tests/host/inputtest_feel.c: (harness only)
 ```
 
 `freestanding/runtime_kernel.c:1497-1499` still resolves `mouse_x` to
@@ -491,16 +491,16 @@ repo attaches a `usb-tablet`", which is false and contradicted this document's o
 §2.9 eleven pages earlier.** The truth is worse for the curve, not better:
 
 ```
-$ grep -n 'usb-mouse\|usb-tablet' kernel/try.sh
+$ grep -n 'usb-mouse\|usb-tablet' kernel/tools/run/try.sh
 30:  -device usb-mouse,bus=xhci.0
-$ for f in kernel/verify.sh kernel/verify-iso.sh kernel/verify-efi.sh \
-           kernel/verify-raw.sh kernel/verify-disk.sh kernel/verify-clock.sh; do
+$ for f in kernel/verify.sh kernel/tools/checks/verify-iso.sh kernel/tools/checks/verify-efi.sh \
+           kernel/tools/checks/verify-raw.sh kernel/tools/checks/verify-disk.sh kernel/tools/checks/verify-clock.sh; do
     grep -o 'usb-[a-z]*' $f; done
 (no output — no boot gate attaches any pointer device at all)
 $ grep -rln 'usb-tablet' --include='*.py' kernel/
 probe-dock.py probe-mouse.py probe-drag.py probe-snake.py probe-resize.py
 probe-mouse-sync.py exercise.py
-$ sed -n '525p;550,552p' kernel/input.c
+$ sed -n '525p;550,552p' kernel/src/drivers/input/input.c
     int x, y, b, tablet = xhci_ptr_ready();
     if (tablet) {
         px_x = x; px_y = y;
@@ -531,7 +531,7 @@ version/max_input/rdesc_len/read_report/byte. `i2c_hid_byte(i)` returns raw
 undecoded bytes. Nothing turns a touchpad report into an x, a y and a button —
 that code does not exist. QEMU has no Intel LPSS I2C, so the laptop is the only
 machine that can produce a real descriptor; write the report-descriptor walker as
-a host test first, fed a captured byte array. `kernel/hosttest/inputtest_hid.c`
+a host test first, fed a captured byte array. `kernel/tests/host/inputtest_hid.c`
 already exists as the harness shape.
 
 *Source: DESKPLAN-15; corroborated `HANDOFF.md:450-453`.*
@@ -604,11 +604,11 @@ it. `ui.h:1-14` states the layering contract — *"kernel.zl POLICY … calls `u
 only - no coordinates, no `fb_*` calls"* — and the tree does the opposite:
 
 ```
-$ grep -oE '\bui_[a-z_]+\(' kernel/kernel.zl | sort | uniq -c
+$ grep -oE '\bui_[a-z_]+\(' kernel/src/kernel.zl | sort | uniq -c
       1 ui_scale(
       1 ui_theme(
 $ for p in fill_rgb label line grad_rgb rrect gradient char_aa rrblend shadow \
-           blend text_box; do printf '%-9s %s\n' "$p" "$(grep -c "\b$p(" kernel/kernel.zl)"; done
+           blend text_box; do printf '%-9s %s\n' "$p" "$(grep -c "\b$p(" kernel/src/kernel.zl)"; done
 fill_rgb 26   label 25   line 8   grad_rgb 7   rrect 5   gradient 4
 char_aa 2   rrblend 2   shadow 1   blend 1   text_box 1      # 82 raw calls
 ```
@@ -629,16 +629,16 @@ lacks is applications, and applications in this repo are zl.
 
 ### 4.2 The Settings app is compiled into every build and cannot be opened
 
-`kernel/settings.c` is 620 lines, in `kernel/SOURCES`, with all six controls laid
+`kernel/src/graphics/ui/settings.c` is 620 lines, in `kernel/SOURCES`, with all six controls laid
 out (`build_ui()`, `:198-219`) and all six sinks driven (`settings_apply()`,
 `:111-141`). `wmglue.c:75` defines `APP_SETTINGS 6` and dispatches draw and event
 to it.
 
 ```
-$ grep -n 'APP_SETTINGS' kernel/kernel.zl kernel/wmglue.c
-kernel/wmglue.c:75:#define APP_SETTINGS 6
-kernel/wmglue.c:80: ... :88   (dispatch arms)
-kernel/kernel.zl:2736,2738    (comments only — no declaration)
+$ grep -n 'APP_SETTINGS' kernel/src/kernel.zl kernel/src/graphics/windowing/wmglue.c
+kernel/src/graphics/windowing/wmglue.c:75:#define APP_SETTINGS 6
+kernel/src/graphics/windowing/wmglue.c:80: ... :88   (dispatch arms)
+kernel/src/kernel.zl:2736,2738    (comments only — no declaration)
 ```
 
 `kernel.zl` numbers 5 then 7 and skips 6. **Nothing can open it.** One
@@ -651,8 +651,8 @@ one id namespace — that is the class the merge hit eight times.
 
 ```
 $ git grep -n 'settings_load' -- ':!kernel/out.c'
-kernel/settings.c:476        (the definition)
-kernel/hosttest/settingstest.c (14 call sites, plus the forward
+kernel/src/graphics/ui/settings.c:476        (the definition)
+kernel/tests/host/settingstest.c (14 call sites, plus the forward
                                declaration at :34, which is not one)
 ```
 
@@ -677,11 +677,11 @@ deletion that caused the gap.
 At the audit baseline, nothing called it.
 
 ```
-$ grep -oE '\bclip_[a-z_]+' kernel/kernel.zl | sort -u
+$ grep -oE '\bclip_[a-z_]+' kernel/src/kernel.zl | sort -u
 clip_ch
 clip_n
 $ grep -rn 'clip_push\|clip_begin\|clip_commit' kernel/*.c freestanding/*.c \
-    | grep -v kernel/clip.c
+    | grep -v kernel/src/graphics/windowing/clip.c
 freestanding/runtime_kernel.c:692-695   (externs)
 freestanding/runtime_kernel.c:1620-1623 (registrations)
 ```
@@ -697,11 +697,11 @@ $ git merge-base --is-ancestor c2123f0 HEAD && echo ancestor
 ancestor
 $ git log --oneline -1 c2123f0
 c2123f0 feat(clip): copy in the editor, paste onto the disk - and no routing changed
-$ git show c2123f0 -- kernel/kernel.zl | grep -E '^\+.*clip_(new|add|done)'
+$ git show c2123f0 -- kernel/src/kernel.zl | grep -E '^\+.*clip_(new|add|done)'
 +                clip_new()
 +                while ci < len { clip_add(peek8(EDIT_BUF + ci))  ci = ci + 1 }
 +                clip_done()
-$ sed -n '1316,1326p' kernel/kernel.zl
+$ sed -n '1316,1326p' kernel/src/kernel.zl
 fn editor_key(code) {      # branches on 27, 8, 13 and code >= 32 only —
                            # 3 (Ctrl+C) and 22 (Ctrl+V) fall through to return 0
 ```
@@ -732,11 +732,11 @@ describe the clipboard as a shipped feature.**
 > `kernel/docs/DECISIONS.md` #40.
 
 ```
-$ grep -n 'icons24\|ICON_N' kernel/fb.c
+$ grep -n 'icons24\|ICON_N' kernel/src/graphics/framebuffer/fb.c
 2949:extern const unsigned char icons24[10][24][24];
 2954:#define ICON_N  10
 2975:    if ((unsigned)n >= ICON_N) return;
-$ grep -n 'const unsigned char icons24' kernel/icons.c
+$ grep -n 'const unsigned char icons24' kernel/src/graphics/icons/icons.c
 38:const unsigned char icons24[20][24][24] = {
 ```
 
@@ -756,7 +756,7 @@ bug, not just an unreachable feature.
 > strokes are gone. `kernel/docs/DECISIONS.md` #41.
 
 ```
-$ grep -n 'THE GRIP HAS TO BE VISIBLE\|THE RESIZE GRIP' kernel/wm.c
+$ grep -n 'THE GRIP HAS TO BE VISIBLE\|THE RESIZE GRIP' kernel/src/graphics/windowing/wm.c
 805:    /* THE GRIP HAS TO BE VISIBLE or it is a secret. ...
 865:    /* THE RESIZE GRIP, drawn. A corner you cannot see is a corner nobody finds,
 1162:/* THE RESIZE GRIP. wm_resize() has existed since wm.c was written ...
@@ -773,7 +773,7 @@ survives at `wm.c:1175`.
 
 Delete the `:805-815` block; it is the earlier, dimmer, wrongly-scaled one and it
 draws before the title bar is composited. **Whether the result looks right is
-unverifiable statically** — settling it needs `kernel/hosttest/wmshot` built, run,
+unverifiable statically** — settling it needs `kernel/tests/host/wmshot` built, run,
 and `wmshot.ppm` looked at.
 
 *Source: DESKPLAN reader; xcheck-contradiction XC-18.*
@@ -796,7 +796,7 @@ the first thing that needs it"), `kernel.zl:2838-2839` ("this is the first"),
 Three carry the bare claim with no correction attached and are now simply false:
 `snap.c:3-4`, `wm.c:1162-1163`, `wm.c:1227-1229`. Fix those three. Separately,
 `wm.c:1225-1239`'s "THE RESIZE GRIP" block now heads `in_closebox()`
-(`sed -n '1241p' kernel/wm.c`) and needs re-siting. This is the canonical example
+(`sed -n '1241p' kernel/src/graphics/windowing/wm.c`) and needs re-siting. This is the canonical example
 of the repo's naming hazard and costs nothing but attention.
 
 *Source: xcheck-status-conflict lens.*
@@ -848,14 +848,14 @@ The inversion that made the compositor the top of the system replaced blocking
 plainly. What it does not say is what that stranded:
 
 ```
-$ grep -n 'read_line' kernel/kernel.zl
+$ grep -n 'read_line' kernel/src/kernel.zl
 903   (the definition)
 2861  (a comment)
        — no call site
-$ grep -n 'hist_load\|hist_save' kernel/kernel.zl
+$ grep -n 'hist_load\|hist_save' kernel/src/kernel.zl
 858, 870  (definitions); 914, 919, 954, 966 — all inside read_line (903-1000)
-$ grep -n 'hist' kernel/term.c ; wc -l kernel/term.c
-(no match)  357 kernel/term.c
+$ grep -n 'hist' kernel/src/graphics/windowing/term.c ; wc -l kernel/src/graphics/windowing/term.c
+(no match)  357 kernel/src/graphics/windowing/term.c
 ```
 
 So backspace-within-line, cursor movement and up/down history recall all went
@@ -872,12 +872,12 @@ command history.
 
 ```
 $ grep -rn 'font24x48' kernel/*.c kernel/*.h freestanding/*.c
-kernel/font_big.c:6   (only)
+kernel/src/graphics/fonts/font_big.c:6   (only)
 $ grep -rn 'icons_rgb' kernel/*.c kernel/*.h freestanding/*.c | grep -v icons_rgb.c
 (no output)
 $ grep -n 'font_big\|icons_rgb' kernel/SOURCES
 (exit 1)
-$ wc -l kernel/font_big.c kernel/icons_rgb.c
+$ wc -l kernel/src/graphics/fonts/font_big.c kernel/src/graphics/icons/icons_rgb.c
 4757 + 1976 = 6733
 ```
 
@@ -934,9 +934,9 @@ compositor rather than an unreachable primitive, and it is the §4.6/§4.7 class
 one name meaning two things inside one function.
 
 ```
-$ grep -c 'int cx, cy, cw, ch' kernel/wm.c
+$ grep -c 'int cx, cy, cw, ch' kernel/src/graphics/windowing/wm.c
 1
-$ sed -n '946p;973,974p;987p;996,997p;1018p' kernel/wm.c
+$ sed -n '946p;973,974p;987p;996,997p;1018p' kernel/src/graphics/windowing/wm.c
             int cx, cy, cw, ch;                       # declared once, per window
                        W->x + W->w + reach, W->y + W->h + reach,
                        rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) continue;   # FRAME+SHADOW
@@ -977,12 +977,12 @@ current state and *zlOS lighting the ThinkPad's panel itself*.
 ### 5.1 `key()` halts the kernel on the panel-handover path — one token
 
 ```
-$ bash kernel/check-zl-calls.sh
+$ bash kernel/tools/checks/check-zl-calls.sh
 ok: every kernel.zl call resolves to a builtin or a zl fn
 KNOWN UNRESOLVED (pre-existing, see the header): key
 note: 150 registered builtin(s) with no caller in kernel.zl
 
-$ sed -n '1404,1409p' kernel/kernel.zl
+$ sed -n '1404,1409p' kernel/src/kernel.zl
         put("    the panel is ours. framebuffer at 0x")  hex(fb, 8)  print("")
         color(C_GREY)
         print("    press a key to move the console onto it")
@@ -1013,14 +1013,14 @@ decides whether display Phase 0.1 is "one caller away" or already wired.
 
 ```
 $ git grep -n 'intel_link_train_arm' -- kernel/ freestanding/ | grep -v hosttest
-kernel/intel.c:2095:void intel_link_train_arm(int on) { lt_armed = on ? 1 : 0; }
-kernel/intel.c:4232:    intel_link_train_arm(1);
-kernel/intel.c:4234:    intel_link_train_arm(0);
-kernel/intel.c:4245:    intel_link_train_arm(1);
-kernel/intel.c:4247:    intel_link_train_arm(0);
-$ grep -n 'panel_up' freestanding/runtime_kernel.c kernel/kernel.zl
+kernel/src/drivers/display/intel.c:2095:void intel_link_train_arm(int on) { lt_armed = on ? 1 : 0; }
+kernel/src/drivers/display/intel.c:4232:    intel_link_train_arm(1);
+kernel/src/drivers/display/intel.c:4234:    intel_link_train_arm(0);
+kernel/src/drivers/display/intel.c:4245:    intel_link_train_arm(1);
+kernel/src/drivers/display/intel.c:4247:    intel_link_train_arm(0);
+$ grep -n 'panel_up' freestanding/runtime_kernel.c kernel/src/kernel.zl
 freestanding/runtime_kernel.c:1443: streq(name, "panel_up") -> intel_bringup_panel()
-kernel/kernel.zl:1395:        fb = panel_up()
+kernel/src/kernel.zl:1395:        fb = panel_up()
 $ grep -n 'intel.c' kernel/SOURCES
 39:intel.c
 ```
@@ -1066,18 +1066,18 @@ would have caught this class. Leave it alone.
 ### 5.3-orig `edid_buf` is still at `0x0C980000`, inside `HI_BLUR`, and `intel.c` asserts nothing
 
 ```
-$ grep -n 'edid_buf' kernel/intel.c
+$ grep -n 'edid_buf' kernel/src/drivers/display/intel.c
 762:static uptr edid_buf = 0x0C980000u;
 763:void intel_set_edid_buffer(uptr p);
     (reads/writes at 783, 784, 795, 1893, 1909, 1922)
 $ grep -rn 'intel_set_edid_buffer' kernel/
-kernel/intel.c:763  kernel/hosttest/intel_probe.c:122,458
+kernel/src/drivers/display/intel.c:763  kernel/tests/host/intel_probe.c:122,458
     (no kernel-side caller)
-$ grep -n '_Static_assert\|memmap.h' kernel/intel.c
+$ grep -n '_Static_assert\|memmap.h' kernel/src/drivers/display/intel.c
 (no output)
 $ grep -rln 'memmap.h' kernel/*.c
 fb.c nvme.c i2c_hid.c virtio_gpu.c xhci.c sched.c      (intel.c absent)
-$ grep -n 'BLUR_LIMIT' kernel/fb.c
+$ grep -n 'BLUR_LIMIT' kernel/src/graphics/framebuffer/fb.c
 178:#define BLUR_LIMIT ((unsigned int)(HI_NVME - HI_BLUR))
 ```
 
@@ -1098,8 +1098,8 @@ path.
 
 ### 5.4 The VBT parser's entry point is dead — Phase 1 unblocks Phases 2 and 3 and is not wired
 
-`kernel/intel.c:4365 intel_vbt_find()` reads `gpu_cfg(ASLS_REG)` and attaches, and
-has **no caller** — a grep over `kernel/*.c`, `kernel/*.h`, `kernel/hosttest/*.c`
+`kernel/src/drivers/display/intel.c:4365 intel_vbt_find()` reads `gpu_cfg(ASLS_REG)` and attaches, and
+has **no caller** — a grep over `kernel/*.c`, `kernel/*.h`, `kernel/tests/host/*.c`
 and `freestanding/*.c` returns only the definition. No VBT builtin is registered
 for zl (`grep -n 'vbt' freestanding/runtime_kernel.c` → nothing). No VBT value is
 consumed by the modeset. So on `main` the VBT is reachable only from a manual
@@ -1135,7 +1135,7 @@ plus `sudo ./modeset-run.sh --survey`.
 ### 5.6 Hotplug: the decode exists, nothing can call it, and there is no interrupt path
 
 `intel.c:4886-4960` defines **seven** `intel_hpd_*` functions against measured
-firmware values (`grep -nE '^[a-z].*intel_hpd_[a-z_]*\(' kernel/intel.c` → 4886,
+firmware values (`grep -nE '^[a-z].*intel_hpd_[a-z_]*\(' kernel/src/drivers/display/intel.c` → 4886,
 4894, 4907, 4917, 4933, 4939, 4956; `:4962` onward is the phase-3 external-DP
 comment block, not hotplug decode — the first draft said nine, to 4967). `grep -rn 'intel_hpd_pending'` outside `intel.c` returns nothing; no
 builtin is registered. So **`display-roadmap.md`'s "done" is done-as-definition,
@@ -1148,17 +1148,17 @@ nameable: a builtin, a caller, and a real interrupt path.
 ### 5.7 `dpll_test.c` — the only harness that programs real display hardware — is built by no script
 
 ```
-$ grep -n 'dpll' kernel/hosttest/build.sh
+$ grep -n 'dpll' kernel/tests/host/build.sh
 (exit 1)
 $ grep -rn 'dpll_test' --include='*.sh' --include=Makefile .
 (exit 1)
-$ ls kernel/hosttest/dpll_test
+$ ls kernel/tests/host/dpll_test
 No such file or directory
-$ git ls-files kernel/hosttest/dpll_test.c
-kernel/hosttest/dpll_test.c   (tracked)
+$ git ls-files kernel/tests/host/dpll_test.c
+kernel/tests/host/dpll_test.c   (tracked)
 ```
 
-It is the single `.c` in `kernel/hosttest/` that `build.sh` does not mention, and
+It is the single `.c` in `kernel/tests/host/` that `build.sh` does not mention, and
 the previously-committed binary was `git rm --cached`'d. **`HANDOFF.md:29` — and
 only it — instructs you to run `sudo ./dpll_test 2 148500`**; following that
 instruction as written fails at the shell, because nothing builds the binary.
@@ -1234,19 +1234,19 @@ synthesis.*
 ```
 $ grep -n 'interp' kernel/SOURCES
 (no output)
-$ wc -l kernel/interp_kernel.c
-721 kernel/interp_kernel.c
+$ wc -l kernel/src/runtime/interp_kernel.c
+721 kernel/src/runtime/interp_kernel.c
 ```
 
 `interp_kernel.c` is complete (`k_memcpy` … `k_atan`, `k_malloc` → `arena_alloc`
-at `:191`) and `interp.c` compiles freestanding (commit `b514d97`). Nothing in
+at `:191`) and `src/runtime/interp.c` compiles freestanding (commit `b514d97`). Nothing in
 the four kernel builds compiles either. `exec.c` stops at `EX_LOADED` and says so
 in its own message (`exec.c:229-238`), and never calls `fs_read`, so the bytes are
 not even loaded into the arena. **Item 2 of the exec brief — the kernel actually
 executing a `.zl` — is unreachable, and the gate cannot see the drop** (§2.3).
 
 Fix is a decision plus mechanics: add `interp_kernel.c` to `kernel/SOURCES`, add
-`interp.c` (+ `lexer.c`, `parser.c`) to the four builds under `-DZL_FREESTANDING`,
+`src/runtime/interp.c` (+ `src/frontend/lexer.c`, `src/frontend/parser.c`) to the four builds under `-DZL_FREESTANDING`,
 then have `exec.c` `fs_read` into `arena_alloc` and call `zl_run_program` with
 `zi_limit`/`zi_confine` armed.
 
@@ -1261,17 +1261,17 @@ landed. Three of the four adversarial reviewers found this independently; it was
 inherited from WIAI-19, which contains the same two errors.
 
 ```
-$ grep -n 'arena_up' freestanding/runtime_kernel.c kernel/kernel.zl
+$ grep -n 'arena_up' freestanding/runtime_kernel.c kernel/src/kernel.zl
 freestanding/runtime_kernel.c:1521:  streq(name, "arena_up") -> arena_init()
-kernel/kernel.zl:3850:arena_up()
+kernel/src/kernel.zl:3850:arena_up()
 $ grep -nx 'arena.c' kernel/SOURCES
 71:arena.c
-$ bash kernel/check-zl-calls.sh | head -1
+$ bash kernel/tools/checks/check-zl-calls.sh | head -1
 ok: every kernel.zl call resolves to a builtin or a zl fn
 ```
 
 `what-is-actually-impossible.md` calls a heap "the single highest-leverage missing
-piece" at ~300 lines. `kernel/arena.c` is **311 lines, `kernel/SOURCES:71`**, with
+piece" at ~300 lines. `kernel/src/core/arena.c` is **311 lines, `kernel/SOURCES:71`**, with
 `arena_init` at `:224` and `arena_alloc` at `:259`, compiled into all four builds,
 and `kernel.zl:3843-3849` states why `arena_up()` is called at boot rather than
 lazily on the first `run`. Eleven `arena_*` builtins are registered at
@@ -1297,7 +1297,7 @@ What is missing is §6.1's change plus a first `arena_alloc()` consumer.
 `hosttest/arenatest.c` has **63 static assertion call sites** (`grep -oE '\bok\('
 → 44 and `\bokv\(` → 21, less the two definitions at `:72` and `:78`), three of
 them inside `for` loops, so the run-time tally is higher than 63.
-`HANDOFF.md:842` reports 62 and **was not re-counted here** — `cd kernel/hosttest
+`HANDOFF.md:842` reports 62 and **was not re-counted here** — `cd kernel/tests/host
 && ./build.sh && ./arenatest` prints its own `%d checks` line (`arenatest.c:268`)
 and settles it. The two reviewers who attacked this number disagreed with each
 other (43 vs 63); 63 is the count that survives, because the lower one matched
@@ -1307,8 +1307,8 @@ other (43 vs 63); 63 is the count that survives, because the lower one matched
 
 ### 6.3 Shipping a `.zl` that is not built in — blocked
 
-No `.zl` program is placed on any image: `grep -n '\.zl' kernel/mkdisk.sh
-kernel/mkiso.sh` returns only `kernel.zl` as the compiler input. This is the exec
+No `.zl` program is placed on any image: `grep -n '\.zl' kernel/tools/images/mkdisk.sh
+kernel/tools/images/mkiso.sh` returns only `kernel.zl` as the compiler input. This is the exec
 brief's own stated proof and it cannot happen until §6.1 closes.
 
 *Source: EXEC-21.*
@@ -1323,14 +1323,14 @@ did not name.
 ```
 $ grep -nx 'sched.c' kernel/SOURCES
 48:sched.c
-$ wc -l kernel/sched.c
-305 kernel/sched.c
-$ grep -n 'sched_' kernel/kernel.zl
+$ wc -l kernel/src/core/sched.c
+305 kernel/src/core/sched.c
+$ grep -n 'sched_' kernel/src/kernel.zl
 1777:        put("    tasks now runnable: ")  print(sched_go())
 1785:            put("  switches=")  print(sched_sw())
 $ git grep -n 'sched_init' -- kernel/ freestanding/ | grep -v hosttest
 freestanding/runtime_kernel.c:321  (extern)
-kernel/sched.c:189  (definition)   kernel/sched.c:298  (its only caller)
+kernel/src/core/sched.c:189  (definition)   kernel/src/core/sched.c:298  (its only caller)
 ```
 
 Seven `sched_*` builtins are registered at `runtime_kernel.c:1369-1375`;
@@ -1362,7 +1362,7 @@ written.
 ### 7.1 The shipped browser's home page asserts the absence of a shipped feature
 
 ```
-$ sed -n '141,144p' kernel/browser.c
+$ sed -n '141,144p' kernel/src/web/browser.c
 "<li><strong>The network.</strong> There is no driver yet, so nothing can "
 "be fetched. The header's <code>net up</code> is decorative and always was.</li>\n"
 "<li><strong>HTTPS.</strong> Refused, deliberately. There is no cipher in "
@@ -1402,25 +1402,25 @@ cited a file that "has never existed in this repo" and instructed the reader to
 strike the citation. That was a measurement error, not a finding. The checks
 behind it were `git ls-files | grep -i crypto` (working tree and index only) and
 `git log --all` — and **neither one sees `refs/wip/*`**. `--all` covers
-`refs/heads`, `refs/remotes` and `refs/tags`; nothing else. `kernel/crypto.c` is
+`refs/heads`, `refs/remotes` and `refs/tags`; nothing else. `kernel/src/net/crypto.c` is
 on three WIP refs:
 
 ```
 $ git for-each-ref --format='%(refname)' refs/wip |
-    while read r; do git cat-file -e "$r:kernel/crypto.c" 2>/dev/null &&
+    while read r; do git cat-file -e "$r:kernel/src/net/crypto.c" 2>/dev/null &&
       echo "$r HAS crypto.c"; done
 refs/wip/zl-linux HAS crypto.c
 refs/wip/tmp-wtclean HAS crypto.c
 refs/wip/tmp-wtw0 HAS crypto.c
-$ git cat-file -s refs/wip/zl-linux:kernel/crypto.c
+$ git cat-file -s refs/wip/zl-linux:kernel/src/net/crypto.c
 21270
-$ git show refs/wip/zl-linux:kernel/crypto.c | wc -l
+$ git show refs/wip/zl-linux:kernel/src/net/crypto.c | wc -l
 543
 ```
 
 543 lines: SHA-1, SHA-256, HMAC-SHA1, HMAC-SHA256, PBKDF2-HMAC-SHA1, AES-128
 (encrypt, decrypt, CTR, CMAC) and the IEEE 802.11i PRF. Alongside it,
-`kernel/hosttest/cryptotest.c` (246 lines) asserts against published vectors —
+`kernel/tests/host/cryptotest.c` (246 lines) asserts against published vectors —
 FIPS 180-1, FIPS 180-4, RFC 2202, RFC 4231, RFC 6070, FIPS-197 C.1, RFC 4493,
 IEEE 802.11i-2004.
 
@@ -1442,7 +1442,7 @@ Correction 2026-08-19: the negative-existence claim was refuted against
 ### 7.2 The tray draws "net up" unconditionally
 
 ```
-$ sed -n '250,252p' kernel/kernel.zl
+$ sed -n '250,252p' kernel/src/kernel.zl
         label(w - 108 * u, ht, "net", TOP_DIM, T_CAPTION, W_REG)
         fill_rgb(w - 66 * u, (hb - 8 * u) / 2, 8 * u, 8 * u, OK_GRN)
         label(w - 48 * u, ht, "up", TOP_DIM, T_CAPTION, W_REG)
@@ -1464,10 +1464,10 @@ lines and put an RTC clock there with a `--:--` fallback. It is an ancestor of
 ```
 $ git merge-base --is-ancestor 577a01a HEAD && echo ancestor
 ancestor
-$ git show 577a01a -- kernel/kernel.zl | grep -E '^-.*("net"|"up")'
+$ git show 577a01a -- kernel/src/kernel.zl | grep -E '^-.*("net"|"up")'
 -        text_aa(w - 108 * u, ht, "net", TOP_DIM)
 -        text_aa(w - 48 * u, ht, "up", TOP_DIM)
-$ grep -c 'rtc_ch' kernel/kernel.zl
+$ grep -c 'rtc_ch' kernel/src/kernel.zl
 0
 $ grep -n '"rtc_ch"' freestanding/runtime_kernel.c
 1614:    if (streq(name, "rtc_ch"))     return zl_num((double)rtc_hhmm_byte(...));
@@ -1494,7 +1494,7 @@ state that prompted the correction.
 and the only one that contradicts this document's own §12 row for zlfs.
 
 ```
-$ sed -n '3858p' kernel/kernel.zl
+$ sed -n '3858p' kernel/src/kernel.zl
 info_line("no heap, no filesystem, no scheduler")
 $ grep -nx 'fs.c' kernel/SOURCES
 64:fs.c
@@ -1529,7 +1529,7 @@ primitives (~1,500 lines, "write once, use twice" across WPA2, BT SSP and TLS)
 are **unlinked, not unwritten** — an earlier draft of this paragraph said the
 estimate "starts from zero, not from a `crypto.c` that does not exist", which
 followed §7.1's since-corrected error. It does exist:
-`refs/wip/zl-linux:kernel/crypto.c` is 543 vector-tested lines already covering
+`refs/wip/zl-linux:kernel/src/net/crypto.c` is 543 vector-tested lines already covering
 SHA-1, SHA-256, HMAC, PBKDF2, AES-128/CTR/CMAC and the IEEE 802.11i PRF — the
 WPA2 half of "write once, use twice" is done. What is missing is a `SOURCES`
 entry, a landing decision, and an entropy source (`crypto.c` has no RNG; this CPU
@@ -1559,7 +1559,7 @@ the raw-frame path feeds `net_link()`.
 > in place, marking it "**THIS ENTRY WAS FALSE WHEN WRITTEN**".
 >
 > ```
-> $ grep -n 'LINE_BUF  =\|DISK_SCRATCH =' kernel/kernel.zl
+> $ grep -n 'LINE_BUF  =\|DISK_SCRATCH =' kernel/src/kernel.zl
 > 848:LINE_BUF  = 0x02030000
 > 1269:DISK_SCRATCH = 0x02040000
 > $ git merge-base --is-ancestor 6bb8086 HEAD && echo on-HEAD
@@ -1578,14 +1578,14 @@ the raw-frame path feeds `net_link()`.
 > the live hazard.
 
 ```
-$ grep -n 'LINE_BUF  =\|DISK_SCRATCH =' kernel/kernel.zl
+$ grep -n 'LINE_BUF  =\|DISK_SCRATCH =' kernel/src/kernel.zl
 848:LINE_BUF  = 0x02030000
 1253:DISK_SCRATCH = 0x02030000
 $ git grep -n '0x02040000'
-docs/MERGE-EVIDENCE.md:93   (the §2.1 prescription)
-docs/MERGE-EVIDENCE.md:318  (the Outcome claim)
+docs/evidence/MERGE-EVIDENCE.md:93   (the §2.1 prescription)
+docs/evidence/MERGE-EVIDENCE.md:318  (the Outcome claim)
     — no source file, on any branch
-$ git log --oneline -S'DISK_SCRATCH = 0x0204' -- kernel/kernel.zl
+$ git log --oneline -S'DISK_SCRATCH = 0x0204' -- kernel/src/kernel.zl
 (no output)
 ```
 
@@ -1626,8 +1626,8 @@ SYSPROMPT-33, DTODO, OVN-B1a, GEN9.*
 `memmap.h` exists precisely to kill hand-copied address lists. `arena.c:110-111`
 defines `HI_BG` and `RAM_CEILING` as `0x08000000` and static-asserts against them
 (`:123-125`); `virtio_net.c:97` defines `NET_CEIL 0x08000000` citing "fb.c: HI_BG".
-Neither includes `memmap.h` (`grep -n '#include' kernel/arena.c
-kernel/virtio_net.c` → no output from either).
+Neither includes `memmap.h` (`grep -n '#include' kernel/src/core/arena.c
+kernel/src/drivers/network/virtio_net.c` → no output from either).
 
 Both are numerically correct today, so this is drift, not a bug. But the drift has
 already started: `HI_BG` and `bg_buf` do not exist on `main` (`fb.c:151` records
@@ -1683,7 +1683,7 @@ returns false for every list and `show()` falls through to `num()` on a list.
 
 *Source: STDLIB-03.*
 
-### 9.2 Native `i64` bitwise ops in `compilel.c` — needs no hardware, and buys zlOS nothing
+### 9.2 Native `i64` bitwise ops in `src/backends/llvm/compilel.c` — needs no hardware, and buys zlOS nothing
 
 **Read the second half of that heading before starting. The first draft called
 this "the only major item that needs no hardware" and left out the numerator.**
@@ -1692,8 +1692,8 @@ toolchain's own build script labels `[ARCHIVED]`; `compilel`, the
 `[SPEED BACKEND]`, is invoked by no script under `kernel/` or `gates/`:
 
 ```
-$ grep -n '^\.\./compile' kernel/build.sh kernel/build64.sh kernel/buildefi.sh kernel/mkdisk.sh
-kernel/buildefi.sh:10   kernel/build64.sh:12   kernel/mkdisk.sh:21   kernel/build.sh:16
+$ grep -n '^\.\./compile' kernel/build.sh kernel/build64.sh kernel/buildefi.sh kernel/tools/images/mkdisk.sh
+kernel/buildefi.sh:10   kernel/build64.sh:12   kernel/tools/images/mkdisk.sh:21   kernel/build.sh:16
 $ grep -n 'ARCHIVED\|SPEED BACKEND' build.sh
 13:==> compile   (zl -> boxed C -> gcc -> native ELF)   [ARCHIVED]
 22:==> compilel  (zl -> LLVM IR -> clang -> native ELF)  [SPEED BACKEND]
@@ -1708,12 +1708,12 @@ thing on the board.**
 
 `HANDOFF.md:410-414` names it as the one item that needs no laptop, no panel, no
 hardware access, cannot break a running driver, and is testable on the host —
-all true. The rest of the premise is confirmed against the tree: `compilel.c:526`
+all true. The rest of the premise is confirmed against the tree: `src/backends/llvm/compilel.c:526`
 lists `band/bor/bxor/bnot/shl/shr` in the `NUMS[]` bridge table, so
 `builtin_bridge_ty` returns `T_NUM` (double) at `:554` (the first draft cited
 `:519`, which is a comment line 35 above) and `:956-1075` emits coerce-to-double, `alloca 2*VALSZ`,
 `@zlx_num` box each, `@zlx_call` **by name pointer**, `@zlx_as_num` unbox. There
-is no `and i64` / `shl i64` emission anywhere in `compilel.c`.
+is no `and i64` / `shl i64` emission anywhere in `src/backends/llvm/compilel.c`.
 
 The dispatch it lands in got *worse* since HANDOFF measured it:
 `grep -c 'streq(name,' freestanding/runtime_kernel.c` → **644** (HANDOFF
@@ -1731,22 +1731,22 @@ been re-taken.
 
 ### 9.3 The `Value` union's new read rule has no test, and the audit it needs was never done
 
-`lang/value-16` shrank `Value` 64 → 16 bytes. The guard rails hold (`compilel.c`'s
-`VALSZ` updated, `runtime.c` static-asserts it). The hazard is the *new rule* the
+`lang/value-16` shrank `Value` 64 → 16 bytes. The guard rails hold (`src/backends/llvm/compilel.c`'s
+`VALSZ` updated, `src/runtime/runtime.c` static-asserts it). The hazard is the *new rule* the
 anonymous union creates: reading a non-active member now yields garbage where it
 used to yield zero. Every builtin added by another track — browser +299, exec
 +321, apps +145, overnight ~27 — must check `a[i].type` before reading `a[i].num`
 or `a[i].str`. `MERGE-EVIDENCE.md` §2.7 states plainly: **there is no test for
 this; it is a read-every-new-builtin job.** `PLAN_unboxing.md`'s Stage 2 asks for
-exactly that audit over `runtime.c` and `freestanding/runtime_kernel.c`, and it
+exactly that audit over `src/runtime/runtime.c` and `freestanding/runtime_kernel.c`, and it
 was not done.
 
 **And the audit is not prospective — the part of it that *was* done found the
-hazard already realised, in `runtime.c`'s oldest builtins rather than in any new
+hazard already realised, in `src/runtime/runtime.c`'s oldest builtins rather than in any new
 track's. The first draft dropped that.**
 
 ```
-$ sed -n '1023,1034p' runtime.c
+$ sed -n '1023,1034p' src/runtime/runtime.c
     if (strcmp(name, "sin") == 0)   { return zl_num(sin(args[0].num)); }
     ...
     if (strcmp(name, "sign") == 0)  { double x=args[0].num; ... }
@@ -1761,7 +1761,7 @@ $ timeout 15 ./interp /tmp/t.zl
 ```
 
 `UNBOX-02C` reports the same program through `./compile` + `gcc -O2` +
-`runtime.c` giving `2.15586e-155 / 1 / 0` — the string's pointer bits read as a
+`src/runtime/runtime.c` giving `2.15586e-155 / 1 / 0` — the string's pointer bits read as a
 double, which is exactly the new union rule. **That compiled arm is the unboxing
 audit's measurement and was not re-taken here**; re-taking it is one `./compile`
 and one `gcc`. The interpreter arm above *was* re-run here and prints what it
@@ -1813,7 +1813,7 @@ them; they are listed here by pointer so the class is visible as a class. §10.1
 
 ### 10.1 Fifty-five files exist only in `refs/wip/*` and on no branch
 
-`docs/DOCS-RECONCILE-PROMPT.md:133` says 49. The number is 55, measured by
+`docs/archive/prompts/DOCS-RECONCILE-PROMPT.md:133` says 49. The number is 55, measured by
 diffing the union of all six local `refs/wip/*` trees against `main`'s tracked
 set. All six refs are already local; no fetch is needed. The composition matters
 more than the count, because three of the groups are different kinds of problem:
@@ -1826,7 +1826,7 @@ more than the count, because three of the groups are different kinds of problem:
   design verdict (§13.5), and `HANDOFF.md` is the document everyone is told to
   trust. A dangling link there is worse than no link.
 - **Lost test surface.** Seven `probe-*.py` scripts (`main` has 13 of the 20 that
-  were written), `crypto.c` + `cryptotest.c`, `zlfmt.c` + `verify_fmt.sh`. The
+  were written), `crypto.c` + `cryptotest.c`, `src/tools/zlfmt.c` + `verify_fmt.sh`. The
   last pair arrives free with §2.5's merge — land that first and re-count. Note
   the seven lost probes are referenced by zero tracked `.md` files, so unlike the
   docs, nothing on `main` is currently broken by their absence.
@@ -1858,8 +1858,8 @@ exist in the dangling WIP commit `5557f4a`, which is on no branch.
 **Recommendation that removes the whole class:** "a doc cites a file that
 `git ls-files` does not have" is one grep, costs nothing, and belongs in
 `land-gate.sh`. It would have caught all five — and it would have caught this
-document's own first draft, which cited `docs/desktop-platform-run.md` for a file
-that lives at `kernel/docs/desktop-platform-run.md` (§13.3, now fixed).
+document's own first draft, which cited `desktop-platform-run.md` at the wrong root for a file
+that lives at `kernel/docs/evidence/desktop-platform-run.md` (§13.3, now fixed).
 
 **The grep catches the file-level class and misses a second one that is live
 now.** Four kernel docs defer a hazard by saying it is "tracked as `T-EXEC-n` in
@@ -1893,7 +1893,7 @@ $ git tag | grep -c '^prelanding/'
 15
 $ git tag | grep -c '^premerge/'
 16
-$ sed -n '359p' docs/MERGE-EVIDENCE.md
+$ sed -n '359p' docs/evidence/MERGE-EVIDENCE.md
 - The eight `prelanding/*` tags are the rollback points and are pushed. Three
 ```
 
@@ -1940,9 +1940,9 @@ $ git ls-files 'kernel/*.c' 'kernel/*.h' 'kernel/*.S' \
     | grep -vE 'font_big|font_aa|font_sub|font8x16|icons\.c|icons_rgb' \
     | xargs wc -l | tail -1
   43833 total
-$ wc -l kernel/kernel.zl
-3995 kernel/kernel.zl
-$ git ls-files 'kernel/hosttest/*.c' 'kernel/hosttest/*.h' | xargs wc -l | tail -1
+$ wc -l kernel/src/kernel.zl
+3995 kernel/src/kernel.zl
+$ git ls-files 'kernel/tests/host/*.c' 'kernel/tests/host/*.h' | xargs wc -l | tail -1
  13341 total
 ```
 
@@ -1980,7 +1980,7 @@ real and all checked in"; `:86-88` says the browser is branch-only and grepping
 `main` "finds nothing"; `:116-120` says `main` has no windowed desktop, zero
 `wm_*` calls, zero `APP_` constants, and never compiles `wm.c`/`ui.c`/`term.c`.
 The first is true; the second and third are false —
-`grep -cE '^APP_[A-Z]+ *=' kernel/kernel.zl` → 12, `grep -c 'wm_' kernel/kernel.zl`
+`grep -cE '^APP_[A-Z]+ *=' kernel/src/kernel.zl` → 12, `grep -c 'wm_' kernel/src/kernel.zl`
 → 174, and `SOURCES:52-54,85` list `term.c`, `wm.c`, `ui.c` and `browser.c`. Its
 *layout* advice is confirmed and should be kept. Everything from its "The browser"
 heading onward must go. **Because CODE-MAP is orientation text, this outranks any
@@ -1999,7 +1999,7 @@ was verified against the merged tree.
 | "Nothing here is started" (`desktop-TODO.md:27`) | In a document whose own banner at `:3` declares the platform queue done, above **27** `### [x]` headings (`grep -c '^### \[x\]'`; 31 `### [` headings in all). The first draft said 29 and did not measure it |
 | "Nothing here is implemented" (`desktop-plan.md:7`) | About an inversion that is now the boot state |
 | "Clipping / scissor — NO, the keystone gap" (`feature-catalogue.md`) | `fb.c:763-798` is the scissor; `wm.c`, `ui.c`, `browser.c`, `term.c` all use it; `fbbench.c:482-527` asserts it suppresses pixels |
-| "Buttons, sliders, toggles, scrollbars — NO" | **Split.** Buttons, sliders and toggles are real and used from C: `ui.c:250`, `:317`, `:286`, called at `settings.c:203, 208, 212, 214, 217, 218` — seven of the widgets defined in `ui.c:239-476` are called from that file, out of 31 `ui_*` calls in it overall (`grep -oE '\bui_[a-z_]+\(' kernel/settings.c \| wc -l`). **Scrollbars are NOT done** — `ui_scroll_begin/end/content` and `ui_list_row` have no caller outside three host harnesses (§4.8). The first draft's "16 call sites" matched no reproducible denominator and closed a widget group this document elsewhere proves open |
+| "Buttons, sliders, toggles, scrollbars — NO" | **Split.** Buttons, sliders and toggles are real and used from C: `ui.c:250`, `:317`, `:286`, called at `settings.c:203, 208, 212, 214, 217, 218` — seven of the widgets defined in `ui.c:239-476` are called from that file, out of 31 `ui_*` calls in it overall (`grep -oE '\bui_[a-z_]+\(' kernel/src/graphics/ui/settings.c \| wc -l`). **Scrollbars are NOT done** — `ui_scroll_begin/end/content` and `ui_list_row` have no caller outside three host harnesses (§4.8). The first draft's "16 call sites" matched no reproducible denominator and closed a widget group this document elsewhere proves open |
 | "A real on-disk filesystem — NO, RAM disk, 10 fixed slots" | zlfs (`fs.c`) with superblock, flat directory, contiguous runs on NVMe; 22 builtins; `verify-disk.sh` power-cycles three times and is in the gate loop |
 | "Clipboard — NO" | `clip.c` in SOURCES, seven builtins, 104 assertions — but see §4.4, the write path has no caller |
 | "TCP/IP stack — NO" | `virtio_net.c` 763 + `net.c` 540 + `dns.c` 433 + `tcp.c` 812 = 2,548 lines, all in SOURCES, with real congestion control |
@@ -2037,7 +2037,7 @@ removed and any surviving `kernel.zl` call site would fail at runtime;
 it, and do not treat `desktop-polish-and-speed.md:144,157`'s
 `bg_snapshot returns in 0.00 ms because bg_ok = 0` rows as a defect** — that is
 the measurement of a thing that was then removed. (The first draft attributed
-those rows to `fbbench`; `grep -c 'bg_snapshot' kernel/hosttest/fbbench.c` → 0,
+those rows to `fbbench`; `grep -c 'bg_snapshot' kernel/tests/host/fbbench.c` → 0,
 which is the entry's own point.)
 
 ### 13.3 The full-screen demos
@@ -2045,14 +2045,14 @@ which is the entry's own point.)
 Every demo is an app in a window now: no `while` loop, no "press any key". Typing
 `snake`, `paint`, `cube`, `anim`, `mouse` or `edit` opens one, and
 `probe-apps.py` boots five at once. The full account is
-`kernel/docs/desktop-platform-run.md` (the first draft of this file cited
-`docs/desktop-platform-run.md`, which does not exist — §10.2's own recommended
+`kernel/docs/evidence/desktop-platform-run.md` (the first draft of this file cited
+`desktop-platform-run.md` at the wrong root — §10.2's own recommended
 gate would have caught it, and now says so). Any document describing a demo that
 takes over the screen is describing the previous design.
 
-### 13.4 `docs/INTEGRATION-PLAN.md`
+### 13.4 `docs/archive/superseded/INTEGRATION-PLAN.md`
 
-**Superseded by `docs/MERGE-EVIDENCE.md`.** It was written against the wrong base
+**Superseded by `docs/evidence/MERGE-EVIDENCE.md`.** It was written against the wrong base
 and its headline figure is wrong — it says 332 commits were at risk; the whole
 repo is 186 (219 at `ff27d57`), and the document's own later section says 69. It
 carries no superseded banner of any kind, so a reader who opens it gets a
@@ -2086,7 +2086,7 @@ Listed so nobody promotes one of these to a fact.
 | Is the v10 wallpaper five passes or six, 100 ms or 130 ms? | Build and run `hosttest/fbbench`, read its wallpaper row. Both existing numbers are estimates taken **before** the wallpaper cache landed; neither was re-taken |
 | Does deleting `wm.c:805-815` (§4.6) look right? | Build and run `hosttest/wmshot`, look at `wmshot.ppm` |
 | Does the on-screen frame time agree with `fbbench`? | Build and run `fbbench`, compare against a booted `probe-frame.py` |
-| Does `dpll_test.c` still compile against merged `intel.c`? | `cd kernel/hosttest && gcc -O2 -w -o dpll_test dpll_test.c ../intel.c hoststubs.c` |
+| Does `dpll_test.c` still compile against merged `intel.c`? | `cd kernel/tests/host && gcc -O2 -w -o dpll_test dpll_test.c ../intel.c hoststubs.c` |
 | Does any `intel.c` write path work from zlOS on the real ThinkPad? | **No gate can cover this** — QEMU has no Gen9 GPU, and it is hardware-damage-adjacent. A stated project limit, not an audit gap |
 | Is QEMU's default guest really 128 MiB on this host? | A QMP `query-memory-size-summary` on a `verify.sh`, `verify-raw.sh` or `verify-iso.sh` boot — the three booting gates that pass no `-m`. Carried from HANDOFF as measured; not re-measured here. **Which scripts carry `-m` is *not* on this list** — `grep -l '\-m 512' kernel/verify*.sh` settles it and did (§2.8) |
 
@@ -2136,7 +2136,7 @@ find, and the classes it found are not exhausted:
   carry theirs. Others do not.
 - **A third class, found after the repair pass: negative existence proved with a
   command that does not cover the whole repository.** §7.1 asserted that
-  `kernel/crypto.c` had "never existed in this repo" and told the reader to
+  `kernel/src/net/crypto.c` had "never existed in this repo" and told the reader to
   strike a correct citation. The evidence was `git ls-files` (working tree and
   index) and `git log --all` — and **`--all` is not all**: it expands to
   `refs/heads`, `refs/remotes` and `refs/tags`, and this repo keeps six refs
@@ -2152,7 +2152,7 @@ find, and the classes it found are not exhausted:
   **Re-running that enumeration against this file's one other never-existed
   claim immediately found a second stale entry — a different failure, same
   command.** §8.1 and §11 assert that `0x02040000` "has never existed in any
-  source file on any branch". It is now at `main:kernel/kernel.zl:1269`, landed
+  source file on any branch". It is now at `main:kernel/src/kernel.zl:1269`, landed
   by `6bb8086`, which is an ancestor of `HEAD`. That claim was *true when
   written* and the tree moved under it, so this is staleness rather than a
   measurement error — but the same one-line sweep catches both, which is the

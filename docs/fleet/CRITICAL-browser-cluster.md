@@ -17,13 +17,13 @@ Keyboard defects have their own file: [`CRITICAL-browser-urlbar-keys.md`](CRITIC
 $ grep -n css kernel/SOURCES
   (no output)
 
-$ grep -rn 'css\.c|css\.h|css_' kernel/build*.sh kernel/mkdisk.sh \
-        kernel/layout.c kernel/browser.c kernel/html.c
+$ grep -rn 'css\.c|css\.h|css_' kernel/build*.sh kernel/tools/images/mkdisk.sh \
+        kernel/src/web/layout.c kernel/src/web/browser.c kernel/src/web/html.c
   (no output)
 
-$ wc -l kernel/css.c kernel/hosttest/csstest.c
-  704 kernel/css.c
-  328 kernel/hosttest/csstest.c
+$ wc -l kernel/src/web/css.c kernel/tests/host/csstest.c
+  704 kernel/src/web/css.c
+  328 kernel/tests/host/csstest.c
  1032 total
 ```
 
@@ -66,14 +66,14 @@ ancestor path, add `css.c` to `SOURCES` and `hosttest/build.sh`, and call it fro
 ## 2. Pointer **motion** navigates — hovering a link fires a fetch
 
 ```zl
-# kernel/kernel.zl:2994
+# kernel/src/kernel.zl:2994
 if ety == 4 { if br_click(ex, ey) == 1 { wm_dmg(win) }  return 1 }
 ```
 
 `ety == 4` is `EV_MOUSE`. The button mask arrives in `ecode`:
 
 ```c
-/* kernel/input.c:620 */
+/* kernel/src/drivers/input/input.c:620 */
 evq_push(EV_MOUSE, (u32)b, mods, px_x, px_y);
 ```
 

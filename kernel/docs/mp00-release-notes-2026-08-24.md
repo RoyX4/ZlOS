@@ -64,8 +64,8 @@ does not exist in the canonical catalogue.
 ## Commands
 
 ```sh
-python3 kernel/gen-release-notes.py --write --selftest
-python3 kernel/gen-release-notes.py --check --selftest
+python3 kernel/tools/generators/gen-release-notes.py --write --selftest
+python3 kernel/tools/generators/gen-release-notes.py --check --selftest
 ```
 
 The full landing gate runs both only after all lower-level inputs have been

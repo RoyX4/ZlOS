@@ -13,7 +13,7 @@
 # Usage:  ./abtree.sh <rootA> <rootB> [runs]
 #         ./abtree.sh ~/Documents/repos/zl-linux ~/Documents/repos/zl-value16 7
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 BENCH=$PWD
 
 A=$(cd "${1:?usage: abtree.sh <rootA> <rootB> [runs]}" && pwd)
@@ -45,8 +45,8 @@ for src in "$BENCH"/b*.zl; do
         R=$A; [ $arm = B ] && R=$B
         d=$tmp/$arm; mkdir -p "$d"
         ( cd "$d" && "$R/compile" "$src" >/dev/null 2>&1 ) || { ok=0; break; }
-        gcc -O2 -D_strdup=strdup -I"$R" -o "$tmp/$name.$arm" \
-            "$d/out.c" "$R/runtime.c" "$R/os_linux.c" -lm 2>"$tmp/$name.$arm.err" || { ok=0; break; }
+        gcc -O2 -D_strdup=strdup -I"$R/src/runtime" -o "$tmp/$name.$arm" \
+            "$d/out.c" "$R/src/runtime/runtime.c" "$R/src/runtime/os_linux.c" -lm 2>"$tmp/$name.$arm.err" || { ok=0; break; }
     done
     if [ $ok -eq 0 ]; then
         printf '%-12s %10s   %s\n' "$name" BUILD-FAIL "$(head -2 "$tmp/$name."?.err 2>/dev/null | tr '\n' ' ')"

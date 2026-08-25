@@ -18,11 +18,11 @@ Untyped zl keeps working, byte for byte. Typing is a thing you reach for, like t
 
 ### 1.1 The pain is already real in this repo
 
-`compiler.zl` is ~700 lines of zl and the README lists two nasty bugs that self-hosting exposed (operator-vs-string, dynamic scoping). Both are the kind of thing a type-checker either catches or narrows. Today the language has **zero** compile-time feedback: every mistake is either a runtime surprise or, worse, a confusing error from the *C compiler* about generated code the author never wrote.
+`src/selfhost/compiler.zl` is ~700 lines of zl and the README lists two nasty bugs that self-hosting exposed (operator-vs-string, dynamic scoping). Both are the kind of thing a type-checker either catches or narrows. Today the language has **zero** compile-time feedback: every mistake is either a runtime surprise or, worse, a confusing error from the *C compiler* about generated code the author never wrote.
 
 Concretely, three classes of error cost time right now:
 
-1. **Wrong argument count.** User functions compile to fixed-arity C functions (`emit_function` in `compiler.zl`). Call `emit_expr(node, ind)` when it takes one arg and you get a `cl` error about `zl_fn_emit_expr` — pointing at `out.c`, not your source.
+1. **Wrong argument count.** User functions compile to fixed-arity C functions (`emit_function` in `src/selfhost/compiler.zl`). Call `emit_expr(node, ind)` when it takes one arg and you get a `cl` error about `zl_fn_emit_expr` — pointing at `out.c`, not your source.
 2. **Operator/type nonsense.** `zl_binop` dispatches on runtime tags. `"hi" - 1` or `[1,2] * 3` produce nil or garbage at runtime with no warning.
 3. **Typos in names.** A misspelled variable is just a fresh `nil` in the interpreter; a misspelled function is a link error in the C backend.
 
@@ -36,7 +36,7 @@ That framing makes typing philosophically consistent with the rest of zl rather 
 
 ### 1.3 Bonus: another self-hosting stress test
 
-Writing the checker *in zl* (§4.5's spirit) exercises records-as-tagged-lists and recursion harder than anything so far, and the checker would immediately be run against `compiler.zl` itself — a real dogfooding loop.
+Writing the checker *in zl* (§4.5's spirit) exercises records-as-tagged-lists and recursion harder than anything so far, and the checker would immediately be run against `src/selfhost/compiler.zl` itself — a real dogfooding loop.
 
 ---
 
@@ -46,7 +46,7 @@ Writing the checker *in zl* (§4.5's spirit) exercises records-as-tagged-lists a
 
 §4.4 locks the reserved-word list at eleven and says every added word is a name users lose forever. **This proposal adds zero reserved words.** Type names (`num`, `str`, `bool`, `list`, `any`, `nil`) are ordinary identifiers — exactly like built-ins (`print`, `dir`, `poke`) are ordinary identifiers per §4.3.
 
-It also adds **zero new lexer tokens**. The annotation punctuation — `:`, `[`, `]` — already lexes today: the parser uses `[` `]` for lists, and `:` falls through `next_token`'s single-char `["SYM", c]` case for free. Verified against `compiler.zl`'s lexer: `:` produces `["SYM", ":"]` with no change.
+It also adds **zero new lexer tokens**. The annotation punctuation — `:`, `[`, `]` — already lexes today: the parser uses `[` `]` for lists, and `:` falls through `next_token`'s single-char `["SYM", c]` case for free. Verified against `src/selfhost/compiler.zl`'s lexer: `:` produces `["SYM", ":"]` with no change.
 
 ### 2.2 Variable annotation — `name: type = value`
 
@@ -116,7 +116,9 @@ Deliberately the simplest system that catches §1.1's real bugs. No subtyping, n
 
 ### 3.1 Every unannotated thing is `any`
 
-An unannotated variable, parameter, return, or built-in result has type `any`. This is what makes the feature *gradual*: `hello.zl` and `compiler.zl` type-check today with no edits and no diagnostics, because everything in them is `any`.
+An unannotated variable, parameter, return, or built-in result has type `any`. This is what makes the feature *gradual*: `examples/hello.zl
+R100
+R100` and `src/selfhost/compiler.zl` type-check today with no edits and no diagnostics, because everything in them is `any`.
 
 ### 3.2 The single assignability rule
 
@@ -214,7 +216,7 @@ The default *does* fail on a violated annotation, and that is consistent with §
 
 ### 5.1 Where it slots in
 
-`compiler.zl`'s `main` today is:
+`src/selfhost/compiler.zl`'s `main` today is:
 
 ```
 prog   = parse_program(input)
@@ -230,7 +232,7 @@ report(errs)                      # print diagnostics; exit if strict and non-em
 result = compile_program(prog)    # unchanged
 ```
 
-The C-side tools (`interp.c`, `compile.c`) get the mirror-image pass over `Node*` (a `check.c`) called in the same spot. The zl version is the one that matters for self-hosting; the C version keeps the interpreter and C backend honest during bootstrap.
+The C-side tools (`src/runtime/interp.c`, `src/backends/c/compile.c`) get the mirror-image pass over `Node*` (a `check.c`) called in the same spot. The zl version is the one that matters for self-hosting; the C version keeps the interpreter and C backend honest during bootstrap.
 
 ### 5.2 Parser changes (small, backward-compatible)
 
@@ -317,7 +319,7 @@ Kept out to stay implementable and to honor §3 of the coding rules (simplicity,
 | **2** | `list[T]`, `for`-element typing, `.`/`[]` checks, token line numbers for messages | element-type and indexing mistakes; better diagnostics |
 | **3** | mirror `check.c` for interpreter/C-backend parity; run checker as a gate in `run_tests.ps1` | regressions; keeps all three engines honest |
 
-Phase 1 alone is a complete, shippable improvement and can be demoed by pointing the checker at a deliberately-broken copy of `compiler.zl`.
+Phase 1 alone is a complete, shippable improvement and can be demoed by pointing the checker at a deliberately-broken copy of `src/selfhost/compiler.zl`.
 
 ---
 

@@ -3,7 +3,7 @@
 **2026-08-19 · worktree `zl-linux-fleet` · tree `3f00366` · arithmetic re-derived by hand**
 
 Found independently by **two** fleet driver agents (`gpu-ring` and `intel-ungated`),
-both citing `kernel/gpuring.c:493`. Verified here. **Confirmed, and the graphics-address
+both citing `kernel/src/drivers/display/gpuring.c:493`. Verified here. **Confirmed, and the graphics-address
 half is a real overlap.**
 
 ---
@@ -11,7 +11,7 @@ half is a real overlap.**
 ## The two allocations
 
 ```c
-/* kernel/gpucursor.c:58-61 */
+/* kernel/src/drivers/display/gpucursor.c:58-61 */
 #define GPU_CURSOR_DIM   64u
 #define GPU_CURSOR_BYTES (GPU_CURSOR_DIM * GPU_CURSOR_DIM * 4u)   /* 16384 = 4 pages */
 #define GPU_CURSOR_PHYS  ((gc_u64)HI_GPU + 4096u)                 /* after the ring */
@@ -19,7 +19,7 @@ half is a real overlap.**
 ```
 
 ```c
-/* kernel/gpuring.c:488-493 */
+/* kernel/src/drivers/display/gpuring.c:488-493 */
 #define GPU_ST_W     64u
 #define GPU_ST_H     64u
 #define GPU_ST_PITCH (GPU_ST_W * 4u)
@@ -92,7 +92,7 @@ The self-test does **not** read back through the aperture. It poisons and verifi
 the *physical* address:
 
 ```c
-/* kernel/gpuring.c:521-527 */
+/* kernel/src/drivers/display/gpuring.c:521-527 */
 if (!intel_ggtt_map_range(GPU_ST_GFX >> 12, (gr_u32)GPU_ST_PHYS,
                           (int)(GPU_ST_BYTES / 4096u))) { gpu_ring_arm(0); return 3; }
 ...
@@ -130,6 +130,6 @@ _Static_assert(GPU_ST_GFX >= GPU_CURSOR_GFX + GPU_CURSOR_BYTES ||
                "the self-test surface and the cursor image overlap in GGTT space");
 ```
 
-3. Better: give GGTT space the same treatment `kernel/memmap.h` gave physical space —
+3. Better: give GGTT space the same treatment `kernel/src/arch/x86/memmap.h` gave physical space —
    one header owning every graphics-address base **with its span**, so the next object
    added is checked rather than commented.

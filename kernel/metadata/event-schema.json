@@ -1,0 +1,270 @@
+{
+  "schema": "zlos.event-schema-registry.v1",
+  "result": "PASS_HOST_SCHEMA_TARGET_UNINTEGRATED",
+  "feature_id": "EV-018",
+  "build_identity": "2c873b665279da5a53c3a58bfa9cdd1c53a8a36f73702259a1bb991c1524d90e",
+  "contract": {
+    "wire": {
+      "endianness": "little",
+      "bytes": 152,
+      "pointer_fields": 0,
+      "variable_length_fields": 0,
+      "payload_words": 4
+    },
+    "fields": [
+      {
+        "name": "magic",
+        "offset": 0,
+        "bytes": 4,
+        "type": "u32"
+      },
+      {
+        "name": "version",
+        "offset": 4,
+        "bytes": 2,
+        "type": "u16"
+      },
+      {
+        "name": "bytes",
+        "offset": 6,
+        "bytes": 2,
+        "type": "u16"
+      },
+      {
+        "name": "sequence",
+        "offset": 8,
+        "bytes": 8,
+        "type": "u64"
+      },
+      {
+        "name": "monotonic_ns",
+        "offset": 16,
+        "bytes": 8,
+        "type": "u64"
+      },
+      {
+        "name": "boot_id",
+        "offset": 24,
+        "bytes": 8,
+        "type": "u64"
+      },
+      {
+        "name": "correlation_id",
+        "offset": 32,
+        "bytes": 8,
+        "type": "u64"
+      },
+      {
+        "name": "parent_sequence",
+        "offset": 40,
+        "bytes": 8,
+        "type": "u64"
+      },
+      {
+        "name": "process_id",
+        "offset": 48,
+        "bytes": 4,
+        "type": "u32"
+      },
+      {
+        "name": "process_generation",
+        "offset": 52,
+        "bytes": 4,
+        "type": "u32"
+      },
+      {
+        "name": "authority_id",
+        "offset": 56,
+        "bytes": 4,
+        "type": "u32"
+      },
+      {
+        "name": "authority_generation",
+        "offset": 60,
+        "bytes": 4,
+        "type": "u32"
+      },
+      {
+        "name": "event_code",
+        "offset": 64,
+        "bytes": 4,
+        "type": "u32"
+      },
+      {
+        "name": "outcome",
+        "offset": 68,
+        "bytes": 4,
+        "type": "i32"
+      },
+      {
+        "name": "severity",
+        "offset": 72,
+        "bytes": 1,
+        "type": "u8-enum"
+      },
+      {
+        "name": "privacy",
+        "offset": 73,
+        "bytes": 1,
+        "type": "u8-enum"
+      },
+      {
+        "name": "kind",
+        "offset": 74,
+        "bytes": 1,
+        "type": "u8-enum"
+      },
+      {
+        "name": "flags",
+        "offset": 75,
+        "bytes": 1,
+        "type": "u8-bits"
+      },
+      {
+        "name": "redaction_mask",
+        "offset": 76,
+        "bytes": 1,
+        "type": "u8-bits"
+      },
+      {
+        "name": "payload_words",
+        "offset": 77,
+        "bytes": 1,
+        "type": "u8"
+      },
+      {
+        "name": "reserved",
+        "offset": 78,
+        "bytes": 2,
+        "type": "u16"
+      },
+      {
+        "name": "feature_id",
+        "offset": 80,
+        "bytes": 16,
+        "type": "nul-token[16]"
+      },
+      {
+        "name": "component_id",
+        "offset": 96,
+        "bytes": 16,
+        "type": "nul-token[16]"
+      },
+      {
+        "name": "payload[0]",
+        "offset": 112,
+        "bytes": 8,
+        "type": "u64"
+      },
+      {
+        "name": "payload[1]",
+        "offset": 120,
+        "bytes": 8,
+        "type": "u64"
+      },
+      {
+        "name": "payload[2]",
+        "offset": 128,
+        "bytes": 8,
+        "type": "u64"
+      },
+      {
+        "name": "payload[3]",
+        "offset": 136,
+        "bytes": 8,
+        "type": "u64"
+      },
+      {
+        "name": "checksum",
+        "offset": 144,
+        "bytes": 8,
+        "type": "u64-fnv1a"
+      }
+    ],
+    "enums": {
+      "severity": [
+        "DEBUG",
+        "INFO",
+        "NOTICE",
+        "WARNING",
+        "ERROR",
+        "CRITICAL"
+      ],
+      "privacy": [
+        "PUBLIC",
+        "INTERNAL",
+        "SENSITIVE",
+        "SECRET"
+      ],
+      "kind": [
+        "STATE",
+        "EFFECT",
+        "SECURITY",
+        "PERFORMANCE",
+        "LIFECYCLE",
+        "DROP"
+      ]
+    },
+    "invariants": [
+      "magic=ZLEV, version=1 and bytes=152",
+      "sequence is nonzero and strictly increases for every committed record",
+      "monotonic_ns never decreases within one trace",
+      "boot_id and correlation_id are nonzero",
+      "parent_sequence is zero or names an earlier committed sequence",
+      "process and authority identities are absent as 0/0 or present as nonzero id/generation pairs",
+      "feature_id and component_id are bounded NUL-terminated tokens",
+      "unknown enum values, flags, reserved fields and redaction bits fail closed",
+      "SECRET requires all four payload words redacted",
+      "every redacted payload word is zero before checksum and commit",
+      "checksum covers every field except itself in canonical little-endian value order",
+      "a corrupt head is retained and cannot be consumed as valid evidence"
+    ]
+  },
+  "queue": {
+    "production_capacity": 64,
+    "allocation": "fixed caller-owned storage",
+    "ownership": "single serialized owner; no SMP/IRQ safety claim",
+    "full_policy": "drop new record; never overwrite committed evidence",
+    "drop_evidence": "next successful emit first commits one DROP record with exact pending count",
+    "corruption_policy": "fail closed and retain corrupt head for inspection"
+  },
+  "proof": {
+    "receipt_path": "kernel/docs/receipts/event-trace-host-2026-08-24.json",
+    "receipt_sha256": "16f89fdab7d6e88ff100f582e15951e0a9246b81cc782955d5e61134ef631648",
+    "host_checks": 37,
+    "host_failures": 0,
+    "compile_lanes": 3
+  },
+  "source_identities": {
+    "tests/host/trace_event.h": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
+    "tests/host/trace_event.c": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
+    "tests/host/eventtracetest.c": "f19f3ad5f584d9b2563b5ab545583b72fdaa2df3304f0940d1d34f6549dfbc62",
+    "tools/checks/verify-event-trace.py": "cb3c48ca426124a888ede684da904951f0d35362bd4a8b883b16d58721cbcaf6"
+  },
+  "counts": {
+    "wire_fields": 28,
+    "wire_bytes": 152,
+    "payload_words": 4,
+    "production_capacity": 64,
+    "host_checks": 37,
+    "compile_lanes": 3,
+    "target_emitters": 0,
+    "qemu_routes": 0,
+    "native_hardware_routes": 0
+  },
+  "open_gaps": [
+    "single-owner-only",
+    "not-compiled-into-shipped-kernel",
+    "no-target-emitter",
+    "no-QEMU-receipt",
+    "no-native-hardware-receipt",
+    "no-durable-anchor",
+    "no-service-export-policy"
+  ],
+  "evidence_ceiling": "host-proved schema/core and cross-ABI compilation; no shipped target integration",
+  "weakest_link": "the core is externally serialized and has zero emitters in a booted zlOS artifact",
+  "generator": {
+    "path": "kernel/gen-event-schema.py",
+    "sha256": "197f1c8e4eec97021b5c87abdaa3713868428920f1fbad72f2759f38f38cc26e"
+  }
+}

@@ -20,11 +20,11 @@ is likely why it escaped a review focused on hostile input.
 ## The arithmetic
 
 ```c
-/* kernel/http.c:40,43 */
+/* kernel/src/net/http.c:40,43 */
 #define REQ_MAX  512
 static u8   req[REQ_MAX];
 
-/* kernel/http.c:89-104 */
+/* kernel/src/net/http.c:89-104 */
 static int build_request(void)
 {
     int n = 0;

@@ -51,7 +51,7 @@ actual paths and hashes are measured. They are not relabelled repository source.
 ## Rejection proof
 
 ```sh
-python3 kernel/gen-build-graph.py --check --selftest
+python3 kernel/tools/generators/gen-build-graph.py --check --selftest
 ```
 
 The self-test removes, independently:

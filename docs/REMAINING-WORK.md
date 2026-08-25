@@ -27,7 +27,7 @@ content, not architecture.
 - Do not take `i915.ko`.
 - Do not write WiFi/BT before H2.
 - Do not migrate 82 `fb_*` sites as a “quick toolkit win”.
-- Do not treat `docs/INTEGRATION-PLAN.md` as live.
+- Do not treat [`archive/superseded/INTEGRATION-PLAN.md`](archive/superseded/INTEGRATION-PLAN.md) as live.
 - Do not count “exists” as “done”. Done = reachable **and** a gate covers the call.
 
 ## Horizons

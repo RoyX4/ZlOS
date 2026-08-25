@@ -67,7 +67,7 @@ desktop read `low = addr | present`, `high = addr bits 39:32` — precisely what
 `ggtt_map` writes. Only the destination was wrong, and the fix is a second
 `mmap` at file offset `0x800000`.
 
-**This was a harness bug, not a driver bug.** `kernel/gpuring.c` reaches the
+**This was a harness bug, not a driver bug.** `kernel/src/drivers/display/gpuring.c` reaches the
 same table as `intel_mmio() + 0x800000` with no `mmap` in the way, which is
 correct for a kernel addressing physical memory directly.
 
@@ -182,7 +182,7 @@ blanks the screen — and this machine runs a Wayland session with many agent
 sessions inside it, all of which die with the display manager.
 
 ```bash
-cd kernel/hosttest
+cd kernel/tests/host
 sudo ./gpu-ring-run.sh --survey   # read-only, i915 stays bound. Zero risk.
 sudo ./gpu-ring-run.sh --dry      # dark screen, writes NOTHING. Rehearsal.
 sudo ./gpu-ring-run.sh --ring     # the real thing.
@@ -236,7 +236,7 @@ derived from a manual this tree does not have:
 
 | piece | where | how |
 |---|---|---|
-| the pixel shader | [`gen9-shader-source.md`](gen9-shader-source.md), `kernel/gpu_shader.inc` | lifted out of Mesa — 80 bytes, colour patchable in place |
+| the pixel shader | [`gen9-shader-source.md`](gen9-shader-source.md), `kernel/src/drivers/display/assets/gpu_shader.inc` | lifted out of Mesa — 80 bytes, colour patchable in place |
 | the pipeline state | [`gen9-blend-pipeline.md`](gen9-blend-pipeline.md) | captured from the vendor driver — 76 packets, decoded |
 
 What remains for RCS is real work — emitting those packets, building surface

@@ -21,33 +21,28 @@ x86-64 with nothing underneath it — its own bootloader, its own UEFI
 application, real PCI enumeration, Intel Gen9 modesetting, xHCI/USB HID input,
 NVMe, a filesystem, and a windowed compositor.
 
-> **Where the project actually is:** [`docs/STATE-OF-THE-PROJECT.md`](docs/STATE-OF-THE-PROJECT.md).
-> It replaced twenty-one planning documents (~392 KB) that were audited item by
-> item against the merged tree, and every claim in it carries the command or the
-> file:line that establishes it. Read that before picking up any task list — the
-> older planning docs predate the eleven-track merge and are stale by construction.
-> Its open-item list now also predates merge round 2: the heap, Files app,
-> browser-next landing and first 32-bit Ring-3 boundary are in `main`.
+> **Where the project actually is:** [`docs/PROJECT-STATUS.md`](docs/PROJECT-STATUS.md).
+> It separates the pushed integration state, the complete implementation plan,
+> the other-repository research, and what remains unimplemented or physical.
+> The older [`STATE-OF-THE-PROJECT.md`](docs/STATE-OF-THE-PROJECT.md) remains a
+> detailed dated audit, not the final post-integration status.
 
 > **Current execution order:** [`docs/EXECUTION-ROADMAP.md`](docs/EXECUTION-ROADMAP.md).
 > Speed is the primary product goal. The dependency spine is bare-metal proof,
 > persistent USB boot evidence, measured latency work, durable files, 64-bit
 > processes, real networking and driver depth, then application/visual polish.
 
-> **Where the project stands against "is this a 10":**
-> [`docs/ROAD-TO-TEN.md`](docs/ROAD-TO-TEN.md). Scores the tree discriminator by
-> discriminator against an external assessment, corrects the two places that
-> assessment guessed wrong, and ranks what actually moves the number. Its old
-> branch-landing warning is now superseded by the complete integration receipt;
-> physical bare-metal proof remains a separate open evidence boundary.
+> **Historical scorecard:**
+> [`docs/archive/superseded/ROAD-TO-TEN.md`](docs/archive/superseded/ROAD-TO-TEN.md).
+> Its measurements are retained, but its ranking was superseded by the execution
+> roadmap and later integration work.
 
-Two more orientation docs worth knowing about:
+Five more orientation docs worth knowing about:
 
-- [`docs/CODE-MAP.md`](docs/CODE-MAP.md) — where the code really is, and which of
-  the files a build leaves behind are generated rather than written. The directory
-  names mislead: there is no `apps/` or `desktop/`, and the desktop plus all eight
-  apps are one file (`kernel/kernel.zl`, 4,289 lines). Stale from its "The browser"
-  heading onward; §11 of `STATE-OF-THE-PROJECT.md` has the corrections.
+- [`docs/README.md`](docs/README.md) — documentation truth states.
+- [`docs/CODE-MAP.md`](docs/CODE-MAP.md) — current source ownership.
+- [`docs/REPOSITORY-STRUCTURE.md`](docs/REPOSITORY-STRUCTURE.md) — placement rules.
+- [`src/README.md`](src/README.md) — language-toolchain ownership.
 - [`docs/GUARDS-THAT-DID-NOT-GUARD.md`](docs/GUARDS-THAT-DID-NOT-GUARD.md) — five
   checks in this tree that reported green while checking nothing. Read it before
   trusting any green result here, and before writing a new gate.
@@ -101,7 +96,8 @@ phantom errors.
 ./interp program.zl                    # run directly
 
 ./compile program.zl                   # -> out.c
-gcc -O2 -D_strdup=strdup -o program out.c runtime.c os_linux.c -lm
+gcc -O2 -D_strdup=strdup -Isrc/runtime -o program out.c \
+    src/runtime/runtime.c src/runtime/os_linux.c -lm
 
 ./compilel program.zl                  # -> out.ll (unboxed subset)
 clang -O2 out.ll -o program
@@ -137,14 +133,14 @@ in the background rather than blocking on them.
 | Command | Roughly | What it proves |
 |---|---|---|
 | `kernel/verify.sh` | ~1 min | BIOS boot against a golden transcript |
-| `kernel/verify-raw.sh` | 1-3 min | Our own bootloader; polls for its marker |
-| `kernel/verify-iso.sh` | ~1.5 min | BIOS **and** UEFI through GRUB |
-| `kernel/verify-efi.sh` | ~1 min | zlOS as its **own** UEFI application — the laptop's real path |
+| `kernel/tools/checks/verify-raw.sh` | 1-3 min | Our own bootloader; polls for its marker |
+| `kernel/tools/checks/verify-iso.sh` | ~1.5 min | BIOS **and** UEFI through GRUB |
+| `kernel/tools/checks/verify-efi.sh` | ~1 min | zlOS as its **own** UEFI application — the laptop's real path |
 
 `verify-efi.sh` exists because the other three were all green while the 64-bit
 build was dead: the first two boot the 32-bit kernel, and `verify-iso.sh`'s "UEFI"
 case boots *GRUB's* `bootx64.efi`, which multiboot-loads that same 32-bit kernel.
-Nothing exercised `kernel/efi.c` or the path a real machine takes. Run
+Nothing exercised `kernel/boot/efi.c` or the path a real machine takes. Run
 `verify-efi.sh` before believing a change is safe on hardware.
 
 **Do not run several QEMU instances alongside a fan-out of agents.** This box has
@@ -154,15 +150,15 @@ not exist, and an OOM kill of the agent process itself. Check
 
 ### Two hazards
 
-**`kernel/intel.c` can damage hardware**, not merely fail — violating the panel's
+**`kernel/src/drivers/display/intel.c` can damage hardware**, not merely fail — violating the panel's
 500 ms T12 power-cycle delay, or driving AUX into an unpowered panel. Develop it
-from Linux userspace against the live GPU via `kernel/hosttest/`, which is seconds
+from Linux userspace against the live GPU via `kernel/tests/host/`, which is seconds
 per iteration with no reboots. Map 8 MiB of BAR0, not 16.
 
 **Never put a pointer through `unsigned long` in the EFI build.**
 `kernel/buildefi.sh` targets `x86_64-unknown-windows`, which is LLP64:
 `unsigned long` is 4 bytes there and 8 everywhere else. This bit twice, and below 4 GiB the truncation is harmless,
-which is exactly why QEMU never showed it. `kernel/wguard.sh` is the check and it
+which is exactly why QEMU never showed it. `kernel/tools/checks/wguard.sh` is the check and it
 runs in all three directions. Details in [`CLAUDE.md`](CLAUDE.md).
 
 ## What changed from the Windows original
@@ -170,24 +166,24 @@ runs in all three directions. Details in [`CLAUDE.md`](CLAUDE.md).
 The language, grammar, lexer, parser and value semantics are untouched — this is a
 platform port, not a rewrite. Three things had to change:
 
-1. **`os_linux.c`** replaces `os_win.c`: `os_dir` / `os_procs` walk `/proc` and
+1. **`src/runtime/os_linux.c`** replaces `os_win.c`: `os_dir` / `os_procs` walk `/proc` and
    `dirent.h` instead of calling Win32.
-2. **Real `kill`/`start`/`rm`/`copy`/`move`/`run`** in `runtime.c` and `interp.c`.
+2. **Real `kill`/`start`/`rm`/`copy`/`move`/`run`** in `src/runtime/runtime.c` and `src/runtime/interp.c`.
    These were simulated (`[sim] kill(...)`) even on Windows; they are wired to
    real syscalls now (`fork`/`execvp`, `SIGTERM`, `remove`/`rename`, `system`).
-3. **`nativegen.c`'s output format.** It used to emit a Windows PE that imported
+3. **`src/backends/native/nativegen.c`'s output format.** It used to emit a Windows PE that imported
    `GetStdHandle`/`WriteFile`/`ExitProcess` from `kernel32.dll`. It now emits a
    static ELF64 that issues raw Linux syscalls directly — no import table at all,
    which is *simpler* than the PE version. Verified with `strace`: the only
    syscalls a compiled program makes are the ones it asked for.
 
-`compilel.c` needed zero platform changes — LLVM IR is platform-neutral.
-`compile.c` needed zero platform changes either, but cross-checking it against the
+`src/backends/llvm/compilel.c` needed zero platform changes — LLVM IR is platform-neutral.
+`src/backends/c/compile.c` needed zero platform changes either, but cross-checking it against the
 interpreter surfaced one real pre-existing bug: list literals built from
 side-effecting calls, e.g. `[dq_pop_front(q), dq_pop_front(q)]`, depend on
 left-to-right argument evaluation, which C does not guarantee — gcc's order
 differs from MSVC's. Fixed by sequencing through temporaries in a
-statement-expression (`emit_seq_call` in `compile.c`).
+statement-expression (`emit_seq_call` in `src/backends/c/compile.c`).
 
 ## Test
 
@@ -216,7 +212,7 @@ stage is skipped with a notice if `clang` is absent.
 
 `zlfmt` re-indents; it does not reformat. It rewrites leading whitespace, strips
 trailing whitespace, and copies every other byte through untouched. That restraint
-is load-bearing: `lexer.c:272-273` discards comments and `lexer.c:88` truncates
+is load-bearing: `src/frontend/lexer.c:272-273` discards comments and `src/frontend/lexer.c:88` truncates
 token text at 128 bytes, so any formatter that *rebuilt* source from the token
 stream would delete every comment in the corpus and silently corrupt long string
 literals. `verify_fmt.sh` proves the token stream is byte-identical before and
@@ -261,11 +257,11 @@ Intel-syntax disassembly, since it has no symbols), and clangd config.
 
 ## What is not ported
 
-`nativert.c` (1,534 lines) — the deeper "no C runtime" floor: a hand-assembled
+`src/backends/native/nativert.c` (1,534 lines) — the deeper "no C runtime" floor: a hand-assembled
 heap allocator, file I/O and a self-hosting compile path with zero libc
 dependency, all targeting Windows/kernel32 directly. Left as a documented next
 step rather than a fragile blind port of 1,500 lines of intricate hand-tuned
-machine code with no interactive debugger in the loop. `nativegen.c` *is* fully
+machine code with no interactive debugger in the loop. `src/backends/native/nativegen.c` *is* fully
 ported and tested.
 
 `poke` / `peek` / `window` stay simulated. `poke`/`peek` would mean patching
@@ -275,7 +271,7 @@ Linux equivalent here.
 
 ## Comparison
 
-[`docs/COMPARE-BOREDOS.md`](docs/COMPARE-BOREDOS.md) measures zlOS against
+[`docs/evidence/COMPARE-BOREDOS.md`](docs/evidence/COMPARE-BOREDOS.md) measures zlOS against
 [BoredOS](https://boredos.dev) — same target, opposite strategy — and is blunt
 about where BoredOS is ahead.
 

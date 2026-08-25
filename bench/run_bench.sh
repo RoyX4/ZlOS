@@ -27,7 +27,7 @@
 # If the interp column moves across a runtime.c-only change, the measurement
 # is contaminated by host load and the run should be discarded.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 ROOT=$(cd .. && pwd)
 
 ONLY=""
@@ -83,8 +83,8 @@ for src in b*.zl; do
 
     # C backend: compile writes out.c into the CWD, not next to the source.
     ( cd "$tmp" && "$ROOT/compile" "$OLDPWD/$src" >/dev/null 2>&1 && \
-      gcc -O2 -D_strdup=strdup -I"$ROOT" -o "$name.bin" out.c \
-          "$ROOT/runtime.c" "$ROOT/os_linux.c" -lm 2>"$name.cc.err" )
+      gcc -O2 -D_strdup=strdup -I"$ROOT/src/runtime" -o "$name.bin" out.c \
+          "$ROOT/src/runtime/runtime.c" "$ROOT/src/runtime/os_linux.c" -lm 2>"$name.cc.err" )
     if [ ! -x "$tmp/$name.bin" ]; then
         printf '%-12s %12s %12s %10s   %s\n' "$name" BUILD-FAIL - - "see $tmp/$name.cc.err"
         fail=1

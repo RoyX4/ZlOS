@@ -49,7 +49,7 @@ Every gate runs only when a human remembers to run it, on the one machine that
 also has to think.
 
 **`.ultra/STATE.md` is stale.** It says the compositor is "built, tested, and
-unreachable — nothing calls them." `kernel/kernel.zl` calls `wm_open_p` at lines
+unreachable — nothing calls them." `kernel/src/kernel.zl` calls `wm_open_p` at lines
 293–296, 2315, 2511, 2518, plus `wm_us`, `wm_peak`, `ui_scale`. It was wired up in
 the commits after that summary was written. Worth fixing before it misleads an
 agent into re-doing finished work.
@@ -68,9 +68,9 @@ All four boot gates and both host gates are CI-compatible today, unmodified:
 | job | script | catches |
 |---|---|---|
 | `bios32` | `kernel/verify.sh` | 32-bit multiboot regressions |
-| `raw` | `kernel/verify-raw.sh` | our own bootloader |
-| `iso` | `kernel/verify-iso.sh` | GRUB BIOS + UEFI |
-| `efi` | `kernel/verify-efi.sh` | **zlOS as its own UEFI app — the ThinkPad path** |
+| `raw` | `kernel/tools/checks/verify-raw.sh` | our own bootloader |
+| `iso` | `kernel/tools/checks/verify-iso.sh` | GRUB BIOS + UEFI |
+| `efi` | `kernel/tools/checks/verify-efi.sh` | **zlOS as its own UEFI app — the ThinkPad path** |
 | `lang` | `run_tests.sh` | interpreter vs C backend vs native, byte-identical |
 | `fmt` | `verify_fmt.sh` | token stream identical before/after |
 
@@ -98,7 +98,7 @@ to `main` rather than on every commit to every branch.
 
 ## 3. Layer 2 — the cool one: a picture of the desktop on every PR
 
-`kernel/hosttest/wmshot.c` renders **one frame of the compositor to a PPM, from
+`kernel/tests/host/wmshot.c` renders **one frame of the compositor to a PPM, from
 Linux, with no boot, no GPU, and no display** — it's C against mmap'd memory, so
 it finishes in milliseconds. Its own header says it best:
 
@@ -207,7 +207,7 @@ Codex natively, Cursor natively, Claude Code via `CLAUDE.md`.
 
 ## 7. What must never leave this box
 
-- **`kernel/intel.c` and `kernel/hosttest/`** — needs the real Gen9 GPU. No runner
+- **`kernel/src/drivers/display/intel.c` and `kernel/tests/host/`** — needs the real Gen9 GPU. No runner
   has one. The `gpu-dev.sh` / `modeset_test` loop stays local, permanently.
 - **The ThinkPad boot path.** Physical hardware, no serial port, screen is the only
   diagnostic.

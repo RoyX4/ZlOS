@@ -194,7 +194,7 @@ margin collapsing, hanging list markers, and reflow on resize.
 from inline `data:` URIs), **flexbox**, **CSS grid**, a real box model
 (width/min/max, `box-sizing`, padding that insets, borders, block backgrounds,
 `margin: 0 auto` centring, `overflow: hidden`), **floats** and **positioning**.
-See [`browser-render-run.md`](browser-render-run.md) for the measurements.
+See [`browser-render-run.md`](evidence/browser-render-run.md) for the measurements.
 
 **Refuses, and says so on screen rather than in a comment:**
 
@@ -225,23 +225,23 @@ programs. That is what makes the gates cheap enough to run on every change
 instead of once at the end.
 
 ```bash
-kernel/hosttest/htmltest       # 101 checks, 0 failed
+kernel/tests/host/htmltest       # 101 checks, 0 failed
 ```
 
 ```bash
-kernel/hosttest/browsershot out.ppm    # the same page at 760/480/300px
+kernel/tests/host/browsershot out.ppm    # the same page at 760/480/300px
 ```
 
 ```bash
-kernel/hosttest/nettest        # 152 checks, 0 failed
+kernel/tests/host/nettest        # 152 checks, 0 failed
 ```
 
 ```bash
-kernel/hosttest/tcptest        # 110 checks, 0 failed
+kernel/tests/host/tcptest        # 110 checks, 0 failed
 ```
 
 ```bash
-kernel/hosttest/httptest       # 91 checks, 0 failed
+kernel/tests/host/httptest       # 91 checks, 0 failed
 ```
 
 > **That number was true when it was written and had not been true since.**
@@ -262,15 +262,15 @@ kernel/hosttest/httptest       # 91 checks, 0 failed
 > falsehood without a single line of the file changing.
 
 ```bash
-kernel/hosttest/browsertest    # 58 checks, 0 failed
+kernel/tests/host/browsertest    # 58 checks, 0 failed
 ```
 
 ```bash
-kernel/hosttest/fbtext         # 45 checks, 0 failed
+kernel/tests/host/fbtext         # 45 checks, 0 failed
 ```
 
 ```bash
-kernel/probe-net.py            # the only gate that is not a host test
+kernel/tools/probes/probe-net.py            # the only gate that is not a host test
 ```
 
 `probe-net.py` is the odd one out and deliberately so: every gate above runs
@@ -302,7 +302,7 @@ the pixels. **Against the shim it replaced it reports 12 failures**, which is
 the only reason to believe it would catch the next one.
 
 ```bash
-kernel/hosttest/fuzz 3000 1    # ~400,000 checks per seed, 0 failed
+kernel/tests/host/fuzz 3000 1    # ~400,000 checks per seed, 0 failed
 ```
 
 The fuzzer feeds garbage to every layer that takes bytes from somewhere else —
@@ -483,15 +483,15 @@ crypto` and `git log --all`, and neither sees `refs/wip/*` — `--all` covers
 
 ```
 $ git for-each-ref --format='%(refname)' refs/wip |
-    while read r; do git cat-file -e "$r:kernel/crypto.c" 2>/dev/null &&
+    while read r; do git cat-file -e "$r:kernel/src/net/crypto.c" 2>/dev/null &&
     echo "$r HAS crypto.c"; done
 refs/wip/zl-linux HAS crypto.c
 refs/wip/tmp-wtclean HAS crypto.c
 refs/wip/tmp-wtw0 HAS crypto.c
 
-$ git cat-file -s refs/wip/zl-linux:kernel/crypto.c
+$ git cat-file -s refs/wip/zl-linux:kernel/src/net/crypto.c
 21270
-$ git show refs/wip/zl-linux:kernel/crypto.c | wc -l
+$ git show refs/wip/zl-linux:kernel/src/net/crypto.c | wc -l
 543
 ```
 
@@ -553,7 +553,7 @@ separate track with its own review. **Nothing here depends on it yet.**
   longer **this code's** arrays. `html.c`, `css.c`, `layout.c` and `png.c` are
   handed their storage by the caller, which is why the caps could move at all:
   they were 1.95 MB of a kernel BSS with 126 KB of link headroom left. See
-  [`browser-storage-run.md`](browser-storage-run.md). Overflow still
+  [`browser-storage-run.md`](evidence/browser-storage-run.md). Overflow still
   **truncates and says so on screen**; it does not scribble.
 - Baselines are approximated by bottom-aligning the glyph cell. Correct only
   because every glyph comes from one atlas; wrong the moment a second face with
@@ -561,4 +561,4 @@ separate track with its own review. **Nothing here depends on it yet.**
 
 ---
 
-Brief: [`BROWSER-PROMPT.md`](BROWSER-PROMPT.md) · Contract: [`../ui.h`](../ui.h)
+Brief: [`BROWSER-PROMPT.md`](archive/prompts/BROWSER-PROMPT.md) · Contract: [`../ui.h`](../ui.h)

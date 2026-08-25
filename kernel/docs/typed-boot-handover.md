@@ -73,7 +73,7 @@ not a claim that automatic rollback is live.
 
 ## Proof
 
-`kernel/hosttest/boot_handover_test.c` compiles the shipping implementation and
+`kernel/tests/host/boot_handover_test.c` compiles the shipping implementation and
 checks:
 
 - all 256 bytes are covered by structural validation or the checksum;

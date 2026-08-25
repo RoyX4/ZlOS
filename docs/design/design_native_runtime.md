@@ -2,7 +2,7 @@
 
 The goal of "delete C entirely": a native x86-64 backend that compiles the FULL language
 (strings, lists, dynamic values) plus a **runtime written in hand-assembled x86-64 using only
-Windows syscalls — no libc**. When this exists and can compile `compiler.zl`, there is no C
+Windows syscalls — no libc**. When this exists and can compile `src/selfhost/compiler.zl`, there is no C
 anywhere in the toolchain's output.
 
 This doc is the implementation spec so the multi-session build is mechanical, not exploratory.
@@ -63,12 +63,12 @@ Win32 APIs, and must `and rsp,-16` before any Win32 call.**
 | `zl_print` | (rcx=v) | **tag dispatch**: int → itoa+WriteFile; string → bytes+WriteFile; list → "[..]" |
 | `zl_read/zl_write/zl_dir` | ... | file I/O via CreateFileA/ReadFile/WriteFile/FindFirstFileA — NO fopen |
 
-`zl_print`'s itoa and the WriteFile path are already proven in nativegen.c (print_int/print_str) —
+`zl_print`'s itoa and the WriteFile path are already proven in src/backends/native/nativegen.c (print_int/print_str) —
 port them into the runtime and add a tag check at the top.
 
-## 4. Codegen changes (a new backend file, e.g. `nativeval.c`)
+## 4. Codegen changes (a new backend file, e.g. `src/backends/native/nativeval.c`)
 
-Keep the working integer `nativegen.c` intact. `nativeval.c` is the boxed version:
+Keep the working integer `src/backends/native/nativegen.c` intact. `src/backends/native/nativeval.c` is the boxed version:
 - Every expression leaves a **tagged value** in rax (not a raw int).
 - `N_NUMBER` → `mov rcx, n; call zl_int` (or inline `mov rax,(n<<1)|1`).
 - `N_STRING` → emit bytes into a data region; `lea rcx,[rip+data]; mov edx,len; call zl_str_lit`.
@@ -80,68 +80,70 @@ Keep the working integer `nativegen.c` intact. `nativeval.c` is the boxed versio
 
 ## 5. The self-host finish
 
-Once `nativeval.c` compiles the full language, point it at `compiler.zl` and the C toolchain files:
-1. `nativeval.exe compiler.zl` → `native_compiler.exe` (a native zl compiler, built by our native backend).
-2. `native_compiler.exe compiler.zl` → reproduces itself → **native self-host, zero C anywhere.**
-3. Delete compile.c/runtime.c usage from the mainline; C only remains as historical bootstrap.
+Once `src/backends/native/nativeval.c` compiles the full language, point it at `src/selfhost/compiler.zl` and the C toolchain files:
+1. `nativeval.exe src/selfhost/compiler.zl` → `native_compiler.exe` (a native zl compiler, built by our native backend).
+2. `native_compiler.exe src/selfhost/compiler.zl` → reproduces itself → **native self-host, zero C anywhere.**
+3. Delete `src/backends/c/compile.c` and `src/runtime/runtime.c` usage from the
+   mainline; C only remains as historical bootstrap.
 
 ## 6. Build order (each brick verifiable on its own)
 
-Bricks 2–5 all live in **`nativert.c`**, which emits `raw_rt.exe`. The file grows
+Bricks 2–5 all live in **`src/backends/native/nativert.c`**, which emits `raw_rt.exe`. The file grows
 one brick per commit and the proof program at its entry point accumulates, so
 every brick re-verifies all the earlier ones on every run.
 
-1. ✅ **DONE** heap via VirtualAlloc (`nativeheap.c` → `raw_heap.exe`)
+1. ✅ **DONE** heap via VirtualAlloc (`src/backends/native/nativeheap.c` → `raw_heap.exe`)
 2. ✅ **DONE** tagged ints, `zl_alloc`/`zl_int`/`zl_untag`/`zl_mul`, `zl_write` tag dispatch
 3. ✅ **DONE** heap strings: `zl_str_lit`, `zl_concat`, `zl_str_eq`, `zl_len`
 4. ✅ **DONE** `zl_add` runtime dispatch (int / string / list), `zl_lt/le/gt/ge`, `zl_eq/ne`, `zl_truthy`
 5. ✅ **DONE** lists: `zl_list_new/set/index/push/concat`, recursive `zl_write`
 6a. ✅ **DONE** `zl_at` (returns a 1-char string), `zl_has` (substring) — the string builtins the self-host needs
 7. ✅ **DONE** file I/O via syscalls: `zl_cstr` (NUL-terminate), `zl_read` (CreateFileA/ReadFile into a 1 MB buffer, length = bytes read), `zl_write_file` (CreateFileA CREATE_ALWAYS/WriteFile), both `CloseHandle` when done. No fopen. **All 7 self-host builtins now exist in machine code.**
-6. ✅ **DONE** `nativeval.c` — the boxed-value backend. Includes nativert.c under `NATIVERT_LIB` to reuse the runtime. Stages: expressions → if/while → functions+recursion+global-scope → lists/index/for/builtins. Matches the interpreter on the full 6-program suite.
-8. ✅ **DONE 🏆 NATIVE SELF-HOST.** `nativeval compiler.zl → nvout.exe` (33 KB machine code, kernel32-only, no libc); `nvout.exe` compiles `compiler.zl` → `out.c` **byte-identical** to the interpreter's (SHA256 ECE14032…, 887 lines).
+6. ✅ **DONE** `src/backends/native/nativeval.c` — the boxed-value backend. Includes src/backends/native/nativert.c under `NATIVERT_LIB` to reuse the runtime. Stages: expressions → if/while → functions+recursion+global-scope → lists/index/for/builtins. Matches the interpreter on the full 6-program suite.
+8. ✅ **DONE 🏆 NATIVE SELF-HOST.** `nativeval src/selfhost/compiler.zl → nvout.exe` (33 KB machine code, kernel32-only, no libc); `nvout.exe` compiles `src/selfhost/compiler.zl` → `out.c` **byte-identical** to the interpreter's (SHA256 ECE14032…, 887 lines).
 
 **Status: ALL 8 bricks done. "Delete C from the OUTPUT" is complete** — the native compiler imports nothing but kernel32.
 
 ### The two bugs that stood between brick 6 and the self-host
 
 1. **Fixed-array overflow in the generator.** The boxed backend emits a runtime
-   call per operation, so compiling compiler.zl made thousands of call sites —
+   call per operation, so compiling src/selfhost/compiler.zl made thousands of call sites —
    `cfix[256]` overflowed and corrupted memory (nativeval.exe itself crashed).
    Fix: `cfix` → 262144; `ufix`/`gnames`/`flocals`/`fnames` enlarged; PE layout
    grown (.text 512 KB, .idata 256 KB); nativeval arena → 64 MB.
 2. **`+` must stringify.** The interpreter's `binop_plus` is num+num→add,
    list+list→concat, and *everything else* → `to_string(l)+to_string(r)`.
-   compiler.zl leans on this (`"zl_list_n(" + len(...)`). The old `zl_add`
+   src/selfhost/compiler.zl leans on this (`"zl_list_n(" + len(...)`). The old `zl_add`
    returned false for string+int, which propagated until `write()` dereferenced
    a tagged int as a string pointer → 0xC0000005. Fix: added `zl_int_str` and
    `zl_to_string`, rerouted `zl_add`'s general case through
-   `zl_concat(to_string(a), to_string(b))`. Found by bisecting compiler.zl
+   `zl_concat(to_string(a), to_string(b))`. Found by bisecting src/selfhost/compiler.zl
    (lexer OK → parser OK → compile_program crashed → string+int concat).
 
 ### What remains ("delete C from the SOURCE")
 
-nativeval.c/nativert.c are still C. The final step of MASTER_PLAN Floor 1 step 10
+`src/backends/native/nativeval.c` and `src/backends/native/nativert.c` are still
+C. The final step of MASTER_PLAN Floor 1 step 10
 is to rewrite that backend in zl so the toolchain has no C source either, then
 move the C files to `bootstrap/`. That is a separate, later climb; the OUTPUT is
 already C-free today. `raw_rt.exe` is 3580 bytes of code and imports **7** kernel32 functions (VirtualAlloc, GetStdHandle, WriteFile, ExitProcess, CreateFileA, ReadFile, CloseHandle). No libc.
 
 ### brick 7 lessons
 
-- **Same-process write-then-read needs the handle closed.** With the write handle still open, opening the file for read either shares-violates or reads 0 bytes. `compiler.zl` reads-then-writes-then-exits so it never hits this, but `CloseHandle` after each op makes the runtime correct for all cases.
+- **Same-process write-then-read needs the handle closed.** With the write handle still open, opening the file for read either shares-violates or reads 0 bytes. `src/selfhost/compiler.zl` reads-then-writes-then-exits so it never hits this, but `CloseHandle` after each op makes the runtime correct for all cases.
 - **`ReadFile` writes only the low 32 bits of `*lpNumberOfBytesRead`.** Zero the full 8-byte slot first, or the string length gets garbage in its high bits.
 - The bug that looked like a runtime crash was in the **proof**, not the runtime: `zl_read` returns the object in `rax`, but `zl_len` reads its argument from `rcx`. Missing `mov rcx,rax` → `len` dereferenced a stale `rcx` → 0xC0000005. Divide-and-conquer `ExitProcess`-probes (handle value, then byte count, then returned pointer) isolated it to the caller.
 
 ### note for brick 6
 
-The arena is currently **4 MB** (`emit_main` VirtualAlloc). That is plenty for the proof, but compiling `compiler.zl` (which allocates an AST of thousands of nodes plus every emitted string) will need more — bump to the 64 MB this doc's §2 specifies when brick 6 lands. `raw_rt.exe` is 2612 bytes of code + 96 bytes of data and
+The arena is currently **4 MB** (`emit_main` VirtualAlloc). That is plenty for the proof, but compiling `src/selfhost/compiler.zl` (which allocates an AST of thousands of nodes plus every emitted string) will need more — bump to the 64 MB this doc's §2 specifies when brick 6 lands. `raw_rt.exe` is 2612 bytes of code + 96 bytes of data and
 imports exactly four kernel32 functions (VirtualAlloc, GetStdHandle, WriteFile,
 ExitProcess). `dumpbin /imports` shows no msvcrt, no ucrtbase, no vcruntime.
 
 ### What the TROPHY actually needs (measured, 2026-07-30)
 
-The point of this runtime is the native self-host of `compiler.zl` (Floor 1 step
-10). `compiler.zl` calls exactly **7** builtins — measured by scanning its source:
+The point of this runtime is the native self-host of `src/selfhost/compiler.zl` (Floor 1 step
+10). `src/selfhost/compiler.zl` calls exactly **7** builtins — measured by scanning its source:
 
 ```
 print  len  at  has  push  read  write
@@ -175,8 +177,8 @@ forever. Do NOT let them block brick 8.
 ### Lessons that cost real time
 
 1. **brick 1:** `VirtualAlloc` needs strict 16-byte stack alignment — `and rsp,-16`.
-2. **brick 2:** never hand-count a jump displacement. `nativeheap.c` wrote them as
-   literals in comments; at 600+ bytes that is a guaranteed bug. `nativert.c` uses
+2. **brick 2:** never hand-count a jump displacement. `src/backends/native/nativeheap.c` wrote them as
+   literals in comments; at 600+ bytes that is a guaranteed bug. `src/backends/native/nativert.c` uses
    `jz_fwd()` / `land()` / `call_to(&off_routine)` so every displacement is computed.
    Bricks 2–5 each ran correctly on the first attempt because of this.
 3. Any routine that calls another must have a real prologue, or it breaks the

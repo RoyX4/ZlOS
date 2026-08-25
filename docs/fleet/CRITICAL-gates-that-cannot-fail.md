@@ -80,9 +80,9 @@ Two independent fleet agents found this one — the `llp64` class sweep and the
 |---|---|
 | `tools/hazard-scan.sh:62` | checks 1 and 2 report through `warn()`, which never sets `fail` — so the EFI guard checks are advisory while appearing to gate |
 | `tools/engine-parity.sh:141` | treats a **total engine build failure** as not-a-failure |
-| `kernel/check-himap.sh:107` | cannot see the address it was written to catch if it is spelled with one fewer leading zero |
+| `kernel/tools/checks/check-himap.sh:107` | cannot see the address it was written to catch if it is spelled with one fewer leading zero |
 
-A fifth lead, `kernel/wguard.sh:45`, **was** on this list and has since been verified —
+A fifth lead, `kernel/tools/checks/wguard.sh:45`, **was** on this list and has since been verified —
 see the section at the end of this file. It was the sharpest of them, because `CLAUDE.md`
 presents `wguard.sh` as the reason the `-w` bug class is believed closed.
 
@@ -93,7 +93,7 @@ presents `wguard.sh` as the reason the `-w` bug class is believed closed.
 ### `xhci_ram_ok()` zeroes a live DCBAA entry, and a zl builtin reaches it
 
 ```c
-/* kernel/xhci.c:411-423 */
+/* kernel/src/drivers/input/xhci.c:411-423 */
 int xhci_ram_ok(void)
 {
     volatile u32 *lo = (volatile u32 *)XMEM_DCBAA;
@@ -111,13 +111,13 @@ It writes a probe pattern into `XMEM_DCBAA` — the Device Context Base Address 
 and then **zeroes it**, restoring nothing. DCBAA entry 0 is where the xHCI spec puts the
 **scratchpad buffer array pointer**.
 
-`kernel/arena.c:198` shows the tree knows the distinction: *"This version saves and
+`kernel/src/core/arena.c:198` shows the tree knows the distinction: *"This version saves and
 restores what was there first. `xhci_ram_ok()` does [not]"*.
 
 The reachability is the problem:
 
 ```
-kernel/xhci.c:450                 if (!xhci_ram_ok()) return 0;      ← during init, safe
+kernel/src/drivers/input/xhci.c:450                 if (!xhci_ram_ok()) return 0;      ← during init, safe
 freestanding/runtime_kernel.c:1061  if (streq(name,"usb_ram")) …     ← zl builtin, ANY TIME
 ```
 
@@ -140,12 +140,12 @@ structure the hardware owns.
 ## ✓ VERIFIED — `wguard.sh` cannot see the flag line it exists to guard
 
 Promoted from a lead after wave 3's refutation stage re-derived it and I checked it by
-hand. `CLAUDE.md:100-103` says *"`kernel/wguard.sh` is the check, and it runs all three
+hand. `CLAUDE.md:100-103` says *"`kernel/tools/checks/wguard.sh` is the check, and it runs all three
 directions… Run it before touching that flag line."* **The flag line is the one input it
 cannot observe.**
 
 ```
-$ grep -n 'buildefi\|CF=' kernel/wguard.sh
+$ grep -n 'buildefi\|CF=' kernel/tools/checks/wguard.sh
 2:# wguard.sh - prove buildefi.sh's four -Werror= flags actually bite.
 4:# WHY THIS EXISTS. From 2026-08-18 to 2026-08-19 buildefi.sh carried
 78:    echo "   buildefi.sh's -w could be restored; re-read this script's header."
@@ -156,7 +156,7 @@ $ grep -n 'buildefi\|CF=' kernel/wguard.sh
 defines its own:
 
 ```sh
-# kernel/wguard.sh:45-48
+# kernel/tools/checks/wguard.sh:45-48
 GUARD="-Werror=shift-count-overflow -Werror=void-pointer-to-int-cast \
        -Werror=pointer-to-int-cast  -Werror=int-to-pointer-cast"
 BASE="-target x86_64-unknown-windows -ffreestanding -fno-stack-protector \
@@ -169,7 +169,7 @@ proves that *clang* honours four flags, not that *the build* passes them.
 ### The threshold is the second half
 
 ```sh
-# kernel/wguard.sh:58-60
+# kernel/tools/checks/wguard.sh:58-60
 n=$(grep -c 'error:' "$TMP/a.log" || true)
 if [ "$n" -ge 4 ]; then
     say "A. guard catches a planted truncation" "ok ($n errors)"

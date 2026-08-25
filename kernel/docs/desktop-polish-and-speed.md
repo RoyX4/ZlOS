@@ -130,7 +130,7 @@ runs on the real target CPU.
 hardcodes so nothing has to be patched. Same method as `intel_probe`.
 
 ```
-cd kernel/hosttest && ./build.sh && ./fbbench
+cd kernel/tests/host && ./build.sh && ./fbbench
 ```
 
 **Baseline, before the shadow fix below** (min of 7 runs; this CPU turbos 1.8–4.9

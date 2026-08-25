@@ -39,7 +39,7 @@ The validator also checks:
 The first freeze used committed HEAD
 `b8a00ec45ac1f9f955ba79ed63f0072540067d4e` plus a large concurrent uncommitted
 shared implementation batch. The authoritative local behavior receipt is
-`kernel/docs/performance-architecture-implementation-2026-08-22.md`; it reports
+`kernel/docs/evidence/performance-architecture-implementation-2026-08-22.md`; it reports
 the exact host/QEMU gates and explicitly open physical gates.
 
 No kernel build, QEMU boot or physical run was performed merely to write this

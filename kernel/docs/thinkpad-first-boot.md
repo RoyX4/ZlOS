@@ -14,7 +14,7 @@ GRUB anywhere in this path.
 Verify it is ours, not GRUB's, before you write it:
 
 ```bash
-cd ~/Documents/repos/zl-linux/kernel && ./mkusb.sh
+cd ~/Documents/repos/zl-linux/kernel && ./tools/images/mkusb.sh
 mtype -i zlOS-usb.img@@1M ::/EFI/BOOT/BOOTX64.EFI | strings | grep -c zlOS
 ```
 
@@ -37,7 +37,7 @@ why the GOP check in it matters.
 `mkusb.sh` will do it, and makes you retype the device name first:
 
 ```bash
-cd ~/Documents/repos/zl-linux/kernel && ./mkusb.sh /dev/sdX
+cd ~/Documents/repos/zl-linux/kernel && ./tools/images/mkusb.sh /dev/sdX
 ```
 
 Find `/dev/sdX` with `lsblk` **after** plugging the stick in. Your internal disk

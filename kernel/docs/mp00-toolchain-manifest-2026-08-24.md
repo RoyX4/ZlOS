@@ -62,8 +62,8 @@ by the caller. It does not make the machine hermetic.
 ## Rejection proof
 
 ```sh
-python3 kernel/gen-dependency-lock.py --check --selftest
-python3 kernel/gen-toolchain-manifest.py --check --selftest
+python3 kernel/tools/generators/gen-dependency-lock.py --check --selftest
+python3 kernel/tools/generators/gen-toolchain-manifest.py --check --selftest
 ```
 
 The dependency lock rejects a missing command, binary drift, lost invocation

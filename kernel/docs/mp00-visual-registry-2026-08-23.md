@@ -1,6 +1,6 @@
 # MP-00 visual evidence registry
 
-`kernel/visual-registry.json` hashes and measures all 46 PNG/PPM visual assets
+`kernel/metadata/visual-registry.json` hashes and measures all 46 PNG/PPM visual assets
 currently present in the implementation worktree. It pairs the 20 named BIOS
 and UEFI exercise scenarios without assuming that equal names mean equal pixels.
 

@@ -13,112 +13,112 @@ BFPRINTABLE = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^
 
 # Convert a byte value to its output character.
 fn bfChar(bfc_code) {
-  if bfc_code == 10 { return "\n" }
-  if bfc_code == 9 { return "\t" }
-  if bfc_code >= 32 and bfc_code <= 126 {
-    return at(BFPRINTABLE, bfc_code - 32)
-  }
-  return ""   # non-printable / out of range -> nothing
+    if bfc_code == 10 { return "\n" }
+    if bfc_code == 9 { return "\t" }
+    if bfc_code >= 32 and bfc_code <= 126 {
+        return at(BFPRINTABLE, bfc_code - 32)
+    }
+    return ""   # non-printable / out of range -> nothing
 }
 
 # Build a fresh tape of n zero cells.
 fn bfMakeTape(bfmt_n) {
-  bfmt_out = []
-  bfmt_i = 0
-  while bfmt_i < bfmt_n {
-    bfmt_out = push(bfmt_out, 0)
-    bfmt_i = bfmt_i + 1
-  }
-  return bfmt_out
+    bfmt_out = []
+    bfmt_i = 0
+    while bfmt_i < bfmt_n {
+        bfmt_out = push(bfmt_out, 0)
+        bfmt_i = bfmt_i + 1
+    }
+    return bfmt_out
 }
 
 # Return a NEW tape with cell bfs_idx set to bfs_val (lists are immutable).
 fn bfSet(bfs_tape, bfs_idx, bfs_val) {
-  bfs_out = []
-  bfs_i = 0
-  while bfs_i < len(bfs_tape) {
-    if bfs_i == bfs_idx {
-      bfs_out = push(bfs_out, bfs_val)
-    } else {
-      bfs_out = push(bfs_out, bfs_tape[bfs_i])
+    bfs_out = []
+    bfs_i = 0
+    while bfs_i < len(bfs_tape) {
+        if bfs_i == bfs_idx {
+            bfs_out = push(bfs_out, bfs_val)
+        } else {
+            bfs_out = push(bfs_out, bfs_tape[bfs_i])
+        }
+        bfs_i = bfs_i + 1
     }
-    bfs_i = bfs_i + 1
-  }
-  return bfs_out
+    return bfs_out
 }
 
 # Given prog and index of '[', return index of the matching ']'.
 fn bfMatchForward(bfmf_prog, bfmf_start) {
-  bfmf_depth = 1
-  bfmf_i = bfmf_start + 1
-  while bfmf_i < len(bfmf_prog) {
-    bfmf_c = at(bfmf_prog, bfmf_i)
-    if bfmf_c == "[" {
-      bfmf_depth = bfmf_depth + 1
-    } else if bfmf_c == "]" {
-      bfmf_depth = bfmf_depth - 1
-      if bfmf_depth == 0 { return bfmf_i }
+    bfmf_depth = 1
+    bfmf_i = bfmf_start + 1
+    while bfmf_i < len(bfmf_prog) {
+        bfmf_c = at(bfmf_prog, bfmf_i)
+        if bfmf_c == "[" {
+            bfmf_depth = bfmf_depth + 1
+        } else if bfmf_c == "]" {
+            bfmf_depth = bfmf_depth - 1
+            if bfmf_depth == 0 { return bfmf_i }
+        }
+        bfmf_i = bfmf_i + 1
     }
-    bfmf_i = bfmf_i + 1
-  }
-  return bfmf_i
+    return bfmf_i
 }
 
 # Given prog and index of ']', return index of the matching '['.
 fn bfMatchBackward(bfmb_prog, bfmb_start) {
-  bfmb_depth = 1
-  bfmb_i = bfmb_start - 1
-  while bfmb_i >= 0 {
-    bfmb_c = at(bfmb_prog, bfmb_i)
-    if bfmb_c == "]" {
-      bfmb_depth = bfmb_depth + 1
-    } else if bfmb_c == "[" {
-      bfmb_depth = bfmb_depth - 1
-      if bfmb_depth == 0 { return bfmb_i }
+    bfmb_depth = 1
+    bfmb_i = bfmb_start - 1
+    while bfmb_i >= 0 {
+        bfmb_c = at(bfmb_prog, bfmb_i)
+        if bfmb_c == "]" {
+            bfmb_depth = bfmb_depth + 1
+        } else if bfmb_c == "[" {
+            bfmb_depth = bfmb_depth - 1
+            if bfmb_depth == 0 { return bfmb_i }
+        }
+        bfmb_i = bfmb_i - 1
     }
-    bfmb_i = bfmb_i - 1
-  }
-  return bfmb_i
+    return bfmb_i
 }
 
 # Run a Brainfuck program string; return its collected output as a string.
 # (No live input, so ',' stores 0 into the current cell.)
 fn bfRun(bfr_prog) {
-  bfr_tape = bfMakeTape(256)
-  bfr_dp = 0
-  bfr_ip = 0
-  bfr_out = ""
-  while bfr_ip < len(bfr_prog) {
-    bfr_c = at(bfr_prog, bfr_ip)
-    if bfr_c == ">" {
-      bfr_dp = bfr_dp + 1
-    } else if bfr_c == "<" {
-      bfr_dp = bfr_dp - 1
-    } else if bfr_c == "+" {
-      bfr_v = bfr_tape[bfr_dp] + 1
-      if bfr_v > 255 { bfr_v = 0 }
-      bfr_tape = bfSet(bfr_tape, bfr_dp, bfr_v)
-    } else if bfr_c == "-" {
-      bfr_v = bfr_tape[bfr_dp] - 1
-      if bfr_v < 0 { bfr_v = 255 }
-      bfr_tape = bfSet(bfr_tape, bfr_dp, bfr_v)
-    } else if bfr_c == "." {
-      bfr_out = bfr_out + bfChar(bfr_tape[bfr_dp])
-    } else if bfr_c == "," {
-      bfr_tape = bfSet(bfr_tape, bfr_dp, 0)
-    } else if bfr_c == "[" {
-      if bfr_tape[bfr_dp] == 0 {
-        bfr_ip = bfMatchForward(bfr_prog, bfr_ip)
-      }
-    } else if bfr_c == "]" {
-      if bfr_tape[bfr_dp] != 0 {
-        bfr_ip = bfMatchBackward(bfr_prog, bfr_ip)
-      }
+    bfr_tape = bfMakeTape(256)
+    bfr_dp = 0
+    bfr_ip = 0
+    bfr_out = ""
+    while bfr_ip < len(bfr_prog) {
+        bfr_c = at(bfr_prog, bfr_ip)
+        if bfr_c == ">" {
+            bfr_dp = bfr_dp + 1
+        } else if bfr_c == "<" {
+            bfr_dp = bfr_dp - 1
+        } else if bfr_c == "+" {
+            bfr_v = bfr_tape[bfr_dp] + 1
+            if bfr_v > 255 { bfr_v = 0 }
+            bfr_tape = bfSet(bfr_tape, bfr_dp, bfr_v)
+        } else if bfr_c == "-" {
+            bfr_v = bfr_tape[bfr_dp] - 1
+            if bfr_v < 0 { bfr_v = 255 }
+            bfr_tape = bfSet(bfr_tape, bfr_dp, bfr_v)
+        } else if bfr_c == "." {
+            bfr_out = bfr_out + bfChar(bfr_tape[bfr_dp])
+        } else if bfr_c == "," {
+            bfr_tape = bfSet(bfr_tape, bfr_dp, 0)
+        } else if bfr_c == "[" {
+            if bfr_tape[bfr_dp] == 0 {
+                bfr_ip = bfMatchForward(bfr_prog, bfr_ip)
+            }
+        } else if bfr_c == "]" {
+            if bfr_tape[bfr_dp] != 0 {
+                bfr_ip = bfMatchBackward(bfr_prog, bfr_ip)
+            }
+        }
+        # any other character is a no-op (comment)
+        bfr_ip = bfr_ip + 1
     }
-    # any other character is a no-op (comment)
-    bfr_ip = bfr_ip + 1
-  }
-  return bfr_out
+    return bfr_out
 }
 
 # --------------------------------------------------------------------

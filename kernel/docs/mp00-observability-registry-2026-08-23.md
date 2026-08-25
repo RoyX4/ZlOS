@@ -1,6 +1,6 @@
 # MP-00 crash and event-trace truth
 
-`kernel/observability-registry.json` records 14 crash/log/event capabilities.
+`kernel/metadata/observability-registry.json` records 14 crash/log/event capabilities.
 Six ordinary QEMU boot routes preserve only a SHA-256 of their boot transcript;
 the raw logs are not stored. Heap refusal/diagnostics have limited host proof.
 The dedicated crash route now executes a real `UD2` in the exact current ISO,

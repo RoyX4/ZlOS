@@ -4,7 +4,7 @@ Captured from the vendor driver on this exact silicon (`8086:9B41`), 2026-08-19.
 **Not derived from a manual this tree does not have.**
 
 ```bash
-cd kernel/hosttest
+cd kernel/tests/host
 MESA_SHADER_CACHE_DISABLE=true INTEL_DEBUG=bat ./gpu_fillrate 2>batch.txt
 ```
 
@@ -26,7 +26,7 @@ The decoder prints the raw dword **beside** each decoded field:
 ```
 
 So the capture is a command stream zlOS can **emit**, not a reading aid it has
-to reverse-engineer. `kernel/gpu_batch.inc` (from `gen_gpu_batch.py`) carries all
+to reverse-engineer. `kernel/src/drivers/display/assets/gpu_batch.inc` (from `gen_gpu_batch.py`) carries all
 **3240 dwords across 77 packets**, with a name/offset table so a caller can find
 any packet.
 

@@ -11,7 +11,8 @@ project should do next.
 
 ## What the project believes
 
-[`.ultra/STATE.md`](../../.ultra/STATE.md), the current state doc, under **Open**:
+`.ultra/STATE.md`, the state file used by that 2026-08-19 worktree but not
+present in this checkout, said under **Open**:
 
 > 2. **`RENDER_SURFACE_STATE` bit layout** — the one struct blocking RCS. Searched
 > exhaustively on this box: no genxml, no ISL headers, no i915 files in `libdrm-dev`,
@@ -39,15 +40,15 @@ fill and **0.85×** for copy. The CPU wins on the blitter.
 ## What is actually in the tree
 
 ```
-$ ls -la kernel/gpu_surface.inc
--rw-rw-r-- 1 roy roy 2824 Aug 19 22:17 kernel/gpu_surface.inc
+$ ls -la kernel/src/drivers/display/assets/gpu_surface.inc
+-rw-rw-r-- 1 roy roy 2824 Aug 19 22:17 kernel/src/drivers/display/assets/gpu_surface.inc
 
 $ git log -1 --format='%h %s' 793763a
 793763a feat(gpu): RENDER_SURFACE_STATE - the last render-engine blocker, out of Mesa
 
 $ git show --stat 793763a | tail -4
- kernel/gen_gpu_surface.py | 128 ++++++++++++++++++++++++++
- kernel/gpu_surface.inc    |  77 ++++++++++++++++++++
+ kernel/tools/generators/gen_gpu_surface.py | 128 ++++++++++++++++++++++++++
+ kernel/src/drivers/display/assets/gpu_surface.inc    |  77 ++++++++++++++++++++
  2 files changed, 205 insertions(+)
 ```
 
@@ -80,7 +81,7 @@ And the file itself explains why the exhaustive search failed:
 The agent additionally reports re-extracting the same genxml from
 `libgallium-26.1.5-1.so` read-only and confirming the dword/shift/mask triples match
 field-for-field, and that a **complete captured instance** already sits in
-`kernel/gpu_batch.inc:506-508`, decoding to `gpu_fillrate.c`'s 1920×1200 pitch-7680
+`kernel/src/drivers/display/assets/gpu_batch.inc:506-508`, decoding to `gpu_fillrate.c`'s 1920×1200 pitch-7680
 render target. *Those two checks are the agent's and were not re-run here* — the
 existence, provenance and commit above were.
 
@@ -89,7 +90,7 @@ existence, provenance and commit above were.
 ## The honest remaining state
 
 ```
-$ grep -rn "gpu_surface" kernel/*.c kernel/SOURCES kernel/hosttest/*.c
+$ grep -rn "gpu_surface" kernel/*.c kernel/SOURCES kernel/tests/host/*.c
   (no output)
 ```
 

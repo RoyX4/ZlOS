@@ -1,6 +1,6 @@
 # MP-00 security claim registry
 
-`kernel/security-registry.json` records 17 claims with their protected asset,
+`kernel/metadata/security-registry.json` records 17 claims with their protected asset,
 threat, enforcement point, current evidence, adversarial proof and residual risk.
 It deliberately contains zero production-complete and zero native-hardware-
 complete security claims.

@@ -8,7 +8,7 @@
 # Desktop — the task list
 
 > **THE PLATFORM QUEUE IS DONE, 2026-08-18.** All ten items of
-> [`PLATFORM-PROMPT.md`](PLATFORM-PROMPT.md) landed on `desktop/apps-in-windows`,
+> [`PLATFORM-PROMPT.md`](archive/prompts/PLATFORM-PROMPT.md) landed on `desktop/apps-in-windows`,
 > each with a gate. The state below is superseded where the two disagree —
 > the compositor is the boot state, every app runs in a window, the sticker
 > drag is deleted, there is one source list, and the parked cores render.
@@ -25,7 +25,7 @@
 > **A full account of the 2026-08-17/18 overnight run — what landed, the four
 > things it got wrong, the two changes that measured *slower* and are still
 > here, and what is left — is in
-> [`desktop-overnight-run.md`](desktop-overnight-run.md).**
+> [`desktop-overnight-run.md`](evidence/desktop-overnight-run.md).**
 
 
 **For whoever picks this up next, human or agent.** Ordered. Do them top to
@@ -70,9 +70,9 @@ to do anyway.
 **Step 1 — Roy, or whoever owns that work:**
 
 ```bash
-git add kernel/kernel.zl freestanding/runtime_kernel.c
+git add kernel/src/kernel.zl freestanding/runtime_kernel.c
 git commit -m "wip: usb pointer + serial timeout"
-# or: git stash push kernel/kernel.zl freestanding/runtime_kernel.c
+# or: git stash push kernel/src/kernel.zl freestanding/runtime_kernel.c
 ```
 
 **Step 2 — paste the zl from [`desktop-wiring.md`](desktop-wiring.md).** It is
@@ -329,7 +329,7 @@ want — bilinearly resamples the 48×48 set instead of copying it.
 It got *faster* because two integer divides per pixel cost more than the larger
 atlas costs in cache.
 
-**Verified.** `kernel/probe-shot.py` (new) → `shots/a-dock-zoom.png`, dock at
+**Verified.** `kernel/tools/probes/probe-shot.py` (new) → `shots/a-dock-zoom.png`, dock at
 1920 wide, 3× magnified: edges are smooth, no 2×2 blocks.
 
 ### [x] 0f. Anti-alias `fb_line` — **DONE 2026-08-18**

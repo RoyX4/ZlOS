@@ -13,7 +13,7 @@
 # it is derived and will be overwritten.
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 
 OUT=TODO.md
 BEGIN_HOLD="<!-- BEGIN HAND-WRITTEN -->"
@@ -58,7 +58,7 @@ if command -v clang >/dev/null 2>&1; then
                 case "$f" in ../*) f="${f#../}" ;; *) f="kernel/$f" ;; esac
                 echo "  - [ ] \`$f\` — $c site(s)"
             done
-        echo "- [ ] then run \`kernel/verify-efi.sh\` before believing the boot path"
+        echo "- [ ] then run \`kernel/tools/checks/verify-efi.sh\` before believing the boot path"
         echo
     fi
 fi

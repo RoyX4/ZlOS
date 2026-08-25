@@ -165,7 +165,7 @@ idea from the housekeeping plan.
 `design_scoping_decision.md` is decided but not landed, and both unboxed backends
 already implement the other side. Have a different model argue **against** the
 adopted option, with the corpus numbers in hand (168 assignment sites, 24 of 111
-files, `compiler.zl` needs 8).
+files, `src/selfhost/compiler.zl` needs 8).
 
 A design decision that survives an adversarial read from a model that did not
 make it is worth more than one that was never challenged.

@@ -1,10 +1,12 @@
-> **AUDITED 2026-08-19 · LIVE WORK, NOT HISTORY.** This file was deliberately NOT audited
-> against the merged tree — it is the current task, not a record of an old one.
-> Its two open items (the xHCI event-ring double drain, and the dock readout's
-> digit debris) are carried into
-> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) §§3.1–3.2 and 3.6 as OPEN, with the
-> diagnosis here treated as settled and not re-derived. Work from THIS file;
-> use that one for everything around it.
+> **TRUTH STATE UPDATED 2026-08-25 - IMPLEMENTED, MANUAL ACCEPTANCE OPEN.**
+> This is no longer the live implementation queue. The one-owner xHCI event-ring
+> fix landed in `f334a3a` and merged in `7ddedb0`; the current source drains
+> through `src/drivers/input/xhci.c:xhci_poll()`. The dock digit-debris fix is
+> also present and recorded in [`DECISIONS.md`](DECISIONS.md). The required human
+> live-VM pointer-feel confirmation is not recorded, so that acceptance gate
+> remains unverified. Keep the diagnosis below as historical evidence; use
+> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) for its
+> original audit context and the current project status documents for the queue.
 
 # POINTER-PROMPT — fix the pointer, then audit the whole tree
 
@@ -12,8 +14,8 @@ Two phases, strictly in order. **Do not start phase 2 until phase 1 is
 confirmed by a human looking at a live VM**, not by a gate going green.
 
 Written 2026-08-19, immediately after eleven parallel tracks were merged into
-`main` (see `docs/MERGE-EVIDENCE.md`). The pointer is the first thing a person
-touched afterwards and it is visibly wrong: moving the mouse in `./try.sh`
+`main` (see `docs/evidence/MERGE-EVIDENCE.md`). The pointer is the first thing a person
+touched afterwards and it is visibly wrong: moving the mouse in `./tools/run/try.sh`
 produces jumpy, laggy, unpredictable motion.
 
 ---
@@ -25,16 +27,16 @@ produces jumpy, laggy, unpredictable motion.
 **Two independent drainers of one xHCI event ring.**
 
 ```
-xhci.c:1775   xhci_ptr_poll()   -> event_poll(0, &status, &ctrl, 1)
-xhci.c:1789   xhci_kbd_poll()   -> event_poll(0, &status, &ctrl, 1)
+src/drivers/input/xhci.c:1775   xhci_ptr_poll()   -> event_poll(0, &status, &ctrl, 1)
+src/drivers/input/xhci.c:1789   xhci_kbd_poll()   -> event_poll(0, &status, &ctrl, 1)
 ```
 
 Both take events off the same ring and dispatch whatever they get. Per frame,
-`input.c` calls them at very different rates:
+`src/drivers/input/input.c` calls them at very different rates:
 
 ```
-input.c:527   xhci_ptr_poll()    once, inside pump_mouse()
-input.c:669   xhci_key_event()   in a loop, up to 16 times
+src/drivers/input/input.c:527   xhci_ptr_poll()    once, inside pump_mouse()
+src/drivers/input/input.c:669   xhci_key_event()   in a loop, up to 16 times
 ```
 
 So a pointer report can be consumed by the keyboard loop, and `pump_mouse()` -
@@ -61,18 +63,19 @@ state*, not pollers. Drain generously - bounded, but far more than one - because
 a fast hand produces many reports per frame and the surplus must not sit in the
 ring until the next one.
 
-Do not guess at this. Read `event_poll()` (xhci.c:551), `xhci_kbd_poll()`,
-`ptr_decode()` (xhci.c:1324) and `pump_mouse()` (input.c:~520) first, and check
+Do not guess at this. Read `event_poll()` (`src/drivers/input/xhci.c:551`),
+`xhci_kbd_poll()`, `ptr_decode()` (`src/drivers/input/xhci.c:1324`) and
+`pump_mouse()` (`src/drivers/input/input.c:~520`) first, and check
 whether the dispatch already routes by endpoint - if it does, the fix is mostly
 deletion.
 
 ### Three more things to check, all real, none confirmed as the cause
 
-1. **`try.sh` attaches a `usb-mouse`, not a `usb-tablet`** - so this is the
-   RELATIVE path. `xhci.c:1101` has `ptr_abs` and `ptr_decode()` accumulates
+1. **`tools/run/try.sh` attaches a `usb-mouse`, not a `usb-tablet`** - so this is the
+   RELATIVE path. `src/drivers/input/xhci.c:1101` has `ptr_abs` and `ptr_decode()` accumulates
    relative deltas into `ptr_x/ptr_y` and clamps them to the live screen, so by
-   the time `input.c` sees it, it *is* an absolute position. That is correct.
-   But `input.c`'s `pump_mouse()` decides "tablet" from `xhci_ptr_ready()`, not
+   the time `src/drivers/input/input.c` sees it, it *is* an absolute position.
+   But `src/drivers/input/input.c`'s `pump_mouse()` decides "tablet" from `xhci_ptr_ready()`, not
    from `xhci_ptr_abs()`, and takes the absolute branch either way - which
    silently disables `desktop/feel-and-control`'s acceleration and speed
    settings for every USB mouse. Settings' pointer-speed slider does nothing.
@@ -82,27 +85,29 @@ deletion.
 2. **Three clamps in series**, set by two different callers, and they disagree
    by one:
    ```
-   idt.c:150     mouse_max_x = 2000, mouse_max_y = 1500   (PS/2)
-   input.c:450   bnd_w = 2000, bnd_h = 1500               (accelerated)
-   xhci.c        clamps to console_pxw()-1 / console_pxh()-1
-   fb.c:726-727  idt_set_pointer_bounds(w, h)  and  input_set_bounds(w, h)
-   input.c:454   bnd_w = w - 1     <- minus one
-   idt.c         mouse_max_x = w - 1  <- check this is still true after the merge
+   src/arch/x86/idt.c:150              mouse_max_x = 2000, mouse_max_y = 1500
+   src/drivers/input/input.c:450       bnd_w = 2000, bnd_h = 1500
+   src/drivers/input/xhci.c            clamps to console_pxw()-1 / console_pxh()-1
+   src/graphics/framebuffer/fb.c:726   sets both pointer bounds
+   src/drivers/input/input.c:454       bnd_w = w - 1
+   src/arch/x86/idt.c                  mouse_max_x = w - 1
    ```
    Confirm all three agree on the last valid pixel, and that `fb_setup()` is the
    only writer.
 
 3. **`EV_MOUSE` coalescing drops the button when the position repeats.**
-   `input.c` returns early when `px_x`, `px_y` and `b` all match the last
+   `src/drivers/input/input.c` returns early when `px_x`, `px_y` and `b` all match the last
    published values. That is right. But check the ordering against
-   `wm.c`'s `route_mouse` - a press and release inside one frame is already
-   gone at `idt.c` (it keeps only the current mask), which `input.c`'s own
+   `src/graphics/windowing/wm.c`'s `route_mouse` - a press and release inside one frame is already
+   gone at `src/arch/x86/idt.c` (it keeps only the current mask), which
+   `src/drivers/input/input.c`'s own
    comment admits. With reports now backing up in the ring, that window is
    wider than it was.
 
 ### The gate for phase 1
 
-`probe-mouse.py`, `probe-mouse-sync.py`, `probe-drag.py` and `probe-dock.py`
+`tools/probes/probe-mouse.py`, `tools/probes/probe-mouse-sync.py`,
+`tools/probes/probe-drag.py` and `tools/probes/probe-dock.py`
 exist and drive the pointer headlessly. They are necessary and **not
 sufficient** - every one of them passed while the pointer was visibly broken,
 because they move the pointer in single large jumps and assert on the result,
@@ -113,7 +118,7 @@ asserting that the reported position tracks the sum of the deltas rather than
 lagging behind it. If that test does not fail before the fix, it is not testing
 the bug.
 
-Then, and only then: `./try.sh`, move the mouse by hand, and have Zac confirm.
+Then, and only then: `./tools/run/try.sh`, move the mouse by hand, and have Zac confirm.
 **A human says it is fixed, or it is not fixed.**
 
 ---
@@ -123,7 +128,7 @@ Then, and only then: `./try.sh`, move the mouse by hand, and have Zac confirm.
 The tray reads `frame 0  us peak 0  )08  up 1`. The `)08` is not a value, it is
 the tail of a previous, wider number.
 
-`kernel.zl` draws the status numbers at FIXED x-offsets with **no background
+`src/kernel.zl` draws the status numbers at FIXED x-offsets with **no background
 clear**:
 
 ```
@@ -150,9 +155,9 @@ Fix: clear each number's cell before drawing it, the way `draw_clock` already
 does for `up`. Better, since the font is proportional and the offsets are fixed
 literals: clear the whole tray strip once per redraw and draw the row into it.
 
-Gate: `probe-frame.py` already reads the frame timer over serial and would not
+Gate: `tools/probes/probe-frame.py` already reads the frame timer over serial and would not
 have seen this - it greps the log, not the screen. Photograph the tray with
-`probe-shot.py --crop` at two different peak values and assert the strip is
+`tools/probes/probe-shot.py --crop` at two different peak values and assert the strip is
 identical apart from the digits that changed.
 
 ---
@@ -176,7 +181,7 @@ identical apart from the digits that changed.
 >
 > | | before | after |
 > |---|---|---|
-> | `term.c` line renderer | `fb_text_prop` | `fb_text_aa` |
+> | `src/graphics/windowing/term.c` line renderer | `fb_text_prop` | `fb_text_aa` |
 > | advance | per glyph, avg **14.97 px** | fixed **16 px** |
 > | "mouse ..." row, ink span | 707 px | **814 px** (+15.1%) |
 > | "poke ..." row, ink span | 892 px | **1021 px** (+14.5%) |
@@ -200,7 +205,7 @@ identical apart from the digits that changed.
 > Overnight already contains `663a110`, so a shot from it would look like the
 > *after*. Three independent fingerprints agree, each a grep count: the shot's
 > terminal is proportional and `fb_text_prop(x, ty, line` appears **0** times in
-> overnight's `term.c`; the shot's tray reads `state: compositor  up:`, which
+> overnight's `src/graphics/windowing/term.c`; the shot's tray reads `state: compositor  up:`, which
 > `663a110` is the commit that *replaced*; and the shot's About window says
 > "press h for the app list", which is 0 occurrences on overnight and on main.
 > The shot comes from the `apps-in-windows` lineage. **Every diff run below was
@@ -223,10 +228,10 @@ identical apart from the digits that changed.
 >
 > > **CLOSED 2026-08-19 by `DECISIONS.md` #35 — wrapping, and one correction to
 > > the count above.** It is **75** columns, not 77. 1236/16 = 77 is the CLIENT
-> > rect; `kernel.zl:2934` insets it by the toolkit's padding before `term_draw`
+> > rect; `src/kernel.zl:2934` insets it by the toolkit's padding before `term_draw`
 > > sees it — `term_draw(ax + 8*u, ay + 6*u, aw - 16*u, ah - 12*u, ...)` at
 > > `u = 2` — so the terminal gets 1204 px. The longest `help` line is exactly
-> > **82** characters (`kernel.zl:627`, the i2c row), so seven characters went
+> > **82** characters (`src/kernel.zl:627`, the i2c row), so seven characters went
 > > past the edge, not five.
 > >
 > > Width was the other option this box allowed and it is the wrong one: the
@@ -235,7 +240,7 @@ identical apart from the digits that changed.
 > > scrollback backwards by **display** rows rather than stored ones so the
 > > newest line still lands against the prompt. The typed line had the same
 > > defect and scrolls sideways instead, because the prompt owns one row.
-> > Gated by `hosttest/termwrap`, watched going red.
+> > Gated by `tests/host/termwrap`, watched going red.
 
 Zac's report, and he is right that the two screens differ. Compare
 `docs/shots/before-merge-help.png` (~~desktop/overnight-compositor~~ **the
@@ -251,20 +256,20 @@ overnight - is false, which is what made the search below unwinnable.**
 Ruled out, each by a command whose output was read:
 
 - **No visual function was lost.** Every function `desktop/overnight-compositor`
-  defines in `fb.c` exists in the merged `fb.c`. Diffed both directions on the
+  defines in `src/graphics/framebuffer/fb.c` exists in the merged file. Diffed both directions on the
   full symbol list; the difference is empty.
 - **`fb_text_aa` is byte-identical** to overnight's, as is `fb_glyph_aa`. It
   advances by a fixed `cell_w`, so the terminal is monospace BY DESIGN on both
   branches - the "v10 was proportional" reading is wrong.
-- **`term.c` lost nothing relevant.** The only removal against overnight is the
+- **`src/graphics/windowing/term.c` lost nothing relevant.** The only removal against overnight is the
   unknown-command block, deliberately replaced with exec-track's `term_say`
-  version so the message reaches the serial log for `probe-term.py`.
+  version so the message reaches the serial log for `tools/probes/probe-term.py`.
 - **`prop_big()` being unused** is pre-existing: it is unused on overnight too.
   The compiler warning is not a symptom of the merge.
 
 So the drawing code is intact. That points at **state or parameters**, not
 deleted code - scale, cell size, padding, theme, or the console geometry - which
-narrows it to `kernel.zl`, where fifteen hunks were resolved by hand, and to
+narrows it to `src/kernel.zl`, where fifteen hunks were resolved by hand, and to
 `fb_setup`'s sizing.
 
 Concrete places to start:
@@ -295,7 +300,7 @@ on screen. Both are useful; "looks fine to me" is not.
 Only after phase 1 is confirmed.
 
 Eleven branches were merged in one night. The merge found and fixed a great deal
-(see `docs/MERGE-EVIDENCE.md` §Outcome), but the failure modes it kept hitting
+(see `docs/evidence/MERGE-EVIDENCE.md` §Outcome), but the failure modes it kept hitting
 are the ones a clean merge cannot show, and there is no reason to believe they
 are all found. Audit for these specifically, in this order:
 
@@ -303,11 +308,13 @@ are all found. Audit for these specifically, in this order:
 
 The class that cost the most during the merge. A merge takes one side's removal
 and the other side's use; the result compiles or doesn't depending on luck.
-Already found and fixed: `fb.c`'s 91-line band-parallel block, `editor_key`'s
-body, `verify-raw.sh`'s `OUT`, the whole static-desktop mouse loop.
+Already found and fixed: `src/graphics/framebuffer/fb.c`'s 91-line
+band-parallel block, `editor_key`'s body, `tools/checks/verify-raw.sh`'s `OUT`,
+the whole static-desktop mouse loop.
 
-Sweep: every function called in `kernel/*.c` and `freestanding/*.c` that nothing
-defines; every zl call site that resolves to nothing (`./check-zl-calls.sh`
+Sweep: every function called under `kernel/src/` and `freestanding/*.c` that
+nothing defines; every zl call site that resolves to nothing
+(`./tools/checks/check-zl-calls.sh`
 already does the zl half and is in the gate).
 
 ### 2. Two implementations of one thing, under different names
@@ -323,28 +330,31 @@ Compare per-file symbol lists across `prelanding/*` tags.
 
 ### 3. Fixed addresses
 
-`kernel/memmap.h` is the single source of truth now and has `_Static_assert`s,
-but `check-memmap.sh` used to iterate a **hardcoded nine-name list** and could
+`kernel/src/arch/x86/memmap.h` is the single source of truth now and has
+`_Static_assert`s, but `kernel/tools/checks/check-memmap.sh` used to iterate a
+**hardcoded nine-name list** and could
 not see `DISK_SCRATCH`. It now parses `DISK_SCRATCH`, `DISK_SCRATCH_SIZE`,
 `PAINT_BUF` and `PAINT_MAX`. A full sweep of every `^[A-Z_]+ *= *0x` is still
 the better detector.
 
-`intel.c`'s `edid_buf` default is `HI_EDID` (`0x0BFF0000`, top of the HID
+`kernel/src/drivers/display/intel.c`'s `edid_buf` default is `HI_EDID`
+(`0x0BFF0000`, top of the HID
 window). Host harnesses still override via `intel_set_edid_buffer()`.
 
 ### 4. Gates that cannot fail
 
 Two were found by using them: a `land-gate.sh` that reported the exit status of
-`tail`, and a `verify-clock.sh` that had been committed without ever passing.
+`tail`, and a `kernel/tools/checks/verify-clock.sh` that had been committed without ever passing.
 Check every gate actually fails on a deliberately broken tree. A gate that has
 never gone red has not been tested.
 
 ### 5. The known-broken list
 
 - `key()` on the panel-handover path is gone: it waits on `in_char()` like
-  every other blocking read. `check-zl-calls.sh`'s known-unresolved list is
+  every other blocking read. `kernel/tools/checks/check-zl-calls.sh`'s known-unresolved list is
   empty; the next hole is a FAIL.
-- `font_big.c` and `icons_rgb.c` are referenced by nothing at all.
+- `kernel/src/graphics/fonts/font_big.c` and
+  `kernel/src/graphics/icons/icons_rgb.c` are referenced by nothing at all.
 - `ci/gates-and-agent-brief` landed on `main` (`2550091`).
 - 55 files exist only in `refs/wip/*` snapshots and on no branch - the whole
   `learn/` course, `crypto.c`, `zlfmt.c`, 7 probes, 12 docs.
@@ -361,5 +371,5 @@ never gone red has not been tested.
   has 8 cores and QEMU is under TCG.
 - Every landing is revertable at its `premerge/*` tag. Nothing has been
   force-pushed and nothing should be.
-- Write findings into `docs/MERGE-EVIDENCE.md` or a sibling, not into a chat
+- Write findings into `docs/evidence/MERGE-EVIDENCE.md` or a sibling, not into a chat
   reply. The chat is gone next session; the repo is not.

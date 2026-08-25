@@ -12,9 +12,9 @@ Measurements here were taken on this machine today.
 Measured:
 
 ```
-kernel/hosttest/wmtest      0.136 s     47 assertions, no boot
+kernel/tests/host/wmtest      0.136 s     47 assertions, no boot
 kernel/verify.sh           ~50    s     QEMU, 32-bit BIOS
-kernel/verify-efi.sh     1 m 27  s      QEMU + OVMF
+kernel/tools/checks/verify-efi.sh     1 m 27  s      QEMU + OVMF
 ```
 
 `wmtest`, `fbbench`, `inputtest`, `wmshot` are C against mmap'd memory. They do
@@ -25,15 +25,15 @@ exactly those files.
 The QEMU gates answer "does it still boot". They are the wrong tool for "does
 this button land in the right place", and they cost 600 times more.
 
-### 1.1 `tools/watch.sh` — save the file, see the result
+### 1.1 Watch loop — save the file, see the result
 
 `entr` is already installed. Roughly:
 
 ```bash
-ls kernel/*.c kernel/*.h | entr -c tools/fastloop.sh
+ls kernel/*.c kernel/*.h | entr -c ./future-fastloop
 ```
 
-where `fastloop.sh` rebuilds the hosttest binaries, runs `wmtest`, and re-renders
+where the future fast loop rebuilds the hosttest binaries, runs `wmtest`, and re-renders
 `wmshot` to a PNG. Sub-second, on every save.
 
 Point an image viewer at that PNG and it refreshes as you type. That is a live
@@ -102,7 +102,7 @@ You have deterministic, scriptable gates. That makes `git bisect run` a
 superpower rather than a chore:
 
 ```bash
-./zl bisect kernel/verify-efi.sh good=v0.2 bad=HEAD
+./zl bisect kernel/tools/checks/verify-efi.sh good=v0.2 bad=HEAD
 ```
 
 A wrapper over `git bisect run` that knows how to build first and which exit

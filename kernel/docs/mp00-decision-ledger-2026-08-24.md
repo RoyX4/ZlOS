@@ -54,8 +54,8 @@ The exact open boundary remains:
 ## Commands
 
 ```sh
-python3 kernel/gen-decision-ledger.py --write --selftest
-python3 kernel/gen-decision-ledger.py --check --selftest
+python3 kernel/tools/generators/gen-decision-ledger.py --write --selftest
+python3 kernel/tools/generators/gen-decision-ledger.py --check --selftest
 ```
 
 The landing gate runs both commands before joining the ledger into the evidence

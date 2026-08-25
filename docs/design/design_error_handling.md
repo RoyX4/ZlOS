@@ -4,8 +4,8 @@
 **Scope:** decides *how zl programs and zl tests observe an error*. Recommends
 one new PowerShell script and one added stanza in `verify.ps1`. **No code is
 changed by this document, and nothing in the language changes.** Line-number
-citations are against the tree as it stood on 2026-08-02; `interp.c`,
-`runtime.c` and the test suites were being edited concurrently by another agent,
+citations are against the tree as it stood on 2026-08-02; `src/runtime/interp.c`,
+`src/runtime/runtime.c` and the test suites were being edited concurrently by another agent,
 so treat them as pointers, not anchors.
 
 ---
@@ -32,12 +32,12 @@ Three measured reasons, in order of weight:
    converting crashes into raises is precisely what the current hardening work
    is doing. The harness is the instrument that measures the hardening.
 2. **A real `catch` is five different mechanisms, not one** (§3.4). The
-   interpreter would use its existing unwind flags; `compile.c` emits straight C
+   interpreter would use its existing unwind flags; `src/backends/c/compile.c` emits straight C
    and would need `setjmp`/`longjmp` (which leaks every boxed `Value` allocated
-   in the `try`, and zl has no GC); `compilel.c` emits `ret i64` and would need
+   in the `try`, and zl has no GC); `src/backends/llvm/compilel.c` emits `ret i64` and would need
    either the Itanium EH ABI or an error-flag on every call ABI — a tax on the
    backend `MASTER_PLAN.md` §10 just named as *the* speed backend;
-   `nativert.c` has **no error path whatsoever** (§2.3) so it would need raising
+   `src/backends/native/nativert.c` has **no error path whatsoever** (§2.3) so it would need raising
    built first, in hand-written x86-64. Parity across engines is load-bearing
    here — `tests/test_bitwise.zl:319-321` says so out loud.
 3. **The harness costs nothing and fixes something larger than the twenty
@@ -140,17 +140,17 @@ static void runtime_error(const char *msg)
     exit(1);
 }
 ```
-— `interp.c:219-226`, and byte-for-byte the same body as `rt_error` at
-`runtime.c:18-25`.
+— `src/runtime/interp.c:219-226`, and byte-for-byte the same body as `rt_error` at
+`src/runtime/runtime.c:18-25`.
 
-Call-site counts: **109** in `interp.c`, **101** in `runtime.c`. The eight-site
-gap is expected — `interp.c` has `V_FN` and the compiled runtime does not (§7,
+Call-site counts: **109** in `src/runtime/interp.c`, **101** in `src/runtime/runtime.c`. The eight-site
+gap is expected — `src/runtime/interp.c` has `V_FN` and the compiled runtime does not (§7,
 R6) — but it has not been reconciled and nothing reconciles it.
 
 ### 2.2 There is no unwinding machinery anywhere
 
-`rg` for `setjmp`, `longjmp`, `jmp_buf` across `interp.c`, `runtime.c` and
-`compile.c`: **zero hits.** Every raise is a process exit. There is no
+`rg` for `setjmp`, `longjmp`, `jmp_buf` across `src/runtime/interp.c`, `src/runtime/runtime.c` and
+`src/backends/c/compile.c`: **zero hits.** Every raise is a process exit. There is no
 intermediate state in which an error exists as a thing a program could inspect.
 
 The interpreter *does* have an unwind mechanism, for a different purpose:
@@ -160,16 +160,16 @@ static int   g_returning = 0;
 ...
 static Value g_return_value;
 ```
-— `interp.c:195-198`, with the flags checked at `interp.c:1539`
+— `src/runtime/interp.c:195-198`, with the flags checked at `src/runtime/interp.c:1539`
 (`if (g_returning || g_breaking || g_continuing) return;`), `:1603` and `:1613`.
 
 A fourth flag pair — `g_raising` / `g_raise_value` — would slot into that shape
 cleanly. This is the honest strongest argument *for* option (a), and §4.1 costs
 it properly.
 
-### 2.3 `nativert.c` has no error path at all
+### 2.3 `src/backends/native/nativert.c` has no error path at all
 
-`rg` for `exit`, `abort`, `trap`, `panic` in `nativert.c` (1534 lines): the only
+`rg` for `exit`, `abort`, `trap`, `panic` in `src/backends/native/nativert.c` (1534 lines): the only
 hits are `ExitProcess(0)` at `:1382` and the import-table string at `:1507`. The
 native runtime cannot report an error, let alone catch one. Any in-language
 mechanism has to build raising there before it can build catching.
@@ -188,13 +188,13 @@ this document.
 Three things fall out, and all three matter:
 
 1. **The stdout-before-the-error survives.** The `fflush(stdout)` at
-   `interp.c:221` is what makes that true, and it means a harness can assert on
+   `src/runtime/interp.c:221` is what makes that true, and it means a harness can assert on
    partial output *and* the error together.
 2. **Lex/parse errors and runtime errors are distinguishable by prefix** —
    `line N: ` versus `runtime error: ` — and both exit 1. So the harness can pin
    `tests/test_syntax.zl:645-648`'s NUL case, which no in-language mechanism can
    reach at all, because the file never runs.
-3. **`7 % 0` is not a raise.** `interp.c` computes `%` as
+3. **`7 % 0` is not a raise.** `src/runtime/interp.c` computes `%` as
    `(double)((long long)a % (long long)b)`, so a zero divisor is a hardware
    integer-divide fault. The process is killed by the CPU; nothing is printed;
    the exit status is the Windows structured-exception code, not 1. This is
@@ -227,14 +227,14 @@ keeps.
 
 `design_selfhost_parity.md` §1 settles this and the finding should not be
 re-derived: `verify.ps1` check 1 is `f(f(x)) == f(x)` over **one input**,
-`compiler.zl`, and `compiler.zl` uses only what `compiler.zl` implements. Every
+`src/selfhost/compiler.zl`, and `src/selfhost/compiler.zl` uses only what `src/selfhost/compiler.zl` implements. Every
 W2 feature so far — `elif`, ternary, `in`, f-strings, ranged `for`, `do`/`while`,
 `break`/`continue`, compound assignment, index assignment — landed in the C
 toolchain and the gate stayed green.
 
 So **new syntax does not break the fixpoint.** Adding `try` would move the
 tracked coverage number from `47/110` to `47/111`-ish and nothing else. Per that
-document's recommendation (§6, option a′), `compiler.zl` is a frozen bounded
+document's recommendation (§6, option a′), `src/selfhost/compiler.zl` is a frozen bounded
 subset that *announces* what it refuses; a `try` it does not implement is
 supposed to produce a message and no `out.c`, which is the correct outcome.
 
@@ -245,7 +245,7 @@ This removes the fixpoint from the argument entirely. It does not remove §3.3.
 `MASTER_PLAN.md:665`, **LOCKED**: *"11 reserved words (§4.4)."* Alongside it at
 `:667`: *"Built-ins are identifiers, not keywords."*
 
-`lexer.c:48-54` currently lists **15**:
+`src/frontend/lexer.c:48-54` currently lists **15**:
 
 ```c
 "if", "else", "elif", "for", "in", "fn", "return", "while",
@@ -269,11 +269,11 @@ times; it is five *different* features:
 
 | engine | what `return` compiles to today | what a `catch` would need |
 |---|---|---|
-| `interp.c` | global flags, `g_returning` at `:195`, checked `:1539`, `:1603`, `:1613` | a fourth flag pair — **cheap and idiomatic** |
-| `compile.c` | a real C `return` (`compile.c:370-373`) | `setjmp`/`longjmp` — a *different* mechanism, and it leaks (§4.1) |
-| `compilel.c` | `ret i64` (`compilel.c:326`) — unboxed | Itanium EH (`invoke`/`landingpad`/personality) or an error-flag ABI on every call |
-| `compilef.c` | `long long` numeric subset, 185 lines | refuse it (fine — it already refuses, `:79`, `:120`) |
-| `nativert.c` | hand-written x86-64; only `ExitProcess(0)` at `:1382` | build raising first, by hand, in assembly |
+| `src/runtime/interp.c` | global flags, `g_returning` at `:195`, checked `:1539`, `:1603`, `:1613` | a fourth flag pair — **cheap and idiomatic** |
+| `src/backends/c/compile.c` | a real C `return` (`src/backends/c/compile.c:370-373`) | `setjmp`/`longjmp` — a *different* mechanism, and it leaks (§4.1) |
+| `src/backends/llvm/compilel.c` | `ret i64` (`src/backends/llvm/compilel.c:326`) — unboxed | Itanium EH (`invoke`/`landingpad`/personality) or an error-flag ABI on every call |
+| `src/backends/c/compilef.c` | `long long` numeric subset, 185 lines | refuse it (fine — it already refuses, `:79`, `:120`) |
+| `src/backends/native/nativert.c` | hand-written x86-64; only `ExitProcess(0)` at `:1382` | build raising first, by hand, in assembly |
 
 `design_selfhost_parity.md` §5.2 already quotes `MASTER_PLAN.md:449` on the last
 row: *"each one becomes another hand-assembly job."*
@@ -290,8 +290,8 @@ static const char *SIMULATED[] = {
     "window", "copy", "move", "run", NULL
 };
 ```
-— `interp.c:391-393`. `run` is simulated: it prints what it *would* do
-(`interp.c:812`).
+— `src/runtime/interp.c:391-393`. `run` is simulated: it prints what it *would* do
+(`src/runtime/interp.c:812`).
 
 Two consequences. First, option (c) cannot be written in zl; it is a PowerShell
 file, alongside `run_tests.ps1` and `verify.ps1`, which is where the project's
@@ -300,7 +300,7 @@ test orchestration already lives. Second, no in-language option can be
 experiment.
 
 One thing that *does* exist and helps: `exit(code)` is a real builtin
-(`interp.c:1162-1164`), so a harness snippet can signal a specific status
+(`src/runtime/interp.c:1162-1164`), so a harness snippet can signal a specific status
 deliberately when a raise is not what is being tested.
 
 ---
@@ -314,13 +314,13 @@ try { risky() } catch e { print(e) }
 ```
 
 **Language cost.** Two reserved words (§3.3), one new `NodeType` appended to
-`parser.h` (append at the end — `design_type_system.md` R8 records why
-mid-enum insertion is hazardous: `compilel.c` and `compilef.c` print raw `type
+`src/frontend/parser.h` (append at the end — `design_type_system.md` R8 records why
+mid-enum insertion is hazardous: `src/backends/llvm/compilel.c` and `src/backends/c/compilef.c` print raw `type
 %d` in their unsupported-node errors).
 
 **Engine cost.** §3.4's table, and it is worse than the table suggests:
 
-- **`interp.c` is the cheap one and it is still not cheap.** Adding
+- **`src/runtime/interp.c` is the cheap one and it is still not cheap.** Adding
   `g_raising`/`g_raise_value` and three flag checks is ~30 lines. But
   `runtime_error` is `noreturn` *in practice* at all 109 call sites, and every
   one is written as though it never returns. For example:
@@ -329,27 +329,27 @@ mid-enum insertion is hazardous: `compilel.c` and `compilef.c` print raw `type
   if (nargs<1||args[0].type!=V_STR) runtime_error("env needs a string");
   const char *val = getenv(args[0].str);
   ```
-  — `interp.c:1165-1167`
+  — `src/runtime/interp.c:1165-1167`
 
   If `runtime_error` starts returning, that `getenv` runs on a `Value` that is
   not a string. Every one of the 109 sites must be audited and given an explicit
-  early return. The same audit, 101 sites, in `runtime.c`. **The cost is
+  early return. The same audit, 101 sites, in `src/runtime/runtime.c`. **The cost is
   210 audited call sites, not 30 lines of control flow**, and a missed one is a
   silent memory-safety defect rather than a test failure.
-- **`compile.c` needs a mechanism the interpreter does not use.** Emitted code is
+- **`src/backends/c/compile.c` needs a mechanism the interpreter does not use.** Emitted code is
   straight C with real `return`s, so a `catch` is `setjmp`/`longjmp`. zl is
   boxed: `zl_nil` memsets a fresh 48-byte struct for every value constructed
   (measured, ~31.2M memsets in one `b2_arith` run), and there is no GC. A
   `longjmp` out of a `try` abandons every `Value` allocated inside it. A `try`
   inside a loop leaks unboundedly. That is not a bug to fix later; it is the
   design.
-- **`compilel.c` is the one the plan cares about.** `MASTER_PLAN.md` §10,
+- **`src/backends/llvm/compilel.c` is the one the plan cares about.** `MASTER_PLAN.md` §10,
   2026-08-02: *"LLVM IS THE OPTIMISER. Full stop, for now."* An LLVM error path
   is either the full Itanium EH ABI or a manual error-flag return ABI applied to
   every call — and either one obstructs exactly the `clang -O2` passes the
   backend was adopted for. Adding it taxes the measured parity result (67ms vs
   71, 58 vs 61, 33 vs 33, 62 vs 62) for a feature the tests do not need.
-- **`nativert.c` needs raising before catching**, by hand, in x86-64.
+- **`src/backends/native/nativert.c` needs raising before catching**, by hand, in x86-64.
 
 **Fixpoint cost.** Zero, per §3.2.
 
@@ -378,20 +378,20 @@ g = twice
 print(g(4))          # prints 8
 ```
 
-But `runtime.h:12` is:
+But `src/runtime/runtime.h:12` is:
 
 ```c
 typedef enum { V_NIL, V_NUM, V_STR, V_BOOL, V_LIST } ValueType;
 ```
 
-versus `interp.c:32`:
+versus `src/runtime/interp.c:32`:
 
 ```c
 typedef enum { V_NIL, V_NUM, V_STR, V_BOOL, V_LIST, V_FN } ValueType;
 ```
 
 **There is no `V_FN` in the compiled runtime.** A function value has no
-representation there, so the builtin cannot exist in `runtime.c` at all. The
+representation there, so the builtin cannot exist in `src/runtime/runtime.c` at all. The
 moment a suite uses it, the interp/compiled parity that
 `tests/test_bitwise.zl:321` treats as the contract is broken. (This is a
 pre-existing divergence found while costing this option, not a new one — see §7
@@ -427,7 +427,7 @@ in.
 
 - **Cost to the five engines: zero.** It links against nothing. It runs the
   binaries the build already produces.
-- **Cost to the fixpoint: zero.** No syntax, so `compiler.zl` is untouched and
+- **Cost to the fixpoint: zero.** No syntax, so `src/selfhost/compiler.zl` is untouched and
   the `47/110` number does not move.
 - **Cost to identity: zero.** Nothing is added to the language.
 - **Cost to write: one file, low hundreds of lines, and the project already has
@@ -512,7 +512,7 @@ beats a better thing that ships next quarter.
 `tests/test_math.zl:262-271`:
 
 > ### CRASH - the % operator with a zero right-hand side kills the process.
-> `interp.c` does `(double)((long long)a % (long long)b)`, an INTEGER modulo, so
+> `src/runtime/interp.c` does `(double)((long long)a % (long long)b)`, an INTEGER modulo, so
 > `b == 0` raises a hardware divide-by-zero: the interpreter dies with
 > `0xC0000094` (STATUS_INTEGER_DIVIDE_BY_ZERO) and prints nothing at all.
 
@@ -596,7 +596,7 @@ Concrete, checkable. Any one of these re-opens the decision.
 2. **Nullable/Option lands with flow-sensitive narrowing.** Then (d) costs a
    fraction of today's price and must be re-costed immediately. `design_type_
    system.md:912` is the gate; when that line is deleted, come back here.
-3. **`nativert.c` grows a raise path for any other reason.** The worst row in
+3. **`src/backends/native/nativert.c` grows a raise path for any other reason.** The worst row in
    §3.4's table is then already paid, and (a) gets substantially cheaper.
 4. **The harness gets slow or large** — say >5 seconds or >200 cases. Per-case
    process spawn is then the wrong shape, and the special-form variant of (b)
@@ -623,8 +623,8 @@ reviewer preferring exceptions.
 | R2 | (c) is read as the permanent answer and (d) never gets designed. | §6 trigger 1 is a product trigger and will fire on its own. Step 5 of §5 records (d) as the named successor in the decision log so the deferral is dated, not silent. |
 | R3 | The harness spawns `interp.exe` while another agent is rebuilding it — flaky. | Run it inside `verify.ps1`, after the build, never concurrently. Same discipline `run_tests.ps1` already relies on. |
 | R4 | **Putting `tests/*.zl` into the gate turns eight unknown suites into a blocker.** I have **not** run them; I do not know that they pass. | Measure first. Run all eight by hand once, record the pass/fail baseline the way `design_selfhost_parity.md` §6.4 records `47/110`, and gate on *"no worse than baseline"* before gating on zero. If the baseline is not zero-fail, that is itself a finding worth more than this document. |
-| R5 | The exit-code contract is asserted from `interp.exe` only. `rt_error` (`runtime.c:18-25`) is structurally identical, so compiled binaries *should* match — but **I did not build and check**, per this pass's read-only constraint. | The harness's first job is to verify it: run each case through the C backend too, exactly as `run_tests.ps1` runs its six programs through three engines. If they diverge, that is a parity bug and the harness found it on day one. |
-| R6 | *(Recorded, out of scope — found while costing option (b).)* `runtime.h:12`'s `ValueType` has no `V_FN`; `interp.c:32` does. Functions are first-class in the interpreter (probed: `g = twice; print(g(4))` prints `8`) and have no representation in the compiled runtime. `compile.c:210` emits a bare `v_<name>` for an identifier read, which for a function name is the C function symbol, not a `Value`. | Not fixed here. It is a live interp/compiled divergence and deserves its own fix, in the same spirit `design_selfhost_parity.md` R6 recorded `nativeval.c`'s compound-assignment miscompile rather than losing it. |
+| R5 | The exit-code contract is asserted from `interp.exe` only. `rt_error` (`src/runtime/runtime.c:18-25`) is structurally identical, so compiled binaries *should* match — but **I did not build and check**, per this pass's read-only constraint. | The harness's first job is to verify it: run each case through the C backend too, exactly as `run_tests.ps1` runs its six programs through three engines. If they diverge, that is a parity bug and the harness found it on day one. |
+| R6 | *(Recorded, out of scope — found while costing option (b).)* `src/runtime/runtime.h:12`'s `ValueType` has no `V_FN`; `src/runtime/interp.c:32` does. Functions are first-class in the interpreter (probed: `g = twice; print(g(4))` prints `8`) and have no representation in the compiled runtime. `src/backends/c/compile.c:210` emits a bare `v_<name>` for an identifier read, which for a function name is the C function symbol, not a `Value`. | Not fixed here. It is a live interp/compiled divergence and deserves its own fix, in the same spirit `design_selfhost_parity.md` R6 recorded `src/backends/native/nativeval.c`'s compound-assignment miscompile rather than losing it. |
 | R7 | The `%`-by-zero case (§5 sketch) asserts *wrong* behaviour and someone "fixes" the harness instead of the engine. | Name it in the case label — `"modulo by zero is a CRASH, not a raise"` — and add a one-line comment saying the correct response to a red is to update the case, not to loosen it. |
 | R8 | Twenty cases is a lower bound; more prose-only error facts exist that this pass did not enumerate. | Very likely true. §1.1 states its counting method so the number can be re-derived; treat 20 as a floor and add cases as the `BUGS` blocks are read properly. |
 
@@ -665,9 +665,9 @@ them:
   Git-Bash shell, which truncates; `tests/test_math.zl:264` says `0xC0000094`
   and that is almost certainly right, but the raw `NTSTATUS` was not read
   directly.
-- **Whether `g = twice` even compiles under `compile.c`.** The interpreter probe
-  succeeded; the compiled side was reasoned about from `runtime.h:12` and
-  `compile.c:210`, not built (R6).
+- **Whether `g = twice` even compiles under `src/backends/c/compile.c`.** The interpreter probe
+  succeeded; the compiled side was reasoned about from `src/runtime/runtime.h:12` and
+  `src/backends/c/compile.c:210`, not built (R6).
 - **Whether "no hidden control flow" is a real project commitment.** It is not
   written anywhere I could find (§3.1). If it *is* a commitment, someone should
   write it down, because it is the single cleanest argument against (a) and

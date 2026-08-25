@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Validate and generate the complete zlOS implementation program.
+"""Validate and generate the self-contained zlOS implementation program.
 
-The canonical 906-row research catalogue lives in the sibling zl repository.
-This tool freezes its rows into zl-linux/docs/program/FEATURE-MAP.md and rejects
-coverage, identity, phase, current-app/game and registry drift.
+The canonical 906-row research catalogue is retained under docs/program/research.
+This tool freezes its rows into FEATURE-MAP.md and rejects coverage, identity,
+phase, current-app/game and registry drift without requiring another checkout.
 """
 
 from __future__ import annotations
@@ -18,21 +18,65 @@ from urllib.parse import unquote
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = (
-    ROOT.parent
-    / "zl"
-    / "docs"
-    / "research"
-    / "starred-repositories"
-    / "CANONICAL_COMPLETE_PRODUCT_FEATURE_CATALOG_2026-08-22.md"
-)
 PROGRAM = ROOT / "docs" / "program"
+RESEARCH = PROGRAM / "research"
+SOURCE = RESEARCH / "CANONICAL_COMPLETE_PRODUCT_FEATURE_CATALOG_2026-08-22.md"
 OUTPUT = PROGRAM / "FEATURE-MAP.md"
 CROSSWALK_OUTPUT = PROGRAM / "RESEARCH-CONTRACT-CROSSWALK.md"
 BACKLOG_SOURCES = {
     "core": SOURCE.parent / "IMPLEMENTATION_CONTRACT_BACKLOG_2026-08-21.md",
     "driver-app": SOURCE.parent / "DRIVER_AND_APP_IMPLEMENTATION_CONTRACT_BACKLOG_2026-08-21.md",
     "visual": SOURCE.parent / "VISUAL_BROWSER_AND_APP_EXPERIENCE_CONTRACT_BACKLOG_2026-08-21.md",
+}
+REPOSITORY_SOURCES = {
+    "manifest": RESEARCH / "SOURCE_SNAPSHOT_MANIFEST_2026-08-21.md",
+    "feature-matrix": RESEARCH / "ALL_33_FEATURE_MATRIX_2026-08-21.md",
+    "driver-app-matrix": RESEARCH / "ALL_33_DRIVERS_AND_APPS_MATRIX_2026-08-21.md",
+    "visual-app-matrix": RESEARCH / "ALL_33_VISUAL_WEB_AND_APP_EXPERIENCE_MATRIX_2026-08-21.md",
+}
+
+EXPECTED_RESEARCH_DOCS = {
+    "ADDITIONAL_EXECUTABLE_EVIDENCE_2026-08-21.md",
+    "ALL_33_DRIVERS_AND_APPS_MATRIX_2026-08-21.md",
+    "ALL_33_FEATURE_MATRIX_2026-08-21.md",
+    "ALL_33_VISUAL_WEB_AND_APP_EXPERIENCE_MATRIX_2026-08-21.md",
+    "ARCHITECTURE_OS_AUDIT_2026-08-21.md",
+    "ARCHITECTURE_OS_DRIVERS_AND_APPS_DEEP_DIVE_2026-08-21.md",
+    "ARCHITECTURE_OS_REFUTATION_AND_OMISSIONS_2026-08-21.md",
+    "ARCHITECTURE_OS_VISUAL_WEB_AND_APP_EXPERIENCE_DEEP_DIVE_2026-08-21.md",
+    "CANONICAL_COMPLETE_PRODUCT_FEATURE_CATALOG_2026-08-22.md",
+    "CANONICAL_FEATURE_IMPLEMENTATION_CATALOG_2026-08-21.md",
+    "CHATGPT_VOICE_ON_LINUX_2026-08-21.md",
+    "CLEAN_ROOM_ZL_ZLOS_INTEGRATION_PLAN_2026-08-21.md",
+    "CURRENT_GITHUB_REPOSITORY_PATTERNS_2026-08-21.md",
+    "DRIVER_AND_APP_AUDIT_TAXONOMY_2026-08-21.md",
+    "DRIVER_AND_APP_CLEAN_ROOM_INTEGRATION_PLAN_2026-08-21.md",
+    "DRIVER_AND_APP_IMPLEMENTATION_CONTRACT_BACKLOG_2026-08-21.md",
+    "FOCUSED_REFUTATION_AND_COVERAGE_2026-08-21.md",
+    "FOCUSED_REPOSITORIES_AUDIT_2026-08-21.md",
+    "FOCUSED_REPOSITORIES_DRIVERS_AND_APPS_DEEP_DIVE_2026-08-21.md",
+    "FOCUSED_REPOSITORIES_VISUAL_WEB_AND_APP_EXPERIENCE_DEEP_DIVE_2026-08-21.md",
+    "IMPLEMENTATION_CONTRACT_BACKLOG_2026-08-21.md",
+    "MASTER_RESEARCH_PLAN_AND_TAXONOMY_2026-08-21.md",
+    "MATURE_OS_AUDIT_2026-08-21.md",
+    "MATURE_OS_DRIVERS_AND_APPS_DEEP_DIVE_2026-08-21.md",
+    "MATURE_OS_REFUTATION_AND_OMISSIONS_2026-08-21.md",
+    "MATURE_OS_VISUAL_WEB_AND_APP_EXPERIENCE_DEEP_DIVE_2026-08-21.md",
+    "OS_REPOSITORY_SURVEY_2026-08-20.md",
+    "PROTOS_KERNEL_AUDIT_2026-08-21.md",
+    "README.md",
+    "RESPONSIVENESS_RENDERING_AND_VISUAL_POLISH_DEEP_DIVE_2026-08-22.md",
+    "SOURCE_SNAPSHOT_MANIFEST_2026-08-21.md",
+    "STARRED_REPOSITORY_MAP_2026-08-21.md",
+    "VISUAL_BROWSER_AND_APP_EXPERIENCE_CONTRACT_BACKLOG_2026-08-21.md",
+    "ZLOS_CURRENT_DRIVER_AND_APP_BASELINE_2026-08-21.md",
+    "ZLOS_CURRENT_VISUAL_WEB_AND_APP_EXPERIENCE_BASELINE_2026-08-21.md",
+    "ZLOS_VISUAL_BROWSER_AND_APP_EXPERIENCE_CLEAN_ROOM_PLAN_2026-08-21.md",
+    "language/HANDOFF.md",
+    "language/MASTER_PLAN.md",
+    "language/README.md",
+    "language/ROADMAP.md",
+    "language/ULTIMATE_PLAN.md",
 }
 
 EXPECTED_PREFIX_COUNTS = {
@@ -114,6 +158,7 @@ REGISTRY_ID_RE = re.compile(
 DEPENDENCY_ROW_RE = re.compile(r"^\| (MP-\d{2}) \| ([^|]+?) \|$", re.MULTILINE)
 LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 CONTRACT_RE = re.compile(r"^### ((?:P\d+\.\d+|DA-[A-Z0-9]+|VX-\d+)) — (.+)$", re.MULTILINE)
+REPOSITORY_RE = re.compile(r"^\|\s*\d+\s*\|\s*`([^`]+/[^`]+)`\s*\|", re.MULTILINE)
 
 
 def fail(message: str) -> None:
@@ -184,15 +229,7 @@ def validate_phases() -> None:
         reachable.add(phase)
 
 
-def validate_program_files() -> None:
-    paths = sorted(PROGRAM.glob("*.md"))
-    required = {
-        "README.md", "PHASES.md", "FEATURE-MAP.md", "DRIVERS.md", "SERVICES.md",
-        "APPLICATIONS.md", "LANGUAGE-AGENTS-OPERATIONS.md", "PROOF-GATES.md",
-        "RESEARCH-CONTRACT-CROSSWALK.md", "VALIDATION-RECEIPT.md",
-    }
-    if {path.name for path in paths} != required:
-        fail(f"program file set differs: actual={[path.name for path in paths]!r}")
+def validate_markdown_files(paths: list[Path]) -> None:
     broken: list[str] = []
     for path in paths:
         text = read(path)
@@ -213,6 +250,46 @@ def validate_program_files() -> None:
                 broken.append(f"{path.relative_to(ROOT)} -> {raw_target}")
     if broken:
         fail("broken local links: " + "; ".join(broken))
+
+
+def validate_program_files() -> None:
+    paths = sorted(PROGRAM.glob("*.md"))
+    required = {
+        "README.md", "PHASES.md", "FEATURE-MAP.md", "DRIVERS.md", "SERVICES.md",
+        "APPLICATIONS.md", "LANGUAGE-AGENTS-OPERATIONS.md", "PROOF-GATES.md",
+        "RESEARCH-CONTRACT-CROSSWALK.md", "VALIDATION-RECEIPT.md",
+        "PRODUCT-IMPLEMENTATION-ORDER.md", "PARTIAL-CLOSURE.md",
+    }
+    if {path.name for path in paths} != required:
+        fail(f"program file set differs: actual={[path.name for path in paths]!r}")
+    validate_markdown_files(paths)
+
+
+def validate_research_files() -> int:
+    paths = sorted(RESEARCH.rglob("*.md"))
+    actual = {path.relative_to(RESEARCH).as_posix() for path in paths}
+    if actual != EXPECTED_RESEARCH_DOCS:
+        missing = sorted(EXPECTED_RESEARCH_DOCS - actual)
+        unexpected = sorted(actual - EXPECTED_RESEARCH_DOCS)
+        fail(f"research file set differs: missing={missing!r}, unexpected={unexpected!r}")
+    validate_markdown_files(paths)
+    return len(paths)
+
+
+def validate_repositories() -> int:
+    inventories: dict[str, set[str]] = {}
+    for name, path in REPOSITORY_SOURCES.items():
+        found = REPOSITORY_RE.findall(read(path))
+        if len(found) != 33 or len(set(found)) != 33:
+            fail(f"{name} repository ledger is not 33 unique rows: rows={len(found)} unique={len(set(found))}")
+        inventories[name] = set(found)
+    expected = inventories["manifest"]
+    for name, repositories in inventories.items():
+        if repositories != expected:
+            missing = sorted(expected - repositories)
+            unexpected = sorted(repositories - expected)
+            fail(f"{name} repository set differs: missing={missing!r}, unexpected={unexpected!r}")
+    return len(expected)
 
 
 def extract_current_names(source_text: str) -> list[str]:
@@ -499,6 +576,8 @@ def main() -> int:
         crosswalk = render_contract_crosswalk(contracts)
         validate_generated(CROSSWALK_OUTPUT, crosswalk, args.write)
         validate_program_files()
+        research_doc_count = validate_research_files()
+        repository_count = validate_repositories()
         if args.self_test:
             run_self_test(features)
     except ValueError as error:
@@ -508,6 +587,7 @@ def main() -> int:
         "master-program: PASS: "
         f"features={len(features)} prefixes={len(EXPECTED_PREFIX_COUNTS)} "
         f"phases=21 research_contracts={len(contracts)} registries={sum(registry_counts.values())} "
+        f"research_docs={research_doc_count} repositories={repository_count} "
         f"current_named=61 catalogue=1 games=24"
     )
     print("registry-counts: " + " ".join(f"{key}={value}" for key, value in registry_counts.items()))
