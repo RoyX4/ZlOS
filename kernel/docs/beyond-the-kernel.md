@@ -518,7 +518,7 @@ paid for five times.
 
 ## What this changes about the roadmap
 
-Nothing on `display-roadmap.md` moves. The display driver is still the point and
+Nothing on `archive/superseded/display-roadmap.md` moves. The display driver is still the point and
 is still the thing in flight.
 
 But there is a genuine ordering insight here worth recording: **item 1 above

@@ -66,6 +66,7 @@ carried into newer status and roadmap documents; the old task lists are history.
 | `archive/superseded/desktop-TODO.md` | Audited 30-of-34-complete task list; never use as the current queue. |
 | `archive/superseded/desktop-wiring.md` | Historical copy-paste wiring handoff; current boot already calls the compositor. |
 | `archive/superseded/desktop-northstar-feasibility.md` | Retained layer analysis with explicitly superseded percentage estimates. |
+| `archive/superseded/display-roadmap.md` | Useful display design with a contradicted status table; never use as the current queue. |
 
 `archive/audits/` contains dated task/session audits. `archive/handoffs/`
 contains recovery notes for work that now has a newer receipt or status map.
@@ -77,8 +78,8 @@ snapshot that the later application-registry receipt supersedes.
 
 ## Planning And Research
 
-Current plans such as `driver-build-order.md`, `display-roadmap.md`,
-`gpu-next.md`, and `wireless-plan.md` stay at this level until the planning
+Current plans such as `driver-build-order.md`, `gpu-next.md`, and
+`wireless-plan.md` stay at this level until the planning
 taxonomy pass is complete.
 
 Comparative and source-heavy studies live in `research/`:

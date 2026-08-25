@@ -158,7 +158,7 @@ is *verified* rather than what is intended. Read it before touching `kernel/`.
 plan a merge from it.
 
 `kernel/docs/evidence/display/gen9-modeset-plan.json` is the retained Intel display research record;
-the text is in `.result.plan`). It resolves 13 conflicts between sources and lists
+the text is in `.result.plan`. It resolves 13 conflicts between sources and lists
 hazards that can damage hardware.
 
 ## The formatter re-indents; it does not reformat

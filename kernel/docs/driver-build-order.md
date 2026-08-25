@@ -64,7 +64,7 @@ Everything here is an edit to a file that already exists. None of it is a new dr
 
 ### 0.0 — Display Phase 0.1 comes first, and it is not on this list
 
-`grep` confirms: nothing outside `hosttest/dpll_test.c` calls `intel_link_train_arm`. The cold-start modeset works on hardware and zlOS still cannot light its own panel. `HANDOFF.md` and `display-roadmap.md` both name this as the point of the project, and at least six specs in this survey independently say "do not let this jump the queue." **Finish 0.1 before anything below.** Wave 0's items are small enough to land in the gaps around it; Waves 1+ are not.
+`grep` confirms: nothing outside `hosttest/dpll_test.c` calls `intel_link_train_arm`. The cold-start modeset works on hardware and zlOS still cannot light its own panel. `HANDOFF.md` and `archive/superseded/display-roadmap.md` both name this as the point of the project, and at least six specs in this survey independently say "do not let this jump the queue." **Finish 0.1 before anything below.** Wave 0's items are small enough to land in the gaps around it; Waves 1+ are not.
 
 ### 0.1 — `acpi_find_table()` external linkage
 - **Why now:** six downstream items are gated on one keyword.

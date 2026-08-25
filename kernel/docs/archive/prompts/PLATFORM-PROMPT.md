@@ -96,7 +96,7 @@ move to the next independent item.
 ### 1.5 Do not touch the display driver
 
 `intel.c` write paths can **damage hardware** — the panel's 500 ms T12 delay is
-real. `kernel/docs/display-roadmap.md` is another session's. Not yours.
+real. `kernel/docs/archive/superseded/display-roadmap.md` is another session's. Not yours.
 
 ---
 

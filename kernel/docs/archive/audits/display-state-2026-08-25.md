@@ -181,10 +181,10 @@ they are told is absent.
 | Document | Says | Truth |
 |---|---|---|
 | `kernel/HANDOFF.md` (three places) | nothing in the kernel arms `lt_armed` | `intel.c:4417` does, from `kernel.zl:2063` via `panel_up` |
-| `kernel/docs/display-roadmap.md` §"Where the code actually is" | no VBT parser; hotplug zero lines; 42 `*_A` registers | parser at `intel.c:4512-4571`; `intel_hpd_*` exists; the `_A` macros are `PIPE_REG`-indexed |
+| `kernel/docs/archive/superseded/display-roadmap.md` §"Where the code actually is" | no VBT parser; hotplug zero lines; 42 `*_A` registers | parser at `intel.c:4512-4571`; `intel_hpd_*` exists; the `_A` macros are `PIPE_REG`-indexed |
 | `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md` §5.1 | `key()` halts the kernel on the panel path | closed; `key_get()` loop, `check-zlcalls.py` clean |
 | `kernel/docs/desktop-look.md` §1 | icons destroyed by nearest-neighbour upscale | fixed, bilinear + native atlas |
-| `kernel/docs/display-roadmap.md` STATUS | phases 1–7 "done" | written and register-verified; **40 of their functions have no caller** |
+| `kernel/docs/archive/superseded/display-roadmap.md` STATUS | phases 1–7 "done" | written and register-verified; **40 of their functions have no caller** |
 
 ---
 

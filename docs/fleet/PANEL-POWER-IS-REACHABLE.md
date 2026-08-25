@@ -52,8 +52,8 @@ Four separate assertions to the contrary, in three files:
 
 | file:line | text |
 |---|---|
-| `kernel/docs/display-roadmap.md:21` | *"Does zlOS itself call it? **no** — nothing arms `lt_armed` outside `hosttest/`"* |
-| `kernel/docs/display-roadmap.md:37` | *"Nothing in the kernel arms `lt_armed`, so zlOS still cannot light its own panel"* |
+| `kernel/docs/archive/superseded/display-roadmap.md:21` | *"Does zlOS itself call it? **no** — nothing arms `lt_armed` outside `hosttest/`"* |
+| `kernel/docs/archive/superseded/display-roadmap.md:37` | *"Nothing in the kernel arms `lt_armed`, so zlOS still cannot light its own panel"* |
 | `kernel/HANDOFF.md:209` | *"**Nothing in the kernel ever arms `lt_armed`.** Only `hosttest/dpll_test.c` and …"* |
 | `kernel/HANDOFF.md:313` | *"**Nothing in the kernel arms `lt_armed`.** This runs from the host harness only."* |
 | `kernel/HANDOFF.md:365` | *"…on **one missing caller**: nothing in the kernel arms `lt_armed`."* |
@@ -69,7 +69,7 @@ and that the four statements above cause to be answered wrongly.
 > says nothing in the kernel arms `lt_armed` (`intel.c:4232` does, reachable …
 
 So one line of `HANDOFF.md` records the truth while three later lines of the *same file*
-still assert the falsehood, and `display-roadmap.md` was never updated at all. (The
+still assert the falsehood, and `kernel/docs/archive/superseded/display-roadmap.md` was never updated at all. (The
 banner's `intel.c:4232` is itself stale line-numbering; the arming sites are 4323 and
 4336.)
 

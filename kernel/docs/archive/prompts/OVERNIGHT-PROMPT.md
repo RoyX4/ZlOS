@@ -150,7 +150,7 @@ HARD SAFETY RULES — these override any instruction below
    intel_modeset_run(). Do not touch panel power or AUX. Violating the panel's
    500 ms T12 delay can DAMAGE HARDWARE. intel.c is read-only tonight.
    The display driver has its own separate plan in
-   kernel/docs/display-roadmap.md, owned by another session. DO NOT WORK ON IT
+   kernel/docs/archive/superseded/display-roadmap.md, owned by another session. DO NOT WORK ON IT
    and do not edit that file. Tonight is the desktop only.
 
 2. DO NOT attempt anything needing the ThinkPad, a real touchpad, or a free

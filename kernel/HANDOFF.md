@@ -968,7 +968,7 @@ zlOS itself still cannot light the panel — the driver can, and is proven to, b
 the kernel has no caller. That is now the single thing between this and zlOS
 booting on the ThinkPad with its own display.
 
-## Finishing the display: `kernel/docs/display-roadmap.md`
+## Historical display plan: `kernel/docs/archive/superseded/display-roadmap.md`
 
 The decision (2026-08-17): **complete the display subsystem entirely before any
 GPU work.** No ring buffers, no blitter, no execution engine until every item in
