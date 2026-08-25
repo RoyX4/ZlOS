@@ -27,6 +27,7 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 | `evidence/desktop-platform-run.md` | Platform-track run record. |
 | `evidence/desktop-overnight-run.md` | Overnight compositor run record. |
 | `evidence/performance-architecture-implementation-2026-08-22.md` | Performance architecture implementation batch. |
+| `evidence/exercises/` | Retained exercise images, transcripts and physical/QEMU bundles; disposable new runs still go to ignored `kernel/exercise-out/`. |
 
 ## Archived Prompt Files
 

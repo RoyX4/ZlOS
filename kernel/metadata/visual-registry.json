@@ -1,11 +1,11 @@
 {
   "schema": "zlos.visual-evidence-registry.v1",
   "result": "INVENTORY_WITH_OPEN_GAPS",
-  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "build_identity": "2c873b665279da5a53c3a58bfa9cdd1c53a8a36f73702259a1bb991c1524d90e",
   "assets": [
     {
-      "path": "exercise-out/bios/anim-before.ppm",
-      "sha256": "efaffb722d1900d2e3bdc216304fbc756a26bd05695fb9ca7ea43e96ee976951",
+      "path": "docs/evidence/exercises/2026-08-24/bios/anim-before.ppm",
+      "sha256": "b9ab822532ae0739409090fd43967af90b17db84c73fc9d800ddec65bd9198fc",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -17,8 +17,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/anim.ppm",
-      "sha256": "0b56b4b0aeafe3bcc4bf9e086635270fbc4785a01f713b46a7b5ef56c51893a7",
+      "path": "docs/evidence/exercises/2026-08-24/bios/anim.ppm",
+      "sha256": "9442ccdc2ab64bfcb89d07ecd8bb2756733e7f17b2366790f97626d03899d20d",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -30,8 +30,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/colorbars-before.ppm",
-      "sha256": "8cf359aebfd331111086c0f705459ffb2ddf5895559b16e1a408694e5d3b45a6",
+      "path": "docs/evidence/exercises/2026-08-24/bios/colorbars-before.ppm",
+      "sha256": "57a78cbef191fd6847f08f0a4ef878637472fd00e5d459967a1efcd06402aca0",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -43,8 +43,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/colorbars.ppm",
-      "sha256": "b79706317f43412de84942dfc86d638c51e0c97268a5cdc8bd3fd753fc072028",
+      "path": "docs/evidence/exercises/2026-08-24/bios/colorbars.ppm",
+      "sha256": "63c881f060ed42bb96797ae698d44a3929241833f94a413fcf2c303b4b32ef02",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -56,8 +56,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/cube3d-before.ppm",
-      "sha256": "7e9735a6c07b4e7b12e823475d7a3d8a11188c3a35d8f1d99d61ec252399099c",
+      "path": "docs/evidence/exercises/2026-08-24/bios/cube3d-before.ppm",
+      "sha256": "63c881f060ed42bb96797ae698d44a3929241833f94a413fcf2c303b4b32ef02",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -69,8 +69,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/cube3d.ppm",
-      "sha256": "f79d68ef1df4d66a3dbc6c9ec7d091727f0a9240f82a3b464866d7af70e14116",
+      "path": "docs/evidence/exercises/2026-08-24/bios/cube3d.ppm",
+      "sha256": "8967352d9e10b393b6e04887080ee89a6031ca161742b35c25ee235aee841816",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -82,8 +82,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/editor-before.ppm",
-      "sha256": "f4a66a1c72554b5b87c1a843bd4ac6c1b35b19a80c4b67279944f17fbc92bd29",
+      "path": "docs/evidence/exercises/2026-08-24/bios/editor-before.ppm",
+      "sha256": "7cfba424c74efe7e5d1d1fa56e1263214d9ad8f29b624ef23dc36a5f6896b3f5",
       "bytes": 3072016,
       "format": "PPM-P6",
       "width": 1280,
@@ -95,8 +95,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/editor.ppm",
-      "sha256": "2ea6e674f3a563ce3f79edd2b1c71a185619e5125deead37f93400bd129d0c8b",
+      "path": "docs/evidence/exercises/2026-08-24/bios/editor.ppm",
+      "sha256": "488c92505e5eec2b95bfc7190f96ca4aec4c21fc5c539473177f28c31ad93f38",
       "bytes": 3072016,
       "format": "PPM-P6",
       "width": 1280,
@@ -108,8 +108,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/modeset-before.ppm",
-      "sha256": "22ec1cd29d11f9dfed0798e6e37b4ce81a60c57ee925f5866d4a9ac9f2e4e962",
+      "path": "docs/evidence/exercises/2026-08-24/bios/modeset-before.ppm",
+      "sha256": "149d44596e0861948d8615ea04b8a1a41146e371cfccf6be9bbdb59dd94345fe",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -121,8 +121,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/modeset.ppm",
-      "sha256": "f4a66a1c72554b5b87c1a843bd4ac6c1b35b19a80c4b67279944f17fbc92bd29",
+      "path": "docs/evidence/exercises/2026-08-24/bios/modeset.ppm",
+      "sha256": "475435bc464bb3f3086fbba72fff01c9ce32e850ef3edc3584ea00885c19c564",
       "bytes": 3072016,
       "format": "PPM-P6",
       "width": 1280,
@@ -134,8 +134,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/mouse-before.ppm",
-      "sha256": "f12bf5ef17b67602e9e1e616ec1a3960fd7729f077fe937abb4fdcc9ac11e5e1",
+      "path": "docs/evidence/exercises/2026-08-24/bios/mouse-before.ppm",
+      "sha256": "95a4c0c66f609208f89b0f35c86352268c8e76c1250bf4bc4b9b0381621e3806",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -147,8 +147,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/mouse.ppm",
-      "sha256": "c1c3c3ab8d8aba8145ceecd65236f7aeea96518b315b36ac9960cf66b245230a",
+      "path": "docs/evidence/exercises/2026-08-24/bios/mouse.ppm",
+      "sha256": "0b80fce94003803d85f334ecf17b23d87e9077b219c922fab343eb3de86f7976",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -160,8 +160,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/paint-before.ppm",
-      "sha256": "3e89e6a319c1383ee2efa197caef4338b2bf0c9228c2492e052bd317234ffbc6",
+      "path": "docs/evidence/exercises/2026-08-24/bios/paint-before.ppm",
+      "sha256": "1fa5810640c655ebe920becfe791b0a8dba41194109be6f3cd577e28c95a3904",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -173,8 +173,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/paint.ppm",
-      "sha256": "d631f738cd2330f2062078229cbb1f25d76ef1ba108b1fda1e595587c666e0a5",
+      "path": "docs/evidence/exercises/2026-08-24/bios/paint.ppm",
+      "sha256": "e248d0d5d8b87c21a0a15e8160108f8f1282f15dec7d26547cba4466e44134bb",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -186,8 +186,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/snake-before.ppm",
-      "sha256": "52099559235b091ccca07f2711d8573be0f3dbb434c034789fea60cacecab417",
+      "path": "docs/evidence/exercises/2026-08-24/bios/snake-before.ppm",
+      "sha256": "e720eb79a6f51adcdac00847b10271202de4a3252a9da27e40c702f6d5c56797",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -199,8 +199,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/snake.ppm",
-      "sha256": "26787ba49af6daefac88d7ebe8e838a6fe522c3ba892df035c1d8ea21f1113f7",
+      "path": "docs/evidence/exercises/2026-08-24/bios/snake.ppm",
+      "sha256": "c7ef17454d178bc7b5c3af9093e52e61ccf70cc8f2dfbd33d0b2e1bafa9a3bd2",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -212,7 +212,7 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/virtio_gpu-before.ppm",
+      "path": "docs/evidence/exercises/2026-08-24/bios/virtio_gpu-before.ppm",
       "sha256": "11b8d01bb05554039a8f9d5b5911f5250d5fc5e686fa447cd43370c4c3c37757",
       "bytes": 921615,
       "format": "PPM-P6",
@@ -225,12 +225,12 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/virtio_gpu.ppm",
-      "sha256": "98c7c324482d2d712b6b9a30972033bbff2971962b5c27591669b35ed249cdb4",
-      "bytes": 3072016,
+      "path": "docs/evidence/exercises/2026-08-24/bios/virtio_gpu.ppm",
+      "sha256": "11b8d01bb05554039a8f9d5b5911f5250d5fc5e686fa447cd43370c4c3c37757",
+      "bytes": 921615,
       "format": "PPM-P6",
-      "width": 1280,
-      "height": 800,
+      "width": 640,
+      "height": 480,
       "evidence_class": "PRIOR_QEMU_SCREENSHOT_UNBOUND",
       "current_build_bound": false,
       "build_identity": null,
@@ -238,7 +238,7 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/windows-before.ppm",
+      "path": "docs/evidence/exercises/2026-08-24/bios/windows-before.ppm",
       "sha256": "397018e30e2679ef76f513ef5bf497eee25e9a4f4f2547fb4b0c1e860cc030e5",
       "bytes": 6912017,
       "format": "PPM-P6",
@@ -251,7 +251,7 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/bios/windows.ppm",
+      "path": "docs/evidence/exercises/2026-08-24/bios/windows.ppm",
       "sha256": "5d3eaf7492bb87d9ba2b649b06722fe0fd67445dabee09ec6c2a3478e9eddd56",
       "bytes": 6912017,
       "format": "PPM-P6",
@@ -264,8 +264,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/anim-before.ppm",
-      "sha256": "8ba8ace88724dcc9f692180857fb36a7a25f102086561970483c9891dd878fbb",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/anim-before.ppm",
+      "sha256": "0b4f828cf13f5a457e30d9a6e8fa65fa341143a47b659e43d1ed152841c8976f",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -277,8 +277,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/anim.ppm",
-      "sha256": "0b56b4b0aeafe3bcc4bf9e086635270fbc4785a01f713b46a7b5ef56c51893a7",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/anim.ppm",
+      "sha256": "a7c0c7bd365efe9bcfa0a55e87832f5f7af05aa69e8fdabac5c5e32d5984b268",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -290,8 +290,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/colorbars-before.ppm",
-      "sha256": "4838b79f668bc8f73554a1249389d061332ed844fff8a9982aeceb76b172e0f5",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/colorbars-before.ppm",
+      "sha256": "ee920364ea58c1549165c58895c9ca67db1d0e3cb7af2a293f0a21a52c8a3158",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -303,8 +303,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/colorbars.ppm",
-      "sha256": "0e87ad2cff02827a40db78cfeebb35be31d4c6f76345b555e66f68d2334dfd0b",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/colorbars.ppm",
+      "sha256": "cec1fc09505b615750333cb3e4cbb02f61b4d99e6a85dd931337b051f2421faa",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -316,8 +316,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/cube3d-before.ppm",
-      "sha256": "88b3a2a8726127fbb5c840c82918494d9053ec0ba7228e8f18800a873a194d70",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/cube3d-before.ppm",
+      "sha256": "288125a8ac00e901e3e3ef45f95dd98bb20f4bbec5b70393d9eb3b385c122099",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -329,8 +329,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/cube3d.ppm",
-      "sha256": "f79d68ef1df4d66a3dbc6c9ec7d091727f0a9240f82a3b464866d7af70e14116",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/cube3d.ppm",
+      "sha256": "a7fda9a6ea201194a3d19ab8f818d07a4203e9638aff1aa293bc1cf02557efd7",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -342,8 +342,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/editor-before.ppm",
-      "sha256": "d2569ffbdffb1757eff041efac8422444285fe4c87e51a6a387357990401a54f",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/editor-before.ppm",
+      "sha256": "1f7b662a34b53e39b386a1eb39d33c246feff994f842dfdb1a4bbc693103b701",
       "bytes": 3072016,
       "format": "PPM-P6",
       "width": 1280,
@@ -355,8 +355,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/editor.ppm",
-      "sha256": "2ea6e674f3a563ce3f79edd2b1c71a185619e5125deead37f93400bd129d0c8b",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/editor.ppm",
+      "sha256": "da8db59e6d5525c84350aec677d5074f1515610dd7bd63bc4ee41d64e79acdc4",
       "bytes": 3072016,
       "format": "PPM-P6",
       "width": 1280,
@@ -368,8 +368,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/modeset-before.ppm",
-      "sha256": "180896a32ba96b6d75a527960e1d0b23939329d53d664b858b326ebcfc2281fd",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/modeset-before.ppm",
+      "sha256": "2df143b575a9f056341c5535eb7bc66f1876293ada28d899dbbc8e8fd08cca2a",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -381,8 +381,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/modeset.ppm",
-      "sha256": "d2569ffbdffb1757eff041efac8422444285fe4c87e51a6a387357990401a54f",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/modeset.ppm",
+      "sha256": "933867f318ba048b9f9a4a1af8d4070031e11649feeefbd311c3b1c3d626f0fa",
       "bytes": 3072016,
       "format": "PPM-P6",
       "width": 1280,
@@ -394,8 +394,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/mouse-before.ppm",
-      "sha256": "be189dd94f74ea909e55bd68c99c32bcaa94bb354dcc627abc705c1eb6a34ed0",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/mouse-before.ppm",
+      "sha256": "4dca3311ed0c38cdcdce8f2b7ed8a753749c0d9d73d795c3ea6854f0c7ed1bbf",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -407,8 +407,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/mouse.ppm",
-      "sha256": "c1c3c3ab8d8aba8145ceecd65236f7aeea96518b315b36ac9960cf66b245230a",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/mouse.ppm",
+      "sha256": "8b889d21346e93cbc9d89793f8393b8f8943f79ef345ab6e1910b108e1bcbd4a",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -420,8 +420,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/paint-before.ppm",
-      "sha256": "379611551e369c12a5f1ff118c283164406042aaedf986eb191df31d9f866084",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/paint-before.ppm",
+      "sha256": "9c0a87cd50e251e62bcd1dfeeded560d65b1af82f32b34da4f5486be9e7ca86a",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -433,8 +433,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/paint.ppm",
-      "sha256": "d631f738cd2330f2062078229cbb1f25d76ef1ba108b1fda1e595587c666e0a5",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/paint.ppm",
+      "sha256": "2563a8afc13116d44e986f50f3c8f0547c362bb18c111a22e3f176ace5d784fc",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -446,8 +446,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/snake-before.ppm",
-      "sha256": "b4c165d4a2835bef26845d2d751ab79e4bea39656f289c6de5f1d23c3e8052c3",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/snake-before.ppm",
+      "sha256": "53b02764605427bd36e14317a74de35819328ac4332c81ef9e1c5f1b0974bb37",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -459,8 +459,8 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/snake.ppm",
-      "sha256": "dd44da855ee81e43cf96e61c17e7ea3b11de5ae7bdf6ed6be2f1e2318d13b7e7",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/snake.ppm",
+      "sha256": "60fc7e066ffbf12544d840959a845ad44298e34b96cfcfcf964e638acf35d4bf",
       "bytes": 6912017,
       "format": "PPM-P6",
       "width": 1920,
@@ -472,7 +472,7 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/virtio_gpu-before.ppm",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/virtio_gpu-before.ppm",
       "sha256": "5d7d732b6065090c1cc779f3df3ae09f82101b9091f3283375b74cf40807b142",
       "bytes": 3072016,
       "format": "PPM-P6",
@@ -485,7 +485,7 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/virtio_gpu.ppm",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/virtio_gpu.ppm",
       "sha256": "98c7c324482d2d712b6b9a30972033bbff2971962b5c27591669b35ed249cdb4",
       "bytes": 3072016,
       "format": "PPM-P6",
@@ -498,7 +498,7 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/windows-before.ppm",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/windows-before.ppm",
       "sha256": "0e87ad2cff02827a40db78cfeebb35be31d4c6f76345b555e66f68d2334dfd0b",
       "bytes": 6912017,
       "format": "PPM-P6",
@@ -511,7 +511,7 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "exercise-out/uefi/windows.ppm",
+      "path": "docs/evidence/exercises/2026-08-24/uefi/windows.ppm",
       "sha256": "7c6959435c470c651f4ae454efcb91bc9b7315b9dec482eaf1ffba8badf19b7f",
       "bytes": 6912017,
       "format": "PPM-P6",
@@ -524,72 +524,7 @@
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
-      "path": "hosttest/browsershot.ppm",
-      "sha256": "4ebab409029c1010f249e24b87b0be2b7a5dd7b695746cde0a24b446ad3860ac",
-      "bytes": 4908017,
-      "format": "PPM-P6",
-      "width": 1636,
-      "height": 1000,
-      "evidence_class": "HOST_RENDER_UNBOUND",
-      "current_build_bound": false,
-      "build_identity": null,
-      "route": null,
-      "reason": "host renderer output; no scenario/build sidecar"
-    },
-    {
-      "path": "hosttest/wmshot.ppm",
-      "sha256": "58c2dc6da52d85c2d26c4cba3e335ea7c8afff583095adf796c1884f5ff591b3",
-      "bytes": 6912017,
-      "format": "PPM-P6",
-      "width": 1920,
-      "height": 1200,
-      "evidence_class": "HOST_RENDER_UNBOUND",
-      "current_build_bound": false,
-      "build_identity": null,
-      "route": null,
-      "reason": "host renderer output; no scenario/build sidecar"
-    },
-    {
-      "path": "shots/catalog-launched.png",
-      "sha256": "45874d91655c9973ed41bd7b465faad03768e531a49c92cd5481c1ae91d376a7",
-      "bytes": 161763,
-      "format": "PNG",
-      "width": 1280,
-      "height": 800,
-      "evidence_class": "PRIOR_QEMU_SCREENSHOT_UNBOUND",
-      "current_build_bound": false,
-      "build_identity": null,
-      "route": null,
-      "reason": "image name suggests prior QEMU evidence; no current build sidecar"
-    },
-    {
-      "path": "shots/catalog-menu.png",
-      "sha256": "3b49a78d42b1fe3542dc2a52d443388727f5df469d532f09fb7085267a676653",
-      "bytes": 165184,
-      "format": "PNG",
-      "width": 1280,
-      "height": 800,
-      "evidence_class": "PRIOR_QEMU_SCREENSHOT_UNBOUND",
-      "current_build_bound": false,
-      "build_identity": null,
-      "route": null,
-      "reason": "image name suggests prior QEMU evidence; no current build sidecar"
-    },
-    {
-      "path": "shots/catalog-open.png",
-      "sha256": "6061a8e2086a57f9186be36bbed3d9916d5f55fef3190bb3a3dc141dd88b0188",
-      "bytes": 176319,
-      "format": "PNG",
-      "width": 1280,
-      "height": 800,
-      "evidence_class": "PRIOR_QEMU_SCREENSHOT_UNBOUND",
-      "current_build_bound": false,
-      "build_identity": null,
-      "route": null,
-      "reason": "image name suggests prior QEMU evidence; no current build sidecar"
-    },
-    {
-      "path": "virtio-gpu-proof.png",
+      "path": "docs/evidence/virtio-gpu-proof.png",
       "sha256": "7eb5db93b535385edff8463206a5492805f8bb4dd505bfb7fcc4c9e47acc1d48",
       "bytes": 15556,
       "format": "PNG",
@@ -605,160 +540,160 @@
   "bios_uefi_pairs": [
     {
       "scenario": "anim-before.ppm",
-      "bios_path": "exercise-out/bios/anim-before.ppm",
-      "uefi_path": "exercise-out/uefi/anim-before.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/anim-before.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/anim-before.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "anim.ppm",
-      "bios_path": "exercise-out/bios/anim.ppm",
-      "uefi_path": "exercise-out/uefi/anim.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/anim.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/anim.ppm",
       "same_dimensions": true,
-      "byte_identical": true,
+      "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "colorbars-before.ppm",
-      "bios_path": "exercise-out/bios/colorbars-before.ppm",
-      "uefi_path": "exercise-out/uefi/colorbars-before.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/colorbars-before.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/colorbars-before.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "colorbars.ppm",
-      "bios_path": "exercise-out/bios/colorbars.ppm",
-      "uefi_path": "exercise-out/uefi/colorbars.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/colorbars.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/colorbars.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "cube3d-before.ppm",
-      "bios_path": "exercise-out/bios/cube3d-before.ppm",
-      "uefi_path": "exercise-out/uefi/cube3d-before.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/cube3d-before.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/cube3d-before.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "cube3d.ppm",
-      "bios_path": "exercise-out/bios/cube3d.ppm",
-      "uefi_path": "exercise-out/uefi/cube3d.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/cube3d.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/cube3d.ppm",
       "same_dimensions": true,
-      "byte_identical": true,
+      "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "editor-before.ppm",
-      "bios_path": "exercise-out/bios/editor-before.ppm",
-      "uefi_path": "exercise-out/uefi/editor-before.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/editor-before.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/editor-before.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "editor.ppm",
-      "bios_path": "exercise-out/bios/editor.ppm",
-      "uefi_path": "exercise-out/uefi/editor.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/editor.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/editor.ppm",
       "same_dimensions": true,
-      "byte_identical": true,
+      "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "modeset-before.ppm",
-      "bios_path": "exercise-out/bios/modeset-before.ppm",
-      "uefi_path": "exercise-out/uefi/modeset-before.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/modeset-before.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/modeset-before.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "modeset.ppm",
-      "bios_path": "exercise-out/bios/modeset.ppm",
-      "uefi_path": "exercise-out/uefi/modeset.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/modeset.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/modeset.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "mouse-before.ppm",
-      "bios_path": "exercise-out/bios/mouse-before.ppm",
-      "uefi_path": "exercise-out/uefi/mouse-before.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/mouse-before.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/mouse-before.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "mouse.ppm",
-      "bios_path": "exercise-out/bios/mouse.ppm",
-      "uefi_path": "exercise-out/uefi/mouse.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/mouse.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/mouse.ppm",
       "same_dimensions": true,
-      "byte_identical": true,
+      "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "paint-before.ppm",
-      "bios_path": "exercise-out/bios/paint-before.ppm",
-      "uefi_path": "exercise-out/uefi/paint-before.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/paint-before.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/paint-before.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "paint.ppm",
-      "bios_path": "exercise-out/bios/paint.ppm",
-      "uefi_path": "exercise-out/uefi/paint.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/paint.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/paint.ppm",
       "same_dimensions": true,
-      "byte_identical": true,
+      "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "snake-before.ppm",
-      "bios_path": "exercise-out/bios/snake-before.ppm",
-      "uefi_path": "exercise-out/uefi/snake-before.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/snake-before.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/snake-before.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "snake.ppm",
-      "bios_path": "exercise-out/bios/snake.ppm",
-      "uefi_path": "exercise-out/uefi/snake.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/snake.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/snake.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "virtio_gpu-before.ppm",
-      "bios_path": "exercise-out/bios/virtio_gpu-before.ppm",
-      "uefi_path": "exercise-out/uefi/virtio_gpu-before.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/virtio_gpu-before.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/virtio_gpu-before.ppm",
       "same_dimensions": false,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "virtio_gpu.ppm",
-      "bios_path": "exercise-out/bios/virtio_gpu.ppm",
-      "uefi_path": "exercise-out/uefi/virtio_gpu.ppm",
-      "same_dimensions": true,
-      "byte_identical": true,
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/virtio_gpu.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/virtio_gpu.ppm",
+      "same_dimensions": false,
+      "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "windows-before.ppm",
-      "bios_path": "exercise-out/bios/windows-before.ppm",
-      "uefi_path": "exercise-out/uefi/windows-before.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/windows-before.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/windows-before.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
     },
     {
       "scenario": "windows.ppm",
-      "bios_path": "exercise-out/bios/windows.ppm",
-      "uefi_path": "exercise-out/uefi/windows.ppm",
+      "bios_path": "docs/evidence/exercises/2026-08-24/bios/windows.ppm",
+      "uefi_path": "docs/evidence/exercises/2026-08-24/uefi/windows.ppm",
       "same_dimensions": true,
       "byte_identical": false,
       "evidence_ceiling": "unbound route comparison only"
@@ -791,9 +726,9 @@
     }
   },
   "counts": {
-    "assets": 46,
-    "prior_qemu_unbound": 44,
-    "host_render_unbound": 2,
+    "assets": 41,
+    "prior_qemu_unbound": 41,
+    "host_render_unbound": 0,
     "current_build_bound": 0,
     "bios_uefi_pairs": 20,
     "variant_dimensions_complete": 0,
@@ -808,9 +743,9 @@
     "backend"
   ],
   "evidence_ceiling": "asset inventory and unbound BIOS/UEFI pairing only; no current visual-regression promotion",
-  "weakest_link": "none of 46 images names the current build identity; all six required variant dimensions remain open",
+  "weakest_link": "none of 41 images names the current build identity; all six required variant dimensions remain open",
   "generator": {
-    "path": "kernel/gen-visual-registry.py",
-    "sha256": "942dff5a5e15a0cdb72d1e3116b0790896168fa20763ac59e57ea3be71793169"
+    "path": "kernel/tools/generators/gen-visual-registry.py",
+    "sha256": "36a132f6a4743498789a7cb506024f00898cfd74d0507cfcae19c819a8ea49ed"
   }
 }

@@ -559,7 +559,7 @@ def build() -> dict:
             "typed_event_target_integration_missing": event_schema["counts"]["target_emitters"] == 0,
         },
         "generator": {
-            "path": "kernel/gen-evidence-registry.py",
+            "path": "kernel/tools/generators/gen-evidence-registry.py",
             "sha256": sha256(Path(__file__).resolve()),
         },
         "evidence_ceiling": (

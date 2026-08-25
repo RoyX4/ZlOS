@@ -72,10 +72,14 @@ The structure reconciliation also publishes the complete local research shelf
 and its documentation audit. Moving and publishing them does not change
 implementation status.
 
-The static validator currently passes for inventory, repository identity,
-identifiers, dependencies, links, and generated-file freshness in the isolated
-verification tree. That proves the plan is internally complete. It does not
-prove the product is implemented.
+The static validator currently passes for program inventory, repository
+identity, identifiers, dependencies and links in the isolated verification
+tree. The visual and accessibility registries also pass their independent
+generator checks. The downstream release-note/provenance/evidence chain is not
+fresh: its inputs contain three incompatible historical build identities, so
+regeneration stops instead of silently joining unlike evidence. That open
+boundary is recorded as T-8 in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md).
+These checks prove planning consistency, not product implementation.
 
 ## Implementation State
 

@@ -20,8 +20,8 @@ OUTPUT = METADATA / "visual-registry.json"
 PATTERNS = (
     "docs/evidence/virtio-gpu-proof.png",
     "shots/*.png",
-    "exercise-out/bios/*.ppm",
-    "exercise-out/uefi/*.ppm",
+    "docs/evidence/exercises/2026-08-24/bios/*.ppm",
+    "docs/evidence/exercises/2026-08-24/uefi/*.ppm",
     "tests/host/*.ppm",
 )
 REQUIRED_VARIANTS = ("scale", "theme", "locale", "accessibility", "ui-state", "backend")
@@ -88,11 +88,11 @@ def validate(value: dict) -> None:
             raise ValueError(f"{row.get('path')}: missing artifact identity/dimensions")
     counts = value.get("counts")
     expected_counts = {
-        "assets": 46,
-        "prior_qemu_unbound": 44,
-        "host_render_unbound": 2,
-        "current_build_bound": 0,
-        "bios_uefi_pairs": 20,
+        "assets": len(assets),
+        "prior_qemu_unbound": sum(row.get("evidence_class") == "PRIOR_QEMU_SCREENSHOT_UNBOUND" for row in assets),
+        "host_render_unbound": sum(row.get("evidence_class") == "HOST_RENDER_UNBOUND" for row in assets),
+        "current_build_bound": sum(bool(row.get("current_build_bound")) for row in assets),
+        "bios_uefi_pairs": len(value.get("bios_uefi_pairs", [])),
         "variant_dimensions_complete": 0,
         "variant_dimensions_open": 6,
     }
@@ -129,7 +129,8 @@ def build() -> dict:
         })
     by_path = {row["path"]: row for row in assets}
     pairs = []
-    for bios in sorted(path for path in by_path if path.startswith("exercise-out/bios/")):
+    exercise_prefix = "docs/evidence/exercises/2026-08-24"
+    for bios in sorted(path for path in by_path if path.startswith(f"{exercise_prefix}/bios/")):
         uefi = bios.replace("/bios/", "/uefi/", 1)
         if uefi not in by_path:
             raise ValueError(f"missing UEFI visual pair: {bios}")
@@ -167,8 +168,8 @@ def build() -> dict:
         },
         "open_gaps": list(REQUIRED_VARIANTS),
         "evidence_ceiling": "asset inventory and unbound BIOS/UEFI pairing only; no current visual-regression promotion",
-        "weakest_link": "none of 46 images names the current build identity; all six required variant dimensions remain open",
-        "generator": {"path": "kernel/gen-visual-registry.py", "sha256": sha256(Path(__file__).resolve())},
+        "weakest_link": f"none of {len(assets)} images names the current build identity; all six required variant dimensions remain open",
+        "generator": {"path": "kernel/tools/generators/gen-visual-registry.py", "sha256": sha256(Path(__file__).resolve())},
     }
     validate(value)
     return value

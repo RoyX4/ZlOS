@@ -34,7 +34,6 @@ zl-linux/
 |   |-- tests/                host, oracle, reference, and fixture tests
 |   |-- tools/                checks, generators, image builders, probes, runners
 |   |-- metadata/             generated machine-readable registries
-|   |-- exercise-out/         legacy mixed output/evidence location; migration pending
 |   `-- docs/                 current kernel docs, evidence, and archive
 |-- tools/                    repository maintenance tools
 |-- gates/                    landing orchestration
@@ -49,6 +48,7 @@ zl-linux/
 `-- kernel/docs/
     |-- README.md             kernel documentation front door
     |-- evidence/             dated implementation and run receipts
+    |   `-- exercises/        retained visual/QEMU/physical exercise artifacts
     |-- receipts/             machine-readable evidence and recovery archives
     `-- archive/              old prompts, audits, and handoffs
 ```

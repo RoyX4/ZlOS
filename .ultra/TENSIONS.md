@@ -159,3 +159,35 @@ open._` while T-3 through T-6 visibly remained open in the source document.
 **Fix:** accept both level-two/three OPEN heading forms, derive the TODO text
 from the actual heading, and keep `--selftest-tensions` as a two-format
 regression check.
+
+---
+
+## T-8 — Generated evidence manifests disagree on build identity. OPEN.
+
+The retained visual evidence moved from ignored `kernel/exercise-out/` into
+`kernel/docs/evidence/exercises/2026-08-24/`. The visual and accessibility
+registries now regenerate independently, but the downstream release-note,
+provenance-viewer and joined-evidence generators cannot refresh honestly.
+
+The checked-in inputs contain three incompatible build identities:
+
+| Identity | Current owners |
+|---|---|
+| `2c873b665279da5a53c3a58bfa9cdd1c53a8a36f73702259a1bb991c1524d90e` | build identity, license, toolchain, visual and accessibility registries |
+| `1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04` | source/build graph, wrapper and artifact registries |
+| `85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13` | decision, benchmark, security, observability, release, provenance and joined-evidence registries |
+
+`python3 kernel/tools/generators/gen-release-notes.py --check --selftest`
+currently stops with `release-note manifests disagree on build identity`.
+The provenance check independently stops with `provenance inputs disagree on
+build identity`, and the joined-evidence check stops with `registry build
+identities disagree`.
+Consequently, `kernel/metadata/provenance-viewer.json` and
+`kernel/docs/provenance-viewer.html` remain dated artifacts: they still report
+46 visuals while the current visual registry discovers 41.
+
+**Close by:** choose or regenerate one authoritative build identity, bring every
+input registry onto it from the same source/artifact snapshot, then regenerate
+release notes, provenance viewer, evidence registry and feature status in
+dependency order. All generator `--check --selftest` gates must pass before the
+viewer is described as current.

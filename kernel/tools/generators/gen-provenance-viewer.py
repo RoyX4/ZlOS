@@ -281,7 +281,7 @@ def build_model() -> dict:
         },
         "open_gaps": OPEN_GAPS,
         "generator": {
-            "path": "kernel/gen-provenance-viewer.py",
+            "path": "kernel/tools/generators/gen-provenance-viewer.py",
             "sha256": sha256(Path(__file__).resolve()),
         },
         "evidence_ceiling": "static host-viewable provenance projection; not a booted zlOS app, live monitor, authenticated remote service or signed release portal",

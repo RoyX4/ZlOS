@@ -487,7 +487,7 @@ def build() -> dict:
         },
         "open_gaps": OPEN_GAPS,
         "generator": {
-            "path": "kernel/gen-release-notes.py",
+            "path": "kernel/tools/generators/gen-release-notes.py",
             "sha256": sha256(Path(__file__).resolve()),
         },
         "evidence_ceiling": "generated unreleased development changelog; not a versioned, signed, distributed or runtime-complete release",

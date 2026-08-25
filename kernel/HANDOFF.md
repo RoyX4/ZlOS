@@ -138,7 +138,7 @@ the ThinkPad, do not upload firmware, and are not a connection claim.
 > TrackPoint/mouse acceleration curve. `i2c` is now immediate read-only status;
 > it no longer resets/re-probes the live bus or blocks the compositor for five
 > seconds. The old physical journal is archived losslessly under
-> `exercise-out/physical-touchpad-2026-08-24/`. Focused transport/decoder/input
+> `docs/evidence/exercises/2026-08-24/physical-touchpad-2026-08-24/`. Focused transport/decoder/input
 > tests, 16 recorder tests, the broad host compile, four source builds, the
 > ten-line native UEFI Terminal gate and full EFI gate are green. The corrected
 > 512 MiB-history image is flashed/read back on Imation serial

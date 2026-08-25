@@ -24,7 +24,7 @@ _none — every file the docs describe is tracked._
 
 ## Open tensions (.ultra/TENSIONS.md)
 
-_none open._
+- [ ] **T-8** — Generated evidence manifests disagree on build identity.
 
 ## Open pull requests
 

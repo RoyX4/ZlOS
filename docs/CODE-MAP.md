@@ -65,8 +65,8 @@ evidence under `docs/`.
 | `examples_out/` | Example program artifacts. |
 | `kernel/*.elf`, `kernel/*.img`, `kernel/*.iso`, `kernel/*.EFI` | zlOS boot/build artifacts. |
 | `kernel/_gen*.c`, `kernel/out.c` | Generated C from zl kernel sources. |
-| `kernel/shots/`, `/shots/` | Disposable visual/QEMU run output. |
-| `kernel/exercise-out/` | Mixed legacy location: ignored new output plus 50 tracked evidence files awaiting an atomic registry-aware move. |
+| `kernel/shots/`, `kernel/exercise-out/`, `/shots/` | Disposable visual/QEMU run output. |
+| `kernel/docs/evidence/exercises/` | Curated exercise, QEMU, and physical evidence retained with receipts and registry paths. |
 | `kernel/tests/host/*` binaries | Host harness build output; the `.c` files are source. |
 
 ## Structural Guardrail

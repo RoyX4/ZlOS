@@ -1,5 +1,13 @@
 # MP-00 provenance viewer — 2026-08-24
 
+> **Freshness notice (2026-08-25):** this is a dated generated artifact, not a
+> current projection. The retained visual inventory moved into
+> `docs/evidence/exercises/` and now contains 41 images, while the checked-in
+> viewer still reports 46. Regeneration correctly stops because its source
+> manifests carry three incompatible build identities. T-8 in
+> [`.ultra/TENSIONS.md`](../../.ultra/TENSIONS.md) records the identities,
+> failing command and closure gate.
+
 ## Result
 
 [`../metadata/provenance-viewer.json`](../metadata/provenance-viewer.json) and the self-contained

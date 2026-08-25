@@ -120,7 +120,7 @@ def build() -> dict:
         "open_gaps": [row["id"] for row in rows if row["status"] != "HOST_PASSED"],
         "evidence_ceiling": "host input/focus/scale primitives only; no complete assistive or target workflow promotion",
         "weakest_link": "semantic tree and assistive providers do not exist; no all-app keyboard, QEMU or native a11y workflow receipt",
-        "generator": {"path": "kernel/gen-accessibility-registry.py", "sha256": sha256(Path(__file__).resolve())},
+        "generator": {"path": "kernel/tools/generators/gen-accessibility-registry.py", "sha256": sha256(Path(__file__).resolve())},
     }
     validate(value)
     return value
