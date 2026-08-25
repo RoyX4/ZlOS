@@ -23,7 +23,7 @@ implementation state. They are not the same thing.
 | This reconciliation worktree | `codex/full-program`; published baseline `b8e5f8a45164` plus local documentation and executable checker repairs | Isolated at `/home/roy/Documents/repos/zl-linux-final`. The published restructure remains intact. Local commits repair status, land/memory-map/TODO contracts, and the EFI hazard scanner; they are intentionally unpushed while automatic boot CI is deferred. No local runtime or hardware proof is claimed. |
 | Older structure worktree | Dirty `codex/full-restructure`, based on `85fcdf542b9c` | Preserved at `/home/roy/Documents/repos/zl-linux-structure` with 566 pending entries from the older migration. It is input history, not the active finalization tree. |
 | Original shared checkout | Dirty `codex/local-zlos-snapshot-2026-08-24` at `/home/roy/Documents/repos/zl-linux` | Preserved with 183 pending entries. Its untracked display audit has now been recovered into this branch as explicitly historical evidence; the shared checkout itself was not rewritten. |
-| Desktop redesign worktree | Dirty `design/desktop-redesign`, based on `85fcdf542b9c` | `/home/roy/Documents/repos/zl-linux-desktop-redesign` contains 164 untracked design/spec/prototype files (35,563,972 bytes). No kernel implementation is claimed and the corpus is not yet in Git. |
+| Desktop redesign worktree | Clean `design/desktop-redesign` at `66eadd0` | The 164-file design/spec/prototype corpus and five later SPREAD updates are committed locally in `/home/roy/Documents/repos/zl-linux-desktop-redesign`. Nothing is merged or pushed, and no kernel implementation is claimed. |
 | `zl-linux-merge-all` | Clean at `4b9883123682` | Local checkout of the pushed integration head and the best place to inspect final merged state. |
 | `RoyX4/zl:main` | Pushed at `6f53115` | Separate language repository. Its local `main` matches the remote, but the working directory has untracked local output. |
 | `zl-merge-all` | Local head `5207d5c`, five commits ahead of `RoyX4/zl:main` | The raw GitHub/other-OS research is committed locally. Two repository-pattern commits are on `origin/codex/github-repo-patterns`; the complete merge head is not on remote `main`. |
@@ -45,7 +45,7 @@ authority.
 |---|---|---|
 | `files-app` | `6b40dfb61cee` | Clean; matches `origin/files-app`. |
 | `secret/desktop-foundry` | `1c96bfebe361` | Clean; matches `origin/secret/desktop-foundry`. |
-| `design/desktop-redesign` | `85fcdf542b9c` | 164 untracked design files; no upstream; no kernel implementation. |
+| `design/desktop-redesign` | `66eadd0` | Clean; two local documentation commits, no upstream, no kernel implementation. |
 | `codex/master-program-foundation` | `11c711eab261` | Clean; matches `github/codex/master-program-foundation`. |
 | Three detached Claude worktrees | `bb1d623b9b49`, `84cecae63019`, `b8a00ec45ac1` | Clean and preserved; their commits are already in `origin/main`. |
 | `codex/local-zlos-snapshot-2026-08-24` | `85fcdf542b9c` | Dirty shared checkout containing the uncommitted cleanup inputs; do not overwrite it. |
