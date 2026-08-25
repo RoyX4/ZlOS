@@ -51,7 +51,11 @@ where things live, not what is complete.
 | `docs/evidence/` | measured history | Merge, pointer, and comparison records retained as evidence. |
 | `docs/evidence/visual-diffs/` | curated evidence | Small before/after visual comparisons that were intentionally kept. |
 | `docs/archive/` | stale/history | Superseded plans, old prompts, backups, and documents kept for context only. |
-| `kernel/docs/` | kernel records | Current kernel references and plans, with dated receipts in `evidence/` and old prompts/audits/handoffs in `archive/`. |
+| `kernel/docs/architecture/`, `kernel/docs/concepts/` | kernel design context | Boot/system contracts and bounded conceptual explainers. |
+| `kernel/docs/desktop/`, `kernel/docs/drivers/`, `kernel/docs/features/` | subsystem records | Current design, implementation notes, and feature contracts grouped by owner. |
+| `kernel/docs/guides/`, `kernel/docs/plans/`, `kernel/docs/reference/`, `kernel/docs/research/` | operator and engineering context | Runbooks, status-qualified plans, stable references, and source-heavy research. |
+| `kernel/docs/evidence/` | retained kernel evidence | Dated implementation receipts, display research, MP-00 execution receipts, and curated exercise bundles. |
+| `kernel/docs/archive/` | kernel history | Superseded plans, old prompts, audits, and handoffs. |
 | `kernel/docs/receipts/` | machine evidence | JSON and archive receipts consumed by metadata/provenance tooling. |
 
 ## Generated Output

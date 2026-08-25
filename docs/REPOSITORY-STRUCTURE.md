@@ -35,7 +35,7 @@ zl-linux/
 |   |-- tests/                host, oracle, reference, and fixture tests
 |   |-- tools/                checks, generators, image builders, probes, runners
 |   |-- metadata/             generated machine-readable registries
-|   `-- docs/                 current kernel docs, evidence, and archive
+|   `-- docs/                 kernel docs grouped by purpose and subsystem
 |-- tools/                    repository maintenance tools
 |-- gates/                    landing orchestration
 |-- docs/
@@ -48,8 +48,17 @@ zl-linux/
 |   `-- archive/              superseded plans, prompts, backups, handoffs
 `-- kernel/docs/
     |-- README.md             kernel documentation front door
+    |-- architecture/         boot and system contracts
+    |-- concepts/             bounded feasibility and ownership explainers
+    |-- desktop/              desktop design, pacing, input, and workspace notes
+    |-- drivers/              display and network implementation notes
     |-- evidence/             dated implementation and run receipts
     |   `-- exercises/        retained visual/QEMU/physical exercise artifacts
+    |-- features/             feature-specific contracts
+    |-- guides/               operator and onboarding runbooks
+    |-- plans/                current or explicitly status-qualified plans
+    |-- reference/            stable system and UI specifications
+    |-- research/             comparative and source-heavy studies
     |-- receipts/             machine-readable evidence and recovery archives
     `-- archive/              old prompts, audits, and handoffs
 ```
