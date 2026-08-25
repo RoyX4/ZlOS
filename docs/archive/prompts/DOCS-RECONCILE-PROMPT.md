@@ -16,7 +16,7 @@ and mark the 21 as superseded rather than deleting them.
 
 ## Why this is not just "read the docs"
 
-**They are stale by construction.** `desktop-TODO.md` alone is 44 KB of items
+**They are stale by construction.** `kernel/docs/archive/superseded/desktop-TODO.md` alone is 44 KB of items
 written before six of the tracks landed. Reading it tells you what someone
 *wanted*, not what is *true*. Every claim has to be checked against the merged
 tree.
@@ -40,7 +40,7 @@ All 21 are on `main` as of this commit - the six that were orphaned in
 any archaeology.
 
 ```
-kernel/docs/desktop-TODO.md                    44 KB
+kernel/docs/archive/superseded/desktop-TODO.md 44 KB
 kernel/docs/gen9-modeset-plan.txt              59 KB   (JSON; text in .result.plan)
 kernel/docs/archive/prompts/OVERNIGHT-PROMPT.md                35 KB   <- produced 19 compositor commits
 kernel/docs/evidence/desktop-v10-plan.md       16 KB

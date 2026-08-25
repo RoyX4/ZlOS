@@ -13,7 +13,7 @@
 > two can be compared; where reality disagreed with it, §8 says so.
 
 **Written 2026-08-18, as the handoff into a fresh session.** Read this, then
-`desktop-TODO.md` for the numbered task list.
+`archive/superseded/desktop-TODO.md` for the numbered task list.
 
 The decision already taken: **option 2 — adopt the prototype's structure,
 effects and typography, keep zlOS's navy/cyan palette.** Not a full repaint.
@@ -266,7 +266,7 @@ and everything wants the compositor to be the thing that boots.
 
 Prototype: `~/zl OS v10.dc.html` · Contract: [`../../src/graphics/ui/ui.h`](../../src/graphics/ui/ui.h) · Wiring:
 [`desktop-wiring.md`](../desktop-wiring.md) · Task list:
-[`desktop-TODO.md`](../desktop-TODO.md) · Numbers:
+[`desktop-TODO.md`](../archive/superseded/desktop-TODO.md) · Numbers:
 [`desktop-polish-and-speed.md`](../desktop-polish-and-speed.md) · Last night:
 [`desktop-overnight-run.md`](desktop-overnight-run.md)
 

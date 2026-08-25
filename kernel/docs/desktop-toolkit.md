@@ -195,12 +195,12 @@ ui.c          NEW: layout cursor, widgets, theme          <- this document
     |
 wm.c          windows, z-order, focus, damage, routing    <- archive/superseded/desktop-plan.md
     |
-fb.c          pixels + clip rect + damage list            <- desktop-TODO.md 0b/0c
+fb.c          pixels + clip rect + damage list            <- archive/superseded/desktop-TODO.md 0b/0c
 ```
 
 **`ui.c` depends on `fb_clip` existing.** A widget must not draw outside its
 window, and clipping is the only thing that guarantees that. So
-`desktop-TODO.md` step 0b is a hard prerequisite — the same step the compositor
+`archive/superseded/desktop-TODO.md` step 0b is a hard prerequisite — the same step the compositor
 and the 3D rasterizer both need. Third customer for one small change.
 
 ---
@@ -255,6 +255,6 @@ path actually works.
 
 ---
 
-Architecture: `archive/superseded/desktop-plan.md` · Task list: `desktop-TODO.md` · Why the gap
+Architecture: `archive/superseded/desktop-plan.md` · Task list: `archive/superseded/desktop-TODO.md` · Why the gap
 existed: `desktop-northstar-feasibility.md` · Theme idea source:
 `os-landscape.md`

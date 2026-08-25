@@ -175,4 +175,4 @@ prints one extra line, the gate fails.
 ---
 
 Contract: `ui.h` · Mechanism: `wm.c` · Widgets: `ui.c` · Seam: `wmglue.c` ·
-Task list: `desktop-TODO.md` · Blocks: `../../.ultra/TENSIONS.md` T-8, T-9
+Task list: `archive/superseded/desktop-TODO.md` · Blocks: `../../.ultra/TENSIONS.md` T-8, T-9

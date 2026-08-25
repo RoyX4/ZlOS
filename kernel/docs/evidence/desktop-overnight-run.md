@@ -316,7 +316,7 @@ object store, and is what should have been used from the start.
 
 ---
 
-Task list: [`desktop-TODO.md`](../desktop-TODO.md) · Wiring:
+Task list: [`desktop-TODO.md`](../archive/superseded/desktop-TODO.md) · Wiring:
 [`desktop-wiring.md`](../desktop-wiring.md) · Decisions:
 [`DECISIONS.md`](../DECISIONS.md) · Numbers:
 [`desktop-polish-and-speed.md`](../desktop-polish-and-speed.md) · Blocks:

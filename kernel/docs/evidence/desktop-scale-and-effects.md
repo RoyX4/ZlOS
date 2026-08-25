@@ -301,7 +301,7 @@ for hours while nothing drew one.
 
 Scale and cost numbers: `desktop-polish-and-speed.md` · What the mockup asks
 for: `desktop-northstar-feasibility.md` · The run that built the primitives:
-`desktop-v10-plan.md` §8 · Task list: `desktop-TODO.md`
+`desktop-v10-plan.md` §8 · Task list: `../archive/superseded/desktop-TODO.md`
 
 ---
 

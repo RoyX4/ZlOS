@@ -187,4 +187,4 @@ Same class as P-3.
 Queue: [`PLATFORM-PROMPT.md`](../archive/prompts/PLATFORM-PROMPT.md) · Bands:
 [`desktop-smp-bands.md`](desktop-smp-bands.md) · Previous run:
 [`desktop-overnight-run.md`](desktop-overnight-run.md) · Tasks:
-[`desktop-TODO.md`](../desktop-TODO.md) · Blocks: `../../../.ultra/TENSIONS.md`
+[`desktop-TODO.md`](../archive/superseded/desktop-TODO.md) · Blocks: `../../../.ultra/TENSIONS.md`

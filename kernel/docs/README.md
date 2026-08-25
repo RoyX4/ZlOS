@@ -56,6 +56,7 @@ can move together; do not use it as the live queue.
 | `archive/prompts/NEXT-PROMPT.md` | Superseded dated ranking. |
 | `archive/superseded/feature-catalogue-2026-08-17.md` | Stale pre-program feature/status survey; replaced by `docs/program/`. |
 | `archive/superseded/desktop-plan.md` | Audited inversion plan: useful decisions, superseded task/status body. |
+| `archive/superseded/desktop-TODO.md` | Audited 30-of-34-complete task list; never use as the current queue. |
 
 `archive/audits/` contains dated task/session audits. `archive/handoffs/`
 contains recovery notes for work that now has a newer receipt or status map.

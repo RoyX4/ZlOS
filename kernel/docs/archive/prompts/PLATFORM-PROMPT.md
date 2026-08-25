@@ -40,7 +40,7 @@ kernel/HANDOFF.md                    what is VERIFIED, not intended
 CLAUDE.md                            the traps, all paid for at least once
 kernel/docs/evidence/desktop-overnight-run.md what landed 2026-08-17/18 and what it cost
 kernel/docs/desktop-wiring.md        how zl and C meet, and why it works
-kernel/docs/desktop-TODO.md          the numbered task list
+kernel/docs/archive/superseded/desktop-TODO.md  the numbered task list
 kernel/ui.h                          the layering contract - read this twice
 ```
 
@@ -332,7 +332,7 @@ In order, forever. This is what "keep going" means.
   state each demo holds, before converting any of them
 - an adversarial reviewer on the SMP band code — concurrency is exactly where a
   second opinion earns its cost
-- a doc-writing agent to keep `desktop-TODO.md` in step while you build
+- a doc-writing agent to keep `archive/superseded/desktop-TODO.md` in step while you build
 
 **Bad uses**
 - anything that boots QEMU in parallel with your own gate

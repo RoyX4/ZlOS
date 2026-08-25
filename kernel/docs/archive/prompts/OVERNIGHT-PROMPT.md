@@ -51,7 +51,7 @@ go to the next.
 READ FIRST, IN THIS ORDER
   kernel/HANDOFF.md
   kernel/docs/DECISIONS.md          every decision already taken, and two that were wrong
-  kernel/docs/desktop-TODO.md       the ordered task list — this is your work queue
+  kernel/docs/archive/superseded/desktop-TODO.md  historical ordered task list
   kernel/docs/desktop-build-guide.md  what a compositor is, in plain words
   kernel/docs/archive/superseded/desktop-plan.md  architecture and line numbers
   kernel/docs/desktop-toolkit.md    the immediate-mode toolkit design
@@ -116,13 +116,13 @@ SURVIVING A CONTEXT RESET
   that happens you must be able to resume from DISK, not from memory. So:
 
     - YOUR STATE LIVES IN FILES, NOT IN YOUR HEAD.
-    - Tick the checkbox in kernel/docs/desktop-TODO.md the moment a task's
+    - Tick the checkbox in kernel/docs/archive/superseded/desktop-TODO.md the moment a task's
       gate goes green. That file is your resume point.
     - Append to .ultra/STATE.md as you go — one line per landed change. Do not
       save it all for the end.
     - Commit on every green gate. Small commits are breadcrumbs.
     - If you ever find yourself unsure what you were doing: read
-      desktop-TODO.md, find the first unticked box you can safely do, and do
+      archive/superseded/desktop-TODO.md, find the first unticked box you can safely do, and do
       that. Do not stop to work out where you were.
 
 ANTI-IDLE BACKLOG — if you genuinely finish A-H, do these, in order, forever
@@ -610,7 +610,7 @@ HOW TO WORK
   kernel/hosttest/build.sh. NEVER report a performance number you did not
   measure — an instruction count is not a measurement. That mistake was already
   made once today; see DECISIONS.md #25.
-- Update kernel/docs/desktop-TODO.md checkboxes as you go.
+- Update kernel/docs/archive/superseded/desktop-TODO.md checkboxes as you go.
 - Append anything learned to .ultra/LEARNINGS.md and anything broken to
   .ultra/TENSIONS.md.
 - Keep kernel/HANDOFF.md honest: record what is VERIFIED, not what is intended.

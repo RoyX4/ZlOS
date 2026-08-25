@@ -964,7 +964,7 @@ offered afterwards.** Logged to `~/.claude/CLAUDE.md`, the vault's
 ---
 
 Docs: `look-and-speed.md` (the frame budget, the vsync survey, what is next) ·
-`desktop-build-guide.md` (start here) · `desktop-TODO.md` (the task list) ·
+`desktop-build-guide.md` (start here) · `archive/superseded/desktop-TODO.md` (historical task list) ·
 `archive/superseded/desktop-plan.md` · `desktop-look.md` · `desktop-polish-and-speed.md` ·
 `desktop-northstar-feasibility.md` · `desktop-prior-art.md` ·
 `os-landscape.md` · `intel-graphics-stack.md`

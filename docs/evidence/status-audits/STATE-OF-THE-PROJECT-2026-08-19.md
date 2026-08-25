@@ -253,7 +253,7 @@ build error — it is silently truncated and jumped into
 that is a pure code regression rather than a documentation error, and it is
 `MERGE-EVIDENCE.md`'s own under-weighted class — a deletion that kept nothing.
 One cherry-pick of ~10 lines. Then `kernel/docs/evidence/desktop-v10-plan.md §8.2.5`,
-`desktop-TODO.md` and `HANDOFF.md` become true.
+`kernel/docs/archive/superseded/desktop-TODO.md` and `HANDOFF.md` become true.
 
 *Source: xcheck-contradiction XC-08; V10-29, DTODO-39.*
 
@@ -621,7 +621,7 @@ description of the tree. That does not change the ranking — nothing else unblo
 applications — but a reader who budgets fifteen builtins will be wrong by an
 order of magnitude.
 
-Two documents call this their own highest-leverage item (`desktop-TODO.md` T-18,
+Two documents call this their own highest-leverage item (`kernel/docs/archive/superseded/desktop-TODO.md` T-18,
 `desktop-northstar-feasibility.md`). They are right. Everything the mockup still
 lacks is applications, and applications in this repo are zl.
 
@@ -811,7 +811,7 @@ said**: `hosttest/wmtest.c:465-499`, `hosttest/wmtest_feel.c:144-146` and
 `:573-607`, and `hosttest/wmshot.c:138-140`. `wmshot` is the one that matters,
 because §4.6 and §14 both send the reader to build and look at it. `settings.c:187`
 mentions `ui_list_row` only in a comment about a draft that was removed.
-`desktop-TODO.md` marks the toolkit done "through `ui_scroll`"; it is not.
+`kernel/docs/archive/superseded/desktop-TODO.md` marks the toolkit done "through `ui_scroll`"; it is not.
 
 *Source: OVN-PROC-07 vs DTODO-24; xcheck-status-conflict lens.*
 
@@ -1921,10 +1921,10 @@ every row the tree is the referee.
 | Did `LINE_BUF`/`DISK_SCRATCH` fire? | `MERGE-EVIDENCE.md` Outcome: no, it was fixed | five readers: it is live | **The readers.** No commit ever set `0x02040000` (§8.1) |
 | Is the browser worth building, and what gates it? | `kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md`: not worth it, needs a heap | `HANDOFF.md:390`: that call was wrong, the gate is a heap | **Neither reason survives.** Eight browser/network `.c` files are in SOURCES and a browser window opens at boot, and they were built with **no heap** — `fs.c:17`, `html.c:1`, `browser.c:84` say so in their own comments. And `beyond-the-kernel.md`, the doc HANDOFF nominates as the correction, is not in the repo (§10.2) |
 | Does `fb3d.c` have a caller? | `GRAPHICS-18`: no caller at all | `OSLAND-01`: full chain, done | **Split by symbol.** The file is reachable; the *tiled* rasterizer is not, deliberately and with the measurement attached (§4.13) |
-| Is the toolkit done "through `ui_scroll`"? | `desktop-TODO.md`: yes | `OVERNIGHT-PROMPT.md`: caller-less | **B**, for those two widgets; the rest of the toolkit is used from C (§4.8) |
+| Is the toolkit done "through `ui_scroll`"? | `kernel/docs/archive/superseded/desktop-TODO.md`: yes | `OVERNIGHT-PROMPT.md`: caller-less | **B**, for those two widgets; the rest of the toolkit is used from C (§4.8) |
 | Hotplug | `display-roadmap.md`: done | `kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md`: not started | **Neither.** Decode exists, nothing can call it, no interrupt path (§5.6) |
 | EDID over AUX | roadmap: done / plan: partial / `HANDOFF.md:252`: still missing | | **All three wrong differently** (§5.5) |
-| Is the frame time on screen? | `desktop-TODO.md`: done | `PLATFORM-PROMPT.md`: partial | **Both, of different destinations** — tray yes, System Monitor no (§4.9) |
+| Is the frame time on screen? | `kernel/docs/archive/superseded/desktop-TODO.md`: done | `PLATFORM-PROMPT.md`: partial | **Both, of different destinations** — tray yes, System Monitor no (§4.9) |
 | How big is zlOS? | `11,374` lines, cited in 8 places incl. on-screen text at `wmshot.c:128` | three readers gave 41,970 / ~27,982+3,995 / 38,176+74,569 | **All four are unusable, and so was the cross-check's own replacement.** The spread is entirely explained by undeclared denominators — a fifth attempt while writing this file produced 84,933 from a differently-quoted pathspec. See the boxed measurement below; use that, with its command attached |
 | Does this box have 4 cores? | `CLAUDE.md:57` and six planning docs: 4 | `nproc`: 8 | **8.** Flag but do not change `land-gate.sh:37`'s `loadavg > 4.0` guard (`:36` is the tail of the comment above it) — whether 4.0 is still right on 8 cores is a judgment call, and a conservative guard is not a defect |
 | Was `GRAPHICS_PLAN.md` annotated? | `HANDOFF.md:590` and `DECISIONS.md:193`: yes, in place | `git log`: one commit, the add | **No annotation exists.** `grep -ci 'supersed\|stale\|annotat\|zlOS'` over it returns 0. A reader following HANDOFF's pointer opens 136 lines of user32/gdi32/opengl32 FFI with no warning attached |
@@ -1996,7 +1996,7 @@ was verified against the merged tree.
 | The documents say | The tree says |
 |---|---|
 | "Window server / compositor — DESIGNED, unbuilt" (`kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md`) | `wm.c` is 1,582 lines, in SOURCES, and **is the boot state**. `kernel.zl:3782 wm_boot = wm_boot_start()` |
-| "Nothing here is started" (`desktop-TODO.md:27`) | In a document whose own banner at `:3` declares the platform queue done, above **27** `### [x]` headings (`grep -c '^### \[x\]'`; 31 `### [` headings in all). The first draft said 29 and did not measure it |
+| "Nothing here is started" (`kernel/docs/archive/superseded/desktop-TODO.md:27`) | In a document whose own banner at `:3` declares the platform queue done, above **27** `### [x]` headings (`grep -c '^### \[x\]'`; 31 `### [` headings in all). The first draft said 29 and did not measure it |
 | "Nothing here is implemented" (`kernel/docs/archive/superseded/desktop-plan.md:7`) | About an inversion that is now the boot state |
 | "Clipping / scissor — NO, the keystone gap" (`kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md`) | `fb.c:763-798` is the scissor; `wm.c`, `ui.c`, `browser.c`, `term.c` all use it; `fbbench.c:482-527` asserts it suppresses pixels |
 | "Buttons, sliders, toggles, scrollbars — NO" | **Split.** Buttons, sliders and toggles are real and used from C: `ui.c:250`, `:317`, `:286`, called at `settings.c:203, 208, 212, 214, 217, 218` — seven of the widgets defined in `ui.c:239-476` are called from that file, out of 31 `ui_*` calls in it overall (`grep -oE '\bui_[a-z_]+\(' kernel/src/graphics/ui/settings.c \| wc -l`). **Scrollbars are NOT done** — `ui_scroll_begin/end/content` and `ui_list_row` have no caller outside three host harnesses (§4.8). The first draft's "16 call sites" matched no reproducible denominator and closed a widget group this document elsewhere proves open |

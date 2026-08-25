@@ -281,7 +281,7 @@ got it by porting Mesa, which needs POSIX.
 
 **The path is SerenityOS's:**
 
-1. **`fb_clip`** — a scissor rectangle in `fb.c` (`desktop-TODO.md` 0b). A
+1. **`fb_clip`** — a scissor rectangle in `fb.c` (`archive/superseded/desktop-TODO.md` 0b). A
    rasterizer needs clipping before anything else. `fb3d.c` already has its own
    private clip; `fb.c` does not.
 2. **Tiled rasterization** — 16×16 blocks, barycentric coordinates, edge

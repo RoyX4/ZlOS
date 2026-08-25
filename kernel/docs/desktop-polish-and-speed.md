@@ -328,7 +328,7 @@ unions to the **whole screen, every second**.
 
 Dragging a window should touch perhaps 5% of the screen. Today it touches 100%.
 
-**The damage system in `desktop-TODO.md` step 0c is not an optimisation. It is
+**The damage system in `archive/superseded/desktop-TODO.md` step 0c is not an optimisation. It is
 the requirement.** At 1440p on one core, a full-screen redraw per frame is
 inherently marginal — no amount of per-pixel tuning fixes drawing 3.7M pixels
 when 200k changed.
@@ -339,7 +339,7 @@ Every shadow pixel, every anti-aliased glyph edge and every rounded corner calls
 `fb_get_px`. With the back buffer on, that is a RAM read — fine. With it **off**,
 it is a VRAM read, which `fb.c:76` measures at **30–50× slower**.
 
-And the back buffer is off at 2560×1440. See `desktop-TODO.md` step 0a. This is
+And the back buffer is off at 2560×1440. See `archive/superseded/desktop-TODO.md` step 0a. This is
 the same bug appearing for the third time in these docs, which is a sign of how
 central it is.
 
@@ -389,7 +389,7 @@ not be happening is the wrong order.
 
 1. **Add a `tsc()` builtin and show frame time.** Optimising without measurement
    is guessing. Everything below is unproven until this exists.
-2. **Damage tracking** (`desktop-TODO.md` 0c). Structural. Nothing else compares.
+2. **Damage tracking** (`archive/superseded/desktop-TODO.md` 0c). Structural. Nothing else compares.
 3. **Back buffer at native resolution** (0a). Turns 30–50× VRAM reads back into
    RAM reads.
 4. **Table the shadow falloff.** Removes ~302k divides per window redraw. Small,
@@ -412,7 +412,7 @@ buys the right to animate anything.
 
 ---
 
-Rendering bugs: `desktop-look.md` · Task list: `desktop-TODO.md` ·
+Rendering bugs: `desktop-look.md` · Task list: `archive/superseded/desktop-TODO.md` ·
 Architecture: `archive/superseded/desktop-plan.md` · Intro: `desktop-build-guide.md`
 
 ---

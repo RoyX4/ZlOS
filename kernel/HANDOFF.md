@@ -1252,7 +1252,8 @@ inverts that. Designed 2026-08-17:
   banners** — one claim in it was wrong and says so.
 - `docs/desktop-build-guide.md` — start here. What a compositor is, in plain
   words, and the build order.
-- **`docs/desktop-TODO.md` — the ordered task list. Pick it up here.**
+- **`docs/archive/superseded/desktop-TODO.md` — historical ordered task list.**
+  Its audited banner says not to work from the body; use `../docs/REMAINING-WORK.md`.
 - `docs/archive/superseded/desktop-plan.md` — the decisions, the evidence, and the line numbers.
 - `docs/desktop-toolkit.md` — **the layer that was missing from every earlier
   plan.** An **immediate-mode** toolkit (`ui.c`), chosen because a retained

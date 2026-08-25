@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """probe-shot.py - boot zlOS, press some keys, and save a PNG of the screen.
 
-The visual gates in kernel/docs/desktop-TODO.md all read "screendump it and
+The visual gates in kernel/docs/archive/superseded/desktop-TODO.md all read "screendump it and
 look" - the icon edges, the sparkline, the logo, the window stack. Doing that
 by hand means ./try.sh, a GTK window, and a human. This does it headless, so it
 can run unattended and leave a file behind.
