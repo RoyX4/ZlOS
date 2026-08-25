@@ -129,7 +129,7 @@ and it is Floor 6.
    ETW. This is the single biggest kernel/RAM/CPU-control unlock.
 4. **Inline assembly** (or FFI helpers) - `CPUID`, `RDTSC`, and later the privileged instructions
    inside a driver.
-5. **`stdlib/win/memory.zl`, `win/process.zl`, `win/cpu.zl`** - libraries wrapping the [R3] APIs.
+5. **Proposed `memory`, `process`, and `cpu` modules under `stdlib/win/`** - libraries wrapping the [R3] APIs.
    This is where zl becomes a real systems tool: a memory scanner, a profiler, a process monitor -
    all pure zl on top of FFI.
 6. **The `.sys` driver target (Floor 6)** - ring-0. The hard, later, strategic piece. Validated

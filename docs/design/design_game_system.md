@@ -698,8 +698,8 @@ is blocked on nothing**, which is why M0 can start immediately.
 
 ## 4. Staged implementation
 
-Every stage ends with a check that can fail. New files only (`game/`, `stdlib/fb.zl`,
-`stdlib/win32.zl`, `stdlib/sprite.zl`), so the wave is parallel-safe except for the runtime
+Every stage ends with a check that can fail. New files only (`game/` and proposed
+`fb`, `win32`, and `sprite` modules under `stdlib/`), so the wave is parallel-safe except for the runtime
 bricks, which touch `src/runtime/interp.c`/`src/runtime/runtime.c` and are therefore **serial, alone**, per the
 campaign rules.
 
@@ -964,7 +964,7 @@ Explicitly **not** blockers, each with the reason:
    a flat arena high-water mark.
 6. **M4**: **Breakout is playable** — serve, bounce, break, score, lose, win — and a
    recorded winning run replays byte-identically through the file presenter.
-7. `stdlib/fb.zl`, `stdlib/win32.zl`, `stdlib/sprite.zl` documented in `REFERENCE.md`
+7. The proposed `fb`, `win32`, and `sprite` stdlib modules documented in `REFERENCE.md`
    alongside the new builtins (`alloc`/`free`/`peek*`/`poke*`/`fill32`/`copy32`/`blit32`/
    `mark`/`release`/`read_bytes`/`load_file`), and the module count corrected — it drifts
    every wave.

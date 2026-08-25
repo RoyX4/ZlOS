@@ -100,18 +100,18 @@ collision.
 Split each concept into **two files**:
 
 ```
-stdlib/str.zl              # definitions only — safe to include
-stdlib/test/str_test.zl    # includes str.zl, then runs the self-test
+stdlib/str                 # proposed module name; definitions only
+stdlib/test/str_test       # proposed test name; runs the self-test
 ```
 
-`stdlib/str.zl` contains only `fn` definitions and a header comment. It never
-prints and never runs driver code, so `include "stdlib/str.zl"` has **no side
+The proposed `str` module under `stdlib/` contains only `fn` definitions and a
+header comment. It never prints and never runs driver code, so including it has **no side
 effects** — it only makes functions available.
 
-`stdlib/test/str_test.zl` is a normal program:
+The proposed `str_test` under `stdlib/test/` is a normal program:
 
 ```
-# stdlib/test/str_test.zl
+# proposed stdlib string test
 include "../str.zl"
 
 print("== str ==")
@@ -162,7 +162,7 @@ If `sort.zl` calls `list_swap`, it puts `include "list.zl"` at its top. It does
 **not** assume the top-level program already included `list.zl`. Because of
 include-once, if the program includes both `sort.zl` and `list.zl` directly,
 `list.zl`'s text is still spliced exactly once. Dependencies are therefore
-**explicit and self-satisfying** — you can `include "stdlib/sort.zl"` and it
+**explicit and self-satisfying** — you can include the proposed `sort` stdlib module and it
 works whether or not you also included its dependencies.
 
 ### 4.2 Layering to keep the graph acyclic
@@ -272,10 +272,10 @@ work; it rides entirely on the `include` pass from `design_modules.md`.
 2. **Seed `core.zl`** with `core_show`/`core_assert` (extract the `show` helper
    that already recurs across files; give it one home).
 3. **Convert one module end-to-end** as the pattern: pick `str`.
-   - Create `stdlib/str.zl`: prefixed, definitions-only.
-   - Create `stdlib/test/str_test.zl`: `include "../str.zl"` + the moved
+   - Create the proposed `str` module under `stdlib/`: prefixed, definitions-only.
+   - Create its proposed `str_test` under `stdlib/test/`: `include "../str.zl"` + the moved
      self-test.
-   - Verify `interp.exe stdlib/test/str_test.zl` prints the expected output.
+   - Verify the interpreter running the proposed string test prints the expected output.
 4. **Repeat** for `math`, `list`, `sort`, `set`, `dict`, `io`, `fmt`, `json`.
 5. **Move non-library files** (`sudoku`, `brainfuck`, `dijkstra`, …) to
    `examples/`.
@@ -292,7 +292,7 @@ work; it rides entirely on the `include` pass from `design_modules.md`.
 4. cut the self-test     move `# --- self-test ---`..EOF into test/sort_test.zl
 5. add header            # Exports: ...   # Depends: ...
 6. add include lines     include "list.zl"  (if it uses list_*)
-7. run test              interp.exe stdlib/test/sort_test.zl
+7. run test              interp.exe <proposed sort test>
 ```
 
 ### 7.3 Two tiny guard scripts (optional, high value)
@@ -312,7 +312,7 @@ The stdlib reorg does not touch `src/selfhost/compiler.zl`'s emitted output, so 
 self-hosting fixpoint (`gen1.c == gen2.c`) is unaffected. The *first real
 customer* of the stdlib should be `src/selfhost/compiler.zl` itself: once `include` and a
 `str`/`core` module exist, the compiler's inline string helpers can be replaced
-with `include "stdlib/str.zl"` — proving the library works under the same
+with an include of the proposed `str` stdlib module — proving the library works under the same
 byte-identical-recompile bar the rest of the language is held to.
 
 ---

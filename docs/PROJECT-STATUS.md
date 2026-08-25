@@ -20,7 +20,7 @@ implementation state. They are not the same thing.
 | Repository or checkout | Commit state | Meaning |
 |---|---|---|
 | `RoyX4/zl-linux:main` | Structure and verifier checkpoint `a5c6f4e4306d`; current docs refresh `b8e5f8a45164` | The complete restructure is published. GitHub docs, repository gates and all four QEMU boot jobs passed at the verifier checkpoint. This is repository closure and QEMU evidence, not product or physical-hardware completion. |
-| This reconciliation worktree | Clean `codex/full-program` at `b8e5f8a45164`, matching `origin/main` | Isolated at `/home/roy/Documents/repos/zl-linux-final`. The structure migration, research shelf and verifier repairs are committed and pushed. The original dirty checkout was not rewritten. |
+| This reconciliation worktree | Clean `codex/full-program`; published baseline `b8e5f8a45164` plus local documentation/checker cleanup | Isolated at `/home/roy/Documents/repos/zl-linux-final`. The structure migration, research shelf and verifier repairs are pushed. The later documentation-only cleanup is intentionally withheld from `main` while boot CI is deferred. The original dirty checkout was not rewritten. |
 | Older structure worktree | `codex/full-restructure`, based on `85fcdf542b9c` | Preserved at `/home/roy/Documents/repos/zl-linux-structure` as the older migration input. It is not the active finalization tree. |
 | Original shared checkout | Dirty `codex/local-zlos-snapshot-2026-08-24` at `/home/roy/Documents/repos/zl-linux` | Preserved migration inputs and a concurrent untracked display-state audit; it is not the publication authority and was not rewritten. |
 | `zl-linux-merge-all` | Clean at `4b9883123682` | Local checkout of the pushed integration head and the best place to inspect final merged state. |
@@ -47,7 +47,7 @@ already an ancestor of `origin/main`; none contains a unique unmerged commit.
 | Three detached Claude worktrees | `bb1d623b9b49`, `84cecae63019`, `b8a00ec45ac1` | Clean and preserved; their commits are already in `origin/main`. |
 | `codex/local-zlos-snapshot-2026-08-24` | `85fcdf542b9c` | Dirty shared checkout containing the uncommitted cleanup inputs; do not overwrite it. |
 | `codex/full-restructure` | `85fcdf542b9c` base | Preserved older isolated structure migration. |
-| `codex/full-program` | `b8e5f8a45164` | Clean and pushed; matches `origin/main` at this status check. |
+| `codex/full-program` | Published through `b8e5f8a45164`; local documentation/checker commits ahead | Clean. The unpublished commits do not claim runtime or hardware evidence and remain local solely to avoid triggering automatic boot CI. |
 
 ## Whole Implementation Program
 

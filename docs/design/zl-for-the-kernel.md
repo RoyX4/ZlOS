@@ -296,7 +296,7 @@ produced a bad number.
 interpreter control moved 12%** — indistinguishable from host load, on a box
 that had three other sessions' QEMU instances running. Interleaving the two
 builds within the same seconds gives the real figure: **4.7%**. This is the
-same failure `kernel/CLAUDE.md` records under "Gates must never be timing-
+same failure `CLAUDE.md` records under "Gates must never be timing-
 sensitive", arriving from a different direction.
 
 **One correction to the plan's method.** It says the interpreter column is a

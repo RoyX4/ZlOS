@@ -37,7 +37,7 @@ Splice another file's text into this file before lexing. One flat program, one
 global namespace. This is what C, assembly `%include`, and PHP `require` do.
 
 ```
-include "stdlib/strings.zl"
+include "stdlib/strings"  # proposed module name; not implemented yet
 
 print(upper_first("zac"))   # upper_first defined in strings.zl
 ```
@@ -271,7 +271,7 @@ changes *which text* is parsed), so the fixpoint should hold unchanged.
   changes to lexer/parser/codegen, zero new reserved words, survives
   self-hosting.
 - **First payoff:** split `src/selfhost/compiler.zl` into `src/selfhost/lexer.zl` / `src/selfhost/parser.zl` /
-  `codegen.zl` and seed `stdlib/strings.zl`.
+  `codegen.zl` and seed a proposed `strings` module under `stdlib/`.
 - **Defer Option B (namespaced `import ... as`)** until `.` member access exists
   in the self-hosted parser *and* a concrete name-collision problem is felt.
   Ship the small thing; keep the door open.

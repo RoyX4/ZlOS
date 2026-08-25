@@ -22,21 +22,6 @@ Both unboxed backends sit on the far side of the scoping decision in
 
 _none — every file the docs describe is tracked._
 
-## Stale doc references — 11 baselined
-
-Delete a line from `tools/doc-check-ignore.txt` as you fix it. New rot fails CI.
-
-- [ ] docs/design/KERNEL_CONTROL_GAPS.md references stdlib/win/memory.zl, which does not exist
-- [ ] docs/design/design_game_system.md references stdlib/fb.zl, which does not exist
-- [ ] docs/design/design_game_system.md references stdlib/sprite.zl, which does not exist
-- [ ] docs/design/design_game_system.md references stdlib/win32.zl, which does not exist
-- [ ] docs/design/design_memory_structs.md references tests/struct/wide64.zl, which does not exist
-- [ ] docs/design/design_modules.md references stdlib/strings.zl, which does not exist
-- [ ] docs/design/design_stdlib_layout.md references stdlib/sort.zl, which does not exist
-- [ ] docs/design/design_stdlib_layout.md references stdlib/str.zl, which does not exist
-- [ ] docs/design/design_stdlib_layout.md references stdlib/test/sort_test.zl, which does not exist
-- [ ] docs/design/design_stdlib_layout.md references stdlib/test/str_test.zl, which does not exist
-- [ ] docs/design/zl-for-the-kernel.md references kernel/CLAUDE.md, which does not exist
 ## Open tensions (.ultra/TENSIONS.md)
 
 _none open._

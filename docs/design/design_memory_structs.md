@@ -938,7 +938,7 @@ rules make that true:
 4. **Test values stay below 2^53** for `peek64`/`i64` fields — the identical
    posture `run_tests.ps1` already takes on division ("use exact divisions here
    so all 3 engines agree", quoted in `design_floats.md` §1.1). A dedicated
-   `tests/struct/wide64.zl` documents the *divergence* deliberately and lives
+   proposed `wide64` test under `tests/struct/` documents the *divergence* deliberately and lives
    outside the gate.
 
 Plus the two gates this feature adds:
