@@ -1033,7 +1033,7 @@ One of the nineteen readers (`wireless-plan.json`) asserted the unqualified
 version was still true and mistook the setter's definition for its call sites.
 **That bullet must not be carried forward.** Stale asserters to correct:
 `HANDOFF.md:198,302,354`; `kernel/docs/archive/superseded/display-roadmap.md:14,30`;
-`what-is-actually-impossible.md:156`; `kernel/docs/plans/wireless-plan.md:171`;
+`kernel/docs/concepts/what-is-actually-impossible.md:156`; `kernel/docs/plans/wireless-plan.md:171`;
 `kernel/docs/plans/driver-build-order.md:73`. **`CLAUDE.md:84-86` is not on this list** — it tells
 the reader to *check* whether anything arms `lt_armed` rather than asserting that
 nothing does, and that instruction is the one piece of guidance in the repo that
@@ -1270,7 +1270,7 @@ $ bash kernel/tools/checks/check-zl-calls.sh | head -1
 ok: every kernel.zl call resolves to a builtin or a zl fn
 ```
 
-`what-is-actually-impossible.md` calls a heap "the single highest-leverage missing
+`kernel/docs/concepts/what-is-actually-impossible.md` calls a heap "the single highest-leverage missing
 piece" at ~300 lines. `kernel/src/core/arena.c` is **311 lines, `kernel/SOURCES:71`**, with
 `arena_init` at `:224` and `arena_alloc` at `:259`, compiled into all four builds,
 and `kernel.zl:3843-3849` states why `arena_up()` is called at boot rather than
@@ -1819,9 +1819,9 @@ set. All six refs are already local; no fetch is needed. The composition matters
 more than the count, because three of the groups are different kinds of problem:
 
 - **Dangling docs.** `kernel/docs/research/desktop-prior-art.md`, `desktop-toolkit.md`,
-  `kernel/docs/guides/desktop-build-guide.md`, `kernel/docs/research/intel-graphics-stack.md` and `beyond-the-kernel.md`
+  `kernel/docs/guides/desktop-build-guide.md`, `kernel/docs/research/intel-graphics-stack.md` and `kernel/docs/concepts/beyond-the-kernel.md`
   are linked by 3, 5, 7, 1 and 3 tracked `.md` files respectively and exist on no
-  branch. Every one of those links is broken today. `beyond-the-kernel.md` is the
+  branch. Every one of those links is broken today. `kernel/docs/concepts/beyond-the-kernel.md` is the
   worst case because `HANDOFF.md:391` makes it the authority that overturns a
   design verdict (§13.5), and `HANDOFF.md` is the document everyone is told to
   trust. A dangling link there is worse than no link.
@@ -1837,11 +1837,11 @@ more than the count, because three of the groups are different kinds of problem:
 ### 10.2 Five filenames are cited by twenty-plus tracked files and none is in the repo
 
 ```
-$ for d in beyond-the-kernel.md desktop-toolkit.md guides/desktop-build-guide.md \
+$ for d in concepts/beyond-the-kernel.md desktop-toolkit.md guides/desktop-build-guide.md \
            research/desktop-prior-art.md research/intel-graphics-stack.md MASTER_PLAN.md; do
     printf '%-26s tracked=%s citers=%s\n' "$d" \
       "$(git ls-files | grep -c $d)" "$(git grep -l $d | wc -l)"; done
-beyond-the-kernel.md       tracked=0 citers=3
+concepts/beyond-the-kernel.md tracked=0 citers=3
 desktop-toolkit.md         tracked=0 citers=5
 guides/desktop-build-guide.md tracked=0 citers=7
 research/desktop-prior-art.md tracked=0 citers=3
@@ -1852,7 +1852,7 @@ MASTER_PLAN.md             tracked=0 citers=14
 `README.md` and eleven design docs route the reader to `MASTER_PLAN.md`.
 `kernel/docs/guides/desktop-build-guide.md` and `desktop-toolkit.md` are the two `OVERNIGHT-PROMPT.md`
 lists under "READ FIRST". `06ced13` rescued six orphaned docs onto `main`; these
-five were not among them. Two of them (`beyond-the-kernel.md`, `desktop-toolkit.md`)
+five were not among them. Two of them (`kernel/docs/concepts/beyond-the-kernel.md`, `desktop-toolkit.md`)
 exist in the dangling WIP commit `5557f4a`, which is on no branch.
 
 **Recommendation that removes the whole class:** "a doc cites a file that
@@ -1917,9 +1917,9 @@ every row the tree is the referee.
 | Question | Side A | Side B | The tree |
 |---|---|---|---|
 | Does anything arm `lt_armed`? | `wireless-plan.json`: nothing does | four other readers: something does | **B.** `intel.c:4232` inside `intel_bringup_panel()`, reachable from `kernel.zl:1395`. Nothing arms it *automatically at boot* — that is the true, narrower claim (§5.2) |
-| Is Phase 0.1 done? | `kernel/docs/archive/superseded/display-roadmap.md`: row marked done | `what-is-actually-impossible.md:156`: blocked on one missing caller | **Neither.** The caller exists; `key()` three lines later halts the kernel (§5.1) |
+| Is Phase 0.1 done? | `kernel/docs/archive/superseded/display-roadmap.md`: row marked done | `kernel/docs/concepts/what-is-actually-impossible.md:156`: blocked on one missing caller | **Neither.** The caller exists; `key()` three lines later halts the kernel (§5.1) |
 | Did `LINE_BUF`/`DISK_SCRATCH` fire? | `MERGE-EVIDENCE.md` Outcome: no, it was fixed | five readers: it is live | **The readers.** No commit ever set `0x02040000` (§8.1) |
-| Is the browser worth building, and what gates it? | `kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md`: not worth it, needs a heap | `HANDOFF.md:390`: that call was wrong, the gate is a heap | **Neither reason survives.** Eight browser/network `.c` files are in SOURCES and a browser window opens at boot, and they were built with **no heap** — `fs.c:17`, `html.c:1`, `browser.c:84` say so in their own comments. And `beyond-the-kernel.md`, the doc HANDOFF nominates as the correction, is not in the repo (§10.2) |
+| Is the browser worth building, and what gates it? | `kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md`: not worth it, needs a heap | `HANDOFF.md:390`: that call was wrong, the gate is a heap | **Neither reason survives.** Eight browser/network `.c` files are in SOURCES and a browser window opens at boot, and they were built with **no heap** — `fs.c:17`, `html.c:1`, `browser.c:84` say so in their own comments. And `kernel/docs/concepts/beyond-the-kernel.md`, the doc HANDOFF nominates as the correction, is not in the repo (§10.2) |
 | Does `fb3d.c` have a caller? | `GRAPHICS-18`: no caller at all | `OSLAND-01`: full chain, done | **Split by symbol.** The file is reachable; the *tiled* rasterizer is not, deliberately and with the measurement attached (§4.13) |
 | Is the toolkit done "through `ui_scroll`"? | `kernel/docs/archive/superseded/desktop-TODO.md`: yes | `OVERNIGHT-PROMPT.md`: caller-less | **B**, for those two widgets; the rest of the toolkit is used from C (§4.8) |
 | Hotplug | `kernel/docs/archive/superseded/display-roadmap.md`: done | `kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md`: not started | **Neither.** Decode exists, nothing can call it, no interrupt path (§5.6) |

@@ -58,6 +58,14 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 | `architecture/system/exec-kill-path.md` | Process termination and non-cooperative execution contract. |
 | `architecture/system/user-process-abi.md` | 64-bit user process ABI. |
 
+## Concepts
+
+| File | Purpose |
+|---|---|
+| `concepts/what-is-a-bios.md` | Firmware ownership and hardware openness explainer. |
+| `concepts/what-is-actually-impossible.md` | Audited feasibility wall map with corrected assumptions. |
+| `concepts/beyond-the-kernel.md` | Language, browser, network, and C-to-zl boundary analysis. |
+
 ## Archived Prompt Files
 
 These old execution briefs live in `archive/prompts/`. Their unresolved work was

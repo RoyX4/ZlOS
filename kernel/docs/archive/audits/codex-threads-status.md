@@ -122,7 +122,7 @@ Sorting the 30 by what they actually are:
 | Plan docs naming files not yet written | ~17 | left failing on purpose; `doc-check-ignore.txt` says *"never add one to make a run green"* |
 
 The three real ones were all the same mistake — a reference under `docs/` to a
-file that lives under `kernel/docs/`: `what-is-a-bios.md`,
+file that lives under `kernel/docs/`: `concepts/what-is-a-bios.md`,
 `typing-into-the-compositor.md`, `evidence/display/gen9-modeset-plan.json`.
 
 ### A false claim the doc-checker could never have caught

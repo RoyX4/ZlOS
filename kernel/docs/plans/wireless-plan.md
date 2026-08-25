@@ -10,8 +10,8 @@
 
 Roy asked for both. This is the build plan, not a feasibility argument.
 
-**It also corrects two things I got wrong in `kernel/docs/what-is-actually-impossible.md`
-and `kernel/docs/beyond-the-kernel.md`, both written the same day.** Those documents listed
+**It also corrects two things I got wrong in `kernel/docs/concepts/what-is-actually-impossible.md`
+and `kernel/docs/concepts/beyond-the-kernel.md`, both written the same day.** Those documents listed
 Bluetooth as a vendor-gated wall and put the iwlwifi blob at 2–3 MB. Measured on
 this machine:
 
@@ -155,7 +155,7 @@ driver is being written.
 ## Where this sits against everything else
 
 Both of these need the same thing underneath: **the network stack from
-`beyond-the-kernel.md` §2** (ARP/IP/UDP/TCP/TLS, ~10,000 lines). WiFi delivers
+`kernel/docs/concepts/beyond-the-kernel.md` §2** (ARP/IP/UDP/TCP/TLS, ~10,000 lines). WiFi delivers
 ethernet frames; everything above the frame is identical whether they arrived by
 wire, dongle or radio.
 

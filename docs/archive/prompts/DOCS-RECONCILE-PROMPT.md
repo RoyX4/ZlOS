@@ -49,7 +49,7 @@ kernel/docs/archive/superseded/desktop-northstar-feasibility.md 11 KB
 kernel/docs/archive/superseded/desktop-plan.md 20 KB
 kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md  20 KB
 kernel/docs/research/os-landscape.md           15 KB
-kernel/docs/what-is-actually-impossible.md      9 KB
+kernel/docs/concepts/what-is-actually-impossible.md 9 KB
 kernel/docs/plans/wireless-plan.md              9 KB
 kernel/docs/archive/prompts/BROWSER-PROMPT.md                  13 KB
 kernel/docs/archive/prompts/EXEC-PROMPT.md                     12 KB

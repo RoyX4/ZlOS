@@ -2,7 +2,7 @@
 > after the eleven-track merge. Its method — separate "no because it is enormous" from "no because a vendor holds a key" — survives the merge intact and is worth keeping as written. Two lines must be corrected before acting on it: its closing paragraph says "about six" walls where its own body says four, and its most actionable claim (blocked on one missing caller, nothing arms `lt_armed`) is false — `kernel.zl:1395` calls `panel_up()`, which arms it.
 >
 > **What is still open from this document is in
-> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 
@@ -54,7 +54,7 @@ only correct move.
 These fail for the same reason every time: **a vendor cryptographically or
 legally controls the thing you would have to write.**
 
-> **Corrected the same day — see [`wireless-plan.md`](plans/wireless-plan.md).** This
+> **Corrected the same day — see [`wireless-plan.md`](../plans/wireless-plan.md).** This
 > table originally listed **Bluetooth** as a wall and put the iwlwifi blob at
 > 2–3 MB. Both wrong. BT on this laptop is a **standard USB device speaking a
 > published open standard** (`8087:0026`, class 224/1/1, and `xhci.c` already
@@ -88,7 +88,7 @@ Not gated, just infinite. No state exists in which you are finished.
 
 | | Why | The bounded version to build instead |
 |---|---|---|
-| **Chrome-compatible browser** | The web is defined by whatever Chrome shipped last Tuesday, not by a spec | **A document browser** — ~13,200 lines, has a finish line. See `beyond-the-kernel.md` §2b |
+| **Chrome-compatible browser** | The web is defined by whatever Chrome shipped last Tuesday, not by a spec | **A document browser** — ~13,200 lines, has a finish line. See `kernel/docs/concepts/beyond-the-kernel.md` §2b |
 | **"Support all USB devices"** | Every device is a new quirk | **USB *classes*** — HID, mass storage, CDC-ECM. Bounded, and two of three already work |
 | **Run unmodified Linux/Windows binaries** | The compatibility tail never ends (ReactOS, 27 years) | A WASM interpreter — every language, one bounded port |
 | **Full ACPI/AML** | ACPICA is ~50k lines of interpreter for a bytecode vendors ship buggy | Parse the **static tables** only (MADT, MCFG) — already done for APIC |
@@ -109,7 +109,7 @@ The encouraging list, and the one to plan from:
 | **Sound (AC'97 or HDA)** | ~1,500 | Whole new subsystem, but small and documented |
 | **Software 3D rasterizer** | ~4,000 | SerenityOS runs *Half-Life* on one |
 | **Hosting zl on zlOS** | ~1,200 | `src/runtime/interp.c` is only 1,900 lines. Self-hosting |
-| **Drivers written in zl** | ~1,500 compiler + grind | See `beyond-the-kernel.md` §3 |
+| **Drivers written in zl** | ~1,500 compiler + grind | See `kernel/docs/concepts/beyond-the-kernel.md` §3 |
 
 **Every row is a Kind-1 problem.** Schedule them; none is a wall.
 

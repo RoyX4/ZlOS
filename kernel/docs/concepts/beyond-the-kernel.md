@@ -159,7 +159,7 @@ Then there is what Intel specifically did to this laptop:
 lives in a separate module and the digital half lives inside the chipset, so
 there is no self-contained "WiFi card" sitting on the bus for a driver to own.
 
-> **Superseded in part by [`wireless-plan.md`](plans/wireless-plan.md).** Everything
+> **Superseded in part by [`wireless-plan.md`](../plans/wireless-plan.md).** Everything
 > below about the AX201 is correct, but it is an argument about *one radio*, not
 > about WiFi. With an **AR9271 USB dongle — 50 KB of open-source firmware** —
 > WiFi is ~8,000 bounded lines. And the blob figure below should read **1.3 MB**

@@ -261,7 +261,7 @@ ahead of its remote. Everything else in this document is reversible. This is not
    (on `desktop/exec-track`) has four files **staged** that are byte-identical
    to `desktop/system-track`'s versions:
    `kernel/clip.c`, `kernel/docs/archive/prompts/SYSTEM-PROMPT.md`, `kernel/docs/evidence/system-track.md`,
-   `kernel/docs/what-is-a-bios.md`. Verified by comparing `git hash-object` in
+   `kernel/docs/concepts/what-is-a-bios.md`. Verified by comparing `git hash-object` in
    the worktree against `git rev-parse desktop/system-track:<path>` — identical
    blobs. A session copied another track's work sideways instead of merging it.
    This is the exact failure §4 exists to prevent, and it post-dates the plan.

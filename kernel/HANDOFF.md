@@ -320,7 +320,7 @@ cold-start modeset.** The laptop is a test PC. Optimise for that.
 
 Where the firmware boundary actually sits, what a BIOS does that this kernel
 already does for itself, and the two walls (an Intel DRAM-training blob, and
-Boot Guard fused *on* on this laptop — measured): [`docs/what-is-a-bios.md`](docs/what-is-a-bios.md).
+Boot Guard fused *on* on this laptop — measured): [`docs/concepts/what-is-a-bios.md`](docs/concepts/what-is-a-bios.md).
 
 ## The USB boot flight recorder works on the physical ThinkPad
 
@@ -994,7 +994,7 @@ State measured rather than remembered: **one port, one pipe, one panel, one mode
 polled.** 42 `*_A` registers, no VBT parser, no HDMI port bring-up (the DPLL
 clock math exists and is verified), and zero hotplug or interrupt code.
 
-## What is actually a wall: `docs/what-is-actually-impossible.md`
+## What is actually a wall: `docs/concepts/what-is-actually-impossible.md`
 
 **The project's thesis is that one person can do what is assumed to need a team,
 so "too big for one person" is not a valid objection here — it is the hypothesis
@@ -1017,7 +1017,7 @@ under test.** That document re-grades the whole board against that bar. Summary:
   its own modeset, drawing its own desktop — no GRUB, no Linux, no blob. Blocked
   on **one missing caller**: nothing in the kernel arms `lt_armed`.
 
-## The three "what about…" questions, answered: `docs/beyond-the-kernel.md`
+## The three "what about…" questions, answered: `docs/concepts/beyond-the-kernel.md`
 
 Other languages on zlOS, the internet, and rewriting the C in zl. Asked and
 measured 2026-08-17. Short version:
@@ -1033,7 +1033,7 @@ measured 2026-08-17. Short version:
   bounded: ~10k lines to HTTPS, of which TLS is 5–8k.
 - **WiFi and Bluetooth** — Roy wants both. Plan: **`docs/plans/wireless-plan.md`**.
   That doc also **corrects two wrong claims** made earlier the same day in
-  `what-is-actually-impossible.md` and `beyond-the-kernel.md`:
+  `docs/concepts/what-is-actually-impossible.md` and `docs/concepts/beyond-the-kernel.md`:
   - **Bluetooth is NOT a wall.** `lsusb` → `8087:0026 Intel AX201 Bluetooth`,
     **on USB**, `Class=Wireless / RF / Bluetooth` (224/1/1) — the standard class
     every BT dongle implements, and **HCI is a published Bluetooth SIG
@@ -1065,7 +1065,7 @@ measured 2026-08-17. Short version:
   it was wrong about the price and about the blocker.
   *Original text, kept because the shape of the error is the reusable part:*
   `docs/archive/superseded/feature-catalogue-2026-08-17.md` says don't; **that call was wrong as
-  stated** and `beyond-the-kernel.md` §2b supersedes it. "Unbounded" is true of
+  stated** and `docs/concepts/beyond-the-kernel.md` §2b supersedes it. "Unbounded" is true of
   a Chrome-compatible browser, not of a *document* browser — Dillo, NetSurf and
   w3m have shipped that for decades. A document browser (HTML+CSS, no JS) is
   **~13,200 lines** plus the ~10k network stack. **The gate is a heap** (~300
