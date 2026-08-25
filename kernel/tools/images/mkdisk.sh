@@ -26,7 +26,8 @@ cp out.c _gen.c
 
 INCLUDES=$(find src boot -type d -printf ' -I%p' | sort)
 CFLAGS="-m32 -O2 -ffreestanding -nostdlib -fno-stack-protector -fno-pic
-        -fno-builtin -Wall -Wextra -Werror -Wno-unused-parameter -I.. -I../src/runtime $INCLUDES"
+        -fno-builtin -Wall -Wextra -Werror -Wno-unused-parameter \
+        -I.. -I../src/frontend -I../src/runtime $INCLUDES"
 
 # the kernel objects (same as build.sh, but our raw entry instead of boot.S)
 # shellcheck disable=SC2086

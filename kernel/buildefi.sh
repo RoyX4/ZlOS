@@ -43,7 +43,7 @@ cp out.c _genefi.c
 INCLUDES=$(find src boot -type d -printf ' -I%p' | sort)
 CF="-target x86_64-unknown-windows -ffreestanding -fno-stack-protector \
     -fshort-wchar -mno-red-zone -O2 -DZL_64 -DZL_EFI \
-    -I.. -I../src/runtime $INCLUDES \
+    -I.. -I../src/frontend -I../src/runtime $INCLUDES \
     -Wall -Wextra -Werror -Wno-unused-parameter -Wno-excessive-regsave \
     -Werror=shift-count-overflow -Werror=void-pointer-to-int-cast \
     -Werror=pointer-to-int-cast -Werror=int-to-pointer-cast"

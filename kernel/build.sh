@@ -28,7 +28,7 @@ cp out.c _gen.c            # compile writes out.c into the CWD, not ..
 INCLUDES=$(find src boot -type d -printf ' -I%p' | sort)
 CFLAGS="-m32 -O2 -ffreestanding -nostdlib -fno-stack-protector -fno-pic
         -fno-builtin -Wall -Wextra -Werror -Wno-unused-parameter
-        -I.. -I../src/runtime $INCLUDES"
+        -I.. -I../src/frontend -I../src/runtime $INCLUDES"
 
 # shellcheck disable=SC2086
 gcc $CFLAGS -DZL_KERNEL_SERIAL -c ../freestanding/runtime_kernel.c -o _rt.o

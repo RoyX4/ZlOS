@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ROUTES = ("build.sh", "build64.sh", "tools/images/mkdisk.sh", "buildefi.sh")
 REQUIRED_FLAGS = ("-Wall", "-Wextra", "-Werror")
+REQUIRED_LANGUAGE_INCLUDES = ("-I../src/frontend", "-I../src/runtime")
 
 
 def route_failures(name: str, source: str) -> list[str]:
@@ -18,6 +19,9 @@ def route_failures(name: str, source: str) -> list[str]:
     for flag in REQUIRED_FLAGS:
         if flag not in source:
             errors.append(f"{name}: missing {flag}")
+    for include in REQUIRED_LANGUAGE_INCLUDES:
+        if include not in source:
+            errors.append(f"{name}: missing language include {include}")
     code = "\n".join(
         line for line in source.splitlines() if not line.lstrip().startswith("#")
     )
@@ -65,9 +69,18 @@ def selftest(sources: dict[str, str]) -> None:
     stale_errors = all_failures(stale_identity)
     assert any("build.sh: does not materialize" in item for item in stale_errors)
     assert any("build.sh: requires an impossible" in item for item in stale_errors)
+
+    missing_frontend = dict(sources)
+    missing_frontend["build64.sh"] = missing_frontend["build64.sh"].replace(
+        "-I../src/frontend", "", 1
+    )
+    assert any(
+        "build64.sh: missing language include -I../src/frontend" == item
+        for item in all_failures(missing_frontend)
+    )
     print(
         "build-contract selftest: caught missing-Werror, blanket-suppression, "
-        "missing-route and stale-identity mutations"
+        "missing-route, stale-identity and missing-include mutations"
     )
 
 
