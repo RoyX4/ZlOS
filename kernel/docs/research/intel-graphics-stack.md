@@ -89,7 +89,7 @@ driver gives you **a black screen**. No log line, no exception, no status bit.
 And you cannot `printf` your way out, because the output device is the thing you
 just broke.
 
-`HANDOFF.md` says it directly about the pipe path: *"each one wrong is a black
+`kernel/HANDOFF.md` says it directly about the pipe path: *"each one wrong is a black
 screen with no error bit."*
 
 **That absence of feedback is why this project has `hosttest/`, why it verifies
@@ -315,8 +315,8 @@ smallest one.
 | Goal | Needs | Where zlOS is |
 |---|---|---|
 | **Modesetting** (current) | DPLL, transcoder, pipe, plane, DDI, AUX/DPCD, link training, watermarks, panel power | **Done for this hardware.** Haiku, at 25 years old, has exactly this and no more. Never yet run *on* the ThinkPad. |
-| **2D blit acceleration** | Blitter engine, a ring buffer, buffer placement, fences | **The ring is proven on silicon** — 16384/16384 pixels, our own GGTT entries, no i915 (`gpu-driver.md`). No heap was needed: zlOS uses fixed regions (`HI_GPU`). What is left is choosing what to accelerate, and the measurements say a plain fill is not it. |
-| **3D acceleration, for a COMPOSITOR** | Render engine ring, the 3D pipeline packets, **three fixed shaders** | **Weeks, and now unblocked.** A compositor needs a handful of fixed operations - solid fill, blended fill, textured blit - not arbitrary programs. One shader is already captured out of Mesa (80 bytes, `gpu_shader.inc`) and the 77-packet pipeline with it (`gen9-blend-pipeline.md`). The one outstanding piece is `RENDER_SURFACE_STATE`'s bit layout. |
+| **2D blit acceleration** | Blitter engine, a ring buffer, buffer placement, fences | **The ring is proven on silicon** — 16384/16384 pixels, our own GGTT entries, no i915 (`kernel/docs/gpu-driver.md`). No heap was needed: zlOS uses fixed regions (`HI_GPU`). What is left is choosing what to accelerate, and the measurements say a plain fill is not it. |
+| **3D acceleration, for a COMPOSITOR** | Render engine ring, the 3D pipeline packets, **three fixed shaders** | **Weeks, and now unblocked.** A compositor needs a handful of fixed operations - solid fill, blended fill, textured blit - not arbitrary programs. One shader is already captured out of Mesa (80 bytes, `gpu_shader.inc`) and the 77-packet pipeline with it (`kernel/docs/gen9-blend-pipeline.md`). The one outstanding piece is `RENDER_SURFACE_STATE`'s bit layout. |
 | **3D acceleration, for ARBITRARY programs** | all of the above **plus a shader compiler targeting Gen ISA** | **Years, and the compiler is the reason** — Mesa is 24 MB of exactly that. This is the row that makes people say "impossible", and it is the only row where the cost is genuinely that shape. |
 | **Video decode** | HuC firmware, VCS engine | **Not attempted, not ruled out.** The engine is present and enumerated (`VCS` in `i915_engine_info`). The firmware and the bitstream work are the cost, and nobody has priced them here. |
 
@@ -448,14 +448,14 @@ programmed**, which is a stronger check than the PRM provides.
    size of the shader compiler between you and them.
 3. **But 3 of 4 CPU cores are parked** (`smp.c:79`). That is a real, available
    4× that needs no driver, and nothing currently uses it.
-4. **SSE is on and unused.** `cpu.c` detects SSE/SSE2/SSE3/SSSE3; `HANDOFF.md`
+4. **SSE is on and unused.** `cpu.c` detects SSE/SSE2/SSE3/SSSE3; `kernel/HANDOFF.md`
    confirms SSE is enabled in the 64-bit build. `fb.c`'s per-pixel blend loops
    are the obvious first customer.
 5. **3D is reachable in software.** SerenityOS runs Quake III on a SIMD
-   rasterizer. See `os-landscape.md`.
+   rasterizer. See `kernel/docs/research/os-landscape.md`.
 6. **Read i915 as documentation, never as source.** That is already what
    `intel.c` does, and it is the only viable relationship — see
-   `desktop-prior-art.md` on why LinuxKPI-style porting is closed here.
+   `kernel/docs/research/desktop-prior-art.md` on why LinuxKPI-style porting is closed here.
 
 ---
 

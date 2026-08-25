@@ -112,4 +112,4 @@ iris, not at `glLinkProgram`, so a program that only links prints nothing and
 looks like another silent run.
 
 Related: [`gpu-driver.md`](gpu-driver.md) · [`gpu-blitter.md`](gpu-blitter.md) ·
-[`intel-graphics-stack.md`](intel-graphics-stack.md)
+[`research/intel-graphics-stack.md`](research/intel-graphics-stack.md)

@@ -8,7 +8,7 @@ renderer cost, end-to-end feel and visual quality because treating all three as
 
 For the deeper comparison with Windows, Linux and macOS—including RAM, retained
 surfaces, GPU presentation and the boxed zl backend—read
-[`why-mainstream-desktops-feel-fast.md`](why-mainstream-desktops-feel-fast.md).
+[`research/why-mainstream-desktops-feel-fast.md`](research/why-mainstream-desktops-feel-fast.md).
 
 ## Blunt result
 

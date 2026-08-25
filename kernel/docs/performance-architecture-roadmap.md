@@ -314,7 +314,7 @@ work happened. In particular:
   display performance;
 - `retained-window-surfaces.md` is the immediate implementation contract, now
   understood as client **and** shell retention in sequence;
-- `why-mainstream-desktops-feel-fast.md` remains a useful conceptual document,
+- `research/why-mainstream-desktops-feel-fast.md` remains a useful conceptual document,
   but its older framebuffer hypothesis is closed by the physical WC rerun;
 - `STATE-OF-THE-PROJECT.md` and older numbered plans are audit/history inputs,
   not the current performance queue;

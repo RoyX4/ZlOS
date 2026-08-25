@@ -589,7 +589,7 @@ H2. TABBED WINDOWS (the Essence idea) — several apps in one window frame,
     grouped by task. Genuinely distinctive and cheap once wm.c exists.
 
 H3. Software 3D: extend fb3d.c toward tiled rasterization (16x16 blocks,
-    barycentric coordinates) per kernel/docs/os-landscape.md. This is the path
+    barycentric coordinates) per kernel/docs/research/os-landscape.md. This is the path
     SerenityOS used to run Quake III with no GPU. Large. Only start if
     everything else is done and committed.
 

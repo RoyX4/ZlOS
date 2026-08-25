@@ -950,7 +950,7 @@ this fix's regression floor, not its proof — see the gap above.
 | **F** | **The northstar wants all-mono chrome** ("Everything inside the screen is mono"); the kernel deliberately moved every dock/menu/tray/title label to proportional DejaVu Sans, citing `desktop-look.md` item 4. A straight contradiction, not drift — one of the two documents has to lose. | Roy |
 | ~~G~~ | ~~The shell's longest lines are clipped~~ — **closed by #35**, by wrapping. Note the correction: it is **75** columns, not the 77 §1c computed, because `kernel.zl:2934` insets the client before `term_draw` sees it. Gated by `hosttest/termwrap`. | closed |
 | ~~B~~ | ~~No layout engine~~ — **now designed**, see #28 and `desktop-toolkit.md` | closed |
-| **C** | Whether to add "ideas worth stealing" + sources to `os-landscape.md` (edit was declined) | Roy |
+| **C** | Whether to add "ideas worth stealing" + sources to `research/os-landscape.md` (edit was declined) | Roy |
 | **D** | C9 watermark encoding still unsettled — firmware's values fit both narrow and wide | Intel side |
 
 ---
@@ -966,8 +966,8 @@ offered afterwards.** Logged to `~/.claude/CLAUDE.md`, the vault's
 Docs: `look-and-speed.md` (the frame budget, the vsync survey, what is next) ·
 `guides/desktop-build-guide.md` (start here) · `archive/superseded/desktop-TODO.md` (historical task list) ·
 `archive/superseded/desktop-plan.md` · `desktop-look.md` · `desktop-polish-and-speed.md` ·
-`archive/superseded/desktop-northstar-feasibility.md` · `desktop-prior-art.md` ·
-`os-landscape.md` · `intel-graphics-stack.md`
+`archive/superseded/desktop-northstar-feasibility.md` · `research/desktop-prior-art.md` ·
+`research/os-landscape.md` · `research/intel-graphics-stack.md`
 
 ### #43 | The snap preview: snapping worked, but you could not see where it would land
 

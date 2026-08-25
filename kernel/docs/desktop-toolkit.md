@@ -82,7 +82,7 @@ frame. That is how ImGui does it and it needs no names and no storage.
 ### The theme — data, not code
 
 Stolen directly from SerenityOS, where window frame colours and metrics live in
-a theme object rather than in the painting code (`os-landscape.md`).
+a theme object rather than in the painting code (`research/os-landscape.md`).
 
 ```c
 struct ui_theme {
@@ -257,4 +257,4 @@ path actually works.
 
 Architecture: `archive/superseded/desktop-plan.md` · Task list: `archive/superseded/desktop-TODO.md` · Why the gap
 existed: `archive/superseded/desktop-northstar-feasibility.md` · Theme idea source:
-`os-landscape.md`
+`research/os-landscape.md`

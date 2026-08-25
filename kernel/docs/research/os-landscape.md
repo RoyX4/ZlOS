@@ -2,7 +2,7 @@
 > after the eleven-track merge. ~230 of its 306 lines survey 13 other hobby OSes and cannot decay; its one measured number (i915.ko = 11.2 MB) re-measures correctly today. The parts that ARE a task list have moved on — `fb_clip` and SIMD are both done, and all four bullets of its "where zlOS sits" self-assessment are false on main. Read it as reference, never as status.
 >
 > **What is still open from this document is in
-> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 
@@ -11,7 +11,7 @@
 Researched 2026-08-17. A survey of the OSes worth knowing about, written for
 someone building one, with **3D as the stated goal**.
 
-Companion to `desktop-prior-art.md`, which covers the graphics/GPU question
+Companion to `kernel/docs/research/desktop-prior-art.md`, which covers the graphics/GPU question
 specifically. This one is "what are these projects actually like".
 
 ---
@@ -214,7 +214,7 @@ a serious independent project. That happens.
 ### 2. Essence — the solo-developer benchmark
 
 **One person, since 2017.** Software vector renderer *with animation*. Window
-manager in the kernel — the same structural choice `archive/superseded/desktop-plan.md` makes.
+manager in the kernel — the same structural choice `kernel/docs/archive/superseded/desktop-plan.md` makes.
 Tabbed windows. Windows 7 as a deliberate visual reference.
 
 **What to take:** this is the realistic ceiling for one person, and it is a good
@@ -275,19 +275,19 @@ is hard.
 
 ## The realistic path to 3D
 
-Not a GPU driver. `desktop-prior-art.md` covers why in detail — `i915.ko` is
+Not a GPU driver. `kernel/docs/research/desktop-prior-art.md` covers why in detail — `i915.ko` is
 11.2 MB against zlOS's 1.07 MB whole kernel, and everyone with GPU acceleration
 got it by porting Mesa, which needs POSIX.
 
 **The path is SerenityOS's:**
 
-1. **`fb_clip`** — a scissor rectangle in `fb.c` (`archive/superseded/desktop-TODO.md` 0b). A
+1. **`fb_clip`** — a scissor rectangle in `fb.c` (`kernel/docs/archive/superseded/desktop-TODO.md` 0b). A
    rasterizer needs clipping before anything else. `fb3d.c` already has its own
    private clip; `fb.c` does not.
 2. **Tiled rasterization** — 16×16 blocks, barycentric coordinates, edge
    derivatives. The documented approach, from Fabian Giesen's *"A trip through
    the Graphics Pipeline"* and Scratchapixel's rasterization series.
-3. **SIMD** — `cpu.c` already detects SSE/SSE2/SSE3/SSSE3 and `HANDOFF.md`
+3. **SIMD** — `cpu.c` already detects SSE/SSE2/SSE3/SSSE3 and `kernel/HANDOFF.md`
    confirms SSE is **on** in the 64-bit build. **Nothing uses it yet.** The
    per-pixel blend loops in `fb.c` are the first customer, well before 3D.
 4. **A depth buffer** — `fb3d.c` deliberately avoids one by culling back faces

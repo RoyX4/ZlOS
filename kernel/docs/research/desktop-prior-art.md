@@ -59,7 +59,7 @@ Graphics Pipeline"* and Scratchapixel's rasterization series.
 Not the renderer. Three other things:
 
 1. **A real toolkit** — `LibGUI` knows what a button is, where it goes, how it
-   arranges. zlOS has no equivalent (`archive/superseded/desktop-northstar-feasibility.md`).
+   arranges. zlOS has no equivalent (`kernel/docs/archive/superseded/desktop-northstar-feasibility.md`).
 2. **A theme system** — `WindowManager` loads a theme object into a shared
    buffer; window frame painting lives in `LibGfx` with gradient support. Colours
    and metrics are **data**, not hardcoded numbers.
@@ -90,11 +90,11 @@ Icculus Microgrant. This is the nearest thing to Roy's situation that exists.
 Three things worth taking from it:
 
 1. **The window manager is in the kernel.** That is the same structural choice
-   `archive/superseded/desktop-plan.md` makes for zlOS (mechanism in C, in-kernel). Independent
+   `kernel/docs/archive/superseded/desktop-plan.md` makes for zlOS (mechanism in C, in-kernel). Independent
    confirmation it is a reasonable design, not a compromise.
 2. **A software *vector* renderer, and it animates.** So "software rendered" does
    not mean "static and flat". One person built animated vector UI on a CPU.
-   The animation ambition in `desktop-polish-and-speed.md` is proven achievable.
+   The animation ambition in `kernel/docs/desktop-polish-and-speed.md` is proven achievable.
 3. **It picked an explicit visual reference (Windows 7) and followed it.** It
    did not invent a look from nothing. That is why it reads as coherent.
 
@@ -288,7 +288,7 @@ The upgrade path is exactly SerenityOS's: **16×16 tiles, barycentric
 coordinates, SIMD.**
 
 And the hardware is there — `cpu.c` already detects SSE/SSE2/SSE3/SSSE3, and
-`HANDOFF.md` confirms **SSE is enabled** in the 64-bit build. Nothing is
+`kernel/HANDOFF.md` confirms **SSE is enabled** in the 64-bit build. Nothing is
 currently using it. `fb.c`'s per-pixel blend loops are the obvious first
 customer, well before 3D.
 
@@ -296,7 +296,7 @@ customer, well before 3D.
 
 SerenityOS keeps colours and frame metrics in a theme object rather than in the
 drawing code. zlOS hardcodes both. This is small, cheap, and would fix the
-"spacing is hand-picked numbers" gap in `desktop-polish-and-speed.md`.
+"spacing is hand-picked numbers" gap in `kernel/docs/desktop-polish-and-speed.md`.
 
 ### 3. Accept the real comparison
 

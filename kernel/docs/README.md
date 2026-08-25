@@ -77,10 +77,19 @@ snapshot that the later application-registry receipt supersedes.
 
 ## Planning And Research
 
-Files such as `driver-build-order.md`, `display-roadmap.md`,
-`gpu-driver.md`, `gpu-next.md`, `wireless-plan.md`, `desktop-*.md`,
-`os-landscape.md`, and `why-mainstream-desktops-feel-fast.md` are planning or
-research unless they carry a receipt section with measured evidence.
+Current plans such as `driver-build-order.md`, `display-roadmap.md`,
+`gpu-next.md`, and `wireless-plan.md` stay at this level until the planning
+taxonomy pass is complete.
+
+Comparative and source-heavy studies live in `research/`:
+
+| File | Subject |
+|---|---|
+| `research/desktop-prior-art.md` | Graphics approaches used by other hand-built operating systems. |
+| `research/intel-graphics-stack.md` | Intel graphics stack and zlOS boundary analysis. |
+| `research/os-landscape.md` | Hobby-OS landscape and 3D strategy survey. |
+| `research/starred-repository-research.md` | Index into the 32-repository external research corpus. |
+| `research/why-mainstream-desktops-feel-fast.md` | Source-backed desktop latency and rendering study. |
 
 ## Rule
 

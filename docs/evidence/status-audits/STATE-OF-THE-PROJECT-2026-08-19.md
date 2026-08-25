@@ -1818,8 +1818,8 @@ diffing the union of all six local `refs/wip/*` trees against `main`'s tracked
 set. All six refs are already local; no fetch is needed. The composition matters
 more than the count, because three of the groups are different kinds of problem:
 
-- **Dangling docs.** `desktop-prior-art.md`, `desktop-toolkit.md`,
-  `kernel/docs/guides/desktop-build-guide.md`, `intel-graphics-stack.md` and `beyond-the-kernel.md`
+- **Dangling docs.** `kernel/docs/research/desktop-prior-art.md`, `desktop-toolkit.md`,
+  `kernel/docs/guides/desktop-build-guide.md`, `kernel/docs/research/intel-graphics-stack.md` and `beyond-the-kernel.md`
   are linked by 3, 5, 7, 1 and 3 tracked `.md` files respectively and exist on no
   branch. Every one of those links is broken today. `beyond-the-kernel.md` is the
   worst case because `HANDOFF.md:391` makes it the authority that overturns a
@@ -1838,14 +1838,14 @@ more than the count, because three of the groups are different kinds of problem:
 
 ```
 $ for d in beyond-the-kernel.md desktop-toolkit.md guides/desktop-build-guide.md \
-           desktop-prior-art.md intel-graphics-stack.md MASTER_PLAN.md; do
+           research/desktop-prior-art.md research/intel-graphics-stack.md MASTER_PLAN.md; do
     printf '%-26s tracked=%s citers=%s\n' "$d" \
       "$(git ls-files | grep -c $d)" "$(git grep -l $d | wc -l)"; done
 beyond-the-kernel.md       tracked=0 citers=3
 desktop-toolkit.md         tracked=0 citers=5
 guides/desktop-build-guide.md tracked=0 citers=7
-desktop-prior-art.md       tracked=0 citers=3
-intel-graphics-stack.md    tracked=0 citers=1
+research/desktop-prior-art.md tracked=0 citers=3
+research/intel-graphics-stack.md tracked=0 citers=1
 MASTER_PLAN.md             tracked=0 citers=14
 ```
 
@@ -2082,7 +2082,7 @@ Listed so nobody promotes one of these to a fact.
 | Do `fix/pointer-drain`'s 26 assertions pass against merged `main`? | `git merge --no-commit --no-ff fix/pointer-drain`, then build and run `hosttest/xhcitest` |
 | Do the six CI workflows pass against merged `main`? | A push, or `act` |
 | Does the browser actually fetch `http://example.com/`? (`browser-status.md:26`) | A QEMU boot with `-netdev user,id=n0 -device virtio-net-pci,netdev=n0` |
-| The "1.07 MB whole kernel" figure (`HANDOFF.md:597`, `os-landscape.md:271`) | `./build.sh && stat -c%s kernel/kernel.elf`. The untracked `kernel.elf` on disk is 1,571,676 bytes but is a build artefact of unknown provenance |
+| The "1.07 MB whole kernel" figure (`HANDOFF.md:597`, `research/os-landscape.md:271`) | `./build.sh && stat -c%s kernel/kernel.elf`. The untracked `kernel.elf` on disk is 1,571,676 bytes but is a build artefact of unknown provenance |
 | Is the v10 wallpaper five passes or six, 100 ms or 130 ms? | Build and run `hosttest/fbbench`, read its wallpaper row. Both existing numbers are estimates taken **before** the wallpaper cache landed; neither was re-taken |
 | Does deleting `wm.c:805-815` (§4.6) look right? | Build and run `hosttest/wmshot`, look at `wmshot.ppm` |
 | Does the on-screen frame time agree with `fbbench`? | Build and run `fbbench`, compare against a booted `probe-frame.py` |

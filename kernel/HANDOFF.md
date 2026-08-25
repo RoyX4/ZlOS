@@ -1292,7 +1292,7 @@ inverts that. Designed 2026-08-17:
   own"; `kernel/docs/browser-status.md` is the measured account.
   Top of the shortlist is still **the clip rectangle**, which now has *three*
   customers: compositor, toolkit, and the 3D rasterizer.
-- `docs/os-landscape.md` — survey of ~13 hobby OSes, written for the **3D goal**.
+- `docs/research/os-landscape.md` — survey of ~13 hobby OSes, written for the **3D goal**.
   Headline: **SerenityOS runs Quake III on a software rasterizer, no GPU** —
   LibSoftGPU, 16×16 tiles, barycentric, SIMD. That is the path, and
   `src/graphics/framebuffer/fb3d.c` is
@@ -1302,7 +1302,7 @@ inverts that. Designed 2026-08-17:
   aiming; and **Redox has
   excellent systems engineering and a "sluggish, unpolished" UI** — a good
   desktop is not downstream of a good kernel.
-- `docs/desktop-prior-art.md` — how TempleOS, SerenityOS, Essence, Haiku, Redox,
+- `docs/research/desktop-prior-art.md` — how TempleOS, SerenityOS, Essence, Haiku, Redox,
   Managarm and Asterinas do graphics. **Nobody in this space has GPU
   acceleration.** SerenityOS runs Half-Life on a SIMD *software* rasterizer.
   **Essence OS is the closest analogue** — one developer since 2017, software
