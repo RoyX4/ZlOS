@@ -76,7 +76,7 @@ struct tss_entry {
  * A ring-3 program that tries any of them takes a #GP instead of doing it.
  *
  * MEMORY isolation needs paging's U/S bit and a separate address space per
- * process, and that is 64-bit-only work - see docs/memory-model.md, Stage 5.
+ * process, and that is 64-bit-only work - see docs/reference/system/memory-model.md, Stage 5.
  * Saying "ring 3" and meaning "isolated" is the confusion this comment exists
  * to prevent. */
 static struct gdt_entry gdt[6];

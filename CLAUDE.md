@@ -69,18 +69,18 @@ coincidence of one URL. The shape of that mistake is kept deliberately.
 
 `kernel/docs/archive/prompts/POINTER-PROMPT.md` is historical diagnosis, not current work. Its
 pointer-drain fix is already in `origin/main`; use it for failure history and
-read `kernel/docs/input-stack.md` plus current source before changing input,
+read `kernel/docs/reference/system/input-stack.md` plus current source before changing input,
 xHCI, or the window manager.
 Two docs written for specific traps, both worth reading before touching their
 area:
 
-- `kernel/docs/input-stack.md` — the keyboard, the pointer, and the three ways a
+- `kernel/docs/reference/system/input-stack.md` — the keyboard, the pointer, and the three ways a
   USB stack written for ONE HID device breaks when a second one arrives. Also
   the `-mgeneral-regs-only` boundary rule, which is subtler than it looks.
 - `kernel/docs/guides/thinkpad-first-boot.md` — the step-by-step for booting the
   laptop, including the two things that waste an hour (Secure Boot, and the fact
   that there is no serial port so the screen is the only diagnostic).
-- `kernel/docs/memory-model.md` — **the address space and, for each boundary in
+- `kernel/docs/reference/system/memory-model.md` — **the address space and, for each boundary in
   it, the thing that actually enforces it.** The four ceilings people conflate
   (what the loader carries, where the image may end, who owns which address, how
   much RAM exists) are four different numbers with four different guards. Read

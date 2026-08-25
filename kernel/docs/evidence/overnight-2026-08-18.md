@@ -104,7 +104,7 @@ Also fixed: the pointer clamped to a hardcoded 2000x1500. On your 2560-wide
 panel that would have made the right **560 px unreachable**.
 
 Full detail, including three bugs from two HID devices sharing one controller:
-`kernel/docs/input-stack.md`.
+`kernel/docs/reference/system/input-stack.md`.
 
 ## State of the tree
 
@@ -145,7 +145,7 @@ before, and 3 then 3 after.
 **This was the fourth bug of the same shape** — state that was accidentally
 correct while exactly one HID device existed — and the only one in pre-existing
 code rather than the new driver. The pattern and the rule are in
-`input-stack.md`: *state named after a device belongs to that device.*
+`kernel/docs/reference/system/input-stack.md`: *state named after a device belongs to that device.*
 
 ## Things I got wrong, so you can discount accordingly
 

@@ -140,7 +140,7 @@ STEPS = [
     # after it in the list then fails too. Measured: editor alone passes,
     # mouse->editor passes, input->editor fails, and detaching the tablet makes
     # input->editor pass. Six hypotheses tested and none held (see
-    # docs/input-stack.md). Kept here, last, so the failure is visible and
+    # docs/reference/system/input-stack.md). Kept here, last, so the failure is visible and
     # named rather than hidden by narrowing the test.
     ("editor",     "edit 3",  "gfx",  "qmp:esc", ["wm: win"], ["needs the framebuffer"]),
     ("editor_file", "ls", "text", None, ["/user/notes.txt"], []),

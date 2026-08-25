@@ -177,7 +177,7 @@ none of it. The *bounded* version — not "port Linux":
 Call it 800–1,200 lines across `gdt64.c`, `idt.c`, a new `syscall.S`, and a new
 `proc.c`. Four unknowns to resolve: IST layout, the `sysret` `RCX`/`R11`
 contract, where the user stack lives in the high-RAM map, and whether
-`-mgeneral-regs-only` covers the entry stub (see `kernel/docs/input-stack.md`).
+`-mgeneral-regs-only` covers the entry stub (see `kernel/docs/reference/system/input-stack.md`).
 
 **The first user process is already written and already stranded.**
 `interp_kernel.c` is 721 complete lines, in no build, whose `k_malloc` already

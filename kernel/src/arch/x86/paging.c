@@ -15,7 +15,7 @@
  *
  *   - Nothing inside it has a fixed address, so no other file names one.
  *   - NO DEVICE IS EVER GIVEN A POINTER INTO IT. heap.c is not in
- *     check-dma.sh's DMA set, and docs/dma-sites.md enumerates every address
+ *     check-dma.sh's DMA set, and docs/reference/system/dma-sites.md enumerates every address
  *     that reaches hardware - none of them is a heap pointer. So the one
  *     failure mode that is silent and unrecoverable - a device handed a
  *     virtual address - cannot arise from this window.

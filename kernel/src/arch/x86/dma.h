@@ -34,7 +34,7 @@
  * drivers, and there is no plan to do it: see paging.c, "what is still
  * identity, deliberately".
  *
- * `docs/dma-sites.md` is the inventory this covers, with the argument for why
+ * `docs/reference/system/dma-sites.md` is the inventory this covers, with the argument for why
  * that inventory is closed rather than merely long. `check-dma.sh` is what stops
  * a new site being added that skips this.
  *

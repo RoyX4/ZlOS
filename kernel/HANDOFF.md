@@ -1432,7 +1432,7 @@ keyboard. No GPU, no root, no QEMU, milliseconds:
 cd kernel/tests/host && ./build.sh && ./inputtest
 ```
 
-Full write-up: `docs/input-stack.md`.
+Full write-up: `docs/reference/system/input-stack.md`.
 
 ## How a harness types a command — `docs/typing-into-the-compositor.md`
 
@@ -1601,7 +1601,7 @@ The full map — every base and end re-grepped from the file that owns it, the
 kernel image end measured, the arithmetic for where a new buffer may go, and one
 collision `src/graphics/framebuffer/fb.c`'s map does not list (the SMP AP
 stacks at 168 MiB, inside
-`sp_buf`'s declared span) — is `kernel/docs/memory-map.md`.
+`sp_buf`'s declared span) — is `kernel/docs/reference/system/memory-map.md`.
 
 ## Two silent faults hid five sixths of the desktop (2026-08-20)
 
@@ -1705,7 +1705,7 @@ you check anything else.**
 
 Three docs, all written from measurement rather than intent:
 
-- `kernel/docs/memory-map.md` — every fixed physical address, re-grepped from the
+- `kernel/docs/reference/system/memory-map.md` — every fixed physical address, re-grepped from the
   file that owns it, the kernel image end measured, and **the fact that no gate
   passes `-m` so every address above 128 MiB is unbacked under all of them**.
   Also two collisions `src/graphics/framebuffer/fb.c`'s map does not list.

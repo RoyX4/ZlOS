@@ -7,8 +7,8 @@ Read the top banner of each file before treating it as current.
 
 | File | Truth state |
 |---|---|
-| `input-stack.md` | Current input model and probe map. |
-| `memory-model.md`, `memory-map.md`, `dma-sites.md` | Current fixed-address and memory-boundary references. |
+| `reference/system/input-stack.md` | Current input model and probe map. |
+| `reference/system/memory-model.md`, `reference/system/memory-map.md`, `reference/system/dma-sites.md` | Current fixed-address and memory-boundary references. |
 | `guides/thinkpad-first-boot.md` | Physical-boot runbook; does not by itself prove a successful boot happened. |
 | `current-speed-and-quality-diagnosis.md` | Current speed diagnosis from measured traces, with hardware/QEMU boundaries called out. |
 | `plans/performance-architecture-roadmap.md` | Current performance architecture plan. |

@@ -4,7 +4,7 @@ Written 2026-08-20, during the work to turn zlOS's memory from a set of
 hand-chosen constants into a memory *model*. This page is the layout as it
 stands, **who enforces each boundary**, and which of the five stages is done.
 
-`kernel/docs/memory-map.md` is the older, longer account of the same territory and is
+`kernel/docs/reference/system/memory-map.md` is the older, longer account of the same territory and is
 still worth reading for the history. This one exists to answer a different
 question: *if I put a buffer at address X, what stops me being wrong?*
 
@@ -317,7 +317,7 @@ The heap is the right first region and the choice is not arbitrary:
 
 - nothing inside it has a fixed address, so no other file names one;
 - **no device is ever given a pointer into it** — `heap.c` is deliberately
-  outside `check-dma.sh`'s DMA set, and `kernel/docs/dma-sites.md` enumerates every
+  outside `check-dma.sh`'s DMA set, and `kernel/docs/reference/system/dma-sites.md` enumerates every
   address that reaches hardware, none of which is a heap pointer;
 - if the window fails, the physical address is a complete, already-tested
   system. There is no half state.
@@ -355,7 +355,7 @@ extend, and `vmm_map_window()` says so and returns 0.
 
 ### The DMA seam, and the four sites I missed
 
-`kernel/docs/dma-sites.md` is the full account. The short version, because it is the
+`kernel/docs/reference/system/dma-sites.md` is the full account. The short version, because it is the
 part worth remembering:
 
 **My own enumeration found 44 sites and missed four**, all in `xhci.c`, all live

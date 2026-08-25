@@ -244,7 +244,7 @@ Measured, not reasoned: **no gate in this project passes `-m` to QEMU**, and
 QEMU's i386 default is exactly 128 MiB (`query-memory-size-summary` →
 `base-memory: 134217728`). So the entire high-RAM map is unbacked on every gate,
 and a new fixed buffer placed above it would link, boot, pass review, and never
-execute. `kernel/docs/memory-map.md` has the full re-grepped map, the arithmetic,
+execute. `kernel/docs/reference/system/memory-map.md` has the full re-grepped map, the arithmetic,
 and the two collisions found while doing it.
 
 ### #E3 | An arena with a reset is not a heap, and the boot log still says so

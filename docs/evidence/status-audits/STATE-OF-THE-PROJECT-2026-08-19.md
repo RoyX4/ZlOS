@@ -1869,13 +1869,13 @@ now.** Four kernel docs defer a hazard by saying it is "tracked as `T-EXEC-n` in
 $ grep -c 'T-EXEC' .ultra/TENSIONS.md
 0
 $ grep -rn 'T-EXEC' kernel/docs/*.md
-memory-map.md:103 (T-EXEC-1)   :136 (T-EXEC-5)   :192 (T-EXEC-3)
+kernel/docs/reference/system/memory-map.md:103 (T-EXEC-1)   :136 (T-EXEC-5)   :192 (T-EXEC-3)
 kernel/docs/architecture/system/exec-kill-path.md:300 (T-EXEC-8)
 ```
 
 The cited *file* exists, so a file-existence check passes and the citation still
 leads nowhere. `T-EXEC-5` and `T-EXEC-8` are the load-bearing pair —
-`memory-map.md:136` declines to fix its hazard *because* it says the tension is
+`kernel/docs/reference/system/memory-map.md:136` declines to fix its hazard *because* it says the tension is
 recorded elsewhere. Either copy the four into `.ultra/TENSIONS.md` or repoint the
 citations. A second one-line check ("every `T-*` id cited in a doc appears in
 `TENSIONS.md`") closes this class too.

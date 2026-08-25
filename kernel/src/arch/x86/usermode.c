@@ -39,7 +39,7 @@
  *
  * MEMORY isolation needs the page tables' U/S bit and a separate address space
  * per process. paging.c has the machinery; the 64-bit builds have the tables.
- * docs/memory-model.md, Stage 5, is the account of what is left.
+ * docs/reference/system/memory-model.md, Stage 5, is the account of what is left.
  *
  * ============================================================================
  * THE THREE THINGS THAT MUST ALL BE TRUE, OR RING 3 TRIPLE FAULTS

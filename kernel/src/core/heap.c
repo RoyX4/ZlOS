@@ -274,7 +274,7 @@ static void hpu(unsigned long v)
  *
  * NO DEVICE EVER SEES ONE OF THESE POINTERS. That is what makes this region
  * safe to move: heap.c is deliberately not in check-dma.sh's DMA set, and
- * docs/dma-sites.md enumerates every address that reaches hardware. If that
+ * docs/reference/system/dma-sites.md enumerates every address that reaches hardware. If that
  * ever stops being true, the pointer must go through dma_addr() like every
  * other one - and dma_addr() consults paging.c, so it would come out right. */
 extern unsigned long long vmm_map_window(unsigned long long phys,
