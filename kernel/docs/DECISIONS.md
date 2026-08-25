@@ -510,8 +510,8 @@ scene, the only difference being which `ui_theme_init` is linked:
 
 | | |
 |---|---|
-| [`docs/shots/palette-before-two-palettes.png`](../../docs/shots/palette-before-two-palettes.png) | mid-navy bodies |
-| [`docs/shots/palette-after-one-palette.png`](../../docs/shots/palette-after-one-palette.png) | `--panel` bodies |
+| [`docs/evidence/visual-diffs/palette-before-two-palettes.png`](../../docs/evidence/visual-diffs/palette-before-two-palettes.png) | mid-navy bodies |
+| [`docs/evidence/visual-diffs/palette-after-one-palette.png`](../../docs/evidence/visual-diffs/palette-after-one-palette.png) | `--panel` bodies |
 
 Three things the pictures show that the table does not. The chrome and the
 content stop being one blue wash and become separate layers, which is the
@@ -864,8 +864,8 @@ target, the second draws one slightly larger, which is the right direction for
 a visual cue.
 
 Deleted the first block. `wmshot` before/after at the same corner
-(`docs/shots/grip-before-two-renderers.png`,
-`docs/shots/grip-after-one-renderer.png`, 80×80 crop at 6×, point-filtered)
+(`docs/evidence/visual-diffs/grip-before-two-renderers.png`,
+`docs/evidence/visual-diffs/grip-after-one-renderer.png`, 80×80 crop at 6×, point-filtered)
 shows the extra, longer diagonal strokes gone.
 
 *Gate:* the three kernel builds clean; `hosttest/wmtest` green including the

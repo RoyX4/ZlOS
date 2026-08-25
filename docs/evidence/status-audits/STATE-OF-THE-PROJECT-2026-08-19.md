@@ -554,8 +554,8 @@ already exists as the harness shape.
 > - **A second, larger contributor found separately:** two palettes were on
 >   screen at once — two cyans and two panel colours. `DECISIONS.md` item E,
 >   closed by **#34**, gated by `hosttest/palette`. Before/after renders are in
->   [`shots/palette-before-two-palettes.png`](../../shots/palette-before-two-palettes.png)
->   and [`shots/palette-after-one-palette.png`](../../shots/palette-after-one-palette.png).
+>   [`visual-diffs/palette-before-two-palettes.png`](../visual-diffs/palette-before-two-palettes.png)
+>   and [`visual-diffs/palette-after-one-palette.png`](../visual-diffs/palette-after-one-palette.png).
 >
 > The concurrency note below turned out to be right and is worth keeping as the
 > example: that session's deletion of §1c and its two PNGs was in-progress work,
@@ -570,7 +570,7 @@ and the window client rect.
 
 **Concurrency note, stated because it changes what you will see:** at writing,
 another session has a staged (uncommitted) deletion of Phase 1c and of
-`docs/shots/{before,after}-merge-help.png` in this worktree's index. That is
+`docs/evidence/visual-diffs/{before,after}-merge-help.png` in this worktree's index. That is
 their work in progress, not a resolution. Check `git status` before assuming this
 entry is closed.
 
@@ -751,8 +751,8 @@ bug, not just an unreachable feature.
 > **CLOSED**, `desktop/v10-look` `580aabe`. Deleted the earlier `:805-815`
 > block exactly as this entry recommended. What was "unverifiable statically"
 > here is now verified: `hosttest/wmshot` before/after at the same corner is
-> `docs/shots/grip-before-two-renderers.png` /
-> `docs/shots/grip-after-one-renderer.png` — the extra, longer diagonal
+> `docs/evidence/visual-diffs/grip-before-two-renderers.png` /
+> `docs/evidence/visual-diffs/grip-after-one-renderer.png` — the extra, longer diagonal
 > strokes are gone. `kernel/docs/DECISIONS.md` #41.
 
 ```

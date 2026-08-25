@@ -48,7 +48,7 @@ from a window to the service it depicts.
 ## Current visual direction
 
 The current direction is not the older navy/cyan desktop shown in
-`docs/shots/after-merge-help.png`, `look-2560.png`, or `dock-menu.png`. Those
+`docs/evidence/visual-diffs/after-merge-help.png`, `look-2560.png`, or `dock-menu.png`. Those
 screenshots remain useful interaction history, but the live reference-derived
 system is a dark graphite depth ladder with a single lime accent.
 

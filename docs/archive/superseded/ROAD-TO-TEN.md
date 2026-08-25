@@ -153,7 +153,7 @@ string is already fixed there (`acec0f5`).
 **3. Get an artifact for the Wikipedia claim.**
 `kernel/docs/browser-status.md:37` asserts it "fetches `https://en.wikipedia.org/`
 by name over verified TLS 1.3, and renders it with images, flexbox and grid."
-**There is no screenshot on that branch to support it** — `docs/shots/` holds two
+**There is no screenshot on that branch to support it** — `docs/evidence/visual-diffs/` holds two
 merge-help PNGs and nothing else. This is precisely the assessment's Q41
 ("screenshot it"), and it is the project's own honesty rule applied to its best
 result. `browsershot` exists; run it and commit the render.

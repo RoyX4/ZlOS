@@ -168,7 +168,7 @@ identical apart from the digits that changed.
 > `6bb8086` ("the three defects the documentation audit found in my own merge"),
 > which does not mention the deletion in its message — 235 lines of removals rode
 > along with a three-item fix. `LOOK-AND-SPEED-PROMPT.md` then cited "§1c" and
-> "`docs/shots/`" as if both were present. They were not. Restored byte-identical
+> "`docs/evidence/visual-diffs/`" as if both were present. They were not. Restored byte-identical
 > from `ff27d57` (`sha256 8c73b422…` on `before-merge-help.png`, matched).
 
 > ## ANSWERED 2026-08-19 — read this before the rest of the section
@@ -243,9 +243,9 @@ identical apart from the digits that changed.
 > > Gated by `tests/host/termwrap`, watched going red.
 
 Zac's report, and he is right that the two screens differ. Compare
-`docs/shots/before-merge-help.png` (~~desktop/overnight-compositor~~ **the
+`docs/evidence/visual-diffs/before-merge-help.png` (~~desktop/overnight-compositor~~ **the
 apps-in-windows lineage — see the box above**, "v10-wall") with
-`docs/shots/after-merge-help.png` (merged main, same `help` screen, same
+`docs/evidence/visual-diffs/after-merge-help.png` (merged main, same `help` screen, same
 1920x1200). The merged one reads as coarser, and its longest lines are clipped
 at the window edge where the v10 shot fits them.
 
@@ -285,7 +285,7 @@ Concrete places to start:
 3. The window's client rect: the merged boot prints
    `compositor: 4 windows, shell client 82,160 1236x834`. Compare against a v10
    boot. A narrower client with the same cell means fewer columns and clipping.
-4. `docs/shots/` has both PNGs. Measure rather than eyeball - my own pixel
+4. `docs/evidence/visual-diffs/` has both PNGs. Measure rather than eyeball - my own pixel
    comparison was inconclusive because the two shots show different content at
    the same row, which is exactly the mistake to avoid repeating.
 

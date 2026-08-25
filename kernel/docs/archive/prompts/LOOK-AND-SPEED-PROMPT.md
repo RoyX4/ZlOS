@@ -88,7 +88,7 @@ rgb() theme", so agreement is expected and disagreement is the signal. Check
   shrinking value leaves the tail of the previous one. Full diagnosis in
   `kernel/docs/POINTER-PROMPT.md` §1b. Small fix, visible every boot.
 - **The desktop reads coarser than the v10 screenshots and nobody knows why.**
-  `POINTER-PROMPT.md` §1c has both PNGs under `docs/shots/` and the list of what
+  `POINTER-PROMPT.md` §1c has both PNGs under `docs/evidence/visual-diffs/` and the list of what
   has already been ruled out — no visual function was lost, `fb_text_aa` and
   `fb_glyph_aa` are byte-identical to the branch that drew those shots. That
   points at a **parameter**, not deleted code: scale, cell size, padding, or the

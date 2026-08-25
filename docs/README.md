@@ -43,7 +43,7 @@ These are useful, but not a done list:
 | `evidence/COMPARE-BOREDOS.md` | Measured comparison against a peer hobby OS. |
 | `evidence/REPOSITORY-STRUCTURE-STUDY-2026-08-25.md` | Read-only layout measurements across all 33 pinned repositories, with detailed inspection of the largest systems. |
 | `evidence/DOCUMENTATION-COVERAGE-AUDIT-2026-08-25.md` | Static proof that the 906-feature/21-phase/174-contract program is self-contained and navigable, with stale runtime evidence kept explicit. |
-| `shots/` | Curated visual evidence images. |
+| `evidence/visual-diffs/` | Curated before/after visual evidence images. |
 
 ## Archive
 

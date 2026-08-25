@@ -54,7 +54,7 @@ correctly, both times.
    decisions against a different reading of the reference, not bugs. Someone has
    to say which wins. See `LOOK-AND-SPEED-PROMPT.md` Part 1.
 3. **What specifically looks worse than v10?** Both screenshots are committed
-   under `docs/shots/`. The rendering code is byte-identical to the branch that
+   under `docs/evidence/visual-diffs/`. The rendering code is byte-identical to the branch that
    drew the good one, so it is a parameter, not deleted code — but nobody has
    named which parameter. A human pointing at the picture and saying "that" is
    worth more than another sweep.

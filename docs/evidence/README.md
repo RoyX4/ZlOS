@@ -9,7 +9,7 @@ work. They are dated evidence, not the current task queue.
 - `status-audits/` contains dated project-state audits superseded as live queues.
 - `POINTER-EVIDENCE.md` records the pointer diagnosis and its proof ceiling.
 - `COMPARE-BOREDOS.md` is a measured peer comparison.
-- `../shots/` contains intentionally curated visual evidence.
+- `visual-diffs/` contains intentionally curated before/after visual evidence.
 
 Read [`../PROJECT-STATUS.md`](../PROJECT-STATUS.md) before using an old receipt
 as a current claim.

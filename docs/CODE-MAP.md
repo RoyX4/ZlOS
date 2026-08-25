@@ -48,7 +48,7 @@ where things live, not what is complete.
 | `docs/design/` | mixed proposals | Design notes and proposals. A file here is not implemented unless its own status says so and current code confirms it. |
 | `docs/fleet/` | audit boards | Review findings, boards, and verification logs. |
 | `docs/evidence/` | measured history | Merge, pointer, and comparison records retained as evidence. |
-| `docs/shots/` | curated evidence | Small visual evidence images that were intentionally kept. |
+| `docs/evidence/visual-diffs/` | curated evidence | Small before/after visual comparisons that were intentionally kept. |
 | `docs/archive/` | stale/history | Superseded plans, old prompts, backups, and documents kept for context only. |
 | `kernel/docs/` | kernel records | Current kernel references and plans, with dated receipts in `evidence/` and old prompts/audits/handoffs in `archive/`. |
 | `kernel/docs/receipts/` | machine evidence | JSON and archive receipts consumed by metadata/provenance tooling. |
