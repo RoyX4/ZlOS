@@ -1,6 +1,6 @@
 # Building the zlOS desktop — the plain-English version
 
-Read this **before** `desktop-plan.md`. That one is the decisions and the
+Read this **before** `archive/superseded/desktop-plan.md`. That one is the decisions and the
 evidence. This one explains what we are actually building and why, in ordinary
 words, for someone who has forgotten everything (including future you).
 
@@ -318,5 +318,5 @@ Terms used in the code and the other docs.
 - Fix the **resolution** thing first — it needs no hardware and everything else
   sits behind it.
 
-Full detail, evidence and line numbers: `desktop-plan.md`.
+Full detail, evidence and line numbers: `archive/superseded/desktop-plan.md`.
 Current status and blockers: `../../.ultra/STATE.md`.

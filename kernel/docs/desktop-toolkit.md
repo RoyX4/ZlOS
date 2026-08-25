@@ -193,7 +193,7 @@ kernel.zl     app_draw calls ui_* — no coordinates anywhere
     |
 ui.c          NEW: layout cursor, widgets, theme          <- this document
     |
-wm.c          windows, z-order, focus, damage, routing    <- desktop-plan.md
+wm.c          windows, z-order, focus, damage, routing    <- archive/superseded/desktop-plan.md
     |
 fb.c          pixels + clip rect + damage list            <- desktop-TODO.md 0b/0c
 ```
@@ -255,6 +255,6 @@ path actually works.
 
 ---
 
-Architecture: `desktop-plan.md` · Task list: `desktop-TODO.md` · Why the gap
+Architecture: `archive/superseded/desktop-plan.md` · Task list: `desktop-TODO.md` · Why the gap
 existed: `desktop-northstar-feasibility.md` · Theme idea source:
 `os-landscape.md`

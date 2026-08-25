@@ -15,7 +15,7 @@ stay in `kernel.zl`.
 *Why:* the zl kernel subset **has no lists** (`kernel/README.md:154`,
 `zl_list_n` is a hard fault). A window table is a list. This is not a style
 choice — the language cannot express it. Same line X11 and Wayland draw.
-→ `desktop-plan.md`
+→ `archive/superseded/desktop-plan.md`
 
 **2. z-order is an index array. Nothing else.**
 Iteration order *is* paint order. Raise = remove + append. Hit-test walks it
@@ -965,7 +965,7 @@ offered afterwards.** Logged to `~/.claude/CLAUDE.md`, the vault's
 
 Docs: `look-and-speed.md` (the frame budget, the vsync survey, what is next) ·
 `desktop-build-guide.md` (start here) · `desktop-TODO.md` (the task list) ·
-`desktop-plan.md` · `desktop-look.md` · `desktop-polish-and-speed.md` ·
+`archive/superseded/desktop-plan.md` · `desktop-look.md` · `desktop-polish-and-speed.md` ·
 `desktop-northstar-feasibility.md` · `desktop-prior-art.md` ·
 `os-landscape.md` · `intel-graphics-stack.md`
 

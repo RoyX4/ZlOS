@@ -214,7 +214,7 @@ a serious independent project. That happens.
 ### 2. Essence — the solo-developer benchmark
 
 **One person, since 2017.** Software vector renderer *with animation*. Window
-manager in the kernel — the same structural choice `desktop-plan.md` makes.
+manager in the kernel — the same structural choice `archive/superseded/desktop-plan.md` makes.
 Tabbed windows. Windows 7 as a deliberate visual reference.
 
 **What to take:** this is the realistic ceiling for one person, and it is a good

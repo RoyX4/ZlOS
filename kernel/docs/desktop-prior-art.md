@@ -90,7 +90,7 @@ Icculus Microgrant. This is the nearest thing to Roy's situation that exists.
 Three things worth taking from it:
 
 1. **The window manager is in the kernel.** That is the same structural choice
-   `desktop-plan.md` makes for zlOS (mechanism in C, in-kernel). Independent
+   `archive/superseded/desktop-plan.md` makes for zlOS (mechanism in C, in-kernel). Independent
    confirmation it is a reasonable design, not a compromise.
 2. **A software *vector* renderer, and it animates.** So "software rendered" does
    not mean "static and flat". One person built animated vector UI on a CPU.

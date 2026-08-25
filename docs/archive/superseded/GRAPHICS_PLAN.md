@@ -27,7 +27,7 @@
 > So on zlOS, layer 5 is not "FFI to OpenGL". It is **"write a software
 > rasterizer"**, and `kernel/fb3d.c` is already its first step.
 >
-> See `kernel/docs/desktop-prior-art.md` and `kernel/docs/desktop-plan.md`.
+> See `kernel/docs/desktop-prior-art.md` and `kernel/docs/archive/superseded/desktop-plan.md`.
 
 Drafted 2026-08-03. The layered path for zl graphics, what each layer needs, and what is buildable
 now versus gated on FFI. Complements the existing `design_game_system.md` (973 lines, the games-

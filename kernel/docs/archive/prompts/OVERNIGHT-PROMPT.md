@@ -53,7 +53,7 @@ READ FIRST, IN THIS ORDER
   kernel/docs/DECISIONS.md          every decision already taken, and two that were wrong
   kernel/docs/desktop-TODO.md       the ordered task list — this is your work queue
   kernel/docs/desktop-build-guide.md  what a compositor is, in plain words
-  kernel/docs/desktop-plan.md       architecture and line numbers
+  kernel/docs/archive/superseded/desktop-plan.md  architecture and line numbers
   kernel/docs/desktop-toolkit.md    the immediate-mode toolkit design
   kernel/docs/desktop-look.md       the three rendering bugs
   kernel/docs/desktop-polish-and-speed.md  measured baselines
@@ -433,7 +433,7 @@ B5. desktop-TODO 0h — add a tsc() builtin. cpu_tsc() and cpu_tsc_khz() exist
 
 --- Group C: the compositor (needs B2 and B3 done) ---
 
-NOTE ON SCOPE: desktop-plan.md says do not start the compositor until the
+NOTE ON SCOPE: archive/superseded/desktop-plan.md says do not start the compositor until the
 touchpad works. That rule was written believing a pointer UI was untestable.
 It is NOT — QEMU has a working PS/2 mouse and try.sh GUI mode is verified. So
 build and test the compositor in QEMU. Anything ThinkPad-specific still waits.
@@ -689,7 +689,7 @@ Mapped so nothing quietly falls off the list. Full detail in
 
 ## The one rule I relaxed, and I am flagging it
 
-`desktop-plan.md` says *do not start the compositor until the touchpad works*.
+`archive/superseded/desktop-plan.md` says *do not start the compositor until the touchpad works*.
 That was written believing a pointer UI could not be tested. **It can** — QEMU
 has a working PS/2 mouse and `try.sh` GUI mode is verified working
 (`HANDOFF.md`). The touchpad blocks the *laptop*, not the *design*.

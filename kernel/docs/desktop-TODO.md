@@ -620,7 +620,7 @@ full one."*
 
 ---
 
-Background and decisions: `desktop-plan.md` · Plain-English intro:
+Background and decisions: `archive/superseded/desktop-plan.md` · Plain-English intro:
 `desktop-build-guide.md` · Why it looks blocky: `desktop-look.md` · Polish and
 performance: `desktop-polish-and-speed.md` · Status and blockers:
 `../../.ultra/STATE.md`

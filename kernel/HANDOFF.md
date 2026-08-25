@@ -1253,7 +1253,7 @@ inverts that. Designed 2026-08-17:
 - `docs/desktop-build-guide.md` — start here. What a compositor is, in plain
   words, and the build order.
 - **`docs/desktop-TODO.md` — the ordered task list. Pick it up here.**
-- `docs/desktop-plan.md` — the decisions, the evidence, and the line numbers.
+- `docs/archive/superseded/desktop-plan.md` — the decisions, the evidence, and the line numbers.
 - `docs/desktop-toolkit.md` — **the layer that was missing from every earlier
   plan.** An **immediate-mode** toolkit (`ui.c`), chosen because a retained
   widget tree needs a heap and *is* a list of children — zlOS has neither.
@@ -1305,7 +1305,7 @@ inverts that. Designed 2026-08-17:
   acceleration.** SerenityOS runs Half-Life on a SIMD *software* rasterizer.
   **Essence OS is the closest analogue** — one developer since 2017, software
   *vector* renderer **with animation**, window manager **in the kernel** (same
-  choice as `desktop-plan.md`). TempleOS was 640×480/16 colours; **zlOS is
+  choice as `docs/archive/superseded/desktop-plan.md`). TempleOS was 640×480/16 colours; **zlOS is
   already well past it**. Do not write a 3D driver — the *display* driver alone
   has cost a 13-conflict plan and an 86-defect audit.
   **Note:** `docs/archive/superseded/GRAPHICS_PLAN.md` (2026-08-03) says the GPU is reached
