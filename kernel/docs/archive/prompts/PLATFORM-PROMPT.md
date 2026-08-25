@@ -39,7 +39,7 @@ a context reset and can be re-read to recover.
 kernel/HANDOFF.md                    what is VERIFIED, not intended
 CLAUDE.md                            the traps, all paid for at least once
 kernel/docs/evidence/desktop-overnight-run.md what landed 2026-08-17/18 and what it cost
-kernel/docs/desktop-wiring.md        how zl and C meet, and why it works
+kernel/docs/archive/superseded/desktop-wiring.md  how zl and C meet, and why it works
 kernel/docs/archive/superseded/desktop-TODO.md  the numbered task list
 kernel/ui.h                          the layering contract - read this twice
 ```
@@ -374,6 +374,6 @@ An instruction count is not a measurement. "It works" is not a report.
 ---
 
 Look track: [`desktop-v10-plan.md`](../../evidence/desktop-v10-plan.md) · Contract:
-[`../ui.h`](../../../src/graphics/ui/ui.h) · Wiring: [`desktop-wiring.md`](../../desktop-wiring.md) ·
+[`../ui.h`](../../../src/graphics/ui/ui.h) · Wiring: [`desktop-wiring.md`](../superseded/desktop-wiring.md) ·
 History: [`desktop-overnight-run.md`](../../evidence/desktop-overnight-run.md) · Blocks:
 `../../.ultra/TENSIONS.md`

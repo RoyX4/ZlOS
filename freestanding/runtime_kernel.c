@@ -485,7 +485,7 @@ extern unsigned int i2c_hid_ptr_malformed(void);
 /* the input stack: events, modifiers, repeat */
 /* ---- the compositor (wm.c / ui.c / wmglue.c) ---------------------------
  * Mechanism only. kernel.zl supplies the policy through the app_* functions
- * that wmglue.c binds to - see kernel/docs/desktop-wiring.md. */
+ * that wmglue.c binds to - see kernel/docs/archive/superseded/desktop-wiring.md. */
 /* ---- the terminal app (term.c) -----------------------------------------
  * A scrollback ring plus a typed-command matcher. The matcher is HERE, in C,
  * because comparing two runtime strings is the one thing the zl kernel subset

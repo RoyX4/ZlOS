@@ -7,8 +7,10 @@ remaining work, written out so it is a copy-paste rather than a design job.
 It was not done in the overnight run for one reason: every line below goes in
 `kernel.zl`, and `kernel.zl` was mid-flight in another session all night — its
 `mouse_x` builtin was rewired underneath me *while I was measuring it*. The
-brief forbids staging another session's unfinished work, so the mechanism got
-built and the policy was left. See `.ultra/TENSIONS.md` T-8 and T-9.
+brief forbade staging another session's unfinished work, so the mechanism was
+built and the policy was left for the next pass. Current source later wired the
+compositor boot at `kernel/src/kernel.zl`; the present T-8 and T-9 track
+unrelated metadata and boot-source placement issues.
 
 ---
 

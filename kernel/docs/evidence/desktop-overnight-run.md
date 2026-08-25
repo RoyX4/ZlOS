@@ -281,7 +281,7 @@ tested, and unreachable — `kernel.zl` still ends in `while running == 1`.
 Everything that does *not* require touching that file is done: `wmglue.c` holds
 every shim with **weak symbols**, so it links today and lights up the moment
 `kernel.zl` grows `app_draw`. The remaining zl is written out verbatim in
-[`desktop-wiring.md`](../desktop-wiring.md).
+[`desktop-wiring.md`](../archive/superseded/desktop-wiring.md).
 
 **Deliberately not attempted:** F4 (fractional scale — its own gate says
 "only if A–D are all green", and D2 is blocked) and **G2 SMP band rendering**,
@@ -317,7 +317,7 @@ object store, and is what should have been used from the start.
 ---
 
 Task list: [`desktop-TODO.md`](../archive/superseded/desktop-TODO.md) · Wiring:
-[`desktop-wiring.md`](../desktop-wiring.md) · Decisions:
+[`desktop-wiring.md`](../archive/superseded/desktop-wiring.md) · Decisions:
 [`DECISIONS.md`](../DECISIONS.md) · Numbers:
 [`desktop-polish-and-speed.md`](../desktop-polish-and-speed.md) · Blocks:
 `../../../.ultra/TENSIONS.md` T-5 … T-12

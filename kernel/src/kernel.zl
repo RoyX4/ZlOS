@@ -3200,7 +3200,7 @@ fn about_body(ax, ay, aw, ah) {
 # ---- THE APP CONTRACT ------------------------------------------------------
 # Three functions, no loop, ever. wm.c calls these through wmglue.c, which
 # reaches them as zl_fn_app_* because zl compiles TO C. See ui.h and
-# docs/desktop-wiring.md.
+# docs/archive/superseded/desktop-wiring.md.
 #
 # app_draw is handed the CLIENT area. The bodies below were written against the
 # WINDOW origin, so the title bar height is subtracted back off - which is

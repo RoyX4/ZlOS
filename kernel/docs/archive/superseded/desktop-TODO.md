@@ -75,7 +75,7 @@ git commit -m "wip: usb pointer + serial timeout"
 # or: git stash push kernel/src/kernel.zl freestanding/runtime_kernel.c
 ```
 
-**Step 2 — paste the zl from [`desktop-wiring.md`](../../desktop-wiring.md).** It is
+**Step 2 — paste the zl from [`desktop-wiring.md`](desktop-wiring.md).** It is
 written out verbatim: the four `fn app_*` dispatchers, the boot sequence, and
 the ordering that matters (the shell window must EXIST before the boot log
 prints, because the log goes inside it).

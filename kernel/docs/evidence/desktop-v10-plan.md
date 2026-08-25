@@ -265,7 +265,7 @@ and everything wants the compositor to be the thing that boots.
 ---
 
 Prototype: `~/zl OS v10.dc.html` · Contract: [`../../src/graphics/ui/ui.h`](../../src/graphics/ui/ui.h) · Wiring:
-[`desktop-wiring.md`](../desktop-wiring.md) · Task list:
+[`desktop-wiring.md`](../archive/superseded/desktop-wiring.md) · Task list:
 [`desktop-TODO.md`](../archive/superseded/desktop-TODO.md) · Numbers:
 [`desktop-polish-and-speed.md`](../desktop-polish-and-speed.md) · Last night:
 [`desktop-overnight-run.md`](desktop-overnight-run.md)
