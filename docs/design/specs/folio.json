@@ -1,0 +1,314 @@
+{
+ "direction": "Folio",
+ "one_line_pitch": "The desktop is a printed page: a warm paper ground with a real type area, a left margin rail carrying the running table of contents, windows as square-cornered sheets snapped to a 12-column grid, and every distinction made with weight, case, scale, rule-thickness and whitespace \u2014 never with colour.",
+ "why_not_default": "A generic \"dark desktop UI\" prompt produces near-black + one saturated accent + 16px radius everywhere + soft shadows + top bar/floating windows/bottom dock. Folio inverts or deletes every one of those five: (1) the ground is LIGHT warm paper #E9E4DB, not #07080A; (2) there is no accent \u2014 the only chromatic ink is a single oxide red #A3301B reserved for the caret, unsaved marks and failure, and it never fills an area larger than 3px; (3) window radius is 0 \u2014 a sheet of paper has square corners, and roundness is reserved for parts that physically move; (4) there are no drop shadows in chrome at all, separation is a three-rank keyline system (hairline / mid rule / 2px ink) plus a surface step; (5) there is no top bar and no dock \u2014 all persistent chrome lives in one 160dp left margin rail, and the window list is a numbered table of contents set in type, not a row of tiles. A default generator also cannot produce the two load-bearing moves here: the wallpaper IS the WM's column grid (dragging a window darkens the columns it will land in, so the \"decoration\" is the layout system made visible), and the type scale lands exactly on the three atlas sizes the kernel already generates (16/24/32 device px at ui 2), so hierarchy costs zero resampling. Both are consequences of reading fb.c, not of a style prompt.",
+ "palette": {
+  "mode": "light \u2014 warm monochrome paper-and-ink, single ladder, no per-surface inversion. The one inverted element in the system is the primary button (PAPER_1 on INK_0) and it is deliberately rare: at most one per dialog.",
+  "tokens": [
+   {
+    "name": "ZD_PAPER_0",
+    "hex": "#E9E4DB",
+    "role": "the ground / desk. Top stop of the only gradient in the system."
+   },
+   {
+    "name": "ZD_PAPER_0B",
+    "hex": "#E2DCD1",
+    "role": "bottom stop of the ground. 7% luminance shift over the full height, dithered."
+   },
+   {
+    "name": "ZD_PAPER_1",
+    "hex": "#F4F1EA",
+    "role": "the sheet \u2014 window interior, rail, card, menu body, toolbar. The default surface."
+   },
+   {
+    "name": "ZD_PAPER_2",
+    "hex": "#FBFAF6",
+    "role": "the well \u2014 input fields, mono/terminal panel, code blocks, the Index overlay sheet."
+   },
+   {
+    "name": "ZD_PAPER_3",
+    "hex": "#DED8CB",
+    "role": "the band \u2014 selected row fill, hover fill, table header fill, pressed button, meter track."
+   },
+   {
+    "name": "ZD_INK_0",
+    "hex": "#17150F",
+    "role": "display + emphasis ink: window title (focused), stat values, primary-button block, the 2px focus rule, keyboard focus ring."
+   },
+   {
+    "name": "ZD_INK_1",
+    "hex": "#2E2A22",
+    "role": "body ink \u2014 everything read continuously; also meter/chart fills."
+   },
+   {
+    "name": "ZD_INK_2",
+    "hex": "#4A4438",
+    "role": "secondary ink; also the control border when a control sits on PAPER_0 or PAPER_3."
+   },
+   {
+    "name": "ZD_INK_3",
+    "hex": "#5E5648",
+    "role": "tertiary ink: captions, column heads, marginalia, folio numeral, unfocused window title. Chosen so it clears 4.5:1 on the DARKEST text-bearing surface (PAPER_3)."
+   },
+   {
+    "name": "ZD_INK_MUTE",
+    "hex": "#8E8674",
+    "role": "NON-TEXT ONLY plus disabled control labels. Banned for any text that carries information. 2.54\u20133.46:1; a gate should assert this token never reaches fb_text_role for an enabled control."
+   },
+   {
+    "name": "ZD_RULE_HAIR",
+    "hex": "#C2BAA8",
+    "role": "the 1px hairline: sheet edges, table rules, dividers, the column grid, the unfocused running-head rule. Decorative/structural only \u2014 never the sole boundary of an interactive control."
+   },
+   {
+    "name": "ZD_RULE_CTRL",
+    "hex": "#8A8270",
+    "role": "the boundary of an interactive control on PAPER_1/PAPER_2 (button box, input box, tab edge). Meets WCAG 1.4.11 3:1 on both."
+   },
+   {
+    "name": "ZD_RULE_MID",
+    "hex": "#A29A87",
+    "role": "the popover keyline \u2014 rank 2 of the depth system. Non-interactive boundary, exempt from 3:1."
+   },
+   {
+    "name": "ZD_RED",
+    "hex": "#A3301B",
+    "role": "THE ONLY CHROMATIC INK. Means attention, nothing else: text caret, unsaved-changes mark, error text, close-control hover mark, failure dot. Never a fill wider than 3dp."
+   },
+   {
+    "name": "ZD_GREEN",
+    "hex": "#2E6A38",
+    "role": "state: healthy / running / pass. Text and 3dp marks only."
+   },
+   {
+    "name": "ZD_OCHRE",
+    "hex": "#7E5305",
+    "role": "state: warning / read-only / drift. Text and 3dp marks only."
+   },
+   {
+    "name": "ZD_R_PAGE",
+    "hex": "#000000",
+    "role": "NOT A COLOUR \u2014 listed for completeness of the token file's shape; radius tokens are in radius_system. Ignore this entry when generating design.h colours."
+   }
+  ],
+  "contrast": [
+   {
+    "fg": "#17150F",
+    "bg": "#F4F1EA",
+    "ratio": 16.18
+   },
+   {
+    "fg": "#2E2A22",
+    "bg": "#F4F1EA",
+    "ratio": 12.66
+   },
+   {
+    "fg": "#4A4438",
+    "bg": "#F4F1EA",
+    "ratio": 8.56
+   },
+   {
+    "fg": "#5E5648",
+    "bg": "#F4F1EA",
+    "ratio": 6.42
+   },
+   {
+    "fg": "#A3301B",
+    "bg": "#F4F1EA",
+    "ratio": 6.21
+   },
+   {
+    "fg": "#2E6A38",
+    "bg": "#F4F1EA",
+    "ratio": 5.76
+   },
+   {
+    "fg": "#7E5305",
+    "bg": "#F4F1EA",
+    "ratio": 5.95
+   },
+   {
+    "fg": "#8A8270",
+    "bg": "#F4F1EA",
+    "ratio": 3.38
+   },
+   {
+    "fg": "#C2BAA8",
+    "bg": "#F4F1EA",
+    "ratio": 1.71
+   },
+   {
+    "fg": "#17150F",
+    "bg": "#FBFAF6",
+    "ratio": 17.48
+   },
+   {
+    "fg": "#2E2A22",
+    "bg": "#FBFAF6",
+    "ratio": 13.67
+   },
+   {
+    "fg": "#5E5648",
+    "bg": "#FBFAF6",
+    "ratio": 6.93
+   },
+   {
+    "fg": "#A3301B",
+    "bg": "#FBFAF6",
+    "ratio": 6.71
+   },
+   {
+    "fg": "#8A8270",
+    "bg": "#FBFAF6",
+    "ratio": 3.65
+   },
+   {
+    "fg": "#17150F",
+    "bg": "#DED8CB",
+    "ratio": 12.85
+   },
+   {
+    "fg": "#2E2A22",
+    "bg": "#DED8CB",
+    "ratio": 10.06
+   },
+   {
+    "fg": "#4A4438",
+    "bg": "#DED8CB",
+    "ratio": 6.8
+   },
+   {
+    "fg": "#5E5648",
+    "bg": "#DED8CB",
+    "ratio": 5.1
+   },
+   {
+    "fg": "#A3301B",
+    "bg": "#DED8CB",
+    "ratio": 4.94
+   },
+   {
+    "fg": "#2E6A38",
+    "bg": "#DED8CB",
+    "ratio": 4.57
+   },
+   {
+    "fg": "#17150F",
+    "bg": "#E9E4DB",
+    "ratio": 14.41
+   },
+   {
+    "fg": "#2E2A22",
+    "bg": "#E9E4DB",
+    "ratio": 11.28
+   },
+   {
+    "fg": "#5E5648",
+    "bg": "#E9E4DB",
+    "ratio": 5.72
+   },
+   {
+    "fg": "#8A8270",
+    "bg": "#E9E4DB",
+    "ratio": 3.01
+   },
+   {
+    "fg": "#C2BAA8",
+    "bg": "#E9E4DB",
+    "ratio": 1.52
+   },
+   {
+    "fg": "#5E5648",
+    "bg": "#E2DCD1",
+    "ratio": 5.31
+   },
+   {
+    "fg": "#2E2A22",
+    "bg": "#E2DCD1",
+    "ratio": 10.47
+   },
+   {
+    "fg": "#F4F1EA",
+    "bg": "#17150F",
+    "ratio": 16.18
+   },
+   {
+    "fg": "#FBFAF6",
+    "bg": "#17150F",
+    "ratio": 17.48
+   },
+   {
+    "fg": "#DED8CB",
+    "bg": "#17150F",
+    "ratio": 12.85
+   },
+   {
+    "fg": "#8E8674",
+    "bg": "#17150F",
+    "ratio": 5.05
+   },
+   {
+    "fg": "#F4F1EA",
+    "bg": "#A3301B",
+    "ratio": 6.21
+   },
+   {
+    "fg": "#F4F1EA",
+    "bg": "#E9E4DB",
+    "ratio": 1.123
+   },
+   {
+    "fg": "#DED8CB",
+    "bg": "#F4F1EA",
+    "ratio": 1.259
+   },
+   {
+    "fg": "#FBFAF6",
+    "bg": "#F4F1EA",
+    "ratio": 1.08
+   },
+   {
+    "fg": "#A29A87",
+    "bg": "#F4F1EA",
+    "ratio": 2.48
+   },
+   {
+    "fg": "#8E8674",
+    "bg": "#F4F1EA",
+    "ratio": 3.2
+   }
+  ]
+ },
+ "structure": "NO TOP BAR. NO DOCK. All persistent chrome is one full-height LEFT MARGIN RAIL; the rest of the screen is a TYPE AREA on a column grid. Every number below is a design pixel through UI_DP(); device px at ui()==2 is double.\n\nTHE RAIL \u2014 width 160dp (ZD_RAIL_W), fill ZD_PAPER_1, no radius, separated from the ground by a single 1px ZD_RULE_HAIR on its right edge and nothing else. Text column inset 20dp left, 20dp right. Top to bottom:\n  1. MASTHEAD. \"zlOS\" set R4 (LEAD, 16dp bold, ZD_INK_0); beneath it \"0.3\" R1 (FOLIO caps, tracked, ZD_INK_3). Then a 2dp ZD_INK_0 rule spanning the text column. 32dp of air below.\n  2. \"OPEN\" \u2014 R1 uppercase tracked, ZD_INK_3, followed by a 1px hairline across the text column.\n  3. THE TABLE OF CONTENTS \u2014 one 28dp row per open window. Layout per row: a 20dp right-aligned gutter holding the window's folio number (R1, ZD_INK_3, drawn in the MONO face via fb_text_aa so the digits are tabular and do not jitter), then 8dp, then the title R2 (ZD_INK_2). The FOCUSED window's row is R3 (bold ZD_INK_0) and carries a 3dp \u00d7 row-height ZD_INK_0 bar flush against the rail's left edge \u2014 a marginal mark, exactly as a printed page marks the current section. No icon, no tile, no chip, no fill. Click raises; click on the already-focused row minimises. This replaces the seven-tile dock outright, and it is why the dock_fill() rgb(18,21,24) literal in kernel.zl disappears rather than being fixed.\n  4. 24dp air. \"LAUNCH\" R1 head + hairline. Up to seven pinned apps as plain names, R2, 28dp rows, same marginal-bar selection. Last row: \"INDEX\u2026\" R2 ZD_INK_2 \u2014 opens the Index (below).\n  5. Flush to the rail's bottom, above a 1px hairline: MARGINALIA. Four caption lines, label R1 uppercase tracked ZD_INK_3 flush left, value right-flush in the MONO face (fb_text_aa) ZD_INK_1 \u2014 clock, CPU, MEM, CPUs. Tabular figures in the margin are the single most legible \"this is a set page\" signal available, and they cost nothing because the mono atlas already exists.\n\nTHE TYPE AREA \u2014 everything right of the rail. Ground = the one gradient (ZD_PAPER_0 \u2192 ZD_PAPER_0B, vertical, dithered). Outer margin 24dp on all four sides. Inside it, a 12-COLUMN GRID: column 48dp, gutter 16dp, module 64dp. At 1920\u00d71200/ui2 this is exact (960dp wide \u2212 160 rail \u2212 48 margins = 752dp = 12\u00d748 + 11\u00d716). At other widths: columns = floor((content \u2212 2\u00d724 + 16) / 64), and the remainder is split evenly into the two outer margins \u2014 integer, no float.\nThe grid is DRAWN: a 1px ZD_RULE_HAIR at 45% alpha (fb_fill_blend) down each column boundary, plus one horizontal hairline at the top margin line and one at the bottom. That is the whole wallpaper. No vignette, no wedges, no glow, no second grid scale.\nThe grid is FUNCTIONAL, which is what stops it being decoration: while a window is dragged, the columns it will land in fill with ZD_PAPER_3 at 60% alpha, fading in over ZD_MS_GRID. On drop the window snaps its left and right edges to column boundaries and its top and bottom to the 28dp vertical rhythm. Snapping is a guide, not a jail: dragging is free, overlap is legal, resize is free, and the existing no-snap modifier bypasses it. This is a stacking WM with printer's guides, not a tiler.\nBottom-right of the type area, inside the margin: the FOLIO \u2014 the workspace number, R4 (16dp bold) ZD_INK_3 (5.72:1). Bottom-left: the COLOPHON, R1 uppercase tracked ZD_INK_3 \u2014 \"ZLOS \u00b7 0.3 \u00b7 NO LIBC \u00b7 NO HEAP \u00b7 NO FLOAT\".\n\nTHE INDEX replaces the start menu. Not a popup \u2014 a full-page overlay covering the type area only (the rail stays visible and live). ZD_PAPER_2 sheet inset by the outer margin, 2dp ZD_INK_0 border, radius 0. \"INDEX\" R4 at top left, a 24dp search well (radius ZD_R_SET) beneath it, then all ~53 apps alphabetised into FOUR columns separated by 1px hairlines, 24dp rows, with letter-run heads in R1 uppercase tracked ZD_INK_3 each preceded by a hairline. Row = 24dp icon, 8dp, name R2, right-flush shortcut in the mono face ZD_INK_3. Selection = ZD_PAPER_3 fill + 3dp ZD_INK_0 marginal bar. Type filters, Esc closes. A book index, not a tile grid \u2014 which is also why the \"three or seven equal tiles\" failure mode cannot recur here.",
+ "chrome": "A window is a SHEET. Fill ZD_PAPER_1, radius 0 on all four corners, no shadow.\n\nTHE MOUNT (the edge, replacing the shadow): two 1px fb_box calls \u2014 outer in ZD_RULE_HAIR, inner in ZD_PAPER_2. A two-tone keyline is how a print is mounted, and it reads as a physical edge at 1.71:1 without any blur, glow or offset.\n\nTHE RUNNING HEAD replaces the title bar. Height ZD_HEAD_H = 32dp. It is NOT a filled strip \u2014 it is the same ZD_PAPER_1 as the body, so the window is one sheet rather than a panel with a label nailed across it. Contents on one baseline, 20dp inset:\n  \u00b7 title, flush left, R3 (12dp BOLD) ZD_INK_0 when focused / R2 (12dp regular) ZD_INK_3 when not;\n  \u00b7 12dp gap, subtitle (path, doc name) R1 ZD_INK_3 focused / ZD_INK_MUTE unfocused (disabled-equivalent, exempt);\n  \u00b7 right-flush, three control marks in 20dp hit boxes, 8dp apart, ink only, no chip behind them: minimise (a 1dp rule), column-fit (a hairline square with a centre rule \u2014 it means \"fit to columns\", which is what it does), close (an X). Hover: the 20dp box fills ZD_PAPER_3 \u2014 one surface step, no colour. Close hover additionally recolours its X to ZD_RED (6.21:1). No red fill.\n\nFOCUS IS A RULE, and that is the whole signal. Directly under the running head, spanning the full window width:\n  focused   \u2192 2dp ZD_INK_0   (16.18:1 against the sheet)\n  unfocused \u2192 1dp ZD_RULE_HAIR (1.71:1)\nThree cues move together on one state change and none of them is a hue: the rule doubles and goes black, the title steps ZD_INK_3 \u2192 ZD_INK_0 and regular \u2192 bold, and the rail's TOC entry goes bold and grows its 3dp marginal bar. No focus ring, no glow, no coloured title bar, no pulse. This is exactly how a page marks the section you are reading.\n\nBelow the rule: 20dp of padding, then content. Toolbars and status bars inside a window are NOT filled bars \u2014 a toolbar is a 28dp line of type with a 1px hairline beneath it; a status bar is a 24dp line with a hairline above it, labels R1, values in the mono face.\n\nZ-ORDER IS KEYLINE WEIGHT, not shadow \u2014 three ranks, stated once and applied everywhere: ground\u2192sheet = 1px ZD_RULE_HAIR (plus the 1.123 surface step); sheet\u2192popover/menu = 1px ZD_RULE_MID (2.48:1); popover\u2192modal = 2px ZD_INK_0 plus a screen scrim of ZD_INK_0 at 24% alpha (flat, fb_fill_blend, no gradient).\n\nTHE ONE SHADOW IN THE SYSTEM: while a window is actively being dragged it is physically lifted off the page, so fb_shadow runs for the duration of the drag only \u2014 dy 4dp, blur 10dp, alpha 22%. It is a lift cue with a physical reason, not a separator, and it vanishes on drop. Every static separation in the design is layout and keyline.",
+ "type_scale": "Ratio 1.5, three sizes, two weights, four REGISTERS. The sizes are chosen so that at ui()==2 they land exactly on the three atlases fb.c already generates (16 / 24 / 32 device px) \u2014 zero resampling, which is the point of preserving the text pipeline rather than fighting it.\n\n  R1 FOLIO   \u2014  8dp / 16 device, regular, ZD_INK_3, UPPERCASE, +8% tracking\n                column heads, key labels, marginalia, letter runs, subtitles, badges\n  R2 BODY    \u2014 12dp / 24 device, regular, ZD_INK_1\n                everything read continuously: list rows, menu items, paragraphs, TOC entries\n  R3 STRONG  \u2014 12dp / 24 device, BOLD,    ZD_INK_0\n                window titles (focused), button labels, selected rows, table headers\n  R4 LEAD    \u2014 16dp / 32 device, BOLD,    ZD_INK_0\n                stat values, app mastheads, the wordmark, dialog titles, the folio numeral\n\nHIERARCHY IS SIGNALLED FOUR WAYS AND NONE OF THEM IS COLOUR:\n  1. CASE + TRACKING. R1 and R2 are 8dp vs 12dp, but the bigger separation is that R1 is uppercase and letterspaced. Spaced caps read as a different register at the same size \u2014 that is the classic small-caps trick and it buys a scale step for free.\n  2. WEIGHT. R2 \u2192 R3 is the same size, same colour position, pure weight. This is the workhorse: it is how a selected row, a focused title and a button label all outrank body text without a fill or a hue.\n  3. SCALE. R3 \u2192 R4 is 1.5\u00d7, used sparingly \u2014 a stat card is a tiny R1 key over a large R4 value, and that pair alone carries the whole card. No border, no fill, no accent needed.\n  4. WHITESPACE. 20dp padding, 28dp rhythm, 24dp margins. Air is the fourth type weight.\n\nTRACKING is implemented in uikit.c as ui_text_tracked(): draw one character at a time with fb_text_rich(len=1) and advance by fb_text_rich_w() + track, where track = (size*8 + 50)/100. Integer, no new fb.c primitive, and fb_text_rich already takes a pixel height so it costs no atlas.\n\nMONO IS RESERVED, and reserving it is a design decision, not a leftover: fb_text_aa / the DejaVu Sans Mono atlas is used for FIGURES THAT MUST ALIGN and for machine text \u2014 the marginalia values, folio numbers, table numeric columns, shortcut hints, the terminal and the editor. Prose, labels and titles are always proportional. Tabular figures in the margin are an editorial device, not a fallback.\n\nAT ui()==1 the scale collapses: fb.c's prop_cell() floors at 12px, so R1 and R2 both land at 12\u201316px and merge. Read out of fb.c, not assumed. Hierarchy there rests on weight, case and whitespace alone \u2014 which still works, because none of it was ever carried by size.",
+ "radius_system": "ONE RULE, three values, and the rule is about what the element IS, not how big it is:\n\n  ZD_R_PAGE = 0    \u2014 it is PAPER. Windows, the rail, the Index sheet, cards, menus, popovers, modals, toasts, toolbars, status bars, buttons, tabs, segmented controls, list rows, selection bands, table cells, badges, meters and progress bars, the sparkline frame. Paper has square corners. This is the single largest visual break from the current look, where the same 16px sits on a window, a dock and a chip alike.\n\n  ZD_R_SET  = 2    \u2014 it is CUT INTO the paper. Input wells, the search field, chips, code blocks, the mono/terminal panel. Two design pixels is barely a curve; it is enough to say \"this is a hole, not a sheet\" and not enough to read as a card. This is the ONLY place a small radius appears, and there is exactly one reason it may be used.\n\n  ZD_R_ROUND = -1  \u2014 it MOVES, or it is a POINT. Sentinel meaning h/2: the toggle track and knob, the slider thumb, the scrollbar thumb, the status dot. fb_rrect already clamps 2r>h to h/2, so the sentinel resolves with no new primitive. Roundness in this system means motion; nothing static is round.\n\nWHY THEY DIFFER, in one sentence a reviewer can check: a corner is square if the element is a surface, slightly cut if it is a recess in a surface, and fully round if it travels across one. Any new widget must be classified into one of those three before it gets a radius, and there is no fourth value to reach for. The fifteen-step measured scale (ZD_R_XS\u2026ZD_R_20) is deleted from design.h \u2014 it was measurement of an artifact, not a system, and ui.c was already collapsing it to one value, which is the honest admission that it never worked.",
+ "depth": "There are no drop shadows in static chrome. Separation is achieved three ways, in this order of precedence:\n\n1. LAYOUT. Two things that must not be confused are given air and a grid position, not a shadow. The rail is separated from the type area by 24dp of margin plus a hairline; windows are separated from each other by column boundaries. This is the primary mechanism and everything else is a backstop.\n\n2. SURFACE STEP. A four-rung paper ladder, and a surface drawn on another must move exactly one rung: PAPER_0 ground (1.123 to PAPER_1) \u2192 PAPER_1 sheet (1.080 to PAPER_2) \u2192 PAPER_2 well; PAPER_3 is a lateral band (1.259 from PAPER_1) used for fills, never as a \"level\". These steps are small on purpose \u2014 they are a whisper under the keyline, not the signal.\n\n3. KEYLINE RANK \u2014 this is what actually replaces the shadow, and it is a ranked system so z-order is readable from the border alone:\n     rank 1  ground \u2192 sheet          1px ZD_RULE_HAIR #C2BAA8   1.71:1 on PAPER_1\n     rank 2  sheet  \u2192 popover/menu   1px ZD_RULE_MID  #A29A87   2.48:1 on PAPER_1\n     rank 3  popover\u2192 modal          2px ZD_INK_0     #17150F  16.18:1, plus an INK_0 24% flat scrim\n   Sheets additionally get THE MOUNT: outer 1px RULE_HAIR + inner 1px PAPER_2, two fb_box calls. A two-tone keyline is a physical edge cue that costs no blur and no alpha ramp.\n\nInteractive boundaries are held to WCAG 1.4.11: a button or input border on PAPER_1/PAPER_2 uses ZD_RULE_CTRL (3.38 / 3.65:1); the same border on PAPER_0 or PAPER_3 steps to ZD_INK_2 (7.62 / 6.80:1) because RULE_CTRL only reaches 3.01 / 2.69 there. RULE_HAIR is explicitly forbidden as the sole boundary of anything clickable.\n\nTHE ONE EXCEPTION, with its reason: fb_shadow runs for the duration of a window drag (dy 4dp, blur 10dp, 22%) because a lifted sheet does cast a shadow. It is transient, it is motivated, and it keeps fb_shadow's chebyshev-falloff path live rather than rotting.",
+ "icons": "ONE PEN. gen_icons.py keeps drawing geometry at 96\u00d796 and box-filtering, but the atlas output moves to 48\u00d748 (which desktop-look.md's item 1 already demands independently \u2014 fb_icon24's nearest-neighbour 2\u00d7 upscale is the single biggest source of blockiness on screen). 96\u219248 is a 2:1 box filter, so a stroke of 4 units at 96 lands as exactly 2 device px = 1 design px at ui 2 \u2014 THE SAME WEIGHT AS THE HAIRLINE RULES. Icons are drawn with the same pen as the page.\n\nConstruction rules, checkable by eye in the generator:\n  \u00b7 96\u00d796 box, 8-unit margin, 80\u00d780 live area, an 8-unit module grid (10\u00d710 modules).\n  \u00b7 Stroke 4 units, uniform. No tapering, no two weights inside one icon.\n  \u00b7 Square-cut terminals, mitred joins. Angles restricted to 0\u00b0, 90\u00b0, 45\u00b0.\n  \u00b7 Curves only as full circles or quarter arcs of radius \u2265 16 units. No blobs, no rounded rectangles, no organic shapes.\n  \u00b7 OUTLINE ONLY. The single permitted fill is one solid disc or square \u2264 16 units used as a \"current / marker\" element \u2014 the printer's bullet.\n  \u00b7 One ink: ZD_INK_1 at rest, ZD_INK_0 in a selected row, ZD_RED only for the close mark on hover. Icons are never the accent, never two-tone, never coloured by category.\n\nICONS ARE RATIONED, because a type-led design that leans on pictograms is neither. They appear in exactly four places: the three window controls, toolbar actions, the file-type mark in file lists, and the 24dp gutter of the Index. There are no icons in the rail's TOC (names), none in menus (shortcut text instead), none in toasts, and there is no dock to put any in.\n\nThe three window controls, as geometry: minimise = one 4-unit horizontal rule, 48 units wide, on the baseline. Column-fit = a 48\u00d748 hairline square with a single vertical rule down its centre \u2014 it reads as \"two columns\", which is what the action does. Close = two 4-unit strokes crossing at 45\u00b0 across a 48-unit box. All three are legible at 48 device px and distinguishable at a glance by silhouette, not by colour.",
+ "motion": "Page motion: things appear and are replaced. Nothing bounces, scales, pulses or glows. Five tokens, down from ten.\n\n  ZD_MS_FADE  120  window / overlay opacity 0\u2192255, linear\n  ZD_MS_POP    80  menu and popover opacity 0\u2192255, linear\n  ZD_MS_PRESS 100  press release: the ZD_PAPER_3 fill applies on the DOWN edge with no delay and decays over 100ms\n  ZD_MS_SNAP  140  a dropped window travelling to its snapped column/rhythm position, eased with the existing ZD_EASE_WIN_* cubic (kept: it is already stored as four ints \u00d71000, no float)\n  ZD_MS_GRID  100  the drag-target column highlight fading in and out\n\nDELETED, and each for a stated reason: ZD_MS_PULSE and ZD_MS_PULSE_SLOW (a pulsing window is an alarm; unfocused is a typographic state here, not an animation), ZD_WIN_FROM_SCALE / ZD_POP_FROM_SCALE / ZD_OV_FROM_SCALE (a sheet of paper does not grow into existence \u2014 and scaling a window means resampling subpixel text mid-animation, which visibly breaks the LCD filter), ZD_PRESS_MIN_SCALE (a button that shrinks is a phone affordance), ZD_MS_SWEEP and the wallpaper sweep (the wallpaper is a grid now; a grid that sweeps is decoration).\n\nThe only motion that moves geometry is ZD_MS_SNAP, and it moves a window along the grid \u2014 the animation exists to teach the grid, not to entertain. Opacity ramps step alpha = min(255, elapsed_ms \u00d7 255 / duration) from the existing tick counter: integer, no float, no new primitive.",
+ "preserves": [
+  "The subpixel LCD text pipeline \u2014 font_sub.c and fb.c's blend_sub, three alphas per pixel with the 5-tap (1,2,3,2,1)/9 FIR. Untouched. It is the reason this design can lean entirely on type.",
+  "Gamma-correct blending in LINEAR LIGHT \u2014 fb.c:195-273, the two boot-built LUTs, no floating point. Untouched, and it matters more on a light palette than a dark one because every hairline, every 45%-alpha grid line and every AA corner is a low-contrast blend where a naive sRGB average would visibly darken.",
+  "Dithered gradients \u2014 the ordered 4\u00d74 threshold at fb.c:1661. Preserved AND kept live: the ground's ZD_PAPER_0 \u2192 ZD_PAPER_0B shift is the one gradient in the system and it is precisely the case that proves the dither (a ~7-step ramp over 1200 rows bands catastrophically without it).",
+  "Anti-aliased rounded corners \u2014 fb.c:1984 fb_rrect's 4\u00d74 supersampled coverage. Still the path for every ZD_R_SET recess and every ZD_R_ROUND moving part; fb_rrect(r=0) already degrades correctly to three fb_fill_px calls, verified by reading the function.",
+  "Soft shadows \u2014 fb.c fb_shadow's chebyshev falloff. Kept and kept CALLED, on the drag lift, so it does not become dead code.",
+  "Icons as geometry drawn at 96\u00d796 and box-filtered \u2014 gen_icons.py's whole approach is retained; only the output size (48) and the stroke rule (4 units) change.",
+  "Wu-antialiased fb_line \u2014 already implemented in this tree despite desktop-look.md still describing it as Bresenham. It draws the sparklines and the icon diagonals.",
+  "The three-layer token architecture: colour literals in design.h and nowhere else, semantic roles in ui.c's ui_theme_init_q8(), ui_color(role) at call sites in kernel.zl. Folio changes the VALUES in design.h and the role mapping in ui.c; it changes no call site, which is the property that architecture was built for.",
+  "The real spacing scale through UI_DP() and the q8 UI scale \u2014 every distance below is a design pixel, and theme.gap 8 and theme.row_h 28 are unchanged.",
+  "Immediate-mode ui.c: widgets return whether they fired and take no action arguments, so the hit-test pass stays safe. Nothing in this design needs retained state.",
+  "Proportional text with per-glyph advances (gen_prop_font.py, DejaVu Sans) for UI, and the mono atlas for the console \u2014 and Folio makes that split load-bearing rather than incidental by reserving mono for tabular figures and machine text."
+ ],
+ "new_primitives": [],
+ "risks": [
+  "WEAKEST LINK: the subpixel filter was tuned on near-black. Dark-ink-on-light-paper inverts the sign of the colour fringe, and the 5-tap FIR's energy distribution that looks neutral at #EEF0F2-on-#101215 may show a warm/cool cast at #2E2A22-on-#F4F1EA. This is a look-at-it-under-a-loupe item, not a rewrite: hosttest/wmshot.c renders a frame in milliseconds, so zoom a paragraph before committing. I have NOT verified this \u2014 it is the prediction I am least confident in.",
+  "Two overlapping UNFOCUSED sheets are both ZD_PAPER_1 with a rank-1 keyline, so their boundary is a single 1.71:1 hairline and the stack order is ambiguous. Mitigated by column snapping (windows mostly abut rather than overlap), by the focused window always carrying the 2dp ink rule, and by the drag shadow. The residual case \u2014 two unfocused windows overlapping by a few pixels \u2014 is genuinely weaker than a shadow-based design and is the price of the direction.",
+  "THE ONE DEVIATION FROM THE BRIEF, stated rather than hidden: the brief says 'no gradients' and also says the dithered-gradient path must be preserved. fb.c's dither lives only inside fb_gradient, so preserving it with zero call sites means preserving dead code. I resolved it by keeping exactly one gradient \u2014 the ground, #E9E4DB \u2192 #E2DCD1, a 7% luminance shift with no hue change over the full screen height. If you would rather obey the ban literally, make the ground flat #E9E4DB and accept that the dither path has no caller.",
+  "gen_icons.py needs real work, not a flag change: output size 96\u219248, and all ten existing icons redrawn as 4-unit hairline marks on the 8-unit module grid. Filled glyphs cannot simply be outlined; several will need new geometry. This is the largest single chunk of implementation in the proposal.",
+  "No dark mode in v1. On an OLED panel in a dark room a full-screen warm paper ground is bright. The token layer makes this a design.h-only change later (invert the ladder: PAPER_0..3 become an ink ladder, INK_0..3 become a paper ladder, and the computed ratios survive because they are symmetric), but it is not in this spec and pretending otherwise would be dishonest.",
+  "ZD_INK_MUTE (#8E8674) sits at 2.54\u20133.46:1 and is the one token that fails 4.5:1. It is restricted to non-text use and to disabled control labels (which WCAG exempts). This needs a GATE, not a comment \u2014 hosttest/uitest.c already scans uikit.c for hex literals; extend it to fail if ZD_INK_MUTE reaches fb_text_role for an enabled control, or the restriction will rot within a month.",
+  "At ui()==1 the type scale collapses from three sizes to two because fb.c's prop_cell() floors at 12px \u2014 R1 and R2 merge and hierarchy rests on case, weight and whitespace alone. Read out of fb.c:3365, not assumed. It degrades rather than breaks, but a 1024\u00d7768 screenshot will look flatter than a 1920\u00d71200 one.",
+  "A 160dp rail is 320 device px, ~17% of a 1920-wide screen, permanently. That is the cost of deleting both the top bar and the dock. On a 1366-wide laptop it is 23% and the column count drops to 7 \u2014 the grid math handles it, but the rail should probably collapse to a 40dp folio-only strip below some width, and this spec does not define that breakpoint.",
+  "The colour-blind / grayscale check passes trivially (the design is already monochrome), but the flip side is that the three state colours are the ONLY hue in the system and therefore carry unusual weight. Every state must also be carried by a word or a mark \u2014 'FAIL' in R1 caps beside the red dot \u2014 or a state becomes invisible to anyone who cannot see #A3301B against #2E2A22 at 4.5:1 apart in lightness."
+ ]
+}

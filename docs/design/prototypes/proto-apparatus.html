@@ -1,0 +1,2586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APPARATUS / zlOS living prototype</title>
+<style>
+/* ==================================================== design.h, light ==
+   APPARATUS. Every window is a scholarly text with a critical apparatus:
+   numbered lines in the outer margin, the machine's commentary set at the
+   foot in the smallest register with lemma references, and focus means the
+   apparatus is open.
+
+   THE LAW OF THIS DIRECTION: colour carries nothing. There is no accent, no
+   chromatic ink, no red error and no green ok anywhere in the system. The
+   machine is distinguished from the user by REGISTER and by POSITION, not
+   by hue - which is exactly how a real apparatus criticus distinguishes a
+   variant from a conjecture.
+
+   Light is a WHITE WOVE. An academic press prints on good stock, not on
+   cream, so this is the highest-contrast paper in the family: AP_PAPER sits
+   at L* 93.1 against Folio's warmer, lower sheet.
+
+   Every hex in this document is one of the tokens below. No hex value is
+   used as a CSS value anywhere outside the two :root blocks. Every token
+   name exists in BOTH blocks; a name in only one mode is a defect.
+   --------------------------------------------------------------------- */
+:root {
+  /* --- the four stocks. measured L*, and the step between them --------
+     PAPER  L* 93.1   the sheet, the user's ground
+     APP    L* 90.3   the apparatus band. dL* 2.81 below the sheet, which
+                      is a setting change you can see before you read a word
+     DESK   L* 88.5   the reading table. dL* 4.57 below the sheet
+     WELL   L* 96.5   a window cut in the sheet: terminal ground, input
+                      wells, the editor's text column. dL* 3.41 ABOVE
+                      the sheet, because on white wove a well is where the
+                      ink has not gone.                                   */
+  --ap-paper:    #EFEBE1;
+  --ap-app:      #E8E3D6;
+  --ap-desk:     #E3DED1;
+  --ap-well:     #F7F5EE;
+
+  /* --- one ink, four densities ---------------------------------------
+     ratios are given against AP_PAPER first, then against AP_APP, which
+     is the darkest text-bearing surface in this mode and therefore the
+     one every ink is actually held to.
+     INK_0  16.20 : 1  /  15.05 : 1   the 2px rule, the cut edge, focused
+                                      running head, the one inversion
+     INK_1  13.33 : 1  /  12.39 : 1   body text, table cells
+     INK_2   8.51 : 1  /   7.90 : 1   secondary, labels, unfocused titles
+     INK_3   6.30 : 1  /   5.86 : 1   the apparatus itself, line numbers
+     HAIR    1.69 : 1  /   1.57 : 1   NOT TEXT. the quiet keyline, the
+                                      drawn column grid, meter tracks.   */
+  --ap-ink-0:    #100E0A;
+  --ap-ink-1:    #25221B;
+  --ap-ink-2:    #474134;
+  --ap-ink-3:    #5B5445;
+  --ap-hair:     #BEB6A3;
+
+  /* --- roles. named for what they DO, so ui.c can bind them once ------
+     RULE_2  the 2px structural rule and the cut edge. always INK_0.
+     RULE_1  the 1px hair that closes an apparatus and mounts a free edge.
+     MARK    a solid graphic that IS the datum: meter fill, slider fill,
+             the sigla marginal bar, the caret, the scrollbar thumb.
+     TRACK   the unfilled remainder of any such graphic.
+     INV_BG / INV_0 / INV_1  the ONE inversion in the system: a selected
+             row. At most one per sheet. INV_1 is 9.56:1 on INV_BG.
+     GRID    the desk's drawn column grid.
+     SCRIM   the overview and lock ground: the desk, opaque. There is no
+             translucency and no shadow anywhere in this direction.      */
+  --ap-rule-2:   #100E0A;
+  --ap-rule-1:   #BEB6A3;
+  --ap-mark:     #100E0A;
+  --ap-mark-2:   #474134;
+  --ap-track:    #BEB6A3;
+  --ap-inv-bg:   #100E0A;
+  --ap-inv-0:    #EFEBE1;
+  --ap-inv-1:    #BEB6A3;
+  --ap-grid:     #BEB6A3;
+  --ap-scrim:    #E3DED1;
+  --ap-knob:     #EFEBE1;
+
+  /* ------------------------------------------------------------ metrics
+     Spacing is on the 4 / 8 / 12 / 16 / 24 scale. The three reserved
+     regions of a sheet are 28dp head, 28dp outer margin, and an apparatus
+     band of 28 + 16*(lines-1) dp - 28dp exactly when one line is set,
+     which is the stated minimum.                                        */
+  --ui: 1;
+  --ap-rail-w:  calc(128px * var(--ui));
+  --ap-sig-w:   calc(24px  * var(--ui));
+  --ap-head-h:  calc(28px  * var(--ui));
+  --ap-marg-w:  calc(28px  * var(--ui));
+  --ap-lines:   3;
+  --ap-app-h:   calc((28px + 16px * (var(--ap-lines) - 1)) * var(--ui));
+  --ap-ln:      calc(16px  * var(--ui));   /* the baseline the margin counts */
+  --ap-row-h:   calc(20px  * var(--ui));
+  --ap-pad:     calc(12px  * var(--ui));
+  --ap-gap:     calc(8px   * var(--ui));
+  --ap-cut-w:   2px;
+  --ap-bar-w:   3px;
+  --ap-r-0:     0px;
+
+  /* --------------------------------------------------------- registers
+     THREE atlas sizes, not six. Datum lost points for needing upscaling;
+     this needs none.
+       R1  the 8x16 mono atlas.  The MACHINE's register: the apparatus,
+           the outer-margin line numbers, every tabular figure, every
+           label. If the machine said it, it is R1.
+       R2  the proportional face on the same 16dp cell. The USER's
+           register: running heads, prose, rail titles.
+       R3  R2's bold. Same atlas, same size, one weight. Focused running
+           head, table heads. Costs zero resampling.
+       R4  the 16x32 mono atlas. Used for exactly two things: the sigla
+           letters and the lock plate's clock.
+     The 24x48 atlas is not used by this direction at all.               */
+  --fs-r1: calc(11px * var(--ui));  --lh-r1: calc(16px * var(--ui));
+  --fs-r2: calc(14px * var(--ui));  --lh-r2: calc(16px * var(--ui));
+  --fs-r4: calc(21px * var(--ui));  --lh-r4: calc(24px * var(--ui));
+  --tr-lab: calc(1px * var(--ui));
+
+  --sans: ui-sans-serif, system-ui, 'DejaVu Sans', sans-serif;
+  --mono: ui-monospace, 'DejaVu Sans Mono', monospace;
+}
+
+/* ===================================================== design.h, dark ==
+   IRON GALL INK, AND THE GROUND IS THE INK ITSELF. The page is what is
+   left where the ink is not.
+
+   This is not an inversion of the light block and it is not a stock
+   near-black. Iron gall oxidises to a cool blue-green-black, so dark
+   APPARATUS inverts the HUE TEMPERATURE as well as the value: a cool
+   ground carrying warm bone-coloured marks, where Folio's dark is a warm
+   ground carrying warm marks. Every surface here has B >= G > R; every
+   mark has R > G > B. The two temperatures are what makes a bone letter
+   on an ink ground read as a letter and not as a hole.
+
+   Three consequences, all derived rather than chosen:
+
+   1. THE WELL REVERSES SIGN, LIKE THE APPARATUS DOES NOT. On white wove
+      a well is lighter (less ink). On an ink ground a well is lighter
+      too - it is still less ink. So AP_WELL stays above AP_PAPER in both
+      modes: dL* +3.41 on paper, +4.69 here. The apparatus band, which is
+      MORE ink in both readings, stays below: dL* -2.81 / -3.49.
+   2. THE DARKEST TEXT-BEARING SURFACE SWAPS ENDS. In light it is AP_APP
+      and every ink is held to it. Here it is AP_WELL, the LIGHTEST
+      surface, and every mark is held to that instead - AP_INK_3 is
+      4.71:1 on AP_WELL, the mirror of light's 5.86:1 on AP_APP.
+   3. THE CUT EDGE STAYS AP_INK_0 AND IS NOW A BONE LINE, 13.19:1 on the
+      sheet against light's 16.20:1. Same role, same 2px, opposite pole -
+      the occluder still draws it and the occluded still never does.   */
+:root[data-theme="dark"] {
+  --ap-paper:    #1A211E;   /* THE SHEET.        L* 12.0 */
+  --ap-app:      #131A17;   /* apparatus band.   L*  8.5, dL* -3.49 */
+  --ap-desk:     #0F1412;   /* THE GROUND.       L*  5.8 */
+  --ap-well:     #232B27;   /* cut in the sheet. L* 16.7, dL* +4.69 */
+
+  /* PARCH_0..3. ratios against the sheet first, then against AP_WELL,
+     which is the surface every mark is held to in this mode.
+     INK_0  13.19 : 1  /  11.68 : 1
+     INK_1  10.60 : 1  /   9.38 : 1
+     INK_2   6.87 : 1  /   6.08 : 1
+     INK_3   5.32 : 1  /   4.71 : 1
+     HAIR    1.73 : 1  /   1.53 : 1   NOT TEXT.                       */
+  --ap-ink-0:    #EDE6D6;
+  --ap-ink-1:    #D8CFBC;
+  --ap-ink-2:    #B0A793;
+  --ap-ink-3:    #9B9280;
+  --ap-hair:     #3E4844;
+
+  --ap-rule-2:   #EDE6D6;
+  --ap-rule-1:   #3E4844;
+  --ap-mark:     #EDE6D6;
+  --ap-mark-2:   #B0A793;
+  --ap-track:    #3E4844;
+  --ap-inv-bg:   #EDE6D6;
+  --ap-inv-0:    #1A211E;
+  --ap-inv-1:    #3E4844;
+  --ap-grid:     #3E4844;
+  --ap-scrim:    #0F1412;
+  --ap-knob:     #1A211E;
+}
+
+/* ============================================================== reset == */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--ap-desk);
+  color: var(--ap-ink-1);
+  font-family: var(--sans);
+  font-size: var(--fs-r2);
+  line-height: var(--lh-r2);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+
+/* ========================================================== registers == */
+.r1  { font-family: var(--mono); font-size: var(--fs-r1); line-height: var(--lh-r1);
+       font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.r2  { font-family: var(--sans); font-size: var(--fs-r2); line-height: var(--lh-r2);
+       font-weight: 400; }
+.r3  { font-family: var(--sans); font-size: var(--fs-r2); line-height: var(--lh-r2);
+       font-weight: 700; }
+.r4  { font-family: var(--mono); font-size: var(--fs-r4); line-height: var(--lh-r4);
+       font-weight: 700; font-variant-numeric: tabular-nums; }
+.lab { font-family: var(--mono); font-size: var(--fs-r1); line-height: var(--lh-r1);
+       text-transform: uppercase; letter-spacing: var(--tr-lab); }
+.i0 { color: var(--ap-ink-0); } .i1 { color: var(--ap-ink-1); }
+.i2 { color: var(--ap-ink-2); } .i3 { color: var(--ap-ink-3); }
+.push { margin-left: auto; }
+.rt { text-align: right; }
+
+/* ======================================================= prototype bar ==
+   This strip is NOT part of the design language - it is the harness that
+   lets a reviewer reach every scene without clicking. It is set in the
+   machine's own register so it does not pretend otherwise.              */
+#strip {
+  height: 24px; flex: none; display: flex; align-items: center; gap: 12px;
+  padding: 0 12px; background: var(--ap-inv-bg); color: var(--ap-inv-1);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1px;
+}
+#strip .nm { color: var(--ap-inv-0); font-weight: 700; }
+#strip .pitch { color: var(--ap-inv-1); letter-spacing: 0; text-transform: none;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#strip .links { margin-left: auto; display: flex; gap: 0; }
+#strip .links a { padding: 0 8px; height: 24px; display: flex; align-items: center;
+  text-transform: uppercase; }
+#strip .links a.on { background: var(--ap-inv-0); color: var(--ap-inv-bg); font-weight: 700; }
+#strip .thm { display: flex; gap: 0; align-items: center; }
+#strip .tk { padding: 0 8px; height: 24px; display: flex; align-items: center;
+  cursor: pointer; text-transform: uppercase; }
+#strip .tk.on { background: var(--ap-inv-0); color: var(--ap-inv-bg); font-weight: 700; }
+#strip .hint { color: var(--ap-inv-1); padding-left: 8px; }
+
+/* =============================================================== shell == */
+#os { position: absolute; inset: 24px 0 0 0; display: flex; background: var(--ap-desk); }
+
+/* ====================================================== sigla register ==
+   The rail is the SIGLA REGISTER. It is ordered TOP OF STACK FIRST, so
+   reading order down the margin IS the z-order: A B C means A is on top.
+   That is the ordinal half of the stacking answer, and it is the half you
+   can read from across the room.                                        */
+#rail {
+  width: var(--ap-rail-w); flex: none; display: flex; flex-direction: column;
+  background: var(--ap-desk);
+  border-right: 2px solid var(--ap-rule-2);
+  padding: 12px 0 8px 0;
+}
+#rail .brand { padding: 0 12px 12px 12px; }
+#rail .brand .n { display: block; color: var(--ap-ink-0); }
+#rail .brand .v { display: block; color: var(--ap-ink-3); }
+#rail .sec { padding: 8px 12px 4px 12px; color: var(--ap-ink-3); }
+#rail .hr { height: 1px; background: var(--ap-rule-1); margin: 4px 12px; flex: none; }
+#rail .hr2 { height: 2px; background: var(--ap-rule-2); margin: 0 0 0 0; flex: none; }
+#rail .list { overflow: hidden; }
+.sig {
+  display: flex; align-items: center; height: calc(24px * var(--ui));
+  padding-right: 8px; cursor: pointer; position: relative;
+}
+.sig .bar { position: absolute; left: 0; top: 0; bottom: 0; width: var(--ap-bar-w);
+  background: var(--ap-mark); opacity: 0; }
+.sig .gl { width: var(--ap-sig-w); flex: none; text-align: center;
+  color: var(--ap-ink-2); font-family: var(--mono); font-size: var(--fs-r1);
+  line-height: var(--lh-r1); font-weight: 700; margin-left: calc(var(--ap-bar-w) + 5px); }
+.sig .tt { color: var(--ap-ink-2); overflow: hidden; white-space: nowrap;
+  text-overflow: ellipsis; }
+.sig .st { margin-left: auto; color: var(--ap-ink-3); font-family: var(--mono);
+  font-size: var(--fs-r1); }
+.sig.on .bar { opacity: 1; }
+.sig.on .gl { color: var(--ap-ink-0); font-size: var(--fs-r4); line-height: var(--lh-r1); }
+.sig.on .tt { color: var(--ap-ink-0); font-weight: 700; }
+.sig.held .gl, .sig.held .tt { color: var(--ap-ink-3); }
+.sig:hover .tt { color: var(--ap-ink-0); }
+.lch { display: flex; align-items: center; height: calc(22px * var(--ui));
+  padding-left: calc(var(--ap-sig-w) + var(--ap-bar-w) + 5px); padding-right: 8px;
+  cursor: pointer; color: var(--ap-ink-2); }
+.lch:hover { color: var(--ap-ink-0); }
+#wsrow { display: flex; margin: 4px 12px 0 12px; border: 1px solid var(--ap-rule-1); }
+#wsrow .w { flex: 1; text-align: center; height: calc(20px * var(--ui)); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; color: var(--ap-ink-2);
+  border-right: 1px solid var(--ap-rule-1); }
+#wsrow .w:last-child { border-right: 0; }
+#wsrow .w.on { background: var(--ap-inv-bg); color: var(--ap-inv-0); font-weight: 700; }
+#readout { margin: 8px 12px 0 12px; }
+#readout .rd { display: flex; justify-content: space-between; }
+#readout .k { color: var(--ap-ink-3); }
+#readout .v { color: var(--ap-ink-1); }
+
+/* ================================================================ desk == */
+#field { flex: 1; position: relative; overflow: hidden; background: var(--ap-desk); }
+#gridsvg { position: absolute; inset: 0; pointer-events: none; }
+#wins { position: absolute; inset: 0; }
+#colophon { position: absolute; left: 0; right: 0; bottom: 0; height: 20px;
+  display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  color: var(--ap-ink-3); pointer-events: none; }
+#deskapp { position: absolute; left: 16px; right: 16px; bottom: 20px;
+  pointer-events: none; }
+/* THE DESK'S OWN APPARATUS. The brief says the machine speaks only in the
+   apparatus, in one register, at the foot. A notification is commentary on
+   the DESK rather than on a sheet, so it is set exactly the same way: at
+   the foot, opened by a 2px rule, in R1, in lemma form. There is no toast
+   card, no colour and no shadow. */
+#deskapp .dnote { display: flex; gap: 8px; align-items: baseline;
+  color: var(--ap-ink-3); border-top: 1px solid var(--ap-rule-1); padding: 2px 0; }
+#deskapp .dnote:first-child { border-top: 2px solid var(--ap-rule-2); }
+#deskapp .dnote .lm { color: var(--ap-ink-1); }
+
+/* =============================================================== sheet ==
+   Every sheet is divided by two horizontal rules into three regions:
+
+     1  RUNNING HEAD    28dp. Title, and the siglum flush right.
+     2  TEXT BLOCK      the user's setting, with a 28dp OUTER MARGIN
+                        COLUMN on its right carrying line numbers.
+     3  APPARATUS       the machine's setting, on AP_APP stock, opened by
+                        a 2px AP_INK_0 rule.
+
+   Regions 2's margin and region 3 are RESERVED AT ALL TIMES, at their
+   focused height. Opening the apparatus therefore reflows nothing: ink
+   appears in air that was already there. That is the most detectable
+   class of change at arm's length and it costs no relayout.            */
+.sheet {
+  position: absolute; display: flex; flex-direction: column;
+  background: var(--ap-paper); color: var(--ap-ink-1);
+  border: 1px solid var(--ap-rule-1);      /* the quiet mount, free edges */
+  border-radius: var(--ap-r-0);
+  overflow: hidden;
+}
+.sheet.hidden { display: none; }
+.rhead {
+  height: var(--ap-head-h); flex: none; display: flex; align-items: center;
+  gap: 8px; padding: 0 var(--ap-pad); background: var(--ap-paper);
+}
+.rhead .ttl { color: var(--ap-ink-3); font-weight: 400; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis; }
+.rhead .sub { color: var(--ap-ink-3); font-family: var(--mono);
+  font-size: var(--fs-r1); }
+.rhead .sg { margin-left: auto; color: var(--ap-ink-3); font-family: var(--mono);
+  font-size: var(--fs-r1); font-weight: 700; }
+.rhead .ctls { display: flex; gap: 0; margin-left: 8px; }
+.rhead .ctl { width: 20px; height: 20px; display: flex; align-items: center;
+  justify-content: center; cursor: pointer; color: var(--ap-ink-3); }
+.rhead .ctl:hover { color: var(--ap-ink-0); }
+.sheet.foc > .rhead .ttl { color: var(--ap-ink-0); font-weight: 700; }
+.sheet.foc > .rhead .sg { color: var(--ap-ink-0); }
+.sheet.foc > .rhead .ctl { color: var(--ap-ink-2); }
+.hrule { height: 1px; flex: none; background: var(--ap-rule-1); }
+
+.block { flex: 1; display: flex; min-height: 0; }
+.col { flex: 1; min-width: 0; display: flex; flex-direction: column;
+  padding: 8px var(--ap-pad) 8px var(--ap-pad); overflow: hidden; }
+/* THE OUTER MARGIN COLUMN. 28dp, reserved always, blank until focus. The
+   numbers are a ruler on the sheet's 16dp baseline, right-aligned and
+   tabular, exactly as a critical edition sets them. */
+.marg { width: var(--ap-marg-w); flex: none; position: relative;
+  border-left: 1px solid var(--ap-rule-1); }
+.marg .ln { position: absolute; right: 4px; color: var(--ap-ink-3);
+  font-family: var(--mono); font-size: var(--fs-r1); line-height: var(--lh-r1);
+  font-variant-numeric: tabular-nums; }
+
+/* THE APPARATUS. Closed: one hair and a right-flush count. Open: a 2px
+   AP_INK_0 rule, 1.69:1 -> 16.20:1, and the commentary set below it. */
+.appx { height: var(--ap-app-h); flex: none; background: var(--ap-app);
+  border-top: 1px solid var(--ap-rule-1); padding: 3px var(--ap-pad) 0 var(--ap-pad);
+  display: flex; flex-direction: column; }
+.sheet.foc > .appx { border-top: 2px solid var(--ap-rule-2); padding-top: 2px; }
+.appx .cnt { margin-left: auto; color: var(--ap-ink-3); font-family: var(--mono);
+  font-size: var(--fs-r1); line-height: var(--lh-r1); }
+.appx .ent { display: flex; gap: 6px; align-items: baseline;
+  font-family: var(--mono); font-size: var(--fs-r1); line-height: var(--lh-r1);
+  color: var(--ap-ink-3); white-space: nowrap; overflow: hidden; }
+.appx .ent .n  { color: var(--ap-ink-3); width: 2.2em; text-align: right; flex: none;
+  font-variant-numeric: tabular-nums; }
+.appx .ent .lm { color: var(--ap-ink-1); }
+.appx .ent .br { color: var(--ap-ink-3); }
+.appx .ent .cm { overflow: hidden; text-overflow: ellipsis; }
+
+/* THE CUT EDGE. Where this sheet occludes another, it draws a 2px AP_INK_0
+   rule along exactly the segments of its OWN outer boundary that lie over
+   another sheet - nowhere else. The border you can see is drawn by the
+   occluder, never by the occluded. An isolated sheet stays quiet at
+   1.69:1; the instant anything overlaps, the contact boundary is 16.20:1.
+   A sheet lying ENTIRELY INSIDE another has its whole boundary over that
+   sheet, so all four edges draw: that is this mechanism's loudest case,
+   not a blind spot. The genuinely silent case is a fully COVERED lower
+   sheet, which has nothing to disambiguate; the sigla register covers it. */
+.cuts { position: absolute; inset: 0; pointer-events: none; }
+.cut { position: absolute; background: var(--ap-rule-2); }
+
+/* =============================================================== parts == */
+.well { background: var(--ap-well); border: 1px solid var(--ap-rule-1);
+  padding: 6px 8px; }
+.pre { font-family: var(--mono); font-size: var(--fs-r1); line-height: var(--lh-r1);
+  white-space: pre; color: var(--ap-ink-1); }
+.scroll { flex: 1; min-height: 0; overflow: hidden; }
+.row { display: flex; align-items: baseline; gap: 8px; }
+.stack { display: flex; flex-direction: column; }
+.cols2 { display: flex; gap: 16px; flex: 1; min-height: 0; }
+.cols2 > * { flex: 1; min-width: 0; overflow: hidden; }
+.pt { padding-top: 8px; }
+.col > .row, .col > .kv, .col > .met, .col > .gate, .col > .swatch,
+.col > .trow, .col > .sld, .col > .tabs { flex: none; }
+.hr2 { height: 2px; background: var(--ap-rule-2); flex: none; }
+.hr1 { height: 1px; background: var(--ap-rule-1); flex: none; }
+.vr { width: 1px; align-self: stretch; background: var(--ap-rule-1); }
+.caret { display: inline-block; width: 6px; height: 12px; background: var(--ap-mark);
+  vertical-align: -2px; }
+body.blinkoff .caret { opacity: 0; }
+
+table.tbl { width: 100%; border-collapse: collapse; table-layout: fixed;
+  font-family: var(--mono); font-size: var(--fs-r1); line-height: var(--lh-r1);
+  font-variant-numeric: tabular-nums; }
+table.tbl th { text-align: left; font-weight: 700; color: var(--ap-ink-2);
+  text-transform: uppercase; letter-spacing: var(--tr-lab);
+  border-bottom: 1px solid var(--ap-rule-1); padding: 2px 6px 2px 0;
+  font-family: var(--mono); font-size: var(--fs-r1); }
+table.tbl th.rt { text-align: right; padding-right: 10px; }
+table.tbl td { color: var(--ap-ink-1); padding: 2px 6px 2px 0;
+  height: var(--ap-row-h); overflow: hidden; white-space: nowrap;
+  text-overflow: ellipsis; }
+table.tbl td.rt { text-align: right; padding-right: 10px; }
+table.tbl tr.zeb:nth-child(even) td { background: var(--ap-app); }
+table.tbl tr.zeb.sel td,
+table.tbl tr.sel td { background: var(--ap-inv-bg); color: var(--ap-inv-0); }
+table.tbl tr.pick { cursor: pointer; }
+table.tbl tr.pick:hover td { color: var(--ap-ink-0); }
+table.tbl tr.sel:hover td { color: var(--ap-inv-0); }
+
+.kv { display: flex; align-items: baseline; gap: 8px; height: var(--ap-ln);
+  font-family: var(--mono); font-size: var(--fs-r1); line-height: var(--lh-r1); }
+.kv .k { color: var(--ap-ink-3); }
+.kv .v { margin-left: auto; color: var(--ap-ink-1); text-align: right; }
+
+.met { display: flex; flex-direction: column; gap: 2px; padding: 2px 0; }
+.met .lr { display: flex; font-family: var(--mono); font-size: var(--fs-r1);
+  line-height: var(--lh-r1); }
+.met .lr .k { color: var(--ap-ink-3); text-transform: uppercase;
+  letter-spacing: var(--tr-lab); }
+.met .lr .v { margin-left: auto; color: var(--ap-ink-1);
+  font-variant-numeric: tabular-nums; }
+.met .tk { height: 6px; background: var(--ap-track); }
+.met .tk > i { display: block; height: 6px; background: var(--ap-mark); }
+.met.sec .tk > i { background: var(--ap-mark-2); }
+
+.plot { display: flex; align-items: flex-end; gap: 1px; flex: 1; min-height: 24px;
+  border-bottom: 1px solid var(--ap-rule-1); }
+.plot > i { flex: 1; background: var(--ap-mark-2); min-height: 1px; }
+.plot > i.hi { background: var(--ap-mark); }
+
+.btn { display: inline-flex; align-items: center; height: calc(20px * var(--ui));
+  padding: 0 10px; border: 1px solid var(--ap-rule-1); cursor: pointer;
+  color: var(--ap-ink-2); background: var(--ap-paper); }
+.btn:hover { color: var(--ap-ink-0); border-color: var(--ap-ink-0); }
+.btn.prim { background: var(--ap-inv-bg); color: var(--ap-inv-0);
+  border-color: var(--ap-inv-bg); }
+.btn.prim:hover { color: var(--ap-inv-0); }
+
+.sw { width: 34px; height: 16px; border: 1px solid var(--ap-ink-2); position: relative;
+  cursor: pointer; flex: none; background: var(--ap-well); }
+.sw > i { position: absolute; top: 1px; left: 1px; width: 14px; height: 12px;
+  background: var(--ap-ink-3); }
+.sw.on { background: var(--ap-inv-bg); border-color: var(--ap-inv-bg); }
+.sw.on > i { left: 17px; background: var(--ap-knob); }
+.trow { display: flex; align-items: center; gap: 12px; height: calc(24px * var(--ui)); }
+.trow .tx { min-width: 0; }
+.trow .tx .n { color: var(--ap-ink-1); }
+.trow .tx .d { color: var(--ap-ink-3); font-family: var(--mono);
+  font-size: var(--fs-r1); }
+.sld { display: flex; align-items: center; gap: 8px; height: calc(24px * var(--ui)); }
+.sld .tk { flex: 1; height: 6px; background: var(--ap-track); position: relative;
+  cursor: pointer; }
+.sld .tk > i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ap-mark); }
+.sld .tk > b { position: absolute; top: -3px; width: 4px; height: 12px;
+  background: var(--ap-mark); }
+.sld .vv { width: 68px; text-align: right; color: var(--ap-ink-1);
+  font-family: var(--mono); font-size: var(--fs-r1);
+  font-variant-numeric: tabular-nums; }
+.sld .kk { width: 108px; color: var(--ap-ink-3); font-family: var(--mono);
+  font-size: var(--fs-r1); text-transform: uppercase; letter-spacing: var(--tr-lab); }
+
+.tabs { display: flex; border-bottom: 2px solid var(--ap-rule-2); }
+.tabs .tb { padding: 0 12px; height: calc(22px * var(--ui)); display: flex;
+  align-items: center; cursor: pointer; color: var(--ap-ink-3); }
+.tabs .tb.on { color: var(--ap-inv-0); background: var(--ap-inv-bg); font-weight: 700; }
+
+/* ============================================================ overview ==
+   THE COLLATION. Not a grid of thumbnails: a plate of the desk at scale,
+   plus the register that names every sheet, its siglum and its rank. */
+#overview { position: absolute; inset: 0; background: var(--ap-scrim); display: none;
+  flex-direction: column; padding: 16px; z-index: 900; }
+#overview.on { display: flex; }
+.ovhead { display: flex; align-items: baseline; gap: 12px; padding-bottom: 8px;
+  border-bottom: 2px solid var(--ap-rule-2); }
+.ovbody { display: flex; gap: 16px; flex: none; height: 46%; min-height: 0; padding: 12px 0; }
+.ovws { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ovlab { display: flex; align-items: baseline; gap: 8px; padding-bottom: 4px; }
+.ovplate { flex: 1; position: relative; background: var(--ap-desk);
+  border: 1px solid var(--ap-rule-1); overflow: hidden; }
+.ovplate.cur { border: 2px solid var(--ap-rule-2); }
+.ovscale { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.ovpick { position: absolute; cursor: pointer; }
+.ovreg { flex: 1; min-height: 0; display: flex; flex-direction: column;
+  border-top: 2px solid var(--ap-rule-2); padding-top: 8px; margin-top: 12px; }
+
+/* ====================================================== command palette ==
+   Set as a title page: a sheet with its own running head and its own
+   apparatus, because it is a window like any other. */
+#palette { position: absolute; left: 50%; top: 64px; transform: translateX(-50%);
+  width: 620px; max-width: calc(100% - 64px); background: var(--ap-paper);
+  border: 2px solid var(--ap-rule-2); display: none; flex-direction: column;
+  z-index: 950; }
+#palette.on { display: flex; }
+#palette .ph { display: flex; align-items: center; gap: 8px; height: var(--ap-head-h);
+  padding: 0 var(--ap-pad); border-bottom: 1px solid var(--ap-rule-1); }
+#palette .pq { padding: 8px var(--ap-pad); font-family: var(--mono);
+  font-size: var(--fs-r1); line-height: var(--lh-r1); color: var(--ap-ink-0);
+  border-bottom: 1px solid var(--ap-rule-1); }
+#presults { max-height: 300px; overflow: hidden; }
+#presults .pr { display: flex; align-items: baseline; gap: 8px;
+  padding: 0 var(--ap-pad); height: var(--ap-row-h); cursor: pointer;
+  font-family: var(--mono); font-size: var(--fs-r1); line-height: var(--ap-row-h);
+  color: var(--ap-ink-2); }
+#presults .pr .n { color: var(--ap-ink-3); width: 2em; }
+#presults .pr .h { margin-left: auto; color: var(--ap-ink-3); }
+#presults .pr.on { background: var(--ap-inv-bg); color: var(--ap-inv-0); }
+#presults .pr.on .n, #presults .pr.on .h { color: var(--ap-inv-1); }
+#palette .pf { border-top: 2px solid var(--ap-rule-2); background: var(--ap-app);
+  padding: 3px var(--ap-pad); }
+
+/* ================================================================ lock ==
+   THE TITLE PAGE. A locked machine is a book closed on its title page:
+   the work, the edition, the date, the colophon, and nothing else. There
+   is no giant clock, because a title page does not have one. */
+#lock { position: absolute; inset: 0; background: var(--ap-scrim); display: none;
+  z-index: 980; flex-direction: column; padding: 24px 32px; }
+#lock.on { display: flex; }
+#lock .lrun { display: flex; align-items: baseline; gap: 12px; flex: none;
+  padding-bottom: 6px; border-bottom: 2px solid var(--ap-rule-2); }
+#lock .lmid { flex: 1; display: flex; gap: 32px; min-height: 0; padding-top: 24px; }
+#lock .lreg { width: var(--ap-rail-w); flex: none; }
+#lock .lreg .sg { display: flex; align-items: baseline; gap: 8px;
+  height: calc(20px * var(--ui)); color: var(--ap-ink-3); }
+#lock .lreg .sg .g { width: var(--ap-sig-w); font-family: var(--mono);
+  font-size: var(--fs-r1); font-weight: 700; color: var(--ap-ink-2); }
+#lock .lcen { flex: 1; display: flex; align-items: center; justify-content: center;
+  min-width: 0; }
+#lock .lfoot { flex: none; display: flex; gap: 12px; align-items: baseline;
+  border-top: 1px solid var(--ap-rule-1); padding-top: 4px; color: var(--ap-ink-3); }
+.lsheet { width: 560px; max-width: calc(100% - 96px); background: var(--ap-paper);
+  border: 2px solid var(--ap-rule-2); display: flex; flex-direction: column; }
+.lsheet .lh { height: var(--ap-head-h); display: flex; align-items: center;
+  padding: 0 24px; border-bottom: 1px solid var(--ap-rule-1); }
+.lsheet .lb { padding: 32px 24px 24px 24px; display: flex; flex-direction: column;
+  gap: 4px; }
+.lsheet .lb .t { color: var(--ap-ink-0); }
+.lsheet .lapp { background: var(--ap-app); border-top: 2px solid var(--ap-rule-2);
+  padding: 3px 24px 6px 24px; }
+.lrule { height: 2px; background: var(--ap-rule-2); margin: 16px 0; }
+
+/* =============================================================== menus == */
+.menu { position: absolute; min-width: 220px; background: var(--ap-paper);
+  border: 2px solid var(--ap-rule-2); display: none; flex-direction: column;
+  z-index: 970; }
+.menu.on { display: flex; }
+.menu .mh { padding: 3px var(--ap-pad); border-bottom: 1px solid var(--ap-rule-1);
+  color: var(--ap-ink-3); }
+.menu .mi { padding: 0 var(--ap-pad); height: var(--ap-row-h); display: flex;
+  align-items: center; gap: 8px; cursor: pointer; color: var(--ap-ink-2);
+  font-family: var(--mono); font-size: var(--fs-r1); }
+.menu .mi:hover { background: var(--ap-inv-bg); color: var(--ap-inv-0); }
+.menu .mi .h { margin-left: auto; color: var(--ap-ink-3); }
+.menu .mi:hover .h { color: var(--ap-inv-1); }
+.menu .msep { height: 1px; background: var(--ap-rule-1); margin: 2px 0; }
+
+.gate { display: flex; align-items: baseline; gap: 8px; height: var(--ap-ln);
+  font-family: var(--mono); font-size: var(--fs-r1); line-height: var(--lh-r1); }
+.gate .g { color: var(--ap-ink-3); }
+.gate .r { margin-left: auto; color: var(--ap-ink-0); font-weight: 700; }
+.swatch { display: flex; align-items: center; gap: 8px; height: var(--ap-ln); }
+.swatch .chip { width: 44px; height: 12px; border: 1px solid var(--ap-rule-1);
+  flex: none; }
+.swatch .nm { color: var(--ap-ink-1); font-family: var(--mono);
+  font-size: var(--fs-r1); width: 96px; }
+.swatch .hx { color: var(--ap-ink-3); font-family: var(--mono);
+  font-size: var(--fs-r1); width: 76px; }
+.swatch .ra { margin-left: auto; color: var(--ap-ink-1); font-family: var(--mono);
+  font-size: var(--fs-r1); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<div id="strip">
+  <span class="nm">APPARATUS</span>
+  <span class="pitch" id="pitch"></span>
+  <span class="links" id="links"></span>
+  <span class="thm" id="themetog"></span>
+  <span class="hint">shift D</span>
+</div>
+
+<div id="os">
+  <div id="rail">
+    <div class="brand">
+      <span class="r3 n">zlOS</span>
+      <span class="r1 v">0.3 x86_64</span>
+    </div>
+    <div class="hr2"></div>
+    <div class="sec lab">sigla</div>
+    <div class="list" id="sigla"></div>
+    <div class="hr"></div>
+    <div class="sec lab">launch</div>
+    <div class="list" id="launch"></div>
+    <div class="hr"></div>
+    <div class="sec lab">workspace</div>
+    <div id="wsrow"></div>
+    <div class="push"></div>
+    <div id="readout"></div>
+  </div>
+
+  <div id="field">
+    <svg id="gridsvg" shape-rendering="crispEdges" aria-hidden="true"></svg>
+    <div id="wins"></div>
+    <div id="deskapp"></div>
+    <div id="colophon" class="r1"></div>
+    <div id="overview"></div>
+  </div>
+
+  <div id="palette">
+    <div class="ph">
+      <span class="r3">command</span>
+      <span class="r1 i3">apparatus</span>
+      <span class="r1 i3 push" id="pcount"></span>
+    </div>
+    <div class="pq"><span id="pq"></span><span class="caret"></span></div>
+    <div id="presults"></div>
+    <div class="pf">
+      <div class="ent r1" style="display:flex;gap:6px;color:var(--ap-ink-3)">
+        <span style="color:var(--ap-ink-1)" id="pflem">command</span>
+        <span>]</span><span id="pfcom"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="lock"></div>
+  <div class="menu" id="ctxmenu"></div>
+  <div class="menu" id="winmenu"></div>
+</div>
+
+<script>
+'use strict';
+/* ======================================================== primitives ==== */
+const $  = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const pad2 = n => (n < 10 ? '0' : '') + n;
+const hx = (n, w) => (n >>> 0).toString(16).toUpperCase().padStart(w || 8, '0');
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const SIGLA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/* --- contrast, computed rather than estimated -------------------------- */
+function tokRaw(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function tokHex(n) { return tokRaw(n).toUpperCase(); }
+function tokRGB(n) {
+  const h = tokRaw(n).replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+function relLum(c) {
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+}
+function ratio(a, b) {
+  const la = relLum(tokRGB(a)), lb = relLum(tokRGB(b));
+  return ((Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05));
+}
+function lstar(n) {
+  const y = relLum(tokRGB(n));
+  return y > 0.008856 ? 116 * Math.pow(y, 1 / 3) - 16 : 903.3 * y;
+}
+
+/* ============================================================= state ==== */
+const S = {
+  scene: 'desktop', theme: 'light', ws: 1, focus: null, wins: {},
+  cols: 12, rows: 8, gut: 8, ui: 1,
+  appLines: 3, lnEvery: 5, cutW: 2, grid: true, cutOn: true,
+  margAlways: false, appStock: true, siglaBar: true, zebra: true,
+  fileSel: 5, procSel: 2, setTab: 0, calcAcc: '241690',
+  pq: '', psel: 0,
+  clock: 22 * 3600 + 41 * 60 + 7, up: 4211,
+  cpu: [61, 38, 74, 22], memPct: 62, load: 0.41, rx: 84.7, tx: 12.4,
+  hist: { cpu: [], mem: [], net: [] }
+};
+for (let i = 0; i < 64; i++) {
+  S.hist.cpu.push(30 + Math.round(38 * Math.abs(Math.sin(i / 5.2)) + (i % 7) * 2));
+  S.hist.mem.push(52 + Math.round(12 * Math.abs(Math.sin(i / 8.1))) + (i % 3));
+  S.hist.net.push(10 + Math.round(58 * Math.abs(Math.sin(i / 3.7))) + (i % 5) * 3);
+}
+
+/* ============================================== THE CUT EDGE, and its ===
+ * GOLDEN. The one change this direction was told to make is that the
+ * hosttest golden comes FIRST, because an occlusion bug here is 2px of
+ * black at 16:1 in the wrong place - the loudest possible failure mode.
+ * So the geometry lives in one pure function over a z-ordered rect list,
+ * it is asserted against four hand-computed cases at load, and the result
+ * is printed in the settings sheet where it cannot be ignored.
+ *
+ * RULE. For sheet W, for each of W's four boundary lines, emit the
+ * sub-segments of that line whose points lie inside SOME sheet below W.
+ * Coordinates returned are LOCAL to W, so wm.c can hand them straight to
+ * fb_fill_px. Integer arithmetic only; no new primitive; nothing is
+ * computed at all when nothing overlaps.
+ */
+function mergeSegs(list) {
+  const s = list.filter(a => a[1] > a[0]).sort((a, b) => a[0] - b[0]);
+  const out = [];
+  for (const seg of s) {
+    if (out.length && seg[0] <= out[out.length - 1][1]) {
+      out[out.length - 1][1] = Math.max(out[out.length - 1][1], seg[1]);
+    } else out.push([seg[0], seg[1]]);
+  }
+  return out;
+}
+/* R is {x,y,w,h}; below is an array of {x,y,w,h} strictly under R. */
+function cutSegments(R, below) {
+  const spanH = py => mergeSegs(below
+    .filter(b => py >= b.y && py <= b.y + b.h - 1)
+    .map(b => [Math.max(R.x, b.x), Math.min(R.x + R.w, b.x + b.w)]))
+    .map(s => [s[0] - R.x, s[1] - R.x]);
+  const spanV = px => mergeSegs(below
+    .filter(b => px >= b.x && px <= b.x + b.w - 1)
+    .map(b => [Math.max(R.y, b.y), Math.min(R.y + R.h, b.y + b.h)]))
+    .map(s => [s[0] - R.y, s[1] - R.y]);
+  return {
+    top:    spanH(R.y),
+    bottom: spanH(R.y + R.h - 1),
+    left:   spanV(R.x),
+    right:  spanV(R.x + R.w - 1)
+  };
+}
+/* ---- the golden. four cases, sixteen assertions, run before anything ---- */
+const GOLDEN = (function () {
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const cases = [];
+  let pass = 0, total = 0;
+  function C(name, note, R, below, want) {
+    const got = cutSegments(R, below);
+    const res = ['top', 'bottom', 'left', 'right'].map(k => {
+      total++;
+      const ok = eq(got[k], want[k]);
+      if (ok) pass++;
+      return { k, ok, got: got[k], want: want[k] };
+    });
+    cases.push({ name, note, ok: res.every(r => r.ok), res });
+  }
+  /* 1. DISJOINT. Nothing touches, so nothing is drawn: the mechanism
+        costs zero until two sheets actually meet. */
+  C('disjoint', 'nothing drawn until two sheets touch',
+    { x: 200, y: 0, w: 100, h: 100 }, [{ x: 0, y: 0, w: 100, h: 100 }],
+    { top: [], bottom: [], left: [], right: [] });
+  /* 2. OVERLAP. The classic corner. Only the two edges that lie over the
+        lower sheet are inked, and only for the length that does. */
+  C('overlap', 'two edges inked, and only where they cross',
+    { x: 50, y: 50, w: 100, h: 100 }, [{ x: 0, y: 0, w: 100, h: 100 }],
+    { top: [[0, 50]], bottom: [], left: [[0, 50]], right: [] });
+  /* 3. CONTAINED. The case the direction wrongly called its blind spot.
+        A sheet entirely inside another has its WHOLE boundary over that
+        sheet, so all four edges draw. It is the loudest case, not silent. */
+  C('contained', 'all four edges draw: the loudest case, not the silent one',
+    { x: 50, y: 50, w: 100, h: 100 }, [{ x: 0, y: 0, w: 200, h: 200 }],
+    { top: [[0, 100]], bottom: [[0, 100]], left: [[0, 100]], right: [[0, 100]] });
+  /* 4. COVERED. The genuinely silent case: a lower sheet completely under
+        an upper one draws nothing, and needs nothing - it is not visible.
+        Rank is carried by the sigla register instead. */
+  C('covered', 'the lower sheet draws nothing, and needs nothing',
+    { x: 50, y: 50, w: 100, h: 100 }, [],
+    { top: [], bottom: [], left: [], right: [] });
+  return { cases, pass, total, ok: pass === total };
+})();
+console.log('[apparatus] cut-edge golden ' + GOLDEN.pass + '/' + GOLDEN.total +
+  ' assertions ' + (GOLDEN.ok ? 'PASS' : 'FAIL'), GOLDEN.cases);
+
+/* ============================================================== icons ===
+ * Geometric, drawn as geometry, on a 24 grid with every vertex on a
+ * multiple of 3. No image, no emoji, one weight. They appear in exactly
+ * one place - the launch list - because a scholarly page does not use
+ * pictures where a word will do.
+ */
+const ICON = {
+  shell: 'M4 6 L10 12 L4 18 M12 18 L20 18',
+  files: 'M3 6 H10 L12 9 H21 V19 H3 Z',
+  mon:   'M3 18 L8 10 L12 15 L16 6 L21 13',
+  edit:  'M4 5 H20 M4 10 H16 M4 15 H20 M4 20 H12',
+  log:   'M4 6 H20 M4 11 H20 M4 16 H14 M4 21 H18',
+  hex:   'M4 5 H10 V11 H4 Z M14 5 H20 V11 H14 Z M4 14 H10 V20 H4 Z M14 14 H20 V20 H14 Z',
+  calc:  'M4 4 H20 V20 H4 Z M4 10 H20 M10 10 V20 M16 10 V20',
+  net:   'M12 4 V20 M4 8 H20 M4 16 H20 M12 4 C6 9 6 15 12 20 C18 15 18 9 12 4',
+  clock: 'M12 4 A8 8 0 1 0 12 20 A8 8 0 1 0 12 4 M12 8 V12 L15 15',
+  chip:  'M7 7 H17 V17 H7 Z M4 10 H7 M4 14 H7 M17 10 H20 M17 14 H20 M10 4 V7 M14 4 V7 M10 17 V20 M14 17 V20',
+  set:   'M4 8 H20 M4 16 H20 M9 5 V11 M15 13 V19',
+  disk:  'M3 7 A9 3 0 1 0 21 7 A9 3 0 1 0 3 7 M3 7 V17 A9 3 0 0 0 21 17 V7',
+  proc:  'M4 5 H20 V10 H4 Z M4 14 H20 V19 H4 Z',
+  regs:  'M4 6 H20 M4 12 H20 M4 18 H20 M9 3 V21 M15 3 V21'
+};
+function icon(n, px) {
+  const p = ICON[n] || ICON.chip;
+  return '<svg width="' + (px || 14) + '" height="' + (px || 14) + '" viewBox="0 0 24 24" ' +
+    'fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="' + p + '"/></svg>';
+}
+const CTL_MIN = '<svg width="10" height="10" viewBox="0 0 10 10" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="8" width="10" height="1" fill="currentColor"/></svg>';
+const CTL_MAX = '<svg width="10" height="10" viewBox="0 0 10 10" shape-rendering="crispEdges" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
+const CTL_CLS = '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0 L10 10 M10 0 L0 10" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>';
+
+/* ========================================================== fragments === */
+function TH(cols) {
+  return '<tr>' + cols.map(c => '<th' + (c.r ? ' class="rt"' : '') +
+    (c.w ? ' style="width:' + c.w + '"' : '') + '>' + (c.h || '') + '</th>').join('') + '</tr>';
+}
+function TR(cells, attr) {
+  return '<tr ' + (attr || '') + '>' + cells.map(c => {
+    if (c && typeof c === 'object') return '<td' + (c.r ? ' class="rt"' : '') + '>' + c.t + '</td>';
+    return '<td>' + c + '</td>';
+  }).join('') + '</tr>';
+}
+function TBL(head, rows) {
+  const z = S.zebra ? rows.map(r => r.replace('<tr ', '<tr class="zeb" ').replace('<tr class="zeb" class="', '<tr class="zeb ')) : rows;
+  return '<table class="tbl"><thead>' + TH(head) + '</thead><tbody>' + z.join('') + '</tbody></table>';
+}
+function KV(k, v) { return '<div class="kv"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>'; }
+function MET(k, v, unit, sec) {
+  const p = Math.max(0, Math.min(100, v));
+  return '<div class="met' + (sec ? ' sec' : '') + '"><div class="lr"><span class="k">' + k +
+    '</span><span class="v">' + v + (unit || '') + '</span></div>' +
+    '<div class="tk"><i style="width:' + p + '%"></i></div></div>';
+}
+function PLOT(series, max) {
+  const mean = series.reduce((a, b) => a + b, 0) / series.length;
+  return '<div class="plot">' + series.map(v =>
+    '<i class="' + (v > mean ? 'hi' : '') + '" style="height:' + Math.max(2, Math.round(v / max * 100)) + '%"></i>').join('') + '</div>';
+}
+function PRE(lines) {
+  return '<div class="pre">' + lines.map(l => esc(l)).join('\n') + '</div>';
+}
+
+/* =============================================================== data === */
+const FILES = [
+  ['apic.c',      '11.4 KiB', 'C source',  '-r--r--r--', '08:50'],
+  ['design.h',    '18.9 KiB', 'C header',  '-r--r--r--', '12:03'],
+  ['dpll.c',      '21.7 KiB', 'C source',  '-rw-r--r--', '11:58'],
+  ['edid.c',      ' 8.9 KiB', 'C source',  '-r--r--r--', '09:02'],
+  ['font_sub.c',  ' 9.8 KiB', 'generated', '-r--r--r--', '07:31'],
+  ['fb.c',        '68.4 KiB', 'C source',  '-r--r--r--', '12:04'],
+  ['hid.c',       '19.6 KiB', 'C source',  '-r--r--r--', '09:41'],
+  ['intel.c',     '112.9 KiB','C source',  '-rw-r--r--', '11:58'],
+  ['kernel.zl',   '41.2 KiB', 'zl source', '-r--r--r--', '12:04'],
+  ['link.ld',     '   412 B', 'linker',    '-r--r--r--', '06:12'],
+  ['memmap.h',    ' 7.1 KiB', 'C header',  '-r--r--r--', '11:12'],
+  ['nvme.c',      '28.3 KiB', 'C source',  '-r--r--r--', '10:22'],
+  ['pci.c',       '16.8 KiB', 'C source',  '-r--r--r--', '08:50'],
+  ['sched.c',     '12.1 KiB', 'C source',  '-r--r--r--', '10:40'],
+  ['ui.c',        '33.6 KiB', 'C source',  '-r--r--r--', '12:01'],
+  ['uikit.c',     '52.7 KiB', 'C source',  '-r--r--r--', '12:01'],
+  ['wm.c',        '46.0 KiB', 'C source',  '-r--r--r--', '12:01'],
+  ['wm_cut.c',    ' 6.2 KiB', 'C source',  '-rw-r--r--', '12:06'],
+  ['xhci.c',      '54.1 KiB', 'C source',  '-r--r--r--', '09:41'],
+  ['zlfs.c',      '37.8 KiB', 'C source',  '-r--r--r--', '10:22'],
+  ['atlas16.bin', '96.0 KiB', 'binary',    '-r--r--r--', '12:00'],
+  ['zlos.elf',    '249.8 KiB','executable','-rwxr-xr-x', '12:04'],
+  ['core.dump',   '256.0 KiB','core dump', '-rw-------', '11:41'],
+  ['boot.log',    ' 2.4 KiB', 'log',       '-r--r--r--', '12:04']
+];
+const SRC = {
+  'wm_cut.c': [
+    '/* wm_cut.c - THE CUT EDGE.',
+    '   The border you can see is drawn by the occluder, never by the',
+    '   occluded. Called once per damaged sheet, after z-sort, before',
+    '   the sheet is blitted. No new primitive: fb_fill_px only. */',
+    '#include "wm.h"',
+    '',
+    'static int merge(struct seg *s, int n)',
+    '{',
+    '    int w = 0;',
+    '    for (int i = 0; i < n; i++) {',
+    '        if (w && s[i].a <= s[w - 1].b) {',
+    '            if (s[i].b > s[w - 1].b) s[w - 1].b = s[i].b;',
+    '        } else s[w++] = s[i];',
+    '    }',
+    '    return w;',
+    '}',
+    '',
+    '/* the four boundary lines of R, clipped to whatever lies below it. */',
+    'int wm_cut_edges(const struct rect *R, const struct rect *below,',
+    '                 int nb, struct seg out[4][WM_MAX_SEG])',
+    '{',
+    '    int n[4] = { 0, 0, 0, 0 };',
+    '    for (int i = 0; i < nb; i++) {',
+    '        const struct rect *b = &below[i];',
+    '        /* horizontal boundaries: top, then bottom */',
+    '        for (int k = 0; k < 2; k++) {',
+    '            int py = k ? R->y + R->h - 1 : R->y;',
+    '            if (py < b->y || py > b->y + b->h - 1) continue;',
+    '            int a = MAX(R->x, b->x), z = MIN(R->x + R->w, b->x + b->w);',
+    '            if (z > a) out[k][n[k]++] = (struct seg){ a - R->x, z - R->x };',
+    '        }',
+    '        /* vertical boundaries: left, then right */',
+    '        for (int k = 2; k < 4; k++) {',
+    '            int px = k == 3 ? R->x + R->w - 1 : R->x;',
+    '            if (px < b->x || px > b->x + b->w - 1) continue;',
+    '            int a = MAX(R->y, b->y), z = MIN(R->y + R->h, b->y + b->h);',
+    '            if (z > a) out[k][n[k]++] = (struct seg){ a - R->y, z - R->y };',
+    '        }',
+    '    }',
+    '    for (int k = 0; k < 4; k++) n[k] = merge(out[k], n[k]);',
+    '    return n[0] + n[1] + n[2] + n[3];',
+    '}'
+  ],
+  'fb.c': [
+    '/* subpixel LCD text. 5 tap (1,2,3,2,1)/9 FIR over the three',
+    '   colour stripes of one cell, gamma correct in linear light',
+    '   through the two LUTs built at fb_init(). */',
+    'static void blend_sub(u32 *dst, const u8 *cov, u32 fg)',
+    '{',
+    '    u32 bg = *dst;',
+    '    int r = fir5(cov, 0), g = fir5(cov, 1), b = fir5(cov, 2);',
+    '    u32 lr = lin[(bg >> 16) & 0xff];',
+    '    u32 lg = lin[(bg >>  8) & 0xff];',
+    '    u32 lb = lin[(bg      ) & 0xff];',
+    '    lr += ((lin[(fg >> 16) & 0xff] - lr) * r) >> 8;',
+    '    lg += ((lin[(fg >>  8) & 0xff] - lg) * g) >> 8;',
+    '    lb += ((lin[(fg      ) & 0xff] - lb) * b) >> 8;',
+    '    *dst = (srgb[lr] << 16) | (srgb[lg] << 8) | srgb[lb];',
+    '}',
+    '',
+    '/* APPARATUS draws thousands of 1px rules and exactly two radii,',
+    '   0 and 0. r <= 0 short circuits to the flat fill. */',
+    'void fb_rrect(int x, int y, int w, int h, int r, u32 c)',
+    '{',
+    '    if (2 * r > h) r = h / 2;',
+    '    if (r <= 0) { fb_fill_px(x, y, w, h, c); return; }',
+    '    fb_fill_px(x + r, y, w - 2 * r, h, c);',
+    '    fb_fill_px(x, y + r, r, h - 2 * r, c);',
+    '    fb_fill_px(x + w - r, y + r, r, h - 2 * r, c);',
+    '    for (int k = 0; k < 4; k++) corner_ss(x, y, w, h, r, k, c);',
+    '}'
+  ],
+  'design.h': [
+    '/* design.h - every literal in the desktop lives here. kernel.zl',
+    '   names roles only; ui.c binds a role to one of two ladders. */',
+    '',
+    '#define AP_PAPER    0xEFEBE1   /* the sheet, L* 93.1  */',
+    '#define AP_APP      0xE8E3D6   /* apparatus band      */',
+    '#define AP_DESK     0xE3DED1   /* the reading table   */',
+    '#define AP_WELL     0xF7F5EE   /* a cut in the sheet  */',
+    '#define AP_INK_0    0x100E0A   /* 16.20:1 on the sheet */',
+    '#define AP_INK_1    0x25221B   /* 13.33:1 */',
+    '#define AP_INK_2    0x474134   /*  8.51:1 */',
+    '#define AP_INK_3    0x5B5445   /*  5.86:1 on AP_APP */',
+    '#define AP_HAIR     0xBEB6A3   /*  1.69:1, never text */',
+    '',
+    '/* there is no AP_ACCENT. colour carries nothing in this design. */',
+    '',
+    '#define AP_HEAD_H   28         /* running head        */',
+    '#define AP_MARG_W   28         /* outer margin column */',
+    '#define AP_APP_MIN  28         /* apparatus, one line */',
+    '#define AP_LN       16         /* the counted baseline */',
+    '#define AP_CUT_W    2          /* the cut edge        */',
+    '#define AP_RAIL_W   128'
+  ],
+  'kernel.zl': [
+    '# zlOS entry. called from boot.S after the handoff.',
+    'fn main() {',
+    '    gdt()',
+    '    idt()',
+    '    apic(4)                  # 4 logical CPUs',
+    '    pit(1000)                # 1193182 / 1000',
+    '    xhci()                   # usb hid keyboard and mouse',
+    '    fb(1600, 1000, 32)',
+    '    zlfs_mount("rd0")',
+    '    desktop()                # the compositor is the boot state',
+    '}',
+    '',
+    'fn desktop() {',
+    '    ui_theme_init_q8(256)    # ui scale 1.0 in q8',
+    '    sigla()                  # the rail, top of stack first',
+    '    field()                  # rules the column grid on the desk',
+    '    loop { input() compose() }',
+    '}',
+    '',
+    '# compose() z-sorts, then for each sheet calls wm_cut_edges()',
+    '# against the union of the rects below it before blitting.'
+  ],
+  'memmap.h': [
+    '/* memmap.h - who owns which address. five fixed maps, not two. */',
+    '',
+    '#define HI_DRAG     0x08000000   /* 128 MiB drag scratch    */',
+    '#define HI_COMP     0x0A000000   /* 160 MiB composite       */',
+    '#define HI_DOM      0x0C000000   /* browser node arena      */',
+    '#define HI_NET      0x04000000   /*  64 MiB virtio_net      */',
+    '#define HI_EDID     0x03F00000   /* intel.c, NOT in fb blur */',
+    '',
+    '_Static_assert(HI_DRAG > RAM_END_LOW, "drag scratch in RAM");',
+    '_Static_assert(HI_NET + NET_LEN <= HI_DRAG, "net overlaps drag");',
+    '',
+    '/* the four ceilings people conflate, and they are four numbers:',
+    '     what the loader carries      raw_boot, 4 MiB',
+    '     where the image may end      link.ld, 0x00400000',
+    '     who owns which address       this file',
+    '     how much RAM exists          e820, read at boot */'
+  ]
+};
+
+/* ==== the machine has ONE register, and these are its lines. Errors,
+   paths, PIDs, timings and warnings live here and nowhere else: no toast
+   over a sheet, no status bar, no inline red. An error is the word err in
+   the apparatus, in the same 11px as everything else, distinguished by the
+   lemma and the position. ==== */
+const APPS = [
+  { id: 'shell', name: 'shell',        sub: 'zlsh',      ico: 'shell', p: [0, 0, 7, 4], app: [
+      ['18', 'make', 'exit 0 · 11 objects · 1.42 s'],
+      ['24', 'regdump', 'PIPE_A_LINK_M 0x0080D9E4 · pipe A'],
+      ['31', 'fsck', '3 generations, 0 orphan extents · 22:41:07'] ] },
+  { id: 'files', name: 'files',        sub: 'zlfs rd0',  ico: 'files', p: [7, 0, 5, 4], app: [
+      ['07', 'fb.c', '68.4 KiB · crc32 0x9E3779B1 · 1 extent'],
+      ['12', 'stat', 'uid 0 gid 0 · generation 3 · contiguous'],
+      ['19', 'open', 'err ENOENT · /kernel/missing.c'] ] },
+  { id: 'mon',   name: 'monitor',      sub: '1 Hz',      ico: 'mon',   p: [0, 4, 7, 4], app: [
+      ['03', 'cpu2', '74 % · above the 60 % mean of the last 64 s'],
+      ['11', 'nvme', 'warn admin queue timeout 500 ms, retried once'],
+      ['26', 'sched', '18 412 switches · 288 /s · 4 ms quantum'] ] },
+  { id: 'edit',  name: 'text editor',  sub: 'fb.c',      ico: 'edit',  p: [0, 0, 7, 8], app: [
+      ['14', 'fb_rrect', 'r <= 0 -> fb_fill_px · 22:41:07'],
+      ['19', 'corner_ss', '4x4 supersample, 16 taps per corner'],
+      ['23', 'buffer', 'unsaved · 26 lines · utf-8 lf · mode c'] ] },
+  { id: 'log',   name: 'kernel log',   sub: 'dmesg',     ico: 'log',   p: [0, 4, 7, 4], app: [
+      ['12', 'xhci', 'warn BIOS owned the controller, handoff 16.9 ms'],
+      ['17', 'nvme', 'err admin queue timeout after 500 ms'],
+      ['21', 'wm', 'field 12 x 8 modules · gutter 8 · 5 sheets'] ] },
+  { id: 'hex',   name: 'hex viewer',   sub: '/dev/rd0',  ico: 'hex',   p: [4, 1, 6, 5], app: [
+      ['01', 'magic', '7F 45 4C 46 · elf64 little endian'],
+      ['09', 'offset', '0x0011A4C0 · width 16 · ascii pane on'],
+      ['18', 'read', '288 B of 249.8 KiB · 0.42 ms · rd0'] ] },
+  { id: 'calc',  name: 'calculator',   sub: 'int64',     ico: 'calc',  p: [8, 1, 4, 6], app: [
+      ['04', 'acc', '241690 · 0x0003B04A · 0b111011000001001010'],
+      ['08', 'kHz->Hz', '241 690 000 · exact, no float on this path'],
+      ['12', 'mode', 'int64 · overflow traps rather than wraps'] ] },
+  { id: 'net',   name: 'network',      sub: 'enp0s31f6', ico: 'net',   p: [7, 4, 5, 4], app: [
+      ['05', 'enp0s31f6', '10.0.2.15/24 · mtu 1500 · link up'],
+      ['13', ':5900', 'ESTABLISHED 10.0.2.2:44118 · pid 18'],
+      ['21', 'arp', 'warn 10.0.2.3 STALE for 312 s'] ] },
+  { id: 'clock', name: 'clocks',       sub: 'monotonic', ico: 'clock', p: [3, 1, 6, 5], app: [
+      ['02', 'monotonic', '01:10:11 since boot · no step'],
+      ['06', 'tsc', '2904.001 MHz invariant · drift 0 ppm'],
+      ['11', 'pit', '1193182 / 1000 -> 1000 Hz · divisor 1193'] ] },
+  { id: 'sys',   name: 'system',       sub: '0.3',       ico: 'chip',  p: [3, 2, 6, 5], app: [
+      ['04', 'build', 'link 12:04 · 11 objects · 218 432 B text'],
+      ['09', 'gates', 'build, hosttest, wmshot, fsck · all green'],
+      ['16', 'display', 'gen9 modeset, real DPLL · 241 690 kHz'] ] },
+  { id: 'set',   name: 'settings',     sub: 'design.h',  ico: 'set',   p: [0, 0, 7, 8], app: [
+      ['06', 'cut edge', 'golden 4 cases, 16 assertions · PASS'],
+      ['12', 'apparatus', '3 lines reserved · 60 dp band · no reflow'],
+      ['18', 'stock', 'white wove · AP_PAPER #EFEBE1 · L* 93.1'] ] },
+  { id: 'disk',  name: 'disk usage',   sub: 'zlfs',      ico: 'disk',  p: [6, 0, 6, 5], app: [
+      ['03', 'rd0', '476.9 GiB · 62 % used · 1 namespace'],
+      ['10', 'zlfs', 'generation 3 · 0 orphan extents'],
+      ['17', 'fsck', 'power cycle 1 -> 2 -> 3 survived'] ] },
+  { id: 'proc',  name: 'processes',    sub: '42 tasks',  ico: 'proc',  p: [2, 1, 7, 5], app: [
+      ['02', 'wm', 'pid 18 RUN 9.6 % · surface · 31.8 MiB'],
+      ['07', 'regdump', 'pid 42 ZOMBIE · exited 0 at 22:39:14'],
+      ['14', 'quantum', '4 ms round robin · 2 ready, 0 blocked'] ] },
+  { id: 'regs',  name: 'registers',    sub: 'pipe A',    ico: 'regs',  p: [3, 0, 7, 6], app: [
+      ['05', 'PIPE_A_CONF', '0xC0000000 · enabled, 8 bpc'],
+      ['11', 'DPLL_CTRL1', '0x00000601 · link 2.7 GHz'],
+      ['19', 'PSR_STATUS', 'warn busy, PIPE_CONF write deferred'] ] }
+];
+const APP = {};
+APPS.forEach(a => { APP[a.id] = a; });
+
+/* ======================================================== renderers ==== */
+const R = {};
+
+R.shell = () => {
+  const L = [
+    'zlsh 0.3   41 built-ins, no libc, no heap',
+    '',
+    'zl@zlos /kernel $ make -j4',
+    '  ZL   kernel.zl    51 884 B  -> build/kernel.o',
+    '  CC   fb.c         68 412 B  -> build/fb.o',
+    '  CC   wm.c         46 004 B  -> build/wm.o',
+    '  CC   wm_cut.c      6 208 B  -> build/wm_cut.o',
+    '  LD   zlos.elf    249 812 B',
+    '  build ok, 11 objects, 2.418 s',
+    'zl@zlos /kernel $ ./hosttest/cutgold',
+    '  disjoint   0 segments      ok',
+    '  overlap    top[0,50] left[0,50]  ok',
+    '  contained  all four edges  ok',
+    '  covered    0 segments      ok',
+    '  16/16 assertions PASS',
+    'zl@zlos /kernel $ ./tools/regdump --pipe A',
+    '  PIPE_A_CONF    0xC0000000   enabled, 8 bpc',
+    '  PIPE_A_LINK_M  0x0080D9E4',
+    '  PIPE_A_LINK_N  0x00800000',
+    '  pixel clock 241690 kHz -> 59.998 Hz',
+    'zl@zlos /kernel $ '
+  ];
+  return '<div class="well stack" style="flex:1;min-height:0;overflow:hidden">' +
+    PRE(L).replace('</div>', '<span class="caret"></span></div>') + '</div>' +
+    '<div class="row pt">' +
+    '<span class="btn prim r1" data-act="toast" data-arg="build">rebuild</span>' +
+    '<span class="btn r1" data-act="open" data-arg="log">dmesg</span>' +
+    '<span class="btn r1" data-act="open" data-arg="regs">regdump</span>' +
+    '<span class="r1 i3 push">exit 0 · 1.42 s</span></div>';
+};
+
+R.files = () => {
+  const rows = FILES.map((f, i) => TR(
+    [f[0], { t: f[1], r: 1 }, f[2], f[3], { t: f[4], r: 1 }],
+    'class="pick' + (i === S.fileSel ? ' sel' : '') + '" data-act="file" data-arg="' + i + '"'));
+  const f = FILES[S.fileSel];
+  return '<div class="row" style="padding-bottom:6px">' +
+    '<span class="lab i3">path</span><span class="r1 i1">/kernel</span>' +
+    '<span class="r1 i3 push">' + FILES.length + ' entries · 386.2 GiB free</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="scroll">' + TBL([{ h: 'name', w: '30%' }, { h: 'size', w: '16%', r: 1 },
+      { h: 'kind', w: '18%' }, { h: 'mode', w: '22%' }, { h: 'mtime', w: '14%', r: 1 }], rows) + '</div>' +
+    '<div class="hr1"></div>' +
+    '<div class="pt">' + KV('selected', f[0]) + KV('full path', '/kernel/' + f[0]) +
+    KV('mode', f[3] + '  uid 0  gid 0') + KV('extent', 'generation 3, 1 extent, contiguous') +
+    KV('crc32', '0x' + hx((S.fileSel * 2654435761) >>> 0, 8)) + '</div>' +
+    '<div class="row pt">' +
+    '<span class="btn prim r1" data-act="open" data-arg="edit">open in editor</span>' +
+    '<span class="btn r1" data-act="open" data-arg="hex">hex</span>' +
+    '<span class="btn r1" data-act="toast" data-arg="stat">stat</span></div>';
+};
+
+R.edit = () => {
+  const name = FILES[S.fileSel][0];
+  const body = SRC[name];
+  if (!body) {
+    return '<div class="row"><span class="lab i3">buffer</span>' +
+      '<span class="r1 i1">' + name + '</span>' +
+      '<span class="r1 i3 push">not a text buffer</span></div><div class="hr2"></div>' +
+      '<div class="well stack" style="flex:1;align-items:center;justify-content:center;margin-top:8px">' +
+      '<span class="lab i2">no setting</span>' +
+      '<span class="r1 i3">' + name + ' has no text. read it in the hex viewer.</span></div>' +
+      '<div class="row pt"><span class="btn prim r1" data-act="open" data-arg="hex">open in hex</span></div>';
+  }
+  let g = '', t = '';
+  body.forEach((l, i) => { g += pad2(i + 1) + '\n'; t += l + '\n'; });
+  return '<div class="row"><span class="lab i3">file</span>' +
+    '<span class="r1 i1">/kernel/' + name + '</span>' +
+    '<span class="r1 i3 push">utf-8 · lf · ' + body.length + ' lines · unsaved</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="well scroll" style="margin-top:8px;display:flex;gap:10px">' +
+    '<div class="pre i3" style="flex:none;text-align:right">' + g.trimEnd() + '</div>' +
+    '<div class="pre" style="flex:1;min-width:0;overflow:hidden">' + esc(t.trimEnd()) +
+    '<span class="caret"></span></div></div>' +
+    '<div class="row pt">' + '<span class="lab i3">ln</span><span class="r1 i1">' + body.length + '</span>' +
+    '<span class="lab i3">col</span><span class="r1 i1">18</span>' +
+    '<span class="lab i3">mode</span><span class="r1 i1">c</span>' +
+    '<span class="r1 i3 push">tab 4 · spaces · no trailing</span></div>';
+};
+
+R.mon = () => {
+  const cores = S.cpu.map((v, i) => MET('cpu ' + i, v, ' %', v <= 60)).join('');
+  const procs = [
+    ['1', 'wm', 'RUN', '14.2', '22 140'], ['12', 'compositor', 'RUN', '9.1', '18 904'],
+    ['18', 'zlsh', 'SLEEP', '0.4', '2 118'], ['24', 'files', 'SLEEP', '0.2', '4 410'],
+    ['31', 'monitor', 'RUN', '3.8', '3 902'], ['37', 'editor', 'SLEEP', '0.1', '6 280'],
+    ['42', 'regdump', 'ZOMBIE', '0.0', '0'], ['48', 'intel', 'RUN', '4.4', '22 916']
+  ].map((p, i) => TR([p[0], p[1], p[2], { t: p[3], r: 1 }, { t: p[4], r: 1 }],
+    'class="pick' + (i === S.procSel ? ' sel' : '') + '" data-act="proc" data-arg="' + i + '"'));
+  const irq = [
+    ['0', 'timer', '1 024', 'apic'], ['1', 'i8042', '0', 'legacy'],
+    ['16', 'xhci', '312', 'msi-x'], ['19', 'e1000e', '148', 'msi'],
+    ['24', 'nvme q0', '96', 'msi-x'], ['33', 'intel vbl', '60', 'msi']
+  ].map(r => TR([r[0], r[1], { t: r[2], r: 1 }, r[3]]));
+  return '<div class="cols2">' +
+    '<div class="stack">' + cores + MET('memory', S.memPct, ' %') +
+      '<div class="row pt"><span class="lab i3">cpu history</span>' +
+      '<span class="r1 i3 push">64 s · 1 Hz · above mean set solid</span></div>' +
+      '<div class="stack" style="flex:none;height:96px;padding-top:4px">' + PLOT(S.hist.cpu, 100) + '</div>' +
+      '<div class="pt">' + KV('resident', '15.4 GiB total, ' + S.memPct + ' % used') +
+      KV('kernel image', '218 KiB text, 30 KiB data') +
+      KV('back buffer', '6.4 MiB at 0x0A000000') +
+      KV('drag scratch', '128 MiB at 0x08000000') + '</div>' +
+    '</div><div class="stack" style="min-height:0">' +
+      TBL([{ h: 'pid', w: '12%' }, { h: 'command', w: '30%' }, { h: 'state', w: '20%' },
+        { h: 'cpu %', w: '18%', r: 1 }, { h: 'rss kib', w: '20%', r: 1 }], procs) +
+      '<div class="row pt"><span class="lab i3">interrupts</span>' +
+      '<span class="r1 i3 push">per second</span></div>' +
+      TBL([{ h: 'vec', w: '16%' }, { h: 'source', w: '38%' }, { h: 'rate', w: '22%', r: 1 },
+        { h: 'route', w: '24%' }], irq) +
+      '<div class="row pt"><span class="lab i3">memory</span>' +
+      '<span class="r1 i3 push">64 s · resident</span></div>' +
+      '<div class="stack" style="flex:none;height:80px;padding-top:4px">' + PLOT(S.hist.mem, 100) + '</div>' +
+    '</div></div>' +
+    '<div class="hr1" style="margin-top:8px"></div>' +
+    '<div class="row pt"><span class="lab i3">load</span><span class="r1 i0">' + S.load.toFixed(2) + '</span>' +
+    '<span class="lab i3">tasks</span><span class="r1 i1">42</span>' +
+    '<span class="lab i3">irq/s</span><span class="r1 i1">1 024</span>' +
+    '<span class="r1 i3 push">round robin · 4 ms quantum</span></div>';
+};
+
+R.log = () => {
+  const L = [
+    ['0.000000', 'zlOS 0.3 x86_64, built from 11 objects'],
+    ['0.000412', 'gdt: flat code and data, tss at 0x00009000'],
+    ['0.001180', 'idt: 256 vectors, 5 casts widened to u64'],
+    ['0.004902', 'apic: io apic id 2, 24 redirection entries'],
+    ['0.009114', 'e820: usable 0x0000000000100000 - 0x00000000BFFDFFFF'],
+    ['0.011840', 'pci: 0000:00:14.0 8086:9d2f xhci, bar0 64-bit'],
+    ['0.012006', 'pci: 0000:02:00.0 144d:a808 nvme, 512 GB'],
+    ['0.031772', 'intel: gen9 display, 3 pipes, 4 ports'],
+    ['0.048119', 'intel: warn firmware left PSR1 armed on eDP-1, disabling'],
+    ['0.061450', 'intel: dpll2 locked, 241690 kHz, m/n 0x0080D9E4'],
+    ['0.062001', 'intel: pipe A 1600x1000@59.998, eDP-1 lane count 4'],
+    ['0.070912', 'fb: 1600x1000x32 pitch 6400 at 0x90000000'],
+    ['0.071440', 'fb: gamma luts built, subpixel 5 tap FIR armed'],
+    ['0.094612', 'xhci: warn BIOS owns the controller, requesting handoff'],
+    ['0.111544', 'xhci: handoff complete after 16.9 ms, 8 scratchpads'],
+    ['0.121880', 'nvme: err admin queue timeout after 500 ms, retrying'],
+    ['0.640210', 'nvme: identify ok, 1 namespace, 476.9 GiB'],
+    ['0.712004', 'zlfs: rd0 mounted, generation 3, 0 orphans'],
+    ['0.804119', 'ui: theme_init_q8(256), 22 roles bound to ladder 0'],
+    ['0.812440', 'wm: field 12 x 8 modules, gutter 8, margin 16'],
+    ['0.815002', 'wm_cut: golden 16/16, cut edge armed at 2 px'],
+    ['0.819003', 'desktop: compositor is the boot state, 5 sheets']
+  ].map(l => TR([{ t: l[0], r: 1 }, l[1]]));
+  return '<div class="row"><span class="lab i3">source</span>' +
+    '<span class="r1 i1">/dev/kmsg</span>' +
+    '<span class="r1 i3 push">22 records · ring 64 KiB · 3 flagged in the apparatus</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="scroll">' + TBL([{ h: 'uptime', w: '14%', r: 1 }, { h: 'record', w: '86%' }], L) + '</div>';
+};
+
+R.hex = () => {
+  const base = 0x0011A4C0;
+  const seed = [0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00];
+  const rows = [];
+  for (let r = 0; r < 20; r++) {
+    const b = [];
+    let asc = '';
+    for (let i = 0; i < 16; i++) {
+      const v = (r === 0 && i < 8) ? seed[i] : ((r * 37 + i * 11 + 0x21) & 0xff);
+      b.push(hx(v, 2));
+      asc += (v >= 32 && v < 127) ? String.fromCharCode(v) : '.';
+    }
+    rows.push(TR([hx(base + r * 16, 8), b.slice(0, 8).join(' '), b.slice(8).join(' '), esc(asc)],
+      r === 0 ? 'class="sel"' : ''));
+  }
+  return '<div class="row"><span class="lab i3">device</span>' +
+    '<span class="r1 i1">/dev/rd0</span>' +
+    '<span class="lab i3">offset</span><span class="r1 i1">0x' + hx(base) + '</span>' +
+    '<span class="r1 i3 push">width 16 · ascii pane</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="scroll">' + TBL([{ h: 'address', w: '17%' }, { h: '00 .. 07', w: '28%' },
+      { h: '08 .. 0f', w: '28%' }, { h: 'ascii', w: '27%' }], rows) + '</div>' +
+    '<div class="hr1"></div>' +
+    '<div class="row pt"><span class="lab i3">signature</span>' +
+    '<span class="r1 i0">7F 45 4C 46</span>' +
+    '<span class="r1 i3 push">elf64, little endian, entry 0x00100000</span></div>';
+};
+
+R.calc = () => {
+  const keys = [['hex', 'dec', 'bin', 'clr'], ['7', '8', '9', 'div'],
+    ['4', '5', '6', 'mul'], ['1', '2', '3', 'sub'], ['0', 'dot', 'eq', 'add']];
+  const n = parseInt(S.calcAcc, 10) || 0;
+  let grid = '<div style="display:grid;grid-template-columns:repeat(4,1fr);' +
+    'border-top:1px solid var(--ap-rule-1);border-left:1px solid var(--ap-rule-1);' +
+    'flex:1;min-height:0">';
+  keys.forEach(row => row.forEach(k => {
+    const lbl = { div: '/', mul: 'x', sub: '-', add: '+', eq: '=', dot: '.', clr: 'c' }[k] || k;
+    const pr = k === 'eq';
+    grid += '<span class="' + (pr ? 'r3' : 'r1') + '" data-act="calc" data-arg="' + k + '" ' +
+      'style="display:flex;align-items:center;justify-content:center;cursor:pointer;' +
+      'border-right:1px solid var(--ap-rule-1);border-bottom:1px solid var(--ap-rule-1);' +
+      'background:var(--' + (pr ? 'ap-inv-bg' : 'ap-paper') + ');' +
+      'color:var(--' + (pr ? 'ap-inv-0' : 'ap-ink-2') + ')">' + lbl + '</span>';
+  }));
+  grid += '</div>';
+  return '<div class="well" style="flex:none;display:flex;align-items:baseline">' +
+    '<span class="lab i3">acc</span>' +
+    '<span class="r4 i0 push">' + S.calcAcc + '</span></div>' +
+    '<div class="pt" style="flex:none">' +
+    KV('hex', '0x' + hx(n, 8)) +
+    KV('bin', n.toString(2).padStart(24, '0').replace(/(.{8})/g, '$1 ').trim()) +
+    KV('oct', '0o' + n.toString(8)) +
+    KV('kHz to Hz', (n * 1000).toLocaleString('en-US').replace(/,/g, ' ')) + '</div>' +
+    '<div class="stack pt" style="flex:1;min-height:0">' + grid + '</div>';
+};
+
+R.net = () => {
+  const ifs = [
+    ['enp0s31f6', 'UP', '10.0.2.15/24', S.rx.toFixed(1), S.tx.toFixed(1), '1500'],
+    ['wlp3s0', 'DOWN', 'unconfigured', '0.0', '0.0', '1500'],
+    ['lo', 'UP', '127.0.0.1/8', '0.4', '0.4', '65536']
+  ].map(f => TR([f[0], f[1], f[2], { t: f[3], r: 1 }, { t: f[4], r: 1 }, { t: f[5], r: 1 }]));
+  const socks = [
+    ['tcp', '10.0.2.15:22', '10.0.2.2:51402', 'ESTABLISHED', '12'],
+    ['tcp', '10.0.2.15:8080', '0.0.0.0:*', 'LISTEN', '18'],
+    ['tcp', '10.0.2.15:5900', '10.0.2.2:44118', 'ESTABLISHED', '18'],
+    ['udp', '0.0.0.0:68', '0.0.0.0:*', 'BOUND', '9'],
+    ['udp', '10.0.2.15:123', '162.159.200.1:123', 'BOUND', '9']
+  ].map(s => TR([s[0], s[1], s[2], s[3], { t: s[4], r: 1 }]));
+  const routes = [
+    ['0.0.0.0/0', '10.0.2.2', 'enp0s31f6', '100', 'static'],
+    ['10.0.2.0/24', 'link', 'enp0s31f6', '100', 'kernel'],
+    ['127.0.0.0/8', 'link', 'lo', '0', 'kernel'],
+    ['169.254.0.0/16', 'link', 'enp0s31f6', '1000', 'fallback']
+  ].map(r => TR([r[0], r[1], r[2], { t: r[3], r: 1 }, r[4]]));
+  return '<div class="row"><span class="lab i3">rx</span>' +
+    '<span class="r1 i0">' + S.rx.toFixed(1) + ' KiB/s</span>' +
+    '<span class="lab i3">tx</span><span class="r1 i0">' + S.tx.toFixed(1) + ' KiB/s</span>' +
+    '<span class="r1 i3 push">rtt 0.42 ms · 0 retransmit</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="stack" style="flex:none;height:52px;padding:8px 0">' + PLOT(S.hist.net, 80) + '</div>' +
+    TBL([{ h: 'iface', w: '20%' }, { h: 'state', w: '14%' }, { h: 'address', w: '26%' },
+      { h: 'rx kib', w: '13%', r: 1 }, { h: 'tx kib', w: '13%', r: 1 }, { h: 'mtu', w: '14%', r: 1 }], ifs) +
+    '<div class="row pt"><span class="lab i3">sockets</span>' +
+    '<span class="r1 i3 push">5 open · 0 timewait</span></div>' +
+    TBL([{ h: 'proto', w: '12%' }, { h: 'local', w: '26%' }, { h: 'remote', w: '30%' },
+      { h: 'state', w: '24%' }, { h: 'pid', w: '8%', r: 1 }], socks) +
+    '<div class="row pt"><span class="lab i3">routes</span>' +
+    '<span class="r1 i3 push">4 entries</span></div>' +
+    '<div class="scroll">' + TBL([{ h: 'destination', w: '28%' }, { h: 'via', w: '20%' },
+      { h: 'dev', w: '22%' }, { h: 'metric', w: '14%', r: 1 }, { h: 'proto', w: '16%' }], routes) + '</div>';
+};
+
+R.clock = () => {
+  const z = [['zlos / local', 0], ['utc', -3600], ['tokyo', 8 * 3600],
+    ['new york', -5 * 3600], ['berlin', 0], ['pacific', -8 * 3600]];
+  const rows = z.map(t => TR([t[0], { t: hhmmss(S.clock + t[1]), r: 1 },
+    { t: (t[1] >= 0 ? '+' : '') + (t[1] / 3600).toFixed(0) + ' h', r: 1 }]));
+  return '<div class="row"><span class="lab i3">monotonic</span>' +
+    '<span class="r4 i0">' + hhmmss(S.clock) + '</span>' +
+    '<span class="r1 i3 push">since boot ' + hhmmss(S.up) + '</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="pt">' + TBL([{ h: 'zone', w: '48%' }, { h: 'time', w: '30%', r: 1 },
+      { h: 'offset', w: '22%', r: 1 }], rows) + '</div>' +
+    '<div class="row pt"><span class="lab i3">sources</span>' +
+    '<span class="r1 i3 push">no rtc write, no ntp step</span></div>' +
+    '<div class="scroll">' + KV('tsc', '2904.001 MHz, invariant') +
+    KV('pit divisor', '1193 -> 1000.15 Hz') +
+    KV('apic timer', 'one shot, deadline mode') +
+    KV('drift vs tsc', '0 ppm over 01:10:11') +
+    KV('rtc', 'read once at boot, never written') + '</div>';
+};
+
+R.sys = () => {
+  const pci = [
+    ['00:02.0', '8086:5916', 'intel', 'gen9 display'],
+    ['00:14.0', '8086:9d2f', 'xhci', '16 slots'],
+    ['00:1f.6', '8086:15d8', 'e1000e', 'enp0s31f6'],
+    ['02:00.0', '144d:a808', 'nvme', '476.9 GiB'],
+    ['00:1f.3', '8086:9d71', 'none', 'unclaimed']
+  ].map(p => TR([p[0], p[1], p[2], p[3]]));
+  const mm = [
+    ['0x00000000', '640 KiB', 'usable'], ['0x000A0000', '384 KiB', 'reserved'],
+    ['0x00100000', '3.0 GiB', 'usable'], ['0x08000000', '128 MiB', 'drag scratch'],
+    ['0x0A000000', '160 MiB', 'composite'], ['0x90000000', '6.4 MiB', 'framebuffer'],
+    ['0xFEC00000', '4 KiB', 'io apic'], ['0xFED00000', '1 KiB', 'hpet']
+  ].map(m => TR([m[0], { t: m[1], r: 1 }, m[2]]));
+  return '<div class="row"><span class="r4 i0">zlOS 0.3</span>' +
+    '<span class="r1 i3 push">no host OS · no libc · no GPU · no heap · no float</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="cols2 pt">' +
+      '<div class="stack">' +
+        KV('kernel', 'zlos 0.3 x86_64') + KV('language', 'zl, self hosting') +
+        KV('lines', '11 374 hand written') + KV('cpu', 'core i5-7300U, 4 threads') +
+        KV('tsc', '2904.001 MHz invariant') + KV('memory', '15.4 GiB, ' + S.memPct + ' % used') +
+        KV('framebuffer', '1600 x 1000 x 32') + KV('stride', '6 400 B') +
+        KV('pixel clock', '241 690 kHz') + KV('refresh', '59.998 Hz') +
+        KV('text', 'subpixel LCD, 5 tap FIR') +
+        KV('atlases', '8x16 and 16x32, two in use') +
+        '<div class="row pt"><span class="lab i3">memory map</span>' +
+        '<span class="r1 i3 push">e820, as handed over</span></div>' +
+        TBL([{ h: 'base', w: '40%' }, { h: 'length', w: '26%', r: 1 },
+          { h: 'kind', w: '34%' }], mm) +
+      '</div>' +
+      '<div class="stack">' +
+        '<div class="row"><span class="lab i3">pci topology</span>' +
+        '<span class="r1 i3 push">5 functions</span></div>' +
+        TBL([{ h: 'slot', w: '28%' }, { h: 'id', w: '26%' }, { h: 'drv', w: '18%' },
+          { h: 'note', w: '28%' }], pci) +
+        '<div class="row pt"><span class="lab i3">subsystems</span>' +
+        '<span class="r1 i3 push">as bound at boot</span></div>' +
+        KV('display', 'gen9 modeset, real DPLL') +
+        KV('input', 'xHCI plus HID boot protocol') +
+        KV('storage', 'zlfs on nvme, generation 3') +
+        KV('window manager', 'wm.c plus wm_cut.c') +
+        KV('build', 'last link 12:04, 11 objects') +
+        KV('text segment', '218 432 B') + KV('bss', '1 441 792 B') +
+        KV('gates', 'build, hosttest, wmshot, fsck') +
+        KV('uptime', hhmmss(S.up)) +
+        '<div class="well pt" style="margin-top:8px">' +
+        '<div class="r1 i1">zlOS 0.3 x86_64</div>' +
+        '<div class="r1 i3">link 12:04 · 11 objects · 218 432 B text</div>' +
+        '<div class="r1 i3">cut edge golden ' + GOLDEN.pass + '/' + GOLDEN.total + ' PASS</div></div>' +
+      '</div>' +
+    '</div>';
+};
+
+R.disk = () => {
+  const parts = [
+    ['rd0p1', 'zlfs', '476.9 GiB', 62], ['rd0p2', 'swap', '8.0 GiB', 3],
+    ['rd0p3', 'efi', '512.0 MiB', 21], ['ram0', 'tmpfs', '128.0 MiB', 44]
+  ];
+  const dirs = [
+    ['/kernel', '2.1 MiB', 24, 41], ['/kernel/hosttest', '884.0 KiB', 11, 17],
+    ['/kernel/docs', '412.0 KiB', 9, 9], ['/stdlib', '1.4 MiB', 18, 22],
+    ['/tests', '3.8 MiB', 61, 74], ['/tools', '640.0 KiB', 7, 12],
+    ['/examples', '244.0 KiB', 12, 12], ['/build', '9.6 MiB', 31, 31]
+  ].map(d => TR([d[0], { t: d[1], r: 1 }, { t: d[2], r: 1 }, { t: d[3], r: 1 },
+    { t: '<span style="display:inline-block;height:6px;background:var(--ap-mark);width:' +
+      Math.round(d[3] / 74 * 100) + '%"></span>' }]));
+  return '<div class="row"><span class="lab i3">device</span>' +
+    '<span class="r1 i1">/dev/rd0</span>' +
+    '<span class="r1 i3 push">476.9 GiB · 62 % used · generation 3</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="pt">' + parts.map(p => MET(p[0] + '  ' + p[1] + '  ' + p[2], p[3], ' %')).join('') + '</div>' +
+    '<div class="row pt"><span class="lab i3">by directory</span>' +
+    '<span class="r1 i3 push">apparent size, one level</span></div>' +
+    '<div class="scroll">' + TBL([{ h: 'path', w: '30%' }, { h: 'size', w: '18%', r: 1 },
+      { h: 'files', w: '12%', r: 1 }, { h: 'share', w: '12%', r: 1 },
+      { h: '', w: '28%' }], dirs) + '</div>' +
+    '<div class="hr1"></div>' +
+    '<div class="pt">' + KV('extents', '4 118 allocated, 0 orphan') +
+    KV('generations', '3 kept, oldest 09:41') +
+    KV('last fsck', '12:04, power cycle 1 -> 2 -> 3 survived') + '</div>';
+};
+
+R.proc = () => {
+  const rows = [
+    ['1', 'wm', 'RUN', '14.2', '22 140', 'surface'], ['12', 'compositor', 'RUN', '9.1', '18 904', 'compose'],
+    ['18', 'zlsh', 'SLEEP', '0.4', '2 118', 'tty0'], ['24', 'files', 'SLEEP', '0.2', '4 410', 'rd0'],
+    ['31', 'monitor', 'RUN', '3.8', '3 902', '1 Hz'], ['37', 'editor', 'SLEEP', '0.1', '6 280', 'fb.c'],
+    ['42', 'regdump', 'ZOMBIE', '0.0', '0', 'exited 0'], ['48', 'intel', 'RUN', '4.4', '22 916', 'pipe A'],
+    ['53', 'xhci', 'SLEEP', '1.2', '8 402', 'irq 16'], ['61', 'zlfs', 'SLEEP', '0.8', '18 610', 'rd0'],
+    ['67', 'klogd', 'SLEEP', '0.0', '904', 'kmsg'], ['72', 'netd', 'SLEEP', '0.6', '5 220', 'enp0s31f6']
+  ].map((p, i) => TR([p[0], p[1], p[2], { t: p[3], r: 1 }, { t: p[4], r: 1 }, p[5]],
+    'class="pick' + (i === S.procSel ? ' sel' : '') + '" data-act="proc" data-arg="' + i + '"'));
+  return '<div class="row"><span class="lab i3">tasks</span><span class="r1 i0">42</span>' +
+    '<span class="lab i3">ready</span><span class="r1 i1">2</span>' +
+    '<span class="lab i3">blocked</span><span class="r1 i1">0</span>' +
+    '<span class="r1 i3 push">round robin · 4 ms quantum · 288 switches/s</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="scroll">' + TBL([{ h: 'pid', w: '10%' }, { h: 'command', w: '24%' },
+      { h: 'state', w: '18%' }, { h: 'cpu %', w: '14%', r: 1 }, { h: 'rss kib', w: '18%', r: 1 },
+      { h: 'note', w: '16%' }], rows) + '</div>' +
+    '<div class="hr1"></div>' +
+    '<div class="pt">' + KV('context switches', '18 412 since boot') +
+    KV('preemptions', '1 904') + KV('run queue depth', '2') + '</div>';
+};
+
+R.regs = () => {
+  const rows = [
+    ['PIPE_A_CONF', '0x70008', '0xC0000000', 'enabled, 8 bpc'],
+    ['PIPE_A_SRCSZ', '0x6001C', '0x063F03E7', '1600 x 1000'],
+    ['PIPE_A_LINK_M', '0x60040', '0x0080D9E4', 'link m'],
+    ['PIPE_A_LINK_N', '0x60044', '0x00800000', 'link n'],
+    ['HTOTAL_A', '0x60000', '0x077F063F', 'htotal 1920'],
+    ['VTOTAL_A', '0x6000C', '0x041703E7', 'vtotal 1048'],
+    ['DPLL_CTRL1', '0x6C058', '0x00000601', 'link 2.7 GHz'],
+    ['DPLL_STATUS', '0x6C060', '0x00008000', 'dpll2 locked'],
+    ['PSR_STATUS', '0x6F040', '0x00000001', 'busy'],
+    ['PP_CONTROL', '0xC7204', '0x00000007', 'panel on, T12 held'],
+    ['CUR_CTL_A', '0x70080', '0x27000027', '64 x 64 argb'],
+    ['PLANE_CTL_1', '0x70180', '0x84000000', 'xrgb8888, linear']
+  ].map(r => TR([r[0], { t: r[1], r: 1 }, { t: r[2], r: 1 }, r[3]]));
+  return '<div class="row"><span class="lab i3">bar0</span>' +
+    '<span class="r1 i1">0x00000000D0000000</span>' +
+    '<span class="lab i3">mapped</span><span class="r1 i1">8 MiB</span>' +
+    '<span class="r1 i3 push">read only unless lt_armed</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="scroll">' + TBL([{ h: 'register', w: '28%' }, { h: 'offset', w: '16%', r: 1 },
+      { h: 'value', w: '22%', r: 1 }, { h: 'reading', w: '34%' }], rows) + '</div>' +
+    '<div class="hr1"></div>' +
+    '<div class="pt">' + KV('pixel clock', 'm/n -> 241 690 kHz') +
+    KV('refresh', '241690000 / (1920 * 1048) = 59.998 Hz') +
+    KV('gate', 'four write paths are not behind lt_armed') + '</div>';
+};
+
+/* ---------------------------------------------------------- settings --- */
+const UI_STEPS   = [0.9, 1.0, 1.1, 1.25];
+const COL_STEPS  = [8, 10, 12, 14];
+const GUT_STEPS  = [4, 8, 12, 16, 24];
+const LINE_STEPS = [1, 2, 3, 4, 5];
+const EVERY_STEPS= [1, 2, 5, 10];
+const CUT_STEPS  = [1, 2, 3, 4];
+const SET_TABS = ['sheet', 'desk', 'stock', 'gates'];
+
+function SLD(key, steps, val, fmt) {
+  const i = Math.max(0, steps.indexOf(val));
+  const p = steps.length > 1 ? (i / (steps.length - 1)) * 100 : 0;
+  return '<div class="sld"><span class="kk">' + key.label + '</span>' +
+    '<span class="tk" data-sld="' + key.k + '"><i style="width:' + p + '%"></i>' +
+    '<b style="left:calc(' + p + '% - 2px)"></b></span>' +
+    '<span class="vv">' + fmt(val) + '</span></div>';
+}
+function TOG(label, note, k) {
+  return '<div class="trow"><span class="sw' + (S[k] ? ' on' : '') + '" data-tog="' + k + '"><i></i></span>' +
+    '<span class="tx"><span class="n r2">' + label + '</span> ' +
+    '<span class="d">' + note + '</span></span></div>';
+}
+function SWATCH(name, role) {
+  const bg = (S.theme === 'dark') ? '--ap-well' : '--ap-app';
+  const isSurface = /paper|app|desk|well/.test(name);
+  const against = isSurface ? '--ap-ink-1' : bg;
+  const r = ratio('--' + name, against);
+  return '<div class="swatch"><span class="chip" style="background:var(--' + name + ')"></span>' +
+    '<span class="nm">' + name.replace('ap-', 'AP_').toUpperCase().replace(/-/g, '_') + '</span>' +
+    '<span class="hx">' + tokHex('--' + name) + '</span>' +
+    '<span class="nm i3">' + role + '</span>' +
+    '<span class="ra">' + r.toFixed(2) + ':1</span></div>';
+}
+
+/* A specimen of the focus change, set at real size, so the four channels
+   can be compared side by side rather than described. Same classes as a
+   real sheet: this is the sheet renderer, not a picture of it. */
+function DEMO() {
+  function one(foc) {
+    return '<div class="sheet spec' + (foc ? ' foc' : '') + '" style="position:relative;' +
+      'flex:1;min-width:0;height:132px">' +
+      '<div class="rhead"><span class="r2 ttl">kernel log</span>' +
+      '<span class="sub">dmesg</span><span class="sg">' + (foc ? 'A' : 'C') + '</span></div>' +
+      '<div class="hrule"></div>' +
+      '<div class="block"><div class="col">' +
+      '<div class="pre i2">0.048119  intel: PSR1 armed\n' +
+      '0.061450  intel: dpll2 locked\n' +
+      '0.121880  nvme: admin timeout</div>' +
+      '</div><div class="marg">' +
+      (foc ? '<span class="ln" style="top:6px">5</span>' +
+             '<span class="ln" style="top:22px">10</span>' : '') +
+      '</div></div>' +
+      '<div class="appx" style="height:44px">' +
+      (foc
+        ? '<div class="ent"><span class="n">17</span><span class="lm">nvme</span>' +
+          '<span class="br">]</span><span class="cm">err admin queue timeout</span></div>' +
+          '<div class="ent"><span class="n">21</span><span class="lm">wm</span>' +
+          '<span class="br">]</span><span class="cm">field 12 x 8 · gutter 8</span></div>'
+        : '<span class="cnt">\u27e83\u27e9</span>') +
+      '</div></div>';
+  }
+  return '<div style="display:flex;gap:16px;padding:8px 0">' + one(false) + one(true) + '</div>' +
+    '<div style="display:flex;gap:16px"><span class="r1 i3" style="flex:1">' +
+    'unfocused · head R2 AP_INK_3 · margin blank · foot hair 1.69:1</span>' +
+    '<span class="r1 i3" style="flex:1">' +
+    'focused · head R3 bold AP_INK_0 · margin set · foot rule 16.20:1</span></div>';
+}
+
+R.set = () => {
+  const tabs = '<div class="tabs">' + SET_TABS.map((t, i) =>
+    '<span class="tb r2' + (i === S.setTab ? ' on' : '') + '" data-tab="' + i + '">' + t + '</span>').join('') +
+    '<span class="r1 i3 push" style="padding:0 8px;align-self:center">design.h</span></div>';
+  let body = '';
+  if (S.setTab === 0) {
+    body =
+      '<div class="row pt"><span class="lab i3">the apparatus</span>' +
+      '<span class="r1 i3 push">reserved at all times, so opening it reflows nothing</span></div>' +
+      SLD({ k: 'appLines', label: 'lines' }, LINE_STEPS, S.appLines,
+        v => v + ' · band ' + (28 + 16 * (v - 1)) + ' dp') +
+      SLD({ k: 'lnEvery', label: 'number every' }, EVERY_STEPS, S.lnEvery, v => v + ' lines') +
+      TOG('outer margin always set', 'line numbers stay when the sheet loses focus', 'margAlways') +
+      TOG('apparatus stock', 'AP_APP one rung below the sheet, dL* 2.81', 'appStock') +
+      TOG('sigla marginal bar', '3 dp AP_INK_0 against the focused siglum', 'siglaBar') +
+      '<div class="hr1" style="margin:8px 0"></div>' +
+      '<div class="row"><span class="lab i3">the cut edge</span>' +
+      '<span class="r1 i3 push">drawn by the occluder, never by the occluded</span></div>' +
+      SLD({ k: 'cutW', label: 'weight' }, CUT_STEPS, S.cutW, v => v + ' px') +
+      TOG('cut edge', 'turn it off to see the problem the family actually has', 'cutOn') +
+      TOG('zebra rows', 'AP_APP on even rows, which is the apparatus stock reused', 'zebra') +
+      '<div class="hr1" style="margin:8px 0"></div>' +
+      '<div class="row"><span class="lab i3">what focus does</span>' +
+      '<span class="r1 i3 push">four channels, none of them a hue, two of them ink in reserved air</span></div>' +
+      DEMO() +
+      '<div class="scroll pt">' +
+      KV('running head', '28 dp, R2 AP_INK_3 -> R3 bold AP_INK_0') +
+      KV('outer margin', '28 dp, R1 tabular, right aligned') +
+      KV('apparatus band', (28 + 16 * (S.appLines - 1)) + ' dp on AP_APP') +
+      KV('reserved when closed', 'both regions, so nothing reflows') +
+      KV('type registers', 'three sizes, two atlases, one weight') +
+      '<div class="row pt"><span class="lab i3">the register ladder</span>' +
+      '<span class="r1 i3 push">two baked atlases and one weight, against Datum’s six sizes</span></div>' +
+      '<div class="hr1" style="margin:6px 0"></div>' +
+      '<div class="kv"><span class="r1 i3" style="width:60px">R1 8x16</span>' +
+      '<span class="r1 i1">0.121880 nvme: admin queue timeout · the machine</span></div>' +
+      '<div class="kv" style="height:auto"><span class="r1 i3" style="width:60px">R2 prop</span>' +
+      '<span class="r2 i1">running head, prose, rail titles · the user</span></div>' +
+      '<div class="kv" style="height:auto"><span class="r1 i3" style="width:60px">R3 bold</span>' +
+      '<span class="r3 i0">focused running head, table heads · same atlas</span></div>' +
+      '<div class="kv" style="height:auto"><span class="r1 i3" style="width:60px">R4 16x32</span>' +
+      '<span class="r4 i0">A B C 22:41:07</span></div>' +
+      '</div>';
+  } else if (S.setTab === 1) {
+    body =
+      '<div class="row pt"><span class="lab i3">the desk</span>' +
+      '<span class="r1 i3 push">Folio’s drawn column grid, unchanged</span></div>' +
+      SLD({ k: 'cols', label: 'columns' }, COL_STEPS, S.cols, v => v + ' x ' + S.rows) +
+      SLD({ k: 'gut', label: 'gutter' }, GUT_STEPS, S.gut, v => v + ' dp') +
+      SLD({ k: 'ui', label: 'ui scale' }, UI_STEPS, S.ui, v => v.toFixed(2) + ' q8 ' + Math.round(v * 256)) +
+      TOG('rule the grid onto the desk', 'the layout system made visible, in AP_HAIR', 'grid') +
+      '<div class="hr1" style="margin:8px 0"></div>' +
+      '<div class="row"><span class="lab i3">measured</span>' +
+      '<span class="r1 i3 push">recomputed on every layout</span></div>' +
+      '<div class="scroll" id="deskmeas"></div>';
+  } else if (S.setTab === 2) {
+    const surf = ['ap-paper', 'ap-app', 'ap-desk', 'ap-well'];
+    const inks = ['ap-ink-0', 'ap-ink-1', 'ap-ink-2', 'ap-ink-3', 'ap-hair'];
+    const roleS = { 'ap-paper': 'the sheet', 'ap-app': 'apparatus band',
+      'ap-desk': 'the table', 'ap-well': 'a cut in the sheet' };
+    const roleI = { 'ap-ink-0': 'rule 2px, cut edge', 'ap-ink-1': 'body, cells',
+      'ap-ink-2': 'labels, secondary', 'ap-ink-3': 'the apparatus', 'ap-hair': 'keyline, never text' };
+    const bgName = S.theme === 'dark' ? 'AP_WELL' : 'AP_APP';
+    body =
+      '<div class="row pt"><span class="lab i3">stock</span>' +
+      '<span class="r1 i1">' + (S.theme === 'dark' ? 'iron gall' : 'white wove') + '</span>' +
+      '<span class="r1 i3 push">L* of the sheet ' + lstar('--ap-paper').toFixed(1) + '</span></div>' +
+      '<div class="hr1" style="margin:6px 0"></div>' +
+      surf.map(n => SWATCH(n, roleS[n])).join('') +
+      '<div class="row pt"><span class="lab i3">ink</span>' +
+      '<span class="r1 i3 push">ratio against ' + bgName + ', the darkest text bearing surface</span></div>' +
+      '<div class="hr1" style="margin:6px 0"></div>' +
+      inks.map(n => SWATCH(n, roleI[n])).join('') +
+      '<div class="row pt"><span class="lab i3">no accent</span>' +
+      '<span class="r1 i3 push">there is no chromatic ink in this system at all</span></div>' +
+      '<div class="scroll pt">' +
+      KV('body floor', 'AP_INK_3 ' + ratio('--ap-ink-3', S.theme === 'dark' ? '--ap-well' : '--ap-app').toFixed(2) + ':1, against 4.5 required') +
+      KV('cut edge', 'AP_INK_0 ' + ratio('--ap-ink-0', '--ap-paper').toFixed(2) + ':1 on the sheet') +
+      KV('quiet mount', 'AP_HAIR ' + ratio('--ap-hair', '--ap-paper').toFixed(2) + ':1 on the sheet') +
+      KV('the focus jump', 'the foot rule goes ' + ratio('--ap-hair', '--ap-paper').toFixed(2) +
+        ':1 -> ' + ratio('--ap-ink-0', '--ap-app').toFixed(2) + ':1') +
+      KV('one inversion', 'AP_INV_0 ' + ratio('--ap-inv-0', '--ap-inv-bg').toFixed(2) + ':1 on AP_INV_BG') +
+      '</div>';
+  } else {
+    body =
+      '<div class="row pt"><span class="lab i3">cut edge golden</span>' +
+      '<span class="r1 i3 push">written before the direction was drawn</span></div>' +
+      '<div class="hr1" style="margin:6px 0"></div>' +
+      GOLDEN.cases.map(c =>
+        '<div class="gate"><span class="g">' + c.name + '</span>' +
+        '<span class="r1 i3" style="padding-left:8px">' + c.note + '</span>' +
+        '<span class="r">' + (c.ok ? 'PASS' : 'FAIL') + '</span></div>').join('') +
+      '<div class="hr1" style="margin:6px 0"></div>' +
+      '<div class="gate"><span class="g">assertions</span>' +
+      '<span class="r">' + GOLDEN.pass + ' / ' + GOLDEN.total + '</span></div>' +
+      '<div class="row pt"><span class="lab i3">why first</span></div>' +
+      '<div class="r1 i3" style="line-height:var(--lh-r1);padding-top:4px">' +
+      'The cut edge is computed geometry drawn every frame. A bug in the<br>' +
+      'occlusion segments puts 2 px of AP_INK_0 in the wrong place at<br>' +
+      ratio('--ap-ink-0', '--ap-paper').toFixed(2) + ':1, which is the loudest failure this design can have.<br>' +
+      'So the golden asserts the segments for overlapping, contained,<br>' +
+      'disjoint and covered rects, and it runs before anything is drawn.</div>' +
+      '<div class="row pt"><span class="lab i3">token parity</span>' +
+      '<span class="r1 i3 push">a token in one mode only is a defect</span></div>' +
+      '<div class="scroll" id="parity"></div>';
+  }
+  return tabs + body;
+};
+
+/* ============================================================= grid ==== */
+let GRID = { W: 0, H: 0, mar: 16, gut: 8, colW: [], colX: [], rowH: [], rowY: [] };
+function computeGrid() {
+  const f = $('#field');
+  const W = f.clientWidth, H = Math.max(0, f.clientHeight - 20);
+  const gut = Math.max(2, Math.round(S.gut * S.ui));
+  const mar = gut * 2;
+  const NC = S.cols, NR = S.rows;
+  const aw = W - 2 * mar - (NC - 1) * gut, ah = H - 2 * mar - (NR - 1) * gut;
+  const cwB = Math.floor(aw / NC), cwR = aw - cwB * NC;
+  const rhB = Math.floor(ah / NR), rhR = ah - rhB * NR;
+  const colW = [], colX = [], rowH = [], rowY = [];
+  let x = mar;
+  for (let i = 0; i < NC; i++) { const w = cwB + (i < cwR ? 1 : 0); colW.push(w); colX.push(x); x += w + gut; }
+  let y = mar;
+  for (let i = 0; i < NR; i++) { const h = rhB + (i < rhR ? 1 : 0); rowH.push(h); rowY.push(y); y += h + gut; }
+  GRID = { W, H, mar, gut, colW, colX, rowH, rowY, cwB, rhB };
+}
+function modRect(c, r, cw, rh) {
+  const g = GRID;
+  c = Math.max(0, Math.min(S.cols - 1, c)); r = Math.max(0, Math.min(S.rows - 1, r));
+  cw = Math.max(1, Math.min(S.cols - c, cw)); rh = Math.max(1, Math.min(S.rows - r, rh));
+  let w = 0, h = 0;
+  for (let i = 0; i < cw; i++) w += g.colW[c + i];
+  w += g.gut * (cw - 1);
+  for (let i = 0; i < rh; i++) h += g.rowH[r + i];
+  h += g.gut * (rh - 1);
+  return { x: g.colX[c], y: g.rowY[r], w, h, c, r, cw, rh };
+}
+function drawGrid() {
+  const svg = $('#gridsvg'), g = GRID;
+  svg.setAttribute('width', g.W); svg.setAttribute('height', g.H + 20);
+  if (!S.grid) { svg.innerHTML = ''; return; }
+  let s = '';
+  g.colX.forEach((x, i) => {
+    s += '<rect x="' + x + '" y="' + g.mar + '" width="1" height="' + (g.H - 2 * g.mar) + '" fill="var(--ap-grid)"/>';
+    s += '<rect x="' + (x + g.colW[i] - 1) + '" y="' + g.mar + '" width="1" height="' + (g.H - 2 * g.mar) + '" fill="var(--ap-grid)"/>';
+  });
+  s += '<rect x="' + g.mar + '" y="' + g.mar + '" width="' + (g.W - 2 * g.mar) + '" height="1" fill="var(--ap-grid)"/>';
+  s += '<rect x="' + g.mar + '" y="' + (g.H - g.mar - 1) + '" width="' + (g.W - 2 * g.mar) + '" height="1" fill="var(--ap-grid)"/>';
+  svg.innerHTML = s;
+}
+
+/* ==================================================== window manager === */
+let ZTOP = 10;
+function zlist(ws) {
+  return Object.values(S.wins).filter(w => w.ws === (ws || S.ws)).sort((a, b) => b.z - a.z);
+}
+function siglumOf(id) {
+  const l = zlist(S.wins[id] ? S.wins[id].ws : S.ws);
+  const i = l.findIndex(w => w.id === id);
+  return i < 0 ? '·' : SIGLA[i % 26];
+}
+function openWin(id, place, ws) {
+  const a = APP[id];
+  if (!a) return;
+  if (S.wins[id]) { S.wins[id].min = false; focusWin(id); return; }
+  const p = place || a.p;
+  S.wins[id] = { id, ws: ws || S.ws, c: p[0], r: p[1], cw: p[2], rh: p[3],
+    det: false, x: 0, y: 0, w: 0, h: 0, min: false, max: false, prev: null, z: ++ZTOP,
+    _x: 0, _y: 0, _w: 0, _h: 0 };
+  buildWin(id);
+  focusWin(id);
+}
+function closeWin(id) {
+  const e = $('.sheet[data-id="' + id + '"]');
+  if (e) e.remove();
+  delete S.wins[id];
+  if (S.focus === id) { const r = zlist().filter(w => !w.min); S.focus = r.length ? r[0].id : null; }
+  layout(); renderRail();
+}
+function focusWin(id) {
+  if (!S.wins[id]) return;
+  S.wins[id].z = ++ZTOP; S.wins[id].min = false; S.focus = id;
+  layout(); renderRail(); redrawHeads();
+}
+function minWin(id) {
+  if (!S.wins[id]) return;
+  S.wins[id].min = true;
+  if (S.focus === id) { const r = zlist().filter(w => !w.min); S.focus = r.length ? r[0].id : null; }
+  layout(); renderRail(); redrawHeads();
+  note('minimise', APP[id].name + ' held, siglum kept in the register');
+}
+function maxWin(id) {
+  const w = S.wins[id];
+  if (!w) return;
+  if (w.max) { Object.assign(w, w.prev); w.max = false; }
+  else {
+    w.prev = { c: w.c, r: w.r, cw: w.cw, rh: w.rh, det: w.det, x: w.x, y: w.y, w: w.w, h: w.h };
+    w.c = 0; w.r = 0; w.cw = S.cols; w.rh = S.rows; w.det = false; w.max = true;
+  }
+  focusWin(id);
+}
+function buildWin(id) {
+  const a = APP[id];
+  const e = document.createElement('div');
+  e.className = 'sheet';
+  e.setAttribute('data-id', id);
+  e.innerHTML =
+    '<div class="rhead">' +
+      '<span class="r2 ttl">' + a.name + '</span>' +
+      '<span class="sub">' + a.sub + '</span>' +
+      '<span class="sg" data-act="winmenu">' + siglumOf(id) + '</span>' +
+      '<span class="ctls">' +
+        '<span class="ctl" data-act="min">' + CTL_MIN + '</span>' +
+        '<span class="ctl" data-act="max">' + CTL_MAX + '</span>' +
+        '<span class="ctl" data-act="close">' + CTL_CLS + '</span>' +
+      '</span>' +
+    '</div>' +
+    '<div class="hrule"></div>' +
+    '<div class="block"><div class="col"></div><div class="marg"></div></div>' +
+    '<div class="appx"></div>' +
+    '<div class="cuts"></div>';
+  $('#wins').appendChild(e);
+  redraw(id);
+}
+function redraw(id) {
+  const w = S.wins[id];
+  if (!w) return;
+  const e = $('.sheet[data-id="' + id + '"]');
+  if (!e) return;
+  $(':scope > .block > .col', e).innerHTML = R[id] ? R[id]() : '';
+  paintApparatus(id);
+}
+function redrawAll() { Object.keys(S.wins).forEach(redraw); }
+function redrawHeads() {
+  Object.keys(S.wins).forEach(id => {
+    const e = $('.sheet[data-id="' + id + '"]');
+    if (!e) return;
+    $(':scope > .rhead > .sg', e).textContent = siglumOf(id);
+    paintApparatus(id);
+    paintMargin(id);
+  });
+}
+
+/* THE APPARATUS, painted. Closed is a count; open is the commentary. */
+function paintApparatus(id) {
+  const e = $('.sheet[data-id="' + id + '"]');
+  if (!e) return;
+  const a = APP[id], foc = S.focus === id;
+  const band = $(':scope > .appx', e);
+  band.style.background = S.appStock ? 'var(--ap-app)' : 'var(--ap-paper)';
+  if (!foc) {
+    band.innerHTML = '<span class="cnt">⟨' + a.app.length + '⟩</span>';
+    return;
+  }
+  band.innerHTML = a.app.slice(0, S.appLines).map(l =>
+    '<div class="ent"><span class="n">' + l[0] + '</span>' +
+    '<span class="lm">' + esc(l[1]) + '</span><span class="br">]</span>' +
+    '<span class="cm">' + esc(l[2]) + '</span></div>').join('');
+}
+/* THE OUTER MARGIN, painted. A ruler on the sheet's 16 dp baseline. */
+function paintMargin(id) {
+  const e = $('.sheet[data-id="' + id + '"]');
+  if (!e) return;
+  const m = $(':scope > .block > .marg', e);
+  const foc = S.focus === id;
+  if (!foc && !S.margAlways) { m.innerHTML = ''; return; }
+  const ln = 16 * S.ui, h = m.clientHeight;
+  let s = '';
+  for (let i = S.lnEvery; i * ln + 8 < h; i += S.lnEvery) {
+    s += '<span class="ln" style="top:' + Math.round(i * ln - ln + 6) + 'px">' + i + '</span>';
+  }
+  m.innerHTML = s;
+}
+
+/* THE CUT EDGE, painted. See cutSegments() and its golden above. */
+function paintCuts() {
+  const vis = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min).sort((a, b) => a.z - b.z);
+  vis.forEach((w, i) => {
+    const e = $('.sheet[data-id="' + w.id + '"]');
+    if (!e) return;
+    const host = $(':scope > .cuts', e);
+    if (!S.cutOn) { host.innerHTML = ''; return; }
+    const R0 = { x: w._x, y: w._y, w: w._w, h: w._h };
+    const below = vis.slice(0, i).map(b => ({ x: b._x, y: b._y, w: b._w, h: b._h }));
+    const seg = cutSegments(R0, below);
+    const cw = S.cutW;
+    let s = '';
+    seg.top.forEach(g => { s += '<i class="cut" style="left:' + g[0] + 'px;top:0;width:' + (g[1] - g[0]) + 'px;height:' + cw + 'px"></i>'; });
+    seg.bottom.forEach(g => { s += '<i class="cut" style="left:' + g[0] + 'px;bottom:0;width:' + (g[1] - g[0]) + 'px;height:' + cw + 'px"></i>'; });
+    seg.left.forEach(g => { s += '<i class="cut" style="top:' + g[0] + 'px;left:0;height:' + (g[1] - g[0]) + 'px;width:' + cw + 'px"></i>'; });
+    seg.right.forEach(g => { s += '<i class="cut" style="top:' + g[0] + 'px;right:0;height:' + (g[1] - g[0]) + 'px;width:' + cw + 'px"></i>'; });
+    host.innerHTML = s;
+  });
+}
+
+function layout() {
+  computeGrid();
+  drawGrid();
+  Object.values(S.wins).forEach(w => {
+    const e = $('.sheet[data-id="' + w.id + '"]');
+    if (!e) return;
+    const vis = w.ws === S.ws && !w.min;
+    e.classList.toggle('hidden', !vis);
+    let x, y, ww, hh;
+    if (w.det) { x = w.x; y = w.y; ww = w.w; hh = w.h; }
+    else {
+      const r = modRect(w.c, w.r, w.cw, w.rh);
+      x = r.x; y = r.y; ww = r.w; hh = r.h;
+      w.c = r.c; w.r = r.r; w.cw = r.cw; w.rh = r.rh;
+    }
+    w._x = Math.round(x); w._y = Math.round(y); w._w = Math.round(ww); w._h = Math.round(hh);
+    e.style.left = w._x + 'px'; e.style.top = w._y + 'px';
+    e.style.width = w._w + 'px'; e.style.height = w._h + 'px';
+    e.style.zIndex = String(w.z);
+    e.classList.toggle('foc', w.id === S.focus);
+  });
+  paintCuts();
+  Object.keys(S.wins).forEach(paintMargin);
+  renderColophon();
+}
+
+/* ==================================================== sigla register === */
+function renderRail() {
+  const l = zlist();
+  $('#sigla').innerHTML = l.length ? l.map((w, i) => {
+    const foc = S.focus === w.id && !w.min;
+    return '<div class="sig' + (foc ? ' on' : '') + (w.min ? ' held' : '') +
+      '" data-app="' + w.id + '">' +
+      '<span class="bar"' + (S.siglaBar ? '' : ' style="display:none"') + '></span>' +
+      '<span class="gl">' + SIGLA[i % 26] + '</span>' +
+      '<span class="tt r2">' + APP[w.id].name + '</span>' +
+      (w.min ? '<span class="st">held</span>' : '') + '</div>';
+  }).join('') : '<div class="sig"><span class="gl">·</span><span class="tt r2 i3">none open</span></div>';
+  $('#launch').innerHTML = APPS.filter(a => !S.wins[a.id]).map(a =>
+    '<div class="lch r2" data-app="' + a.id + '">' + a.name + '</div>').join('');
+  const c1 = Object.values(S.wins).filter(w => w.ws === 1).length;
+  const c2 = Object.values(S.wins).filter(w => w.ws === 2).length;
+  $('#wsrow').innerHTML =
+    '<span class="w r1' + (S.ws === 1 ? ' on' : '') + '" data-ws="1">01&#8201;' + c1 + '</span>' +
+    '<span class="w r1' + (S.ws === 2 ? ' on' : '') + '" data-ws="2">02&#8201;' + c2 + '</span>' +
+    '<span class="w r1" data-ov="1">all</span>';
+  $('#readout').innerHTML = [
+    ['clock', hhmmss(S.clock)], ['uptime', hhmmss(S.up)], ['load', S.load.toFixed(2)],
+    ['mem', S.memPct + ' %'], ['net', S.rx.toFixed(0) + ' KiB'],
+    ['sheets', String(Object.values(S.wins).filter(w => w.ws === S.ws).length)]
+  ].map(r => '<div class="rd r1"><span class="k">' + r[0] + '</span>' +
+    '<span class="v">' + r[1] + '</span></div>').join('');
+}
+function renderColophon() {
+  const l = zlist().filter(w => !w.min);
+  const sig = l.length ? SIGLA[0] + ' ' + APP[l[0].id].name : 'no sheet';
+  $('#colophon').innerHTML = [
+    'zlOS 0.3',
+    S.theme === 'dark' ? 'iron gall' : 'white wove',
+    'ws ' + pad2(S.ws),
+    S.cols + ' col · gutter ' + GRID.gut,
+    l.length + ' sheet' + (l.length === 1 ? '' : 's'),
+    'sig. ' + sig
+  ].map(t => '<span>' + t + '</span>').join('<span class="i3">·</span>');
+}
+
+/* ============================ the desk's own apparatus (the notifier) ===
+ * The machine speaks in one register, at the foot, in lemma form. A note
+ * about the DESK is set exactly the way a note about a SHEET is: no card,
+ * no colour, no shadow, no separate vocabulary. */
+const NOTE_MS = 5200, NOTE_MAX = 3;
+function note(lemma, comment) {
+  const host = $('#deskapp');
+  const el = document.createElement('div');
+  el.className = 'dnote r1';
+  el.innerHTML = '<span class="n" style="width:2.2em;text-align:right">' +
+    pad2(Math.floor(S.clock / 60) % 100) + '</span>' +
+    '<span class="lm">' + esc(lemma) + '</span><span>]</span>' +
+    '<span>' + esc(comment) + '</span>' +
+    '<span class="push">' + hhmmss(S.clock) + '</span>';
+  host.appendChild(el);
+  while (host.children.length > NOTE_MAX) host.removeChild(host.firstChild);
+  setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, NOTE_MS);
+}
+
+/* ============================================================ collation = */
+function overviewOn() { return $('#overview').classList.contains('on'); }
+function showOverview(on) {
+  const ov = $('#overview');
+  if (!on) { ov.classList.remove('on'); ov.innerHTML = ''; return; }
+  const g = GRID;
+  let html = '<div class="ovhead"><span class="r3">collation</span>' +
+    '<span class="r1 i3">every sheet, both workspaces, at scale, in stack order</span>' +
+    '<span class="r1 i3 push">esc returns</span></div><div class="ovbody">';
+  [1, 2].forEach(ws => {
+    const n = Object.values(S.wins).filter(w => w.ws === ws).length;
+    html += '<div class="ovws"><div class="ovlab"><span class="lab i3">workspace ' + pad2(ws) + '</span>' +
+      '<span class="r1 i3">' + n + ' sheet' + (n === 1 ? '' : 's') + '</span>' +
+      (ws === S.ws ? '<span class="r1 i0 push">current</span>' : '') +
+      '</div><div class="ovplate' + (ws === S.ws ? ' cur' : '') + '" data-ovws="' + ws + '"></div></div>';
+  });
+  html += '</div>';
+  const rows = [1, 2].flatMap(ws => zlist(ws).map((w, i) => TR([
+    SIGLA[i % 26], APP[w.id].name, APP[w.id].sub, 'ws ' + pad2(ws),
+    w.det ? Math.round(w.x) + ',' + Math.round(w.y) + ' px' : (w.c + 1) + ',' + (w.r + 1) + '  ' + w.cw + 'x' + w.rh,
+    w.min ? 'held' : w.max ? 'full' : w.det ? 'detached' : 'tiled',
+    { t: S.focus === w.id && ws === S.ws ? 'focus' : '', r: 1 }
+  ], 'class="pick" data-ovpick="' + w.id + '" data-ovws="' + ws + '"')));
+  html += '<div class="ovreg"><div class="row" style="padding-bottom:4px">' +
+    '<span class="lab i3">sigla register</span>' +
+    '<span class="r1 i3 push">reading order down this column is the z order</span></div>' +
+    '<div class="scroll">' + TBL([{ h: 'sig', w: '6%' }, { h: 'sheet', w: '22%' },
+      { h: 'subtitle', w: '18%' }, { h: 'workspace', w: '12%' }, { h: 'module', w: '18%' },
+      { h: 'state', w: '14%' }, { h: '', w: '10%', r: 1 }], rows) + '</div></div>';
+  ov.innerHTML = html;
+  ov.classList.add('on');
+  $$('.ovplate', ov).forEach(host => {
+    const ws = Number(host.getAttribute('data-ovws'));
+    /* measure while the plate is still stretched by the flex parent, THEN
+       pin it: reading a flex:1 box that has been told not to stretch gives
+       zero, and a zero scale silently empties the whole collation. */
+    const bw = host.clientWidth, bh = host.clientHeight;
+    const k = Math.min(bw / g.W, bh / g.H);
+    host.style.flex = 'none';
+    host.style.alignSelf = 'flex-start';
+    host.style.width = Math.round(g.W * k) + 'px';
+    host.style.height = Math.round(g.H * k) + 'px';
+    const wrap = document.createElement('div');
+    wrap.className = 'ovscale';
+    wrap.style.width = g.W + 'px'; wrap.style.height = g.H + 'px';
+    wrap.style.transform = 'scale(' + k + ')';
+    Object.values(S.wins).filter(w => w.ws === ws).sort((a, b) => a.z - b.z).forEach(w => {
+      const src = $('.sheet[data-id="' + w.id + '"]');
+      if (!src) return;
+      const c = src.cloneNode(true);
+      c.classList.remove('hidden');
+      c.style.pointerEvents = 'none';
+      if (ws !== S.ws) { c.style.left = w._x + 'px'; c.style.top = w._y + 'px'; }
+      wrap.appendChild(c);
+      const hit = document.createElement('div');
+      hit.className = 'ovpick';
+      hit.style.left = (w._x * k) + 'px'; hit.style.top = (w._y * k) + 'px';
+      hit.style.width = (w._w * k) + 'px'; hit.style.height = (w._h * k) + 'px';
+      hit.setAttribute('data-ovpick', w.id);
+      hit.setAttribute('data-ovws', String(ws));
+      host.appendChild(hit);
+    });
+    host.insertBefore(wrap, host.firstChild);
+  });
+}
+
+/* ============================================================= palette = */
+const CMDS = [];
+APPS.forEach(a => CMDS.push({ name: 'open ' + a.name, hint: a.sub,
+  run: () => { openWin(a.id); note('open', a.name + ' placed, siglum ' + siglumOf(a.id)); } }));
+CMDS.push(
+  { name: 'collation, every sheet at scale', hint: 'ctrl space', run: () => setScene('overview') },
+  { name: 'lock, close the book on its title page', hint: 'ctrl l', run: () => setScene('lock') },
+  { name: 'tile every sheet on this workspace', hint: 'ctrl t', run: () => { tileAll(); note('tile', zlist().length + ' sheets ruled to the module grid'); } },
+  { name: 'toggle the cut edge', hint: 'ctrl e', run: () => { S.cutOn = !S.cutOn; layout(); redraw('set'); note('cut edge', S.cutOn ? 'armed at ' + S.cutW + ' px' : 'disarmed, only the 1.69:1 mount is left'); } },
+  { name: 'rule the column grid onto the desk', hint: 'ctrl g', run: () => { S.grid = !S.grid; drawGrid(); redraw('set'); note('desk', S.grid ? 'column grid ruled on' : 'column grid ruled off'); } },
+  { name: 'apparatus, four lines', hint: 'set', run: () => { S.appLines = 4; applyMetrics(); redrawAll(); note('apparatus', '4 lines, band 76 dp, reserved at all times'); } },
+  { name: 'send the focused sheet to workspace 02', hint: 'shift 2', run: () => { if (S.focus) { S.wins[S.focus].ws = 2; layout(); renderRail(); note('move', APP[S.focus].name + ' to workspace 02'); } } },
+  { name: 'run the cut edge golden again', hint: 'gate', run: () => note('cutgold', GOLDEN.pass + '/' + GOLDEN.total + ' assertions ' + (GOLDEN.ok ? 'PASS' : 'FAIL')) },
+  { name: 'fsck rd0', hint: 'io', run: () => note('fsck', '3 generations, 0 orphan extents, 1.42 s') },
+  { name: 'dump the sigla register to /tmp', hint: 'io', run: () => note('written', '/tmp/sigla-2241.txt, 412 B') },
+  { name: 'switch stock', hint: 'shift d', run: () => setStock(S.theme === 'dark' ? 'light' : 'dark', true) }
+);
+function paletteResults() {
+  const q = S.pq.toLowerCase();
+  return CMDS.filter(c => c.name.toLowerCase().indexOf(q) >= 0).slice(0, 8);
+}
+function renderPalette() {
+  const r = paletteResults();
+  S.psel = Math.max(0, Math.min(S.psel, r.length - 1));
+  $('#pq').textContent = S.pq;
+  $('#pcount').textContent = r.length + ' of ' + CMDS.length;
+  $('#presults').innerHTML = r.map((c, i) =>
+    '<div class="pr' + (i === S.psel ? ' on' : '') + '" data-pi="' + i + '">' +
+    '<span class="n">' + pad2(i + 1) + '</span><span>' + esc(c.name) + '</span>' +
+    '<span class="h">' + esc(c.hint) + '</span></div>').join('');
+  const sel = r[S.psel];
+  $('#pflem').textContent = sel ? sel.name.split(' ')[0] : 'command';
+  $('#pfcom').textContent = sel ? sel.hint + ' · return runs it, escape closes' : 'no match';
+}
+function showPalette(on) {
+  $('#palette').classList.toggle('on', !!on);
+  if (on) renderPalette();
+}
+function runPalette() {
+  const r = paletteResults()[S.psel];
+  showPalette(false);
+  if (r) r.run();
+}
+
+/* ================================================================ lock = */
+function renderLock() {
+  const held = APPS.filter(a => S.wins[a.id]);
+  $('#lock').innerHTML =
+    '<div class="lrun"><span class="r3">zlOS</span>' +
+    '<span class="r1 i3">0.3 x86_64</span>' +
+    '<span class="r1 i3 push">session held · no sheet closed · ' + hhmmss(S.clock) + '</span></div>' +
+    '<div class="lmid">' +
+      '<div class="lreg"><div class="lab i3" style="padding-bottom:6px">sigla held</div>' +
+      (held.length ? held.map((a, i) => '<div class="sg"><span class="g">' + SIGLA[i % 26] +
+        '</span><span class="r2">' + a.name + '</span></div>').join('')
+        : '<div class="sg"><span class="g">·</span><span class="r2">none</span></div>') +
+      '<div class="hr1" style="margin:8px 0"></div>' +
+      '<div class="r1 i3">the register survives a lock, because the sheets do</div>' +
+      '</div>' +
+      '<div class="lcen"><div class="lsheet">' +
+        '<div class="lh"><span class="lab i3">title page</span>' +
+        '<span class="r1 i3 push">' + (S.theme === 'dark' ? 'iron gall' : 'white wove') + '</span></div>' +
+        '<div class="lb">' +
+          '<span class="r4 t">zlOS</span>' +
+          '<span class="r2 i1">an operating system written from scratch,</span>' +
+          '<span class="r2 i1">in its own language, drawing every pixel itself</span>' +
+          '<div class="lrule"></div>' +
+          '<span class="r4 t">' + hhmmss(S.clock) + '</span>' +
+          '<span class="r1 i3">monotonic since boot ' + hhmmss(S.up) + '</span>' +
+          '<div style="height:16px"></div>' +
+          KV('edition', '0.3, x86_64') +
+          KV('composed by', 'wm.c, uikit.c, fb.c, wm_cut.c') +
+          KV('set in', 'DejaVu Sans and DejaVu Sans Mono') +
+          KV('atlases', '8x16 and 16x32, baked at build') +
+          KV('registers', 'three sizes, one weight, no upscaling') +
+          KV('sheets held', String(held.length)) +
+          '<div style="height:12px"></div>' +
+          '<div class="row"><span class="btn prim r1" data-act="unlock">return to the desk</span>' +
+          '<span class="r1 i3">or press escape</span></div>' +
+        '</div>' +
+        '<div class="lapp">' +
+          '<div class="ent r1" style="display:flex;gap:6px;color:var(--ap-ink-3)">' +
+          '<span class="n" style="width:2.2em;text-align:right">01</span>' +
+          '<span style="color:var(--ap-ink-1)">lock</span><span>]</span>' +
+          '<span>session held at ' + hhmmss(S.clock) + ' · no sheet closed</span></div>' +
+          '<div class="ent r1" style="display:flex;gap:6px;color:var(--ap-ink-3)">' +
+          '<span class="n" style="width:2.2em;text-align:right">02</span>' +
+          '<span style="color:var(--ap-ink-1)">cutgold</span><span>]</span>' +
+          '<span>' + GOLDEN.pass + '/' + GOLDEN.total + ' assertions PASS · armed at ' + S.cutW + ' px</span></div>' +
+        '</div>' +
+      '</div></div>' +
+    '</div>' +
+    '<div class="lfoot r1"><span>zlOS 0.3</span><span class="i3">·</span>' +
+    '<span>' + (S.theme === 'dark' ? 'iron gall' : 'white wove') + '</span><span class="i3">·</span>' +
+    '<span>colour carries nothing</span><span class="i3">·</span>' +
+    '<span>no host OS · no libc · no GPU · no heap · no float</span>' +
+    '<span class="push">' + hhmmss(S.clock) + '</span></div>';
+}
+function showLock(on) {
+  $('#lock').classList.toggle('on', !!on);
+  if (on) renderLock();
+}
+
+/* =============================================================== menus = */
+function showMenu(el, x, y, items, head) {
+  el.innerHTML = (head ? '<div class="mh lab">' + head + '</div>' : '') +
+    items.map(i => i === '-' ? '<div class="msep"></div>' :
+      '<div class="mi" data-mact="' + i[1] + '" data-marg="' + (i[2] || '') + '">' +
+      '<span>' + i[0] + '</span>' + (i[3] ? '<span class="h">' + i[3] + '</span>' : '') + '</div>').join('');
+  el.style.left = Math.min(x, window.innerWidth - 240) + 'px';
+  el.style.top = Math.min(y, window.innerHeight - 240) + 'px';
+  el.classList.add('on');
+}
+function hideMenus() { $('#ctxmenu').classList.remove('on'); $('#winmenu').classList.remove('on'); }
+
+/* ================================================================ tick = */
+function hhmmss(s) {
+  s = ((s % 86400) + 86400) % 86400;
+  return pad2(Math.floor(s / 3600)) + ':' + pad2(Math.floor(s / 60) % 60) + ':' + pad2(s % 60);
+}
+function walk(v, lo, hi, amp) {
+  v += (Math.random() - 0.5) * amp;
+  return Math.max(lo, Math.min(hi, v));
+}
+function tick() {
+  S.clock++; S.up++;
+  S.cpu = S.cpu.map(v => Math.round(walk(v, 4, 98, 14)));
+  S.memPct = Math.round(walk(S.memPct, 45, 88, 3));
+  S.load = Number(walk(S.load, 0.05, 3.2, 0.22).toFixed(2));
+  S.rx = Number(walk(S.rx, 1, 240, 24).toFixed(1));
+  S.tx = Number(walk(S.tx, 0.4, 90, 9).toFixed(1));
+  S.hist.cpu.push(Math.round(S.cpu.reduce((a, b) => a + b, 0) / 4)); S.hist.cpu.shift();
+  S.hist.mem.push(S.memPct); S.hist.mem.shift();
+  S.hist.net.push(Math.round(S.rx / 3)); S.hist.net.shift();
+  document.body.classList.toggle('blinkoff', (S.clock % 2) === 0);
+  renderRail(); renderColophon();
+  ['mon', 'net', 'clock', 'sys', 'proc'].forEach(id => { if (S.wins[id]) redraw(id); });
+  if ($('#lock').classList.contains('on')) renderLock();
+}
+
+/* ========================================================== metrics ==== */
+function applyMetrics() {
+  const d = document.documentElement.style;
+  d.setProperty('--ui', String(S.ui));
+  d.setProperty('--ap-lines', String(S.appLines));
+  d.setProperty('--ap-cut-w', S.cutW + 'px');
+  layout();
+}
+
+/* ============================== the two settings panels that are measured
+ * rather than asserted: the desk's real numbers, and a parity check that
+ * every token name exists in BOTH ladders. A name in one mode only is a
+ * defect, and this prints the count rather than promising it.          */
+function fillSetExtras() {
+  const dm = $('#deskmeas');
+  if (dm) {
+    dm.innerHTML =
+      KV('field', GRID.W + ' x ' + GRID.H + ' px') +
+      KV('module', GRID.cwB + ' x ' + GRID.rhB + ' px') +
+      KV('gutter', GRID.gut + ' px') +
+      KV('margin', GRID.mar + ' px') +
+      KV('ui scale', S.ui.toFixed(2) + ' · q8 ' + Math.round(S.ui * 256)) +
+      KV('rail', Math.round(128 * S.ui) + ' px') +
+      KV('head / margin / band', Math.round(28 * S.ui) + ' / ' + Math.round(28 * S.ui) +
+        ' / ' + Math.round((28 + 16 * (S.appLines - 1)) * S.ui) + ' px');
+  }
+  const pa = $('#parity');
+  if (pa) {
+    const names = TOKENS;
+    const root = document.documentElement;
+    const wasDark = root.getAttribute('data-theme') === 'dark';
+    const read = () => names.map(n => getComputedStyle(root).getPropertyValue(n).trim());
+    root.setAttribute('data-theme', 'dark');
+    const dv = read();
+    root.removeAttribute('data-theme');
+    const lv = read();
+    if (wasDark) root.setAttribute('data-theme', 'dark');
+    let both = 0, only = [];
+    names.forEach((n, i) => {
+      if (lv[i] && dv[i]) both++; else only.push(n);
+      if (lv[i] && dv[i] && lv[i] === dv[i] && !/rule-2|mark|inv-bg/.test(n)) { /* shared by design */ }
+    });
+    pa.innerHTML =
+      '<div class="gate"><span class="g">tokens declared</span><span class="r">' + names.length + '</span></div>' +
+      '<div class="gate"><span class="g">present in both ladders</span><span class="r">' + both + '</span></div>' +
+      '<div class="gate"><span class="g">present in one only</span><span class="r">' + only.length + '</span></div>' +
+      '<div class="gate"><span class="g">verdict</span><span class="r">' + (only.length === 0 ? 'PASS' : 'FAIL') + '</span></div>' +
+      '<div class="r1 i3" style="padding-top:6px">' + (only.length ? esc(only.join(' ')) :
+        'every role name resolves in both modes, which is the shape ui_theme_init_q8() needs') + '</div>';
+  }
+}
+const TOKENS = ['--ap-paper', '--ap-app', '--ap-desk', '--ap-well',
+  '--ap-ink-0', '--ap-ink-1', '--ap-ink-2', '--ap-ink-3', '--ap-hair',
+  '--ap-rule-2', '--ap-rule-1', '--ap-mark', '--ap-mark-2', '--ap-track',
+  '--ap-inv-bg', '--ap-inv-0', '--ap-inv-1', '--ap-grid', '--ap-scrim', '--ap-knob'];
+const _redraw = redraw;
+redraw = function (id) { _redraw(id); if (id === 'set') fillSetExtras(); };
+
+/* ======================================================== interaction == */
+function tileAll() {
+  const l = zlist().filter(w => !w.min).reverse();
+  const n = l.length;
+  if (!n) return;
+  const cols = n <= 1 ? 1 : n <= 4 ? 2 : 3;
+  const rows = Math.ceil(n / cols);
+  l.forEach((w, i) => {
+    const cx = i % cols, ry = Math.floor(i / cols);
+    w.det = false; w.max = false;
+    w.c = Math.round(cx * S.cols / cols);
+    w.cw = Math.round((cx + 1) * S.cols / cols) - w.c;
+    w.r = Math.round(ry * S.rows / rows);
+    w.rh = Math.round((ry + 1) * S.rows / rows) - w.r;
+  });
+  layout();
+}
+function calcKey(k) {
+  if (k === 'clr') { S.calcAcc = '0'; return; }
+  if (k === 'eq') { S.calcAcc = String(parseInt(S.calcAcc, 10) || 0); return; }
+  if (/^[0-9]$/.test(k)) { S.calcAcc = (S.calcAcc === '0' ? '' : S.calcAcc) + k; return; }
+  if (k === 'hex' || k === 'dec' || k === 'bin') return;
+}
+const WINMENU = [
+  ['focus, bring to the top', 'focus', '', 'click'],
+  ['minimise, keep the siglum', 'min', '', 'ctrl m'],
+  ['fill the desk', 'max', '', 'ctrl f'],
+  '-',
+  ['send to workspace 01', 'ws', '1', ''],
+  ['send to workspace 02', 'ws', '2', ''],
+  '-',
+  ['open the apparatus wide', 'wide', '', ''],
+  ['close the sheet', 'close', '', 'ctrl w']
+];
+const DESKMENU = [
+  ['collation', 'ov', '', 'ctrl space'],
+  ['command', 'pal', '', 'ctrl k'],
+  '-',
+  ['tile every sheet', 'tile', '', 'ctrl t'],
+  ['rule the column grid', 'grid', '', 'ctrl g'],
+  ['toggle the cut edge', 'cut', '', 'ctrl e'],
+  '-',
+  ['switch stock', 'stock', '', 'shift d'],
+  ['lock', 'lock', '', 'ctrl l']
+];
+
+let SL = null, DR = null;
+document.addEventListener('mousedown', ev => {
+  const t = ev.target;
+  /* --- prototype strip ------------------------------------------------ */
+  const st = t.closest('[data-stock]');
+  if (st) { ev.preventDefault(); setStock(st.getAttribute('data-stock'), true); return; }
+  /* --- menus ---------------------------------------------------------- */
+  const mi = t.closest('.mi');
+  if (mi) {
+    ev.preventDefault();
+    const a = mi.getAttribute('data-mact'), g = mi.getAttribute('data-marg');
+    const id = $('#winmenu').getAttribute('data-for');
+    hideMenus();
+    if (a === 'focus') focusWin(id);
+    else if (a === 'min') minWin(id);
+    else if (a === 'max') maxWin(id);
+    else if (a === 'close') closeWin(id);
+    else if (a === 'ws') { if (S.wins[id]) { S.wins[id].ws = Number(g); layout(); renderRail(); note('move', APP[id].name + ' to workspace ' + pad2(Number(g))); } }
+    else if (a === 'wide') { S.appLines = 5; applyMetrics(); redrawAll(); note('apparatus', '5 lines, band 92 dp'); }
+    else if (a === 'ov') setScene('overview');
+    else if (a === 'pal') { S.pq = ''; S.psel = 0; showPalette(true); }
+    else if (a === 'tile') tileAll();
+    else if (a === 'grid') { S.grid = !S.grid; drawGrid(); redraw('set'); }
+    else if (a === 'cut') { S.cutOn = !S.cutOn; layout(); redraw('set'); note('cut edge', S.cutOn ? 'armed' : 'disarmed'); }
+    else if (a === 'stock') setStock(S.theme === 'dark' ? 'light' : 'dark', true);
+    else if (a === 'lock') setScene('lock');
+    return;
+  }
+  hideMenus();
+  /* --- overview ------------------------------------------------------- */
+  const ovp = t.closest('[data-ovpick]');
+  if (ovp) {
+    ev.preventDefault();
+    S.ws = Number(ovp.getAttribute('data-ovws'));
+    setScene('desktop', true, true);
+    focusWin(ovp.getAttribute('data-ovpick'));
+    return;
+  }
+  if (overviewOn()) { ev.preventDefault(); setScene('desktop'); return; }
+  /* --- rail ----------------------------------------------------------- */
+  const ra = t.closest('[data-app]');
+  if (ra) { ev.preventDefault(); openWin(ra.getAttribute('data-app')); return; }
+  const rw = t.closest('[data-ws]');
+  if (rw) {
+    ev.preventDefault();
+    S.ws = Number(rw.getAttribute('data-ws'));
+    const l = zlist().filter(w => !w.min);
+    S.focus = l.length ? l[0].id : null;
+    layout(); renderRail(); redrawHeads();
+    return;
+  }
+  if (t.closest('[data-ov]')) { ev.preventDefault(); setScene('overview'); return; }
+  /* --- palette -------------------------------------------------------- */
+  const pi = t.closest('[data-pi]');
+  if (pi) { ev.preventDefault(); S.psel = Number(pi.getAttribute('data-pi')); runPalette(); return; }
+  /* --- lock ----------------------------------------------------------- */
+  if (t.closest('[data-act="unlock"]')) { ev.preventDefault(); setScene('desktop'); return; }
+  /* --- settings widgets ------------------------------------------------ */
+  const tg = t.closest('[data-tog]');
+  if (tg) {
+    ev.preventDefault();
+    const k = tg.getAttribute('data-tog');
+    S[k] = !S[k];
+    if (k === 'grid') drawGrid();
+    if (k === 'zebra' || k === 'appStock') redrawAll();
+    layout(); redrawHeads(); redraw('set'); renderRail();
+    note(k, String(S[k]));
+    return;
+  }
+  const sd = t.closest('[data-sld]');
+  if (sd) {
+    ev.preventDefault();
+    SL = { k: sd.getAttribute('data-sld'), el: sd };
+    setSlider(ev);
+    const up = () => { SL = null; document.removeEventListener('mousemove', setSlider); document.removeEventListener('mouseup', up); };
+    document.addEventListener('mousemove', setSlider);
+    document.addEventListener('mouseup', up);
+    return;
+  }
+  const tb = t.closest('[data-tab]');
+  if (tb) { ev.preventDefault(); S.setTab = Number(tb.getAttribute('data-tab')); redraw('set'); return; }
+  /* --- inside a sheet -------------------------------------------------- */
+  const sh = t.closest('.sheet:not(.spec)');
+  if (sh) {
+    const id = sh.getAttribute('data-id');
+    if (S.focus !== id) focusWin(id);
+    const act = t.closest('[data-act]');
+    if (act) {
+      const a = act.getAttribute('data-act'), g = act.getAttribute('data-arg');
+      ev.preventDefault();
+      if (a === 'close') { closeWin(id); return; }
+      if (a === 'min') { minWin(id); return; }
+      if (a === 'max') { maxWin(id); return; }
+      if (a === 'winmenu') {
+        const r = act.getBoundingClientRect();
+        $('#winmenu').setAttribute('data-for', id);
+        showMenu($('#winmenu'), r.left - 100, r.bottom + 2, WINMENU, 'sheet ' + siglumOf(id) + ' · ' + APP[id].name);
+        return;
+      }
+      if (a === 'open') { openWin(g); return; }
+      if (a === 'file') { S.fileSel = Number(g); redraw('files'); redraw('edit'); return; }
+      if (a === 'proc') { S.procSel = Number(g); redraw('mon'); redraw('proc'); return; }
+      if (a === 'calc') { calcKey(g); redraw('calc'); return; }
+      if (a === 'toast') { note(g === 'build' ? 'make' : g, g === 'build' ?
+        'exit 0 · 11 objects · 2.418 s' : 'uid 0 gid 0 · generation 3 · contiguous'); return; }
+    }
+    const hd = t.closest('.rhead');
+    if (hd) { ev.preventDefault(); startDrag(ev, id, sh); return; }
+    return;
+  }
+  /* --- the desk -------------------------------------------------------- */
+  if (t.closest('#field')) {
+    if (ev.button === 2) return;
+    S.focus = null; layout(); renderRail(); redrawHeads();
+  }
+});
+document.addEventListener('contextmenu', ev => {
+  const sh = ev.target.closest('.sheet:not(.spec)');
+  ev.preventDefault();
+  if (sh) {
+    const id = sh.getAttribute('data-id');
+    focusWin(id);
+    $('#winmenu').setAttribute('data-for', id);
+    showMenu($('#winmenu'), ev.clientX, ev.clientY, WINMENU, 'sheet ' + siglumOf(id) + ' · ' + APP[id].name);
+  } else if (ev.target.closest('#field')) {
+    showMenu($('#ctxmenu'), ev.clientX, ev.clientY, DESKMENU, 'the desk');
+  }
+});
+function setSlider(ev) {
+  if (!SL) return;
+  const r = SL.el.getBoundingClientRect();
+  const f = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+  const steps = { ui: UI_STEPS, cols: COL_STEPS, gut: GUT_STEPS,
+    appLines: LINE_STEPS, lnEvery: EVERY_STEPS, cutW: CUT_STEPS }[SL.k];
+  const v = steps[Math.round(f * (steps.length - 1))];
+  if (S[SL.k] === v) return;
+  S[SL.k] = v;
+  applyMetrics();
+  redrawAll(); redrawHeads(); renderRail();
+}
+function startDrag(ev, id, el) {
+  const w = S.wins[id];
+  if (!w || w.max) return;
+  const sx = ev.clientX, sy = ev.clientY;
+  const r = modRect(w.c, w.r, w.cw, w.rh);
+  const ox = w.det ? w.x : r.x, oy = w.det ? w.y : r.y;
+  const ow = w.det ? w.w : r.w, oh = w.det ? w.h : r.h;
+  let moved = false;
+  function move(e) {
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+    moved = true;
+    w.det = true; w.w = ow; w.h = oh;
+    w.x = Math.max(0, Math.min(GRID.W - ow, ox + dx));
+    w.y = Math.max(0, Math.min(GRID.H - oh, oy + dy));
+    layout();
+  }
+  function up() {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+    if (moved) note('drag', APP[id].name + ' detached at ' + Math.round(w.x) + ',' + Math.round(w.y) + ' px');
+  }
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+}
+
+/* ============================================================ keyboard = */
+document.addEventListener('keydown', ev => {
+  const k = ev.key;
+  if ($('#palette').classList.contains('on')) {
+    if (k === 'Escape') { showPalette(false); ev.preventDefault(); return; }
+    if (k === 'Enter') { runPalette(); ev.preventDefault(); return; }
+    if (k === 'ArrowDown') { S.psel++; renderPalette(); ev.preventDefault(); return; }
+    if (k === 'ArrowUp') { S.psel = Math.max(0, S.psel - 1); renderPalette(); ev.preventDefault(); return; }
+    if (k === 'Backspace') { S.pq = S.pq.slice(0, -1); S.psel = 0; renderPalette(); ev.preventDefault(); return; }
+    if (k.length === 1 && !ev.ctrlKey && !ev.metaKey) { S.pq += k; S.psel = 0; renderPalette(); ev.preventDefault(); return; }
+    return;
+  }
+  if (ev.shiftKey && (k === 'D' || k === 'd')) { setStock(S.theme === 'dark' ? 'light' : 'dark', true); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'k' || k === 'K')) { S.pq = ''; S.psel = 0; showPalette(true); ev.preventDefault(); return; }
+  if (ev.ctrlKey && k === ' ') { setScene(overviewOn() ? 'desktop' : 'overview'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'l' || k === 'L')) { setScene('lock'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'g' || k === 'G')) { S.grid = !S.grid; drawGrid(); redraw('set'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'e' || k === 'E')) { S.cutOn = !S.cutOn; layout(); redraw('set'); note('cut edge', S.cutOn ? 'armed at ' + S.cutW + ' px' : 'disarmed'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 't' || k === 'T')) { tileAll(); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'w' || k === 'W')) { if (S.focus) closeWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'f' || k === 'F')) { if (S.focus) maxWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'm' || k === 'M')) { if (S.focus) minWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === '1' || k === '2')) {
+    S.ws = Number(k);
+    const l = zlist().filter(w => !w.min);
+    S.focus = l.length ? l[0].id : null;
+    layout(); renderRail(); redrawHeads(); ev.preventDefault(); return;
+  }
+  if (k === 'Tab' && !ev.ctrlKey) {
+    const l = zlist().filter(w => !w.min);
+    if (l.length > 1) { focusWin(l[1].id); note('cycle', 'siglum A is now ' + APP[l[1].id].name); }
+    ev.preventDefault(); return;
+  }
+  if (k === 'Escape') {
+    if ($('#lock').classList.contains('on')) { setScene('desktop'); return; }
+    if (overviewOn()) { setScene('desktop'); return; }
+    hideMenus();
+  }
+});
+
+/* =============================================================== stock =
+ * Two primitive ladders, one set of role names. Setting data-theme is the
+ * ONLY switch: no rule weight, no metric, no radius and no reserved region
+ * differs between the two. */
+const STOCK = {
+  light: { name: 'wove', other: 'gall',
+    pitch: 'a scholarly text with a critical apparatus. white wove, one ink, ' +
+           'line numbers in the outer margin, the machine at the foot.' },
+  dark: { name: 'gall', other: 'wove',
+    pitch: 'iron gall ink, and the ground is the ink itself. a cool blue green ' +
+           'black carrying warm bone marks. the page is what the ink left.' }
+};
+function applyTheme() {
+  if (S.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  $('#pitch').textContent = STOCK[S.theme].pitch;
+  $('#themetog').innerHTML =
+    '<span class="tk' + (S.theme === 'light' ? ' on' : '') + '" data-stock="light">wove</span>' +
+    '<span class="tk' + (S.theme === 'dark' ? ' on' : '') + '" data-stock="dark">gall</span>';
+}
+function hashName() { return S.scene + (S.theme === 'dark' ? '-dark' : ''); }
+function setStock(t, announce) {
+  const next = t === 'dark' ? 'dark' : 'light';
+  if (next === S.theme) return;
+  S.theme = next;
+  applyTheme(); renderLinks(); renderColophon(); redraw('set'); redrawAll(); redrawHeads();
+  if ($('#lock').classList.contains('on')) renderLock();
+  if (overviewOn()) showOverview(true);
+  if (announce) {
+    history.replaceState(null, '', '#' + hashName());
+    note('stock', S.theme === 'dark'
+      ? 'iron gall · AP_PAPER ' + tokHex('--ap-paper') + ' · marks ' + ratio('--ap-ink-0', '--ap-paper').toFixed(2) + ':1'
+      : 'white wove · AP_PAPER ' + tokHex('--ap-paper') + ' · ink ' + ratio('--ap-ink-0', '--ap-paper').toFixed(2) + ':1');
+  }
+}
+const SCENE_NAMES = ['desktop', 'overview', 'palette', 'files', 'monitor', 'settings', 'lock'];
+function renderLinks() {
+  const sfx = S.theme === 'dark' ? '-dark' : '';
+  $('#links').innerHTML = SCENE_NAMES.map(n => '<a href="#' + n + sfx + '">' + n + '</a>').join('');
+  markLinks(S.scene);
+}
+function markLinks(name) {
+  $$('#links a').forEach(a => a.classList.toggle('on',
+    a.getAttribute('href').slice(1).replace(/-dark$/, '') === name));
+}
+
+/* ============================================================== scenes = */
+function clearAll() {
+  Object.keys(S.wins).forEach(id => { const e = $('.sheet[data-id="' + id + '"]'); if (e) e.remove(); });
+  S.wins = {}; S.focus = null; ZTOP = 10;
+  showOverview(false); showPalette(false); showLock(false); hideMenus();
+  $('#deskapp').innerHTML = '';
+}
+function place(id, c, r, cw, rh, ws) { openWin(id, [c, r, cw, rh], ws || S.ws); }
+function baseDesktop() {
+  clearAll();
+  S.ws = 1;
+  place('shell', 0, 0, 7, 4);
+  place('files', 7, 0, 5, 4);
+  place('mon', 0, 4, 7, 4);
+  place('net', 7, 4, 5, 4);
+  place('log', 0, 0, 7, 4, 2);
+  place('regs', 7, 0, 5, 5, 2);
+  place('hex', 0, 4, 12, 4, 2);
+  /* Three sheets deliberately overlapping, because the cut edge is this
+     direction's whole technical claim and a tiled screenshot hides it.
+     SYSTEM sits over MONITOR and FILES; PROCESSES sits entirely inside
+     SYSTEM, which is the case the direction wrongly called a blind spot
+     and which in fact draws all four of its edges at full contrast. */
+  openWin('sys', [2, 1, 7, 5]);
+  layout();
+  let r = modRect(2, 1, 7, 5);
+  Object.assign(S.wins.sys, { det: true, x: r.x + 22, y: r.y + 18, w: r.w, h: r.h });
+  openWin('proc', [3, 2, 5, 3]);
+  layout();
+  const s = S.wins.sys;
+  Object.assign(S.wins.proc, { det: true, x: s.x + 48, y: s.y + 74, w: s.w - 108, h: s.h - 132 });
+  focusWin('proc');
+  layout();
+}
+function setScene(name, push, quiet) {
+  let dark = false;
+  if (/-dark$/.test(name)) { dark = true; name = name.slice(0, -5); }
+  if (SCENE_NAMES.indexOf(name) < 0) { name = 'desktop'; dark = false; }
+  const wasWs = S.ws;
+  S.scene = name;
+  S.theme = dark ? 'dark' : 'light';
+  applyTheme(); renderLinks();
+  if (push !== false && location.hash.slice(1) !== hashName()) {
+    history.replaceState(null, '', '#' + hashName());
+  }
+  markLinks(name);
+  if (quiet) { showOverview(false); showPalette(false); showLock(false); layout(); renderRail(); return; }
+  if (name === 'desktop') {
+    baseDesktop();
+    note('compose', '5 sheets on workspace 01 · cut edge ' + S.cutW + ' px · golden ' + GOLDEN.pass + '/' + GOLDEN.total);
+  } else if (name === 'overview') {
+    baseDesktop(); layout(); showOverview(true);
+  } else if (name === 'palette') {
+    baseDesktop(); S.pq = 'cut'; S.psel = 0; showPalette(true);
+  } else if (name === 'files') {
+    clearAll(); S.ws = 1;
+    place('files', 0, 0, 5, 8);
+    place('edit', 5, 0, 7, 8);
+    S.fileSel = 5;
+    redraw('files'); redraw('edit');
+    focusWin('edit'); layout();
+    note('select', 'fb.c 68.4 KiB · opened in the text editor');
+  } else if (name === 'monitor') {
+    clearAll(); S.ws = 1;
+    place('mon', 0, 0, 7, 8);
+    place('net', 7, 0, 5, 4);
+    place('disk', 7, 4, 5, 4);
+    focusWin('mon'); layout();
+    note('sample', 'monitor, network and disk at 1 Hz · 64 s history');
+  } else if (name === 'settings') {
+    clearAll(); S.ws = 1;
+    place('sys', 7, 0, 5, 8);
+    place('set', 0, 0, 7, 8);
+    S.setTab = 0;
+    redraw('set');
+    focusWin('set'); layout();
+  } else if (name === 'lock') {
+    baseDesktop(); showLock(true);
+  }
+  if (wasWs !== S.ws) renderRail();
+  renderRail(); redrawHeads(); renderColophon();
+}
+window.addEventListener('hashchange', () => setScene(location.hash.slice(1) || 'desktop', false));
+window.addEventListener('resize', () => {
+  layout(); redrawHeads();
+  if (overviewOn()) showOverview(true);
+  if ($('#lock').classList.contains('on')) renderLock();
+});
+
+/* =============================================================== start = */
+applyTheme();
+applyMetrics();
+computeGrid();
+setScene(location.hash.slice(1) || 'desktop', false);
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

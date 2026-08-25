@@ -1,0 +1,2550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shelf / zlOS living prototype</title>
+<style>
+/* ======================================================================
+   SHELF - design.h, light finish.
+
+   THE LADDER LAW, and it holds in both finishes:
+     L1  THE DESK IS THE MIDDLE VALUE. Nothing shipping today puts the
+         desktop in the middle; every generated desktop for fifteen years
+         is near-white or near-black. #9E9B93 is the identity.
+     L2  THE WINDOW SHEET IS THE EXTREME - the value furthest from the
+         desk, on the far side from the ink you read with.
+     L3  THE WELL IS ONE RUNG FURTHER THAN THE SHEET, always in the same
+         direction. A well is machined out of the sheet, not painted on.
+     L4  CHROME IS ONE RUNG LIGHTER THAN THE DESK, in BOTH finishes. It is
+         the machined face that catches the light: title bar, dock cell,
+         menu row. This is the one rung that does not flip.
+
+   Every hex in this document is in one of the two :root blocks. No hex is
+   used as a CSS value anywhere else, and every name in the light block
+   exists in the dark block. A name in one finish only is a defect.
+
+   ONE SATURATED INK, and it is spent on SELECTION. Not focus, not the
+   primary action, not status. PLATE spends its one ink on focus; Folio
+   spends none; both fall back to a paper selection band at 1.1-1.3:1 that
+   vanishes in a screenshot. ZS_SEL is 6.43:1 on the sheet in light and
+   8.08:1 in dark, and the knocked-out text on it is the same number,
+   because a WCAG ratio is symmetric and this one was chosen so.
+
+   STATUS CARRIES NO COLOUR. Inherited from Folio, and it is what frees the
+   one ink for selection. OK / WARN / FAIL are a filled, half and hollow
+   square plus a weight change. There is no green and there is no red.
+   ------------------------------------------------------------------- */
+:root {
+  --zs-desk:      #9E9B93;
+  --zs-desk-tex:  #96938B;
+  --zs-chrome:    #C8C5BC;
+  --zs-sheet:     #E6E3DA;
+  --zs-well:      #F1EFE8;
+  --zs-ink:       #141310;
+  --zs-ink-1:     #2A2721;
+  /* ZS_INK_3 is set on CHROME (unfocused window titles, menu keys, dock
+     cell captions), not on the sheet. The brief's #58534A clears 5.95:1 on
+     the sheet and only 4.42:1 on chrome, so it was deepened one notch:
+     4.86:1 on chrome, 6.54:1 on the sheet. Hold a token to the DARKEST
+     surface it can land on, never to the brightest. */
+  --zs-ink-3:     #524D44;
+  --zs-mute:      #8C887E;
+  --zs-grip:      #7E7A70;
+  --zs-rule-1:    #827E74;
+  --zs-rule-2:    #141310;
+  --zs-sel:       #1B4F8C;
+  --zs-sel-ink:   #E6E3DA;
+  --zs-mark:      #141310;
+  --zs-mark-bulk: #524D44;
+  --zs-knob:      #141310;
+  --zs-knob-edge: #F1EFE8;
+
+  /* ------------------------------------------------------------ metrics
+     4 / 8 / 12 / 16 / 24 only. Radius is 0 everywhere; a sheet of anything
+     machined has a square corner, and Shelf has no part that rolls. */
+  --ui: 1;
+  --zs-menu-w:  calc(180px * var(--ui));
+  --zs-dock-w:  calc(64px  * var(--ui));
+  --zs-row-h:   calc(26px  * var(--ui));
+  --zs-cell:    calc(64px  * var(--ui));
+  --zs-shelf-h: calc(64px  * var(--ui));
+  --zs-resize:  calc(12px  * var(--ui));
+  --sp-4:  calc(4px  * var(--ui));
+  --sp-8:  calc(8px  * var(--ui));
+  --sp-12: calc(12px * var(--ui));
+  --sp-16: calc(16px * var(--ui));
+  --sp-24: calc(24px * var(--ui));
+  --r-0: 0px;
+
+  /* THREE TYPE SIZES, one per baked atlas. 8x16 -> data, 16x32 -> body,
+     24x48 -> display. There is no fourth size anywhere in this document,
+     because there is no runtime rasteriser and a fourth size is an
+     upscale. Datum lost points here; Shelf spends nothing. */
+  --fs-data:    calc(11px * var(--ui));
+  --lh-data:    calc(16px * var(--ui));
+  --fs-body:    calc(15px * var(--ui));
+  --lh-body:    calc(22px * var(--ui));
+  --fs-display: calc(22px * var(--ui));
+  --lh-display: calc(28px * var(--ui));
+  --tr-cap:  calc(2px * var(--ui));
+  --tr-disp: calc(3px * var(--ui));
+
+  --sans: ui-sans-serif, system-ui, 'DejaVu Sans', sans-serif;
+  --mono: ui-monospace, 'DejaVu Sans Mono', monospace;
+}
+
+/* ======================================================================
+   SHELF - design.h, dark finish.
+
+   THE GROUND IS MADE OF THE SAME OBJECT IN ITS OTHER FINISH. A NeXT
+   magnesium case came in a matte black textured paint, and the thing that
+   paint is NOT is black - held next to a real black it is plainly a grey.
+   So the dark desk is a warm grey at L* 21.3, not a stock near-black,
+   and the ladder law is what carries across, not the hexes.
+
+     desk    #9E9B93 L* 64.0   ->  #35332E L* 21.3   still the middle
+     sheet   #E6E3DA L* 90.2   ->  #131210 L*  5.5   still the extreme
+     well    #F1EFE8 L* 94.4   ->  #0A0908 L*  2.5   still one further
+     chrome  #C8C5BC L* 79.5   ->  #423F39 L* 26.8   still one lighter
+
+   THE DESK WAS LIFTED after looking at the render. The direction's brief
+   put it at #2E2C28, L* 18.1, and at that value the ground stopped
+   reading as a grey object and started reading as the absence of one -
+   which is the exact failure the direction exists to avoid. It is now
+   L* 21.3, sheet-to-desk 1.48:1 rather than 1.34:1, and the machined
+   hatch went from 1.08:1 to 1.16:1. That last one is not a cheat: the
+   same ratio is perceptually weaker on a dark ground than on a light one,
+   so holding the NUMBER equal across the two finishes would have made the
+   finish visible in one and invisible in the other. Chrome, ZS_INK_3,
+   ZS_SEL, ZS_RULE_1 and ZS_MUTE all moved with it, because they are all
+   held against chrome and chrome is defined against the desk.
+
+   Every window carries a 2px ZS_RULE_2 frame at all times in both
+   finishes, because 1.48:1 is not separation on its own. In light the
+   frame is the ink; in dark the ink is invisible against a near-black
+   sheet, so ZS_RULE_2 becomes a machined-edge value #A29D91 - 4.67:1 on
+   the desk, 6.93:1 on the sheet. The WEIGHT never changes.
+   ------------------------------------------------------------------- */
+:root[data-theme="dark"] {
+  --zs-desk:      #35332E;
+  --zs-desk-tex:  #403D34;
+  --zs-chrome:    #423F39;
+  --zs-sheet:     #131210;
+  --zs-well:      #0A0908;
+  --zs-ink:       #E8E5DC;
+  --zs-ink-1:     #D2CEC3;
+  --zs-ink-3:     #B4AEA1;
+  --zs-mute:      #7A7568;
+  --zs-grip:      #7E7A70;
+  --zs-rule-1:    #666257;
+  --zs-rule-2:    #A29D91;
+  --zs-sel:       #79AFE4;
+  --zs-sel-ink:   #131210;
+  --zs-mark:      #C9C4B8;
+  --zs-mark-bulk: #8A8579;
+  --zs-knob:      #C9C4B8;
+  --zs-knob-edge: #131210;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body { background: var(--zs-desk); font-family: var(--sans); overflow: hidden;
+       -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--zs-well); }
+::-webkit-scrollbar-thumb { background: var(--zs-mark-bulk); border-radius: var(--r-0); }
+
+/* ============================================================== type == */
+.t-data  { font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+           font-weight: 400; color: var(--zs-ink-1); font-variant-numeric: tabular-nums; }
+.t-cap   { font-family: var(--sans); font-size: var(--fs-data); line-height: var(--lh-data);
+           font-weight: 700; text-transform: uppercase; letter-spacing: var(--tr-cap);
+           margin-right: calc(-1 * var(--tr-cap)); color: var(--zs-ink-3); }
+.t-body  { font-family: var(--sans); font-size: var(--fs-body); line-height: var(--lh-body);
+           font-weight: 400; color: var(--zs-ink-1); }
+.t-disp  { font-family: var(--sans); font-size: var(--fs-display); line-height: var(--lh-display);
+           font-weight: 700; text-transform: uppercase; letter-spacing: var(--tr-disp);
+           margin-right: calc(-1 * var(--tr-disp)); color: var(--zs-ink); }
+.t-disp-m{ font-family: var(--mono); font-size: var(--fs-display); line-height: var(--lh-display);
+           font-weight: 700; color: var(--zs-ink); font-variant-numeric: tabular-nums; }
+.i0 { color: var(--zs-ink); } .i1 { color: var(--zs-ink-1); } .i3 { color: var(--zs-ink-3); }
+.sel-ink { color: var(--zs-sel-ink); }
+.b { font-weight: 700; }
+.r { text-align: right; }
+.spread { margin-left: auto; }
+
+/* ==================================================== harness strip ====
+   NOT PART OF THE OPERATING SYSTEM. Shelf's claim is that no horizontal
+   bar exists anywhere in the desktop; this strip is the prototype's own
+   scene switcher and it sits OUTSIDE #os for that reason. */
+#strip { position: fixed; left: 0; right: 0; top: 0; height: 28px; z-index: 500;
+  background: var(--zs-sheet); border-bottom: 2px solid var(--zs-rule-2);
+  display: flex; align-items: stretch; padding-left: var(--sp-12); }
+#strip .nm { display: flex; align-items: center; color: var(--zs-ink); font-family: var(--sans);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; }
+#strip .pitch { display: block; line-height: 28px; padding: 0 14px; color: var(--zs-ink-3);
+  font-family: var(--mono); font-size: 11px; white-space: nowrap; overflow: hidden;
+  min-width: 0; text-overflow: ellipsis; }
+#strip .links { margin-left: auto; display: flex; }
+#strip a, #strip .tk, #strip .thint { display: flex; align-items: center; padding: 0 10px;
+  text-decoration: none; border-left: 1px solid var(--zs-rule-1); color: var(--zs-ink-3);
+  font-family: var(--sans); font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 2px; }
+#strip .thint { font-family: var(--mono); font-weight: 400; text-transform: none; letter-spacing: 0; }
+#strip a.on, #strip .tk.on { background: var(--zs-sel); color: var(--zs-sel-ink); }
+#strip .tk { cursor: pointer; }
+#strip .thm { display: flex; }
+
+#os { position: fixed; left: 0; right: 0; top: 28px; bottom: 0; overflow: hidden;
+      background: var(--zs-desk); }
+
+/* ======================================================== menu column ==
+   THE MENU IS AN OBJECT, NOT A POPUP. It belongs to the focused
+   application and its head carries that application's name. Focus is
+   legible from here, which is a part of the screen you were already
+   reading. Tear-off is DEFERRED for v1: it is the only thing in this
+   family that needs retained per-widget position and open state inside an
+   immediate-mode ui.c, and it is the least load-bearing of the three
+   novelties. The column carries the whole focus signal without it. */
+#menu { position: absolute; left: 0; top: 0; bottom: 0; width: var(--zs-menu-w); z-index: 40;
+  background: var(--zs-chrome); border-right: 2px solid var(--zs-rule-2);
+  display: flex; flex-direction: column; }
+#menu .mhead { flex: none; padding: var(--sp-8) var(--sp-12) var(--sp-4);
+  border-bottom: 2px solid var(--zs-rule-2); }
+#menu .mhead .t-disp { display: block; color: var(--zs-ink); }
+#menu .mhead .t-data { display: block; color: var(--zs-ink-3); }
+#menu .msec { flex: none; height: var(--zs-row-h); display: flex; align-items: center;
+  padding: 0 var(--sp-12); border-bottom: 1px solid var(--zs-rule-1);
+  background: var(--zs-chrome); }
+#menu .mrows { overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; }
+.mrow { height: var(--zs-row-h); display: flex; align-items: center; gap: var(--sp-8);
+  padding: 0 var(--sp-12); border-bottom: 1px solid var(--zs-rule-1); cursor: pointer; }
+.mrow .lb { font-family: var(--sans); font-size: var(--fs-data); line-height: var(--lh-data);
+  color: var(--zs-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mrow .ky { margin-left: auto; font-family: var(--mono); font-size: var(--fs-data);
+  color: var(--zs-ink-3); white-space: nowrap; }
+.mrow .sub { margin-left: auto; color: var(--zs-ink-3); font-family: var(--mono);
+  font-size: var(--fs-data); }
+.mrow.on { background: var(--zs-sel); }
+.mrow.on .lb, .mrow.on .ky, .mrow.on .sub { color: var(--zs-sel-ink); }
+.mrow.dis { cursor: default; }
+.mrow.dis .lb { color: var(--zs-mute); }
+.mrow.dis .ky { color: var(--zs-mute); }
+.mrow:hover:not(.on):not(.dis) { box-shadow: inset 0 0 0 2px var(--zs-rule-2); }
+#menu .mfoot { flex: none; border-top: 2px solid var(--zs-rule-2); padding: var(--sp-8) var(--sp-12); }
+#menu .mfoot .t-data { display: block; color: var(--zs-ink-3); }
+
+/* =============================================================== dock ==
+   RIGHT EDGE, TOP ANCHORED, 64dp SQUARE CELLS, radius 0. Every cell is a
+   LIVE INSTRUMENT rather than an icon: the clock cell draws a clock, the
+   monitor cell draws a sparkline, the shell cell draws its last line, the
+   log cell draws a count. This is the direct answer to the banned
+   identical-rounded-tiles launcher - no two cells look alike and none of
+   them is a pictogram.
+
+   The cells are drawn BY THE SHELL from a small per-app state struct the
+   app pushes, NOT rendered by a backgrounded application. That keeps the
+   idea and costs no new application lifecycle contract. */
+#dock { position: absolute; right: 0; top: 0; bottom: 0; width: var(--zs-dock-w); z-index: 40;
+  background: var(--zs-desk); border-left: 2px solid var(--zs-rule-2);
+  display: flex; flex-direction: column; }
+#dockcells { flex: 1 1 auto; overflow: hidden; }
+.cell { position: relative; width: var(--zs-dock-w); height: var(--zs-cell);
+  background: var(--zs-chrome); border-bottom: 2px solid var(--zs-rule-2);
+  cursor: pointer; overflow: hidden; }
+.cell .cn { position: absolute; left: 0; right: 0; bottom: 0; height: calc(12px * var(--ui));
+  font-family: var(--sans); font-size: calc(9px * var(--ui)); line-height: calc(12px * var(--ui));
+  font-weight: 700; text-transform: uppercase; letter-spacing: 1px; text-align: center;
+  color: var(--zs-ink-3); background: var(--zs-chrome); }
+.cell .cbody { position: absolute; left: var(--sp-4); right: var(--sp-4); top: var(--sp-4);
+  bottom: calc(12px * var(--ui)); }
+/* a running application gets its cell face cut down to the well: the cell
+   is machined open. Not a dot, not a colour. */
+.cell.run { background: var(--zs-well); }
+.cell.run .cn { background: var(--zs-well); color: var(--zs-ink-1); }
+.cell.foc .cn { color: var(--zs-sel-ink); background: var(--zs-sel); }
+.cell:hover { box-shadow: inset 0 0 0 2px var(--zs-rule-2); }
+.wscell { flex: none; border-top: 2px solid var(--zs-rule-2); display: grid;
+  grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  height: var(--zs-cell); background: var(--zs-chrome); }
+.wsq { display: flex; align-items: center; justify-content: center; cursor: pointer;
+  border-right: 1px solid var(--zs-rule-1); border-bottom: 1px solid var(--zs-rule-1);
+  font-family: var(--mono); font-size: var(--fs-data); color: var(--zs-ink-3); }
+.wsq:nth-child(2n) { border-right: 0; }
+.wsq:nth-child(n+3) { border-bottom: 0; }
+.wsq.on { background: var(--zs-sel); color: var(--zs-sel-ink); font-weight: 700; }
+.wsq.dis { color: var(--zs-mute); cursor: default; }
+/* occupancy is a 2px rule across the foot of the cell, never a second
+   numeral: two digits in one 32dp cell read as one two digit number. */
+.wsq.occ { box-shadow: inset 0 -2px 0 var(--zs-ink); }
+.wsq.occ.on { box-shadow: inset 0 -2px 0 var(--zs-sel-ink); }
+.wsq:hover:not(.on):not(.dis) { box-shadow: inset 0 0 0 2px var(--zs-rule-2); }
+
+/* =============================================================== desk ==
+   Mid grey, and machined rather than flat: a 3px 45 degree hatch at
+   1.11:1 (light) / 1.16:1 (dark). Below the perceptual step on its own,
+   which is the point - it is a finish, not a pattern, and it is what
+   stops the mid grey reading as an empty CSS background. In fb.c it is
+   a fb_line loop, not an image. */
+#desk { position: absolute; left: var(--zs-menu-w); right: var(--zs-dock-w); top: 0; bottom: 0;
+  overflow: hidden;
+  background-image: repeating-linear-gradient(45deg,
+    var(--zs-desk) 0px, var(--zs-desk) 2px,
+    var(--zs-desk-tex) 2px, var(--zs-desk-tex) 3px); }
+#wins { position: absolute; inset: 0; }
+#toasts { position: absolute; right: var(--sp-16); bottom: var(--sp-16); width: calc(300px * var(--ui));
+  display: flex; flex-direction: column; gap: var(--sp-8); z-index: 300; pointer-events: none; }
+
+/* ============================================================= window == */
+.win { position: absolute; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--zs-sheet); border: 2px solid var(--zs-rule-2); border-radius: var(--r-0); }
+/* UNFOCUSED reads as a 1px frame without any geometry change: the outer
+   2px stays (dark needs it, sheet-to-desk is only 1.34:1) and a 1px sheet
+   line is machined inside it. Two fb_box calls. Nothing reflows. */
+.win:not(.foc) { box-shadow: inset 0 0 0 1px var(--zs-sheet); }
+.win.min { display: none; }
+
+.title { flex: none; height: var(--zs-row-h); display: flex; align-items: stretch;
+  background: var(--zs-chrome); border-bottom: 2px solid var(--zs-rule-2); cursor: move; }
+.tbtn { width: var(--zs-row-h); flex: none; display: flex; align-items: center;
+  justify-content: center; color: var(--zs-ink); cursor: pointer; }
+.tbtn.cl { border-right: 1px solid var(--zs-rule-1); }
+.tbtn.mn { border-left: 1px solid var(--zs-rule-1); }
+.tbtn:hover { background: var(--zs-well); }
+.title .tt { flex: 1 1 auto; display: flex; align-items: center; justify-content: center;
+  gap: var(--sp-8); min-width: 0; overflow: hidden; }
+.title .tt .nm { font-family: var(--sans); font-size: var(--fs-data); line-height: var(--lh-data);
+  text-transform: uppercase; letter-spacing: var(--tr-cap); white-space: nowrap;
+  color: var(--zs-ink-3); font-weight: 400; }
+/* THE FOCUS SIGNAL, primary half: a MACHINED GRIP ARRIVES. Four 1px lines
+   at the grip value flanking the title, present only on the focused
+   window. A texture arriving, not a colour changing. No other candidate in
+   this family uses that as a state. */
+.title .hatch { flex: 1 1 auto; height: 100%; min-width: calc(12px * var(--ui));
+  background-image: repeating-linear-gradient(to bottom,
+    var(--zs-grip) 0px, var(--zs-grip) 1px, transparent 1px, transparent 4px);
+  background-size: 100% 16px; background-position: 0 center; background-repeat: no-repeat;
+  opacity: 0; }
+.win.foc .title .hatch { opacity: 1; }
+.win.foc .title .tt .nm { color: var(--zs-ink); font-weight: 700; }
+
+/* THE SHELF. A 64dp staging strip across the top of a file-bearing
+   window: what you are working with right now, and that window's open
+   document switcher. It is per window, so it is not a bar. */
+.wshelf { flex: none; height: var(--zs-shelf-h); display: flex; align-items: stretch;
+  background: var(--zs-well); border-bottom: 2px solid var(--zs-rule-2); overflow: hidden; }
+.shitem { width: calc(72px * var(--ui)); flex: none; border-right: 1px solid var(--zs-rule-1);
+  padding: var(--sp-4); display: flex; flex-direction: column; gap: 2px; cursor: pointer;
+  overflow: hidden; }
+.shitem .sn { font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+  color: var(--zs-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shitem .sz { font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+  color: var(--zs-ink-3); }
+.shitem.on { background: var(--zs-sel); }
+.shitem.on .sn, .shitem.on .sz { color: var(--zs-sel-ink); }
+.shitem:hover:not(.on) { box-shadow: inset 0 0 0 2px var(--zs-rule-2); }
+.shdrop { flex: 1 1 auto; display: flex; align-items: center; padding: 0 var(--sp-12);
+  color: var(--zs-mute); font-family: var(--sans); font-size: var(--fs-data);
+  text-transform: uppercase; letter-spacing: var(--tr-cap); }
+
+.wbody { flex: 1 1 auto; overflow: hidden; display: flex; flex-direction: column;
+  padding: var(--sp-12); gap: var(--sp-8); min-height: 0; }
+
+/* THE RESIZE BAR. 12dp, full width, three sections - the outer two resize
+   in both axes, the middle one in height. A far better target than a 4px
+   edge, and it is the second half of the focus signal: an unfocused
+   window loses its section dividers and is left a plain strip. Geometry
+   never changes, only what is drawn inside it. */
+.resize { flex: none; height: var(--zs-resize); display: flex; align-items: stretch;
+  background: var(--zs-chrome); border-top: 2px solid var(--zs-rule-2); cursor: ns-resize; }
+.resize .rs { flex: none; width: calc(48px * var(--ui)); cursor: nwse-resize; }
+.resize .rs.rr { cursor: nesw-resize; }
+.resize .rm { flex: 1 1 auto; }
+.win.foc .resize .rs { border-right: 1px solid var(--zs-rule-2); }
+.win.foc .resize .rs.rr { border-right: 0; border-left: 1px solid var(--zs-rule-2); }
+
+/* MINIATURISED WINDOWS become 64dp tiles ON THE DESK, bottom left, the way
+   NeXT did it. They are objects lying on the desk, not entries in a bar. */
+#icons { position: absolute; left: var(--sp-16); bottom: var(--sp-16); display: flex;
+  gap: var(--sp-8); z-index: 20; }
+.mini { width: var(--zs-cell); height: var(--zs-cell); background: var(--zs-chrome);
+  border: 2px solid var(--zs-rule-2); cursor: pointer; position: relative; overflow: hidden; }
+.mini .cn { position: absolute; left: 0; right: 0; bottom: 0; height: calc(12px * var(--ui));
+  font-family: var(--sans); font-size: calc(9px * var(--ui)); line-height: calc(12px * var(--ui));
+  font-weight: 700; text-transform: uppercase; letter-spacing: 1px; text-align: center;
+  color: var(--zs-ink-3); background: var(--zs-chrome); }
+.mini .cbody { position: absolute; left: var(--sp-4); right: var(--sp-4); top: var(--sp-4);
+  bottom: calc(12px * var(--ui)); }
+.mini:hover { box-shadow: inset 0 0 0 2px var(--zs-grip); }
+
+/* ========================================================= primitives == */
+.stack { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
+.cols2 { display: flex; gap: var(--sp-16); flex: 1 1 auto; min-height: 0; }
+.cols2 > .stack { flex: 1 1 0; min-width: 0; overflow-y: auto; overflow-x: hidden; }
+.row   { display: flex; align-items: center; gap: var(--sp-8); }
+.pad-t { margin-top: var(--sp-8); }
+.hr1 { height: 1px; background: var(--zs-rule-1); flex: none; }
+.hr2 { height: 2px; background: var(--zs-rule-2); flex: none; }
+.vr1 { width: 1px; background: var(--zs-rule-1); flex: none; align-self: stretch; }
+.scroll { overflow: auto; min-height: 0; flex: 1 1 auto; }
+.well { background: var(--zs-well); border: 1px solid var(--zs-rule-1); padding: var(--sp-8);
+  overflow: auto; min-height: 0; }
+.pre { font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+  white-space: pre; color: var(--zs-ink-1); display: block; }
+.pre .dim { color: var(--zs-ink-3); }
+.pre .em  { color: var(--zs-ink); font-weight: 700; }
+.pre .sel { background: var(--zs-sel); color: var(--zs-sel-ink); }
+/* a nested role inside the selection band must knock out with it, or it
+   lands at 1.07:1 and the gutter numeral disappears. */
+.pre .sel .dim, .pre .sel .em { color: var(--zs-sel-ink); }
+.caret { display: inline-block; width: calc(7px * var(--ui)); height: calc(13px * var(--ui));
+  background: var(--zs-ink); vertical-align: text-bottom; }
+body.blinkon .caret { animation: bl 1.06s steps(1) infinite; }
+@keyframes bl { 0%,50% { opacity: 1; } 50.01%,100% { opacity: 0; } }
+
+table.tbl { border-collapse: collapse; width: 100%; table-layout: fixed; }
+table.tbl th { font-family: var(--sans); font-size: var(--fs-data); line-height: var(--lh-data);
+  font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--zs-ink-3);
+  text-align: left; padding: 0 var(--sp-8) 2px 0; border-bottom: 2px solid var(--zs-rule-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+table.tbl th.r { text-align: right; }
+table.tbl td { font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+  color: var(--zs-ink-1); padding: 1px var(--sp-8) 1px 0; border-bottom: 1px solid var(--zs-rule-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+table.tbl td.r { text-align: right; }
+table.tbl th:last-child, table.tbl td:last-child { padding-right: 0; }
+table.tbl tr.sel td { background: var(--zs-sel); color: var(--zs-sel-ink); border-bottom-color: var(--zs-sel); }
+table.tbl tr.sel td .i0, table.tbl tr.sel td .i3, table.tbl tr.sel td .b { color: var(--zs-sel-ink); }
+table.tbl tr[data-pick] { cursor: pointer; }
+table.tbl tr[data-pick]:hover:not(.sel) td { background: var(--zs-well); }
+
+/* STATUS WITHOUT COLOUR. A filled square is OK, a half square is WARN, a
+   hollow square is FAIL, and FAIL additionally takes bold. Three shapes
+   and one weight, which is exactly the Folio discipline, and it is what
+   leaves the single saturated ink free for selection. */
+.st { display: inline-flex; align-items: center; gap: 5px; font-family: var(--sans);
+  font-size: var(--fs-data); text-transform: uppercase; letter-spacing: 1px;
+  color: var(--zs-ink-1); }
+.st .sq { width: 8px; height: 8px; flex: none; border: 1px solid var(--zs-ink); }
+.st.ok   .sq { background: var(--zs-ink); }
+.st.warn .sq { background: linear-gradient(135deg, var(--zs-ink) 0 50%, transparent 50% 100%); }
+.st.fail .sq { background: transparent; }
+.st.fail { font-weight: 700; color: var(--zs-ink); }
+tr.sel .st { color: var(--zs-sel-ink); }
+tr.sel .st .sq { border-color: var(--zs-sel-ink); }
+tr.sel .st.ok .sq { background: var(--zs-sel-ink); }
+tr.sel .st.warn .sq { background: linear-gradient(135deg, var(--zs-sel-ink) 0 50%, transparent 50% 100%); }
+
+.kv { display: flex; align-items: baseline; gap: var(--sp-8); border-bottom: 1px solid var(--zs-rule-1);
+  padding: 1px 0; }
+.kv .k { font-family: var(--sans); font-size: var(--fs-data); line-height: var(--lh-data);
+  font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--zs-ink-3);
+  white-space: nowrap; }
+.kv .v { margin-left: auto; font-family: var(--mono); font-size: var(--fs-data);
+  line-height: var(--lh-data); color: var(--zs-ink-1); font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kvgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-16); }
+
+.meter { display: flex; flex-direction: column; gap: 2px; }
+.meter .mr { display: flex; align-items: baseline; }
+.track { height: calc(10px * var(--ui)); background: var(--zs-well);
+  border: 1px solid var(--zs-rule-1); position: relative; }
+.track > i { display: block; position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--zs-mark-bulk); }
+.plotbox { position: relative; flex: 1 1 auto; min-height: calc(48px * var(--ui));
+  background: var(--zs-well); border: 1px solid var(--zs-rule-1); overflow: hidden; }
+.plotbox svg { display: block; }
+.meanline { position: absolute; left: 0; right: 0; height: 1px; background: var(--zs-ink);
+  opacity: 0.55; }
+
+.btn { display: inline-flex; align-items: center; gap: var(--sp-8); height: calc(22px * var(--ui));
+  padding: 0 var(--sp-12); background: var(--zs-chrome); border: 1px solid var(--zs-rule-2);
+  cursor: pointer; font-family: var(--sans); font-size: var(--fs-data); font-weight: 700;
+  text-transform: uppercase; letter-spacing: var(--tr-cap); color: var(--zs-ink); }
+.btn:hover { background: var(--zs-well); }
+.btn.prim { border-width: 2px; }
+.sw { width: calc(34px * var(--ui)); height: calc(16px * var(--ui)); background: var(--zs-well);
+  border: 1px solid var(--zs-rule-2); position: relative; cursor: pointer; flex: none; }
+.sw > i { position: absolute; top: 0; bottom: 0; left: 0; width: 50%; background: var(--zs-mute); }
+.sw.on > i { left: 50%; background: var(--zs-mark); }
+.ctlrow { display: flex; align-items: center; gap: var(--sp-8); min-height: var(--zs-row-h);
+  border-bottom: 1px solid var(--zs-rule-1); }
+.ctlrow .right { margin-left: auto; display: flex; align-items: center; gap: var(--sp-12); }
+.slider { position: relative; width: calc(150px * var(--ui)); height: calc(16px * var(--ui));
+  flex: none; cursor: pointer; }
+.slider .st2 { position: absolute; left: 0; right: 0; top: calc(6px * var(--ui));
+  height: calc(4px * var(--ui)); background: var(--zs-well); border: 1px solid var(--zs-rule-1); }
+.slider .sf { position: absolute; left: 1px; top: calc(7px * var(--ui));
+  height: calc(2px * var(--ui)); background: var(--zs-mark-bulk); }
+.slider .sh { position: absolute; top: 0; width: calc(8px * var(--ui)); height: calc(16px * var(--ui));
+  background: var(--zs-knob); }
+.slider .sh::after { content: ''; position: absolute; left: 2px; right: 2px; top: 4px; bottom: 4px;
+  background-image: repeating-linear-gradient(to bottom,
+    var(--zs-knob-edge) 0px, var(--zs-knob-edge) 1px, transparent 1px, transparent 3px); }
+.slider .tick { position: absolute; bottom: 0; width: 1px; height: calc(4px * var(--ui));
+  background: var(--zs-rule-1); }
+.seg { display: inline-flex; border: 1px solid var(--zs-rule-2); height: calc(22px * var(--ui)); }
+.seg > span { flex: 1 1 0; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; border-right: 1px solid var(--zs-rule-2); font-family: var(--sans);
+  font-size: var(--fs-data); font-weight: 700; text-transform: uppercase;
+  letter-spacing: var(--tr-cap); color: var(--zs-ink); background: var(--zs-chrome); }
+.seg > span:last-child { border-right: 0; }
+.seg > span.on { background: var(--zs-sel); color: var(--zs-sel-ink); }
+.tabs { display: flex; border-bottom: 2px solid var(--zs-rule-2); flex: none; }
+.tabs > span { padding: 0 var(--sp-12); height: var(--zs-row-h); display: flex; align-items: center;
+  cursor: pointer; border-right: 1px solid var(--zs-rule-1); font-family: var(--sans);
+  font-size: var(--fs-data); font-weight: 700; text-transform: uppercase;
+  letter-spacing: var(--tr-cap); color: var(--zs-ink-3); }
+.tabs > span.on { color: var(--zs-ink); box-shadow: inset 0 -2px 0 var(--zs-rule-2); }
+.swatchrow { display: flex; gap: var(--sp-12); margin: var(--sp-8) 0; }
+.swatch { display: block; height: calc(22px * var(--ui)); border: 1px solid var(--zs-rule-2);
+  cursor: pointer; }
+.swatch.on { box-shadow: inset 0 0 0 2px var(--zs-well); border-width: 2px; }
+
+/* =========================================================== overview == */
+#overview { position: absolute; inset: 0; z-index: 200; display: none;
+  background: var(--zs-desk); }
+#overview.on { display: flex; flex-direction: column; }
+.ovhead { flex: none; display: flex; align-items: center; gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16); border-bottom: 2px solid var(--zs-rule-2);
+  background: var(--zs-chrome); }
+.ovfields { flex: 1 1 auto; display: flex; gap: var(--sp-16); padding: var(--sp-16); min-height: 0; }
+.ovfield { flex: 1 1 0; display: flex; flex-direction: column; background: var(--zs-desk);
+  border: 2px solid var(--zs-rule-2); min-width: 0; cursor: pointer; }
+.ovfield .ovtitle { flex: none; height: var(--zs-row-h); display: flex; align-items: center;
+  gap: var(--sp-8); padding: 0 var(--sp-8); background: var(--zs-chrome);
+  border-bottom: 2px solid var(--zs-rule-2); }
+.ovfield.on .ovtitle { background: var(--zs-sel); }
+.ovfield.on .ovtitle .t-cap, .ovfield.on .ovtitle .t-data { color: var(--zs-sel-ink); }
+.ovcanvas { flex: 1 1 auto; position: relative; overflow: hidden;
+  background-image: repeating-linear-gradient(45deg,
+    var(--zs-desk) 0px, var(--zs-desk) 2px,
+    var(--zs-desk-tex) 2px, var(--zs-desk-tex) 3px); }
+.ovwin { position: absolute; background: var(--zs-sheet); border: 2px solid var(--zs-rule-2);
+  overflow: hidden; cursor: pointer; }
+.ovwin .ovt { height: calc(14px * var(--ui)); background: var(--zs-chrome);
+  border-bottom: 1px solid var(--zs-rule-2); display: flex; align-items: center;
+  padding: 0 3px; }
+.ovwin .ovt span { font-family: var(--sans); font-size: calc(9px * var(--ui));
+  font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--zs-ink-3);
+  white-space: nowrap; overflow: hidden; }
+.ovwin.foc .ovt span { color: var(--zs-ink); }
+.ovwin:hover { box-shadow: inset 0 0 0 2px var(--zs-grip); }
+.ovlines { padding: 3px; }
+.ovlines i { display: block; height: 2px; background: var(--zs-mark-bulk); margin-bottom: 3px;
+  opacity: .5; }
+
+/* ============================================================ palette == */
+#palette { position: absolute; inset: 0; z-index: 260; display: none; }
+#palette.on { display: block; }
+#palette .scrim { position: absolute; inset: 0; background: var(--zs-desk); opacity: .72; }
+#palette .sheet { position: absolute; left: 50%; top: calc(60px * var(--ui));
+  transform: translateX(-50%); width: calc(560px * var(--ui)); max-height: calc(100% - 120px);
+  background: var(--zs-sheet); border: 2px solid var(--zs-rule-2); display: flex;
+  flex-direction: column; overflow: hidden; }
+#palette .phead { flex: none; height: var(--zs-row-h); display: flex; align-items: center;
+  gap: var(--sp-12); padding: 0 var(--sp-12); background: var(--zs-chrome);
+  border-bottom: 2px solid var(--zs-rule-2); }
+#palette .pin { flex: none; display: flex; align-items: center; gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12); background: var(--zs-well);
+  border-bottom: 1px solid var(--zs-rule-1); }
+#palette .pin .q { font-family: var(--mono); font-size: var(--fs-body); color: var(--zs-ink); }
+#presults { overflow-y: auto; flex: 1 1 auto; }
+.prow { height: var(--zs-row-h); display: flex; align-items: center; gap: var(--sp-12);
+  padding: 0 var(--sp-12); border-bottom: 1px solid var(--zs-rule-1); cursor: pointer; }
+.prow .pn { font-family: var(--sans); font-size: var(--fs-data); color: var(--zs-ink); }
+.prow .pd { font-family: var(--mono); font-size: var(--fs-data); color: var(--zs-ink-3);
+  margin-left: auto; white-space: nowrap; }
+.prow.on { background: var(--zs-sel); }
+.prow.on .pn, .prow.on .pd { color: var(--zs-sel-ink); }
+#palette .pfoot { flex: none; display: flex; align-items: center; gap: var(--sp-8);
+  padding: var(--sp-4) var(--sp-12); background: var(--zs-chrome);
+  border-top: 2px solid var(--zs-rule-2); }
+
+/* =============================================================== lock == */
+#lock { position: absolute; inset: 0; z-index: 400; display: none; background: var(--zs-desk);
+  background-image: repeating-linear-gradient(45deg,
+    var(--zs-desk) 0px, var(--zs-desk) 2px,
+    var(--zs-desk-tex) 2px, var(--zs-desk-tex) 3px); }
+#lock.on { display: flex; align-items: center; justify-content: center; }
+#lock .lsheet { width: calc(640px * var(--ui)); background: var(--zs-sheet);
+  border: 2px solid var(--zs-rule-2); display: flex; }
+#lock .lside { width: var(--zs-cell); flex: none; background: var(--zs-chrome);
+  border-right: 2px solid var(--zs-rule-2); display: flex; flex-direction: column; }
+#lock .lside .cell:last-child { border-bottom: 0; }
+#lock .lmain { flex: 1 1 auto; min-width: 0; }
+#lock .lhead { height: var(--zs-row-h); display: flex; align-items: center; gap: var(--sp-12);
+  padding: 0 var(--sp-12); background: var(--zs-chrome); border-bottom: 2px solid var(--zs-rule-2); }
+#lock .lbody { padding: var(--sp-16); display: flex; flex-direction: column; gap: var(--sp-8); }
+
+/* ============================================================== menus == */
+.cmenu { position: absolute; z-index: 320; min-width: var(--zs-menu-w);
+  background: var(--zs-chrome); border: 2px solid var(--zs-rule-2); display: none; }
+.cmenu.on { display: block; }
+.cmenu .ch { height: var(--zs-row-h); display: flex; align-items: center; padding: 0 var(--sp-12);
+  border-bottom: 2px solid var(--zs-rule-2); }
+.cmenu .mi { height: var(--zs-row-h); display: flex; align-items: center; gap: var(--sp-12);
+  padding: 0 var(--sp-12); border-bottom: 1px solid var(--zs-rule-1); cursor: pointer; }
+.cmenu .mi:last-child { border-bottom: 0; }
+.cmenu .mi .lb { font-family: var(--sans); font-size: var(--fs-data); color: var(--zs-ink); }
+.cmenu .mi .ky { margin-left: auto; font-family: var(--mono); font-size: var(--fs-data);
+  color: var(--zs-ink-3); }
+.cmenu .mi:hover { background: var(--zs-sel); }
+.cmenu .mi:hover .lb, .cmenu .mi:hover .ky { color: var(--zs-sel-ink); }
+
+/* ============================================================= toasts == */
+.toast { background: var(--zs-sheet); border: 2px solid var(--zs-rule-2); padding: var(--sp-8);
+  display: flex; flex-direction: column; gap: 2px; }
+.toast .tn { font-family: var(--sans); font-size: var(--fs-data); font-weight: 700;
+  text-transform: uppercase; letter-spacing: var(--tr-cap); color: var(--zs-ink); }
+.toast .tb { font-family: var(--mono); font-size: var(--fs-data); color: var(--zs-ink-1); }
+</style>
+</head>
+<body>
+
+<div id="strip">
+  <span class="nm">Shelf</span>
+  <span class="pitch" id="pitch"></span>
+  <span class="links" id="links"></span>
+  <span class="thm" id="themetog"></span>
+</div>
+
+<div id="os">
+
+  <div id="menu">
+    <div class="mhead">
+      <span class="t-disp" id="mtitle">zlos</span>
+      <span class="t-data" id="msub">no window focused</span>
+    </div>
+    <div class="mrows" id="mrows"></div>
+    <div class="mfoot">
+      <span class="t-data" id="mfoot"></span>
+    </div>
+  </div>
+
+  <div id="desk">
+    <div id="wins"></div>
+    <div id="icons"></div>
+    <div id="toasts"></div>
+    <div id="overview"></div>
+    <div id="palette">
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="phead">
+          <span class="t-cap i0">command</span>
+          <span class="t-data i3">zlsh builtin</span>
+          <span class="t-data i3 spread" id="pcount"></span>
+        </div>
+        <div class="pin">
+          <span class="t-cap">run</span>
+          <span class="q" id="pq"></span><span class="caret"></span>
+        </div>
+        <div id="presults"></div>
+        <div class="pfoot">
+          <span class="t-cap">enter</span><span class="t-data i3">run</span>
+          <span class="t-cap">up down</span><span class="t-data i3">select</span>
+          <span class="t-cap">esc</span><span class="t-data i3">dismiss</span>
+        </div>
+      </div>
+    </div>
+    <div class="cmenu" id="ctxmenu"></div>
+    <div class="cmenu" id="winmenu"></div>
+  </div>
+
+  <div id="dock">
+    <div id="dockcells"></div>
+    <div class="wscell" id="wscell"></div>
+  </div>
+
+  <div id="lock">
+    <div class="lsheet">
+      <div class="lside" id="lockside"></div>
+      <div class="lmain">
+        <div class="lhead">
+          <span class="t-cap i0">session locked</span>
+          <span class="t-data i3">tty1 seat0</span>
+          <span class="t-data i3 spread" id="lockup"></span>
+        </div>
+        <div class="lbody" id="lockbody"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+/* ======================================================================
+ * SHELF - a living prototype of the zlOS desktop.
+ *
+ * Structure: MENU COLUMN (left, belongs to the focused application) /
+ * DESK (mid grey, machined) / DOCK (right, live instrument cells).
+ * There is no horizontal bar anywhere in the operating system. The strip
+ * across the top of this page is the prototype's own scene switcher and
+ * lives outside #os.
+ *
+ * Depth model: a 2px frame, a 1px rule, a surface step, and a machined
+ * hatch. No shadow, no glow, no blur, no radius.
+ * ====================================================================== */
+
+const $  = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const pad2 = n => (n < 10 ? '0' : '') + n;
+const hx = (n, w) => n.toString(16).toUpperCase().padStart(w || 8, '0');
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+
+/* --------------------------------------------------- token readback ----
+ * The settings sheet prints this stock's own hex values and contrast
+ * ratios. Typed literals are a claim; these are read off the LIVE custom
+ * property on :root, so the sheet cannot print a number it is not
+ * actually rendering. */
+function tokRaw(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function tokResolve(n, d) {
+  const v = tokRaw(n), m = /^var\((--[\w-]+)\)$/.exec(v);
+  return (m && (d || 0) < 8) ? tokResolve(m[1], (d || 0) + 1) : v;
+}
+function tokHex(n) { return tokResolve(n).toUpperCase(); }
+function tokRGB(n) {
+  const h = tokResolve(n).replace('#', '');
+  return h.length === 6 ? [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)) : null;
+}
+function relLum(c) {
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+}
+function tokRatio(fg, bg) {
+  const a = tokRGB(fg), b = tokRGB(bg);
+  if (!a || !b) return '--';
+  let l1 = relLum(a), l2 = relLum(b);
+  if (l1 < l2) { const t = l1; l1 = l2; l2 = t; }
+  return ((l1 + 0.05) / (l2 + 0.05)).toFixed(2);
+}
+function tokLstar(n) {
+  const c = tokRGB(n); if (!c) return '--';
+  const y = relLum(c);
+  return (y > 0.008856 ? 116 * Math.pow(y, 1 / 3) - 16 : 903.3 * y).toFixed(1);
+}
+
+/* ------------------------------------------------------------- state -- */
+const S = {
+  theme: 'light', scene: 'desktop', ws: 1, focus: null,
+  ui: 1, hatch: true, texture: true, blink: true, shelfStrip: true, resizeBar: true,
+  dockLive: true, menuFollows: true,
+  fileSel: 1, docSel: 0, procSel: 3, logSel: -1, hexSel: 0x40,
+  setTab: 0, menuSel: {}, pq: '', psel: 0,
+  calcAcc: '241690', calcOp: null, calcPend: null,
+  t: 0, clock: 14 * 3600 + 32 * 60 + 7,
+  hist: { cpu: [], net: [], mem: [], io: [] },
+  cpu: [34, 21, 47, 12], memPct: 62, load: 0.31, rx: 148.2, tx: 22.7,
+  logCount: 3, order: [], wins: {}
+};
+for (let i = 0; i < 72; i++) {
+  S.hist.cpu.push(18 + ((i * 37) % 46));
+  S.hist.net.push(6 + ((i * 53) % 58));
+  S.hist.mem.push(56 + ((i * 17) % 12));
+  S.hist.io.push(4 + ((i * 29) % 40));
+}
+
+/* -------------------------------------------------------- title glyphs -
+ * Geometry only, one stroke weight, every vertex on a multiple of 2 in a
+ * 12x12 field. Close is an X, miniaturise is a small square dropped into
+ * the lower left, exactly as NeXT drew them. */
+const G_CLOSE = '<svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true">' +
+  '<path d="M1 1 L11 11 M11 1 L1 11" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>';
+const G_MIN = '<svg width="10" height="10" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true">' +
+  '<rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1"/>' +
+  '<rect x="1.5" y="7.5" width="4" height="4" fill="currentColor"/></svg>';
+
+/* ------------------------------------------------------------ tables -- */
+function TH(cols) {
+  return '<tr>' + cols.map(c => '<th class="' + (c.r ? 'r' : '') + '"' +
+    (c.w ? ' style="width:' + c.w + '"' : '') + '>' + c.h + '</th>').join('') + '</tr>';
+}
+function TR(cells, attr) {
+  return '<tr ' + (attr || '') + '>' + cells.map(c => typeof c === 'string'
+    ? '<td>' + c + '</td>'
+    : '<td class="' + (c.c || '') + '">' + c.t + '</td>').join('') + '</tr>';
+}
+function TBL(head, rows) {
+  return '<table class="tbl"><thead>' + TH(head) + '</thead><tbody>' + rows.join('') + '</tbody></table>';
+}
+/* SHAPE CARRIES THE RANK, the word carries the fact. A caller that has a
+   real word (LISTEN, ESTAB, RUN) passes it with the rank it belongs to,
+   rather than being forced through OK / WARN / FAIL. Still no colour. */
+function stat(w, kind) {
+  const k = kind || (w === 'OK' ? 'ok' : w === 'WARN' ? 'warn' : w === 'FAIL' ? 'fail' : 'ok');
+  return '<span class="st ' + k + '"><i class="sq"></i>' + esc(w) + '</span>';
+}
+function kv(k, v) { return '<div class="kv"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>'; }
+function meter(label, val, unit) {
+  return '<div class="meter"><div class="mr"><span class="t-cap">' + label + '</span>' +
+    '<span class="t-data spread">' + val + (unit || '') + '</span></div>' +
+    '<div class="track"><i style="width:' + clamp(val, 0, 100) + '%"></i></div></div>';
+}
+function plotFlex(series, max, minH) {
+  const n = series.length, bw = 100 / n;
+  let bars = '';
+  series.forEach((v, i) => {
+    const h = Math.max(1, (v / max) * 100);
+    bars += '<rect x="' + (i * bw).toFixed(2) + '" y="' + (100 - h).toFixed(2) +
+      '" width="' + (bw * 0.66).toFixed(2) + '" height="' + h.toFixed(2) + '"/>';
+  });
+  const mean = series.reduce((a, b) => a + b, 0) / n;
+  return '<div class="plotbox"' + (minH ? ' style="min-height:' + minH + 'px"' : '') + '>' +
+    '<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" ' +
+    'fill="var(--zs-mark-bulk)" aria-hidden="true">' + bars + '</svg>' +
+    '<span class="meanline" style="top:' + (100 - (mean / max) * 100).toFixed(2) + '%"></span></div>';
+}
+function hhmmss(s) {
+  s = Math.floor(s) % 86400;
+  return pad2(Math.floor(s / 3600)) + ':' + pad2(Math.floor(s / 60) % 60) + ':' + pad2(s % 60);
+}
+
+/* ==================================================== DOCK INSTRUMENTS ==
+ * The load-bearing idea. Each of these draws the application's actual
+ * state at 56x48 device pixels. None of them is a pictogram, no two of
+ * them look alike, and that is what makes the banned row-of-identical-
+ * rounded-tiles launcher structurally unreachable.
+ *
+ * They are drawn BY THE SHELL from a small per-app struct (the values in
+ * S), not by a backgrounded application. That is the one change that
+ * makes this direction cost nothing architecturally: no new application
+ * lifecycle contract, no render-while-not-visible requirement. */
+const CELL_W = 56, CELL_H = 48;
+function svgc(inner) {
+  return '<svg width="100%" height="100%" viewBox="0 0 ' + CELL_W + ' ' + CELL_H + '" ' +
+    'preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">' + inner + '</svg>';
+}
+function svgcs(inner) {
+  return '<svg width="100%" height="100%" viewBox="0 0 ' + CELL_W + ' ' + CELL_H + '" ' +
+    'preserveAspectRatio="xMidYMid meet" aria-hidden="true">' + inner + '</svg>';
+}
+const DEAD = '<span style="display:block;width:100%;height:100%;border:1px solid var(--zs-rule-1)"></span>';
+
+const INSTR = {
+  /* an actual clock face, hands at the actual time */
+  clock: () => {
+    const t = S.clock + S.t, cx = 28, cy = 24, r = 20;
+    const ang = (v, n) => (v / n) * Math.PI * 2 - Math.PI / 2;
+    const pt = (a, rr) => [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr];
+    let ticks = '';
+    for (let i = 0; i < 12; i++) {
+      const a = ang(i, 12), p1 = pt(a, r - 3), p2 = pt(a, r);
+      ticks += '<path d="M' + p1[0].toFixed(1) + ' ' + p1[1].toFixed(1) + ' L' +
+        p2[0].toFixed(1) + ' ' + p2[1].toFixed(1) + '" stroke="var(--zs-ink-3)" stroke-width="1"/>';
+    }
+    const h = pt(ang((t / 3600) % 12, 12), r - 9), m = pt(ang((t / 60) % 60, 60), r - 5),
+          s = pt(ang(t % 60, 60), r - 4);
+    return svgcs('<circle cx="28" cy="24" r="20" fill="none" stroke="var(--zs-ink)" stroke-width="1.5"/>' +
+      ticks +
+      '<path d="M28 24 L' + h[0].toFixed(1) + ' ' + h[1].toFixed(1) + '" stroke="var(--zs-ink)" stroke-width="2.5"/>' +
+      '<path d="M28 24 L' + m[0].toFixed(1) + ' ' + m[1].toFixed(1) + '" stroke="var(--zs-ink)" stroke-width="1.5"/>' +
+      '<path d="M28 24 L' + s[0].toFixed(1) + ' ' + s[1].toFixed(1) + '" stroke="var(--zs-ink-3)" stroke-width="1"/>' +
+      '<circle cx="28" cy="24" r="1.5" fill="var(--zs-ink)"/>');
+  },
+  /* live cpu sparkline, 28 samples, with the mean ruled across it */
+  mon: () => {
+    const s = S.hist.cpu.slice(-28), n = s.length, bw = CELL_W / n;
+    let bars = '';
+    s.forEach((v, i) => {
+      const h = Math.max(1, (v / 100) * CELL_H);
+      bars += '<rect x="' + (i * bw).toFixed(1) + '" y="' + (CELL_H - h).toFixed(1) +
+        '" width="' + (bw - 0.6).toFixed(1) + '" height="' + h.toFixed(1) + '" fill="var(--zs-mark)"/>';
+    });
+    const mean = s.reduce((a, b) => a + b, 0) / n;
+    return svgc('<rect width="' + CELL_W + '" height="' + CELL_H + '" fill="var(--zs-well)"/>' + bars +
+      '<rect x="0" y="' + (CELL_H - (mean / 100) * CELL_H).toFixed(1) + '" width="' + CELL_W +
+      '" height="1" fill="var(--zs-ink-3)"/>');
+  },
+  /* the terminal's last line, actually the last line */
+  sh: () => {
+    const l = SHELL_LINES[SHELL_LINES.length - 1] || '';
+    const prev = SHELL_LINES[SHELL_LINES.length - 2] || '';
+    return '<span style="display:block;width:100%;height:100%;background:var(--zs-well);' +
+      'border:1px solid var(--zs-rule-1);padding:2px;overflow:hidden;font-family:var(--mono);' +
+      'font-size:8px;line-height:10px;color:var(--zs-ink-3);white-space:nowrap">' +
+      esc(prev.slice(0, 10)) + '<br><span style="color:var(--zs-ink)">' +
+      esc(l.slice(0, 10)) + '</span><span class="caret" style="width:4px;height:7px"></span></span>';
+  },
+  /* a count, set large, plus the rule stack it is counting */
+  log: () => {
+    let rows = '';
+    for (let i = 0; i < 6; i++) {
+      rows += '<rect x="2" y="' + (4 + i * 7) + '" width="' + (18 + ((i * 13) % 30)) +
+        '" height="2" fill="var(--zs-' + (i < S.logCount ? 'mark' : 'mute') + ')"/>';
+    }
+    return '<span style="position:relative;display:block;width:100%;height:100%;' +
+      'background:var(--zs-well);border:1px solid var(--zs-rule-1)">' +
+      svgc(rows) +
+      '<span style="position:absolute;right:2px;bottom:0;font-family:var(--mono);font-size:16px;' +
+      'font-weight:700;color:var(--zs-ink);line-height:16px">' + S.logCount + '</span></span>';
+  },
+  /* twin bars, rx up and tx down from a centre rule */
+  net: () => {
+    const rxs = S.hist.net.slice(-14), n = rxs.length, bw = CELL_W / n;
+    let up = '', dn = '';
+    rxs.forEach((v, i) => {
+      const h = Math.max(1, (v / 70) * 20), h2 = Math.max(1, (v / 190) * 20);
+      up += '<rect x="' + (i * bw).toFixed(1) + '" y="' + (24 - h).toFixed(1) + '" width="' +
+        (bw - 1).toFixed(1) + '" height="' + h.toFixed(1) + '" fill="var(--zs-mark)"/>';
+      dn += '<rect x="' + (i * bw).toFixed(1) + '" y="25" width="' + (bw - 1).toFixed(1) +
+        '" height="' + h2.toFixed(1) + '" fill="var(--zs-mark-bulk)"/>';
+    });
+    return svgc('<rect width="' + CELL_W + '" height="' + CELL_H + '" fill="var(--zs-well)"/>' +
+      up + dn + '<rect x="0" y="24" width="' + CELL_W + '" height="1" fill="var(--zs-ink)"/>');
+  },
+  /* disk: a square pie, wedge swept by actual usage */
+  du: () => {
+    const pct = 71 + (S.t % 3), a = (pct / 100) * Math.PI * 2 - Math.PI / 2;
+    const R2 = 19, cx = 28, cy = 22;
+    const x = cx + Math.cos(a) * R2, y = cy + Math.sin(a) * R2;
+    const big = pct > 50 ? 1 : 0;
+    return svgcs('<circle cx="28" cy="22" r="19" fill="var(--zs-well)" stroke="var(--zs-ink)" stroke-width="1.5"/>' +
+      '<path d="M28 22 L28 3 A19 19 0 ' + big + ' 1 ' + x.toFixed(1) + ' ' + y.toFixed(1) +
+      ' Z" fill="var(--zs-mark-bulk)"/>' +
+      '<text x="28" y="46" text-anchor="middle" font-family="ui-monospace, monospace" ' +
+      'font-size="10" font-weight="700" fill="var(--zs-ink)">' + pct + '%</text>');
+  },
+  /* the file column, with the selected row in the one saturated ink */
+  files: () => {
+    let rows = '';
+    for (let i = 0; i < 6; i++) {
+      const on = (S.fileSel % 6) === i;
+      rows += '<rect x="0" y="' + (i * 8) + '" width="' + CELL_W + '" height="7" fill="var(--zs-' +
+        (on ? 'sel' : 'well') + ')"/>' +
+        '<rect x="3" y="' + (i * 8 + 3) + '" width="' + (20 + ((i * 11) % 26)) + '" height="2" fill="var(--zs-' +
+        (on ? 'sel-ink' : 'ink-3') + ')"/>';
+    }
+    return svgc(rows);
+  },
+  /* a byte grid that actually shifts */
+  hex: () => {
+    let cells = '';
+    for (let r = 0; r < 6; r++) for (let c = 0; c < 7; c++) {
+      const v = (S.hexSel + r * 7 + c + S.t) & 0xFF;
+      if (v > 128) cells += '<rect x="' + (c * 8) + '" y="' + (r * 8) + '" width="7" height="7" fill="var(--zs-mark)"/>';
+      else if (v > 64) cells += '<rect x="' + (c * 8) + '" y="' + (r * 8) + '" width="7" height="7" fill="var(--zs-mark-bulk)"/>';
+      else cells += '<rect x="' + (c * 8 + 0.5) + '" y="' + (r * 8 + 0.5) + '" width="6" height="6" fill="none" stroke="var(--zs-rule-1)" stroke-width="1"/>';
+    }
+    return svgc('<rect width="' + CELL_W + '" height="' + CELL_H + '" fill="var(--zs-well)"/>' + cells);
+  },
+  /* the process table's top row, by cpu */
+  proc: () => {
+    const p = PROCS.slice().sort((a, b) => b[3] - a[3])[0];
+    let bars = '';
+    PROCS.slice(0, 6).forEach((q, i) => {
+      bars += '<rect x="0" y="' + (i * 8 + 1) + '" width="' + Math.max(2, (q[3] / 40) * CELL_W).toFixed(1) +
+        '" height="5" fill="var(--zs-' + (i === 0 ? 'mark' : 'mark-bulk') + ')"/>';
+    });
+    return '<span style="position:relative;display:block;width:100%;height:100%;' +
+      'background:var(--zs-well);border:1px solid var(--zs-rule-1);overflow:hidden">' +
+      '<span style="display:block;font-family:var(--mono);font-size:8px;line-height:10px;' +
+      'color:var(--zs-ink);white-space:nowrap;border-bottom:1px solid var(--zs-rule-1)">' +
+      esc(p[1].slice(0, 8)) + '</span>' +
+      '<span style="display:block;height:calc(100% - 11px)">' + svgc(bars) + '</span></span>';
+  },
+  /* the memory map, as a column of regions at true relative size */
+  sys: () => {
+    let bands = '', y = 0;
+    [[10, 'mark'], [4, 'mute'], [18, 'mark-bulk'], [3, 'mute'], [9, 'mark'], [4, 'mute']]
+      .forEach(b => { bands += '<rect x="6" y="' + y + '" width="44" height="' + (b[0] - 1) +
+        '" fill="var(--zs-' + b[1] + ')"/>'; y += b[0]; });
+    return svgc('<rect width="' + CELL_W + '" height="' + CELL_H + '" fill="var(--zs-well)"/>' + bands +
+      '<rect x="5" y="0" width="1" height="' + CELL_H + '" fill="var(--zs-ink)"/>');
+  },
+  /* settings: three sliders at their live positions */
+  set: () => {
+    const vals = [S.ui / 1.25, S.hatch ? 1 : 0.16, S.texture ? 0.72 : 0.16];
+    let rows = '';
+    vals.forEach((v, i) => {
+      const y = 8 + i * 14;
+      rows += '<rect x="2" y="' + (y + 2) + '" width="52" height="3" fill="var(--zs-mute)"/>' +
+        '<rect x="' + (2 + v * 44).toFixed(1) + '" y="' + y + '" width="8" height="7" fill="var(--zs-mark)"/>';
+    });
+    return svgc('<rect width="' + CELL_W + '" height="' + CELL_H + '" fill="var(--zs-well)"/>' + rows);
+  }
+};
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/* ================================================================ data ==
+ * Real kernel file names, real register offsets, plausible timings. Every
+ * number below is either a real zlOS figure or one shaped like it. */
+const FILES = [
+  ['kernel.zl',    '41.2 KiB',  'zl source', '-r--r--r--', '12:04', 'OK'],
+  ['fb.c',         '68.4 KiB',  'C source',  '-r--r--r--', '12:04', 'OK'],
+  ['intel.c',      '112.9 KiB', 'C source',  '-rw-r--r--', '11:58', 'WARN'],
+  ['xhci.c',       '54.1 KiB',  'C source',  '-r--r--r--', '09:41', 'OK'],
+  ['hid.c',        '19.6 KiB',  'C source',  '-r--r--r--', '09:41', 'OK'],
+  ['zlfs.c',       '37.8 KiB',  'C source',  '-r--r--r--', '10:22', 'OK'],
+  ['nvme.c',       '28.3 KiB',  'C source',  '-r--r--r--', '10:22', 'OK'],
+  ['apic.c',       '11.4 KiB',  'C source',  '-r--r--r--', '08:50', 'OK'],
+  ['wm.c',         '46.0 KiB',  'C source',  '-r--r--r--', '12:01', 'OK'],
+  ['uikit.c',      '52.7 KiB',  'C source',  '-r--r--r--', '12:01', 'OK'],
+  ['ui.c',         '33.6 KiB',  'C source',  '-r--r--r--', '12:01', 'OK'],
+  ['design.h',     '18.9 KiB',  'C header',  '-r--r--r--', '12:03', 'OK'],
+  ['font_aa.c',    '24.5 KiB',  'C source',  '-r--r--r--', '07:31', 'OK'],
+  ['font_sub.c',   '9.8 KiB',   'C source',  '-r--r--r--', '07:31', 'OK'],
+  ['pci.c',        '16.8 KiB',  'C source',  '-r--r--r--', '08:50', 'OK'],
+  ['dpll.c',       '21.7 KiB',  'C source',  '-rw-r--r--', '11:58', 'WARN'],
+  ['edid.c',       '8.9 KiB',   'C source',  '-r--r--r--', '09:02', 'OK'],
+  ['smp.c',        '13.5 KiB',  'C source',  '-r--r--r--', '08:12', 'OK'],
+  ['memmap.h',     '6.4 KiB',   'C header',  '-r--r--r--', '11:40', 'OK'],
+  ['link.ld',      '412 B',     'Linker',    '-r--r--r--', '06:12', 'OK'],
+  ['Makefile',     '3.1 KiB',   'Makefile',  '-r--r--r--', '12:03', 'OK'],
+  ['zlos.elf',     '249.8 KiB', 'Executable','-rwxr-xr-x', '12:04', 'OK'],
+  ['boot.log',     '2.4 KiB',   'Log',       '-r--r--r--', '12:04', 'OK'],
+  ['_gen64.c',     '1.9 MiB',   'Generated', '-rw-r--r--', '12:04', 'FAIL']
+];
+const PROCS = [
+  [1,   'zlinit',      'S', 0.2,  '1.1 MiB',  '00:00:04'],
+  [12,  'wm',          'R', 14.8, '18.4 MiB', '00:41:02'],
+  [13,  'compositor',  'R', 21.4, '160.0 MiB','00:41:02'],
+  [22,  'zlsh',        'S', 0.6,  '2.2 MiB',  '00:38:51'],
+  [31,  'monitor',     'R', 3.9,  '4.0 MiB',  '00:22:17'],
+  [34,  'nvme_q0',     'D', 6.2,  '512.0 KiB','00:41:01'],
+  [41,  'xhci_evt',    'S', 1.4,  '256.0 KiB','00:41:01'],
+  [47,  'e1000e_rx',   'R', 8.1,  '3.5 MiB',  '00:40:58'],
+  [55,  'zlfs_flush',  'S', 2.0,  '1.8 MiB',  '00:12:44'],
+  [61,  'edit',        'S', 0.4,  '6.1 MiB',  '00:09:31'],
+  [66,  'hexview',     'S', 0.1,  '900.0 KiB','00:04:12'],
+  [70,  'kbd_hid',     'S', 0.3,  '128.0 KiB','00:41:01']
+];
+const SHELL_LINES = [
+  'zlsh 0.3  no libc, no host',
+  '',
+  '$ make -C kernel modeset',
+  '  ZL   kernel.zl -> build/kernel.o',
+  '  CC   fb.c intel.c xhci.c hid.c zlfs.c',
+  '  LD   build/zlos.elf',
+  '       text 218432  data 30720  bss 1441792',
+  '$ ./tools/regdump --pipe A',
+  '  PIPE_LINK_M1(A)  0x60040  0x0080B4D3',
+  '  PIPE_LINK_N1(A)  0x60044  0x00800000',
+  '  PIPE_SRCSZ(A)    0x6001C  0x077F0437',
+  '  DPLL_CFGCR0(2)   0x6C000  0x01C001A5',
+  '  pixel clock 241690 kHz   refresh 59.998 Hz',
+  '$ zlfs fsck /dev/nvme0n1p2',
+  '  generation 3, 2 048 inodes, 0 orphan',
+  '  survived 3 power cycles',
+  '$ '
+];
+const DMESG = [
+  ['0.000041', 'boot',   'zlOS 0.3 x86_64, loaded by our own BOOTX64.EFI'],
+  ['0.000388', 'e820',   '0x00000000 640 KiB usable'],
+  ['0.000401', 'e820',   '0x00100000 3.0 GiB usable'],
+  ['0.000417', 'e820',   '0x100000000 12.4 GiB usable'],
+  ['0.004119', 'idt',    'set_gate x256, handlers at 0xFFFFFFFF80104A20'],
+  ['0.006702', 'apic',   'local apic 0xFEE00000, io apic 0xFEC00000, 4 lapics'],
+  ['0.011840', 'smp',    'ap 1 2 3 online, ENTRY_PTR 0x0000000000008000'],
+  ['0.019233', 'pci',    '00:02.0 8086:9B41 rev 02 -> intel'],
+  ['0.019401', 'pci',    '00:14.0 8086:9DED rev 30 -> xhci'],
+  ['0.019588', 'pci',    '00:1f.6 8086:15BE rev 30 -> e1000e'],
+  ['0.019744', 'pci',    '02:00.0 144D:A80A rev 00 -> nvme'],
+  ['0.041002', 'intel',  'BAR0 8 MiB mapped, GT frequency 350 MHz'],
+  ['0.048817', 'edid',   'panel 1920x1080, 3 blocks, checksum ok'],
+  ['0.061455', 'dpll',   'DPLL2 locked, target 241690 kHz, error 0 kHz'],
+  ['0.078120', 'intel',  'PIPE_LINK_M/N verified bit for bit against firmware'],
+  ['0.079004', 'intel',  'T12 power cycle honoured, 512 ms since blank'],
+  ['0.092331', 'fb',     '1600x1000x32 stride 6400, gamma correct linear blend'],
+  ['0.101288', 'xhci',   '64 bit BAR, 16 slots, firmware ownership released'],
+  ['0.103550', 'hid',    'boot protocol keyboard on slot 2, ep 1 in'],
+  ['0.103902', 'hid',    'boot protocol mouse on slot 3, ep 1 in, depth 1'],
+  ['0.140770', 'nvme',   'admin queue depth 32, io queue 0 depth 1024'],
+  ['0.166204', 'zlfs',   'superblock generation 3, 2048 inodes, clean'],
+  ['0.201911', 'net',    'e1000e link up 1000 Mb/s full duplex'],
+  ['0.204008', 'net',    'dhcp bound 10.0.2.15/24 lease 86400 s'],
+  ['0.310442', 'wm',     '14 sheets registered, compositor stack 256 KiB'],
+  ['0.318805', 'ui',     'design.h loaded, 18 role tokens, 2 ladders'],
+  ['0.402117', 'warn',   'nvme temperature 61 C, threshold 70 C'],
+  ['0.480330', 'shell',  'zlsh on tty1, seat0']
+];
+const HEXBASE = 0xC0000000;
+function hexByte(a) { return (((a >> 4) ^ (a * 37) ^ (a >> 9)) + (a & 0x5A)) & 0xFF; }
+
+/* ================================================================ apps == */
+const APPS = [
+  { id: 'sh',    name: 'shell',      sub: 'zlsh',       cell: 'sh',    w: 520, h: 340 , short: 'shell' },
+  { id: 'files', name: 'files',      sub: 'zlfs',       cell: 'files', w: 560, h: 400, shelf: 1 , short: 'files' },
+  { id: 'mon',   name: 'monitor',    sub: '1 Hz',       cell: 'mon',   w: 520, h: 400 , short: 'monitor' },
+  { id: 'edit',  name: 'editor',     sub: 'fb.c',       cell: null,    w: 560, h: 420, shelf: 1 , short: 'editor' },
+  { id: 'log',   name: 'kernel log', sub: 'dmesg',      cell: 'log',   w: 620, h: 340 , short: 'log' },
+  { id: 'hex',   name: 'hex',        sub: 'rd0',        cell: 'hex',   w: 600, h: 360 , short: 'hex' },
+  { id: 'calc',  name: 'calc',       sub: 'int64',      cell: null,    w: 300, h: 380 , short: 'calc' },
+  { id: 'net',   name: 'network',    sub: 'enp0s31f6',  cell: 'net',   w: 480, h: 380 , short: 'net' },
+  { id: 'clock', name: 'clocks',     sub: 'monotonic',  cell: 'clock', w: 500, h: 320 , short: 'clock' },
+  { id: 'sys',   name: 'system',     sub: '0.3',        cell: 'sys',   w: 560, h: 420 , short: 'system' },
+  { id: 'set',   name: 'settings',   sub: 'design.h',   cell: 'set',   w: 620, h: 460 , short: 'set' },
+  { id: 'du',    name: 'disk usage', sub: 'zlfs',       cell: 'du',    w: 520, h: 380 , short: 'disk' },
+  { id: 'proc',  name: 'process',    sub: '12 tasks',   cell: 'proc',  w: 560, h: 360 , short: 'proc' },
+  { id: 'regs',  name: 'registers',  sub: 'pipe A',     cell: null,    w: 540, h: 380 , short: 'regs' }
+];
+const APP = {};
+APPS.forEach(a => { APP[a.id] = a; });
+const DOCK_ORDER = ['sh', 'files', 'mon', 'log', 'net', 'hex', 'proc', 'du', 'sys', 'clock', 'set'];
+
+/* ===================================================== THE MENU COLUMN ==
+ * Not a popup. A 180dp persistent object that belongs to the focused
+ * application, and the strongest half of the focus signal: the column
+ * RELOADS with the focused application's actual commands, which puts the
+ * focus indicator in a part of the screen you were already reading.
+ *
+ * Tear-off is deferred: it is the only thing in this family that needs
+ * retained per-widget position and open/closed state inside an
+ * immediate-mode ui.c, and the column carries the focus signal without
+ * it. Everything below is stateless per frame. */
+const MENUS = {
+  none: ['zlos', 'no window focused', [
+    ['s', 'workspace'], ['r', 'new shell', 'alt 1', 'open:sh'],
+    ['r', 'files', 'alt 2', 'open:files'], ['r', 'monitor', 'alt 3', 'open:mon'],
+    ['s', 'session'], ['r', 'command', 'ctrl k', 'palette'],
+    ['r', 'overview', 'ctrl space', 'overview'], ['r', 'lock', 'ctrl l', 'lock'],
+    ['s', 'finish'], ['r', 'flip stock', 'shift d', 'stock']
+  ]],
+  sh: ['shell', 'zlsh, tty1', [
+    ['s', 'shell'], ['r', 'new shell', 'ctrl n', 'open:sh'],
+    ['r', 'clear', 'ctrl l', 'act:clear'], ['r', 'interrupt', 'ctrl c', 'act:sigint'],
+    ['s', 'edit'], ['r', 'copy line', 'ctrl w'], ['r', 'paste', 'ctrl y'],
+    ['s', 'history'], ['r', 'search back', 'ctrl r'], ['r', 'last command', 'up'],
+    ['s', 'window'], ['r', 'miniaturise', 'ctrl m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  files: ['files', 'zlfs, /kernel', [
+    ['s', 'file'], ['r', 'open', 'return', 'act:open'],
+    ['r', 'open in editor', 'ctrl e', 'open:edit'], ['r', 'rename', 'f2'],
+    ['r', 'delete', 'del', 'dis'],
+    ['s', 'shelf'], ['r', 'put on shelf', 'ctrl s', 'act:shelf'],
+    ['r', 'clear shelf', 'ctrl shift s', 'act:unshelf'],
+    ['s', 'view'], ['r', 'by name', 'ctrl 1'], ['r', 'by size', 'ctrl 2'],
+    ['r', 'by time', 'ctrl 3'],
+    ['s', 'window'], ['r', 'miniaturise', 'ctrl m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  mon: ['monitor', 'sampling at 1 Hz', [
+    ['s', 'sampling'], ['r', 'hold', 'space', 'act:hold'], ['r', 'reset history', 'ctrl r', 'act:reset'],
+    ['s', 'series'], ['r', 'cpu', 'ctrl 1'], ['r', 'memory', 'ctrl 2'],
+    ['r', 'network', 'ctrl 3'], ['r', 'block io', 'ctrl 4'],
+    ['s', 'window'], ['r', 'miniaturise', 'ctrl m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  edit: ['editor', 'fb.c, read only', [
+    ['s', 'file'], ['r', 'save', 'ctrl s', 'dis'], ['r', 'revert', 'ctrl u', 'dis'],
+    ['s', 'go'], ['r', 'to line', 'ctrl g'], ['r', 'next symbol', 'alt down'],
+    ['r', 'prev symbol', 'alt up'],
+    ['s', 'find'], ['r', 'find', 'ctrl f'], ['r', 'find in tree', 'ctrl shift f'],
+    ['s', 'window'], ['r', 'miniaturise', 'ctrl m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  log: ['kernel log', 'dmesg, 28 records', [
+    ['s', 'log'], ['r', 'follow', 'ctrl f', 'act:follow'], ['r', 'mark read', 'ctrl m', 'act:markread'],
+    ['s', 'filter'], ['r', 'all', 'ctrl 0'], ['r', 'warnings only', 'ctrl 1'],
+    ['r', 'by subsystem', 'ctrl 2'],
+    ['s', 'window'], ['r', 'miniaturise', 'alt m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  hex: ['hex', 'rd0, drag scratch', [
+    ['s', 'view'], ['r', 'page down', 'pgdn', 'act:hexdn'], ['r', 'page up', 'pgup', 'act:hexup'],
+    ['r', 'go to address', 'ctrl g'],
+    ['s', 'format'], ['r', 'bytes', 'ctrl 1'], ['r', 'words', 'ctrl 2'],
+    ['r', 'quads', 'ctrl 3'],
+    ['s', 'window'], ['r', 'miniaturise', 'ctrl m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  calc: ['calc', 'int64, no fpu', [
+    ['s', 'base'], ['r', 'decimal', 'ctrl d'], ['r', 'hexadecimal', 'ctrl h'],
+    ['r', 'binary', 'ctrl b'],
+    ['s', 'edit'], ['r', 'clear', 'esc', 'act:calcclear'], ['r', 'copy', 'ctrl c'],
+    ['s', 'window'], ['r', 'miniaturise', 'ctrl m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  net: ['network', 'enp0s31f6', [
+    ['s', 'link'], ['r', 'renew lease', 'ctrl r', 'act:renew'], ['r', 'take down', 'ctrl d', 'dis'],
+    ['s', 'view'], ['r', 'interfaces', 'ctrl 1'], ['r', 'sockets', 'ctrl 2'],
+    ['r', 'routes', 'ctrl 3'],
+    ['s', 'window'], ['r', 'miniaturise', 'ctrl m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  clock: ['clocks', 'monotonic, tsc', [
+    ['s', 'zones'], ['r', 'add zone', 'ctrl n'], ['r', 'remove zone', 'ctrl d', 'dis'],
+    ['s', 'timers'], ['r', 'start timer', 'ctrl t', 'act:timer'], ['r', 'stop all', 'ctrl period'],
+    ['s', 'window'], ['r', 'miniaturise', 'ctrl m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  sys: ['system', 'zlOS 0.3', [
+    ['s', 'report'], ['r', 'copy summary', 'ctrl c'], ['r', 'memory map', 'ctrl m'],
+    ['r', 'pci topology', 'ctrl p'],
+    ['s', 'gates'], ['r', 'run build', 'ctrl b', 'act:build'], ['r', 'run hosttest', 'ctrl t', 'act:hosttest'],
+    ['s', 'window'], ['r', 'miniaturise', 'alt m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  set: ['settings', 'design.h, live', [
+    ['s', 'sheets'], ['r', 'stock', 'shift d', 'stock'], ['r', 'metrics', 'ctrl 2', 'act:tab1'],
+    ['r', 'chrome', 'ctrl 3', 'act:tab2'], ['r', 'ladder', 'ctrl 4', 'act:tab3'],
+    ['s', 'apply'], ['r', 'write design.h', 'ctrl s', 'act:writeh'],
+    ['r', 'revert', 'ctrl u', 'act:revert'],
+    ['s', 'window'], ['r', 'miniaturise', 'ctrl m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  du: ['disk usage', 'zlfs generation 3', [
+    ['s', 'scan'], ['r', 'rescan', 'ctrl r', 'act:rescan'], ['r', 'fsck', 'ctrl f', 'act:fsck'],
+    ['s', 'view'], ['r', 'by directory', 'ctrl 1'], ['r', 'by extension', 'ctrl 2'],
+    ['s', 'window'], ['r', 'miniaturise', 'ctrl m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  proc: ['process', '12 tasks', [
+    ['s', 'task'], ['r', 'renice', 'ctrl r'], ['r', 'signal term', 'ctrl t', 'dis'],
+    ['r', 'signal kill', 'ctrl k', 'dis'],
+    ['s', 'sort'], ['r', 'by cpu', 'ctrl 1'], ['r', 'by memory', 'ctrl 2'],
+    ['r', 'by pid', 'ctrl 3'],
+    ['s', 'window'], ['r', 'miniaturise', 'ctrl m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]],
+  regs: ['registers', 'gen9 pipe A', [
+    ['s', 'read'], ['r', 'refresh', 'ctrl r', 'act:regread'], ['r', 'dump to log', 'ctrl d', 'act:regdump'],
+    ['s', 'block'], ['r', 'pipe A', 'ctrl 1'], ['r', 'dpll', 'ctrl 2'],
+    ['r', 'transcoder', 'ctrl 3'],
+    ['s', 'window'], ['r', 'miniaturise', 'ctrl m', 'act:min'],
+    ['r', 'close', 'ctrl w', 'act:close']
+  ]]
+};
+
+/* ==================================================== app renderers === */
+const R = {};
+
+R.sh = () => {
+  const body = SHELL_LINES.map(l => {
+    if (!l) return '';
+    if (l.startsWith('$')) return '<span class="em">' + esc(l) + '</span>';
+    if (l.startsWith('  ')) return '<span class="dim">' + esc(l) + '</span>';
+    return esc(l);
+  }).join('\n');
+  return '<div class="well" style="flex:1 1 auto"><span class="pre">' + body +
+    '<span class="caret"></span></span></div>' +
+    '<div class="row"><span class="t-cap">tty1</span>' +
+    '<span class="t-data i3">seat0, 80x24 cells, 8x16 atlas</span>' +
+    '<span class="t-data i3 spread">exit 0, 41 ms</span></div>';
+};
+
+R.files = () => {
+  const rows = FILES.map((f, i) => TR([
+    { t: esc(f[0]), c: 'i0' }, { t: f[1], c: 'r' }, f[2], { t: f[3] }, f[4],
+    { t: stat(f[5]) }
+  ], 'data-pick="file" data-i="' + i + '"' + (S.fileSel === i ? ' class="sel"' : '')));
+  const f = FILES[S.fileSel];
+  return '<div class="scroll">' + TBL([
+    { h: 'name', w: '25%' }, { h: 'size', w: '17%', r: 1 }, { h: 'kind', w: '15%' },
+    { h: 'mode', w: '18%' }, { h: 'time', w: '11%' }, { h: 'fsck', w: '14%' }], rows) + '</div>' +
+    '<div class="hr2"></div>' +
+    '<div class="row"><span class="t-cap">selected</span>' +
+    '<span class="t-data i0 b">' + esc(f[0]) + '</span>' +
+    '<span class="t-data i3">' + f[1] + ', inode ' + (1024 + S.fileSel * 3) + '</span>' +
+    '<span class="t-data i3 spread">24 entries, 1.02 MiB, 0 orphan</span></div>';
+};
+
+R.mon = () => {
+  const cores = S.cpu.map((v, i) => meter('cpu ' + i, Math.round(v), ' %')).join('');
+  return '<div class="cols2"><div class="stack">' +
+    '<span class="t-cap">cpu, 72 s history</span>' + plotFlex(S.hist.cpu, 100, 70) +
+    '<span class="t-cap pad-t">block io, MiB/s</span>' + plotFlex(S.hist.io, 48, 54) +
+    '</div><div class="stack">' + cores +
+    '<div class="hr1 pad-t"></div>' +
+    meter('memory', S.memPct, ' %') +
+    kv('load 1m', S.load.toFixed(2)) + kv('load 5m', (S.load * 1.31).toFixed(2)) +
+    kv('tasks', '12 total, 4 running') + kv('ctx switch', (14200 + (S.t % 97) * 31) + ' /s') +
+    kv('irq', (3810 + (S.t % 53) * 7) + ' /s') + kv('sample', '1 Hz, 72 kept') +
+    '<div class="row pad-t"><span class="btn" data-act="reset"><span>reset history</span></span>' +
+    '<span class="t-data i3 spread">' + hhmmss(4211 + S.t) + ' up</span></div>' +
+    '</div></div>';
+};
+
+const EDIT_SRC = [
+  ['  42', 'static inline u32 blend_lin(u32 dst, u32 src, u8 a)', 1],
+  ['  43', '{', 0],
+  ['  44', '    /* gamma correct: both operands are lifted into linear', 2],
+  ['  45', '       light, mixed, and written back through the s-curve. */', 2],
+  ['  46', '    u32 dr = LIN[(dst >> 16) & 0xFF];', 0],
+  ['  47', '    u32 dg = LIN[(dst >>  8) & 0xFF];', 0],
+  ['  48', '    u32 db = LIN[ dst        & 0xFF];', 0],
+  ['  49', '    u32 sr = LIN[(src >> 16) & 0xFF];', 0],
+  ['  50', '    u32 sg = LIN[(src >>  8) & 0xFF];', 0],
+  ['  51', '    u32 sb = LIN[ src        & 0xFF];', 0],
+  ['  52', '', 0],
+  ['  53', '    u32 r = dr + (((sr - dr) * a) >> 8);', 3],
+  ['  54', '    u32 g = dg + (((sg - dg) * a) >> 8);', 3],
+  ['  55', '    u32 b = db + (((sb - db) * a) >> 8);', 3],
+  ['  56', '', 0],
+  ['  57', '    return (SRGB[r] << 16) | (SRGB[g] << 8) | SRGB[b];', 0],
+  ['  58', '}', 0],
+  ['  59', '', 0],
+  ['  60', 'void fb_rrect_blend(int x, int y, int w, int h,', 1],
+  ['  61', '                    int rad, u32 col, u8 a)', 1],
+  ['  62', '{', 0],
+  ['  63', '    if (rad <= 0) { fb_fill_blend(x, y, w, h, col, a); return; }', 0],
+  ['  64', '    fb_fill_blend(x + rad, y, w - 2 * rad, h, col, a);', 0],
+  ['  65', '    fb_fill_blend(x, y + rad, rad, h - 2 * rad, col, a);', 0]
+];
+R.edit = () => {
+  const body = EDIT_SRC.map(l => {
+    const cls = l[2] === 1 ? 'em' : l[2] === 2 ? 'dim' : '';
+    const line = '<span class="dim">' + l[0] + '</span>  ' +
+      (cls ? '<span class="' + cls + '">' + esc(l[1]) + '</span>' : esc(l[1]));
+    return l[2] === 3 ? '<span class="sel">' + '<span class="dim">' + l[0] + '</span>  ' +
+      esc(l[1]) + '</span>' : line;
+  }).join('\n');
+  return '<div class="well" style="flex:1 1 auto"><span class="pre">' + body + '</span></div>' +
+    '<div class="row"><span class="t-cap">fb.c</span>' +
+    '<span class="t-data i3">68.4 KiB, 2 341 lines, read only</span>' +
+    '<span class="t-data i0 b spread">53:1 to 55:48</span>' +
+    '<span class="t-data i3">3 lines selected</span></div>';
+};
+
+R.log = () => {
+  const rows = DMESG.map((d, i) => TR([
+    { t: d[0], c: 'r i3' }, { t: esc(d[1]), c: 'b' }, { t: esc(d[2]), c: 'i0' }
+  ], 'data-pick="log" data-i="' + i + '"' + (S.logSel === i ? ' class="sel"' : '')));
+  return '<div class="scroll">' + TBL([{ h: 'time', w: '12%', r: 1 },
+    { h: 'sub', w: '12%' }, { h: 'record', w: '76%' }], rows) + '</div>' +
+    '<div class="hr2"></div>' +
+    '<div class="row"><span class="t-cap">ring</span>' +
+    '<span class="t-data i3">28 of 4096 records, 0 dropped</span>' +
+    '<span class="t-data i3 spread">' + S.logCount + ' unread</span>' +
+    '<span class="btn" data-act="markread"><span>mark read</span></span></div>';
+};
+
+R.hex = () => {
+  let out = '';
+  for (let r = 0; r < 14; r++) {
+    const a = HEXBASE + S.hexSel * 16 + r * 16;
+    let bytes = '', txt = '';
+    for (let c = 0; c < 16; c++) {
+      const v = hexByte(a + c);
+      bytes += hx(v, 2) + (c === 7 ? '  ' : ' ');
+      txt += (v >= 32 && v < 127) ? String.fromCharCode(v) : '.';
+    }
+    out += '<span class="dim">' + hx(a, 8) + '</span>  ' + bytes + ' <span class="dim">|</span>' +
+      esc(txt) + '<span class="dim">|</span>\n';
+  }
+  return '<div class="well" style="flex:1 1 auto"><span class="pre">' + out + '</span></div>' +
+    '<div class="row"><span class="t-cap">region</span>' +
+    '<span class="t-data i3">drag scratch, 128 MiB at 0xC0000000</span>' +
+    '<span class="t-data i0 b spread">' + hx(HEXBASE + S.hexSel * 16, 8) + '</span>' +
+    '<span class="btn" data-act="hexup"><span>page up</span></span>' +
+    '<span class="btn" data-act="hexdn"><span>page down</span></span></div>';
+};
+
+const CALC_KEYS = [['7', '8', '9', 'and'], ['4', '5', '6', 'or'], ['1', '2', '3', 'xor'],
+                   ['0', 'shl', 'shr', 'not'], ['C', '+', '-', '=']];
+R.calc = () => {
+  const v = Number(S.calcAcc) || 0;
+  let keys = '';
+  CALC_KEYS.forEach(row => {
+    keys += '<div class="row" style="gap:var(--sp-4)">' + row.map(k =>
+      '<span class="btn" data-act="calc" data-arg="' + k + '" ' +
+      'style="flex:1 1 0;justify-content:center;padding:0">' + esc(k) + '</span>').join('') + '</div>';
+  });
+  return '<div class="well" style="flex:none;text-align:right;padding:var(--sp-8)">' +
+    '<span class="t-disp-m">' + esc(S.calcAcc) + '</span></div>' +
+    '<div class="kvgrid" style="grid-template-columns:1fr">' +
+    kv('hex', '0x' + hx(v, 8)) + kv('oct', '0o' + v.toString(8)) +
+    kv('bin', v.toString(2).padStart(24, '0').replace(/(.{8})(?=.)/g, '$1 ')) +
+    kv('width', 'int64, no fpu in the drawing path') + '</div>' +
+    '<div class="stack" style="gap:var(--sp-4);flex:1 1 auto;justify-content:flex-end">' + keys + '</div>';
+};
+
+R.net = () => {
+  const socks = [[':22', '10.0.2.15', 'LISTEN', 'sshd', 'warn'],
+    [':80', '10.0.2.15', 'LISTEN', 'httpd', 'warn'],
+    [':443', '93.184.216.34', 'ESTAB', 'browser', 'ok'],
+    [':5353', '224.0.0.251', 'BOUND', 'mdns', 'warn'],
+    [':68', '10.0.2.2', 'ESTAB', 'dhcp', 'ok']]
+    .map(s => TR([s[0], s[1], { t: stat(s[2], s[4]) }, { t: esc(s[3]), c: 'i0' }]));
+  return '<div class="stack">' +
+    '<span class="t-cap">rx, KiB/s, 72 s</span>' + plotFlex(S.hist.net, 70, 64) +
+    '<div class="kvgrid pad-t">' +
+    kv('device', 'enp0s31f6') + kv('driver', 'e1000e') +
+    kv('mac', '52:54:00:12:34:56') + kv('mtu', '1500') +
+    kv('address', '10.0.2.15/24') + kv('gateway', '10.0.2.2') +
+    kv('link', '1000 Mb/s full') + kv('lease', '86 400 s') +
+    kv('rx', S.rx.toFixed(1) + ' KiB/s') + kv('tx', S.tx.toFixed(1) + ' KiB/s') +
+    kv('rx packets', (881204 + S.t * 37).toLocaleString('en-GB').replace(/,/g, ' ')) +
+    kv('errors', '0, 0 dropped') + '</div>' +
+    '<span class="t-cap pad-t">sockets</span>' +
+    TBL([{ h: 'port', w: '16%' }, { h: 'peer', w: '34%' }, { h: 'state', w: '26%' },
+      { h: 'task', w: '24%' }], socks) +
+    '</div>';
+};
+
+R.clock = () => {
+  const t = S.clock + S.t;
+  const zones = [['london', 0, 'GMT'], ['berlin', 1, 'CET'], ['new york', -5, 'EST'],
+    ['tokyo', 9, 'JST'], ['utc', 0, 'UTC']].map(z =>
+    TR([esc(z[0]), { t: hhmmss(t + z[1] * 3600), c: 'r i0' }, z[2],
+      { t: (z[1] >= 0 ? '+' : '') + z[1], c: 'r' }]));
+  const timers = [['build watch', '00:04:12', 'OK'], ['soak test', '02:41:55', 'OK'],
+    ['pomodoro', '00:00:00', 'FAIL']].map(x =>
+    TR([esc(x[0]), { t: x[1], c: 'r i0' }, { t: stat(x[2]) }]));
+  return '<div class="cols2"><div class="stack">' +
+    TBL([{ h: 'zone', w: '30%' }, { h: 'time', w: '30%', r: 1 }, { h: 'tz', w: '24%' },
+      { h: 'off', w: '16%', r: 1 }], zones) +
+    '<span class="t-cap pad-t">timers</span>' +
+    TBL([{ h: 'name', w: '46%' }, { h: 'elapsed', w: '30%', r: 1 }, { h: 'run', w: '24%' }], timers) +
+    '</div><div class="stack" style="flex:0 0 auto;padding-left:var(--sp-12);align-items:center">' +
+    '<div style="width:calc(112px * var(--ui));height:calc(112px * var(--ui))">' +
+    INSTR.clock() + '</div>' +
+    '<span class="t-disp-m">' + hhmmss(t) + '</span>' +
+    '<span class="t-cap">local</span>' +
+    '<div class="hr1" style="width:100%;margin:var(--sp-8) 0"></div>' +
+    '<div style="width:100%">' + kv('uptime', hhmmss(4211 + S.t)) +
+    kv('monotonic', (4211 + S.t) + '.004 s') + kv('tsc', '2904.001 MHz') +
+    kv('invariant', 'yes, no drift correction') + '</div>' +
+    '</div></div>';
+};
+
+R.sys = () => {
+  return '<div class="cols2"><div class="stack">' +
+    '<span class="t-disp">zlOS 0.3</span>' +
+    '<div class="row" style="margin:var(--sp-4) 0 var(--sp-8)">' +
+    '<span class="t-data">no host OS</span><span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data">no libc</span><span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data">no GPU stack</span></div>' +
+    kv('kernel', 'zlos 0.3 x86_64') + kv('language', 'zl, self hosting') +
+    kv('lines', '11 374 hand written') + kv('cpu', 'core i5-10210U, 8 threads') +
+    kv('tsc', '2904.001 MHz invariant') + kv('memory', '15.4 GiB, 62 % used') +
+    kv('framebuffer', '1600 x 1000 x 32') + kv('stride', '6400 B') +
+    kv('pixel clock', '241 690 kHz') + kv('refresh', '59.998 Hz') +
+    kv('text', '218 432 B') + kv('bss', '1 441 792 B') +
+    '<span class="t-cap pad-t">memory map, e820 as handed over</span>' +
+    '<div class="scroll">' + TBL([{ h: 'base', w: '34%' }, { h: 'len', w: '28%', r: 1 },
+      { h: 'kind', w: '38%' }],
+      [['0x00000000', '640 KiB', 'usable'], ['0x000A0000', '384 KiB', 'reserved'],
+       ['0x00100000', '3.0 GiB', 'usable'], ['0xC0000000', '128 MiB', 'drag scratch'],
+       ['0xC8000000', '32 MiB', 'HI_DOM'], ['0xD0000000', '8 MiB', 'gen9 bar0'],
+       ['0xE0000000', '256 MiB', 'gen9 stolen'], ['0xFEC00000', '4 KiB', 'io apic'],
+       ['0xFED00000', '1 KiB', 'hpet'], ['0xFEE00000', '4 KiB', 'local apic'],
+       ['0x100000000', '12.4 GiB', 'usable']]
+        .map(m => TR([m[0], { t: m[1], c: 'r' }, m[2]]))) + '</div>' +
+    '</div><div class="stack">' +
+    '<span class="t-cap">pci topology</span>' +
+    TBL([{ h: 'slot', w: '26%' }, { h: 'id', w: '30%' }, { h: 'drv', w: '20%' },
+      { h: 'state', w: '24%' }],
+      [['00:02.0', '8086:9B41', 'intel', 'OK'], ['00:14.0', '8086:9DED', 'xhci', 'OK'],
+       ['00:1f.6', '8086:15BE', 'e1000e', 'OK'], ['02:00.0', '144D:A80A', 'nvme', 'WARN'],
+       ['00:1f.3', '8086:02C8', 'none', 'FAIL']]
+        .map(p => TR([p[0], p[1], { t: esc(p[2]), c: 'i0' }, { t: stat(p[3]) }]))) +
+    '<span class="t-cap pad-t">subsystems</span>' +
+    kv('display', 'gen9 modeset') + kv('input', 'xHCI plus HID') +
+    kv('storage', 'zlfs generation 3') + kv('text', 'subpixel, 5 tap FIR') +
+    kv('blend', 'linear light') + kv('gradients', 'ordered dither') +
+    '<span class="t-cap pad-t">gates</span>' +
+    TBL([{ h: 'gate', w: '46%' }, { h: 'secs', w: '20%', r: 1 }, { h: 'result', w: '34%' }],
+      [['build', '58', 'OK'], ['verify raw', '141', 'OK'], ['verify efi', '63', 'OK'],
+       ['hosttest', '9', 'OK'], ['wguard', '2', 'OK'], ['memmap guard', '3', 'WARN']]
+        .map(g => TR([esc(g[0]), { t: g[1], c: 'r' }, { t: stat(g[2]) }]))) +
+    '<div class="well pad-t" style="flex:none"><span class="pre">' +
+    'zlOS 0.3 x86_64\nlink 12:04, 11 objects\n218 432 B text\n' +
+    'no host OS\nno libc\nno GPU driver stack\nself hosting, generation 3</span></div>' +
+    '</div></div>';
+};
+
+R.du = () => {
+  const dirs = [['kernel/', 612.4, 41], ['kernel/hosttest/', 188.0, 12],
+    ['kernel/docs/', 96.2, 7], ['compiler/', 141.8, 9], ['editors/', 42.1, 3],
+    ['docs/', 214.9, 21], ['tools/', 18.6, 4]];
+  const max = 620;
+  const rows = dirs.map(d => TR([
+    { t: esc(d[0]), c: 'i0' }, { t: d[1].toFixed(1) + ' KiB', c: 'r' },
+    { t: String(d[2]), c: 'r' },
+    { t: '<span class="track" style="display:block"><i style="width:' +
+        ((d[1] / max) * 100).toFixed(1) + '%"></i></span>' }
+  ]));
+  return '<div class="cols2"><div class="stack">' +
+    TBL([{ h: 'path', w: '34%' }, { h: 'size', w: '20%', r: 1 }, { h: 'n', w: '8%', r: 1 },
+      { h: 'share', w: '38%' }], rows) +
+    '<span class="t-cap pad-t">by extension</span>' +
+    TBL([{ h: 'ext', w: '26%' }, { h: 'files', w: '20%', r: 1 }, { h: 'bytes', w: '54%', r: 1 }],
+      [['.c', 34, '742 118'], ['.h', 21, '188 402'], ['.zl', 9, '141 990'],
+       ['.md', 24, '392 447'], ['.sh', 17, '38 210'], ['.py', 8, '61 004']]
+        .map(e => TR([esc(e[0]), { t: String(e[1]), c: 'r' }, { t: e[2], c: 'r' }]))) +
+    '</div><div class="stack" style="flex:0 0 auto;width:calc(180px * var(--ui));align-items:center">' +
+    '<div style="width:calc(140px * var(--ui));height:calc(140px * var(--ui))">' + INSTR.du() + '</div>' +
+    '<span class="t-cap">volume in use</span>' +
+    '<div style="width:100%" class="pad-t">' +
+    kv('volume', '/dev/nvme0n1p2') + kv('filesystem', 'zlfs generation 3') +
+    kv('capacity', '2.00 GiB') + kv('used', '1.44 GiB') + kv('free', '588.1 MiB') +
+    kv('inodes', '2 048, 431 used') + kv('orphans', '0') +
+    kv('power cycles', '3, all survived') + '</div>' +
+    '<div class="row pad-t"><span class="btn" data-act="fsck"><span>run fsck</span></span></div>' +
+    '</div></div>';
+};
+
+R.proc = () => {
+  const rows = PROCS.map((p, i) => TR([
+    { t: String(p[0]), c: 'r' }, { t: esc(p[1]), c: 'i0' },
+    { t: stat(p[2] === 'R' ? 'RUN' : p[2] === 'S' ? 'SLEEP' : 'IO WAIT',
+              p[2] === 'R' ? 'ok' : p[2] === 'S' ? 'warn' : 'fail') },
+    { t: p[3].toFixed(1), c: 'r' }, { t: p[4], c: 'r' }, { t: p[5], c: 'r' }
+  ], 'data-pick="proc" data-i="' + i + '"' + (S.procSel === i ? ' class="sel"' : '')));
+  const p = PROCS[S.procSel];
+  return '<div class="scroll">' + TBL([{ h: 'pid', w: '10%', r: 1 }, { h: 'name', w: '24%' },
+    { h: 'state', w: '20%' }, { h: 'cpu', w: '11%', r: 1 }, { h: 'rss', w: '18%', r: 1 },
+    { h: 'time', w: '17%', r: 1 }], rows) + '</div>' +
+    '<div class="hr2"></div>' +
+    '<div class="row"><span class="t-cap">selected</span>' +
+    '<span class="t-data i0 b">' + esc(p[1]) + '</span>' +
+    '<span class="t-data i3">pid ' + p[0] + ', rss ' + p[4] + ', ' + p[3].toFixed(1) + ' % cpu</span>' +
+    '<span class="t-data i3 spread">filled run, half sleep, hollow uninterruptible</span></div>';
+};
+
+R.regs = () => {
+  const regs = [
+    ['PIPE_LINK_M1(A)', '0x60040', '0x0080B4D3'], ['PIPE_LINK_N1(A)', '0x60044', '0x00800000'],
+    ['PIPE_SRCSZ(A)', '0x6001C', '0x077F0437'], ['PIPE_CONF(A)', '0x70008', '0x80000000'],
+    ['PLANE_CTL(A,1)', '0x70180', '0xD0000400'], ['PLANE_STRIDE(A,1)', '0x70188', '0x00000064'],
+    ['PLANE_SURF(A,1)', '0x7019C', '0x01000000'], ['DPLL_CFGCR0(2)', '0x6C000', '0x01C001A5'],
+    ['DPLL_CFGCR1(2)', '0x6C004', '0x00000E42'], ['DPCLKA_CFGCR0', '0x6C200', '0x00040000'],
+    ['TRANS_DDI_FUNC_CTL(A)', '0x60400', '0x81000000'], ['TRANS_HTOTAL(A)', '0x60000', '0x0897077F'],
+    ['TRANS_VTOTAL(A)', '0x6000C', '0x046A0437'], ['PP_CONTROL', '0xC7204', '0x00000067'],
+    ['PP_STATUS', '0xC7200', '0x80000008'], ['SBI_CTL_STAT', '0xC6004', '0x00000000']
+  ].map(r => TR([{ t: esc(r[0]), c: 'i0' }, { t: r[1], c: 'r' }, { t: r[2], c: 'r b' }]));
+  return '<div class="scroll">' + TBL([{ h: 'register', w: '48%' }, { h: 'offset', w: '20%', r: 1 },
+    { h: 'value', w: '32%', r: 1 }], regs) + '</div>' +
+    '<div class="hr2"></div>' +
+    '<div class="stack">' +
+    '<div class="row"><span class="t-cap">derived</span>' +
+    '<span class="t-data i0 b spread">241 690 kHz, 59.998 Hz</span></div>' +
+    '<div class="kvgrid">' + kv('link M', '0x80B4D3') + kv('link N', '0x800000') +
+    kv('mode', '1920 x 1080') + kv('lanes', '4 at 2.7 Gb/s') +
+    kv('T12 honoured', '512 ms since blank') + kv('write path', 'lt_armed, gated') + '</div>' +
+    '<div class="row"><span class="btn prim" data-act="regread"><span>read again</span></span>' +
+    '<span class="btn" data-act="regdump"><span>dump to log</span></span>' +
+    '<span class="t-data i3 spread">read only, no write is issued from this sheet</span></div>' +
+    '</div>';
+};
+
+/* ---------------------------------------------------- settings sheet -- */
+const UI_STEPS = [0.9, 1.0, 1.1, 1.25];
+const SET_TABS = ['chrome', 'metrics', 'stock', 'ladder'];
+function sliderHTML(name, steps, val) {
+  const i = Math.max(0, steps.indexOf(val));
+  const pct = steps.length === 1 ? 0 : i / (steps.length - 1);
+  const ticks = steps.map((s, k) => '<span class="tick" style="left:' +
+    (steps.length === 1 ? 0 : (k / (steps.length - 1)) * 100) + '%"></span>').join('');
+  return '<span class="slider" data-slider="' + name + '">' +
+    '<span class="st2"></span>' +
+    '<span class="sf" style="width:calc(' + (pct * 100) + '% - 2px)"></span>' +
+    '<span class="sh" style="left:calc(' + (pct * 100) + '% - ' + (pct * 8) + 'px)"></span>' +
+    ticks + '</span>';
+}
+function toggleRow(label, key, note) {
+  return '<div class="ctlrow"><span class="t-cap">' + label + '</span>' +
+    (note ? '<span class="t-data i3">' + note + '</span>' : '') +
+    '<span class="right"><span class="t-data i0 b">' + (S[key] ? 'on' : 'off') + '</span>' +
+    '<span class="sw' + (S[key] ? ' on' : '') + '" data-toggle="' + key + '"><i></i></span>' +
+    '</span></div>';
+}
+function setChrome() {
+  return toggleRow('grip hatch', 'hatch', 'the focus signal: 4 lines arrive on the focused title') +
+    toggleRow('resize bar', 'resizeBar', '12 dp, three sections, sections vanish when unfocused') +
+    toggleRow('window shelf', 'shelfStrip', '64 dp staging strip on file bearing windows') +
+    toggleRow('desk texture', 'texture', '3 px machined hatch, measured at ' +
+      tokRatio('--zs-desk-tex', '--zs-desk') + ':1 in this finish') +
+    toggleRow('live dock cells', 'dockLive', 'off makes every cell a name plate, which is the banned launcher') +
+    toggleRow('menu follows focus', 'menuFollows', 'off pins the column to the shell') +
+    toggleRow('caret blink', 'blink', '1.06 s, steps(1), no easing anywhere in this design') +
+    '<div class="row pad-t">' +
+    '<span class="btn prim" data-act="writeh"><span>write design.h</span></span>' +
+    '<span class="btn" data-act="revert"><span>revert</span></span>' +
+    '<span class="t-data i3 spread">every switch above changes what is on screen now</span></div>' +
+    '<div class="hr2 pad-t"></div>' +
+    '<div class="row pad-t"><span class="t-cap">the focus signal, four parts, none of them colour</span></div>' +
+    '<div class="row" style="align-items:stretch;gap:var(--sp-16)">' +
+    ['foc', ''].map(k =>
+      '<div style="flex:1 1 0;min-width:0;border:2px solid var(--zs-rule-2);' +
+      (k ? '' : 'box-shadow:inset 0 0 0 1px var(--zs-sheet);') + 'background:var(--zs-sheet)">' +
+      '<div class="title" style="cursor:default"><span class="tbtn cl">' + G_CLOSE + '</span>' +
+      '<span class="tt"><span class="hatch" style="opacity:' + (k ? 1 : 0) + '"></span>' +
+      '<span class="nm" style="' + (k ? 'color:var(--zs-ink);font-weight:700' : '') + '">' +
+      (k ? 'focused' : 'not focused') + '</span>' +
+      '<span class="hatch" style="opacity:' + (k ? 1 : 0) + '"></span></span>' +
+      '<span class="tbtn mn">' + G_MIN + '</span></div>' +
+      '<div style="padding:var(--sp-8)"><span class="t-data i3">' +
+      (k ? 'hatch present, frame 2 px, title bold, resize bar sectioned, and the ' +
+           'menu column carries this window commands' :
+           'hatch absent, frame reads 1 px, title regular, resize bar plain') +
+      '</span></div>' +
+      '<div class="resize" style="cursor:default">' +
+      '<span class="rs" style="' + (k ? 'border-right:1px solid var(--zs-rule-2)' : '') + '"></span>' +
+      '<span class="rm"></span>' +
+      '<span class="rs rr" style="' + (k ? 'border-left:1px solid var(--zs-rule-2)' : '') + '"></span>' +
+      '</div></div>').join('') + '</div>' +
+    '<div class="hr2 pad-t"></div>' +
+    '<div class="row pad-t"><span class="t-cap">deferred for v1</span></div>' +
+    '<div class="well"><span class="pre">' +
+    'TEAR OFF MENUS. The menu column can be torn off and left on the desk in\n' +
+    'the full direction. It is dropped here on purpose: it is the only thing\n' +
+    'in this family that needs retained per widget position and open state\n' +
+    'inside an immediate mode ui.c, and the column following focus is what\n' +
+    'carries the focus signal, which costs nothing. Dock cells are drawn BY\n' +
+    'THE SHELL from a per app struct, not by a backgrounded application, so\n' +
+    'no new lifecycle contract is needed either.</span></div>';
+}
+function setMetrics() {
+  return '<div class="ctlrow"><span class="t-cap">ui scale</span>' +
+    '<span class="t-data i3">one q8 multiplier, no second type ramp</span>' +
+    '<span class="right"><span class="t-data i0 b">' + S.ui.toFixed(2) + ', q8 ' +
+    Math.round(S.ui * 256) + '</span>' + sliderHTML('ui', UI_STEPS, S.ui) + '</span></div>' +
+    '<div class="kvgrid pad-t">' +
+    kv('menu column', Math.round(180 * S.ui) + ' px') +
+    kv('dock cell', Math.round(64 * S.ui) + ' px square') +
+    kv('title bar', Math.round(26 * S.ui) + ' px') +
+    kv('menu row', Math.round(26 * S.ui) + ' px') +
+    kv('window shelf', Math.round(64 * S.ui) + ' px') +
+    kv('resize bar', Math.round(12 * S.ui) + ' px') +
+    kv('frame', '2 px, both states') +
+    kv('rule', '1 px, one weight') +
+    kv('radius', '0 px, every corner') +
+    kv('spacing', '4 8 12 16 24 only') +
+    kv('permanent chrome', Math.round(244 * S.ui) + ' px across two edges') +
+    kv('desk width', Math.round(1600 - 244 * S.ui) + ' px at 1600') + '</div>' +
+    '<div class="row pad-t"><span class="t-cap">type register</span>' +
+    '<span class="t-data i3 spread">three sizes, one per baked atlas, no fourth</span></div>' +
+    '<div class="well"><div class="stack">' +
+    '<div class="row"><span class="t-data" style="width:calc(120px * var(--ui))">8x16 data</span>' +
+    '<span class="t-data">fb_text_role, mono, tabular</span></div>' +
+    '<div class="row"><span class="t-data" style="width:calc(120px * var(--ui))">16x32 body</span>' +
+    '<span class="t-body">the sheet is set in this</span></div>' +
+    '<div class="row"><span class="t-data" style="width:calc(120px * var(--ui))">24x48 display</span>' +
+    '<span class="t-disp">zlOS</span></div>' +
+    '</div></div>' +
+    '<div class="row pad-t"><span class="t-cap">weakness, stated</span></div>' +
+    '<div class="well"><span class="pre">' +
+    '180 dp menu plus 64 dp dock is 244 dp of permanent horizontal budget,\n' +
+    'split across two edges. That is comparable to PLATE rail but harder to\n' +
+    'collapse on a narrow panel, and the menu can end up 1400 px from the\n' +
+    'window it controls. Both are real and neither is fixed here.</span></div>';
+}
+function setStock() {
+  const dk = S.theme === 'dark';
+  return '<div class="ctlrow"><span class="t-cap">stock</span>' +
+    '<span class="t-data i3">one role set, two primitive ladders</span>' +
+    '<span class="right"><span class="seg" data-seg="stock" style="width:calc(200px * var(--ui))">' +
+    '<span class="' + (dk ? '' : 'on') + '" data-arg="0">bare</span>' +
+    '<span class="' + (dk ? 'on' : '') + '" data-arg="1">painted</span>' +
+    '</span></span></div>' +
+    '<div class="row pad-t"><span class="t-cap">the ladder law</span>' +
+    '<span class="t-data i3 spread">holds in both finishes, measured below</span></div>' +
+    '<div class="well"><span class="pre">' +
+    'L1  the desk is the MIDDLE value          L* ' + tokLstar('--zs-desk') + '\n' +
+    'L2  the window sheet is the EXTREME       L* ' + tokLstar('--zs-sheet') + '\n' +
+    'L3  the well is ONE RUNG FURTHER          L* ' + tokLstar('--zs-well') + '\n' +
+    'L4  chrome is ONE RUNG LIGHTER than desk  L* ' + tokLstar('--zs-chrome') + '</span></div>' +
+    '<div class="row pad-t"><span class="t-cap">the one saturated ink</span>' +
+    '<span class="t-data i3 spread">selection, and nothing else</span></div>' +
+    '<div class="swatchrow">' +
+    '<div style="width:calc(120px * var(--ui))">' +
+    '<span class="swatch on" style="background:var(--zs-sel);width:100%"></span>' +
+    '<span class="t-cap" style="display:block;margin-top:3px">' + tokHex('--zs-sel') + '</span></div>' +
+    '<div style="flex:1 1 auto">' +
+    '<span class="swatch" style="background:var(--zs-sel);width:100%;color:var(--zs-sel-ink);' +
+    'display:flex;align-items:center;justify-content:center;font-family:var(--mono);' +
+    'font-size:var(--fs-data)">knocked out text on the selection ink</span>' +
+    '<span class="t-cap" style="display:block;margin-top:3px">' +
+    tokRatio('--zs-sel-ink', '--zs-sel') + ':1 both directions</span></div></div>' +
+    '<div class="kvgrid">' + kv('selected text', 'yes') + kv('selected file row', 'yes') +
+    kv('active menu row', 'yes') + kv('current workspace', 'yes, it is a selection') +
+    kv('focus', 'no, PLATE owns knockout') + kv('primary action', 'no, 2 px frame instead') +
+    kv('status', 'no, shape and weight instead') + kv('links, hover, badges', 'no') + '</div>' +
+    '<div class="row pad-t"><span class="t-cap">status without colour</span></div>' +
+    '<div class="row" style="gap:var(--sp-24)">' + stat('OK') + stat('WARN') + stat('FAIL') +
+    '<span class="t-data i3 spread">filled, half, hollow, plus one weight step</span></div>';
+}
+const LADDER = [
+  ['--zs-desk', 'THE DESK. the middle value, the identity', null],
+  ['--zs-desk-tex', 'machined hatch on the desk', '--zs-desk'],
+  ['--zs-chrome', 'title bar, dock cell, menu row', '--zs-desk'],
+  ['--zs-sheet', 'THE WINDOW. the extreme value', '--zs-desk'],
+  ['--zs-well', 'log, terminal, track, plot, one rung further', '--zs-sheet'],
+  ['--zs-ink', 'focused title, values, the 2 px mark', '--zs-sheet'],
+  ['--zs-ink-1', 'body ink, all mono data, all rows', '--zs-sheet'],
+  ['--zs-ink-3', 'captions, keys, unfocused title, on CHROME', '--zs-chrome'],
+  ['--zs-mute', 'NON TEXT ONLY, disabled rows', '--zs-sheet'],
+  ['--zs-grip', 'the 4 line focus hatch, texture not text', '--zs-chrome'],
+  ['--zs-rule-1', 'the 1 px rule, row and cell dividers', '--zs-sheet'],
+  ['--zs-rule-2', 'the 2 px frame, every window, both states', '--zs-desk'],
+  ['--zs-sel', 'THE ONE SATURATED INK, selection only', '--zs-sheet'],
+  ['--zs-sel-ink', 'knocked out of the selection', '--zs-sel'],
+  ['--zs-mark', 'a solid mark that IS the datum', '--zs-well'],
+  ['--zs-mark-bulk', 'a large tonal area, meter and plot fill', '--zs-well'],
+  ['--zs-knob', 'the slider knob, a machined block', '--zs-well'],
+  ['--zs-knob-edge', 'the grip cut into the knob face', '--zs-knob']
+];
+function setLadder() {
+  const rows = LADDER.map(t => {
+    const ratio = t[2] ? tokRatio(t[0], t[2]) : '--';
+    const okBody = t[2] && Number(ratio) >= 4.5;
+    const okLarge = t[2] && Number(ratio) >= 3;
+    return TR([
+      { t: esc(t[0].replace('--zs-', 'ZS_').toUpperCase().replace(/-/g, '_')), c: 'i0' },
+      { t: tokHex(t[0]), c: 'r' },
+      { t: esc(t[1]), c: 'i3' },
+      { t: t[2] ? ratio + ':1' : '--', c: 'r b' },
+      { t: t[2] ? stat(okBody ? 'OK' : okLarge ? 'WARN' : 'FAIL') : '' }
+    ]);
+  });
+  return '<div class="row"><span class="t-cap">' +
+    (S.theme === 'dark' ? 'painted finish' : 'bare finish') + '</span>' +
+    '<span class="t-data i3">18 tokens, every name present in both finishes</span>' +
+    '<span class="t-data i3 spread">read off the live custom properties, not typed</span></div>' +
+    '<div class="scroll">' + TBL([{ h: 'token', w: '26%' }, { h: 'hex', w: '13%', r: 1 },
+      { h: 'role', w: '35%' }, { h: 'against ground', w: '13%', r: 1 },
+      { h: 'wcag', w: '13%' }], rows) + '</div>' +
+    '<div class="hr2"></div>' +
+    '<div class="kvgrid">' +
+    kv('ink on sheet', tokRatio('--zs-ink', '--zs-sheet') + ':1') +
+    kv('ink on the bare desk', tokRatio('--zs-ink', '--zs-desk') + ':1') +
+    kv('ink3 on chrome', tokRatio('--zs-ink-3', '--zs-chrome') + ':1') +
+    kv('sel on sheet', tokRatio('--zs-sel', '--zs-sheet') + ':1') +
+    kv('sheet to desk', tokRatio('--zs-sheet', '--zs-desk') + ':1') +
+    kv('chrome to desk', tokRatio('--zs-chrome', '--zs-desk') + ':1') +
+    kv('2 px frame on desk', tokRatio('--zs-rule-2', '--zs-desk') + ':1') +
+    kv('grip on chrome', tokRatio('--zs-grip', '--zs-chrome') + ':1') + '</div>' +
+    '<div class="row pad-t"><span class="t-data i3">' +
+    'WARN on a rule or a texture is correct: a hatch at 2.4:1 and a desk finish at 1.1:1 ' +
+    'are deliberately below the text floor. Every row that carries TEXT is OK.</span></div>';
+}
+R.set = () => {
+  const tabs = '<div class="tabs">' + SET_TABS.map((t, i) =>
+    '<span class="' + (S.setTab === i ? 'on' : '') + '" data-act="tab" data-arg="' + i + '">' +
+    t + '</span>').join('') + '</div>';
+  const body = [setChrome, setMetrics, setStock, setLadder][S.setTab]();
+  return tabs + '<div class="stack scroll" style="padding-top:var(--sp-8)">' + body + '</div>';
+};
+
+/* ====================================================== window mgmt === */
+let ZTOP = 10;
+/* THE SHELF IS PER WINDOW. Two windows that both carry one are two
+   different staging areas, so they hold different things: FILES stages
+   what you dragged out of the listing, EDITOR stages what it has open. */
+const SHELVES = {
+  files: [['fb.c', '68.4 KiB'], ['intel.c', '112.9 KiB'], ['design.h', '18.9 KiB'],
+          ['wm.c', '46.0 KiB'], ['memmap.h', '6.4 KiB']],
+  edit:  [['fb.c', '2 341 ln'], ['ui.c', '1 108 ln'], ['uikit.c', '1 702 ln'],
+          ['wm.c', '1 486 ln']]
+};
+
+function deskRect() {
+  const d = $('#desk').getBoundingClientRect();
+  return { w: d.width, h: d.height };
+}
+function openWin(id, pos, ws) {
+  const a = APP[id];
+  if (S.wins[id]) {
+    const w = S.wins[id];
+    w.min = false; w.ws = ws || S.ws;
+    focusWin(id); layout(); return;
+  }
+  const d = deskRect();
+  const w = {
+    id: id, ws: ws || S.ws, min: false, max: false, z: ++ZTOP,
+    w: Math.min(a.w, d.w - 24), h: Math.min(a.h, d.h - 24),
+    x: pos ? pos[0] : 24 + (Object.keys(S.wins).length % 5) * 26,
+    y: pos ? pos[1] : 20 + (Object.keys(S.wins).length % 5) * 22
+  };
+  if (pos && pos.length === 4) { w.w = pos[2]; w.h = pos[3]; }
+  S.wins[id] = w;
+  buildWin(id);
+  focusWin(id);
+  layout();
+}
+function closeWin(id) {
+  const e = $('.win[data-id="' + id + '"]');
+  if (e) e.remove();
+  delete S.wins[id];
+  if (S.focus === id) {
+    const top = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min).sort((a, b) => b.z - a.z);
+    S.focus = top.length ? top[0].id : null;
+  }
+  layout(); renderDock(); renderMenu();
+}
+function focusWin(id) {
+  if (!S.wins[id]) return;
+  S.wins[id].z = ++ZTOP;
+  S.wins[id].min = false;
+  S.focus = id;
+  layout(); renderDock(); renderMenu();
+}
+function minWin(id) {
+  const w = S.wins[id]; if (!w) return;
+  w.min = true;
+  if (S.focus === id) {
+    const top = Object.values(S.wins).filter(x => x.ws === S.ws && !x.min).sort((a, b) => b.z - a.z);
+    S.focus = top.length ? top[0].id : null;
+  }
+  layout(); renderDock(); renderMenu();
+  toast('miniaturised', APP[id].name + ' is a tile on the desk, not an entry in a bar');
+}
+function maxWin(id) {
+  const w = S.wins[id]; if (!w) return;
+  const d = deskRect();
+  if (w.max) {
+    w.max = false; w.x = w.px; w.y = w.py; w.w = w.pw; w.h = w.ph;
+  } else {
+    w.max = true; w.px = w.x; w.py = w.y; w.pw = w.w; w.ph = w.h;
+    w.x = 0; w.y = 0; w.w = d.w; w.h = d.h;
+  }
+  focusWin(id);
+}
+function buildWin(id) {
+  const a = APP[id];
+  const el = document.createElement('div');
+  el.className = 'win';
+  el.setAttribute('data-id', id);
+  el.innerHTML =
+    '<div class="title">' +
+      '<span class="tbtn cl" data-act="close" title="close">' + G_CLOSE + '</span>' +
+      '<span class="tt"><span class="hatch"></span>' +
+      '<span class="nm">' + esc(a.name) + '</span><span class="hatch"></span></span>' +
+      '<span class="tbtn mn" data-act="min" title="miniaturise">' + G_MIN + '</span>' +
+    '</div>' +
+    (a.shelf ? '<div class="wshelf"></div>' : '') +
+    '<div class="wbody"></div>' +
+    '<div class="resize"><span class="rs"></span><span class="rm"></span>' +
+    '<span class="rs rr"></span></div>';
+  $('#wins').appendChild(el);
+  redraw(id);
+}
+function shelfHTML(id) {
+  const list = SHELVES[id] || SHELVES.files;
+  const sel = S.docSel % list.length;
+  return list.map((d, i) =>
+    '<span class="shitem' + (sel === i ? ' on' : '') + '" data-shelf="' + i + '">' +
+    '<span class="sn">' + esc(d[0]) + '</span><span class="sz">' + d[1] + '</span>' +
+    '<span class="sz">' + (i === sel ? (id === 'edit' ? 'front' : 'open') : 'staged') +
+    '</span></span>').join('') +
+    '<span class="shdrop">' + (id === 'edit' ? 'open documents' : 'drop a file here') + '</span>';
+}
+function redraw(id) {
+  const el = $('.win[data-id="' + id + '"]');
+  if (!el) return;
+  const b = $('.wbody', el);
+  if (b && R[id]) b.innerHTML = R[id]();
+  const sh = $('.wshelf', el);
+  if (sh) { sh.innerHTML = shelfHTML(id); sh.style.display = S.shelfStrip ? '' : 'none'; }
+  const rz = $('.resize', el);
+  if (rz) rz.style.display = S.resizeBar ? '' : 'none';
+}
+function redrawAll() { Object.keys(S.wins).forEach(redraw); }
+function layout() {
+  const d = deskRect();
+  Object.values(S.wins).forEach(w => {
+    const el = $('.win[data-id="' + w.id + '"]');
+    if (!el) return;
+    const vis = w.ws === S.ws && !w.min;
+    el.style.display = vis ? '' : 'none';
+    if (w.max) { w.x = 0; w.y = 0; w.w = d.w; w.h = d.h; }
+    w.x = clamp(w.x, -(w.w - 90), d.w - 90);
+    w.y = clamp(w.y, 0, Math.max(0, d.h - 30));
+    el.style.left = Math.round(w.x) + 'px';
+    el.style.top = Math.round(w.y) + 'px';
+    el.style.width = Math.round(w.w) + 'px';
+    el.style.height = Math.round(w.h) + 'px';
+    el.style.zIndex = w.z;
+    el.classList.toggle('foc', S.focus === w.id);
+  });
+  renderIcons();
+}
+function renderIcons() {
+  const mins = Object.values(S.wins).filter(w => w.min && w.ws === S.ws)
+    .sort((a, b) => a.id.localeCompare(b.id));
+  $('#icons').innerHTML = mins.map(w => {
+    const a = APP[w.id];
+    const inner = (a.cell && S.dockLive && INSTR[a.cell]) ? INSTR[a.cell]() : DEAD;
+    return '<div class="mini" data-restore="' + w.id + '">' +
+      '<span class="cbody">' + inner + '</span><span class="cn">' + esc(a.short) + '</span></div>';
+  }).join('');
+}
+
+/* ================================================== THE MENU COLUMN === */
+function renderMenu() {
+  const id = (S.menuFollows && S.focus && MENUS[S.focus]) ? S.focus
+           : (!S.menuFollows && MENUS.sh ? 'sh' : 'none');
+  const m = MENUS[id] || MENUS.none;
+  $('#mtitle').textContent = m[0];
+  $('#msub').textContent = m[1];
+  const sel = S.menuSel[id];
+  let out = '', ri = 0;
+  m[2].forEach(row => {
+    if (row[0] === 's') { out += '<div class="msec"><span class="t-cap">' + esc(row[1]) + '</span></div>'; return; }
+    const dis = row[3] === 'dis';
+    const on = !dis && sel === ri;
+    out += '<div class="mrow' + (on ? ' on' : '') + (dis ? ' dis' : '') +
+      '" data-mrow="' + ri + '" data-cmd="' + esc(row[3] || '') + '">' +
+      '<span class="lb">' + esc(row[1]) + '</span>' +
+      '<span class="ky">' + esc(row[2] || '') + '</span></div>';
+    ri++;
+  });
+  /* THE WINDOW LIST lives at the foot of the same column, so the column is
+     never a field of empty chrome and the focused row is a second reading
+     of the focus signal. Stateless: it is derived from S.wins each frame,
+     which is exactly what an immediate mode ui.c can do. */
+  const open = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min)
+    .sort((a, b) => b.z - a.z);
+  const mini = Object.values(S.wins).filter(w => w.ws === S.ws && w.min);
+  out += '<div class="msec"><span class="t-cap">windows</span></div>';
+  if (!open.length && !mini.length) {
+    out += '<div class="mrow dis"><span class="lb">none on this workspace</span></div>';
+  }
+  open.forEach(w => {
+    out += '<div class="mrow' + (S.focus === w.id ? ' on' : '') +
+      '" data-cmd="focus:' + w.id + '"><span class="lb">' + esc(APP[w.id].name) +
+      '</span><span class="sub">' + (S.focus === w.id ? 'front' : 'open') + '</span></div>';
+  });
+  mini.forEach(w => {
+    out += '<div class="mrow" data-cmd="focus:' + w.id + '"><span class="lb">' +
+      esc(APP[w.id].name) + '</span><span class="sub">tile</span></div>';
+  });
+  $('#mrows').innerHTML = out;
+  $('#mfoot').textContent = S.focus
+    ? 'focus: ' + APP[S.focus].name + ', ' + APP[S.focus].sub
+    : 'right click the desk for workspaces';
+  $('#menu')._id = id;
+}
+
+/* ============================================================ dock === */
+function renderDock() {
+  const cells = DOCK_ORDER.map(id => {
+    const a = APP[id], w = S.wins[id];
+    const run = !!w && !w.min;
+    const foc = S.focus === id;
+    const inner = (a.cell && S.dockLive && INSTR[a.cell]) ? INSTR[a.cell]() : DEAD;
+    return '<div class="cell' + (run ? ' run' : '') + (foc ? ' foc' : '') +
+      '" data-dock="' + id + '" title="' + esc(a.name) + '">' +
+      '<span class="cbody">' + inner + '</span>' +
+      '<span class="cn">' + esc(a.short) + '</span></div>';
+  }).join('');
+  $('#dockcells').innerHTML = cells;
+  /* the numbered 2x2. Two workspaces exist, so 03 and 04 are drawn as
+     empty cells rather than omitted: the switcher keeps its shape. The
+     small figure is that workspace's window count. */
+  $('#wscell').innerHTML = [1, 2, 3, 4].map(n => {
+    const live = n <= 2;
+    const c = Object.values(S.wins).filter(w => w.ws === n && !w.min).length;
+    return '<span class="wsq' + (S.ws === n ? ' on' : '') + (live ? '' : ' dis') +
+      (live && c ? ' occ' : '') + '"' +
+      (live ? ' data-ws="' + n + '"' : '') + '>' + n + '</span>';
+  }).join('');
+}
+
+/* ======================================================== overview === */
+function overviewOn() { return $('#overview').classList.contains('on'); }
+function showOverview(on) {
+  $('#overview').classList.toggle('on', on);
+  if (!on) return;
+  const d = deskRect();
+  let fields = '';
+  [1, 2].forEach(ws => {
+    const wins = Object.values(S.wins).filter(w => w.ws === ws && !w.min).sort((a, b) => a.z - b.z);
+    const mins = Object.values(S.wins).filter(w => w.ws === ws && w.min);
+    let canvas = '';
+    wins.forEach(w => {
+      const sx = 100 / d.w, sy = 100 / d.h;
+      canvas += '<div class="ovwin' + (S.focus === w.id && ws === S.ws ? ' foc' : '') +
+        '" data-ovpick="' + w.id + '" data-ovws="' + ws + '" style="left:' +
+        (w.x * sx).toFixed(2) + '%;top:' + (w.y * sy).toFixed(2) + '%;width:' +
+        (w.w * sx).toFixed(2) + '%;height:' + (w.h * sy).toFixed(2) + '%">' +
+        '<div class="ovt"><span>' + esc(APP[w.id].name) + '</span></div>' +
+        '<div class="ovlines"><i style="width:82%"></i><i style="width:64%"></i>' +
+        '<i style="width:91%"></i><i style="width:47%"></i><i style="width:73%"></i></div></div>';
+    });
+    fields += '<div class="ovfield' + (S.ws === ws ? ' on' : '') + '" data-ovws="' + ws + '">' +
+      '<div class="ovtitle"><span class="t-cap">workspace ' + pad2(ws) + '</span>' +
+      '<span class="t-data i3 spread">' + wins.length + ' open, ' + mins.length + ' miniaturised</span></div>' +
+      '<div class="ovcanvas">' + canvas + '</div></div>';
+  });
+  $('#overview').innerHTML =
+    '<div class="ovhead"><span class="t-disp">overview</span>' +
+    '<span class="t-data i3">two workspaces, the menu column belongs to whichever window you pick</span>' +
+    '<span class="t-data i3 spread">esc to dismiss</span></div>' +
+    '<div class="ovfields">' + fields + '</div>';
+}
+
+/* ========================================================= palette === */
+const PCMDS = APPS.map(a => ({ n: 'open ' + a.name, d: a.sub, f: () => openWin(a.id) })).concat([
+  { n: 'overview', d: 'ctrl space', f: () => setScene('overview') },
+  { n: 'lock session', d: 'ctrl l', f: () => setScene('lock') },
+  { n: 'flip stock', d: 'shift d', f: () => setStockTheme(S.theme === 'dark' ? 'light' : 'dark', true) },
+  { n: 'workspace 01', d: 'alt 1', f: () => gotoWs(1) },
+  { n: 'workspace 02', d: 'alt 2', f: () => gotoWs(2) },
+  { n: 'toggle grip hatch', d: 'the focus signal', f: () => { S.hatch = !S.hatch; applyChrome(); redraw('set'); toast('grip hatch', S.hatch ? 'on' : 'off'); } },
+  { n: 'toggle live dock cells', d: 'the launcher test', f: () => { S.dockLive = !S.dockLive; renderDock(); renderIcons(); redraw('set'); toast('dock cells', S.dockLive ? 'live instruments' : 'name plates, which is the banned pattern'); } },
+  { n: 'close every window', d: 'ctrl shift w', f: () => { Object.keys(S.wins).forEach(closeWin); toast('closed', 'every sheet on every workspace'); } },
+  { n: 'cascade this workspace', d: 'ctrl t', f: () => cascade() }
+]);
+function paletteResults() {
+  const q = S.pq.toLowerCase();
+  return PCMDS.filter(c => c.n.toLowerCase().indexOf(q) >= 0).slice(0, 9);
+}
+function renderPalette() {
+  const rs = paletteResults();
+  if (S.psel >= rs.length) S.psel = Math.max(0, rs.length - 1);
+  $('#pq').textContent = S.pq;
+  $('#pcount').textContent = rs.length + ' of ' + PCMDS.length;
+  $('#presults').innerHTML = rs.map((c, i) =>
+    '<div class="prow' + (i === S.psel ? ' on' : '') + '" data-pi="' + i + '">' +
+    '<span class="pn">' + esc(c.n) + '</span><span class="pd">' + esc(c.d) + '</span></div>').join('') ||
+    '<div class="prow"><span class="pn">no match</span></div>';
+}
+function showPalette(on) {
+  $('#palette').classList.toggle('on', on);
+  if (on) renderPalette();
+}
+function runPalette() {
+  const rs = paletteResults();
+  if (!rs.length) return;
+  showPalette(false);
+  rs[S.psel].f();
+}
+
+/* ============================================================ lock === */
+function renderLock() {
+  $('#lockup').textContent = 'up ' + hhmmss(4211 + S.t);
+  $('#lockside').innerHTML = [['clock', 'clock'], ['mon', 'monitor'], ['net', 'net'],
+    ['du', 'disk']].map(k =>
+    '<div class="cell" style="flex:1 1 0;height:auto;border-bottom:2px solid var(--zs-rule-2)">' +
+    '<span class="cbody">' + INSTR[k[0]]() + '</span>' +
+    '<span class="cn">' + k[1] + '</span></div>').join('');
+  const n = Object.values(S.wins).filter(w => !w.min).length;
+  $('#lockbody').innerHTML =
+    '<span class="t-disp">zlOS 0.3</span>' +
+    '<span class="t-body">The dock keeps drawing while the session is locked, because the ' +
+    'cells are drawn by the shell from a per application struct. Nothing is running behind ' +
+    'this sheet to render them.</span>' +
+    '<div class="hr2 pad-t"></div>' +
+    '<div class="kvgrid pad-t">' +
+    kv('user', 'roy') + kv('seat', 'seat0, tty1') +
+    kv('locked at', hhmmss(S.clock + S.t - 96)) + kv('idle', '00:01:36') +
+    kv('sheets held', n + ' across 2 workspaces') + kv('menu column', 'restored on unlock') +
+    kv('framebuffer', '1600 x 1000 x 32') + kv('refresh', '59.998 Hz') + '</div>' +
+    '<div class="row pad-t"><span class="t-cap">password</span>' +
+    '<span class="well" style="flex:1 1 auto;padding:var(--sp-4) var(--sp-8)">' +
+    '<span class="t-data">' + '•'.repeat(9) + '</span><span class="caret"></span></span>' +
+    '<span class="btn prim" data-act="unlock"><span>unlock</span></span></div>' +
+    '<span class="t-data i3">click anywhere to unlock</span>';
+}
+function showLock(on) {
+  $('#lock').classList.toggle('on', on);
+  if (on) renderLock();
+}
+
+/* ========================================================== toasts === */
+function toast(title, body) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = '<span class="tn">' + esc(title) + '</span><span class="tb">' + esc(body) + '</span>';
+  const c = $('#toasts');
+  c.appendChild(el);
+  while (c.children.length > 3) c.removeChild(c.firstChild);
+  setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 5200);
+}
+
+/* =========================================================== menus === */
+function showCMenu(el, x, y, items, head) {
+  el.innerHTML = '<div class="ch"><span class="t-cap i0">' + esc(head) + '</span></div>' +
+    items.map((it, i) => '<div class="mi" data-mi="' + i + '"><span class="lb">' + esc(it[0]) +
+      '</span><span class="ky">' + esc(it[1] || '') + '</span></div>').join('');
+  const d = deskRect();
+  el.style.left = Math.min(x, d.w - 190) + 'px';
+  el.style.top = Math.min(y, d.h - items.length * 26 - 40) + 'px';
+  el.classList.add('on');
+}
+function hideMenus() { $('#ctxmenu').classList.remove('on'); $('#winmenu').classList.remove('on'); }
+
+/* ============================================================ tick === */
+function walk(v, lo, hi, amp) {
+  v += (Math.random() - 0.5) * amp;
+  return clamp(v, lo, hi);
+}
+function tick() {
+  S.t += 1;
+  S.cpu = S.cpu.map(v => walk(v, 2, 96, 16));
+  const avg = S.cpu.reduce((a, b) => a + b, 0) / S.cpu.length;
+  S.hist.cpu.push(avg); S.hist.cpu.shift();
+  S.rx = walk(S.rx, 4, 240, 44); S.tx = walk(S.tx, 1, 90, 18);
+  S.hist.net.push(S.rx / 3.4); S.hist.net.shift();
+  S.memPct = Math.round(walk(S.memPct, 48, 82, 2));
+  S.hist.mem.push(S.memPct); S.hist.mem.shift();
+  S.hist.io.push(walk(S.hist.io[S.hist.io.length - 1], 0, 46, 14)); S.hist.io.shift();
+  S.load = walk(S.load, 0.05, 3.4, 0.22);
+  if (S.t % 7 === 0 && S.logCount < 6) S.logCount++;
+  if (S.scene !== 'lock') {
+    ['mon', 'net', 'clock', 'proc', 'du'].forEach(id => { if (S.wins[id] && !S.wins[id].min) redraw(id); });
+    renderDock(); renderIcons();
+  } else { renderLock(); }
+}
+
+/* ========================================================= settings === */
+function applyUI() { document.documentElement.style.setProperty('--ui', S.ui); }
+function applyChrome() {
+  $$('.win').forEach(el => {
+    const h = $$('.hatch', el);
+    h.forEach(x => { x.style.visibility = S.hatch ? '' : 'hidden'; });
+  });
+  $('#desk').style.backgroundImage = S.texture ? '' : 'none';
+  $$('.ovcanvas').forEach(c => { c.style.backgroundImage = S.texture ? '' : 'none'; });
+  document.body.classList.toggle('blinkon', S.blink);
+  redrawAll();
+  renderDock(); renderIcons();
+}
+
+/* ========================================================== helpers === */
+function gotoWs(n) {
+  S.ws = n;
+  const top = Object.values(S.wins).filter(w => w.ws === n && !w.min).sort((a, b) => b.z - a.z);
+  S.focus = top.length ? top[0].id : null;
+  layout(); renderDock(); renderMenu();
+  toast('workspace ' + pad2(n), top.length + ' windows, menu column reloaded');
+}
+function cascade() {
+  const wins = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min).sort((a, b) => a.z - b.z);
+  const d = deskRect();
+  wins.forEach((w, i) => {
+    w.max = false;
+    w.w = Math.min(APP[w.id].w, d.w - 40);
+    w.h = Math.min(APP[w.id].h, d.h - 40);
+    w.x = 16 + i * 30; w.y = 12 + i * 26;
+  });
+  layout();
+  toast('cascaded', wins.length + ' windows on workspace ' + pad2(S.ws));
+}
+function menuCmd(cmd) {
+  if (!cmd) return false;
+  if (cmd.startsWith('open:')) { openWin(cmd.slice(5)); return true; }
+  if (cmd.startsWith('focus:')) { openWin(cmd.slice(6)); return true; }
+  if (cmd === 'palette') { showPalette(true); return true; }
+  if (cmd === 'overview') { showOverview(true); return true; }
+  if (cmd === 'lock') { setScene('lock'); return true; }
+  if (cmd === 'stock') { setStockTheme(S.theme === 'dark' ? 'light' : 'dark', true); return true; }
+  if (!cmd.startsWith('act:')) return false;
+  const a = cmd.slice(4), id = S.focus;
+  switch (a) {
+    case 'min': if (id) minWin(id); return true;
+    case 'close': if (id) closeWin(id); return true;
+    case 'clear': SHELL_LINES.length = 0; SHELL_LINES.push('zlsh 0.3  no libc, no host', '', '$ ');
+      redraw('sh'); renderDock(); toast('shell', 'cleared, scrollback dropped'); return true;
+    case 'sigint': SHELL_LINES.push('^C', '$ '); redraw('sh'); renderDock();
+      toast('shell', 'SIGINT to foreground job'); return true;
+    case 'markread': S.logCount = 0; redraw('log'); renderDock();
+      toast('kernel log', 'count cell is now zero'); return true;
+    case 'follow': toast('kernel log', 'following, 28 records, ring holds 4096'); return true;
+    case 'hexdn': S.hexSel += 14; redraw('hex'); renderDock(); return true;
+    case 'hexup': S.hexSel = Math.max(0, S.hexSel - 14); redraw('hex'); renderDock(); return true;
+    case 'reset': for (let i = 0; i < S.hist.cpu.length; i++) S.hist.cpu[i] = 0;
+      redraw('mon'); renderDock(); toast('monitor', 'history cleared, 72 samples zeroed'); return true;
+    case 'hold': toast('monitor', 'sampling held, the dock cell freezes with it'); return true;
+    case 'shelf': toast('shelf', esc(FILES[S.fileSel][0]) + ' staged on this window shelf'); return true;
+    case 'unshelf': toast('shelf', 'cleared, 0 staged'); return true;
+    case 'open': openWin('edit'); return true;
+    case 'calcclear': S.calcAcc = '0'; redraw('calc'); return true;
+    case 'renew': toast('network', 'dhcp renewed, 10.0.2.15/24, lease 86 400 s'); return true;
+    case 'timer': toast('clocks', 'timer started, 00:00:00'); return true;
+    case 'build': toast('gate build', 'passed in 58 s, text 218 432 B'); return true;
+    case 'hosttest': toast('gate hosttest', 'passed in 9 s, 63 assertions'); return true;
+    case 'fsck': toast('fsck', 'generation 3, 2 048 inodes, 0 orphan, clean'); return true;
+    case 'rescan': toast('disk usage', 'rescanned 431 inodes in 211 ms'); return true;
+    case 'regread': redraw('regs'); toast('registers', 'read 16 registers, no write issued'); return true;
+    case 'regdump': toast('registers', 'dumped pipe A to the kernel log'); return true;
+    case 'writeh': toast('design.h', '18 role tokens written, both ladders'); return true;
+    case 'revert': toast('design.h', 'reverted to the committed ladder'); return true;
+    case 'tab1': S.setTab = 1; redraw('set'); return true;
+    case 'tab2': S.setTab = 2; redraw('set'); return true;
+    case 'tab3': S.setTab = 3; redraw('set'); return true;
+  }
+  return false;
+}
+function handleWinAction(id, t) {
+  const node = t.closest('[data-act], [data-toggle], [data-seg], [data-slider], [data-pick], [data-shelf]');
+  if (!node) return;
+  if (node.hasAttribute('data-toggle')) {
+    const k = node.getAttribute('data-toggle');
+    S[k] = !S[k];
+    applyChrome();
+    if (k === 'menuFollows') renderMenu();
+    redraw('set');
+    toast(k.replace(/([A-Z])/g, ' $1').toLowerCase(), S[k] ? 'on' : 'off');
+    return;
+  }
+  if (node.hasAttribute('data-shelf')) {
+    S.docSel = Number(node.getAttribute('data-shelf'));
+    redrawAll();
+    toast('shelf', (SHELVES[id] || SHELVES.files)[S.docSel % (SHELVES[id] || SHELVES.files).length][0] +
+      ' is the open document for this window');
+    return;
+  }
+  if (node.hasAttribute('data-pick')) {
+    const kind = node.getAttribute('data-pick'), i = Number(node.getAttribute('data-i'));
+    if (kind === 'file') {
+      S.fileSel = i; redraw('files'); renderDock();
+      toast('selected', FILES[i][0] + ', ' + FILES[i][1]);
+    } else if (kind === 'proc') { S.procSel = i; redraw('proc'); renderDock(); }
+    else if (kind === 'log') { S.logSel = i; redraw('log'); }
+    return;
+  }
+  if (node.hasAttribute('data-seg')) {
+    const arg = t.closest('[data-arg]');
+    if (arg) setStockTheme(arg.getAttribute('data-arg') === '1' ? 'dark' : 'light', true);
+    return;
+  }
+  if (node.hasAttribute('data-slider')) { setSlider({ target: node, clientX: window._lx }); return; }
+  const act = node.getAttribute('data-act');
+  const arg = node.getAttribute('data-arg');
+  if (act === 'tab') { S.setTab = Number(arg); redraw('set'); return; }
+  if (act === 'calc') { calcKey(arg); redraw('calc'); return; }
+  if (act === 'close') { closeWin(id); return; }
+  if (act === 'min') { minWin(id); return; }
+  if (menuCmd('act:' + act)) return;
+}
+function calcKey(k) {
+  if (k === 'C') { S.calcAcc = '0'; S.calcOp = null; S.calcPend = null; return; }
+  if (/^[0-9]$/.test(k)) { S.calcAcc = (S.calcAcc === '0' ? '' : S.calcAcc) + k; return; }
+  const v = Number(S.calcAcc) || 0;
+  if (k === '=') {
+    if (S.calcOp && S.calcPend !== null) {
+      const a = S.calcPend, b = v;
+      const r = S.calcOp === '+' ? a + b : S.calcOp === '-' ? a - b :
+        S.calcOp === 'and' ? (a & b) : S.calcOp === 'or' ? (a | b) :
+        S.calcOp === 'xor' ? (a ^ b) : S.calcOp === 'shl' ? (a << (b & 31)) :
+        S.calcOp === 'shr' ? (a >>> (b & 31)) : b;
+      S.calcAcc = String(r); S.calcOp = null; S.calcPend = null;
+    }
+    return;
+  }
+  if (k === 'not') { S.calcAcc = String(~v >>> 0); return; }
+  S.calcOp = k; S.calcPend = v; S.calcAcc = '0';
+}
+function setSlider(ev) {
+  const el = ev.target.closest ? ev.target.closest('[data-slider]') : ev.target;
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  const p = clamp((ev.clientX - r.left) / r.width, 0, 1);
+  const i = Math.round(p * (UI_STEPS.length - 1));
+  S.ui = UI_STEPS[i];
+  applyUI(); layout(); redraw('set'); renderDock(); renderIcons();
+  toast('ui scale', S.ui.toFixed(2) + ', q8 ' + Math.round(S.ui * 256) +
+    ', chrome now ' + Math.round(244 * S.ui) + ' px across two edges');
+}
+
+/* =========================================================== drag ===== */
+function startDrag(ev, id, el) {
+  const w = S.wins[id];
+  if (w.max) return;
+  const ox = ev.clientX - w.x, oy = ev.clientY - w.y;
+  function move(e) { w.x = e.clientX - ox; w.y = e.clientY - oy; layout(); }
+  function up() { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); }
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+  ev.preventDefault();
+}
+function startResize(ev, id, mode) {
+  const w = S.wins[id];
+  if (w.max) return;
+  const sx = ev.clientX, sy = ev.clientY, sw = w.w, sh = w.h, sxx = w.x;
+  function move(e) {
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    w.h = Math.max(140, sh + dy);
+    if (mode === 'l') { w.w = Math.max(260, sw - dx); w.x = sxx + (sw - w.w); }
+    else if (mode === 'r') { w.w = Math.max(260, sw + dx); }
+    layout();
+  }
+  function up() { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); }
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+  ev.preventDefault();
+}
+
+/* ========================================================== events ==== */
+document.addEventListener('mousemove', e => { window._lx = e.clientX; });
+
+document.addEventListener('mousedown', ev => {
+  const t = ev.target;
+  if (!t.closest('.cmenu')) hideMenus();
+
+  if ($('#lock').classList.contains('on')) {
+    if (t.closest('#lock')) { setScene('desktop'); toast('session', 'unlocked, menu column restored'); }
+    return;
+  }
+  if ($('#palette').classList.contains('on')) {
+    const pr = t.closest('.prow');
+    if (pr && pr.getAttribute('data-pi') !== null) {
+      S.psel = Number(pr.getAttribute('data-pi')); runPalette(); return;
+    }
+    if (!t.closest('#palette .sheet')) showPalette(false);
+    return;
+  }
+  if (overviewOn()) {
+    const pick = t.closest('[data-ovpick]');
+    if (pick) {
+      S.ws = Number(pick.getAttribute('data-ovws'));
+      showOverview(false); focusWin(pick.getAttribute('data-ovpick'));
+      return;
+    }
+    const fld = t.closest('.ovfield');
+    if (fld) { gotoWs(Number(fld.getAttribute('data-ovws'))); showOverview(false); return; }
+    if (!t.closest('.ovhead')) showOverview(false);
+    return;
+  }
+
+  const mrow = t.closest('.mrow');
+  if (mrow) {
+    if (mrow.classList.contains('dis')) return;
+    const mid = $('#menu')._id;
+    S.menuSel[mid] = Number(mrow.getAttribute('data-mrow'));
+    const cmd = mrow.getAttribute('data-cmd');
+    renderMenu();
+    if (!menuCmd(cmd)) toast(mid + ' menu', mrow.querySelector('.lb').textContent +
+      ', the column stays where it is');
+    return;
+  }
+  const cell = t.closest('[data-dock]');
+  if (cell) {
+    const id = cell.getAttribute('data-dock'), w = S.wins[id];
+    if (!w) openWin(id);
+    else if (w.min || w.ws !== S.ws) { w.ws = S.ws; w.min = false; focusWin(id); }
+    else if (S.focus === id) minWin(id);
+    else focusWin(id);
+    return;
+  }
+  const wsq = t.closest('[data-ws]');
+  if (wsq) { gotoWs(Number(wsq.getAttribute('data-ws'))); return; }
+  const mini = t.closest('[data-restore]');
+  if (mini) { openWin(mini.getAttribute('data-restore')); return; }
+
+  const win = t.closest('.win');
+  if (win) {
+    const id = win.getAttribute('data-id');
+    if (S.focus !== id) focusWin(id);
+    const act = t.closest('[data-act]') ? t.closest('[data-act]').getAttribute('data-act') : null;
+    if (act === 'close') { closeWin(id); return; }
+    if (act === 'min') { minWin(id); return; }
+    const rs = t.closest('.rs');
+    if (rs) { startResize(ev, id, rs.classList.contains('rr') ? 'r' : 'l'); return; }
+    if (t.closest('.rm')) { startResize(ev, id, 'm'); return; }
+    handleWinAction(id, t);
+    const hdr = t.closest('.title');
+    if (hdr && !t.closest('.tbtn')) {
+      if (ev.detail === 2) { maxWin(id); return; }
+      startDrag(ev, id, win);
+    }
+    return;
+  }
+});
+
+document.addEventListener('contextmenu', ev => {
+  if ($('#lock').classList.contains('on') || overviewOn()) return;
+  const d = $('#desk').getBoundingClientRect();
+  const inDesk = ev.target.closest('#desk') && !ev.target.closest('.win');
+  const win = ev.target.closest('.win');
+  if (!inDesk && !win) return;
+  ev.preventDefault();
+  const x = ev.clientX - d.left, y = ev.clientY - d.top;
+  if (inDesk) {
+    /* THE ONLY TRANSIENT MENU IN THE SYSTEM. Everything else is a
+       persistent object, which is why this one is allowed to pop. */
+    showCMenu($('#ctxmenu'), x, y, [
+      ['new shell', 'alt 1'], ['command', 'ctrl k'], ['overview', 'ctrl space'],
+      ['workspace ' + (S.ws === 1 ? '02' : '01'), 'alt ' + (S.ws === 1 ? '2' : '1')],
+      ['cascade windows', 'ctrl t'], ['lock session', 'ctrl l'],
+      ['flip stock', 'shift d']
+    ], 'workspace ' + pad2(S.ws));
+    $('#ctxmenu')._kind = 'desk';
+  } else {
+    const id = win.getAttribute('data-id');
+    focusWin(id);
+    showCMenu($('#winmenu'), x, y, [
+      ['raise to front', 'click'], [S.wins[id].max ? 'restore' : 'maximise', 'double click'],
+      ['miniaturise', 'ctrl m'],
+      ['send to workspace ' + (S.ws === 1 ? '02' : '01'), 'shift ' + (S.ws === 1 ? '2' : '1')],
+      ['close', 'ctrl w']
+    ], APP[id].name);
+    $('#winmenu')._win = id;
+  }
+});
+$('#ctxmenu').addEventListener('mousedown', ev => {
+  const mi = ev.target.closest('.mi'); if (!mi) return;
+  const i = Number(mi.getAttribute('data-mi'));
+  hideMenus();
+  [() => openWin('sh'), () => showPalette(true), () => showOverview(true),
+   () => gotoWs(S.ws === 1 ? 2 : 1), () => cascade(), () => setScene('lock'),
+   () => setStockTheme(S.theme === 'dark' ? 'light' : 'dark', true)][i]();
+});
+$('#winmenu').addEventListener('mousedown', ev => {
+  const mi = ev.target.closest('.mi'); if (!mi) return;
+  const i = Number(mi.getAttribute('data-mi'));
+  const id = $('#winmenu')._win;
+  hideMenus();
+  [() => focusWin(id), () => maxWin(id), () => minWin(id),
+   () => { S.wins[id].ws = S.ws === 1 ? 2 : 1; layout(); renderDock();
+     toast('moved', APP[id].name + ' to workspace ' + pad2(S.wins[id].ws)); },
+   () => closeWin(id)][i]();
+});
+
+document.addEventListener('keydown', ev => {
+  const k = ev.key;
+  if ($('#palette').classList.contains('on')) {
+    if (k === 'Escape') { showPalette(false); return; }
+    if (k === 'ArrowDown') { S.psel++; renderPalette(); ev.preventDefault(); return; }
+    if (k === 'ArrowUp') { S.psel = Math.max(0, S.psel - 1); renderPalette(); ev.preventDefault(); return; }
+    if (k === 'Enter') { runPalette(); ev.preventDefault(); return; }
+    if (k === 'Backspace') { S.pq = S.pq.slice(0, -1); S.psel = 0; renderPalette(); ev.preventDefault(); return; }
+    if (k.length === 1) { S.pq += k; S.psel = 0; renderPalette(); ev.preventDefault(); return; }
+    return;
+  }
+  if (k === 'Escape') {
+    if (overviewOn()) { showOverview(false); return; }
+    if ($('#lock').classList.contains('on')) { setScene('desktop'); return; }
+    hideMenus(); return;
+  }
+  if ((k === 'D' || k === 'd') && ev.shiftKey && !ev.ctrlKey) {
+    setStockTheme(S.theme === 'dark' ? 'light' : 'dark', true); ev.preventDefault(); return;
+  }
+  if (ev.ctrlKey && (k === 'k' || k === 'K')) { showPalette(true); ev.preventDefault(); return; }
+  if (ev.ctrlKey && k === ' ') { showOverview(!overviewOn()); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'l' || k === 'L')) { setScene('lock'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 't' || k === 'T')) { cascade(); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'm' || k === 'M')) { if (S.focus) minWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'w' || k === 'W')) { if (S.focus) closeWin(S.focus); ev.preventDefault(); return; }
+  if (ev.altKey && (k === '1' || k === '2')) { gotoWs(Number(k)); ev.preventDefault(); return; }
+});
+
+/* =========================================================== stock ==== *
+ * BARE and PAINTED are the same magnesium case in two finishes. The dark
+ * ground is not an inversion and it is not a stock near black: it is the
+ * matte textured paint, which held against a real black is plainly a grey.
+ * The ladder law carries across, not the hexes. */
+const STOCK = {
+  light: { name: 'bare', other: 'painted',
+    pitch: 'no bar anywhere. a mid grey desk, a right edge dock of live instruments, ' +
+           'and the menu is an object that belongs to the focused application.',
+    toast: ['bare', 'desk #9E9B93 at L* 64.0, the value nothing shipping today uses'] },
+  dark: { name: 'painted', other: 'bare',
+    pitch: 'the same case in its other finish. matte textured paint, still visibly a ' +
+           'grey, windows go to the far extreme instead of the near one.',
+    toast: ['painted', 'desk #2E2C28 at L* 18.1, a grey and not a black'] }
+};
+function applyTheme() {
+  if (S.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  $('#pitch').textContent = STOCK[S.theme].pitch;
+  $('#themetog').innerHTML =
+    '<span class="tk' + (S.theme === 'light' ? ' on' : '') + '" data-stock="light">bare</span>' +
+    '<span class="tk' + (S.theme === 'dark' ? ' on' : '') + '" data-stock="dark">painted</span>' +
+    '<span class="thint">shift d</span>';
+}
+function hashName() { return S.scene + (S.theme === 'dark' ? '-dark' : ''); }
+function setStockTheme(t, announce) {
+  const next = t === 'dark' ? 'dark' : 'light';
+  if (next === S.theme && announce) return;
+  S.theme = next;
+  applyTheme(); renderLinks(); redraw('set'); renderDock(); renderIcons();
+  if ($('#lock').classList.contains('on')) renderLock();
+  if (announce) {
+    history.replaceState(null, '', '#' + hashName());
+    toast(STOCK[S.theme].toast[0], STOCK[S.theme].toast[1]);
+  }
+}
+function renderLinks() {
+  const sfx = S.theme === 'dark' ? '-dark' : '';
+  $('#links').innerHTML = SCENE_NAMES.map(n => '<a href="#' + n + sfx + '">' + n + '</a>').join('');
+  markLinks(S.scene);
+}
+function markLinks(name) {
+  $$('#links a').forEach(a => a.classList.toggle('on',
+    a.getAttribute('href').slice(1).replace(/-dark$/, '') === name));
+}
+
+/* ========================================================== scenes ==== */
+const SCENE_NAMES = ['desktop', 'overview', 'palette', 'files', 'monitor', 'settings', 'lock'];
+function clearAll() {
+  Object.keys(S.wins).forEach(id => { const e = $('.win[data-id="' + id + '"]'); if (e) e.remove(); });
+  S.wins = {}; S.focus = null; ZTOP = 10;
+  showOverview(false); showPalette(false); showLock(false); hideMenus();
+  $('#toasts').innerHTML = '';
+}
+function baseDesktop() {
+  clearAll();
+  S.ws = 1;
+  openWin('sh',    [20, 16, 500, 300]);
+  openWin('files', [540, 16, 570, 380]);
+  openWin('mon',   [20, 332, 500, 400]);
+  openWin('log',   [560, 396, 620, 292]);
+  openWin('hex',  [40, 30, 600, 360], 2);
+  openWin('regs', [420, 200, 540, 380], 2);
+  openWin('proc', [60, 300, 560, 340], 2);
+  focusWin('log');
+  layout();
+}
+function setScene(name, push) {
+  let dark = false;
+  if (/-dark$/.test(name)) { dark = true; name = name.slice(0, -5); }
+  if (SCENE_NAMES.indexOf(name) < 0) { name = 'desktop'; dark = false; }
+  S.scene = name;
+  S.theme = dark ? 'dark' : 'light';
+  applyTheme(); renderLinks(); markLinks(name);
+  if (push !== false && location.hash.slice(1) !== hashName()) {
+    history.replaceState(null, '', '#' + hashName());
+  }
+  if (name === 'desktop') {
+    baseDesktop();
+    toast('workspace 01', '4 windows, the menu column belongs to KERNEL LOG');
+  } else if (name === 'overview') {
+    baseDesktop(); showOverview(true);
+  } else if (name === 'palette') {
+    baseDesktop(); S.pq = 'e'; S.psel = 0; showPalette(true);
+  } else if (name === 'files') {
+    clearAll(); S.ws = 1;
+    const d = deskRect();
+    openWin('files', [16, 14, Math.min(600, d.w * 0.52), d.h - 28]);
+    openWin('edit', [Math.min(600, d.w * 0.52) + 28, 14, d.w - Math.min(600, d.w * 0.52) - 44, d.h - 28]);
+    S.fileSel = 1; S.docSel = 0;
+    focusWin('files');
+    toast('selected', 'fb.c 68.4 KiB, staged on the shelf and open in EDITOR');
+  } else if (name === 'monitor') {
+    clearAll(); S.ws = 1;
+    const d = deskRect();
+    openWin('mon', [16, 14, Math.min(560, d.w * 0.5), d.h - 28]);
+    openWin('net', [Math.min(560, d.w * 0.5) + 28, 14, d.w - Math.min(560, d.w * 0.5) - 44, d.h - 28]);
+    focusWin('mon');
+    toast('sampling', 'monitor and network at 1 Hz, the dock cells sample with them');
+  } else if (name === 'settings') {
+    clearAll(); S.ws = 1;
+    const d = deskRect();
+    openWin('sys', [d.w - 540, 14, 524, d.h - 28]);
+    openWin('set', [16, 14, d.w - 572, d.h - 28]);
+    S.setTab = 0;
+    focusWin('set');
+  } else if (name === 'lock') {
+    baseDesktop(); showLock(true);
+  }
+  layout(); renderDock(); renderMenu(); renderIcons();
+}
+$('#themetog').addEventListener('mousedown', ev => {
+  const t = ev.target.closest('[data-stock]');
+  if (t) { ev.preventDefault(); setStockTheme(t.getAttribute('data-stock'), true); }
+});
+window.addEventListener('hashchange', () => setScene(location.hash.slice(1) || 'desktop', false));
+window.addEventListener('resize', () => {
+  layout();
+  if (overviewOn()) showOverview(true);
+  if ($('#lock').classList.contains('on')) renderLock();
+});
+
+/* =========================================================== start ==== */
+document.body.classList.add('blinkon');
+applyTheme(); applyUI();
+setScene(location.hash.slice(1) || 'desktop', false);
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
