@@ -8,18 +8,18 @@ Windows, Apple and Linux documentation.
 The locally executable implementation batch has now landed. The exact source
 changes, final BIOS/UEFI/network/SMP evidence and the physical-only acceptance
 gates are recorded in
-[`performance-architecture-implementation-2026-08-22.md`](evidence/performance-architecture-implementation-2026-08-22.md).
+[`performance-architecture-implementation-2026-08-22.md`](../evidence/performance-architecture-implementation-2026-08-22.md).
 This page remains the architecture and test contract; it must not be read as a
 claim that the ThinkPad gates have run.
 
 Read the measured evidence first:
 
-- [`current-speed-and-quality-diagnosis.md`](current-speed-and-quality-diagnosis.md)
+- [`current-speed-and-quality-diagnosis.md`](../current-speed-and-quality-diagnosis.md)
   is the current physical measurement record;
 - [`retained-window-surfaces.md`](retained-window-surfaces.md) is the first
   implementation contract;
-- [`always-on-telemetry.md`](always-on-telemetry.md) is the recorder contract;
-- [`../HANDOFF.md`](../HANDOFF.md) is the current hardware handoff.
+- [`always-on-telemetry.md`](../always-on-telemetry.md) is the recorder contract;
+- [`kernel/HANDOFF.md`](../../HANDOFF.md) is the current hardware handoff.
 
 ## The answer in one page
 
@@ -249,7 +249,7 @@ telemetry.
 "Log everything" cannot mean storing every instruction, pixel write and packet
 payload on a USB stick: doing so changes the timing, exhausts storage and
 collects private content. The useful whole-system recorder is a five-tier
-system, documented in [`always-on-telemetry.md`](always-on-telemetry.md):
+system, documented in [`always-on-telemetry.md`](../always-on-telemetry.md):
 
 | tier | keep | examples |
 |---|---|---|
@@ -314,7 +314,7 @@ work happened. In particular:
   display performance;
 - `retained-window-surfaces.md` is the immediate implementation contract, now
   understood as client **and** shell retention in sequence;
-- `research/why-mainstream-desktops-feel-fast.md` remains a useful conceptual document,
+- `../research/why-mainstream-desktops-feel-fast.md` remains a useful conceptual document,
   but its older framebuffer hypothesis is closed by the physical WC rerun;
 - `STATE-OF-THE-PROJECT.md` and older numbered plans are audit/history inputs,
   not the current performance queue;

@@ -11,7 +11,7 @@ Read the top banner of each file before treating it as current.
 | `memory-model.md`, `memory-map.md`, `dma-sites.md` | Current fixed-address and memory-boundary references. |
 | `guides/thinkpad-first-boot.md` | Physical-boot runbook; does not by itself prove a successful boot happened. |
 | `current-speed-and-quality-diagnosis.md` | Current speed diagnosis from measured traces, with hardware/QEMU boundaries called out. |
-| `performance-architecture-roadmap.md` | Current performance architecture plan. |
+| `plans/performance-architecture-roadmap.md` | Current performance architecture plan. |
 
 ## Evidence And Run Receipts
 
@@ -78,9 +78,15 @@ snapshot that the later application-registry receipt supersedes.
 
 ## Planning And Research
 
-Current plans such as `driver-build-order.md`, `gpu-next.md`, and
-`wireless-plan.md` stay at this level until the planning
-taxonomy pass is complete.
+Current plans are grouped under `plans/`. The first pair is:
+
+| File | Purpose |
+|---|---|
+| `plans/performance-architecture-roadmap.md` | Current physical-desktop performance architecture and test contract. |
+| `plans/retained-window-surfaces.md` | Immediate retained-surface implementation contract. |
+
+The remaining top-level plans are being moved only after their status and path
+coupling are audited.
 
 Comparative and source-heavy studies live in `research/`:
 

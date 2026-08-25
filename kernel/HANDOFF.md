@@ -216,12 +216,12 @@ Read this first in a new session. Everything below is verified, not remembered.
 > selected retained client and shell surfaces. They are now implemented with
 > bounded disjoint damage/occlusion, direct-render fallback, deadline/input
 > work and a real-kernel four-core band oracle. The implementation contract
-> remains [`docs/retained-window-surfaces.md`](docs/retained-window-surfaces.md);
+> remains [`docs/plans/retained-window-surfaces.md`](docs/plans/retained-window-surfaces.md);
 > the target claim is still blocked on a fresh physical before/after journal.
 > The broader, evidence-ranked execution order -- retained client **and** shell
 > surfaces, damage/occlusion, deadline pacing, async storage, processes, real
 > networking, then GPU composition -- is
-> [`docs/performance-architecture-roadmap.md`](docs/performance-architecture-roadmap.md).
+> [`docs/plans/performance-architecture-roadmap.md`](docs/plans/performance-architecture-roadmap.md).
 
 > **Final local execution evidence (2026-08-22):** BIOS/GRUB and native
 > UEFI/GOP exercises each pass 32/32 workflows. `tools/checks/verify-efi.sh`

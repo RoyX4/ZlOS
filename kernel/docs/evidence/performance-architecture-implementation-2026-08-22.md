@@ -1,7 +1,7 @@
 # Performance architecture implementation — 2026-08-22
 
 This is the receipt for the implementation batch requested from
-[`performance-architecture-roadmap.md`](../performance-architecture-roadmap.md),
+[`performance-architecture-roadmap.md`](../plans/performance-architecture-roadmap.md),
 [`HANDOFF.md`](../../HANDOFF.md), and
 [`EXECUTION-ROADMAP.md`](../../../docs/EXECUTION-ROADMAP.md).
 

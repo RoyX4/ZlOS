@@ -6,7 +6,7 @@ Status: implementation-ready decomposition of [`CLEAN_ROOM_ZL_ZLOS_INTEGRATION_P
 
 ## Current authority and ordering
 
-This backlog preserves the current product sequence from [`kernel/HANDOFF.md`](../../../kernel/HANDOFF.md), [`performance-architecture-roadmap.md`](../../../kernel/docs/performance-architecture-roadmap.md), [`retained-window-surfaces.md`](../../../kernel/docs/retained-window-surfaces.md), and [`docs/EXECUTION-ROADMAP.md`](../../EXECUTION-ROADMAP.md). The immediate zlOS work remains retained client and shell surfaces, regions/deadlines, async block/storage, 64-bit processes, real networking, then GPU/audio/application depth.
+This backlog preserves the current product sequence from [`kernel/HANDOFF.md`](../../../kernel/HANDOFF.md), [`performance-architecture-roadmap.md`](../../../kernel/docs/plans/performance-architecture-roadmap.md), [`retained-window-surfaces.md`](../../../kernel/docs/plans/retained-window-surfaces.md), and [`docs/EXECUTION-ROADMAP.md`](../../EXECUTION-ROADMAP.md). The immediate zlOS work remains retained client and shell surfaces, regions/deadlines, async block/storage, 64-bit processes, real networking, then GPU/audio/application depth.
 
 Language dependencies follow the retained [`HANDOFF.md`](language/HANDOFF.md), [`ULTIMATE_PLAN.md`](language/ULTIMATE_PLAN.md), [`ROADMAP.md`](language/ROADMAP.md), and [`MASTER_PLAN.md`](language/MASTER_PLAN.md) snapshots: imports; scoping/errors; records/maps; exact integers/bytes; types/unboxing; FFI/allocators/comptime; ecosystem; source self-hosting.
 
@@ -94,7 +94,7 @@ Phase exit: the same physical interaction trace proves unchanged clients and she
 
 ### P1.1 — retained client surfaces
 
-- **Dependencies/current/provenance:** existing WM, 64 MiB heap, direct draw path and [`retained-window-surfaces.md`](../../../kernel/docs/retained-window-surfaces.md); Serenity/Lemon/banan buffers; reject blank-on-allocation-failure and raw client pointers.
+- **Dependencies/current/provenance:** existing WM, 64 MiB heap, direct draw path and [`retained-window-surfaces.md`](../../../kernel/docs/plans/retained-window-surfaces.md); Serenity/Lemon/banan buffers; reject blank-on-allocation-failure and raw client pointers.
 - **I/O and state:** window/client dimensions and explicit app invalidation in; bounded RGB32 surface plus generation/validity out; state `None -> Allocated/Invalid -> Rendering -> Valid -> Retiring -> None`.
 - **Invariants/failure:** overflow checked; 48 MiB initial aggregate budget; target/clip restored on every exit; allocation refusal uses current direct renderer; free occurs after compositor retirement.
 - **Deterministic proof:** byte-identical direct/surface draw, allocation refusal, resize/minimize/close, repeated lifecycle heap audit, invalidation generation race.

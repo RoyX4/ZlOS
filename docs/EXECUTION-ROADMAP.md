@@ -113,7 +113,7 @@ different bugs and must never share one vague report called "slow".
 The current desktop-specific diagnosis and first corrective pass are in
 [`kernel/docs/current-speed-and-quality-diagnosis.md`](../kernel/docs/current-speed-and-quality-diagnosis.md).
 The newest physical evidence and the detailed architecture/order for this phase
-are in [`kernel/docs/performance-architecture-roadmap.md`](../kernel/docs/performance-architecture-roadmap.md).
+are in [`kernel/docs/plans/performance-architecture-roadmap.md`](../kernel/docs/plans/performance-architecture-roadmap.md).
 
 The first instrumentation slice now exists. A 4,096-record RAM ring starts
 before storage, retains boot text through `system ready`, redacts printable key
