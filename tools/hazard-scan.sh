@@ -29,9 +29,49 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 # The exact CFLAGS buildefi.sh uses, parsed out of the script so this test can
 # never drift from the real build.
 efi_cflags() {
-    sed -n '/^CF="/,/"$/p' kernel/buildefi.sh \
-        | sed 's/^CF="//; s/"$//' | tr -d '\\' | tr '\n' ' '
+    local cf includes
+    cf=$(sed -n '/^CF="/,/"$/p' kernel/buildefi.sh \
+        | sed 's/^CF="//; s/"$//' | tr -d '\\' | tr '\n' ' ')
+    includes=$(cd kernel && find src boot -type d -printf ' -I%p' | sort)
+    printf '%s\n' "${cf//\$INCLUDES/$includes}"
 }
+
+efi_sources() {
+    local f loop
+    loop=$(sed -nE 's/^for f in (.*); do$/\1/p' kernel/buildefi.sh)
+    for f in $loop; do
+        if [ "$f" = '$CORE' ]; then
+            grep -vE '^[[:space:]]*(#|$)' kernel/SOURCES
+        else
+            printf '%s\n' "$f"
+        fi
+    done
+
+    # Include the C translation units compiled outside the shared-source loop.
+    sed -nE 's/^clang \$CF.* -c ([^ ]+\.c) -o .*/\1/p' kernel/buildefi.sh
+}
+
+if [ "${1:-}" = "--check-efi-parser" ]; then
+    flags=$(efi_cflags)
+    sources=$(efi_sources | awk '!seen[$0]++')
+    case "$flags" in *'$'*) echo "hazard-scan parser: FAIL: unexpanded flag variable"; exit 1;; esac
+    case "$sources" in *'$'*) echo "hazard-scan parser: FAIL: unexpanded source variable"; exit 1;; esac
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        grep -qxF "$f" <<< "$sources" || {
+            echo "hazard-scan parser: FAIL: missing SOURCES entry $f"
+            exit 1
+        }
+    done < <(grep -vE '^[[:space:]]*(#|$)' kernel/SOURCES)
+    for f in ../src/frontend/lexer.c ../src/frontend/parser.c ../src/runtime/interp.c boot/efi_stage0.c; do
+        grep -qxF "$f" <<< "$sources" || {
+            echo "hazard-scan parser: FAIL: missing explicit EFI source $f"
+            exit 1
+        }
+    done
+    echo "hazard-scan parser: PASS: expanded flags and complete EFI source manifest"
+    exit 0
+fi
 
 [ "$COUNT_ONLY" -eq 1 ] || echo "== 1. the EFI warning guard must actually FIRE, not merely be configured =="
 # buildefi.sh targets x86_64-unknown-windows, which is LLP64: unsigned long is 4
@@ -69,7 +109,7 @@ fi
 # arithmetic that merely mentions 'unsigned long'.
 if command -v clang >/dev/null 2>&1; then
     read -r -a CFA <<< "$(efi_cflags)"
-    files=$(sed -n '/^for f in/,/do$/p' kernel/buildefi.sh | tr ' \\' '\n\n' | grep '\.c$')
+    files=$(efi_sources | awk '!seen[$0]++')
     total=0; bad=0
     # buildefi.sh runs from kernel/, and CF carries a relative -I.. — so this
     # must compile from there too or every include resolves to the wrong tree.
