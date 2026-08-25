@@ -1,7 +1,7 @@
 # NEXT-PROMPT — what to pick up, ranked, with the evidence for the ranking
 
 Rewritten 2026-08-19 at the end of the session that worked the previous
-ranking. Read [`docs/STATE-OF-THE-PROJECT.md`](../../../../docs/STATE-OF-THE-PROJECT.md)
+ranking. Read [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md)
 for everything open; this file is narrower — it is **which one to do next and
 why**, with the measurement that ranks it.
 

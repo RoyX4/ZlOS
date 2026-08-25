@@ -275,7 +275,7 @@ Read this first in a new session. Everything below is verified, not remembered.
 > application completeness as separate claims.
 
 > **What is still OPEN is not in this file — it is in
-> [`docs/STATE-OF-THE-PROJECT.md`](../docs/STATE-OF-THE-PROJECT.md),** which
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md),** which
 > audited twenty-one planning documents against the merged tree on 2026-08-19.
 > The **sequence** those open items run in is
 > [`docs/REMAINING-WORK.md`](../docs/REMAINING-WORK.md).
@@ -1663,10 +1663,10 @@ line and history ring, and typing at the prompt overwrote those two files.
 There is no heap, so nothing catches this at runtime. It reads source and does
 arithmetic — no build, no QEMU, so it cannot fail because the host is busy.
 
-**But it does not catch everything it looks like it catches.** It iterates a
-hardcoded nine-name list and does not discover new constants, so `DISK_SCRATCH`
-— added on `desktop/system-track` at exactly the `0x02030000` this branch moved
-`LINE_BUF` to — is invisible to it. Fix the sweep before trusting it.
+The checker now discovers the current map, derives scratch/name sizes from
+their owning constants, and has a mutation self-test that plants a duplicate
+address and requires rejection. This closes the old `DISK_SCRATCH` blind spot;
+new memory owners still need to use a discoverable declaration shape.
 **`./build.sh` DOES NOT REBUILD WHAT THE PROBES BOOT, and this will cost you an
 afternoon.** `build.sh` produces `kernel.elf`. Every `probe-*.py` boots
 `zlOS.iso` (`tools/probes/exercise.py:280` `qemu_argv` → `-cdrom zlOS.iso`),
@@ -1767,8 +1767,9 @@ EV-008 is closed for the current batch. `kernel/metadata/wrapper-registry.json` 
 and classifies all 141 current shebang wrappers, including 17 legacy/action/
 probe policy gaps that are explicitly not landing authority. The only supported
 entry remains `gates/run-land-gate-contained.sh start`; `check-land-gate.py`
-proves 66 mandatory seams and rejects masked child-failure and masked final-exit
-mutations. The adversarial registry is 19/19 canaries caught. A stale zero-byte
+proves 71 mandatory seams, including memory-map mutation and UI-scale
+contracts, and rejects masked child-failure and masked final-exit mutations.
+The adversarial registry is 19/19 canaries caught. A stale zero-byte
 `kernel64.elf` was discovered by CAN-006 and rebuilt under a two-core,
 low-priority limit; its final 2,702,592-byte output matches the registered hash.
 

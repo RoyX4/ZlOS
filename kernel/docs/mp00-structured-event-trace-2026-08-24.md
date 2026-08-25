@@ -5,12 +5,12 @@
 EV-018 now has a real transport-independent core, not only a planned schema.
 The implementation is intentionally bounded and pointer-free:
 
-- [`../hosttest/trace_event.h`](../hosttest/trace_event.h) defines the logical envelope and API;
-- [`../hosttest/trace_event.c`](../hosttest/trace_event.c) implements admission, sequencing,
+- [`../tests/host/trace_event.h`](../tests/host/trace_event.h) defines the logical envelope and API;
+- [`../tests/host/trace_event.c`](../tests/host/trace_event.c) implements admission, sequencing,
   redaction, checksum, queue pressure evidence and wire import/export;
-- [`../event-schema.json`](../event-schema.json) is the generated 28-field wire
+- [`../metadata/event-schema.json`](../metadata/event-schema.json) is the generated 28-field wire
   contract;
-- [`../hosttest/eventtracetest.c`](../hosttest/eventtracetest.c) executes the
+- [`../tests/host/eventtracetest.c`](../tests/host/eventtracetest.c) executes the
   real module under ASan/UBSan;
 - [`../docs/receipts/event-trace-host-2026-08-24.json`](receipts/event-trace-host-2026-08-24.json)
   binds 37 passing assertions and three compile lanes to exact source/tool

@@ -475,7 +475,7 @@ screen, and explicitly forbids a half-TLS that skips certificate validation.
 **That decision stands.** What follows is only the evidence about what exists,
 because two documents disagree about it and one of them is wrong.
 
-`docs/STATE-OF-THE-PROJECT.md` §7.1 says of `crypto.c`: *"**No such file has
+`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md` §7.1 says of `crypto.c`: *"**No such file has
 ever existed in this repo.** Strike the citation."* **That is incorrect, and
 the citation should not be struck.** The audit used `git ls-files | grep -i
 crypto` and `git log --all`, and neither sees `refs/wip/*` — `--all` covers
@@ -561,4 +561,4 @@ separate track with its own review. **Nothing here depends on it yet.**
 
 ---
 
-Brief: [`BROWSER-PROMPT.md`](archive/prompts/BROWSER-PROMPT.md) · Contract: [`../ui.h`](../ui.h)
+Brief: [`BROWSER-PROMPT.md`](archive/prompts/BROWSER-PROMPT.md) · Contract: [`../src/graphics/ui/ui.h`](../src/graphics/ui/ui.h)

@@ -2,8 +2,8 @@
 
 This is the durable orientation for the files produced by the zlOS build. The
 machine-readable authority is
-[`../artifact-registry.json`](../artifact-registry.json), generated and checked
-by [`../gen-artifact-registry.py`](../gen-artifact-registry.py). Do not infer a
+[`../metadata/artifact-registry.json`](../metadata/artifact-registry.json), generated and checked
+by [`../tools/generators/gen-artifact-registry.py`](../tools/generators/gen-artifact-registry.py). Do not infer a
 runtime or hardware claim merely because a similarly named artifact passed.
 
 ## Current evidence boundary

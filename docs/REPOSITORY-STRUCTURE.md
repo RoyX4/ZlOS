@@ -24,12 +24,17 @@ zl-linux/
 |-- tests/                    language tests
 |-- examples/                 source examples
 |-- freestanding/             no-libc proof lane
+|-- bench/                    benchmark drivers and comparison trees
+|-- learn/                    bounded teaching exercises
+|-- editors/                  editor and language integrations
 |-- kernel/                   zlOS product root
 |   |-- apps/                 zl applications and games
 |   |-- boot/                 entry code, EFI handoff, and linker layouts
 |   |-- src/                  kernel implementation by subsystem
 |   |-- tests/                host, oracle, reference, and fixture tests
 |   |-- tools/                checks, generators, image builders, probes, runners
+|   |-- metadata/             generated machine-readable registries
+|   |-- exercise-out/         legacy mixed output/evidence location; migration pending
 |   `-- docs/                 current kernel docs, evidence, and archive
 |-- tools/                    repository maintenance tools
 |-- gates/                    landing orchestration
@@ -44,6 +49,7 @@ zl-linux/
 `-- kernel/docs/
     |-- README.md             kernel documentation front door
     |-- evidence/             dated implementation and run receipts
+    |-- receipts/             machine-readable evidence and recovery archives
     `-- archive/              old prompts, audits, and handoffs
 ```
 

@@ -1,8 +1,8 @@
 # zlOS host dependency lock
 
-[`../dependency-lock.json`](../dependency-lock.json) is the exact local lock for
+[`../metadata/dependency-lock.json`](../metadata/dependency-lock.json) is the exact local lock for
 the tools and firmware used by the current build, packaging and six-route QEMU
-proof. [`../gen-dependency-lock.py`](../gen-dependency-lock.py) regenerates and
+proof. [`../tools/generators/gen-dependency-lock.py`](../tools/generators/gen-dependency-lock.py) regenerates and
 checks it.
 
 The lock records absolute invoked and resolved paths, byte count, SHA-256,

@@ -3,11 +3,11 @@
 Hand-off for a fresh chat that picks up where the eleven-track merge session
 left off. Operational state, not project state — for *what is open and who is
 doing it*, this is the file; for *what the project needs*, read
-`docs/STATE-OF-THE-PROJECT.md`.
+`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`.
 
 ## Read these three, in this order
 
-1. **`docs/STATE-OF-THE-PROJECT.md`** — 57 open items, each with the command that
+1. **`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`** — 57 open items, each with the command that
    established it. The one page that says where the project is.
 2. **`docs/WORKING-RULE.md`** — everything lands on `main`, the same day. Why,
    with the numbers, and the one thing that is actually forbidden.

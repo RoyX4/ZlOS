@@ -28,7 +28,7 @@ _none open._
 
 ## Open pull requests
 
-- [ ] #2 fix(kernel): HID buffers sat inside fb.c's blur arena — the high-RAM map is now compiler-enforced  `fix/dma-map-hid-arena`
+- [ ] close #2 administratively — its `fix/dma-map-hid-arena` head is already an ancestor of `origin/main`
 
 ---
 

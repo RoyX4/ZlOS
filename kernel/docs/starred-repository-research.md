@@ -28,7 +28,7 @@ visual changes, performance work, packages, agents, or public-demo changes.
 
 ## Ownership and evidence rules
 
-- `zl-linux` remains authoritative for current implementation and live evidence: this `HANDOFF.md`, `docs/STATE-OF-THE-PROJECT.md`, source, tests, QEMU and physical journals.
+- `zl-linux` remains authoritative for current implementation and live evidence: this `HANDOFF.md`, `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`, source, tests, QEMU and physical journals.
 - The sibling research suite is authoritative for the pinned 33-repository comparison, feature normalization, donor provenance, rejected patterns and clean-room destination inventory.
 - Never copy donor source. Transfer contracts, ideas, failure shapes and tests.
 - Never upgrade screenshot, claim, fetched/external code, source presence, build, QEMU or host-harness evidence into native runtime/hardware proof.
@@ -36,6 +36,6 @@ visual changes, performance work, packages, agents, or public-demo changes.
 - Preserve the shared dirty checkout. Read current orientation and status before editing, and do not revert unrelated concurrent work.
 
 The research catalogue is intentionally broader than the active roadmap. It
-defines the complete destination; `HANDOFF.md`, `docs/STATE-OF-THE-PROJECT.md`
+defines the complete destination; `HANDOFF.md`, `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`
 and current dependency gates determine what is safe and useful to implement
 next.

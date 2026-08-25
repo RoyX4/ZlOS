@@ -3,7 +3,7 @@
 Two things live here.
 
 > **Complete 2026-08-24 zl-linux integration:**
-> [`docs/MERGE-ALL-2026-08-24.md`](docs/MERGE-ALL-2026-08-24.md) records the
+> [`docs/evidence/integration/MERGE-ALL-2026-08-24.md`](docs/evidence/integration/MERGE-ALL-2026-08-24.md) records the
 > exact remote branch, local branch, registered-worktree and standalone-clone
 > closure. The post-push audit found one extra divergent local Product Wave
 > branch and merged it too. After that pass, every audited zl-linux branch and
@@ -24,7 +24,7 @@ NVMe, a filesystem, and a windowed compositor.
 > **Where the project actually is:** [`docs/PROJECT-STATUS.md`](docs/PROJECT-STATUS.md).
 > It separates the pushed integration state, the complete implementation plan,
 > the other-repository research, and what remains unimplemented or physical.
-> The older [`STATE-OF-THE-PROJECT.md`](docs/STATE-OF-THE-PROJECT.md) remains a
+> The older [`STATE-OF-THE-PROJECT.md`](docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) remains a
 > detailed dated audit, not the final post-integration status.
 
 > **Current execution order:** [`docs/EXECUTION-ROADMAP.md`](docs/EXECUTION-ROADMAP.md).
@@ -277,6 +277,6 @@ about where BoredOS is ahead.
 
 ## Repository preservation audit
 
-[`docs/GIT-WORKTREE-AUDIT-2026-08-24.md`](docs/GIT-WORKTREE-AUDIT-2026-08-24.md)
+[`docs/evidence/integration/GIT-WORKTREE-AUDIT-2026-08-24.md`](docs/evidence/integration/GIT-WORKTREE-AUDIT-2026-08-24.md)
 records the exhaustive ZL-only worktree audit, the preservation branches pushed
 to GitHub, the evidence archives, and the verification boundary for each branch.

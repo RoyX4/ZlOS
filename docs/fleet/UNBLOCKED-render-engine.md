@@ -116,7 +116,7 @@ second be recorded as the first.
    every session reads first, and it currently routes work away from the highest-value
    item in the project.
 2. **Correct the four docs listed above**, or banner them at
-   `docs/STATE-OF-THE-PROJECT.md` the way the other twenty-one planning documents are.
+   `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md` the way the other twenty-one planning documents are.
 3. **Re-rank the next action.** `.ultra/STATE.md`'s current next step is to flash
    `zlOS-usb.img` and press `G` — which exercises the **blitter**, the engine measured at
    ~1× against the CPU. The render engine is the one worth 48×, and its four stated

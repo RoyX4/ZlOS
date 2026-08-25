@@ -1,7 +1,8 @@
 # Remaining-work map — zlOS after the merge
 
 The sequence. Evidence stays in
-[`STATE-OF-THE-PROJECT.md`](STATE-OF-THE-PROJECT.md). Do not re-audit the
+[`STATE-OF-THE-PROJECT-2026-08-19.md`](evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md).
+Do not re-audit the
 twenty-one planning documents from this file.
 
 **Identity.** zlOS is the OS written in its own language that lights a real

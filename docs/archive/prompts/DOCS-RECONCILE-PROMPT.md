@@ -95,7 +95,7 @@ Then a **cross-check pass**: with all readers' output in hand, find (a) the same
 item claimed by two docs with different status, (b) direct contradictions, (c)
 items no doc owns but the code clearly needs.
 
-Then **one synthesis**: a single ranked file, `docs/STATE-OF-THE-PROJECT.md`,
+Then **one synthesis**: a single ranked file, `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`,
 grouped by subsystem, ordered by leverage, each entry carrying its evidence and
 its source doc. Add a header to each of the 21 pointing at it.
 
@@ -138,6 +138,6 @@ From `docs/evidence/MERGE-EVIDENCE.md` §Still open:
 
 ## What done looks like
 
-`docs/STATE-OF-THE-PROJECT.md` exists, every entry has evidence, every one of
+`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md` exists, every entry has evidence, every one of
 the 21 docs has a superseded header pointing at it, and a person can read one
 page and know what to do next. If an item cannot be verified, it says so.

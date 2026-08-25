@@ -2,7 +2,7 @@
 > after the eleven-track merge. Every externally checkable hardware fact here reproduces exactly, and not one line of WiFi or Bluetooth code exists in the tree — so this is unstarted rather than stale. Follow it, but fix three premises first: the network stack it budgets at ~10,000 lines is already landed, its xhci.c estimate assumes a bulk path that is hardcoded single-instance mass-storage, and its shared-crypto discount is unbanked — the tree has no crypto at all.
 >
 > **What is still open from this document is in
-> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 

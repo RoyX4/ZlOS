@@ -22,7 +22,7 @@ closure only.
 
 ## Deterministic format
 
-[`../gen-source-snapshot.py`](../gen-source-snapshot.py) reads the canonical
+[`../tools/generators/gen-source-snapshot.py`](../tools/generators/gen-source-snapshot.py) reads the canonical
 source-file map from `build-identity.json`, refuses any stale hash, and emits a
 POSIX ustar archive with:
 

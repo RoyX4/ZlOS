@@ -2,7 +2,7 @@
 > after the eleven-track merge. The substrate genuinely exists: zlfs survives three power cycles under `verify-disk.sh`, `rtc.c` decodes under `verify-clock.sh`, snapping gave `wm_resize` its first caller, and all seven data-loss defects have named regressions. Read it now for its hazard list and its "what done means" standard — four of its user-facing outcomes were silently reverted by the merge.
 >
 > **What is still open from this document is in
-> [`docs/STATE-OF-THE-PROJECT.md`](../../../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 # The system track — storage, time, clipboard, and the things an OS just has
@@ -302,5 +302,5 @@ Authorised. Best used here for:
 
 Look: [`desktop-v10-plan.md`](../../desktop-v10-plan.md) · Platform:
 [`PLATFORM-PROMPT.md`](PLATFORM-PROMPT.md) · Feel:
-[`FEEL-PROMPT.md`](FEEL-PROMPT.md) · Contract: [`../ui.h`](../../../ui.h) · History:
+[`FEEL-PROMPT.md`](FEEL-PROMPT.md) · Contract: [`../ui.h`](../../../src/graphics/ui/ui.h) · History:
 [`desktop-overnight-run.md`](../../evidence/desktop-overnight-run.md)

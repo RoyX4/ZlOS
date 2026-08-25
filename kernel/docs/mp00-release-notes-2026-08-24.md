@@ -2,7 +2,7 @@
 
 ## Result
 
-[`../release-notes.json`](../release-notes.json) and the generated
+[`../metadata/release-notes.json`](../metadata/release-notes.json) and the generated
 [`UNRELEASED-CHANGELOG.md`](UNRELEASED-CHANGELOG.md) implement the first EV-027
 release-note contract. They record 17 current change candidates, six with
 potential user-visible impact, three migrations, 12 current defects/blockers,

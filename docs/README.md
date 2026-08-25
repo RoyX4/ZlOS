@@ -8,7 +8,6 @@ not be current.
 | File | Truth state |
 |---|---|
 | `PROJECT-STATUS.md` | Current cross-repo, commit, plan, and implementation boundary. |
-| `STATE-OF-THE-PROJECT.md` | Current open-item audit, but aging. It marks repairs and stale sections inline. |
 | `EXECUTION-ROADMAP.md` | Current priority spine. Later implementation notes update it; they do not convert unverified hardware into proof. |
 | `CODE-MAP.md` | Current file-layout map. |
 | `REPOSITORY-STRUCTURE.md` | Layout rules and source-ownership boundaries. |
@@ -38,6 +37,8 @@ These are useful, but not a done list:
 |---|---|
 | `evidence/MERGE-EVIDENCE.md` | Round-1 merge evidence and measured conflict classes. |
 | `evidence/MERGE-ROUND-2.md` | Round-2 worktree evidence and integration state at that time. |
+| `evidence/integration/` | Completed worktree and all-branch integration receipts. |
+| `evidence/status-audits/` | Dated whole-project status audits; evidence-rich, but not the current queue. |
 | `evidence/POINTER-EVIDENCE.md` | Pointer fix measurements; explicitly not full human/live-VM closure. |
 | `evidence/COMPARE-BOREDOS.md` | Measured comparison against a peer hobby OS. |
 | `evidence/REPOSITORY-STRUCTURE-STUDY-2026-08-25.md` | Read-only layout measurements across all 33 pinned repositories, with detailed inspection of the largest systems. |

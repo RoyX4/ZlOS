@@ -34,6 +34,12 @@ through to disk; `Esc` saves and closes. See
 ./tools/checks/verify-iso.sh     # slow gate: boot the ISO on BIOS and UEFI
 ```
 
+`app_manifest_embed.zl` and `build_identity_embed.zl` are generated, tracked
+source imports at this product root. Their generators, receipts, probes, build
+identity, and `src/kernel.zl` import path all depend on that location. They are
+documented exceptions to the nested-source rule until those consumers move in
+one atomic change; do not hand-edit them or move either file alone.
+
 ## Running it on real hardware
 
 ```bash

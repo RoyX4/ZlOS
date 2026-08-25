@@ -113,7 +113,7 @@ constants from the C. A new base added tomorrow is still uncovered.
 
 ## Why this matters more than the individual corrections
 
-This is the same failure mode `docs/STATE-OF-THE-PROJECT.md` was written to fix,
+This is the same failure mode `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md` was written to fix,
 running in the opposite direction. That document warns that reading a planning doc
 "tells you what somebody wanted, never what is true." The usual damage is a doc that
 claims something works when it does not. This is the mirror image: **a doc that claims
@@ -124,7 +124,7 @@ nobody tries what they are told is absent. Wave 0 is three landed commits that a
 of `driver-build-order.md` would spend a day re-implementing.
 
 **`kernel/docs/driver-build-order.md` needs the same audit banner the other twenty-one
-planning documents already carry**, pointing at `docs/STATE-OF-THE-PROJECT.md`. It is
+planning documents already carry**, pointing at `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`. It is
 currently the most actionable-looking document in the repo and the top of its queue is
 done.
 

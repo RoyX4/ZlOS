@@ -2,7 +2,7 @@
 
 ## Result
 
-[`../decision-ledger.json`](../decision-ledger.json) is the first generated
+[`../metadata/decision-ledger.json`](../metadata/decision-ledger.json) is the first generated
 EV-026 decision ledger. It contains 19 dated, attributable records and indexes
 all 47 labels in the older [`DECISIONS.md`](DECISIONS.md). Five legacy labels
 currently have normalized semantics; 42 remain explicitly open.

@@ -12,7 +12,7 @@
 > `gates.yml`; `DISK_SCRATCH` is at `0x02040000` (the checker still does not
 > name it). Still first: `key()` at `kernel.zl:1517` (§5.1), boot the ThinkPad,
 > land `desktop/browser-next` (21 commits), Ring 3. Ranked plan for score, not
-> bugs: [`docs/archive/superseded/ROAD-TO-TEN.md`](ROAD-TO-TEN.md).
+> bugs: [`docs/archive/superseded/ROAD-TO-TEN.md`](../../archive/superseded/ROAD-TO-TEN.md).
 
 > **Repair pass, 2026-08-19.** Four adversarial reviewers attacked the first
 > draft and raised 44 defects. Every one was re-verified against the tree by a
@@ -28,7 +28,7 @@
 > not by the audit that fed it.
 
 The sequence those open items run in is
-[`docs/REMAINING-WORK.md`](REMAINING-WORK.md): H0 stop lying, H1 a desktop you
+[`docs/REMAINING-WORK.md`](../../REMAINING-WORK.md): H0 stop lying, H1 a desktop you
 can use, H2 the ThinkPad lights its own panel, H3 write zl on zlOS.
 
 This file replaces twenty-one planning documents totalling ~392 KB. Nineteen of
@@ -554,8 +554,8 @@ already exists as the harness shape.
 > - **A second, larger contributor found separately:** two palettes were on
 >   screen at once — two cyans and two panel colours. `DECISIONS.md` item E,
 >   closed by **#34**, gated by `hosttest/palette`. Before/after renders are in
->   [`shots/palette-before-two-palettes.png`](shots/palette-before-two-palettes.png)
->   and [`shots/palette-after-one-palette.png`](shots/palette-after-one-palette.png).
+>   [`shots/palette-before-two-palettes.png`](../../shots/palette-before-two-palettes.png)
+>   and [`shots/palette-after-one-palette.png`](../../shots/palette-after-one-palette.png).
 >
 > The concurrency note below turned out to be right and is worth keeping as the
 > example: that session's deletion of §1c and its two PNGs was in-progress work,

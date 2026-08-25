@@ -21,11 +21,37 @@ cd "$(dirname "$0")/.." || exit
 
 IGNORE=tools/doc-check-ignore.txt
 PATHS_ONLY=0
+LINK_SELFTEST=0
 case "${1:-}" in
     --paths-only) PATHS_ONLY=1 ;;
+    --selftest-links) LINK_SELFTEST=1 ;;
     "") ;;
-    *) echo "usage: $0 [--paths-only]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--paths-only|--selftest-links]" >&2; exit 2 ;;
 esac
+
+markdown_link_refs() {
+    sed -E 's/`[^`]*`//g' "$1" 2>/dev/null \
+        | grep -oE '\[[^]]*\]\([^) ]+' \
+        | sed -E 's/^.*\]\(//' \
+        | sort -u || true
+}
+
+if [ "$LINK_SELFTEST" -eq 1 ]; then
+    fixture=$(mktemp -d); trap 'rm -rf "$fixture"' EXIT
+    touch "$fixture/present.md"
+    printf '%s\n' '[ok](present.md)' '`fs[0](5)`' '[bad](missing.md)' > "$fixture/index.md"
+    refs=$(markdown_link_refs "$fixture/index.md")
+    grep -qxF 'present.md' <<< "$refs" \
+        && grep -qxF 'missing.md' <<< "$refs" \
+        && ! grep -qxF '5' <<< "$refs" \
+        && [ -e "$fixture/$(printf '%s\n' "$refs" | grep '^present')" ] \
+        && [ ! -e "$fixture/$(printf '%s\n' "$refs" | grep '^missing')" ] || {
+            echo "doc-check link selftest: FAIL"
+            exit 1
+        }
+    echo "doc-check link selftest: caught missing target and ignored inline code"
+    exit 0
+fi
 
 fail=0
 # Path-looking references that belong to this checkout. The leading character is
@@ -77,6 +103,26 @@ for d in $DOCS; do
     done
 done
 [ "$missing" -eq 0 ] && ok "every referenced path exists"
+
+echo "== 1b. every local Markdown link must resolve from its document =="
+# REPO_REF catches repo-root paths in prose. This second pass catches ordinary
+# relative Markdown links such as ../metadata/foo.json. Strip inline code first
+# so source text like `fs[0](5)` is not mistaken for a Markdown link.
+broken_links=0
+LINK_DOCS=$({ git ls-files '*.md' 2>/dev/null
+              git ls-files --others --exclude-standard '*.md' 2>/dev/null
+            } | sort -u \
+            | grep -vE '^(TODO\.md|docs/JOURNAL\.md|\.github/pull_request_template\.md)')
+for d in $LINK_DOCS; do
+    while IFS= read -r ref; do
+        case "$ref" in ''|http://*|https://*|mailto:*|data:*|\#*|/*) continue ;; esac
+        ref=${ref%%#*}; ref=${ref#<}; ref=${ref%>}
+        [ -e "$(dirname "$d")/$ref" ] && continue
+        hit "$d links to $ref, which does not resolve from that document"
+        broken_links=$((broken_links+1))
+    done < <(markdown_link_refs "$d")
+done
+[ "$broken_links" -eq 0 ] && ok "every local Markdown link resolves"
 
 echo "== 2. files the docs describe must actually be in git =="
 # verify-efi.sh was described as essential by CLAUDE.md and existed on exactly

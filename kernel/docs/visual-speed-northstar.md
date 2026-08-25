@@ -417,4 +417,4 @@ is being judged: **look, feel, machinery, or applications**.
 
 Related evidence: `look-and-speed.md` · `desktop-v10-plan.md` §8 ·
 `desktop-northstar-feasibility.md` · `DECISIONS.md` #29–#33 ·
-`../../docs/STATE-OF-THE-PROJECT.md`
+`../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`

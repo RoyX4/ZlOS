@@ -2,7 +2,7 @@
 > after the eleven-track merge. A Windows-hosted graphics ladder (user32/gdi32/d2d1/opengl32 via FFI) added by the very commit that ported zl to Linux, never edited since. It has never described a platform this repo targets. The annotation `HANDOFF.md` and `DECISIONS.md` both claim was written into this file does not exist — this banner is it. On zlOS, 3D means a software rasterizer.
 >
 > **What is still open from this document is in
-> [`docs/STATE-OF-THE-PROJECT.md`](../../STATE-OF-THE-PROJECT.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 # Graphics plan — from BMP files to live windows to the GPU

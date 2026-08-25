@@ -2,7 +2,7 @@
 > after the eleven-track merge. Its stated prerequisite landed and its stated top priority did not: imports are fully implemented and gate-covered, while all seven Part 3 bugs — including the `json_parse` / `json_pretty` abort this doc calls highest priority — reproduce verbatim on main today. Keep Part 3 as a live bug list; Parts 1 and 2 need rewriting.
 >
 > **What is still open from this document is in
-> [`docs/STATE-OF-THE-PROJECT.md`](../STATE-OF-THE-PROJECT.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 # Standard library plan — organising 96 modules and finding the holes

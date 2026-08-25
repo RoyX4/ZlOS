@@ -2,7 +2,7 @@
 > after the eleven-track merge. Roughly half executed. Items 0 and 1 landed and are compiled into all four targets; Item 2's port is ~90% built and never linked — neither `interp.c` nor `interp_kernel.c` is in `kernel/SOURCES`, so the kernel still cannot execute anything. §3's "four source lists" and "4 cores" are both dead.
 >
 > **What is still open from this document is in
-> [`docs/STATE-OF-THE-PROJECT.md`](../../../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 # The exec track — running code the kernel was not built with
@@ -311,5 +311,5 @@ matters.
 ---
 
 System track (filesystem): [`SYSTEM-PROMPT.md`](SYSTEM-PROMPT.md) · Contract:
-[`../ui.h`](../../../ui.h) · Decisions: [`DECISIONS.md`](../../DECISIONS.md) ·
+[`../ui.h`](../../../src/graphics/ui/ui.h) · Decisions: [`DECISIONS.md`](../../DECISIONS.md) ·
 Scheduler: `../sched.c`

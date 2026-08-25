@@ -2,7 +2,7 @@
 > after the eleven-track merge. The track shipped what this brief asked for: eight C files, 3,160 lines against a ~3,050 budget, all in `kernel/SOURCES`, with a browser window opened at boot. Read it as a validated costing exercise and a hazard list. Its `crypto.c` citation describes a file that has never existed in this repository.
 >
 > **What is still open from this document is in
-> [`docs/STATE-OF-THE-PROJECT.md`](../../../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 # The browser track — and why it is not the impossible one
@@ -328,5 +328,5 @@ direction.
 ---
 
 System track (network, storage): [`SYSTEM-PROMPT.md`](SYSTEM-PROMPT.md) ·
-Contract: [`../ui.h`](../../../ui.h) · Feature table:
+Contract: [`../ui.h`](../../../src/graphics/ui/ui.h) · Feature table:
 [`feature-catalogue.md`](../../feature-catalogue.md)

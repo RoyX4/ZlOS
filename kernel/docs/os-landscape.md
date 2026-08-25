@@ -2,7 +2,7 @@
 > after the eleven-track merge. ~230 of its 306 lines survey 13 other hobby OSes and cannot decay; its one measured number (i915.ko = 11.2 MB) re-measures correctly today. The parts that ARE a task list have moved on — `fb_clip` and SIMD are both done, and all four bullets of its "where zlOS sits" self-assessment are false on main. Read it as reference, never as status.
 >
 > **What is still open from this document is in
-> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 

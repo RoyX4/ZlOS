@@ -2,7 +2,7 @@
 > after the eleven-track merge. Superseded by `docs/evidence/MERGE-EVIDENCE.md`, which was written against the correct base. This file was written against the wrong one and its headline figure is wrong: it says 332 commits were at risk; the whole repository is 186. Its own later section says 69. Kept for history only — do not plan a merge from it.
 >
 > **What is still open from this document is in
-> [`docs/STATE-OF-THE-PROJECT.md`](../../STATE-OF-THE-PROJECT.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 # Integration plan — landing the eight parallel tracks

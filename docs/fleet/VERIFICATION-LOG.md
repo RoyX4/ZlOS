@@ -186,7 +186,7 @@ keyboard the OS supports.
 **Fix:** `code == KEY_TAB`. One token, and `wm.c` already includes the header that
 defines it.
 
-**Why it is worth flagging beyond itself:** `docs/STATE-OF-THE-PROJECT.md` ranks
+**Why it is worth flagging beyond itself:** `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md` ranks
 *"Fix `key()` at `kernel.zl:1407` — one token"* third on the whole-project board. This
 is a **second instance of the same class** — a character literal used where a key code
 is required — in a different file. Worth a sweep for the rest: any comparison of an

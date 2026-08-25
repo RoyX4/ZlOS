@@ -22,6 +22,8 @@ where things live, not what is complete.
 | `kernel/src/` | active | zlOS implementation grouped by architecture and subsystem. |
 | `kernel/tests/` | active evidence | Host harnesses, visual oracle, reference renderer, and fixtures. |
 | `kernel/tools/` | active tooling | Static checks, generators, image builders, runtime probes, and VM launchers. |
+| `kernel/metadata/` | generated truth | Tracked machine-readable registries generated from source, policy, and receipts. |
+| `kernel/app_manifest_embed.zl`, `kernel/build_identity_embed.zl` | generated source exceptions | Build-owned imports kept at the product root until generator, importer, receipt, and build-identity paths move atomically. |
 | `freestanding/` | active proof lane | No-libc generated-zl proof for the kernel track. |
 | `bench/` | active tooling | Bench scripts and benchmark trees. |
 | `tools/` | active tooling | Repo maintenance: doc checks, hazard scan, parity helpers, preflight, journal helpers. |
@@ -40,7 +42,7 @@ where things live, not what is complete.
 | `docs/README.md` | current index | Truth-state map for docs: current, partial, evidence, archived. |
 | `docs/PROJECT-STATUS.md` | current status | Cross-repo commit state and the boundary between plan, integration, and implementation. |
 | `docs/REPOSITORY-STRUCTURE.md` | current layout policy | Placement and source-ownership rules. |
-| `docs/STATE-OF-THE-PROJECT.md` | current but aging | Open-item audit. Keep hardware and QEMU claims separated. |
+| `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md` | historical audit | Evidence-rich dated status; not the current queue. |
 | `docs/EXECUTION-ROADMAP.md` | current but aging | Priority order. Treat later implementation notes as updates, not proof of physical hardware. |
 | `docs/program/` | current program | Full feature/contract/phase program and partial-closure data. |
 | `docs/design/` | mixed proposals | Design notes and proposals. A file here is not implemented unless its own status says so and current code confirms it. |
@@ -49,6 +51,7 @@ where things live, not what is complete.
 | `docs/shots/` | curated evidence | Small visual evidence images that were intentionally kept. |
 | `docs/archive/` | stale/history | Superseded plans, old prompts, backups, and documents kept for context only. |
 | `kernel/docs/` | kernel records | Current kernel references and plans, with dated receipts in `evidence/` and old prompts/audits/handoffs in `archive/`. |
+| `kernel/docs/receipts/` | machine evidence | JSON and archive receipts consumed by metadata/provenance tooling. |
 
 ## Generated Output
 
@@ -62,7 +65,8 @@ evidence under `docs/`.
 | `examples_out/` | Example program artifacts. |
 | `kernel/*.elf`, `kernel/*.img`, `kernel/*.iso`, `kernel/*.EFI` | zlOS boot/build artifacts. |
 | `kernel/_gen*.c`, `kernel/out.c` | Generated C from zl kernel sources. |
-| `kernel/shots/`, `kernel/exercise-out/`, `/shots/` | Visual/QEMU run output. |
+| `kernel/shots/`, `/shots/` | Disposable visual/QEMU run output. |
+| `kernel/exercise-out/` | Mixed legacy location: ignored new output plus 50 tracked evidence files awaiting an atomic registry-aware move. |
 | `kernel/tests/host/*` binaries | Host harness build output; the `.c` files are source. |
 
 ## Structural Guardrail

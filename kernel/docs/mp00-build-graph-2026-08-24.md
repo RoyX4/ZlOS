@@ -2,7 +2,7 @@
 
 ## Outcome
 
-[`../build-graph.json`](../build-graph.json) closes the previous gap between an
+[`../metadata/build-graph.json`](../metadata/build-graph.json) closes the previous gap between an
 input hash list and final artifact list. It currently records:
 
 - all 123 build-identity inputs;

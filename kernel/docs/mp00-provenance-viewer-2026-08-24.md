@@ -2,7 +2,7 @@
 
 ## Result
 
-[`../provenance-viewer.json`](../provenance-viewer.json) and the self-contained
+[`../metadata/provenance-viewer.json`](../metadata/provenance-viewer.json) and the self-contained
 [`provenance-viewer.html`](provenance-viewer.html) implement the first EV-028
 read-only provenance viewer. The static projection includes the exact build and
 source origin, licensing and signature state, 9 artifacts, 62 applications, 17

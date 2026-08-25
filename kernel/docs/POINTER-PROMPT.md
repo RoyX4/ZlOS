@@ -5,7 +5,7 @@
 > also present and recorded in [`DECISIONS.md`](DECISIONS.md). The required human
 > live-VM pointer-feel confirmation is not recorded, so that acceptance gate
 > remains unverified. Keep the diagnosis below as historical evidence; use
-> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) for its
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) for its
 > original audit context and the current project status documents for the queue.
 
 # POINTER-PROMPT — fix the pointer, then audit the whole tree

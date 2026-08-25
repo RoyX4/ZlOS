@@ -97,7 +97,7 @@ address. A PR's green tick catches none of that class.
 
 Plus `main`'s own worktree: **42 dirty**, of which 8 are `.cache/clangd/` and
 `.cursor/` noise and **34 are real** (`CLAUDE.md`, `README.md`,
-`docs/STATE-OF-THE-PROJECT.md`, `kernel/src/kernel.zl`, `kernel/src/graphics/windowing/term.c`,
+`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`, `kernel/src/kernel.zl`, `kernel/src/graphics/windowing/term.c`,
 `freestanding/runtime_kernel.c`, the `probe-*.py` set, `run_tests.sh`, and
 untracked `docs/archive/superseded/ROAD-TO-TEN.md`, `verify_selfhost.sh`, four `kernel/tests/host/`
 binaries).

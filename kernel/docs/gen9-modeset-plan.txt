@@ -1,5 +1,5 @@
 {
-  "_audit_2026_08_19": "AUDITED 2026-08-19. The most successfully executed plan in the repo: 13/13 source conflicts resolved in intel.c, the ordered 35-step sequence exists as code and lit the real ThinkPad panel on 2026-08-17, and all five hardware-damage hazards have guards citing them by number. Keep it as the register and hazard reference; stop treating it as a task list. What is still open from this plan is in docs/STATE-OF-THE-PROJECT.md section 5 - read that first. This key was added by the documentation reconciliation; it is not part of the original plan.",
+  "_audit_2026_08_19": "AUDITED 2026-08-19. The most successfully executed plan in the repo: 13/13 source conflicts resolved in intel.c, the ordered 35-step sequence exists as code and lit the real ThinkPad panel on 2026-08-17, and all five hardware-damage hazards have guards citing them by number. Keep it as the register and hazard reference; stop treating it as a task list. What is still open from this plan is in docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md section 5 - read that first. This key was added by the documentation reconciliation; it is not part of the original plan.",
   "summary": "Gather exact Skylake/Comet Lake register sequences for a cold-start display modeset",
   "agentCount": 7,
   "logs": [],

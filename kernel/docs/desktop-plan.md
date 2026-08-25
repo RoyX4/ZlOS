@@ -2,7 +2,7 @@
 > after the eleven-track merge. 55 of 58 asks are built and booting — several better than specified. Its header still says "Nothing here is implemented"; that describes an inversion which is now the boot state. Keep §1.5 and §§3.3/4 as live reference.
 >
 > **What is still open from this document is in
-> [`docs/STATE-OF-THE-PROJECT.md`](../../docs/STATE-OF-THE-PROJECT.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 

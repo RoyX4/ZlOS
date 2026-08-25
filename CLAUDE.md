@@ -6,7 +6,7 @@
 integration, the complete implementation program, raw research, and actual
 implementation evidence. Read it before picking up any task list.
 
-`docs/STATE-OF-THE-PROJECT.md` is the detailed 2026-08-19 audit. It remains
+`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md` is the detailed 2026-08-19 audit. It remains
 valuable evidence but predates later integration. The archived
 `docs/archive/superseded/ROAD-TO-TEN.md` is also historical, not the queue.
 
@@ -28,7 +28,8 @@ so every PR would diff against a stale base), the landing order, and two places
 touching any `zl-linux-*` worktree.
 
 `docs/archive/prompts/DOCS-RECONCILE-PROMPT.md` is the brief that produced
-`STATE-OF-THE-PROJECT.md`. Done 2026-08-19; kept for method, not for work.
+`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`. Done
+2026-08-19; kept for method, not for work.
 
 **`docs/GUARDS-THAT-DID-NOT-GUARD.md`** is five checks in this tree that
 reported green while checking nothing, each with the command that establishes
@@ -66,10 +67,10 @@ a diagnosis that was precise, plausible and WRONG - the URL-bar bug it blames
 on the keyboard was in the mouse path, and the symptom it reasoned from was a
 coincidence of one URL. The shape of that mistake is kept deliberately.
 
-`kernel/docs/POINTER-PROMPT.md` is the CURRENT WORK: the pointer is
-visibly broken after the eleven-track merge, the lead suspect is measured
-(two drainers of one xHCI event ring), and a full-tree bug audit follows it.
-Read it before touching input, xhci or wm.
+`kernel/docs/POINTER-PROMPT.md` is historical diagnosis, not current work. Its
+pointer-drain fix is already in `origin/main`; use it for failure history and
+read `kernel/docs/input-stack.md` plus current source before changing input,
+xHCI, or the window manager.
 Two docs written for specific traps, both worth reading before touching their
 area:
 
@@ -151,10 +152,8 @@ fixed form of the bug above. Do not "fix" it back.
 `kernel/HANDOFF.md` is the orientation doc and it is kept honest — it records what
 is *verified* rather than what is intended. Read it before touching `kernel/`.
 
-**All eleven tracks landed on `main` on 2026-08-19.** `docs/evidence/MERGE-EVIDENCE.md`
-§Outcome is the record. Two branches are still out: `fix/pointer-drain` (3
-commits, the written fix for the broken pointer) and `ci/gates-and-agent-brief`
-(11 commits, the only CI and the only copy of `src/tools/zlfmt.c` anywhere).
+**All eleven tracks and the later pointer/CI branches are in `origin/main`.**
+`docs/evidence/MERGE-EVIDENCE.md` §Outcome is the historical landing record.
 `docs/archive/superseded/INTEGRATION-PLAN.md` is **superseded** and its figures are wrong — do not
 plan a merge from it.
 

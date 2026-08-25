@@ -1,6 +1,6 @@
 # MP-00 joined evidence registry
 
-[`../evidence-registry.json`](../evidence-registry.json) is the current front
+[`../metadata/evidence-registry.json`](../metadata/evidence-registry.json) is the current front
 door for implementation evidence. It joins 25 inputs by exact SHA-256 and build
 identity: the build identity and reconstructable source snapshot, app
 manifest/evidence, artifact/boot registry,

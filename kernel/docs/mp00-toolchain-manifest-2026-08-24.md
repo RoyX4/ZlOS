@@ -2,7 +2,7 @@
 
 ## Outcome
 
-[`../toolchain-manifest.json`](../toolchain-manifest.json) binds the exact
+[`../metadata/toolchain-manifest.json`](../metadata/toolchain-manifest.json) binds the exact
 current compiler/linker contract rather than treating a version string as a
 toolchain:
 

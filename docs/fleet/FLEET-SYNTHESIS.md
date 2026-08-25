@@ -3,7 +3,7 @@
 **2026-08-19 · worktree `zl-linux-fleet` · branch `fleet/audit-2026-08-19` · base `main` @ `3f00366`**
 
 The four boards rank within their own subsystem. This page ranks across all of them, by
-the ordering principle `docs/STATE-OF-THE-PROJECT.md` already uses:
+the ordering principle `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md` already uses:
 
 > leverage = (what the fix unblocks, or the failure it prevents) ÷ (what it costs),
 > with a deliberate thumb on the scale for changes that turn a **silent** failure into a
