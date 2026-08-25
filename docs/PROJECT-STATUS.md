@@ -20,7 +20,7 @@ implementation state. They are not the same thing.
 | Repository or checkout | Commit state | Meaning |
 |---|---|---|
 | `RoyX4/zl-linux:main` | Structure and verifier checkpoint `a5c6f4e4306d`; current docs refresh `b8e5f8a45164` | The complete restructure is published. GitHub docs, repository gates and all four QEMU boot jobs passed at the verifier checkpoint. This is repository closure and QEMU evidence, not product or physical-hardware completion. |
-| This reconciliation worktree | `codex/full-program`; published baseline `b8e5f8a45164` plus local documentation and executable checker repairs | Isolated at `/home/roy/Documents/repos/zl-linux-final`. The published restructure remains intact. Local commits repair status, land/memory-map/TODO contracts, and the EFI hazard scanner; they are intentionally unpushed while automatic boot CI is deferred. No local runtime or hardware proof is claimed. |
+| This reconciliation worktree | Clean `codex/full-program`; substantive cleanup through `a5380b8` plus this status refresh, eleven commits ahead of published baseline `b8e5f8a45164` | Isolated at `/home/roy/Documents/repos/zl-linux-final`. Local commits repair status and static checker contracts, preserve historical inputs, separate retained evidence from disposable output, and record the two remaining structure/metadata tensions. They are intentionally unpushed while automatic boot CI is deferred. No local runtime or hardware proof is claimed. |
 | Older structure worktree | Dirty `codex/full-restructure`, based on `85fcdf542b9c` | Preserved at `/home/roy/Documents/repos/zl-linux-structure` with 566 pending entries from the older migration. It is input history, not the active finalization tree. |
 | Original shared checkout | Dirty `codex/local-zlos-snapshot-2026-08-24` at `/home/roy/Documents/repos/zl-linux` | Preserved with 183 pending entries. Its untracked display audit has now been recovered into this branch as explicitly historical evidence; the shared checkout itself was not rewritten. |
 | Desktop redesign worktree | Clean `design/desktop-redesign` at `66eadd0` | The 164-file design/spec/prototype corpus and five later SPREAD updates are committed locally in `/home/roy/Documents/repos/zl-linux-desktop-redesign`. Nothing is merged or pushed, and no kernel implementation is claimed. |
@@ -36,10 +36,12 @@ receipt is [`MERGE-ALL-2026-08-24.md`](evidence/integration/MERGE-ALL-2026-08-24
 
 ### Registered zl-linux Worktrees
 
-Checked 2026-08-25. Every listed committed HEAD is already an ancestor of
-`origin/main`; dirty and untracked content is called out separately. The local
-`main` ref itself is 49 commits behind `origin/main` and is not publication
-authority.
+Checked 2026-08-25 against the locally fetched `origin/main` at `b8e5f8a45164`.
+Published integration heads are ancestors of that ref; intentional local
+preservation and cleanup branches are called out separately rather than folded
+into the ancestry claim. Dirty and untracked content is also explicit. The
+local `main` ref itself is 49 commits behind `origin/main` and is not
+publication authority.
 
 | Worktree branch | HEAD | Remote/working state |
 |---|---|---|
@@ -50,7 +52,7 @@ authority.
 | Three detached Claude worktrees | `bb1d623b9b49`, `84cecae63019`, `b8a00ec45ac1` | Clean and preserved; their commits are already in `origin/main`. |
 | `codex/local-zlos-snapshot-2026-08-24` | `85fcdf542b9c` | Dirty shared checkout containing the uncommitted cleanup inputs; do not overwrite it. |
 | `codex/full-restructure` | `85fcdf542b9c` base | Preserved older isolated migration with 566 pending entries. |
-| `codex/full-program` | Published through `b8e5f8a45164`; local documentation and checker commits ahead | Active cleanup tree. The unpublished commits do not claim runtime or hardware evidence and remain local solely to avoid triggering automatic boot CI. |
+| `codex/full-program` | Substantive cleanup through `a5380b8` plus this status refresh; eleven local commits ahead of `b8e5f8a45164` | Active cleanup tree. The unpublished commits do not claim runtime or hardware evidence and remain local solely to avoid triggering automatic boot CI. |
 
 ## Whole Implementation Program
 
@@ -79,7 +81,11 @@ generator checks. The downstream release-note/provenance/evidence chain is not
 fresh: its inputs contain three incompatible historical build identities, so
 regeneration stops instead of silently joining unlike evidence. That open
 boundary is recorded as T-8 in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md).
-These checks prove planning consistency, not product implementation.
+The sole remaining live-source root exception, unshipped `kernel/boot_state.c`
+and `.h`, is recorded as T-9 because moving it requires the focused compile gate
+that is deliberately deferred. Ignored local build/test outputs are outside Git
+and are not part of the published layout. These checks prove planning
+consistency, not product implementation.
 
 ## Implementation State
 
