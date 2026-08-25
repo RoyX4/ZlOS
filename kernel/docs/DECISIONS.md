@@ -799,7 +799,7 @@ settled here rather than picked by whoever reads which file first.
    expensive full-screen work this system does, ~12.2 ms for one 900×700 glow.
    Band rendering does not touch it.
 
-3. **What it does buy, from `desktop-smp-bands.md`'s own table:** whole desktop
+3. **What it does buy, from `evidence/desktop-smp-bands.md`'s own table:** whole desktop
    4.833 ms → 2.949 ms at four bands. **1.88 ms**, on a full-screen redraw that
    damage tracking already made rare, and the worst run has 4 bands slower than
    2. `fb.c:229` also rules out the reading that would make it worth more: the

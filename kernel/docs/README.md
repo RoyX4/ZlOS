@@ -25,6 +25,8 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 | `browser-status.md` | Browser state and measured capability boundary. |
 | `evidence/desktop-platform-run.md` | Platform-track run record. |
 | `evidence/desktop-overnight-run.md` | Overnight compositor run record. |
+| `evidence/desktop-feel.md` | Completed feel/control track with measured gates and remaining physical boundary. |
+| `evidence/desktop-smp-bands.md` | Measured SMP band-rendering result and its explicit speed ceiling. |
 | `evidence/performance-architecture-implementation-2026-08-22.md` | Performance architecture implementation batch. |
 | `evidence/exercises/` | Retained exercise images, transcripts and physical/QEMU bundles; disposable new runs still go to ignored `kernel/exercise-out/`. |
 
@@ -53,6 +55,8 @@ contains recovery notes for work that now has a newer receipt or status map.
 The recovered `archive/audits/display-state-2026-08-25.md` is a historical
 read-only display audit from commit `85fcdf5` plus a dirty restructure; it is
 durable context now, not current implementation proof.
+`archive/audits/ds-clone-status-2026-08-20.md` is the preserved false-green
+snapshot that the later application-registry receipt supersedes.
 
 ## Planning And Research
 

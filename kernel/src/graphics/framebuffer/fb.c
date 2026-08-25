@@ -260,7 +260,7 @@ _Static_assert(AP_STACK_BASE + AP_STACK_SPAN <= HI_SCHED,
  * fb_gradient or fb_shadow already owns a rectangle and already writes it row
  * by row with no dependence between rows. That covers most of a desktop frame
  * (measured: the wallpaper gradient and three window shadows) without going
- * near zl. See docs/desktop-smp-bands.md for the numbers and for why the
+ * near zl. See docs/evidence/desktop-smp-bands.md for the numbers and for why the
  * answer is not 4x.
  *
  * DISJOINT BY CONSTRUCTION. The bands are the gaps between a monotonic edge

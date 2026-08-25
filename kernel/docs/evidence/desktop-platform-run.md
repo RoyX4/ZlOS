@@ -136,7 +136,7 @@ passed. It times the body of a frame now, over frames that actually painted.
 
 **SMP band rendering is 1.64×, not 4×.** Full account with four runs tabulated,
 including the one where four bands came out *slower* than two, in
-[`desktop-smp-bands.md`](../desktop-smp-bands.md). The short version: the draw
+[`desktop-smp-bands.md`](desktop-smp-bands.md). The short version: the draw
 list is zl and the zl runtime is not reentrant, so what is parallel is each
 large *primitive* internally, which caps the whole scene at ~2.6× before any
 overhead.
@@ -185,6 +185,6 @@ Same class as P-3.
 ---
 
 Queue: [`PLATFORM-PROMPT.md`](../archive/prompts/PLATFORM-PROMPT.md) · Bands:
-[`desktop-smp-bands.md`](../desktop-smp-bands.md) · Previous run:
+[`desktop-smp-bands.md`](desktop-smp-bands.md) · Previous run:
 [`desktop-overnight-run.md`](desktop-overnight-run.md) · Tasks:
 [`desktop-TODO.md`](../desktop-TODO.md) · Blocks: `../../../.ultra/TENSIONS.md`

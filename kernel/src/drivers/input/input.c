@@ -542,7 +542,7 @@ int  input_accel(void)       { return accel_on; }
  * idt_mouse_x(), which is the raw ISR position and is now only an input to
  * this file rather than the answer. Anything asking "where is the pointer"
  * must come here; kernel.zl's mouse_x() builtin still reads the raw one and is
- * therefore unaccelerated - see docs/desktop-feel.md. */
+ * therefore unaccelerated - see docs/evidence/desktop-feel.md. */
 int input_ptr_x(void) { return px_x; }
 int input_ptr_y(void) { return px_y; }
 
