@@ -127,7 +127,7 @@ file that lives under `kernel/docs/`: `what-is-a-bios.md`,
 
 ### A false claim the doc-checker could never have caught
 
-`kernel/docs/system-track.md:359` states, as fact:
+`kernel/docs/evidence/system-track.md:359` states, as fact:
 
 > the **editor** copies its whole buffer on Ctrl+C and appends the clipboard
 

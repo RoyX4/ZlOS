@@ -1840,7 +1840,7 @@ fn editor_key(code) {
     # Ctrl+C copies the whole buffer; Ctrl+V pastes the clipboard at the end.
     # clip.c's own header already documents these two codes as needing no
     # change to the routing layer - "these arrive at the focused app as an
-    # ordinary EV_CHAR" - this is that caller, the one system-track.md
+    # ordinary EV_CHAR" - this is that caller, the one evidence/system-track.md
     # describes and this file did not, until now, actually contain.
     if code == 3 {
         clip_new()

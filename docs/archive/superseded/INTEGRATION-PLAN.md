@@ -260,7 +260,7 @@ ahead of its remote. Everything else in this document is reversible. This is not
 1. **Cross-track contamination has already happened.** `repos/zl-exec`
    (on `desktop/exec-track`) has four files **staged** that are byte-identical
    to `desktop/system-track`'s versions:
-   `kernel/clip.c`, `kernel/docs/archive/prompts/SYSTEM-PROMPT.md`, `kernel/docs/system-track.md`,
+   `kernel/clip.c`, `kernel/docs/archive/prompts/SYSTEM-PROMPT.md`, `kernel/docs/evidence/system-track.md`,
    `kernel/docs/what-is-a-bios.md`. Verified by comparing `git hash-object` in
    the worktree against `git rev-parse desktop/system-track:<path>` — identical
    blobs. A session copied another track's work sideways instead of merging it.
@@ -339,4 +339,3 @@ Adding to it:
   it is not evidence that this ordering is better, only that the spread stays
   small.
 - No claim here has been tested against a build. Nothing has been merged.
-

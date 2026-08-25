@@ -1164,10 +1164,10 @@ unreachable. **A primitive is not done when it passes its test; it is done when
 something calls it and a gate covers the call.** For visual work the assertion
 has to check the PIXELS, not the state: `wm_anim_alpha()` reported a fade
 correctly for hours while nothing drew one. See T-16 and
-`docs/desktop-scale-and-effects.md` §5.
+`docs/evidence/desktop-scale-and-effects.md` §5.
 
 **Why the desktop looked small on a big screen, and where the effects went:**
-`docs/desktop-scale-and-effects.md`. Short version: `ui()` was `cell_w() / 8`,
+`docs/evidence/desktop-scale-and-effects.md`. Short version: `ui()` was `cell_w() / 8`,
 so it was 1 or 2 and never more, while the layout is written in 800 design
 units - at 3840 wide that is 1920 units of space for an 800-unit design. It is
 derived from the screen now (1..4) and the console cell is a separate question.
@@ -1458,7 +1458,7 @@ the line back — the one marker that proves it was taken, on either wire. It
 exits non-zero when the echo never comes, instead of photographing a frame no
 command ran in, which is what it used to do.
 
-## zlOS keeps things now — `docs/system-track.md`
+## zlOS keeps things now — `docs/evidence/system-track.md`
 
 Files had no names and nothing survived a reboot. **zlfs** (`src/fs/fs.c`) is a
 superblock, a flat directory of 32 named entries, and files as contiguous runs
@@ -1486,7 +1486,7 @@ code that already had 63 passing assertions, including one where the comment
 asserted an invariant the code did not hold. All six are fixed with regressions
 that fail on the old code. The full account, and what is deliberately left
 undone in `src/graphics/windowing/wm.c`, is in
-[`docs/system-track.md`](docs/system-track.md).
+[`docs/evidence/system-track.md`](docs/evidence/system-track.md).
 
 ## The recurring bug class — check this FIRST
 

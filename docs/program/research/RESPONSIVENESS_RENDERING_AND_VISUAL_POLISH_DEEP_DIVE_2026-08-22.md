@@ -393,6 +393,6 @@ Primary local evidence and synthesis inputs:
 - [`ALL_33_VISUAL_WEB_AND_APP_EXPERIENCE_MATRIX_2026-08-21.md`](ALL_33_VISUAL_WEB_AND_APP_EXPERIENCE_MATRIX_2026-08-21.md)
 - [`CANONICAL_FEATURE_IMPLEMENTATION_CATALOG_2026-08-21.md`](CANONICAL_FEATURE_IMPLEMENTATION_CATALOG_2026-08-21.md)
 - [`DRIVER_AND_APP_AUDIT_TAXONOMY_2026-08-21.md`](DRIVER_AND_APP_AUDIT_TAXONOMY_2026-08-21.md)
-- current zlOS `kernel/HANDOFF.md`, `kernel/docs/visual-speed-northstar.md`, `kernel/docs/look-and-speed.md`, `kernel/docs/desktop-scale-and-effects.md`, `kernel/docs/evidence/desktop-feel.md`, and `kernel/docs/retained-window-surfaces.md` in `/home/roy/Documents/repos/zl-linux`
+- current zlOS `kernel/HANDOFF.md`, `kernel/docs/visual-speed-northstar.md`, `kernel/docs/look-and-speed.md`, `kernel/docs/evidence/desktop-scale-and-effects.md`, `kernel/docs/evidence/desktop-feel.md`, and `kernel/docs/retained-window-surfaces.md` in `/home/roy/Documents/repos/zl-linux`
 
 No upstream source was copied. No repository was built, booted, modified, committed, or pushed for this pass.

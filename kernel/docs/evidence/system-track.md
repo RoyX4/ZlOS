@@ -5,7 +5,7 @@ collection of programs behave like one machine. This is the account of what
 landed, what it refuses to do, and the six ways the filesystem was broken
 before it was any good.
 
-Companion to [`SYSTEM-PROMPT.md`](archive/prompts/SYSTEM-PROMPT.md), which is the brief. This
+Companion to [`SYSTEM-PROMPT.md`](../archive/prompts/SYSTEM-PROMPT.md), which is the brief. This
 is the result.
 
 ---
