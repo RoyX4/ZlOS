@@ -250,7 +250,7 @@ static u8 ustack[U_STACK_BYTES] __attribute__((aligned(16)));
  * and, if set, restores the kernel stack captured on the way in and returns
  * there instead. This is a longjmp in everything but name, and it is the same
  * shape exec.c already uses to stop a runaway program (see
- * docs/exec-kill-path.md) - deliberately, because a second mechanism for
+ * docs/architecture/system/exec-kill-path.md) - deliberately, because a second mechanism for
  * "abandon what you were doing" is a second thing to get wrong. */
 u32 user_exit_esp(void) { return user_return_esp; }
 

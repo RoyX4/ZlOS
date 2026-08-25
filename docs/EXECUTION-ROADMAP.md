@@ -276,7 +276,7 @@ ThinkPad mount and power-cut recovery; this expanded build's fresh physical
 rerun is still the manual gate.
 
 The journal also carries the typed automatic audit trail documented in
-[`kernel/docs/automatic-system-audit.md`](../kernel/docs/automatic-system-audit.md):
+[`kernel/docs/architecture/system/automatic-system-audit.md`](../kernel/docs/architecture/system/automatic-system-audit.md):
 process/app lifecycle, every Ring-3 syscall result, zlfs operations, owned
 window operations, and asynchronous TCP/DNS/HTTP outcomes. `zllog.py audit`
 correlates begin/result IDs and reports incomplete or unmatched boundaries

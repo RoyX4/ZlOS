@@ -52,6 +52,10 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 | `architecture/boot/boot-architecture-decision.md` | Boot ownership ADR and loader/kernel boundary. |
 | `architecture/boot/typed-boot-handover.md` | Typed boot handover contract and recovery-policy boundary. |
 | `architecture/boot/persistent-boot-observer.md` | Persistent boot diagnosis architecture. |
+| `architecture/system/always-on-telemetry.md` | Always-on recorder and telemetry contract. |
+| `architecture/system/automatic-system-audit.md` | Automatic system-audit architecture and proof boundaries. |
+| `architecture/system/exec-kill-path.md` | Process termination and non-cooperative execution contract. |
+| `architecture/system/user-process-abi.md` | 64-bit user process ABI. |
 
 ## Archived Prompt Files
 

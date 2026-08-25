@@ -106,10 +106,10 @@ opening an app: `format`/`mkfs` is the explicit destructive route. New zlfs v2
 volumes use copy-on-write replacement and dual checksummed directory
 generations; version-1 volumes remain mountable through the legacy path.
 The implemented 64-bit Ring-3 image/syscall contract and its remaining process
-gates are [`docs/user-process-abi.md`](docs/user-process-abi.md).
+gates are [`docs/architecture/system/user-process-abi.md`](docs/architecture/system/user-process-abi.md).
 The automatic process/app -> syscall -> file/network/window -> result/error ->
 exit audit contract and physical read-back procedure are
-[`docs/automatic-system-audit.md`](docs/automatic-system-audit.md).
+[`docs/architecture/system/automatic-system-audit.md`](docs/architecture/system/automatic-system-audit.md).
 The complete performance/storage/process/network implementation receipt,
 including every local gate and every still-open physical gate, is
 [`docs/evidence/performance-architecture-implementation-2026-08-22.md`](docs/evidence/performance-architecture-implementation-2026-08-22.md).
@@ -183,7 +183,7 @@ the ThinkPad, do not upload firmware, and are not a connection claim.
 > this PCH I219 before any MMIO write; milestone 216 records the deliberate
 > quarantine and boot may continue. This does **not** claim I219 Ethernet works.
 > The next physical gate is a visible desktop plus durable 213, 216, 206 and
-> 207 milestones. Details: [`docs/automatic-system-audit.md`](docs/automatic-system-audit.md).
+> 207 milestones. Details: [`docs/architecture/system/automatic-system-audit.md`](docs/architecture/system/automatic-system-audit.md).
 > The fourth image is already on the 3.6 GiB Imation stick: clean GPT/FAT,
 > pristine 512 MiB ZLLOG GUID `156e16f3-53e4-48db-a1b6-3dd99cc664b7`, and
 > local/USB EFI hashes match. `Boot0002` names ESP PARTUUID
@@ -327,9 +327,9 @@ Boot Guard fused *on* on this laptop — measured): [`docs/what-is-a-bios.md`](d
 The implementation and safety contract are in
 [`docs/architecture/boot/persistent-boot-observer.md`](docs/architecture/boot/persistent-boot-observer.md); the
 whole-runtime event/counter/sampling/burst/laboratory design is in
-[`docs/always-on-telemetry.md`](docs/always-on-telemetry.md); the
+[`docs/architecture/system/always-on-telemetry.md`](docs/architecture/system/always-on-telemetry.md); the
 typed lifecycle/operation/result layer is in
-[`docs/automatic-system-audit.md`](docs/automatic-system-audit.md); the
+[`docs/architecture/system/automatic-system-audit.md`](docs/architecture/system/automatic-system-audit.md); the
 priority order around it is in
 [`../docs/EXECUTION-ROADMAP.md`](../docs/EXECUTION-ROADMAP.md). This is the
 verified current state:
@@ -1709,7 +1709,7 @@ Three docs, all written from measurement rather than intent:
   file that owns it, the kernel image end measured, and **the fact that no gate
   passes `-m` so every address above 128 MiB is unbacked under all of them**.
   Also two collisions `src/graphics/framebuffer/fb.c`'s map does not list.
-- `kernel/docs/exec-kill-path.md` — how a program that will not stop is stopped:
+- `kernel/docs/architecture/system/exec-kill-path.md` — how a program that will not stop is stopped:
   a step budget and a depth cap at `eval`/`exec`, a `longjmp` boundary instead of
   `exit(1)`, and why it is deliberately not the timer interrupt.
 - `kernel/docs/DECISIONS.md` §"The exec track" — the level choice (**Level 1,

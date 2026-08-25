@@ -1870,7 +1870,7 @@ $ grep -c 'T-EXEC' .ultra/TENSIONS.md
 0
 $ grep -rn 'T-EXEC' kernel/docs/*.md
 memory-map.md:103 (T-EXEC-1)   :136 (T-EXEC-5)   :192 (T-EXEC-3)
-exec-kill-path.md:300 (T-EXEC-8)
+kernel/docs/architecture/system/exec-kill-path.md:300 (T-EXEC-8)
 ```
 
 The cited *file* exists, so a file-existence check passes and the citation still
@@ -1964,7 +1964,7 @@ the tally is settled statically, with no run needed.** `killtest.sh` increments
 its `checks` counter at exactly 25 sites (13 `run_case` calls, 6 `run_confined`
 calls, 6 unconditional inline increments at `:188, 241, 258, 272, 314, 340`) and
 `:358` prints `"$checks cases"`, so it prints **25**, matching
-`exec-kill-path.md:284`. The first draft filed "19 or 25?" in §14 as needing a
+`kernel/docs/architecture/system/exec-kill-path.md:284`. The first draft filed "19 or 25?" in §14 as needing a
 run; it did not; (d) it describes the boot fork as
 `if wm_avail()==0 {shell} else {wm_session()}` while `kernel.zl:3782` does
 `wm_boot = wm_boot_start()` with `wm_session()` demoted to the `w` command —

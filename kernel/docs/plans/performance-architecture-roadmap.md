@@ -18,7 +18,7 @@ Read the measured evidence first:
   is the current physical measurement record;
 - [`retained-window-surfaces.md`](retained-window-surfaces.md) is the first
   implementation contract;
-- [`always-on-telemetry.md`](../always-on-telemetry.md) is the recorder contract;
+- [`always-on-telemetry.md`](../architecture/system/always-on-telemetry.md) is the recorder contract;
 - [`kernel/HANDOFF.md`](../../HANDOFF.md) is the current hardware handoff.
 
 ## The answer in one page
@@ -249,7 +249,7 @@ telemetry.
 "Log everything" cannot mean storing every instruction, pixel write and packet
 payload on a USB stick: doing so changes the timing, exhausts storage and
 collects private content. The useful whole-system recorder is a five-tier
-system, documented in [`always-on-telemetry.md`](../always-on-telemetry.md):
+system, documented in [`always-on-telemetry.md`](../architecture/system/always-on-telemetry.md):
 
 | tier | keep | examples |
 |---|---|---|
