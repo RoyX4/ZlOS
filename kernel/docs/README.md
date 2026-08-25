@@ -45,6 +45,14 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 | `guides/desktop-build-guide.md` | Plain-language desktop/compositor orientation. |
 | `guides/thinkpad-first-boot.md` | Physical ThinkPad boot and evidence-capture runbook. |
 
+## Architecture
+
+| File | Purpose |
+|---|---|
+| `architecture/boot/boot-architecture-decision.md` | Boot ownership ADR and loader/kernel boundary. |
+| `architecture/boot/typed-boot-handover.md` | Typed boot handover contract and recovery-policy boundary. |
+| `architecture/boot/persistent-boot-observer.md` | Persistent boot diagnosis architecture. |
+
 ## Archived Prompt Files
 
 These old execution briefs live in `archive/prompts/`. Their unresolved work was

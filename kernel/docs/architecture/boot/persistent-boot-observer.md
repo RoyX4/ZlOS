@@ -7,7 +7,7 @@ Codex can inspect after the USB stick is plugged back into Linux.
 
 The whole-runtime capture tiers, performance correlation, retention policy and
 laboratory trace mode are specified in
-[`always-on-telemetry.md`](always-on-telemetry.md). It is not an instruction trace. Recording every executed instruction would
+[`always-on-telemetry.md`](../../always-on-telemetry.md). It is not an instruction trace. Recording every executed instruction would
 change timing, overflow the stick and produce unusable data. It is a flight
 recorder for subsystem boundaries, errors, counters and latency phases.
 

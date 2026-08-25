@@ -192,7 +192,7 @@ allowed to replace the CPU path.
 
 The complete observer, on-stick format, safety rules and extraction workflow
 are specified in
-[`kernel/docs/persistent-boot-observer.md`](../kernel/docs/persistent-boot-observer.md).
+[`kernel/docs/architecture/boot/persistent-boot-observer.md`](../kernel/docs/architecture/boot/persistent-boot-observer.md).
 
 The ESP stays a boot volume, not a crash dump scratchpad. `kernel/tools/images/mkusb.sh` now
 builds two fixed GPT partitions:

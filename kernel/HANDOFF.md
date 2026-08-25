@@ -311,7 +311,7 @@ Boots three ways with no GRUB: BIOS multiboot, our own 512-byte bootloader
 (`raw_boot.asm`), and as a native UEFI application (`efi.c`).
 
 All three entry families now converge on the versioned, sealed record described
-in [`docs/typed-boot-handover.md`](docs/typed-boot-handover.md) before the ZL
+in [`docs/architecture/boot/typed-boot-handover.md`](docs/architecture/boot/typed-boot-handover.md) before the ZL
 kernel starts. Exact artifact/origin identity and automatic recovery selection
 remain explicitly unclaimed until the next loader slice supplies them.
 
@@ -325,7 +325,7 @@ Boot Guard fused *on* on this laptop — measured): [`docs/what-is-a-bios.md`](d
 ## The USB boot flight recorder works on the physical ThinkPad
 
 The implementation and safety contract are in
-[`docs/persistent-boot-observer.md`](docs/persistent-boot-observer.md); the
+[`docs/architecture/boot/persistent-boot-observer.md`](docs/architecture/boot/persistent-boot-observer.md); the
 whole-runtime event/counter/sampling/burst/laboratory design is in
 [`docs/always-on-telemetry.md`](docs/always-on-telemetry.md); the
 typed lifecycle/operation/result layer is in
