@@ -14,11 +14,12 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KERNEL_ROOT = os.path.dirname(os.path.dirname(HERE))
+REPO_ROOT = os.path.dirname(KERNEL_ROOT)
 METADATA = os.path.join(KERNEL_ROOT, "metadata")
 MANIFEST = os.path.join(METADATA, "app-manifest.json")
-EMBED = os.path.join(HERE, "app_manifest_embed.zl")
+EMBED = os.path.join(KERNEL_ROOT, "app_manifest_embed.zl")
 BUILD_IDENTITY = os.path.join(METADATA, "build-identity.json")
-BUILD_EMBED = os.path.join(HERE, "build_identity_embed.zl")
+BUILD_EMBED = os.path.join(KERNEL_ROOT, "build_identity_embed.zl")
 MARKER = re.compile(r"app-manifest: schema=(\d+) entries=(\d+) sha256=([0-9a-f]{64})")
 BUILD_MARKER = re.compile(
     r"build-identity: schema=(\d+) id=([0-9a-f]{64})"
@@ -72,7 +73,7 @@ def main(argv):
             "app_manifest_embed.zl": sha256(EMBED),
             "build-identity.json": sha256(BUILD_IDENTITY),
             "build_identity_embed.zl": sha256(BUILD_EMBED),
-            "kernel.zl": sha256(os.path.join(HERE, "kernel.zl")),
+            "kernel.zl": sha256(os.path.join(KERNEL_ROOT, "src", "kernel.zl")),
             os.path.basename(args.harness): sha256(os.path.abspath(args.harness)),
             "write-app-manifest-boot-receipt.py": sha256(os.path.abspath(__file__)),
         }
@@ -80,16 +81,16 @@ def main(argv):
             source_path = os.path.abspath(source)
             if not os.path.isfile(source_path):
                 raise ValueError(f"extra receipt source is missing: {source}")
-            source_files[os.path.relpath(source_path, HERE)] = sha256(source_path)
+            source_files[os.path.relpath(source_path, KERNEL_ROOT)] = sha256(source_path)
         receipt = {
             "schema": "zlos.application-manifest-boot-receipt.v1",
             "route": args.route,
             "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
             "source_head": subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], cwd=os.path.dirname(HERE), text=True).strip(),
+                ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip(),
             "source_files_sha256": source_files,
             "artifact": {
-                "path": os.path.relpath(artifact, os.path.dirname(HERE)),
+                "path": os.path.relpath(artifact, REPO_ROOT),
                 "sha256": sha256(artifact),
                 "bytes": os.path.getsize(artifact),
             },

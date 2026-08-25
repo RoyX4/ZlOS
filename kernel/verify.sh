@@ -7,7 +7,9 @@ set -uo pipefail
 cd "$(dirname "$0")" || exit
 
 GOLDEN=tests/fixtures/golden.txt
-OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT
+OUT=$(mktemp)
+NORMALIZED=$(mktemp)
+trap 'rm -f "$OUT" "$NORMALIZED"' EXIT
 
 if ! BUILD_OUTPUT=$(./build.sh 2>&1); then
     echo "FAIL: kernel did not build"
@@ -49,8 +51,28 @@ if [ ! -f "$GOLDEN" ]; then
     cp "$OUT" "$GOLDEN"; echo "wrote $GOLDEN (first run - review, then commit)"; exit 0
 fi
 
-if diff -q "$GOLDEN" "$OUT" >/dev/null; then
+MANIFEST_SHA=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
+BUILD_ID=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["identity_sha256"])')
+BUILD_HEAD=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["git"]["head"])')
+BUILD_DIRTY=$(python3 -c 'import json; print(1 if json.load(open("metadata/build-identity.json"))["git"]["dirty"] else 0)')
+for marker in \
+    "app-manifest: schema=1 entries=62 sha256=$MANIFEST_SHA" \
+    "build-identity: schema=1 id=$BUILD_ID" \
+    "build-source: head=$BUILD_HEAD dirty=$BUILD_DIRTY"; do
+    [ "$(grep -Fc "$marker" "$OUT")" -eq 1 ] || {
+        echo "FAIL: serial transcript has missing or duplicate current receipt: $marker"
+        exit 1
+    }
+done
+
+sed -E \
+    -e 's/(app-manifest: schema=1 entries=62 sha256=)[0-9a-f]{64}/\1<CURRENT>/' \
+    -e 's/(build-identity: schema=1 id=)[0-9a-f]{64}/\1<CURRENT>/' \
+    -e 's/(build-source: head=)[0-9a-f]{40} dirty=[01]/\1<CURRENT>/' \
+    "$OUT" > "$NORMALIZED"
+
+if diff -q "$GOLDEN" "$NORMALIZED" >/dev/null; then
     echo "ok    kernel boots, shell responds, transcript matches golden.txt"
     exit 0
 fi
-echo "FAIL: serial transcript changed"; diff "$GOLDEN" "$OUT" | head -20; exit 1
+echo "FAIL: serial transcript changed"; diff "$GOLDEN" "$NORMALIZED" | head -20; exit 1

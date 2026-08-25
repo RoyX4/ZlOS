@@ -20,9 +20,9 @@
   network: link ready, DHCP started
   [  OK  ] zl runtime, kernel subset
   [ INFO ] no heap, zlfs mounts on demand, no scheduler
-  app-manifest: schema=1 entries=62 sha256=a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7
-  build-identity: schema=1 id=85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13
-  build-source: head=b8a00ec45ac1f9f955ba79ed63f0072540067d4e dirty=1
+  app-manifest: schema=1 entries=62 sha256=<CURRENT>
+  build-identity: schema=1 id=<CURRENT>
+  build-source: head=<CURRENT>
 
   ready.
   press h for help, q to halt

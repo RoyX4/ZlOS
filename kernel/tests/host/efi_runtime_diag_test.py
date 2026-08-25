@@ -34,6 +34,7 @@ def main() -> int:
         bad_image = root / "bad-label.img"
         vars_file = root / "vars.fd"
         serial = root / "serial.log"
+        qemu_stderr = root / "qemu.stderr"
         shutil.copyfile(image, bad_image)
         shutil.copyfile(vars_template, vars_file)
         subprocess.run(
@@ -56,21 +57,30 @@ def main() -> int:
             "-vga", "std", "-display", "none", "-no-reboot",
             "-serial", f"file:{serial}",
         ]
-        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        try:
-            deadline = time.monotonic() + 120
-            while time.monotonic() < deadline:
-                if serial.exists() and b"ready." in serial.read_bytes():
-                    break
-                if process.poll() is not None:
-                    break
-                time.sleep(0.1)
-            else:
-                raise AssertionError("runtime diagnostic QEMU boot timed out")
-        finally:
-            if process.poll() is None:
-                process.terminate()
-            process.wait(timeout=10)
+        with qemu_stderr.open("wb") as error_log:
+            process = subprocess.Popen(
+                command, stdout=subprocess.DEVNULL, stderr=error_log
+            )
+            try:
+                deadline = time.monotonic() + 120
+                while time.monotonic() < deadline:
+                    if serial.exists() and b"ready." in serial.read_bytes():
+                        break
+                    if process.poll() is not None:
+                        break
+                    time.sleep(0.1)
+                else:
+                    raise AssertionError("runtime diagnostic QEMU boot timed out")
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                process.wait(timeout=10)
+
+        if not serial.exists():
+            detail = qemu_stderr.read_text(errors="replace").strip()
+            raise AssertionError(
+                f"QEMU exited {process.returncode} before opening serial: {detail}"
+            )
 
         transcript = serial.read_text(errors="replace")
         assert "ready." in transcript, "bad-label image never reached the prompt"
