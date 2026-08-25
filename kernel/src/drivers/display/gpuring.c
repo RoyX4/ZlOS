@@ -603,7 +603,7 @@ gr_u32 gpu_present_mismatches(void) { return present_mismatch; }
 /* ---- the self-test: what a USB boot is FOR ---------------------------------
  *
  * There is no serial port on the ThinkPad, so the screen is the only
- * diagnostic (docs/thinkpad-first-boot.md). A boot that arms the ring and says
+ * diagnostic (docs/guides/thinkpad-first-boot.md). A boot that arms the ring and says
  * nothing is a boot wasted. This runs the whole sequence and leaves every
  * number a human needs behind it, for kernel.zl to print.
  *

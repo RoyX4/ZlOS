@@ -1251,7 +1251,7 @@ inverts that. Designed 2026-08-17:
   rendering is one call that should not be made yet — 1.76x measured, not 4x,
   and two bands is slower than serial. **Two of its entries carry correction
   banners** — one claim in it was wrong and says so.
-- `docs/desktop-build-guide.md` — start here. What a compositor is, in plain
+- `docs/guides/desktop-build-guide.md` — start here. What a compositor is, in plain
   words, and the build order.
 - **`docs/archive/superseded/desktop-TODO.md` — historical ordered task list.**
   Its audited banner says not to work from the body; use `../docs/REMAINING-WORK.md`.

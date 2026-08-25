@@ -45,7 +45,7 @@ on x86 is an immediate processor reset.
 
 That is not "the desktop looks wrong" or "the machine hangs with a message." It is
 **the laptop reboots instantly, with no output**, on the one test machine that
-`kernel/docs/thinkpad-first-boot.md` records as having **no serial port — the screen is
+`kernel/docs/guides/thinkpad-first-boot.md` records as having **no serial port — the screen is
 the only diagnostic.** A triple fault clears the screen on the way out.
 
 This repo has lost the 64-bit boot once before inside `setup_idt()` with all three gates

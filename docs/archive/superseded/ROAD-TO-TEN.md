@@ -141,7 +141,7 @@ and a verified TLS 1.3 handshake with a correct chain.
 The one item that converts "runs in QEMU" into "runs on bare metal", which is the
 literal wording of the gap between the two scores. Everything needed is already
 built: `verify-efi.sh` gates the exact path a real machine takes,
-`kernel/docs/thinkpad-first-boot.md` is the runbook, the USB image has been
+`kernel/docs/guides/thinkpad-first-boot.md` is the runbook, the USB image has been
 rebuilt (it was two builds stale). `.ultra/STATE.md` open item 1: flash
 `/dev/sda`, boot, run `blit`, steps 1–7 with 7 as the win.
 **Record it on video.** An unrecorded bare-metal boot is worth about as much as

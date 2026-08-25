@@ -191,4 +191,4 @@ Items 1–3 are bug fixes and could be done in an afternoon. Item 4 is a feature
 ---
 
 Task list: `archive/superseded/desktop-TODO.md` · Architecture: `archive/superseded/desktop-plan.md` · Intro:
-`desktop-build-guide.md`
+`guides/desktop-build-guide.md`

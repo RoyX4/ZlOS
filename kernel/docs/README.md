@@ -9,7 +9,7 @@ Read the top banner of each file before treating it as current.
 |---|---|
 | `input-stack.md` | Current input model and probe map. |
 | `memory-model.md`, `memory-map.md`, `dma-sites.md` | Current fixed-address and memory-boundary references. |
-| `thinkpad-first-boot.md` | Physical-boot runbook; does not by itself prove a successful boot happened. |
+| `guides/thinkpad-first-boot.md` | Physical-boot runbook; does not by itself prove a successful boot happened. |
 | `current-speed-and-quality-diagnosis.md` | Current speed diagnosis from measured traces, with hardware/QEMU boundaries called out. |
 | `performance-architecture-roadmap.md` | Current performance architecture plan. |
 
@@ -37,6 +37,13 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 | `evidence/mp00/test-inventory-2026-08-22.md` | Host-test classification and execution receipt retained from the MP-00 foundation run. |
 | `evidence/performance-architecture-implementation-2026-08-22.md` | Performance architecture implementation batch. |
 | `evidence/exercises/` | Retained exercise images, transcripts and physical/QEMU bundles; disposable new runs still go to ignored `kernel/exercise-out/`. |
+
+## Guides
+
+| File | Purpose |
+|---|---|
+| `guides/desktop-build-guide.md` | Plain-language desktop/compositor orientation. |
+| `guides/thinkpad-first-boot.md` | Physical ThinkPad boot and evidence-capture runbook. |
 
 ## Archived Prompt Files
 

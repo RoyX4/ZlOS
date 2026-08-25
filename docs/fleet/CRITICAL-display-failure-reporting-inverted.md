@@ -11,7 +11,7 @@ together, and each is the mirror of the other:
   entire modeset failed, so `panel_up` returns 0 on a panel that is lit and working.
 
 On a machine whose only diagnostic is the screen
-(`kernel/docs/thinkpad-first-boot.md`), both directions are expensive.
+(`kernel/docs/guides/thinkpad-first-boot.md`), both directions are expensive.
 
 ---
 

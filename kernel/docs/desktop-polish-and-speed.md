@@ -413,7 +413,7 @@ buys the right to animate anything.
 ---
 
 Rendering bugs: `desktop-look.md` · Task list: `archive/superseded/desktop-TODO.md` ·
-Architecture: `archive/superseded/desktop-plan.md` · Intro: `desktop-build-guide.md`
+Architecture: `archive/superseded/desktop-plan.md` · Intro: `guides/desktop-build-guide.md`
 
 ---
 

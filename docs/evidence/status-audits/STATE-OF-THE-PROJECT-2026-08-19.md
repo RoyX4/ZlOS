@@ -1819,7 +1819,7 @@ set. All six refs are already local; no fetch is needed. The composition matters
 more than the count, because three of the groups are different kinds of problem:
 
 - **Dangling docs.** `desktop-prior-art.md`, `desktop-toolkit.md`,
-  `desktop-build-guide.md`, `intel-graphics-stack.md` and `beyond-the-kernel.md`
+  `kernel/docs/guides/desktop-build-guide.md`, `intel-graphics-stack.md` and `beyond-the-kernel.md`
   are linked by 3, 5, 7, 1 and 3 tracked `.md` files respectively and exist on no
   branch. Every one of those links is broken today. `beyond-the-kernel.md` is the
   worst case because `HANDOFF.md:391` makes it the authority that overturns a
@@ -1837,20 +1837,20 @@ more than the count, because three of the groups are different kinds of problem:
 ### 10.2 Five filenames are cited by twenty-plus tracked files and none is in the repo
 
 ```
-$ for d in beyond-the-kernel.md desktop-toolkit.md desktop-build-guide.md \
+$ for d in beyond-the-kernel.md desktop-toolkit.md guides/desktop-build-guide.md \
            desktop-prior-art.md intel-graphics-stack.md MASTER_PLAN.md; do
     printf '%-26s tracked=%s citers=%s\n' "$d" \
       "$(git ls-files | grep -c $d)" "$(git grep -l $d | wc -l)"; done
 beyond-the-kernel.md       tracked=0 citers=3
 desktop-toolkit.md         tracked=0 citers=5
-desktop-build-guide.md     tracked=0 citers=7
+guides/desktop-build-guide.md tracked=0 citers=7
 desktop-prior-art.md       tracked=0 citers=3
 intel-graphics-stack.md    tracked=0 citers=1
 MASTER_PLAN.md             tracked=0 citers=14
 ```
 
 `README.md` and eleven design docs route the reader to `MASTER_PLAN.md`.
-`desktop-build-guide.md` and `desktop-toolkit.md` are the two `OVERNIGHT-PROMPT.md`
+`kernel/docs/guides/desktop-build-guide.md` and `desktop-toolkit.md` are the two `OVERNIGHT-PROMPT.md`
 lists under "READ FIRST". `06ced13` rescued six orphaned docs onto `main`; these
 five were not among them. Two of them (`beyond-the-kernel.md`, `desktop-toolkit.md`)
 exist in the dangling WIP commit `5557f4a`, which is on no branch.

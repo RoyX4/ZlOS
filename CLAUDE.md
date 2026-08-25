@@ -77,7 +77,7 @@ area:
 - `kernel/docs/input-stack.md` — the keyboard, the pointer, and the three ways a
   USB stack written for ONE HID device breaks when a second one arrives. Also
   the `-mgeneral-regs-only` boundary rule, which is subtler than it looks.
-- `kernel/docs/thinkpad-first-boot.md` — the step-by-step for booting the
+- `kernel/docs/guides/thinkpad-first-boot.md` — the step-by-step for booting the
   laptop, including the two things that waste an hour (Secure Boot, and the fact
   that there is no serial port so the screen is the only diagnostic).
 - `kernel/docs/memory-model.md` — **the address space and, for each boundary in

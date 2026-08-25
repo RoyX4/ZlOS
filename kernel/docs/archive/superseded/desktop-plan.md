@@ -8,7 +8,7 @@
 
 # zlOS desktop — inverting the shell and the compositor
 
-> **New to this? Read `desktop-build-guide.md` first.** It explains what we are
+> **New to this? Read `../../guides/desktop-build-guide.md` first.** It explains what we are
 > building and why, in ordinary words. This file is the decisions and the
 > evidence behind them.
 

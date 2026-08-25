@@ -52,7 +52,7 @@ READ FIRST, IN THIS ORDER
   kernel/HANDOFF.md
   kernel/docs/DECISIONS.md          every decision already taken, and two that were wrong
   kernel/docs/archive/superseded/desktop-TODO.md  historical ordered task list
-  kernel/docs/desktop-build-guide.md  what a compositor is, in plain words
+  kernel/docs/guides/desktop-build-guide.md  what a compositor is, in plain words
   kernel/docs/archive/superseded/desktop-plan.md  architecture and line numbers
   kernel/docs/desktop-toolkit.md    the immediate-mode toolkit design
   kernel/docs/desktop-look.md       the three rendering bugs

@@ -306,7 +306,7 @@ Two ways to get it, both needing a human:
 - **Detach i915** (`modeset-run.sh`'s pattern, EXIT-trap recovery). This blanks
   the screen of whoever is using the laptop, so it is not something to start
   while someone is working.
-- **Boot zlOS on the ThinkPad from USB.** `kernel/docs/thinkpad-first-boot.md`
+- **Boot zlOS on the ThinkPad from USB.** `kernel/docs/guides/thinkpad-first-boot.md`
   has the procedure, including the two things that waste an hour.
 
 Until one of those happens, `gpu.c` is as far as this can honestly go: the

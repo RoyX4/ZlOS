@@ -160,7 +160,7 @@ code rather than the new driver. The pattern and the rule are in
 
 ## Next steps
 
-1. **Boot the laptop.** `kernel/docs/thinkpad-first-boot.md` is the checklist.
+1. **Boot the laptop.** `kernel/docs/guides/thinkpad-first-boot.md` is the checklist.
    Secure Boot off; **do not press `o`** (NVMe demo writes to LBA 1000 of your
    real disk); `k` is the one worth booting for; `?` is the touchpad, which has
    never executed anywhere.

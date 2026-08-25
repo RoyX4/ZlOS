@@ -31,7 +31,7 @@
 **For whoever picks this up next, human or agent.** Ordered. Do them top to
 bottom. Each task says what to change, and how you know it worked.
 
-Nothing here is started. Read `desktop-build-guide.md` first if the words
+Nothing here is started. Read `../../guides/desktop-build-guide.md` first if the words
 "clipping" or "z-order" are not already familiar.
 
 **Before starting anything:** `cut -d' ' -f1-3 /proc/loadavg`. If the 1-minute
@@ -621,7 +621,7 @@ full one."*
 ---
 
 Background and decisions: `archive/superseded/desktop-plan.md` · Plain-English intro:
-`desktop-build-guide.md` · Why it looks blocky: `desktop-look.md` · Polish and
+`../../guides/desktop-build-guide.md` · Why it looks blocky: `../../desktop-look.md` · Polish and
 performance: `desktop-polish-and-speed.md` · Status and blockers:
 `../../.ultra/STATE.md`
 
