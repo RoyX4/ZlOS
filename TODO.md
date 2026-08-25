@@ -7,24 +7,6 @@ Every item below was measured by a command, not remembered. Regenerate with:
 tools/todo.sh
 ```
 
-## EFI pointer truncation — 7 sites
-
-The four `-Werror=` flags in `kernel/buildefi.sh` are inert: `-w` is a
-blanket suppression a later `-Werror=` does not survive. Harmless below
-4 GiB, which is why no emulator shows them, and why this class shipped twice.
-
-- [ ] replace `-w` with `-Wno-everything` in `kernel/buildefi.sh` (verified fix)
-- [ ] repair the sites it then reports, per file:
-
-  - [ ] `kernel/boot/efi.c` — 1 site(s)
-  - [ ] `freestanding/runtime_kernel.c` — 1 site(s)
-  - [ ] `kernel/boot/gdt64.c` — 1 site(s)
-  - [ ] `src/frontend/lexer.c` — 1 site(s)
-  - [ ] `src/frontend/parser.c` — 1 site(s)
-  - [ ] `src/runtime/interp.c` — 1 site(s)
-  - [ ] `kernel/boot/efi_stage0.c` — 1 site(s)
-- [ ] then run `kernel/tools/checks/verify-efi.sh` before believing the boot path
-
 ## Engine divergence — 2 pinned
 
 `./interp` is ground truth. These engines disagree with it today:
@@ -40,30 +22,21 @@ Both unboxed backends sit on the far side of the scoping decision in
 
 _none — every file the docs describe is tracked._
 
-## Stale doc references — 19 baselined
+## Stale doc references — 11 baselined
 
 Delete a line from `tools/doc-check-ignore.txt` as you fix it. New rot fails CI.
 
-- [ ] docs/design/GRAPHICS_PLAN.md references examples/game_of_life.zl, which does not exist
-- [ ] docs/design/GRAPHICS_PLAN.md references stdlib/window.zl, which does not exist
 - [ ] docs/design/KERNEL_CONTROL_GAPS.md references stdlib/win/memory.zl, which does not exist
 - [ ] docs/design/design_game_system.md references stdlib/fb.zl, which does not exist
 - [ ] docs/design/design_game_system.md references stdlib/sprite.zl, which does not exist
 - [ ] docs/design/design_game_system.md references stdlib/win32.zl, which does not exist
-- [ ] docs/design/design_imports.md references stdlib/foo.zl, which does not exist
 - [ ] docs/design/design_memory_structs.md references tests/struct/wide64.zl, which does not exist
 - [ ] docs/design/design_modules.md references stdlib/strings.zl, which does not exist
-- [ ] docs/design/design_stdlib_layout.md references stdlib/README.md, which does not exist
 - [ ] docs/design/design_stdlib_layout.md references stdlib/sort.zl, which does not exist
 - [ ] docs/design/design_stdlib_layout.md references stdlib/str.zl, which does not exist
 - [ ] docs/design/design_stdlib_layout.md references stdlib/test/sort_test.zl, which does not exist
 - [ ] docs/design/design_stdlib_layout.md references stdlib/test/str_test.zl, which does not exist
 - [ ] docs/design/zl-for-the-kernel.md references kernel/CLAUDE.md, which does not exist
-- [ ] docs/design/zl-for-the-kernel.md references kernel/runtime.h, which does not exist
-- [ ] kernel/docs/driver-build-order.md references docs/wireless-plan.md, which does not exist
-- [ ] CLAUDE.md describes kernel/_gen64.c, which exists but is NOT tracked
-- [ ] docs/design/zl-for-the-kernel.md describes kernel/crypto.c, which exists but is NOT tracked
-
 ## Open tensions (.ultra/TENSIONS.md)
 
 _none open._

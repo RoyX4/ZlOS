@@ -38,18 +38,16 @@ tools/todo.sh
 
 HEADER
 
-# ---- 1. the EFI truncation backlog -----------------------------------------
+# ---- 1. the EFI warning-contract backlog ----------------------------------
 if command -v clang >/dev/null 2>&1; then
     n=$(tools/hazard-scan.sh --count 2>/dev/null || echo "?")
     if [ "$n" != "0" ] && [ "$n" != "?" ]; then
-        echo "## EFI pointer truncation — $n sites"
+        echo "## EFI warning-contract failures — $n sites"
         echo
-        echo "The four \`-Werror=\` flags in \`kernel/buildefi.sh\` are inert: \`-w\` is a"
-        echo "blanket suppression a later \`-Werror=\` does not survive. Harmless below"
-        echo "4 GiB, which is why no emulator shows them, and why this class shipped twice."
+        echo "The live warning-strict EFI flags reject the dedicated pointer-truncation"
+        echo "probe, but compiling the shipped EFI translation units reported errors."
         echo
-        echo "- [ ] replace \`-w\` with \`-Wno-everything\` in \`kernel/buildefi.sh\` (verified fix)"
-        echo "- [ ] repair the sites it then reports, per file:"
+        echo "- [ ] inspect and repair the reported translation units:"
         echo
         tools/hazard-scan.sh 2>/dev/null | sed -n '/== 2\./,/^  \(WARN\|ok\|HAZARD\)/p' \
             | grep -E '^     ' | while read -r f c; do
@@ -58,7 +56,7 @@ if command -v clang >/dev/null 2>&1; then
                 case "$f" in ../*) f="${f#../}" ;; *) f="kernel/$f" ;; esac
                 echo "  - [ ] \`$f\` — $c site(s)"
             done
-        echo "- [ ] then run \`kernel/tools/checks/verify-efi.sh\` before believing the boot path"
+        echo "- [ ] then run the static hazard scan; leave hardware/QEMU proof for its explicit gate"
         echo
     fi
 fi

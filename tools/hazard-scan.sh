@@ -38,9 +38,9 @@ efi_cflags() {
 # bytes there, 8 everywhere else. Five pointer truncations once sat in the boot
 # path because -w silenced the warnings that name this class.
 #
-# The four -Werror= flags are placed after -w on the theory that clang applies
-# flags left to right. That is true of -Wno-<group>, but NOT of -w, which is a
-# blanket suppression that wins regardless of position. Measured:
+# The build once placed the four -Werror= flags after -w on the theory that
+# clang applies flags left to right. That is true of -Wno-<group>, but NOT of
+# -w, which is a blanket suppression that wins regardless of position. Measured:
 #
 #   -w              -Werror=pointer-to-int-cast   -> exit 0   (guard inert)
 #   -Wno-everything -Werror=pointer-to-int-cast   -> exit 1   (guard fires)
@@ -56,15 +56,7 @@ EOF
     if [ "${#CFA[@]}" -eq 0 ]; then
         skip "could not parse CF= out of kernel/buildefi.sh"
     elif clang "${CFA[@]}" -c "$tmp/probe.c" -o "$tmp/probe.o" >/dev/null 2>&1; then
-        # Known-outstanding, so this warns rather than failing - otherwise every
-        # PR is red for a defect it did not introduce, and a permanently red
-        # gate is one nobody reads. Check 2 is what actually holds the line.
-        warn "the EFI build ACCEPTS a 64-bit pointer truncated into 'unsigned long'."
-        warn "  the four -Werror= flags in kernel/buildefi.sh are inert: -w is a"
-        warn "  blanket suppression that a later -Werror= does not survive."
-        warn "  fix: replace '-w' with '-Wno-everything' in CF (verified), then"
-        warn "  repair the sites check 2 reports. See section 8b of"
-        warn "  docs/design/ci-and-agent-pipeline.md."
+        hit "the EFI build accepts a 64-bit pointer truncated into 'unsigned long'"
     else
         ok "guard fires: a truncating pointer cast is rejected by the EFI flags"
     fi
@@ -77,12 +69,6 @@ fi
 # arithmetic that merely mentions 'unsigned long'.
 if command -v clang >/dev/null 2>&1; then
     read -r -a CFA <<< "$(efi_cflags)"
-    # Force the guard on for counting, whatever buildefi.sh currently does.
-    # Exact-element match only: substring replacement would turn -fshort-wchar
-    # into -fshort-Wno-everythingchar, which clang rejects.
-    for i in "${!CFA[@]}"; do
-        [ "${CFA[$i]}" = "-w" ] && CFA[$i]="-Wno-everything"
-    done
     files=$(sed -n '/^for f in/,/do$/p' kernel/buildefi.sh | tr ' \\' '\n\n' | grep '\.c$')
     total=0; bad=0
     # buildefi.sh runs from kernel/, and CF carries a relative -I.. — so this
@@ -91,7 +77,11 @@ if command -v clang >/dev/null 2>&1; then
     for f in $files; do
         [ -f "$f" ] || continue
         EXTRA=(); case "$(basename "$f")" in idt.c|apic.c) EXTRA=(-mgeneral-regs-only);; esac
-        n=$(clang "${CFA[@]}" "${EXTRA[@]}" -c "$f" -o "$tmp/o.o" 2>&1 | grep -c 'error:')
+        # Match buildefi.sh exactly. Omitting ZL_KERNEL_SERIAL makes one
+        # unrelated standalone-translation-unit error appear in every file and
+        # used to manufacture a seven-item TODO from a green EFI build.
+        n=$(clang "${CFA[@]}" "${EXTRA[@]}" -DZL_KERNEL_SERIAL \
+            -c "$f" -o "$tmp/o.o" 2>&1 | grep -c 'error:')
         if [ "$n" -gt 0 ]; then
             [ "$COUNT_ONLY" -eq 1 ] || printf "     %-36s %s\n" "$f" "$n"
             total=$((total+n)); bad=$((bad+1))

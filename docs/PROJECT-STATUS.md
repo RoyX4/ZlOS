@@ -19,10 +19,10 @@ implementation state. They are not the same thing.
 
 | Repository or checkout | Commit state | Meaning |
 |---|---|---|
-| `RoyX4/zl-linux:main` | Pushed at `4b9883123682` | Final integration head. Every currently advertised `origin/*` topic branch is an ancestor of this commit. This is branch closure, not product completion. |
-| This reconciliation worktree | `codex/full-program`, based on `4b9883123682` | Isolated at `/home/roy/Documents/repos/zl-linux-final`. It combines the full structure migration with current integrated `main`; the work is uncommitted and unpushed. The original dirty checkout was not rewritten. |
+| `RoyX4/zl-linux:main` | Structure and verifier checkpoint `a5c6f4e4306d`; current docs refresh `b8e5f8a45164` | The complete restructure is published. GitHub docs, repository gates and all four QEMU boot jobs passed at the verifier checkpoint. This is repository closure and QEMU evidence, not product or physical-hardware completion. |
+| This reconciliation worktree | Clean `codex/full-program` at `b8e5f8a45164`, matching `origin/main` | Isolated at `/home/roy/Documents/repos/zl-linux-final`. The structure migration, research shelf and verifier repairs are committed and pushed. The original dirty checkout was not rewritten. |
 | Older structure worktree | `codex/full-restructure`, based on `85fcdf542b9c` | Preserved at `/home/roy/Documents/repos/zl-linux-structure` as the older migration input. It is not the active finalization tree. |
-| `display-state-2026-08-25.md` | Untracked under the original shared checkout's kernel docs | A concurrent read-only display audit. Preserve it, but do not describe it as committed or pushed. |
+| Original shared checkout | Dirty `codex/local-zlos-snapshot-2026-08-24` at `/home/roy/Documents/repos/zl-linux` | Preserved migration inputs and a concurrent untracked display-state audit; it is not the publication authority and was not rewritten. |
 | `zl-linux-merge-all` | Clean at `4b9883123682` | Local checkout of the pushed integration head and the best place to inspect final merged state. |
 | `RoyX4/zl:main` | Pushed at `6f53115` | Separate language repository. Its local `main` matches the remote, but the working directory has untracked local output. |
 | `zl-merge-all` | Local head `5207d5c`, five commits ahead of `RoyX4/zl:main` | The raw GitHub/other-OS research is committed locally. Two repository-pattern commits are on `origin/codex/github-repo-patterns`; the complete merge head is not on remote `main`. |
@@ -47,7 +47,7 @@ already an ancestor of `origin/main`; none contains a unique unmerged commit.
 | Three detached Claude worktrees | `bb1d623b9b49`, `84cecae63019`, `b8a00ec45ac1` | Clean and preserved; their commits are already in `origin/main`. |
 | `codex/local-zlos-snapshot-2026-08-24` | `85fcdf542b9c` | Dirty shared checkout containing the uncommitted cleanup inputs; do not overwrite it. |
 | `codex/full-restructure` | `85fcdf542b9c` base | Preserved older isolated structure migration. |
-| `codex/full-program` | `4b9883123682` base | Active isolated current-main reconciliation; uncommitted and unpushed. |
+| `codex/full-program` | `b8e5f8a45164` | Clean and pushed; matches `origin/main` at this status check. |
 
 ## Whole Implementation Program
 
@@ -65,9 +65,9 @@ normalized core program is committed and pushed in `zl-linux:main` and contains:
 - phases MP-00 through MP-20;
 - driver, service, application, language, agent, release, and proof-gate maps.
 
-The structure reconciliation adds the complete local research shelf and its
-documentation audit. Those additions are still uncommitted and unpushed in
-`codex/full-program`; moving them does not change implementation status.
+The structure reconciliation also publishes the complete local research shelf
+and its documentation audit. Moving and publishing them does not change
+implementation status.
 
 The static validator currently passes for inventory, repository identity,
 identifiers, dependencies, links, and generated-file freshness in the isolated
@@ -83,7 +83,7 @@ The codebase is substantial but the whole program is partial.
 | Research inventory and dependency plan | Complete and committed. |
 | Branch/worktree integration discovered on 2026-08-24 | Complete and pushed. Historical refs/directories were not deleted. |
 | Existing local implementation batch | Implemented across many host and QEMU lanes; see the dated receipt under `kernel/docs/evidence/`. |
-| Full landing gate at final integration | Stopped after the explicit push request. Later host inventory, QEMU boots, and joined evidence refresh were not completed in that run. |
+| Post-restructure static and QEMU verification | GitHub docs, repository gates, BIOS32, raw BIOS, GRUB BIOS/UEFI and native UEFI all passed at `a5c6f4e4306d`. No physical boot was run. |
 | Physical ThinkPad proof | Partial. QEMU and host evidence do not close panel, input feel, I219, USB power-cut, NVMe, suspend, or Intel promotion gates. |
 | Complete MP-00 through MP-20 product | Not complete. The product-first order begins with Wave 1 performance/dependability and proceeds through boot, processes, IPC, services, hardware breadth, apps, browser, tooling, and release. |
 

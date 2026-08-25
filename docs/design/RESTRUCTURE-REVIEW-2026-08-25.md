@@ -2,8 +2,9 @@
 
 Status: reviewed and reconciled onto integrated `main` in the isolated
 `codex/full-program` working tree. Phase 1 and its moved-path repairs are
-implemented but remain uncommitted and unpushed. Later phases are decisions and
-migration targets, not completed work.
+implemented, committed and pushed. GitHub docs, repository gates and all four
+QEMU boot jobs passed at `a5c6f4e4306d`. Later phases are decisions and
+migration targets, not completed work; no physical boot was run.
 
 ## Review Method
 
@@ -77,8 +78,10 @@ Implemented in this working tree:
 - root and subsystem orientation files added
 - current, evidence, proposal, and archive meanings documented
 
-This phase has static verification only. It has no fresh compiler, host-harness,
-QEMU, graphical, or hardware proof.
+The review itself was static. The later publication checkpoint passed the
+repository's GitHub docs, host/language gates and BIOS32, raw BIOS, GRUB
+BIOS/UEFI and native UEFI QEMU jobs. It has no fresh graphical-human or physical
+hardware proof.
 
 ### Phase 1.1 - Path Integrity
 
@@ -141,8 +144,8 @@ Not implemented:
   implementation file.
 - C files still rely on basename includes and broad source-directory search
   paths. Current folders express intent more strongly than enforced boundaries.
-- No fresh build, QEMU, graphical, or physical-hardware evidence exists for this
-  restructure.
+- No fresh graphical-human or physical-hardware evidence exists for this
+  restructure. Build, host and QEMU evidence exists at `a5c6f4e4306d`.
 
 ## Rules
 

@@ -8,22 +8,14 @@
 # kernel/crypto.c and the kernel/docs/*.md set) exist on the laptop but were
 # never committed.
 
-docs/design/GRAPHICS_PLAN.md references examples/game_of_life.zl, which does not exist
-docs/design/GRAPHICS_PLAN.md references stdlib/window.zl, which does not exist
 docs/design/KERNEL_CONTROL_GAPS.md references stdlib/win/memory.zl, which does not exist
 docs/design/design_game_system.md references stdlib/fb.zl, which does not exist
 docs/design/design_game_system.md references stdlib/sprite.zl, which does not exist
 docs/design/design_game_system.md references stdlib/win32.zl, which does not exist
-docs/design/design_imports.md references stdlib/foo.zl, which does not exist
 docs/design/design_memory_structs.md references tests/struct/wide64.zl, which does not exist
 docs/design/design_modules.md references stdlib/strings.zl, which does not exist
-docs/design/design_stdlib_layout.md references stdlib/README.md, which does not exist
 docs/design/design_stdlib_layout.md references stdlib/sort.zl, which does not exist
 docs/design/design_stdlib_layout.md references stdlib/str.zl, which does not exist
 docs/design/design_stdlib_layout.md references stdlib/test/sort_test.zl, which does not exist
 docs/design/design_stdlib_layout.md references stdlib/test/str_test.zl, which does not exist
 docs/design/zl-for-the-kernel.md references kernel/CLAUDE.md, which does not exist
-docs/design/zl-for-the-kernel.md references kernel/runtime.h, which does not exist
-kernel/docs/driver-build-order.md references docs/wireless-plan.md, which does not exist
-CLAUDE.md describes kernel/_gen64.c, which exists but is NOT tracked
-docs/design/zl-for-the-kernel.md describes kernel/crypto.c, which exists but is NOT tracked

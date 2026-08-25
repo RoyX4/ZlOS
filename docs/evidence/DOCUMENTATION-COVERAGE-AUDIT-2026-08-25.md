@@ -106,8 +106,11 @@ started while the earlier scope still appeared to include implementation and
 was stopped immediately when the user clarified the request. Partial compiler
 output is not a green receipt.
 
-The restructure remains uncommitted and unpushed. The original dirty shared
-checkout was not rewritten.
+At the time of this audit the restructure was uncommitted and unpushed, and the
+original dirty shared checkout was not rewritten. It was subsequently committed
+and published; GitHub docs, repository gates and all four QEMU boot jobs passed
+at `a5c6f4e4306d`. That later result does not retroactively turn this static
+documentation audit into runtime or physical evidence.
 
 ## Weakest Link
 
