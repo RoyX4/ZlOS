@@ -45,7 +45,7 @@ It replaces the old aggregate `apps53.py` green that printed `Maze exists NO`
 and hid the missing route behind blank catalogue ID 14.
 
 The MP-00 host-test inventory and dated 62-target execution receipt is
-[`docs/mp00-test-inventory-2026-08-22.md`](docs/mp00-test-inventory-2026-08-22.md).
+[`docs/evidence/mp00/test-inventory-2026-08-22.md`](docs/evidence/mp00/test-inventory-2026-08-22.md).
 It replaces filename-guessed execution with exact pass, hardware-skip,
 instrument and manual-action states.
 
@@ -86,7 +86,7 @@ identity and regeneration fails closed under T-8. The dated verifier-canary,
 failure-injection and hostile-corpus boundary is
 [`docs/mp00-adversarial-registry-2026-08-23.md`](docs/mp00-adversarial-registry-2026-08-23.md).
 The dated frame-performance receipt and its open regressions are
-[`docs/mp00-benchmark-registry-2026-08-23.md`](docs/mp00-benchmark-registry-2026-08-23.md).
+[`docs/evidence/mp00/benchmark-registry-2026-08-23.md`](docs/evidence/mp00/benchmark-registry-2026-08-23.md).
 The current screenshot/visual asset boundary is
 [`docs/mp00-visual-registry-2026-08-23.md`](docs/mp00-visual-registry-2026-08-23.md).
 The current accessibility proof boundary is

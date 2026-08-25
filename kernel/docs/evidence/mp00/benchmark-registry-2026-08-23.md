@@ -1,6 +1,6 @@
 # MP-00 benchmark receipt
 
-[`receipts/benchmark-host-2026-08-23.json`](receipts/benchmark-host-2026-08-23.json)
+[`receipts/benchmark-host-2026-08-23.json`](../../receipts/benchmark-host-2026-08-23.json)
 records the exact `wmbench` and `fbbench` executables, sources, raw output,
 machine, load, sampling method, frame metrics and 60 Hz budget result.
 

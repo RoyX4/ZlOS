@@ -33,6 +33,8 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 | `evidence/system-track.md` | Completed system-track implementation record and measured costs. |
 | `evidence/physical-input-and-recorder-diagnosis-2026-08-23.md` | Physical ThinkPad input and persistent-recorder diagnosis with explicit limits. |
 | `evidence/display/gen9-modeset-plan.json` | Audited Gen9 display research, resolved source conflicts, and retained hardware hazard register. |
+| `evidence/mp00/benchmark-registry-2026-08-23.md` | Exact host benchmark receipt with explicit open regressions and native-target limits. |
+| `evidence/mp00/test-inventory-2026-08-22.md` | Host-test classification and execution receipt retained from the MP-00 foundation run. |
 | `evidence/performance-architecture-implementation-2026-08-22.md` | Performance architecture implementation batch. |
 | `evidence/exercises/` | Retained exercise images, transcripts and physical/QEMU bundles; disposable new runs still go to ignored `kernel/exercise-out/`. |
 
