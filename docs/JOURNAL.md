@@ -7,6 +7,34 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-25 — fix: generate exact build identity per route (832b4f5)
+
+`HEAD` · 12 files changed, 45 insertions(+), 17 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 7 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | agree |
+
+<details><summary>12 file(s)</summary>
+
+- `gates/check-contained-gate.py`
+- `gates/land-gate.sh`
+- `gates/run-land-gate-contained.sh`
+- `kernel/build.sh`
+- `kernel/build64.sh`
+- `kernel/buildefi.sh`
+- `kernel/metadata/README.md`
+- `kernel/tools/checks/check-build-contract.py`
+- `kernel/tools/checks/verify-efi.sh`
+- `kernel/tools/checks/verify-iso.sh`
+- `kernel/tools/checks/verify-raw.sh`
+- `kernel/tools/images/mkdisk.sh`
+
+</details>
+
 ## 2026-08-25 — docs: record path-reference repair (f7aaa08)
 
 `main` · 1 file changed, 17 insertions(+)
