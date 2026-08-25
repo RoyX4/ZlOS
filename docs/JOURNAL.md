@@ -7,6 +7,24 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-25 — docs: record build-identity repair (08b030c)
+
+`main` · 2 files changed, 32 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 7 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | agree |
+
+<details><summary>2 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+
+</details>
+
 ## 2026-08-25 — fix: generate exact build identity per route (832b4f5)
 
 `HEAD` · 12 files changed, 45 insertions(+), 17 deletions(-)

@@ -68,10 +68,6 @@ Delete a line from `tools/doc-check-ignore.txt` as you fix it. New rot fails CI.
 
 _none open._
 
-## Open pull requests
-
-- [ ] #2 fix(kernel): HID buffers sat inside fb.c's blur arena — the high-RAM map is now compiler-enforced  `fix/dma-map-hid-arena`
-
 ---
 
 <!-- BEGIN HAND-WRITTEN -->
