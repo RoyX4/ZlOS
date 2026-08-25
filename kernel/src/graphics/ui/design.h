@@ -119,7 +119,7 @@
  * the accent is compared against black-ish 0.0034 and white 1, and INK becomes
  * whichever wins the contrast ratio. On the default #b8e838 it resolves dark.
  *
- * reference-widgets.md S20.1 is the reason both are named here rather than
+ * docs/reference/ui/widgets.md S20.1 is the reason both are named here rather than
  * spelled at a call site: the reference writes ink-on-accent FOUR ways -
  * #0c1005 (INK, computed), #0d1005 (utility button, drag ghost), #0c0f05
  * (close hover) and a hard-coded #fff in three places that is a contrast
@@ -237,13 +237,13 @@
 #define ZD_T_12_5   25   /* 12.5px  THE ROOT SIZE of the desktop           */
 
 /* ---- widget geometry, in REFERENCE pixels ---------------------------------
- * Every number below is a design-space pixel out of reference-widgets.md, and
+ * Every number below is a design-space pixel out of docs/reference/ui/widgets.md, and
  * every one of them must go through UI_DP() before it reaches fb.c. They live
  * here rather than in uikit.c for the same reason the colours do: the moment a
  * second widget spells `13` for the card radius, the two copies drift.
  *
  * WHERE THE REFERENCE DISAGREES WITH ITSELF, ONE VALUE IS PICKED AND THE
- * DISAGREEMENT IS RECORDED. reference-widgets.md S13.1 catalogues 26 pill
+ * DISAGREEMENT IS RECORDED. docs/reference/ui/widgets.md S13.1 catalogues 26 pill
  * buttons that agree on nothing; S20 indexes eighteen more such splits. The
  * collapse below is that document's own recommendation, and a port built from
  * it differs from the reference by 1-4 px in places. That is deliberate: 26

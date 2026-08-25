@@ -9,6 +9,7 @@ Read the top banner of each file before treating it as current.
 |---|---|
 | `reference/system/input-stack.md` | Current input model and probe map. |
 | `reference/system/memory-model.md`, `reference/system/memory-map.md`, `reference/system/dma-sites.md` | Current fixed-address and memory-boundary references. |
+| `reference/ui/widgets.md` | Measured 68-widget visual specification and inconsistency register. |
 | `guides/thinkpad-first-boot.md` | Physical-boot runbook; does not by itself prove a successful boot happened. |
 | `current-speed-and-quality-diagnosis.md` | Current speed diagnosis from measured traces, with hardware/QEMU boundaries called out. |
 | `plans/performance-architecture-roadmap.md` | Current performance architecture plan. |

@@ -127,12 +127,12 @@ Recorded here rather than claimed as parity.
   subset has no runtime string type and no concatenation, so a weekday name
   cannot be joined to a time.
 - **The 26 pill-button variants** are collapsed to three sizes plus `mono` and
-  `bold` flags, per `reference-widgets.md` §13.1's own recommendation. The
+  `bold` flags, per `kernel/docs/reference/ui/widgets.md` §13.1's own recommendation. The
   reference does not collapse cleanly; a port differs by 1–4 px in places.
 
 ## Where the reference is wrong, and is deliberately not copied
 
-`kernel/docs/reference-widgets.md` §20 indexes 18 internal inconsistencies. The
+`kernel/docs/reference/ui/widgets.md` §20 indexes 18 internal inconsistencies. The
 ones that changed a decision:
 
 - **The CPU sparkline clips.** `66 - v/100*66*1.9` puts anything above 52.63%
@@ -156,7 +156,7 @@ ones that changed a decision:
 | `kernel/src/graphics/ui/design.h` | every design token, with the evidence for each |
 | `kernel/src/graphics/ui/ease.c` + `kernel/src/graphics/ui/ease.h` | the motion curves |
 | `kernel/src/graphics/ui/ui.c`, `kernel/src/graphics/ui/uikit.c` | the widget toolkit, ~82 functions |
-| `kernel/docs/reference-widgets.md` | 68 widget records, 178 line citations |
+| `kernel/docs/reference/ui/widgets.md` | 68 widget records, 178 line citations |
 | `kernel/tests/refrender/` | the `x-dc` shim + reference renderer |
 | `kernel/tests/oracle/` | the fidelity measurement |
 | `kernel/apps/apps_sys2.zl`, `kernel/apps/apps_sys3.zl`, `kernel/apps/apps_games3.zl`, `kernel/apps/apps_games4.zl` | id-disjoint app slices |

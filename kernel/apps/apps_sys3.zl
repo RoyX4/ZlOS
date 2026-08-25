@@ -24,7 +24,7 @@
 #   ui_stat ui_statc ui_statn ui_stat_end ui_ink_on ui_color
 #
 # What it needs and the bridge does NOT bind, so it is drawn here against the
-# same numbers - kernel/docs/reference-widgets.md S4.2, S7, S9, S10.3, S10.4 -
+# same numbers - kernel/docs/reference/ui/widgets.md S4.2, S7, S9, S10.3, S10.4 -
 # each s3_* helper being a one-line forward the day its twin is bridged:
 #
 #   ui_utabs      underline tab strip   Services      S4.2 / ds 431, 3787

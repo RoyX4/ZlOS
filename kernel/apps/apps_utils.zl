@@ -40,7 +40,7 @@
 #
 # ui_kv would not have served anyway: it is S15.3's CARD row - 13px padding,
 # key in #9ba0a6, value RIGHT-aligned - and the utility row is a third shape,
-# reference-widgets.md S15.3 last paragraph: 96px mono key at the LEFT, value
+# docs/reference/ui/widgets.md S15.3 last paragraph: 96px mono key at the LEFT, value
 # flex:1 beside it. Two different widgets that happen to share a name.
 #
 # COLOUR. Every colour is theme(TH_*), i.e. ui_color(), i.e. design.h. The

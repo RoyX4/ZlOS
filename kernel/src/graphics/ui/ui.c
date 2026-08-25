@@ -314,7 +314,7 @@ int  ui_fire(int x, int y, int w, int h) { return fire(x, y, w, h); }
 void ui_ring(int x, int y, int w, int h) { focus_ring(x, y, w, h); }
 
 /* ---- INK ON THE ACCENT, COMPUTED --------------------------------------------
- * reference-widgets.md S21.8: "INK must be computed, not stored. Four widgets
+ * docs/reference/ui/widgets.md S21.8: "INK must be computed, not stored. Four widgets
  * already got this wrong in the reference (S20.1)." The reference's own
  * derivation is at ds-reference.html 3039-3045: WCAG relative luminance of the
  * background, contrast-compared against black-ish 0.0034 and against white 1,
@@ -441,7 +441,7 @@ int ui_toggle(const char *s, int *on)
      * at a rendered frame; every assertion about it passed while it was wrong,
      * because "does it toggle" and "does it look like a toggle" are different
      * questions and only one of them has a test. */
-    /* THE GEOMETRY IS THE REFERENCE'S, NOT A RATIO. reference-widgets.md S11:
+    /* THE GEOMETRY IS THE REFERENCE'S, NOT A RATIO. docs/reference/ui/widgets.md S11:
      * track 40x22 r14, knob 16 at inset 3, so the knob's right edge lands
      * flush on the track when on (3 + 16 + 21 == 40) and the travel is
      * asymmetric by 3px. That asymmetry is in the reference and is kept -
@@ -509,7 +509,7 @@ int ui_slider(int *v, int lo, int hi)
         *v = t;
     }
     if (L.mode == UI_DRAW) {
-        /* reference-widgets.md S12: track 4px r7 on #22262b (== theme.border),
+        /* docs/reference/ui/widgets.md S12: track 4px r7 on #22262b (== theme.border),
          * thumb 15x15 r12 in the accent. The FILLED portion of the track is a
          * zlOS extension - the reference's <input type=range> has no fill at
          * all - kept because a bare track gives no readout at a glance. */
@@ -584,7 +584,7 @@ static struct {
 } S;
 
 /* ---- THE SELECTION TREATMENT, PICKED ONCE ----------------------------------
- * reference-widgets.md S20.2 and S20.3: the reference paints a selected row
+ * docs/reference/ui/widgets.md S20.2 and S20.3: the reference paints a selected row
  * three different ways and never settled on one.
  *
  *   A  tint rgba(184,232,56,.15) + inset 2px 0 0 ACC left bar + #eef0f2 text
@@ -609,7 +609,7 @@ static struct {
  * control's active item are, where the element IS the selection and has no
  * cells inside it. C had one user and buys nothing A does not.
  *
- * `zebra` is the odd-row stripe: reference-widgets.md records .014 in Monitor
+ * `zebra` is the odd-row stripe: docs/reference/ui/widgets.md records .014 in Monitor
  * and .012 in Archive, one thousandth apart, "almost certainly a typo". Both
  * round to 1% and 1% is what this draws. */
 void ui_row_select(int x, int y, int w, int h, int selected, int zebra)
@@ -648,7 +648,7 @@ int ui_list_row(const char *s, int selected)
     int fired = fire(x, y, w, h);
     if (L.mode == UI_DRAW) {
         ui_row_select(x, y, w, h, selected, 0);
-        /* hover is NEW DESIGN, not a port. reference-widgets.md S21.1: five
+        /* hover is NEW DESIGN, not a port. docs/reference/ui/widgets.md S21.1: five
          * hover rules exist in the whole 4338-line reference and none of them
          * is on a list row. Kept because zlOS has a pointer and a row that
          * does not acknowledge it reads as dead - but kept SUBTLE, one surface

@@ -110,7 +110,7 @@ mismatch (24 did before commit 96017a4).
 | Settings as a real app | **PARTIAL** | `settings.c` is 637 lines, drives 6 real sinks (accent, scale, pointer speed, accel, subpixel, animation), sized to the reference's 486x332. Its internal layout is NOT the reference's sidebar + cards. |
 | VFS tree | **NOT DONE** | `grep -c 'VFS0\|vfs_' kernel/src/kernel.zl` → 0. Files reads real zlfs instead; the reference's synthetic tree is absent. |
 | 3 workspaces | **PARTIAL** | `ws_cur` / `cur_ws()` / `set_ws()` exist and the island's pips render current-vs-other. Windows are **not** filtered by workspace, so switching changes the indicator and nothing else. |
-| per-app internal layouts | **PARTIAL** | The 27 apps written this session use the shared toolkit against `reference-widgets.md` (toolbars, tab strips, column grids, stat strips, sidebars, status bars, mono panels). The 20 older registry apps were not re-laid-out. **None has been seen on screen.** |
+| per-app internal layouts | **PARTIAL** | The 27 apps written this session use the shared toolkit against `kernel/docs/reference/ui/widgets.md` (toolbars, tab strips, column grids, stat strips, sidebars, status bars, mono panels). The 20 older registry apps were not re-laid-out. **None has been seen on screen.** |
 
 ---
 

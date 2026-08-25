@@ -13,7 +13,7 @@
  * needs more of ui.c's cursor than the published seven functions, it belongs
  * in ui.c instead of behind a wider window into it.
  *
- * THE SPECIFICATION IS kernel/docs/reference-widgets.md - 68 widget records
+ * THE SPECIFICATION IS kernel/docs/reference/ui/widgets.md - 68 widget records
  * measured out of docs/design/ds-reference.html, with the line numbers. Every
  * section reference below (S3, S13.1, S20.2 ...) is into that document. Do not
  * re-derive a number from the HTML; it has already been measured, and the
@@ -30,7 +30,7 @@
  *    looked at. The numbers going in are the reference's own design pixels,
  *    and they live in design.h, not here.
  *
- * 3. NO HOVER INVENTED BY DEFAULT. reference-widgets.md S0 and S21.1: the
+ * 3. NO HOVER INVENTED BY DEFAULT. docs/reference/ui/widgets.md S0 and S21.1: the
  *    reference has FIVE hover rules in 4338 lines and no :focus anywhere. Its
  *    interaction language is SELECTION. Where this file adds a pointer-state
  *    or keyboard-focus visual it is marked NEW DESIGN in a comment and kept to
@@ -121,7 +121,7 @@ static int item_at(const char *items, int idx, char *out, int cap)
 }
 
 /* ---- text ------------------------------------------------------------------
- * Three sizes, not eight. reference-widgets.md S1.1 counts eight font sizes
+ * Three sizes, not eight. docs/reference/ui/widgets.md S1.1 counts eight font sizes
  * between 9 and 12.5 px; fb.c generates three atlases (16/24/32 at ui 2) and
  * resamples between them. Collapsing 9/9.5/10/10.5 onto SM, 11/11.5/12/12.5
  * onto MD and the display numerals onto LG is a real loss of fidelity and is
@@ -171,7 +171,7 @@ static void neutral_fill(int x, int y, int w, int h, int r, int alpha_pct)
 }
 
 /* ============================================================================
- * BUTTONS - reference-widgets.md S13
+ * BUTTONS - docs/reference/ui/widgets.md S13
  *
  * S13.1 catalogues TWENTY-SIX near-identical pills and reports that no two
  * agree on all of padding, radius and size. Its own recommended collapse is
@@ -1021,7 +1021,7 @@ void ui_toast_draw(int x, int y, int w, const char *title, const char *body,
  *
  * inside a viewBox 66 units tall. At v = 52.63 that reaches 0; above it the
  * point is outside the box and the SVG root clips, so EVERY CPU READING OVER
- * 52.63% RENDERS AS A FLAT LINE PINNED TO THE TOP. reference-widgets.md S20.18
+ * 52.63% RENDERS AS A FLAT LINE PINNED TO THE TOP. docs/reference/ui/widgets.md S20.18
  * calls it a bug in the reference rather than a style and says a port should
  * drop the 1.9 or clamp.
  *

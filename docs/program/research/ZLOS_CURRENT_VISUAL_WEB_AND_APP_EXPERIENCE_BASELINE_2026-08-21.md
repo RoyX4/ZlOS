@@ -173,7 +173,7 @@ buttons. It includes:
 - popovers, menus, modals, toasts, notifications, a command palette, empty
   states, calculator keypad, clock readouts, and shell chrome.
 
-`reference-widgets.md` records 68 widget patterns and 18 inconsistencies in
+`kernel/docs/reference/ui/widgets.md` records 68 widget patterns and 18 inconsistencies in
 the external reference. zlOS deliberately corrects several: ink contrast on
 the lime accent, CPU chart clipping, and header/row track drift.
 

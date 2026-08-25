@@ -388,7 +388,7 @@ unsigned ui_luminance_q16(unsigned rgb);   /* 0..65535; exposed for the gate */
 #define UI_ALIGN_C 1
 #define UI_ALIGN_R 2
 
-/* monospace panel grounds - reference-widgets.md S14 */
+/* monospace panel grounds - docs/reference/ui/widgets.md S14 */
 #define UI_PANEL_TERM 0      /* #0b0d0f, 12px/1.5   terminal + editor       */
 #define UI_PANEL_LOG  1      /* #0b0d0f, 11px/1.55  kernel log              */
 #define UI_PANEL_HEX  2      /* #090a0c, 11.5px/1.5 hex + syscall trace     */
@@ -398,7 +398,7 @@ int  ui_text_w(const char *s, int size, int flags);
 int  ui_text_h(int size);
 void ui_text(int x, int y, const char *s, unsigned rgb, int size, int flags);
 
-/* ---- buttons - reference-widgets.md S13 ---------------------------------- */
+/* ---- buttons - docs/reference/ui/widgets.md S13 -------------------------- */
 int  ui_pill_w(const char *s, int size, int flags);
 int  ui_pill_h(int size);
 int  ui_pill(int x, int y, int w, int h, const char *s,

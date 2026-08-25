@@ -258,7 +258,7 @@ Read this first in a new session. Everything below is verified, not remembered.
 > the ds-reference.html clone — the palette chain, the motion curves, the
 > fidelity oracle, and an explicit list of what is APPROXIMATED rather than
 > reproduced. Its companion
-> [`docs/reference-widgets.md`](docs/reference-widgets.md) is the measured
+> [`docs/reference/ui/widgets.md`](docs/reference/ui/widgets.md) is the measured
 > widget specification: 68 records, 178 line citations into the reference, and
 > an index of the 18 places the reference contradicts itself. Read both before
 > adding an app or a widget.

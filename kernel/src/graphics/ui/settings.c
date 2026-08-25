@@ -214,7 +214,7 @@ static void settings_flush(void)
  *                   toggle rows (722-731), about key/value (732-736)
  *   a closing note  11px #74797f (737)
  *
- * WIDGET GEOMETRY IS NOT RE-DERIVED HERE. kernel/docs/reference-widgets.md S11
+ * WIDGET GEOMETRY IS NOT RE-DERIVED HERE. kernel/docs/reference/ui/widgets.md S11
  * and S12 are the specification and uikit.c is the implementation; every
  * number below is either a ZD_* token from design.h or one of the six pane and
  * card measurements the reference states inline, named once immediately below.

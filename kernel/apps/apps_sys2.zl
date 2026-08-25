@@ -13,7 +13,7 @@
 # THIS SLICE OWNS IDS 40..45 AND NO OTHERS.
 #
 # Every window here is drawn out of the shared widget catalogue (kernel/uikit.c,
-# specified by kernel/docs/reference-widgets.md) rather than out of rectangles:
+# specified by kernel/docs/reference/ui/widgets.md) rather than out of rectangles:
 # ui_tb/ui_sb are S5/S6, ui_seg is S3, ui_stat* is S8, ui_mono* is S14, ui_pill
 # is S13 and ui_chip is S18.3. Not one colour literal - theme(TH_*) for the ten
 # published roles and ui_ink() for the design.h inks that are not roles.
@@ -66,7 +66,7 @@ S2_PANEL_LOG  = 1
 S2_PANEL_HEX  = 2
 
 # ui_ink() indices. ui_color() publishes the ten theme ROLES; these are the
-# design.h inks reference-widgets.md names that are not roles - amber WARN, the
+# design.h inks docs/reference/ui/widgets.md names that are not roles - amber WARN, the
 # two dimmest inks a hex offset and a timestamp are drawn in, and the paler lime
 # S14.3 gives hex bytes. The values live in design.h and nowhere else.
 S2_IK_WARN  = 0
@@ -365,7 +365,7 @@ fn rd_tick(win) {
 # ==============================================================================
 # 42  HEX VIEWER - 566 x 340
 #
-# ds-reference.html 268-289 and reference-widgets.md S14.3. Real memory: the
+# ds-reference.html 268-289 and docs/reference/ui/widgets.md S14.3. Real memory: the
 # rows below are peek8() of the address the multiboot kernel is loaded at, so
 # the page chips move a window over live RAM rather than over a fixture.
 #
