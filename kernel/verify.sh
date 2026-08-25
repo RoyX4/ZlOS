@@ -9,7 +9,11 @@ cd "$(dirname "$0")" || exit
 GOLDEN=tests/fixtures/golden.txt
 OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT
 
-./build.sh >/dev/null 2>&1 || { echo "FAIL: kernel did not build"; exit 1; }
+if ! BUILD_OUTPUT=$(./build.sh 2>&1); then
+    echo "FAIL: kernel did not build"
+    printf '%s\n' "$BUILD_OUTPUT" | tail -80
+    exit 1
+fi
 
 # The leading '.' is a deliberate throwaway: QEMU can hand the guest the
 # very first serial byte before it starts executing, so that byte is lost

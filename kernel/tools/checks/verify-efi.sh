@@ -39,7 +39,11 @@ if [ "${ZLOS_SKIP_BUILD:-0}" = 1 ]; then
         echo "FAIL: ZLOS_SKIP_BUILD=1 but zlOS-usb.img is missing"; exit 1;
     }
 else
-    ./tools/images/mkusb.sh >/dev/null 2>&1 || { echo "FAIL: the UEFI image did not build"; exit 1; }
+    if ! BUILD_OUTPUT=$(./tools/images/mkusb.sh 2>&1); then
+        echo "FAIL: the UEFI image did not build"
+        printf '%s\n' "$BUILD_OUTPUT" | tail -80
+        exit 1
+    fi
 fi
 ./tests/host/efi_stage0_test.py || exit 1
 python3 ./tests/host/efi_kernel_witness_test.py || exit 1

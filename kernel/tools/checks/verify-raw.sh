@@ -11,7 +11,11 @@ command -v nasm >/dev/null || { echo "skip: no nasm"; exit 0; }
 if [ "${ZLOS_SKIP_BUILD:-0}" = 1 ]; then
     [ -s zlOS.img ] || { echo "FAIL: ZLOS_SKIP_BUILD=1 but zlOS.img is missing"; exit 1; }
 else
-    ./tools/images/mkdisk.sh >/dev/null 2>&1 || { echo "FAIL: disk image did not build"; exit 1; }
+    if ! BUILD_OUTPUT=$(./tools/images/mkdisk.sh 2>&1); then
+        echo "FAIL: disk image did not build"
+        printf '%s\n' "$BUILD_OUTPUT" | tail -80
+        exit 1
+    fi
 fi
 
 OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT

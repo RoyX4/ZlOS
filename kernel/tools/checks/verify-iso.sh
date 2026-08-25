@@ -21,7 +21,11 @@ command -v qemu-system-x86_64 >/dev/null || { echo "skip: no qemu-system-x86_64"
 if [ "${ZLOS_SKIP_BUILD:-0}" = 1 ]; then
     [ -s zlOS.iso ] || { echo "FAIL: ZLOS_SKIP_BUILD=1 but zlOS.iso is missing"; exit 1; }
 else
-    ./tools/images/mkiso.sh >/dev/null 2>&1 || { echo "FAIL: ISO did not build"; exit 1; }
+    if ! BUILD_OUTPUT=$(./tools/images/mkiso.sh 2>&1); then
+        echo "FAIL: ISO did not build"
+        printf '%s\n' "$BUILD_OUTPUT" | tail -80
+        exit 1
+    fi
 fi
 
 check() {
