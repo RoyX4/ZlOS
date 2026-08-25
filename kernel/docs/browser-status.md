@@ -1,6 +1,6 @@
 # A browser in zlOS — what is actually true
 
-`feature-catalogue.md` marks a web browser ❌ and `OVERNIGHT-PROMPT.md` explains
+`archive/superseded/feature-catalogue-2026-08-17.md` marks a web browser ❌ and `OVERNIGHT-PROMPT.md` explains
 why:
 
 > **A browser** | Unbounded. Chromium is 6.38M lines, Ladybird 314K, all of
@@ -20,7 +20,7 @@ applies in the optimistic direction.
 
 > **DONE, 2026-08-19.** Both files landed on `main` in the eleven-track merge
 > and both have been corrected on `desktop/browser-next`:
-> `feature-catalogue.md` §12 (the whole networking table, since `TCP/IP stack
+> `archive/superseded/feature-catalogue-2026-08-17.md` §12 (the whole networking table, since `TCP/IP stack
 > ❌` above a working browser is a contradiction, not a stale row), its
 > "explicitly not worth taking" list, and §"Why a browser is in a category of
 > its own"; and the exclusion table in `OVERNIGHT-PROMPT.md`. The original

@@ -198,7 +198,7 @@ Sequential. Each depends on the previous.
 - **Unblocks:** persistence, loading `.zl` source at runtime, eventually self-update.
 - **Size:** ~800 read-only (BPB, FAT chain, LFN directory entries).
 - **Biggest risk:** the EOC test. `/boot/efi`'s live FAT has `FAT[2] = 0x0FFFFFF8` and `FAT[3] = 0x0FFFFFFF` — **two different end-of-chain values in one FAT.** `if (ent == 0x0FFFFFFF)` walks off the end of the root directory into free space. The test is `(ent & 0x0FFFFFFF) >= 0x0FFFFFF8`. Fails silently, looks like directory corruption.
-- **Also worth correcting in the repo:** `feature-catalogue.md:301-303` lists filesystems as "not worth taking" because they "need a heap." FAT32 read is a counterexample — one sector buffer, one cluster buffer, one FAT window, all static. Amend that line when this lands.
+- **Also worth correcting in the repo:** `archive/superseded/feature-catalogue-2026-08-17.md:301-303` lists filesystems as "not worth taking" because they "need a heap." FAT32 read is a counterexample — one sector buffer, one cluster buffer, one FAT window, all static. Amend that line when this lands.
 
 ### 3.3 — FAT32 write, then `cache.c`
 - **Why now:** write-back is 15× faster than write-through at 4 KiB on this drive (40.9 µs vs 625.7 µs; a FLUSH costs ~585 µs). And `IO_FLUSH` is defined at `nvme.c:97` and **grep finds exactly one occurrence — the definition.** The drive's `write_cache = "write back"`, so every write zlOS makes today can already vanish on power loss. It reads back fine because the read is served from the same cache.

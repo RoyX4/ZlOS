@@ -30,7 +30,7 @@ Do not stop until I tell you to.
 
 ## 0. The honest framing, because the docs currently get this wrong
 
-`feature-catalogue.md` lists a web browser as ❌ and
+`archive/superseded/feature-catalogue-2026-08-17.md` lists a web browser as ❌ and
 `OVERNIGHT-PROMPT.md` explains why:
 
 > **A browser** | Unbounded. Chromium is 6.38M lines, Ladybird 314K, all of
@@ -315,7 +315,7 @@ Authorised, and this track has two ideal uses:
 
 ## 9. Update the docs when you know more
 
-`feature-catalogue.md` says a browser is ❌ and `OVERNIGHT-PROMPT.md` says
+`archive/superseded/feature-catalogue-2026-08-17.md` says a browser is ❌ and `OVERNIGHT-PROMPT.md` says
 unbounded. **Both should be corrected to say what is actually true**: the
 maximal version is out of reach, a bounded one is ~3,000 lines, and here is
 where it got to.
@@ -329,4 +329,4 @@ direction.
 
 System track (network, storage): [`SYSTEM-PROMPT.md`](SYSTEM-PROMPT.md) ·
 Contract: [`../ui.h`](../../../src/graphics/ui/ui.h) · Feature table:
-[`feature-catalogue.md`](../../feature-catalogue.md)
+[`feature-catalogue-2026-08-17.md`](../superseded/feature-catalogue-2026-08-17.md)

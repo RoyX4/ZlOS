@@ -1139,7 +1139,7 @@ firmware values (`grep -nE '^[a-z].*intel_hpd_[a-z_]*\(' kernel/src/drivers/disp
 4894, 4907, 4917, 4933, 4939, 4956; `:4962` onward is the phase-3 external-DP
 comment block, not hotplug decode — the first draft said nine, to 4967). `grep -rn 'intel_hpd_pending'` outside `intel.c` returns nothing; no
 builtin is registered. So **`display-roadmap.md`'s "done" is done-as-definition,
-`feature-catalogue.md`'s "not-started" is wrong (the code exists), and
+`kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md`'s "not-started" is wrong (the code exists), and
 `HANDOFF.md:324`'s "zero lines today" is wrong too.** The missing part is
 nameable: a builtin, a caller, and a real interrupt path.
 
@@ -1919,10 +1919,10 @@ every row the tree is the referee.
 | Does anything arm `lt_armed`? | `wireless-plan.json`: nothing does | four other readers: something does | **B.** `intel.c:4232` inside `intel_bringup_panel()`, reachable from `kernel.zl:1395`. Nothing arms it *automatically at boot* — that is the true, narrower claim (§5.2) |
 | Is Phase 0.1 done? | `display-roadmap.md`: row marked done | `what-is-actually-impossible.md:156`: blocked on one missing caller | **Neither.** The caller exists; `key()` three lines later halts the kernel (§5.1) |
 | Did `LINE_BUF`/`DISK_SCRATCH` fire? | `MERGE-EVIDENCE.md` Outcome: no, it was fixed | five readers: it is live | **The readers.** No commit ever set `0x02040000` (§8.1) |
-| Is the browser worth building, and what gates it? | `feature-catalogue.md`: not worth it, needs a heap | `HANDOFF.md:390`: that call was wrong, the gate is a heap | **Neither reason survives.** Eight browser/network `.c` files are in SOURCES and a browser window opens at boot, and they were built with **no heap** — `fs.c:17`, `html.c:1`, `browser.c:84` say so in their own comments. And `beyond-the-kernel.md`, the doc HANDOFF nominates as the correction, is not in the repo (§10.2) |
+| Is the browser worth building, and what gates it? | `kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md`: not worth it, needs a heap | `HANDOFF.md:390`: that call was wrong, the gate is a heap | **Neither reason survives.** Eight browser/network `.c` files are in SOURCES and a browser window opens at boot, and they were built with **no heap** — `fs.c:17`, `html.c:1`, `browser.c:84` say so in their own comments. And `beyond-the-kernel.md`, the doc HANDOFF nominates as the correction, is not in the repo (§10.2) |
 | Does `fb3d.c` have a caller? | `GRAPHICS-18`: no caller at all | `OSLAND-01`: full chain, done | **Split by symbol.** The file is reachable; the *tiled* rasterizer is not, deliberately and with the measurement attached (§4.13) |
 | Is the toolkit done "through `ui_scroll`"? | `desktop-TODO.md`: yes | `OVERNIGHT-PROMPT.md`: caller-less | **B**, for those two widgets; the rest of the toolkit is used from C (§4.8) |
-| Hotplug | `display-roadmap.md`: done | `feature-catalogue.md`: not started | **Neither.** Decode exists, nothing can call it, no interrupt path (§5.6) |
+| Hotplug | `display-roadmap.md`: done | `kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md`: not started | **Neither.** Decode exists, nothing can call it, no interrupt path (§5.6) |
 | EDID over AUX | roadmap: done / plan: partial / `HANDOFF.md:252`: still missing | | **All three wrong differently** (§5.5) |
 | Is the frame time on screen? | `desktop-TODO.md`: done | `PLATFORM-PROMPT.md`: partial | **Both, of different destinations** — tray yes, System Monitor no (§4.9) |
 | How big is zlOS? | `11,374` lines, cited in 8 places incl. on-screen text at `wmshot.c:128` | three readers gave 41,970 / ~27,982+3,995 / 38,176+74,569 | **All four are unusable, and so was the cross-check's own replacement.** The spread is entirely explained by undeclared denominators — a fifth attempt while writing this file produced 84,933 from a differently-quoted pathspec. See the boxed measurement below; use that, with its command attached |
@@ -1995,10 +1995,10 @@ was verified against the merged tree.
 
 | The documents say | The tree says |
 |---|---|
-| "Window server / compositor — DESIGNED, unbuilt" (`feature-catalogue.md`) | `wm.c` is 1,582 lines, in SOURCES, and **is the boot state**. `kernel.zl:3782 wm_boot = wm_boot_start()` |
+| "Window server / compositor — DESIGNED, unbuilt" (`kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md`) | `wm.c` is 1,582 lines, in SOURCES, and **is the boot state**. `kernel.zl:3782 wm_boot = wm_boot_start()` |
 | "Nothing here is started" (`desktop-TODO.md:27`) | In a document whose own banner at `:3` declares the platform queue done, above **27** `### [x]` headings (`grep -c '^### \[x\]'`; 31 `### [` headings in all). The first draft said 29 and did not measure it |
 | "Nothing here is implemented" (`desktop-plan.md:7`) | About an inversion that is now the boot state |
-| "Clipping / scissor — NO, the keystone gap" (`feature-catalogue.md`) | `fb.c:763-798` is the scissor; `wm.c`, `ui.c`, `browser.c`, `term.c` all use it; `fbbench.c:482-527` asserts it suppresses pixels |
+| "Clipping / scissor — NO, the keystone gap" (`kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md`) | `fb.c:763-798` is the scissor; `wm.c`, `ui.c`, `browser.c`, `term.c` all use it; `fbbench.c:482-527` asserts it suppresses pixels |
 | "Buttons, sliders, toggles, scrollbars — NO" | **Split.** Buttons, sliders and toggles are real and used from C: `ui.c:250`, `:317`, `:286`, called at `settings.c:203, 208, 212, 214, 217, 218` — seven of the widgets defined in `ui.c:239-476` are called from that file, out of 31 `ui_*` calls in it overall (`grep -oE '\bui_[a-z_]+\(' kernel/src/graphics/ui/settings.c \| wc -l`). **Scrollbars are NOT done** — `ui_scroll_begin/end/content` and `ui_list_row` have no caller outside three host harnesses (§4.8). The first draft's "16 call sites" matched no reproducible denominator and closed a widget group this document elsewhere proves open |
 | "A real on-disk filesystem — NO, RAM disk, 10 fixed slots" | zlfs (`fs.c`) with superblock, flat directory, contiguous runs on NVMe; 22 builtins; `verify-disk.sh` power-cycles three times and is in the gate loop |
 | "Clipboard — NO" | `clip.c` in SOURCES, seven builtins, 104 assertions — but see §4.4, the write path has no caller |
@@ -2062,7 +2062,7 @@ the file being superseded. One line.
 
 ### 13.5 "A browser needs a heap" — retired as a reason, in both directions
 
-`feature-catalogue.md` said a browser, a network stack and an attribute-indexed
+`kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md` said a browser, a network stack and an attribute-indexed
 filesystem each need a heap and were therefore not worth taking.
 `HANDOFF.md:390-393` said that call was wrong and "the gate is a heap (~300
 lines)". **Both reasons are refuted by the same evidence:** all eight files

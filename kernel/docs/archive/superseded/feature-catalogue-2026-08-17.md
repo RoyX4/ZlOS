@@ -2,7 +2,7 @@
 > after the eleven-track merge. The survey of ~15 hand-built OSes is still good and its citations still hold. The zlOS have/partial/none column is stale in one direction: eleven tracks landed nine of the things it marks absent, including three of the five it tells you not to build.
 >
 > **What is still open from this document is in
-> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
+> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../../../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md) — read that first, and do not
 > work from the task list below.**
 
 

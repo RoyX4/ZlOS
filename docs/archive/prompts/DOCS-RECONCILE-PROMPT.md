@@ -47,7 +47,7 @@ kernel/docs/evidence/desktop-v10-plan.md       16 KB
 kernel/docs/display-roadmap.md                 14 KB
 kernel/docs/desktop-northstar-feasibility.md   11 KB
 kernel/docs/desktop-plan.md                    20 KB
-kernel/docs/feature-catalogue.md               20 KB
+kernel/docs/archive/superseded/feature-catalogue-2026-08-17.md  20 KB
 kernel/docs/os-landscape.md                    15 KB
 kernel/docs/what-is-actually-impossible.md      9 KB
 kernel/docs/wireless-plan.md                    9 KB

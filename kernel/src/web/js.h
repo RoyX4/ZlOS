@@ -4,7 +4,7 @@
  * project most likely to be read as a claim it cannot support.
  *
  * A JS ENGINE FOR THE MODERN WEB IS UNBOUNDED and that judgement stands - it
- * is the one thing feature-catalogue.md called unbounded that really is. The
+ * is the one thing docs/archive/superseded/feature-catalogue-2026-08-17.md called unbounded that really is. The
  * target moves, it is defined by whatever Chrome shipped last Tuesday, and it
  * drags in a DOM, an event loop, promises, generators, proxies, prototypes,
  * getters, regular expressions, Unicode, a garbage collector and a JIT. There

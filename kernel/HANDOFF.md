@@ -1063,7 +1063,7 @@ measured 2026-08-17. Short version:
   "unbounded" describes a Chrome-compatible browser and not a document one;
   it was wrong about the price and about the blocker.
   *Original text, kept because the shape of the error is the reusable part:*
-  `feature-catalogue.md` says don't; **that call was wrong as
+  `docs/archive/superseded/feature-catalogue-2026-08-17.md` says don't; **that call was wrong as
   stated** and `beyond-the-kernel.md` §2b supersedes it. "Unbounded" is true of
   a Chrome-compatible browser, not of a *document* browser — Dillo, NetSurf and
   w3m have shipped that for decades. A document browser (HTML+CSS, no JS) is
@@ -1276,7 +1276,7 @@ inverts that. Designed 2026-08-17:
   `src/arch/x86/cpu.c`, not exposed to
   zl); and the renderer is now benchmarked — see below.
 
-- **`docs/feature-catalogue.md` — every feature found across ~15 hand-built OSes,
+- **`docs/archive/superseded/feature-catalogue-2026-08-17.md` — every feature found across ~15 hand-built OSes,
   organised by subsystem with a zlOS have/partial/none column.** 16 categories,
   from kernels to clipboard. Ends with a ranked shortlist of what is actually
   worth taking, and an explicit list of what is not (microkernels, capability
@@ -1286,7 +1286,7 @@ inverts that. Designed 2026-08-17:
   them needed either** — `src/fs/fs.c`, the files under `src/net/`, and
   `src/web/browser.c` use the same static arenas as the rest of the kernel. The
   premise was never tested against an attempt. The rows are corrected in
-  `docs/feature-catalogue.md` §12 and §"Why a browser is in a category of its
+  `docs/archive/superseded/feature-catalogue-2026-08-17.md` §12 and §"Why a browser is in a category of its
   own"; `kernel/docs/browser-status.md` is the measured account.
   Top of the shortlist is still **the clip rectangle**, which now has *three*
   customers: compositor, toolkit, and the 3D rasterizer.

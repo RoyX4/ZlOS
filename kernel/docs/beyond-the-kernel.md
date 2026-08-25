@@ -230,7 +230,7 @@ genuine "zlOS is on the internet" moment, with no TLS and no TCP.
 
 ## 2b. The browser
 
-`feature-catalogue.md` says don't. **That call was wrong as stated**, and this
+`archive/superseded/feature-catalogue-2026-08-17.md` says don't. **That call was wrong as stated**, and this
 section supersedes it.
 
 The mistake was treating "a browser" as one thing. It is three products with

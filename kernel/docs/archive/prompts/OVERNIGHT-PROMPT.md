@@ -643,7 +643,7 @@ DESIGN RULES — do not violate
 | `ui_scroll`, `ui_list_row` | Need clipping to be settled first; leave for a supervised session |
 | The editor conversion | Most state to hoist; highest chance of a mess |
 | **SMP band rendering** | The biggest remaining speed lever (**4×**, three cores are parked) — but concurrency bugs unattended are the wrong risk. Supervised only. |
-| Audio, networking, a filesystem | Each is a whole subsystem needing a heap. Not tonight, probably not ever — see `feature-catalogue.md` |
+| Audio, networking, a filesystem | Each is a whole subsystem needing a heap. Not tonight, probably not ever — see `archive/superseded/feature-catalogue-2026-08-17.md` |
 | A browser | Unbounded. Chromium is 6.38M lines, Ladybird 314K, all of zlOS is 11,374 |
 
 > **Both of those last two rows were wrong, and are corrected here rather than
@@ -659,7 +659,7 @@ DESIGN RULES — do not violate
 > that row is correct and **the conclusion does not follow from them** — they
 > measure the maximal version of the capability and report it as the
 > capability. The full correction, and the general form of the mistake, is in
-> `feature-catalogue.md` §"Why a browser is in a category of its own".
+> `archive/superseded/feature-catalogue-2026-08-17.md` §"Why a browser is in a category of its own".
 >
 > Kept as a standing caution for this document's own genre: an exclusion table
 > is a list of things nobody will attempt, so a wrong entry in it costs work
@@ -669,7 +669,7 @@ DESIGN RULES — do not violate
 ## What Windows and Linux have that this run is chasing
 
 Mapped so nothing quietly falls off the list. Full detail in
-`feature-catalogue.md` and `desktop-polish-and-speed.md`.
+`archive/superseded/feature-catalogue-2026-08-17.md` and `desktop-polish-and-speed.md`.
 
 | What they do | Task here |
 |---|---|
