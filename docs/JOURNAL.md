@@ -7,6 +7,26 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-25 — fix: repair boot verification after restructure (4b53256)
+
+`main` · 4 files changed, 60 insertions(+), 27 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 7 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 19 |
+| docs vs tree | agree |
+
+<details><summary>4 file(s)</summary>
+
+- `kernel/tests/fixtures/golden.txt`
+- `kernel/tests/host/efi_runtime_diag_test.py`
+- `kernel/tools/generators/write-app-manifest-boot-receipt.py`
+- `kernel/verify.sh`
+
+</details>
+
 ## 2026-08-25 — fix: include reorganized language frontend in kernel builds (55078d3)
 
 `main` · 5 files changed, 19 insertions(+), 5 deletions(-)
