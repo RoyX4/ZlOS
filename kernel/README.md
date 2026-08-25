@@ -191,5 +191,8 @@ for exactly this reason.
 The early polling-only description above is historical. The current kernel has
 interrupt-driven input, a timer, a compositor, NVMe and zlfs. It still has no
 general-purpose heap or active process scheduler, and the kernel-side zl
-interpreter is not linked into production. Read [`HANDOFF.md`](HANDOFF.md) for
-the measured current state rather than inferring it from this bring-up guide.
+interpreter is not linked into production. Read
+[`../docs/PROJECT-STATUS.md`](../docs/PROJECT-STATUS.md) for current repository
+and implementation truth. [`HANDOFF.md`](HANDOFF.md) preserves the measured
+hardware narrative and dated implementation history; do not infer current queue
+state from its older sections.

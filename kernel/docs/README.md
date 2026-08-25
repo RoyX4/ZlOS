@@ -7,7 +7,6 @@ Read the top banner of each file before treating it as current.
 
 | File | Truth state |
 |---|---|
-| `POINTER-PROMPT.md` | Live work per its audit banner. It is not history. |
 | `input-stack.md` | Current input model and probe map. |
 | `memory-model.md`, `memory-map.md`, `dma-sites.md` | Current fixed-address and memory-boundary references. |
 | `thinkpad-first-boot.md` | Physical-boot runbook; does not by itself prove a successful boot happened. |
@@ -33,6 +32,10 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 
 These old execution briefs live in `archive/prompts/`. Their unresolved work was
 carried into newer status and roadmap documents; the old task lists are history.
+
+`POINTER-PROMPT.md` is also historical by its own audited banner. It remains at
+the docs root only as a path-stable exception until its 26 textual references
+can move together; do not use it as the live queue.
 
 | File | Banner state |
 |---|---|

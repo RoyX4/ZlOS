@@ -1,5 +1,14 @@
 # zlOS — where things stand
 
+> **Authority notice (checked 2026-08-25):** use
+> [`../docs/PROJECT-STATUS.md`](../docs/PROJECT-STATUS.md) for current repository
+> and implementation truth, [`../docs/REMAINING-WORK.md`](../docs/REMAINING-WORK.md)
+> for the immediate queue, and [`../docs/program/README.md`](../docs/program/README.md)
+> for the complete product program. This file preserves measured hardware and
+> implementation history, so later sections intentionally retain dated claims
+> and reversals. T-8 in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md) records
+> the metadata chain that cannot currently regenerate as one build identity.
+
 The 2026-08-24 host freeze, the evidence that survived it, and the mandatory
 resource-contained landing-gate procedure are recorded in
 [`docs/host-freeze-and-gate-containment-2026-08-24.md`](docs/host-freeze-and-gate-containment-2026-08-24.md).
@@ -10,7 +19,7 @@ host receipt and explicit target-integration gap are recorded in
 [`docs/mp00-structured-event-trace-2026-08-24.md`](docs/mp00-structured-event-trace-2026-08-24.md).
 It is host-proved core code, not yet a booted zlOS audit service.
 
-The generated EV-026 decision/reversal/deprecation ledger and its exact
+The dated generated EV-026 decision/reversal/deprecation ledger and its exact
 historical coverage gap are recorded in
 [`docs/mp00-decision-ledger-2026-08-24.md`](docs/mp00-decision-ledger-2026-08-24.md).
 It normalizes 19 high-impact records and indexes all 47 legacy labels without
@@ -19,8 +28,9 @@ pretending the remaining 42 labels already have normalized semantics.
 The generated EV-027 unreleased changelog, compatibility facts, migrations,
 known defects and recovery paths are recorded in
 [`docs/mp00-release-notes-2026-08-24.md`](docs/mp00-release-notes-2026-08-24.md).
-It has 17 change candidates and 12 current blockers, but deliberately zero
-published entries: there is still no versioned, signed or authorized release.
+It has 17 change candidates and 12 blockers at its generation snapshot, but
+deliberately zero published entries: there is still no versioned, signed or
+authorized release.
 
 The generated EV-028 read-only provenance model and self-contained evidence-room
 HTML are recorded in
@@ -34,7 +44,7 @@ The corrected reference-app registry and Maze pointer-route receipt is
 It replaces the old aggregate `apps53.py` green that printed `Maze exists NO`
 and hid the missing route behind blank catalogue ID 14.
 
-The MP-00 host-test inventory and fresh 62-target execution receipt is
+The MP-00 host-test inventory and dated 62-target execution receipt is
 [`docs/mp00-test-inventory-2026-08-22.md`](docs/mp00-test-inventory-2026-08-22.md).
 It replaces filename-guessed execution with exact pass, hardware-skip,
 instrument and manual-action states.
@@ -59,7 +69,7 @@ are bound separately in
 The exact declared-input to logical-object to artifact reachability graph is
 [`docs/mp00-build-graph-2026-08-24.md`](docs/mp00-build-graph-2026-08-24.md).
 
-The exact current 123-file build-input closure is reconstructable from the
+The exact dated 123-file build-input closure is reconstructable from the
 deterministic archive described in
 [`docs/mp00-source-snapshot-2026-08-24.md`](docs/mp00-source-snapshot-2026-08-24.md).
 It is local and unsigned; it is not an off-host or whole-repository backup.
@@ -69,19 +79,21 @@ License/provenance truth is recorded in
 There is currently no repository license file, so public release is explicitly
 blocked rather than silently treating local files as permission to redistribute.
 
-The joined front door for all current MP-00 receipts is
+The dated joined front door for the MP-00 receipt set is
 [`docs/mp00-evidence-registry-2026-08-23.md`](docs/mp00-evidence-registry-2026-08-23.md).
-The current verifier-canary, failure-injection and hostile-corpus boundary is
+It is not a current projection: its upstream registries disagree on build
+identity and regeneration fails closed under T-8. The dated verifier-canary,
+failure-injection and hostile-corpus boundary is
 [`docs/mp00-adversarial-registry-2026-08-23.md`](docs/mp00-adversarial-registry-2026-08-23.md).
-The current frame-performance receipt and its open regressions are
+The dated frame-performance receipt and its open regressions are
 [`docs/mp00-benchmark-registry-2026-08-23.md`](docs/mp00-benchmark-registry-2026-08-23.md).
 The current screenshot/visual asset boundary is
 [`docs/mp00-visual-registry-2026-08-23.md`](docs/mp00-visual-registry-2026-08-23.md).
 The current accessibility proof boundary is
 [`docs/mp00-accessibility-registry-2026-08-23.md`](docs/mp00-accessibility-registry-2026-08-23.md).
-The current security claim boundary is
+The dated security claim boundary is
 [`docs/mp00-security-registry-2026-08-23.md`](docs/mp00-security-registry-2026-08-23.md).
-The current crash/log/event boundary is
+The dated crash/log/event boundary is
 [`docs/mp00-observability-registry-2026-08-23.md`](docs/mp00-observability-registry-2026-08-23.md).
 Its `PASS_WITH_OPEN_GAPS` result preserves physical, hardware-skip, non-run and
 license blockers instead of flattening them into one green count.
@@ -274,13 +286,15 @@ Read this first in a new session. Everything below is verified, not remembered.
 > and the exact target-hardware proof that remains. Keep visual polish and real
 > application completeness as separate claims.
 
-> **What is still OPEN is not in this file — it is in
-> [`docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`](../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md),** which
-> audited twenty-one planning documents against the merged tree on 2026-08-19.
-> The **sequence** those open items run in is
-> [`docs/REMAINING-WORK.md`](../docs/REMAINING-WORK.md).
-> This file remains the authority on what the hardware has *proven*. It is
-> **stale on five checkable points**, each corrected there with a command: it
+> **Current open work is not owned by this historical narrative.** Use
+> [`../docs/REMAINING-WORK.md`](../docs/REMAINING-WORK.md) for the immediate
+> sequence and [`../docs/program/README.md`](../docs/program/README.md) for the
+> complete program. The
+> [`2026-08-19 status audit`](../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md)
+> remains useful dated revalidation evidence, not the current queue.
+> This file remains authoritative only for the measured hardware events it
+> records. Its older narrative is **stale on five checkable points**, each
+> corrected in that audit with a command: it
 > says nothing in the kernel arms `lt_armed`
 > (`src/drivers/display/intel.c:4232` does, reachable from
 > `src/kernel.zl:1395`); it says there is no VBT parser (there is, and

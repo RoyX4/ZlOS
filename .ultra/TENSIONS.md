@@ -181,7 +181,9 @@ The checked-in inputs contain three incompatible build identities:
 currently stops with `release-note manifests disagree on build identity`.
 The provenance check independently stops with `provenance inputs disagree on
 build identity`, and the joined-evidence check stops with `registry build
-identities disagree`.
+identities disagree`. After the Handoff authority correction, the decision
+ledger check also stops with `decision ledger has stale build context`; it must
+not be refreshed alone against the incompatible registry families.
 Consequently, `kernel/metadata/provenance-viewer.json` and
 `kernel/docs/provenance-viewer.html` remain dated artifacts: they still report
 46 visuals while the current visual registry discovers 41.
