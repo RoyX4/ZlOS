@@ -308,7 +308,7 @@ green and committed.
 In order, forever. This is what "keep going" means.
 
 1. Re-run **every** gate from scratch, all four boots plus every harness.
-2. `fbbench` again; replace the table in `desktop-polish-and-speed.md` with the
+2. `fbbench` again; replace the table in `kernel/docs/desktop/desktop-polish-and-speed.md` with the
    new numbers. Never a number you did not measure.
 3. Write a test for anything you changed that has none.
 4. **Re-read `fb.c`, `wm.c`, `ui.c`, `term.c` for this project's known bug

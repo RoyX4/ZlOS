@@ -53,7 +53,7 @@ Every other asset in this renderer is a **gamma-correct coverage atlas** —
 fonts (mono and proportional), icons at two sizes, 16 references in `fb.c`
 alone. The cursor is **zero of them**.
 
-**And it is the single thing your eye follows constantly.** `desktop-look.md`
+**And it is the single thing your eye follows constantly.** `kernel/docs/desktop/desktop-look.md`
 found three resampling bugs and fixed them all; this is the fourth and it was
 missed because it is drawn, not resampled. It is the honest answer to "why does
 everything still look blocky".

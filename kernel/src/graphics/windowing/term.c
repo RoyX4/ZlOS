@@ -68,7 +68,7 @@ static char argstr[TERM_COLS];      /* ...and the argument as TEXT, for C  */
  * is wrong", which is why it survived.
  *
  * fb_text_prop is right for a LABEL - a dock tile, a window title, a menu row -
- * and wrong for a terminal, and the split is exactly the one desktop-look.md
+ * and wrong for a terminal, and the split is exactly the one docs/desktop/desktop-look.md
  * item 4 draws: uniform advance is the "this is a terminal" signal, so use it
  * on the one thing that IS a terminal. */
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);

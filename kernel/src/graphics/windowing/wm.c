@@ -46,7 +46,7 @@ void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
 void fb_icon24(int px, int py, int n, unsigned int fg);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
 /* Titles are LABELS, not console text, so they take the proportional path.
- * That is the single change desktop-look.md item 4 asks for at this layer. */
+ * That is the single change docs/desktop/desktop-look.md item 4 asks for at this layer. */
 void fb_text_prop(int px, int py, const char *s, unsigned int fg);
 int  fb_text_prop_w(const char *s);
 int  fb_text_prop_h(void);
@@ -867,7 +867,7 @@ void wm_damage_win(int win)
 
 /* ---- motion ---------------------------------------------------------------
  * Nothing in zlOS animated at all: windows appeared instantly, menus popped,
- * focus snapped. desktop-polish-and-speed.md calls that the single biggest
+ * focus snapped. docs/desktop/desktop-polish-and-speed.md calls that the single biggest
  * "feels modern" gap, and it was gated on damage tracking - a window that
  * appears over several frames is composited several times, which is only
  * affordable once that costs a rectangle instead of the screen.

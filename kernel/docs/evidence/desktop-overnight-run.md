@@ -160,7 +160,7 @@ around it means giving up gamma-correct linear-light blending.
 
 ### F3 — proportional text
 
-`desktop-look.md` ranks this as *"the one that stops the desktop reading as a
+`kernel/docs/desktop/desktop-look.md` ranks this as *"the one that stops the desktop reading as a
 terminal"*, and **its plan does not work**. It proposes emitting per-glyph
 advances from the existing atlas — but that atlas is DejaVu Sans **Mono**, so
 every advance is the same number and the screen would not move a pixel. Right
@@ -319,5 +319,5 @@ object store, and is what should have been used from the start.
 Task list: [`desktop-TODO.md`](../archive/superseded/desktop-TODO.md) · Wiring:
 [`desktop-wiring.md`](../archive/superseded/desktop-wiring.md) · Decisions:
 [`DECISIONS.md`](../DECISIONS.md) · Numbers:
-[`desktop-polish-and-speed.md`](../desktop-polish-and-speed.md) · Blocks:
+[`desktop-polish-and-speed.md`](../desktop/desktop-polish-and-speed.md) · Blocks:
 `../../../.ultra/TENSIONS.md` T-5 … T-12

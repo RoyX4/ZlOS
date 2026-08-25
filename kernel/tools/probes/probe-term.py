@@ -47,7 +47,7 @@ TWO THINGS THIS HAD TO WORK AROUND, both measured rather than guessed:
    Using the keyboard here is still right: this gate's subject includes the
    input stack, and QMP exercises the PS/2 and USB HID decoders, which are the
    only input a laptop has. It is a better assertion, not a workaround.
-   `docs/typing-into-the-compositor.md` has the full measurement.
+   `docs/desktop/typing-into-the-compositor.md` has the full measurement.
 
 2. THE TERMINAL'S OWN OUTPUT DID NOT REACH THE SERIAL LOG. term_putc writes the
    scrollback ring and nothing else, so the unknown-command message and the

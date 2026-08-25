@@ -266,7 +266,7 @@ out ragged and it read as "the formatting is broken" rather than as "the font
 is wrong", which is exactly why it survived.
 
 A terminal is a grid. It uses the mono atlas, and `fb_text_prop` is for the
-things that are not terminals — which is the split desktop-look.md item 4 draws
+things that are not terminals — which is the split `kernel/docs/desktop/desktop-look.md` item 4 draws
 and this had inverted.
 
 ---
@@ -299,7 +299,7 @@ for hours while nothing drew one.
 
 ---
 
-Scale and cost numbers: `desktop-polish-and-speed.md` · What the mockup asks
+Scale and cost numbers: `kernel/docs/desktop/desktop-polish-and-speed.md` · What the mockup asks
 for: `../archive/superseded/desktop-northstar-feasibility.md` · The run that built the primitives:
 `desktop-v10-plan.md` §8 · Task list: `../archive/superseded/desktop-TODO.md`
 

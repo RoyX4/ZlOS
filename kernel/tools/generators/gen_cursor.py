@@ -14,7 +14,7 @@
 #         put_pixel(x + w, y + r, edge);
 #     }
 #
-# and it is the single thing the eye follows constantly. desktop-look.md found
+# and it is the single thing the eye follows constantly. docs/desktop/desktop-look.md found
 # and fixed three resampling bugs; this is the fourth, missed because the cursor
 # is DRAWN rather than resampled, so no resampling audit could see it.
 #
@@ -366,7 +366,7 @@ def main():
  * against a background of its own colour.
  *
  * TWO SIZES, each rasterized separately at 4x - never one scaled up. That was
- * desktop-look.md bug 1 for the icons and it is the same mistake here.
+ * docs/desktop/desktop-look.md bug 1 for the icons and it is the same mistake here.
  *
  * cur_hotN[i] is the HOTSPOT in atlas pixels: the pixel that IS the pointer
  * position. An arrow points with its tip, everything else with its middle.

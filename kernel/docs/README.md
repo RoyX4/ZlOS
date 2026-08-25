@@ -76,6 +76,17 @@ hardware-only gates closed. Dated receipts live in `evidence/`.
 | `drivers/display/gen9-blend-pipeline.md` | Fixed blend-pipeline packet recipe. |
 | `drivers/network/ax201-wifi.md` | AX201 implementation and evidence boundary. |
 
+## Desktop
+
+| File | Purpose |
+|---|---|
+| `desktop/desktop-look.md` | Rendering-quality diagnosis and typography/icon rules. |
+| `desktop/desktop-polish-and-speed.md` | Measured polish, animation, and performance analysis. |
+| `desktop/desktop-toolkit.md` | Immediate-mode toolkit design and constraints. |
+| `desktop/look-and-speed.md` | Frame budget, pacing evidence, and next-step analysis. |
+| `desktop/typing-into-the-compositor.md` | Harness-to-compositor input-path measurement. |
+| `desktop/workspaces.md` | Workspace filtering and behavior contract. |
+
 ## Archived Prompt Files
 
 These old execution briefs live in `archive/prompts/`. Their unresolved work was

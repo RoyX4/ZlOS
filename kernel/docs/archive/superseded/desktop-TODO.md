@@ -296,7 +296,7 @@ is invisible in a screenshot, which is why it gets assertions instead:
 
 These are not architecture. They are three resampling bugs that make a
 near-modern renderer look 1990s. Any of them can be done at any time, by anyone,
-without touching the compositor work. Full detail: `desktop-look.md`.
+without touching the compositor work. Full detail: `../../desktop/desktop-look.md`.
 
 ### [x] 0e. Stop destroying the icons — **DONE 2026-08-18**
 
@@ -385,7 +385,7 @@ The original task text follows.
 `idt_ticks()` is 100 Hz, which is 10 ms resolution, too coarse for a 16 ms frame.
 
 **Do this before any performance work.** Optimising without measurement is
-guessing. Full reasoning: `desktop-polish-and-speed.md`.
+guessing. Full reasoning: `../../desktop/desktop-polish-and-speed.md`.
 
 ### [x] 0i. ~~Table the shadow falloff~~ — **DONE, but not the way this said**
 
@@ -544,7 +544,7 @@ Already the right shape, copy the pattern: `draw_sysmon(sx, sy, sfoc)` and
 
 ### [x] 2f. `ui.c` — the toolkit — **BUILT 2026-08-18** (through `ui_num`)
 
-Full design: `desktop-toolkit.md`. This is the layer that was missing from every
+Full design: `../../desktop/desktop-toolkit.md`. This is the layer that was missing from every
 earlier plan.
 
 **Immediate mode**, not a retained widget tree — forced by the constraints, not
@@ -621,8 +621,8 @@ full one."*
 ---
 
 Background and decisions: `archive/superseded/desktop-plan.md` · Plain-English intro:
-`../../guides/desktop-build-guide.md` · Why it looks blocky: `../../desktop-look.md` · Polish and
-performance: `desktop-polish-and-speed.md` · Status and blockers:
+`../../guides/desktop-build-guide.md` · Why it looks blocky: `../../desktop/desktop-look.md` · Polish and
+performance: `../../desktop/desktop-polish-and-speed.md` · Status and blockers:
 `../../.ultra/STATE.md`
 
 ---
@@ -660,7 +660,7 @@ What the harness pins down, beyond "it runs":
 - **`WM_MAX` is a refusal**, not a silent drop: the 13th `wm_open` returns −1.
 - **`app_tick` returning 0 does not repaint, returning 1 does.** That is how a
   clock ticks without owning the frame — and it is the resolution of the
-  immediate-mode/damage tension `desktop-toolkit.md` flagged as most likely to
+  immediate-mode/damage tension `../../desktop/desktop-toolkit.md` flagged as most likely to
   be got wrong.
 - **the hit-test pass draws nothing and fires the same widget the draw pass
   would.** If those two ever disagree, clicks land on the wrong control.

@@ -350,7 +350,7 @@ void fb_blur_free_all(void);
  * the start menu, the tray, the About card, the System Monitor - went through
  * console_text_aa, which is DejaVu Sans MONO. wm.c's window titles were the
  * only proportional text on screen. Uniform advance is the strongest "this is
- * a terminal" signal there is (desktop-look.md item 4) and it was being applied
+ * a terminal" signal there is (docs/desktop/desktop-look.md item 4) and it was being applied
  * to every label that is not a terminal. */
 void fb_text_role(int px, int py, const char *s, unsigned int fg, int role, int weight);
 int  fb_text_role_w(const char *s, int role, int weight);

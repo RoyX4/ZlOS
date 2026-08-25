@@ -9,7 +9,7 @@
  *
  * EACH SIZE IS RASTERIZED SEPARATELY at 4x supersampling. The 48x48 set
  * is NOT the 24x24 set scaled up: doing that in fb_icon24 was the single
- * most visible source of blockiness in the desktop (desktop-look.md,
+ * most visible source of blockiness in the desktop (docs/desktop/desktop-look.md,
  * bug 1), because it threw away every anti-aliased edge pixel.
  *
  * index:

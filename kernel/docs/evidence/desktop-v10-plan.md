@@ -73,7 +73,7 @@ a hand test.
 > it, and fails loudly if the shell does not echo the line back. The
 > reproducible form of this gate is
 > `./probe-shot.py -k help -k unknownthing -o v10-typed`.
-> Full measurement: `kernel/docs/typing-into-the-compositor.md`.
+> Full measurement: `kernel/docs/desktop/typing-into-the-compositor.md`.
 
 ### 1b. Make the compositor the boot state
 
@@ -120,7 +120,7 @@ Its palette is a **different visual system**, not a refinement:
 | surface | `#1E2A44` | grey `#1c2024` / `#22262b` |
 | accent | cyan `#55D6FF` | **lime `#b8e838`** |
 
-`desktop-look.md` says *"never introduce a second visual system; extend the one
+`kernel/docs/desktop/desktop-look.md` says *"never introduce a second visual system; extend the one
 that exists"*. Adopting the palette wholesale contradicts that rule. Adopting
 the **structure and effects** does not. Hence option 2.
 
@@ -267,7 +267,7 @@ and everything wants the compositor to be the thing that boots.
 Prototype: `~/zl OS v10.dc.html` · Contract: [`../../src/graphics/ui/ui.h`](../../src/graphics/ui/ui.h) · Wiring:
 [`desktop-wiring.md`](../archive/superseded/desktop-wiring.md) · Task list:
 [`desktop-TODO.md`](../archive/superseded/desktop-TODO.md) · Numbers:
-[`desktop-polish-and-speed.md`](../desktop-polish-and-speed.md) · Last night:
+[`desktop-polish-and-speed.md`](../desktop/desktop-polish-and-speed.md) · Last night:
 [`desktop-overnight-run.md`](desktop-overnight-run.md)
 
 

@@ -271,7 +271,7 @@ Read this first in a new session. Everything below is verified, not remembered.
 > those, only the shell can be cloned.
 
 > **Workspaces are real as of 2026-08-20:**
-> [`docs/workspaces.md`](docs/workspaces.md) — what filters (the paint walk,
+> [`docs/desktop/workspaces.md`](docs/desktop/workspaces.md) — what filters (the paint walk,
 > `wm_at`, the modal and focus walks, both taskbar loops), what deliberately
 > does not (damage, the dock's running-accent), and why `wm_raise`/`wm_focus`
 > PULL a window to the current workspace instead of refusing. Read it before
@@ -1243,7 +1243,7 @@ inverts that. Designed 2026-08-17:
   one checkout, and on 2026-08-19 that produced two simultaneous land gates,
   one session's commit sweeping another's in-progress edits, and load average
   15.
-- **`docs/look-and-speed.md` — what a frame costs, what paces it, what is
+- **`docs/desktop/look-and-speed.md` — what a frame costs, what paces it, what is
   next.** The frame target (every frame AND the peak under 16.67 ms), the
   vsync survey per backend (one source exists,
   `src/drivers/display/intel.c`'s `PIPE_FRMCNT_A`, and
@@ -1256,12 +1256,12 @@ inverts that. Designed 2026-08-17:
 - **`docs/archive/superseded/desktop-TODO.md` — historical ordered task list.**
   Its audited banner says not to work from the body; use `../docs/REMAINING-WORK.md`.
 - `docs/archive/superseded/desktop-plan.md` — the decisions, the evidence, and the line numbers.
-- `docs/desktop-toolkit.md` — **the layer that was missing from every earlier
+- `docs/desktop/desktop-toolkit.md` — **the layer that was missing from every earlier
   plan.** An **immediate-mode** toolkit (`ui.c`), chosen because a retained
   widget tree needs a heap and *is* a list of children — zlOS has neither.
   Widgets return whether they fired; nothing is allocated. Hit testing re-runs
   `app_draw` with drawing off, the same trick as `intel_modeset_dry()`.
-- `docs/desktop-look.md` — why it looks blocky. **The renderer is not the
+- `docs/desktop/desktop-look.md` — why it looks blocky. **The renderer is not the
   problem** — real TrueType glyphs, subpixel LCD rendering and gamma-correct
   linear-light blending are all already in. **Read "TrueType" precisely:** the
   shapes come from DejaVu Sans Mono, but `gen_hd_font.py` rasterizes them **at
@@ -1271,7 +1271,7 @@ inverts that. Designed 2026-08-17:
   resampling bugs, the
   worst being `fb_icon24` nearest-neighbour upscaling every icon at 2×
   (`src/graphics/framebuffer/fb.c:929`).
-- `docs/desktop-polish-and-speed.md` — what makes a desktop look modern, and
+- `docs/desktop/desktop-polish-and-speed.md` — what makes a desktop look modern, and
   what it costs. Three facts up front: **three of four cores are parked** in
   `cli; hlt` forever (`src/arch/x86/smp.c:79`) so all drawing is single-core;
   **nothing measures a frame inside the kernel** (TSC exists in
@@ -1434,7 +1434,7 @@ cd kernel/tests/host && ./build.sh && ./inputtest
 
 Full write-up: `docs/reference/system/input-stack.md`.
 
-## How a harness types a command — `docs/typing-into-the-compositor.md`
+## How a harness types a command — `docs/desktop/typing-into-the-compositor.md`
 
 **Serial reaches the compositor.** `src/drivers/input/input.c` feeds COM1 into
 the same event

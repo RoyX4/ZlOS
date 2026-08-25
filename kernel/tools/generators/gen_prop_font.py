@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # gen_prop_font.py - the PROPORTIONAL companion to gen_hd_font.py.
 #
-# desktop-look.md's item 4, and it calls it "the one that stops the desktop
+# docs/desktop/desktop-look.md's item 4, and it calls it "the one that stops the desktop
 # reading as a terminal":
 #
 #     fb_text_aa advances by exactly cell_w per character, so EVERY string on
@@ -32,7 +32,7 @@
 # round letters.
 #
 # The console keeps its grid and keeps the mono atlas. Only titles and labels
-# change, which is exactly what desktop-look.md asks for.
+# change, which is exactly what docs/desktop/desktop-look.md asks for.
 
 import os
 from PIL import Image, ImageDraw, ImageFont

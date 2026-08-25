@@ -54,9 +54,9 @@ READ FIRST, IN THIS ORDER
   kernel/docs/archive/superseded/desktop-TODO.md  historical ordered task list
   kernel/docs/guides/desktop-build-guide.md  what a compositor is, in plain words
   kernel/docs/archive/superseded/desktop-plan.md  architecture and line numbers
-  kernel/docs/desktop-toolkit.md    the immediate-mode toolkit design
-  kernel/docs/desktop-look.md       the three rendering bugs
-  kernel/docs/desktop-polish-and-speed.md  measured baselines
+  kernel/docs/desktop/desktop-toolkit.md    the immediate-mode toolkit design
+  kernel/docs/desktop/desktop-look.md       the three rendering bugs
+  kernel/docs/desktop/desktop-polish-and-speed.md  measured baselines
 
 Everything is already designed. Do not re-plan. Build it.
 
@@ -129,7 +129,7 @@ ANTI-IDLE BACKLOG — if you genuinely finish A-H, do these, in order, forever
 
   1. Re-run every gate from scratch and confirm all still green.
   2. hosttest/fbbench.c — measure again after all changes and record the new
-     baseline in desktop-polish-and-speed.md, replacing the old table.
+     baseline in kernel/docs/desktop/desktop-polish-and-speed.md, replacing the old table.
   3. Write a test or a harness for anything you changed that has none.
   4. Re-read fb.c, wm.c, ui.c looking for the bug classes this project already
      knows about: a buffer at a fixed address that could collide with the DMA
@@ -356,7 +356,7 @@ WHERE IMMEDIATE MODE MEETS DAMAGE — the known tension, get this right
     - app_tick runs every frame and is where an app decides it IS damaged
     - a click runs app_draw a THIRD time, in UI_HITTEST mode, drawing nothing,
       purely to find which widget the pointer landed on
-  This is flagged in desktop-toolkit.md as the thing most likely to be got
+  This is flagged in kernel/docs/desktop/desktop-toolkit.md as the thing most likely to be got
   wrong. If widgets flicker or clicks land on the wrong control, look here
   first.
 
@@ -476,7 +476,7 @@ D0. THEME AS DATA — do this FIRST, ui.c reads from it. Stolen from SerenityOS,
     and fine where a number snapped to the scale); grep shows no bare pixel
     literals left in the window/dock/menu drawing paths.
 
-D1. ui.c per kernel/docs/desktop-toolkit.md. IMMEDIATE MODE, no allocation.
+D1. ui.c per kernel/docs/desktop/desktop-toolkit.md. IMMEDIATE MODE, no allocation.
     Hit testing re-runs app_draw with drawing off — same trick as
     intel_modeset_dry(). CRITICAL: widgets must RETURN whether they fired and
     never take an action as an argument. C evaluates arguments eagerly; that is
@@ -669,7 +669,7 @@ DESIGN RULES — do not violate
 ## What Windows and Linux have that this run is chasing
 
 Mapped so nothing quietly falls off the list. Full detail in
-`archive/superseded/feature-catalogue-2026-08-17.md` and `desktop-polish-and-speed.md`.
+`archive/superseded/feature-catalogue-2026-08-17.md` and `kernel/docs/desktop/desktop-polish-and-speed.md`.
 
 | What they do | Task here |
 |---|---|

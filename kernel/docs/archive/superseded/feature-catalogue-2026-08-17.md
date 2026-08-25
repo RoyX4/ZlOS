@@ -135,7 +135,7 @@ hobby OS — but it should be a *stated* choice, not an accident.
 
 | Feature | Who | zlOS |
 |---|---|---|
-| GUI toolkit | SerenityOS (`LibGUI`), Haiku (BeAPI), Essence | 📋 `desktop-toolkit.md` |
+| GUI toolkit | SerenityOS (`LibGUI`), Haiku (BeAPI), Essence | 📋 `../../desktop/desktop-toolkit.md` |
 | **Layout engine** | all of them | 📋 immediate-mode cursor |
 | Buttons, sliders, toggles, scrollbars | all | ❌ |
 | Text fields with selection | all | ❌ (shell owns text input) |
@@ -313,7 +313,7 @@ Filtered by: cheap, fits no-heap/no-lists, and pays off more than once.
 |---|---|---|---|
 | **1** | **Clip rectangle** | everyone | Not from anyone — it is the gap. **Three customers**: compositor, toolkit, 3D rasterizer. Two functions. |
 | **2** | **Theme as data** | SerenityOS | One struct kills every hand-picked number. Tiny. |
-| **3** | **Immediate-mode toolkit** | (forced by constraints) | The layer nothing else can be built on. `desktop-toolkit.md`. |
+| **3** | **Immediate-mode toolkit** | (forced by constraints) | The layer nothing else can be built on. `../../desktop/desktop-toolkit.md`. |
 | **4** | **Tiled SIMD software rasterizer** | SerenityOS `LibSoftGPU` | The 3D goal, and SSE work speeds up `fb.c` first |
 | **5** | **Mouse into the event queue** | everyone | `EV_MOUSE` already declared. Half a day. |
 | **6** | **Tabbed windows** | Essence | Genuinely distinctive, and cheap once `wm.c` exists |

@@ -1818,7 +1818,7 @@ diffing the union of all six local `refs/wip/*` trees against `main`'s tracked
 set. All six refs are already local; no fetch is needed. The composition matters
 more than the count, because three of the groups are different kinds of problem:
 
-- **Dangling docs.** `kernel/docs/research/desktop-prior-art.md`, `desktop-toolkit.md`,
+- **Dangling docs.** `kernel/docs/research/desktop-prior-art.md`, `kernel/docs/desktop/desktop-toolkit.md`,
   `kernel/docs/guides/desktop-build-guide.md`, `kernel/docs/research/intel-graphics-stack.md` and `kernel/docs/concepts/beyond-the-kernel.md`
   are linked by 3, 5, 7, 1 and 3 tracked `.md` files respectively and exist on no
   branch. Every one of those links is broken today. `kernel/docs/concepts/beyond-the-kernel.md` is the
@@ -1837,12 +1837,12 @@ more than the count, because three of the groups are different kinds of problem:
 ### 10.2 Five filenames are cited by twenty-plus tracked files and none is in the repo
 
 ```
-$ for d in concepts/beyond-the-kernel.md desktop-toolkit.md guides/desktop-build-guide.md \
+$ for d in concepts/beyond-the-kernel.md desktop/desktop-toolkit.md guides/desktop-build-guide.md \
            research/desktop-prior-art.md research/intel-graphics-stack.md MASTER_PLAN.md; do
     printf '%-26s tracked=%s citers=%s\n' "$d" \
       "$(git ls-files | grep -c $d)" "$(git grep -l $d | wc -l)"; done
 concepts/beyond-the-kernel.md tracked=0 citers=3
-desktop-toolkit.md         tracked=0 citers=5
+desktop/desktop-toolkit.md tracked=0 citers=5
 guides/desktop-build-guide.md tracked=0 citers=7
 research/desktop-prior-art.md tracked=0 citers=3
 research/intel-graphics-stack.md tracked=0 citers=1
@@ -1850,9 +1850,9 @@ MASTER_PLAN.md             tracked=0 citers=14
 ```
 
 `README.md` and eleven design docs route the reader to `MASTER_PLAN.md`.
-`kernel/docs/guides/desktop-build-guide.md` and `desktop-toolkit.md` are the two `OVERNIGHT-PROMPT.md`
+`kernel/docs/guides/desktop-build-guide.md` and `kernel/docs/desktop/desktop-toolkit.md` are the two `OVERNIGHT-PROMPT.md`
 lists under "READ FIRST". `06ced13` rescued six orphaned docs onto `main`; these
-five were not among them. Two of them (`kernel/docs/concepts/beyond-the-kernel.md`, `desktop-toolkit.md`)
+five were not among them. Two of them (`kernel/docs/concepts/beyond-the-kernel.md`, `kernel/docs/desktop/desktop-toolkit.md`)
 exist in the dangling WIP commit `5557f4a`, which is on no branch.
 
 **Recommendation that removes the whole class:** "a doc cites a file that
@@ -2034,7 +2034,7 @@ into their 48 MiB and now covers 3840×2160, and a whole-desktop redraw went
 (`HANDOFF.md` v10 item 2). `MERGE-EVIDENCE.md` §2.8 records that the builtins were
 removed and any surviving `kernel.zl` call site would fail at runtime;
 `check-zl-calls.sh` now reports zero such calls. **This is closed. Do not restore
-it, and do not treat `desktop-polish-and-speed.md:144,157`'s
+it, and do not treat `kernel/docs/desktop/desktop-polish-and-speed.md:144,157`'s
 `bg_snapshot returns in 0.00 ms because bg_ok = 0` rows as a defect** — that is
 the measurement of a thing that was then removed. (The first draft attributed
 those rows to `fbbench`; `grep -c 'bg_snapshot' kernel/tests/host/fbbench.c` → 0,

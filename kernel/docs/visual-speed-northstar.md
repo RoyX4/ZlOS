@@ -391,7 +391,7 @@ The remaining speed proof should follow perception, not theoretical throughput:
 2. measure the new deadline/vblank path on the 59.998 Hz ThinkPad panel;
 3. keep measuring `late`, not just average and peak.
 
-Full evidence and the pacing analysis are in `look-and-speed.md`.
+Full evidence and the pacing analysis are in `desktop/look-and-speed.md`.
 
 ## How future sessions should use the prototype
 
@@ -415,6 +415,6 @@ applications built on top, not another renderer rewrite.
 Do not answer this question with one completeness percentage. Say which layer
 is being judged: **look, feel, machinery, or applications**.
 
-Related evidence: `look-and-speed.md` · `evidence/desktop-v10-plan.md` §8 ·
+Related evidence: `desktop/look-and-speed.md` · `evidence/desktop-v10-plan.md` §8 ·
 `archive/superseded/desktop-northstar-feasibility.md` · `DECISIONS.md` #29–#33 ·
 `../../docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`

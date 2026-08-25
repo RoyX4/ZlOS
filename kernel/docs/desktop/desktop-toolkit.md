@@ -2,7 +2,7 @@
 
 Planning document, 2026-08-17. Nothing implemented.
 
-`archive/superseded/desktop-northstar-feasibility.md` named the real gap and then did not solve it:
+`../archive/superseded/desktop-northstar-feasibility.md` named the real gap and then did not solve it:
 
 > **A layout engine.** 105 flex declarations mean the mockup never positions
 > anything by hand. zlOS positions *everything* by hand — `sx + 14 * u`,
@@ -82,7 +82,7 @@ frame. That is how ImGui does it and it needs no names and no storage.
 ### The theme — data, not code
 
 Stolen directly from SerenityOS, where window frame colours and metrics live in
-a theme object rather than in the painting code (`research/os-landscape.md`).
+a theme object rather than in the painting code (`../research/os-landscape.md`).
 
 ```c
 struct ui_theme {
@@ -193,14 +193,14 @@ kernel.zl     app_draw calls ui_* — no coordinates anywhere
     |
 ui.c          NEW: layout cursor, widgets, theme          <- this document
     |
-wm.c          windows, z-order, focus, damage, routing    <- archive/superseded/desktop-plan.md
+wm.c          windows, z-order, focus, damage, routing    <- ../archive/superseded/desktop-plan.md
     |
-fb.c          pixels + clip rect + damage list            <- archive/superseded/desktop-TODO.md 0b/0c
+fb.c          pixels + clip rect + damage list            <- ../archive/superseded/desktop-TODO.md 0b/0c
 ```
 
 **`ui.c` depends on `fb_clip` existing.** A widget must not draw outside its
 window, and clipping is the only thing that guarantees that. So
-`archive/superseded/desktop-TODO.md` step 0b is a hard prerequisite — the same step the compositor
+`../archive/superseded/desktop-TODO.md` step 0b is a hard prerequisite — the same step the compositor
 and the 3D rasterizer both need. Third customer for one small change.
 
 ---
@@ -255,6 +255,6 @@ path actually works.
 
 ---
 
-Architecture: `archive/superseded/desktop-plan.md` · Task list: `archive/superseded/desktop-TODO.md` · Why the gap
-existed: `archive/superseded/desktop-northstar-feasibility.md` · Theme idea source:
-`research/os-landscape.md`
+Architecture: `../archive/superseded/desktop-plan.md` · Task list: `../archive/superseded/desktop-TODO.md` · Why the gap
+existed: `../archive/superseded/desktop-northstar-feasibility.md` · Theme idea source:
+`../research/os-landscape.md`

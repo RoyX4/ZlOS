@@ -7,10 +7,10 @@
 > removed the measured cost.
 
 Written 2026-08-19, answering `LOOK-AND-SPEED-PROMPT.md`. The look half is in
-[`DECISIONS.md`](DECISIONS.md) #29–#33, where the brief asked for it. This is the
+[`DECISIONS.md`](../DECISIONS.md) #29–#33, where the brief asked for it. This is the
 speed half plus the frame target.
 
-**Read [`visual-speed-northstar.md`](visual-speed-northstar.md) first** — it is
+**Read [`visual-speed-northstar.md`](../visual-speed-northstar.md) first** — it is
 Roy's own clarification of what the reference is *for*, and it outranks the
 execution brief this document answers. Two things it says bear directly here:
 "fast is perceived latency and smoothness, not a high average frame rate printed
@@ -299,7 +299,7 @@ Done today, each with the command that says so:
 | the tray row no longer draws off-screen at 800×600 | the fields it cannot fit are dropped, not clipped |
 | blur removed; wallpaper cache holds at 2560×1440 | `hosttest/walltest.c`, 6 assertions |
 | `dock_baked` no longer lies when the cache is refused | it is `wall_save()`'s return value now |
-| §1c — the coarseness, named and measured | `archive/prompts/POINTER-PROMPT.md` §1c, answered |
+| §1c — the coarseness, named and measured | `../archive/prompts/POINTER-PROMPT.md` §1c, answered |
 | `fb_shadow` re-timed after the scissor fix | `fbbench`, `DECISIONS.md` #12 |
 
 Next, in the order the measurements rank them:

@@ -14,7 +14,7 @@
  * against a background of its own colour.
  *
  * TWO SIZES, each rasterized separately at 4x - never one scaled up. That was
- * desktop-look.md bug 1 for the icons and it is the same mistake here.
+ * docs/desktop/desktop-look.md bug 1 for the icons and it is the same mistake here.
  *
  * cur_hotN[i] is the HOTSPOT in atlas pixels: the pixel that IS the pointer
  * position. An arrow points with its tip, everything else with its middle.

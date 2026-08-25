@@ -1,7 +1,7 @@
 # The feel & control track — what actually landed
 
 The running record for `desktop/feel-and-control`, the way
-[`desktop-look.md`](../desktop-look.md) is for the look track. The brief is
+[`desktop-look.md`](../desktop/desktop-look.md) is for the look track. The brief is
 [`FEEL-PROMPT.md`](../archive/prompts/FEEL-PROMPT.md); this is what came back.
 
 Every entry states the gate **and its output**, or a number that was

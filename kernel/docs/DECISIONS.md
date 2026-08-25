@@ -87,7 +87,7 @@ compositor. The first four need neither the laptop nor a pointer.
 **10. The renderer is not the problem.** Real TrueType via FreeType, subpixel
 LCD with a 5-tap FIR, gamma-correct linear-light blending, dithered gradients.
 ~80% of the way to modern. It is also the *smallest* layer.
-→ `desktop-look.md`
+→ `desktop/desktop-look.md`
 
 **11. Three resampling bugs, not a bad renderer.** Worst: `fb_icon24`
 nearest-neighbour upscaling every icon at 2× (`fb.c:929`) — icons are drawn as
@@ -113,7 +113,7 @@ chrome)` = **0.787 ms**. Same harness, same `REPS 7`. So the numbers above are
 it nothing, which is the honest reading and not the one a single fast run
 suggests. The claim "fb_shadow is 4.3 ms of a 5.1 ms window redraw" is dead
 either way: it is now ~4% of a 16.67 ms budget and **is not where frame time
-goes**. See `look-and-speed.md` for where it does go.
+goes**. See `desktop/look-and-speed.md` for where it does go.
 
 **13. Measurement is a build artifact now.** `hosttest/fbbench.c` compiles the
 shipping `fb.c` at the kernel's own `-O2`; `hosttest/gpu_fillrate.c` measures the
@@ -181,7 +181,7 @@ Not a retained widget tree (Qt / GTK / SerenityOS LibGUI) — those allocate an
 object per widget and hold parent/child pointers. **A tree needs a heap, and a
 tree of children is a list.** zlOS has neither. `ui_button("OK")` returns whether
 it was clicked; nothing is allocated; state stays in the app where it already is.
-→ `desktop-toolkit.md`
+→ `desktop/desktop-toolkit.md`
 
 **Three sub-decisions that follow:**
 
@@ -640,7 +640,7 @@ forever, and `intel_wait_vblank()` tested `intel_pipe_enabled()`, read 0 out of 
 register it had never mapped, and reported "no vblank" immediately. No error
 anywhere — just a driver nobody asked to look.
 
-That is what blocks `look-and-speed.md` §4: replacing the 100 Hz PIT release with
+That is what blocks `desktop/look-and-speed.md` §4: replacing the 100 Hz PIT release with
 a 59.998 Hz panel deadline starts by reading the frame counter, and nothing
 could — **`intel_frame_count` had no zl binding at all**, declared at
 `runtime_kernel.c:636` and bound nowhere, which is also why "it returns 0" was
@@ -696,7 +696,7 @@ line naming PSR when the counter reads 0.
 **Which qualifies the item itself.** `NEXT-PROMPT.md` §4 calls this "what
 unblocks any vblank work at all". It is necessary and it is *not sufficient*: a
 frame-counter-based pacer will read a frozen counter on the only machine this OS
-targets. The pacing design in `look-and-speed.md` §4 has to start from the pixel
+targets. The pacing design in `desktop/look-and-speed.md` §4 has to start from the pixel
 clock, or from turning PSR off, and that is a decision nobody has taken.
 
 **Only the negative branch is reachable under QEMU** — it has no Intel display
@@ -776,7 +776,7 @@ in flight.
 
 `drivers/display/gpu-driver.md`'s "the order that follows from all of it" ranks SMP bands **#1**:
 *"1.78x on the desktop redraw, already written, switched off, no hardware
-risk."* `NEXT-PROMPT.md` and `look-and-speed.md` §2 say the opposite: *"it is one
+risk."* `NEXT-PROMPT.md` and `desktop/look-and-speed.md` §2 say the opposite: *"it is one
 call and it should not be made."* Same measurement, same day, opposite advice,
 and it sits at the top of the driver's own recommended order — so it gets
 settled here rather than picked by whoever reads which file first.
@@ -947,9 +947,9 @@ this fix's regression floor, not its proof — see the gap above.
 |---|---|---|
 | **A** | `.ultra/METRICS.json` primary metric is blank — **modeset or desktop?** They give different numbers. Logged as T-4. | Roy |
 | ~~E~~ | ~~Two palettes ship at once~~ — **closed by #34.** Not a taste call in the end: the reference's own header says it was transcribed *from* `kernel.zl`, so `ui.c` was the only file that had drifted. Gated by `hosttest/palette`. **The window body going near-black is the visible half — if that reads wrong, #34's table is the one block to revert.** | closed |
-| **F** | **The northstar wants all-mono chrome** ("Everything inside the screen is mono"); the kernel deliberately moved every dock/menu/tray/title label to proportional DejaVu Sans, citing `desktop-look.md` item 4. A straight contradiction, not drift — one of the two documents has to lose. | Roy |
+| **F** | **The northstar wants all-mono chrome** ("Everything inside the screen is mono"); the kernel deliberately moved every dock/menu/tray/title label to proportional DejaVu Sans, citing `desktop/desktop-look.md` item 4. A straight contradiction, not drift — one of the two documents has to lose. | Roy |
 | ~~G~~ | ~~The shell's longest lines are clipped~~ — **closed by #35**, by wrapping. Note the correction: it is **75** columns, not the 77 §1c computed, because `kernel.zl:2934` insets the client before `term_draw` sees it. Gated by `hosttest/termwrap`. | closed |
-| ~~B~~ | ~~No layout engine~~ — **now designed**, see #28 and `desktop-toolkit.md` | closed |
+| ~~B~~ | ~~No layout engine~~ — **now designed**, see #28 and `desktop/desktop-toolkit.md` | closed |
 | **C** | Whether to add "ideas worth stealing" + sources to `research/os-landscape.md` (edit was declined) | Roy |
 | **D** | C9 watermark encoding still unsettled — firmware's values fit both narrow and wide | Intel side |
 
@@ -963,9 +963,9 @@ offered afterwards.** Logged to `~/.claude/CLAUDE.md`, the vault's
 
 ---
 
-Docs: `look-and-speed.md` (the frame budget, the vsync survey, what is next) ·
+Docs: `desktop/look-and-speed.md` (the frame budget, the vsync survey, what is next) ·
 `guides/desktop-build-guide.md` (start here) · `archive/superseded/desktop-TODO.md` (historical task list) ·
-`archive/superseded/desktop-plan.md` · `desktop-look.md` · `desktop-polish-and-speed.md` ·
+`archive/superseded/desktop-plan.md` · `desktop/desktop-look.md` · `desktop/desktop-polish-and-speed.md` ·
 `archive/superseded/desktop-northstar-feasibility.md` · `research/desktop-prior-art.md` ·
 `research/os-landscape.md` · `research/intel-graphics-stack.md`
 

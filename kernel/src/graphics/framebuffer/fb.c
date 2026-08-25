@@ -1758,7 +1758,7 @@ void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
  *
  * This read the ONE-BIT font8x16 and drew each set bit as a solid scale x
  * scale square. It was the blockiest path in the codebase and it drew the
- * largest text on screen - the zlOS logo (desktop-look.md, bug 3). text_big
+ * largest text on screen - the zlOS logo (docs/desktop/desktop-look.md, bug 3). text_big
  * already did the right thing; logo was the odd one out.
  *
  * Now it resamples the 16x32 COVERAGE atlas - the same real-TrueType,
@@ -2438,7 +2438,7 @@ void fb_box(int x, int y, int w, int h, unsigned int rgb)
  * This was plain Bresenham: one hard on/off pixel per step, so every diagonal
  * staircased. The System Monitor sparkline is eight diagonal segments sitting
  * directly beside gamma-correct anti-aliased text, and the contrast made it
- * worse rather than hiding it (desktop-look.md, bug 2).
+ * worse rather than hiding it (docs/desktop/desktop-look.md, bug 2).
  *
  * Wu's insight is that a diagonal line passes BETWEEN two pixels, so light
  * both, in proportion to how close the true line is to each. The exact ratio
@@ -3308,7 +3308,7 @@ int fb_get_col(void) { return fb_col; }
 /* ---- proportional text ----------------------------------------------------
  * fb_text_aa advances by exactly cell_w per character, so every string it
  * draws is monospace-positioned - window titles, dock labels, button captions,
- * all of it. desktop-look.md item 4: uniform advance is the single strongest
+ * all of it. docs/desktop/desktop-look.md item 4: uniform advance is the single strongest
  * "this is a terminal" signal there is, and it was being applied to things
  * that are not terminals.
  *
@@ -3318,7 +3318,7 @@ int fb_get_col(void) { return fb_col; }
  *
  * THE CONSOLE DOES NOT USE THIS AND MUST NOT. A terminal is a grid; text that
  * reflows under it would break fb_scroll, the text box, and the cursor. Only
- * labels change - which is exactly the split desktop-look.md asks for.
+ * labels change - which is exactly the split docs/desktop/desktop-look.md asks for.
  */
 /* The atlas itself, not a declaration of it. See the comment at the top of the
  * generated file for why it rides along with fb.c rather than being its own
@@ -3622,7 +3622,7 @@ extern const int icons_n;
  * wider, which is every screen actually used, so the pipeline was: draw clean
  * geometry at 96x96, box-filter it to 24x24, then throw away every one of
  * those anti-aliased edge pixels by blowing it back up to 48x48 in squares.
- * desktop-look.md called it the single most visible source of blockiness in
+ * docs/desktop/desktop-look.md called it the single most visible source of blockiness in
  * the desktop, and it was.
  *
  * Now each scale reads the atlas that was RASTERIZED for it. Only a scale

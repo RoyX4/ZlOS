@@ -21,7 +21,7 @@ to be, because two of the four were not the thing the ranking said they were.
    northstar item by item. **#29 carries an unresolved tension that is Roy's to
    call**, not the next session's to quietly re-decide. #34–#38 are the last
    session's, and #37 contains a correction it made to its own work.
-3. [`look-and-speed.md`](../../look-and-speed.md) — the frame budget, where the time
+3. [`look-and-speed.md`](../../desktop/look-and-speed.md) — the frame budget, where the time
    goes, and the vsync survey. Note its two correction banners: one entry in it
    was wrong and says so.
 
@@ -85,7 +85,7 @@ the engine. A blitter call per damage rect is the wrong shape.
 
 ### 2. PSR, and what the frame pacer is actually allowed to read — *newly on the list, and it is a decision*
 
-`look-and-speed.md` §4's plan is to replace the uneven 100 Hz PIT release with a
+`kernel/docs/desktop/look-and-speed.md` §4's plan is to replace the uneven 100 Hz PIT release with a
 measured 60 Hz deadline. #37 got `intel_find()` running at boot so the display
 registers are mapped at all — and then found that the register the plan wants is
 **frozen**. `hosttest/intel_probe`, read-only, against this laptop's own GPU:
@@ -145,7 +145,7 @@ in `need_root`.
 
 - **F: mono versus proportional chrome.** The northstar says "everything inside
   the screen is mono"; the kernel deliberately moved every dock/menu/tray/title
-  label to proportional DejaVu Sans, citing `desktop-look.md` item 4. A straight
+  label to proportional DejaVu Sans, citing `kernel/docs/desktop/desktop-look.md` item 4. A straight
   contradiction, not drift — one of the two documents has to lose. Note that
   item G's fix (#35) already settled the *terminal* half: it stays mono, and
   that half is not reopened by whatever F decides.
@@ -166,7 +166,7 @@ fix if the blur is wanted back is **(3), grow the arena** — move `HI_NVME` up,
 - **Raising the PIT.** 30+ dependent sites, and one is hardware-hazardous:
   `cpu.c:259` feeds `cpu_delay_us`, which enforces the panel's 500 ms T12
   delay. Introduce `PIT_HZ`/`idt_hz()` *first*. Full blast radius in
-  `look-and-speed.md` §2, including the class `grep` will not find — window
+  `kernel/docs/desktop/look-and-speed.md` §2, including the class `grep` will not find — window
   animations are counted in **frames**, so their wall-clock duration scales
   inversely with the tick rate.
 - **Turning on SMP band rendering.** It is one call and it should not be made.
@@ -223,7 +223,7 @@ Three new host gates, all watched going red before being believed:
   the real GPU refuted it. **The refutation cost thirty seconds and the fact was
   already written in `intel.c`** — the expensive version of that mistake is
   finding it after building a pacer on top.
-- **I broke my own rule and it is recorded**: `look-and-speed.md` §3 asserted a
+- **I broke my own rule and it is recorded**: `kernel/docs/desktop/look-and-speed.md` §3 asserted a
   `term_draw` mechanism taken from a sub-agent summary that never went through
   the adversarial pass. It was false and had been for months. The correction is
   in place; the lesson is that the unverified claim is the one that gets

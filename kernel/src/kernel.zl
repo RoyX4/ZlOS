@@ -261,7 +261,7 @@ fn ui() { return ui_scale() }
 # Every label this file drew went through text_aa, which is DejaVu Sans MONO.
 # wm.c's window titles were the only proportional text anywhere on screen, and
 # uniform advance is the single strongest "this is a terminal" signal there is
-# (desktop-look.md item 4) - applied, until now, to a dock, a menu, a tray and
+# (docs/desktop/desktop-look.md item 4) - applied, until now, to a dock, a menu, a tray and
 # an identity card, none of which are terminals.
 #
 # A role, never a size: T_BODY at ui 2 and at ui 4 are different pixel heights,
@@ -4663,7 +4663,7 @@ fn desk_draw(dx, dy, dw, dh) {
 # The v10 background, translated rather than copied. Its structure - a base
 # gradient, two offset elliptical glows, a corner shadow, a vignette and two
 # faint conic sweeps - is taken exactly; its palette is NOT. The prototype is
-# near-black and lime; this is navy and cyan, because desktop-look.md's rule is
+# near-black and lime; this is navy and cyan, because docs/desktop/desktop-look.md's rule is
 # to extend the visual system that exists rather than introduce a second one.
 # Percentages become pixels here, because a percentage of what is a layout
 # question and fb.c does not do layout.
@@ -5417,7 +5417,7 @@ fn wm_boot_start() {
     # of a register it never mapped, and reported "no vblank" immediately. Not
     # an error anywhere - just a driver that was never asked to look.
     #
-    # That is what blocks the pacing work in look-and-speed.md §4: replacing the
+    # That is what blocks the pacing work in docs/desktop/look-and-speed.md §4: replacing the
     # 100 Hz PIT release with a 59.998 Hz panel deadline starts by being able to
     # read the frame counter, and nothing could.
     #

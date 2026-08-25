@@ -97,7 +97,7 @@ from exercise import Serial, Qmp, qemu_argv, build, qtype, PROMPT
 # The silence that misled it is real but means something else: term.c buffers
 # printable characters and echoes only in its Enter branch, so a single 'N'
 # submits nothing and prints nothing. A delivered keystroke and a dropped one
-# are the same silence until Enter. See docs/typing-into-the-compositor.md.
+# are the same silence until Enter. See docs/desktop/typing-into-the-compositor.md.
 #
 # Typing on the emulated keyboard is still the right choice for this gate - it
 # exercises the PS/2 and USB HID decoders, the only input a laptop has. Keep

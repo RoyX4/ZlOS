@@ -870,7 +870,7 @@ def render(fn, n=N):
 
     Every output size gets its OWN 4x4-supersampled master, so a 48x48 icon is
     real detail rather than a 24x24 icon with its pixels copied - which is
-    exactly the bug this replaces (fb.c fb_icon24, desktop-look.md bug 1)."""
+    exactly the bug this replaces (fb.c fb_icon24, docs/desktop/desktop-look.md bug 1)."""
     master = n * SS
     # an exact integer ratio keeps every scaled literal an exact integer too,
     # which is what makes the 24x24 output provably unchanged (k == 1)
@@ -918,7 +918,7 @@ def main():
         f.write(" *\n")
         f.write(" * EACH SIZE IS RASTERIZED SEPARATELY at 4x supersampling. The 48x48 set\n")
         f.write(" * is NOT the 24x24 set scaled up: doing that in fb_icon24 was the single\n")
-        f.write(" * most visible source of blockiness in the desktop (desktop-look.md,\n")
+        f.write(" * most visible source of blockiness in the desktop (docs/desktop/desktop-look.md,\n")
         f.write(" * bug 1), because it threw away every anti-aliased edge pixel.\n")
         f.write(" *\n")
         f.write(" * index:")

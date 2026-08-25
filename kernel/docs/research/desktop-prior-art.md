@@ -94,7 +94,7 @@ Three things worth taking from it:
    confirmation it is a reasonable design, not a compromise.
 2. **A software *vector* renderer, and it animates.** So "software rendered" does
    not mean "static and flat". One person built animated vector UI on a CPU.
-   The animation ambition in `kernel/docs/desktop-polish-and-speed.md` is proven achievable.
+   The animation ambition in `kernel/docs/desktop/desktop-polish-and-speed.md` is proven achievable.
 3. **It picked an explicit visual reference (Windows 7) and followed it.** It
    did not invent a look from nothing. That is why it reads as coherent.
 
@@ -296,7 +296,7 @@ customer, well before 3D.
 
 SerenityOS keeps colours and frame metrics in a theme object rather than in the
 drawing code. zlOS hardcodes both. This is small, cheap, and would fix the
-"spacing is hand-picked numbers" gap in `kernel/docs/desktop-polish-and-speed.md`.
+"spacing is hand-picked numbers" gap in `kernel/docs/desktop/desktop-polish-and-speed.md`.
 
 ### 3. Accept the real comparison
 

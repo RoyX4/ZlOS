@@ -6,7 +6,7 @@
 > percentage. Read [`visual-speed-northstar.md`](../../visual-speed-northstar.md)
 > first; it is the durable intent. This prompt is the older execution brief and
 > much of it has already been answered by `DECISIONS.md` and
-> `look-and-speed.md`.
+> `kernel/docs/desktop/look-and-speed.md`.
 
 Written 2026-08-19, for a fresh session. Two halves. **Do the look first** — a
 frame budget is meaningless until you know what has to be in the frame.

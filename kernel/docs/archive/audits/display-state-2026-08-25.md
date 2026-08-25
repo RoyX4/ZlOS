@@ -155,7 +155,7 @@ proportional anti-aliased text with correct spacing, rounded window frames with
 soft shadows, a dark theme with a lime accent, a dock with legible 48 px icons,
 progress meters, a toggle switch, a tabbed window, a scrollbar.
 
-**`kernel/docs/desktop-look.md` is stale on its own headline bug.** It says the single
+**`kernel/docs/desktop/desktop-look.md` is stale on its own headline bug.** It says the single
 most visible source of blockiness is `fb_icon24` doing nearest-neighbour 2×
 upscaling (`ic[y / sc][x / sc]`). That is fixed. `fb.c:3624` retains the old line
 in a comment and `fb.c:3635-3647` now picks the nearest native atlas and
@@ -183,7 +183,7 @@ they are told is absent.
 | `kernel/HANDOFF.md` (three places) | nothing in the kernel arms `lt_armed` | `intel.c:4417` does, from `kernel.zl:2063` via `panel_up` |
 | `kernel/docs/archive/superseded/display-roadmap.md` §"Where the code actually is" | no VBT parser; hotplug zero lines; 42 `*_A` registers | parser at `intel.c:4512-4571`; `intel_hpd_*` exists; the `_A` macros are `PIPE_REG`-indexed |
 | `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md` §5.1 | `key()` halts the kernel on the panel path | closed; `key_get()` loop, `check-zlcalls.py` clean |
-| `kernel/docs/desktop-look.md` §1 | icons destroyed by nearest-neighbour upscale | fixed, bilinear + native atlas |
+| `kernel/docs/desktop/desktop-look.md` §1 | icons destroyed by nearest-neighbour upscale | fixed, bilinear + native atlas |
 | `kernel/docs/archive/superseded/display-roadmap.md` STATUS | phases 1–7 "done" | written and register-verified; **40 of their functions have no caller** |
 
 ---

@@ -260,7 +260,7 @@ More than you would think, and it is the expensive-looking half:
   `gen_hd_font.py` at build time).
 - A **software renderer measured at 4.88 ms** for a full desktop at 1920×1200.
 - An **immediate-mode toolkit** already designed for a no-heap kernel
-  (`desktop-toolkit.md`) — a browser's UI chrome is exactly that shape.
+  (`kernel/docs/desktop/desktop-toolkit.md`) — a browser's UI chrome is exactly that shape.
 
 ### What is genuinely missing — the honest bill of materials
 
