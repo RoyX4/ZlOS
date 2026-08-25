@@ -42,6 +42,7 @@ These are useful, but not a done list:
 | `evidence/POINTER-EVIDENCE.md` | Pointer fix measurements; explicitly not full human/live-VM closure. |
 | `evidence/COMPARE-BOREDOS.md` | Measured comparison against a peer hobby OS. |
 | `evidence/REPOSITORY-STRUCTURE-STUDY-2026-08-25.md` | Read-only layout measurements across all 33 pinned repositories, with detailed inspection of the largest systems. |
+| `evidence/STRUCTURE-CLEANUP-2026-08-25.md` | Measured cleanup receipt: relocations, static checks, held metadata/source boundaries, and explicit no-build/no-boot/no-push scope. |
 | `evidence/DOCUMENTATION-COVERAGE-AUDIT-2026-08-25.md` | Static proof that the 906-feature/21-phase/174-contract program is self-contained and navigable, with stale runtime evidence kept explicit. |
 | `evidence/visual-diffs/` | Curated before/after visual evidence images. |
 
