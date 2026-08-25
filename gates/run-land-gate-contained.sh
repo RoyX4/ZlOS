@@ -89,7 +89,7 @@ preflight() {
 
   "$WT/kernel/tools/checks/verify-sources.sh" --selftest-recovery
   "$WT/kernel/tools/checks/verify-sources.sh" --recover-only
-  python3 "$WT/kernel/tools/generators/gen-build-identity.py" --check --selftest
+  python3 "$WT/kernel/tools/generators/gen-build-identity.py" --write --selftest
   echo "contained-gate preflight: PASS (load=$load, available=${mem}MiB)"
 }
 

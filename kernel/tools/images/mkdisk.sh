@@ -16,7 +16,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 python3 ./tools/generators/gen-app-manifest.py --check
-python3 ./tools/generators/gen-build-identity.py --check
+python3 ./tools/generators/gen-build-identity.py --write
 
 SRC=${1:-src/kernel.zl}
 [ -x ../compile ] || { echo "build the toolchain first: ../build.sh"; exit 1; }

@@ -42,10 +42,10 @@ check() {
         echo "  FAIL  $label - reached the prompt but the compositor never opened a window"; return 1
     fi
     local manifest_sha build_id build_head build_dirty
-    manifest_sha=$(sha256sum app-manifest.json | awk '{print $1}')
-    build_id=$(python3 -c 'import json; print(json.load(open("build-identity.json"))["identity_sha256"])')
-    build_head=$(python3 -c 'import json; print(json.load(open("build-identity.json"))["git"]["head"])')
-    build_dirty=$(python3 -c 'import json; print(1 if json.load(open("build-identity.json"))["git"]["dirty"] else 0)')
+    manifest_sha=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
+    build_id=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["identity_sha256"])')
+    build_head=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["git"]["head"])')
+    build_dirty=$(python3 -c 'import json; print(1 if json.load(open("metadata/build-identity.json"))["git"]["dirty"] else 0)')
     grep -q "app-manifest: schema=1 entries=62 sha256=$manifest_sha" "$log" || {
         echo "  FAIL  $label - running image reported the wrong app manifest"; return 1;
     }

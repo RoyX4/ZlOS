@@ -8,7 +8,7 @@ set -e
 cd "$(dirname "$0")"
 
 python3 ./tools/generators/gen-app-manifest.py --check
-python3 ./tools/generators/gen-build-identity.py --check
+python3 ./tools/generators/gen-build-identity.py --write
 
 ZL_STDLIB="$PWD/apps" ../compile src/kernel.zl >/dev/null
 cp out.c _genefi.c

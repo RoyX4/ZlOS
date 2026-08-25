@@ -11,7 +11,10 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 python3 ./tools/generators/gen-app-manifest.py --check
-python3 ./tools/generators/gen-build-identity.py --check
+# The identity includes this checkout's HEAD, dirty state, compiler binary and
+# tool versions. A tracked snapshot cannot already match a fresh checkout on a
+# different machine, so materialize the exact build identity before compiling.
+python3 ./tools/generators/gen-build-identity.py --write
 
 SRC=${1:-src/kernel.zl}
 [ -x ../compile ] || { echo "build the toolchain first: ../build.sh"; exit 1; }

@@ -163,7 +163,7 @@ else
         grep -E "Ring-3 window|window/input ABI" "$LOG" | tail -3 | sed 's/^/          /'
         fail=1
     fi
-    MANIFEST_SHA=$(sha256sum app-manifest.json | awk '{print $1}')
+    MANIFEST_SHA=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
     if grep -q "app-manifest: schema=1 entries=62 sha256=$MANIFEST_SHA" "$LOG"; then
         echo "  ok    running UEFI image reports the current 62-app manifest"
     else

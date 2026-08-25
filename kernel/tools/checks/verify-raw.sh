@@ -51,7 +51,7 @@ kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null
 tr -d '\r' < "$OUT" > "$OUT.c" && mv "$OUT.c" "$OUT"
 
 fail=0
-MANIFEST_SHA=$(sha256sum app-manifest.json | awk '{print $1}')
+MANIFEST_SHA=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
 grep -q "our bootloader (raw_boot), no GRUB" "$OUT" || { echo "  FAIL  did not boot via our loader"; fail=1; }
 grep -q "ready\." "$OUT"  || { echo "  FAIL  never reached the prompt"; fail=1; }
 grep -q "6765" "$OUT"   || { echo "  FAIL  fib(20) wrong or shell unresponsive"; fail=1; }

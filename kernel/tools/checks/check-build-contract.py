@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-ROUTES = ("build.sh", "build64.sh", "mkdisk.sh", "buildefi.sh")
+ROUTES = ("build.sh", "build64.sh", "tools/images/mkdisk.sh", "buildefi.sh")
 REQUIRED_FLAGS = ("-Wall", "-Wextra", "-Werror")
 
 
@@ -25,6 +25,10 @@ def route_failures(name: str, source: str) -> list[str]:
         errors.append(f"{name}: blanket -w suppression")
     if "set -e" not in source:
         errors.append(f"{name}: does not enable shell fail-fast mode")
+    if not re.search(r"gen-build-identity\.py\s+--write(?:\s|$)", code):
+        errors.append(f"{name}: does not materialize the current build identity")
+    if re.search(r"gen-build-identity\.py\s+--check(?:\s|$)", code):
+        errors.append(f"{name}: requires an impossible pre-build identity snapshot")
     return errors
 
 
@@ -48,9 +52,23 @@ def selftest(sources: dict[str, str]) -> None:
     assert any("buildefi.sh: blanket -w suppression" == item for item in all_failures(silenced))
 
     missing = dict(sources)
-    del missing["mkdisk.sh"]
-    assert any("missing route script: mkdisk.sh" == item for item in all_failures(missing))
-    print("build-contract selftest: caught missing-Werror, blanket-suppression and missing-route")
+    del missing["tools/images/mkdisk.sh"]
+    assert any(
+        "missing route script: tools/images/mkdisk.sh" == item
+        for item in all_failures(missing)
+    )
+
+    stale_identity = dict(sources)
+    stale_identity["build.sh"] = stale_identity["build.sh"].replace(
+        "gen-build-identity.py --write", "gen-build-identity.py --check", 1
+    )
+    stale_errors = all_failures(stale_identity)
+    assert any("build.sh: does not materialize" in item for item in stale_errors)
+    assert any("build.sh: requires an impossible" in item for item in stale_errors)
+    print(
+        "build-contract selftest: caught missing-Werror, blanket-suppression, "
+        "missing-route and stale-identity mutations"
+    )
 
 
 def main() -> int:

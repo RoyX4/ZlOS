@@ -74,7 +74,7 @@ run "license/provenance truth" "$WT/kernel" \
 
 # --- toolchain and compile-only steps (cheap, no QEMU)
 run "zl toolchain"     "$WT"               ./build.sh
-run "build input identity" "$WT/kernel" python3 tools/generators/gen-build-identity.py --check --selftest
+run "build input identity" "$WT/kernel" python3 tools/generators/gen-build-identity.py --write --selftest
 run "toolchain manifest write" "$WT/kernel" python3 tools/generators/gen-toolchain-manifest.py --write --selftest
 run "toolchain manifest check" "$WT/kernel" python3 tools/generators/gen-toolchain-manifest.py --check --selftest
 run "build graph write" "$WT/kernel" python3 tools/generators/gen-build-graph.py --write --selftest

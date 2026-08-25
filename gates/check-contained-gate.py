@@ -21,7 +21,7 @@ LAUNCHER_REQUIREMENTS = (
     "MEM_MIN_MIB=8192",
     "verify-sources.sh\" --selftest-recovery",
     "verify-sources.sh\" --recover-only",
-    "tools/generators/gen-build-identity.py\" --check --selftest",
+    "tools/generators/gen-build-identity.py\" --write --selftest",
     "--setenv=ZLOS_CONTAINED_GATE=1",
     "--property=CPUQuota=100%",
     "--property=CPUWeight=10",
