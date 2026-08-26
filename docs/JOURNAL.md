@@ -7,6 +7,23 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-26 — docs: make research index self-contained (69f11cf)
+
+`main` · 1 file changed, 9 insertions(+), 9 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>1 file(s)</summary>
+
+- `kernel/docs/research/starred-repository-research.md`
+
+</details>
+
 ## 2026-08-26 — docs: document every project directory (c9e6e69)
 
 `codex/full-program` · 875 files changed, 18194 insertions(+), 4 deletions(-)

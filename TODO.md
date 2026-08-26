@@ -27,10 +27,6 @@ _none — every file the docs describe is tracked._
 - [ ] **T-8** — Generated evidence manifests disagree on build identity.
 - [ ] **T-9** — Boot recovery policy remains at the kernel root.
 
-## Open pull requests
-
-- [ ] close #2 administratively — its `fix/dma-map-hid-arena` head is already an ancestor of `origin/main`
-
 ---
 
 <!-- BEGIN HAND-WRITTEN -->
