@@ -1,878 +1,902 @@
 {
   "schema": "zlos.source-snapshot-receipt.v1",
   "result": "PASS_WITH_OPEN_CUSTODY_GAP",
-  "build_identity": "1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04",
+  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
   "git": {
-    "head": "d19313a98b3ff1776448e06efc0a0b4dc40e92b3",
-    "branch": "codex/merge-all-2026-08-24",
+    "head": "69f11cf8e5792d4430c3f2ce7a07b472054af691",
+    "branch": "",
     "dirty": true,
-    "canonical_status_sha256": "7c1525ceb1fd39f59fb73358c49bd7f37cfac51b3f978729adf84d1f92cb5f9c",
+    "canonical_status_sha256": "c0d1438f87f418ea457c6328f8776aca44366cf86230666ec807cf9bc319e153",
     "submodule_status": []
   },
   "scope": "active zl import closure, declared C SOURCES, kernel/freestanding headers and all route scripts/entries/linkers/packaging helpers; conservative header superset",
   "archive": {
     "path": "kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar",
     "format": "deterministic POSIX ustar; sorted paths; uid/gid/mtime zero",
-    "bytes": 5795840,
-    "sha256": "57b6df8f01e9ce48c57cb34576eb2baaec89aaf8b4ffe57001a9db6dbb3ab78c",
-    "members": 142
+    "bytes": 7413760,
+    "sha256": "07560bc944b91e03f44bac26a6b14f704ce94ef4e7d6d0b20d2f227e247a8bbe",
+    "members": 146
   },
   "counts": {
-    "build_inputs": 142,
-    "archived_inputs": 142
+    "build_inputs": 146,
+    "archived_inputs": 146
   },
   "source_files": [
     {
       "path": "freestanding/runtime_kernel.c",
-      "bytes": 138265,
+      "bytes": 138970,
       "mode": 436,
-      "sha256": "86280a35f50b8b43cc3c457e2d4302836367955eaaa97ff0d8173a543c1316ac"
+      "sha256": "fff4cd8b71797353caf22b2f74302410c768459ffa89481ca6dd8c2fa5552aec"
     },
     {
       "path": "freestanding/zl_freestanding.h",
-      "bytes": 6765,
+      "bytes": 6767,
       "mode": 436,
-      "sha256": "20366eb778f689059ea4fb982dd56af2c6cf5cf42caf4ac46139557a99ccb504"
+      "sha256": "5be9db332d6666dd6332643a05b31774b14f3f93c85546f8dbac18144ef7a843"
     },
     {
       "path": "kernel/SOURCES",
-      "bytes": 4022,
+      "bytes": 5143,
       "mode": 436,
-      "sha256": "1185a07d17f4e2ff53176fc7b3ecc0b9887906304170b62748a189ea5c703e35"
-    },
-    {
-      "path": "kernel/apic.c",
-      "bytes": 18369,
-      "mode": 436,
-      "sha256": "708dae2c5007c0c3b2f0bd3a8fba29f1db022185cfa12c19119fe8ea5e85eb8d"
-    },
-    {
-      "path": "kernel/app-manifest.json",
-      "bytes": 21280,
-      "mode": 436,
-      "sha256": "a995f1e25c2f7b16ff1b6c7d94fd5e2ae45a26150fb8fa67f2297a6e99cb8bb5"
+      "sha256": "380c0a1d892349b3350ec8fc5d961c524965ae44a46db1350b7665d3c0ecf933"
     },
     {
       "path": "kernel/app_manifest_embed.zl",
       "bytes": 270,
       "mode": 436,
-      "sha256": "50f0ae9b482808af38697597d013c2ba63e7f557a26650121841b897e8e60a6c"
+      "sha256": "f8db3ec0482624cd718258976a2eb50187ae0f095be1a30f49e94a12b6ef658d"
     },
     {
-      "path": "kernel/apps_common.zl",
+      "path": "kernel/apps/apps_common.zl",
       "bytes": 3758,
       "mode": 436,
       "sha256": "dc15b6174f21e45a4c51aaa055fa61e56a27f8245e0c4ea99b0a545214bc5df2"
     },
     {
-      "path": "kernel/apps_games1.zl",
-      "bytes": 36800,
+      "path": "kernel/apps/apps_games1.zl",
+      "bytes": 36832,
       "mode": 436,
-      "sha256": "8191e44e016041b755e29a7f189a8fb6446aea7c6a5ad09f636cb9c7b63cd40c"
+      "sha256": "e64d44bde4aff81bf1b2c8adea2593d99cc5f08c77e931a43effdda7fc884ce1"
     },
     {
-      "path": "kernel/apps_games2.zl",
-      "bytes": 20928,
+      "path": "kernel/apps/apps_games2.zl",
+      "bytes": 20948,
       "mode": 436,
-      "sha256": "ceea12a3d4f21c9dfcdb9a55a8624181ef2220ef94480fa3e8f2be828ead2cd1"
+      "sha256": "8756a9d4a5159d3628eb41493a071ac51b2bac76f510059a990480ee89fff077"
     },
     {
-      "path": "kernel/apps_games3.zl",
-      "bytes": 76696,
+      "path": "kernel/apps/apps_games3.zl",
+      "bytes": 76988,
       "mode": 436,
-      "sha256": "59a233ba8016c9cca4ff84472bf729ac7fa7a469ad46bfa26b2e06d54f9ef1ee"
+      "sha256": "a40b3cc43aeef71f81f91e1710e926f9f0a4af178b217edb08ec313efcfc3b2c"
     },
     {
-      "path": "kernel/apps_games4.zl",
-      "bytes": 82464,
+      "path": "kernel/apps/apps_games4.zl",
+      "bytes": 82480,
       "mode": 436,
-      "sha256": "825d7a316c2260bbc633e3edaa0b1bcefccb930a5994fd83c74f38ed02fb18d4"
+      "sha256": "d8bdcbbe6913ca2a87805cd7f4725ee32e95a730269404f9f830bbb0d81aaa8d"
     },
     {
-      "path": "kernel/apps_registry.zl",
+      "path": "kernel/apps/apps_registry.zl",
       "bytes": 31267,
       "mode": 436,
       "sha256": "d9df7132a84c6eb0e1daf4d71c50dbc789f82a54ef8b59865f1b49f3008d204a"
     },
     {
-      "path": "kernel/apps_sys2.zl",
-      "bytes": 33077,
+      "path": "kernel/apps/apps_sys2.zl",
+      "bytes": 33096,
       "mode": 436,
-      "sha256": "12368e065b385f31380f390f1efd752e505f3b56d865cc8fa2126cba2c6c2287"
+      "sha256": "2f6d76b2af0a166ef1de7c8379ae8aa45f0e0e2237caf1a8cf42d9c66588dbc1"
     },
     {
-      "path": "kernel/apps_sys3.zl",
-      "bytes": 50942,
+      "path": "kernel/apps/apps_sys3.zl",
+      "bytes": 51049,
       "mode": 436,
-      "sha256": "26ffc50b93823346e62de6065a0e4755bf016d6b9138896e0a404bcb4b7debd2"
+      "sha256": "028d28dbf73a835844818c8da55c0ca4aaba4224a29bd75310da771180aa9017"
     },
     {
-      "path": "kernel/apps_system.zl",
+      "path": "kernel/apps/apps_system.zl",
       "bytes": 8423,
       "mode": 436,
       "sha256": "4dd056c2b46e332e57794f62baac2b90f21873a020c013af50d74c183a3ed4f3"
     },
     {
-      "path": "kernel/apps_utils.zl",
-      "bytes": 52446,
+      "path": "kernel/apps/apps_utils.zl",
+      "bytes": 52490,
       "mode": 436,
-      "sha256": "429d201fe9b692174b4286c11562546591dc815f84828e4df2dd61f57a09cb6e"
+      "sha256": "acac9c8836e32c8fb5c9c16e40106c66b8564f19c845047f50f8570017969da1"
     },
     {
-      "path": "kernel/arena.c",
-      "bytes": 18074,
-      "mode": 436,
-      "sha256": "cf01029e7ff7865a72bd99b47a8463fc1a379944ed17486b182f0c1978343032"
-    },
-    {
-      "path": "kernel/bga.c",
-      "bytes": 6304,
-      "mode": 436,
-      "sha256": "c93051fbfa31247ba498cb7f67e571d0b97b7b2a4d8a7d32c3763c26368410a4"
-    },
-    {
-      "path": "kernel/block.c",
-      "bytes": 4666,
-      "mode": 436,
-      "sha256": "729654179304583a89a7dafccfc395b3e8a8fb2532f0bc5ce0da9209ad072fd7"
-    },
-    {
-      "path": "kernel/boot.S",
+      "path": "kernel/boot/boot.S",
       "bytes": 2721,
       "mode": 436,
       "sha256": "0949e1171f666158091663c701296a49da6a73db49c916bda1e3b5af756df4bc"
     },
     {
-      "path": "kernel/boot64.S",
+      "path": "kernel/boot/boot64.S",
       "bytes": 7164,
       "mode": 436,
       "sha256": "5dd28b445937cb093bbce36572497114a4643eddaf89270f5c055cd8259d1221"
     },
     {
-      "path": "kernel/boot_handover.c",
-      "bytes": 14775,
-      "mode": 436,
-      "sha256": "a47127daa8a60037bf4b2bdb6ea9103c44058e81e1ac0462d5a3738824081a10"
-    },
-    {
-      "path": "kernel/boot_handover.h",
-      "bytes": 5158,
-      "mode": 436,
-      "sha256": "1e4cba660387285a5f48be493b839c4f1aa5c2769f0d5be49a5b05a2b39ae61d"
-    },
-    {
-      "path": "kernel/boot_state.h",
-      "bytes": 2150,
-      "mode": 436,
-      "sha256": "b67d827be6baddd92a40d87e79822ada9e46f19c9bb7a478cadc55e57acf9f0c"
-    },
-    {
-      "path": "kernel/browser.c",
-      "bytes": 88763,
-      "mode": 436,
-      "sha256": "85f42693d6d45380473405bf9570724f3bcf262546efcac4ea16147bce4a659c"
-    },
-    {
-      "path": "kernel/build.sh",
-      "bytes": 3223,
-      "mode": 509,
-      "sha256": "87bd445f42546a83217bc7a184accd626c98b28431d51a8944a3b30bcc6a17ef"
-    },
-    {
-      "path": "kernel/build64.sh",
-      "bytes": 2508,
-      "mode": 509,
-      "sha256": "7e2ba4afb7f73d323f7f6db0832e99c36d2f5aee43cabeb88fe61d43bd25389d"
-    },
-    {
-      "path": "kernel/buildefi.sh",
-      "bytes": 5491,
-      "mode": 509,
-      "sha256": "7c11445471fca2ef9cfe7064ef42e87e664ab569a20a4fc71254f5846d6e8a53"
-    },
-    {
-      "path": "kernel/clip.c",
-      "bytes": 4720,
-      "mode": 436,
-      "sha256": "33361f8fa6d5cda2c277f68b4ed03761966b8f5a088e6c52fe918ed5badc3886"
-    },
-    {
-      "path": "kernel/console.c",
-      "bytes": 26888,
-      "mode": 436,
-      "sha256": "72c48db5020dbd19164927ff166c0f9dec1d0954a87fd2cc6b51fb2338779262"
-    },
-    {
-      "path": "kernel/cpu.c",
-      "bytes": 20358,
-      "mode": 436,
-      "sha256": "961db5bf741cf1c60a3f5099a4d6610fbffbcf7878211427339be7ed8799b9aa"
-    },
-    {
-      "path": "kernel/crash.c",
-      "bytes": 7242,
-      "mode": 436,
-      "sha256": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f"
-    },
-    {
-      "path": "kernel/crash.h",
-      "bytes": 1524,
-      "mode": 436,
-      "sha256": "2d4fbb5bcb6523418f8caaed8e8e64b12e09e585f3bf37955a927b52dfa5d2d6"
-    },
-    {
-      "path": "kernel/crypto.c",
-      "bytes": 37627,
-      "mode": 436,
-      "sha256": "1dbf246046ae36e6fda25225e5bc6df1138f4fea2a8314458aaa64d5af5bbcb2"
-    },
-    {
-      "path": "kernel/crypto.h",
-      "bytes": 2496,
-      "mode": 436,
-      "sha256": "48e7b2e3020c9edccebd7be063646dcbebc753d36c99c1cfef2408cfe34eddaa"
-    },
-    {
-      "path": "kernel/css.c",
-      "bytes": 78096,
-      "mode": 436,
-      "sha256": "160c5cef524d51ec1fbefa3d338d90517f0787ea7d65c9ef64c863836db3385b"
-    },
-    {
-      "path": "kernel/css.h",
-      "bytes": 16210,
-      "mode": 436,
-      "sha256": "3d22d8ee088aa98d5b00d8939ddb61b4042472e36c77c541f8c2f57d0c3e06ab"
-    },
-    {
-      "path": "kernel/design.h",
-      "bytes": 22734,
-      "mode": 436,
-      "sha256": "cc964fac8490348035ec5a7e6e7bb0f658e5f4bf7ce1045745d0b5dc710f4f52"
-    },
-    {
-      "path": "kernel/dhcp.c",
-      "bytes": 7003,
-      "mode": 436,
-      "sha256": "7e3115d9b3334ab7520556c15ec8427fafd488e51238f91f0ecf26798ce33fbb"
-    },
-    {
-      "path": "kernel/dhcp.h",
-      "bytes": 619,
-      "mode": 436,
-      "sha256": "f197fdfd4c4b4f9dd5a5cf03db7d771006dc49823c34f4b151d3598c4331ee27"
-    },
-    {
-      "path": "kernel/divmod.c",
-      "bytes": 3168,
-      "mode": 436,
-      "sha256": "761ead808c0e59c5cf27be64d242f1c65c440ce3a19470482ed3d83378282fb7"
-    },
-    {
-      "path": "kernel/dma.h",
-      "bytes": 5998,
-      "mode": 436,
-      "sha256": "c3a9813dc03c9c59c84bc53550b44b6750610ee4e17912bedaacc22f8ccc3b54"
-    },
-    {
-      "path": "kernel/dns.c",
-      "bytes": 19283,
-      "mode": 436,
-      "sha256": "4d93eea0c4b0ad1bc1f73b8469aad96279bceacfa3076f3adbb40dec673bfb8f"
-    },
-    {
-      "path": "kernel/dns.h",
-      "bytes": 2335,
-      "mode": 436,
-      "sha256": "b6bcbed6f04e19bcb045fb074e524ee3d141585a1c1004692d970a8c4e9c4ca1"
-    },
-    {
-      "path": "kernel/e1000.c",
-      "bytes": 8916,
-      "mode": 436,
-      "sha256": "e2ffaaf912deff3f4e96c590d9b4e030cbcff5ea90f23009d2692c7ddcfa180e"
-    },
-    {
-      "path": "kernel/e1000.h",
-      "bytes": 530,
-      "mode": 436,
-      "sha256": "2494d5ea9be18739f42903e04f69c5f0c56972da515b33cb0f67d1831b2b93ec"
-    },
-    {
-      "path": "kernel/ease.c",
-      "bytes": 6372,
-      "mode": 436,
-      "sha256": "e26757324e1ea7387eef66d5125dbb39fca059ba03d63d20e253be95e802dc50"
-    },
-    {
-      "path": "kernel/ease.h",
-      "bytes": 2807,
-      "mode": 436,
-      "sha256": "10b7e842a94feca628dfdfa09b307df51505bc419c616519f0bc8c136f9f9e2c"
-    },
-    {
-      "path": "kernel/ecdsa.c",
-      "bytes": 13467,
-      "mode": 436,
-      "sha256": "3112557f003aef228dc64be32473026aa3fc783b25f395bb9d8b347ac3b3d850"
-    },
-    {
-      "path": "kernel/efi.c",
+      "path": "kernel/boot/efi.c",
       "bytes": 41795,
       "mode": 436,
       "sha256": "08b4a15453543f69a90b370ee067d5b2b1918bd6542d9c9461b84955d4b929d2"
     },
     {
-      "path": "kernel/entropy.c",
-      "bytes": 6379,
+      "path": "kernel/boot/gdt.c",
+      "bytes": 7704,
       "mode": 436,
-      "sha256": "a65f4ca6258c63733ac8320f51323af2e22e25df557a486f79dce3314b389597"
+      "sha256": "4d367201d9be5cb0527784cefe3f89f4c66dda1d5572b255b540ad4755c3b6aa"
     },
     {
-      "path": "kernel/exec.c",
-      "bytes": 14415,
-      "mode": 436,
-      "sha256": "3a5ee6373afaa20ba3d3564f84e15eac80673d5f3e8928a2184e2ae707d07b51"
-    },
-    {
-      "path": "kernel/fb.c",
-      "bytes": 169841,
-      "mode": 436,
-      "sha256": "07bd3b0473cda36acf5bd8bdf2b061eb45d34cec0bbb95937aa5dd00aadd4805"
-    },
-    {
-      "path": "kernel/fb3d.c",
-      "bytes": 16831,
-      "mode": 436,
-      "sha256": "b6259dc2c67fcdb0189678ce5667517cdbc6b934d14ef6ef4df436099fc47d56"
-    },
-    {
-      "path": "kernel/font8x16.c",
-      "bytes": 11397,
-      "mode": 436,
-      "sha256": "e0760da784d60454da095f1f9def88f5cac57b9bd7628b9695846046bb8596f4"
-    },
-    {
-      "path": "kernel/font_aa.c",
-      "bytes": 279043,
-      "mode": 436,
-      "sha256": "7e432066b616f01c9c84351b72031e84c54ecf3855f25e097e5b7bea92f2351d"
-    },
-    {
-      "path": "kernel/font_prop.h",
-      "bytes": 412,
-      "mode": 436,
-      "sha256": "db9195ea42a855de5ad4945b6e1c4dd45009772814aaa12efdf6e7b026d1faa1"
-    },
-    {
-      "path": "kernel/font_sub.c",
-      "bytes": 886958,
-      "mode": 436,
-      "sha256": "7c290296512ea687acb4d5dce30908d55950bb662375e6af4218896abe00439f"
-    },
-    {
-      "path": "kernel/fs.c",
-      "bytes": 42224,
-      "mode": 436,
-      "sha256": "5943915491e1ca7f35bbfb46068f9e658ba8eab7f59e14d5903897fcde74b1dd"
-    },
-    {
-      "path": "kernel/gdt.c",
-      "bytes": 7687,
-      "mode": 436,
-      "sha256": "ed6735e61cb49c163a271038543f8ba17b36f58cfb44f36710d0d8765130f8d4"
-    },
-    {
-      "path": "kernel/gdt64.c",
+      "path": "kernel/boot/gdt64.c",
       "bytes": 4862,
       "mode": 436,
       "sha256": "c4ddaa41af011ab47f81e3c308bc99dd26f2f99de93406a1bcbd493f86450db8"
     },
     {
-      "path": "kernel/gen-app-manifest.py",
-      "bytes": 14916,
-      "mode": 436,
-      "sha256": "a7aea6916625f469c6b1b0fc4662655b3e57e34b32aaea715454506de428b671"
-    },
-    {
-      "path": "kernel/gen-boot-media-ids.py",
-      "bytes": 4039,
-      "mode": 436,
-      "sha256": "938d6bb44bd73061f047d6f6884c4612064f158006f95f6672b74fbbaeb3c464"
-    },
-    {
-      "path": "kernel/gen-build-identity.py",
-      "bytes": 9647,
-      "mode": 509,
-      "sha256": "156a60035cbe803d144af049a898d101dd69a38fa82c54fb6a097becab526462"
-    },
-    {
-      "path": "kernel/ggttmap.h",
-      "bytes": 4415,
-      "mode": 436,
-      "sha256": "76f574a8eaff9b2e03cac3307a17836b59668fb93c8d67a6b6f0e7d102bc2a90"
-    },
-    {
-      "path": "kernel/gpu.c",
-      "bytes": 10589,
-      "mode": 436,
-      "sha256": "05e297ed6ada70626389dd1f92912752bcf12900ed7933c0639cf7204e72da37"
-    },
-    {
-      "path": "kernel/gpu.h",
-      "bytes": 3059,
-      "mode": 436,
-      "sha256": "38eafef56c5f32e36eaa74312faf8da89639120bbff6ae0f8829de066f90175f"
-    },
-    {
-      "path": "kernel/gpucursor.c",
-      "bytes": 8348,
-      "mode": 436,
-      "sha256": "de437b74c41f872f5a781f173114f0409306ffdaca8bfb4efd949ac380a7b822"
-    },
-    {
-      "path": "kernel/gpuring.c",
-      "bytes": 31520,
-      "mode": 436,
-      "sha256": "57ccac3bdf467ad630bae52912d59235f200390a121124f8b68c879ebceea2cf"
-    },
-    {
-      "path": "kernel/heap.c",
-      "bytes": 39874,
-      "mode": 436,
-      "sha256": "44d508960e59c064f2442c276cb803edba411f6a78f5bb773e4ad314baa9d885"
-    },
-    {
-      "path": "kernel/html.c",
-      "bytes": 36986,
-      "mode": 436,
-      "sha256": "82edd0e36dad42ba1b9b74c151e81474f6ccca89c057f9aaf227a12ecf10b2d2"
-    },
-    {
-      "path": "kernel/html.h",
-      "bytes": 5151,
-      "mode": 436,
-      "sha256": "3f95a8698f0fba60e5dddf3afd3e94362fee15438bd60fdfb4f9df711d36b65d"
-    },
-    {
-      "path": "kernel/http.c",
-      "bytes": 24754,
-      "mode": 436,
-      "sha256": "fed75c2f188f02480229f90e680d2d00e0f3b46c5611d31bbc3a3a78a2155376"
-    },
-    {
-      "path": "kernel/http.h",
-      "bytes": 2409,
-      "mode": 436,
-      "sha256": "e6db2ca624641a3a03e993f839c3bc18aca58a744533514b696590d56c974782"
-    },
-    {
-      "path": "kernel/i2c_hid.c",
-      "bytes": 26026,
-      "mode": 436,
-      "sha256": "9ff7f55015320d09b0ef38c6d48ee4c1697451e493b87e9eebfa773a0fde1f06"
-    },
-    {
-      "path": "kernel/i2c_touch.c",
-      "bytes": 5994,
-      "mode": 436,
-      "sha256": "f73fd66da160191563610e43bc37e7b87f299faf3bc7bd5c24dc30ed7f6f53b5"
-    },
-    {
-      "path": "kernel/i2c_touch.h",
-      "bytes": 1018,
-      "mode": 436,
-      "sha256": "c5fe14df2d9d9c050e03cc86469f50d515b6664866238bf773f27ec64664e52d"
-    },
-    {
-      "path": "kernel/icons.c",
-      "bytes": 1076717,
-      "mode": 436,
-      "sha256": "24904a0a81026a7a96573dbea07f8cfd2811c92f9f63371f5aa69cd1586ad0a5"
-    },
-    {
-      "path": "kernel/idt.c",
-      "bytes": 27097,
-      "mode": 436,
-      "sha256": "2919c40097d401ecde8905bbb24249769a16888cc42355f4020d0f8477472560"
-    },
-    {
-      "path": "kernel/input.c",
-      "bytes": 42903,
-      "mode": 436,
-      "sha256": "0fa8a4edaf2e9887968857f9e7e7aefcfc4b82d95e240b809dadfcf50715a8ce"
-    },
-    {
-      "path": "kernel/intel.c",
-      "bytes": 233357,
-      "mode": 436,
-      "sha256": "a9e3aba74b75f65c80e187cfd5f66f1bca995f0977c35064ef05c256895b8d79"
-    },
-    {
-      "path": "kernel/interp_kernel.c",
-      "bytes": 27349,
-      "mode": 436,
-      "sha256": "3025360324482b5a2d6129ff5186dbba8128fd5ece6794a1bf1bd0e386d2d096"
-    },
-    {
-      "path": "kernel/iwlwifi.c",
-      "bytes": 9409,
-      "mode": 436,
-      "sha256": "4369558ad415d29a82386535e00aaf35f6138808297b021cf48e1b76ab537e45"
-    },
-    {
-      "path": "kernel/iwlwifi.h",
-      "bytes": 1504,
-      "mode": 436,
-      "sha256": "7bf632b32de7cf09daf96c8c09d6bc37d71c5693148610c7b7c984ae4224c32e"
-    },
-    {
-      "path": "kernel/js.c",
-      "bytes": 38383,
-      "mode": 436,
-      "sha256": "b904895c9ec08765945de30acd8d9bca3c49c5303b87ed42f60beeca4dc0290e"
-    },
-    {
-      "path": "kernel/js.h",
-      "bytes": 2778,
-      "mode": 436,
-      "sha256": "5b3a36e468b4381345996ee3e369c6444189bd91426455decb1ddd3642d90026"
-    },
-    {
-      "path": "kernel/kernel.zl",
-      "bytes": 268022,
-      "mode": 436,
-      "sha256": "2c77d6ae43d46ae21fa28dcf1a3b0f40e9c416b9950f9fac89a91c970897fb86"
-    },
-    {
-      "path": "kernel/keycodes.h",
-      "bytes": 1869,
-      "mode": 436,
-      "sha256": "e0ecb92e323475d21a4558f1dece6329dd4f7b17f6fac69b940daa560954e620"
-    },
-    {
-      "path": "kernel/layout.c",
-      "bytes": 99758,
-      "mode": 436,
-      "sha256": "2f53f72060bd232a5d2223bc9f5430e6d0dd2159723ccde28db7030c4581f402"
-    },
-    {
-      "path": "kernel/layout.h",
-      "bytes": 6609,
-      "mode": 436,
-      "sha256": "e47c0405a97d13b57418c004e18e9c8d6518d8437ba29ba2e7f0735096b27718"
-    },
-    {
-      "path": "kernel/link-raw.ld",
+      "path": "kernel/boot/link-raw.ld",
       "bytes": 2165,
       "mode": 436,
       "sha256": "3f2743872e2f6f87f583ea236285d9b8176e9a4e25d883ac02bbe9fd1cc77e0b"
     },
     {
-      "path": "kernel/link.ld",
+      "path": "kernel/boot/link.ld",
       "bytes": 1446,
       "mode": 436,
       "sha256": "f34f6150836ed57409cd6449a53fa5d20cd5bc146fdd215f154555c4f3ccfdf2"
     },
     {
-      "path": "kernel/link64.ld",
+      "path": "kernel/boot/link64.ld",
       "bytes": 1054,
       "mode": 436,
       "sha256": "a4e5260c9f7ee0d540b12ee74cf8ec80c3f7abc35b4b15a4eafcb88cd55626c1"
     },
     {
-      "path": "kernel/memmap.h",
-      "bytes": 22369,
-      "mode": 436,
-      "sha256": "af9281ea4b7075b45b18b0d1ef85d8b0399c8c78721ae25d743b132dcd4fede1"
-    },
-    {
-      "path": "kernel/mkdisk.sh",
-      "bytes": 4898,
-      "mode": 509,
-      "sha256": "abdb13c043cd8f71c808ec61d599236d0f1ba17ff0ca5794c3acf95ddf6f31fd"
-    },
-    {
-      "path": "kernel/mkiso.sh",
-      "bytes": 4766,
-      "mode": 509,
-      "sha256": "69bcc5f6b3e3b3489c3551db05cf84d147e3650887121dc1d21d844da07dcee0"
-    },
-    {
-      "path": "kernel/mkiso64.sh",
-      "bytes": 259,
-      "mode": 509,
-      "sha256": "46f1717534f6690c26d430d0b57a99708c3e23ae66e63d7285a06e963f69d8f7"
-    },
-    {
-      "path": "kernel/mkusb.sh",
-      "bytes": 10494,
-      "mode": 509,
-      "sha256": "f0a95f13bd8b96be3c2ef91b4580aaf7d87db7349d4bcdede52f79f723455b33"
-    },
-    {
-      "path": "kernel/net.c",
-      "bytes": 23622,
-      "mode": 436,
-      "sha256": "ba50715aad6697c2084e3754c24d2f5750199e0c458700ee672038c8517c75e6"
-    },
-    {
-      "path": "kernel/net.h",
-      "bytes": 3822,
-      "mode": 436,
-      "sha256": "2653c76f4ed46d7d814951533397f2e30f18c5b9c6adde246e9785d117d654b8"
-    },
-    {
-      "path": "kernel/netdev.c",
-      "bytes": 3868,
-      "mode": 436,
-      "sha256": "7910d054884996eb86f86c56d52b0728de50e3ba6a23da04da28f48e063670e3"
-    },
-    {
-      "path": "kernel/netdev.h",
-      "bytes": 512,
-      "mode": 436,
-      "sha256": "f9a90c1c705e761f1ae89bc0748b816d33c1ed5de03a2707651af2f077a44e25"
-    },
-    {
-      "path": "kernel/notify.c",
-      "bytes": 7348,
-      "mode": 436,
-      "sha256": "56d6e7b3ad1401c378f70dd3f2104bb8f71acff7bc331ba762c7c4553d0fa7f7"
-    },
-    {
-      "path": "kernel/nvme.c",
-      "bytes": 22939,
-      "mode": 436,
-      "sha256": "1fa574bddb7515d19825147dbfc45e959a52c20b357c9cccc5ceff47cd6451ac"
-    },
-    {
-      "path": "kernel/paging.c",
-      "bytes": 28210,
-      "mode": 436,
-      "sha256": "81473ea5b42353e2b4b3f6fa012edd287119da88b89e40993abbe51650cef7f4"
-    },
-    {
-      "path": "kernel/pci.c",
-      "bytes": 13308,
-      "mode": 436,
-      "sha256": "3edf9a875df14e3169d2b1aadb1e0c8c33abf3bd4c668777bcec535b21064983"
-    },
-    {
-      "path": "kernel/png.c",
-      "bytes": 34552,
-      "mode": 436,
-      "sha256": "c273ddcb4e751fd4e999a6fa7c40d7706f499ad57d36da9683bb621e334964cd"
-    },
-    {
-      "path": "kernel/png.h",
-      "bytes": 5277,
-      "mode": 436,
-      "sha256": "c91befe500618549405b7ba2ef93ddd55c1998614df35a53a855c9e38eeea09a"
-    },
-    {
-      "path": "kernel/raw_boot.asm",
+      "path": "kernel/boot/raw_boot.asm",
       "bytes": 10247,
       "mode": 436,
       "sha256": "c37c4ecb83f30cd89988fec09fb77c94d56ca33814b360dc2f2899db6c6217ea"
     },
     {
-      "path": "kernel/raw_entry.S",
+      "path": "kernel/boot/raw_entry.S",
       "bytes": 4285,
       "mode": 436,
       "sha256": "0ea086961cf4be6068164cd83ffffee5c4eb0a36a5640d97d8d4ea6089a1e4b7"
     },
     {
-      "path": "kernel/roots.c",
-      "bytes": 22737,
-      "mode": 436,
-      "sha256": "383cc193de6c8badec3275a5b67d3f2ebbe0670e5894cd9458cb2a542be2f277"
-    },
-    {
-      "path": "kernel/rsa.c",
-      "bytes": 8028,
-      "mode": 436,
-      "sha256": "c7af65d440990a54a19540539bc4e79dace8bd32047a0ca76d73d9a00e6bba1e"
-    },
-    {
-      "path": "kernel/rtc.c",
-      "bytes": 10839,
-      "mode": 436,
-      "sha256": "d5a79b23bfdb0f9803d941e9f2b04ae36d23a06e44e64ec1a3c0c2e94596df8d"
-    },
-    {
-      "path": "kernel/sched.c",
-      "bytes": 11260,
-      "mode": 436,
-      "sha256": "2ffe51d069ccdfa18afeb29cc5509c6eca0711d3ad16ddcd551b0a62e81667e2"
-    },
-    {
-      "path": "kernel/settings.c",
-      "bytes": 46906,
-      "mode": 436,
-      "sha256": "0ceb7c27da715020b0ef6fd9c1239c80b801cd49494e44dba43a3f12abf89c4e"
-    },
-    {
-      "path": "kernel/smp.c",
-      "bytes": 14049,
-      "mode": 436,
-      "sha256": "0b7765b99179270fb5e3753257a0795455b05bb077aae4e14b69f4b8f1b12ed0"
-    },
-    {
-      "path": "kernel/smp_trampoline.S",
+      "path": "kernel/boot/smp_trampoline.S",
       "bytes": 3254,
       "mode": 436,
       "sha256": "59344904f38aad37625cd5bc83a220f72771627555cc137a22734d023c3cf8c7"
     },
     {
-      "path": "kernel/smp_trampoline64.S",
+      "path": "kernel/boot/smp_trampoline64.S",
       "bytes": 4006,
       "mode": 436,
       "sha256": "f3443d9976cad1ef7c1f1c483dbc25fcc2888ec6fd264de2b590862017d7cef8"
     },
     {
-      "path": "kernel/snap.c",
-      "bytes": 8056,
-      "mode": 436,
-      "sha256": "77bb9397c504b1a59ae35d67befb96586ec2b7ff33705241ac2b0ac6531ecc9c"
+      "path": "kernel/build.sh",
+      "bytes": 3731,
+      "mode": 509,
+      "sha256": "ed63792c70b9d2491e46aec11e79ef0b8b98f2185d6e8ea960b7cce3e598d5f1"
     },
     {
-      "path": "kernel/support.c",
+      "path": "kernel/build64.sh",
+      "bytes": 2766,
+      "mode": 509,
+      "sha256": "01a1476a9c0089f7f430a54af521ac9fde84c73b75671f75ca686913afeffde0"
+    },
+    {
+      "path": "kernel/buildefi.sh",
+      "bytes": 5734,
+      "mode": 509,
+      "sha256": "cf8abf6f91ac9a9cdb2e7d9208645b2087d0d8397f75c4ae217ff05d6645ee80"
+    },
+    {
+      "path": "kernel/metadata/app-manifest.json",
+      "bytes": 21280,
+      "mode": 436,
+      "sha256": "51eddc02a028add86a4dda92cdba1b77aa51b3675b9b129fa1bbf650eb36219d"
+    },
+    {
+      "path": "kernel/src/arch/x86/apic.c",
+      "bytes": 18369,
+      "mode": 436,
+      "sha256": "708dae2c5007c0c3b2f0bd3a8fba29f1db022185cfa12c19119fe8ea5e85eb8d"
+    },
+    {
+      "path": "kernel/src/arch/x86/cpu.c",
+      "bytes": 20358,
+      "mode": 436,
+      "sha256": "961db5bf741cf1c60a3f5099a4d6610fbffbcf7878211427339be7ed8799b9aa"
+    },
+    {
+      "path": "kernel/src/arch/x86/divmod.c",
+      "bytes": 3168,
+      "mode": 436,
+      "sha256": "761ead808c0e59c5cf27be64d242f1c65c440ce3a19470482ed3d83378282fb7"
+    },
+    {
+      "path": "kernel/src/arch/x86/dma.h",
+      "bytes": 6015,
+      "mode": 436,
+      "sha256": "7974bc5732dfbaea1fb4b10e5c13d0fc2dc2466be7a65ef137d9d5eba2192c57"
+    },
+    {
+      "path": "kernel/src/arch/x86/idt.c",
+      "bytes": 27097,
+      "mode": 436,
+      "sha256": "2919c40097d401ecde8905bbb24249769a16888cc42355f4020d0f8477472560"
+    },
+    {
+      "path": "kernel/src/arch/x86/memmap.h",
+      "bytes": 22369,
+      "mode": 436,
+      "sha256": "af9281ea4b7075b45b18b0d1ef85d8b0399c8c78721ae25d743b132dcd4fede1"
+    },
+    {
+      "path": "kernel/src/arch/x86/paging.c",
+      "bytes": 28227,
+      "mode": 436,
+      "sha256": "0fde4015702cf2f711853d0ba153fe1c9ecff7e2e6a478087393c5816bbbd023"
+    },
+    {
+      "path": "kernel/src/arch/x86/pci.c",
+      "bytes": 13308,
+      "mode": 436,
+      "sha256": "3edf9a875df14e3169d2b1aadb1e0c8c33abf3bd4c668777bcec535b21064983"
+    },
+    {
+      "path": "kernel/src/arch/x86/rtc.c",
+      "bytes": 10839,
+      "mode": 436,
+      "sha256": "d5a79b23bfdb0f9803d941e9f2b04ae36d23a06e44e64ec1a3c0c2e94596df8d"
+    },
+    {
+      "path": "kernel/src/arch/x86/smp.c",
+      "bytes": 14049,
+      "mode": 436,
+      "sha256": "0b7765b99179270fb5e3753257a0795455b05bb077aae4e14b69f4b8f1b12ed0"
+    },
+    {
+      "path": "kernel/src/arch/x86/support.c",
       "bytes": 8382,
       "mode": 436,
       "sha256": "4ce2cecf76a4da5547fbf9749fa817dc879cf6b5b0d05958e38c672fa022378a"
     },
     {
-      "path": "kernel/tcp.c",
-      "bytes": 40634,
+      "path": "kernel/src/arch/x86/usermode.c",
+      "bytes": 53520,
       "mode": 436,
-      "sha256": "7d75ced18a5dc13e9754aef6ecd152bc00c1bdd67c269b8152ed0fb56835ead8"
+      "sha256": "ea25de01de29a1916ba29a1afd5ed8fbe7fff03f57bc2098883c36ff37a0d773"
     },
     {
-      "path": "kernel/tcp.h",
-      "bytes": 4146,
+      "path": "kernel/src/core/arena.c",
+      "bytes": 18074,
       "mode": 436,
-      "sha256": "0be68423a134942df89bc380a2fbf42933148b1bd805d84a600d57bfd9652555"
+      "sha256": "cf01029e7ff7865a72bd99b47a8463fc1a379944ed17486b182f0c1978343032"
     },
     {
-      "path": "kernel/telemetry.h",
+      "path": "kernel/src/core/boot/boot_handover.c",
+      "bytes": 14775,
+      "mode": 436,
+      "sha256": "a47127daa8a60037bf4b2bdb6ea9103c44058e81e1ac0462d5a3738824081a10"
+    },
+    {
+      "path": "kernel/src/core/boot/boot_handover.h",
+      "bytes": 5158,
+      "mode": 436,
+      "sha256": "1e4cba660387285a5f48be493b839c4f1aa5c2769f0d5be49a5b05a2b39ae61d"
+    },
+    {
+      "path": "kernel/src/core/console.c",
+      "bytes": 26901,
+      "mode": 436,
+      "sha256": "124025daa79df82856d35d1aee78ff9981a886371fdfd74aa5e6f2f4aa1bd67d"
+    },
+    {
+      "path": "kernel/src/core/crash.c",
+      "bytes": 7242,
+      "mode": 436,
+      "sha256": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f"
+    },
+    {
+      "path": "kernel/src/core/crash.h",
+      "bytes": 1524,
+      "mode": 436,
+      "sha256": "2d4fbb5bcb6523418f8caaed8e8e64b12e09e585f3bf37955a927b52dfa5d2d6"
+    },
+    {
+      "path": "kernel/src/core/exec.c",
+      "bytes": 14415,
+      "mode": 436,
+      "sha256": "3a5ee6373afaa20ba3d3564f84e15eac80673d5f3e8928a2184e2ae707d07b51"
+    },
+    {
+      "path": "kernel/src/core/heap.c",
+      "bytes": 39891,
+      "mode": 436,
+      "sha256": "d3d7cbb7010e7527713ca516a40a3dfc3050875e01762e83cb4443bc17fe4d1f"
+    },
+    {
+      "path": "kernel/src/core/sched.c",
+      "bytes": 11260,
+      "mode": 436,
+      "sha256": "2ffe51d069ccdfa18afeb29cc5509c6eca0711d3ad16ddcd551b0a62e81667e2"
+    },
+    {
+      "path": "kernel/src/core/telemetry.h",
       "bytes": 5506,
       "mode": 436,
       "sha256": "e0d88ab2a45944681a0ed13625980d753496329966e875561d5b072bf3930e90"
     },
     {
-      "path": "kernel/term.c",
-      "bytes": 28882,
+      "path": "kernel/src/core/zllog.c",
+      "bytes": 51109,
       "mode": 436,
-      "sha256": "bec8bc45e6a38644de93946a6022d29f714636cf68322811e505fc485906965e"
+      "sha256": "dba5ebc9ef8fe249a1dc2c35e120a27431ebf4982172edadc29b63099fd7804e"
     },
     {
-      "path": "kernel/tls.c",
+      "path": "kernel/src/core/zllog.h",
+      "bytes": 9243,
+      "mode": 436,
+      "sha256": "67c99338a70f04c3a73c550e1680e1a220edab1081e8aae5bb2dbf9115a1bfa3"
+    },
+    {
+      "path": "kernel/src/drivers/display/assets/cursor.inc",
+      "bytes": 46732,
+      "mode": 436,
+      "sha256": "29f295becd82741f83b44ede7146f458ddcdcbe3ddd2b02cb46b48d626adc167"
+    },
+    {
+      "path": "kernel/src/drivers/display/assets/gpu_batch.inc",
+      "bytes": 44959,
+      "mode": 436,
+      "sha256": "27e34e57d0887e72df8901f311844e168219c739a502b21baf3cbb1ab4ede36c"
+    },
+    {
+      "path": "kernel/src/drivers/display/assets/gpu_shader.inc",
+      "bytes": 1882,
+      "mode": 436,
+      "sha256": "c67e14a40e0b14568659db6c2e0ce3beea4dcbc8bab3374d921a16fec72ada00"
+    },
+    {
+      "path": "kernel/src/drivers/display/assets/gpu_surface.inc",
+      "bytes": 2824,
+      "mode": 436,
+      "sha256": "630780a8cc78579b45d4bedc175c233e8d8d511f2780f57f1248cbae58b1b20a"
+    },
+    {
+      "path": "kernel/src/drivers/display/bga.c",
+      "bytes": 6304,
+      "mode": 436,
+      "sha256": "c93051fbfa31247ba498cb7f67e571d0b97b7b2a4d8a7d32c3763c26368410a4"
+    },
+    {
+      "path": "kernel/src/drivers/display/ggttmap.h",
+      "bytes": 4415,
+      "mode": 436,
+      "sha256": "76f574a8eaff9b2e03cac3307a17836b59668fb93c8d67a6b6f0e7d102bc2a90"
+    },
+    {
+      "path": "kernel/src/drivers/display/gpu.c",
+      "bytes": 10623,
+      "mode": 436,
+      "sha256": "606e6bebfbe6499f24b1295322a0bf6382d389e8b811d8fb6d90bfe4834c5ca4"
+    },
+    {
+      "path": "kernel/src/drivers/display/gpu.h",
+      "bytes": 3059,
+      "mode": 436,
+      "sha256": "38eafef56c5f32e36eaa74312faf8da89639120bbff6ae0f8829de066f90175f"
+    },
+    {
+      "path": "kernel/src/drivers/display/gpucursor.c",
+      "bytes": 8348,
+      "mode": 436,
+      "sha256": "de437b74c41f872f5a781f173114f0409306ffdaca8bfb4efd949ac380a7b822"
+    },
+    {
+      "path": "kernel/src/drivers/display/gpuring.c",
+      "bytes": 31613,
+      "mode": 436,
+      "sha256": "9a3ed64856a284f71d753d4be729f2d33853d7639a7ef1d7ffd50dbd85388cfd"
+    },
+    {
+      "path": "kernel/src/drivers/display/intel.c",
+      "bytes": 233359,
+      "mode": 436,
+      "sha256": "a33cfa268a53eb78975333c536b86fd0e00bb5ada27bd0ee3c5fb6fea4f88efa"
+    },
+    {
+      "path": "kernel/src/drivers/display/vga.c",
+      "bytes": 3884,
+      "mode": 436,
+      "sha256": "b0422a37198078d02e8539003412bea7fc7bd5cf7529acc247fcc261d86ff662"
+    },
+    {
+      "path": "kernel/src/drivers/display/virtio_gpu.c",
+      "bytes": 22274,
+      "mode": 436,
+      "sha256": "39b634236e53158bc7c601531f8e83b7ac95dc2f3be879781ce1f37338b5f7c7"
+    },
+    {
+      "path": "kernel/src/drivers/input/i2c_hid.c",
+      "bytes": 26026,
+      "mode": 436,
+      "sha256": "9ff7f55015320d09b0ef38c6d48ee4c1697451e493b87e9eebfa773a0fde1f06"
+    },
+    {
+      "path": "kernel/src/drivers/input/i2c_touch.c",
+      "bytes": 5994,
+      "mode": 436,
+      "sha256": "f73fd66da160191563610e43bc37e7b87f299faf3bc7bd5c24dc30ed7f6f53b5"
+    },
+    {
+      "path": "kernel/src/drivers/input/i2c_touch.h",
+      "bytes": 1018,
+      "mode": 436,
+      "sha256": "c5fe14df2d9d9c050e03cc86469f50d515b6664866238bf773f27ec64664e52d"
+    },
+    {
+      "path": "kernel/src/drivers/input/input.c",
+      "bytes": 42912,
+      "mode": 436,
+      "sha256": "6586256d1456a546b88a2eec965508276fa8751f5d3c6d01f2e4abaf21962ab0"
+    },
+    {
+      "path": "kernel/src/drivers/input/keycodes.h",
+      "bytes": 1869,
+      "mode": 436,
+      "sha256": "e0ecb92e323475d21a4558f1dece6329dd4f7b17f6fac69b940daa560954e620"
+    },
+    {
+      "path": "kernel/src/drivers/input/xhci.c",
+      "bytes": 169207,
+      "mode": 436,
+      "sha256": "6c1985ca01d6c2b12c9ddfcc8017c940ee600a10a780f4fc15f65451d0ef4e7e"
+    },
+    {
+      "path": "kernel/src/drivers/network/e1000.c",
+      "bytes": 8916,
+      "mode": 436,
+      "sha256": "e2ffaaf912deff3f4e96c590d9b4e030cbcff5ea90f23009d2692c7ddcfa180e"
+    },
+    {
+      "path": "kernel/src/drivers/network/e1000.h",
+      "bytes": 530,
+      "mode": 436,
+      "sha256": "2494d5ea9be18739f42903e04f69c5f0c56972da515b33cb0f67d1831b2b93ec"
+    },
+    {
+      "path": "kernel/src/drivers/network/iwlwifi.c",
+      "bytes": 9409,
+      "mode": 436,
+      "sha256": "4369558ad415d29a82386535e00aaf35f6138808297b021cf48e1b76ab537e45"
+    },
+    {
+      "path": "kernel/src/drivers/network/iwlwifi.h",
+      "bytes": 1504,
+      "mode": 436,
+      "sha256": "7bf632b32de7cf09daf96c8c09d6bc37d71c5693148610c7b7c984ae4224c32e"
+    },
+    {
+      "path": "kernel/src/drivers/network/netdev.c",
+      "bytes": 3868,
+      "mode": 436,
+      "sha256": "7910d054884996eb86f86c56d52b0728de50e3ba6a23da04da28f48e063670e3"
+    },
+    {
+      "path": "kernel/src/drivers/network/netdev.h",
+      "bytes": 512,
+      "mode": 436,
+      "sha256": "f9a90c1c705e761f1ae89bc0748b816d33c1ed5de03a2707651af2f077a44e25"
+    },
+    {
+      "path": "kernel/src/drivers/network/virtio_net.c",
+      "bytes": 36853,
+      "mode": 436,
+      "sha256": "e603eec80b0b8acfeb426059aa24199b9d677f75b474896e4b984194dafbead5"
+    },
+    {
+      "path": "kernel/src/drivers/storage/block.c",
+      "bytes": 4666,
+      "mode": 436,
+      "sha256": "729654179304583a89a7dafccfc395b3e8a8fb2532f0bc5ce0da9209ad072fd7"
+    },
+    {
+      "path": "kernel/src/drivers/storage/nvme.c",
+      "bytes": 22939,
+      "mode": 436,
+      "sha256": "1fa574bddb7515d19825147dbfc45e959a52c20b357c9cccc5ceff47cd6451ac"
+    },
+    {
+      "path": "kernel/src/fs/fs.c",
+      "bytes": 42224,
+      "mode": 436,
+      "sha256": "5943915491e1ca7f35bbfb46068f9e658ba8eab7f59e14d5903897fcde74b1dd"
+    },
+    {
+      "path": "kernel/src/graphics/fonts/font8x16.c",
+      "bytes": 11397,
+      "mode": 436,
+      "sha256": "e0760da784d60454da095f1f9def88f5cac57b9bd7628b9695846046bb8596f4"
+    },
+    {
+      "path": "kernel/src/graphics/fonts/font_aa.c",
+      "bytes": 279043,
+      "mode": 436,
+      "sha256": "7e432066b616f01c9c84351b72031e84c54ecf3855f25e097e5b7bea92f2351d"
+    },
+    {
+      "path": "kernel/src/graphics/fonts/font_prop.h",
+      "bytes": 412,
+      "mode": 436,
+      "sha256": "db9195ea42a855de5ad4945b6e1c4dd45009772814aaa12efdf6e7b026d1faa1"
+    },
+    {
+      "path": "kernel/src/graphics/fonts/font_prop.inc",
+      "bytes": 1507513,
+      "mode": 436,
+      "sha256": "42f69ac420935245296beacd772a4cc5e7e783f5b424adbb0dcc61d89d65aa02"
+    },
+    {
+      "path": "kernel/src/graphics/fonts/font_sub.c",
+      "bytes": 886958,
+      "mode": 436,
+      "sha256": "7c290296512ea687acb4d5dce30908d55950bb662375e6af4218896abe00439f"
+    },
+    {
+      "path": "kernel/src/graphics/framebuffer/fb.c",
+      "bytes": 169917,
+      "mode": 436,
+      "sha256": "33a54ce9ca9167be31791c3d3f6e4d919dcc54a35e92d0c752c66a6ae02f7582"
+    },
+    {
+      "path": "kernel/src/graphics/framebuffer/fb3d.c",
+      "bytes": 16831,
+      "mode": 436,
+      "sha256": "b6259dc2c67fcdb0189678ce5667517cdbc6b934d14ef6ef4df436099fc47d56"
+    },
+    {
+      "path": "kernel/src/graphics/icons/icons.c",
+      "bytes": 1076730,
+      "mode": 436,
+      "sha256": "290a1449bddae89cd7e368e7254435c474566b3e766cea70a7a6fdda307d5919"
+    },
+    {
+      "path": "kernel/src/graphics/image/png.c",
+      "bytes": 34552,
+      "mode": 436,
+      "sha256": "c273ddcb4e751fd4e999a6fa7c40d7706f499ad57d36da9683bb621e334964cd"
+    },
+    {
+      "path": "kernel/src/graphics/image/png.h",
+      "bytes": 5277,
+      "mode": 436,
+      "sha256": "c91befe500618549405b7ba2ef93ddd55c1998614df35a53a855c9e38eeea09a"
+    },
+    {
+      "path": "kernel/src/graphics/ui/design.h",
+      "bytes": 22758,
+      "mode": 436,
+      "sha256": "f7f41d856f24c3acd4465545775247ad4131136009b3fe60d5eeacfb423d304c"
+    },
+    {
+      "path": "kernel/src/graphics/ui/ease.c",
+      "bytes": 6372,
+      "mode": 436,
+      "sha256": "e26757324e1ea7387eef66d5125dbb39fca059ba03d63d20e253be95e802dc50"
+    },
+    {
+      "path": "kernel/src/graphics/ui/ease.h",
+      "bytes": 2807,
+      "mode": 436,
+      "sha256": "10b7e842a94feca628dfdfa09b307df51505bc419c616519f0bc8c136f9f9e2c"
+    },
+    {
+      "path": "kernel/src/graphics/ui/notify.c",
+      "bytes": 7348,
+      "mode": 436,
+      "sha256": "56d6e7b3ad1401c378f70dd3f2104bb8f71acff7bc331ba762c7c4553d0fa7f7"
+    },
+    {
+      "path": "kernel/src/graphics/ui/settings.c",
+      "bytes": 46909,
+      "mode": 436,
+      "sha256": "34953c6d92b31233397c4b576d5182ab2708f9068dea37e3b793e66f9b8b42bb"
+    },
+    {
+      "path": "kernel/src/graphics/ui/snap.c",
+      "bytes": 8056,
+      "mode": 436,
+      "sha256": "77bb9397c504b1a59ae35d67befb96586ec2b7ff33705241ac2b0ac6531ecc9c"
+    },
+    {
+      "path": "kernel/src/graphics/ui/ui.c",
+      "bytes": 33259,
+      "mode": 436,
+      "sha256": "1d9a00f73eb8a5f735de053e5d9b6e19dfdbcaec845b1a142c797826830b757d"
+    },
+    {
+      "path": "kernel/src/graphics/ui/ui.h",
+      "bytes": 27394,
+      "mode": 436,
+      "sha256": "004c669a87915915ee560aded670dd94cdd5c9f02842f823031d8663203ff002"
+    },
+    {
+      "path": "kernel/src/graphics/ui/uikit.c",
+      "bytes": 47068,
+      "mode": 436,
+      "sha256": "91b93e196897b60cfae7d2895704ce1d84442cacc0696c149db1d8d50ff2eca5"
+    },
+    {
+      "path": "kernel/src/graphics/windowing/clip.c",
+      "bytes": 4720,
+      "mode": 436,
+      "sha256": "33361f8fa6d5cda2c277f68b4ed03761966b8f5a088e6c52fe918ed5badc3886"
+    },
+    {
+      "path": "kernel/src/graphics/windowing/term.c",
+      "bytes": 28911,
+      "mode": 436,
+      "sha256": "c94684e7bd4848f3020ceea98dab3c6bcf1d90cfe8a1041a8c2f9fe9b5f9d54a"
+    },
+    {
+      "path": "kernel/src/graphics/windowing/userwin.c",
+      "bytes": 7819,
+      "mode": 436,
+      "sha256": "f61152649895c2bf5a9916a32f41cc5cec5a79d51c8c6b63eada58f9fa61aece"
+    },
+    {
+      "path": "kernel/src/graphics/windowing/wm.c",
+      "bytes": 147816,
+      "mode": 436,
+      "sha256": "d50f8d82df45cde849efc5b8c15f99d7a221e721709234a4713179498fad749c"
+    },
+    {
+      "path": "kernel/src/graphics/windowing/wmglue.c",
+      "bytes": 6899,
+      "mode": 436,
+      "sha256": "5429294c4351cbe46b5b6eefb52eb9ffb25d992fb4fc0ef124fd074c11861e76"
+    },
+    {
+      "path": "kernel/src/kernel.zl",
+      "bytes": 268079,
+      "mode": 436,
+      "sha256": "8d5f7ada7d8fcbf91e8c3d19fe39c8e61ae02a40cdad77ce2206567e217a5ddc"
+    },
+    {
+      "path": "kernel/src/net/crypto.c",
+      "bytes": 37627,
+      "mode": 436,
+      "sha256": "1dbf246046ae36e6fda25225e5bc6df1138f4fea2a8314458aaa64d5af5bbcb2"
+    },
+    {
+      "path": "kernel/src/net/crypto.h",
+      "bytes": 2496,
+      "mode": 436,
+      "sha256": "48e7b2e3020c9edccebd7be063646dcbebc753d36c99c1cfef2408cfe34eddaa"
+    },
+    {
+      "path": "kernel/src/net/dhcp.c",
+      "bytes": 7003,
+      "mode": 436,
+      "sha256": "7e3115d9b3334ab7520556c15ec8427fafd488e51238f91f0ecf26798ce33fbb"
+    },
+    {
+      "path": "kernel/src/net/dhcp.h",
+      "bytes": 619,
+      "mode": 436,
+      "sha256": "f197fdfd4c4b4f9dd5a5cf03db7d771006dc49823c34f4b151d3598c4331ee27"
+    },
+    {
+      "path": "kernel/src/net/dns.c",
+      "bytes": 19283,
+      "mode": 436,
+      "sha256": "4d93eea0c4b0ad1bc1f73b8469aad96279bceacfa3076f3adbb40dec673bfb8f"
+    },
+    {
+      "path": "kernel/src/net/dns.h",
+      "bytes": 2335,
+      "mode": 436,
+      "sha256": "b6bcbed6f04e19bcb045fb074e524ee3d141585a1c1004692d970a8c4e9c4ca1"
+    },
+    {
+      "path": "kernel/src/net/ecdsa.c",
+      "bytes": 13467,
+      "mode": 436,
+      "sha256": "3112557f003aef228dc64be32473026aa3fc783b25f395bb9d8b347ac3b3d850"
+    },
+    {
+      "path": "kernel/src/net/entropy.c",
+      "bytes": 6379,
+      "mode": 436,
+      "sha256": "a65f4ca6258c63733ac8320f51323af2e22e25df557a486f79dce3314b389597"
+    },
+    {
+      "path": "kernel/src/net/http.c",
+      "bytes": 24754,
+      "mode": 436,
+      "sha256": "fed75c2f188f02480229f90e680d2d00e0f3b46c5611d31bbc3a3a78a2155376"
+    },
+    {
+      "path": "kernel/src/net/http.h",
+      "bytes": 2409,
+      "mode": 436,
+      "sha256": "e6db2ca624641a3a03e993f839c3bc18aca58a744533514b696590d56c974782"
+    },
+    {
+      "path": "kernel/src/net/net.c",
+      "bytes": 23622,
+      "mode": 436,
+      "sha256": "ba50715aad6697c2084e3754c24d2f5750199e0c458700ee672038c8517c75e6"
+    },
+    {
+      "path": "kernel/src/net/net.h",
+      "bytes": 3822,
+      "mode": 436,
+      "sha256": "2653c76f4ed46d7d814951533397f2e30f18c5b9c6adde246e9785d117d654b8"
+    },
+    {
+      "path": "kernel/src/net/roots.c",
+      "bytes": 22737,
+      "mode": 436,
+      "sha256": "383cc193de6c8badec3275a5b67d3f2ebbe0670e5894cd9458cb2a542be2f277"
+    },
+    {
+      "path": "kernel/src/net/rsa.c",
+      "bytes": 8028,
+      "mode": 436,
+      "sha256": "c7af65d440990a54a19540539bc4e79dace8bd32047a0ca76d73d9a00e6bba1e"
+    },
+    {
+      "path": "kernel/src/net/tcp.c",
+      "bytes": 40634,
+      "mode": 436,
+      "sha256": "7d75ced18a5dc13e9754aef6ecd152bc00c1bdd67c269b8152ed0fb56835ead8"
+    },
+    {
+      "path": "kernel/src/net/tcp.h",
+      "bytes": 4146,
+      "mode": 436,
+      "sha256": "0be68423a134942df89bc380a2fbf42933148b1bd805d84a600d57bfd9652555"
+    },
+    {
+      "path": "kernel/src/net/tls.c",
       "bytes": 27054,
       "mode": 436,
       "sha256": "2554ff1e961be07a92d09b5a271b42558bdef392a9668309538eac62bbffc33f"
     },
     {
-      "path": "kernel/tls.h",
+      "path": "kernel/src/net/tls.h",
       "bytes": 6367,
       "mode": 436,
       "sha256": "761f10741020c810429f8f93053050e8e605809e3631f4afb9a07f02dfde5391"
+    },
+    {
+      "path": "kernel/src/net/x509.c",
+      "bytes": 26703,
+      "mode": 436,
+      "sha256": "ac566189332b3f7705f7502f4d590de6ddf1266f79d0e4884ad6a5240b95a212"
+    },
+    {
+      "path": "kernel/src/net/x509.h",
+      "bytes": 4120,
+      "mode": 436,
+      "sha256": "4c761b5157d315b949371b8a36c87a606c4b77383f87459079adf25b7cda5cf1"
+    },
+    {
+      "path": "kernel/src/runtime/interp_kernel.c",
+      "bytes": 27349,
+      "mode": 436,
+      "sha256": "3025360324482b5a2d6129ff5186dbba8128fd5ece6794a1bf1bd0e386d2d096"
+    },
+    {
+      "path": "kernel/src/web/browser.c",
+      "bytes": 88763,
+      "mode": 436,
+      "sha256": "85f42693d6d45380473405bf9570724f3bcf262546efcac4ea16147bce4a659c"
+    },
+    {
+      "path": "kernel/src/web/css.c",
+      "bytes": 78096,
+      "mode": 436,
+      "sha256": "160c5cef524d51ec1fbefa3d338d90517f0787ea7d65c9ef64c863836db3385b"
+    },
+    {
+      "path": "kernel/src/web/css.h",
+      "bytes": 16210,
+      "mode": 436,
+      "sha256": "3d22d8ee088aa98d5b00d8939ddb61b4042472e36c77c541f8c2f57d0c3e06ab"
+    },
+    {
+      "path": "kernel/src/web/html.c",
+      "bytes": 36986,
+      "mode": 436,
+      "sha256": "82edd0e36dad42ba1b9b74c151e81474f6ccca89c057f9aaf227a12ecf10b2d2"
+    },
+    {
+      "path": "kernel/src/web/html.h",
+      "bytes": 5151,
+      "mode": 436,
+      "sha256": "3f95a8698f0fba60e5dddf3afd3e94362fee15438bd60fdfb4f9df711d36b65d"
+    },
+    {
+      "path": "kernel/src/web/js.c",
+      "bytes": 38383,
+      "mode": 436,
+      "sha256": "b904895c9ec08765945de30acd8d9bca3c49c5303b87ed42f60beeca4dc0290e"
+    },
+    {
+      "path": "kernel/src/web/js.h",
+      "bytes": 2813,
+      "mode": 436,
+      "sha256": "cc66d41d0742f4fa46ca46fac6fe45bfcd340df155b208d77f9823ea8469897d"
+    },
+    {
+      "path": "kernel/src/web/layout.c",
+      "bytes": 99758,
+      "mode": 436,
+      "sha256": "2f53f72060bd232a5d2223bc9f5430e6d0dd2159723ccde28db7030c4581f402"
+    },
+    {
+      "path": "kernel/src/web/layout.h",
+      "bytes": 6609,
+      "mode": 436,
+      "sha256": "e47c0405a97d13b57418c004e18e9c8d6518d8437ba29ba2e7f0735096b27718"
+    },
+    {
+      "path": "kernel/tools/generators/gen-app-manifest.py",
+      "bytes": 15047,
+      "mode": 509,
+      "sha256": "9b41d56391f2d5a4a6ba2f942e99699cc74b870aa6c0d678cbe0e9856967a5b2"
+    },
+    {
+      "path": "kernel/tools/generators/gen-boot-media-ids.py",
+      "bytes": 4139,
+      "mode": 509,
+      "sha256": "6ed01003b30635419ffdafad31a8a3026d2861d14215a20e29f8439b9a8f5eb1"
+    },
+    {
+      "path": "kernel/tools/generators/gen-build-identity.py",
+      "bytes": 11803,
+      "mode": 509,
+      "sha256": "3dfd0a54fbd2206e88b9f94ced6e687e635834317c701552996a9beb4873ad5c"
+    },
+    {
+      "path": "kernel/tools/images/mkdisk.sh",
+      "bytes": 5180,
+      "mode": 509,
+      "sha256": "afe1a1fc7cc781090f0d48b7443725040ec283e6404c9216272ccf2faa57d9ea"
+    },
+    {
+      "path": "kernel/tools/images/mkiso.sh",
+      "bytes": 4772,
+      "mode": 509,
+      "sha256": "a43837d670b5df92785ff99df873763e2e4eed7edf2c45a3df358fe80ff3e43f"
+    },
+    {
+      "path": "kernel/tools/images/mkiso64.sh",
+      "bytes": 318,
+      "mode": 509,
+      "sha256": "3abec3dee416348973f2028beb60d5f80858665e1c7f646cb24a3f0af41b770d"
+    },
+    {
+      "path": "kernel/tools/images/mkusb.sh",
+      "bytes": 10566,
+      "mode": 509,
+      "sha256": "d3a3a794dcde8f1fa0c95b0b3b5fae6760289415a7811c65784170af0cbb4e9b"
     },
     {
       "path": "kernel/tools/reproducible_time.c",
       "bytes": 1273,
       "mode": 436,
       "sha256": "8283a864a02f5ebc6cfc88f629ef124b686aa06bbf2efbe71ac869c51bb1545a"
-    },
-    {
-      "path": "kernel/ui.c",
-      "bytes": 33195,
-      "mode": 436,
-      "sha256": "7329f63c4afb060ca64223251a8808f0f1c154dda0c71e823bfd6bc354495a90"
-    },
-    {
-      "path": "kernel/ui.h",
-      "bytes": 27386,
-      "mode": 436,
-      "sha256": "b17667f85cac506bbe8eaa9f9d607ef2d9f4a1902182e4b08c0c5d5e5fd05b5c"
-    },
-    {
-      "path": "kernel/uikit.c",
-      "bytes": 47033,
-      "mode": 436,
-      "sha256": "f408e05fcc73c1df8d4b7e1b990c0cdbb3f55528f17d4278b23ca76ad974b8f2"
-    },
-    {
-      "path": "kernel/usermode.c",
-      "bytes": 53483,
-      "mode": 436,
-      "sha256": "a06c1b84bdc6f86cc73a07832744b15691e4ac43c22d3836d92822177c258c39"
-    },
-    {
-      "path": "kernel/userwin.c",
-      "bytes": 7819,
-      "mode": 436,
-      "sha256": "f61152649895c2bf5a9916a32f41cc5cec5a79d51c8c6b63eada58f9fa61aece"
-    },
-    {
-      "path": "kernel/vga.c",
-      "bytes": 3884,
-      "mode": 436,
-      "sha256": "b0422a37198078d02e8539003412bea7fc7bd5cf7529acc247fcc261d86ff662"
-    },
-    {
-      "path": "kernel/virtio_gpu.c",
-      "bytes": 22274,
-      "mode": 436,
-      "sha256": "39b634236e53158bc7c601531f8e83b7ac95dc2f3be879781ce1f37338b5f7c7"
-    },
-    {
-      "path": "kernel/virtio_net.c",
-      "bytes": 36853,
-      "mode": 436,
-      "sha256": "e603eec80b0b8acfeb426059aa24199b9d677f75b474896e4b984194dafbead5"
-    },
-    {
-      "path": "kernel/wm.c",
-      "bytes": 147790,
-      "mode": 436,
-      "sha256": "8d8c4d578095377709148fab17cdbf27dbf57f3cb351e8eeb33dbf4f78a12101"
-    },
-    {
-      "path": "kernel/wmglue.c",
-      "bytes": 6878,
-      "mode": 436,
-      "sha256": "b0ab805463effa741ee1f00e1943a27ac4f98244cd81caec12ca7616393d50f5"
-    },
-    {
-      "path": "kernel/x509.c",
-      "bytes": 26703,
-      "mode": 436,
-      "sha256": "ac566189332b3f7705f7502f4d590de6ddf1266f79d0e4884ad6a5240b95a212"
-    },
-    {
-      "path": "kernel/x509.h",
-      "bytes": 4120,
-      "mode": 436,
-      "sha256": "4c761b5157d315b949371b8a36c87a606c4b77383f87459079adf25b7cda5cf1"
-    },
-    {
-      "path": "kernel/xhci.c",
-      "bytes": 169207,
-      "mode": 436,
-      "sha256": "6c1985ca01d6c2b12c9ddfcc8017c940ee600a10a780f4fc15f65451d0ef4e7e"
-    },
-    {
-      "path": "kernel/zllog.c",
-      "bytes": 51109,
-      "mode": 436,
-      "sha256": "dba5ebc9ef8fe249a1dc2c35e120a27431ebf4982172edadc29b63099fd7804e"
-    },
-    {
-      "path": "kernel/zllog.h",
-      "bytes": 9243,
-      "mode": 436,
-      "sha256": "67c99338a70f04c3a73c550e1680e1a220edab1081e8aae5bb2dbf9115a1bfa3"
     }
   ],
   "open_gaps": {
@@ -882,7 +906,7 @@
   },
   "generator": {
     "path": "kernel/gen-source-snapshot.py",
-    "sha256": "225db1e094cfcf27a926900c72f579900db24ff43c37b415719b6dd49916094f"
+    "sha256": "65dee27314ab18c3d62b377eec48a2fce7eaa9247e20880f88cf535e17c2248b"
   },
   "evidence_ceiling": "exact reconstructable current build-input closure in the same uncommitted worktree; not a signed, off-host, whole-repository or release-custody snapshot"
 }

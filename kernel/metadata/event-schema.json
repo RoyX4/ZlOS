@@ -1,8 +1,8 @@
 {
   "schema": "zlos.event-schema-registry.v1",
-  "result": "PASS_HOST_SCHEMA_TARGET_UNINTEGRATED",
+  "result": "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED",
   "feature_id": "EV-018",
-  "build_identity": "2c873b665279da5a53c3a58bfa9cdd1c53a8a36f73702259a1bb991c1524d90e",
+  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
   "contract": {
     "wire": {
       "endianness": "little",
@@ -233,7 +233,10 @@
     "receipt_sha256": "16f89fdab7d6e88ff100f582e15951e0a9246b81cc782955d5e61134ef631648",
     "host_checks": 37,
     "host_failures": 0,
-    "compile_lanes": 3
+    "compile_lanes": 3,
+    "subject_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+    "current_build_bound": false,
+    "evidence_ceiling": "dated host execution receipt; not current-build target proof"
   },
   "source_identities": {
     "tests/host/trace_event.h": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
@@ -261,10 +264,10 @@
     "no-durable-anchor",
     "no-service-export-policy"
   ],
-  "evidence_ceiling": "host-proved schema/core and cross-ABI compilation; no shipped target integration",
+  "evidence_ceiling": "current static schema joined to historical host proof; no current-build or shipped target integration",
   "weakest_link": "the core is externally serialized and has zero emitters in a booted zlOS artifact",
   "generator": {
     "path": "kernel/gen-event-schema.py",
-    "sha256": "197f1c8e4eec97021b5c87abdaa3713868428920f1fbad72f2759f38f38cc26e"
+    "sha256": "c799df4465dfb1d893934bad4b31f1181cb89f58800a78d7fba7e749872f4272"
   }
 }

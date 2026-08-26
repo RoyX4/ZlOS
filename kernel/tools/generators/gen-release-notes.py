@@ -49,7 +49,6 @@ AUDIENCE = {
     "DEC-0009": "USERS_AND_DEVELOPERS",
     "DEC-0010": "DEVELOPERS",
     "DEC-0011": "USERS_AND_DEVELOPERS",
-    "DEC-0012": "USERS_AND_DEVELOPERS",
     "DEC-0013": "DISTRIBUTORS",
     "DEC-0014": "DEVELOPERS",
     "DEC-0015": "DEVELOPERS",
@@ -57,6 +56,7 @@ AUDIENCE = {
     "DEC-0017": "OPERATORS",
     "DEC-0018": "DEVELOPERS",
     "DEC-0019": "OPERATORS",
+    "DEC-0020": "USERS_AND_DEVELOPERS",
 }
 
 COMPATIBILITY_NOTES = {
@@ -69,7 +69,6 @@ COMPATIBILITY_NOTES = {
     "DEC-0009": "Application identities and routes must match the generated manifest; blank or dead catalogue IDs are invalid.",
     "DEC-0010": "A receipt applies only to the exact artifact and route it names.",
     "DEC-0011": "Intel host-harness modesetting is not native-boot display compatibility.",
-    "DEC-0012": "I2C-HID raw transport diagnostics are not input-event compatibility.",
     "DEC-0013": "No public redistribution channel is supported until licensing authority exists.",
     "DEC-0014": "The local source archive is recovery material, not a signed/off-host repository release.",
     "DEC-0015": "Tool or firmware byte drift requires an inspected lock refresh; silent compatibility is rejected.",
@@ -77,10 +76,11 @@ COMPATIBILITY_NOTES = {
     "DEC-0017": "Uncontained full landing-gate invocation is unsupported on this host.",
     "DEC-0018": "The structured-event core is host-only and provides no shipped event-service ABI yet.",
     "DEC-0019": "The interrupted complete gate provides no green compatibility or release claim.",
+    "DEC-0020": "The physical transport/decoder receipt does not promote tap, scroll, gesture feel or current-build hardware proof.",
 }
 
 USER_VISIBLE = {
-    "DEC-0003", "DEC-0004", "DEC-0008", "DEC-0009", "DEC-0011", "DEC-0012"
+    "DEC-0003", "DEC-0004", "DEC-0008", "DEC-0009", "DEC-0011", "DEC-0020"
 }
 
 OPEN_GAPS = {
@@ -92,6 +92,9 @@ OPEN_GAPS = {
     "user_data_migration_inventory_complete": False,
     "previous_release_rollback_artifact_available": False,
     "historical_release_series_complete": False,
+    "current_artifact_snapshot_missing": True,
+    "current_qemu_evidence_missing": True,
+    "current_host_benchmark_missing": True,
 }
 
 
@@ -358,6 +361,8 @@ def compatibility(docs: dict[str, dict]) -> dict:
         "toolchain_lanes": [row["id"] for row in toolchain["target_lanes"]],
         "application_identities": app["counts"]["identities"],
         "application_lifecycle_qemu_proved": app["counts"]["with_qemu_open_ready_close"],
+        "artifact_snapshot_current_build_bound": False,
+        "application_evidence_current_build_bound": False,
         "physical_exact_hash_proofs": 0,
         "public_distribution_supported": False,
     }
@@ -388,6 +393,18 @@ def validate(value: dict, docs: dict[str, dict]) -> None:
     } for path in INPUTS]
     if value.get("inputs") != expected_inputs:
         raise ValueError("release-note input closure drift")
+    expected_historical = [
+        ("kernel/metadata/artifact-registry.json", docs["artifact-registry.json"]["build_identity"]["id"]),
+        ("kernel/metadata/app-evidence.json", docs["app-evidence.json"]["shipped_build_identity"]["id"]),
+        ("kernel/docs/receipts/benchmark-host-2026-08-23.json",
+         docs["docs/receipts/benchmark-host-2026-08-23.json"]["build_identity"]),
+    ]
+    if value.get("historical_evidence") != [{
+            "path": path, "subject_build_identity": subject,
+            "current_build_bound": False,
+            "evidence_ceiling": "dated evidence for its named subject build only",
+    } for path, subject in expected_historical]:
+        raise ValueError("release-note historical evidence boundary drift")
     expected_operational = [{"path": path, "sha256": sha256(ROOT / path)}
                             for path in OPERATIONAL_SOURCES]
     if value.get("operational_sources") != expected_operational:
@@ -410,7 +427,7 @@ def validate(value: dict, docs: dict[str, dict]) -> None:
         "unreleased_change_candidates": 17,
         "user_visible_candidates": 6,
         "published_entries": 0,
-        "superseded_records_retained": 2,
+        "superseded_records_retained": 3,
         "migrations": 3,
         "known_issues": 12,
         "recovery_paths": 3,
@@ -429,22 +446,27 @@ def validate(value: dict, docs: dict[str, dict]) -> None:
 def build() -> dict:
     docs = documents()
     identity = docs["build-identity.json"]["identity_sha256"]
-    joined_identities = (
+    current_identities = (
         docs["decision-ledger.json"]["build_identity"],
-        docs["artifact-registry.json"]["build_identity"]["id"],
-        docs["app-evidence.json"]["shipped_build_identity"]["id"],
         docs["license-registry.json"]["build_identity"],
         docs["docs/receipts/source-snapshot-2026-08-24.json"]["build_identity"],
         docs["toolchain-manifest.json"]["build_identity"],
         docs["build-graph.json"]["build_identity"],
-        docs["docs/receipts/benchmark-host-2026-08-23.json"]["build_identity"],
         docs["visual-registry.json"]["build_identity"],
         docs["accessibility-registry.json"]["build_identity"],
         docs["security-registry.json"]["build_identity"],
         docs["observability-registry.json"]["build_identity"],
     )
-    if any(item != identity for item in joined_identities):
-        raise ValueError("release-note manifests disagree on build identity")
+    if any(item != identity for item in current_identities):
+        raise ValueError("release-note current manifests disagree on build identity")
+    historical_inputs = {
+        "kernel/metadata/artifact-registry.json": docs["artifact-registry.json"]["build_identity"]["id"],
+        "kernel/metadata/app-evidence.json": docs["app-evidence.json"]["shipped_build_identity"]["id"],
+        "kernel/docs/receipts/benchmark-host-2026-08-23.json": docs[
+            "docs/receipts/benchmark-host-2026-08-23.json"]["build_identity"],
+    }
+    if any(len(item) != 64 or item == identity for item in historical_inputs.values()):
+        raise ValueError("release-note historical evidence boundary is invalid")
     if docs["license-registry.json"]["public_release_blocked"] is not True:
         raise ValueError("release notes require the current license release block")
     changes = current_changes(docs["decision-ledger.json"])
@@ -467,6 +489,12 @@ def build() -> dict:
             "sha256": sha256(input_path(path)),
             "schema": docs[path].get("schema"),
         } for path in INPUTS],
+        "historical_evidence": [{
+            "path": path,
+            "subject_build_identity": subject,
+            "current_build_bound": False,
+            "evidence_ceiling": "dated evidence for its named subject build only",
+        } for path, subject in historical_inputs.items()],
         "operational_sources": [{"path": path, "sha256": sha256(ROOT / path)}
                                 for path in OPERATIONAL_SOURCES],
         "changes": changes,
@@ -479,7 +507,7 @@ def build() -> dict:
             "unreleased_change_candidates": len(changes),
             "user_visible_candidates": sum(row["user_visible_candidate"] for row in changes),
             "published_entries": 0,
-            "superseded_records_retained": 2,
+            "superseded_records_retained": 3,
             "migrations": 3,
             "known_issues": 12,
             "recovery_paths": 3,
@@ -594,6 +622,9 @@ def selftest(value: dict, docs: dict[str, dict]) -> None:
     gap = copy.deepcopy(value)
     gap["open_gaps"]["historical_release_series_complete"] = True
     mutations["hidden-history-gap"] = gap
+    current = copy.deepcopy(value)
+    current["historical_evidence"][0]["current_build_bound"] = True
+    mutations["invented-current-artifact-proof"] = current
     caught = []
     for name, mutant in mutations.items():
         try:

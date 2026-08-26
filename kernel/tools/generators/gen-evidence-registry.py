@@ -84,7 +84,7 @@ def landing_gate_seam_count() -> int:
 def validate(value: dict) -> None:
     if value.get("schema") != "zlos.evidence-registry.v1":
         raise ValueError("wrong evidence-registry schema")
-    if value.get("result") != "PASS_WITH_OPEN_GAPS":
+    if value.get("result") != "PASS_CURRENT_INDEX_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS":
         raise ValueError("evidence registry must preserve open gaps")
     inputs = value.get("inputs")
     expected_input_paths = [input_path(path).relative_to(ROOT).as_posix()
@@ -97,7 +97,7 @@ def validate(value: dict) -> None:
     counts = value.get("counts", {})
     expected_counts = {
         "reproducible_artifacts": 9,
-        "source_snapshot_inputs": 123,
+        "source_snapshot_inputs": 146,
         "source_snapshot_off_host_copies": 0,
         "qemu_boot_routes": 6,
         "app_identities": 62,
@@ -106,21 +106,21 @@ def validate(value: dict) -> None:
         "dependency_commands": 15,
         "dependency_firmware_blobs": 2,
         "dependency_runtime_files": 91,
-        "dependency_transitive_packages": 156,
+        "dependency_transitive_packages": 145,
         "dependency_source_archives_retained": 0,
-        "wrapper_inventory": 141,
-        "wrapper_named_by_landing_gate": 56,
-        "wrapper_legacy_policy_gaps": 17,
+        "wrapper_inventory": 156,
+        "wrapper_named_by_landing_gate": 58,
+        "wrapper_legacy_policy_gaps": 19,
         "toolchain_tools": 7,
         "toolchain_target_lanes": 4,
         "toolchain_external_headers": 82,
         "toolchain_hermetic_builds": 0,
-        "build_graph_source_inputs": 123,
+        "build_graph_source_inputs": 146,
         "build_graph_target_lanes": 4,
         "build_graph_artifacts": 9,
         "build_graph_orphan_inputs": 0,
-        "build_graph_scope_only_inputs": 1,
-        "license_build_inputs": 123,
+        "build_graph_scope_only_inputs": 12,
+        "license_build_inputs": 146,
         "license_files": 0,
         "host_targets": 62,
         "host_commands_executed": 53,
@@ -137,7 +137,7 @@ def validate(value: dict) -> None:
         "benchmark_within_budget": counts.get("benchmark_within_budget"),
         "benchmark_over_budget": counts.get("benchmark_over_budget"),
         "benchmark_native_target_measurements": 0,
-        "visual_assets": 46,
+        "visual_assets": 41,
         "visual_current_build_bound": 0,
         "visual_variant_dimensions_complete": 0,
         "visual_variant_dimensions_open": 6,
@@ -152,11 +152,11 @@ def validate(value: dict) -> None:
         "security_qemu_partial": 1,
         "security_missing": 11,
         "security_production_complete": 0,
-        "decision_records": 19,
+        "decision_records": 20,
         "decision_legacy_labels_indexed": 47,
         "decision_legacy_labels_normalized": 47,
         "decision_legacy_labels_remaining": 0,
-        "decision_superseded_records": 2,
+        "decision_superseded_records": 3,
         "release_change_candidates": 17,
         "release_user_visible_candidates": 6,
         "release_published_entries": 0,
@@ -187,6 +187,11 @@ def validate(value: dict) -> None:
         "event_trace_host_checks": 37,
         "event_trace_compile_lanes": 3,
         "event_trace_target_emitters": 0,
+        "current_build_bound_artifacts": 0,
+        "historical_artifacts": 9,
+        "current_build_bound_qemu_routes": 0,
+        "historical_qemu_routes": 6,
+        "current_build_bound_host_receipts": 0,
     }
     if counts != expected_counts:
         raise ValueError("evidence count drift")
@@ -195,7 +200,7 @@ def validate(value: dict) -> None:
         "physical_exact_hash_artifacts": 9,
         "host_hardware_skips": 3,
         "host_non_runs": 11,
-        "inputs_without_redistribution_grant": 123,
+        "inputs_without_redistribution_grant": 146,
         "public_release_blocked": True,
         "source_snapshot_off_host_missing": True,
         "source_snapshot_signature_missing": True,
@@ -204,16 +209,16 @@ def validate(value: dict) -> None:
         "signed_toolchain_attestation_missing": True,
         "toolchain_source_archive_missing": True,
         "dependency_offline_rebuild_missing": True,
-        "dependency_source_archives_missing": 156,
+        "dependency_source_archives_missing": 145,
         "per_object_provenance_receipts_missing": True,
-        "build_graph_scope_only_inputs": 1,
+        "build_graph_scope_only_inputs": 12,
         "future_build_graph_outputs_missing": True,
         "failure_injection_open_families": 7,
         "hostile_corpus_open_families": 4,
         "performance_over_budget": counts.get("benchmark_over_budget"),
         "native_target_benchmark_missing": True,
         "benchmark_percentiles_missing": True,
-        "visual_unbound_assets": 46,
+        "visual_unbound_assets": 41,
         "visual_variant_dimensions_open": 6,
         "accessibility_missing_capabilities": 9,
         "accessibility_target_workflows_missing": True,
@@ -239,6 +244,10 @@ def validate(value: dict) -> None:
         "observability_open_capabilities": 12,
         "durable_crash_receipt_missing": True,
         "typed_event_target_integration_missing": True,
+        "current_artifact_snapshot_missing": True,
+        "current_qemu_evidence_missing": True,
+        "current_host_test_receipt_missing": True,
+        "current_host_benchmark_missing": True,
     }
     if gaps != expected_gaps:
         raise ValueError("open evidence gaps were hidden or drifted")
@@ -253,6 +262,12 @@ def validate(value: dict) -> None:
         raise ValueError("missing joined build identity")
     if len(value.get("generator", {}).get("sha256", "")) != 64:
         raise ValueError("missing evidence generator identity")
+    historical = value.get("historical_evidence", [])
+    if len(historical) != 8 or any(row.get("current_build_bound") is not False \
+            or len(row.get("subject_build_identity", "")) != 64 for row in historical):
+        raise ValueError("historical evidence was promoted or lost")
+    if value.get("historical_host_test_receipt", {}).get("current_build_bound") is not False:
+        raise ValueError("historical host-test receipt was promoted as current")
 
 
 def build() -> dict:
@@ -282,54 +297,59 @@ def build() -> dict:
     event_schema = documents["event-schema.json"]
     observability = documents["observability-registry.json"]
 
-    joined_identities = (
+    current_identities = (
         source_snapshot.get("build_identity"),
-        artifact.get("build_identity", {}).get("id"),
-        app.get("shipped_build_identity", {}).get("id"),
-        init.get("build_identity"),
         dependency.get("build_identity"),
         wrappers.get("build_identity"),
         toolchain.get("build_identity"),
         build_graph.get("build_identity"),
         license_registry.get("build_identity"),
-        adversarial.get("build_identity"),
-        reproducible.get("build_identity", {}).get("id"),
-        benchmark.get("build_identity"),
-        crash.get("build_identity"),
         visual.get("build_identity"),
         accessibility.get("build_identity"),
         security.get("build_identity"),
         decisions.get("build_identity"),
         release_notes.get("build_identity"),
         provenance.get("build_identity"),
-        event_receipt.get("build_identity"),
         event_schema.get("build_identity"),
         observability.get("build_identity"),
     )
-    if any(item != identity for item in joined_identities):
-        raise ValueError("registry build identities disagree")
+    if any(item != identity for item in current_identities):
+        raise ValueError("current registry build identities disagree")
+    historical_inputs = {
+        "kernel/metadata/artifact-registry.json": artifact.get("build_identity", {}).get("id"),
+        "kernel/metadata/app-evidence.json": app.get("shipped_build_identity", {}).get("id"),
+        "kernel/metadata/init-registry.json": init.get("build_identity"),
+        "kernel/metadata/adversarial-registry.json": adversarial.get("build_identity"),
+        "kernel/docs/receipts/reproducible-build-2026-08-22.json": reproducible.get("build_identity", {}).get("id"),
+        "kernel/docs/receipts/benchmark-host-2026-08-23.json": benchmark.get("build_identity"),
+        "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json": crash.get("build_identity"),
+        "kernel/docs/receipts/event-trace-host-2026-08-24.json": event_receipt.get("build_identity"),
+    }
+    if any(len(item or "") != 64 or item == identity for item in historical_inputs.values()):
+        raise ValueError("historical evidence identity boundary is invalid")
     if source_snapshot.get("result") != "PASS_WITH_OPEN_CUSTODY_GAP" \
-            or source_snapshot.get("counts", {}).get("archived_inputs") != 123 \
+            or source_snapshot.get("counts", {}).get("archived_inputs") != 146 \
             or source_snapshot.get("open_gaps", {}).get("off_host_copies") != 0:
         raise ValueError("source snapshot is missing or overpromoted")
     if artifact.get("result") != "PASS" or app.get("counts", {}).get("with_qemu_open_ready_close") != 62:
-        raise ValueError("artifact/app evidence is not passing")
+        raise ValueError("historical artifact/app evidence is not passing")
     if init.get("result") != "PASS" \
             or dependency.get("result") != "PASS_WITH_OPEN_SUPPLY_GAPS" \
             or dependency.get("closure", {}).get("all_package_dependencies_resolved") is not True \
             or dependency.get("closure", {}).get("all_source_archives_retained") is not False:
         raise ValueError("init/dependency evidence is not passing")
     if wrappers.get("result") != "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS" \
-            or wrappers.get("counts", {}).get("wrappers") != 141 \
+            or wrappers.get("counts", {}).get("wrappers") != 156 \
             or wrappers.get("authority_contract", {}).get("legacy_policy_gaps_are_not_landing_authority") is not True:
         raise ValueError("wrapper inventory is missing or overpromoted")
     if toolchain.get("result") != "PASS_WITH_OPEN_PORTABILITY_GAPS" \
             or toolchain.get("counts") != {"tools": 7, "target_lanes": 4, "external_headers": 82}:
         raise ValueError("toolchain manifest is missing or overpromoted")
-    if build_graph.get("result") != "PASS_WITH_DECLARED_SUPERSET" \
-            or build_graph.get("counts", {}).get("source_inputs") != 123 \
+    if build_graph.get("result") != "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT" \
+            or build_graph.get("counts", {}).get("source_inputs") != 146 \
             or build_graph.get("counts", {}).get("orphan_source_inputs") != 0 \
-            or build_graph.get("counts", {}).get("scope_only_inputs") != 1:
+            or build_graph.get("counts", {}).get("scope_only_inputs") != 12 \
+            or build_graph.get("artifact_snapshot", {}).get("current_build_bound") is not False:
         raise ValueError("build graph is missing or overpromoted")
     if license_registry.get("result") != "PASS_WITH_RELEASE_BLOCK" \
             or license_registry.get("public_release_blocked") is not True:
@@ -352,14 +372,14 @@ def build() -> dict:
     if accessibility.get("result") != "PASS_WITH_OPEN_GAPS" \
             or accessibility.get("counts", {}).get("missing") != 9:
         raise ValueError("accessibility gaps disappeared or drifted")
-    if security.get("result") != "PASS_WITH_OPEN_GAPS" \
+    if security.get("result") != "PASS_WITH_HISTORICAL_EVIDENCE_AND_OPEN_GAPS" \
             or security.get("counts", {}).get("production_complete") != 0:
         raise ValueError("security evidence was overpromoted or drifted")
     if decisions.get("result") != "PASS_WITH_OPEN_GAPS" \
-            or decisions.get("coverage", {}).get("normalized_records") != 19 \
+            or decisions.get("coverage", {}).get("normalized_records") != 20 \
             or decisions.get("coverage", {}).get("legacy_labels_indexed") != 47 \
             or decisions.get("coverage", {}).get("legacy_labels_remaining") != 0 \
-            or decisions.get("counts", {}).get("status", {}).get("SUPERSEDED") != 2:
+            or decisions.get("counts", {}).get("status", {}).get("SUPERSEDED") != 3:
         raise ValueError("decision ledger is missing, incomplete or overpromoted")
     if release_notes.get("result") != "PASS_UNRELEASED_WITH_BLOCKERS" \
             or release_notes.get("release", {}).get("state") != "UNRELEASED_DEVELOPMENT" \
@@ -378,15 +398,14 @@ def build() -> dict:
             or event_receipt.get("proof", {}).get("host_execution", {}).get("checks") != 37 \
             or event_receipt.get("target_integration", {}).get("target_emitters") != 0:
         raise ValueError("event-trace receipt is missing or overpromoted")
-    tool_hashes = {row["name"]: row["sha256"] for row in toolchain["tools"]}
-    if event_receipt.get("tools", {}).get("gcc", {}).get("binary_sha256") != tool_hashes["gcc"] \
-            or event_receipt.get("tools", {}).get("clang", {}).get("binary_sha256") != tool_hashes["clang"]:
-        raise ValueError("event-trace receipt used tools outside the locked manifest")
-    if event_schema.get("result") != "PASS_HOST_SCHEMA_TARGET_UNINTEGRATED" \
+    if any(len(event_receipt.get("tools", {}).get(name, {}).get("binary_sha256", "")) != 64
+           for name in ("gcc", "clang")):
+        raise ValueError("historical event-trace receipt has no compiler identities")
+    if event_schema.get("result") != "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED" \
             or event_schema.get("counts", {}).get("wire_fields") != 28 \
             or event_schema.get("counts", {}).get("target_emitters") != 0:
         raise ValueError("event schema is missing or overpromoted")
-    if observability.get("result") != "PASS_WITH_OPEN_GAPS" \
+    if observability.get("result") != "PASS_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS" \
             or observability.get("counts", {}).get("durable_crash_receipts") != 0:
         raise ValueError("observability evidence was overpromoted or drifted")
     if any(row.get("physical_hardware") != "UNVERIFIED_FOR_EXACT_HASH"
@@ -496,12 +515,29 @@ def build() -> dict:
         "event_trace_host_checks": event_receipt["proof"]["host_execution"]["checks"],
         "event_trace_compile_lanes": len(event_receipt["proof"]["compile_lanes"]),
         "event_trace_target_emitters": event_schema["counts"]["target_emitters"],
+        "current_build_bound_artifacts": 0,
+        "historical_artifacts": len(artifact["artifacts"]),
+        "current_build_bound_qemu_routes": 0,
+        "historical_qemu_routes": len(artifact["boot_routes"]),
+        "current_build_bound_host_receipts": 0,
     }
     value = {
         "schema": "zlos.evidence-registry.v1",
-        "result": "PASS_WITH_OPEN_GAPS",
+        "result": "PASS_CURRENT_INDEX_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS",
         "build_identity": identity,
         "inputs": input_rows,
+        "historical_evidence": [{
+            "path": path,
+            "subject_build_identity": subject,
+            "current_build_bound": False,
+            "evidence_ceiling": "dated evidence for its named subject build only",
+        } for path, subject in historical_inputs.items()],
+        "historical_host_test_receipt": {
+            "path": "kernel/tests/host/test-run-receipt.json",
+            "subject_head": tests.get("git", {}).get("head"),
+            "current_build_bound": False,
+            "evidence_ceiling": "dated host receipt; no current build identity binding",
+        },
         "counts": counts,
         "open_gaps": {
             "physical_exact_hash_artifacts": len(artifact["artifacts"]),
@@ -557,14 +593,18 @@ def build() -> dict:
             "observability_open_capabilities": len(observability["open_gaps"]),
             "durable_crash_receipt_missing": observability["counts"]["durable_crash_receipts"] == 0,
             "typed_event_target_integration_missing": event_schema["counts"]["target_emitters"] == 0,
+            "current_artifact_snapshot_missing": True,
+            "current_qemu_evidence_missing": True,
+            "current_host_test_receipt_missing": True,
+            "current_host_benchmark_missing": True,
         },
         "generator": {
             "path": "kernel/tools/generators/gen-evidence-registry.py",
             "sha256": sha256(Path(__file__).resolve()),
         },
         "evidence_ceiling": (
-            "joined host/build/QEMU evidence; no physical artifact promotion, full workflow proof, "
-            "or public-release grant"
+            "current source/tooling index joined to explicitly historical host/build/QEMU evidence; "
+            "no current-runtime, physical-artifact, full-workflow or public-release promotion"
         ),
         "weakest_link": (
             "off-host signed source custody, physical exact-hash proof, hardware-skipped tests, "
@@ -634,6 +674,9 @@ def selftest(value: dict) -> None:
     identity = copy.deepcopy(value)
     identity["build_identity"] = "short"
     mutations["missing-build-identity"] = identity
+    current = copy.deepcopy(value)
+    current["historical_evidence"][0]["current_build_bound"] = True
+    mutations["invented-current-artifact-proof"] = current
     caught = []
     for name, mutated in mutations.items():
         try:
@@ -671,7 +714,7 @@ def main() -> int:
             if not OUTPUT.is_file() or load("evidence-registry.json") != value:
                 raise ValueError("evidence-registry.json is missing or stale")
         print(
-            "evidence-registry: PASS_WITH_OPEN_GAPS: "
+            f"evidence-registry: {value['result']}: "
             f"{value['counts']['reproducible_artifacts']} artifacts, "
             f"{value['counts']['qemu_boot_routes']} routes, "
             f"{value['counts']['app_lifecycle_proved']} apps"

@@ -1,12 +1,12 @@
 {
   "schema": "zlos.accessibility-proof-registry.v1",
   "result": "PASS_WITH_OPEN_GAPS",
-  "build_identity": "2c873b665279da5a53c3a58bfa9cdd1c53a8a36f73702259a1bb991c1524d90e",
+  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
   "host_test_receipt_sha256": "9f091d6276630a0087bfe7cc03b481fea1d1cefb29b43730e4db80a91dceca2f",
   "source_identities": {
-    "src/drivers/input/input.c": "0fa8a4edaf2e9887968857f9e7e7aefcfc4b82d95e240b809dadfcf50715a8ce",
-    "src/graphics/ui/ui.c": "0988f8100d5080a96524a78aa3c152ebe32b08c8dce1b574f216a68587253593",
-    "src/graphics/windowing/wm.c": "8d8c4d578095377709148fab17cdbf27dbf57f3cb351e8eeb33dbf4f78a12101",
+    "src/drivers/input/input.c": "6586256d1456a546b88a2eec965508276fa8751f5d3c6d01f2e4abaf21962ab0",
+    "src/graphics/ui/ui.c": "1d9a00f73eb8a5f735de053e5d9b6e19dfdbcaec845b1a142c797826830b757d",
+    "src/graphics/windowing/wm.c": "d50f8d82df45cde849efc5b8c15f99d7a221e721709234a4713179498fad749c",
     "tests/host/inputtest_hid.c": "ea5689899fdf9404e693a3bf34c8e4c5f7565ffe37f2566693ffaff57fc97c58",
     "tests/host/uitest.c": "16e0bd80cf420feb1e8b4185acee3ddf0d2d87beb6ea00f3f58d507f7f4d3b3b",
     "tests/host/wmtest.c": "182614fbd495f4191d197d544c6815f5fd0af5c785403a55e186731ba9114596",
@@ -14,7 +14,7 @@
   },
   "visual_registry": {
     "path": "kernel/metadata/visual-registry.json",
-    "sha256": "ddda92e24a0ac1536a078ab86fd2d3a80effb947a05c29e143c5dc66d37e8466",
+    "sha256": "ff546e6516dbeea042d513f4aa06d429618b027962139d814c4eeab2ad4d76e4",
     "current_build_bound": 0
   },
   "capabilities": [

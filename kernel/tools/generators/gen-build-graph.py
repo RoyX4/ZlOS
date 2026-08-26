@@ -56,9 +56,12 @@ def build() -> dict:
     artifacts = load(ARTIFACTS)
     toolchain = load(TOOLCHAIN)
     build_id = identity["identity_sha256"]
-    if toolchain.get("build_identity") != build_id \
-            or artifacts.get("build_identity", {}).get("id") != build_id:
-        raise ValueError("build graph inputs disagree on build identity")
+    if toolchain.get("build_identity") != build_id:
+        raise ValueError("build graph toolchain has stale build identity")
+    artifact_build_id = artifacts.get("build_identity", {}).get("id")
+    if len(artifact_build_id or "") != 64:
+        raise ValueError("artifact registry has no subject build identity")
+    artifact_current = artifact_build_id == build_id
     source_hashes = identity["source_files_sha256"]
     source_paths = sorted(source_hashes)
     sources_list = [
@@ -194,10 +197,11 @@ def build() -> dict:
         artifact_row = artifacts["artifacts"][lane["artifact"]]
         node(
             artifact_id,
-            "artifact",
+            "artifact" if artifact_current else "historical-artifact",
             path=artifact_row["path"],
             sha256=artifact_row["sha256"],
             bytes=artifact_row["bytes"],
+            current_build_bound=artifact_current,
         )
         script_id = "source:" + lane["script"]
         edge(script_id, artifact_id, "build-script-produces")
@@ -265,7 +269,9 @@ def build() -> dict:
     )
     for name, row in artifacts["artifacts"].items():
         artifact_id = "artifact:" + name
-        node(artifact_id, "artifact", path=row["path"], sha256=row["sha256"], bytes=row["bytes"])
+        node(artifact_id, "artifact" if artifact_current else "historical-artifact",
+             path=row["path"], sha256=row["sha256"], bytes=row["bytes"],
+             current_build_bound=artifact_current)
         producer = "source:kernel/" + row["producer"]
         if producer in nodes:
             edge(producer, artifact_id, "producer-script")
@@ -304,13 +310,21 @@ def build() -> dict:
             name = row["to"].split(":", 1)[1]
             if name in artifact_incoming:
                 artifact_incoming[name] += 1
-    if any(count == 0 for count in artifact_incoming.values()):
+    if artifact_current and any(count == 0 for count in artifact_incoming.values()):
         raise ValueError("one or more artifacts has no producing edge")
 
     value = {
         "schema": "zlos.build-graph.v1",
-        "result": "PASS_WITH_DECLARED_SUPERSET",
+        "result": "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT",
         "build_identity": build_id,
+        "artifact_snapshot": {
+            "subject_build_identity": artifact_build_id,
+            "current_build_bound": artifact_current,
+            "evidence_ceiling": (
+                "exact historical artifact/QEMU registry; recipe edges do not promote "
+                "those bytes as outputs of the current source identity"
+            ),
+        },
         "artifact_registry_sha256": sha256(ARTIFACTS),
         "toolchain_manifest_sha256": sha256(TOOLCHAIN),
         "source_inputs": source_paths,
@@ -322,6 +336,8 @@ def build() -> dict:
             "declared_c_units": len(sources_list),
             "target_lanes": len(lane_rows),
             "artifacts": len(artifact_names),
+            "current_artifacts": len(artifact_names) if artifact_current else 0,
+            "historical_artifacts": 0 if artifact_current else len(artifact_names),
             "nodes": len(rows),
             "edges": len(edge_rows),
             "orphan_source_inputs": 0,
@@ -332,11 +348,12 @@ def build() -> dict:
             "logical object graph is source-derived; object hashes are represented by final reproducibility receipts, not per-object receipts",
             "conservative header-superset inputs may be scope-only rather than active includes",
             "archive/package/service outputs beyond the current nine-artifact registry are not yet graph nodes",
+            "the exact artifact snapshot is historical and no artifact hash is bound to the current source identity",
         ],
         "generator": {"path": "kernel/tools/generators/gen-build-graph.py", "sha256": sha256(Path(__file__).resolve())},
         "evidence_ceiling": (
-            "complete declared-input and current nine-artifact reachability graph for four build lanes; "
-            "source-derived logical object edges, not a compiler-emitted per-object provenance attestation"
+            "complete declared-input build recipe for four lanes joined to a clearly historical "
+            "nine-artifact snapshot; not current artifact provenance or a compiler-emitted per-object attestation"
         ),
     }
     validate(value, source_hashes, artifact_names)
@@ -345,7 +362,7 @@ def build() -> dict:
 
 def validate(value: dict, source_hashes: dict[str, str], artifact_names: list[str]) -> None:
     if value.get("schema") != "zlos.build-graph.v1" \
-            or value.get("result") != "PASS_WITH_DECLARED_SUPERSET":
+            or value.get("result") != "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT":
         raise ValueError("wrong build-graph schema/result")
     if value.get("source_inputs") != sorted(source_hashes):
         raise ValueError("build graph source-input set/order drifted")
@@ -366,9 +383,8 @@ def validate(value: dict, source_hashes: dict[str, str], artifact_names: list[st
     missing = ["source:" + path for path in sorted(source_hashes) if "source:" + path not in outgoing]
     if missing:
         raise ValueError(f"build graph has orphan source inputs: {missing[:3]}")
-    graph_artifacts = sorted(
-        node["id"].split(":", 1)[1] for node in nodes if node.get("kind") == "artifact"
-    )
+    graph_artifacts = sorted(node["id"].split(":", 1)[1] for node in nodes
+                             if node.get("kind") in ("artifact", "historical-artifact"))
     if graph_artifacts != artifact_names:
         raise ValueError("build graph artifact set drifted")
     counts = value.get("counts", {})
@@ -377,6 +393,8 @@ def validate(value: dict, source_hashes: dict[str, str], artifact_names: list[st
         "declared_c_units": counts.get("declared_c_units"),
         "target_lanes": len(lanes),
         "artifacts": len(artifact_names),
+        "current_artifacts": counts.get("current_artifacts"),
+        "historical_artifacts": counts.get("historical_artifacts"),
         "nodes": len(nodes),
         "edges": len(edges),
         "orphan_source_inputs": 0,
@@ -384,6 +402,12 @@ def validate(value: dict, source_hashes: dict[str, str], artifact_names: list[st
     }
     if counts != expected_counts or counts.get("declared_c_units", 0) <= 0:
         raise ValueError("build graph counts drifted")
+    snapshot = value.get("artifact_snapshot", {})
+    if snapshot.get("current_build_bound") is not False \
+            or counts.get("current_artifacts") != 0 \
+            or counts.get("historical_artifacts") != len(artifact_names) \
+            or len(snapshot.get("subject_build_identity", "")) != 64:
+        raise ValueError("historical artifact snapshot was promoted as current")
     if len(value.get("artifact_registry_sha256", "")) != 64 \
             or len(value.get("toolchain_manifest_sha256", "")) != 64 \
             or len(value.get("generator", {}).get("sha256", "")) != 64:
@@ -409,6 +433,11 @@ def selftest(value: dict, source_hashes: dict[str, str], artifact_names: list[st
     artifact["nodes"] = [row for row in artifact["nodes"] if row.get("id") != "artifact:zlOS.iso"]
     artifact["counts"]["nodes"] = len(artifact["nodes"])
     mutations["missing-artifact"] = artifact
+    current = copy.deepcopy(value)
+    current["artifact_snapshot"]["current_build_bound"] = True
+    current["counts"]["current_artifacts"] = len(artifact_names)
+    current["counts"]["historical_artifacts"] = 0
+    mutations["invented-current-artifact-binding"] = current
     caught = []
     for name, mutant in mutations.items():
         try:
@@ -447,7 +476,7 @@ def main() -> int:
         if args.check and (not OUTPUT.is_file() or load(OUTPUT) != value):
             raise ValueError("build-graph.json is missing or stale")
         print(
-            "build-graph: PASS_WITH_DECLARED_SUPERSET: "
+            f"build-graph: {value['result']}: "
             f"{value['counts']['source_inputs']} inputs, {value['counts']['target_lanes']} lanes, "
             f"{value['counts']['artifacts']} artifacts, {value['counts']['scope_only_inputs']} scope-only"
         )

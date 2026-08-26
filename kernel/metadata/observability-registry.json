@@ -1,39 +1,47 @@
 {
   "schema": "zlos.observability-registry.v1",
-  "result": "PASS_WITH_OPEN_GAPS",
-  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "result": "PASS_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS",
+  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
   "boot_transcripts": [
     {
       "path": "kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json",
-      "receipt_sha256": "3122c030794d0f1594ce23e44c6ba1f598a93685368a9b471a4fd456a8527dd8",
+      "receipt_sha256": "8a94a7e1decde0b648964fc81d2e275e42be98c63cfd439f4748cad4638a302e",
       "route": "raw-bios",
-      "boot_log_sha256": "d9ccda3040805062f2b6709b38be0fcf311da6e00e8fc4e59312eca38bc68b73",
+      "boot_log_sha256": "8bad0db65e83b628763693ca9b9c7b5a5e7527f1b80bfa3d842005733dccef6f",
       "raw_log_preserved": false,
-      "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware"
+      "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
+      "subject_build_identity": "236ab3190b889b9cd62e3e08545a7a8a9e4c556c305a2a158c428ecabb12ea7b",
+      "current_build_bound": false
     },
     {
       "path": "kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json",
-      "receipt_sha256": "1615004123892d56d42a8d3174959f635d46ba278c558332902c584cdf20eb60",
+      "receipt_sha256": "d2c9d18459fdce0bbe12f8ec443516fe8e2e13c54f33776561912c72bd6c6c10",
       "route": "native-uefi64",
-      "boot_log_sha256": "fe7dd14b81dd2882aed5b2b5b2b036a2174f0f7b509419487439f82f422e54b7",
+      "boot_log_sha256": "65ab778446f00c717453850e13ad78350694fd03d8987eaa567b9949d306eacb",
       "raw_log_preserved": false,
-      "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware"
+      "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
+      "subject_build_identity": "236ab3190b889b9cd62e3e08545a7a8a9e4c556c305a2a158c428ecabb12ea7b",
+      "current_build_bound": false
     },
     {
       "path": "kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json",
-      "receipt_sha256": "f8328326125d4bad47044582ab746e3b2c9b4e77a8402a61b5bb03a65f5b2ad1",
+      "receipt_sha256": "c59d3c93c0ccd4657919a4421e50f12928b329cf05aab0b7c4aa5345b1e00b80",
       "route": "grub-bios32",
-      "boot_log_sha256": "160d12dfbaa77598fce2da6e673dc1795c42d149283efe969791d8a5ec9f8e36",
+      "boot_log_sha256": "281c2025894abca1e3f49835258671a90879da5ed8993b2464919075dea17ed5",
       "raw_log_preserved": false,
-      "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware"
+      "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
+      "subject_build_identity": "236ab3190b889b9cd62e3e08545a7a8a9e4c556c305a2a158c428ecabb12ea7b",
+      "current_build_bound": false
     },
     {
       "path": "kernel/docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json",
-      "receipt_sha256": "898285b681b69cde36a0be3339b4f0a372e94a40d7c2bebcba8d80bb6bcee9a9",
+      "receipt_sha256": "816129d8ca123fcedcde5a6381cf49f9c198854ea08acefe723f172722ebacf3",
       "route": "grub-uefi32",
-      "boot_log_sha256": "c00d136bc65e04239e427a2b76a640a0259cdcaa41a7253d26ba39975540cdac",
+      "boot_log_sha256": "0aa9d983844a2135f0358af29fa8ee889aa09762c3857596888e63c61c277722",
       "raw_log_preserved": false,
-      "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware"
+      "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
+      "subject_build_identity": "236ab3190b889b9cd62e3e08545a7a8a9e4c556c305a2a158c428ecabb12ea7b",
+      "current_build_bound": false
     },
     {
       "path": "kernel/docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json",
@@ -41,7 +49,9 @@
       "route": "grub-bios64",
       "boot_log_sha256": "28a087b1719f9402c530323f42a2577ff349d6950fe52cf766fb5243b66a2db4",
       "raw_log_preserved": false,
-      "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware"
+      "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
+      "subject_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+      "current_build_bound": false
     },
     {
       "path": "kernel/docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json",
@@ -49,61 +59,67 @@
       "route": "grub-uefi64",
       "boot_log_sha256": "118002dc8a1675b86a34b0540cd24861cf58b5a0d5464ca826b27dd2c8ec9d27",
       "raw_log_preserved": false,
-      "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware"
+      "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
+      "subject_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+      "current_build_bound": false
     }
   ],
   "host_test_receipt": {
-    "path": "kernel/hosttest/test-run-receipt.json",
-    "sha256": "9f091d6276630a0087bfe7cc03b481fea1d1cefb29b43730e4db80a91dceca2f"
+    "path": "kernel/tests/host/test-run-receipt.json",
+    "sha256": "9f091d6276630a0087bfe7cc03b481fea1d1cefb29b43730e4db80a91dceca2f",
+    "subject_head": "b8a00ec45ac1f9f955ba79ed63f0072540067d4e",
+    "current_build_bound": false
   },
   "qemu_crash_receipt": {
     "path": "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json",
-    "sha256": "bd144c4cde0217f87d8549655039cbcc55fe049515621c9eec698c078f674c8d"
+    "sha256": "bd144c4cde0217f87d8549655039cbcc55fe049515621c9eec698c078f674c8d",
+    "subject_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+    "current_build_bound": false
   },
   "event_schema": {
-    "path": "kernel/event-schema.json",
-    "sha256": "23c89a049d50e4e19314d45a483404c206fc05e11f9f6fbfc0e994f5633fd86a",
-    "result": "PASS_HOST_SCHEMA_TARGET_UNINTEGRATED",
+    "path": "kernel/metadata/event-schema.json",
+    "sha256": "3860629e49929b031703a74bc816f302532f03475bfcf289864b8299e4b1af47",
+    "result": "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED",
     "target_emitters": 0
   },
   "source_identities": {
-    "idt.c": "e98cbb7b86d37250268b0be84f6068af4017c2cd5cb870c14dfb09ecca40c810",
-    "crash.c": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f",
-    "crash.h": "2d4fbb5bcb6523418f8caaed8e8e64b12e09e585f3bf37955a927b52dfa5d2d6",
-    "heap.c": "d7a8a817f19568106db8af368e179cebc2f2f1dd14fd9c9de100aff108cbafb8",
-    "console.c": "dd86cad040fa7c90417591de1ce03b0620c3fe8a1917890a84c0c4d9293ea40b",
-    "support.c": "4ce2cecf76a4da5547fbf9749fa817dc879cf6b5b0d05958e38c672fa022378a",
-    "term.c": "bdcbf0c5f6dd9bd382b45d575da780966eda499938519ca5f1ef507f52921c3c",
-    "verify-crash.py": "dc5123130ec2be94fbe23e0e649aa675a09f94eb5c92d0020e9d0b6c7ea05064",
-    "hosttest/trace_event.c": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
-    "hosttest/trace_event.h": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
-    "gen-event-schema.py": "a532bffaa970a3205b64c2dfb2f4c099c720809194e9f9e99d839d9214fe8e2f",
-    "verify-event-trace.py": "ef4cd30e2d67dd2b8e4adc1c6c59e25ae6518fb55d6f73882d1d167931ca9a2d"
+    "src/arch/x86/idt.c": "2919c40097d401ecde8905bbb24249769a16888cc42355f4020d0f8477472560",
+    "src/core/crash.c": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f",
+    "src/core/crash.h": "2d4fbb5bcb6523418f8caaed8e8e64b12e09e585f3bf37955a927b52dfa5d2d6",
+    "src/core/heap.c": "d3d7cbb7010e7527713ca516a40a3dfc3050875e01762e83cb4443bc17fe4d1f",
+    "src/core/console.c": "124025daa79df82856d35d1aee78ff9981a886371fdfd74aa5e6f2f4aa1bd67d",
+    "src/arch/x86/support.c": "4ce2cecf76a4da5547fbf9749fa817dc879cf6b5b0d05958e38c672fa022378a",
+    "src/graphics/windowing/term.c": "c94684e7bd4848f3020ceea98dab3c6bcf1d90cfe8a1041a8c2f9fe9b5f9d54a",
+    "tools/checks/verify-crash.py": "44c745f78dae1c684768ceab3675e313048e8c971a588c6aa1120cf9b0921051",
+    "tests/host/trace_event.c": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
+    "tests/host/trace_event.h": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
+    "tools/generators/gen-event-schema.py": "c799df4465dfb1d893934bad4b31f1181cb89f58800a78d7fba7e749872f4272",
+    "tools/checks/verify-event-trace.py": "cb3c48ca426124a888ede684da904951f0d35362bd4a8b883b16d58721cbcaf6"
   },
   "capabilities": [
     {
       "id": "hashed-boot-transcript",
       "status": "QEMU_HASH_ONLY",
       "detail": "six route receipts carry boot-log SHA-256 but not durable raw logs",
-      "evidence_ceiling": "QEMU receipt hash only"
+      "evidence_ceiling": "historical QEMU receipt hash only"
     },
     {
       "id": "heap-corruption-diagnostic",
       "status": "HOST_PROVED_LIMITED",
       "detail": "heap refuses after detected corruption and prints once; no crash bundle",
-      "evidence_ceiling": "host behavior only"
+      "evidence_ceiling": "historical host behavior only"
     },
     {
       "id": "cpu-fault-stop",
       "status": "QEMU_PROVED",
       "detail": "real UD2 reaches vector 6, emits a complete record and remains halted",
-      "evidence_ceiling": "exact QEMU target behavior"
+      "evidence_ceiling": "historical exact QEMU target behavior"
     },
     {
       "id": "fault-register-capture",
       "status": "QEMU_PROVED_PARTIAL",
       "detail": "vector/error/IP/CS/FLAGS/SP/SS/CR2 control frame only; no general registers",
-      "evidence_ceiling": "exact QEMU target behavior, explicitly partial fields"
+      "evidence_ceiling": "historical exact QEMU target behavior, explicitly partial fields"
     },
     {
       "id": "stack-symbolization",
@@ -133,25 +149,25 @@
       "id": "typed-event-schema",
       "status": "HOST_PROVED_CORE",
       "detail": "versioned 152-byte pointer-free feature/process/authority/correlation envelope; not target integrated",
-      "evidence_ceiling": "host-proved core, explicitly target-unintegrated"
+      "evidence_ceiling": "historical host-proved core, explicitly target-unintegrated"
     },
     {
       "id": "monotonic-event-order",
       "status": "HOST_PROVED_CORE",
       "detail": "accepted records receive strict sequence order and nondecreasing caller-supplied monotonic time; single-owner host proof only",
-      "evidence_ceiling": "host-proved core, explicitly target-unintegrated"
+      "evidence_ceiling": "historical host-proved core, explicitly target-unintegrated"
     },
     {
       "id": "drop-and-truncation-evidence",
       "status": "HOST_PROVED_CORE",
       "detail": "full queue never overwrites and next successful emit records exact pending drops; no target/service proof",
-      "evidence_ceiling": "host-proved core, explicitly target-unintegrated"
+      "evidence_ceiling": "historical host-proved core, explicitly target-unintegrated"
     },
     {
       "id": "redaction-privacy-policy",
       "status": "HOST_PROVED_CORE",
       "detail": "four privacy classes and per-word redaction commit zeroes; no target policy owner",
-      "evidence_ceiling": "host-proved core, explicitly target-unintegrated"
+      "evidence_ceiling": "historical host-proved core, explicitly target-unintegrated"
     },
     {
       "id": "tamper-evident-anchor",
@@ -163,7 +179,7 @@
       "id": "trace-export-import",
       "status": "HOST_PROVED_PARTIAL",
       "detail": "stable little-endian checksum round-trip preserves boot/process/authority/correlation identity but carries no artifact identity",
-      "evidence_ceiling": "host-proved partial behavior"
+      "evidence_ceiling": "historical host-proved partial behavior"
     }
   ],
   "counts": {
@@ -178,7 +194,9 @@
     "missing": 5,
     "qemu_crash_receipts": 1,
     "durable_crash_receipts": 0,
-    "typed_structured_event_fields": 28
+    "typed_structured_event_fields": 28,
+    "current_build_bound_qemu_receipts": 0,
+    "historical_qemu_receipts": 7
   },
   "open_gaps": [
     "heap-corruption-diagnostic",
@@ -194,10 +212,10 @@
     "tamper-evident-anchor",
     "trace-export-import"
   ],
-  "evidence_ceiling": "source, host event-core and exact QEMU control-frame evidence; event core has no target emitter and crash evidence is not durable",
+  "evidence_ceiling": "current source inventory joined to historical host/QEMU receipts; no current-build execution, target emitter, or durable crash evidence",
   "weakest_link": "the structured core is externally serialized and target-unintegrated; general registers, stack symbols and durable recovery remain absent",
   "generator": {
     "path": "kernel/gen-observability-registry.py",
-    "sha256": "4e656537dafe4e954d566e4cb6951aeaaaa94e1fddedeba2740a9e131ba1ff8d"
+    "sha256": "2e3e84b9dbf1c103593e2f899b4cfae8a47d16db8a8517c5876300515ecb3ae5"
   }
 }

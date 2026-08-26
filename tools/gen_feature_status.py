@@ -31,19 +31,19 @@ OVERRIDES = {
                 "kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar"),
                ("missing input", "archive hash drift", "archive byte corruption", "invented custody"),
                ("0 off-host copies", "unsigned receipt", "not a whole-repository snapshot"),
-               "all 123 exact build inputs are reconstructable, but the archive remains unsigned in the same uncommitted worktree"),
+               "all 146 exact build inputs are reconstructable, but the archive remains unsigned in the same worktree"),
     "EV-003": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/license-registry.json"),),
                ("python3 kernel/tools/generators/gen-license-registry.py --check --selftest",),
                ("kernel/metadata/license-registry.json",), ("invented grant", "false release green"),
-               ("0 license files", "123 inputs lack an established redistribution grant"),
+               ("0 license files", "146 inputs lack an established redistribution grant"),
                "build-input inventory exists, but public redistribution authority is absent"),
     "EV-004": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/dependency-lock.json"),),
                ("python3 kernel/tools/generators/gen-dependency-lock.py --check --selftest",),
                ("kernel/metadata/dependency-lock.json",),
                ("binary drift", "missing firmware identity", "missing package",
                 "unresolved package dependency", "invented source-archive custody"),
-               ("156 package source archives absent", "offline rebuild not proved"),
-               "15 commands, 2 firmware blobs, 91 runtime files and 156 recursively installed packages are exact; source archives and offline reconstruction remain absent"),
+               ("145 package source archives absent", "offline rebuild not proved"),
+               "15 commands, 2 firmware blobs, 91 runtime files and 145 recursively installed packages are exact; source archives and offline reconstruction remain absent"),
     "EV-005": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/toolchain-manifest.json"),
                                     ("implementation", "kernel/metadata/dependency-lock.json")),
                ("python3 kernel/tools/generators/gen-toolchain-manifest.py --check --selftest",),
@@ -52,11 +52,11 @@ OVERRIDES = {
                 "external header drift", "environment injection"),
                ("0 hermetic builds", "unsigned toolchain", "compiler/sysroot sources unarchived"),
                "7 tools, 4 ABI lanes and 82 external headers are exact locally, but the toolchain is not hermetic or source-custodied"),
-    "EV-006": ("PROVED_CURRENT", (("implementation", "kernel/docs/receipts/reproducible-build-2026-08-22.json"),),
+    "EV-006": ("HISTORICAL_ONLY", (("implementation", "kernel/docs/receipts/reproducible-build-2026-08-22.json"),),
                ("python3 kernel/tools/checks/check-reproducible-build.py --check --selftest",),
                ("kernel/docs/receipts/reproducible-build-2026-08-22.json",),
                ("byte drift in every artifact", "missing artifact", "stale resume snapshot"), (),
-               "proved for the current nine-artifact recipe set; future artifacts must join separately"),
+               "two-run reproducibility is proved for its historical nine-artifact subject build, not the current identity"),
     "EV-007": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/build-graph.json"),
                                     ("implementation", "kernel/metadata/artifact-registry.json")),
                ("python3 kernel/tools/generators/gen-build-graph.py --check --selftest",),
@@ -64,7 +64,7 @@ OVERRIDES = {
                ("missing source", "missing lane", "orphan source", "missing artifact"),
                ("1 conservative scope-only header", "no per-object binary receipts",
                 "future package/service outputs absent"),
-               "all 123 inputs and 9 artifacts have graph positions across 4 lanes, but intermediate object provenance remains source-derived"),
+               "all 146 inputs have recipe positions across 4 lanes; the nine exact artifacts are an explicitly historical snapshot"),
     "EV-008": ("PROVED_CURRENT", (("implementation", "kernel/metadata/wrapper-registry.json"),
                                      ("implementation", "kernel/metadata/adversarial-registry.json")),
                ("python3 kernel/tools/generators/gen-wrapper-registry.py --check --selftest",
@@ -72,13 +72,13 @@ OVERRIDES = {
                ("kernel/metadata/wrapper-registry.json", "kernel/metadata/adversarial-registry.json"),
                ("missing wrapper", "duplicate wrapper", "missing policy", "hidden authority boundary",
                 "deleted verifier", "optional verifier", "missing route", "masked final exit", "masked child failure"),
-               (), "all 141 current shebang wrappers are inventoried; the sole contained landing authority has 66 mandatory seams and rejects child/final exit masking"),
-    "EV-009": ("PROVED_CURRENT", (("implementation", "kernel/metadata/artifact-registry.json"),
+               (), "all 156 current shebang wrappers are inventoried; the contained landing authority rejects child/final exit masking"),
+    "EV-009": ("HISTORICAL_ONLY", (("implementation", "kernel/metadata/artifact-registry.json"),
                                    ("implementation", "kernel/metadata/app-evidence.json")),
                ("python3 kernel/tools/generators/gen-artifact-registry.py --check --selftest",),
                ("kernel/metadata/artifact-registry.json", "kernel/metadata/app-evidence.json"),
                ("artifact mismatch", "wrong build identity"), (),
-               "current shipped artifacts and QEMU routes identify the exact build; physical hash proof remains separate"),
+               "the exact artifact and QEMU routes remain valid for their historical subject build; no current artifact proof exists"),
     "EV-010": ("PROVED_CURRENT", (("plan", "docs/program/PROOF-GATES.md"),
                                    ("implementation", "kernel/metadata/evidence-registry.json")),
                ("python3 kernel/tools/generators/gen-evidence-registry.py --check --selftest",),
@@ -89,24 +89,24 @@ OVERRIDES = {
                ("python3 tools/gen_feature_status.py --check --selftest",),
                ("docs/program/FEATURE-STATUS.json",), ("hidden gap", "unproved promotion"), (),
                "every feature has a conservative current maturity row; most remain planned/unproved"),
-    "EV-012": ("PROVED_CURRENT", (("implementation", "kernel/tests/host/test-inventory.json"),
+    "EV-012": ("HISTORICAL_ONLY", (("implementation", "kernel/tests/host/test-inventory.json"),
                                    ("implementation", "kernel/tests/host/test-run-receipt.json")),
                ("python3 kernel/tools/run/run-host-tests.py --selftest",),
                ("kernel/tests/host/test-inventory.json", "kernel/tests/host/test-run-receipt.json"),
                ("missing target", "promoted instrument", "hidden skip"), (),
-               "62 current targets are classified and receipted; 53 automatic commands include 48 passes, 3 hardware skips and later target suites must join"),
-    "EV-013": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/adversarial-registry.json"),),
+               "the dated 62-target receipt records 48 passes and 3 hardware skips; it is not bound to the current build"),
+    "EV-013": ("PARTIAL_HISTORICAL", (("implementation", "kernel/metadata/adversarial-registry.json"),),
                ("python3 kernel/tools/generators/gen-adversarial-registry.py --check --selftest",),
                ("kernel/metadata/adversarial-registry.json",), ("19 planted verifier mutations",),
                ("one mutation per every future required field is not yet possible",),
-               "19 current authorities prove red, not every future feature verifier"),
-    "EV-014": ("PARTIAL_CURRENT", (("implementation", "kernel/docs/receipts/benchmark-host-2026-08-23.json"),),
+               "19 historical verifier canaries proved red; they are not a current verifier run"),
+    "EV-014": ("PARTIAL_HISTORICAL", (("implementation", "kernel/docs/receipts/benchmark-host-2026-08-23.json"),),
                ("python3 kernel/tools/run/run-benchmarks.py --check --selftest",),
                ("kernel/docs/receipts/benchmark-host-2026-08-23.json",),
                ("hidden regression", "invented percentile", "target overclaim"),
                ("4 frame metrics over budget", "no percentiles/peaks/native-target distribution"),
                "host frame receipt exists, but it is not a complete performance qualification"),
-    "EV-015": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/artifact-registry.json"),),
+    "EV-015": ("PARTIAL_HISTORICAL", (("implementation", "kernel/metadata/artifact-registry.json"),),
                ("python3 kernel/tools/generators/gen-artifact-registry.py --check --selftest",),
                ("kernel/metadata/artifact-registry.json",), ("physical overclaim",),
                ("0 of 9 exact artifact hashes have native physical proof",),
@@ -115,14 +115,14 @@ OVERRIDES = {
                ("python3 kernel/tools/generators/gen-visual-registry.py --check --selftest",),
                ("kernel/metadata/visual-registry.json",),
                ("invented build binding", "hidden variant gap"),
-               ("46 visual assets are unbound to the current build", "6 variant dimensions are open"),
+               ("41 visual assets are unbound to the current build", "6 variant dimensions are open"),
                "assets are hashed and measured, but none is a current screenshot/video receipt"),
     "EV-017": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/observability-registry.json"),),
                ("python3 kernel/tools/generators/gen-observability-registry.py --check --selftest",),
                ("kernel/metadata/observability-registry.json",),
                ("overpromoted fault frame", "invented general registers", "invented raw log", "hidden crash gap"),
                ("0 durable crash receipts", "no general-register frame, symbols, persistence or recovery"),
-               "QEMU proves a bounded checksummed control-frame record and exact invalid-opcode IP before halt; durable crash bundles, general registers, symbols and recovery remain absent"),
+               "dated QEMU receipts prove a bounded control frame and invalid-opcode IP for older builds; current-build runtime and durable recovery remain absent"),
     "EV-018": ("PARTIAL_CURRENT", (
                    ("implementation", "kernel/tests/host/trace_event.c"),
                    ("implementation", "kernel/tests/host/trace_event.h"),
@@ -137,18 +137,18 @@ OVERRIDES = {
                 "invented concurrency", "invented target emitter", "hidden observability gap"),
                ("0 target emitters", "single-owner core only", "no QEMU/native route",
                 "no durable tamper-evident anchor or service export policy"),
-               "28-field pointer-free envelope and bounded queue pass 37 host checks across 3 compile lanes; the core is not compiled into or emitted by booted zlOS"),
-    "EV-019": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/adversarial-registry.json"),),
+               "the current 28-field schema retains a dated 37-check host receipt; no current-build or target emitter proof exists"),
+    "EV-019": ("PARTIAL_HISTORICAL", (("implementation", "kernel/metadata/adversarial-registry.json"),),
                ("python3 kernel/tools/generators/gen-adversarial-registry.py --check --selftest",),
                ("kernel/metadata/adversarial-registry.json",), ("hidden failure gap",),
                ("all 7 failure families remain non-exhaustive",),
                "allocation/queue/I/O/lifecycle are partial; provider/service/package injection is absent"),
-    "EV-020": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/adversarial-registry.json"),),
+    "EV-020": ("PARTIAL_HISTORICAL", (("implementation", "kernel/metadata/adversarial-registry.json"),),
                ("python3 kernel/tools/generators/gen-adversarial-registry.py --check --selftest",),
                ("kernel/metadata/adversarial-registry.json",), ("unearned ELF promotion", "hidden hostile gap"),
                ("ELF/archive/font/IPC absent",),
                "5 of 9 hostile families have executed host proof; PNG is now sanitizer-gated"),
-    "EV-021": ("PARTIAL_CURRENT", (("implementation", "kernel/docs/receipts/benchmark-host-2026-08-23.json"),),
+    "EV-021": ("PARTIAL_HISTORICAL", (("implementation", "kernel/docs/receipts/benchmark-host-2026-08-23.json"),),
                ("python3 kernel/tools/run/run-benchmarks.py --check --selftest",),
                ("kernel/docs/receipts/benchmark-host-2026-08-23.json",),
                ("hidden performance regression",),
@@ -165,13 +165,13 @@ OVERRIDES = {
                ("kernel/metadata/accessibility-registry.json",),
                ("invented semantic tree", "hidden assistive gap", "target overclaim"),
                ("9 capabilities missing", "0 complete target workflows"),
-               "keyboard/focus primitives pass on host; semantic and assistive workflows remain absent"),
+               "dated host evidence covers keyboard/focus primitives; current-build semantic and assistive workflows remain absent"),
     "EV-024": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/security-registry.json"),),
                ("python3 kernel/tools/generators/gen-security-registry.py --check --selftest",),
                ("kernel/metadata/security-registry.json",),
                ("production overclaim", "hidden DMA risk", "invented DMA proof"),
                ("17 residual-risk claims open", "0 production-complete security claims"),
-               "static/host/QEMU evidence exists for six limited areas; eleven security foundations are missing"),
+               "historical static/host/QEMU evidence exists for six limited areas; no claim is current-build bound and eleven foundations are missing"),
     "EV-025": ("PARTIAL_CURRENT", (("plan", "docs/program/VALIDATION-RECEIPT.md"),),
                ("python3 tools/validate_master_program.py --self-test",),
                ("docs/program/VALIDATION-RECEIPT.md",), ("missing feature", "unknown contract"),
@@ -257,17 +257,12 @@ def evidence_entry(kind: str, relative: str, evidence_root: Path) -> dict:
 
 
 def git_snapshot(path: Path) -> dict:
-    def run(*args: str) -> str:
-        return subprocess.check_output(args, cwd=path, text=True).strip()
-    status = subprocess.check_output(
-        ("git", "status", "--porcelain=v1", "-uall"), cwd=path, text=True
-    )
+    identity = json.loads((path / "kernel/metadata/build-identity.json").read_text())
     return {
-        "path": str(path),
-        "head": run("git", "rev-parse", "HEAD"),
-        "branch": run("git", "branch", "--show-current"),
-        "dirty": bool(status),
-        "status_sha256": hashlib.sha256(status.encode()).hexdigest(),
+        "path": ".",
+        "build_identity": identity["identity_sha256"],
+        "generation_git_context": identity["git"],
+        "evidence_ceiling": "build-input generation context, not current checkout or artifact commit attestation",
     }
 
 
@@ -308,13 +303,56 @@ def validate_provenance_feature_link(provenance: dict, feature_ids: set[str]) ->
         raise ValueError("provenance viewer references an unknown feature ID")
 
 
+def validate_feature_status_value(value: dict) -> None:
+    if value.get("schema") != "zlos.feature-status.v1" \
+            or value.get("result") != "PASS_WITH_OPEN_GAPS":
+        raise ValueError("wrong feature-status schema/result")
+    expected = master.parse_features(master.read(master.SOURCE))
+    rows = value.get("features", [])
+    expected_ids = [row["id"] for row in expected]
+    if [row.get("id") for row in rows] != expected_ids \
+            or len(set(expected_ids)) != len(expected_ids):
+        raise ValueError("feature-status identity/order drift")
+    maturities = {"PLANNED_UNPROVED", "PROVED_CURRENT", "PARTIAL_CURRENT",
+                  "HISTORICAL_ONLY", "PARTIAL_HISTORICAL"}
+    phases = set(phase_dependencies())
+    for row in rows:
+        if row.get("maturity") not in maturities or not row.get("known_gaps") \
+                and row.get("maturity") == "PLANNED_UNPROVED":
+            raise ValueError(f"{row.get('id')}: invalid maturity or hidden gap")
+        if row.get("maturity") == "PROVED_CURRENT" and not row.get("evidence"):
+            raise ValueError(f"{row.get('id')}: current proof has no evidence")
+        if any(len(item.get("sha256", "")) != 64 for item in row.get("evidence", [])):
+            raise ValueError(f"{row.get('id')}: evidence identity missing")
+        if row.get("primary_phase") not in phases \
+                or any(item not in phases for item in row.get("phase_dependencies", [])):
+            raise ValueError(f"{row.get('id')}: unknown phase dependency")
+    counts = Counter(row["maturity"] for row in rows)
+    if value.get("counts") != {"total": len(rows), **dict(sorted(counts.items()))}:
+        raise ValueError("feature-status counts drift")
+    if len(value.get("build_identity", "")) != 64:
+        raise ValueError("feature-status build identity missing")
+    blockers = value.get("global_blockers", {})
+    if any(item is not True for item in blockers.values() if isinstance(item, bool)):
+        raise ValueError("feature-status hid a boolean blocker")
+    for name, item in blockers.items():
+        if isinstance(item, int) and not isinstance(item, bool) \
+                and name != "decision_legacy_semantics_open" and item <= 0:
+            raise ValueError(f"feature-status hid numeric blocker: {name}")
+    for name in ("public_release_blocked", "current_artifact_snapshot_missing",
+                 "current_qemu_evidence_missing", "current_host_test_receipt_missing",
+                 "current_host_benchmark_missing"):
+        if blockers.get(name) is not True:
+            raise ValueError(f"feature-status hid blocker: {name}")
+
+
 def build(evidence_root: Path) -> dict:
     source_text = master.read(master.SOURCE)
     features = master.parse_features(source_text)
     master.validate_features(features)
     dependencies = phase_dependencies()
     joined = json.loads((evidence_root / "kernel/metadata/evidence-registry.json").read_text())
-    if joined.get("result") != "PASS_WITH_OPEN_GAPS":
+    if joined.get("result") != "PASS_CURRENT_INDEX_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS":
         raise ValueError("implementation evidence registry is absent or overpromoted")
     decisions = json.loads((evidence_root / "kernel/metadata/decision-ledger.json").read_text())
     release_notes = json.loads((evidence_root / "kernel/metadata/release-notes.json").read_text())
@@ -420,6 +458,10 @@ def build(evidence_root: Path) -> dict:
             "provenance_remote_auth_missing": joined["open_gaps"]["provenance_remote_auth_missing"],
             "provenance_public_release_missing": joined["open_gaps"]["provenance_public_release_missing"],
             "observability_open_capabilities": joined["open_gaps"]["observability_open_capabilities"],
+            "current_artifact_snapshot_missing": joined["open_gaps"]["current_artifact_snapshot_missing"],
+            "current_qemu_evidence_missing": joined["open_gaps"]["current_qemu_evidence_missing"],
+            "current_host_test_receipt_missing": joined["open_gaps"]["current_host_test_receipt_missing"],
+            "current_host_benchmark_missing": joined["open_gaps"]["current_host_benchmark_missing"],
         },
         "features": rows,
         "generator": {"path": "tools/gen_feature_status.py", "sha256": digest(Path(__file__).resolve())},
@@ -460,7 +502,7 @@ def selftest(value: dict, evidence_root: Path) -> None:
     caught = []
     for name, mutant in mutations.items():
         try:
-            master.validate_feature_status_value(mutant)
+            validate_feature_status_value(mutant)
         except ValueError:
             caught.append(name)
         else:
@@ -507,7 +549,7 @@ def main() -> int:
         parser.error("choose exactly one of --write or --check")
     try:
         value = build(args.evidence_root.resolve())
-        master.validate_feature_status_value(value)
+        validate_feature_status_value(value)
         if args.selftest:
             selftest(value, args.evidence_root.resolve())
         if args.write:

@@ -1,11 +1,12 @@
 {
   "evidence_ceiling": "pre-link shared build-input identity; exact target, configuration, boot origin and final artifact hash require a route receipt",
   "git": {
-    "branch": "codex/full-program",
+    "branch": "",
     "dirty": true,
-    "head": "c9e6e69c6b58745aeba278d838a84147fea67980"
+    "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
+    "head": "69f11cf8e5792d4430c3f2ce7a07b472054af691"
   },
-  "identity_sha256": "236ab3190b889b9cd62e3e08545a7a8a9e4c556c305a2a158c428ecabb12ea7b",
+  "identity_sha256": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -154,7 +155,7 @@
     "kernel/src/web/layout.h": "e47c0405a97d13b57418c004e18e9c8d6518d8437ba29ba2e7f0735096b27718",
     "kernel/tools/generators/gen-app-manifest.py": "9b41d56391f2d5a4a6ba2f942e99699cc74b870aa6c0d678cbe0e9856967a5b2",
     "kernel/tools/generators/gen-boot-media-ids.py": "6ed01003b30635419ffdafad31a8a3026d2861d14215a20e29f8439b9a8f5eb1",
-    "kernel/tools/generators/gen-build-identity.py": "f4f23edded6e87182d6e30f1922b0c749a9e92cb39334f2736284184fe492620",
+    "kernel/tools/generators/gen-build-identity.py": "3dfd0a54fbd2206e88b9f94ced6e687e635834317c701552996a9beb4873ad5c",
     "kernel/tools/images/mkdisk.sh": "afe1a1fc7cc781090f0d48b7443725040ec283e6404c9216272ccf2faa57d9ea",
     "kernel/tools/images/mkiso.sh": "a43837d670b5df92785ff99df873763e2e4eed7edf2c45a3df358fe80ff3e43f",
     "kernel/tools/images/mkiso64.sh": "3abec3dee416348973f2028beb60d5f80858665e1c7f646cb24a3f0af41b770d",

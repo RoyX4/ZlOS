@@ -2,7 +2,7 @@
   "schema": "zlos.decision-ledger.v1",
   "result": "PASS_WITH_OPEN_GAPS",
   "feature_id": "EV-026",
-  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
   "records": [
     {
       "id": "DEC-0001",
@@ -17,7 +17,7 @@
       "rationale": "The current kernel zl subset cannot express the required window list and mechanism boundary.",
       "source": {
         "path": "kernel/docs/DECISIONS.md",
-        "sha256": "5298a0a5e8ec2ca949db8242cb5947921b5f8f2c40db6fb30b7e49265354efbc",
+        "sha256": "254f320f0f73d3c1eaedfff22f4901bddfcc278f4e2ce0f8f71718d7a81bb048",
         "needle": "**1. Mechanism in C, policy in zl.**"
       },
       "needle": "**1. Mechanism in C, policy in zl.**",
@@ -42,7 +42,7 @@
       "rationale": "The original source inspection missed three direct back-buffer writers.",
       "source": {
         "path": "kernel/docs/DECISIONS.md",
-        "sha256": "5298a0a5e8ec2ca949db8242cb5947921b5f8f2c40db6fb30b7e49265354efbc",
+        "sha256": "254f320f0f73d3c1eaedfff22f4901bddfcc278f4e2ce0f8f71718d7a81bb048",
         "needle": "**6. The clip rectangle is the keystone, and it is ~~two functions~~ FIVE.**"
       },
       "needle": "**6. The clip rectangle is the keystone, and it is ~~two functions~~ FIVE.**",
@@ -70,7 +70,7 @@
       "rationale": "Measured escape pixels refuted the two-function boundary without adding a per-pixel hot-path branch.",
       "source": {
         "path": "kernel/docs/DECISIONS.md",
-        "sha256": "5298a0a5e8ec2ca949db8242cb5947921b5f8f2c40db6fb30b7e49265354efbc",
+        "sha256": "254f320f0f73d3c1eaedfff22f4901bddfcc278f4e2ce0f8f71718d7a81bb048",
         "needle": "**Three more functions write the back buffer"
       },
       "needle": "**Three more functions write the back buffer",
@@ -97,7 +97,7 @@
       "rationale": "The old path imposed a window-size ceiling, artifacts and fixed memory cost.",
       "source": {
         "path": "kernel/docs/DECISIONS.md",
-        "sha256": "5298a0a5e8ec2ca949db8242cb5947921b5f8f2c40db6fb30b7e49265354efbc",
+        "sha256": "254f320f0f73d3c1eaedfff22f4901bddfcc278f4e2ce0f8f71718d7a81bb048",
         "needle": "**7. Delete the snapshot-and-sticker drag machinery**"
       },
       "needle": "**7. Delete the snapshot-and-sticker drag machinery**",
@@ -125,7 +125,7 @@
       "rationale": "A complete i915/Mesa stack assumes kernel facilities outside zlOS, but bounded display/blitter providers remain valid product work.",
       "source": {
         "path": "kernel/docs/DECISIONS.md",
-        "sha256": "5298a0a5e8ec2ca949db8242cb5947921b5f8f2c40db6fb30b7e49265354efbc",
+        "sha256": "254f320f0f73d3c1eaedfff22f4901bddfcc278f4e2ce0f8f71718d7a81bb048",
         "needle": "**20. `intel.c` already has the correct relationship: borrow Linux's knowledge,"
       },
       "needle": "**20. `intel.c` already has the correct relationship: borrow Linux's knowledge,",
@@ -153,7 +153,7 @@
       "rationale": "Four hand-maintained lists repeatedly produced route-specific source drift.",
       "source": {
         "path": "kernel/SOURCES",
-        "sha256": "e2c4a415fadfe01dafd9de3fa0ed4bb49a3bd2b0abba546066b149dae8851102",
+        "sha256": "380c0a1d892349b3350ec8fc5d961c524965ae44a46db1350b7665d3c0ecf933",
         "needle": "# SOURCES - the kernel sources that EVERY target compiles."
       },
       "needle": "# SOURCES - the kernel sources that EVERY target compiles.",
@@ -178,7 +178,7 @@
       "rationale": "The comparison measured the maximal implementation rather than the bounded capability.",
       "source": {
         "path": "kernel/docs/browser-status.md",
-        "sha256": "8f73456f653d23c16a3492232237649afce7b89aa36648fb9a573d43bbbfa072",
+        "sha256": "9e7ed3345060b1435251e27bff943054c29b259cdfdd65044bc7cb7abb2cb2aa",
         "needle": "> **A browser** | Unbounded. Chromium is 6.38M lines"
       },
       "needle": "> **A browser** | Unbounded. Chromium is 6.38M lines",
@@ -204,7 +204,7 @@
       "rationale": "Fetcher, parser, box model and bounded scripting have finite contracts and current implementation evidence.",
       "source": {
         "path": "kernel/docs/browser-status.md",
-        "sha256": "8f73456f653d23c16a3492232237649afce7b89aa36648fb9a573d43bbbfa072",
+        "sha256": "9e7ed3345060b1435251e27bff943054c29b259cdfdd65044bc7cb7abb2cb2aa",
         "needle": "**Every number there is correct and the conclusion does not follow.**"
       },
       "needle": "**Every number there is correct and the conclusion does not follow.**",
@@ -229,7 +229,7 @@
       "rationale": "The old aggregate printed Maze missing while still returning success.",
       "source": {
         "path": "kernel/HANDOFF.md",
-        "sha256": "3b54b13d163d042f8e4cca35f3bbc9b5057264f52ddbd43d0dbc4cbe46c1f71f",
+        "sha256": "1a00c6456d29d969a78c69a22cecd6f0faa00220cb06145ddf505efce515d03b",
         "needle": "It replaces the old aggregate `apps53.py` green that printed `Maze exists NO`"
       },
       "needle": "It replaces the old aggregate `apps53.py` green that printed `Maze exists NO`",
@@ -255,7 +255,7 @@
       "rationale": "Similar names and parent/payload relationships do not prove the exact bytes executed on another route.",
       "source": {
         "path": "kernel/docs/artifact-and-boot-route-registry-2026-08-22.md",
-        "sha256": "effcb4faa5c09fdf63ee298577acecafaf429bfcad295b4a4022222211feac15",
+        "sha256": "2591129a27bd647963a29e6210937be396532013aa97cdb2010d5022417d2d63",
         "needle": "runtime or hardware claim merely because a similarly named artifact passed."
       },
       "needle": "runtime or hardware claim merely because a similarly named artifact passed.",
@@ -279,7 +279,7 @@
       "rationale": "The real driver can light the panel from the harness, but no kernel path arms it.",
       "source": {
         "path": "kernel/HANDOFF.md",
-        "sha256": "3b54b13d163d042f8e4cca35f3bbc9b5057264f52ddbd43d0dbc4cbe46c1f71f",
+        "sha256": "1a00c6456d29d969a78c69a22cecd6f0faa00220cb06145ddf505efce515d03b",
         "needle": "**Nothing in the kernel arms `lt_armed`.** This runs from the host harness only."
       },
       "needle": "**Nothing in the kernel arms `lt_armed`.** This runs from the host harness only.",
@@ -295,7 +295,7 @@
       "id": "DEC-0012",
       "date": "2026-08-22",
       "action": "CORRECTION",
-      "status": "ACTIVE",
+      "status": "SUPERSEDED",
       "features": [
         "DV-031"
       ],
@@ -303,15 +303,15 @@
       "rationale": "Raw bytes are exposed but no x/y/button decoder exists.",
       "source": {
         "path": "kernel/HANDOFF.md",
-        "sha256": "3b54b13d163d042f8e4cca35f3bbc9b5057264f52ddbd43d0dbc4cbe46c1f71f",
-        "needle": "it is a **transport with no decoder**."
+        "sha256": "1a00c6456d29d969a78c69a22cecd6f0faa00220cb06145ddf505efce515d03b",
+        "needle": "it is a **transport with\nno decoder**."
       },
-      "needle": "it is a **transport with no decoder**.",
+      "needle": "it is a **transport with\nno decoder**.",
       "legacy_labels": [],
       "supersedes": [],
-      "replaced_by": null,
+      "replaced_by": "DEC-0020",
       "obsolete_evidence": [
-        "Any I2C-HID input-provider completion claim based on raw-byte diagnostics"
+        "The former no-decoder state and any completion claim based only on raw-byte diagnostics"
       ],
       "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
     },
@@ -328,7 +328,7 @@
       "rationale": "Source possession and successful builds do not create a distribution license.",
       "source": {
         "path": "kernel/HANDOFF.md",
-        "sha256": "3b54b13d163d042f8e4cca35f3bbc9b5057264f52ddbd43d0dbc4cbe46c1f71f",
+        "sha256": "1a00c6456d29d969a78c69a22cecd6f0faa00220cb06145ddf505efce515d03b",
         "needle": "There is currently no repository license file, so public release is explicitly"
       },
       "needle": "There is currently no repository license file, so public release is explicitly",
@@ -350,7 +350,7 @@
       "rationale": "The archive remains unsigned and in the same uncommitted worktree with zero off-host copies.",
       "source": {
         "path": "kernel/docs/mp00-source-snapshot-2026-08-24.md",
-        "sha256": "2a51b2df6a37ab16dd3acc2c2d31d12e55a27fbd336aa63a9873273433ab8781",
+        "sha256": "deb3414d1a80b25891d35f6feed884f1e78d01828ee4a2b2251f9e09cdff0bdb",
         "needle": "This is `PARTIAL_CURRENT`, not complete source custody."
       },
       "needle": "This is `PARTIAL_CURRENT`, not complete source custody.",
@@ -373,7 +373,7 @@
       "rationale": "PATH aliases, package upgrades and firmware drift must make the gate red until inspected.",
       "source": {
         "path": "kernel/docs/dependency-lock-truth-2026-08-23.md",
-        "sha256": "62d5c819b69c712731d5c694e4b8da72255492e900305dbfac67093aa0c0ef7d",
+        "sha256": "6fd60eeeb3d3c73e2308faa65899f212604219fbc2c6eeaf12eab13510a6d3c0",
         "needle": "The landing gate checks but never rewrites this file."
       },
       "needle": "The landing gate checks but never rewrites this file.",
@@ -395,7 +395,7 @@
       "rationale": "Dropping them hides identity scope; calling them compiled invents reachability.",
       "source": {
         "path": "kernel/docs/mp00-build-graph-2026-08-24.md",
-        "sha256": "4fedd657c7a1575073578a5c9baec9259edd8c6939510be6dabb6e07ce950fa6",
+        "sha256": "5c5bfa04b3349cb238e8fa269faf934879b6b3f5acdd6461c37c2ed193777b9d",
         "needle": "`declared-scope-only`; it does not call it compiled"
       },
       "needle": "`declared-scope-only`; it does not call it compiled",
@@ -443,7 +443,7 @@
       "rationale": "Target integration requires an idle contained rebuild and later per-CPU/IRQ/service ownership.",
       "source": {
         "path": "kernel/docs/mp00-structured-event-trace-2026-08-24.md",
-        "sha256": "885b035a747e43e6089481f2f403b46f6b1c034d7512e10ba7de3426c9eb2e31",
+        "sha256": "98e79b8fe3dda4e89f5dfccca0b934bf563147a907ba7017dc932dd192448b22",
         "needle": "This is `PARTIAL_CURRENT`. It is not in `kernel/SOURCES`"
       },
       "needle": "This is `PARTIAL_CURRENT`. It is not in `kernel/SOURCES`",
@@ -476,11 +476,35 @@
         "Partial pre-freeze gate output"
       ],
       "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
+    },
+    {
+      "id": "DEC-0020",
+      "date": "2026-08-24",
+      "action": "REVERSAL",
+      "status": "ACTIVE",
+      "features": [
+        "DV-031"
+      ],
+      "decision": "Recognize the physical I2C-HID transport, report decoder and compositor route while keeping touchpad feel gestures open.",
+      "rationale": "A physical ThinkPad trace proves cursor movement and click edges, superseding the older no-decoder state without inventing tap, scroll or feel completion.",
+      "source": {
+        "path": "kernel/HANDOFF.md",
+        "sha256": "1a00c6456d29d969a78c69a22cecd6f0faa00220cb06145ddf505efce515d03b",
+        "needle": "Transport, decoder and compositor routing are therefore physical"
+      },
+      "needle": "Transport, decoder and compositor routing are therefore physical",
+      "legacy_labels": [],
+      "supersedes": [
+        "DEC-0012"
+      ],
+      "replaced_by": null,
+      "obsolete_evidence": [],
+      "evidence_ceiling": "attributable source decision; runtime effect requires its feature receipt"
     }
   ],
   "legacy_source_inventory": {
     "path": "kernel/docs/DECISIONS.md",
-    "sha256": "5298a0a5e8ec2ca949db8242cb5947921b5f8f2c40db6fb30b7e49265354efbc",
+    "sha256": "254f320f0f73d3c1eaedfff22f4901bddfcc278f4e2ce0f8f71718d7a81bb048",
     "labels": [
       "1",
       "2",
@@ -542,7 +566,7 @@
       ],
       "source_line": 11,
       "source_heading": "**1. Mechanism in C, policy in zl.**",
-      "section_sha256": "74e454baf7e2a6d39cc4c232bed6f7bbe0665f14969065dd8533254290bb9494",
+      "section_sha256": "a71a65b6cb3072fc6863e70c4bb3ed3fefe88c39b78a1e8488284faef3593fbf",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -659,7 +683,7 @@
       ],
       "source_line": 87,
       "source_heading": "**10. The renderer is not the problem.**",
-      "section_sha256": "cac8135e5e024a18977fd7132c19b88ef94e7409f55ed6714857b2bdecb00cad",
+      "section_sha256": "322b47c2dcd48fcbc186cdc40d9d6ad3c17b9a17f06bbb0b97185b60804fb09b",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -685,7 +709,7 @@
       ],
       "source_line": 96,
       "source_heading": "**12. `fb_shadow` fixed and SHIPPED.**",
-      "section_sha256": "0b76f58aa7f63269f2c5f04d9ade824888e5f62d0544c366c363e59df89d9304",
+      "section_sha256": "6c4e5308f659063a57836b242b47b9be89279b00f3425aa549149feb2fc059f0",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -867,20 +891,20 @@
       ],
       "source_line": 211,
       "source_heading": "**26. \"The v10 mockup is ~95% achievable\" \u2014 WRONG.**",
-      "section_sha256": "1937faf6c5af6c253538fd0fd3a8bc5fab1e9e6b264380d437c056f200b28c0a",
+      "section_sha256": "d7bc9b4be7dd09ec2a48414b9f17b24457960ccb7f8a4acc3972c8f6628007a1",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
     {
       "label": "27",
-      "title": "GRAPHICSPLAN.md is stale for zlOS",
+      "title": "docs/archive/superseded/GRAPHICSPLAN.md is stale for zlOS",
       "feature_scope": [
         "EV-011",
         "DS-001"
       ],
       "source_line": 217,
-      "source_heading": "**27. `GRAPHICS_PLAN.md` is stale for zlOS**",
-      "section_sha256": "77442d7f0c898ec76afe5af7a1120e6bb9763b433c65de190f7246831b7500a6",
+      "source_heading": "**27. `docs/archive/superseded/GRAPHICS_PLAN.md` is stale for zlOS**",
+      "section_sha256": "a33031cfe1b6e39bfbe44dd5e639ae3daecfe6955a1d4a6f085b211ba31f32e4",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -893,7 +917,7 @@
       ],
       "source_line": 179,
       "source_heading": "**28. The toolkit is immediate mode, and the constraints chose it.**",
-      "section_sha256": "e380d59c74ebe044e8e07c97b1ed6d3a8926d3156cf1dc1ea4b8b0696a42a115",
+      "section_sha256": "ae1c415b737aef893efd2e4949ff1cbb00ee465554a410bb6d854e95826d500e",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -906,7 +930,7 @@
       ],
       "source_line": 289,
       "source_heading": "### #29 | Blur \u2014 **the northstar wins.** Removed, and the reason is not aesthetic",
-      "section_sha256": "0fa063e461234b39357de5c02e68ed5a1e8d712936401f5d5dfa6aaaabde42b0",
+      "section_sha256": "8bcf4bccc0a9d71ff8c0bb63b5d5d229373c04939f54d70a3ebaf6e8f310b346",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -971,7 +995,7 @@
       ],
       "source_line": 471,
       "source_heading": "### #34 | The two palettes \u2014 **`kernel.zl` wins, and the reference says so itself.** Closes E",
-      "section_sha256": "cabe35d06f506e0931b6a9546628db1cd68e52ab8623b5c0ea4c5e45523cd845",
+      "section_sha256": "2254ed234aff76ac5bf79a81805d74cd3142635ee2403185dc8d5c9407580443",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -1010,7 +1034,7 @@
       ],
       "source_line": 633,
       "source_heading": "### #37 | `intel_find()` runs at boot, and `gpu_frames` exists so the result is visible",
-      "section_sha256": "03d2c6e112655bd70d0113e58c4ff8f14c61708dee79f04cdeb2cbd4f3251b88",
+      "section_sha256": "a51ad26bb8785403d2ef79847febf948063d9df627cac54cee73925fcead2aaf",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -1023,7 +1047,7 @@
       ],
       "source_line": 709,
       "source_heading": "### #38 | What a different model family found in #34\u2013#37, and one of the four was a P1",
-      "section_sha256": "c5da81d44c9a72ac77dbfe55f2f4f73c361e097fa455bd4739cedb746b8ed4f5",
+      "section_sha256": "991fca28f1fc9b3799616dd148ab83ade977162ba40afbc9dc3f9bd57218f384",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -1036,7 +1060,7 @@
       ],
       "source_line": 775,
       "source_heading": "### #39 | SMP bands: two docs written the same day disagree, and the code settles it \u2014 **do not turn them on**",
-      "section_sha256": "0ce66b60d3974fc4eec046a1bf358679404fe168b476f1cbbc505caafe395432",
+      "section_sha256": "4b533cbcf17d1a7f265d0b96c2b54993cce3abe7efe7a77471860305e37af35b",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -1062,7 +1086,7 @@
       ],
       "source_line": 855,
       "source_heading": "### #41 | The resize grip was drawn twice; deleted the earlier, dimmer, wrongly-scaled one",
-      "section_sha256": "f6ff850f535f1f799aebc6592d08ecca3bf6069ccd57a848c262c7e0a3673504",
+      "section_sha256": "c11970985d4c27f2e0a52b365f40c1ed2501f8c6e3416a6aa4910a62ce1b2930",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -1075,7 +1099,7 @@
       ],
       "source_line": 876,
       "source_heading": "### #42 | The window fade blended its saved backdrop at the wrong origin, and I widened its scissor too",
-      "section_sha256": "557815866e687d3330f7003f42bd58d48628bf4ac1b882745adb6847f8c93503",
+      "section_sha256": "443602e0c1007c8010c7ae744b5d8f6eca082a927b88a6fb5a8578fdd6aff28b",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -1088,7 +1112,7 @@
       ],
       "source_line": 972,
       "source_heading": "### #43 | The snap preview: snapping worked, but you could not see where it would land",
-      "section_sha256": "848b655771cfc0a38b3cfd963223f9e7813f14a06a9551d5763e1ea365b3043f",
+      "section_sha256": "d69d843346700739ee3fcce4cb4494f318ce38c61c7bfc76a7adeabcd2e45e9f",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -1114,7 +1138,7 @@
       ],
       "source_line": 241,
       "source_heading": "### #E2 | The program arena goes at 8 MiB, below the high-RAM map, not above it",
-      "section_sha256": "2eef17633b3d7d32caf02d8c2d63f3074138f312930a63d89748f3872a98985f",
+      "section_sha256": "fef047c81c403e361bb1c64dce767518ff99bf9c283ab0762a288b9f1386e723",
       "semantics_status": "NORMALIZED_SOURCE_HEADING_AND_SECTION",
       "evidence_ceiling": "source-normalized decision section; implementation effect requires feature evidence"
     },
@@ -1146,7 +1170,7 @@
     }
   ],
   "coverage": {
-    "normalized_records": 19,
+    "normalized_records": 20,
     "legacy_labels_indexed": 47,
     "legacy_labels_semantically_normalized": 47,
     "legacy_labels_remaining": 0,
@@ -1201,11 +1225,11 @@
     ]
   },
   "counts": {
-    "records": 19,
+    "records": 20,
     "status": {
       "ACTIVE": 16,
       "QUALIFIED": 1,
-      "SUPERSEDED": 2
+      "SUPERSEDED": 3
     },
     "action": {
       "CORRECTION": 4,
@@ -1213,7 +1237,7 @@
       "DEPRECATION": 1,
       "MIGRATION": 1,
       "OPERATIONS": 1,
-      "REVERSAL": 2
+      "REVERSAL": 3
     }
   },
   "open_gaps": {
@@ -1223,10 +1247,10 @@
     "automatic_migration_from_changed_source": false,
     "user_visible_history_viewer": false
   },
-  "evidence_ceiling": "19 high-impact records plus source-normalized semantics for all 47 legacy labels; not complete system history or independent approval",
+  "evidence_ceiling": "20 high-impact records plus source-normalized semantics for all 47 legacy labels; not complete system history or independent approval",
   "weakest_link": "system-wide non-DECISIONS.md sources, independent approval, automatic migration and target history UI remain open",
   "generator": {
     "path": "kernel/gen-decision-ledger.py",
-    "sha256": "b3033b01e6c14d4688e6cb1e5481633ffa0edfa62d71d9e2a002af1cafcc6d5d"
+    "sha256": "7e8d140a6d08db61056307a560fc6ac45d9f0c0d3082c49446d884d367e6ac20"
   }
 }

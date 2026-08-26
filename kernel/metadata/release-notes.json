@@ -2,7 +2,7 @@
   "schema": "zlos.release-notes.v1",
   "result": "PASS_UNRELEASED_WITH_BLOCKERS",
   "feature_id": "EV-027",
-  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
   "release": {
     "state": "UNRELEASED_DEVELOPMENT",
     "version": null,
@@ -14,47 +14,47 @@
   },
   "inputs": [
     {
-      "path": "kernel/build-identity.json",
-      "sha256": "22414d9ea92b9d48bc68fc2160fe6f950e39bffcb723adb29923f4ad05da524f",
+      "path": "kernel/metadata/build-identity.json",
+      "sha256": "a0acdf8256ab07475512e0287310b27e435cf09245cc60696be187a33c7d1544",
       "schema": "zlos.build-input-identity.v1"
     },
     {
-      "path": "kernel/decision-ledger.json",
-      "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+      "path": "kernel/metadata/decision-ledger.json",
+      "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
       "schema": "zlos.decision-ledger.v1"
     },
     {
-      "path": "kernel/artifact-registry.json",
-      "sha256": "8378d40d2f0a0f5cc5dff9a334be31911fe1d5a8f257845cc8d30870865d96c1",
+      "path": "kernel/metadata/artifact-registry.json",
+      "sha256": "d279b2373f57684b95376f46bfbda0dd4cbadf0ac4468a7ba5ee5fc356a79fa3",
       "schema": "zlos.artifact-boot-registry.v1"
     },
     {
-      "path": "kernel/app-evidence.json",
+      "path": "kernel/metadata/app-evidence.json",
       "sha256": "8e27cbee3a8107f9a2e3f76758939821fa5898dc0189d7ac975171437ca6b38d",
       "schema": "zlos.application-evidence-registry.v1"
     },
     {
-      "path": "kernel/license-registry.json",
-      "sha256": "1f36d1d3630970ebf6711b30b4c13d192ad03e658e0dea9b025b4d44f0559395",
+      "path": "kernel/metadata/license-registry.json",
+      "sha256": "d343cc65cd311988821c88fdce44e049f1977e10d9ce74304b844b5502226fee",
       "schema": "zlos.license-provenance-registry.v1"
     },
     {
       "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
-      "sha256": "4e7c5aeed8be8c11182dd2f0e7686233efba97367501df992f3ac551e844de21",
+      "sha256": "4c272307ecc781575d4d56af37ab1efc6f66c634c257f214cf83e30492aed806",
       "schema": "zlos.source-snapshot-receipt.v1"
     },
     {
-      "path": "kernel/toolchain-manifest.json",
-      "sha256": "2a0a0481c50a81eef7a1e179ff4f306527a7fd5792ea4b766f4659e51ffa9f22",
+      "path": "kernel/metadata/toolchain-manifest.json",
+      "sha256": "bcbdd494c94f74bd8b5d74b7d99a7c931917941cb83ec844c08a575055b07f6c",
       "schema": "zlos.toolchain-manifest.v1"
     },
     {
-      "path": "kernel/build-graph.json",
-      "sha256": "184110f6c8d281caa7c71b292765ed42987aed56590ce22ced11619f35c55194",
+      "path": "kernel/metadata/build-graph.json",
+      "sha256": "a78957da9948b0963a1b9563310d03e5e6c4d745d2b1687d8e9bd7d34870e633",
       "schema": "zlos.build-graph.v1"
     },
     {
-      "path": "kernel/hosttest/test-run-receipt.json",
+      "path": "kernel/tests/host/test-run-receipt.json",
       "sha256": "9f091d6276630a0087bfe7cc03b481fea1d1cefb29b43730e4db80a91dceca2f",
       "schema": "zlos.host-test-run-receipt.v1"
     },
@@ -64,34 +64,54 @@
       "schema": "zlos.host-benchmark-receipt.v1"
     },
     {
-      "path": "kernel/visual-registry.json",
-      "sha256": "f7c6171e66ad750f918803c3a24c3bba57890cfc596e79abe61ab0217bce9b0b",
+      "path": "kernel/metadata/visual-registry.json",
+      "sha256": "ff546e6516dbeea042d513f4aa06d429618b027962139d814c4eeab2ad4d76e4",
       "schema": "zlos.visual-evidence-registry.v1"
     },
     {
-      "path": "kernel/accessibility-registry.json",
-      "sha256": "86fb47133c8017ef22740c64cca408dff3119a924a93173ec08b8d507a0008ba",
+      "path": "kernel/metadata/accessibility-registry.json",
+      "sha256": "6643ebf3ef6b24e5319a8ec9e694fa2993ce0f011d5922046626351be98acb99",
       "schema": "zlos.accessibility-proof-registry.v1"
     },
     {
-      "path": "kernel/security-registry.json",
-      "sha256": "8c6b73406fd6b617a10c00f8a2540397782a0197d18ae265b4204aa0e32261ae",
+      "path": "kernel/metadata/security-registry.json",
+      "sha256": "c9cf4ce412a9d47772beff1520e99531865bd4ffa39ccb648b993fc23788c300",
       "schema": "zlos.security-claim-registry.v1"
     },
     {
-      "path": "kernel/observability-registry.json",
-      "sha256": "b7dd0e1a365b0b5ba3048baea2723890cdc50c00983ce83bea5e1fb62d74992a",
+      "path": "kernel/metadata/observability-registry.json",
+      "sha256": "2a69620f03f31f914de447bef94b0374a629e435b7d96ebadae20c9d89620950",
       "schema": "zlos.observability-registry.v1"
+    }
+  ],
+  "historical_evidence": [
+    {
+      "path": "kernel/metadata/artifact-registry.json",
+      "subject_build_identity": "1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04",
+      "current_build_bound": false,
+      "evidence_ceiling": "dated evidence for its named subject build only"
+    },
+    {
+      "path": "kernel/metadata/app-evidence.json",
+      "subject_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+      "current_build_bound": false,
+      "evidence_ceiling": "dated evidence for its named subject build only"
+    },
+    {
+      "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
+      "subject_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+      "current_build_bound": false,
+      "evidence_ceiling": "dated evidence for its named subject build only"
     }
   ],
   "operational_sources": [
     {
       "path": "gates/run-land-gate-contained.sh",
-      "sha256": "d4f3fec2b635c80310a431e52bb691b93d6d357aecb864b15408d6c297604005"
+      "sha256": "84569f83f03dc05e0076decd6fb5c6f4aedda3078c4c8f9fd2d2ddca6e56ed85"
     },
     {
-      "path": "kernel/verify-sources.sh",
-      "sha256": "5ffdff9df321ccedf7db747b5648480ee2a5e4c524ac00bf617753b876a3f1a6"
+      "path": "kernel/tools/checks/verify-sources.sh",
+      "sha256": "cc6da47d6ee4f593dd2564bcd047f943dca8dbefc5b741a5c5b03afa4d256e28"
     }
   ],
   "changes": [
@@ -111,7 +131,7 @@
       "compatibility": "No public ABI change; preserve the current C/zl boundary until the replacement language/runtime contract is proved.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0001"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -132,7 +152,7 @@
       "compatibility": "Rendering output must retain the five-path clipping oracle at every supported mode.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0003"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -153,7 +173,7 @@
       "compatibility": "Keep the existing drag fallback until retained damage repaint passes equivalent host and target gates.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0004"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -175,7 +195,7 @@
       "compatibility": "Intel display/blitter work remains bounded native-provider work; Linux i915/Mesa ABI compatibility is not promised.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0005"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -196,7 +216,7 @@
       "compatibility": "Every kernel compile route must consume kernel/SOURCES; route-local source lists are unsupported.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0006"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -217,7 +237,7 @@
       "compatibility": "The supported browser contract is the explicit bounded compatibility ledger, not Chrome pixel/API parity.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0008"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -238,7 +258,7 @@
       "compatibility": "Application identities and routes must match the generated manifest; blank or dead catalogue IDs are invalid.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0009"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -260,7 +280,7 @@
       "compatibility": "A receipt applies only to the exact artifact and route it names.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0010"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -280,28 +300,8 @@
       "compatibility": "Intel host-harness modesetting is not native-boot display compatibility.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0011"
-      },
-      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
-    },
-    {
-      "decision_id": "DEC-0012",
-      "date": "2026-08-22",
-      "change_type": "CORRECTION",
-      "decision_status": "ACTIVE",
-      "feature_ids": [
-        "DV-031"
-      ],
-      "audience": "USERS_AND_DEVELOPERS",
-      "user_visible_candidate": true,
-      "summary": "Classify I2C-HID as a raw transport, not an input provider, until report decoding and session routing exist.",
-      "rationale": "Raw bytes are exposed but no x/y/button decoder exists.",
-      "compatibility": "I2C-HID raw transport diagnostics are not input-event compatibility.",
-      "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
-        "record_id": "DEC-0012"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
     },
@@ -321,7 +321,7 @@
       "compatibility": "No public redistribution channel is supported until licensing authority exists.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0013"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -341,7 +341,7 @@
       "compatibility": "The local source archive is recovery material, not a signed/off-host repository release.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0014"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -362,7 +362,7 @@
       "compatibility": "Tool or firmware byte drift requires an inspected lock refresh; silent compatibility is rejected.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0015"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -382,7 +382,7 @@
       "compatibility": "Scope-only inputs affect identity but are not claimed as compiled objects.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0016"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -403,7 +403,7 @@
       "compatibility": "Uncontained full landing-gate invocation is unsupported on this host.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0017"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -424,7 +424,7 @@
       "compatibility": "The structured-event core is host-only and provides no shipped event-service ABI yet.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0018"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -444,8 +444,28 @@
       "compatibility": "The interrupted complete gate provides no green compatibility or release claim.",
       "evidence": {
         "path": "kernel/decision-ledger.json",
-        "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
         "record_id": "DEC-0019"
+      },
+      "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
+    },
+    {
+      "decision_id": "DEC-0020",
+      "date": "2026-08-24",
+      "change_type": "REVERSAL",
+      "decision_status": "ACTIVE",
+      "feature_ids": [
+        "DV-031"
+      ],
+      "audience": "USERS_AND_DEVELOPERS",
+      "user_visible_candidate": true,
+      "summary": "Recognize the physical I2C-HID transport, report decoder and compositor route while keeping touchpad feel gestures open.",
+      "rationale": "A physical ThinkPad trace proves cursor movement and click edges, superseding the older no-decoder state without inventing tap, scroll or feel completion.",
+      "compatibility": "The physical transport/decoder receipt does not promote tap, scroll, gesture feel or current-build hardware proof.",
+      "evidence": {
+        "path": "kernel/decision-ledger.json",
+        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "record_id": "DEC-0020"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
     }
@@ -466,6 +486,13 @@
         "The original browser rejection",
         "The original 2,900-line optimistic count"
       ]
+    },
+    {
+      "decision_id": "DEC-0012",
+      "replaced_by": "DEC-0020",
+      "obsolete_evidence": [
+        "The former no-decoder state and any completion claim based only on raw-byte diagnostics"
+      ]
     }
   ],
   "migrations": [
@@ -484,7 +511,7 @@
       "scope": "window-drag-rendering",
       "required_now": false,
       "instruction": "Retire snapshot-and-sticker dragging only after retained damage repaint passes equivalent gates.",
-      "verification": "kernel/hosttest/fbbench",
+      "verification": "kernel/tests/host/fbbench",
       "recovery": "Keep the proven fallback until replacement evidence exists; do not delete first."
     },
     {
@@ -508,7 +535,7 @@
       "summary": "Public redistribution authority is absent.",
       "facts": {
         "public_release_blocked": true,
-        "inputs_without_established_grant": 123
+        "inputs_without_established_grant": 146
       },
       "source": "kernel/license-registry.json"
     },
@@ -537,7 +564,7 @@
         "hardware_skips": 3,
         "not_run": 11
       },
-      "source": "kernel/hosttest/test-run-receipt.json"
+      "source": "kernel/tests/host/test-run-receipt.json"
     },
     {
       "id": "ISSUE-004",
@@ -563,7 +590,7 @@
       ],
       "summary": "Visual assets are not bound to the current build.",
       "facts": {
-        "assets": 46,
+        "assets": 41,
         "current_build_bound": 0,
         "variant_dimensions_open": 6
       },
@@ -693,7 +720,7 @@
     }
   ],
   "compatibility": {
-    "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+    "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
     "dirty_development_build": true,
     "artifact_names": [
       "BOOTX64.EFI",
@@ -722,6 +749,8 @@
     ],
     "application_identities": 62,
     "application_lifecycle_qemu_proved": 62,
+    "artifact_snapshot_current_build_bound": false,
+    "application_evidence_current_build_bound": false,
     "physical_exact_hash_proofs": 0,
     "public_distribution_supported": false
   },
@@ -729,7 +758,7 @@
     "unreleased_change_candidates": 17,
     "user_visible_candidates": 6,
     "published_entries": 0,
-    "superseded_records_retained": 2,
+    "superseded_records_retained": 3,
     "migrations": 3,
     "known_issues": 12,
     "recovery_paths": 3,
@@ -743,11 +772,14 @@
     "automatic_change_classification_complete": false,
     "user_data_migration_inventory_complete": false,
     "previous_release_rollback_artifact_available": false,
-    "historical_release_series_complete": false
+    "historical_release_series_complete": false,
+    "current_artifact_snapshot_missing": true,
+    "current_qemu_evidence_missing": true,
+    "current_host_benchmark_missing": true
   },
   "generator": {
-    "path": "kernel/gen-release-notes.py",
-    "sha256": "610126d25ed20c10b01150259a1bd10c51fc5214c43168ac7dcc853936be5891"
+    "path": "kernel/tools/generators/gen-release-notes.py",
+    "sha256": "2a69c5c11d9c1884352f5ebc75f58981477ec5476dea9cfa4e5aa326607fd17f"
   },
   "evidence_ceiling": "generated unreleased development changelog; not a versioned, signed, distributed or runtime-complete release",
   "weakest_link": "there is no public release generation, redistribution authority, signed note, complete migration inventory or previous-generation rollback artifact"

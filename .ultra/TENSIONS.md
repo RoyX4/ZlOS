@@ -162,37 +162,37 @@ regression check.
 
 ---
 
-## T-8 — Generated evidence manifests disagree on build identity. OPEN.
+## T-8 — Generated evidence manifests disagree on build identity. CLOSED.
 
-The retained visual evidence moved from ignored `kernel/exercise-out/` into
-`kernel/docs/evidence/exercises/2026-08-24/`. The visual and accessibility
-registries now regenerate independently, but the downstream release-note,
-provenance-viewer and joined-evidence generators cannot refresh honestly.
+The authoritative current build-input identity is
+`7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d`
+over 146 declared inputs. Its digest now covers source/toolchain/route fields,
+while Git head, branch and build-input dirty state remain conservative
+generation context. This removes the impossible cycle in which writing and
+committing the checked-in identity changed the identity itself.
 
-The checked-in inputs contain three incompatible build identities:
+Source snapshot, dependency, toolchain, license, wrapper, build-recipe, visual,
+accessibility, decision, event-schema, security and observability registries
+regenerate on that identity. Release notes, the JSON/HTML provenance viewer,
+the joined evidence registry and the 906-row feature status then regenerate in
+dependency order from the same current identity.
 
-| Identity | Current owners |
-|---|---|
-| `2c873b665279da5a53c3a58bfa9cdd1c53a8a36f73702259a1bb991c1524d90e` | build identity, license, toolchain, visual and accessibility registries |
-| `1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04` | source/build graph, wrapper and artifact registries |
-| `85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13` | decision, benchmark, security, observability, release, provenance and joined-evidence registries |
+The dated artifact, application, init, reproducibility, benchmark, crash,
+event-trace and adversarial receipts were not relabelled. They remain exact
+evidence for their original `1f9e16ad...`, `85027b15...` or later historical
+subject builds. Current registries carry those subject identities with
+`current_build_bound: false`; current artifact, QEMU, host-test and benchmark
+gaps remain explicit. Mutation tests reject changing those flags to true.
 
-`python3 kernel/tools/generators/gen-release-notes.py --check --selftest`
-currently stops with `release-note manifests disagree on build identity`.
-The provenance check independently stops with `provenance inputs disagree on
-build identity`, and the joined-evidence check stops with `registry build
-identities disagree`. After the Handoff authority correction, the decision
-ledger check also stops with `decision ledger has stale build context`; it must
-not be refreshed alone against the incompatible registry families.
-Consequently, `kernel/metadata/provenance-viewer.json` and
-`kernel/docs/provenance-viewer.html` remain dated artifacts: they still report
-46 visuals while the current visual registry discovers 41.
+**Closure evidence:** every affected generator passes `--check --selftest`.
+The current joined registry reports 0 current-build-bound artifacts, 9
+historical artifacts, 0 current-build-bound QEMU routes and 6 historical QEMU
+routes. Feature status demotes stale runtime claims to `HISTORICAL_ONLY` or
+`PARTIAL_HISTORICAL`; it does not promote historical execution as current.
 
-**Close by:** choose or regenerate one authoritative build identity, bring every
-input registry onto it from the same source/artifact snapshot, then regenerate
-release notes, provenance viewer, evidence registry and feature status in
-dependency order. All generator `--check --selftest` gates must pass before the
-viewer is described as current.
+**Irreducible historical boundary:** old exact artifact/runtime receipts cannot
+be made current without producing and testing new artifacts. Rewriting their
+identity would destroy provenance, so they remain historical by design.
 
 ---
 

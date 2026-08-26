@@ -55,7 +55,7 @@ def sha256(path: Path) -> str:
 def validate(value: dict) -> None:
     if value.get("schema") != "zlos.observability-registry.v1":
         raise ValueError("wrong observability schema")
-    if value.get("result") != "PASS_WITH_OPEN_GAPS":
+    if value.get("result") != "PASS_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS":
         raise ValueError("observability registry overpromoted current evidence")
     rows = value.get("capabilities", [])
     if [row.get("id") for row in rows] != [row[0] for row in CAPABILITIES]:
@@ -77,6 +77,8 @@ def validate(value: dict) -> None:
         "qemu_crash_receipts": 1,
         "durable_crash_receipts": 0,
         "typed_structured_event_fields": 28,
+        "current_build_bound_qemu_receipts": 0,
+        "historical_qemu_receipts": 7,
     }
     if value.get("counts") != expected_counts:
         raise ValueError("observability counts drift")
@@ -89,6 +91,11 @@ def validate(value: dict) -> None:
         raise ValueError("boot transcript identities missing")
     if any(row.get("raw_log_preserved") is not False for row in boot):
         raise ValueError("unearned raw boot-log preservation claim")
+    if any(row.get("current_build_bound") is not False \
+           or len(row.get("subject_build_identity", "")) != 64 for row in boot):
+        raise ValueError("historical boot transcript was promoted as current")
+    if value.get("qemu_crash_receipt", {}).get("current_build_bound") is not False:
+        raise ValueError("historical crash receipt was promoted as current")
     if len(value.get("build_identity", "")) != 64:
         raise ValueError("observability build identity missing")
 
@@ -97,7 +104,7 @@ def build() -> dict:
     identity = json.loads((METADATA / "build-identity.json").read_text())["identity_sha256"]
     event_schema_path = METADATA / "event-schema.json"
     event_schema = json.loads(event_schema_path.read_text())
-    if event_schema.get("result") != "PASS_HOST_SCHEMA_TARGET_UNINTEGRATED" or \
+    if event_schema.get("result") != "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED" or \
             event_schema.get("build_identity") != identity or \
             event_schema.get("counts", {}).get("wire_fields") != 28 or \
             event_schema.get("counts", {}).get("target_emitters") != 0:
@@ -106,8 +113,9 @@ def build() -> dict:
     for relative in BOOT_RECEIPTS:
         path = KERNEL_ROOT / relative
         receipt = json.loads(path.read_text())
-        if receipt.get("result") != "PASS" or receipt.get("shipped_build_identity", {}).get("id") != identity:
-            raise ValueError(f"{relative}: stale boot receipt")
+        subject_identity = receipt.get("shipped_build_identity", {}).get("id")
+        if receipt.get("result") != "PASS" or len(subject_identity or "") != 64:
+            raise ValueError(f"{relative}: invalid historical boot receipt")
         transcripts.append({
             "path": "kernel/" + relative,
             "receipt_sha256": sha256(path),
@@ -115,6 +123,8 @@ def build() -> dict:
             "boot_log_sha256": receipt["boot_log_sha256"],
             "raw_log_preserved": False,
             "evidence_ceiling": receipt["evidence"],
+            "subject_build_identity": subject_identity,
+            "current_build_bound": subject_identity == identity,
         })
     host_receipt_path = KERNEL_ROOT / "tests/host/test-run-receipt.json"
     host_receipt = json.loads(host_receipt_path.read_text())
@@ -123,8 +133,8 @@ def build() -> dict:
         raise ValueError("heap/crash host proof is not passing")
     crash_path = KERNEL_ROOT / CRASH_RECEIPT
     crash = json.loads(crash_path.read_text())
-    if crash.get("result") != "PASS" or crash.get("build_identity") != identity:
-        raise ValueError("QEMU crash receipt is missing or stale")
+    if crash.get("result") != "PASS" or len(crash.get("build_identity", "")) != 64:
+        raise ValueError("QEMU crash receipt is missing or invalid")
     record = crash.get("record", {})
     if record.get("vector") != 6 or record.get("has_error") != 0 \
             or record.get("ip") != crash.get("kernel_symbol_ip") \
@@ -137,12 +147,12 @@ def build() -> dict:
             or "last_record.magic = CRASH_RECORD_MAGIC" not in crash_source:
         raise ValueError("fault-record source boundary drift")
     ceilings = {
-        "QEMU_HASH_ONLY": "QEMU receipt hash only",
-        "QEMU_PROVED": "exact QEMU target behavior",
-        "QEMU_PROVED_PARTIAL": "exact QEMU target behavior, explicitly partial fields",
-        "HOST_PROVED_LIMITED": "host behavior only",
-        "HOST_PROVED_CORE": "host-proved core, explicitly target-unintegrated",
-        "HOST_PROVED_PARTIAL": "host-proved partial behavior",
+        "QEMU_HASH_ONLY": "historical QEMU receipt hash only",
+        "QEMU_PROVED": "historical exact QEMU target behavior",
+        "QEMU_PROVED_PARTIAL": "historical exact QEMU target behavior, explicitly partial fields",
+        "HOST_PROVED_LIMITED": "historical host behavior only",
+        "HOST_PROVED_CORE": "historical host-proved core, explicitly target-unintegrated",
+        "HOST_PROVED_PARTIAL": "historical host-proved partial behavior",
         "SOURCE_ONLY": "source inspection only",
         "MISSING": "no current evidence",
     }
@@ -153,12 +163,16 @@ def build() -> dict:
     ]
     value = {
         "schema": "zlos.observability-registry.v1",
-        "result": "PASS_WITH_OPEN_GAPS",
+        "result": "PASS_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS",
         "build_identity": identity,
         "boot_transcripts": transcripts,
-        "host_test_receipt": {"path": "kernel/tests/host/test-run-receipt.json", "sha256": sha256(host_receipt_path)},
+        "host_test_receipt": {"path": "kernel/tests/host/test-run-receipt.json", "sha256": sha256(host_receipt_path),
+                              "subject_head": host_receipt.get("git", {}).get("head"),
+                              "current_build_bound": False},
         "qemu_crash_receipt": {"path": "kernel/" + CRASH_RECEIPT,
-                               "sha256": sha256(crash_path)},
+                               "sha256": sha256(crash_path),
+                               "subject_build_identity": crash["build_identity"],
+                               "current_build_bound": crash["build_identity"] == identity},
         "event_schema": {"path": "kernel/metadata/event-schema.json",
                          "sha256": sha256(event_schema_path),
                          "result": event_schema["result"],
@@ -188,10 +202,12 @@ def build() -> dict:
             "qemu_crash_receipts": 1,
             "durable_crash_receipts": 0,
             "typed_structured_event_fields": 28,
+            "current_build_bound_qemu_receipts": 0,
+            "historical_qemu_receipts": len(transcripts) + 1,
         },
         "open_gaps": [row["id"] for row in rows
                       if row["status"] not in ("QEMU_HASH_ONLY", "QEMU_PROVED")],
-        "evidence_ceiling": "source, host event-core and exact QEMU control-frame evidence; event core has no target emitter and crash evidence is not durable",
+        "evidence_ceiling": "current source inventory joined to historical host/QEMU receipts; no current-build execution, target emitter, or durable crash evidence",
         "weakest_link": "the structured core is externally serialized and target-unintegrated; general registers, stack symbols and durable recovery remain absent",
         "generator": {"path": "kernel/gen-observability-registry.py", "sha256": sha256(Path(__file__).resolve())},
     }
@@ -213,6 +229,9 @@ def selftest(value: dict) -> None:
     raw = copy.deepcopy(value)
     raw["boot_transcripts"][0]["raw_log_preserved"] = True
     mutations["invented-raw-log"] = raw
+    current = copy.deepcopy(value)
+    current["boot_transcripts"][0]["current_build_bound"] = True
+    mutations["invented-current-boot-proof"] = current
     typed = copy.deepcopy(value)
     typed["counts"]["typed_structured_event_fields"] = 29
     mutations["event-schema-field-drift"] = typed
@@ -255,7 +274,7 @@ def main() -> int:
         if args.check and (not OUTPUT.is_file() or json.loads(OUTPUT.read_text()) != value):
             raise ValueError("observability-registry.json is missing or stale")
         print(
-            "observability: PASS_WITH_OPEN_GAPS: "
+            f"observability: {value['result']}: "
             f"{value['counts']['qemu_proved']} QEMU-proved, "
             f"{value['counts']['qemu_proved_partial']} QEMU-partial, "
             f"{value['counts']['qemu_hash_only']} QEMU-hash, "

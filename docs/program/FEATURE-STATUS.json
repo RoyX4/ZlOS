@@ -3,23 +3,29 @@
   "result": "PASS_WITH_OPEN_GAPS",
   "source_catalogue_sha256": "646202b87733eaab09a1c81ac39964bca99e7e937ee19bbf7d0da783b29cb57b",
   "feature_map_sha256": "fe170e7242556db051e3cf50f096b5d6e9434307032ede6ea1fe7b2920ca4047",
-  "implementation_evidence_registry_sha256": "f7fdb144b291f0f1101d89ffcd6c9a21512cf2dadcb7e21eef9e19d7379eb1c0",
-  "decision_ledger_sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
-  "release_notes_sha256": "fd2af9b6aa18a5538d2c57faa9758fd5c43bba552a454fdad7334318321dda4f",
-  "provenance_viewer_sha256": "8ba4c6e41b479c7de50ba1e2c64bddde1e3f06fe55ed34bf7f230be2fdb66205",
-  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "implementation_evidence_registry_sha256": "3c195f4fd570a4877f4d8305160ca775691136c13ca3281a6621678560c70941",
+  "decision_ledger_sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+  "release_notes_sha256": "986a045a2d3303f843118717beec572d8ca8b7d48391e7de480ff9cd0e51ba91",
+  "provenance_viewer_sha256": "75a2d7f5749515db5973c6a3485d44de9b26e744df825c52a794681274f6294d",
+  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
   "implementation_tree": {
-    "path": "/home/roy/Documents/repos/zl-linux-master-program-foundation",
-    "head": "b8a00ec45ac1f9f955ba79ed63f0072540067d4e",
-    "branch": "codex/master-program-foundation",
-    "dirty": true,
-    "status_sha256": "a8258b5bc5e992a3ae0823635c7452ddd9b01f3cb049b2892de6c8724ee58eb2"
+    "path": ".",
+    "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+    "generation_git_context": {
+      "branch": "",
+      "dirty": true,
+      "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
+      "head": "69f11cf8e5792d4430c3f2ce7a07b472054af691"
+    },
+    "evidence_ceiling": "build-input generation context, not current checkout or artifact commit attestation"
   },
   "counts": {
     "total": 906,
-    "PARTIAL_CURRENT": 22,
+    "HISTORICAL_ONLY": 3,
+    "PARTIAL_CURRENT": 16,
+    "PARTIAL_HISTORICAL": 6,
     "PLANNED_UNPROVED": 877,
-    "PROVED_CURRENT": 7
+    "PROVED_CURRENT": 4
   },
   "global_blockers": {
     "public_release_blocked": true,
@@ -30,15 +36,15 @@
     "signed_toolchain_attestation_missing": true,
     "toolchain_source_archive_missing": true,
     "dependency_offline_rebuild_missing": true,
-    "dependency_source_archives_missing": 156,
+    "dependency_source_archives_missing": 145,
     "per_object_provenance_receipts_missing": true,
-    "build_graph_scope_only_inputs": 1,
+    "build_graph_scope_only_inputs": 12,
     "future_build_graph_outputs_missing": true,
     "physical_exact_hash_artifacts": 9,
     "failure_injection_open_families": 7,
     "hostile_corpus_open_families": 4,
     "performance_over_budget": 4,
-    "visual_unbound_assets": 46,
+    "visual_unbound_assets": 41,
     "accessibility_missing_capabilities": 9,
     "security_open_claims": 17,
     "decision_legacy_semantics_open": 0,
@@ -58,7 +64,11 @@
     "provenance_target_accessibility_missing": true,
     "provenance_remote_auth_missing": true,
     "provenance_public_release_missing": true,
-    "observability_open_capabilities": 12
+    "observability_open_capabilities": 12,
+    "current_artifact_snapshot_missing": true,
+    "current_qemu_evidence_missing": true,
+    "current_host_test_receipt_missing": true,
+    "current_host_benchmark_missing": true
   },
   "features": [
     {
@@ -106,7 +116,7 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "repository, commit, submodules, dirty state, patches, toolchain, and dependency digests recorded",
       "routes": [
-        "python3 kernel/gen-source-snapshot.py --check --selftest"
+        "python3 kernel/tools/generators/gen-source-snapshot.py --check --selftest"
       ],
       "artifacts": [
         "kernel/docs/receipts/source-snapshot-2026-08-24.json",
@@ -122,7 +132,7 @@
         {
           "root": "implementation",
           "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
-          "sha256": "4e7c5aeed8be8c11182dd2f0e7686233efba97367501df992f3ac551e844de21",
+          "sha256": "4c272307ecc781575d4d56af37ab1efc6f66c634c257f214cf83e30492aed806",
           "schema": "zlos.source-snapshot-receipt.v1",
           "result": "PASS_WITH_OPEN_CUSTODY_GAP"
         }
@@ -135,7 +145,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "all 123 exact build inputs are reconstructable, but the archive remains unsigned in the same uncommitted worktree"
+      "weakest_evidence": "all 146 exact build inputs are reconstructable, but the archive remains unsigned in the same worktree"
     },
     {
       "id": "EV-003",
@@ -147,10 +157,10 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "per-component code, font, icon, firmware, media, dataset, and port licenses travel into artifacts",
       "routes": [
-        "python3 kernel/gen-license-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-license-registry.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/license-registry.json"
+        "kernel/metadata/license-registry.json"
       ],
       "tests": [
         "invented grant",
@@ -159,15 +169,15 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/license-registry.json",
-          "sha256": "1f36d1d3630970ebf6711b30b4c13d192ad03e658e0dea9b025b4d44f0559395",
+          "path": "kernel/metadata/license-registry.json",
+          "sha256": "d343cc65cd311988821c88fdce44e049f1977e10d9ce74304b844b5502226fee",
           "schema": "zlos.license-provenance-registry.v1",
           "result": "PASS_WITH_RELEASE_BLOCK"
         }
       ],
       "known_gaps": [
         "0 license files",
-        "123 inputs lack an established redistribution grant"
+        "146 inputs lack an established redistribution grant"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
@@ -184,10 +194,10 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "all direct/transitive source and binary inputs are immutable and verified",
       "routes": [
-        "python3 kernel/gen-dependency-lock.py --check --selftest"
+        "python3 kernel/tools/generators/gen-dependency-lock.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/dependency-lock.json"
+        "kernel/metadata/dependency-lock.json"
       ],
       "tests": [
         "binary drift",
@@ -199,20 +209,20 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/dependency-lock.json",
-          "sha256": "25cf47fb8ba38f757db5912f06c8c4895f826663f66e24526f0b389921384f20",
+          "path": "kernel/metadata/dependency-lock.json",
+          "sha256": "97da2b6401653bf0221e1e8f6f6912a21402b31f4912763d50d1d3768fa1858e",
           "schema": "zlos.host-dependency-lock.v2",
           "result": "PASS_WITH_OPEN_SUPPLY_GAPS"
         }
       ],
       "known_gaps": [
-        "156 package source archives absent",
+        "145 package source archives absent",
         "offline rebuild not proved"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "15 commands, 2 firmware blobs, 91 runtime files and 156 recursively installed packages are exact; source archives and offline reconstruction remain absent"
+      "weakest_evidence": "15 commands, 2 firmware blobs, 91 runtime files and 145 recursively installed packages are exact; source archives and offline reconstruction remain absent"
     },
     {
       "id": "EV-005",
@@ -224,11 +234,11 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "compiler, assembler, linker, sysroot, generated headers, flags, and target ABI are identified",
       "routes": [
-        "python3 kernel/gen-toolchain-manifest.py --check --selftest"
+        "python3 kernel/tools/generators/gen-toolchain-manifest.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/toolchain-manifest.json",
-        "kernel/dependency-lock.json"
+        "kernel/metadata/toolchain-manifest.json",
+        "kernel/metadata/dependency-lock.json"
       ],
       "tests": [
         "missing target lane",
@@ -240,15 +250,15 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/toolchain-manifest.json",
-          "sha256": "2a0a0481c50a81eef7a1e179ff4f306527a7fd5792ea4b766f4659e51ffa9f22",
+          "path": "kernel/metadata/toolchain-manifest.json",
+          "sha256": "bcbdd494c94f74bd8b5d74b7d99a7c931917941cb83ec844c08a575055b07f6c",
           "schema": "zlos.toolchain-manifest.v1",
           "result": "PASS_WITH_OPEN_PORTABILITY_GAPS"
         },
         {
           "root": "implementation",
-          "path": "kernel/dependency-lock.json",
-          "sha256": "25cf47fb8ba38f757db5912f06c8c4895f826663f66e24526f0b389921384f20",
+          "path": "kernel/metadata/dependency-lock.json",
+          "sha256": "97da2b6401653bf0221e1e8f6f6912a21402b31f4912763d50d1d3768fa1858e",
           "schema": "zlos.host-dependency-lock.v2",
           "result": "PASS_WITH_OPEN_SUPPLY_GAPS"
         }
@@ -270,10 +280,10 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PROVED_CURRENT",
+      "maturity": "HISTORICAL_ONLY",
       "acceptance_contract": "empty output directory produces current artifacts without hidden cached prerequisites",
       "routes": [
-        "python3 kernel/check-reproducible-build.py --check --selftest"
+        "python3 kernel/tools/checks/check-reproducible-build.py --check --selftest"
       ],
       "artifacts": [
         "kernel/docs/receipts/reproducible-build-2026-08-22.json"
@@ -296,7 +306,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "proved for the current nine-artifact recipe set; future artifacts must join separately"
+      "weakest_evidence": "two-run reproducibility is proved for its historical nine-artifact subject build, not the current identity"
     },
     {
       "id": "EV-007",
@@ -308,11 +318,11 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "source, compiled object, linked image, package, registry, init, and launch-route inventories agree",
       "routes": [
-        "python3 kernel/gen-build-graph.py --check --selftest"
+        "python3 kernel/tools/generators/gen-build-graph.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/build-graph.json",
-        "kernel/artifact-registry.json"
+        "kernel/metadata/build-graph.json",
+        "kernel/metadata/artifact-registry.json"
       ],
       "tests": [
         "missing source",
@@ -323,15 +333,15 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/build-graph.json",
-          "sha256": "184110f6c8d281caa7c71b292765ed42987aed56590ce22ced11619f35c55194",
+          "path": "kernel/metadata/build-graph.json",
+          "sha256": "a78957da9948b0963a1b9563310d03e5e6c4d745d2b1687d8e9bd7d34870e633",
           "schema": "zlos.build-graph.v1",
-          "result": "PASS_WITH_DECLARED_SUPERSET"
+          "result": "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT"
         },
         {
           "root": "implementation",
-          "path": "kernel/artifact-registry.json",
-          "sha256": "8378d40d2f0a0f5cc5dff9a334be31911fe1d5a8f257845cc8d30870865d96c1",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "d279b2373f57684b95376f46bfbda0dd4cbadf0ac4468a7ba5ee5fc356a79fa3",
           "schema": "zlos.artifact-boot-registry.v1",
           "result": "PASS"
         }
@@ -344,7 +354,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "all 123 inputs and 9 artifacts have graph positions across 4 lanes, but intermediate object provenance remains source-derived"
+      "weakest_evidence": "all 146 inputs have recipe positions across 4 lanes; the nine exact artifacts are an explicitly historical snapshot"
     },
     {
       "id": "EV-008",
@@ -356,12 +366,12 @@
       "maturity": "PROVED_CURRENT",
       "acceptance_contract": "no wrapper, timeout, ignored command, or final-test status can manufacture green",
       "routes": [
-        "python3 kernel/gen-wrapper-registry.py --check --selftest",
-        "python3 kernel/check-land-gate.py --selftest"
+        "python3 kernel/tools/generators/gen-wrapper-registry.py --check --selftest",
+        "python3 kernel/tools/checks/check-land-gate.py --selftest"
       ],
       "artifacts": [
-        "kernel/wrapper-registry.json",
-        "kernel/adversarial-registry.json"
+        "kernel/metadata/wrapper-registry.json",
+        "kernel/metadata/adversarial-registry.json"
       ],
       "tests": [
         "missing wrapper",
@@ -377,14 +387,14 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/wrapper-registry.json",
-          "sha256": "971594596a876be208ab27d3f6013027a084222f58c3b1560c8cd046ae939314",
+          "path": "kernel/metadata/wrapper-registry.json",
+          "sha256": "6e7f1820d35c27fe5e798b7ee17263c74913181cf5a513e3db4053bcef553c9d",
           "schema": "zlos.wrapper-registry.v1",
           "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS"
         },
         {
           "root": "implementation",
-          "path": "kernel/adversarial-registry.json",
+          "path": "kernel/metadata/adversarial-registry.json",
           "sha256": "18e1217ccdb668b7421a737d9a84b14ff8defce2481bb9ca28605e065338cdc1",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
@@ -394,7 +404,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "66 mandatory landing seams are guarded, not every repository command path"
+      "weakest_evidence": "71 mandatory landing seams are guarded, not every repository command path"
     },
     {
       "id": "EV-009",
@@ -403,14 +413,14 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PROVED_CURRENT",
+      "maturity": "HISTORICAL_ONLY",
       "acceptance_contract": "booted/running product reports exact image, commit, configuration, and boot origin",
       "routes": [
-        "python3 kernel/gen-artifact-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-artifact-registry.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/artifact-registry.json",
-        "kernel/app-evidence.json"
+        "kernel/metadata/artifact-registry.json",
+        "kernel/metadata/app-evidence.json"
       ],
       "tests": [
         "artifact mismatch",
@@ -419,14 +429,14 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/artifact-registry.json",
-          "sha256": "8378d40d2f0a0f5cc5dff9a334be31911fe1d5a8f257845cc8d30870865d96c1",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "d279b2373f57684b95376f46bfbda0dd4cbadf0ac4468a7ba5ee5fc356a79fa3",
           "schema": "zlos.artifact-boot-registry.v1",
           "result": "PASS"
         },
         {
           "root": "implementation",
-          "path": "kernel/app-evidence.json",
+          "path": "kernel/metadata/app-evidence.json",
           "sha256": "8e27cbee3a8107f9a2e3f76758939821fa5898dc0189d7ac975171437ca6b38d",
           "schema": "zlos.application-evidence-registry.v1",
           "result": null
@@ -436,7 +446,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "current shipped artifacts and QEMU routes identify the exact build; physical hash proof remains separate"
+      "weakest_evidence": "the exact artifact and QEMU routes remain valid for their historical subject build; no current artifact proof exists"
     },
     {
       "id": "EV-010",
@@ -448,11 +458,11 @@
       "maturity": "PROVED_CURRENT",
       "acceptance_contract": "claim/source/build/image/init/user-route/test/QEMU/host-hardware/native-hardware remain distinct",
       "routes": [
-        "python3 kernel/gen-evidence-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-evidence-registry.py --check --selftest"
       ],
       "artifacts": [
         "docs/program/PROOF-GATES.md",
-        "kernel/evidence-registry.json"
+        "kernel/metadata/evidence-registry.json"
       ],
       "tests": [
         "physical overclaim",
@@ -468,10 +478,10 @@
         },
         {
           "root": "implementation",
-          "path": "kernel/evidence-registry.json",
-          "sha256": "f7fdb144b291f0f1101d89ffcd6c9a21512cf2dadcb7e21eef9e19d7379eb1c0",
+          "path": "kernel/metadata/evidence-registry.json",
+          "sha256": "3c195f4fd570a4877f4d8305160ca775691136c13ca3281a6621678560c70941",
           "schema": "zlos.evidence-registry.v1",
-          "result": "PASS_WITH_OPEN_GAPS"
+          "result": "PASS_CURRENT_INDEX_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS"
         }
       ],
       "known_gaps": [],
@@ -521,10 +531,10 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PROVED_CURRENT",
+      "maturity": "HISTORICAL_ONLY",
       "acceptance_contract": "declared, compiled, registered, executed, skipped, failed, and shipped test sets compare automatically",
       "routes": [
-        "python3 kernel/run-host-tests.py --selftest"
+        "python3 kernel/tools/run/run-host-tests.py --selftest"
       ],
       "artifacts": [
         "kernel/tests/host/test-inventory.json",
@@ -555,7 +565,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "62 current targets are classified and receipted; 53 automatic commands include 48 passes, 3 hardware skips and later target suites must join"
+      "weakest_evidence": "the dated 62-target receipt records 48 passes and 3 hardware skips; it is not bound to the current build"
     },
     {
       "id": "EV-013",
@@ -564,13 +574,13 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PARTIAL_CURRENT",
+      "maturity": "PARTIAL_HISTORICAL",
       "acceptance_contract": "planted failure in every required field proves the verifier can fail",
       "routes": [
-        "python3 kernel/gen-adversarial-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-adversarial-registry.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/adversarial-registry.json"
+        "kernel/metadata/adversarial-registry.json"
       ],
       "tests": [
         "19 planted verifier mutations"
@@ -578,7 +588,7 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/adversarial-registry.json",
+          "path": "kernel/metadata/adversarial-registry.json",
           "sha256": "18e1217ccdb668b7421a737d9a84b14ff8defce2481bb9ca28605e065338cdc1",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
@@ -590,7 +600,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "19 current authorities prove red, not every future feature verifier"
+      "weakest_evidence": "19 historical verifier canaries proved red; they are not a current verifier run"
     },
     {
       "id": "EV-014",
@@ -599,10 +609,10 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PARTIAL_CURRENT",
+      "maturity": "PARTIAL_HISTORICAL",
       "acceptance_contract": "workload, clock, samples, percentile, peak, machine, backend, artifact, and regression budget recorded",
       "routes": [
-        "python3 kernel/run-benchmarks.py --check --selftest"
+        "python3 kernel/tools/run/run-benchmarks.py --check --selftest"
       ],
       "artifacts": [
         "kernel/docs/receipts/benchmark-host-2026-08-23.json"
@@ -637,13 +647,13 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PARTIAL_CURRENT",
+      "maturity": "PARTIAL_HISTORICAL",
       "acceptance_contract": "exact device/firmware/topology, first use, reuse, reset, teardown, recovery, and raw evidence",
       "routes": [
-        "python3 kernel/gen-artifact-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-artifact-registry.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/artifact-registry.json"
+        "kernel/metadata/artifact-registry.json"
       ],
       "tests": [
         "physical overclaim"
@@ -651,8 +661,8 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/artifact-registry.json",
-          "sha256": "8378d40d2f0a0f5cc5dff9a334be31911fe1d5a8f257845cc8d30870865d96c1",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "d279b2373f57684b95376f46bfbda0dd4cbadf0ac4468a7ba5ee5fc356a79fa3",
           "schema": "zlos.artifact-boot-registry.v1",
           "result": "PASS"
         }
@@ -675,10 +685,10 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "asset names artifact, mode, scale, theme, locale, scenario, time, and evidence ceiling",
       "routes": [
-        "python3 kernel/gen-visual-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-visual-registry.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/visual-registry.json"
+        "kernel/metadata/visual-registry.json"
       ],
       "tests": [
         "invented build binding",
@@ -687,14 +697,14 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/visual-registry.json",
-          "sha256": "f7c6171e66ad750f918803c3a24c3bba57890cfc596e79abe61ab0217bce9b0b",
+          "path": "kernel/metadata/visual-registry.json",
+          "sha256": "ff546e6516dbeea042d513f4aa06d429618b027962139d814c4eeab2ad4d76e4",
           "schema": "zlos.visual-evidence-registry.v1",
           "result": "INVENTORY_WITH_OPEN_GAPS"
         }
       ],
       "known_gaps": [
-        "46 visual assets are unbound to the current build",
+        "41 visual assets are unbound to the current build",
         "6 variant dimensions are open"
       ],
       "rejected_claims": [
@@ -712,10 +722,10 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "independent minimal recorder preserves symbols, input, state, and artifact identity",
       "routes": [
-        "python3 kernel/gen-observability-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-observability-registry.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/observability-registry.json"
+        "kernel/metadata/observability-registry.json"
       ],
       "tests": [
         "overpromoted fault frame",
@@ -726,10 +736,10 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/observability-registry.json",
-          "sha256": "b7dd0e1a365b0b5ba3048baea2723890cdc50c00983ce83bea5e1fb62d74992a",
+          "path": "kernel/metadata/observability-registry.json",
+          "sha256": "2a69620f03f31f914de447bef94b0374a629e435b7d96ebadae20c9d89620950",
           "schema": "zlos.observability-registry.v1",
-          "result": "PASS_WITH_OPEN_GAPS"
+          "result": "PASS_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS"
         }
       ],
       "known_gaps": [
@@ -739,7 +749,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "QEMU proves a bounded checksummed control-frame record and exact invalid-opcode IP before halt; durable crash bundles, general registers, symbols and recovery remain absent"
+      "weakest_evidence": "dated QEMU receipts prove a bounded control frame and invalid-opcode IP for older builds; current-build runtime and durable recovery remain absent"
     },
     {
       "id": "EV-018",
@@ -751,14 +761,14 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "typed monotonic events carry feature, process, authority, correlation, drop, and redaction fields",
       "routes": [
-        "python3 kernel/verify-event-trace.py --check --selftest",
-        "python3 kernel/gen-event-schema.py --check --selftest",
-        "python3 kernel/gen-observability-registry.py --check --selftest"
+        "python3 kernel/tools/checks/verify-event-trace.py --check --selftest",
+        "python3 kernel/tools/generators/gen-event-schema.py --check --selftest",
+        "python3 kernel/tools/generators/gen-observability-registry.py --check --selftest"
       ],
       "artifacts": [
         "kernel/docs/receipts/event-trace-host-2026-08-24.json",
-        "kernel/event-schema.json",
-        "kernel/observability-registry.json"
+        "kernel/metadata/event-schema.json",
+        "kernel/metadata/observability-registry.json"
       ],
       "tests": [
         "missing event field",
@@ -785,17 +795,17 @@
         },
         {
           "root": "implementation",
-          "path": "kernel/event-schema.json",
-          "sha256": "23c89a049d50e4e19314d45a483404c206fc05e11f9f6fbfc0e994f5633fd86a",
+          "path": "kernel/metadata/event-schema.json",
+          "sha256": "3860629e49929b031703a74bc816f302532f03475bfcf289864b8299e4b1af47",
           "schema": "zlos.event-schema-registry.v1",
-          "result": "PASS_HOST_SCHEMA_TARGET_UNINTEGRATED"
+          "result": "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED"
         },
         {
           "root": "implementation",
-          "path": "kernel/observability-registry.json",
-          "sha256": "b7dd0e1a365b0b5ba3048baea2723890cdc50c00983ce83bea5e1fb62d74992a",
+          "path": "kernel/metadata/observability-registry.json",
+          "sha256": "2a69620f03f31f914de447bef94b0374a629e435b7d96ebadae20c9d89620950",
           "schema": "zlos.observability-registry.v1",
-          "result": "PASS_WITH_OPEN_GAPS"
+          "result": "PASS_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS"
         }
       ],
       "known_gaps": [
@@ -807,7 +817,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "28-field pointer-free envelope and bounded queue pass 37 host checks across 3 compile lanes; the core is not compiled into or emitted by booted zlOS"
+      "weakest_evidence": "the current 28-field schema retains a dated 37-check host receipt; no current-build or target emitter proof exists"
     },
     {
       "id": "EV-019",
@@ -816,13 +826,13 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PARTIAL_CURRENT",
+      "maturity": "PARTIAL_HISTORICAL",
       "acceptance_contract": "every allocation, queue, I/O, provider, service, package, and lifecycle seam has forced failures",
       "routes": [
-        "python3 kernel/gen-adversarial-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-adversarial-registry.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/adversarial-registry.json"
+        "kernel/metadata/adversarial-registry.json"
       ],
       "tests": [
         "hidden failure gap"
@@ -830,7 +840,7 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/adversarial-registry.json",
+          "path": "kernel/metadata/adversarial-registry.json",
           "sha256": "18e1217ccdb668b7421a737d9a84b14ff8defce2481bb9ca28605e065338cdc1",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
@@ -851,13 +861,13 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PARTIAL_CURRENT",
+      "maturity": "PARTIAL_HISTORICAL",
       "acceptance_contract": "malformed ELF/archive/fs/network/font/image/web/IPC inputs are durable and minimized",
       "routes": [
-        "python3 kernel/gen-adversarial-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-adversarial-registry.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/adversarial-registry.json"
+        "kernel/metadata/adversarial-registry.json"
       ],
       "tests": [
         "unearned ELF promotion",
@@ -866,7 +876,7 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/adversarial-registry.json",
+          "path": "kernel/metadata/adversarial-registry.json",
           "sha256": "18e1217ccdb668b7421a737d9a84b14ff8defce2481bb9ca28605e065338cdc1",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
@@ -887,10 +897,10 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PARTIAL_CURRENT",
+      "maturity": "PARTIAL_HISTORICAL",
       "acceptance_contract": "frame, input, I/O, network, launch, memory, and build budgets are machine checked",
       "routes": [
-        "python3 kernel/run-benchmarks.py --check --selftest"
+        "python3 kernel/tools/run/run-benchmarks.py --check --selftest"
       ],
       "artifacts": [
         "kernel/docs/receipts/benchmark-host-2026-08-23.json"
@@ -925,10 +935,10 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "goldens cover scale, theme, locale, a11y, empty/error/loading, and backend variants",
       "routes": [
-        "python3 kernel/gen-visual-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-visual-registry.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/visual-registry.json"
+        "kernel/metadata/visual-registry.json"
       ],
       "tests": [
         "missing asset",
@@ -937,8 +947,8 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/visual-registry.json",
-          "sha256": "f7c6171e66ad750f918803c3a24c3bba57890cfc596e79abe61ab0217bce9b0b",
+          "path": "kernel/metadata/visual-registry.json",
+          "sha256": "ff546e6516dbeea042d513f4aa06d429618b027962139d814c4eeab2ad4d76e4",
           "schema": "zlos.visual-evidence-registry.v1",
           "result": "INVENTORY_WITH_OPEN_GAPS"
         }
@@ -962,10 +972,10 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "keyboard and assistive-provider workflows are required for each component/app route",
       "routes": [
-        "python3 kernel/gen-accessibility-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-accessibility-registry.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/accessibility-registry.json"
+        "kernel/metadata/accessibility-registry.json"
       ],
       "tests": [
         "invented semantic tree",
@@ -975,8 +985,8 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/accessibility-registry.json",
-          "sha256": "86fb47133c8017ef22740c64cca408dff3119a924a93173ec08b8d507a0008ba",
+          "path": "kernel/metadata/accessibility-registry.json",
+          "sha256": "6643ebf3ef6b24e5319a8ec9e694fa2993ce0f011d5922046626351be98acb99",
           "schema": "zlos.accessibility-proof-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
@@ -988,7 +998,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "keyboard/focus primitives pass on host; semantic and assistive workflows remain absent"
+      "weakest_evidence": "dated host evidence covers keyboard/focus primitives; current-build semantic and assistive workflows remain absent"
     },
     {
       "id": "EV-024",
@@ -1000,10 +1010,10 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "threat model, protected asset, enforcement point, adversarial proof, and residual risk are linked",
       "routes": [
-        "python3 kernel/gen-security-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-security-registry.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/security-registry.json"
+        "kernel/metadata/security-registry.json"
       ],
       "tests": [
         "production overclaim",
@@ -1013,10 +1023,10 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/security-registry.json",
-          "sha256": "8c6b73406fd6b617a10c00f8a2540397782a0197d18ae265b4204aa0e32261ae",
+          "path": "kernel/metadata/security-registry.json",
+          "sha256": "c9cf4ce412a9d47772beff1520e99531865bd4ffa39ccb648b993fc23788c300",
           "schema": "zlos.security-claim-registry.v1",
-          "result": "PASS_WITH_OPEN_GAPS"
+          "result": "PASS_WITH_HISTORICAL_EVIDENCE_AND_OPEN_GAPS"
         }
       ],
       "known_gaps": [
@@ -1026,7 +1036,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "static/host/QEMU evidence exists for six limited areas; eleven security foundations are missing"
+      "weakest_evidence": "historical static/host/QEMU evidence exists for six limited areas; no claim is current-build bound and eleven foundations are missing"
     },
     {
       "id": "EV-025",
@@ -1051,7 +1061,7 @@
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "d64842aef7044b6f81f22d7f675fdf78512af5c2a6c42768b05326f1daa6a39f",
+          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1074,11 +1084,11 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "decisions, migrations, deprecations, reversals, and obsolete evidence stay attributable",
       "routes": [
-        "python3 kernel/gen-decision-ledger.py --check --selftest",
+        "python3 kernel/tools/generators/gen-decision-ledger.py --check --selftest",
         "python3 tools/validate_master_program.py"
       ],
       "artifacts": [
-        "kernel/decision-ledger.json",
+        "kernel/metadata/decision-ledger.json",
         "kernel/docs/mp00-decision-ledger-2026-08-24.md"
       ],
       "tests": [
@@ -1092,15 +1102,15 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/decision-ledger.json",
-          "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+          "path": "kernel/metadata/decision-ledger.json",
+          "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
           "schema": "zlos.decision-ledger.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         },
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "d64842aef7044b6f81f22d7f675fdf78512af5c2a6c42768b05326f1daa6a39f",
+          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1125,10 +1135,10 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "user-visible changes, compatibility, migrations, defects, and recovery steps derive from manifests",
       "routes": [
-        "python3 kernel/gen-release-notes.py --check --selftest"
+        "python3 kernel/tools/generators/gen-release-notes.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/release-notes.json",
+        "kernel/metadata/release-notes.json",
         "kernel/docs/UNRELEASED-CHANGELOG.md",
         "kernel/docs/mp00-release-notes-2026-08-24.md"
       ],
@@ -1144,15 +1154,15 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/release-notes.json",
-          "sha256": "fd2af9b6aa18a5538d2c57faa9758fd5c43bba552a454fdad7334318321dda4f",
+          "path": "kernel/metadata/release-notes.json",
+          "sha256": "986a045a2d3303f843118717beec572d8ca8b7d48391e7de480ff9cd0e51ba91",
           "schema": "zlos.release-notes.v1",
           "result": "PASS_UNRELEASED_WITH_BLOCKERS"
         },
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "d64842aef7044b6f81f22d7f675fdf78512af5c2a6c42768b05326f1daa6a39f",
+          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1179,10 +1189,10 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "users can inspect version, origin, licenses, signatures, permissions, tests, and current health",
       "routes": [
-        "python3 kernel/gen-provenance-viewer.py --check --selftest"
+        "python3 kernel/tools/generators/gen-provenance-viewer.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/provenance-viewer.json",
+        "kernel/metadata/provenance-viewer.json",
         "kernel/docs/provenance-viewer.html",
         "kernel/docs/mp00-provenance-viewer-2026-08-24.md"
       ],
@@ -1199,15 +1209,15 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/provenance-viewer.json",
-          "sha256": "8ba4c6e41b479c7de50ba1e2c64bddde1e3f06fe55ed34bf7f230be2fdb66205",
+          "path": "kernel/metadata/provenance-viewer.json",
+          "sha256": "75a2d7f5749515db5973c6a3485d44de9b26e744df825c52a794681274f6294d",
           "schema": "zlos.provenance-viewer.v1",
           "result": "PASS_STATIC_VIEWER_WITH_OPEN_GAPS"
         },
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "d64842aef7044b6f81f22d7f675fdf78512af5c2a6c42768b05326f1daa6a39f",
+          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
           "schema": null,
           "result": "SOURCE"
         }
@@ -2701,7 +2711,7 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "complete vector ownership, nesting, fault frames, spurious paths, and panic fallback",
       "routes": [
-        "python3 kernel/verify-crash.py --run --no-build --selftest",
+        "python3 kernel/tools/checks/verify-crash.py --run --no-build --selftest",
         "kernel/tests/host/crashtest"
       ],
       "artifacts": [
@@ -2718,15 +2728,15 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/crash.c",
+          "path": "kernel/src/core/crash.c",
           "sha256": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f",
           "schema": null,
           "result": "SOURCE"
         },
         {
           "root": "implementation",
-          "path": "kernel/idt.c",
-          "sha256": "e98cbb7b86d37250268b0be84f6068af4017c2cd5cb870c14dfb09ecca40c810",
+          "path": "kernel/src/arch/x86/idt.c",
+          "sha256": "2919c40097d401ecde8905bbb24249769a16888cc42355f4020d0f8477472560",
           "schema": null,
           "result": "SOURCE"
         },
@@ -24592,7 +24602,7 @@
   ],
   "generator": {
     "path": "tools/gen_feature_status.py",
-    "sha256": "03d3a0bf85f9622996e05ffa69beaa147ad6614ae46f8b040c6d253e22f64aea"
+    "sha256": "406bb8e7694c21742c22181e39442b490189cac86c57c777f76079d86dda1c9d"
   },
   "evidence_ceiling": "conservative plan-to-current-evidence join; unlisted current assets are not promoted"
 }

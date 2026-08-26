@@ -92,7 +92,7 @@ def sha256(path: Path) -> str:
 def validate(value: dict) -> None:
     if value.get("schema") != "zlos.event-schema-registry.v1":
         raise ValueError("wrong event-schema registry version")
-    if value.get("result") != "PASS_HOST_SCHEMA_TARGET_UNINTEGRATED":
+    if value.get("result") != "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED":
         raise ValueError("event schema was failed or overpromoted")
     expected_identity = json.loads((METADATA / "build-identity.json").read_text())[
         "identity_sha256"]
@@ -136,6 +136,9 @@ def validate(value: dict) -> None:
     if receipt.get("result") != "PASS_HOST_CORE_TARGET_UNINTEGRATED" or \
             receipt.get("target_integration", {}).get("target_emitters") != 0:
         raise ValueError("event-schema receipt overclaims target reachability")
+    if proof.get("subject_build_identity") != receipt.get("build_identity") \
+            or proof.get("current_build_bound") is not False:
+        raise ValueError("historical event-trace receipt was promoted as current")
     if value.get("counts") != {
             "wire_fields": 28,
             "wire_bytes": 152,
@@ -163,7 +166,7 @@ def build() -> dict:
     receipt = json.loads(RECEIPT.read_text())
     value = {
         "schema": "zlos.event-schema-registry.v1",
-        "result": "PASS_HOST_SCHEMA_TARGET_UNINTEGRATED",
+        "result": "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED",
         "feature_id": "EV-018",
         "build_identity": json.loads((METADATA / "build-identity.json").read_text())[
             "identity_sha256"],
@@ -192,6 +195,10 @@ def build() -> dict:
             "host_checks": receipt["proof"]["host_execution"]["checks"],
             "host_failures": receipt["proof"]["host_execution"]["failures"],
             "compile_lanes": len(receipt["proof"]["compile_lanes"]),
+            "subject_build_identity": receipt["build_identity"],
+            "current_build_bound": receipt["build_identity"] == json.loads(
+                (METADATA / "build-identity.json").read_text())["identity_sha256"],
+            "evidence_ceiling": "dated host execution receipt; not current-build target proof",
         },
         "source_identities": {
             path: sha256(KERNEL_ROOT / path) for path in
@@ -210,7 +217,7 @@ def build() -> dict:
             "native_hardware_routes": receipt["target_integration"]["native_hardware_routes"],
         },
         "open_gaps": OPEN_GAPS,
-        "evidence_ceiling": "host-proved schema/core and cross-ABI compilation; no shipped target integration",
+        "evidence_ceiling": "current static schema joined to historical host proof; no current-build or shipped target integration",
         "weakest_link": "the core is externally serialized and has zero emitters in a booted zlOS artifact",
         "generator": {"path": "kernel/gen-event-schema.py",
                       "sha256": sha256(Path(__file__).resolve())},
@@ -239,6 +246,9 @@ def selftest(value: dict) -> None:
     promoted = copy.deepcopy(value)
     promoted["counts"]["target_emitters"] = 1
     mutations["invented-target-emitter"] = promoted
+    current = copy.deepcopy(value)
+    current["proof"]["current_build_bound"] = True
+    mutations["invented-current-host-proof"] = current
     caught = []
     for name, mutant in mutations.items():
         try:
@@ -278,7 +288,7 @@ def main() -> int:
                 raise ValueError("event schema is stale")
         if args.selftest:
             selftest(value)
-        print("event-schema: PASS_HOST_SCHEMA_TARGET_UNINTEGRATED: "
+        print(f"event-schema: {value['result']}: "
               f"{value['counts']['wire_fields']} fields, "
               f"{value['counts']['host_checks']} host checks")
         return 0

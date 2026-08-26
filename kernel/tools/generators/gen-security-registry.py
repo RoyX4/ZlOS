@@ -49,7 +49,7 @@ def sha256(path: Path) -> str:
 def validate(value: dict) -> None:
     if value.get("schema") != "zlos.security-claim-registry.v1":
         raise ValueError("wrong security registry schema")
-    if value.get("result") != "PASS_WITH_OPEN_GAPS":
+    if value.get("result") != "PASS_WITH_HISTORICAL_EVIDENCE_AND_OPEN_GAPS":
         raise ValueError("security registry overpromoted current claims")
     rows = value.get("claims", [])
     if [row.get("id") for row in rows] != [row[0] for row in CLAIMS]:
@@ -70,6 +70,8 @@ def validate(value: dict) -> None:
         "missing": 11,
         "production_complete": 0,
         "native_hardware_complete": 0,
+        "current_build_bound_claims": 0,
+        "historical_evidence_claims": 6,
     }
     if value.get("counts") != expected_counts:
         raise ValueError("security claim counts drift")
@@ -77,9 +79,14 @@ def validate(value: dict) -> None:
         raise ValueError("security residual-risk set was hidden")
     if len(value.get("build_identity", "")) != 64:
         raise ValueError("security registry build identity missing")
+    bindings = value.get("input_bindings", {})
+    if set(bindings) != {"artifact_registry", "init_registry", "host_test_receipt"} \
+            or any(row.get("current_build_bound") is not False for row in bindings.values()):
+        raise ValueError("historical security input was promoted as current")
 
 
 def build() -> dict:
+    identity = json.loads((METADATA / "build-identity.json").read_text())["identity_sha256"]
     receipt_path = KERNEL_ROOT / "tests/host/test-run-receipt.json"
     receipt = json.loads(receipt_path.read_text())
     passed = {row["name"] for row in receipt["results"] if row.get("status") == "passed"}
@@ -104,15 +111,29 @@ def build() -> dict:
             "adversarial_proof": adversarial,
             "residual_risk": residual,
             "evidence_ceiling": (
-                "host behavior only" if targets else
-                ("QEMU boot reachability only" if status == "QEMU_BOOT_REACHABLE_PARTIAL" else
-                 ("static artifact structure only" if status == "STATIC_PROVED" else "no current proof"))
+                "historical host behavior only" if targets else
+                ("historical QEMU boot reachability only" if status == "QEMU_BOOT_REACHABLE_PARTIAL" else
+                 ("historical static artifact structure only" if status == "STATIC_PROVED" else "no current proof"))
             ),
         })
     value = {
         "schema": "zlos.security-claim-registry.v1",
-        "result": "PASS_WITH_OPEN_GAPS",
-        "build_identity": json.loads((METADATA / "build-identity.json").read_text())["identity_sha256"],
+        "result": "PASS_WITH_HISTORICAL_EVIDENCE_AND_OPEN_GAPS",
+        "build_identity": identity,
+        "input_bindings": {
+            "artifact_registry": {
+                "subject_build_identity": artifact["build_identity"]["id"],
+                "current_build_bound": artifact["build_identity"]["id"] == identity,
+            },
+            "init_registry": {
+                "subject_build_identity": init["build_identity"],
+                "current_build_bound": init["build_identity"] == identity,
+            },
+            "host_test_receipt": {
+                "subject_head": receipt.get("git", {}).get("head"),
+                "current_build_bound": False,
+            },
+        },
         "input_receipts": {
             "kernel/metadata/artifact-registry.json": sha256(METADATA / "artifact-registry.json"),
             "kernel/metadata/init-registry.json": sha256(METADATA / "init-registry.json"),
@@ -127,9 +148,11 @@ def build() -> dict:
             "missing": sum(row["status"] == "MISSING" for row in rows),
             "production_complete": 0,
             "native_hardware_complete": 0,
+            "current_build_bound_claims": 0,
+            "historical_evidence_claims": sum(row["status"] != "MISSING" for row in rows),
         },
         "open_claims": [row["id"] for row in rows],
-        "evidence_ceiling": "claim registry, static checks, host adversarial tests and QEMU boot reachability only",
+        "evidence_ceiling": "current claim inventory joined to historical static, host and QEMU evidence only",
         "weakest_link": "no claim is production-complete; capability/usercopy/DMA/credential/IPC/sandbox/boot/package/audit mediation is absent",
         "generator": {"path": "kernel/gen-security-registry.py", "sha256": sha256(Path(__file__).resolve())},
     }
@@ -154,6 +177,9 @@ def selftest(value: dict) -> None:
     threat = copy.deepcopy(value)
     threat["claims"][0]["protected_asset"] = ""
     mutations["missing-protected-asset"] = threat
+    current = copy.deepcopy(value)
+    current["input_bindings"]["artifact_registry"]["current_build_bound"] = True
+    mutations["invented-current-artifact-proof"] = current
     caught = []
     for name, mutated in mutations.items():
         try:
@@ -190,7 +216,7 @@ def main() -> int:
         if args.check and (not OUTPUT.is_file() or json.loads(OUTPUT.read_text()) != value):
             raise ValueError("security-registry.json is missing or stale")
         print(
-            "security-registry: PASS_WITH_OPEN_GAPS: "
+            f"security-registry: {value['result']}: "
             f"{value['counts']['static_proved']} static, {value['counts']['host_proved_limited']} host-limited, "
             f"{value['counts']['qemu_boot_reachable_partial']} QEMU-partial, {value['counts']['missing']} missing"
         )

@@ -48,7 +48,7 @@ FIRMWARE = (
 
 PACKAGE_FIELDS = (
     "${binary:Package}\t${Version}\t${Architecture}\t${Status}\t"
-    "${source:Package}\t${source:Version}\t${Depends}\t${Pre-Depends}\n"
+    "${source:Package}\t${source:Version}\t${Depends}\t${Pre-Depends}\t${Provides}\n"
 )
 PACKAGE_CACHE: dict[str, dict] = {}
 
@@ -108,10 +108,12 @@ def package_row(name: str) -> dict:
         output = command_output(["dpkg-query", "-W", "-f=" + PACKAGE_FIELDS])
         for line in output.splitlines():
             fields = line.split("\t")
-            if len(fields) != 8:
+            if len(fields) != 9:
                 raise ValueError(f"unexpected installed package metadata: {fields!r}")
-            binary, version, architecture, status, source, source_version, depends, pre_depends = fields
-            if status != "install ok installed":
+            binary, version, architecture, status, source, source_version, depends, pre_depends, provides = fields
+            # dpkg keeps packages installed while deferred trigger processing
+            # reports "triggers-pending" or "triggers-awaited".
+            if not status.startswith("install ok "):
                 continue
             row = {
                 "name": binary,
@@ -122,9 +124,15 @@ def package_row(name: str) -> dict:
                 "source_version": source_version or version,
                 "depends_raw": depends,
                 "pre_depends_raw": pre_depends,
+                "provides_raw": provides,
             }
             PACKAGE_CACHE[binary] = row
             PACKAGE_CACHE.setdefault(binary.split(":", 1)[0], row)
+        for row in list(PACKAGE_CACHE.values()):
+            for provided in row["provides_raw"].split(","):
+                provided_name = re.sub(r"\s*\([^)]*\)", "", provided).strip()
+                if provided_name:
+                    PACKAGE_CACHE.setdefault(provided_name, row)
     cached = PACKAGE_CACHE.get(name)
     if cached is None:
         raise ValueError(f"package is not installed: {name}")
